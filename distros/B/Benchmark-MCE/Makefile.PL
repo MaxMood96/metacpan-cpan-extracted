@@ -14,7 +14,8 @@ my %WriteMakefileArgs = (
         "ExtUtils::MakeMaker" => '6.52',
     },
     TEST_REQUIRES => {
-        'Test2::V0' => '0',
+        'Capture::Tiny' => '0',
+        'Test2::V0'     => '0',
     },
     PREREQ_PM => {
         'MCE::Loop'    => '0',

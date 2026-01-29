@@ -13,12 +13,13 @@ my $resolver = Net::DNS::Resolver->new(
 	nameserver  => '8.8.8.8@853#dns.google',
 	add_ta_file => '/var/lib/unbound/root.key',
 	option	    => ['tls-cert-bundle' => '/etc/ssl/cert.pem'],
+	option	    => ['tls-system-cert' => 'yes'],
 	set_tls	    => 1
 	);
 
 $resolver->print;
 
-my @request = qw(example.net IN NS);
+my @request = qw(www.example.com IN A);
 
 my $reply = $resolver->send(@request);
 

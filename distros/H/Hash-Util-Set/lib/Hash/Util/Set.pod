@@ -31,6 +31,9 @@ Hash::Util::Set - Set operations on hash keys
    $bool = keys_any  %x, 'a', 'z';            # at least one exists?
    $bool = keys_all  %x, 'a', 'b', 'c';       # all exist?
    $bool = keys_none %x, 'x', 'y', 'z';       # none exist?
+   
+   # Combined operations
+   @sets = keys_partition %x, %y;             # A \ B, A ∩ B, B \ A
 
 =head1 DESCRIPTION
 
@@ -40,8 +43,8 @@ intersection, difference), set predicates, and membership tests.
 
 All operations work only on keys; values are ignored.
 
-This module automatically uses the XS implementation if available, falling back
-to pure Perl otherwise. 
+This module automatically uses the XS implementation if available, 
+falling back to pure Perl otherwise. 
 
 =head1 FUNCTIONS
 
@@ -133,6 +136,18 @@ True if all keys in LIST exist in C<%x>. Returns true for empty LIST.
 
 True if none of the keys in LIST exist in C<%x>. Returns true for empty LIST.
 
+=head2 Combined Operations
+
+=head3 keys_partition
+
+    my ($only_x, $both, $only_y) = keys_partition %x, %y;
+
+Partitions the union of keys from both hashes into three disjoint sets: 
+keys only in C<%x> (C<A \ B>), keys in both hashes (C<A ∩ B>), and keys 
+only in C<%y> (C<B \ A>).
+
+Returns a list with three array references.
+
 =head1 ALIASES
 
 Shorter aliases:
@@ -144,14 +159,46 @@ Shorter aliases:
 
 =head1 EXPORTS
 
-Nothing is exported by default. Import functions individually or use C<:all>:
+Nothing is exported by default. Functions can be imported individually or by category:
 
-    use Hash::Util::Set qw(keys_union keys_intersection);
-    use Hash::Util::Set qw(:all);
+    use Hash::Util::Keys qw(keys_union keys_intersection);  # individual functions
+    use Hash::Util::Keys qw(:all);                          # all functions
+    use Hash::Util::Keys qw(:operations);                   # set operations only
+    use Hash::Util::Keys qw(:predicates);                   # predicates only
+    use Hash::Util::Keys qw(:membership);                   # membership tests only
+    use Hash::Util::Keys qw(:aliases);                      # short aliases only
+
+=head2 Export Tags
+
+=over 4
+
+=item C<:all>
+
+All functions including operations, predicates, membership tests, and aliases.
+
+=item C<:operations>
+
+Set operations: C<keys_union>, C<keys_intersection>, C<keys_difference>, 
+C<keys_symmetric_difference>, C<keys_partition>.
+
+=item C<:predicates>
+
+Set predicates: C<keys_disjoint>, C<keys_equal>, C<keys_subset>, 
+C<keys_proper_subset>, C<keys_superset>, C<keys_proper_superset>.
+
+=item C<:membership>
+
+Membership tests: C<keys_any>, C<keys_all>, C<keys_none>.
+
+=item C<:aliases>
+
+Short aliases: C<keys_or>, C<keys_and>, C<keys_sub>, C<keys_xor>.
+
+=back
 
 =head1 IMPLEMENTATION
 
-Automatically uses C<Hash::Util::Set::XS> if available, otherwise falls back to
+Automatically uses L<Hash::Util::Set::XS> if available, otherwise falls back to
 C<Hash::Util::Set::PP>.
 
 =head1 SEE ALSO

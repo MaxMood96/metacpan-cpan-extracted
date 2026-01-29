@@ -24,12 +24,13 @@ our $VERSION = '0.01';
 my @all_cmd = qw(prepare_perl_env do_grep do_substitute do_perl
     do_execute do_load do_sort do_list_op do_tail do_head do_delete_marked
     do_insert_marked do_set_markers do_number_lines do_file_name do_line_count
-    do_cut do_paste do_pivot do_tee do_shell do_eat);
+    do_cut do_paste do_pivot do_tee do_shell do_eat do_push);
 our @EXPORT_OK = (@all_cmd, 'warn_or_die_if_needed');
 our %EXPORT_TAGS = (CMD => \@all_cmd);
 
 our @markers;  # The current marker array, not shared in the safe.
 tie @App::PTP::PerlEnv::m, 'App::PTP::Util::MarkersArray';
+my @content_stack;  # The push/pop stack, not shared in the safe.
 
 my $f_setter = tie $App::PTP::PerlEnv::f, 'App::PTP::Util::ReadOnlyVar';
 my $F_setter = tie $App::PTP::PerlEnv::F, 'App::PTP::Util::ReadOnlyVar';
@@ -169,6 +170,7 @@ sub process {  ## no critic (RequireArgUnpacking)
   prepare_perl_env($file_name, $options);
   @markers = (0) x scalar(@$content);
   my $markers = \@markers;
+  @content_stack = ();
   for my $stage (@$pipeline) {
     my ($command, $code, $modes, @args) = @$stage;
     $N_setter->set(scalar(@$content));
@@ -656,22 +658,51 @@ sub do_tee {
 
 sub do_shell {
   my ($content, $markers, $modes, $options, $command, $arg) = @_;
-  die "INTERNAL ERROR: Unexpected command in do_shell: ${command}\n" unless $command eq 'shell';
   $arg = maybe_interpolate($arg, $modes, $options, prepare_code($command, $modes));
-  {
+  if ($command eq 'shell') {
     local $SIG{PIPE} = 'IGNORE';
     open(my $pipe, '|-', $arg) or die "FATAL: Cannot execute command given to --${command}: $!\n";
     write_handle($pipe, $content, $modes->{missing_final_separator}, $options);
     # When run by CPAN testers, this fails sometime for unknown reason. So this
     # is only a warning and not a fatal error.
     close $pipe or print "WARNING: Cannot close pipe for command given to --${command}: $!\n";
+  } elsif ($command eq 'xargs') {
+    for my $i (0 .. $#$content) {
+      next unless defined $content->[$i];
+      my $cmd = $arg;
+      $cmd =~ s/{}/$content->[$i]/ or $cmd .= ' '.$content->[$i];
+      if ($i == 0 && $options->{debug_mode}) {
+        print "Example of the xargs command: $cmd\n";
+      }
+      system($cmd);
+    }
+  } else {
+    die "INTERNAL ERROR: Unexpected command in do_shell: ${command}\n";
   }
+  @$content = ();
+  @$markers = ();
 }
 
 sub do_eat {
   my ($content, $markers, $modes, $options) = @_;
   @$content = ();
   @$markers = ();
+}
+
+sub do_push {
+  my ($content, $markers, $modes, $options, $command) = @_;
+  if ($command eq 'push') {
+    printf "Pushing %d lines on the stack\n", scalar @$content if $options->{debug_mode};
+    push @content_stack, [[@$content], [@$markers]];
+  } elsif ($command eq 'pop') {
+    die "FATAL: Cannot pop an empty stack\n" unless @content_stack;
+    my ($saved_content, $saved_markers) = @{pop @content_stack};
+    @$content = @$saved_content;
+    @$markers = @$saved_markers;
+    printf "Popping %d lines from the stack\n", scalar @$content if $options->{debug_mode};
+  } else {
+    die "INTERNAL ERROR: Unexpected command in do_push: ${command}\n";
+  }
 }
 
 1;

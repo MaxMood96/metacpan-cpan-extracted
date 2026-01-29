@@ -5,7 +5,7 @@ use warnings;
 use Exporter   qw[import];
 use List::Util qw[all any];
 
-our $VERSION   = '0.03';
+our $VERSION   = '0.05';
 our @EXPORT_OK = qw[ keys_union
                      keys_intersection
                      keys_difference
@@ -18,7 +18,8 @@ our @EXPORT_OK = qw[ keys_union
                      keys_proper_superset
                      keys_any
                      keys_all
-                     keys_none ];
+                     keys_none
+                     keys_partition ];
 
 our %EXPORT_TAGS = ( all => \@EXPORT_OK );
 
@@ -44,10 +45,11 @@ sub keys_difference(\%\%) {
 
 sub keys_symmetric_difference(\%\%) {
   my ($x, $y) = @_;
-  return (
+  my @k = (
     (grep { not exists $y->{$_} } keys %$x),
     (grep { not exists $x->{$_} } keys %$y),
   );
+  return @k;
 }
 
 sub keys_disjoint(\%\%) {
@@ -94,6 +96,25 @@ sub keys_all(\%@) {
 sub keys_none(\%@) {
   my $x = shift;
   return not any { exists $x->{$_} } @_;
+}
+
+sub keys_partition(\%\%) {
+  my ($x, $y) = @_;
+
+  my (@only_x, @both, @only_y);
+  foreach my $k (keys %$x) {
+    if (exists $y->{$k}) {
+      push @both, $k;
+    } else {
+      push @only_x, $k;
+    }
+  }
+
+  foreach my $k (keys %$y) {
+    push @only_y, $k unless exists $x->{$k};
+  }
+
+  return (\@only_x, \@both, \@only_y);
 }
 
 BEGIN {

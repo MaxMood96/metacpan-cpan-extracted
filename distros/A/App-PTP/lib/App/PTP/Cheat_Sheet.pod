@@ -52,7 +52,7 @@ Pipeline commands are applied, in order, to all the input files.
 
 =item B<-M> I<module>: load the given module
 
-=item B<--sort>, B<--ns> (B<--numeric-sort>), B<--ls>, (B<--locale-sort>),
+=item B<--sort>, B<--ns> (B<--numeric-sort>), B<--ls> (B<--locale-sort>),
 B<--cs> I<code> (B<--custom-sort>)
 
 =item B<-u> (B<--unique>), B<--gu> (B<--global-unique>)
@@ -95,6 +95,10 @@ the file
 
 =item B<--shell> I<command>: sends the content as input to the command
 
+=item B<--xargs> I<command>: execute the command (which can contain C<{}>) for each line.
+
+=item B<--push>, B<--pop>: push and pop the entire content of the current file.
+
 =back
 
 =head2 PROGRAM BEHAVIOR
@@ -118,11 +122,12 @@ default is C<\n>
 =item B<--eol> (B<--preserve-input-separator>), B<--fix-final-separator>
 
 =item B<-0>: set B<--input-separator> to C<NUL> and B<--output-separator> to the
-empty string.
+empty string
 
 =item B<--00>: set B<--output-separator> to C<NUL>, useful with C<xargs -0>
 
-=item B<-h> (B<--help>), B<--version>: remember to have B<perldoc> installed
+=item B<-h> (B<--help>), B<--cheat>, B<--helpshort>, B<--version>: remember to
+have B<perldoc> installed
 
 =item B<-d> (B<--debug>), B<--abort>
 

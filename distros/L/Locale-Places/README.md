@@ -4,7 +4,7 @@ Locale::Places - Translate places between different languages using http://downl
 
 # VERSION
 
-Version 0.15
+Version 0.16
 
 # SYNOPSIS
 
@@ -62,6 +62,36 @@ Example:
     # Prints "Douvres"
     print Locale::Places->new()->translate({ place => 'Dover', country => 'GB', from => 'en', to => 'fr' });
 
+### Translation Resolution Order
+
+- 1. Preferred names
+- 2. Non-preferred names
+- 3. Short names
+- 4. Non-short names
+- 5. Single-translation disambiguation
+- 6. Identity fallback
+
+### API SPECIFICATION
+
+#### INPUT
+
+    {
+      'place' => { 'type' => 'string', 'min' => 2, 'max' => 64 },
+      'from' => { 'type' => 'string', 'min' => 2, 'max' => 64, optional => 1 },
+      'to' => { 'type' => 'string', 'min' => 2, 'max' => 64, optional => 1 },
+      'country' => { 'type' => 'string', 'min' => 2, 'max' => 64, optional => 1 }
+    }
+
+#### OUTPUT
+
+Argument error: croak
+No matches found: undef
+
+    {
+      'type' => 'string',
+      'min' => 1
+    }
+
 ## AUTOLOAD
 
 Translate to the given language, where the routine's name will be the target language.
@@ -71,13 +101,15 @@ Translate to the given language, where the routine's name will be the target lan
 
 Extracts the target language from the method name and calls `translate()` internally.
 
+Returns a string containing the translated name if found, or undef if no translation exists.
+
 # AUTHOR
 
-Nigel Horne, `<njh at bandsman.co.uk>`
+Nigel Horne, `<njh at nigelhorne.com>`
 
 # BUGS
 
-Only supports places in GB and US at the moment.
+Only supports places in GB and the US at the moment.
 
 Canterbury no longer translates to Cantorbéry in French.
 This is a problem with the data, which has this line:
@@ -91,9 +123,12 @@ For example, is Virginia a state, a town in Illinois or one in Minnesota?
 
 # SEE ALSO
 
-[Locale::Country::Multilingual](https://metacpan.org/pod/Locale%3A%3ACountry%3A%3AMultilingual) to translate country names.
+- [Test Coverage Report](https://nigelhorne.github.io/Locale-Places/coverage/)
+- [Locale::Country::Multilingual](https://metacpan.org/pod/Locale%3A%3ACountry%3A%3AMultilingual) to translate country names.
 
 # SUPPORT
+
+This module is provided as-is without any warranty.
 
 You can find documentation for this module with the perldoc command.
 
@@ -127,8 +162,8 @@ You can also look for information at:
 
 # LICENCE AND COPYRIGHT
 
-Copyright 2020-2025 Nigel Horne.
+Copyright 2020-2026 Nigel Horne.
 
 This program is released under the following licence: GPL2
 
-This product uses data from geonames, [http://download.geonames.org](http://download.geonames.org).
+This product uses data from Geonames, available at [http://download.geonames.org](http://download.geonames.org).

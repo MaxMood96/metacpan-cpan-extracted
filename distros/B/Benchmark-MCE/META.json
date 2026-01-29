@@ -40,6 +40,7 @@
       },
       "test" : {
          "requires" : {
+            "Capture::Tiny" : "0",
             "Test2::V0" : "0"
          }
       }
@@ -52,6 +53,6 @@
          "web" : "https://github.com/SpareRoom/Benchmark-MCE"
       }
    },
-   "version" : "1.02",
+   "version" : "1.03",
    "x_serialization_backend" : "JSON::PP version 4.04"
 }

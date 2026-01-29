@@ -3,7 +3,7 @@
 
 
 package BeamerReveal::IPC::Run;
-our $VERSION = '20260123.1702'; # VERSION
+our $VERSION = '20260127.1936'; # VERSION
 
 use strict;
 use warnings;
@@ -14,7 +14,7 @@ use File::chdir;
 
 
 sub run {
-  my ( $cmd, $coreId, $indent, $dir ) = @_;
+  my ( $cmd, $coreId, $indent, $dir, $errormessage ) = @_;
   my ( $out, $err );
 
   my $logger = $BeamerReveal::Log::logger;
@@ -38,13 +38,13 @@ sub run {
       $logger->log( $indent, "- $cmd->[0] run in thread no $coreId finished" );
     }
     else {
-      $logger->fatal( "- $cmd->[0] run in thread no $coreId failed (check log file)\n" );
+      $logger->fatal( $errormessage );
     }
   }
 }
 
 sub runsmart {
-  my ( $cmd, $mode, $regexp, $subroutine, $coreId, $indent, $dir ) = @_;
+  my ( $cmd, $mode, $regexp, $subroutine, $coreId, $indent, $dir, $errormessage ) = @_;
   my ( $in, $out, $err ) = ( '', undef, undef );
 
   # the stream to read the progress info from is set by $mode
@@ -65,7 +65,7 @@ sub runsmart {
       $$progress = '';
     }
   }
-  finish $h or $logger->fatal( "Error: subprocess $cmd->[0] returned $?\n$err" );
+  finish $h or $logger->fatal( $errormessage );
 }
 
 1;
@@ -82,7 +82,7 @@ BeamerReveal::IPC::Run - IPC::Run
 
 =head1 VERSION
 
-version 20260123.1702
+version 20260127.1936
 
 =head1 SYNOPSIS
 

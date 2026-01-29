@@ -5,6 +5,7 @@ use warnings;
 
 use Test2::V0;
 
+use IO::Socket::IP;
 use Socket qw( SOCK_STREAM $CRLF );
 use Net::Prometheus;
 
@@ -21,7 +22,7 @@ my $export_f = $client->export_to_Future_IO(
 
 ok( defined $listensock, '$listensock is defined after ->export_to_Future_IO' );
 
-my $fh = IO::Socket::INET->new(
+my $fh = IO::Socket::IP->new(
    PeerHost => $listensock->sockhost,
    PeerPort => $listensock->sockport,
    Type     => SOCK_STREAM,

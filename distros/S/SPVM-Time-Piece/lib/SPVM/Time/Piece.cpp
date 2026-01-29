@@ -33,7 +33,7 @@ int32_t SPVM__Time__Piece__strftime(SPVM_ENV* env, SPVM_VALUE* stack) {
   int32_t format_length = env->length(env, stack, obj_format);
   
   if (format_length == 0) {
-    return env->die(env, stack, "The length of $format must be greater than 1.", __func__, FILE_NAME, __LINE__);
+    return env->die_v2(env, stack, "The length of $format must be greater than 1.", __func__, FILE_NAME, __LINE__);
   }
   
   const char* format = env->get_chars(env, stack, obj_format);
@@ -57,13 +57,13 @@ int32_t SPVM__Time__Piece__strftime(SPVM_ENV* env, SPVM_VALUE* stack) {
     int32_t write_length = strftime(ret, max_length, format, st_tm);
     
     if (!(errno == 0)) {
-      env->die(env, stack, "[System Error]strftime failed:%s. $format is \"%s\"", env->strerror(env, stack, errno, 0), format, __func__, FILE_NAME, __LINE__);
+      env->die_v2(env, stack, "[System Error]strftime failed:%s. $format is \"%s\"", __func__, FILE_NAME, __LINE__, env->strerror(env, stack, errno, 0), format);
       return SPVM_NATIVE_C_BASIC_TYPE_ID_ERROR_SYSTEM_CLASS;
     }
     
     if (write_length == 0) {
       if (max_length > 100 * format_length) {
-        return env->die(env, stack, "Too many memory is allocated.", __func__, FILE_NAME, __LINE__);
+        return env->die_v2(env, stack, "Too many memory is allocated.", __func__, FILE_NAME, __LINE__);
       }
       
       max_length *= 2;
@@ -86,7 +86,7 @@ int32_t SPVM__Time__Piece__strptime_tm(SPVM_ENV* env, SPVM_VALUE* stack) {
   void* obj_string = stack[0].oval;
   
   if (!obj_string) {
-    return env->die(env, stack, "$string must be defined.", __func__, FILE_NAME, __LINE__);
+    return env->die_v2(env, stack, "$string must be defined.", __func__, FILE_NAME, __LINE__);
   }
   
   const char* string = env->get_chars(env, stack, obj_string);
@@ -94,7 +94,7 @@ int32_t SPVM__Time__Piece__strptime_tm(SPVM_ENV* env, SPVM_VALUE* stack) {
   void* obj_format = stack[1].oval;
   
   if (!obj_format) {
-    return env->die(env, stack, "$format must be defined.", __func__, FILE_NAME, __LINE__);
+    return env->die_v2(env, stack, "$format must be defined.", __func__, FILE_NAME, __LINE__);
   }
   
   const char* format = env->get_chars(env, stack, obj_format);
@@ -107,7 +107,7 @@ int32_t SPVM__Time__Piece__strptime_tm(SPVM_ENV* env, SPVM_VALUE* stack) {
   string_stream >> std::get_time(st_tm, format);
   
   if (string_stream.fail()) {
-    return env->die(env, stack, "std::get_time failed.", __func__, FILE_NAME, __LINE__);
+    return env->die_v2(env, stack, "std::get_time failed.", __func__, FILE_NAME, __LINE__);
   }
   
   void* obj_tm = env->new_pointer_object_by_name(env, stack, "Sys::Time::Tm", st_tm, &error_id, __func__, FILE_NAME, __LINE__);

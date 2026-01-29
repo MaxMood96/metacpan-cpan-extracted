@@ -15,7 +15,7 @@
 #endif
 
 #ifdef MEM_DEBUG
-# define MEM_TRACE(...) frintf(stderr, __VA_ARGS__)
+# define MEM_TRACE(...) fprintf(stderr, __VA_ARGS__)
 #else
 # define MEM_TRACE(...)
 #endif

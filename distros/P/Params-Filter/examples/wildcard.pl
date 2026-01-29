@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-use v5.40;
+use v5.36;
 use Params::Filter qw/filter/;
 
 # Wildcard Example: Using '*' to accept all remaining fields

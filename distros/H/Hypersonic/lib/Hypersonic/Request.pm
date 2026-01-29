@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use 5.010;
 
-our $VERSION = '0.03';
+our $VERSION = '0.10';
 
 # JIT-compiled Request object using array-based slots for maximum speed
 # Generates XS accessors at compile time via XS::JIT::Builder
@@ -46,13 +46,19 @@ our @EXPORT_OK = qw(
 my $COMPILED = 0;
 my $MODULE_ID = 0;
 
+# Unified compile interface
+sub compile {
+    my ($class, %opts) = @_;
+    return $class->compile_accessors(%opts);
+}
+
 # Generate and compile XS accessors
 sub compile_accessors {
     my ($class, %opts) = @_;
 
-    return if $COMPILED;
+    return 1 if $COMPILED;
 
-    my $cache_dir = $opts{cache_dir} // '_hypersonic_request_cache';
+    my $cache_dir = $opts{cache_dir} // '_hypersonic_cache/request';
     my $module_name = 'Hypersonic::Request::Accessors_' . $MODULE_ID++;
 
     my $builder = XS::JIT::Builder->new;
@@ -202,38 +208,227 @@ sub compile_accessors {
       ->xs_return('1')
       ->xs_end;
 
+    # Build functions hash
+    my %functions = (
+        # Simple slot accessors
+        'Hypersonic::Request::method'       => { source => 'jit_method', is_xs_native => 1 },
+        'Hypersonic::Request::path'         => { source => 'jit_path', is_xs_native => 1 },
+        'Hypersonic::Request::body'         => { source => 'jit_body', is_xs_native => 1 },
+        'Hypersonic::Request::query_string' => { source => 'jit_query_string', is_xs_native => 1 },
+        'Hypersonic::Request::id'           => { source => 'jit_id', is_xs_native => 1 },
+
+        # Hashref slot accessors
+        'Hypersonic::Request::params'   => { source => 'jit_params', is_xs_native => 1 },
+        'Hypersonic::Request::query'    => { source => 'jit_query', is_xs_native => 1 },
+        'Hypersonic::Request::headers'  => { source => 'jit_headers', is_xs_native => 1 },
+        'Hypersonic::Request::cookies'  => { source => 'jit_cookies', is_xs_native => 1 },
+        'Hypersonic::Request::form'     => { source => 'jit_form_field', is_xs_native => 1 },
+        'Hypersonic::Request::json'     => { source => 'jit_json', is_xs_native => 1 },
+        'Hypersonic::Request::segments' => { source => 'jit_segments', is_xs_native => 1 },
+
+        # Keyed accessors
+        'Hypersonic::Request::param'       => { source => 'jit_param', is_xs_native => 1 },
+        'Hypersonic::Request::query_param' => { source => 'jit_query_param', is_xs_native => 1 },
+        'Hypersonic::Request::header'      => { source => 'jit_header', is_xs_native => 1 },
+        'Hypersonic::Request::cookie'      => { source => 'jit_cookie', is_xs_native => 1 },
+
+        # Type checks
+        'Hypersonic::Request::is_json' => { source => 'jit_is_json', is_xs_native => 1 },
+        'Hypersonic::Request::is_form' => { source => 'jit_is_form', is_xs_native => 1 },
+    );
+
+    # JIT: Only generate response helpers if requested
+    if ($opts{response_helpers}) {
+        # text_response($text, $status) - returns {status, headers, body}
+        $builder->xs_function('jit_text_response')
+          ->xs_preamble
+          ->line('SV* text = items > 1 ? ST(1) : newSVpvs("");')
+          ->line('IV status = items > 2 && SvOK(ST(2)) ? SvIV(ST(2)) : 200;')
+          ->line('HV* resp = newHV();')
+          ->line('HV* hdrs = newHV();')
+          ->line('hv_store(hdrs, "Content-Type", 12, newSVpvs("text/plain"), 0);')
+          ->line('hv_store(resp, "status", 6, newSViv(status), 0);')
+          ->line('hv_store(resp, "headers", 7, newRV_noinc((SV*)hdrs), 0);')
+          ->line('hv_store(resp, "body", 4, newSVsv(text), 0);')
+          ->line('ST(0) = sv_2mortal(newRV_noinc((SV*)resp));')
+          ->xs_return('1')
+          ->xs_end;
+
+        # html_response($html, $status) - returns {status, headers, body}
+        $builder->xs_function('jit_html_response')
+          ->xs_preamble
+          ->line('SV* html = items > 1 ? ST(1) : newSVpvs("");')
+          ->line('IV status = items > 2 && SvOK(ST(2)) ? SvIV(ST(2)) : 200;')
+          ->line('HV* resp = newHV();')
+          ->line('HV* hdrs = newHV();')
+          ->line('hv_store(hdrs, "Content-Type", 12, newSVpvs("text/html"), 0);')
+          ->line('hv_store(resp, "status", 6, newSViv(status), 0);')
+          ->line('hv_store(resp, "headers", 7, newRV_noinc((SV*)hdrs), 0);')
+          ->line('hv_store(resp, "body", 4, newSVsv(html), 0);')
+          ->line('ST(0) = sv_2mortal(newRV_noinc((SV*)resp));')
+          ->xs_return('1')
+          ->xs_end;
+
+        # redirect($url, $status) - returns {status, headers, body}
+        $builder->xs_function('jit_redirect')
+          ->xs_preamble
+          ->line('SV* url = items > 1 ? ST(1) : newSVpvs("/");')
+          ->line('IV status = items > 2 && SvOK(ST(2)) ? SvIV(ST(2)) : 302;')
+          ->line('HV* resp = newHV();')
+          ->line('HV* hdrs = newHV();')
+          ->line('hv_store(hdrs, "Location", 8, newSVsv(url), 0);')
+          ->line('hv_store(resp, "status", 6, newSViv(status), 0);')
+          ->line('hv_store(resp, "headers", 7, newRV_noinc((SV*)hdrs), 0);')
+          ->line('hv_store(resp, "body", 4, newSVpvs(""), 0);')
+          ->line('ST(0) = sv_2mortal(newRV_noinc((SV*)resp));')
+          ->xs_return('1')
+          ->xs_end;
+
+        # error($message, $status) - returns {status, headers, body} as JSON
+        $builder->xs_function('jit_error')
+          ->xs_preamble
+          ->line('const char* msg = "Internal Server Error";')
+          ->line('STRLEN msg_len = 21;')
+          ->line('if (items > 1 && SvOK(ST(1))) { msg = SvPV(ST(1), msg_len); }')
+          ->line('IV status = items > 2 && SvOK(ST(2)) ? SvIV(ST(2)) : 500;')
+          ->line('HV* resp = newHV();')
+          ->line('HV* hdrs = newHV();')
+          ->line('hv_store(hdrs, "Content-Type", 12, newSVpvs("application/json"), 0);')
+          ->line('hv_store(resp, "status", 6, newSViv(status), 0);')
+          ->line('hv_store(resp, "headers", 7, newRV_noinc((SV*)hdrs), 0);')
+          ->comment('Build JSON: {"error":"message"}')
+          ->line('SV* body = newSV(msg_len + 12);')
+          ->line('sv_setpvs(body, "{\"error\":\"");')
+          ->line('sv_catpvn(body, msg, msg_len);')
+          ->line('sv_catpvs(body, "\"}");')
+          ->line('hv_store(resp, "body", 4, body, 0);')
+          ->line('ST(0) = sv_2mortal(newRV_noinc((SV*)resp));')
+          ->xs_return('1')
+          ->xs_end;
+
+        # not_found($message) - calls error with 404
+        $builder->xs_function('jit_not_found')
+          ->xs_preamble
+          ->line('const char* msg = "Not Found";')
+          ->line('STRLEN msg_len = 9;')
+          ->line('if (items > 1 && SvOK(ST(1))) { msg = SvPV(ST(1), msg_len); }')
+          ->line('HV* resp = newHV();')
+          ->line('HV* hdrs = newHV();')
+          ->line('hv_store(hdrs, "Content-Type", 12, newSVpvs("application/json"), 0);')
+          ->line('hv_store(resp, "status", 6, newSViv(404), 0);')
+          ->line('hv_store(resp, "headers", 7, newRV_noinc((SV*)hdrs), 0);')
+          ->line('SV* body = newSV(msg_len + 12);')
+          ->line('sv_setpvs(body, "{\"error\":\"");')
+          ->line('sv_catpvn(body, msg, msg_len);')
+          ->line('sv_catpvs(body, "\"}");')
+          ->line('hv_store(resp, "body", 4, body, 0);')
+          ->line('ST(0) = sv_2mortal(newRV_noinc((SV*)resp));')
+          ->xs_return('1')
+          ->xs_end;
+
+        # bad_request($message) - calls error with 400
+        $builder->xs_function('jit_bad_request')
+          ->xs_preamble
+          ->line('const char* msg = "Bad Request";')
+          ->line('STRLEN msg_len = 11;')
+          ->line('if (items > 1 && SvOK(ST(1))) { msg = SvPV(ST(1), msg_len); }')
+          ->line('HV* resp = newHV();')
+          ->line('HV* hdrs = newHV();')
+          ->line('hv_store(hdrs, "Content-Type", 12, newSVpvs("application/json"), 0);')
+          ->line('hv_store(resp, "status", 6, newSViv(400), 0);')
+          ->line('hv_store(resp, "headers", 7, newRV_noinc((SV*)hdrs), 0);')
+          ->line('SV* body = newSV(msg_len + 12);')
+          ->line('sv_setpvs(body, "{\"error\":\"");')
+          ->line('sv_catpvn(body, msg, msg_len);')
+          ->line('sv_catpvs(body, "\"}");')
+          ->line('hv_store(resp, "body", 4, body, 0);')
+          ->line('ST(0) = sv_2mortal(newRV_noinc((SV*)resp));')
+          ->xs_return('1')
+          ->xs_end;
+
+        # unauthorized($message) - calls error with 401
+        $builder->xs_function('jit_unauthorized')
+          ->xs_preamble
+          ->line('const char* msg = "Unauthorized";')
+          ->line('STRLEN msg_len = 12;')
+          ->line('if (items > 1 && SvOK(ST(1))) { msg = SvPV(ST(1), msg_len); }')
+          ->line('HV* resp = newHV();')
+          ->line('HV* hdrs = newHV();')
+          ->line('hv_store(hdrs, "Content-Type", 12, newSVpvs("application/json"), 0);')
+          ->line('hv_store(resp, "status", 6, newSViv(401), 0);')
+          ->line('hv_store(resp, "headers", 7, newRV_noinc((SV*)hdrs), 0);')
+          ->line('SV* body = newSV(msg_len + 12);')
+          ->line('sv_setpvs(body, "{\"error\":\"");')
+          ->line('sv_catpvn(body, msg, msg_len);')
+          ->line('sv_catpvs(body, "\"}");')
+          ->line('hv_store(resp, "body", 4, body, 0);')
+          ->line('ST(0) = sv_2mortal(newRV_noinc((SV*)resp));')
+          ->xs_return('1')
+          ->xs_end;
+
+        # forbidden($message) - calls error with 403
+        $builder->xs_function('jit_forbidden')
+          ->xs_preamble
+          ->line('const char* msg = "Forbidden";')
+          ->line('STRLEN msg_len = 9;')
+          ->line('if (items > 1 && SvOK(ST(1))) { msg = SvPV(ST(1), msg_len); }')
+          ->line('HV* resp = newHV();')
+          ->line('HV* hdrs = newHV();')
+          ->line('hv_store(hdrs, "Content-Type", 12, newSVpvs("application/json"), 0);')
+          ->line('hv_store(resp, "status", 6, newSViv(403), 0);')
+          ->line('hv_store(resp, "headers", 7, newRV_noinc((SV*)hdrs), 0);')
+          ->line('SV* body = newSV(msg_len + 12);')
+          ->line('sv_setpvs(body, "{\"error\":\"");')
+          ->line('sv_catpvn(body, msg, msg_len);')
+          ->line('sv_catpvs(body, "\"}");')
+          ->line('hv_store(resp, "body", 4, body, 0);')
+          ->line('ST(0) = sv_2mortal(newRV_noinc((SV*)resp));')
+          ->xs_return('1')
+          ->xs_end;
+
+        # json_response($data, $status) - needs to call Perl JSON encoder
+        # This one calls back to Perl for Cpanel::JSON::XS::encode_json
+        $builder->xs_function('jit_json_response')
+          ->xs_preamble
+          ->line('SV* data = items > 1 ? ST(1) : newRV_noinc((SV*)newHV());')
+          ->line('IV status = items > 2 && SvOK(ST(2)) ? SvIV(ST(2)) : 200;')
+          ->line('ENTER; SAVETMPS;')
+          ->line('PUSHMARK(SP);')
+          ->line('XPUSHs(data);')
+          ->line('PUTBACK;')
+          ->line('int count = call_pv("Cpanel::JSON::XS::encode_json", G_SCALAR);')
+          ->line('SPAGAIN;')
+          ->line('SV* json_body = count > 0 ? POPs : newSVpvs("{}");')
+          ->line('SvREFCNT_inc(json_body);')
+          ->line('PUTBACK; FREETMPS; LEAVE;')
+          ->line('HV* resp = newHV();')
+          ->line('HV* hdrs = newHV();')
+          ->line('hv_store(hdrs, "Content-Type", 12, newSVpvs("application/json"), 0);')
+          ->line('hv_store(resp, "status", 6, newSViv(status), 0);')
+          ->line('hv_store(resp, "headers", 7, newRV_noinc((SV*)hdrs), 0);')
+          ->line('hv_store(resp, "body", 4, json_body, 0);')
+          ->line('ST(0) = sv_2mortal(newRV_noinc((SV*)resp));')
+          ->xs_return('1')
+          ->xs_end;
+
+        # Add response helpers to functions hash
+        $functions{'Hypersonic::Request::text_response'} = { source => 'jit_text_response', is_xs_native => 1 };
+        $functions{'Hypersonic::Request::html_response'} = { source => 'jit_html_response', is_xs_native => 1 };
+        $functions{'Hypersonic::Request::redirect'}      = { source => 'jit_redirect', is_xs_native => 1 };
+        $functions{'Hypersonic::Request::error'}         = { source => 'jit_error', is_xs_native => 1 };
+        $functions{'Hypersonic::Request::not_found'}     = { source => 'jit_not_found', is_xs_native => 1 };
+        $functions{'Hypersonic::Request::bad_request'}   = { source => 'jit_bad_request', is_xs_native => 1 };
+        $functions{'Hypersonic::Request::unauthorized'}  = { source => 'jit_unauthorized', is_xs_native => 1 };
+        $functions{'Hypersonic::Request::forbidden'}     = { source => 'jit_forbidden', is_xs_native => 1 };
+        $functions{'Hypersonic::Request::json_response'} = { source => 'jit_json_response', is_xs_native => 1 };
+    }
+
     # Compile via XS::JIT
     XS::JIT->compile(
         code      => $builder->code,
         name      => $module_name,
         cache_dir => $cache_dir,
-        functions => {
-            # Simple slot accessors
-            'Hypersonic::Request::method'       => { source => 'jit_method', is_xs_native => 1 },
-            'Hypersonic::Request::path'         => { source => 'jit_path', is_xs_native => 1 },
-            'Hypersonic::Request::body'         => { source => 'jit_body', is_xs_native => 1 },
-            'Hypersonic::Request::query_string' => { source => 'jit_query_string', is_xs_native => 1 },
-            'Hypersonic::Request::id'           => { source => 'jit_id', is_xs_native => 1 },
-
-            # Hashref slot accessors
-            'Hypersonic::Request::params'   => { source => 'jit_params', is_xs_native => 1 },
-            'Hypersonic::Request::query'    => { source => 'jit_query', is_xs_native => 1 },
-            'Hypersonic::Request::headers'  => { source => 'jit_headers', is_xs_native => 1 },
-            'Hypersonic::Request::cookies'  => { source => 'jit_cookies', is_xs_native => 1 },
-            'Hypersonic::Request::form'     => { source => 'jit_form_field', is_xs_native => 1 },
-            'Hypersonic::Request::json'     => { source => 'jit_json', is_xs_native => 1 },
-            'Hypersonic::Request::segments' => { source => 'jit_segments', is_xs_native => 1 },
-
-            # Keyed accessors
-            'Hypersonic::Request::param'       => { source => 'jit_param', is_xs_native => 1 },
-            'Hypersonic::Request::query_param' => { source => 'jit_query_param', is_xs_native => 1 },
-            'Hypersonic::Request::header'      => { source => 'jit_header', is_xs_native => 1 },
-            'Hypersonic::Request::cookie'      => { source => 'jit_cookie', is_xs_native => 1 },
-
-            # Type checks
-            'Hypersonic::Request::is_json' => { source => 'jit_is_json', is_xs_native => 1 },
-            'Hypersonic::Request::is_form' => { source => 'jit_is_form', is_xs_native => 1 },
-        },
+        functions => \%functions,
     );
 
     $COMPILED = 1;
@@ -241,107 +436,32 @@ sub compile_accessors {
 }
 
 # Session methods - implemented in Perl because they need to interact
-# with the session store. JIT overhead isn't worth it for session access.
+# with the session store. JIT: require cached after first load.
 
-# Get or set a session value
-# $req->session('key')          - get value
-# $req->session('key', $value)  - set value
+my $SESSION_LOADED;
+
 sub session {
     my $self = shift;
-    require Hypersonic::Session;
+    require Hypersonic::Session unless $SESSION_LOADED++;
     return Hypersonic::Session::get_set($self, @_);
 }
 
-# Get all session data
 sub session_data {
     my $self = shift;
-    require Hypersonic::Session;
+    require Hypersonic::Session unless $SESSION_LOADED++;
     return Hypersonic::Session::get_all($self);
 }
 
-# Clear the session
 sub session_clear {
     my $self = shift;
-    require Hypersonic::Session;
+    require Hypersonic::Session unless $SESSION_LOADED++;
     return Hypersonic::Session::clear($self);
 }
 
-# Regenerate session ID (for security after login)
 sub session_regenerate {
     my $self = shift;
-    require Hypersonic::Session;
+    require Hypersonic::Session unless $SESSION_LOADED++;
     return Hypersonic::Session::regenerate($self);
-}
-
-# Response helper methods (still pure Perl - they just return hashrefs)
-# These are lightweight enough that JIT overhead isn't worth it
-
-sub json_response {
-    my ($self, $data, $status) = @_;
-    require JSON::XS;
-    return {
-        status  => $status // 200,
-        headers => { 'Content-Type' => 'application/json' },
-        body    => JSON::XS::encode_json($data),
-    };
-}
-
-sub text_response {
-    my ($self, $text, $status) = @_;
-    return {
-        status  => $status // 200,
-        headers => { 'Content-Type' => 'text/plain' },
-        body    => $text,
-    };
-}
-
-sub html_response {
-    my ($self, $html, $status) = @_;
-    return {
-        status  => $status // 200,
-        headers => { 'Content-Type' => 'text/html' },
-        body    => $html,
-    };
-}
-
-sub redirect {
-    my ($self, $url, $status) = @_;
-    return {
-        status  => $status // 302,
-        headers => { 'Location' => $url },
-        body    => '',
-    };
-}
-
-sub error {
-    my ($self, $message, $status) = @_;
-    $message //= 'Internal Server Error';
-    $status //= 500;
-    return {
-        status  => $status,
-        headers => { 'Content-Type' => 'application/json' },
-        body    => qq({"error":"$message"}),
-    };
-}
-
-sub not_found {
-    my ($self, $message) = @_;
-    return $self->error($message // 'Not Found', 404);
-}
-
-sub bad_request {
-    my ($self, $message) = @_;
-    return $self->error($message // 'Bad Request', 400);
-}
-
-sub unauthorized {
-    my ($self, $message) = @_;
-    return $self->error($message // 'Unauthorized', 401);
-}
-
-sub forbidden {
-    my ($self, $message) = @_;
-    return $self->error($message // 'Forbidden', 403);
 }
 
 1;

@@ -19,7 +19,7 @@
 
 =head1 NAME
 
-Object::Meta::Named - Library to recognise a special C<Name> field from the raw data
+Object::Meta::Named - Library to recognise a special C<name> field from the raw data
 
 =cut
 

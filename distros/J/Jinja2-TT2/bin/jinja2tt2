@@ -1,0 +1,195 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use v5.20;
+
+use FindBin qw($RealBin);
+use lib "$RealBin/../lib";
+
+use Getopt::Long qw(GetOptions);
+use Pod::Usage qw(pod2usage);
+
+use Jinja2::TT2;
+
+my %opts = (
+    help    => 0,
+    version => 0,
+    debug   => 0,
+    output  => '-',
+    inplace => 0,
+);
+
+GetOptions(
+    'help|h'     => \$opts{help},
+    'version|v'  => \$opts{version},
+    'debug|d'    => \$opts{debug},
+    'output|o=s' => \$opts{output},
+    'inplace|i'  => \$opts{inplace},
+) or pod2usage(2);
+
+pod2usage(1) if $opts{help};
+
+if ($opts{version}) {
+    say "jinja2tt2 version $Jinja2::TT2::VERSION";
+    exit 0;
+}
+
+# Get input
+my $input;
+my $input_file;
+
+if (@ARGV) {
+    $input_file = shift @ARGV;
+    open my $fh, '<:encoding(UTF-8)', $input_file
+        or die "Cannot open '$input_file': $!";
+    $input = do { local $/; <$fh> };
+    close $fh;
+} else {
+    # Read from stdin
+    $input = do { local $/; <STDIN> };
+}
+
+# Transpile
+my $transpiler = Jinja2::TT2->new(debug => $opts{debug});
+my $output;
+
+eval {
+    $output = $transpiler->transpile($input);
+};
+
+if ($@) {
+    die "Transpilation error: $@";
+}
+
+# Write output
+if ($opts{inplace} && $input_file) {
+    # Write back to original file with .tt extension
+    my $output_file = $input_file;
+    $output_file =~ s/\.(j2|jinja2?|html\.j2)$/.tt/i;
+    $output_file .= '.tt' if $output_file eq $input_file;
+
+    open my $fh, '>:encoding(UTF-8)', $output_file
+        or die "Cannot write '$output_file': $!";
+    print $fh $output;
+    close $fh;
+
+    say "Wrote: $output_file";
+} elsif ($opts{output} eq '-') {
+    print $output;
+} else {
+    open my $fh, '>:encoding(UTF-8)', $opts{output}
+        or die "Cannot write '$opts{output}': $!";
+    print $fh $output;
+    close $fh;
+}
+
+__END__
+
+=head1 NAME
+
+jinja2tt2 - Transpile Jinja2 templates to Template Toolkit 2
+
+=head1 SYNOPSIS
+
+    jinja2tt2 [options] [input_file]
+
+    # From file
+    jinja2tt2 template.j2 > template.tt
+
+    # From stdin
+    echo '{{ name|upper }}' | jinja2tt2
+
+    # In-place conversion
+    jinja2tt2 -i template.j2
+
+    # With debug output
+    jinja2tt2 -d template.j2
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-h, --help>
+
+Print this help message and exit.
+
+=item B<-v, --version>
+
+Print version information and exit.
+
+=item B<-d, --debug>
+
+Print debug information (tokens and AST) to stderr.
+
+=item B<-o, --output> FILE
+
+Write output to FILE instead of stdout.
+
+=item B<-i, --inplace>
+
+Convert file in place, creating a .tt file alongside the input.
+
+=back
+
+=head1 EXAMPLES
+
+    # Simple variable
+    echo '{{ user.name }}' | jinja2tt2
+    # Output: [% user.name %]
+
+    # Filter
+    echo '{{ name|upper }}' | jinja2tt2
+    # Output: [% name.upper %]
+
+    # Loop
+    echo '{% for item in items %}{{ item }}{% endfor %}' | jinja2tt2
+    # Output: [% FOREACH item IN items %][% item %][% END %]
+
+    # Conditional
+    echo '{% if user %}Hello{% endif %}' | jinja2tt2
+    # Output: [% IF user %]Hello[% END %]
+
+=head1 SUPPORTED CONSTRUCTS
+
+=over 4
+
+=item * Variables and attribute access
+
+=item * Filters (most common ones)
+
+=item * for loops (including else clause)
+
+=item * if/elif/else conditionals
+
+=item * Blocks and inheritance (partial)
+
+=item * Includes
+
+=item * Macros
+
+=item * Comments
+
+=item * Whitespace control (-% tags)
+
+=back
+
+=head1 LIMITATIONS
+
+=over 4
+
+=item * Template inheritance (extends) requires manual adjustment
+
+=item * Some filters need TT2 plugins (JSON, Dumper, etc.)
+
+=item * Complex expressions may need review
+
+=item * Autoescape is not directly supported in TT2
+
+=back
+
+=head1 AUTHOR
+
+Luciano Federico Pereira
+
+=cut

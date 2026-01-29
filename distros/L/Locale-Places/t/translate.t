@@ -3,7 +3,9 @@
 use strict;
 use warnings;
 
-use Test::Most tests => 28;
+use Test::RequiresInternet;
+use Test::Most tests => 32;
+
 use lib 't/lib';
 use MyLogger;
 
@@ -20,7 +22,7 @@ TRANSLATE: {
 	}
 
 	SKIP: {
-		if((!defined($ENV{'AUTOMATED_TESTING'}) && (!defined($ENV{'NO_NETWORK_TESTING'})) && (-d 'lib/Locale/Places/data'))) {
+		if(-d 'lib/Locale/Places/data') {
 			eval { require 'autodie' };
 
 			like($places->translate(place => 'London', from => 'en', to => 'fr'), qr/Londres$/, 'French for London is Londres');
@@ -37,6 +39,7 @@ TRANSLATE: {
 
 			$ENV{'LANGUAGE'} = 'en';
 			is($places->translate({ place => 'Dover', 'from' => 'en' }), 'Dover', 'LANGUAGE set to English');
+			is($places->translate({ place => 'Dover', 'from' => 'en' }), 'Dover', 'Cached value is returned');
 
 			delete $ENV{'LANGUAGE'};
 
@@ -75,6 +78,14 @@ TRANSLATE: {
 			is($places->translate(place => 'Bexley', from => 'en', to => 'fr'), 'Bexley', 'Test for two preferred values that are the same');
 			is($places->translate(place => 'Thurrock', to => 'fr'), 'Thurrock', 'Test for two preferred values neither of which matches');
 			is($places->fr(place => 'Thurrock'), 'Thurrock', 'AUTOLOAD: Test for two preferred values neither of which matches');
+
+			throws_ok {
+				$places->translate(place => 'Paris', from => 'en', to => 'fr', country => 'ZZ');
+			} qr/Unsupported country/, 'invalid country rejected';
+
+			lives_ok {
+				ok(!defined($places->foo(place => 'London')));
+			} 'invalid AUTOLOAD rejected';
 		} else {
 			diag('AUTOMATED_TESTING: Not testing live data');
 			skip('AUTOMATED_TESTING: Not testing live data', 26);

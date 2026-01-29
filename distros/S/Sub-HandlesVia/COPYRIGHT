@@ -32,9 +32,7 @@ Files: Changes
  lib/Sub/HandlesVia/Toolkit/ObjectPad.pm.mite.pm
  lib/Sub/HandlesVia/Toolkit/Plain.pm
  lib/Sub/HandlesVia/Toolkit/Plain.pm.mite.pm
- t/02moo/modifiers.t
- t/03moo_mxtt.t
- t/03moo_mxtth.t
+ t/00begin.t
  t/30egpod/array.t
  t/30egpod/bool.t
  t/30egpod/code.t
@@ -48,19 +46,30 @@ Files: Changes
  t/40mite/code.t
  t/40mite/counter.t
  t/40mite/hash.t
+ t/40mite/lib/MyTest.pm.mite.pm
+ t/40mite/lib/MyTest/Class1.pm.mite.pm
+ t/40mite/lib/MyTest/Mite.pm
+ t/40mite/lib/MyTest/Role1.pm.mite.pm
+ t/40mite/lib/MyTest/Role2.pm.mite.pm
  t/40mite/lib/MyTest/TestClass/Array.pm
+ t/40mite/lib/MyTest/TestClass/Array.pm.mite.pm
  t/40mite/lib/MyTest/TestClass/Bool.pm
+ t/40mite/lib/MyTest/TestClass/Bool.pm.mite.pm
  t/40mite/lib/MyTest/TestClass/Code.pm
+ t/40mite/lib/MyTest/TestClass/Code.pm.mite.pm
  t/40mite/lib/MyTest/TestClass/Counter.pm
+ t/40mite/lib/MyTest/TestClass/Counter.pm.mite.pm
  t/40mite/lib/MyTest/TestClass/Hash.pm
+ t/40mite/lib/MyTest/TestClass/Hash.pm.mite.pm
  t/40mite/lib/MyTest/TestClass/Number.pm
+ t/40mite/lib/MyTest/TestClass/Number.pm.mite.pm
  t/40mite/lib/MyTest/TestClass/Scalar.pm
+ t/40mite/lib/MyTest/TestClass/Scalar.pm.mite.pm
  t/40mite/lib/MyTest/TestClass/String.pm
+ t/40mite/lib/MyTest/TestClass/String.pm.mite.pm
  t/40mite/number.t
  t/40mite/scalar.t
  t/40mite/string.t
- t/50objectpad.t
- t/55corinna.t
  t/55corinna/array.t
  t/55corinna/bool.t
  t/55corinna/code.t
@@ -69,59 +78,8 @@ Files: Changes
  t/55corinna/number.t
  t/55corinna/scalar.t
  t/55corinna/string.t
- t/96foreach.t
- t/99headtail.t
-Copyright: Copyright 2025 Toby Inkster.
-License: GPL-1.0+ or Artistic-1.0
-
-Files: dist.ini
- t/00begin.t
- t/02moo.t
- t/02moo/ext_attr.t
- t/02moo/roles-multiple.t
- t/04moose.t
- t/04moose/ext_attr.t
- t/04moose/role.t
- t/04moose/roles-multiple.t
- t/04moose/trait_array.t
- t/04moose/trait_bool.t
- t/04moose/trait_code.t
- t/04moose/trait_counter.t
- t/04moose/trait_hash.t
- t/04moose/trait_number.t
- t/04moose/trait_string.t
- t/05moose_nativetypes/trait_array.t
- t/06mouse.t
- t/06mouse/ext_attr.t
- t/06mouse/roles-multiple.t
- t/06mouse/trait_hash.t
- t/10barebones_eagerbuilder.t
- t/11delegation.t
- t/14enum.t
- t/15preludes.t
- t/16stackqueue.t
- t/40mite/lib/MyTest.pm
- t/40mite/lib/MyTest.pm.mite.pm
- t/40mite/lib/MyTest/Class1.pm
- t/40mite/lib/MyTest/Class1.pm.mite.pm
- t/40mite/lib/MyTest/Mite.pm
- t/40mite/lib/MyTest/Role1.pm
- t/40mite/lib/MyTest/Role1.pm.mite.pm
- t/40mite/lib/MyTest/Role2.pm
- t/40mite/lib/MyTest/Role2.pm.mite.pm
- t/40mite/lib/MyTest/TestClass/Array.pm.mite.pm
- t/40mite/lib/MyTest/TestClass/Bool.pm.mite.pm
- t/40mite/lib/MyTest/TestClass/Code.pm.mite.pm
- t/40mite/lib/MyTest/TestClass/Counter.pm.mite.pm
- t/40mite/lib/MyTest/TestClass/Hash.pm.mite.pm
- t/40mite/lib/MyTest/TestClass/Number.pm.mite.pm
- t/40mite/lib/MyTest/TestClass/Scalar.pm.mite.pm
- t/40mite/lib/MyTest/TestClass/String.pm.mite.pm
- t/60detect.t
- t/61moosemetagubbins.t
- t/62mousemetagubbins.t
- t/94cmp.t
-Copyright: Copyright 2022 Toby Inkster.
+ t/88shvxs.t
+Copyright: Copyright 2026 Toby Inkster.
 License: GPL-1.0+ or Artistic-1.0
 
 Files: t/02moo/role.t
@@ -173,6 +131,42 @@ Files: t/02moo/role.t
 Copyright: Copyright 2020 Toby Inkster.
 License: GPL-1.0+ or Artistic-1.0
 
+Files: dist.ini
+ t/02moo.t
+ t/02moo/ext_attr.t
+ t/02moo/roles-multiple.t
+ t/04moose.t
+ t/04moose/ext_attr.t
+ t/04moose/role.t
+ t/04moose/roles-multiple.t
+ t/04moose/trait_array.t
+ t/04moose/trait_bool.t
+ t/04moose/trait_code.t
+ t/04moose/trait_counter.t
+ t/04moose/trait_hash.t
+ t/04moose/trait_number.t
+ t/04moose/trait_string.t
+ t/05moose_nativetypes/trait_array.t
+ t/06mouse.t
+ t/06mouse/ext_attr.t
+ t/06mouse/roles-multiple.t
+ t/06mouse/trait_hash.t
+ t/10barebones_eagerbuilder.t
+ t/11delegation.t
+ t/14enum.t
+ t/15preludes.t
+ t/16stackqueue.t
+ t/40mite/lib/MyTest.pm
+ t/40mite/lib/MyTest/Class1.pm
+ t/40mite/lib/MyTest/Role1.pm
+ t/40mite/lib/MyTest/Role2.pm
+ t/60detect.t
+ t/61moosemetagubbins.t
+ t/62mousemetagubbins.t
+ t/94cmp.t
+Copyright: Copyright 2022 Toby Inkster.
+License: GPL-1.0+ or Artistic-1.0
+
 Files: lib/Sub/HandlesVia/Declare.pm
  lib/Sub/HandlesVia/HandlerLibrary/Blessed.pm
  lib/Sub/HandlesVia/HandlerLibrary/Enum.pm
@@ -209,6 +203,17 @@ Files: README
 Copyright: This software is copyright (c) 2020, 2022 by Toby Inkster.
 License: GPL-1.0+ or Artistic-1.0
 
+Files: t/02moo/modifiers.t
+ t/03moo_mxtt.t
+ t/03moo_mxtth.t
+ t/50objectpad.t
+ t/55corinna.t
+ t/70shiftself.t
+ t/96foreach.t
+ t/99headtail.t
+Copyright: Copyright 2025 Toby Inkster.
+License: GPL-1.0+ or Artistic-1.0
+
 Files: INSTALL
  LICENSE
  Makefile.PL
@@ -232,14 +237,14 @@ Copyright: This software is copyright (c) 2020 by Toby Inkster.
 License: GPL-1.0+ or Artistic-1.0
 
 License: Artistic-1.0
- This software is Copyright (c) 2025 by the copyright holder(s).
+ This software is Copyright (c) 2026 by the copyright holder(s).
  
  This is free software, licensed under:
  
    The Artistic License 1.0
 
 License: GPL-1.0
- This software is Copyright (c) 2025 by the copyright holder(s).
+ This software is Copyright (c) 2026 by the copyright holder(s).
  
  This is free software, licensed under:
  

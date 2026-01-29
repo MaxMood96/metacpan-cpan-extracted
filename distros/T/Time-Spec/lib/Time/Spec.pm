@@ -1,5 +1,5 @@
 package Time::Spec;
-$Time::Spec::VERSION = '0.005';
+$Time::Spec::VERSION = '0.007';
 use strict;
 use warnings;
 
@@ -14,7 +14,7 @@ XSLoader::load(__PACKAGE__, __PACKAGE__->VERSION);
 
 1;
 
-# ABSTRACT: a wrapper arount struct timespec
+# ABSTRACT: a wrapper around struct timespec
 
 __END__
 
@@ -24,11 +24,11 @@ __END__
 
 =head1 NAME
 
-Time::Spec - a wrapper arount struct timespec
+Time::Spec - a wrapper around struct timespec
 
 =head1 VERSION
 
-version 0.005
+version 0.007
 
 =head1 SYNOPSIS
 

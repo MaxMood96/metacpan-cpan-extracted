@@ -16,7 +16,7 @@ on test => sub {
 on develop => sub {
     requires 'Carp::Always';
     requires 'Protocol::Sys::Virt::Devel' => '1.0.1';
-    requires 'XDR::Gen' => '1.0.0';
+    requires 'XDR::Gen' => '1.1.1';
 };
 
 feature 'examples', 'Dependencies for examples in eg/' => sub {

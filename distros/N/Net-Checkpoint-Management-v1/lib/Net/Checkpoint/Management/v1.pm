@@ -1,5 +1,5 @@
 package Net::Checkpoint::Management::v1;
-$Net::Checkpoint::Management::v1::VERSION = '0.004001';
+$Net::Checkpoint::Management::v1::VERSION = '0.004002';
 # ABSTRACT: Checkpoint Management API version 1.x client library
 
 use 5.024;
@@ -506,7 +506,7 @@ Net::Checkpoint::Management::v1 - Checkpoint Management API version 1.x client l
 
 =head1 VERSION
 
-version 0.004001
+version 0.004002
 
 =head1 SYNOPSIS
 
@@ -568,7 +568,7 @@ version available by the L</login> method.
 
 =head1 METHODS
 
-=head2 create_packages
+=head2 create_package
 
 Creates a package, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"create_$singular">
 
@@ -576,19 +576,23 @@ Creates a package, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"c
 
 Lists packages, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"list_$object">
 
-=head2 get_packages
+=head2 find_package
+
+Finds a package, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"find_$singular">
+
+=head2 get_package
 
 Gets a package, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"get_$singular">
 
-=head2 update_packages
+=head2 update_package
 
 Updates a package, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"update_$singular">
 
-=head2 delete_packages
+=head2 delete_package
 
 Deletes a package, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"delete_$singular">
 
-=head2 create_accessrules
+=head2 create_accessrule
 
 Creates an accessrule, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"create_$singular">
 
@@ -596,19 +600,23 @@ Creates an accessrule, see L<Net::Checkpoint::Management::v1::Role::ObjectMethod
 
 Lists accessrules, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"list_$object">
 
-=head2 get_accessrules
+=head2 find_accessrule
+
+Finds an accessrule, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"find_$singular">
+
+=head2 get_accessrule
 
 Gets an accessrule, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"get_$singular">
 
-=head2 update_accessrules
+=head2 update_accessrule
 
 Updates an accessrule, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"update_$singular">
 
-=head2 delete_accessrules
+=head2 delete_accessrule
 
 Deletes an accessrule, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"delete_$singular">
 
-=head2 create_networks
+=head2 create_network
 
 Creates a network, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"create_$singular">
 
@@ -616,19 +624,23 @@ Creates a network, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"c
 
 Lists networks, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"list_$object">
 
-=head2 get_networks
+=head2 find_network
+
+Finds a network, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"find_$singular">
+
+=head2 get_network
 
 Gets a network, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"get_$singular">
 
-=head2 update_networks
+=head2 update_network
 
 Updates a network, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"update_$singular">
 
-=head2 delete_networks
+=head2 delete_network
 
 Deletes a network, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"delete_$singular">
 
-=head2 create_hosts
+=head2 create_host
 
 Creates a host, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"create_$singular">
 
@@ -636,19 +648,23 @@ Creates a host, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"crea
 
 Lists hosts, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"list_$object">
 
-=head2 get_hosts
+=head2 find_host
+
+Finds a host, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"find_$singular">
+
+=head2 get_host
 
 Gets a host, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"get_$singular">
 
-=head2 update_hosts
+=head2 update_host
 
 Updates a host, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"update_$singular">
 
-=head2 delete_hosts
+=head2 delete_host
 
 Deletes a host, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"delete_$singular">
 
-=head2 create_address_ranges
+=head2 create_address_range
 
 Creates an address_range, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"create_$singular">
 
@@ -656,19 +672,23 @@ Creates an address_range, see L<Net::Checkpoint::Management::v1::Role::ObjectMet
 
 Lists address_ranges, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"list_$object">
 
-=head2 get_address_ranges
+=head2 find_address_range
+
+Finds an address_range, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"find_$singular">
+
+=head2 get_address_range
 
 Gets an address_range, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"get_$singular">
 
-=head2 update_address_ranges
+=head2 update_address_range
 
 Updates an address_range, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"update_$singular">
 
-=head2 delete_address_ranges
+=head2 delete_address_range
 
 Deletes an address_range, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"delete_$singular">
 
-=head2 create_dns_domains
+=head2 create_dns_domain
 
 Creates a dns_domain, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"create_$singular">
 
@@ -676,19 +696,23 @@ Creates a dns_domain, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods
 
 Lists dns_domains, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"list_$object">
 
-=head2 get_dns_domains
+=head2 find_dns_domain
+
+Finds a dns_domain, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"find_$singular">
+
+=head2 get_dns_domain
 
 Gets a dns_domain, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"get_$singular">
 
-=head2 update_dns_domains
+=head2 update_dns_domain
 
 Updates a dns_domain, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"update_$singular">
 
-=head2 delete_dns_domains
+=head2 delete_dns_domain
 
 Deletes a dns_domain, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"delete_$singular">
 
-=head2 create_groups
+=head2 create_group
 
 Creates a group, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"create_$singular">
 
@@ -696,19 +720,23 @@ Creates a group, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"cre
 
 Lists groups, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"list_$object">
 
-=head2 get_groups
+=head2 find_group
+
+Finds a group, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"find_$singular">
+
+=head2 get_group
 
 Gets a group, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"get_$singular">
 
-=head2 update_groups
+=head2 update_group
 
 Updates a group, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"update_$singular">
 
-=head2 delete_groups
+=head2 delete_group
 
 Deletes a group, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"delete_$singular">
 
-=head2 create_access_roles
+=head2 create_access_role
 
 Creates an access_role, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"create_$singular">
 
@@ -716,19 +744,23 @@ Creates an access_role, see L<Net::Checkpoint::Management::v1::Role::ObjectMetho
 
 Lists access_roles, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"list_$object">
 
-=head2 get_access_roles
+=head2 find_access_role
+
+Finds an access_role, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"find_$singular">
+
+=head2 get_access_role
 
 Gets an access_role, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"get_$singular">
 
-=head2 update_access_roles
+=head2 update_access_role
 
 Updates an access_role, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"update_$singular">
 
-=head2 delete_access_roles
+=head2 delete_access_role
 
 Deletes an access_role, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"delete_$singular">
 
-=head2 create_services_tcp
+=head2 create_service_tcp
 
 Creates a service_tcp, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"create_$singular">
 
@@ -736,19 +768,23 @@ Creates a service_tcp, see L<Net::Checkpoint::Management::v1::Role::ObjectMethod
 
 Lists services_tcp, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"list_$object">
 
-=head2 get_services_tcp
+=head2 find_service_tcp
+
+Finds a service_tcp, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"find_$singular">
+
+=head2 get_service_tcp
 
 Gets a service_tcp, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"get_$singular">
 
-=head2 update_services_tcp
+=head2 update_service_tcp
 
 Updates a service_tcp, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"update_$singular">
 
-=head2 delete_services_tcp
+=head2 delete_service_tcp
 
 Deletes a service_tcp, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"delete_$singular">
 
-=head2 create_services_udp
+=head2 create_service_udp
 
 Creates a service_udp, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"create_$singular">
 
@@ -756,19 +792,23 @@ Creates a service_udp, see L<Net::Checkpoint::Management::v1::Role::ObjectMethod
 
 Lists services_udp, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"list_$object">
 
-=head2 get_services_udp
+=head2 find_service_udp
+
+Finds a service_udp, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"find_$singular">
+
+=head2 get_service_udp
 
 Gets a service_udp, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"get_$singular">
 
-=head2 update_services_udp
+=head2 update_service_udp
 
 Updates a service_udp, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"update_$singular">
 
-=head2 delete_services_udp
+=head2 delete_service_udp
 
 Deletes a service_udp, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"delete_$singular">
 
-=head2 create_services_icmp
+=head2 create_service_icmp
 
 Creates a service_icmp, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"create_$singular">
 
@@ -776,19 +816,23 @@ Creates a service_icmp, see L<Net::Checkpoint::Management::v1::Role::ObjectMetho
 
 Lists services_icmp, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"list_$object">
 
-=head2 get_services_icmp
+=head2 find_service_icmp
+
+Finds a service_icmp, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"find_$singular">
+
+=head2 get_service_icmp
 
 Gets a service_icmp, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"get_$singular">
 
-=head2 update_services_icmp
+=head2 update_service_icmp
 
 Updates a service_icmp, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"update_$singular">
 
-=head2 delete_services_icmp
+=head2 delete_service_icmp
 
 Deletes a service_icmp, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"delete_$singular">
 
-=head2 create_services_icmpv6
+=head2 create_service_icmpv6
 
 Creates a service_icmpv6, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"create_$singular">
 
@@ -796,19 +840,23 @@ Creates a service_icmpv6, see L<Net::Checkpoint::Management::v1::Role::ObjectMet
 
 Lists services_icmpv6, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"list_$object">
 
-=head2 get_services_icmpv6
+=head2 find_service_icmpv6
+
+Finds a service_icmpv6, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"find_$singular">
+
+=head2 get_service_icmpv6
 
 Gets a service_icmpv6, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"get_$singular">
 
-=head2 update_services_icmpv6
+=head2 update_service_icmpv6
 
 Updates a service_icmpv6, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"update_$singular">
 
-=head2 delete_services_icmpv6
+=head2 delete_service_icmpv6
 
 Deletes a service_icmpv6, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"delete_$singular">
 
-=head2 create_services_other
+=head2 create_service_other
 
 Creates a service_other, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"create_$singular">
 
@@ -816,19 +864,23 @@ Creates a service_other, see L<Net::Checkpoint::Management::v1::Role::ObjectMeth
 
 Lists services_other, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"list_$object">
 
-=head2 get_services_other
+=head2 find_service_other
+
+Finds a service_other, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"find_$singular">
+
+=head2 get_service_other
 
 Gets a service_other, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"get_$singular">
 
-=head2 update_services_other
+=head2 update_service_other
 
 Updates a service_other, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"update_$singular">
 
-=head2 delete_services_other
+=head2 delete_service_other
 
 Deletes a service_other, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"delete_$singular">
 
-=head2 create_service_groups
+=head2 create_service_group
 
 Creates a service_group, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"create_$singular">
 
@@ -836,15 +888,19 @@ Creates a service_group, see L<Net::Checkpoint::Management::v1::Role::ObjectMeth
 
 Lists service_groups, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"list_$object">
 
-=head2 get_service_groups
+=head2 find_service_group
+
+Finds a service_group, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"find_$singular">
+
+=head2 get_service_group
 
 Gets a service_group, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"get_$singular">
 
-=head2 update_service_groups
+=head2 update_service_group
 
 Updates a service_group, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"update_$singular">
 
-=head2 delete_service_groups
+=head2 delete_service_group
 
 Deletes a service_group, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"delete_$singular">
 
@@ -852,11 +908,15 @@ Deletes a service_group, see L<Net::Checkpoint::Management::v1::Role::ObjectMeth
 
 Lists sessions, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"list_$object">
 
-=head2 get_sessions
+=head2 find_session
+
+Finds a session, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"find_$singular">
+
+=head2 get_session
 
 Gets a session, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"get_$singular">
 
-=head2 update_sessions
+=head2 update_session
 
 Updates a session, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"update_$singular">
 
@@ -864,7 +924,11 @@ Updates a session, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"u
 
 Lists tasks, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"list_$object">
 
-=head2 get_tasks
+=head2 find_task
+
+Finds a task, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"find_$singular">
+
+=head2 get_task
 
 Gets a task, see L<Net::Checkpoint::Management::v1::Role::ObjectMethods/"get_$singular">
 

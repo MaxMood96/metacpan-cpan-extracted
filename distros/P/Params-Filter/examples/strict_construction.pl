@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-use v5.40;
+use v5.36;
 
 # Example: Strict Parameter Construction
 # Demonstrates the concept of "strict construction" - ensuring only

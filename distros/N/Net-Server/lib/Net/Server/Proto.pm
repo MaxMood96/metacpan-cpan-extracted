@@ -19,6 +19,7 @@ package Net::Server::Proto;
 
 use strict;
 use warnings;
+use Carp qw(croak);
 use Socket ();
 use Exporter ();
 use constant NIx_NOHOST => 1; # The getNameInfo Xtended flags are too difficult to obtain on some older systems,
@@ -28,32 +29,40 @@ my $requires_ipv6 = 0;
 my $ipv6_package;
 my $can_disable_v6only;
 my $exported = {};
+my $have6;
+my $stub_wrapper;
 
-BEGIN {
-    if (!eval { Socket->import("IPV6_V6ONLY") }) { # Get the actual platform value
-        # XXX: Do we have to hard-code magic numbers based on OS for old Perl < 5.14 / Socket < 1.94?
-        my $IPV6_V6ONLY = $^O eq 'linux' ? 26 : # XXX: Why is Linux different?
-            $^O =~ /^(?:darwin|freebsd|openbsd|netbsd|dragonfly|MSWin32|solaris|svr4)$/ ? 27 : undef; # XXX: Most common
-        if ($IPV6_V6ONLY) {
-            import constant IPV6_V6ONLY => $IPV6_V6ONLY;
-        } else { # XXX: Scrape it from kernel header files? Last ditch effort ugly hack!
-            my $d = "/tmp/IP6Cache";
-            !eval { require "$d.pl" } and $IPV6_V6ONLY = do { mkdir $d; `h2ph -d $d -a netinet/in.h 2>/dev/null`; eval `grep -rl "sub IPV6_V6ONLY" $d|xargs cat|grep "sub IPV6_V6ONLY";echo "IPV6_V6ONLY()"`} and `rm -rf $d;echo "sub IPV6_V6ONLY{$IPV6_V6ONLY}1">$d.pl`;
-        }
-        die "IPV6_V6ONLY unknown on this platform: $@" unless defined &IPV6_V6ONLY;
-    }
-}
+our @EXPORT;
+our @EXPORT_OK; # Allow any routine defined in this module to be exported, except block these static methods:
+our @EXPORT_DENIED = qw[
+    import
+    parse_info
+    get_addr_info
+    object
+];
+sub IPV6_V6ONLY();
 
 sub import {
     my $class = shift;
     my $callpkg = caller;
+    foreach my $func (@_) {
+        if (!grep {$_ eq $func} @EXPORT_OK) { # Trying to import something not in my list
+            if (!exists &$func) { # Symbol doesn't exist here yet
+                grep {$_ eq $func} @Socket::EXPORT,@Socket::EXPORT_OK # Is exportable by Socket
+                or ($have6 || !defined $have6 && eval{($have6=0)=require Socket6}) && # Or else if Socket6 is available, AND
+                grep {$_ eq $func} @Socket6::EXPORT,@Socket6::EXPORT_OK # Is exportable by Socket6
+                or croak "$func is not a valid Socket macro nor defined by ".__PACKAGE__." and could not be imported";
+                no strict 'refs'; *$func = sub { $stub_wrapper->($func,@_) };
+            }
+            croak "$func is a static method invoked via ".__PACKAGE__."->$func so it cannot be imported" if grep {$_ eq $func} @EXPORT_DENIED;
+            push @EXPORT_OK, $func; # Verified routine or stub exists, so it's safe to append to my exportable list
+        }
+    }
     # Keep track of who imports any fake stub wrappers
     $exported->{$_}->{$callpkg}=1 foreach @_;
     return Exporter::export($class, $callpkg, @_);
 }
 
-our @EXPORT;
-our @EXPORT_OK;
 BEGIN {
     # If the underlying constant or routine really isn't available in Socket nor Socket6,
     # then it will not die until run-time instead of crashing at compile-time.
@@ -88,33 +97,29 @@ BEGIN {
 
     # Load just in time once explicitly invoked.
     my $sub = {};
-    my $s = sub {
+    $stub_wrapper = sub {
         my @c = caller 1;
-        (my $basename = (my $fullname = $c[3])) =~ s/.*:://;
+        my $fullname = __PACKAGE__."::".(my $basename = shift);
         # Manually run routine if import failed to brick over symbol in local namespace during the last attempt.
         $sub->{$fullname} ? (return $sub->{$fullname}->(@_)) : (die "$fullname: Unable to replace symbol") if exists $sub->{$fullname};
-        my @res = ();
-        no strict 'refs';
-        foreach my $pkg ($ipv6_package,"Socket","Socket6") {
-            # Some symbols, such as NI_NUMERICHOST, will not exist until explicitly called via AUTOLOAD
-            last if $pkg and eval { @res = &{"$pkg\::$basename"}(@_); $sub->{$fullname} = $pkg->can($basename); };
-        }
+        # Always try Socket.pm first, then Socket6.pm
+        $sub->{$fullname} = Socket->can($basename) || $have6 && Socket6->can($basename) || eval { # Only try to load Socket6 once
+            die "No Socket6" if defined $have6 && !$have6; ($have6||=0)||=do{require Socket6;1};
+            Socket6->can($basename) or do{no strict 'refs';&{"Socket6::$basename"};0} or # Avoid Crash: Can't use string as a subroutine ref while "strict refs"
+            Socket6->can($basename); # Socket6 will conjure the constant routine on-the-fly via AUTOLOAD upon invocation, so "can" will work the second time.
+        };
         if (my $code = $sub->{$fullname}) {
+            no strict 'refs';
             no warnings qw(redefine prototype); # Don't spew when redefining the stub in the packages that imported it (as well as mine) with the REAL routine
             eval { *{"$_\::$basename"}=$code foreach keys %{$exported->{$basename}}; *$fullname=$code } or warn "$fullname: On-The-Fly replacement failed: $@";
-            return @res < 2 && !$c[5] ? $res[0] : @res;
+            my @res = (); # Run REAL routine preserving the same wantarray-ness context as caller
+            eval { @res = $c[5] ? $code->(@_) : scalar $code->(@_); 1 } or do { (my $why=$@) =~ s/\s*at .* line \d.*//s; die "$why at $c[1] line $c[2]\n"; };
+            return $c[5] ? @res : $res[0];
         }
-        if ($ipv6_package) {
-            $sub->{$fullname} = undef;
-            die "$fullname: Failed to locate true symbol even using $ipv6_package at $c[1] line $c[2]\n";
-        } else {
-            warn "WARNING: Cheater pre-loading IPv6 attempt since non-Socket.pm $fullname called too early at $c[1] line $c[2]\n";
-            __PACKAGE__->ipv6_package({}) and $ipv6_package and return &{$basename}(@_);
-        }
+        die "$basename is not a valid Socket macro and could not be imported at $c[1] line $c[2]\n";
     };
-    foreach my $func (@EXPORT_OK) { eval "sub $func { \$s->(\@_) }" if !defined &$func; }
+    foreach my $func (@EXPORT_OK) { eval { no strict 'refs'; *$func = sub { $stub_wrapper->($func,@_) }; } if !exists &$func; }
 }
-foreach (@EXPORT_OK) { $_ = "safe_$1\_$2" if /^get(....)(info)$/ && defined &{"safe_$1\_$2"}; }
 
 # ($err, $hostname, $servicename) = safe_name_info($sockaddr, [$flags, [$xflags]])
 # Compatibility routine to always act like Socket::getnameinfo even if it doesn't exist or if IO::Socket::IP is not available.
@@ -122,15 +127,14 @@ foreach (@EXPORT_OK) { $_ = "safe_$1\_$2" if /^get(....)(info)$/ && defined &{"s
 # The old Socket6 only allows for a single option $flags after the $sockaddr input and an error might be the first element. ($host,$sevice)=Socket6::getnameinfo($sockaddr, [$flags])
 # The new Socket also allows for an optional $xflags input and always returns its $err as the first element, even on success.
 sub safe_name_info {
-    return ('IPv6 not ready yet') if !$ipv6_package && !Socket->can("getnameinfo");
-    my ($sockaddr, $flags, $xflags) = @_; $flags ||= 0; $xflags ||= 0;
+    my ($sockaddr, $flags, $xflags) = @_; $sockaddr ||= sockaddr_in 0, inet_aton "0.0.0.0"; $flags ||= 0; $xflags ||= 0;
     my @res;
     eval { @res = getnameinfo $sockaddr, $flags, $xflags; 1 } or do { # Force 3-arg input to ensure old version will die: "Usage: Socket6::getnameinfo"
-        @res = getnameinfo @_[0,1]; # Probably old Socket6 version, so hide NIx_* $xflags in $_[2]
+        @res = getnameinfo $sockaddr, $flags; # Probably old Socket6 version, so hide NIx_* $xflags in $_[2]
         @res<2 ? ($res[0]||="EAI_NONAME") : do {
             @res = @res[-3,-2,-1]; $res[0] ||= ""; # Create first $err output element, if doesn't exist.
-            $res[NIx_NOHOST] = undef if $xflags | NIx_NOHOST; # Emulate $xflags
-            $res[NIx_NOSERV] = undef if $xflags | NIx_NOSERV; # so output matches
+            $res[NIx_NOHOST] = undef if $xflags & NIx_NOHOST; # Emulate $xflags
+            $res[NIx_NOSERV] = undef if $xflags & NIx_NOSERV; # so output matches
         };
     };
     return @res;
@@ -139,24 +143,23 @@ sub safe_name_info {
 # ($err, @result) = safe_addr_info($host, $service, [$hints])
 # Compatibility routine to always act like Socket::getaddrinfo even if IO::Socket::IP is not available.
 # XXX: Why are there two different versions of getaddrinfo?
-# The old Socket6 accepts a list of optional hints and returns a multiple of 5 output. (@fiver_chunks)=Socket6::getaddrinfo($node,$port,[$family,$socktype,$proto,$flags])
+# The old Socket6 accepts a list of optional hints and returns either an $err or a multiple of 5 output. (@fiver_chunks)=Socket6::getaddrinfo($node,$port,[$family,$socktype,$proto,$flags])
 # The new Socket accepts an optional HASHREF of hints and returns an $err followed by a list of HASHREFs.
 sub safe_addr_info {
-    return ('IPv6 not ready yet') if !$ipv6_package && !Socket->can("getaddrinfo");
-    my ($host, $port, $h) = @_;
-    $h ||= {};
+    my ($host, $port, $hints) = @_; $host ||= ""; $port ||= 0;
+    $hints ||= {};
     my @res;
-    return @res = ('EAI_BADFLAGS: Usage: safe_addr_info($hostname, $servicename, \%hints)') if "HASH" ne ref $h or @_ < 2 or @_ > 3;
-    eval { @res = getaddrinfo( $host, $port, $h ); die ($res[0] || "EAI_NONAME") if @res < 2; 1 } # Nice new Socket "HASH" method
+    return @res = ('EAI_BADFLAGS: Usage: safe_addr_info($hostname, $servicename, \%hints)') if "HASH" ne ref $hints or @_ < 2 or @_ > 3;
+    eval { @res = getaddrinfo( $host, $port, $hints ); die ($res[0] || "EAI_NONAME") if @res < 2; 1 } # Nice new Socket "HASH" method
     or eval { # Convert Socket6 Old Array "C" method to "HASH" method
         @res = (''); # Pretend like no error so far
-        my @results = getaddrinfo( $host, $port, $h->{family}||0, $h->{socktype}||0, $h->{protocol}||0, $h->{flags}||0 );
+        my @results = getaddrinfo( $host, $port, map {$hints->{$_}||0} qw[family socktype protocol flags] );
         while (@results > 4) {
             my $r = {};
             (@$r{qw[family socktype protocol addr canonname]}, @results) = @results;
             push @res, $r;
         }
-        $res[0] = "EAI_NONAME" if @res < 2;
+        $res[0] ||= "EAI_NONAME" if @res < 2;
         1;
     }
     or $res[0] = ($@ || "getaddrinfo: failed $!");
@@ -177,7 +180,7 @@ sub parse_info {
 
     my $info;
     if (ref($port) eq 'HASH') {
-        die "Missing port in hashref passed in port argument.\n" if ! $port->{'port'};
+        croak "Missing port in hashref passed in port argument" if ! $port->{'port'};
         $info = $port;
     } else {
         $info = {};
@@ -259,20 +262,20 @@ sub get_addr_info {
     $proto = 'tcp' if ! defined $proto;
     $server = {}   if ! defined $server;
     return ([$host, $port, '*']) if $proto =~ /UNIX/i;
-    $port = (getservbyname($port, $proto))[2] or die "Could not determine port number from host [$host]:$_[2]\n" if $port =~ /\D/;
+    $port = (getservbyname($port, $proto))[2] or croak "Could not determine port number from host [$host]:$_[2]" if $port =~ /\D/;
 
     my @info;
     if ($host =~ /^\d+(?:\.\d+){3}$/) {
-        my $addr = inet_aton($host) or die "Unresolveable host [$host]:$port: invalid ip\n";
+        my $addr = inet_aton($host) or croak "Unresolveable host [$host]:$port: invalid ip";
         push @info, [inet_ntoa($addr), $port, 4];
     } elsif (eval { $class->ipv6_package($server) }) { # Hopefully IPv6 package has already been loaded by now, if it's available.
         my $proto_id = getprotobyname(lc($proto) eq 'udp' ? 'udp' : 'tcp');
         my $socktype = lc($proto) eq 'udp' ? SOCK_DGRAM : SOCK_STREAM;
         my @res = safe_addr_info($host eq '*' ? '' : $host, $port, { family=>AF_UNSPEC, socktype=>$socktype, protocol=>$proto_id, flags=>AI_PASSIVE });
-        my $err = shift @res; die "Unresolveable [$host]:$port: $err\n" if $err or (@res < 1 and $err = "getaddrname: $host: FAILURE!");
+        my $err = shift @res; croak "Unresolveable [$host]:$port: $err" if $err or (@res < 1 and $err = "getaddrname: $host: FAILURE!");
         while (my $r = shift @res) {
             my ($err, $ip) = safe_name_info($r->{addr}, NI_NUMERICHOST | NI_NUMERICSERV);
-            die "safe_name_info failed on [$host]:$port [$err]\n" if $err || !$ip;
+            croak "safe_name_info failed on [$host]:$port [$err]" if $err || !$ip;
             my $ipv = ($r->{family} == AF_INET) ? 4 : ($r->{family} == AF_INET6) ? 6 : '*';
             push @info, [$ip, $port, $ipv];
         }
@@ -292,14 +295,14 @@ sub get_addr_info {
             @info = grep {length $_->[0]} @info;
         }
     } elsif ($host =~ /:/) {
-        die "Unresolveable host [$host]:$port - could not load IPv6: $@";
+        croak "Unresolveable host [$host]:$port - could not load IPv6: $@";
     } else {
         my @addr;
         if ($host eq '*') {
             push @addr, INADDR_ANY;
         } else {
             (undef, undef, undef, undef, @addr) = gethostbyname($host);
-            die "Unresolveable host [$host]:$port via IPv4 gethostbyname\n" if !@addr;
+            croak "Unresolveable host [$host]:$port via IPv4 gethostbyname" if !@addr;
         }
         push @info, [inet_ntoa($_), $port, 4] for @addr
     }
@@ -341,10 +344,28 @@ sub ipv6_package {
         if (eval { require IO::Socket::INET6 }) {
             $pkg = 'IO::Socket::INET6';
         } else {
-            die "Port configuration using IPv6 could not be started.  Could not find or load IO::Socket::IP or IO::Socket::INET6:\n  $err  $@"
+            croak "Port configuration using IPv6 could not be started. Could not find or load IO::Socket::IP or IO::Socket::INET6:\n  $err  $@";
         }
     }
     return $ipv6_package = $pkg;
+}
+
+our $IPV6_V6ONLY;
+sub IPV6_V6ONLY () {
+    return $IPV6_V6ONLY if $IPV6_V6ONLY;
+    $IPV6_V6ONLY = eval { Socket::IPV6_V6ONLY() }; # First try the actual platform value
+    my $why = $@; # XXX: Do we need to hard-code magic numbers based on OS for old Perl < 5.14 / Socket < 1.94?
+    $IPV6_V6ONLY ||= $^O eq 'linux' ? 26 : # XXX: Why is Linux different?
+        $^O =~ /^(?:darwin|freebsd|openbsd|netbsd|dragonfly|MSWin32|solaris|svr4)$/ ? 27 : undef; # XXX: "27" everywhere else?
+    if (!$IPV6_V6ONLY) { # XXX: Do we need to scrape it from kernel header files? Last ditch effort super ugly string-eval hack!
+        my $d = "/tmp/IP6Cache"; !eval{$IPV6_V6ONLY=do"$d.pl"} and $IPV6_V6ONLY=do{mkdir $d;`h2ph -d $d -a netinet/in.h 2>/dev/null`;eval `echo "package _h2ph_shush_ipv6only;";grep -rl "sub IPV6_V6ONLY" $d|xargs cat|grep "sub IPV6_V6ONLY";echo "IPV6_V6ONLY()"`} and `rm -rvf $d 1>&2;echo $IPV6_V6ONLY|tee $d.pl`;
+    }
+    if ($IPV6_V6ONLY) {
+        my $bricker=sub(){$IPV6_V6ONLY}; (my $me=(caller 0)[3])=~s/.*:://;
+        no strict 'refs';no warnings qw(redefine);*{"$_\::$me"}=$bricker foreach keys %{$exported->{$me}},__PACKAGE__;
+        return $IPV6_V6ONLY;
+    }
+    croak "$why\n$@\n[Socket $Socket::VERSION] Could not determine IPV6_V6ONLY on Unknown Platform [$^O]";
 }
 
 1;

@@ -1,5 +1,15 @@
 Revision history for Net-Prometheus
 
+0.16    2026-01-28
+        [CHANGES]
+         * Account for `SVt_PVOBJ` of Perl 5.38+ in the PerlCollector heap
+           metrics
+         * Use `Future::IO->load_best_impl` of Future::IO 0.18 in the examples
+
+        [BUGFIXES]
+         * Use `IO::Socket::IP` rather than `...::INET` to test the Future::IO
+           exporter, in case the system provided a 'v6 local address
+
 0.15    2026-01-05
         [CHANGES]
          * Modernise to perl v5.20:

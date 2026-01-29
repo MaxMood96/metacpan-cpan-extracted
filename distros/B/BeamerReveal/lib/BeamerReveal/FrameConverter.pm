@@ -3,7 +3,7 @@
 
 
 package BeamerReveal::FrameConverter;
-our $VERSION = '20260123.1702'; # VERSION
+our $VERSION = '20260127.1936'; # VERSION
 
 use strict;
 use warnings;
@@ -68,8 +68,6 @@ sub toJPG {
 	      '-scale-to-y', @{[1.5*$self->{yres}]},
 	      '-progress',
 	    ];
-  #  BeamerReveal::IPC::Run::run( $cmd, 0, 2 );
-  
   my $logger = $BeamerReveal::Log::logger;
   BeamerReveal::IPC::Run::runsmart( $cmd, 2, qr/^(\d+) (\d+) .*$/,
 				    sub {
@@ -81,6 +79,8 @@ sub toJPG {
 				    },
 				    0, # coreId
 				    2, # indent
+				    undef, # directory
+				    "Error: frame conversion failed, is your beamer PDF damaged?"
 				  );
 }
 
@@ -98,7 +98,7 @@ BeamerReveal::FrameConverter - FrameConverter
 
 =head1 VERSION
 
-version 20260123.1702
+version 20260127.1936
 
 =head1 SYNOPSIS
 

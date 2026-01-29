@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use 5.010;
 
-our $VERSION = '0.03';
+our $VERSION = '0.10';
 
 # JIT-compiled gzip compression for Hypersonic
 # All compression happens in C via zlib for maximum performance
@@ -12,72 +12,23 @@ our $VERSION = '0.03';
 # Configuration
 my $COMPRESS_CONFIG;
 
-# Check if zlib is available
+# Cache for zlib detection result
+my $ZLIB_DETECTION;
+
+# Check if zlib is available and actually linkable (uses centralized detection)
 sub check_zlib {
-    # Try to find zlib header
-    my @search_paths = qw(
-        /usr/include
-        /usr/local/include
-        /opt/homebrew/include
-        /opt/local/include
-    );
-    
-    # Add macOS SDK paths
-    push @search_paths, glob('/Library/Developer/CommandLineTools/SDKs/MacOSX*.sdk/usr/include');
-    push @search_paths, glob('/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX*.sdk/usr/include');
-    
-    for my $path (@search_paths) {
-        return 1 if -f "$path/zlib.h";
-    }
-    
-    # Try pkg-config
-    my $flags = `pkg-config --cflags zlib 2>/dev/null`;
-    return 1 if $? == 0;
-    
-    # Try compiling a test
-    my $test = `echo '#include <zlib.h>' | cc -E -x c - 2>/dev/null`;
-    return 1 if $? == 0;
-    
-    return 0;
+    return $ZLIB_DETECTION->{available} if defined $ZLIB_DETECTION;
+
+    require Hypersonic::JIT::Util;
+    $ZLIB_DETECTION = Hypersonic::JIT::Util->detect_zlib();
+    return $ZLIB_DETECTION->{available};
 }
 
-# Get zlib compiler flags
+# Get zlib compiler flags (uses centralized detection)
 sub get_zlib_flags {
-    # Try pkg-config first
-    my $cflags = `pkg-config --cflags zlib 2>/dev/null`;
-    my $libs = `pkg-config --libs zlib 2>/dev/null`;
-    
-    if ($? == 0) {
-        chomp($cflags);
-        chomp($libs);
-        return ($cflags, $libs);
-    }
-    
-    # Fallback for common paths
-    my @include_paths = qw(
-        /usr/include
-        /usr/local/include
-        /opt/homebrew/include
-        /opt/local/include
-    );
-    
-    # Add macOS SDK paths
-    push @include_paths, glob('/Library/Developer/CommandLineTools/SDKs/MacOSX*.sdk/usr/include');
-    
-    for my $path (@include_paths) {
-        if (-f "$path/zlib.h") {
-            my $lib_path = $path;
-            $lib_path =~ s/include/lib/;
-            # For macOS SDK, just use -lz since the library is in the system
-            if ($path =~ /SDK/) {
-                return ("", "-lz");
-            }
-            return ("-I$path", "-L$lib_path -lz");
-        }
-    }
-    
-    # Default - zlib is typically in the system path on macOS
-    return ("", "-lz");
+    require Hypersonic::JIT::Util;
+    $ZLIB_DETECTION //= Hypersonic::JIT::Util->detect_zlib();
+    return ($ZLIB_DETECTION->{cflags} // '', $ZLIB_DETECTION->{ldflags} // '-lz');
 }
 
 # Configure compression

@@ -38,13 +38,5 @@ ok( $resolver->errorstring(), 'bogus flag set' );
 is( $resolver->_decode_result(undef), undef, 'undefined result' );
 
 
-my $file   = "25-decode.tmp";					# discard debug output
-my $handle = IO::File->new( $file, '>' ) || die "Could not open $file for writing";
-$resolver->debug(1);
-select( ( select($handle), $resolver->_decode_result($secure) )[0] );
-close($handle);
-unlink($file);
-
-
 exit;
 

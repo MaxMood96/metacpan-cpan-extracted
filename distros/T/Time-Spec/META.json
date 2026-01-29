@@ -1,5 +1,5 @@
 {
-   "abstract" : "a wrapper arount struct timespec",
+   "abstract" : "a wrapper around struct timespec",
    "author" : [
       "Leon Timmermans <fawaka@gmail.com>"
    ],
@@ -52,7 +52,7 @@
    "provides" : {
       "Time::Spec" : {
          "file" : "lib/Time/Spec.pm",
-         "version" : "0.005"
+         "version" : "0.007"
       }
    },
    "release_status" : "stable",
@@ -66,7 +66,7 @@
          "web" : "https://github.com/Leont/time-spec"
       }
    },
-   "version" : "0.005",
+   "version" : "0.007",
    "x_generated_by_perl" : "v5.42.0",
    "x_serialization_backend" : "Cpanel::JSON::XS version 4.39",
    "x_spdx_expression" : "Artistic-1.0-Perl OR GPL-1.0-or-later"

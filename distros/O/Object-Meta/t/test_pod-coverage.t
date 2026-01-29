@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 # @author Bodo (Hugo) Barwich
-# @version 2026-01-27
+# @version 2026-01-29
 # @package Test for the POD Coverage
 # @subpackage t/test_pod-coverage.t
 
@@ -21,7 +21,6 @@ use File::Find;
 use Test::More;
 use Test::Pod;
 use Pod::Coverage;
-
 
 BEGIN {
     use lib "lib";
@@ -56,13 +55,13 @@ print "# Found Modules:\n", join( "\n", @modules_found ), "\n";
 my %modules_expected = (
     'Object::Meta' => {
         package           => 'Object::Meta',
-        file => 'lib/Object/Meta.pm',
+        file              => 'lib/Object/Meta.pm',
         expected_coverage => 1
     },
     'Object::Meta::List' => {
         package            => 'Object::Meta::List',
-        file => 'lib/Object/Meta/List.pm',
-        expected_coverage  => 0.333333333333333,
+        file               => 'lib/Object/Meta/List.pm',
+        expected_coverage  => 0.33,
         expected_uncovered => {
             setIndexField         => 0,
             createIndex           => 0,
@@ -78,14 +77,24 @@ my %modules_expected = (
     },
     'Object::Meta::Named' => {
         package           => 'Object::Meta::Named',
-        file => 'lib/Object/Meta/Named.pm',
+        file              => 'lib/Object/Meta/Named.pm',
+        expected_coverage => 1
+    },
+    'Object::Meta::File' => {
+        package           => 'Object::Meta::File',
+        file              => 'lib/Object/Meta/File.pm',
         expected_coverage => 1
     },
     'Object::Meta::Named::List' => {
         package           => 'Object::Meta::Named::List',
-        file => 'lib/Object/Meta/Named/List.pm',
+        file              => 'lib/Object/Meta/Named/List.pm',
         expected_coverage => 1
     },
+    'Object::Meta::File::List' => {
+        package           => 'Object::Meta::File::List',
+        file              => 'lib/Object/Meta/File/List.pm',
+        expected_coverage => 1
+    }
 );
 
 subtest 'Module POD Coverage' => sub {
@@ -100,8 +109,8 @@ subtest 'Module POD Coverage' => sub {
             my $coverage = Pod::Coverage->new( %{ $modules_expected{$module_name} } );
 
             is(
-                $coverage->coverage(),
-                $modules_expected{$module_name}{expected_coverage},
+                sprintf( '%.2f', $coverage->coverage() ),
+                sprintf( '%.2f', $modules_expected{$module_name}{expected_coverage} ),
                 "Module '$module_name': Coverage '$modules_expected{$module_name}{expected_coverage}' as expected"
             );
 

@@ -1,5 +1,15 @@
 Revision history for Locale::Places
 
+0.16	Tue Jan 27 20:22:41 EST 2026
+	Workaround for smokers that don't set AUTOMATED TESTING - GitHub#13
+	Use Object::Configure instead of Class::Debug
+	AUTOLOAD: use Params::Get
+	Added formal specification of the translate method API
+	Use I18N::LangTags::Detect andd Test::RequiresInternet
+	Fallback to HTTP::Tiny
+	Only load the required database(s)
+	Document language fallback order
+
 0.15	Wed Jun  4 07:11:08 EDT 2025
 	Implement internal cache
 	Workaround for broken smokers not setting AUTOMATED_TESTING

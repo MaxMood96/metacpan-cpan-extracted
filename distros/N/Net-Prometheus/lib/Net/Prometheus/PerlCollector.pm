@@ -3,13 +3,13 @@
 #
 #  (C) Paul Evans, 2018-2024 -- leonerd@leonerd.org.uk
 
-package Net::Prometheus::PerlCollector 0.15;
+package Net::Prometheus::PerlCollector 0.16;
 
 use v5.20;
 use warnings;
 
 BEGIN {
-   our $VERSION = '0.15';
+   our $VERSION = '0.16';
 }
 
 use constant HAVE_XS => defined eval {

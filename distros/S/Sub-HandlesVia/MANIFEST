@@ -192,8 +192,10 @@ t/55corinna/string.t
 t/60detect.t
 t/61moosemetagubbins.t
 t/62mousemetagubbins.t
+t/70shiftself.t
 t/80beam.t
 t/81mxpa.t
+t/88shvxs.t
 t/94cmp.t
 t/95any.t
 t/96foreach.t

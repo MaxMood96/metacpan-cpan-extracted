@@ -1,0 +1,137 @@
+=pod
+
+=encoding UTF-8
+
+=head1 NAME
+
+Hash::Util::Join - SQL-like join operations on hashes
+
+=head1 SYNOPSIS
+
+    use Hash::Util::Join qw(:all);
+    
+    my %users  = (1 => 'Alice', 2 => 'Bob', 3 => 'Charlie'        );
+    my %scores = (              2 => 95,    3 => 87,       4 => 92);
+    
+    my %result = hash_inner_join %users, %scores, sub {
+      my ($key, $left, $right) = @_;
+      "$left: $right";
+    };
+    # Result: (2 => 'Bob: 95', 3 => 'Charlie: 87')
+
+=head1 DESCRIPTION
+
+C<Hash::Util::Join> provides SQL-like join operations on Perl hashes.
+Each join function combines two hashes based on their keys, similar to
+database join operations.
+
+=head1 FUNCTIONS
+
+=head2 hash_inner_join
+
+    my %result = hash_inner_join %x, %y;
+    my %result = hash_inner_join %x, %y, sub { ... };
+    my $result = hash_inner_join %x, %y, sub { ... };
+
+Returns keys present in both hashes. The merge function receives
+C<($key, $x_value, $y_value)> for each common key.
+
+Default: C<sub { $_[2] }> (right value)
+
+Returns key-value pairs in list context, hash reference in scalar context.
+
+=head2 hash_left_join
+
+    my %result = hash_left_join %x, %y;
+    my %result = hash_left_join %x, %y, sub { ... };
+    my $result = hash_left_join %x, %y, sub { ... };
+
+Returns all keys from the left hash. The merge function receives
+C<($key, $x_value, $y_value)> where C<$y_value> is C<undef> for
+keys not in the right hash.
+
+Default: C<sub { $_[2] // $_[1] }> (right // left)
+
+Returns key-value pairs in list context, hash reference in scalar context.
+
+=head2 hash_right_join
+
+    my %result = hash_right_join %x, %y;
+    my %result = hash_right_join %x, %y, sub { ... };
+    my $result = hash_right_join %x, %y, sub { ... };
+
+Returns all keys from the right hash. The merge function receives
+C<($key, $x_value, $y_value)> where C<$x_value> is C<undef> for
+keys not in the left hash.
+
+Default: C<sub { $_[2] // $_[1] }> (right // left)
+
+Returns key-value pairs in list context, hash reference in scalar context.
+
+=head2 hash_outer_join
+
+    my %result = hash_outer_join %x, %y;
+    my %result = hash_outer_join %x, %y, sub { ... };
+    my $result = hash_outer_join %x, %y, sub { ... };
+
+Returns all keys from both hashes. The merge function receives
+C<($key, $x_value, $y_value)> where either value may be C<undef>
+for keys present in only one hash.
+
+Default: C<sub { $_[2] // $_[1] }> (right // left)
+
+Returns key-value pairs in list context, hash reference in scalar context.
+
+=head2 hash_left_anti_join
+
+    my %result = hash_left_anti_join %x, %y;
+    my $result = hash_left_anti_join %x, %y;
+
+Returns keys present in the left hash but not in the right hash.
+No merge function - values come directly from the left hash.
+
+Returns key-value pairs in list context, hash reference in scalar context.
+
+=head2 hash_right_anti_join
+
+    my %result = hash_right_anti_join %x, %y;
+    my $result = hash_right_anti_join %x, %y;
+
+Returns keys present in the right hash but not in the left hash.
+No merge function - values come directly from the right hash.
+
+Returns key-value pairs in list context, hash reference in scalar context.
+
+=head2 hash_full_anti_join
+
+    my %result = hash_full_anti_join %x, %y;
+    my $result = hash_full_anti_join %x, %y;
+
+Returns keys present in either hash but not in both (symmetric difference).
+No merge function - values come from whichever hash contains the key.
+
+Returns key-value pairs in list context, hash reference in scalar context.
+
+=head1 EXPORTS
+
+Nothing is exported by default. Import functions individually or use C<:all>:
+
+    use Hash::Util::Join qw(hash_inner_join hash_left_join);
+    use Hash::Util::Join qw(:all);
+
+=head1 SEE ALSO
+
+L<Hash::Util::Set> - Set operations on hash keys
+
+=head1 AUTHOR
+
+Christian Hansen <chansen@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2025 Christian Hansen
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.
+
+=cut

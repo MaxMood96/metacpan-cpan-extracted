@@ -5,7 +5,7 @@
 
 #include "SPVM__Unicode__utf8proc.h"
 
-const char* MFILE = "SPVM/Unicode.c";
+const char* FILE_NAME = "Unicode.c";
 
 int32_t SPVM__Unicode__uchar(SPVM_ENV* env, SPVM_VALUE* stack) {
   
@@ -17,7 +17,7 @@ int32_t SPVM__Unicode__uchar(SPVM_ENV* env, SPVM_VALUE* stack) {
   int32_t* offset_ref = stack[1].iref;
   
   if (!offset_ref) {
-    return env->die(env, stack, "The reference of the offset $offset_ref must be defined.");
+    return env->die_v2(env, stack, "The reference of the offset $offset_ref must be defined.", __func__, FILE_NAME, __LINE__);
   }
   
   if (*offset_ref < 0 || *offset_ref > str_len - 1) {

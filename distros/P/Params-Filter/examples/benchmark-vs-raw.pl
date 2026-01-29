@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-use v5.40;
+use v5.36;
 use strict;
 use warnings;
 use Benchmark qw(:all);

@@ -5,7 +5,7 @@
       "Erik Huelsmann <ehuels@gmail.com>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Dist::Zilla version 6.033, CPAN::Meta::Converter version 2.150010",
+   "generated_by" : "Dist::Zilla version 6.037, CPAN::Meta::Converter version 2.150010",
    "license" : [
       "perl_5"
    ],
@@ -48,58 +48,58 @@
    "provides" : {
       "Authen::SASL" : {
          "file" : "lib/Authen/SASL.pm",
-         "version" : "2.1900"
+         "version" : "2.2000"
       },
       "Authen::SASL::CRAM_MD5" : {
          "file" : "lib/Authen/SASL/CRAM_MD5.pm",
-         "version" : "2.1900",
+         "version" : "2.2000",
          "x_deprecated" : 1
       },
       "Authen::SASL::EXTERNAL" : {
          "file" : "lib/Authen/SASL/EXTERNAL.pm",
-         "version" : "2.1900"
+         "version" : "2.2000"
       },
       "Authen::SASL::Perl" : {
          "file" : "lib/Authen/SASL/Perl.pm",
-         "version" : "2.1900"
+         "version" : "2.2000"
       },
       "Authen::SASL::Perl::ANONYMOUS" : {
          "file" : "lib/Authen/SASL/Perl/ANONYMOUS.pm",
-         "version" : "2.1900"
+         "version" : "2.2000"
       },
       "Authen::SASL::Perl::CRAM_MD5" : {
          "file" : "lib/Authen/SASL/Perl/CRAM_MD5.pm",
-         "version" : "2.1900",
+         "version" : "2.2000",
          "x_deprecated" : 1
       },
       "Authen::SASL::Perl::DIGEST_MD5" : {
          "file" : "lib/Authen/SASL/Perl/DIGEST_MD5.pm",
-         "version" : "2.1900",
+         "version" : "2.2000",
          "x_deprecated" : 1
       },
       "Authen::SASL::Perl::EXTERNAL" : {
          "file" : "lib/Authen/SASL/Perl/EXTERNAL.pm",
-         "version" : "2.1900"
+         "version" : "2.2000"
       },
       "Authen::SASL::Perl::GSSAPI" : {
          "file" : "lib/Authen/SASL/Perl/GSSAPI.pm",
-         "version" : "2.1900"
+         "version" : "2.2000"
       },
       "Authen::SASL::Perl::LOGIN" : {
          "file" : "lib/Authen/SASL/Perl/LOGIN.pm",
-         "version" : "2.1900"
+         "version" : "2.2000"
       },
       "Authen::SASL::Perl::OAUTHBEARER" : {
          "file" : "lib/Authen/SASL/Perl/OAUTHBEARER.pm",
-         "version" : "2.1900"
+         "version" : "2.2000"
       },
       "Authen::SASL::Perl::PLAIN" : {
          "file" : "lib/Authen/SASL/Perl/PLAIN.pm",
-         "version" : "2.1900"
+         "version" : "2.2000"
       },
       "Authen::SASL::Perl::XOAUTH2" : {
          "file" : "lib/Authen/SASL/Perl/XOAUTH2.pm",
-         "version" : "2.1900"
+         "version" : "2.2000"
       }
    },
    "release_status" : "stable",
@@ -114,7 +114,7 @@
          "web" : "https://github.com/perl-authen-sasl/perl-authen-sasl/"
       }
    },
-   "version" : "2.1900",
+   "version" : "2.2000",
    "x_contributors" : [
       "Aditya Garg <gargaditya08@live.com>",
       "Chris Ridd <chris.ridd@isode.com>",
@@ -130,7 +130,7 @@
       "openstrike <git@openstrike.co.uk>"
    ],
    "x_generated_by_perl" : "v5.38.2",
-   "x_serialization_backend" : "Cpanel::JSON::XS version 4.39",
+   "x_serialization_backend" : "Cpanel::JSON::XS version 4.40",
    "x_spdx_expression" : "Artistic-1.0-Perl OR GPL-1.0-or-later"
 }
 

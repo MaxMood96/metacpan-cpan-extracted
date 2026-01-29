@@ -2,7 +2,7 @@
 # -*- cperl -*-
 # PODNAME: beamer-reveal.pl
 # ABSTRACT: converts the .rvl file and the corresponding pdf file to a full reveal website
-our $VERSION = '20260123.1702'; # VERSION
+our $VERSION = '20260127.1936'; # VERSION
 
 
 use strict;
@@ -116,7 +116,6 @@ my $overall_id =
 			 total    => 5 );
 
 $logger->activate();
-
 
 ##################
 # Read input file
@@ -269,7 +268,7 @@ beamer-reveal.pl - converts the .rvl file and the corresponding pdf file to a fu
 
 =head1 VERSION
 
-version 20260123.1702
+version 20260127.1936
 
 =head1 SYNOPSIS
 

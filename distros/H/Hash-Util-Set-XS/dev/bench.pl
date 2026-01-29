@@ -75,6 +75,11 @@ for my $size (64, 256, 1024) {
     sub { my $bool = Hash::Util::Set::PP::keys_proper_subset(%x, %y); },
     sub { my $bool = Hash::Util::Set::XS::keys_proper_subset(%x, %y); }
   );
+  
+  benchmark_operation('keys_partition',
+    sub { my @sets = Hash::Util::Set::PP::keys_partition(%x, %y); },
+    sub { my @sets = Hash::Util::Set::XS::keys_partition(%x, %y); }
+  );
 }
 
 say "=" x 60;

@@ -1,15 +1,9 @@
-- [ ] implement png version (instead of jpeg version)
-- [ ] think about absolute measures for size of objects?
-- [X] Upload to CTAN
-- [X] Upload to CPAN
-- [X] Fix the Perl side for packaging to CPAN
 - [ ] Windows installer (for the perl package + the pdftoppm Poppler)
-- [X] improve gobbling of output of subcommands, to show neat log
-- [ ] make menu use short title entries instead of long ones
-- [X] slide transitions
-- [X] check for keys that are not appropriate
-- [X] move to l3build
-- [X] complete LaTeX documentation for poppler / windows build etc.
-- [X] Write Perl documentation
-- [X] add parts of latex test document as tests
-  
+- [X] make menu use short title entries instead of long ones
+- [ ] insert facility for animations to generate multiple handouts slides
+- [ ] insert speaker notes (in text mode)
+- [ ] insert speaker notes (graphical)
+- [ ] make filenames of ancillary files unique / not changing
+- [X] make inline version for all media objects
+
+- Embed a whole “subpage” in an iframe using srcdoc

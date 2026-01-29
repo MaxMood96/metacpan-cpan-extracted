@@ -1,5 +1,9 @@
 Revision history for Monit::HTTP
 
+0.07    28 Jan 2026
+        - Pod typos
+        - Generate urls from sprintf templates
+
 0.06    6 Jan 2023
         - Change lincense to MIT GH#1
 

@@ -46,6 +46,10 @@ static char *sv_typename(U8 svt)
     case SVt_INVLIST:
       return "INVLIST";
 #endif
+#if PERL_VERSION >= 38
+    case SVt_PVOBJ:
+      return "OBJECT";
+#endif
     default:
       return "UNKNOWN";
   }

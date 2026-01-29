@@ -1,10 +1,19 @@
 package App::GHGen;
 
+# Try this to update GitHub Marketplace released, but bear in mind it tends to not work, marketplace does not detect the update
+# Update the @v1 to @v2 in actions.yml
+# git tag -a v2 -m "Release v0.02"
+# git push origin v2
+# Go to https://github.com/nigelhorne/App-GHGen/releases
+# Click “Draft a new release”
+# Choose the existing tag: v2
+# Publish the release
+
 use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.01';
+our $VERSION = '0.03';
 
 =head1 NAME
 
@@ -28,9 +37,14 @@ App::GHGen - Comprehensive GitHub Actions workflow generator, analyzer, and opti
 
 =head1 DESCRIPTION
 
-App::GHGen is a comprehensive toolkit for creating, analyzing, and optimizing GitHub Actions workflows.
-It combines intelligent project detection, workflow generation, security analysis, cost optimization,
-and automatic fixing into a single powerful tool.
+GHGen Workflow Analyzer is the all‑in‑one solution for keeping your GitHub Actions fast, secure, and effortlessly up‑to‑date.
+It automatically scans your workflows for performance bottlenecks,
+outdated actions,
+missing security permissions, and wasted CI minutes—then applies safe, intelligent fixes or opens a clean pull request with improvements.
+Whether you maintain a single project or dozens,
+GHGen saves time, reduces CI costs, and enforces modern best practices without manual effort.
+Developers choose it because it turns workflow maintenance from a chore into a fully automated,
+reliable part of their development pipeline.
 
 =head2 Key Features
 
@@ -58,13 +72,13 @@ and automatic fixing into a single powerful tool.
 
 =head1 INSTALLATION
 
-=head2 From CPAN (when published)
+=head2 From CPAN
 
     cpanm App::GHGen
 
 =head2 From Source
 
-    git clone https://github.com/nigelhorne/ghgen.git
+    git clone https://github.com/nigelhorne/App-GHGen.git
     cd ghgen
     cpanm --installdeps .
     perl Makefile.PL
@@ -450,7 +464,7 @@ Automatically comment on PRs that modify workflows:
         runs-on: ubuntu-latest
         steps:
           - uses: actions/checkout@v6
-          - uses: nigelhorne/ghgen-action@v1
+          - uses: nigelhorne/App-GHGen@v1
             with:
               github-token: ${{ secrets.GITHUB_TOKEN }}
               mode: comment
@@ -492,7 +506,7 @@ Automatically create PRs with fixes on a schedule:
         runs-on: ubuntu-latest
         steps:
           - uses: actions/checkout@v6
-          - uses: nigelhorne/ghgen-action@v1
+          - uses: nigelhorne/App-GHGen@v1
             with:
               github-token: ${{ secrets.GITHUB_TOKEN }}
               auto-fix: true
@@ -520,7 +534,7 @@ Fail builds if workflow issues are found:
         runs-on: ubuntu-latest
         steps:
           - uses: actions/checkout@v6
-          - uses: nigelhorne/ghgen-action@v1
+          - uses: nigelhorne/App-GHGen@v1
             id: check
           - name: Fail if issues found
             if: steps.check.outputs.issues-found > 0
@@ -1149,6 +1163,12 @@ B<Solution:>
 
 =head1 SEE ALSO
 
+=over 4
+
+=item * L<Test Coverage Report|https://nigelhorne.github.io/App-GHGen/coverage/>
+
+=back
+
 =head2 GitHub Actions Documentation
 
 =over 4
@@ -1183,7 +1203,7 @@ Contributions are welcome! GHGen is open source and hosted on GitHub.
 
 =over 4
 
-=item * B<Report bugs> - L<GitHub Issues|https://github.com/nigelhorne/ghgen/issues>
+=item * B<Report bugs> - L<GitHub Issues|https://github.com/nigelhorne/App-GHGen/issues>
 
 =item * B<Suggest features> - Open an issue with your idea
 
@@ -1237,13 +1257,27 @@ To add support for a new language:
 
 =head1 SUPPORT
 
+This module is provided as-is without any warranty.
+
+Please report any bugs or feature requests to C<bug-app-ghgen at rt.cpan.org>,
+or through the web interface at
+L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=App-GHGen>.
+I will be notified, and then you'll
+automatically be notified of progress on your bug as I make changes.
+
+You can find documentation for this module with the perldoc command.
+
+    perldoc App::GHGen
+
+You can also look for information at:
+
 =head2 Getting Help
 
 =over 4
 
-=item * L<GitHub Issues|https://github.com/nigelhorne/ghgen/issues> - Bug reports and feature requests
+=item * L<GitHub Issues|https://github.com/nigelhorne/App-GHGen/issues> - Bug reports and feature requests
 
-=item * L<GitHub Discussions|https://github.com/nigelhorne/ghgen/discussions> - Questions and community
+=item * L<GitHub Discussions|https://github.com/nigelhorne/App-GHGen/discussions> - Questions and community
 
 =item * Email: L<njh@nigelhorne.com|mailto:njh@nigelhorne.com>
 
@@ -1263,11 +1297,11 @@ L<https://github.com/nigelhorne>
 
 Thanks to all contributors who have helped improve GHGen!
 
-See L<https://github.com/nigelhorne/ghgen/graphs/contributors>
+See L<https://github.com/nigelhorne/App-GHGen/graphs/contributors>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2025 Nigel Horne.
+Copyright 2025-2026 Nigel Horne.
 
 Usage is subject to license terms.
 

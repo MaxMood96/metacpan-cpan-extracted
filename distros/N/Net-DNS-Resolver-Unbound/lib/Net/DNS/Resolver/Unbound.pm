@@ -15,7 +15,7 @@ use base (OS_CONF)[0];			## backward compatibility only
 our $VERSION;
 
 BEGIN {
-	$VERSION = '1.33';
+	$VERSION = '1.35';
 	eval { __PACKAGE__->bootstrap($VERSION) };
 }
 
@@ -180,7 +180,7 @@ sub new {
 		my $value = shift @args;
 		$self->$attr( ref($value) ? @$value : $value );
 	}
-	$self->_finalise_config;				# force context rebuild
+	$self->_finalise_config;				# merge config updates
 	return $self;
 }
 
@@ -244,40 +244,18 @@ use constant UB_SEND => UB_CONTEXT->can('ub_send');
 sub send {
 	my ( $self, @argument ) = @_;
 
-	my ($packet) = @argument;
-	if ( ref $packet ) {					# resolve packets asynchronously
-		my $handle = $self->bgsend(@argument);
-		return $self->bgread($handle);
-	}
-
-	$self->_finalise_config;
-	$self->_reset_errorstring;
-
-	my $query  = $self->_make_query_packet(@argument);
-	my ($q)	   = $query->question;
-	my $result = $self->{ub_ctx}->ub_resolve( $q->name, $q->{qtype}, $q->{qclass} );
-	return $self->_decode_result($result);
+	my $handle = $self->bgsend(@argument);			# resolve asynchronously
+	return $self->bgread($handle);
 }
 
 sub bgsend {
 	my ( $self, @argument ) = @_;
-	$self->_finalise_config;
 	$self->_reset_errorstring;
+	$self->_finalise_config;				# merge config updates
 
 	my $query = $self->_make_query_packet(@argument);
-	my $image = $query->encode;
-	my $ident = $query->header->id;
-	my ($q)	  = $query->question;
-	return $self->{ub_ctx}->ub_resolve_async( $q->name, $q->{qtype}, $q->{qclass}, $ident );
-}
-
-sub bgbusy {
-	my ( $self, $handle ) = @_;
-	return unless $handle;
-	return unless $handle->waiting;
-	$self->{ub_ctx}->ub_process;
-	eval { select( undef, undef, undef, 0.200 ) };		# avoid tight loop on bgbusy()
-	return $handle->waiting;
+	my ($q) = $query->question;
+	return $self->{ub_ctx}->ub_resolve_async( $q->name, $q->{qtype}, $q->{qclass}, $query );
 }
 
 sub bgread {
@@ -288,8 +266,19 @@ sub bgread {
 	$self->errorstring( $handle->err );
 
 	my $reply = $self->_decode_result( $handle->result ) || return;
-	$reply->header->id( $handle->query_id );		# lying toad!;
+	$handle->query->{id} = $reply->_quid;			# zero id replaced by random lie
+
+	$reply->print if $self->debug;
 	return $reply;
+}
+
+sub bgbusy {
+	my ( $self, $handle ) = @_;
+	return unless $handle;
+	return unless $handle->waiting;
+	$self->{ub_ctx}->ub_process;
+	eval { select( undef, undef, undef, 0.200 ) };		# avoid tight loop on bgbusy()
+	return $handle->waiting;
 }
 
 
@@ -537,7 +526,7 @@ sub string {
 ;; ${prefer}	$self->{$prefer}	ndots	$self->{ndots}
 ;; ${force}	$self->{$force}	debug	$self->{debug}
 END
-	$self->_finalise_config;				# force config rebuild
+	$self->_finalise_config;				# merge config updates
 	my %config = %{$self->{ub_cfg}};
 	my $optref = $config{set_option} || [];
 	my @option = @$optref;					# pre-sorted option list
@@ -579,8 +568,7 @@ sub _decode_result {
 	my $buffer = $result->answer_packet || return;
 	my $packet = Net::DNS::Packet->decode( \$buffer );
 	$self->errorstring($@);
-	$packet->print if $self->debug;
-
+	delete $packet->{id} unless $packet->{id};		# discard zero id
 	return $packet;
 }
 

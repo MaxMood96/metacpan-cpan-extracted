@@ -84,9 +84,6 @@ METHODS
 
 TODO
 
-      * Proper error handling if the run future dies; clear state and fail
-      all pending queries.
-
       * Some wrapping of other resolvers, like the POSIX get*ent family.
 
       * Look into other backends - will be necessary for other resolver

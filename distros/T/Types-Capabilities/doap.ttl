@@ -13,12 +13,15 @@
 	a                    doap:Project;
 	dc:contributor       <http://purl.org/NET/cpan-uri/person/tobyink>;
 	doap-deps:develop-recommendation [ doap-deps:on "Dist::Inkt 0.001"^^doap-deps:CpanId ];
+	doap-deps:runtime-recommendation [
+		doap-deps:on "Sub::HandlesVia::XS 0.001003"^^doap-deps:CpanId;
+	];
 	doap-deps:runtime-requirement [ doap-deps:on "perl 5.010001"^^doap-deps:CpanId ], [
 		doap-deps:on "Type::Tiny::Duck 2.000000"^^doap-deps:CpanId;
 	], [ doap-deps:on "Types::Common"^^doap-deps:CpanId ], [ doap-deps:on "Types::Path::Tiny"^^doap-deps:CpanId ], [ doap-deps:on "Carp"^^doap-deps:CpanId ], [ doap-deps:on "Module::Runtime"^^doap-deps:CpanId ], [ doap-deps:on "parent"^^doap-deps:CpanId ], [
-		doap-deps:on "Sub::HandlesVia::CodeGenerator 0.050006"^^doap-deps:CpanId;
+		doap-deps:on "Sub::HandlesVia::CodeGenerator 0.053000"^^doap-deps:CpanId;
 	], [
-		doap-deps:on "Sub::HandlesVia::Handler 0.050006"^^doap-deps:CpanId;
+		doap-deps:on "Sub::HandlesVia::Handler 0.053000"^^doap-deps:CpanId;
 	], [
 		doap-deps:on "Class::Method::Modifiers"^^doap-deps:CpanId;
 	], [
@@ -42,7 +45,7 @@
 	doap:maintainer      <http://purl.org/NET/cpan-uri/person/tobyink>;
 	doap:name            "Types-Capabilities";
 	doap:programming-language "Perl";
-	doap:release         <http://purl.org/NET/cpan-uri/dist/Types-Capabilities/v_0-001000>, <http://purl.org/NET/cpan-uri/dist/Types-Capabilities/v_0-002000>, <http://purl.org/NET/cpan-uri/dist/Types-Capabilities/v_0-002001>, <http://purl.org/NET/cpan-uri/dist/Types-Capabilities/v_0-003000>;
+	doap:release         <http://purl.org/NET/cpan-uri/dist/Types-Capabilities/v_0-001000>, <http://purl.org/NET/cpan-uri/dist/Types-Capabilities/v_0-002000>, <http://purl.org/NET/cpan-uri/dist/Types-Capabilities/v_0-002001>, <http://purl.org/NET/cpan-uri/dist/Types-Capabilities/v_0-003000>, <http://purl.org/NET/cpan-uri/dist/Types-Capabilities/v_0-004000>;
 	doap:repository      [
 		a doap:GitRepository;
 		doap:browse <https://github.com/tobyink/p5-types-capabilities>;
@@ -98,6 +101,19 @@
 	doap-changeset:released-by <http://purl.org/NET/cpan-uri/person/tobyink>;
 	doap:file-release    <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Types-Capabilities-0.003000.tar.gz>;
 	doap:revision        "0.003000"^^xsd:string.
+
+<http://purl.org/NET/cpan-uri/dist/Types-Capabilities/v_0-004000>
+	a                    doap:Version;
+	dc:identifier        "Types-Capabilities-0.004000"^^xsd:string;
+	dc:issued            "2026-01-28"^^xsd:date;
+	doap-changeset:changeset [
+		doap-changeset:item [
+			rdfs:label "Updated for newest Sub::HandlesVia and Sub::HandlesVia::XS.";
+		];
+	];
+	doap-changeset:released-by <http://purl.org/NET/cpan-uri/person/tobyink>;
+	doap:file-release    <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Types-Capabilities-0.004000.tar.gz>;
+	doap:revision        "0.004000"^^xsd:string.
 
 <http://purl.org/NET/cpan-uri/person/tobyink>
 	a                    foaf:Person;

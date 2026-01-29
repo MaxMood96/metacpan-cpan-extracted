@@ -14,7 +14,7 @@ int32_t SPVM__MyZlib__test_gzopen_gzread(SPVM_ENV* env, SPVM_VALUE* stack) {
   gzFile gz_fh = gzopen(file, "rb");
   
   if (gz_fh == NULL){
-    return env->die(env, stack, "Can't open file \"%s\"\n", file);
+    return env->die_v2(env, stack, "Can't open file \"%s\"\n", __func__, __FILE__, __LINE__, file);
   }
   
   char buffer[256] = {0};

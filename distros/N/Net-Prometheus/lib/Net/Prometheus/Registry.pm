@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2020-2026 -- leonerd@leonerd.org.uk
 
-package Net::Prometheus::Registry 0.15;
+package Net::Prometheus::Registry 0.16;
 
 use v5.20;
 use warnings;

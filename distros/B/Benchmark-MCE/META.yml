@@ -3,6 +3,7 @@ abstract: 'Perl multi-core benchmarking framework'
 author:
   - 'Dimitrios Kechagias <dkechag@cpan.org>'
 build_requires:
+  Capture::Tiny: '0'
   ExtUtils::MakeMaker: '0'
   Test2::V0: '0'
 configure_requires:
@@ -25,5 +26,5 @@ requires:
   perl: '5.010000'
 resources:
   repository: git://github.com/SpareRoom/Benchmark-MCE.git
-version: '1.02'
+version: '1.03'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

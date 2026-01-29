@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2026 -- leonerd@leonerd.org.uk
 
-package Future::IO::Resolver 0.01;
+package Future::IO::Resolver 0.02;
 
 use v5.20;
 use warnings;
@@ -59,6 +59,7 @@ use constant NS_CLASS_IN => 1;
 
 my $asyncns;
 my $runf;
+my $pending_failuref;
 
 sub _asyncns ()
 {
@@ -79,11 +80,13 @@ sub _asyncns ()
             $f->done( $q );
          }
          Future->done;
-      } );
-   } while => sub ( $ ) { 1 };
+      } )
+   } while => sub ( $f ) { !$f->failure };
 
    $runf->on_fail( sub ( $err, @ ) {
       say "Future::IO::Resolver run future failed - $err";
+      $pending_failuref = $runf;
+      undef $runf;
    } );
 
    return $asyncns;
@@ -113,6 +116,12 @@ sub getaddrinfo ( $, %args )
 {
    my $asyncns = _asyncns();
 
+   if( $pending_failuref ) {
+      my $f = $pending_failuref;
+      undef $pending_failuref;
+      return $f;
+   }
+
    my $host    = delete $args{host};
    my $service = delete $args{service};
 
@@ -121,7 +130,7 @@ sub getaddrinfo ( $, %args )
    my $f = $runf->new;
    $q->setuserdata( $f );
 
-   return $f->then( sub ( $q ) {
+   my $queryf = $f->then( sub ( $q ) {
       my ( $err, @res ) = $asyncns->getaddrinfo_done( $q );
 
       if( !$err ) {
@@ -131,6 +140,8 @@ sub getaddrinfo ( $, %args )
          Future->fail( "$err\n", getaddrinfo => );
       }
    })->on_cancel( sub ( $ ) { $asyncns->cancel( $q ); } );
+
+   return Future->wait_any( $queryf, $runf->without_cancel );
 }
 
 =head2 getnameinfo
@@ -150,6 +161,12 @@ sub getnameinfo ( $, %args )
 {
    my $asyncns = _asyncns();
 
+   if( $pending_failuref ) {
+      my $f = $pending_failuref;
+      undef $pending_failuref;
+      return $f;
+   }
+
    my $addr  = delete $args{addr};
    my $flags = delete $args{flags} // 0;
 
@@ -158,7 +175,7 @@ sub getnameinfo ( $, %args )
    my $f = $runf->new;
    $q->setuserdata( $f );
 
-   return $f->then( sub ( $q ) {
+   my $queryf = $f->then( sub ( $q ) {
       my ( $err, $host, $service ) = $asyncns->getnameinfo_done( $q );
 
       if( !$err ) {
@@ -168,6 +185,8 @@ sub getnameinfo ( $, %args )
          Future->fail( "$err\n", getnameinfo => );
       }
    })->on_cancel( sub ( $ ) { $asyncns->cancel( $q ); } );
+
+   return Future->wait_any( $queryf, $runf->without_cancel );
 }
 
 =head2 res_query
@@ -188,6 +207,12 @@ sub res_query ( $, %args )
 {
    my $asyncns = _asyncns();
 
+   if( $pending_failuref ) {
+      my $f = $pending_failuref;
+      undef $pending_failuref;
+      return $f;
+   }
+
    my $dname = delete $args{dname};
    my $class = delete $args{class} // NS_CLASS_IN;
    my $type  = delete $args{type};
@@ -197,7 +222,7 @@ sub res_query ( $, %args )
    my $f = $runf->new;
    $q->setuserdata( $f );
 
-   return $f->then( sub ( $q ) {
+   my $queryf = $f->then( sub ( $q ) {
       my $answer = $asyncns->res_done( $q );
 
       if( defined $answer ) {
@@ -207,6 +232,8 @@ sub res_query ( $, %args )
          Future->fail( "$!", res_query => );
       }
    })->on_cancel( sub ( $ ) { $asyncns->cancel( $q ); } );
+
+   return Future->wait_any( $queryf, $runf->without_cancel );
 }
 
 =head2 res_search
@@ -227,6 +254,12 @@ sub res_search ( $, %args )
 {
    my $asyncns = _asyncns();
 
+   if( $pending_failuref ) {
+      my $f = $pending_failuref;
+      undef $pending_failuref;
+      return $f;
+   }
+
    my $dname = delete $args{dname};
    my $class = delete $args{class} // NS_CLASS_IN;
    my $type  = delete $args{type};
@@ -236,7 +269,7 @@ sub res_search ( $, %args )
    my $f = $runf->new;
    $q->setuserdata( $f );
 
-   return $f->then( sub ( $q ) {
+   my $queryf = $f->then( sub ( $q ) {
       my $answer = $asyncns->res_done( $q );
 
       if( defined $answer ) {
@@ -246,16 +279,13 @@ sub res_search ( $, %args )
          Future->fail( "$!", res_search => );
       }
    })->on_cancel( sub ( $ ) { $asyncns->cancel( $q ); } );
+
+   return Future->wait_any( $queryf, $runf->without_cancel );
 }
 
 =head1 TODO
 
 =over 4
-
-=item *
-
-Proper error handling if the run future dies; clear state and fail all pending
-queries.
 
 =item *
 

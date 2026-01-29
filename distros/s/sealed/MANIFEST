@@ -1,5 +1,7 @@
 Changes
 JOESUF.pub
+lib/B/Delivered.pm
+lib/clown.pm
 lib/ModPerl/RegistryCookerSealed.pm
 lib/sealed.pm
 LICENSE
@@ -10,6 +12,7 @@ README.md
 RegistryCooker.pm.patch
 sealed.xs
 t/bench.pl
+t/clown.pl
 t/signature.pl
 t/verify.pl
 typemap

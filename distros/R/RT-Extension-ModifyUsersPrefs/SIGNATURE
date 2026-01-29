@@ -1,0 +1,46 @@
+This file contains message digests of all files listed in MANIFEST,
+signed via the Module::Signature module, version 0.89.
+
+To verify the content in this distribution, first make sure you have
+Module::Signature installed, then type:
+
+    % cpansign -v
+
+It will check each file's integrity, as well as the signature's
+validity.  If "==> Signature verified OK! <==" is not displayed,
+the distribution may already have been compromised, and you should
+not run its Makefile.PL or Build.PL.
+
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: RIPEMD160
+
+SHA256 27667d8902a3870552d64153cf98b2bf3ac1a0bbac7e3a8ee45f1332e1f73652 Changes
+SHA256 4bc6caae11cf25b72dbda59f78f5bc4f9a82f73e770ce3007d872b278b8f5ac1 LICENSE
+SHA256 9ed6a8004754578c8349989374c8a147d9bf3d58bbe9788be4023244d9044493 MANIFEST
+SHA256 74fdae4426f3a123b7a55f01082d8d6be7c1f536855bafd056fe20babda2a60e META.yml
+SHA256 21b9200cb0c02469bcb19069e5e9df03c62dfa6b24dd41eced50188620960f76 Makefile.PL
+SHA256 f046a922efe76b30d2e69230c76a94eca3c5689bd54e302eb4d1cf64d79a0c7a README
+SHA256 313ea461a034fcec3f0b32771f7b70abb645fb03de90dee4795845e15b9fcfde README.md
+SHA256 311ad18541c450317cfe9a7b41d3e781855dd98fe3b4134ef60e9e09d0762aa0 html/Admin/Users/Prefs.html
+SHA256 5d563891a4e0e6b8e2f2829f8a1b13d536b27aaef50d6f57d162ce0aa686a8fa html/Callbacks/RT-Extension-ModifyUsersPrefs/Elements/Tabs/Privileged
+SHA256 0ab36e7e7af06b847b17cfe25f01d8a1f67d1db418c5a311a0f3f6d5af7091c0 inc/Module/AutoInstall.pm
+SHA256 cd5397bbe618f5bbd4e12a33b0cf5d21114e771c2dbd0ce28e2135beb52c35a8 inc/Module/Install.pm
+SHA256 22540b8bec39fc9b68994495bcf1afbadf4c0405625bc3d683b67ed0a52fa070 inc/Module/Install/AutoInstall.pm
+SHA256 798836f9ccb8d204b1be31fc3835631f57e9d818b21a8f0d14bfcfb82ff4a72a inc/Module/Install/Base.pm
+SHA256 d64cd4c16f83c5baf11f64a44bea3a0abc060a49da5aba040f0eb01394bf75ab inc/Module/Install/Can.pm
+SHA256 65d7a6098bf3f829e8c1c2865476d3537aa6f0ad0ffc9149e10812c856529043 inc/Module/Install/Fetch.pm
+SHA256 aa71b16c882fd2d8af83ac3e9761ef314bb45627905359435ae986d3129b199a inc/Module/Install/Include.pm
+SHA256 70c4b77acab3ff51dfb318110369607cb109e1c319459249623b787cf3859750 inc/Module/Install/Makefile.pm
+SHA256 14556386168007ce913e669fc08a332ccdb6140246fd55a90c879b5190c1b57a inc/Module/Install/Metadata.pm
+SHA256 33866e8b2874cec991b3c881bfcfd1630e3fe638f1af6130a82505554253c5be inc/Module/Install/RTx.pm
+SHA256 a7c5323f81fc052097b0470bd3e6e7e2de2ac9d90c59646948d89c4c7e46cfe6 inc/Module/Install/RTx/Runtime.pm
+SHA256 53825bc78e4c910b888160bc148c8bc211be58e02b99c8edcbf4854f95faa049 inc/Module/Install/ReadmeFromPod.pm
+SHA256 be36753441f18072742b266bebcc036aac2f06d8e2b48055eec78d83c21e515a inc/Module/Install/Substitute.pm
+SHA256 4c746c02c5cc19bed4c352e76205b4adff4c45ce8310d71294e1b83c059659c2 inc/Module/Install/Win32.pm
+SHA256 d3d9b4583243c470ae895defa4c44564485b53693cba1c50ab0320768f443e97 inc/Module/Install/WriteAll.pm
+SHA256 7c4ad7f9916feb5fa7e045af6ac6ecf8230942c18576c100509f978f6504a1db inc/YAML/Tiny.pm
+SHA256 afc3abefe7c1984b41b92a6a7f0a3ebc4b25e6357a34ae8ced6a0b376769c9e8 lib/RT/Extension/ModifyUsersPrefs.pm
+SHA256 2162e2e3e0ba95c875b6658371cae80e1ad7e0413e851ee9e783d1da92b72062 lib/RT/Extension/ModifyUsersPrefs/Test.pm.in
+SHA256 27b7ed56c8d5d4b61b73de100bd9222f152552d38986d4610451093e4c94b994 po/fr.po
+SHA256 1667db99ab46ee71072ed6dfed255b8f01407aa0db74aa4d1423d3aacb86774c xt/00-load.t
+SHA256 1cd652f21d1c89c0dc3edf1810007b14d216c3f9d5fce2672d081380a6e3f6fb xt/modify-users-prefs.t

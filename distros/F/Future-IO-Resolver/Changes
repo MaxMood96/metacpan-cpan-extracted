@@ -1,4 +1,10 @@
 Revision history for Future-IO-Resolver
 
+0.02    2026-01-28
+        [CHANGES]
+         * More robust error handling if the run loop fails
+         * Remark that it `test_requires` a working Future::IO::Impl module;
+           pick `Ppoll` for now as it should be fairly portable
+
 0.01    2026-01-19
         First version, released on an unsuspecting world.

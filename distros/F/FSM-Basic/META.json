@@ -4,7 +4,7 @@
       "DULAUNOY Fabrice <fabrice@dulaunoy.com>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "ExtUtils::MakeMaker version 7.34, CPAN::Meta::Converter version 2.150010",
+   "generated_by" : "ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010",
    "license" : [
       "artistic_2"
    ],
@@ -38,6 +38,6 @@
       }
    },
    "release_status" : "stable",
-   "version" : "0.24",
-   "x_serialization_backend" : "JSON::PP version 2.97001"
+   "version" : "0.28",
+   "x_serialization_backend" : "JSON::PP version 4.16"
 }

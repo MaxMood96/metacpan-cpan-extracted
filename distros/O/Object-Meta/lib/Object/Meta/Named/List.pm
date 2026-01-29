@@ -19,7 +19,7 @@
 
 =head1 NAME
 
-Object::Meta::Named::List - Library to index C<Object::Meta::Named> entries by
+Object::Meta::Named::List - Library to index C<Object::Meta::Named> instances by
 their C<name> field.
 
 =cut
@@ -32,12 +32,12 @@ package Object::Meta::Named::List;
 use parent 'Object::Meta::List';
 
 use Scalar::Util qw(blessed);
-use Digest::MD5 qw(md5_hex);
+use Digest::MD5  qw(md5_hex);
 
 =head1 DESCRIPTION
 
 C<Object::Meta::Named::List> implements a class which indexes C<Object::Meta::Named>
-entries by their C<name> field.
+instances by their C<name> field.
 
 Additionally a C<hash> meta data field will be created for indexation and lookup.
 
@@ -133,10 +133,8 @@ sub Add {
         }
     }
 
-    if ( defined $mtaety ) {
-        unless ( $mtaety->isa('Object::Meta::Named') ) {
-            $mtaety = undef;
-        }
+    if ( defined $mtaety && !$mtaety->isa('Object::Meta::Named') ) {
+        $mtaety = undef;
     }
 
     $mtaety = Object::Meta::Named::->new unless ( defined $mtaety );

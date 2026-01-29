@@ -1,0 +1,49 @@
+Sub-HandlesVia-XS
+=================
+
+Created:      2026-01-26
+Home page:    <https://metacpan.org/release/Sub-HandlesVia-XS>
+Bug tracker:  <https://github.com/tobyink/p5-sub-handlesvia-xs/issues>
+Maintainer:   Toby Inkster (TOBYINK) <tobyink@cpan.org>
+
+0.001004	2026-01-29
+
+ - Fix packaging error.
+
+0.001003	2026-01-29
+
+ - Improvements to the OUTBLESS return pattern.
+
+0.001002	2026-01-28
+
+ [ Bug Fixes ]
+ - Fix for hard to trigger refcount issues with unshift and push methods.
+
+0.001001	2026-01-28
+
+ [ Bug Fixes ]
+ - Fix for hard to trigger refcount issues with shift and pop methods.
+ - Fix segfaults in older versions of Perl caused by trying to POPs without
+   checking the function we called returned a value at all. Now always
+   check a value was returned first!
+
+ [ Other ]
+ - Added: Internal structures which have an 'element_type' now also can
+   have an 'element_type_tiny' which is a pointer back to the original
+   Type::Tiny type. If this is provided, then error handling should be even
+   better.
+ - Change missing parameter error messages to 'Wrong number of parameters'
+   for closer consistency with Type::Params.
+ - Check indices passed to get, set, and accessor methods are actually
+   integers.
+ - Check parameters passed to sort methods are actually coderefs.
+ - Check strings passed to join methods are actually strings.
+ - Defer to Type::Tiny's error handling when a type check fails, so that
+   error messages are at least approximately the same.
+ - Issue 'Wrong number of parameters' errors when too many parameters are
+   given.
+ - More consistency in whether the invocant is counted as a parameter (it
+   always is now) when reporting which parameter number had an issue.
+ - The push and unshift methods now return the new array length.
+
+0.001000	2026-01-27	Initial release

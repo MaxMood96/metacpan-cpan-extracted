@@ -1,0 +1,97 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Net::Multicast::PeerDiscovery - Local Peer Discovery via UDP Multicast
+
+=head1 SYNOPSIS
+
+    use Net::Multicast::PeerDiscovery;
+
+    my $discovery = Net::Multicast::PeerDiscovery->new();
+
+    # Register discovery callback
+    $discovery->on( peer_found => sub ($info) {
+        say "Found local peer $info->{ip}:$info->{port} for swarm $info->{info_hash}";
+    });
+
+    # Periodically announce our presence
+    $discovery->announce($info_hash, 6881);
+
+    # Drive discovery logic
+    $discovery->tick(0.1) while 1;
+
+=head1 DESCRIPTION
+
+C<Net::Multicast::PeerDiscovery> implements a multicast-based peer discovery mechanism. While originally developed for
+BitTorrent (B<BEP 14>), this module is general-purpose and can be used by any peer-to-peer or local-first application
+to find neighbors on the same LAN without requiring a central registry or external internet access.
+
+=head2 Dual-Stack Support
+
+This implementation is L<RFC 6724 compliant|https://datatracker.ietf.org/doc/html/rfc6724> and supports both IPv4 and
+IPv6 multicast:
+
+=over
+
+=item * B<IPv4 Group>: C<239.192.152.143>
+
+=item * B<IPv6 Group>: C<ff15::efc0:988f> (Site-local scope)
+
+=back
+
+It correctly handles L<IPv6 link-local|https://en.wikipedia.org/wiki/Link-local_address#IPv6> addresses (C<fe80::/10>),
+preserving the C<scope_id> required for local connectivity.
+
+=head1 METHODS
+
+=head2 C<announce( $info_hash, $port )>
+
+Broadcasts a C<BT-SEARCH> message to the multicast groups.
+
+Expected params:
+
+=over
+
+=item C<$info_hash> - a unique binary identifier for the swarm/service
+
+=item C<$port> - the port your application is listening on
+
+=back
+
+=head2 C<tick( [$timeout] )>
+
+Listens for incoming multicast packets and processes them. Triggers C<peer_found> events.
+
+=head2 C<is_available( )>
+
+Returns boolean. Requires L<IO::Socket::Multicast>. If the module is missing, discovery will gracefully disable itself
+and return false.
+
+=head2 C<on( peer_found =E<gt> sub ($info) { ... } )>
+
+Registers a handler for discovered peers. C<$info> is a hashref containing:
+
+=over
+
+=item * C<ip>: The IP address (includes C<%scope> for link-local IPv6)
+
+=item * C<port>: The remote peer's port
+
+=item * C<info_hash>: The binary identifier they are participating in
+
+=back
+
+=head1 AUTHOR
+
+Sanko Robinson E<lt>sanko@cpan.orgE<gt>
+
+=head1 COPYRIGHT
+
+Copyright (C) 2026 by Sanko Robinson.
+
+This library is free software; you can redistribute it and/or modify it under the terms of the Artistic License 2.0.
+
+=cut

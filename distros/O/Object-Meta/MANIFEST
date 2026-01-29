@@ -1,4 +1,6 @@
 lib/Object/Meta.pm
+lib/Object/Meta/File.pm
+lib/Object/Meta/File/List.pm
 lib/Object/Meta/List.pm
 lib/Object/Meta/Named.pm
 lib/Object/Meta/Named/List.pm
@@ -6,7 +8,9 @@ LICENSE
 Makefile.PL
 MANIFEST			This list of files
 README.md
+t/test_file-list.t
 t/test_named-list.t
+t/test_object-file.t
 t/test_object-list.t
 t/test_object-named.t
 t/test_object.t

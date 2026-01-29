@@ -29,6 +29,7 @@
       },
       "test" : {
          "requires" : {
+            "Future::IO::Impl::Ppoll" : "0",
             "Test2::V0" : "0"
          }
       }
@@ -36,7 +37,7 @@
    "provides" : {
       "Future::IO::Resolver" : {
          "file" : "lib/Future/IO/Resolver.pm",
-         "version" : "0.01"
+         "version" : "0.02"
       }
    },
    "release_status" : "stable",
@@ -45,6 +46,6 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.01",
+   "version" : "0.02",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

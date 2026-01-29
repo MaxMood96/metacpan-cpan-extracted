@@ -28,10 +28,9 @@ my ($dir_lhs, $dir_rhs) = @ARGV;
 my %files_lhs = scan_dir($dir_lhs);
 my %files_rhs = scan_dir($dir_rhs);
 
-my @different;
-foreach my $path (keys_intersection %files_lhs, %files_rhs) {
-  push @different, $path if $files_lhs{$path} != $files_rhs{$path};
-}
+my @different = grep {
+  $files_lhs{$_} != $files_rhs{$_}
+} keys_intersection %files_lhs, %files_rhs;
 
 my @only_lhs = keys_difference %files_lhs, %files_rhs;
 my @only_rhs = keys_difference %files_rhs, %files_lhs;

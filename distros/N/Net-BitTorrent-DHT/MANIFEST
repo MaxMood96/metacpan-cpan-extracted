@@ -1,5 +1,4 @@
 Build.PL
-CHANGELOG.md
 CODE_OF_CONDUCT.md
 CONTRIBUTING.md
 Changes.md
@@ -17,6 +16,7 @@ eg/run_node.pl
 lib/Net/BitTorrent/DHT.pm
 lib/Net/BitTorrent/DHT.pod
 lib/Net/BitTorrent/DHT/Security.pm
+lib/Net/BitTorrent/DHT/Security.pod
 t/00_local_mock.t
 t/01_find_hash.t
 t/02_announce.t
@@ -29,3 +29,4 @@ t/09_crc32c.t
 t/10_bep33.t
 t/11_bep44.t
 t/13_bep51.t
+t/15_node_id_rotation.t

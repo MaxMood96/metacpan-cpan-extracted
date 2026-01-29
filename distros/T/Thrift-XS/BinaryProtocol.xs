@@ -16,14 +16,14 @@ CODE:
     p->mbuf = (TMemoryBuffer *)xs_object_magic_get_struct_rv_pretty(aTHX_ transport, "mbuf");
   else
     p->mbuf = NULL;
-    
+
   p->transport = transport;
-  
+
   p->bool_type     = -1;
   p->bool_id       = -1;
   p->bool_value_id = -1;
   p->last_field_id = 0;
-  
+
   SIMPLEQ_INIT(p->last_fields);
 
   RETVAL = xs_object_magic_create(
@@ -40,7 +40,7 @@ DESTROY(TBinaryProtocol *p)
 CODE:
 {
   MEM_TRACE("DESTROY()\n");
-  
+
   // clear field queue
   struct field_entry *entry;
   while (!SIMPLEQ_EMPTY(p->last_fields)) {
@@ -49,7 +49,7 @@ CODE:
     MEM_TRACE("  free entry @ %p\n", entry);
     Safefree(entry);
   }
-  
+
   MEM_TRACE("  free last_fields @ %p\n", p->last_fields);
   Safefree(p->last_fields);
   MEM_TRACE("  free p @ %p\n", p);
@@ -72,30 +72,30 @@ CODE:
 {
   DEBUG_TRACE("writeMessageBegin()\n");
   RETVAL = 0;
-  
+
   SV *namecopy = sv_mortalcopy(name); // because we can't modify the original name
   sv_utf8_encode(namecopy);
   int namelen = sv_len(namecopy);
   SV *data = sv_2mortal(newSV(8 + 4+namelen));
   char i32[4];
-  
+
   // i32 type
   type = VERSION_1 | type;
   INT_TO_I32(i32, type, 0);
   sv_setpvn(data, i32, 4);
   RETVAL += 4;
-  
+
   // i32 len + string
   INT_TO_I32(i32, namelen, 0);
   sv_catpvn(data, i32, 4);
   sv_catsv(data, namecopy);
   RETVAL += 4 + namelen;
-  
+
   // i32 seqid
   INT_TO_I32(i32, seqid, 0);
   sv_catpvn(data, i32, 4);
   RETVAL += 4;
-  
+
   WRITE_SV(p, data);
 }
 OUTPUT:
@@ -129,17 +129,18 @@ OUTPUT:
   RETVAL
 
 int
-writeFieldBegin(TBinaryProtocol *p, SV * /*name*/, int type, int id)
+writeFieldBegin(TBinaryProtocol *p, SV *name, int type, int id)
 CODE:
 {
   DEBUG_TRACE("writeFieldBegin(type %d, id %d)\n", type, id);
   char data[3];
   RETVAL = 0;
-  
+
+  PERL_UNUSED_VAR(name);
   data[0] = type & 0xff;      // byte
   data[1] = (id >> 8) & 0xff; // i16
   data[2] = id & 0xff;
-  
+
   WRITE(p, data, 3);
   RETVAL += 3;
 }
@@ -161,10 +162,10 @@ CODE:
 {
   DEBUG_TRACE("writeFieldStop()\n");
   RETVAL = 0;
-  
+
   char data[1];
   data[0] = T_STOP;
-  
+
   WRITE(p, data, 1);
   RETVAL += 1;
 }
@@ -178,7 +179,7 @@ CODE:
   DEBUG_TRACE("writeMapBegin(keytype %d, valtype %d, size %d)\n", keytype, valtype, size);
   char data[6];
   RETVAL = 0;
-  
+
   data[0] = keytype & 0xff;
   data[1] = valtype & 0xff;
   INT_TO_I32(data, size, 2);
@@ -205,10 +206,10 @@ CODE:
   DEBUG_TRACE("writeListBegin(elemtype %d, size %d)\n", elemtype, size);
   char data[5];
   RETVAL = 0;
-  
+
   data[0] = elemtype & 0xff;
   INT_TO_I32(data, size, 1);
-  
+
   WRITE(p, data, 5);
   RETVAL += 5;
 }
@@ -231,10 +232,10 @@ CODE:
   DEBUG_TRACE("writeSetBegin(elemtype %d, size %d)\n", elemtype, size);
   char data[5];
   RETVAL = 0;
-  
+
   data[0] = elemtype & 0xff;
   INT_TO_I32(data, size, 1);
-  
+
   WRITE(p, data, 5);
   RETVAL += 5;
 }
@@ -257,9 +258,9 @@ CODE:
   DEBUG_TRACE("writeBool(%d)\n", SvTRUE(value) ? 1 : 0);
   char data[1];
   RETVAL = 0;
-  
+
   data[0] = SvTRUE(value) ? 1 : 0;
-  
+
   WRITE(p, data, 1);
   RETVAL += 1;
 }
@@ -273,9 +274,9 @@ CODE:
   DEBUG_TRACE("writeByte(%ld)\n", SvIV(value) & 0xff);
   char data[1];
   RETVAL = 0;
-  
+
   data[0] = SvIV(value) & 0xff;
-  
+
   WRITE(p, data, 1);
   RETVAL += 1;
 }
@@ -289,9 +290,9 @@ CODE:
   DEBUG_TRACE("writeI16(%d)\n", value);
   char data[2];
   RETVAL = 0;
-  
+
   INT_TO_I16(data, value, 0);
-  
+
   WRITE(p, data, 2);
   RETVAL += 2;
 }
@@ -305,9 +306,9 @@ CODE:
   DEBUG_TRACE("writeI32(%d)\n", value);
   char data[4];
   RETVAL = 0;
-  
+
   INT_TO_I32(data, value, 0);
-  
+
   WRITE(p, data, 4);
   RETVAL += 4;
 }
@@ -320,13 +321,13 @@ CODE:
 {
   char data[8];
   RETVAL = 0;
-  
+
   // Stringify the value, then convert to an int64_t
   const char *str = SvPOK(value) ? SvPVX(value) : SvPV_nolen(value);
   int64_t i64 = (int64_t)strtoll(str, NULL, 10);
-  
-  DEBUG_TRACE("writeI64(%lld) (from string %s)\n", i64, str);
-  
+
+  DEBUG_TRACE("writeI64(%" PRId64 ") (from string %s)\n", i64, str);
+
   data[7] = i64 & 0xff;
   data[6] = (i64 >> 8) & 0xff;
   data[5] = (i64 >> 16) & 0xff;
@@ -335,7 +336,7 @@ CODE:
   data[2] = (i64 >> 40) & 0xff;
   data[1] = (i64 >> 48) & 0xff;
   data[0] = (i64 >> 56) & 0xff;
-  
+
   WRITE(p, data, 8);
   RETVAL += 8;
 }
@@ -353,11 +354,11 @@ CODE:
     uint64_t to;
   } u;
   RETVAL = 0;
-  
+
   u.from = (double)SvNV(value);
   uint64_t bits = u.to;
   bits = htonll(bits);
-  
+
   memcpy(&data, (uint8_t *)&bits, 8);
 
   WRITE(p, data, 8);
@@ -372,7 +373,7 @@ CODE:
 {
   DEBUG_TRACE("writeString(%s)\n", SvPVX(value));
   RETVAL = 0;
-  
+
   SV *valuecopy = sv_mortalcopy(value);
   if (SvUTF8(value) != 0) {
     sv_utf8_encode(valuecopy);
@@ -380,13 +381,13 @@ CODE:
   int len = sv_len(valuecopy);
   SV *data = sv_2mortal(newSV(4 + len));
   char i32[4];
-  
+
   INT_TO_I32(i32, len, 0);
   sv_setpvn(data, i32, 4);
   RETVAL += 4;
   sv_catsv(data, valuecopy);
   RETVAL += len;
-  
+
   WRITE_SV(p, data);
 }
 OUTPUT:
@@ -398,17 +399,17 @@ CODE:
 {
   DEBUG_TRACE("readMessageBegin()\n");
   RETVAL = 0;
-  
+
   SV *tmp;
   int version;
   char *tmps;
-  
+
   // read version + type
   READ_SV(p, tmp, 4);
   tmps = SvPVX(tmp);
   I32_TO_INT(version, tmps, 0);
   RETVAL += 4;
-  
+
   if (version < 0) {
     if ((version & VERSION_MASK) != VERSION_1) {
       THROW("Thrift::TException", "Missing version identifier");
@@ -416,7 +417,7 @@ CODE:
     // set type
     if (SvROK(type))
       sv_setiv(SvRV(type), version & 0x000000ff);
-    
+
     // read string
     {
       uint32_t len;
@@ -436,7 +437,7 @@ CODE:
           sv_setpv(SvRV(name), "");
       }
     }
-    
+
     // read seqid
     {
       int s;
@@ -470,7 +471,7 @@ CODE:
 {
   DEBUG_TRACE("readStructBegin()\n");
   RETVAL = 0;
-  
+
   if (SvROK(name))
     sv_setpv(SvRV(name), "");
 }
@@ -487,22 +488,23 @@ OUTPUT:
   RETVAL
 
 int
-readFieldBegin(TBinaryProtocol *p, SV * /*name*/, SV *fieldtype, SV *fieldid)
+readFieldBegin(TBinaryProtocol *p, SV *name, SV *fieldtype, SV *fieldid)
 CODE:
 {
   DEBUG_TRACE("readFieldBegin()\n");
   SV *tmp;
   char *tmps;
   RETVAL = 0;
-  
+
+  PERL_UNUSED_VAR(name);
   READ_SV(p, tmp, 1);
   tmps = SvPVX(tmp);
   RETVAL += 1;
-  
+
   // fieldtype byte
   if (SvROK(fieldtype))
     sv_setiv(SvRV(fieldtype), tmps[0]);
-  
+
   if (tmps[0] == T_STOP) {
     if (SvROK(fieldid))
       sv_setiv(SvRV(fieldid), 0);
@@ -538,19 +540,19 @@ CODE:
   SV *tmp;
   char *tmps;
   RETVAL = 0;
-  
+
   READ_SV(p, tmp, 6);
   tmps = SvPVX(tmp);
   RETVAL += 6;
-  
+
   // keytype byte
   if (SvROK(keytype))
     sv_setiv(SvRV(keytype), tmps[0]);
-  
+
   // valtype byte
   if (SvROK(valtype))
     sv_setiv(SvRV(valtype), tmps[1]);
-  
+
   // size i32
   int isize;
   I32_TO_INT(isize, tmps, 2);
@@ -577,15 +579,15 @@ CODE:
   SV *tmp;
   char *tmps;
   RETVAL = 0;
-  
+
   READ_SV(p, tmp, 5);
   tmps = SvPVX(tmp);
   RETVAL += 5;
-  
+
   // elemtype byte
   if (SvROK(elemtype))
     sv_setiv(SvRV(elemtype), tmps[0]);
-  
+
   // size i32
   int isize;
   I32_TO_INT(isize, tmps, 1);
@@ -612,15 +614,15 @@ CODE:
   SV *tmp;
   char *tmps;
   RETVAL = 0;
-  
+
   READ_SV(p, tmp, 5);
   tmps = SvPVX(tmp);
   RETVAL += 5;
-  
+
   // elemtype byte
   if (SvROK(elemtype))
     sv_setiv(SvRV(elemtype), tmps[0]);
-  
+
   // size i32
   int isize;
   I32_TO_INT(isize, tmps, 1);
@@ -647,11 +649,11 @@ CODE:
   SV *tmp;
   char *tmps;
   RETVAL = 0;
-  
+
   READ_SV(p, tmp, 1);
   tmps = SvPVX(tmp);
   RETVAL += 1;
-  
+
   if (SvROK(value))
     sv_setiv(SvRV(value), tmps[0] ? 1 : 0);
 }
@@ -666,11 +668,11 @@ CODE:
   SV *tmp;
   char *tmps;
   RETVAL = 0;
-  
+
   READ_SV(p, tmp, 1);
   tmps = SvPVX(tmp);
   RETVAL += 1;
-  
+
   if (SvROK(value))
     sv_setiv(SvRV(value), tmps[0]);
 }
@@ -685,11 +687,11 @@ CODE:
   SV *tmp;
   char *tmps;
   RETVAL = 0;
-  
+
   READ_SV(p, tmp, 2);
   tmps = SvPVX(tmp);
   RETVAL += 2;
-  
+
   int v;
   I16_TO_INT(v, tmps, 0);
   if (SvROK(value))
@@ -706,11 +708,11 @@ CODE:
   SV *tmp;
   char *tmps;
   RETVAL = 0;
-  
+
   READ_SV(p, tmp, 4);
   tmps = SvPVX(tmp);
   RETVAL += 4;
-  
+
   int v;
   I32_TO_INT(v, tmps, 0);
   if (SvROK(value))
@@ -727,20 +729,20 @@ CODE:
   SV *tmp;
   char *tmps;
   RETVAL = 0;
-  
+
   READ_SV(p, tmp, 8);
   tmps = SvPVX(tmp);
   RETVAL += 8;
-  
+
   int64_t hi;
   uint32_t lo;
   I32_TO_INT(hi, tmps, 0);
   I32_TO_INT(lo, tmps, 4);
-  
+
   if (SvROK(value)) {
     char string[25];
     STRLEN length;
-    length = sprintf(string, "%lld", (int64_t)(hi << 32) | lo);
+    length = sprintf(string, "%" PRId64, (int64_t)(hi << 32) | lo);
     sv_setpvn(SvRV(value), string, length);
   }
 }
@@ -756,11 +758,11 @@ CODE:
   char *tmps;
   uint64_t bits;
   RETVAL = 0;
-  
+
   READ_SV(p, tmp, 8);
   tmps = SvPVX(tmp);
   RETVAL += 8;
-  
+
   bits = *(uint64_t *)tmps;
   bits = ntohll(bits);
 
@@ -769,7 +771,7 @@ CODE:
     double to;
   } u;
   u.from = bits;
-  
+
   if (SvROK(value))
     sv_setnv(SvRV(value), u.to);
 }
@@ -784,7 +786,7 @@ CODE:
   SV *tmp;
   char *tmps;
   RETVAL = 0;
-  
+
   uint32_t len;
   READ_SV(p, tmp, 4);
   tmps = SvPVX(tmp);
@@ -812,7 +814,7 @@ CODE:
   // This method is never used but is here for compat
   SV *tmp;
   RETVAL = 0;
-  
+
   if (len) {
     READ_SV(p, tmp, len);
     sv_utf8_decode(tmp);

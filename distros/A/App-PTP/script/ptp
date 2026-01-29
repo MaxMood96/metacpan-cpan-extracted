@@ -513,12 +513,39 @@ back-slash characters '\').
 
 Execute the given command and pass it the content of the current file as
 standard input. The output of the command goes on the standard output, it is not
-read by the program. The current content and markers are not modified.
+read by the program. The current file is empty after this command.
 
 Not that the given command is first interpreted as a Perl string, so it can
 contain variables from the Perl environment. This behavior can be deactivated by
 the B<-Q> flag. Then, the command is passed to a shell which will do another
 pass of interpretation. That pass cannot be deactivated.
+
+=item B<--xargs> I<command>
+
+Execute the given command for each line of the current file. The command can
+contain the string C<{}> which is replaced by the content of the of the line
+(without it's end of line separator). If the command contains no C<{}>, then the
+content of the line is appended to the command.
+
+The passed command is interpolated as a Perl string, similarly than with the
+B<--shell> command and this can be deactivated with the B<-Q> flag. The file
+name is inserted I<after> the interpolation, if any.
+
+The output of the command goes to the standard output and is not read by the
+program. The current file is empty after this command.
+
+=item B<--push>
+
+Push the current content and markers of the file to a stack. The content and
+markers are not modified by this command.
+
+=item B<--pop>
+
+Pop the content and markers of the file from the stack. The content and markers
+are restored to what they were when the B<--push> command was called. That
+command must have been called before on the current file. In particular it is
+not possible to pop after a B<--merge> command content that would have been
+pushed before it.
 
 =back
 
@@ -600,7 +627,8 @@ Keep the input separators in the content of each line. It is then your
 responsibility to preserve (or to change) this separator when the files are
 processed.
 
-Setting this flag also sets the B<--output-separator> to the empty string. This can be overridden if needed by passing that flag after the B<--eol> one
+Setting this flag also sets the B<--output-separator> to the empty string. This
+can be overridden if needed by passing that flag after the B<--eol> one
 (this would result in each line having their initial end of line separator plus
 the one specified for the output (unless the initial one is removed during the
 processing).
@@ -624,9 +652,13 @@ output compatible with B<-0> option of C<xargs>.
 
 =item B<-h>, B<--help>
 
-Print this help message and exits. Note: the help message will be much printed
-improved if you have the B<perldoc> program installed (sometimes from a
-B<perl-doc> package).
+Print this help message and exit. Note: the help message will be much improved
+if you have the B<perldoc> program installed (sometimes from a B<perl-doc>
+package).
+
+=item B<--cheat>
+
+Print the cheat sheet content and exit.
 
 =item B<--version>
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-use v5.40;
+use v5.36;
 use Params::Filter qw/filter/;
 
 # Error Handling Example: Filtering failures and how to handle them

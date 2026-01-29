@@ -65,6 +65,7 @@ sub process_country {
 
 	# Skip processing if SQLite file is valid and up to date
 	if(should_skip_build($sqlite, $csv)) {
+		print "No need to build $sqlite\n";
 		return;
 	}
 

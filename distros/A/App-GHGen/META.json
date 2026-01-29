@@ -4,7 +4,7 @@
       "Nigel Horne <njh@nigelhorne.com>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010",
+   "generated_by" : "ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150011",
    "license" : [
       "open_source"
    ],
@@ -41,6 +41,7 @@
       },
       "test" : {
          "requires" : {
+            "IPC::Run3" : "0",
             "Test::DescribeMe" : "0",
             "Test::Exception" : "0",
             "Test::More" : "0.98"
@@ -51,8 +52,8 @@
    "resources" : {
       "bugtracker" : {
          "mailto" : "bug-App-GHGen@rt.cpan.org",
-         "web" : "https://github.com/nigelhorne/App-GHGen/issues",
-         "x_url" : "https://github.com/nigelhorne/App-GHGen/issues"
+         "web" : "https://rt.cpan.org/Public/Dist/Display.html?Name=App-GHGen",
+         "x_url" : "https://rt.cpan.org/Public/Dist/Display.html?Name=App-GHGen"
       },
       "homepage" : "https://metacpan.org/pod/App::GHGen",
       "repository" : {
@@ -62,6 +63,6 @@
          "x_repository" : "https://github.com/nigelhorne/App-GHGen"
       }
    },
-   "version" : "0.01",
+   "version" : "0.03",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

@@ -1,5 +1,45 @@
 Revision history for Hypersonic
 
+0.10    2026-01-29
+	- RequestID Middleware
+	- More C89 compliance refactoring
+
+0.09    2026-01-29
+	- Fix io_uring backend to check for liburing library (not just headers)
+	- Add event backend ldflags to XS compile options
+	- Fix test race conditions with active port probing instead of sleep()
+	- Fix OpenSSL check to verify library is actually linkable
+	- Fix zlib check to verify library is actually linkable
+	- Fix SSE test includes for FreeBSD/BSD compatibility
+
+0.08    2026-01-28
+	- Add Hypersonic::UA HTTP client with JIT-compiled XS
+	- Optional feature compilation (async, parallel, tls, http2, compression)
+	- Connection pooling with keep-alive support
+	- Async request support (currently only kqueue/epoll supported)
+        - Benchmark static get against python, rust and go.
+
+0.07    2026-01-28
+	- Adds c_helpers for reusable c functions
+	- Adds need_xs_builder as an endpoint feature...
+	- Refactor Future::Pool so you can have more than one
+	- Centralise the caching
+	- Be a little more JIT but some improvements can still be made..
+
+0.06    2026-01-28
+        - Async/Future Enhancements in preparation to remove the next bottle
+
+0.05    2026-01-28
+        - Fix G_LIST -> G_ARRAY for Perl 5.32+ compatibility (CPAN testers fix)
+
+0.04    2026-01-27
+        - Split out event loops
+        - Split out http1 protocol
+        - Add HTTP/2 support via nghttp2
+        - Add some SSE support
+        - Add Websockets (only v13 currently)
+        - Some will know what we need next...
+
 0.03    2026-01-26
         - Response
         - Request

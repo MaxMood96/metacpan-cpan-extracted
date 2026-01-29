@@ -1,0 +1,29 @@
+#! perl
+
+use 5.036;
+use experimental 'signatures';
+use Future::AsyncAwait;
+
+use Future::IO;
+Future::IO->load_best_impl;
+# Future::IO->load_impl("Uring");
+
+use Future::IO::TLS;
+use Future::IO::Resolver;
+
+async sub main($hostname, $secure) {
+	my $port = $secure ? 'https' : 'http';
+	my ($address) = await Future::IO::Resolver->getaddrinfo(host => $hostname, service => $port) or die "";
+
+	socket my $connection, $address->{family}, $address->{socktype}, $address->{protocol} or die;
+	await Future::IO->connect($connection, $address->{addr});
+	my $ssl = $secure ? await Future::IO::TLS->start_TLS($connection, hostname => $hostname) : 'Future::IO';
+
+	await $ssl->write($connection, "GET / HTTP/1.1\r\nHost: $hostname\r\n\r\n");
+	my $response = await $ssl->read($connection, 2048);
+
+	say $response;
+};
+
+my $main = main('www.google.com', 1);
+$main->get;

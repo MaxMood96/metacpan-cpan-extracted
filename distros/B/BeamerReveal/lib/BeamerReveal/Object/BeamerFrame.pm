@@ -3,7 +3,7 @@
 
 
 package BeamerReveal::Object::BeamerFrame;
-our $VERSION = '20260123.1702'; # VERSION
+our $VERSION = '20260127.1936'; # VERSION
 
 use parent 'BeamerReveal::Object';
 use Carp;
@@ -19,6 +19,7 @@ use Digest::SHA;
 
 
 our $maxRawPage;
+our $embeddedID;
 
 sub nofdigits { length( "$_[0]" ) }
 
@@ -68,7 +69,8 @@ sub new {
       $logger->fatal( "Error: unknown BeamerFrame data on line @{[ $lineCtr + $i ]} '$lines->[$i]'\n" );
     }
   }
-
+  
+  $embeddedID = 0 unless defined( $embeddedID );
   
   return $self;
 }
@@ -87,56 +89,109 @@ sub makeSlide {
   #############################
   # process all video material
   foreach my $video (@{$self->{videos}}) {
-    $logger->log( 4, "- adding video" );
-    my $vTemplate = $templateStore->fetch( 'html', 'video.html' );
-    my $vStamps =
-      { X => _topercent( $video->{x} ),
-	Y => _topercent( $video->{y} ),
-	W => _topercent( $video->{width} ),
-	H => _topercent( $video->{height} ),
-	VIDEO => $mediaManager->videoFromStore( $video->{file} ),
-	FIT => $video->{fit},
-	AUTOPLAY => exists $video->{autoplay} ? 'data-autoplay' : '',
-	CONTROLS => exists $video->{controls} ? 'controls' : '',
-	LOOP => exists $video->{loop} ? 'loop' : '',
-      };
-    $content .= BeamerReveal::TemplateStore::stampTemplate( $vTemplate,
-							    $vStamps );
+    my %commonStamps = ( X => _topercent( $video->{x} ),
+			 Y => _topercent( $video->{y} ),
+			 W => _topercent( $video->{width} ),
+			 H => _topercent( $video->{height} ),
+			 VIDEOID          => 'embedded-id-' . $embeddedID++,
+			 VIDEOEMBEDDEDB64 => $videoContent,
+			 MIMETYPE         => $mimeType,
+			 FIT => $video->{fit},
+			 AUTOPLAY => exists $video->{autoplay} ? 'data-autoplay' : '',
+			 CONTROLS => exists $video->{controls} ? 'controls' : '',
+			 LOOP => exists $video->{loop} ? 'loop' : '',
+		       );
+    my $vStamps;
+    my $vTemplate;
+    if( exists $video->{embed} ) {
+      $logger->log( 4, "- adding embedded video" );
+      $vTemplate = $templateStore->fetch( 'html', 'video-embedded.html' );
+      my ( $mimeType, $videoContent ) = $mediaManager->videoFromStore( $video->{file},
+								       to_embed => 1 );
+      $vStamps = { %commonStamps,
+		   VIDEOID          => 'embedded-id-' . $embeddedID++,
+		   VIDEOEMBEDDEDB64 => $videoContent,
+		   MIMETYPE         => $mimeType,
+		 };
+    }
+    else {
+      $logger->log( 4, "- adding video" );
+      $vTemplate = $templateStore->fetch( 'html', 'video.html' );
+      my ( $mimeType, $videoFile ) = $mediaManager->videoFromStore( $video->{file} );
+      $vStamps = { %commonStamps,
+		   VIDEO => $videoFile
+		 };
+    }
+    $content .= BeamerReveal::TemplateStore::stampTemplate( $vTemplate, $vStamps);
   }
 
   #############################
   # process all audio material
   foreach my $audio (@{$self->{audios}}) {
-    $logger->log( 4, "- adding audio" );
-    my $aTemplate = $templateStore->fetch( 'html', 'audio.html' );
-    my $aStamps =
-      { X => _topercent( $audio->{x} ),
-	Y => _topercent( $audio->{y} ),
-	W => _topercent( $audio->{width} ),
-	H => _topercent( $audio->{height} ),
-	AUDIO => $mediaManager->audioFromStore( $audio->{file} ),
-	FIT => $audio->{fit},
-	AUTOPLAY => exists $audio->{autoplay} ? 'data-autoplay' : '',
-	CONTROLS => exists $audio->{controls} ? 'controls' : '',
-	LOOP => exists $video->{loop} ? 'loop' : '',
-      };
-    $content .= BeamerReveal::TemplateStore::stampTemplate( $aTemplate,
-							    $aStamps );
+    my %commonStamps = ( X => _topercent( $audio->{x} ),
+			 Y => _topercent( $audio->{y} ),
+			 W => _topercent( $audio->{width} ),
+			 H => _topercent( $audio->{height} ),
+			 FIT => $audio->{fit},
+			 AUTOPLAY => exists $audio->{autoplay} ? 'data-autoplay' : '',
+			 CONTROLS => exists $audio->{controls} ? 'controls' : '',
+			 LOOP => exists $video->{loop} ? 'loop' : '' );
+    my $aStamps;
+    my $aTemplate;
+    if( exists $audio->{embed} ) {
+      $logger->log( 4, "- adding embedded audio" );
+      $aTemplate = $templateStore->fetch( 'html', 'audio-embedded.html' );
+      my ( $mimeType, $audioContent ) = $mediaManager->audioFromStore( $audio->{file},
+								       to_embed => 1 );
+      $aStamps = { %commonStamps,
+		   AUDIOID          => 'embedded-id-' . $embeddedID++,
+		   AUDIOEMBEDDEDB64 => $audioContent,
+		   MIMETYPE         => $mimeType,
+		 };
+    }
+    else {
+      $logger->log( 4, "- adding audio" );
+      $aTemplate = $templateStore->fetch( 'html', 'audio.html' );
+      my ( $mimeType, $audioFile ) = $mediaManager->audioFromStore( $audio->{file} );
+      $aStamps = { %commonStamps,
+		   AUDIO => $audioFile,
+		 };
+    }
+    $content .= BeamerReveal::TemplateStore::stampTemplate( $aTemplate, $aStamps );
   }
 
   #############################
   # process all image material
   foreach my $image (@{$self->{images}}) {
-    $logger->log( 4, "- adding image" );
-    my $iTemplate = $templateStore->fetch( 'html', 'image.html' );
-    my $iStamps =
-      { X => _topercent( $image->{x} ),
-	Y => _topercent( $image->{y} ),
-	W => _topercent( $image->{width} ),
-	H => _topercent( $image->{height} ),
-	IMAGE => $mediaManager->imageFromStore( $image->{file} ),
-	FIT => $image->{fit}
-      };
+    my %commonStamps = ( X => _topercent( $image->{x} ),
+			 Y => _topercent( $image->{y} ),
+			 W => _topercent( $image->{width} ),
+			 H => _topercent( $image->{height} ),
+			 IMAGEID          => 'embedded-id-' . $embeddedID++,
+			 IMAGEEMBEDDEDB64 => $imageContent,
+			 MIMETYPE         => $mimeType,
+			 FIT              => $image->{fit}
+		       );
+    my $iStamps;
+    my $iTemplate;
+    if( exists $image->{embed} ) {
+      $logger->log( 4, "- adding embedded image" );
+      $iTemplate = $templateStore->fetch( 'html', 'image-embedded.html' );
+      my( $mimeType, $imageContent ) = $mediaManager->imageFromStore( $image->{file},
+								      to_embed => 1 );
+      $iStamps = { %commonStamps,
+		   IMAGEID          => 'embedded-id-' . $embeddedID++,
+		   IMAGEEMBEDDEDB64 => $imageContent,
+		   MIMETYPE         => $mimeType,
+		 };
+    }
+    else {
+      $logger->log( 4, "- adding image" );
+      $iTemplate = $templateStore->fetch( 'html', 'image.html' );
+      my( $mimeType, $imageFile ) = $mediaManager->imageFromStore( $image->{file} );
+      $iStamps = { %commonStamps,
+		   IMAGE => $imageFile };
+    }
     $content .= BeamerReveal::TemplateStore::stampTemplate( $iTemplate,
 							    $iStamps );
   }
@@ -144,16 +199,32 @@ sub makeSlide {
   #############################
   # process all iframe material
   foreach my $iframe (@{$self->{iframes}}) {
-    $logger->log( 4, "- adding iframe" );
-    my $iTemplate = $templateStore->fetch( 'html', 'iframe.html' );
-    my $iStamps =
-      { X => _topercent( $iframe->{x} ),
-	Y => _topercent( $iframe->{y} ),
-	W => _topercent( $iframe->{width} ),
-	H => _topercent( $iframe->{height} ),
-	IFRAME => $mediaManager->iframeFromStore( $iframe->{file} ),
-	FIT => $iframe->{fit}
-      };
+    my %commonStamps = ( X => _topercent( $iframe->{x} ),
+			 Y => _topercent( $iframe->{y} ),
+			 W => _topercent( $iframe->{width} ),
+			 H => _topercent( $iframe->{height} ),
+			 FIT => $iframe->{fit}
+		       );
+    my $iStamps;
+    my $iTemplate;
+    if( exists $iframe->{embed} ) {
+      $logger->log( 4, "- adding embedded iframe" );
+      $iTemplate = $templateStore->fetch( 'html', 'iframe-embedded.html' );
+      my ( $mimeType, $iframeContent ) = $mediaManager->iframeFromStore( $iframe->{file},
+									 to_embed => 1 );
+      $iStamps = { %commonStamps,
+		   IFRAMEID          => 'embedded-id-' . $embeddedID++,
+		   IFRAMEEMBEDDEDB64 => $iframeContent,
+		 };
+    }
+    else {
+      $logger->log( 4, "- adding iframe" );
+      $iTemplate = $templateStore->fetch( 'html', 'iframe.html' );
+      my ( $mimeType, $iframeFile ) = $mediaManager->iframeFromStore( $iframe->{file} );
+      $iStamps = { %commonStamps,
+		   IFRAME => $iframeFile,
+		 };
+    }
     $content .= BeamerReveal::TemplateStore::stampTemplate( $iTemplate,
 							    $iStamps );
   }
@@ -186,7 +257,14 @@ sub makeSlide {
   # process the frame itself  
   my $fTemplate = $templateStore->fetch( 'html', 'beamerframe.html' );
 
-  $self->{parameters}->{title} = _modernize( $self->{parameters}->{title} );
+  my $title = _modernize( $self->{parameters}->{title} );
+  if( $title =~ /\\/ ) {
+    $logger->fatal( "Error: the title of slide $i contains TeX-like code (observe below between <<< >>>); provide a clean version using \\frametitle[clean-version]{TeX-like code}\n" .
+   		    "<<< $self->{parameters}->{title} >>>" );
+  }
+  else {
+    $self->{parameters}->{title} = $title;
+  };
   
   my $menuTitle;
   if ( exists $self->{parameters}->{toc} ) {
@@ -221,11 +299,15 @@ sub makeSlide {
   return BeamerReveal::TemplateStore::stampTemplate( $fTemplate, $fStamps );
 }
 
-sub _topercent { return sprintf( "%.2f%%", $_[0] * 100 ); }
+sub _topercent {
+  confess() unless defined $_[0];
+  return sprintf( "%.2f%%", $_[0] * 100 );
+}
 
 sub _modernize {
   my $string = shift;
-  my $dictionary = {		# a
+  defined( $string ) or die();
+  my $dictionary = {
 		    qr/\\`\{?a\}?/ => 'à',
 		    qr/\\'\{?a\}?/ => 'á',
 		    qr/\\"\{?a\}?/ => 'ä',
@@ -280,6 +362,7 @@ sub _modernize {
 		    qr/\\~\{?n\}?/ => 'ñ',
 		    qr/\\oe/ => 'œ',
 		    qr/\\OE/ => 'Œ',
+		    qr/\\&/ => '&',
 		   };
   while( my ( $regexp, $rep ) = each ( %$dictionary ) ) {
     $string =~ s/$regexp/$rep/g;
@@ -301,7 +384,7 @@ BeamerReveal::Object::BeamerFrame - BeamerFrame object
 
 =head1 VERSION
 
-version 20260123.1702
+version 20260127.1936
 
 =head1 SYNOPSIS
 

@@ -31,9 +31,13 @@
          }
       },
       "runtime" : {
+         "recommends" : {
+            "Devel::CheckLib" : "0",
+            "ExtUtils::PkgConfig" : "0"
+         },
          "requires" : {
             "Cpanel::JSON::XS" : "0",
-            "XS::JIT" : "0.08",
+            "XS::JIT" : "0.13",
             "perl" : "5.010"
          }
       },
@@ -44,6 +48,16 @@
       }
    },
    "release_status" : "stable",
-   "version" : "0.03",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/ThisUsedToBeAnEmail/Hypersonic/issues"
+      },
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/ThisUsedToBeAnEmail/Hypersonic.git",
+         "web" : "https://github.com/ThisUsedToBeAnEmail/Hypersonic"
+      }
+   },
+   "version" : "0.10",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

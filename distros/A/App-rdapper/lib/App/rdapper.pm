@@ -10,7 +10,7 @@ use Net::DNS::Domain;
 use Net::IDN::PP;
 use Net::IP;
 use Net::RDAP::EPPStatusMap;
-use Net::RDAP 0.40;
+use Net::RDAP 0.41;
 use Pod::Usage;
 use POSIX qw(setlocale LC_ALL);
 use Term::ANSIColor;
@@ -32,7 +32,7 @@ use locale;
 use vars qw($VERSION $LH);
 use strict;
 
-$VERSION = '1.20';
+$VERSION = '1.22';
 
 $LH = App::rdapper::l10n->get_handle;
 
@@ -660,6 +660,9 @@ sub print_domain {
     $package->display_platform_nameservers($domain->{'platformNS_nameservers'}, $indent) if ($domain->{'platformNS_nameservers'});
 
     $package->print_kv(_('Registration Type'), $domain->{'regType_regType'}) if ($domain->{'regType_regType'});
+
+    my @types = $domain->dns_ttl_types;
+    $package->display_ttl_values($domain, $indent) if (scalar(@types) > 0);
 }
 
 sub display_artRecord {
@@ -777,6 +780,9 @@ sub print_nameserver {
     foreach my $ip ($nameserver->addresses) {
         $package->print_kv(_('IP Address'), $ip->short, $indent);
     }
+
+    my @types = $nameserver->dns_ttl_values;
+    $package->display_ttl_values($nameserver, $indent) if (scalar(@types) > 0);
 }
 
 sub print_events {
@@ -881,6 +887,20 @@ sub print_link {
         u($link->href->as_string),
         $indent,
     );
+}
+
+sub display_ttl_values {
+    my ($package, $object, $indent) = @_;
+
+    $package->print_kv(_('DNS TTL Values'), '', $indent);
+
+    foreach my $type ($object->dns_ttl_types) {
+        $package->print_kv($type, _('[_1]s', $object->dns_ttl($type)), 1+$indent);
+    }
+
+    foreach my $remark ($object->dns_ttl_remarks) {
+        $package->print_remark_or_notice($remark, 1+$indent);
+    }
 }
 
 sub print_kv {
@@ -1172,7 +1192,7 @@ Hub|https://hub.docker.com/r/gbxyz/rdapper>:
 
 Copyright (c) 2012-2023 CentralNic Ltd.
 
-Copyright (c) 2023-2025 Gavin Brown.
+Copyright (c) 2023-2026 Gavin Brown.
 
 All rights reserved. This program is free software; you can redistribute it
 and/or modify it under the same terms as Perl itself.

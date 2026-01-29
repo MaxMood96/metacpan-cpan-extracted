@@ -1,5 +1,30 @@
 Revision history for Params-Filter
 
+v0.014  2026-01-27 (STABLE RELEASE)
+    - DISTRIBUTION: Fixed PAX headers issue permanently
+    - Configured Makefile.PL to use GNU tar (gtar) with --format=ustar
+    - This prevents CPAN rejection due to PAX headers created by macOS BSD tar
+    - Requires: brew install gnu-tar
+    - No code changes, distribution build fix only
+
+v0.013  2026-01-27 (STABLE RELEASE)
+    - DOCUMENTATION: Major reorganization and cleanup
+    - README.md simplified from 856 to 198 lines (77% reduction)
+    - Removed duplicate API documentation from README (now in POD only)
+    - Added focused quick start examples in README
+    - POD reorganized to emphasize closure interface performance
+    - CLOSURE INTERFACE now presented first with "Maximum Performance" emphasis
+    - Added real-world security examples (safe logging, data segregation)
+    - Clear scope markers for which features apply to which interfaces
+    - EXAMPLES: Consolidated and organized
+      * Created dev-tools/ directory for development benchmarks (6 files)
+      * Removed redundant benchmarks from examples/
+      * Renamed benchmarks for clarity
+      * examples/ now has 11 teaching examples + 4 user benchmarks
+    - DISTRIBUTION: Clean perl 5.036 requirement verified
+    - Removed profiling artifacts from distribution
+    - All 73 tests pass
+
 v0.011  2026-01-26 (STABLE RELEASE)
     - NEW: Added closure interface with make_filter() function for maximum performance
     - make_filter() creates optimized, reusable closures that can be 20-25% faster than
@@ -101,7 +126,7 @@ v0.6_01 2026-01-14 (DEVELOPER RELEASE)
     - Beta release for CPAN testing and feedback
     - Renamed for CPAN publication: Local::Params::Filter → Params::Filter
     - Changed failure return value from 0 to undef for clearer boolean semantics
-    - Lowered minimum Perl version from 5.40 to 5.36 (signatures stable since 5.36)
+    - Lowered minimum Perl version from 5.36 to 5.36 (signatures stable since 5.36)
     - Updated all test files with new namespace
     - Updated all example files with new namespace
     - Updated README.md with new namespace

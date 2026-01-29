@@ -1,5 +1,20 @@
 Revision history for FSM-Basic
 
+0.28    Tue 27 Jan 18:16:44 CET 2026
+            fix "do" command
+            add catSEQn
+            tidy code"
+
+0.27    Mon 26 Jan 17:29:46 CET 2026
+            comment debug code (carp)
+            fix the "do" perl code
+
+0.26
+            test
+
+0.27
+            test
+
 0.24    Wed Now 18 22:04:03 2020 +0200
             add 'output_file' and test files
             escape special regex character (. * ?) from input

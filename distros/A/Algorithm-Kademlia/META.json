@@ -37,12 +37,12 @@
       "configure" : {
          "requires" : {
             "Module::Build::Tiny" : "0",
-            "perl" : "v5.40.0"
+            "perl" : "v5.42.0"
          }
       },
       "runtime" : {
          "requires" : {
-            "perl" : "v5.40.0"
+            "perl" : "v5.42.0"
          }
       },
       "test" : {
@@ -54,19 +54,23 @@
    "provides" : {
       "Algorithm::Kademlia" : {
          "file" : "lib/Algorithm/Kademlia.pm",
-         "version" : "v1.0.0"
+         "version" : "v1.0.1"
       },
       "Algorithm::Kademlia::RoutingTable" : {
          "file" : "lib/Algorithm/Kademlia.pm",
-         "version" : "v1.0.0"
+         "version" : "v1.0.1"
       },
       "Algorithm::Kademlia::Search" : {
          "file" : "lib/Algorithm/Kademlia.pm",
-         "version" : "v1.0.0"
+         "version" : "v1.0.1"
       },
       "Algorithm::Kademlia::Storage" : {
          "file" : "lib/Algorithm/Kademlia.pm",
-         "version" : "v1.0.0"
+         "version" : "v1.0.1"
+      },
+      "Algorithm::Kademlia::Storage::Entry" : {
+         "file" : "lib/Algorithm/Kademlia.pm",
+         "version" : "v1.0.1"
       }
    },
    "release_status" : "stable",
@@ -84,7 +88,7 @@
          "web" : "https://github.com/sanko/Algorithm-Kademlia.pm"
       }
    },
-   "version" : "v1.0.0",
+   "version" : "v1.0.1",
    "x_help_wanted" : [
       "Tester",
       "Documenter"

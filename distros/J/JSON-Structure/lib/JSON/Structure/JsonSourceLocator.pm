@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use v5.20;
 
-our $VERSION = '0.5.5';
+our $VERSION = '0.6.0';
 
 use JSON::Structure::Types;
 

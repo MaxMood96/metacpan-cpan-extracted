@@ -1,0 +1,91 @@
+{
+   "X_No_Archive" : "Yes",
+   "abstract" : "Pure-Perl SHA-256 Merkle Tree with Audit Proofs",
+   "author" : [
+      "Sanko Robinson <sanko@cpan.org>"
+   ],
+   "description" : "Merkle trees allow for efficient and secure verification of the contents of large data structures.",
+   "dynamic_config" : 0,
+   "generated_by" : "App::mii v1.0.0",
+   "keywords" : [
+      "sha256",
+      "digest",
+      "merkle",
+      "merkle-tree"
+   ],
+   "license" : [
+      "artistic_2"
+   ],
+   "meta-spec" : {
+      "url" : "https://metacpan.org/pod/CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "Digest-Merkle-SHA256",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "xt",
+         "eg"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "Module::Build::Tiny" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "Module::Build::Tiny" : "0",
+            "perl" : "v5.42.0"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "Digest::SHA" : "0",
+            "perl" : "v5.42.0"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "Test2::V0" : "0"
+         }
+      }
+   },
+   "provides" : {
+      "Digest::Merkle::SHA256" : {
+         "file" : "lib/Digest/Merkle/SHA256.pm",
+         "version" : "v1.0.0"
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/sanko/Digest-Merkle-SHA256.pm/issues"
+      },
+      "homepage" : "https://github.com/sanko/Digest-Merkle-SHA256.pm",
+      "license" : [
+         "http://www.perlfoundation.org/artistic_license_2_0"
+      ],
+      "repository" : {
+         "type" : "git",
+         "url" : "git://github.com/sanko/Digest-Merkle-SHA256.pm.git",
+         "web" : "https://github.com/sanko/Digest-Merkle-SHA256.pm"
+      }
+   },
+   "version" : "v1.0.0",
+   "x_help_wanted" : [
+      "Tester",
+      "Documenter"
+   ],
+   "x_ignore" : [
+      ".tidyallrc",
+      ".gitignore",
+      ".github/",
+      ".github/*",
+      ".github/**",
+      ".clang-format"
+   ],
+   "x_serialization_backend" : "JSON::PP version 4.16",
+   "x_static_install" : 0
+}

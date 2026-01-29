@@ -1,5 +1,8 @@
 Revision history for Benchmark-MCE
 
+1.03    2026-01-28
+        - Add Capture::Tiny to test requirements.
+
 1.02    2026-01-26
         - Remove unused module.
 

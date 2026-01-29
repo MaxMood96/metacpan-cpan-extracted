@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use 5.010;
 
-our $VERSION = '0.03';
+our $VERSION = '0.10';
 
 # JIT-compiled TLS/HTTPS support for Hypersonic
 # Uses OpenSSL for TLS support (via Alien::OpenSSL when available)
@@ -16,68 +16,35 @@ use XS::JIT::Builder;
 my $COMPILED = 0;
 my $MODULE_ID = 0;
 
-# Cache for OpenSSL check result
-my $OPENSSL_AVAILABLE;
+# Cache for OpenSSL detection result
+my $OPENSSL_DETECTION;
 
-# Check if OpenSSL is available
+# Check if OpenSSL is available (uses centralized detection)
 sub check_openssl {
-    # Return cached result if already checked
-    return $OPENSSL_AVAILABLE if defined $OPENSSL_AVAILABLE;
+    return $OPENSSL_DETECTION->{available} if defined $OPENSSL_DETECTION;
 
-    # First try Alien::OpenSSL - this is the portable CPAN way
-    if (eval { require Alien::OpenSSL; 1 }) {
-        $OPENSSL_AVAILABLE = 1;
-        return 1;
-    }
+    require Hypersonic::JIT::Util;
+    $OPENSSL_DETECTION = Hypersonic::JIT::Util->detect_openssl();
+    return $OPENSSL_DETECTION->{available};
+}
 
-    # Quick check: do the header files exist?
-    my $cflags = get_extra_cflags();
-    if ($cflags =~ /-I(.+)/) {
-        my $inc_dir = $1;
-        # Check for openssl headers - they might be in $inc_dir or $inc_dir/openssl
-        if (-f "$inc_dir/ssl.h" || -f "$inc_dir/openssl/ssl.h") {
-            $OPENSSL_AVAILABLE = 1;
-            return 1;
-        }
-    }
-
-    # Fallback: try to compile a minimal test program
-    my $cc = $ENV{CC} || 'cc';
-    my $ldflags = get_extra_ldflags();
-
-    my $test_code = <<'C';
-#include <openssl/opensslv.h>
-int main() { return OPENSSL_VERSION_NUMBER > 0 ? 0 : 1; }
-C
-
-    my $tmp = "/tmp/hypersonic_ssl_check_$$.c";
-    my $out = "/tmp/hypersonic_ssl_check_$$";
-
-    if (open my $fh, '>', $tmp) {
-        print $fh $test_code;
-        close $fh;
-
-        my $result = system("$cc $cflags -o $out $tmp $ldflags 2>/dev/null");
-        unlink $tmp, $out;
-
-        $OPENSSL_AVAILABLE = ($result == 0) ? 1 : 0;
-        return $OPENSSL_AVAILABLE;
-    }
-
-    $OPENSSL_AVAILABLE = 0;
-    return 0;
+# Unified compile interface
+sub compile {
+    my ($class, %opts) = @_;
+    return $class->compile_tls_ops(%opts);
 }
 
 # Compile TLS ops using XS::JIT::Builder
 sub compile_tls_ops {
     my ($class, %opts) = @_;
 
-    return if $COMPILED;
+    return 1 if $COMPILED;
 
-    my $cache_dir = $opts{cache_dir} // '_hypersonic_tls_cache';
+    my $cache_dir = $opts{cache_dir} // '_hypersonic_cache/tls';
     my $module_name = 'Hypersonic::TLS::Ops_' . $MODULE_ID++;
 
     my $builder = XS::JIT::Builder->new;
+    my $inline = Hypersonic::JIT::Util->inline_keyword;
 
     # Add OpenSSL includes
     $builder->include('<openssl/ssl.h>')
@@ -101,8 +68,9 @@ sub compile_tls_ops {
 
     # Helper to get TLS connection
     $builder->line('')
-            ->line('static inline TLSConnection* get_tls_connection(int fd) {')
-            ->line('    for (int i = 0; i < MAX_TLS_CONNECTIONS; i++) {')
+            ->line("static $inline TLSConnection* get_tls_connection(int fd) {")
+            ->line('    int i;')
+            ->line('    for (i = 0; i < MAX_TLS_CONNECTIONS; i++) {')
             ->line('        if (g_tls_connections[i].fd == fd) {')
             ->line('            return &g_tls_connections[i];')
             ->line('        }')
@@ -112,8 +80,9 @@ sub compile_tls_ops {
 
     # Helper to allocate TLS connection
     $builder->line('')
-            ->line('static inline TLSConnection* alloc_tls_connection(int fd, SSL* ssl) {')
-            ->line('    for (int i = 0; i < MAX_TLS_CONNECTIONS; i++) {')
+            ->line("static $inline TLSConnection* alloc_tls_connection(int fd, SSL* ssl) {")
+            ->line('    int i;')
+            ->line('    for (i = 0; i < MAX_TLS_CONNECTIONS; i++) {')
             ->line('        if (g_tls_connections[i].fd == 0) {')
             ->line('            g_tls_connections[i].fd = fd;')
             ->line('            g_tls_connections[i].ssl = ssl;')
@@ -127,8 +96,9 @@ sub compile_tls_ops {
 
     # Helper to free TLS connection
     $builder->line('')
-            ->line('static inline void free_tls_connection(int fd) {')
-            ->line('    for (int i = 0; i < MAX_TLS_CONNECTIONS; i++) {')
+            ->line("static $inline void free_tls_connection(int fd) {")
+            ->line('    int i;')
+            ->line('    for (i = 0; i < MAX_TLS_CONNECTIONS; i++) {')
             ->line('        if (g_tls_connections[i].fd == fd) {')
             ->line('            if (g_tls_connections[i].ssl) {')
             ->line('                SSL_shutdown(g_tls_connections[i].ssl);')
@@ -273,13 +243,16 @@ sub compile_tls_ops {
     # XS wrapper for init_ssl_ctx
     $builder->xs_function('jit_init_ssl_ctx')
       ->xs_preamble
+      ->line('STRLEN cert_len, key_len;')
+      ->line('const char* cert_file;')
+      ->line('const char* key_file;')
+      ->line('int result;')
       ->line('if (items != 2) {')
       ->line('    croak("init_ssl_ctx requires cert_file and key_file");')
       ->line('}')
-      ->line('STRLEN cert_len, key_len;')
-      ->line('const char* cert_file = SvPV(ST(0), cert_len);')
-      ->line('const char* key_file = SvPV(ST(1), key_len);')
-      ->line('int result = init_ssl_ctx(cert_file, key_file);')
+      ->line('cert_file = SvPV(ST(0), cert_len);')
+      ->line('key_file = SvPV(ST(1), key_len);')
+      ->line('result = init_ssl_ctx(cert_file, key_file);')
       ->line('ST(0) = sv_2mortal(newSViv(result));')
       ->xs_return('1')
       ->xs_end;
@@ -287,11 +260,13 @@ sub compile_tls_ops {
     # XS wrapper for tls_accept
     $builder->xs_function('jit_tls_accept')
       ->xs_preamble
+      ->line('int client_fd;')
+      ->line('int result;')
       ->line('if (items != 1) {')
       ->line('    croak("tls_accept requires client_fd");')
       ->line('}')
-      ->line('int client_fd = SvIV(ST(0));')
-      ->line('int result = tls_accept(client_fd);')
+      ->line('client_fd = SvIV(ST(0));')
+      ->line('result = tls_accept(client_fd);')
       ->line('ST(0) = sv_2mortal(newSViv(result));')
       ->xs_return('1')
       ->xs_end;
@@ -299,10 +274,11 @@ sub compile_tls_ops {
     # XS wrapper for tls_close
     $builder->xs_function('jit_tls_close')
       ->xs_preamble
+      ->line('int fd;')
       ->line('if (items != 1) {')
       ->line('    croak("tls_close requires fd");')
       ->line('}')
-      ->line('int fd = SvIV(ST(0));')
+      ->line('fd = SvIV(ST(0));')
       ->line('tls_close(fd);')
       ->xs_return('0')
       ->xs_end;
@@ -336,7 +312,47 @@ C
 
 # Generate SSL context initialization (for use by Hypersonic.pm code generation)
 sub gen_ssl_ctx_init {
-    return <<'C';
+    my (%opts) = @_;
+    my $enable_http2 = $opts{http2} // 0;
+    my $inline = Hypersonic::JIT::Util->inline_keyword;
+
+    my $alpn_code = '';
+    if ($enable_http2) {
+        $alpn_code = <<'ALPN';
+
+/* ALPN protocol list for HTTP/2 negotiation */
+static const unsigned char alpn_protos[] = {
+    2, 'h', '2',                              /* HTTP/2 */
+    8, 'h', 't', 't', 'p', '/', '1', '.', '1' /* HTTP/1.1 fallback */
+};
+
+/* ALPN selection callback - called during TLS handshake */
+static int alpn_select_cb(SSL* ssl,
+                          const unsigned char** out,
+                          unsigned char* outlen,
+                          const unsigned char* in,
+                          unsigned int inlen,
+                          void* arg) {
+    (void)ssl; (void)arg;
+    
+    /* Use OpenSSL's helper to select preferred protocol */
+    if (SSL_select_next_proto((unsigned char**)out, outlen,
+                              alpn_protos, sizeof(alpn_protos),
+                              in, inlen) == OPENSSL_NPN_NEGOTIATED) {
+        return SSL_TLSEXT_ERR_OK;
+    }
+    
+    /* No matching protocol - allow connection anyway (HTTP/1.1) */
+    return SSL_TLSEXT_ERR_NOACK;
+}
+ALPN
+    }
+    
+    my $alpn_setup = $enable_http2 
+        ? "\n    /* Enable ALPN for HTTP/2 negotiation */\n    SSL_CTX_set_alpn_select_cb(g_ssl_ctx, alpn_select_cb, NULL);\n" 
+        : '';
+    
+    return <<"C";
 /* Global SSL context - initialized once */
 static SSL_CTX* g_ssl_ctx = NULL;
 
@@ -346,13 +362,17 @@ typedef struct {
     SSL* ssl;
     time_t last_activity;
     int handshake_complete;
+    int protocol;  /* PROTO_HTTP1=1, PROTO_HTTP2=2 */
 } TLSConnection;
 
+#define PROTO_HTTP1 1
+#define PROTO_HTTP2 2
 #define MAX_TLS_CONNECTIONS 10000
 static TLSConnection g_tls_connections[MAX_TLS_CONNECTIONS];
-
-static inline TLSConnection* get_tls_connection(int fd) {
-    for (int i = 0; i < MAX_TLS_CONNECTIONS; i++) {
+$alpn_code
+static $inline TLSConnection* get_tls_connection(int fd) {
+    int i;
+    for (i = 0; i < MAX_TLS_CONNECTIONS; i++) {
         if (g_tls_connections[i].fd == fd) {
             return &g_tls_connections[i];
         }
@@ -360,21 +380,24 @@ static inline TLSConnection* get_tls_connection(int fd) {
     return NULL;
 }
 
-static inline TLSConnection* alloc_tls_connection(int fd, SSL* ssl) {
-    for (int i = 0; i < MAX_TLS_CONNECTIONS; i++) {
+static $inline TLSConnection* alloc_tls_connection(int fd, SSL* ssl) {
+    int i;
+    for (i = 0; i < MAX_TLS_CONNECTIONS; i++) {
         if (g_tls_connections[i].fd == 0) {
             g_tls_connections[i].fd = fd;
             g_tls_connections[i].ssl = ssl;
             g_tls_connections[i].last_activity = time(NULL);
             g_tls_connections[i].handshake_complete = 0;
+            g_tls_connections[i].protocol = PROTO_HTTP1;  /* Default */
             return &g_tls_connections[i];
         }
     }
     return NULL;
 }
 
-static inline void free_tls_connection(int fd) {
-    for (int i = 0; i < MAX_TLS_CONNECTIONS; i++) {
+static $inline void free_tls_connection(int fd) {
+    int i;
+    for (i = 0; i < MAX_TLS_CONNECTIONS; i++) {
         if (g_tls_connections[i].fd == fd) {
             if (g_tls_connections[i].ssl) {
                 SSL_shutdown(g_tls_connections[i].ssl);
@@ -385,6 +408,20 @@ static inline void free_tls_connection(int fd) {
             return;
         }
     }
+}
+
+/* Check negotiated protocol after TLS handshake */
+static $inline int get_negotiated_protocol(TLSConnection* conn) {
+    const unsigned char* alpn = NULL;
+    unsigned int alpn_len = 0;
+    SSL_get0_alpn_selected(conn->ssl, &alpn, &alpn_len);
+    
+    if (alpn_len == 2 && memcmp(alpn, "h2", 2) == 0) {
+        conn->protocol = PROTO_HTTP2;
+        return PROTO_HTTP2;
+    }
+    conn->protocol = PROTO_HTTP1;
+    return PROTO_HTTP1;
 }
 
 static int init_ssl_ctx(const char* cert_file, const char* key_file) {
@@ -399,7 +436,7 @@ static int init_ssl_ctx(const char* cert_file, const char* key_file) {
 
     /* Set minimum TLS version to 1.2 for security */
     SSL_CTX_set_min_proto_version(g_ssl_ctx, TLS1_2_VERSION);
-
+$alpn_setup
     /* Load certificate and key */
     if (SSL_CTX_use_certificate_file(g_ssl_ctx, cert_file, SSL_FILETYPE_PEM) <= 0) {
         SSL_CTX_free(g_ssl_ctx);
@@ -532,80 +569,20 @@ sub generate_tls_code {
     );
 }
 
-# Cache for flags
-my ($CACHED_CFLAGS, $CACHED_LDFLAGS);
-
-# Get extra compiler flags for OpenSSL
+# Get extra compiler flags for OpenSSL (uses centralized detection)
 sub get_extra_cflags {
-    return $CACHED_CFLAGS if defined $CACHED_CFLAGS;
-
-    # Use Alien::OpenSSL if available (portable across all platforms)
-    if (eval { require Alien::OpenSSL; 1 }) {
-        $CACHED_CFLAGS = Alien::OpenSSL->cflags;
-        return $CACHED_CFLAGS;
-    }
-
-    # Fallback to common paths (ordered by likelihood)
-    my @search_paths = (
-        # macOS Homebrew (Apple Silicon)
-        '/opt/homebrew/opt/openssl@3/include',
-        '/opt/homebrew/opt/openssl/include',
-        # macOS Homebrew (Intel)
-        '/usr/local/opt/openssl@3/include',
-        '/usr/local/opt/openssl/include',
-        # Linux standard locations
-        '/usr/include',              # Most Linux distros (headers in /usr/include/openssl/)
-        '/usr/local/include',        # Manually installed
-        # FreeBSD
-        '/usr/local/include',
-    );
-
-    for my $path (@search_paths) {
-        # Check if openssl headers exist in this path
-        if (-f "$path/openssl/ssl.h") {
-            $CACHED_CFLAGS = "-I$path";
-            return $CACHED_CFLAGS;
-        }
-    }
-
-    $CACHED_CFLAGS = '';
-    return '';
+    require Hypersonic::JIT::Util;
+    $OPENSSL_DETECTION //= Hypersonic::JIT::Util->detect_openssl();
+    return $OPENSSL_DETECTION->{cflags} // '';
 }
 
 sub get_extra_ldflags {
-    return $CACHED_LDFLAGS if defined $CACHED_LDFLAGS;
-
-    # Use Alien::OpenSSL if available (portable across all platforms)
-    if (eval { require Alien::OpenSSL; 1 }) {
-        $CACHED_LDFLAGS = Alien::OpenSSL->libs;
-        return $CACHED_LDFLAGS;
-    }
-
-    # Fallback to common paths
-    my @search_paths = (
-        # macOS Homebrew (Apple Silicon)
-        '/opt/homebrew/opt/openssl@3/lib',
-        '/opt/homebrew/opt/openssl/lib',
-        # macOS Homebrew (Intel)
-        '/usr/local/opt/openssl@3/lib',
-        '/usr/local/opt/openssl/lib',
-        # Linux standard locations
-        '/usr/lib/x86_64-linux-gnu',  # Debian/Ubuntu
-        '/usr/lib64',                  # RHEL/CentOS/Fedora
-        '/usr/lib',                    # Generic
-        '/usr/local/lib',              # Manually installed
-    );
-
-    my @flags = ('-lssl', '-lcrypto');
-    for my $path (@search_paths) {
-        if (-f "$path/libssl.so" || -f "$path/libssl.dylib" || -f "$path/libssl.a") {
-            unshift @flags, "-L$path";
-            last;
-        }
-    }
-
-    $CACHED_LDFLAGS = join(' ', @flags);
-    return $CACHED_LDFLAGS;
+    require Hypersonic::JIT::Util;
+    $OPENSSL_DETECTION //= Hypersonic::JIT::Util->detect_openssl();
+    # Need both -lssl and -lcrypto for full OpenSSL
+    my $ldflags = $OPENSSL_DETECTION->{ldflags} // '';
+    $ldflags .= ' -lcrypto' unless $ldflags =~ /-lcrypto/;
+    return $ldflags;
 }
 
 1;

@@ -1,0 +1,111 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Net::uTP - Micro Transport Protocol (μTP, BEP 29)
+
+=head1 SYNOPSIS
+
+    use Net::uTP;
+
+    my $utp = Net::uTP->new(
+        conn_id_send => 1234,
+        conn_id_recv => 1235
+    );
+
+    # Initiate connection
+    my $syn_pkt = $utp->connect( );
+
+    # Handle incoming UDP data
+    my $reply = $utp->receive_packet( $raw_udp_payload );
+
+    # Send data (returns one or more μTP packets)
+    my $pkts = $utp->send_data( 'Hello World' );
+
+    # Periodically handle retransmissions
+    my $resends = $utp->tick( 0.1 );
+
+=head1 DESCRIPTION
+
+C<Net::uTP> implements μTP, the L<Micro Transport Protocol|https://www.bittorrent.org/beps/bep_0029.html> (originally
+μTorrent transport protocol), a congestion-controlled UDP transport designed to prevent background traffic from
+"choking" other internet activity (like VoIP or gaming) on the same network.
+
+While originally developed for BitTorrent, this module is general-purpose and can be used for any application requiring
+high-throughput, low-impact data transfer.
+
+=head2 Key Mechanisms
+
+=over
+
+=item * L<LEDBAT Congestion Control|https://en.wikipedia.org/wiki/LEDBAT>: Uses one-way delay measurements to detect network congestion B<before> packet loss occurs. It targets a specific queuing delay (100ms) and yields to other traffic.
+
+=item * Selective ACKs (SACK): Efficiently recovers from packet loss by acknowledging specific received packets out-of-order, reducing redundant retransmissions.
+
+=item * Out-of-Order Reassembly: Automatically buffers and re-sequences packets received out of order, delivering a contiguous stream to the application.
+
+=item * Fast Retransmit: Detects dropped packets via duplicate ACKs and resends them immediately.
+
+=back
+
+=head1 METHODS
+
+=head2 C<connect( )>
+
+Transitions to C<SYN_SENT> state and returns the raw C<ST_SYN> packet to be sent over UDP.
+
+=head2 C<receive_packet( $data )>
+
+Processes an incoming raw μTP packet.
+
+=over
+
+=item Updates congestion windows and delay metrics.
+
+=item Emits C<data> or C<connected> events.
+
+=item Returns a C<ST_STATE> (ACK) packet if a response is required.
+
+=back
+
+=head2 C<send_data( $payload )>
+
+Fragments the payload into 1400-byte μTP data packets and returns them. Data is only sent if within the current
+congestion window.
+
+=head2 C<tick( $delta )>
+
+Handles timers for retransmissions. If a packet has not been ACKed within the current RTO (Retransmission TimeOut), it
+is resent.
+
+=head2 C<state( )>
+
+Returns the current connection state: C<CLOSED>, C<SYN_SENT>, C<CONNECTED>, etc.
+
+=head2 C<on( $event, $callback )>
+
+Registers a handler for:
+
+=over
+
+=item C<connected>: Handshake successful.
+
+=item C<data>: contiguous payload received.
+
+=item C<closed>: Connection lost or reset.
+
+=back
+
+=head1 AUTHOR
+
+Sanko Robinson E<lt>sanko@cpan.orgE<gt>
+
+=head1 COPYRIGHT
+
+Copyright (C) 2026 by Sanko Robinson.
+
+This library is free software; you can redistribute it and/or modify it under the terms of the Artistic License 2.0.
+
+=cut

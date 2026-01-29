@@ -5,11 +5,12 @@ use warnings;
 package Types::Capabilities;
 
 our $AUTHORITY = 'cpan:TOBYINK';
-our $VERSION   = '0.003000';
+our $VERSION   = '0.004000';
 
 use Type::Library -base;
 
 use Class::Method::Modifiers ();
+use Sub::HandlesVia 0.053000 ();
 use Sub::HandlesVia::CodeGenerator ();
 use Sub::HandlesVia::Handler ();
 use Sub::HandlesVia::HandlerLibrary::Array ();
@@ -20,35 +21,18 @@ my $_munge_handler = sub {
 	return ref( $handler )->new( %$handler, prefer_shift_self => 0 );
 };
 
+my $xs_info;
+$xs_info = { arr_source => Sub::HandlesVia::XS->ArraySource('DEREF_SCALAR') }
+	if Sub::HandlesVia::HAS_SHVXS;
+
 my @standard_generator_args = (
 	generator_for_slot         => sub { return '${$_[0]}' },
 	generator_for_get          => sub { return '${$_[0]}' },
 	generator_for_set          => sub { return '@${$_[0]} = @{' . pop . '}'; },
 	generator_for_default      => sub { return '[]'; },
 	get_is_lvalue              => !!1,
+	xs_info                    => $xs_info,
 );
-
-BEGIN {
-	# I don't like doing this, but curried arguments are breaking things...
-
-	*Sub::HandlesVia::HandlerLibrary::Array::peek = sub {
-		return Sub::HandlesVia::Handler->new(
-			name      => 'Array:peek',
-			args      => 0,
-			template  => '($GET)->[0]',
-		);
-	};
-
-	*Sub::HandlesVia::HandlerLibrary::Array::peekend = sub {
-		return Sub::HandlesVia::Handler->new(
-			name      => 'Array:peekend',
-			args      => 0,
-			template  => '($GET)->[-1]',
-		);
-	};
-
-	push @Sub::HandlesVia::HandlerLibrary::Array::METHODS, qw( peek peekend );
-};
 
 do {
 	my $array_class = 'Types::Capabilities::CoercedValue::ARRAYREF';
@@ -86,6 +70,14 @@ do {
 
 		for my $method ( sort keys %$cap_methods ) {
 			next if $already{$method}++;
+			if ( grep { $_ eq $method } @{ $need_wrapper || [] } ) {
+				$xs_info->{method_return_pattern} = Sub::HandlesVia::XS->ReturnPattern('OUTBLESS');
+				$xs_info->{method_return_class}   = 1;
+			}
+			else {
+				delete $xs_info->{method_return_pattern};
+				delete $xs_info->{method_return_class};
+			}
 			Sub::HandlesVia::Handler
 				->lookup( $cap_methods->{$method}, 'Array' )
 				->loose
@@ -101,7 +93,7 @@ do {
 				my $next = shift;
 				wantarray ? $next->(@_) : $cap_type->coerce( [ $next->(@_) ] );
 			},
-		) if defined $need_wrapper;
+		) if defined($need_wrapper) && !$xs_info;
 	}
 };
 
@@ -137,12 +129,30 @@ do {
 
 		for my $method ( sort keys %$cap_methods ) {
 			next if $already{$method}++;
+			if ( grep { $_ eq $method } @{ $need_wrapper || [] } ) {
+				$xs_info->{method_return_pattern} = Sub::HandlesVia::XS->ReturnPattern('OUTBLESS');
+				$xs_info->{method_return_class}   = 1;
+			}
+			else {
+				delete $xs_info->{method_return_pattern};
+				delete $xs_info->{method_return_class};
+			}
 			Sub::HandlesVia::Handler
 				->lookup( $cap_methods->{$method}, 'Array' )
 				->loose
 				->$_munge_handler
 				->install_method( method_name => $method, code_generator => $cg );
 		}
+		
+		Class::Method::Modifiers::install_modifier(
+			$array_class,
+			'around',
+			@$need_wrapper,
+			sub {
+				my $next = shift;
+				wantarray ? $next->(@_) : $cap_type->coerce( [ $next->(@_) ] );
+			},
+		) if defined($need_wrapper) && !$xs_info;
 	}
 };
 
@@ -178,12 +188,30 @@ do {
 		
 		for my $method ( sort keys %$cap_methods ) {
 			next if $already{$method}++;
+			if ( grep { $_ eq $method } @{ $need_wrapper || [] } ) {
+				$xs_info->{method_return_pattern} = Sub::HandlesVia::XS->ReturnPattern('OUTBLESS');
+				$xs_info->{method_return_class}   = 1;
+			}
+			else {
+				delete $xs_info->{method_return_pattern};
+				delete $xs_info->{method_return_class};
+			}
 			Sub::HandlesVia::Handler
 				->lookup( $cap_methods->{$method}, 'Array' )
 				->loose
 				->$_munge_handler
 				->install_method( method_name => $method, code_generator => $cg );
 		}
+		
+		Class::Method::Modifiers::install_modifier(
+			$array_class,
+			'around',
+			@$need_wrapper,
+			sub {
+				my $next = shift;
+				wantarray ? $next->(@_) : $cap_type->coerce( [ $next->(@_) ] );
+			},
+		) if defined($need_wrapper) && !$xs_info;
 	}
 };
 

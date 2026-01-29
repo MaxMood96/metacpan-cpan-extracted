@@ -6,7 +6,404 @@ use warnings;
 
 use Carp;
 
-#use Data::Dumper;
+use Data::Dumper;
+
+our $VERSION = '0.28';
+
+sub new {
+    my ($class, $l, $s) = @_;
+    my $self;
+    $self->{states_list} = $l;
+    $self->{state}       = $s;
+    foreach my $k1 (keys %{ $self->{states_list} }) {
+        if (exists $self->{states_list}{$k1}{expect}) {
+            foreach my $k2 (keys %{ $self->{states_list}{$k1}{expect} }) {
+                if (ref $self->{states_list}{$k1}{expect}{$k2} eq 'HASH'
+                    && exists $self->{states_list}{$k1}{expect}{$k2}{alternation})
+                {
+                    if (defined $self->{states_list}{$k1}{expect}{$k2}{caseinsensitive}) {
+                        $self->{states_list}{$k1}{expect}{ alter($k2, 1) } = delete $self->{states_list}{$k1}{expect}{$k2};
+                    } else {
+                        $self->{states_list}{$k1}{expect}{ alter($k2) } = delete $self->{states_list}{$k1}{expect}{$k2};
+                    }
+                }
+            }
+        }
+    }
+    bless($self, $class);
+    return $self;
+}
+
+my @commands = qw(
+  cmd
+  cmd_exec
+  exec
+  cmd_regex
+  do
+  output
+  output_file
+  cat
+  more
+  catrand
+  catwrand
+  catseq
+  catseq_idx
+  catseqn
+  swapregex
+  matching
+  final
+  matching
+  caseinsensitive
+  alternation
+);
+
+
+sub qp(&){
+    my $s;
+    open local *STDOUT, '>', \$s or die "open in-memory file: $!";
+    &{$_[0]};
+    die $@ if $@;
+    $s;
+}
+
+sub run {
+    my ($self, $in) = @_;
+    my $in_lc = lc($in);
+    $in =~ s/([*?.])/\\$1/g;
+    my $rev;
+    my %extra;
+    if ($in !~ /^$/) {
+        foreach my $IN (grep { /^$in/i } keys %{ $self->{states_list}{ $self->{state} }{expect} }) {
+            if (ref $self->{states_list}{ $self->{state} }{expect}{$IN} eq 'HASH') {
+                $rev //= $IN if (defined $self->{states_list}{ $self->{state} }{expect}{$IN}{swapregex});
+                foreach my $key (keys %{ $self->{states_list}{ $self->{state} }{expect}{$IN} }) {
+                    # carp "k=$key IN=$IN";
+                    $extra{$key} = $self->{states_list}{ $self->{state} }{expect}{$IN}{$key} unless any($key);
+                }
+            }
+        }
+    }
+    # carp "state=".Dumper($self->{states_list});
+    my $output = '';
+    my $string;
+    if (exists $self->{states_list}) {
+        if (   exists $self->{states_list}{ $self->{state} }
+            && exists $self->{states_list}{ $self->{state} }{repeat}
+            && $self->{states_list}{ $self->{state} }{repeat} <= 0)
+        {
+            $self->{previous_state} = $self->{state};
+            $self->{state}          = $self->{states_list}{ $self->{state} }{expect}{not_matching0} // $self->{states_list}{ $self->{state} }{not_matching0};
+            if (exists $self->{states_list}{ $self->{previous_state} }{not_matching_info_last}) {
+                $output = $self->{states_list}{ $self->{previous_state} }{not_matching_info_last};
+            }
+            $output .= $self->{states_list}{ $self->{state} }{output} // read_file($self->{states_list}{ $self->{state} }{output_file}) // '';
+            return ($self->{states_list}{ $self->{state} }{final} // 0, $output);
+        }
+        if (exists $self->{states_list}{ $self->{state} }{expect}) {
+            if (exists $self->{states_list}{ $self->{state} }{info}) {
+                $output = $self->{states_list}{ $self->{state} }{info} . $output;
+            }
+            if (exists $self->{states_list}{ $self->{state} }{info_once}) {
+                $output = delete($self->{states_list}{ $self->{state} }{info_once}) . $output;
+            }
+            my $state;
+            if (   exists $self->{previous_output}
+                && $in eq ''
+                && $self->{previous_output} =~ /\[(.+)\]/)
+            {
+                $in = $1;
+            }
+            my $match;
+            if (defined $rev) {
+                my $key = $rev;
+                my $r   = $in;
+                $r = '(?i:' . $r . ')' if defined $self->{states_list}{ $self->{state} }{expect}{$rev}{caseinsensitive};
+                if ($r && $key =~ /^$r/) {
+                    if (@+) {
+                        for my $nbr (1 .. (scalar(@+) - 1)) {
+                            if (defined $-[$nbr]) {
+                                $match = substr($key, $-[$nbr], $+[$nbr] - $-[$nbr]);
+                                if (defined($+[$nbr])) {
+                                    $self->{cmd_regex}{$nbr} = substr($key, $-[$nbr], $+[$nbr] - $-[$nbr]);
+                                }
+                            }
+                        }
+                    }
+                    $state = $self->{states_list}{ $self->{state} }{expect}{$key};
+                }
+            } elsif (exists $self->{states_list}{ $self->{state} }{expect}{$in_lc}
+                && defined $self->{states_list}{ $self->{state} }{expect}{$in_lc}{caseinsensitive})
+            {
+                $state = $self->{states_list}{ $self->{state} }{expect}{$in_lc};
+            } elsif (exists $self->{states_list}{ $self->{state} }{expect}{$in}) {
+                $state = $self->{states_list}{ $self->{state} }{expect}{$in};
+            } else {
+                foreach my $key (keys %{ $self->{states_list}{ $self->{state} }{expect} }) {
+                    if ($in =~ /^$key$/) {
+                        if (@+) {
+                            for my $nbr (1 .. (scalar(@+) - 1)) {
+                                if (defined $-[$nbr]) {
+                                    $match = substr($in, $-[$nbr], $+[$nbr] - $-[$nbr]);
+                                    if (defined($+[$nbr])) {
+                                        $self->{cmd_regex}{$nbr} = substr($in, $-[$nbr], $+[$nbr] - $-[$nbr]);
+                                    }
+                                }
+                            }
+                        }
+                        $state = $self->{states_list}{ $self->{state} }{expect}{$key};
+                    }
+                }
+            }
+            if (ref $state eq 'HASH') {
+                $self->{previous_state}  = $self->{state};
+                $self->{previous_output} = $state->{output} // $self->{states_list}{ $self->{state} }{output} // read_file($self->{states_list}{ $self->{state} }{output_file}) // '';
+                $self->{state}           = $state->{matching} // $self->{state};
+                $output .= $state->{output} // $self->{states_list}{ $self->{state} }{output} // read_file($self->{states_list}{ $self->{state} }{output_file}) // '';
+                if (exists $state->{cmd}) {
+                    my $cmd_state = delete $state->{cmd};
+                    $cmd_state =~ s/\$in/$in/g;
+                    push(@{ $self->{cmd_stack} }, $cmd_state);
+                } elsif (exists $state->{cmd_exec}) {
+                    my $cmd_exec = join ' ', @{ $self->{cmd_stack} };
+                    $string           = `$cmd_exec`;
+                    $output           = sprintf("%s", $string) . $output;
+                    $self->{cmd_exec} = [];
+                } elsif (exists $state->{exec}) {
+                    my $old_exec = $state->{exec};
+                    $state->{exec} =~ s/__IN__/$in/g;
+                    foreach my $k (keys %{ $self->{cmd_regex} }) {
+                        my $v = $self->{cmd_regex}{$k};
+                        my $K = '__' . $k . '__';
+                        $state->{exec} =~ s/$K/$v/g;
+                    }
+                    $string        = `$state->{exec}`;
+                    $output        = sprintf("%s", $string) . $output;
+                    $state->{exec} = $old_exec;
+                } elsif (exists $state->{do}) {
+                    my $old_do = $state->{do};
+                    $state->{do} =~ s/__IN__/$in/g;
+                    foreach my $k (keys %{ $self->{cmd_regex} }) {
+                        my $v = $self->{cmd_regex}{$k};
+                        my $K = '__' . $k . '__';
+                        $state->{do} =~ s/$K/$v/g;
+                    }
+
+                    my $res = qp {  eval  ($state->{do}) };
+                    $output = $res . $output;
+                    $state->{do} = $old_do;
+                } elsif (exists $state->{output_file}) {
+                    $output = read_file($state->{output_file});
+                    chomp $output;
+                } elsif (exists $state->{cat}) {
+                    my $old_cat = $state->{cat};
+                    $state->{cat} =~ s/__IN__/$in/g;
+                    foreach my $k (keys %{ $self->{cmd_regex} }) {
+                        my $v = $self->{cmd_regex}{$k};
+                        my $K = '__' . $k . '__';
+                        $state->{cat} =~ s/$K/$v/g;
+                    }
+                    $string       = read_file($state->{cat});
+                    $output       = sprintf("%s", $string) . $output;
+                    $state->{cat} = $old_cat;
+                } elsif (exists $state->{more}) {
+                    my $old_cat = $state->{more};
+                    $state->{more} =~ s/__IN__/$in/g;
+                    foreach my $k (keys %{ $self->{cmd_regex} }) {
+                        my $v = $self->{cmd_regex}{$k};
+                        my $K = '__' . $k . '__';
+                        $state->{more} =~ s/$K/$v/g;
+                    }
+                    $string        = read_file($state->{more});
+                    $extra{more}   = 1;
+                    $output        = sprintf("%s", $string) . $output;
+                    $state->{more} = $old_cat;
+                } elsif (exists $state->{catRAND}) {
+                    my $old_cat = $state->{catRAND};
+                    $state->{catRAND} =~ s/__IN__/$in/g;
+                    foreach my $k (keys %{ $self->{cmd_regex} }) {
+                        my $v = $self->{cmd_regex}{$k};
+                        my $K = '__' . $k . '__';
+                        $state->{catRAND} =~ s/$K/$v/g;
+                    }
+                    my @files = split /\s+/, $state->{catRAND};
+                    my $file = $files[ rand @files ];
+                    $string           = read_file($file);
+                    $output           = sprintf("%s", $string) . $output;
+                    $state->{catRAND} = $old_cat;
+                } elsif (exists $state->{catWRAND}) {
+                    my $old_cat = $state->{catWRAND};
+                    $state->{catWRAND} =~ s/__IN__/$in/g;
+                    foreach my $k (keys %{ $self->{cmd_regex} }) {
+                        my $v = $self->{cmd_regex}{$k};
+                        my $K = '__' . $k . '__';
+                        $state->{catWRAND} =~ s/$K/$v/g;
+                    }
+                    my %files = map { split /:/ } split /\s+/, $state->{catWRAND};
+                    my $file;
+                    my $weight;
+                    while (my ($p, $w) = each %files) {
+                        $w //= 1;
+                        $weight += $w // 1;
+                        $file = $p if rand($weight) < $w;
+                    }
+                    $string            = read_file($file);
+                    $output            = sprintf("%s", $string) . $output;
+                    $state->{catWRAND} = $old_cat;
+                } elsif (exists $state->{catSEQ}) {
+                    my $old_cat = $state->{catSEQ};
+                    my $state_file;
+                    if (exists $state->{catSEQ_idx}) {
+                        $state_file = $state->{catSEQ_idx};
+                    } else {
+                        $state_file = $old_cat . '.state';
+                        $state_file =~ s/\s/_/g;
+                    }
+                    $state->{catSEQ} =~ s/__IN__/$in/g;
+                    foreach my $k (keys %{ $self->{cmd_regex} }) {
+                        my $v = $self->{cmd_regex}{$k};
+                        my $K = '__' . $k . '__';
+                        $state->{catSEQ} =~ s/$K/$v/g;
+                    }
+                    my @files = split /\s+/, $state->{catSEQ};
+                    tie my $nbr => 'FSM::Basic::Modulo', scalar @files, 0;
+                    if (-f $state_file) {
+                        $nbr = read_file($state_file);
+                    }
+                    my $file = $files[ $nbr++ ];
+                    $string          = read_file($file);
+                    $output          = sprintf("%s", $string) . $output;
+                    $state->{catSEQ} = $old_cat;
+                    write_file($state_file, $nbr);
+                } elsif (exists $state->{catSEQn}) {
+                    my $old_cat = $state->{catSEQn};
+                    my @files_n = split /\s+/, $state->{catSEQn};
+                    my @files;
+                    foreach my $f_n (@files_n) {
+                        my ($i, $f) = split ',', $f_n;
+                        for (1 .. $i) {
+                            push @files, $f;
+                        }
+                    }
+                    my $state_name = $files[0];
+                    my $state_file;
+                    if (exists $state->{catSEQn_idx}) {
+                        $state_file = $state->{catSEQn_idx};
+                    } else {
+                        $state_file = $state_name . '.state';
+                        $state_file =~ s/\s/_/g;
+                    }
+                    $state->{catSEQn} =~ s/__IN__/$in/g;
+                    foreach my $k (keys %{ $self->{cmd_regex} }) {
+                        my $v = $self->{cmd_regex}{$k};
+                        my $K = '__' . $k . '__';
+                        $state->{catSEQn} =~ s/$K/$v/g;
+                    }
+                    tie my $nbr => 'FSM::Basic::Modulo', scalar @files, 0;
+                    if (-f $state_file) {
+                        $nbr = read_file($state_file);
+                    }
+                    my $file = $files[ $nbr++ ];
+                    $string           = read_file($file);
+                    $output           = sprintf("%s", $string) . $output;
+                    $state->{catSEQn} = $old_cat;
+                    write_file($state_file, $nbr);
+                }
+            } else {
+                $self->{previous_state} = $self->{state};
+                $self->{state}          = $self->{states_list}{ $self->{state} }{not_matching} // $self->{state};
+                $self->{states_list}{ $self->{state} }{repeat}-- if exists $self->{states_list}{ $self->{state} }{repeat};
+                $output .= $self->{states_list}{ $self->{state} }{output} // read_file($self->{states_list}{ $self->{state} }{output_file}) // '';
+                if (exists $self->{states_list}{ $self->{state} }{not_matching_info}) {
+                    $output = $self->{states_list}{ $self->{state} }{not_matching_info} . "\n" . $output;
+                }
+                #return ($self->{states_list}{ $self->{state} }{$in}{final} // $self->{states_list}{ $self->{state} }{final} // 0, $output, \%extra);
+            }
+            return ($self->{states_list}{ $self->{state} }{$in}{final} // $self->{states_list}{ $self->{state} }{final} // 0, $output, \%extra);
+        }
+    }
+}
+
+sub any {
+    my ($in) = @_;
+    my $out = 0;
+    foreach (@commands) {
+        $out = 1 if (lc($in) eq $_);
+    }
+    return $out;
+}
+
+sub set {
+    my ($self, $in) = @_;
+    $self->{previous_state}  = $self->{state};
+    $self->{previous_output} = $self->{states_list}{ $self->{state} }{output} // read_file($self->{states_list}{ $self->{state} }{output_file}) // '';
+    $self->{state}           = $in if exists $self->{states_list}{$in};
+    return 1;
+}
+
+sub write_file {
+    my ($file, $content) = @_;
+    open my $fh, '>', $file or die "Error opening file for write $file: $!\n";
+    print $fh $content;
+    close $fh or die "Error closing file $file: $!\n";
+    return 1;
+}
+
+sub alter {
+    my $r = shift;
+    my $c = shift // 0;
+    $r =~ /([^[]*)\[([^\]]+)\](.*)/;
+    my $pre_r   = $1;
+    my $match_r = $2;
+    my $post_r  = $3;
+    my $out     = $pre_r . '(';
+    for (my $i = 1 ; $i <= length $match_r ; $i++) {
+        $out .= substr($match_r, 0, $i) . '|';
+    }
+    chop $out;
+    $post_r = alter($post_r) if $post_r =~ /\[([^\]]+)\]/;
+    $out    = $out . ')' . $post_r;
+    $out    = '(?i:' . $out . ')' if $c;
+    return $out;
+}
+
+sub read_file {
+    my ($file) = @_;
+    my $content = '';
+    if ($file) {
+        if (-f $file) {
+            open my $fh, '<', $file
+              or die "Error opening file for read $file: $!\n";
+            local $/;
+            $content = <$fh>;
+            close $fh or die "Error closing file $file: $!\n";;
+        } else {
+            carp "missing file: $file";
+        }
+    }
+    return $content;
+}
+
+sub rotate_files {
+    my @all  = @_;
+    my $uuid = do {
+        open my $fh, "/proc/sys/kernel/random/uuid"
+          or die $!;
+        scalar <$fh>;
+    };
+    chomp $uuid;
+    rename($all[0], $all[0] . '.' . $uuid);
+    for (my $idx = 1 ; $idx < $#all + 1 ; $idx++) {
+        rename($all[$idx], $all[ $idx - 1 ]);
+    }
+    rename($all[0] . '.' . $uuid, $all[-1]);
+}
+
+
+package FSM::Basic::Modulo;
+sub TIESCALAR { bless [ $_[2] || 0, $_[1] ] => $_[0] }
+sub FETCH { ${ $_[0] }[0] }
+sub STORE { ${ $_[0] }[0] = $_[1] % ${ $_[0] }[1] }
+1;
 
 =head1 NAME
 
@@ -14,11 +411,9 @@ FSM::Basic - Finite state machine using HASH as state definitions
 
 =head1 VERSION
 
-Version 0.24
+Version 0.25
 
 =cut
-
-our $VERSION = '0.24';
 
 =head1 SYNOPSIS
 
@@ -32,9 +427,10 @@ The HASH is easily using a JSON file
     my $fsm = FSM::Basic->new( \%states, 'accept' );
     my $final = 0;
     my $out;
+    my $extra;
     foreach my $in ( @ins )
     {
-        ( $final, $out ) = $fsm->run( $in );
+        ( $final, $out, $extra) = $fsm->run( $in );
         say $out;
         last if $final;
    }
@@ -97,9 +493,9 @@ The keys are the states name.
 
 =over 1
 
-=item In this hash, you have :
+=item In this hash, you have:
 
-=back 
+=back
 
 =over 2
 
@@ -124,6 +520,17 @@ e.g. 'catWRAND' => './t/test_cat.txt:1 ./t/test_cat1.txt:50',   in this case the
 "catSEQ" read sequentialy the next files provided in parameter space separated
         if "catSEQ_idx" is defined, that file is used to keep the state. Otherwise , the state file is named used
         all the files name from "catSEQ" concatenated with a final '.tate'. All spaces are replaced by an underscore
+
+"catSEQn" read sequentialy a list of files but a specific number of time provided in parameter space separated
+        if "catSEQn_idx" is defined, that file is used to keep the state. Otherwise , the state file is named used
+        all the files name from "catSEQ" concatenated with a final '.tate'. All spaces are replaced by an underscore
+        e.g.
+          'cat' => { 
+               'catSEQn' => '5,./t/test_cat.txt 2,./t/test_cat1.txt',
+               'catSEQn_idx' => './t/test_cat_seqn.idx',
+                'final'    => 0
+           },
+         This setup read 5 times the first file followed by 2 times the second file 
 
 =back
 
@@ -155,7 +562,7 @@ e.g. for a ping
 
 The __1__ is substitued by the first parameter in the expected command
 
-If you run the command "ping 127.0.0.1" the exec run the command "ping -c 3 127.0.0.1" 
+If you run the command "ping 127.0.0.1" the exec run the command "ping -c 3 127.0.0.1"
 
 Other example:
 
@@ -163,8 +570,8 @@ Other example:
       "cat /tmp/test/((\\w)(\\d))": {
         "cat": "/tmp/test/__3__"
       }
-      
-If you call with "cat /tmp/test/a1 the cat read the file /tmp/test/1" (without the 'a' because the group 3 is matching a single digit after a single character    
+
+If you call with "cat /tmp/test/a1 the cat read the file /tmp/test/1" (without the 'a' because the group 3 is matching a single digit after a single character
 
 
 
@@ -173,10 +580,10 @@ Use the extra tag "swapregex": "1"
 
 In case of "swapregex": "1" we use this
 
-  $key =~ /^$in/  
-  
+  $key =~ /^$in/
+
 e.g.
-        
+
         'expect' => {
             'not_matching' => 'prompt',
             'help'       => {
@@ -191,12 +598,12 @@ e.g.
 
 This reverse the REGEX test
 In normal case (no "swapregex" )
-The state is check with 
+The state is check with
 
   $in =~ /^$key$/
 
 Where $in is the input from the run() function
-and $key is the state defined in the HASH  
+and $key is the state defined in the HASH
 
 
 
@@ -215,17 +622,15 @@ This match 'oth', 'othe' and 'other'
 
 In fact the system create the REGEX /^o(t|th|the|ther)$/
 
-For a more complex example: 
+For a more complex example:
 
-'c[onfiguration] t[erminal]' 
+'c[onfiguration] t[erminal]'
 
-create the REGEX  
+create the REGEX
 
 /^c(o|on|onf|onfi|onfig|onfigu|onfigur|onfigura|onfigurat|onfigurati|onfiguratio|onfiguration) t(e|er|erm|ermi|ermin|ermina|erminal)$/
 
-
-It is possible to add the tag 'caseinsensitive' => 1, to allow also the case insentitive matching
-
+=back
 
 =over 4
 
@@ -240,7 +645,7 @@ e.g.
                 'caseinsensitive' => 1,
                 'final'           => 0
             }
-            
+
 in this example "other", "OTHER", "Other", "otheR" (and all other case alternate set) match the state "other"
 
 =back
@@ -259,11 +664,11 @@ to return a flag
 
 =back
 
-=over 4 
+=over 4
 
 =item "not_matching"
 the state if the input is not matching the "expect" value (if missing stay in the same state)
- 
+
 =back
 
 =over 4
@@ -304,6 +709,7 @@ use the content of that file as output
 =back
 
 It is perfectly possible to add extra tag not used by FSM::Basic for generic purpose.
+These extra tag are returned from the run() function as third parameter HASH ref .
 Check examples/fake_bash_ssh1.*
 Take a look at timout and timer usage
 In this example if destination IP from the SSH connection is available, the file IP.json is used as definition
@@ -311,316 +717,21 @@ In this example if destination IP from the SSH connection is available, the file
 
 =cut
 
-sub new {
-    my ($class, $l, $s) = @_;
-    my $self;
-    $self->{states_list} = $l;
-    $self->{state}       = $s;
-    foreach my $k1 (keys %{ $self->{states_list} }) {
-        if (exists $self->{states_list}{$k1}{expect}) {
-            foreach my $k2 (keys %{ $self->{states_list}{$k1}{expect} }) {
-                if (ref $self->{states_list}{$k1}{expect}{$k2} eq 'HASH'
-                    && exists $self->{states_list}{$k1}{expect}{$k2}{alternation})
-                {
-                    if (defined $self->{states_list}{$k1}{expect}{$k2}{caseinsensitive}) {
-                        $self->{states_list}{$k1}{expect}{ alter($k2, 1) } =
-                          delete $self->{states_list}{$k1}{expect}{$k2};
-                    } else {
-                        $self->{states_list}{$k1}{expect}{ alter($k2) } = delete $self->{states_list}{$k1}{expect}{$k2};
-                    }
-                }
-            }
-        }
-    }
-    bless($self, $class);
-    return $self;
-}
-
 =back
 
 B<run>
 
-my ( $final, $out ) = $fsm->run( $in );
+my ( $final, $out, $extra ) = $fsm->run( $in );
 
-Run the FSM with the input and return the expected output and an extra flag
+Run the FSM with the input and return the final state (0 or 1) , the expected output and a reference to an HASH with the extra tag key/value pair
 
 
 =cut
 
-sub run {
-    my ($self, $in) = @_;
-    my $in_lc = lc($in);
-    $in =~ s/([*?.])/\\$1/g;
-    my $rev;
-    foreach my $IN (grep { /$in/i } keys %{ $self->{states_list}{ $self->{state} }{expect} }) {
-        if (ref $self->{states_list}{ $self->{state} }{expect}{$IN} eq 'HASH'
-            && defined $self->{states_list}{ $self->{state} }{expect}{$IN}{swapregex})
-        {
-            $rev //= $IN;
-        }
-    }
-    my $output = '';
-    my $more   = 0;
-    my $string;
-    if (exists $self->{states_list}) {
-        if (   exists $self->{states_list}{ $self->{state} }
-            && exists $self->{states_list}{ $self->{state} }{repeat}
-            && $self->{states_list}{ $self->{state} }{repeat} <= 0)
-        {
-            $self->{previous_state} = $self->{state};
-            $self->{state}          = $self->{states_list}{ $self->{state} }{expect}{not_matching0} // $self->{states_list}{ $self->{state} }{not_matching0};
-            if (exists $self->{states_list}{ $self->{previous_state} }{not_matching_info_last}) {
-                $output = $self->{states_list}{ $self->{previous_state} }{not_matching_info_last};
-            }
-            $output .= $self->{states_list}{ $self->{state} }{output} // read_file($self->{states_list}{ $self->{state} }{output_file}) // '';
-            return ($self->{states_list}{ $self->{state} }{final} // 0, $output);
-        }
-        if (exists $self->{states_list}{ $self->{state} }{expect}) {
-            if (exists $self->{states_list}{ $self->{state} }{info}) {
-                $output = $self->{states_list}{ $self->{state} }{info} . $output;
-            }
-            if (exists $self->{states_list}{ $self->{state} }{info_once}) {
-                $output = delete($self->{states_list}{ $self->{state} }{info_once}) . $output;
-            }
-            my $state;
-            if (   exists $self->{previous_output}
-                && $in eq ''
-                && $self->{previous_output} =~ /\[(.+)\]/)
-            {
-                $in = $1;
-            }
-            if (defined $rev) {
-                my $key = $rev;
-                my $r   = $in;
-                $r = '(?i:' . $r . ')' if defined $self->{states_list}{ $self->{state} }{expect}{$rev}{caseinsensitive};
-                if ($r && $key =~ /^$r/) {
-                    if (@+) {
-                        for my $nbr (1 .. (scalar(@+) - 1)) {
-                            if (defined $-[$nbr]) {
-                                my $match = substr($key, $-[$nbr], $+[$nbr] - $-[$nbr]);
-                                if (defined($+[$nbr])) {
-                                    $self->{cmd_regex}{$nbr} = substr($key, $-[$nbr], $+[$nbr] - $-[$nbr]);
-                                }
-                            }
-                        }
-                    }
-                    $state = $self->{states_list}{ $self->{state} }{expect}{$key};
-                }
-            } elsif (exists $self->{states_list}{ $self->{state} }{expect}{$in_lc}
-                && defined $self->{states_list}{ $self->{state} }{expect}{$in_lc}{caseinsensitive})
-            {
-                $state = $self->{states_list}{ $self->{state} }{expect}{$in_lc};
-            } elsif (exists $self->{states_list}{ $self->{state} }{expect}{$in}) {
-                $state = $self->{states_list}{ $self->{state} }{expect}{$in};
-            } else {
-                foreach my $key (keys %{ $self->{states_list}{ $self->{state} }{expect} }) {
-                    if ($in =~ /^$key$/) {
-                        if (@+) {
-                            for my $nbr (1 .. (scalar(@+) - 1)) {
-                                if (defined $-[$nbr]) {
-                                    my $match = substr($in, $-[$nbr], $+[$nbr] - $-[$nbr]);
-                                    if (defined($+[$nbr])) {
-                                        $self->{cmd_regex}{$nbr} = substr($in, $-[$nbr], $+[$nbr] - $-[$nbr]);
-                                    }
-                                }
-                            }
-                        }
-                        $state = $self->{states_list}{ $self->{state} }{expect}{$key};
-                    }
-                }
-            }
-            if (ref $state eq 'HASH') {
-                $self->{previous_state}  = $self->{state};
-                $self->{previous_output} = $state->{output} // $self->{states_list}{ $self->{state} }{output} // read_file($self->{states_list}{ $self->{state} }{output_file}) // '';
-                $self->{state}           = $state->{matching} // $self->{state};
-                $output .= $state->{output} // $self->{states_list}{ $self->{state} }{output} // read_file($self->{states_list}{ $self->{state} }{output_file}) // '';
-                if (exists $state->{cmd}) {
-                    my $cmd_state = delete $state->{cmd};
-                    $cmd_state =~ s/\$in/$in/g;
-                    push(@{ $self->{cmd_stack} }, $cmd_state);
-                } elsif (exists $state->{cmd_exec}) {
-                    my $cmd_exec = join ' ', @{ $self->{cmd_stack} };
-                    $string           = `$cmd_exec`;
-                    $output           = sprintf("%s", $string) . $output;
-                    $self->{cmd_exec} = [];
-                } elsif (exists $state->{exec}) {
-                    my $old_exec = $state->{exec};
-                    $state->{exec} =~ s/__IN__/$in/g;
-                    foreach my $k (keys %{ $self->{cmd_regex} }) {
-                        my $v = $self->{cmd_regex}{$k};
-                        my $K = '__' . $k . '__';
-                        $state->{exec} =~ s/$K/$v/g;
-                    }
-                    $string        = `$state->{exec}`;
-                    $output        = sprintf("%s", $string) . $output;
-                    $state->{exec} = $old_exec;
-                } elsif (exists $state->{do}) {
-                    my $old_do = $state->{do};
-                    $state->{do} =~ s/__IN__/$in/g;
-                    foreach my $k (keys %{ $self->{cmd_regex} }) {
-                        my $v = $self->{cmd_regex}{$k};
-                        my $K = '__' . $k . '__';
-                        $state->{do} =~ s/$K/$v/g;
-                    }
-                    $output = (eval { $state->{do} }) . $output;
-                    $state->{do} = $old_do;
-                } elsif (exists $state->{output_file}) {
-                    $output = read_file($state->{output_file});
-                    chomp $output;
-                } elsif (exists $state->{cat}) {
-                    my $old_cat = $state->{cat};
-                    $state->{cat} =~ s/__IN__/$in/g;
-                    foreach my $k (keys %{ $self->{cmd_regex} }) {
-                        my $v = $self->{cmd_regex}{$k};
-                        my $K = '__' . $k . '__';
-                        $state->{cat} =~ s/$K/$v/g;
-                    }
-                    $string       = read_file($state->{cat});
-                    $output       = sprintf("%s", $string) . $output;
-                    $state->{cat} = $old_cat;
-                } elsif (exists $state->{more}) {
-                    my $old_cat = $state->{more};
-                    $state->{more} =~ s/__IN__/$in/g;
-                    foreach my $k (keys %{ $self->{cmd_regex} }) {
-                        my $v = $self->{cmd_regex}{$k};
-                        my $K = '__' . $k . '__';
-                        $state->{more} =~ s/$K/$v/g;
-                    }
-                    $string        = read_file($state->{more});
-                    $more          = 1;
-                    $output        = sprintf("%s", $string) . $output;
-                    $state->{more} = $old_cat;
-                } elsif (exists $state->{catRAND}) {
-                    my $old_cat = $state->{catRAND};
-                    $state->{catRAND} =~ s/__IN__/$in/g;
-                    foreach my $k (keys %{ $self->{cmd_regex} }) {
-                        my $v = $self->{cmd_regex}{$k};
-                        my $K = '__' . $k . '__';
-                        $state->{catRAND} =~ s/$K/$v/g;
-                    }
-                    my @files = split /\s+/, $state->{catRAND};
-                    my $file = $files[ rand @files ];
-                    $string           = read_file($file);
-                    $output           = sprintf("%s", $string) . $output;
-                    $state->{catRAND} = $old_cat;
-                } elsif (exists $state->{catWRAND}) {
-                    my $old_cat = $state->{catWRAND};
-                    $state->{catWRAND} =~ s/__IN__/$in/g;
-                    foreach my $k (keys %{ $self->{cmd_regex} }) {
-                        my $v = $self->{cmd_regex}{$k};
-                        my $K = '__' . $k . '__';
-                        $state->{catWRAND} =~ s/$K/$v/g;
-                    }
-                    my %files = map { split /:/ } split /\s+/, $state->{catWRAND};
-                    my $file;
-                    my $weight;
-                    while (my ($p, $w) = each %files) {
-                        $w //= 1;
-                        $weight += $w // 1;
-                        $file = $p if rand($weight) < $w;
-                    }
-                    $string            = read_file($file);
-                    $output            = sprintf("%s", $string) . $output;
-                    $state->{catWRAND} = $old_cat;
-                } elsif (exists $state->{catSEQ}) {
-                    my $old_cat = $state->{catSEQ};
-                    my $state_file;
-                    if (exists $state->{catSEQ_idx}) {
-                        $state_file = $state->{catSEQ_idx};
-                    } else {
-                        $state_file = $old_cat . '.state';
-                        $state_file =~ s/\s/_/g;
-                    }
-                    $state->{catSEQ} =~ s/__IN__/$in/g;
-                    foreach my $k (keys %{ $self->{cmd_regex} }) {
-                        my $v = $self->{cmd_regex}{$k};
-                        my $K = '__' . $k . '__';
-                        $state->{catSEQ} =~ s/$K/$v/g;
-                    }
-                    my @files = split /\s+/, $state->{catSEQ};
-                    tie my $nbr => 'FSM::Basic::Modulo', scalar @files, 0;
-                    if (-f $state_file) {
-                        $nbr = read_file($state_file);
-                    }
-                    my $file = $files[ $nbr++ ];
-                    $string          = read_file($file);
-                    $output          = sprintf("%s", $string) . $output;
-                    $state->{catSEQ} = $old_cat;
-                    write_file($state_file, $nbr);
-                }
-            } else {
-                $self->{previous_state} = $self->{state};
-                $self->{state}          = $self->{states_list}{ $self->{state} }{not_matching} // $self->{state};
-                $self->{states_list}{ $self->{state} }{repeat}--
-                  if exists $self->{states_list}{ $self->{state} }{repeat};
-                $output .= $self->{states_list}{ $self->{state} }{output} // read_file($self->{states_list}{ $self->{state} }{output_file}) // '';
-                if (exists $self->{states_list}{ $self->{state} }{not_matching_info}) {
-                    $output = $self->{states_list}{ $self->{state} }{not_matching_info} . "\n" . $output;
-                }
-                return ($self->{states_list}{ $self->{state} }{$in}{final} // $self->{states_list}{ $self->{state} }{final} // 0, $output, $more);
-            }
-            return ($self->{states_list}{ $self->{state} }{$in}{final} // $self->{states_list}{ $self->{state} }{final} // 0, $output, $more);
-        }
-    }
-}
-
-sub set {
-    my ($self, $in) = @_;
-    $self->{previous_state}  = $self->{state};
-    $self->{previous_output} = $self->{states_list}{ $self->{state} }{output} // read_file($self->{states_list}{ $self->{state} }{output_file}) // '';
-    $self->{state}           = $in if exists $self->{states_list}{$in};
-    return 1;
-}
-
-sub write_file {
-    my ($file, $content) = @_;
-    open my $fh, '>', $file or die "Error opening file for write $file: $!\n";
-    print $fh $content;
-    close $fh or die "Error closing file $file: $!\n";
-    return 1;
-}
-
-sub alter {
-    my $r = shift;
-    my $c = shift // 0;
-    $r =~ /([^[]*)\[([^\]]+)\](.*)/;
-    my $pre_r   = $1;
-    my $match_r = $2;
-    my $post_r  = $3;
-    my $out     = $pre_r . '(';
-    for (my $i = 1 ; $i <= length $match_r ; $i++) {
-        $out .= substr($match_r, 0, $i) . '|';
-    }
-    chop $out;
-    $post_r = alter($post_r) if $post_r =~ /\[([^\]]+)\]/;
-    $out    = $out . ')' . $post_r;
-    $out    = '(?i:' . $out . ')' if $c;
-    return $out;
-}
-
-sub read_file {
-    my ($file) = @_;
-    my $content = '';
-    if ($file) {
-        if (-f $file) {
-            open my $fh, '<', $file or die "Error opening file for read $file: $!\n";
-            local $/;
-            $content = <$fh>;
-            close $fh;
-        } else {
-            carp "missing file: $file";
-        }
-    }
-    return $content;
-}
-
-package FSM::Basic::Modulo;
-sub TIESCALAR { bless [ $_[2] || 0, $_[1] ] => $_[0] }
-sub FETCH { ${ $_[0] }[0] }
-sub STORE { ${ $_[0] }[0] = $_[1] % ${ $_[0] }[1] }
-1;
+=over 1
 
 =back
+
 
 B<EXAMPLE>
 
@@ -682,6 +793,7 @@ B<EXAMPLE>
     my $prompt       = '> ';
     my $line;
     my $final   = 0;
+    my $extra;
     my $term    = new Term::ReadLine 'bash';
     my $attribs = $term->Attribs->ornaments( 0 );
     $term->using_history();
@@ -692,7 +804,7 @@ B<EXAMPLE>
     my $out = "Password> ";
     while ( defined( $line = $term->readline( $out ) ) )
     {
-        ( $final, $out ) = $fsm->run( $line );
+        ( $final, $out, $extra ) = $fsm->run( $line );
         $term->write_history( $history_file );
         last if $final;
     }

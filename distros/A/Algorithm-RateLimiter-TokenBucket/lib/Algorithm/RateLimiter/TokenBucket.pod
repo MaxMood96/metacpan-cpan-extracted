@@ -1,0 +1,68 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Algorithm::RateLimiter::TokenBucket - Loop-agnostic Token Bucket Rate Limiter
+
+=head1 SYNOPSIS
+
+    use Algorithm::RateLimiter::TokenBucket;
+
+    # Limit to 500 KB/s
+    my $limiter = Algorithm::RateLimiter::TokenBucket->new( limit => 512_000 );
+
+    # In your main loop
+    while ( 1 ) {
+        my $delta = 0.1; # Time elapsed since last tick
+        $limiter->tick( $delta );
+
+        my $can_send = $limiter->consume( 16384 );
+        if ($can_send > 0) {
+            # Send $can_send bytes
+        }
+    }
+
+=head1 DESCRIPTION
+
+C<Algorithm::RateLimiter::TokenBucket> implements the L<token bucket|https://en.wikipedia.org/wiki/Token_bucket>
+algorithm for rate limiting. It is specifically designed to be B<loop-agnostic>, meaning it does not manage its own
+timers or background threads. Instead, you "drive" it by calling C<tick( )> with the amount of time that has passed.
+
+This makes it ideal for integration into event loops (like L<IO::Async> or L<Mojo::IOLoop>) or high-performance network
+applications.
+
+=head1 METHODS
+
+=head2 C<new( limit => $bytes_per_second )>
+
+Creates a new limiter. C<limit> is optional and defaults to 0 (unlimited).
+
+=head2 C<set_limit( $limit )>
+
+Dynamically updates the rate limit.
+
+=head2 C<tick( $delta_seconds )>
+
+Adds new tokens to the bucket based on the time elapsed.
+
+=head2 C<consume( $amount )>
+
+Attempts to consume C<$amount> units (tokens) from the bucket. Returns the number of units actually consumed.
+
+=head2 C<available( )>
+
+Returns the current number of tokens in the bucket.
+
+=head1 AUTHOR
+
+Sanko Robinson E<lt>sanko@cpan.orgE<gt>
+
+=head1 COPYRIGHT
+
+Copyright (C) 2026 by Sanko Robinson.
+
+This library is free software; you can redistribute it and/or modify it under the terms of the Artistic License 2.0.
+
+=cut

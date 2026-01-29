@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use 5.010;
 
-our $VERSION = '0.03';
+our $VERSION = '0.10';
 
 # Session management for Hypersonic
 # Uses signed cookies for session ID, memory store for data
@@ -12,6 +12,7 @@ our $VERSION = '0.03';
 # Only activated when session_config() is called
 
 use Digest::SHA qw(hmac_sha256_hex);
+use Hypersonic::JIT::Util;
 
 # Session slot constants (used in Request object)
 use constant {
@@ -37,6 +38,12 @@ my $MODULE_ID = 0;
 # ============================================================
 # JIT Compilation of Cryptographic Operations
 # ============================================================
+
+# Unified compile interface
+sub compile {
+    my ($class, %opts) = @_;
+    return $class->compile_session_ops(%opts);
+}
 
 sub compile_session_ops {
     my ($class, %opts) = @_;
@@ -68,19 +75,14 @@ sub compile_session_ops {
         return 0;
     }
 
-    my $cache_dir = $opts{cache_dir} // '_hypersonic_session_cache';
+    my $cache_dir = $opts{cache_dir} // '_hypersonic_cache/session';
     my $module_name = 'Hypersonic::Session::Ops_' . $MODULE_ID++;
 
     my $builder = XS::JIT::Builder->new;
 
-    # Add required includes
-    $builder->line('#include <openssl/hmac.h>')
-            ->line('#include <openssl/evp.h>')
-            ->line('#include <openssl/rand.h>')
-            ->line('#include <fcntl.h>')
-            ->line('#include <unistd.h>')
-            ->line('#include <string.h>')
-            ->blank;
+    # Add required includes via centralized utility
+    Hypersonic::JIT::Util->add_standard_includes($builder,
+        qw(unistd fcntl openssl));
 
     # --------------------------------------------------------
     # jit_hmac_sha256_hex: Generate HMAC-SHA256 signature
@@ -89,6 +91,7 @@ sub compile_session_ops {
     # --------------------------------------------------------
     $builder->xs_function('jit_hmac_sha256_hex')
       ->xs_preamble
+      ->line('int i;')
       ->line('if (items < 2) croak("Usage: _jit_hmac_sha256_hex(data, key, [output_len])");')
       ->line('STRLEN data_len, key_len;')
       ->line('const unsigned char* data = (const unsigned char*)SvPV(ST(0), data_len);')
@@ -104,7 +107,7 @@ sub compile_session_ops {
       ->line('char hex[129];')
       ->line('int hex_bytes = (int)(out_len / 2);')
       ->line('if (hex_bytes > 32) hex_bytes = 32;')
-      ->line('for (int i = 0; i < hex_bytes; i++) {')
+      ->line('for (i = 0; i < hex_bytes; i++) {')
       ->line('    sprintf(hex + i*2, "%02x", digest[i]);')
       ->line('}')
       ->line('hex[out_len] = \'\\0\';')
@@ -120,6 +123,7 @@ sub compile_session_ops {
     # --------------------------------------------------------
     $builder->xs_function('jit_constant_time_compare')
       ->xs_preamble
+      ->line('STRLEN i;')
       ->line('if (items != 2) croak("Usage: _jit_constant_time_compare(s1, s2)");')
       ->line('STRLEN len1, len2;')
       ->line('const unsigned char* s1 = (const unsigned char*)SvPV(ST(0), len1);')
@@ -129,7 +133,7 @@ sub compile_session_ops {
       ->line('STRLEN max_len = len1 > len2 ? len1 : len2;')
       ->line('unsigned char diff = (len1 != len2) ? 1 : 0;')
       ->blank
-      ->line('for (STRLEN i = 0; i < max_len; i++) {')
+      ->line('for (i = 0; i < max_len; i++) {')
       ->line('    unsigned char c1 = (i < len1) ? s1[i] : 0;')
       ->line('    unsigned char c2 = (i < len2) ? s2[i] : 0;')
       ->line('    diff |= c1 ^ c2;')
@@ -146,6 +150,7 @@ sub compile_session_ops {
     # --------------------------------------------------------
     $builder->xs_function('jit_generate_session_id')
       ->xs_preamble
+      ->line('int i;')
       ->line('unsigned char bytes[16];')
       ->blank
       ->comment('Try /dev/urandom first (most portable)')
@@ -165,7 +170,7 @@ sub compile_session_ops {
       ->blank
       ->comment('Convert to hex')
       ->line('char hex[33];')
-      ->line('for (int i = 0; i < 16; i++) {')
+      ->line('for (i = 0; i < 16; i++) {')
       ->line('    sprintf(hex + i*2, "%02x", bytes[i]);')
       ->line('}')
       ->line('hex[32] = \'\\0\';')
@@ -182,6 +187,7 @@ sub compile_session_ops {
     # --------------------------------------------------------
     $builder->xs_function('jit_verify_signature')
       ->xs_preamble
+      ->line('int i;')
       ->line('if (items != 2) croak("Usage: _jit_verify_signature(signed_cookie, secret)");')
       ->line('STRLEN cookie_len, secret_len;')
       ->line('const char* cookie = SvPV(ST(0), cookie_len);')
@@ -194,7 +200,7 @@ sub compile_session_ops {
       ->endif
       ->blank
       ->comment('Validate hex characters in session_id')
-      ->line('for (int i = 0; i < 32; i++) {')
+      ->line('for (i = 0; i < 32; i++) {')
       ->line('    char c = cookie[i];')
       ->line('    if (!((c >= \'0\' && c <= \'9\') || (c >= \'a\' && c <= \'f\'))) {')
       ->line('        ST(0) = &PL_sv_undef;')
@@ -217,14 +223,14 @@ sub compile_session_ops {
       ->blank
       ->comment('Convert first 8 bytes to hex (16 chars)')
       ->line('char expected[17];')
-      ->line('for (int i = 0; i < 8; i++) {')
+      ->line('for (i = 0; i < 8; i++) {')
       ->line('    sprintf(expected + i*2, "%02x", digest[i]);')
       ->line('}')
       ->line('expected[16] = \'\\0\';')
       ->blank
       ->comment('Constant-time comparison')
       ->line('unsigned char diff = 0;')
-      ->line('for (int i = 0; i < 16; i++) {')
+      ->line('for (i = 0; i < 16; i++) {')
       ->line('    diff |= expected[i] ^ provided_sig[i];')
       ->line('}')
       ->blank
@@ -234,6 +240,58 @@ sub compile_session_ops {
       ->endif
       ->blank
       ->line('ST(0) = sv_2mortal(newSVpv(session_id, 32));')
+      ->xs_return('1')
+      ->xs_end;
+
+    # --------------------------------------------------------
+    # jit_session_get_set: Get or set session value
+    # Input: req (AV*), key (SV*), [value (SV*)]
+    # Output: value (SV*) or undef
+    # --------------------------------------------------------
+    $builder->xs_function('jit_session_get_set')
+      ->xs_preamble
+      ->line('if (items < 2) croak("Usage: _jit_session_get_set(req, key, [value])");')
+      ->line('SV** ary = AvARRAY((AV*)SvRV(ST(0)));')
+      ->line('SV* session_sv = ary[' . SLOT_SESSION . '];')
+      ->blank
+      ->comment('Check if session data exists')
+      ->if('!session_sv || !SvROK(session_sv) || SvTYPE(SvRV(session_sv)) != SVt_PVHV')
+        ->line('ST(0) = &PL_sv_undef;')
+        ->line('XSRETURN(1);')
+      ->endif
+      ->blank
+      ->line('HV* session = (HV*)SvRV(session_sv);')
+      ->line('STRLEN klen;')
+      ->line('const char* key = SvPV(ST(1), klen);')
+      ->blank
+      ->if('items == 2')
+        ->comment('Getter mode')
+        ->line('SV** val = hv_fetch(session, key, klen, 0);')
+        ->line('ST(0) = (val && *val) ? *val : &PL_sv_undef;')
+      ->else
+        ->comment('Setter mode')
+        ->line('hv_store(session, key, klen, newSVsv(ST(2)), 0);')
+        ->line('ary[' . SLOT_SESSION_MODIFIED . '] = newSViv(1);')
+        ->line('ST(0) = ST(2);')
+      ->endif
+      ->xs_return('1')
+      ->xs_end;
+
+    # --------------------------------------------------------
+    # jit_session_get_all: Get all session data
+    # Input: req (AV*)
+    # Output: session hashref (SV*) or undef
+    # --------------------------------------------------------
+    $builder->xs_function('jit_session_get_all')
+      ->xs_preamble
+      ->line('if (items < 1) croak("Usage: _jit_session_get_all(req)");')
+      ->line('SV** ary = AvARRAY((AV*)SvRV(ST(0)));')
+      ->line('SV* session_sv = ary[' . SLOT_SESSION . '];')
+      ->if('session_sv && SvROK(session_sv)')
+        ->line('ST(0) = session_sv;')
+      ->else
+        ->line('ST(0) = &PL_sv_undef;')
+      ->endif
       ->xs_return('1')
       ->xs_end;
 
@@ -250,6 +308,8 @@ sub compile_session_ops {
                 'Hypersonic::Session::_jit_constant_time_compare' => { source => 'jit_constant_time_compare', is_xs_native => 1 },
                 'Hypersonic::Session::_jit_generate_session_id'   => { source => 'jit_generate_session_id', is_xs_native => 1 },
                 'Hypersonic::Session::_jit_verify_signature'      => { source => 'jit_verify_signature', is_xs_native => 1 },
+                'Hypersonic::Session::_jit_session_get_set'       => { source => 'jit_session_get_set', is_xs_native => 1 },
+                'Hypersonic::Session::_jit_session_get_all'       => { source => 'jit_session_get_all', is_xs_native => 1 },
             },
         );
         $COMPILED = 1;
@@ -460,6 +520,14 @@ sub after_middleware {
 sub get_set {
     my ($req, $key, $value) = @_;
 
+    # Use JIT-compiled version if available
+    if ($COMPILED && defined &_jit_session_get_set) {
+        return @_ == 2
+            ? _jit_session_get_set($req, $key)
+            : _jit_session_get_set($req, $key, $value);
+    }
+
+    # Perl fallback
     my $data = $req->[SLOT_SESSION];
     return unless $data;
 
@@ -477,6 +545,12 @@ sub get_set {
 # Get all session data
 sub get_all {
     my ($req) = @_;
+
+    # Use JIT-compiled version if available
+    if ($COMPILED && defined &_jit_session_get_all) {
+        return _jit_session_get_all($req);
+    }
+
     return $req->[SLOT_SESSION];
 }
 

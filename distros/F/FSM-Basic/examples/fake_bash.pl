@@ -16,11 +16,12 @@ my $date  = localtime($epoch);
 my %to_subst = (
     __ENPROMPT__ => 'Admin#',
     __PROMPT__   => $srcip . '=>' . $dstip . '>',
+    __PROMPT1__  => $srcip . '=>' . $dstip . '#',
     __DSTIP__    => $dstip,
     __SRCIP__    => $srcip,
     __DSTPORT__  => $dstport,
     __SRCPORT__  => $srcport,
-    __DATE__     => $date,
+#    __DATE__     => $date,
     __EPOCH__    => $epoch,
 );
 
@@ -76,7 +77,6 @@ my $out;
 my $line;
 
 while ( defined( $line = $term->readline($prompt) ) ) {
-
     ( $final, $out ) = $fsm->run($line);
     if ( $log_filter ) {
         print $log_fd '[' . scalar(localtime) . "] $srcip => $dstip line=<$line> out=<$out> final=<$final> state=<$fsm->{state}> \n" if $DEBUG && ( $log_filter eq $srcip ||$log_filter eq $dstip) ;
@@ -86,9 +86,12 @@ while ( defined( $line = $term->readline($prompt) ) ) {
     if ( $out =~ s/(\N*)$//s ) {
         $prompt = $1;
     }
+    my $old_out = $out;
     $out = subst($out);
+    $out = subst_date($out);
     print $out;
     $term->write_history($history_file);
+    $out = $old_out;
     last if $final;
 }
 
@@ -99,7 +102,19 @@ sub slurp_file {
     return wantarray ? split /\n/, $data : $data;
 }
 
+
+
 sub subst {
+    my ($data) = @_;
+    print $log_fd "DATA=$data\n" if $log_level > 0;
+    foreach my $subst ( keys %to_subst ) {
+        $data =~ s/\Q$subst\E/$to_subst{$subst}/g;
+    }
+    print $log_fd "DATANEW=$data\n" if $log_level > 0;
+    return $data;
+}
+
+sub subst_date {
     my ($data) = @_;
     print $log_fd "DATA=$data\n" if $log_level > 0;
     while ( $data =~ /(__DATE(\((.*)\))?([+-]?\d+)?__)/mg ) {
@@ -114,14 +129,11 @@ sub subst {
         my $delta = $4 // 0;
         my $new_tag;
         if ($fmt) {
-            $new_tag = strftime( $fmt, localtime( $epoch + ( $delta * 86400 ) ) );
+            $new_tag = strftime( $fmt, localtime( time + ( $delta * 86400 ) ) );
         } else {
-            $new_tag = localtime( $epoch + ( $delta * 86400 ) );
+            $new_tag = localtime( time + ( $delta * 86400 ) );
         }
         $data =~ s/\Q$tag/$new_tag/mg;
-    }
-    foreach my $subst ( keys %to_subst ) {
-        $data =~ s/\Q$subst\E/$to_subst{$subst}/g;
     }
     print $log_fd "DATANEW=$data\n" if $log_level > 0;
     return $data;

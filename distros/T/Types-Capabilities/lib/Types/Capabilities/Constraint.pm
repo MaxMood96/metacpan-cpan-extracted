@@ -5,7 +5,7 @@ use warnings;
 package Types::Capabilities::Constraint;
 
 our $AUTHORITY = 'cpan:TOBYINK';
-our $VERSION   = '0.003000';
+our $VERSION   = '0.004000';
 
 use parent 'Type::Tiny::Duck';
 use Carp ();

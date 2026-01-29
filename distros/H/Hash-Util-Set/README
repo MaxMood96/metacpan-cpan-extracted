@@ -25,6 +25,9 @@ SYNOPSIS
        $bool = keys_any  %x, 'a', 'z';            # at least one exists?
        $bool = keys_all  %x, 'a', 'b', 'c';       # all exist?
        $bool = keys_none %x, 'x', 'y', 'z';       # none exist?
+   
+       # Combined operations
+       @sets = keys_partition %x, %y;             # A \ B, A ∩ B, B \ A
 
 DESCRIPTION
     "Hash::Util::Set" provides set operations on hash keys. It treats the
@@ -111,6 +114,16 @@ FUNCTIONS
     True if none of the keys in LIST exist in %x. Returns true for empty
     LIST.
 
+  Combined Operations
+   keys_partition
+        my ($only_x, $both, $only_y) = keys_partition %x, %y;
+
+    Partitions the union of keys from both hashes into three disjoint sets:
+    keys only in %x ("A \ B"), keys in both hashes ("A ∩ B"), and keys only
+    in %y ("B \ A").
+
+    Returns a list with three array references.
+
 ALIASES
     Shorter aliases:
 
@@ -120,14 +133,37 @@ ALIASES
         keys_xor  =>  keys_symmetric_difference
 
 EXPORTS
-    Nothing is exported by default. Import functions individually or use
-    ":all":
+    Nothing is exported by default. Functions can be imported individually
+    or by category:
 
-        use Hash::Util::Set qw(keys_union keys_intersection);
-        use Hash::Util::Set qw(:all);
+        use Hash::Util::Keys qw(keys_union keys_intersection);  # individual functions
+        use Hash::Util::Keys qw(:all);                          # all functions
+        use Hash::Util::Keys qw(:operations);                   # set operations only
+        use Hash::Util::Keys qw(:predicates);                   # predicates only
+        use Hash::Util::Keys qw(:membership);                   # membership tests only
+        use Hash::Util::Keys qw(:aliases);                      # short aliases only
+
+  Export Tags
+    ":all"
+        All functions including operations, predicates, membership tests,
+        and aliases.
+
+    ":operations"
+        Set operations: "keys_union", "keys_intersection",
+        "keys_difference", "keys_symmetric_difference", "keys_partition".
+
+    ":predicates"
+        Set predicates: "keys_disjoint", "keys_equal", "keys_subset",
+        "keys_proper_subset", "keys_superset", "keys_proper_superset".
+
+    ":membership"
+        Membership tests: "keys_any", "keys_all", "keys_none".
+
+    ":aliases"
+        Short aliases: "keys_or", "keys_and", "keys_sub", "keys_xor".
 
 IMPLEMENTATION
-    Automatically uses "Hash::Util::Set::XS" if available, otherwise falls
+    Automatically uses Hash::Util::Set::XS if available, otherwise falls
     back to "Hash::Util::Set::PP".
 
 SEE ALSO

@@ -8,13 +8,13 @@ use warnings;
 
 use Carp;
 use CHI;
-use Class::Debug 0.07;
 use Database::Abstraction;
 use File::Spec;
-use Locale::Places::GB;
-use Locale::Places::US;
+use I18N::LangTags::Detect;
 use Module::Info;
-use Params::Get;
+use Object::Configure 0.12;
+use Params::Get 0.13;
+use Params::Validate::Strict 0.13;
 use Scalar::Util;
 
 =encoding utf8
@@ -25,11 +25,11 @@ Locale::Places - Translate places between different languages using http://downl
 
 =head1 VERSION
 
-Version 0.15
+Version 0.16
 
 =cut
 
-our $VERSION = '0.15';
+our $VERSION = '0.16';
 
 =head1 SYNOPSIS
 
@@ -78,13 +78,13 @@ sub new {
 	my $class = shift;
 
 	# Handle hash or hashref arguments
-	my $params = Params::Get::get_params(undef, @_);
+	my $params = Params::Get::get_params(undef, \@_);
 
 	if(!defined($class)) {
 		if((scalar keys %{$params}) > 0) {
 			# Locale::Places::new() used rather than Locale::Places->new()
 			carp(__PACKAGE__, ' use ->new() not ::new() to instantiate');
-			return;
+			Carp::croak(__PACKAGE__ . '->new() must be called as a class or object method');
 		}
 
 		# FIXME: this only works when no arguments are given
@@ -99,17 +99,21 @@ sub new {
 
 	# Load the configuration from a config file, if provided
 
-	$params = Class::Debug::setup($class, $params);
+	$params = Object::Configure::configure($class, $params);
 
 	my $directory = delete $params->{'directory'};
 	if(!defined($directory)) {
+		# Module::Info path detection may fail under fatpacking or PAR.
 		$directory = Module::Info->new_from_loaded(__PACKAGE__)->file();
 		$directory =~ s/\.pm$//;
 	}
 	$directory = File::Spec->catfile($directory, 'data');
 
-	if(!-d $directory) {
+	unless((-d $directory) && (-r $directory)) {
 		unless($ENV{'AUTOMATED_TESTING'}) {	# Allow some sanity tests to be run
+			if($params->{'logger'}) {
+				$params->{'logger'}->warn("$class: can't find the data directory $directory: $!");
+			}
 			Carp::carp("$class: can't find the data directory $directory: $!");
 			return;
 		}
@@ -151,6 +155,44 @@ Example:
     # Prints "Douvres"
     print Locale::Places->new()->translate({ place => 'Dover', country => 'GB', from => 'en', to => 'fr' });
 
+=head3 Translation Resolution Order
+
+=over 4
+
+=item 1. Preferred names
+
+=item 2. Non-preferred names
+
+=item 3. Short names
+
+=item 4. Non-short names
+
+=item 5. Single-translation disambiguation
+
+=item 6. Identity fallback
+
+=back
+
+=head3 API SPECIFICATION
+
+=head4	INPUT
+
+  {
+    'place' => { 'type' => 'string', 'min' => 2, 'max' => 64 },
+    'from' => { 'type' => 'string', 'min' => 2, 'max' => 64, optional => 1 },
+    'to' => { 'type' => 'string', 'min' => 2, 'max' => 64, optional => 1 },
+    'country' => { 'type' => 'string', 'min' => 2, 'max' => 64, optional => 1 }
+  }
+
+=head4	OUTPUT
+
+Argument error: croak
+No matches found: undef
+
+  {
+    'type' => 'string',
+    'min' => 1
+  }
 
 =cut
 
@@ -162,13 +204,25 @@ sub translate
 	Carp::croak('translate() must be called on an object') unless(Scalar::Util::blessed($self));
 
 	# Handle hash or hashref arguments
-	my $params = Params::Get::get_params('place', @_);
+        my $params = Params::Validate::Strict::validate_strict({
+		args => Params::Get::get_params('place', @_),
+		schema => {
+			'place' => { 'type' => 'string', 'min' => 2, 'max' => 64 },
+			'from' => { 'type' => 'string', 'min' => 2, 'max' => 64, optional => 1 },
+			'to' => { 'type' => 'string', 'min' => 2, 'max' => 64, optional => 1 },
+			'country' => { 'type' => 'string', 'min' => 2, 'max' => 64, optional => 1 }
+		}
+	});
+
 	if(scalar(@_) == 1) {
 		$params->{'from'} ||= 'en';
 	}
 
 	my $place = $params->{place};
 	unless(defined $place) {
+		if(my $logger = $self->logger()) {
+			$logger->warn(__PACKAGE__ . ': usage: translate(place => $place, from => $language1, to => $language2 [ , country => $country ])');
+		}
 		Carp::carp(__PACKAGE__, ': usage: translate(place => $place, from => $language1, to => $language2 [ , country => $country ])');
 		return;
 	}
@@ -202,6 +256,9 @@ sub translate
 
 	my $db = $self->{$country} ||= do {
 		my $class = "Locale::Places::$country";
+
+		eval "require $class; 1" && $class->import() unless $class->can('new');
+		Carp::croak("Unsupported country: $country") if $@;
 		$class->new(directory => $self->{directory});
 	};
 
@@ -223,11 +280,11 @@ sub translate
 			return $data;
 		}
 	} elsif(scalar(@places) > 1) {
-		# Handle the case when there are more than one preferred value
+		# Handle the case when there is more than one preferred value
 		# but either not all translate or they all translate to the same
 		# value, in which case the duplicate can be ignored
 
-		# If none of them matches then assume there are no translations
+		# If none of them match, then assume there are no translations
 		# available and return that
 
 		my $candidate;
@@ -250,31 +307,26 @@ sub translate
 		@places = $db->code2({ type => $from, data => $place, ispreferredname => 1, isshortname => undef });
 		if(scalar(@places) == 1) {
 			if(my $data = $db->data({ type => $to, code2 => $places[0] })) {
-				$self->{cache}->set($cache_key, $data);
-				return $data;
+				return $self->{cache}->set($cache_key, $data);
 			}
 			@places = $db->code2({ type => $from, data => $place, ispreferredname => 1, isshortname => 1 });
 			if(scalar(@places) == 1) {
 				if(my $data = $db->data({ type => $to, code2 => $places[0] })) {
-					$self->{cache}->set($cache_key, $data);
-					return $data;
+					return $self->{cache}->set($cache_key, $data);
 				}
 				# Can't find anything
-				$self->{cache}->set($cache_key, $place);
-				return $place;
+				return $self->{cache}->set($cache_key, $place);
 			}
 		} elsif(scalar(@places) == 0) {
 			@places = $db->code2({ type => $from, data => $place, isshortname => undef });
 			if((scalar(@places) == 1) &&
 			   (my $data = $db->data({ type => $to, code2 => $places[0] }))) {
-				$self->{cache}->set($cache_key, $data);
-				return $data;
+				return $self->{cache}->set($cache_key, $data);
 			}
 			@places = $db->code2({ type => $from, data => $place });
 			if((scalar(@places) == 1) &&
 			   (my $data = $db->data({ type => $to, code2 => $places[0] }))) {
-				$self->{cache}->set($cache_key, $data);
-				return $data;
+				return $self->{cache}->set($cache_key, $data);
 			}
 		} else {
 			# Handle multiple translations - see if they happen to be the same
@@ -302,7 +354,7 @@ sub translate
 	return; # Return undef if no translation is found
 }
 
-#Determines the system's default language using environment variables:
+# Determines the system's default language using environment variables:
 # 'LANGUAGE', 'LC_ALL', 'LC_MESSAGES', $ENV{'LANG'}.
 # Defaults to English ('en') if no valid language is found.
 
@@ -310,6 +362,11 @@ sub translate
 # https://www.gnu.org/software/gettext/manual/html_node/The-LANGUAGE-variable.html
 sub _get_language
 {
+	for my $tag (I18N::LangTags::Detect::detect()) {
+		if ($tag =~ /^([a-z]{2})/i) {
+			return lc($1);
+		}
+	}
 	if(($ENV{'LANGUAGE'}) && ($ENV{'LANGUAGE'} =~ /^([a-z]{2})/i)) {
 		return lc($1);
 	}
@@ -324,10 +381,10 @@ sub _get_language
 	}
 
 	# if(defined($ENV{'LANG'}) && (($ENV{'LANG'} =~ /^C\./) || ($ENV{'LANG'} eq 'C'))) {
-		# return 'en';
+	#	return 'en';
 	# }
 	return 'en' if (defined $ENV{'LANG'}) && $ENV{'LANG'} =~ /^C(\.|$)/;
-	return;	# undef
+	return; # undef
 }
 
 =head2 AUTOLOAD
@@ -339,37 +396,40 @@ Translate to the given language, where the routine's name will be the target lan
 
 Extracts the target language from the method name and calls C<translate()> internally.
 
+Returns a string containing the translated name if found, or undef if no translation exists.
+
 =cut
 
 sub AUTOLOAD
 {
 	our $AUTOLOAD;
 	my $self = shift or return;
+	return if(!defined($AUTOLOAD));
 
 	# Extract the target language from the AUTOLOAD variable
 	my ($to) = $AUTOLOAD =~ /::(\w+)$/;
 
 	return if($to eq 'DESTROY');
 
-	my %params;
-        if(ref($_[0]) eq 'HASH') {
-                %params = %{$_[0]};
-        } elsif((scalar(@_) % 2) == 0) {
-                %params = @_;
-        } elsif(scalar(@_) == 1) {
-                $params{'place'} = shift;
-        }
+	my $params = Params::Get::get_params('place', \@_);
 
-	return $self->translate(to => $to, %params);
+	# Validate method name - only allow safe to languages
+	if($to =~ /^[a-zA-Z_][a-zA-Z0-9_]*$/) {
+		return $self->translate(to => $to, %{$params});
+	}
+	if($self->{'logger'}) {
+		$self->{'logger'}->notice(__PACKAGE__ . ": Invalid language name: $to");
+	}
+	Carp::croak(__PACKAGE__, ": Invalid language name: $to");
 }
 
 =head1 AUTHOR
 
-Nigel Horne, C<< <njh at bandsman.co.uk> >>
+Nigel Horne, C<< <njh at nigelhorne.com> >>
 
 =head1 BUGS
 
-Only supports places in GB and US at the moment.
+Only supports places in GB and the US at the moment.
 
 Canterbury no longer translates to Cantorbéry in French.
 This is a problem with the data, which has this line:
@@ -383,9 +443,17 @@ For example, is Virginia a state, a town in Illinois or one in Minnesota?
 
 =head1 SEE ALSO
 
-L<Locale::Country::Multilingual> to translate country names.
+=over 4
+
+=item * L<Test Coverage Report|https://nigelhorne.github.io/Locale-Places/coverage/>
+
+=item * L<Locale::Country::Multilingual> to translate country names.
+
+=back
 
 =head1 SUPPORT
+
+This module is provided as-is without any warranty.
 
 You can find documentation for this module with the perldoc command.
 
@@ -423,11 +491,11 @@ L<https://groups.google.com/g/geonames>
 
 =head1 LICENCE AND COPYRIGHT
 
-Copyright 2020-2025 Nigel Horne.
+Copyright 2020-2026 Nigel Horne.
 
 This program is released under the following licence: GPL2
 
-This product uses data from geonames, L<http://download.geonames.org>.
+This product uses data from Geonames, available at L<http://download.geonames.org>.
 
 =cut
 

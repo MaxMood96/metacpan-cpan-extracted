@@ -20,20 +20,21 @@ my $meta = {
                           configure => { requires => { "ExtUtils::MakeMaker" => 6.17 } },
                           develop   => { recommends => { "Dist::Inkt" => 0.001 } },
                           runtime   => {
-                                         requires => {
-                                           "Carp" => 0,
-                                           "Class::Method::Modifiers" => 0,
-                                           "Module::Runtime" => 0,
-                                           "parent" => 0,
-                                           "perl" => 5.010001,
-                                           "Sub::HandlesVia::CodeGenerator" => 0.050006,
-                                           "Sub::HandlesVia::Handler" => 0.050006,
-                                           "Type::Library" => "2.000000",
-                                           "Type::Tiny::Duck" => "2.000000",
-                                           "Types::Common" => 0,
-                                           "Types::Path::Tiny" => 0,
-                                           "Types::TypeTiny" => "2.000000",
-                                         },
+                                         recommends => { "Sub::HandlesVia::XS" => 0.001003 },
+                                         requires   => {
+                                                         "Carp" => 0,
+                                                         "Class::Method::Modifiers" => 0,
+                                                         "Module::Runtime" => 0,
+                                                         "parent" => 0,
+                                                         "perl" => 5.010001,
+                                                         "Sub::HandlesVia::CodeGenerator" => "0.053000",
+                                                         "Sub::HandlesVia::Handler" => "0.053000",
+                                                         "Type::Library" => "2.000000",
+                                                         "Type::Tiny::Duck" => "2.000000",
+                                                         "Types::Common" => 0,
+                                                         "Types::Path::Tiny" => 0,
+                                                         "Types::TypeTiny" => "2.000000",
+                                                       },
                                        },
                           test      => {
                                          requires => {
@@ -48,30 +49,30 @@ my $meta = {
                                        },
                         },
   "provides"         => {
-                          "Types::Capabilities"                           => { file => "lib/Types/Capabilities.pm", version => "0.003000" },
+                          "Types::Capabilities"                           => { file => "lib/Types/Capabilities.pm", version => "0.004000" },
                           "Types::Capabilities::CoercedValue::ARRAYREF"   => {
                                                                                file => "lib/Types/Capabilities/CoercedValue/ARRAYREF.pm",
-                                                                               version => "0.003000",
+                                                                               version => "0.004000",
                                                                              },
                           "Types::Capabilities::CoercedValue::CODEREF"    => {
                                                                                file => "lib/Types/Capabilities/CoercedValue/CODEREF.pm",
-                                                                               version => "0.003000",
+                                                                               version => "0.004000",
                                                                              },
                           "Types::Capabilities::CoercedValue::FILEHANDLE" => {
                                                                                file => "lib/Types/Capabilities/CoercedValue/FILEHANDLE.pm",
-                                                                               version => "0.003000",
+                                                                               version => "0.004000",
                                                                              },
                           "Types::Capabilities::CoercedValue::QUEUE"      => {
                                                                                file => "lib/Types/Capabilities/CoercedValue/QUEUE.pm",
-                                                                               version => "0.003000",
+                                                                               version => "0.004000",
                                                                              },
                           "Types::Capabilities::CoercedValue::STACK"      => {
                                                                                file => "lib/Types/Capabilities/CoercedValue/STACK.pm",
-                                                                               version => "0.003000",
+                                                                               version => "0.004000",
                                                                              },
                           "Types::Capabilities::Constraint"               => {
                                                                                file => "lib/Types/Capabilities/Constraint.pm",
-                                                                               version => "0.003000",
+                                                                               version => "0.004000",
                                                                              },
                         },
   "release_status"   => "stable",
@@ -88,7 +89,7 @@ my $meta = {
                                           },
                           x_identifier => "http://purl.org/NET/cpan-uri/dist/Types-Capabilities/project",
                         },
-  "version"          => "0.003000",
+  "version"          => "0.004000",
   "x_static_install" => 1,
 };
 

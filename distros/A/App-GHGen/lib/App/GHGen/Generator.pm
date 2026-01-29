@@ -1,8 +1,10 @@
 package App::GHGen::Generator;
 
 use v5.36;
+
 use strict;
 use warnings;
+
 use Path::Tiny;
 use App::GHGen::PerlCustomizer qw(detect_perl_requirements generate_custom_perl_workflow);
 
@@ -13,7 +15,7 @@ our @EXPORT_OK = qw(
 	get_workflow_description
 );
 
-our $VERSION = '0.01';
+our $VERSION = '0.03';
 
 =head1 NAME
 
@@ -42,9 +44,9 @@ sub generate_workflow($type) {
         rust   => \&_generate_rust_workflow,
         go     => \&_generate_go_workflow,
         ruby   => \&_generate_ruby_workflow,
-        php    => \&_generate_php_workflow,
         java   => \&_generate_java_workflow,
         cpp    => \&_generate_cpp_workflow,
+        php    => \&_generate_php_workflow,
         docker => \&_generate_docker_workflow,
         static => \&_generate_static_workflow,
     );
@@ -67,9 +69,9 @@ sub list_workflow_types() {
         go     => 'Go projects with testing and race detection',
         ruby   => 'Ruby projects with bundler and rake',
         perl   => 'Perl projects with cpanm, prove, and coverage',
-        php    => 'PHP projects with Composer and PHPUnit',
         java   => 'Java projects with Maven or Gradle',
-        cpp    => 'C/C++ projects with CMake and testing',
+        cpp    => 'C++ projects with CMake',
+        php    => 'PHP projects with Composer and PHPUnit',
         docker => 'Docker image build and push workflow',
         static => 'Static site deployment to GitHub Pages',
     );
@@ -82,8 +84,8 @@ Get the description for a specific workflow type.
 =cut
 
 sub get_workflow_description($type) {
-    my %types = list_workflow_types();
-    return $types{$type};
+	my %types = list_workflow_types();
+	return $types{$type};
 }
 
 # Private workflow generators
@@ -95,18 +97,18 @@ sub _generate_perl_workflow() {
 	# Use detected min version or default to 5.36
 	my $min_version = $reqs->{min_version} // '5.36';
 
-    # Generate custom workflow with detected settings
-    return generate_custom_perl_workflow({
-        min_perl_version => $min_version,
-        max_perl_version => '5.40',
-        os => ['macos-latest', 'ubuntu-latest', 'windows-latest'],
-        enable_critic => 1,
-        enable_coverage => 1,
-    });
+	# Generate custom workflow with detected settings
+	return generate_custom_perl_workflow({
+		min_perl_version => $min_version,
+		max_perl_version => '5.40',
+		os => ['macos-latest', 'ubuntu-latest', 'windows-latest'],
+		enable_critic => 1,
+		enable_coverage => 1,
+	});
 }
 
 sub _generate_node_workflow() {
-    return <<'YAML';
+	return <<'YAML';
 ---
 name: Node.js CI
 
@@ -382,195 +384,6 @@ jobs:
 YAML
 }
 
-sub _generate_php_workflow() {
-    return <<'YAML';
----
-name: PHP CI
-
-'on':
-  push:
-    branches:
-      - main
-      - master
-  pull_request:
-    branches:
-      - main
-      - master
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        php-version:
-          - '8.1'
-          - '8.2'
-          - '8.3'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: ${{ matrix.php-version }}
-          extensions: mbstring, xml, ctype, json
-          coverage: xdebug
-          tools: composer:v2
-
-      - name: Validate composer.json
-        run: composer validate --strict
-
-      - name: Cache Composer packages
-        uses: actions/cache@v5
-        with:
-          path: vendor
-          key: ${{ runner.os }}-php-${{ matrix.php-version }}-${{ hashFiles('**/composer.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-php-${{ matrix.php-version }}-
-
-      - name: Install dependencies
-        run: composer install --prefer-dist --no-progress
-
-      - name: Run PHPStan
-        run: composer exec phpstan analyse || true
-        continue-on-error: true
-
-      - name: Run tests
-        run: composer exec phpunit
-
-      - name: Run tests with coverage
-        if: matrix.php-version == '8.3'
-        run: composer exec phpunit -- --coverage-clover=coverage.xml
-YAML
-}
-
-sub _generate_java_workflow() {
-    return <<'YAML';
----
-name: Java CI
-
-'on':
-  push:
-    branches:
-      - main
-      - master
-  pull_request:
-    branches:
-      - main
-      - master
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        java-version:
-          - '11'
-          - '17'
-          - '21'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Set up JDK ${{ matrix.java-version }}
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ matrix.java-version }}
-          distribution: 'temurin'
-          cache: 'maven'
-
-      - name: Build with Maven
-        run: mvn -B clean verify
-
-      - name: Run tests
-        run: mvn -B test
-
-      - name: Generate coverage report
-        if: matrix.java-version == '21'
-        run: mvn -B jacoco:report
-YAML
-}
-
-sub _generate_cpp_workflow() {
-    return <<'YAML';
----
-name: C++ CI
-
-'on':
-  push:
-    branches:
-      - main
-      - master
-  pull_request:
-    branches:
-      - main
-      - master
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
-
-jobs:
-  test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
-        build-type:
-          - Debug
-          - Release
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Install dependencies (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build
-
-      - name: Install dependencies (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install cmake ninja
-
-      - name: Install dependencies (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          choco install cmake ninja
-
-      - name: Configure CMake
-        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.build-type }}
-
-      - name: Build
-        run: cmake --build build --config ${{ matrix.build-type }}
-
-      - name: Run tests
-        run: ctest --test-dir build -C ${{ matrix.build-type }} --output-on-failure
-YAML
-}
-
 sub _generate_docker_workflow() {
     return <<'YAML';
 ---
@@ -630,7 +443,7 @@ YAML
 }
 
 sub _generate_static_workflow() {
-	return <<'YAML';
+    return <<'YAML';
 ---
 name: Deploy Static Site
 
@@ -676,6 +489,191 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+YAML
+}
+
+sub _generate_java_workflow() {
+    return <<'YAML';
+---
+name: Java CI
+
+'on':
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java-version:
+          - '11'
+          - '17'
+          - '21'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up JDK ${{ matrix.java-version }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java-version }}
+          distribution: 'temurin'
+
+      - name: Cache Maven packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Build with Maven
+        run: mvn -B package --file pom.xml
+
+      - name: Run tests
+        run: mvn -B test
+
+      - name: Generate test report
+        if: always()
+        run: mvn surefire-report:report
+YAML
+}
+
+sub _generate_cpp_workflow() {
+    return <<'YAML';
+---
+name: C++ CI
+
+'on':
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+        build-type:
+          - Debug
+          - Release
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install CMake
+        uses: lukka/get-cmake@latest
+
+      - name: Cache build artifacts
+        uses: actions/cache@v5
+        with:
+          path: |
+            build
+            ~/.cache/ccache
+          key: ${{ runner.os }}-${{ matrix.build-type }}-${{ hashFiles('**/CMakeLists.txt') }}
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.build-type }}
+
+      - name: Build
+        run: cmake --build build --config ${{ matrix.build-type }}
+
+      - name: Run tests
+        working-directory: build
+        run: ctest -C ${{ matrix.build-type }} --output-on-failure
+YAML
+}
+
+sub _generate_php_workflow() {
+    return <<'YAML';
+---
+name: PHP CI
+
+'on':
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-version:
+          - '8.1'
+          - '8.2'
+          - '8.3'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup PHP ${{ matrix.php-version }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          extensions: mbstring, xml, ctype, json
+          coverage: xdebug
+
+      - name: Validate composer.json
+        run: composer validate --strict
+
+      - name: Cache Composer packages
+        uses: actions/cache@v5
+        with:
+          path: vendor
+          key: ${{ runner.os }}-php-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-php-
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress
+
+      - name: Run PHPUnit tests
+        run: vendor/bin/phpunit --coverage-text
+
+      - name: Run PHP CodeSniffer
+        run: vendor/bin/phpcs --standard=PSR12 src tests
+        continue-on-error: true
 YAML
 }
 

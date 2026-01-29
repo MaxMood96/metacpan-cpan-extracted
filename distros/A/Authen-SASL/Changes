@@ -1,4 +1,10 @@
 
+2.2000  2026-01-28
+  [Added]
+     - Documentation for the security layer
+  [Fixed]
+     - Several public functions missing from the API documentation
+
 2.1900  2025-08-05
   [Fixed]
     - CVE-2025-40918 (Insecure source of randomness),

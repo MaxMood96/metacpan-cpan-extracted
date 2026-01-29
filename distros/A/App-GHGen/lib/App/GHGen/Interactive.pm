@@ -14,7 +14,7 @@ our @EXPORT_OK = qw(
 	customize_workflow
 );
 
-our $VERSION = '0.01';
+our $VERSION = '0.03';
 
 =head1 NAME
 
@@ -406,18 +406,18 @@ sub _customize_docker() {
     $config{image_name} = $image_name;
     say '';
 
-    $config{push_on_pr} = prompt_yes_no(
-        "Push images on pull requests?",
-        'n'
-    );
-    say '';
+	$config{push_on_pr} = prompt_yes_no(
+		'Push images on pull requests?',
+		'n'
+	);
+	say '';
 
-    my $branches = prompt_text(
-        "Branches to run on (comma-separated)",
-        'main'
-    );
-    $config{branches} = [split /,\s*/, $branches];
-    say '';
+	my $branches = prompt_text(
+		"Branches to run on (comma-separated)",
+		'main'
+	);
+	$config{branches} = [split /,\s*/, $branches];
+	say '';
 
 	return \%config;
 }

@@ -1,5 +1,7 @@
 =pod
 
+=encoding utf-8
+
 =head1 NAME
 
 Net::BitTorrent::DHT - BitTorrent Mainline DHT implementation
@@ -44,7 +46,7 @@ Creates a new DHT node instance. All arguments are optional.
 
     my $dht = Net::BitTorrent::DHT->new( port => 8999 );
 
-=over 4
+=over
 
 =item C<node_id_bin>
 
@@ -90,6 +92,10 @@ Boolean. Enable BEP 42 (Security Extensions). Defaults to C<1>.
 Boolean. Enable BEP 44 (Arbitrary Data). Defaults to C<1>.
 
 Note: Only supports immutable data unless dependencies are met.
+
+=item C<bep51>
+
+Boolean. Enable BEP 51 (Infohash Indexing). Defaults to C<1>.
 
 =item C<read_only>
 
@@ -147,6 +153,27 @@ Queries a node for peers associated with an infohash. The primary method for pee
 
     $dht->get_peers( $info_hash, '1.2.3.4', 6881 );
 
+=head2 C<find_peers( $info_hash )>
+
+Performs a high-level iterative search for peers associated with an infohash. It queries the nodes closest to the
+infohash in the local routing table (both IPv4 and IPv6 if enabled).
+
+    $dht->find_peers( $info_hash );
+
+=head2 C<scrape( $info_hash )>
+
+Performs a high-level iterative scrape (BEP 33) for an infohash. It queries the nodes closest to the infohash for swarm
+statistics (seeders and leechers).
+
+    $dht->scrape( $info_hash );
+
+=head2 C<sample( $target_id )>
+
+Performs a high-level iterative sampling (BEP 51) starting from a target ID. It queries the closest nodes for random
+samples of infohashes they are currently storing.
+
+    $dht->sample( $target_id );
+
 =head2 C<announce_peer( $info_hash, $token, $implied_port, $addr, $port, [$seed] )>
 
 Announces to a remote node that you are a peer for the given infohash. Requires a valid C<$token> received from a
@@ -196,6 +223,39 @@ DHT's progress so it doesn't have to re-bootstrap on restart.
 
     my $state = $dht->export_state( );
     # Save $state to disk...
+
+=head2 C<set_node_id( $new_id )>
+
+Updates the local node ID. This is typically used during B<node ID rotation> when a new external IP address is
+detected.
+
+    $dht->set_node_id( $new_id );
+
+=head2 C<external_ip( )>
+
+Returns the current external IP address string as detected by the DHT network. Returns C<undef> if no consensus has
+been reached yet.
+
+    my $ip = $dht->external_ip();
+
+=head2 C<on( $event, $cb )>
+
+Registers a callback for a specific event.
+
+    $dht->on('external_ip_detected', sub ($ip) {
+        say "Confirmed external IP: $ip";
+    });
+
+Supported events:
+
+=over
+
+=item C<external_ip_detected>
+
+Triggered when a consensus is reached among remote nodes regarding our external IP address. The first argument is the
+detected IP address string.
+
+=back
 
 =head2 C<import_state( $state )>
 
@@ -260,7 +320,9 @@ constructor argument.
 
 =head2 BEP 42: DHT Security Extensions
 
-Implements node ID validation to mitigate specific attacks. Can be toggled via the C<bep42> constructor argument.
+Implements node ID validation to mitigate specific attacks. Can be toggled via the C<bep42> constructor argument. When
+enabled, the node will automatically rotate its C<node_id> if a consensus regarding a new external IP address is
+reached.
 
 =head2 BEP 43: Read-only DHT Nodes
 
@@ -277,6 +339,18 @@ In order to handle mutable data, L<Crypt::PK::Ed25519> or L<Crypt::Perl::Ed25519
 =head2 BEP 51: Infohash Indexing
 
 Adds the C<sample_infohashes> RPC to allow indexing of the DHT's content. Supported and enabled by default.
+
+=head1 SECURITY
+
+This module aims to protect the node and the network with these following features:
+
+=over
+
+=item * BEP 42 (Node ID Validation) mitigates Sybil attacks and routing table poisoning.
+
+=item * Peers that attempt to update mutable data with an invalid signature (BEP 44) are automatically blacklisted. All subsequent queries and responses from their IP address will be ignored for the duration of the session.
+
+=back
 
 =head1 SEE ALSO
 

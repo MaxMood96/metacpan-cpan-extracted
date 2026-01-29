@@ -1,0 +1,19 @@
+Revision history for Jinja2-TT2
+
+0.01  2025-01-28
+    - Initial release
+    - Tokenizer for Jinja2 syntax
+    - Parser generating AST
+    - Emitter producing TT2 code
+    - CLI tool (jinja2tt2)
+    - Support for:
+      * Variables and attribute access
+      * Filters (40+ mapped to TT2 equivalents)
+      * Conditionals (if/elif/else)
+      * Loops (for/endfor with loop variables)
+      * Blocks and macros
+      * Includes
+      * Comments
+      * Whitespace control
+      * Ternary expressions
+      * List and dict literals

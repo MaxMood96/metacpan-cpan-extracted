@@ -3,7 +3,7 @@ package Export::These;
 use strict;
 use warnings;
 
-our $VERSION="v0.2.2";
+our $VERSION="v0.3.0";
 
 sub import {
   my $package=shift;
@@ -98,8 +98,11 @@ sub import {
     # Filter out any refs.. this config not symbol names
     \@_=grep !ref, \@_;
     no strict "refs";
-    for(\@_ ? \@_ : \@\$ref_export){
-      my \@syms;
+    my \@stack=\@_ ? \@_ :\@\$ref_export;
+    
+    local \$_;
+    while(\@stack){
+      \$_=shift \@stack;
       if(ref){
         # If not a simple scalar don't process here, but don't error
         next;
@@ -113,79 +116,33 @@ sub import {
 
         my \$group=\$ref_tags->{\$name};
         #die  "Tag \$name does not exists" unless \$group;
-        push \@syms, \@\$group if \$group;
+        push \@stack, \@\$group if \$group;
       }
       else {
         #non tag symbol
-        my \$t=\$_;
-        \$t="\\\\\$t" if \$t =~ /^\\\$/;
-        my \$found=grep /\$t/, \@\$ref_export_ok;
-         
-        push \@syms, \$_ if \$found;
+        my \$type;
+        my \$name=\$_;
+        if(\$name=~s/^(\\W)//){
+          # has sigil 
+          \$type=\$1;
 
-        \$found\|\|=grep /^\$t\$/, \@\$\$ref_export_pass;
-
-
-
-        # If ref export is an empty array, we pass everything
-        \$found\|\|=((defined(\$\$ref_export_pass) and !\@\$\$ref_export_pass));
-        die "\$_ is not exported or reexported from ".__PACKAGE__."\n" unless \$found;
-      }
-      
-      my \%map=(
-        '\$'=>"SCALAR",
-        '\@'=>"ARRAY",
-        '\%'=>"HASH",
-        '\&'=>"CODE"
-        );
-
-      for(\@syms){
-        my \$prefix=substr(\$_,0,1);
-        my \$name=\$_; 
-        my \$type=\$map{\$prefix};
-
-        \$name=substr \$_, 1 if \$type;
-        unless(\$type){
-          \$type//="CODE";
-          \$prefix="";
-        }
-
-        no warnings "redefine";
-        if(\$type ne "CODE"){
-          eval { *{\$target."::".\$name}= *{ \\\${__PACKAGE__ ."::"}{\$name}}{\$type}; };
-          die "Could not export \$prefix\$name from ".__PACKAGE__ if \$\@;
         }
         else {
-          #
-	  # No longer access CODE slot as this might not always exists. See
-	  # https://github.com/Perl/perl5/issues/23131
-	  # Work around here ( and elsewhere in this code) is to use the 
-	  # defined operator to test if sub routine exists instead of 
-	  # directly accessin the CODE slot in the typeclob
-	  #
-	  # If it is defined then we dereference a non strict ref.
-	  #
-	  # Note the the defined test is require to before hand to workaround
-	  # autovivification when dereferening
-          #
-
-          my \$package=__PACKAGE__;
-	  my \$str="&\$package"."::\$name";
-	  my \$defined=eval  "defined $str";
-	  if(\$defined){
-	  	my \$ref= \\&{\$package."::\$name"};
-	 	 *{\$target."::".\$name}= \$ref;
-  	  }
-	  else {
-        	  die "Could not export \$prefix\$name from ".__PACKAGE__;
-  		}
+          # No sigil
+          \$type="&";
         }
+        #my \$name=\$_;
 
-
+        my \$package=__PACKAGE__;
+        *{\$target."::".\$name}= 
+          \$type eq '&' ? \\&{"\${package}::\$name"} :
+          \$type eq '\$' ? \\\${"\${package}::\$name"} :
+          \$type eq '\@' ? \\\@{"\${package}::\$name"} :
+          \$type eq '%' ? \\%{"\${package}::\$name"} :
+          \$type eq '*' ? *{"\${package}::\$name"} :
+           die "Can't export symbol: \$type\$name";
       }
     }
-
-
   }
 
 
@@ -194,8 +151,6 @@ sub import {
     \$Exporter::ExportLevel//=0;
     my \$target=(caller(\$Exporter::ExportLevel))[0];
 
-    #my \$ref=eval {*{\\\${\$package."::"}{_preexport}}{CODE}};
-    # my \$ref=eval { \\&{\$package."::_preexport"} };
     my \$defined=eval "defined &\$package"."::_preexport";
     my \@args;
     if(\$defined){
@@ -208,8 +163,6 @@ sub import {
     $exporter->_self_export(\$target, \@args);
     
     local \$Exporter::ExportLevel=\$Exporter::ExportLevel+3;
-    #\$ref=eval {*{\\\${\$package."::"}{_reexport}}{CODE}};
-    #\$ref=eval { \\&{\$package."::_reexport"} };
     \$defined=eval "defined &\$package"."::_reexport";
 
     if(\$defined){

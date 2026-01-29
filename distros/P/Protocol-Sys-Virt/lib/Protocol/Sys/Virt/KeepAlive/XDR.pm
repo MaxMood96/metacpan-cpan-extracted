@@ -1,7 +1,7 @@
 ####################################################################
 #
 #     This file was generated using XDR::Parse version v1.0.1,
-#        XDR::Gen version 1.0.0 and LibVirt version v12.0.0
+#        XDR::Gen version 1.1.1 and LibVirt version v12.0.0
 #
 #      Don't edit this file, use the source template instead
 #
@@ -9,7 +9,7 @@
 #
 ####################################################################
 
-package Protocol::Sys::Virt::KeepAlive::XDR v12.0.6;
+package Protocol::Sys::Virt::KeepAlive::XDR v12.0.7;
 
 use v5.14;
 use warnings FATAL => 'uninitialized';
@@ -57,7 +57,7 @@ Protocol::Sys::Virt::KeepAlive::XDR - Constants and (de)serializers for KeepAliv
 
 =head1 VERSION
 
-v12.0.6
+v12.0.7
 
 Based on LibVirt tag v12.0.0
 

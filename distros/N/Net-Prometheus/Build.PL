@@ -30,6 +30,7 @@ my $build = Module::Build->new(
       'URI' => 0,  # for parsing query string in ->psgi_app
    },
    test_requires => {
+      'IO::Socket::IP' => 0,
       'List::Util'  => '1.29', # pairgrep
       'HTTP::Request' => 0,
       'Test2::V0' => 0,

@@ -64,7 +64,7 @@ extern "C" {
 
 
 #define checkerr(arg)	checkret( (arg), __LINE__ )
-static void checkret(const int err, int line)
+static void checkret(const int err, const int line)
 {
 	if (err) croak( "%s (%d)  %s line %d", ub_strerror(err), err, __FILE__, line );
 }
@@ -96,20 +96,37 @@ DESTROY(struct av* handle)
     CODE:
 	sv_2mortal( (SV*) handle );
 
-int
-query_id(struct av* handle)
+SV*
+query(struct av* handle)
     INIT:
 	SV** index = av_fetch(handle, 0, 0);
-	int id = SvIVX(*index);
     CODE:
-	RETVAL = id;
+	RETVAL = newSVsv(*index);
+    OUTPUT:
+	RETVAL
+
+int
+async_id(struct av* handle)
+    INIT:
+	SV** index = av_fetch(handle, 1, 0);
+    CODE:
+	RETVAL = SvIVX(*index);
+    OUTPUT:
+	RETVAL
+
+int
+waiting(struct av* handle)
+    INIT:
+	SV** index = av_fetch(handle, 2, 0);
+    CODE:
+	RETVAL = index ? 0 : 1;
     OUTPUT:
 	RETVAL
 
 SV*
 err(struct av* handle)
     INIT:
-	SV** index = av_fetch(handle, 1, 0);
+	SV** index = av_fetch(handle, 2, 0);
 	int err = index ? SvIVX(*index) : 0;
     CODE:
 	RETVAL = err ? newSVpvf("%s (%d)", ub_strerror(err), err) : newSVpv("", 0);
@@ -119,18 +136,9 @@ err(struct av* handle)
 SV*
 result(struct av* handle)
     INIT:
-	SV** index = av_fetch(handle, 2, 0);
+	SV** index = av_fetch(handle, 3, 0);
     CODE:
 	RETVAL = index ?  av_pop(handle) : newSVpv("", 0);
-    OUTPUT:
-	RETVAL
-
-int
-waiting(struct av* handle)
-    INIT:
-	SV** index = av_fetch(handle, 1, 0);
-    CODE:
-	RETVAL = index ? 0 : 1;
     OUTPUT:
 	RETVAL
 
@@ -266,7 +274,7 @@ async(struct ub_ctx* ctx, int dothread)
     CODE:
 	checkerr( ub_ctx_async(ctx, dothread) );
 
-
+#ifdef REDUNDANT
 Net::DNS::Resolver::Unbound::Result
 ub_resolve(struct ub_ctx* ctx, const char* qname, int qtype, int qclass)
     CODE:
@@ -274,15 +282,18 @@ ub_resolve(struct ub_ctx* ctx, const char* qname, int qtype, int qclass)
     OUTPUT:
 	RETVAL
 
+#endif
+
 
 Net::DNS::Resolver::Unbound::Handle
-ub_resolve_async(struct ub_ctx* ctx, const char* qname, int qtype, int qclass, int query_id)
+ub_resolve_async(struct ub_ctx* ctx, const char* qname, int qtype, int qclass, SV* query)
     INIT:
 	int async_id = 0;
     CODE:
 	RETVAL = newAV();
 	checkerr( ub_resolve_async(ctx, qname, qtype, qclass, (void*) RETVAL, async_callback, &async_id) );
-	av_push(RETVAL, newSViv(query_id) );
+	av_push(RETVAL, newSVsv(query) );
+	av_push(RETVAL, newSVuv(async_id) );
     OUTPUT:
 	RETVAL
 
@@ -303,10 +314,14 @@ ub_wait(struct ub_ctx* ctx)
 
 Net::DNS::Resolver::Unbound::Result
 mock_resolve(struct ub_ctx* ctx, const char* qname, int secure, int bogus)
+	char *buffer;
     CODE:
 	checkerr( ub_resolve(ctx, qname, 1, 1, &RETVAL) );
 	RETVAL->secure = secure;
 	RETVAL->bogus = bogus;
+	buffer = RETVAL->answer_packet;
+	buffer[0] = buffer[1] = secure;
+	RETVAL->answer_packet = buffer;
 	if (bogus) RETVAL->answer_packet = NULL;
     OUTPUT:
 	RETVAL
@@ -325,7 +340,8 @@ Net::DNS::Resolver::Unbound::Handle
 emulate_callback(int async_id, int err, struct ub_result* result=NULL)
     CODE:
 	RETVAL = newAV();
-	av_push(RETVAL, newSViv(async_id) );
+	av_push(RETVAL, newSV(0) );
+	av_push(RETVAL, newSVuv(async_id) );
 	async_callback( (void*) RETVAL, err, result );
     OUTPUT:
 	RETVAL
@@ -334,7 +350,8 @@ Net::DNS::Resolver::Unbound::Handle
 emulate_wait(int async_id)
     CODE:
 	RETVAL = newAV();
-	av_push(RETVAL, newSViv(async_id) );
+	av_push(RETVAL, newSV(0) );
+	av_push(RETVAL, newSVuv(async_id) );
     OUTPUT:
 	RETVAL
 

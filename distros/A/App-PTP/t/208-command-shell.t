@@ -23,12 +23,17 @@ unless ($^O =~ /cygwin|linux/) {
   my $temp = File::Temp->new();
   my $f = $temp->filename;
   my $out = ptp(['--shell', "cat > $f"], \"foo\nbar\nbaz\n");
-  is($out, "foo\nbar\nbaz\n", 'does not change output');
+  is($out, "", 'eat the output');
 }{
   my $temp = File::Temp->new();
   my $f = $temp->filename;
-  my $out = ptp(['--shell', "cat > $f", '--eat'], \"foo\nbar\nbaz\n");
-  is($out, "", 'eat');
+  my $out = ptp(['--push', '--shell', "cat > $f", '--pop'], \"foo\nbar\nbaz\n");
+  is($out, "foo\nbar\nbaz\n", 'restore the output');
+}{
+  my $temp = File::Temp->new();
+  my $f = $temp->filename;
+  my $out = ptp(['--push', '--shell', "cat > $f", '--pop', '--eat'], \"foo\nbar\nbaz\n");
+  is($out, "", 'restore and then eat the output');
 }{
   my $temp = File::Temp->new();
   my $f = $temp->filename;
@@ -44,6 +49,11 @@ unless ($^O =~ /cygwin|linux/) {
   my $f = $temp->filename;
   my $out = ptp(['-e', '$a = "abc"', '--shell', "echo \"\$a\" > $f"], \"foo\nbar\nbaz\n");
   is(slurp($f), "abc\n", 'interpolate variable');
+}{
+  my $temp = File::Temp->new();
+  my $f = $temp->filename;
+  ptp(['--xargs', "echo {} >> $f"], \"foo\nbar\nbaz\n");
+  is(slurp($f), "foo\nbar\nbaz\n", 'xargs');
 }
 
 done_testing();

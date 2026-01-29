@@ -18,6 +18,8 @@ t/config_file.t
 t/critic.t
 t/eof.t
 t/eol.t
+t/error.t
+t/fuzz.t
 t/gb.t
 t/kwalitee.t
 t/lib/MyLogger.pm

@@ -17,6 +17,7 @@ no_index:
     - t
     - inc
 requires:
+  Carp: '0'
   File::Temp: '0'
   IO::Socket: '0'
   POSIX: '0'
@@ -26,5 +27,5 @@ resources:
   bugtracker: https://github.com/rhandom/perl-net-server/issues
   homepage: https://github.com/rhandom/perl-net-server
   repository: https://github.com/rhandom/perl-net-server
-version: '2.015'
+version: '2.016'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

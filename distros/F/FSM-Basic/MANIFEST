@@ -10,6 +10,7 @@ t/01-toomuch_notmatching.t
 t/01-final.t
 t/01-cat.t
 t/01-catSEQ.t
+t/01-catSEQn.t
 t/01-cat.t
 t/01-catRAND.t
 t/01-catSEQ.t

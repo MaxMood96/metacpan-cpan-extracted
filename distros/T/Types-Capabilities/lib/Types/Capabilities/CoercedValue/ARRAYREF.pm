@@ -5,13 +5,14 @@ use warnings;
 package Types::Capabilities::CoercedValue::ARRAYREF;
 
 our $AUTHORITY = 'cpan:TOBYINK';
-our $VERSION   = '0.003000';
+our $VERSION   = '0.004000';
 
-use Types::Common qw( ArrayRef ArrayLike assert_ArrayLike HasMethods );
+use Types::Common qw( ArrayRef ArrayLike is_ArrayRef assert_ArrayLike HasMethods );
 
 sub new {
 	my ( $class, $data ) = @_;
 	assert_ArrayLike( $data );
+	$data = \@$data if !is_ArrayRef $data;
 	my $new = bless \$data, $class;
 	Internals::SvREADONLY( $new, 1 );
 	return $new;

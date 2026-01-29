@@ -14,19 +14,32 @@
       },
       "timeout": {
         "final": 0,
-        "matching": "timeout"
+        "matching": "timeout_state"
       },
-      "h(elp)?|\\?": {
-        "output": "default\nexit\n__PROMPT__"
+      "help": {
+        "swapregex": "1",
+        "output": "enable\ndefault\ntimeout\nexit\n__PROMPT__"
+      },
+      "enable": {
+        "final": "0",
+        "matching": "prompt_enable",
+        "swapregex": "1",
+        "readmode": "2"
+      },
+      "catN": {
+          "catSEQn": "5,/tmp/test/a1 2,/tmp/test/a2"
+      },
+      "output": {
+          "catSEQn": "5,/tmp/test/a1 2,/tmp/test/a2"
       }
     },
     "not_matching": "prompt",
     "not_matching_info": "% Unknown command or computer name, or unable to find computer address",
     "output": "__PROMPT__",
-    "timeout": "timeout",
-    "timer": 5
+    "timeout": "prompt",
+    "timer": 3
   },
-  "timeout": {
+  "timeout_state": {
     "expect": {
       "prompt": {
         "final": 0,
@@ -37,9 +50,43 @@
         "matching": "close"
       },
       "h(elp)?|\\?": {
-        "output": "\nexit\n__PROMPT__"
+        "output": "prompt\nexit\nIN TIMEOUT >"
       }
     },
-    "output": "__PROMPT__"
+    "output": "IN TIMEOUT >",
+    "timeout": "prompt",
+    "final": 0
+  },
+  "prompt_enable": {
+    "expect": {
+      "default": {
+        "final": 0,
+        "matching": "in_enable",
+        "output": "\n__ENPROMPT__"
+      }
+    },
+    "not_matching": "prompt_enable",
+    "not_matching0": "prompt",
+    "not_matching_info": "% Unknown command",
+    "not_matching_info_last": "% Bad secrets\n",
+    "output": "Password: ",
+    "repeat": 2
+  },
+  "in_enable": {
+    "expect": {
+      "help": {
+        "final": 0,
+        "swapregex": "1",
+        "output": "default\nexit\nother\n__ENPROMPT__"
+      },
+      "exit": {
+        "final": 0,
+        "matching": "prompt",
+        "output": "in exit __PROMPT__"
+      }
+    },
+    "not_matching": "in_enable",
+    "not_matching_info": "% Unknown command",
+    "output": "__ENPROMPT__"
   }
 }

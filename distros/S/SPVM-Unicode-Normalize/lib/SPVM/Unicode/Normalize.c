@@ -12,7 +12,7 @@ int32_t SPVM__Unicode__Normalize__NFC(SPVM_ENV* env, SPVM_VALUE* stack) {
   void* obj_string = stack[0].oval;
   
   if (!obj_string) {
-    return env->die(env, stack, "The string $string must be defined.", __func__, FILE_NAME, __LINE__);
+    return env->die_v2(env, stack, "The string $string must be defined.", __func__, FILE_NAME, __LINE__);
   }
   
   const char* string = env->get_chars(env, stack, obj_string);
@@ -23,7 +23,7 @@ int32_t SPVM__Unicode__Normalize__NFC(SPVM_ENV* env, SPVM_VALUE* stack) {
     UTF8PROC_COMPOSE);
   
   if (string_ret_length < 0) {
-    return env->die(env, stack, "utf8proc_map failed.", __func__, FILE_NAME, __LINE__);
+    return env->die_v2(env, stack, "utf8proc_map failed.", __func__, FILE_NAME, __LINE__);
   }
   
   void* obj_string_ret = env->new_string(env, stack, NULL, string_ret_length);
@@ -44,7 +44,7 @@ int32_t SPVM__Unicode__Normalize__NFD(SPVM_ENV* env, SPVM_VALUE* stack) {
   void* obj_string = stack[0].oval;
   
   if (!obj_string) {
-    return env->die(env, stack, "The string $string must be defined.", __func__, FILE_NAME, __LINE__);
+    return env->die_v2(env, stack, "The string $string must be defined.", __func__, FILE_NAME, __LINE__);
   }
   
   const char* string = env->get_chars(env, stack, obj_string);
@@ -55,7 +55,7 @@ int32_t SPVM__Unicode__Normalize__NFD(SPVM_ENV* env, SPVM_VALUE* stack) {
     UTF8PROC_DECOMPOSE);
   
   if (string_ret_length < 0) {
-    return env->die(env, stack, "utf8proc_map failed.", __func__, FILE_NAME, __LINE__);
+    return env->die_v2(env, stack, "utf8proc_map failed.", __func__, FILE_NAME, __LINE__);
   }
   
   void* obj_string_ret = env->new_string(env, stack, NULL, string_ret_length);
@@ -76,7 +76,7 @@ int32_t SPVM__Unicode__Normalize__NFKC(SPVM_ENV* env, SPVM_VALUE* stack) {
   void* obj_string = stack[0].oval;
   
   if (!obj_string) {
-    return env->die(env, stack, "The string $string must be defined.", __func__, FILE_NAME, __LINE__);
+    return env->die_v2(env, stack, "The string $string must be defined.", __func__, FILE_NAME, __LINE__);
   }
   
   const char* string = env->get_chars(env, stack, obj_string);
@@ -87,7 +87,7 @@ int32_t SPVM__Unicode__Normalize__NFKC(SPVM_ENV* env, SPVM_VALUE* stack) {
     UTF8PROC_COMPOSE | UTF8PROC_COMPAT);
   
   if (string_ret_length < 0) {
-    return env->die(env, stack, "utf8proc_map failed.", __func__, FILE_NAME, __LINE__);
+    return env->die_v2(env, stack, "utf8proc_map failed.", __func__, FILE_NAME, __LINE__);
   }
   
   void* obj_string_ret = env->new_string(env, stack, NULL, string_ret_length);
@@ -108,7 +108,7 @@ int32_t SPVM__Unicode__Normalize__NFKD(SPVM_ENV* env, SPVM_VALUE* stack) {
   void* obj_string = stack[0].oval;
   
   if (!obj_string) {
-    return env->die(env, stack, "The string $string must be defined.", __func__, FILE_NAME, __LINE__);
+    return env->die_v2(env, stack, "The string $string must be defined.", __func__, FILE_NAME, __LINE__);
   }
   
   const char* string = env->get_chars(env, stack, obj_string);
@@ -119,7 +119,7 @@ int32_t SPVM__Unicode__Normalize__NFKD(SPVM_ENV* env, SPVM_VALUE* stack) {
     UTF8PROC_DECOMPOSE | UTF8PROC_COMPAT);
   
   if (string_ret_length < 0) {
-    return env->die(env, stack, "utf8proc_map failed.", __func__, FILE_NAME, __LINE__);
+    return env->die_v2(env, stack, "utf8proc_map failed.", __func__, FILE_NAME, __LINE__);
   }
   
   void* obj_string_ret = env->new_string(env, stack, NULL, string_ret_length);

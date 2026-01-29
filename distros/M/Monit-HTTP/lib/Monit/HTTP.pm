@@ -7,7 +7,7 @@ use strict;
 use v5.10;
 
 package Monit::HTTP;
-$Monit::HTTP::VERSION = '0.06';
+$Monit::HTTP::VERSION = '0.07';
 use HTTP::Tiny;
 use XML::Fast;
 use Carp qw( croak );
@@ -22,6 +22,9 @@ our (
     %MONIT_MONITOR,
     %MONIT_MONITOR_REV,
 );
+
+my $STATUS_URL_TEMPLATE = 'http://%s%s:%d/_status?format=xml';
+my $COMMAND_URL_TEMPLATE = 'http://%s:%d/%s';
 
 BEGIN {
 
@@ -121,7 +124,7 @@ sub new {
     $self->{hostname} ||= 'localhost';
     $self->{port} ||= 2812;
     $self->{use_auth} ||= 0;
-    if($self->{use_auth}) {
+    if ($self->{use_auth}) {
         $self->{username} ||= 'admin';
         $self->{password} ||= 'monit';
     }
@@ -141,7 +144,7 @@ sub _generate_url {
         $auth = sprintf('%s:%s@',$self->{username},$self->{password})
     }
 
-    $self->{status_url} = sprintf('http://%s%s:%d/_status?format=xml',
+    $self->{status_url} = sprintf($STATUS_URL_TEMPLATE,
                                $auth, $self->{hostname}, $self->{port});
 }
 
@@ -292,7 +295,7 @@ sub service_status {
     }
 
     croak "Service $service does not exist\n"
-        unless scalar keys %$status_href;
+        unless scalar keys %{$status_href};
 
     return $status_href
 
@@ -312,7 +315,7 @@ sub command_run {
 
     # if services does not exist throw error
 
-    my $url = 'http://'.$self->{hostname}.':'.$self->{port}.'/'.$service;
+    my $url = sprintf($COMMAND_URL_TEMPLATE, $self->{hostname}, $self->{port}, $service);
 
     my $res = $self->{ua}->post_form($url, { action => $command });
     croak $res->{status}
@@ -335,13 +338,13 @@ Monit::HTTP - An OOP interface to Monit.
 
 =head1 VERSION
 
-version 0.06
+version 0.07
 
 =head1 SYNOPSIS
 
  use Monit::HTTP;
 
- # Use defaults to authenticate
+ # Use Monits default user and password to authenticate
  my $monit = Monit::HTTP->new( use_auth => 1 );
 
  # Or specify what you need (defaults displayed)
@@ -354,7 +357,7 @@ version 0.06
             );
 
  # list processes
- my @processes = $hd->get_services();
+ my @processes = $monit->get_services();
 
 =head1 DESCRIPTION
 
@@ -362,6 +365,7 @@ This module exposes an interface to talk with Monit via its HTTP interface.
 You can use it to get the status of all the monitored services on that particular
 host such as CPU and Memory usage, current PID, parent PID, current running status,
 current monitoring status and so on.
+
 The module can be used also for performing actions like:
 
 =head1 COMMON USE CASES
@@ -524,11 +528,11 @@ Set the TCP port of the Monit instance
 
 =head2 C<$monit-E<gt>set_username($username)>
 
-Set the username to be used in thee basic http authentication
+Set the username to be used in the basic http authentication
 
 =head2 C<$monit-E<gt>set_password($password)>
 
-Set the password to be used in thee basic http authentication
+Set the password to be used in the basic http authentication
 
 =head2 C<$res = $monit-E<gt>_fetch_info()>
 
@@ -593,7 +597,7 @@ Dean Hamstead <dean@fragfest.com.au>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2022 by Dean Hamstead.
+This software is Copyright (c) 2026 by Dean Hamstead.
 
 This is free software, licensed under:
 

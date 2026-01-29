@@ -37,6 +37,7 @@
       "test" : {
          "requires" : {
             "HTTP::Request" : "0",
+            "IO::Socket::IP" : "0",
             "List::Util" : "1.29",
             "Test2::V0" : "0"
          }
@@ -45,47 +46,47 @@
    "provides" : {
       "Net::Prometheus" : {
          "file" : "lib/Net/Prometheus.pm",
-         "version" : "0.15"
+         "version" : "0.16"
       },
       "Net::Prometheus::Counter" : {
          "file" : "lib/Net/Prometheus/Counter.pm",
-         "version" : "0.15"
+         "version" : "0.16"
       },
       "Net::Prometheus::Gauge" : {
          "file" : "lib/Net/Prometheus/Gauge.pm",
-         "version" : "0.15"
+         "version" : "0.16"
       },
       "Net::Prometheus::Histogram" : {
          "file" : "lib/Net/Prometheus/Histogram.pm",
-         "version" : "0.15"
+         "version" : "0.16"
       },
       "Net::Prometheus::Metric" : {
          "file" : "lib/Net/Prometheus/Metric.pm",
-         "version" : "0.15"
+         "version" : "0.16"
       },
       "Net::Prometheus::PerlCollector" : {
          "file" : "lib/Net/Prometheus/PerlCollector.pm",
-         "version" : "0.15"
+         "version" : "0.16"
       },
       "Net::Prometheus::ProcessCollector" : {
          "file" : "lib/Net/Prometheus/ProcessCollector.pm",
-         "version" : "0.15"
+         "version" : "0.16"
       },
       "Net::Prometheus::ProcessCollector::linux" : {
          "file" : "lib/Net/Prometheus/ProcessCollector/linux.pm",
-         "version" : "0.15"
+         "version" : "0.16"
       },
       "Net::Prometheus::Registry" : {
          "file" : "lib/Net/Prometheus/Registry.pm",
-         "version" : "0.15"
+         "version" : "0.16"
       },
       "Net::Prometheus::Summary" : {
          "file" : "lib/Net/Prometheus/Summary.pm",
-         "version" : "0.15"
+         "version" : "0.16"
       },
       "Net::Prometheus::Types" : {
          "file" : "lib/Net/Prometheus/Types.pm",
-         "version" : "0.15"
+         "version" : "0.16"
       }
    },
    "release_status" : "stable",
@@ -94,6 +95,6 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.15",
+   "version" : "0.16",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

@@ -35,6 +35,4 @@ ok sub4 eq "sub4";
 
 use ModD  qw<:group3 df>;
 ok group3_sub eq "group3_sub";
-
-
 done_testing;

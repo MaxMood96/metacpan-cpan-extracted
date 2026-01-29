@@ -30,6 +30,7 @@
       },
       "runtime" : {
          "requires" : {
+            "Carp" : "0",
             "File::Temp" : "0",
             "IO::Socket" : "0",
             "POSIX" : "0",
@@ -53,6 +54,6 @@
          "web" : "https://github.com/rhandom/perl-net-server"
       }
    },
-   "version" : "2.015",
+   "version" : "2.016",
    "x_serialization_backend" : "JSON::PP version 4.06"
 }

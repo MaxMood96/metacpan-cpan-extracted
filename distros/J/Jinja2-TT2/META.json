@@ -1,0 +1,64 @@
+{
+   "abstract" : "Transpile Jinja2 templates to Template Toolkit 2",
+   "author" : [
+      "Luciano Federico Pereira"
+   ],
+   "dynamic_config" : 1,
+   "generated_by" : "ExtUtils::MakeMaker version 7.70, CPAN::Meta::Converter version 2.150010",
+   "keywords" : [
+      "jinja2",
+      "template-toolkit",
+      "transpiler",
+      "tt2",
+      "template"
+   ],
+   "license" : [
+      "lgpl_2_1"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "Jinja2-TT2",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "inc"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "perl" : "5.020"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "Test::More" : "0.98"
+         }
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/lucianofedericopereira/jinja2tt2/issues"
+      },
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/lucianofedericopereira/jinja2tt2.git",
+         "web" : "https://github.com/lucianofedericopereira/jinja2tt2"
+      }
+   },
+   "version" : "0.01",
+   "x_serialization_backend" : "JSON::PP version 4.16"
+}

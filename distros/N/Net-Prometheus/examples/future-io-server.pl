@@ -3,13 +3,15 @@
 use v5.20;
 use warnings;
 
-use Future::IO;
+use Future::IO 0.18; # ->load_best_impl
 use Metrics::Any::Adapter 'Prometheus';
 use Net::Prometheus;
 
 use constant LISTEN_PORT => 8200;
 
-Future::IO->load_impl(qw( UV Glib IOAsync Tickit ));
+Future::IO->load_best_impl;
+
+$Net::Prometheus::PerlCollector::DETAIL = 1;
 
 my $client = Net::Prometheus->new;
 

@@ -4,7 +4,6 @@ Upstream-Contact: Toby Inkster (TOBYINK) <tobyink@cpan.org>
 Source: https://metacpan.org/release/Types-Capabilities
 
 Files: dist.ini
- t/integration/simple-test.t
  t/lib/Local/Example/Countable.pm
  t/lib/Local/Example/Dequeueable.pm
  t/lib/Local/Example/Eachable.pm
@@ -32,6 +31,7 @@ Files: Changes
  lib/Types/Capabilities/Constraint.pm
  t/integration/intercoercion.t
  t/integration/queues.t
+ t/integration/simple-test.t
 Copyright: Copyright 2026 Toby Inkster.
 License: GPL-1.0+ or Artistic-1.0
 
@@ -42,17 +42,17 @@ Files: INSTALL
 Copyright: Unknown
 License: Unknown
 
-Files: COPYRIGHT
- CREDITS
- SIGNATURE
-Copyright: None
-License: public-domain
-
 Files: README
  lib/Types/Capabilities.pm
  t/unit/Types/Capabilities.t
 Copyright: This software is copyright (c) 2025-2026 by Toby Inkster.
 License: GPL-1.0+ or Artistic-1.0
+
+Files: COPYRIGHT
+ CREDITS
+ SIGNATURE
+Copyright: None
+License: public-domain
 
 Files: t/00start.t
  t/01basic.t

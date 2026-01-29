@@ -26,3 +26,14 @@ ax.grid(True)
 plt.show()
 ```
 
+## slide with speaker notes
+
+Slide content
+
+- abc
+- def
+
+::: {.notes}
+speaker notes go here
+:::
+

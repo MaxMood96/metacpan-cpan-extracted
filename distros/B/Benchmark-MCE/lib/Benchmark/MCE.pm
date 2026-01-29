@@ -12,7 +12,7 @@ use MCE::Loop;
 use System::CPU;
 use System::Info;
 
-our $VERSION    = '1.02';
+our $VERSION    = '1.03';
 our @EXPORT     = qw(system_identity suite_run calc_scalability suite_calc);
 our $MONO_CLOCK = $^O !~ /win/i || $Time::HiRes::VERSION >= 1.9764;
 our $QUIET      = 0;
@@ -90,7 +90,7 @@ to return the same times, double the scores.
 
 =over 4
 
-=item * C<bench> (HashRef) B<required>:
+=item * C<bench> (HashRef, with alias C<benchmarks>) B<required>:
 A hashref with keys being your unique custom benchmark names and values being
 arrays:
 
@@ -132,6 +132,10 @@ Only run benchmarks whose names match regex.
 
 =item * C<exclude> (Regex):
 Skip benchmarks whose names match regex.
+
+=item * C<filter> (CodeRef):
+Custom filter callback for finer control. It receives C<($opt, $bench, $bench_def)>
+and should return true to run a benchmark.
 
 =item * C<time> (Bool):
 Report time (sec) instead of score. Set to true by C<quick> or if at least one
@@ -267,8 +271,7 @@ L<https://github.com/SpareRoom/Benchmark-MCE>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2021-2025 Dimitrios Kechagias.
-Copyright (c) 2025 SpareRoom.
+Copyright (c) 2025-2026 Dimitrios Kechagias and SpareRoom.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.
@@ -489,7 +492,7 @@ sub _run_iteration {
         _print("\n");
         sleep $opt->{sleep} if $opt->{sleep};
     }
-    die "No tests to run\n" unless $i;
+    die "No benchmarks to run\n" unless $i;
     my $s = int($total_score/$i+0.5);
     _print(_pad("Overall $title: ")
             . sprintf($opt->{f} . "\n", $opt->{time} ? $total_time : $s));

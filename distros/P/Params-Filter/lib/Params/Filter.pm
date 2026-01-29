@@ -1,6 +1,6 @@
 package Params::Filter;
 use v5.36;
-our $VERSION = '0.012';
+our $VERSION = '0.014';
 
 =head1 NAME
 
@@ -100,13 +100,13 @@ The main advantages of using Params::Filter are:
 
 B<Important>: The functional and OO interfaces include features that add overhead
 compared to manual hash lookups, especially when the incoming data is in a known
-consistent format. The value of Params::Filter is in its capability to assure the
+consistent format. The value of Params::Filter shows in its capability to assure the
 security, compliance, and correctness benefits listed above.
 
-However, the L</CLOSURE INTERFACE> (C<make_filter>) provides maximum performance
-and can be faster than hand-written Perl filtering code due to pre-computed
-exclusion lookups and specialized closure variants. Use C<make_filter> for
-hot code paths or high-frequency filtering.
+For speed with fewer features, the L</CLOSURE INTERFACE> (C<make_filter>) 
+provides maximum performance and can be faster than hand-written Perl filtering 
+code due to pre-computed exclusion lookups and specialized closure variants. 
+Use C<make_filter> for hot code paths or high-frequency filtering.
 
 For all interfaces, Params::Filter CAN improve overall performance when downstream
 validation is expensive (database statements, API calls, complex regex) by failing
@@ -268,29 +268,83 @@ sub make_filter ($req,$ok=[],$no=[]) {
 
 =head1 SECURITY
 
-This module provides important security benefits by separating data filtering
-from validation:
+This module provides important security benefits by excluding sensitive fields
+before they reach downstream systems like logging, validation, or storage.
 
-=head2 Preventing Sensitive Data Leakage
+=head2 Safe Logging - Exclude Credentials
 
-By excluding sensitive fields early in the request processing pipeline, you
-ensure they never reach validation code, database statements, or logging systems:
+A common security requirement is logging user activity without exposing credentials:
 
-    my $user_filter = Params::Filter->new_filter({
-        required => ['username', 'email'],
-        accepted => ['name', 'bio'],
-        excluded => ['password', 'ssn', 'credit_card', 'admin_token'],
-    });
+    use Params::Filter qw/make_filter/;
 
-    # Web form submission with password field
+    # Create filter for safe logging - exclude credentials
+    my $log_filter = make_filter(
+        [qw(timestamp action)],           # required
+        [qw(username email ip_address)],  # accepted - safe to log
+        [qw(user_id password session_token)], # excluded - never logged
+    );
+
+    # Web form submission from user login
     my $form_data = {
-        username => 'user',
-        email => 'user@example.com',
-        password => 'secret123',  # Never reaches validation!
+        timestamp    => '2026-01-27T10:30:00Z',
+        action       => 'login_attempt',
+        username     => 'alice',
+        email        => 'alice@example.com',
+        ip_address   => '192.168.1.100',
+        user_id      => 12345,
+        password     => 'secret123',      # MUST NOT appear in logs
+        session_token => 'abc123xyz',     # MUST NOT appear in logs
     };
 
-    my ($filtered, $msg) = $user_filter->apply($form_data);
-    # $filtered = { username => 'user', email => 'user@example.com' }
+    # Filter for logging - credentials automatically excluded
+    my $log_entry = $log_filter->($form_data);
+    write_audit_log($log_entry);
+    # Logged: { timestamp, action, username, email, ip_address }
+    # Never logged: user_id, password, session_token
+
+=head2 Multiple Filters for Data Segregation
+
+Use different filters on the same input to route data to appropriate subsystems,
+ensuring credentials only reach authentication and never reach public display:
+
+    # Auth filter - requires credentials, excludes public data
+    my $auth_filter = Params::Filter->new_filter({
+        required => ['user_id', 'password'],
+        accepted => [],  # Only credentials, nothing else
+        excluded => ['name', 'comment', 'category', 'date'],
+    });
+
+    # Comment filter - accepts public data, excludes credentials
+    my $comment_filter = Params::Filter->new_filter({
+        required => ['name', 'comment'],
+        accepted => ['category', 'date'],
+        excluded => ['user_id', 'password'],  # Never show on comment page
+    });
+
+    # Single web form submission with mixed data
+    my $form_submission = {
+        user_id  => 12345,
+        password => 'secret123',
+        name     => 'Alice',
+        comment  => 'Great article!',
+        category => 'feedback',
+        date     => '2026-01-27',
+    };
+
+    # Route to authentication system - only credentials
+    my ($auth_data, $auth_msg) = $auth_filter->apply($form_submission);
+    if ($auth_data) {
+        $app->authenticate($auth_data);
+        # Sent to auth: { user_id => 12345, password => 'secret123' }
+    }
+
+    # Route to comment display - only public data
+    my ($comment_data, $comment_msg) = $comment_filter->apply($form_submission);
+    if ($comment_data) {
+        $app->add_comment($comment_data);
+        # Sent to comment page: { name => 'Alice', comment => '...', category => '...', date => '...' }
+        # Password and user_id NEVER reach the comment display system
+    }
 
 =head2 Compliance Benefits
 
@@ -298,43 +352,229 @@ Helps meet regulatory requirements by design:
 
 =over 4
 
+=item * **PCI-DSS** - Ensure credit card numbers never touch logging or validation code
+
 =item * **GDPR** - Exclude fields you shouldn't store before processing
 
-=item * **PCI-DSS** - Ensure credit card numbers never touch validation code
+=item * **Data Minimization** - Only process fields you actually need for each subsystem
 
-=item * **Data Minimization** - Only process fields you actually need
-
-=item * **Audit Trails** - Clear record of what fields are accepted/excluded
+=item * **Audit Trails** - Clear record of what fields are accepted/excluded per destination
 
 =back
 
 =head2 Defense in Depth
 
-Even if validation code has bugs or is later modified, excluded fields B<never>
-reach it. This provides defense in depth:
+Even if downstream validation code has bugs or is later modified, excluded fields
+B<never> reach it:
 
-    # Filter excludes 'admin' field
-    my $filter = Params::Filter->new_filter({
-        required => ['user'],
-        accepted => ['email'],
-        excluded => ['admin'],  # Security-critical field excluded
-    });
+    # Logging system updated to dump all input - credentials still excluded
+    my $safe_data = $log_filter->($user_activity);
+    log_everything($safe_data);  # Password field was already filtered out
 
-    # Even if validation code is buggy, 'admin' never reaches it
-    my ($data, $msg) = $filter->apply($untrusted_input);
+This provides defense in depth: sensitive data is removed at the filter layer,
+regardless of what happens downstream.
 
-=head2 Secure by Default
+=head1 CLOSURE INTERFACE (Maximum Performance)
 
-The filter fails closed (returns undef) if required fields are missing, preventing
-incomplete data from progressing through your system:
+The closure interface provides B<maximum performance> through specialized,
+pre-compiled closures. This is the most important performance feature of
+Params::Filter and can be faster than hand-written Perl filtering code.
 
-    # Missing required field - filter returns undef
-    my ($data, $msg) = $filter->apply({user => 'bob'});  # email missing
-    # $data is undef, $msg explains what's missing
+B<Key Characteristics:>
 
-This prevents partial data from causing security issues downstream.
+=over 4
+
+=item * **Fastest interface** - Pre-computed exclusions, specialized variants
+
+=item * **Hashref input only** - No input parsing overhead (unlike functional/OO interfaces)
+
+=item * **Immutable** - Filter cannot be modified after creation (unlike OO interface)
+
+=item * **No error messages** - Returns C<undef> on failure (unlike functional/OO interfaces)
+
+=item * **No debug mode** - Minimal overhead for maximum speed
+
+=back
+
+B<Use this interface when:> Performance is critical, you have high-frequency
+filtering operations, or you're processing large datasets.
+
+=head2 make_filter
+
+    use Params::Filter qw/make_filter/;
+
+    # Create a reusable filter closure
+    my $filter = make_filter(
+        \@required,     # Arrayref of required field names
+        \@accepted,     # Arrayref of optional field names (default: [])
+        \@excluded,     # Arrayref of names of fields to remove (default: [])
+    );
+
+    # Apply filter to data (must be hashref)
+    my $result = $filter->($input_hashref);
+
+Creates a fast, reusable closure that filters hashrefs according to field
+specifications. The closure checks only for presence/absence of fields, not
+field values.
+
+=head3 Parameters
+
+=over 4
+
+=item * C<\@required> - Arrayref of names of fields that B<must> be present
+
+=item * C<\@accepted> - Arrayref of optional names of fields to accept (default: [])
+
+=item * C<\@excluded> - Arrayref of names of fields to remove even if accepted (default: [])
+
+=back
+
+=head3 Returns
+
+A code reference that accepts a single hashref argument and returns a filtered
+hashref, or C<undef> if required fields are missing.
+
+B<Important:> No error message is returned. The closure only returns the filtered
+hashref or C<undef>. Use the functional or OO interfaces if you need error messages.
+
+=head3 Specialized Closure Variants
+
+The closure is optimized based on your configuration:
+
+=over 4
+
+=item * **Required-only** - When C<@accepted> is empty, returns only required fields
+
+=item * **Wildcard** - When C<@accepted> contains C<'*'>, accepts all input fields except exclusions
+
+=item * **Accepted-specific** - When C<@accepted> has specific fields, returns required plus those accepted fields (minus exclusions)
+
+=back
+
+=head3 Example
+
+    # Create filter for user registration
+    my $user_filter = make_filter(
+        [qw(username email)],     # required
+        [qw(full_name bio)],      # accepted
+        [qw(password confirm)],   # excluded
+    );
+
+    # Apply to multiple records - very fast
+    for my $record (@records) {
+        my $filtered = $user_filter->($record);
+        next unless $filtered;  # Skip if required fields missing
+        process_user($filtered);
+    }
+
+    # Wildcard example - accept everything except sensitive fields
+    my $safe_filter = make_filter(
+        [qw(id type)],
+        ['*'],                      # accept all other fields
+        [qw(password token ssn)],   # but exclude these
+    );
+
+=head3 Performance Characteristics
+
+=over 4
+
+=item * Non-destructive - Original hashref is never modified
+
+=item * Pre-computed - Exclusion hash built once at filter creation
+
+=item * Specialized - No runtime conditionals, closure is tailored during construction
+
+=item * Can be faster than raw Perl - Up to 20-25% faster than hand-written filtering code in many cases
+
+=item * No overhead for multiple uses - Create once, apply many times
+
+=back
+
+=head3 Trade-offs Compared to Other Interfaces
+
+=over 4
+
+=item * **Advantages**: Maximum speed, lightweight, no feature overhead, fastest option available
+
+=item * **Limitations**: No error messages, no debug mode, no modifier methods, no input parsing (only accepts hashrefs), immutable after creation
+
+=item * **When to use**: High-frequency filtering, performance-critical code, hot code paths, large dataset processing
+
+=item * **When to use OO/functional instead**: When you need error messages, debug mode, input format flexibility (arrayrefs/scalars), or dynamic reconfiguration
+
+=back
+
+=head1 FUNCTIONAL INTERFACE
+
+The functional interface provides direct parameter filtering through the C<filter()> function.
+This interface supports flexible input parsing (hashrefs, arrayrefs, scalars) and returns
+detailed error messages.
+
+B<Use this interface when:> You need flexible input formats, detailed error messages,
+or one-off filtering operations.
+
+=head2 filter
+
+    my ($filtered, $status) = filter(
+        $input_data,     # Hashref, arrayref, or scalar
+        \@required,      # Arrayref of required field names
+        \@accepted,      # Arrayref of optional field names (default: [])
+        \@excluded,      # Arrayref of names of fields to remove (default: [])
+        $debug_mode,     # Boolean: enable warnings (default: 0)
+    );
+
+    # Scalar context - returns filtered hashref or undef on failure
+    my $result = filter($input, \@required, \@accepted);
+
+Filters input data according to field specifications. Only checks for
+presence/absence of fields, not field values.
+
+=head3 Parameters
+
+=over 4
+
+=item * C<$input_data> - Input parameters (hashref, arrayref, or scalar)
+
+=item * C<\@required> - Arrayref of names of fields that B<must> be present
+
+=item * C<\@accepted> - Arrayref of optional names of fields to accept (default: [])
+
+=item * C<\@excluded> - Arrayref of names of fields to remove even if accepted (default: [])
+
+=item * C<$debug_mode> - Boolean to enable warnings (default: 0)
+
+=back
+
+=head3 Returns
+
+In list context: C<(hashref, status_message)> or C<(undef, error_message)>
+
+In scalar context: Hashref with filtered parameters, or C<undef> on failure
+
+=head3 Example
+
+    # Define filter rules (could be from config file)
+    my @required = qw(username email);
+    my @accepted = qw(full_name phone);
+    my @excluded = qw(password ssn);
+
+    # Apply to incoming data from web form
+    my ($user_data, $msg) = filter(
+        $form_submission,
+        \@required,
+        \@accepted,
+        \@excluded,
+    );
+
+    if ($user_data) {
+        create_user($user_data);
+    } else {
+        log_error($msg);
+    }
 
 =head1 OBJECT-ORIENTED INTERFACE
+
+The OO interface provides reusable filter objects that can be configured once and applied to multiple datasets. This interface includes the most features, including modifier methods for dynamic configuration.
 
 =head2 new_filter
 
@@ -545,67 +785,6 @@ These methods enable dynamic configuration for conditional scenarios:
           ->set_accepted($config_fields->{accepted})
           ->set_excluded($config_fields->{excluded});
 
-=head1 FUNCTIONAL INTERFACE
-
-=head2 filter
-
-    my ($filtered, $status) = filter(
-        $input_data,     # Hashref, arrayref, or scalar
-        \@required,      # Arrayref of required field names
-        \@accepted,      # Arrayref of optional field names (default: [])
-        \@excluded,      # Arrayref of names of fields to remove (default: [])
-        $debug_mode,     # Boolean: enable warnings (default: 0)
-    );
-
-    # Scalar context - returns filtered hashref or undef on failure
-    my $result = filter($input, \@required, \@accepted);
-
-Filters input data according to field specifications. Only checks for
-presence/absence of fields, not field values.
-
-=head3 Parameters
-
-=over 4
-
-=item * C<$input_data> - Input parameters (hashref, arrayref, or scalar)
-
-=item * C<\@required> - Arrayref of names of fields that B<must> be present
-
-=item * C<\@accepted> - Arrayref of optional names of fields to accept (default: [])
-
-=item * C<\@excluded> - Arrayref of names of fields to remove even if accepted (default: [])
-
-=item * C<$debug_mode> - Boolean to enable warnings (default: 0)
-
-=back
-
-=head3 Returns
-
-In list context: C<(hashref, status_message)> or C<(undef, error_message)>
-
-In scalar context: Hashref with filtered parameters, or C<undef> on failure
-
-=head3 Example
-
-    # Define filter rules (could be from config file)
-    my @required = qw(username email);
-    my @accepted = qw(full_name phone);
-    my @excluded = qw(password ssn);
-
-    # Apply to incoming data from web form
-    my ($user_data, $msg) = filter(
-        $form_submission,
-        \@required,
-        \@accepted,
-        \@excluded,
-    );
-
-    if ($user_data) {
-        create_user($user_data);
-    } else {
-        log_error($msg);
-    }
-
 =cut
 
 sub filter ($args,$req,$ok=[],$no=[],$db=0) {
@@ -748,122 +927,9 @@ sub filter ($args,$req,$ok=[],$no=[],$db=0) {
 	return $wantarray ? ( $filtered, $return_msg ) : $filtered;
 }
 
-=head1 CLOSURE INTERFACE
-
-=head2 make_filter
-
-    use Params::Filter qw/make_filter/;
-
-    # Create a reusable filter closure
-    my $filter = make_filter(
-        \@required,     # Arrayref of required field names
-        \@accepted,     # Arrayref of optional field names (default: [])
-        \@excluded,     # Arrayref of names of fields to remove (default: [])
-    );
-
-    # Apply filter to data
-    my $result = $filter->($input_hashref);
-
-Creates a fast, reusable closure that filters hashrefs according to field
-specifications. The closure checks only for presence/absence of fields, not
-field values.
-
-This interface provides maximum performance and is ideal for hot code paths
-or when filtering the same structure multiple times. Can be faster than
-hand-written Perl filtering code due to pre-computed exclusion lookups and
-specialized closure variants.
-
-B<Note>: The closure returned by C<make_filter()> only accepts data in the form
-of a hashref. Unlike the functional and OO interfaces, it does not support
-arrayrefs, scalars, or other input formats.
-
-=head3 Parameters
-
-=over 4
-
-=item * C<\@required> - Arrayref of names of fields that B<must> be present
-
-=item * C<\@accepted> - Arrayref of optional names of fields to accept (default: [])
-
-=item * C<\@excluded> - Arrayref of names of fields to remove even if accepted (default: [])
-
-=back
-
-=head3 Returns
-
-A code reference that accepts a single hashref argument and returns a filtered
-hashref, or C<undef> if required fields are missing.
-
-=head3 Specialized Closure Variants
-
-The closure is optimized based on your configuration:
-
-=over 4
-
-=item * **Required-only** - When C<@accepted> is empty, returns only required fields
-
-=item * **Wildcard** - When C<@accepted> contains C<'*'>, accepts all input fields except exclusions
-
-=item * **Accepted-specific** - When C<@accepted> has specific fields, returns required plus those accepted fields (minus exclusions)
-
-=back
-
-=head3 Example
-
-    # Create filter for user registration
-    my $user_filter = make_filter(
-        [qw(username email)],     # required
-        [qw(full_name bio)],      # accepted
-        [qw(password confirm)],   # excluded
-    );
-
-    # Apply to multiple records
-    for my $record (@records) {
-        my $filtered = $user_filter->($record);
-        next unless $filtered;  # Skip if required fields missing
-        process_user($filtered);
-    }
-
-    # Wildcard example - accept everything except sensitive fields
-    my $safe_filter = make_filter(
-        [qw(id type)],
-        ['*'],                      # accept all other fields
-        [qw(password token ssn)],   # but exclude these
-    );
-
-=head3 Performance Characteristics
-
-=over 4
-
-=item * Non-destructive - Original hashref is never modified
-
-=item * Pre-computed - Exclusion hash built once at filter creation
-
-=item * Specialized - No runtime conditionals, closure is tailored during construction
-
-=item * Can be faster than raw Perl - Up to 20-25% faster than hand-written filtering code in many cases
-
-=item * No overhead for multiple uses - Create once, apply many times
-
-=back
-
-=head3 Trade-offs Compared to Other Interfaces
-
-=over 4
-
-=item * **Advantages**: Maximum speed, lightweight, no feature overhead
-
-=item * **Limitations**: No error messages, no debug mode, no modifier methods, no input parsing (only accepts hashrefs)
-
-=item * **When to use**: High-frequency filtering, performance-critical code, when you need maximum speed
-
-=item * **When to use OO/functional instead**: When you need error messages, debug mode, wildcards with modifiers, or input format flexibility
-
-=back
-
-=cut
-
 =head1 INPUT PARSING
+
+B<Note:> This section applies to the L</FUNCTIONAL INTERFACE> and L</OBJECT-ORIENTED INTERFACE> only. The L</CLOSURE INTERFACE (Maximum Performance)> accepts only hashrefs for maximum speed.
 
 The C<filter()> function parses multiple common input formats into a consistent internal structure. This flexibility allows you to use the module with data from differing sources such as form input, arguments to subroutines/methods, fetched database records, and test input, without pre-processing.
 
@@ -1190,6 +1256,8 @@ This consistency makes the filtered data easy to use in downstream code without 
 
 =head1 DEBUG MODE
 
+B<Note:> This feature applies to the L</FUNCTIONAL INTERFACE> and L</OBJECT-ORIENTED INTERFACE> only. The L</CLOSURE INTERFACE (Maximum Performance)> does not support debug mode for maximum speed.
+
 Debug mode provides additional information about field filtering during development:
 
     my ($filtered, $msg) = filter(
@@ -1408,6 +1476,7 @@ This example demonstrates how Params::Filter can integrate incoming data and seg
     my ($biz_data,        $bmsg) = $biz_filter->apply($data);
     my ($auth_data,       $amsg) = $auth_filter->apply($data);
 
+    # One way to use the filter results:
     # Set the requirement that all filtering requirements must be met
     # with data provided by any of the three webform sources:
     unless ($person_data && $biz_data && $auth_data) {

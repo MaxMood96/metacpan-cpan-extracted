@@ -6,6 +6,8 @@ use warnings;
 
 use App::PTP::Commands ':CMD';
 use App::PTP::Util;
+use File::Basename 'dirname';
+use File::Spec::Functions 'catfile';
 use Getopt::Long qw(GetOptionsFromArray :config auto_abbrev no_ignore_case
     permute auto_version);
 use List::Util;
@@ -105,9 +107,19 @@ sub set_output {
   $options{output} = $f;
 }
 
+sub find_cheat_sheet {
+  my $cur_file = (__PACKAGE__ =~ s{::}{/}rg).'.pm';
+  die "Failed to find file for the current module (${cur_file})\n" unless exists $INC{$cur_file};
+  my $p = catfile(dirname($INC{$cur_file}), 'Cheat_Sheet.pod');
+  die "Cannot find Cheat Sheet file: ${p}\n" unless -f $p;
+  return $p;
+}
+
 sub options_flags {
   (
-    'help|h' => sub { pod2usage(-exitval => 0, -verbose => 2) },
+    'help|helplong|h' => sub { pod2usage(-exitval => 0, -verbose => 2) },
+    'helpshort' => sub { pod2usage(-exitval => 0, -verbose => 0) },
+    'cheat' => sub { pod2usage(-exitval => 0, -verbose => 2, -input => find_cheat_sheet()) },
     'debug|d+' => \$options{debug_mode},
     # Merge is documented to be a pipeline command, but it is implemented as a
     # very custom option.
@@ -293,7 +305,16 @@ sub action_flags {
     'tee=s' => sub { push @{$cur_pipeline}, ['tee', \&do_tee, {%modes}, $_[1]] },
     'shell=s' => sub {
       push @{$cur_pipeline}, ['shell', \&do_shell, {%modes}, 'shell', $_[1]];
-    })
+    },
+    'xargs=s' => sub {
+      push @{$cur_pipeline}, ['xargs', \&do_shell, {%modes}, 'xargs', $_[1]];
+    },
+    'push' => sub {
+      push @{$cur_pipeline}, ['push', \&do_push, {%modes}, 'push'];
+    },
+    'pop' => sub {
+      push @{$cur_pipeline}, ['pop', \&do_push, {%modes}, 'pop'];
+    },)
 }
 
 sub all_args {

@@ -3,7 +3,7 @@
 
 
 package BeamerReveal::Object;
-our $VERSION = '20260123.1702'; # VERSION
+our $VERSION = '20260127.1936'; # VERSION
 
 use parent 'Exporter';
 use Carp;
@@ -25,19 +25,21 @@ sub makeSlide {
 
 sub readParameterLine {
   my ( $line ) = @_;
-  my $braceconstructRegexp = qr { (?<brace_group>
-				    \{
-				    (?<val>
-				      (?> (?:\\[{}]|(?![{}]).)* )
-				    |
-				      (?&brace_group)
+  my $braceconstructRegexp = qr { (?<val>
+				    (?<brace_group>
+				      \{
+				      (?:
+					(?> [^{}]+ )
+				      |
+					(?&brace_group)
+				      )*
+				      \}
 				    )
-				    \}
 				  )
 			      }xs;
   my $parmdb = {};
   while( $line =~ /(?<kw>\w+)=${braceconstructRegexp},*/g ) {
-    $parmdb->{$+{kw}} = $+{val};
+    $parmdb->{$+{kw}} = substr( $+{val}, 1, -1 );
   }
   return $parmdb;
 }
@@ -56,7 +58,7 @@ BeamerReveal::Object - Object
 
 =head1 VERSION
 
-version 20260123.1702
+version 20260127.1936
 
 =head1 SYNOPSIS
 

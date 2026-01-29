@@ -1,0 +1,29 @@
+NAME
+    Sub::HandlesVia::XS - XS parts for Sub::HandlesVia; no user-serviceable
+    parts inside
+
+DESCRIPTION
+    Use Sub::HandlesVia. That module will make use of Sub::HandlesVia::XS when
+    it can.
+
+BUGS
+    Please report any bugs to
+    <https://github.com/tobyink/p5-sub-handlesvia-xs/issues>.
+
+SEE ALSO
+    Sub::HandlesVia, Marlin.
+
+AUTHOR
+    Toby Inkster <tobyink@cpan.org>.
+
+COPYRIGHT AND LICENCE
+    This software is copyright (c) 2026 by Toby Inkster.
+
+    This is free software; you can redistribute it and/or modify it under the
+    same terms as the Perl 5 programming language system itself.
+
+DISCLAIMER OF WARRANTIES
+    THIS PACKAGE IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR IMPLIED
+    WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
+    MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+

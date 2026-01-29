@@ -20,7 +20,8 @@ BEGIN {
                                     keys_proper_superset
                                     keys_any
                                     keys_all
-                                    keys_none ]);
+                                    keys_none
+                                    keys_partition ]);
 }
 
 {

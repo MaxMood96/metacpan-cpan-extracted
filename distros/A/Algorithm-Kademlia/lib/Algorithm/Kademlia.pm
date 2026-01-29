@@ -1,7 +1,7 @@
-use v5.40;
+use v5.42;
 use experimental 'class';
 #
-package Algorithm::Kademlia v1.0.0 {
+package Algorithm::Kademlia v1.0.1 {
     use parent 'Exporter';
     our @EXPORT_OK = qw[xor_distance xor_bucket_index];
     #
@@ -22,8 +22,8 @@ package Algorithm::Kademlia v1.0.0 {
         }
         return undef;    # Same ID
     }
-    class Algorithm::Kademlia::RoutingTable v1.0.0 {
-        field $local_id_bin : param;
+    class Algorithm::Kademlia::RoutingTable v1.0.1 {
+        field $local_id_bin : param : writer : reader;
         field $k : param //= 20;
         field @buckets : reader;
         #
@@ -78,25 +78,50 @@ package Algorithm::Kademlia v1.0.0 {
             $count += scalar @$_ for @buckets;
             $count;
         }
+
+        method import_peers ($peer_list) {
+            for my $p (@$peer_list) {
+
+                # Directly push to avoid eviction logic during restore
+                my $idx = Algorithm::Kademlia::xor_bucket_index( $local_id_bin, $p->{id} );
+                next unless defined $idx;
+                push $buckets[$idx]->@*, $p;
+            }
+        }
     };
-    class Algorithm::Kademlia::Storage v1.0.0 {
-        field %store : reader(entries);           # key_bin -> { value => val_bin, time => timestamp, publisher => id_bin }
+    class Algorithm::Kademlia::Storage v1.0.1 {
+        field %store : reader(entries);
         field $ttl : reader : param //= 86400;    # 24 hours
 
-        method put ( $key_bin, $value_bin, $publisher_id_bin = undef ) {
-            $store{$key_bin} = { value => $value_bin, time => time(), publisher => $publisher_id_bin };
+        method put ( $key_bin, $value_bin, $publisher_id_bin //= (), $seeds //= [], $leechers //= [] ) {
+            $store{$key_bin} = Algorithm::Kademlia::Storage::Entry->new(
+                key       => $key_bin,
+                value     => $value_bin,
+                time      => time(),
+                publisher => $publisher_id_bin,
+                seeds     => $seeds,
+                leechers  => $leechers
+            );
         }
 
         method get ($key_bin) {
-            my $entry = $store{$key_bin} or return undef;
-            if ( time() - $entry->{time} > $ttl ) {
+            my $entry = $store{$key_bin} // return;
+            if ( time() - $entry->time > $ttl ) {
                 delete $store{$key_bin};
                 return undef;
             }
-            $entry->{value};
+            $entry;    # Return the full entry now
         }
     };
-    class Algorithm::Kademlia::Search v1.0.0 {
+    class Algorithm::Kademlia::Storage::Entry v1.0.1 {
+        field $key       : param : reader;
+        field $leechers  : param : reader : writer;
+        field $seeds     : param : reader : writer;
+        field $time      : param : reader : writer;
+        field $value     : param : reader : writer;
+        field $publisher : param : reader;
+    };
+    class Algorithm::Kademlia::Search v1.0.1 {
         field $target_id_bin : param;
         field $k     : param //= 20;
         field $alpha : param //= 3;

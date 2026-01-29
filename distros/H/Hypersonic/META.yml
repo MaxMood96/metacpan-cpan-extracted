@@ -18,9 +18,15 @@ no_index:
   directory:
     - t
     - inc
+recommends:
+  Devel::CheckLib: '0'
+  ExtUtils::PkgConfig: '0'
 requires:
   Cpanel::JSON::XS: '0'
-  XS::JIT: '0.08'
+  XS::JIT: '0.13'
   perl: '5.010'
-version: '0.03'
+resources:
+  bugtracker: https://github.com/ThisUsedToBeAnEmail/Hypersonic/issues
+  repository: https://github.com/ThisUsedToBeAnEmail/Hypersonic.git
+version: '0.10'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

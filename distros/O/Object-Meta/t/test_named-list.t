@@ -106,4 +106,5 @@ subtest 'Name Index' => sub {
         is( $obj->getName(), 'object2', "Name Indexed: Instance 'object2' returned" );
     };
 };
+
 done_testing();

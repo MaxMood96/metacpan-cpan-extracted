@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-use v5.40;
+use v5.36;
 use Params::Filter;
 
 # OO Interface Example: Using new_filter() and apply()

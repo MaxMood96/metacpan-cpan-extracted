@@ -1,0 +1,33 @@
+---
+abstract: 'Transpile Jinja2 templates to Template Toolkit 2'
+author:
+  - 'Luciano Federico Pereira'
+build_requires:
+  ExtUtils::MakeMaker: '0'
+  Test::More: '0.98'
+configure_requires:
+  ExtUtils::MakeMaker: '0'
+dynamic_config: 1
+generated_by: 'ExtUtils::MakeMaker version 7.70, CPAN::Meta::Converter version 2.150010'
+keywords:
+  - jinja2
+  - template-toolkit
+  - transpiler
+  - tt2
+  - template
+license: lgpl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: Jinja2-TT2
+no_index:
+  directory:
+    - t
+    - inc
+requires:
+  perl: '5.020'
+resources:
+  bugtracker: https://github.com/lucianofedericopereira/jinja2tt2/issues
+  repository: https://github.com/lucianofedericopereira/jinja2tt2.git
+version: '0.01'
+x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

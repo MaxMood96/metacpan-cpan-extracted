@@ -1,5 +1,5 @@
 package Catalyst::Plugin::HTML::Scrubber;
-$Catalyst::Plugin::HTML::Scrubber::VERSION = '0.08';
+$Catalyst::Plugin::HTML::Scrubber::VERSION = '0.09';
 use Moose;
 use namespace::autoclean;
 
@@ -163,7 +163,7 @@ sub _should_scrub_param {
             $ignore_values = [ $ignore_values ];
         }
         for my $ignore_value (@$ignore_values) {
-            if ($value =~ $ignore_value) {
+            if (defined $value && $value =~ $ignore_value) {
                 return;
             }
         }

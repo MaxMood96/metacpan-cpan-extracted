@@ -8,13 +8,13 @@ subtest 'Basic Storage' => sub {
     my $key     = 'foo';
     my $val     = 'bar';
     $storage->put( $key, $val );
-    is $storage->get($key),      $val,  'Value stored and retrieved';
-    is $storage->get('missing'), undef, 'Missing key returns undef';
+    is $storage->get($key)->value, $val,  'Value stored and retrieved';
+    is $storage->get('missing'),   undef, 'Missing key returns undef';
 };
 subtest 'TTL Expiry' => sub {
     my $storage = Algorithm::Kademlia::Storage->new( ttl => 1 );
     $storage->put( 'short', 'life' );
-    is $storage->get('short'), 'life', 'Immediate retrieval works';
+    is $storage->get('short')->value, 'life', 'Immediate retrieval works';
     sleep 2;
     is $storage->get('short'), undef, 'Expired key returns undef';
 };

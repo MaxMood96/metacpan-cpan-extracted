@@ -1,0 +1,1202 @@
+#define PERL_NO_GET_CONTEXT
+#include "xshelper.h"
+
+#define IsObject(sv)    (SvROK(sv) && SvOBJECT(SvRV(sv)))
+#define IsArrayRef(sv)  (SvROK(sv) && !SvOBJECT(SvRV(sv)) && SvTYPE(SvRV(sv)) == SVt_PVAV)
+#define IsHashRef(sv)   (SvROK(sv) && !SvOBJECT(SvRV(sv)) && SvTYPE(SvRV(sv)) == SVt_PVHV)
+#define IsCodeRef(sv)   (SvROK(sv) && !SvOBJECT(SvRV(sv)) && SvTYPE(SvRV(sv)) == SVt_PVCV)
+#define IsScalarRef(sv) (SvROK(sv) && !SvOBJECT(SvRV(sv)) && SvTYPE(SvRV(sv)) <= SVt_PVMG)
+
+#define WRONG_NUMBER_OF_PARAMETERS "Wrong number of parameters"
+
+#define SV_SAFE_COPY(val)                                 \
+    (                                                     \
+        (SvROK(val) && SvTYPE(SvRV(val)) == SVt_PVCV)     \
+            ? newRV_inc(SvRV(val))                        \
+            : newSVsv(val)                                \
+    )
+
+// Utility macros, typedefs, etc.
+#include "src/Types.c"
+#include "src/ShouldReturn.c"
+#include "src/Unpacking.c"
+
+// Different types, corresponding to Sub::HandlesVia
+#include "src/Array.c"
+
+#define INSTALL_CONST(module, name) newCONSTSUB(module, #name, newSViv(name))
+#define UNPACK_SIG(type) const type *sig = (const type *) CvXSUBANY(cv).any_ptr
+
+typedef struct {
+#ifdef USE_ITHREADS
+    pTHX;
+#endif
+    CV *callback;
+} sort_ctx_t;
+
+static int
+sv_cmp_with_optional_callback(const void *a, const void *b, void *ctx_void) {
+    sort_ctx_t *ctx = (sort_ctx_t *)ctx_void;
+#ifdef USE_ITHREADS
+    dTHXa(ctx->aTHX);
+#endif
+
+    SV *lhs = *(SV **)a;
+    SV *rhs = *(SV **)b;
+
+    /* Fast path: no callback → string cmp */
+    if (!ctx->callback) {
+        return sv_cmp(lhs, rhs);
+    }
+
+    /* Callback-based comparison */
+    dSP;
+    ENTER;
+    SAVETMPS;
+
+    PUSHMARK(SP);
+    XPUSHs(lhs);
+    XPUSHs(rhs);
+    PUTBACK;
+
+    call_sv((SV *)ctx->callback, G_SCALAR);
+
+    SPAGAIN;
+    SV *ret = POPs;
+    int cmp = SvIV(ret);
+
+    PUTBACK;
+    FREETMPS;
+    LEAVE;
+
+    return cmp;
+}
+
+MODULE = Sub::HandlesVia::XS  PACKAGE = Sub::HandlesVia::XS
+
+BOOT:
+{
+    HV *stash = gv_stashpv("Sub::HandlesVia::XS", GV_ADD);
+
+    INSTALL_CONST(stash, TYPE_BASE_ANY);
+    INSTALL_CONST(stash, TYPE_BASE_DEFINED);
+    INSTALL_CONST(stash, TYPE_BASE_REF);
+    INSTALL_CONST(stash, TYPE_BASE_BOOL);
+    INSTALL_CONST(stash, TYPE_BASE_INT);
+    INSTALL_CONST(stash, TYPE_BASE_PZINT);
+    INSTALL_CONST(stash, TYPE_BASE_NUM);
+    INSTALL_CONST(stash, TYPE_BASE_PZNUM);
+    INSTALL_CONST(stash, TYPE_BASE_STR);
+    INSTALL_CONST(stash, TYPE_BASE_NESTR);
+    INSTALL_CONST(stash, TYPE_BASE_CLASSNAME);
+    INSTALL_CONST(stash, TYPE_BASE_OBJECT);
+    INSTALL_CONST(stash, TYPE_BASE_SCALARREF);
+    INSTALL_CONST(stash, TYPE_BASE_CODEREF);
+    INSTALL_CONST(stash, TYPE_OTHER);
+    INSTALL_CONST(stash, TYPE_ARRAYREF);
+    INSTALL_CONST(stash, TYPE_HASHREF);
+
+    INSTALL_CONST(stash, ARRAY_SRC_INVOCANT);
+    INSTALL_CONST(stash, ARRAY_SRC_DEREF_SCALAR);
+    INSTALL_CONST(stash, ARRAY_SRC_DEREF_ARRAY);
+    INSTALL_CONST(stash, ARRAY_SRC_DEREF_HASH);
+    INSTALL_CONST(stash, ARRAY_SRC_CALL_METHOD);
+
+    INSTALL_CONST(stash, SHOULD_RETURN_NOTHING);
+    INSTALL_CONST(stash, SHOULD_RETURN_UNDEF);
+    INSTALL_CONST(stash, SHOULD_RETURN_FALSE);
+    INSTALL_CONST(stash, SHOULD_RETURN_TRUE);
+    INSTALL_CONST(stash, SHOULD_RETURN_INVOCANT);
+    INSTALL_CONST(stash, SHOULD_RETURN_OTHER);
+    INSTALL_CONST(stash, SHOULD_RETURN_ARRAY);
+    INSTALL_CONST(stash, SHOULD_RETURN_ARRAYBLESS);
+    INSTALL_CONST(stash, SHOULD_RETURN_OUT);
+    INSTALL_CONST(stash, SHOULD_RETURN_OUTBLESS);
+    INSTALL_CONST(stash, SHOULD_RETURN_VAL);
+    INSTALL_CONST(stash, SHOULD_RETURN_COUNT);
+}
+
+#### array : accessor
+
+void
+shvxs_array_accessor (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_array_SETTER_SIG);
+    GET_ARRAY_FROM_SOURCE;
+    GET_INDEX_FROM_SOURCE(1);
+
+    I32 len = av_len(array) + 1;
+    I32 real_ix = ix;
+    if (real_ix < 0)
+        real_ix += len;
+
+    //warn("HERE, items=%d, sig.has_curried_sv=%d, sig.index=%d, sig.has_index=%d, ix=%d, real_ix=%d, has_ix=%d", items, sig->has_curried_sv, sig->index, sig->has_index, ix, real_ix, has_ix);
+    //Perl_sv_dump(sig->curried_sv);
+
+    if ( items > ( has_ix ? 1 : 2 ) || sig->has_curried_sv ) {
+
+        GET_CURRIED_SV_FROM_SOURCE(has_ix ? 1 : 2);
+
+        I32 expected = 3;
+        if (has_ix) expected--;
+        if (has_curried_sv) expected--;
+        if ( items != expected ) croak(WRONG_NUMBER_OF_PARAMETERS);
+
+        val = SV_SAFE_COPY(curried_sv);
+
+        bool ok;
+        CHECK_TYPE(ok, val, sig->element_type, sig->element_type_cv);
+        TRY_COERCE_TYPE(ok, val, sig->element_type, sig->element_type_cv, sig->element_coercion_cv);
+        if (!ok) {
+            if ( has_ix && has_curried_sv ) {
+                type_error(val, "$curried", 1, sig->element_type, sig->element_type_tiny);
+            }
+            else if ( has_curried_sv ) {
+                type_error(val, "$curried", 0, sig->element_type, sig->element_type_tiny);
+            }
+            else if ( has_ix ) {
+                type_error(val, "$_", 1, sig->element_type, sig->element_type_tiny);
+            }
+            else {
+                type_error(val, "$_", 2, sig->element_type, sig->element_type_tiny);
+            }
+        }
+
+        av_store(array, real_ix, val);
+    }
+    else {
+        I32 expected = 2;
+        if (has_ix) expected--;
+        if ( items != expected ) croak(WRONG_NUMBER_OF_PARAMETERS);
+
+        if (real_ix < 0 || real_ix >= len) {
+            val = &PL_sv_undef;
+        }
+        else {
+            SV **svp = av_fetch(array, real_ix, 0);
+            val = svp ? *svp : &PL_sv_undef;
+        }
+    }
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : all
+
+void
+shvxs_array_all (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    if ( items > 1 ) croak(WRONG_NUMBER_OF_PARAMETERS);
+
+    UNPACK_SIG(shvxs_array_SIMPLE_SIG);
+    GET_ARRAY_FROM_SOURCE;
+
+    out = array;
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : all_true
+
+void
+shvxs_array_all_true (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_array_CALLBACK_SIG);
+    GET_ARRAY_FROM_SOURCE;
+
+    GET_CALLBACK_FROM_SOURCE(1);
+    if ( items != ( has_callback ? 1 : 2 ) ) croak(WRONG_NUMBER_OF_PARAMETERS);
+
+    val = &PL_sv_yes;
+
+    I32 len = av_len(array) + 1;
+    for (I32 i = 0; i < len; i++) {
+        SV **svp = av_fetch(array, i, 0);
+        if (!svp) continue;
+
+        SV *tmp = sv_2mortal(newSVsv(*svp));
+        sv_setsv(get_sv("_", 0), tmp);
+
+        ENTER;
+        SAVETMPS;
+        PUSHMARK(SP);
+        XPUSHs(tmp);
+        XPUSHs(sv_2mortal(newSViv(i)));
+        PUTBACK;
+
+        I32 count = call_sv((SV *)callback, G_SCALAR);
+        SPAGAIN;
+
+        SV *ret;
+        if (count > 0)
+            ret = POPs;
+        else
+            ret = &PL_sv_undef;
+
+        if (!SvTRUE(ret)) {
+            PUTBACK;
+            FREETMPS;
+            LEAVE;
+            val = &PL_sv_no;
+            break;
+        }
+
+        PUTBACK;
+        FREETMPS;
+        LEAVE;
+    }
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : any
+
+void
+shvxs_array_any (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_array_CALLBACK_SIG);
+    GET_ARRAY_FROM_SOURCE;
+
+    GET_CALLBACK_FROM_SOURCE(1);
+    if ( items != ( has_callback ? 1 : 2 ) ) croak(WRONG_NUMBER_OF_PARAMETERS);
+
+    val = &PL_sv_no;
+
+    I32 len = av_len(array) + 1;
+    for (I32 i = 0; i < len; i++) {
+        SV **svp = av_fetch(array, i, 0);
+        if (!svp) continue;
+
+        SV *tmp = sv_2mortal(newSVsv(*svp));
+        sv_setsv(get_sv("_", 0), tmp);
+
+        ENTER;
+        SAVETMPS;
+        PUSHMARK(SP);
+        XPUSHs(tmp);
+        XPUSHs(sv_2mortal(newSViv(i)));
+        PUTBACK;
+
+        I32 count = call_sv((SV *)callback, G_SCALAR);
+        SPAGAIN;
+
+        SV *ret;
+        if (count > 0)
+            ret = POPs;
+        else
+            ret = &PL_sv_undef;
+
+        if (SvTRUE(ret)) {
+            PUTBACK;
+            FREETMPS;
+            LEAVE;
+            val = &PL_sv_yes;
+            break;
+        }
+
+        PUTBACK;
+        FREETMPS;
+        LEAVE;
+    }
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : clear
+
+void
+shvxs_array_clear (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    if ( items > 1 ) croak(WRONG_NUMBER_OF_PARAMETERS);
+
+    UNPACK_SIG(shvxs_array_SIMPLE_SIG);
+    GET_ARRAY_FROM_SOURCE;
+
+    av_clear(array);
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : count
+
+void
+shvxs_array_count (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    if ( items > 1 ) croak(WRONG_NUMBER_OF_PARAMETERS);
+
+    UNPACK_SIG(shvxs_array_SIMPLE_SIG);
+    GET_ARRAY_FROM_SOURCE;
+
+    I32 n = av_len(array) + 1;
+    val = newSViv(n);
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : first
+
+void
+shvxs_array_first (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_array_CALLBACK_SIG);
+    GET_ARRAY_FROM_SOURCE;
+
+    GET_CALLBACK_FROM_SOURCE(1);
+    if ( items != ( has_callback ? 1 : 2 ) ) croak(WRONG_NUMBER_OF_PARAMETERS);
+
+    val = &PL_sv_undef;
+
+    I32 len = av_len(array) + 1;
+    for (I32 i = 0; i < len; i++) {
+        SV **svp = av_fetch(array, i, 0);
+        if (!svp) continue;
+
+        SV *elem = *svp;
+        SV *tmp = sv_2mortal(newSVsv(elem));
+        sv_setsv(get_sv("_", 0), tmp);
+
+        ENTER;
+        SAVETMPS;
+        PUSHMARK(SP);
+        XPUSHs(tmp);
+        XPUSHs(sv_2mortal(newSViv(i)));
+        PUTBACK;
+
+        I32 count = call_sv((SV *)callback, G_SCALAR);
+        SPAGAIN;
+
+        SV *ret;
+        if (count > 0)
+            ret = POPs;
+        else
+            ret = &PL_sv_undef;
+
+        if (SvTRUE(ret)) {
+            PUTBACK;
+            FREETMPS;
+            LEAVE;
+            val = newSVsv(elem);
+            break;
+        }
+
+        PUTBACK;
+        FREETMPS;
+        LEAVE;
+    }
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : for_each
+
+void
+shvxs_array_for_each (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_array_CALLBACK_SIG);
+    GET_ARRAY_FROM_SOURCE;
+
+    GET_CALLBACK_FROM_SOURCE(1);
+    if ( items != ( has_callback ? 1 : 2 ) ) croak(WRONG_NUMBER_OF_PARAMETERS);
+
+    I32 len = av_len(array) + 1;
+    for (I32 i = 0; i < len; i++) {
+        SV **svp = av_fetch(array, i, 0);
+        if (!svp) continue;
+        SV *elem = *svp;
+        SV *tmp = newSVsv(elem);
+        sv_2mortal(tmp);
+        SV *sv_dollar_underscore = get_sv("_", 0);
+        sv_setsv(sv_dollar_underscore, tmp);
+        ENTER;
+        SAVETMPS;
+        PUSHMARK(SP);
+        XPUSHs(tmp);
+        XPUSHs(sv_2mortal(newSViv(i)));
+        PUTBACK;
+        call_sv((SV*)callback, G_VOID | G_DISCARD);
+        FREETMPS;
+        LEAVE;
+    }
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : get
+
+void
+shvxs_array_get (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_array_INDEX_SIG);
+    GET_ARRAY_FROM_SOURCE;
+
+    GET_INDEX_FROM_SOURCE(1);
+    if ( items != ( has_ix ? 1 : 2 ) ) croak(WRONG_NUMBER_OF_PARAMETERS);
+
+    I32 len = av_len(array) + 1;
+    I32 real_ix = ix;
+    if (real_ix < 0)
+        real_ix += len;
+
+    if (real_ix < 0 || real_ix >= len) {
+        val = &PL_sv_undef;
+    }
+    else {
+        SV **svp = av_fetch(array, real_ix, 0);
+        val = svp ? *svp : &PL_sv_undef;
+    }
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : grep
+
+void
+shvxs_array_grep (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_array_CALLBACK_SIG);
+    GET_ARRAY_FROM_SOURCE;
+
+    GET_CALLBACK_FROM_SOURCE(1);
+    if ( items != ( has_callback ? 1 : 2 ) ) croak(WRONG_NUMBER_OF_PARAMETERS);
+
+    out = newAV();
+
+    I32 len = av_len(array) + 1;
+    for (I32 i = 0; i < len; i++) {
+        SV **svp = av_fetch(array, i, 0);
+        if (!svp) continue;
+
+        SV *tmp = sv_2mortal(newSVsv(*svp));
+        sv_setsv(get_sv("_", 0), tmp);
+
+        ENTER;
+        SAVETMPS;
+        PUSHMARK(SP);
+        XPUSHs(tmp);
+        XPUSHs(sv_2mortal(newSViv(i)));
+        PUTBACK;
+
+        I32 count = call_sv((SV *)callback, G_SCALAR);
+
+        SPAGAIN;
+
+        SV *ret = POPs;
+        if (count > 0 && SvTRUE(ret))
+            av_push(out, SV_SAFE_COPY(*svp));
+
+        PUTBACK;
+        FREETMPS;
+        LEAVE;
+    }
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : is_empty
+
+void
+shvxs_array_is_empty (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    if ( items > 1 ) croak(WRONG_NUMBER_OF_PARAMETERS);
+
+    UNPACK_SIG(shvxs_array_SIMPLE_SIG);
+    GET_ARRAY_FROM_SOURCE;
+
+    val = (av_len(array) < 0) ? &PL_sv_yes : &PL_sv_no;
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : join
+
+void
+shvxs_array_join (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_array_SV_SIG);
+    GET_ARRAY_FROM_SOURCE;
+
+    MAYBE_GET_CURRIED_SV_FROM_SOURCE(1);
+    if ( items > ( has_curried_sv ? 1 : 2 ) ) croak(WRONG_NUMBER_OF_PARAMETERS);
+
+    SV* joiner = curried_sv ? curried_sv : sv_2mortal(newSVpv(",", 1));
+    if ( !joiner || !SvOK(joiner) || SvROK(joiner) || isGV(joiner) ) {
+        if ( has_curried_sv ) type_error(joiner, "$curried", 0, TYPE_BASE_STR, NULL);
+        type_error(joiner, "$_", 1, TYPE_BASE_STR, NULL);
+    }
+
+    STRLEN sep_len;
+    const char *sep = SvPV(joiner, sep_len);
+
+    val = newSVpv("", 0);
+
+    I32 len = av_len(array) + 1;
+    for (I32 i = 0; i < len; i++) {
+        SV **svp = av_fetch(array, i, 0);
+
+        if (i > 0)
+            sv_catpvn(val, sep, sep_len);
+
+        if (svp && SvOK(*svp)) {
+            STRLEN l;
+            const char *p = SvPV(*svp, l);
+            sv_catpvn(val, p, l);
+        }
+    }
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : map
+
+void
+shvxs_array_map (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_array_CALLBACK_SIG);
+    GET_ARRAY_FROM_SOURCE;
+
+    GET_CALLBACK_FROM_SOURCE(1);
+    if ( items != ( has_callback ? 1 : 2 ) ) croak(WRONG_NUMBER_OF_PARAMETERS);
+
+    out = newAV();
+
+    I32 len = av_len(array) + 1;
+    for (I32 i = 0; i < len; i++) {
+        SV **svp = av_fetch(array, i, 0);
+        if (!svp) continue;
+
+        SV *tmp = sv_2mortal(newSVsv(*svp));
+        sv_setsv(get_sv("_", 0), tmp);
+
+        ENTER;
+        SAVETMPS;
+        PUSHMARK(SP);
+        XPUSHs(tmp);
+        XPUSHs(sv_2mortal(newSViv(i)));
+        PUTBACK;
+
+        I32 count = call_sv((SV *)callback, G_ARRAY);
+        SPAGAIN;
+
+        /* stack is LIFO; preserve order */
+        if (count > 0) {
+            SV **results = SP - count + 1;
+            for (I32 j = 0; j < count; j++) {
+                av_push(out, SV_SAFE_COPY(results[j]));
+            }
+            SP -= count;
+        }
+        
+        PUTBACK;
+        FREETMPS;
+        LEAVE;
+    }
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : pop
+
+void
+shvxs_array_pop (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    if ( items > 1 ) croak(WRONG_NUMBER_OF_PARAMETERS);
+
+    UNPACK_SIG(shvxs_array_SIMPLE_SIG);
+    GET_ARRAY_FROM_SOURCE;
+
+    val = (SV*)av_pop(array);
+    if (val) {
+        SvREFCNT_inc(val);
+    }
+    else {
+        val = newSV(0);
+    }
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : push
+
+void
+shvxs_array_push (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    UNPACK_SIG(shvxs_array_NEW_ELEMS_SIG);
+    GET_ARRAY_FROM_SOURCE;
+
+    bool ok;
+    for (I32 i = 1; i < items; i++) {
+        val = ST(i);
+        CHECK_TYPE(ok, newSVsv(val), sig->element_type, sig->element_type_cv);
+        TRY_COERCE_TYPE(ok, val, sig->element_type, sig->element_type_cv, sig->element_coercion_cv);
+        if (!ok) type_error(val, "$_", i, sig->element_type, sig->element_type_tiny);
+        av_push(array, SV_SAFE_COPY(val));
+    }
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : reverse
+
+void
+shvxs_array_reverse (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    if ( items > 1 ) croak(WRONG_NUMBER_OF_PARAMETERS);
+
+    UNPACK_SIG(shvxs_array_SIMPLE_SIG);
+    GET_ARRAY_FROM_SOURCE;
+
+    out = newAV();
+    I32 len = av_len(array);
+    if (len >= 0)
+        av_extend(out, len);
+
+    for (I32 i = len; i >= 0; i--) {
+        SV **svp = av_fetch(array, i, 0);
+        av_push(out, svp ? newSVsv(*svp) : &PL_sv_undef);
+    }
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : set
+
+void
+shvxs_array_set (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_array_SETTER_SIG);
+    GET_ARRAY_FROM_SOURCE;
+    GET_INDEX_FROM_SOURCE(1);
+    GET_CURRIED_SV_FROM_SOURCE(has_ix ? 1 : 2);
+
+    I32 expected = 3;
+    if (has_ix) expected--;
+    if (has_curried_sv) expected--;
+    if ( items != expected ) croak(WRONG_NUMBER_OF_PARAMETERS);
+
+    I32 len = av_len(array) + 1;
+    I32 real_ix = ix;
+    if (real_ix < 0)
+        real_ix += len;
+
+    val = SV_SAFE_COPY(curried_sv);
+
+    bool ok;
+    CHECK_TYPE(ok, val, sig->element_type, sig->element_type_cv);
+    TRY_COERCE_TYPE(ok, val, sig->element_type, sig->element_type_cv, sig->element_coercion_cv);
+    if (!ok) {
+        if ( has_ix && has_curried_sv ) {
+            type_error(val, "$curried", 1, sig->element_type, sig->element_type_tiny);
+        }
+        else if ( has_curried_sv ) {
+            type_error(val, "$curried", 0, sig->element_type, sig->element_type_tiny);
+        }
+        else if ( has_ix ) {
+            type_error(val, "$_", 1, sig->element_type, sig->element_type_tiny);
+        }
+        else {
+            type_error(val, "$_", 2, sig->element_type, sig->element_type_tiny);
+        }
+    }
+
+    av_store(array, real_ix, val);
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : shift
+
+void
+shvxs_array_shift (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    if ( items > 1 ) croak(WRONG_NUMBER_OF_PARAMETERS);
+
+    UNPACK_SIG(shvxs_array_SIMPLE_SIG);
+    GET_ARRAY_FROM_SOURCE;
+
+    val = (SV*)av_shift(array);
+    if (val) {
+        SvREFCNT_inc(val);
+    }
+    else {
+        val = newSV(0);
+    }
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : sort
+
+void
+shvxs_array_sort (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_array_CALLBACK_SIG);
+    GET_ARRAY_FROM_SOURCE;
+
+    MAYBE_GET_CALLBACK_FROM_SOURCE(1);
+    if ( items > ( has_callback ? 1 : 2 ) ) croak(WRONG_NUMBER_OF_PARAMETERS);
+    if ( !has_callback && items == 2 && !callback && !IsCodeRef(ST(1)) ) {
+        type_error(ST(1), "$_", 1, TYPE_BASE_CODEREF, NULL);
+    }
+
+    out = newAV();
+
+    I32 len = av_len(array) + 1;
+    if (len > 1) {
+        SV **elems = (SV **)malloc(len * sizeof(SV *));
+        if (!elems)
+            croak("Out of memory");
+
+        for (I32 i = 0; i < len; i++) {
+            SV **svp = av_fetch(array, i, 0);
+            elems[i] = svp ? *svp : &PL_sv_undef;
+        }
+
+        sort_ctx_t ctx;
+#ifdef USE_ITHREADS
+        ctx.aTHX = aTHX;
+#endif
+        ctx.callback = callback;
+
+        qsort_r(
+            elems,
+            len,
+            sizeof(SV *),
+            sv_cmp_with_optional_callback,
+            &ctx
+        );
+
+        av_extend(out, len - 1);
+
+        for (I32 i = 0; i < len; i++) {
+            av_push(out, newSVsv(elems[i]));
+        }
+
+        free(elems);
+    }
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : unshift
+
+void
+shvxs_array_unshift (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    UNPACK_SIG(shvxs_array_NEW_ELEMS_SIG); // reuse from push
+    GET_ARRAY_FROM_SOURCE;
+
+    bool ok;
+    for (I32 i = items - 1; i >= 1; i--) {
+        val = ST(i);
+        CHECK_TYPE(ok, newSVsv(val), sig->element_type, sig->element_type_cv);
+        TRY_COERCE_TYPE(ok, val, sig->element_type, sig->element_type_cv, sig->element_coercion_cv);
+        if (!ok) type_error(val, "$_", i, sig->element_type, sig->element_type_tiny);
+        av_unshift(array, 1);
+        av_store(array, 0, SV_SAFE_COPY(val));
+    }
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : INSTALL(SIMPLE)
+
+void
+INSTALL_shvxs_array_SIMPLE(SV *name, SV *href)
+ALIAS:
+    INSTALL_shvxs_array_all          = 1
+    INSTALL_shvxs_array_clear        = 2
+    INSTALL_shvxs_array_count        = 3
+    INSTALL_shvxs_array_is_empty     = 4
+    INSTALL_shvxs_array_pop          = 5
+    INSTALL_shvxs_array_reverse      = 6
+    INSTALL_shvxs_array_shift        = 7
+CODE:
+{
+    dTHX;
+
+    XSUBADDR_t op;
+    enum ReturnPattern rp;
+    switch ( ix ) {
+        case 1:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_all;
+            rp = SHOULD_RETURN_OUT;
+            break;
+        case 2:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_clear;
+            rp = SHOULD_RETURN_NOTHING;
+            break;
+        case 3:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_count;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        case 4:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_is_empty;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        case 5:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_pop;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        case 6:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_reverse;
+            rp = SHOULD_RETURN_OUT;
+            break;
+        case 7:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_shift;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        default:
+            croak("PANIC!");
+    }
+
+    shvxs_array_SIMPLE_SIG *sig;
+    Newxz(sig, 1, shvxs_array_SIMPLE_SIG);
+    UNPACKING_HV_FROM_SV (href, hv);
+    UNPACKING_GET_ENUM   (hv, sig, arr_source,            ARRAY_SRC_INVOCANT, ArraySource);
+    UNPACKING_GET_STRING (hv, sig, arr_source_string,     NULL);
+    UNPACKING_GET_STRING (hv, sig, arr_source_fallback,   NULL);
+    UNPACKING_GET_I32    (hv, sig, arr_source_index,      0);
+    UNPACKING_GET_ENUM   (hv, sig, method_return_pattern, rp, ReturnPattern);
+    UNPACKING_GET_STRING (hv, sig, method_return_class,       NULL);
+    UNPACKING_GET_STRING (hv, sig, method_return_constructor, NULL);
+
+    CV *cv = newXS( SvPV_nolen(name), op, (char *)__FILE__ );
+    CvXSUBANY(cv).any_ptr = sig;
+    XSRETURN_EMPTY;
+}
+
+#### array : INSTALL(CALLBACK)
+
+void
+INSTALL_shvxs_array_CALLBACK(SV *name, SV *href)
+ALIAS:
+    INSTALL_shvxs_array_for_each     = 1
+    INSTALL_shvxs_array_grep         = 2
+    INSTALL_shvxs_array_map          = 3
+    INSTALL_shvxs_array_first        = 4
+    INSTALL_shvxs_array_any          = 5
+    INSTALL_shvxs_array_all_true     = 6
+    INSTALL_shvxs_array_sort         = 7
+CODE:
+{
+    dTHX;
+
+    XSUBADDR_t op;
+    enum ReturnPattern rp;
+    switch ( ix ) {
+        case 1:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_for_each;
+            rp = SHOULD_RETURN_INVOCANT;
+            break;
+        case 2:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_grep;
+            rp = SHOULD_RETURN_OUT;
+            break;
+        case 3:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_map;
+            rp = SHOULD_RETURN_OUT;
+            break;
+        case 4:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_first;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        case 5:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_any;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        case 6:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_all_true;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        case 7:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_sort;
+            rp = SHOULD_RETURN_OUT;
+            break;
+        default:
+            croak("PANIC!");
+    }
+
+    shvxs_array_CALLBACK_SIG *sig;
+    Newxz(sig, 1, shvxs_array_CALLBACK_SIG);
+    UNPACKING_HV_FROM_SV (href, hv);
+    UNPACKING_GET_ENUM   (hv, sig, arr_source,            ARRAY_SRC_INVOCANT, ArraySource);
+    UNPACKING_GET_STRING (hv, sig, arr_source_string,     NULL);
+    UNPACKING_GET_STRING (hv, sig, arr_source_fallback,   NULL);
+    UNPACKING_GET_I32    (hv, sig, arr_source_index,      0);
+    UNPACKING_GET_CV     (hv, sig, callback);
+    UNPACKING_GET_ENUM   (hv, sig, method_return_pattern, rp, ReturnPattern);
+    UNPACKING_GET_STRING (hv, sig, method_return_class,       NULL);
+    UNPACKING_GET_STRING (hv, sig, method_return_constructor, NULL);
+
+    CV *cv = newXS( SvPV_nolen(name), op, (char *)__FILE__ );
+    CvXSUBANY(cv).any_ptr = sig;
+    XSRETURN_EMPTY;
+}
+
+#### array : INSTALL(SV)
+
+void
+INSTALL_shvxs_array_SV(SV *name, SV *href)
+ALIAS:
+    INSTALL_shvxs_array_join         = 1
+CODE:
+{
+    dTHX;
+
+    XSUBADDR_t op;
+    enum ReturnPattern rp;
+    switch ( ix ) {
+        case 1:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_join;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        default:
+            croak("PANIC!");
+    }
+
+    shvxs_array_SV_SIG *sig;
+    Newxz(sig, 1, shvxs_array_SV_SIG);
+    UNPACKING_HV_FROM_SV (href, hv);
+    UNPACKING_GET_ENUM   (hv, sig, arr_source,            ARRAY_SRC_INVOCANT, ArraySource);
+    UNPACKING_GET_STRING (hv, sig, arr_source_string,     NULL);
+    UNPACKING_GET_STRING (hv, sig, arr_source_fallback,   NULL);
+    UNPACKING_GET_I32    (hv, sig, arr_source_index,      0);
+    UNPACKING_MAYBE_SV   (hv, sig, curried_sv,            has_curried_sv);
+    UNPACKING_GET_ENUM   (hv, sig, method_return_pattern, rp, ReturnPattern);
+    UNPACKING_GET_STRING (hv, sig, method_return_class,       NULL);
+    UNPACKING_GET_STRING (hv, sig, method_return_constructor, NULL);
+
+    CV *cv = newXS( SvPV_nolen(name), op, (char *)__FILE__ );
+    CvXSUBANY(cv).any_ptr = sig;
+    XSRETURN_EMPTY;
+}
+
+#### array : INSTALL(NEW_ELEMS)
+
+void
+INSTALL_shvxs_array_NEW_ELEMS(SV *name, SV *href)
+ALIAS:
+    INSTALL_shvxs_array_push         = 1
+    INSTALL_shvxs_array_unshift      = 2
+CODE:
+{
+    dTHX;
+
+    XSUBADDR_t op;
+    enum ReturnPattern rp;
+    switch ( ix ) {
+        case 1:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_push;
+            rp = SHOULD_RETURN_COUNT;
+            break;
+        case 2:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_unshift;
+            rp = SHOULD_RETURN_COUNT;
+            break;
+        default:
+            croak("PANIC!");
+    }
+
+    shvxs_array_NEW_ELEMS_SIG *sig;
+    Newxz(sig, 1, shvxs_array_NEW_ELEMS_SIG);
+    UNPACKING_HV_FROM_SV (href, hv);
+    UNPACKING_GET_ENUM   (hv, sig, arr_source,            ARRAY_SRC_INVOCANT, ArraySource);
+    UNPACKING_GET_STRING (hv, sig, arr_source_string,     NULL);
+    UNPACKING_GET_STRING (hv, sig, arr_source_fallback,   NULL);
+    UNPACKING_GET_I32    (hv, sig, arr_source_index,      0);
+    UNPACKING_GET_I32    (hv, sig, element_type,          TYPE_BASE_ANY);
+    UNPACKING_GET_CV     (hv, sig, element_type_cv);
+    UNPACKING_MAYBE_SV   (hv, sig, element_type_tiny,     has_element_type_tiny);
+    UNPACKING_GET_CV     (hv, sig, element_coercion_cv);
+    UNPACKING_GET_ENUM   (hv, sig, method_return_pattern, rp, ReturnPattern);
+    UNPACKING_GET_STRING (hv, sig, method_return_class,       NULL);
+    UNPACKING_GET_STRING (hv, sig, method_return_constructor, NULL);
+
+    if (sig->element_type != TYPE_BASE_ANY && sig->element_type_cv == NULL) {
+        croak("element_type_cv is required unless element_type is TYPE_BASE_ANY");
+    }
+
+    CV *cv = newXS( SvPV_nolen(name), op, (char *)__FILE__ );
+    CvXSUBANY(cv).any_ptr = sig;
+    XSRETURN_EMPTY;
+}
+
+#### array : INSTALL(INDEX)
+
+void
+INSTALL_shvxs_array_INDEX(SV *name, SV *href)
+ALIAS:
+    INSTALL_shvxs_array_get          = 1
+    INSTALL_shvxs_array_peek         = 2
+    INSTALL_shvxs_array_peekend      = 3
+CODE:
+{
+    dTHX;
+
+    XSUBADDR_t op;
+    enum ReturnPattern rp;
+    switch ( ix ) {
+        case 1:
+        case 2:
+        case 3:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_get;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        default:
+            croak("PANIC!");
+    }
+
+    shvxs_array_INDEX_SIG *sig;
+    Newxz(sig, 1, shvxs_array_INDEX_SIG);
+    UNPACKING_HV_FROM_SV (href, hv);
+    UNPACKING_GET_ENUM   (hv, sig, arr_source,            ARRAY_SRC_INVOCANT, ArraySource);
+    UNPACKING_GET_STRING (hv, sig, arr_source_string,     NULL);
+    UNPACKING_GET_STRING (hv, sig, arr_source_fallback,   NULL);
+    UNPACKING_GET_I32    (hv, sig, arr_source_index,      0);
+    UNPACKING_MAYBE_I32  (hv, sig, index, has_index);
+    UNPACKING_GET_ENUM   (hv, sig, method_return_pattern, rp, ReturnPattern);
+    UNPACKING_GET_STRING (hv, sig, method_return_class,       NULL);
+    UNPACKING_GET_STRING (hv, sig, method_return_constructor, NULL);
+
+    if ( ix == 2 ) {
+        sig->has_index = TRUE;
+        sig->index     = 0;
+    }
+    else if ( ix == 3 ) {
+        sig->has_index = TRUE;
+        sig->index     = -1;
+    }
+
+    CV *cv = newXS( SvPV_nolen(name), op, (char *)__FILE__ );
+    CvXSUBANY(cv).any_ptr = sig;
+    XSRETURN_EMPTY;
+}
+
+#### array : INSTALL(SETTER)
+
+void
+INSTALL_shvxs_array_SETTER(SV *name, SV *href)
+ALIAS:
+    INSTALL_shvxs_array_set          = 1
+    INSTALL_shvxs_array_accessor     = 2
+CODE:
+{
+    dTHX;
+
+    XSUBADDR_t op;
+    enum ReturnPattern rp;
+    switch ( ix ) {
+        case 1:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_set;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        case 2:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_accessor;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        default:
+            croak("PANIC!");
+    }
+
+    shvxs_array_SETTER_SIG *sig;
+    Newxz(sig, 1, shvxs_array_SETTER_SIG);
+    UNPACKING_HV_FROM_SV (href, hv);
+    UNPACKING_GET_ENUM   (hv, sig, arr_source,            ARRAY_SRC_INVOCANT, ArraySource);
+    UNPACKING_GET_STRING (hv, sig, arr_source_string,     NULL);
+    UNPACKING_GET_STRING (hv, sig, arr_source_fallback,   NULL);
+    UNPACKING_GET_I32    (hv, sig, arr_source_index,      0);
+    UNPACKING_MAYBE_I32  (hv, sig, index, has_index);
+    UNPACKING_MAYBE_SV   (hv, sig, curried_sv, has_curried_sv);
+    UNPACKING_GET_I32    (hv, sig, element_type,          TYPE_BASE_ANY);
+    UNPACKING_GET_CV     (hv, sig, element_type_cv);
+    UNPACKING_MAYBE_SV   (hv, sig, element_type_tiny,     has_element_type_tiny);
+    UNPACKING_GET_CV     (hv, sig, element_coercion_cv);
+    UNPACKING_GET_ENUM   (hv, sig, method_return_pattern, rp, ReturnPattern);
+    UNPACKING_GET_STRING (hv, sig, method_return_class,       NULL);
+    UNPACKING_GET_STRING (hv, sig, method_return_constructor, NULL);
+
+    if (sig->element_type != TYPE_BASE_ANY && sig->element_type_cv == NULL) {
+        croak("element_type_cv is required unless element_type is TYPE_BASE_ANY");
+    }
+
+    CV *cv = newXS( SvPV_nolen(name), op, (char *)__FILE__ );
+    CvXSUBANY(cv).any_ptr = sig;
+    XSRETURN_EMPTY;
+}
+

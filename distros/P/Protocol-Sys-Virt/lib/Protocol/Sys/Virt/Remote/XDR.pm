@@ -1,7 +1,7 @@
 ####################################################################
 #
 #     This file was generated using XDR::Parse version v1.0.1,
-#        XDR::Gen version 1.0.0 and LibVirt version v12.0.0
+#        XDR::Gen version 1.1.1 and LibVirt version v12.0.0
 #
 #      Don't edit this file, use the source template instead
 #
@@ -9,7 +9,7 @@
 #
 ####################################################################
 
-package Protocol::Sys::Virt::Remote::XDR v12.0.6;
+package Protocol::Sys::Virt::Remote::XDR v12.0.7;
 
 use constant {
     VIR_TYPED_PARAM_INT     => 1,
@@ -183,11 +183,11 @@ sub deserialize_uuid {
 # @_: ($class, $value, $index, $output) = @_;
 sub serialize_uuid {
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1];
     do {
         my $len = length $_[1];
-        die "Opaque value length mismatch (defined: 16): $len"
+        die "Opaque data length mismatch (defined: 16): $len"
             if not $len  == 16;
 
         substr( $_[3], $_[2] ) = $_[1];
@@ -1939,16 +1939,10 @@ sub deserialize_node_get_info_ret {
     $_[1] = {};
     # Deserializing field: 'model'
     # my ($class, $value, $index, $input) = @_;
-    $_[1]->{model} = [];
-    for my $i1 ( 0 .. (32 - 1) ) {
-        # my ($class, $value, $index, $input) = @_;
-            die "Input buffer too short"
-                if ($input_length - $_[2]) < 4;
-            $_[1]->{model}->[$i1] = unpack("l>", substr( $_[3], $_[2] ));
-            $_[2] += 4;
-            die "Out of bounds 'char': $_[1]->{model}->[$i1]"
-                unless (-128 <= $_[1]->{model}->[$i1] and $_[1]->{model}->[$i1] < 128);
-    }
+    die "Input buffer too short"
+        if ($input_length - $_[2]) < 32;
+    $_[1]->{model} = substr( $_[3], $_[2], 32 );
+    $_[2] += 32;
 
     # Deserializing field: 'memory'
     # my ($class, $value, $index, $input) = @_;
@@ -2026,21 +2020,12 @@ sub serialize_node_get_info_ret {
     croak "Missing required input 'array' value"
         unless defined $_[1]->{model};
     do {
-        my $len = scalar @{ $_[1]->{model} };
+        my $len = length $_[1]->{model};
         die "Array length mismatch (defined: 32): $len"
             if not $len  == 32;
 
-        for my $i1 ( 0 .. ($len - 1) ) {
-            # my ($class, $value, $index, $output) = @_;
-            croak "Missing required input 'char' value"
-                unless defined $_[1]->{model}->[$i1];
-            die "Out of bounds 'char': $_[1]->{model}->[$i1]"
-                unless (-128 <= $_[1]->{model}->[$i1] and $_[1]->{model}->[$i1] < 128);
-            die "Non-integer 'char' value given: $_[1]->{model}->[$i1]"
-                unless int($_[1]->{model}->[$i1]) == $_[1]->{model}->[$i1];
-            substr( $_[3], $_[2] ) = pack("l>", $_[1]->{model}->[$i1]);
-            $_[2] += 4;
-        }
+        substr( $_[3], $_[2] ) = $_[1]->{model};
+        $_[2] += $len;
     };
 
     # Serializing field: 'memory'
@@ -4961,7 +4946,7 @@ sub serialize_domain_block_peek_ret {
     croak "Missing required input value 'buffer'"
         unless exists $_[1]->{buffer};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{buffer};
     do {
         my $len = length $_[1]->{buffer};
@@ -5093,7 +5078,7 @@ sub serialize_domain_memory_peek_ret {
     croak "Missing required input value 'buffer'"
         unless exists $_[1]->{buffer};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{buffer};
     do {
         my $len = length $_[1]->{buffer};
@@ -7172,7 +7157,7 @@ sub serialize_domain_migrate_prepare_ret {
     croak "Missing required input value 'cookie'"
         unless exists $_[1]->{cookie};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie};
     do {
         my $len = length $_[1]->{cookie};
@@ -7261,7 +7246,7 @@ sub serialize_domain_migrate_perform_args {
     croak "Missing required input value 'cookie'"
         unless exists $_[1]->{cookie};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie};
     do {
         my $len = length $_[1]->{cookie};
@@ -7370,7 +7355,7 @@ sub serialize_domain_migrate_finish_args {
     croak "Missing required input value 'cookie'"
         unless exists $_[1]->{cookie};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie};
     do {
         my $len = length $_[1]->{cookie};
@@ -7545,7 +7530,7 @@ sub serialize_domain_migrate_prepare2_ret {
     croak "Missing required input value 'cookie'"
         unless exists $_[1]->{cookie};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie};
     do {
         my $len = length $_[1]->{cookie};
@@ -7629,7 +7614,7 @@ sub serialize_domain_migrate_finish2_args {
     croak "Missing required input value 'cookie'"
         unless exists $_[1]->{cookie};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie};
     do {
         my $len = length $_[1]->{cookie};
@@ -8599,7 +8584,7 @@ sub serialize_domain_pin_vcpu_args {
     croak "Missing required input value 'cpumap'"
         unless exists $_[1]->{cpumap};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cpumap};
     do {
         my $len = length $_[1]->{cpumap};
@@ -8685,7 +8670,7 @@ sub serialize_domain_pin_vcpu_flags_args {
     croak "Missing required input value 'cpumap'"
         unless exists $_[1]->{cpumap};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cpumap};
     do {
         my $len = length $_[1]->{cpumap};
@@ -8837,7 +8822,7 @@ sub serialize_domain_get_vcpu_pin_info_ret {
     croak "Missing required input value 'cpumaps'"
         unless exists $_[1]->{cpumaps};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cpumaps};
     do {
         my $len = length $_[1]->{cpumaps};
@@ -8914,7 +8899,7 @@ sub serialize_domain_pin_emulator_args {
     croak "Missing required input value 'cpumap'"
         unless exists $_[1]->{cpumap};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cpumap};
     do {
         my $len = length $_[1]->{cpumap};
@@ -9044,7 +9029,7 @@ sub serialize_domain_get_emulator_pin_info_ret {
     croak "Missing required input value 'cpumaps'"
         unless exists $_[1]->{cpumaps};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cpumaps};
     do {
         my $len = length $_[1]->{cpumaps};
@@ -9201,7 +9186,7 @@ sub serialize_domain_get_vcpus_ret {
     croak "Missing required input value 'cpumaps'"
         unless exists $_[1]->{cpumaps};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cpumaps};
     do {
         my $len = length $_[1]->{cpumaps};
@@ -9318,7 +9303,7 @@ sub serialize_domain_iothread_info {
     croak "Missing required input value 'cpumap'"
         unless exists $_[1]->{cpumap};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cpumap};
     do {
         my $len = length $_[1]->{cpumap};
@@ -9512,7 +9497,7 @@ sub serialize_domain_pin_iothread_args {
     croak "Missing required input value 'cpumap'"
         unless exists $_[1]->{cpumap};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cpumap};
     do {
         my $len = length $_[1]->{cpumap};
@@ -9797,19 +9782,12 @@ sub deserialize_domain_get_security_label_ret {
             if ($input_length - $_[2]) < 4;
         my $len = unpack("L>", substr( $_[3], $_[2] ));
         $_[2] += 4;
-
         die "Array too long (max: 4097): $len"
             unless ($len <= 4097);
-        $_[1]->{label} = [];
-        for my $i1 ( 0 .. ($len - 1) ) {
-            # my ($class, $value, $index, $input) = @_;
-            die "Input buffer too short"
-                if ($input_length - $_[2]) < 4;
-            $_[1]->{label}->[$i1] = unpack("l>", substr( $_[3], $_[2] ));
-            $_[2] += 4;
-            die "Out of bounds 'char': $_[1]->{label}->[$i1]"
-                unless (-128 <= $_[1]->{label}->[$i1] and $_[1]->{label}->[$i1] < 128);
-        }
+        die "Input buffer too short"
+            if ($input_length - $_[2]) < $len;
+        $_[1]->{label} = substr( $_[3], $_[2], $len );
+        $_[2] += $len + ((4 - ($len % 4)) % 4); # skip padding too
     };
 
     # Deserializing field: 'enforcing'
@@ -9833,22 +9811,17 @@ sub serialize_domain_get_security_label_ret {
     croak "Missing required input 'array' value"
         unless defined $_[1]->{label};
     do {
-        my $len = scalar @{ $_[1]->{label} };
+        my $len = length $_[1]->{label};
         die "Array too long (max: 4097): $len"
             unless ($len <= 4097);
 
         substr( $_[3], $_[2] ) = pack("L>", $len);
         $_[2] += 4;
-        for my $i1 ( 0 .. ($len - 1) ) {
-            # my ($class, $value, $index, $output) = @_;
-            croak "Missing required input 'char' value"
-                unless defined $_[1]->{label}->[$i1];
-            die "Out of bounds 'char': $_[1]->{label}->[$i1]"
-                unless (-128 <= $_[1]->{label}->[$i1] and $_[1]->{label}->[$i1] < 128);
-            die "Non-integer 'char' value given: $_[1]->{label}->[$i1]"
-                unless int($_[1]->{label}->[$i1]) == $_[1]->{label}->[$i1];
-            substr( $_[3], $_[2] ) = pack("l>", $_[1]->{label}->[$i1]);
-            $_[2] += 4;
+        substr( $_[3], $_[2] ) = $_[1]->{label};
+        $_[2] += $len;
+        if (my $pad = ((4 - ($len % 4)) % 4)) {
+            substr( $_[3], $_[2] ) = ("\0" x $pad);
+            $_[2] += $pad;
         }
     };
 
@@ -9962,19 +9935,12 @@ sub deserialize_node_get_security_model_ret {
             if ($input_length - $_[2]) < 4;
         my $len = unpack("L>", substr( $_[3], $_[2] ));
         $_[2] += 4;
-
         die "Array too long (max: 257): $len"
             unless ($len <= 257);
-        $_[1]->{model} = [];
-        for my $i1 ( 0 .. ($len - 1) ) {
-            # my ($class, $value, $index, $input) = @_;
-            die "Input buffer too short"
-                if ($input_length - $_[2]) < 4;
-            $_[1]->{model}->[$i1] = unpack("l>", substr( $_[3], $_[2] ));
-            $_[2] += 4;
-            die "Out of bounds 'char': $_[1]->{model}->[$i1]"
-                unless (-128 <= $_[1]->{model}->[$i1] and $_[1]->{model}->[$i1] < 128);
-        }
+        die "Input buffer too short"
+            if ($input_length - $_[2]) < $len;
+        $_[1]->{model} = substr( $_[3], $_[2], $len );
+        $_[2] += $len + ((4 - ($len % 4)) % 4); # skip padding too
     };
 
     # Deserializing field: 'doi'
@@ -9984,19 +9950,12 @@ sub deserialize_node_get_security_model_ret {
             if ($input_length - $_[2]) < 4;
         my $len = unpack("L>", substr( $_[3], $_[2] ));
         $_[2] += 4;
-
         die "Array too long (max: 257): $len"
             unless ($len <= 257);
-        $_[1]->{doi} = [];
-        for my $i1 ( 0 .. ($len - 1) ) {
-            # my ($class, $value, $index, $input) = @_;
-            die "Input buffer too short"
-                if ($input_length - $_[2]) < 4;
-            $_[1]->{doi}->[$i1] = unpack("l>", substr( $_[3], $_[2] ));
-            $_[2] += 4;
-            die "Out of bounds 'char': $_[1]->{doi}->[$i1]"
-                unless (-128 <= $_[1]->{doi}->[$i1] and $_[1]->{doi}->[$i1] < 128);
-        }
+        die "Input buffer too short"
+            if ($input_length - $_[2]) < $len;
+        $_[1]->{doi} = substr( $_[3], $_[2], $len );
+        $_[2] += $len + ((4 - ($len % 4)) % 4); # skip padding too
     };
 }
 # @_: ($class, $value, $index, $output) = @_;
@@ -10011,22 +9970,17 @@ sub serialize_node_get_security_model_ret {
     croak "Missing required input 'array' value"
         unless defined $_[1]->{model};
     do {
-        my $len = scalar @{ $_[1]->{model} };
+        my $len = length $_[1]->{model};
         die "Array too long (max: 257): $len"
             unless ($len <= 257);
 
         substr( $_[3], $_[2] ) = pack("L>", $len);
         $_[2] += 4;
-        for my $i1 ( 0 .. ($len - 1) ) {
-            # my ($class, $value, $index, $output) = @_;
-            croak "Missing required input 'char' value"
-                unless defined $_[1]->{model}->[$i1];
-            die "Out of bounds 'char': $_[1]->{model}->[$i1]"
-                unless (-128 <= $_[1]->{model}->[$i1] and $_[1]->{model}->[$i1] < 128);
-            die "Non-integer 'char' value given: $_[1]->{model}->[$i1]"
-                unless int($_[1]->{model}->[$i1]) == $_[1]->{model}->[$i1];
-            substr( $_[3], $_[2] ) = pack("l>", $_[1]->{model}->[$i1]);
-            $_[2] += 4;
+        substr( $_[3], $_[2] ) = $_[1]->{model};
+        $_[2] += $len;
+        if (my $pad = ((4 - ($len % 4)) % 4)) {
+            substr( $_[3], $_[2] ) = ("\0" x $pad);
+            $_[2] += $pad;
         }
     };
 
@@ -10037,22 +9991,17 @@ sub serialize_node_get_security_model_ret {
     croak "Missing required input 'array' value"
         unless defined $_[1]->{doi};
     do {
-        my $len = scalar @{ $_[1]->{doi} };
+        my $len = length $_[1]->{doi};
         die "Array too long (max: 257): $len"
             unless ($len <= 257);
 
         substr( $_[3], $_[2] ) = pack("L>", $len);
         $_[2] += 4;
-        for my $i1 ( 0 .. ($len - 1) ) {
-            # my ($class, $value, $index, $output) = @_;
-            croak "Missing required input 'char' value"
-                unless defined $_[1]->{doi}->[$i1];
-            die "Out of bounds 'char': $_[1]->{doi}->[$i1]"
-                unless (-128 <= $_[1]->{doi}->[$i1] and $_[1]->{doi}->[$i1] < 128);
-            die "Non-integer 'char' value given: $_[1]->{doi}->[$i1]"
-                unless int($_[1]->{doi}->[$i1]) == $_[1]->{doi}->[$i1];
-            substr( $_[3], $_[2] ) = pack("l>", $_[1]->{doi}->[$i1]);
-            $_[2] += 4;
+        substr( $_[3], $_[2] ) = $_[1]->{doi};
+        $_[2] += $len;
+        if (my $pad = ((4 - ($len % 4)) % 4)) {
+            substr( $_[3], $_[2] ) = ("\0" x $pad);
+            $_[2] += $pad;
         }
     };
 }
@@ -13748,19 +13697,12 @@ sub deserialize_auth_sasl_start_args {
             if ($input_length - $_[2]) < 4;
         my $len = unpack("L>", substr( $_[3], $_[2] ));
         $_[2] += 4;
-
         die "Array too long (max: 65536): $len"
             unless ($len <= 65536);
-        $_[1]->{data} = [];
-        for my $i1 ( 0 .. ($len - 1) ) {
-            # my ($class, $value, $index, $input) = @_;
-            die "Input buffer too short"
-                if ($input_length - $_[2]) < 4;
-            $_[1]->{data}->[$i1] = unpack("l>", substr( $_[3], $_[2] ));
-            $_[2] += 4;
-            die "Out of bounds 'char': $_[1]->{data}->[$i1]"
-                unless (-128 <= $_[1]->{data}->[$i1] and $_[1]->{data}->[$i1] < 128);
-        }
+        die "Input buffer too short"
+            if ($input_length - $_[2]) < $len;
+        $_[1]->{data} = substr( $_[3], $_[2], $len );
+        $_[2] += $len + ((4 - ($len % 4)) % 4); # skip padding too
     };
 }
 # @_: ($class, $value, $index, $output) = @_;
@@ -13794,22 +13736,17 @@ sub serialize_auth_sasl_start_args {
     croak "Missing required input 'array' value"
         unless defined $_[1]->{data};
     do {
-        my $len = scalar @{ $_[1]->{data} };
+        my $len = length $_[1]->{data};
         die "Array too long (max: 65536): $len"
             unless ($len <= 65536);
 
         substr( $_[3], $_[2] ) = pack("L>", $len);
         $_[2] += 4;
-        for my $i1 ( 0 .. ($len - 1) ) {
-            # my ($class, $value, $index, $output) = @_;
-            croak "Missing required input 'char' value"
-                unless defined $_[1]->{data}->[$i1];
-            die "Out of bounds 'char': $_[1]->{data}->[$i1]"
-                unless (-128 <= $_[1]->{data}->[$i1] and $_[1]->{data}->[$i1] < 128);
-            die "Non-integer 'char' value given: $_[1]->{data}->[$i1]"
-                unless int($_[1]->{data}->[$i1]) == $_[1]->{data}->[$i1];
-            substr( $_[3], $_[2] ) = pack("l>", $_[1]->{data}->[$i1]);
-            $_[2] += 4;
+        substr( $_[3], $_[2] ) = $_[1]->{data};
+        $_[2] += $len;
+        if (my $pad = ((4 - ($len % 4)) % 4)) {
+            substr( $_[3], $_[2] ) = ("\0" x $pad);
+            $_[2] += $pad;
         }
     };
 }
@@ -13842,19 +13779,12 @@ sub deserialize_auth_sasl_start_ret {
             if ($input_length - $_[2]) < 4;
         my $len = unpack("L>", substr( $_[3], $_[2] ));
         $_[2] += 4;
-
         die "Array too long (max: 65536): $len"
             unless ($len <= 65536);
-        $_[1]->{data} = [];
-        for my $i1 ( 0 .. ($len - 1) ) {
-            # my ($class, $value, $index, $input) = @_;
-            die "Input buffer too short"
-                if ($input_length - $_[2]) < 4;
-            $_[1]->{data}->[$i1] = unpack("l>", substr( $_[3], $_[2] ));
-            $_[2] += 4;
-            die "Out of bounds 'char': $_[1]->{data}->[$i1]"
-                unless (-128 <= $_[1]->{data}->[$i1] and $_[1]->{data}->[$i1] < 128);
-        }
+        die "Input buffer too short"
+            if ($input_length - $_[2]) < $len;
+        $_[1]->{data} = substr( $_[3], $_[2], $len );
+        $_[2] += $len + ((4 - ($len % 4)) % 4); # skip padding too
     };
 }
 # @_: ($class, $value, $index, $output) = @_;
@@ -13895,22 +13825,17 @@ sub serialize_auth_sasl_start_ret {
     croak "Missing required input 'array' value"
         unless defined $_[1]->{data};
     do {
-        my $len = scalar @{ $_[1]->{data} };
+        my $len = length $_[1]->{data};
         die "Array too long (max: 65536): $len"
             unless ($len <= 65536);
 
         substr( $_[3], $_[2] ) = pack("L>", $len);
         $_[2] += 4;
-        for my $i1 ( 0 .. ($len - 1) ) {
-            # my ($class, $value, $index, $output) = @_;
-            croak "Missing required input 'char' value"
-                unless defined $_[1]->{data}->[$i1];
-            die "Out of bounds 'char': $_[1]->{data}->[$i1]"
-                unless (-128 <= $_[1]->{data}->[$i1] and $_[1]->{data}->[$i1] < 128);
-            die "Non-integer 'char' value given: $_[1]->{data}->[$i1]"
-                unless int($_[1]->{data}->[$i1]) == $_[1]->{data}->[$i1];
-            substr( $_[3], $_[2] ) = pack("l>", $_[1]->{data}->[$i1]);
-            $_[2] += 4;
+        substr( $_[3], $_[2] ) = $_[1]->{data};
+        $_[2] += $len;
+        if (my $pad = ((4 - ($len % 4)) % 4)) {
+            substr( $_[3], $_[2] ) = ("\0" x $pad);
+            $_[2] += $pad;
         }
     };
 }
@@ -13934,19 +13859,12 @@ sub deserialize_auth_sasl_step_args {
             if ($input_length - $_[2]) < 4;
         my $len = unpack("L>", substr( $_[3], $_[2] ));
         $_[2] += 4;
-
         die "Array too long (max: 65536): $len"
             unless ($len <= 65536);
-        $_[1]->{data} = [];
-        for my $i1 ( 0 .. ($len - 1) ) {
-            # my ($class, $value, $index, $input) = @_;
-            die "Input buffer too short"
-                if ($input_length - $_[2]) < 4;
-            $_[1]->{data}->[$i1] = unpack("l>", substr( $_[3], $_[2] ));
-            $_[2] += 4;
-            die "Out of bounds 'char': $_[1]->{data}->[$i1]"
-                unless (-128 <= $_[1]->{data}->[$i1] and $_[1]->{data}->[$i1] < 128);
-        }
+        die "Input buffer too short"
+            if ($input_length - $_[2]) < $len;
+        $_[1]->{data} = substr( $_[3], $_[2], $len );
+        $_[2] += $len + ((4 - ($len % 4)) % 4); # skip padding too
     };
 }
 # @_: ($class, $value, $index, $output) = @_;
@@ -13974,22 +13892,17 @@ sub serialize_auth_sasl_step_args {
     croak "Missing required input 'array' value"
         unless defined $_[1]->{data};
     do {
-        my $len = scalar @{ $_[1]->{data} };
+        my $len = length $_[1]->{data};
         die "Array too long (max: 65536): $len"
             unless ($len <= 65536);
 
         substr( $_[3], $_[2] ) = pack("L>", $len);
         $_[2] += 4;
-        for my $i1 ( 0 .. ($len - 1) ) {
-            # my ($class, $value, $index, $output) = @_;
-            croak "Missing required input 'char' value"
-                unless defined $_[1]->{data}->[$i1];
-            die "Out of bounds 'char': $_[1]->{data}->[$i1]"
-                unless (-128 <= $_[1]->{data}->[$i1] and $_[1]->{data}->[$i1] < 128);
-            die "Non-integer 'char' value given: $_[1]->{data}->[$i1]"
-                unless int($_[1]->{data}->[$i1]) == $_[1]->{data}->[$i1];
-            substr( $_[3], $_[2] ) = pack("l>", $_[1]->{data}->[$i1]);
-            $_[2] += 4;
+        substr( $_[3], $_[2] ) = $_[1]->{data};
+        $_[2] += $len;
+        if (my $pad = ((4 - ($len % 4)) % 4)) {
+            substr( $_[3], $_[2] ) = ("\0" x $pad);
+            $_[2] += $pad;
         }
     };
 }
@@ -14022,19 +13935,12 @@ sub deserialize_auth_sasl_step_ret {
             if ($input_length - $_[2]) < 4;
         my $len = unpack("L>", substr( $_[3], $_[2] ));
         $_[2] += 4;
-
         die "Array too long (max: 65536): $len"
             unless ($len <= 65536);
-        $_[1]->{data} = [];
-        for my $i1 ( 0 .. ($len - 1) ) {
-            # my ($class, $value, $index, $input) = @_;
-            die "Input buffer too short"
-                if ($input_length - $_[2]) < 4;
-            $_[1]->{data}->[$i1] = unpack("l>", substr( $_[3], $_[2] ));
-            $_[2] += 4;
-            die "Out of bounds 'char': $_[1]->{data}->[$i1]"
-                unless (-128 <= $_[1]->{data}->[$i1] and $_[1]->{data}->[$i1] < 128);
-        }
+        die "Input buffer too short"
+            if ($input_length - $_[2]) < $len;
+        $_[1]->{data} = substr( $_[3], $_[2], $len );
+        $_[2] += $len + ((4 - ($len % 4)) % 4); # skip padding too
     };
 }
 # @_: ($class, $value, $index, $output) = @_;
@@ -14075,22 +13981,17 @@ sub serialize_auth_sasl_step_ret {
     croak "Missing required input 'array' value"
         unless defined $_[1]->{data};
     do {
-        my $len = scalar @{ $_[1]->{data} };
+        my $len = length $_[1]->{data};
         die "Array too long (max: 65536): $len"
             unless ($len <= 65536);
 
         substr( $_[3], $_[2] ) = pack("L>", $len);
         $_[2] += 4;
-        for my $i1 ( 0 .. ($len - 1) ) {
-            # my ($class, $value, $index, $output) = @_;
-            croak "Missing required input 'char' value"
-                unless defined $_[1]->{data}->[$i1];
-            die "Out of bounds 'char': $_[1]->{data}->[$i1]"
-                unless (-128 <= $_[1]->{data}->[$i1] and $_[1]->{data}->[$i1] < 128);
-            die "Non-integer 'char' value given: $_[1]->{data}->[$i1]"
-                unless int($_[1]->{data}->[$i1]) == $_[1]->{data}->[$i1];
-            substr( $_[3], $_[2] ) = pack("l>", $_[1]->{data}->[$i1]);
-            $_[2] += 4;
+        substr( $_[3], $_[2] ) = $_[1]->{data};
+        $_[2] += $len;
+        if (my $pad = ((4 - ($len % 4)) % 4)) {
+            substr( $_[3], $_[2] ) = ("\0" x $pad);
+            $_[2] += $pad;
         }
     };
 }
@@ -17803,7 +17704,7 @@ sub serialize_secret_set_value_args {
     croak "Missing required input value 'value'"
         unless exists $_[1]->{value};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{value};
     do {
         my $len = length $_[1]->{value};
@@ -17902,7 +17803,7 @@ sub serialize_secret_get_value_ret {
     croak "Missing required input value 'value'"
         unless exists $_[1]->{value};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{value};
     do {
         my $len = length $_[1]->{value};
@@ -23041,7 +22942,7 @@ sub serialize_domain_migrate_begin3_ret {
     croak "Missing required input value 'cookie_out'"
         unless exists $_[1]->{cookie_out};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie_out};
     do {
         my $len = length $_[1]->{cookie_out};
@@ -23124,7 +23025,7 @@ sub serialize_domain_migrate_prepare3_args {
     croak "Missing required input value 'cookie_in'"
         unless exists $_[1]->{cookie_in};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie_in};
     do {
         my $len = length $_[1]->{cookie_in};
@@ -23219,7 +23120,7 @@ sub serialize_domain_migrate_prepare3_ret {
     croak "Missing required input value 'cookie_out'"
         unless exists $_[1]->{cookie_out};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie_out};
     do {
         my $len = length $_[1]->{cookie_out};
@@ -23298,7 +23199,7 @@ sub serialize_domain_migrate_prepare_tunnel3_args {
     croak "Missing required input value 'cookie_in'"
         unless exists $_[1]->{cookie_in};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie_in};
     do {
         my $len = length $_[1]->{cookie_in};
@@ -23383,7 +23284,7 @@ sub serialize_domain_migrate_prepare_tunnel3_ret {
     croak "Missing required input value 'cookie_out'"
         unless exists $_[1]->{cookie_out};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie_out};
     do {
         my $len = length $_[1]->{cookie_out};
@@ -23480,7 +23381,7 @@ sub serialize_domain_migrate_perform3_args {
     croak "Missing required input value 'cookie_in'"
         unless exists $_[1]->{cookie_in};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie_in};
     do {
         my $len = length $_[1]->{cookie_in};
@@ -23571,7 +23472,7 @@ sub serialize_domain_migrate_perform3_ret {
     croak "Missing required input value 'cookie_out'"
         unless exists $_[1]->{cookie_out};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie_out};
     do {
         my $len = length $_[1]->{cookie_out};
@@ -23653,7 +23554,7 @@ sub serialize_domain_migrate_finish3_args {
     croak "Missing required input value 'cookie_in'"
         unless exists $_[1]->{cookie_in};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie_in};
     do {
         my $len = length $_[1]->{cookie_in};
@@ -23747,7 +23648,7 @@ sub serialize_domain_migrate_finish3_ret {
     croak "Missing required input value 'cookie_out'"
         unless exists $_[1]->{cookie_out};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie_out};
     do {
         my $len = length $_[1]->{cookie_out};
@@ -23821,7 +23722,7 @@ sub serialize_domain_migrate_confirm3_args {
     croak "Missing required input value 'cookie_in'"
         unless exists $_[1]->{cookie_in};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie_in};
     do {
         my $len = length $_[1]->{cookie_in};
@@ -25695,7 +25596,7 @@ sub serialize_node_get_cpu_map_ret {
     croak "Missing required input value 'cpumap'"
         unless exists $_[1]->{cpumap};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cpumap};
     do {
         my $len = length $_[1]->{cpumap};
@@ -26105,7 +26006,7 @@ sub serialize_domain_migrate_begin3_params_ret {
     croak "Missing required input value 'cookie_out'"
         unless exists $_[1]->{cookie_out};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie_out};
     do {
         my $len = length $_[1]->{cookie_out};
@@ -26201,7 +26102,7 @@ sub serialize_domain_migrate_prepare3_params_args {
     croak "Missing required input value 'cookie_in'"
         unless exists $_[1]->{cookie_in};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie_in};
     do {
         my $len = length $_[1]->{cookie_in};
@@ -26263,7 +26164,7 @@ sub serialize_domain_migrate_prepare3_params_ret {
     croak "Missing required input value 'cookie_out'"
         unless exists $_[1]->{cookie_out};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie_out};
     do {
         my $len = length $_[1]->{cookie_out};
@@ -26359,7 +26260,7 @@ sub serialize_domain_migrate_prepare_tunnel3_params_args {
     croak "Missing required input value 'cookie_in'"
         unless exists $_[1]->{cookie_in};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie_in};
     do {
         my $len = length $_[1]->{cookie_in};
@@ -26417,7 +26318,7 @@ sub serialize_domain_migrate_prepare_tunnel3_params_ret {
     croak "Missing required input value 'cookie_out'"
         unless exists $_[1]->{cookie_out};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie_out};
     do {
         my $len = length $_[1]->{cookie_out};
@@ -26527,7 +26428,7 @@ sub serialize_domain_migrate_perform3_params_args {
     croak "Missing required input value 'cookie_in'"
         unless exists $_[1]->{cookie_in};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie_in};
     do {
         my $len = length $_[1]->{cookie_in};
@@ -26585,7 +26486,7 @@ sub serialize_domain_migrate_perform3_params_ret {
     croak "Missing required input value 'cookie_out'"
         unless exists $_[1]->{cookie_out};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie_out};
     do {
         my $len = length $_[1]->{cookie_out};
@@ -26684,7 +26585,7 @@ sub serialize_domain_migrate_finish3_params_args {
     croak "Missing required input value 'cookie_in'"
         unless exists $_[1]->{cookie_in};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie_in};
     do {
         my $len = length $_[1]->{cookie_in};
@@ -26765,7 +26666,7 @@ sub serialize_domain_migrate_finish3_params_ret {
     croak "Missing required input value 'cookie_out'"
         unless exists $_[1]->{cookie_out};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie_out};
     do {
         my $len = length $_[1]->{cookie_out};
@@ -26874,7 +26775,7 @@ sub serialize_domain_migrate_confirm3_params_args {
     croak "Missing required input value 'cookie_in'"
         unless exists $_[1]->{cookie_in};
     # my ($class, $value, $index, $output) = @_;
-    croak "Missing required input 'opaque' value"
+    croak "Missing required input 'opaque data' value"
         unless defined $_[1]->{cookie_in};
     do {
         my $len = length $_[1]->{cookie_in};
@@ -34683,7 +34584,7 @@ Protocol::Sys::Virt::Remote::XDR - Constants and (de)serializers for remote serv
 
 =head1 VERSION
 
-v12.0.6
+v12.0.7
 
 Based on LibVirt tag v12.0.0
 

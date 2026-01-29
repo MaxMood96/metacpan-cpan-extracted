@@ -6,6 +6,10 @@ Home page:    <https://metacpan.org/release/Types-Capabilities>
 Bug tracker:  <https://github.com/tobyink/p5-types-capabilities/issues>
 Maintainer:   Toby Inkster (TOBYINK) <tobyink@cpan.org>
 
+0.004000	2026-01-28
+
+ - Updated for newest Sub::HandlesVia and Sub::HandlesVia::XS.
+
 0.003000	2026-01-15
 
  - Add coercions from FileHandle, File, and CodeRef.

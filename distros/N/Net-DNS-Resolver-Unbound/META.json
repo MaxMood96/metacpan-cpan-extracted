@@ -35,7 +35,7 @@
          "requires" : {
             "Carp" : "1.1",
             "DynaLoader" : "1.09",
-            "Net::DNS" : "1.19",
+            "Net::DNS" : "1.46",
             "base" : "2.13",
             "constant" : "1.17",
             "integer" : "1",
@@ -55,6 +55,6 @@
       }
    },
    "release_status" : "stable",
-   "version" : "1.33",
+   "version" : "1.35",
    "x_serialization_backend" : "JSON::PP version 2.27200"
 }

@@ -16,6 +16,10 @@ format:
 - Get in bed
 - Count sheep
 
+::: {.notes}
+speaker notes are here
+:::
+
 ## Abolute images
 
 

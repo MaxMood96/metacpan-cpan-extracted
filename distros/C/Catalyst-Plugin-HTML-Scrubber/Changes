@@ -1,5 +1,8 @@
 Revision history for Perl extension Catalyst::Plugin::HTML::Scrubber
 
+0.09   2026-01-27
+- Avoid uninitialised var in pattern match warning - PR #9 (bigpresh)
+
 0.08   2025-12-16
 - Support exempting from scrubbing by pattern match on value
   via new ignore_values option - PR #8 (bigpresh)

@@ -1,5 +1,14 @@
+0.05 2026-01-28
+  - Added Hash::Util::Join, SQL-like join operations on hashes.
+  - Added Hash::Util::Set export tags.
+
+0.04 2026-01-27
+  - Ensure all Set operations return the element count in scalar context.
+  - Added keys_partition(), which partitions keys into three disjoint sets: 
+    A \ B, A ∩ B, and B \ A.
+
 0.03 2026-01-26
- - any() and all() require List::Util ≥ 1.33.
+  - any() and all() require List::Util ≥ 1.33.
 
 0.02 2026-01-26
   - Ensure tests run against the pure-Perl version, not an installed XS version.

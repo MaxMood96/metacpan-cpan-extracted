@@ -51,8 +51,8 @@ like(
     dies {
         suite_run({iter => 1, exclude => 'pro', include => 'ove', bench => $bench})
     },
-    qr/No tests/,
-    'No tests to run'
+    qr/No benchmarks/,
+    'No benchmarks to run'
 );
 
 like(
@@ -214,7 +214,7 @@ is(scalar @out, 3, 'Multi / Scalability results');
 sub func0{return 0};
 sub func1{return 1};
 
-like(dies {suite_run({filter =>\&func0, bench => $bench})}, qr/No tests to run/,'Filtered out');
+like(dies {suite_run({filter =>\&func0, bench => $bench})}, qr/No benchmarks to run/,'Filtered out');
 
 $Benchmark::MCE::MONO_CLOCK = 0;
 my %stat = suite_run({filter =>\&func1, bench => $bench, srand => 0});

@@ -5,7 +5,7 @@ use warnings;
 package Types::Capabilities::CoercedValue::FILEHANDLE;
 
 our $AUTHORITY = 'cpan:TOBYINK';
-our $VERSION   = '0.003000';
+our $VERSION   = '0.004000';
 
 our $INPUT_RECORD_SEPARATOR = "\n";
 our $AUTO_SEEK              = !!1;

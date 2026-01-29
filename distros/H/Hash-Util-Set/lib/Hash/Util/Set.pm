@@ -5,7 +5,7 @@ use warnings;
 use Exporter qw[import];
 
 BEGIN {
-  our $VERSION   = '0.03';
+  our $VERSION   = '0.05';
   our @EXPORT_OK = qw[ keys_union
                        keys_intersection
                        keys_difference
@@ -18,14 +18,35 @@ BEGIN {
                        keys_proper_superset
                        keys_any
                        keys_all
-                       keys_none ];
+                       keys_none
+                       keys_partition ];
 
-  our %EXPORT_TAGS = ( all => \@EXPORT_OK );
+  our %EXPORT_TAGS = (
+    all        => \@EXPORT_OK,
+    operations => [qw[ keys_union
+                       keys_intersection
+                       keys_difference
+                       keys_symmetric_difference
+                       keys_partition ]],
+    predicates => [qw[ keys_disjoint
+                       keys_equal
+                       keys_subset
+                       keys_proper_subset
+                       keys_superset
+                       keys_proper_superset ]],
+    membership => [qw[ keys_any
+                       keys_all
+                       keys_none ]],
+    aliases    => [qw[ keys_or
+                       keys_and
+                       keys_sub
+                       keys_xor ]],
+  );
 
   my $use_pp = $ENV{HASH_UTIL_SET_PP};
   if (!$use_pp) {
     eval {
-      require Hash::Util::Set::XS;
+      require Hash::Util::Set::XS; Hash::Util::Set::XS->import('0.03');
     };
     $use_pp = !!$@;
   }

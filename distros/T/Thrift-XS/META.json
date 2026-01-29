@@ -1,0 +1,51 @@
+{
+   "abstract" : "Faster Thrift binary protocol encoding and decoding",
+   "author" : [
+      "Andy Grundman <andy@hybridized.org>"
+   ],
+   "dynamic_config" : 1,
+   "generated_by" : "ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010",
+   "license" : [
+      "unknown"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "Thrift-XS",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "inc"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "Bit::Vector" : "0",
+            "Test::BinaryData" : "0"
+         }
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "license" : [
+         "http://www.apache.org/licenses/LICENSE-2.0"
+      ],
+      "repository" : {
+         "url" : "https://github.com/andygrundman/thrift-xs"
+      }
+   },
+   "version" : "1.06",
+   "x_serialization_backend" : "JSON::PP version 4.16"
+}

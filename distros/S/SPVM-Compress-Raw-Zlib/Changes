@@ -1,3 +1,8 @@
+0.005 2026-01-28
+  [Requirement Changes]
+    * Require SPVM 0.990119.
+  [Internal Changes]
+    * Use die_v2 native API in native classes.
 0.004 2025-10-13
   [Internal Changes]
     * Do internal changes to catch up latest SPVM.

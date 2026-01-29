@@ -1,7 +1,7 @@
 This archive contains the distribution Time-Spec,
-version 0.005:
+version 0.007:
 
-  a wrapper arount struct timespec
+  a wrapper around struct timespec
 
 This software is copyright (c) 2025 by Leon Timmermans.
 

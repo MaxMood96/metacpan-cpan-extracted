@@ -11,7 +11,7 @@ typedef struct timespec* Time__Spec;
 
 MODULE = Time::Spec		PACKAGE = Time::Spec	PREFIX = timespec_
 
-PROTOTYPES: DISABLED
+PROTOTYPES: DISABLE
 
 Time::Spec timespec_new(class, struct timespec value)
 CODE:

@@ -25,6 +25,11 @@ WriteMakefile(
         'lib/Params/Filter.pm' => '$(INST_LIB)/Params/Filter.pm',
     },
 
-    dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
+    dist  => {
+        COMPRESS => 'gzip -9f',
+        SUFFIX   => 'gz',
+        TAR      => 'gtar',
+        TARFLAGS => '--format=ustar -cvf',
+    },
     clean => { FILES => 'Params-Filter-*' },
 );

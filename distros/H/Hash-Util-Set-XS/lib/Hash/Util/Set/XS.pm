@@ -16,10 +16,11 @@ our @EXPORT_OK = qw[ keys_union
                      keys_proper_superset
                      keys_any
                      keys_all
-                     keys_none ];
+                     keys_none
+                     keys_partition ];
 
 BEGIN {
-  our $VERSION = '0.02';
+  our $VERSION = '0.05';
   require XSLoader; XSLoader::load(__PACKAGE__, $VERSION);
 }
 

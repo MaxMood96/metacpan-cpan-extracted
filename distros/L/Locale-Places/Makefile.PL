@@ -4,6 +4,7 @@
 
 use strict;
 use warnings;
+
 use Config;
 use ExtUtils::MakeMaker;
 use IO::Socket::INET;
@@ -36,7 +37,8 @@ my $test_requires = {
 	'Test::Carp' => 0,
 	'Test::DescribeMe' => 0,
 	'Test::Most' => 0,
-	'Test::Needs' => 0
+	'Test::Needs' => 0,
+	'Test::RequiresInternet' => 0
 };
 
 if(scalar(@countries)) {
@@ -58,7 +60,7 @@ if(scalar(@countries)) {
 	foreach my $dir(@dirs) {
 		if(! -d $dir) {
 			print "Creating the download directory $dir\n";
-			mkdir $dir || die "$dir: $!";
+			mkdir $dir || die "Failed to create directory $dir: $!";
 		}
 	}
 
@@ -80,15 +82,16 @@ if(scalar(@countries)) {
 
 		if(!-d $cache_dir) {
 			print "Creating the cache directory $cache_dir\n";
-			mkdir $cache_dir, 02755 || die "$cache_dir: $!";
+			mkdir $cache_dir, 02755 || die "Failed to create cache directory $cache_dir: $!";
 		}
+
 		HTTP::Cache::Transparent::init({
 			BasePath => $cache_dir,
 			# Verbose => $opts{'v'} ? 1 : 0,
 			Verbose => 1,
 			NoUpdate => 60 * 60 * 24,
 			MaxAge => 30 * 24
-		}) || die "$0: $cache_dir: $!";
+		}) || die "Failed to initialize HTTP::Cache::Transparent in $cache_dir: $!";
 	} elsif(!$ENV{'AUTOMATED_TESTING'}) {
 		print "Consider installing HTTP::Cache::Transparent to reduce downloads\n";
 	}
@@ -112,7 +115,7 @@ if(scalar(@countries)) {
 
 		my $use_mirror = 0;
 
-		if(-r $file) {
+		if((-r $file) && (-r "lib/Locale/Places/data/$country.csv")) {
 			# Don't bother checking for a download if the file is less than a week old
 			next if(-M $file < 7);
 			# I get errors with mirror with L:S:WithCache
@@ -149,13 +152,31 @@ if(scalar(@countries)) {
 					exit(0);
 				}
 				die "$url: LWP error $rc";
-			} elsif(LWP::Simple::is_error($rc = LWP::Simple::getstore($url, $file))) {
-				if($ENV{'AUTOMATED_TESTING'}) {
-					print STDERR "Can't download $url";
-					exit(0);
-				}
-				die "$url: LWP error $rc";
 			}
+			if(!-r $file) {
+				my $rc = LWP::Simple::getstore($url, $file);
+				if(LWP::Simple::is_error($rc)) {
+					if($ENV{'AUTOMATED_TESTING'}) {
+						print STDERR "Can't download $url";
+						exit(0);
+					}
+					die "$url: LWP error $rc";
+				}
+			}
+		}
+		if(!-r $file) {
+			print "Download failed with LWP, trying HTTP::Tiny\n";
+				require HTTP::Tiny;
+				HTTP::Tiny->import();
+
+			my $http = HTTP::Tiny->new(
+				timeout => 60,
+				verify_SSL => 1,
+			);
+
+			my $res = $http->mirror($url, $file);
+
+			die "Failed: $res->{status} $res->{reason}" unless $res->{success} && -s $file;
 		}
 		die $file if(!-r $file);
 
@@ -168,19 +189,23 @@ if(scalar(@countries)) {
 			# http://www.cpantesters.org/cpan/report/a03259ca-6c02-1014-bd5e-9b11492b42cd
 			eval 'require IO::Uncompress::Unzip';
 			if($@) {
-				system("unzip $zip") or die "unzip $zip failed";
+				system("unzip $zip") == 0 or die "unzip $zip failed: $?";
 
 				rename "$country.txt", "lib/Locale/Places/data/$country.csv" or die "rename: $!";
 				unlink 'readme.txt';
 			} elsif(open(my $fout, '>', "lib/Locale/Places/data/$country.csv")) {
 				IO::Uncompress::Unzip->import();
+				my $found = 0;
 				if(my $fin = IO::Uncompress::Unzip->new($zip)) {
 					do {
 						if($fin->getHeaderInfo->{'Name'} eq "$country.txt") {
+							$found = 1;
 							while(my $line = $fin->getline()) {
 								print $fout $line or die "Error exploding $zip"
 							}
-							# last; # Gives syntax error that it's not in a loop :-(
+							# Don't enable this, because it breaks out of the foreach loop,
+							#	not the do while loop
+							# last;
 						}
 					} while($fin->nextStream());
 				} elsif($ENV{'AUTOMATED_TESTING'}) {
@@ -189,13 +214,19 @@ if(scalar(@countries)) {
 				} else {
 					die "$zip: $IO::Uncompress::Unzip::UnzipError";
 				}
-				close $fout || die "$zip: $!";
+				close $fout or die "Failed to close output file: $!";
+
+				if(!$found && !$ENV{'AUTOMATED_TESTING'}) {
+					die "Could not find $country.txt in $zip";
+				}
 			}
 			# Save disc space, but prevent more than one download
 			# if(open(my $fout, '>', $zip)) {
 				# close($fout);
 			# }
-			truncate $zip, 0;
+			if(-e $zip) {
+				truncate $zip, 0 or warn "Failed to truncate $zip: $!";
+			}
 		}
 
 		die if(!(-r "lib/Locale/Places/data/$country.csv"));
@@ -245,7 +276,7 @@ if($^O eq 'darwin') {
 
 WriteMakefile(
 	NAME		=> 'Locale::Places',
-	AUTHOR		=> q{Nigel Horne <njh@bandsman.co.uk>},
+	AUTHOR		=> q{Nigel Horne <njh@nigelhorne.com>},
 	VERSION_FROM	=> 'lib/Locale/Places.pm',
 	ABSTRACT_FROM   => 'lib/Locale/Places.pm',
 	((defined($ExtUtils::MakeMaker::VERSION) &&
@@ -261,7 +292,6 @@ WriteMakefile(
 	}, TEST_REQUIRES => $test_requires,
 	PREREQ_PM => {
 		'CHI' => 0,
-		'Class::Debug' => 0.07,
 		'ExtUtils::MakeMaker' => 6.64,	# 6.64 for TEST_REQUIRES
 		'Database::Abstraction' => 0.04,
 		'DBI' => 0,
@@ -271,13 +301,16 @@ WriteMakefile(
 		'Error::Simple' => 0,
 		'File::pfopen' => 0,
 		'File::Spec' => 0,
+		'I18N::LangTags::Detect' => 0,
 		'Module::Info' => 0,
-		'Params::Get' => 0,
+		'Object::Configure' => 0.12,
+		'Params::Get' => 0.13,
+		'Params::Validate::Strict' => 0.13,
 		'Scalar::Util' => 0,
 		'Text::CSV' => 0,
 		'Text::xSV::Slurp' => 0
 	}, dist => $dist,
-	clean	=> { FILES => 'Locale-Places-*' },
+	clean	=> { FILES => 'Locale-Places-* lib/Locale/Places/data/*' },
 	EXE_FILES	=> [ 'bin/translate' ],
 	# META_ADD => {
 		# provides => { }
@@ -285,19 +318,23 @@ WriteMakefile(
 	META_MERGE		=> {
 		'meta-spec' => { version => 2 },
 		resources => {
+			homepage => 'https://metacpan.org/pod/Locale::Places',
 			repository => {
+				repository => 'https://github.com/nigelhorne/Locale-Places',
 				type => 'git',
 				url => 'git://github.com/nigelhorne/Locale-Places.git',
 				web => 'https://github.com/nigelhorne/Locale-Places',
+				# license    => 'http://dev.perl.org/licenses/',
 			}, bugtracker => {
+				mailto => 'bug-Locale-Places@rt.cpan.org',
+				url => 'https://github.com/nigelhorne/Locale-Places/issues',
 				# web => 'https://rt.cpan.org/Public/Dist/Display.html?Name=Locale-Places',
-				web => 'https://github.com/nigelhorne/Locale-Places/issues',
-				mailto => 'bug-Locale-Places@rt.cpan.org'
+				web => 'https://github.com/nigelhorne/Locale-Places/issues'
 			}
 		},
 	}, PL_FILES => (defined($ENV{'AUTOMATED_TESTING'}) ? {} : {'bin/create_db.PL' => 'bin/create_db'}),
 	# , PM => $pm,
 	# PPM_INSTALL_EXEC	=> 'bash',
 	# PPM_INSTALL_SCRIPT	=> 'bin/create_sqlite',
-	MIN_PERL_VERSION	=> '5.6.2'	# Probably would work, but never tested on earlier versions than this
+	MIN_PERL_VERSION	=> '5.14.0'	# Minimum version that HTTP::Tiny is in the core
 );

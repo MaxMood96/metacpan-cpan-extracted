@@ -10,7 +10,7 @@ use Net::DNS::Resolver::Unbound;
 my $resolver = Net::DNS::Resolver::Unbound->new();
 
 plan skip_all => 'resolver not loaded' unless $resolver;
-plan tests    => 12;
+plan tests    => 13;
 
 
 for ( my $handle = undef ) {
@@ -32,12 +32,12 @@ for ( my $handle = Net::DNS::Resolver::libunbound::emulate_wait($id) ) {
 for ( my $handle = Net::DNS::Resolver::libunbound::emulate_callback( $id, $err ) ) {
 	ok( !$handle->waiting(),	 'not handle->waiting' );
 	ok( !$resolver->bgbusy($handle), 'not bgbusy' );
-	ok( $handle->err(),		 'handle->err' );
 	ok( !$handle->result(),		 'no handle->result' );
+	ok( $handle->err(),		 'handle->err' );
+	is( $handle->async_id(),	$id,   'handle->async_id' );
 	is( $resolver->bgread($handle), undef, 'undefined bgread' );
 	my $errorstring = $resolver->errorstring;
 	like( $errorstring, "/$err/", "errorstring: [$errorstring]" );
 }
-
 
 exit;

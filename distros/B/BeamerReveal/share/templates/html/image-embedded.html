@@ -1,0 +1,21 @@
+<div class="absolute" style="left: ---X---;
+			     top: ---Y---;
+			     width: 100%;
+			     height: 100%;
+			     ">
+  <img id="---IMAGEID---"
+       style="margin: 0;
+	      display: block;
+	      width: ---W---;
+	      height: ---H---;
+	      object-fit: ---FIT---;"></img>
+  <script type="module">
+    const encoded = `
+---IMAGEEMBEDDEDB64---`;
+    const bytes = Uint8Array.from(atob(encoded), c =>c.charCodeAt(0));
+    const blob = new Blob([bytes], { type: "---MIMETYPE---" });
+    
+    const image = document.getElementById("---IMAGEID---");
+    image.src = URL.createObjectURL(blob);
+  </script>
+</div>

@@ -1,0 +1,73 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Net::uTP::Manager - uTP Connection Orchestrator
+
+=head1 SYNOPSIS
+
+    use Net::uTP::Manager;
+
+    my $manager = Net::uTP::Manager->new();
+
+    # Handle incoming UDP data from your socket
+    $manager->handle_packet($data, $sender_addr);
+
+    # Create an outgoing connection
+    my $utp = $manager->new_connection($ip, $port);
+
+    # Periodically process retransmissions for ALL connections
+    my $packets = $manager->tick(0.1);
+    for my $pkt (@$packets) {
+        $udp_socket->send($pkt->{data}, 0, $pkt->{ip}, $pkt->{port});
+    }
+
+=head1 DESCRIPTION
+
+C<Net::uTP::Manager> provides a central registry and dispatcher for all active uTP connections. It allows a single UDP
+socket to multiplex multiple peer sessions.
+
+=head1 PUBLIC METHODS
+
+=head2 C<handle_packet( $data, $sockaddr )>
+
+The entry point for incoming UDP data.
+
+=over
+
+=item 1. Decodes the sender's address (IPv4 or IPv6).
+
+=item 2. Looks up the session based on IP, port, and connection ID.
+
+=item 3. If it's a connection request, it creates a new L<Net::uTP> instance and emits a C<new_connection> event.
+
+=item 4. Routes the packet to the appropriate connection object.
+
+=back
+
+=head2 C<new_connection( $ip, $port )>
+
+Creates and registers a new outgoing uTP session. Returns the L<Net::uTP> instance.
+
+=head2 C<tick( $delta )>
+
+Calls C<tick( )> on every managed connection. Returns an arrayref of packets that need to be sent over the physical
+network.
+
+=head2 C<on( 'new_connection', sub ($utp, $ip, $port) { ... } )>
+
+Registers a callback for incoming uTP connection requests.
+
+=head1 AUTHOR
+
+Sanko Robinson E<lt>sanko@cpan.orgE<gt>
+
+=head1 COPYRIGHT
+
+Copyright (C) 2026 by Sanko Robinson.
+
+This library is free software; you can redistribute it and/or modify it under the terms of the Artistic License 2.0.
+
+=cut

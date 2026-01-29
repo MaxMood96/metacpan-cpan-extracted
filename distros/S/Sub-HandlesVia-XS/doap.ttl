@@ -1,0 +1,143 @@
+@prefix dc:    <http://purl.org/dc/terms/> .
+@prefix doap:  <http://usefulinc.com/ns/doap#> .
+@prefix doap-changeset: <http://ontologi.es/doap-changeset#> .
+@prefix doap-deps: <http://ontologi.es/doap-deps#> .
+@prefix foaf:  <http://xmlns.com/foaf/0.1/> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+
+<http://dev.perl.org/licenses/>
+	dc:title             "the same terms as the perl 5 programming language system itself".
+
+<http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/project>
+	a                    doap:Project;
+	dc:contributor       <http://purl.org/NET/cpan-uri/person/tobyink>;
+	doap-deps:develop-recommendation [ doap-deps:on "Dist::Inkt 0.001"^^doap-deps:CpanId ];
+	doap-deps:runtime-requirement [ doap-deps:on "perl 5.008008"^^doap-deps:CpanId ], [
+		doap-deps:on "Types::Common 2.010001"^^doap-deps:CpanId;
+	];
+	doap-deps:test-requirement [ doap-deps:on "Test2::V0"^^doap-deps:CpanId ], [ doap-deps:on "Test2::Tools::Spec"^^doap-deps:CpanId ], [
+		doap-deps:on "Test2::Require::AuthorTesting"^^doap-deps:CpanId;
+	], [
+		doap-deps:on "Test2::Require::Module"^^doap-deps:CpanId;
+	], [
+		doap-deps:on "Test2::Plugin::BailOnFail"^^doap-deps:CpanId;
+	];
+	doap:bug-database    <https://github.com/tobyink/p5-sub-handlesvia-xs/issues>;
+	doap:created         "2026-01-26"^^xsd:date;
+	doap:developer       <http://purl.org/NET/cpan-uri/person/tobyink>;
+	doap:download-page   <https://metacpan.org/release/Sub-HandlesVia-XS>;
+	doap:homepage        <https://metacpan.org/release/Sub-HandlesVia-XS>;
+	doap:license         <http://dev.perl.org/licenses/>;
+	doap:maintainer      <http://purl.org/NET/cpan-uri/person/tobyink>;
+	doap:name            "Sub-HandlesVia-XS";
+	doap:programming-language "Perl";
+	doap:release         <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001000>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001001>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001002>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001003>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001004>;
+	doap:repository      [
+		a doap:GitRepository;
+		doap:browse <https://github.com/tobyink/p5-sub-handlesvia-xs>;
+	];
+	doap:shortdesc       "XS parts for Sub::HandlesVia; no user-serviceable parts inside".
+
+<http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001000>
+	a                    doap:Version;
+	rdfs:label           "Initial release";
+	dc:identifier        "Sub-HandlesVia-XS-0.001000"^^xsd:string;
+	dc:issued            "2026-01-27"^^xsd:date;
+	doap-changeset:released-by <http://purl.org/NET/cpan-uri/person/tobyink>;
+	doap:file-release    <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Sub-HandlesVia-XS-0.001000.tar.gz>;
+	doap:revision        "0.001000"^^xsd:string.
+
+<http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001001>
+	a                    doap:Version;
+	dc:identifier        "Sub-HandlesVia-XS-0.001001"^^xsd:string;
+	dc:issued            "2026-01-28"^^xsd:date;
+	doap-changeset:changeset [
+		doap-changeset:item [
+			a doap-changeset:Bugfix;
+			rdfs:label "Fix segfaults in older versions of Perl caused by trying to POPs without checking the function we called returned a value at all. Now always check a value was returned first!";
+		], [
+			a doap-changeset:Change;
+			rdfs:label "Defer to Type::Tiny's error handling when a type check fails, so that error messages are at least approximately the same.";
+		], [
+			a doap-changeset:Bugfix;
+			rdfs:label "Fix for hard to trigger refcount issues with shift and pop methods.";
+		], [
+			a doap-changeset:Change;
+			rdfs:label "Change missing parameter error messages to 'Wrong number of parameters' for closer consistency with Type::Params.";
+		], [
+			a doap-changeset:Change;
+			rdfs:label "Issue 'Wrong number of parameters' errors when too many parameters are given.";
+		], [
+			a doap-changeset:Change;
+			rdfs:label "More consistency in whether the invocant is counted as a parameter (it always is now) when reporting which parameter number had an issue.";
+		], [
+			a doap-changeset:Addition;
+			rdfs:label "Internal structures which have an 'element_type' now also can have an 'element_type_tiny' which is a pointer back to the original Type::Tiny type. If this is provided, then error handling should be even better.";
+		], [
+			a doap-changeset:Change;
+			rdfs:label "The push and unshift methods now return the new array length.";
+		], [
+			a doap-changeset:Change;
+			rdfs:label "Check strings passed to join methods are actually strings.";
+		], [
+			a doap-changeset:Change;
+			rdfs:label "Check parameters passed to sort methods are actually coderefs.";
+		], [
+			a doap-changeset:Change;
+			rdfs:label "Check indices passed to get, set, and accessor methods are actually integers.";
+		];
+	];
+	doap-changeset:released-by <http://purl.org/NET/cpan-uri/person/tobyink>;
+	doap:file-release    <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Sub-HandlesVia-XS-0.001001.tar.gz>;
+	doap:revision        "0.001001"^^xsd:string.
+
+<http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001002>
+	a                    doap:Version;
+	dc:identifier        "Sub-HandlesVia-XS-0.001002"^^xsd:string;
+	dc:issued            "2026-01-28"^^xsd:date;
+	doap-changeset:changeset [
+		doap-changeset:item [
+			a doap-changeset:Bugfix;
+			rdfs:label "Fix for hard to trigger refcount issues with unshift and push methods.";
+		];
+	];
+	doap-changeset:released-by <http://purl.org/NET/cpan-uri/person/tobyink>;
+	doap:file-release    <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Sub-HandlesVia-XS-0.001002.tar.gz>;
+	doap:revision        "0.001002"^^xsd:string.
+
+<http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001003>
+	a                    doap:Version;
+	dc:identifier        "Sub-HandlesVia-XS-0.001003"^^xsd:string;
+	dc:issued            "2026-01-29"^^xsd:date;
+	doap-changeset:changeset [
+		doap-changeset:item [
+			a doap-changeset:Change;
+			rdfs:label "Improvements to the OUTBLESS return pattern.";
+		];
+	];
+	doap-changeset:released-by <http://purl.org/NET/cpan-uri/person/tobyink>;
+	doap:file-release    <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Sub-HandlesVia-XS-0.001003.tar.gz>;
+	doap:revision        "0.001003"^^xsd:string.
+
+<http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001004>
+	a                    doap:Version;
+	dc:identifier        "Sub-HandlesVia-XS-0.001004"^^xsd:string;
+	dc:issued            "2026-01-29"^^xsd:date;
+	doap-changeset:changeset [
+		doap-changeset:item [
+			a doap-changeset:Change;
+			rdfs:label "Fix packaging error.";
+		];
+	];
+	doap-changeset:released-by <http://purl.org/NET/cpan-uri/person/tobyink>;
+	doap:file-release    <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Sub-HandlesVia-XS-0.001004.tar.gz>;
+	doap:revision        "0.001004"^^xsd:string.
+
+<http://purl.org/NET/cpan-uri/person/tobyink>
+	a                    foaf:Person;
+	foaf:mbox            <mailto:tobyink@cpan.org>;
+	foaf:name            "Toby Inkster";
+	foaf:nick            "TOBYINK";
+	foaf:page            <https://metacpan.org/author/TOBYINK>.
+

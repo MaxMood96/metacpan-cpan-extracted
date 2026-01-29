@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2016-2026 -- leonerd@leonerd.org.uk
 
-package Net::Prometheus::ProcessCollector::linux 0.15;
+package Net::Prometheus::ProcessCollector::linux 0.16;
 
 use v5.20;
 use warnings;

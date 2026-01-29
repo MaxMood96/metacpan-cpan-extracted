@@ -1,0 +1,86 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Digest::Merkle::SHA256 - Pure-Perl SHA-256 Merkle Tree with Audit Proofs
+
+=head1 SYNOPSIS
+
+    use Digest::Merkle::SHA256;
+
+    my $tree = Digest::Merkle::SHA256->new(
+        file_size  => 1048576, # 1MiB
+        block_size => 16384    # 16KiB
+    );
+
+    # Set a leaf node hash
+    $tree->set_block(0, $sha256_hash);
+
+    # Get the root hash (Merkle Root)
+    my $root = $tree->root();
+
+    # Generate an audit path for a specific block
+    my $path = $tree->get_audit_path(0);
+
+    # Verify a hash using an audit path (static method)
+    my $is_valid = Digest::Merkle::SHA256->verify_hash(
+        $index, $hash, $path, $expected_root
+    );
+
+=head1 DESCRIPTION
+
+C<Digest::Merkle::SHA256> implements a SHA-256 Merkle tree (also known as a Hash Tree). Merkle trees allow for
+efficient and secure verification of the contents of large data structures.
+
+This module is general purpose and can be used for any system requiring block level data integrity proofs (IPFS,
+BitTorrent v2, Certificate Transparency, Blockchain-like ledgers, etc.).
+
+=head2 Key Features:
+
+=over
+
+=item * Sparse Storage: Can calculate parent hashes even if some leaf nodes are missing using pre-calculated "zero hashes" (hashes of empty space).
+
+=item * Audit Proofs: Generates the sibling hashes (audit path) required to prove that a specific block belongs to a specific root.
+
+=item * Layer Access: Allows retrieving entire layers of the tree as contiguous binary strings.
+
+=back
+
+=head1 METHODS
+
+=head2 C<root( )>
+
+Returns the binary SHA-256 root hash of the entire tree.
+
+=head2 C<set_block( $index, $hash )>
+
+Sets the SHA-256 hash for a leaf node at C<$index>. This triggers a recursive update of all parent nodes up to the
+root.
+
+=head2 C<get_audit_path( $index )>
+
+Returns an arrayref of binary hashes required to verify the block at C<$index>.
+
+=head2 C<get_hashes( $level, $index, $count )>
+
+Returns a contiguous binary string containing C<$count> hashes from the tree at the specified C<$level>.
+
+=head2 C<verify_hash( $index, $hash, $audit_path, $expected_root )>
+
+Static method that performs the Merkle proof calculation. Returns a true value if the calculated root matches
+C<$expected_root>.
+
+=head1 AUTHOR
+
+Sanko Robinson E<lt>sanko@cpan.orgE<gt>
+
+=head1 COPYRIGHT
+
+Copyright (C) 2008-2026 by Sanko Robinson.
+
+This library is free software; you can redistribute it and/or modify it under the terms of the Artistic License 2.0.
+
+=cut

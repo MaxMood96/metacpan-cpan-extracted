@@ -16,7 +16,7 @@ BEGIN { use_ok('Locale::Places::US') }
 
 US: {
 	SKIP: {
-		if(-d 'lib/Locale/Places/data') {
+		if((!defined($ENV{'AUTOMATED_TESTING'}) && (!defined($ENV{'NO_NETWORK_TESTING'})) && (-d 'lib/Locale/Places/data'))) {
 			Database::Abstraction::init(directory => 'lib/Locale/Places/data');
 			my $places = new_ok('Locale::Places::US' => [{logger => new_ok('MyLogger'), no_entry => 1}]);
 

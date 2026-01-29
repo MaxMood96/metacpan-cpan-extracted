@@ -4,7 +4,7 @@ Authen::SASL - SASL Authentication framework
 
 =head1 VERSION
 
-version 2.1900
+version 2.2000
 
 =head1 SYNOPSIS
 
@@ -137,6 +137,29 @@ Returns any error from the last connection
 
 =head1 The Connection Class
 
+The connection class matches the capabilities of the client with those of
+the server; eg., for a client:
+
+  my $sasl->mechanisms( $mechlist );
+  my $conn      = $sasl->client_new( 'smtp', 'smtp.examlpe.com', 'noplaintext noanonymous' );
+  my $challenge = $conn->client_start
+    or die "Authentication failure:" . $conn->error;
+
+  # optionally set connection properties
+
+  while ($conn->need_step) {
+     $sock->send( $challenge )
+        or die "I/O error: $!";
+     my $response = $sock->read()
+        or die "I/O error: $!";
+     $challenge = $conn->client_step( $response );
+     die $conn->error if $conn->error;
+  }
+  if (not $conn->success()) {
+    die "Authentication failed";
+  }
+
+
 =over 4
 
 =item server_start ( CHALLENGE )
@@ -224,9 +247,73 @@ passing an code reference that, when called, returns the value.
 
 =back
 
+=head1 The Security Layer
+
+In addition to negotiating authentication, SASL is also capable of
+negotiating a security layer: encryption for connections that do not
+use eg. TLS for encryption. This is supported by the C<DIGEST-MD5> and
+C<GSSAPI> mechanisms, of which only GSSAPI isn't deprecated.
+
+  # optionally set connection parameters
+  $conn->property( minssf => 56 );
+  $conn->property( maxssf =>  0xFFFF );
+  $conn->property( maxbuf => 0x10000 );
+  # in case of TLS:
+  $conn->property( externalssf => $tls_key_strength_in_bits );
+
+When authentication completes, the C<ssf> property indicates whether
+a security layer has been negotiated or not:
+
+  my $with_sec_layer = defined $conn->property( 'ssf' )
+                           and $conn->property( 'ssf' ) > 0;
+
+
+=over 4
+
+=item encode
+
+  my $len = length( $payload );
+  my $idx = 0;
+  my $bufsize = $conn->property( 'maxbuf' );
+  while ($len > 0) {
+    my $encrypted = $conn->encode( substr( $payload, $idx, $bufsize ), $len );
+    my $output = pack('N', length($encrypted)) . $encrypted;
+    $fh->write( $output, length( $output ) );
+    $idx += $bufsize;
+    $len -= $bufsize;
+  }
+
+Encodes C<$payload>. The maximum size of the data being encoded should be taken
+from C<< $conn->property( 'maxbuf' ) >>. Payloads longer than C<maxbuf> need to
+be split across multiple encoded blocks.
+
+=item decode
+
+  my $buf = '';
+  $fh->read( $buf, 4 );
+  my $encrypted = '';
+  my $len = unpack('N', $buf );
+  $fh->read( $encrypted, $len );
+  my $payload = $conn->decode( $encrypted, $len );
+
+Decodes C<$encrypted>. The encrypted block is preseded by a 4-byte unsigned
+integer in network byte order (C<'N'>). A block of that many bytes must be
+read from the stream and fed to the C<decode> function.
+
+=item securesocket
+
+  my $sec_sock_handle = $conn->securesocket( $sock );
+
+Wraps the C<$sock> handle creating a file handle which encrypts written
+data and decrypts data being read. Wrapping a non-blocking file handle
+will fail to work correctly.
+
+=back
+
 =head1 SEE ALSO
 
-L<Authen::SASL::Perl>, L<Authen::SASL::XS>, L<Authen::SASL::Cyrus>
+L<Authen::SASL::Perl>, L<Authen::SASL::XS>, L<Authen::SASL::Cyrus>,
+L<Authen::SASL::SCRAM>, L<Authen::SASL::Perl::NTLM>
 
 =head1 MAINTAINER
 

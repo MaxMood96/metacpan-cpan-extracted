@@ -1,3 +1,15 @@
+0.05 2026-01-27
+  - Ensure AV is explicitly cast to SV in newRV_inc
+
+0.04 2026-01-27
+  - Use G_ARRAY on older Perl
+
+0.03 2026-01-27
+  - Standardized scalar return behavior for set operations in 
+    line with pure-Perl behavior.
+  - Added keys_partition(), which partitions keys into three 
+    disjoint sets: A \ B, A ∩ B, and B \ A.
+
 0.02 2026-01-26
   - Optimize hash key set operations
   - Added dev/bench.pl

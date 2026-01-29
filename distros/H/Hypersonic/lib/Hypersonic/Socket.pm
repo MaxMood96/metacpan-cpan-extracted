@@ -4,10 +4,11 @@ use strict;
 use warnings;
 use 5.010;
 
-our $VERSION = '0.03';
+our $VERSION = '0.10';
 
 use XS::JIT;
 use XS::JIT::Builder;
+use Hypersonic::JIT::Util;
 
 # Platform detection
 sub platform {
@@ -19,51 +20,37 @@ sub platform {
     die "Unsupported platform: $^O";
 }
 
+# Event backend detection (delegates to Hypersonic::Event)
 sub event_backend {
-    my $p = platform();
-    return 'kqueue' if $p =~ /^(darwin|freebsd|openbsd|netbsd)$/;
-    return 'epoll'  if $p eq 'linux';
-    die "No event backend for $p";
+    require Hypersonic::Event;
+    return Hypersonic::Event->best_backend();
 }
 
 my $COMPILED = 0;
 my $MODULE_ID = 0;
 
+# Unified compile interface
+sub compile {
+    my ($class, %opts) = @_;
+    return $class->compile_socket_ops(%opts);
+}
+
 # Generate and compile JIT socket functions using Builder
 sub compile_socket_ops {
     my ($class, %opts) = @_;
 
-    return if $COMPILED;
+    return 1 if $COMPILED;
 
-    my $cache_dir = $opts{cache_dir} // '_hypersonic_socket_cache';
+    my $cache_dir = $opts{cache_dir} // '_hypersonic_cache/socket';
     my $module_name = 'Hypersonic::Socket::Ops_' . $MODULE_ID++;
-    my $backend = event_backend();
 
     my $builder = XS::JIT::Builder->new;
 
-    # Platform-specific includes
-    $builder->line('#include <stdio.h>')
-      ->line('#include <stdlib.h>')
-      ->line('#include <string.h>')
-      ->line('#include <unistd.h>')
-      ->line('#include <fcntl.h>')
-      ->line('#include <errno.h>')
-      ->line('#include <sys/socket.h>')
-      ->line('#include <sys/types.h>')
-      ->line('#include <netinet/in.h>')
-      ->line('#include <arpa/inet.h>')
-      ->line('#include <sys/uio.h>');
+    # Common includes via centralized utility
+    Hypersonic::JIT::Util->add_standard_includes($builder,
+        qw(stdio unistd fcntl socket));
 
-    if ($backend eq 'epoll') {
-        $builder->line('#include <sys/epoll.h>')
-          ->line('#define USE_EPOLL 1');
-    } else {
-        $builder->line('#include <sys/event.h>')
-          ->line('#define USE_KQUEUE 1');
-    }
-
-    $builder->line('#define MAX_EVENTS 1024')
-      ->line('#define RECV_BUF_SIZE 65536')
+    $builder->line('#define RECV_BUF_SIZE 65536')
       ->blank
       ->line('static char recv_buf[RECV_BUF_SIZE];')
       ->blank;
@@ -71,25 +58,30 @@ sub compile_socket_ops {
     # Generate create_listen_socket
     $builder->xs_function('jit_create_listen_socket')
       ->xs_preamble
-      ->line('if (items != 1) croak("Usage: create_listen_socket(port)");')
-      ->line('IV port = SvIV(ST(0));')
+      ->line('IV port;')
+      ->line('int fd;')
+      ->line('int opt;')
+      ->line('int flags;')
+      ->line('struct sockaddr_in addr;')
       ->blank
-      ->line('int fd = socket(AF_INET, SOCK_STREAM, 0);')
+      ->line('if (items != 1) croak("Usage: create_listen_socket(port)");')
+      ->line('port = SvIV(ST(0));')
+      ->blank
+      ->line('fd = socket(AF_INET, SOCK_STREAM, 0);')
       ->if('fd < 0')
         ->line('ST(0) = sv_2mortal(newSViv(-1));')
         ->line('XSRETURN(1);')
       ->endif
       ->blank
-      ->line('int opt = 1;')
+      ->line('opt = 1;')
       ->line('setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));')
       ->line('#ifdef SO_REUSEPORT')
       ->line('setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));')
       ->line('#endif')
       ->blank
-      ->line('int flags = fcntl(fd, F_GETFL, 0);')
+      ->line('flags = fcntl(fd, F_GETFL, 0);')
       ->line('fcntl(fd, F_SETFL, flags | O_NONBLOCK);')
       ->blank
-      ->line('struct sockaddr_in addr;')
       ->line('memset(&addr, 0, sizeof(addr));')
       ->line('addr.sin_family = AF_INET;')
       ->line('addr.sin_port = htons((uint16_t)port);')
@@ -111,178 +103,8 @@ sub compile_socket_ops {
       ->xs_return('1')
       ->xs_end;
 
-    # Generate create_event_loop (platform-specific)
-    if ($backend eq 'epoll') {
-        $builder->xs_function('jit_create_event_loop')
-          ->xs_preamble
-          ->line('if (items != 1) croak("Usage: create_event_loop(listen_fd)");')
-          ->line('IV listen_fd = SvIV(ST(0));')
-          ->blank
-          ->line('int epoll_fd = epoll_create1(0);')
-          ->if('epoll_fd < 0')
-            ->line('ST(0) = sv_2mortal(newSViv(-1));')
-            ->line('XSRETURN(1);')
-          ->endif
-          ->blank
-          ->line('struct epoll_event ev;')
-          ->line('ev.events = EPOLLIN | EPOLLET;')
-          ->line('ev.data.fd = (int)listen_fd;')
-          ->blank
-          ->if('epoll_ctl(epoll_fd, EPOLL_CTL_ADD, (int)listen_fd, &ev) < 0')
-            ->line('close(epoll_fd);')
-            ->line('ST(0) = sv_2mortal(newSViv(-1));')
-            ->line('XSRETURN(1);')
-          ->endif
-          ->blank
-          ->line('ST(0) = sv_2mortal(newSViv(epoll_fd));')
-          ->xs_return('1')
-          ->xs_end;
-    } else {
-        $builder->xs_function('jit_create_event_loop')
-          ->xs_preamble
-          ->line('if (items != 1) croak("Usage: create_event_loop(listen_fd)");')
-          ->line('IV listen_fd = SvIV(ST(0));')
-          ->blank
-          ->line('int kq = kqueue();')
-          ->if('kq < 0')
-            ->line('ST(0) = sv_2mortal(newSViv(-1));')
-            ->line('XSRETURN(1);')
-          ->endif
-          ->blank
-          ->line('struct kevent ev;')
-          ->line('EV_SET(&ev, listen_fd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, NULL);')
-          ->blank
-          ->if('kevent(kq, &ev, 1, NULL, 0, NULL) < 0')
-            ->line('close(kq);')
-            ->line('ST(0) = sv_2mortal(newSViv(-1));')
-            ->line('XSRETURN(1);')
-          ->endif
-          ->blank
-          ->line('ST(0) = sv_2mortal(newSViv(kq));')
-          ->xs_return('1')
-          ->xs_end;
-    }
-
-    # Generate event_add (platform-specific)
-    if ($backend eq 'epoll') {
-        $builder->xs_function('jit_event_add')
-          ->xs_preamble
-          ->line('if (items != 2) croak("Usage: event_add(loop_fd, fd)");')
-          ->line('IV loop_fd = SvIV(ST(0));')
-          ->line('IV fd = SvIV(ST(1));')
-          ->blank
-          ->line('struct epoll_event ev;')
-          ->line('ev.events = EPOLLIN | EPOLLET;')
-          ->line('ev.data.fd = (int)fd;')
-          ->blank
-          ->line('int result = epoll_ctl((int)loop_fd, EPOLL_CTL_ADD, (int)fd, &ev);')
-          ->line('ST(0) = sv_2mortal(newSViv(result));')
-          ->xs_return('1')
-          ->xs_end;
-    } else {
-        $builder->xs_function('jit_event_add')
-          ->xs_preamble
-          ->line('if (items != 2) croak("Usage: event_add(loop_fd, fd)");')
-          ->line('IV loop_fd = SvIV(ST(0));')
-          ->line('IV fd = SvIV(ST(1));')
-          ->blank
-          ->line('struct kevent ev;')
-          ->line('EV_SET(&ev, fd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, NULL);')
-          ->blank
-          ->line('int result = kevent((int)loop_fd, &ev, 1, NULL, 0, NULL);')
-          ->line('ST(0) = sv_2mortal(newSViv(result));')
-          ->xs_return('1')
-          ->xs_end;
-    }
-
-    # Generate event_del (platform-specific)
-    if ($backend eq 'epoll') {
-        $builder->xs_function('jit_event_del')
-          ->xs_preamble
-          ->line('if (items != 2) croak("Usage: event_del(loop_fd, fd)");')
-          ->line('IV loop_fd = SvIV(ST(0));')
-          ->line('IV fd = SvIV(ST(1));')
-          ->blank
-          ->line('int result = epoll_ctl((int)loop_fd, EPOLL_CTL_DEL, (int)fd, NULL);')
-          ->line('ST(0) = sv_2mortal(newSViv(result));')
-          ->xs_return('1')
-          ->xs_end;
-    } else {
-        $builder->xs_function('jit_event_del')
-          ->xs_preamble
-          ->line('if (items != 2) croak("Usage: event_del(loop_fd, fd)");')
-          ->line('IV loop_fd = SvIV(ST(0));')
-          ->line('IV fd = SvIV(ST(1));')
-          ->blank
-          ->line('struct kevent ev;')
-          ->line('EV_SET(&ev, fd, EVFILT_READ, EV_DELETE, 0, 0, NULL);')
-          ->blank
-          ->line('int result = kevent((int)loop_fd, &ev, 1, NULL, 0, NULL);')
-          ->line('ST(0) = sv_2mortal(newSViv(result));')
-          ->xs_return('1')
-          ->xs_end;
-    }
-
-    # Generate ev_poll (platform-specific)
-    if ($backend eq 'epoll') {
-        $builder->xs_function('jit_ev_poll')
-          ->xs_preamble
-          ->line('if (items != 2) croak("Usage: ev_poll(loop_fd, timeout_ms)");')
-          ->line('IV loop_fd = SvIV(ST(0));')
-          ->line('IV timeout_ms = SvIV(ST(1));')
-          ->blank
-          ->line('struct epoll_event events[MAX_EVENTS];')
-          ->line('int n = epoll_wait((int)loop_fd, events, MAX_EVENTS, (int)timeout_ms);')
-          ->blank
-          ->if('n < 0')
-            ->line('ST(0) = &PL_sv_undef;')
-            ->line('XSRETURN(1);')
-          ->endif
-          ->blank
-          ->line('AV* ready = newAV();')
-          ->line('int i;')
-          ->line('for (i = 0; i < n; i++) {')
-          ->line('    AV* event = newAV();')
-          ->line('    av_push(event, newSViv(events[i].data.fd));')
-          ->line('    av_push(event, newSViv(events[i].events));')
-          ->line('    av_push(ready, newRV_noinc((SV*)event));')
-          ->line('}')
-          ->blank
-          ->line('ST(0) = sv_2mortal(newRV_noinc((SV*)ready));')
-          ->xs_return('1')
-          ->xs_end;
-    } else {
-        $builder->xs_function('jit_ev_poll')
-          ->xs_preamble
-          ->line('if (items != 2) croak("Usage: ev_poll(loop_fd, timeout_ms)");')
-          ->line('IV loop_fd = SvIV(ST(0));')
-          ->line('IV timeout_ms = SvIV(ST(1));')
-          ->blank
-          ->line('struct kevent events[MAX_EVENTS];')
-          ->line('struct timespec ts;')
-          ->line('ts.tv_sec = timeout_ms / 1000;')
-          ->line('ts.tv_nsec = (timeout_ms % 1000) * 1000000;')
-          ->blank
-          ->line('int n = kevent((int)loop_fd, NULL, 0, events, MAX_EVENTS, &ts);')
-          ->blank
-          ->if('n < 0')
-            ->line('ST(0) = &PL_sv_undef;')
-            ->line('XSRETURN(1);')
-          ->endif
-          ->blank
-          ->line('AV* ready = newAV();')
-          ->line('int i;')
-          ->line('for (i = 0; i < n; i++) {')
-          ->line('    AV* event = newAV();')
-          ->line('    av_push(event, newSViv((IV)events[i].ident));')
-          ->line('    av_push(event, newSViv(events[i].filter == EVFILT_READ ? 1 : 2));')
-          ->line('    av_push(ready, newRV_noinc((SV*)event));')
-          ->line('}')
-          ->blank
-          ->line('ST(0) = sv_2mortal(newRV_noinc((SV*)ready));')
-          ->xs_return('1')
-          ->xs_end;
-    }
+    # Event loop functions (create_event_loop, event_add, event_del, ev_poll)
+    # have been moved to Hypersonic::Event::* backend modules
 
     # Generate http_accept
     $builder->xs_function('jit_http_accept')
@@ -446,17 +268,13 @@ sub compile_socket_ops {
       ->xs_return('1')
       ->xs_end;
 
-    # Compile via XS::JIT
+    # Compile via XS::JIT (socket-only functions - event loop is in backends)
     XS::JIT->compile(
         code      => $builder->code,
         name      => $module_name,
         cache_dir => $cache_dir,
         functions => {
             'Hypersonic::Socket::create_listen_socket' => { source => 'jit_create_listen_socket', is_xs_native => 1 },
-            'Hypersonic::Socket::create_event_loop'    => { source => 'jit_create_event_loop', is_xs_native => 1 },
-            'Hypersonic::Socket::event_add'            => { source => 'jit_event_add', is_xs_native => 1 },
-            'Hypersonic::Socket::event_del'            => { source => 'jit_event_del', is_xs_native => 1 },
-            'Hypersonic::Socket::ev_poll'              => { source => 'jit_ev_poll', is_xs_native => 1 },
             'Hypersonic::Socket::http_accept'          => { source => 'jit_http_accept', is_xs_native => 1 },
             'Hypersonic::Socket::http_recv'            => { source => 'jit_http_recv', is_xs_native => 1 },
             'Hypersonic::Socket::http_send'            => { source => 'jit_http_send', is_xs_native => 1 },
@@ -489,37 +307,25 @@ Hypersonic::Socket - JIT-compiled socket operations for Hypersonic
     use Hypersonic::Socket;
 
     # Platform detection
-    my $platform = Hypersonic::Socket::platform();    # 'darwin', 'linux', etc.
-    my $backend  = Hypersonic::Socket::event_backend();  # 'kqueue' or 'epoll'
+    my $platform = Hypersonic::Socket::platform();  # 'darwin', 'linux', etc.
 
     # Low-level socket operations (usually called internally)
     my $listen_fd = Hypersonic::Socket::create_listen_socket(8080);
-    my $loop_fd   = Hypersonic::Socket::create_event_loop($listen_fd);
 
-    # Event loop (simplified example)
-    while (1) {
-        my $events = Hypersonic::Socket::ev_poll($loop_fd, 1000);
-        for my $event (@$events) {
-            my ($fd, $flags) = @$event;
-            if ($fd == $listen_fd) {
-                my $client_fd = Hypersonic::Socket::http_accept($listen_fd);
-                Hypersonic::Socket::event_add($loop_fd, $client_fd);
-            } else {
-                my $req = Hypersonic::Socket::http_recv($fd);
-                Hypersonic::Socket::http_send($fd, 'Hello', 'text/plain');
-                Hypersonic::Socket::close_fd($fd);
-            }
-        }
-    }
+    # Accept and handle connections
+    my $client_fd = Hypersonic::Socket::http_accept($listen_fd);
+    my $req = Hypersonic::Socket::http_recv($client_fd);
+    Hypersonic::Socket::http_send($client_fd, 'Hello', 'text/plain');
+    Hypersonic::Socket::close_fd($client_fd);
 
 =head1 DESCRIPTION
 
 C<Hypersonic::Socket> provides JIT-compiled XS socket functions for the
-Hypersonic HTTP server. It automatically detects the platform and compiles
-the appropriate event backend (kqueue or epoll).
+Hypersonic HTTP server. It handles low-level socket operations while event
+loop functionality is provided by L<Hypersonic::Event> backend modules.
 
 B<This module is for internal use by Hypersonic.> You typically don't
-need to use it directly unless building custom event loops.
+need to use it directly.
 
 All functions are compiled to native XS code on first use via
 L<XS::JIT::Builder>.
@@ -547,20 +353,6 @@ Returns the detected platform:
 =back
 
 Dies on unsupported platforms.
-
-=head2 event_backend
-
-    my $backend = Hypersonic::Socket::event_backend();
-
-Returns the event backend for the current platform:
-
-=over 4
-
-=item * C<kqueue> - macOS, FreeBSD, OpenBSD, NetBSD
-
-=item * C<epoll> - Linux
-
-=back
 
 =head1 CLASS METHODS
 
@@ -607,46 +399,6 @@ Features:
 =back
 
 Returns the file descriptor, or -1 on error.
-
-=head2 create_event_loop
-
-    my $loop_fd = Hypersonic::Socket::create_event_loop($listen_fd);
-
-Create an event loop (kqueue or epoll) and register the listen socket.
-
-Returns the event loop file descriptor, or -1 on error.
-
-=head2 event_add
-
-    my $result = Hypersonic::Socket::event_add($loop_fd, $fd);
-
-Add a file descriptor to the event loop for read events.
-
-Returns 0 on success, -1 on error.
-
-=head2 event_del
-
-    my $result = Hypersonic::Socket::event_del($loop_fd, $fd);
-
-Remove a file descriptor from the event loop.
-
-Returns 0 on success, -1 on error.
-
-=head2 ev_poll
-
-    my $events = Hypersonic::Socket::ev_poll($loop_fd, $timeout_ms);
-
-Wait for events on the event loop.
-
-Returns an arrayref of C<[$fd, $flags]> pairs, where:
-
-=over 4
-
-=item * C<$fd> - File descriptor with pending events
-
-=item * C<$flags> - Event flags (read, write, error)
-
-=back
 
 =head2 http_accept
 
@@ -711,8 +463,6 @@ due to:
 
 =item * Zero-copy parsing
 
-=item * Platform-optimized event backends
-
 =item * Minimal memory allocations
 
 =back
@@ -727,8 +477,6 @@ You only need to use this module directly if:
 
 =over 4
 
-=item * Building custom event loops
-
 =item * Extending Hypersonic with custom protocols
 
 =item * Testing or debugging socket operations
@@ -738,6 +486,8 @@ You only need to use this module directly if:
 =head1 SEE ALSO
 
 L<Hypersonic> - Main HTTP server module
+
+L<Hypersonic::Event> - Event backend selection
 
 L<XS::JIT::Builder> - JIT compilation API
 

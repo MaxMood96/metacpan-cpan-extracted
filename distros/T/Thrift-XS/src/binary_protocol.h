@@ -1,6 +1,7 @@
 #ifndef _BINARY_PROTOCOL_H
 #define _BINARY_PROTOCOL_H
 
+#include <inttypes.h>
 #include "simple_queue.h"
 
 struct field_entry {
@@ -12,7 +13,7 @@ SIMPLEQ_HEAD(fieldq, field_entry);
 typedef struct {
   SV *transport;       // Transport instance
   TMemoryBuffer *mbuf; // XS MemoryBuffer instance, if we're using it
-  
+
   // Data for compact protocol state
   int bool_type;
   int bool_id;
@@ -133,7 +134,7 @@ static const int32_t TYPE_SHIFT_AMOUNT = 5;
     uint32_t avail = buffer_len(p->mbuf->buffer);                                   \
     if (avail < len) {                                                              \
       THROW_SV("TTransportException",                                               \
-        newSVpvf("Attempt to readAll(%lld) found only %d available", (uint64_t)len, avail));    \
+        newSVpvf("Attempt to readAll(%" PRIu64 ") found only %d available", (uint64_t)len, avail));    \
     }                                                                               \
     dst = newSVpvn( buffer_ptr(p->mbuf->buffer), len );                             \
     buffer_consume(p->mbuf->buffer, len);                                           \
@@ -186,7 +187,7 @@ static const int32_t TYPE_SHIFT_AMOUNT = 5;
       shift += 7;                                         \
       if (!(bs[0] & 0x80)) break;                         \
     }                                                     \
-  }    
+  }
 
 static int get_compact_type(int type) {
   switch (type) {
@@ -256,9 +257,9 @@ zigzag_to_ll(uint64_t n)
 static void
 write_field_begin_internal(TBinaryProtocol *p, int type, int id, int type_override)
 {
-  char data[4];  
+  char data[4];
   int type_to_write = type_override == -1 ? get_compact_type(type) : type_override;
-  
+
   // check if we can use delta encoding for the field id
   if (id > p->last_field_id && id - p->last_field_id <= 15) {
     // write them together
@@ -274,7 +275,7 @@ write_field_begin_internal(TBinaryProtocol *p, int type, int id, int type_overri
     UINT_TO_VARINT(varlen, data, uid, 1);
     WRITE(p, data, varlen + 1);
   }
-  
+
   p->last_field_id = id;
 }
 
@@ -282,7 +283,7 @@ static void
 write_collection_begin_internal(TBinaryProtocol *p, int elemtype, uint32_t size)
 {
   char data[6];
-  
+
   if (size <= 14) {
     data[0] = (size << 4) | get_compact_type(elemtype);
     WRITE(p, data, 1);

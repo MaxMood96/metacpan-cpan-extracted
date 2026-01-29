@@ -6,6 +6,26 @@ Home page:    <https://metacpan.org/release/Sub-HandlesVia>
 Bug tracker:  <https://github.com/tobyink/p5-sub-handlesvia/issues>
 Maintainer:   Toby Inkster (TOBYINK) <tobyink@cpan.org>
 
+0.053001	2026-01-28
+
+ [ Packaging ]
+ - Add Sub::HandlesVia::XS as a runtime recommends dependency.
+
+ [ Other ]
+ - Updated: Don't use Sub::HandlesVia::XS versions older than 0.001004 as
+   they are buggy.
+
+0.053000	2026-01-28
+
+ - Added: Array:peek and Array:peekend.
+ - Added: Code generators can set a never_shift_self attribute to prevent
+   handlers from trying to shift the invocant off @_, which they sometimes
+   do for efficiency reasons.
+ - Use Sub::HandlesVia::XS when it is available. Currently only the Moo
+   handler uses it, and Sub::HandlesVia::XS only has implementations for
+   some Array-related methods. You can include no_SHVXS=>1 in an Moo
+   attribute definition if it's causing issues.
+
 0.052000	2025-11-21
 
  [ Bug Fixes ]

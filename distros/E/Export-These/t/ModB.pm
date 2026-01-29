@@ -3,7 +3,7 @@ package ModB;
 use Export::These (
   "sub4",
   group2=>["group2_sub", "\$group2_scalar"],
-  group3=>["group3_sub"]
+  group3=>["group3_sub"],
 );
 
 our $group2_scalar="group2_scalar";

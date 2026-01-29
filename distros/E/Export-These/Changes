@@ -1,5 +1,10 @@
 Revision history for Perl extension Export::These.
 
+v.0.3.0
+  [improvements]
+    - mimic Exporter symbol resolution for simpler and faster symbol look
+      up code
+
 v0.2.2
   [fixes]
     - Addressing https://github.com/Perl/perl5/issues/23131

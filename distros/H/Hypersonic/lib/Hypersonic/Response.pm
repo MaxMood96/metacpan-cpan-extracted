@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use 5.010;
 
-our $VERSION = '0.03';
+our $VERSION = '0.10';
 
 # JIT-compiled Response object using array-based slots for maximum speed
 # Generates XS accessors at compile time via XS::JIT::Builder
@@ -34,13 +34,19 @@ sub res { __PACKAGE__->new(@_) }
 my $COMPILED = 0;
 my $MODULE_ID = 0;
 
+# Unified compile interface
+sub compile {
+    my ($class, %opts) = @_;
+    return $class->compile_accessors(%opts);
+}
+
 # Generate and compile XS accessors
 sub compile_accessors {
     my ($class, %opts) = @_;
 
-    return if $COMPILED;
+    return 1 if $COMPILED;
 
-    my $cache_dir = $opts{cache_dir} // '_hypersonic_response_cache';
+    my $cache_dir = $opts{cache_dir} // '_hypersonic_cache/response';
     my $module_name = 'Hypersonic::Response::Accessors_' . $MODULE_ID++;
 
     my $builder = XS::JIT::Builder->new;
@@ -331,6 +337,29 @@ sub compile_accessors {
       ->xs_return('1')
       ->xs_end;
 
+    # ============================================================
+    # JIT-compiled HTTP date formatting (for Last-Modified, etc.)
+    # ============================================================
+    $builder->line('#include <time.h>')
+      ->blank;
+
+    $builder->xs_function('jit_http_date')
+      ->xs_preamble
+      ->line('time_t t = items > 0 && SvOK(ST(0)) ? (time_t)SvIV(ST(0)) : time(NULL);')
+      ->line('struct tm* gm = gmtime(&t);')
+      ->blank
+      ->line('static const char* days[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};')
+      ->line('static const char* months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};')
+      ->blank
+      ->line('char buf[32];')
+      ->line('int len = sprintf(buf, "%s, %02d %s %04d %02d:%02d:%02d GMT",')
+      ->line('    days[gm->tm_wday], gm->tm_mday, months[gm->tm_mon],')
+      ->line('    gm->tm_year + 1900, gm->tm_hour, gm->tm_min, gm->tm_sec);')
+      ->blank
+      ->line('ST(0) = sv_2mortal(newSVpv(buf, len));')
+      ->xs_return('1')
+      ->xs_end;
+
     # Compile via XS::JIT
     XS::JIT->compile(
         code      => $builder->code,
@@ -365,6 +394,9 @@ sub compile_accessors {
 
             # Direct HTTP response generation
             'Hypersonic::Response::_jit_to_http'      => { source => 'jit_to_http', is_xs_native => 1 },
+
+            # Utility functions
+            'Hypersonic::Response::_jit_http_date'    => { source => 'jit_http_date', is_xs_native => 1 },
         },
     );
 
@@ -437,9 +469,9 @@ sub body {
 # Set JSON response (auto-sets Content-Type and encodes data)
 sub json {
     my ($self, $data) = @_;
-    require JSON::XS;
+    require Cpanel::JSON::XS;
     $self->[SLOT_HEADERS]{'Content-Type'} = 'application/json';
-    $self->[SLOT_BODY] = JSON::XS::encode_json($data);
+    $self->[SLOT_BODY] = Cpanel::JSON::XS::encode_json($data);
     return $self;
 }
 
@@ -735,6 +767,13 @@ sub TO_JSON {
 # Helper: format HTTP date
 sub _http_date {
     my ($time) = @_;
+
+    # Use JIT-compiled version if available
+    if ($COMPILED && defined &_jit_http_date) {
+        return _jit_http_date($time);
+    }
+
+    # Perl fallback
     $time //= time();
     my @t = gmtime($time);
     my @days = qw(Sun Mon Tue Wed Thu Fri Sat);

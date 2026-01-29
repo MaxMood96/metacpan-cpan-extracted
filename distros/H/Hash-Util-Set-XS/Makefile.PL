@@ -36,7 +36,7 @@ bugtracker     'https://github.com/chansen/p5-hash-util-set-xs/issues';
 readme_from    'lib/Hash/Util/Set/XS.pod';
 
 requires       'XSLoader'        => '0';
-requires       'Hash::Util::Set' => '0';
+requires       'Hash::Util::Set' => '0.04';
 test_requires  'Test::More'      => '0.88';
 
 cc_warnings;

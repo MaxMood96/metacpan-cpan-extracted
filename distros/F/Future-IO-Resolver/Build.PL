@@ -14,6 +14,10 @@ my $build = Module::Build->new(
       'perl' => '5.020',
    },
    test_requires => {
+      # Not mentioned in any of the test scripts, but we need /a/ working
+      # Future::IO::Impl to test with; this one seems most easy to obtain
+      'Future::IO::Impl::Ppoll' => 0,
+
       'Test2::V0' => 0,
    },
    configure_requires => {

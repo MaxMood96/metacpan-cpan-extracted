@@ -11,7 +11,7 @@ build_requires:
 configure_requires:
   ExtUtils::MakeMaker: '0'
 dynamic_config: 0
-generated_by: 'Dist::Zilla version 6.033, CPAN::Meta::Converter version 2.150010'
+generated_by: 'Dist::Zilla version 6.037, CPAN::Meta::Converter version 2.150010'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -20,46 +20,46 @@ name: Authen-SASL
 provides:
   Authen::SASL:
     file: lib/Authen/SASL.pm
-    version: '2.1900'
+    version: '2.2000'
   Authen::SASL::CRAM_MD5:
     file: lib/Authen/SASL/CRAM_MD5.pm
-    version: '2.1900'
+    version: '2.2000'
     x_deprecated: 1
   Authen::SASL::EXTERNAL:
     file: lib/Authen/SASL/EXTERNAL.pm
-    version: '2.1900'
+    version: '2.2000'
   Authen::SASL::Perl:
     file: lib/Authen/SASL/Perl.pm
-    version: '2.1900'
+    version: '2.2000'
   Authen::SASL::Perl::ANONYMOUS:
     file: lib/Authen/SASL/Perl/ANONYMOUS.pm
-    version: '2.1900'
+    version: '2.2000'
   Authen::SASL::Perl::CRAM_MD5:
     file: lib/Authen/SASL/Perl/CRAM_MD5.pm
-    version: '2.1900'
+    version: '2.2000'
     x_deprecated: 1
   Authen::SASL::Perl::DIGEST_MD5:
     file: lib/Authen/SASL/Perl/DIGEST_MD5.pm
-    version: '2.1900'
+    version: '2.2000'
     x_deprecated: 1
   Authen::SASL::Perl::EXTERNAL:
     file: lib/Authen/SASL/Perl/EXTERNAL.pm
-    version: '2.1900'
+    version: '2.2000'
   Authen::SASL::Perl::GSSAPI:
     file: lib/Authen/SASL/Perl/GSSAPI.pm
-    version: '2.1900'
+    version: '2.2000'
   Authen::SASL::Perl::LOGIN:
     file: lib/Authen/SASL/Perl/LOGIN.pm
-    version: '2.1900'
+    version: '2.2000'
   Authen::SASL::Perl::OAUTHBEARER:
     file: lib/Authen/SASL/Perl/OAUTHBEARER.pm
-    version: '2.1900'
+    version: '2.2000'
   Authen::SASL::Perl::PLAIN:
     file: lib/Authen/SASL/Perl/PLAIN.pm
-    version: '2.1900'
+    version: '2.2000'
   Authen::SASL::Perl::XOAUTH2:
     file: lib/Authen/SASL/Perl/XOAUTH2.pm
-    version: '2.1900'
+    version: '2.2000'
 recommends:
   GSSAPI: '0'
 requires:
@@ -70,7 +70,7 @@ resources:
   bugtracker: https://github.com/perl-authen-sasl/perl-authen-sasl/issues
   homepage: https://github.com/perl-authen-sasl/perl-authen-sasl/
   repository: git://github.com/perl-authen-sasl/perl-authen-sasl.git
-version: '2.1900'
+version: '2.2000'
 x_contributors:
   - 'Aditya Garg <gargaditya08@live.com>'
   - 'Chris Ridd <chris.ridd@isode.com>'

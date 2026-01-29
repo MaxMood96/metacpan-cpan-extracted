@@ -1,26 +1,27 @@
---- #YAML:1.0
-name:               Thrift-XS
-version:            1.04
-abstract:           Faster Thrift binary protocol encoding and decoding
+---
+abstract: 'Faster Thrift binary protocol encoding and decoding'
 author:
-    - Andy Grundman <andy@hybridized.org>
-license:            unknown
-distribution_type:  module
-configure_requires:
-    ExtUtils::MakeMaker:  0
+  - 'Andy Grundman <andy@hybridized.org>'
 build_requires:
-    ExtUtils::MakeMaker:  0
-requires:
-    Bit::Vector:       0
-    Test::BinaryData:  0
-resources:
-    license:     http://www.apache.org/licenses/LICENSE-2.0
-    repository:  https://github.com/andygrundman/thrift-xs
-no_index:
-    directory:
-        - t
-        - inc
-generated_by:       ExtUtils::MakeMaker version 6.54
+  ExtUtils::MakeMaker: '0'
+configure_requires:
+  ExtUtils::MakeMaker: '0'
+dynamic_config: 1
+generated_by: 'ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010'
+license: unknown
 meta-spec:
-    url:      http://module-build.sourceforge.net/META-spec-v1.4.html
-    version:  1.4
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: Thrift-XS
+no_index:
+  directory:
+    - t
+    - inc
+requires:
+  Bit::Vector: '0'
+  Test::BinaryData: '0'
+resources:
+  license: http://www.apache.org/licenses/LICENSE-2.0
+  repository: https://github.com/andygrundman/thrift-xs
+version: '1.06'
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'
