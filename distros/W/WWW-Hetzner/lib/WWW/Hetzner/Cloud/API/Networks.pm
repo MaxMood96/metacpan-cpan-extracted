@@ -1,8 +1,7 @@
 package WWW::Hetzner::Cloud::API::Networks;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Cloud Networks API
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -144,6 +143,7 @@ sub delete_route {
     });
 }
 
+
 1;
 
 __END__
@@ -158,7 +158,7 @@ WWW::Hetzner::Cloud::API::Networks - Hetzner Cloud Networks API
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -265,6 +265,20 @@ Add a route to the network.
     );
 
 Delete a route from the network.
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Cloud> - Main Cloud API client
+
+=item * L<WWW::Hetzner::Cloud::Network> - Network entity class
+
+=item * L<WWW::Hetzner::CLI::Cmd::Network> - Network CLI commands
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

@@ -1,8 +1,7 @@
 package WWW::Hetzner::Robot::API::IPs;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Robot IPs API
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -44,7 +43,8 @@ sub get {
 }
 
 
-1;
+
+1.
 
 __END__
 
@@ -58,7 +58,7 @@ WWW::Hetzner::Robot::API::IPs - Hetzner Robot IPs API
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -79,6 +79,18 @@ Returns arrayref of L<WWW::Hetzner::Robot::IP> objects.
     my $ip = $robot->ips->get($ip_address);
 
 Returns L<WWW::Hetzner::Robot::IP> object.
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Robot> - Main Robot API client
+
+=item * L<WWW::Hetzner::Robot::IP> - IP entity class
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

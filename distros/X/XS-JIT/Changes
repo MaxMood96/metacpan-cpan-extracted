@@ -1,5 +1,20 @@
 Revision history for XS-JIT
 
+0.13    2026-01-29
+	- Attempt to fix C89 compatibility in generated code for roles and constructors
+
+0.12    2026-01-28
+	- Various attempts to fix cpantester fails
+
+0.11    2026-01-27
+        - Attempt to fix compilation on non-threaded Perl builds
+
+0.09    2026-01-26
+        - Added extra_cflags and extra_ldflags parameters to compile()
+        - Enables linking against external libraries (OpenSSL, etc.)
+        - Updated xs_jit_compile() and xs_jit_compile_file() C API
+        - Larger command buffer for complex compiler invocations
+
 0.01    Date/time
         First version, released on an unsuspecting world.
 

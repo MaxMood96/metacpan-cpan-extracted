@@ -1,8 +1,7 @@
 package WWW::Hetzner::Cloud::API::Datacenters;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Cloud Datacenters API
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -58,6 +57,7 @@ sub get_by_name {
     return;
 }
 
+
 1;
 
 __END__
@@ -72,7 +72,7 @@ WWW::Hetzner::Cloud::API::Datacenters - Hetzner Cloud Datacenters API
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -110,6 +110,20 @@ Returns a L<WWW::Hetzner::Cloud::Datacenter> object.
     my $datacenter = $cloud->datacenters->get_by_name('fsn1-dc14');
 
 Returns a L<WWW::Hetzner::Cloud::Datacenter> object. Returns undef if not found.
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Cloud> - Main Cloud API client
+
+=item * L<WWW::Hetzner::Cloud::Datacenter> - Datacenter entity class
+
+=item * L<WWW::Hetzner::CLI::Cmd::Datacenter> - Datacenter CLI commands
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

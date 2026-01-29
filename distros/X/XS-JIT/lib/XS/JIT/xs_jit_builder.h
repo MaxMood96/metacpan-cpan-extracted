@@ -21,6 +21,73 @@
 #include "XSUB.h"
 
 /* ============================================
+ * Op sibling compatibility for Perl < 5.22
+ * These macros were added in Perl 5.21.2 as part of the
+ * OP sibling rework. On older Perls, ops use op_sibling directly.
+ * ============================================ */
+#ifndef OpHAS_SIBLING
+#  define OpHAS_SIBLING(o) ((o)->op_sibling != NULL)
+#endif
+#ifndef OpSIBLING
+#  define OpSIBLING(o) ((o)->op_sibling)
+#endif
+#ifndef OpMORESIB_set
+#  define OpMORESIB_set(o, sib) ((o)->op_sibling = (sib))
+#endif
+#ifndef OpLASTSIB_set
+#  define OpLASTSIB_set(o, parent) ((o)->op_sibling = NULL)
+#endif
+#ifndef op_sibling_splice
+/* Simplified compatibility version - handles common JIT use cases */
+PERL_STATIC_INLINE OP*
+S_op_sibling_splice_compat(OP *parent, OP *start, int del_count, OP *insert)
+{
+    OP *first, *rest, *last_del = NULL;
+
+    if (!parent)
+        return NULL;
+
+    if (start)
+        first = start->op_sibling;
+    else
+        first = cLISTOPx(parent)->op_first;
+
+    /* Find the deleted ops and the rest */
+    rest = first;
+    while (del_count && rest) {
+        last_del = rest;
+        rest = rest->op_sibling;
+        del_count--;
+    }
+
+    /* Unlink the deleted range */
+    if (last_del)
+        last_del->op_sibling = NULL;
+
+    /* Link in the insert chain */
+    if (insert) {
+        OP *insert_last = insert;
+        while (insert_last->op_sibling)
+            insert_last = insert_last->op_sibling;
+        insert_last->op_sibling = rest;
+        if (start)
+            start->op_sibling = insert;
+        else
+            cLISTOPx(parent)->op_first = insert;
+    } else {
+        if (start)
+            start->op_sibling = rest;
+        else
+            cLISTOPx(parent)->op_first = rest;
+    }
+
+    return first;
+}
+#  define op_sibling_splice(parent, start, del_count, insert) \
+       S_op_sibling_splice_compat(parent, start, del_count, insert)
+#endif
+
+/* ============================================
  * Builder context structure
  * ============================================ */
 

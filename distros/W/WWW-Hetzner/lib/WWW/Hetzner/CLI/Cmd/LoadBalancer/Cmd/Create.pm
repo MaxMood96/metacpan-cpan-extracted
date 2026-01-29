@@ -1,8 +1,7 @@
 package WWW::Hetzner::CLI::Cmd::LoadBalancer::Cmd::Create;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Create a load balancer
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use MooX::Cmd;
@@ -58,7 +57,7 @@ WWW::Hetzner::CLI::Cmd::LoadBalancer::Cmd::Create - Create a load balancer
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SUPPORT
 

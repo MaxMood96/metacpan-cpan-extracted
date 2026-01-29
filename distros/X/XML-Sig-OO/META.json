@@ -60,11 +60,16 @@
       }
    },
    "release_status" : "stable",
-   "version" : "0.011",
-   "x_repository" : {
-      "type" : "git",
-      "url" : "https://github.com/akalinux/xml-sig-oo.git",
-      "web" : "https://github.com/akalinux/xml-sig-oo"
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/akalinux/xml-sig-oo/issues"
+      },
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/akalinux/xml-sig-oo.git",
+         "web" : "https://github.com/akalinux/xml-sig-oo"
+      }
    },
+   "version" : "0.012",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

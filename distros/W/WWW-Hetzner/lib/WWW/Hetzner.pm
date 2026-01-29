@@ -1,5 +1,4 @@
 package WWW::Hetzner;
-our $AUTHORITY = 'cpan:GETTY';
 
 # ABSTRACT: Perl client for Hetzner APIs (Cloud, Storage, Robot)
 
@@ -8,7 +7,7 @@ use WWW::Hetzner::Cloud;
 use WWW::Hetzner::Robot;
 use namespace::clean;
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 
 has cloud => (
@@ -44,7 +43,7 @@ WWW::Hetzner - Perl client for Hetzner APIs (Cloud, Storage, Robot)
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -122,6 +121,22 @@ Returns a L<WWW::Hetzner::Robot> instance for the Robot API.
 
 =item * L<WWW::Hetzner::Cloud::API::SSHKeys> - SSH key management
 
+=item * L<WWW::Hetzner::Cloud::API::Volumes> - Volume management
+
+=item * L<WWW::Hetzner::Cloud::API::Networks> - Network management
+
+=item * L<WWW::Hetzner::Cloud::API::Firewalls> - Firewall management
+
+=item * L<WWW::Hetzner::Cloud::API::FloatingIPs> - Floating IP management
+
+=item * L<WWW::Hetzner::Cloud::API::PrimaryIPs> - Primary IP management
+
+=item * L<WWW::Hetzner::Cloud::API::LoadBalancers> - Load balancer management
+
+=item * L<WWW::Hetzner::Cloud::API::Certificates> - TLS certificate management
+
+=item * L<WWW::Hetzner::Cloud::API::PlacementGroups> - Placement group management
+
 =item * L<WWW::Hetzner::Cloud::API::Zones> - DNS zone management
 
 =item * L<WWW::Hetzner::Cloud::API::RRSets> - DNS record management
@@ -143,6 +158,22 @@ Returns a L<WWW::Hetzner::Robot> instance for the Robot API.
 =item * L<WWW::Hetzner::Cloud::Server> - Server object
 
 =item * L<WWW::Hetzner::Cloud::SSHKey> - SSH key object
+
+=item * L<WWW::Hetzner::Cloud::Volume> - Volume object
+
+=item * L<WWW::Hetzner::Cloud::Network> - Network object
+
+=item * L<WWW::Hetzner::Cloud::Firewall> - Firewall object
+
+=item * L<WWW::Hetzner::Cloud::FloatingIP> - Floating IP object
+
+=item * L<WWW::Hetzner::Cloud::PrimaryIP> - Primary IP object
+
+=item * L<WWW::Hetzner::Cloud::LoadBalancer> - Load balancer object
+
+=item * L<WWW::Hetzner::Cloud::Certificate> - Certificate object
+
+=item * L<WWW::Hetzner::Cloud::PlacementGroup> - Placement group object
 
 =item * L<WWW::Hetzner::Cloud::Zone> - DNS zone object
 
@@ -261,6 +292,215 @@ RRSet objects:
     $record->values
     $record->update
     $record->delete
+
+=head1 VOLUMES API
+
+    $cloud->volumes->list
+    $cloud->volumes->get($id)
+    $cloud->volumes->create(%params)
+    $cloud->volumes->update($id, %params)
+    $cloud->volumes->delete($id)
+    $cloud->volumes->attach($volume_id, $server_id)
+    $cloud->volumes->detach($volume_id)
+    $cloud->volumes->resize($volume_id, $size)
+
+Volume objects:
+
+    $volume->id
+    $volume->name
+    $volume->size
+    $volume->server
+    $volume->location
+    $volume->status
+    $volume->labels
+    $volume->update
+    $volume->delete
+    $volume->attach($server_id)
+    $volume->detach
+    $volume->resize($size)
+
+See L<WWW::Hetzner::Cloud::API::Volumes>, L<WWW::Hetzner::Cloud::Volume>
+
+=head1 NETWORKS API
+
+    $cloud->networks->list
+    $cloud->networks->get($id)
+    $cloud->networks->create(name => 'mynet', ip_range => '10.0.0.0/8')
+    $cloud->networks->update($id, %params)
+    $cloud->networks->delete($id)
+    $cloud->networks->add_subnet($network_id, %params)
+    $cloud->networks->add_route($network_id, %params)
+    $cloud->networks->delete_subnet($network_id, $subnet_id)
+    $cloud->networks->delete_route($network_id, $route_id)
+
+Network objects:
+
+    $network->id
+    $network->name
+    $network->ip_range
+    $network->subnets
+    $network->routes
+    $network->servers
+    $network->labels
+    $network->update
+    $network->delete
+    $network->add_subnet(%params)
+    $network->add_route(%params)
+
+See L<WWW::Hetzner::Cloud::API::Networks>, L<WWW::Hetzner::Cloud::Network>
+
+=head1 FIREWALLS API
+
+    $cloud->firewalls->list
+    $cloud->firewalls->get($id)
+    $cloud->firewalls->create(name => 'web-fw')
+    $cloud->firewalls->update($id, %params)
+    $cloud->firewalls->delete($id)
+    $cloud->firewalls->add_rule($firewall_id, %params)
+    $cloud->firewalls->remove_rule($firewall_id, %params)
+    $cloud->firewalls->apply_to($firewall_id, %params)
+    $cloud->firewalls->remove_from($firewall_id, %params)
+
+Firewall objects:
+
+    $firewall->id
+    $firewall->name
+    $firewall->rules
+    $firewall->applied_to
+    $firewall->labels
+    $firewall->update
+    $firewall->delete
+    $firewall->add_rule(%params)
+    $firewall->apply_to(%params)
+
+See L<WWW::Hetzner::Cloud::API::Firewalls>, L<WWW::Hetzner::Cloud::Firewall>
+
+=head1 FLOATING IPS API
+
+    $cloud->floating_ips->list
+    $cloud->floating_ips->get($id)
+    $cloud->floating_ips->create(%params)
+    $cloud->floating_ips->update($id, %params)
+    $cloud->floating_ips->delete($id)
+    $cloud->floating_ips->assign($ip_id, $server_id)
+    $cloud->floating_ips->unassign($ip_id)
+
+Floating IP objects:
+
+    $ip->id
+    $ip->name
+    $ip->ip
+    $ip->type
+    $ip->server
+    $ip->home_location
+    $ip->labels
+    $ip->update
+    $ip->delete
+    $ip->assign($server_id)
+    $ip->unassign
+
+See L<WWW::Hetzner::Cloud::API::FloatingIPs>, L<WWW::Hetzner::Cloud::FloatingIP>
+
+=head1 PRIMARY IPS API
+
+    $cloud->primary_ips->list
+    $cloud->primary_ips->get($id)
+    $cloud->primary_ips->create(%params)
+    $cloud->primary_ips->update($id, %params)
+    $cloud->primary_ips->delete($id)
+    $cloud->primary_ips->assign($ip_id, $assignee_id)
+    $cloud->primary_ips->unassign($ip_id)
+
+Primary IP objects:
+
+    $ip->id
+    $ip->name
+    $ip->ip
+    $ip->type
+    $ip->assignee_id
+    $ip->assignee_type
+    $ip->datacenter
+    $ip->labels
+    $ip->update
+    $ip->delete
+    $ip->assign($assignee_id)
+    $ip->unassign
+
+See L<WWW::Hetzner::Cloud::API::PrimaryIPs>, L<WWW::Hetzner::Cloud::PrimaryIP>
+
+=head1 LOAD BALANCERS API
+
+    $cloud->load_balancers->list
+    $cloud->load_balancers->get($id)
+    $cloud->load_balancers->create(%params)
+    $cloud->load_balancers->update($id, %params)
+    $cloud->load_balancers->delete($id)
+    $cloud->load_balancers->add_target($lb_id, %params)
+    $cloud->load_balancers->remove_target($lb_id, %params)
+    $cloud->load_balancers->add_service($lb_id, %params)
+    $cloud->load_balancers->remove_service($lb_id, $service)
+
+Load Balancer objects:
+
+    $lb->id
+    $lb->name
+    $lb->public_net
+    $lb->private_net
+    $lb->location
+    $lb->load_balancer_type
+    $lb->targets
+    $lb->services
+    $lb->labels
+    $lb->update
+    $lb->delete
+    $lb->add_target(%params)
+    $lb->add_service(%params)
+
+See L<WWW::Hetzner::Cloud::API::LoadBalancers>, L<WWW::Hetzner::Cloud::LoadBalancer>
+
+=head1 CERTIFICATES API
+
+    $cloud->certificates->list
+    $cloud->certificates->get($id)
+    $cloud->certificates->create(%params)
+    $cloud->certificates->update($id, %params)
+    $cloud->certificates->delete($id)
+
+Certificate objects:
+
+    $cert->id
+    $cert->name
+    $cert->type
+    $cert->certificate
+    $cert->domain_names
+    $cert->fingerprint
+    $cert->not_valid_before
+    $cert->not_valid_after
+    $cert->labels
+    $cert->update
+    $cert->delete
+
+See L<WWW::Hetzner::Cloud::API::Certificates>, L<WWW::Hetzner::Cloud::Certificate>
+
+=head1 PLACEMENT GROUPS API
+
+    $cloud->placement_groups->list
+    $cloud->placement_groups->get($id)
+    $cloud->placement_groups->create(name => 'pg', type => 'spread')
+    $cloud->placement_groups->update($id, %params)
+    $cloud->placement_groups->delete($id)
+
+Placement Group objects:
+
+    $pg->id
+    $pg->name
+    $pg->type
+    $pg->servers
+    $pg->labels
+    $pg->update
+    $pg->delete
+
+See L<WWW::Hetzner::Cloud::API::PlacementGroups>, L<WWW::Hetzner::Cloud::PlacementGroup>
 
 =head1 READ-ONLY APIs
 

@@ -1,8 +1,7 @@
 package WWW::Hetzner::Robot::CLI::Cmd::Wol;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Send Wake-on-LAN to a server
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use MooX::Cmd;
@@ -41,7 +40,7 @@ WWW::Hetzner::Robot::CLI::Cmd::Wol - Send Wake-on-LAN to a server
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 

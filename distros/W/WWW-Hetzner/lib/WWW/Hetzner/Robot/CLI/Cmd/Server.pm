@@ -1,8 +1,7 @@
 package WWW::Hetzner::Robot::CLI::Cmd::Server;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Robot server commands
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use MooX::Cmd;
@@ -56,7 +55,7 @@ WWW::Hetzner::Robot::CLI::Cmd::Server - Robot server commands
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 

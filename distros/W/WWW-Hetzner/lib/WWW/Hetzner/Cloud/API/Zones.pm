@@ -1,8 +1,7 @@
 package WWW::Hetzner::Cloud::API::Zones;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Cloud DNS Zones API
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -111,6 +110,7 @@ sub rrsets {
     );
 }
 
+
 1;
 
 __END__
@@ -125,7 +125,7 @@ WWW::Hetzner::Cloud::API::Zones - Hetzner Cloud DNS Zones API
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -218,6 +218,22 @@ Exports the zone as a standard zone file format.
     my $records = $rrsets->list;
 
 Returns a L<WWW::Hetzner::Cloud::API::RRSets> object for managing records in this zone.
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Cloud> - Main Cloud API client
+
+=item * L<WWW::Hetzner::Cloud::Zone> - Zone entity class
+
+=item * L<WWW::Hetzner::Cloud::API::RRSets> - RRSets (DNS records) API
+
+=item * L<WWW::Hetzner::CLI::Cmd::Zone> - Zone CLI commands
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

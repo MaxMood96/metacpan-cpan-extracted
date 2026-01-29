@@ -1,8 +1,7 @@
 package WWW::Hetzner::Cloud::FloatingIP;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Cloud Floating IP object
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -151,7 +150,8 @@ sub data {
 }
 
 
-1;
+
+1.
 
 __END__
 
@@ -165,7 +165,7 @@ WWW::Hetzner::Cloud::FloatingIP - Hetzner Cloud Floating IP object
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -292,6 +292,22 @@ Reloads floating IP data from the API.
     my $hashref = $fip->data;
 
 Returns all floating IP data as a hashref (for JSON serialization).
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Cloud::API::FloatingIPs> - Floating IPs API
+
+=item * L<WWW::Hetzner::Cloud> - Main Cloud API client
+
+=item * L<WWW::Hetzner::Cloud::Server> - Server entity
+
+=item * L<WWW::Hetzner::Cloud::Location> - Location entity
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

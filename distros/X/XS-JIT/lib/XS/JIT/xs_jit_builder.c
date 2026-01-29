@@ -634,19 +634,23 @@ void xs_jit_new_hash(pTHX_ XS_JIT_Builder* b, const char* func_name) {
     
     xs_jit_comment(aTHX_ b, "Create object hash");
     xs_jit_line(aTHX_ b, "HV* hv = newHV();");
+    xs_jit_line(aTHX_ b, "HV* args;");
+    xs_jit_line(aTHX_ b, "HE* entry;");
+    xs_jit_line(aTHX_ b, "STRLEN klen;");
+    xs_jit_line(aTHX_ b, "const char* key;");
+    xs_jit_line(aTHX_ b, "SV* val;");
+    xs_jit_line(aTHX_ b, "int i;");
     xs_jit_blank(aTHX_ b);
-    
+
     xs_jit_comment(aTHX_ b, "Parse args - accept hashref or flat list");
     xs_jit_if(aTHX_ b, "items > 1");
     xs_jit_if(aTHX_ b, "SvROK(ST(1)) && SvTYPE(SvRV(ST(1))) == SVt_PVHV");
     xs_jit_comment(aTHX_ b, "Hashref: Class->new(\\%args)");
-    xs_jit_line(aTHX_ b, "HV* args = (HV*)SvRV(ST(1));");
+    xs_jit_assign(aTHX_ b, "args", "(HV*)SvRV(ST(1))");
     xs_jit_line(aTHX_ b, "hv_iterinit(args);");
-    xs_jit_line(aTHX_ b, "HE* entry;");
     xs_jit_while(aTHX_ b, "(entry = hv_iternext(args)) != NULL");
-    xs_jit_line(aTHX_ b, "STRLEN klen;");
-    xs_jit_line(aTHX_ b, "const char* key = HePV(entry, klen);");
-    xs_jit_line(aTHX_ b, "SV* val = HeVAL(entry);");
+    xs_jit_assign(aTHX_ b, "key", "HePV(entry, klen)");
+    xs_jit_assign(aTHX_ b, "val", "HeVAL(entry)");
     xs_jit_line(aTHX_ b, "hv_store(hv, key, klen, newSVsv(val), 0);");
     xs_jit_endloop(aTHX_ b);
     xs_jit_else(aTHX_ b);
@@ -654,11 +658,9 @@ void xs_jit_new_hash(pTHX_ XS_JIT_Builder* b, const char* func_name) {
     xs_jit_if(aTHX_ b, "(items - 1) % 2 != 0");
     xs_jit_croak(aTHX_ b, "Odd number of arguments to new()");
     xs_jit_endif(aTHX_ b);
-    xs_jit_line(aTHX_ b, "int i;");
     xs_jit_for(aTHX_ b, "i = 1", "i < items", "i += 2");
-    xs_jit_line(aTHX_ b, "STRLEN klen;");
-    xs_jit_line(aTHX_ b, "const char* key = SvPV(ST(i), klen);");
-    xs_jit_line(aTHX_ b, "SV* val = ST(i + 1);");
+    xs_jit_assign(aTHX_ b, "key", "SvPV(ST(i), klen)");
+    xs_jit_assign(aTHX_ b, "val", "ST(i + 1)");
     xs_jit_line(aTHX_ b, "hv_store(hv, key, klen, newSVsv(val), 0);");
     xs_jit_endloop(aTHX_ b);
     xs_jit_endif(aTHX_ b);
@@ -719,19 +721,23 @@ void xs_jit_new_with_build(pTHX_ XS_JIT_Builder* b, const char* func_name) {
     xs_jit_comment(aTHX_ b, "Create object hash and args hash");
     xs_jit_line(aTHX_ b, "HV* hv = newHV();");
     xs_jit_line(aTHX_ b, "HV* args = newHV();");
+    xs_jit_line(aTHX_ b, "HV* src;");
+    xs_jit_line(aTHX_ b, "HE* entry;");
+    xs_jit_line(aTHX_ b, "STRLEN klen;");
+    xs_jit_line(aTHX_ b, "const char* key;");
+    xs_jit_line(aTHX_ b, "SV* val;");
+    xs_jit_line(aTHX_ b, "int i;");
     xs_jit_blank(aTHX_ b);
-    
+
     xs_jit_comment(aTHX_ b, "Parse args - accept hashref or flat list");
     xs_jit_if(aTHX_ b, "items > 1");
     xs_jit_if(aTHX_ b, "SvROK(ST(1)) && SvTYPE(SvRV(ST(1))) == SVt_PVHV");
     xs_jit_comment(aTHX_ b, "Hashref: Class->new(\\%args)");
-    xs_jit_line(aTHX_ b, "HV* src = (HV*)SvRV(ST(1));");
+    xs_jit_assign(aTHX_ b, "src", "(HV*)SvRV(ST(1))");
     xs_jit_line(aTHX_ b, "hv_iterinit(src);");
-    xs_jit_line(aTHX_ b, "HE* entry;");
     xs_jit_while(aTHX_ b, "(entry = hv_iternext(src)) != NULL");
-    xs_jit_line(aTHX_ b, "STRLEN klen;");
-    xs_jit_line(aTHX_ b, "const char* key = HePV(entry, klen);");
-    xs_jit_line(aTHX_ b, "SV* val = newSVsv(HeVAL(entry));");
+    xs_jit_assign(aTHX_ b, "key", "HePV(entry, klen)");
+    xs_jit_assign(aTHX_ b, "val", "newSVsv(HeVAL(entry))");
     xs_jit_line(aTHX_ b, "hv_store(hv, key, klen, val, 0);");
     xs_jit_line(aTHX_ b, "hv_store(args, key, klen, newSVsv(val), 0);");
     xs_jit_endloop(aTHX_ b);
@@ -740,11 +746,9 @@ void xs_jit_new_with_build(pTHX_ XS_JIT_Builder* b, const char* func_name) {
     xs_jit_if(aTHX_ b, "(items - 1) % 2 != 0");
     xs_jit_croak(aTHX_ b, "Odd number of arguments to new()");
     xs_jit_endif(aTHX_ b);
-    xs_jit_line(aTHX_ b, "int i;");
     xs_jit_for(aTHX_ b, "i = 1", "i < items", "i += 2");
-    xs_jit_line(aTHX_ b, "STRLEN klen;");
-    xs_jit_line(aTHX_ b, "const char* key = SvPV(ST(i), klen);");
-    xs_jit_line(aTHX_ b, "SV* val = newSVsv(ST(i + 1));");
+    xs_jit_assign(aTHX_ b, "key", "SvPV(ST(i), klen)");
+    xs_jit_assign(aTHX_ b, "val", "newSVsv(ST(i + 1))");
     xs_jit_line(aTHX_ b, "hv_store(hv, key, klen, val, 0);");
     xs_jit_line(aTHX_ b, "hv_store(args, key, klen, newSVsv(val), 0);");
     xs_jit_endloop(aTHX_ b);
@@ -801,19 +805,23 @@ void xs_jit_new_with_required(pTHX_ XS_JIT_Builder* b, const char* func_name,
     
     xs_jit_comment(aTHX_ b, "Create object hash");
     xs_jit_line(aTHX_ b, "HV* hv = newHV();");
+    xs_jit_line(aTHX_ b, "HV* src;");
+    xs_jit_line(aTHX_ b, "HE* entry;");
+    xs_jit_line(aTHX_ b, "STRLEN klen;");
+    xs_jit_line(aTHX_ b, "const char* key;");
+    xs_jit_line(aTHX_ b, "SV* val;");
+    xs_jit_line(aTHX_ b, "int i;");
     xs_jit_blank(aTHX_ b);
-    
+
     xs_jit_comment(aTHX_ b, "Parse args - accept hashref or flat list");
     xs_jit_if(aTHX_ b, "items > 1");
     xs_jit_if(aTHX_ b, "SvROK(ST(1)) && SvTYPE(SvRV(ST(1))) == SVt_PVHV");
     xs_jit_comment(aTHX_ b, "Hashref: Class->new(\\%args)");
-    xs_jit_line(aTHX_ b, "HV* src = (HV*)SvRV(ST(1));");
+    xs_jit_assign(aTHX_ b, "src", "(HV*)SvRV(ST(1))");
     xs_jit_line(aTHX_ b, "hv_iterinit(src);");
-    xs_jit_line(aTHX_ b, "HE* entry;");
     xs_jit_while(aTHX_ b, "(entry = hv_iternext(src)) != NULL");
-    xs_jit_line(aTHX_ b, "STRLEN klen;");
-    xs_jit_line(aTHX_ b, "const char* key = HePV(entry, klen);");
-    xs_jit_line(aTHX_ b, "SV* val = newSVsv(HeVAL(entry));");
+    xs_jit_assign(aTHX_ b, "key", "HePV(entry, klen)");
+    xs_jit_assign(aTHX_ b, "val", "newSVsv(HeVAL(entry))");
     xs_jit_line(aTHX_ b, "hv_store(hv, key, klen, val, 0);");
     xs_jit_endloop(aTHX_ b);
     xs_jit_else(aTHX_ b);
@@ -821,17 +829,15 @@ void xs_jit_new_with_required(pTHX_ XS_JIT_Builder* b, const char* func_name,
     xs_jit_if(aTHX_ b, "(items - 1) % 2 != 0");
     xs_jit_croak(aTHX_ b, "Odd number of arguments to new()");
     xs_jit_endif(aTHX_ b);
-    xs_jit_line(aTHX_ b, "int i;");
     xs_jit_for(aTHX_ b, "i = 1", "i < items", "i += 2");
-    xs_jit_line(aTHX_ b, "STRLEN klen;");
-    xs_jit_line(aTHX_ b, "const char* key = SvPV(ST(i), klen);");
-    xs_jit_line(aTHX_ b, "SV* val = newSVsv(ST(i + 1));");
+    xs_jit_assign(aTHX_ b, "key", "SvPV(ST(i), klen)");
+    xs_jit_assign(aTHX_ b, "val", "newSVsv(ST(i + 1))");
     xs_jit_line(aTHX_ b, "hv_store(hv, key, klen, val, 0);");
     xs_jit_endloop(aTHX_ b);
     xs_jit_endif(aTHX_ b);
     xs_jit_endif(aTHX_ b);
     xs_jit_blank(aTHX_ b);
-    
+
     /* Validate required attributes */
     if (num_required > 0) {
         xs_jit_comment(aTHX_ b, "Validate required attributes");
@@ -958,9 +964,11 @@ void xs_jit_clone_hash(pTHX_ XS_JIT_Builder* b, const char* func_name) {
     xs_jit_line(aTHX_ b, "HV* dst = newHV();");
     xs_jit_line(aTHX_ b, "hv_iterinit(src);");
     xs_jit_line(aTHX_ b, "HE* entry;");
+    xs_jit_line(aTHX_ b, "SV* key_sv;");
+    xs_jit_line(aTHX_ b, "SV* val;");
     xs_jit_while(aTHX_ b, "(entry = hv_iternext(src)) != NULL");
-    xs_jit_line(aTHX_ b, "SV* key_sv = hv_iterkeysv(entry);");
-    xs_jit_line(aTHX_ b, "SV* val = hv_iterval(src, entry);");
+    xs_jit_assign(aTHX_ b, "key_sv", "hv_iterkeysv(entry)");
+    xs_jit_assign(aTHX_ b, "val", "hv_iterval(src, entry)");
     xs_jit_line(aTHX_ b, "hv_store_ent(dst, key_sv, newSVsv(val), 0);");
     xs_jit_endloop(aTHX_ b);
     xs_jit_blank(aTHX_ b);
@@ -1095,24 +1103,25 @@ void xs_jit_new_complete(pTHX_ XS_JIT_Builder* b, const char* func_name,
     xs_jit_blank(aTHX_ b);
     
     xs_jit_line(aTHX_ b, "HV* hv = newHV();");
-    xs_jit_blank(aTHX_ b);
-    
-    xs_jit_comment(aTHX_ b, "Parse args - accept hashref or flat list");
     xs_jit_line(aTHX_ b, "HV* args = NULL;");
+    xs_jit_line(aTHX_ b, "STRLEN klen;");
+    xs_jit_line(aTHX_ b, "const char* key;");
+    xs_jit_line(aTHX_ b, "int i;");
+    xs_jit_blank(aTHX_ b);
+
+    xs_jit_comment(aTHX_ b, "Parse args - accept hashref or flat list");
     xs_jit_if(aTHX_ b, "items > 1");
     xs_jit_if(aTHX_ b, "SvROK(ST(1)) && SvTYPE(SvRV(ST(1))) == SVt_PVHV");
     xs_jit_comment(aTHX_ b, "Hashref: Class->new(\\%args)");
-    xs_jit_line(aTHX_ b, "args = (HV*)SvRV(ST(1));");
+    xs_jit_assign(aTHX_ b, "args", "(HV*)SvRV(ST(1))");
     xs_jit_else(aTHX_ b);
     xs_jit_comment(aTHX_ b, "Flat list: Class->new(key => val, ...)");
     xs_jit_if(aTHX_ b, "(items - 1) % 2 != 0");
     xs_jit_croak(aTHX_ b, "Odd number of arguments to new()");
     xs_jit_endif(aTHX_ b);
-    xs_jit_line(aTHX_ b, "args = newHV();");
-    xs_jit_line(aTHX_ b, "int i;");
+    xs_jit_assign(aTHX_ b, "args", "newHV()");
     xs_jit_for(aTHX_ b, "i = 1", "i < items", "i += 2");
-    xs_jit_line(aTHX_ b, "STRLEN klen;");
-    xs_jit_line(aTHX_ b, "const char* key = SvPV(ST(i), klen);");
+    xs_jit_assign(aTHX_ b, "key", "SvPV(ST(i), klen)");
     xs_jit_line(aTHX_ b, "hv_store(args, key, klen, newSVsv(ST(i + 1)), 0);");
     xs_jit_endloop(aTHX_ b);
     xs_jit_endif(aTHX_ b);
@@ -2525,9 +2534,8 @@ void xs_jit_av_slot_write(pTHX_ XS_JIT_Builder* b, const char* slots_var,
 /* Static buffer for type check expressions (non-reentrant but sufficient for code gen) */
 static char xs_jit_type_check_buf[256];
 
-const char* xs_jit_type_check_expr(pTHX_ XS_JIT_TypeCheck type, 
+const char* xs_jit_type_check_expr(pTHX_ XS_JIT_TypeCheck type,
                                     const char* sv, const char* classname) {
-    PERL_UNUSED_ARG(my_perl);
     switch (type) {
         case XS_JIT_TYPE_ANY:
             return "1";
@@ -2904,7 +2912,9 @@ void xs_jit_attr_keys(pTHX_ XS_JIT_Builder* b, const char* func_name,
     xs_jit_endif(aTHX_ b);
     
     xs_jit_line(aTHX_ b, "HV* ahv = (HV*)SvRV(*href);");
+    xs_jit_line(aTHX_ b, "I32 key_count = HvUSEDKEYS(ahv);");
     xs_jit_line(aTHX_ b, "I32 count = 0;");
+    xs_jit_line(aTHX_ b, "EXTEND(SP, key_count);");  /* Fix: extend stack before writing */
     xs_jit_line(aTHX_ b, "hv_iterinit(ahv);");
     xs_jit_line(aTHX_ b, "HE* entry;");
     xs_jit_line(aTHX_ b, "while ((entry = hv_iternext(ahv))) {");
@@ -2914,7 +2924,7 @@ void xs_jit_attr_keys(pTHX_ XS_JIT_Builder* b, const char* func_name,
     b->indent--;
     xs_jit_line(aTHX_ b, "}");
     xs_jit_line(aTHX_ b, "XSRETURN(count);");
-    
+
     xs_jit_xs_end(aTHX_ b);
 }
 
@@ -2923,14 +2933,16 @@ void xs_jit_attr_values(pTHX_ XS_JIT_Builder* b, const char* func_name,
     xs_jit_xs_function(aTHX_ b, func_name);
     xs_jit_xs_preamble(aTHX_ b);
     xs_jit_get_self_hv(aTHX_ b);
-    
+
     xs_jit_hv_fetch(aTHX_ b, "hv", attr_name, attr_len, "href");
     xs_jit_if(aTHX_ b, "!href || !SvROK(*href) || SvTYPE(SvRV(*href)) != SVt_PVHV");
     xs_jit_xs_return(aTHX_ b, 0);
     xs_jit_endif(aTHX_ b);
-    
+
     xs_jit_line(aTHX_ b, "HV* ahv = (HV*)SvRV(*href);");
+    xs_jit_line(aTHX_ b, "I32 key_count = HvUSEDKEYS(ahv);");
     xs_jit_line(aTHX_ b, "I32 count = 0;");
+    xs_jit_line(aTHX_ b, "EXTEND(SP, key_count);");  /* Fix: extend stack before writing */
     xs_jit_line(aTHX_ b, "hv_iterinit(ahv);");
     xs_jit_line(aTHX_ b, "HE* entry;");
     xs_jit_line(aTHX_ b, "while ((entry = hv_iternext(ahv))) {");
@@ -2940,7 +2952,7 @@ void xs_jit_attr_values(pTHX_ XS_JIT_Builder* b, const char* func_name,
     b->indent--;
     xs_jit_line(aTHX_ b, "}");
     xs_jit_line(aTHX_ b, "XSRETURN(count);");
-    
+
     xs_jit_xs_end(aTHX_ b);
 }
 
@@ -4185,16 +4197,19 @@ static void xs_jit_role_cloneable(pTHX_ XS_JIT_Builder* b, XS_JIT_RoleOpts* opts
     xs_jit_line(aTHX_ b, "HE* entry;");
     xs_jit_line(aTHX_ b, "SV* clone_ref;");
     xs_jit_line(aTHX_ b, "const char* classname;");
+    xs_jit_line(aTHX_ b, "SV* key_sv;");
+    xs_jit_line(aTHX_ b, "SV* val;");
+    xs_jit_line(aTHX_ b, "STRLEN key_len;");
+    xs_jit_line(aTHX_ b, "const char* key;");
     xs_jit_check_items(aTHX_ b, 1, 1, "$self");
     xs_jit_blank(aTHX_ b);
     xs_jit_comment(aTHX_ b, "Create new hash and copy all keys");
     xs_jit_assign(aTHX_ b, "clone_hv", "newHV()");
     xs_jit_line(aTHX_ b, "hv_iterinit(hv);");
     xs_jit_while(aTHX_ b, "(entry = hv_iternext(hv)) != NULL");
-    xs_jit_line(aTHX_ b, "SV* key_sv = hv_iterkeysv(entry);");
-    xs_jit_line(aTHX_ b, "SV* val = hv_iterval(hv, entry);");
-    xs_jit_line(aTHX_ b, "STRLEN key_len;");
-    xs_jit_line(aTHX_ b, "const char* key = SvPV(key_sv, key_len);");
+    xs_jit_assign(aTHX_ b, "key_sv", "hv_iterkeysv(entry)");
+    xs_jit_assign(aTHX_ b, "val", "hv_iterval(hv, entry)");
+    xs_jit_assign(aTHX_ b, "key", "SvPV(key_sv, key_len)");
     xs_jit_comment(aTHX_ b, "Use newSVsv to create a true copy of the value");
     xs_jit_line(aTHX_ b, "(void)hv_store(clone_hv, key, key_len, newSVsv(val), 0);");
     xs_jit_endloop(aTHX_ b);
@@ -4219,16 +4234,19 @@ static void xs_jit_role_serializable(pTHX_ XS_JIT_Builder* b, XS_JIT_RoleOpts* o
     xs_jit_comment(aTHX_ b, "Declare all variables at top for C89");
     xs_jit_declare_hv(aTHX_ b, "copy", NULL);
     xs_jit_line(aTHX_ b, "HE* entry;");
+    xs_jit_line(aTHX_ b, "SV* key_sv;");
+    xs_jit_line(aTHX_ b, "SV* val;");
+    xs_jit_line(aTHX_ b, "STRLEN key_len;");
+    xs_jit_line(aTHX_ b, "const char* key;");
     xs_jit_check_items(aTHX_ b, 1, 1, "$self");
     xs_jit_blank(aTHX_ b);
     xs_jit_comment(aTHX_ b, "Create shallow copy of hash");
     xs_jit_assign(aTHX_ b, "copy", "newHV()");
     xs_jit_line(aTHX_ b, "hv_iterinit(hv);");
     xs_jit_while(aTHX_ b, "(entry = hv_iternext(hv)) != NULL");
-    xs_jit_line(aTHX_ b, "SV* key_sv = hv_iterkeysv(entry);");
-    xs_jit_line(aTHX_ b, "SV* val = hv_iterval(hv, entry);");
-    xs_jit_line(aTHX_ b, "STRLEN key_len;");
-    xs_jit_line(aTHX_ b, "const char* key = SvPV(key_sv, key_len);");
+    xs_jit_assign(aTHX_ b, "key_sv", "hv_iterkeysv(entry)");
+    xs_jit_assign(aTHX_ b, "val", "hv_iterval(hv, entry)");
+    xs_jit_assign(aTHX_ b, "key", "SvPV(key_sv, key_len)");
     xs_jit_comment(aTHX_ b, "Skip private attributes (starting with _)");
     xs_jit_if(aTHX_ b, "key_len > 0 && key[0] == '_'");
     xs_jit_line(aTHX_ b, "continue;");
@@ -4247,16 +4265,19 @@ static void xs_jit_role_serializable(pTHX_ XS_JIT_Builder* b, XS_JIT_RoleOpts* o
     xs_jit_comment(aTHX_ b, "Declare all variables at top for C89");
     xs_jit_declare_hv(aTHX_ b, "copy", NULL);
     xs_jit_line(aTHX_ b, "HE* entry;");
+    xs_jit_line(aTHX_ b, "SV* key_sv;");
+    xs_jit_line(aTHX_ b, "SV* val;");
+    xs_jit_line(aTHX_ b, "STRLEN key_len;");
+    xs_jit_line(aTHX_ b, "const char* key;");
     xs_jit_check_items(aTHX_ b, 1, 1, "$self");
     xs_jit_blank(aTHX_ b);
     xs_jit_comment(aTHX_ b, "Create shallow copy of hash (all keys)");
     xs_jit_assign(aTHX_ b, "copy", "newHV()");
     xs_jit_line(aTHX_ b, "hv_iterinit(hv);");
     xs_jit_while(aTHX_ b, "(entry = hv_iternext(hv)) != NULL");
-    xs_jit_line(aTHX_ b, "SV* key_sv = hv_iterkeysv(entry);");
-    xs_jit_line(aTHX_ b, "SV* val = hv_iterval(hv, entry);");
-    xs_jit_line(aTHX_ b, "STRLEN key_len;");
-    xs_jit_line(aTHX_ b, "const char* key = SvPV(key_sv, key_len);");
+    xs_jit_assign(aTHX_ b, "key_sv", "hv_iterkeysv(entry)");
+    xs_jit_assign(aTHX_ b, "val", "hv_iterval(hv, entry)");
+    xs_jit_assign(aTHX_ b, "key", "SvPV(key_sv, key_len)");
     xs_jit_line(aTHX_ b, "(void)hv_store(copy, key, key_len, SvREFCNT_inc(val), 0);");
     xs_jit_endloop(aTHX_ b);
     xs_jit_blank(aTHX_ b);
@@ -4345,8 +4366,10 @@ static void xs_jit_role_observable(pTHX_ XS_JIT_Builder* b, XS_JIT_RoleOpts* opt
     xs_jit_comment(aTHX_ b, "Declare all variables at top for C89");
     xs_jit_declare_av(aTHX_ b, "observers", NULL);
     xs_jit_line(aTHX_ b, "SSize_t len;");
+    xs_jit_line(aTHX_ b, "SSize_t args_len;");
     xs_jit_line(aTHX_ b, "IV i, j;");
     xs_jit_line(aTHX_ b, "AV* args_av;");
+    xs_jit_line(aTHX_ b, "SV** arg_svp;");
     xs_jit_line(aTHX_ b, "PERL_UNUSED_VAR(items);");
     xs_jit_blank(aTHX_ b);
     xs_jit_hv_fetch(aTHX_ b, "hv", observers_attr, observers_attr_len, "obs_svp");
@@ -4374,7 +4397,6 @@ static void xs_jit_role_observable(pTHX_ XS_JIT_Builder* b, XS_JIT_RoleOpts* opt
     xs_jit_endif(aTHX_ b);
     xs_jit_blank(aTHX_ b);
     xs_jit_block_start(aTHX_ b);
-    xs_jit_line(aTHX_ b, "SSize_t args_len;");
     xs_jit_line(aTHX_ b, "ENTER;");
     xs_jit_line(aTHX_ b, "SAVETMPS;");
     xs_jit_line(aTHX_ b, "PUSHMARK(SP);");
@@ -4382,7 +4404,7 @@ static void xs_jit_role_observable(pTHX_ XS_JIT_Builder* b, XS_JIT_RoleOpts* opt
     xs_jit_if(aTHX_ b, "args_av");
     xs_jit_assign(aTHX_ b, "args_len", "av_len(args_av)");
     xs_jit_for(aTHX_ b, "j = 0", "j <= args_len", "j++");
-    xs_jit_line(aTHX_ b, "SV** arg_svp = av_fetch(args_av, j, 0);");
+    xs_jit_assign(aTHX_ b, "arg_svp", "av_fetch(args_av, j, 0)");
     xs_jit_if(aTHX_ b, "arg_svp && *arg_svp");
     xs_jit_line(aTHX_ b, "XPUSHs(*arg_svp);");
     xs_jit_endif(aTHX_ b);

@@ -1,5 +1,8 @@
 Revision history for WWW-Hetzner
 
+0.003     2026-01-28 05:56:39Z
+    - Add comprehensive POD documentation for all API modules
+
 0.002     2026-01-11 01:22:45Z
     - Refactor POD to use inline PodWeaver commands (=attr, =method)
     - Fix ABSTRACT/VERSION order for PodWeaver compatibility

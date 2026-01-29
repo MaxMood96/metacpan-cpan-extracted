@@ -1,8 +1,7 @@
 package WWW::Hetzner::CLI::Cmd::Firewall::Cmd::Describe;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Describe a firewall
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use MooX::Cmd;
@@ -81,7 +80,7 @@ WWW::Hetzner::CLI::Cmd::Firewall::Cmd::Describe - Describe a firewall
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SUPPORT
 

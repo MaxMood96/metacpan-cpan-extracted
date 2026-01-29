@@ -1,8 +1,7 @@
 package WWW::Hetzner::Cloud::Certificate;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Cloud Certificate object
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -106,7 +105,8 @@ sub data {
 }
 
 
-1;
+
+1.
 
 __END__
 
@@ -120,7 +120,7 @@ WWW::Hetzner::Cloud::Certificate - Hetzner Cloud Certificate object
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -218,6 +218,20 @@ Retries issuance for a managed certificate.
     my $hashref = $cert->data;
 
 Returns all certificate data as a hashref (for JSON serialization).
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Cloud::API::Certificates> - Certificates API
+
+=item * L<WWW::Hetzner::Cloud> - Main Cloud API client
+
+=item * L<WWW::Hetzner::Cloud::LoadBalancer> - Load balancer entity
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

@@ -1,5 +1,4 @@
 package WWW::Hetzner::Cloud;
-our $AUTHORITY = 'cpan:GETTY';
 
 # ABSTRACT: Perl client for Hetzner Cloud API
 
@@ -21,7 +20,7 @@ use WWW::Hetzner::Cloud::API::Certificates;
 use WWW::Hetzner::Cloud::API::PlacementGroups;
 use namespace::clean;
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 
 has token => (
@@ -161,7 +160,7 @@ WWW::Hetzner::Cloud - Perl client for Hetzner Cloud API
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 

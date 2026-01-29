@@ -1,8 +1,7 @@
 package WWW::Hetzner::Cloud::Server;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Cloud Server object
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -169,7 +168,8 @@ sub data {
 }
 
 
-1;
+
+1.
 
 __END__
 
@@ -183,7 +183,7 @@ WWW::Hetzner::Cloud::Server - Hetzner Cloud Server object
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -335,6 +335,24 @@ Reloads server data from the API.
     my $hashref = $server->data;
 
 Returns all server data as a hashref (for JSON serialization).
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Cloud::API::Servers> - Servers API
+
+=item * L<WWW::Hetzner::Cloud> - Main Cloud API client
+
+=item * L<WWW::Hetzner::Cloud::ServerType> - Server type entity
+
+=item * L<WWW::Hetzner::Cloud::Image> - Image entity
+
+=item * L<WWW::Hetzner::Cloud::Datacenter> - Datacenter entity
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

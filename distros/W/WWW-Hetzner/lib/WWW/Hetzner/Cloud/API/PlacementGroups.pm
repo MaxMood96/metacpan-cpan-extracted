@@ -1,8 +1,7 @@
 package WWW::Hetzner::Cloud::API::PlacementGroups;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Cloud Placement Groups API
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -85,6 +84,7 @@ sub delete {
     return $self->client->delete("/placement_groups/$id");
 }
 
+
 1;
 
 __END__
@@ -99,7 +99,7 @@ WWW::Hetzner::Cloud::API::PlacementGroups - Hetzner Cloud Placement Groups API
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -165,6 +165,20 @@ Updates placement group. Returns L<WWW::Hetzner::Cloud::PlacementGroup> object.
     $cloud->placement_groups->delete($id);
 
 Deletes placement group.
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Cloud> - Main Cloud API client
+
+=item * L<WWW::Hetzner::Cloud::PlacementGroup> - PlacementGroup entity class
+
+=item * L<WWW::Hetzner::CLI::Cmd::PlacementGroup> - PlacementGroup CLI commands
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

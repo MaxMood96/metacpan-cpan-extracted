@@ -1,13 +1,13 @@
 package WWW::Hetzner::CLI::Cmd::Server;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Server commands
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use MooX::Cmd;
 use MooX::Options usage_string => 'USAGE: hcloud.pl server <command> [options]';
 use JSON::MaybeXS qw(encode_json);
+
 
 sub execute {
     my ($self, $args, $chain) = @_;
@@ -68,7 +68,8 @@ sub _list {
     }
 }
 
-1;
+
+1.
 
 __END__
 
@@ -82,7 +83,63 @@ WWW::Hetzner::CLI::Cmd::Server - Server commands
 
 =head1 VERSION
 
-version 0.002
+version 0.003
+
+=head1 SYNOPSIS
+
+    hcloud.pl server list
+    hcloud.pl server list --selector env=prod
+    hcloud.pl server create --name test --type cx22 --image debian-12
+    hcloud.pl server delete <id>
+    hcloud.pl server describe <id>
+    hcloud.pl server poweron <id>
+    hcloud.pl server poweroff <id>
+
+=head1 DESCRIPTION
+
+Manage Hetzner Cloud servers via CLI.
+
+=head1 SUBCOMMANDS
+
+=over 4
+
+=item * L<list|WWW::Hetzner::CLI::Cmd::Server::Cmd::List> - List servers
+
+=item * L<create|WWW::Hetzner::CLI::Cmd::Server::Cmd::Create> - Create a server
+
+=item * L<delete|WWW::Hetzner::CLI::Cmd::Server::Cmd::Delete> - Delete a server
+
+=item * L<describe|WWW::Hetzner::CLI::Cmd::Server::Cmd::Describe> - Show server details
+
+=item * L<poweron|WWW::Hetzner::CLI::Cmd::Server::Cmd::Poweron> - Power on server
+
+=item * L<poweroff|WWW::Hetzner::CLI::Cmd::Server::Cmd::Poweroff> - Power off server
+
+=item * L<reboot|WWW::Hetzner::CLI::Cmd::Server::Cmd::Reboot> - Reboot server
+
+=item * L<shutdown|WWW::Hetzner::CLI::Cmd::Server::Cmd::Shutdown> - Shutdown server
+
+=item * L<reset|WWW::Hetzner::CLI::Cmd::Server::Cmd::Reset> - Reset server
+
+=item * L<rebuild|WWW::Hetzner::CLI::Cmd::Server::Cmd::Rebuild> - Rebuild server
+
+=item * L<rescue|WWW::Hetzner::CLI::Cmd::Server::Cmd::Rescue> - Enable rescue mode
+
+=back
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::CLI> - Main Cloud CLI
+
+=item * L<WWW::Hetzner::Cloud::API::Servers> - Servers API
+
+=item * L<WWW::Hetzner::Cloud::Server> - Server entity
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

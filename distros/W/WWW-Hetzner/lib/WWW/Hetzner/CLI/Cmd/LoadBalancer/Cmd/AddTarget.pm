@@ -1,8 +1,7 @@
 package WWW::Hetzner::CLI::Cmd::LoadBalancer::Cmd::AddTarget;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Add a target to a load balancer
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use MooX::Cmd;
@@ -44,7 +43,7 @@ WWW::Hetzner::CLI::Cmd::LoadBalancer::Cmd::AddTarget - Add a target to a load ba
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SUPPORT
 

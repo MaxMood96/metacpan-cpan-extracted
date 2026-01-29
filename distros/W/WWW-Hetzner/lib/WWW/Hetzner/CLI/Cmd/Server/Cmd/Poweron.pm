@@ -1,8 +1,7 @@
 package WWW::Hetzner::CLI::Cmd::Server::Cmd::Poweron;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Power on a server
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use MooX::Cmd;
@@ -34,7 +33,7 @@ WWW::Hetzner::CLI::Cmd::Server::Cmd::Poweron - Power on a server
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SUPPORT
 

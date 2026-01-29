@@ -3,7 +3,7 @@ use warnings;
 
 
 package XDR::Gen;
-$XDR::Gen::VERSION = '1.1.0';
+$XDR::Gen::VERSION = '1.1.1';
 use Carp qw(croak confess);
 use IO::Handle;
 use List::Util qw(max);
@@ -619,6 +619,25 @@ sub _serializer_named {
     SERIAL
 }
 
+sub _postproc_deserializer_array_char {
+    my ($ast_node, $value) = @_;
+    my $decl_type = $ast_node->{type};
+    my $pack_char = $decl_type->{unsigned} ? 'C' : 'c';
+
+    return <<~SERIAL;
+
+    $value = pack('$pack_char*', \@{ $value });
+    SERIAL
+}
+
+sub _postproc_deserializer_array {
+    my ($ast_node, $value) = @_;
+    if ($ast_node->{type}->{name} eq 'char') {
+        return _postproc_deserializer_array_char( @_ );
+    }
+    return '';
+}
+
 sub _deserializer_array {
     my ($ast_node, $value, %args) = @_;
 
@@ -632,7 +651,8 @@ sub _deserializer_array {
     my $len_var = _var( '$len' );
     my $iter_var = _var( '$i' );
     my $c = _indent( _indent( _deserializer_type( $decl, $value . "->[$iter_var\]",
-                              %args ) ) );
+                                                  %args ) ) );
+    my $postproc = _indent( _postproc_deserializer_array( $ast_node, $value ) );
     if ($decl->{variable}) {
         my $max = _resolve_to_number( $ast_node->{max}->{content} // 4294967295 );
 
@@ -649,7 +669,7 @@ sub _deserializer_array {
             $value = [];
             for my $iter_var ( 0 .. ($len_var - 1) ) {
                 $c
-            }
+            }$postproc
         };
         SERIAL
     }
@@ -661,9 +681,28 @@ sub _deserializer_array {
         $value = [];
         for my $iter_var ( 0 .. ($count - 1) ) {
             $c
-        }
+        }$postproc
         SERIAL
     }
+}
+
+sub _preproc_serializer_array_char {
+    my ($ast_node, $value) = @_;
+    my $decl_type = $ast_node->{type};
+    my $pack_char = $decl_type->{unsigned} ? 'C' : 'c';
+
+    return <<~SERIAL;
+
+    local $value = [ unpack('$pack_char*', $value) ];
+    SERIAL
+}
+
+sub _preproc_serializer_array {
+    my ($ast_node, $value) = @_;
+    if ($ast_node->{type}->{name} eq 'char') {
+        return _preproc_serializer_array_char( @_ );
+    }
+    return '';
 }
 
 sub _serializer_array {
@@ -680,6 +719,7 @@ sub _serializer_array {
     my $iter_var = _var( '$i' );
     my $c = _indent( _indent( _serializer_type( $decl, $value . "->[$iter_var\]",
                                                 %args ) ) );
+    my $preproc = _indent( _preproc_serializer_array( $ast_node, $value ) );
     if ($decl->{variable}) {
         my $max = _resolve_to_number( $ast_node->{max}->{content} // 4294967295 );
 
@@ -687,7 +727,7 @@ sub _serializer_array {
         # my (\$class, \$value, \$index, \$output) = \@_;
         croak "Missing required input 'array' value"
             unless defined $value;
-        do {
+        do {$preproc
             my $len_var = scalar \@{ $value };
             die "Array too long (max: $max): $len_var"
                 unless ($len_var <= $max);
@@ -706,7 +746,7 @@ sub _serializer_array {
         # my (\$class, \$value, \$index, \$output) = \@_;
         croak "Missing required input 'array' value"
             unless defined $value;
-        do {
+        do {$preproc
             my $len_var = scalar \@{ $value };
             die "Array length mismatch (defined: $count): $len_var"
                 if not $len_var  == $count;
@@ -1269,7 +1309,7 @@ XDR::Gen - Generator for XDR (de)serializers
 
 =head1 VERSION
 
-version 1.1.0
+version 1.1.1
 
 =head1 SYNOPSIS
 

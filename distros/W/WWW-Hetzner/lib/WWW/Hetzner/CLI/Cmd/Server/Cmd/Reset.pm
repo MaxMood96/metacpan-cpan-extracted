@@ -1,8 +1,7 @@
 package WWW::Hetzner::CLI::Cmd::Server::Cmd::Reset;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Reset a server (hard)
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use MooX::Cmd;
@@ -34,7 +33,7 @@ WWW::Hetzner::CLI::Cmd::Server::Cmd::Reset - Reset a server (hard)
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SUPPORT
 

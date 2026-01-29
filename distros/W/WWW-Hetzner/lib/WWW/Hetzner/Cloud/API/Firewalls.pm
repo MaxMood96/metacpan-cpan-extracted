@@ -1,8 +1,7 @@
 package WWW::Hetzner::Cloud::API::Firewalls;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Cloud Firewalls API
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -116,6 +115,7 @@ sub remove_from_resources {
     });
 }
 
+
 1;
 
 __END__
@@ -130,7 +130,7 @@ WWW::Hetzner::Cloud::API::Firewalls - Hetzner Cloud Firewalls API
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -228,6 +228,20 @@ Apply firewall to resources.
     );
 
 Remove firewall from resources.
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Cloud> - Main Cloud API client
+
+=item * L<WWW::Hetzner::Cloud::Firewall> - Firewall entity class
+
+=item * L<WWW::Hetzner::CLI::Cmd::Firewall> - Firewall CLI commands
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

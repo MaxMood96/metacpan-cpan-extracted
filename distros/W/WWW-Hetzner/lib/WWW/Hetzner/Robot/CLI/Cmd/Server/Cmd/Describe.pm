@@ -1,8 +1,7 @@
 package WWW::Hetzner::Robot::CLI::Cmd::Server::Cmd::Describe;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Describe a dedicated server
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use MooX::Cmd;
@@ -59,7 +58,7 @@ WWW::Hetzner::Robot::CLI::Cmd::Server::Cmd::Describe - Describe a dedicated serv
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 

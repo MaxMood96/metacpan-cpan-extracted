@@ -1,8 +1,7 @@
 package WWW::Hetzner::Cloud::API::RRSets;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Cloud DNS RRSets (Records) API
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -175,6 +174,7 @@ sub add_txt {
     );
 }
 
+
 1;
 
 __END__
@@ -189,7 +189,7 @@ WWW::Hetzner::Cloud::API::RRSets - Hetzner Cloud DNS RRSets (Records) API
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -311,6 +311,22 @@ Returns a L<WWW::Hetzner::Cloud::RRSet> object.
     my $record = $rrsets->add_txt('@', 'v=spf1 include:_spf.example.com ~all');
 
 Creates a TXT record. Returns a L<WWW::Hetzner::Cloud::RRSet> object.
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Cloud> - Main Cloud API client
+
+=item * L<WWW::Hetzner::Cloud::RRSet> - RRSet entity class
+
+=item * L<WWW::Hetzner::Cloud::API::Zones> - Zones API
+
+=item * L<WWW::Hetzner::CLI::Cmd::Record> - Record CLI commands
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

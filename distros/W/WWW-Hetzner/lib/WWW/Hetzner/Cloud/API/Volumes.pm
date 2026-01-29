@@ -1,8 +1,7 @@
 package WWW::Hetzner::Cloud::API::Volumes;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Cloud Volumes API
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -106,6 +105,7 @@ sub resize {
     return $self->client->post("/volumes/$id/actions/resize", { size => $size });
 }
 
+
 1;
 
 __END__
@@ -120,7 +120,7 @@ WWW::Hetzner::Cloud::API::Volumes - Hetzner Cloud Volumes API
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -201,6 +201,20 @@ Detaches volume.
     $cloud->volumes->resize($volume_id, $size);
 
 Resizes volume to the specified size in GB.
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Cloud> - Main Cloud API client
+
+=item * L<WWW::Hetzner::Cloud::Volume> - Volume entity class
+
+=item * L<WWW::Hetzner::CLI::Cmd::Volume> - Volume CLI commands
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

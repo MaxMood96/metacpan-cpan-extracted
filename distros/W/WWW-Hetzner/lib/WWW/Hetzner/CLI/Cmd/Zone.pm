@@ -1,8 +1,7 @@
 package WWW::Hetzner::CLI::Cmd::Zone;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: DNS Zone commands
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use MooX::Cmd;
@@ -82,7 +81,7 @@ WWW::Hetzner::CLI::Cmd::Zone - DNS Zone commands
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 

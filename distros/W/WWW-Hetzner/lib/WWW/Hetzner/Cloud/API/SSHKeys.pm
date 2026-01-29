@@ -1,8 +1,7 @@
 package WWW::Hetzner::Cloud::API::SSHKeys;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Cloud SSH Keys API
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -121,6 +120,7 @@ sub ensure {
     return $self->create(name => $name, public_key => $public_key);
 }
 
+
 1;
 
 __END__
@@ -135,7 +135,7 @@ WWW::Hetzner::Cloud::API::SSHKeys - Hetzner Cloud SSH Keys API
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -214,6 +214,20 @@ Deletes an SSH key.
 Ensures an SSH key exists with the given name and public key content.
 If a key with that name exists but has different content, it will be
 deleted and recreated. Returns a L<WWW::Hetzner::Cloud::SSHKey> object.
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Cloud> - Main Cloud API client
+
+=item * L<WWW::Hetzner::Cloud::SSHKey> - SSHKey entity class
+
+=item * L<WWW::Hetzner::CLI::Cmd::Sshkey> - SSH Key CLI commands
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

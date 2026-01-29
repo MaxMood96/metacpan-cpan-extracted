@@ -1,8 +1,7 @@
 package WWW::Hetzner::Robot::IP;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Robot IP entity
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use namespace::clean;
@@ -51,7 +50,8 @@ sub update {
 }
 
 
-1;
+
+1.
 
 __END__
 
@@ -65,7 +65,7 @@ WWW::Hetzner::Robot::IP - Hetzner Robot IP entity
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head2 ip
 
@@ -107,6 +107,20 @@ Monthly traffic limit.
 
 Updates the IP configuration via the API with current attribute values for
 traffic_warnings, traffic_hourly, traffic_daily, and traffic_monthly.
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Robot::API::IPs> - IPs API
+
+=item * L<WWW::Hetzner::Robot> - Main Robot API client
+
+=item * L<WWW::Hetzner::Robot::Server> - Server entity
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

@@ -1,8 +1,7 @@
 package WWW::Hetzner::CLI::Cmd::Server::Cmd::Rebuild;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Rebuild a server with a new image
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use MooX::Cmd;
@@ -41,7 +40,7 @@ WWW::Hetzner::CLI::Cmd::Server::Cmd::Rebuild - Rebuild a server with a new image
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SUPPORT
 

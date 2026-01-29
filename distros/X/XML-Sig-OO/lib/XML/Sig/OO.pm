@@ -1,6 +1,6 @@
 package XML::Sig::OO;
 
-our $VERSION="0.011";
+our $VERSION="0.012";
 
 BEGIN {
 use Crypt::OpenSSL::VerifyX509;

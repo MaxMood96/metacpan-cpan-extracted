@@ -1,8 +1,7 @@
 package WWW::Hetzner::CLI::Cmd::LoadBalancer::Cmd::Delete;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Delete a load balancer
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use MooX::Cmd;
@@ -34,7 +33,7 @@ WWW::Hetzner::CLI::Cmd::LoadBalancer::Cmd::Delete - Delete a load balancer
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SUPPORT
 

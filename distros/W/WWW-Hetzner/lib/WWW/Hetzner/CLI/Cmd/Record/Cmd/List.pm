@@ -1,8 +1,7 @@
 package WWW::Hetzner::CLI::Cmd::Record::Cmd::List;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: List DNS records
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use MooX::Cmd;
@@ -82,7 +81,7 @@ WWW::Hetzner::CLI::Cmd::Record::Cmd::List - List DNS records
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SUPPORT
 

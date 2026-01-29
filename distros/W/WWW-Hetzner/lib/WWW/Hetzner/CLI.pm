@@ -1,5 +1,4 @@
 package WWW::Hetzner::CLI;
-our $AUTHORITY = 'cpan:GETTY';
 
 # ABSTRACT: Hetzner Cloud CLI
 
@@ -8,7 +7,7 @@ use MooX::Cmd;
 use MooX::Options;
 use WWW::Hetzner::Cloud;
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 
 option token => (
@@ -95,7 +94,7 @@ WWW::Hetzner::CLI - Hetzner Cloud CLI
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -117,15 +116,15 @@ options, and output should match the original tool as closely as possible.
 
 =over 4
 
-=item * server - Manage cloud servers (list, create, delete, describe, poweron, poweroff, reboot, shutdown, reset, rebuild, rescue)
+=item * L<server|WWW::Hetzner::CLI::Cmd::Server> - Manage cloud servers
 
-=item * servertype - List server types
+=item * L<servertype|WWW::Hetzner::CLI::Cmd::Servertype> - List server types
 
-=item * image - List images
+=item * L<image|WWW::Hetzner::CLI::Cmd::Image> - List images
 
-=item * sshkey - Manage SSH keys (list, create, delete, describe)
+=item * L<sshkey|WWW::Hetzner::CLI::Cmd::Sshkey> - Manage SSH keys
 
-=item * placement-group - Manage placement groups (list, create, delete, describe)
+=item * L<placement-group|WWW::Hetzner::CLI::Cmd::PlacementGroup> - Manage placement groups
 
 =back
 
@@ -133,15 +132,15 @@ options, and output should match the original tool as closely as possible.
 
 =over 4
 
-=item * network - Manage private networks (list, create, delete, describe, add-subnet, add-route)
+=item * L<network|WWW::Hetzner::CLI::Cmd::Network> - Manage private networks
 
-=item * firewall - Manage firewalls (list, create, delete, describe, add-rule, apply-to, remove-from)
+=item * L<firewall|WWW::Hetzner::CLI::Cmd::Firewall> - Manage firewalls
 
-=item * floating-ip - Manage floating IPs (list, create, delete, describe, assign, unassign)
+=item * L<floating-ip|WWW::Hetzner::CLI::Cmd::FloatingIp> - Manage floating IPs
 
-=item * primary-ip - Manage primary IPs (list, create, delete, describe, assign, unassign)
+=item * L<primary-ip|WWW::Hetzner::CLI::Cmd::PrimaryIp> - Manage primary IPs
 
-=item * load-balancer - Manage load balancers (list, create, delete, describe, add-target, add-service)
+=item * L<load-balancer|WWW::Hetzner::CLI::Cmd::LoadBalancer> - Manage load balancers
 
 =back
 
@@ -149,7 +148,7 @@ options, and output should match the original tool as closely as possible.
 
 =over 4
 
-=item * volume - Manage volumes (list, create, delete, describe, attach, detach, resize)
+=item * L<volume|WWW::Hetzner::CLI::Cmd::Volume> - Manage volumes
 
 =back
 
@@ -157,9 +156,9 @@ options, and output should match the original tool as closely as possible.
 
 =over 4
 
-=item * zone - Manage DNS zones (list, create, delete, describe)
+=item * L<zone|WWW::Hetzner::CLI::Cmd::Zone> - Manage DNS zones
 
-=item * record - Manage DNS records (list, create, delete, describe)
+=item * L<record|WWW::Hetzner::CLI::Cmd::Record> - Manage DNS records
 
 =back
 
@@ -167,7 +166,7 @@ options, and output should match the original tool as closely as possible.
 
 =over 4
 
-=item * certificate - Manage TLS certificates (list, create, delete, describe)
+=item * L<certificate|WWW::Hetzner::CLI::Cmd::Certificate> - Manage TLS certificates
 
 =back
 
@@ -175,9 +174,9 @@ options, and output should match the original tool as closely as possible.
 
 =over 4
 
-=item * location - List locations
+=item * L<location|WWW::Hetzner::CLI::Cmd::Location> - List locations
 
-=item * datacenter - List datacenters
+=item * L<datacenter|WWW::Hetzner::CLI::Cmd::Datacenter> - List datacenters
 
 =back
 
@@ -200,7 +199,15 @@ Main entry point. Shows help when no subcommand is given.
 
 =head1 SEE ALSO
 
-L<WWW::Hetzner::Cloud>
+=over 4
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=item * L<WWW::Hetzner::Cloud> - Cloud API client
+
+=item * L<https://docs.hetzner.cloud/> - Official Hetzner Cloud API documentation
+
+=back
 
 =head1 SUPPORT
 

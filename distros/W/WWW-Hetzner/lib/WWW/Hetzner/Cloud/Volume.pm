@@ -1,8 +1,7 @@
 package WWW::Hetzner::Cloud::Volume;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Cloud Volume object
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -143,7 +142,8 @@ sub data {
 }
 
 
-1;
+
+1.
 
 __END__
 
@@ -157,7 +157,7 @@ WWW::Hetzner::Cloud::Volume - Hetzner Cloud Volume object
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -279,6 +279,18 @@ Reloads volume data from the API.
     my $hashref = $volume->data;
 
 Returns all volume data as a hashref (for JSON serialization).
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Cloud::API::Volumes> - Volumes API
+
+=item * L<WWW::Hetzner::Cloud> - Main Cloud API client
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

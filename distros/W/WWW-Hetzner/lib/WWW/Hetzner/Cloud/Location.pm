@@ -1,8 +1,7 @@
 package WWW::Hetzner::Cloud::Location;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Cloud Location object
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use namespace::clean;
@@ -46,7 +45,8 @@ sub data {
 }
 
 
-1;
+
+1.
 
 __END__
 
@@ -60,7 +60,7 @@ WWW::Hetzner::Cloud::Location - Hetzner Cloud Location object
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -107,6 +107,22 @@ Network zone, e.g. "eu-central".
     my $hashref = $loc->data;
 
 Returns all location data as a hashref (for JSON serialization).
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Cloud::API::Locations> - Locations API
+
+=item * L<WWW::Hetzner::Cloud> - Main Cloud API client
+
+=item * L<WWW::Hetzner::Cloud::Server> - Server entity
+
+=item * L<WWW::Hetzner::Cloud::Datacenter> - Datacenter entity
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

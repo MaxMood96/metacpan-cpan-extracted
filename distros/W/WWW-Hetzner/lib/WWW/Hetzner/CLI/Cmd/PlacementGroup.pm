@@ -1,8 +1,7 @@
 package WWW::Hetzner::CLI::Cmd::PlacementGroup;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Cloud Placement Group commands
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use MooX::Cmd;
@@ -32,7 +31,7 @@ WWW::Hetzner::CLI::Cmd::PlacementGroup - Hetzner Cloud Placement Group commands
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SUPPORT
 

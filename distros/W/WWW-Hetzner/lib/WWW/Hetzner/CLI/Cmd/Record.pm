@@ -1,8 +1,7 @@
 package WWW::Hetzner::CLI::Cmd::Record;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: DNS Record commands
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use MooX::Cmd;
@@ -83,7 +82,7 @@ WWW::Hetzner::CLI::Cmd::Record - DNS Record commands
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 

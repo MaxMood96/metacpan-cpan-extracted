@@ -1,8 +1,7 @@
 package WWW::Hetzner::CLI::Cmd::Sshkey;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: SSH key commands
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use MooX::Cmd;
@@ -52,7 +51,7 @@ WWW::Hetzner::CLI::Cmd::Sshkey - SSH key commands
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SUPPORT
 

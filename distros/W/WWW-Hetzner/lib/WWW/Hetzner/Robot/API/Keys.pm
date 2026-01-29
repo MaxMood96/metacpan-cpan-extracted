@@ -1,8 +1,7 @@
 package WWW::Hetzner::Robot::API::Keys;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Robot SSH Keys API
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -64,7 +63,8 @@ sub delete {
 }
 
 
-1;
+
+1.
 
 __END__
 
@@ -78,7 +78,7 @@ WWW::Hetzner::Robot::API::Keys - Hetzner Robot SSH Keys API
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -118,6 +118,20 @@ Creates key and returns L<WWW::Hetzner::Robot::Key> object.
 =head2 delete
 
     $robot->keys->delete($fingerprint);
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Robot> - Main Robot API client
+
+=item * L<WWW::Hetzner::Robot::Key> - Key entity class
+
+=item * L<WWW::Hetzner::Robot::CLI::Cmd::Key> - Key CLI commands
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

@@ -37,12 +37,16 @@ WriteMakefile(
     AUTHOR         => 'Mike Shipper <AKALINUX@CPAN.ORG>',
     META_MERGE=>{
       "meta-spec" => { version => 2 },
-      repository => {
+      resources => {
+          repository => {
                 type => 'git',
                 url => 'https://github.com/akalinux/xml-sig-oo.git',
                 web => 'https://github.com/akalinux/xml-sig-oo',
-
-      },
+          },
+          bugtracker => {
+             web => 'https://github.com/akalinux/xml-sig-oo/issues'
+          },
+      }
     },
     "TEST_REQUIRES" => {
           "Test::More" => "0.88",

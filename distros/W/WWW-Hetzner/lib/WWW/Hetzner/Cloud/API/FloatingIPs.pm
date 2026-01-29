@@ -1,8 +1,7 @@
 package WWW::Hetzner::Cloud::API::FloatingIPs;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Cloud Floating IPs API
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -121,6 +120,7 @@ sub change_dns_ptr {
     });
 }
 
+
 1;
 
 __END__
@@ -135,7 +135,7 @@ WWW::Hetzner::Cloud::API::FloatingIPs - Hetzner Cloud Floating IPs API
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -224,6 +224,20 @@ Unassign floating IP from server.
     $cloud->floating_ips->change_dns_ptr($id, $ip, $dns_ptr);
 
 Change reverse DNS pointer for the floating IP.
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Cloud> - Main Cloud API client
+
+=item * L<WWW::Hetzner::Cloud::FloatingIP> - FloatingIP entity class
+
+=item * L<WWW::Hetzner::CLI::Cmd::FloatingIp> - FloatingIP CLI commands
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

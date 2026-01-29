@@ -1,5 +1,4 @@
 package WWW::Hetzner::Robot;
-our $AUTHORITY = 'cpan:GETTY';
 
 # ABSTRACT: Perl client for Hetzner Robot API (Dedicated Servers)
 
@@ -11,7 +10,7 @@ use WWW::Hetzner::Robot::API::Reset;
 use WWW::Hetzner::Robot::API::Traffic;
 use namespace::clean;
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 
 has user => (
@@ -110,7 +109,7 @@ WWW::Hetzner::Robot - Perl client for Hetzner Robot API (Dedicated Servers)
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 

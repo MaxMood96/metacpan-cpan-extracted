@@ -1,8 +1,7 @@
 package WWW::Hetzner::Cloud::API::ServerTypes;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Cloud Server Types API
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -58,7 +57,8 @@ sub get_by_name {
     return;
 }
 
-1;
+
+1.
 
 __END__
 
@@ -72,7 +72,7 @@ WWW::Hetzner::Cloud::API::ServerTypes - Hetzner Cloud Server Types API
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -113,6 +113,20 @@ Returns a L<WWW::Hetzner::Cloud::ServerType> object.
     my $type = $cloud->server_types->get_by_name('cx23');
 
 Returns a L<WWW::Hetzner::Cloud::ServerType> object. Returns undef if not found.
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Cloud> - Main Cloud API client
+
+=item * L<WWW::Hetzner::Cloud::ServerType> - ServerType entity class
+
+=item * L<WWW::Hetzner::CLI::Cmd::Servertype> - ServerType CLI commands
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

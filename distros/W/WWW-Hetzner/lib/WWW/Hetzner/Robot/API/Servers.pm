@@ -1,8 +1,7 @@
 package WWW::Hetzner::Robot::API::Servers;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Robot Servers API
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -52,7 +51,8 @@ sub update {
 }
 
 
-1;
+
+1.
 
 __END__
 
@@ -66,7 +66,7 @@ WWW::Hetzner::Robot::API::Servers - Hetzner Robot Servers API
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -105,6 +105,20 @@ Returns L<WWW::Hetzner::Robot::Server> object.
     my $server = $robot->servers->update($server_number, server_name => 'new-name');
 
 Updates server and returns L<WWW::Hetzner::Robot::Server> object.
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Robot> - Main Robot API client
+
+=item * L<WWW::Hetzner::Robot::Server> - Server entity class
+
+=item * L<WWW::Hetzner::Robot::CLI::Cmd::Server> - Server CLI commands
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

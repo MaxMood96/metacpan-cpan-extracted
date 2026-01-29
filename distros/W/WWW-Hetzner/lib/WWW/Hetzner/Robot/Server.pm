@@ -1,8 +1,7 @@
 package WWW::Hetzner::Robot::Server;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Robot Server entity
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use namespace::clean;
@@ -79,7 +78,8 @@ sub refresh {
 }
 
 
-1;
+
+1.
 
 __END__
 
@@ -93,7 +93,7 @@ WWW::Hetzner::Robot::Server - Hetzner Robot Server entity
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head2 server_number
 
@@ -156,6 +156,18 @@ Convenience accessor for C<server_ip>.
 =head2 refresh
 
     $server->refresh;  # reload from API
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Robot::API::Servers> - Servers API
+
+=item * L<WWW::Hetzner::Robot> - Main Robot API client
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

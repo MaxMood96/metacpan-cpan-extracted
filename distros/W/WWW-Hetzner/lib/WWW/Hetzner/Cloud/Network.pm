@@ -1,8 +1,7 @@
 package WWW::Hetzner::Cloud::Network;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Cloud Network object
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -160,6 +159,7 @@ sub data {
 }
 
 
+
 1;
 
 __END__
@@ -174,7 +174,7 @@ WWW::Hetzner::Cloud::Network - Hetzner Cloud Network object
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -304,6 +304,18 @@ Reloads network data from the API.
     my $hashref = $network->data;
 
 Returns all network data as a hashref (for JSON serialization).
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Cloud::API::Networks> - Networks API
+
+=item * L<WWW::Hetzner::Cloud> - Main Cloud API client
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

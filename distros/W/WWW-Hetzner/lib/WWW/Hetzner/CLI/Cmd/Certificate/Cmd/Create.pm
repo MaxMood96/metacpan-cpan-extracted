@@ -1,8 +1,7 @@
 package WWW::Hetzner::CLI::Cmd::Certificate::Cmd::Create;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Create a managed certificate
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use MooX::Cmd;
@@ -51,7 +50,7 @@ WWW::Hetzner::CLI::Cmd::Certificate::Cmd::Create - Create a managed certificate
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SUPPORT
 

@@ -1,8 +1,7 @@
 package WWW::Hetzner::Robot::API::Traffic;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Robot Traffic API
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -52,7 +51,8 @@ sub query {
 }
 
 
-1;
+
+1.
 
 __END__
 
@@ -66,7 +66,7 @@ WWW::Hetzner::Robot::API::Traffic - Hetzner Robot Traffic API
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -161,6 +161,18 @@ B<Response structure:>
             },
         },
     }
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Robot> - Main Robot API client
+
+=item * L<WWW::Hetzner::Robot::CLI::Cmd::Traffic> - Traffic CLI commands
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

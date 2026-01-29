@@ -1,8 +1,7 @@
 package WWW::Hetzner::CLI::Cmd::Datacenter;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Datacenter commands
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use MooX::Cmd;
@@ -47,7 +46,7 @@ WWW::Hetzner::CLI::Cmd::Datacenter - Datacenter commands
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SUPPORT
 

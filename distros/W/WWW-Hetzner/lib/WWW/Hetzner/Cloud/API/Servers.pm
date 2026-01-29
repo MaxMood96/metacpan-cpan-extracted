@@ -1,8 +1,7 @@
 package WWW::Hetzner::Cloud::API::Servers;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Cloud Servers API
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -279,6 +278,7 @@ sub wait_for_status {
     croak "Timeout waiting for server $id to reach status '$status'";
 }
 
+
 1;
 
 __END__
@@ -293,7 +293,7 @@ WWW::Hetzner::Cloud::API::Servers - Hetzner Cloud Servers API
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -492,6 +492,20 @@ Updates server name or labels.
     $cloud->servers->wait_for_status($id, 'running', 120);
 
 Polls until server reaches the specified status. Default timeout is 120 seconds.
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Cloud> - Main Cloud API client
+
+=item * L<WWW::Hetzner::Cloud::Server> - Server entity class
+
+=item * L<WWW::Hetzner::CLI::Cmd::Server> - Server CLI commands
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

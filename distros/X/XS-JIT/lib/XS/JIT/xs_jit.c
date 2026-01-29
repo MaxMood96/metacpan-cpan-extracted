@@ -12,6 +12,24 @@
 #include <sys/stat.h>
 #include <errno.h>
 
+/* PERL_VERSION_LE/GE macros for compile-time version checks in this file
+ * These are needed because older Perls don't define them */
+#ifndef PERL_VERSION_DECIMAL
+#  define PERL_VERSION_DECIMAL(r,v,s) (r*1000000 + v*1000 + s)
+#endif
+#ifndef PERL_DECIMAL_VERSION
+#  define PERL_DECIMAL_VERSION \
+      PERL_VERSION_DECIMAL(PERL_REVISION,PERL_VERSION,PERL_SUBVERSION)
+#endif
+#ifndef PERL_VERSION_GE
+#  define PERL_VERSION_GE(r,v,s) \
+      (PERL_DECIMAL_VERSION >= PERL_VERSION_DECIMAL(r,v,s))
+#endif
+#ifndef PERL_VERSION_LE
+#  define PERL_VERSION_LE(r,v,s) \
+      (PERL_DECIMAL_VERSION <= PERL_VERSION_DECIMAL(r,v,s))
+#endif
+
 /* Buffer growth size */
 #define BUFFER_CHUNK 4096
 
@@ -249,27 +267,34 @@ static int generate_boot(StrBuf *buf, const char *module_name,
     strbuf_append(buf, "#endif\n");
     strbuf_appendf(buf, "XS_EXTERNAL(boot_%s);\n", safe_module);
     strbuf_appendf(buf, "XS_EXTERNAL(boot_%s) {\n", safe_module);
-    strbuf_append(buf, "#if PERL_VERSION_LE(5, 21, 5)\n");
+
+    /* JIT: emit correct boot args for this Perl version */
+#if PERL_VERSION_LE(5, 21, 5)
     strbuf_append(buf, "    dVAR; dXSARGS;\n");
-    strbuf_append(buf, "#else\n");
+#else
     strbuf_append(buf, "    dVAR; dXSBOOTARGSXSAPIVERCHK;\n");
-    strbuf_append(buf, "#endif\n");
-    strbuf_append(buf, "#if PERL_VERSION_LE(5, 8, 999)\n");
+#endif
+
+    /* JIT: emit correct file declaration for this Perl version */
+#if PERL_VERSION_LE(5, 8, 999)
     strbuf_append(buf, "    char* file = __FILE__;\n");
-    strbuf_append(buf, "#else\n");
+#else
     strbuf_append(buf, "    const char* file = __FILE__;\n");
-    strbuf_append(buf, "#endif\n");
+#endif
+
     strbuf_append(buf, "\n");
     strbuf_append(buf, "    PERL_UNUSED_VAR(file);\n");
     strbuf_append(buf, "    PERL_UNUSED_VAR(cv);\n");
     strbuf_append(buf, "    PERL_UNUSED_VAR(items);\n");
     strbuf_append(buf, "\n");
-    strbuf_append(buf, "#if PERL_VERSION_LE(5, 21, 5)\n");
+
+    /* JIT: emit version check only for older Perls */
+#if PERL_VERSION_LE(5, 21, 5)
     strbuf_append(buf, "    XS_VERSION_BOOTCHECK;\n");
-    strbuf_append(buf, "#  ifdef XS_APIVERSION_BOOTCHECK\n");
+#  ifdef XS_APIVERSION_BOOTCHECK
     strbuf_append(buf, "    XS_APIVERSION_BOOTCHECK;\n");
-    strbuf_append(buf, "#  endif\n");
-    strbuf_append(buf, "#endif\n");
+#  endif
+#endif
     strbuf_append(buf, "\n");
 
     /* Register each function */
@@ -284,15 +309,18 @@ static int generate_boot(StrBuf *buf, const char *module_name,
     }
 
     strbuf_append(buf, "\n");
-    strbuf_append(buf, "#if PERL_VERSION_LE(5, 21, 5)\n");
-    strbuf_append(buf, "#  if PERL_VERSION_GE(5, 9, 0)\n");
+
+    /* JIT: emit correct boot epilog for this Perl version */
+#if PERL_VERSION_LE(5, 21, 5)
+#  if PERL_VERSION_GE(5, 9, 0)
     strbuf_append(buf, "    if (PL_unitcheckav)\n");
     strbuf_append(buf, "        call_list(PL_scopestack_ix, PL_unitcheckav);\n");
-    strbuf_append(buf, "#  endif\n");
+#  endif
     strbuf_append(buf, "    XSRETURN_YES;\n");
-    strbuf_append(buf, "#else\n");
+#else
     strbuf_append(buf, "    Perl_xs_boot_epilog(aTHX_ ax);\n");
-    strbuf_append(buf, "#endif\n");
+#endif
+
     strbuf_append(buf, "}\n");
     strbuf_append(buf, "#ifdef __cplusplus\n");
     strbuf_append(buf, "}\n");
@@ -321,17 +349,22 @@ char* xs_jit_generate_code(pTHX_ const char *user_code,
     strbuf_append(&buf, "#include \"XSUB.h\"\n");
     strbuf_append(&buf, "\n");
 
-    /* Version compatibility macros */
+    /* Version compatibility macros - only emit if not defined on build system */
+#ifndef PERL_UNUSED_VAR
     strbuf_append(&buf, "#ifndef PERL_UNUSED_VAR\n");
     strbuf_append(&buf, "#  define PERL_UNUSED_VAR(var) if (0) var = var\n");
     strbuf_append(&buf, "#endif\n");
     strbuf_append(&buf, "\n");
+#endif
+#ifndef dVAR
     strbuf_append(&buf, "#ifndef dVAR\n");
     strbuf_append(&buf, "#  define dVAR dNOOP\n");
     strbuf_append(&buf, "#endif\n");
     strbuf_append(&buf, "\n");
+#endif
 
-    /* PERL_VERSION macros */
+    /* PERL_VERSION macros - only emit if not defined on build system */
+#ifndef PERL_VERSION_DECIMAL
     strbuf_append(&buf, "#ifndef PERL_VERSION_DECIMAL\n");
     strbuf_append(&buf, "#  define PERL_VERSION_DECIMAL(r,v,s) (r*1000000 + v*1000 + s)\n");
     strbuf_append(&buf, "#endif\n");
@@ -348,14 +381,17 @@ char* xs_jit_generate_code(pTHX_ const char *user_code,
     strbuf_append(&buf, "      (PERL_DECIMAL_VERSION <= PERL_VERSION_DECIMAL(r,v,s))\n");
     strbuf_append(&buf, "#endif\n");
     strbuf_append(&buf, "\n");
+#endif
 
-    /* XS macros */
+    /* XS macros - only emit if not defined on build system */
+#ifndef XS_EXTERNAL
     strbuf_append(&buf, "#ifndef XS_EXTERNAL\n");
     strbuf_append(&buf, "#  define XS_EXTERNAL(name) XS(name)\n");
     strbuf_append(&buf, "#endif\n");
     strbuf_append(&buf, "#ifndef XS_INTERNAL\n");
     strbuf_append(&buf, "#  define XS_INTERNAL(name) XS(name)\n");
     strbuf_append(&buf, "#endif\n");
+#endif
     strbuf_append(&buf, "#undef XS_EUPXS\n");
     strbuf_append(&buf, "#if defined(PERL_EUPXS_ALWAYS_EXPORT)\n");
     strbuf_append(&buf, "#  define XS_EUPXS(name) XS_EXTERNAL(name)\n");
@@ -364,13 +400,54 @@ char* xs_jit_generate_code(pTHX_ const char *user_code,
     strbuf_append(&buf, "#endif\n");
     strbuf_append(&buf, "\n");
 
-    /* newXS_deffile compatibility */
-    strbuf_append(&buf, "#if PERL_VERSION_LE(5, 21, 5)\n");
-    strbuf_append(&buf, "#  define newXS_deffile(a,b) Perl_newXS(aTHX_ a,b,file)\n");
-    strbuf_append(&buf, "#else\n");
-    strbuf_append(&buf, "#  define newXS_deffile(a,b) Perl_newXS_deffile(aTHX_ a,b)\n");
+    /* newXS_deffile compatibility - JIT: emit only correct version */
+#if PERL_VERSION_LE(5, 21, 5)
+    strbuf_append(&buf, "#define newXS_deffile(a,b) Perl_newXS(aTHX_ a,b,file)\n");
+#else
+    strbuf_append(&buf, "#define newXS_deffile(a,b) Perl_newXS_deffile(aTHX_ a,b)\n");
+#endif
+    strbuf_append(&buf, "\n");
+
+    /* Op sibling compatibility for Perl < 5.22 (added in 5.21.2)
+     * Only emit compat code when XS::JIT is built on older Perl - true JIT behavior */
+#ifndef OpHAS_SIBLING
+    strbuf_append(&buf, "/* Op sibling compatibility for Perl < 5.22 */\n");
+    strbuf_append(&buf, "#ifndef OpHAS_SIBLING\n");
+    strbuf_append(&buf, "#  define OpHAS_SIBLING(o) ((o)->op_sibling != NULL)\n");
+    strbuf_append(&buf, "#  define OpSIBLING(o) ((o)->op_sibling)\n");
+    strbuf_append(&buf, "#  define OpMORESIB_set(o, sib) ((o)->op_sibling = (sib))\n");
+    strbuf_append(&buf, "#  define OpLASTSIB_set(o, parent) ((o)->op_sibling = NULL)\n");
+    strbuf_append(&buf, "PERL_STATIC_INLINE OP*\n");
+    strbuf_append(&buf, "S_op_sibling_splice_compat(OP *parent, OP *start, int del_count, OP *insert)\n");
+    strbuf_append(&buf, "{\n");
+    strbuf_append(&buf, "    OP *first, *rest, *last_del = NULL;\n");
+    strbuf_append(&buf, "    if (!parent) return NULL;\n");
+    strbuf_append(&buf, "    if (start) first = start->op_sibling;\n");
+    strbuf_append(&buf, "    else first = cLISTOPx(parent)->op_first;\n");
+    strbuf_append(&buf, "    rest = first;\n");
+    strbuf_append(&buf, "    while (del_count && rest) {\n");
+    strbuf_append(&buf, "        last_del = rest;\n");
+    strbuf_append(&buf, "        rest = rest->op_sibling;\n");
+    strbuf_append(&buf, "        del_count--;\n");
+    strbuf_append(&buf, "    }\n");
+    strbuf_append(&buf, "    if (last_del) last_del->op_sibling = NULL;\n");
+    strbuf_append(&buf, "    if (insert) {\n");
+    strbuf_append(&buf, "        OP *insert_last = insert;\n");
+    strbuf_append(&buf, "        while (insert_last->op_sibling) insert_last = insert_last->op_sibling;\n");
+    strbuf_append(&buf, "        insert_last->op_sibling = rest;\n");
+    strbuf_append(&buf, "        if (start) start->op_sibling = insert;\n");
+    strbuf_append(&buf, "        else cLISTOPx(parent)->op_first = insert;\n");
+    strbuf_append(&buf, "    } else {\n");
+    strbuf_append(&buf, "        if (start) start->op_sibling = rest;\n");
+    strbuf_append(&buf, "        else cLISTOPx(parent)->op_first = rest;\n");
+    strbuf_append(&buf, "    }\n");
+    strbuf_append(&buf, "    return first;\n");
+    strbuf_append(&buf, "}\n");
+    strbuf_append(&buf, "#  define op_sibling_splice(parent, start, del_count, insert) \\\n");
+    strbuf_append(&buf, "       S_op_sibling_splice_compat(parent, start, del_count, insert)\n");
     strbuf_append(&buf, "#endif\n");
     strbuf_append(&buf, "\n");
+#endif
 
     /* XS::JIT convenience macros */
     strbuf_append(&buf, "/* XS::JIT convenience macros */\n");

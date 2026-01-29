@@ -1,8 +1,7 @@
 package WWW::Hetzner::Cloud::RRSet;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Cloud DNS RRSet object
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -76,7 +75,8 @@ sub data {
 }
 
 
-1;
+
+1.
 
 __END__
 
@@ -90,7 +90,7 @@ WWW::Hetzner::Cloud::RRSet - Hetzner Cloud DNS RRSet object
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -162,6 +162,22 @@ Returns an arrayref of just the record values (without the hash structure).
     my $hashref = $record->data;
 
 Returns all RRSet data as a hashref (for JSON serialization).
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Cloud::API::RRSets> - DNS records API
+
+=item * L<WWW::Hetzner::Cloud::API::Zones> - Zones API
+
+=item * L<WWW::Hetzner::Cloud> - Main Cloud API client
+
+=item * L<WWW::Hetzner::Cloud::Zone> - DNS zone entity
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

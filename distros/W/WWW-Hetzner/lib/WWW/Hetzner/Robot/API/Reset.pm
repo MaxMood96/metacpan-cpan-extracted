@@ -1,8 +1,7 @@
 package WWW::Hetzner::Robot::API::Reset;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Robot Server Reset API
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -61,7 +60,8 @@ sub wol {
 }
 
 
-1;
+
+1.
 
 __END__
 
@@ -75,7 +75,7 @@ WWW::Hetzner::Robot::API::Reset - Hetzner Robot Server Reset API
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -140,6 +140,20 @@ Convenience method for manual reset.
     $robot->reset->wol($server_number);
 
 Send Wake-on-LAN packet.
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Robot> - Main Robot API client
+
+=item * L<WWW::Hetzner::Robot::CLI::Cmd::Reset> - Reset CLI commands
+
+=item * L<WWW::Hetzner::Robot::CLI::Cmd::Wol> - WOL CLI commands
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

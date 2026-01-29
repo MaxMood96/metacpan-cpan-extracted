@@ -1,8 +1,7 @@
 package WWW::Hetzner::Robot::Key;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Robot SSH Key entity
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use namespace::clean;
@@ -42,7 +41,8 @@ sub update {
 }
 
 
-1;
+
+1.
 
 __END__
 
@@ -56,7 +56,7 @@ WWW::Hetzner::Robot::Key - Hetzner Robot SSH Key entity
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head2 name
 
@@ -86,6 +86,18 @@ Public key data.
 
     $key->name('new-name');
     $key->update;
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Robot::API::Keys> - Keys API
+
+=item * L<WWW::Hetzner::Robot> - Main Robot API client
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 

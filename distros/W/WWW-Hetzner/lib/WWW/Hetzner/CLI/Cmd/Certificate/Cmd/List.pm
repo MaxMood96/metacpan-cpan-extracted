@@ -1,8 +1,7 @@
 package WWW::Hetzner::CLI::Cmd::Certificate::Cmd::List;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: List certificates
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use MooX::Cmd;
@@ -52,7 +51,7 @@ WWW::Hetzner::CLI::Cmd::Certificate::Cmd::List - List certificates
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SUPPORT
 

@@ -1,8 +1,7 @@
 package WWW::Hetzner::CLI::Cmd::Server::Cmd::Describe;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Show server details
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use MooX::Cmd;
@@ -56,7 +55,7 @@ WWW::Hetzner::CLI::Cmd::Server::Cmd::Describe - Show server details
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SUPPORT
 

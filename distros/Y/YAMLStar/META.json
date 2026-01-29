@@ -1,5 +1,5 @@
 {
-   "abstract" : "Pure YAML 1.2 loader via FFI",
+   "abstract" : "YAML 1.2 loader via FFI",
    "author" : [
       "Ingy dÃ¶t Net <ingy@cpan.org>"
    ],
@@ -53,6 +53,6 @@
          "web" : "https://github.com/yaml/yamlstar"
       }
    },
-   "version" : "v0.1.0",
+   "version" : "v0.1.3",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

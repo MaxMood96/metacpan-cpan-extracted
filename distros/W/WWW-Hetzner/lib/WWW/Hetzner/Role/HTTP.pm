@@ -1,5 +1,4 @@
 package WWW::Hetzner::Role::HTTP;
-our $AUTHORITY = 'cpan:GETTY';
 
 # ABSTRACT: HTTP client role for Hetzner API clients
 
@@ -9,7 +8,7 @@ use JSON::MaybeXS qw(decode_json encode_json);
 use Carp qw(croak);
 use Log::Any qw($log);
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 
 requires 'token';
@@ -121,7 +120,7 @@ WWW::Hetzner::Role::HTTP - HTTP client role for Hetzner API clients
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 

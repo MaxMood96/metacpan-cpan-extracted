@@ -1,8 +1,7 @@
 package WWW::Hetzner::Cloud::API::Certificates;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Hetzner Cloud Certificates API
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Moo;
 use Carp qw(croak);
@@ -100,6 +99,7 @@ sub retry {
     return $self->client->post("/certificates/$id/actions/retry", {});
 }
 
+
 1;
 
 __END__
@@ -114,7 +114,7 @@ WWW::Hetzner::Cloud::API::Certificates - Hetzner Cloud Certificates API
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -197,6 +197,20 @@ Deletes certificate.
     $cloud->certificates->retry($id);
 
 Retry issuance of a managed certificate that failed.
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<WWW::Hetzner::Cloud> - Main Cloud API client
+
+=item * L<WWW::Hetzner::Cloud::Certificate> - Certificate entity class
+
+=item * L<WWW::Hetzner::CLI::Cmd::Certificate> - Certificate CLI commands
+
+=item * L<WWW::Hetzner> - Main umbrella module
+
+=back
 
 =head1 SUPPORT
 
