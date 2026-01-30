@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-use v5.14;
+use v5.28;
 use warnings;
 
 use Test2::V0;
@@ -193,9 +193,10 @@ sub with_crc8
       "\x55" . with_crc8( with_crc8( "\xC6\x00" ) ) );
    $controller->expect_sleep( Test::Deep::num( 0.0017, 1E-4 ) );
    $controller->expect_syswrite( "DummyFH",
-      "\x55" . with_crc8( with_crc8( "\xC6\x00" ) ) );
-   $controller->expect_syswrite( "DummyFH",
       "\x55" . with_crc8( with_crc8( "\xC5\x00" ) ) );
+   $controller->expect_sleep( Test::Deep::num( 0.0017, 1E-4 ) );
+   $controller->expect_syswrite( "DummyFH",
+      "\x55" . with_crc8( with_crc8( "\xC6\x00" ) ) );
    $controller->expect_sleep( Test::Deep::num( 0.0017, 1E-4 ) );
    $controller->expect_syswrite( "DummyFH",
       "\x55" . with_crc8( with_crc8( "\xC5\x00" ) ) );

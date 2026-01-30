@@ -1,6 +1,5 @@
-#<<<
-use strict; use warnings;
-#>>>
+use strict;
+use warnings;
 
 use Test::More import => [ qw( is ok ) ], tests => 6;
 use Log::Any::Test;
@@ -18,7 +17,7 @@ eval qq{
 
   with qw( $role );
 
-  1;
+  1
 };
 
 is $@, '', "Moo class '$class' created dynamically" or die "\n";
@@ -31,4 +30,4 @@ is $class, $logger->category, "default logger has 'category' attribute with valu
 
 $logger->infof( 'log %s', 'something' );
 $log_buffer->contains_ok( qr/\Alog something\z/, 'default logger provides additional logging methods' );
-$log_buffer->empty_ok( 'no more log lines in log buffer' );
+$log_buffer->empty_ok( 'no more log lines in log buffer' )

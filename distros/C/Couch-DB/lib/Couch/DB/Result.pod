@@ -33,9 +33,9 @@ more.  So: let them run out-of-scope once you have collected your C<values()>.
 
 =over 4
 
-=item overload: B<bool>
+=item overload: B<bool> boolean context
 
-These Return objects are overloaded to return a false value when there is
+These Return objects are overloaded to return a C<false> value when there is
 any error.  For delayed collection of data, this status may change after
 this object is initially created.
 
@@ -47,7 +47,7 @@ this object is initially created.
 
 =over 4
 
-=item Couch::DB::Result-E<gt>B<new>(%options)
+=item $class-E<gt>B<new>(%options)
 
 For details on the C<on_*> event handlers, see L<Couch::DB/DETAILS>.
 
@@ -62,32 +62,32 @@ For details on the C<on_*> event handlers, see L<Couch::DB/DETAILS>.
 
 =over 2
 
-=item couch => L<Couch::DB|Couch::DB>-object
+=item couch => Couch::DB-object
 
-=item on_chain => CODE|ARRAY
+=item on_chain => CODE|\@codes
 
 When a request was completed, a new request can be made immediately.  This
 is especially usefull in combination with C<_delay>, and with internal
 logic.
 
-=item on_error => CODE|ARRAY
+=item on_error => CODE|\@codes
 
 Called each time when the result CODE changes to be "not a success".
 
-=item on_final => CODE|ARRAY
+=item on_final => CODE|\@codes
 
 Called when the Result object has either an error or an success.
 
-=item on_row => CODE|ARRAY
+=item on_row => CODE|\@codes
 
 Produces a single L<Couch::DB::Row|Couch::DB::Row>-object when L<page()|Couch::DB::Result/"Paging through results"> is used.
 
-=item on_values => CODE|ARRAY
+=item on_values => CODE|\@codes
 
 Provide a sub which translates incoming JSON data from the server, into
 pure perl.
 
-=item paging => HASH
+=item paging => \%config
 
 When a call support paging, internal information about it is passed in
 this HASH.
@@ -117,9 +117,15 @@ of the codes.
 
 =item $obj-E<gt>B<couch>()
 
+Z<>
+
 =item $obj-E<gt>B<isDelayed>()
 
+Z<>
+
 =item $obj-E<gt>B<isReady>()
+
+Z<>
 
 =item $obj-E<gt>B<message>()
 
@@ -133,7 +139,7 @@ debugging and tracing.
 
 =item $obj-E<gt>B<setStatus>($code, $message)
 
-Set the $code and $message to something else.  Your program should
+Set the C<$code> and C<$message> to something else.  Your program should
 probably not do this: it's the library which determines how the result
 needs to be interpreted.
 
@@ -205,6 +211,8 @@ Returns a reference to the documents.
 
 =item $obj-E<gt>B<numberOfRows>( [$qnr] )
 
+Z<>
+
 =item $obj-E<gt>B<row>( $rownr, [$qnr] )
 
 Returns a L<Couch::DB::Row|Couch::DB::Row> object (or an empty LIST) which represents one
@@ -237,13 +245,13 @@ the data.  Otherwise, use the C<row*> and C<doc*> methods.
 
 =item $obj-E<gt>B<inPagingMode>()
 
-Returns true when this call may be chained with other calls to come up to
+Returns C<true> when this call may be chained with other calls to come up to
 a number of rows which match the number you desire.  True when either
-call parameter C<all> is true, or a C<page_size> is given.
+call parameter C<all> is C<true>, or a C<page_size> is given.
 
 =item $obj-E<gt>B<isLastPage>()
 
-Returns a true value when there are no more page elements to be expected.  The
+Returns a C<true> value when there are no more page elements to be expected.  The
 L<page()|Couch::DB::Result/"Paging through results"> may already be empty.
 
 =item $obj-E<gt>B<nextPageSettings>()
@@ -259,13 +267,13 @@ are no more elements as result of the search.
 
 Method L<pageRows()|Couch::DB::Result/"Paging through results"> will return the rows as a LIST.
 
-example: compare page and pageRows
+» example: compare page and pageRows
 
-   my $r = $db->find(...);
-   foreach my $row ($r->pageRows) { ... }
-   foreach my $row ( @{$r->page} ) { ... }
-   print template($t, rows => [ $r->pageRows ]);
-   print template($t, rows => $r->page);
+  my $r = $db->find(...);
+  foreach my $row ($r->pageRows) { ... }
+  foreach my $row ( @{$r->page} ) { ... }
+  print template($t, rows => [ $r->pageRows ]);
+  print template($t, rows => $r->page);
 
 =item $obj-E<gt>B<pageDoc>($rownr)
 
@@ -277,7 +285,7 @@ in the page (starts at 1).
 Returns the LIST of documents (L<Couch::DB::Document|Couch::DB::Document> objects), which are
 contained in the rows.
 
-example: of pageDocs()
+» example: of pageDocs()
 
   my $r1 = $couch->find(...);
   my @docs1 = map $_->doc, $r1->page;
@@ -290,7 +298,7 @@ example: of pageDocs()
 
 =item $obj-E<gt>B<pageIsPartial>()
 
-Returns a true value when there should be made another attempt to fill the
+Returns a C<true> value when there should be made another attempt to fill the
 page upto the the requested page size.
 
 =item $obj-E<gt>B<pageNumber>()
@@ -313,7 +321,7 @@ which can be saved into a session.
 
 =over 2
 
-=item max_bookmarks => INTEGER
+=item max_bookmarks => $count
 
 When you save this paging information into a session cookie, you should not
 store many bookmarks, because they are pretty large and do not compress.  Random
@@ -355,15 +363,15 @@ programming with L<Couch::DB|Couch::DB>.
 
 =head2 Result is an error
 
-The Result object is overloaded to produce a false value when the command did
+The Result object is overloaded to produce a C<false> value when the command did
 not succeed for any reason.
 
-B<. Example: without error handler>
+=head4 » Example: without error handler
 
   my $result = $db->find(...)
       or die $result->message;
 
-B<. Example: with error handler>
+=head4 » Example: with error handler
 
   my $result = $db->find(..., on_error => sub { die } );
 
@@ -371,7 +379,7 @@ B<. Example: with error handler>
 
 When your website has only the slightest chance on having users, then
 you need to use single server processes shared by many website users.
-Couch::DB implementations will use event-driven programming to make this
+L<Couch::DB|Couch::DB> implementations will use event-driven programming to make this
 possible, but your own program should be configured to make use of this
 to benefit.
 
@@ -380,13 +388,13 @@ case to handle, and totally hidden for you, as user of this module.
 For instance, when you want to query in parallel, you need to prepare
 multiple queries, and then start them at the same time.
 
-B<. Example: prepare a query, delayed>
+=head4 » Example: prepare a query, delayed
 
   my $find1 = $db->find(..., _delay => 1)
       or die $result->message;  # only preparation errors
-  
+
   if($find1->isDelayed) ...;    # true
-  
+
   my $result = $find1->run
       or die $result->message;  # network/server errors
 
@@ -395,7 +403,7 @@ B<. Example: prepare a query, delayed>
 
 =head2 Understanding values
 
-To bridge the gap between your program and JSON data received, Couch::DB
+To bridge the gap between your program and JSON data received, L<Couch::DB|Couch::DB>
 provides templated conversions.  This conversion scheme also attempts to
 hide protocol changes between CouchDB server versions.
 
@@ -412,16 +420,27 @@ In some cases, data is added or modified for convenience: to make it
 compatible with the version your program has been written for.  See
 L<Couch::DB::new(api)|Couch::DB/"Constructors">.
 
+=head1 DIAGNOSTICS
+
+=over 4
+
+=item Error: document not ready: $err
+
+Cast by C<answer()>
+
+=back
+
 =head1 SEE ALSO
 
-This module is part of Couch-DB distribution version 0.200,
-built on June 18, 2025. Website: F<http://perl.overmeer.net/CPAN/>
+This module is part of Couch-DB version 0.201,
+built on January 30, 2026. Website: F<http://perl.overmeer.net/CPAN/>
 
 =head1 LICENSE
 
-Copyrights 2024-2025 by [Mark Overmeer]. For other contributors see ChangeLog.
+For contributors see file ChangeLog.
 
-This program is free software; you can redistribute it and/or modify it
-under the same terms as Perl itself.
-See F<http://dev.perl.org/licenses/>
+This software is copyright (c) 2024-2026 by Mark Overmeer.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
 

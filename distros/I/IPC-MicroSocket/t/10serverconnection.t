@@ -26,14 +26,14 @@ class TestConnection {
       if( $meth eq "FAIL" ) { die "Oopsie\n" }
    }
 
-   method on_subscribe { $next_subscribe->done( @_ ); }
+   method on_subscribe ( @args ) { $next_subscribe->done( @args ); }
 }
 my $conn = TestConnection->new(
    fh => "DummyFH",
 );
 
 my $runf = $conn->run
-   ->on_fail( sub { warn "Runloop failed: @_\n" } );
+   ->on_fail( sub ( $err, @ ) { warn "Runloop failed: $err\n" } );
 
 # request OK
 {

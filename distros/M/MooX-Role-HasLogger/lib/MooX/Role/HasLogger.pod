@@ -14,12 +14,12 @@ MooX::Role::HasLogger - Moo role that provides a logger attribute
 
   with qw( MooX::Role::HasLogger );
 
-  sub bar {
+  sub foo {
     my ( $self ) = @_;
-    $self->logger->info( 'log something' );
+    $self->logger->info( 'log something' )
   }
 
-  1;
+  1
 
 =head1 DESCRIPTION
 
@@ -29,9 +29,9 @@ library L<MooX::Role::HasLogger::Types> exports the C<Logger> type that defines
 the interface of the attribute. The C<build_logger()> builder method returns a
 L<Log::Any> logger object with the consuming class as its category.
 
-=head1 EXAMPLE
+=head1 EXAMPLES
 
-This extended example
+The first example
 
   package Bar;
 
@@ -45,11 +45,9 @@ This extended example
 
   has '+logger' => ( isa => ( Logger ) & ( HasMethods [ qw( tracef debugf infof warnf errorf fatalf ) ] ) );
 
-  sub build_logger {
-    return Log::Any->get_logger( category => ref shift, default_adapter => 'Stderr' );
-  }
+  sub build_logger { Log::Any->get_logger( category => ref shift, default_adapter => 'Stderr' ) }
 
-  1;
+  1
 
 shows
 
@@ -75,6 +73,50 @@ adapter class.
 
 =back
 
+As of version C<0.002> the previous C<HasMethods> based override of the
+C<logger> attribute can be replaced with a L<Type::Tiny::Duck> based override
+
+  has '+logger' => (
+    isa => Type::Tiny::Duck->new(
+             name    => 'ExtendedLogger',
+             methods => [ \@{ Logger->methods }, qw( tracef debugf infof warnf errorf fatalf ) ]
+           )
+  );
+
+or the new C<LoggerAny> type can be used
+
+  use MooX::Role::HasLogger::Types qw( LoggerAny );
+  has '+logger' => ( isa => LoggerAny );
+
+This new type requires that a logger object has to implement the C<category()>
+getter method too.
+
+The second example 
+
+  package Baz;
+
+  use Moo;
+  use MooX::TypeTiny;
+  use MooX::Role::HasLogger::Types qw( Logger );
+  use namespace::clean;
+
+  with qw( MooX::Role::HasLogger );
+
+  has '+logger' => ( handles => Logger->methods );
+
+  sub baz {
+    my ( $self ) = @_;
+    # delegation
+    $self->info( 'log something' )
+  }
+
+  1
+
+shows how to override the C<handles> option of the C<logger> attribute using
+the C<+> notation. The delegating class C<Baz> can now use the methods provided
+by the C<logger> (the delegatee) directly. If you prefer to work with an
+extended interface replace the C<Logger> type with the C<LoggerAny> type.
+
 =head1 SEE ALSO
 
 =over 2
@@ -95,7 +137,7 @@ Sven Willenbuecher <sven.willenbuecher@gmx.de>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2023 by Sven Willenbuecher.
+This software is copyright (c) 2023-2026 by Sven Willenbuecher.
 
 This is free software; you can redistribute it and/or modify it under the
 same terms as the Perl 5 programming language system itself.

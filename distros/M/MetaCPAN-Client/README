@@ -5,7 +5,7 @@ NAME
 
 VERSION
 
-    version 2.037000
+    version 2.038000
 
 SYNOPSIS
 
@@ -84,6 +84,12 @@ METHODS
         my $cover = $mcpan->cover('Moose-2.2007');
 
     Returns a MetaCPAN::Client::Cover object.
+
+ cve
+
+        my $cve = $mcpan->cve('CPANSA-DBD-SQLite-2019-5018');
+
+    Returns a MetaCPAN::Client::CVE object.
 
  distribution
 

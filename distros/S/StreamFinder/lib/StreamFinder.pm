@@ -143,6 +143,7 @@ odysee.com videos (L<StreamFinder::Odysee>),
 podbean.com podcasts (L<StreamFinder::Podbean>), 
 podcastaddict.com podcasts (L<StreamFinder::PodcastAddict>) (DEPRECIATED), 
 podchaser.com podcasts (L<StreamFinder::Podchaser>), 
+prageru.com videos (L<StreamFinder::PragerU>), 
 radio.net radio stations (L<StreamFinder::RadioNet>), 
 rcast.net radio stations (L<StreamFinder::Rcast>), 
 rumble.com videos (L<StreamFinder::Rumble>), 
@@ -160,14 +161,6 @@ by any of the other submodules) for streams.
 
 NOTE:  StreamFinder::Google has been removed as Google Podcasts has shut down.
 
-NOTE:  StreamFinder::LinkTV has been removed as that site no longer provides 
-streams anymore but only links to the various (and diverse) streaming sites 
-that provide their own streams.  Some may possibly work via 
-StreamFinder::Youtube or StreamFinder::AnyStream.
-
-NOTE:  StreamFinder::Goodpods has been removed, as that site has redone itself 
-in javascript as to no longer be scrapable for streams.
-
 NOTE:  StreamFinder::Podcastaddict is now considered depreciated and may be 
 removed in a later StreamFinder release as it now requires a specific valid 
 episode page to fetch streams from, as Podcastaddict.com has javascripted up 
@@ -181,7 +174,7 @@ impossible to search for songs on their site without enabling, but song URLs
 (when known) seem to still work for now, but without channel/artist icons.  
 (Privacy-minded individuals should now be cautious while using this site).
 
-NOTE:  For many sites, ie. Youtube, Vimeo, Apple, Spreaker, Castbox, Google, 
+NOTE:  For many sites, ie. Youtube, Vimeo, Apple, Spreaker, Castbox, PragerU, 
 etc. the "station" object actually refers to a specific video or podcast 
 episode, but functions the same way.  
 
@@ -551,7 +544,7 @@ use strict;
 use warnings;
 use vars qw(@ISA @EXPORT $VERSION);
 
-our $VERSION = '2.47';
+our $VERSION = '2.50';
 our $DEBUG = 0;
 
 require Exporter;
@@ -560,7 +553,8 @@ require Exporter;
 @EXPORT = qw();
 my @supported_mods = (qw(Anystream Apple Bitchute Blogger BrandNewTube Brighteon Castbox EpochTV 
 		Google IHeartRadio InternetRadio Odysee OnlineRadiobox Podbean PodcastAddict Podchaser 
-		RadioNet Rcast Rumble SermonAudio SoundCloud	Spreaker	Tunein Vimeo Youtube Zeno Subsplash));
+		PragerU RadioNet Rcast Rumble SermonAudio SoundCloud	Spreaker	Tunein Vimeo Youtube Zeno 
+		Subsplash));
 
 my %useit;
 
@@ -630,6 +624,9 @@ sub new
 	} elsif ($url =~ m#\bvimeo\.# && $useit{'Vimeo'}) {  #NOTE:ALSO USES youtube-dl!
 		eval { require 'StreamFinder/Vimeo.pm'; $haveit = 1; };
 		return new StreamFinder::Vimeo($url, @args)  if ($haveit);
+	} elsif ($url =~ m#\bprageru\.# && $useit{'PragerU'}) {
+		eval { require 'StreamFinder/PragerU.pm'; $haveit = 1; };
+		return new StreamFinder::PragerU($url, @args)  if ($haveit);
 	} elsif ($url =~ m#\bblogger\.# && $useit{'Blogger'}) {
 		eval { require 'StreamFinder/Blogger.pm'; $haveit = 1; };
 		return new StreamFinder::Blogger($url, @args)  if ($haveit);

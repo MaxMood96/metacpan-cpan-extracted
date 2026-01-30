@@ -4,7 +4,7 @@ StreamFinder::Subsplash - Fetch actual raw streamable URLs on subsplash.com
 
 =head1 AUTHOR
 
-This module is Copyright (C) 2021-2024 by
+This module is Copyright (C) 2021-2026 by
 
 Jim Turner, C<< <turnerjw784 at yahoo.com> >>
 		
@@ -86,7 +86,7 @@ file.
 
 =head1 DESCRIPTION
 
-StreamFinder::Subsplash accepts a valid podcast (sermon) ID or URL on 
+StreamFinder::Subsplash accepts a valid podcast (sermon) page URL on 
 Subsplash.com and returns the actual stream URL(s), title, and cover art icon.  
 The purpose is that one needs one of these URLs in order to have the option to 
 stream the podcast in one's own choice of media player software rather than 
@@ -103,13 +103,34 @@ One or more stream URLs can be returned for each podcast.
 
 =over 4
 
-=item B<new>(I<ID>|I<url> [, I<-secure> [ => 0|1 ]] [, I<-debug> [ => 0|1|2 ]])
+=item B<new>(I<ID>|I<url> [, I<-secure> [ => 0|1 ]] 
+[, I<-nohls> [ => 0|1 ]] [, I<-debug> [ => 0|1|2 ]] 
+[, I<-youtube> => yes|no|first|last|only|ifneeded ])
 
-Accepts a subsplash.com podcast (sermon) ID or URL and creates and returns a 
-a new podcast object, or I<undef> if the URL is not a valid podcast, or no streams 
-are found.  The URL can be the full URL, ie. 
-https://subsplash.com/B<channel>/embed/mi/B<id>, or just 
-I<channel>/B<id>.
+Accepts a subsplash.com podcast (sermon) URL and creates and returns a 
+a new podcast object, or I<undef> if the URL is not a valid podcast, or no 
+streams are found.  The URL must be the full URL, ie. 
+https://subsplash.com/B<channel>/embed/mi/B<id>.
+
+The optional I<-youtube> argument can be set to "I<yes>" or "I<last>" - 
+Subsplash will also look for streams via the external program yt-dlp ,if 
+available, (last - after Subsplash streams, if any, found on the page); 
+"I<no>" - only include streams found from the video's subsplash.com page; 
+"I<only>" - return only streams returned by yt-dlp; or "I<first>" - include the 
+yt-dlp streams (if any) first.  
+NOTE:  Unlike most other modules, yt-dlp will NOT be used if I<-youtube> is set 
+to I<no> regardless of whether any Subsplash streams were found.  
+If I<-youtube> is set to I<ifneeded>, then yt-dlp 
+will only be called if no other streams found.  Default is set to "first" 
+because now generally only audio streams are found on Subsplash pages.
+
+DEFAULT I<-youtube> is 'first'.
+
+The optional (<-nohls> argument can be set to either 0 or 1 
+(I<false> or I<true>).  If 1 (I<true>), then only non-HLS (.m3u8?) streams 
+will be accepted from Subsplash or yt-dlp (Youtube).
+
+DEFAULT I<-nohls> is 0 (false) - return all streams yt-dlp finds in Subsplash.
 
 The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  If 1 
 then only secure ("https://") streams will be returned.
@@ -118,10 +139,19 @@ DEFAULT I<-secure> is 0 (false) - return all streams (http and https).
 
 Additional options:
 
+Certain yt-dlp (L<StreamFinder::Youtube>) configuration options, 
+namely I<-format>, I<-formatonly>, I<-youtube-dl-args>, 
+and I<-youtube-dl-add-args> can be overridden here by specifying 
+I<-youtube-format>, I<-youtube-formatonly>, I<-youtube-dl-args>, 
+and I<-youtube-dl-add-args> arguments respectively.  It is however, 
+recommended to specify these in the Subsplash-specific configuration file 
+(see B<CONFIGURATION FILES> below).
+
 I<-log> => "I<logfile>"
 
-Specify path to a log file.  If a valid and writable file is specified, A line will be 
-appended to this file every time one or more streams is successfully fetched for a url.
+Specify path to a log file.  If a valid and writable file is specified, 
+A line will be appended to this file every time one or more streams is 
+successfully fetched for a url.
 
 DEFAULT I<-none-> (no logging).
 
@@ -129,11 +159,11 @@ I<-logfmt> specifies a format string for lines written to the log file.
 
 DEFAULT "I<[time] [url] - [site]: [title] ([total])>".  
 
-The valid field I<[variables]> are:  [stream]: The url of the first/best stream found.  
-[site]:  The site name (Subsplash).  [url]:  The url searched for streams.  
-[time]: Perl timestamp when the line was logged.  [title], [artist], [album], 
-[description], [year], [genre], [total], [albumartist]:  The corresponding field data 
-returned (or "I<-na->", if no value).
+The valid field I<[variables]> are:  [stream]: The url of the first/best 
+stream found.  [site]:  The site name (Subsplash).  [url]:  The url searched 
+for streams.  [time]: Perl timestamp when the line was logged.  [title], 
+[artist], [album], [description], [year], [genre], [total], [albumartist]:  
+The corresponding field data returned (or "I<-na->", if no value).
 
 =item $podcast->B<get>()
 
@@ -160,24 +190,32 @@ Returns the podcast's title, or (long description).  Podcasts
 on Subsplash can have separate descriptions, but for podcasts, 
 it is always the podcast's title.
 
-=item $podcast->B<getIconURL>()
+=item $podcast->B<getIconURL>(['artist'])
 
 Returns the URL for the podcast's "cover art" icon image, if any.
+If B<'artist'> is specified, the channel artist's icon url is returned, 
+if any.
 
-=item $podcast->B<getIconData>()
+=item $podcast->B<getIconData>(['artist'])
 
 Returns a two-element array consisting of the extension (ie. "png", 
 "gif", "jpeg", etc.) and the actual icon image (binary data), if any.
+If B<'artist'> is specified, the channel artist's icon data is returned, 
+if any.
 
-=item $podcast->B<getImageURL>()
+=item $podcast->B<getImageURL>(['artist'])
 
 Returns the URL for the podcast's "cover art" (usually larger) 
-banner image.
+banner image.  Note:  Subsplash returns the same image url as the icon url.
+If B<'artist'> is specified, the channel artist's image URL 
+is returned, if any, which may be larger than the artist's icon image.
 
-=item $podcast->B<getImageData>()
+=item $podcast->B<getImageData>(['artist'])
 
 Returns a two-element array consisting of the extension (ie. "png", 
 "gif", "jpeg", etc.) and the actual podcast's banner image (binary data).
+If B<'artist'> is specified, the channel artist's image data is returned, 
+if any.
 
 =item $podcast->B<getType>()
 
@@ -210,6 +248,12 @@ and the options are loaded into a hash used only by the specific
 (submodule) specified.  Valid options include 
 I<-debug> => [0|1|2]> and most of the L<LWP::UserAgent> options.  
 
+Among options valid for Subsplash streams are the various youtube-dl 
+(L<StreamFinder::Youtube>) configuration options, 
+namely I<format>, I<formatonly>, I<youtube-dl-args>, and I<youtube-dl-add-args> 
+can be overridden here by specifying I<youtube-format>, I<youtube-formatonly>, 
+I<youtube-dl-args>, and I<youtube-dl-add-args> arguments respectively.  
+
 Options specified here override any specified in I<~/.config/StreamFinder/config>.
 
 =item ~/.config/StreamFinder/config
@@ -237,6 +281,8 @@ subsplash
 L<URI::Escape>, L<HTML::Entities>, L<LWP::UserAgent>
 
 =head1 RECCOMENDS
+
+yt-dlp, or other compatable program
 
 wget
 
@@ -276,7 +322,7 @@ L<http://search.cpan.org/dist/StreamFinder-Subsplash/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2021-2024 Jim Turner.
+Copyright 2021-2026 Jim Turner.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the the Artistic License (2.0). You may obtain a
@@ -336,25 +382,40 @@ sub new
 
 	my $self = $class->SUPER::new('Subsplash', @_);
 	$DEBUG = $self->{'debug'}  if (defined $self->{'debug'});
+	$self->{'youtube'} = 'first'  unless (defined $self->{'youtube'});
+	$self->{'nohls'} = 0  unless (defined $self->{'nohls'});
+	while (@_) {
+		if ($_[0] =~ /^\-?youtube$/o) {
+			shift;
+			$self->{'youtube'} = (defined $_[0]) ? shift : 'first';
+		} elsif ($_[0] =~ /^\-?nohls$/o) {
+			shift;
+			$self->{'nohls'} = (defined $_[0]) ? shift : 1;
+		} else {
+			shift;
+		}
+	}
 
 	$url =~ s#\\##g;
 	my $url2fetch = HTML::Entities::decode_entities($url);
+	my ($protocol, undef, $server, @urlparts) = split(m#\/#, $url2fetch);
 	my $channel = '';
-	if ($url =~ /^https?\:/) {
-		$self->{'id'} = "$1/$2"  if ($url2fetch =~ m#\/\+?([\-a-z0-9]+)\/(?:embed|media)\/m\w\/\+?([\-a-z0-9]+)#i);
-		unless ($self->{'id'}) {
-			my $url_x = $url2fetch;
-			$self->{'id'} = $1  if ($url_x =~ s#\/\+?([a-z0-9]+)##);
-			$self->{'id'} .= "/$1"  if ($url_x =~ s#\/\+?([\-a-z0-9]+)##);
+	foreach my $j (@urlparts) {
+		$j =~ s/[\?\&].*$//o;
+		next  if ($j =~ /\b(?:embed|media)\b/o);
+		if (length($j) < 4) {
+			$self->{'albumartist'} .= '/' . $j  unless ($channel);
+			next;
+		} elsif ($channel) {
+			$self->{'id'} = $j;
+		} else {
+			$self->{'albumartist'} .= '/' . $j;
+			$channel = $j;
 		}
-		($channel = $url2fetch) =~ s#\/(?:embed|media)\/.+$##;
-	} else {
-		$self->{'id'} = $url;
-		my ($channelID, $id) = split(m#\/#, $url);
-		$url2fetch = "https://subsplash.com/$channelID";
-		$channel = $url2fetch;
-		$url2fetch .= '/embed/mi/' . $id  if ($id);
 	}
+	$self->{'id'} ||= $channel;
+	my $baseURL = $protocol . '//' . $server;
+	$self->{'albumartist'} = $baseURL . $self->{'albumartist'} . '/media';
 	my $html = '';
 	print STDERR "-0(Subsplash): FETCHING URL=$url2fetch= ID=".$self->{'id'}."=\n"  if ($DEBUG);
 	my $ua = LWP::UserAgent->new(@{$self->{'_userAgentOps'}});		
@@ -368,8 +429,7 @@ sub new
 		print STDERR $response->status_line  if ($DEBUG);
 	}
 	print STDERR "-1: html=$html=\n"  if ($DEBUG > 1);
-	return undef  unless ($html && $self->{'id'} && $self->{'id'} =~ m#\/#);  #STEP 1 FAILED, INVALID PODCAST URL, PUNT!
-
+	return undef  unless ($html);  #STEP 1 FAILED, INVALID PODCAST URL, PUNT!
 	$self->{'cnt'} = 0;
 	$self->{'title'} = '';
 	$self->{'artist'} = '';
@@ -382,21 +442,31 @@ sub new
 	$self->{'streams'} = [];
 	$self->{'Url'} = '';
 	$self->{'playlist'} = '';
-	$self->{'albumartist'} = $channel;
 	my %dups = ();
 	my $stream = '';
-	foreach my $tag ('video', 'audio') {
-		if ($html =~ s#\<$tag\s+preload(.+?)\<\/$tag\>##s) {
-			my $stuff = $1;
-			$stream = $1  if ($stuff =~ m#\<source\s+src\=\"([^\"]+)#);
-			unless (!$stream || ($self->{'secure'} && $stream !~ /^https/o)) {
-				push @{$self->{'streams'}}, $stream;
-				$self->{'cnt'}++;
+	my @nonYtStreams = ();
+	my $nonYtCnt = 0;
+	my @YTDLstreams = ();
+	my $YTDLcnt = 0;
+	my $embedPage = 0;
+	unless ($self->{'youtube'} =~ /only/i) {
+		#TRY TO FETCH ANY STREAM IN THE ODYSEE VIDEO PAGE ITSELF:
+		foreach my $tag ('video', 'audio') {
+			if ($html =~ s#\<$tag\s+preload(.+?)\<\/$tag\>##si) {
+				my $stuff = $1;
+				if ($stuff =~ m#\<source\s+src\=\"([^\"]+)#) {
+					$stream = $1;
+					next  if ($self->{'nohls'} && $stream =~ /\.m3u8?/o);
+					print STDERR "+++++FOUND $tag stream in page=$stream=\n"  if ($DEBUG);
+					push (@nonYtStreams, $stream)
+							unless ($self->{'secure'} && $stream !~ /^https/o);
+				}
 			}
 		}
-	}
+		$nonYtCnt = scalar (@nonYtStreams);
 
-	return undef  unless ($self->{'cnt'} > 0);
+		return undef  unless ($nonYtCnt > 0 || $self->{'youtube'} !~ /no/i);
+	}
 
 	foreach my $tag ('og:title', 'twitter:title') {
 		if ($html =~ s#\"$tag\"\s+content\=\"([^\"]+)\"##gso) {
@@ -413,7 +483,7 @@ sub new
 	foreach my $tag ('og:image', 'twitter:image') {
 		if ($html =~ s#\"$tag\"\s+content\=\"([^\"]+)\"##gso) {
 			$self->{'iconurl'} = $1;
-			$self->{'imageurl'} = $self->{'iconurl'};
+			($self->{'imageurl'} = $self->{'iconurl'}) =~ s/\&.+$//;
 			last  if ($self->{'iconurl'});
 		}
 	}
@@ -424,41 +494,102 @@ sub new
 		}
 	}
 	if ($html =~ s#kit\-player\_\_info\-text\-\-date\"\>(.+?)\<\/div\>##s) {
-		my $copyright = $1;
-		$self->{'year'} = $1  if ($copyright =~ /(\d\d\d\d)/);
-	} elsif ($html =~ s#app\_\_footer\-copyright\"\>(.+)?\<\/div\>##s) {
-		my $date = $1;
-		$self->{'year'} = $1  if ($date =~ /(\d\d\d\d)/);
+		$self->{'created'} = $1;
+		$self->{'year'} = $1  if ($self->{'created'} =~ /(\d\d\d\d)/);
+	} elsif ($html =~ s#app\_\_footer\-copyright\"\>(.+?)\<\/div\>##s) {
+		$self->{'created'} = $1;
+		$self->{'year'} = $1  if ($self->{'created'} =~ /(\d\d\d\d)/);
+	} elsif ($html =~ m#\\\"date\\\"\:\\\"(.+?)\\\"#s) {
+		$self->{'created'} = $1;
+		$self->{'year'} = $1  if ($self->{'created'} =~ /(\d\d\d\d)/);
+	} elsif ($html =~ m#\<\!\-\-\s+\-\-\>(\d\d\d\d)\<\!\-\-\s+\-\-\>#) {
+		$self->{'created'} = $self->{'year'} = $1  if ($self->{'created'} =~ /(\d\d\d\d)/);
 	}
 	if ($html =~ m#\<div\s+class\=\"route\-media\-item\_\_basic\-info\"\>(.+?)\<\/div\>#s) {
 		my $addtl = $1;
 		if ($addtl =~ m#\<p\>\s*(.+?)\<\/p\>#s) {
 			my $stuff = $1;
-			if ($stuff =~ s#^\s*(.+?\d\d\d\d)##) {
+			if ($stuff =~ s#^\s*(.+?\d\d\d\d)##s) {
 				$self->{'created'} = $1;
 				$self->{'year'} = $1  if ($self->{'created'} =~ /(\d\d\d\d)/);
-				($self->{'artist'} = $stuff) =~ s#^[^\w]+##;
+				($self->{'artist'} = $stuff) =~ s#^[^\w]+##s;
 				$self->{'artist'} =~ s/\s+$//;
+				$self->{'artist'} =~ s/[\\\"].*$//s;
 			}
 		}
 	} elsif ($html =~ s#kit\-player\_\_info\-text\-\-additional\"\>(.+?)\<\/div\>##s) { ## DEPRECIATED? ##:
 		$self->{'artist'} = $1;
 		$self->{'artist'} =~ s/^\s+//s;
 		$self->{'artist'} =~ s/\s+$//s;
+	} elsif ($html =~ m#\\\"speaker\\\"\:\\\"(.+?)\\\"#s) {
+		$self->{'artist'} = $1;
 	}
+	$self->{'genre'} = $1  if ($html =~ m#\\\"topic\:(.+?)\\\"#s);
 	if ($html =~ m#\<div\s+class\=\"route\-media\-item\_\_more\-items\-title\"(.+?)\<\/div\>#s) {
 		my $addtl = $1;
 		if ($addtl =~ m#\<a[^\>]+\>\s*(.+?)\<\/a\>#s) {
 			($self->{'album'} = $1) =~ s/\s+$//;
 		}
 	}
+	if ($html =~ m#\<img\s+alt\=\"logo\" ([^\>]+)#s) {
+		my $data = $1;
+		$self->{'articonurl'} = $1  if ($data =~ m#src\=\"(.+?)(?:\"| \dx)#);
+		$self->{'articonurl'} = $baseURL . $self->{'articonurl'}
+				if ($self->{'articonurl'} =~ m#^\/#);
+		$self->{'articonurl'} =~ s/\"$//;
+		$self->{'articonurl'} = uri_unescape($self->{'articonurl'});
+		$self->{'articonurl'} = HTML::Entities::decode_entities($self->{'articonurl'});
+		$self->{'articonurl'} =~ s/^.*\?url\=//;
+	}
+
+	my $haveYoutube = 0;
+	unless ($self->{'youtube'} =~ /no/i || ($nonYtCnt > 0 && $self->{'youtube'} =~ /ifneeded/i)) {
+		eval { require 'StreamFinder/Youtube.pm'; $haveYoutube = 1; };
+	}
+	print STDERR "\n-2 NO STREAMS FOUND IN PAGE (haveYoutube=$haveYoutube)\n"  if ($DEBUG && $nonYtCnt <= 0);
+	if ($haveYoutube) {
+		print STDERR "\n-2 TRYING yt-dlp...\n"  if ($DEBUG);
+		my %globalArgs = (
+				'-noiframes' => 1, '-fast' => 1, '-debug' => $DEBUG
+		);
+		foreach my $arg (qw(secure log logfmt youtube-format youtube-format-fallback
+				youtube-formatonly youtube-dl-args youtube-dl-add-args)) {
+			(my $arg0 = $arg) =~ s/^youtube\-(?!dl)//o;
+			$globalArgs{$arg0} = $self->{$arg}  if (defined $self->{$arg});
+		}
+		my $yt = new StreamFinder::Youtube($url2fetch, %globalArgs);
+		if ($yt) {
+			if ($yt->count() > 0) {
+				my @ytStreams = $yt->get();
+				foreach my $s (@ytStreams) {
+					print STDERR "+++++FOUND stream via yt-dlp=$s=\n"  if ($DEBUG);
+					push (@YTDLstreams, $s)  unless ($self->{'nohls'} && $s =~ /\.m3u8?/o);
+				}
+				$YTDLcnt = scalar (@YTDLstreams);
+				$self->{'description'} = $yt->{'description'}
+						if (length($yt->{'description'}) > length($self->{'description'}));
+			}
+		}
+	}
+	push (@{$self->{'streams'}}, @YTDLstreams)
+			if ($YTDLcnt > 0 && $self->{'youtube'} =~ /(?:yes|top|first|last|only|ifneeded)/i);
+	if ($nonYtCnt > 0 && $self->{'youtube'} !~ /only/i) {
+		if ($self->{'youtube'} =~ /(?:top|first)/i) {  #PUT yt-dlp STREAMS ON TOP:
+			push @{$self->{'streams'}}, @nonYtStreams;
+		} else {                                       #PUT STREAMS FROM PAGE ON TOP:
+			unshift @{$self->{'streams'}}, @nonYtStreams;
+		}
+	}
+	$self->{'cnt'} = scalar @{$self->{'streams'}};
+
 	foreach my $field (qw(title description artist)) {
 		$self->{$field} = HTML::Entities::decode_entities($self->{$field});
 		$self->{$field} = uri_unescape($self->{$field});
 		$self->{$field} =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/eg;
 	}
 	$self->{'total'} = $self->{'cnt'};
-	$self->{'id'} =~ s/[\+\-]//g;
+	$self->{'id'} =~ s/[\+]//g;  #DON'T LEAVE THESE IN POTENTIAL FILE-NAMES!:
+	$self->{'id'} =~ s/^[\-]//;
 	$self->{'Url'} = ($self->{'total'} > 0) ? $self->{'streams'}->[0] : '';
 	print STDERR "-SUCCESS: 1st stream=".$self->{'Url'}."=\n"  if ($DEBUG);
 	$self->_log($url);

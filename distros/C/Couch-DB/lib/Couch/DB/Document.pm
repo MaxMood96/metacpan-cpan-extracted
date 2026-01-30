@@ -1,13 +1,21 @@
-# Copyrights 2024-2025 by [Mark Overmeer].
-#  For other contributors see ChangeLog.
-# See the manual pages for details on the licensing terms.
-# Pod stripped from pm file by OODoc 2.03.
-# SPDX-FileCopyrightText: 2024 Mark Overmeer <mark@overmeer.net>
-# SPDX-License-Identifier: Artistic-2.0
+# This code is part of Perl distribution Couch-DB version 0.201.
+# The POD got stripped from this file by OODoc version 3.06.
+# For contributors see file ChangeLog.
+
+# This software is copyright (c) 2024-2026 by Mark Overmeer.
+
+# This is free software; you can redistribute it and/or modify it under
+# the same terms as the Perl 5 programming language system itself.
+# SPDX-License-Identifier: Artistic-1.0-Perl OR GPL-1.0-or-later
+
 
 package Couch::DB::Document;{
-our $VERSION = '0.200';
+our $VERSION = '0.201';
 }
+
+
+use warnings;
+use strict;
 
 use Couch::DB::Util;
 
@@ -16,6 +24,7 @@ use Scalar::Util             qw/weaken/;
 use MIME::Base64             qw/decode_base64/;
 use Devel::GlobalDestruction qw/in_global_destruction/;
 
+#--------------------
 
 sub new(@) { my ($class, %args) = @_; (bless {}, $class)->init(\%args) }
 
@@ -81,7 +90,7 @@ sub fromResult($$$%)
 	$class->new(%args, result => $result)->_consume($result, { %$data });
 }
 
-#-------------
+#--------------------
 
 sub id()      { $_[0]->{CDD_id} }
 sub db()      { $_[0]->{CDD_db} }
@@ -113,12 +122,13 @@ sub _saved($$;$)
 sub row(;$)
 {	my $self = shift;
 	@_ or return $self->{CDD_row};
+
 	$self->{CDD_row} = shift;
 	weaken($self->{CDD_row});
 	$self->{CDD_row};
 }
 
-#-------------
+#--------------------
 
 sub isLocal() { $_[0]->{CDD_local} }
 
@@ -132,6 +142,7 @@ sub revision($) { $_[0]->{CDD_revs}{$_[1]} }
 sub latest() { $_[0]->revision(($_[0]->revisions)[0]) }
 
 
+
 sub revisions()
 {	my $revs = $_[0]->{CDD_revs};
 	no warnings 'numeric';   # forget the "-hex" part of the rev
@@ -141,9 +152,9 @@ sub revisions()
 
 sub rev() { ($_[0]->revisions)[0] }
 
-#-------------
+#--------------------
 
-sub _info() { $_[0]->{CDD_info} or panic "No info yet" }
+sub _info() { $_[0]->{CDD_info} or panic "no info yet." }
 
 
 sub conflicts()        { @{ $_[0]->_info->{_conflicts} || [] } }
@@ -156,7 +167,7 @@ sub revisionsInfo()
 	return $self->{CDD_revinfo} if $self->{CDD_revinfo};
 
 	my $c = $self->_info->{_revs_info}
-		or error __x"You have requested the open_revs detail for the document yet.";
+		or error __x"you have requested the open_revs detail for the document yet.";
 
 	$self->{CDD_revinfo} = +{ map +($_->{rev} => $_), @$c };
 }
@@ -164,14 +175,14 @@ sub revisionsInfo()
 
 sub revisionInfo($) { $_[0]->revisionsInfo->{$_[1]} }
 
-#-------------
+#--------------------
 
 sub exists(%)
-{   my ($self, %args) = @_;
+{	my ($self, %args) = @_;
 
-    $self->couch->call(HEAD => $self->_pathToDoc,
-        $self->couch->_resultsConfig(\%args),
-    );
+	$self->couch->call(HEAD => $self->_pathToDoc,
+		$self->couch->_resultsConfig(\%args),
+	);
 }
 
 
@@ -185,7 +196,7 @@ sub __created($$)
 	delete $data->{_id};  # do not polute the data
 	$self->_saved($v->{id}, $v->{rev}, $data);
 }
-	
+
 sub create($%)
 {	my ($self, $data, %args) = @_;
 	ref $data eq 'HASH' or panic "Attempt to create document without data.";
@@ -245,8 +256,8 @@ sub get(%)
 	my $couch = $self->couch;
 
 	my %query  = $flags ? %$flags : ();
-	$couch->toQuery(\%query, bool => qw/attachments att_encoding_info conflicts
-		deleted_conflicts latest local_seq meta revs revs_info/);
+	$couch->toQuery(\%query,
+		bool => qw/attachments att_encoding_info conflicts deleted_conflicts latest local_seq meta revs revs_info/);
 
 	$couch->call(GET => $self->_pathToDoc,
 		query    => \%query,
@@ -273,7 +284,7 @@ sub delete(%)
 	my %query;
 	$query{batch} = 'ok' if exists $args{batch} ? delete $args{batch} : $self->batch;
 	$query{rev}   = delete $args{rev} || $self->rev;
-		
+
 	$couch->call(DELETE => $self->_pathToDoc,
 		query    => \%query,
 		$couch->_resultsConfig(\%args, on_final => sub { $self->__delete($_[0]) }),
@@ -322,7 +333,7 @@ sub appendTo($%)
 }
 
 
-#-------------
+#--------------------
 
 sub attInfo($)    { $_[0]->_info->{_attachments}{$_[1]} }
 sub attachments() { keys %{$_[0]->_info->{_attachments}} }
@@ -350,7 +361,7 @@ sub __attLoad($$)
 
 sub attLoad($%)
 {	my ($self, $name, %args) = @_;
-	my %query = ( rev => delete $args{rev} || $self->rev );
+	my %query = (rev => delete $args{rev} || $self->rev);
 
 	$self->couch->call(GET => $self->_pathToDoc($name),
 		query => \%query,

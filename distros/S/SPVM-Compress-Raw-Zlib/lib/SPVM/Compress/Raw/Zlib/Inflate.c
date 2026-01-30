@@ -22,7 +22,7 @@ int32_t SPVM__Compress__Raw__Zlib__Inflate___inflateInit(SPVM_ENV* env, SPVM_VAL
   int32_t status = inflateInit2(st_z_stream, windowBits);
   
   if (!(status == Z_OK)) {
-    error_id = env->die_v2(env, stack, "[zlib Error]inflateInit2() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
+    error_id = env->die(env, stack, "[zlib Error]inflateInit2() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
     goto END_OF_FUNC;
   }
   
@@ -64,7 +64,7 @@ int32_t SPVM__Compress__Raw__Zlib__Inflate__inflateReset(SPVM_ENV* env, SPVM_VAL
   int32_t status = inflateReset(st_z_stream);
   
   if (!(status == Z_OK)) {
-    error_id = env->die_v2(env, stack, "[zlib Error]inflateReset() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
+    error_id = env->die(env, stack, "[zlib Error]inflateReset() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
     goto END_OF_FUNC;
   }
   
@@ -84,12 +84,12 @@ int32_t SPVM__Compress__Raw__Zlib__Inflate__inflate(SPVM_ENV* env, SPVM_VALUE* s
   void* obj_output_ref = stack[2].oval;
   
   if (!obj_input) {
-    error_id = env->die_v2(env, stack, "The input $input must be define.", __func__, FILE_NAME, __LINE__);
+    error_id = env->die(env, stack, "The input $input must be define.", __func__, FILE_NAME, __LINE__);
     goto END_OF_FUNC;
   }
   
   if (!(obj_output_ref && env->length(env, stack, obj_output_ref) == 1)) {
-    error_id = env->die_v2(env, stack, "The output reference $output_ref must be 1-length string array.", __func__, FILE_NAME, __LINE__);
+    error_id = env->die(env, stack, "The output reference $output_ref must be 1-length string array.", __func__, FILE_NAME, __LINE__);
     goto END_OF_FUNC;
   }
   
@@ -171,7 +171,7 @@ int32_t SPVM__Compress__Raw__Zlib__Inflate__inflate(SPVM_ENV* env, SPVM_VALUE* s
         status = inflateSetDictionary(st_z_stream, (const Bytef*)dictionary, dictonary_length);
         
         if (!(status == Z_OK)) {
-          error_id = env->die_v2(env, stack, "[zlib Error]inflateSetDictionary() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
+          error_id = env->die(env, stack, "[zlib Error]inflateSetDictionary() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
           goto END_OF_FUNC;
         }
       }
@@ -184,7 +184,7 @@ int32_t SPVM__Compress__Raw__Zlib__Inflate__inflate(SPVM_ENV* env, SPVM_VALUE* s
     }
     
     if (fatal_error) {
-      error_id = env->die_v2(env, stack, "[zlib Error]inflate() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
+      error_id = env->die(env, stack, "[zlib Error]inflate() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
       goto END_OF_FUNC;
     }
     

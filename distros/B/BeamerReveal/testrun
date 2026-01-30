@@ -1,7 +1,12 @@
 #!/bin/bash
 cd ../LaTeX-beamer-reveal
 l3build doc
+l3build install
 cp -r build/doc/beamer-reveal-example.{tex,pdf,rvl} build/doc/Media ../Perl-beamer-reveal
 cd ../Perl-beamer-reveal
 dzil run
+cd ../LaTeX-beamer-reveal
+l3build uninstall
+cd ../Perl-beamer-reveal
+
 

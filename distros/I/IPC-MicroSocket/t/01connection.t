@@ -16,7 +16,7 @@ my $message_f;
 class TestConnection {
    inherit IPC::MicroSocket::Connection;
 
-   method on_recv { $message_f->done( @_ ); }
+   method on_recv ( @args ) { $message_f->done( @args ); }
 }
 my $conn = TestConnection->new(
    fh => "DummyFH",
@@ -45,7 +45,7 @@ my $conn = TestConnection->new(
    $controller->use_sysread_buffer( "DummyFH" );
 
    my $runf = $conn->_recv
-      ->on_fail( sub { warn "Runloop failed: @_\n" } );
+      ->on_fail( sub ( $err, @ ) { warn "Runloop failed: $err\n" } );
 
    $message_f = $runf->new;
 

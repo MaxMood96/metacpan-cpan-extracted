@@ -2,7 +2,7 @@ use v5.42;
 use feature 'class';
 no warnings 'experimental::class';
 #
-class Net::uTP v1.0.0 {
+class Net::uTP v1.0.1 {
     use Carp qw[carp croak];
     use Time::HiRes qw[gettimeofday time];
 
@@ -128,7 +128,7 @@ class Net::uTP v1.0.0 {
     method _handle_sack ( $bitmask, $ack_nr ) {
         my $base  = ( $ack_nr + 2 ) & 0xFFFF;
         my @bytes = unpack 'C*', $bitmask;
-        for my $i ( 0 .. @bytes ) {
+        for my $i ( 0 .. $#bytes ) {
             my $byte = $bytes[$i];
             for ( my $bit = 0; $bit < 8; $bit++ ) {
                 $self->_ack_packet( ( $base + ( $i * 8 ) + $bit ) & 0xFFFF ) if $byte & ( 1 << $bit );

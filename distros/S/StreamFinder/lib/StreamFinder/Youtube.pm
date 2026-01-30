@@ -767,15 +767,17 @@ RETRYIT:
 	my @fmtsfound = split(/\+/, $fmtline);
 	for (my $i=0;$i<=$#fmtsfound;$i++) {  #GET STREAM URLS:
 		$_ = shift @ytdldata;
+		next  unless (/^https?/o);
 		push @ytStreams, $_  unless ($self->{'secure'} && $_ !~ /^https/o);
 	}
 	if ($ytdlArgs =~ /get-thumbnail/o) {  #GET THUMBNAIL URL:
 		$_ = shift @ytdldata;
-		$self->{'iconurl'} = $_  if (m#^https?\:\/\/#);
+		$self->{'iconurl'} = $_  if (defined($_) && m#^https?\:\/\/#);
 	}
 	#GET ANY YOUTUBE-URL (LAST LINE BEFORE FORMAT (OF DESCRIPTION)) IN MANY ODYSEE VIDEOS:
 	#(THIS CAN BE USED BY StreamFinder::Odysee!)
-	$self->{'_odysee_yturl'} = pop(@ytdldata)  if ($ytdldata[$#ytdldata] =~ m#^https?\:\/\/#);
+	$self->{'_odysee_yturl'} = pop(@ytdldata)
+			if ($#ytdldata >= 0 && $ytdldata[$#ytdldata] =~ m#^https?\:\/\/#);
 	#GET DESCRIPTION (EVERYTHING ELSE):
 	$self->{'description'} = '';
 	while (@ytdldata) {
@@ -878,7 +880,7 @@ RETRYPAGE:
 	print STDERR "-2: title=".$self->{'title'}."= id=".$self->{'id'}."= artist=".$self->{'artist'}."= year(Published)=".$self->{'year'}."=\n"  if ($DEBUG);
 	if ($DEBUG) {
 		foreach my $i (sort keys %{$self}) {
-			print STDERR "--KEY=$i= VAL=".$self->{$i}."=\n";
+			print STDERR "--KEY.YT=$i= VAL=".$self->{$i}."=\n";
 		}
 	}
 	$self->_log($url2fetch);

@@ -2,7 +2,7 @@
 # -*- cperl -*-
 # PODNAME: beamer-reveal.pl
 # ABSTRACT: converts the .rvl file and the corresponding pdf file to a full reveal website
-our $VERSION = '20260127.1936'; # VERSION
+our $VERSION = '20260130.1048'; # VERSION
 
 
 use strict;
@@ -21,7 +21,7 @@ use Data::Dumper;
 use BeamerReveal;
 use BeamerReveal::TemplateStore;
 use BeamerReveal::FrameConverter;
-
+use BeamerReveal::NotesFactory;
 use BeamerReveal::Log;
 
 sub unixify;
@@ -67,6 +67,9 @@ my $openinglines =
    '-|-',
    "--  beamer-reveal.pl|v${BeamerReveal::VERSION} --",
    '--  (C) 2025-2026 Walter PM Daems <wdaems@cpan.org>|GPLv3 --',
+   '--  This script uses materials from:|--',
+   '--    - reveal.js (C) Hakim El Hattab and contributors|MIT license --',
+   '--    - Quarto    (C) Posit Software, PBC and contributors|MIT license --',
    '-|-',
   ];
 my $closinglines = [ '-|-' ];
@@ -102,6 +105,10 @@ my $fc_id =
   $logger->registerTask( label    => "Frame conversion",
 			 progress => 0,
 			 total    => 1 );
+my $ng_id =
+  $logger->registerTask( label    => "Note generation",
+			 progress => 0,
+			 total    => 1 );
 my $mmcop_id =
   $logger->registerTask( label    => "Media copying",
 			 progress => 0,
@@ -113,7 +120,7 @@ my $mmgen_id =
 my $overall_id =
   $logger->registerTask( label    => "Overall progress",
 			 progress => 0,
-			 total    => 5 );
+			 total    => 6 );
 
 $logger->activate();
 
@@ -157,15 +164,21 @@ my $factory = BeamerReveal->new();
 my $presentation = $factory->createFromChunk( $chunks[0], $chunksLineNrs[0] );
 
 my $slides = [];
+my $nofNotes = 0;
 eval {
   for( my $i = 1; $i < @chunks; ++$i ) {
     my $object = $factory->createFromChunk( $chunks[$i], $chunksLineNrs[$i] );
     push @$slides, $object;
+    $object->{hasnotes} = ++$nofNotes if( $object->{hasnotes} ); #if notes, add sequence number
   }
   1;
 } or do {
   $logger->fatal( "$@" );
 };
+# needed for NotesFactory
+$presentation->{parameters}->{nofnotes} = $nofNotes;
+
+
 
 ######################
 # process the content
@@ -189,7 +202,7 @@ my $i = 0;
 my $nofSlides = @$slides;
 foreach my $slide ( @$slides ) {
   $logger->progress( $proc_id, $i++, "slide $i/$nofSlides", $nofSlides );
-  $slideCollection .= $slide->makeSlide( $i, $mediaManager );
+  $slideCollection .= $slide->makeSlide( $i, $mediaManager, $nofNotes );
 }
 $logger->progress( $proc_id, $i );
 
@@ -205,19 +218,35 @@ my $convertor = BeamerReveal::FrameConverter->new( "$output_dir/${jobname}_files
 						   $fc_id );
 $convertor->toJPG();
 
+##########################
+# geneate the notes pages
+$logger->progress( $overall_id, 4, 'generating notes pages' );
+
+$logger->log( 0, "- Generating the notes pages" );
+my $notesFactory = BeamerReveal::NotesFactory->new( "$output_dir/${jobname}_files",
+						    $pdf_dir,
+						    $presentation->{parameters},
+						    $presentation->{parameters}->{canvaswidth} / 2,
+						    $presentation->{parameters}->{canvasheight} / 2,
+						    $ng_id );
+$notesFactory->toJPG();
+
 ################################
 # generate the copy back-orders
-$logger->progress( $overall_id, 4, 'media copying' );
+$logger->progress( $overall_id, 5, 'media copying' );
+
+$logger->log( 0, "- Collecting all existing media" );
 $mediaManager->processCopyBackOrders( $mmcop_id );
 
 ################################
 # generate the generation back-orders
-$logger->progress( $overall_id, 4, 'animation generation' );
+$logger->progress( $overall_id, 5.5, 'animation generation' );
+$logger->log( 0, "- Generating all new media" );
 $mediaManager->processConstructionBackOrders( $mmgen_id );
 
 ######################
 # write the main file
-$logger->progress( $overall_id, 4, 'writing presentation file' );
+$logger->progress( $overall_id, 5.75, 'writing presentation file' );
 
 $logger->log( 0, "- Producing presentation" );
 
@@ -231,17 +260,19 @@ $oFile->open( ">$oFileName" )
   or $logger->fatal( "Error: cannot write to '$oFileName'" );
 print $oFile
   BeamerReveal::TemplateStore::stampTemplate( $mainTemplate,
-					      { TITLE => 'presentation',
-						CANVASWIDTH => $presentation->{parameters}->{canvaswidth},
+					      { PRODUCER => "beamer-reveal.pl v${BeamerReveal::VERSION}",
+						TITLE    => $presentation->{parameters}->{title},
+						AUTHOR   => $presentation->{parameters}->{author},
+						CANVASWIDTH  => $presentation->{parameters}->{canvaswidth},
 						CANVASHEIGHT => $presentation->{parameters}->{canvasheight},
-						SLIDES => $slideCollection,
-						SUBDIR => "${jobname}_files" } );
+						SLIDES   => $slideCollection,
+						SUBDIR   => "${jobname}_files" } );
 $oFile->close();
 
 # finally let's create an index.html link
 $logger->log( 2, "- Creating index.html link" );
 link( "$oFileName", "$output_dir/index.html" );
-$logger->progress( $overall_id, 5, 'done' );
+$logger->progress( $overall_id, 6, 'done' );
 
 ########################
 # generate closing line
@@ -268,7 +299,7 @@ beamer-reveal.pl - converts the .rvl file and the corresponding pdf file to a fu
 
 =head1 VERSION
 
-version 20260127.1936
+version 20260130.1048
 
 =head1 SYNOPSIS
 

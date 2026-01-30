@@ -518,7 +518,7 @@ sub new
 							foreach my $field (qw(title artist albumartist year iconurl articonurl)) {
 								$self->{$field} ||= $yt0->{$field}  if (defined($yt0->{$field}) && $yt0->{$field});
 							}
-							$self->{'description'} = $yt0->{'description'}  if (length($yt0->{'description'}) > $self->{'description'});
+							$self->{'description'} = $yt0->{'description'}  if (length($yt0->{'description'}) > length($self->{'description'}));
 						}
 						$self->{'cnt'} = scalar @{$self->{'streams'}};
 						print STDERR "i:Found (".$self->{'cnt'}.") Youtube stream(s) (".join('|',@ytStreams).") via youtube-dl.\n"  if ($DEBUG);

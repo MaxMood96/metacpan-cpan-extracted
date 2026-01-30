@@ -1,22 +1,29 @@
-# Copyrights 2024-2025 by [Mark Overmeer].
-#  For other contributors see ChangeLog.
-# See the manual pages for details on the licensing terms.
-# Pod stripped from pm file by OODoc 2.03.
-# SPDX-FileCopyrightText: 2024 Mark Overmeer <mark@overmeer.net>
-# SPDX-License-Identifier: Artistic-2.0
+# This code is part of Perl distribution Couch-DB version 0.201.
+# The POD got stripped from this file by OODoc version 3.06.
+# For contributors see file ChangeLog.
+
+# This software is copyright (c) 2024-2026 by Mark Overmeer.
+
+# This is free software; you can redistribute it and/or modify it under
+# the same terms as the Perl 5 programming language system itself.
+# SPDX-License-Identifier: Artistic-1.0-Perl OR GPL-1.0-or-later
+
 
 package Couch::DB::Result;{
-our $VERSION = '0.200';
+our $VERSION = '0.201';
 }
 
 
-use Couch::DB::Util     qw(flat pile);
+use warnings;
+use strict;
+
+use Couch::DB::Util     qw/flat pile/;
 use Couch::DB::Document ();
 use Couch::DB::Row      ();
 
 use Log::Report   'couch-db';
-use HTTP::Status  qw(is_success status_constant_name HTTP_OK HTTP_CONTINUE HTTP_MULTIPLE_CHOICES);
-use Scalar::Util  qw(weaken blessed);
+use HTTP::Status  qw/is_success status_constant_name HTTP_OK HTTP_CONTINUE HTTP_MULTIPLE_CHOICES/;
+use Scalar::Util  qw/weaken blessed/;
 
 my %couch_code_names   = ();   # I think I saw them somewhere.  Maybe none
 
@@ -28,12 +35,14 @@ my %default_code_texts = (  # do not construct them all the time again
 
 my $seqnr = 0;
 
+#--------------------
 
 use overload
 	bool     => sub { $_[0]->code < 400 },
 	'""'     => 'short',
 	fallback => 1;
 
+#--------------------
 
 sub new(@) { my ($class, %args) = @_; (bless {}, $class)->init(\%args) }
 
@@ -53,7 +62,7 @@ sub init($)
 	$self;
 }
 
-#-------------
+#--------------------
 
 sub couch()     { $_[0]->{CDR_couch}  }
 sub isDelayed() { $_[0]->code == HTTP_CONTINUE }
@@ -88,16 +97,16 @@ sub seqnr() { $_[0]->{CDR_seqnr} }
 
 
 sub short()
-{	my $self = shift;
+{	my $self   = shift;
 	my $client = $self->client;
 	my $req    = $self->request;
 
 	$client && $req
-	  ? (sprintf "RESULT %07d.%08d %-6s %s\n", $client->seqnr, $self->seqnr, $req->method, $req->url =~ s/\?.*/?.../r)
-	  : (sprintf "RESULT prepare.%08d\n", $self->seqnr);
+	? (sprintf "RESULT %07d.%08d %-6s %s\n", $client->seqnr, $self->seqnr, $req->method, $req->url =~ s/\?.*/?.../r)
+	: (sprintf "RESULT prepare.%08d\n", $self->seqnr);
 }
 
-#-------------
+#--------------------
 
 sub client()    { $_[0]->{CDR_client} }
 sub request()   { $_[0]->{CDR_request} }
@@ -110,8 +119,8 @@ sub answer(%)
 	return $self->{CDR_answer}
 		if defined $self->{CDR_answer};
 
- 	$self->isReady
-		or error __x"Document not ready: {err}", err => $self->message;
+	$self->isReady
+		or error __x"document not ready: {err}", err => $self->message;
 
 	$self->{CDR_answer} = $self->couch->_extractAnswer($self->response);
 }
@@ -126,7 +135,7 @@ sub values(@)
 	$self->{CDR_values} = $values;
 }
 
-#-------------
+#--------------------
 
 sub rows(;$) { @{$_[0]->rowsRef($_[1])} }
 
@@ -191,7 +200,7 @@ sub doc($;$)
 	defined $r ? $r->doc : undef;
 }
 
-#-------------
+#--------------------
 
 sub pagingState(%)
 {	my ($self, %args) = @_;
@@ -269,15 +278,15 @@ sub pageDoc($) { my $r = $_[0]->page->[$_[1]-1]; defined $r ? $r->doc : undef }
 
 sub pageIsPartial()
 {	my $this = shift->_thisPage;
-	     $this->{page_mode}
-	  && ! $this->{end_reached}
-	  && ($this->{all} || @{$this->{harvested}} < $this->{page_size});
+		$this->{page_mode}
+	&& ! $this->{end_reached}
+	&& ($this->{all} || @{$this->{harvested}} < $this->{page_size});
 }
 
 
 sub isLastPage() { $_[0]->_thisPage->{end_reached} }
 
-#-------------
+#--------------------
 
 sub setFinalResult($%)
 {	my ($self, $data, %args) = @_;
@@ -295,7 +304,6 @@ sub setFinalResult($%)
 	delete $self->{CDR_values};
 	delete $self->{CDR_rows};
 
-#warn "CODE=$code, $self";
 	# "on_error" handler
 	unless(is_success $code)
 	{	$_->($self) for @{$self->{CDR_on_error}};
@@ -311,7 +319,7 @@ sub setFinalResult($%)
 	my $tail   = $self;
 
 	while(@chains && $tail)
- 	{	$tail = (pop @chains)->($tail);
+	{	$tail = (pop @chains)->($tail);
 		blessed $tail && $tail->isa('Couch::DB::Result')
 			or panic "Chain must return a Result object";
 	}
@@ -331,6 +339,6 @@ sub setResultDelayed($%)
 
 sub delayPlan() { $_[0]->{CDR_delayed} }
 
-#-------------
+#--------------------
 
 1;

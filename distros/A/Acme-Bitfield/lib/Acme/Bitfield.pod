@@ -1,0 +1,84 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Acme::Bitfield - Bitmask for Tracking Boolean Sets
+
+=head1 SYNOPSIS
+
+    use Acme::Bitfield;
+
+    my $bf = Acme::Bitfield->new( size => 100 );
+
+    # Mark item 42 as present
+    $bf->set( 42 );
+
+    # Check if we have item 42
+    say 'Found it!' if $bf->get(42);
+
+    # Statistics
+    printf "Progress: %.2f%%\r", ($bf->count / $bf->size * 100);
+
+    # Export raw binary for network transfer
+    my $raw = $bf->data;
+
+=head1 DESCRIPTION
+
+C<Acme::Bitfield> provides a compact way to track a large set of big endian boolean flags. It is specifically designed
+to follow the BitTorrent (BEP 03) bit-ordering convention, where the most significant bit of the first byte represents
+index 0.
+
+=head2 Bit Ordering
+
+* Byte 0, Bit 0 (0x80) -> Index 0 * Byte 0, Bit 7 (0x01) -> Index 7 * Byte 1, Bit 0 (0x80) -> Index 8
+
+This is the inverse of Perl's internal C<vec> bit-ordering, and this module handles the necessary bit-swizzling
+transparently.
+
+=head1 METHODS
+
+=head2 C<get( $index )>
+
+Returns 1 if the bit at C<$index> is set, 0 otherwise.
+
+=head2 C<set( $index )>
+
+Sets the bit at C<$index> to 1.
+
+=head2 C<clear( $index )>
+
+Sets the bit at C<$index> to 0.
+
+=head2 C<count( )>
+
+Returns the total number of bits set to 1.
+
+=head2 C<size( )>
+
+Returns the total capacity of the bitfield.
+
+=head2 C<data( )>
+
+Returns the raw binary string representation of the bitfield.
+
+=head2 C<fill( )>
+
+Sets all bits within the C<size> to 1.
+
+=head2 C<find_missing( )>
+
+Returns the index of the first bit set to 0, or C<undef> if all bits are set.
+
+=head1 AUTHOR
+
+Sanko Robinson E<lt>sanko@cpan.orgE<gt>
+
+=head1 COPYRIGHT
+
+Copyright (C) 2026 by Sanko Robinson.
+
+This library is free software; you can redistribute it and/or modify it under the terms of the Artistic License 2.0.
+
+=cut

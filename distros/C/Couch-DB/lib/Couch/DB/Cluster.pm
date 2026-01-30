@@ -1,41 +1,51 @@
-# Copyrights 2024-2025 by [Mark Overmeer].
-#  For other contributors see ChangeLog.
-# See the manual pages for details on the licensing terms.
-# Pod stripped from pm file by OODoc 2.03.
-# SPDX-FileCopyrightText: 2024 Mark Overmeer <mark@overmeer.net>
-# SPDX-License-Identifier: Artistic-2.0
+# This code is part of Perl distribution Couch-DB version 0.201.
+# The POD got stripped from this file by OODoc version 3.06.
+# For contributors see file ChangeLog.
+
+# This software is copyright (c) 2024-2026 by Mark Overmeer.
+
+# This is free software; you can redistribute it and/or modify it under
+# the same terms as the Perl 5 programming language system itself.
+# SPDX-License-Identifier: Artistic-1.0-Perl OR GPL-1.0-or-later
+
+#oorestyle: not found P for method shardsForDoc($db)
+#oorestyle: not found P for method shardsForDoc($db)
 
 package Couch::DB::Cluster;{
-our $VERSION = '0.200';
+our $VERSION = '0.201';
 }
 
 
-use Couch::DB::Util  qw/flat/;;
+use warnings;
+use strict;
 
 use Log::Report 'couch-db';
 
-use Scalar::Util  qw(weaken);
-use URI::Escape   qw(uri_escape);
-use Storable      qw(dclone);
+use Couch::DB::Util qw/flat/;;
 
+use Scalar::Util    qw/weaken/;
+use URI::Escape     qw/uri_escape/;
+use Storable        qw/dclone/;
+
+#--------------------
 
 sub new(@) { my ($class, %args) = @_; (bless {}, $class)->init(\%args) }
 
 sub init($)
-{   my ($self, $args) = @_;
+{	my ($self, $args) = @_;
 
-    $self->{CDC_couch} = delete $args->{couch} or panic "Requires couch";
-    weaken $self->{CDC_couch};
+	$self->{CDC_couch} = delete $args->{couch} or panic "Requires couch";
+	weaken $self->{CDC_couch};
 
-    $self;
+	$self;
 }
 
 
-#-------------
+#--------------------
 
 sub couch() { $_[0]->{CDC_couch} }
 
-#-------------
+#--------------------
 
 sub clusterState(%)
 {	my ($self, %args) = @_;
@@ -57,7 +67,7 @@ sub clusterSetup($%)
 {	my ($self, $config, %args) = @_;
 
 	$self->couch->toJSON($config, int => qw/port node_count/);
-	
+
 	$self->couch->call(POST => '/_cluster_setup',
 		introduced => '2.0.0',
 		send       => $config,
@@ -65,7 +75,7 @@ sub clusterSetup($%)
 	);
 }
 
-#-------------
+#--------------------
 
 sub reshardStatus(%)
 {	my ($self, %args) = @_;
@@ -99,7 +109,7 @@ sub __jobValues($$)
 {	my ($self, $couch, $job) = @_;
 
 	$couch->toPerl($job, isotime => qw/start_time update_time/)
-	      ->toPerl($job, node => qw/node/);
+		->toPerl($job, node => qw/node/);
 
 	$couch->toPerl($_, isotime => qw/timestamp/)
 		for @{$job->{history} || []};

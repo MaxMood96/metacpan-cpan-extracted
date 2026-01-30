@@ -137,8 +137,9 @@ DESCRIPTION
     (StreamFinder::OnlineRadiobox), odysee.com videos
     (StreamFinder::Odysee), podbean.com podcasts (StreamFinder::Podbean),
     podcastaddict.com podcasts (StreamFinder::PodcastAddict) (DEPRECIATED),
-    podchaser.com podcasts (StreamFinder::Podchaser), radio.net radio
-    stations (StreamFinder::RadioNet), rcast.net radio stations
+    podchaser.com podcasts (StreamFinder::Podchaser), prageru.com videos
+    (StreamFinder::PragerU), radio.net radio stations
+    (StreamFinder::RadioNet), rcast.net radio stations
     (StreamFinder::Rcast), rumble.com videos (StreamFinder::Rumble),
     sermonaudio.com sermons: audio and video (StreamFinder::SermonAudio),
     soundcloud.com (non-paywalled) songs (StreamFinder::SoundCloud)
@@ -153,14 +154,6 @@ DESCRIPTION
 
     NOTE: StreamFinder::Google has been removed as Google Podcasts has shut
     down.
-
-    NOTE: StreamFinder::LinkTV has been removed as that site no longer
-    provides streams anymore but only links to the various (and diverse)
-    streaming sites that provide their own streams. Some may possibly work
-    via StreamFinder::Youtube or StreamFinder::AnyStream.
-
-    NOTE: StreamFinder::Goodpods has been removed, as that site has redone
-    itself in javascript as to no longer be scrapable for streams.
 
     NOTE: StreamFinder::Podcastaddict is now considered depreciated and may
     be removed in a later StreamFinder release as it now requires a specific
@@ -178,8 +171,8 @@ DESCRIPTION
     this site).
 
     NOTE: For many sites, ie. Youtube, Vimeo, Apple, Spreaker, Castbox,
-    Google, etc. the "station" object actually refers to a specific video or
-    podcast episode, but functions the same way.
+    PragerU, etc. the "station" object actually refers to a specific video
+    or podcast episode, but functions the same way.
 
     Each site is supported by a separate subpackage
     (StreamFinder::*Package*), which is determined and selected based on the

@@ -1,14 +1,21 @@
-# Copyrights 2024-2025 by [Mark Overmeer].
-#  For other contributors see ChangeLog.
-# See the manual pages for details on the licensing terms.
-# Pod stripped from pm file by OODoc 2.03.
-# SPDX-FileCopyrightText: 2024 Mark Overmeer <mark@overmeer.net>
-# SPDX-License-Identifier: Artistic-2.0
+# This code is part of Perl distribution Couch-DB version 0.201.
+# The POD got stripped from this file by OODoc version 3.06.
+# For contributors see file ChangeLog.
+
+# This software is copyright (c) 2024-2026 by Mark Overmeer.
+
+# This is free software; you can redistribute it and/or modify it under
+# the same terms as the Perl 5 programming language system itself.
+# SPDX-License-Identifier: Artistic-1.0-Perl OR GPL-1.0-or-later
+
 
 package Couch::DB;{
-our $VERSION = '0.200';
+our $VERSION = '0.201';
 }
 
+
+use strict;
+use warnings;
 use version;
 
 use Log::Report 'couch-db';
@@ -17,22 +24,23 @@ use Couch::DB::Client   ();
 use Couch::DB::Cluster  ();
 use Couch::DB::Database ();
 use Couch::DB::Node     ();
-use Couch::DB::Util     qw(flat);
+use Couch::DB::Util     qw/flat/;
 
 use DateTime          ();
 use DateTime::Format::ISO8601 ();
 use DateTime::Format::Mail    ();
 use JSON              qw/encode_json/;
-use List::Util        qw(first min);
-use Scalar::Util      qw(blessed);
+use List::Util        qw/first min/;
+use Scalar::Util      qw/blessed/;
 use Storable          qw/dclone/;
 use URI               ();
 use URI::Escape       qw/uri_escape uri_unescape/;
 
-use constant
-{	DEFAULT_SERVER => 'http://127.0.0.1:5984',
+use constant {
+	DEFAULT_SERVER => 'http://127.0.0.1:5984',
 };
 
+#--------------------
 
 sub new(%)
 {	my ($class, %args) = @_;
@@ -80,11 +88,11 @@ sub init($)
 	$self;
 }
 
-#-------------
+#--------------------
 
 sub api() { $_[0]->{CD_api} }
 
-#-------------
+#--------------------
 
 sub createClient(%)
 {	my ($self, %args) = @_;
@@ -107,21 +115,18 @@ sub node($)
 
 sub cluster() { $_[0]->{CD_cluster} ||= Couch::DB::Cluster->new(couch => $_[0]) }
 
-#-------------
+#--------------------
 
 #XXX the API-doc might be mistaken, calling the "analyzer" parameter "field".
 
-sub searchAnalyze(%)
-{	my ($self, %args) = @_;
-
-	my %send = (
-		analyzer => delete $args{analyzer} // panic "No analyzer specified.",
-		text     => delete $args{text}     // panic "No text to inspect specified.",
-	);
+sub searchAnalyze($%)
+{	my ($self, $config, %args) = @_;
+	exists $config->{analyzer} or panic "No analyzer specified.";
+	exists $config->{text}     or panic "No text to inspect specified.";
 
 	$self->call(POST => '/_search_analyze',
 		introduced => '3.0',
-		send       => \%send,
+		send       => $config,
 		$self->_resultsConfig(\%args),
 	);
 }
@@ -154,7 +159,7 @@ sub freshUUIDs($%)
 
 sub freshUUID(%) { my $s = shift; ($s->freshUUIDs(1, @_))[0] }
 
-#-------------
+#--------------------
 
 sub addClient($)
 {	my ($self, $client) = @_;
@@ -182,6 +187,7 @@ sub client($)
 }
 
 
+
 sub call($$%)
 {	my ($self, $method, $path, %args) = @_;
 	$args{method}   = $method;
@@ -195,7 +201,7 @@ sub call($$%)
 #use Data::Dumper;
 #warn "CALL ", Dumper \%args;
 
-    my $send = $args{send};
+	my $send = $args{send};
 	defined $send || ($method ne 'POST' && $method ne 'PUT')
 		or panic "No send in $method $path";
 
@@ -234,7 +240,7 @@ sub call($$%)
 		paging    => $paging,
 	);
 
-  CLIENT:
+CLIENT:
 	foreach my $client (@clients)
 	{
 		! $introduced || $client->version >= $introduced
@@ -243,7 +249,7 @@ sub call($$%)
 		if($paging)
 		{	do
 			{	# Merge paging setting into the request
-	    		$self->_pageRequest($paging, $method, $query, $send);
+				$self->_pageRequest($paging, $method, $query, $send);
 
 				$self->_callClient($result, $client, %args);
 				$result
@@ -392,9 +398,9 @@ sub _pageRequest($$$$)
 	my $start    = $paging->{start};
 
 	$params->{limit}
-	  = $paging->{page_size}
-	  ? (min $paging->{page_size} - $progress, $paging->{req_rows})
-	  : $paging->{req_rows};
+	= $paging->{page_size}
+	? (min $paging->{page_size} - $progress, $paging->{req_rows})
+	: $paging->{req_rows};
 
 	if(my $bookmark = $paging->{bookmarks}{$start + $progress})
 	{	$params->{bookmark} = $bookmark;
@@ -412,7 +418,7 @@ my %default_toperl = (  # sub ($couch, $name, $datum) returns value/object
 	epoch     => sub { DateTime->from_epoch(epoch => $_[2]) },
 	isotime   => sub { DateTime::Format::ISO8601->parse_datetime($_[2]) },
 	mailtime  => sub { DateTime::Format::Mail->parse_datetime($_[2]) },   # smart choice by CouchDB?
- 	version   => sub { version->parse($_[2]) },
+	version   => sub { version->parse($_[2]) },
 	node      => sub { $_[0]->node($_[2]) },
 );
 
@@ -528,8 +534,6 @@ sub check($$$$)
 	$self;
 }
 
-#-------------
-
 #### Extension which perform some tasks which are framework object specific.
 
 # Returns the JSON structure which is part of the response by the CouchDB
@@ -545,4 +549,4 @@ sub _messageContent($) { panic "must be extended" }
 
 1;
 
-#-------------
+#--------------------

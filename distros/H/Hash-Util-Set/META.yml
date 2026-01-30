@@ -26,4 +26,4 @@ resources:
   bugtracker: https://github.com/chansen/p5-hash-util-set/issues
   license: http://dev.perl.org/licenses/
   repository: https://github.com/chansen/p5-hash-util-set
-version: '0.05'
+version: '0.06'

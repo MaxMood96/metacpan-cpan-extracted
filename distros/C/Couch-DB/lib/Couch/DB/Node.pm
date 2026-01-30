@@ -1,21 +1,29 @@
-# Copyrights 2024-2025 by [Mark Overmeer].
-#  For other contributors see ChangeLog.
-# See the manual pages for details on the licensing terms.
-# Pod stripped from pm file by OODoc 2.03.
-# SPDX-FileCopyrightText: 2024 Mark Overmeer <mark@overmeer.net>
-# SPDX-License-Identifier: Artistic-2.0
+# This code is part of Perl distribution Couch-DB version 0.201.
+# The POD got stripped from this file by OODoc version 3.06.
+# For contributors see file ChangeLog.
+
+# This software is copyright (c) 2024-2026 by Mark Overmeer.
+
+# This is free software; you can redistribute it and/or modify it under
+# the same terms as the Perl 5 programming language system itself.
+# SPDX-License-Identifier: Artistic-1.0-Perl OR GPL-1.0-or-later
+
 
 package Couch::DB::Node;{
-our $VERSION = '0.200';
+our $VERSION = '0.201';
 }
 
 
+use warnings;
+use strict;
+
 use Couch::DB::Util;
 
-use Log::Report 'couch-db';
+use Log::Report    'couch-db';
 
 use Scalar::Util   qw/weaken/;
 
+#--------------------
 
 sub new(@) { my ($class, %args) = @_; (bless {}, $class)->init(\%args) }
 
@@ -29,12 +37,12 @@ sub init($)
 	$self;
 }
 
-#-------------
+#--------------------
 
 sub name()  { $_[0]->{CDN_name} }
 sub couch() { $_[0]->{CDN_couch} }
 
-#-------------
+#--------------------
 
 # [CouchDB API "GET /_node/{node-name}/_prometheus", UNSUPPORTED]
 # This is not (yet) supported, because it is a plain-text version of the
@@ -78,7 +86,7 @@ sub software(%)
 {	my ($self, %args) = @_;
 
 	#XXX No idea which data transformations can be done.
-    #XXX Some versions would match Perl's version object, but that's uncertain.
+	#XXX Some versions would match Perl's version object, but that's uncertain.
 	$self->couch->call(GET => $self->_pathToNode('_versions'),
 		$self->couch->_resultsConfig(\%args),
 	);

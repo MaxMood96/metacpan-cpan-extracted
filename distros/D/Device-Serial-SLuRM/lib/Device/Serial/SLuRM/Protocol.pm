@@ -1,13 +1,14 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2023-2025 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2023-2026 -- leonerd@leonerd.org.uk
 
 use v5.26;
 use warnings;
 use Object::Pad 0.800 ':experimental(adjust_params)';
+use Sublike::Extended 0.29 qw( method );
 
-package Device::Serial::SLuRM::Protocol 0.09;
+package Device::Serial::SLuRM::Protocol 0.10;
 class Device::Serial::SLuRM::Protocol;
 
 use Carp;
@@ -19,6 +20,9 @@ use Future::IO;
 use Digest::CRC qw( crc8 );
 
 use constant DEBUG => $ENV{SLURM_DEBUG} // 0;
+
+# builtin::false only turned up at 5.36, grrrr
+use constant false => !!0;
 
 =encoding UTF-8
 
@@ -136,6 +140,25 @@ ADJUST :params (
 
 field $_recv_buffer;
 
+field @_linestuff_queue;
+
+async method _drain1_linestuff ()
+{
+   my $bytes = shift @_linestuff_queue;
+
+   my ( $pktctrl ) = unpack "C", $bytes;
+
+   $METRICS and
+      $METRICS->inc_counter( packets => [ dir => "tx", type => $PKTTYPE_NAME{ $pktctrl & 0xF0 } // "UNKNOWN" ] );
+   $METRICS and
+      $METRICS->inc_counter_by( serial_bytes => 1 + length $bytes, [ dir => "tx" ] );
+
+   printf STDERR "SLuRM DEV WRITE: %v02X\n", "\x55" . $bytes
+      if DEBUG > 2;
+
+   await Future::IO->syswrite_exactly( $_fh, "\x55" . $bytes );
+}
+
 async method recv
 {
    $_recv_buffer //= Future::Buffer->new(
@@ -152,7 +175,19 @@ async method recv
    my $headerlen = 3 + !!$_multidrop;
 
    PACKET: {
-      await $_recv_buffer->read_until( qr/\x55/ );
+      # await start-of-frame while line-stuffing
+      while(1) {
+         my $f = $_recv_buffer->read_until( qr/\x55/ );
+         if( @_linestuff_queue ) {
+            $f = Future->wait_any( $f,
+               $self->interpacket_delay->then_done( "" ),
+            );
+         }
+
+         last if length await $f;
+
+         await $self->_drain1_linestuff;
+      }
 
       defined( my $pkt = await $_recv_buffer->read_exactly( $headerlen ) )
          or return; # EOF
@@ -196,7 +231,7 @@ async method recv
    }
 }
 
-async method send ( $pktctrl, $addr, $payload )
+async method send ( $pktctrl, $addr, $payload, :$linestuff = false )
 {
    printf STDERR "SLuRM TX%s-> {%02X/%v02X}\n",
       ( $_multidrop ? sprintf "(%d)", $addr & 0x7F : "" ), $pktctrl, $payload
@@ -209,6 +244,11 @@ async method send ( $pktctrl, $addr, $payload )
 
    $bytes .= $payload;
    $bytes .= pack( "C", crc8( $bytes ) );
+
+   if( $linestuff ) {
+      push @_linestuff_queue, $bytes;
+      return;
+   }
 
    $METRICS and
       $METRICS->inc_counter( packets => [ dir => "tx", type => $PKTTYPE_NAME{ $pktctrl & 0xF0 } // "UNKNOWN" ] );

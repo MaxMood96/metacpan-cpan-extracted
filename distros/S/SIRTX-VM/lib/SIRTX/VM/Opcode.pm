@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Philipp Schafft
+# Copyright (c) 2025-2026 Philipp Schafft
 
 # licensed under Artistic License 2.0 (see LICENSE file)
 
@@ -19,7 +19,7 @@ use SIRTX::VM::Assembler;
 
 use parent 'Data::Identifier::Interface::Userdata';
 
-our $VERSION = v0.11;
+our $VERSION = v0.12;
 
 my %_die_raen = (code => 0, P => 7, codeX => 0, S => 2, T => 4+1);
 
@@ -42,18 +42,20 @@ my %_raes_to_raen = (
 );
 
 our %_logicals_to_sni = (
-    sni     =>  10,
-    sid     => 115,
-    raen    => 116,
-    chat0w  => 118,
-    uuid    => 119,
-    uri     => 121,
-    asciicp => 122,
-    oid     => 120,
-    wd      => 123,
-    logical => 129,
-    false   => 189,
-    true    => 190,
+    sni         =>  10,
+    sid         => 115,
+    raen        => 116,
+    chat0w      => 118,
+    uuid        => 119,
+    uri         => 121,
+    asciicp     => 122,
+    oid         => 120,
+    wd          => 123,
+    logical     => 129,
+    false       => 189,
+    true        => 190,
+    ac          => 298,
+    accumulator => 298,
 );
 my %_sni_to_logicals = reverse %_logicals_to_sni;
 
@@ -194,6 +196,13 @@ my %_synthetic = (
     ],
     setvalue        => [[reg => 1, reg => 2, '"arg"' => 3] => ['control', \1, 'sni:102', \2, \3]],
     getvalue        => [['"out"' => 1, reg => 2, reg => 3] => ['control', \2, 'sni:101', \3]],
+    read_character  => [['"out"' => 'undef', reg => 1] => ['control', \1, 'sni:282']],
+    write_character => [
+        [reg => 1, reg => 2] => ['control', \1, 'sni:283', \2],
+        [reg => 1, int => 2] => ['control', \1, 'sni:283', \2],
+    ],
+    read_be8        => [['"out"' => 'undef', reg => 1] => ['control', \1, 'sni:143', '8']],
+    read_be16       => [['"out"' => 'undef', reg => 1] => ['control', \1, 'sni:143', '16']],
 );
 
 
@@ -931,7 +940,7 @@ SIRTX::VM::Opcode - module for single SIRTX VM opcodes
 
 =head1 VERSION
 
-version v0.11
+version v0.12
 
 =head1 SYNOPSIS
 
@@ -1080,7 +1089,7 @@ Philipp Schafft <lion@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2024-2025 by Philipp Schafft <lion@cpan.org>.
+This software is Copyright (c) 2024-2026 by Philipp Schafft <lion@cpan.org>.
 
 This is free software, licensed under:
 

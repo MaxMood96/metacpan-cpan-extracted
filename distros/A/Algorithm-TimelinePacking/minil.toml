@@ -1,0 +1,6 @@
+name = "Algorithm-TimelinePacking"
+author = "David Morel <david.morel@amakuru.net>"
+license = "Perl_5"
+
+[no_index]
+directory = ["examples"]

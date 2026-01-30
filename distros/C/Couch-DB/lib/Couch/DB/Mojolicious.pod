@@ -11,11 +11,11 @@ Couch::DB::Mojolicious - CouchDB backend for Mojolicious
 
 =head1 SYNOPSIS
 
-   use Couch::DB::Mojolicious ();
-   my $couch = Couch::DB::Mojolicious->new;
+  use Couch::DB::Mojolicious ();
+  my $couch = Couch::DB::Mojolicious->new;
 
-   # From here on: see the Couch::DB base class
-   my $db    = $couch->db('my-db');
+  # From here on: see the Couch::DB base class
+  my $db    = $couch->db('my-db');
 
 =head1 DESCRIPTION
 
@@ -23,18 +23,20 @@ This is the L<Couch::DB|Couch::DB> implementation based on the Mojolicious (=Moj
 framework.  It uses many Mojo specific modules, like Mojo::URL and Mojo::UserAgent.
 
 Extends L<"DESCRIPTION" in Couch::DB|Couch::DB/"DESCRIPTION">.
- 
+
 =head1 METHODS
 
 Extends L<"METHODS" in Couch::DB|Couch::DB/"METHODS">.
- 
+
 =head2 Constructors
 
 Extends L<"Constructors" in Couch::DB|Couch::DB/"Constructors">.
- 
+
 =over 4
 
-=item Couch::DB::Mojolicious-E<gt>B<new>(%options)
+=item $class-E<gt>B<new>(%options)
+
+Inherited, see L<Couch::DB/"Constructors">
 
  -Option  --Defined in     --Default
   api       Couch::DB        <required>
@@ -71,7 +73,7 @@ Extends L<"Constructors" in Couch::DB|Couch::DB/"Constructors">.
 =head2 Accessors
 
 Extends L<"Accessors" in Couch::DB|Couch::DB/"Accessors">.
- 
+
 =over 4
 
 =item $obj-E<gt>B<api>()
@@ -83,7 +85,7 @@ Inherited, see L<Couch::DB/"Accessors">
 =head2 Interface starting points
 
 Extends L<"Interface starting points" in Couch::DB|Couch::DB/"Interface starting points">.
- 
+
 =over 4
 
 =item $obj-E<gt>B<cluster>()
@@ -107,7 +109,7 @@ Inherited, see L<Couch::DB/"Interface starting points">
 =head2 Ungrouped calls
 
 Extends L<"Ungrouped calls" in Couch::DB|Couch::DB/"Ungrouped calls">.
- 
+
 =over 4
 
 =item $obj-E<gt>B<freshUUID>(%options)
@@ -122,7 +124,7 @@ Inherited, see L<Couch::DB/"Ungrouped calls">
 
 Inherited, see L<Couch::DB/"Ungrouped calls">
 
-=item $obj-E<gt>B<searchAnalyze>(%options)
+=item $obj-E<gt>B<searchAnalyze>(\%config, %options)
 
 Inherited, see L<Couch::DB/"Ungrouped calls">
 
@@ -131,7 +133,7 @@ Inherited, see L<Couch::DB/"Ungrouped calls">
 =head2 Processing
 
 Extends L<"Processing" in Couch::DB|Couch::DB/"Processing">.
- 
+
 =over 4
 
 =item $obj-E<gt>B<addClient>($client)
@@ -184,17 +186,40 @@ The C<user_agent> is a Mojo::UserAgent.
 =head1 DETAILS
 
 Extends L<"DETAILS" in Couch::DB|Couch::DB/"DETAILS">.
- 
+
+=head1 DIAGNOSTICS
+
+=over 4
+
+=item Warning: $what got deprecated in api $release.
+
+Cast by C<check()>
+
+=item Error: $what got removed in $release, but you specified api $api.
+
+Cast by C<check()>
+
+=item Warning: $what was introduced in $release, but you specified api $api.
+
+Cast by C<check()>
+
+=item Error: No clients can run $method $path.
+
+Cast by C<call()>
+
+=back
+
 =head1 SEE ALSO
 
-This module is part of Couch-DB distribution version 0.200,
-built on June 18, 2025. Website: F<http://perl.overmeer.net/CPAN/>
+This module is part of Couch-DB version 0.201,
+built on January 30, 2026. Website: F<http://perl.overmeer.net/CPAN/>
 
 =head1 LICENSE
 
-Copyrights 2024-2025 by [Mark Overmeer]. For other contributors see ChangeLog.
+For contributors see file ChangeLog.
 
-This program is free software; you can redistribute it and/or modify it
-under the same terms as Perl itself.
-See F<http://dev.perl.org/licenses/>
+This software is copyright (c) 2024-2026 by Mark Overmeer.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
 

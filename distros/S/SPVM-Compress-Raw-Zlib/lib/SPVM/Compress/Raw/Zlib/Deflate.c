@@ -37,7 +37,7 @@ int32_t SPVM__Compress__Raw__Zlib__Deflate___deflateInit(SPVM_ENV* env, SPVM_VAL
   int32_t status = deflateInit2(st_z_stream, level, method, windowBits, memLevel, strategy);
   
   if (!(status == Z_OK)) {
-    error_id = env->die_v2(env, stack, "[zlib Error]deflateInit2() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
+    error_id = env->die(env, stack, "[zlib Error]deflateInit2() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
     goto END_OF_FUNC;
   }
   
@@ -54,7 +54,7 @@ int32_t SPVM__Compress__Raw__Zlib__Deflate___deflateInit(SPVM_ENV* env, SPVM_VAL
   }
   
   if (!(status == Z_OK)) {
-    error_id = env->die_v2(env, stack, "[zlib Error]deflateSetDictionary() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
+    error_id = env->die(env, stack, "[zlib Error]deflateSetDictionary() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
     goto END_OF_FUNC;
   }
   
@@ -96,7 +96,7 @@ int32_t SPVM__Compress__Raw__Zlib__Deflate___deflateParams(SPVM_ENV* env, SPVM_V
   int32_t status = deflateParams(st_z_stream, level, strategy);
   
   if (!(status == Z_OK)) {
-    error_id = env->die_v2(env, stack, "[zlib Error]deflateParams() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
+    error_id = env->die(env, stack, "[zlib Error]deflateParams() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
     goto END_OF_FUNC;
   }
   
@@ -119,7 +119,7 @@ int32_t SPVM__Compress__Raw__Zlib__Deflate__deflateReset(SPVM_ENV* env, SPVM_VAL
   int32_t status = deflateReset(st_z_stream);
   
   if (!(status == Z_OK)) {
-    error_id = env->die_v2(env, stack, "[zlib Error]deflateReset() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
+    error_id = env->die(env, stack, "[zlib Error]deflateReset() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
     goto END_OF_FUNC;
   }
   
@@ -146,7 +146,7 @@ int32_t SPVM__Compress__Raw__Zlib__Deflate__deflateTune(SPVM_ENV* env, SPVM_VALU
   int32_t status = deflateTune(st_z_stream, good_length, max_lazy, nice_length, max_chain);
   
   if (!(status == Z_OK)) {
-    error_id = env->die_v2(env, stack, "[zlib Error]deflateTune() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
+    error_id = env->die(env, stack, "[zlib Error]deflateTune() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
     goto END_OF_FUNC;
   }
   
@@ -166,12 +166,12 @@ int32_t SPVM__Compress__Raw__Zlib__Deflate__deflate(SPVM_ENV* env, SPVM_VALUE* s
   void* obj_output_ref = stack[2].oval;
   
   if (!obj_input) {
-    error_id = env->die_v2(env, stack, "The input $input must be define.", __func__, FILE_NAME, __LINE__);
+    error_id = env->die(env, stack, "The input $input must be define.", __func__, FILE_NAME, __LINE__);
     goto END_OF_FUNC;
   }
   
   if (!(obj_output_ref && env->length(env, stack, obj_output_ref) == 1)) {
-    error_id = env->die_v2(env, stack, "The output reference $output_ref must be 1-length string array.", __func__, FILE_NAME, __LINE__);
+    error_id = env->die(env, stack, "The output reference $output_ref must be 1-length string array.", __func__, FILE_NAME, __LINE__);
     goto END_OF_FUNC;
   }
   
@@ -229,7 +229,7 @@ int32_t SPVM__Compress__Raw__Zlib__Deflate__deflate(SPVM_ENV* env, SPVM_VALUE* s
     }
     
     if (fatal_error) {
-      error_id = env->die_v2(env, stack, "[zlib Error]deflate() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
+      error_id = env->die(env, stack, "[zlib Error]deflate() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
       goto END_OF_FUNC;
     }
   }
@@ -270,7 +270,7 @@ int32_t SPVM__Compress__Raw__Zlib__Deflate__flush(SPVM_ENV* env, SPVM_VALUE* sta
   int32_t flush_type = stack[2].ival;
   
   if (!(obj_output_ref && env->length(env, stack, obj_output_ref) == 1)) {
-    error_id = env->die_v2(env, stack, "The output reference $output_ref must be 1-length string array.", __func__, FILE_NAME, __LINE__);
+    error_id = env->die(env, stack, "The output reference $output_ref must be 1-length string array.", __func__, FILE_NAME, __LINE__);
     goto END_OF_FUNC;
   }
   
@@ -322,7 +322,7 @@ int32_t SPVM__Compress__Raw__Zlib__Deflate__flush(SPVM_ENV* env, SPVM_VALUE* sta
     }
     
     if (fatal_error) {
-      error_id = env->die_v2(env, stack, "[zlib Error]deflate() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
+      error_id = env->die(env, stack, "[zlib Error]deflate() failed(status:%d).", __func__, FILE_NAME, __LINE__, status);
       goto END_OF_FUNC;
     }
     

@@ -15,6 +15,6 @@ eval {
 
 ok !$server, 'server did not initialize ok';
 
-like $@, qr/\*\*\* FATAL CONFIG FILE ERROR( \([^\)]+\))? \*\*\*/, 'error msg ok';
+like $@, qr/(?:\*\*\* FATAL CONFIG FILE ERROR( \([^\)]+\))? \*\*\*|Module Configuration detected without loadmodule directive or no ApplyConfig call: aborting)/, 'error msg ok';
 
 done_testing;

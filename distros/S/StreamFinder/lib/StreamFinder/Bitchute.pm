@@ -4,7 +4,7 @@ StreamFinder::Bitchute - Fetch actual raw streamable URLs from Bitchute.com.
 
 =head1 AUTHOR
 
-This module is Copyright (C) 2017-2024 by
+This module is Copyright (C) 2017-2026 by
 
 Jim Turner, C<< <turnerjw784 at yahoo.com> >>
 		
@@ -337,7 +337,7 @@ L<http://search.cpan.org/dist/StreamFinder-Bitchute/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2017-2024 Jim Turner.
+Copyright 2017-2026 Jim Turner.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the the Artistic License (2.0). You may obtain a
@@ -585,7 +585,7 @@ sub new
 
 	#IF WE DIDN'T FIND ANY STREAMS IN THE PAGE, TRY youtube-dl:
 
-	if ($self->{'cnt'} <= 0 || $self->{'youtube'} =~ /(?:yes|top|first|last)/i) {
+	if ($self->{'cnt'} <= 0 || $self->{'youtube'} =~ /(?:yes|top|first|last|only)/i) {
 		my $haveYoutube = 0;
 		eval { require 'StreamFinder/Youtube.pm'; $haveYoutube = 1; };
 		print STDERR "\n-2 NO STREAMS FOUND IN PAGE (haveYoutube=$haveYoutube)\n"  if ($DEBUG && $self->{'cnt'} <= 0);
@@ -599,7 +599,7 @@ sub new
 				(my $arg0 = $arg) =~ s/^youtube\-(?!dl)//o;
 				$globalArgs{$arg0} = $self->{$arg}  if (defined $self->{$arg});
 			}
-			$url2fetch =~ s#api.bitchute.com#old.bitchute.com#i;
+			$url2fetch =~ s#api\.bitchute\.com#old\.bitchute\.com#i;
 			my $yt = new StreamFinder::Youtube($url2fetch, %globalArgs);
 			if ($yt && $yt->count() > 0) {
 				my @ytStreams = $yt->get();
@@ -608,9 +608,10 @@ sub new
 				} else {
 					push @{$self->{'streams'}}, @ytStreams;
 				}
-				foreach my $field (qw(title description)) {
+				foreach my $field (qw(title iconurl)) {
 					$self->{$field} ||= $yt->{$field}  if (defined($yt->{$field}) && $yt->{$field});
 				}
+				$self->{'description'} = $yt->{'description'}  if (length($yt->{'description'}) > length($self->{'description'}));
 				$self->{'cnt'} = scalar @{$self->{'streams'}};
 				print STDERR "i:Found stream(s) (".join('|',@ytStreams).") via youtube-dl.\n"  if ($DEBUG);
 			}

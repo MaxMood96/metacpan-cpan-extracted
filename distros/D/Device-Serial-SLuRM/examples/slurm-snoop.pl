@@ -7,13 +7,13 @@ use Future::AsyncAwait;
 use Device::Serial::SLuRM;
 use Device::Serial::MSLuRM;
 use Future;
-use Future::IO 0.16; # ->load_impl
+use Future::IO 0.18; # ->load_best_impl
 use Future::Selector;
 use Getopt::Long;
 use POSIX qw( strftime );
 use Time::HiRes qw( gettimeofday );
 
-Future::IO->load_impl(qw( Glib UV IOAsync ));
+Future::IO->load_best_impl;
 
 GetOptions(
    'device|d=s' => \( my $DEVICE = "/dev/ttyUSB0" ),

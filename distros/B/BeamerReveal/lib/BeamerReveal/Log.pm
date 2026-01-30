@@ -3,7 +3,7 @@
 
 
 package BeamerReveal::Log;
-our $VERSION = '20260127.1936'; # VERSION
+our $VERSION = '20260130.1048'; # VERSION
 
 use parent 'Exporter';
 use Carp;
@@ -131,6 +131,7 @@ sub _formatLines {
       my $llen = length( $left );
       my $rlen = length( $right );
       my $midspace = $width - $llen - $rlen;
+      die( "Error $left | $right\n" ) if( $midspace < 0 );
       $openinglines .= $extra . $left . ( ' ' x $midspace ) . $right . "\n";
     }
   }
@@ -150,7 +151,7 @@ BeamerReveal::Log - Log
 
 =head1 VERSION
 
-version 20260127.1936
+version 20260130.1048
 
 =head1 SYNOPSIS
 

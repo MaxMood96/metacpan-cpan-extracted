@@ -1,13 +1,13 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2022-2025 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2022-2026 -- leonerd@leonerd.org.uk
 
 use v5.28;  # delete %hash{@slice}
 use warnings;
-use Object::Pad 0.807 ':experimental(adjust_params)';
+use Object::Pad 0.807 ':experimental(adjust_params inherit_field)';
 
-package Device::Serial::SLuRM 0.09;
+package Device::Serial::SLuRM 0.10;
 class Device::Serial::SLuRM;
 
 use Carp;
@@ -25,6 +25,12 @@ use constant DEBUG => $ENV{SLURM_DEBUG} // 0;
 require Device::Serial::SLuRM::Protocol;
 no warnings 'once';
 our $METRICS = $Device::Serial::SLuRM::Protocol::METRICS;
+
+# builtin:: only turned up at 5.36, grrrr
+use constant {
+   true  => !!1,
+   false => !!0,
+};
 
 use constant {
    SLURM_PKTCTRL_META   => 0x00,
@@ -47,6 +53,8 @@ use constant {
 C<Device::Serial::SLuRM> - communicate the SLµRM protocol over a serial port
 
 =head1 SYNOPSIS
+
+=for highlighter language=perl
 
    use v5.36;
    use Device::Serial::SLuRM;
@@ -207,7 +215,6 @@ C<request> method will make up to 3 attempts).
 
 use constant is_multidrop => 0;
 
-use Object::Pad ':experimental(inherit_field)';
 field $_protocol :inheritable; # TODO
 ADJUST :params ( %params )
 {
@@ -397,11 +404,12 @@ async method _run
             $METRICS and
                $METRICS->report_distribution( request_success_attempts => 1 + $_retransmit_count - $slot->{retransmit_count} );
 
-            $nodestate->clear_pending_slot( $seqno );
-
             # Second ACK
-            await $_protocol->interpacket_delay;
-            await $_protocol->send( SLURM_PKTCTRL_ACK | $seqno, $node_id | 0x80, "" );
+            await $_protocol->send( SLURM_PKTCTRL_ACK | $seqno, $node_id | 0x80, "",
+               linestuff => true,
+            );
+
+            $nodestate->clear_pending_slot( $seqno );
          }
 
          case( SLURM_PKTCTRL_ACK ) {
@@ -687,7 +695,7 @@ method _set_retransmit ( $node_id, $seqno )
                if DEBUG;
 
             my $pktctrl = SLURM_PKTCTRL_REQUEST | $seqno;
-            $slot->{retransmit_f} = $_protocol->send( $pktctrl, $node_id, $slot->{payload} )
+            $slot->{retransmit_f} = $_protocol->send( $pktctrl, $node_id | 0x80, $slot->{payload} )
                ->on_fail( sub {
                   warn "Retransmit failed: @_";
                   $slot->{response_f}->fail( @_ );

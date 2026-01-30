@@ -1,5 +1,10 @@
 Revision history for IPC-MicroSocket
 
+0.04    2026-01-29
+        [CHANGES]
+         * Provide a `->new_inprocess` client constructor for convenience of
+           in-process client setups
+
 0.03    2025-07-11
         [CHANGES]
          * Provide abstract classes (as per Object::Pad v0.817) rather than

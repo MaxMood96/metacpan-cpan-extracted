@@ -1,3 +1,7 @@
+0.06 2026-01-30
+  - Included examples in the documentation for Hash::Util::Join
+  - Added test cases for tied hashes in XS
+
 0.05 2026-01-28
   - Added Hash::Util::Join, SQL-like join operations on hashes.
   - Added Hash::Util::Set export tags.

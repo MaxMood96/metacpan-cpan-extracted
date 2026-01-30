@@ -1,3 +1,8 @@
+v0.12  2026-01-29Z
+    - Added experimental support for open with ports
+    - Added ac/accumulator to list of known logicals
+    - Added synthetic directives {read,write}_character, and {read,write}_be{8,16}
+
 v0.11  2025-12-18Z
     - Added support for more opcodes in disassembler
     - Added support for .paddingchunk in assembler

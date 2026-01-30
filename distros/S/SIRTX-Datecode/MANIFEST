@@ -12,4 +12,5 @@ dist.ini
 lib/SIRTX/Datecode.pm
 t/01_load.t
 t/02_null.t
+t/03_vectors.t
 xt/author/pod-syntax.t

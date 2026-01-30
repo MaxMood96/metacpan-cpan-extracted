@@ -29,7 +29,9 @@ structures.
 
 =over 4
 
-=item Couch::DB::Row-E<gt>B<new>(%options)
+=item $class-E<gt>B<new>(%options)
+
+Z<>
 
  -Option--Default
   answer  <required>
@@ -44,9 +46,9 @@ structures.
 
 The JSON structure from the result which represents this row.
 
-=item doc => L<Couch::DB::Document|Couch::DB::Document>-object
+=item doc => Couch::DB::Document-object
 
-=item result => L<Couch::DB::Result|Couch::DB::Result>
+=item result => Couch::DB::Result
 
 The result-object which contains this row.
 
@@ -95,24 +97,33 @@ The answer about this row, translated into Perl data types.
 
 =item $obj-E<gt>B<pageNumber>()
 
+Z<>
+
 =item $obj-E<gt>B<rowNumberInPage>()
+
+Z<>
 
 =item $obj-E<gt>B<rowNumberInResult>()
 
+Z<>
+
 =item $obj-E<gt>B<rowNumberInSearch>()
+
+Z<>
 
 =back
 
 =head1 SEE ALSO
 
-This module is part of Couch-DB distribution version 0.200,
-built on June 18, 2025. Website: F<http://perl.overmeer.net/CPAN/>
+This module is part of Couch-DB version 0.201,
+built on January 30, 2026. Website: F<http://perl.overmeer.net/CPAN/>
 
 =head1 LICENSE
 
-Copyrights 2024-2025 by [Mark Overmeer]. For other contributors see ChangeLog.
+For contributors see file ChangeLog.
 
-This program is free software; you can redistribute it and/or modify it
-under the same terms as Perl itself.
-See F<http://dev.perl.org/licenses/>
+This software is copyright (c) 2024-2026 by Mark Overmeer.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
 

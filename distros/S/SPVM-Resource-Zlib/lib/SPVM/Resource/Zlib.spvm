@@ -2,5 +2,5 @@
 # MIT License
 
 class Resource::Zlib {
-  version "1.005";
+  version "1.006";
 }

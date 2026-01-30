@@ -1,28 +1,36 @@
-# Copyrights 2024-2025 by [Mark Overmeer].
-#  For other contributors see ChangeLog.
-# See the manual pages for details on the licensing terms.
-# Pod stripped from pm file by OODoc 2.03.
-# SPDX-FileCopyrightText: 2024 Mark Overmeer <mark@overmeer.net>
-# SPDX-License-Identifier: Artistic-2.0
+# This code is part of Perl distribution Couch-DB version 0.201.
+# The POD got stripped from this file by OODoc version 3.06.
+# For contributors see file ChangeLog.
+
+# This software is copyright (c) 2024-2026 by Mark Overmeer.
+
+# This is free software; you can redistribute it and/or modify it under
+# the same terms as the Perl 5 programming language system itself.
+# SPDX-License-Identifier: Artistic-1.0-Perl OR GPL-1.0-or-later
+
 
 package Couch::DB::Client;{
-our $VERSION = '0.200';
+our $VERSION = '0.201';
 }
 
 
-use Couch::DB::Util   qw(flat);
+use warnings;
+use strict;
+
+use Couch::DB::Util   qw/flat/;
 use Couch::DB::Result ();
 
-use Log::Report 'couch-db';
+use Log::Report     'couch-db';
 
-use Scalar::Util    qw(weaken blessed);
-use List::Util      qw(first);
-use MIME::Base64    qw(encode_base64);
-use Storable        qw(dclone);
-use URI::Escape     qw(uri_escape);
+use Scalar::Util    qw/weaken blessed/;
+use List::Util      qw/first/;
+use MIME::Base64    qw/encode_base64/;
+use Storable        qw/dclone/;
+use URI::Escape     qw/uri_escape/;
 
 my $seqnr = 0;
 
+#--------------------
 
 sub new(@) { (bless {}, shift)->init( {@_} ) }
 
@@ -49,7 +57,7 @@ sub init($)
 	$self;
 }
 
-#-------------
+#--------------------
 
 sub name() { $_[0]->{CDC_name} }
 
@@ -68,7 +76,7 @@ sub headers($) { $_[0]->{CDC_hdrs} }
 
 sub seqnr() { $_[0]->{CDC_seqnr} }
 
-#-------------
+#--------------------
 
 sub _clientIsMe($)   # check no client parameter is used
 {	my ($self, $args) = @_;
@@ -93,8 +101,8 @@ sub login(%)
 	$auth eq 'COOKIE'
 		or error __x"Unsupport authorization '{how}'", how => $auth;
 
-	my $send = $self->{CDC_login} =     # keep for cookie refresh (uninplemented)
-	 	+{ name => $username, password => $password };
+	my $send = $self->{CDC_login}  	 	=     # keep for cookie refresh (uninplemented)
++{name => $username, password => $password };
 
 	$self->couch->call(POST => '/_session',
 		send      => $send,
@@ -143,7 +151,7 @@ sub roles()
 
 sub hasRole($) { first { $_[1] eq $_ } $_[0]->roles }
 
-#-------------
+#--------------------
 
 sub __serverInfoValues($$)
 {	my ($self, $result, $data) = @_;
@@ -160,8 +168,7 @@ sub serverInfo(%)
 	$self->_clientIsMe(\%args);
 
 	my $cached = delete $args{cached} || 'YES';
-	$cached =~ m!^(?:YES|NEVER|RETRY|PING)$!
-		or panic "Unsupported cached parameter '$cached'.";
+	$cached =~ m!^(?:YES|NEVER|RETRY|PING)$! or panic "Unsupported cached parameter '$cached'.";
 
 	if(my $result = $self->{CDC_info})
 	{	return $self->{CDC_info}
@@ -183,6 +190,7 @@ sub serverInfo(%)
 }
 
 
+
 sub version()
 {	my $self   = shift;
 	return $self->{CDC_version} if exists $self->{CDC_version};
@@ -198,7 +206,7 @@ sub version()
 
 
 sub __simpleArrayRow($$%)
-{   my ($self, $result, $index, %args) = @_;
+{	my ($self, $result, $index, %args) = @_;
 	my $answer = $result->answer->[$index] or return ();
 
 	  (	answer => $answer,
@@ -262,8 +270,8 @@ sub databaseInfo(;$%)
 	my $names  = delete $args{names};
 
 	my ($method, $query, $send, $intro) = $names
-	  ?	(POST => undef,  +{ keys => $names }, '2.2.0')
-	  :	(GET  => $self->_dbNamesFilter($search), undef, '3.2.0');
+	?	(POST => undef,  +{ keys => $names }, '2.2.0')
+	:	(GET  => $self->_dbNamesFilter($search), undef, '3.2.0');
 
 	$self->couch->call($method => '/_dbs_info',
 		introduced => $intro,
@@ -279,9 +287,9 @@ sub databaseInfo(;$%)
 sub __dbUpRow($$%)
 {	my ($self, $result, $index, %args) = @_;
 	my $answer = $result->answer->{results}[$index] or return ();
-	  (	answer => $answer,
+	(	answer => $answer,
 		values => $result->values->{results}[$index],
-	  );
+	);
 }
 
 sub dbUpdates($%)
@@ -351,7 +359,7 @@ sub replicate($%)
 	my $couch  = $self->couch;
 	$couch->toJSON($rules, bool => qw/cancel continuous create_target winning_revs_only/);
 
-    #TODO: warn for upcoming changes in source and target: absolute URLs required
+	#TODO: warn for upcoming changes in source and target: absolute URLs required
 
 	$couch->call(POST => '/_replicate',
 		send   => $rules,
@@ -382,8 +390,8 @@ sub __replJobsValues($$)
 			foreach @{$job->{history} || []};
 
 		$couch->toPerl($job, isotime => qw/start_time/)
-		      ->toPerl($job, abs_url => qw/target source/)
-		      ->toPerl($job, node    => qw/node/);
+			->toPerl($job, abs_url => qw/target source/)
+			->toPerl($job, node    => qw/node/);
 	}
 
 	$values;
@@ -496,11 +504,11 @@ sub node()
 {	my $self = shift;
 	return $self->{CDC_node} if defined $self->{CDC_node};
 
- 	my $result = $self->nodeName('_local', client => $self);
+	my $result = $self->nodeName('_local', client => $self);
 	$result->isReady or return undef;   # (temporary?) failure
 
 	my $name   = $result->value('name')
-		or error __x"Did not get a node name for _local";
+		or error __x"did not get a node name for _local.";
 
 	$self->{CDC_node} = $self->couch->node($name);
 }

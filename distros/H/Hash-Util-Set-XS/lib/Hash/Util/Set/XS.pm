@@ -20,7 +20,7 @@ our @EXPORT_OK = qw[ keys_union
                      keys_partition ];
 
 BEGIN {
-  our $VERSION = '0.05';
+  our $VERSION = '0.06';
   require XSLoader; XSLoader::load(__PACKAGE__, $VERSION);
 }
 

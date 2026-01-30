@@ -4,10 +4,12 @@ author:
   - 'Mark Overmeer'
 build_requires:
   ExtUtils::MakeMaker: '0'
+  Test::More: '1'
+  Test::Pod: '1'
 configure_requires:
   ExtUtils::MakeMaker: '0'
 dynamic_config: 1
-generated_by: 'ExtUtils::MakeMaker version 7.70, CPAN::Meta::Converter version 2.150010'
+generated_by: 'ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -17,6 +19,7 @@ no_index:
   directory:
     - t
     - inc
+recommends: {}
 requires:
   DateTime: '0'
   DateTime::Format::ISO8601: '0'
@@ -32,8 +35,34 @@ requires:
   Storable: '0'
   URI: '0'
 resources:
+  bugtracker: https://github.com/perl-Couch-DB/issues
   homepage: http://perl.overmeer.net/CPAN/
-  license: http://dev.perl.org/licenses/
-  repository: https://github.com/markov2/perl5-Couch-DB.git
-version: '0.200'
+  repository: https://github.com/perl-Couch-DB.git
+version: '0.201'
+x_oodist:
+  email: markov@cpan.org
+  first_year: 2024
+  generate:
+    -
+      format: pod3
+      podtail: ~
+    -
+      export: website
+      markup: html
+      meta:
+        main_manual: Couch::DB
+      publish: ../public_html/couch-db/doctree
+      serializer: json
+  include: []
+  oodoc_version: 3.06
+  parser:
+    pmhead: ~
+    skip_links: []
+    syntax: markov
+  raw:
+    publish: ../public_html/couch-db/raw
+  release:
+    publish: ../public_html/couch-db/source
+  tests: {}
+  use: []
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

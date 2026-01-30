@@ -1,5 +1,15 @@
 Revision history for Device-Serial-SLuRM
 
+0.10    2026-01-29
+        [CHANGES]
+         * Ensure that REQUEST transactions are mutex-locked on MSLµRM to
+           avoid bus contention and collisions
+         * Use `Future::IO->load_best_impl` from Future::IO v0.18
+
+        [BUGFIXES]
+         * Ensure that REQUEST packet retransmits include the 0x80 bit
+         * Do not attempt to send META_RESET to the broadcast node address
+
 0.09    2025-07-11
         [CHANGES]
          * Added `slurm-snoop.pl` example script

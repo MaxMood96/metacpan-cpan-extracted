@@ -23,7 +23,9 @@ it may very well be that there is no knowledge about the node yet.
 
 =over 4
 
-=item Couch::DB::Node-E<gt>B<new>(%options)
+=item $class-E<gt>B<new>(%options)
+
+Z<>
 
  -Option--Default
   couch   <required>
@@ -45,27 +47,31 @@ it may very well be that there is no knowledge about the node yet.
 
 =item $obj-E<gt>B<couch>()
 
+Z<>
+
 =item $obj-E<gt>B<name>()
+
+Z<>
 
 =back
 
 =head2 Node information
 
-B<All CouchDB API calls> documented below, support %options like C<_delay>
+B<All CouchDB API calls> documented below, support C<%options> like C<_delay>
 and C<on_error>.  See L<Couch::DB/Using the CouchDB API>.
 
 =over 4
 
 =item $obj-E<gt>B<config>(%options)
 
- [CouchDB API "GET /_node/{node-name}/_config", UNTESTED]
- [CouchDB API "GET /_node/{node-name}/_config/{section}", UNTESTED]
- [CouchDB API "GET /_node/{node-name}/_config/{section}/{key}", UNTESTED]
+  [CouchDB API "GET /_node/{node-name}/_config", UNTESTED]
+  [CouchDB API "GET /_node/{node-name}/_config/{section}", UNTESTED]
+  [CouchDB API "GET /_node/{node-name}/_config/{section}/{key}", UNTESTED]
 
 Returns the node configuration.
 
 At least according to the example in the spec, all values are strings.
-So, a boolean will be string "true" or "false".  The API notes that the
+So, a boolean will be string "C<true>" or "C<false>".  The API notes that the
 actual type of values is unpredictable.
 
  -Option --Default
@@ -74,15 +80,15 @@ actual type of values is unpredictable.
 
 =over 2
 
-=item key => STRING
+=item key => $key
 
 (Requires a section to be specified)
 
-=item section => STRING
+=item section => $name
 
 =back
 
-example: of config
+» example: of config
 
   # Three times the same.  The last may be the most efficient for the server.
   my $mode = $node->config->values->{log}{level};
@@ -91,37 +97,37 @@ example: of config
 
 =item $obj-E<gt>B<configChange>($section, $key, $value, %options)
 
- [CouchDB API "PUT /_node/{node-name}/_config/{section}/{key}", UNTESTED]>
+  [CouchDB API "PUT /_node/{node-name}/_config/{section}/{key}", UNTESTED]>
 
 Change one value in the configuration.  Probably, it should be followed by
 a L<configReload()|Couch::DB::Node/"Node information">: changes may not be commited without reload.
 
-You MAY need to convert booleans to string "true" or "false" by hand.
+You MAY need to convert booleans to string "C<true>" or "C<false>" by hand.
 
 =item $obj-E<gt>B<configDelete>($section, $key, %options)
 
- [CouchDB API "DELETE /_node/{node-name}/_config/{section}/{key}", UNTESTED]>
+  [CouchDB API "DELETE /_node/{node-name}/_config/{section}/{key}", UNTESTED]>
 
 Remove one value in the configuration.  Probably, it should be followed by
 a L<configReload()|Couch::DB::Node/"Node information">: changes may not be commited without reload.
 
 =item $obj-E<gt>B<configReload>(%options)
 
- [CouchDB API "POST /_node/{node-name}/_config/_reload", UNTESTED]>
+  [CouchDB API "POST /_node/{node-name}/_config/_reload", UNTESTED]>
 
 Re-apply the configuration to the node.  This has as side-effect that the
 (changed) configuration of the node will be saved.
 
 =item $obj-E<gt>B<restart>(%options)
 
- [CouchDB API "POST /_node/{node-name}/_restart", UNTESTED]
+  [CouchDB API "POST /_node/{node-name}/_restart", UNTESTED]
 
 This may help you in a test environment, but should not be used in
 production, according to the API documentation.
 
 =item $obj-E<gt>B<server>(%options)
 
- [CouchDB API "GET /_node/{node-name}/_system", UNTESTED]
+  [CouchDB API "GET /_node/{node-name}/_system", UNTESTED]
 
 Presents information about the system of the server where the node
 runs on.
@@ -132,13 +138,13 @@ function.
 
 =item $obj-E<gt>B<software>(%options)
 
- [CouchDB API "GET /_node/{node-name}/_versions", UNTESTED]
+  [CouchDB API "GET /_node/{node-name}/_versions", UNTESTED]
 
 Get details of some software running the node.
 
 =item $obj-E<gt>B<stats>(%options)
 
- [CouchDB API "GET /_node/{node-name}/_stats", UNTESTED]
+  [CouchDB API "GET /_node/{node-name}/_stats", UNTESTED]
 
 Collect node statistics.
 
@@ -146,14 +152,15 @@ Collect node statistics.
 
 =head1 SEE ALSO
 
-This module is part of Couch-DB distribution version 0.200,
-built on June 18, 2025. Website: F<http://perl.overmeer.net/CPAN/>
+This module is part of Couch-DB version 0.201,
+built on January 30, 2026. Website: F<http://perl.overmeer.net/CPAN/>
 
 =head1 LICENSE
 
-Copyrights 2024-2025 by [Mark Overmeer]. For other contributors see ChangeLog.
+For contributors see file ChangeLog.
 
-This program is free software; you can redistribute it and/or modify it
-under the same terms as Perl itself.
-See F<http://dev.perl.org/licenses/>
+This software is copyright (c) 2024-2026 by Mark Overmeer.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
 

@@ -1,14 +1,24 @@
 Release history for MooX-Role-HasLogger
 
+1.0.0     2026-01-30
+          - Use Semantic Versioning
+          - Remove author extensions
+          - Migrated to Codeberg
+
+0.002     2023-05-22
+          - Use Type::Tiny::Duck instead of HasMethods
+          - Show by example how to setup delegation
+          - Introduce the LoggerAny type that extends the Logger type
+
 0.001002  2023-04-04
-          - set minimum perl version  
-          - update prerequisites
-          - add author extensions
-          - configure "provides" META.yml field
-          - rename and update readme
+          - Set minimum perl version
+          - Update prerequisites
+          - Add author extensions
+          - Configure "provides" META.yml field
+          - Rename and update readme
 
 0.001001  2023-01-26
-          - fix needed version of some prerequisites (CPAN Testers feedback)
+          - Fix needed version of some prerequisites (CPAN Testers feedback)
 
 0.001     2023-01-24
-          - initial release
+          - Initial release

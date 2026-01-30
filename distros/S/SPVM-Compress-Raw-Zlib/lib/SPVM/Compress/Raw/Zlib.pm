@@ -1,6 +1,6 @@
 package SPVM::Compress::Raw::Zlib;
 
-our $VERSION = "0.005";
+our $VERSION = "0.006";
 
 1;
 

@@ -17,7 +17,7 @@ use SIRTX::VM::Register;
 
 use parent 'Data::Identifier::Interface::Userdata';
 
-our $VERSION = v0.11;
+our $VERSION = v0.12;
 
 my @_register_templates = (
     # user:
@@ -259,7 +259,7 @@ SIRTX::VM::RegisterFile - module for interacting with SIRTX VM code
 
 =head1 VERSION
 
-version v0.11
+version v0.12
 
 =head1 SYNOPSIS
 
@@ -357,7 +357,7 @@ Philipp Schafft <lion@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2024-2025 by Philipp Schafft <lion@cpan.org>.
+This software is Copyright (c) 2024-2026 by Philipp Schafft <lion@cpan.org>.
 
 This is free software, licensed under:
 

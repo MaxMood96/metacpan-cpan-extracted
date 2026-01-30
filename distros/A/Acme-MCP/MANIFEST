@@ -1,0 +1,12 @@
+Build.PL
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
+Changes.md
+LICENSE
+MANIFEST
+META.json
+README.md
+SECURITY.md
+lib/Acme/MCP.pm
+lib/Acme/MCP.pod
+t/basics.t

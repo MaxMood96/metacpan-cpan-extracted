@@ -7,10 +7,9 @@ build_requires:
   Test::TCP: '0'
 configure_requires:
   Module::Build::Tiny: '0.035'
-  Redis: '0'
   perl: 5.008_001
 dynamic_config: 0
-generated_by: 'Minilla/v3.1.13, CPAN::Meta::Converter version 2.150010'
+generated_by: 'Minilla/v3.1.29, CPAN::Meta::Converter version 2.150010'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -29,16 +28,15 @@ no_index:
 provides:
   Test::RedisServer:
     file: lib/Test/RedisServer.pm
-    version: '0.23'
+    version: '0.24'
 requires:
-  File::Temp: '0'
   Mouse: '0'
-  Time::HiRes: '0'
+  Redis: '0'
 resources:
   bugtracker: https://github.com/typester/Test-RedisServer/issues
   homepage: https://github.com/typester/Test-RedisServer
-  repository: git://github.com/typester/Test-RedisServer.git
-version: '0.23'
+  repository: https://github.com/typester/Test-RedisServer.git
+version: '0.24'
 x_authority: cpan:TYPESTER
 x_contributors:
   - 'Daisuke Murase <typester@gmail.com>'

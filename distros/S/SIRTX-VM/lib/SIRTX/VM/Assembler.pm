@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Philipp Schafft
+# Copyright (c) 2025-2026 Philipp Schafft
 
 # licensed under Artistic License 2.0 (see LICENSE file)
 
@@ -23,7 +23,7 @@ use SIRTX::VM::Opcode;
 
 use parent 'Data::Identifier::Interface::Userdata';
 
-our $VERSION = v0.11;
+our $VERSION = v0.12;
 
 my %_escapes = (
     '\\' => '\\',
@@ -210,6 +210,24 @@ my %_synthetic = (
                 ['open_function', \5, \1],
                 ['open', \6, \3],
                 ['relations', \5, \2, \6, \4],
+            ]],
+        write_be8       => [
+            [reg => 1, reg => 2] => [arg => 3] => [
+                ['replace', \3, \2],
+                ['control', \1, 'sni:144', '8'],
+            ],
+            [reg => 1, any => 2] => [arg => 3] => [
+                ['open', \3, \2],
+                ['control', \1, 'sni:144', '8'],
+            ]],
+        write_be16      => [
+            [reg => 1, reg => 2] => [arg => 3] => [
+                ['replace', \3, \2],
+                ['control', \1, 'sni:144', '16'],
+            ],
+            [reg => 1, any => 2] => [arg => 3] => [
+                ['open', \3, \2],
+                ['control', \1, 'sni:144', '16'],
             ]],
         '.autosectionstart' => [['"header"' => 1] => [] => [
                 ['.section', \1, '"VM\\r\\n\\xc0\\n"'],
@@ -805,6 +823,19 @@ sub _proc_parts {
     } elsif ($cmd eq 'open' && scalar(@args) == 2 && $self->_get_value_type($args[0]) eq 'reg' && $self->_get_value_type($args[1]) eq 'string') {
         my $key = $self->_autostring_allocate($self->_parse_string($args[1]));
         $self->_proc_parts(['substr', $args[0], 'program_text', $key, 'end$'.$key], $opts);
+    } elsif ($cmd eq 'open' && scalar(@args) == 2 && $self->_get_value_type($args[0]) eq 'reg' && $self->_get_value_type($args[1]) eq 'port') {
+        my $reg = $self->_reg_alloc_phy('user*');
+
+        $self->_reg_alloc_phy('out') if $args[0] ne 'out';
+
+        $self->_proc_parts(['open', $reg, $args[1] =~ s/^%//r], $opts);
+        $self->_proc_parts(['getvalue', 'out', 'context', $reg], $opts);
+
+        if ($args[0] ne 'out') {
+            $self->_proc_parts(['replace', $args[0], 'out'], $opts);
+        }
+
+        $self->_proc_parts(['unref', $reg], $opts) if $self->{settings}{synthetic_auto_unref};
     } elsif ($cmd eq 'byte_transfer' && scalar(@args) == 2 && $self->_get_value_type($args[0]) eq 'reg' && $self->_get_value_type($args[1]) eq 'string') {
         my $key = $self->_autostring_allocate($self->_parse_string($args[1]));
         my $reg = $self->_reg_alloc_phy('user*');
@@ -1205,6 +1236,7 @@ sub _get_value_type {
     return 'undef' if $value eq 'undef';
     return 'string' if $value =~ /^(?:"|U\+)/;
     return 'int' if $value =~ /^'?[\+\-]?(?:0|[1-9][0-9]*|0x[0-9a-fA-F]+|0[0-7]+|0b[01]+)$/;
+    return 'port' if $value =~ /^%[a-zA-Z][:a-zA-Z0-9]*$/;
 
     if ($value =~ /^([a-z]+):(?:0|[1-9][0-9]*)$/) {
         my $type = $1;
@@ -1320,7 +1352,7 @@ SIRTX::VM::Assembler - module for assembling SIRTX VM code
 
 =head1 VERSION
 
-version v0.11
+version v0.12
 
 =head1 SYNOPSIS
 
@@ -1394,7 +1426,7 @@ Philipp Schafft <lion@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2024-2025 by Philipp Schafft <lion@cpan.org>.
+This software is Copyright (c) 2024-2026 by Philipp Schafft <lion@cpan.org>.
 
 This is free software, licensed under:
 

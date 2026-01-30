@@ -1,0 +1,23 @@
+/* Ensure the top-level container of the notes area takes up all available space */
+/* Ensure the notes container can shrink/grow */
+.speaker-controls-notes {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+}
+
+/* Force the 'value' div to fill the space and center the image */
+.speaker-controls-notes .value {
+    flex: 1 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    overflow: hidden !important;
+}
+
+/* Target images specifically within that value div */
+.speaker-controls-notes .value img {
+    max-width: 100% !important;
+    max-height: 100% !important;
+    object-fit: contain !important;
+}

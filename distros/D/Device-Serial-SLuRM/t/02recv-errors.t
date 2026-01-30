@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-use v5.14;
+use v5.28;
 use warnings;
 
 use Test2::V0;
@@ -64,7 +64,7 @@ my $expect = [ 0x11, 0, "OK" ];
 # Corrupted header CRC
 {
    my $badbytes = "\x55" . with_crc8( with_crc8( "\x10\x03" ) . "BAD" );
-   substr( $badbytes, 1, 1 ) ^= "\x01";
+   substr( $badbytes, 1, 1 ) ^.= "\x01";
 
    $controller->expect_sysread( "DummyFH", 8192 )
       ->will_done( $badbytes . $OKbytes );
@@ -84,7 +84,7 @@ my $expect = [ 0x11, 0, "OK" ];
 # Corrupted payload CRC
 {
    my $badbytes = "\x55" . with_crc8( with_crc8( "\x10\x03" ) . "BAD" );
-   substr( $badbytes, length($badbytes) - 1, 1 ) ^= "\x01";
+   substr( $badbytes, length($badbytes) - 1, 1 ) ^.= "\x01";
 
    $controller->expect_sysread( "DummyFH", 8192 )
       ->will_done( $badbytes . $OKbytes );

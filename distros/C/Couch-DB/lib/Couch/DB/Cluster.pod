@@ -20,7 +20,7 @@ methods, so they got their own module.
 
 =over 4
 
-=item Couch::DB::Cluster-E<gt>B<new>(%options)
+=item $class-E<gt>B<new>(%options)
 
 B<Do not call> the method yourself: use L<Couch::DB::cluster()|Couch::DB/"Interface starting points">.
 
@@ -41,6 +41,8 @@ B<Do not call> the method yourself: use L<Couch::DB::cluster()|Couch::DB/"Interf
 
 =item $obj-E<gt>B<couch>()
 
+Z<>
+
 =back
 
 =head2 Managing a Cluster
@@ -52,14 +54,14 @@ C<client>, and C<on_error>.  See L<Couch::DB/Using the CouchDB API>.
 
 =item $obj-E<gt>B<clusterSetup>($config, %options)
 
- [CouchDB API "POST /_cluster_setup", since 2.0, UNTESTED]
+  [CouchDB API "POST /_cluster_setup", since 2.0, UNTESTED]
 
 Configure a node as a single (standalone) node, as part of a cluster,
 or finalise a cluster.
 
 =item $obj-E<gt>B<clusterState>(%options)
 
- [CouchDB API "GET /_cluster_setup", since 2.0]
+  [CouchDB API "GET /_cluster_setup", since 2.0]
 
 Describes the status of this CouchDB instance is in the cluster.
 Option C<ensure_dbs_exist>.
@@ -72,13 +74,13 @@ Option C<ensure_dbs_exist>.
 
 =item $obj-E<gt>B<reshardJob>($jobid, %options)
 
- [CouchDB API "GET /_reshard/jobs/{jobid}", since 2.4, UNTESTED]
+  [CouchDB API "GET /_reshard/jobs/{jobid}", since 2.4, UNTESTED]
 
 Show the resharding activity.
 
 =item $obj-E<gt>B<reshardJobChange>($jobid, %options)
 
- [CouchDB API "PUT /_reshard/jobs/{jobid}/state", since 2.4, UNTESTED]
+  [CouchDB API "PUT /_reshard/jobs/{jobid}/state", since 2.4, UNTESTED]
 Change the resharding job status.
 
  -Option--Default
@@ -97,32 +99,32 @@ Can be C<new>, C<running>, C<stopped>, C<completed>, or C<failed>.
 
 =item $obj-E<gt>B<reshardJobRemove>($jobid, %options)
 
- [CouchDB API "DELETE /_reshard/jobs/{jobid}", since 2.4, UNTESTED]
+  [CouchDB API "DELETE /_reshard/jobs/{jobid}", since 2.4, UNTESTED]
 
 Show the resharding activity.
 
 =item $obj-E<gt>B<reshardJobState>($jobid, %options)
 
- [CouchDB API "GET /_reshard/jobs/{jobid}/state", since 2.4, UNTESTED]
+  [CouchDB API "GET /_reshard/jobs/{jobid}/state", since 2.4, UNTESTED]
 
 Show the resharding job status.
 
 =item $obj-E<gt>B<reshardJobs>(%options)
 
- [CouchDB API "GET /_reshard/jobs", since 2.4]
+  [CouchDB API "GET /_reshard/jobs", since 2.4]
 
 Show the resharding activity.
 
 =item $obj-E<gt>B<reshardStart>(\%create, %options)
 
- [CouchDB API "POST /_reshard/jobs", since 2.4, UNTESTED]
+  [CouchDB API "POST /_reshard/jobs", since 2.4, UNTESTED]
 
 Create resharding jobs.
 
 =item $obj-E<gt>B<reshardStatus>(%options)
 
- [CouchDB API "GET /_reshard", since 2.4]
- [CouchDB API "GET /_reshard/state", since 2.4]
+  [CouchDB API "GET /_reshard", since 2.4]
+  [CouchDB API "GET /_reshard/state", since 2.4]
 
 Retrieve the state of resharding on the cluster.
 
@@ -142,7 +144,7 @@ Include the job counts in the result.
 
 =item $obj-E<gt>B<resharding>(%options)
 
- [CouchDB API "PUT /_reshard/state", since 2.4, UNTESTED]
+  [CouchDB API "PUT /_reshard/state", since 2.4, UNTESTED]
 
 Start or stop the resharding process.
 
@@ -154,29 +156,29 @@ Start or stop the resharding process.
 
 =item reason => STRING
 
-=item state => STRING
+=item state => 'stopped'|'running'
 
-Can be C<stopped> or C<running>.  Stopped state can be resumed into running.
+Stopped state can be resumed into running.
 
 =back
 
 =item $obj-E<gt>B<shardsForDB>($db, %options)
 
- [CouchDB API "GET /{db}/_shards", since 2.0]
+  [CouchDB API "GET /{db}/_shards", since 2.0]
 
 Returns the structure of the shared used to store a database.  Pass this
 a C<$db> as L<Couch::DB::Database|Couch::DB::Database>-object.
 
 =item $obj-E<gt>B<shardsForDoc>($doc, %options)
 
- [CouchDB API "GET /{db}/_shards/{docid}", since 2.0]
+  [CouchDB API "GET /{db}/_shards/{docid}", since 2.0]
 
 Returns the structure of the shared used to store a database.  Pass this
 a C<$db> as L<Couch::DB::Database|Couch::DB::Database>-object.
 
 =item $obj-E<gt>B<syncShards>($db, %options)
 
- [CouchDB API "POST /{db}/_sync_shards", since 2.3.1]
+  [CouchDB API "POST /{db}/_sync_shards", since 2.3.1]
 
 Force (re-)sharding of documents, usually in response to changes in the setup.
 Pass this a C<$db> as L<Couch::DB::Database|Couch::DB::Database>-object.
@@ -185,14 +187,15 @@ Pass this a C<$db> as L<Couch::DB::Database|Couch::DB::Database>-object.
 
 =head1 SEE ALSO
 
-This module is part of Couch-DB distribution version 0.200,
-built on June 18, 2025. Website: F<http://perl.overmeer.net/CPAN/>
+This module is part of Couch-DB version 0.201,
+built on January 30, 2026. Website: F<http://perl.overmeer.net/CPAN/>
 
 =head1 LICENSE
 
-Copyrights 2024-2025 by [Mark Overmeer]. For other contributors see ChangeLog.
+For contributors see file ChangeLog.
 
-This program is free software; you can redistribute it and/or modify it
-under the same terms as Perl itself.
-See F<http://dev.perl.org/licenses/>
+This software is copyright (c) 2024-2026 by Mark Overmeer.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
 

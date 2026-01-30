@@ -1,15 +1,22 @@
-# Copyrights 2024-2025 by [Mark Overmeer].
-#  For other contributors see ChangeLog.
-# See the manual pages for details on the licensing terms.
-# Pod stripped from pm file by OODoc 2.03.
-# SPDX-FileCopyrightText: 2024 Mark Overmeer <mark@overmeer.net>
-# SPDX-License-Identifier: Artistic-2.0
+# This code is part of Perl distribution Couch-DB version 0.201.
+# The POD got stripped from this file by OODoc version 3.06.
+# For contributors see file ChangeLog.
+
+# This software is copyright (c) 2024-2026 by Mark Overmeer.
+
+# This is free software; you can redistribute it and/or modify it under
+# the same terms as the Perl 5 programming language system itself.
+# SPDX-License-Identifier: Artistic-1.0-Perl OR GPL-1.0-or-later
+
 
 package Couch::DB::Design;{
-our $VERSION = '0.200';
+our $VERSION = '0.201';
 }
 
 use parent 'Couch::DB::Document';
+
+use warnings;
+use strict;
 
 use Couch::DB::Util;
 
@@ -20,6 +27,7 @@ use Scalar::Util qw/blessed/;
 
 my $id_generator;
 
+#--------------------
 
 sub init($)
 {	my ($self, $args) = @_;
@@ -32,7 +40,7 @@ sub init($)
 	$self;
 }
 
-#-------------
+#--------------------
 
 $id_generator = sub ($) { $_[0]->couch->freshUUID };
 sub setIdGenerator($) { $id_generator = $_[1] }
@@ -40,7 +48,7 @@ sub setIdGenerator($) { $id_generator = $_[1] }
 
 sub idBase() { $_[0]->{CDD_base} }
 
-#-------------
+#--------------------
 
 sub create($%)
 {	my $self = shift;
@@ -76,9 +84,9 @@ sub details(%)
 	);
 }
 
-#-------------
+#--------------------
 
-#-------------
+#--------------------
 
 sub createIndex($%)
 {	my ($self, $config, %args) = @_;
@@ -145,14 +153,24 @@ sub indexDetails($%)
 	);
 }
 
-#-------------
+#--------------------
 
 sub viewDocs($;$%)
 {	my ($self, $view, $search, %args) = @_;
 	$self->db->allDocs($search, view => $view, design => $self, %args);
 }
 
-#-------------
+
+sub compactViews(%)
+{	my ($self, %args) = @_;
+
+	$self->couch->call(POST => $self->_pathToDB('_compact/', uri_escape($self->baseId)),
+		send => +{},
+		$self->couch->_resultsConfig(\%args),
+	);
+}
+
+#--------------------
 
 sub show($;$%)
 {	my ($self, $function, $doc, %args) = @_;

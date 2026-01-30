@@ -10,11 +10,13 @@ my $build = Module::Build->new(
       'perl' => '5.028',
       'Future::AsyncAwait' => 0,
       'Object::Pad' => '0.807',
+      'Sublike::Extended' => '0.29',
       'Syntax::Keyword::Match' => 0,
 
       'Digest::CRC' => 0,
       'Future::Buffer' => '0.03',
       'Future::IO' => 0,
+      'Future::Mutex' => 0,
       'Future::Selector' => '0.02',
       'IO::Termios' => 0,
    },

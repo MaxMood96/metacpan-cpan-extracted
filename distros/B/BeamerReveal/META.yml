@@ -28,34 +28,37 @@ no_index:
 provides:
   BeamerReveal:
     file: lib/BeamerReveal.pm
-    version: '20260127.1936'
+    version: '20260130.1048'
   BeamerReveal::FrameConverter:
     file: lib/BeamerReveal/FrameConverter.pm
-    version: '20260127.1936'
+    version: '20260130.1048'
   BeamerReveal::IPC::Run:
     file: lib/BeamerReveal/IPC/Run.pm
-    version: '20260127.1936'
+    version: '20260130.1048'
   BeamerReveal::Log:
     file: lib/BeamerReveal/Log.pm
-    version: '20260127.1936'
+    version: '20260130.1048'
   BeamerReveal::Log::Ansi:
     file: lib/BeamerReveal/Log/Ansi.pm
-    version: '20260127.1936'
+    version: '20260130.1048'
   BeamerReveal::MediaManager:
     file: lib/BeamerReveal/MediaManager.pm
-    version: '20260127.1936'
+    version: '20260130.1048'
+  BeamerReveal::NotesFactory:
+    file: lib/BeamerReveal/NotesFactory.pm
+    version: '20260130.1048'
   BeamerReveal::Object:
     file: lib/BeamerReveal/Object.pm
-    version: '20260127.1936'
+    version: '20260130.1048'
   BeamerReveal::Object::BeamerFrame:
     file: lib/BeamerReveal/Object/BeamerFrame.pm
-    version: '20260127.1936'
+    version: '20260130.1048'
   BeamerReveal::Object::Presentation:
     file: lib/BeamerReveal/Object/Presentation.pm
-    version: '20260127.1936'
+    version: '20260130.1048'
   BeamerReveal::TemplateStore:
     file: lib/BeamerReveal/TemplateStore.pm
-    version: '20260127.1936'
+    version: '20260130.1048'
 requires:
   Carp: '0'
   Config::Tiny: '0'
@@ -87,7 +90,7 @@ requires:
   parent: '0'
   strict: '0'
   warnings: '0'
-version: '20260127.1936'
+version: '20260130.1048'
 x_Dist_Zilla:
   perl:
     version: '5.042000'

@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-use v5.14;
+use v5.28;
 use warnings;
 
 use Test2::V0;
@@ -77,6 +77,48 @@ sub with_crc8
    $controller->check_and_clear( '->request' );
 
    $slurm->stop;
+}
+
+# concurrent REQUESTs are queued on MSLuRM
+{
+   $controller->use_sysread_buffer( "DummyFH" );
+
+   # R1->A1 happens entirely first
+   $controller->expect_syswrite( "DummyFH",
+      "\x55" . with_crc8( with_crc8( "\x32\x8F\x02" ) . "R1" ) )
+      ->will_write_sysread_buffer_later( "DummyFH",
+         "\x55" . with_crc8( with_crc8( "\xB2\x0F\x02" ) . "A1" ) );
+   $controller->expect_sleep( 0.05 )
+      ->remains_pending;
+   $controller->expect_syswrite( "DummyFH",
+      "\x55" . with_crc8( with_crc8( "\xC2\x8F\x00" ) ) );
+   # R2->A2 happens entirely second
+   $controller->expect_syswrite( "DummyFH",
+      "\x55" . with_crc8( with_crc8( "\x33\x8F\x02" ) . "R2" ) )
+      ->will_write_sysread_buffer_later( "DummyFH",
+         "\x55" . with_crc8( with_crc8( "\xB3\x0F\x02" ) . "A2" ) );
+   $controller->expect_sleep( Test::Deep::num( 0.0017, 1E-4 ) );
+   $controller->expect_sleep( 0.05 )
+      ->remains_pending;
+   $controller->expect_syswrite( "DummyFH",
+      "\x55" . with_crc8( with_crc8( "\xC3\x8F\x00" ) ) );
+
+   # Both duplicate ACKs happen afterwards
+   $controller->expect_sleep( Test::Deep::num( 0.0017, 1E-4 ) );
+   $controller->expect_syswrite( "DummyFH",
+      "\x55" . with_crc8( with_crc8( "\xC2\x8F\x00" ) ) );
+   $controller->expect_sleep( Test::Deep::num( 0.0017, 1E-4 ) );
+   $controller->expect_syswrite( "DummyFH",
+      "\x55" . with_crc8( with_crc8( "\xC3\x8F\x00" ) ) );
+
+   my $f1 = $slurm->request( 15 => "R1" );
+   my $f2 = $slurm->request( 15 => "R2" );
+
+   is( await $f1, "A1", 'Result of first ->request' );
+
+   is( await $f2, "A2", 'Result of second ->request' );
+
+   $controller->check_and_clear( 'Two concurrent ->request calls' );
 }
 
 done_testing;

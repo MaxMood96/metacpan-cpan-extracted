@@ -31,7 +31,7 @@ class TestServer {
       return "Response<$cmd>";
    }
 
-   method on_connection_subscribe {}
+   method on_connection_subscribe ( @ ) {}
 }
 my $server = TestServer->new(
    fh => "ListenFH",
@@ -51,7 +51,7 @@ my $run_f;
       ->remains_pending;
 
    $run_f = $server->run;
-   $run_f->on_fail( sub { die "@_" } );
+   $run_f->on_fail( sub ( $err, @ ) { die $err } );
 
    # UGH this is terrible
    Test::Future::Deferred->done_later->await until $server->clients > 0;
@@ -105,9 +105,8 @@ my $run_f;
    require IO::Socket::UNIX;
    my %io_socket_unix_args;
    no warnings qw( once redefine );
-   *IO::Socket::UNIX::new = sub {
-      shift;
-      %io_socket_unix_args = @_;
+   *IO::Socket::UNIX::new = sub ( $, @args ) {
+      %io_socket_unix_args = @args;
       return 1;
    };
 

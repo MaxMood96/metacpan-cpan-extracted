@@ -5,16 +5,16 @@ author:
 build_requires:
   ExtUtils::MakeMaker: '0'
   Log::Log4perl: '0'
-  Test::More: '0'
+  Test::More: '1.001005'
   Test::Output: '0'
 configure_requires:
-  Config: '0'
+  ExtUtils::MakeMaker: '6.76'
   ExtUtils::MakeMaker::CPANfile: '0.09'
-  File::Spec: '0'
-  lib: '0'
-  subs: '0'
+  File::Spec::Functions: '0'
+  strict: '0'
+  warnings: '0'
 dynamic_config: 0
-generated_by: 'ExtUtils::MakeMaker version 7.64, CPAN::Meta::Converter version 2.143240'
+generated_by: 'ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.143240'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -27,10 +27,10 @@ no_index:
 provides:
   MooX::Role::HasLogger:
     file: lib/MooX/Role/HasLogger.pm
-    version: '0.001002'
+    version: v1.0.0
   MooX::Role::HasLogger::Types:
     file: lib/MooX/Role/HasLogger/Types.pm
-    version: '0.001002'
+    version: v1.0.0
 requires:
   Log::Any: '1.711'
   Moo: '2.004000'
@@ -38,7 +38,9 @@ requires:
   Type::Tiny: '0'
   namespace::clean: '0'
   perl: '5.008009'
+  strict: '0'
+  warnings: '0'
 resources:
-  bugtracker: https://github.com/XSven/MooX-Role-HasLogger/issues
-  repository: git://github.com/XSven/MooX-Role-HasLogger.git
-version: '0.001002'
+  bugtracker: https://codeberg.org/XSven/MooX-Role-HasLogger/issues
+  repository: https://codeberg.org/XSven/MooX-Role-HasLogger.git
+version: v1.0.0

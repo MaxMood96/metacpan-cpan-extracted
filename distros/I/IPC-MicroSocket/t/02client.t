@@ -68,8 +68,8 @@ my $client = IPC::MicroSocket::Client->new(
             "\0\0\0\x07"."message" );
 
    my $next_event_f = Test::Future::Deferred->new;
-   my $subf = $client->subscribe( "T" => sub { $next_event_f->done( @_ ) } );
-   $subf->on_fail( sub { die "FAILED @_" } );
+   my $subf = $client->subscribe( "T" => sub ( @args ) { $next_event_f->done( @args ) } );
+   $subf->on_fail( sub ( $err, @ ) { die "FAILED $err" } );
 
    is( [ await $next_event_f ], [ "the", "message" ],
       'on_recv saw message' );

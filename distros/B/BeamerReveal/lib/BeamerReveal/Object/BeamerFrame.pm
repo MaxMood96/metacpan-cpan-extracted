@@ -3,7 +3,7 @@
 
 
 package BeamerReveal::Object::BeamerFrame;
-our $VERSION = '20260127.1936'; # VERSION
+our $VERSION = '20260130.1048'; # VERSION
 
 use parent 'BeamerReveal::Object';
 use Carp;
@@ -19,6 +19,7 @@ use Digest::SHA;
 
 
 our $maxRawPage;
+our $maxNotePage = 0;
 our $embeddedID;
 
 sub nofdigits { length( "$_[0]" ) }
@@ -38,16 +39,19 @@ sub new {
   $self->{images}     = [];
   $self->{iframes}    = [];
   $self->{animations} = [];
+  $self->{hasnotes}   = 0;
+  
   ++$lineCtr;
   for( my $i = 0; $i < @$lines; ++$i ) {
     ( $lines->[$i] =~ /^-(?<command>\w+):(?<payload>.*)$/ )
       or $logger->fatal( "Error: syntax incorrect in rvl file on line $lineCtr '$lines->[$i]'\n" );
     if ( $+{command} eq 'parameters' ) {
       $self->{parameters} = BeamerReveal::Object::readParameterLine( $+{payload} );
-      $self->{parameters}->{rawpage} = $rawpage;
-
       # The correctness of this relies on the pages appearing in order in the .rvl file
-      $maxRawPage = $self->{parameters}->{rawpage};
+      # however, the rawpage counter of LaTeX is not all cases a true arabic counter and
+      # therefore not reliable
+      $self->{parameters}->{rawpage} = $rawpage;
+      $maxRawPage = $rawpage;
     }
     elsif ( $+{command} eq 'video' ) {
       push @{$self->{videos}}, BeamerReveal::Object::readParameterLine( $+{payload} );
@@ -65,10 +69,14 @@ sub new {
       push @{$self->{animations}}, BeamerReveal::Object::readParameterLine( $+{payload} );
       $self->{animations}->[-1]->{tex} = $lines->[++$i];
     }
+    elsif ( $+{command} eq 'hasnote' ) {
+      $self->{hasnotes} = 1;
+    }
     else {
       $logger->fatal( "Error: unknown BeamerFrame data on line @{[ $lineCtr + $i ]} '$lines->[$i]'\n" );
     }
   }
+  ++$maxNotePage if $self->{hasnotes};
   
   $embeddedID = 0 unless defined( $embeddedID );
   
@@ -78,7 +86,7 @@ sub new {
 
 sub makeSlide {
   my $self = shift;
-  my ( $i, $mediaManager ) = @_;
+  my ( $i, $mediaManager, $nofNotes ) = @_;
 
   my $logger = $BeamerReveal::Log::logger;
   $logger->log( 2, "- making slide $i" );
@@ -99,6 +107,7 @@ sub makeSlide {
 			 FIT => $video->{fit},
 			 AUTOPLAY => exists $video->{autoplay} ? 'data-autoplay' : '',
 			 CONTROLS => exists $video->{controls} ? 'controls' : '',
+			 MUTED => exists $video->{muted} ? 'muted' : '',
 			 LOOP => exists $video->{loop} ? 'loop' : '',
 		       );
     my $vStamps;
@@ -135,7 +144,8 @@ sub makeSlide {
 			 FIT => $audio->{fit},
 			 AUTOPLAY => exists $audio->{autoplay} ? 'data-autoplay' : '',
 			 CONTROLS => exists $audio->{controls} ? 'controls' : '',
-			 LOOP => exists $video->{loop} ? 'loop' : '' );
+			 MUTED => exists $audio->{muted} ? 'muted' : '',
+			 LOOP => exists $audio->{loop} ? 'loop' : '' );
     my $aStamps;
     my $aTemplate;
     if( exists $audio->{embed} ) {
@@ -286,14 +296,20 @@ sub makeSlide {
   }
   $menuTitle = sprintf( $menuTitle,
 			$self->{parameters}->{title} );
-			# $self->{parameters}->{truepage} );
+  # $self->{parameters}->{truepage} );
+
+  my $slideImage = $mediaManager->slideFromStore( sprintf( 'slide-%0' . nofdigits( $maxRawPage ) . 'd.jpg',
+							   $self->{parameters}->{rawpage} ) ),;
+  my $notesImage = $mediaManager->slideFromStore( sprintf( 'notes-%0' . nofdigits( $maxNotePage ) . 'd.jpg',
+							   $self->{hasnotes} ) );
   my $fStamps =
     {
-     'DATA-MENU-TITLE' => $menuTitle,
-     SLIDEIMAGE   => $mediaManager->slideFromStore( sprintf( 'slide-%0' . nofdigits( $maxRawPage ) . 'd.jpg',
-		                                           $self->{parameters}->{rawpage} ) ),
+     DATAMENUTITLE => $menuTitle,
+     SLIDEIMAGE   => $slideImage,
      SLIDECONTENT => $content,
      TRANSITION   => $self->{parameters}->{transition} || 'none',
+     NOTESIMAGE   => $self->{hasnotes} ?
+     '<img width="100%" height="100%" src="' . $notesImage . '">' : ' ' # space is important!
     };
 
   return BeamerReveal::TemplateStore::stampTemplate( $fTemplate, $fStamps );
@@ -384,7 +400,7 @@ BeamerReveal::Object::BeamerFrame - BeamerFrame object
 
 =head1 VERSION
 
-version 20260127.1936
+version 20260130.1048
 
 =head1 SYNOPSIS
 
@@ -420,15 +436,24 @@ the beamerframe object
 
 =head2 makeSlide()
 
-  $html = $bf->makeSlide( $mediaManager )
+  $html = $bf->makeSlide( $i, $mediaManager, $nofNotes )
 
 generate a HTML slides from this beamerframe.
 
 =over 4
 
+=item . C<$i>
+
+the number of the slide that is generated; needed because slide number in LaTeX is dubious.
+
 =item . C<$mediaManager>
 
 mediamanager to use, to access all media files (and geneate animations when needed)
+
+=item . C<$nofNotes>
+
+total number of notes attached to the presentation; needed to zero-pad the node count in the
+filenames of the note-images that are linked.
 
 =item . C<$html>
 

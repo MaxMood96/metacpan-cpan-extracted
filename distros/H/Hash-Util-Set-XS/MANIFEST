@@ -18,6 +18,6 @@ Makefile.PL
 MANIFEST			This list of files
 META.yml
 README
-t/basic.t
-t/fuzz.t
+t/11-set-basic.t
+t/12-set-fuzz.t
 XS.xs

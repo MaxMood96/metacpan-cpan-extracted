@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Hadoop Jobs Timeline - Demo</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0; padding: 20px; background: #f8f9fa; color: #333;
+        }
+        h1 { margin-top: 0; color: #2c3e50; }
+        .subtitle { color: #666; margin-bottom: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        #chart {
+            background: #fff; border-radius: 8px; padding: 20px;
+            overflow-x: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        svg { overflow: visible; }
+        rect {
+            stroke: rgba(0,0,0,0.1); stroke-width: 0.5;
+            cursor: pointer; transition: opacity 0.2s;
+        }
+        rect:hover { stroke: #333; stroke-width: 2; opacity: 0.85; }
+        .stats { margin-top: 15px; font-size: 13px; color: #666; }
+        .tooltip {
+            position: absolute; background: rgba(0,0,0,0.9); color: #fff;
+            padding: 10px; border-radius: 4px; font-size: 12px;
+            pointer-events: none; z-index: 1000; line-height: 1.5; display: none;
+        }
+        .tooltip-title { font-weight: bold; margin-bottom: 5px; }
+        .legend { display: flex; gap: 20px; margin-top: 15px; font-size: 12px; }
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .legend-color { width: 20px; height: 12px; border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Hadoop MapReduce Timeline</h1>
+        <p class="subtitle">75 jobs arranged into parallel execution lanes. Color intensity indicates map task count. Hover for details.</p>
+
+        <div id="chart">
+            <svg id="timeline" width="1200"></svg>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" id="legend-low"></div>
+                <span>Few map tasks</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" id="legend-high"></div>
+                <span>Many map tasks</span>
+            </div>
+        </div>
+
+        <div class="stats" id="stats"></div>
+    </div>
+
+    <div class="tooltip" id="tooltip">
+        <div class="tooltip-title" id="tooltip-title"></div>
+        <div id="tooltip-user"></div>
+        <div id="tooltip-maps"></div>
+        <div id="tooltip-reduces"></div>
+        <div id="tooltip-duration"></div>
+    </div>
+
+<script>
+// =============================================================================
+// INPUT: Raw job data (sent to server)
+// Each job: [start_epoch, end_epoch, job_id, user, map_tasks, reduce_tasks]
+// =============================================================================
+var INPUT = [[1700002680,1700002812,"job_1","alice",2121,41],[1700003083,1700003262,"job_2","dave",3464,418],[1700001666,1700001869,"job_3","dave",139,385],[1700002164,1700002466,"job_4","dave",2689,249],[1700001575,1700001709,"job_5","grace",311,430],[1700003499,1700003783,"job_6","bob",1038,49],[1700001086,1700001334,"job_7","alice",1379,145],[1700002036,1700002322,"job_8","bob",4018,409],[1700000769,1700000825,"job_9","dave",2633,433],[1700003359,1700003430,"job_10","dave",2606,147],[1700001119,1700001287,"job_11","bob",688,126],[1700001936,1700001986,"job_12","dave",4074,472],[1700002474,1700002589,"job_13","bob",62,310],[1700001462,1700001638,"job_14","dave",1167,420],[1700001244,1700001459,"job_15","bob",2896,78],[1700000886,1700001194,"job_16","bob",4105,387],[1700002210,1700002486,"job_17","eve",1272,308],[1700000370,1700000682,"job_18","alice",2725,308],[1700003554,1700003594,"job_19","frank",2989,142],[1700002997,1700003210,"job_20","alice",1340,293],[1700001418,1700001717,"job_21","grace",1313,315],[1700000786,1700001069,"job_22","grace",4762,301],[1700001816,1700002068,"job_23","eve",661,472],[1700000751,1700000841,"job_24","carol",3581,26],[1700002127,1700002267,"job_25","dave",1575,228],[1700000088,1700000154,"job_26","carol",436,368],[1700001393,1700001540,"job_27","carol",41,471],[1700001605,1700001854,"job_28","frank",4537,188],[1700000030,1700000222,"job_29","grace",1676,412],[1700000708,1700000981,"job_30","grace",4530,24],[1700002610,1700002691,"job_31","frank",781,297],[1700002530,1700002744,"job_32","bob",195,14],[1700003226,1700003542,"job_33","carol",602,371],[1700001987,1700002288,"job_34","grace",4813,465],[1700002182,1700002301,"job_35","frank",433,126],[1700001083,1700001406,"job_36","dave",2348,103],[1700001727,1700002031,"job_37","alice",569,497],[1700002969,1700003246,"job_38","dave",2502,492],[1700002025,1700002204,"job_39","carol",2997,7],[1700002489,1700002707,"job_40","grace",3156,167],[1700000580,1700000827,"job_41","grace",2636,86],[1700003026,1700003327,"job_42","eve",3610,225],[1700002142,1700002318,"job_43","bob",2062,191],[1700001816,1700002039,"job_44","alice",4672,3],[1700002336,1700002565,"job_45","frank",3348,236],[1700000528,1700000792,"job_46","grace",3417,192],[1700001721,1700001974,"job_47","carol",184,89],[1700002598,1700002836,"job_48","dave",4399,338],[1700002424,1700002486,"job_49","eve",3621,74],[1700001617,1700001702,"job_50","frank",3526,305],[1700002293,1700002606,"job_51","alice",4691,231],[1700001785,1700001857,"job_52","alice",2907,370],[1700001133,1700001280,"job_53","bob",4525,414],[1700001351,1700001418,"job_54","eve",845,203],[1700001724,1700001908,"job_55","dave",843,405],[1700002547,1700002714,"job_56","frank",4705,130],[1700003058,1700003236,"job_57","frank",3567,288],[1700001631,1700001662,"job_58","alice",3548,97],[1700001405,1700001620,"job_59","alice",94,96],[1700000656,1700000814,"job_60","alice",4682,302],[1700000579,1700000830,"job_61","frank",3926,221],[1700000716,1700000922,"job_62","grace",2930,46],[1700002910,1700003049,"job_63","grace",1840,428],[1700001476,1700001532,"job_64","dave",4808,128],[1700001690,1700001964,"job_65","grace",3824,91],[1700002925,1700003123,"job_66","eve",4275,327],[1700002247,1700002421,"job_67","carol",3566,491],[1700002615,1700002647,"job_68","frank",83,373],[1700001755,1700002075,"job_69","dave",2794,205],[1700002832,1700003109,"job_70","carol",2943,499],[1700001142,1700001430,"job_71","frank",298,144],[1700001610,1700001812,"job_72","carol",2026,190],[1700000451,1700000541,"job_73","carol",4038,472],[1700001293,1700001438,"job_74","alice",104,177],[1700001682,1700001966,"job_75","dave",88,402]];
+
+// =============================================================================
+// OUTPUT: Pre-computed by Algorithm::TimelinePacking (returned from server)
+// Times normalized to start at 0, arranged into non-overlapping lines
+// =============================================================================
+var EARLIEST = 1700000030;  // Original start timestamp
+var LATEST = 3753;          // Duration in seconds
+
+var lines = [
+    [[756,1039,"job_22","grace",4762,301],[1321,1388,"job_54","eve",845,203],[1545,1679,"job_5","grace",311,430],[1697,2001,"job_37","alice",569,497],[2180,2456,"job_17","eve",1272,308],[2650,2782,"job_1","alice",2121,41],[3329,3400,"job_10","dave",2606,147]],
+    [[58,124,"job_26","carol",436,368],[340,652,"job_18","alice",2725,308],[678,951,"job_30","grace",4530,24],[1263,1408,"job_74","alice",104,177],[1580,1782,"job_72","carol",2026,190],[1786,2009,"job_44","alice",4672,3],[2217,2391,"job_67","carol",3566,491],[2580,2661,"job_31","frank",781,297],[2996,3297,"job_42","eve",3610,225]],
+    [[739,795,"job_9","dave",2633,433],[1056,1304,"job_7","alice",1379,145],[1432,1608,"job_14","dave",1167,420],[1660,1934,"job_65","grace",3824,91],[2097,2237,"job_25","dave",1575,228],[2444,2559,"job_13","bob",62,310],[2895,3093,"job_66","eve",4275,327]],
+    [[721,811,"job_24","carol",3581,26],[1112,1400,"job_71","frank",298,144],[1575,1824,"job_28","frank",4537,188],[1906,1956,"job_12","dave",4074,472],[2152,2271,"job_35","frank",433,126],[2500,2714,"job_32","bob",195,14],[3196,3512,"job_33","carol",602,371]],
+    [[0,192,"job_29","grace",1676,412],[421,511,"job_73","carol",4038,472],[549,800,"job_61","frank",3926,221],[1103,1250,"job_53","bob",4525,414],[1375,1590,"job_59","alice",94,96],[1652,1936,"job_75","dave",88,402],[2112,2288,"job_43","bob",2062,191],[2517,2684,"job_56","frank",4705,130],[3053,3232,"job_2","dave",3464,418]],
+    [[686,892,"job_62","grace",2930,46],[1214,1429,"job_15","bob",2896,78],[1587,1672,"job_50","frank",3526,305],[1694,1878,"job_55","dave",843,405],[2006,2292,"job_8","bob",4018,409],[2568,2806,"job_48","dave",4399,338],[3469,3753,"job_6","bob",1038,49]],
+    [[498,762,"job_46","grace",3417,192],[856,1164,"job_16","bob",4105,387],[1363,1510,"job_27","carol",41,471],[1636,1839,"job_3","dave",139,385],[1995,2174,"job_39","carol",2997,7],[2394,2456,"job_49","eve",3621,74],[2802,3079,"job_70","carol",2943,499]],
+    [[1786,2038,"job_23","eve",661,472],[2263,2576,"job_51","alice",4691,231],[2939,3216,"job_38","dave",2502,492]],
+    [[550,797,"job_41","grace",2636,86],[1089,1257,"job_11","bob",688,126],[1388,1687,"job_21","grace",1313,315],[1725,2045,"job_69","dave",2794,205],[2306,2535,"job_45","frank",3348,236],[2880,3019,"job_63","grace",1840,428],[3524,3564,"job_19","frank",2989,142]],
+    [[1755,1827,"job_52","alice",2907,370],[1957,2258,"job_34","grace",4813,465],[2459,2677,"job_40","grace",3156,167],[3028,3206,"job_57","frank",3567,288]],
+    [[626,784,"job_60","alice",4682,302],[1053,1376,"job_36","dave",2348,103],[1446,1502,"job_64","dave",4808,128],[1601,1632,"job_58","alice",3548,97],[1691,1944,"job_47","carol",184,89],[2134,2436,"job_4","dave",2689,249],[2585,2617,"job_68","frank",83,373],[2967,3180,"job_20","alice",1340,293]]
+];
+
+// =============================================================================
+// RENDERING: Display the pre-computed layout (no algorithm, just visualization)
+// =============================================================================
+var LINE_HEIGHT = 22;
+var BAR_HEIGHT = 18;
+var SCALE = 1100 / LATEST;
+
+var colorFn = function(d) { return d3.interpolateLab("#eee", "#f00")(d); };
+
+document.getElementById('legend-low').style.background = colorFn(0);
+document.getElementById('legend-high').style.background = colorFn(1);
+
+var svg = d3.select("#timeline");
+svg.attr("height", lines.length * LINE_HEIGHT);
+
+var tooltip = document.getElementById('tooltip');
+
+lines.forEach(function(line, idx) {
+    var lineGroup = svg.append("g")
+        .attr("transform", "translate(0, " + (idx * LINE_HEIGHT) + ")");
+
+    lineGroup.selectAll("rect")
+        .data(line)
+        .enter()
+        .append("rect")
+        .style("fill", function(d) { return colorFn(Math.min(d[4] / 5000, 1)); })
+        .attr("height", BAR_HEIGHT)
+        .attr("width", function(d) { return Math.max(3, (d[1] - d[0]) * SCALE); })
+        .attr("x", function(d) { return d[0] * SCALE; })
+        .attr("y", 0)
+        .attr("rx", 2)
+        .attr("ry", 2)
+        .on("mouseover", function(event, d) {
+            document.getElementById('tooltip-title').textContent = d[2];
+            document.getElementById('tooltip-user').textContent = 'User: ' + d[3];
+            document.getElementById('tooltip-maps').textContent = 'Maps: ' + d[4].toLocaleString();
+            document.getElementById('tooltip-reduces').textContent = 'Reduces: ' + d[5].toLocaleString();
+            document.getElementById('tooltip-duration').textContent = 'Duration: ' + (d[1] - d[0]) + 's';
+            tooltip.style.display = 'block';
+            tooltip.style.left = (event.pageX + 10) + 'px';
+            tooltip.style.top = (event.pageY - 10) + 'px';
+        })
+        .on("mousemove", function(event) {
+            tooltip.style.left = (event.pageX + 10) + 'px';
+            tooltip.style.top = (event.pageY - 10) + 'px';
+        })
+        .on("mouseout", function() {
+            tooltip.style.display = 'none';
+        });
+});
+
+document.getElementById('stats').textContent = INPUT.length + ' jobs arranged on ' + lines.length + ' lines | Timeline span: ' + LATEST + 's | Avg jobs per line: ' + (INPUT.length / lines.length).toFixed(1);
+</script>
+</body>
+</html>

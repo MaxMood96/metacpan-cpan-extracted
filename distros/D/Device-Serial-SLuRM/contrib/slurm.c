@@ -336,8 +336,8 @@ abort:
 }
 
 // empty default implementations
-__attribute__((weak)) void on_slurm_notify(uint8_t b[], uint8_t len) {}
-__attribute__((weak)) void on_slurm_request(uint8_t seqno, uint8_t b[], uint8_t len) {}
+__attribute__((weak)) void on_slurm_notify(const uint8_t b[], uint8_t len) {}
+__attribute__((weak)) void on_slurm_request(uint8_t seqno, const uint8_t b[], uint8_t len) {}
 
 /* Background task runner */
 

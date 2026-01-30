@@ -1,3 +1,6 @@
+0.06 2026-01-30
+  - Added extensive test coverage for tied hashes
+
 0.05 2026-01-27
   - Ensure AV is explicitly cast to SV in newRV_inc
 

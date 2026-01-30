@@ -5,7 +5,7 @@ use warnings;
 use Exporter        qw[import];
 use Hash::Util::Set qw[:operations];
 
-our $VERSION   = '0.05';
+our $VERSION   = '0.06';
 our @EXPORT_OK = qw[ hash_inner_join
                      hash_left_join
                      hash_right_join

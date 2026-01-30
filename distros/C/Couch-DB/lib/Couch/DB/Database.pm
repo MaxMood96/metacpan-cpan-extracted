@@ -1,24 +1,34 @@
-# Copyrights 2024-2025 by [Mark Overmeer].
-#  For other contributors see ChangeLog.
-# See the manual pages for details on the licensing terms.
-# Pod stripped from pm file by OODoc 2.03.
-# SPDX-FileCopyrightText: 2024 Mark Overmeer <mark@overmeer.net>
-# SPDX-License-Identifier: Artistic-2.0
+# This code is part of Perl distribution Couch-DB version 0.201.
+# The POD got stripped from this file by OODoc version 3.06.
+# For contributors see file ChangeLog.
+
+# This software is copyright (c) 2024-2026 by Mark Overmeer.
+
+# This is free software; you can redistribute it and/or modify it under
+# the same terms as the Perl 5 programming language system itself.
+# SPDX-License-Identifier: Artistic-1.0-Perl OR GPL-1.0-or-later
+
+#oorestyle: not found P for method saveBulk(%details)
 
 package Couch::DB::Database;{
-our $VERSION = '0.200';
+our $VERSION = '0.201';
 }
 
 
+use warnings;
+use strict;
+
 use Log::Report 'couch-db';
 
-use Couch::DB::Util   qw(flat);
+use Couch::DB::Util   qw/flat/;
 use Couch::DB::Document ();
 use Couch::DB::Design   ();
 
-use Scalar::Util      qw(weaken blessed);
-use HTTP::Status      qw(HTTP_OK HTTP_NOT_FOUND);
+use Scalar::Util      qw/weaken blessed/;
+use HTTP::Status      qw/HTTP_OK HTTP_NOT_FOUND/;
 use JSON::PP ();
+
+#--------------------
 
 
 sub new(@) { my ($class, %args) = @_; (bless {}, $class)->init(\%args) }
@@ -37,7 +47,7 @@ sub init($)
 	$self;
 }
 
-#-------------
+#--------------------
 
 sub name()  { $_[0]->{CDD_name} }
 sub couch() { $_[0]->{CDD_couch} }
@@ -45,7 +55,7 @@ sub batch() { $_[0]->{CDD_batch} }
 
 sub _pathToDB(;$) { '/' . $_[0]->name . (defined $_[1] ? '/' . $_[1] : '') }
 
-#-------------
+#--------------------
 
 sub ping(%)
 {	my ($self, %args) = @_;
@@ -60,8 +70,8 @@ sub exists()
 {	my $self = shift;
 	my $result = $self->ping(delay => 0);
 
-	  $result->code eq HTTP_NOT_FOUND ? 0
-    : $result->code eq HTTP_OK        ? 1
+	$result->code eq HTTP_NOT_FOUND ? 0
+	: $result->code eq HTTP_OK        ? 1
 	:     undef;  # will probably die in the next step
 }
 
@@ -93,8 +103,7 @@ sub create(%)
 	my $couch = $self->couch;
 
 	my %query;
-	exists $args{$_} && ($query{$_} = delete $args{$_})
-		for qw/partitioned q n/;
+	exists $args{$_} && ($query{$_} = delete $args{$_}) for qw/partitioned q n/;
 	$couch->toQuery(\%query, bool => qw/partitioned/);
 	$couch->toQuery(\%query, int  => qw/q n/);
 
@@ -132,25 +141,19 @@ sub userRolesChange(%)
 	);
 
 	$self->couch->call(PUT => $self->_pathToDB('_security'),
-		send  => \%send,
+		send    => \%send,
 		$self->couch->_resultsConfig(\%args),
 	);
 }
 
 
-sub changes { ... }
+sub changes($%) { ... }
 
 
-sub compact(%)
+sub compactViews(%)
 {	my ($self, %args) = @_;
-	my $path = $self->_pathToDB('_compact');
-
-	if(my $ddoc = delete $args{design})
-	{	$path .= '/' . (blessed $ddoc ? $ddoc->id :$ddoc);
-	}
-
-	$self->couch->call(POST => $path,
-		send  => { },
+	$self->couch->call(POST => $self->_pathToDB('_compact'),
+		send => +{},
 		$self->couch->_resultsConfig(\%args),
 	);
 }
@@ -266,7 +269,7 @@ sub revisionLimitSet($%)
 	);
 }
 
-#-------------
+#--------------------
 
 sub design($)
 {	my ($self, $which) = @_;
@@ -294,11 +297,11 @@ sub __designsRow($$%)
 	my $answer = $result->answer->{rows}[$index] or return;
 	my $values = $result->values->{rows}[$index];
 
-	  ( answer    => $answer,
+	( answer    => $answer,
 		values    => $values,
 		ddocdata  => $values->{doc},
 		docparams => { db => $self },
-	  );
+	);
 }
 
 sub designs(;$%)
@@ -309,7 +312,7 @@ sub designs(;$%)
 	my ($method, $path, $send) = (GET => $self->_pathToDB('_design_docs'), undef);
 	if(@search)
 	{	$method = 'POST';
-	 	my @s   = map $self->__designsPrepare($method, $_), @search;
+		my @s   = map $self->__designsPrepare($method, $_), @search;
 
 		if(@search==1)
 		{	$send  = $s[0];
@@ -333,9 +336,9 @@ sub __indexesRow($$%)
 {	my ($self, $result, $index, %args) = @_;
 	my $answer = $result->answer->{indexes}[$index] or return ();
 
-	  (	answer => $answer,
+	(	answer => $answer,
 		values => $result->values->{indexes}[$index],
-	  );
+	);
 }
 
 sub __indexesValues()
@@ -363,7 +366,7 @@ sub search($$;$%)
 	$self->design($ddoc)->search($index, $search, %args);
 }
 
-#-------------
+#--------------------
 
 sub doc($%)
 {	my ($self, $id) = @_;
@@ -445,7 +448,7 @@ sub inspectDocs($%)
 	$query->{revs} = delete $args{revs} if exists $args{revs};
 	$couch->toQuery($query, bool => qw/revs/);
 
-	@$docs or error __x"need at least on document for bulk query.";
+	@$docs or error __x"need at least one document for bulk query.";
 
 	#XXX what does "conflicted documents mean?
 	#XXX what does "a": 1 mean in its response?
@@ -463,11 +466,11 @@ sub __allDocsRow($$%)
 	my $answer = $result->answer->{rows}[$index] or return ();
 	my $values = $result->values->{rows}[$index];
 
-	 (	answer    => $answer,
+	(	answer    => $answer,
 		values    => $values,
 		docdata   => $values->{doc},
 		docparams => { local => $args{local}, db => $self },
-	 );
+	);
 }
 
 sub allDocs(;$%)
@@ -489,9 +492,9 @@ sub allDocs(;$%)
 	!$part  || @search < 2 or panic "allDocs(partition) cannot work with multiple searches.";
 
 	my $set
-	  = $local ? '_local_docs'
-	  :   ($part ? '_partition/'. uri_escape($part) . '/' : '')
-	    . ($view ? "_design/$ddocid/_view/". uri_escape($view) : '_all_docs');
+	= $local ? '_local_docs'
+	:   ($part ? '_partition/'. uri_escape($part) . '/' : '')
+		. ($view ? "_design/$ddocid/_view/". uri_escape($view) : '_all_docs');
 
 	my $method = !@search || $part ? 'GET' : 'POST';
 	my $path   = $self->_pathToDB($set);
@@ -560,11 +563,11 @@ sub __findRow($$%)
 	my $answer = $result->answer->{docs}[$index] or return ();
 	my $values = $result->values->{docs}[$index];
 
-	(	answer    => $answer,
+	  (	answer    => $answer,
 		values    => $values,
 		docdata   => $values,
 		docparams => { local => $args{local}, db => $self },
-	 );
+	  );
 }
 
 sub find($%)

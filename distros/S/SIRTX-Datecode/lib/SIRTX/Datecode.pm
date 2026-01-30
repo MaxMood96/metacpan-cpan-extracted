@@ -1,4 +1,4 @@
-# Copyright (c) 2023-2025 Philipp Schafft
+# Copyright (c) 2023-2026 Philipp Schafft
 
 # licensed under Artistic License 2.0 (see LICENSE file)
 
@@ -17,7 +17,7 @@ use Data::Identifier;
 
 use parent qw(Data::Identifier::Interface::Userdata Data::Identifier::Interface::Simple Data::Identifier::Interface::Subobjects);
 
-our $VERSION = v0.06;
+our $VERSION = v0.07;
 
 
 sub new {
@@ -335,7 +335,7 @@ sub _build_from_iso {
     } elsif ($year <= 1979) {
         $code = 324 + ($year - 1905) * 13 + $month;
     } elsif ($year <= 2058) {
-        $code = 1299 + ($year - 1980) * 385 + ($month ? 1 : 0) + ($month - 1) * 32 + $day;
+        $code = 1299 + ($year - 1980) * 385 + ($month ? 1 + ($month - 1) * 32 : 0) + $day;
     } elsif ($year <= 2114) {
         $code = 31714 + ($year - 2059) * 13 + $month;
     } else {
@@ -382,7 +382,7 @@ SIRTX::Datecode - module for interacting with SIRTX Datecodes
 
 =head1 VERSION
 
-version v0.06
+version v0.07
 
 =head1 SYNOPSIS
 
@@ -616,7 +616,7 @@ Philipp Schafft <lion@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2025 by Philipp Schafft <lion@cpan.org>.
+This software is Copyright (c) 2025-2026 by Philipp Schafft <lion@cpan.org>.
 
 This is free software, licensed under:
 

@@ -11,8 +11,8 @@ Couch::DB::Util - utility functions
 
 =head1 SYNOPSIS
 
-   use Couch::DB::Util;           # obligatory!
-   use Couch::DB::Util  qw(flat); # alternative
+  use Couch::DB::Util;           # obligatory!
+  use Couch::DB::Util  qw(flat); # alternative
 
 =head1 DESCRIPTION
 
@@ -25,21 +25,21 @@ additional features to the namespace, like 'warnings' and 'strict'.
 
 =item B<apply_tree>($tree, CODE)
 
-Apply the CODE to all elements in the $tree.  Returns a new tree.
+Apply the C<CODE> to all elements in the C<$tree>.  Returns a new tree.
 
 =item B<flat>(LIST|ARRAY)
 
-Returns all defined elements found in the LIST or ARRAY.  The parameter
-LIST may contain ARRAYs.
+Returns all defined elements found in the C<LIST> or C<ARRAY>.  The parameter
+C<LIST> may contain ARRAYs.
 
 =item B<pile>(LIST|ARRAY)
 
-Create a new ARRAY from the offered arguments, combining all elements
-from the LIST and ARRAYs.  Undefined elements are removed.
+Create a new C<ARRAY> from the offered arguments, combining all elements
+from the C<LIST> and ARRAYs.  Undefined elements are removed.
 
 =item B<simplified>($name, $data)
 
-Returns a Data::Dumper output, which is a simplified version of the $data.
+Returns a Data::Dumper output, which is a simplified version of the C<$data>.
 A normal dump would show internals of objects which make the output very verbose,
 hence harder to interpret.
 
@@ -47,14 +47,15 @@ hence harder to interpret.
 
 =head1 SEE ALSO
 
-This module is part of Couch-DB distribution version 0.200,
-built on June 18, 2025. Website: F<http://perl.overmeer.net/CPAN/>
+This module is part of Couch-DB version 0.201,
+built on January 30, 2026. Website: F<http://perl.overmeer.net/CPAN/>
 
 =head1 LICENSE
 
-Copyrights 2024-2025 by [Mark Overmeer]. For other contributors see ChangeLog.
+For contributors see file ChangeLog.
 
-This program is free software; you can redistribute it and/or modify it
-under the same terms as Perl itself.
-See F<http://dev.perl.org/licenses/>
+This software is copyright (c) 2024-2026 by Mark Overmeer.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
 

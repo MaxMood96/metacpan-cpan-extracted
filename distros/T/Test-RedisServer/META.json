@@ -4,7 +4,7 @@
       "Daisuke Murase <typester@cpan.org>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Minilla/v3.1.13",
+   "generated_by" : "Minilla/v3.1.29",
    "license" : [
       "perl_5"
    ],
@@ -29,12 +29,12 @@
       "configure" : {
          "requires" : {
             "Module::Build::Tiny" : "0.035",
-            "Redis" : "0",
             "perl" : "5.008_001"
          }
       },
       "develop" : {
          "requires" : {
+            "Pod::Markdown::Github" : "0",
             "Test::CPAN::Meta" : "0",
             "Test::MinimumVersion::Fast" : "0.04",
             "Test::PAUSE::Permissions" : "0.07",
@@ -44,9 +44,8 @@
       },
       "runtime" : {
          "requires" : {
-            "File::Temp" : "0",
             "Mouse" : "0",
-            "Time::HiRes" : "0"
+            "Redis" : "0"
          }
       },
       "test" : {
@@ -59,7 +58,7 @@
    "provides" : {
       "Test::RedisServer" : {
          "file" : "lib/Test/RedisServer.pm",
-         "version" : "0.23"
+         "version" : "0.24"
       }
    },
    "release_status" : "stable",
@@ -69,11 +68,12 @@
       },
       "homepage" : "https://github.com/typester/Test-RedisServer",
       "repository" : {
-         "url" : "git://github.com/typester/Test-RedisServer.git",
+         "type" : "git",
+         "url" : "https://github.com/typester/Test-RedisServer.git",
          "web" : "https://github.com/typester/Test-RedisServer"
       }
    },
-   "version" : "0.23",
+   "version" : "0.24",
    "x_authority" : "cpan:TYPESTER",
    "x_contributors" : [
       "Daisuke Murase <typester@gmail.com>",
@@ -86,6 +86,6 @@
       "Sean Smith <ssmith@localhost.localdomain>",
       "gregor herrmann <gregoa@debian.org>"
    ],
-   "x_serialization_backend" : "JSON::PP version 4.04",
+   "x_serialization_backend" : "JSON::PP version 4.16",
    "x_static_install" : 1
 }

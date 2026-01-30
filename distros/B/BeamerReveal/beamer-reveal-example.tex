@@ -24,8 +24,9 @@
 %% 
 %% The Current Maintainer of this work is Walter Daems.
 %% 
+
 %%
-\documentclass[11pt,aspectratio=1610,t]{beamer}
+\documentclass[11pt,aspectratio=169,t]{beamer}%
 \setbeamertemplate{navigation symbols}{}
 
 \usepackage[width=1920]{beamer-reveal}
@@ -38,6 +39,8 @@
 \title{Test slide deck}
 \subtitle{\textsc{beamer-reveal}}
 \author{Walter Daems}
+
+\setbeamertemplate{note page}{\insertnote}
 
 \begin{document}
 
@@ -73,6 +76,9 @@
   \begin{equation}
     \eu^{-\ju\pi}+1=0
   \end{equation}
+
+  \note[item]{Make joke about fingertips}
+  \note[item]{Don't speak about your personal temptations!}
 \end{frame}
 
 \begin{frame}[transition=concave]
@@ -115,6 +121,10 @@
   The pancake menu on the bottom left also opens the menu.
 \end{frame}
 
+\note{
+  Don't spend too much time on this slide
+}
+
 \begin{frame}[transition=zoom]
   {A dymmy slide}
   {number three}
@@ -156,7 +166,7 @@
     \image[width=0.33,aspectratio=1,fit=contain,draw] (myimage) {Media/beamer-reveal-AnimatedPendulum.gif}
   \end{columns}
   % this is an overlayed image (not consuming any space)
-  \image[width=0.25,aspectratio=1,fit=contain,embed] \at (0.2,0.6) {Media/beamer-reveal-WiresTp.png}
+  \image[width=0.25,aspectratio=1,fit=contain] \at (0.2,0.6) {Media/beamer-reveal-WiresTp.png}
 \end{frame}
 
 \begin{frame}
@@ -168,6 +178,10 @@
   \iframe[draw,anchor=north,height=0.6,aspectratio=16/9,embed,
           fit=cover] \at (0.5,0.7) {Media/beamer-reveal-PCB.html}
 \end{frame}
+
+\note{
+  Don't mention the amount of hours that went into this iframe!
+}
 
 \subsection{Resonance for the ear}
 
@@ -193,7 +207,7 @@
   to mp4 maximally exploiting your multi-core CPU.
 
   \begin{center}
-  \animation[framerate=25,duration=7.5,pdfprogress=0.1,autoplay,loop] {%
+  \animation<1|handout:1-3>[framerate=25,duration=7.5,pdf progress=0.1,handout progress={1:0,2:0.2,3:0.5},autoplay,loop] {%
     \begin{tikzpicture}[font=\footnotesize,transform shape,scale=0.75]
       \pgfmathsetmacro\angle{\progress*540}%
       \clip (-2,-5.25) rectangle (8,2);
@@ -259,7 +273,7 @@
   }%
   \end{center}
   % let's play some audio in the background, totally hidden
-  \audio[autoplay,width=0.1,aspectratio=16/9,fit=cover,embed] \at (0,0)
+  \audio[autoplay,width=0.1,aspectratio=16/9,fit=cover] \at (0,0)
         {Media/beamer-reveal-AudioSample.ogg}
 \end{frame}
 

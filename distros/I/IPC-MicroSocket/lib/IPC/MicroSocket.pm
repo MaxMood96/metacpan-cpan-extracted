@@ -1,14 +1,14 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2024 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2024-2026 -- leonerd@leonerd.org.uk
 
 use v5.36;
 use Object::Pad 0.817;  # class :abstract
 use Future::AsyncAwait;
 use Syntax::Keyword::Match;
 
-package IPC::MicroSocket 0.03;
+package IPC::MicroSocket 0.04;
 
 =head1 NAME
 
@@ -69,10 +69,10 @@ class IPC::MicroSocket::Connection :abstract
 
    # A message is a sigil (U8), argc (U8), args (argc * U32+bytes)
 
-   async method _recv
+   async method _recv ()
    {
       my $buffer = Future::Buffer->new(
-         fill => sub { Future::IO->sysread( $fh, 256 ) },
+         fill => sub () { Future::IO->sysread( $fh, 256 ) },
       );
 
       MESSAGE: while(1) {
@@ -94,7 +94,7 @@ class IPC::MicroSocket::Connection :abstract
       }
    }
 
-   method on_recv;
+   method on_recv ( $sigil, @args );
 
    async method send ( $sigil, @args )
    {
@@ -120,7 +120,7 @@ class IPC::MicroSocket::ServerConnection :abstract
 
    method on_request;
 
-   method on_subscribe;
+   method on_subscribe ( $topic );
 
    field %subscribed_topics;
    method is_subscribed ( $topic ) { return $subscribed_topics{ $topic }; }
@@ -143,9 +143,9 @@ class IPC::MicroSocket::ServerConnection :abstract
                f    => $self->on_request( @args )
                   ->then(
                      # done
-                     sub { $self->send( ")", $tag, @_ ) },
+                     sub ( @result ) { $self->send( ")", $tag, @result ) },
                      # fail
-                     sub { $self->send( "#", $tag, $_[0] ) },
+                     sub ( $err, @ ) { $self->send( "#", $tag, $err ) },
                   ),
                );
          }

@@ -8,16 +8,14 @@ Hash::Util::Join - SQL-like join operations on hashes
 
 =head1 SYNOPSIS
 
-    use Hash::Util::Join qw(:all);
+    %result = hash_inner_join %x, %y;       # Keys in both hashes
+    %result = hash_left_join %x, %y;        # All keys from left hash
+    %result = hash_right_join %x, %y;       # All keys from right hash
+    %result = hash_outer_join %x, %y;       # All keys from both hashes
     
-    my %users  = (1 => 'Alice', 2 => 'Bob', 3 => 'Charlie'        );
-    my %scores = (              2 => 95,    3 => 87,       4 => 92);
-    
-    my %result = hash_inner_join %users, %scores, sub {
-      my ($key, $left, $right) = @_;
-      "$left: $right";
-    };
-    # Result: (2 => 'Bob: 95', 3 => 'Charlie: 87')
+    %result = hash_left_anti_join %x, %y;   # Keys only in left hash
+    %result = hash_right_anti_join %x, %y;  # Keys only in right hash
+    %result = hash_full_anti_join %x, %y;   # Keys in either but not both
 
 =head1 DESCRIPTION
 
@@ -29,9 +27,9 @@ database join operations.
 
 =head2 hash_inner_join
 
-    my %result = hash_inner_join %x, %y;
-    my %result = hash_inner_join %x, %y, sub { ... };
-    my $result = hash_inner_join %x, %y, sub { ... };
+   %result = hash_inner_join %x, %y;
+   %result = hash_inner_join %x, %y, sub { ... };
+   $result = hash_inner_join %x, %y, sub { ... };
 
 Returns keys present in both hashes. The merge function receives
 C<($key, $x_value, $y_value)> for each common key.
@@ -42,9 +40,9 @@ Returns key-value pairs in list context, hash reference in scalar context.
 
 =head2 hash_left_join
 
-    my %result = hash_left_join %x, %y;
-    my %result = hash_left_join %x, %y, sub { ... };
-    my $result = hash_left_join %x, %y, sub { ... };
+   %result = hash_left_join %x, %y;
+   %result = hash_left_join %x, %y, sub { ... };
+   $result = hash_left_join %x, %y, sub { ... };
 
 Returns all keys from the left hash. The merge function receives
 C<($key, $x_value, $y_value)> where C<$y_value> is C<undef> for
@@ -56,9 +54,9 @@ Returns key-value pairs in list context, hash reference in scalar context.
 
 =head2 hash_right_join
 
-    my %result = hash_right_join %x, %y;
-    my %result = hash_right_join %x, %y, sub { ... };
-    my $result = hash_right_join %x, %y, sub { ... };
+   %result = hash_right_join %x, %y;
+   %result = hash_right_join %x, %y, sub { ... };
+   $result = hash_right_join %x, %y, sub { ... };
 
 Returns all keys from the right hash. The merge function receives
 C<($key, $x_value, $y_value)> where C<$x_value> is C<undef> for
@@ -70,9 +68,9 @@ Returns key-value pairs in list context, hash reference in scalar context.
 
 =head2 hash_outer_join
 
-    my %result = hash_outer_join %x, %y;
-    my %result = hash_outer_join %x, %y, sub { ... };
-    my $result = hash_outer_join %x, %y, sub { ... };
+   %result = hash_outer_join %x, %y;
+   %result = hash_outer_join %x, %y, sub { ... };
+   $result = hash_outer_join %x, %y, sub { ... };
 
 Returns all keys from both hashes. The merge function receives
 C<($key, $x_value, $y_value)> where either value may be C<undef>
@@ -84,8 +82,8 @@ Returns key-value pairs in list context, hash reference in scalar context.
 
 =head2 hash_left_anti_join
 
-    my %result = hash_left_anti_join %x, %y;
-    my $result = hash_left_anti_join %x, %y;
+   %result = hash_left_anti_join %x, %y;
+   $result = hash_left_anti_join %x, %y;
 
 Returns keys present in the left hash but not in the right hash.
 No merge function - values come directly from the left hash.
@@ -94,8 +92,8 @@ Returns key-value pairs in list context, hash reference in scalar context.
 
 =head2 hash_right_anti_join
 
-    my %result = hash_right_anti_join %x, %y;
-    my $result = hash_right_anti_join %x, %y;
+   %result = hash_right_anti_join %x, %y;
+   $result = hash_right_anti_join %x, %y;
 
 Returns keys present in the right hash but not in the left hash.
 No merge function - values come directly from the right hash.
@@ -104,13 +102,250 @@ Returns key-value pairs in list context, hash reference in scalar context.
 
 =head2 hash_full_anti_join
 
-    my %result = hash_full_anti_join %x, %y;
-    my $result = hash_full_anti_join %x, %y;
+   %result = hash_full_anti_join %x, %y;
+   $result = hash_full_anti_join %x, %y;
 
 Returns keys present in either hash but not in both (symmetric difference).
 No merge function - values come from whichever hash contains the key.
 
 Returns key-value pairs in list context, hash reference in scalar context.
+
+=head1 EXAMPLES
+
+=head2 Basic Usage
+
+    %users  = (1 => 'Alice', 2 => 'Bob', 3 => 'Charlie'        );
+    %scores = (              2 => 95,    3 => 87,       4 => 92);
+    
+    # Inner join - users with scores
+    %result = hash_inner_join %users, %scores, sub {
+      my ($id, $name, $score) = @_;
+      return { name => $name, score => $score };
+    };
+    # Result:  
+    #   (2 => {name => 'Bob',     score => 95}, 
+    #    3 => {name => 'Charlie', score => 87})
+
+    # Left join - all users, with scores if available
+    %result = hash_left_join %users, %scores, sub {
+      my ($key, $name, $score) = @_;
+      return defined $score ? "$name: $score" : "$name: no score";
+    };
+    # Result: 
+    #   (1 => 'Alice: no score', 
+    #    2 => 'Bob: 95', 
+    #    3 => 'Charlie: 87')
+    
+    # Left anti join - users without scores
+    %result = hash_left_anti_join %users, %scores;
+    # Result: 
+    #   (1 => 'Alice')
+
+
+=head2 Merging Nested Structures
+
+    %users = (
+      1 => { name => 'Alice', age => 30 },
+      2 => { name => 'Bob',   age => 25 },
+    );
+    
+    %scores = (
+      1 => { math => 95, english => 88 },
+      2 => { math => 87, english => 92 },
+    );
+    
+    %result = hash_inner_join %users, %scores, sub {
+      my ($id, $user, $score) = @_;
+      return { %$user, %$score };
+    };
+    
+    # Output:
+    #   1 => { name => 'Alice', age => 30, math => 95, english => 88 }
+    #   2 => { name => 'Bob',   age => 25, math => 87, english => 92 }
+
+=head2 Deep Merging
+
+    sub deep_merge {
+      my ($key, $left, $right) = @_;
+      
+      if (ref $left eq 'HASH' && ref $right eq 'HASH') {
+          return { hash_outer_join %$left, %$right, \&deep_merge };
+      }
+      return $right // $left;
+    }
+    
+    %system_defaults = (
+      database => {
+        host => 'localhost',
+        port => 5432,
+        pool => { min => 5, max => 20 },
+      },
+      logging => {
+        level  => 'info',
+        output => { file => '/var/log/app.log', console => 1 },
+      },
+    );
+    
+    %user_config = (
+      database => {
+        host => 'prod.example.com',
+        pool => { min => 10 },
+      },
+      logging => {
+        output => { console => 0 },
+      },
+    );
+    
+    %config = hash_outer_join %system_defaults, %user_config, \&deep_merge;
+    # Result:
+    #   database => {
+    #     host => 'prod.example.com',
+    #     port => 5432,
+    #     pool => { min => 10, max => 20 }
+    #   }
+    #   logging => {
+    #     level => 'info',
+    #     output => { file => '/var/log/app.log', console => 0 }
+    #   }
+
+=head2 Chaining Joins
+
+    %products = (1 => 'Widget', 2 => 'Gadget', 3 => 'Gizmo'             );
+    %prices   = (               2 => 19.99,    3 => 29.99,    4 => 39.99);
+    %stock    = (1 => 10,       2 => 50                                 );
+    
+    # Find products with price
+    %catalog = hash_inner_join %products, %prices, sub {
+      return { name => $_[1], price => $_[2] }
+    };
+    # Result: 
+    #   (2 => { name => 'Gadget', price => 19.99 },
+    #    3 => { name => "Gizmo",  price => 29.99 })
+
+    # Find available products with price in stock
+    %available = hash_inner_join %catalog, %stock, sub {
+      my ($id, $info, $qty) = @_;
+      return { %$info, stock => $qty };
+    };
+    # Result: 
+    #   (2 => { name => 'Gadget', price => 19.99, stock => 50 })
+    
+    # Or find what's missing at each step
+    %no_price = hash_left_anti_join %products, %prices;  # (1 => 'Widget')
+    %no_stock = hash_left_anti_join %catalog, %stock;    # (3 => {...})
+
+=head2 Numeric Operations
+
+    %q1_sales = (
+      alice => 15000,
+      bob   => 22000,
+      carol => 18000,
+    );
+    
+    %q2_sales = (
+      bob   => 25000,
+      carol => 19000,
+      dave  => 21000,
+    );
+    
+    # Total sales for employees in both quarters
+    %both_quarters = hash_inner_join %q1_sales, %q2_sales, sub {
+      return $_[1] + $_[2]
+    };
+    # Result: (bob => 47000, carol => 37000)
+    
+    # All employee totals
+    %all_totals = hash_outer_join %q1_sales, %q2_sales, sub {
+      return ($_[1] // 0) + ($_[2] // 0)
+    };
+    # Result: (alice => 15000, bob => 47000, carol => 37000, dave => 21000)
+    
+    # Best performance per employee
+    %best_quarter = hash_inner_join %q1_sales, %q2_sales, sub {
+      my ($name, $q1, $q2) = @_;
+      return $q1 > $q2 ? { quarter => 'Q1', sales => $q1 }
+                       : { quarter => 'Q2', sales => $q2 };
+    };
+    # Result: (bob => {quarter => 'Q2', sales => 25000}, ...)
+
+=head1 TIPS
+
+=head2 Always Use C<return> or C<+> in Merge Functions
+
+Perl cannot distinguish between a block and a hash reference constructor
+when it appears at the end of a subroutine. Always use C<return> or prefix
+with C<+> to avoid ambiguity.
+
+B<Incorrect:>
+
+    %result = hash_inner_join %x, %y, sub {
+      my ($k, $left, $right) = @_;
+      { %$left, %$right }  # ERROR: This is a BLOCK, not a hashref!
+    };
+
+B<Correct - using return:>
+
+    %result = hash_inner_join %x, %y, sub {
+      my ($k, $left, $right) = @_;
+      return { %$left, %$right };  # Explicit return
+    };
+
+B<Correct - using unary plus:>
+
+    %result = hash_inner_join %x, %y, sub {
+      my ($k, $left, $right) = @_;
+      +{ %$left, %$right }  # Unary + forces hashref context
+    };
+
+=head2 Distinguishing undef values from missing keys
+
+In cases where it is necessary to distinguish C<undef> values from 
+missing keys, the merge function can access the original hashes 
+via a closure to check key existence.
+
+    %x = (a => 1, b => undef);
+    %y = (a => 2, c => 3);
+
+    %result = hash_left_join %x, %y, sub {
+      my ($k, $left, $right) = @_;
+  
+      if (exists $y{$k}) {
+        return "from y: " . ($right // 'undef');
+      } else {
+        return "from x: " . ($left // 'undef');
+      }
+    };
+    # Result: (a => 'from y: 2', b => 'from x: undef')
+
+=head2 Modifying Input Hashes During Merge
+
+All join functions retrieve their operation keys before invoking merge 
+functions. This means it is safe to modify either input hash during the 
+merge function execution without affecting the join operation itself.
+
+    %x = (a => 1,  b => 2, c => 3);
+    %y = (a => 10, b => 20);
+    
+    %result = hash_inner_join %x, %y, sub {
+      my ($k, $left, $right) = @_;
+      
+      # Safe: Add new keys to input hashes
+      $x{new_key} = 99;
+      delete $y{b};
+      
+      # Safe: Modify existing values
+      $x{c} = 999;
+      
+      return $left + $right;
+    };
+    
+    # Result: (a => 11, b => 22)
+
+The key list is determined before iteration begins, so modifications
+to C<%x> or C<%y> during the merge function don't affect which keys
+are processed.
+
+This guarantee holds for both the Pure Perl (PP) and XS implementations.
 
 =head1 EXPORTS
 
@@ -129,7 +364,7 @@ Christian Hansen <chansen@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2025 Christian Hansen
+Copyright (C) 2026 Christian Hansen
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.

@@ -3,7 +3,7 @@
 
 
 package BeamerReveal::MediaManager;
-our $VERSION = '20260127.1936'; # VERSION
+our $VERSION = '20260130.1048'; # VERSION
 
 use strict;
 use warnings;
@@ -223,7 +223,7 @@ sub processConstructionBackOrders {
     my $progress;
     my $sliceSize = $nofFrames;
     if ( $^O eq 'MSWin32' ) {
-      $logger->log( 6, "- Preparing media generation of $nofFrames (alas, no parallellization on MS-Windows)" );
+      $logger->log( 2, "- Preparing media generation of $nofFrames (alas, no parallellization on MS-Windows)" );
       $nofCores = 1;
       $progress = MCE::Shared::Scalar->new( 0 );
     }
@@ -232,7 +232,7 @@ sub processConstructionBackOrders {
     }      
     else {
       $sliceSize = ceil( $nofFrames / $nofCores );
-      $logger->log( 6, "- Preparing media generation of $nofFrames frames in $nofCores threads at $sliceSize frames per thread" );
+      $logger->log( 2, "- Preparing media generation of $nofFrames frames in $nofCores threads at $sliceSize frames per thread" );
       $progress = MCE::Shared->scalar( 0 );
     }
 
@@ -299,7 +299,7 @@ sub processConstructionBackOrders {
       }
       
       # $_->join for @hobos;
-      $logger->log( 6, "- returning to single-threaded operation" );
+      $logger->log( 2, "- returning to single-threaded operation" );
     }
     
     # rename all files in order
@@ -457,7 +457,7 @@ sub _animWork {
   say $logFile "- Running TeX";
   # run TeX
   $cmd = [ $self->{compiler},
-	   "-halt-on-error", "-output-directory=$animdir", "$texFileName" ];
+	   "-halt-on-error", "-interaction=nonstopmode", "-output-directory=$animdir", "$texFileName" ];
   my $logFilename = $texFileName;
   $logFilename =~ s/\.tex$/.log/;
 
@@ -477,7 +477,7 @@ sub _animWork {
 				      }
 				    },
 				    $coreId,
-				    8,
+				    4,
 				    undef, # directory
 				    "Error: animation generation failed: check $logFilename"
 				  );
@@ -531,7 +531,7 @@ BeamerReveal::MediaManager - MediaManager
 
 =head1 VERSION
 
-version 20260127.1936
+version 20260130.1048
 
 =head1 SYNOPSIS
 

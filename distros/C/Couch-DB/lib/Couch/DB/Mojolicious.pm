@@ -1,40 +1,50 @@
-# Copyrights 2024-2025 by [Mark Overmeer].
-#  For other contributors see ChangeLog.
-# See the manual pages for details on the licensing terms.
-# Pod stripped from pm file by OODoc 2.03.
+# This code is part of Perl distribution Couch-DB version 0.201.
+# The POD got stripped from this file by OODoc version 3.06.
+# For contributors see file ChangeLog.
+
+# This software is copyright (c) 2024-2026 by Mark Overmeer.
+
+# This is free software; you can redistribute it and/or modify it under
+# the same terms as the Perl 5 programming language system itself.
+# SPDX-License-Identifier: Artistic-1.0-Perl OR GPL-1.0-or-later
+
+#oorestyle: no "use strict"
+#oorestyle: no "use warnings"
+
 # SPDX-FileCopyrightText: 2024 Mark Overmeer <mark@overmeer.net>
 # SPDX-License-Identifier: Artistic-2.0
 
 package Couch::DB::Mojolicious;{
-our $VERSION = '0.200';
+our $VERSION = '0.201';
 }
 
 use parent 'Couch::DB';
 use feature 'state';
 
 use Log::Report 'couch-db';
-use Couch::DB::Util qw(flat);
+use Couch::DB::Util qw/flat/;
 
-use Scalar::Util     qw(blessed);
+use Scalar::Util     qw/blessed/;
 use Mojo::URL        ();
 use Mojo::UserAgent  ();
-use Mojo::JSON       qw(decode_json);
-use HTTP::Status     qw(HTTP_OK);
+use Mojo::JSON       qw/decode_json/;
+use HTTP::Status     qw/HTTP_OK/;
 
+#--------------------
 
 sub init($)
 {	my ($self, $args) = @_;
 
-	$args->{to_perl} =
-	 +{	abs_uri => sub { Mojo::URL->new($_[2]) },
-	  };
+	$args->{to_perl}  	 = +{
+		abs_uri => sub { Mojo::URL->new($_[2]) },
+	};
 
 	$self->SUPER::init($args);
 }
 
-#-------------
+#--------------------
 
-#-------------
+#--------------------
 
 sub createClient(%)
 {	my ($self, %args) = @_;
@@ -69,9 +79,9 @@ sub _callClient($$%)
 	$url->query($query) if $query;
 
 	my @body
-	  = ! defined $send ? ()
-	  : $headers{'Content-Type'} eq 'application/json' ? (json => $send)
-	  :                   $send;
+	= ! defined $send ? ()
+	: $headers{'Content-Type'} eq 'application/json' ? (json => $send)
+	:    $send;
 
 	# $tx is a Mojo::Transaction::HTTP
 	my $tx   = $ua->build_tx($method => $url, \%headers, @body);
@@ -101,8 +111,9 @@ sub _callClient($$%)
 sub _extractAnswer($)
 {	my ($self, $response) = @_;
 	my $content = $response->content;
-	return $response->json
-		unless $response->content->is_multipart;
+
+	$response->content->is_multipart
+		or return $response->json;
 
 	my $part = $response->content->parts->[0];
 	decode_json $part->asset->slurp;

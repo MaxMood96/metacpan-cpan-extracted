@@ -41,15 +41,15 @@
    "provides" : {
       "IPC::MicroSocket" : {
          "file" : "lib/IPC/MicroSocket.pm",
-         "version" : "0.03"
+         "version" : "0.04"
       },
       "IPC::MicroSocket::Client" : {
          "file" : "lib/IPC/MicroSocket/Client.pm",
-         "version" : "0.03"
+         "version" : "0.04"
       },
       "IPC::MicroSocket::Server" : {
          "file" : "lib/IPC/MicroSocket/Server.pm",
-         "version" : "0.03"
+         "version" : "0.04"
       }
    },
    "release_status" : "stable",
@@ -58,6 +58,6 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.03",
+   "version" : "0.04",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

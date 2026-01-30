@@ -1,0 +1,8 @@
+Revision history for Algorithm-TimelinePacking
+
+0.01 2026-01-29T19:00:57Z
+    - Initial release
+    - Greedy first-fit interval packing algorithm
+    - Configurable spacing between intervals
+    - Optional width scaling
+    - Originally developed for Hadoop job timeline visualization

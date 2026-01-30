@@ -1,5 +1,8 @@
 Revision history for Perl extension Test::RedisServer
 
+0.24 2026-01-29T12:09:09Z
+    - Adjust test to redis 8.0.0 (issue #18) (gregoa)
+
 0.23 2022-02-25T10:07:52Z
     - fix the blocking behavior when tmpdir disappears when the server is stopping (issue #13, #15)
 

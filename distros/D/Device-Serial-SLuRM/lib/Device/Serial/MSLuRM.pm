@@ -1,22 +1,22 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2023 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2023-2025 -- leonerd@leonerd.org.uk
 
 use v5.26;
 use warnings;
-use Object::Pad 0.807;
+use Object::Pad 0.807 ':experimental(inherit_field)';
 
-package Device::Serial::MSLuRM 0.09;
+package Device::Serial::MSLuRM 0.10;
 class Device::Serial::MSLuRM;
 
-use Object::Pad ':experimental(inherit_field)';
 inherit Device::Serial::SLuRM
    qw( $_protocol );
 
 use Carp;
 
 use Future::AsyncAwait;
+use Future::Mutex;
 
 =encoding UTF-8
 
@@ -25,6 +25,8 @@ use Future::AsyncAwait;
 C<Device::Serial::MSLuRM> - communicate Multi-drop SLµRM over a serial port
 
 =head1 SYNOPSIS
+
+=for highlighter language=perl
 
    use v5.36;
    use Device::Serial::MSLuRM;
@@ -85,6 +87,14 @@ of nodes that need resetting.
 
 async method _autoreset () {}
 
+async method _reset ( $node_id )
+{
+   # Node ID zero is the special broadcast address; do not attempt to reset it
+   return if $node_id == 0;
+
+   await $self->SUPER::_reset( $node_id );
+}
+
 =head2 recv_packet
 
    ( $pktctrl, $addr, $payload ) = await $slurm->recv_packet;
@@ -141,7 +151,17 @@ Will automatically L</reset> first if required.
 
 =cut
 
-method request ( $node_id, $payload ) { $self->_request( $node_id, $payload ); }
+field $bus_lock = Future::Mutex->new;
+
+method request ( $node_id, $payload )
+{
+   # On a multidrop bus we don't want to allow more than one outstanding
+   # REQUEST, or line collisions will likely result between nodes' RESPONSE
+   # frames, and possibly other outbound REQUESTs.
+   return $bus_lock->enter(
+      sub { $self->_request( $node_id, $payload ); }
+   );
+}
 
 =head1 AUTHOR
 

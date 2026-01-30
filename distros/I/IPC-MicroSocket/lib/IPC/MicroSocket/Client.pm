@@ -1,7 +1,7 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2024 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2024-2026 -- leonerd@leonerd.org.uk
 
 use v5.36;
 use Object::Pad 0.807;
@@ -11,7 +11,7 @@ use Syntax::Keyword::Match;
 
 use IPC::MicroSocket;
 
-class IPC::MicroSocket::Client 0.03;
+class IPC::MicroSocket::Client 0.04;
 
 use Carp;
 
@@ -68,6 +68,39 @@ sub new_unix ( $class, :$path )
    return $class->new( fh => $sock );
 }
 
+=head2 new_inprocess
+
+   $client = IPC::MicroSocket::Client->new_inprocess( $server );
+
+I<Since version 0.04.>
+
+Creates a new client instance connected to an existing
+L<IPC::MicroSocket::Server> instance within the same process. This allows
+operation of code that would normally use a separately-connected client to
+run from within the same process as the server.
+
+I<Currently> the implementation uses a C<PF_UNIX> socketpair to transport
+bytes as if an external socket was connected, but a later version of this
+module may make use of some other, more efficient internal mechanism instead.
+
+=cut
+
+# class method
+sub new_inprocess ( $class, $server )
+{
+   require IO::Socket::UNIX;
+
+   my ( $sock_for_server, $sock_for_client ) = IO::Socket::UNIX->socketpair(
+      Socket::AF_UNIX, Socket::SOCK_STREAM, 0,
+   ) or croak "Cannot socketpair() - $!";
+
+   my $client = $class->new( fh => $sock_for_client );
+
+   $server->_accepted( $sock_for_server );
+
+   return $client;
+}
+
 method on_recv ( $sigil, @args )
 {
    match( $sigil : eq ) {
@@ -93,7 +126,7 @@ method on_recv ( $sigil, @args )
 }
 
 field $selector;
-method _selector
+method _selector ()
 {
    return $selector if $selector;
 

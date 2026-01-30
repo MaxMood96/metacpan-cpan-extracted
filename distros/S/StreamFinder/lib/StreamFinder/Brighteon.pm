@@ -4,7 +4,7 @@ StreamFinder::Brighteon - Fetch actual raw streamable URLs from Brighteon.com.
 
 =head1 AUTHOR
 
-This module is Copyright (C) 2017-2021 by
+This module is Copyright (C) 2017-2026 by
 
 Jim Turner, C<< <turnerjw784 at yahoo.com> >>
 		
@@ -345,7 +345,7 @@ L<http://search.cpan.org/dist/StreamFinder-Brighteon/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2017-2021 Jim Turner.
+Copyright 2017-2026 Jim Turner.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the the Artistic License (2.0). You may obtain a
@@ -615,7 +615,7 @@ sub new
 
 	#IF WE DIDN'T FIND ANY STREAMS IN THE PAGE, TRY youtube-dl (DEPRECIATED!):
 
-	if ($self->{'cnt'} <= 0 || $self->{'youtube'} =~ /(?:yes|top|first|last)/i) { #(ANYTHING BUT "no"):
+	if ($self->{'cnt'} <= 0 || $self->{'youtube'} =~ /(?:yes|top|first|last|only)/i) { #(ANYTHING BUT "no"):
 		my $haveYoutube = 0;
 		eval { require 'StreamFinder/Youtube.pm'; $haveYoutube = 1; };
 		print STDERR "\n-2 NO STREAMS FOUND IN PAGE (haveYoutube=$haveYoutube)\n"  if ($DEBUG && $self->{'cnt'} <= 0);
@@ -637,9 +637,10 @@ sub new
 				} else {
 					push @{$self->{'streams'}}, @ytStreams;
 				}
-				foreach my $field (qw(title description)) {
+				foreach my $field (qw(title iconurl)) {
 					$self->{$field} ||= $yt->{$field}  if (defined($yt->{$field}) && $yt->{$field});
 				}
+				$self->{'description'} = $yt->{'description'}  if (length($yt->{'description'}) > length($self->{'description'}));
 				$self->{'cnt'} = scalar @{$self->{'streams'}};
 				print STDERR "i:Found stream(s) (".join('|',@ytStreams).") via youtube-dl.\n"  if ($DEBUG);
 			}

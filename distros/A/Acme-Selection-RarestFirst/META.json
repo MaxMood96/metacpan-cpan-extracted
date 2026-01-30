@@ -1,0 +1,96 @@
+{
+   "X_No_Archive" : "Yes",
+   "abstract" : "Rarest-First Selection Algorithm",
+   "author" : [
+      "Sanko Robinson <sanko@cpan.org>"
+   ],
+   "description" : "Implements the classic rarest-first selection algorithm for distributed data systems.",
+   "dynamic_config" : 0,
+   "generated_by" : "App::mii v1.0.0",
+   "keywords" : [
+      "algorithm",
+      "selection",
+      "rarest-first",
+      "p2p",
+      "distributed"
+   ],
+   "license" : [
+      "artistic_2"
+   ],
+   "meta-spec" : {
+      "url" : "https://metacpan.org/pod/CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "Acme-Selection-RarestFirst",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "xt",
+         "eg"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "Module::Build::Tiny" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "Module::Build::Tiny" : "0",
+            "perl" : "v5.42.0"
+         }
+      },
+      "runtime" : {
+         "recommends" : {
+            "Acme::Bitfield" : "0"
+         },
+         "requires" : {
+            "List::Util" : "0",
+            "perl" : "v5.42.0"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "Acme::Bitfield" : "0",
+            "Test2::V0" : "0"
+         }
+      }
+   },
+   "provides" : {
+      "Acme::Selection::RarestFirst" : {
+         "file" : "lib/Acme/Selection/RarestFirst.pm",
+         "version" : "v1.0.0"
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/sanko/Acme-Selection-RarestFirst.pm/issues"
+      },
+      "homepage" : "https://github.com/sanko/Acme-Selection-RarestFirst.pm",
+      "license" : [
+         "http://www.perlfoundation.org/artistic_license_2_0"
+      ],
+      "repository" : {
+         "type" : "git",
+         "url" : "git://github.com/sanko/Acme-Selection-RarestFirst.pm.git",
+         "web" : "https://github.com/sanko/Acme-Selection-RarestFirst.pm"
+      }
+   },
+   "version" : "v1.0.0",
+   "x_help_wanted" : [
+      "Tester",
+      "Documenter"
+   ],
+   "x_ignore" : [
+      ".tidyallrc",
+      ".gitignore",
+      ".github/",
+      ".github/*",
+      ".github/**",
+      ".clang-format"
+   ],
+   "x_serialization_backend" : "JSON::PP version 4.16",
+   "x_static_install" : 0
+}

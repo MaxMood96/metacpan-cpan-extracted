@@ -3,7 +3,7 @@
 
 
 package BeamerReveal::FrameConverter;
-our $VERSION = '20260127.1936'; # VERSION
+our $VERSION = '20260130.1048'; # VERSION
 
 use strict;
 use warnings;
@@ -58,6 +58,7 @@ sub new {
 
 sub toJPG {
   my $self = shift;
+  
   my $cmd = [ $self->{pdftoppm},
 	      $self->{file},
 	      "$self->{slides}/slide",
@@ -98,7 +99,7 @@ BeamerReveal::FrameConverter - FrameConverter
 
 =head1 VERSION
 
-version 20260127.1936
+version 20260130.1048
 
 =head1 SYNOPSIS
 

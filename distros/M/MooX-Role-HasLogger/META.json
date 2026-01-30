@@ -4,7 +4,7 @@
       "Sven Willenbuecher <sven.willenbuecher@gmx.de>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "ExtUtils::MakeMaker version 7.64, CPAN::Meta::Converter version 2.143240",
+   "generated_by" : "ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.143240",
    "license" : [
       "perl_5"
    ],
@@ -27,17 +27,11 @@
       },
       "configure" : {
          "requires" : {
-            "Config" : "0",
+            "ExtUtils::MakeMaker" : "6.76",
             "ExtUtils::MakeMaker::CPANfile" : "0.09",
-            "File::Spec" : "0",
-            "lib" : "0",
-            "subs" : "0"
-         }
-      },
-      "develop" : {
-         "suggests" : {
-            "App::Software::License" : "0",
-            "App::cpanminus" : "1.7046"
+            "File::Spec::Functions" : "0",
+            "strict" : "0",
+            "warnings" : "0"
          }
       },
       "runtime" : {
@@ -47,13 +41,15 @@
             "MooX::TypeTiny" : "0.002003",
             "Type::Tiny" : "0",
             "namespace::clean" : "0",
-            "perl" : "5.008009"
+            "perl" : "5.008009",
+            "strict" : "0",
+            "warnings" : "0"
          }
       },
       "test" : {
          "requires" : {
             "Log::Log4perl" : "0",
-            "Test::More" : "0",
+            "Test::More" : "1.001005",
             "Test::Output" : "0"
          }
       }
@@ -61,23 +57,23 @@
    "provides" : {
       "MooX::Role::HasLogger" : {
          "file" : "lib/MooX/Role/HasLogger.pm",
-         "version" : "0.001002"
+         "version" : "v1.0.0"
       },
       "MooX::Role::HasLogger::Types" : {
          "file" : "lib/MooX/Role/HasLogger/Types.pm",
-         "version" : "0.001002"
+         "version" : "v1.0.0"
       }
    },
    "release_status" : "stable",
    "resources" : {
       "bugtracker" : {
-         "web" : "https://github.com/XSven/MooX-Role-HasLogger/issues"
+         "web" : "https://codeberg.org/XSven/MooX-Role-HasLogger/issues"
       },
       "repository" : {
          "type" : "git",
-         "url" : "git://github.com/XSven/MooX-Role-HasLogger.git",
-         "web" : "https://github.com/XSven/MooX-Role-HasLogger"
+         "url" : "https://codeberg.org/XSven/MooX-Role-HasLogger.git",
+         "web" : "https://codeberg.org/XSven/MooX-Role-HasLogger"
       }
    },
-   "version" : "0.001002"
+   "version" : "v1.0.0"
 }

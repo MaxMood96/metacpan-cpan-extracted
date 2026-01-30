@@ -578,7 +578,7 @@ sub new
 				my $bitrate = ($html =~ m#\"bitrate\"\:(\d+)#o) ? $1 : 0;
 				print STDERR "...quality=$quality= bitrate=$bitrate=(max=".$self->{'bitrate'}.") stream=$stream=\n"  if ($DEBUG);
 				next  if ($bitrate > $self->{'bitrate'});
-				next  if ($stream =~ /\.[A-Z]aa\.rec\.(?:mp4|webm)$/o);  #THESE WON'T PLAY! (VIDEO-ONLY?)
+				next  if ($stream =~ /\.[A-Z]aa(?:\.rec)?\.(?:mp4|webm)$/o);  #THESE WON'T PLAY! (VIDEO-ONLY?)
 
 				for (my $i=0;$i<=$#okStreams;$i++) {
 					if ($stream =~ /\.$okStreams[$i]\b/) {

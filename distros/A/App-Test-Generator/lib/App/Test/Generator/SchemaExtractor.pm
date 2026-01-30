@@ -8,13 +8,14 @@ use Carp qw(carp croak);
 use Data::Dumper;	# For debugging
 use PPI;
 use Pod::Simple::Text;
-use YAML::XS;
 use File::Basename;
 use File::Path qw(make_path);
+use Params::Get;
 use Safe;
 use Scalar::Util qw(looks_like_number);
+use YAML::XS;
 
-our $VERSION = '0.26';
+our $VERSION = '0.27';
 
 =head1 NAME
 
@@ -22,7 +23,7 @@ App::Test::Generator::SchemaExtractor - Extract test schemas from Perl modules
 
 =head1 VERSION
 
-Version 0.26
+Version 0.27
 
 =head1 SYNOPSIS
 
@@ -597,7 +598,7 @@ Detection provides:
 
 =over 4
 
-=item * C<returns_self> - Returns invocant for chaining
+=item * C<_returns_self> - Returns invocant for chaining
 
 =item * C<class> - The class name being returned
 
@@ -639,9 +640,9 @@ B<Example Analysis:>
 
 Results in:
 
-    error_return: 'undef'
+    _error_return: 'undef'
     success_failure_pattern: 1
-    error_handling: {
+    _error_handling: {
         undef_on_error: ['$id', '$id < 0']
     }
 
@@ -683,12 +684,12 @@ Enhanced return analysis adds these fields to method schemas:
         type: array
       scalar_context:
         type: integer
-      returns_self: 1               # Returns $self
+      _returns_self: 1               # Returns $self
       void_context: 1            # No meaningful return
       _success_indicator: 1       # Always returns true
-      error_return: undef        # How errors are signaled
+      _error_return: undef        # How errors are signaled
       success_failure_pattern: 1 # Mixed return types
-      error_handling:            # Detailed error patterns
+      _error_handling:            # Detailed error patterns
         undef_on_error: [...]
         exception_handling: 1
 
@@ -1155,18 +1156,21 @@ The extractor supports several configuration parameters:
 =cut
 
 sub new {
-	my ($class, %args) = @_;
+	my $class = shift;
 
-	croak(__PACKAGE__, ': input_file required') unless exists $args{input_file};
+	# Handle hash or hashref arguments
+	my $params = Params::Get::get_params('input_file', @_) || {};
+
+	croak(__PACKAGE__, ': input_file required') unless exists $params->{input_file};
 
 	my $self = {
-		input_file => $args{input_file},
-		output_dir => $args{output_dir} || 'schemas',
-		verbose	=> $args{verbose} // 0,
-		confidence_threshold => $args{confidence_threshold} // 0.5,
-		include_private => $args{include_private} // 0,	# include _private methods
-		max_parameters => $args{max_parameters} // 20,	# safety limit
-		strict_pod => _validate_strictness_level($args{strict_pod}),  # Enable strict POD checking
+		input_file => $params->{input_file},
+		output_dir => $params->{output_dir} || 'schemas',
+		verbose	=> $params->{verbose} // 0,
+		confidence_threshold => $params->{confidence_threshold} // 0.5,
+		include_private => $params->{include_private} // 0,	# include _private methods
+		max_parameters => $params->{max_parameters} // 20,	# safety limit
+		strict_pod => _validate_strictness_level($params->{strict_pod}),  # Enable strict POD checking
 	};
 
 	# Validate input file exists
@@ -1577,8 +1581,9 @@ sub _analyze_method {
 	$self->_detect_accessor_methods($method, $schema);
 
 	# Detect if this is an instance method that needs object instantiation
+	# Constructors never require object instantiation
 	my $needs_object = $self->_needs_object_instantiation($method->{name}, $method->{body}, $method);
-	if ($needs_object) {
+	if($method->{name} ne 'new' && $needs_object) {
 		$schema->{new} = $needs_object;
 		$self->_log("  NEW: Method requires object instantiation: $needs_object");
 	}
@@ -1751,8 +1756,8 @@ sub _detect_accessor_methods {
 	# Setter
 	# -------------------------------
 	if (
-		$code =~ /\$self\s*->\s*\{\s*['"]?([^}'"]+)['"]?\s*\}\s*=\s*\$(\w+)\s*;/ &&
-		$code =~ /return\s+\$self\b/
+		$code =~ /return\s+\$self\b/ &&
+		$code =~ /\$self\s*->\s*\{\s*['"]?([^}'"]+)['"]?\s*\}\s*=\s*\$(\w+)\s*;/
 	) {
 		my ($field, $param) = ($1, $2);
 
@@ -1781,9 +1786,9 @@ sub _detect_accessor_methods {
 	# Getter/Setter combo
 	# -------------------------------
 	if (
-		$code =~ /if\s*\(\s*\@_\s*>\s*1\s*\)/ &&
 		$code =~ /\$self\s*->\s*\{\s*['"]?([^}'"]+)['"]?\s*\}\s*=\s*shift\s*;/ &&
-		$code =~ /return\s+\$self\s*->\s*\{/
+		$code =~ /return\s+\$self\s*->\s*\{/ &&
+		$code =~ /if\s*\(\s*\@_\s*>\s*1\s*\)/
 	) {
 		my $field = $1;
 
@@ -1808,7 +1813,7 @@ sub _detect_accessor_methods {
 	}
 }
 
-# Look at the parameters validation that may exist in the code, and infer the input schema from that
+# Look at the parameter validation that may exist in the code, and infer the input schema from that
 sub _extract_validator_schema {
 	my ($self, $code) = @_;
 
@@ -1901,7 +1906,7 @@ sub _ppi {
 	$self->{_ppi_cache} ||= {};
 	return $self->{_ppi_cache}{$code} //= PPI::Document->new(\$code);
 }
-		
+
 # Params::Validate::Strict
 sub _extract_pvs_schema {
 	my ($self, $code) = @_;
@@ -2260,10 +2265,16 @@ sub _analyze_pod {
 		$self->_log("  POD: Scan for named parameters in '$param_section'");
 		# Now parse each line that starts with $varname
 		foreach my $line (split /\n/, $param_section) {
+			if ($line =~ /C<\$(\w+)>\s*\((Required|Mandatory)\)/i) {
+				$params{$1}{optional} = 0;
+				$self->_log("  POD: $1 marked required from item header");
+			}
+
 			# Match: $name - type (constraints), description
 			# or:	$name - type, description
 			# or:	$name - type
-			if ($line =~ /^\s*\$(\w+)\s*-\s*(\w+)(?:\s*\(([^)]+)\))?\s*,?\s*(.*)$/i) {
+			if(($line =~ /^\s*\$(\w+)\s*-\s*(\w+)(?:\s*\(([^)]+)\))?\s*,?\s*(.*)$/i) ||
+			   ($line =~ /^\s*C<\$(\w+)>\s*-\s*(\w+)(?:\s*\(([^)]+)\))?\s*,?\s*(.*)$/i)) {
 				my ($name, $type, $constraint, $desc) = ($1, lc($2), $3, $4);
 
 				# Clean up
@@ -2545,7 +2556,8 @@ sub _analyze_output_from_pod {
 				$output->{type} ||= 'boolean';
 			}
 			if ($returns_desc =~ /\bundef\b/i) {
-				$output->{nullable} = 1;
+				# $output->{nullable} = 1;
+				$output->{optional} = 1;
 			}
 		}
 
@@ -2745,6 +2757,7 @@ sub _analyze_output_from_code
 			if($output->{'type'}) {
 				$return_types{$output->{'type'}} += 3;	# Add weighting to what's already been found
 			}
+			my $min;
 			foreach my $ret (@return_statements) {
 				$ret =~ s/^\s+|\s+$//g;
 
@@ -2776,6 +2789,20 @@ sub _analyze_output_from_code
 					# Logical-or fallback with numeric literal (e.g. $x || 200)
 					$return_types{integer} += 2;
 					$self->_log("  OUTPUT: Numeric fallback expression detected");
+				} elsif($ret =~ /^length[\s\(]/) {
+					$return_types{integer}++;
+					$min = 0;
+				} elsif($ret =~ /^pos[\s\(]/) {
+					$return_types{integer}++;
+					$min = 0;
+				} elsif($ret =~ /^index[\s\(]/) {
+					$return_types{integer}++;
+					$min = -1;
+				} elsif($ret =~ /^rindex[\s\(]/) {
+					$return_types{integer}++;
+					$min = -1;
+				} elsif($ret =~ /^ord[\s\(]/) {
+					$return_types{integer}++;
 				} elsif ($ret =~ /=/ && $ret =~ /\$\w+/) {
 					# Assignment returning a value (e.g. $self->{status} = $status)
 					# If assignment involves a numeric literal or variable, assume numeric intent
@@ -2812,6 +2839,10 @@ sub _analyze_output_from_code
 					if (!$output->{type} || $output->{type} eq 'scalar') {
 						$output->{type} = 'integer';
 						$self->_log("  OUTPUT: Numeric returns dominate, forcing integer");
+						$output->{_type_confidence} ||= 'low';
+						if(defined($min)) {
+							$output->{min} = $min;
+						}
 					}
 				}
 				unless ($output->{type}) {
@@ -2820,6 +2851,9 @@ sub _analyze_output_from_code
 					# Assign confidence for inferred numeric expressions
 					if ($most_common eq 'number') {
 						$output->{_type_confidence} ||= 'medium';
+						if(defined($min)) {
+							$output->{min} = $min;
+						}
 					}
 
 					$self->_log("  OUTPUT: Inferred type from code: $most_common");
@@ -2998,7 +3032,7 @@ sub _detect_void_context {
 	# Check if method name suggests void context
 	foreach my $type (keys %$void_patterns) {
 		if ($method_name =~ $void_patterns->{$type}) {
-			$output->{void_context_hint} = $type;
+			$output->{_void_context_hint} = $type;
 			$self->_log("  OUTPUT: Method name suggests $type (typically void context)");
 			last;
 		}
@@ -3071,7 +3105,7 @@ sub _detect_chaining_pattern {
 
 		if ($ratio >= 0.8) {
 			$output->{type} = 'object';
-			$output->{returns_self} = 1;
+			$output->{_returns_self} = 1;
 
 			# Get the class name
 			if ($self->{_document}) {
@@ -3154,16 +3188,16 @@ sub _detect_error_conventions {
 
 		# Determine primary error convention
 		if ($error_patterns{undef_on_error}) {
-			$output->{error_return} = 'undef';
+			$output->{_error_return} = 'undef';
 			$self->_log("  OUTPUT: Returns undef on error");
 		} elsif ($error_patterns{implicit_undef}) {
-			$output->{error_return} = 'undef';
+			$output->{_error_return} = 'undef';
 			$self->_log("  OUTPUT: Returns implicit undef on error");
 		} elsif ($error_patterns{empty_list}) {
-			$output->{error_return} = 'empty_list';
+			$output->{_error_return} = 'empty_list';
 			$self->_log("  OUTPUT: Returns empty list on error");
 		} elsif ($error_patterns{zero_on_error}) {
-			$output->{error_return} = 'false';
+			$output->{_error_return} = 'false';
 			$self->_log("  OUTPUT: Returns 0/false on error");
 		}
 
@@ -3203,7 +3237,7 @@ sub _infer_type_from_expression {
 
 	# Check for scalar() function - returns count
 	if ($expr =~ /scalar\s*\(/) {
-		return { type => 'integer' };
+		return { type => 'integer', min => 0 };
 	}
 
 	# Check for array reference
@@ -3221,11 +3255,10 @@ sub _infer_type_from_expression {
         return { type => 'hash' };
     }
 
-    # Check for strings
-    if ($expr =~ /^['"]/ || $expr =~ /['"]$/) {
-        return { type => 'string' };
-    }
-
+	# Check for strings
+	if ($expr =~ /^['"]/ || $expr =~ /['"]$/) {
+		return { type => 'string' };
+	}
 
     # Check for numbers
     if ($expr =~ /^-?\d+$/) {
@@ -3240,13 +3273,17 @@ sub _infer_type_from_expression {
         return { type => 'boolean' };
     }
 
-    # Check for objects
-    if ($expr =~ /bless/) {
-        return { type => 'object' };
-    }
+	# Check for objects
+	if ($expr =~ /bless/) {
+		return { type => 'object' };
+	}
+    
+	if($expr =~ /\blength\s*\(/) {
+		return { type => 'integer', min => 0 };
+	}
 
-    # Default to scalar
-    return { type => 'scalar' };
+	# Default to scalar
+	return { type => 'scalar' };
 }
 
 # Addition to _analyze_output_from_pod to detect chaining documentation
@@ -3260,7 +3297,7 @@ sub _detect_chaining_from_pod {
 		$pod =~ /fluent\s+interface/i ||
 		$pod =~ /method\s+chaining/i) {
 
-		$output->{returns_self} = 1;
+		$output->{_returns_self} = 1;
 		$self->_log("  OUTPUT: POD indicates chainable/fluent interface");
 	}
 }
@@ -4905,9 +4942,9 @@ sub _calculate_output_confidence {
 	}
 
 	# Error handling information
-	if ($output->{error_return}) {
+	if ($output->{_error_return}) {
 		$score += 15;
-		push @factors, "Error return convention documented: $output->{error_return} (+15)";
+		push @factors, "Error return convention documented: $output->{_error_return} (+15)";
 	}
 
 	# Success/failure pattern
@@ -4917,7 +4954,7 @@ sub _calculate_output_confidence {
 	}
 
 	# Chainable methods
-	if ($output->{returns_self}) {
+	if ($output->{_returns_self}) {
 		$score += 15;
 		push @factors, "Chainable method (fluent interface) (+15)";
 	}
@@ -5706,39 +5743,32 @@ sub _serialize_parameter_for_yaml {
 			$cleaned{type} = 'string';
 			$cleaned{matches} ||= '/^\d{4}-\d{2}-\d{2}$/';
 			$cleaned{_example} = '2024-12-12';
-
 		} elsif ($semantic eq 'iso8601_string') {
 			$cleaned{type} = 'string';
 			$cleaned{matches} ||= '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z?$/';
 			$cleaned{_example} = '2024-12-12T10:30:00Z';
-
 		} elsif ($semantic eq 'unix_timestamp') {
 			$cleaned{type} = 'integer';
 			$cleaned{min} ||= 0;
 			$cleaned{max} ||= 2147483647;	# 32-bit max
 			$cleaned{_note} = 'UNIX timestamp';
-
 		} elsif ($semantic eq 'datetime_parseable') {
 			$cleaned{type} = 'string';
 			$cleaned{_note} = 'Must be parseable as datetime';
-
 		} elsif ($semantic eq 'filehandle') {
 			# File handles: special handling needed
 			$cleaned{type} = 'object';
 			$cleaned{isa} = $param->{isa} || 'IO::Handle';
 			$cleaned{_note} = 'File handle - may need mock in tests';
-
 		} elsif ($semantic eq 'filepath') {
 			# File paths: string with path pattern
 			$cleaned{type} = 'string';
 			$cleaned{matches} ||= '/^[\\w\\/.\\-_]+$/';
 			$cleaned{_note} = 'File path';
-
 		} elsif ($semantic eq 'callback') {
 			# Coderefs: mark as special type
 			$cleaned{type} = 'coderef';
 			$cleaned{_note} = 'CODE reference - provide sub { } in tests';
-
 		} elsif ($semantic eq 'enum') {
 			# Enum: keep as string but add valid values
 			$cleaned{type} = 'string';
@@ -5822,10 +5852,6 @@ sub _needs_object_instantiation {
 	my $package_stmt = $doc->find_first('PPI::Statement::Package');
 	my $current_package = $package_stmt ? $package_stmt->namespace : 'UNKNOWN';
 
-	# Skip constructors and destructors
-	return undef if $method_name eq 'new';
-	return undef if $method_name =~ /^(create|build|construct|init|DESTROY)$/i;
-
 	# Initialize result structure
 	my $result = {
 		package => $current_package,
@@ -5835,15 +5861,22 @@ sub _needs_object_instantiation {
 		constructor_params => undef,
 	};
 
-	# 1. Check for factory methods that return instances
-	my $is_factory = $self->_detect_factory_method($method_name, $method_body, $current_package, $method_info);
-	if ($is_factory) {
-		$result->{needs_object} = 0;	# Factory methods CREATE objects, don't need them
-		$result->{type} = 'factory';
-		$result->{details} = $is_factory;
-		$self->_log("  OBJECT: Detected factory method '$method_name' returns $is_factory->{returns_class} objects") if $is_factory->{returns_class};
-		return undef;	# Factory methods don't need pre-existing objects
+	# Track whether we should explicitly skip object instantiation
+	my $skip_object = 0;
+
+	# Skip constructors and destructors
+	if ($method_name eq 'new') {
+		$self->_log("  OBJECT: Constructor '$method_name' detected; skipping instantiation analysis");
+		return undef;
 	}
+	if($method_name =~ /^(create|build|construct|init|DESTROY)$/i) {
+		$skip_object = 1;
+	}
+
+	# 1. Check for factory methods that return instances
+	my $is_factory = $self->_detect_factory_method(
+		$method_name, $method_body, $current_package, $method_info
+	);
 
 	# 2. Check for singleton patterns
 	my $is_singleton = $self->_detect_singleton_pattern($method_name, $method_body);
@@ -5854,37 +5887,53 @@ sub _needs_object_instantiation {
 		$self->_log("  OBJECT: Detected singleton accessor '$method_name'");
 		# Singleton accessors typically don't need object creation in tests
 		# as they're called on the class, not instance
-		return undef;
+		$skip_object = 1;
 	}
 
 	# 3. Check if this is an instance method that needs an object
 	my $is_instance_method = $self->_detect_instance_method($method_name, $method_body);
-	if($is_instance_method &&
+	if ($is_instance_method &&
 	    ($is_instance_method->{explicit_self} ||
-			$is_instance_method->{shift_self} ||
-			$is_instance_method->{accesses_object_data})) {
+	     $is_instance_method->{shift_self} ||
+	     $is_instance_method->{accesses_object_data})) {
+
+		# Instance-only methods override factory detection
+		if ($is_factory) {
+			$self->_log(
+				"  OBJECT: Instance-only method '$method_name' overrides factory detection"
+			);
+		}
+
 		$result->{needs_object} = 1;
 		$result->{type} = 'instance_method';
 		$result->{details} = $is_instance_method;
 
 		# 4. Check for inheritance - if parent class constructor should be used
-		my $inheritance_info = $self->_check_inheritance_for_constructor($current_package, $method_body);
+		my $inheritance_info = $self->_check_inheritance_for_constructor(
+			$current_package, $method_body
+		);
 		if ($inheritance_info && $inheritance_info->{use_parent_constructor}) {
 			$result->{package} = $inheritance_info->{parent_class};
 			$result->{details}{inheritance} = $inheritance_info;
-			$self->_log("  OBJECT: Method '$method_name' uses parent class constructor: $inheritance_info->{parent_class}");
+			$self->_log(
+				"  OBJECT: Method '$method_name' uses parent class constructor: $inheritance_info->{parent_class}"
+			);
 		}
 
 		# 5. Check if constructor needs specific parameters
-		my $constructor_needs = $self->_detect_constructor_requirements($current_package, $result->{package});
+		my $constructor_needs = $self->_detect_constructor_requirements(
+			$current_package, $result->{package}
+		);
 		if ($constructor_needs) {
 			$result->{constructor_params} = $constructor_needs;
 			$result->{details}{constructor_requirements} = $constructor_needs;
-			$self->_log("  OBJECT: Constructor for $result->{package} requires parameters");
+			$self->_log(
+				"  OBJECT: Constructor for $result->{package} requires parameters"
+			);
 		}
 
 		# Return the package name (or parent package) that needs instantiation
-		return $result->{package} if $result->{needs_object};
+		return $result->{package};
 	}
 
 	# 6. Check for class methods that might need objects from other classes
@@ -5892,11 +5941,24 @@ sub _needs_object_instantiation {
 	if ($needs_other_object) {
 		$result->{needs_object} = 1;
 		$result->{type} = 'external_dependency';
-		$result->{package} = $needs_other_object->{package} if $needs_other_object->{package};
+		$result->{package} = $needs_other_object->{package}
+			if $needs_other_object->{package};
 		$result->{details} = $needs_other_object;
 
-		$self->_log("  OBJECT: Method '$method_name' depends on external object: $needs_other_object->{package}");
+		$self->_log(
+			"  OBJECT: Method '$method_name' depends on external object: $needs_other_object->{package}"
+		);
 		return $result->{package} if $result->{package};
+	}
+
+	# Factory method only if NOT instance-based
+	if ($is_factory && !$skip_object) {
+		$result->{needs_object} = 0;
+		$result->{type} = 'factory';
+		$result->{details} = $is_factory;
+		$self->_log(
+			"  OBJECT: Detected factory method '$method_name' returns $is_factory->{returns_class} objects"
+		) if $is_factory->{returns_class};
 	}
 
 	return undef;

@@ -2,7 +2,7 @@ use v5.42;
 use feature 'class';
 no warnings 'experimental::class';
 #
-class Net::uTP::Manager v1.0.0 {
+class Net::uTP::Manager v1.0.1 {
     use Net::uTP;
     use Socket qw[sockaddr_family AF_INET AF_INET6 unpack_sockaddr_in unpack_sockaddr_in6 inet_ntop];
     use Carp   qw[carp croak];

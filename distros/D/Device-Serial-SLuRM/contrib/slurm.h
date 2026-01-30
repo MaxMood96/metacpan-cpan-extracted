@@ -27,8 +27,8 @@ void slurm_responderr(uint8_t seqno, const uint8_t b[], uint8_t len);
  * User code may provide implementations of either of these, to be informed
  * of incoming packets
  */
-void on_slurm_notify(uint8_t b[], uint8_t len);
-void on_slurm_request(uint8_t seqno, uint8_t b[], uint8_t len);
+void on_slurm_notify(const uint8_t b[], uint8_t len);
+void on_slurm_request(uint8_t seqno, const uint8_t b[], uint8_t len);
 
 /* Background task management:
  * User code must provide on_slurm_need_tasks()

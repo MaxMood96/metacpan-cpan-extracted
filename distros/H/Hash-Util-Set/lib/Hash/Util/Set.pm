@@ -5,7 +5,7 @@ use warnings;
 use Exporter qw[import];
 
 BEGIN {
-  our $VERSION   = '0.05';
+  our $VERSION   = '0.06';
   our @EXPORT_OK = qw[ keys_union
                        keys_intersection
                        keys_difference

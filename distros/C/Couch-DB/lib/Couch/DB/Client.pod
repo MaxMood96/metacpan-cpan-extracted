@@ -26,7 +26,7 @@ node may be part of a cluster, which can be managed via L<Couch::DB::Cluster|Cou
 
 =over 4
 
-=item Couch::DB::Client-E<gt>B<new>(%options)
+=item $class-E<gt>B<new>(%options)
 
 Create the client. Whether it works will show when the first call is made.
 You could try L<serverStatus()|Couch::DB::Client/"Server information"> on application startup.
@@ -45,7 +45,7 @@ You could try L<serverStatus()|Couch::DB::Client/"Server information"> on applic
 
 =item auth => 'BASIC'|'COOKIE'
 
-=item couch => L<Couch::DB|Couch::DB>-object
+=item couch => Couch::DB-object
 
 =item headers => HASH
 
@@ -95,6 +95,8 @@ this client.
 
 =item $obj-E<gt>B<name>()
 
+Z<>
+
 =item $obj-E<gt>B<seqnr>()
 
 Returns the (process space) unique sequence number for this client.  This may
@@ -122,9 +124,9 @@ a Mojo::UserAgent when using L<Couch::DB::Mojolicious|Couch::DB::Mojolicious>.
 
 =item $obj-E<gt>B<hasRole>($role)
 
- [UNTESTED]
+  [UNTESTED]
 
-Return 'true' if (this user logged-in to the server with) this client can perform
+Return 'C<true>' if (this user logged-in to the server with) this client can perform
 a certain role.
 
 B<It is often> preferred to try a certain action, and then check whether it
@@ -132,7 +134,7 @@ results in a permission error.
 
 =item $obj-E<gt>B<login>(%options)
 
- [CouchDB API "POST /_session", UNTESTED]
+  [CouchDB API "POST /_session", UNTESTED]
 
 Get a Cookie: Cookie authentication.
 
@@ -158,19 +160,19 @@ the indicated location.
 
 =item $obj-E<gt>B<logout>(%options)
 
- [CouchDB API "DELETE /_session", UNTESTED]
+  [CouchDB API "DELETE /_session", UNTESTED]
 
 Terminate the session.
 
 =item $obj-E<gt>B<roles>()
 
- [UNTESTED]
+  [UNTESTED]
 
 Returns a LIST of all roles this client can perform.
 
 =item $obj-E<gt>B<session>(%options)
 
- [CouchDB API "GET /_session", UNTESTED]
+  [CouchDB API "GET /_session", UNTESTED]
 
 Returns information about the current session, like information about the
 user who is logged-in.  Part of the reply is the "userCtx" (user context)
@@ -194,29 +196,29 @@ and C<on_error>.  See L<Couch::DB/Using the CouchDB API>.
 
 These are only for web-interfaces:
 
- [CouchDB API "GET /favicon.ico", UNSUPPORTED]
- [CouchDB API "GET /_utils", UNSUPPORTED]
- [CouchDB API "GET /_utils/", UNSUPPORTED]
+  [CouchDB API "GET /favicon.ico", UNSUPPORTED]
+  [CouchDB API "GET /_utils", UNSUPPORTED]
+  [CouchDB API "GET /_utils/", UNSUPPORTED]
 
 =over 4
 
 =item $obj-E<gt>B<activeTasks>(%options)
 
- [CouchDB API "GET /_active_tasks"]
+  [CouchDB API "GET /_active_tasks"]
 
 Query details about the (maintenance) tasks which are currently running in the
 connected server.  Returns a L<Couch::DB::Result|Couch::DB::Result> object which support rows.
 
 =item $obj-E<gt>B<clusterNodes>(%options)
 
- [CouchDB API "GET /_membership", since 2.0, UNTESTED]
+  [CouchDB API "GET /_membership", since 2.0, UNTESTED]
 
 List all known nodes, and those currently used for the cluster.
 
 =item $obj-E<gt>B<databaseInfo>( [\%search, %options] )
 
- [CouchDB API "GET /_dbs_info", since 3.2]
- [CouchDB API "POST /_dbs_info", since 2.2]
+  [CouchDB API "GET /_dbs_info", since 3.2]
+  [CouchDB API "POST /_dbs_info", since 2.2]
 
 Returns detailed information about the selected database keys, on the
 connected CouchDB instance.  Both the GET and POST alternatives produce
@@ -230,7 +232,7 @@ reported.
 
 =over 2
 
-=item names => ARRAY
+=item names => \@names
 
 When you provide explicit database keys, then only those are displayed.
 The number of keys is limited by the C<max_db_number_for_dbs_info_req>
@@ -240,7 +242,7 @@ configuration parameter, which defaults to 100.
 
 =item $obj-E<gt>B<databaseNames>( [ \%search, %options ] )
 
- [CouchDB API "GET /_all_dbs"]
+  [CouchDB API "GET /_all_dbs"]
 
 Returns the selected database names as present on the connected CouchDB
 instance.
@@ -250,7 +252,7 @@ returned in the C<%search>.
 
 =item $obj-E<gt>B<dbUpdates>(\%feed, %options)
 
- [CouchDB API "GET /_db_updates", since 1.4, UNTESTED]
+  [CouchDB API "GET /_db_updates", since 1.4, UNTESTED]
 
 Get a feed of database changes, mainly for debugging purposes.  It supports
 rows.
@@ -262,22 +264,22 @@ This fact is cached.
 
 =item $obj-E<gt>B<nodeName>($name, %options)
 
- [CouchDB API "GET /_node/{node-name}", UNTESTED]
+  [CouchDB API "GET /_node/{node-name}", UNTESTED]
 
 The only useful application is with the abstract name C<_local>, which will
 return you the name of the node represented by the CouchDB instance.
 
 =item $obj-E<gt>B<replicate>(\%rules, %options)
 
- [CouchDB API "POST /_replicate", UNTESTED]
+  [CouchDB API "POST /_replicate", UNTESTED]
 
 Configure replication: configure and stop.
 
-All %options are posted as parameters.
+All C<%options> are posted as parameters.
 
 =item $obj-E<gt>B<replicationDoc>($doc|$docid, %options)
 
- [CouchDB API "GET /_scheduler/docs/{replicator_db}/{docid}", UNTESTED]
+  [CouchDB API "GET /_scheduler/docs/{replicator_db}/{docid}", UNTESTED]
 
 Retrieve information about a particular replication document.
 
@@ -286,7 +288,7 @@ Retrieve information about a particular replication document.
 
 =over 2
 
-=item dbname => NAME
+=item dbname => $name
 
 Pass a C<dbname> for the database which contains the replication information.
 
@@ -294,8 +296,8 @@ Pass a C<dbname> for the database which contains the replication information.
 
 =item $obj-E<gt>B<replicationDocs>(%options)
 
- [CouchDB API "GET /_scheduler/docs", UNTESTED]
- [CouchDB API "GET /_scheduler/docs/{replicator_db}", UNTESTED]
+  [CouchDB API "GET /_scheduler/docs", UNTESTED]
+  [CouchDB API "GET /_scheduler/docs/{replicator_db}", UNTESTED]
 
 Retrieve information about replication documents.
 Supports pagination.
@@ -313,7 +315,7 @@ Pass a C<dbname> for the database which contains the replication information.
 
 =item $obj-E<gt>B<replicationJobs>(%options)
 
- [CouchDB API "GET /_scheduler/jobs", UNTESTED]
+  [CouchDB API "GET /_scheduler/jobs", UNTESTED]
 
 Returns information about current replication jobs (which preform tasks), on
 this CouchDB server instance.  The results are ordered by replication ID.
@@ -322,7 +324,7 @@ Supports pagination.
 
 =item $obj-E<gt>B<serverInfo>(%options)
 
- [CouchDB API "GET /"]
+  [CouchDB API "GET /"]
 
 Query details about the server this client is connected to.
 Returns a L<Couch::DB::Result|Couch::DB::Result> object.
@@ -345,13 +347,13 @@ not be lost.
 
 =item $obj-E<gt>B<serverIsUp>()
 
- [UNTESTED]
+  [UNTESTED]
 
-Returns a true value when the server status is "ok".
+Returns a C<true> value when the server status is "ok".
 
 =item $obj-E<gt>B<serverStatus>(%options)
 
- [CouchDB API "GET /_up", since 2.0, UNTESTED]
+  [CouchDB API "GET /_up", since 2.0, UNTESTED]
 
 Probably you want to use L<serverIsUp()|Couch::DB::Client/"Server information">, because this reply contains little
 information.
@@ -362,16 +364,35 @@ Returns the version of the server software, as version object.
 
 =back
 
+=head1 DIAGNOSTICS
+
+=over 4
+
+=item Error: Server info field does not contain the server version.
+
+Cast by C<version()>
+
+=item Error: Unsupport authorization '$how'
+
+Cast by C<login()>
+
+=item Error: did not get a node name for _local.
+
+Cast by C<node()>
+
+=back
+
 =head1 SEE ALSO
 
-This module is part of Couch-DB distribution version 0.200,
-built on June 18, 2025. Website: F<http://perl.overmeer.net/CPAN/>
+This module is part of Couch-DB version 0.201,
+built on January 30, 2026. Website: F<http://perl.overmeer.net/CPAN/>
 
 =head1 LICENSE
 
-Copyrights 2024-2025 by [Mark Overmeer]. For other contributors see ChangeLog.
+For contributors see file ChangeLog.
 
-This program is free software; you can redistribute it and/or modify it
-under the same terms as Perl itself.
-See F<http://dev.perl.org/licenses/>
+This software is copyright (c) 2024-2026 by Mark Overmeer.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
 

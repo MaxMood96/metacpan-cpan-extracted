@@ -6,8 +6,7 @@ BEGIN {
   unshift @INC, 'inc';
   
   my @required = (
-    'inc::Module::Install'           => '1.00',
-    'Module::Install::ReadmeFromPod' => '0',
+    'inc::Module::Install'=> '1.00',
   );
 
   my @missing;
@@ -32,7 +31,6 @@ perl_version   '5.010001';
 all_from       'lib/Hash/Util/Set.pm';
 repository     'https://github.com/chansen/p5-hash-util-set';
 bugtracker     'https://github.com/chansen/p5-hash-util-set/issues';
-readme_from    'lib/Hash/Util/Set.pod';
 
 requires       'List::Util' => '1.33';
 test_requires  'Test::More' => '0.88';

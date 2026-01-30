@@ -11,11 +11,14 @@ Couch::DB - CouchDB database client
 
 =head1 SYNOPSIS
 
-   use Couch::DB::Mojolicious ();
-   my $couch   = Couch::DB::Mojolicious->new(api => '3.3.3');
-   my $db      = $couch->db('my-db'); # Couch::DB::Database object
-   my $cluster = $couch->cluster;     # Couch::DB::Cluster object
-   my $client  = $couch->createClient(...);  # Couch::DB::Client
+  use Couch::DB::Mojolicious ();
+  my $couch   = Couch::DB::Mojolicious->new(api => '3.3.3');
+  my $db      = $couch->db('my-db'); # Couch::DB::Database object
+  my $cluster = $couch->cluster;     # Couch::DB::Cluster object
+  my $client  = $couch->createClient(...);  # Couch::DB::Client
+
+  my $results = $db->find(...) or die;
+  my $results = $db->search(...) or die;
 
 =head1 DESCRIPTION
 
@@ -25,10 +28,10 @@ This implementation provides a B<thick interface>: a far higher level
 of abstraction than the other modules. This should make your work much,
 much easier.
 
-Also, open F<https://perl.overmeer.net/couch-db/reference.html>
+Also, open L<https://perl.overmeer.net/couch-db/reference.html>
 in a browser window, as useful cross-reference: parameters for CouchDB
 are not documented in this Perl documentation!  For those, you need
-to visit F<https://docs.couchdb.org/en/stable/>.
+to visit L<https://docs.couchdb.org/en/stable/>.
 
 B<Please read> the L</DETAILS> section, further down, at least once
 before you start!
@@ -39,7 +42,7 @@ before you start!
 
 =over 4
 
-=item Couch::DB-E<gt>B<new>(%options)
+=item $class-E<gt>B<new>(%options)
 
 Create a relation with a CouchDB server (cluster).  You should use
 totally separated L<Couch::DB|Couch::DB>-objects for totally separate database
@@ -67,7 +70,7 @@ You MUST specify the version of the server you expect to answer your
 queries.  L<Couch::DB|Couch::DB> tries to hide differences between your expectations
 and the reality of the server version.
 
-The $version can be a string or a version object (see "man version").
+The C<$version> can be a string or a version object (see "man version").
 
 =item auth => 'BASIC'|'COOKIE'
 
@@ -82,7 +85,7 @@ This server will be named C<_local>.
 
 You can add more servers using L<addClient()|Couch::DB/"Processing">.  In such case, you probably
 do not want this default client to be created as well.  To achieve this,
-explicitly set C<server =E<gt> undef>.
+explicitly set C<<server => undef >>.
 
 =item to_json => HASH
 
@@ -101,7 +104,7 @@ QUERY conversions.  Defaults to the json converters.  See L<toQuery()|Couch::DB/
 
 =item username => STRING
 
-When a C<username> is given, it will be used together with C<auth> and
+When a username is given, it will be used together with C<auth> and
 C<password> to login to any created client.
 
 =back
@@ -121,6 +124,14 @@ automatically resolved.
 =back
 
 =head2 Interface starting points
+
+The CouchDB specification does group API calls a bit, but not too
+strong.  C<Couch::DB> has chosen to group them much stronger.  This
+helps with carity in the method names.  All methods which do something
+with the database are addressed via C<<$couch->db($name)>> and
+provided via a L<Couch::DB::Database|Couch::DB::Database> object.  All methods which
+relate to cluster management are implemented in L<Couch::DB::Cluster|Couch::DB::Cluster>,
+with access via C<<$couch->cluster>>, et cetera.
 
 =over 4
 
@@ -150,7 +161,7 @@ method does nothing with the CouchDB server.
 
 =item $obj-E<gt>B<node>($name)
 
-Returns a L<Couch::DB::Node|Couch::DB::Node>-object with the $name.  If the object does not
+Returns a L<Couch::DB::Node|Couch::DB::Node>-object with the C<$name>.  If the object does not
 exist yet, it gets created, otherwise reused.
 
 =back
@@ -165,7 +176,7 @@ Returns one unique identifier.
 
 =item $obj-E<gt>B<freshUUIDs>($count, %options)
 
-Returns a $count number of UUIDs in a LIST.  This uses L<requestUUIDs()|Couch::DB/"Ungrouped calls">
+Returns a C<$count> number of UUIDs in a LIST.  This uses L<requestUUIDs()|Couch::DB/"Ungrouped calls">
 to get a bunch at the same time, for efficiency.  You may get fewer than
 you want, but only when the server is not sending them.
 
@@ -183,17 +194,18 @@ more.
 
 =item $obj-E<gt>B<requestUUIDs>($count, %options)
 
- [CouchDB API "GET /_uuids", since 2.0]
+  [CouchDB API "GET /_uuids", since 2.0]
 
 Returns UUIDs (Universally unique identifiers), when the call was
 successful.  Better use L<freshUUIDs()|Couch::DB/"Ungrouped calls">.  It is faster to use Perl
 modules to generate UUIDs.
 
-=item $obj-E<gt>B<searchAnalyze>(%options)
+=item $obj-E<gt>B<searchAnalyze>(\%config, %options)
 
- [CouchDB API "POST /_search_analyze", since 3.0, UNTESTED]
+  [CouchDB API "POST /_search_analyze", since 3.0, UNTESTED]
 
-Check what the build-in Lucene tokenizer(s) will do with your text.
+Check what the build-in Lucene tokenizer(s) will do with your text.  This uses
+the Clouseau backend.
 
  -Option  --Default
   analyzer  <required>
@@ -201,7 +213,7 @@ Check what the build-in Lucene tokenizer(s) will do with your text.
 
 =over 2
 
-=item analyzer => KIND
+=item analyzer => $kind
 
 =item text => STRING
 
@@ -235,13 +247,13 @@ B<Note:> you should probably not use this method yourself: all endpoint of
 CouchDB are available via a nice, abstract wrapper.
 
  -Option--Default
-  paging  {}
+  paging  +{}
   query   undef
   send    undef
 
 =over 2
 
-=item paging => HASH
+=item paging => \%config
 
 When the endpoint support paging, then its needed configuration
 data has been collected in here.  This enables the use of C<succeed>,
@@ -261,16 +273,16 @@ explicit about that.
 
 =item $obj-E<gt>B<check>($condition, $change, $version, $what)
 
-If the $condition it true (usually the existence of some parameter), then
+If the C<$condition> it C<true> (usually the existence of some parameter), then
 check whether api limitiations apply.
 
-Parameter $change is either C<removed>, C<introduced>, or C<deprecated> (as
+Parameter C<$change> is either C<removed>, C<introduced>, or C<deprecated> (as
 strings).  The C<version> is taken from the CouchDB API documentation.
-The $what describes the element, to be used in error or warning messages.
+The C<$what> describes the element, to be used in error or warning messages.
 
 =item $obj-E<gt>B<client>($name)
 
-Returns the client with the specific $name (which defaults to the server's url).
+Returns the client with the specific C<$name> (which defaults to the server's url).
 
 =item $obj-E<gt>B<clients>(%options)
 
@@ -284,13 +296,13 @@ Returns a LIST with the defined clients; L<Couch::DB::Client|Couch::DB::Client>-
 =item role => $role
 
 When defined, only return clients which are able to fulfill the
-specific $role.
+specific C<$role>.
 
 =back
 
 =item $obj-E<gt>B<jsonText>($json, %options)
 
-Convert the (complex) $json structure into serialized JSON.  By default, it
+Convert the (complex) C<$json> structure into serialized JSON.  By default, it
 is beautified.
 
  -Option --Default
@@ -306,27 +318,34 @@ Produce compact (no white-space) JSON.
 
 =item $obj-E<gt>B<listToPerl>($set, $type, @data|\@data)
 
-Returns a LIST from all elements in the LIST @data or the ARRAY, each
-converted from JSON to pure Perl according to rule $type.
+Returns a LIST from all elements in the LIST C<@data> or the ARRAY, each
+converted from JSON to pure Perl according to rule C<$type>.
 
 =item $obj-E<gt>B<toJSON>(\%data, $type, @keys)
 
-Convert the named fields in the %data into a JSON compatible format.
+Convert the named fields in the C<%data> into a JSON compatible format.
 Fields which do not exist are left alone.
+
+At the moment, special treatment is implemented when C<$type> is
+C<bool>, C<uri>, C<node> or C<int>.  When this method is called
+with other types, the data is untouched.
 
 =item $obj-E<gt>B<toPerl>(\%data, $type, @keys)
 
-Convert all fields with @keys in the %data HASH into object
-of $type.  Fields which do not exist are ignored.
+Convert all fields with C<@keys> in the C<%data> HASH into object
+of C<$type>.  Fields which do not exist are ignored.
 
-As default JSON to Perl translations are currently defined:
-C<abs_uri>, C<epoch>, C<isotime>, C<mailtime>, C<version>, and
-C<node>.
+As default JSON to Perl translations are currently defined for C<$type>
+being C<abs_uri>, C<epoch>, C<isotime>, C<mailtime>, C<version>,
+and C<node>.  Other values for C<$type> will not trigger any action.
 
 =item $obj-E<gt>B<toQuery>(\%data, $type, @keys)
 
-Convert the named fields in the %data HASH into a Query compatible
+Convert the named fields in the C<%data> HASH into a Query compatible
 format.  Fields which do not exist are left alone.
+
+At the moment, special treatment is implemented when C<$type> is
+C<bool> or C<json>.
 
 =back
 
@@ -360,19 +379,6 @@ Mojo::UserAgent, Mojo::IOLoop, and many other.
 Other extensions are hopefully added in the future.  Preferrably as part
 of this release so it gets maintained together.  The extensions are not
 too difficult to create and certainly quite small.
-
-=head2 Where can I find what?
-
-The CouchDB API lists all endpoints as URLs.  This library, however,
-creates an Object Oriented interface around these calls: you do not
-see the internals in the resulting code.  Knowing the CouchDB API,
-it is usually immediately clear where to find a certain end-point:
-C<< /{db} >> will be in L<Couch::DB::Database|Couch::DB::Database>.  A major exception is
-anything what has to do with replication and sharding: this is bundled
-in L<Couch::DB::Cluster|Couch::DB::Cluster>.
-
-Have a look at F<https://perl.overmeer.net/couch-db/reference.html>.
-Keep that page open in your browser while developing.
 
 =head2 Thick interface
 
@@ -447,12 +453,23 @@ You could also write
   my $uuids  = $couch->requestUUIDs(100)->values->{uuids};
 
 because "values()" will terminate when the database call did not result
-in a successful answer.  Last alternative:
+in a successful answer.  Some convenience methods are provided as well,
+which makes the last alternative:
 
-   my @uuids = $couch->freshUUIDs(100);
+  my @uuids = $couch->freshUUIDs(100);
 
-Besides calls, there are all kinds of facility methods, which add
-further abstraction from the server connection.
+=head3 Where can I find what?
+
+The CouchDB API lists all endpoints as URLs.  This library, however,
+creates an Object Oriented interface around these calls: you do not
+see the internals in the resulting code.  Knowing the CouchDB API,
+it is usually immediately clear where to find a certain end-point:
+C<< /{db} >> will be in L<Couch::DB::Database|Couch::DB::Database>.  A major exception is
+anything what has to do with replication and sharding: this is bundled
+in L<Couch::DB::Cluster|Couch::DB::Cluster>.
+
+Have a look at L<https://perl.overmeer.net/couch-db/reference.html>.
+Keep that page open in your browser while developing.
 
 =head3 Type conversions
 
@@ -488,7 +505,7 @@ At the moment, the following generic C<%options> are supported everywhere:
 Do not perform and wait for the actual call, but prepare it to be used in parallel
 querying.  TO BE IMPLEMENTED/DOCUMENTED.
 
-=item * C<client> =E<gt> $client-object or -name
+=item * C<client> =E<gt> C<$client>-object or -name
 
 Use only the specified client (=server) to perform the call.
 
@@ -545,7 +562,7 @@ answers.
 
 =back
 
-=head2 Searching with CouchDB
+=head3 Searching with CouchDB
 
 CouchDB supports various search mechanisms, which are confusingly
 named.  Their configuration is stored in design documents (see
@@ -558,13 +575,13 @@ L<Couch::DB::Design|Couch::DB::Design>).  The mechanisms can often be combined.
 Views are docid-key-value tables which are following the changes made
 in a database.  The value may be complex, and may contain extracts
 and computed elements based on each document.
-See F<https://docs.couchdb.org/en/stable/ddocs/views/>
+See L<https://docs.couchdb.org/en/stable/ddocs/views/>
 
 =item * Search
 
 Use Lucene (mainly full text search) indexes on a database.  The
 interface uses Clouseau wrapper libraries around the Lucene core.
-See F<https://docs.couchdb.org/en/stable/ddocs/search.html>
+See L<https://docs.couchdb.org/en/stable/ddocs/search.html>
 
 Clouseau was introduced in CouchDB 3.0.0, and now being phased out
 because it got stuck on Java 8. It has index type C<text>.
@@ -580,14 +597,14 @@ type C<nouveau>.
 The C<find()> method uses MongoDB compatible search statements,
 which can be combined with index and view restrictions.
 These indexes are of the (ill-named) type C<json>.
-See F<https://docs.couchdb.org/en/stable/ddocs/mango.html>
+See L<https://docs.couchdb.org/en/stable/ddocs/mango.html>
 
 =back
 
 Confusing? Yes it is.  There are often multiple solutions for the
 same problem.
 
-=head2 Paging
+=head3 Pagination
 
 Searches tend to give a large number of results.  The CouchDB server
 will refuse to return too many answers at a time (typically 25).
@@ -623,7 +640,7 @@ Now, you need to use the page commands of the result object.
 
 =back
 
-=head3 paging possible
+=head4 paging possible
 
 To get more answers, CouchDB implements two mechanisms: some calls
 provide a C<skip> and C<limit> only.  Other calls implement the more
@@ -657,7 +674,7 @@ B<Be warned:> use as C<%option>, not as search parameter.
 If you accidentally know the bookmark for the search.  Usually, this is
 automatically picked-up via C<succeed>.
 
-=item * C<stop> =E<gt> CODE|'EMPTY'|'SMALLER'|'UPTO($nr)'
+=item * C<stop> =E<gt> CODE|'EMPTY'|'SMALLER'|'UPTO(<nr>)'
 
 When do we stop asking the server for more pages?  When the call returned
 no rows, then we always stop.  C<EMPTY> reflects the same.
@@ -669,7 +686,7 @@ server returns, but probably always the same until the source runs out.
 When C<UPTO> is used with some value (for instance C<UPTO(5)>) then no new
 call is made when less or equal to that number of rows is returned.
 
-=item * C<succeed> =E<gt> $result or $result->paging
+=item * C<succeed> =E<gt> C<$result> or C<< $result->paging >>
 
 Make this query as successor of a previous query.  Some requests support
 paging (via bookmarks).  See examples in a section below.
@@ -689,19 +706,19 @@ will happen on the moment each response has been received, which may help
 to create a better interactive experience.
 
 Your CODE may return the harvested object, but also something small
-(even undef) which will free-up the memory use of the object immediately.
+(even C<undef>) which will free-up the memory use of the object immediately.
 However: at least return a single scalar (it will be returned in the
 "page"), because an empty list signals "end of results".
 
 =back
 
-=head3 paging used
+=head4 paging used
 
 To manage paged results, selected calls support the following options:
 
 =over 4
 
-=item * C<all> =E<gt> BOOLEAN (default false)
+=item * C<all> =E<gt> BOOLEAN (default C<false>)
 
 Return all results at once.  This may involve multiple calls, like when
 the number of results is larger than what the server wants to produce
@@ -728,7 +745,7 @@ The start of the page counter, for display purposes.
 
 =back
 
-B<. Example: paging through result>
+=head4 » Example: paging through result
 
 Get page by page, where you may use the C<limit> parameter to request
 for a number of elements.  Do not use C<skip>, except in the first call.
@@ -739,18 +756,18 @@ and C<client>, which you do not wish to know.
   my $rows1 = $page1->page;
   my @rows1 = $page1->pageRows;
   my @docs1 = map $_->doc, @rows1;
-  
+
   my $page2 = $couch->find(\%search, succeed => $page1);
   my $rows2 = $page2->page;
   my @docs2 = map $_->doc, $page2->page;
   my @docs2 = $page2->pageDocs;
-  
+
   sub h { my ($result) = @_; $result->docs }
   my $page3 = $couch->find(\%search, succeed => $page2, harvester => \&h);
   my $docs3 = $page3->page;    # now docs!
   my @docs3 = $page3->pageRows;
 
-B<. Example: paging with a website user session>
+=head4 » Example: paging with a website user session
 
 When you cannot ask for pages within a single continuous process, because
 the page is shown to a user who has to take action to see an other page,
@@ -767,7 +784,7 @@ harvester or map, then you need to resupply those.
   my $page2 = $couch->find(\%search, succeed => $prev);
   my $rows2 = $page2->page;
 
-B<. Example: get all results in a loop>
+=head4 » Example: get all results in a loop
 
 Handle the responses which are coming in one by one.  This is useful
 when the documents (with attachements?) are large.  Each C<$list>
@@ -787,7 +804,7 @@ This call does not use C<page_size> or C<all>, so the number of rows
 received per loop may differ by decission of the server.  You cannot
 use the C<page*> set of methods, only the C<row*> and C<doc> methods.
 
-B<. Example: get one page of results>
+=head4 » Example: get one page of results
 
 You can jump back and forward in the pages: bookmarks will remember the
 pages already seen.
@@ -795,8 +812,8 @@ pages already seen.
   my $page4 = $couch->find(\%search,
 	limit     => 10,  # results per server request
 	page_size => 50,  # results until complete
-    page      =>  4,  # start point, may use bookmark
-    harvester => sub { $_[0]->rows }, # default
+  page      =>  4,  # start point, may use bookmark
+  harvester => sub { $_[0]->rows }, # default
   );
   my $rows4 = $page4->page;
   my $page5 = $couch->find(\%search, succeed => $page4);
@@ -806,7 +823,7 @@ When paging (here selected via C<page_size>, you cannot use the
 the C<row*> and C<doc> methods on the result object: you need to
 use the C<page*> versions.
 
-B<. Example: get all results in one call>
+=head4 » Example: get all results in one call
 
 When you ask for all answers at once, you must be aware this can consume
 a lot of time and memory.  Your clients will keep on requesting data from
@@ -819,7 +836,7 @@ You may consider to use C<map> here: to extract the data immediately
 when it comes in.  In this case, you can reduce the amount of information
 which has to be kept in memory immediately on arrival.
 
-B<. Example: processing results when they arrive>
+=head4 » Example: processing results when they arrive
 
 When a page (may) require multiple calls to the server, this may enhance
 the user experience.
@@ -828,16 +845,39 @@ the user experience.
   my $all = $couch->find(\%search, all => 1, map => \&do_something);
   # $all->page will now show elements containing '42'.
 
+=head1 DIAGNOSTICS
+
+=over 4
+
+=item Warning: $what got deprecated in api $release.
+
+Cast by C<check()>
+
+=item Error: $what got removed in $release, but you specified api $api.
+
+Cast by C<check()>
+
+=item Warning: $what was introduced in $release, but you specified api $api.
+
+Cast by C<check()>
+
+=item Error: No clients can run $method $path.
+
+Cast by C<call()>
+
+=back
+
 =head1 SEE ALSO
 
-This module is part of Couch-DB distribution version 0.200,
-built on June 18, 2025. Website: F<http://perl.overmeer.net/CPAN/>
+This module is part of Couch-DB version 0.201,
+built on January 30, 2026. Website: F<http://perl.overmeer.net/CPAN/>
 
 =head1 LICENSE
 
-Copyrights 2024-2025 by [Mark Overmeer]. For other contributors see ChangeLog.
+For contributors see file ChangeLog.
 
-This program is free software; you can redistribute it and/or modify it
-under the same terms as Perl itself.
-See F<http://dev.perl.org/licenses/>
+This software is copyright (c) 2024-2026 by Mark Overmeer.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
 

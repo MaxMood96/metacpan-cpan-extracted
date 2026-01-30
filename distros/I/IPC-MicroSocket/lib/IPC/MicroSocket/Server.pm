@@ -1,7 +1,7 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2024 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2024-2026 -- leonerd@leonerd.org.uk
 
 use v5.36;
 use Object::Pad 0.817;  # class :abstract
@@ -10,7 +10,7 @@ use Sublike::Extended 0.29 'method';
 
 use IPC::MicroSocket;
 
-package IPC::MicroSocket::Server 0.03;  # this 'package' statement just to keep CPAN indexers happy
+package IPC::MicroSocket::Server 0.04;  # this 'package' statement just to keep CPAN indexers happy
 class IPC::MicroSocket::Server :abstract;
 
 use Carp;
@@ -102,23 +102,24 @@ method new_unix :common ( :$path, :$listen //= 5, %rest )
 }
 
 field $selector;
-method _selector
+method _selector ()
 {
    return $selector if $selector;
 
    $selector = Future::Selector->new;
+
    $selector->add(
       data => "acceptor",
-      gen  => sub { $self->_accept },
-   );
+      gen  => async sub () {
+         $self->_accepted( await Future::IO->accept( $fh ) );
+      },
+   ) if $fh; # might be false in some unit tests
 
    return $selector;
 }
 
-async method _accept
+async method _accepted ( $clientsock )
 {
-   my $clientsock = await Future::IO->accept( $fh );
-
    push @clients, my $client = $connection_class->new(
       server => $self,
       fh     => $clientsock,
@@ -127,7 +128,7 @@ async method _accept
    $self->_selector->add(
       data => $client,
       f    => $client->run
-         ->on_ready(sub {
+         ->on_ready(sub ( $ ) {
             @clients = grep { $_ != $client } @clients;
          }),
    );

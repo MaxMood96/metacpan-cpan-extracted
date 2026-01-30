@@ -12,12 +12,10 @@ the interface of the attribute. The "build_logger()" builder method returns a
 
 INSTALLATION
 
-To install this module manually, run the following commands:
+To install this module, use your preferred CPAN client. If this is "cpanm" then
+run the command
 
-  perl Makefile.PL
-  make
-  make test
-  make install
+  cpanm MooX::Role::HasLogger
 
 DOCUMENTATION
 
@@ -26,21 +24,29 @@ After the installation, you can find further documentation using the commands:
   perldoc MooX::Role::HasLogger
   perldoc MooX::Role::HasLogger::Types
 
-MAINTENANCE
+DEVELOPMENT
 
-To maintain this module, run the following commands:
+After the download of the source code, you have to install the module
+dependencies first. The dependencies are described in a "cpanfile".
+
+It follows the "configure" step that creates a "Makefile"
 
   perl Makefile.PL
-  make PERL_CPANM_OPT=--notest installdeps 
-  make
-  make test
 
-The second command installs the module dependencies in a "local" directory
-using "cpanm".
+You may explicitly trigger the "build" step, calling
+
+  make
+
+before executing all test scripts
+
+  make test # in lexicographic order
+  prove t   # in random order
+
+The "RELEASE_TESTING" flag enables the release testing context.
 
 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2023 by Sven Willenbuecher.
+This software is copyright (c) 2023-2026 by Sven Willenbuecher.
 
 This is free software; you can redistribute it and/or modify it under the same
 terms as the Perl 5 programming language system itself.
