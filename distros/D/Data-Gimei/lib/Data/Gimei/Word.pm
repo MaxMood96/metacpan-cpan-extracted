@@ -11,6 +11,10 @@ use Class::Tiny qw (
   romaji
 );
 
+#
+# Class methods
+#
+
 sub BUILDARGS {
     my ( $class, $aref ) = @_;
 
@@ -24,10 +28,14 @@ sub BUILDARGS {
     return \%args;
 }
 
+#
+# Instance methods
+#
+
 sub to_s {
     my $self = shift;
 
     return sprintf( "%s, %s, %s, %s",
-        $self->kanji, $self->hiragana, $self->katakana, $self->romaji );
+        $self->kanji, $self->hiragana, $self->katakana, $self->romaji // '' );
 }
 1;

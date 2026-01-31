@@ -244,11 +244,17 @@ sub ws_connect {
     my $magic = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
     my $expected_accept = sha1_base64($key . $magic) . '=';
 
+    # Separate HTTP headers from any extra WebSocket frame data
+    # that may have arrived in the same TCP segment
+    my ($headers, $extra_data) = split(/\r\n\r\n/, $response, 2);
+    $extra_data //= '';
+
     return {
         socket   => $sock,
         response => $response,
         key      => $key,
         expected_accept => $expected_accept,
+        extra_data => $extra_data,  # Any data after headers (may contain WS frames)
     };
 }
 
@@ -304,6 +310,45 @@ sub ws_send_close {
     }
 
     print $sock $frame;
+}
+
+# Parse WebSocket frame from data buffer (no socket read)
+sub ws_parse_frame {
+    my ($data) = @_;
+    return undef unless defined $data && length($data) >= 2;
+
+    my @bytes = unpack('C*', $data);
+    my $byte1 = $bytes[0];
+    my $byte2 = $bytes[1];
+
+    my $fin = ($byte1 & 0x80) >> 7;
+    my $opcode = $byte1 & 0x0F;
+    my $masked = ($byte2 & 0x80) >> 7;
+    my $len = $byte2 & 0x7F;
+
+    my $pos = 2;
+
+    # Extended length
+    if ($len == 126) {
+        return undef if length($data) < 4;
+        $len = unpack('n', substr($data, 2, 2));
+        $pos = 4;
+    } elsif ($len == 127) {
+        return undef if length($data) < 10;
+        $len = unpack('Q>', substr($data, 2, 8));
+        $pos = 10;
+    }
+
+    # Read payload
+    return undef if length($data) < $pos + $len;
+    my $payload = substr($data, $pos, $len);
+
+    return {
+        fin     => $fin,
+        opcode  => $opcode,
+        masked  => $masked,
+        payload => $payload,
+    };
 }
 
 # Read WebSocket frame (server to client - unmasked)
@@ -470,12 +515,20 @@ subtest 'WebSocket server-initiated message' => sub {
     ok($ws && $ws->{socket}, 'WebSocket connected');
     like($ws->{response}, qr/HTTP\/1\.1 101/, 'Handshake successful');
 
-    # Try reading with retries - server may need time to process open handler
+    # The Welcome! frame may arrive in the same TCP segment as the handshake response.
+    # Check extra_data first, then try reading from socket.
     my $frame;
-    for my $attempt (1..10) {
-        $frame = ws_read_frame($ws->{socket}, 0.5);
-        last if $frame && $frame->{payload};
-        select(undef, undef, undef, 0.1);
+    if ($ws->{extra_data} && length($ws->{extra_data}) >= 2) {
+        $frame = ws_parse_frame($ws->{extra_data});
+    }
+
+    # If no frame in extra_data, try reading from socket
+    unless ($frame && $frame->{payload}) {
+        for my $attempt (1..10) {
+            $frame = ws_read_frame($ws->{socket}, 0.5);
+            last if $frame && $frame->{payload};
+            select(undef, undef, undef, 0.1);
+        }
     }
     ok($frame && $frame->{payload} eq 'Welcome!', 'Received server greeting');
 

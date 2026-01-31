@@ -11,13 +11,27 @@ use Class::Tiny qw (
   seed
 );
 
-sub BUILDARGS {
-    my ( $class, %args ) = @_;
+#
+# Class methods
+#
 
+sub BUILDARGS {
+    my ( $class, @args ) = @_;
+
+    # Handle single argument as seed
+    if ( @args == 1 ) {
+        return { seed => $args[0] };
+    }
+
+    my %args = @args;
     $args{'seed'} //= time();
 
     return \%args;
 }
+
+#
+# Instance methods
+#
 
 sub set_seed {
     my ( $self, $seed ) = @_;

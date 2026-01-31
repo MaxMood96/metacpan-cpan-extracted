@@ -33,17 +33,19 @@
       },
       "develop" : {
          "requires" : {
-            "CPAN::Uploader" : "0",
-            "Minilla" : "0",
-            "Perl::Tidy" : "0",
-            "Software::License::MIT" : "0",
-            "Spellunker" : "0",
-            "Test::CPAN::Meta" : "0",
-            "Test::MinimumVersion::Fast" : "0.04",
-            "Test::PAUSE::Permissions" : "0.07",
-            "Test::Pod" : "1.41",
-            "Test::Spellunker" : "v0.2.7",
-            "Version::Next" : "0"
+            "CPAN::Uploader" : "== 0.103018",
+            "Minilla" : "== v3.1.29",
+            "Perl::Tidy" : "== 20260109",
+            "Reply" : "== 0.42",
+            "Software::License::MIT" : "== 0.104007",
+            "Spellunker" : "== v0.4.0",
+            "Term::ReadLine::Gnu" : "== 1.47",
+            "Test::CPAN::Meta" : "== 0.25",
+            "Test::MinimumVersion::Fast" : "== 0.04",
+            "Test::PAUSE::Permissions" : "== 0.07",
+            "Test::Pod" : "== 1.52",
+            "Test::Spellunker" : "== v0.4.0",
+            "Version::Next" : "== 1"
          }
       },
       "runtime" : {
@@ -57,14 +59,15 @@
       },
       "test" : {
          "requires" : {
-            "Test2::Bundle::More" : "0"
+            "List::Util" : "1.33",
+            "Test2::V1" : "0"
          }
       }
    },
    "provides" : {
       "Data::Gimei" : {
          "file" : "lib/Data/Gimei.pm",
-         "version" : "v0.4.7"
+         "version" : "v0.5.0"
       },
       "Data::Gimei::Address" : {
          "file" : "lib/Data/Gimei/Address.pm"
@@ -91,7 +94,7 @@
          "web" : "https://github.com/youpong/Data-Gimei"
       }
    },
-   "version" : "v0.4.7",
+   "version" : "v0.5.0",
    "x_authority" : "cpan:YOUPONG",
    "x_contributors" : [
       "NAKAJIMA Yusaku <yupong7@gmail.com>",

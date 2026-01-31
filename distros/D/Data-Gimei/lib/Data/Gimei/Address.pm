@@ -14,7 +14,14 @@ use Class::Tiny qw(
   town
 );
 
-our $addresses;
+#
+# Package variables
+#
+our $addresses;    # loaded address data
+
+#
+# Class methods
+#
 
 sub load {
     my $yaml_path = shift // dist_file( 'Data-Gimei', 'addresses.yml' );
@@ -38,6 +45,10 @@ sub BUILDARGS {
 
     return \%args;
 }
+
+#
+# Instance methods
+#
 
 sub to_s {
     my $self = shift;

@@ -95,6 +95,7 @@ subtest 'path parameters' => sub {
     [ 'simple', true,  -42, '-42' ],
     [ 'simple', true,  '', '' ],
     [ 'simple', true,  'red', 'red' ],
+    [ 'simple', true,  'red,green', 'red%2Cgreen' ],
     [ 'simple', true,  " i have spaces  \t ", " i have spaces  \t " ],
     [ 'simple', true,  ' red,  green ', ' red,  green ' ],
     [ 'simple', true,  'red﹠green', uri_encode('red﹠green') ],
@@ -106,6 +107,8 @@ subtest 'path parameters' => sub {
     [ 'simple', true,  [ '', '', '' ], ',,' ],
     [ 'simple', false, [ 'red' ], 'red' ],
     [ 'simple', true,  [ 'red' ], 'red' ],
+    [ 'simple', false, [ 'red,green', 'blue' ], 'red%2Cgreen,blue' ],
+    [ 'simple', true,  [ 'red,green', 'blue' ], 'red%2Cgreen,blue' ],
     [ 'simple', false, [ qw(blue black brown) ], 'blue,black,brown' ],
     [ 'simple', true,  [ qw(blue black brown) ], 'blue,black,brown' ],
     [ 'simple', false, { R => '', G => '', B => '' }, 'R,,G,,B,' ],
@@ -114,6 +117,8 @@ subtest 'path parameters' => sub {
     [ 'simple', true,  { R => '100', G => '200', B => '' }, 'R=100,G=200,B' ],
     [ 'simple', false, { qw(R 100 G 200 B 150) }, 'R,100,G,200,B,150' ],
     [ 'simple', true,  { qw(R 100 G 200 B 150) }, 'R=100,G=200,B=150' ],
+    [ 'simple', false, { 'R,X' => '100', G => '200', 'B,Y' => '150' }, 'R%2CX,100,G,200,B%2CY,150' ],
+    [ 'simple', true,  { 'R,X' => '100', G => '200', 'B=Y' => '150' }, 'R%2CX=100,G=200,B%3DY=150' ],
 
     {
       name => 'any type is permitted, default to string',
@@ -318,36 +323,41 @@ subtest 'path parameters' => sub {
     # style=matrix
 
     # style, explode, deserialized data, serialized string
-    [ 'matrix', true, undef, '' ],
-    [ 'matrix', true, 0, ';color=0' ],
-    [ 'matrix', true, 1, ';color=1' ],
-    [ 'matrix', true, false, ';color' ],
-    [ 'matrix', true, false, ';color=0' ],
-    [ 'matrix', true, true, ';color=1' ],
-    [ 'matrix', true, false, ';color=false' ],
-    [ 'matrix', true, true, ';color=true' ],
-    [ 'matrix', true, 3, ';color=3' ],
-    [ 'matrix', true, '', ';color' ],
-    [ 'matrix', true, 'red', ';color=red' ],
+    [ 'matrix', true,  undef, '' ],
+    [ 'matrix', true,  0, ';color=0' ],
+    [ 'matrix', true,  1, ';color=1' ],
+    [ 'matrix', true,  false, ';color' ],
+    [ 'matrix', true,  false, ';color=0' ],
+    [ 'matrix', true,  true, ';color=1' ],
+    [ 'matrix', true,  false, ';color=false' ],
+    [ 'matrix', true,  true, ';color=true' ],
+    [ 'matrix', true,  3, ';color=3' ],
+    [ 'matrix', true,  '', ';color' ],
+    [ 'matrix', true,  'red', ';color=red' ],
+    [ 'matrix', true,  'red;green=blue', ';color=red%3Bgreen%3Dblue' ],
     [ 'matrix', false, [], '' ],
-    [ 'matrix', true, [], '' ],
+    [ 'matrix', true,  [], '' ],
     [ 'matrix', false, {}, '' ],
     [ 'matrix', true,  {}, '' ],
     [ 'matrix', false, [], ';color' ],  # not reversible
-    [ 'matrix', true, [''], ';color' ],
+    [ 'matrix', true,  [''], ';color' ],
     [ 'matrix', false, {}, ';color' ],  # not reversible
-    [ 'matrix', true, {}, ';' ],        # ""
+    [ 'matrix', true,  {}, ';' ],        # ""
     [ 'matrix', false, [ '', '', '' ], ';color=,,' ],
     [ 'matrix', true,  [ '', '', '' ], ';color;color;color' ],
     [ 'matrix', false, [ qw(blue black brown) ], ';color=blue,black,brown' ],
-    [ 'matrix', true, [ qw(blue black brown) ], ';color=blue;color=black;color=brown' ],
+    [ 'matrix', true,  [ qw(blue black brown) ], ';color=blue;color=black;color=brown' ],
+    [ 'matrix', false, [ 'red,green;black', 'blue' ], ';color=red%2Cgreen%3Bblack,blue' ],
+    [ 'matrix', true,  [ 'red,green;black', 'blue' ], ';color=red%2Cgreen%3Bblack;color=blue' ],
     [ 'matrix', false, { R => '', G => '', B => '' }, ';color=R,,G,,B,' ],
     [ 'matrix', true,  { R => '', G => '', B => '' }, ';R;G;B' ],
     [ 'matrix', false, { R => '100', G => '200', B => '' }, ';color=R,100,G,200,B,' ],
     [ 'matrix', true,  { R => '100', G => '200', B => '' }, ';R=100;G=200;B' ],
     [ 'matrix', false, { qw(R 100 G 200 B 150) }, ';color=R,100,G,200,B,150' ],
-    [ 'matrix', true, { qw(R 100 G 200 B 150) }, ';R=100;G=200;B=150' ],
-    [ 'matrix', true, { color => 'brown' }, ';color=blue;color=black;color=brown' ],
+    [ 'matrix', true,  { qw(R 100 G 200 B 150) }, ';R=100;G=200;B=150' ],
+    [ 'matrix', false, { 'R,X' => '100', G => '200', 'B,Y' => '150' }, ';color=R%2CX,100,G,200,B%2CY,150' ],
+    [ 'matrix', true,  { 'R,X' => '100', G => '200', 'B=Y' => '150' }, ';R%2CX=100;G=200;B%3DY=150' ],
+    [ 'matrix', true,  { color => 'brown' }, ';color=blue;color=black;color=brown' ],
 
     {
       name => 'any type is permitted, default to string',
@@ -587,36 +597,40 @@ subtest 'path parameters' => sub {
     # style=label
 
     # style, explode, deserialized data, serialized string
-    [ 'label', true, undef, '' ],
-    [ 'label', true, 0, '.0' ],
-    [ 'label', true, 1, '.1' ],
-    [ 'label', true, false, '.' ],
-    [ 'label', true, false, '.0' ],
-    [ 'label', true, true, '.1' ],
-    [ 'label', true, false, '.false' ],
-    [ 'label', true, true, '.true' ],
-    [ 'label', true, 3, '.3' ],
-    [ 'label', true, '', '.' ],
-    [ 'label', true, 'red', '.red' ],
-    [ 'label', true, 'red﹠gr.e.en', '.red%EF%B9%A0gr%2Ee%2Een' ], # . is in "unreserved" - must be manually encoded
+    [ 'label', true,  undef, '' ],
+    [ 'label', true,  0, '.0' ],
+    [ 'label', true,  1, '.1' ],
+    [ 'label', true,  false, '.' ],
+    [ 'label', true,  false, '.0' ],
+    [ 'label', true,  true, '.1' ],
+    [ 'label', true,  false, '.false' ],
+    [ 'label', true,  true, '.true' ],
+    [ 'label', true,  3, '.3' ],
+    [ 'label', true,  '', '.' ],
+    [ 'label', true,  'red', '.red' ],
+    [ 'label', true,  'red﹠gr.e.en', '.red%EF%B9%A0gr%2Ee%2Een' ], # . is in "unreserved" - must be manually encoded
     [ 'label', false, [], '' ],
     [ 'label', true,  [], '' ],
     [ 'label', false, {}, '' ],
     [ 'label', true,  {}, '' ],
     [ 'label', false, [], '.' ],    # not reversible
-    [ 'label', true, [], '.' ],     # ""
+    [ 'label', true,  [], '.' ],     # ""
     [ 'label', false, {}, '.' ],    # ""
-    [ 'label', true, {}, '.' ],     # ""
+    [ 'label', true,  {}, '.' ],     # ""
     [ 'label', false, [ '', '', '' ], '.,,' ],
-    [ 'label', true, [ '', '', '' ], '...' ],
+    [ 'label', true,  [ '', '', '' ], '...' ],
     [ 'label', false, { R => '', G => '', B => '' }, '.R,,G,,B,' ],
-    [ 'label', true, { R => '', G => '', B => '' }, '.R.G.B' ],
+    [ 'label', true,  { R => '', G => '', B => '' }, '.R.G.B' ],
     [ 'label', false, { R => '100', G => '200', B => '' }, '.R,100,G,200,B,' ],
-    [ 'label', true, { R => '100', G => '200', B => '' }, '.R=100.G=200.B' ],
+    [ 'label', true,  { R => '100', G => '200', B => '' }, '.R=100.G=200.B' ],
     [ 'label', false, [ qw(blue black brown) ], '.blue,black,brown' ],
-    [ 'label', true, [ qw(blue black brown) ], '.blue.black.brown' ],
+    [ 'label', true,  [ qw(blue black brown) ], '.blue.black.brown' ],
+    [ 'label', false, [ 'red.green', 'blue' ], '.red%2Egreen,blue' ],
+    [ 'label', true,  [ 'red.green', 'blue' ], '.red%2Egreen.blue' ],
     [ 'label', false, { qw(R 100 G 200 B 150) }, '.R,100,G,200,B,150' ],
     [ 'label', true,  { qw(R 100 G 200 B 150) }, '.R=100.G=200.B=150' ],
+    [ 'label', false, { 'R.X' => '100', G => '200', 'B,Y' => '150' }, '.R%2EX,100,G,200,B%2CY,150' ],
+    [ 'label', true,  { 'R.X' => '100', G => '200', 'B=Y' => '150' }, '.R%2EX=100.G=200.B%3DY=150' ],
 
     {
       name => 'any type is permitted, default to string',

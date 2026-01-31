@@ -6,8 +6,21 @@ Home page:    <https://metacpan.org/release/Sub-HandlesVia-XS>
 Bug tracker:  <https://github.com/tobyink/p5-sub-handlesvia-xs/issues>
 Maintainer:   Toby Inkster (TOBYINK) <tobyink@cpan.org>
 
+0.002000	2026-01-29
+
+ [ Bug Fixes ]
+ - Fix XS errors initializing mortal SVs before SAVETMPS which was leading
+   to crashes on large arrays.
+ - Fix qsort implementation on non-glibc platforms.
+
+ [ Other ]
+ - Added: A whole bunch of string methods.
+ - Efficiency and stability improvements for some of the array-looping
+   methods.
+
 0.001004	2026-01-29
 
+ [ Packaging ]
  - Fix packaging error.
 
 0.001003	2026-01-29

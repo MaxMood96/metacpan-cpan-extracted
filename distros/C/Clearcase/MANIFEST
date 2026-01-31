@@ -1,0 +1,33 @@
+Changes
+Clearcase-1.0.tar.gz
+lib/Clearcase/Element.pm
+lib/Clearcase.pm
+lib/Clearcase/Server.pm
+lib/Clearcase/UCM/Activity.pm
+lib/Clearcase/UCM/Baseline.pm
+lib/Clearcase/UCM/Component.pm
+lib/Clearcase/UCM/Folder.pm
+lib/Clearcase/UCM.pm
+lib/Clearcase/UCM/Project.pm
+lib/Clearcase/UCM/Pvob.pm
+lib/Clearcase/UCM/Stream.pm
+lib/Clearcase/UCM/Streams.pm
+lib/Clearcase/View.pm
+lib/Clearcase/Views.pm
+lib/Clearcase/Vob.pm
+lib/Clearcase/Vobs.pm
+Makefile
+Makefile.PL
+MANIFEST
+MYMETA.json
+MYMETA.yml
+README
+t/00-load.t
+t/01-clearcase.t
+t/02-vob.t
+t/03-view.t
+t/04-element.t
+t/06-views.t
+t/test.conf
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

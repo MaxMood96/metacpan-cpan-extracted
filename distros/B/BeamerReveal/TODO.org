@@ -1,9 +1,7 @@
 - [ ] Windows installer (for the perl package + the pdftoppm Poppler)
 - [X] make menu use short title entries instead of long ones
-- [ ] insert facility for animations to generate multiple handouts slides
+- [X] insert facility for animations to generate multiple handouts slides
 - [ ] insert speaker notes (in text mode)
-- [ ] insert speaker notes (graphical)
+- [X] insert speaker notes (graphical)
 - [ ] make filenames of ancillary files unique / not changing
 - [X] make inline version for all media objects
-
-- Embed a whole “subpage” in an iframe using srcdoc

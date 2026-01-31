@@ -763,7 +763,7 @@ Revision history for StreamFinder
         - StreamFinder::Subsplash - Refactor to optionally use yt-dlp to fetch 
         video streams (-youtube => {yes|no|first|last|ifneeded}) similar to 
         several of the other fetcher modules, as Subsplash pages pretty much 
-        only return audio streams (if at all) without javascripts/cookies, etc.
+        only return audio streams (if at all) without javascripts/cookies now.
         Also fixed & greatly improved metadata fetch from their pages.
         - StreamFinder::Brighteon - Fix failure when -youtube => 'only' is set.
         - StreamFinder::(BitChute,Brighteon,Odysee) - Try harder to get full 
@@ -774,3 +774,13 @@ Revision history for StreamFinder
         - StreamFinder::Youtube - Prevent sometimes non-URLs being returned as 
         valid streams causing failure to fallback to StreamFinder::Anystream 
         when no valid streams found.
+2.51    2016/01/31
+        - StreamFinder::EpochTV - Fix returning mostly invalid stream URLs.
+        Also add "-speakericon" (boolean) to return artist's icon instead of 
+        the default channel icon (EpochTV offers separate ones, like 
+        StreamFinder::SermonAudio).
+        Also improved several other metadata values returned.
+        - StreamFinder::Bitchute - Change default -youtube value from "no" to 
+        "yes" as yt-dlp is now required to fetch Bitchute streams.  Also 
+        clean up code & docs a bit.
+        StreamFinder::(Anystream,Subsplash) - Touch up docs a bit.

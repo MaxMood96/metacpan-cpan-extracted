@@ -10,7 +10,7 @@
 # ABSTRACT: Migrate the configuration of an application
 
 package App::Cme::Command::migrate ;
-$App::Cme::Command::migrate::VERSION = '1.043';
+$App::Cme::Command::migrate::VERSION = '1.044';
 use strict;
 use warnings;
 use 5.10.1;
@@ -54,6 +54,9 @@ sub execute {
 
     $root->migrate;
 
+    # force save to reformat or apply minor changes brought by model
+    $opt->{save} = 1 ;
+
     $self->save($inst,$opt) ;
     return;
 }
@@ -72,7 +75,7 @@ App::Cme::Command::migrate - Migrate the configuration of an application
 
 =head1 VERSION
 
-version 1.043
+version 1.044
 
 =head1 SYNOPSIS
 
@@ -84,6 +87,8 @@ version 1.043
 Checks the content of the configuration file of an application (and show
 warnings if needed), update deprecated parameters (old value are saved
 to new parameters) and save the new configuration. See L<App::Cme::Command::migrate>.
+
+This command is equivalent to C<cme modify xxx -save>.
 
 For more details, see L<Config::Model::Value/Upgrade>
 

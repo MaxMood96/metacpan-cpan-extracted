@@ -282,6 +282,7 @@ t/41-sessions-global-logout.t
 t/50-notifications-DBI.t
 t/50-notifications.t
 t/60-2ndfa.t
+t/60-Cli-JSON.t
 t/70-viewer.t
 t/71-viewer-without-diff.t
 t/72-appList-diff.t

@@ -1,0 +1,94 @@
+#!/usr/bin/perl
+
+=pod
+
+=head1 NAME speak
+
+Simply speaks the passed in message, clipboard or file
+
+=head1 VERSION
+
+=over
+
+=item Author
+
+Andrew DeFaria <Andrew@DeFaria.com>
+
+=item Created:
+
+Wed 24 Feb 2021 12:01:12 PM PST
+
+=back
+
+=head1 SYNOPSIS
+
+ Usage: speak [-usa|ge] [-h|elp] [-v|erbose] [-de|bug]
+              [-c|lipboard] [-f|ile <filename>] ["message"]
+
+ Where:
+   -usa|ge:          Print this usage
+   -h|elp:           Detailed help
+   -c|lipboard:      Speak the contents of the clipboard
+   -f|ile <filename> Speak the contents of <filename>
+   "message"         Speak the message
+
+=head1 DESCRIPTION
+
+This script speaks the contents of the passed in message, clipboard or file
+
+=cut
+
+use strict;
+use warnings;
+
+use Getopt::Long;
+use Pod::Usage;
+
+use Speak qw(speak);
+use Clipboard;
+
+sub error {
+  my ($msg, $exit_code) = @_;
+  print STDERR "ERROR: $msg\n";
+  exit ($exit_code || 1);
+}
+
+my $verbose = 0;
+my $debug   = 0;
+
+my %opts = (
+  usage => sub {pod2usage},
+  help  => sub {pod2usage (-verbose => 2)},
+  ## no critic (Variables::RequireLocalizedPunctuationVars)
+  verbose => sub {$verbose = 1; $ENV{VERBOSE} = 1},
+  debug   => sub {$debug   = 1; $ENV{DEBUG}   = 1},
+);
+
+## Main
+GetOptions (\%opts, 'usage', 'help', 'verbose', 'debug', 'clipboard', 'file=s',)
+  || pod2usage;
+
+my $msg = join ' ', @ARGV;
+
+if ($opts{clipboard}) {
+  if ($opts{file}) {
+    error 'Cannot specify both -clipboard and -file', 1;
+  } elsif ($msg) {
+    error 'Cannot specify both -clipboard and <message>', 1;
+  } else {
+    $msg = Clipboard->paste;
+  }    # if
+} elsif ($opts{file}) {
+  if ($msg) {
+    error 'Cannot specify both -file and <message>', 1;
+  } else {
+    open my $file, '<', $opts{file}
+      or error "Unable to open $opts{file} - $!", 1;
+
+    $msg = <$file>;
+
+    close $file;
+  }    # if
+}    # if
+
+speak $msg;

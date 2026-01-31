@@ -1,10 +1,12 @@
 Build.PL
 Changes
 DEVELOPMENT.md
+Dockerfile
+Dockerfile-dev
 LICENSE
 META.json
 README.md
-author/format.sh
+author/format.pl
 cpanfile
 eg/sample.pl
 lib/Data/Gimei.pm
@@ -19,6 +21,7 @@ t/00_compile.t
 t/address.t
 t/addresses.yml
 t/deterministic_rand.t
+t/gimei.t
 t/name.t
 t/names.yml
 t/random.t

@@ -43,7 +43,7 @@ Test::CVE - Test against known CVE's
 use 5.014000;
 use warnings;
 
-our $VERSION = "0.12";
+our $VERSION = "0.13";
 
 use version;
 use Carp;
@@ -449,7 +449,7 @@ sub test {
 	    my $cds = $c->{cves} || $c->{cve} || [];
 	    if (ref $cds ne "ARRAY") {
 	       $cds =~ m/^{/ and $cds = decode_json ($cds);
-	       use DP;die DDumper $cds;
+	       #use DP;die DDumper $cds;
 	       }
 	    my @cve = @$cds;
 	       @cve = grep { !exists $self->{skip}{$_} } @cve;
@@ -481,7 +481,7 @@ sub test {
 		}
 	    else {
 		warn "Oops: NO V or CVE?\n";
-		use DP;DDumper $c->{cve};
+		#use DP;DDumper $c->{cve};
 		}
 	    push @{$self->{CVE}{$m}{cve}} => {
 		cid => $cid,

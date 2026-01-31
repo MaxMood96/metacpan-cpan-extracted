@@ -3,6 +3,7 @@ package Lemonldap::NG::Common::MessageBroker::Pg;
 use strict;
 use JSON;
 use POSIX qw(:signal_h);
+use Lemonldap::NG::Common::Lib::DBI qw(check_dbh);
 
 our $VERSION = '2.21.0';
 
@@ -67,7 +68,8 @@ sub waitForNextMessage {
 
 sub _dbh {
     my ($self) = @_;
-    return $self->{_dbh} if ( $self->{_dbh} and $self->{_dbh}->ping );
+    my $dbh = check_dbh( $self->{_dbh} );
+    return $dbh if $dbh;
     $self->{_dbh} = undef;
 
     # This timeout is inspired from example given by DBI(3)

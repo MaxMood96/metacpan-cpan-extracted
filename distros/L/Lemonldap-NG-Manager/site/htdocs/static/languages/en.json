@@ -268,7 +268,7 @@
 "contextSwitchingRule":"Use rule",
 "contextSwitchingStopWithLogout":"Stop by logout",
 "contextSwitchingUnrestrictedUsersRule":"Unrestricted users rule",
-"cookieExpiration":"Cookie expiration time",
+"cookieExpiration":"SSO cookie expiration time",
 "cookieName":"Cookie name",
 "cookieParams":"Cookies",
 "copyPath":"Copy location",

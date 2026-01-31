@@ -1,5 +1,11 @@
 Revision history for Perl extension Data-Gimei
 
+v0.5.0 2026-01-30T18:21:07Z
+    - Add compatibility section to README
+    - Migrate formatter script from Shell to Perl
+    - Enable single-argument initialization for Data::Gimei::Random
+    - Fix Data::Gimei::Word#to_s() when the romaji is undef
+
 v0.4.7 2026-01-17T08:17:33Z
     - Add module dependencies
 

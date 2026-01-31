@@ -17,7 +17,7 @@ CGI::Info - Information about the CGI environment
 
 # VERSION
 
-Version 1.08
+Version 1.09
 
 # SYNOPSIS
 
@@ -209,12 +209,13 @@ Return the URL of the machine running the CGI script.
 
 Returns a reference to a hash list of the CGI arguments.
 
-CGI::Info helps you to test your script prior to deployment on a website:
-if it is not in a CGI environment (e.g. the script is being tested from the
+CGI::Info helps you to test your script before deployment on a website:
+if it is not in a CGI environment (e.g., the script is being tested from the
 command line), the program's command line arguments (a list of key=value pairs)
-are used, if there are no command line arguments then they are read from stdin
-as a list of key=value lines.
-Also you can give one of --tablet, --search-engine,
+are used, if there are no command line arguments,
+then they are read from stdin as a list of key=value lines.
+Also,
+you can give one of --tablet, --search-engine,
 \--mobile and --robot to mimic those agents. For example:
 
         ./script.cgi --mobile name=Nigel
@@ -354,7 +355,7 @@ Advanced features:
         return 1;
     }
 
-## param
+## param($field)
 
 Get a single parameter from the query string.
 Takes an optional single string parameter which is the argument to return. If
@@ -376,6 +377,11 @@ be thrown:
         my $bar = $info->param('bar');  # Gives an error message
 
 Returns undef if the requested parameter was not given
+
+- $field
+
+    Optional field to be retrieved.
+    If omitted, all the parameters are returned.
 
 ## is\_mobile
 
@@ -466,9 +472,13 @@ Synonym of rootdir(), for compatibility with [CHI](https://metacpan.org/pod/CHI)
 
 Synonym of rootdir(), for compatibility with Apache.
 
-## logdir
+## logdir($dir)
 
 Gets and sets the name of a directory that you can use to store logs in.
+
+- $dir
+
+    Path to the directory where logs will be stored
 
 ## is\_robot
 
@@ -577,11 +587,16 @@ Cookie set:
       /x
     }
 
-## status
+## status($status)
 
 Sets or returns the status of the object,
 200 for OK,
 otherwise an HTTP error code
+
+- $status
+
+    Optional integer value to be set or retrieved.
+    If omitted, the value is retrived.
 
 ## messages
 
@@ -599,7 +614,7 @@ Returns the messages that the object has generated as a ref to an array of hashe
 
 Returns the messages of that the object has generated as a string.
 
-## cache
+## cache($cache)
 
 Get/set the internal cache system.
 
@@ -607,6 +622,12 @@ Use this rather than pass the cache argument to `new()` if you see these error m
 "(in cleanup) Failed to get MD5\_CTX pointer".
 It's some obscure problem that I can't work out,
 but calling this after `new()` works.
+
+- $cache
+
+    Optional cache object.
+    When not given,
+    returns the current cache object.
 
 ## set\_logger
 
@@ -637,7 +658,7 @@ things to happen.
 
 # SEE ALSO
 
-- Test coverage report: [https://nigelhorne.github.io/CGI-Info/coverage/](https://nigelhorne.github.io/CGI-Info/coverage/)
+- [Test Coverage Report](https://nigelhorne.github.io/CGI-Info/coverage/)
 - [Object::Configure](https://metacpan.org/pod/Object%3A%3AConfigure)
 - [HTTP::BrowserDetect](https://metacpan.org/pod/HTTP%3A%3ABrowserDetect)
 - [https://github.com/mitchellkrogza/apache-ultimate-bad-bot-blocker](https://github.com/mitchellkrogza/apache-ultimate-bad-bot-blocker)
@@ -680,7 +701,7 @@ You can also look for information at:
 
 # LICENCE AND COPYRIGHT
 
-Copyright 2010-2025 Nigel Horne.
+Copyright 2010-2026 Nigel Horne.
 
 Usage is subject to licence terms.
 

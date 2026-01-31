@@ -2,7 +2,7 @@
 # -*- cperl -*-
 # PODNAME: beamer-reveal.pl
 # ABSTRACT: converts the .rvl file and the corresponding pdf file to a full reveal website
-our $VERSION = '20260130.1048'; # VERSION
+our $VERSION = '20260130.1210'; # VERSION
 
 
 use strict;
@@ -223,13 +223,18 @@ $convertor->toJPG();
 $logger->progress( $overall_id, 4, 'generating notes pages' );
 
 $logger->log( 0, "- Generating the notes pages" );
-my $notesFactory = BeamerReveal::NotesFactory->new( "$output_dir/${jobname}_files",
-						    $pdf_dir,
-						    $presentation->{parameters},
-						    $presentation->{parameters}->{canvaswidth} / 2,
-						    $presentation->{parameters}->{canvasheight} / 2,
-						    $ng_id );
-$notesFactory->toJPG();
+if ( $nofNotes ) {
+  my $notesFactory = BeamerReveal::NotesFactory->new( "$output_dir/${jobname}_files",
+						      $pdf_dir,
+						      $presentation->{parameters},
+						      $presentation->{parameters}->{canvaswidth} / 2,
+						      $presentation->{parameters}->{canvasheight} / 2,
+						      $ng_id );
+  $notesFactory->toJPG();
+}
+else {
+  $logger->progress( $ng_id, 1, 'no notes found', 1 );
+}
 
 ################################
 # generate the copy back-orders
@@ -299,7 +304,7 @@ beamer-reveal.pl - converts the .rvl file and the corresponding pdf file to a fu
 
 =head1 VERSION
 
-version 20260130.1048
+version 20260130.1210
 
 =head1 SYNOPSIS
 

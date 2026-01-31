@@ -10,6 +10,7 @@ use Mouse;
 use Time::Local;
 use DBI;
 use Encode;
+use Lemonldap::NG::Common::Lib::DBI qw(check_dbh);
 
 our $VERSION = '2.21.0';
 
@@ -290,7 +291,9 @@ sub getIdentifier {
 
 sub _dbh {
     my $self = shift;
-    return $self->{_dbh} if ( $self->{_dbh} and $self->{_dbh}->ping );
+    my $dbh = check_dbh( $self->{_dbh} );
+    return $dbh if $dbh;
+    delete $self->{_dbh};
     $self->logger->debug("Notification DBI connection lost, getting a new one");
     $self->{_dbh} = DBI->connect_cached( $self->{dbiChain}, $self->{dbiUser},
         $self->{dbiPassword}, { RaiseError => 1, AutoCommit => 1, } );

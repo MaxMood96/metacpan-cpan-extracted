@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use 5.010;
 
-our $VERSION = '0.10';
+our $VERSION = '0.11';
 
 use Scalar::Util qw(blessed);
 use XS::JIT;
@@ -715,6 +715,8 @@ sub compile {
         $self->{route_analysis}{needs_websocket} = 1;
         # Handler is needed if we have websocket routes
         $self->{route_analysis}{needs_websocket_handler} = 1;
+        # WebSocket uses Stream for connection handling
+        $self->{route_analysis}{needs_streaming} = 1;
     }
 
     # JIT: Explicit opt-in for Room support (can also be set in new())
@@ -1202,6 +1204,13 @@ sub _generate_server_code {
         $self->{_xs_builder_routes} = \@xs_builder_routes;
     }
 
+    # JIT: WebSocket handler storage (independent of dynamic routes)
+    if ($analysis->{needs_websocket}) {
+        $builder->comment('WebSocket handler storage')
+          ->line('static SV* g_websocket_handlers = NULL;')
+          ->blank;
+    }
+
     # Global storage for dynamic handler dispatch (only if needed)
     if ($has_dynamic) {
         $builder->comment('Storage for dynamic handler callbacks')
@@ -1209,30 +1218,24 @@ sub _generate_server_code {
           ->line('static SV* g_server_obj = NULL;');
 
         # JIT: Only generate middleware storage if middleware is present
-        my $analysis = $self->{route_analysis};
         if ($analysis->{has_any_middleware}) {
             $builder->line('static SV* g_before_middleware = NULL;')
               ->line('static SV* g_after_middleware = NULL;')
               ->line('static SV* g_route_before_middleware = NULL;')
               ->line('static SV* g_route_after_middleware = NULL;');
         }
-
-        # JIT: WebSocket handler storage
-        if ($analysis->{needs_websocket}) {
-            $builder->line('static SV* g_websocket_handlers = NULL;');
-        }
         $builder->blank;
-        
+
         # Generate param info table for named path parameters
         # Structure: { param_name, segment_position } per handler
         $builder->comment('Path parameter info per dynamic handler')
           ->line('typedef struct { const char* name; int position; } ParamInfo;')
           ->line('typedef struct { int count; ParamInfo params[8]; } RouteParamInfo;')
           ->blank;
-        
+
         my @route_params = @{$self->{route_param_info} // []};
         my $handler_count = scalar @route_params;
-        
+
         $builder->line("static RouteParamInfo g_route_params[$handler_count] = {");
         for my $i (0 .. $#route_params) {
             my $params = $route_params[$i] // [];

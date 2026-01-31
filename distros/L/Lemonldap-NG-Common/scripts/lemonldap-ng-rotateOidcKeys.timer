@@ -1,0 +1,9 @@
+[Unit]
+Description=Rotate LemonLDAP::NG OIDC keys
+
+[Timer]
+OnCalendar=Sat *-*-* 5:05:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

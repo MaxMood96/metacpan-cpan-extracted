@@ -4,7 +4,7 @@ use 5.010;
 use strict;
 use warnings;
 
-use version; our $VERSION = version->declare("v0.4.7");
+use version; our $VERSION = version->declare("v0.5.0");
 
 use Data::Gimei::Name;
 use Data::Gimei::Address;
@@ -12,6 +12,10 @@ use Data::Gimei::Word;
 use Data::Gimei::Random;
 
 my $r = Data::Gimei::Random->new;
+
+#
+# Package methods
+#
 
 sub set_random_seed {
     my $seed = shift;
@@ -114,6 +118,22 @@ This module is available on CPAN.  You can install this module
 by following the step below.
 
   $ cpanm Data::Gimei
+
+=head1 Compatibility
+
+=head2 Operating Systems
+
+=over 4
+
+=item * B<Linux / macOS>
+
+Works with the system's default Perl distribution (5.10.0 or later).
+
+=item * B<Windows>
+
+Works with B<Strawberry Perl> (5.14.0 or later).
+
+=back
 
 =head1 DOCUMENTATION
 

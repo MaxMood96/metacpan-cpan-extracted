@@ -106,8 +106,8 @@ Depends:
 
 L<URI::Escape>, L<HTML::Entities>, L<LWP::UserAgent> 
 
-The separate application program:  youtube-dl, or a compatable program 
-such as yt-dlp (only if wishing to use the I<-youtube> option).
+The separate application program:  B<yt-dlp> (now required to fetch streams
+from Bitchute).
 
 =head1 SUBROUTINES/METHODS
 
@@ -138,10 +138,10 @@ control order of search.
 NOTE:  I<-keep> is ignored if I<-youtube> is set to "I<only>".
 
 The optional I<-youtube> argument can be set to "I<yes>" or "I<last>" - also 
-include streams youtube-dl finds; "I<no>" - only include streams embedded in 
+include streams B<yt-dlp> finds; "I<no>" - only include streams embedded in 
 the video's bitchute.com page, unless none are found; "I<only>" - only include 
-streams youtube-dl finds; or "I<first>" - include streams youtube-dl 
-finds first.  Default is B<"no">.
+streams yt-dlp finds; or "I<first>" - include streams youtube-dl 
+finds first.  Default is B<"yes">.
 
 The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  
 If 1 then only secure ("https://") streams will be returned.
@@ -150,7 +150,7 @@ DEFAULT I<-secure> is 0 (false) - return all streams (http and https).
 
 Additional options:
 
-Certain youtube-dl (L<StreamFinder::Youtube>) configuration options, 
+Certain yt-dlp (L<StreamFinder::Youtube>) configuration options, 
 namely I<format>, I<formatonly>, I<youtube-dl-args>, and I<youtube-dl-add-args> 
 can be overridden here by specifying I<youtube-format>, I<youtube-formatonly>, 
 I<youtube-dl-args>, and I<youtube-dl-add-args> arguments respectively.  It is 
@@ -264,7 +264,7 @@ I<~/.config/StreamFinder/config>.
 
 Among options valid for Bitchute streams is the I<-keep> and 
 I<-youtube> options described in the B<new()> function.  Also, 
-various youtube-dl (L<StreamFinder::Youtube>) configuration options, 
+various yt-dlp (L<StreamFinder::Youtube>) configuration options, 
 namely I<format>, I<formatonly>, I<youtube-dl-args>, and I<youtube-dl-add-args> 
 can be overridden here by specifying I<youtube-format>, I<youtube-formatonly>, 
 I<youtube-dl-args>, and I<youtube-dl-add-args> arguments respectively.  
@@ -294,10 +294,6 @@ bitchute
 =head1 DEPENDENCIES
 
 L<URI::Escape>, L<HTML::Entities>, L<LWP::UserAgent>
-
-=head1 RECCOMENDS
-
-youtube-dl (or yt-dlp, or other compatable program)
 
 wget
 
@@ -399,7 +395,7 @@ sub new
 	$DEBUG = $self->{'debug'}  if (defined $self->{'debug'});
 
 	my @okStreams;
-	$self->{'youtube'} = 'no'  unless (defined $self->{'youtube'});
+	$self->{'youtube'} = 'yes'  unless (defined $self->{'youtube'});
 	while (@_) {
 		if ($_[0] =~ /^\-?youtube$/o) {
 			shift;
@@ -499,7 +495,7 @@ sub new
 			$ext = ($one =~ /\.(\w+)$/) ? $1 : '';
 			$streams .= "$ext=$one|";
 		}
-		unless ($self->{'youtube'} =~ /only/io) {
+		unless ($self->{'youtube'} =~ /only/io) {  #DEPRECIATED (NO LONGER ANY IN-PAGE STREAMS)?:
 			my $stindex = 0;
 			my $savestreams = $streams;
 			my %havestreams = ();
@@ -516,7 +512,7 @@ sub new
 						}
 						$streams =~ s/^[^\|]*\|//o;
 					}
-				} elsif ($streamtype =~ /^playlist$/i) {
+				} elsif ($streamtype =~ /^playlist$/io) {
 					while ($streams =~ /^([^\=]*)\=([^\|]+)/o) {
 						$ext = $1; $one = $2;
 						if ($ext =~ /^pls$/i && !defined($havestreams{"$ext|$one"})) {
@@ -527,7 +523,7 @@ sub new
 						}
 						$streams =~ s/^[^\|]*\|//o;
 					}
-				} elsif ($streamtype =~ /^a(?:ny|ll)$/i) {
+				} elsif ($streamtype =~ /^a(?:ny|ll)$/io) {
 					while ($streams =~ /^([^\=]*)\=([^\|]+)/o) {
 						$ext = $1; $one = $2;
 						unless (defined($havestreams{"$ext|$one"})) {
@@ -585,36 +581,37 @@ sub new
 
 	#IF WE DIDN'T FIND ANY STREAMS IN THE PAGE, TRY youtube-dl:
 
-	if ($self->{'cnt'} <= 0 || $self->{'youtube'} =~ /(?:yes|top|first|last|only)/i) {
-		my $haveYoutube = 0;
+	my $haveYoutube = 0;
+	unless ($self->{'youtube'} =~ /no/i
+				|| ($self->{'cnt'} > 0 && $self->{'youtube'} =~ /ifneeded/i)) {
 		eval { require 'StreamFinder/Youtube.pm'; $haveYoutube = 1; };
-		print STDERR "\n-2 NO STREAMS FOUND IN PAGE (haveYoutube=$haveYoutube)\n"  if ($DEBUG && $self->{'cnt'} <= 0);
-		if ($haveYoutube) {
-			print STDERR "\n-2 TRYING youtube-dl($self->{'youtube'})...\n"  if ($DEBUG && $self->{'youtube'} =~ /(?:yes|top|first)/i);
-			my %globalArgs = (
-					'-noiframes' => 1, '-fast' => 1, '-debug' => $DEBUG
-			);
-			foreach my $arg (qw(secure log logfmt youtube-format youtube-format-fallback
-					youtube-formatonly youtube-dl-args youtube-dl-add-args)) {
-				(my $arg0 = $arg) =~ s/^youtube\-(?!dl)//o;
-				$globalArgs{$arg0} = $self->{$arg}  if (defined $self->{$arg});
+	}
+	print STDERR "\n-2 NO STREAMS FOUND IN PAGE (haveYoutube=$haveYoutube)\n"  if ($DEBUG && $self->{'cnt'} <= 0);
+	if ($haveYoutube) {
+		print STDERR "\n-2 TRYING youtube-dl($self->{'youtube'})...\n"  if ($DEBUG);
+		my %globalArgs = (
+				'-noiframes' => 1, '-fast' => 1, '-debug' => $DEBUG
+		);
+		foreach my $arg (qw(secure log logfmt youtube-format youtube-format-fallback
+				youtube-formatonly youtube-dl-args youtube-dl-add-args)) {
+			(my $arg0 = $arg) =~ s/^youtube\-(?!dl)//o;
+			$globalArgs{$arg0} = $self->{$arg}  if (defined $self->{$arg});
+		}
+		$url2fetch =~ s#api\.bitchute\.com#old\.bitchute\.com#i;
+		my $yt = new StreamFinder::Youtube($url2fetch, %globalArgs);
+		if ($yt && $yt->count() > 0) {
+			my @ytStreams = $yt->get();
+			if ($self->{'youtube'} =~ /(?:top|first)/i) {  #PUT youtube-dl STREAMS ON TOP:
+				unshift @{$self->{'streams'}}, @ytStreams;
+			} else {
+				push @{$self->{'streams'}}, @ytStreams;
 			}
-			$url2fetch =~ s#api\.bitchute\.com#old\.bitchute\.com#i;
-			my $yt = new StreamFinder::Youtube($url2fetch, %globalArgs);
-			if ($yt && $yt->count() > 0) {
-				my @ytStreams = $yt->get();
-				if ($self->{'youtube'} =~ /(?:top|first)/i) {  #PUT youtube-dl STREAMS ON TOP:
-					unshift @{$self->{'streams'}}, @ytStreams;
-				} else {
-					push @{$self->{'streams'}}, @ytStreams;
-				}
-				foreach my $field (qw(title iconurl)) {
-					$self->{$field} ||= $yt->{$field}  if (defined($yt->{$field}) && $yt->{$field});
-				}
-				$self->{'description'} = $yt->{'description'}  if (length($yt->{'description'}) > length($self->{'description'}));
-				$self->{'cnt'} = scalar @{$self->{'streams'}};
-				print STDERR "i:Found stream(s) (".join('|',@ytStreams).") via youtube-dl.\n"  if ($DEBUG);
+			foreach my $field (qw(title iconurl)) {
+				$self->{$field} ||= $yt->{$field}  if (defined($yt->{$field}) && $yt->{$field});
 			}
+			$self->{'description'} = $yt->{'description'}  if (length($yt->{'description'}) > length($self->{'description'}));
+			$self->{'cnt'} = scalar @{$self->{'streams'}};
+			print STDERR "i:Found stream(s) (".join('|',@ytStreams).") via youtube-dl.\n"  if ($DEBUG);
 		}
 		print STDERR "-count=".$self->{'cnt'}."= iconurl=".$self->{'iconurl'}."=\n"  if ($DEBUG);
 	}

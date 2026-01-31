@@ -10,7 +10,7 @@
 # ABSTRACT: List applications handled by cme
 
 package App::Cme::Command::list ;
-$App::Cme::Command::list::VERSION = '1.043';
+$App::Cme::Command::list::VERSION = '1.044';
 use strict;
 use warnings;
 use 5.10.1;
@@ -24,7 +24,7 @@ Show a list all applications where a model is available. This list depends on
 installed Config::Model modules. Applications are divided in 3 categories:
 - system: for system wide applications (e.g. daemon like sshd)
 - user: for user applications (e.g. ssh configuration)
-- application: misc application like multistrap or Debian packaging
+- application: misc application like Debian packaging
 EOD
 }
 
@@ -67,7 +67,7 @@ App::Cme::Command::list - List applications handled by cme
 
 =head1 VERSION
 
-version 1.043
+version 1.044
 
 =head1 SYNOPSIS
 

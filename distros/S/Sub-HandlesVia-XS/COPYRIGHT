@@ -32,6 +32,23 @@ Files: Changes
  t/unit/array/shift.t
  t/unit/array/sort.t
  t/unit/array/unshift.t
+ t/unit/string/append.t
+ t/unit/string/cmp.t
+ t/unit/string/cmpi.t
+ t/unit/string/eq.t
+ t/unit/string/eqi.t
+ t/unit/string/ge.t
+ t/unit/string/gei.t
+ t/unit/string/gt.t
+ t/unit/string/gti.t
+ t/unit/string/le.t
+ t/unit/string/lei.t
+ t/unit/string/lt.t
+ t/unit/string/lti.t
+ t/unit/string/ne.t
+ t/unit/string/nei.t
+ t/unit/string/prepend.t
+ t/unit/string/set.t
 Copyright: Copyright 2026 Toby Inkster.
 License: GPL-1.0+ or Artistic-1.0
 
@@ -43,9 +60,11 @@ Files: INSTALL
  fallback/const-xs.inc
  ppport.h
  src/Array.c
- src/ShouldReturn.c
- src/Types.c
- src/Unpacking.c
+ src/String.c
+ src/should_return.c
+ src/sorting.c
+ src/types.c
+ src/unpacking.c
  xshelper.h
 Copyright: Unknown
 License: Unknown

@@ -4,7 +4,7 @@
       "Nigel Horne <njh@nigelhorne.com>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010",
+   "generated_by" : "ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150011",
    "license" : [
       "open_source"
    ],
@@ -43,9 +43,9 @@
             "List::Util" : "1.33",
             "Log::Abstraction" : "0.1",
             "Net::CIDR" : "0",
-            "Object::Configure" : "0.12",
+            "Object::Configure" : "0.19",
             "Params::Get" : "0.13",
-            "Params::Validate::Strict" : "0.21",
+            "Params::Validate::Strict" : "0.28",
             "Return::Set" : "0",
             "Scalar::Util" : "0",
             "Socket" : "0",
@@ -90,8 +90,8 @@
    "resources" : {
       "bugtracker" : {
          "mailto" : "bug-CGI-Info@rt.cpan.org",
-         "web" : "https://github.com/nigelhorne/CGI-Info/issues",
-         "x_url" : "https://github.com/nigelhorne/CGI-Info/issues"
+         "web" : "https://rt.cpan.org/Public/Dist/Display.html?Name=CGI-Info",
+         "x_url" : "https://rt.cpan.org/Public/Dist/Display.html?Name=CGI-Info"
       },
       "homepage" : "https://metacpan.org/pod/CGI::Info",
       "repository" : {
@@ -101,6 +101,6 @@
          "x_repository" : "https://github.com/nigelhorne/CGI-Info"
       }
    },
-   "version" : "1.08",
+   "version" : "1.09",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

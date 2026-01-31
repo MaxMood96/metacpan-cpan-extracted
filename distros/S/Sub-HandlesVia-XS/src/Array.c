@@ -185,107 +185,8 @@ typedef struct {
         }                                                               \
     } STMT_END
 
-#define GET_INDEX_FROM_SOURCE(z)                                        \
-    I32 ix = 0;                                                         \
-    bool has_ix = FALSE;                                                \
-    STMT_START {                                                        \
-        if (sig->has_index) {                                           \
-            has_ix = TRUE;                                              \
-            ix = sig->index;                                            \
-        }                                                               \
-        else if (items > z) {                                           \
-            bool ok = check_type(ST(z), TYPE_BASE_INT, NULL);           \
-            if (!ok) type_error(ST(z), "$_", z, TYPE_BASE_INT, NULL);   \
-            has_ix = FALSE;                                             \
-            ix = SvIV(ST(z));                                           \
-        }                                                               \
-        else {                                                          \
-            croak(WRONG_NUMBER_OF_PARAMETERS);                          \
-        }                                                               \
-    } STMT_END
-
-#define GET_CURRIED_SV_FROM_SOURCE(z)                                   \
-    SV* curried_sv = NULL;                                              \
-    bool has_curried_sv = FALSE;                                        \
-    STMT_START {                                                        \
-        if (sig->has_curried_sv) {                                      \
-            has_curried_sv = TRUE;                                      \
-            curried_sv = sig->curried_sv;                               \
-        }                                                               \
-        else if (items > z) {                                           \
-            has_curried_sv = FALSE;                                     \
-            curried_sv = newSVsv(ST(z));                                \
-        }                                                               \
-        else {                                                          \
-            croak(WRONG_NUMBER_OF_PARAMETERS);                          \
-        }                                                               \
-    } STMT_END
-
- #define MAYBE_GET_CURRIED_SV_FROM_SOURCE(z)                             \
-     SV* curried_sv = NULL;                                              \
-     bool has_curried_sv = FALSE;                                        \
-     STMT_START {                                                        \
-         if (sig->has_curried_sv) {                                      \
-             has_curried_sv = TRUE;                                      \
-             curried_sv = sig->curried_sv;                               \
-         }                                                               \
-         else if (items > z) {                                           \
-             has_curried_sv = FALSE;                                     \
-             curried_sv = newSVsv(ST(z));                                \
-         }                                                               \
-     } STMT_END
-
-#define GET_CALLBACK_FROM_SOURCE(z)                                     \
-    CV *callback = NULL;                                                \
-    bool has_callback = FALSE;                                          \
-    STMT_START {                                                        \
-        if (sig->callback) {                                            \
-            if (items > 1 && SvOK(ST(1))) {                             \
-                if (SvROK(ST(1)) && SvTYPE(SvRV(ST(1))) == SVt_PVCV) {  \
-                    croak(WRONG_NUMBER_OF_PARAMETERS);                  \
-                }                                                       \
-            }                                                           \
-            callback = sig->callback;                                   \
-            has_callback = TRUE;                                        \
-        }                                                               \
-        else if (items <= z ) {                                         \
-            croak(WRONG_NUMBER_OF_PARAMETERS);                          \
-        }                                                               \
-        else if ( !SvROK(ST(z)) || SvTYPE(SvRV(ST(z))) != SVt_PVCV ) {  \
-            type_error(ST(z), "$_", z, TYPE_BASE_CODEREF, NULL);        \
-        }                                                               \
-        else {                                                          \
-            callback = (CV *)SvRV(ST(z));                               \
-        }                                                               \
-    } STMT_END
-
-#define MAYBE_GET_CALLBACK_FROM_SOURCE(z)                               \
-    CV *callback = NULL;                                                \
-    bool has_callback = FALSE;                                          \
-    STMT_START {                                                        \
-        if (sig->callback) {                                            \
-            if (items > z && SvOK(ST(z))) {                             \
-                if (SvROK(ST(z)) && SvTYPE(SvRV(ST(z))) == SVt_PVCV) {  \
-                    croak(WRONG_NUMBER_OF_PARAMETERS);                  \
-                }                                                       \
-            }                                                           \
-            callback = sig->callback;                                   \
-            has_callback = TRUE;                                        \
-        }                                                               \
-        else {                                                          \
-            if (items <= z                                              \
-                || !SvROK(ST(z))                                        \
-                || SvTYPE(SvRV(ST(z))) != SVt_PVCV) {                   \
-                callback = NULL;                                        \
-            }                                                           \
-            else {                                                      \
-                callback = (CV *)SvRV(ST(z));                           \
-            }                                                           \
-        }                                                               \
-    } STMT_END
-
 SV*
-shvxs_return_sv_object(
+shvxs_array_return_sv_object(
     SV*               invocant,
     AV*               array,
     char*             return_class,
@@ -389,3 +290,113 @@ shvxs_return_sv_object(
 
     croak("Invalid ArraySource value");
 }
+
+#define RETURN_ARRAY_EXPECTATION                                        \
+    STMT_START {                                                        \
+        switch (sig->method_return_pattern) {                           \
+        case SHOULD_RETURN_NOTHING: {                                   \
+            if (GIMME_V == G_SCALAR) {                                  \
+                XSRETURN_UNDEF;                                         \
+            }                                                           \
+            XSRETURN_EMPTY;                                             \
+        }                                                               \
+                                                                        \
+        case SHOULD_RETURN_UNDEF:                                       \
+            XSRETURN_UNDEF;                                             \
+                                                                        \
+        case SHOULD_RETURN_TRUE:                                        \
+            XSRETURN_YES;                                               \
+                                                                        \
+        case SHOULD_RETURN_FALSE:                                       \
+            XSRETURN_NO;                                                \
+                                                                        \
+        case SHOULD_RETURN_INVOCANT:                                    \
+            ST(0) = sv_2mortal(newSVsv(invocant));                      \
+            XSRETURN(1);                                                \
+                                                                        \
+        case SHOULD_RETURN_VAL:                                         \
+            ST(0) = val;                                                \
+            XSRETURN(1);                                                \
+                                                                        \
+        case SHOULD_RETURN_COUNT:                                       \
+            I32 n = av_len(array) + 1;                                  \
+            ST(0) = sv_2mortal(newSViv(n));                             \
+            XSRETURN(1);                                                \
+                                                                        \
+        case SHOULD_RETURN_ARRAY:                                       \
+        case SHOULD_RETURN_ARRAYBLESS: {                                \
+            I32 n = av_len(array) + 1;                                  \
+                                                                        \
+            if (GIMME_V == G_SCALAR) {                                  \
+                enum ReturnPattern rp = sig->method_return_pattern;     \
+                if ( rp == SHOULD_RETURN_ARRAY ) {                      \
+                    ST(0) = sv_2mortal(newSViv(n));                     \
+                    XSRETURN(1);                                        \
+                }                                                       \
+                else {                                                  \
+                    ST(0) = shvxs_array_return_sv_object(               \
+                        invocant,                                       \
+                        array,                                          \
+                        sig->method_return_class,                       \
+                        sig->method_return_constructor,                 \
+                        sig->arr_source,                                \
+                        sig->arr_source_string,                         \
+                        sig->arr_source_index                           \
+                    );                                                  \
+                    XSRETURN(1);                                        \
+                }                                                       \
+            }                                                           \
+                                                                        \
+            if (n > 0) {                                                \
+                SP = MARK;                                              \
+                EXTEND(SP, n);                                          \
+                for (I32 i = 0; i < n; i++) {                           \
+                    SV **svp = av_fetch(array, i, 0);                   \
+                    PUSHs(svp ? sv_2mortal(newSVsv(*svp))               \
+                               : &PL_sv_undef);                         \
+                }                                                       \
+            }                                                           \
+            XSRETURN(n);                                                \
+        }                                                               \
+                                                                        \
+        case SHOULD_RETURN_OUT:                                         \
+        case SHOULD_RETURN_OUTBLESS: {                                  \
+            I32 n = av_len(out) + 1;                                    \
+                                                                        \
+            if (GIMME_V == G_SCALAR) {                                  \
+                enum ReturnPattern rp = sig->method_return_pattern;     \
+                if ( rp == SHOULD_RETURN_OUT ) {                        \
+                    ST(0) = sv_2mortal(newSViv(n));                     \
+                    XSRETURN(1);                                        \
+                }                                                       \
+                else {                                                  \
+                    ST(0) = shvxs_array_return_sv_object(               \
+                        invocant,                                       \
+                        out,                                            \
+                        sig->method_return_class,                       \
+                        sig->method_return_constructor,                 \
+                        sig->arr_source,                                \
+                        sig->arr_source_string,                         \
+                        sig->arr_source_index                           \
+                    );                                                  \
+                    XSRETURN(1);                                        \
+                }                                                       \
+            }                                                           \
+                                                                        \
+            if (n > 0) {                                                \
+                SP = MARK;                                              \
+                EXTEND(SP, n);                                          \
+                for (I32 i = 0; i < n; i++) {                           \
+                    SV **svp = av_fetch(out, i, 0);                     \
+                    PUSHs(svp ? sv_2mortal(newSVsv(*svp))               \
+                               : &PL_sv_undef);                         \
+                }                                                       \
+            }                                                           \
+            XSRETURN(n);                                                \
+        }                                                               \
+                                                                        \
+        case SHOULD_RETURN_OTHER:                                       \
+        default:                                                        \
+            break;                                                      \
+        }                                                               \
+    } STMT_END

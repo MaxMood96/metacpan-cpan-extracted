@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use 5.010;
 
-our $VERSION = '0.13';
+our $VERSION = '0.14';
 
 use Exporter 'import';
 our @EXPORT_OK = qw(

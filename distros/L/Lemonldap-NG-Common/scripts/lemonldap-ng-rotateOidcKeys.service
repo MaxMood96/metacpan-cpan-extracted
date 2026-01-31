@@ -1,0 +1,10 @@
+[Unit]
+Description=Cron job to rotate LemonLDAP::NG OIDC keys
+After=network.target
+
+[Service]
+User=__APACHEUSER__
+ExecStart=__BINDIR__/rotateOidcKeys
+
+[Install]
+WantedBy=multi-user.target

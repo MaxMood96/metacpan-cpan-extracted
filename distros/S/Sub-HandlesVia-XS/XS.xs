@@ -7,7 +7,8 @@
 #define IsCodeRef(sv)   (SvROK(sv) && !SvOBJECT(SvRV(sv)) && SvTYPE(SvRV(sv)) == SVt_PVCV)
 #define IsScalarRef(sv) (SvROK(sv) && !SvOBJECT(SvRV(sv)) && SvTYPE(SvRV(sv)) <= SVt_PVMG)
 
-#define WRONG_NUMBER_OF_PARAMETERS "Wrong number of parameters"
+#define INSTALL_CONST(module, name)   newCONSTSUB(module, #name, newSViv(name))
+#define WRONG_NUMBER_OF_PARAMETERS    "Wrong number of parameters"
 
 #define SV_SAFE_COPY(val)                                 \
     (                                                     \
@@ -17,60 +18,14 @@
     )
 
 // Utility macros, typedefs, etc.
-#include "src/Types.c"
-#include "src/ShouldReturn.c"
-#include "src/Unpacking.c"
+#include "src/types.c"
+#include "src/should_return.c"
+#include "src/unpacking.c"
+#include "src/sorting.c"
 
-// Different types, corresponding to Sub::HandlesVia
+// Type-specific macros, typedefs, etc.
 #include "src/Array.c"
-
-#define INSTALL_CONST(module, name) newCONSTSUB(module, #name, newSViv(name))
-#define UNPACK_SIG(type) const type *sig = (const type *) CvXSUBANY(cv).any_ptr
-
-typedef struct {
-#ifdef USE_ITHREADS
-    pTHX;
-#endif
-    CV *callback;
-} sort_ctx_t;
-
-static int
-sv_cmp_with_optional_callback(const void *a, const void *b, void *ctx_void) {
-    sort_ctx_t *ctx = (sort_ctx_t *)ctx_void;
-#ifdef USE_ITHREADS
-    dTHXa(ctx->aTHX);
-#endif
-
-    SV *lhs = *(SV **)a;
-    SV *rhs = *(SV **)b;
-
-    /* Fast path: no callback → string cmp */
-    if (!ctx->callback) {
-        return sv_cmp(lhs, rhs);
-    }
-
-    /* Callback-based comparison */
-    dSP;
-    ENTER;
-    SAVETMPS;
-
-    PUSHMARK(SP);
-    XPUSHs(lhs);
-    XPUSHs(rhs);
-    PUTBACK;
-
-    call_sv((SV *)ctx->callback, G_SCALAR);
-
-    SPAGAIN;
-    SV *ret = POPs;
-    int cmp = SvIV(ret);
-
-    PUTBACK;
-    FREETMPS;
-    LEAVE;
-
-    return cmp;
-}
+#include "src/String.c"
 
 MODULE = Sub::HandlesVia::XS  PACKAGE = Sub::HandlesVia::XS
 
@@ -102,6 +57,12 @@ BOOT:
     INSTALL_CONST(stash, ARRAY_SRC_DEREF_HASH);
     INSTALL_CONST(stash, ARRAY_SRC_CALL_METHOD);
 
+    INSTALL_CONST(stash, STR_SRC_INVOCANT);
+    INSTALL_CONST(stash, STR_SRC_DEREF_SCALAR);
+    INSTALL_CONST(stash, STR_SRC_DEREF_ARRAY);
+    INSTALL_CONST(stash, STR_SRC_DEREF_HASH);
+    INSTALL_CONST(stash, STR_SRC_CALL_METHOD);
+
     INSTALL_CONST(stash, SHOULD_RETURN_NOTHING);
     INSTALL_CONST(stash, SHOULD_RETURN_UNDEF);
     INSTALL_CONST(stash, SHOULD_RETURN_FALSE);
@@ -114,6 +75,7 @@ BOOT:
     INSTALL_CONST(stash, SHOULD_RETURN_OUTBLESS);
     INSTALL_CONST(stash, SHOULD_RETURN_VAL);
     INSTALL_CONST(stash, SHOULD_RETURN_COUNT);
+    INSTALL_CONST(stash, SHOULD_RETURN_STRING);
 }
 
 #### array : accessor
@@ -221,19 +183,23 @@ CODE:
 
     val = &PL_sv_yes;
 
+    SV *sv_dollar_underscore = get_sv("_", 0);
+    SV *ixsv = sv_2mortal(newSViv(0));
     I32 len = av_len(array) + 1;
+    
+    ENTER;
+    SAVETMPS;
+
     for (I32 i = 0; i < len; i++) {
         SV **svp = av_fetch(array, i, 0);
         if (!svp) continue;
+        SV *elem = *svp;
+        sv_setsv(sv_dollar_underscore, elem);
+        sv_setiv(ixsv, i);
 
-        SV *tmp = sv_2mortal(newSVsv(*svp));
-        sv_setsv(get_sv("_", 0), tmp);
-
-        ENTER;
-        SAVETMPS;
         PUSHMARK(SP);
-        XPUSHs(tmp);
-        XPUSHs(sv_2mortal(newSViv(i)));
+        XPUSHs(elem);
+        XPUSHs(ixsv);
         PUTBACK;
 
         I32 count = call_sv((SV *)callback, G_SCALAR);
@@ -247,16 +213,17 @@ CODE:
 
         if (!SvTRUE(ret)) {
             PUTBACK;
-            FREETMPS;
-            LEAVE;
             val = &PL_sv_no;
             break;
         }
 
         PUTBACK;
         FREETMPS;
-        LEAVE;
+        SAVETMPS;
     }
+
+    FREETMPS;
+    LEAVE;
 
     RETURN_ARRAY_EXPECTATION;
 }
@@ -278,19 +245,23 @@ CODE:
 
     val = &PL_sv_no;
 
+    SV *sv_dollar_underscore = get_sv("_", 0);
+    SV *ixsv = sv_2mortal(newSViv(0));
     I32 len = av_len(array) + 1;
+
+    ENTER;
+    SAVETMPS;
+
     for (I32 i = 0; i < len; i++) {
         SV **svp = av_fetch(array, i, 0);
         if (!svp) continue;
+        SV *elem = *svp;
+        sv_setsv(sv_dollar_underscore, elem);
+        sv_setiv(ixsv, i);
 
-        SV *tmp = sv_2mortal(newSVsv(*svp));
-        sv_setsv(get_sv("_", 0), tmp);
-
-        ENTER;
-        SAVETMPS;
         PUSHMARK(SP);
-        XPUSHs(tmp);
-        XPUSHs(sv_2mortal(newSViv(i)));
+        XPUSHs(elem);
+        XPUSHs(ixsv);
         PUTBACK;
 
         I32 count = call_sv((SV *)callback, G_SCALAR);
@@ -304,16 +275,17 @@ CODE:
 
         if (SvTRUE(ret)) {
             PUTBACK;
-            FREETMPS;
-            LEAVE;
             val = &PL_sv_yes;
             break;
         }
 
         PUTBACK;
         FREETMPS;
-        LEAVE;
+        SAVETMPS;
     }
+
+    FREETMPS;
+    LEAVE;
 
     RETURN_ARRAY_EXPECTATION;
 }
@@ -351,9 +323,8 @@ CODE:
     UNPACK_SIG(shvxs_array_SIMPLE_SIG);
     GET_ARRAY_FROM_SOURCE;
 
-    I32 n = av_len(array) + 1;
-    val = newSViv(n);
-
+    SETVAL_INT( av_len(array) + 1 );
+    
     RETURN_ARRAY_EXPECTATION;
 }
 
@@ -374,20 +345,23 @@ CODE:
 
     val = &PL_sv_undef;
 
+    SV *sv_dollar_underscore = get_sv("_", 0);
+    SV *ixsv = sv_2mortal(newSViv(0));
     I32 len = av_len(array) + 1;
+
+    ENTER;
+    SAVETMPS;
+
     for (I32 i = 0; i < len; i++) {
         SV **svp = av_fetch(array, i, 0);
         if (!svp) continue;
-
         SV *elem = *svp;
-        SV *tmp = sv_2mortal(newSVsv(elem));
-        sv_setsv(get_sv("_", 0), tmp);
+        sv_setsv(sv_dollar_underscore, elem);
+        sv_setiv(ixsv, i);
 
-        ENTER;
-        SAVETMPS;
         PUSHMARK(SP);
-        XPUSHs(tmp);
-        XPUSHs(sv_2mortal(newSViv(i)));
+        XPUSHs(elem);
+        XPUSHs(ixsv);
         PUTBACK;
 
         I32 count = call_sv((SV *)callback, G_SCALAR);
@@ -401,16 +375,17 @@ CODE:
 
         if (SvTRUE(ret)) {
             PUTBACK;
-            FREETMPS;
-            LEAVE;
             val = newSVsv(elem);
             break;
         }
 
         PUTBACK;
         FREETMPS;
-        LEAVE;
+        SAVETMPS;
     }
+
+    FREETMPS;
+    LEAVE;
 
     RETURN_ARRAY_EXPECTATION;
 }
@@ -430,25 +405,34 @@ CODE:
     GET_CALLBACK_FROM_SOURCE(1);
     if ( items != ( has_callback ? 1 : 2 ) ) croak(WRONG_NUMBER_OF_PARAMETERS);
 
+    SV *sv_dollar_underscore = get_sv("_", 0);
+    SV *ixsv = sv_2mortal(newSViv(0));
     I32 len = av_len(array) + 1;
+
+    ENTER;
+    SAVETMPS;
+
     for (I32 i = 0; i < len; i++) {
         SV **svp = av_fetch(array, i, 0);
         if (!svp) continue;
         SV *elem = *svp;
-        SV *tmp = newSVsv(elem);
-        sv_2mortal(tmp);
-        SV *sv_dollar_underscore = get_sv("_", 0);
-        sv_setsv(sv_dollar_underscore, tmp);
-        ENTER;
-        SAVETMPS;
+        sv_setsv(sv_dollar_underscore, elem);
+        sv_setiv(ixsv, i);
+
         PUSHMARK(SP);
-        XPUSHs(tmp);
-        XPUSHs(sv_2mortal(newSViv(i)));
+        XPUSHs(elem);
+        XPUSHs(ixsv);
         PUTBACK;
+
         call_sv((SV*)callback, G_VOID | G_DISCARD);
+        SPAGAIN;
+
         FREETMPS;
-        LEAVE;
+        SAVETMPS;
     }
+
+    FREETMPS;
+    LEAVE;
 
     RETURN_ARRAY_EXPECTATION;
 }
@@ -501,23 +485,26 @@ CODE:
 
     out = newAV();
 
+    SV *sv_dollar_underscore = get_sv("_", 0);
+    SV *ixsv = sv_2mortal(newSViv(0));
     I32 len = av_len(array) + 1;
+
+    ENTER;
+    SAVETMPS;
+
     for (I32 i = 0; i < len; i++) {
         SV **svp = av_fetch(array, i, 0);
         if (!svp) continue;
+        SV *elem = *svp;
+        sv_setsv(sv_dollar_underscore, elem);
+        sv_setiv(ixsv, i);
 
-        SV *tmp = sv_2mortal(newSVsv(*svp));
-        sv_setsv(get_sv("_", 0), tmp);
-
-        ENTER;
-        SAVETMPS;
         PUSHMARK(SP);
-        XPUSHs(tmp);
-        XPUSHs(sv_2mortal(newSViv(i)));
+        XPUSHs(elem);
+        XPUSHs(ixsv);
         PUTBACK;
 
         I32 count = call_sv((SV *)callback, G_SCALAR);
-
         SPAGAIN;
 
         SV *ret = POPs;
@@ -526,8 +513,11 @@ CODE:
 
         PUTBACK;
         FREETMPS;
-        LEAVE;
+        SAVETMPS;
     }
+
+    FREETMPS;
+    LEAVE;
 
     RETURN_ARRAY_EXPECTATION;
 }
@@ -546,7 +536,7 @@ CODE:
     UNPACK_SIG(shvxs_array_SIMPLE_SIG);
     GET_ARRAY_FROM_SOURCE;
 
-    val = (av_len(array) < 0) ? &PL_sv_yes : &PL_sv_no;
+    SETVAL_BOOL( av_len(array) < 0 );
 
     RETURN_ARRAY_EXPECTATION;
 }
@@ -611,19 +601,23 @@ CODE:
 
     out = newAV();
 
+    SV *sv_dollar_underscore = get_sv("_", 0);
+    SV *ixsv = sv_2mortal(newSViv(0));
     I32 len = av_len(array) + 1;
+
+    ENTER;
+    SAVETMPS;
+
     for (I32 i = 0; i < len; i++) {
         SV **svp = av_fetch(array, i, 0);
         if (!svp) continue;
+        SV *elem = *svp;
+        sv_setsv(sv_dollar_underscore, elem);
+        sv_setiv(ixsv, i);
 
-        SV *tmp = sv_2mortal(newSVsv(*svp));
-        sv_setsv(get_sv("_", 0), tmp);
-
-        ENTER;
-        SAVETMPS;
         PUSHMARK(SP);
-        XPUSHs(tmp);
-        XPUSHs(sv_2mortal(newSViv(i)));
+        XPUSHs(elem);
+        XPUSHs(ixsv);
         PUTBACK;
 
         I32 count = call_sv((SV *)callback, G_ARRAY);
@@ -640,8 +634,11 @@ CODE:
         
         PUTBACK;
         FREETMPS;
-        LEAVE;
+        SAVETMPS;
     }
+
+    FREETMPS;
+    LEAVE;
 
     RETURN_ARRAY_EXPECTATION;
 }
@@ -678,6 +675,8 @@ shvxs_array_push (SV *invocant, ...)
 CODE:
 {
     dTHX;
+    dSP;
+
     UNPACK_SIG(shvxs_array_NEW_ELEMS_SIG);
     GET_ARRAY_FROM_SOURCE;
 
@@ -831,13 +830,7 @@ CODE:
 #endif
         ctx.callback = callback;
 
-        qsort_r(
-            elems,
-            len,
-            sizeof(SV *),
-            sv_cmp_with_optional_callback,
-            &ctx
-        );
+        SHVXS_QSORT(elems, len, sizeof(SV *), &ctx);
 
         av_extend(out, len - 1);
 
@@ -858,6 +851,8 @@ shvxs_array_unshift (SV *invocant, ...)
 CODE:
 {
     dTHX;
+    dSP;
+
     UNPACK_SIG(shvxs_array_NEW_ELEMS_SIG); // reuse from push
     GET_ARRAY_FROM_SOURCE;
 
@@ -1200,3 +1195,530 @@ CODE:
     XSRETURN_EMPTY;
 }
 
+#### string : append
+
+void
+shvxs_string_append (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_string_SETTER_SIG);
+    GET_STRING_FROM_SOURCE;
+    GET_CURRIED_SV_FROM_SOURCE(1);
+    COMMON_STRING_PARAM_COUNT_CHECK;
+    CHECK_CURRIED_SV_IS_STRING;
+
+    SV *tmp = newSVsv(string);
+    SvREFCNT_inc(tmp);
+    sv_catsv(tmp, curried_sv);
+
+    CHECK_TYPE(ok, tmp, sig->type, sig->type_cv);
+    TRY_COERCE_TYPE(ok, tmp, sig->type, sig->type_cv, sig->coercion_cv);
+    if (!ok) type_error(tmp, "$newvalue", -1, sig->type, sig->type_tiny);
+
+    SET_STRING(tmp);
+    SvREFCNT_dec(tmp);
+
+    RETURN_STRING_EXPECTATION;
+}
+
+#### string : cmp
+
+void
+shvxs_string_cmp (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_string_CMP_SIG);
+    GET_STRING_FROM_SOURCE;
+    GET_CURRIED_SV_FROM_SOURCE(1);
+    COMMON_STRING_PARAM_COUNT_CHECK;
+    CHECK_CURRIED_SV_IS_STRING;
+
+    SETVAL_INT( sv_cmp(string, curried_sv) );
+
+    RETURN_STRING_EXPECTATION;
+}
+
+#### string : cmpi
+
+void
+shvxs_string_cmpi (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_string_CMP_SIG);
+    GET_STRING_FROM_SOURCE;
+    GET_CURRIED_SV_FROM_SOURCE(1);
+    COMMON_STRING_PARAM_COUNT_CHECK;
+    CHECK_CURRIED_SV_IS_STRING;
+
+    SETVAL_INT( SV_CMP_CI(string, curried_sv) );
+
+    RETURN_STRING_EXPECTATION;
+}
+
+#### string : eq
+
+void
+shvxs_string_eq (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_string_CMP_SIG);
+    GET_STRING_FROM_SOURCE;
+    GET_CURRIED_SV_FROM_SOURCE(1);
+    COMMON_STRING_PARAM_COUNT_CHECK;
+    CHECK_CURRIED_SV_IS_STRING;
+
+    SETVAL_BOOL( sv_eq(string, curried_sv) );
+
+    RETURN_STRING_EXPECTATION;
+}
+
+#### string : eqi
+
+void
+shvxs_string_eqi (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_string_CMP_SIG);
+    GET_STRING_FROM_SOURCE;
+    GET_CURRIED_SV_FROM_SOURCE(1);
+    COMMON_STRING_PARAM_COUNT_CHECK;
+    CHECK_CURRIED_SV_IS_STRING;
+
+    SETVAL_BOOL( SV_CMP_CI(string, curried_sv)==0 );
+
+    RETURN_STRING_EXPECTATION;
+}
+
+#### string : ge
+
+void
+shvxs_string_ge (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_string_CMP_SIG);
+    GET_STRING_FROM_SOURCE;
+    GET_CURRIED_SV_FROM_SOURCE(1);
+    COMMON_STRING_PARAM_COUNT_CHECK;
+    CHECK_CURRIED_SV_IS_STRING;
+
+    SETVAL_BOOL( sv_cmp(string, curried_sv) >= 0 );
+
+    RETURN_STRING_EXPECTATION;
+}
+
+#### string : gei
+
+void
+shvxs_string_gei (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_string_CMP_SIG);
+    GET_STRING_FROM_SOURCE;
+    GET_CURRIED_SV_FROM_SOURCE(1);
+    COMMON_STRING_PARAM_COUNT_CHECK;
+    CHECK_CURRIED_SV_IS_STRING;
+
+    SETVAL_BOOL( SV_CMP_CI(string, curried_sv) >= 0 );
+
+    RETURN_STRING_EXPECTATION;
+}
+
+#### string : gt
+
+void
+shvxs_string_gt (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_string_CMP_SIG);
+    GET_STRING_FROM_SOURCE;
+    GET_CURRIED_SV_FROM_SOURCE(1);
+    COMMON_STRING_PARAM_COUNT_CHECK;
+    CHECK_CURRIED_SV_IS_STRING;
+
+    SETVAL_BOOL( sv_cmp(string, curried_sv) > 0 );
+
+    RETURN_STRING_EXPECTATION;
+}
+
+#### string : gti
+
+void
+shvxs_string_gti (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_string_CMP_SIG);
+    GET_STRING_FROM_SOURCE;
+    GET_CURRIED_SV_FROM_SOURCE(1);
+    COMMON_STRING_PARAM_COUNT_CHECK;
+    CHECK_CURRIED_SV_IS_STRING;
+
+    SETVAL_BOOL( SV_CMP_CI(string, curried_sv) > 0 );
+
+    RETURN_STRING_EXPECTATION;
+}
+
+#### string : le
+
+void
+shvxs_string_le (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_string_CMP_SIG);
+    GET_STRING_FROM_SOURCE;
+    GET_CURRIED_SV_FROM_SOURCE(1);
+    COMMON_STRING_PARAM_COUNT_CHECK;
+    CHECK_CURRIED_SV_IS_STRING;
+
+    SETVAL_BOOL( sv_cmp(string, curried_sv) <= 0 );
+
+    RETURN_STRING_EXPECTATION;
+}
+
+#### string : lei
+
+void
+shvxs_string_lei (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_string_CMP_SIG);
+    GET_STRING_FROM_SOURCE;
+    GET_CURRIED_SV_FROM_SOURCE(1);
+    COMMON_STRING_PARAM_COUNT_CHECK;
+    CHECK_CURRIED_SV_IS_STRING;
+
+    SETVAL_BOOL( SV_CMP_CI(string, curried_sv) <= 0 );
+
+    RETURN_STRING_EXPECTATION;
+}
+
+#### string : lt
+
+void
+shvxs_string_lt (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_string_CMP_SIG);
+    GET_STRING_FROM_SOURCE;
+    GET_CURRIED_SV_FROM_SOURCE(1);
+    COMMON_STRING_PARAM_COUNT_CHECK;
+    CHECK_CURRIED_SV_IS_STRING;
+
+    SETVAL_BOOL( sv_cmp(string, curried_sv) < 0 );
+
+    RETURN_STRING_EXPECTATION;
+}
+
+#### string : lti
+
+void
+shvxs_string_lti (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_string_CMP_SIG);
+    GET_STRING_FROM_SOURCE;
+    GET_CURRIED_SV_FROM_SOURCE(1);
+    COMMON_STRING_PARAM_COUNT_CHECK;
+    CHECK_CURRIED_SV_IS_STRING;
+
+    SETVAL_BOOL( SV_CMP_CI(string, curried_sv) < 0 );
+
+    RETURN_STRING_EXPECTATION;
+}
+
+#### string : ne
+
+void
+shvxs_string_ne (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_string_CMP_SIG);
+    GET_STRING_FROM_SOURCE;
+    GET_CURRIED_SV_FROM_SOURCE(1);
+    COMMON_STRING_PARAM_COUNT_CHECK;
+    CHECK_CURRIED_SV_IS_STRING;
+
+    SETVAL_BOOL( !sv_eq(string, curried_sv) );
+
+    RETURN_STRING_EXPECTATION;
+}
+
+#### string : nei
+
+void
+shvxs_string_nei (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_string_CMP_SIG);
+    GET_STRING_FROM_SOURCE;
+    GET_CURRIED_SV_FROM_SOURCE(1);
+    COMMON_STRING_PARAM_COUNT_CHECK;
+    CHECK_CURRIED_SV_IS_STRING;
+
+    SETVAL_BOOL( SV_CMP_CI(string, curried_sv)!=0 );
+
+    RETURN_STRING_EXPECTATION;
+}
+
+#### string : prepend
+
+void
+shvxs_string_prepend (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_string_SETTER_SIG);
+    GET_STRING_FROM_SOURCE;
+    GET_CURRIED_SV_FROM_SOURCE(1);
+    COMMON_STRING_PARAM_COUNT_CHECK;
+    CHECK_CURRIED_SV_IS_STRING;
+
+    SV *tmp = newSVsv(curried_sv);
+    SvREFCNT_inc(tmp);
+    sv_catsv(tmp, string);
+
+    CHECK_TYPE(ok, tmp, sig->type, sig->type_cv);
+    TRY_COERCE_TYPE(ok, tmp, sig->type, sig->type_cv, sig->coercion_cv);
+    if (!ok) type_error(tmp, "$newvalue", -1, sig->type, sig->type_tiny);
+
+    SET_STRING(tmp);
+    SvREFCNT_dec(tmp);
+
+    RETURN_STRING_EXPECTATION;
+}
+
+#### string : set
+
+void
+shvxs_string_set (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_string_SETTER_SIG);
+    GET_STRING_FROM_SOURCE;
+    GET_CURRIED_SV_FROM_SOURCE(1);
+    COMMON_STRING_PARAM_COUNT_CHECK;
+
+    bool ok;
+    CHECK_TYPE(ok, curried_sv, sig->type, sig->type_cv);
+    TRY_COERCE_TYPE(ok, curried_sv, sig->type, sig->type_cv, sig->coercion_cv);
+    if (!ok) {
+        if (has_curried_sv) {
+            type_error(curried_sv, "$curried", 0, sig->type, sig->type_tiny);
+        }
+        else {
+            type_error(curried_sv, "$_", 1, sig->type, sig->type_tiny);
+        }
+    }
+
+    SET_STRING(curried_sv);
+
+    RETURN_STRING_EXPECTATION;
+}
+
+#### string : INSTALL(CMP)
+
+void
+INSTALL_shvxs_string_CMP(SV *name, SV *href)
+ALIAS:
+    INSTALL_shvxs_string_eq          = 1
+    INSTALL_shvxs_string_ne          = 2
+    INSTALL_shvxs_string_gt          = 3
+    INSTALL_shvxs_string_ge          = 4
+    INSTALL_shvxs_string_lt          = 5
+    INSTALL_shvxs_string_le          = 6
+    INSTALL_shvxs_string_cmp         = 7
+    INSTALL_shvxs_string_eqi         = 17
+    INSTALL_shvxs_string_nei         = 18
+    INSTALL_shvxs_string_gti         = 19
+    INSTALL_shvxs_string_gei         = 20
+    INSTALL_shvxs_string_lti         = 21
+    INSTALL_shvxs_string_lei         = 22
+    INSTALL_shvxs_string_cmpi        = 23
+CODE:
+{
+    dTHX;
+
+    XSUBADDR_t op;
+    enum ReturnPattern rp;
+    switch ( ix ) {
+        case 1:
+            op = XS_Sub__HandlesVia__XS_shvxs_string_eq;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        case 2:
+            op = XS_Sub__HandlesVia__XS_shvxs_string_ne;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        case 3:
+            op = XS_Sub__HandlesVia__XS_shvxs_string_gt;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        case 4:
+            op = XS_Sub__HandlesVia__XS_shvxs_string_ge;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        case 5:
+            op = XS_Sub__HandlesVia__XS_shvxs_string_lt;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        case 6:
+            op = XS_Sub__HandlesVia__XS_shvxs_string_le;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        case 7:
+            op = XS_Sub__HandlesVia__XS_shvxs_string_cmp;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        case 17:
+            op = XS_Sub__HandlesVia__XS_shvxs_string_eqi;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        case 18:
+            op = XS_Sub__HandlesVia__XS_shvxs_string_nei;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        case 19:
+            op = XS_Sub__HandlesVia__XS_shvxs_string_gti;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        case 20:
+            op = XS_Sub__HandlesVia__XS_shvxs_string_gei;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        case 21:
+            op = XS_Sub__HandlesVia__XS_shvxs_string_lti;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        case 22:
+            op = XS_Sub__HandlesVia__XS_shvxs_string_lei;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        case 23:
+            op = XS_Sub__HandlesVia__XS_shvxs_string_cmpi;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        default:
+            croak("PANIC!");
+    }
+
+    shvxs_string_CMP_SIG *sig;
+    Newxz(sig, 1, shvxs_string_CMP_SIG);
+    UNPACKING_HV_FROM_SV (href, hv);
+    UNPACKING_GET_ENUM   (hv, sig, str_source,            ARRAY_SRC_INVOCANT, ArraySource);
+    UNPACKING_GET_STRING (hv, sig, str_source_string,     NULL);
+    UNPACKING_GET_STRING (hv, sig, str_source_fallback,   NULL);
+    UNPACKING_GET_I32    (hv, sig, str_source_index,      0);
+    UNPACKING_MAYBE_SV   (hv, sig, curried_sv, has_curried_sv);
+    UNPACKING_GET_ENUM   (hv, sig, method_return_pattern, rp, ReturnPattern);
+    UNPACKING_GET_STRING (hv, sig, method_return_class,       NULL);
+    UNPACKING_GET_STRING (hv, sig, method_return_constructor, NULL);
+
+    CV *cv = newXS( SvPV_nolen(name), op, (char *)__FILE__ );
+    CvXSUBANY(cv).any_ptr = sig;
+    XSRETURN_EMPTY;
+}
+
+#### string : INSTALL(SETTER)
+
+void
+INSTALL_shvxs_string_SETTER(SV *name, SV *href)
+ALIAS:
+    INSTALL_shvxs_string_set         = 1
+    INSTALL_shvxs_string_append      = 2
+    INSTALL_shvxs_string_prepend     = 3
+CODE:
+{
+    dTHX;
+
+    XSUBADDR_t op;
+    enum ReturnPattern rp;
+    switch ( ix ) {
+        case 1:
+            op = XS_Sub__HandlesVia__XS_shvxs_string_set;
+            rp = SHOULD_RETURN_STRING;
+            break;
+        case 2:
+            op = XS_Sub__HandlesVia__XS_shvxs_string_append;
+            rp = SHOULD_RETURN_STRING;
+            break;
+        case 3:
+            op = XS_Sub__HandlesVia__XS_shvxs_string_prepend;
+            rp = SHOULD_RETURN_STRING;
+            break;
+        default:
+            croak("PANIC!");
+    }
+
+    shvxs_string_SETTER_SIG *sig;
+    Newxz(sig, 1, shvxs_string_SETTER_SIG);
+    UNPACKING_HV_FROM_SV (href, hv);
+    UNPACKING_GET_ENUM   (hv, sig, str_source,            ARRAY_SRC_INVOCANT, ArraySource);
+    UNPACKING_GET_STRING (hv, sig, str_source_string,     NULL);
+    UNPACKING_GET_STRING (hv, sig, str_source_fallback,   NULL);
+    UNPACKING_GET_I32    (hv, sig, str_source_index,      0);
+    UNPACKING_MAYBE_SV   (hv, sig, curried_sv, has_curried_sv);
+    UNPACKING_GET_I32    (hv, sig, type,                  TYPE_BASE_ANY);
+    UNPACKING_GET_CV     (hv, sig, type_cv);
+    UNPACKING_MAYBE_SV   (hv, sig, type_tiny,             has_type_tiny);
+    UNPACKING_GET_CV     (hv, sig, coercion_cv);
+    UNPACKING_GET_ENUM   (hv, sig, method_return_pattern, rp, ReturnPattern);
+    UNPACKING_GET_STRING (hv, sig, method_return_class,       NULL);
+    UNPACKING_GET_STRING (hv, sig, method_return_constructor, NULL);
+
+    if (sig->type != TYPE_BASE_ANY && sig->type_cv == NULL) {
+        croak("type_cv is required unless type is TYPE_BASE_ANY");
+    }
+
+    CV *cv = newXS( SvPV_nolen(name), op, (char *)__FILE__ );
+    CvXSUBANY(cv).any_ptr = sig;
+    XSRETURN_EMPTY;
+}

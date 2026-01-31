@@ -1,0 +1,5 @@
+Revision history for Clearquest
+
+2.23    2026-01-13
+        - CPAN distribution created
+        - Incorporated GetConfig logic to remove external dependency

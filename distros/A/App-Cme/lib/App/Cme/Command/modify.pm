@@ -10,7 +10,7 @@
 # ABSTRACT: Modify the configuration of an application
 
 package App::Cme::Command::modify ;
-$App::Cme::Command::modify::VERSION = '1.043';
+$App::Cme::Command::modify::VERSION = '1.044';
 use strict;
 use warnings;
 use 5.10.1;
@@ -83,7 +83,7 @@ App::Cme::Command::modify - Modify the configuration of an application
 
 =head1 VERSION
 
-version 1.043
+version 1.044
 
 =head1 SYNOPSIS
 
@@ -98,8 +98,8 @@ These command must follow the syntax defined in L<Config::Model::Loader>
 
 Example:
 
-   cme modify dpkg 'source format="(3.0) quilt"'
-   cme modify multistrap my_mstrap.conf 'sections:base source="http://ftp.fr.debian.org"'
+   cme modify dpkg 'control source format="(3.0) quilt"'
+   cme modify ssh 'Host:"*.debian.org" User=dod'
 
 Finding the right instructions to perform a modification may be
 difficult when starting from scratch.
@@ -131,7 +131,10 @@ See L<cme/"Global Options">.
 
 =item -save
 
-Force a save even if no change was done. Useful to reformat the configuration file.
+Force a save even if no change was done by user (although some minor
+change like migrating deprecated values can be done by cme). Useful to
+minimize changes and reformat the configuration file.  Running C<cme
+modify xxx -save> is equivalent to running C<cme migrate xxx>.
 
 =item -verbose
 

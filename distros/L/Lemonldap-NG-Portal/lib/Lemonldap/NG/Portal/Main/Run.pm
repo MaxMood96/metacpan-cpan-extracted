@@ -998,8 +998,6 @@ sub cookie {
     my ( $self, %h ) = @_;
     $h{path} ||= '/';
     $h{HttpOnly} //= $self->conf->{httpOnly};
-    $h{max_age}  //= $self->conf->{cookieExpiration}
-      if ( $self->conf->{cookieExpiration} );
     $h{SameSite} ||= $self->cookieSameSite;
 
     return $self->assemble_cookie(%h);

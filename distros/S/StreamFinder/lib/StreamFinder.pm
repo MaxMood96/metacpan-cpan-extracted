@@ -153,7 +153,7 @@ soundcloud.com (non-paywalled) songs (L<StreamFinder::SoundCloud>)
 subsplash.com podcasts (L<StreamFinder::Subsplash>) (EXPERIMENTAL), 
 tunein.com (non-paywalled) radio stations and podcasts 
 (L<StreamFinder::Tunein>), vimeo.com videos (L<StreamFinder::Vimeo>), 
-youtube.com, et. al and other sites that youtube-dl/yt-dlp support 
+youtube.com, et. al and other sites that yt-dlp support 
 (L<StreamFinder::Youtube>), 
 zeno.fm radio stations and podcasts (L<StreamFinder::Zeno>), 
 and L<StreamFinder::Anystream> - search any (other) webpage URL (not supported 
@@ -201,7 +201,7 @@ able to return much beyond the stream URLs it finds, but please see it's POD
 documentation for details on what it is able to return.
 
 If you have another streaming site that is not supported, first, make sure 
-you have B<youtube-dl> installed and see if B<StreamFinder::Youtube> can 
+you have B<yt-dlp> installed and see if B<StreamFinder::Youtube> can 
 successfully fetch any streams for it.  If not, then please file a feature 
 request via email or the CPAN bug system, or (for faster service), provide a 
 Perl patch module / program source that can extract some or all of the 
@@ -453,9 +453,8 @@ L<URI::Escape>, L<HTML::Entities>, L<LWP::UserAgent>
 
 =head1 RECCOMENDS
 
-youtube-dl, or other compatable program such as yt-dlp, etc. 
-(for Youtube, Bitchute, Blogger, Brighteon, Odysee, Vimeo)
-NOTE:  Required for Youtube, Odysee, and SoundCloud to work.
+yt-dlp (for Youtube, Bitchute, Blogger, Brighteon, Odysee, Vimeo)
+NOTE:  Required for Youtube, Bitchute, and SoundCloud to work.
 
 wget
 
@@ -544,7 +543,7 @@ use strict;
 use warnings;
 use vars qw(@ISA @EXPORT $VERSION);
 
-our $VERSION = '2.50';
+our $VERSION = '2.51';
 our $DEBUG = 0;
 
 require Exporter;
@@ -606,10 +605,10 @@ sub new
 	} elsif ($url =~ m#\biheart(?:radio)?\.#i && $useit{'IHeartRadio'}) {
 		eval { require 'StreamFinder/IHeartRadio.pm'; $haveit = 1; };
 		return new StreamFinder::IHeartRadio($url, @args)  if ($haveit);
-	} elsif ($url =~ m#\btunein\.# && $useit{'Tunein'}) {  #NOTE:ALSO USES youtube-dl!
+	} elsif ($url =~ m#\btunein\.# && $useit{'Tunein'}) {  #NOTE:ALSO USES yt-dlp!
 		eval { require 'StreamFinder/Tunein.pm'; $haveit = 1; };
 		return new StreamFinder::Tunein($url, @args)  if ($haveit);
-	} elsif ($url =~ m#\bbrighteon\.com\/# && $useit{'Brighteon'}) {  #NOTE:ALSO USES youtube-dl!
+	} elsif ($url =~ m#\bbrighteon\.com\/# && $useit{'Brighteon'}) {  #NOTE:ALSO USES yt-dlp!
 		eval { require 'StreamFinder/Brighteon.pm'; $haveit = 1; };
 		return new StreamFinder::Brighteon($url, @args)  if ($haveit);
 	} elsif ($url =~ m#\bspreaker\.# && $useit{'Spreaker'}) {
@@ -621,7 +620,7 @@ sub new
 	} elsif ($url =~ m#\bradio\.net\/# && $useit{'RadioNet'}) {
 		eval { require 'StreamFinder/RadioNet.pm'; $haveit = 1; };
 		return new StreamFinder::RadioNet($url, @args)  if ($haveit);
-	} elsif ($url =~ m#\bvimeo\.# && $useit{'Vimeo'}) {  #NOTE:ALSO USES youtube-dl!
+	} elsif ($url =~ m#\bvimeo\.# && $useit{'Vimeo'}) {  #NOTE:ALSO USES yt-dlp!
 		eval { require 'StreamFinder/Vimeo.pm'; $haveit = 1; };
 		return new StreamFinder::Vimeo($url, @args)  if ($haveit);
 	} elsif ($url =~ m#\bprageru\.# && $useit{'PragerU'}) {
@@ -664,7 +663,7 @@ sub new
 		eval { require 'StreamFinder/EpochTV.pm'; $haveit = 1; };
 		return new StreamFinder::EpochTV($url, @args)  if ($haveit);
 	} elsif ($url !~ /\.m3u8$/i && $useit{'Youtube'}) {
-		#DEFAULT TO youtube-dl (EXCEPT HLS URLS) SINCE SO MANY URLS ARE HANDLED THERE NOW.
+		#DEFAULT TO yt-dlp (EXCEPT HLS URLS) SINCE SO MANY URLS ARE HANDLED THERE NOW.
 		#(WE NOW PASS HLS URLS ON TO Anystream WHICH CHECKS THEM AGAINST ANY BANDWIDTH
 		#LIMITS AND, IF A MASTER PLAYLIST, LIMITS TO STREAMS WITHIN THE LIMITS):
 		eval { require 'StreamFinder/Youtube.pm'; $haveit = 1; };

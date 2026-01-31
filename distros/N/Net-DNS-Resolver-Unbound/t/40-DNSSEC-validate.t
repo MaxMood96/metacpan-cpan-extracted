@@ -14,6 +14,7 @@ my $resolver = Net::DNS::Resolver::Unbound->new(
 	);
 
 my $root_key = '/var/lib/unbound/root.key';
+$root_key = 't/trust_anchor' unless -r $root_key;
 
 plan skip_all => 'resolver not loaded' unless $resolver;
 plan skip_all => 'unreadable root key' unless -r $root_key;

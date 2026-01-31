@@ -1,5 +1,10 @@
 -----
 
+12.0.8    2026-01-29
+   [Fixed]
+       * Mapping of '(unsigned) char' arrays broken due to use of
+         broken dependency XDR::Gen v1.1.1
+
 12.0.7    2026-01-27
    [Breaking]
        * Mapping of '(unsigned) char' arrays changed from/to strings

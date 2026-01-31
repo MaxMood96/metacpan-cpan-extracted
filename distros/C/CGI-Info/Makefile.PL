@@ -64,9 +64,9 @@ WriteMakefile(
 		'File::Spec' => 3.4,
 		'Log::Abstraction' => 0.10,
 		'Net::CIDR' => 0,
-		'Object::Configure' => 0.12,
+		'Object::Configure' => 0.19,
 		'Params::Get' => 0.13,
-		'Params::Validate::Strict' => 0.21,
+		'Params::Validate::Strict' => 0.28,
 		'Return::Set' => 0,
 		'Scalar::Util' => 0,
 		'Sys::Hostname' => 0,
@@ -98,12 +98,13 @@ WriteMakefile(
 				type => 'git',
 				url => 'git://github.com/nigelhorne/CGI-Info.git',
 				web => 'https://github.com/nigelhorne/CGI-Info',
-				# license    => 'http://dev.perl.org/licenses/',
+				# license => 'http://dev.perl.org/licenses/',
 			}, bugtracker => {
-				mailto => 'bug-CGI-Info@rt.cpan.org',
-				url => 'https://github.com/nigelhorne/CGI-Info/issues',
-				# web => 'https://rt.cpan.org/Public/Dist/Display.html?Name=CGI-Info',
-				web => 'https://github.com/nigelhorne/CGI-Info/issues'
+				web => 'https://rt.cpan.org/Public/Dist/Display.html?Name=CGI-Info',
+				url => 'https://rt.cpan.org/Public/Dist/Display.html?Name=CGI-Info',
+				# web => 'https://github.com/nigelhorne/CGI-Info/issues',
+				# url => 'https://github.com/nigelhorne/CGI-Info/issues',
+				mailto => 'bug-CGI-Info@rt.cpan.org'
 			}
 		},
 	},

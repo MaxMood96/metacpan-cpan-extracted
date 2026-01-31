@@ -19,6 +19,7 @@ subtest "Basic" => sub {
 	my $sum_topics  = 0;
 	
 	my $arr = [ 10..13 ];
+	use Data::Dumper;
 	Local::test_1( $arr, sub {
 		$sum_elems    += $_[0];
 		$sum_indices  += $_[1];

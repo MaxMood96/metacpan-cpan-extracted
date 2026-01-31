@@ -3,7 +3,7 @@ use warnings;
 
 
 package XDR::Gen;
-$XDR::Gen::VERSION = '1.1.1';
+$XDR::Gen::VERSION = '1.1.2';
 use Carp qw(croak confess);
 use IO::Handle;
 use List::Util qw(max);
@@ -641,9 +641,6 @@ sub _postproc_deserializer_array {
 sub _deserializer_array {
     my ($ast_node, $value, %args) = @_;
 
-    return __deserializer_bytes( 1, @_ )
-        if $ast_node->{type}->{name} eq 'char';
-
     my $decl = $ast_node;
     _assert_value_var($value);
 
@@ -652,9 +649,10 @@ sub _deserializer_array {
     my $iter_var = _var( '$i' );
     my $c = _indent( _indent( _deserializer_type( $decl, $value . "->[$iter_var\]",
                                                   %args ) ) );
-    my $postproc = _indent( _postproc_deserializer_array( $ast_node, $value ) );
+    my $postproc = _postproc_deserializer_array( $ast_node, $value );
     if ($decl->{variable}) {
         my $max = _resolve_to_number( $ast_node->{max}->{content} // 4294967295 );
+        $postproc = _indent( $postproc );
 
         return <<~SERIAL;
         # my (\$class, \$value, \$index, \$input) = \@_;
@@ -707,9 +705,6 @@ sub _preproc_serializer_array {
 
 sub _serializer_array {
     my ($ast_node, $value, %args) = @_;
-
-    return __serializer_bytes( 1, @_ )
-        if $ast_node->{type}->{name} eq 'char';
 
     my $decl = $ast_node;
     _assert_value_var($value);
@@ -1309,7 +1304,7 @@ XDR::Gen - Generator for XDR (de)serializers
 
 =head1 VERSION
 
-version 1.1.1
+version 1.1.2
 
 =head1 SYNOPSIS
 

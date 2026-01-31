@@ -991,12 +991,22 @@ sub run {
             );
 
             # Set SessionNotOnOrAfter
+            my $end_session_time = $time + $self->conf->{timeout};
+
+            # If a timeout for the SP's session has been set, use it unless the
+            # SSO session is already about to expire
             my $sessionNotOnOrAfterTimeout =
               $self->spOptions->{$sp}
               ->{samlSPMetaDataOptionsSessionNotOnOrAfterTimeout};
-            $sessionNotOnOrAfterTimeout ||= $self->conf->{timeout};
-            my $timeout             = $time + $sessionNotOnOrAfterTimeout;
-            my $sessionNotOnOrAfter = $self->timestamp2samldate($timeout);
+            if ( $sessionNotOnOrAfterTimeout
+                and ( time + $sessionNotOnOrAfterTimeout < $end_session_time ) )
+            {
+
+                $end_session_time = time + $sessionNotOnOrAfterTimeout;
+            }
+
+            my $sessionNotOnOrAfter =
+              $self->timestamp2samldate($end_session_time);
             $authn_statements[0]->SessionNotOnOrAfter($sessionNotOnOrAfter);
 
             $self->logger->debug(

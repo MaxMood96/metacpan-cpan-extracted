@@ -14,7 +14,7 @@ use v5.14.1;
 use warnings;
 use Syntax::Operator::Elem qw( elem_str );
 
-package Protocol::Sys::Virt::TypedParams v12.0.7;
+package Protocol::Sys::Virt::TypedParams v12.0.8;
 
 
 use Carp qw(croak);
@@ -212,7 +212,7 @@ Protocol::Sys::Virt::TypedParams - Helper routines for typed parameter values
 
 =head1 VERSION
 
-v12.0.7
+v12.0.8
 
 =head1 SYNOPSYS
 

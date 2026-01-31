@@ -5,50 +5,45 @@ use strict;
 use warnings;
 
 use Data::Gimei;
-use Test2::Bundle::More;
+use Test2::V1 -utf8;
+use Test2::Tools::Spec;
 
-my @expected;
-Data::Gimei::set_random_seed(42);
-push @expected, Data::Gimei::Name->new();
-push @expected, Data::Gimei::Name->new();
-push @expected, Data::Gimei::Address->new();
+describe "Data::Gimei deterministic random test" => sub {
+    my @expected;
+    my $seed = 42;
 
-# Same seed generates same result.
-{
-    my @actual;
-    Data::Gimei::set_random_seed(42);
-    push @actual, Data::Gimei::Name->new();
-    push @actual, Data::Gimei::Name->new();
-    push @actual, Data::Gimei::Address->new();
+    before_each setup => sub {
+        Data::Gimei::set_random_seed($seed);
+        @expected = ();
+        push @expected, Data::Gimei::Name->new();       # Name 1
+        push @expected, Data::Gimei::Name->new();       # Name 2
+        push @expected, Data::Gimei::Address->new();    # Address 1
+    };
 
-    is_deeply [ map { $_->kanji } @expected ], [ map { $_->kanji } @actual ];
-}
+    it "same seed generates same result" => sub {
+        Data::Gimei::set_random_seed($seed);            # same seed
+        T2->is( Data::Gimei::Name->new()->to_s,    shift(@expected)->to_s, "Name 1" );
+        T2->is( Data::Gimei::Name->new()->to_s,    shift(@expected)->to_s, "Name 2" );
+        T2->is( Data::Gimei::Address->new()->to_s, shift(@expected)->to_s, "Address 1" );
+    };
 
-# Different seed might generates different result.
-{
-    my @actual;
-    Data::Gimei::set_random_seed(43);
-    push @actual, Data::Gimei::Name->new();
-    push @actual, Data::Gimei::Name->new();
-    push @actual, Data::Gimei::Address->new();
+    it "different seed generates different result" => sub {
+        Data::Gimei::set_random_seed( $seed + 1 );      # different seed
+        T2->isnt( Data::Gimei::Name->new()->to_s, shift(@expected)->to_s, "Name 1" );
+        T2->isnt( Data::Gimei::Name->new()->to_s, shift(@expected)->to_s, "Name 2" );
+        T2->isnt( Data::Gimei::Address->new()->to_s, shift(@expected)->to_s,
+            "Address 1" );
+    };
 
-    isnt $actual[0]->kanji, $expected[0]->kanji;
-    isnt $actual[1]->kanji, $expected[1]->kanji;
-    isnt $actual[2]->kanji, $expected[2]->kanji;
-}
+    it "SHOULD NOT depend on calling rand()" => sub {
+        Data::Gimei::set_random_seed($seed);
+        rand;    # call rand() to change internal state
+        T2->is(
+            Data::Gimei::Name->new()->to_s,
+            shift(@expected)->to_s,
+            "Not depending on rand()"
+        );
+    };
+};
 
-# SHOULD NOT depend on calling rand()
-{
-    my @actual;
-    Data::Gimei::set_random_seed(42);
-    rand;
-    push @actual, Data::Gimei::Name->new();
-    rand;
-    push @actual, Data::Gimei::Name->new();
-    rand;
-    push @actual, Data::Gimei::Address->new();
-
-    is_deeply [ map { $_->kanji } @expected ], [ map { $_->kanji } @actual ];
-}
-
-done_testing();
+T2->done_testing();

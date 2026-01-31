@@ -32,7 +32,7 @@
 	doap:maintainer      <http://purl.org/NET/cpan-uri/person/tobyink>;
 	doap:name            "Sub-HandlesVia-XS";
 	doap:programming-language "Perl";
-	doap:release         <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001000>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001001>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001002>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001003>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001004>;
+	doap:release         <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001000>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001001>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001002>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001003>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001004>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-002000>;
 	doap:repository      [
 		a doap:GitRepository;
 		doap:browse <https://github.com/tobyink/p5-sub-handlesvia-xs>;
@@ -60,11 +60,11 @@
 			a doap-changeset:Change;
 			rdfs:label "Defer to Type::Tiny's error handling when a type check fails, so that error messages are at least approximately the same.";
 		], [
-			a doap-changeset:Bugfix;
-			rdfs:label "Fix for hard to trigger refcount issues with shift and pop methods.";
-		], [
 			a doap-changeset:Change;
 			rdfs:label "Change missing parameter error messages to 'Wrong number of parameters' for closer consistency with Type::Params.";
+		], [
+			a doap-changeset:Bugfix;
+			rdfs:label "Fix for hard to trigger refcount issues with shift and pop methods.";
 		], [
 			a doap-changeset:Change;
 			rdfs:label "Issue 'Wrong number of parameters' errors when too many parameters are given.";
@@ -126,13 +126,36 @@
 	dc:issued            "2026-01-29"^^xsd:date;
 	doap-changeset:changeset [
 		doap-changeset:item [
-			a doap-changeset:Change;
+			a doap-changeset:Packaging;
 			rdfs:label "Fix packaging error.";
 		];
 	];
 	doap-changeset:released-by <http://purl.org/NET/cpan-uri/person/tobyink>;
 	doap:file-release    <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Sub-HandlesVia-XS-0.001004.tar.gz>;
 	doap:revision        "0.001004"^^xsd:string.
+
+<http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-002000>
+	a                    doap:Version;
+	dc:identifier        "Sub-HandlesVia-XS-0.002000"^^xsd:string;
+	dc:issued            "2026-01-29"^^xsd:date;
+	doap-changeset:changeset [
+		doap-changeset:item [
+			a doap-changeset:Bugfix;
+			rdfs:label "Fix XS errors initializing mortal SVs before SAVETMPS which was leading to crashes on large arrays.";
+		], [
+			a doap-changeset:Bugfix;
+			rdfs:label "Fix qsort implementation on non-glibc platforms.";
+		], [
+			a doap-changeset:Change;
+			rdfs:label "Efficiency and stability improvements for some of the array-looping methods.";
+		], [
+			a doap-changeset:Addition;
+			rdfs:label "A whole bunch of string methods.";
+		];
+	];
+	doap-changeset:released-by <http://purl.org/NET/cpan-uri/person/tobyink>;
+	doap:file-release    <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Sub-HandlesVia-XS-0.002000.tar.gz>;
+	doap:revision        "0.002000"^^xsd:string.
 
 <http://purl.org/NET/cpan-uri/person/tobyink>
 	a                    foaf:Person;

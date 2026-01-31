@@ -9,7 +9,7 @@ use 5.010;
 # Automatically handles headers, event formatting, and keepalives.
 # Uses JIT-compiled XS for performance.
 
-our $VERSION = '0.10';
+our $VERSION = '0.11';
 
 use constant {
     STATE_INIT     => 0,

@@ -382,7 +382,7 @@ $(window).on('load', function() {
   // 	cookie:
   // 		name: 'lemonldapauthchoice'
   if (datas['choicetab']) {
-    authMenuTabs.tabs("option", "active", $('#authMenu a[href="#' + datas['choicetab'] + '"]').parent().index());
+    authMenuTabs.tabs("option", "active", $('#authMenu a[href="#id_' + datas['choicetab'] + '"]').parent().index());
   }
   // If there are no auto-focused fields, focus on first visible input
   if ($("input[autofocus]").length === 0) {

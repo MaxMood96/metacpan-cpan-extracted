@@ -10,7 +10,7 @@
 # ABSTRACT: Run a cme script
 
 package App::Cme::Command::run ;
-$App::Cme::Command::run::VERSION = '1.043';
+$App::Cme::Command::run::VERSION = '1.044';
 use strict;
 use warnings;
 use v5.20;
@@ -308,9 +308,17 @@ sub parse_script ($script, $content, $user_args) {
     return $processed_data;
 }
 
-sub commit ($self, $root, $msg) {
+sub process_commit_message($self, $root, $values, $msg) {
+    # replace strings like "{{ config_load_path }}" in $msg
     $msg =~ s/\{\{(.*?)\}\}/$root->grab_value($1)/e;
 
+    # replace strings like "$value" in $msg
+    $msg =~ s/\$(\w+)/$values->{$1}/eg;
+
+    return $msg;
+}
+
+sub commit ($self, $msg) {
     system(qw/git commit -a -m/, $msg) == 0
         or die "git commit failed: $?\n";
 
@@ -484,7 +492,10 @@ sub run_script ($self, $opt, $app_args, $script_data, $user_args){
 
         # commit if needed
         if ($commit_msg and not $opt->{no_commit}) {
-            $self->commit($root, $commit_msg);
+            my $processed_msg = $self->process_commit_message(
+                $root, $script_data->{values}, $commit_msg
+            );
+            $self->commit($processed_msg);
         }
     } else {
         say "No change were applied";
@@ -500,7 +511,7 @@ sub run_script ($self, $opt, $app_args, $script_data, $user_args){
 }
 
 package App::Cme::Run::Var; ## no critic (Modules::ProhibitMultiplePackages)
-$App::Cme::Run::Var::VERSION = '1.043';
+$App::Cme::Run::Var::VERSION = '1.044';
 require Tie::Hash;
 
 ## no critic (ClassHierarchies::ProhibitExplicitISA)
@@ -528,7 +539,7 @@ App::Cme::Command::run - Run a cme script
 
 =head1 VERSION
 
-version 1.043
+version 1.044
 
 =head1 SYNOPSIS
 
@@ -682,8 +693,8 @@ option. Reading a value from C<%args> which is not set by user
 triggers a missing option error. Use C<exists> if you need to test if
 a argument was set by user:
 
-    var: $var{foo} = exists $var{bar} ? $var{bar} : 'default' # good
-    var: $var{foo} = $var{bar} || 'default' # triggers a "missing arg" error
+    var: $var{foo} = exists $args{bar} ? $args{bar} : 'default' # good
+    var: $var{foo} = $args{bar} || 'default' # triggers a "missing arg" error
 
 =item load
 
@@ -717,6 +728,19 @@ yields this commit message:
 
     declare compliance with policy 4.7.0
 
+String like C<$some_value> are with substituted with a value coming
+from an environment variable, a script argument or a value defined as
+a C<var> line.
+
+For example, this specification:
+
+  var: $var{close_str} = defined $args{closes} ? " (Closes: #$args{closes})" : ""
+  commit: set $DEBEMAIL as Maintainer$close_str
+
+invoked with argument C<-arg closes=1234>, yields this commit message:
+
+  set dod@example.com as Maintainer (Closes: #1234)
+
 =back
 
 All instructions can use variables like C<$stuff> whose value can be
@@ -743,6 +767,8 @@ Here's an example from L<libconfig-model-dpkg-perl scripts|https://salsa.debian.
   app: dpkg-control
   load: source Uploaders:.insort("$DEBFULLNAME <$DEBEMAIL>")
   commit: add $DEBEMAIL to Uploaders
+
+You can find other examples on L<script directory of libconfig-model-dpkg-perl|https://salsa.debian.org/perl-team/modules/packages/libconfig-model-dpkg-perl/-/blob/master/lib/Config/Model/scripts/>
 
 =head2 Code section
 

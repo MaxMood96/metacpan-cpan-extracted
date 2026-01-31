@@ -10,7 +10,7 @@
 # ABSTRACT: Edit the configuration of an application
 
 package App::Cme::Command::edit ;
-$App::Cme::Command::edit::VERSION = '1.043';
+$App::Cme::Command::edit::VERSION = '1.044';
 use strict;
 use warnings;
 use 5.10.1;
@@ -124,7 +124,7 @@ App::Cme::Command::edit - Edit the configuration of an application
 
 =head1 VERSION
 
-version 1.043
+version 1.044
 
 =head1 SYNOPSIS
 
@@ -139,9 +139,6 @@ version 1.043
 
   # edit ~/.ssh/config (requires Config::Model::OpenSsh)
   cme edit ssh
-
-  # edit a file (file name specification is mandatory here)
-  cme edit multistrap my.conf
 
 =head1 DESCRIPTION
 

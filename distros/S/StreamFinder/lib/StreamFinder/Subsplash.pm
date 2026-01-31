@@ -103,14 +103,14 @@ One or more stream URLs can be returned for each podcast.
 
 =over 4
 
-=item B<new>(I<ID>|I<url> [, I<-secure> [ => 0|1 ]] 
-[, I<-nohls> [ => 0|1 ]] [, I<-debug> [ => 0|1|2 ]] 
-[, I<-youtube> => yes|no|first|last|only|ifneeded ])
+=item B<new>(I<url> [, I<-secure> [ => 0|1 ] 
+[, I<-nohls> [ => 0|1 ]] [, I<-debug> [ => 0|1|2 ] 
+[, I<-youtube> => yes|no|first|last|only|ifneeded ]])
 
 Accepts a subsplash.com podcast (sermon) URL and creates and returns a 
 a new podcast object, or I<undef> if the URL is not a valid podcast, or no 
 streams are found.  The URL must be the full URL, ie. 
-https://subsplash.com/B<channel>/embed/mi/B<id>.
+https://subsplash.com/...B<channel>/.../B<episode><id>.
 
 The optional I<-youtube> argument can be set to "I<yes>" or "I<last>" - 
 Subsplash will also look for streams via the external program yt-dlp ,if 

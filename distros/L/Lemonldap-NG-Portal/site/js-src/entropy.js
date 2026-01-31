@@ -64,7 +64,7 @@ $(document).on('checkpassword', function(event, context) {
         url: `${scriptname}checkentropy`,
         method: "POST",
         data: {
-          "password": btoa(newpasswordVal)
+          "password": btoa(String.fromCharCode(...new TextEncoder().encode(newpasswordVal)))
         },
         context: document.body,
         success: function(data) {

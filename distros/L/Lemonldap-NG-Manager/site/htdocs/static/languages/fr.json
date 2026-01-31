@@ -268,7 +268,7 @@
 "contextSwitchingRule":"Règle d'utilisation",
 "contextSwitchingStopWithLogout":"Arrêt par déconnexion",
 "contextSwitchingUnrestrictedUsersRule":"Règle des utilisateurs non restreints",
-"cookieExpiration":"Durée de vie du cookie",
+"cookieExpiration":"Durée de vie du cookie SSO",
 "cookieName":"Nom du cookie",
 "cookieParams":"Cookies",
 "copyPath":"Copier l'emplacement",

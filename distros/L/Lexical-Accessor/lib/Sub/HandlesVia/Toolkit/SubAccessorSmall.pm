@@ -6,7 +6,7 @@ no warnings qw( void once uninitialized );
 package Sub::HandlesVia::Toolkit::SubAccessorSmall;
 
 our $AUTHORITY = 'cpan:TOBYINK';
-our $VERSION   = '1.001000';
+our $VERSION   = '1.001002';
 
 use Sub::HandlesVia::Toolkit;
 our @ISA = 'Sub::HandlesVia::Toolkit';
@@ -43,6 +43,7 @@ sub code_generator_for_attribute {
 	
 	my $slot = sub {
 		my $gen = shift;
+		delete local $realattr->{chain};
 		$realattr->inline_access($gen->generate_self);
 	};
 	
@@ -65,12 +66,14 @@ sub code_generator_for_attribute {
 	if ( $realattr->has_simple_writer ) {
 		$set = sub {
 			my ( $gen, $val ) = @_;
+			delete local $realattr->{chain};
 			return sprintf('(%s)', $realattr->inline_access_w($gen->generate_self, $val) );
 		};
 	}
 	else {
 		$set = sub {
 			my ( $gen, $val ) = @_;
+			delete local $realattr->{chain};
 			return $realattr->inline_writer( $gen->generate_self, $val );
 		};
 	}

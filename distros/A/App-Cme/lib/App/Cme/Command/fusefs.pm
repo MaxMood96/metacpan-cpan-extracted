@@ -10,7 +10,7 @@
 # ABSTRACT: Edit the configuration of an application with fuse
 
 package App::Cme::Command::fusefs ;
-$App::Cme::Command::fusefs::VERSION = '1.043';
+$App::Cme::Command::fusefs::VERSION = '1.044';
 use strict;
 use warnings;
 use 5.10.1;
@@ -110,7 +110,7 @@ App::Cme::Command::fusefs - Edit the configuration of an application with fuse
 
 =head1 VERSION
 
-version 1.043
+version 1.044
 
 =head1 SYNOPSIS
 
@@ -139,14 +139,14 @@ Use this option to debug fuse problems.
 
 =item -dir-char
 
-Fuse will fail if an element name or key name contains '/'. You can specify a
+Fuse fails when an element name or key name contains '/'. You can specify a
 substitution string to replace '/' in the fused dir. Default is C<< <slash> >>.
 
 =back
 
 =head1 SEE ALSO
 
-L<cme>
+L<cme>, L<fusermount>
 
 =head1 AUTHOR
 

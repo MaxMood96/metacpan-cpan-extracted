@@ -1,0 +1,197 @@
+=pod
+
+=head1 NAME
+
+unit/string/set.t - tests the C<set> method
+
+=cut
+
+use Test2::V0;
+use Scalar::Util 'blessed';
+use Sub::HandlesVia::XS;
+
+subtest "Basic" => sub {
+	Sub::HandlesVia::XS::INSTALL_shvxs_string_set( "Local::test_1" => {
+		str_source  => Sub::HandlesVia::XS::STR_SRC_INVOCANT,
+	} );
+
+	my $x = "foo";
+	is( Local::test_1($x, "bar"), "bar" );
+	is( $x, "bar" );
+	
+	my $y = "baz";
+	is( Local::test_1($x, $y), "baz" );
+	is( $x, "baz" );
+	$y = "quux";
+	is( $x, "baz" );
+};
+
+subtest "Scalarref invocant" => sub {
+	Sub::HandlesVia::XS::INSTALL_shvxs_string_set( "Local::test_2" => {
+		str_source  => Sub::HandlesVia::XS::STR_SRC_DEREF_SCALAR,
+	} );
+
+	my $x = "foo";
+	my $x_ref = \$x;
+	is( Local::test_2($x_ref, "bar"), "bar" );
+	is( $x, "bar" );
+	
+	my $y = "baz";
+	is( Local::test_2($x_ref, $y), "baz" );
+	is( $x, "baz" );
+	$y = "quux";
+	is( $x, "baz" );
+	ok !blessed $x_ref;
+};
+
+subtest "Blessed scalarref invocant" => sub {
+	my $x = "foo";
+	my $x_ref = bless( \$x, "Local::Test2" );
+	is( Local::test_2($x_ref, "bar"), "bar" );
+	is( $x, "bar" );
+	isa_ok( $x_ref, 'Local::Test2' );
+	
+	my $y = "baz";
+	is( Local::test_2($x_ref, $y), "baz" );
+	is( $x, "baz" );
+	$y = "quux";
+	is( $x, "baz" );
+	isa_ok( $x_ref, 'Local::Test2' );
+};
+
+subtest "Arrayref invocant" => sub {
+	Sub::HandlesVia::XS::INSTALL_shvxs_string_set( "Local::test_3" => {
+		str_source         => Sub::HandlesVia::XS::STR_SRC_DEREF_ARRAY,
+		str_source_index   => 2,
+	} );
+
+	my $x = [undef, undef, "foo"];
+	is( Local::test_3($x, "bar"), "bar" );
+	is( $x, [undef, undef, "bar"] );
+	
+	my $y = "baz";
+	is( Local::test_3($x, $y), "baz" );
+	is( $x, [undef, undef, "baz"] );
+	$y = "quux";
+	is( $x, [undef, undef, "baz"] );
+	ok !blessed $x;
+};
+
+subtest "Blessed arrayref invocant" => sub {
+	my $x = bless( [undef, undef, "foo"], 'Local::Test3' );
+	is( Local::test_3($x, "bar"), "bar" );
+	is( $x, bless( [undef, undef, "bar"], 'Local::Test3' ) );
+	isa_ok( $x, 'Local::Test3' );
+	
+	my $y = "baz";
+	is( Local::test_3($x, $y), "baz" );
+	is( $x, [undef, undef, "baz"] );
+	$y = "quux";
+	is( $x, [undef, undef, "baz"] );
+	isa_ok( $x, 'Local::Test3' );
+};
+
+subtest "Hashref invocant" => sub {
+	Sub::HandlesVia::XS::INSTALL_shvxs_string_set( "Local::test_4" => {
+		str_source         => Sub::HandlesVia::XS::STR_SRC_DEREF_HASH,
+		str_source_string  => "xyz",
+	} );
+
+	my $x = { xyz => "foo" };
+	is( Local::test_4($x, "bar"), "bar" );
+	is( $x, { xyz => "bar" } );
+	
+	my $y = "baz";
+	is( Local::test_4($x, $y), "baz" );
+	is( $x, { xyz => "baz" } );
+	$y = "quux";
+	is( $x, { xyz => "baz" } );
+	ok !blessed $x;
+};
+
+subtest "Hashref invocant, initially missing key" => sub {
+	my $x = {};
+	is( Local::test_4($x, "bar"), "bar" );
+	is( $x, { xyz => "bar" } );
+	
+	my $y = "baz";
+	is( Local::test_4($x, $y), "baz" );
+	is( $x, { xyz => "baz" } );
+	$y = "quux";
+	is( $x, { xyz => "baz" } );
+	ok !blessed $x;
+};
+
+subtest "Blessed hashref invocant" => sub {
+	my $x = bless( { xyz => "foo" }, 'Local::Test4' );
+	is( Local::test_4($x, "bar"), "bar" );
+	is( $x, bless( { xyz => "bar" }, 'Local::Test4' ) );
+	
+	my $y = "baz";
+	is( Local::test_4($x, $y), "baz" );
+	is( $x, bless( { xyz => "baz" }, 'Local::Test4' ) );
+	$y = "quux";
+	is( $x, bless( { xyz => "baz" }, 'Local::Test4' ) );
+	isa_ok( $x, 'Local::Test4' );
+};
+
+my ( $GETS, $SETS );
+
+{
+	package Local::Test5;
+	# Avoid storing $self->xyz as $self->{xyz}
+	sub new {
+		my ( $class, %arg ) = @_;
+		return bless [ whatever => $arg{xyz} ], $class;
+	}
+	sub xyz {
+		( @_ == 1 ) ? ( $GETS++  ) : ( $SETS++ );
+		( @_ == 1 ) ? ( $_[0][1] ) : ( $_[0][1] = $_[1] );
+	}
+}
+
+subtest "Object invocant" => sub {
+	Sub::HandlesVia::XS::INSTALL_shvxs_string_set( "Local::test_5" => {
+		str_source         => Sub::HandlesVia::XS::STR_SRC_CALL_METHOD,
+		str_source_string  => "xyz",
+	} );
+
+	my $x = Local::Test5->new( xyz => "foo" );
+	is( Local::test_5($x, "bar"), "bar" );
+	is( $x->xyz, "bar" );
+	
+	my $y = "baz";
+	is( Local::test_5($x, $y), "baz" );
+	is( $x->xyz, "baz" );
+	$y = "quux";
+	is( $x->xyz, "baz" );
+	isa_ok( $x, 'Local::Test5' );
+	
+	is( $GETS, 5 );
+	is( $SETS, 2 );
+};
+
+sub Local::Test6::_builder {
+	shift->{xyz} = 'foo';
+}
+
+subtest "Blessed hashref invocant with fallback builder" => sub {
+	Sub::HandlesVia::XS::INSTALL_shvxs_string_set( "Local::test_6" => {
+		str_source           => Sub::HandlesVia::XS::STR_SRC_DEREF_HASH,
+		str_source_string    => "xyz",
+		str_source_fallback  => "_builder",
+	} );
+	
+	my $x = bless( {}, 'Local::Test6' );
+	is( Local::test_6($x, "bar"), "bar" );
+	is( $x, bless( { xyz => "bar" }, 'Local::Test6' ) );
+	
+	my $y = "baz";
+	is( Local::test_6($x, $y), "baz" );
+	is( $x, bless( { xyz => "baz" }, 'Local::Test6' ) );
+	$y = "quux";
+	is( $x, bless( { xyz => "baz" }, 'Local::Test6' ) );
+	isa_ok( $x, 'Local::Test6' );
+};
+
+done_testing;

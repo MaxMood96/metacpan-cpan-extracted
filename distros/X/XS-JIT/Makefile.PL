@@ -36,7 +36,8 @@ my %WriteMakefileArgs = (
         'Config'      => '0',
     },
     dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
-    clean => { FILES => 'XS-JIT-* lib/XS/JIT/*.o lib/XS/*.o *.o blib/arch/auto/XS/JIT/Builder/*' },
+    # .def windows specific
+    clean => { FILES => 'XS-JIT-* lib/XS/JIT/*.o lib/XS/*.o *.o blib/arch/auto/XS/JIT/Builder/* lib/XS/JIT/Builder.def' },
 );
 
 # Compatibility with old versions of ExtUtils::MakeMaker
@@ -74,9 +75,27 @@ sub postamble {
     my $builder_c = 'lib/XS/JIT/Builder.c';
     my $builder_o = 'lib/XS/JIT/Builder$(OBJ_EXT)';
     my $builder_so = 'blib/arch/auto/XS/JIT/Builder/Builder.$(DLEXT)';
+    my $builder_def = 'lib/XS/JIT/Builder.def';
+    
+    # On Windows, we need a separate .def file for Builder.dll
+    # Generate it now so it's available for the build
+    my $builder_export_list = '';
+    my $builder_def_rule = '';
+    if ($^O eq 'MSWin32') {
+        $builder_export_list = $builder_def;
+        # Generate Builder.def file for Windows
+        $builder_def_rule = <<"DEF_RULE";
+# Generate Builder.def for Windows
+$builder_def :
+\t\$(NOECHO) \$(ECHO) "LIBRARY Builder" > $builder_def
+\t\$(NOECHO) \$(ECHO) "EXPORTS" >> $builder_def
+\t\$(NOECHO) \$(ECHO) "boot_XS__JIT__Builder" >> $builder_def
+
+DEF_RULE
+    }
 
     return <<"MAKE";
-
+$builder_def_rule
 # Compile xs_jit.c to object file
 $xs_jit_o : $xs_jit_c $xs_jit_h
 \t\$(CCCMD) \$(CCCDLFLAGS) "-I\$(PERL_INC)" \$(PASTHRU_DEFINE) \$(DEFINE) -c -o $xs_jit_o $xs_jit_c
@@ -96,10 +115,10 @@ $builder_c : $builder_xs
 $builder_o : $builder_c $xs_jit_builder_h
 \t\$(CCCMD) \$(CCCDLFLAGS) "-I\$(PERL_INC)" -Ilib/XS/JIT \$(PASTHRU_DEFINE) \$(DEFINE) -c -o $builder_o $builder_c
 
-# Link Builder.so
-$builder_so : $builder_o $xs_jit_builder_o
+# Link Builder.so/dll - on Windows use Builder.def instead of EXPORT_LIST
+$builder_so : $builder_o $xs_jit_builder_o $builder_export_list
 \t\$(NOECHO) \$(MKPATH) blib/arch/auto/XS/JIT/Builder
-\t\$(LD) \$(LDDLFLAGS) -o $builder_so $builder_o $xs_jit_builder_o \$(OTHERLDFLAGS) \$(MYEXTLIB) \$(PERL_ARCHIVE) \$(LDLOADLIBS) \$(EXPORT_LIST) \$(PERL_ARCHIVE_AFTER)
+\t\$(LD) \$(LDDLFLAGS) -o $builder_so $builder_o $xs_jit_builder_o \$(OTHERLDFLAGS) \$(MYEXTLIB) \$(PERL_ARCHIVE) \$(LDLOADLIBS) $builder_export_list \$(PERL_ARCHIVE_AFTER)
 
 # Build Builder as part of dynamic target
 dynamic :: $builder_so

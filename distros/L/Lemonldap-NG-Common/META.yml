@@ -52,6 +52,7 @@ requires:
   Cache::Cache: '0'
   Config::IniFiles: '0'
   Convert::PEM: '0'
+  Crypt::OpenSSL::Bignum: '0'
   Crypt::OpenSSL::RSA: '0'
   Crypt::OpenSSL::X509: '0'
   Crypt::Rijndael: '0'
@@ -74,5 +75,5 @@ resources:
   bugtracker: https://gitlab.ow2.org/lemonldap-ng/lemonldap-ng/issues
   homepage: https://lemonldap-ng.org/
   license: http://opensource.org/licenses/GPL-2.0
-version: v2.22.1
+version: v2.22.2
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

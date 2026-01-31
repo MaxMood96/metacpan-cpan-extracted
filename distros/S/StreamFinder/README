@@ -147,7 +147,7 @@ DESCRIPTION
     subsplash.com podcasts (StreamFinder::Subsplash) (EXPERIMENTAL),
     tunein.com (non-paywalled) radio stations and podcasts
     (StreamFinder::Tunein), vimeo.com videos (StreamFinder::Vimeo),
-    youtube.com, et. al and other sites that youtube-dl/yt-dlp support
+    youtube.com, et. al and other sites that yt-dlp support
     (StreamFinder::Youtube), zeno.fm radio stations and podcasts
     (StreamFinder::Zeno), and StreamFinder::Anystream - search any (other)
     webpage URL (not supported by any of the other submodules) for streams.
@@ -200,7 +200,7 @@ DESCRIPTION
     for details on what it is able to return.
 
     If you have another streaming site that is not supported, first, make
-    sure you have youtube-dl installed and see if StreamFinder::Youtube can
+    sure you have yt-dlp installed and see if StreamFinder::Youtube can
     successfully fetch any streams for it. If not, then please file a
     feature request via email or the CPAN bug system, or (for faster
     service), provide a Perl patch module / program source that can extract
@@ -436,9 +436,8 @@ DEPENDENCIES
     URI::Escape, HTML::Entities, LWP::UserAgent
 
 RECCOMENDS
-    youtube-dl, or other compatable program such as yt-dlp, etc. (for
-    Youtube, Bitchute, Blogger, Brighteon, Odysee, Vimeo) NOTE: Required for
-    Youtube, Odysee, and SoundCloud to work.
+    yt-dlp (for Youtube, Bitchute, Blogger, Brighteon, Odysee, Vimeo) NOTE:
+    Required for Youtube, Bitchute, and SoundCloud to work.
 
     wget
 

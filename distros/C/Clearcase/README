@@ -1,0 +1,104 @@
+Clearcase
+
+Object oriented interface to Clearcase.
+
+INSTALLATION
+
+To install this module, run the following command:s
+
+	perl Makefile.PL
+	make
+	make test
+	make install
+
+SUPPORT AND DOCUMENTATION
+
+After installing, you can find documentation for this module with the
+perldoc command.
+
+	perldoc Clearcase
+	perldoc Clearcase::Element
+	perldoc Clearcase::Server
+	perldoc Clearcase::View
+	perldoc Clearcase::Views
+	perldoc Clearcase::Vob
+	perldoc Clearcase::Vobs
+
+For UCM, see also:
+
+	perldoc Clearcase::UCM
+	perldoc Clearcase::UCM:Activity
+	perldoc Clearcase::UCM:Baseline
+	perldoc Clearcase::UCM:Component
+	perldoc Clearcase::UCM:Project
+	perldoc Clearcase::USM::Pvob
+	perldoc Clearcase::UCM::Stream
+	perldoc Clearcase::UCM::Streams
+
+EXAMPLES
+
+Running Tests
+
+  Configure the test.conf file with your Clearcase environment.
+
+  $ cd Clearcase-1.0
+  $ cp t/test.conf my_test.conf
+  $ vi my_test.conf # Edit to suit your environment
+  $ TEST_CONF=my_test.conf make test
+
+  Or using prove:
+
+  $ TEST_CONF=my_test.conf prove -b t/
+
+Clearcase VOBS
+
+  use Clearcase::Vob;
+
+  my $vobhost = "storagehost";
+  my $vobtag = "/vobs/product";
+  my $vobstore = "/net/storagehost/vobs";
+
+  # Instantiate the Vob object
+  my $productVob = Clearcase::Vob->new ($vobtag);
+
+  # Create the Vob
+  my ($status, @output) = $productVob->create($vobhost, "$vobstore/product.vbs");
+
+  # Mount the Vob
+  my ($status, @output) = $productVob->mount;
+
+Clearcase Views
+
+  # Create a view
+  my $viewhost = "viewhost";
+  my $viewstore = "/net/viewhost/views";
+  my $viewtag = "product_view";
+
+  # Instantiate the View object
+  my $productView = Clearcase::View->new ($viewtag);
+
+  # Create the View
+  my ($status, @output) = $productView->create($viewhost, "$viewstore/product_view.vws");
+
+  # Set the View
+  my ($status, @output) = $productView->set;
+
+Clearcase elements
+
+  # Checkout a file
+  my $file = "product.txt";
+  my $newElement = Clearcase::Element->new($file);
+  my ($status, @output) = $newElement->checkout;
+
+  # Modify file...
+
+  # Checkin the file
+  my ($status, @output) = $newElement->checkin;
+
+COPYRIGHT AND LICENCE
+
+Copyright (C) 2007-2026 by Andrew DeFaria <Andrew@DeFaria.com>
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself, either Perl version 5.38.0 or,
+at your option, any later version of Perl 5 you may have available.

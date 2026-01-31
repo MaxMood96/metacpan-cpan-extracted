@@ -12,6 +12,7 @@ use Mouse;
 use Crypt::URandom;
 use MIME::Base64 qw/encode_base64url/;
 use Lemonldap::NG::Portal::Main::Constants qw(PE_OK PE_DONE);
+use Lemonldap::NG::Common::Lib::DBI qw(check_dbh);
 
 extends 'Lemonldap::NG::Common::Module';
 
@@ -58,6 +59,10 @@ has _dbh => (
 
 sub dbh {
     my ($self) = @_;
+
+    my $dbh = check_dbh( $self->{_dbh} );
+    return $dbh if $dbh;
+    delete $self->{_dbh};
 
     my $conf = $self->{conf};
     $self->{_dbh} = eval {

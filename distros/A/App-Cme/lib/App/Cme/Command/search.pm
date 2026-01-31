@@ -10,7 +10,7 @@
 # ABSTRACT: Search the configuration of an application
 
 package App::Cme::Command::search ;
-$App::Cme::Command::search::VERSION = '1.043';
+$App::Cme::Command::search::VERSION = '1.044';
 use strict;
 use warnings;
 use 5.10.1;
@@ -87,7 +87,7 @@ App::Cme::Command::search - Search the configuration of an application
 
 =head1 VERSION
 
-version 1.043
+version 1.044
 
 =head1 SYNOPSIS
 
@@ -112,9 +112,15 @@ Narrows down the search to:
 
 =item element
 
+The element name (e.g. C<Host> for ssh model)
+
 =item value
 
+The element value
+
 =item key
+
+A hash key (e.g. key of C<Match> element for ssh model)
 
 =item summary
 
@@ -134,10 +140,8 @@ value help text
 
 Example:
 
- $ cme search multistrap my_mstrap.conf -search http -narrow value
- sections:base source -> 'http://ftp.fr.debian.org'
- sections:debian source -> 'http://ftp.uk.debian.org/debian'
- sections:toolchains source -> 'http://www.emdebian.org/debian'
+ $ cme search ssh --search dod -narrow value
+ Host:"*.debian.org" User -> 'dod'
 
 =head1 Common options
 

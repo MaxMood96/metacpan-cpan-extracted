@@ -14,7 +14,15 @@ use Class::Tiny qw(
   surname
 );
 
-our $names;
+#
+# Package variables
+#
+
+our $names;    # loaded names data
+
+#
+# Class methods
+#
 
 sub load {
     my $yaml_path = shift // dist_file( 'Data-Gimei', 'names.yml' );
@@ -37,6 +45,10 @@ sub BUILDARGS {
 
     return \%args;
 }
+
+#
+# Instance methods
+#
 
 sub to_s {
     my $self = shift;

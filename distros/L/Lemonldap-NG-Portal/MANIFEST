@@ -70,6 +70,7 @@ lib/Lemonldap/NG/Portal/Lib/Captcha.pm
 lib/Lemonldap/NG/Portal/Lib/CAS.pm
 lib/Lemonldap/NG/Portal/Lib/Choice.pm
 lib/Lemonldap/NG/Portal/Lib/Code2F.pm
+lib/Lemonldap/NG/Portal/Lib/CrowdSec.pm
 lib/Lemonldap/NG/Portal/Lib/CrowdSecFilter.pm
 lib/Lemonldap/NG/Portal/Lib/CustomModule.pm
 lib/Lemonldap/NG/Portal/Lib/DBI.pm
@@ -612,6 +613,7 @@ t/01-Reject-Hashes-in-URL.t
 t/01-Unauth-Logout.t
 t/01-WebAuthn-Registration.t
 t/01-WebAuthn.t
+t/02-Custom-Template-Parameters.t
 t/02-Password-Demo-checkEntropy.t
 t/02-Password-Demo-checkHIBP.t
 t/02-Password-Demo-Hook.t
@@ -693,6 +695,8 @@ t/30-CDC.t
 t/30-Lazy-Loading.t
 t/30-SAML-Federation-Config.t
 t/30-SAML-Head-to-Tail-POST.t
+t/30-SAML-Key-Override-IDP.t
+t/30-SAML-Key-Override-SP.t
 t/30-SAML-Macros.t
 t/30-SAML-NameID-IDP.t
 t/30-SAML-NameID-SP.t
@@ -705,6 +709,7 @@ t/30-SAML-ReAuth-with-choice.t
 t/30-SAML-ReAuth-with-Cmb-Kerberos.t
 t/30-SAML-ReAuth.t
 t/30-SAML-RelayState.t
+t/30-SAML-Response.t
 t/30-SAML-SP-rule.t
 t/31-Auth-and-issuer-CAS-declared-app-multiple-urls.t
 t/31-Auth-and-issuer-CAS-declared-app-userattr.t
@@ -769,6 +774,7 @@ t/32-OIDC-JWE.t
 t/32-OIDC-JWS-client_secret_jwt.t
 t/32-OIDC-JWS-private_key_jwt.t
 t/32-OIDC-JWT-type-header.t
+t/32-OIDC-key-override.t
 t/32-OIDC-login_hint.t
 t/32-OIDC-Logout-from-RP-bypass-confirm.t
 t/32-OIDC-Logout-redirect-uri-not-allowed.t
@@ -1076,6 +1082,7 @@ t/sessions2/6e30af4ffa5689b3e49a104d1b160d316db2b2161a0f45776994eed19dbdc101
 t/sessions2/lock/Apache-Session-6e30af4ffa5689b3e49a104d1b160d316db2b2161a0f45776994eed19dbdc101.lock
 t/sfHookPlugin.pm
 t/smtp.pm
+t/templates/bootstrap/customheader.tpl
 t/templates/bootstrap/custommenu.tpl
 t/templates/bootstrap/test_mail.tpl
 t/templates/mailtplskin/all.json

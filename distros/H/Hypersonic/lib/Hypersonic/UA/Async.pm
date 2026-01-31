@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use 5.010;
 
-our $VERSION = '0.10';
+our $VERSION = '0.11';
 
 # Use Hypersonic::Event for backend detection
 use Hypersonic::Event;
@@ -952,7 +952,7 @@ sub gen_xs_tick {
       ->blank
       ->comment('        Cleanup slot')
       ->line('        async_free_slot(slot);')
-      ->line('        av_delete(pending_av, i, G_DISCARD);')
+      ->line('        av_delete(pending_av, j, G_DISCARD);')
       ->line('        completed++;')
       ->line('    }')
       ->line('}')

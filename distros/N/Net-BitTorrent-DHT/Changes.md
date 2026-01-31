@@ -2,6 +2,30 @@
 
 All notable changes to Net::BitTorrent::DHT will be documented in this file.
 
+## [v2.0.5] - 2026-01-30
+
+### Added
+
+- New `routing_table_stats()` method to visualize bucketed routing table distribution.
+- New `eg/full_search.pl` example demonstrating a complete iterative Kademlia search.
+- New `eg/distributed_blob.pl` example demonstrating storing, changing, and then accessing a large file split into fragments across the public DHT.
+- New `eg/bep44_remote_storage.pl` example for simple remote data persistence.
+- Implemented robust Transaction ID (TID) management to correctly match responses to pending queries.
+- Added support for the `cas` (Compare-and-Swap) field in BEP 44 `put` requests.
+
+### Improved
+
+- Clarified `find_peers()`, `scrape()`, and `sample()` behavior in documentation as single-step lookups.
+- BEP 44 signature generation now strictly follows the alphabetical bencoded field order required by the spec.
+
+### Fixed
+
+- Fixed `node_id_bin` to default to a random 20-byte ID as per documentation.
+- Fixed `_unpack_peers()` to correctly handle mixed IPv4/IPv6 peer lists and non-standard packed blobs.
+- Fixed potential crashes in `get_peers`, `announce_peer`, `scrape_peers`, `get`, and `put` handlers by properly checking for existing storage objects.
+- Fixed token misassignment in BEP 44 `put` operations by tracking queried targets via Transaction IDs.
+- Fixed regressions in BEP 33 (Scrape) and BEP 51 (Sample) handling caused by the transition to dynamic TIDs.
+
 ## [v2.0.4] - 2026-01-28
 
 ### Added
@@ -79,7 +103,8 @@ This is a total rewrite. I was breaking apart the Kademlia stuff into smaller pi
 
 - original version (broken from unstable Net::BitTorrent dist)
 
-[Unreleased]: https://github.com/sanko/Net-BitTorrent-DHT.pm/compare/v2.0.4...HEAD
+[Unreleased]: https://github.com/sanko/Net-BitTorrent-DHT.pm/compare/v2.0.5...HEAD
+[v2.0.5]: https://github.com/sanko/Net-BitTorrent-DHT.pm/compare/v2.0.4...v2.0.5
 [v2.0.4]: https://github.com/sanko/Net-BitTorrent-DHT.pm/compare/v2.0.3...v2.0.4
 [v2.0.3]: https://github.com/sanko/Net-BitTorrent-DHT.pm/compare/v2.0.2...v2.0.3
 [v2.0.2]: https://github.com/sanko/Net-BitTorrent-DHT.pm/compare/v2.0.1...v2.0.2

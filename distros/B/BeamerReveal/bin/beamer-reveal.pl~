@@ -2,7 +2,7 @@
 # -*- cperl -*-
 # PODNAME: beamer-reveal.pl
 # ABSTRACT: converts the .rvl file and the corresponding pdf file to a full reveal website
-our $VERSION = '20260130.1048'; # VERSION
+our $VERSION = '20260130.1210'; # VERSION
 
 =pod
 
@@ -12,7 +12,7 @@ beamer-reveal.pl - from beamer slides to reveal presentation
 
 =head1 VERSION
 
-version 20260130.1048
+version 20260130.1210
 
 =head1 SYNOPSIS
 
@@ -83,8 +83,8 @@ my $openinglines =
    "--  beamer-reveal.pl|v${BeamerReveal::VERSION} --",
    '--  (C) 2025-2026 Walter PM Daems <wdaems@cpan.org>|GPLv3 --',
    '--  This script uses materials from:|--',
-   '--    - reveal.js (C) Hakim El Hattab and contributors| MIT license --',
-   '--    - Quarto-based files (C) Posit Software, PBC and contributors|MIT license --',
+   '--    - reveal.js (C) Hakim El Hattab and contributors|MIT license --',
+   '--    - Quarto    (C) Posit Software, PBC and contributors|MIT license --',
    '-|-',
   ];
 my $closinglines = [ '-|-' ];

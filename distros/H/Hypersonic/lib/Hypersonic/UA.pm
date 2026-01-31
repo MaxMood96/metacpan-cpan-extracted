@@ -5,7 +5,7 @@ use warnings;
 use 5.010;
 use Carp;
 
-our $VERSION = '0.10';
+our $VERSION = '0.11';
 
 use XS::JIT::Builder;
 
@@ -95,6 +95,36 @@ sub generate_c_code {
     my ($class, $builder, $opts, $analysis) = @_;
 
     my $max = $opts->{max_connections} // MAX_CONNECTIONS;
+
+    # Add required includes for networking (needed by UA registry and HTTP methods)
+    $builder->line('#include <sys/types.h>')
+      ->line('#include <sys/socket.h>')
+      ->line('#include <netinet/in.h>')
+      ->line('#include <arpa/inet.h>')
+      ->line('#include <netdb.h>')
+      ->line('#include <unistd.h>')
+      ->line('#include <string.h>')
+      ->line('#include <time.h>')
+      ->line('#include <errno.h>')
+      ->line('#include <fcntl.h>')
+      ->line('#include <ctype.h>')
+      ->blank
+      ->comment('Portable strcasestr implementation (GNU extension not available everywhere)')
+      ->line('#ifndef HAVE_STRCASESTR')
+      ->line('static char *hs_strcasestr(const char *haystack, const char *needle) {')
+      ->line('    size_t needle_len;')
+      ->line('    if (!needle || !*needle) return (char *)haystack;')
+      ->line('    needle_len = strlen(needle);')
+      ->line('    while (*haystack) {')
+      ->line('        if (strncasecmp(haystack, needle, needle_len) == 0)')
+      ->line('            return (char *)haystack;')
+      ->line('        haystack++;')
+      ->line('    }')
+      ->line('    return NULL;')
+      ->line('}')
+      ->line('#define strcasestr hs_strcasestr')
+      ->line('#endif')
+      ->blank;
 
     # UA registry (always)
     $class->gen_ua_registry($builder, $max);

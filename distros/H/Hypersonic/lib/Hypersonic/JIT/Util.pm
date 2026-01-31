@@ -5,7 +5,7 @@ use warnings;
 use Config;
 use Carp qw(croak);
 
-our $VERSION = '0.10';
+our $VERSION = '0.11';
 
 # =============================================================================
 # Cache Directory Management
@@ -273,26 +273,39 @@ sub can_link {
     $ldflags //= '';
     $extra_includes //= '';
 
+    # Extract header names from include directives for Devel::CheckLib
+    # e.g., '#include <math.h>' -> 'math.h'
+    my @headers;
+    if ($extra_includes) {
+        @headers = ($extra_includes =~ /#include\s*[<"]([^>"]+)[>"]/g);
+    }
+
     # Use Devel::CheckLib if available - it's the CPAN standard and handles
     # edge cases (different compilers, platforms, error handling) better
     if ($class->_has_devel_checklib()) {
-        my $function = "void *p = (void*)$test_symbol; return p ? 0 : 1;";
-        return Devel::CheckLib::check_lib(
+        # Take address of symbol and store in volatile to force linker resolution
+        # The void* cast works for both functions and variables
+        my $function = "void *p = (void*)$test_symbol; volatile void *vp = p; return vp ? 0 : 1;";
+        my %args = (
             INC      => $cflags,
             LIBS     => $ldflags,
-            header   => $extra_includes ? undef : undef,  # Headers handled via function
             function => $function,
         );
+        $args{header} = \@headers if @headers;
+        return Devel::CheckLib::check_lib(%args);
     }
 
     # Fallback: manual compile+link test
     require File::Temp;
 
+    # Generate test code that forces the linker to resolve the symbol
+    # Take address and store in volatile to prevent optimization
     my $test_code = <<"C";
 $extra_includes
-int main() {
+int main(void) {
     void *p = (void*)$test_symbol;
-    return p ? 0 : 1;
+    volatile void *vp = p;
+    return vp ? 0 : 1;
 }
 C
 
@@ -305,7 +318,7 @@ C
     my $out_path = $out->filename;
     close $out;
 
-    my $cc = $ENV{CC} || 'cc';
+    my $cc = $ENV{CC} || $Config{cc} || 'cc';
     my $result = system("$cc $cflags -o $out_path $src_path $ldflags 2>/dev/null");
 
     unlink $out_path if -f $out_path;

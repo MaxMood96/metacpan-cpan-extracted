@@ -3,7 +3,8 @@ abstract: "A Perl module ported from Ruby's gimei that randomly generates Japane
 author:
   - 'NAKAJIMA Yusaku < youpong@cpan.org >'
 build_requires:
-  Test2::Bundle::More: '0'
+  List::Util: '1.33'
+  Test2::V1: '0'
 configure_requires:
   Module::Build::Tiny: '0.035'
 dynamic_config: 0
@@ -26,7 +27,7 @@ no_index:
 provides:
   Data::Gimei:
     file: lib/Data/Gimei.pm
-    version: v0.4.7
+    version: v0.5.0
   Data::Gimei::Address:
     file: lib/Data/Gimei/Address.pm
   Data::Gimei::Name:
@@ -45,7 +46,7 @@ resources:
   bugtracker: https://github.com/youpong/Data-Gimei/issues
   homepage: https://github.com/youpong/Data-Gimei
   repository: https://github.com/youpong/Data-Gimei.git
-version: v0.4.7
+version: v0.5.0
 x_authority: cpan:YOUPONG
 x_contributors:
   - 'NAKAJIMA Yusaku <yupong7@gmail.com>'

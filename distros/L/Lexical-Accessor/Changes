@@ -6,6 +6,16 @@ Home page:    <https://metacpan.org/release/Lexical-Accessor>
 Bug tracker:  <https://github.com/tobyink/p5-lexical-accessor/issues>
 Maintainer:   Toby Inkster (TOBYINK) <tobyink@cpan.org>
 
+1.001002	2026-01-30
+
+ [ Bug Fixes ]
+ - Fix previous fix.
+
+1.001001	2026-01-30
+
+ [ Bug Fixes ]
+ - Bypass chainable accessors when dealing with Sub::HandlesVia.
+
 1.001000	2026-01-23
 
  [ Bug Fixes ]

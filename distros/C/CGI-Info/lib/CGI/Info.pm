@@ -8,7 +8,7 @@ use strict;
 
 use boolean;
 use Carp;
-use Object::Configure 0.12;
+use Object::Configure 0.19;
 use File::Spec;
 use Log::Abstraction 0.10;
 use Params::Get 0.13;
@@ -34,11 +34,11 @@ CGI::Info - Information about the CGI environment
 
 =head1 VERSION
 
-Version 1.08
+Version 1.09
 
 =cut
 
-our $VERSION = '1.08';
+our $VERSION = '1.09';
 
 =head1 SYNOPSIS
 
@@ -472,12 +472,13 @@ sub cgi_host_url {
 
 Returns a reference to a hash list of the CGI arguments.
 
-CGI::Info helps you to test your script prior to deployment on a website:
-if it is not in a CGI environment (e.g. the script is being tested from the
+CGI::Info helps you to test your script before deployment on a website:
+if it is not in a CGI environment (e.g., the script is being tested from the
 command line), the program's command line arguments (a list of key=value pairs)
-are used, if there are no command line arguments then they are read from stdin
-as a list of key=value lines.
-Also you can give one of --tablet, --search-engine,
+are used, if there are no command line arguments,
+then they are read from stdin as a list of key=value lines.
+Also,
+you can give one of --tablet, --search-engine,
 --mobile and --robot to mimic those agents. For example:
 
 	./script.cgi --mobile name=Nigel
@@ -504,7 +505,6 @@ This works alongside existing regex and Params::Validate::Strict patterns.
 A undef value means that any value will be allowed.
 Arguments not in the list are silently ignored.
 This is useful to help to block attacks on your site.
-
 
 Upload_dir is a string containing a directory where files being uploaded are to
 be stored.
@@ -1034,7 +1034,7 @@ sub params {
 	return Return::Set::set_return(\%FORM, { type => 'hashref', min => 1 });
 }
 
-=head2 param
+=head2 param($field)
 
 Get a single parameter from the query string.
 Takes an optional single string parameter which is the argument to return. If
@@ -1056,6 +1056,15 @@ be thrown:
 	my $bar = $info->param('bar');  # Gives an error message
 
 Returns undef if the requested parameter was not given
+
+=over 4
+
+=item $field
+
+Optional field to be retrieved.
+If omitted, all the parameters are returned.
+
+=back
 
 =cut
 
@@ -1577,9 +1586,17 @@ sub documentroot
 	return __PACKAGE__->rootdir(@_);
 }
 
-=head2 logdir
+=head2 logdir($dir)
 
 Gets and sets the name of a directory that you can use to store logs in.
+
+=over 4
+
+=item $dir
+
+Path to the directory where logs will be stored
+
+=back
 
 =cut
 
@@ -1999,11 +2016,20 @@ sub cookie
 	return $self->{jar}{$field};
 }
 
-=head2 status
+=head2 status($status)
 
 Sets or returns the status of the object,
 200 for OK,
 otherwise an HTTP error code
+
+=over 4
+
+=item $status
+
+Optional integer value to be set or retrieved.
+If omitted, the value is retrived.
+
+=back
 
 =cut
 
@@ -2067,7 +2093,7 @@ sub messages_as_string
 	return '';
 }
 
-=head2 cache
+=head2 cache($cache)
 
 Get/set the internal cache system.
 
@@ -2075,6 +2101,16 @@ Use this rather than pass the cache argument to C<new()> if you see these error 
 "(in cleanup) Failed to get MD5_CTX pointer".
 It's some obscure problem that I can't work out,
 but calling this after C<new()> works.
+
+=over 4
+
+=item $cache
+
+Optional cache object.
+When not given,
+returns the current cache object.
+
+=back
 
 =cut
 
@@ -2084,6 +2120,7 @@ sub cache
 	my $cache = shift;
 
 	if($cache) {
+		croak(ref($self), ':cache($cache) is not an object') if(!Scalar::Util::blessed($cache));
 		$self->{'cache'} = $cache;
 	}
 	return $self->{'cache'};
@@ -2120,7 +2157,7 @@ sub _log
 {
 	my ($self, $level, @messages) = @_;
 
-	if(ref($self) && scalar(@messages)) {
+	if(scalar(@messages)) {
 		# FIXME: add caller's function
 		# if(($level eq 'warn') || ($level eq 'info')) {
 			push @{$self->{'messages'}}, { level => $level, message => join(' ', grep defined, @messages) };
@@ -2216,6 +2253,8 @@ sub AUTOLOAD
 
 	my $self = shift or return;
 
+	return if(!defined($AUTOLOAD));
+
 	# Extract the method name from the AUTOLOAD variable
 	my ($method) = $AUTOLOAD =~ /::(\w+)$/;
 
@@ -2255,7 +2294,7 @@ things to happen.
 
 =over 4
 
-=item * Test coverage report: L<https://nigelhorne.github.io/CGI-Info/coverage/>
+=item * L<Test Coverage Report|https://nigelhorne.github.io/CGI-Info/coverage/>
 
 =item * L<Object::Configure>
 
@@ -2307,7 +2346,7 @@ L<http://deps.cpantesters.org/?module=CGI::Info>
 
 =head1 LICENCE AND COPYRIGHT
 
-Copyright 2010-2025 Nigel Horne.
+Copyright 2010-2026 Nigel Horne.
 
 Usage is subject to licence terms.
 

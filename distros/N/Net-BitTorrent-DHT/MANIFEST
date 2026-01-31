@@ -8,9 +8,11 @@ META.json
 README.md
 SECURITY.md
 cpanfile
-eg/bep44.pl
+eg/bep44_remote_storage.pl
 eg/bep51_index.pl
+eg/distributed_blob.pl
 eg/find_hash.pl
+eg/full_search.pl
 eg/io_async_node.pl
 eg/run_node.pl
 lib/Net/BitTorrent/DHT.pm

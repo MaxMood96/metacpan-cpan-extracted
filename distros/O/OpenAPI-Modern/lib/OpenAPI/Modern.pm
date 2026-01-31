@@ -1,10 +1,10 @@
 use strictures 2;
-package OpenAPI::Modern; # git description: v0.124-2-g55600338
+package OpenAPI::Modern; # git description: v0.125-6-g0c91af95
 # vim: set ts=8 sts=2 sw=2 tw=100 et :
 # ABSTRACT: Validate HTTP requests and responses against an OpenAPI v3.0, v3.1 or v3.2 document
 # KEYWORDS: validation evaluation JSON Schema OpenAPI v3.0 v3.1 v3.2 Swagger HTTP request response
 
-our $VERSION = '0.125';
+our $VERSION = '0.126';
 
 use 5.020;
 use utf8;
@@ -345,8 +345,6 @@ sub validate_response ($self, $response, $options = {}) {
 *find_path = \&find_path_item;
 
 sub find_path_item ($self, $options, $state = {}) {
-  # there are many $state fields used by JSM that we do not set here because we do not use them for
-  # OpenAPI validation, such as document, document_path, vocabularies, specification_version
   $state->{data_path} //= '';
   $state->{initial_schema_uri} = $self->openapi_uri;   # the canonical URI as of the start or last $id, or the last traversed $ref
   $state->{traversed_keyword_path} = '';   # the accumulated traversal path as of the start, or last $id, or up to the last traversed $ref
@@ -599,6 +597,7 @@ sub recursive_get ($self, $uri_reference, $entity_type = undef) {
   my $base = $self->openapi_document->canonical_uri;
   my $ref = $uri_reference;
   my ($depth, $schema);
+  my $parent_obj = {};
 
   while ($ref) {
     croak 'maximum evaluation depth exceeded' if $depth++ > $self->evaluator->max_traversal_depth;
@@ -607,17 +606,26 @@ sub recursive_get ($self, $uri_reference, $entity_type = undef) {
     my $schema_info = $self->evaluator->_fetch_from_uri($uri);
 
     croak 'unable to find resource "', $uri, '"' if not $schema_info;
+    my $this_entity = $schema_info->{document}->get_entity_at_location($schema_info->{document_path});
     croak sprintf('bad $ref to %s: not a%s "%s"', $schema_info->{canonical_uri}, ($entity_type =~ /^[aeiou]/ ? 'n' : ''), $entity_type)
-      if $entity_type
-        and $schema_info->{document}->get_entity_at_location($schema_info->{document_path}) ne $entity_type;
+      if $entity_type and $this_entity ne $entity_type;
 
-    $entity_type //= $schema_info->{document}->get_entity_at_location($schema_info->{document_path});
+    $entity_type //= $this_entity;
     $schema = $schema_info->{schema};
     $base = $schema_info->{canonical_uri};
-    $ref = $schema->{'$ref'};
+    if (defined($ref = $schema->{'$ref'}) and not any { $this_entity eq $_ } qw(schema callbacks)) {
+      # OAS reference object or path-item object: copy summary, description
+      $parent_obj->{summary} = $schema->{summary}
+        if (any { $this_entity eq $_ } qw(response example path-item))
+          and exists $schema->{summary} and not exists $parent_obj->{summary};
+      $parent_obj->{description} = $schema->{description}
+        if exists $schema->{description} and not exists $parent_obj->{description};
+    }
   }
 
   $schema = dclone($schema);
+  $schema->{$_} = $parent_obj->{$_} foreach keys %$parent_obj;
+
   return wantarray ? ($schema, $base) : $schema;
 }
 
@@ -853,6 +861,8 @@ sub _validate_query_parameter ($self, $state, $param_obj, $uri) {
 
 # validates a header, from either the request or the response
 sub _validate_header_parameter ($self, $state, $header_name, $header_obj, $headers) {
+  croak '$headers must be a Mojo::Headers object' if not $headers->$_isa('Mojo::Headers');
+
   return 1 if grep fc $header_name eq fc $_, qw(Accept Content-Type Authorization);
 
   if (not $headers->every_header($header_name)->@*) {
@@ -1641,7 +1651,7 @@ OpenAPI::Modern - Validate HTTP requests and responses against an OpenAPI v3.0, 
 
 =head1 VERSION
 
-version 0.125
+version 0.126
 
 =head1 SYNOPSIS
 
@@ -1829,7 +1839,7 @@ described below.
 
   my $parameter_data = $openapi->document_get('/paths/~1foo~1{foo_id}~1bar~1%7Bbar_id%7D/post/parameters/0');
 
-Fetches the subschema at the provided JSON pointer from the main OpenAPI document.
+Fetches the portion of the main OpenAPI document located at the provided JSON pointer.
 Proxies to L<JSON::Schema::Modern::Document::OpenAPI/get>.
 This is not recursive (does not follow C<$ref> chains) -- for that, use
 C<< $openapi->recursive_get(Mojo::URL->new->fragment($json_pointer)) >>, see
@@ -1995,17 +2005,13 @@ for validation of the entire reference chain.
 Returns the data in scalar context, or a tuple of the data and the canonical URI of the
 referenced location in list context.
 
-If the provided location is relative, the main openapi document is used for the base URI.
+If the provided location is relative, the main OpenAPI document is used for the base URI.
 If you have a local json pointer you want to resolve, you can turn it into a uri-reference by
 prepending C<#> and url-encoding it, e.g. C<< Mojo::URL->new->fragment($jsonp) >>.
 
   my $param = $openapi->recursive_get('#/components/parameters/Content-Encoding', 'parameter');
   my $operation_schema = $openapi->recursive_get(Mojo::URL->new('https://example.com/api.json')
     ->fragment(jsonp(qw(/paths /foo/{foo_id} get requestBody content application/json schema)));
-
-  # starts with a JSON::Schema::Modern object (TODO)
-  my $schema = $js->recursive_get('https:///openapi_doc.yaml#/components/schemas/my_object')
-  my $schema = $js->recursive_get('https://localhost:1234/my_spec#/$defs/my_object')
 
 =head2 canonical_uri
 

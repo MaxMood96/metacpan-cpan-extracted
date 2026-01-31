@@ -293,7 +293,7 @@ ub_resolve_async(struct ub_ctx* ctx, const char* qname, int qtype, int qclass, S
 	RETVAL = newAV();
 	checkerr( ub_resolve_async(ctx, qname, qtype, qclass, (void*) RETVAL, async_callback, &async_id) );
 	av_push(RETVAL, newSVsv(query) );
-	av_push(RETVAL, newSVuv(async_id) );
+	av_push(RETVAL, newSViv(async_id) );
     OUTPUT:
 	RETVAL
 
@@ -314,7 +314,8 @@ ub_wait(struct ub_ctx* ctx)
 
 Net::DNS::Resolver::Unbound::Result
 mock_resolve(struct ub_ctx* ctx, const char* qname, int secure, int bogus)
-	char *buffer;
+    INIT:
+	char* buffer;
     CODE:
 	checkerr( ub_resolve(ctx, qname, 1, 1, &RETVAL) );
 	RETVAL->secure = secure;
@@ -341,7 +342,7 @@ emulate_callback(int async_id, int err, struct ub_result* result=NULL)
     CODE:
 	RETVAL = newAV();
 	av_push(RETVAL, newSV(0) );
-	av_push(RETVAL, newSVuv(async_id) );
+	av_push(RETVAL, newSViv(async_id) );
 	async_callback( (void*) RETVAL, err, result );
     OUTPUT:
 	RETVAL
@@ -351,7 +352,7 @@ emulate_wait(int async_id)
     CODE:
 	RETVAL = newAV();
 	av_push(RETVAL, newSV(0) );
-	av_push(RETVAL, newSVuv(async_id) );
+	av_push(RETVAL, newSViv(async_id) );
     OUTPUT:
 	RETVAL
 

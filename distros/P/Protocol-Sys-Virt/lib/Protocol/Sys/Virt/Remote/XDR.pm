@@ -1,7 +1,7 @@
 ####################################################################
 #
 #     This file was generated using XDR::Parse version v1.0.1,
-#        XDR::Gen version 1.1.1 and LibVirt version v12.0.0
+#        XDR::Gen version 1.1.2 and LibVirt version v12.0.0
 #
 #      Don't edit this file, use the source template instead
 #
@@ -9,7 +9,7 @@
 #
 ####################################################################
 
-package Protocol::Sys::Virt::Remote::XDR v12.0.7;
+package Protocol::Sys::Virt::Remote::XDR v12.0.8;
 
 use constant {
     VIR_TYPED_PARAM_INT     => 1,
@@ -1939,10 +1939,18 @@ sub deserialize_node_get_info_ret {
     $_[1] = {};
     # Deserializing field: 'model'
     # my ($class, $value, $index, $input) = @_;
-    die "Input buffer too short"
-        if ($input_length - $_[2]) < 32;
-    $_[1]->{model} = substr( $_[3], $_[2], 32 );
-    $_[2] += 32;
+    $_[1]->{model} = [];
+    for my $i1 ( 0 .. (32 - 1) ) {
+        # my ($class, $value, $index, $input) = @_;
+            die "Input buffer too short"
+                if ($input_length - $_[2]) < 4;
+            $_[1]->{model}->[$i1] = unpack("l>", substr( $_[3], $_[2] ));
+            $_[2] += 4;
+            die "Out of bounds 'char': $_[1]->{model}->[$i1]"
+                unless (-128 <= $_[1]->{model}->[$i1] and $_[1]->{model}->[$i1] < 128);
+    }
+    $_[1]->{model} = pack('c*', @{ $_[1]->{model} });
+
 
     # Deserializing field: 'memory'
     # my ($class, $value, $index, $input) = @_;
@@ -2020,12 +2028,22 @@ sub serialize_node_get_info_ret {
     croak "Missing required input 'array' value"
         unless defined $_[1]->{model};
     do {
-        my $len = length $_[1]->{model};
+        local $_[1]->{model} = [ unpack('c*', $_[1]->{model}) ];
+        my $len = scalar @{ $_[1]->{model} };
         die "Array length mismatch (defined: 32): $len"
             if not $len  == 32;
 
-        substr( $_[3], $_[2] ) = $_[1]->{model};
-        $_[2] += $len;
+        for my $i1 ( 0 .. ($len - 1) ) {
+            # my ($class, $value, $index, $output) = @_;
+            croak "Missing required input 'char' value"
+                unless defined $_[1]->{model}->[$i1];
+            die "Out of bounds 'char': $_[1]->{model}->[$i1]"
+                unless (-128 <= $_[1]->{model}->[$i1] and $_[1]->{model}->[$i1] < 128);
+            die "Non-integer 'char' value given: $_[1]->{model}->[$i1]"
+                unless int($_[1]->{model}->[$i1]) == $_[1]->{model}->[$i1];
+            substr( $_[3], $_[2] ) = pack("l>", $_[1]->{model}->[$i1]);
+            $_[2] += 4;
+        }
     };
 
     # Serializing field: 'memory'
@@ -9782,12 +9800,20 @@ sub deserialize_domain_get_security_label_ret {
             if ($input_length - $_[2]) < 4;
         my $len = unpack("L>", substr( $_[3], $_[2] ));
         $_[2] += 4;
+
         die "Array too long (max: 4097): $len"
             unless ($len <= 4097);
-        die "Input buffer too short"
-            if ($input_length - $_[2]) < $len;
-        $_[1]->{label} = substr( $_[3], $_[2], $len );
-        $_[2] += $len + ((4 - ($len % 4)) % 4); # skip padding too
+        $_[1]->{label} = [];
+        for my $i1 ( 0 .. ($len - 1) ) {
+            # my ($class, $value, $index, $input) = @_;
+            die "Input buffer too short"
+                if ($input_length - $_[2]) < 4;
+            $_[1]->{label}->[$i1] = unpack("l>", substr( $_[3], $_[2] ));
+            $_[2] += 4;
+            die "Out of bounds 'char': $_[1]->{label}->[$i1]"
+                unless (-128 <= $_[1]->{label}->[$i1] and $_[1]->{label}->[$i1] < 128);
+        }
+        $_[1]->{label} = pack('c*', @{ $_[1]->{label} });
     };
 
     # Deserializing field: 'enforcing'
@@ -9811,17 +9837,23 @@ sub serialize_domain_get_security_label_ret {
     croak "Missing required input 'array' value"
         unless defined $_[1]->{label};
     do {
-        my $len = length $_[1]->{label};
+        local $_[1]->{label} = [ unpack('c*', $_[1]->{label}) ];
+        my $len = scalar @{ $_[1]->{label} };
         die "Array too long (max: 4097): $len"
             unless ($len <= 4097);
 
         substr( $_[3], $_[2] ) = pack("L>", $len);
         $_[2] += 4;
-        substr( $_[3], $_[2] ) = $_[1]->{label};
-        $_[2] += $len;
-        if (my $pad = ((4 - ($len % 4)) % 4)) {
-            substr( $_[3], $_[2] ) = ("\0" x $pad);
-            $_[2] += $pad;
+        for my $i1 ( 0 .. ($len - 1) ) {
+            # my ($class, $value, $index, $output) = @_;
+            croak "Missing required input 'char' value"
+                unless defined $_[1]->{label}->[$i1];
+            die "Out of bounds 'char': $_[1]->{label}->[$i1]"
+                unless (-128 <= $_[1]->{label}->[$i1] and $_[1]->{label}->[$i1] < 128);
+            die "Non-integer 'char' value given: $_[1]->{label}->[$i1]"
+                unless int($_[1]->{label}->[$i1]) == $_[1]->{label}->[$i1];
+            substr( $_[3], $_[2] ) = pack("l>", $_[1]->{label}->[$i1]);
+            $_[2] += 4;
         }
     };
 
@@ -9935,12 +9967,20 @@ sub deserialize_node_get_security_model_ret {
             if ($input_length - $_[2]) < 4;
         my $len = unpack("L>", substr( $_[3], $_[2] ));
         $_[2] += 4;
+
         die "Array too long (max: 257): $len"
             unless ($len <= 257);
-        die "Input buffer too short"
-            if ($input_length - $_[2]) < $len;
-        $_[1]->{model} = substr( $_[3], $_[2], $len );
-        $_[2] += $len + ((4 - ($len % 4)) % 4); # skip padding too
+        $_[1]->{model} = [];
+        for my $i1 ( 0 .. ($len - 1) ) {
+            # my ($class, $value, $index, $input) = @_;
+            die "Input buffer too short"
+                if ($input_length - $_[2]) < 4;
+            $_[1]->{model}->[$i1] = unpack("l>", substr( $_[3], $_[2] ));
+            $_[2] += 4;
+            die "Out of bounds 'char': $_[1]->{model}->[$i1]"
+                unless (-128 <= $_[1]->{model}->[$i1] and $_[1]->{model}->[$i1] < 128);
+        }
+        $_[1]->{model} = pack('c*', @{ $_[1]->{model} });
     };
 
     # Deserializing field: 'doi'
@@ -9950,12 +9990,20 @@ sub deserialize_node_get_security_model_ret {
             if ($input_length - $_[2]) < 4;
         my $len = unpack("L>", substr( $_[3], $_[2] ));
         $_[2] += 4;
+
         die "Array too long (max: 257): $len"
             unless ($len <= 257);
-        die "Input buffer too short"
-            if ($input_length - $_[2]) < $len;
-        $_[1]->{doi} = substr( $_[3], $_[2], $len );
-        $_[2] += $len + ((4 - ($len % 4)) % 4); # skip padding too
+        $_[1]->{doi} = [];
+        for my $i1 ( 0 .. ($len - 1) ) {
+            # my ($class, $value, $index, $input) = @_;
+            die "Input buffer too short"
+                if ($input_length - $_[2]) < 4;
+            $_[1]->{doi}->[$i1] = unpack("l>", substr( $_[3], $_[2] ));
+            $_[2] += 4;
+            die "Out of bounds 'char': $_[1]->{doi}->[$i1]"
+                unless (-128 <= $_[1]->{doi}->[$i1] and $_[1]->{doi}->[$i1] < 128);
+        }
+        $_[1]->{doi} = pack('c*', @{ $_[1]->{doi} });
     };
 }
 # @_: ($class, $value, $index, $output) = @_;
@@ -9970,17 +10018,23 @@ sub serialize_node_get_security_model_ret {
     croak "Missing required input 'array' value"
         unless defined $_[1]->{model};
     do {
-        my $len = length $_[1]->{model};
+        local $_[1]->{model} = [ unpack('c*', $_[1]->{model}) ];
+        my $len = scalar @{ $_[1]->{model} };
         die "Array too long (max: 257): $len"
             unless ($len <= 257);
 
         substr( $_[3], $_[2] ) = pack("L>", $len);
         $_[2] += 4;
-        substr( $_[3], $_[2] ) = $_[1]->{model};
-        $_[2] += $len;
-        if (my $pad = ((4 - ($len % 4)) % 4)) {
-            substr( $_[3], $_[2] ) = ("\0" x $pad);
-            $_[2] += $pad;
+        for my $i1 ( 0 .. ($len - 1) ) {
+            # my ($class, $value, $index, $output) = @_;
+            croak "Missing required input 'char' value"
+                unless defined $_[1]->{model}->[$i1];
+            die "Out of bounds 'char': $_[1]->{model}->[$i1]"
+                unless (-128 <= $_[1]->{model}->[$i1] and $_[1]->{model}->[$i1] < 128);
+            die "Non-integer 'char' value given: $_[1]->{model}->[$i1]"
+                unless int($_[1]->{model}->[$i1]) == $_[1]->{model}->[$i1];
+            substr( $_[3], $_[2] ) = pack("l>", $_[1]->{model}->[$i1]);
+            $_[2] += 4;
         }
     };
 
@@ -9991,17 +10045,23 @@ sub serialize_node_get_security_model_ret {
     croak "Missing required input 'array' value"
         unless defined $_[1]->{doi};
     do {
-        my $len = length $_[1]->{doi};
+        local $_[1]->{doi} = [ unpack('c*', $_[1]->{doi}) ];
+        my $len = scalar @{ $_[1]->{doi} };
         die "Array too long (max: 257): $len"
             unless ($len <= 257);
 
         substr( $_[3], $_[2] ) = pack("L>", $len);
         $_[2] += 4;
-        substr( $_[3], $_[2] ) = $_[1]->{doi};
-        $_[2] += $len;
-        if (my $pad = ((4 - ($len % 4)) % 4)) {
-            substr( $_[3], $_[2] ) = ("\0" x $pad);
-            $_[2] += $pad;
+        for my $i1 ( 0 .. ($len - 1) ) {
+            # my ($class, $value, $index, $output) = @_;
+            croak "Missing required input 'char' value"
+                unless defined $_[1]->{doi}->[$i1];
+            die "Out of bounds 'char': $_[1]->{doi}->[$i1]"
+                unless (-128 <= $_[1]->{doi}->[$i1] and $_[1]->{doi}->[$i1] < 128);
+            die "Non-integer 'char' value given: $_[1]->{doi}->[$i1]"
+                unless int($_[1]->{doi}->[$i1]) == $_[1]->{doi}->[$i1];
+            substr( $_[3], $_[2] ) = pack("l>", $_[1]->{doi}->[$i1]);
+            $_[2] += 4;
         }
     };
 }
@@ -13697,12 +13757,20 @@ sub deserialize_auth_sasl_start_args {
             if ($input_length - $_[2]) < 4;
         my $len = unpack("L>", substr( $_[3], $_[2] ));
         $_[2] += 4;
+
         die "Array too long (max: 65536): $len"
             unless ($len <= 65536);
-        die "Input buffer too short"
-            if ($input_length - $_[2]) < $len;
-        $_[1]->{data} = substr( $_[3], $_[2], $len );
-        $_[2] += $len + ((4 - ($len % 4)) % 4); # skip padding too
+        $_[1]->{data} = [];
+        for my $i1 ( 0 .. ($len - 1) ) {
+            # my ($class, $value, $index, $input) = @_;
+            die "Input buffer too short"
+                if ($input_length - $_[2]) < 4;
+            $_[1]->{data}->[$i1] = unpack("l>", substr( $_[3], $_[2] ));
+            $_[2] += 4;
+            die "Out of bounds 'char': $_[1]->{data}->[$i1]"
+                unless (-128 <= $_[1]->{data}->[$i1] and $_[1]->{data}->[$i1] < 128);
+        }
+        $_[1]->{data} = pack('c*', @{ $_[1]->{data} });
     };
 }
 # @_: ($class, $value, $index, $output) = @_;
@@ -13736,17 +13804,23 @@ sub serialize_auth_sasl_start_args {
     croak "Missing required input 'array' value"
         unless defined $_[1]->{data};
     do {
-        my $len = length $_[1]->{data};
+        local $_[1]->{data} = [ unpack('c*', $_[1]->{data}) ];
+        my $len = scalar @{ $_[1]->{data} };
         die "Array too long (max: 65536): $len"
             unless ($len <= 65536);
 
         substr( $_[3], $_[2] ) = pack("L>", $len);
         $_[2] += 4;
-        substr( $_[3], $_[2] ) = $_[1]->{data};
-        $_[2] += $len;
-        if (my $pad = ((4 - ($len % 4)) % 4)) {
-            substr( $_[3], $_[2] ) = ("\0" x $pad);
-            $_[2] += $pad;
+        for my $i1 ( 0 .. ($len - 1) ) {
+            # my ($class, $value, $index, $output) = @_;
+            croak "Missing required input 'char' value"
+                unless defined $_[1]->{data}->[$i1];
+            die "Out of bounds 'char': $_[1]->{data}->[$i1]"
+                unless (-128 <= $_[1]->{data}->[$i1] and $_[1]->{data}->[$i1] < 128);
+            die "Non-integer 'char' value given: $_[1]->{data}->[$i1]"
+                unless int($_[1]->{data}->[$i1]) == $_[1]->{data}->[$i1];
+            substr( $_[3], $_[2] ) = pack("l>", $_[1]->{data}->[$i1]);
+            $_[2] += 4;
         }
     };
 }
@@ -13779,12 +13853,20 @@ sub deserialize_auth_sasl_start_ret {
             if ($input_length - $_[2]) < 4;
         my $len = unpack("L>", substr( $_[3], $_[2] ));
         $_[2] += 4;
+
         die "Array too long (max: 65536): $len"
             unless ($len <= 65536);
-        die "Input buffer too short"
-            if ($input_length - $_[2]) < $len;
-        $_[1]->{data} = substr( $_[3], $_[2], $len );
-        $_[2] += $len + ((4 - ($len % 4)) % 4); # skip padding too
+        $_[1]->{data} = [];
+        for my $i1 ( 0 .. ($len - 1) ) {
+            # my ($class, $value, $index, $input) = @_;
+            die "Input buffer too short"
+                if ($input_length - $_[2]) < 4;
+            $_[1]->{data}->[$i1] = unpack("l>", substr( $_[3], $_[2] ));
+            $_[2] += 4;
+            die "Out of bounds 'char': $_[1]->{data}->[$i1]"
+                unless (-128 <= $_[1]->{data}->[$i1] and $_[1]->{data}->[$i1] < 128);
+        }
+        $_[1]->{data} = pack('c*', @{ $_[1]->{data} });
     };
 }
 # @_: ($class, $value, $index, $output) = @_;
@@ -13825,17 +13907,23 @@ sub serialize_auth_sasl_start_ret {
     croak "Missing required input 'array' value"
         unless defined $_[1]->{data};
     do {
-        my $len = length $_[1]->{data};
+        local $_[1]->{data} = [ unpack('c*', $_[1]->{data}) ];
+        my $len = scalar @{ $_[1]->{data} };
         die "Array too long (max: 65536): $len"
             unless ($len <= 65536);
 
         substr( $_[3], $_[2] ) = pack("L>", $len);
         $_[2] += 4;
-        substr( $_[3], $_[2] ) = $_[1]->{data};
-        $_[2] += $len;
-        if (my $pad = ((4 - ($len % 4)) % 4)) {
-            substr( $_[3], $_[2] ) = ("\0" x $pad);
-            $_[2] += $pad;
+        for my $i1 ( 0 .. ($len - 1) ) {
+            # my ($class, $value, $index, $output) = @_;
+            croak "Missing required input 'char' value"
+                unless defined $_[1]->{data}->[$i1];
+            die "Out of bounds 'char': $_[1]->{data}->[$i1]"
+                unless (-128 <= $_[1]->{data}->[$i1] and $_[1]->{data}->[$i1] < 128);
+            die "Non-integer 'char' value given: $_[1]->{data}->[$i1]"
+                unless int($_[1]->{data}->[$i1]) == $_[1]->{data}->[$i1];
+            substr( $_[3], $_[2] ) = pack("l>", $_[1]->{data}->[$i1]);
+            $_[2] += 4;
         }
     };
 }
@@ -13859,12 +13947,20 @@ sub deserialize_auth_sasl_step_args {
             if ($input_length - $_[2]) < 4;
         my $len = unpack("L>", substr( $_[3], $_[2] ));
         $_[2] += 4;
+
         die "Array too long (max: 65536): $len"
             unless ($len <= 65536);
-        die "Input buffer too short"
-            if ($input_length - $_[2]) < $len;
-        $_[1]->{data} = substr( $_[3], $_[2], $len );
-        $_[2] += $len + ((4 - ($len % 4)) % 4); # skip padding too
+        $_[1]->{data} = [];
+        for my $i1 ( 0 .. ($len - 1) ) {
+            # my ($class, $value, $index, $input) = @_;
+            die "Input buffer too short"
+                if ($input_length - $_[2]) < 4;
+            $_[1]->{data}->[$i1] = unpack("l>", substr( $_[3], $_[2] ));
+            $_[2] += 4;
+            die "Out of bounds 'char': $_[1]->{data}->[$i1]"
+                unless (-128 <= $_[1]->{data}->[$i1] and $_[1]->{data}->[$i1] < 128);
+        }
+        $_[1]->{data} = pack('c*', @{ $_[1]->{data} });
     };
 }
 # @_: ($class, $value, $index, $output) = @_;
@@ -13892,17 +13988,23 @@ sub serialize_auth_sasl_step_args {
     croak "Missing required input 'array' value"
         unless defined $_[1]->{data};
     do {
-        my $len = length $_[1]->{data};
+        local $_[1]->{data} = [ unpack('c*', $_[1]->{data}) ];
+        my $len = scalar @{ $_[1]->{data} };
         die "Array too long (max: 65536): $len"
             unless ($len <= 65536);
 
         substr( $_[3], $_[2] ) = pack("L>", $len);
         $_[2] += 4;
-        substr( $_[3], $_[2] ) = $_[1]->{data};
-        $_[2] += $len;
-        if (my $pad = ((4 - ($len % 4)) % 4)) {
-            substr( $_[3], $_[2] ) = ("\0" x $pad);
-            $_[2] += $pad;
+        for my $i1 ( 0 .. ($len - 1) ) {
+            # my ($class, $value, $index, $output) = @_;
+            croak "Missing required input 'char' value"
+                unless defined $_[1]->{data}->[$i1];
+            die "Out of bounds 'char': $_[1]->{data}->[$i1]"
+                unless (-128 <= $_[1]->{data}->[$i1] and $_[1]->{data}->[$i1] < 128);
+            die "Non-integer 'char' value given: $_[1]->{data}->[$i1]"
+                unless int($_[1]->{data}->[$i1]) == $_[1]->{data}->[$i1];
+            substr( $_[3], $_[2] ) = pack("l>", $_[1]->{data}->[$i1]);
+            $_[2] += 4;
         }
     };
 }
@@ -13935,12 +14037,20 @@ sub deserialize_auth_sasl_step_ret {
             if ($input_length - $_[2]) < 4;
         my $len = unpack("L>", substr( $_[3], $_[2] ));
         $_[2] += 4;
+
         die "Array too long (max: 65536): $len"
             unless ($len <= 65536);
-        die "Input buffer too short"
-            if ($input_length - $_[2]) < $len;
-        $_[1]->{data} = substr( $_[3], $_[2], $len );
-        $_[2] += $len + ((4 - ($len % 4)) % 4); # skip padding too
+        $_[1]->{data} = [];
+        for my $i1 ( 0 .. ($len - 1) ) {
+            # my ($class, $value, $index, $input) = @_;
+            die "Input buffer too short"
+                if ($input_length - $_[2]) < 4;
+            $_[1]->{data}->[$i1] = unpack("l>", substr( $_[3], $_[2] ));
+            $_[2] += 4;
+            die "Out of bounds 'char': $_[1]->{data}->[$i1]"
+                unless (-128 <= $_[1]->{data}->[$i1] and $_[1]->{data}->[$i1] < 128);
+        }
+        $_[1]->{data} = pack('c*', @{ $_[1]->{data} });
     };
 }
 # @_: ($class, $value, $index, $output) = @_;
@@ -13981,17 +14091,23 @@ sub serialize_auth_sasl_step_ret {
     croak "Missing required input 'array' value"
         unless defined $_[1]->{data};
     do {
-        my $len = length $_[1]->{data};
+        local $_[1]->{data} = [ unpack('c*', $_[1]->{data}) ];
+        my $len = scalar @{ $_[1]->{data} };
         die "Array too long (max: 65536): $len"
             unless ($len <= 65536);
 
         substr( $_[3], $_[2] ) = pack("L>", $len);
         $_[2] += 4;
-        substr( $_[3], $_[2] ) = $_[1]->{data};
-        $_[2] += $len;
-        if (my $pad = ((4 - ($len % 4)) % 4)) {
-            substr( $_[3], $_[2] ) = ("\0" x $pad);
-            $_[2] += $pad;
+        for my $i1 ( 0 .. ($len - 1) ) {
+            # my ($class, $value, $index, $output) = @_;
+            croak "Missing required input 'char' value"
+                unless defined $_[1]->{data}->[$i1];
+            die "Out of bounds 'char': $_[1]->{data}->[$i1]"
+                unless (-128 <= $_[1]->{data}->[$i1] and $_[1]->{data}->[$i1] < 128);
+            die "Non-integer 'char' value given: $_[1]->{data}->[$i1]"
+                unless int($_[1]->{data}->[$i1]) == $_[1]->{data}->[$i1];
+            substr( $_[3], $_[2] ) = pack("l>", $_[1]->{data}->[$i1]);
+            $_[2] += 4;
         }
     };
 }
@@ -34584,7 +34700,7 @@ Protocol::Sys::Virt::Remote::XDR - Constants and (de)serializers for remote serv
 
 =head1 VERSION
 
-v12.0.7
+v12.0.8
 
 Based on LibVirt tag v12.0.0
 

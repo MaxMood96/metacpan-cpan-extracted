@@ -4,38 +4,40 @@ use warnings;
 use utf8;
 
 use Data::Gimei;
-Data::Gimei::Name::load('t/names.yml');
 
-use Test2::Bundle::More;
+use Test2::V1 -utf8;
+use Test2::Tools::Spec;
 
-{    # test Name#to_s
-    my $name = Data::Gimei::Name->new( gender => 'male' );
-    is $name->to_s, 'male, 佐藤 愛斗, さとう あいと, サトウ アイト, Aito Sato';
-}
+describe "Data::Gimei::Name" => sub {
+    my ( $male, $female );
+    before_all setup => sub {
+        Data::Gimei::Name::load('t/names.yml');
+        $male   = Data::Gimei::Name->new( gender => 'male' );
+        $female = Data::Gimei::Name->new( gender => 'female' );
+    };
 
-{    # test constructor of Name
-    my $name = Data::Gimei::Name->new( gender => 'male' );
+    it "to_s" => sub {
+        T2->is( $male->to_s,   'male, 佐藤 愛斗, さとう あいと, サトウ アイト, Aito Sato', 'male' );
+        T2->is( $female->to_s, 'female, 佐藤 和柚, さとう わゆ, サトウ ワユ, Wayu Sato', 'female' );
+    };
 
-    is $name->gender,         'male';
-    is $name->kanji,          '佐藤 愛斗';
-    is $name->hiragana,       'さとう あいと';
-    is $name->katakana,       'サトウ アイト';
-    is $name->romaji,         'Aito Sato';
-    is $name->forename->to_s, '愛斗, あいと, アイト, Aito';
-    is $name->surname->to_s,  '佐藤, さとう, サトウ, Sato';
-}
+    it "getter" => sub {
+        T2->is( $male->gender,   'male' );
+        T2->is( $male->kanji,    '佐藤 愛斗' );
+        T2->is( $male->hiragana, 'さとう あいと' );
+        T2->is( $male->katakana, 'サトウ アイト' );
+        T2->is( $male->romaji,   'Aito Sato', "romaji() returns capitalized romaji" );
+        T2->is( $male->forename->to_s, '愛斗, あいと, アイト, Aito' );
+        T2->is( $male->surname->to_s,  '佐藤, さとう, サトウ, Sato' );
+        T2->is( $female->gender,       'female' );
+    };
 
-{    # test separater of kanji/katakana/hiragana/romaji
-    my $name = Data::Gimei::Name->new( gender => 'male' );
-    is $name->kanji('/'),    '佐藤/愛斗';
-    is $name->hiragana('/'), 'さとう/あいと';
-    is $name->katakana('/'), 'サトウ/アイト';
-    is $name->romaji('/'),   'Aito/Sato';
-}
+    it "getter with separator" => sub {
+        T2->is( $male->kanji('/'),    '佐藤/愛斗' );
+        T2->is( $male->hiragana('/'), 'さとう/あいと' );
+        T2->is( $male->katakana('/'), 'サトウ/アイト' );
+        T2->is( $male->romaji('/'),   'Aito/Sato' );
+    };
+};
 
-{    # test Name#gender
-    my $name = Data::Gimei::Name->new( gender => 'female' );
-    is $name->gender, 'female';
-}
-
-done_testing;
+T2->done_testing();

@@ -31,7 +31,7 @@ my $meta = {
                                      },
                       },
   "provides"       => {
-                        "Sub::HandlesVia::XS" => { file => "lib/Sub/HandlesVia/XS.pm", version => 0.001004 },
+                        "Sub::HandlesVia::XS" => { file => "lib/Sub/HandlesVia/XS.pm", version => "0.002000" },
                       },
   "release_status" => "stable",
   "resources"      => {
@@ -45,7 +45,7 @@ my $meta = {
                                         },
                         x_identifier => "http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/project",
                       },
-  "version"        => 0.001004,
+  "version"        => "0.002000",
 };
 
 my %dynamic_config;
@@ -86,7 +86,7 @@ my %WriteMakefileArgs = (
 	VERSION    => $meta->{version},
 	EXE_FILES  => [ map $_->{file}, values %{ $meta->{x_provides_scripts} || {} } ],
 	NAME       => do { my $n = $meta->{name}; $n =~ s/-/::/g; $n },
-	test       => { TESTS => "t/*.t t/integration/*.t t/unit/array/*.t" },
+	test       => { TESTS => "t/*.t t/integration/*.t t/unit/array/*.t t/unit/string/*.t" },
 	%dynamic_config,
 );
 

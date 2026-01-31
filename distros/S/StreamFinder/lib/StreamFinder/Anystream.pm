@@ -4,7 +4,7 @@ StreamFinder::Anystream - Fetch any raw streamable URLs from an HTML page.
 
 =head1 AUTHOR
 
-This module is Copyright (C) 2017-2024 by
+This module is Copyright (C) 2017-2026 by
 
 Jim Turner, C<< <turnerjw784 at yahoo.com> >>
 		
@@ -98,7 +98,8 @@ that all mp3 streams found (if any), followed by all "ogg" streams, etc.
 The optional I<-maxstreams> argument specifies the maximum number of streams to 
 consider (some sites have tons of them).  
 
-DEFAULT I<-secure> is 20 - return up to the first 20 streams found.
+DEFAULT I<-maxstreams> is 20 - return up to the first 20 streams found.
+
 The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  
 If 1 then only secure ("https://") streams will be returned.  
 NOTE:  If I<-secure> is specified, the number returned could be less as both 
@@ -301,7 +302,7 @@ L<http://search.cpan.org/dist/StreamFinder-Anystream/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2017-2024 Jim Turner.
+Copyright 2017-2026 Jim Turner.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the the Artistic License (2.0). You may obtain a

@@ -6,7 +6,7 @@ no warnings qw( void once uninitialized );
 package Sub::Accessor::Small;
 
 our $AUTHORITY = 'cpan:TOBYINK';
-our $VERSION   = '1.001000';
+our $VERSION   = '1.001002';
 our @ISA       = qw/ Exporter::Tiny /;
 our @EXPORT_OK = qw/ has /;
 
@@ -129,6 +129,7 @@ sub install_accessors : method
 				$handles_map{"$name"} = $name;
 			}
 			
+			delete local $me->{chain};
 			require Sub::HandlesVia::Toolkit::SubAccessorSmall;
 			my $SHV = 'Sub::HandlesVia::Toolkit::SubAccessorSmall'->new(
 				attr => $me,

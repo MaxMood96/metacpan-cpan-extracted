@@ -5,7 +5,7 @@ use warnings;
 use File::Temp qw(tempfile);
 use File::Spec;
 
-our $VERSION = '0.13';
+our $VERSION = '0.14';
 
 # Find a working C preprocessor
 sub _find_preprocessor {

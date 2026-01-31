@@ -1,5 +1,15 @@
 Revision history for Hypersonic
 
+0.11    2026-01-31
+	- Fix can_link() to properly pass headers to Devel::CheckLib
+	- Fix can_link() test to work reliably with compiler builtins (libm sin)
+	- Add missing C includes to UA.pm for socket/networking types
+	- Attempt a portable strcasestr implementation for non-GNU systems
+	- Fix compilation failures on Linux (missing headers, GNU extensions)
+	- Fix WebSocket g_websocket_handlers not declared when no dynamic routes
+	- Fix WebSocket requires Stream module (set needs_streaming for WebSocket)
+	- Fix WebSocket test to handle frame arriving with HTTP handshake
+
 0.10    2026-01-29
 	- RequestID Middleware
 	- More C89 compliance refactoring

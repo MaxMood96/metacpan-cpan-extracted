@@ -4,7 +4,7 @@ StreamFinder::EpochTV - Fetch actual raw streamable video URLs on www.theepochti
 
 =head1 AUTHOR
 
-This module is Copyright (C) 2024 by
+This module is Copyright (C) 2022-2026 by
 
 Jim Turner, C<< <turnerjw784 at yahoo.com> >>
 		
@@ -111,7 +111,8 @@ One stream URL can be returned for each video.
 
 =over 4
 
-=item B<new>(I<ID>|I<url> [, I<-secure> [ => 0|1 ]] [, I<-debug> [ => 0|1|2 ]])
+=item B<new>(I<ID>|I<url> [, I<-speakericon> [ => 0|1 ]] 
+[, I<-secure> [ => 0|1 ]] [, I<-debug> [ => 0|1|2 ]])
 
 Accepts a www.theepochtimes.com video or channel ID or URL and creates and 
 returns a a new video object, or I<undef> if the URL is not a valid video, or 
@@ -121,6 +122,13 @@ B<channel_or_video-id>.  EpochTV can't really distinguish between episode and
 channel IDs except that channel pages do not contain a specific video stream 
 URL, so if no stream URL is found, it assumes a channel page, in which case, 
 the first (latest) episode is returned (along with the channel's playlist).
+
+The optional I<-speakericon> argument can be set to use the artist/speaker's 
+icon usually resulting in the artist icon being a photo of the individual 
+artist/speaker's photo, instead of the channel's icon.  Regardless of setting, 
+if either icon is missing, the other will be used.
+
+DEFAULT zero (I<false>): Prefer to use the channel's icon for artist's icon.
 
 The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  
 If 1 then only secure ("https://") streams will be returned.  Currently, 
@@ -190,6 +198,11 @@ since on the page itself there's a "Read More" button to view the rest, and
 Returns the URL for the video's "cover art" icon image, if any.
 If B<'artist'> is specified, the channel artist's icon url is returned, 
 if any.
+
+Note:  EpochTV videos (unlike most other sites) often have both 
+an artist icon (for the channel) AND an artist image for that individual 
+artist/author (photo). See the B<-speakericon> option for preferring the 
+artist/author's photo in lieu of the channel's icon.
 
 =item $video->B<getIconData>(['artist'])
 
@@ -310,7 +323,7 @@ L<http://search.cpan.org/dist/StreamFinder-EpochTV/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2022 Jim Turner.
+Copyright 2022-2026 Jim Turner.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the the Artistic License (2.0). You may obtain a
@@ -369,6 +382,22 @@ sub new
 	return undef  unless ($url);
 
 	my $self = $class->SUPER::new('EpochTV', @_);
+
+	while (@_) {
+		if ($_[0] =~ /^\-?debug$/o) {
+			shift;
+			$DEBUG = (defined($_[0]) && $_[0] =~/^[0-9]$/) ? shift : 1;
+		} elsif ($_[0] =~ /^\-?secure$/o) {
+			shift;
+			$self->{'secure'} = (defined $_[0]) ? shift : 1;
+		} elsif ($_[0] =~ /^\-?speakericon$/o) {
+			shift;
+			$self->{'speakericon'} = (defined $_[0]) ? shift : 1;
+		} else {
+			shift;
+		}
+	}
+	$self->{'speakericon'} = 0  unless (defined $self->{'speakericon'});
 	$DEBUG = $self->{'debug'}  if (defined $self->{'debug'});
 	my $baseURL = 'https://www.theepochtimes.com';
 	$self->{'id'} = '';
@@ -441,52 +470,80 @@ TRYIT:
 	$self->{'iconurl'} ||= $1  if ($html =~ m#data\-thumbnail\=\"([^\"]+)#s);
 	$self->{'imageurl'} = $1  if ($html =~ m#\,\"thumbnailUrl\"\:\"([^\"]+)#s);
 	$self->{'album'} = ($html =~ m#\bmd\:text\-lg\"\>([^\<]+)#s) ? $1 : '';
+	$self->{'_artisturl'} = '';
 	unless ($self->{'album'}) {
 		my $albumdata = $1  if ($html =~ m#\,\"author\"\:\[([^\]]+)#s);
 		$self->{'album'} = $1  if ($albumdata =~ m#\"url\"\:\"([^\"]+)#s);
 	}
+	#FETCH CHANNEL'S DATA:
 	if ($html =~ m#\<a\s+href\=\"([^\"]+)\"><div class="(?:h-\d+\s+w-\d+|size\-\d+)">(.+?)\<\/div\>#s) {
 		$self->{'albumartist'} = $1;
 		my $channeldata = $2;
-		if ($self->{'albumartist'}) {
-			$self->{'albumartist'} = $baseURL . $self->{'albumartist'}
-					unless ($self->{'albumartist'} =~ m#^https?\:#);
+		$self->{'articonurl'} = $1  if ($channeldata =~ m#\burl\=([^\"]+)#s);
+		print STDERR "i:channel avatar found($$self{'articonurl'}).\n"  if ($DEBUG);
+	}
+	#FETCH ARTIST'S DATA (ARTIST/AUTHOR MAY NOT BE SAME AS CHANNEL)!:
+	if ($html =~ m#\\\"authors\\\"\:\[\{([^}]+)#s) {
+		my $artistdata = $1;
+		$self->{'artist'} = $1  if ($artistdata =~ m#\\\"name\\\"\:\\\"([^\\]+)#s);
+		if ($artistdata =~ m#\\\"avatar\\\"\:\\\"([^\\]+)#s) {
+			my $artisticon = $1;
+			if ($self->{'speakericon'}) {
+				$self->{'articonurl'} = $artisticon;
+				print STDERR "i:Individual artist avatar found($$self{'articonurl'}).\n"  if ($DEBUG);
+			} else {
+				$self->{'articonurl'} ||= $artisticon;
+			}
 		}
-		if ($channeldata =~ m#\burl\=([^\"]+)#s) {
-			$self->{'articonurl'} = $1;
-		}
-	} elsif ($html =~ m#\{\\\"className\\\"\:\\\"mb\-2\s+flex\s+gap([^\}]+)#s) {
-		my $channeldata = $1;
-		if ($channeldata =~ m#\\\"src\\\"\:\\\"([^\\]+)#s) {
-			$self->{'articonurl'} = $1;
-			$self->{'artist'} = $1  if ($channeldata =~ m#\\\"alt\\\"\:\\\"([^\\]+)#s);
+		if ($artistdata =~ m#\\\"uri\\\"\:\\\"([^\\]+)#s) {
+			$self->{'_artisturl'} = $1;
+			$self->{'_artisturl'} = '/author/' . $self->{'_artisturl'}
+					unless ($self->{'_artisturl'} =~ m#^(?:\/|https?\:)#);
+			$self->{'_artisturl'} = $baseURL . $self->{'_artisturl'}
+					unless ($self->{'_artisturl'} =~ m#^https?\:#);
 		}
 	}
-	$self->{'artist'} ||= $1  if ($html =~ m#\\\"authors\\\"\:\[\{\\\"name\\\"\:\\\"([^\\]+)#s);
+	$self->{'articonurl'} ||= $1  if ($html =~ m#\\\"termIcon\\\"\:\\\"([^\\]+)#s);
 	$self->{'articonurl'} ||= $1  if ($html =~ m#\\\"termIcon\\\"\:\\\"([^\\]+)#s);
 	$self->{'articonurl'} = HTML::Entities::decode_entities($self->{'articonurl'});
 	$self->{'articonurl'} = uri_unescape($self->{'articonurl'});
 	$self->{'articonurl'} =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/egso;
 	$self->{'articonurl'} =~ s#\&.*$##;
 	$self->{'artimageurl'} = $1  if ($html =~ m#\\\"termPoster\\\"\:\\\"([^\\]+)#s);
-	if ($html =~ m#\\\"avatar\\\"\:\\\"([^\\]+)#s) {
-		$self->{'articonurl'} ||= $1;
-		$self->{'artimageurl'} ||= $1;
-		print STDERR "i:Individual artist avatar found($$self{'articonurl'}).\n"  if ($DEBUG);
-	} else {
-		print STDERR "i:No individual artist avatar found, using category page icon ($$self{'articonurl'}).\n"  if ($DEBUG);
+	if ($self->{'albumartist'}) {
+		$self->{'albumartist'} = $baseURL . $self->{'albumartist'}
+				unless ($self->{'albumartist'} =~ m#^https?\:#);
+	}
+	if ($self->{'_artisturl'}) {
+		$self->{'artist'} .= ' - '  if ($self->{'artist'});
+		$self->{'artist'} .= $self->{'_artisturl'};
 	}
 	$self->{'articonurl'} ||= $self->{'artimageurl'};
-	$self->{'description'} = $1  if ($html =~ m#\bwhitespace\-break\-spaces\"\>([^\<]+)#s);
+	($self->{'description'} = $1) =~ s#\\$##  if ($html =~ m#\\\"content\\\"\:\[\{\\\"type\\\"\:\\\"p\\\",\\\"text\\\"\:\\\"([^\"]+)#s);
+	$self->{'description'} ||= $1  if ($html =~ m#\bwhitespace\-break\-spaces\"\>([^\<]+)#s);
 	$self->{'description'} ||= $1  if ($html =~ m#\<meta\s+name\=\"description\"\s+content\=\"([^\"]+)#s);
 	$self->{'description'} ||= $1  if ($html =~ m#\<meta\s+property\=\"og\:description\"\s+content\=\"([^\"]+)#s);
 	$self->{'created'} = $1  if ($html =~ m#\"uploadDate\"\:\"([^\"]+)#s);
 	$self->{'created'} ||= $1  if ($html =~ m#\<div\s+class\=\"whitespace\-nowrap]s+text\-sm\s+text\-\[\#707070\]\"\>([^\<]+)#s);
 	$self->{'created'} ||= $1  if ($html =~ m#\,\"datePublished\"\:\"([^\"]+)#s);
 	$self->{'year'} = ($self->{'created'} =~ /(\d\d\d\d)/) ? $1 : '';
+	foreach my $i (qw(description title artist)) {
+		$self->{$i} = HTML::Entities::decode_entities($self->{$i});
+		$self->{$i} = uri_unescape($self->{$i});
+		$self->{$i} =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/egso;
+	}
 	$self->{'imageurl'} ||= $self->{'iconurl'};
 
 	$self->{'cnt'} = scalar @{$self->{'streams'}};
+
+	#MUST NOW "FIX" SOME OF THEIR "STREAMS"!:
+	for (my $i=0;$i<$self->{'cnt'};$i++) {
+		if ($self->{'streams'}->[$i]
+				=~ s#\/vod\.brightchat\.com\/embed\/#\/vod\.brightchat\.com\/assets\/#o) {
+			$self->{'streams'}->[$i] .= '/playlist.m3u8'
+					unless ($self->{'streams'}->[$i] =~ /\.(?:mp3|m3u8|mp4|m4a|pls)$/);
+		}
+	}
 	$self->{'Url'} = ($self->{'cnt'} > 0) ? $self->{'streams'}->[0] : '';
 
 	#NOW GET PLAYLIST DATA:

@@ -6,6 +6,12 @@ Home page:    <https://metacpan.org/release/Sub-HandlesVia>
 Bug tracker:  <https://github.com/tobyink/p5-sub-handlesvia/issues>
 Maintainer:   Toby Inkster (TOBYINK) <tobyink@cpan.org>
 
+0.053002	2026-01-30
+
+ - Updated: Don't use Sub::HandlesVia::XS versions older than 0.002000 as
+   they are buggy.
+ - Use Sub::HandlesVia::XS for some Enum and String handlers.
+
 0.053001	2026-01-28
 
  [ Packaging ]

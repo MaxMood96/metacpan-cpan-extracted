@@ -1646,7 +1646,7 @@ sub attributes {
         # Cookies
         cookieExpiration => {
             type          => 'intOrNull',
-            documentation => 'Cookie expiration',
+            documentation => 'SSO cookie expiration',
             flags         => 'hp',
         },
         cookieName => {
@@ -1654,7 +1654,7 @@ sub attributes {
             test          => qr/^[a-zA-Z][a-zA-Z0-9_-]*$/,
             msgFail       => '__badCookieName__',
             default       => 'lemonldap',
-            documentation => 'Name of the main cookie',
+            documentation => 'Name of the SSO cookie',
             flags         => 'hp',
         },
         domain => {

@@ -15,7 +15,7 @@ use base (OS_CONF)[0];			## backward compatibility only
 our $VERSION;
 
 BEGIN {
-	$VERSION = '1.35';
+	$VERSION = '1.36';
 	eval { __PACKAGE__->bootstrap($VERSION) };
 }
 
@@ -264,6 +264,7 @@ sub bgread {
 
 	$self->{ub_ctx}->ub_wait;
 	$self->errorstring( $handle->err );
+	my $qident = $handle->async_id;
 
 	my $reply = $self->_decode_result( $handle->result ) || return;
 	$handle->query->{id} = $reply->_quid;			# zero id replaced by random lie
