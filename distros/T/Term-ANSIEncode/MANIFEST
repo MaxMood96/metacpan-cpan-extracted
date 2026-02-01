@@ -12,6 +12,7 @@ HISTORY.md
 ignore.txt
 lib/Term/ANSIEncode.pm
 font-installer/install-awesome-fonts.sh
+lib/Term/README.md
 Makefile.PL
 MANIFEST
 README.md

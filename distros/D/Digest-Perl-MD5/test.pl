@@ -5,7 +5,7 @@ use Test;
 use strict;
 use lib './lib';
 
-BEGIN {plan tests => 7}
+BEGIN {plan tests => 9}
 
 use Digest::Perl::MD5 qw(md5 md5_hex md5_base64);
 

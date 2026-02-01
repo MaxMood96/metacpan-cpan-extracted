@@ -3,27 +3,34 @@ use v5.40;
 use App::Gimei::Generator;
 use App::Gimei::Generators;
 
-use Test2::Bundle::More;
+use Test2::V1 -utf8;
+use Test2::Tools::Spec;
 
-# test
-{
-    my $generators = App::Gimei::Generators->new();
+describe "App::Gimei::Generators" => sub {
 
-    my $g = App::Gimei::Generator->new( word_class => "Data::Gimei::Name" );
-    $generators->add_generator($g);
+    it "add_generator()" => sub {
+        my $generators = App::Gimei::Generators->new();
 
-    my @list = $generators->to_list();
-    is( scalar @list, 1, "to_list returns one generator" );
-}
+        $generators->add_generator(
+            App::Gimei::Generator->new( word_class => "Data::Gimei::Name" ) );
 
-# test
-{
-    my $generators = App::Gimei::Generators->new();
+        my @list = $generators->to_list();
+        T2->is( scalar @list, 1, "to_list returns one generator" );
+    };
 
-    my $g = App::Gimei::Generator->new( word_class => "Data::Gimei::Name" );
-    $generators->add_generator($g);
+    it "execute()" => sub {
+        my $word_class = "Data::Gimei::Name";
+        my $generators = App::Gimei::Generators->new();
 
-    $generators->execute();
-}
+        $generators->add_generator(
+            App::Gimei::Generator->new( word_class => $word_class ) );
+        $generators->add_generator(
+            App::Gimei::Generator->new( word_class => $word_class ) );
 
-done_testing();
+        my @words = $generators->execute();
+
+        T2->is( scalar @words, 2, "contains two generators" );
+        T2->ok( $words[0] eq $words[1], "contains same word" );
+    };
+};
+T2->done_testing();

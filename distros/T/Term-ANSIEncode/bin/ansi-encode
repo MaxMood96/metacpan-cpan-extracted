@@ -75,7 +75,7 @@ GetOptions(
 );
 
 if ($baud > 0) {
-	$speed = calc_speed($baud);
+    $speed = calc_speed($baud);
 } else {
     $baud  = 0;
     $speed = 0;
@@ -545,8 +545,8 @@ FRAMES
 exit(0);
 
 sub calc_speed {
-	my $baud = shift;
-	return(1 / ($baud / 8));
+    my $baud = shift;
+    return(1 / ($baud / 8));
 }
 
 sub type {

@@ -16,6 +16,7 @@ use Test::EOL;
 
 my @files = (
     'lib/MIDI/Drummer/Tiny.pm',
+    'lib/MIDI/Drummer/Tiny/Grooves.pm',
     'lib/MIDI/Drummer/Tiny/SwingFills.pm',
     'lib/MIDI/Drummer/Tiny/Syncopate.pm',
     'lib/MIDI/Drummer/Tiny/Tutorial/Advanced.pod',
@@ -24,6 +25,7 @@ my @files = (
     'lib/MIDI/Drummer/Tiny/Types.pm',
     't/00-compile.t',
     't/01-methods.t',
+    't/grooves.t',
     't/verbose_add_fill.t'
 );
 

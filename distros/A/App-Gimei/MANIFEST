@@ -1,6 +1,7 @@
 Build.PL
 Changes
 DEVELOPMENT.md
+Dockerfile
 LICENSE
 META.json
 README.md

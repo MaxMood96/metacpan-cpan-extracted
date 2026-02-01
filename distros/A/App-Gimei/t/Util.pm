@@ -8,7 +8,12 @@ our @EXPORT_OK = qw(run);
 use lib ".";
 use t::CLI;
 
-use Test2::Bundle::More;
+use Test2::V1 -utf8;
+use Test2::Tools::Spec;
+
+#
+# package methods
+#
 
 sub run (@tests) {
     foreach my $t (@tests) {
@@ -16,31 +21,37 @@ sub run (@tests) {
 
         if ( $t->{expected_error_message} ) {
             if ( ref( $t->{expected_error_message} ) eq 'Regexp' ) {
-                like $cli->error_message, $t->{expected_error_message},
-                  "$t->{Name} error_message";
+                T2->like(
+                    $cli->error_message,
+                    $t->{expected_error_message},
+                    "$t->{Name} error_message"
+                );
             } else {
-                is $cli->error_message, $t->{expected_error_message},
-                  "$t->{Name} error_message";
+                T2->is(
+                    $cli->error_message,
+                    $t->{expected_error_message},
+                    "$t->{Name} error_message"
+                );
             }
-            is $cli->exit_code, undef, "$t->{Name} exit_code";
+            T2->is( $cli->exit_code, undef, "$t->{Name} exit_code" );
         } else {
-            is $cli->exit_code, 0, "$t->{Name} exit_code";
+            T2->is( $cli->exit_code, 0, "$t->{Name} exit_code" );
         }
 
         if ( ref( $t->{expected_stdout} ) eq 'Regexp' ) {
-            like $cli->stdout, $t->{expected_stdout}, "$t->{Name} stdout";
+            T2->like( $cli->stdout, $t->{expected_stdout}, "$t->{Name} stdout" );
         } else {
-            is $cli->stdout, $t->{expected_stdout}, "$t->{Name} stdout";
+            T2->is( $cli->stdout, $t->{expected_stdout}, "$t->{Name} stdout" );
         }
 
         if ( ref( $t->{expected_stderr} ) eq 'Regexp' ) {
-            like $cli->stderr, $t->{expected_stderr}, "$t->{Name} stderr";
+            T2->like( $cli->stderr, $t->{expected_stderr}, "$t->{Name} stderr" );
         } else {
-            is $cli->stderr, $t->{expected_stderr}, "$t->{Name} stderr";
+            T2->is( $cli->stderr, $t->{expected_stderr}, "$t->{Name} stderr" );
         }
     }
 
-    done_testing;
+    T2->done_testing;
 }
 
 1;

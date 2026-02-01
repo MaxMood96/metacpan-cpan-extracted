@@ -3,7 +3,7 @@ our $AUTHORITY = 'cpan:GENE';
 
 # ABSTRACT: Glorified metronome
 
-our $VERSION = '0.6012';
+our $VERSION = '0.7000';
 
 use 5.024;
 use strictures 2;
@@ -12,20 +12,17 @@ use List::Util 1.26 qw(sum0);
 use Moo;
 use experimental qw(signatures);
 use Math::Bezier ();
-use MIDI::Util   qw(
+use MIDI::Util qw(
     dura_size
     reverse_dump
     set_time_signature
-    timidity_conf
-    play_timidity
-    play_fluidsynth
     ticks
 );
-use Music::Duration        ();
+use Music::Duration ();
 use Music::RhythmSet::Util qw(upsize);
 
 use MIDI::Drummer::Tiny::Types qw(:all);
-use Types::Standard            qw(InstanceOf);
+use Types::Standard qw(InstanceOf);
 
 use Data::Dumper::Compact qw(ddc);
 use namespace::clean;
@@ -52,7 +49,8 @@ use constant STRAIGHT => 50;    # Swing percent
 #pod
 #pod   $d->set_time_sig('4/4');
 #pod   $d->count_in(1);  # Closed hi-hat for 1 bar
-#pod   $d->metronome4($d->bars, $d->closed_hh, $d->eighth, 60); # swing!
+#pod
+#pod   $d->metronome4($d->bars, $d->closed_hh, $d->eighth, 60); # 60% swing!
 #pod
 #pod   $d->rest($d->whole);
 #pod
@@ -86,13 +84,7 @@ use constant STRAIGHT => 50;    # Swing percent
 #pod   $d->set_bpm(200); # handy for tempo changes
 #pod   $d->set_channel;  # reset back to 9 if ever changed
 #pod
-#pod   $d->timidity_cfg('timidity-drummer.cfg');
-#pod
 #pod   $d->write;
-#pod   # OR:
-#pod   $d->play_with_timidity;
-#pod   # OR:
-#pod   $d->play_with_fluidsynth;
 #pod
 #pod =head1 DESCRIPTION
 #pod
@@ -1138,8 +1130,8 @@ sub crescendo_roll ( $self, $span_ref, $length, $spec,
 #pod
 #pod The B<vary> option is a hashref of coderefs, keyed by single character
 #pod tokens, like the digits 0-9.  Each coderef duration should add up to
-#pod the given B<duration> option.  The single argument to the coderefs is
-#pod the object itself and may be used as: C<my $self = shift;> in yours.
+#pod the given B<duration> option.  The single argument that is given to a
+#pod coderef is the object itself. It is used like: C<my $self = shift;>.
 #pod
 #pod These patterns can be generated with any custom function, as in the
 #pod L</SYNOPSIS>. For instance, you could use the L<Creating::Rhythms>
@@ -1183,8 +1175,7 @@ sub pattern ( $self, %args ) {
     # set the default beat-string variations
     $args{vary} ||= {
         0 => sub { $self->rest( $args{duration} ) },
-        1 =>
-            sub { $self->note( $args{duration}, $args{instrument} ) },
+        1 => sub { $self->note( $args{duration}, $args{instrument} ) },
     };
 
     for my $pattern ( $args{patterns}->@* ) {
@@ -1231,7 +1222,7 @@ sub sync_patterns ( $self, %patterns ) {
                 ? ( duration => $master_duration )
                 : (),
             );
-        },;
+        };
     }
 
     return $self->sync(@subs);
@@ -1385,63 +1376,6 @@ sub write ($self) {    ## no critic (Subroutines::ProhibitBuiltinHomonyms)
     return $self->score->write_score( $self->file );
 }
 
-#pod =method timidity_cfg
-#pod
-#pod   $timidity_conf = $d->timidity_cfg;
-#pod   $d->timidity_cfg($config_file);
-#pod
-#pod Return a timidity.cfg paragraph to use a defined B<soundfont>
-#pod attribute. If a B<config_file> is given, the timidity configuration is
-#pod written to that file.
-#pod
-#pod =cut
-
-sub timidity_cfg {
-    my ($self, $config) = @_;
-    croak 'No soundfont defined' unless $self->soundfont;
-    my $cfg = timidity_conf( $self->soundfont, $config );
-    return $cfg;
-}
-
-#pod =method play_with_timidity
-#pod
-#pod   $d->play_with_timidity;
-#pod   $d->play_with_timidity($config_file);
-#pod
-#pod Play the score with C<timidity>.
-#pod
-#pod If there is a B<soundfont> attribute, either the given B<config_file>
-#pod or C<timidity-midi-util.cfg> is used for the timidity configuration.
-#pod If a soundfont is not defined, a timidity configuration file is not
-#pod rendered.
-#pod
-#pod See L<MIDI::Util/play_timidity> for more details.
-#pod
-#pod =cut
-
-sub play_with_timidity {
-    my ($self, $config) = @_;
-    return play_timidity( $self->score, $self->file,
-        $self->soundfont, $config );
-}
-
-#pod =method play_with_fluidsynth
-#pod
-#pod   $d->play_with_fluidsynth;
-#pod   $d->play_with_fluidsynth(\@config);
-#pod
-#pod Play the score with C<fluidsynth>.
-#pod
-#pod See L<MIDI::Util/play_fluidsynth> for more details.
-#pod
-#pod =cut
-
-sub play_with_fluidsynth {
-    my ($self, $config) = @_;
-    return play_fluidsynth( $self->score, $self->file,
-        $self->soundfont, $config );
-}
-
 # lifted from https://www.perlmonks.org/?node_id=56906
 sub _gcf ( $x, $y ) {
     ( $x, $y ) = ( $y, $x % $y ) while $y;
@@ -1470,7 +1404,7 @@ MIDI::Drummer::Tiny - Glorified metronome
 
 =head1 VERSION
 
-version 0.6012
+version 0.7000
 
 =head1 SYNOPSIS
 
@@ -1492,7 +1426,8 @@ version 0.6012
 
   $d->set_time_sig('4/4');
   $d->count_in(1);  # Closed hi-hat for 1 bar
-  $d->metronome4($d->bars, $d->closed_hh, $d->eighth, 60); # swing!
+
+  $d->metronome4($d->bars, $d->closed_hh, $d->eighth, 60); # 60% swing!
 
   $d->rest($d->whole);
 
@@ -1526,13 +1461,7 @@ version 0.6012
   $d->set_bpm(200); # handy for tempo changes
   $d->set_channel;  # reset back to 9 if ever changed
 
-  $d->timidity_cfg('timidity-drummer.cfg');
-
   $d->write;
-  # OR:
-  $d->play_with_timidity;
-  # OR:
-  $d->play_with_fluidsynth;
 
 =head1 DESCRIPTION
 
@@ -1844,8 +1773,8 @@ attribute.
 
 The B<vary> option is a hashref of coderefs, keyed by single character
 tokens, like the digits 0-9.  Each coderef duration should add up to
-the given B<duration> option.  The single argument to the coderefs is
-the object itself and may be used as: C<my $self = shift;> in yours.
+the given B<duration> option.  The single argument that is given to a
+coderef is the object itself. It is used like: C<my $self = shift;>.
 
 These patterns can be generated with any custom function, as in the
 L</SYNOPSIS>. For instance, you could use the L<Creating::Rhythms>
@@ -1919,38 +1848,6 @@ are B<not> reset.
 
 Output the score as a MIDI file with the module L</file> attribute as
 the file name.
-
-=head2 timidity_cfg
-
-  $timidity_conf = $d->timidity_cfg;
-  $d->timidity_cfg($config_file);
-
-Return a timidity.cfg paragraph to use a defined B<soundfont>
-attribute. If a B<config_file> is given, the timidity configuration is
-written to that file.
-
-=head2 play_with_timidity
-
-  $d->play_with_timidity;
-  $d->play_with_timidity($config_file);
-
-Play the score with C<timidity>.
-
-If there is a B<soundfont> attribute, either the given B<config_file>
-or C<timidity-midi-util.cfg> is used for the timidity configuration.
-If a soundfont is not defined, a timidity configuration file is not
-rendered.
-
-See L<MIDI::Util/play_timidity> for more details.
-
-=head2 play_with_fluidsynth
-
-  $d->play_with_fluidsynth;
-  $d->play_with_fluidsynth(\@config);
-
-Play the score with C<fluidsynth>.
-
-See L<MIDI::Util/play_fluidsynth> for more details.
 
 =head1 NOTE ATTRIBUTES
 

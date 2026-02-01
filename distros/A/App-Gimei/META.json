@@ -36,8 +36,10 @@
             "CPAN::Uploader" : "== 0.103018",
             "Minilla" : "== v3.1.29",
             "Perl::Tidy" : "== 20260109",
+            "Reply" : "== 0.42",
             "Software::License" : "== 0.104007",
             "Spellunker" : "== v0.4.0",
+            "Term::ReadLine::Gnu" : "== 1.47",
             "Test::CPAN::Meta" : "== 0.25",
             "Test::MinimumVersion::Fast" : "== 0.04",
             "Test::PAUSE::Permissions" : "== 0.07",
@@ -48,7 +50,7 @@
       },
       "runtime" : {
          "requires" : {
-            "Data::Gimei" : "== v0.4.5",
+            "Data::Gimei" : "== v0.5.0",
             "Getopt::Long" : "== 2.58",
             "Pod::Find" : "== 1.67",
             "Pod::Text" : "== v6.0.2",
@@ -59,14 +61,14 @@
       "test" : {
          "requires" : {
             "Capture::Tiny" : "== 0.50",
-            "Test2::Bundle::More" : "== 1.302219"
+            "Test2::V1" : "== 1.302219"
          }
       }
    },
    "provides" : {
       "App::Gimei" : {
          "file" : "lib/App/Gimei.pm",
-         "version" : "v0.3.0"
+         "version" : "v0.3.1"
       },
       "App::Gimei::Generator" : {
          "file" : "lib/App/Gimei/Generator.pm"
@@ -93,7 +95,7 @@
          "web" : "https://github.com/youpong/App-Gimei"
       }
    },
-   "version" : "v0.3.0",
+   "version" : "v0.3.1",
    "x_authority" : "cpan:YOUPONG",
    "x_contributors" : [
       "NAKAJIMA Yusaku <yupong7@gmail.com>",

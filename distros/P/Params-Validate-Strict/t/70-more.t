@@ -5,21 +5,14 @@ use warnings;
 
 use Test::Most;
 
-BEGIN { use_ok('Params::Validate::Strict', qw(validate_strict)) }
+use lib 't/lib';
+use TestLogger;
 
-# Mock logger for testing
-package TestLogger {
-	sub new { bless { messages => [] }, shift }
-	sub error { push @{shift->{messages}}, 'ERROR: ' . join('', @_); }
-	sub warn { push @{shift->{messages}}, 'WARN: ' . join('', @_); }
-	sub debug { push @{shift->{messages}}, 'DEBUG: ' . join('', @_); }
-	sub get_messages { @{$_[0]->{messages}} }
-	sub clear { $_[0]->{messages} = [] }
-}
+BEGIN { use_ok('Params::Validate::Strict', qw(validate_strict)) }
 
 subtest "Relationship validations - uncovered code" => sub {
 	my $logger = new_ok('TestLogger');
-	
+
 	# Test mutually_exclusive relationship
 	dies_ok {
 		validate_strict(
@@ -38,7 +31,7 @@ subtest "Relationship validations - uncovered code" => sub {
 			logger => $logger
 		);
 	} 'mutually_exclusive relationship should die when both params present';
-	
+
 	# Test required_group relationship
 	dies_ok {
 		validate_strict(
@@ -58,7 +51,7 @@ subtest "Relationship validations - uncovered code" => sub {
 			logger => $logger
 		);
 	} 'required_group relationship should die when none present';
-	
+
 	# Test conditional_requirement relationship
 	lives_ok {
 		my $result = validate_strict(
@@ -79,7 +72,7 @@ subtest "Relationship validations - uncovered code" => sub {
 		);
 		ok $result, 'conditional_requirement passes when condition met';
 	} 'conditional_requirement with valid input';
-	
+
 	# Test dependency relationship
 	dies_ok {
 		validate_strict(
@@ -99,7 +92,7 @@ subtest "Relationship validations - uncovered code" => sub {
 			logger => $logger
 		);
 	} 'dependency relationship should die when dependency missing';
-	
+
 	# Test value_constraint relationship
 	dies_ok {
 		validate_strict(
@@ -121,7 +114,7 @@ subtest "Relationship validations - uncovered code" => sub {
 			logger => $logger
 		);
 	} 'value_constraint relationship should die when constraint violated';
-	
+
 	# Test value_conditional relationship
 	dies_ok {
 		validate_strict(
@@ -145,13 +138,13 @@ subtest "Relationship validations - uncovered code" => sub {
 };
 
 subtest "Semantic validation and edge cases" => sub {
-	my $logger = TestLogger->new;
-	
+	my $logger = new_ok('TestLogger');
+
 	# Test semantic rule (currently warns about unsupported)
 	lives_ok {
 		my $result = validate_strict(
 			schema => {
-				timestamp => { 
+				timestamp => {
 					type => 'integer',
 					semantic => 'unix_timestamp'
 				}
@@ -161,12 +154,12 @@ subtest "Semantic validation and edge cases" => sub {
 		);
 		ok $result, 'semantic rule with valid timestamp';
 	} 'semantic rule validation';
-	
+
 	# Test _warn function via unknown_parameter_handler => 'warn'
 	lives_ok {
 		my $result = validate_strict(
 			schema => { required_field => { type => 'string' } },
-			input => { 
+			input => {
 				required_field => 'valid',
 				extra_field => 'should trigger warning'
 			},
@@ -174,13 +167,13 @@ subtest "Semantic validation and edge cases" => sub {
 			logger => $logger
 		);
 		ok $result, 'validation with warning for unknown parameter';
-		
+
 		# Check that warning was logged
 		my @messages = $logger->get_messages();
-		ok(grep { /Unknown parameter 'extra_field'/ } @messages, 
+		ok(grep { /Unknown parameter 'extra_field'/ } @messages,
 		   'Warning logged for unknown parameter');
 	} 'test _warn function via unknown_parameter_handler';
-	
+
 	# Test _error function with logger
 	dies_ok {
 		validate_strict(
@@ -189,7 +182,7 @@ subtest "Semantic validation and edge cases" => sub {
 			logger => $logger
 		);
 	} 'error with logger should still die';
-	
+
 	# Check that error was logged
 	my @messages = $logger->get_messages;
 	ok(grep { /ERROR/ } @messages, 'Error was logged via logger');
@@ -199,22 +192,22 @@ subtest "Edge cases in validation rules" => sub {
 	# Test min > max error
 	dies_ok {
 		validate_strict(
-			schema => { 
-				field => { 
+			schema => {
+				field => {
 					type => 'integer',
 					min => 10,
-					max => 5 
+					max => 5
 				}
 			},
 			input => { field => 7 }
 		);
 	} 'should die when min > max';
-	
+
 	# Test memberof with min/max conflict
 	dies_ok {
 		validate_strict(
-			schema => { 
-				field => { 
+			schema => {
+				field => {
 					type => 'integer',
 					memberof => [1, 2, 3],
 					min => 0
@@ -223,12 +216,12 @@ subtest "Edge cases in validation rules" => sub {
 			input => { field => 2 }
 		);
 	} 'should die when memberof combined with min';
-	
+
 	# Test custom types with overrides
 	lives_ok {
 		my $result = validate_strict(
 			schema => {
-				email => { 
+				email => {
 					type => 'email',
 					min => 10  # Override custom type min
 				}
@@ -245,7 +238,7 @@ subtest "Edge cases in validation rules" => sub {
 		);
 		ok $result, 'custom type with override';
 	} 'custom type validation with override';
-	
+
 	# Test arrayref with schema validation failure
 	dies_ok {
 		validate_strict(
@@ -261,7 +254,7 @@ subtest "Edge cases in validation rules" => sub {
 			input => { items => [1, -5, 3] }
 		);
 	} 'should die when nested schema validation fails';
-	
+
 	# Test transform that changes type
 	dies_ok {
 		validate_strict(
@@ -287,7 +280,7 @@ subtest "Positional arguments and edge cases" => sub {
 			input => ['value1', 'value2']
 		);
 	} 'should die when duplicate positions in schema';
-	
+
 	# Test mixed positional and named args detection
 	dies_ok {
 		validate_strict(

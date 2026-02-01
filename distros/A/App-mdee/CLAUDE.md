@@ -18,8 +18,10 @@ mdee (Markdown, Easy on the Eyes) is a Markdown viewer command implemented as a 
 ### Testing Colors
 
 ```bash
-./script/mdee t/test.md              # light mode
+./script/mdee t/test.md              # light mode (nup style)
 ./script/mdee --mode=dark t/test.md  # dark mode
+./script/mdee -p t/test.md           # pager style
+./script/mdee -f t/test.md           # filter style (stdout)
 ./script/mdee --list-themes          # show theme samples
 ```
 
@@ -69,11 +71,13 @@ flowchart LR
     C -->|no| E{table?}
     D --> E
     E -->|yes| F[ansicolumn]
-    E -->|no| G{nup?}
+    E -->|no| G{style?}
     F --> G
-    G -->|yes| H[nup]
-    G -->|no| I[stdout]
+    G -->|nup| H[nup]
+    G -->|pager| J[pager]
+    G -->|cat/filter/raw| I[stdout]
     H --> I
+    J --> I
 
     subgraph "Syntax Highlighting"
         B
@@ -84,36 +88,97 @@ flowchart LR
     end
     subgraph "Output"
         H
+        J
     end
 ```
 
-Each stage is optional (`--[no-]fold`, `--[no-]table`, `--[no-]nup`).
+Each stage is controlled by `--style` and individual `--[no-]fold`, `--[no-]table`, `--[no-]nup` options.
 
-### Filter Mode
+### Style System
 
-The `-f` / `--filter` option enables filter mode for simple highlighting:
+The `--style` (`-s`) option controls which pipeline stages are active:
+
+| Style | fold | table | nup | pager | Use case |
+|-------|------|-------|-----|-------|----------|
+| `nup` (default) | on | on | on | - | Multi-column paged output |
+| `pager` | on | on | - | on | Single-column with pager |
+| `cat` | on | on | - | - | Output to stdout |
+| `filter` | - | on | - | - | Piping / stdin |
+| `raw` | - | - | - | - | Highlight only |
+
+Shortcuts: `-f` = `--style=filter`, `-p` = `--style=pager`
 
 ```bash
-mdee -f file.md           # highlight + table (no fold, nup)
-cat file.md | mdee -f     # highlight stdin
-mdee -f --fold file.md    # highlight + table + fold
+mdee -s pager file.md       # fold + table, output to pager
+mdee -f file.md             # table only (filter mode)
+mdee -p file.md             # fold + table + pager
+mdee -f --fold file.md      # filter + fold override
 ```
 
-Implementation uses a callback function:
+#### Implementation
+
+Style defaults are applied after option parsing using a sentinel value:
 
 ```bash
+[        style | s  :          # output style      ]=nup
 [       filter | f   !         # filter mode       ]=
+[        plain | p   !         # plain mode        ]=
+[         fold |               # line folding      ]=_
+[        table |               # table formatting  ]=_
+[          nup |               # use nup           ]=_
+```
 
-filter() {
-    fold=
-    nup=
+- `fold`/`table`/`nup` default to sentinel `_` (not user-set)
+- After getoptlong.sh, style defaults are applied only to sentinel values
+- Explicit `--fold`/`--no-fold` sets the value to `1`/empty, overriding style
+- `filter()` and `plain()` callbacks set `$style` during option parsing
+- The `!` marker triggers the callback when option is parsed
+
+```bash
+filter() { style=filter; }
+plain()  { [[ $plain ]] && style=pager || style=nup; }
+
+# After getoptlong.sh:
+case $style in
+    nup)    style_defaults=([fold]=1 [table]=1 [nup]=1) ;;
+    pager)  style_defaults=([fold]=1 [table]=1 [nup]=)  ;;
+    ...
+esac
+[[ $fold  == _ ]] && fold=${style_defaults[fold]}
+[[ $table == _ ]] && table=${style_defaults[table]}
+[[ $nup   == _ ]] && nup=${style_defaults[nup]}
+```
+
+#### Pager Stage
+
+When `style=pager`, the `run_pager` function is appended to the pipeline:
+
+```bash
+run_pager() { invoke ${PAGER:-less}; }
+
+# Added to stages when style=pager:
+[[ $style == pager ]] && stages+=(run_pager)
+```
+
+#### Command Invocation Wrapper
+
+All `run_XXX` functions use `invoke` to execute commands. When `debug > 1` (`-dd`), it prints the full command with quoted arguments to stderr. In dryrun mode, `invoke` skips execution:
+
+```bash
+invoke() {
+    (( debug > 1 )) && echo "debug: $(printf '%q ' "$@")" >&2
+    [[ ${dryrun:-} ]] && return
+    "$@"
 }
 ```
 
-- The `!` marker triggers the callback when option is parsed
-- Callback sets fold and nup to empty (disabled), table remains enabled
-- Subsequent options (`--fold`, `--table`, `--nup`) can override
-- Order matters: `-f --fold` enables fold, `--fold -f` disables it
+Debug levels:
+- `-d` (`debug > 0`): color values, pipeline stage names
+- `-dd` (`debug > 1`): above + full command lines for each pipeline stage
+
+Dryrun combinations:
+- `-dn`: show pipeline as function names (e.g., `run_greple "$@" | run_fold | ...`)
+- `-ddn`: show expanded command lines for each stage without executing
 
 ### Greple Options
 
@@ -178,15 +243,16 @@ Regex pattern ([CommonMark Code Spans](https://spec.commonmark.org/0.31.2/#code-
 
 Light mode uses light background with dark text:
 ```bash
-[h1]='L25DE/${base}'      # Gray text on base background
-[h2]='L25DE/${base}+l10'  # Lighter background
+[h1]='L25DE/${base}'       # Gray text on base background
+[h2]='L25DE/${base}+y20'   # Lighter background
+[h3]='L25DN/${base}+y30'   # Normal weight, even lighter
 ```
 
 Dark mode uses dark background with light text:
 ```bash
 [h1]='L00DE/${base}'       # Black text on base background
-[h2]='L00DE/${base}-l10'   # Darker background
-[h3]='L00DN/${base}-l15'   # Normal weight, even darker
+[h2]='L00DE/${base}-y15'   # Darker background
+[h3]='L00DN/${base}-y25'   # Normal weight, even darker
 ```
 
 ### Greple::tee Module
@@ -228,11 +294,11 @@ greple \
 
 ```bash
 greple \
-    -Mtee::config=discrete "&ansicolumn" -s '|' -o '|' -t --cu=1 -- \
+    -Mtee::config=discrete,bulkmode "&ansicolumn" -s '|' -o '|' -t --cu=1 -- \
     -E '^(\|.+\|\n){3,}' --all --need=0 --no-color
 ```
 
-- `-Mtee::config=discrete`: Process each match separately
+- `-Mtee::config=discrete,bulkmode`: Process each match separately, in bulk mode
 - `"&ansicolumn"`: Call ansicolumn as function
 - `-s '|'`: Input separator
 - `-o '|'`: Output separator
@@ -242,13 +308,22 @@ greple \
 
 #### Table Separator Fix
 
-After ansicolumn, a perl one-liner fixes the separator line:
+After ansicolumn, a perl script fixes the separator lines within table blocks:
 
 ```bash
-perl -pE 's/ /-/g if /^ \| (\s* -+ \s* \|)+ $/x'
+define fix_table_script <<'EOS'
+    use Term::ANSIColor::Concise "ansi_color";
+    local $_ = do { local $/; <> };
+    s{ ^ (\| ( ( [^|]* \| )+ \n){3,} ) }{
+        $1 =~ s{^( \| (\h* -+ \h* \|)+ )$}{ $1 =~ tr[ ][-]r }xmegr;
+    }xmepg;
+    print;
+EOS
+
+run_table_fix() { invoke perl -E "$fix_table_script"; }
 ```
 
-This replaces spaces with dashes in the `|---|---|` separator row.
+The script slurps the entire input and only modifies separator lines (`|---|---|`) within table blocks (3+ consecutive pipe-delimited rows), replacing spaces with dashes.
 
 ### Field Visibility with --show Option
 
@@ -299,16 +374,16 @@ Bold and italic patterns follow [CommonMark emphasis rules](https://spec.commonm
 ```bash
 # Bold: ** and __
 add_pattern bold '(?<!\\)\*\*.*?(?<!\\)\*\*'
-add_pattern bold '(?<!\\)(?<!\w)__.*?(?<!\\)__(?!\w)'
+add_pattern bold '(?<!\\)(?<![`\w])__.*?(?<!\\)__(?!\w)'
 
 # Italic: * and _
-add_pattern italic '(?<!\\)(?<!\w)_(?:(?!_).)+(?<!\\)_(?!\w)'
+add_pattern italic '(?<!\\)(?<![`\w])_(?:(?!_).)+(?<!\\)_(?!\w)'
 add_pattern italic '(?<!\\)(?<!\*)\*(?:(?!\*).)+(?<!\\)\*(?!\*)'
 ```
 
 Key rules:
 - `(?<!\\)`: Not preceded by backslash (escape handling)
-- `(?<!\w)` / `(?!\w)`: Word boundaries for `_` (prevents `foo_bar_baz` matching)
+- `` (?<![`\w]) `` / `(?!\w)`: Word boundaries for `_` (prevents `foo_bar_baz` matching and avoids matching inside inline code)
 - `(?<!\*)` / `(?!\*)`: Not adjacent to `*` (distinguishes `*italic*` from `**bold**`)
 - `(?:(?!\*).)+`: Match any character except `*`, and `.` excludes newlines (single-line only)
 - `__` requires word boundaries (same as `_`)
@@ -320,12 +395,12 @@ Links are converted to [OSC 8 terminal hyperlinks](https://gist.github.com/egmon
 
 ```bash
 # Define osc8 function via --prologue
-osc8_prologue='sub{ sub osc8 { sprintf "\e]8;;%2\$s\e\\%1\$s\e]8;;\e\\", @_ } }'
+osc8_prologue='sub{ sub osc8 { sprintf "\e]8;;%s\e\\%s\e]8;;\e\\", @_ } }'
 
 # Color functions using named captures
-link_func='sub{ s/\[(?<text>.+?)\]\((?<url>.+?)\)/osc8("[$+{text}]",$+{url})/er }'
-image_func='sub{ s/!\[(?<alt>.+?)\]\((?<url>.+?)\)/osc8("![$+{alt}]",$+{url})/er }'
-image_link_func='sub{ s/\[!\[(?<alt>.+?)\]\(.+?\)\]\((?<url>.+?)\)/osc8("![$+{alt}]",$+{url})/er }'
+    link_func='sub{ s/   \[(?<txt>.+?)\]\((?<url>.+?)\)/osc8($+{url},  "[$+{txt}]")/xer }'
+   image_func='sub{ s/  !\[(?<alt>.+?)\]\((?<url>.+?)\)/osc8($+{url}, "![$+{alt}]")/xer }'
+image_link_func='sub{ s/\[!\[(?<alt>.+?)\]\((?<img>.+?)\)\]\((?<url>.+?)\)/osc8($+{img}, "!") . osc8($+{url}, "[$+{alt}]")/xer }'
 ```
 
 Three link patterns:
@@ -334,14 +409,14 @@ Three link patterns:
 |---------|-------|--------|-------------|
 | link | `[text](url)` | `[text]` | url |
 | image | `![alt](img)` | `![alt]` | img |
-| image_link | `[![alt](img)](url)` | `![alt]` | url |
+| image_link | `[![alt](img)](url)` | `![alt]` | img (for `!`) + url (for `[alt]`) |
 
 OSC 8 format: `\e]8;;URL\e\TEXT\e]8;;\e\`
 - `\e]8;;URL\e\` - Start hyperlink with URL
 - `TEXT` - Displayed text
 - `\e]8;;\e\` - End hyperlink
 
-The `osc8` function uses sprintf with positional arguments (`%2$s`, `%1$s`) to reorder text and URL.
+The `osc8` function takes `(URL, TEXT)` order. The `image_link_func` produces two separate OSC 8 links: `!` linked to the image URL and `[alt]` linked to the outer URL.
 
 ### Mode Detection with [Getopt::EX::termcolor](https://metacpan.org/pod/Getopt::EX::termcolor)
 

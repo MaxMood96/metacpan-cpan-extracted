@@ -1,5 +1,16 @@
 Revision history for Dist-Zilla-Plugin-ContributorsFile
 
+0.4.0 2026-01-31
+ [API CHANGES]
+ [BUG FIXES]
+ [DOCUMENTATION]
+ [ENHANCEMENTS]
+ - Minor code refactoring.
+
+ [NEW FEATURES]
+ [STATISTICS]
+ - code churn: 7 files changed, 276 insertions(+), 28 deletions(-)
+
 0.3.0 2014-10-25
  [ENHANCEMENTS]
  - Don't print out the emails in the CONTRIBUTORS file, as it seems spammer
@@ -61,8 +72,6 @@ Revision history for Dist-Zilla-Plugin-ContributorsFile
  - code churn: 3 files changed, 26 insertions(+), 2 deletions(-)
 
 0.1.0 2013-03-18
- - First version, unleashed on an unsuspecting world.
-
+ [First version, unleashed on an unsuspecting world.]
  [STATISTICS]
  - code churn: 4 files changed, 152 insertions(+), 7 deletions(-)
-

@@ -9,9 +9,9 @@ typedef struct {
 
 static const WidthRange width_table[] = {
 //    { 0x0, 0x1f, -1 },
-    { 0x20, 0x7e, 1 },
+//    { 0x20, 0x7e, 1 },
 //    { 0x7f, 0x9f, -1 },
-    { 0xa0, 0x2ff, 1 },
+//    { 0xa0, 0x2ff, 1 },
     { 0x300, 0x36f, 0 },
     { 0x370, 0x482, 1 },
     { 0x483, 0x489, 0 },
@@ -1007,7 +1007,7 @@ static const WidthRange width_table[] = {
     { 0xe0020, 0xe007f, 0 },
     { 0xe0080, 0xe00ff, 1 },
     { 0xe0100, 0xe01ef, 0 },
-    { 0xe01f0, 0x10ffff, 1 },
+//    { 0xe01f0, 0x10ffff, 1 },
 };
 
 static const int width_table_len = sizeof(width_table) / sizeof(width_table[0]);

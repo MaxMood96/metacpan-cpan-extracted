@@ -112,6 +112,29 @@ DISTRIBUTIONS
       Test::More 0
       XSLoader 0.02
       perl 5.008001
+  Config-INI-0.029
+    pathname: R/RJ/RJBS/Config-INI-0.029.tar.gz
+    provides:
+      Config::INI 0.029
+      Config::INI::Reader 0.029
+      Config::INI::Writer 0.029
+    requirements:
+      Carp 0
+      ExtUtils::MakeMaker 6.78
+      Mixin::Linewise::Readers 0.110
+      Mixin::Linewise::Writers 0
+      perl 5.012
+      warnings 0
+  Config-INI-Reader-Ordered-0.022
+    pathname: R/RJ/RJBS/Config-INI-Reader-Ordered-0.022.tar.gz
+    provides:
+      Config::INI::Reader::Ordered 0.022
+    requirements:
+      Config::INI::Reader 0
+      ExtUtils::MakeMaker 6.78
+      perl 5.012
+      strict 0
+      vars 0
   Config-Identity-0.0019
     pathname: D/DA/DAGOLDEN/Config-Identity-0.0019.tar.gz
     provides:
@@ -128,10 +151,10 @@ DISTRIBUTIONS
       perl 5.006
       strict 0
       warnings 0
-  Data-Gimei-v0.4.5
-    pathname: Y/YO/YOUPONG/Data-Gimei-v0.4.5.tar.gz
+  Data-Gimei-v0.5.0
+    pathname: Y/YO/YOUPONG/Data-Gimei-v0.5.0.tar.gz
     provides:
-      Data::Gimei v0.4.5
+      Data::Gimei v0.5.0
       Data::Gimei::Address undef
       Data::Gimei::Name undef
       Data::Gimei::Random undef
@@ -173,6 +196,14 @@ DISTRIBUTIONS
       Data::Section::Simple 0.07
     requirements:
       ExtUtils::MakeMaker 6.30
+  Devel-Caller-2.07
+    pathname: R/RC/RCLAMP/Devel-Caller-2.07.tar.gz
+    provides:
+      Devel::Caller 2.07
+    requirements:
+      ExtUtils::MakeMaker 0
+      PadWalker 0.08
+      Test::More 0
   Devel-CheckCompiler-0.07
     pathname: S/SY/SYOHEX/Devel-CheckCompiler-0.07.tar.gz
     provides:
@@ -186,6 +217,26 @@ DISTRIBUTIONS
       Test::More 0.98
       parent 0
       perl 5.008001
+  Devel-LexAlias-0.05
+    pathname: R/RC/RCLAMP/Devel-LexAlias-0.05.tar.gz
+    provides:
+      Devel::LexAlias 0.05
+    requirements:
+      Devel::Caller 0.03
+      ExtUtils::MakeMaker 0
+      Test::More 0
+  Dist-CheckConflicts-0.11
+    pathname: D/DO/DOY/Dist-CheckConflicts-0.11.tar.gz
+    provides:
+      Dist::CheckConflicts 0.11
+    requirements:
+      Carp 0
+      Exporter 0
+      ExtUtils::MakeMaker 6.30
+      Module::Runtime 0.009
+      base 0
+      strict 0
+      warnings 0
   Encode-Locale-1.05
     pathname: G/GA/GAAS/Encode-Locale-1.05.tar.gz
     provides:
@@ -195,6 +246,19 @@ DISTRIBUTIONS
       Encode::Alias 0
       ExtUtils::MakeMaker 0
       perl 5.008
+  Eval-Closure-0.14
+    pathname: D/DO/DOY/Eval-Closure-0.14.tar.gz
+    provides:
+      Eval::Closure 0.14
+    requirements:
+      Carp 0
+      Exporter 0
+      ExtUtils::MakeMaker 0
+      Scalar::Util 0
+      constant 0
+      overload 0
+      strict 0
+      warnings 0
   ExtUtils-Config-0.010
     pathname: L/LE/LEONT/ExtUtils-Config-0.010.tar.gz
     provides:
@@ -689,6 +753,21 @@ DISTRIBUTIONS
       parent 0
       perl 5.010001
       version 0
+  Mixin-Linewise-0.111
+    pathname: R/RJ/RJBS/Mixin-Linewise-0.111.tar.gz
+    provides:
+      Mixin::Linewise 0.111
+      Mixin::Linewise::Readers 0.111
+      Mixin::Linewise::Writers 0.111
+    requirements:
+      Carp 0
+      ExtUtils::MakeMaker 6.78
+      IO::File 0
+      PerlIO::utf8_strict 0
+      Sub::Exporter 0
+      perl 5.012
+      strict 0
+      warnings 0
   Module-Build-0.4234
     pathname: L/LE/LEONT/Module-Build-0.4234.tar.gz
     provides:
@@ -922,6 +1001,43 @@ DISTRIBUTIONS
       perl 5.010000
       strict 0
       warnings 0
+  Package-Stash-0.40
+    pathname: E/ET/ETHER/Package-Stash-0.40.tar.gz
+    provides:
+      Package::Stash 0.40
+      Package::Stash::PP 0.40
+    requirements:
+      B 0
+      Carp 0
+      Dist::CheckConflicts 0.02
+      ExtUtils::MakeMaker 0
+      Getopt::Long 0
+      Module::Implementation 0.06
+      Package::Stash::XS 0.26
+      Scalar::Util 0
+      Symbol 0
+      Text::ParseWords 0
+      constant 0
+      perl 5.008001
+      strict 0
+      warnings 0
+  Package-Stash-XS-0.30
+    pathname: E/ET/ETHER/Package-Stash-XS-0.30.tar.gz
+    provides:
+      Package::Stash::XS 0.30
+    requirements:
+      ExtUtils::MakeMaker 0
+      XSLoader 0
+      perl 5.008001
+      strict 0
+      warnings 0
+  PadWalker-2.5
+    pathname: R/RO/ROBIN/PadWalker-2.5.tar.gz
+    provides:
+      PadWalker 2.5
+    requirements:
+      ExtUtils::MakeMaker 0
+      perl 5.008001
   Params-Util-1.102
     pathname: R/RE/REHSACK/Params-Util-1.102.tar.gz
     provides:
@@ -1034,6 +1150,16 @@ DISTRIBUTIONS
     requirements:
       ExtUtils::MakeMaker 0
       perl 5.008001
+  PerlIO-utf8_strict-0.010
+    pathname: L/LE/LEONT/PerlIO-utf8_strict-0.010.tar.gz
+    provides:
+      PerlIO::utf8_strict 0.010
+    requirements:
+      ExtUtils::MakeMaker 0
+      XSLoader 0
+      perl 5.008
+      strict 0
+      warnings 0
   Pod-Markdown-3.400
     pathname: R/RW/RWSTAUNER/Pod-Markdown-3.400.tar.gz
     provides:
@@ -1138,6 +1264,61 @@ DISTRIBUTIONS
       perl 5.010
       strict 0
       vars 0
+      warnings 0
+  Reply-0.42
+    pathname: D/DO/DOY/Reply-0.42.tar.gz
+    provides:
+      Reply 0.42
+      Reply::App 0.42
+      Reply::Config 0.42
+      Reply::Plugin 0.42
+      Reply::Plugin::AutoRefresh 0.42
+      Reply::Plugin::Autocomplete::Commands 0.42
+      Reply::Plugin::Autocomplete::Functions 0.42
+      Reply::Plugin::Autocomplete::Globals 0.42
+      Reply::Plugin::Autocomplete::Keywords 0.42
+      Reply::Plugin::Autocomplete::Lexicals 0.42
+      Reply::Plugin::Autocomplete::Methods 0.42
+      Reply::Plugin::Autocomplete::Packages 0.42
+      Reply::Plugin::CollapseStack 0.42
+      Reply::Plugin::Colors 0.42
+      Reply::Plugin::DataDump 0.42
+      Reply::Plugin::DataDumper 0.42
+      Reply::Plugin::DataPrinter 0.42
+      Reply::Plugin::Editor 0.42
+      Reply::Plugin::FancyPrompt 0.42
+      Reply::Plugin::Hints 0.42
+      Reply::Plugin::Interrupt 0.42
+      Reply::Plugin::LexicalPersistence 0.42
+      Reply::Plugin::LoadClass 0.42
+      Reply::Plugin::Nopaste 0.42
+      Reply::Plugin::Packages 0.42
+      Reply::Plugin::Pager 0.42
+      Reply::Plugin::ReadLine 0.42
+      Reply::Plugin::ResultCache 0.42
+      Reply::Plugin::Timer 0.42
+    requirements:
+      Config::INI::Reader::Ordered 0
+      Data::Dumper 0
+      Devel::LexAlias 0
+      Eval::Closure 0.11
+      Exporter 0
+      ExtUtils::MakeMaker 0
+      File::HomeDir 0
+      File::Spec 0
+      Getopt::Long 2.36
+      Module::Runtime 0
+      Package::Stash 0
+      PadWalker 0
+      Scalar::Util 0
+      Term::ANSIColor 0
+      Term::ReadLine 0
+      Time::HiRes 0
+      Try::Tiny 0
+      base 0
+      overload 0
+      perl 5.006
+      strict 0
       warnings 0
   Role-Tiny-2.002004
     pathname: H/HA/HAARG/Role-Tiny-2.002004.tar.gz
@@ -1282,6 +1463,16 @@ DISTRIBUTIONS
       Term::Encoding 0.03
     requirements:
       ExtUtils::MakeMaker 0
+  Term-ReadLine-Gnu-1.47
+    pathname: H/HA/HAYASHI/Term-ReadLine-Gnu-1.47.tar.gz
+    provides:
+      Term::ReadLine::Gnu 1.47
+      Term::ReadLine::Gnu::AU 1.47
+      Term::ReadLine::Gnu::Var 1.47
+      Term::ReadLine::Gnu::XS 1.47
+    requirements:
+      ExtUtils::MakeMaker 0
+      perl 5.008001
   TermReadKey-2.38
     pathname: J/JS/JSTOWE/TermReadKey-2.38.tar.gz
     provides:

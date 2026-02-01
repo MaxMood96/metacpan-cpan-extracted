@@ -1,17 +1,16 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+
 use Test::Most;
-use Params::Validate::Strict qw(validate_strict);
 use Scalar::Util 'blessed';
 
-# Mock logger for testing
-{
-	package Test::Logger;
-	sub new { bless { messages => [] }, shift }
-	sub error { push @{$_[0]->{messages}}, ['error', @_[1..$#_]] }
-	sub warn { push @{$_[0]->{messages}}, ['warn', @_[1..$#_]] }
-	sub debug { push @{$_[0]->{messages}}, ['debug', @_[1..$#_]] }
-	sub get_messages { @{shift->{messages}} }
-	sub clear { $_[0]->{messages} = [] }
-}
+use lib 't/lib';
+use Test::Logger;
+
+BEGIN { use_ok('Params::Validate::Strict', qw(validate_strict)) }
+
 
 subtest 'Basic validation failures' => sub {
 	dies_ok {

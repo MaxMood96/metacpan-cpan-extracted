@@ -1,9 +1,8 @@
 use v5.40;
-use Test2::Bundle::More;
 
-# test for loading the module
 use App::Gimei;
+use Test2::V1 -utf8;
 
-ok 1;    # dummy
+T2->ok( 1, "App::Gimei loaded successfully" );
 
-done_testing;
+T2->done_testing;

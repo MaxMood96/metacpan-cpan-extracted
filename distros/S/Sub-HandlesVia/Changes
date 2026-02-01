@@ -6,6 +6,15 @@ Home page:    <https://metacpan.org/release/Sub-HandlesVia>
 Bug tracker:  <https://github.com/tobyink/p5-sub-handlesvia/issues>
 Maintainer:   Toby Inkster (TOBYINK) <tobyink@cpan.org>
 
+0.053003	2026-01-31
+
+ - A lot of the array handlers which accepted a coderef which operated on
+   $_ would also pass $_ to the coderef in @_. There were no test cases for
+   this and it was undocumented (apart from for_each). This feature has
+   been removed (apart from for_each).
+ - Added: The new for_each2 array handler only makes the array element
+   available as $_, not in @_.
+
 0.053002	2026-01-30
 
  - Updated: Don't use Sub::HandlesVia::XS versions older than 0.002000 as

@@ -4,7 +4,7 @@ package App::mdee;
 # POD documentation is appended from script/mdee at release time.
 # See minil.toml for details.
 
-our $VERSION = "0.06";
+our $VERSION = "0.07";
 
 1;
 =encoding utf-8
@@ -12,6 +12,12 @@ our $VERSION = "0.06";
 =head1 NAME
 
 mdee - Markdown, Easy on the Eyes
+
+=begin html
+
+<p><img width="750" src="https://raw.githubusercontent.com/tecolicom/App-mdee/main/images/manual.png">
+
+=end html
 
 =head1 SYNOPSIS
 
@@ -21,7 +27,9 @@ mdee - Markdown, Easy on the Eyes
          --version          show version
      -d  --debug            debug level (repeatable)
      -n  --dryrun           dry-run mode
-     -f  --filter           filter mode (--no-fold --no-nup)
+     -s  --style=#          output style (nup/pager/cat/filter/raw)
+     -f  --filter           shortcut for --style=filter
+     -p  --plain             shortcut for --style=pager
          --[no-]fold        line folding (default: on)
          --[no-]table       table formatting (default: on)
          --[no-]nup         nup paged output (default: on)
@@ -42,7 +50,7 @@ mdee - Markdown, Easy on the Eyes
 
 =head1 VERSION
 
-Version 0.06
+Version 0.07
 
 =cut
 =head1 DESCRIPTION
@@ -76,12 +84,25 @@ Show version.
 
 =item B<-d>, B<--debug>
 
-Set debug level.  Can be repeated (C<-d>, C<-dd>, C<-ddd>) for
-increasing verbosity.
+Set debug level.  Can be repeated for increasing verbosity.
+
+=over 4
+
+=item C<-d>
+
+Show color values and pipeline stage names.
+
+=item C<-dd>
+
+Above, plus full command lines for each pipeline stage.
+
+=back
 
 =item B<-n>, B<--dryrun>
 
-Dry-run mode. Show the command without executing.
+Dry-run mode. Show the pipeline without executing.
+With C<-dd>, shows expanded command lines for each stage instead
+of function names.
 
 =back
 
@@ -89,12 +110,42 @@ Dry-run mode. Show the command without executing.
 
 =over 4
 
+=item B<-s> I<STYLE>, B<--style>=I<STYLE>
+
+Set the output style.  Default is C<nup>.  Available styles:
+
+=over 4
+
+=item C<nup> - Full pipeline: fold + table + nup paged output (default)
+
+=item C<pager> - Fold + table, output to pager (C<$PAGER> or C<less>)
+
+=item C<cat> - Fold + table, output to stdout
+
+=item C<filter> - Table only (no fold, no nup), suitable for piping
+
+=item C<raw> - Highlight only (no fold, no table, no nup)
+
+=back
+
+The style sets the initial state of C<--fold>, C<--table>, and
+C<--nup> options.  Subsequent options can override individual
+settings:
+
+    mdee -s filter --fold file.md    # filter + fold
+    mdee -p --no-fold file.md        # pager without fold
+
 =item B<-f>, B<--filter>
 
-Filter mode.  Reads from stdin (or files) and outputs highlighted
-Markdown to stdout.  Disables line folding and nup paged output,
-but keeps table formatting enabled.  Useful for piping Markdown
-content through mdee for syntax highlighting.
+Shortcut for C<--style=filter>.  Reads from stdin (or files) and
+outputs highlighted Markdown to stdout.  Disables line folding and
+nup paged output, but keeps table formatting enabled.  Useful for
+piping Markdown content through mdee for syntax highlighting.
+
+=item B<-p>, B<--plain>
+
+Shortcut for C<--style=pager>.  Enables fold and table formatting,
+outputs through a pager (C<$PAGER> or C<less>) instead of nup.
 
 =item B<--[no-]fold>
 
@@ -294,9 +345,20 @@ or C<--no-pager> to disable paging.
     mdee --no-fold file.md      # disable line folding
     mdee --no-table file.md     # disable table formatting
 
-    # Filter mode
-    cat file.md | mdee -f       # highlight stdin
+    # Output styles
+    mdee -s pager file.md       # fold + table, output to pager
+    mdee -s cat file.md         # fold + table, output to stdout
+    mdee -s filter file.md      # table only, no fold/nup
+    mdee -s raw file.md         # highlight only
+
+    # Style shortcuts
+    mdee -p file.md             # same as --style=pager
+    cat file.md | mdee -f       # highlight stdin (filter mode)
     mdee -f file.md             # highlight only (no paging)
+
+    # Override individual settings
+    mdee -f --fold file.md      # filter + fold
+    mdee -p --no-fold file.md   # pager without fold
 
     # Theme examples
     mdee --mode=dark file.md             # use dark mode
@@ -361,7 +423,9 @@ The overall data flow is:
     [ansicolumn] --- Table Formatting (optional)
         |
         v
-    [nup] --- Paged Output (optional)
+    [nup] --- Paged Output (nup style)
+        |         or
+    [pager] --- Pager Output (pager style)
         |
         v
     Terminal/Pager
@@ -369,9 +433,9 @@ The overall data flow is:
 =head2 Pipeline Architecture
 
 B<mdee> dynamically constructs a pipeline based on enabled options.
-Each stage is represented as a Bash array containing the command and
-its arguments.  The C<--dryrun> option displays the constructed pipeline
-without execution.
+Each stage is defined as a Bash function (e.g., C<run_greple>,
+C<run_fold>).  The C<--dryrun> option displays the function-based
+pipeline without execution.
 
 =head3 Processing Stages
 

@@ -1,3 +1,13 @@
+1.91:	Performance and maintenance release:
+	- ~11% performance improvement on 64-bit systems (reduced masking overhead)
+	- Added GitHub Actions CI workflows
+	- Code reformatted with perltidy
+
+1.9:	Bug fix release:
+	- RT#78392: Localize $_ to protect calling modules from clobbering
+	- RT#85872: Fixed /usr/bin/false shebang in tools/md5
+	- RT#86853: Fixed typos in documentation
+
 1.8:	Workaround for older perl
 	- Josh Clark suggested substr workaround needed by 5.004
 
@@ -19,7 +29,7 @@
 
 1.4:	Removed obsolete sum() function (hint from Guido Flohr)
 	round() function is now dynamically generated,
-	different code for 32bit and 64bit architechtures.
+	different code for 32-bit and 64-bit architectures.
 	Global 'use integer' (except for rotate_left()).
 	Faster than 1.3.	
 
@@ -32,5 +42,5 @@
 	Using 'use integer'.
 	
 1.0:	Fix for big endian machines.
-	Performancetuning.
+	Performance tuning.
 

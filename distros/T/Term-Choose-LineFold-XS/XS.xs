@@ -11,25 +11,29 @@
 
 
 static int _char_width(UV codepoint) {
+    if (codepoint < width_table[0].start) {
+        return 1;
+    }
+
     int min = 0;
     int max = width_table_len - 1;
     int mid;
 
-    if (codepoint < width_table[0].start || codepoint > width_table[max].end) {
-        return 1;
-    } else {
-        while (max >= min) {
-            mid = (min + max) / 2;
-            if (codepoint > width_table[mid].end) {
-                min = mid + 1;
-            } else if (codepoint < width_table[mid].start) {
-                max = mid - 1;
-            } else {
-                return width_table[mid].width;
-            }
-        }
+    if (codepoint > width_table[max].end) {
         return 1;
     }
+
+    while (max >= min) {
+        mid = (min + max) / 2;
+        if (codepoint > width_table[mid].end) {
+            min = mid + 1;
+        } else if (codepoint < width_table[mid].start) {
+            max = mid - 1;
+        } else {
+            return width_table[mid].width;
+        }
+    }
+    return 1;
 }
 
 

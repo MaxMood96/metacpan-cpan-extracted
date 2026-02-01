@@ -1,5 +1,11 @@
 Revision history for Params-Validate-Strict
 
+0.29	Sat Jan 31 16:29:42 EST 2026
+	Document "can" and "optional" as a code ref a bit more
+	Added nullable as a synonym for optional
+	Updated to the latest test dashboard
+	Fix https://www.cpantesters.org/cpan/report/c1353bb2-fd80-11f0-a3bc-a055f9c4ba34
+
 0.28	Tue Dec 23 20:28:19 EST 2025
 	Added relationship validator
 	Handle undefined value in 'isa' test

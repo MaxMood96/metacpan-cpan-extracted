@@ -1,6 +1,6 @@
 requires 'perl', '5.024';
 
-requires 'Text::ANSI::Fold', '2.32';
+requires 'Text::ANSI::Fold', '2.33';
 
 requires 'App::ansiecho';
 requires 'App::ansifold', '1.34';

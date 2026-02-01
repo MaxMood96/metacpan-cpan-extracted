@@ -6,7 +6,15 @@ class App::Gimei::Generators {
 
     use Data::Gimei;
 
+    #
+    # instance variables
+    #
+
     field $body : param = [];
+
+    #
+    # instance methods
+    #
 
     method add_generator ($generator) {
         push @{$body}, $generator;

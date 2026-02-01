@@ -7,10 +7,18 @@ class t::CLI {
     use App::Gimei::Runner;
     use Capture::Tiny qw(capture);
 
+    #
+    # instance variables
+    #
+
     field $stdout        : param : reader;
     field $stderr        : param : reader;
     field $exit_code     : param : reader;
     field $error_message : param : reader;
+
+    #
+    # class methods
+    #
 
     sub run ( $class, @args ) {
         my %param;

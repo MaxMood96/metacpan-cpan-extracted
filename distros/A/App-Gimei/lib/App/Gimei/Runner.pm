@@ -14,7 +14,7 @@ class App::Gimei::Runner {
     use App::Gimei::Parser;
 
     #
-    # instance fields
+    # instance variables
     #
 
     field $conf : param = { POD_FILE => pod_where( { -inc => 1 }, 'App::Gimei' ) };
@@ -23,7 +23,7 @@ class App::Gimei::Runner {
     # instance methods
     #
 
-    method parse_option ( $args_ref, $opts_ref ) {
+    method _parse_option ( $args_ref, $opts_ref ) {
         $opts_ref->{n}   = 1;
         $opts_ref->{sep} = ', ';
 
@@ -42,7 +42,7 @@ class App::Gimei::Runner {
 
     method execute (@args) {
         my %opts;
-        $self->parse_option( \@args, \%opts );
+        $self->_parse_option( \@args, \%opts );
 
         if ( $opts{version} ) {
             say "$App::Gimei::VERSION";
@@ -58,10 +58,11 @@ class App::Gimei::Runner {
             push @args, 'name:kanji';
         }
 
-        my $parser     = App::Gimei::Parser->new( args => \@args );
-        my $generators = $parser->parse();
+        #        my $parser     = App::Gimei::Parser->new( args => \@args );
+        #        my $generators = $parser->parse();
+        my $generators = App::Gimei::Parser::parse( \@args );
 
-        semantic_analysis($generators);
+        _semantic_analysis($generators);
 
         foreach ( 1 .. $opts{n} ) {
             say join $opts{sep}, $generators->execute();
@@ -74,7 +75,7 @@ class App::Gimei::Runner {
     # class methods
     #
 
-    sub semantic_analysis ($generators) {
+    sub _semantic_analysis ($generators) {
         foreach my $gen ( $generators->to_list() ) {
             if (   $gen->word_class eq 'Data::Gimei::Address'
                 && $gen->rendering eq 'romaji' )

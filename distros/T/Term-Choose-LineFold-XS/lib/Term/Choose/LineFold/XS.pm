@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use 5.16.0;
 
-our $VERSION = '0.004';
+our $VERSION = '0.005';
 
 use Exporter 'import';
 our @EXPORT_OK = qw( print_columns );
@@ -30,7 +30,7 @@ Term::Choose::LineFold::XS - XS acceleration for Term-Choose-LineFold
 
 =head1 VERSION
 
-Version 0.004
+Version 0.005
 
 =cut
 
@@ -68,7 +68,7 @@ Matthäus Kiem <cuer2s@gmail.com>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (C) 2025 Matthäus Kiem.
+Copyright (C) 2025-2026 Matthäus Kiem.
 
 This library is free software; you can redistribute it and/or modify it under the same terms as Perl 5.10.0. For
 details, see the full text of the licenses in the file LICENSE.

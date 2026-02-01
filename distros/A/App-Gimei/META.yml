@@ -4,7 +4,7 @@ author:
   - 'NAKAJIMA Yusaku <youpong@cpan.org>'
 build_requires:
   Capture::Tiny: '== 0.50'
-  Test2::Bundle::More: '== 1.302219'
+  Test2::V1: '== 1.302219'
 configure_requires:
   Module::Build::Tiny: '== 0.052'
 dynamic_config: 0
@@ -27,7 +27,7 @@ no_index:
 provides:
   App::Gimei:
     file: lib/App/Gimei.pm
-    version: v0.3.0
+    version: v0.3.1
   App::Gimei::Generator:
     file: lib/App/Gimei/Generator.pm
   App::Gimei::Generators:
@@ -37,7 +37,7 @@ provides:
   App::Gimei::Runner:
     file: lib/App/Gimei/Runner.pm
 requires:
-  Data::Gimei: '== v0.4.5'
+  Data::Gimei: '== v0.5.0'
   Getopt::Long: '== 2.58'
   Pod::Find: '== 1.67'
   Pod::Text: '== v6.0.2'
@@ -47,7 +47,7 @@ resources:
   bugtracker: https://github.com/youpong/App-Gimei/issues
   homepage: https://github.com/youpong/App-Gimei
   repository: https://github.com/youpong/App-Gimei.git
-version: v0.3.0
+version: v0.3.1
 x_authority: cpan:YOUPONG
 x_contributors:
   - 'NAKAJIMA Yusaku <yupong7@gmail.com>'

@@ -22,10 +22,10 @@ class Formatter {
         chomp @files;
         foreach my $f (@files) {
             if ( any { $f =~ $_ } @patterns ) {
-                print $f . "\n";
                 $self->format($f);
             }
         }
+        say "Done $#files files.";
     }
 
     method format($file) {

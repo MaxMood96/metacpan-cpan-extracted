@@ -60,35 +60,87 @@ subtest 'dryrun option' => sub {
 
 # Test: mode option
 subtest 'mode option' => sub {
-    my $out_light = `$mdee --dryrun --mode=light $test_md 2>&1`;
-    my $out_dark = `$mdee --dryrun --mode=dark $test_md 2>&1`;
+    my $out_light = `$mdee --mode=light -s cat $test_md 2>&1`;
+    my $out_dark = `$mdee --mode=dark -s cat $test_md 2>&1`;
     isnt($out_light, $out_dark, 'light and dark modes produce different output');
 };
 
 # Test: no-nup option
 subtest 'no-nup option' => sub {
     my $out = `$mdee --dryrun --no-nup $test_md 2>&1`;
-    unlike($out, qr/\|\s*nup/, '--no-nup excludes nup from pipeline');
+    unlike($out, qr/run_nup/, '--no-nup excludes nup from pipeline');
 };
 
 # Test: no-fold option
 subtest 'no-fold option' => sub {
     my $out = `$mdee --dryrun --no-fold $test_md 2>&1`;
-    unlike($out, qr/ansifold/, '--no-fold excludes ansifold from pipeline');
+    unlike($out, qr/run_fold/, '--no-fold excludes fold from pipeline');
 };
 
 # Test: no-table option
 subtest 'no-table option' => sub {
     my $out = `$mdee --dryrun --no-table $test_md 2>&1`;
-    unlike($out, qr/ansicolumn/, '--no-table excludes ansicolumn from pipeline');
+    unlike($out, qr/run_table/, '--no-table excludes table from pipeline');
 };
 
 # Test: filter option
 subtest 'filter option' => sub {
     my $out = `$mdee --dryrun -f $test_md 2>&1`;
-    unlike($out, qr/ansifold/, '-f disables fold');
-    like($out, qr/ansicolumn/, '-f keeps table enabled');
-    unlike($out, qr/\|\s*nup/, '-f disables nup');
+    unlike($out, qr/run_fold/, '-f disables fold');
+    like($out, qr/run_table/, '-f keeps table enabled');
+    unlike($out, qr/run_nup/, '-f disables nup');
+};
+
+# Test: style option
+subtest 'style option' => sub {
+    my $nup = `$mdee --dryrun --style=nup $test_md 2>&1`;
+    like($nup, qr/run_fold/, '--style=nup includes fold');
+    like($nup, qr/run_table/, '--style=nup includes table');
+    like($nup, qr/run_nup/, '--style=nup includes nup');
+
+    my $pager = `$mdee --dryrun --style=pager $test_md 2>&1`;
+    like($pager, qr/run_fold/, '--style=pager includes fold');
+    like($pager, qr/run_table/, '--style=pager includes table');
+    unlike($pager, qr/run_nup/, '--style=pager excludes nup');
+    like($pager, qr/run_pager/, '--style=pager includes pager');
+
+    my $cat = `$mdee --dryrun --style=cat $test_md 2>&1`;
+    like($cat, qr/run_fold/, '--style=cat includes fold');
+    like($cat, qr/run_table/, '--style=cat includes table');
+    unlike($cat, qr/run_nup/, '--style=cat excludes nup');
+
+    my $filter = `$mdee --dryrun --style=filter $test_md 2>&1`;
+    unlike($filter, qr/run_fold/, '--style=filter excludes fold');
+    like($filter, qr/run_table/, '--style=filter includes table');
+    unlike($filter, qr/run_nup/, '--style=filter excludes nup');
+
+    my $raw = `$mdee --dryrun --style=raw $test_md 2>&1`;
+    unlike($raw, qr/run_fold/, '--style=raw excludes fold');
+    unlike($raw, qr/run_table/, '--style=raw excludes table');
+    unlike($raw, qr/run_nup/, '--style=raw excludes nup');
+
+    my $bogus = `$mdee --dryrun --style=bogus $test_md 2>&1`;
+    like($bogus, qr/unknown style/, '--style=bogus produces error');
+};
+
+# Test: plain option
+subtest 'plain option' => sub {
+    my $out = `$mdee --dryrun -p $test_md 2>&1`;
+    like($out, qr/run_fold/, '-p includes fold');
+    like($out, qr/run_table/, '-p includes table');
+    unlike($out, qr/run_nup/, '-p excludes nup');
+    like($out, qr/run_pager/, '-p includes pager');
+};
+
+# Test: style override
+subtest 'style override' => sub {
+    my $out = `$mdee --dryrun -f --fold $test_md 2>&1`;
+    like($out, qr/run_fold/, '-f --fold enables fold');
+    unlike($out, qr/run_nup/, '-f --fold keeps nup disabled');
+
+    my $out2 = `$mdee --dryrun -p --no-fold $test_md 2>&1`;
+    unlike($out2, qr/run_fold/, '-p --no-fold disables fold');
+    like($out2, qr/run_pager/, '-p --no-fold keeps pager');
 };
 
 # Test: list-themes option
@@ -100,8 +152,12 @@ subtest 'list-themes option' => sub {
 
 # Test: width option
 subtest 'width option' => sub {
-    my $out = `$mdee --dryrun --width=60 $test_md 2>&1`;
-    like($out, qr/-sw60/, '--width=60 sets fold width');
+    # Use actual execution: narrow width should produce more lines than wide
+    my $narrow = `$mdee -s cat --width=30 $test_md 2>&1`;
+    my $wide   = `$mdee -s cat --width=200 $test_md 2>&1`;
+    my @narrow_lines = split /\n/, $narrow;
+    my @wide_lines   = split /\n/, $wide;
+    ok(@narrow_lines > @wide_lines, '--width=30 produces more lines than --width=200');
 };
 
 # Test: tee module with fold (actual execution)
@@ -140,31 +196,32 @@ subtest 'tee combined execution' => sub {
 
 # Test: show option
 subtest 'show option' => sub {
-    # Count -E options in first greple command (before first pipe)
+    # Count -E options in run_greple debug line (identified by --ci=G)
     sub count_patterns {
         my $out = shift;
-        my ($first_cmd) = $out =~ /^(.*?)\s+\|/s;
-        return () = ($first_cmd // '') =~ /-E/g;
+        my ($line) = $out =~ /^(debug: greple\h.*--ci=G\h.*)/m;
+        return 0 unless $line;
+        return () = $line =~ /\h-E\h/g;
     }
 
     # all fields enabled by default (16 patterns)
-    my $default = `$mdee --dryrun $test_md 2>&1`;
+    my $default = `$mdee -ddn $test_md 2>&1`;
     is(count_patterns($default), 16, 'default has 16 patterns');
 
     # --show italic=0 disables italic (14 patterns: 16 - 2 italic patterns)
-    my $no_italic = `$mdee --dryrun --show italic=0 $test_md 2>&1`;
+    my $no_italic = `$mdee -ddn --show italic=0 $test_md 2>&1`;
     is(count_patterns($no_italic), 14, '--show italic=0 removes 2 patterns');
 
     # --show bold=0 disables bold (14 patterns: 16 - 2 bold patterns)
-    my $no_bold = `$mdee --dryrun --show bold=0 $test_md 2>&1`;
+    my $no_bold = `$mdee -ddn --show bold=0 $test_md 2>&1`;
     is(count_patterns($no_bold), 14, '--show bold=0 removes 2 patterns');
 
     # --show all enables all fields (16 patterns)
-    my $all = `$mdee --dryrun --show all $test_md 2>&1`;
+    my $all = `$mdee -ddn --show all $test_md 2>&1`;
     is(count_patterns($all), 16, '--show all has 16 patterns');
 
     # --show all= --show bold enables only bold (2 patterns)
-    my $only_bold = `$mdee --dryrun '--show=all=' --show=bold $test_md 2>&1`;
+    my $only_bold = `$mdee -ddn '--show=all=' --show=bold $test_md 2>&1`;
     is(count_patterns($only_bold), 2, '--show all= --show bold has 2 patterns');
 
     # unknown field should error

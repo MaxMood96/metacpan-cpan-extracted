@@ -22,11 +22,11 @@ Params::Validate::Strict - Validates a set of parameters against a schema
 
 =head1 VERSION
 
-Version 0.28
+Version 0.29
 
 =cut
 
-our $VERSION = '0.28';
+our $VERSION = '0.29';
 
 =head1 SYNOPSIS
 
@@ -212,6 +212,10 @@ The parameter must be an object that understands the method C<can>.
 C<can> can be a simple scalar string of a method name,
 or an arrayref of a list of method names, all of which must be supported by the object.
 
+   $schema = {
+     gedcom => { type => object, can => 'get_individual' }
+   }
+
 =item * C<isa>
 
 The parameter must be an object of type C<isa>.
@@ -388,6 +392,23 @@ A boolean value indicating whether the parameter is optional.
 If true, the parameter is not required.
 If false or omitted, the parameter is required.
 
+It can be a reference to a code snippet that will return true or false,
+to determine if the parameter is optional or not.
+The code will be called with two arguments: the value of the parameter and hash ref of all parameters:
+
+  my $schema = {
+    optional_field => {
+      type => 'string',
+      optional => sub {
+        my ($value, $all_params) = @_;
+        return $all_params->{make_optional} ? 1 : 0;
+      }
+    },
+    make_optional => { type => 'boolean' }
+  };
+
+  my $result = validate_strict(schema => $schema, input => { make_optional => 1 });
+
 =item * C<default>
 
 Populate missing optional parameters with the specified value.
@@ -419,6 +440,12 @@ The custom error message to be used in the event of a validation failure.
     min => 18,
     error_msg => 'You must be at least 18 years old'
   }
+
+=item * C<nullable>
+
+Like optional,
+though this cannot be a coderef,
+only a flag.
 
 =item * C<schema>
 
@@ -1009,6 +1036,8 @@ sub validate_strict
 				} else {
 					$is_optional = $rules->{'optional'};
 				}
+			} elsif($rules->{nullable}) {
+				$is_optional = $rules->{'nullable'};
 			}
 		}
 
@@ -2076,7 +2105,7 @@ L<http://deps.cpantesters.org/?module=Params::Validate::Strict>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2025 Nigel Horne.
+Copyright 2025-2026 Nigel Horne.
 
 This program is released under the following licence: GPL2
 

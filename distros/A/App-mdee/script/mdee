@@ -15,6 +15,12 @@ define pod <<"=cut"
 
 mdee - Markdown, Easy on the Eyes
 
+=begin html
+
+<p><img width="750" src="https://raw.githubusercontent.com/tecolicom/App-mdee/main/images/manual.png">
+
+=end html
+
 =head1 SYNOPSIS
 
     mdee [ options ] file ...
@@ -23,7 +29,9 @@ mdee - Markdown, Easy on the Eyes
          --version          show version
      -d  --debug            debug level (repeatable)
      -n  --dryrun           dry-run mode
-     -f  --filter           filter mode (--no-fold --no-nup)
+     -s  --style=#          output style (nup/pager/cat/filter/raw)
+     -f  --filter           shortcut for --style=filter
+     -p  --plain             shortcut for --style=pager
          --[no-]fold        line folding (default: on)
          --[no-]table       table formatting (default: on)
          --[no-]nup         nup paged output (default: on)
@@ -44,7 +52,7 @@ mdee - Markdown, Easy on the Eyes
 
 =head1 VERSION
 
-Version 0.06
+Version 0.07
 
 =cut
 
@@ -85,10 +93,12 @@ declare -A OPTS=(
     [      version |     !         # show version      ]=
     [        debug | d  +          # debug level       ]=0
     [       dryrun | n             # dry-run mode      ]=
+    [        style | s  :          # output style      ]=nup
     [       filter | f   !         # filter mode       ]=
-    [         fold |               # line folding      ]=1
-    [        table |               # table formatting  ]=1
-    [          nup |               # use nup           ]=1
+    [        plain | p   !         # plain mode        ]=
+    [         fold |               # line folding      ]=_
+    [        table |               # table formatting  ]=_
+    [          nup |               # use nup           ]=_
     [        width | w  :=i        # fold width        ]=80
     [        theme | t  :          # color theme       ]=default
     [         mode | m  :          # light or dark     ]=
@@ -232,8 +242,11 @@ pager() {
 }
 
 filter() {
-    fold=
-    nup=
+    style=filter
+}
+
+plain() {
+    [[ $plain ]] && style=pager || style=nup
 }
 
 show() {
@@ -338,6 +351,25 @@ list_themes() {
 . getoptlong.sh OPTS "$@"
 
 ##############################################################################
+# Apply style defaults for fold/table/nup
+##############################################################################
+
+# Style determines default values for fold, table, nup.
+# Sentinel "_" means not explicitly set by user.
+declare -A style_defaults
+case $style in
+    nup)    style_defaults=([fold]=1 [table]=1 [nup]=1) ;;
+    pager)  style_defaults=([fold]=1 [table]=1 [nup]=)  ;;
+    cat)    style_defaults=([fold]=1 [table]=1 [nup]=)  ;;
+    filter) style_defaults=([fold]=  [table]=1 [nup]=)  ;;
+    raw)    style_defaults=([fold]=  [table]=  [nup]=)  ;;
+    *)      die "unknown style: $style" ;;
+esac
+[[ $fold  == _ ]] && fold=${style_defaults[fold]}
+[[ $table == _ ]] && table=${style_defaults[table]}
+[[ $nup   == _ ]] && nup=${style_defaults[nup]}
+
+##############################################################################
 # Main
 ##############################################################################
 
@@ -429,55 +461,79 @@ add_pattern link        '(?<!!)\[[^\]\n]+\]\(<?[^>)\s\n]+>?\)'
 ##############################################################################
 
 # Process files
-(( $# == 0 )) && [[ ! ${filter:-} ]] && die "stdin mode not supported without -f option"
+(( $# == 0 )) && [[ $style == nup ]] && die "stdin mode not supported without -f option"
 for file in "$@"; do
     [[ -e "$file" ]] || die "$file: No such file or directory"
 done
 
-# Define each command as an array
-declare -a cmd_greple=(greple "${greple_opts[@]}" "$@")
-
+# Define pipeline stage functions
 ITEM_PREFIX='^\h*(?:[*-]|\d+\.)\h+'
 DEF_PATTERN='(?:\A|\G\n|\n\n).+\n\n?(:\h+.*\n)'
 AUTOINDENT='^\h*(?:[*-]|\d+\.|:)\h+'
 
-declare -a cmd_fold=(
-    greple
-    -Mtee "&ansifold" --crmode --autoindent="$AUTOINDENT" -sw${width} --
-    -G -E "${ITEM_PREFIX}.*\\n" -E "${DEF_PATTERN}"
-    --crmode --all --need=0 --no-color
-)
+invoke() {
+    (( debug > 1 )) && echo "debug: $(printf '%q ' "$@")" >&2
+    [[ ${dryrun:-} ]] && return
+    "$@"
+}
 
-declare -a cmd_table=(
-    greple
-    -Mtee::config=discrete,bulkmode "&ansicolumn" -s '|' -o '|' -t --cu=1 --
-    -E '^(\|.+\|\n){3,}' --all --need=0 --no-color
-)
+run_greple()    { invoke greple "${greple_opts[@]}" "$@"; }
 
-declare -a cmd_table_fix=(
-    perl -pE 's/ /-/g if /^ \| (\s* -+ \s* \|)+ $/x'
-)
+run_fold() {
+    invoke greple \
+        -Mtee "&ansifold" --crmode --autoindent="$AUTOINDENT" -sw${width} -- \
+        -G -E "${ITEM_PREFIX}.*\\n" -E "${DEF_PATTERN}" \
+        --crmode --all --need=0 --no-color
+}
 
-declare -a cmd_nup=(nup "${nup_opts[@]}")
+run_table() {
+    invoke greple \
+        -Mtee::config=discrete,bulkmode "&ansicolumn" -s '|' -o '|' -t --cu=1 -- \
+        -E '^(\|.+\|\n){3,}' --all --need=0 --no-color
+}
+
+define fix_table_script <<'EOS'
+    use Term::ANSIColor::Concise "ansi_color";
+    local $_ = do { local $/; <> };
+    s{ ^ (\| ( ( [^|]* \| )+ \n){3,} ) }{
+        $1 =~ s{^( \| (\h* -+ \h* \|)+ )$}{ $1 =~ tr[ ][-]r }xmegr;
+    }xmepg;
+    print;
+EOS
+
+run_table_fix() { invoke perl -E "$fix_table_script"; }
+
+run_nup()   { invoke nup "${nup_opts[@]}"; }
+
+run_pager() { invoke ${PAGER:-less}; }
 
 # Collect pipeline stages
-declare -a stages=(cmd_greple)
-[[ $fold  ]] && stages+=(cmd_fold)
-[[ $table ]] && stages+=(cmd_table cmd_table_fix)
-[[ $nup   ]] && stages+=(cmd_nup)
+declare -a stages=(run_greple)
+[[ $fold  ]] && stages+=(run_fold)
+[[ $table ]] && stages+=(run_table run_table_fix)
+[[ $nup   ]] && stages+=(run_nup)
+[[ $style == pager ]] && stages+=(run_pager)
 
-# Build pipeline string from stages
-pipeline=""
-for stage in "${stages[@]}"; do
-    declare -n cmd="$stage"
-    [[ $pipeline ]] && pipeline+=" | "
-    pipeline+="$(printf '%q ' "${cmd[@]}")"
+# Build and execute pipeline
+# run_greple needs "$@" for file arguments; other stages read from stdin
+pipeline='run_greple "$@"'
+for stage in "${stages[@]:1}"; do
+    pipeline+=" | $stage"
 done
 
 (( debug > 0 )) && echo "debug: stages: ${stages[*]}" >&2
-(( debug > 0 )) && echo "debug: pipeline: $pipeline" >&2
 
-[[ ${dryrun:-} ]] && echo "$pipeline" || eval "$pipeline"
+if [[ ${dryrun:-} ]]; then
+    if (( debug > 1 )); then
+        for stage in "${stages[@]}"; do
+            $stage "$@"
+        done
+    else
+        echo "$pipeline"
+    fi
+else
+    eval "$pipeline"
+fi
 
 : <<'=cut'
 
@@ -512,12 +568,25 @@ Show version.
 
 =item B<-d>, B<--debug>
 
-Set debug level.  Can be repeated (C<-d>, C<-dd>, C<-ddd>) for
-increasing verbosity.
+Set debug level.  Can be repeated for increasing verbosity.
+
+=over 4
+
+=item C<-d>
+
+Show color values and pipeline stage names.
+
+=item C<-dd>
+
+Above, plus full command lines for each pipeline stage.
+
+=back
 
 =item B<-n>, B<--dryrun>
 
-Dry-run mode. Show the command without executing.
+Dry-run mode. Show the pipeline without executing.
+With C<-dd>, shows expanded command lines for each stage instead
+of function names.
 
 =back
 
@@ -525,12 +594,42 @@ Dry-run mode. Show the command without executing.
 
 =over 4
 
+=item B<-s> I<STYLE>, B<--style>=I<STYLE>
+
+Set the output style.  Default is C<nup>.  Available styles:
+
+=over 4
+
+=item C<nup> - Full pipeline: fold + table + nup paged output (default)
+
+=item C<pager> - Fold + table, output to pager (C<$PAGER> or C<less>)
+
+=item C<cat> - Fold + table, output to stdout
+
+=item C<filter> - Table only (no fold, no nup), suitable for piping
+
+=item C<raw> - Highlight only (no fold, no table, no nup)
+
+=back
+
+The style sets the initial state of C<--fold>, C<--table>, and
+C<--nup> options.  Subsequent options can override individual
+settings:
+
+    mdee -s filter --fold file.md    # filter + fold
+    mdee -p --no-fold file.md        # pager without fold
+
 =item B<-f>, B<--filter>
 
-Filter mode.  Reads from stdin (or files) and outputs highlighted
-Markdown to stdout.  Disables line folding and nup paged output,
-but keeps table formatting enabled.  Useful for piping Markdown
-content through mdee for syntax highlighting.
+Shortcut for C<--style=filter>.  Reads from stdin (or files) and
+outputs highlighted Markdown to stdout.  Disables line folding and
+nup paged output, but keeps table formatting enabled.  Useful for
+piping Markdown content through mdee for syntax highlighting.
+
+=item B<-p>, B<--plain>
+
+Shortcut for C<--style=pager>.  Enables fold and table formatting,
+outputs through a pager (C<$PAGER> or C<less>) instead of nup.
 
 =item B<--[no-]fold>
 
@@ -730,9 +829,20 @@ or C<--no-pager> to disable paging.
     mdee --no-fold file.md      # disable line folding
     mdee --no-table file.md     # disable table formatting
 
-    # Filter mode
-    cat file.md | mdee -f       # highlight stdin
+    # Output styles
+    mdee -s pager file.md       # fold + table, output to pager
+    mdee -s cat file.md         # fold + table, output to stdout
+    mdee -s filter file.md      # table only, no fold/nup
+    mdee -s raw file.md         # highlight only
+
+    # Style shortcuts
+    mdee -p file.md             # same as --style=pager
+    cat file.md | mdee -f       # highlight stdin (filter mode)
     mdee -f file.md             # highlight only (no paging)
+
+    # Override individual settings
+    mdee -f --fold file.md      # filter + fold
+    mdee -p --no-fold file.md   # pager without fold
 
     # Theme examples
     mdee --mode=dark file.md             # use dark mode
@@ -797,7 +907,9 @@ The overall data flow is:
     [ansicolumn] --- Table Formatting (optional)
         |
         v
-    [nup] --- Paged Output (optional)
+    [nup] --- Paged Output (nup style)
+        |         or
+    [pager] --- Pager Output (pager style)
         |
         v
     Terminal/Pager
@@ -805,9 +917,9 @@ The overall data flow is:
 =head2 Pipeline Architecture
 
 B<mdee> dynamically constructs a pipeline based on enabled options.
-Each stage is represented as a Bash array containing the command and
-its arguments.  The C<--dryrun> option displays the constructed pipeline
-without execution.
+Each stage is defined as a Bash function (e.g., C<run_greple>,
+C<run_fold>).  The C<--dryrun> option displays the function-based
+pipeline without execution.
 
 =head3 Processing Stages
 

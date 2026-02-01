@@ -6,7 +6,7 @@ Revision history for Perl extension Compress-Stream-Zstd
     Sat, 8 Apr 2023 16:01:20 +0100
     bbe2fbced1f97473273f846d00dcb2c6712ccb83
 
-    * Module::Build dependencies
+  * Module::Build dependencies
     Tue, 4 Apr 2023 13:59:26 +0100
     2fe84b4a7375e7faeee07346c5face4b945d6ca8
 

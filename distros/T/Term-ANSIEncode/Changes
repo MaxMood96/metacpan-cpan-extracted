@@ -348,3 +348,7 @@
 1.85    Jan 19, 2026
 
         Many changes to Makefile.PL, README.md and ansi-encode
+
+1.86    Jan 31, 2026
+
+        Added Windows Warp terminal detection (handles 24 bit color)

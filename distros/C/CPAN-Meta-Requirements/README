@@ -2,7 +2,7 @@ NAME
     CPAN::Meta::Requirements - a set of version requirements for a CPAN dist
 
 VERSION
-    version 2.144
+    version 2.145
 
 SYNOPSIS
       use CPAN::Meta::Requirements;

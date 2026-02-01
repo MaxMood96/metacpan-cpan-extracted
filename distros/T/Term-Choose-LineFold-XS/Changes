@@ -1,6 +1,10 @@
 Revision history for Term::Choose::LineFold::XS
 
 
+0.005   2026-02-01
+    - Skip leading and trailing one-width-entries in char-width tables.
+    - Update year copyright.
+
 0.004   2025-10-15
     - Set the width of all format code points to zero.
 

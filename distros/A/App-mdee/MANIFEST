@@ -5,6 +5,7 @@ LICENSE
 META.json
 README.md
 cpanfile
+images/manual.png
 lib/App/mdee.pm
 minil.toml
 script/mdee

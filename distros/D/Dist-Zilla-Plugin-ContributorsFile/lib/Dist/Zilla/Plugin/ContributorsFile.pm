@@ -1,9 +1,9 @@
 package Dist::Zilla::Plugin::ContributorsFile;
-BEGIN {
-  $Dist::Zilla::Plugin::ContributorsFile::AUTHORITY = 'cpan:YANICK';
-}
+our $AUTHORITY = 'cpan:YANICK';
 # ABSTRACT: add a file listing all contributors
-$Dist::Zilla::Plugin::ContributorsFile::VERSION = '0.3.0';
+$Dist::Zilla::Plugin::ContributorsFile::VERSION = '0.4.0';
+use 5.36.0;
+
 use strict;
 use warnings;
 
@@ -27,8 +27,7 @@ has contributors => (
     traits => [ 'Array' ],
     isa => 'ArrayRef',
     lazy => 1,
-    default => sub {
-        my $self = shift;
+    default => sub($self) {
         return [ map {
                 Dist::Zilla::Plugin::ContributorsFile::Contributor->new($_) 
             } @{ $self->zilla->distmeta->{x_contributors} || [] }
@@ -40,8 +39,7 @@ has contributors => (
     },
 );
 
-sub munge_file {
-    my( $self, $file ) = @_;
+sub munge_file($self,$file) {
 
     return unless $file->name eq $self->filename;
 
@@ -57,28 +55,24 @@ sub munge_file {
 
 }
 
-sub gather_files {
-    my $self = shift;
-
-    my $file = Dist::Zilla::File::InMemory->new({ 
-            content => $self->contributors_template,
-            name    => $self->filename,
-        }
+sub gather_files($self) {
+    $self->add_file( 
+        Dist::Zilla::File::InMemory->new({ 
+                content => $self->contributors_template,
+                name    => $self->filename,
+            }
+        )
     );
-
-    $self->add_file($file);
 }
 
-sub prune_files {
-    my $self = shift;
+sub prune_files($self) {
 
     return if $self->has_contributors;
 
     $self->log( 'no contributors, pruning file' );
 
-    for my $file ( grep { $_->name eq $self->filename } @{ $self->zilla->files } ) {
-        $self->zilla->prune_file($file);
-    }
+    $self->zilla->prune_file($_)
+        for grep { $_->name eq $self->filename } $self->zilla->files->@*;
 
 }
 
@@ -111,16 +105,15 @@ package
 use overload 
     '""' => sub { sprintf "%s <%s>", @$_ };
 
-sub new {
-    my $class = shift;
+sub new($class,@rest) {
 
     my @self;
 
-    if( @_ == 2 ) {
-        @self = @_;
+    if( @rest == 2 ) {
+        @self = @rest;
     }
     else {
-        @self = shift =~ /^\s*(.*?)\s*<(.*?)>\s*$/
+        @self = $rest[0] =~ /^\s*(.*?)\s*<(.*?)>\s*$/
     }
 
     return bless \@self, $class;
@@ -144,7 +137,7 @@ Dist::Zilla::Plugin::ContributorsFile - add a file listing all contributors
 
 =head1 VERSION
 
-version 0.3.0
+version 0.4.0
 
 =head1 SYNOPSIS
 
@@ -216,7 +209,7 @@ Yanick Champoux <yanick@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2013 by Yanick Champoux.
+This software is copyright (c) 2026 by Yanick Champoux.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

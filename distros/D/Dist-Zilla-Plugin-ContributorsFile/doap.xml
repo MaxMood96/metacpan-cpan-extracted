@@ -33,7 +33,7 @@
     </foaf:Person>
   </helper>
   <license rdf:resource="http://dev.perl.org/licenses/" />
-  <homepage rdf:resource="http://search.cpan.org/dist/Dist-Zilla-Plugin-ContributorsFile/" />
+  <homepage rdf:resource="https://github.com/yanick/Dist-Zilla-Plugin-ContributorsFile" />
   <bug-database rdf:resource="https://github.com/yanick/Dist-Zilla-Plugin-ContributorsFile/issues" />
   <repository>
     <GitRepository>
@@ -87,6 +87,12 @@
     <Version>
       <revision rdf:datatype="http://www.w3.org/2001/XMLSchema#string">0.2.6</revision>
       <dc:issued rdf:datatype="http://www.w3.org/2001/XMLSchema#date">2014-10-18</dc:issued>
+    </Version>
+  </release>
+  <release>
+    <Version>
+      <revision rdf:datatype="http://www.w3.org/2001/XMLSchema#string">0.3.0</revision>
+      <dc:issued rdf:datatype="http://www.w3.org/2001/XMLSchema#date">2014-10-25</dc:issued>
     </Version>
   </release>
   <programming-language>Perl</programming-language>

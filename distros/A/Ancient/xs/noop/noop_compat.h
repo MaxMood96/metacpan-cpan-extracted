@@ -1,0 +1,48 @@
+/*
+ * noop_compat.h - Perl compatibility macros for noop
+ * Boot macros and XS helpers (5.22+)
+ */
+
+#ifndef NOOP_COMPAT_H
+#define NOOP_COMPAT_H
+
+/* Version checking */
+#ifndef PERL_VERSION_DECIMAL
+#  define PERL_VERSION_DECIMAL(r,v,s) ((r)*1000000 + (v)*1000 + (s))
+#endif
+#ifndef PERL_DECIMAL_VERSION
+#  define PERL_DECIMAL_VERSION \
+      PERL_VERSION_DECIMAL(PERL_REVISION, PERL_VERSION, PERL_SUBVERSION)
+#endif
+#ifndef PERL_VERSION_GE
+#  define PERL_VERSION_GE(r,v,s) \
+      (PERL_DECIMAL_VERSION >= PERL_VERSION_DECIMAL(r,v,s))
+#endif
+
+/* XS boot macros - 5.22+ */
+#ifndef dXSBOOTARGSXSAPIVERCHK
+#  define dXSBOOTARGSXSAPIVERCHK dXSARGS
+#endif
+
+/* Boot epilog - 5.22+ */
+#if !PERL_VERSION_GE(5,22,0)
+#  ifndef Perl_xs_boot_epilog
+#    define Perl_xs_boot_epilog(aTHX_ ax) XSRETURN_YES
+#  endif
+#endif
+
+/* XS_EXTERNAL - 5.16+ */
+#ifndef XS_EXTERNAL
+#  define XS_EXTERNAL(name) XS(name)
+#endif
+
+/* Unused arg/var macros */
+#ifndef PERL_UNUSED_ARG
+#  define PERL_UNUSED_ARG(x) ((void)(x))
+#endif
+
+#ifndef PERL_UNUSED_VAR
+#  define PERL_UNUSED_VAR(x) ((void)(x))
+#endif
+
+#endif /* NOOP_COMPAT_H */
