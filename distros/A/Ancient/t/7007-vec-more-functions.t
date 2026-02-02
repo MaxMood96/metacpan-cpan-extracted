@@ -111,7 +111,7 @@ is($even->median, 2.5, 'median of [4,1,3,2] = 2.5');
 use POSIX qw(HUGE_VAL);
 my $nan = HUGE_VAL - HUGE_VAL;  # NaN
 my $inf = HUGE_VAL;  # Inf
-my $ninf = -HUGE_VAL;  # -Inf
+my $ninf = -(HUGE_VAL);  # -Inf
 my $special = nvec::new([1.0, $nan, $inf, $ninf]);  # 1, NaN, Inf, -Inf
 my $isnan = $special->isnan();
 is($isnan->get(0), 0, 'isnan(1) = 0');

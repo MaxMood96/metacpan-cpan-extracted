@@ -20,7 +20,7 @@ elsif ($^O eq 'MSWin32' || $^O eq 'cygwin' || $^O eq 'msys') {
 WriteMakefile(
     NAME             => 'object',
     VERSION_FROM     => '../../lib/object.pm',
-    MIN_PERL_VERSION => '5.014',
+    MIN_PERL_VERSION => '5.010',
     OBJECT       => 'object$(OBJ_EXT)',
     C            => ['object.c'],
     XS           => {},

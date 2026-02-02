@@ -2,6 +2,7 @@ Build.PL
 Changes
 LICENSE
 META.json
+OSC8-SUPPORT.md
 README.md
 cpanfile
 lib/Text/ANSI/Fold.pm
@@ -21,6 +22,7 @@ t/09_padcolor.t
 t/10_lvalue.t
 t/11_prefix.t
 t/12_control.t
+t/13_osc8.t
 tool/fix-w3c.pl
 META.yml
 MANIFEST

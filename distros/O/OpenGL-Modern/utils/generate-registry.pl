@@ -6,6 +6,10 @@ use warnings;
 This script extracts the function signatures etc from include/GL/glew.h
 and saves the info to lib/OpenGL/Modern/Registry.pm
 
+Run it with:
+
+  make && perl -Mblib utils/generate-registry.pl
+
 =cut
 
 require './utils/common.pl';
@@ -13,7 +17,6 @@ my %upper2data;
 my %case_map;
 my %alias;
 
-my @exported_functions = manual_list(); # names the module exports
 my %constants;
 
 for my $file ("include/GL/glew.h") {
@@ -117,8 +120,9 @@ for my $name (@ARGV ? @ARGV : sort keys %signature) {
     # Rewrite `const GLwhatever foo[]` into `const GLwhatever* foo`
     s!^const (\w+)\s+(\**)(\w+)\[\d*\]$!const $1 * $2$3!;
     s!^(\w+)\s+(\**)(\w+)\[\d*\]$!$1 * $2$3!;
-    /(.*?)(\w+)$/;
-    push @argdata, [$2,$1]; # name, type
+    my ($type, $arg) = /(.*?)(\w+)$/;
+    if (!$type) { $type = "$arg "; $arg = 'param'.(@argdata+1); }
+    push @argdata, [$arg,$type];
   }
   $item->{argdata} = \@argdata if @argdata;
   my $glewImpl;
@@ -126,13 +130,139 @@ for my $name (@ARGV ? @ARGV : sort keys %signature) {
       ( $glewImpl = $name ) =~ s!^gl!__glew!;
   }
   $item->{glewImpl} = $glewImpl if defined $glewImpl;
-  next if is_manual($name);
   my $type = $item->{restype};
-  my $num_ptr_types = 0;
-  for ($type, map $_->[1], @argdata) {
-    $num_ptr_types++ if /\*/ and !/^\s*const\s+GLchar(?:ARB)?\s*\*\s*$/;
+  my ($i, @ptr_args) = -1;
+  for ([$i++,$type], map [$i++,$_->[1]], @argdata) {
+    my ($ind, $type) = @$_;
+    next if $type !~ /\*/;
+    next if is_stringtype($type, 1);
+    next if ($name !~ /v[A-Z]*$/ || $argdata[$ind][0] eq 'name') and $type =~ /^\s*const\s+GLubyte(?:ARB)?\s*\*\s*$/;
+    push @ptr_args, $ind;
   }
-  $item->{has_ptr_arg} = $num_ptr_types if $num_ptr_types > 0;
+  $item->{ptr_args} = \@ptr_args if @ptr_args;
+}
+
+my %counts;
+for (grep $_, split /\n/, slurp('utils/paramcounts.txt')) {
+  my ($enum, $count) = split /\s+/;
+  $counts{$enum} = $count;
+}
+
+for (grep $_, split /\n/, slurp('utils/args-len.txt')) {
+  my ($func, @args) = split ' ';
+  next unless my $s = $signature{$func};
+  my ($argind, $argdata, $found_compsize) = (0, $s->{argdata});
+  for (@args) {
+    my ($name, $len) = split /=/;
+    my $arginfo = $argdata->[$argind++];
+    $arginfo->[0] = $name;
+    next if !$len;
+    $found_compsize = 1 if $len =~ /COMPSIZE/;
+    push @$arginfo, $len;
+  }
+  next if !$found_compsize;
+  my %name2data = map +($_->[0] => $_), @$argdata;
+  for (0..$#$argdata) {
+    next if !$argdata->[$_][2] or $argdata->[$_][2] !~ /^COMPSIZE\((\w+)\)/;
+    my $compsize_from = $1;
+    my $fromdata = $name2data{$compsize_from};
+    next if $fromdata->[1] !~ /^\s*GLsizei\s*$/;
+    $argdata->[$_][2] = $compsize_from;
+  }
+}
+
+for (grep $_, split /\n/, slurp('utils/args-group.txt')) {
+  my ($func, @args) = split ' ';
+  next unless my $s = $signature{$func};
+  my $argind = 0;
+  for (@args) {
+    my ($name, $group) = split /=/;
+    my $arginfo = $s->{argdata}[$argind++];
+    $arginfo->[0] = $name;
+    next if !$group;
+    $arginfo->[3] = $group; # undef in slot 2 is OK
+  }
+}
+
+for (grep $_, split /\n/, slurp('utils/dynlang.txt')) {
+  my ($func, @args) = split ' ';
+  $signature{$func}{dynlang} = { map split('=', $_, 2), @args };
+}
+
+my (%groups, %enums);
+for (grep $_, split /\n/, slurp('utils/enums-group.txt')) {
+  my ($enum, $value, @groups) = split ' ';
+  $enums{$enum} = $value;
+  push @{ $groups{$_} }, $enum for @groups;
+}
+my $g2c2s = assemble_enum_groups(\%groups, \%counts);
+
+for my $name (@ARGV ? @ARGV : sort keys %signature) {
+  my $s = $signature{$name};
+  next if $s->{dynlang};
+  my @argdata = @{$s->{argdata} || []};
+  next unless my @ptr_arg_inds = @{$s->{ptr_args} || []};
+  next unless @ptr_arg_inds = grep $_ >= 0, @ptr_arg_inds;
+  my %name2data = map +($_->[0] => $_), @argdata;
+  my @ptr_args = @argdata[@ptr_arg_inds];
+  my @ptr_types = map parse_ptr($_), @ptr_args;
+  my @constargs = @ptr_args[ grep $ptr_types[$_][1], 0..$#ptr_args ];
+  my @outargs = @ptr_args[ grep !$ptr_types[$_][1], 0..$#ptr_args ];
+  die "$name: undef ptr_type" if grep !$_->[0], @ptr_types;
+  my %arg2len = map @$_, grep defined($_->[1]) && $_->[1] !~ /COMPSIZE/, map [@$_[0,2]], @argdata;
+  my %dynlang;
+  for my $arg (@ptr_args) {
+    next unless my ($compsize_from) = ($arg->[2]//'') =~ /COMPSIZE\(([^,]+)\)/;
+    next unless my $compsize_data = $name2data{$compsize_from};
+    next unless my $compsize_group = $compsize_data->[3];
+    next unless $g2c2s->{$compsize_group};
+    $arg2len{$arg->[0]} = "${compsize_from}_count";
+    $dynlang{$arg->[0]} = "SIZE:$compsize_group:$compsize_from";
+  }
+  if (@outargs == 1 and
+    typefunc(parse_ptr($outargs[0])->[0]) and
+    $s->{restype} eq 'void' and
+    (my $len = $arg2len{$outargs[0][0]})
+  ) {
+    if ($len eq '1') {
+      $dynlang{RETVAL} = $outargs[0][0];
+    } else {
+      $dynlang{$outargs[0][0]} = join ',', grep $_, $dynlang{$outargs[0][0]}, "OUTASLIST:$len";
+    }
+  } elsif (
+    ((($s->{restype} ne 'void') + @outargs) > 1) and
+    !(grep !$arg2len{$_->[0]} || !(is_stringtype($_->[1]) || typefunc(parse_ptr($_)->[0])), @outargs)
+  ) {
+    for (@outargs) {
+      my $len = $arg2len{$_->[0]};
+      my $outas = (is_stringtype($_->[1]) || ($len =~ /^\d+$/ && $len == 1))
+        ? "OUTSCALAR" : "OUTARRAY:$arg2len{$_->[0]}";
+      $dynlang{$_->[0]} = join ',', grep $_, $dynlang{$_->[0]}, $outas;
+    }
+  }
+  if (@constargs == 1 and
+    typefunc(parse_ptr($constargs[0])->[0]) and
+    $arg2len{$constargs[0][0]}
+  ) {
+    my $len = $arg2len{$constargs[0][0]};
+    my $startfrom = grep !$dynlang{$_} && $_ ne $len && $_ ne $constargs[0][0], keys %name2data;
+    $dynlang{$len} = 'items'.($startfrom ? "-$startfrom" : '') if $len =~ /^[a-zA-Z]+$/;
+    $dynlang{$constargs[0][0]} = join ',', grep $_, $dynlang{$constargs[0][0]}, "VARARGS:$startfrom:$len";
+  } elsif (
+    @constargs > 1 and
+    !(grep !$arg2len{$_->[0]} || !typefunc(parse_ptr($_)->[0]), @constargs)
+  ) {
+    my %len_done;
+    for (@constargs) {
+      my $len = $arg2len{$_->[0]};
+      if ($len =~ /\D/ and !$len_done{$len}) {
+        $len_done{$len} = 1;
+        $dynlang{$len} = "LEN:$_->[0]";
+      }
+      $dynlang{$_->[0]} = join ',', grep $_, $dynlang{$_->[0]}, "INARRAY:$arg2len{$_->[0]}";
+    }
+  }
+  $s->{dynlang} = \%dynlang if %dynlang;
 }
 
 my %feature2version;
@@ -142,27 +272,15 @@ for (grep $_, split /\n/, slurp('utils/feature-reuse.txt')) {
 }
 @feature2version{keys %feature2version} = map +(keys %$_)[0], values %feature2version;
 $signature{$_}{core_removed} = 1 for grep $_, split /\s+/, slurp('utils/removed.txt');
-my (%features, %gltags);
+my %features;
 for my $name (sort {uc$a cmp uc$b} keys %signature) {
   my $s = $signature{$name};
-  my @binding_names = map $_->{binding_name}, bindings($name, $s);
-  push @exported_functions, @binding_names if !is_manual($name);
   next if !$s->{feature};
   for ($s->{feature}, grep defined, $feature2version{$s->{feature}}) {
-    @{ $gltags{$_} }{ @binding_names } = ();
     $features{$_}{$name} = undef;
   }
 }
-@gltags{keys %gltags} = map [sort keys %$_], values %gltags;
 @features{keys %features} = map [sort keys %$_], values %features;
-my @version_features = grep /^GL_VERSION/, keys %features;
-my (@version_31, @version_core);
-for my $f (@version_features) {
-  die "Error parsing '$f'" unless my ($maj, $min) = $f =~ /(\d)/g;
-  my $arr = (10*$maj + $min) < 32 ? \@version_31 : \@version_core;
-  push @$arr, $f;
-}
-my %glcompat_c = map +($_=>undef), map @{$gltags{$_}}, @version_31;
 
 my %nonglew2alias;
 for (grep $_, split /\n/, slurp('utils/aliases.txt')) {
@@ -181,21 +299,46 @@ for (grep $_, split /\n/, slurp('utils/aliases.txt')) {
   delete $signature{$from};
 }
 
-for (grep $_, split /\n/, slurp('utils/len-args.txt')) {
-  my ($func, @args) = split ' ';
-  next unless my $s = $signature{$func};
-  my $argind = 0;
-  for (@args) {
-    my ($name, $len) = split /=/;
-    my $arginfo = $s->{argdata}[$argind++];
-    $arginfo->[0] = $name;
-    push @$arginfo, $len if $len;
+my @version_features = grep /^GL_VERSION/, keys %features;
+my (@version_31, @version_core);
+for my $f (@version_features) {
+  die "Error parsing '$f'" unless my ($maj, $min) = $f =~ /(\d)/g;
+  my $arr = (10*$maj + $min) < 32 ? \@version_31 : \@version_core;
+  push @$arr, $f;
+}
+my %gltags;
+my @exported_functions; # names the module exports
+for my $name (sort {uc$a cmp uc$b} keys %signature) {
+  my $s = $signature{$name};
+  my @bindings = bindings($name, $s, $g2c2s, \%signature);
+  my @binding_names = map $_->{binding_name}, @bindings;
+  my @binding_aliases = map @{ $_->{aliases} }, @bindings;
+  push @exported_functions, @binding_names, @binding_aliases;
+  next if !$s->{feature};
+  for ($s->{feature}, grep defined, $feature2version{$s->{feature}}) {
+    @{ $gltags{$_} }{ @binding_names } = ();
   }
+  next if !$s->{aliases};
+  my %aliases = %{ $s->{aliases} };
+  for my $from (keys %aliases) {
+    next unless my $feature = $aliases{$from};
+    my @these_bindings = grep /^$from/, @binding_aliases;
+    @{ $gltags{$feature} }{ @these_bindings } = ();
+  }
+}
+@gltags{keys %gltags} = map [sort keys %$_], values %gltags;
+my %glcompat_c = map +($_=>undef), map @{$gltags{$_}}, @version_31;
+
+use Data::Dumper;
+$Data::Dumper::Indent = $Data::Dumper::Sortkeys = $Data::Dumper::Terse = 1;
+sub dump_strip {
+  my $vdump = Dumper $_[0];
+  $vdump =~ s!^\{!!;
+  $vdump =~ s!\s+\}$!!s;
+  $vdump;
 }
 
 # Now rewrite registry if we need to:
-use Data::Dumper;
-$Data::Dumper::Indent = $Data::Dumper::Sortkeys = $Data::Dumper::Terse = 1;
 my $new = <<"END";
 package OpenGL::Modern::Registry;\n
 # ATTENTION: This file is automatically generated by utils/generate-registry.pl
@@ -203,16 +346,13 @@ package OpenGL::Modern::Registry;\n
 use strict;
 use warnings;\n
 END
-my $registry = Dumper \%signature;
-$registry =~ s!^\{!!;
-$registry =~ s!\s+\}$!!s;
-$new .= "our %registry = ($registry);\n\n";
+$new .= "our %registry = (@{[dump_strip(\%signature)]});\n\n";
 my $glconstants = join '', "\n", map "  $_\n", sort keys %constants;
 $new .= "our \@glconstants = qw($glconstants);\n\n";
-my $features = Dumper \%features;
-$features =~ s!^\{!!;
-$features =~ s!\s+\}$!!s;
-$new .= "our %features = ($features);\n\n";
+$new .= "our %features = (@{[dump_strip(\%features)]});\n\n";
+$new .= "our %counts = (@{[dump_strip(\%counts)]});\n\n";
+$new .= "our %groups = (@{[dump_strip(\%groups)]});\n\n";
+$new .= "our %enums = (@{[dump_strip(\%enums)]});\n\n";
 $new .= "1;\n";
 save_file( "lib/OpenGL/Modern/Registry.pm", $new );
 
@@ -224,10 +364,7 @@ my $gl_functionscompat = join '', "\n", map "  $_\n", sort grep exists $glcompat
 $middle .= "our \@gl_functionscompat = qw($gl_functionscompat);\n";
 my $gl_functionsrest = join '', "\n", map "  $_\n", sort {uc$a cmp uc$b} grep !exists $glcompat_c{$_}, @exported_functions;
 $middle .= "our \@gl_functionsrest = qw($gl_functionsrest);\n";
-my $gltags = Dumper \%gltags;
-$gltags =~ s!^\{!!;
-$gltags =~ s!\s+\}$!!s;
-$middle .= "our %EXPORT_TAGS_GL = ($gltags);\n";
+$middle .= "our %EXPORT_TAGS_GL = (@{[dump_strip(\%gltags)]});\n";
 $middle .= "our \@gl_constants = qw($glconstants);\n\n";
 $middle .= "# END code generated by utils/generate-registry.pl\n";
 $new = join $sep, $start, $middle, $end;
@@ -243,21 +380,17 @@ my $middle1 = '';
 for my $name (sort grep !/^GL/, keys %signature) {
   $middle1 .= "=head2 $name\n\n";
   my $s = $signature{$name};
-  for my $bind (sort {$a->{binding_name} cmp $b->{binding_name}} bindings($name, $s)) {
+  my %dynlang = %{ $s->{dynlang} || {} };
+  for my $bind (sort {$a->{binding_name} cmp $b->{binding_name}} bindings($name, $s, $g2c2s, \%signature)) {
+    die "$name: $bind->{binding_name} has no xs_rettype" if !defined $bind->{xs_rettype};
     my $prefix = " ";
-    $prefix .= "\$retval = " if $bind->{xs_rettype} ne 'void';
-    $prefix .= "\@retvals = " if $bind->{xs_code} eq "PPCODE:\n";
-    my $suffix .= "(";
-    $suffix .= join ', ', map $_ eq '...' ? '@inputs' : "\$$_", split /\s*,\s*/, $bind->{xs_args};
-    $suffix .= ");\n";
-    my @names = $bind->{binding_name};
-    if ($bind->{aliases}) {
-      my (undef, @list) = split /\n\s*/, $bind->{aliases};
-      pop @list;
-      s/\s.*// for @list;
-      push @names, @list;
+    if (my @retnames = @{ $bind->{retnames} }) {
+      $prefix .= @retnames == 1 ? "$retnames[0] = " : "(@{[join ', ', @retnames]}) = ";
     }
-    $middle1 .= "$prefix$_$suffix" for @names;
+    my $suffix .= "(";
+    $suffix .= join ', ', @{ $bind->{innames} };
+    $suffix .= ");\n";
+    $middle1 .= "$prefix$_$suffix" for $bind->{binding_name}, @{ $bind->{aliases} };
   }
   $middle1 .= "\n";
   my $descrip = '';
@@ -272,3 +405,32 @@ for my $name (sort grep !/^GL/, keys %signature) {
 }
 $new = join $sep, $start, $middle, $p1, $middle1, $end;
 save_file( "lib/OpenGL/Modern.pod", $new );
+
+$new = <<"END";
+/* This file is automatically generated by utils/generate-registry.pl
+   Manual changes will be lost. */\n
+END
+for my $group (sort keys %$g2c2s) {
+  my $c2syms = $g2c2s->{$group};
+  my ($max) = sort { $b <=> $a } keys %$c2syms;
+  $new .= "int oglm_count_$group(int param);\n";
+}
+save_file( "lib/OpenGL/Modern/gl_counts.h", $new );
+
+$new = <<"END";
+/* This file is automatically generated by utils/generate-registry.pl
+   Manual changes will be lost. */\n
+#include <GL/glew.h>\n
+END
+for my $group (sort keys %$g2c2s) {
+  my $c2syms = $g2c2s->{$group};
+  my @counts = sort { $a <=> $b } keys %$c2syms;
+  $new .= "int oglm_count_$group(int param) {\n  switch (param) {\n";
+  for my $c (@counts) {
+    my $syms = $c2syms->{$c};
+    $new .= join '', map "    case $_:\n", @$syms;
+    $new .= "      return $c;\n";
+  }
+  $new .= "  }\n  return -1;\n}\n";
+}
+save_file( "lib/OpenGL/Modern/gl_counts.c", $new );

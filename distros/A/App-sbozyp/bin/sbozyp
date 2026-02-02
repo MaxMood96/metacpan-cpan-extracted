@@ -6,8 +6,9 @@ use v5.34.0; # The Perl version on Slackware 15.0 (sbozyp's min supported versio
 
 package Sbozyp;
 
-our $VERSION = '1.4.1';
+our $VERSION = '1.5.4';
 
+use Cwd qw();
 use Digest::MD5 qw();
 use File::Basename qw(basename dirname);
 use File::Temp qw();
@@ -33,7 +34,7 @@ sub main {
     sbozyp_getopts(
         \@argv,
         'C'   => \my $opt_clone,
-        'F=s' => \my $opt_configfile,
+        'F=s' => \(my $opt_configfile = '/etc/sbozyp/sbozyp.conf'),
         'R=s' => \my $opt_reponame,
         'S'   => \my $opt_syncrepo,
         'T'   => \my $opt_noinitrepo
@@ -76,6 +77,7 @@ sub main_install {
     sbozyp_getopts(
         \@_,
         'h|help' => \my $opt_help,
+        'b=s'    => \(my $opt_blacklistfile = '/etc/sbozyp/sbozyp.blacklist'),
         'f'      => \my $opt_force,
         'k'      => \my $opt_keeppackage,
         'r'      => \my $opt_installdeps,
@@ -89,7 +91,18 @@ sub main_install {
     my @queue; for my $pkg (@pkgs) {
         my @pkg_queue = $opt_installdeps ? pkg_queue($pkg) : ($pkg);
         unless ($opt_force) {
-            @pkg_queue = grep { !pkg_installed_and_up_to_date($_) } @pkg_queue;
+            @pkg_queue = do {
+                my @_pkg_queue; for my $pkg (@pkg_queue) {
+                    if (pkg_matches_blacklist($pkg, $opt_blacklistfile)) {
+                        sbozyp_print_stderr("skipping $pkg->{PKGNAME} due to blacklist match\n");
+                    } elsif (pkg_installed_and_up_to_date($pkg)) {
+                        sbozyp_print_stderr("skipping $pkg->{PKGNAME} as it's installed and up to date\n");
+                    } else {
+                        push @_pkg_queue, $pkg;
+                    }
+                }
+                @_pkg_queue
+            };
         }
         @queue = pkgs_merged(@queue, @pkg_queue);
     }
@@ -104,7 +117,7 @@ sub main_install {
             sbozyp_unlink($slackware_pkg) unless $opt_keeppackage;
         }
     } else {
-        sbozyp_print('all packages requested for installation are up to date', "\n");
+        sbozyp_print('no packages to install', "\n");
     }
 }
 
@@ -262,7 +275,8 @@ sub main_search {
     if ($opt_help) { print command_help_msg('search'); return }
     @_ == 1 or die command_usage('search');
     my $regex_arg = $_[0];
-    my $regex = $opt_casesensitive ? qr/$regex_arg/ : qr/$regex_arg/i;
+    my $regex = eval { $opt_casesensitive ? qr/$regex_arg/ : qr/$regex_arg/i };
+    sbozyp_die("invalid Perl regex: $regex_arg") if $@;
     my @matches = grep {
         $opt_matchcategory ? $_ =~ $regex : basename($_) =~ $regex;
     } all_pkgnames();
@@ -379,6 +393,31 @@ sub pkg_installed_and_up_to_date {
     } else {
         return 1;
     }
+}
+
+sub pkg_matches_blacklist {
+    my ($pkg, $blacklist_file) = @_;
+    state %blacklist_cache;
+    my $pkgnames = $blacklist_cache{$blacklist_file};
+    if (!defined $pkgnames) {
+        my $fh = sbozyp_open('<', $blacklist_file);
+        my @pkgnames;
+        while (<$fh>) {
+            chomp;
+            s/#.*//;            # no comments
+            s/^\s+//;           # no leading whitespace
+            s/\s+$//;           # no trailing whitespace
+            next unless length; # is there anything left?
+            if (my $pkgname = prgnam_to_pkgname($_)) {
+                push @pkgnames, $pkgname;
+            }
+        }
+        $pkgnames = $blacklist_cache{$blacklist_file} = \@pkgnames;
+    }
+    for my $pkgname (@$pkgnames) {
+        return 1 if $pkg->{PKGNAME} eq $pkgname;
+    }
+    return 0;
 }
 
 sub parse_slackware_pkgname {
@@ -580,14 +619,14 @@ sub pkg_prepare_for_build {
     my $staging_dir = File::Temp->newdir(DIR => $CONFIG{TMPDIR}, TEMPLATE => 'sbozyp_XXXXXX');
     sbozyp_copy($pkg->{PKGDIR}, $staging_dir);
     for my $url (sort keys %url_md5) {
-        my $src_filename = basename($url);
+        my $src_filename = basename(decode_url($url));
         if ($keep_src && -r "$CONFIG{SRCDIR}/$src_filename") {
             # Sources stored from previous downloads have already been md5 checked
             sbozyp_print_stderr("$pkg->{PKGNAME}: using previously downloaded src: $src_filename\n");
             sbozyp_copy("$CONFIG{SRCDIR}/$src_filename", "$staging_dir/$src_filename");
         } else {
             my $md5 = $url_md5{$url};
-            sbozyp_system('wget', '-P', $staging_dir, $url);
+            sbozyp_system('wget', '-e', 'background=off', '-O', "$staging_dir/$src_filename", $url);
             my $got_md5 = do {
                 my $fh = sbozyp_open('<', "$staging_dir/$src_filename");
                 binmode($fh);
@@ -611,9 +650,11 @@ sub build_slackware_pkg {
     sbozyp_mkdir($CONFIG{TMPDIR});
     my $staging_dir = pkg_prepare_for_build($pkg, $keep_src);
     my $slackbuild = $pkg->{PRGNAM} . '.SlackBuild';
-    my $cmd = sbozyp_open('-|', "cd '$staging_dir' && chmod +x ./$slackbuild && ./$slackbuild");
-    my $slackware_pkg;
-    while (my $line = <$cmd>) {
+    my $cmd = with_cwd($staging_dir, sub {
+        sbozyp_chmod(0755, "./$slackbuild");
+        return sbozyp_open('-|', "./$slackbuild");
+    });
+    my $slackware_pkg; while (my $line = <$cmd>) {
         $slackware_pkg = $1 if $line =~ /^Slackware package (.+) created\.$/;
         print $line; # magically knows to print to stdout or stderr
     }
@@ -713,15 +754,17 @@ sub clone_repo {
     }
     my $repo_git_branch = repo_git_branch();
     my $repo_git_url = repo_git_url();
-    sbozyp_system('git', 'clone', '--branch', $repo_git_branch, '--single-branch', $repo_git_url, $repo_dir);
+    sbozyp_system('git', 'clone', '--single-branch', '--branch', $repo_git_branch, '--no-tags', $repo_git_url, $repo_dir);
 }
 
 sub sync_repo {
     my $repo_dir = repo_dir();
     if (repo_is_cloned()) {
         my $repo_git_branch = repo_git_branch();
-        sbozyp_system("git -C '$repo_dir' fetch --verbose 1>&2");
-        sbozyp_system("git -C '$repo_dir' reset --hard 'origin/$repo_git_branch' 1>&2");
+        with_stdout_to_stderr(sub {
+            sbozyp_system('git', '-C', $repo_dir, 'fetch', '--verbose');
+            sbozyp_system('git', '-C', $repo_dir, 'reset', '--hard', "origin/$repo_git_branch");
+        });
     } else {
         sbozyp_die("cannot sync non-existent git repository at '$repo_dir'");
     }
@@ -733,7 +776,6 @@ sub sync_repo {
 
 sub parse_config_file {
     my ($config_file) = @_;
-    $config_file = '/etc/sbozyp/sbozyp.conf' unless defined $config_file;
     my $fh = sbozyp_open('<', $config_file);
     while (<$fh>) {
         chomp;
@@ -813,6 +855,25 @@ sub sbozyp_qx {
     return wantarray ? @output : $output;
 }
 
+sub with_stdout_to_stderr {
+    my ($sub) = @_;
+    open(my $orig_stdout, '>&', \*STDOUT) or sbozyp_die("failed to dup STDOUT: $!");
+    open(STDOUT, '>&=', \*STDERR) or sbozyp_die("failed to redirect STDOUT to STDERR: $!");
+    my $ret = $sub->();
+    open(STDOUT, '>&=', $orig_stdout) or sbozyp_die("failed to restore STDOUT: $!");
+    return $ret;
+}
+
+sub with_cwd {
+    my ($dir, $sub) = @_;
+    my $orig_cwd = Cwd::getcwd();
+    sbozyp_chdir($dir);
+    my $ret = eval { $sub->() }; my $err = $@;
+    sbozyp_chdir($orig_cwd);
+    if ($err) { $! = 1; die $err };
+    return $ret;
+}
+
 sub arch {
     state $arch = sbozyp_qx('uname -m');
     return $arch;
@@ -825,6 +886,12 @@ sub i_am_root {
 sub i_am_root_or_die {
     my ($msg) = @_;
     sbozyp_die($msg // 'must be root') unless i_am_root();
+}
+
+sub decode_url { # https://stackoverflow.com/a/4510561/13603478
+    my ($url) = @_;
+    my $decoded = $url =~ s/%([A-Fa-f\d]{2})/chr hex $1/egr;
+    return $decoded;
 }
 
 # The internal algorithm of version_gt() is copy and pasted directly from the
@@ -922,6 +989,16 @@ sub sbozyp_open {
 sub sbozyp_unlink {
     my ($file) = @_;
     unlink $file or sbozyp_die("could not unlink file '$file': $!");
+}
+
+sub sbozyp_chmod {
+    my ($mode, $file) = @_;
+    chmod $mode, $file or sbozyp_die(sprintf("could not chmod 0%o '%s': %s", $mode, $file, $!));
+}
+
+sub sbozyp_chdir {
+    my ($dir) = @_;
+    chdir $dir or sbozyp_die("could not chdir '$dir': $!");
 }
 
 sub sbozyp_print_file {
@@ -1073,14 +1150,15 @@ Defaults to C<SRCDIR=/var/lib/sbozyp/source-cache>.
 
 =head2 INSTALL
 
- Usage: sbozyp <install|in> [-h] [-f] [-k] [-r] [-y] [-z] <pkgname...>
+ Usage: sbozyp <install|in> [-h] [-b FILE] [-f] [-k] [-r] [-y] [-z] <pkgname...>
 
 Install or update packages.
 
 Options are:
 
- -h|--help     Print help message
- -f            Force installation even if package is already up to date
+ -h|--help     Print help message and exit
+ -b FILE       Use FILE as blacklist instead of /etc/sbozyp/sbozyp.blacklist
+ -f            Force install/update even if package is up to date or blacklisted
  -k            Keep the built package (resides in TMPDIR)
  -r            Install package dependencies recursively
  -y            No interactive prompt
@@ -1104,7 +1182,7 @@ Build but don't install packages.
 
 Options are:
 
- -h|--help     Print help message
+ -h|--help     Print help message and exit
  -f            Force rebuilding the package even if it's already built
  -y            No confirmation prompt
  -z            Keep and reuse downloaded sources (reside in SRCDIR)
@@ -1126,7 +1204,7 @@ Remove packages.
 
 Options are:
 
- -h|--help     Print help message
+ -h|--help     Print help message and exit
  -f            Disable removal safety check (DANGEROUS)
  -r            Recursively remove package dependencies that are safe to remove
  -y            No confirmation prompt
@@ -1148,7 +1226,7 @@ Exactly one option must be used in a single query command.
 
 Options are:
 
- -h|--help     Print help message
+ -h|--help     Print help message and exit
  -a            Print all installed packages
  -b            Print the path to PKGNAME's local package directory
  -c            Print the path to the current repositories directory
@@ -1181,7 +1259,7 @@ Search for packages using a Perl regex.
 
 Options are:
 
- -h|--help     Print help message
+ -h|--help     Print help message and exit
  -c            Match case sensitive
  -n            Match against CATEGORY/PRGNAM instead of just PRGNAM
  -p            Print just the PRGNAM of matched packages
@@ -1204,7 +1282,7 @@ sync (with global -S option) a repository.
 
 Options are:
 
- -h|--help     Print help message
+ -h|--help     Print help message and exit
 
 Examples:
 

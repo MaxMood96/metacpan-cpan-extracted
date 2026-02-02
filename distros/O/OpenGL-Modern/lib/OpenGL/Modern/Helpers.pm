@@ -9,27 +9,19 @@ use Carp qw(croak);
 use Config;
 
 use OpenGL::Modern qw(
-  GL_NO_ERROR
-  GL_INVALID_ENUM
-  GL_INVALID_VALUE
-  GL_INVALID_OPERATION
-  GL_STACK_OVERFLOW
-  GL_STACK_UNDERFLOW
-  GL_OUT_OF_MEMORY
-  GL_TABLE_TOO_LARGE
   GL_VERSION
   glGenTextures_p
   glGenFramebuffers_p
   glGenVertexArrays_p
   glGenBuffers_p
   glGetString
-  glGetError
-  glGetShaderInfoLog_c
-  glGetProgramInfoLog_c
-  glGetProgramiv_c
-  glGetShaderiv_c
-  glGetIntegerv_c
-  glShaderSource_c
+  glpCheckErrors
+  glGetShaderInfoLog_p
+  glGetProgramInfoLog_p
+  glGetProgramiv_p
+  glGetShaderiv_p
+  glGetIntegerv_p
+  glShaderSource_p
   glBufferData_c
   glUniform2f
   glUniform4f
@@ -169,43 +161,13 @@ our @EXPORT_OK = qw(
   glUniform4f_p
 );
 
-our %glErrorStrings = (
-    GL_NO_ERROR()          => 'No error has been recorded.',
-    GL_INVALID_ENUM()      => 'An unacceptable value is specified for an enumerated argument.',
-    GL_INVALID_VALUE()     => 'A numeric argument is out of range.',
-    GL_INVALID_OPERATION() => 'The specified operation is not allowed in the current state.',
-    GL_STACK_OVERFLOW()    => 'This command would cause a stack overflow.',
-    GL_STACK_UNDERFLOW()   => 'This command would cause a stack underflow.',
-    GL_OUT_OF_MEMORY()     => 'There is not enough memory left to execute the command.',
-    GL_TABLE_TOO_LARGE()   => 'The specified table exceeds the implementation\'s maximum supported table size.',
-);
-
 our $PACK_TYPE = $Config{ptrsize} == 4 ? 'L' : 'Q';
 
-sub pack_GLuint {
-    my @gluints = @_;
-    pack 'I*', @gluints;
-}
-
-sub pack_GLint {
-    my @gluints = @_;
-    pack 'I*', @gluints;
-}
-
-sub pack_GLfloat {
-    my @glfloats = @_;
-    pack 'f*', @glfloats;
-}
-
-sub pack_GLdouble {
-    my @gldoubles = @_;
-    pack 'd*', @gldoubles;
-}
-
-# No parameter declaration because we don't want copies
-sub pack_GLstrings {
-    pack 'P*', @_;
-}
+sub pack_GLuint { pack 'I*', @_ }
+sub pack_GLint { pack 'i*', @_ }
+sub pack_GLfloat { pack 'f*', @_ }
+sub pack_GLdouble { pack 'd*', @_ }
+sub pack_GLstrings { pack 'P*', @_ } # No declare params as don't want copies
 
 # No parameter declaration because we don't want copies
 # This returns a packed string representation of the
@@ -233,22 +195,6 @@ sub xs_buffer {
     $_[0];
 }
 
-sub get_info_log_p {
-    my ( $call, $id ) = @_;
-    my $bufsize = 1024 * 64;
-    my $buffer  = "\0" x $bufsize;
-    my $len     = "\0" x 4;
-
-    # void glGetShaderInfoLog(GLuint shader, GLsizei bufSize, GLsizei* length, GLchar* infoLog);
-    # void glGetProgramInfoLog(GLuint program, GLsizei bufSize, GLsizei* length, GLchar* infoLog);
-    $call->( $id, $bufsize, unpack( $PACK_TYPE, pack( 'p', $len ) ), $buffer );
-    $len = unpack 'I', $len;
-    return substr $buffer, 0, $len;
-}
-
-sub glGetShaderInfoLog_p  { get_info_log_p \&glGetShaderInfoLog_c,  @_ }
-sub glGetProgramInfoLog_p { get_info_log_p \&glGetProgramInfoLog_c, @_ }
-
 # This should probably be named glpGetVersion since there is actually
 # no glGetVersion() in the OpenGL API.
 #
@@ -260,52 +206,7 @@ sub glGetVersion_p {
     $glVersion;
 }
 
-sub croak_on_gl_error {
-
-    # GLenum glGetError (void);
-    my $error = glGetError();
-    if ( $error != GL_NO_ERROR ) {
-        croak $glErrorStrings{$error} || "Unknown OpenGL error: $error";
-    }
-}
-
-sub gen_thing_p {
-    my ( $call, $n ) = @_;
-    xs_buffer my $new_ids, 4 * $n;
-    $call->( $n, unpack( $PACK_TYPE, pack( 'p', $new_ids ) ) );
-    my @ids = unpack 'I*', $new_ids;
-    return wantarray ? @ids : $ids[0];
-}
-
-sub get_iv_p {
-    my ( $call, $id, $pname, $count ) = @_;
-    $count ||= 1;
-    xs_buffer my $params, 4 * $count;
-    $call->( $id, $pname, unpack( "$PACK_TYPE*", pack( 'p*', $params ) ) );
-    my @params = unpack 'I*', $params;
-    return wantarray ? @params : $params[0];
-}
-
-sub glGetProgramiv_p { get_iv_p \&glGetProgramiv_c, @_ }    # TODO: get rid of $count
-
-sub glGetShaderiv_p { get_iv_p \&glGetShaderiv_c, @_ }      # TODO: get rid of $count
-
-sub glShaderSource_p {
-    my ( $shader, @sources ) = @_;
-    my $count = @sources;
-    my @lengths = map length, @sources;
-    glShaderSource_c( $shader, $count, pack( 'P*', @sources ), pack( 'I*', @lengths ) );
-    return;
-}
-
-sub glGetIntegerv_p {
-    my ( $pname, $count ) = @_;                             # TODO: get rid of $count
-    $count ||= 1;
-    xs_buffer my $data, 4 * $count;
-    glGetIntegerv_c $pname, unpack( $PACK_TYPE, pack( 'p', $data ) );
-    my @data = unpack 'I*', $data;
-    return wantarray ? @data : $data[0];
-}
+*croak_on_gl_error = \&glpCheckErrors;
 
 sub glBufferData_p {                                        # NOTE: this might be better named glpBufferDataf_p
     my $usage = pop;

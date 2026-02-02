@@ -22,6 +22,11 @@ is(util::final(sub { $_ > 3 }, \@arr), 5, 'final: last > 3 is 5');
 is(util::final(sub { $_ < 3 }, \@arr), 2, 'final: last < 3 is 2');
 
 # Test first_inline uses $_ (not $_[0])
-is(util::first_inline(sub { $_ > 3 }, 1, 2, 3, 4, 5), 4, 'first_inline: first > 3 is 4');
+# first_inline requires MULTICALL API (Perl 5.11+)
+SKIP: {
+    skip "first_inline requires Perl 5.11+", 1 if $] < 5.011;
+    skip "first_inline not available (MULTICALL disabled)", 1 unless util->can('first_inline');
+    is(util::first_inline(sub { $_ > 3 }, 1, 2, 3, 4, 5), 4, 'first_inline: first > 3 is 4');
+}
 
 done_testing();

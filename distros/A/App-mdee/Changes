@@ -1,5 +1,15 @@
 Revision history for Perl extension App-mdee
 
+0.08 2026-02-02T07:41:42Z
+
+    - Support custom themes and config defaults via default[] array
+    - Support external theme files and theme discovery (--theme=?, --list-themes)
+    - Add h6 header highlighting and fix h5 pattern to require whitespace
+    - Remove colors[] override in config.sh (use theme partial override instead)
+    - Add link, image, image_link to --show available fields
+    - Fix OSC 8 reference URL
+    - Bump Text::ANSI::Fold dependency to 2.3302
+
 0.07 2026-01-31T14:18:16Z
 
     - Add --style option for output mode control (nup/pager/cat/filter/raw)

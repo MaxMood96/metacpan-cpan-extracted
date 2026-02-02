@@ -14,6 +14,7 @@
 #include "perl.h"
 #include "XSUB.h"
 #include "file_compat.h"
+#include "file_hooks.h"
 
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -65,6 +66,182 @@
 #define FILE_BULK_BUFFER_SIZE 262144
 
 /* ============================================
+   File hooks - lazy approach with simple pointer checks
+   ============================================ */
+
+/* Global hook pointers - NULL when no hooks registered (fast check) */
+static file_hook_func g_file_read_hook = NULL;
+static void *g_file_read_hook_data = NULL;
+static file_hook_func g_file_write_hook = NULL;
+static void *g_file_write_hook_data = NULL;
+
+/* Hook linked lists for multiple hooks per phase */
+static FileHookEntry *g_file_hooks[4] = { NULL, NULL, NULL, NULL };
+
+/* Implementation of C API */
+
+void file_set_read_hook(pTHX_ file_hook_func func, void *user_data) {
+    PERL_UNUSED_CONTEXT;
+    g_file_read_hook = func;
+    g_file_read_hook_data = user_data;
+}
+
+void file_set_write_hook(pTHX_ file_hook_func func, void *user_data) {
+    PERL_UNUSED_CONTEXT;
+    g_file_write_hook = func;
+    g_file_write_hook_data = user_data;
+}
+
+file_hook_func file_get_read_hook(void) {
+    return g_file_read_hook;
+}
+
+file_hook_func file_get_write_hook(void) {
+    return g_file_write_hook;
+}
+
+int file_has_hooks(FileHookPhase phase) {
+    /* Fast path for simple hooks */
+    if (phase == FILE_HOOK_PHASE_READ && g_file_read_hook) return 1;
+    if (phase == FILE_HOOK_PHASE_WRITE && g_file_write_hook) return 1;
+    /* Check hook list */
+    return g_file_hooks[phase] != NULL;
+}
+
+int file_register_hook_c(pTHX_ FileHookPhase phase, const char *name,
+                         file_hook_func func, int priority, void *user_data) {
+    FileHookEntry *entry, *prev, *curr;
+
+    if (phase > FILE_HOOK_PHASE_CLOSE) return 0;
+
+    /* Allocate new entry */
+    Newxz(entry, 1, FileHookEntry);
+    entry->name = name;  /* Caller owns the string */
+    entry->c_func = func;
+    entry->perl_callback = NULL;
+    entry->priority = priority;
+    entry->user_data = user_data;
+    entry->next = NULL;
+
+    /* Insert in priority order */
+    prev = NULL;
+    curr = g_file_hooks[phase];
+    while (curr && curr->priority <= priority) {
+        prev = curr;
+        curr = curr->next;
+    }
+
+    if (prev) {
+        entry->next = prev->next;
+        prev->next = entry;
+    } else {
+        entry->next = g_file_hooks[phase];
+        g_file_hooks[phase] = entry;
+    }
+
+    return 1;
+}
+
+int file_unregister_hook(pTHX_ FileHookPhase phase, const char *name) {
+    FileHookEntry *prev, *curr;
+    PERL_UNUSED_CONTEXT;
+
+    if (phase > FILE_HOOK_PHASE_CLOSE) return 0;
+
+    prev = NULL;
+    curr = g_file_hooks[phase];
+    while (curr) {
+        if (strcmp(curr->name, name) == 0) {
+            if (prev) {
+                prev->next = curr->next;
+            } else {
+                g_file_hooks[phase] = curr->next;
+            }
+            if (curr->perl_callback) {
+                SvREFCNT_dec(curr->perl_callback);
+            }
+            Safefree(curr);
+            return 1;
+        }
+        prev = curr;
+        curr = curr->next;
+    }
+    return 0;
+}
+
+SV* file_run_hooks(pTHX_ FileHookPhase phase, const char *path, SV *data) {
+    FileHookContext ctx;
+    FileHookEntry *entry;
+    SV *result = data;
+    file_hook_func simple_hook = NULL;
+    void *simple_data = NULL;
+
+    /* Check simple hooks first */
+    if (phase == FILE_HOOK_PHASE_READ && g_file_read_hook) {
+        simple_hook = g_file_read_hook;
+        simple_data = g_file_read_hook_data;
+    } else if (phase == FILE_HOOK_PHASE_WRITE && g_file_write_hook) {
+        simple_hook = g_file_write_hook;
+        simple_data = g_file_write_hook_data;
+    }
+
+    /* Run simple hook if present */
+    if (simple_hook) {
+        ctx.path = path;
+        ctx.data = result;
+        ctx.phase = phase;
+        ctx.user_data = simple_data;
+        ctx.cancel = 0;
+
+        result = simple_hook(aTHX_ &ctx);
+        if (!result || ctx.cancel) return NULL;
+    }
+
+    /* Run hook chain */
+    for (entry = g_file_hooks[phase]; entry; entry = entry->next) {
+        ctx.path = path;
+        ctx.data = result;
+        ctx.phase = phase;
+        ctx.user_data = entry->user_data;
+        ctx.cancel = 0;
+
+        if (entry->c_func) {
+            result = entry->c_func(aTHX_ &ctx);
+        } else if (entry->perl_callback) {
+            /* Call Perl callback */
+            dSP;
+            int count;
+
+            ENTER;
+            SAVETMPS;
+            PUSHMARK(SP);
+            mXPUSHs(newSVpv(path, 0));
+            mXPUSHs(SvREFCNT_inc(result));
+            PUTBACK;
+
+            count = call_sv(entry->perl_callback, G_SCALAR);
+
+            SPAGAIN;
+            if (count > 0) {
+                SV *ret = POPs;
+                if (SvOK(ret)) {
+                    result = newSVsv(ret);
+                } else {
+                    ctx.cancel = 1;
+                }
+            }
+            PUTBACK;
+            FREETMPS;
+            LEAVE;
+        }
+
+        if (!result || ctx.cancel) return NULL;
+    }
+
+    return result;
+}
+
+/* ============================================
    Custom op support for compile-time optimization
    ============================================ */
 
@@ -101,6 +278,7 @@ static XOP file_atomic_spew_xop;
 
 /* Forward declarations for internal functions */
 static SV* file_slurp_internal(pTHX_ const char *path);
+static SV* file_slurp_raw_internal(pTHX_ const char *path);
 static int file_spew_internal(pTHX_ const char *path, SV *data);
 static int file_append_internal(pTHX_ const char *path, SV *data);
 static IV file_size_internal(const char *path);
@@ -383,12 +561,12 @@ static OP* pp_file_readdir(pTHX) {
     return NORMAL;
 }
 
-/* pp_file_slurp_raw: single path arg on stack (same as slurp) */
+/* pp_file_slurp_raw: single path arg on stack (bypasses hooks) */
 static OP* pp_file_slurp_raw(pTHX) {
     dSP;
     SV *path_sv = POPs;
     const char *path = SvPV_nolen(path_sv);
-    SV *result = file_slurp_internal(aTHX_ path);
+    SV *result = file_slurp_raw_internal(aTHX_ path);
     PUSHs(sv_2mortal(result));
     PUTBACK;
     return NORMAL;
@@ -456,29 +634,6 @@ static OP* pp_file_atomic_spew(pTHX) {
    Call checkers for compile-time optimization
    ============================================ */
 
-/* 
- * Check if an op is accessing $_ (the default variable).
- * This indicates we're likely in map/grep context where custom ops
- * don't work correctly due to how the op tree is evaluated.
- * Returns TRUE if the op is rv2sv -> gv for "_".
- */
-static bool file_op_is_dollar_underscore(pTHX_ OP *op) {
-    if (!op) return FALSE;
-    
-    /* Check for $_ access: rv2sv -> gv for "_" */
-    if (op->op_type == OP_RV2SV) {
-        OP *gvop = cUNOPx(op)->op_first;
-        if (gvop && gvop->op_type == OP_GV) {
-            GV *gv = cGVOPx_gv(gvop);
-            if (gv && GvNAMELEN(gv) == 1 && GvNAME(gv)[0] == '_') {
-                return TRUE;
-            }
-        }
-    }
-    
-    return FALSE;
-}
-
 /* 1-arg call checker (slurp, exists, size, is_file, is_dir, lines) */
 static OP* file_call_checker_1arg(pTHX_ OP *entersubop, GV *namegv, SV *ckobj) {
     file_ppfunc ppfunc = (file_ppfunc)SvIVX(ckobj);
@@ -502,11 +657,6 @@ static OP* file_call_checker_1arg(pTHX_ OP *entersubop, GV *namegv, SV *ckobj) {
 
     /* Verify exactly 1 arg */
     if (OpSIBLING(argop) != cvop) return entersubop;
-
-    /* If arg is $_, fall back to XS (map/grep context) */
-    if (file_op_is_dollar_underscore(aTHX_ argop)) {
-        return entersubop;
-    }
 
     /* Detach arg from tree */
     OpMORESIB_set(pushop, cvop);
@@ -546,11 +696,6 @@ static OP* file_call_checker_2arg(pTHX_ OP *entersubop, GV *namegv, SV *ckobj) {
 
     /* Verify exactly 2 args */
     if (OpSIBLING(dataop) != cvop) return entersubop;
-
-    /* If path is $_, fall back to XS (map/grep context) */
-    if (file_op_is_dollar_underscore(aTHX_ pathop)) {
-        return entersubop;
-    }
 
     /* Detach args from tree */
     OpMORESIB_set(pushop, cvop);
@@ -746,15 +891,103 @@ static SV* file_slurp_internal(pTHX_ const char *path) {
     }
 
     close(fd);
+
+    /* Run read hooks if registered (lazy - just pointer check) */
+    if (g_file_read_hook || g_file_hooks[FILE_HOOK_PHASE_READ]) {
+        SV *hooked = file_run_hooks(aTHX_ FILE_HOOK_PHASE_READ, path, result);
+        if (!hooked) {
+            SvREFCNT_dec(result);
+            return &PL_sv_undef;
+        }
+        if (hooked != result) {
+            SvREFCNT_dec(result);
+            result = hooked;
+        }
+    }
+
     return result;
 }
 
 /* ============================================
    Fast slurp binary - same as slurp but explicit
+   (bypasses hooks - for raw binary data)
    ============================================ */
 
+static SV* file_slurp_raw_internal(pTHX_ const char *path) {
+    int fd;
+    struct stat st;
+    SV *result;
+    char *buf;
+    ssize_t total = 0, n;
+#ifdef _WIN32
+    int open_flags = O_RDONLY | O_BINARY;
+#else
+    int open_flags = O_RDONLY;
+#endif
+
+    fd = open(path, open_flags);
+    if (fd < 0) {
+        return &PL_sv_undef;
+    }
+
+    if (fstat(fd, &st) < 0) {
+        close(fd);
+        return &PL_sv_undef;
+    }
+
+    if (S_ISREG(st.st_mode) && st.st_size > 0) {
+        result = newSV(st.st_size + 1);
+        SvPOK_on(result);
+        buf = SvPVX(result);
+
+        while (total < st.st_size) {
+            n = read(fd, buf + total, st.st_size - total);
+            if (n < 0) {
+                if (errno == EINTR) continue;
+                close(fd);
+                SvREFCNT_dec(result);
+                return &PL_sv_undef;
+            }
+            if (n == 0) break;
+            total += n;
+        }
+
+        buf[total] = '\0';
+        SvCUR_set(result, total);
+    } else {
+        size_t capacity = FILE_BUFFER_SIZE;
+        result = newSV(capacity);
+        SvPOK_on(result);
+        buf = SvPVX(result);
+
+        while (1) {
+            if (total >= (ssize_t)capacity - 1) {
+                capacity *= 2;
+                SvGROW(result, capacity);
+                buf = SvPVX(result);
+            }
+
+            n = read(fd, buf + total, capacity - total - 1);
+            if (n < 0) {
+                if (errno == EINTR) continue;
+                close(fd);
+                SvREFCNT_dec(result);
+                return &PL_sv_undef;
+            }
+            if (n == 0) break;
+            total += n;
+        }
+
+        buf[total] = '\0';
+        SvCUR_set(result, total);
+    }
+
+    close(fd);
+    return result;  /* No hooks for raw */
+}
+
 static SV* file_slurp_raw(pTHX_ const char *path) {
-    return file_slurp_internal(aTHX_ path);
+    return file_slurp_raw_internal(aTHX_ path);
 }
 
 /* ============================================
@@ -766,16 +999,31 @@ static int file_spew_internal(pTHX_ const char *path, SV *data) {
     const char *buf;
     STRLEN len;
     ssize_t written = 0, n;
+    SV *write_data = data;
+    int free_write_data = 0;
 #ifdef _WIN32
     int open_flags = O_WRONLY | O_CREAT | O_TRUNC | O_BINARY;
 #else
     int open_flags = O_WRONLY | O_CREAT | O_TRUNC;
 #endif
 
-    buf = SvPV(data, len);
+    /* Run write hooks if registered (lazy - just pointer check) */
+    if (g_file_write_hook || g_file_hooks[FILE_HOOK_PHASE_WRITE]) {
+        SV *hooked = file_run_hooks(aTHX_ FILE_HOOK_PHASE_WRITE, path, data);
+        if (!hooked) {
+            return 0;  /* Hook cancelled the write */
+        }
+        if (hooked != data) {
+            write_data = hooked;
+            free_write_data = 1;
+        }
+    }
+
+    buf = SvPV(write_data, len);
 
     fd = open(path, open_flags, 0644);
     if (fd < 0) {
+        if (free_write_data) SvREFCNT_dec(write_data);
         return 0;
     }
 
@@ -784,12 +1032,14 @@ static int file_spew_internal(pTHX_ const char *path, SV *data) {
         if (n < 0) {
             if (errno == EINTR) continue;
             close(fd);
+            if (free_write_data) SvREFCNT_dec(write_data);
             return 0;
         }
         written += n;
     }
 
     close(fd);
+    if (free_write_data) SvREFCNT_dec(write_data);
     return 1;
 }
 
@@ -2281,6 +2531,22 @@ static bool pred_is_not_comment(pTHX_ SV *line) {
     return !pred_is_comment(aTHX_ line);
 }
 
+/* Cleanup callback registry during global destruction */
+static void file_cleanup_callback_registry(pTHX_ void *data) {
+    PERL_UNUSED_ARG(data);
+
+    /* During global destruction, just NULL out pointers.
+     * Perl handles SV cleanup; trying to free them ourselves
+     * can cause crashes due to destruction order. */
+    if (PL_dirty) {
+        g_file_callback_registry = NULL;
+        return;
+    }
+
+    /* Normal cleanup - not during global destruction */
+    g_file_callback_registry = NULL;
+}
+
 static void file_init_callback_registry(pTHX) {
     SV *sv;
     FileLineCallback *cb;
@@ -2452,18 +2718,24 @@ static XS(xs_grep_lines) {
         while ((line = file_lines_next(aTHX_ idx)) != &PL_sv_undef) {
             dSP;
             IV count;
+            SV *result_sv;
+            bool matches = FALSE;
             DEFSV_set(line);  /* Set $_ */
             PUSHMARK(SP);
             XPUSHs(line);
             PUTBACK;
             count = call_sv(cb_sv, G_SCALAR);
             SPAGAIN;
-            if (count > 0 && SvTRUE(POPs)) {
+            if (count > 0) {
+                result_sv = POPs;
+                matches = SvTRUE(result_sv);
+            }
+            PUTBACK;
+            if (matches) {
                 av_push(result, line);
             } else {
                 SvREFCNT_dec(line);
             }
-            PUTBACK;
         }
         DEFSV_set(old_defsv);
     }
@@ -2543,17 +2815,23 @@ static XS(xs_count_lines) {
         while ((line = file_lines_next(aTHX_ idx)) != &PL_sv_undef) {
             dSP;
             IV n;
+            SV *result_sv;
+            bool matches = FALSE;
             DEFSV_set(line);  /* Set $_ */
             PUSHMARK(SP);
             XPUSHs(line);
             PUTBACK;
             n = call_sv(cb_sv, G_SCALAR);
             SPAGAIN;
-            if (n > 0 && SvTRUE(POPs)) {
+            if (n > 0) {
+                result_sv = POPs;
+                matches = SvTRUE(result_sv);
+            }
+            PUTBACK;
+            if (matches) {
                 count++;
             }
             SvREFCNT_dec(line);
-            PUTBACK;
         }
         DEFSV_set(old_defsv);
     }
@@ -2615,20 +2893,26 @@ static XS(xs_find_line) {
         while ((line = file_lines_next(aTHX_ idx)) != &PL_sv_undef) {
             dSP;
             IV n;
+            SV *result_sv;
+            bool matches = FALSE;
             DEFSV_set(line);  /* Set $_ */
             PUSHMARK(SP);
             XPUSHs(line);
             PUTBACK;
             n = call_sv(cb_sv, G_SCALAR);
             SPAGAIN;
-            if (n > 0 && SvTRUE(POPs)) {
+            if (n > 0) {
+                result_sv = POPs;
+                matches = SvTRUE(result_sv);
+            }
+            PUTBACK;
+            if (matches) {
                 DEFSV_set(old_defsv);
                 file_lines_close(idx);
                 ST(0) = sv_2mortal(line);
                 XSRETURN(1);
             }
             SvREFCNT_dec(line);
-            PUTBACK;
         }
         DEFSV_set(old_defsv);
     }
@@ -2670,6 +2954,7 @@ static XS(xs_map_lines) {
         while ((line = file_lines_next(aTHX_ idx)) != &PL_sv_undef) {
             dSP;
             IV count;
+            SV *result_sv;
             DEFSV_set(line);  /* Set $_ */
             PUSHMARK(SP);
             XPUSHs(sv_2mortal(line));
@@ -2677,7 +2962,8 @@ static XS(xs_map_lines) {
             count = call_sv(callback, G_SCALAR);
             SPAGAIN;
             if (count > 0) {
-                av_push(result, SvREFCNT_inc(POPs));
+                result_sv = POPs;
+                av_push(result, SvREFCNT_inc(result_sv));
             }
             PUTBACK;
         }
@@ -2750,6 +3036,135 @@ static XS(xs_list_line_callbacks) {
     }
 
     ST(0) = sv_2mortal(newRV_noinc((SV*)result));
+    XSRETURN(1);
+}
+
+/* ============================================
+   Hook registration XS functions
+   ============================================ */
+
+/* Register a Perl read hook */
+static XS(xs_register_read_hook) {
+    dXSARGS;
+    SV *coderef;
+    FileHookEntry *entry;
+
+    if (items != 1) croak("Usage: file::register_read_hook(\\&coderef)");
+
+    coderef = ST(0);
+    if (!SvROK(coderef) || SvTYPE(SvRV(coderef)) != SVt_PVCV) {
+        croak("file::register_read_hook: argument must be a coderef");
+    }
+
+    /* Use the hook list for Perl callbacks */
+    Newxz(entry, 1, FileHookEntry);
+    entry->name = "perl_read_hook";
+    entry->c_func = NULL;
+    entry->perl_callback = newSVsv(coderef);
+    entry->priority = FILE_HOOK_PRIORITY_NORMAL;
+    entry->user_data = NULL;
+    entry->next = g_file_hooks[FILE_HOOK_PHASE_READ];
+    g_file_hooks[FILE_HOOK_PHASE_READ] = entry;
+
+    XSRETURN_YES;
+}
+
+/* Register a Perl write hook */
+static XS(xs_register_write_hook) {
+    dXSARGS;
+    SV *coderef;
+    FileHookEntry *entry;
+
+    if (items != 1) croak("Usage: file::register_write_hook(\\&coderef)");
+
+    coderef = ST(0);
+    if (!SvROK(coderef) || SvTYPE(SvRV(coderef)) != SVt_PVCV) {
+        croak("file::register_write_hook: argument must be a coderef");
+    }
+
+    /* Use the hook list for Perl callbacks */
+    Newxz(entry, 1, FileHookEntry);
+    entry->name = "perl_write_hook";
+    entry->c_func = NULL;
+    entry->perl_callback = newSVsv(coderef);
+    entry->priority = FILE_HOOK_PRIORITY_NORMAL;
+    entry->user_data = NULL;
+    entry->next = g_file_hooks[FILE_HOOK_PHASE_WRITE];
+    g_file_hooks[FILE_HOOK_PHASE_WRITE] = entry;
+
+    XSRETURN_YES;
+}
+
+/* Clear all hooks for a phase */
+static XS(xs_clear_hooks) {
+    dXSARGS;
+    const char *phase_name;
+    FileHookPhase phase;
+    FileHookEntry *entry, *next;
+
+    if (items != 1) croak("Usage: file::clear_hooks($phase)");
+
+    phase_name = SvPV_nolen(ST(0));
+
+    if (strcmp(phase_name, "read") == 0) {
+        phase = FILE_HOOK_PHASE_READ;
+        g_file_read_hook = NULL;
+        g_file_read_hook_data = NULL;
+    } else if (strcmp(phase_name, "write") == 0) {
+        phase = FILE_HOOK_PHASE_WRITE;
+        g_file_write_hook = NULL;
+        g_file_write_hook_data = NULL;
+    } else if (strcmp(phase_name, "open") == 0) {
+        phase = FILE_HOOK_PHASE_OPEN;
+    } else if (strcmp(phase_name, "close") == 0) {
+        phase = FILE_HOOK_PHASE_CLOSE;
+    } else {
+        croak("file::clear_hooks: unknown phase '%s' (use read, write, open, close)", phase_name);
+    }
+
+    /* Free hook list */
+    entry = g_file_hooks[phase];
+    while (entry) {
+        next = entry->next;
+        if (entry->perl_callback) {
+            SvREFCNT_dec(entry->perl_callback);
+        }
+        Safefree(entry);
+        entry = next;
+    }
+    g_file_hooks[phase] = NULL;
+
+    XSRETURN_YES;
+}
+
+/* Check if hooks are registered for a phase */
+static XS(xs_has_hooks) {
+    dXSARGS;
+    const char *phase_name;
+    FileHookPhase phase;
+    int has;
+
+    if (items != 1) croak("Usage: file::has_hooks($phase)");
+
+    phase_name = SvPV_nolen(ST(0));
+
+    if (strcmp(phase_name, "read") == 0) {
+        phase = FILE_HOOK_PHASE_READ;
+        has = (g_file_read_hook != NULL) || (g_file_hooks[phase] != NULL);
+    } else if (strcmp(phase_name, "write") == 0) {
+        phase = FILE_HOOK_PHASE_WRITE;
+        has = (g_file_write_hook != NULL) || (g_file_hooks[phase] != NULL);
+    } else if (strcmp(phase_name, "open") == 0) {
+        phase = FILE_HOOK_PHASE_OPEN;
+        has = (g_file_hooks[phase] != NULL);
+    } else if (strcmp(phase_name, "close") == 0) {
+        phase = FILE_HOOK_PHASE_CLOSE;
+        has = (g_file_hooks[phase] != NULL);
+    } else {
+        croak("file::has_hooks: unknown phase '%s' (use read, write, open, close)", phase_name);
+    }
+
+    ST(0) = has ? &PL_sv_yes : &PL_sv_no;
     XSRETURN(1);
 }
 
@@ -3197,7 +3612,7 @@ XS_EXTERNAL(XS_file_func_slurp_raw) {
     const char *path;
     if (items != 1) croak("Usage: file_slurp_raw($path)");
     path = SvPV_nolen(ST(0));
-    ST(0) = sv_2mortal(file_slurp_internal(aTHX_ path));
+    ST(0) = sv_2mortal(file_slurp_raw_internal(aTHX_ path));
     XSRETURN(1);
 }
 
@@ -3440,12 +3855,133 @@ XS_EXTERNAL(boot_file) {
     XopENTRY_set(&file_atomic_spew_xop, xop_desc, "file atomic_spew");
     Perl_custom_op_register(aTHX_ pp_file_atomic_spew, &file_atomic_spew_xop);
 
-    /* Core functions */
-    newXS("file::slurp", xs_slurp, __FILE__);
-    newXS("file::slurp_raw", xs_slurp_raw, __FILE__);
-    newXS("file::spew", xs_spew, __FILE__);
-    newXS("file::append", xs_append, __FILE__);
-    newXS("file::lines", xs_lines, __FILE__);
+    /* Install functions with call checker for custom op optimization */
+    {
+        CV *cv;
+        SV *ckobj;
+
+        /* 1-arg functions with call checker */
+        cv = newXS("file::size", xs_size, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_size));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        cv = newXS("file::mtime", xs_mtime, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_mtime));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        cv = newXS("file::atime", xs_atime, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_atime));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        cv = newXS("file::ctime", xs_ctime, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_ctime));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        cv = newXS("file::mode", xs_mode, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_mode));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        cv = newXS("file::exists", xs_exists, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_exists));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        cv = newXS("file::is_file", xs_is_file, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_is_file));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        cv = newXS("file::is_dir", xs_is_dir, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_is_dir));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        cv = newXS("file::is_link", xs_is_link, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_is_link));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        cv = newXS("file::is_readable", xs_is_readable, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_is_readable));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        cv = newXS("file::is_writable", xs_is_writable, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_is_writable));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        cv = newXS("file::is_executable", xs_is_executable, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_is_executable));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        /* File manipulation - 1-arg */
+        cv = newXS("file::unlink", xs_unlink, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_unlink));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        cv = newXS("file::mkdir", xs_mkdir, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_mkdir));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        cv = newXS("file::rmdir", xs_rmdir, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_rmdir));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        cv = newXS("file::touch", xs_touch, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_touch));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        cv = newXS("file::basename", xs_basename, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_basename));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        cv = newXS("file::dirname", xs_dirname, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_dirname));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        cv = newXS("file::extname", xs_extname, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_extname));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        cv = newXS("file::slurp", xs_slurp, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_slurp));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        cv = newXS("file::slurp_raw", xs_slurp_raw, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_slurp_raw));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        cv = newXS("file::lines", xs_lines, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_lines));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        cv = newXS("file::readdir", xs_readdir, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_readdir));
+        cv_set_call_checker(cv, file_call_checker_1arg, ckobj);
+
+        /* 2-arg functions with call checker */
+        cv = newXS("file::spew", xs_spew, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_spew));
+        cv_set_call_checker(cv, file_call_checker_2arg, ckobj);
+
+        cv = newXS("file::append", xs_append, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_append));
+        cv_set_call_checker(cv, file_call_checker_2arg, ckobj);
+
+        cv = newXS("file::copy", xs_copy, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_copy));
+        cv_set_call_checker(cv, file_call_checker_2arg, ckobj);
+
+        cv = newXS("file::move", xs_move, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_move));
+        cv_set_call_checker(cv, file_call_checker_2arg, ckobj);
+
+        cv = newXS("file::chmod", xs_chmod, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_chmod));
+        cv_set_call_checker(cv, file_call_checker_2arg, ckobj);
+
+        cv = newXS("file::atomic_spew", xs_atomic_spew, __FILE__);
+        ckobj = newSViv(PTR2IV(pp_file_atomic_spew));
+        cv_set_call_checker(cv, file_call_checker_2arg, ckobj);
+    }
+
+    /* Functions without custom op optimization */
+    newXS("file::join", xs_join, __FILE__);
     newXS("file::each_line", xs_each_line, __FILE__);
     newXS("file::grep_lines", xs_grep_lines, __FILE__);
     newXS("file::count_lines", xs_count_lines, __FILE__);
@@ -3454,36 +3990,11 @@ XS_EXTERNAL(boot_file) {
     newXS("file::register_line_callback", xs_register_line_callback, __FILE__);
     newXS("file::list_line_callbacks", xs_list_line_callbacks, __FILE__);
 
-    /* Stat functions */
-    newXS("file::size", xs_size, __FILE__);
-    newXS("file::mtime", xs_mtime, __FILE__);
-    newXS("file::atime", xs_atime, __FILE__);
-    newXS("file::ctime", xs_ctime, __FILE__);
-    newXS("file::mode", xs_mode, __FILE__);
-    newXS("file::exists", xs_exists, __FILE__);
-    newXS("file::is_file", xs_is_file, __FILE__);
-    newXS("file::is_dir", xs_is_dir, __FILE__);
-    newXS("file::is_link", xs_is_link, __FILE__);
-    newXS("file::is_readable", xs_is_readable, __FILE__);
-    newXS("file::is_writable", xs_is_writable, __FILE__);
-    newXS("file::is_executable", xs_is_executable, __FILE__);
-
-    /* File manipulation */
-    newXS("file::unlink", xs_unlink, __FILE__);
-    newXS("file::copy", xs_copy, __FILE__);
-    newXS("file::move", xs_move, __FILE__);
-    newXS("file::touch", xs_touch, __FILE__);
-    newXS("file::chmod", xs_chmod, __FILE__);
-    newXS("file::mkdir", xs_mkdir, __FILE__);
-    newXS("file::rmdir", xs_rmdir, __FILE__);
-    newXS("file::readdir", xs_readdir, __FILE__);
-    newXS("file::atomic_spew", xs_atomic_spew, __FILE__);
-
-    /* Path manipulation */
-    newXS("file::basename", xs_basename, __FILE__);
-    newXS("file::dirname", xs_dirname, __FILE__);
-    newXS("file::extname", xs_extname, __FILE__);
-    newXS("file::join", xs_join, __FILE__);
+    /* File hooks */
+    newXS("file::register_read_hook", xs_register_read_hook, __FILE__);
+    newXS("file::register_write_hook", xs_register_write_hook, __FILE__);
+    newXS("file::clear_hooks", xs_clear_hooks, __FILE__);
+    newXS("file::has_hooks", xs_has_hooks, __FILE__);
 
     /* Head and tail */
     newXS("file::head", xs_head, __FILE__);
@@ -3505,6 +4016,9 @@ XS_EXTERNAL(boot_file) {
     newXS("file::lines::eof", xs_lines_iter_eof, __FILE__);
     newXS("file::lines::close", xs_lines_iter_close, __FILE__);
     newXS("file::lines::DESTROY", xs_lines_iter_DESTROY, __FILE__);
+
+    /* Register cleanup for global destruction */
+    Perl_call_atexit(aTHX_ file_cleanup_callback_registry, NULL);
 
     Perl_xs_boot_epilog(aTHX_ ax);
 }

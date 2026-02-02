@@ -5,7 +5,7 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     NAME             => 'const',
     VERSION_FROM     => '../../lib/const.pm',
-    MIN_PERL_VERSION => '5.014',
+    MIN_PERL_VERSION => '5.010',
     OBJECT       => 'const$(OBJ_EXT)',
     C            => ['const.c'],
     XS           => {},

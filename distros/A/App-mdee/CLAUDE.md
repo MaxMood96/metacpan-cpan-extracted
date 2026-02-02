@@ -28,17 +28,36 @@ mdee (Markdown, Easy on the Eyes) is a Markdown viewer command implemented as a 
 ### Theme System
 
 Themes are defined as Bash associative arrays:
-- `theme_default_light` - Light mode theme (full definition)
-- `theme_default_dark` - Dark mode theme (only differences from light)
+- `theme_default_light` - Light mode theme (full definition, includes `[base]`)
+- `theme_default_dark` - Dark mode theme (only differences from light, includes `[base]`)
 
-Dark theme inherits from light theme:
+Dark theme inherits from light theme automatically in `load_theme()`.
+
+### External Theme Files
+
+Themes can be provided as external Bash scripts. Search order:
+
+1. User theme: `${XDG_CONFIG_HOME:-$HOME/.config}/mdee/theme/NAME.sh`
+2. Share theme: `$share_dir/theme/NAME.sh` (installed via distribution or `../share` in development)
+3. In-memory variables (built-in themes, config.sh definitions)
+
+Theme file format (`declare -gA` for global scope from within functions):
 
 ```bash
-# After defining theme_default_dark with only different values
-for k in "${!theme_default_light[@]}"; do
-    [[ -v theme_default_dark[$k] ]] || theme_default_dark[$k]=${theme_default_light[$k]}
-done
+# share/theme/warm.sh
+declare -gA theme_warm_light=(
+    [base]='<Coral>=y25'
+    [bold]='${base}D'
+    ...all fields...
+)
+declare -gA theme_warm_dark=(
+    [base]='<Coral>=y80'
+    [h1]='L00DE/${base}'
+    ...differences only (inherits from light)...
+)
 ```
+
+The `find_share_dir()` function discovers the installed share directory via `@INC`, with a development fallback to `$0/../share`.
 
 Field names are derived from theme keys (excluding `base`):
 
@@ -56,6 +75,29 @@ Color specifications use [Term::ANSIColor::Concise](https://metacpan.org/pod/Ter
 - `=l50`: Set absolute lightness
 - `D`: Bold, `I`: Italic, `U`: Underline, `E`: Erase line
 - `FG/BG`: Foreground/Background
+
+### User Configuration
+
+Config file: `${XDG_CONFIG_HOME:-~/.config}/mdee/config.sh`
+
+The config file is sourced at global scope (not inside a function), so `declare -A` creates global variables. This allows custom themes to be defined in config.sh.
+
+The `default` associative array supports:
+
+| Key | Option | Example |
+|-----|--------|---------|
+| `default[mode]` | `--mode` | `dark` |
+| `default[theme]` | `--theme` | `custom` |
+| `default[style]` | `--style` | `pager` |
+| `default[width]` | `--width` | `100` |
+| `default[base_color]` | `--base-color` | `DarkCyan` |
+
+Priority: command-line option > config default > built-in default.
+
+The `--base-color` option default is empty (no override). Base color is determined by:
+1. `--base-color` option (highest priority)
+2. `default[base_color]` in config.sh
+3. Theme's `[base]` key (e.g., `<RoyalBlue>=y25` for light)
 
 ## Implementation Notes
 

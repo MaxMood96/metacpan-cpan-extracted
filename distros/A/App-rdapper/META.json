@@ -70,6 +70,6 @@
          "web" : "https://github.com/gbxyz/rdapper"
       }
    },
-   "version" : "1.22",
+   "version" : "1.23",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

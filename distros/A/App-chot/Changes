@@ -1,0 +1,124 @@
+Revision history for "chot" command
+
+1.00 2026-02-02T06:31:07Z
+
+    - Add optex symlink detection and resolution (App::chot::Optex)
+    - Add -i/--info option to show command trace without source display
+    - Resolve pyenv shims to actual executables in info mode
+    - Resolve optex aliases from config.toml
+    - Rename to "Command Heuristic Omni-Tracer"
+
+0.99 2026-02-02T02:29:53Z
+
+    - Add Node.js handler (--nd) using require.resolve with subpath support.
+    - Add Ruby handler (--rb) using $LOADED_FEATURES inspection.
+
+0.21 2026-02-02T01:19:05Z
+
+    - Add --bat-theme option for automatic BAT_THEME selection based on terminal background
+
+0.20 2026-02-01T11:28:13Z
+
+    - Support Linuxbrew path resolution in Homebrew wrapper detection
+
+0.19 2026-01-29T03:13:51Z
+
+    - Show concise help with -h option
+
+0.18 2026-01-29T02:34:37Z
+
+    - Add -N/--number/--no-number option for line number display
+    - Fix state hash initialization for Perl 5.24 compatibility
+
+0.17 2026-01-27T10:08:03Z
+
+    - Use bat --force-colorization to show file headers and colors when piped.
+
+0.16 2026-01-26T10:25:15Z
+
+    - Deduplicate Perl modules with identical content using MD5 hash.
+
+0.15 2026-01-25T11:26:13Z
+
+    - Add --py option as shortcut for --type Python.
+    - Add --pl option as shortcut for --type Perl.
+    - Make --type handler names case-insensitive.
+    - Update documentation with practical examples.
+
+0.14 2026-01-25T03:03:01Z
+
+    - Find alternative file when __init__.py is empty.
+
+0.13 2026-01-25T02:41:43Z
+
+    - Replace Inline::Python with direct Python execution.
+    - Add --help/-h option to display brief usage.
+    - Add --man/-m option to show documentation (perldoc/pydoc/man).
+    - Add -d/--debug option to show handler search process.
+    - Add -n/--dryrun option to show command without executing.
+    - Add -r/--raw option to skip wrapper resolution.
+    - Add -1/--one option to stop at first match.
+    - Change default behavior to search all handlers and show all files.
+    - Use bat as default pager if available.
+    - Support CHOT_PAGER environment variable.
+    - Show both wrapper and resolved path for Homebrew commands.
+    - Refactor language-specific code into handler modules.
+
+0.12 2026-01-24T05:21:15Z
+
+    - Search Homebrew libexec paths for Perl modules.
+    - Add GitHub Actions workflow to create releases on tag push.
+
+0.11 2026-01-24T04:45:36Z
+
+    - Add Homebrew wrapper resolution to show actual scripts.
+    - Make Inline::Python optional with dynamic loading.
+    - Enable GitHub release on minil release.
+
+0.10 2025-10-30T07:29:29Z
+
+    - Add --version/-v option to display version information.
+    - Add --type/-t option to customize handler module selection.
+    - Fix PAGER handling to support arguments in pager commands.
+    - Improve Inline::Python configuration for Python library support.
+    - Update comprehensive documentation with detailed option descriptions and examples.
+    - Add CLAUDE.md for Claude Code integration.
+
+0.09 2022-09-07T09:44:11Z
+
+    - Update -l option behavior.
+
+0.08 2022-08-22T01:41:38Z
+
+    - New Getopt::EX::Hashed interface.
+
+0.07  2022-02-11 20:01:50 JST
+
+    - Add github action badge.
+
+0.06  2022-02-11 17:51:10 JST
+
+    - Make ~/.Inline directory.
+
+0.05 2021-08-09T03:18:38Z
+
+    - Use Getopt::EX::Hashed oo interface.
+
+0.04 2021-04-09T01:31:32Z
+
+    - Look at $ENV{PAGER}.
+    - Introduce --vi option in default.pm.
+
+0.03 2021-01-30T16:16:39Z
+
+    - Accept options for pager.
+
+0.02 2021-01-25T13:01:17Z
+
+    - Add debug option.
+    - Move some part to Util.pm.
+
+0.01 2021-01-20T02:29:05Z
+
+    - original version
+

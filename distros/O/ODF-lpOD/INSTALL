@@ -13,10 +13,10 @@ System requirements:
 - File::Type
 - File::Slurp
 - File::Temp 0.12 or later
+- match::simple
 - Time::Local 1.07 or later
 - Image::Size
 - LWP::Simple
-- experimental
 
 Usage
 =====

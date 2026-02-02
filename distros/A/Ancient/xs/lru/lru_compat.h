@@ -5,6 +5,12 @@
 #ifndef LRU_COMPAT_H
 #define LRU_COMPAT_H
 
+/* Devel::PPPort compatibility - provides many backported macros */
+#include "ppport.h"
+
+/* Include shared XOP compatibility for custom ops (5.14+ fallback) */
+#include "../xop_compat.h"
+
 /* Version checking macro */
 #ifndef PERL_VERSION_GE
 #  define PERL_VERSION_GE(r,v,s) \
@@ -28,8 +34,17 @@
 
 #if !PERL_VERSION_GE(5,22,0)
 #  ifndef Perl_xs_boot_epilog
-#    define Perl_xs_boot_epilog(aTHX_ ax) XSRETURN_YES
+#    ifdef USE_ITHREADS
+#      define Perl_xs_boot_epilog(ctx, ax) XSRETURN_YES
+#    else
+#      define Perl_xs_boot_epilog(ax) XSRETURN_YES
+#    endif
 #  endif
+#endif
+
+/* XS_EXTERNAL - introduced in 5.16 */
+#ifndef XS_EXTERNAL
+#  define XS_EXTERNAL(name) XS(name)
 #endif
 
 /* newSVpvn_flags */

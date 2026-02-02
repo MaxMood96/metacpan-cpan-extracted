@@ -2,7 +2,7 @@ package
     slot;
 use strict;
 use warnings;
-our $VERSION = '0.10';
+our $VERSION = '0.14';
 require XSLoader;
 XSLoader::load('slot', $VERSION);
 1;
@@ -200,6 +200,15 @@ Reset slot value(s) to undef and remove watchers by numeric index.
 
 Returns a list of all defined slot names.
 
+=head2 slot::exists
+
+    if (slot::exists('config')) {
+        # slot is defined
+    }
+
+Check if a slot with the given name has been defined. Returns true if
+the slot exists, false otherwise.
+
 =head1 THREAD SAFETY
 
 For thread-safe data sharing, store C<threads::shared> variables in slots:
@@ -232,27 +241,6 @@ thread-safe storage.
 
 After C<fork()>, child processes get a copy of slot values (copy-on-write).
 Changes in child processes do not affect the parent, and vice versa.
-
-=head1 BENCHMARK
-
-bench.pl is included
-
-	=== SETTER BENCHMARK ===
-
-			  Rate pp_closure    pp_hash   raw_hash       slot
-	pp_closure  12277720/s         --       -14%       -82%       -96%
-	pp_hash     14298759/s        16%         --       -80%       -96%
-	raw_hash    70063941/s       471%       390%         --       -79%
-	slot       340183182/s      2671%      2279%       386%         --
-
-	=== GETTER BENCHMARK ===
-
-			 Rate pp_closure    pp_hash   raw_hash       slot
-	pp_closure 11513773/s         --       -14%       -79%       -84%
-	pp_hash    13345509/s        16%         --       -76%       -82%
-	raw_hash   54947210/s       377%       312%         --       -25%
-	slot       72793704/s       532%       445%        32%         --
-
 
 =head1 AUTHOR
 

@@ -15,15 +15,13 @@ subtest "Basic" => sub {
 	} );
 	
 	is( Local::test_1( [10..13], sub { $_ > 11 } ), 12 );
-	is( Local::test_1( [10..13], sub { $_[0] > 11 } ), 12 );
 	is( Local::test_1( [2..5], sub { $_ > 11 } ), undef );
-	is( Local::test_1( [2..5], sub { $_[0] > 11 } ), undef );
 };
 
 subtest "Curried" => sub {
 	Sub::HandlesVia::XS::INSTALL_shvxs_array_first( "Local::test_2" => {
 		arr_source  => Sub::HandlesVia::XS::ARRAY_SRC_INVOCANT,
-		callback    => sub { $_[0] > 11 },
+		callback    => sub { $_ > 11 },
 	} );
 
 	is( Local::test_2( [10..13] ), 12 );

@@ -8,7 +8,7 @@ use Exporter 'import';
 
 use OpenGL::Modern::Const;
 
-our $VERSION    = '0.0401';
+our $VERSION    = '0.0402';
 our $XS_VERSION = $VERSION; # capture before strip, as EUMM reads statically in setting version for .xs file
 $VERSION =~ tr/_//d;
 
@@ -19,6 +19,7 @@ our @gl_functionscompat = qw(
   glActiveTexture
   glAlphaFunc
   glAreTexturesResident_c
+  glAreTexturesResident_p
   glArrayElement
   glAttachShader
   glBegin
@@ -34,7 +35,7 @@ our @gl_functionscompat = qw(
   glBindRenderbuffer
   glBindTexture
   glBindVertexArray
-  glBitmap_c
+  glBitmap
   glBlendColor
   glBlendEquation
   glBlendEquationSeparate
@@ -51,46 +52,66 @@ our @gl_functionscompat = qw(
   glClearAccum
   glClearBufferfi
   glClearBufferfv_c
+  glClearBufferfv_p
   glClearBufferiv_c
+  glClearBufferiv_p
   glClearBufferuiv_c
+  glClearBufferuiv_p
   glClearColor
   glClearDepth
   glClearIndex
   glClearStencil
   glClientActiveTexture
   glClipPlane_c
+  glClipPlane_p
   glColor3b
   glColor3bv_c
+  glColor3bv_p
   glColor3d
   glColor3dv_c
+  glColor3dv_p
   glColor3f
   glColor3fv_c
+  glColor3fv_p
   glColor3i
   glColor3iv_c
+  glColor3iv_p
   glColor3s
   glColor3sv_c
+  glColor3sv_p
   glColor3ub
   glColor3ubv_c
+  glColor3ubv_p
   glColor3ui
   glColor3uiv_c
+  glColor3uiv_p
   glColor3us
   glColor3usv_c
+  glColor3usv_p
   glColor4b
   glColor4bv_c
+  glColor4bv_p
   glColor4d
   glColor4dv_c
+  glColor4dv_p
   glColor4f
   glColor4fv_c
+  glColor4fv_p
   glColor4i
   glColor4iv_c
+  glColor4iv_p
   glColor4s
   glColor4sv_c
+  glColor4sv_p
   glColor4ub
   glColor4ubv_c
+  glColor4ubv_p
   glColor4ui
   glColor4uiv_c
+  glColor4uiv_p
   glColor4us
   glColor4usv_c
+  glColor4usv_p
   glColorMask
   glColorMaski
   glColorMaterial
@@ -139,6 +160,7 @@ our @gl_functionscompat = qw(
   glDrawArraysInstanced
   glDrawBuffer
   glDrawBuffers_c
+  glDrawBuffers_p
   glDrawElementsInstanced_c
   glDrawElements_c
   glDrawPixels_c
@@ -146,6 +168,7 @@ our @gl_functionscompat = qw(
   glEdgeFlag
   glEdgeFlagPointer_c
   glEdgeFlagv_c
+  glEdgeFlagv_p
   glEnable
   glEnableClientState
   glEnableVertexAttribArray
@@ -157,29 +180,38 @@ our @gl_functionscompat = qw(
   glEndTransformFeedback
   glEvalCoord1d
   glEvalCoord1dv_c
+  glEvalCoord1dv_p
   glEvalCoord1f
   glEvalCoord1fv_c
+  glEvalCoord1fv_p
   glEvalCoord2d
   glEvalCoord2dv_c
+  glEvalCoord2dv_p
   glEvalCoord2f
   glEvalCoord2fv_c
+  glEvalCoord2fv_p
   glEvalMesh1
   glEvalMesh2
   glEvalPoint1
   glEvalPoint2
   glFeedbackBuffer_c
+  glFeedbackBuffer_p
   glFinish
   glFlush
   glFlushMappedBufferRange
   glFogCoordPointer_c
   glFogCoordd
   glFogCoorddv_c
+  glFogCoorddv_p
   glFogCoordf
   glFogCoordfv_c
+  glFogCoordfv_p
   glFogf
   glFogfv_c
+  glFogfv_p
   glFogi
   glFogiv_c
+  glFogiv_p
   glFramebufferRenderbuffer
   glFramebufferTexture1D
   glFramebufferTexture2D
@@ -202,87 +234,138 @@ our @gl_functionscompat = qw(
   glGenVertexArrays_p
   glGenerateMipmap
   glGetActiveAttrib_c
+  glGetActiveAttrib_p
   glGetActiveUniformBlockName_c
+  glGetActiveUniformBlockName_p
   glGetActiveUniformBlockiv_c
   glGetActiveUniformName_c
+  glGetActiveUniformName_p
   glGetActiveUniform_c
+  glGetActiveUniform_p
   glGetActiveUniformsiv_c
+  glGetActiveUniformsiv_p
   glGetAttachedShaders_c
+  glGetAttachedShaders_p
   glGetAttribLocation
   glGetBooleani_v_c
+  glGetBooleani_v_p
   glGetBooleanv_c
+  glGetBooleanv_p
   glGetBufferParameteriv_c
+  glGetBufferParameteriv_p
   glGetBufferPointerv_c
   glGetBufferSubData_c
   glGetClipPlane_c
+  glGetClipPlane_p
   glGetCompressedTexImage_c
   glGetDoublev_c
+  glGetDoublev_p
   glGetError
   glGetFloatv_c
+  glGetFloatv_p
   glGetFragDataLocation
   glGetFramebufferAttachmentParameteriv_c
+  glGetFramebufferAttachmentParameteriv_p
   glGetIntegeri_v_c
+  glGetIntegeri_v_p
   glGetIntegerv_c
+  glGetIntegerv_p
   glGetLightfv_c
+  glGetLightfv_p
   glGetLightiv_c
+  glGetLightiv_p
   glGetMapdv_c
   glGetMapfv_c
   glGetMapiv_c
   glGetMaterialfv_c
+  glGetMaterialfv_p
   glGetMaterialiv_c
+  glGetMaterialiv_p
   glGetPixelMapfv_c
   glGetPixelMapuiv_c
   glGetPixelMapusv_c
   glGetPointerv_c
   glGetPolygonStipple_c
   glGetProgramInfoLog_c
+  glGetProgramInfoLog_p
   glGetProgramiv_c
+  glGetProgramiv_p
   glGetQueryObjectiv_c
+  glGetQueryObjectiv_p
   glGetQueryObjectuiv_c
+  glGetQueryObjectuiv_p
   glGetQueryiv_c
+  glGetQueryiv_p
   glGetRenderbufferParameteriv_c
+  glGetRenderbufferParameteriv_p
   glGetShaderInfoLog_c
+  glGetShaderInfoLog_p
   glGetShaderSource_c
+  glGetShaderSource_p
   glGetShaderiv_c
+  glGetShaderiv_p
   glGetString
   glGetTexEnvfv_c
+  glGetTexEnvfv_p
   glGetTexEnviv_c
+  glGetTexEnviv_p
   glGetTexGendv_c
+  glGetTexGendv_p
   glGetTexGenfv_c
+  glGetTexGenfv_p
   glGetTexGeniv_c
+  glGetTexGeniv_p
   glGetTexImage_c
   glGetTexLevelParameterfv_c
+  glGetTexLevelParameterfv_p
   glGetTexLevelParameteriv_c
+  glGetTexLevelParameteriv_p
   glGetTexParameterIiv_c
+  glGetTexParameterIiv_p
   glGetTexParameterIuiv_c
+  glGetTexParameterIuiv_p
   glGetTexParameterfv_c
+  glGetTexParameterfv_p
   glGetTexParameteriv_c
+  glGetTexParameteriv_p
   glGetTransformFeedbackVarying_c
+  glGetTransformFeedbackVarying_p
   glGetUniformBlockIndex
   glGetUniformIndices_c
+  glGetUniformIndices_p
   glGetUniformLocation
   glGetUniformfv_c
   glGetUniformiv_c
   glGetUniformuiv_c
   glGetVertexAttribIiv_c
+  glGetVertexAttribIiv_p
   glGetVertexAttribIuiv_c
+  glGetVertexAttribIuiv_p
   glGetVertexAttribPointerv_c
   glGetVertexAttribdv_c
+  glGetVertexAttribdv_p
   glGetVertexAttribfv_c
+  glGetVertexAttribfv_p
   glGetVertexAttribiv_c
+  glGetVertexAttribiv_p
   glHint
   glIndexMask
   glIndexPointer_c
   glIndexd
   glIndexdv_c
+  glIndexdv_p
   glIndexf
   glIndexfv_c
+  glIndexfv_p
   glIndexi
   glIndexiv_c
+  glIndexiv_p
   glIndexs
   glIndexsv_c
+  glIndexsv_p
   glIndexub
   glIndexubv_c
+  glIndexubv_p
   glInitNames
   glInterleavedArrays_c
   glIsBuffer
@@ -298,22 +381,30 @@ our @gl_functionscompat = qw(
   glIsVertexArray
   glLightModelf
   glLightModelfv_c
+  glLightModelfv_p
   glLightModeli
   glLightModeliv_c
+  glLightModeliv_p
   glLightf
   glLightfv_c
+  glLightfv_p
   glLighti
   glLightiv_c
+  glLightiv_p
   glLineStipple
   glLineWidth
   glLinkProgram
   glListBase
   glLoadIdentity
   glLoadMatrixd_c
+  glLoadMatrixd_p
   glLoadMatrixf_c
+  glLoadMatrixf_p
   glLoadName
   glLoadTransposeMatrixd_c
+  glLoadTransposeMatrixd_p
   glLoadTransposeMatrixf_c
+  glLoadTransposeMatrixf_p
   glLogicOp
   glMap1d_c
   glMap1f_c
@@ -327,64 +418,95 @@ our @gl_functionscompat = qw(
   glMapGrid2f
   glMaterialf
   glMaterialfv_c
+  glMaterialfv_p
   glMateriali
   glMaterialiv_c
+  glMaterialiv_p
   glMatrixMode
   glMultMatrixd_c
+  glMultMatrixd_p
   glMultMatrixf_c
+  glMultMatrixf_p
   glMultTransposeMatrixd_c
+  glMultTransposeMatrixd_p
   glMultTransposeMatrixf_c
+  glMultTransposeMatrixf_p
   glMultiDrawArrays_c
+  glMultiDrawArrays_p
   glMultiDrawElements_c
   glMultiTexCoord1d
   glMultiTexCoord1dv_c
+  glMultiTexCoord1dv_p
   glMultiTexCoord1f
   glMultiTexCoord1fv_c
+  glMultiTexCoord1fv_p
   glMultiTexCoord1i
   glMultiTexCoord1iv_c
+  glMultiTexCoord1iv_p
   glMultiTexCoord1s
   glMultiTexCoord1sv_c
+  glMultiTexCoord1sv_p
   glMultiTexCoord2d
   glMultiTexCoord2dv_c
+  glMultiTexCoord2dv_p
   glMultiTexCoord2f
   glMultiTexCoord2fv_c
+  glMultiTexCoord2fv_p
   glMultiTexCoord2i
   glMultiTexCoord2iv_c
+  glMultiTexCoord2iv_p
   glMultiTexCoord2s
   glMultiTexCoord2sv_c
+  glMultiTexCoord2sv_p
   glMultiTexCoord3d
   glMultiTexCoord3dv_c
+  glMultiTexCoord3dv_p
   glMultiTexCoord3f
   glMultiTexCoord3fv_c
+  glMultiTexCoord3fv_p
   glMultiTexCoord3i
   glMultiTexCoord3iv_c
+  glMultiTexCoord3iv_p
   glMultiTexCoord3s
   glMultiTexCoord3sv_c
+  glMultiTexCoord3sv_p
   glMultiTexCoord4d
   glMultiTexCoord4dv_c
+  glMultiTexCoord4dv_p
   glMultiTexCoord4f
   glMultiTexCoord4fv_c
+  glMultiTexCoord4fv_p
   glMultiTexCoord4i
   glMultiTexCoord4iv_c
+  glMultiTexCoord4iv_p
   glMultiTexCoord4s
   glMultiTexCoord4sv_c
+  glMultiTexCoord4sv_p
   glNewList
   glNormal3b
   glNormal3bv_c
+  glNormal3bv_p
   glNormal3d
   glNormal3dv_c
+  glNormal3dv_p
   glNormal3f
   glNormal3fv_c
+  glNormal3fv_p
   glNormal3i
   glNormal3iv_c
+  glNormal3iv_p
   glNormal3s
   glNormal3sv_c
+  glNormal3sv_p
   glNormalPointer_c
   glOrtho
   glPassThrough
   glPixelMapfv_c
+  glPixelMapfv_p
   glPixelMapuiv_c
+  glPixelMapuiv_p
   glPixelMapusv_c
+  glPixelMapusv_p
   glPixelStoref
   glPixelStorei
   glPixelTransferf
@@ -392,56 +514,75 @@ our @gl_functionscompat = qw(
   glPixelZoom
   glPointParameterf
   glPointParameterfv_c
+  glPointParameterfv_p
   glPointParameteri
   glPointParameteriv_c
+  glPointParameteriv_p
   glPointSize
   glPolygonMode
   glPolygonOffset
-  glPolygonStipple_c
+  glPolygonStipple
   glPopAttrib
   glPopClientAttrib
   glPopMatrix
   glPopName
   glPrimitiveRestartIndex
   glPrioritizeTextures_c
+  glPrioritizeTextures_p
   glPushAttrib
   glPushClientAttrib
   glPushMatrix
   glPushName
   glRasterPos2d
   glRasterPos2dv_c
+  glRasterPos2dv_p
   glRasterPos2f
   glRasterPos2fv_c
+  glRasterPos2fv_p
   glRasterPos2i
   glRasterPos2iv_c
+  glRasterPos2iv_p
   glRasterPos2s
   glRasterPos2sv_c
+  glRasterPos2sv_p
   glRasterPos3d
   glRasterPos3dv_c
+  glRasterPos3dv_p
   glRasterPos3f
   glRasterPos3fv_c
+  glRasterPos3fv_p
   glRasterPos3i
   glRasterPos3iv_c
+  glRasterPos3iv_p
   glRasterPos3s
   glRasterPos3sv_c
+  glRasterPos3sv_p
   glRasterPos4d
   glRasterPos4dv_c
+  glRasterPos4dv_p
   glRasterPos4f
   glRasterPos4fv_c
+  glRasterPos4fv_p
   glRasterPos4i
   glRasterPos4iv_c
+  glRasterPos4iv_p
   glRasterPos4s
   glRasterPos4sv_c
+  glRasterPos4sv_p
   glReadBuffer
   glReadPixels_c
   glRectd
   glRectdv_c
+  glRectdv_p
   glRectf
   glRectfv_c
+  glRectfv_p
   glRecti
   glRectiv_c
+  glRectiv_p
   glRects
   glRectsv_c
+  glRectsv_p
   glRenderMode
   glRenderbufferStorage
   glRenderbufferStorageMultisample
@@ -453,24 +594,34 @@ our @gl_functionscompat = qw(
   glScissor
   glSecondaryColor3b
   glSecondaryColor3bv_c
+  glSecondaryColor3bv_p
   glSecondaryColor3d
   glSecondaryColor3dv_c
+  glSecondaryColor3dv_p
   glSecondaryColor3f
   glSecondaryColor3fv_c
+  glSecondaryColor3fv_p
   glSecondaryColor3i
   glSecondaryColor3iv_c
+  glSecondaryColor3iv_p
   glSecondaryColor3s
   glSecondaryColor3sv_c
+  glSecondaryColor3sv_p
   glSecondaryColor3ub
   glSecondaryColor3ubv_c
+  glSecondaryColor3ubv_p
   glSecondaryColor3ui
   glSecondaryColor3uiv_c
+  glSecondaryColor3uiv_p
   glSecondaryColor3us
   glSecondaryColor3usv_c
+  glSecondaryColor3usv_p
   glSecondaryColorPointer_c
   glSelectBuffer_c
+  glSelectBuffer_p
   glShadeModel
   glShaderSource_c
+  glShaderSource_p
   glStencilFunc
   glStencilFuncSeparate
   glStencilMask
@@ -480,199 +631,301 @@ our @gl_functionscompat = qw(
   glTexBuffer
   glTexCoord1d
   glTexCoord1dv_c
+  glTexCoord1dv_p
   glTexCoord1f
   glTexCoord1fv_c
+  glTexCoord1fv_p
   glTexCoord1i
   glTexCoord1iv_c
+  glTexCoord1iv_p
   glTexCoord1s
   glTexCoord1sv_c
+  glTexCoord1sv_p
   glTexCoord2d
   glTexCoord2dv_c
+  glTexCoord2dv_p
   glTexCoord2f
   glTexCoord2fv_c
+  glTexCoord2fv_p
   glTexCoord2i
   glTexCoord2iv_c
+  glTexCoord2iv_p
   glTexCoord2s
   glTexCoord2sv_c
+  glTexCoord2sv_p
   glTexCoord3d
   glTexCoord3dv_c
+  glTexCoord3dv_p
   glTexCoord3f
   glTexCoord3fv_c
+  glTexCoord3fv_p
   glTexCoord3i
   glTexCoord3iv_c
+  glTexCoord3iv_p
   glTexCoord3s
   glTexCoord3sv_c
+  glTexCoord3sv_p
   glTexCoord4d
   glTexCoord4dv_c
+  glTexCoord4dv_p
   glTexCoord4f
   glTexCoord4fv_c
+  glTexCoord4fv_p
   glTexCoord4i
   glTexCoord4iv_c
+  glTexCoord4iv_p
   glTexCoord4s
   glTexCoord4sv_c
+  glTexCoord4sv_p
   glTexCoordPointer_c
   glTexEnvf
   glTexEnvfv_c
+  glTexEnvfv_p
   glTexEnvi
   glTexEnviv_c
+  glTexEnviv_p
   glTexGend
   glTexGendv_c
+  glTexGendv_p
   glTexGenf
   glTexGenfv_c
+  glTexGenfv_p
   glTexGeni
   glTexGeniv_c
+  glTexGeniv_p
   glTexImage1D_c
   glTexImage2D_c
   glTexImage3D_c
   glTexParameterIiv_c
+  glTexParameterIiv_p
   glTexParameterIuiv_c
+  glTexParameterIuiv_p
   glTexParameterf
   glTexParameterfv_c
+  glTexParameterfv_p
   glTexParameteri
   glTexParameteriv_c
+  glTexParameteriv_p
   glTexSubImage1D_c
   glTexSubImage2D_c
   glTexSubImage3D_c
   glTransformFeedbackVaryings_c
+  glTransformFeedbackVaryings_p
   glTranslated
   glTranslatef
   glUniform1f
   glUniform1fv_c
+  glUniform1fv_p
   glUniform1i
   glUniform1iv_c
+  glUniform1iv_p
   glUniform1ui
   glUniform1uiv_c
+  glUniform1uiv_p
   glUniform2f
   glUniform2fv_c
+  glUniform2fv_p
   glUniform2i
   glUniform2iv_c
+  glUniform2iv_p
   glUniform2ui
   glUniform2uiv_c
+  glUniform2uiv_p
   glUniform3f
   glUniform3fv_c
+  glUniform3fv_p
   glUniform3i
   glUniform3iv_c
+  glUniform3iv_p
   glUniform3ui
   glUniform3uiv_c
+  glUniform3uiv_p
   glUniform4f
   glUniform4fv_c
+  glUniform4fv_p
   glUniform4i
   glUniform4iv_c
+  glUniform4iv_p
   glUniform4ui
   glUniform4uiv_c
+  glUniform4uiv_p
   glUniformBlockBinding
   glUniformMatrix2fv_c
+  glUniformMatrix2fv_p
   glUniformMatrix2x3fv_c
+  glUniformMatrix2x3fv_p
   glUniformMatrix2x4fv_c
+  glUniformMatrix2x4fv_p
   glUniformMatrix3fv_c
+  glUniformMatrix3fv_p
   glUniformMatrix3x2fv_c
+  glUniformMatrix3x2fv_p
   glUniformMatrix3x4fv_c
+  glUniformMatrix3x4fv_p
   glUniformMatrix4fv_c
+  glUniformMatrix4fv_p
   glUniformMatrix4x2fv_c
+  glUniformMatrix4x2fv_p
   glUniformMatrix4x3fv_c
+  glUniformMatrix4x3fv_p
   glUnmapBuffer
   glUseProgram
   glValidateProgram
   glVertex2d
   glVertex2dv_c
+  glVertex2dv_p
   glVertex2f
   glVertex2fv_c
+  glVertex2fv_p
   glVertex2i
   glVertex2iv_c
+  glVertex2iv_p
   glVertex2s
   glVertex2sv_c
+  glVertex2sv_p
   glVertex3d
   glVertex3dv_c
+  glVertex3dv_p
   glVertex3f
   glVertex3fv_c
+  glVertex3fv_p
   glVertex3i
   glVertex3iv_c
+  glVertex3iv_p
   glVertex3s
   glVertex3sv_c
+  glVertex3sv_p
   glVertex4d
   glVertex4dv_c
+  glVertex4dv_p
   glVertex4f
   glVertex4fv_c
+  glVertex4fv_p
   glVertex4i
   glVertex4iv_c
+  glVertex4iv_p
   glVertex4s
   glVertex4sv_c
+  glVertex4sv_p
   glVertexAttrib1d
   glVertexAttrib1dv_c
+  glVertexAttrib1dv_p
   glVertexAttrib1f
   glVertexAttrib1fv_c
+  glVertexAttrib1fv_p
   glVertexAttrib1s
   glVertexAttrib1sv_c
+  glVertexAttrib1sv_p
   glVertexAttrib2d
   glVertexAttrib2dv_c
+  glVertexAttrib2dv_p
   glVertexAttrib2f
   glVertexAttrib2fv_c
+  glVertexAttrib2fv_p
   glVertexAttrib2s
   glVertexAttrib2sv_c
+  glVertexAttrib2sv_p
   glVertexAttrib3d
   glVertexAttrib3dv_c
+  glVertexAttrib3dv_p
   glVertexAttrib3f
   glVertexAttrib3fv_c
+  glVertexAttrib3fv_p
   glVertexAttrib3s
   glVertexAttrib3sv_c
+  glVertexAttrib3sv_p
   glVertexAttrib4Nbv_c
+  glVertexAttrib4Nbv_p
   glVertexAttrib4Niv_c
+  glVertexAttrib4Niv_p
   glVertexAttrib4Nsv_c
+  glVertexAttrib4Nsv_p
   glVertexAttrib4Nub
   glVertexAttrib4Nubv_c
+  glVertexAttrib4Nubv_p
   glVertexAttrib4Nuiv_c
+  glVertexAttrib4Nuiv_p
   glVertexAttrib4Nusv_c
+  glVertexAttrib4Nusv_p
   glVertexAttrib4bv_c
+  glVertexAttrib4bv_p
   glVertexAttrib4d
   glVertexAttrib4dv_c
+  glVertexAttrib4dv_p
   glVertexAttrib4f
   glVertexAttrib4fv_c
+  glVertexAttrib4fv_p
   glVertexAttrib4iv_c
+  glVertexAttrib4iv_p
   glVertexAttrib4s
   glVertexAttrib4sv_c
+  glVertexAttrib4sv_p
   glVertexAttrib4ubv_c
+  glVertexAttrib4ubv_p
   glVertexAttrib4uiv_c
+  glVertexAttrib4uiv_p
   glVertexAttrib4usv_c
+  glVertexAttrib4usv_p
   glVertexAttribI1i
   glVertexAttribI1iv_c
+  glVertexAttribI1iv_p
   glVertexAttribI1ui
   glVertexAttribI1uiv_c
+  glVertexAttribI1uiv_p
   glVertexAttribI2i
   glVertexAttribI2iv_c
+  glVertexAttribI2iv_p
   glVertexAttribI2ui
   glVertexAttribI2uiv_c
+  glVertexAttribI2uiv_p
   glVertexAttribI3i
   glVertexAttribI3iv_c
+  glVertexAttribI3iv_p
   glVertexAttribI3ui
   glVertexAttribI3uiv_c
+  glVertexAttribI3uiv_p
   glVertexAttribI4bv_c
+  glVertexAttribI4bv_p
   glVertexAttribI4i
   glVertexAttribI4iv_c
+  glVertexAttribI4iv_p
   glVertexAttribI4sv_c
+  glVertexAttribI4sv_p
   glVertexAttribI4ubv_c
+  glVertexAttribI4ubv_p
   glVertexAttribI4ui
   glVertexAttribI4uiv_c
+  glVertexAttribI4uiv_p
   glVertexAttribI4usv_c
+  glVertexAttribI4usv_p
   glVertexAttribIPointer_c
   glVertexAttribPointer_c
   glVertexPointer_c
   glViewport
   glWindowPos2d
   glWindowPos2dv_c
+  glWindowPos2dv_p
   glWindowPos2f
   glWindowPos2fv_c
+  glWindowPos2fv_p
   glWindowPos2i
   glWindowPos2iv_c
+  glWindowPos2iv_p
   glWindowPos2s
   glWindowPos2sv_c
+  glWindowPos2sv_p
   glWindowPos3d
   glWindowPos3dv_c
+  glWindowPos3dv_p
   glWindowPos3f
   glWindowPos3fv_c
+  glWindowPos3fv_p
   glWindowPos3i
   glWindowPos3iv_c
+  glWindowPos3iv_p
   glWindowPos3s
   glWindowPos3sv_c
+  glWindowPos3sv_p
 );
 our @gl_functionsrest = qw(
   glAcquireKeyedMutexWin32EXT
@@ -689,12 +942,20 @@ our @gl_functionsrest = qw(
   glAlphaFragmentOp3ATI
   glAlphaFuncQCOM
   glAlphaFuncx
+  glAlphaToCoverageDitherControlNV
+  glApplyFramebufferAttachmentCMAAINTEL
   glApplyTextureEXT
   glAreProgramsResidentNV_c
+  glAreProgramsResidentNV_p
   glAreTexturesResidentEXT_c
+  glAreTexturesResidentEXT_p
   glAreVertexArraysResidentSGIX_c
   glArrayElementEXT
   glArrayObjectATI
+  glAsyncCopyBufferSubDataNVX_c
+  glAsyncCopyBufferSubDataNVX_p
+  glAsyncCopyImageSubDataNVX_c
+  glAsyncCopyImageSubDataNVX_p
   glAsyncMarkerSGIX
   glAttachObjectARB
   glBeginConditionalRenderNV
@@ -705,6 +966,7 @@ our @gl_functionsrest = qw(
   glBeginPerfQueryINTEL
   glBeginQueryANGLE
   glBeginQueryARB
+  glBeginQueryEXT
   glBeginQueryIndexed
   glBeginSceneEXT
   glBeginTransformFeedbackEXT
@@ -721,15 +983,18 @@ our @gl_functionsrest = qw(
   glBindBufferRangeEXT
   glBindBufferRangeNV
   glBindBuffersBase_c
+  glBindBuffersBase_p
   glBindBuffersRange_c
   glBindFragDataLocationEXT
   glBindFragDataLocationIndexed
   glBindFragDataLocationIndexedEXT
   glBindFragmentShaderATI
   glBindFramebufferEXT
+  glBindFramebufferOES
   glBindImageTexture
   glBindImageTextureEXT
   glBindImageTextures_c
+  glBindImageTextures_p
   glBindLightParameterEXT
   glBindMaterialParameterEXT
   glBindMultiTextureEXT
@@ -738,16 +1003,21 @@ our @gl_functionsrest = qw(
   glBindProgramNV
   glBindProgramPipeline
   glBindRenderbufferEXT
+  glBindRenderbufferOES
   glBindSampler
   glBindSamplers_c
+  glBindSamplers_p
+  glBindShadingRateImageNV
   glBindTexGenParameterEXT
   glBindTextureEXT
   glBindTextures_c
+  glBindTextures_p
   glBindTextureUnit
   glBindTextureUnitParameterEXT
   glBindTransformFeedback
   glBindTransformFeedbackNV
   glBindVertexArrayAPPLE
+  glBindVertexArrayOES
   glBindVertexArraySGIX
   glBindVertexBuffer
   glBindVertexBuffers_c
@@ -755,6 +1025,7 @@ our @gl_functionsrest = qw(
   glBindVideoCaptureStreamBufferNV
   glBindVideoCaptureStreamTextureNV
   glBinormalPointerEXT_c
+  glBlendBarrier
   glBlendBarrierKHR
   glBlendBarrierNV
   glBlendColorEXT
@@ -763,28 +1034,40 @@ our @gl_functionsrest = qw(
   glBlendEquationiARB
   glBlendEquationiEXT
   glBlendEquationIndexedAMD
+  glBlendEquationiOES
+  glBlendEquationOES
   glBlendEquationSeparateEXT
   glBlendEquationSeparatei
   glBlendEquationSeparateiARB
   glBlendEquationSeparateiEXT
   glBlendEquationSeparateIndexedAMD
+  glBlendEquationSeparateiOES
+  glBlendEquationSeparateOES
   glBlendFunci
   glBlendFunciARB
   glBlendFunciEXT
   glBlendFuncIndexedAMD
+  glBlendFunciOES
   glBlendFuncSeparateEXT
   glBlendFuncSeparatei
   glBlendFuncSeparateiARB
   glBlendFuncSeparateiEXT
   glBlendFuncSeparateIndexedAMD
+  glBlendFuncSeparateINGR
+  glBlendFuncSeparateiOES
+  glBlendFuncSeparateOES
   glBlendParameteriNV
   glBlitFramebufferANGLE
   glBlitFramebufferEXT
+  glBlitFramebufferLayerEXT
+  glBlitFramebufferLayersEXT
   glBlitFramebufferNV
   glBlitNamedFramebuffer
   glBufferAddressRangeNV
+  glBufferAttachMemoryNV
   glBufferDataARB_c
   glBufferPageCommitmentARB
+  glBufferPageCommitmentMemNV
   glBufferParameteriAPPLE
   glBufferRegionEnabled
   glBufferStorageExternalEXT
@@ -794,6 +1077,7 @@ our @gl_functionsrest = qw(
   glBufferSubDataARB_c
   glCallCommandListNV
   glCheckFramebufferStatusEXT
+  glCheckFramebufferStatusOES
   glCheckNamedFramebufferStatus
   glCheckNamedFramebufferStatusEXT
   glClampColorARB
@@ -804,6 +1088,7 @@ our @gl_functionsrest = qw(
   glClearColorx
   glClearDepthdNV
   glClearDepthf
+  glClearDepthfOES
   glClearDepthx
   glClearNamedBufferDataEXT_c
   glClearNamedBufferData_c
@@ -811,9 +1096,13 @@ our @gl_functionsrest = qw(
   glClearNamedBufferSubData_c
   glClearNamedFramebufferfi
   glClearNamedFramebufferfv_c
+  glClearNamedFramebufferfv_p
   glClearNamedFramebufferiv_c
+  glClearNamedFramebufferiv_p
   glClearNamedFramebufferuiv_c
+  glClearNamedFramebufferuiv_p
   glClearPixelLocalStorageuiEXT_c
+  glClearPixelLocalStorageuiEXT_p
   glClearTexImageEXT_c
   glClearTexImage_c
   glClearTexSubImageEXT_c
@@ -821,23 +1110,35 @@ our @gl_functionsrest = qw(
   glClientActiveTextureARB
   glClientActiveVertexStreamATI
   glClientAttribDefaultEXT
+  glClientWaitSemaphoreui64NVX_c
+  glClientWaitSemaphoreui64NVX_p
   glClientWaitSync
   glClientWaitSyncAPPLE
   glClipControl
+  glClipControlEXT
+  glClipPlanefOES_c
   glClipPlanef_c
+  glClipPlanef_p
   glClipPlanex_c
+  glClipPlanex_p
   glColor3fVertex3fSUN
   glColor3fVertex3fvSUN_c
+  glColor3fVertex3fvSUN_p
   glColor3hNV
   glColor3hvNV_c
+  glColor3hvNV_p
   glColor4fNormal3fVertex3fSUN
   glColor4fNormal3fVertex3fvSUN_c
+  glColor4fNormal3fVertex3fvSUN_p
   glColor4hNV
   glColor4hvNV_c
+  glColor4hvNV_p
   glColor4ubVertex2fSUN
   glColor4ubVertex2fvSUN_c
+  glColor4ubVertex2fvSUN_p
   glColor4ubVertex3fSUN
   glColor4ubVertex3fvSUN_c
+  glColor4ubVertex3fvSUN_p
   glColor4x
   glColorFormatNV
   glColorFragmentOp1ATI
@@ -845,10 +1146,13 @@ our @gl_functionsrest = qw(
   glColorFragmentOp3ATI
   glColorMaskiEXT
   glColorMaskIndexedEXT
+  glColorMaskiOES
   glColorP3ui
   glColorP3uiv_c
+  glColorP3uiv_p
   glColorP4ui
   glColorP4uiv_c
+  glColorP4uiv_p
   glColorPointerEXT_c
   glColorPointerListIBM_c
   glColorPointervINTEL_c
@@ -856,9 +1160,13 @@ our @gl_functionsrest = qw(
   glColorSubTable_c
   glColorTableEXT_c
   glColorTableParameterfvSGI_c
+  glColorTableParameterfvSGI_p
   glColorTableParameterfv_c
+  glColorTableParameterfv_p
   glColorTableParameterivSGI_c
+  glColorTableParameterivSGI_p
   glColorTableParameteriv_c
+  glColorTableParameteriv_p
   glColorTableSGI_c
   glColorTable_c
   glCombinerInputNV
@@ -872,6 +1180,7 @@ our @gl_functionsrest = qw(
   glCompileCommandListNV
   glCompileShaderARB
   glCompileShaderIncludeARB_c
+  glCompileShaderIncludeARB_p
   glCompressedMultiTexImage1DEXT_c
   glCompressedMultiTexImage2DEXT_c
   glCompressedMultiTexImage3DEXT_c
@@ -882,10 +1191,12 @@ our @gl_functionsrest = qw(
   glCompressedTexImage2DARB_c
   glCompressedTexImage3DARB_c
   glCompressedTexImage3DNV_c
+  glCompressedTexImage3DOES_c
   glCompressedTexSubImage1DARB_c
   glCompressedTexSubImage2DARB_c
   glCompressedTexSubImage3DARB_c
   glCompressedTexSubImage3DNV_c
+  glCompressedTexSubImage3DOES_c
   glCompressedTextureImage1DEXT_c
   glCompressedTextureImage2DEXT_c
   glCompressedTextureImage3DEXT_c
@@ -904,11 +1215,15 @@ our @gl_functionsrest = qw(
   glConvolutionParameterf
   glConvolutionParameterfEXT
   glConvolutionParameterfvEXT_c
+  glConvolutionParameterfvEXT_p
   glConvolutionParameterfv_c
+  glConvolutionParameterfv_p
   glConvolutionParameteri
   glConvolutionParameteriEXT
   glConvolutionParameterivEXT_c
+  glConvolutionParameterivEXT_p
   glConvolutionParameteriv_c
+  glConvolutionParameteriv_p
   glCopyBufferSubDataNV
   glCopyColorSubTable
   glCopyColorSubTableEXT
@@ -921,6 +1236,7 @@ our @gl_functionsrest = qw(
   glCopyImageSubData
   glCopyImageSubDataEXT
   glCopyImageSubDataNV
+  glCopyImageSubDataOES
   glCopyMultiTexImage1DEXT
   glCopyMultiTexImage2DEXT
   glCopyMultiTexSubImage1DEXT
@@ -934,6 +1250,7 @@ our @gl_functionsrest = qw(
   glCopyTexSubImage2DEXT
   glCopyTexSubImage3DEXT
   glCopyTexSubImage3DNV
+  glCopyTexSubImage3DOES
   glCopyTextureImage1DEXT
   glCopyTextureImage2DEXT
   glCopyTextureLevelsAPPLE
@@ -945,6 +1262,7 @@ our @gl_functionsrest = qw(
   glCopyTextureSubImage3DEXT
   glCoverageModulationNV
   glCoverageModulationTableNV_c
+  glCoverageModulationTableNV_p
   glCoverFillPathInstancedNV_c
   glCoverFillPathNV
   glCoverStrokePathInstancedNV_c
@@ -956,41 +1274,55 @@ our @gl_functionsrest = qw(
   glCreateFramebuffers_c
   glCreateFramebuffers_p
   glCreateMemoryObjectsEXT_c
-  glCreateMemoryObjectsEXT_p
   glCreatePerfQueryINTEL_c
-  glCreatePerfQueryINTEL_p
   glCreateProgramObjectARB
   glCreateProgramPipelines_c
   glCreateProgramPipelines_p
+  glCreateProgressFenceNVX
   glCreateQueries_c
+  glCreateQueries_p
   glCreateRenderbuffers_c
   glCreateRenderbuffers_p
   glCreateSamplers_c
   glCreateSamplers_p
+  glCreateSemaphoresNV_c
+  glCreateSemaphoresNV_p
   glCreateShaderObjectARB
   glCreateShaderProgramEXT
   glCreateShaderProgramv_c
+  glCreateShaderProgramv_p
   glCreateStatesNV_c
   glCreateStatesNV_p
   glCreateSyncFromCLeventARB
   glCreateTextures_c
+  glCreateTextures_p
   glCreateTransformFeedbacks_c
   glCreateTransformFeedbacks_p
   glCreateVertexArrays_c
   glCreateVertexArrays_p
   glCullParameterdvEXT_c
+  glCullParameterdvEXT_p
   glCullParameterfvEXT_c
+  glCullParameterfvEXT_p
   glCurrentPaletteMatrixARB
+  glCurrentPaletteMatrixOES
   glDataPipe
   glDebugMessageCallbackAMD_c
   glDebugMessageCallbackARB_c
+  glDebugMessageCallbackKHR_c
   glDebugMessageCallback_c
   glDebugMessageControlARB_c
+  glDebugMessageControlARB_p
+  glDebugMessageControlKHR_c
+  glDebugMessageControlKHR_p
   glDebugMessageControl_c
+  glDebugMessageControl_p
   glDebugMessageEnableAMD_c
+  glDebugMessageEnableAMD_p
   glDebugMessageInsert
   glDebugMessageInsertAMD
   glDebugMessageInsertARB
+  glDebugMessageInsertKHR
   glDeformSGIX
   glDeleteArraySetsEXT_c
   glDeleteAsyncMarkersSGIX
@@ -1006,16 +1338,19 @@ our @gl_functionsrest = qw(
   glDeleteFragmentShaderATI
   glDeleteFramebuffersEXT_c
   glDeleteFramebuffersEXT_p
+  glDeleteFramebuffersOES_c
   glDeleteMemoryObjectsEXT_c
   glDeleteMemoryObjectsEXT_p
   glDeleteMPEGPredictorsSGIX_c
   glDeleteNamedStringARB
   glDeleteNamesAMD_c
+  glDeleteNamesAMD_p
   glDeleteObjectARB
   glDeleteOcclusionQueriesNV_c
   glDeleteOcclusionQueriesNV_p
   glDeletePathsNV
   glDeletePerfMonitorsAMD_c
+  glDeletePerfMonitorsAMD_p
   glDeletePerfQueryINTEL
   glDeleteProgramPipelines_c
   glDeleteProgramPipelines_p
@@ -1024,11 +1359,13 @@ our @gl_functionsrest = qw(
   glDeleteProgramsNV_c
   glDeleteProgramsNV_p
   glDeleteQueriesANGLE_c
-  glDeleteQueriesANGLE_p
   glDeleteQueriesARB_c
   glDeleteQueriesARB_p
+  glDeleteQueriesEXT_c
+  glDeleteQueriesEXT_p
   glDeleteRenderbuffersEXT_c
   glDeleteRenderbuffersEXT_p
+  glDeleteRenderbuffersOES_c
   glDeleteSamplers_c
   glDeleteSamplers_p
   glDeleteSemaphoresEXT_c
@@ -1045,26 +1382,30 @@ our @gl_functionsrest = qw(
   glDeleteTransformFeedbacks_p
   glDeleteVertexArraysAPPLE_c
   glDeleteVertexArraysAPPLE_p
+  glDeleteVertexArraysOES_c
   glDeleteVertexArraysSGIX_c
-  glDeleteVertexArraysSGIX_p
   glDeleteVertexShaderEXT
   glDepthBoundsdNV
   glDepthBoundsEXT
   glDepthRangeArrayfvNV_c
   glDepthRangeArrayv_c
+  glDepthRangeArrayv_p
   glDepthRangedNV
   glDepthRangef
+  glDepthRangefOES
   glDepthRangeIndexed
   glDepthRangeIndexedfNV
   glDepthRangex
   glDetachObjectARB
   glDetailTexFuncSGIS_c
+  glDetailTexFuncSGIS_p
   glDisableClientStateiEXT
   glDisableClientStateIndexedEXT
   glDisableDriverControlQCOM
   glDisableiEXT
   glDisableIndexedEXT
   glDisableiNV
+  glDisableiOES
   glDisableVariantClientStateEXT
   glDisableVertexArrayAttrib
   glDisableVertexArrayAttribEXT
@@ -1072,6 +1413,7 @@ our @gl_functionsrest = qw(
   glDisableVertexAttribAPPLE
   glDisableVertexAttribArrayARB
   glDiscardFramebufferEXT_c
+  glDiscardFramebufferEXT_p
   glDispatchCompute
   glDispatchComputeGroupSizeARB
   glDispatchComputeIndirect
@@ -1085,10 +1427,15 @@ our @gl_functionsrest = qw(
   glDrawArraysInstancedNV
   glDrawBufferRegion
   glDrawBuffersARB_c
+  glDrawBuffersARB_p
   glDrawBuffersATI_c
+  glDrawBuffersATI_p
   glDrawBuffersEXT_c
+  glDrawBuffersEXT_p
   glDrawBuffersIndexedEXT_c
+  glDrawBuffersIndexedEXT_p
   glDrawBuffersNV_c
+  glDrawBuffersNV_p
   glDrawCommandsAddressNV_c
   glDrawCommandsNV_c
   glDrawCommandsStatesAddressNV_c
@@ -1108,6 +1455,10 @@ our @gl_functionsrest = qw(
   glDrawElementsInstancedBaseVertex_c
   glDrawElementsInstancedEXT_c
   glDrawElementsInstancedNV_c
+  glDrawMeshTasksEXT
+  glDrawMeshTasksIndirectEXT
+  glDrawMeshTasksIndirectNV
+  glDrawMeshTasksNV
   glDrawRangeElementArrayAPPLE
   glDrawRangeElementArrayATI
   glDrawRangeElementsBaseVertexEXT_c
@@ -1115,7 +1466,9 @@ our @gl_functionsrest = qw(
   glDrawRangeElementsEXT_c
   glDrawTextureNV
   glDrawTransformFeedback
+  glDrawTransformFeedbackEXT
   glDrawTransformFeedbackInstanced
+  glDrawTransformFeedbackInstancedEXT
   glDrawTransformFeedbackNV
   glDrawTransformFeedbackStream
   glDrawTransformFeedbackStreamInstanced
@@ -1123,6 +1476,10 @@ our @gl_functionsrest = qw(
   glEdgeFlagFormatNV
   glEdgeFlagPointerEXT_c
   glEdgeFlagPointerListIBM_c
+  glEGLImageTargetRenderbufferStorageOES
+  glEGLImageTargetTexStorageEXT_c
+  glEGLImageTargetTexture2DOES
+  glEGLImageTargetTextureStorageEXT_c
   glElementPointerAPPLE_c
   glElementPointerATI_c
   glEnableClientStateiEXT
@@ -1131,6 +1488,7 @@ our @gl_functionsrest = qw(
   glEnableiEXT
   glEnableIndexedEXT
   glEnableiNV
+  glEnableiOES
   glEnableVariantClientStateEXT
   glEnableVertexArrayAttrib
   glEnableVertexArrayAttribEXT
@@ -1145,6 +1503,7 @@ our @gl_functionsrest = qw(
   glEndPerfQueryINTEL
   glEndQueryANGLE
   glEndQueryARB
+  glEndQueryEXT
   glEndQueryIndexed
   glEndSceneEXT
   glEndTilingQCOM
@@ -1153,6 +1512,7 @@ our @gl_functionsrest = qw(
   glEndVertexShaderEXT
   glEndVideoCaptureNV
   glEvalMapsNV
+  glEvaluateDepthValuesARB
   GLEW_3DFX_multisample
   GLEW_3DFX_tbuffer
   GLEW_3DFX_texture_compression_FXT1
@@ -1163,9 +1523,11 @@ our @gl_functionsrest = qw(
   GLEW_AMD_debug_output
   GLEW_AMD_depth_clamp_separate
   GLEW_AMD_draw_buffers_blend
+  GLEW_AMD_framebuffer_multisample_advanced
   GLEW_AMD_framebuffer_sample_positions
   GLEW_AMD_gcn_shader
   GLEW_AMD_gpu_shader_half_float
+  GLEW_AMD_gpu_shader_half_float_fetch
   GLEW_AMD_gpu_shader_int16
   GLEW_AMD_gpu_shader_int64
   GLEW_AMD_interleaved_elements
@@ -1181,6 +1543,7 @@ our @gl_functionsrest = qw(
   GLEW_AMD_shader_atomic_counter_ops
   GLEW_AMD_shader_ballot
   GLEW_AMD_shader_explicit_vertex_parameter
+  GLEW_AMD_shader_image_load_store_lod
   GLEW_AMD_shader_stencil_export
   GLEW_AMD_shader_stencil_value_export
   GLEW_AMD_shader_trinary_minmax
@@ -1407,8 +1770,10 @@ our @gl_functionsrest = qw(
   GLEW_ARM_mali_program_binary
   GLEW_ARM_mali_shader_binary
   GLEW_ARM_rgba8
+  GLEW_ARM_shader_core_properties
   GLEW_ARM_shader_framebuffer_fetch
   GLEW_ARM_shader_framebuffer_fetch_depth_stencil
+  GLEW_ARM_texture_unnormalized_coordinates
   GLEW_ATIX_point_sprites
   GLEW_ATIX_texture_env_combine3
   GLEW_ATIX_texture_env_route
@@ -1430,8 +1795,8 @@ our @gl_functionsrest = qw(
   GLEW_ATI_vertex_array_object
   GLEW_ATI_vertex_attrib_array_object
   GLEW_ATI_vertex_streams
-  GLEW_EGL_KHR_context_flush_control
-  GLEW_EGL_NV_robustness_video_memory_purge
+  GLEW_DMP_program_binary
+  GLEW_DMP_shader_binary
   GLEW_EXT_422_pixels
   GLEW_EXT_abgr
   GLEW_EXT_base_instance
@@ -1447,6 +1812,7 @@ our @gl_functionsrest = qw(
   GLEW_EXT_buffer_storage
   GLEW_EXT_Cg_shader
   GLEW_EXT_clear_texture
+  GLEW_EXT_clip_control
   GLEW_EXT_clip_cull_distance
   GLEW_EXT_clip_volume_hint
   GLEW_EXT_cmyka
@@ -1464,21 +1830,32 @@ our @gl_functionsrest = qw(
   GLEW_EXT_debug_label
   GLEW_EXT_debug_marker
   GLEW_EXT_depth_bounds_test
+  GLEW_EXT_depth_clamp
   GLEW_EXT_direct_state_access
   GLEW_EXT_discard_framebuffer
+  GLEW_EXT_disjoint_timer_query
   GLEW_EXT_draw_buffers
   GLEW_EXT_draw_buffers2
   GLEW_EXT_draw_buffers_indexed
   GLEW_EXT_draw_elements_base_vertex
   GLEW_EXT_draw_instanced
   GLEW_EXT_draw_range_elements
+  GLEW_EXT_draw_transform_feedback
   GLEW_EXT_EGL_image_array
+  GLEW_EXT_EGL_image_external_wrap_modes
+  GLEW_EXT_EGL_image_storage
+  GLEW_EXT_EGL_image_storage_compression
+  GLEW_EXT_EGL_sync
   GLEW_EXT_external_buffer
   GLEW_EXT_float_blend
   GLEW_EXT_fog_coord
   GLEW_EXT_fragment_lighting
+  GLEW_EXT_fragment_shading_rate
+  GLEW_EXT_fragment_shading_rate_attachment
+  GLEW_EXT_fragment_shading_rate_primitive
   GLEW_EXT_frag_depth
   GLEW_EXT_framebuffer_blit
+  GLEW_EXT_framebuffer_blit_layers
   GLEW_EXT_framebuffer_multisample
   GLEW_EXT_framebuffer_multisample_blit_scaled
   GLEW_EXT_framebuffer_object
@@ -1500,6 +1877,7 @@ our @gl_functionsrest = qw(
   GLEW_EXT_memory_object
   GLEW_EXT_memory_object_fd
   GLEW_EXT_memory_object_win32
+  GLEW_EXT_mesh_shader
   GLEW_EXT_misc_attribute
   GLEW_EXT_multiple_textures
   GLEW_EXT_multisample
@@ -1507,8 +1885,12 @@ our @gl_functionsrest = qw(
   GLEW_EXT_multisampled_render_to_texture2
   GLEW_EXT_multisample_compatibility
   GLEW_EXT_multiview_draw_buffers
+  GLEW_EXT_multiview_tessellation_geometry_shader
+  GLEW_EXT_multiview_texture_multisample
+  GLEW_EXT_multiview_timer_query
   GLEW_EXT_multi_draw_arrays
   GLEW_EXT_multi_draw_indirect
+  GLEW_EXT_occlusion_query_boolean
   GLEW_EXT_packed_depth_stencil
   GLEW_EXT_packed_float
   GLEW_EXT_packed_pixels
@@ -1520,20 +1902,26 @@ our @gl_functionsrest = qw(
   GLEW_EXT_polygon_offset
   GLEW_EXT_polygon_offset_clamp
   GLEW_EXT_post_depth_coverage
+  GLEW_EXT_primitive_bounding_box
+  GLEW_EXT_protected_textures
   GLEW_EXT_provoking_vertex
   GLEW_EXT_pvrtc_sRGB
   GLEW_EXT_raster_multisample
   GLEW_EXT_read_format_bgra
   GLEW_EXT_render_snorm
   GLEW_EXT_rescale_normal
+  GLEW_EXT_robustness
   GLEW_EXT_scene_marker
   GLEW_EXT_secondary_color
   GLEW_EXT_semaphore
   GLEW_EXT_semaphore_fd
   GLEW_EXT_semaphore_win32
+  GLEW_EXT_separate_depth_stencil
   GLEW_EXT_separate_shader_objects
   GLEW_EXT_separate_specular_color
+  GLEW_EXT_shader_clock
   GLEW_EXT_shader_framebuffer_fetch
+  GLEW_EXT_shader_framebuffer_fetch_non_coherent
   GLEW_EXT_shader_group_vote
   GLEW_EXT_shader_image_load_formatted
   GLEW_EXT_shader_image_load_store
@@ -1543,7 +1931,10 @@ our @gl_functionsrest = qw(
   GLEW_EXT_shader_non_constant_global_initializers
   GLEW_EXT_shader_pixel_local_storage
   GLEW_EXT_shader_pixel_local_storage2
+  GLEW_EXT_shader_realtime_clock
+  GLEW_EXT_shader_samples_identical
   GLEW_EXT_shader_texture_lod
+  GLEW_EXT_shader_texture_samples
   GLEW_EXT_shadow_funcs
   GLEW_EXT_shadow_samplers
   GLEW_EXT_shared_texture_palette
@@ -1551,13 +1942,18 @@ our @gl_functionsrest = qw(
   GLEW_EXT_sparse_texture2
   GLEW_EXT_sRGB
   GLEW_EXT_sRGB_write_control
+  GLEW_EXT_static_vertex_array
   GLEW_EXT_stencil_clear_tag
   GLEW_EXT_stencil_two_side
   GLEW_EXT_stencil_wrap
   GLEW_EXT_subtexture
+  GLEW_EXT_tessellation_point_size
+  GLEW_EXT_tessellation_shader
   GLEW_EXT_texture
   GLEW_EXT_texture3D
   GLEW_EXT_texture_array
+  GLEW_EXT_texture_border_clamp
+  GLEW_EXT_texture_buffer
   GLEW_EXT_texture_buffer_object
   GLEW_EXT_texture_compression_astc_decode_mode
   GLEW_EXT_texture_compression_astc_decode_mode_rgb9e5
@@ -1566,6 +1962,7 @@ our @gl_functionsrest = qw(
   GLEW_EXT_texture_compression_latc
   GLEW_EXT_texture_compression_rgtc
   GLEW_EXT_texture_compression_s3tc
+  GLEW_EXT_texture_compression_s3tc_srgb
   GLEW_EXT_texture_cube_map
   GLEW_EXT_texture_cube_map_array
   GLEW_EXT_texture_edge_clamp
@@ -1576,14 +1973,18 @@ our @gl_functionsrest = qw(
   GLEW_EXT_texture_filter_anisotropic
   GLEW_EXT_texture_filter_minmax
   GLEW_EXT_texture_format_BGRA8888
+  GLEW_EXT_texture_format_sRGB_override
   GLEW_EXT_texture_integer
   GLEW_EXT_texture_lod_bias
   GLEW_EXT_texture_mirror_clamp
+  GLEW_EXT_texture_mirror_clamp_to_edge
   GLEW_EXT_texture_norm16
   GLEW_EXT_texture_object
   GLEW_EXT_texture_perturb_normal
+  GLEW_EXT_texture_query_lod
   GLEW_EXT_texture_rectangle
   GLEW_EXT_texture_rg
+  GLEW_EXT_texture_shadow_lod
   GLEW_EXT_texture_shared_exponent
   GLEW_EXT_texture_snorm
   GLEW_EXT_texture_sRGB
@@ -1591,6 +1992,7 @@ our @gl_functionsrest = qw(
   GLEW_EXT_texture_sRGB_R8
   GLEW_EXT_texture_sRGB_RG8
   GLEW_EXT_texture_storage
+  GLEW_EXT_texture_storage_compression
   GLEW_EXT_texture_swizzle
   GLEW_EXT_texture_type_2_10_10_10_REV
   GLEW_EXT_texture_view
@@ -1607,26 +2009,43 @@ our @gl_functionsrest = qw(
   GLEW_EXT_window_rectangles
   GLEW_EXT_x11_sync_object
   GLEW_EXT_YUV_target
+  GLEW_FJ_shader_binary_GCCSO
   GLEW_GREMEDY_frame_terminator
   GLEW_GREMEDY_string_marker
   GLEW_HP_convolution_border_modes
   GLEW_HP_image_transform
   GLEW_HP_occlusion_test
   GLEW_HP_texture_lighting
+  GLEW_HUAWEI_program_binary
+  GLEW_HUAWEI_shader_binary
   GLEW_IBM_cull_vertex
   GLEW_IBM_multimode_draw_arrays
   GLEW_IBM_rasterpos_clip
   GLEW_IBM_static_data
   GLEW_IBM_texture_mirrored_repeat
   GLEW_IBM_vertex_array_lists
+  GLEW_IMG_bindless_texture
+  GLEW_IMG_framebuffer_downsample
+  GLEW_IMG_multisampled_render_to_texture
+  GLEW_IMG_program_binary
+  GLEW_IMG_pvric_end_to_end_signature
+  GLEW_IMG_read_format
+  GLEW_IMG_shader_binary
+  GLEW_IMG_texture_compression_pvrtc
+  GLEW_IMG_texture_compression_pvrtc2
+  GLEW_IMG_texture_env_enhanced_fixed_function
+  GLEW_IMG_texture_filter_cubic
+  GLEW_IMG_tile_region_protection
   GLEW_INGR_color_clamp
   GLEW_INGR_interlace_read
+  GLEW_INTEL_blackhole_render
   GLEW_INTEL_conservative_rasterization
   GLEW_INTEL_fragment_shader_ordering
   GLEW_INTEL_framebuffer_CMAA
   GLEW_INTEL_map_texture
   GLEW_INTEL_parallel_arrays
   GLEW_INTEL_performance_query
+  GLEW_INTEL_shader_integer_functions2
   GLEW_INTEL_texture_scissor
   GLEW_KHR_blend_equation_advanced
   GLEW_KHR_blend_equation_advanced_coherent
@@ -1636,20 +2055,30 @@ our @gl_functionsrest = qw(
   GLEW_KHR_parallel_shader_compile
   GLEW_KHR_robustness
   GLEW_KHR_robust_buffer_access_behavior
+  GLEW_KHR_shader_subgroup
   GLEW_KHR_texture_compression_astc_hdr
   GLEW_KHR_texture_compression_astc_ldr
   GLEW_KHR_texture_compression_astc_sliced_3d
   GLEW_KTX_buffer_region
   GLEW_MESAX_texture_stack
+  GLEW_MESA_bgra
+  GLEW_MESA_framebuffer_flip_x
+  GLEW_MESA_framebuffer_flip_y
+  GLEW_MESA_framebuffer_swap_xy
   GLEW_MESA_pack_invert
+  GLEW_MESA_program_binary_formats
   GLEW_MESA_resize_buffers
   GLEW_MESA_shader_integer_functions
+  GLEW_MESA_texture_const_bandwidth
+  GLEW_MESA_tile_raster_order
   GLEW_MESA_window_pos
   GLEW_MESA_ycbcr_texture
   GLEW_NVX_blend_equation_advanced_multi_draw_buffers
   GLEW_NVX_conditional_render
   GLEW_NVX_gpu_memory_info
+  GLEW_NVX_gpu_multicast2
   GLEW_NVX_linked_gpu_multicast
+  GLEW_NVX_progress_fence
   GLEW_NV_3dvision_settings
   GLEW_NV_alpha_to_coverage_dither_control
   GLEW_NV_bgr
@@ -1663,16 +2092,20 @@ our @gl_functionsrest = qw(
   GLEW_NV_clip_space_w_scaling
   GLEW_NV_command_list
   GLEW_NV_compute_program5
+  GLEW_NV_compute_shader_derivatives
   GLEW_NV_conditional_render
   GLEW_NV_conservative_raster
   GLEW_NV_conservative_raster_dilate
+  GLEW_NV_conservative_raster_pre_snap
   GLEW_NV_conservative_raster_pre_snap_triangles
+  GLEW_NV_conservative_raster_underestimation
   GLEW_NV_copy_buffer
   GLEW_NV_copy_depth_to_color
   GLEW_NV_copy_image
   GLEW_NV_deep_texture3D
   GLEW_NV_depth_buffer_float
   GLEW_NV_depth_clamp
+  GLEW_NV_depth_nonlinear
   GLEW_NV_depth_range_unclamped
   GLEW_NV_draw_buffers
   GLEW_NV_draw_instanced
@@ -1692,6 +2125,7 @@ our @gl_functionsrest = qw(
   GLEW_NV_fragment_program2
   GLEW_NV_fragment_program4
   GLEW_NV_fragment_program_option
+  GLEW_NV_fragment_shader_barycentric
   GLEW_NV_fragment_shader_interlock
   GLEW_NV_framebuffer_blit
   GLEW_NV_framebuffer_mixed_samples
@@ -1712,6 +2146,9 @@ our @gl_functionsrest = qw(
   GLEW_NV_instanced_arrays
   GLEW_NV_internalformat_sample_query
   GLEW_NV_light_max_exponent
+  GLEW_NV_memory_attachment
+  GLEW_NV_memory_object_sparse
+  GLEW_NV_mesh_shader
   GLEW_NV_multisample_coverage
   GLEW_NV_multisample_filter_hint
   GLEW_NV_non_square_matrices
@@ -1731,14 +2168,20 @@ our @gl_functionsrest = qw(
   GLEW_NV_polygon_mode
   GLEW_NV_present_video
   GLEW_NV_primitive_restart
+  GLEW_NV_primitive_shading_rate
+  GLEW_NV_query_resource_tag
+  GLEW_NV_read_buffer
+  GLEW_NV_read_buffer_front
   GLEW_NV_read_depth
   GLEW_NV_read_depth_stencil
   GLEW_NV_read_stencil
   GLEW_NV_register_combiners
   GLEW_NV_register_combiners2
+  GLEW_NV_representative_fragment_test
   GLEW_NV_robustness_video_memory_purge
   GLEW_NV_sample_locations
   GLEW_NV_sample_mask_override_coverage
+  GLEW_NV_scissor_exclusive
   GLEW_NV_shader_atomic_counters
   GLEW_NV_shader_atomic_float
   GLEW_NV_shader_atomic_float64
@@ -1747,8 +2190,11 @@ our @gl_functionsrest = qw(
   GLEW_NV_shader_buffer_load
   GLEW_NV_shader_noperspective_interpolation
   GLEW_NV_shader_storage_buffer_object
+  GLEW_NV_shader_subgroup_partitioned
+  GLEW_NV_shader_texture_footprint
   GLEW_NV_shader_thread_group
   GLEW_NV_shader_thread_shuffle
+  GLEW_NV_shading_rate_image
   GLEW_NV_shadow_samplers_array
   GLEW_NV_shadow_samplers_cube
   GLEW_NV_sRGB_formats
@@ -1772,10 +2218,13 @@ our @gl_functionsrest = qw(
   GLEW_NV_texture_shader
   GLEW_NV_texture_shader2
   GLEW_NV_texture_shader3
+  GLEW_NV_timeline_semaphore
   GLEW_NV_transform_feedback
   GLEW_NV_transform_feedback2
+  GLEW_NV_uniform_buffer_std430_layout
   GLEW_NV_uniform_buffer_unified_memory
   GLEW_NV_vdpau_interop
+  GLEW_NV_vdpau_interop2
   GLEW_NV_vertex_array_range
   GLEW_NV_vertex_array_range2
   GLEW_NV_vertex_attrib_integer_64bit
@@ -1790,7 +2239,68 @@ our @gl_functionsrest = qw(
   GLEW_NV_viewport_array
   GLEW_NV_viewport_array2
   GLEW_NV_viewport_swizzle
+  GLEW_OES_blend_equation_separate
+  GLEW_OES_blend_func_separate
+  GLEW_OES_blend_subtract
   GLEW_OES_byte_coordinates
+  GLEW_OES_compressed_ETC1_RGB8_texture
+  GLEW_OES_compressed_paletted_texture
+  GLEW_OES_copy_image
+  GLEW_OES_depth24
+  GLEW_OES_depth32
+  GLEW_OES_depth_texture
+  GLEW_OES_depth_texture_cube_map
+  GLEW_OES_draw_buffers_indexed
+  GLEW_OES_draw_texture
+  GLEW_OES_EGL_image
+  GLEW_OES_EGL_image_external
+  GLEW_OES_EGL_image_external_essl3
+  GLEW_OES_element_index_uint
+  GLEW_OES_extended_matrix_palette
+  GLEW_OES_fbo_render_mipmap
+  GLEW_OES_fragment_precision_high
+  GLEW_OES_framebuffer_object
+  GLEW_OES_geometry_point_size
+  GLEW_OES_geometry_shader
+  GLEW_OES_get_program_binary
+  GLEW_OES_gpu_shader5
+  GLEW_OES_mapbuffer
+  GLEW_OES_matrix_get
+  GLEW_OES_matrix_palette
+  GLEW_OES_packed_depth_stencil
+  GLEW_OES_point_size_array
+  GLEW_OES_point_sprite
+  GLEW_OES_read_format
+  GLEW_OES_required_internalformat
+  GLEW_OES_rgb8_rgba8
+  GLEW_OES_sample_shading
+  GLEW_OES_sample_variables
+  GLEW_OES_shader_image_atomic
+  GLEW_OES_shader_io_blocks
+  GLEW_OES_shader_multisample_interpolation
+  GLEW_OES_single_precision
+  GLEW_OES_standard_derivatives
+  GLEW_OES_stencil1
+  GLEW_OES_stencil4
+  GLEW_OES_stencil8
+  GLEW_OES_surfaceless_context
+  GLEW_OES_tessellation_point_size
+  GLEW_OES_tessellation_shader
+  GLEW_OES_texture_3D
+  GLEW_OES_texture_border_clamp
+  GLEW_OES_texture_buffer
+  GLEW_OES_texture_compression_astc
+  GLEW_OES_texture_cube_map
+  GLEW_OES_texture_cube_map_array
+  GLEW_OES_texture_env_crossbar
+  GLEW_OES_texture_mirrored_repeat
+  GLEW_OES_texture_npot
+  GLEW_OES_texture_stencil8
+  GLEW_OES_texture_storage_multisample_2d_array
+  GLEW_OES_texture_view
+  GLEW_OES_vertex_array_object
+  GLEW_OES_vertex_half_float
+  GLEW_OES_vertex_type_10_10_10_2
   GLEW_OML_interlace
   GLEW_OML_resample
   GLEW_OML_subsample
@@ -1805,10 +2315,22 @@ our @gl_functionsrest = qw(
   GLEW_QCOM_extended_get
   GLEW_QCOM_extended_get2
   GLEW_QCOM_framebuffer_foveated
+  GLEW_QCOM_frame_extrapolation
+  GLEW_QCOM_motion_estimation
   GLEW_QCOM_perfmon_global_mode
+  GLEW_QCOM_render_shared_exponent
+  GLEW_QCOM_render_sRGB_R8_RG8
   GLEW_QCOM_shader_framebuffer_fetch_noncoherent
+  GLEW_QCOM_shader_framebuffer_fetch_rate
+  GLEW_QCOM_shading_rate
+  GLEW_QCOM_texture_foveated
+  GLEW_QCOM_texture_foveated2
+  GLEW_QCOM_texture_foveated_subsampled_layout
+  GLEW_QCOM_texture_lod_bias
   GLEW_QCOM_tiled_rendering
   GLEW_QCOM_writeonly_rendering
+  GLEW_QCOM_ycbcr_degamma
+  GLEW_QCOM_YUV_texture_gather
   GLEW_REGAL_enable
   GLEW_REGAL_error_string
   GLEW_REGAL_ES1_0_compatibility
@@ -1951,28 +2473,37 @@ our @gl_functionsrest = qw(
   GLEW_VERSION_4_4
   GLEW_VERSION_4_5
   GLEW_VERSION_4_6
+  GLEW_VIV_shader_binary
   GLEW_WIN_phong_shading
   GLEW_WIN_scene_markerXXX
   GLEW_WIN_specular_fog
   GLEW_WIN_swap_hint
   glExecuteProgramNV_c
+  glExecuteProgramNV_p
   glExtGetBufferPointervQCOM_c
   glExtGetBuffersQCOM_c
+  glExtGetBuffersQCOM_p
   glExtGetFramebuffersQCOM_c
+  glExtGetFramebuffersQCOM_p
   glExtGetProgramBinarySourceQCOM_c
   glExtGetProgramsQCOM_c
+  glExtGetProgramsQCOM_p
   glExtGetRenderbuffersQCOM_c
+  glExtGetRenderbuffersQCOM_p
   glExtGetShadersQCOM_c
+  glExtGetShadersQCOM_p
   glExtGetTexLevelParameterivQCOM_c
   glExtGetTexSubImageQCOM_c
   glExtGetTexturesQCOM_c
   glExtIsProgramBinaryQCOM
   glExtractComponentEXT
+  glExtrapolateTex2DQCOM
   glExtTexObjectStateOverrideiQCOM
   glFenceSync
   glFenceSyncAPPLE
   glFinalCombinerInputNV
   glFinishAsyncSGIX_c
+  glFinishAsyncSGIX_p
   glFinishFenceAPPLE
   glFinishFenceNV
   glFinishObjectAPPLE
@@ -1987,17 +2518,22 @@ our @gl_functionsrest = qw(
   glFlushVertexArrayRangeNV
   glFogCoorddEXT
   glFogCoorddvEXT_c
+  glFogCoorddvEXT_p
   glFogCoordfEXT
   glFogCoordFormatNV
   glFogCoordfvEXT_c
+  glFogCoordfvEXT_p
   glFogCoordhNV
   glFogCoordhvNV_c
+  glFogCoordhvNV_p
   glFogCoordPointerEXT_c
   glFogCoordPointerListIBM_c
   glFogFuncSGIS_c
+  glFogFuncSGIS_p
   glFogLayersSGIX_c
   glFogx
   glFogxv_c
+  glFogxv_p
   glFragmentColorMaterialEXT
   glFragmentColorMaterialSGIX
   glFragmentCoverageColorNV
@@ -2005,10 +2541,12 @@ our @gl_functionsrest = qw(
   glFragmentLightfSGIX
   glFragmentLightfvEXT_c
   glFragmentLightfvSGIX_c
+  glFragmentLightfvSGIX_p
   glFragmentLightiEXT
   glFragmentLightiSGIX
   glFragmentLightivEXT_c
   glFragmentLightivSGIX_c
+  glFragmentLightivSGIX_p
   glFragmentLightModelfEXT
   glFragmentLightModelfSGIX
   glFragmentLightModelfvEXT_c
@@ -2021,32 +2559,45 @@ our @gl_functionsrest = qw(
   glFragmentMaterialfSGIX
   glFragmentMaterialfvEXT_c
   glFragmentMaterialfvSGIX_c
+  glFragmentMaterialfvSGIX_p
   glFragmentMaterialiEXT
   glFragmentMaterialiSGIX
   glFragmentMaterialivEXT_c
   glFragmentMaterialivSGIX_c
+  glFragmentMaterialivSGIX_p
   glFramebufferDrawBufferEXT
   glFramebufferDrawBuffersEXT_c
+  glFramebufferDrawBuffersEXT_p
+  glFramebufferFetchBarrierEXT
   glFramebufferFetchBarrierQCOM
   glFramebufferFoveationConfigQCOM_c
+  glFramebufferFoveationConfigQCOM_p
   glFramebufferFoveationParametersQCOM
   glFramebufferParameteri
+  glFramebufferParameteriMESA
   glFramebufferPixelLocalStorageSizeEXT
   glFramebufferReadBufferEXT
   glFramebufferRenderbufferEXT
+  glFramebufferRenderbufferOES
   glFramebufferSampleLocationsfvARB_c
   glFramebufferSampleLocationsfvNV_c
   glFramebufferSamplePositionsfvAMD_c
+  glFramebufferShadingRateEXT
   glFramebufferTexture
   glFramebufferTexture1DEXT
+  glFramebufferTexture2DDownsampleIMG
   glFramebufferTexture2DEXT
   glFramebufferTexture2DMultisampleEXT
+  glFramebufferTexture2DMultisampleIMG
+  glFramebufferTexture2DOES
   glFramebufferTexture3DEXT
+  glFramebufferTexture3DOES
   glFramebufferTextureARB
   glFramebufferTextureEXT
   glFramebufferTextureFaceARB
   glFramebufferTextureFaceEXT
   glFramebufferTextureLayerARB
+  glFramebufferTextureLayerDownsampleIMG
   glFramebufferTextureLayerEXT
   glFramebufferTextureLayerNV
   glFramebufferTextureMultisampleMultiviewOVR
@@ -2055,11 +2606,13 @@ our @gl_functionsrest = qw(
   glFrameZoomSGIX
   glFreeObjectBufferATI
   glFrustumf
+  glFrustumfOES
   glFrustumx
   glGenAsyncMarkersSGIX
   glGenBuffersARB_c
   glGenBuffersARB_p
   glGenerateMipmapEXT
+  glGenerateMipmapOES
   glGenerateMultiTexMipmapEXT
   glGenerateTextureMipmap
   glGenerateTextureMipmapEXT
@@ -2070,9 +2623,10 @@ our @gl_functionsrest = qw(
   glGenFragmentShadersATI
   glGenFramebuffersEXT_c
   glGenFramebuffersEXT_p
+  glGenFramebuffersOES_c
   glGenMPEGPredictorsSGIX_c
-  glGenMPEGPredictorsSGIX_p
   glGenNamesAMD_c
+  glGenNamesAMD_p
   glGenOcclusionQueriesNV_c
   glGenOcclusionQueriesNV_p
   glGenPathsNV
@@ -2085,11 +2639,13 @@ our @gl_functionsrest = qw(
   glGenProgramsNV_c
   glGenProgramsNV_p
   glGenQueriesANGLE_c
-  glGenQueriesANGLE_p
   glGenQueriesARB_c
   glGenQueriesARB_p
+  glGenQueriesEXT_c
+  glGenQueriesEXT_p
   glGenRenderbuffersEXT_c
   glGenRenderbuffersEXT_p
+  glGenRenderbuffersOES_c
   glGenSamplers_c
   glGenSamplers_p
   glGenSemaphoresEXT_c
@@ -2103,35 +2659,57 @@ our @gl_functionsrest = qw(
   glGenTransformFeedbacks_p
   glGenVertexArraysAPPLE_c
   glGenVertexArraysAPPLE_p
+  glGenVertexArraysOES_c
   glGenVertexArraysSGIX_c
-  glGenVertexArraysSGIX_p
   glGenVertexShadersEXT
   glGetActiveAtomicCounterBufferiv_c
+  glGetActiveAtomicCounterBufferiv_p
   glGetActiveAttribARB_c
+  glGetActiveAttribARB_p
   glGetActiveSubroutineName_c
+  glGetActiveSubroutineName_p
   glGetActiveSubroutineUniformiv_c
+  glGetActiveSubroutineUniformiv_p
   glGetActiveSubroutineUniformName_c
+  glGetActiveSubroutineUniformName_p
   glGetActiveUniformARB_c
+  glGetActiveUniformARB_p
   glGetActiveVaryingNV_c
+  glGetActiveVaryingNV_p
   glGetArrayObjectfvATI_c
+  glGetArrayObjectfvATI_p
   glGetArrayObjectivATI_c
+  glGetArrayObjectivATI_p
   glGetAttachedObjectsARB_c
   glGetAttribLocationARB
   glGetBooleanIndexedvEXT_c
+  glGetBooleanIndexedvEXT_p
   glGetBufferParameteri64v_c
+  glGetBufferParameteri64v_p
   glGetBufferParameterivARB_c
+  glGetBufferParameterivARB_p
   glGetBufferParameterui64vNV_c
   glGetBufferPointervARB_c
+  glGetBufferPointervOES_c
   glGetBufferSubDataARB_c
+  glGetClipPlanefOES_c
   glGetClipPlanef_c
+  glGetClipPlanef_p
   glGetClipPlanex_c
+  glGetClipPlanex_p
   glGetColorTableEXT_c
   glGetColorTableParameterfvEXT_c
+  glGetColorTableParameterfvEXT_p
   glGetColorTableParameterfvSGI_c
+  glGetColorTableParameterfvSGI_p
   glGetColorTableParameterfv_c
+  glGetColorTableParameterfv_p
   glGetColorTableParameterivEXT_c
+  glGetColorTableParameterivEXT_p
   glGetColorTableParameterivSGI_c
+  glGetColorTableParameterivSGI_p
   glGetColorTableParameteriv_c
+  glGetColorTableParameteriv_p
   glGetColorTableSGI_c
   glGetColorTable_c
   glGetCombinerInputParameterfvNV_c
@@ -2148,17 +2726,30 @@ our @gl_functionsrest = qw(
   glGetConvolutionFilterEXT_c
   glGetConvolutionFilter_c
   glGetConvolutionParameterfvEXT_c
+  glGetConvolutionParameterfvEXT_p
   glGetConvolutionParameterfv_c
+  glGetConvolutionParameterfv_p
   glGetConvolutionParameterivEXT_c
+  glGetConvolutionParameterivEXT_p
   glGetConvolutionParameteriv_c
+  glGetConvolutionParameteriv_p
   glGetCoverageModulationTableNV_c
   glGetDebugMessageLogAMD_c
+  glGetDebugMessageLogAMD_p
   glGetDebugMessageLogARB_c
+  glGetDebugMessageLogARB_p
+  glGetDebugMessageLogKHR_c
+  glGetDebugMessageLogKHR_p
   glGetDebugMessageLog_c
+  glGetDebugMessageLog_p
   glGetDetailTexFuncSGIS_c
+  glGetDetailTexFuncSGIS_p
   glGetDoubleIndexedvEXT_c
+  glGetDoubleIndexedvEXT_p
   glGetDoublei_vEXT_c
+  glGetDoublei_vEXT_p
   glGetDoublei_v_c
+  glGetDoublei_v_p
   glGetDriverControlsQCOM_c
   glGetDriverControlStringQCOM_c
   glGetExtensionREGAL
@@ -2168,9 +2759,13 @@ our @gl_functionsrest = qw(
   glGetFirstPerfQueryIdINTEL_c
   glGetFixedv_c
   glGetFloatIndexedvEXT_c
+  glGetFloatIndexedvEXT_p
   glGetFloati_vEXT_c
+  glGetFloati_vEXT_p
   glGetFloati_vNV_c
+  glGetFloati_vNV_p
   glGetFloati_v_c
+  glGetFloati_v_p
   glGetFogFuncSGIS_c
   glGetFogLayersSGIX_c
   glGetFragDataIndex
@@ -2178,45 +2773,74 @@ our @gl_functionsrest = qw(
   glGetFragDataLocationEXT
   glGetFragmentLightfvEXT_c
   glGetFragmentLightfvSGIX_c
+  glGetFragmentLightfvSGIX_p
   glGetFragmentLightivEXT_c
   glGetFragmentLightivSGIX_c
+  glGetFragmentLightivSGIX_p
   glGetFragmentMaterialfvEXT_c
   glGetFragmentMaterialfvSGIX_c
+  glGetFragmentMaterialfvSGIX_p
   glGetFragmentMaterialivEXT_c
   glGetFragmentMaterialivSGIX_c
+  glGetFragmentMaterialivSGIX_p
+  glGetFragmentShadingRatesEXT_c
+  glGetFragmentShadingRatesEXT_p
   glGetFramebufferAttachmentParameterivEXT_c
+  glGetFramebufferAttachmentParameterivEXT_p
+  glGetFramebufferAttachmentParameterivOES_c
   glGetFramebufferParameterfvAMD_c
   glGetFramebufferParameterivEXT_c
+  glGetFramebufferParameterivEXT_p
+  glGetFramebufferParameterivMESA_c
+  glGetFramebufferParameterivMESA_p
   glGetFramebufferParameteriv_c
+  glGetFramebufferParameteriv_p
   glGetFramebufferPixelLocalStorageSizeEXT
   glGetGraphicsResetStatus
   glGetGraphicsResetStatusARB
+  glGetGraphicsResetStatusEXT
+  glGetGraphicsResetStatusKHR
   glGetHandleARB
   glGetHistogramEXT_c
   glGetHistogramParameterfvEXT_c
+  glGetHistogramParameterfvEXT_p
   glGetHistogramParameterfv_c
+  glGetHistogramParameterfv_p
   glGetHistogramParameterivEXT_c
+  glGetHistogramParameterivEXT_p
   glGetHistogramParameteriv_c
+  glGetHistogramParameteriv_p
   glGetHistogram_c
   glGetImageHandleARB
   glGetImageHandleNV
   glGetImageTransformParameterfvHP_c
   glGetImageTransformParameterivHP_c
   glGetInfoLogARB_c
+  glGetInfoLogARB_p
   glGetInteger64i_v_c
+  glGetInteger64i_v_p
   glGetInteger64vAPPLE_c
+  glGetInteger64vAPPLE_p
+  glGetInteger64vEXT_c
+  glGetInteger64vEXT_p
   glGetInteger64v_c
+  glGetInteger64v_p
   glGetIntegerIndexedvEXT_c
+  glGetIntegerIndexedvEXT_p
   glGetIntegeri_vEXT_c
   glGetIntegerui64i_vNV_c
   glGetIntegerui64vNV_c
   glGetInternalformati64v_c
+  glGetInternalformati64v_p
   glGetInternalformativ_c
+  glGetInternalformativ_p
   glGetInternalformatSampleivNV_c
+  glGetInternalformatSampleivNV_p
   glGetInvariantBooleanvEXT_c
   glGetInvariantFloatvEXT_c
   glGetInvariantIntegervEXT_c
   glGetLightxv_c
+  glGetLightxv_p
   glGetLocalConstantBooleanvEXT_c
   glGetLocalConstantFloatvEXT_c
   glGetLocalConstantIntegervEXT_c
@@ -2226,53 +2850,83 @@ our @gl_functionsrest = qw(
   glGetMapParameterfvNV_c
   glGetMapParameterivNV_c
   glGetMaterialxv_c
+  glGetMaterialxv_p
+  glGetMemoryObjectDetachedResourcesuivNV_c
   glGetMemoryObjectParameterivEXT_c
   glGetMinmaxEXT_c
   glGetMinmaxParameterfvEXT_c
+  glGetMinmaxParameterfvEXT_p
   glGetMinmaxParameterfv_c
+  glGetMinmaxParameterfv_p
   glGetMinmaxParameterivEXT_c
+  glGetMinmaxParameterivEXT_p
   glGetMinmaxParameteriv_c
+  glGetMinmaxParameteriv_p
   glGetMinmax_c
   glGetMPEGParameterfvSGIX_c
   glGetMPEGParameterivSGIX_c
   glGetMPEGPredictorSGIX_c
   glGetMPEGQuantTableubv_c
   glGetMultisamplefvNV_c
+  glGetMultisamplefvNV_p
   glGetMultisamplefv_c
+  glGetMultisamplefv_p
   glGetMultiTexEnvfvEXT_c
+  glGetMultiTexEnvfvEXT_p
   glGetMultiTexEnvivEXT_c
+  glGetMultiTexEnvivEXT_p
   glGetMultiTexGendvEXT_c
+  glGetMultiTexGendvEXT_p
   glGetMultiTexGenfvEXT_c
+  glGetMultiTexGenfvEXT_p
   glGetMultiTexGenivEXT_c
+  glGetMultiTexGenivEXT_p
   glGetMultiTexImageEXT_c
   glGetMultiTexLevelParameterfvEXT_c
+  glGetMultiTexLevelParameterfvEXT_p
   glGetMultiTexLevelParameterivEXT_c
+  glGetMultiTexLevelParameterivEXT_p
   glGetMultiTexParameterfvEXT_c
+  glGetMultiTexParameterfvEXT_p
   glGetMultiTexParameterIivEXT_c
+  glGetMultiTexParameterIivEXT_p
   glGetMultiTexParameterIuivEXT_c
+  glGetMultiTexParameterIuivEXT_p
   glGetMultiTexParameterivEXT_c
+  glGetMultiTexParameterivEXT_p
   glGetNamedBufferParameteri64v_c
   glGetNamedBufferParameterivEXT_c
+  glGetNamedBufferParameterivEXT_p
   glGetNamedBufferParameteriv_c
   glGetNamedBufferParameterui64vNV_c
+  glGetNamedBufferParameterui64vNV_p
   glGetNamedBufferPointervEXT_c
   glGetNamedBufferPointerv_c
   glGetNamedBufferSubDataEXT_c
   glGetNamedBufferSubData_c
   glGetNamedFramebufferAttachmentParameterivEXT_c
+  glGetNamedFramebufferAttachmentParameterivEXT_p
   glGetNamedFramebufferAttachmentParameteriv_c
   glGetNamedFramebufferParameterfvAMD_c
   glGetNamedFramebufferParameterivEXT_c
+  glGetNamedFramebufferParameterivEXT_p
   glGetNamedFramebufferParameteriv_c
   glGetNamedProgramivEXT_c
+  glGetNamedProgramivEXT_p
   glGetNamedProgramLocalParameterdvEXT_c
+  glGetNamedProgramLocalParameterdvEXT_p
   glGetNamedProgramLocalParameterfvEXT_c
+  glGetNamedProgramLocalParameterfvEXT_p
   glGetNamedProgramLocalParameterIivEXT_c
+  glGetNamedProgramLocalParameterIivEXT_p
   glGetNamedProgramLocalParameterIuivEXT_c
+  glGetNamedProgramLocalParameterIuivEXT_p
   glGetNamedProgramStringEXT_c
   glGetNamedRenderbufferParameterivEXT_c
+  glGetNamedRenderbufferParameterivEXT_p
   glGetNamedRenderbufferParameteriv_c
   glGetNamedStringARB_c
+  glGetNamedStringARB_p
   glGetNamedStringivARB_c
   glGetnColorTableARB_c
   glGetnCompressedTexImageARB_c
@@ -2281,35 +2935,69 @@ our @gl_functionsrest = qw(
   glGetNextPerfQueryIdINTEL_c
   glGetnHistogramARB_c
   glGetnMapdvARB_c
+  glGetnMapdvARB_p
   glGetnMapfvARB_c
+  glGetnMapfvARB_p
   glGetnMapivARB_c
+  glGetnMapivARB_p
   glGetnMinmaxARB_c
   glGetNonlinLightfvSGIX_c
   glGetNonlinMaterialfvSGIX_c
   glGetnPixelMapfvARB_c
+  glGetnPixelMapfvARB_p
   glGetnPixelMapuivARB_c
+  glGetnPixelMapuivARB_p
   glGetnPixelMapusvARB_c
+  glGetnPixelMapusvARB_p
   glGetnPolygonStippleARB_c
+  glGetnPolygonStippleARB_p
   glGetnSeparableFilterARB_c
   glGetnTexImageARB_c
   glGetnTexImage_c
   glGetnUniformdvARB_c
+  glGetnUniformdvARB_p
   glGetnUniformdv_c
+  glGetnUniformdv_p
   glGetnUniformfvARB_c
+  glGetnUniformfvARB_p
+  glGetnUniformfvEXT_c
+  glGetnUniformfvEXT_p
+  glGetnUniformfvKHR_c
+  glGetnUniformfvKHR_p
   glGetnUniformfv_c
+  glGetnUniformfv_p
   glGetnUniformi64vARB_c
+  glGetnUniformi64vARB_p
   glGetnUniformivARB_c
+  glGetnUniformivARB_p
+  glGetnUniformivEXT_c
+  glGetnUniformivEXT_p
+  glGetnUniformivKHR_c
+  glGetnUniformivKHR_p
   glGetnUniformiv_c
+  glGetnUniformiv_p
   glGetnUniformui64vARB_c
+  glGetnUniformui64vARB_p
   glGetnUniformuivARB_c
+  glGetnUniformuivARB_p
+  glGetnUniformuivKHR_c
+  glGetnUniformuivKHR_p
   glGetnUniformuiv_c
+  glGetnUniformuiv_p
   glGetObjectBufferfvATI_c
+  glGetObjectBufferfvATI_p
   glGetObjectBufferivATI_c
+  glGetObjectBufferivATI_p
   glGetObjectLabelEXT_c
+  glGetObjectLabelEXT_p
+  glGetObjectLabelKHR_c
+  glGetObjectLabelKHR_p
   glGetObjectLabel_c
+  glGetObjectLabel_p
   glGetObjectParameterfvARB_c
   glGetObjectParameterivAPPLE_c
   glGetObjectParameterivARB_c
+  glGetObjectPtrLabelKHR_c
   glGetObjectPtrLabel_c
   glGetOcclusionQueryivNV_c
   glGetOcclusionQueryuivNV_c
@@ -2322,17 +3010,24 @@ our @gl_functionsrest = qw(
   glGetPathMetricRangeNV_c
   glGetPathMetricsNV_c
   glGetPathParameterfvNV_c
+  glGetPathParameterfvNV_p
   glGetPathParameterivNV_c
+  glGetPathParameterivNV_p
   glGetPathSpacingNV_c
   glGetPathTexGenfvNV_c
   glGetPathTexGenivNV_c
   glGetPerfCounterInfoINTEL_c
   glGetPerfMonitorCounterDataAMD_c
+  glGetPerfMonitorCounterDataAMD_p
   glGetPerfMonitorCounterInfoAMD_c
   glGetPerfMonitorCountersAMD_c
+  glGetPerfMonitorCountersAMD_p
   glGetPerfMonitorCounterStringAMD_c
+  glGetPerfMonitorCounterStringAMD_p
   glGetPerfMonitorGroupsAMD_c
+  glGetPerfMonitorGroupsAMD_p
   glGetPerfMonitorGroupStringAMD_c
+  glGetPerfMonitorGroupStringAMD_p
   glGetPerfQueryDataINTEL_c
   glGetPerfQueryIdByNameINTEL_c
   glGetPerfQueryInfoINTEL_c
@@ -2342,29 +3037,50 @@ our @gl_functionsrest = qw(
   glGetPixelTransformParameterivSGI_c
   glGetPointerIndexedvEXT_c
   glGetPointeri_vEXT_c
+  glGetPointervEXT_c
+  glGetPointervKHR_c
   glGetProcAddressREGAL_c
+  glGetProgramBinaryOES_c
   glGetProgramBinary_c
+  glGetProgramBinary_p
   glGetProgramEnvParameterdvARB_c
+  glGetProgramEnvParameterdvARB_p
   glGetProgramEnvParameterfvARB_c
+  glGetProgramEnvParameterfvARB_p
   glGetProgramInterfaceiv_c
+  glGetProgramInterfaceiv_p
   glGetProgramivARB_c
+  glGetProgramivARB_p
   glGetProgramivNV_c
+  glGetProgramivNV_p
   glGetProgramLocalParameterdvARB_c
+  glGetProgramLocalParameterdvARB_p
   glGetProgramLocalParameterfvARB_c
+  glGetProgramLocalParameterfvARB_p
   glGetProgramNamedParameterdvNV_c
+  glGetProgramNamedParameterdvNV_p
   glGetProgramNamedParameterfvNV_c
+  glGetProgramNamedParameterfvNV_p
   glGetProgramParameterdvNV_c
+  glGetProgramParameterdvNV_p
   glGetProgramParameterfvNV_c
+  glGetProgramParameterfvNV_p
   glGetProgramPipelineInfoLog_c
+  glGetProgramPipelineInfoLog_p
   glGetProgramPipelineiv_c
+  glGetProgramPipelineiv_p
   glGetProgramResourcefvNV_c
+  glGetProgramResourcefvNV_p
   glGetProgramResourceIndex
   glGetProgramResourceiv_c
+  glGetProgramResourceiv_p
   glGetProgramResourceLocation
   glGetProgramResourceLocationIndex
   glGetProgramResourceLocationIndexEXT
   glGetProgramResourceName_c
+  glGetProgramResourceName_p
   glGetProgramStageiv_c
+  glGetProgramStageiv_p
   glGetProgramStringARB_c
   glGetProgramStringNV_c
   glGetQueryBufferObjecti64v
@@ -2372,68 +3088,125 @@ our @gl_functionsrest = qw(
   glGetQueryBufferObjectui64v
   glGetQueryBufferObjectuiv
   glGetQueryIndexediv_c
+  glGetQueryIndexediv_p
   glGetQueryivANGLE_c
   glGetQueryivARB_c
+  glGetQueryivARB_p
+  glGetQueryivEXT_c
+  glGetQueryivEXT_p
   glGetQueryObjecti64vANGLE_c
   glGetQueryObjecti64vEXT_c
+  glGetQueryObjecti64vEXT_p
   glGetQueryObjecti64v_c
+  glGetQueryObjecti64v_p
   glGetQueryObjectivANGLE_c
   glGetQueryObjectivARB_c
+  glGetQueryObjectivARB_p
+  glGetQueryObjectivEXT_c
+  glGetQueryObjectivEXT_p
   glGetQueryObjectui64vANGLE_c
   glGetQueryObjectui64vEXT_c
+  glGetQueryObjectui64vEXT_p
   glGetQueryObjectui64v_c
+  glGetQueryObjectui64v_p
   glGetQueryObjectuivANGLE_c
   glGetQueryObjectuivARB_c
+  glGetQueryObjectuivARB_p
+  glGetQueryObjectuivEXT_c
+  glGetQueryObjectuivEXT_p
   glGetRenderbufferParameterivEXT_c
+  glGetRenderbufferParameterivEXT_p
+  glGetRenderbufferParameterivOES_c
   glGetSamplerParameterfv_c
+  glGetSamplerParameterfv_p
+  glGetSamplerParameterIivEXT_c
+  glGetSamplerParameterIivEXT_p
+  glGetSamplerParameterIivOES_c
   glGetSamplerParameterIiv_c
+  glGetSamplerParameterIiv_p
+  glGetSamplerParameterIuivEXT_c
+  glGetSamplerParameterIuivEXT_p
+  glGetSamplerParameterIuivOES_c
   glGetSamplerParameterIuiv_c
+  glGetSamplerParameterIuiv_p
   glGetSamplerParameteriv_c
+  glGetSamplerParameteriv_p
+  glGetSemaphoreParameterivNV_c
   glGetSemaphoreParameterui64vEXT_c
   glGetSeparableFilterEXT_c
   glGetSeparableFilter_c
   glGetShaderPrecisionFormat_c
+  glGetShaderPrecisionFormat_p
   glGetShaderSourceARB_c
+  glGetShaderSourceARB_p
+  glGetShadingRateImagePaletteNV_c
+  glGetShadingRateImagePaletteNV_p
+  glGetShadingRateSampleLocationivNV_c
+  glGetShadingRateSampleLocationivNV_p
   glGetSharpenTexFuncSGIS_c
+  glGetSharpenTexFuncSGIS_p
   glGetStageIndexNV
   glGetSubroutineIndex
   glGetSubroutineUniformLocation
   glGetSyncivAPPLE_c
+  glGetSyncivAPPLE_p
   glGetSynciv_c
+  glGetSynciv_p
   glGetTexBumpParameterfvATI_c
   glGetTexBumpParameterivATI_c
   glGetTexEnvxv_c
+  glGetTexEnvxv_p
   glGetTexFilterFuncSGIS_c
+  glGetTexGenfvOES_c
+  glGetTexGenivOES_c
+  glGetTexGenxvOES_c
   glGetTexParameterIivEXT_c
+  glGetTexParameterIivEXT_p
+  glGetTexParameterIivOES_c
   glGetTexParameterIuivEXT_c
+  glGetTexParameterIuivEXT_p
+  glGetTexParameterIuivOES_c
   glGetTexParameterPointervAPPLE_c
   glGetTexParameterxv_c
+  glGetTexParameterxv_p
   glGetTextureHandleARB
+  glGetTextureHandleIMG
   glGetTextureHandleNV
   glGetTextureImageEXT_c
   glGetTextureImage_c
   glGetTextureLevelParameterfvEXT_c
+  glGetTextureLevelParameterfvEXT_p
   glGetTextureLevelParameterfv_c
   glGetTextureLevelParameterivEXT_c
+  glGetTextureLevelParameterivEXT_p
   glGetTextureLevelParameteriv_c
   glGetTextureParameterfvEXT_c
+  glGetTextureParameterfvEXT_p
   glGetTextureParameterfv_c
   glGetTextureParameterIivEXT_c
+  glGetTextureParameterIivEXT_p
   glGetTextureParameterIiv_c
   glGetTextureParameterIuivEXT_c
+  glGetTextureParameterIuivEXT_p
   glGetTextureParameterIuiv_c
   glGetTextureParameterivEXT_c
+  glGetTextureParameterivEXT_p
   glGetTextureParameteriv_c
   glGetTextureSamplerHandleARB
+  glGetTextureSamplerHandleIMG
   glGetTextureSamplerHandleNV
   glGetTextureSubImage_c
   glGetTrackMatrixivNV_c
+  glGetTrackMatrixivNV_p
   glGetTransformFeedbacki64_v_c
   glGetTransformFeedbackiv_c
   glGetTransformFeedbacki_v_c
   glGetTransformFeedbackVaryingEXT_c
+  glGetTransformFeedbackVaryingEXT_p
   glGetTransformFeedbackVaryingNV_c
+  glGetTransformFeedbackVaryingNV_p
   glGetTranslatedShaderSourceANGLE_c
+  glGetTranslatedShaderSourceANGLE_p
   glGetUniformBufferSizeEXT
   glGetUniformdv_c
   glGetUniformfvARB_c
@@ -2443,13 +3216,17 @@ our @gl_functionsrest = qw(
   glGetUniformLocationARB
   glGetUniformOffsetEXT
   glGetUniformSubroutineuiv_c
+  glGetUniformSubroutineuiv_p
   glGetUniformui64vARB_c
   glGetUniformui64vNV_c
   glGetUniformuivEXT_c
   glGetUnsignedBytei_vEXT_c
   glGetUnsignedBytevEXT_c
+  glGetUnsignedBytevEXT_p
   glGetVariantArrayObjectfvATI_c
+  glGetVariantArrayObjectfvATI_p
   glGetVariantArrayObjectivATI_c
+  glGetVariantArrayObjectivATI_p
   glGetVariantBooleanvEXT_c
   glGetVariantFloatvEXT_c
   glGetVariantIntegervEXT_c
@@ -2464,20 +3241,34 @@ our @gl_functionsrest = qw(
   glGetVertexArrayPointeri_vEXT_c
   glGetVertexArrayPointervEXT_c
   glGetVertexAttribArrayObjectfvATI_c
+  glGetVertexAttribArrayObjectfvATI_p
   glGetVertexAttribArrayObjectivATI_c
+  glGetVertexAttribArrayObjectivATI_p
   glGetVertexAttribdvARB_c
+  glGetVertexAttribdvARB_p
   glGetVertexAttribdvNV_c
+  glGetVertexAttribdvNV_p
   glGetVertexAttribfvARB_c
+  glGetVertexAttribfvARB_p
   glGetVertexAttribfvNV_c
+  glGetVertexAttribfvNV_p
   glGetVertexAttribIivEXT_c
+  glGetVertexAttribIivEXT_p
   glGetVertexAttribIuivEXT_c
+  glGetVertexAttribIuivEXT_p
   glGetVertexAttribivARB_c
+  glGetVertexAttribivARB_p
   glGetVertexAttribivNV_c
+  glGetVertexAttribivNV_p
   glGetVertexAttribLdvEXT_c
+  glGetVertexAttribLdvEXT_p
   glGetVertexAttribLdv_c
+  glGetVertexAttribLdv_p
   glGetVertexAttribLi64vNV_c
+  glGetVertexAttribLi64vNV_p
   glGetVertexAttribLui64vARB_c
   glGetVertexAttribLui64vNV_c
+  glGetVertexAttribLui64vNV_p
   glGetVertexAttribPointervARB_c
   glGetVertexAttribPointervNV_c
   glGetVideoCaptureivNV_c
@@ -2523,9 +3314,13 @@ our @gl_functionsrest = qw(
   glInvalidateBufferData
   glInvalidateBufferSubData
   glInvalidateFramebuffer_c
+  glInvalidateFramebuffer_p
   glInvalidateNamedFramebufferData_c
+  glInvalidateNamedFramebufferData_p
   glInvalidateNamedFramebufferSubData_c
+  glInvalidateNamedFramebufferSubData_p
   glInvalidateSubFramebuffer_c
+  glInvalidateSubFramebuffer_p
   glInvalidateTexImage
   glInvalidateTexSubImage
   glIsAsyncMarkerSGIX
@@ -2535,9 +3330,11 @@ our @gl_functionsrest = qw(
   glIsEnablediEXT
   glIsEnabledIndexedEXT
   glIsEnablediNV
+  glIsEnablediOES
   glIsFenceAPPLE
   glIsFenceNV
   glIsFramebufferEXT
+  glIsFramebufferOES
   glIsImageHandleResidentARB
   glIsImageHandleResidentNV
   glIsMemoryObjectEXT
@@ -2555,7 +3352,9 @@ our @gl_functionsrest = qw(
   glIsProgramPipeline
   glIsQueryANGLE
   glIsQueryARB
+  glIsQueryEXT
   glIsRenderbufferEXT
+  glIsRenderbufferOES
   glIsSampler
   glIsSemaphoreEXT
   glIsStateNV
@@ -2569,6 +3368,7 @@ our @gl_functionsrest = qw(
   glIsTransformFeedbackNV
   glIsVariantEnabledEXT
   glIsVertexArrayAPPLE
+  glIsVertexArrayOES
   glIsVertexArraySGIX
   glIsVertexAttribEnabledAPPLE
   glLabelObjectEXT
@@ -2578,16 +3378,22 @@ our @gl_functionsrest = qw(
   glLightEnviEXT
   glLightModelx
   glLightModelxv_c
+  glLightModelxv_p
   glLightx
   glLightxv_c
+  glLightxv_p
   glLineWidthx
   glLinkProgramARB
   glListDrawCommandsStatesClientNV_c
   glLoadIdentityDeformationMapSGIX
   glLoadMatrixx_c
-  glLoadProgramNV_c
+  glLoadMatrixx_p
+  glLoadPaletteFromModelViewMatrixOES
+  glLoadProgramNV
   glLoadTransposeMatrixdARB_c
+  glLoadTransposeMatrixdARB_p
   glLoadTransposeMatrixfARB_c
+  glLoadTransposeMatrixfARB_p
   glLockArraysEXT
   glLogMessageCallbackREGAL
   glMakeBufferNonResidentNV
@@ -2603,6 +3409,7 @@ our @gl_functionsrest = qw(
   glMakeTextureHandleResidentARB
   glMakeTextureHandleResidentNV
   glMapBufferARB_c
+  glMapBufferOES_c
   glMapBufferRangeEXT_c
   glMapControlPointsNV_c
   glMapNamedBufferEXT_c
@@ -2613,32 +3420,46 @@ our @gl_functionsrest = qw(
   glMapParameterfvNV_c
   glMapParameterivNV_c
   glMapTexture2DINTEL_c
+  glMapTexture2DINTEL_p
   glMapVertexAttrib1dAPPLE_c
   glMapVertexAttrib1fAPPLE_c
   glMapVertexAttrib2dAPPLE_c
   glMapVertexAttrib2fAPPLE_c
   glMaterialx
   glMaterialxv_c
+  glMaterialxv_p
   glMatrixFrustumEXT
   glMatrixIndexPointerARB_c
+  glMatrixIndexPointerOES_c
   glMatrixIndexubvARB_c
+  glMatrixIndexubvARB_p
   glMatrixIndexuivARB_c
+  glMatrixIndexuivARB_p
   glMatrixIndexusvARB_c
+  glMatrixIndexusvARB_p
   glMatrixLoad3x2fNV_c
   glMatrixLoad3x3fNV_c
   glMatrixLoaddEXT_c
+  glMatrixLoaddEXT_p
   glMatrixLoadfEXT_c
+  glMatrixLoadfEXT_p
   glMatrixLoadIdentityEXT
   glMatrixLoadTranspose3x3fNV_c
   glMatrixLoadTransposedEXT_c
+  glMatrixLoadTransposedEXT_p
   glMatrixLoadTransposefEXT_c
+  glMatrixLoadTransposefEXT_p
   glMatrixMult3x2fNV_c
   glMatrixMult3x3fNV_c
   glMatrixMultdEXT_c
+  glMatrixMultdEXT_p
   glMatrixMultfEXT_c
+  glMatrixMultfEXT_p
   glMatrixMultTranspose3x3fNV_c
   glMatrixMultTransposedEXT_c
+  glMatrixMultTransposedEXT_p
   glMatrixMultTransposefEXT_c
+  glMatrixMultTransposefEXT_p
   glMatrixOrthoEXT
   glMatrixPopEXT
   glMatrixPushEXT
@@ -2648,6 +3469,7 @@ our @gl_functionsrest = qw(
   glMatrixScalefEXT
   glMatrixTranslatedEXT
   glMatrixTranslatefEXT
+  glMaxActiveShaderCoresARM
   glMaxShaderCompilerThreadsARB
   glMaxShaderCompilerThreadsKHR
   glMemoryBarrier
@@ -2660,6 +3482,7 @@ our @gl_functionsrest = qw(
   glMinmaxEXT
   glMinSampleShading
   glMinSampleShadingARB
+  glMinSampleShadingOES
   glMPEGPredictorSGIX_c
   glMPEGQuantTableubv_c
   glMulticastBarrierNV
@@ -2672,8 +3495,14 @@ our @gl_functionsrest = qw(
   glMulticastGetQueryObjectivNV_c
   glMulticastGetQueryObjectui64vNV_c
   glMulticastGetQueryObjectuivNV_c
+  glMulticastScissorArrayvNVX_c
+  glMulticastScissorArrayvNVX_p
+  glMulticastViewportArrayvNVX_c
+  glMulticastViewportArrayvNVX_p
+  glMulticastViewportPositionWScaleNVX
   glMulticastWaitSyncNV
   glMultiDrawArraysEXT_c
+  glMultiDrawArraysEXT_p
   glMultiDrawArraysIndirectAMD_c
   glMultiDrawArraysIndirectBindlessCountNV_c
   glMultiDrawArraysIndirectBindlessNV_c
@@ -2682,6 +3511,7 @@ our @gl_functionsrest = qw(
   glMultiDrawArraysIndirectEXT_c
   glMultiDrawArraysIndirect_c
   glMultiDrawElementArrayAPPLE_c
+  glMultiDrawElementArrayAPPLE_p
   glMultiDrawElementsBaseVertexEXT_c
   glMultiDrawElementsBaseVertex_c
   glMultiDrawElementsEXT_c
@@ -2692,89 +3522,132 @@ our @gl_functionsrest = qw(
   glMultiDrawElementsIndirectCount_c
   glMultiDrawElementsIndirectEXT_c
   glMultiDrawElementsIndirect_c
+  glMultiDrawMeshTasksIndirectCountEXT
+  glMultiDrawMeshTasksIndirectCountNV
+  glMultiDrawMeshTasksIndirectEXT
+  glMultiDrawMeshTasksIndirectNV
   glMultiDrawRangeElementArrayAPPLE_c
+  glMultiDrawRangeElementArrayAPPLE_p
   glMultiModeDrawArraysIBM_c
   glMultiModeDrawElementsIBM_c
   glMultisampleSubRectPosSGIS
   glMultiTexBufferEXT
   glMultiTexCoord1dARB
   glMultiTexCoord1dvARB_c
+  glMultiTexCoord1dvARB_p
   glMultiTexCoord1fARB
   glMultiTexCoord1fvARB_c
+  glMultiTexCoord1fvARB_p
   glMultiTexCoord1hNV
   glMultiTexCoord1hvNV_c
+  glMultiTexCoord1hvNV_p
   glMultiTexCoord1iARB
   glMultiTexCoord1ivARB_c
+  glMultiTexCoord1ivARB_p
   glMultiTexCoord1sARB
   glMultiTexCoord1svARB_c
+  glMultiTexCoord1svARB_p
   glMultiTexCoord2dARB
   glMultiTexCoord2dvARB_c
+  glMultiTexCoord2dvARB_p
   glMultiTexCoord2fARB
   glMultiTexCoord2fvARB_c
+  glMultiTexCoord2fvARB_p
   glMultiTexCoord2hNV
   glMultiTexCoord2hvNV_c
+  glMultiTexCoord2hvNV_p
   glMultiTexCoord2iARB
   glMultiTexCoord2ivARB_c
+  glMultiTexCoord2ivARB_p
   glMultiTexCoord2sARB
   glMultiTexCoord2svARB_c
+  glMultiTexCoord2svARB_p
   glMultiTexCoord3dARB
   glMultiTexCoord3dvARB_c
+  glMultiTexCoord3dvARB_p
   glMultiTexCoord3fARB
   glMultiTexCoord3fvARB_c
+  glMultiTexCoord3fvARB_p
   glMultiTexCoord3hNV
   glMultiTexCoord3hvNV_c
+  glMultiTexCoord3hvNV_p
   glMultiTexCoord3iARB
   glMultiTexCoord3ivARB_c
+  glMultiTexCoord3ivARB_p
   glMultiTexCoord3sARB
   glMultiTexCoord3svARB_c
+  glMultiTexCoord3svARB_p
   glMultiTexCoord4dARB
   glMultiTexCoord4dvARB_c
+  glMultiTexCoord4dvARB_p
   glMultiTexCoord4fARB
   glMultiTexCoord4fvARB_c
+  glMultiTexCoord4fvARB_p
   glMultiTexCoord4hNV
   glMultiTexCoord4hvNV_c
+  glMultiTexCoord4hvNV_p
   glMultiTexCoord4iARB
   glMultiTexCoord4ivARB_c
+  glMultiTexCoord4ivARB_p
   glMultiTexCoord4sARB
   glMultiTexCoord4svARB_c
+  glMultiTexCoord4svARB_p
   glMultiTexCoord4x
   glMultiTexCoordP1ui
   glMultiTexCoordP1uiv_c
+  glMultiTexCoordP1uiv_p
   glMultiTexCoordP2ui
   glMultiTexCoordP2uiv_c
+  glMultiTexCoordP2uiv_p
   glMultiTexCoordP3ui
   glMultiTexCoordP3uiv_c
+  glMultiTexCoordP3uiv_p
   glMultiTexCoordP4ui
   glMultiTexCoordP4uiv_c
+  glMultiTexCoordP4uiv_p
   glMultiTexCoordPointerEXT_c
   glMultiTexEnvfEXT
   glMultiTexEnvfvEXT_c
+  glMultiTexEnvfvEXT_p
   glMultiTexEnviEXT
   glMultiTexEnvivEXT_c
+  glMultiTexEnvivEXT_p
   glMultiTexGendEXT
   glMultiTexGendvEXT_c
+  glMultiTexGendvEXT_p
   glMultiTexGenfEXT
   glMultiTexGenfvEXT_c
+  glMultiTexGenfvEXT_p
   glMultiTexGeniEXT
   glMultiTexGenivEXT_c
+  glMultiTexGenivEXT_p
   glMultiTexImage1DEXT_c
   glMultiTexImage2DEXT_c
   glMultiTexImage3DEXT_c
   glMultiTexParameterfEXT
   glMultiTexParameterfvEXT_c
+  glMultiTexParameterfvEXT_p
   glMultiTexParameteriEXT
   glMultiTexParameterIivEXT_c
+  glMultiTexParameterIivEXT_p
   glMultiTexParameterIuivEXT_c
+  glMultiTexParameterIuivEXT_p
   glMultiTexParameterivEXT_c
+  glMultiTexParameterivEXT_p
   glMultiTexRenderbufferEXT
   glMultiTexSubImage1DEXT_c
   glMultiTexSubImage2DEXT_c
   glMultiTexSubImage3DEXT_c
   glMultMatrixx_c
+  glMultMatrixx_p
   glMultTransposeMatrixdARB_c
+  glMultTransposeMatrixdARB_p
   glMultTransposeMatrixfARB_c
+  glMultTransposeMatrixfARB_p
+  glNamedBufferAttachMemoryNV
   glNamedBufferDataEXT_c
   glNamedBufferData_c
+  glNamedBufferPageCommitmentMemNV
   glNamedBufferStorageExternalEXT
   glNamedBufferStorageEXT_c
   glNamedBufferStorageMemEXT
@@ -2784,6 +3657,7 @@ our @gl_functionsrest = qw(
   glNamedCopyBufferSubDataEXT
   glNamedFramebufferDrawBuffer
   glNamedFramebufferDrawBuffers_c
+  glNamedFramebufferDrawBuffers_p
   glNamedFramebufferParameteri
   glNamedFramebufferParameteriEXT
   glNamedFramebufferReadBuffer
@@ -2800,21 +3674,30 @@ our @gl_functionsrest = qw(
   glNamedFramebufferTextureFaceEXT
   glNamedFramebufferTextureLayer
   glNamedFramebufferTextureLayerEXT
+  glNamedFramebufferTextureMultiviewOVR
   glNamedProgramLocalParameter4dEXT
   glNamedProgramLocalParameter4dvEXT_c
+  glNamedProgramLocalParameter4dvEXT_p
   glNamedProgramLocalParameter4fEXT
   glNamedProgramLocalParameter4fvEXT_c
+  glNamedProgramLocalParameter4fvEXT_p
   glNamedProgramLocalParameterI4iEXT
   glNamedProgramLocalParameterI4ivEXT_c
+  glNamedProgramLocalParameterI4ivEXT_p
   glNamedProgramLocalParameterI4uiEXT
   glNamedProgramLocalParameterI4uivEXT_c
+  glNamedProgramLocalParameterI4uivEXT_p
   glNamedProgramLocalParameters4fvEXT_c
+  glNamedProgramLocalParameters4fvEXT_p
   glNamedProgramLocalParametersI4ivEXT_c
+  glNamedProgramLocalParametersI4ivEXT_p
   glNamedProgramLocalParametersI4uivEXT_c
+  glNamedProgramLocalParametersI4uivEXT_p
   glNamedProgramStringEXT_c
   glNamedRenderbufferStorage
   glNamedRenderbufferStorageEXT
   glNamedRenderbufferStorageMultisample
+  glNamedRenderbufferStorageMultisampleAdvancedAMD
   glNamedRenderbufferStorageMultisampleCoverageEXT
   glNamedRenderbufferStorageMultisampleEXT
   glNamedStringARB
@@ -2824,42 +3707,57 @@ our @gl_functionsrest = qw(
   glNonlinMaterialfvSGIX_c
   glNormal3fVertex3fSUN
   glNormal3fVertex3fvSUN_c
+  glNormal3fVertex3fvSUN_p
   glNormal3hNV
   glNormal3hvNV_c
+  glNormal3hvNV_p
   glNormal3x
   glNormalFormatNV
   glNormalP3ui
   glNormalP3uiv_c
+  glNormalP3uiv_p
   glNormalPointerEXT_c
   glNormalPointerListIBM_c
   glNormalPointervINTEL_c
   glNormalStream3bATI
   glNormalStream3bvATI_c
+  glNormalStream3bvATI_p
   glNormalStream3dATI
   glNormalStream3dvATI_c
+  glNormalStream3dvATI_p
   glNormalStream3fATI
   glNormalStream3fvATI_c
+  glNormalStream3fvATI_p
   glNormalStream3iATI
   glNormalStream3ivATI_c
+  glNormalStream3ivATI_p
   glNormalStream3sATI
   glNormalStream3svATI_c
+  glNormalStream3svATI_p
   glObjectLabel
+  glObjectLabelKHR
+  glObjectPtrLabelKHR_c
   glObjectPtrLabel_c
   glObjectPurgeableAPPLE
   glObjectUnpurgeableAPPLE
   glOrthof
+  glOrthofOES
   glOrthox
   glPassTexCoordATI
   glPatchParameterfv_c
+  glPatchParameterfv_p
   glPatchParameteri
+  glPatchParameteriEXT
   glPathColorGenNV_c
   glPathCommandsNV_c
   glPathCoordsNV_c
   glPathCoverDepthFuncNV
   glPathDashArrayNV_c
+  glPathDashArrayNV_p
   glPathFogGenNV
   glPathGlyphIndexArrayNV_c
   glPathGlyphIndexRangeNV_c
+  glPathGlyphIndexRangeNV_p
   glPathGlyphRangeNV_c
   glPathGlyphsNV_c
   glPathMemoryGlyphIndexArrayNV_c
@@ -2880,256 +3778,392 @@ our @gl_functionsrest = qw(
   glPixelTransformParameterfEXT
   glPixelTransformParameterfSGI
   glPixelTransformParameterfvEXT_c
+  glPixelTransformParameterfvEXT_p
   glPixelTransformParameterfvSGI_c
   glPixelTransformParameteriEXT
   glPixelTransformParameteriSGI
   glPixelTransformParameterivEXT_c
+  glPixelTransformParameterivEXT_p
   glPixelTransformParameterivSGI_c
   glPixelTransformSGI
   glPNTrianglesfATI
   glPNTrianglesiATI
   glPointAlongPathNV_c
+  glPointAlongPathNV_p
   glPointParameterfARB
   glPointParameterfEXT
+  glPointParameterfSGIS
   glPointParameterfvARB_c
+  glPointParameterfvARB_p
   glPointParameterfvEXT_c
+  glPointParameterfvEXT_p
+  glPointParameterfvSGIS_c
+  glPointParameterfvSGIS_p
   glPointParameteriNV
   glPointParameterivNV_c
+  glPointParameterivNV_p
   glPointParameterx
   glPointParameterxv_c
+  glPointParameterxv_p
   glPointSizePointerOES_c
   glPointSizex
   glPollAsyncSGIX_c
+  glPollAsyncSGIX_p
   glPolygonModeNV
   glPolygonOffsetClamp
   glPolygonOffsetClampEXT
   glPolygonOffsetEXT
   glPolygonOffsetx
   glPopDebugGroup
+  glPopDebugGroupKHR
   glPopGroupMarkerEXT
   glPresentFrameDualFillNV
   glPresentFrameKeyedNV
+  glPrimitiveBoundingBox
   glPrimitiveBoundingBoxARB
+  glPrimitiveBoundingBoxEXT
   glPrimitiveRestartIndexNV
   glPrimitiveRestartNV
   glPrioritizeTexturesEXT_c
+  glPrioritizeTexturesEXT_p
   glPrioritizeVertexArraysSGIX_c
+  glProgramBinaryOES_c
   glProgramBinary_c
   glProgramBufferParametersfvNV_c
+  glProgramBufferParametersfvNV_p
   glProgramBufferParametersIivNV_c
+  glProgramBufferParametersIivNV_p
   glProgramBufferParametersIuivNV_c
+  glProgramBufferParametersIuivNV_p
   glProgramEnvParameter4dARB
   glProgramEnvParameter4dvARB_c
+  glProgramEnvParameter4dvARB_p
   glProgramEnvParameter4fARB
   glProgramEnvParameter4fvARB_c
+  glProgramEnvParameter4fvARB_p
   glProgramEnvParameterI4iNV
   glProgramEnvParameterI4ivNV_c
+  glProgramEnvParameterI4ivNV_p
   glProgramEnvParameterI4uiNV
   glProgramEnvParameterI4uivNV_c
+  glProgramEnvParameterI4uivNV_p
   glProgramEnvParameters4fvEXT_c
+  glProgramEnvParameters4fvEXT_p
   glProgramEnvParametersI4ivNV_c
+  glProgramEnvParametersI4ivNV_p
   glProgramEnvParametersI4uivNV_c
+  glProgramEnvParametersI4uivNV_p
   glProgramLocalParameter4dARB
   glProgramLocalParameter4dvARB_c
+  glProgramLocalParameter4dvARB_p
   glProgramLocalParameter4fARB
   glProgramLocalParameter4fvARB_c
+  glProgramLocalParameter4fvARB_p
   glProgramLocalParameterI4iNV
   glProgramLocalParameterI4ivNV_c
+  glProgramLocalParameterI4ivNV_p
   glProgramLocalParameterI4uiNV
   glProgramLocalParameterI4uivNV_c
+  glProgramLocalParameterI4uivNV_p
   glProgramLocalParameters4fvEXT_c
+  glProgramLocalParameters4fvEXT_p
   glProgramLocalParametersI4ivNV_c
+  glProgramLocalParametersI4ivNV_p
   glProgramLocalParametersI4uivNV_c
-  glProgramNamedParameter4dNV_c
+  glProgramLocalParametersI4uivNV_p
+  glProgramNamedParameter4dNV
   glProgramNamedParameter4dvNV_c
-  glProgramNamedParameter4fNV_c
+  glProgramNamedParameter4dvNV_p
+  glProgramNamedParameter4fNV
   glProgramNamedParameter4fvNV_c
+  glProgramNamedParameter4fvNV_p
   glProgramParameter4dNV
   glProgramParameter4dvNV_c
+  glProgramParameter4dvNV_p
   glProgramParameter4fNV
   glProgramParameter4fvNV_c
+  glProgramParameter4fvNV_p
   glProgramParameteri
   glProgramParameteriARB
   glProgramParameteriEXT
   glProgramParameters4dvNV_c
+  glProgramParameters4dvNV_p
   glProgramParameters4fvNV_c
+  glProgramParameters4fvNV_p
   glProgramPathFragmentInputGenNV_c
   glProgramStringARB_c
   glProgramUniform1d
   glProgramUniform1dv_c
+  glProgramUniform1dv_p
   glProgramUniform1f
   glProgramUniform1fEXT
   glProgramUniform1fvEXT_c
+  glProgramUniform1fvEXT_p
   glProgramUniform1fv_c
+  glProgramUniform1fv_p
   glProgramUniform1i
   glProgramUniform1i64ARB
   glProgramUniform1i64NV
   glProgramUniform1i64vARB_c
+  glProgramUniform1i64vARB_p
   glProgramUniform1i64vNV_c
+  glProgramUniform1i64vNV_p
   glProgramUniform1iEXT
   glProgramUniform1ivEXT_c
+  glProgramUniform1ivEXT_p
   glProgramUniform1iv_c
+  glProgramUniform1iv_p
   glProgramUniform1ui
   glProgramUniform1ui64ARB
   glProgramUniform1ui64NV
   glProgramUniform1ui64vARB_c
+  glProgramUniform1ui64vARB_p
   glProgramUniform1ui64vNV_c
+  glProgramUniform1ui64vNV_p
   glProgramUniform1uiEXT
   glProgramUniform1uivEXT_c
+  glProgramUniform1uivEXT_p
   glProgramUniform1uiv_c
+  glProgramUniform1uiv_p
   glProgramUniform2d
   glProgramUniform2dv_c
+  glProgramUniform2dv_p
   glProgramUniform2f
   glProgramUniform2fEXT
   glProgramUniform2fvEXT_c
+  glProgramUniform2fvEXT_p
   glProgramUniform2fv_c
+  glProgramUniform2fv_p
   glProgramUniform2i
   glProgramUniform2i64ARB
   glProgramUniform2i64NV
   glProgramUniform2i64vARB_c
+  glProgramUniform2i64vARB_p
   glProgramUniform2i64vNV_c
+  glProgramUniform2i64vNV_p
   glProgramUniform2iEXT
   glProgramUniform2ivEXT_c
+  glProgramUniform2ivEXT_p
   glProgramUniform2iv_c
+  glProgramUniform2iv_p
   glProgramUniform2ui
   glProgramUniform2ui64ARB
   glProgramUniform2ui64NV
   glProgramUniform2ui64vARB_c
+  glProgramUniform2ui64vARB_p
   glProgramUniform2ui64vNV_c
+  glProgramUniform2ui64vNV_p
   glProgramUniform2uiEXT
   glProgramUniform2uivEXT_c
+  glProgramUniform2uivEXT_p
   glProgramUniform2uiv_c
+  glProgramUniform2uiv_p
   glProgramUniform3d
   glProgramUniform3dv_c
+  glProgramUniform3dv_p
   glProgramUniform3f
   glProgramUniform3fEXT
   glProgramUniform3fvEXT_c
+  glProgramUniform3fvEXT_p
   glProgramUniform3fv_c
+  glProgramUniform3fv_p
   glProgramUniform3i
   glProgramUniform3i64ARB
   glProgramUniform3i64NV
   glProgramUniform3i64vARB_c
+  glProgramUniform3i64vARB_p
   glProgramUniform3i64vNV_c
+  glProgramUniform3i64vNV_p
   glProgramUniform3iEXT
   glProgramUniform3ivEXT_c
+  glProgramUniform3ivEXT_p
   glProgramUniform3iv_c
+  glProgramUniform3iv_p
   glProgramUniform3ui
   glProgramUniform3ui64ARB
   glProgramUniform3ui64NV
   glProgramUniform3ui64vARB_c
+  glProgramUniform3ui64vARB_p
   glProgramUniform3ui64vNV_c
+  glProgramUniform3ui64vNV_p
   glProgramUniform3uiEXT
   glProgramUniform3uivEXT_c
+  glProgramUniform3uivEXT_p
   glProgramUniform3uiv_c
+  glProgramUniform3uiv_p
   glProgramUniform4d
   glProgramUniform4dv_c
+  glProgramUniform4dv_p
   glProgramUniform4f
   glProgramUniform4fEXT
   glProgramUniform4fvEXT_c
+  glProgramUniform4fvEXT_p
   glProgramUniform4fv_c
+  glProgramUniform4fv_p
   glProgramUniform4i
   glProgramUniform4i64ARB
   glProgramUniform4i64NV
   glProgramUniform4i64vARB_c
+  glProgramUniform4i64vARB_p
   glProgramUniform4i64vNV_c
+  glProgramUniform4i64vNV_p
   glProgramUniform4iEXT
   glProgramUniform4ivEXT_c
+  glProgramUniform4ivEXT_p
   glProgramUniform4iv_c
+  glProgramUniform4iv_p
   glProgramUniform4ui
   glProgramUniform4ui64ARB
   glProgramUniform4ui64NV
   glProgramUniform4ui64vARB_c
+  glProgramUniform4ui64vARB_p
   glProgramUniform4ui64vNV_c
+  glProgramUniform4ui64vNV_p
   glProgramUniform4uiEXT
   glProgramUniform4uivEXT_c
+  glProgramUniform4uivEXT_p
   glProgramUniform4uiv_c
+  glProgramUniform4uiv_p
   glProgramUniformHandleui64ARB
+  glProgramUniformHandleui64IMG
   glProgramUniformHandleui64NV
   glProgramUniformHandleui64vARB_c
+  glProgramUniformHandleui64vARB_p
+  glProgramUniformHandleui64vIMG_c
+  glProgramUniformHandleui64vIMG_p
   glProgramUniformHandleui64vNV_c
+  glProgramUniformHandleui64vNV_p
   glProgramUniformMatrix2dv_c
+  glProgramUniformMatrix2dv_p
   glProgramUniformMatrix2fvEXT_c
+  glProgramUniformMatrix2fvEXT_p
   glProgramUniformMatrix2fv_c
+  glProgramUniformMatrix2fv_p
   glProgramUniformMatrix2x3dv_c
+  glProgramUniformMatrix2x3dv_p
   glProgramUniformMatrix2x3fvEXT_c
+  glProgramUniformMatrix2x3fvEXT_p
   glProgramUniformMatrix2x3fv_c
+  glProgramUniformMatrix2x3fv_p
   glProgramUniformMatrix2x4dv_c
+  glProgramUniformMatrix2x4dv_p
   glProgramUniformMatrix2x4fvEXT_c
+  glProgramUniformMatrix2x4fvEXT_p
   glProgramUniformMatrix2x4fv_c
+  glProgramUniformMatrix2x4fv_p
   glProgramUniformMatrix3dv_c
+  glProgramUniformMatrix3dv_p
   glProgramUniformMatrix3fvEXT_c
+  glProgramUniformMatrix3fvEXT_p
   glProgramUniformMatrix3fv_c
+  glProgramUniformMatrix3fv_p
   glProgramUniformMatrix3x2dv_c
+  glProgramUniformMatrix3x2dv_p
   glProgramUniformMatrix3x2fvEXT_c
+  glProgramUniformMatrix3x2fvEXT_p
   glProgramUniformMatrix3x2fv_c
+  glProgramUniformMatrix3x2fv_p
   glProgramUniformMatrix3x4dv_c
+  glProgramUniformMatrix3x4dv_p
   glProgramUniformMatrix3x4fvEXT_c
+  glProgramUniformMatrix3x4fvEXT_p
   glProgramUniformMatrix3x4fv_c
+  glProgramUniformMatrix3x4fv_p
   glProgramUniformMatrix4dv_c
+  glProgramUniformMatrix4dv_p
   glProgramUniformMatrix4fvEXT_c
+  glProgramUniformMatrix4fvEXT_p
   glProgramUniformMatrix4fv_c
+  glProgramUniformMatrix4fv_p
   glProgramUniformMatrix4x2dv_c
+  glProgramUniformMatrix4x2dv_p
   glProgramUniformMatrix4x2fvEXT_c
+  glProgramUniformMatrix4x2fvEXT_p
   glProgramUniformMatrix4x2fv_c
+  glProgramUniformMatrix4x2fv_p
   glProgramUniformMatrix4x3dv_c
+  glProgramUniformMatrix4x3dv_p
   glProgramUniformMatrix4x3fvEXT_c
+  glProgramUniformMatrix4x3fvEXT_p
   glProgramUniformMatrix4x3fv_c
+  glProgramUniformMatrix4x3fv_p
   glProgramUniformui64NV
   glProgramUniformui64vNV_c
+  glProgramUniformui64vNV_p
   glProgramVertexLimitNV
   glProvokingVertex
   glProvokingVertexEXT
   glPushClientAttribDefaultEXT
   glPushDebugGroup
+  glPushDebugGroupKHR
   glPushGroupMarkerEXT
   glQueryCounter
   glQueryCounterANGLE
+  glQueryCounterEXT
   glQueryObjectParameteruiAMD
   glRasterSamplesEXT
   glReadBufferIndexedEXT
+  glReadBufferNV
   glReadBufferRegion
   glReadnPixelsARB_c
+  glReadnPixelsEXT_c
+  glReadnPixelsKHR_c
   glReadnPixels_c
   glReadVideoPixelsSUN_c
   glReferencePlaneSGIX_c
+  glReferencePlaneSGIX_p
   glReleaseKeyedMutexWin32EXT
   glReleaseShaderCompiler
   glRenderbufferStorageEXT
+  glRenderbufferStorageMultisampleAdvancedAMD
   glRenderbufferStorageMultisampleANGLE
   glRenderbufferStorageMultisampleAPPLE
   glRenderbufferStorageMultisampleCoverageNV
   glRenderbufferStorageMultisampleEXT
+  glRenderbufferStorageMultisampleIMG
   glRenderbufferStorageMultisampleNV
+  glRenderbufferStorageOES
   glRenderGpuMaskNV
   glReplacementCodePointerSUN_c
   glReplacementCodeubSUN
   glReplacementCodeubvSUN_c
   glReplacementCodeuiColor3fVertex3fSUN
   glReplacementCodeuiColor3fVertex3fvSUN_c
+  glReplacementCodeuiColor3fVertex3fvSUN_p
   glReplacementCodeuiColor4fNormal3fVertex3fSUN
   glReplacementCodeuiColor4fNormal3fVertex3fvSUN_c
+  glReplacementCodeuiColor4fNormal3fVertex3fvSUN_p
   glReplacementCodeuiColor4ubVertex3fSUN
   glReplacementCodeuiColor4ubVertex3fvSUN_c
+  glReplacementCodeuiColor4ubVertex3fvSUN_p
   glReplacementCodeuiNormal3fVertex3fSUN
   glReplacementCodeuiNormal3fVertex3fvSUN_c
+  glReplacementCodeuiNormal3fVertex3fvSUN_p
   glReplacementCodeuiSUN
   glReplacementCodeuiTexCoord2fColor4fNormal3fVertex3fSUN
   glReplacementCodeuiTexCoord2fColor4fNormal3fVertex3fvSUN_c
+  glReplacementCodeuiTexCoord2fColor4fNormal3fVertex3fvSUN_p
   glReplacementCodeuiTexCoord2fNormal3fVertex3fSUN
   glReplacementCodeuiTexCoord2fNormal3fVertex3fvSUN_c
+  glReplacementCodeuiTexCoord2fNormal3fVertex3fvSUN_p
   glReplacementCodeuiTexCoord2fVertex3fSUN
   glReplacementCodeuiTexCoord2fVertex3fvSUN_c
+  glReplacementCodeuiTexCoord2fVertex3fvSUN_p
   glReplacementCodeuiVertex3fSUN
   glReplacementCodeuiVertex3fvSUN_c
+  glReplacementCodeuiVertex3fvSUN_p
   glReplacementCodeuivSUN_c
   glReplacementCodeusSUN
   glReplacementCodeusvSUN_c
   glRequestResidentProgramsNV_c
+  glRequestResidentProgramsNV_p
   glResetHistogram
   glResetHistogramEXT
+  glResetMemoryObjectParameterNV
   glResetMinmax
   glResetMinmaxEXT
   glResizeBuffersMESA
+  glResolveDepthValuesNV
   glResolveMultisampleFramebufferAPPLE
   glResumeTransformFeedback
   glResumeTransformFeedbackNV
@@ -3145,66 +4179,110 @@ our @gl_functionsrest = qw(
   glSamplePatternSGIS
   glSamplerParameterf
   glSamplerParameterfv_c
+  glSamplerParameterfv_p
   glSamplerParameteri
+  glSamplerParameterIivEXT_c
+  glSamplerParameterIivEXT_p
+  glSamplerParameterIivOES_c
   glSamplerParameterIiv_c
+  glSamplerParameterIiv_p
+  glSamplerParameterIuivEXT_c
+  glSamplerParameterIuivEXT_p
+  glSamplerParameterIuivOES_c
   glSamplerParameterIuiv_c
+  glSamplerParameterIuiv_p
   glSamplerParameteriv_c
+  glSamplerParameteriv_p
   glScalex
   glScissorArrayvNV_c
+  glScissorArrayvNV_p
   glScissorArrayv_c
+  glScissorArrayv_p
+  glScissorExclusiveArrayvNV_c
+  glScissorExclusiveArrayvNV_p
+  glScissorExclusiveNV
   glScissorIndexed
   glScissorIndexedNV
   glScissorIndexedvNV_c
+  glScissorIndexedvNV_p
   glScissorIndexedv_c
+  glScissorIndexedv_p
   glSecondaryColor3bEXT
   glSecondaryColor3bvEXT_c
+  glSecondaryColor3bvEXT_p
   glSecondaryColor3dEXT
   glSecondaryColor3dvEXT_c
+  glSecondaryColor3dvEXT_p
   glSecondaryColor3fEXT
   glSecondaryColor3fvEXT_c
+  glSecondaryColor3fvEXT_p
   glSecondaryColor3hNV
   glSecondaryColor3hvNV_c
+  glSecondaryColor3hvNV_p
   glSecondaryColor3iEXT
   glSecondaryColor3ivEXT_c
+  glSecondaryColor3ivEXT_p
   glSecondaryColor3sEXT
   glSecondaryColor3svEXT_c
+  glSecondaryColor3svEXT_p
   glSecondaryColor3ubEXT
   glSecondaryColor3ubvEXT_c
+  glSecondaryColor3ubvEXT_p
   glSecondaryColor3uiEXT
   glSecondaryColor3uivEXT_c
+  glSecondaryColor3uivEXT_p
   glSecondaryColor3usEXT
   glSecondaryColor3usvEXT_c
+  glSecondaryColor3usvEXT_p
   glSecondaryColorFormatNV
   glSecondaryColorP3ui
   glSecondaryColorP3uiv_c
+  glSecondaryColorP3uiv_p
   glSecondaryColorPointerEXT_c
   glSecondaryColorPointerListIBM_c
   glSelectPerfMonitorCountersAMD_c
+  glSelectPerfMonitorCountersAMD_p
   glSelectTextureCoordSetSGIS
   glSelectTextureSGIS
   glSelectTextureTransformSGIS
+  glSemaphoreParameterivNV_c
   glSemaphoreParameterui64vEXT_c
   glSeparableFilter2DEXT_c
   glSeparableFilter2D_c
   glSetFenceAPPLE
   glSetFenceNV
   glSetFragmentShaderConstantATI_c
+  glSetFragmentShaderConstantATI_p
   glSetInvariantEXT_c
   glSetLocalConstantEXT_c
   glSetMultisamplefvAMD_c
+  glSetMultisamplefvAMD_p
   glShaderBinary_c
   glShaderOp1EXT
   glShaderOp2EXT
   glShaderOp3EXT
   glShaderSourceARB_c
-  glShaderSource_p
+  glShaderSourceARB_p
   glShaderStorageBlockBinding
+  glShadingRateCombinerOpsEXT
+  glShadingRateEXT
+  glShadingRateImageBarrierNV
+  glShadingRateImagePaletteNV_c
+  glShadingRateImagePaletteNV_p
+  glShadingRateQCOM
+  glShadingRateSampleOrderCustomNV_c
+  glShadingRateSampleOrderNV
   glSharpenTexFuncSGIS_c
+  glSharpenTexFuncSGIS_p
   glSignalSemaphoreEXT_c
+  glSignalSemaphoreui64NVX_c
+  glSignalSemaphoreui64NVX_p
   glSignalVkFenceNV
   glSignalVkSemaphoreNV
   glSpecializeShaderARB_c
+  glSpecializeShaderARB_p
   glSpecializeShader_c
+  glSpecializeShader_p
   glSpriteParameterfSGIX
   glSpriteParameterfvSGIX_c
   glSpriteParameteriSGIX
@@ -3237,61 +4315,97 @@ our @gl_functionsrest = qw(
   glTestFenceAPPLE
   glTestFenceNV
   glTestObjectAPPLE
+  glTexAttachMemoryNV
   glTexBufferARB
   glTexBufferEXT
+  glTexBufferOES
   glTexBufferRange
+  glTexBufferRangeEXT
+  glTexBufferRangeOES
   glTexBumpParameterfvATI_c
   glTexBumpParameterivATI_c
   glTexCoord1hNV
   glTexCoord1hvNV_c
+  glTexCoord1hvNV_p
   glTexCoord2fColor3fVertex3fSUN
   glTexCoord2fColor3fVertex3fvSUN_c
+  glTexCoord2fColor3fVertex3fvSUN_p
   glTexCoord2fColor4fNormal3fVertex3fSUN
   glTexCoord2fColor4fNormal3fVertex3fvSUN_c
+  glTexCoord2fColor4fNormal3fVertex3fvSUN_p
   glTexCoord2fColor4ubVertex3fSUN
   glTexCoord2fColor4ubVertex3fvSUN_c
+  glTexCoord2fColor4ubVertex3fvSUN_p
   glTexCoord2fNormal3fVertex3fSUN
   glTexCoord2fNormal3fVertex3fvSUN_c
+  glTexCoord2fNormal3fVertex3fvSUN_p
   glTexCoord2fVertex3fSUN
   glTexCoord2fVertex3fvSUN_c
+  glTexCoord2fVertex3fvSUN_p
   glTexCoord2hNV
   glTexCoord2hvNV_c
+  glTexCoord2hvNV_p
   glTexCoord3hNV
   glTexCoord3hvNV_c
+  glTexCoord3hvNV_p
   glTexCoord4fColor4fNormal3fVertex4fSUN
   glTexCoord4fColor4fNormal3fVertex4fvSUN_c
+  glTexCoord4fColor4fNormal3fVertex4fvSUN_p
   glTexCoord4fVertex4fSUN
   glTexCoord4fVertex4fvSUN_c
+  glTexCoord4fVertex4fvSUN_p
   glTexCoord4hNV
   glTexCoord4hvNV_c
+  glTexCoord4hvNV_p
   glTexCoordFormatNV
   glTexCoordP1ui
   glTexCoordP1uiv_c
+  glTexCoordP1uiv_p
   glTexCoordP2ui
   glTexCoordP2uiv_c
+  glTexCoordP2uiv_p
   glTexCoordP3ui
   glTexCoordP3uiv_c
+  glTexCoordP3uiv_p
   glTexCoordP4ui
   glTexCoordP4uiv_c
+  glTexCoordP4uiv_p
   glTexCoordPointerEXT_c
   glTexCoordPointerListIBM_c
   glTexCoordPointervINTEL_c
   glTexEnvx
   glTexEnvxv_c
+  glTexEnvxv_p
+  glTexEstimateMotionQCOM
+  glTexEstimateMotionRegionsQCOM
   glTexFilterFuncSGIS_c
+  glTexFilterFuncSGIS_p
+  glTexGenfOES
+  glTexGenfvOES_c
+  glTexGeniOES
+  glTexGenivOES_c
+  glTexGenxOES
+  glTexGenxvOES_c
   glTexImage2DMultisample
   glTexImage2DMultisampleCoverageNV
   glTexImage3DEXT_c
   glTexImage3DMultisample
   glTexImage3DMultisampleCoverageNV
   glTexImage3DNV_c
+  glTexImage3DOES_c
   glTexImage4DSGIS_c
   glTexPageCommitmentARB
   glTexPageCommitmentEXT
+  glTexPageCommitmentMemNV
   glTexParameterIivEXT_c
+  glTexParameterIivEXT_p
+  glTexParameterIivOES_c
   glTexParameterIuivEXT_c
+  glTexParameterIuivEXT_p
+  glTexParameterIuivOES_c
   glTexParameterx
   glTexParameterxv_c
+  glTexParameterxv_p
   glTexRenderbufferNV
   glTexScissorFuncINTEL
   glTexScissorINTEL
@@ -3303,6 +4417,9 @@ our @gl_functionsrest = qw(
   glTexStorage3D
   glTexStorage3DEXT
   glTexStorage3DMultisample
+  glTexStorage3DMultisampleOES
+  glTexStorageAttribs2DEXT_c
+  glTexStorageAttribs3DEXT_c
   glTexStorageMem1DEXT
   glTexStorageMem2DEXT
   glTexStorageMem2DMultisampleEXT
@@ -3313,7 +4430,9 @@ our @gl_functionsrest = qw(
   glTexSubImage2DEXT_c
   glTexSubImage3DEXT_c
   glTexSubImage3DNV_c
+  glTexSubImage3DOES_c
   glTexSubImage4DSGIS_c
+  glTextureAttachMemoryNV
   glTextureBarrier
   glTextureBarrierNV
   glTextureBuffer
@@ -3321,6 +4440,7 @@ our @gl_functionsrest = qw(
   glTextureBufferRange
   glTextureBufferRangeEXT
   glTextureFogSGIX
+  glTextureFoveationParametersQCOM
   glTextureImage1DEXT_c
   glTextureImage2DEXT_c
   glTextureImage2DMultisampleCoverageNV
@@ -3332,18 +4452,27 @@ our @gl_functionsrest = qw(
   glTextureMaterialEXT
   glTextureNormalEXT
   glTexturePageCommitmentEXT
+  glTexturePageCommitmentMemNV
   glTextureParameterf
   glTextureParameterfEXT
   glTextureParameterfvEXT_c
+  glTextureParameterfvEXT_p
   glTextureParameterfv_c
+  glTextureParameterfv_p
   glTextureParameteri
   glTextureParameteriEXT
   glTextureParameterIivEXT_c
+  glTextureParameterIivEXT_p
   glTextureParameterIiv_c
+  glTextureParameterIiv_p
   glTextureParameterIuivEXT_c
+  glTextureParameterIuivEXT_p
   glTextureParameterIuiv_c
+  glTextureParameterIuiv_p
   glTextureParameterivEXT_c
+  glTextureParameterivEXT_p
   glTextureParameteriv_c
+  glTextureParameteriv_p
   glTextureRangeAPPLE_c
   glTextureRenderbufferEXT
   glTextureStorage1D
@@ -3370,111 +4499,173 @@ our @gl_functionsrest = qw(
   glTextureSubImage3D_c
   glTextureView
   glTextureViewEXT
+  glTextureViewOES
   glTrackMatrixNV
   glTransformFeedbackAttribsNV_c
   glTransformFeedbackBufferBase
   glTransformFeedbackBufferRange
   glTransformFeedbackVaryingsEXT_c
+  glTransformFeedbackVaryingsEXT_p
   glTransformFeedbackVaryingsNV_c
+  glTransformFeedbackVaryingsNV_p
   glTransformPathNV_c
   glTranslatex
   glUniform1d
   glUniform1dv_c
+  glUniform1dv_p
   glUniform1fARB
   glUniform1fvARB_c
+  glUniform1fvARB_p
   glUniform1i64ARB
   glUniform1i64NV
   glUniform1i64vARB_c
+  glUniform1i64vARB_p
   glUniform1i64vNV_c
+  glUniform1i64vNV_p
   glUniform1iARB
   glUniform1ivARB_c
+  glUniform1ivARB_p
   glUniform1ui64ARB
   glUniform1ui64NV
   glUniform1ui64vARB_c
+  glUniform1ui64vARB_p
   glUniform1ui64vNV_c
+  glUniform1ui64vNV_p
   glUniform1uiEXT
   glUniform1uivEXT_c
+  glUniform1uivEXT_p
   glUniform2d
   glUniform2dv_c
+  glUniform2dv_p
   glUniform2fARB
   glUniform2fvARB_c
+  glUniform2fvARB_p
   glUniform2i64ARB
   glUniform2i64NV
   glUniform2i64vARB_c
+  glUniform2i64vARB_p
   glUniform2i64vNV_c
+  glUniform2i64vNV_p
   glUniform2iARB
   glUniform2ivARB_c
+  glUniform2ivARB_p
   glUniform2ui64ARB
   glUniform2ui64NV
   glUniform2ui64vARB_c
+  glUniform2ui64vARB_p
   glUniform2ui64vNV_c
+  glUniform2ui64vNV_p
   glUniform2uiEXT
   glUniform2uivEXT_c
+  glUniform2uivEXT_p
   glUniform3d
   glUniform3dv_c
+  glUniform3dv_p
   glUniform3fARB
   glUniform3fvARB_c
+  glUniform3fvARB_p
   glUniform3i64ARB
   glUniform3i64NV
   glUniform3i64vARB_c
+  glUniform3i64vARB_p
   glUniform3i64vNV_c
+  glUniform3i64vNV_p
   glUniform3iARB
   glUniform3ivARB_c
+  glUniform3ivARB_p
   glUniform3ui64ARB
   glUniform3ui64NV
   glUniform3ui64vARB_c
+  glUniform3ui64vARB_p
   glUniform3ui64vNV_c
+  glUniform3ui64vNV_p
   glUniform3uiEXT
   glUniform3uivEXT_c
+  glUniform3uivEXT_p
   glUniform4d
   glUniform4dv_c
+  glUniform4dv_p
   glUniform4fARB
   glUniform4fvARB_c
+  glUniform4fvARB_p
   glUniform4i64ARB
   glUniform4i64NV
   glUniform4i64vARB_c
+  glUniform4i64vARB_p
   glUniform4i64vNV_c
+  glUniform4i64vNV_p
   glUniform4iARB
   glUniform4ivARB_c
+  glUniform4ivARB_p
   glUniform4ui64ARB
   glUniform4ui64NV
   glUniform4ui64vARB_c
+  glUniform4ui64vARB_p
   glUniform4ui64vNV_c
+  glUniform4ui64vNV_p
   glUniform4uiEXT
   glUniform4uivEXT_c
+  glUniform4uivEXT_p
   glUniformBufferEXT
   glUniformHandleui64ARB
+  glUniformHandleui64IMG
   glUniformHandleui64NV
   glUniformHandleui64vARB_c
+  glUniformHandleui64vARB_p
+  glUniformHandleui64vIMG_c
+  glUniformHandleui64vIMG_p
   glUniformHandleui64vNV_c
+  glUniformHandleui64vNV_p
   glUniformMatrix2dv_c
+  glUniformMatrix2dv_p
   glUniformMatrix2fvARB_c
+  glUniformMatrix2fvARB_p
   glUniformMatrix2x3dv_c
+  glUniformMatrix2x3dv_p
   glUniformMatrix2x3fvNV_c
+  glUniformMatrix2x3fvNV_p
   glUniformMatrix2x4dv_c
+  glUniformMatrix2x4dv_p
   glUniformMatrix2x4fvNV_c
+  glUniformMatrix2x4fvNV_p
   glUniformMatrix3dv_c
+  glUniformMatrix3dv_p
   glUniformMatrix3fvARB_c
+  glUniformMatrix3fvARB_p
   glUniformMatrix3x2dv_c
+  glUniformMatrix3x2dv_p
   glUniformMatrix3x2fvNV_c
+  glUniformMatrix3x2fvNV_p
   glUniformMatrix3x4dv_c
+  glUniformMatrix3x4dv_p
   glUniformMatrix3x4fvNV_c
+  glUniformMatrix3x4fvNV_p
   glUniformMatrix4dv_c
+  glUniformMatrix4dv_p
   glUniformMatrix4fvARB_c
+  glUniformMatrix4fvARB_p
   glUniformMatrix4x2dv_c
+  glUniformMatrix4x2dv_p
   glUniformMatrix4x2fvNV_c
+  glUniformMatrix4x2fvNV_p
   glUniformMatrix4x3dv_c
+  glUniformMatrix4x3dv_p
   glUniformMatrix4x3fvNV_c
+  glUniformMatrix4x3fvNV_p
   glUniformSubroutinesuiv_c
+  glUniformSubroutinesuiv_p
   glUniformui64NV
   glUniformui64vNV_c
+  glUniformui64vNV_p
   glUnlockArraysEXT
   glUnmapBufferARB
+  glUnmapBufferOES
   glUnmapNamedBuffer
   glUnmapNamedBufferEXT
   glUnmapObjectBufferATI
   glUnmapTexture2DINTEL
   glUpdateObjectBufferATI_c
+  glUploadGpuMaskNVX
   glUseProgramObjectARB
   glUseProgramStages
   glUseShaderProgramEXT
@@ -3497,16 +4688,20 @@ our @gl_functionsrest = qw(
   glVDPAUMapSurfacesNV_c
   glVDPAURegisterOutputSurfaceNV_c
   glVDPAURegisterVideoSurfaceNV_c
+  glVDPAURegisterVideoSurfaceWithPictureStructureNV_c
   glVDPAUSurfaceAccessNV
   glVDPAUUnmapSurfacesNV_c
   glVDPAUUnregisterSurfaceNV
   glVectorOperationSGIX
   glVertex2hNV
   glVertex2hvNV_c
+  glVertex2hvNV_p
   glVertex3hNV
   glVertex3hvNV_c
+  glVertex3hvNV_p
   glVertex4hNV
   glVertex4hvNV_c
+  glVertex4hvNV_p
   glVertexArrayAttribBinding
   glVertexArrayAttribFormat
   glVertexArrayAttribIFormat
@@ -3540,73 +4735,113 @@ our @gl_functionsrest = qw(
   glVertexAttrib1dARB
   glVertexAttrib1dNV
   glVertexAttrib1dvARB_c
+  glVertexAttrib1dvARB_p
   glVertexAttrib1dvNV_c
+  glVertexAttrib1dvNV_p
   glVertexAttrib1fARB
   glVertexAttrib1fNV
   glVertexAttrib1fvARB_c
+  glVertexAttrib1fvARB_p
   glVertexAttrib1fvNV_c
+  glVertexAttrib1fvNV_p
   glVertexAttrib1hNV
   glVertexAttrib1hvNV_c
+  glVertexAttrib1hvNV_p
   glVertexAttrib1sARB
   glVertexAttrib1sNV
   glVertexAttrib1svARB_c
+  glVertexAttrib1svARB_p
   glVertexAttrib1svNV_c
+  glVertexAttrib1svNV_p
   glVertexAttrib2dARB
   glVertexAttrib2dNV
   glVertexAttrib2dvARB_c
+  glVertexAttrib2dvARB_p
   glVertexAttrib2dvNV_c
+  glVertexAttrib2dvNV_p
   glVertexAttrib2fARB
   glVertexAttrib2fNV
   glVertexAttrib2fvARB_c
+  glVertexAttrib2fvARB_p
   glVertexAttrib2fvNV_c
+  glVertexAttrib2fvNV_p
   glVertexAttrib2hNV
   glVertexAttrib2hvNV_c
+  glVertexAttrib2hvNV_p
   glVertexAttrib2sARB
   glVertexAttrib2sNV
   glVertexAttrib2svARB_c
+  glVertexAttrib2svARB_p
   glVertexAttrib2svNV_c
+  glVertexAttrib2svNV_p
   glVertexAttrib3dARB
   glVertexAttrib3dNV
   glVertexAttrib3dvARB_c
+  glVertexAttrib3dvARB_p
   glVertexAttrib3dvNV_c
+  glVertexAttrib3dvNV_p
   glVertexAttrib3fARB
   glVertexAttrib3fNV
   glVertexAttrib3fvARB_c
+  glVertexAttrib3fvARB_p
   glVertexAttrib3fvNV_c
+  glVertexAttrib3fvNV_p
   glVertexAttrib3hNV
   glVertexAttrib3hvNV_c
+  glVertexAttrib3hvNV_p
   glVertexAttrib3sARB
   glVertexAttrib3sNV
   glVertexAttrib3svARB_c
+  glVertexAttrib3svARB_p
   glVertexAttrib3svNV_c
+  glVertexAttrib3svNV_p
   glVertexAttrib4bvARB_c
+  glVertexAttrib4bvARB_p
   glVertexAttrib4dARB
   glVertexAttrib4dNV
   glVertexAttrib4dvARB_c
+  glVertexAttrib4dvARB_p
   glVertexAttrib4dvNV_c
+  glVertexAttrib4dvNV_p
   glVertexAttrib4fARB
   glVertexAttrib4fNV
   glVertexAttrib4fvARB_c
+  glVertexAttrib4fvARB_p
   glVertexAttrib4fvNV_c
+  glVertexAttrib4fvNV_p
   glVertexAttrib4hNV
   glVertexAttrib4hvNV_c
+  glVertexAttrib4hvNV_p
   glVertexAttrib4ivARB_c
+  glVertexAttrib4ivARB_p
   glVertexAttrib4NbvARB_c
+  glVertexAttrib4NbvARB_p
   glVertexAttrib4NivARB_c
+  glVertexAttrib4NivARB_p
   glVertexAttrib4NsvARB_c
+  glVertexAttrib4NsvARB_p
   glVertexAttrib4NubARB
   glVertexAttrib4NubvARB_c
+  glVertexAttrib4NubvARB_p
   glVertexAttrib4NuivARB_c
+  glVertexAttrib4NuivARB_p
   glVertexAttrib4NusvARB_c
+  glVertexAttrib4NusvARB_p
   glVertexAttrib4sARB
   glVertexAttrib4sNV
   glVertexAttrib4svARB_c
+  glVertexAttrib4svARB_p
   glVertexAttrib4svNV_c
+  glVertexAttrib4svNV_p
   glVertexAttrib4ubNV
   glVertexAttrib4ubvARB_c
+  glVertexAttrib4ubvARB_p
   glVertexAttrib4ubvNV_c
+  glVertexAttrib4ubvNV_p
   glVertexAttrib4uivARB_c
+  glVertexAttrib4uivARB_p
   glVertexAttrib4usvARB_c
+  glVertexAttrib4usvARB_p
   glVertexAttribArrayObjectATI
   glVertexAttribBinding
   glVertexAttribDivisor
@@ -3618,93 +4853,142 @@ our @gl_functionsrest = qw(
   glVertexAttribFormatNV
   glVertexAttribI1iEXT
   glVertexAttribI1ivEXT_c
+  glVertexAttribI1ivEXT_p
   glVertexAttribI1uiEXT
   glVertexAttribI1uivEXT_c
+  glVertexAttribI1uivEXT_p
   glVertexAttribI2iEXT
   glVertexAttribI2ivEXT_c
+  glVertexAttribI2ivEXT_p
   glVertexAttribI2uiEXT
   glVertexAttribI2uivEXT_c
+  glVertexAttribI2uivEXT_p
   glVertexAttribI3iEXT
   glVertexAttribI3ivEXT_c
+  glVertexAttribI3ivEXT_p
   glVertexAttribI3uiEXT
   glVertexAttribI3uivEXT_c
+  glVertexAttribI3uivEXT_p
   glVertexAttribI4bvEXT_c
+  glVertexAttribI4bvEXT_p
   glVertexAttribI4iEXT
   glVertexAttribI4ivEXT_c
+  glVertexAttribI4ivEXT_p
   glVertexAttribI4svEXT_c
+  glVertexAttribI4svEXT_p
   glVertexAttribI4ubvEXT_c
+  glVertexAttribI4ubvEXT_p
   glVertexAttribI4uiEXT
   glVertexAttribI4uivEXT_c
+  glVertexAttribI4uivEXT_p
   glVertexAttribI4usvEXT_c
+  glVertexAttribI4usvEXT_p
   glVertexAttribIFormat
   glVertexAttribIFormatNV
   glVertexAttribIPointerEXT_c
   glVertexAttribL1d
   glVertexAttribL1dEXT
   glVertexAttribL1dvEXT_c
+  glVertexAttribL1dvEXT_p
   glVertexAttribL1dv_c
+  glVertexAttribL1dv_p
   glVertexAttribL1i64NV
   glVertexAttribL1i64vNV_c
+  glVertexAttribL1i64vNV_p
   glVertexAttribL1ui64ARB
   glVertexAttribL1ui64NV
   glVertexAttribL1ui64vARB_c
   glVertexAttribL1ui64vNV_c
+  glVertexAttribL1ui64vNV_p
   glVertexAttribL2d
   glVertexAttribL2dEXT
   glVertexAttribL2dvEXT_c
+  glVertexAttribL2dvEXT_p
   glVertexAttribL2dv_c
+  glVertexAttribL2dv_p
   glVertexAttribL2i64NV
   glVertexAttribL2i64vNV_c
+  glVertexAttribL2i64vNV_p
   glVertexAttribL2ui64NV
   glVertexAttribL2ui64vNV_c
+  glVertexAttribL2ui64vNV_p
   glVertexAttribL3d
   glVertexAttribL3dEXT
   glVertexAttribL3dvEXT_c
+  glVertexAttribL3dvEXT_p
   glVertexAttribL3dv_c
+  glVertexAttribL3dv_p
   glVertexAttribL3i64NV
   glVertexAttribL3i64vNV_c
+  glVertexAttribL3i64vNV_p
   glVertexAttribL3ui64NV
   glVertexAttribL3ui64vNV_c
+  glVertexAttribL3ui64vNV_p
   glVertexAttribL4d
   glVertexAttribL4dEXT
   glVertexAttribL4dvEXT_c
+  glVertexAttribL4dvEXT_p
   glVertexAttribL4dv_c
+  glVertexAttribL4dv_p
   glVertexAttribL4i64NV
   glVertexAttribL4i64vNV_c
+  glVertexAttribL4i64vNV_p
   glVertexAttribL4ui64NV
   glVertexAttribL4ui64vNV_c
+  glVertexAttribL4ui64vNV_p
   glVertexAttribLFormat
   glVertexAttribLFormatNV
   glVertexAttribLPointerEXT_c
   glVertexAttribLPointer_c
   glVertexAttribP1ui
   glVertexAttribP1uiv_c
+  glVertexAttribP1uiv_p
   glVertexAttribP2ui
   glVertexAttribP2uiv_c
+  glVertexAttribP2uiv_p
   glVertexAttribP3ui
   glVertexAttribP3uiv_c
+  glVertexAttribP3uiv_p
   glVertexAttribP4ui
   glVertexAttribP4uiv_c
+  glVertexAttribP4uiv_p
   glVertexAttribParameteriAMD
   glVertexAttribPointerARB_c
   glVertexAttribPointerNV_c
   glVertexAttribs1dvNV_c
+  glVertexAttribs1dvNV_p
   glVertexAttribs1fvNV_c
+  glVertexAttribs1fvNV_p
   glVertexAttribs1hvNV_c
+  glVertexAttribs1hvNV_p
   glVertexAttribs1svNV_c
+  glVertexAttribs1svNV_p
   glVertexAttribs2dvNV_c
+  glVertexAttribs2dvNV_p
   glVertexAttribs2fvNV_c
+  glVertexAttribs2fvNV_p
   glVertexAttribs2hvNV_c
+  glVertexAttribs2hvNV_p
   glVertexAttribs2svNV_c
+  glVertexAttribs2svNV_p
   glVertexAttribs3dvNV_c
+  glVertexAttribs3dvNV_p
   glVertexAttribs3fvNV_c
+  glVertexAttribs3fvNV_p
   glVertexAttribs3hvNV_c
+  glVertexAttribs3hvNV_p
   glVertexAttribs3svNV_c
+  glVertexAttribs3svNV_p
   glVertexAttribs4dvNV_c
+  glVertexAttribs4dvNV_p
   glVertexAttribs4fvNV_c
+  glVertexAttribs4fvNV_p
   glVertexAttribs4hvNV_c
+  glVertexAttribs4hvNV_p
   glVertexAttribs4svNV_c
+  glVertexAttribs4svNV_p
   glVertexAttribs4ubvNV_c
+  glVertexAttribs4ubvNV_p
   glVertexBindingDivisor
   glVertexBlendARB
   glVertexBlendEnvfATI
@@ -3712,117 +4996,175 @@ our @gl_functionsrest = qw(
   glVertexFormatNV
   glVertexP2ui
   glVertexP2uiv_c
+  glVertexP2uiv_p
   glVertexP3ui
   glVertexP3uiv_c
+  glVertexP3uiv_p
   glVertexP4ui
   glVertexP4uiv_c
+  glVertexP4uiv_p
   glVertexPointerEXT_c
   glVertexPointerListIBM_c
   glVertexPointervINTEL_c
   glVertexStream1dATI
   glVertexStream1dvATI_c
+  glVertexStream1dvATI_p
   glVertexStream1fATI
   glVertexStream1fvATI_c
+  glVertexStream1fvATI_p
   glVertexStream1iATI
   glVertexStream1ivATI_c
+  glVertexStream1ivATI_p
   glVertexStream1sATI
   glVertexStream1svATI_c
+  glVertexStream1svATI_p
   glVertexStream2dATI
   glVertexStream2dvATI_c
+  glVertexStream2dvATI_p
   glVertexStream2fATI
   glVertexStream2fvATI_c
+  glVertexStream2fvATI_p
   glVertexStream2iATI
   glVertexStream2ivATI_c
+  glVertexStream2ivATI_p
   glVertexStream2sATI
   glVertexStream2svATI_c
+  glVertexStream2svATI_p
   glVertexStream3dATI
   glVertexStream3dvATI_c
+  glVertexStream3dvATI_p
   glVertexStream3fATI
   glVertexStream3fvATI_c
+  glVertexStream3fvATI_p
   glVertexStream3iATI
   glVertexStream3ivATI_c
+  glVertexStream3ivATI_p
   glVertexStream3sATI
   glVertexStream3svATI_c
+  glVertexStream3svATI_p
   glVertexStream4dATI
   glVertexStream4dvATI_c
+  glVertexStream4dvATI_p
   glVertexStream4fATI
   glVertexStream4fvATI_c
+  glVertexStream4fvATI_p
   glVertexStream4iATI
   glVertexStream4ivATI_c
+  glVertexStream4ivATI_p
   glVertexStream4sATI
   glVertexStream4svATI_c
+  glVertexStream4svATI_p
   glVertexWeightfEXT
   glVertexWeightfvEXT_c
+  glVertexWeightfvEXT_p
   glVertexWeighthNV
   glVertexWeighthvNV_c
+  glVertexWeighthvNV_p
   glVertexWeightPointerEXT_c
   glVideoCaptureNV_c
   glVideoCaptureStreamParameterdvNV_c
   glVideoCaptureStreamParameterfvNV_c
   glVideoCaptureStreamParameterivNV_c
   glViewportArrayvNV_c
+  glViewportArrayvNV_p
   glViewportArrayv_c
+  glViewportArrayv_p
   glViewportIndexedf
   glViewportIndexedfNV
   glViewportIndexedfvNV_c
+  glViewportIndexedfvNV_p
   glViewportIndexedfv_c
+  glViewportIndexedfv_p
   glViewportPositionWScaleNV
   glViewportSwizzleNV
   glWaitSemaphoreEXT_c
+  glWaitSemaphoreui64NVX_c
+  glWaitSemaphoreui64NVX_p
   glWaitSync
   glWaitSyncAPPLE
   glWaitVkSemaphoreNV
   glWeightbvARB_c
+  glWeightbvARB_p
   glWeightdvARB_c
+  glWeightdvARB_p
   glWeightfvARB_c
+  glWeightfvARB_p
   glWeightivARB_c
+  glWeightivARB_p
   glWeightPathsNV_c
+  glWeightPathsNV_p
   glWeightPointerARB_c
+  glWeightPointerOES_c
   glWeightsvARB_c
+  glWeightsvARB_p
   glWeightubvARB_c
+  glWeightubvARB_p
   glWeightuivARB_c
+  glWeightuivARB_p
   glWeightusvARB_c
+  glWeightusvARB_p
   glWindowPos2dARB
   glWindowPos2dMESA
   glWindowPos2dvARB_c
+  glWindowPos2dvARB_p
   glWindowPos2dvMESA_c
+  glWindowPos2dvMESA_p
   glWindowPos2fARB
   glWindowPos2fMESA
   glWindowPos2fvARB_c
+  glWindowPos2fvARB_p
   glWindowPos2fvMESA_c
+  glWindowPos2fvMESA_p
   glWindowPos2iARB
   glWindowPos2iMESA
   glWindowPos2ivARB_c
+  glWindowPos2ivARB_p
   glWindowPos2ivMESA_c
+  glWindowPos2ivMESA_p
   glWindowPos2sARB
   glWindowPos2sMESA
   glWindowPos2svARB_c
+  glWindowPos2svARB_p
   glWindowPos2svMESA_c
+  glWindowPos2svMESA_p
   glWindowPos3dARB
   glWindowPos3dMESA
   glWindowPos3dvARB_c
+  glWindowPos3dvARB_p
   glWindowPos3dvMESA_c
+  glWindowPos3dvMESA_p
   glWindowPos3fARB
   glWindowPos3fMESA
   glWindowPos3fvARB_c
+  glWindowPos3fvARB_p
   glWindowPos3fvMESA_c
+  glWindowPos3fvMESA_p
   glWindowPos3iARB
   glWindowPos3iMESA
   glWindowPos3ivARB_c
+  glWindowPos3ivARB_p
   glWindowPos3ivMESA_c
+  glWindowPos3ivMESA_p
   glWindowPos3sARB
   glWindowPos3sMESA
   glWindowPos3svARB_c
+  glWindowPos3svARB_p
   glWindowPos3svMESA_c
+  glWindowPos3svMESA_p
   glWindowPos4dMESA
   glWindowPos4dvMESA_c
+  glWindowPos4dvMESA_p
   glWindowPos4fMESA
   glWindowPos4fvMESA_c
+  glWindowPos4fvMESA_p
   glWindowPos4iMESA
   glWindowPos4ivMESA_c
+  glWindowPos4ivMESA_p
   glWindowPos4sMESA
   glWindowPos4svMESA_c
+  glWindowPos4svMESA_p
   glWindowRectanglesEXT_c
+  glWindowRectanglesEXT_p
   glWriteMaskEXT
 );
 our %EXPORT_TAGS_GL = (
@@ -3832,14 +5174,20 @@ our %EXPORT_TAGS_GL = (
   'GL_AMD_debug_output' => [
     'glDebugMessageCallbackAMD_c',
     'glDebugMessageEnableAMD_c',
+    'glDebugMessageEnableAMD_p',
     'glDebugMessageInsertAMD',
-    'glGetDebugMessageLogAMD_c'
+    'glGetDebugMessageLogAMD_c',
+    'glGetDebugMessageLogAMD_p'
   ],
   'GL_AMD_draw_buffers_blend' => [
     'glBlendEquationIndexedAMD',
     'glBlendEquationSeparateIndexedAMD',
     'glBlendFuncIndexedAMD',
     'glBlendFuncSeparateIndexedAMD'
+  ],
+  'GL_AMD_framebuffer_multisample_advanced' => [
+    'glNamedRenderbufferStorageMultisampleAdvancedAMD',
+    'glRenderbufferStorageMultisampleAdvancedAMD'
   ],
   'GL_AMD_framebuffer_sample_positions' => [
     'glFramebufferSamplePositionsfvAMD_c',
@@ -3856,7 +5204,9 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_AMD_name_gen_delete' => [
     'glDeleteNamesAMD_c',
+    'glDeleteNamesAMD_p',
     'glGenNamesAMD_c',
+    'glGenNamesAMD_p',
     'glIsNameAMD'
   ],
   'GL_AMD_occlusion_query_event' => [
@@ -3865,19 +5215,27 @@ our %EXPORT_TAGS_GL = (
   'GL_AMD_performance_monitor' => [
     'glBeginPerfMonitorAMD',
     'glDeletePerfMonitorsAMD_c',
+    'glDeletePerfMonitorsAMD_p',
     'glEndPerfMonitorAMD',
     'glGenPerfMonitorsAMD_c',
     'glGenPerfMonitorsAMD_p',
     'glGetPerfMonitorCounterDataAMD_c',
+    'glGetPerfMonitorCounterDataAMD_p',
     'glGetPerfMonitorCounterInfoAMD_c',
     'glGetPerfMonitorCounterStringAMD_c',
+    'glGetPerfMonitorCounterStringAMD_p',
     'glGetPerfMonitorCountersAMD_c',
+    'glGetPerfMonitorCountersAMD_p',
     'glGetPerfMonitorGroupStringAMD_c',
+    'glGetPerfMonitorGroupStringAMD_p',
     'glGetPerfMonitorGroupsAMD_c',
-    'glSelectPerfMonitorCountersAMD_c'
+    'glGetPerfMonitorGroupsAMD_p',
+    'glSelectPerfMonitorCountersAMD_c',
+    'glSelectPerfMonitorCountersAMD_p'
   ],
   'GL_AMD_sample_positions' => [
-    'glSetMultisamplefvAMD_c'
+    'glSetMultisamplefvAMD_c',
+    'glSetMultisamplefvAMD_p'
   ],
   'GL_AMD_sparse_texture' => [
     'glTexStorageSparseAMD',
@@ -3904,10 +5262,8 @@ our %EXPORT_TAGS_GL = (
   'GL_ANGLE_timer_query' => [
     'glBeginQueryANGLE',
     'glDeleteQueriesANGLE_c',
-    'glDeleteQueriesANGLE_p',
     'glEndQueryANGLE',
     'glGenQueriesANGLE_c',
-    'glGenQueriesANGLE_p',
     'glGetQueryObjecti64vANGLE_c',
     'glGetQueryObjectivANGLE_c',
     'glGetQueryObjectui64vANGLE_c',
@@ -3917,7 +5273,8 @@ our %EXPORT_TAGS_GL = (
     'glQueryCounterANGLE'
   ],
   'GL_ANGLE_translated_shader_source' => [
-    'glGetTranslatedShaderSourceANGLE_c'
+    'glGetTranslatedShaderSourceANGLE_c',
+    'glGetTranslatedShaderSourceANGLE_p'
   ],
   'GL_APPLE_copy_texture_levels' => [
     'glCopyTextureLevelsAPPLE'
@@ -3927,7 +5284,9 @@ our %EXPORT_TAGS_GL = (
     'glDrawRangeElementArrayAPPLE',
     'glElementPointerAPPLE_c',
     'glMultiDrawElementArrayAPPLE_c',
-    'glMultiDrawRangeElementArrayAPPLE_c'
+    'glMultiDrawElementArrayAPPLE_p',
+    'glMultiDrawRangeElementArrayAPPLE_c',
+    'glMultiDrawRangeElementArrayAPPLE_p'
   ],
   'GL_APPLE_fence' => [
     'glDeleteFencesAPPLE_c',
@@ -3959,7 +5318,9 @@ our %EXPORT_TAGS_GL = (
     'glDeleteSyncAPPLE',
     'glFenceSyncAPPLE',
     'glGetInteger64vAPPLE_c',
+    'glGetInteger64vAPPLE_p',
     'glGetSyncivAPPLE_c',
+    'glGetSyncivAPPLE_p',
     'glIsSyncAPPLE',
     'glWaitSyncAPPLE'
   ],
@@ -3993,6 +5354,7 @@ our %EXPORT_TAGS_GL = (
     'glClearDepthf',
     'glDepthRangef',
     'glGetShaderPrecisionFormat_c',
+    'glGetShaderPrecisionFormat_p',
     'glReleaseShaderCompiler',
     'glShaderBinary_c'
   ],
@@ -4000,7 +5362,9 @@ our %EXPORT_TAGS_GL = (
     'glMemoryBarrierByRegion'
   ],
   'GL_ARB_ES3_2_compatibility' => [
-    'glPrimitiveBoundingBoxARB'
+    'glPrimitiveBoundingBox',
+    'glPrimitiveBoundingBoxARB',
+    'glPrimitiveBoundingBoxEXT'
   ],
   'GL_ARB_base_instance' => [
     'glDrawArraysInstancedBaseInstance',
@@ -4020,8 +5384,10 @@ our %EXPORT_TAGS_GL = (
     'glMakeTextureHandleResidentARB',
     'glProgramUniformHandleui64ARB',
     'glProgramUniformHandleui64vARB_c',
+    'glProgramUniformHandleui64vARB_p',
     'glUniformHandleui64ARB',
     'glUniformHandleui64vARB_c',
+    'glUniformHandleui64vARB_p',
     'glVertexAttribL1ui64ARB',
     'glVertexAttribL1ui64vARB_c'
   ],
@@ -4067,8 +5433,10 @@ our %EXPORT_TAGS_GL = (
   'GL_ARB_debug_output' => [
     'glDebugMessageCallbackARB_c',
     'glDebugMessageControlARB_c',
+    'glDebugMessageControlARB_p',
     'glDebugMessageInsertARB',
-    'glGetDebugMessageLogARB_c'
+    'glGetDebugMessageLogARB_c',
+    'glGetDebugMessageLogARB_p'
   ],
   'GL_ARB_direct_state_access' => [
     'glBindTextureUnit',
@@ -4078,8 +5446,11 @@ our %EXPORT_TAGS_GL = (
     'glClearNamedBufferSubData_c',
     'glClearNamedFramebufferfi',
     'glClearNamedFramebufferfv_c',
+    'glClearNamedFramebufferfv_p',
     'glClearNamedFramebufferiv_c',
+    'glClearNamedFramebufferiv_p',
     'glClearNamedFramebufferuiv_c',
+    'glClearNamedFramebufferuiv_p',
     'glCompressedTextureSubImage1D_c',
     'glCompressedTextureSubImage2D_c',
     'glCompressedTextureSubImage3D_c',
@@ -4094,11 +5465,13 @@ our %EXPORT_TAGS_GL = (
     'glCreateProgramPipelines_c',
     'glCreateProgramPipelines_p',
     'glCreateQueries_c',
+    'glCreateQueries_p',
     'glCreateRenderbuffers_c',
     'glCreateRenderbuffers_p',
     'glCreateSamplers_c',
     'glCreateSamplers_p',
     'glCreateTextures_c',
+    'glCreateTextures_p',
     'glCreateTransformFeedbacks_c',
     'glCreateTransformFeedbacks_p',
     'glCreateVertexArrays_c',
@@ -4133,7 +5506,9 @@ our %EXPORT_TAGS_GL = (
     'glGetVertexArrayIndexediv_c',
     'glGetVertexArrayiv_c',
     'glInvalidateNamedFramebufferData_c',
+    'glInvalidateNamedFramebufferData_p',
     'glInvalidateNamedFramebufferSubData_c',
+    'glInvalidateNamedFramebufferSubData_p',
     'glMapNamedBufferRange_c',
     'glMapNamedBuffer_c',
     'glNamedBufferData_c',
@@ -4141,6 +5516,7 @@ our %EXPORT_TAGS_GL = (
     'glNamedBufferSubData_c',
     'glNamedFramebufferDrawBuffer',
     'glNamedFramebufferDrawBuffers_c',
+    'glNamedFramebufferDrawBuffers_p',
     'glNamedFramebufferParameteri',
     'glNamedFramebufferReadBuffer',
     'glNamedFramebufferRenderbuffer',
@@ -4151,11 +5527,15 @@ our %EXPORT_TAGS_GL = (
     'glTextureBuffer',
     'glTextureBufferRange',
     'glTextureParameterIiv_c',
+    'glTextureParameterIiv_p',
     'glTextureParameterIuiv_c',
+    'glTextureParameterIuiv_p',
     'glTextureParameterf',
     'glTextureParameterfv_c',
+    'glTextureParameterfv_p',
     'glTextureParameteri',
     'glTextureParameteriv_c',
+    'glTextureParameteriv_p',
     'glTextureStorage1D',
     'glTextureStorage2D',
     'glTextureStorage2DMultisample',
@@ -4177,7 +5557,8 @@ our %EXPORT_TAGS_GL = (
     'glVertexArrayVertexBuffers_c'
   ],
   'GL_ARB_draw_buffers' => [
-    'glDrawBuffersARB_c'
+    'glDrawBuffersARB_c',
+    'glDrawBuffersARB_p'
   ],
   'GL_ARB_draw_buffers_blend' => [
     'glBlendEquationSeparateiARB',
@@ -4198,7 +5579,9 @@ our %EXPORT_TAGS_GL = (
   'GL_ARB_framebuffer_no_attachments' => [
     'glFramebufferParameteri',
     'glGetFramebufferParameteriv_c',
+    'glGetFramebufferParameteriv_p',
     'glGetNamedFramebufferParameterivEXT_c',
+    'glGetNamedFramebufferParameterivEXT_p',
     'glNamedFramebufferParameteriEXT'
   ],
   'GL_ARB_framebuffer_object' => [
@@ -4221,7 +5604,9 @@ our %EXPORT_TAGS_GL = (
     'glGenRenderbuffers_p',
     'glGenerateMipmap',
     'glGetFramebufferAttachmentParameteriv_c',
+    'glGetFramebufferAttachmentParameteriv_p',
     'glGetRenderbufferParameteriv_c',
+    'glGetRenderbufferParameteriv_p',
     'glIsFramebuffer',
     'glIsRenderbuffer',
     'glRenderbufferStorage',
@@ -4235,6 +5620,7 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_ARB_get_program_binary' => [
     'glGetProgramBinary_c',
+    'glGetProgramBinary_p',
     'glProgramBinary_c',
     'glProgramParameteri'
   ],
@@ -4243,92 +5629,136 @@ our %EXPORT_TAGS_GL = (
     'glGetTextureSubImage_c'
   ],
   'GL_ARB_gl_spirv' => [
-    'glSpecializeShaderARB_c'
+    'glSpecializeShaderARB_c',
+    'glSpecializeShaderARB_p'
   ],
   'GL_ARB_gpu_shader_fp64' => [
     'glGetUniformdv_c',
     'glUniform1d',
     'glUniform1dv_c',
+    'glUniform1dv_p',
     'glUniform2d',
     'glUniform2dv_c',
+    'glUniform2dv_p',
     'glUniform3d',
     'glUniform3dv_c',
+    'glUniform3dv_p',
     'glUniform4d',
     'glUniform4dv_c',
+    'glUniform4dv_p',
     'glUniformMatrix2dv_c',
+    'glUniformMatrix2dv_p',
     'glUniformMatrix2x3dv_c',
+    'glUniformMatrix2x3dv_p',
     'glUniformMatrix2x4dv_c',
+    'glUniformMatrix2x4dv_p',
     'glUniformMatrix3dv_c',
+    'glUniformMatrix3dv_p',
     'glUniformMatrix3x2dv_c',
+    'glUniformMatrix3x2dv_p',
     'glUniformMatrix3x4dv_c',
+    'glUniformMatrix3x4dv_p',
     'glUniformMatrix4dv_c',
+    'glUniformMatrix4dv_p',
     'glUniformMatrix4x2dv_c',
-    'glUniformMatrix4x3dv_c'
+    'glUniformMatrix4x2dv_p',
+    'glUniformMatrix4x3dv_c',
+    'glUniformMatrix4x3dv_p'
   ],
   'GL_ARB_gpu_shader_int64' => [
     'glGetUniformi64vARB_c',
     'glGetUniformui64vARB_c',
     'glGetnUniformi64vARB_c',
+    'glGetnUniformi64vARB_p',
     'glGetnUniformui64vARB_c',
+    'glGetnUniformui64vARB_p',
     'glProgramUniform1i64ARB',
     'glProgramUniform1i64vARB_c',
+    'glProgramUniform1i64vARB_p',
     'glProgramUniform1ui64ARB',
     'glProgramUniform1ui64vARB_c',
+    'glProgramUniform1ui64vARB_p',
     'glProgramUniform2i64ARB',
     'glProgramUniform2i64vARB_c',
+    'glProgramUniform2i64vARB_p',
     'glProgramUniform2ui64ARB',
     'glProgramUniform2ui64vARB_c',
+    'glProgramUniform2ui64vARB_p',
     'glProgramUniform3i64ARB',
     'glProgramUniform3i64vARB_c',
+    'glProgramUniform3i64vARB_p',
     'glProgramUniform3ui64ARB',
     'glProgramUniform3ui64vARB_c',
+    'glProgramUniform3ui64vARB_p',
     'glProgramUniform4i64ARB',
     'glProgramUniform4i64vARB_c',
+    'glProgramUniform4i64vARB_p',
     'glProgramUniform4ui64ARB',
     'glProgramUniform4ui64vARB_c',
+    'glProgramUniform4ui64vARB_p',
     'glUniform1i64ARB',
     'glUniform1i64vARB_c',
+    'glUniform1i64vARB_p',
     'glUniform1ui64ARB',
     'glUniform1ui64vARB_c',
+    'glUniform1ui64vARB_p',
     'glUniform2i64ARB',
     'glUniform2i64vARB_c',
+    'glUniform2i64vARB_p',
     'glUniform2ui64ARB',
     'glUniform2ui64vARB_c',
+    'glUniform2ui64vARB_p',
     'glUniform3i64ARB',
     'glUniform3i64vARB_c',
+    'glUniform3i64vARB_p',
     'glUniform3ui64ARB',
     'glUniform3ui64vARB_c',
+    'glUniform3ui64vARB_p',
     'glUniform4i64ARB',
     'glUniform4i64vARB_c',
+    'glUniform4i64vARB_p',
     'glUniform4ui64ARB',
-    'glUniform4ui64vARB_c'
+    'glUniform4ui64vARB_c',
+    'glUniform4ui64vARB_p'
   ],
   'GL_ARB_imaging' => [
     'glColorSubTable_c',
     'glColorTableParameterfv_c',
+    'glColorTableParameterfv_p',
     'glColorTableParameteriv_c',
+    'glColorTableParameteriv_p',
     'glColorTable_c',
     'glConvolutionFilter1D_c',
     'glConvolutionFilter2D_c',
     'glConvolutionParameterf',
     'glConvolutionParameterfv_c',
+    'glConvolutionParameterfv_p',
     'glConvolutionParameteri',
     'glConvolutionParameteriv_c',
+    'glConvolutionParameteriv_p',
     'glCopyColorSubTable',
     'glCopyColorTable',
     'glCopyConvolutionFilter1D',
     'glCopyConvolutionFilter2D',
     'glGetColorTableParameterfv_c',
+    'glGetColorTableParameterfv_p',
     'glGetColorTableParameteriv_c',
+    'glGetColorTableParameteriv_p',
     'glGetColorTable_c',
     'glGetConvolutionFilter_c',
     'glGetConvolutionParameterfv_c',
+    'glGetConvolutionParameterfv_p',
     'glGetConvolutionParameteriv_c',
+    'glGetConvolutionParameteriv_p',
     'glGetHistogramParameterfv_c',
+    'glGetHistogramParameterfv_p',
     'glGetHistogramParameteriv_c',
+    'glGetHistogramParameteriv_p',
     'glGetHistogram_c',
     'glGetMinmaxParameterfv_c',
+    'glGetMinmaxParameterfv_p',
     'glGetMinmaxParameteriv_c',
+    'glGetMinmaxParameteriv_p',
     'glGetMinmax_c',
     'glGetSeparableFilter_c',
     'glHistogram',
@@ -4347,16 +5777,20 @@ our %EXPORT_TAGS_GL = (
     'glVertexAttribDivisorARB'
   ],
   'GL_ARB_internalformat_query' => [
-    'glGetInternalformativ_c'
+    'glGetInternalformativ_c',
+    'glGetInternalformativ_p'
   ],
   'GL_ARB_internalformat_query2' => [
-    'glGetInternalformati64v_c'
+    'glGetInternalformati64v_c',
+    'glGetInternalformati64v_p'
   ],
   'GL_ARB_invalidate_subdata' => [
     'glInvalidateBufferData',
     'glInvalidateBufferSubData',
     'glInvalidateFramebuffer_c',
+    'glInvalidateFramebuffer_p',
     'glInvalidateSubFramebuffer_c',
+    'glInvalidateSubFramebuffer_p',
     'glInvalidateTexImage',
     'glInvalidateTexSubImage'
   ],
@@ -4368,15 +5802,22 @@ our %EXPORT_TAGS_GL = (
     'glCurrentPaletteMatrixARB',
     'glMatrixIndexPointerARB_c',
     'glMatrixIndexubvARB_c',
+    'glMatrixIndexubvARB_p',
     'glMatrixIndexuivARB_c',
-    'glMatrixIndexusvARB_c'
+    'glMatrixIndexuivARB_p',
+    'glMatrixIndexusvARB_c',
+    'glMatrixIndexusvARB_p'
   ],
   'GL_ARB_multi_bind' => [
     'glBindBuffersBase_c',
+    'glBindBuffersBase_p',
     'glBindBuffersRange_c',
     'glBindImageTextures_c',
+    'glBindImageTextures_p',
     'glBindSamplers_c',
+    'glBindSamplers_p',
     'glBindTextures_c',
+    'glBindTextures_p',
     'glBindVertexBuffers_c'
   ],
   'GL_ARB_multi_draw_indirect' => [
@@ -4391,36 +5832,52 @@ our %EXPORT_TAGS_GL = (
     'glClientActiveTextureARB',
     'glMultiTexCoord1dARB',
     'glMultiTexCoord1dvARB_c',
+    'glMultiTexCoord1dvARB_p',
     'glMultiTexCoord1fARB',
     'glMultiTexCoord1fvARB_c',
+    'glMultiTexCoord1fvARB_p',
     'glMultiTexCoord1iARB',
     'glMultiTexCoord1ivARB_c',
+    'glMultiTexCoord1ivARB_p',
     'glMultiTexCoord1sARB',
     'glMultiTexCoord1svARB_c',
+    'glMultiTexCoord1svARB_p',
     'glMultiTexCoord2dARB',
     'glMultiTexCoord2dvARB_c',
+    'glMultiTexCoord2dvARB_p',
     'glMultiTexCoord2fARB',
     'glMultiTexCoord2fvARB_c',
+    'glMultiTexCoord2fvARB_p',
     'glMultiTexCoord2iARB',
     'glMultiTexCoord2ivARB_c',
+    'glMultiTexCoord2ivARB_p',
     'glMultiTexCoord2sARB',
     'glMultiTexCoord2svARB_c',
+    'glMultiTexCoord2svARB_p',
     'glMultiTexCoord3dARB',
     'glMultiTexCoord3dvARB_c',
+    'glMultiTexCoord3dvARB_p',
     'glMultiTexCoord3fARB',
     'glMultiTexCoord3fvARB_c',
+    'glMultiTexCoord3fvARB_p',
     'glMultiTexCoord3iARB',
     'glMultiTexCoord3ivARB_c',
+    'glMultiTexCoord3ivARB_p',
     'glMultiTexCoord3sARB',
     'glMultiTexCoord3svARB_c',
+    'glMultiTexCoord3svARB_p',
     'glMultiTexCoord4dARB',
     'glMultiTexCoord4dvARB_c',
+    'glMultiTexCoord4dvARB_p',
     'glMultiTexCoord4fARB',
     'glMultiTexCoord4fvARB_c',
+    'glMultiTexCoord4fvARB_p',
     'glMultiTexCoord4iARB',
     'glMultiTexCoord4ivARB_c',
+    'glMultiTexCoord4ivARB_p',
     'glMultiTexCoord4sARB',
-    'glMultiTexCoord4svARB_c'
+    'glMultiTexCoord4svARB_c',
+    'glMultiTexCoord4svARB_p'
   ],
   'GL_ARB_occlusion_query' => [
     'glBeginQueryARB',
@@ -4430,8 +5887,11 @@ our %EXPORT_TAGS_GL = (
     'glGenQueriesARB_c',
     'glGenQueriesARB_p',
     'glGetQueryObjectivARB_c',
+    'glGetQueryObjectivARB_p',
     'glGetQueryObjectuivARB_c',
+    'glGetQueryObjectuivARB_p',
     'glGetQueryivARB_c',
+    'glGetQueryivARB_p',
     'glIsQueryARB'
   ],
   'GL_ARB_parallel_shader_compile' => [
@@ -4439,18 +5899,22 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_ARB_point_parameters' => [
     'glPointParameterfARB',
-    'glPointParameterfvARB_c'
+    'glPointParameterfvARB_c',
+    'glPointParameterfvARB_p'
   ],
   'GL_ARB_polygon_offset_clamp' => [
     'glPolygonOffsetClamp'
   ],
   'GL_ARB_program_interface_query' => [
     'glGetProgramInterfaceiv_c',
+    'glGetProgramInterfaceiv_p',
     'glGetProgramResourceIndex',
     'glGetProgramResourceLocation',
     'glGetProgramResourceLocationIndex',
     'glGetProgramResourceName_c',
-    'glGetProgramResourceiv_c'
+    'glGetProgramResourceName_p',
+    'glGetProgramResourceiv_c',
+    'glGetProgramResourceiv_p'
   ],
   'GL_ARB_provoking_vertex' => [
     'glProvokingVertex'
@@ -4462,22 +5926,34 @@ our %EXPORT_TAGS_GL = (
     'glGetnConvolutionFilterARB_c',
     'glGetnHistogramARB_c',
     'glGetnMapdvARB_c',
+    'glGetnMapdvARB_p',
     'glGetnMapfvARB_c',
+    'glGetnMapfvARB_p',
     'glGetnMapivARB_c',
+    'glGetnMapivARB_p',
     'glGetnMinmaxARB_c',
     'glGetnPixelMapfvARB_c',
+    'glGetnPixelMapfvARB_p',
     'glGetnPixelMapuivARB_c',
+    'glGetnPixelMapuivARB_p',
     'glGetnPixelMapusvARB_c',
+    'glGetnPixelMapusvARB_p',
     'glGetnPolygonStippleARB_c',
+    'glGetnPolygonStippleARB_p',
     'glGetnSeparableFilterARB_c',
     'glGetnTexImageARB_c',
     'glGetnUniformdvARB_c',
+    'glGetnUniformdvARB_p',
     'glGetnUniformfvARB_c',
+    'glGetnUniformfvARB_p',
     'glGetnUniformivARB_c',
+    'glGetnUniformivARB_p',
     'glGetnUniformuivARB_c',
+    'glGetnUniformuivARB_p',
     'glReadnPixelsARB_c'
   ],
   'GL_ARB_sample_locations' => [
+    'glEvaluateDepthValuesARB',
     'glFramebufferSampleLocationsfvARB_c',
     'glNamedFramebufferSampleLocationsfvARB_c'
   ],
@@ -4491,83 +5967,129 @@ our %EXPORT_TAGS_GL = (
     'glGenSamplers_c',
     'glGenSamplers_p',
     'glGetSamplerParameterIiv_c',
+    'glGetSamplerParameterIiv_p',
     'glGetSamplerParameterIuiv_c',
+    'glGetSamplerParameterIuiv_p',
     'glGetSamplerParameterfv_c',
+    'glGetSamplerParameterfv_p',
     'glGetSamplerParameteriv_c',
+    'glGetSamplerParameteriv_p',
     'glIsSampler',
     'glSamplerParameterIiv_c',
+    'glSamplerParameterIiv_p',
     'glSamplerParameterIuiv_c',
+    'glSamplerParameterIuiv_p',
     'glSamplerParameterf',
     'glSamplerParameterfv_c',
+    'glSamplerParameterfv_p',
     'glSamplerParameteri',
-    'glSamplerParameteriv_c'
+    'glSamplerParameteriv_c',
+    'glSamplerParameteriv_p'
   ],
   'GL_ARB_separate_shader_objects' => [
     'glActiveShaderProgram',
     'glBindProgramPipeline',
     'glCreateShaderProgramv_c',
+    'glCreateShaderProgramv_p',
     'glDeleteProgramPipelines_c',
     'glDeleteProgramPipelines_p',
     'glGenProgramPipelines_c',
     'glGenProgramPipelines_p',
     'glGetProgramPipelineInfoLog_c',
+    'glGetProgramPipelineInfoLog_p',
     'glGetProgramPipelineiv_c',
+    'glGetProgramPipelineiv_p',
     'glIsProgramPipeline',
     'glProgramUniform1d',
     'glProgramUniform1dv_c',
+    'glProgramUniform1dv_p',
     'glProgramUniform1f',
     'glProgramUniform1fv_c',
+    'glProgramUniform1fv_p',
     'glProgramUniform1i',
     'glProgramUniform1iv_c',
+    'glProgramUniform1iv_p',
     'glProgramUniform1ui',
     'glProgramUniform1uiv_c',
+    'glProgramUniform1uiv_p',
     'glProgramUniform2d',
     'glProgramUniform2dv_c',
+    'glProgramUniform2dv_p',
     'glProgramUniform2f',
     'glProgramUniform2fv_c',
+    'glProgramUniform2fv_p',
     'glProgramUniform2i',
     'glProgramUniform2iv_c',
+    'glProgramUniform2iv_p',
     'glProgramUniform2ui',
     'glProgramUniform2uiv_c',
+    'glProgramUniform2uiv_p',
     'glProgramUniform3d',
     'glProgramUniform3dv_c',
+    'glProgramUniform3dv_p',
     'glProgramUniform3f',
     'glProgramUniform3fv_c',
+    'glProgramUniform3fv_p',
     'glProgramUniform3i',
     'glProgramUniform3iv_c',
+    'glProgramUniform3iv_p',
     'glProgramUniform3ui',
     'glProgramUniform3uiv_c',
+    'glProgramUniform3uiv_p',
     'glProgramUniform4d',
     'glProgramUniform4dv_c',
+    'glProgramUniform4dv_p',
     'glProgramUniform4f',
     'glProgramUniform4fv_c',
+    'glProgramUniform4fv_p',
     'glProgramUniform4i',
     'glProgramUniform4iv_c',
+    'glProgramUniform4iv_p',
     'glProgramUniform4ui',
     'glProgramUniform4uiv_c',
+    'glProgramUniform4uiv_p',
     'glProgramUniformMatrix2dv_c',
+    'glProgramUniformMatrix2dv_p',
     'glProgramUniformMatrix2fv_c',
+    'glProgramUniformMatrix2fv_p',
     'glProgramUniformMatrix2x3dv_c',
+    'glProgramUniformMatrix2x3dv_p',
     'glProgramUniformMatrix2x3fv_c',
+    'glProgramUniformMatrix2x3fv_p',
     'glProgramUniformMatrix2x4dv_c',
+    'glProgramUniformMatrix2x4dv_p',
     'glProgramUniformMatrix2x4fv_c',
+    'glProgramUniformMatrix2x4fv_p',
     'glProgramUniformMatrix3dv_c',
+    'glProgramUniformMatrix3dv_p',
     'glProgramUniformMatrix3fv_c',
+    'glProgramUniformMatrix3fv_p',
     'glProgramUniformMatrix3x2dv_c',
+    'glProgramUniformMatrix3x2dv_p',
     'glProgramUniformMatrix3x2fv_c',
+    'glProgramUniformMatrix3x2fv_p',
     'glProgramUniformMatrix3x4dv_c',
+    'glProgramUniformMatrix3x4dv_p',
     'glProgramUniformMatrix3x4fv_c',
+    'glProgramUniformMatrix3x4fv_p',
     'glProgramUniformMatrix4dv_c',
+    'glProgramUniformMatrix4dv_p',
     'glProgramUniformMatrix4fv_c',
+    'glProgramUniformMatrix4fv_p',
     'glProgramUniformMatrix4x2dv_c',
+    'glProgramUniformMatrix4x2dv_p',
     'glProgramUniformMatrix4x2fv_c',
+    'glProgramUniformMatrix4x2fv_p',
     'glProgramUniformMatrix4x3dv_c',
+    'glProgramUniformMatrix4x3dv_p',
     'glProgramUniformMatrix4x3fv_c',
+    'glProgramUniformMatrix4x3fv_p',
     'glUseProgramStages',
     'glValidateProgramPipeline'
   ],
   'GL_ARB_shader_atomic_counters' => [
-    'glGetActiveAtomicCounterBufferiv_c'
+    'glGetActiveAtomicCounterBufferiv_c',
+    'glGetActiveAtomicCounterBufferiv_p'
   ],
   'GL_ARB_shader_image_load_store' => [
     'glBindImageTexture',
@@ -4581,36 +6103,51 @@ our %EXPORT_TAGS_GL = (
     'glDeleteObjectARB',
     'glDetachObjectARB',
     'glGetActiveUniformARB_c',
+    'glGetActiveUniformARB_p',
     'glGetAttachedObjectsARB_c',
     'glGetHandleARB',
     'glGetInfoLogARB_c',
+    'glGetInfoLogARB_p',
     'glGetObjectParameterfvARB_c',
     'glGetObjectParameterivARB_c',
     'glGetShaderSourceARB_c',
+    'glGetShaderSourceARB_p',
     'glGetUniformLocationARB',
     'glGetUniformfvARB_c',
     'glGetUniformivARB_c',
     'glLinkProgramARB',
     'glShaderSourceARB_c',
+    'glShaderSourceARB_p',
     'glUniform1fARB',
     'glUniform1fvARB_c',
+    'glUniform1fvARB_p',
     'glUniform1iARB',
     'glUniform1ivARB_c',
+    'glUniform1ivARB_p',
     'glUniform2fARB',
     'glUniform2fvARB_c',
+    'glUniform2fvARB_p',
     'glUniform2iARB',
     'glUniform2ivARB_c',
+    'glUniform2ivARB_p',
     'glUniform3fARB',
     'glUniform3fvARB_c',
+    'glUniform3fvARB_p',
     'glUniform3iARB',
     'glUniform3ivARB_c',
+    'glUniform3ivARB_p',
     'glUniform4fARB',
     'glUniform4fvARB_c',
+    'glUniform4fvARB_p',
     'glUniform4iARB',
     'glUniform4ivARB_c',
+    'glUniform4ivARB_p',
     'glUniformMatrix2fvARB_c',
+    'glUniformMatrix2fvARB_p',
     'glUniformMatrix3fvARB_c',
+    'glUniformMatrix3fvARB_p',
     'glUniformMatrix4fvARB_c',
+    'glUniformMatrix4fvARB_p',
     'glUseProgramObjectARB',
     'glValidateProgramARB'
   ],
@@ -4619,18 +6156,26 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_ARB_shader_subroutine' => [
     'glGetActiveSubroutineName_c',
+    'glGetActiveSubroutineName_p',
     'glGetActiveSubroutineUniformName_c',
+    'glGetActiveSubroutineUniformName_p',
     'glGetActiveSubroutineUniformiv_c',
+    'glGetActiveSubroutineUniformiv_p',
     'glGetProgramStageiv_c',
+    'glGetProgramStageiv_p',
     'glGetSubroutineIndex',
     'glGetSubroutineUniformLocation',
     'glGetUniformSubroutineuiv_c',
-    'glUniformSubroutinesuiv_c'
+    'glGetUniformSubroutineuiv_p',
+    'glUniformSubroutinesuiv_c',
+    'glUniformSubroutinesuiv_p'
   ],
   'GL_ARB_shading_language_include' => [
     'glCompileShaderIncludeARB_c',
+    'glCompileShaderIncludeARB_p',
     'glDeleteNamedStringARB',
     'glGetNamedStringARB_c',
+    'glGetNamedStringARB_p',
     'glGetNamedStringivARB_c',
     'glIsNamedStringARB',
     'glNamedStringARB'
@@ -4646,12 +6191,15 @@ our %EXPORT_TAGS_GL = (
     'glDeleteSync',
     'glFenceSync',
     'glGetInteger64v_c',
+    'glGetInteger64v_p',
     'glGetSynciv_c',
+    'glGetSynciv_p',
     'glIsSync',
     'glWaitSync'
   ],
   'GL_ARB_tessellation_shader' => [
     'glPatchParameterfv_c',
+    'glPatchParameterfv_p',
     'glPatchParameteri'
   ],
   'GL_ARB_texture_barrier' => [
@@ -4675,6 +6223,7 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_ARB_texture_multisample' => [
     'glGetMultisamplefv_c',
+    'glGetMultisamplefv_p',
     'glSampleMaski',
     'glTexImage2DMultisample',
     'glTexImage3DMultisample'
@@ -4695,7 +6244,9 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_ARB_timer_query' => [
     'glGetQueryObjecti64v_c',
+    'glGetQueryObjecti64v_p',
     'glGetQueryObjectui64v_c',
+    'glGetQueryObjectui64v_p',
     'glQueryCounter'
   ],
   'GL_ARB_transform_feedback2' => [
@@ -4713,7 +6264,8 @@ our %EXPORT_TAGS_GL = (
     'glBeginQueryIndexed',
     'glDrawTransformFeedbackStream',
     'glEndQueryIndexed',
-    'glGetQueryIndexediv_c'
+    'glGetQueryIndexediv_c',
+    'glGetQueryIndexediv_p'
   ],
   'GL_ARB_transform_feedback_instanced' => [
     'glDrawTransformFeedbackInstanced',
@@ -4721,20 +6273,29 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_ARB_transpose_matrix' => [
     'glLoadTransposeMatrixdARB_c',
+    'glLoadTransposeMatrixdARB_p',
     'glLoadTransposeMatrixfARB_c',
+    'glLoadTransposeMatrixfARB_p',
     'glMultTransposeMatrixdARB_c',
-    'glMultTransposeMatrixfARB_c'
+    'glMultTransposeMatrixdARB_p',
+    'glMultTransposeMatrixfARB_c',
+    'glMultTransposeMatrixfARB_p'
   ],
   'GL_ARB_uniform_buffer_object' => [
     'glBindBufferBase',
     'glBindBufferRange',
     'glGetActiveUniformBlockName_c',
+    'glGetActiveUniformBlockName_p',
     'glGetActiveUniformBlockiv_c',
     'glGetActiveUniformName_c',
+    'glGetActiveUniformName_p',
     'glGetActiveUniformsiv_c',
+    'glGetActiveUniformsiv_p',
     'glGetIntegeri_v_c',
+    'glGetIntegeri_v_p',
     'glGetUniformBlockIndex',
     'glGetUniformIndices_c',
+    'glGetUniformIndices_p',
     'glUniformBlockBinding'
   ],
   'GL_ARB_vertex_array_object' => [
@@ -4747,14 +6308,19 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_ARB_vertex_attrib_64bit' => [
     'glGetVertexAttribLdv_c',
+    'glGetVertexAttribLdv_p',
     'glVertexAttribL1d',
     'glVertexAttribL1dv_c',
+    'glVertexAttribL1dv_p',
     'glVertexAttribL2d',
     'glVertexAttribL2dv_c',
+    'glVertexAttribL2dv_p',
     'glVertexAttribL3d',
     'glVertexAttribL3dv_c',
+    'glVertexAttribL3dv_p',
     'glVertexAttribL4d',
     'glVertexAttribL4dv_c',
+    'glVertexAttribL4dv_p',
     'glVertexAttribLPointer_c'
   ],
   'GL_ARB_vertex_attrib_binding' => [
@@ -4775,13 +6341,21 @@ our %EXPORT_TAGS_GL = (
     'glVertexBlendARB',
     'glWeightPointerARB_c',
     'glWeightbvARB_c',
+    'glWeightbvARB_p',
     'glWeightdvARB_c',
+    'glWeightdvARB_p',
     'glWeightfvARB_c',
+    'glWeightfvARB_p',
     'glWeightivARB_c',
+    'glWeightivARB_p',
     'glWeightsvARB_c',
+    'glWeightsvARB_p',
     'glWeightubvARB_c',
+    'glWeightubvARB_p',
     'glWeightuivARB_c',
-    'glWeightusvARB_c'
+    'glWeightuivARB_p',
+    'glWeightusvARB_c',
+    'glWeightusvARB_p'
   ],
   'GL_ARB_vertex_buffer_object' => [
     'glBindBufferARB',
@@ -4792,6 +6366,7 @@ our %EXPORT_TAGS_GL = (
     'glGenBuffersARB_c',
     'glGenBuffersARB_p',
     'glGetBufferParameterivARB_c',
+    'glGetBufferParameterivARB_p',
     'glGetBufferPointervARB_c',
     'glGetBufferSubDataARB_c',
     'glIsBufferARB',
@@ -4807,140 +6382,214 @@ our %EXPORT_TAGS_GL = (
     'glGenProgramsARB_c',
     'glGenProgramsARB_p',
     'glGetProgramEnvParameterdvARB_c',
+    'glGetProgramEnvParameterdvARB_p',
     'glGetProgramEnvParameterfvARB_c',
+    'glGetProgramEnvParameterfvARB_p',
     'glGetProgramLocalParameterdvARB_c',
+    'glGetProgramLocalParameterdvARB_p',
     'glGetProgramLocalParameterfvARB_c',
+    'glGetProgramLocalParameterfvARB_p',
     'glGetProgramStringARB_c',
     'glGetProgramivARB_c',
+    'glGetProgramivARB_p',
     'glGetVertexAttribPointervARB_c',
     'glGetVertexAttribdvARB_c',
+    'glGetVertexAttribdvARB_p',
     'glGetVertexAttribfvARB_c',
+    'glGetVertexAttribfvARB_p',
     'glGetVertexAttribivARB_c',
+    'glGetVertexAttribivARB_p',
     'glIsProgramARB',
     'glProgramEnvParameter4dARB',
     'glProgramEnvParameter4dvARB_c',
+    'glProgramEnvParameter4dvARB_p',
     'glProgramEnvParameter4fARB',
     'glProgramEnvParameter4fvARB_c',
+    'glProgramEnvParameter4fvARB_p',
     'glProgramLocalParameter4dARB',
     'glProgramLocalParameter4dvARB_c',
+    'glProgramLocalParameter4dvARB_p',
     'glProgramLocalParameter4fARB',
     'glProgramLocalParameter4fvARB_c',
+    'glProgramLocalParameter4fvARB_p',
     'glProgramStringARB_c',
     'glVertexAttrib1dARB',
     'glVertexAttrib1dvARB_c',
+    'glVertexAttrib1dvARB_p',
     'glVertexAttrib1fARB',
     'glVertexAttrib1fvARB_c',
+    'glVertexAttrib1fvARB_p',
     'glVertexAttrib1sARB',
     'glVertexAttrib1svARB_c',
+    'glVertexAttrib1svARB_p',
     'glVertexAttrib2dARB',
     'glVertexAttrib2dvARB_c',
+    'glVertexAttrib2dvARB_p',
     'glVertexAttrib2fARB',
     'glVertexAttrib2fvARB_c',
+    'glVertexAttrib2fvARB_p',
     'glVertexAttrib2sARB',
     'glVertexAttrib2svARB_c',
+    'glVertexAttrib2svARB_p',
     'glVertexAttrib3dARB',
     'glVertexAttrib3dvARB_c',
+    'glVertexAttrib3dvARB_p',
     'glVertexAttrib3fARB',
     'glVertexAttrib3fvARB_c',
+    'glVertexAttrib3fvARB_p',
     'glVertexAttrib3sARB',
     'glVertexAttrib3svARB_c',
+    'glVertexAttrib3svARB_p',
     'glVertexAttrib4NbvARB_c',
+    'glVertexAttrib4NbvARB_p',
     'glVertexAttrib4NivARB_c',
+    'glVertexAttrib4NivARB_p',
     'glVertexAttrib4NsvARB_c',
+    'glVertexAttrib4NsvARB_p',
     'glVertexAttrib4NubARB',
     'glVertexAttrib4NubvARB_c',
+    'glVertexAttrib4NubvARB_p',
     'glVertexAttrib4NuivARB_c',
+    'glVertexAttrib4NuivARB_p',
     'glVertexAttrib4NusvARB_c',
+    'glVertexAttrib4NusvARB_p',
     'glVertexAttrib4bvARB_c',
+    'glVertexAttrib4bvARB_p',
     'glVertexAttrib4dARB',
     'glVertexAttrib4dvARB_c',
+    'glVertexAttrib4dvARB_p',
     'glVertexAttrib4fARB',
     'glVertexAttrib4fvARB_c',
+    'glVertexAttrib4fvARB_p',
     'glVertexAttrib4ivARB_c',
+    'glVertexAttrib4ivARB_p',
     'glVertexAttrib4sARB',
     'glVertexAttrib4svARB_c',
+    'glVertexAttrib4svARB_p',
     'glVertexAttrib4ubvARB_c',
+    'glVertexAttrib4ubvARB_p',
     'glVertexAttrib4uivARB_c',
+    'glVertexAttrib4uivARB_p',
     'glVertexAttrib4usvARB_c',
+    'glVertexAttrib4usvARB_p',
     'glVertexAttribPointerARB_c'
   ],
   'GL_ARB_vertex_shader' => [
     'glBindAttribLocationARB',
     'glGetActiveAttribARB_c',
+    'glGetActiveAttribARB_p',
     'glGetAttribLocationARB'
   ],
   'GL_ARB_vertex_type_2_10_10_10_rev' => [
     'glColorP3ui',
     'glColorP3uiv_c',
+    'glColorP3uiv_p',
     'glColorP4ui',
     'glColorP4uiv_c',
+    'glColorP4uiv_p',
     'glMultiTexCoordP1ui',
     'glMultiTexCoordP1uiv_c',
+    'glMultiTexCoordP1uiv_p',
     'glMultiTexCoordP2ui',
     'glMultiTexCoordP2uiv_c',
+    'glMultiTexCoordP2uiv_p',
     'glMultiTexCoordP3ui',
     'glMultiTexCoordP3uiv_c',
+    'glMultiTexCoordP3uiv_p',
     'glMultiTexCoordP4ui',
     'glMultiTexCoordP4uiv_c',
+    'glMultiTexCoordP4uiv_p',
     'glNormalP3ui',
     'glNormalP3uiv_c',
+    'glNormalP3uiv_p',
     'glSecondaryColorP3ui',
     'glSecondaryColorP3uiv_c',
+    'glSecondaryColorP3uiv_p',
     'glTexCoordP1ui',
     'glTexCoordP1uiv_c',
+    'glTexCoordP1uiv_p',
     'glTexCoordP2ui',
     'glTexCoordP2uiv_c',
+    'glTexCoordP2uiv_p',
     'glTexCoordP3ui',
     'glTexCoordP3uiv_c',
+    'glTexCoordP3uiv_p',
     'glTexCoordP4ui',
     'glTexCoordP4uiv_c',
+    'glTexCoordP4uiv_p',
     'glVertexAttribP1ui',
     'glVertexAttribP1uiv_c',
+    'glVertexAttribP1uiv_p',
     'glVertexAttribP2ui',
     'glVertexAttribP2uiv_c',
+    'glVertexAttribP2uiv_p',
     'glVertexAttribP3ui',
     'glVertexAttribP3uiv_c',
+    'glVertexAttribP3uiv_p',
     'glVertexAttribP4ui',
     'glVertexAttribP4uiv_c',
+    'glVertexAttribP4uiv_p',
     'glVertexP2ui',
     'glVertexP2uiv_c',
+    'glVertexP2uiv_p',
     'glVertexP3ui',
     'glVertexP3uiv_c',
+    'glVertexP3uiv_p',
     'glVertexP4ui',
-    'glVertexP4uiv_c'
+    'glVertexP4uiv_c',
+    'glVertexP4uiv_p'
   ],
   'GL_ARB_viewport_array' => [
     'glDepthRangeArrayv_c',
+    'glDepthRangeArrayv_p',
     'glDepthRangeIndexed',
     'glGetDoublei_v_c',
+    'glGetDoublei_v_p',
     'glGetFloati_v_c',
+    'glGetFloati_v_p',
     'glScissorArrayv_c',
+    'glScissorArrayv_p',
     'glScissorIndexed',
     'glScissorIndexedv_c',
+    'glScissorIndexedv_p',
     'glViewportArrayv_c',
+    'glViewportArrayv_p',
     'glViewportIndexedf',
-    'glViewportIndexedfv_c'
+    'glViewportIndexedfv_c',
+    'glViewportIndexedfv_p'
   ],
   'GL_ARB_window_pos' => [
     'glWindowPos2dARB',
     'glWindowPos2dvARB_c',
+    'glWindowPos2dvARB_p',
     'glWindowPos2fARB',
     'glWindowPos2fvARB_c',
+    'glWindowPos2fvARB_p',
     'glWindowPos2iARB',
     'glWindowPos2ivARB_c',
+    'glWindowPos2ivARB_p',
     'glWindowPos2sARB',
     'glWindowPos2svARB_c',
+    'glWindowPos2svARB_p',
     'glWindowPos3dARB',
     'glWindowPos3dvARB_c',
+    'glWindowPos3dvARB_p',
     'glWindowPos3fARB',
     'glWindowPos3fvARB_c',
+    'glWindowPos3fvARB_p',
     'glWindowPos3iARB',
     'glWindowPos3ivARB_c',
+    'glWindowPos3ivARB_p',
     'glWindowPos3sARB',
-    'glWindowPos3svARB_c'
+    'glWindowPos3svARB_c',
+    'glWindowPos3svARB_p'
+  ],
+  'GL_ARM_shader_core_properties' => [
+    'glMaxActiveShaderCoresARM'
   ],
   'GL_ATI_draw_buffers' => [
-    'glDrawBuffersATI_c'
+    'glDrawBuffersATI_c',
+    'glDrawBuffersATI_p'
   ],
   'GL_ATI_element_array' => [
     'glDrawElementArrayATI',
@@ -4967,7 +6616,8 @@ our %EXPORT_TAGS_GL = (
     'glGenFragmentShadersATI',
     'glPassTexCoordATI',
     'glSampleMapATI',
-    'glSetFragmentShaderConstantATI_c'
+    'glSetFragmentShaderConstantATI_c',
+    'glSetFragmentShaderConstantATI_p'
   ],
   'GL_ATI_map_object_buffer' => [
     'glMapObjectBufferATI_c',
@@ -4985,11 +6635,17 @@ our %EXPORT_TAGS_GL = (
     'glArrayObjectATI',
     'glFreeObjectBufferATI',
     'glGetArrayObjectfvATI_c',
+    'glGetArrayObjectfvATI_p',
     'glGetArrayObjectivATI_c',
+    'glGetArrayObjectivATI_p',
     'glGetObjectBufferfvATI_c',
+    'glGetObjectBufferfvATI_p',
     'glGetObjectBufferivATI_c',
+    'glGetObjectBufferivATI_p',
     'glGetVariantArrayObjectfvATI_c',
+    'glGetVariantArrayObjectfvATI_p',
     'glGetVariantArrayObjectivATI_c',
+    'glGetVariantArrayObjectivATI_p',
     'glIsObjectBufferATI',
     'glNewObjectBufferATI_c',
     'glUpdateObjectBufferATI_c',
@@ -4997,55 +6653,82 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_ATI_vertex_attrib_array_object' => [
     'glGetVertexAttribArrayObjectfvATI_c',
+    'glGetVertexAttribArrayObjectfvATI_p',
     'glGetVertexAttribArrayObjectivATI_c',
+    'glGetVertexAttribArrayObjectivATI_p',
     'glVertexAttribArrayObjectATI'
   ],
   'GL_ATI_vertex_streams' => [
     'glClientActiveVertexStreamATI',
     'glNormalStream3bATI',
     'glNormalStream3bvATI_c',
+    'glNormalStream3bvATI_p',
     'glNormalStream3dATI',
     'glNormalStream3dvATI_c',
+    'glNormalStream3dvATI_p',
     'glNormalStream3fATI',
     'glNormalStream3fvATI_c',
+    'glNormalStream3fvATI_p',
     'glNormalStream3iATI',
     'glNormalStream3ivATI_c',
+    'glNormalStream3ivATI_p',
     'glNormalStream3sATI',
     'glNormalStream3svATI_c',
+    'glNormalStream3svATI_p',
     'glVertexBlendEnvfATI',
     'glVertexBlendEnviATI',
     'glVertexStream1dATI',
     'glVertexStream1dvATI_c',
+    'glVertexStream1dvATI_p',
     'glVertexStream1fATI',
     'glVertexStream1fvATI_c',
+    'glVertexStream1fvATI_p',
     'glVertexStream1iATI',
     'glVertexStream1ivATI_c',
+    'glVertexStream1ivATI_p',
     'glVertexStream1sATI',
     'glVertexStream1svATI_c',
+    'glVertexStream1svATI_p',
     'glVertexStream2dATI',
     'glVertexStream2dvATI_c',
+    'glVertexStream2dvATI_p',
     'glVertexStream2fATI',
     'glVertexStream2fvATI_c',
+    'glVertexStream2fvATI_p',
     'glVertexStream2iATI',
     'glVertexStream2ivATI_c',
+    'glVertexStream2ivATI_p',
     'glVertexStream2sATI',
     'glVertexStream2svATI_c',
+    'glVertexStream2svATI_p',
     'glVertexStream3dATI',
     'glVertexStream3dvATI_c',
+    'glVertexStream3dvATI_p',
     'glVertexStream3fATI',
     'glVertexStream3fvATI_c',
+    'glVertexStream3fvATI_p',
     'glVertexStream3iATI',
     'glVertexStream3ivATI_c',
+    'glVertexStream3ivATI_p',
     'glVertexStream3sATI',
     'glVertexStream3svATI_c',
+    'glVertexStream3svATI_p',
     'glVertexStream4dATI',
     'glVertexStream4dvATI_c',
+    'glVertexStream4dvATI_p',
     'glVertexStream4fATI',
     'glVertexStream4fvATI_c',
+    'glVertexStream4fvATI_p',
     'glVertexStream4iATI',
     'glVertexStream4ivATI_c',
+    'glVertexStream4ivATI_p',
     'glVertexStream4sATI',
-    'glVertexStream4svATI_c'
+    'glVertexStream4svATI_c',
+    'glVertexStream4svATI_p'
+  ],
+  'GL_EXT_EGL_image_storage' => [
+    'glEGLImageTargetTexStorageEXT_c',
+    'glEGLImageTargetTextureStorageEXT_c'
   ],
   'GL_EXT_base_instance' => [
     'glDrawArraysInstancedBaseInstanceEXT',
@@ -5075,12 +6758,14 @@ our %EXPORT_TAGS_GL = (
     'glBlendEquationEXT'
   ],
   'GL_EXT_buffer_storage' => [
-    'glBufferStorageEXT_c',
-    'glNamedBufferStorageEXT_c'
+    'glBufferStorageEXT_c'
   ],
   'GL_EXT_clear_texture' => [
     'glClearTexImageEXT_c',
     'glClearTexSubImageEXT_c'
+  ],
+  'GL_EXT_clip_control' => [
+    'glClipControlEXT'
   ],
   'GL_EXT_color_subtable' => [
     'glColorSubTableEXT_c',
@@ -5095,13 +6780,17 @@ our %EXPORT_TAGS_GL = (
     'glConvolutionFilter2DEXT_c',
     'glConvolutionParameterfEXT',
     'glConvolutionParameterfvEXT_c',
+    'glConvolutionParameterfvEXT_p',
     'glConvolutionParameteriEXT',
     'glConvolutionParameterivEXT_c',
+    'glConvolutionParameterivEXT_p',
     'glCopyConvolutionFilter1DEXT',
     'glCopyConvolutionFilter2DEXT',
     'glGetConvolutionFilterEXT_c',
     'glGetConvolutionParameterfvEXT_c',
+    'glGetConvolutionParameterfvEXT_p',
     'glGetConvolutionParameterivEXT_c',
+    'glGetConvolutionParameterivEXT_p',
     'glGetSeparableFilterEXT_c',
     'glSeparableFilter2DEXT_c'
   ],
@@ -5121,10 +6810,13 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_EXT_cull_vertex' => [
     'glCullParameterdvEXT_c',
-    'glCullParameterfvEXT_c'
+    'glCullParameterdvEXT_p',
+    'glCullParameterfvEXT_c',
+    'glCullParameterfvEXT_p'
   ],
   'GL_EXT_debug_label' => [
     'glGetObjectLabelEXT_c',
+    'glGetObjectLabelEXT_p',
     'glLabelObjectEXT'
   ],
   'GL_EXT_debug_marker' => [
@@ -5172,48 +6864,79 @@ our %EXPORT_TAGS_GL = (
     'glFlushMappedNamedBufferRangeEXT',
     'glFramebufferDrawBufferEXT',
     'glFramebufferDrawBuffersEXT_c',
+    'glFramebufferDrawBuffersEXT_p',
     'glFramebufferReadBufferEXT',
     'glGenerateMultiTexMipmapEXT',
     'glGenerateTextureMipmapEXT',
     'glGetCompressedMultiTexImageEXT_c',
     'glGetCompressedTextureImageEXT_c',
     'glGetDoubleIndexedvEXT_c',
+    'glGetDoubleIndexedvEXT_p',
     'glGetDoublei_vEXT_c',
+    'glGetDoublei_vEXT_p',
     'glGetFloatIndexedvEXT_c',
+    'glGetFloatIndexedvEXT_p',
     'glGetFloati_vEXT_c',
+    'glGetFloati_vEXT_p',
     'glGetFramebufferParameterivEXT_c',
+    'glGetFramebufferParameterivEXT_p',
     'glGetMultiTexEnvfvEXT_c',
+    'glGetMultiTexEnvfvEXT_p',
     'glGetMultiTexEnvivEXT_c',
+    'glGetMultiTexEnvivEXT_p',
     'glGetMultiTexGendvEXT_c',
+    'glGetMultiTexGendvEXT_p',
     'glGetMultiTexGenfvEXT_c',
+    'glGetMultiTexGenfvEXT_p',
     'glGetMultiTexGenivEXT_c',
+    'glGetMultiTexGenivEXT_p',
     'glGetMultiTexImageEXT_c',
     'glGetMultiTexLevelParameterfvEXT_c',
+    'glGetMultiTexLevelParameterfvEXT_p',
     'glGetMultiTexLevelParameterivEXT_c',
+    'glGetMultiTexLevelParameterivEXT_p',
     'glGetMultiTexParameterIivEXT_c',
+    'glGetMultiTexParameterIivEXT_p',
     'glGetMultiTexParameterIuivEXT_c',
+    'glGetMultiTexParameterIuivEXT_p',
     'glGetMultiTexParameterfvEXT_c',
+    'glGetMultiTexParameterfvEXT_p',
     'glGetMultiTexParameterivEXT_c',
+    'glGetMultiTexParameterivEXT_p',
     'glGetNamedBufferParameterivEXT_c',
+    'glGetNamedBufferParameterivEXT_p',
     'glGetNamedBufferPointervEXT_c',
     'glGetNamedBufferSubDataEXT_c',
     'glGetNamedFramebufferAttachmentParameterivEXT_c',
+    'glGetNamedFramebufferAttachmentParameterivEXT_p',
     'glGetNamedProgramLocalParameterIivEXT_c',
+    'glGetNamedProgramLocalParameterIivEXT_p',
     'glGetNamedProgramLocalParameterIuivEXT_c',
+    'glGetNamedProgramLocalParameterIuivEXT_p',
     'glGetNamedProgramLocalParameterdvEXT_c',
+    'glGetNamedProgramLocalParameterdvEXT_p',
     'glGetNamedProgramLocalParameterfvEXT_c',
+    'glGetNamedProgramLocalParameterfvEXT_p',
     'glGetNamedProgramStringEXT_c',
     'glGetNamedProgramivEXT_c',
+    'glGetNamedProgramivEXT_p',
     'glGetNamedRenderbufferParameterivEXT_c',
+    'glGetNamedRenderbufferParameterivEXT_p',
     'glGetPointerIndexedvEXT_c',
     'glGetPointeri_vEXT_c',
     'glGetTextureImageEXT_c',
     'glGetTextureLevelParameterfvEXT_c',
+    'glGetTextureLevelParameterfvEXT_p',
     'glGetTextureLevelParameterivEXT_c',
+    'glGetTextureLevelParameterivEXT_p',
     'glGetTextureParameterIivEXT_c',
+    'glGetTextureParameterIivEXT_p',
     'glGetTextureParameterIuivEXT_c',
+    'glGetTextureParameterIuivEXT_p',
     'glGetTextureParameterfvEXT_c',
+    'glGetTextureParameterfvEXT_p',
     'glGetTextureParameterivEXT_c',
+    'glGetTextureParameterivEXT_p',
     'glGetVertexArrayIntegeri_vEXT_c',
     'glGetVertexArrayIntegervEXT_c',
     'glGetVertexArrayPointeri_vEXT_c',
@@ -5223,13 +6946,21 @@ our %EXPORT_TAGS_GL = (
     'glMatrixFrustumEXT',
     'glMatrixLoadIdentityEXT',
     'glMatrixLoadTransposedEXT_c',
+    'glMatrixLoadTransposedEXT_p',
     'glMatrixLoadTransposefEXT_c',
+    'glMatrixLoadTransposefEXT_p',
     'glMatrixLoaddEXT_c',
+    'glMatrixLoaddEXT_p',
     'glMatrixLoadfEXT_c',
+    'glMatrixLoadfEXT_p',
     'glMatrixMultTransposedEXT_c',
+    'glMatrixMultTransposedEXT_p',
     'glMatrixMultTransposefEXT_c',
+    'glMatrixMultTransposefEXT_p',
     'glMatrixMultdEXT_c',
+    'glMatrixMultdEXT_p',
     'glMatrixMultfEXT_c',
+    'glMatrixMultfEXT_p',
     'glMatrixOrthoEXT',
     'glMatrixPopEXT',
     'glMatrixPushEXT',
@@ -5243,28 +6974,38 @@ our %EXPORT_TAGS_GL = (
     'glMultiTexCoordPointerEXT_c',
     'glMultiTexEnvfEXT',
     'glMultiTexEnvfvEXT_c',
+    'glMultiTexEnvfvEXT_p',
     'glMultiTexEnviEXT',
     'glMultiTexEnvivEXT_c',
+    'glMultiTexEnvivEXT_p',
     'glMultiTexGendEXT',
     'glMultiTexGendvEXT_c',
+    'glMultiTexGendvEXT_p',
     'glMultiTexGenfEXT',
     'glMultiTexGenfvEXT_c',
+    'glMultiTexGenfvEXT_p',
     'glMultiTexGeniEXT',
     'glMultiTexGenivEXT_c',
+    'glMultiTexGenivEXT_p',
     'glMultiTexImage1DEXT_c',
     'glMultiTexImage2DEXT_c',
     'glMultiTexImage3DEXT_c',
     'glMultiTexParameterIivEXT_c',
+    'glMultiTexParameterIivEXT_p',
     'glMultiTexParameterIuivEXT_c',
+    'glMultiTexParameterIuivEXT_p',
     'glMultiTexParameterfEXT',
     'glMultiTexParameterfvEXT_c',
+    'glMultiTexParameterfvEXT_p',
     'glMultiTexParameteriEXT',
     'glMultiTexParameterivEXT_c',
+    'glMultiTexParameterivEXT_p',
     'glMultiTexRenderbufferEXT',
     'glMultiTexSubImage1DEXT_c',
     'glMultiTexSubImage2DEXT_c',
     'glMultiTexSubImage3DEXT_c',
     'glNamedBufferDataEXT_c',
+    'glNamedBufferStorageEXT_c',
     'glNamedBufferSubDataEXT_c',
     'glNamedCopyBufferSubDataEXT',
     'glNamedFramebufferRenderbufferEXT',
@@ -5276,63 +7017,96 @@ our %EXPORT_TAGS_GL = (
     'glNamedFramebufferTextureLayerEXT',
     'glNamedProgramLocalParameter4dEXT',
     'glNamedProgramLocalParameter4dvEXT_c',
+    'glNamedProgramLocalParameter4dvEXT_p',
     'glNamedProgramLocalParameter4fEXT',
     'glNamedProgramLocalParameter4fvEXT_c',
+    'glNamedProgramLocalParameter4fvEXT_p',
     'glNamedProgramLocalParameterI4iEXT',
     'glNamedProgramLocalParameterI4ivEXT_c',
+    'glNamedProgramLocalParameterI4ivEXT_p',
     'glNamedProgramLocalParameterI4uiEXT',
     'glNamedProgramLocalParameterI4uivEXT_c',
+    'glNamedProgramLocalParameterI4uivEXT_p',
     'glNamedProgramLocalParameters4fvEXT_c',
+    'glNamedProgramLocalParameters4fvEXT_p',
     'glNamedProgramLocalParametersI4ivEXT_c',
+    'glNamedProgramLocalParametersI4ivEXT_p',
     'glNamedProgramLocalParametersI4uivEXT_c',
+    'glNamedProgramLocalParametersI4uivEXT_p',
     'glNamedProgramStringEXT_c',
     'glNamedRenderbufferStorageEXT',
     'glNamedRenderbufferStorageMultisampleCoverageEXT',
     'glNamedRenderbufferStorageMultisampleEXT',
     'glProgramUniform1fEXT',
     'glProgramUniform1fvEXT_c',
+    'glProgramUniform1fvEXT_p',
     'glProgramUniform1iEXT',
     'glProgramUniform1ivEXT_c',
+    'glProgramUniform1ivEXT_p',
     'glProgramUniform1uiEXT',
     'glProgramUniform1uivEXT_c',
+    'glProgramUniform1uivEXT_p',
     'glProgramUniform2fEXT',
     'glProgramUniform2fvEXT_c',
+    'glProgramUniform2fvEXT_p',
     'glProgramUniform2iEXT',
     'glProgramUniform2ivEXT_c',
+    'glProgramUniform2ivEXT_p',
     'glProgramUniform2uiEXT',
     'glProgramUniform2uivEXT_c',
+    'glProgramUniform2uivEXT_p',
     'glProgramUniform3fEXT',
     'glProgramUniform3fvEXT_c',
+    'glProgramUniform3fvEXT_p',
     'glProgramUniform3iEXT',
     'glProgramUniform3ivEXT_c',
+    'glProgramUniform3ivEXT_p',
     'glProgramUniform3uiEXT',
     'glProgramUniform3uivEXT_c',
+    'glProgramUniform3uivEXT_p',
     'glProgramUniform4fEXT',
     'glProgramUniform4fvEXT_c',
+    'glProgramUniform4fvEXT_p',
     'glProgramUniform4iEXT',
     'glProgramUniform4ivEXT_c',
+    'glProgramUniform4ivEXT_p',
     'glProgramUniform4uiEXT',
     'glProgramUniform4uivEXT_c',
+    'glProgramUniform4uivEXT_p',
     'glProgramUniformMatrix2fvEXT_c',
+    'glProgramUniformMatrix2fvEXT_p',
     'glProgramUniformMatrix2x3fvEXT_c',
+    'glProgramUniformMatrix2x3fvEXT_p',
     'glProgramUniformMatrix2x4fvEXT_c',
+    'glProgramUniformMatrix2x4fvEXT_p',
     'glProgramUniformMatrix3fvEXT_c',
+    'glProgramUniformMatrix3fvEXT_p',
     'glProgramUniformMatrix3x2fvEXT_c',
+    'glProgramUniformMatrix3x2fvEXT_p',
     'glProgramUniformMatrix3x4fvEXT_c',
+    'glProgramUniformMatrix3x4fvEXT_p',
     'glProgramUniformMatrix4fvEXT_c',
+    'glProgramUniformMatrix4fvEXT_p',
     'glProgramUniformMatrix4x2fvEXT_c',
+    'glProgramUniformMatrix4x2fvEXT_p',
     'glProgramUniformMatrix4x3fvEXT_c',
+    'glProgramUniformMatrix4x3fvEXT_p',
     'glPushClientAttribDefaultEXT',
     'glTextureBufferEXT',
     'glTextureImage1DEXT_c',
     'glTextureImage2DEXT_c',
     'glTextureImage3DEXT_c',
+    'glTexturePageCommitmentEXT',
     'glTextureParameterIivEXT_c',
+    'glTextureParameterIivEXT_p',
     'glTextureParameterIuivEXT_c',
+    'glTextureParameterIuivEXT_p',
     'glTextureParameterfEXT',
     'glTextureParameterfvEXT_c',
+    'glTextureParameterfvEXT_p',
     'glTextureParameteriEXT',
     'glTextureParameterivEXT_c',
+    'glTextureParameterivEXT_p',
     'glTextureRenderbufferEXT',
     'glTextureSubImage1DEXT_c',
     'glTextureSubImage2DEXT_c',
@@ -5352,17 +7126,39 @@ our %EXPORT_TAGS_GL = (
     'glVertexArrayVertexOffsetEXT'
   ],
   'GL_EXT_discard_framebuffer' => [
-    'glDiscardFramebufferEXT_c'
+    'glDiscardFramebufferEXT_c',
+    'glDiscardFramebufferEXT_p'
+  ],
+  'GL_EXT_disjoint_timer_query' => [
+    'glBeginQueryEXT',
+    'glDeleteQueriesEXT_c',
+    'glDeleteQueriesEXT_p',
+    'glEndQueryEXT',
+    'glGenQueriesEXT_c',
+    'glGenQueriesEXT_p',
+    'glGetInteger64vEXT_c',
+    'glGetInteger64vEXT_p',
+    'glGetQueryObjectivEXT_c',
+    'glGetQueryObjectivEXT_p',
+    'glGetQueryObjectuivEXT_c',
+    'glGetQueryObjectuivEXT_p',
+    'glGetQueryivEXT_c',
+    'glGetQueryivEXT_p',
+    'glIsQueryEXT',
+    'glQueryCounterEXT'
   ],
   'GL_EXT_draw_buffers' => [
-    'glDrawBuffersEXT_c'
+    'glDrawBuffersEXT_c',
+    'glDrawBuffersEXT_p'
   ],
   'GL_EXT_draw_buffers2' => [
     'glColorMaskIndexedEXT',
     'glDisableIndexedEXT',
     'glEnableIndexedEXT',
     'glGetBooleanIndexedvEXT_c',
+    'glGetBooleanIndexedvEXT_p',
     'glGetIntegerIndexedvEXT_c',
+    'glGetIntegerIndexedvEXT_p',
     'glIsEnabledIndexedEXT'
   ],
   'GL_EXT_draw_buffers_indexed' => [
@@ -5388,6 +7184,10 @@ our %EXPORT_TAGS_GL = (
   'GL_EXT_draw_range_elements' => [
     'glDrawRangeElementsEXT_c'
   ],
+  'GL_EXT_draw_transform_feedback' => [
+    'glDrawTransformFeedbackEXT',
+    'glDrawTransformFeedbackInstancedEXT'
+  ],
   'GL_EXT_external_buffer' => [
     'glBufferStorageExternalEXT',
     'glNamedBufferStorageExternalEXT'
@@ -5396,8 +7196,10 @@ our %EXPORT_TAGS_GL = (
     'glFogCoordPointerEXT_c',
     'glFogCoorddEXT',
     'glFogCoorddvEXT_c',
+    'glFogCoorddvEXT_p',
     'glFogCoordfEXT',
-    'glFogCoordfvEXT_c'
+    'glFogCoordfvEXT_c',
+    'glFogCoordfvEXT_p'
   ],
   'GL_EXT_fragment_lighting' => [
     'glFragmentColorMaterialEXT',
@@ -5419,8 +7221,19 @@ our %EXPORT_TAGS_GL = (
     'glGetFragmentMaterialivEXT_c',
     'glLightEnviEXT'
   ],
+  'GL_EXT_fragment_shading_rate' => [
+    'glFramebufferShadingRateEXT',
+    'glGetFragmentShadingRatesEXT_c',
+    'glGetFragmentShadingRatesEXT_p',
+    'glShadingRateCombinerOpsEXT',
+    'glShadingRateEXT'
+  ],
   'GL_EXT_framebuffer_blit' => [
     'glBlitFramebufferEXT'
+  ],
+  'GL_EXT_framebuffer_blit_layers' => [
+    'glBlitFramebufferLayerEXT',
+    'glBlitFramebufferLayersEXT'
   ],
   'GL_EXT_framebuffer_multisample' => [
     'glRenderbufferStorageMultisampleEXT'
@@ -5443,7 +7256,9 @@ our %EXPORT_TAGS_GL = (
     'glGenRenderbuffersEXT_p',
     'glGenerateMipmapEXT',
     'glGetFramebufferAttachmentParameterivEXT_c',
+    'glGetFramebufferAttachmentParameterivEXT_p',
     'glGetRenderbufferParameterivEXT_c',
+    'glGetRenderbufferParameterivEXT_p',
     'glIsFramebufferEXT',
     'glIsRenderbufferEXT',
     'glRenderbufferStorageEXT'
@@ -5455,51 +7270,75 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_EXT_gpu_program_parameters' => [
     'glProgramEnvParameters4fvEXT_c',
-    'glProgramLocalParameters4fvEXT_c'
+    'glProgramEnvParameters4fvEXT_p',
+    'glProgramLocalParameters4fvEXT_c',
+    'glProgramLocalParameters4fvEXT_p'
   ],
   'GL_EXT_gpu_shader4' => [
     'glBindFragDataLocationEXT',
     'glGetFragDataLocationEXT',
     'glGetUniformuivEXT_c',
     'glGetVertexAttribIivEXT_c',
+    'glGetVertexAttribIivEXT_p',
     'glGetVertexAttribIuivEXT_c',
+    'glGetVertexAttribIuivEXT_p',
     'glUniform1uiEXT',
     'glUniform1uivEXT_c',
+    'glUniform1uivEXT_p',
     'glUniform2uiEXT',
     'glUniform2uivEXT_c',
+    'glUniform2uivEXT_p',
     'glUniform3uiEXT',
     'glUniform3uivEXT_c',
+    'glUniform3uivEXT_p',
     'glUniform4uiEXT',
     'glUniform4uivEXT_c',
+    'glUniform4uivEXT_p',
     'glVertexAttribI1iEXT',
     'glVertexAttribI1ivEXT_c',
+    'glVertexAttribI1ivEXT_p',
     'glVertexAttribI1uiEXT',
     'glVertexAttribI1uivEXT_c',
+    'glVertexAttribI1uivEXT_p',
     'glVertexAttribI2iEXT',
     'glVertexAttribI2ivEXT_c',
+    'glVertexAttribI2ivEXT_p',
     'glVertexAttribI2uiEXT',
     'glVertexAttribI2uivEXT_c',
+    'glVertexAttribI2uivEXT_p',
     'glVertexAttribI3iEXT',
     'glVertexAttribI3ivEXT_c',
+    'glVertexAttribI3ivEXT_p',
     'glVertexAttribI3uiEXT',
     'glVertexAttribI3uivEXT_c',
+    'glVertexAttribI3uivEXT_p',
     'glVertexAttribI4bvEXT_c',
+    'glVertexAttribI4bvEXT_p',
     'glVertexAttribI4iEXT',
     'glVertexAttribI4ivEXT_c',
+    'glVertexAttribI4ivEXT_p',
     'glVertexAttribI4svEXT_c',
+    'glVertexAttribI4svEXT_p',
     'glVertexAttribI4ubvEXT_c',
+    'glVertexAttribI4ubvEXT_p',
     'glVertexAttribI4uiEXT',
     'glVertexAttribI4uivEXT_c',
+    'glVertexAttribI4uivEXT_p',
     'glVertexAttribI4usvEXT_c',
+    'glVertexAttribI4usvEXT_p',
     'glVertexAttribIPointerEXT_c'
   ],
   'GL_EXT_histogram' => [
     'glGetHistogramEXT_c',
     'glGetHistogramParameterfvEXT_c',
+    'glGetHistogramParameterfvEXT_p',
     'glGetHistogramParameterivEXT_c',
+    'glGetHistogramParameterivEXT_p',
     'glGetMinmaxEXT_c',
     'glGetMinmaxParameterfvEXT_c',
+    'glGetMinmaxParameterfvEXT_p',
     'glGetMinmaxParameterivEXT_c',
+    'glGetMinmaxParameterivEXT_p',
     'glHistogramEXT',
     'glMinmaxEXT',
     'glResetHistogramEXT',
@@ -5526,12 +7365,12 @@ our %EXPORT_TAGS_GL = (
   'GL_EXT_memory_object' => [
     'glBufferStorageMemEXT',
     'glCreateMemoryObjectsEXT_c',
-    'glCreateMemoryObjectsEXT_p',
     'glDeleteMemoryObjectsEXT_c',
     'glDeleteMemoryObjectsEXT_p',
     'glGetMemoryObjectParameterivEXT_c',
     'glGetUnsignedBytei_vEXT_c',
     'glGetUnsignedBytevEXT_c',
+    'glGetUnsignedBytevEXT_p',
     'glIsMemoryObjectEXT',
     'glMemoryObjectParameterivEXT_c',
     'glNamedBufferStorageMemEXT',
@@ -5553,8 +7392,15 @@ our %EXPORT_TAGS_GL = (
     'glImportMemoryWin32HandleEXT_c',
     'glImportMemoryWin32NameEXT_c'
   ],
+  'GL_EXT_mesh_shader' => [
+    'glDrawMeshTasksEXT',
+    'glDrawMeshTasksIndirectEXT',
+    'glMultiDrawMeshTasksIndirectCountEXT',
+    'glMultiDrawMeshTasksIndirectEXT'
+  ],
   'GL_EXT_multi_draw_arrays' => [
     'glMultiDrawArraysEXT_c',
+    'glMultiDrawArraysEXT_p',
     'glMultiDrawElementsEXT_c'
   ],
   'GL_EXT_multi_draw_indirect' => [
@@ -5570,6 +7416,7 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_EXT_multiview_draw_buffers' => [
     'glDrawBuffersIndexedEXT_c',
+    'glDrawBuffersIndexedEXT_p',
     'glGetIntegeri_vEXT_c',
     'glReadBufferIndexedEXT'
   ],
@@ -5577,19 +7424,24 @@ our %EXPORT_TAGS_GL = (
     'glColorTableEXT_c',
     'glGetColorTableEXT_c',
     'glGetColorTableParameterfvEXT_c',
-    'glGetColorTableParameterivEXT_c'
+    'glGetColorTableParameterfvEXT_p',
+    'glGetColorTableParameterivEXT_c',
+    'glGetColorTableParameterivEXT_p'
   ],
   'GL_EXT_pixel_transform' => [
     'glGetPixelTransformParameterfvEXT_c',
     'glGetPixelTransformParameterivEXT_c',
     'glPixelTransformParameterfEXT',
     'glPixelTransformParameterfvEXT_c',
+    'glPixelTransformParameterfvEXT_p',
     'glPixelTransformParameteriEXT',
-    'glPixelTransformParameterivEXT_c'
+    'glPixelTransformParameterivEXT_c',
+    'glPixelTransformParameterivEXT_p'
   ],
   'GL_EXT_point_parameters' => [
     'glPointParameterfEXT',
-    'glPointParameterfvEXT_c'
+    'glPointParameterfvEXT_c',
+    'glPointParameterfvEXT_p'
   ],
   'GL_EXT_polygon_offset' => [
     'glPolygonOffsetEXT'
@@ -5597,14 +7449,26 @@ our %EXPORT_TAGS_GL = (
   'GL_EXT_polygon_offset_clamp' => [
     'glPolygonOffsetClampEXT'
   ],
+  'GL_EXT_primitive_bounding_box' => [
+    'glPrimitiveBoundingBoxEXT'
+  ],
   'GL_EXT_provoking_vertex' => [
     'glProvokingVertexEXT'
   ],
   'GL_EXT_raster_multisample' => [
     'glCoverageModulationNV',
     'glCoverageModulationTableNV_c',
+    'glCoverageModulationTableNV_p',
     'glGetCoverageModulationTableNV_c',
     'glRasterSamplesEXT'
+  ],
+  'GL_EXT_robustness' => [
+    'glGetGraphicsResetStatusEXT',
+    'glGetnUniformfvEXT_c',
+    'glGetnUniformfvEXT_p',
+    'glGetnUniformivEXT_c',
+    'glGetnUniformivEXT_p',
+    'glReadnPixelsEXT_c'
   ],
   'GL_EXT_scene_marker' => [
     'glBeginSceneEXT',
@@ -5613,20 +7477,28 @@ our %EXPORT_TAGS_GL = (
   'GL_EXT_secondary_color' => [
     'glSecondaryColor3bEXT',
     'glSecondaryColor3bvEXT_c',
+    'glSecondaryColor3bvEXT_p',
     'glSecondaryColor3dEXT',
     'glSecondaryColor3dvEXT_c',
+    'glSecondaryColor3dvEXT_p',
     'glSecondaryColor3fEXT',
     'glSecondaryColor3fvEXT_c',
+    'glSecondaryColor3fvEXT_p',
     'glSecondaryColor3iEXT',
     'glSecondaryColor3ivEXT_c',
+    'glSecondaryColor3ivEXT_p',
     'glSecondaryColor3sEXT',
     'glSecondaryColor3svEXT_c',
+    'glSecondaryColor3svEXT_p',
     'glSecondaryColor3ubEXT',
     'glSecondaryColor3ubvEXT_c',
+    'glSecondaryColor3ubvEXT_p',
     'glSecondaryColor3uiEXT',
     'glSecondaryColor3uivEXT_c',
+    'glSecondaryColor3uivEXT_p',
     'glSecondaryColor3usEXT',
     'glSecondaryColor3usvEXT_c',
+    'glSecondaryColor3usvEXT_p',
     'glSecondaryColorPointerEXT_c'
   ],
   'GL_EXT_semaphore' => [
@@ -5652,18 +7524,21 @@ our %EXPORT_TAGS_GL = (
     'glCreateShaderProgramEXT',
     'glUseShaderProgramEXT'
   ],
+  'GL_EXT_shader_framebuffer_fetch' => [
+    'glFramebufferFetchBarrierEXT'
+  ],
   'GL_EXT_shader_image_load_store' => [
     'glBindImageTextureEXT',
     'glMemoryBarrierEXT'
   ],
   'GL_EXT_shader_pixel_local_storage2' => [
     'glClearPixelLocalStorageuiEXT_c',
+    'glClearPixelLocalStorageuiEXT_p',
     'glFramebufferPixelLocalStorageSizeEXT',
     'glGetFramebufferPixelLocalStorageSizeEXT'
   ],
   'GL_EXT_sparse_texture' => [
-    'glTexPageCommitmentEXT',
-    'glTexturePageCommitmentEXT'
+    'glTexPageCommitmentEXT'
   ],
   'GL_EXT_stencil_two_side' => [
     'glActiveStencilFaceEXT'
@@ -5673,11 +7548,24 @@ our %EXPORT_TAGS_GL = (
     'glTexSubImage2DEXT_c',
     'glTexSubImage3DEXT_c'
   ],
+  'GL_EXT_tessellation_point_size' => [
+    'glPatchParameteriEXT'
+  ],
   'GL_EXT_texture3D' => [
     'glTexImage3DEXT_c'
   ],
   'GL_EXT_texture_array' => [
     'glFramebufferTextureLayerEXT'
+  ],
+  'GL_EXT_texture_border_clamp' => [
+    'glGetSamplerParameterIivEXT_c',
+    'glGetSamplerParameterIivEXT_p',
+    'glGetSamplerParameterIuivEXT_c',
+    'glGetSamplerParameterIuivEXT_p',
+    'glSamplerParameterIivEXT_c',
+    'glSamplerParameterIivEXT_p',
+    'glSamplerParameterIuivEXT_c',
+    'glSamplerParameterIuivEXT_p'
   ],
   'GL_EXT_texture_buffer_object' => [
     'glTexBufferEXT'
@@ -5686,19 +7574,25 @@ our %EXPORT_TAGS_GL = (
     'glClearColorIiEXT',
     'glClearColorIuiEXT',
     'glGetTexParameterIivEXT_c',
+    'glGetTexParameterIivEXT_p',
     'glGetTexParameterIuivEXT_c',
+    'glGetTexParameterIuivEXT_p',
     'glTexParameterIivEXT_c',
-    'glTexParameterIuivEXT_c'
+    'glTexParameterIivEXT_p',
+    'glTexParameterIuivEXT_c',
+    'glTexParameterIuivEXT_p'
   ],
   'GL_EXT_texture_object' => [
     'glAreTexturesResidentEXT_c',
+    'glAreTexturesResidentEXT_p',
     'glBindTextureEXT',
     'glDeleteTexturesEXT_c',
     'glDeleteTexturesEXT_p',
     'glGenTexturesEXT_c',
     'glGenTexturesEXT_p',
     'glIsTextureEXT',
-    'glPrioritizeTexturesEXT_c'
+    'glPrioritizeTexturesEXT_c',
+    'glPrioritizeTexturesEXT_p'
   ],
   'GL_EXT_texture_perturb_normal' => [
     'glTextureNormalEXT'
@@ -5711,12 +7605,18 @@ our %EXPORT_TAGS_GL = (
     'glTextureStorage2DEXT',
     'glTextureStorage3DEXT'
   ],
+  'GL_EXT_texture_storage_compression' => [
+    'glTexStorageAttribs2DEXT_c',
+    'glTexStorageAttribs3DEXT_c'
+  ],
   'GL_EXT_texture_view' => [
     'glTextureViewEXT'
   ],
   'GL_EXT_timer_query' => [
     'glGetQueryObjecti64vEXT_c',
-    'glGetQueryObjectui64vEXT_c'
+    'glGetQueryObjecti64vEXT_p',
+    'glGetQueryObjectui64vEXT_c',
+    'glGetQueryObjectui64vEXT_p'
   ],
   'GL_EXT_transform_feedback' => [
     'glBeginTransformFeedbackEXT',
@@ -5725,7 +7625,9 @@ our %EXPORT_TAGS_GL = (
     'glBindBufferRangeEXT',
     'glEndTransformFeedbackEXT',
     'glGetTransformFeedbackVaryingEXT_c',
-    'glTransformFeedbackVaryingsEXT_c'
+    'glGetTransformFeedbackVaryingEXT_p',
+    'glTransformFeedbackVaryingsEXT_c',
+    'glTransformFeedbackVaryingsEXT_p'
   ],
   'GL_EXT_vertex_array' => [
     'glArrayElementEXT',
@@ -5743,15 +7645,20 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_EXT_vertex_attrib_64bit' => [
     'glGetVertexAttribLdvEXT_c',
+    'glGetVertexAttribLdvEXT_p',
     'glVertexArrayVertexAttribLOffsetEXT',
     'glVertexAttribL1dEXT',
     'glVertexAttribL1dvEXT_c',
+    'glVertexAttribL1dvEXT_p',
     'glVertexAttribL2dEXT',
     'glVertexAttribL2dvEXT_c',
+    'glVertexAttribL2dvEXT_p',
     'glVertexAttribL3dEXT',
     'glVertexAttribL3dvEXT_c',
+    'glVertexAttribL3dvEXT_p',
     'glVertexAttribL4dEXT',
     'glVertexAttribL4dvEXT_c',
+    'glVertexAttribL4dvEXT_p',
     'glVertexAttribLPointerEXT_c'
   ],
   'GL_EXT_vertex_shader' => [
@@ -5801,14 +7708,16 @@ our %EXPORT_TAGS_GL = (
   'GL_EXT_vertex_weighting' => [
     'glVertexWeightPointerEXT_c',
     'glVertexWeightfEXT',
-    'glVertexWeightfvEXT_c'
+    'glVertexWeightfvEXT_c',
+    'glVertexWeightfvEXT_p'
   ],
   'GL_EXT_win32_keyed_mutex' => [
     'glAcquireKeyedMutexWin32EXT',
     'glReleaseKeyedMutexWin32EXT'
   ],
   'GL_EXT_window_rectangles' => [
-    'glWindowRectanglesEXT_c'
+    'glWindowRectanglesEXT_c',
+    'glWindowRectanglesEXT_p'
   ],
   'GL_EXT_x11_sync_object' => [
     'glImportSyncEXT'
@@ -5841,6 +7750,27 @@ our %EXPORT_TAGS_GL = (
     'glTexCoordPointerListIBM_c',
     'glVertexPointerListIBM_c'
   ],
+  'GL_IMG_bindless_texture' => [
+    'glGetTextureHandleIMG',
+    'glGetTextureSamplerHandleIMG',
+    'glProgramUniformHandleui64IMG',
+    'glProgramUniformHandleui64vIMG_c',
+    'glProgramUniformHandleui64vIMG_p',
+    'glUniformHandleui64IMG',
+    'glUniformHandleui64vIMG_c',
+    'glUniformHandleui64vIMG_p'
+  ],
+  'GL_IMG_framebuffer_downsample' => [
+    'glFramebufferTexture2DDownsampleIMG',
+    'glFramebufferTextureLayerDownsampleIMG'
+  ],
+  'GL_IMG_multisampled_render_to_texture' => [
+    'glFramebufferTexture2DMultisampleIMG',
+    'glRenderbufferStorageMultisampleIMG'
+  ],
+  'GL_INTEL_framebuffer_CMAA' => [
+    'glApplyFramebufferAttachmentCMAAINTEL'
+  ],
   'GL_INTEL_parallel_arrays' => [
     'glColorPointervINTEL_c',
     'glNormalPointervINTEL_c',
@@ -5850,7 +7780,6 @@ our %EXPORT_TAGS_GL = (
   'GL_INTEL_performance_query' => [
     'glBeginPerfQueryINTEL',
     'glCreatePerfQueryINTEL_c',
-    'glCreatePerfQueryINTEL_p',
     'glDeletePerfQueryINTEL',
     'glEndPerfQueryINTEL',
     'glGetFirstPerfQueryIdINTEL_c',
@@ -5865,14 +7794,19 @@ our %EXPORT_TAGS_GL = (
     'glTexScissorINTEL'
   ],
   'GL_KHR_blend_equation_advanced' => [
-    'glBlendBarrierKHR'
+    'glBlendBarrier',
+    'glBlendBarrierKHR',
+    'glBlendBarrierNV'
   ],
   'GL_KHR_debug' => [
     'glDebugMessageCallback_c',
     'glDebugMessageControl_c',
+    'glDebugMessageControl_p',
     'glDebugMessageInsert',
     'glGetDebugMessageLog_c',
+    'glGetDebugMessageLog_p',
     'glGetObjectLabel_c',
+    'glGetObjectLabel_p',
     'glGetObjectPtrLabel_c',
     'glObjectLabel',
     'glObjectPtrLabel_c',
@@ -5884,8 +7818,11 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_KHR_robustness' => [
     'glGetnUniformfv_c',
+    'glGetnUniformfv_p',
     'glGetnUniformiv_c',
+    'glGetnUniformiv_p',
     'glGetnUniformuiv_c',
+    'glGetnUniformuiv_p',
     'glReadnPixels_c'
   ],
   'GL_KTX_buffer_region' => [
@@ -5897,8 +7834,14 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_LAYOUT_LINEAR_INTEL' => [
     'glMapTexture2DINTEL_c',
+    'glMapTexture2DINTEL_p',
     'glSyncTextureINTEL',
     'glUnmapTexture2DINTEL'
+  ],
+  'GL_MESA_framebuffer_flip_y' => [
+    'glFramebufferParameteriMESA',
+    'glGetFramebufferParameterivMESA_c',
+    'glGetFramebufferParameterivMESA_p'
   ],
   'GL_MESA_resize_buffers' => [
     'glResizeBuffersMESA'
@@ -5906,41 +7849,77 @@ our %EXPORT_TAGS_GL = (
   'GL_MESA_window_pos' => [
     'glWindowPos2dMESA',
     'glWindowPos2dvMESA_c',
+    'glWindowPos2dvMESA_p',
     'glWindowPos2fMESA',
     'glWindowPos2fvMESA_c',
+    'glWindowPos2fvMESA_p',
     'glWindowPos2iMESA',
     'glWindowPos2ivMESA_c',
+    'glWindowPos2ivMESA_p',
     'glWindowPos2sMESA',
     'glWindowPos2svMESA_c',
+    'glWindowPos2svMESA_p',
     'glWindowPos3dMESA',
     'glWindowPos3dvMESA_c',
+    'glWindowPos3dvMESA_p',
     'glWindowPos3fMESA',
     'glWindowPos3fvMESA_c',
+    'glWindowPos3fvMESA_p',
     'glWindowPos3iMESA',
     'glWindowPos3ivMESA_c',
+    'glWindowPos3ivMESA_p',
     'glWindowPos3sMESA',
     'glWindowPos3svMESA_c',
+    'glWindowPos3svMESA_p',
     'glWindowPos4dMESA',
     'glWindowPos4dvMESA_c',
+    'glWindowPos4dvMESA_p',
     'glWindowPos4fMESA',
     'glWindowPos4fvMESA_c',
+    'glWindowPos4fvMESA_p',
     'glWindowPos4iMESA',
     'glWindowPos4ivMESA_c',
+    'glWindowPos4ivMESA_p',
     'glWindowPos4sMESA',
-    'glWindowPos4svMESA_c'
+    'glWindowPos4svMESA_c',
+    'glWindowPos4svMESA_p'
   ],
   'GL_NVX_conditional_render' => [
     'glBeginConditionalRenderNVX',
     'glEndConditionalRenderNVX'
+  ],
+  'GL_NVX_gpu_multicast2' => [
+    'glAsyncCopyBufferSubDataNVX_c',
+    'glAsyncCopyBufferSubDataNVX_p',
+    'glAsyncCopyImageSubDataNVX_c',
+    'glAsyncCopyImageSubDataNVX_p',
+    'glMulticastScissorArrayvNVX_c',
+    'glMulticastScissorArrayvNVX_p',
+    'glMulticastViewportArrayvNVX_c',
+    'glMulticastViewportArrayvNVX_p',
+    'glMulticastViewportPositionWScaleNVX',
+    'glUploadGpuMaskNVX'
   ],
   'GL_NVX_linked_gpu_multicast' => [
     'glLGPUCopyImageSubDataNVX',
     'glLGPUInterlockNVX',
     'glLGPUNamedBufferSubDataNVX_c'
   ],
+  'GL_NVX_progress_fence' => [
+    'glClientWaitSemaphoreui64NVX_c',
+    'glClientWaitSemaphoreui64NVX_p',
+    'glCreateProgressFenceNVX',
+    'glSignalSemaphoreui64NVX_c',
+    'glSignalSemaphoreui64NVX_p',
+    'glWaitSemaphoreui64NVX_c',
+    'glWaitSemaphoreui64NVX_p'
+  ],
   'GL_NV_3dvision_settings' => [
     'glStereoParameterfNV',
     'glStereoParameteriNV'
+  ],
+  'GL_NV_alpha_to_coverage_dither_control' => [
+    'glAlphaToCoverageDitherControlNV'
   ],
   'GL_NV_bindless_multi_draw_indirect' => [
     'glMultiDrawArraysIndirectBindlessNV_c',
@@ -5962,8 +7941,10 @@ our %EXPORT_TAGS_GL = (
     'glMakeTextureHandleResidentNV',
     'glProgramUniformHandleui64NV',
     'glProgramUniformHandleui64vNV_c',
+    'glProgramUniformHandleui64vNV_p',
     'glUniformHandleui64NV',
-    'glUniformHandleui64vNV_c'
+    'glUniformHandleui64vNV_c',
+    'glUniformHandleui64vNV_p'
   ],
   'GL_NV_blend_equation_advanced' => [
     'glBlendBarrierNV',
@@ -5997,7 +7978,8 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_NV_conditional_render' => [
     'glBeginConditionalRenderNV',
-    'glEndConditionalRenderNV'
+    'glEndConditionalRenderNV',
+    'glEndConditionalRenderNVX'
   ],
   'GL_NV_conservative_raster' => [
     'glSubpixelPrecisionBiasNV'
@@ -6020,7 +8002,8 @@ our %EXPORT_TAGS_GL = (
     'glDepthRangedNV'
   ],
   'GL_NV_draw_buffers' => [
-    'glDrawBuffersNV_c'
+    'glDrawBuffersNV_c',
+    'glDrawBuffersNV_p'
   ],
   'GL_NV_draw_instanced' => [
     'glDrawArraysInstancedNV',
@@ -6049,6 +8032,7 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_NV_explicit_multisample' => [
     'glGetMultisamplefvNV_c',
+    'glGetMultisamplefvNV_p',
     'glSampleMaskIndexedNV',
     'glTexRenderbufferNV'
   ],
@@ -6068,11 +8052,15 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_NV_fragment_program' => [
     'glGetProgramNamedParameterdvNV_c',
+    'glGetProgramNamedParameterdvNV_p',
     'glGetProgramNamedParameterfvNV_c',
-    'glProgramNamedParameter4dNV_c',
+    'glGetProgramNamedParameterfvNV_p',
+    'glProgramNamedParameter4dNV',
     'glProgramNamedParameter4dvNV_c',
-    'glProgramNamedParameter4fNV_c',
-    'glProgramNamedParameter4fvNV_c'
+    'glProgramNamedParameter4dvNV_p',
+    'glProgramNamedParameter4fNV',
+    'glProgramNamedParameter4fvNV_c',
+    'glProgramNamedParameter4fvNV_p'
   ],
   'GL_NV_framebuffer_blit' => [
     'glBlitFramebufferNV'
@@ -6103,114 +8091,190 @@ our %EXPORT_TAGS_GL = (
   'GL_NV_gpu_program4' => [
     'glProgramEnvParameterI4iNV',
     'glProgramEnvParameterI4ivNV_c',
+    'glProgramEnvParameterI4ivNV_p',
     'glProgramEnvParameterI4uiNV',
     'glProgramEnvParameterI4uivNV_c',
+    'glProgramEnvParameterI4uivNV_p',
     'glProgramEnvParametersI4ivNV_c',
+    'glProgramEnvParametersI4ivNV_p',
     'glProgramEnvParametersI4uivNV_c',
+    'glProgramEnvParametersI4uivNV_p',
     'glProgramLocalParameterI4iNV',
     'glProgramLocalParameterI4ivNV_c',
+    'glProgramLocalParameterI4ivNV_p',
     'glProgramLocalParameterI4uiNV',
     'glProgramLocalParameterI4uivNV_c',
+    'glProgramLocalParameterI4uivNV_p',
     'glProgramLocalParametersI4ivNV_c',
-    'glProgramLocalParametersI4uivNV_c'
+    'glProgramLocalParametersI4ivNV_p',
+    'glProgramLocalParametersI4uivNV_c',
+    'glProgramLocalParametersI4uivNV_p'
   ],
   'GL_NV_gpu_shader5' => [
     'glGetUniformi64vNV_c',
     'glGetUniformui64vNV_c',
     'glProgramUniform1i64NV',
     'glProgramUniform1i64vNV_c',
+    'glProgramUniform1i64vNV_p',
     'glProgramUniform1ui64NV',
     'glProgramUniform1ui64vNV_c',
+    'glProgramUniform1ui64vNV_p',
     'glProgramUniform2i64NV',
     'glProgramUniform2i64vNV_c',
+    'glProgramUniform2i64vNV_p',
     'glProgramUniform2ui64NV',
     'glProgramUniform2ui64vNV_c',
+    'glProgramUniform2ui64vNV_p',
     'glProgramUniform3i64NV',
     'glProgramUniform3i64vNV_c',
+    'glProgramUniform3i64vNV_p',
     'glProgramUniform3ui64NV',
     'glProgramUniform3ui64vNV_c',
+    'glProgramUniform3ui64vNV_p',
     'glProgramUniform4i64NV',
     'glProgramUniform4i64vNV_c',
+    'glProgramUniform4i64vNV_p',
     'glProgramUniform4ui64NV',
     'glProgramUniform4ui64vNV_c',
+    'glProgramUniform4ui64vNV_p',
     'glUniform1i64NV',
     'glUniform1i64vNV_c',
+    'glUniform1i64vNV_p',
     'glUniform1ui64NV',
     'glUniform1ui64vNV_c',
+    'glUniform1ui64vNV_p',
     'glUniform2i64NV',
     'glUniform2i64vNV_c',
+    'glUniform2i64vNV_p',
     'glUniform2ui64NV',
     'glUniform2ui64vNV_c',
+    'glUniform2ui64vNV_p',
     'glUniform3i64NV',
     'glUniform3i64vNV_c',
+    'glUniform3i64vNV_p',
     'glUniform3ui64NV',
     'glUniform3ui64vNV_c',
+    'glUniform3ui64vNV_p',
     'glUniform4i64NV',
     'glUniform4i64vNV_c',
+    'glUniform4i64vNV_p',
     'glUniform4ui64NV',
-    'glUniform4ui64vNV_c'
+    'glUniform4ui64vNV_c',
+    'glUniform4ui64vNV_p'
   ],
   'GL_NV_half_float' => [
     'glColor3hNV',
     'glColor3hvNV_c',
+    'glColor3hvNV_p',
     'glColor4hNV',
     'glColor4hvNV_c',
+    'glColor4hvNV_p',
     'glFogCoordhNV',
     'glFogCoordhvNV_c',
+    'glFogCoordhvNV_p',
     'glMultiTexCoord1hNV',
     'glMultiTexCoord1hvNV_c',
+    'glMultiTexCoord1hvNV_p',
     'glMultiTexCoord2hNV',
     'glMultiTexCoord2hvNV_c',
+    'glMultiTexCoord2hvNV_p',
     'glMultiTexCoord3hNV',
     'glMultiTexCoord3hvNV_c',
+    'glMultiTexCoord3hvNV_p',
     'glMultiTexCoord4hNV',
     'glMultiTexCoord4hvNV_c',
+    'glMultiTexCoord4hvNV_p',
     'glNormal3hNV',
     'glNormal3hvNV_c',
+    'glNormal3hvNV_p',
     'glSecondaryColor3hNV',
     'glSecondaryColor3hvNV_c',
+    'glSecondaryColor3hvNV_p',
     'glTexCoord1hNV',
     'glTexCoord1hvNV_c',
+    'glTexCoord1hvNV_p',
     'glTexCoord2hNV',
     'glTexCoord2hvNV_c',
+    'glTexCoord2hvNV_p',
     'glTexCoord3hNV',
     'glTexCoord3hvNV_c',
+    'glTexCoord3hvNV_p',
     'glTexCoord4hNV',
     'glTexCoord4hvNV_c',
+    'glTexCoord4hvNV_p',
     'glVertex2hNV',
     'glVertex2hvNV_c',
+    'glVertex2hvNV_p',
     'glVertex3hNV',
     'glVertex3hvNV_c',
+    'glVertex3hvNV_p',
     'glVertex4hNV',
     'glVertex4hvNV_c',
+    'glVertex4hvNV_p',
     'glVertexAttrib1hNV',
     'glVertexAttrib1hvNV_c',
+    'glVertexAttrib1hvNV_p',
     'glVertexAttrib2hNV',
     'glVertexAttrib2hvNV_c',
+    'glVertexAttrib2hvNV_p',
     'glVertexAttrib3hNV',
     'glVertexAttrib3hvNV_c',
+    'glVertexAttrib3hvNV_p',
     'glVertexAttrib4hNV',
     'glVertexAttrib4hvNV_c',
+    'glVertexAttrib4hvNV_p',
     'glVertexAttribs1hvNV_c',
+    'glVertexAttribs1hvNV_p',
     'glVertexAttribs2hvNV_c',
+    'glVertexAttribs2hvNV_p',
     'glVertexAttribs3hvNV_c',
+    'glVertexAttribs3hvNV_p',
     'glVertexAttribs4hvNV_c',
+    'glVertexAttribs4hvNV_p',
     'glVertexWeighthNV',
-    'glVertexWeighthvNV_c'
+    'glVertexWeighthvNV_c',
+    'glVertexWeighthvNV_p'
   ],
   'GL_NV_instanced_arrays' => [
     'glVertexAttribDivisorNV'
   ],
   'GL_NV_internalformat_sample_query' => [
-    'glGetInternalformatSampleivNV_c'
+    'glGetInternalformatSampleivNV_c',
+    'glGetInternalformatSampleivNV_p'
+  ],
+  'GL_NV_memory_attachment' => [
+    'glBufferAttachMemoryNV',
+    'glGetMemoryObjectDetachedResourcesuivNV_c',
+    'glNamedBufferAttachMemoryNV',
+    'glResetMemoryObjectParameterNV',
+    'glTexAttachMemoryNV',
+    'glTextureAttachMemoryNV'
+  ],
+  'GL_NV_memory_object_sparse' => [
+    'glBufferPageCommitmentMemNV',
+    'glNamedBufferPageCommitmentMemNV',
+    'glTexPageCommitmentMemNV',
+    'glTexturePageCommitmentMemNV'
+  ],
+  'GL_NV_mesh_shader' => [
+    'glDrawMeshTasksIndirectNV',
+    'glDrawMeshTasksNV',
+    'glMultiDrawMeshTasksIndirectCountNV',
+    'glMultiDrawMeshTasksIndirectNV'
   ],
   'GL_NV_non_square_matrices' => [
     'glUniformMatrix2x3fvNV_c',
+    'glUniformMatrix2x3fvNV_p',
     'glUniformMatrix2x4fvNV_c',
+    'glUniformMatrix2x4fvNV_p',
     'glUniformMatrix3x2fvNV_c',
+    'glUniformMatrix3x2fvNV_p',
     'glUniformMatrix3x4fvNV_c',
+    'glUniformMatrix3x4fvNV_p',
     'glUniformMatrix4x2fvNV_c',
-    'glUniformMatrix4x3fvNV_c'
+    'glUniformMatrix4x2fvNV_p',
+    'glUniformMatrix4x3fvNV_c',
+    'glUniformMatrix4x3fvNV_p'
   ],
   'GL_NV_occlusion_query' => [
     'glBeginOcclusionQueryNV',
@@ -6225,8 +8289,11 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_NV_parameter_buffer_object' => [
     'glProgramBufferParametersIivNV_c',
+    'glProgramBufferParametersIivNV_p',
     'glProgramBufferParametersIuivNV_c',
-    'glProgramBufferParametersfvNV_c'
+    'glProgramBufferParametersIuivNV_p',
+    'glProgramBufferParametersfvNV_c',
+    'glProgramBufferParametersfvNV_p'
   ],
   'GL_NV_path_rendering' => [
     'glCopyPathNV',
@@ -6245,11 +8312,14 @@ our %EXPORT_TAGS_GL = (
     'glGetPathMetricRangeNV_c',
     'glGetPathMetricsNV_c',
     'glGetPathParameterfvNV_c',
+    'glGetPathParameterfvNV_p',
     'glGetPathParameterivNV_c',
+    'glGetPathParameterivNV_p',
     'glGetPathSpacingNV_c',
     'glGetPathTexGenfvNV_c',
     'glGetPathTexGenivNV_c',
     'glGetProgramResourcefvNV_c',
+    'glGetProgramResourcefvNV_p',
     'glInterpolatePathsNV',
     'glIsPathNV',
     'glIsPointInFillPathNV',
@@ -6265,9 +8335,11 @@ our %EXPORT_TAGS_GL = (
     'glPathCoordsNV_c',
     'glPathCoverDepthFuncNV',
     'glPathDashArrayNV_c',
+    'glPathDashArrayNV_p',
     'glPathFogGenNV',
     'glPathGlyphIndexArrayNV_c',
     'glPathGlyphIndexRangeNV_c',
+    'glPathGlyphIndexRangeNV_p',
     'glPathGlyphRangeNV_c',
     'glPathGlyphsNV_c',
     'glPathMemoryGlyphIndexArrayNV_c',
@@ -6282,6 +8354,7 @@ our %EXPORT_TAGS_GL = (
     'glPathSubCoordsNV_c',
     'glPathTexGenNV_c',
     'glPointAlongPathNV_c',
+    'glPointAlongPathNV_p',
     'glProgramPathFragmentInputGenNV_c',
     'glStencilFillPathInstancedNV_c',
     'glStencilFillPathNV',
@@ -6292,7 +8365,8 @@ our %EXPORT_TAGS_GL = (
     'glStencilThenCoverStrokePathInstancedNV_c',
     'glStencilThenCoverStrokePathNV',
     'glTransformPathNV_c',
-    'glWeightPathsNV_c'
+    'glWeightPathsNV_c',
+    'glWeightPathsNV_p'
   ],
   'GL_NV_pixel_data_range' => [
     'glFlushPixelDataRangeNV',
@@ -6300,7 +8374,8 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_NV_point_sprite' => [
     'glPointParameteriNV',
-    'glPointParameterivNV_c'
+    'glPointParameterivNV_c',
+    'glPointParameterivNV_p'
   ],
   'GL_NV_polygon_mode' => [
     'glPolygonModeNV'
@@ -6316,6 +8391,9 @@ our %EXPORT_TAGS_GL = (
   'GL_NV_primitive_restart' => [
     'glPrimitiveRestartIndexNV',
     'glPrimitiveRestartNV'
+  ],
+  'GL_NV_read_buffer' => [
+    'glReadBufferNV'
   ],
   'GL_NV_register_combiners' => [
     'glCombinerInputNV',
@@ -6338,12 +8416,19 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_NV_sample_locations' => [
     'glFramebufferSampleLocationsfvNV_c',
-    'glNamedFramebufferSampleLocationsfvNV_c'
+    'glNamedFramebufferSampleLocationsfvNV_c',
+    'glResolveDepthValuesNV'
+  ],
+  'GL_NV_scissor_exclusive' => [
+    'glScissorExclusiveArrayvNV_c',
+    'glScissorExclusiveArrayvNV_p',
+    'glScissorExclusiveNV'
   ],
   'GL_NV_shader_buffer_load' => [
     'glGetBufferParameterui64vNV_c',
     'glGetIntegerui64vNV_c',
     'glGetNamedBufferParameterui64vNV_c',
+    'glGetNamedBufferParameterui64vNV_p',
     'glIsBufferResidentNV',
     'glIsNamedBufferResidentNV',
     'glMakeBufferNonResidentNV',
@@ -6352,8 +8437,22 @@ our %EXPORT_TAGS_GL = (
     'glMakeNamedBufferResidentNV',
     'glProgramUniformui64NV',
     'glProgramUniformui64vNV_c',
+    'glProgramUniformui64vNV_p',
     'glUniformui64NV',
-    'glUniformui64vNV_c'
+    'glUniformui64vNV_c',
+    'glUniformui64vNV_p'
+  ],
+  'GL_NV_shading_rate_image' => [
+    'glBindShadingRateImageNV',
+    'glGetShadingRateImagePaletteNV_c',
+    'glGetShadingRateImagePaletteNV_p',
+    'glGetShadingRateSampleLocationivNV_c',
+    'glGetShadingRateSampleLocationivNV_p',
+    'glShadingRateImageBarrierNV',
+    'glShadingRateImagePaletteNV_c',
+    'glShadingRateImagePaletteNV_p',
+    'glShadingRateSampleOrderCustomNV_c',
+    'glShadingRateSampleOrderNV'
   ],
   'GL_NV_texture_array' => [
     'glCompressedTexImage3DNV_c',
@@ -6374,6 +8473,12 @@ our %EXPORT_TAGS_GL = (
     'glTextureImage3DMultisampleCoverageNV',
     'glTextureImage3DMultisampleNV'
   ],
+  'GL_NV_timeline_semaphore' => [
+    'glCreateSemaphoresNV_c',
+    'glCreateSemaphoresNV_p',
+    'glGetSemaphoreParameterivNV_c',
+    'glSemaphoreParameterivNV_c'
+  ],
   'GL_NV_transform_feedback' => [
     'glActiveVaryingNV',
     'glBeginTransformFeedbackNV',
@@ -6382,10 +8487,13 @@ our %EXPORT_TAGS_GL = (
     'glBindBufferRangeNV',
     'glEndTransformFeedbackNV',
     'glGetActiveVaryingNV_c',
+    'glGetActiveVaryingNV_p',
     'glGetTransformFeedbackVaryingNV_c',
+    'glGetTransformFeedbackVaryingNV_p',
     'glGetVaryingLocationNV',
     'glTransformFeedbackAttribsNV_c',
-    'glTransformFeedbackVaryingsNV_c'
+    'glTransformFeedbackVaryingsNV_c',
+    'glTransformFeedbackVaryingsNV_p'
   ],
   'GL_NV_transform_feedback2' => [
     'glBindTransformFeedbackNV',
@@ -6410,29 +8518,42 @@ our %EXPORT_TAGS_GL = (
     'glVDPAUUnmapSurfacesNV_c',
     'glVDPAUUnregisterSurfaceNV'
   ],
+  'GL_NV_vdpau_interop2' => [
+    'glVDPAURegisterVideoSurfaceWithPictureStructureNV_c'
+  ],
   'GL_NV_vertex_array_range' => [
     'glFlushVertexArrayRangeNV',
     'glVertexArrayRangeNV_c'
   ],
   'GL_NV_vertex_attrib_integer_64bit' => [
     'glGetVertexAttribLi64vNV_c',
+    'glGetVertexAttribLi64vNV_p',
     'glGetVertexAttribLui64vNV_c',
+    'glGetVertexAttribLui64vNV_p',
     'glVertexAttribL1i64NV',
     'glVertexAttribL1i64vNV_c',
+    'glVertexAttribL1i64vNV_p',
     'glVertexAttribL1ui64NV',
     'glVertexAttribL1ui64vNV_c',
+    'glVertexAttribL1ui64vNV_p',
     'glVertexAttribL2i64NV',
     'glVertexAttribL2i64vNV_c',
+    'glVertexAttribL2i64vNV_p',
     'glVertexAttribL2ui64NV',
     'glVertexAttribL2ui64vNV_c',
+    'glVertexAttribL2ui64vNV_p',
     'glVertexAttribL3i64NV',
     'glVertexAttribL3i64vNV_c',
+    'glVertexAttribL3i64vNV_p',
     'glVertexAttribL3ui64NV',
     'glVertexAttribL3ui64vNV_c',
+    'glVertexAttribL3ui64vNV_p',
     'glVertexAttribL4i64NV',
     'glVertexAttribL4i64vNV_c',
+    'glVertexAttribL4i64vNV_p',
     'glVertexAttribL4ui64NV',
     'glVertexAttribL4ui64vNV_c',
+    'glVertexAttribL4ui64vNV_p',
     'glVertexAttribLFormatNV'
   ],
   'GL_NV_vertex_buffer_unified_memory' => [
@@ -6451,71 +8572,111 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_NV_vertex_program' => [
     'glAreProgramsResidentNV_c',
+    'glAreProgramsResidentNV_p',
     'glBindProgramNV',
     'glDeleteProgramsNV_c',
     'glDeleteProgramsNV_p',
     'glExecuteProgramNV_c',
+    'glExecuteProgramNV_p',
     'glGenProgramsNV_c',
     'glGenProgramsNV_p',
     'glGetProgramParameterdvNV_c',
+    'glGetProgramParameterdvNV_p',
     'glGetProgramParameterfvNV_c',
+    'glGetProgramParameterfvNV_p',
     'glGetProgramStringNV_c',
     'glGetProgramivNV_c',
+    'glGetProgramivNV_p',
     'glGetTrackMatrixivNV_c',
+    'glGetTrackMatrixivNV_p',
     'glGetVertexAttribPointervNV_c',
     'glGetVertexAttribdvNV_c',
+    'glGetVertexAttribdvNV_p',
     'glGetVertexAttribfvNV_c',
+    'glGetVertexAttribfvNV_p',
     'glGetVertexAttribivNV_c',
+    'glGetVertexAttribivNV_p',
     'glIsProgramNV',
-    'glLoadProgramNV_c',
+    'glLoadProgramNV',
     'glProgramParameter4dNV',
     'glProgramParameter4dvNV_c',
+    'glProgramParameter4dvNV_p',
     'glProgramParameter4fNV',
     'glProgramParameter4fvNV_c',
+    'glProgramParameter4fvNV_p',
     'glProgramParameters4dvNV_c',
+    'glProgramParameters4dvNV_p',
     'glProgramParameters4fvNV_c',
+    'glProgramParameters4fvNV_p',
     'glRequestResidentProgramsNV_c',
+    'glRequestResidentProgramsNV_p',
     'glTrackMatrixNV',
     'glVertexAttrib1dNV',
     'glVertexAttrib1dvNV_c',
+    'glVertexAttrib1dvNV_p',
     'glVertexAttrib1fNV',
     'glVertexAttrib1fvNV_c',
+    'glVertexAttrib1fvNV_p',
     'glVertexAttrib1sNV',
     'glVertexAttrib1svNV_c',
+    'glVertexAttrib1svNV_p',
     'glVertexAttrib2dNV',
     'glVertexAttrib2dvNV_c',
+    'glVertexAttrib2dvNV_p',
     'glVertexAttrib2fNV',
     'glVertexAttrib2fvNV_c',
+    'glVertexAttrib2fvNV_p',
     'glVertexAttrib2sNV',
     'glVertexAttrib2svNV_c',
+    'glVertexAttrib2svNV_p',
     'glVertexAttrib3dNV',
     'glVertexAttrib3dvNV_c',
+    'glVertexAttrib3dvNV_p',
     'glVertexAttrib3fNV',
     'glVertexAttrib3fvNV_c',
+    'glVertexAttrib3fvNV_p',
     'glVertexAttrib3sNV',
     'glVertexAttrib3svNV_c',
+    'glVertexAttrib3svNV_p',
     'glVertexAttrib4dNV',
     'glVertexAttrib4dvNV_c',
+    'glVertexAttrib4dvNV_p',
     'glVertexAttrib4fNV',
     'glVertexAttrib4fvNV_c',
+    'glVertexAttrib4fvNV_p',
     'glVertexAttrib4sNV',
     'glVertexAttrib4svNV_c',
+    'glVertexAttrib4svNV_p',
     'glVertexAttrib4ubNV',
     'glVertexAttrib4ubvNV_c',
+    'glVertexAttrib4ubvNV_p',
     'glVertexAttribPointerNV_c',
     'glVertexAttribs1dvNV_c',
+    'glVertexAttribs1dvNV_p',
     'glVertexAttribs1fvNV_c',
+    'glVertexAttribs1fvNV_p',
     'glVertexAttribs1svNV_c',
+    'glVertexAttribs1svNV_p',
     'glVertexAttribs2dvNV_c',
+    'glVertexAttribs2dvNV_p',
     'glVertexAttribs2fvNV_c',
+    'glVertexAttribs2fvNV_p',
     'glVertexAttribs2svNV_c',
+    'glVertexAttribs2svNV_p',
     'glVertexAttribs3dvNV_c',
+    'glVertexAttribs3dvNV_p',
     'glVertexAttribs3fvNV_c',
+    'glVertexAttribs3fvNV_p',
     'glVertexAttribs3svNV_c',
+    'glVertexAttribs3svNV_p',
     'glVertexAttribs4dvNV_c',
+    'glVertexAttribs4dvNV_p',
     'glVertexAttribs4fvNV_c',
+    'glVertexAttribs4fvNV_p',
     'glVertexAttribs4svNV_c',
-    'glVertexAttribs4ubvNV_c'
+    'glVertexAttribs4svNV_p',
+    'glVertexAttribs4ubvNV_c',
+    'glVertexAttribs4ubvNV_p'
   ],
   'GL_NV_video_capture' => [
     'glBeginVideoCaptureNV',
@@ -6537,19 +8698,139 @@ our %EXPORT_TAGS_GL = (
     'glDisableiNV',
     'glEnableiNV',
     'glGetFloati_vNV_c',
+    'glGetFloati_vNV_p',
     'glIsEnablediNV',
     'glScissorArrayvNV_c',
+    'glScissorArrayvNV_p',
     'glScissorIndexedNV',
     'glScissorIndexedvNV_c',
+    'glScissorIndexedvNV_p',
     'glViewportArrayvNV_c',
+    'glViewportArrayvNV_p',
     'glViewportIndexedfNV',
-    'glViewportIndexedfvNV_c'
+    'glViewportIndexedfvNV_c',
+    'glViewportIndexedfvNV_p'
   ],
   'GL_NV_viewport_swizzle' => [
     'glViewportSwizzleNV'
   ],
+  'GL_OES_EGL_image' => [
+    'glEGLImageTargetRenderbufferStorageOES',
+    'glEGLImageTargetTexture2DOES'
+  ],
+  'GL_OES_blend_equation_separate' => [
+    'glBlendEquationSeparateOES'
+  ],
+  'GL_OES_blend_func_separate' => [
+    'glBlendFuncSeparateOES'
+  ],
+  'GL_OES_blend_subtract' => [
+    'glBlendEquationOES'
+  ],
+  'GL_OES_copy_image' => [
+    'glCopyImageSubDataOES'
+  ],
+  'GL_OES_draw_buffers_indexed' => [
+    'glBlendEquationSeparateiOES',
+    'glBlendEquationiOES',
+    'glBlendFuncSeparateiOES',
+    'glBlendFunciOES',
+    'glColorMaskiOES',
+    'glDisableiOES',
+    'glEnableiOES',
+    'glIsEnablediOES'
+  ],
+  'GL_OES_framebuffer_object' => [
+    'glBindFramebufferOES',
+    'glBindRenderbufferOES',
+    'glCheckFramebufferStatusOES',
+    'glDeleteFramebuffersOES_c',
+    'glDeleteRenderbuffersOES_c',
+    'glFramebufferRenderbufferOES',
+    'glFramebufferTexture2DOES',
+    'glGenFramebuffersOES_c',
+    'glGenRenderbuffersOES_c',
+    'glGenerateMipmapOES',
+    'glGetFramebufferAttachmentParameterivOES_c',
+    'glGetRenderbufferParameterivOES_c',
+    'glIsFramebufferOES',
+    'glIsRenderbufferOES',
+    'glRenderbufferStorageOES'
+  ],
+  'GL_OES_get_program_binary' => [
+    'glGetProgramBinaryOES_c',
+    'glProgramBinaryOES_c'
+  ],
+  'GL_OES_mapbuffer' => [
+    'glGetBufferPointervOES_c',
+    'glMapBufferOES_c',
+    'glUnmapBufferOES'
+  ],
+  'GL_OES_matrix_palette' => [
+    'glCurrentPaletteMatrixOES',
+    'glLoadPaletteFromModelViewMatrixOES',
+    'glMatrixIndexPointerOES_c',
+    'glWeightPointerOES_c'
+  ],
+  'GL_OES_sample_shading' => [
+    'glMinSampleShadingOES'
+  ],
+  'GL_OES_single_precision' => [
+    'glClearDepthfOES',
+    'glClipPlanefOES_c',
+    'glDepthRangefOES',
+    'glFrustumfOES',
+    'glGetClipPlanefOES_c',
+    'glOrthofOES'
+  ],
+  'GL_OES_texture_3D' => [
+    'glCompressedTexImage3DOES_c',
+    'glCompressedTexSubImage3DOES_c',
+    'glCopyTexSubImage3DOES',
+    'glFramebufferTexture3DOES',
+    'glTexImage3DOES_c',
+    'glTexSubImage3DOES_c'
+  ],
+  'GL_OES_texture_border_clamp' => [
+    'glGetSamplerParameterIivOES_c',
+    'glGetSamplerParameterIuivOES_c',
+    'glGetTexParameterIivOES_c',
+    'glGetTexParameterIuivOES_c',
+    'glSamplerParameterIivOES_c',
+    'glSamplerParameterIuivOES_c',
+    'glTexParameterIivOES_c',
+    'glTexParameterIuivOES_c'
+  ],
+  'GL_OES_texture_buffer' => [
+    'glTexBufferOES',
+    'glTexBufferRangeOES'
+  ],
+  'GL_OES_texture_cube_map' => [
+    'glGetTexGenfvOES_c',
+    'glGetTexGenivOES_c',
+    'glGetTexGenxvOES_c',
+    'glTexGenfOES',
+    'glTexGenfvOES_c',
+    'glTexGeniOES',
+    'glTexGenivOES_c',
+    'glTexGenxOES',
+    'glTexGenxvOES_c'
+  ],
+  'GL_OES_texture_storage_multisample_2d_array' => [
+    'glTexStorage3DMultisampleOES'
+  ],
+  'GL_OES_texture_view' => [
+    'glTextureViewOES'
+  ],
+  'GL_OES_vertex_array_object' => [
+    'glBindVertexArrayOES',
+    'glDeleteVertexArraysOES_c',
+    'glGenVertexArraysOES_c',
+    'glIsVertexArrayOES'
+  ],
   'GL_OVR_multiview' => [
-    'glFramebufferTextureMultiviewOVR'
+    'glFramebufferTextureMultiviewOVR',
+    'glNamedFramebufferTextureMultiviewOVR'
   ],
   'GL_OVR_multiview_multisampled_render_to_texture' => [
     'glFramebufferTextureMultisampleMultiviewOVR'
@@ -6566,8 +8847,11 @@ our %EXPORT_TAGS_GL = (
   'GL_QCOM_extended_get' => [
     'glExtGetBufferPointervQCOM_c',
     'glExtGetBuffersQCOM_c',
+    'glExtGetBuffersQCOM_p',
     'glExtGetFramebuffersQCOM_c',
+    'glExtGetFramebuffersQCOM_p',
     'glExtGetRenderbuffersQCOM_c',
+    'glExtGetRenderbuffersQCOM_p',
     'glExtGetTexLevelParameterivQCOM_c',
     'glExtGetTexSubImageQCOM_c',
     'glExtGetTexturesQCOM_c',
@@ -6576,15 +8860,31 @@ our %EXPORT_TAGS_GL = (
   'GL_QCOM_extended_get2' => [
     'glExtGetProgramBinarySourceQCOM_c',
     'glExtGetProgramsQCOM_c',
+    'glExtGetProgramsQCOM_p',
     'glExtGetShadersQCOM_c',
+    'glExtGetShadersQCOM_p',
     'glExtIsProgramBinaryQCOM'
+  ],
+  'GL_QCOM_frame_extrapolation' => [
+    'glExtrapolateTex2DQCOM'
   ],
   'GL_QCOM_framebuffer_foveated' => [
     'glFramebufferFoveationConfigQCOM_c',
+    'glFramebufferFoveationConfigQCOM_p',
     'glFramebufferFoveationParametersQCOM'
+  ],
+  'GL_QCOM_motion_estimation' => [
+    'glTexEstimateMotionQCOM',
+    'glTexEstimateMotionRegionsQCOM'
   ],
   'GL_QCOM_shader_framebuffer_fetch_noncoherent' => [
     'glFramebufferFetchBarrierQCOM'
+  ],
+  'GL_QCOM_shading_rate' => [
+    'glShadingRateQCOM'
+  ],
+  'GL_QCOM_texture_foveated' => [
+    'glTextureFoveationParametersQCOM'
   ],
   'GL_QCOM_tiled_rendering' => [
     'glEndTilingQCOM',
@@ -6598,17 +8898,23 @@ our %EXPORT_TAGS_GL = (
     'glDepthRangex',
     'glFogx',
     'glFogxv_c',
+    'glFogxv_p',
     'glFrustumf',
     'glFrustumx',
     'glLightModelx',
     'glLightModelxv_c',
+    'glLightModelxv_p',
     'glLightx',
     'glLightxv_c',
+    'glLightxv_p',
     'glLineWidthx',
     'glLoadMatrixx_c',
+    'glLoadMatrixx_p',
     'glMaterialx',
     'glMaterialxv_c',
+    'glMaterialxv_p',
     'glMultMatrixx_c',
+    'glMultMatrixx_p',
     'glMultiTexCoord4x',
     'glNormal3x',
     'glOrthof',
@@ -6620,23 +8926,34 @@ our %EXPORT_TAGS_GL = (
     'glScalex',
     'glTexEnvx',
     'glTexEnvxv_c',
+    'glTexEnvxv_p',
     'glTexParameterx',
     'glTranslatex'
   ],
   'GL_REGAL_ES1_1_compatibility' => [
     'glClipPlanef_c',
+    'glClipPlanef_p',
     'glClipPlanex_c',
+    'glClipPlanex_p',
     'glGetClipPlanef_c',
+    'glGetClipPlanef_p',
     'glGetClipPlanex_c',
+    'glGetClipPlanex_p',
     'glGetFixedv_c',
     'glGetLightxv_c',
+    'glGetLightxv_p',
     'glGetMaterialxv_c',
+    'glGetMaterialxv_p',
     'glGetTexEnvxv_c',
+    'glGetTexEnvxv_p',
     'glGetTexParameterxv_c',
+    'glGetTexParameterxv_p',
     'glPointParameterx',
     'glPointParameterxv_c',
+    'glPointParameterxv_p',
     'glPointSizePointerOES_c',
-    'glTexParameterxv_c'
+    'glTexParameterxv_c',
+    'glTexParameterxv_p'
   ],
   'GL_REGAL_extension_query' => [
     'glGetExtensionREGAL',
@@ -6650,10 +8967,13 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_SGIS_detail_texture' => [
     'glDetailTexFuncSGIS_c',
-    'glGetDetailTexFuncSGIS_c'
+    'glDetailTexFuncSGIS_p',
+    'glGetDetailTexFuncSGIS_c',
+    'glGetDetailTexFuncSGIS_p'
   ],
   'GL_SGIS_fog_function' => [
     'glFogFuncSGIS_c',
+    'glFogFuncSGIS_p',
     'glGetFogFuncSGIS_c'
   ],
   'GL_SGIS_multisample' => [
@@ -6671,7 +8991,9 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_SGIS_sharpen_texture' => [
     'glGetSharpenTexFuncSGIS_c',
-    'glSharpenTexFuncSGIS_c'
+    'glGetSharpenTexFuncSGIS_p',
+    'glSharpenTexFuncSGIS_c',
+    'glSharpenTexFuncSGIS_p'
   ],
   'GL_SGIS_texture4D' => [
     'glTexImage4DSGIS_c',
@@ -6679,15 +9001,18 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_SGIS_texture_filter4' => [
     'glGetTexFilterFuncSGIS_c',
-    'glTexFilterFuncSGIS_c'
+    'glTexFilterFuncSGIS_c',
+    'glTexFilterFuncSGIS_p'
   ],
   'GL_SGIX_async' => [
     'glAsyncMarkerSGIX',
     'glDeleteAsyncMarkersSGIX',
     'glFinishAsyncSGIX_c',
+    'glFinishAsyncSGIX_p',
     'glGenAsyncMarkersSGIX',
     'glIsAsyncMarkerSGIX',
-    'glPollAsyncSGIX_c'
+    'glPollAsyncSGIX_c',
+    'glPollAsyncSGIX_p'
   ],
   'GL_SGIX_datapipe' => [
     'glAddressSpace',
@@ -6711,16 +9036,24 @@ our %EXPORT_TAGS_GL = (
     'glFragmentLightModelivSGIX_c',
     'glFragmentLightfSGIX',
     'glFragmentLightfvSGIX_c',
+    'glFragmentLightfvSGIX_p',
     'glFragmentLightiSGIX',
     'glFragmentLightivSGIX_c',
+    'glFragmentLightivSGIX_p',
     'glFragmentMaterialfSGIX',
     'glFragmentMaterialfvSGIX_c',
+    'glFragmentMaterialfvSGIX_p',
     'glFragmentMaterialiSGIX',
     'glFragmentMaterialivSGIX_c',
+    'glFragmentMaterialivSGIX_p',
     'glGetFragmentLightfvSGIX_c',
+    'glGetFragmentLightfvSGIX_p',
     'glGetFragmentLightivSGIX_c',
+    'glGetFragmentLightivSGIX_p',
     'glGetFragmentMaterialfvSGIX_c',
-    'glGetFragmentMaterialivSGIX_c'
+    'glGetFragmentMaterialfvSGIX_p',
+    'glGetFragmentMaterialivSGIX_c',
+    'glGetFragmentMaterialivSGIX_p'
   ],
   'GL_SGIX_framezoom' => [
     'glFrameZoomSGIX'
@@ -6732,7 +9065,6 @@ our %EXPORT_TAGS_GL = (
     'glAllocMPEGPredictorsSGIX_c',
     'glDeleteMPEGPredictorsSGIX_c',
     'glGenMPEGPredictorsSGIX_c',
-    'glGenMPEGPredictorsSGIX_p',
     'glGetMPEGParameterfvSGIX_c',
     'glGetMPEGParameterivSGIX_c',
     'glGetMPEGPredictorSGIX_c',
@@ -6760,7 +9092,8 @@ our %EXPORT_TAGS_GL = (
     'glMeshStrideSGIX'
   ],
   'GL_SGIX_reference_plane' => [
-    'glReferencePlaneSGIX_c'
+    'glReferencePlaneSGIX_c',
+    'glReferencePlaneSGIX_p'
   ],
   'GL_SGIX_sprite' => [
     'glSpriteParameterfSGIX',
@@ -6779,19 +9112,21 @@ our %EXPORT_TAGS_GL = (
     'glAreVertexArraysResidentSGIX_c',
     'glBindVertexArraySGIX',
     'glDeleteVertexArraysSGIX_c',
-    'glDeleteVertexArraysSGIX_p',
     'glGenVertexArraysSGIX_c',
-    'glGenVertexArraysSGIX_p',
     'glIsVertexArraySGIX',
     'glPrioritizeVertexArraysSGIX_c'
   ],
   'GL_SGI_color_table' => [
     'glColorTableParameterfvSGI_c',
+    'glColorTableParameterfvSGI_p',
     'glColorTableParameterivSGI_c',
+    'glColorTableParameterivSGI_p',
     'glColorTableSGI_c',
     'glCopyColorTableSGI',
     'glGetColorTableParameterfvSGI_c',
+    'glGetColorTableParameterfvSGI_p',
     'glGetColorTableParameterivSGI_c',
+    'glGetColorTableParameterivSGI_p',
     'glGetColorTableSGI_c'
   ],
   'GL_SGI_fft' => [
@@ -6831,53 +9166,74 @@ our %EXPORT_TAGS_GL = (
   'GL_SUN_vertex' => [
     'glColor3fVertex3fSUN',
     'glColor3fVertex3fvSUN_c',
+    'glColor3fVertex3fvSUN_p',
     'glColor4fNormal3fVertex3fSUN',
     'glColor4fNormal3fVertex3fvSUN_c',
+    'glColor4fNormal3fVertex3fvSUN_p',
     'glColor4ubVertex2fSUN',
     'glColor4ubVertex2fvSUN_c',
+    'glColor4ubVertex2fvSUN_p',
     'glColor4ubVertex3fSUN',
     'glColor4ubVertex3fvSUN_c',
+    'glColor4ubVertex3fvSUN_p',
     'glNormal3fVertex3fSUN',
     'glNormal3fVertex3fvSUN_c',
+    'glNormal3fVertex3fvSUN_p',
     'glReplacementCodeuiColor3fVertex3fSUN',
     'glReplacementCodeuiColor3fVertex3fvSUN_c',
+    'glReplacementCodeuiColor3fVertex3fvSUN_p',
     'glReplacementCodeuiColor4fNormal3fVertex3fSUN',
     'glReplacementCodeuiColor4fNormal3fVertex3fvSUN_c',
+    'glReplacementCodeuiColor4fNormal3fVertex3fvSUN_p',
     'glReplacementCodeuiColor4ubVertex3fSUN',
     'glReplacementCodeuiColor4ubVertex3fvSUN_c',
+    'glReplacementCodeuiColor4ubVertex3fvSUN_p',
     'glReplacementCodeuiNormal3fVertex3fSUN',
     'glReplacementCodeuiNormal3fVertex3fvSUN_c',
+    'glReplacementCodeuiNormal3fVertex3fvSUN_p',
     'glReplacementCodeuiTexCoord2fColor4fNormal3fVertex3fSUN',
     'glReplacementCodeuiTexCoord2fColor4fNormal3fVertex3fvSUN_c',
+    'glReplacementCodeuiTexCoord2fColor4fNormal3fVertex3fvSUN_p',
     'glReplacementCodeuiTexCoord2fNormal3fVertex3fSUN',
     'glReplacementCodeuiTexCoord2fNormal3fVertex3fvSUN_c',
+    'glReplacementCodeuiTexCoord2fNormal3fVertex3fvSUN_p',
     'glReplacementCodeuiTexCoord2fVertex3fSUN',
     'glReplacementCodeuiTexCoord2fVertex3fvSUN_c',
+    'glReplacementCodeuiTexCoord2fVertex3fvSUN_p',
     'glReplacementCodeuiVertex3fSUN',
     'glReplacementCodeuiVertex3fvSUN_c',
+    'glReplacementCodeuiVertex3fvSUN_p',
     'glTexCoord2fColor3fVertex3fSUN',
     'glTexCoord2fColor3fVertex3fvSUN_c',
+    'glTexCoord2fColor3fVertex3fvSUN_p',
     'glTexCoord2fColor4fNormal3fVertex3fSUN',
     'glTexCoord2fColor4fNormal3fVertex3fvSUN_c',
+    'glTexCoord2fColor4fNormal3fVertex3fvSUN_p',
     'glTexCoord2fColor4ubVertex3fSUN',
     'glTexCoord2fColor4ubVertex3fvSUN_c',
+    'glTexCoord2fColor4ubVertex3fvSUN_p',
     'glTexCoord2fNormal3fVertex3fSUN',
     'glTexCoord2fNormal3fVertex3fvSUN_c',
+    'glTexCoord2fNormal3fVertex3fvSUN_p',
     'glTexCoord2fVertex3fSUN',
     'glTexCoord2fVertex3fvSUN_c',
+    'glTexCoord2fVertex3fvSUN_p',
     'glTexCoord4fColor4fNormal3fVertex4fSUN',
     'glTexCoord4fColor4fNormal3fVertex4fvSUN_c',
+    'glTexCoord4fColor4fNormal3fVertex4fvSUN_p',
     'glTexCoord4fVertex4fSUN',
-    'glTexCoord4fVertex4fvSUN_c'
+    'glTexCoord4fVertex4fvSUN_c',
+    'glTexCoord4fVertex4fvSUN_p'
   ],
   'GL_VERSION_1_1' => [
     'glAccum',
     'glAlphaFunc',
     'glAreTexturesResident_c',
+    'glAreTexturesResident_p',
     'glArrayElement',
     'glBegin',
     'glBindTexture',
-    'glBitmap_c',
+    'glBitmap',
     'glBlendFunc',
     'glCallList',
     'glCallLists_c',
@@ -6888,38 +9244,55 @@ our %EXPORT_TAGS_GL = (
     'glClearIndex',
     'glClearStencil',
     'glClipPlane_c',
+    'glClipPlane_p',
     'glColor3b',
     'glColor3bv_c',
+    'glColor3bv_p',
     'glColor3d',
     'glColor3dv_c',
+    'glColor3dv_p',
     'glColor3f',
     'glColor3fv_c',
+    'glColor3fv_p',
     'glColor3i',
     'glColor3iv_c',
+    'glColor3iv_p',
     'glColor3s',
     'glColor3sv_c',
+    'glColor3sv_p',
     'glColor3ub',
     'glColor3ubv_c',
+    'glColor3ubv_p',
     'glColor3ui',
     'glColor3uiv_c',
+    'glColor3uiv_p',
     'glColor3us',
     'glColor3usv_c',
+    'glColor3usv_p',
     'glColor4b',
     'glColor4bv_c',
+    'glColor4bv_p',
     'glColor4d',
     'glColor4dv_c',
+    'glColor4dv_p',
     'glColor4f',
     'glColor4fv_c',
+    'glColor4fv_p',
     'glColor4i',
     'glColor4iv_c',
+    'glColor4iv_p',
     'glColor4s',
     'glColor4sv_c',
+    'glColor4sv_p',
     'glColor4ub',
     'glColor4ubv_c',
+    'glColor4ubv_p',
     'glColor4ui',
     'glColor4uiv_c',
+    'glColor4uiv_p',
     'glColor4us',
     'glColor4usv_c',
+    'glColor4usv_p',
     'glColorMask',
     'glColorMaterial',
     'glColorPointer_c',
@@ -6944,47 +9317,64 @@ our %EXPORT_TAGS_GL = (
     'glEdgeFlag',
     'glEdgeFlagPointer_c',
     'glEdgeFlagv_c',
+    'glEdgeFlagv_p',
     'glEnable',
     'glEnableClientState',
     'glEnd',
     'glEndList',
     'glEvalCoord1d',
     'glEvalCoord1dv_c',
+    'glEvalCoord1dv_p',
     'glEvalCoord1f',
     'glEvalCoord1fv_c',
+    'glEvalCoord1fv_p',
     'glEvalCoord2d',
     'glEvalCoord2dv_c',
+    'glEvalCoord2dv_p',
     'glEvalCoord2f',
     'glEvalCoord2fv_c',
+    'glEvalCoord2fv_p',
     'glEvalMesh1',
     'glEvalMesh2',
     'glEvalPoint1',
     'glEvalPoint2',
     'glFeedbackBuffer_c',
+    'glFeedbackBuffer_p',
     'glFinish',
     'glFlush',
     'glFogf',
     'glFogfv_c',
+    'glFogfv_p',
     'glFogi',
     'glFogiv_c',
+    'glFogiv_p',
     'glFrontFace',
     'glFrustum',
     'glGenLists',
     'glGenTextures_c',
     'glGenTextures_p',
     'glGetBooleanv_c',
+    'glGetBooleanv_p',
     'glGetClipPlane_c',
+    'glGetClipPlane_p',
     'glGetDoublev_c',
+    'glGetDoublev_p',
     'glGetError',
     'glGetFloatv_c',
+    'glGetFloatv_p',
     'glGetIntegerv_c',
+    'glGetIntegerv_p',
     'glGetLightfv_c',
+    'glGetLightfv_p',
     'glGetLightiv_c',
+    'glGetLightiv_p',
     'glGetMapdv_c',
     'glGetMapfv_c',
     'glGetMapiv_c',
     'glGetMaterialfv_c',
+    'glGetMaterialfv_p',
     'glGetMaterialiv_c',
+    'glGetMaterialiv_p',
     'glGetPixelMapfv_c',
     'glGetPixelMapuiv_c',
     'glGetPixelMapusv_c',
@@ -6992,28 +9382,42 @@ our %EXPORT_TAGS_GL = (
     'glGetPolygonStipple_c',
     'glGetString',
     'glGetTexEnvfv_c',
+    'glGetTexEnvfv_p',
     'glGetTexEnviv_c',
+    'glGetTexEnviv_p',
     'glGetTexGendv_c',
+    'glGetTexGendv_p',
     'glGetTexGenfv_c',
+    'glGetTexGenfv_p',
     'glGetTexGeniv_c',
+    'glGetTexGeniv_p',
     'glGetTexImage_c',
     'glGetTexLevelParameterfv_c',
+    'glGetTexLevelParameterfv_p',
     'glGetTexLevelParameteriv_c',
+    'glGetTexLevelParameteriv_p',
     'glGetTexParameterfv_c',
+    'glGetTexParameterfv_p',
     'glGetTexParameteriv_c',
+    'glGetTexParameteriv_p',
     'glHint',
     'glIndexMask',
     'glIndexPointer_c',
     'glIndexd',
     'glIndexdv_c',
+    'glIndexdv_p',
     'glIndexf',
     'glIndexfv_c',
+    'glIndexfv_p',
     'glIndexi',
     'glIndexiv_c',
+    'glIndexiv_p',
     'glIndexs',
     'glIndexsv_c',
+    'glIndexsv_p',
     'glIndexub',
     'glIndexubv_c',
+    'glIndexubv_p',
     'glInitNames',
     'glInterleavedArrays_c',
     'glIsEnabled',
@@ -7021,18 +9425,24 @@ our %EXPORT_TAGS_GL = (
     'glIsTexture',
     'glLightModelf',
     'glLightModelfv_c',
+    'glLightModelfv_p',
     'glLightModeli',
     'glLightModeliv_c',
+    'glLightModeliv_p',
     'glLightf',
     'glLightfv_c',
+    'glLightfv_p',
     'glLighti',
     'glLightiv_c',
+    'glLightiv_p',
     'glLineStipple',
     'glLineWidth',
     'glListBase',
     'glLoadIdentity',
     'glLoadMatrixd_c',
+    'glLoadMatrixd_p',
     'glLoadMatrixf_c',
+    'glLoadMatrixf_p',
     'glLoadName',
     'glLogicOp',
     'glMap1d_c',
@@ -7045,28 +9455,40 @@ our %EXPORT_TAGS_GL = (
     'glMapGrid2f',
     'glMaterialf',
     'glMaterialfv_c',
+    'glMaterialfv_p',
     'glMateriali',
     'glMaterialiv_c',
+    'glMaterialiv_p',
     'glMatrixMode',
     'glMultMatrixd_c',
+    'glMultMatrixd_p',
     'glMultMatrixf_c',
+    'glMultMatrixf_p',
     'glNewList',
     'glNormal3b',
     'glNormal3bv_c',
+    'glNormal3bv_p',
     'glNormal3d',
     'glNormal3dv_c',
+    'glNormal3dv_p',
     'glNormal3f',
     'glNormal3fv_c',
+    'glNormal3fv_p',
     'glNormal3i',
     'glNormal3iv_c',
+    'glNormal3iv_p',
     'glNormal3s',
     'glNormal3sv_c',
+    'glNormal3sv_p',
     'glNormalPointer_c',
     'glOrtho',
     'glPassThrough',
     'glPixelMapfv_c',
+    'glPixelMapfv_p',
     'glPixelMapuiv_c',
+    'glPixelMapuiv_p',
     'glPixelMapusv_c',
+    'glPixelMapusv_p',
     'glPixelStoref',
     'glPixelStorei',
     'glPixelTransferf',
@@ -7075,50 +9497,67 @@ our %EXPORT_TAGS_GL = (
     'glPointSize',
     'glPolygonMode',
     'glPolygonOffset',
-    'glPolygonStipple_c',
+    'glPolygonStipple',
     'glPopAttrib',
     'glPopClientAttrib',
     'glPopMatrix',
     'glPopName',
     'glPrioritizeTextures_c',
+    'glPrioritizeTextures_p',
     'glPushAttrib',
     'glPushClientAttrib',
     'glPushMatrix',
     'glPushName',
     'glRasterPos2d',
     'glRasterPos2dv_c',
+    'glRasterPos2dv_p',
     'glRasterPos2f',
     'glRasterPos2fv_c',
+    'glRasterPos2fv_p',
     'glRasterPos2i',
     'glRasterPos2iv_c',
+    'glRasterPos2iv_p',
     'glRasterPos2s',
     'glRasterPos2sv_c',
+    'glRasterPos2sv_p',
     'glRasterPos3d',
     'glRasterPos3dv_c',
+    'glRasterPos3dv_p',
     'glRasterPos3f',
     'glRasterPos3fv_c',
+    'glRasterPos3fv_p',
     'glRasterPos3i',
     'glRasterPos3iv_c',
+    'glRasterPos3iv_p',
     'glRasterPos3s',
     'glRasterPos3sv_c',
+    'glRasterPos3sv_p',
     'glRasterPos4d',
     'glRasterPos4dv_c',
+    'glRasterPos4dv_p',
     'glRasterPos4f',
     'glRasterPos4fv_c',
+    'glRasterPos4fv_p',
     'glRasterPos4i',
     'glRasterPos4iv_c',
+    'glRasterPos4iv_p',
     'glRasterPos4s',
     'glRasterPos4sv_c',
+    'glRasterPos4sv_p',
     'glReadBuffer',
     'glReadPixels_c',
     'glRectd',
     'glRectdv_c',
+    'glRectdv_p',
     'glRectf',
     'glRectfv_c',
+    'glRectfv_p',
     'glRecti',
     'glRectiv_c',
+    'glRectiv_p',
     'glRects',
     'glRectsv_c',
+    'glRectsv_p',
     'glRenderMode',
     'glRotated',
     'glRotatef',
@@ -7126,87 +9565,123 @@ our %EXPORT_TAGS_GL = (
     'glScalef',
     'glScissor',
     'glSelectBuffer_c',
+    'glSelectBuffer_p',
     'glShadeModel',
     'glStencilFunc',
     'glStencilMask',
     'glStencilOp',
     'glTexCoord1d',
     'glTexCoord1dv_c',
+    'glTexCoord1dv_p',
     'glTexCoord1f',
     'glTexCoord1fv_c',
+    'glTexCoord1fv_p',
     'glTexCoord1i',
     'glTexCoord1iv_c',
+    'glTexCoord1iv_p',
     'glTexCoord1s',
     'glTexCoord1sv_c',
+    'glTexCoord1sv_p',
     'glTexCoord2d',
     'glTexCoord2dv_c',
+    'glTexCoord2dv_p',
     'glTexCoord2f',
     'glTexCoord2fv_c',
+    'glTexCoord2fv_p',
     'glTexCoord2i',
     'glTexCoord2iv_c',
+    'glTexCoord2iv_p',
     'glTexCoord2s',
     'glTexCoord2sv_c',
+    'glTexCoord2sv_p',
     'glTexCoord3d',
     'glTexCoord3dv_c',
+    'glTexCoord3dv_p',
     'glTexCoord3f',
     'glTexCoord3fv_c',
+    'glTexCoord3fv_p',
     'glTexCoord3i',
     'glTexCoord3iv_c',
+    'glTexCoord3iv_p',
     'glTexCoord3s',
     'glTexCoord3sv_c',
+    'glTexCoord3sv_p',
     'glTexCoord4d',
     'glTexCoord4dv_c',
+    'glTexCoord4dv_p',
     'glTexCoord4f',
     'glTexCoord4fv_c',
+    'glTexCoord4fv_p',
     'glTexCoord4i',
     'glTexCoord4iv_c',
+    'glTexCoord4iv_p',
     'glTexCoord4s',
     'glTexCoord4sv_c',
+    'glTexCoord4sv_p',
     'glTexCoordPointer_c',
     'glTexEnvf',
     'glTexEnvfv_c',
+    'glTexEnvfv_p',
     'glTexEnvi',
     'glTexEnviv_c',
+    'glTexEnviv_p',
     'glTexGend',
     'glTexGendv_c',
+    'glTexGendv_p',
     'glTexGenf',
     'glTexGenfv_c',
+    'glTexGenfv_p',
     'glTexGeni',
     'glTexGeniv_c',
+    'glTexGeniv_p',
     'glTexImage1D_c',
     'glTexImage2D_c',
     'glTexParameterf',
     'glTexParameterfv_c',
+    'glTexParameterfv_p',
     'glTexParameteri',
     'glTexParameteriv_c',
+    'glTexParameteriv_p',
     'glTexSubImage1D_c',
     'glTexSubImage2D_c',
     'glTranslated',
     'glTranslatef',
     'glVertex2d',
     'glVertex2dv_c',
+    'glVertex2dv_p',
     'glVertex2f',
     'glVertex2fv_c',
+    'glVertex2fv_p',
     'glVertex2i',
     'glVertex2iv_c',
+    'glVertex2iv_p',
     'glVertex2s',
     'glVertex2sv_c',
+    'glVertex2sv_p',
     'glVertex3d',
     'glVertex3dv_c',
+    'glVertex3dv_p',
     'glVertex3f',
     'glVertex3fv_c',
+    'glVertex3fv_p',
     'glVertex3i',
     'glVertex3iv_c',
+    'glVertex3iv_p',
     'glVertex3s',
     'glVertex3sv_c',
+    'glVertex3sv_p',
     'glVertex4d',
     'glVertex4dv_c',
+    'glVertex4dv_p',
     'glVertex4f',
     'glVertex4fv_c',
+    'glVertex4fv_p',
     'glVertex4i',
     'glVertex4iv_c',
+    'glVertex4iv_p',
     'glVertex4s',
     'glVertex4sv_c',
+    'glVertex4sv_p',
     'glVertexPointer_c',
     'glViewport'
   ],
@@ -7227,41 +9702,61 @@ our %EXPORT_TAGS_GL = (
     'glCompressedTexSubImage3D_c',
     'glGetCompressedTexImage_c',
     'glLoadTransposeMatrixd_c',
+    'glLoadTransposeMatrixd_p',
     'glLoadTransposeMatrixf_c',
+    'glLoadTransposeMatrixf_p',
     'glMultTransposeMatrixd_c',
+    'glMultTransposeMatrixd_p',
     'glMultTransposeMatrixf_c',
+    'glMultTransposeMatrixf_p',
     'glMultiTexCoord1d',
     'glMultiTexCoord1dv_c',
+    'glMultiTexCoord1dv_p',
     'glMultiTexCoord1f',
     'glMultiTexCoord1fv_c',
+    'glMultiTexCoord1fv_p',
     'glMultiTexCoord1i',
     'glMultiTexCoord1iv_c',
+    'glMultiTexCoord1iv_p',
     'glMultiTexCoord1s',
     'glMultiTexCoord1sv_c',
+    'glMultiTexCoord1sv_p',
     'glMultiTexCoord2d',
     'glMultiTexCoord2dv_c',
+    'glMultiTexCoord2dv_p',
     'glMultiTexCoord2f',
     'glMultiTexCoord2fv_c',
+    'glMultiTexCoord2fv_p',
     'glMultiTexCoord2i',
     'glMultiTexCoord2iv_c',
+    'glMultiTexCoord2iv_p',
     'glMultiTexCoord2s',
     'glMultiTexCoord2sv_c',
+    'glMultiTexCoord2sv_p',
     'glMultiTexCoord3d',
     'glMultiTexCoord3dv_c',
+    'glMultiTexCoord3dv_p',
     'glMultiTexCoord3f',
     'glMultiTexCoord3fv_c',
+    'glMultiTexCoord3fv_p',
     'glMultiTexCoord3i',
     'glMultiTexCoord3iv_c',
+    'glMultiTexCoord3iv_p',
     'glMultiTexCoord3s',
     'glMultiTexCoord3sv_c',
+    'glMultiTexCoord3sv_p',
     'glMultiTexCoord4d',
     'glMultiTexCoord4dv_c',
+    'glMultiTexCoord4dv_p',
     'glMultiTexCoord4f',
     'glMultiTexCoord4fv_c',
+    'glMultiTexCoord4fv_p',
     'glMultiTexCoord4i',
     'glMultiTexCoord4iv_c',
+    'glMultiTexCoord4iv_p',
     'glMultiTexCoord4s',
     'glMultiTexCoord4sv_c',
+    'glMultiTexCoord4sv_p',
     'glSampleCoverage'
   ],
   'GL_VERSION_1_4' => [
@@ -7271,47 +9766,68 @@ our %EXPORT_TAGS_GL = (
     'glFogCoordPointer_c',
     'glFogCoordd',
     'glFogCoorddv_c',
+    'glFogCoorddv_p',
     'glFogCoordf',
     'glFogCoordfv_c',
+    'glFogCoordfv_p',
     'glMultiDrawArrays_c',
+    'glMultiDrawArrays_p',
     'glMultiDrawElements_c',
     'glPointParameterf',
     'glPointParameterfv_c',
+    'glPointParameterfv_p',
     'glPointParameteri',
     'glPointParameteriv_c',
+    'glPointParameteriv_p',
     'glSecondaryColor3b',
     'glSecondaryColor3bv_c',
+    'glSecondaryColor3bv_p',
     'glSecondaryColor3d',
     'glSecondaryColor3dv_c',
+    'glSecondaryColor3dv_p',
     'glSecondaryColor3f',
     'glSecondaryColor3fv_c',
+    'glSecondaryColor3fv_p',
     'glSecondaryColor3i',
     'glSecondaryColor3iv_c',
+    'glSecondaryColor3iv_p',
     'glSecondaryColor3s',
     'glSecondaryColor3sv_c',
+    'glSecondaryColor3sv_p',
     'glSecondaryColor3ub',
     'glSecondaryColor3ubv_c',
+    'glSecondaryColor3ubv_p',
     'glSecondaryColor3ui',
     'glSecondaryColor3uiv_c',
+    'glSecondaryColor3uiv_p',
     'glSecondaryColor3us',
     'glSecondaryColor3usv_c',
+    'glSecondaryColor3usv_p',
     'glSecondaryColorPointer_c',
     'glWindowPos2d',
     'glWindowPos2dv_c',
+    'glWindowPos2dv_p',
     'glWindowPos2f',
     'glWindowPos2fv_c',
+    'glWindowPos2fv_p',
     'glWindowPos2i',
     'glWindowPos2iv_c',
+    'glWindowPos2iv_p',
     'glWindowPos2s',
     'glWindowPos2sv_c',
+    'glWindowPos2sv_p',
     'glWindowPos3d',
     'glWindowPos3dv_c',
+    'glWindowPos3dv_p',
     'glWindowPos3f',
     'glWindowPos3fv_c',
+    'glWindowPos3fv_p',
     'glWindowPos3i',
     'glWindowPos3iv_c',
+    'glWindowPos3iv_p',
     'glWindowPos3s',
-    'glWindowPos3sv_c'
+    'glWindowPos3sv_c',
+    'glWindowPos3sv_p'
   ],
   'GL_VERSION_1_5' => [
     'glBeginQuery',
@@ -7328,11 +9844,15 @@ our %EXPORT_TAGS_GL = (
     'glGenQueries_c',
     'glGenQueries_p',
     'glGetBufferParameteriv_c',
+    'glGetBufferParameteriv_p',
     'glGetBufferPointerv_c',
     'glGetBufferSubData_c',
     'glGetQueryObjectiv_c',
+    'glGetQueryObjectiv_p',
     'glGetQueryObjectuiv_c',
+    'glGetQueryObjectuiv_p',
     'glGetQueryiv_c',
+    'glGetQueryiv_p',
     'glIsBuffer',
     'glIsQuery',
     'glMapBuffer_c',
@@ -7350,96 +9870,149 @@ our %EXPORT_TAGS_GL = (
     'glDetachShader',
     'glDisableVertexAttribArray',
     'glDrawBuffers_c',
+    'glDrawBuffers_p',
     'glEnableVertexAttribArray',
     'glGetActiveAttrib_c',
+    'glGetActiveAttrib_p',
     'glGetActiveUniform_c',
+    'glGetActiveUniform_p',
     'glGetAttachedShaders_c',
+    'glGetAttachedShaders_p',
     'glGetAttribLocation',
     'glGetProgramInfoLog_c',
+    'glGetProgramInfoLog_p',
     'glGetProgramiv_c',
+    'glGetProgramiv_p',
     'glGetShaderInfoLog_c',
+    'glGetShaderInfoLog_p',
     'glGetShaderSource_c',
+    'glGetShaderSource_p',
     'glGetShaderiv_c',
+    'glGetShaderiv_p',
     'glGetUniformLocation',
     'glGetUniformfv_c',
     'glGetUniformiv_c',
     'glGetVertexAttribPointerv_c',
     'glGetVertexAttribdv_c',
+    'glGetVertexAttribdv_p',
     'glGetVertexAttribfv_c',
+    'glGetVertexAttribfv_p',
     'glGetVertexAttribiv_c',
+    'glGetVertexAttribiv_p',
     'glIsProgram',
     'glIsShader',
     'glLinkProgram',
     'glShaderSource_c',
+    'glShaderSource_p',
     'glStencilFuncSeparate',
     'glStencilMaskSeparate',
     'glStencilOpSeparate',
     'glUniform1f',
     'glUniform1fv_c',
+    'glUniform1fv_p',
     'glUniform1i',
     'glUniform1iv_c',
+    'glUniform1iv_p',
     'glUniform2f',
     'glUniform2fv_c',
+    'glUniform2fv_p',
     'glUniform2i',
     'glUniform2iv_c',
+    'glUniform2iv_p',
     'glUniform3f',
     'glUniform3fv_c',
+    'glUniform3fv_p',
     'glUniform3i',
     'glUniform3iv_c',
+    'glUniform3iv_p',
     'glUniform4f',
     'glUniform4fv_c',
+    'glUniform4fv_p',
     'glUniform4i',
     'glUniform4iv_c',
+    'glUniform4iv_p',
     'glUniformMatrix2fv_c',
+    'glUniformMatrix2fv_p',
     'glUniformMatrix3fv_c',
+    'glUniformMatrix3fv_p',
     'glUniformMatrix4fv_c',
+    'glUniformMatrix4fv_p',
     'glUseProgram',
     'glValidateProgram',
     'glVertexAttrib1d',
     'glVertexAttrib1dv_c',
+    'glVertexAttrib1dv_p',
     'glVertexAttrib1f',
     'glVertexAttrib1fv_c',
+    'glVertexAttrib1fv_p',
     'glVertexAttrib1s',
     'glVertexAttrib1sv_c',
+    'glVertexAttrib1sv_p',
     'glVertexAttrib2d',
     'glVertexAttrib2dv_c',
+    'glVertexAttrib2dv_p',
     'glVertexAttrib2f',
     'glVertexAttrib2fv_c',
+    'glVertexAttrib2fv_p',
     'glVertexAttrib2s',
     'glVertexAttrib2sv_c',
+    'glVertexAttrib2sv_p',
     'glVertexAttrib3d',
     'glVertexAttrib3dv_c',
+    'glVertexAttrib3dv_p',
     'glVertexAttrib3f',
     'glVertexAttrib3fv_c',
+    'glVertexAttrib3fv_p',
     'glVertexAttrib3s',
     'glVertexAttrib3sv_c',
+    'glVertexAttrib3sv_p',
     'glVertexAttrib4Nbv_c',
+    'glVertexAttrib4Nbv_p',
     'glVertexAttrib4Niv_c',
+    'glVertexAttrib4Niv_p',
     'glVertexAttrib4Nsv_c',
+    'glVertexAttrib4Nsv_p',
     'glVertexAttrib4Nub',
     'glVertexAttrib4Nubv_c',
+    'glVertexAttrib4Nubv_p',
     'glVertexAttrib4Nuiv_c',
+    'glVertexAttrib4Nuiv_p',
     'glVertexAttrib4Nusv_c',
+    'glVertexAttrib4Nusv_p',
     'glVertexAttrib4bv_c',
+    'glVertexAttrib4bv_p',
     'glVertexAttrib4d',
     'glVertexAttrib4dv_c',
+    'glVertexAttrib4dv_p',
     'glVertexAttrib4f',
     'glVertexAttrib4fv_c',
+    'glVertexAttrib4fv_p',
     'glVertexAttrib4iv_c',
+    'glVertexAttrib4iv_p',
     'glVertexAttrib4s',
     'glVertexAttrib4sv_c',
+    'glVertexAttrib4sv_p',
     'glVertexAttrib4ubv_c',
+    'glVertexAttrib4ubv_p',
     'glVertexAttrib4uiv_c',
+    'glVertexAttrib4uiv_p',
     'glVertexAttrib4usv_c',
+    'glVertexAttrib4usv_p',
     'glVertexAttribPointer_c'
   ],
   'GL_VERSION_2_1' => [
     'glUniformMatrix2x3fv_c',
+    'glUniformMatrix2x3fv_p',
     'glUniformMatrix2x4fv_c',
+    'glUniformMatrix2x4fv_p',
     'glUniformMatrix3x2fv_c',
+    'glUniformMatrix3x2fv_p',
     'glUniformMatrix3x4fv_c',
+    'glUniformMatrix3x4fv_p',
     'glUniformMatrix4x2fv_c',
-    'glUniformMatrix4x3fv_c'
+    'glUniformMatrix4x2fv_p',
+    'glUniformMatrix4x3fv_c',
+    'glUniformMatrix4x3fv_p'
   ],
   'GL_VERSION_3_0' => [
     'glBeginConditionalRender',
@@ -7453,8 +10026,11 @@ our %EXPORT_TAGS_GL = (
     'glClampColor',
     'glClearBufferfi',
     'glClearBufferfv_c',
+    'glClearBufferfv_p',
     'glClearBufferiv_c',
+    'glClearBufferiv_p',
     'glClearBufferuiv_c',
+    'glClearBufferuiv_p',
     'glColorMaski',
     'glDeleteFramebuffers_c',
     'glDeleteFramebuffers_p',
@@ -7480,15 +10056,23 @@ our %EXPORT_TAGS_GL = (
     'glGenVertexArrays_p',
     'glGenerateMipmap',
     'glGetBooleani_v_c',
+    'glGetBooleani_v_p',
     'glGetFragDataLocation',
     'glGetFramebufferAttachmentParameteriv_c',
+    'glGetFramebufferAttachmentParameteriv_p',
     'glGetRenderbufferParameteriv_c',
+    'glGetRenderbufferParameteriv_p',
     'glGetTexParameterIiv_c',
+    'glGetTexParameterIiv_p',
     'glGetTexParameterIuiv_c',
+    'glGetTexParameterIuiv_p',
     'glGetTransformFeedbackVarying_c',
+    'glGetTransformFeedbackVarying_p',
     'glGetUniformuiv_c',
     'glGetVertexAttribIiv_c',
+    'glGetVertexAttribIiv_p',
     'glGetVertexAttribIuiv_c',
+    'glGetVertexAttribIuiv_p',
     'glIsEnabledi',
     'glIsFramebuffer',
     'glIsRenderbuffer',
@@ -7497,36 +10081,55 @@ our %EXPORT_TAGS_GL = (
     'glRenderbufferStorage',
     'glRenderbufferStorageMultisample',
     'glTexParameterIiv_c',
+    'glTexParameterIiv_p',
     'glTexParameterIuiv_c',
+    'glTexParameterIuiv_p',
     'glTransformFeedbackVaryings_c',
+    'glTransformFeedbackVaryings_p',
     'glUniform1ui',
     'glUniform1uiv_c',
+    'glUniform1uiv_p',
     'glUniform2ui',
     'glUniform2uiv_c',
+    'glUniform2uiv_p',
     'glUniform3ui',
     'glUniform3uiv_c',
+    'glUniform3uiv_p',
     'glUniform4ui',
     'glUniform4uiv_c',
+    'glUniform4uiv_p',
     'glVertexAttribI1i',
     'glVertexAttribI1iv_c',
+    'glVertexAttribI1iv_p',
     'glVertexAttribI1ui',
     'glVertexAttribI1uiv_c',
+    'glVertexAttribI1uiv_p',
     'glVertexAttribI2i',
     'glVertexAttribI2iv_c',
+    'glVertexAttribI2iv_p',
     'glVertexAttribI2ui',
     'glVertexAttribI2uiv_c',
+    'glVertexAttribI2uiv_p',
     'glVertexAttribI3i',
     'glVertexAttribI3iv_c',
+    'glVertexAttribI3iv_p',
     'glVertexAttribI3ui',
     'glVertexAttribI3uiv_c',
+    'glVertexAttribI3uiv_p',
     'glVertexAttribI4bv_c',
+    'glVertexAttribI4bv_p',
     'glVertexAttribI4i',
     'glVertexAttribI4iv_c',
+    'glVertexAttribI4iv_p',
     'glVertexAttribI4sv_c',
+    'glVertexAttribI4sv_p',
     'glVertexAttribI4ubv_c',
+    'glVertexAttribI4ubv_p',
     'glVertexAttribI4ui',
     'glVertexAttribI4uiv_c',
+    'glVertexAttribI4uiv_p',
     'glVertexAttribI4usv_c',
+    'glVertexAttribI4usv_p',
     'glVertexAttribIPointer_c'
   ],
   'GL_VERSION_3_1' => [
@@ -7536,12 +10139,17 @@ our %EXPORT_TAGS_GL = (
     'glDrawArraysInstanced',
     'glDrawElementsInstanced_c',
     'glGetActiveUniformBlockName_c',
+    'glGetActiveUniformBlockName_p',
     'glGetActiveUniformBlockiv_c',
     'glGetActiveUniformName_c',
+    'glGetActiveUniformName_p',
     'glGetActiveUniformsiv_c',
+    'glGetActiveUniformsiv_p',
     'glGetIntegeri_v_c',
+    'glGetIntegeri_v_p',
     'glGetUniformBlockIndex',
     'glGetUniformIndices_c',
+    'glGetUniformIndices_p',
     'glPrimitiveRestartIndex',
     'glTexBuffer',
     'glUniformBlockBinding'
@@ -7555,10 +10163,15 @@ our %EXPORT_TAGS_GL = (
     'glFenceSync',
     'glFramebufferTexture',
     'glGetBufferParameteri64v_c',
+    'glGetBufferParameteri64v_p',
     'glGetInteger64i_v_c',
+    'glGetInteger64i_v_p',
     'glGetInteger64v_c',
+    'glGetInteger64v_p',
     'glGetMultisamplefv_c',
+    'glGetMultisamplefv_p',
     'glGetSynciv_c',
+    'glGetSynciv_p',
     'glIsSync',
     'glMultiDrawElementsBaseVertex_c',
     'glProvokingVertex',
@@ -7572,74 +10185,99 @@ our %EXPORT_TAGS_GL = (
     'glBindSampler',
     'glColorP3ui',
     'glColorP3uiv_c',
+    'glColorP3uiv_p',
     'glColorP4ui',
     'glColorP4uiv_c',
+    'glColorP4uiv_p',
     'glDeleteSamplers_c',
     'glDeleteSamplers_p',
     'glGenSamplers_c',
     'glGenSamplers_p',
     'glGetFragDataIndex',
     'glGetQueryObjecti64v_c',
+    'glGetQueryObjecti64v_p',
     'glGetQueryObjectui64v_c',
+    'glGetQueryObjectui64v_p',
     'glGetSamplerParameterIiv_c',
+    'glGetSamplerParameterIiv_p',
     'glGetSamplerParameterIuiv_c',
+    'glGetSamplerParameterIuiv_p',
     'glGetSamplerParameterfv_c',
+    'glGetSamplerParameterfv_p',
     'glGetSamplerParameteriv_c',
+    'glGetSamplerParameteriv_p',
     'glIsSampler',
     'glMultiTexCoordP1ui',
     'glMultiTexCoordP1uiv_c',
+    'glMultiTexCoordP1uiv_p',
     'glMultiTexCoordP2ui',
     'glMultiTexCoordP2uiv_c',
+    'glMultiTexCoordP2uiv_p',
     'glMultiTexCoordP3ui',
     'glMultiTexCoordP3uiv_c',
+    'glMultiTexCoordP3uiv_p',
     'glMultiTexCoordP4ui',
     'glMultiTexCoordP4uiv_c',
+    'glMultiTexCoordP4uiv_p',
     'glNormalP3ui',
     'glNormalP3uiv_c',
+    'glNormalP3uiv_p',
     'glQueryCounter',
     'glSamplerParameterIiv_c',
+    'glSamplerParameterIiv_p',
     'glSamplerParameterIuiv_c',
+    'glSamplerParameterIuiv_p',
     'glSamplerParameterf',
     'glSamplerParameterfv_c',
+    'glSamplerParameterfv_p',
     'glSamplerParameteri',
     'glSamplerParameteriv_c',
+    'glSamplerParameteriv_p',
     'glSecondaryColorP3ui',
     'glSecondaryColorP3uiv_c',
+    'glSecondaryColorP3uiv_p',
     'glTexCoordP1ui',
     'glTexCoordP1uiv_c',
+    'glTexCoordP1uiv_p',
     'glTexCoordP2ui',
     'glTexCoordP2uiv_c',
+    'glTexCoordP2uiv_p',
     'glTexCoordP3ui',
     'glTexCoordP3uiv_c',
+    'glTexCoordP3uiv_p',
     'glTexCoordP4ui',
     'glTexCoordP4uiv_c',
+    'glTexCoordP4uiv_p',
     'glVertexAttribDivisor',
     'glVertexAttribP1ui',
     'glVertexAttribP1uiv_c',
+    'glVertexAttribP1uiv_p',
     'glVertexAttribP2ui',
     'glVertexAttribP2uiv_c',
+    'glVertexAttribP2uiv_p',
     'glVertexAttribP3ui',
     'glVertexAttribP3uiv_c',
+    'glVertexAttribP3uiv_p',
     'glVertexAttribP4ui',
     'glVertexAttribP4uiv_c',
+    'glVertexAttribP4uiv_p',
     'glVertexP2ui',
     'glVertexP2uiv_c',
+    'glVertexP2uiv_p',
     'glVertexP3ui',
     'glVertexP3uiv_c',
+    'glVertexP3uiv_p',
     'glVertexP4ui',
-    'glVertexP4uiv_c'
+    'glVertexP4uiv_c',
+    'glVertexP4uiv_p'
   ],
   'GL_VERSION_4_0' => [
     'glBeginQueryIndexed',
     'glBindTransformFeedback',
     'glBlendEquationSeparatei',
-    'glBlendEquationSeparateiARB',
     'glBlendEquationi',
-    'glBlendEquationiARB',
     'glBlendFuncSeparatei',
-    'glBlendFuncSeparateiARB',
     'glBlendFunci',
-    'glBlendFunciARB',
     'glDeleteTransformFeedbacks_c',
     'glDeleteTransformFeedbacks_p',
     'glDrawArraysIndirect_c',
@@ -7650,130 +10288,202 @@ our %EXPORT_TAGS_GL = (
     'glGenTransformFeedbacks_c',
     'glGenTransformFeedbacks_p',
     'glGetActiveSubroutineName_c',
+    'glGetActiveSubroutineName_p',
     'glGetActiveSubroutineUniformName_c',
+    'glGetActiveSubroutineUniformName_p',
     'glGetActiveSubroutineUniformiv_c',
+    'glGetActiveSubroutineUniformiv_p',
     'glGetProgramStageiv_c',
+    'glGetProgramStageiv_p',
     'glGetQueryIndexediv_c',
+    'glGetQueryIndexediv_p',
     'glGetSubroutineIndex',
     'glGetSubroutineUniformLocation',
     'glGetUniformSubroutineuiv_c',
+    'glGetUniformSubroutineuiv_p',
     'glGetUniformdv_c',
     'glIsTransformFeedback',
     'glMinSampleShading',
     'glPatchParameterfv_c',
+    'glPatchParameterfv_p',
     'glPatchParameteri',
     'glPauseTransformFeedback',
     'glResumeTransformFeedback',
     'glUniform1d',
     'glUniform1dv_c',
+    'glUniform1dv_p',
     'glUniform2d',
     'glUniform2dv_c',
+    'glUniform2dv_p',
     'glUniform3d',
     'glUniform3dv_c',
+    'glUniform3dv_p',
     'glUniform4d',
     'glUniform4dv_c',
+    'glUniform4dv_p',
     'glUniformMatrix2dv_c',
+    'glUniformMatrix2dv_p',
     'glUniformMatrix2x3dv_c',
+    'glUniformMatrix2x3dv_p',
     'glUniformMatrix2x4dv_c',
+    'glUniformMatrix2x4dv_p',
     'glUniformMatrix3dv_c',
+    'glUniformMatrix3dv_p',
     'glUniformMatrix3x2dv_c',
+    'glUniformMatrix3x2dv_p',
     'glUniformMatrix3x4dv_c',
+    'glUniformMatrix3x4dv_p',
     'glUniformMatrix4dv_c',
+    'glUniformMatrix4dv_p',
     'glUniformMatrix4x2dv_c',
+    'glUniformMatrix4x2dv_p',
     'glUniformMatrix4x3dv_c',
-    'glUniformSubroutinesuiv_c'
+    'glUniformMatrix4x3dv_p',
+    'glUniformSubroutinesuiv_c',
+    'glUniformSubroutinesuiv_p'
   ],
   'GL_VERSION_4_1' => [
     'glActiveShaderProgram',
     'glBindProgramPipeline',
     'glClearDepthf',
     'glCreateShaderProgramv_c',
+    'glCreateShaderProgramv_p',
     'glDeleteProgramPipelines_c',
     'glDeleteProgramPipelines_p',
     'glDepthRangeArrayv_c',
+    'glDepthRangeArrayv_p',
     'glDepthRangeIndexed',
     'glDepthRangef',
     'glGenProgramPipelines_c',
     'glGenProgramPipelines_p',
     'glGetDoublei_v_c',
+    'glGetDoublei_v_p',
     'glGetFloati_v_c',
+    'glGetFloati_v_p',
     'glGetProgramBinary_c',
+    'glGetProgramBinary_p',
     'glGetProgramPipelineInfoLog_c',
+    'glGetProgramPipelineInfoLog_p',
     'glGetProgramPipelineiv_c',
+    'glGetProgramPipelineiv_p',
     'glGetShaderPrecisionFormat_c',
+    'glGetShaderPrecisionFormat_p',
     'glGetVertexAttribLdv_c',
+    'glGetVertexAttribLdv_p',
     'glIsProgramPipeline',
     'glProgramBinary_c',
     'glProgramParameteri',
     'glProgramUniform1d',
     'glProgramUniform1dv_c',
+    'glProgramUniform1dv_p',
     'glProgramUniform1f',
     'glProgramUniform1fv_c',
+    'glProgramUniform1fv_p',
     'glProgramUniform1i',
     'glProgramUniform1iv_c',
+    'glProgramUniform1iv_p',
     'glProgramUniform1ui',
     'glProgramUniform1uiv_c',
+    'glProgramUniform1uiv_p',
     'glProgramUniform2d',
     'glProgramUniform2dv_c',
+    'glProgramUniform2dv_p',
     'glProgramUniform2f',
     'glProgramUniform2fv_c',
+    'glProgramUniform2fv_p',
     'glProgramUniform2i',
     'glProgramUniform2iv_c',
+    'glProgramUniform2iv_p',
     'glProgramUniform2ui',
     'glProgramUniform2uiv_c',
+    'glProgramUniform2uiv_p',
     'glProgramUniform3d',
     'glProgramUniform3dv_c',
+    'glProgramUniform3dv_p',
     'glProgramUniform3f',
     'glProgramUniform3fv_c',
+    'glProgramUniform3fv_p',
     'glProgramUniform3i',
     'glProgramUniform3iv_c',
+    'glProgramUniform3iv_p',
     'glProgramUniform3ui',
     'glProgramUniform3uiv_c',
+    'glProgramUniform3uiv_p',
     'glProgramUniform4d',
     'glProgramUniform4dv_c',
+    'glProgramUniform4dv_p',
     'glProgramUniform4f',
     'glProgramUniform4fv_c',
+    'glProgramUniform4fv_p',
     'glProgramUniform4i',
     'glProgramUniform4iv_c',
+    'glProgramUniform4iv_p',
     'glProgramUniform4ui',
     'glProgramUniform4uiv_c',
+    'glProgramUniform4uiv_p',
     'glProgramUniformMatrix2dv_c',
+    'glProgramUniformMatrix2dv_p',
     'glProgramUniformMatrix2fv_c',
+    'glProgramUniformMatrix2fv_p',
     'glProgramUniformMatrix2x3dv_c',
+    'glProgramUniformMatrix2x3dv_p',
     'glProgramUniformMatrix2x3fv_c',
+    'glProgramUniformMatrix2x3fv_p',
     'glProgramUniformMatrix2x4dv_c',
+    'glProgramUniformMatrix2x4dv_p',
     'glProgramUniformMatrix2x4fv_c',
+    'glProgramUniformMatrix2x4fv_p',
     'glProgramUniformMatrix3dv_c',
+    'glProgramUniformMatrix3dv_p',
     'glProgramUniformMatrix3fv_c',
+    'glProgramUniformMatrix3fv_p',
     'glProgramUniformMatrix3x2dv_c',
+    'glProgramUniformMatrix3x2dv_p',
     'glProgramUniformMatrix3x2fv_c',
+    'glProgramUniformMatrix3x2fv_p',
     'glProgramUniformMatrix3x4dv_c',
+    'glProgramUniformMatrix3x4dv_p',
     'glProgramUniformMatrix3x4fv_c',
+    'glProgramUniformMatrix3x4fv_p',
     'glProgramUniformMatrix4dv_c',
+    'glProgramUniformMatrix4dv_p',
     'glProgramUniformMatrix4fv_c',
+    'glProgramUniformMatrix4fv_p',
     'glProgramUniformMatrix4x2dv_c',
+    'glProgramUniformMatrix4x2dv_p',
     'glProgramUniformMatrix4x2fv_c',
+    'glProgramUniformMatrix4x2fv_p',
     'glProgramUniformMatrix4x3dv_c',
+    'glProgramUniformMatrix4x3dv_p',
     'glProgramUniformMatrix4x3fv_c',
+    'glProgramUniformMatrix4x3fv_p',
     'glReleaseShaderCompiler',
     'glScissorArrayv_c',
+    'glScissorArrayv_p',
     'glScissorIndexed',
     'glScissorIndexedv_c',
+    'glScissorIndexedv_p',
     'glShaderBinary_c',
     'glUseProgramStages',
     'glValidateProgramPipeline',
     'glVertexAttribL1d',
     'glVertexAttribL1dv_c',
+    'glVertexAttribL1dv_p',
     'glVertexAttribL2d',
     'glVertexAttribL2dv_c',
+    'glVertexAttribL2dv_p',
     'glVertexAttribL3d',
     'glVertexAttribL3dv_c',
+    'glVertexAttribL3dv_p',
     'glVertexAttribL4d',
     'glVertexAttribL4dv_c',
+    'glVertexAttribL4dv_p',
     'glVertexAttribLPointer_c',
     'glViewportArrayv_c',
+    'glViewportArrayv_p',
     'glViewportIndexedf',
-    'glViewportIndexedfv_c'
+    'glViewportIndexedfv_c',
+    'glViewportIndexedfv_p'
   ],
   'GL_VERSION_4_2' => [
     'glBindImageTexture',
@@ -7783,7 +10493,9 @@ our %EXPORT_TAGS_GL = (
     'glDrawTransformFeedbackInstanced',
     'glDrawTransformFeedbackStreamInstanced',
     'glGetActiveAtomicCounterBufferiv_c',
+    'glGetActiveAtomicCounterBufferiv_p',
     'glGetInternalformativ_c',
+    'glGetInternalformativ_p',
     'glMemoryBarrier',
     'glTexStorage1D',
     'glTexStorage2D',
@@ -7798,26 +10510,37 @@ our %EXPORT_TAGS_GL = (
     'glCopyImageSubData',
     'glDebugMessageCallback_c',
     'glDebugMessageControl_c',
+    'glDebugMessageControl_p',
     'glDebugMessageInsert',
     'glDispatchCompute',
     'glDispatchComputeIndirect',
     'glFramebufferParameteri',
     'glGetDebugMessageLog_c',
+    'glGetDebugMessageLog_p',
     'glGetFramebufferParameteriv_c',
+    'glGetFramebufferParameteriv_p',
     'glGetInternalformati64v_c',
+    'glGetInternalformati64v_p',
     'glGetNamedFramebufferParameterivEXT_c',
+    'glGetNamedFramebufferParameterivEXT_p',
     'glGetObjectLabel_c',
+    'glGetObjectLabel_p',
     'glGetObjectPtrLabel_c',
     'glGetProgramInterfaceiv_c',
+    'glGetProgramInterfaceiv_p',
     'glGetProgramResourceIndex',
     'glGetProgramResourceLocation',
     'glGetProgramResourceLocationIndex',
     'glGetProgramResourceName_c',
+    'glGetProgramResourceName_p',
     'glGetProgramResourceiv_c',
+    'glGetProgramResourceiv_p',
     'glInvalidateBufferData',
     'glInvalidateBufferSubData',
     'glInvalidateFramebuffer_c',
+    'glInvalidateFramebuffer_p',
     'glInvalidateSubFramebuffer_c',
+    'glInvalidateSubFramebuffer_p',
     'glInvalidateTexImage',
     'glInvalidateTexSubImage',
     'glMultiDrawArraysIndirect_c',
@@ -7849,10 +10572,14 @@ our %EXPORT_TAGS_GL = (
   ],
   'GL_VERSION_4_4' => [
     'glBindBuffersBase_c',
+    'glBindBuffersBase_p',
     'glBindBuffersRange_c',
     'glBindImageTextures_c',
+    'glBindImageTextures_p',
     'glBindSamplers_c',
+    'glBindSamplers_p',
     'glBindTextures_c',
+    'glBindTextures_p',
     'glBindVertexBuffers_c',
     'glBufferStorage_c',
     'glClearTexImage_c',
@@ -7866,8 +10593,11 @@ our %EXPORT_TAGS_GL = (
     'glClearNamedBufferSubData_c',
     'glClearNamedFramebufferfi',
     'glClearNamedFramebufferfv_c',
+    'glClearNamedFramebufferfv_p',
     'glClearNamedFramebufferiv_c',
+    'glClearNamedFramebufferiv_p',
     'glClearNamedFramebufferuiv_c',
+    'glClearNamedFramebufferuiv_p',
     'glClipControl',
     'glCompressedTextureSubImage1D_c',
     'glCompressedTextureSubImage2D_c',
@@ -7883,11 +10613,13 @@ our %EXPORT_TAGS_GL = (
     'glCreateProgramPipelines_c',
     'glCreateProgramPipelines_p',
     'glCreateQueries_c',
+    'glCreateQueries_p',
     'glCreateRenderbuffers_c',
     'glCreateRenderbuffers_p',
     'glCreateSamplers_c',
     'glCreateSamplers_p',
     'glCreateTextures_c',
+    'glCreateTextures_p',
     'glCreateTransformFeedbacks_c',
     'glCreateTransformFeedbacks_p',
     'glCreateVertexArrays_c',
@@ -7931,23 +10663,37 @@ our %EXPORT_TAGS_GL = (
     'glGetnConvolutionFilterARB_c',
     'glGetnHistogramARB_c',
     'glGetnMapdvARB_c',
+    'glGetnMapdvARB_p',
     'glGetnMapfvARB_c',
+    'glGetnMapfvARB_p',
     'glGetnMapivARB_c',
+    'glGetnMapivARB_p',
     'glGetnMinmaxARB_c',
     'glGetnPixelMapfvARB_c',
+    'glGetnPixelMapfvARB_p',
     'glGetnPixelMapuivARB_c',
+    'glGetnPixelMapuivARB_p',
     'glGetnPixelMapusvARB_c',
+    'glGetnPixelMapusvARB_p',
     'glGetnPolygonStippleARB_c',
+    'glGetnPolygonStippleARB_p',
     'glGetnSeparableFilterARB_c',
     'glGetnTexImageARB_c',
     'glGetnTexImage_c',
     'glGetnUniformdvARB_c',
+    'glGetnUniformdvARB_p',
     'glGetnUniformdv_c',
+    'glGetnUniformdv_p',
     'glGetnUniformfvARB_c',
+    'glGetnUniformfvARB_p',
     'glGetnUniformivARB_c',
+    'glGetnUniformivARB_p',
     'glGetnUniformuivARB_c',
+    'glGetnUniformuivARB_p',
     'glInvalidateNamedFramebufferData_c',
+    'glInvalidateNamedFramebufferData_p',
     'glInvalidateNamedFramebufferSubData_c',
+    'glInvalidateNamedFramebufferSubData_p',
     'glMapNamedBufferRange_c',
     'glMapNamedBuffer_c',
     'glMemoryBarrierByRegion',
@@ -7956,6 +10702,7 @@ our %EXPORT_TAGS_GL = (
     'glNamedBufferSubData_c',
     'glNamedFramebufferDrawBuffer',
     'glNamedFramebufferDrawBuffers_c',
+    'glNamedFramebufferDrawBuffers_p',
     'glNamedFramebufferParameteri',
     'glNamedFramebufferReadBuffer',
     'glNamedFramebufferRenderbuffer',
@@ -7963,16 +10710,19 @@ our %EXPORT_TAGS_GL = (
     'glNamedFramebufferTextureLayer',
     'glNamedRenderbufferStorage',
     'glNamedRenderbufferStorageMultisample',
-    'glReadnPixelsARB_c',
     'glTextureBarrier',
     'glTextureBuffer',
     'glTextureBufferRange',
     'glTextureParameterIiv_c',
+    'glTextureParameterIiv_p',
     'glTextureParameterIuiv_c',
+    'glTextureParameterIuiv_p',
     'glTextureParameterf',
     'glTextureParameterfv_c',
+    'glTextureParameterfv_p',
     'glTextureParameteri',
     'glTextureParameteriv_c',
+    'glTextureParameteriv_p',
     'glTextureStorage1D',
     'glTextureStorage2D',
     'glTextureStorage2DMultisample',
@@ -7994,13 +10744,11 @@ our %EXPORT_TAGS_GL = (
     'glVertexArrayVertexBuffers_c'
   ],
   'GL_VERSION_4_6' => [
-    'glMultiDrawArraysIndirectCountARB_c',
     'glMultiDrawArraysIndirectCount_c',
-    'glMultiDrawElementsIndirectCountARB_c',
     'glMultiDrawElementsIndirectCount_c',
     'glPolygonOffsetClamp',
-    'glSpecializeShaderARB_c',
-    'glSpecializeShader_c'
+    'glSpecializeShader_c',
+    'glSpecializeShader_p'
   ],
   'GL_WIN_swap_hint' => [
     'glAddSwapHintRectWIN'
@@ -8081,6 +10829,7 @@ our @gl_constants = qw(
   GL_ACTIVE_VERTEX_UNITS_ARB
   GL_ADD
   GL_ADD_ATI
+  GL_ADD_BLEND_IMG
   GL_ADD_SIGNED
   GL_ADD_SIGNED_ARB
   GL_ADD_SIGNED_EXT
@@ -8123,6 +10872,7 @@ our @gl_constants = qw(
   GL_ALPHA8I_EXT
   GL_ALPHA8UI_EXT
   GL_ALPHA8_EXT
+  GL_ALPHA8_OES
   GL_ALPHA8_SNORM
   GL_ALPHA_BIAS
   GL_ALPHA_BITS
@@ -8164,6 +10914,8 @@ our @gl_constants = qw(
   GL_AND_REVERSE
   GL_ANY_SAMPLES_PASSED
   GL_ANY_SAMPLES_PASSED_CONSERVATIVE
+  GL_ANY_SAMPLES_PASSED_CONSERVATIVE_EXT
+  GL_ANY_SAMPLES_PASSED_EXT
   GL_ARC_TO_NV
   GL_ARRAY_BUFFER
   GL_ARRAY_BUFFER_ARB
@@ -8194,11 +10946,17 @@ our @gl_constants = qw(
   GL_ATOMIC_COUNTER_BUFFER_REFERENCED_BY_COMPUTE_SHADER
   GL_ATOMIC_COUNTER_BUFFER_REFERENCED_BY_FRAGMENT_SHADER
   GL_ATOMIC_COUNTER_BUFFER_REFERENCED_BY_GEOMETRY_SHADER
+  GL_ATOMIC_COUNTER_BUFFER_REFERENCED_BY_MESH_SHADER_EXT
+  GL_ATOMIC_COUNTER_BUFFER_REFERENCED_BY_MESH_SHADER_NV
+  GL_ATOMIC_COUNTER_BUFFER_REFERENCED_BY_TASK_SHADER_EXT
+  GL_ATOMIC_COUNTER_BUFFER_REFERENCED_BY_TASK_SHADER_NV
   GL_ATOMIC_COUNTER_BUFFER_REFERENCED_BY_TESS_CONTROL_SHADER
   GL_ATOMIC_COUNTER_BUFFER_REFERENCED_BY_TESS_EVALUATION_SHADER
   GL_ATOMIC_COUNTER_BUFFER_REFERENCED_BY_VERTEX_SHADER
   GL_ATOMIC_COUNTER_BUFFER_SIZE
   GL_ATOMIC_COUNTER_BUFFER_START
+  GL_ATTACHED_MEMORY_OBJECT_NV
+  GL_ATTACHED_MEMORY_OFFSET_NV
   GL_ATTACHED_SHADERS
   GL_ATTENUATION_EXT
   GL_ATTRIBUTE_ADDRESS_COMMAND_NV
@@ -8234,6 +10992,7 @@ our @gl_constants = qw(
   GL_BGRA
   GL_BGRA8_EXT
   GL_BGRA_EXT
+  GL_BGRA_IMG
   GL_BGRA_INTEGER
   GL_BGRA_INTEGER_EXT
   GL_BGR_EXT
@@ -8249,6 +11008,7 @@ our @gl_constants = qw(
   GL_BINORMAL_ARRAY_TYPE_EXT
   GL_BITMAP
   GL_BITMAP_TOKEN
+  GL_BLACKHOLE_RENDER_INTEL
   GL_BLEND
   GL_BLEND_ADVANCED_COHERENT_KHR
   GL_BLEND_ADVANCED_COHERENT_NV
@@ -8258,21 +11018,28 @@ our @gl_constants = qw(
   GL_BLEND_DST
   GL_BLEND_DST_ALPHA
   GL_BLEND_DST_ALPHA_EXT
+  GL_BLEND_DST_ALPHA_OES
   GL_BLEND_DST_RGB
   GL_BLEND_DST_RGB_EXT
+  GL_BLEND_DST_RGB_OES
   GL_BLEND_EQUATION
   GL_BLEND_EQUATION_ALPHA
   GL_BLEND_EQUATION_ALPHA_EXT
+  GL_BLEND_EQUATION_ALPHA_OES
   GL_BLEND_EQUATION_EXT
+  GL_BLEND_EQUATION_OES
   GL_BLEND_EQUATION_RGB
   GL_BLEND_EQUATION_RGB_EXT
+  GL_BLEND_EQUATION_RGB_OES
   GL_BLEND_OVERLAP_NV
   GL_BLEND_PREMULTIPLIED_SRC_NV
   GL_BLEND_SRC
   GL_BLEND_SRC_ALPHA
   GL_BLEND_SRC_ALPHA_EXT
+  GL_BLEND_SRC_ALPHA_OES
   GL_BLEND_SRC_RGB
   GL_BLEND_SRC_RGB_EXT
+  GL_BLEND_SRC_RGB_OES
   GL_BLOCK_INDEX
   GL_BLUE
   GL_BLUE_BIAS
@@ -8299,6 +11066,7 @@ our @gl_constants = qw(
   GL_BUFFER_ACCESS
   GL_BUFFER_ACCESS_ARB
   GL_BUFFER_ACCESS_FLAGS
+  GL_BUFFER_ACCESS_OES
   GL_BUFFER_BINDING
   GL_BUFFER_DATA_SIZE
   GL_BUFFER_FLUSHING_UNMAP_APPLE
@@ -8307,10 +11075,12 @@ our @gl_constants = qw(
   GL_BUFFER_IMMUTABLE_STORAGE_EXT
   GL_BUFFER_MAPPED
   GL_BUFFER_MAPPED_ARB
+  GL_BUFFER_MAPPED_OES
   GL_BUFFER_MAP_LENGTH
   GL_BUFFER_MAP_OFFSET
   GL_BUFFER_MAP_POINTER
   GL_BUFFER_MAP_POINTER_ARB
+  GL_BUFFER_MAP_POINTER_OES
   GL_BUFFER_OBJECT_APPLE
   GL_BUFFER_OBJECT_EXT
   GL_BUFFER_SERIALIZED_MODIFY_APPLE
@@ -8349,7 +11119,9 @@ our @gl_constants = qw(
   GL_CLAMP_READ_COLOR_ARB
   GL_CLAMP_TO_BORDER
   GL_CLAMP_TO_BORDER_ARB
+  GL_CLAMP_TO_BORDER_EXT
   GL_CLAMP_TO_BORDER_NV
+  GL_CLAMP_TO_BORDER_OES
   GL_CLAMP_TO_BORDER_SGIS
   GL_CLAMP_TO_EDGE
   GL_CLAMP_TO_EDGE_EXT
@@ -8374,6 +11146,7 @@ our @gl_constants = qw(
   GL_CLIPPING_OUTPUT_PRIMITIVES
   GL_CLIPPING_OUTPUT_PRIMITIVES_ARB
   GL_CLIP_DEPTH_MODE
+  GL_CLIP_DEPTH_MODE_EXT
   GL_CLIP_DISTANCE0
   GL_CLIP_DISTANCE0_APPLE
   GL_CLIP_DISTANCE0_EXT
@@ -8400,6 +11173,7 @@ our @gl_constants = qw(
   GL_CLIP_FAR_HINT_PGI
   GL_CLIP_NEAR_HINT_PGI
   GL_CLIP_ORIGIN
+  GL_CLIP_ORIGIN_EXT
   GL_CLIP_PLANE0
   GL_CLIP_PLANE1
   GL_CLIP_PLANE2
@@ -8443,6 +11217,7 @@ our @gl_constants = qw(
   GL_COLOR_ATTACHMENT0
   GL_COLOR_ATTACHMENT0_EXT
   GL_COLOR_ATTACHMENT0_NV
+  GL_COLOR_ATTACHMENT0_OES
   GL_COLOR_ATTACHMENT1
   GL_COLOR_ATTACHMENT10
   GL_COLOR_ATTACHMENT10_EXT
@@ -8638,11 +11413,21 @@ our @gl_constants = qw(
   GL_COMPRESSED_RGBA_ASTC_10x8_KHR
   GL_COMPRESSED_RGBA_ASTC_12x10_KHR
   GL_COMPRESSED_RGBA_ASTC_12x12_KHR
+  GL_COMPRESSED_RGBA_ASTC_3x3x3_OES
+  GL_COMPRESSED_RGBA_ASTC_4x3x3_OES
   GL_COMPRESSED_RGBA_ASTC_4x4_KHR
+  GL_COMPRESSED_RGBA_ASTC_4x4x3_OES
+  GL_COMPRESSED_RGBA_ASTC_4x4x4_OES
   GL_COMPRESSED_RGBA_ASTC_5x4_KHR
+  GL_COMPRESSED_RGBA_ASTC_5x4x4_OES
   GL_COMPRESSED_RGBA_ASTC_5x5_KHR
+  GL_COMPRESSED_RGBA_ASTC_5x5x4_OES
+  GL_COMPRESSED_RGBA_ASTC_5x5x5_OES
   GL_COMPRESSED_RGBA_ASTC_6x5_KHR
+  GL_COMPRESSED_RGBA_ASTC_6x5x5_OES
   GL_COMPRESSED_RGBA_ASTC_6x6_KHR
+  GL_COMPRESSED_RGBA_ASTC_6x6x5_OES
+  GL_COMPRESSED_RGBA_ASTC_6x6x6_OES
   GL_COMPRESSED_RGBA_ASTC_8x5_KHR
   GL_COMPRESSED_RGBA_ASTC_8x6_KHR
   GL_COMPRESSED_RGBA_ASTC_8x8_KHR
@@ -8650,6 +11435,10 @@ our @gl_constants = qw(
   GL_COMPRESSED_RGBA_BPTC_UNORM_ARB
   GL_COMPRESSED_RGBA_BPTC_UNORM_EXT
   GL_COMPRESSED_RGBA_FXT1_3DFX
+  GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG
+  GL_COMPRESSED_RGBA_PVRTC_2BPPV2_IMG
+  GL_COMPRESSED_RGBA_PVRTC_4BPPV1_IMG
+  GL_COMPRESSED_RGBA_PVRTC_4BPPV2_IMG
   GL_COMPRESSED_RGBA_S3TC_DXT1_ANGLE
   GL_COMPRESSED_RGBA_S3TC_DXT1_EXT
   GL_COMPRESSED_RGBA_S3TC_DXT1_NV
@@ -8667,6 +11456,8 @@ our @gl_constants = qw(
   GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_ARB
   GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT_EXT
   GL_COMPRESSED_RGB_FXT1_3DFX
+  GL_COMPRESSED_RGB_PVRTC_2BPPV1_IMG
+  GL_COMPRESSED_RGB_PVRTC_4BPPV1_IMG
   GL_COMPRESSED_RGB_S3TC_DXT1_ANGLE
   GL_COMPRESSED_RGB_S3TC_DXT1_EXT
   GL_COMPRESSED_RGB_S3TC_DXT1_NV
@@ -8692,11 +11483,21 @@ our @gl_constants = qw(
   GL_COMPRESSED_SRGB8_ALPHA8_ASTC_10x8_KHR
   GL_COMPRESSED_SRGB8_ALPHA8_ASTC_12x10_KHR
   GL_COMPRESSED_SRGB8_ALPHA8_ASTC_12x12_KHR
+  GL_COMPRESSED_SRGB8_ALPHA8_ASTC_3x3x3_OES
+  GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x3x3_OES
   GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR
+  GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4x3_OES
+  GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4x4_OES
   GL_COMPRESSED_SRGB8_ALPHA8_ASTC_5x4_KHR
+  GL_COMPRESSED_SRGB8_ALPHA8_ASTC_5x4x4_OES
   GL_COMPRESSED_SRGB8_ALPHA8_ASTC_5x5_KHR
+  GL_COMPRESSED_SRGB8_ALPHA8_ASTC_5x5x4_OES
+  GL_COMPRESSED_SRGB8_ALPHA8_ASTC_5x5x5_OES
   GL_COMPRESSED_SRGB8_ALPHA8_ASTC_6x5_KHR
+  GL_COMPRESSED_SRGB8_ALPHA8_ASTC_6x5x5_OES
   GL_COMPRESSED_SRGB8_ALPHA8_ASTC_6x6_KHR
+  GL_COMPRESSED_SRGB8_ALPHA8_ASTC_6x6x5_OES
+  GL_COMPRESSED_SRGB8_ALPHA8_ASTC_6x6x6_OES
   GL_COMPRESSED_SRGB8_ALPHA8_ASTC_8x5_KHR
   GL_COMPRESSED_SRGB8_ALPHA8_ASTC_8x6_KHR
   GL_COMPRESSED_SRGB8_ALPHA8_ASTC_8x8_KHR
@@ -8746,6 +11547,7 @@ our @gl_constants = qw(
   GL_CONSERVATIVE_RASTER_DILATE_RANGE_NV
   GL_CONSERVATIVE_RASTER_MODE_NV
   GL_CONSERVATIVE_RASTER_MODE_POST_SNAP_NV
+  GL_CONSERVATIVE_RASTER_MODE_PRE_SNAP_NV
   GL_CONSERVATIVE_RASTER_MODE_PRE_SNAP_TRIANGLES_NV
   GL_CONSERVE_MEMORY_HINT_PGI
   GL_CONSTANT
@@ -8759,6 +11561,7 @@ our @gl_constants = qw(
   GL_CONSTANT_COLOR1_NV
   GL_CONSTANT_COLOR_EXT
   GL_CONSTANT_EXT
+  GL_CONST_BW_TILING_MESA
   GL_CONST_EYE_NV
   GL_CONTEXT_COMPATIBILITY_PROFILE_BIT
   GL_CONTEXT_CORE_PROFILE_BIT
@@ -8767,11 +11570,15 @@ our @gl_constants = qw(
   GL_CONTEXT_FLAG_FORWARD_COMPATIBLE_BIT
   GL_CONTEXT_FLAG_NO_ERROR_BIT
   GL_CONTEXT_FLAG_NO_ERROR_BIT_KHR
+  GL_CONTEXT_FLAG_PROTECTED_CONTENT_BIT_EXT
   GL_CONTEXT_FLAG_ROBUST_ACCESS_BIT
   GL_CONTEXT_FLAG_ROBUST_ACCESS_BIT_ARB
   GL_CONTEXT_LOST
   GL_CONTEXT_PROFILE_MASK
+  GL_CONTEXT_RELEASE_BEHAVIOR
+  GL_CONTEXT_RELEASE_BEHAVIOR_FLUSH
   GL_CONTEXT_ROBUST_ACCESS
+  GL_CONTEXT_ROBUST_ACCESS_EXT
   GL_CONTINUOUS_AMD
   GL_CONTRAST_NV
   GL_CONVEX_HULL_NV
@@ -8805,6 +11612,7 @@ our @gl_constants = qw(
   GL_COORD_REPLACE
   GL_COORD_REPLACE_ARB
   GL_COORD_REPLACE_NV
+  GL_COORD_REPLACE_OES
   GL_COPY
   GL_COPY_INVERTED
   GL_COPY_PIXEL_TOKEN
@@ -8832,6 +11640,9 @@ our @gl_constants = qw(
   GL_CUBE_MAP_ZP_SGIX
   GL_CUBIC_CURVE_TO_NV
   GL_CUBIC_EXT
+  GL_CUBIC_IMG
+  GL_CUBIC_MIPMAP_LINEAR_IMG
+  GL_CUBIC_MIPMAP_NEAREST_IMG
   GL_CULL_FACE
   GL_CULL_FACE_MODE
   GL_CULL_FRAGMENT_NV
@@ -8856,10 +11667,12 @@ our @gl_constants = qw(
   GL_CURRENT_NORMAL
   GL_CURRENT_OCCLUSION_QUERY_ID_NV
   GL_CURRENT_PALETTE_MATRIX_ARB
+  GL_CURRENT_PALETTE_MATRIX_OES
   GL_CURRENT_PROGRAM
   GL_CURRENT_QUERY
   GL_CURRENT_QUERY_ANGLE
   GL_CURRENT_QUERY_ARB
+  GL_CURRENT_QUERY_EXT
   GL_CURRENT_RASTER_COLOR
   GL_CURRENT_RASTER_DISTANCE
   GL_CURRENT_RASTER_INDEX
@@ -8958,10 +11771,12 @@ our @gl_constants = qw(
   GL_DEPTH
   GL_DEPTH24_STENCIL8
   GL_DEPTH24_STENCIL8_EXT
+  GL_DEPTH24_STENCIL8_OES
   GL_DEPTH32F_STENCIL8
   GL_DEPTH32F_STENCIL8_NV
   GL_DEPTH_ATTACHMENT
   GL_DEPTH_ATTACHMENT_EXT
+  GL_DEPTH_ATTACHMENT_OES
   GL_DEPTH_BIAS
   GL_DEPTH_BITS
   GL_DEPTH_BOUNDS_EXT
@@ -8978,6 +11793,7 @@ our @gl_constants = qw(
   GL_DEPTH_BUFFER_BIT7_QCOM
   GL_DEPTH_BUFFER_FLOAT_MODE_NV
   GL_DEPTH_CLAMP
+  GL_DEPTH_CLAMP_EXT
   GL_DEPTH_CLAMP_FAR_AMD
   GL_DEPTH_CLAMP_NEAR_AMD
   GL_DEPTH_CLAMP_NV
@@ -8985,14 +11801,18 @@ our @gl_constants = qw(
   GL_DEPTH_COMPONENT
   GL_DEPTH_COMPONENT16
   GL_DEPTH_COMPONENT16_ARB
+  GL_DEPTH_COMPONENT16_NONLINEAR_NV
+  GL_DEPTH_COMPONENT16_OES
   GL_DEPTH_COMPONENT16_SGIX
   GL_DEPTH_COMPONENT24
   GL_DEPTH_COMPONENT24_ARB
+  GL_DEPTH_COMPONENT24_OES
   GL_DEPTH_COMPONENT24_SGIX
   GL_DEPTH_COMPONENT32
   GL_DEPTH_COMPONENT32F
   GL_DEPTH_COMPONENT32F_NV
   GL_DEPTH_COMPONENT32_ARB
+  GL_DEPTH_COMPONENT32_OES
   GL_DEPTH_COMPONENT32_SGIX
   GL_DEPTH_COMPONENTS
   GL_DEPTH_EXT
@@ -9008,6 +11828,7 @@ our @gl_constants = qw(
   GL_DEPTH_STENCIL_ATTACHMENT
   GL_DEPTH_STENCIL_EXT
   GL_DEPTH_STENCIL_NV
+  GL_DEPTH_STENCIL_OES
   GL_DEPTH_STENCIL_TEXTURE_MODE
   GL_DEPTH_STENCIL_TO_BGRA_NV
   GL_DEPTH_STENCIL_TO_RGBA_NV
@@ -9015,6 +11836,9 @@ our @gl_constants = qw(
   GL_DEPTH_TEXTURE_MODE
   GL_DEPTH_TEXTURE_MODE_ARB
   GL_DEPTH_WRITEMASK
+  GL_DETACHED_BUFFERS_NV
+  GL_DETACHED_MEMORY_INCARNATION_NV
+  GL_DETACHED_TEXTURES_NV
   GL_DEVICE_LUID_EXT
   GL_DEVICE_NODE_MASK_EXT
   GL_DEVICE_UUID_EXT
@@ -9030,6 +11854,7 @@ our @gl_constants = qw(
   GL_DISPLAY_LIST
   GL_DISTANCE_ATTENUATION_EXT
   GL_DITHER
+  GL_DMP_PROGRAM_BINARY_DMP
   GL_DOMAIN
   GL_DONT_CARE
   GL_DOT2_ADD_ATI
@@ -9038,6 +11863,7 @@ our @gl_constants = qw(
   GL_DOT3_RGBA
   GL_DOT3_RGBA_ARB
   GL_DOT3_RGBA_EXT
+  GL_DOT3_RGBA_IMG
   GL_DOT3_RGB_ARB
   GL_DOT3_RGB_EXT
   GL_DOT4_ATI
@@ -9080,6 +11906,7 @@ our @gl_constants = qw(
   GL_DOUBLE_VEC3_EXT
   GL_DOUBLE_VEC4
   GL_DOUBLE_VEC4_EXT
+  GL_DOWNSAMPLE_SCALES_IMG
   GL_DRAW_ARRAYS_COMMAND_NV
   GL_DRAW_ARRAYS_INSTANCED_COMMAND_NV
   GL_DRAW_ARRAYS_STRIP_COMMAND_NV
@@ -9234,7 +12061,6 @@ our @gl_constants = qw(
   GL_EDGE_FLAG_ARRAY_STRIDE
   GL_EDGE_FLAG_ARRAY_STRIDE_EXT
   GL_EFFECTIVE_RASTER_SAMPLES_EXT
-  GL_EGL_GENERATE_RESET_ON_VIDEO_MEMORY_PURGE_NV
   GL_EIGHTH_BIT_ATI
   GL_ELEMENT_ADDRESS_COMMAND_NV
   GL_ELEMENT_ARRAY_ADDRESS_NV
@@ -9262,6 +12088,7 @@ our @gl_constants = qw(
   GL_EQUAL
   GL_EQUIV
   GL_ERROR_REGAL
+  GL_ETC1_RGB8_OES
   GL_ETC1_SRGB8_NV
   GL_EVAL_2D_NV
   GL_EVAL_BIT
@@ -9303,6 +12130,7 @@ our @gl_constants = qw(
   GL_EYE_RADIAL_NV
   GL_EYE_SPACE_SGIX
   GL_E_TIMES_F_NV
+  GL_FACTOR_ALPHA_MODULATE_IMG
   GL_FACTOR_MAX_AMD
   GL_FACTOR_MIN_AMD
   GL_FAILURE_NV
@@ -9328,11 +12156,23 @@ our @gl_constants = qw(
   GL_FIRST_TO_REST_NV
   GL_FIRST_VERTEX_CONVENTION
   GL_FIRST_VERTEX_CONVENTION_EXT
+  GL_FIRST_VERTEX_CONVENTION_OES
   GL_FIXED
   GL_FIXED_ONLY
   GL_FIXED_ONLY_ARB
   GL_FLAT
   GL_FLOAT
+  GL_FLOAT16_IMAGE_1D_AMD
+  GL_FLOAT16_IMAGE_1D_ARRAY_AMD
+  GL_FLOAT16_IMAGE_2D_AMD
+  GL_FLOAT16_IMAGE_2D_ARRAY_AMD
+  GL_FLOAT16_IMAGE_2D_MULTISAMPLE_AMD
+  GL_FLOAT16_IMAGE_2D_MULTISAMPLE_ARRAY_AMD
+  GL_FLOAT16_IMAGE_2D_RECT_AMD
+  GL_FLOAT16_IMAGE_3D_AMD
+  GL_FLOAT16_IMAGE_BUFFER_AMD
+  GL_FLOAT16_IMAGE_CUBE_AMD
+  GL_FLOAT16_IMAGE_CUBE_MAP_ARRAY_AMD
   GL_FLOAT16_MAT2_AMD
   GL_FLOAT16_MAT2x3_AMD
   GL_FLOAT16_MAT2x4_AMD
@@ -9343,6 +12183,24 @@ our @gl_constants = qw(
   GL_FLOAT16_MAT4x2_AMD
   GL_FLOAT16_MAT4x3_AMD
   GL_FLOAT16_NV
+  GL_FLOAT16_SAMPLER_1D_AMD
+  GL_FLOAT16_SAMPLER_1D_ARRAY_AMD
+  GL_FLOAT16_SAMPLER_1D_ARRAY_SHADOW_AMD
+  GL_FLOAT16_SAMPLER_1D_SHADOW_AMD
+  GL_FLOAT16_SAMPLER_2D_AMD
+  GL_FLOAT16_SAMPLER_2D_ARRAY_AMD
+  GL_FLOAT16_SAMPLER_2D_ARRAY_SHADOW_AMD
+  GL_FLOAT16_SAMPLER_2D_MULTISAMPLE_AMD
+  GL_FLOAT16_SAMPLER_2D_MULTISAMPLE_ARRAY_AMD
+  GL_FLOAT16_SAMPLER_2D_RECT_AMD
+  GL_FLOAT16_SAMPLER_2D_RECT_SHADOW_AMD
+  GL_FLOAT16_SAMPLER_2D_SHADOW_AMD
+  GL_FLOAT16_SAMPLER_3D_AMD
+  GL_FLOAT16_SAMPLER_BUFFER_AMD
+  GL_FLOAT16_SAMPLER_CUBE_AMD
+  GL_FLOAT16_SAMPLER_CUBE_MAP_ARRAY_AMD
+  GL_FLOAT16_SAMPLER_CUBE_MAP_ARRAY_SHADOW_AMD
+  GL_FLOAT16_SAMPLER_CUBE_SHADOW_AMD
   GL_FLOAT16_VEC2_NV
   GL_FLOAT16_VEC3_NV
   GL_FLOAT16_VEC4_NV
@@ -9454,11 +12312,17 @@ our @gl_constants = qw(
   GL_FORMAT_SUBSAMPLE_24_24_OML
   GL_FOVEATION_ENABLE_BIT_QCOM
   GL_FOVEATION_SCALED_BIN_METHOD_BIT_QCOM
+  GL_FOVEATION_SUBSAMPLED_LAYOUT_METHOD_BIT_QCOM
   GL_FRACTIONAL_EVEN
+  GL_FRACTIONAL_EVEN_EXT
+  GL_FRACTIONAL_EVEN_OES
   GL_FRACTIONAL_ODD
+  GL_FRACTIONAL_ODD_EXT
+  GL_FRACTIONAL_ODD_OES
   GL_FRAGMENTS_INSTRUMENT_COUNTERS_SGIX
   GL_FRAGMENTS_INSTRUMENT_MAX_SGIX
   GL_FRAGMENTS_INSTRUMENT_SGIX
+  GL_FRAGMENT_ALPHA_MODULATE_IMG
   GL_FRAGMENT_COLOR_EXT
   GL_FRAGMENT_COLOR_MATERIAL_EXT
   GL_FRAGMENT_COLOR_MATERIAL_FACE_EXT
@@ -9469,6 +12333,7 @@ our @gl_constants = qw(
   GL_FRAGMENT_DEPTH_EXT
   GL_FRAGMENT_INPUT_NV
   GL_FRAGMENT_INTERPOLATION_OFFSET_BITS
+  GL_FRAGMENT_INTERPOLATION_OFFSET_BITS_OES
   GL_FRAGMENT_LIGHT0_EXT
   GL_FRAGMENT_LIGHT7_EXT
   GL_FRAGMENT_LIGHTING_EXT
@@ -9490,10 +12355,21 @@ our @gl_constants = qw(
   GL_FRAGMENT_SHADER_BIT
   GL_FRAGMENT_SHADER_DERIVATIVE_HINT
   GL_FRAGMENT_SHADER_DERIVATIVE_HINT_ARB
+  GL_FRAGMENT_SHADER_DERIVATIVE_HINT_OES
   GL_FRAGMENT_SHADER_DISCARDS_SAMPLES_EXT
   GL_FRAGMENT_SHADER_FRAMEBUFFER_FETCH_MRT_ARM
   GL_FRAGMENT_SHADER_INVOCATIONS
   GL_FRAGMENT_SHADER_INVOCATIONS_ARB
+  GL_FRAGMENT_SHADING_RATE_ATTACHMENT_WITH_DEFAULT_FRAMEBUFFER_SUPPORTED_EXT
+  GL_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_EXT
+  GL_FRAGMENT_SHADING_RATE_COMBINER_OP_MAX_EXT
+  GL_FRAGMENT_SHADING_RATE_COMBINER_OP_MIN_EXT
+  GL_FRAGMENT_SHADING_RATE_COMBINER_OP_MUL_EXT
+  GL_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_EXT
+  GL_FRAGMENT_SHADING_RATE_NON_TRIVIAL_COMBINERS_SUPPORTED_EXT
+  GL_FRAGMENT_SHADING_RATE_PRIMITIVE_RATE_WITH_MULTI_VIEWPORT_SUPPORTED_EXT
+  GL_FRAGMENT_SHADING_RATE_WITH_SAMPLE_MASK_SUPPORTED_EXT
+  GL_FRAGMENT_SHADING_RATE_WITH_SHADER_DEPTH_STENCIL_WRITES_SUPPORTED_EXT
   GL_FRAGMENT_SUBROUTINE
   GL_FRAGMENT_SUBROUTINE_UNIFORM
   GL_FRAGMENT_TEXTURE
@@ -9510,61 +12386,84 @@ our @gl_constants = qw(
   GL_FRAMEBUFFER_ATTACHMENT_LAYERED
   GL_FRAMEBUFFER_ATTACHMENT_LAYERED_ARB
   GL_FRAMEBUFFER_ATTACHMENT_LAYERED_EXT
+  GL_FRAMEBUFFER_ATTACHMENT_LAYERED_OES
   GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME
   GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME_EXT
+  GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME_OES
   GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE
   GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE_EXT
+  GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE_OES
   GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE
   GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE
   GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_3D_ZOFFSET_EXT
+  GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_3D_ZOFFSET_OES
   GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_BASE_VIEW_INDEX_OVR
   GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_CUBE_MAP_FACE
   GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_CUBE_MAP_FACE_EXT
+  GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_CUBE_MAP_FACE_OES
   GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LAYER
   GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LAYER_EXT
   GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LAYER_NV
   GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LEVEL
   GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LEVEL_EXT
+  GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LEVEL_OES
   GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_NUM_VIEWS_OVR
   GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_SAMPLES_EXT
+  GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_SCALE_IMG
   GL_FRAMEBUFFER_BARRIER_BIT
   GL_FRAMEBUFFER_BARRIER_BIT_EXT
   GL_FRAMEBUFFER_BINDING
   GL_FRAMEBUFFER_BINDING_EXT
+  GL_FRAMEBUFFER_BINDING_OES
   GL_FRAMEBUFFER_BLEND
   GL_FRAMEBUFFER_COMPLETE
   GL_FRAMEBUFFER_COMPLETE_EXT
+  GL_FRAMEBUFFER_COMPLETE_OES
   GL_FRAMEBUFFER_DEFAULT
   GL_FRAMEBUFFER_DEFAULT_FIXED_SAMPLE_LOCATIONS
   GL_FRAMEBUFFER_DEFAULT_HEIGHT
   GL_FRAMEBUFFER_DEFAULT_LAYERS
   GL_FRAMEBUFFER_DEFAULT_LAYERS_EXT
+  GL_FRAMEBUFFER_DEFAULT_LAYERS_OES
   GL_FRAMEBUFFER_DEFAULT_SAMPLES
   GL_FRAMEBUFFER_DEFAULT_WIDTH
   GL_FRAMEBUFFER_EXT
   GL_FRAMEBUFFER_FETCH_NONCOHERENT_QCOM
+  GL_FRAMEBUFFER_FLIP_X_MESA
+  GL_FRAMEBUFFER_FLIP_Y_MESA
   GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT
   GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT_EXT
+  GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT_OES
   GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS_EXT
+  GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS_OES
   GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER
   GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER_EXT
+  GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER_OES
   GL_FRAMEBUFFER_INCOMPLETE_FORMATS_EXT
+  GL_FRAMEBUFFER_INCOMPLETE_FORMATS_OES
+  GL_FRAMEBUFFER_INCOMPLETE_FOVEATION_QCOM
   GL_FRAMEBUFFER_INCOMPLETE_INSUFFICIENT_SHADER_COMBINED_LOCAL_STORAGE_EXT
   GL_FRAMEBUFFER_INCOMPLETE_LAYER_COUNT_ARB
   GL_FRAMEBUFFER_INCOMPLETE_LAYER_COUNT_EXT
   GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS
   GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS_ARB
   GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS_EXT
+  GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS_OES
   GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT
   GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT_EXT
+  GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT_OES
   GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE
+  GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE_AND_DOWNSAMPLE_IMG
   GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE_ANGLE
   GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE_APPLE
   GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE_EXT
+  GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE_IMG
   GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE_NV
   GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER
   GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER_EXT
+  GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER_OES
   GL_FRAMEBUFFER_INCOMPLETE_VIEW_TARGETS_OVR
+  GL_FRAMEBUFFER_OES
   GL_FRAMEBUFFER_PROGRAMMABLE_SAMPLE_LOCATIONS_ARB
   GL_FRAMEBUFFER_PROGRAMMABLE_SAMPLE_LOCATIONS_NV
   GL_FRAMEBUFFER_RENDERABLE
@@ -9574,9 +12473,12 @@ our @gl_constants = qw(
   GL_FRAMEBUFFER_SRGB
   GL_FRAMEBUFFER_SRGB_CAPABLE_EXT
   GL_FRAMEBUFFER_SRGB_EXT
+  GL_FRAMEBUFFER_SWAP_XY_MESA
   GL_FRAMEBUFFER_UNDEFINED
+  GL_FRAMEBUFFER_UNDEFINED_OES
   GL_FRAMEBUFFER_UNSUPPORTED
   GL_FRAMEBUFFER_UNSUPPORTED_EXT
+  GL_FRAMEBUFFER_UNSUPPORTED_OES
   GL_FRAME_NV
   GL_FRONT
   GL_FRONT_AND_BACK
@@ -9589,12 +12491,16 @@ our @gl_constants = qw(
   GL_FULL_SUPPORT
   GL_FUNC_ADD
   GL_FUNC_ADD_EXT
+  GL_FUNC_ADD_OES
   GL_FUNC_COMPLEX_ADD_EXT
   GL_FUNC_COMPLEX_MULTIPLY_EXT
   GL_FUNC_REVERSE_SUBTRACT
   GL_FUNC_REVERSE_SUBTRACT_EXT
+  GL_FUNC_REVERSE_SUBTRACT_OES
   GL_FUNC_SUBTRACT
   GL_FUNC_SUBTRACT_EXT
+  GL_FUNC_SUBTRACT_OES
+  GL_GCCSO_SHADER_BINARY_FJ
   GL_GENERATE_MIPMAP
   GL_GENERATE_MIPMAP_HINT
   GL_GENERATE_MIPMAP_HINT_SGIS
@@ -9606,8 +12512,11 @@ our @gl_constants = qw(
   GL_GEOMETRY_INPUT_TYPE_ARB
   GL_GEOMETRY_INPUT_TYPE_EXT
   GL_GEOMETRY_LINKED_INPUT_TYPE_EXT
+  GL_GEOMETRY_LINKED_INPUT_TYPE_OES
   GL_GEOMETRY_LINKED_OUTPUT_TYPE_EXT
+  GL_GEOMETRY_LINKED_OUTPUT_TYPE_OES
   GL_GEOMETRY_LINKED_VERTICES_OUT_EXT
+  GL_GEOMETRY_LINKED_VERTICES_OUT_OES
   GL_GEOMETRY_OUTPUT_TYPE
   GL_GEOMETRY_OUTPUT_TYPE_ARB
   GL_GEOMETRY_OUTPUT_TYPE_EXT
@@ -9617,9 +12526,12 @@ our @gl_constants = qw(
   GL_GEOMETRY_SHADER_ARB
   GL_GEOMETRY_SHADER_BIT
   GL_GEOMETRY_SHADER_BIT_EXT
+  GL_GEOMETRY_SHADER_BIT_OES
   GL_GEOMETRY_SHADER_EXT
   GL_GEOMETRY_SHADER_INVOCATIONS
   GL_GEOMETRY_SHADER_INVOCATIONS_EXT
+  GL_GEOMETRY_SHADER_INVOCATIONS_OES
+  GL_GEOMETRY_SHADER_OES
   GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED
   GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED_ARB
   GL_GEOMETRY_SUBROUTINE
@@ -9643,6 +12555,7 @@ our @gl_constants = qw(
   GL_GLYPH_VERTICAL_BEARING_Y_BIT_NV
   GL_GLYPH_WIDTH_BIT_NV
   GL_GPU_ADDRESS_NV
+  GL_GPU_DISJOINT_EXT
   GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX
   GL_GPU_MEMORY_INFO_DEDICATED_VIDMEM_NVX
   GL_GPU_MEMORY_INFO_EVICTED_MEMORY_NVX
@@ -9662,6 +12575,7 @@ our @gl_constants = qw(
   GL_GREEN_SCALE
   GL_GUILTY_CONTEXT_RESET
   GL_GUILTY_CONTEXT_RESET_ARB
+  GL_GUILTY_CONTEXT_RESET_EXT
   GL_HALF_APPLE
   GL_HALF_BIAS_NEGATE_NV
   GL_HALF_BIAS_NORMAL_NV
@@ -9669,6 +12583,7 @@ our @gl_constants = qw(
   GL_HALF_FLOAT
   GL_HALF_FLOAT_ARB
   GL_HALF_FLOAT_NV
+  GL_HALF_FLOAT_OES
   GL_HANDLE_TYPE_D3D11_IMAGE_EXT
   GL_HANDLE_TYPE_D3D11_IMAGE_KMT_EXT
   GL_HANDLE_TYPE_D3D12_FENCE_EXT
@@ -9715,6 +12630,8 @@ our @gl_constants = qw(
   GL_HSL_LUMINOSITY_NV
   GL_HSL_SATURATION_KHR
   GL_HSL_SATURATION_NV
+  GL_HUAWEI_PROGRAM_BINARY
+  GL_HUAWEI_SHADER_BINARY
   GL_IDENTITY_NV
   GL_IGLOO_COLORNORMAL_SGIX
   GL_IGLOO_FULLSCREEN_SGIX
@@ -9755,6 +12672,7 @@ our @gl_constants = qw(
   GL_IMAGE_BIT
   GL_IMAGE_BUFFER
   GL_IMAGE_BUFFER_EXT
+  GL_IMAGE_BUFFER_OES
   GL_IMAGE_CLASS_10_10_10_2
   GL_IMAGE_CLASS_11_11_10
   GL_IMAGE_CLASS_1_X_16
@@ -9771,6 +12689,7 @@ our @gl_constants = qw(
   GL_IMAGE_CUBE_EXT
   GL_IMAGE_CUBE_MAP_ARRAY
   GL_IMAGE_CUBE_MAP_ARRAY_EXT
+  GL_IMAGE_CUBE_MAP_ARRAY_OES
   GL_IMAGE_FORMAT_COMPATIBILITY_BY_CLASS
   GL_IMAGE_FORMAT_COMPATIBILITY_BY_SIZE
   GL_IMAGE_FORMAT_COMPATIBILITY_TYPE
@@ -9778,7 +12697,9 @@ our @gl_constants = qw(
   GL_IMAGE_PIXEL_TYPE
   GL_IMAGE_TEXEL_SIZE
   GL_IMPLEMENTATION_COLOR_READ_FORMAT
+  GL_IMPLEMENTATION_COLOR_READ_FORMAT_OES
   GL_IMPLEMENTATION_COLOR_READ_TYPE
+  GL_IMPLEMENTATION_COLOR_READ_TYPE_OES
   GL_INCLUSIVE_EXT
   GL_INCR
   GL_INCR_WRAP
@@ -9810,6 +12731,7 @@ our @gl_constants = qw(
   GL_INFO_LOG_LENGTH
   GL_INNOCENT_CONTEXT_RESET
   GL_INNOCENT_CONTEXT_RESET_ARB
+  GL_INNOCENT_CONTEXT_RESET_EXT
   GL_INT
   GL_INT16_NV
   GL_INT16_VEC2_NV
@@ -9883,6 +12805,7 @@ our @gl_constants = qw(
   GL_INTERPOLATE
   GL_INTERPOLATE_ARB
   GL_INTERPOLATE_EXT
+  GL_INT_10_10_10_2_OES
   GL_INT_2_10_10_10_REV
   GL_INT_IMAGE_1D
   GL_INT_IMAGE_1D_ARRAY
@@ -9902,10 +12825,12 @@ our @gl_constants = qw(
   GL_INT_IMAGE_3D_EXT
   GL_INT_IMAGE_BUFFER
   GL_INT_IMAGE_BUFFER_EXT
+  GL_INT_IMAGE_BUFFER_OES
   GL_INT_IMAGE_CUBE
   GL_INT_IMAGE_CUBE_EXT
   GL_INT_IMAGE_CUBE_MAP_ARRAY
   GL_INT_IMAGE_CUBE_MAP_ARRAY_EXT
+  GL_INT_IMAGE_CUBE_MAP_ARRAY_OES
   GL_INT_SAMPLER_1D
   GL_INT_SAMPLER_1D_ARRAY
   GL_INT_SAMPLER_1D_ARRAY_EXT
@@ -9916,6 +12841,7 @@ our @gl_constants = qw(
   GL_INT_SAMPLER_2D_EXT
   GL_INT_SAMPLER_2D_MULTISAMPLE
   GL_INT_SAMPLER_2D_MULTISAMPLE_ARRAY
+  GL_INT_SAMPLER_2D_MULTISAMPLE_ARRAY_OES
   GL_INT_SAMPLER_2D_RECT
   GL_INT_SAMPLER_2D_RECT_EXT
   GL_INT_SAMPLER_3D
@@ -9923,11 +12849,13 @@ our @gl_constants = qw(
   GL_INT_SAMPLER_BUFFER
   GL_INT_SAMPLER_BUFFER_AMD
   GL_INT_SAMPLER_BUFFER_EXT
+  GL_INT_SAMPLER_BUFFER_OES
   GL_INT_SAMPLER_CUBE
   GL_INT_SAMPLER_CUBE_EXT
   GL_INT_SAMPLER_CUBE_MAP_ARRAY
   GL_INT_SAMPLER_CUBE_MAP_ARRAY_ARB
   GL_INT_SAMPLER_CUBE_MAP_ARRAY_EXT
+  GL_INT_SAMPLER_CUBE_MAP_ARRAY_OES
   GL_INT_SAMPLER_RENDERBUFFER_NV
   GL_INT_VEC2
   GL_INT_VEC2_ARB
@@ -9938,6 +12866,7 @@ our @gl_constants = qw(
   GL_INVALID_ENUM
   GL_INVALID_FRAMEBUFFER_OPERATION
   GL_INVALID_FRAMEBUFFER_OPERATION_EXT
+  GL_INVALID_FRAMEBUFFER_OPERATION_OES
   GL_INVALID_INDEX
   GL_INVALID_OPERATION
   GL_INVALID_VALUE
@@ -9951,7 +12880,11 @@ our @gl_constants = qw(
   GL_INVERT_OVG_NV
   GL_INVERT_RGB_NV
   GL_ISOLINES
+  GL_ISOLINES_EXT
+  GL_ISOLINES_OES
   GL_IS_PER_PATCH
+  GL_IS_PER_PATCH_EXT
+  GL_IS_PER_PATCH_OES
   GL_IS_ROW_MAJOR
   GL_ITALIC_BIT_NV
   GL_KEEP
@@ -9963,12 +12896,16 @@ our @gl_constants = qw(
   GL_LARGE_CW_ARC_TO_NV
   GL_LAST_VERTEX_CONVENTION
   GL_LAST_VERTEX_CONVENTION_EXT
+  GL_LAST_VERTEX_CONVENTION_OES
   GL_LAST_VIDEO_CAPTURE_STATUS_NV
   GL_LAYERED_SGIX
   GL_LAYER_PROVOKING_VERTEX
   GL_LAYER_PROVOKING_VERTEX_EXT
+  GL_LAYER_PROVOKING_VERTEX_OES
   GL_LAYOUT_COLOR_ATTACHMENT_EXT
   GL_LAYOUT_DEFAULT_INTEL
+  GL_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_EXT
+  GL_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_EXT
   GL_LAYOUT_DEPTH_STENCIL_ATTACHMENT_EXT
   GL_LAYOUT_DEPTH_STENCIL_READ_ONLY_EXT
   GL_LAYOUT_GENERAL_EXT
@@ -10014,6 +12951,7 @@ our @gl_constants = qw(
   GL_LINES_ADJACENCY
   GL_LINES_ADJACENCY_ARB
   GL_LINES_ADJACENCY_EXT
+  GL_LINES_ADJACENCY_OES
   GL_LINE_BIT
   GL_LINE_LOOP
   GL_LINE_NV
@@ -10028,6 +12966,7 @@ our @gl_constants = qw(
   GL_LINE_STRIP_ADJACENCY
   GL_LINE_STRIP_ADJACENCY_ARB
   GL_LINE_STRIP_ADJACENCY_EXT
+  GL_LINE_STRIP_ADJACENCY_OES
   GL_LINE_TOKEN
   GL_LINE_TO_NV
   GL_LINE_WIDTH
@@ -10062,7 +13001,9 @@ our @gl_constants = qw(
   GL_LOG_WARNING_REGAL
   GL_LOSE_CONTEXT_ON_RESET
   GL_LOSE_CONTEXT_ON_RESET_ARB
+  GL_LOSE_CONTEXT_ON_RESET_EXT
   GL_LOWER_LEFT
+  GL_LOWER_LEFT_EXT
   GL_LOW_FLOAT
   GL_LOW_INT
   GL_LO_BIAS_NV
@@ -10098,6 +13039,7 @@ our @gl_constants = qw(
   GL_LUMINANCE4
   GL_LUMINANCE4_ALPHA4
   GL_LUMINANCE4_ALPHA4_EXT
+  GL_LUMINANCE4_ALPHA4_OES
   GL_LUMINANCE4_EXT
   GL_LUMINANCE6_ALPHA2
   GL_LUMINANCE6_ALPHA2_EXT
@@ -10106,8 +13048,10 @@ our @gl_constants = qw(
   GL_LUMINANCE8UI_EXT
   GL_LUMINANCE8_ALPHA8
   GL_LUMINANCE8_ALPHA8_EXT
+  GL_LUMINANCE8_ALPHA8_OES
   GL_LUMINANCE8_ALPHA8_SNORM
   GL_LUMINANCE8_EXT
+  GL_LUMINANCE8_OES
   GL_LUMINANCE8_SNORM
   GL_LUMINANCE_ALPHA
   GL_LUMINANCE_ALPHA16F_ARB
@@ -10285,12 +13229,19 @@ our @gl_constants = qw(
   GL_MATRIX9_ARB
   GL_MATRIX_EXT
   GL_MATRIX_INDEX_ARRAY_ARB
+  GL_MATRIX_INDEX_ARRAY_BUFFER_BINDING_OES
+  GL_MATRIX_INDEX_ARRAY_OES
   GL_MATRIX_INDEX_ARRAY_POINTER_ARB
+  GL_MATRIX_INDEX_ARRAY_POINTER_OES
   GL_MATRIX_INDEX_ARRAY_SIZE_ARB
+  GL_MATRIX_INDEX_ARRAY_SIZE_OES
   GL_MATRIX_INDEX_ARRAY_STRIDE_ARB
+  GL_MATRIX_INDEX_ARRAY_STRIDE_OES
   GL_MATRIX_INDEX_ARRAY_TYPE_ARB
+  GL_MATRIX_INDEX_ARRAY_TYPE_OES
   GL_MATRIX_MODE
   GL_MATRIX_PALETTE_ARB
+  GL_MATRIX_PALETTE_OES
   GL_MATRIX_STRIDE
   GL_MAT_AMBIENT_AND_DIFFUSE_BIT_PGI
   GL_MAT_AMBIENT_BIT_PGI
@@ -10302,6 +13253,7 @@ our @gl_constants = qw(
   GL_MAX
   GL_MAX_3D_TEXTURE_SIZE
   GL_MAX_3D_TEXTURE_SIZE_EXT
+  GL_MAX_3D_TEXTURE_SIZE_OES
   GL_MAX_ACTIVE_LIGHTS_EXT
   GL_MAX_ALPHA_SGIS
   GL_MAX_ARRAY_TEXTURE_LAYERS
@@ -10321,9 +13273,12 @@ our @gl_constants = qw(
   GL_MAX_CLIP_DISTANCES_APPLE
   GL_MAX_CLIP_DISTANCES_EXT
   GL_MAX_CLIP_PLANES
+  GL_MAX_COARSE_FRAGMENT_SAMPLES_NV
   GL_MAX_COLOR_ATTACHMENTS
   GL_MAX_COLOR_ATTACHMENTS_EXT
   GL_MAX_COLOR_ATTACHMENTS_NV
+  GL_MAX_COLOR_FRAMEBUFFER_SAMPLES_AMD
+  GL_MAX_COLOR_FRAMEBUFFER_STORAGE_SAMPLES_AMD
   GL_MAX_COLOR_MATRIX_STACK_DEPTH
   GL_MAX_COLOR_MATRIX_STACK_DEPTH_SGI
   GL_MAX_COLOR_TEXTURE_SAMPLES
@@ -10336,13 +13291,22 @@ our @gl_constants = qw(
   GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS
   GL_MAX_COMBINED_GEOMETRY_UNIFORM_COMPONENTS
   GL_MAX_COMBINED_GEOMETRY_UNIFORM_COMPONENTS_EXT
+  GL_MAX_COMBINED_GEOMETRY_UNIFORM_COMPONENTS_OES
   GL_MAX_COMBINED_IMAGE_UNIFORMS
   GL_MAX_COMBINED_IMAGE_UNITS_AND_FRAGMENT_OUTPUTS
   GL_MAX_COMBINED_IMAGE_UNITS_AND_FRAGMENT_OUTPUTS_EXT
+  GL_MAX_COMBINED_MESH_UNIFORM_COMPONENTS_EXT
+  GL_MAX_COMBINED_MESH_UNIFORM_COMPONENTS_NV
   GL_MAX_COMBINED_SHADER_OUTPUT_RESOURCES
   GL_MAX_COMBINED_SHADER_STORAGE_BLOCKS
+  GL_MAX_COMBINED_TASK_UNIFORM_COMPONENTS_EXT
+  GL_MAX_COMBINED_TASK_UNIFORM_COMPONENTS_NV
   GL_MAX_COMBINED_TESS_CONTROL_UNIFORM_COMPONENTS
+  GL_MAX_COMBINED_TESS_CONTROL_UNIFORM_COMPONENTS_EXT
+  GL_MAX_COMBINED_TESS_CONTROL_UNIFORM_COMPONENTS_OES
   GL_MAX_COMBINED_TESS_EVALUATION_UNIFORM_COMPONENTS
+  GL_MAX_COMBINED_TESS_EVALUATION_UNIFORM_COMPONENTS_EXT
+  GL_MAX_COMBINED_TESS_EVALUATION_UNIFORM_COMPONENTS_OES
   GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS
   GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS_ARB
   GL_MAX_COMBINED_UNIFORM_BLOCKS
@@ -10369,6 +13333,7 @@ our @gl_constants = qw(
   GL_MAX_CUBE_MAP_TEXTURE_SIZE
   GL_MAX_CUBE_MAP_TEXTURE_SIZE_ARB
   GL_MAX_CUBE_MAP_TEXTURE_SIZE_EXT
+  GL_MAX_CUBE_MAP_TEXTURE_SIZE_OES
   GL_MAX_CULL_DISTANCES
   GL_MAX_CULL_DISTANCES_EXT
   GL_MAX_DEBUG_GROUP_STACK_DEPTH
@@ -10381,12 +13346,16 @@ our @gl_constants = qw(
   GL_MAX_DEEP_3D_TEXTURE_DEPTH_NV
   GL_MAX_DEEP_3D_TEXTURE_WIDTH_HEIGHT_NV
   GL_MAX_DEPTH
+  GL_MAX_DEPTH_STENCIL_FRAMEBUFFER_SAMPLES_AMD
   GL_MAX_DEPTH_TEXTURE_SAMPLES
+  GL_MAX_DETACHED_BUFFERS_NV
+  GL_MAX_DETACHED_TEXTURES_NV
   GL_MAX_DRAW_BUFFERS
   GL_MAX_DRAW_BUFFERS_ARB
   GL_MAX_DRAW_BUFFERS_ATI
   GL_MAX_DRAW_BUFFERS_EXT
   GL_MAX_DRAW_BUFFERS_NV
+  GL_MAX_DRAW_MESH_TASKS_COUNT_NV
   GL_MAX_DUAL_SOURCE_DRAW_BUFFERS
   GL_MAX_DUAL_SOURCE_DRAW_BUFFERS_EXT
   GL_MAX_ELEMENTS_INDICES
@@ -10405,9 +13374,14 @@ our @gl_constants = qw(
   GL_MAX_FRAGMENT_INPUT_COMPONENTS
   GL_MAX_FRAGMENT_INTERPOLATION_OFFSET
   GL_MAX_FRAGMENT_INTERPOLATION_OFFSET_NV
+  GL_MAX_FRAGMENT_INTERPOLATION_OFFSET_OES
   GL_MAX_FRAGMENT_LIGHTS_EXT
   GL_MAX_FRAGMENT_PROGRAM_LOCAL_PARAMETERS_NV
   GL_MAX_FRAGMENT_SHADER_STORAGE_BLOCKS
+  GL_MAX_FRAGMENT_SHADING_RATE_ATTACHMENT_LAYERS_EXT
+  GL_MAX_FRAGMENT_SHADING_RATE_ATTACHMENT_TEXEL_ASPECT_RATIO_EXT
+  GL_MAX_FRAGMENT_SHADING_RATE_ATTACHMENT_TEXEL_HEIGHT_EXT
+  GL_MAX_FRAGMENT_SHADING_RATE_ATTACHMENT_TEXEL_WIDTH_EXT
   GL_MAX_FRAGMENT_UNIFORM_BLOCKS
   GL_MAX_FRAGMENT_UNIFORM_COMPONENTS
   GL_MAX_FRAGMENT_UNIFORM_COMPONENTS_ARB
@@ -10415,39 +13389,52 @@ our @gl_constants = qw(
   GL_MAX_FRAMEBUFFER_HEIGHT
   GL_MAX_FRAMEBUFFER_LAYERS
   GL_MAX_FRAMEBUFFER_LAYERS_EXT
+  GL_MAX_FRAMEBUFFER_LAYERS_OES
   GL_MAX_FRAMEBUFFER_SAMPLES
   GL_MAX_FRAMEBUFFER_WIDTH
   GL_MAX_GENERAL_COMBINERS_NV
   GL_MAX_GEOMETRY_ATOMIC_COUNTERS
   GL_MAX_GEOMETRY_ATOMIC_COUNTERS_EXT
+  GL_MAX_GEOMETRY_ATOMIC_COUNTERS_OES
   GL_MAX_GEOMETRY_ATOMIC_COUNTER_BUFFERS
   GL_MAX_GEOMETRY_ATOMIC_COUNTER_BUFFERS_EXT
+  GL_MAX_GEOMETRY_ATOMIC_COUNTER_BUFFERS_OES
   GL_MAX_GEOMETRY_BINDABLE_UNIFORMS_EXT
   GL_MAX_GEOMETRY_IMAGE_UNIFORMS
   GL_MAX_GEOMETRY_IMAGE_UNIFORMS_EXT
+  GL_MAX_GEOMETRY_IMAGE_UNIFORMS_OES
   GL_MAX_GEOMETRY_INPUT_COMPONENTS
   GL_MAX_GEOMETRY_INPUT_COMPONENTS_EXT
+  GL_MAX_GEOMETRY_INPUT_COMPONENTS_OES
   GL_MAX_GEOMETRY_OUTPUT_COMPONENTS
   GL_MAX_GEOMETRY_OUTPUT_COMPONENTS_EXT
+  GL_MAX_GEOMETRY_OUTPUT_COMPONENTS_OES
   GL_MAX_GEOMETRY_OUTPUT_VERTICES
   GL_MAX_GEOMETRY_OUTPUT_VERTICES_ARB
   GL_MAX_GEOMETRY_OUTPUT_VERTICES_EXT
+  GL_MAX_GEOMETRY_OUTPUT_VERTICES_OES
   GL_MAX_GEOMETRY_PROGRAM_INVOCATIONS_NV
   GL_MAX_GEOMETRY_SHADER_INVOCATIONS
   GL_MAX_GEOMETRY_SHADER_INVOCATIONS_EXT
+  GL_MAX_GEOMETRY_SHADER_INVOCATIONS_OES
   GL_MAX_GEOMETRY_SHADER_STORAGE_BLOCKS
   GL_MAX_GEOMETRY_SHADER_STORAGE_BLOCKS_EXT
+  GL_MAX_GEOMETRY_SHADER_STORAGE_BLOCKS_OES
   GL_MAX_GEOMETRY_TEXTURE_IMAGE_UNITS
   GL_MAX_GEOMETRY_TEXTURE_IMAGE_UNITS_ARB
   GL_MAX_GEOMETRY_TEXTURE_IMAGE_UNITS_EXT
+  GL_MAX_GEOMETRY_TEXTURE_IMAGE_UNITS_OES
   GL_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS
   GL_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS_ARB
   GL_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS_EXT
+  GL_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS_OES
   GL_MAX_GEOMETRY_UNIFORM_BLOCKS
   GL_MAX_GEOMETRY_UNIFORM_BLOCKS_EXT
+  GL_MAX_GEOMETRY_UNIFORM_BLOCKS_OES
   GL_MAX_GEOMETRY_UNIFORM_COMPONENTS
   GL_MAX_GEOMETRY_UNIFORM_COMPONENTS_ARB
   GL_MAX_GEOMETRY_UNIFORM_COMPONENTS_EXT
+  GL_MAX_GEOMETRY_UNIFORM_COMPONENTS_OES
   GL_MAX_GEOMETRY_VARYING_COMPONENTS_ARB
   GL_MAX_GEOMETRY_VARYING_COMPONENTS_EXT
   GL_MAX_GREEN_SGIS
@@ -10466,6 +13453,39 @@ our @gl_constants = qw(
   GL_MAX_LUMINANCE_SGIS
   GL_MAX_MAP_TESSELLATION_NV
   GL_MAX_MATRIX_PALETTE_STACK_DEPTH_ARB
+  GL_MAX_MESH_ATOMIC_COUNTERS_EXT
+  GL_MAX_MESH_ATOMIC_COUNTERS_NV
+  GL_MAX_MESH_ATOMIC_COUNTER_BUFFERS_EXT
+  GL_MAX_MESH_ATOMIC_COUNTER_BUFFERS_NV
+  GL_MAX_MESH_IMAGE_UNIFORMS_EXT
+  GL_MAX_MESH_IMAGE_UNIFORMS_NV
+  GL_MAX_MESH_MULTIVIEW_VIEW_COUNT_EXT
+  GL_MAX_MESH_OUTPUT_COMPONENTS_EXT
+  GL_MAX_MESH_OUTPUT_LAYERS_EXT
+  GL_MAX_MESH_OUTPUT_MEMORY_SIZE_EXT
+  GL_MAX_MESH_OUTPUT_PRIMITIVES_EXT
+  GL_MAX_MESH_OUTPUT_PRIMITIVES_NV
+  GL_MAX_MESH_OUTPUT_VERTICES_EXT
+  GL_MAX_MESH_OUTPUT_VERTICES_NV
+  GL_MAX_MESH_PAYLOAD_AND_OUTPUT_MEMORY_SIZE_EXT
+  GL_MAX_MESH_PAYLOAD_AND_SHARED_MEMORY_SIZE_EXT
+  GL_MAX_MESH_SHADER_STORAGE_BLOCKS_EXT
+  GL_MAX_MESH_SHADER_STORAGE_BLOCKS_NV
+  GL_MAX_MESH_SHARED_MEMORY_SIZE_EXT
+  GL_MAX_MESH_TEXTURE_IMAGE_UNITS_EXT
+  GL_MAX_MESH_TEXTURE_IMAGE_UNITS_NV
+  GL_MAX_MESH_TOTAL_MEMORY_SIZE_NV
+  GL_MAX_MESH_UNIFORM_BLOCKS_EXT
+  GL_MAX_MESH_UNIFORM_BLOCKS_NV
+  GL_MAX_MESH_UNIFORM_COMPONENTS_EXT
+  GL_MAX_MESH_UNIFORM_COMPONENTS_NV
+  GL_MAX_MESH_VIEWS_NV
+  GL_MAX_MESH_WORK_GROUP_COUNT_EXT
+  GL_MAX_MESH_WORK_GROUP_INVOCATIONS_EXT
+  GL_MAX_MESH_WORK_GROUP_INVOCATIONS_NV
+  GL_MAX_MESH_WORK_GROUP_SIZE_EXT
+  GL_MAX_MESH_WORK_GROUP_SIZE_NV
+  GL_MAX_MESH_WORK_GROUP_TOTAL_COUNT_EXT
   GL_MAX_MIPMAP_ANISOTROPY_SGIX
   GL_MAX_MODELVIEW_STACK_DEPTH
   GL_MAX_MULTISAMPLE_COVERAGE_MODES_NV
@@ -10480,10 +13500,15 @@ our @gl_constants = qw(
   GL_MAX_OPTIMIZED_VERTEX_SHADER_LOCAL_CONSTANTS_EXT
   GL_MAX_OPTIMIZED_VERTEX_SHADER_VARIANTS_EXT
   GL_MAX_PALETTE_MATRICES_ARB
+  GL_MAX_PALETTE_MATRICES_OES
   GL_MAX_PATCH_VERTICES
+  GL_MAX_PATCH_VERTICES_EXT
+  GL_MAX_PATCH_VERTICES_OES
   GL_MAX_PIXEL_MAP_TABLE
   GL_MAX_PIXEL_TRANSFORM_2D_STACK_DEPTH_EXT
   GL_MAX_PN_TRIANGLES_TESSELATION_LEVEL_ATI
+  GL_MAX_PREFERRED_MESH_WORK_GROUP_INVOCATIONS_EXT
+  GL_MAX_PREFERRED_TASK_WORK_GROUP_INVOCATIONS_EXT
   GL_MAX_PROGRAM_ADDRESS_REGISTERS_ARB
   GL_MAX_PROGRAM_ALU_INSTRUCTIONS_ARB
   GL_MAX_PROGRAM_ATTRIBS_ARB
@@ -10535,10 +13560,12 @@ our @gl_constants = qw(
   GL_MAX_RED_SGIS
   GL_MAX_RENDERBUFFER_SIZE
   GL_MAX_RENDERBUFFER_SIZE_EXT
+  GL_MAX_RENDERBUFFER_SIZE_OES
   GL_MAX_SAMPLES
   GL_MAX_SAMPLES_ANGLE
   GL_MAX_SAMPLES_APPLE
   GL_MAX_SAMPLES_EXT
+  GL_MAX_SAMPLES_IMG
   GL_MAX_SAMPLES_NV
   GL_MAX_SAMPLE_MASK_WORDS
   GL_MAX_SAMPLE_MASK_WORDS_NV
@@ -10553,6 +13580,7 @@ our @gl_constants = qw(
   GL_MAX_SHADER_PIXEL_LOCAL_STORAGE_SIZE_EXT
   GL_MAX_SHADER_STORAGE_BLOCK_SIZE
   GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS
+  GL_MAX_SHADER_SUBSAMPLED_IMAGE_UNITS_QCOM
   GL_MAX_SHININESS_NV
   GL_MAX_SPARSE_3D_TEXTURE_SIZE_AMD
   GL_MAX_SPARSE_3D_TEXTURE_SIZE_ARB
@@ -10567,31 +13595,99 @@ our @gl_constants = qw(
   GL_MAX_SUBPIXEL_PRECISION_BIAS_BITS_NV
   GL_MAX_SUBROUTINES
   GL_MAX_SUBROUTINE_UNIFORM_LOCATIONS
+  GL_MAX_TASK_ATOMIC_COUNTERS_EXT
+  GL_MAX_TASK_ATOMIC_COUNTERS_NV
+  GL_MAX_TASK_ATOMIC_COUNTER_BUFFERS_EXT
+  GL_MAX_TASK_ATOMIC_COUNTER_BUFFERS_NV
+  GL_MAX_TASK_IMAGE_UNIFORMS_EXT
+  GL_MAX_TASK_IMAGE_UNIFORMS_NV
+  GL_MAX_TASK_OUTPUT_COUNT_NV
+  GL_MAX_TASK_PAYLOAD_AND_SHARED_MEMORY_SIZE_EXT
+  GL_MAX_TASK_PAYLOAD_SIZE_EXT
+  GL_MAX_TASK_SHADER_STORAGE_BLOCKS_EXT
+  GL_MAX_TASK_SHADER_STORAGE_BLOCKS_NV
+  GL_MAX_TASK_SHARED_MEMORY_SIZE_EXT
+  GL_MAX_TASK_TEXTURE_IMAGE_UNITS_EXT
+  GL_MAX_TASK_TEXTURE_IMAGE_UNITS_NV
+  GL_MAX_TASK_TOTAL_MEMORY_SIZE_NV
+  GL_MAX_TASK_UNIFORM_BLOCKS_EXT
+  GL_MAX_TASK_UNIFORM_BLOCKS_NV
+  GL_MAX_TASK_UNIFORM_COMPONENTS_EXT
+  GL_MAX_TASK_UNIFORM_COMPONENTS_NV
+  GL_MAX_TASK_WORK_GROUP_COUNT_EXT
+  GL_MAX_TASK_WORK_GROUP_INVOCATIONS_EXT
+  GL_MAX_TASK_WORK_GROUP_INVOCATIONS_NV
+  GL_MAX_TASK_WORK_GROUP_SIZE_EXT
+  GL_MAX_TASK_WORK_GROUP_SIZE_NV
+  GL_MAX_TASK_WORK_GROUP_TOTAL_COUNT_EXT
   GL_MAX_TESS_CONTROL_ATOMIC_COUNTERS
+  GL_MAX_TESS_CONTROL_ATOMIC_COUNTERS_EXT
+  GL_MAX_TESS_CONTROL_ATOMIC_COUNTERS_OES
   GL_MAX_TESS_CONTROL_ATOMIC_COUNTER_BUFFERS
+  GL_MAX_TESS_CONTROL_ATOMIC_COUNTER_BUFFERS_EXT
+  GL_MAX_TESS_CONTROL_ATOMIC_COUNTER_BUFFERS_OES
   GL_MAX_TESS_CONTROL_IMAGE_UNIFORMS
+  GL_MAX_TESS_CONTROL_IMAGE_UNIFORMS_EXT
+  GL_MAX_TESS_CONTROL_IMAGE_UNIFORMS_OES
   GL_MAX_TESS_CONTROL_INPUT_COMPONENTS
+  GL_MAX_TESS_CONTROL_INPUT_COMPONENTS_EXT
+  GL_MAX_TESS_CONTROL_INPUT_COMPONENTS_OES
   GL_MAX_TESS_CONTROL_OUTPUT_COMPONENTS
+  GL_MAX_TESS_CONTROL_OUTPUT_COMPONENTS_EXT
+  GL_MAX_TESS_CONTROL_OUTPUT_COMPONENTS_OES
   GL_MAX_TESS_CONTROL_SHADER_STORAGE_BLOCKS
+  GL_MAX_TESS_CONTROL_SHADER_STORAGE_BLOCKS_EXT
+  GL_MAX_TESS_CONTROL_SHADER_STORAGE_BLOCKS_OES
   GL_MAX_TESS_CONTROL_TEXTURE_IMAGE_UNITS
+  GL_MAX_TESS_CONTROL_TEXTURE_IMAGE_UNITS_EXT
+  GL_MAX_TESS_CONTROL_TEXTURE_IMAGE_UNITS_OES
   GL_MAX_TESS_CONTROL_TOTAL_OUTPUT_COMPONENTS
+  GL_MAX_TESS_CONTROL_TOTAL_OUTPUT_COMPONENTS_EXT
+  GL_MAX_TESS_CONTROL_TOTAL_OUTPUT_COMPONENTS_OES
   GL_MAX_TESS_CONTROL_UNIFORM_BLOCKS
+  GL_MAX_TESS_CONTROL_UNIFORM_BLOCKS_EXT
+  GL_MAX_TESS_CONTROL_UNIFORM_BLOCKS_OES
   GL_MAX_TESS_CONTROL_UNIFORM_COMPONENTS
+  GL_MAX_TESS_CONTROL_UNIFORM_COMPONENTS_EXT
+  GL_MAX_TESS_CONTROL_UNIFORM_COMPONENTS_OES
   GL_MAX_TESS_EVALUATION_ATOMIC_COUNTERS
+  GL_MAX_TESS_EVALUATION_ATOMIC_COUNTERS_EXT
+  GL_MAX_TESS_EVALUATION_ATOMIC_COUNTERS_OES
   GL_MAX_TESS_EVALUATION_ATOMIC_COUNTER_BUFFERS
+  GL_MAX_TESS_EVALUATION_ATOMIC_COUNTER_BUFFERS_EXT
+  GL_MAX_TESS_EVALUATION_ATOMIC_COUNTER_BUFFERS_OES
   GL_MAX_TESS_EVALUATION_IMAGE_UNIFORMS
+  GL_MAX_TESS_EVALUATION_IMAGE_UNIFORMS_EXT
+  GL_MAX_TESS_EVALUATION_IMAGE_UNIFORMS_OES
   GL_MAX_TESS_EVALUATION_INPUT_COMPONENTS
+  GL_MAX_TESS_EVALUATION_INPUT_COMPONENTS_EXT
+  GL_MAX_TESS_EVALUATION_INPUT_COMPONENTS_OES
   GL_MAX_TESS_EVALUATION_OUTPUT_COMPONENTS
+  GL_MAX_TESS_EVALUATION_OUTPUT_COMPONENTS_EXT
+  GL_MAX_TESS_EVALUATION_OUTPUT_COMPONENTS_OES
   GL_MAX_TESS_EVALUATION_SHADER_STORAGE_BLOCKS
+  GL_MAX_TESS_EVALUATION_SHADER_STORAGE_BLOCKS_EXT
+  GL_MAX_TESS_EVALUATION_SHADER_STORAGE_BLOCKS_OES
   GL_MAX_TESS_EVALUATION_TEXTURE_IMAGE_UNITS
+  GL_MAX_TESS_EVALUATION_TEXTURE_IMAGE_UNITS_EXT
+  GL_MAX_TESS_EVALUATION_TEXTURE_IMAGE_UNITS_OES
   GL_MAX_TESS_EVALUATION_UNIFORM_BLOCKS
+  GL_MAX_TESS_EVALUATION_UNIFORM_BLOCKS_EXT
+  GL_MAX_TESS_EVALUATION_UNIFORM_BLOCKS_OES
   GL_MAX_TESS_EVALUATION_UNIFORM_COMPONENTS
+  GL_MAX_TESS_EVALUATION_UNIFORM_COMPONENTS_EXT
+  GL_MAX_TESS_EVALUATION_UNIFORM_COMPONENTS_OES
   GL_MAX_TESS_GEN_LEVEL
+  GL_MAX_TESS_GEN_LEVEL_EXT
+  GL_MAX_TESS_GEN_LEVEL_OES
   GL_MAX_TESS_PATCH_COMPONENTS
+  GL_MAX_TESS_PATCH_COMPONENTS_EXT
+  GL_MAX_TESS_PATCH_COMPONENTS_OES
   GL_MAX_TEXTURES_SGIS
   GL_MAX_TEXTURE_BUFFER_SIZE
   GL_MAX_TEXTURE_BUFFER_SIZE_ARB
   GL_MAX_TEXTURE_BUFFER_SIZE_EXT
+  GL_MAX_TEXTURE_BUFFER_SIZE_OES
   GL_MAX_TEXTURE_COORDS
   GL_MAX_TEXTURE_COORDS_ARB
   GL_MAX_TEXTURE_COORDS_NV
@@ -10607,6 +13703,7 @@ our @gl_constants = qw(
   GL_MAX_TEXTURE_STACK_DEPTH
   GL_MAX_TEXTURE_UNITS
   GL_MAX_TEXTURE_UNITS_ARB
+  GL_MAX_TIMELINE_SEMAPHORE_VALUE_DIFFERENCE_NV
   GL_MAX_TRACK_MATRICES_NV
   GL_MAX_TRACK_MATRIX_STACK_DEPTH_NV
   GL_MAX_TRANSFORM_FEEDBACK_BUFFERS
@@ -10655,6 +13752,7 @@ our @gl_constants = qw(
   GL_MAX_VERTEX_UNIFORM_COMPONENTS_ARB
   GL_MAX_VERTEX_UNIFORM_VECTORS
   GL_MAX_VERTEX_UNITS_ARB
+  GL_MAX_VERTEX_UNITS_OES
   GL_MAX_VERTEX_VARYING_COMPONENTS_ARB
   GL_MAX_VERTEX_VARYING_COMPONENTS_EXT
   GL_MAX_VIEWPORTS
@@ -10665,6 +13763,35 @@ our @gl_constants = qw(
   GL_MAX_WINDOW_RECTANGLES_EXT
   GL_MEDIUM_FLOAT
   GL_MEDIUM_INT
+  GL_MEMORY_ATTACHABLE_ALIGNMENT_NV
+  GL_MEMORY_ATTACHABLE_NV
+  GL_MEMORY_ATTACHABLE_SIZE_NV
+  GL_MESH_OUTPUT_PER_PRIMITIVE_GRANULARITY_EXT
+  GL_MESH_OUTPUT_PER_PRIMITIVE_GRANULARITY_NV
+  GL_MESH_OUTPUT_PER_VERTEX_GRANULARITY_EXT
+  GL_MESH_OUTPUT_PER_VERTEX_GRANULARITY_NV
+  GL_MESH_OUTPUT_TYPE_EXT
+  GL_MESH_OUTPUT_TYPE_NV
+  GL_MESH_PREFERS_COMPACT_PRIMITIVE_OUTPUT_EXT
+  GL_MESH_PREFERS_COMPACT_VERTEX_OUTPUT_EXT
+  GL_MESH_PREFERS_LOCAL_INVOCATION_PRIMITIVE_OUTPUT_EXT
+  GL_MESH_PREFERS_LOCAL_INVOCATION_VERTEX_OUTPUT_EXT
+  GL_MESH_PRIMITIVES_GENERATED_EXT
+  GL_MESH_PRIMITIVES_OUT_EXT
+  GL_MESH_PRIMITIVES_OUT_NV
+  GL_MESH_SHADER_BIT_EXT
+  GL_MESH_SHADER_BIT_NV
+  GL_MESH_SHADER_EXT
+  GL_MESH_SHADER_INVOCATIONS_EXT
+  GL_MESH_SHADER_NV
+  GL_MESH_SUBROUTINE_EXT
+  GL_MESH_SUBROUTINE_NV
+  GL_MESH_SUBROUTINE_UNIFORM_EXT
+  GL_MESH_SUBROUTINE_UNIFORM_NV
+  GL_MESH_VERTICES_OUT_EXT
+  GL_MESH_VERTICES_OUT_NV
+  GL_MESH_WORK_GROUP_SIZE_EXT
+  GL_MESH_WORK_GROUP_SIZE_NV
   GL_MIN
   GL_MINMAX
   GL_MINMAX_EXT
@@ -10680,6 +13807,9 @@ our @gl_constants = qw(
   GL_MIN_EXT
   GL_MIN_FRAGMENT_INTERPOLATION_OFFSET
   GL_MIN_FRAGMENT_INTERPOLATION_OFFSET_NV
+  GL_MIN_FRAGMENT_INTERPOLATION_OFFSET_OES
+  GL_MIN_FRAGMENT_SHADING_RATE_ATTACHMENT_TEXEL_HEIGHT_EXT
+  GL_MIN_FRAGMENT_SHADING_RATE_ATTACHMENT_TEXEL_WIDTH_EXT
   GL_MIN_GREEN_SGIS
   GL_MIN_INTENSITY_SGIS
   GL_MIN_LOD_WARNING_AMD
@@ -10694,6 +13824,7 @@ our @gl_constants = qw(
   GL_MIN_RED_SGIS
   GL_MIN_SAMPLE_SHADING_VALUE
   GL_MIN_SAMPLE_SHADING_VALUE_ARB
+  GL_MIN_SAMPLE_SHADING_VALUE_OES
   GL_MIN_SPARSE_LEVEL_AMD
   GL_MIPMAP
   GL_MIRRORED_REPEAT
@@ -10750,15 +13881,19 @@ our @gl_constants = qw(
   GL_MODELVIEW8_ARB
   GL_MODELVIEW9_ARB
   GL_MODELVIEW_MATRIX
+  GL_MODELVIEW_MATRIX_FLOAT_AS_INT_BITS_OES
   GL_MODELVIEW_PROJECTION_NV
   GL_MODELVIEW_STACK_DEPTH
   GL_MODULATE
   GL_MODULATE_ADD_ATI
   GL_MODULATE_ADD_ATIX
+  GL_MODULATE_COLOR_IMG
   GL_MODULATE_SIGNED_ADD_ATI
   GL_MODULATE_SIGNED_ADD_ATIX
   GL_MODULATE_SUBTRACT_ATI
   GL_MODULATE_SUBTRACT_ATIX
+  GL_MOTION_ESTIMATION_SEARCH_BLOCK_X_QCOM
+  GL_MOTION_ESTIMATION_SEARCH_BLOCK_Y_QCOM
   GL_MOVE_TO_CONTINUES_NV
   GL_MOVE_TO_NV
   GL_MOVE_TO_RESETS_NV
@@ -10809,6 +13944,7 @@ our @gl_constants = qw(
   GL_NEGATE_BIT_ATI
   GL_NEGATIVE_ONE_EXT
   GL_NEGATIVE_ONE_TO_ONE
+  GL_NEGATIVE_ONE_TO_ONE_EXT
   GL_NEGATIVE_W_EXT
   GL_NEGATIVE_X_EXT
   GL_NEGATIVE_Y_EXT
@@ -10817,6 +13953,7 @@ our @gl_constants = qw(
   GL_NEXT_VIDEO_CAPTURE_BUFFER_STATUS_NV
   GL_NICEST
   GL_NONE
+  GL_NONE_OES
   GL_NOOP
   GL_NOP_COMMAND_NV
   GL_NOR
@@ -10843,15 +13980,18 @@ our @gl_constants = qw(
   GL_NORMAL_MAP_ARB
   GL_NORMAL_MAP_EXT
   GL_NORMAL_MAP_NV
+  GL_NORMAL_MAP_OES
   GL_NOTEQUAL
   GL_NO_ERROR
   GL_NO_RESET_NOTIFICATION
   GL_NO_RESET_NOTIFICATION_ARB
+  GL_NO_RESET_NOTIFICATION_EXT
   GL_NUM_ACTIVE_VARIABLES
   GL_NUM_COMPATIBLE_SUBROUTINES
   GL_NUM_COMPRESSED_TEXTURE_FORMATS
   GL_NUM_COMPRESSED_TEXTURE_FORMATS_ARB
   GL_NUM_DEVICE_UUIDS_EXT
+  GL_NUM_DOWNSAMPLE_SCALES_IMG
   GL_NUM_EXTENSIONS
   GL_NUM_FILL_STREAMS_NV
   GL_NUM_FRAGMENT_CONSTANTS_ATI
@@ -10863,12 +14003,15 @@ our @gl_constants = qw(
   GL_NUM_LOOPBACK_COMPONENTS_ATI
   GL_NUM_PASSES_ATI
   GL_NUM_PROGRAM_BINARY_FORMATS
+  GL_NUM_PROGRAM_BINARY_FORMATS_OES
   GL_NUM_SAMPLE_COUNTS
   GL_NUM_SHADER_BINARY_FORMATS
   GL_NUM_SHADING_LANGUAGE_VERSIONS
   GL_NUM_SPARSE_LEVELS_ARB
   GL_NUM_SPARSE_LEVELS_EXT
   GL_NUM_SPIR_V_EXTENSIONS
+  GL_NUM_SUPPORTED_MULTISAMPLE_MODES_AMD
+  GL_NUM_SURFACE_COMPRESSION_FIXED_RATES_EXT
   GL_NUM_TILING_TYPES_EXT
   GL_NUM_VIDEO_CAPTURE_STREAMS_NV
   GL_NUM_VIRTUAL_PAGE_SIZES_ARB
@@ -11049,6 +14192,16 @@ our @gl_constants = qw(
   GL_PACK_SKIP_ROWS_NV
   GL_PACK_SUBSAMPLE_RATE_SGIX
   GL_PACK_SWAP_BYTES
+  GL_PALETTE4_R5_G6_B5_OES
+  GL_PALETTE4_RGB5_A1_OES
+  GL_PALETTE4_RGB8_OES
+  GL_PALETTE4_RGBA4_OES
+  GL_PALETTE4_RGBA8_OES
+  GL_PALETTE8_R5_G6_B5_OES
+  GL_PALETTE8_RGB5_A1_OES
+  GL_PALETTE8_RGB8_OES
+  GL_PALETTE8_RGBA4_OES
+  GL_PALETTE8_RGBA8_OES
   GL_PARALLEL_ARRAYS_INTEL
   GL_PARAMETER_BUFFER
   GL_PARAMETER_BUFFER_ARB
@@ -11058,9 +14211,13 @@ our @gl_constants = qw(
   GL_PASS_THROUGH_NV
   GL_PASS_THROUGH_TOKEN
   GL_PATCHES
+  GL_PATCHES_EXT
+  GL_PATCHES_OES
   GL_PATCH_DEFAULT_INNER_LEVEL
   GL_PATCH_DEFAULT_OUTER_LEVEL
   GL_PATCH_VERTICES
+  GL_PATCH_VERTICES_EXT
+  GL_PATCH_VERTICES_OES
   GL_PATH_CLIENT_LENGTH_NV
   GL_PATH_COMMAND_COUNT_NV
   GL_PATH_COMPUTED_LENGTH_NV
@@ -11212,6 +14369,11 @@ our @gl_constants = qw(
   GL_POINT_FADE_THRESHOLD_SIZE_EXT
   GL_POINT_NV
   GL_POINT_SIZE
+  GL_POINT_SIZE_ARRAY_BUFFER_BINDING_OES
+  GL_POINT_SIZE_ARRAY_OES
+  GL_POINT_SIZE_ARRAY_POINTER_OES
+  GL_POINT_SIZE_ARRAY_STRIDE_OES
+  GL_POINT_SIZE_ARRAY_TYPE_OES
   GL_POINT_SIZE_GRANULARITY
   GL_POINT_SIZE_MAX
   GL_POINT_SIZE_MAX_ARB
@@ -11229,6 +14391,7 @@ our @gl_constants = qw(
   GL_POINT_SPRITE_CULL_CLIP_ATIX
   GL_POINT_SPRITE_CULL_MODE_ATIX
   GL_POINT_SPRITE_NV
+  GL_POINT_SPRITE_OES
   GL_POINT_SPRITE_R_MODE_NV
   GL_POINT_TOKEN
   GL_POLYGON
@@ -11309,13 +14472,16 @@ our @gl_constants = qw(
   GL_PRIMITIVES_GENERATED
   GL_PRIMITIVES_GENERATED_EXT
   GL_PRIMITIVES_GENERATED_NV
+  GL_PRIMITIVES_GENERATED_OES
   GL_PRIMITIVES_SUBMITTED
   GL_PRIMITIVES_SUBMITTED_ARB
   GL_PRIMITIVE_BOUNDING_BOX_ARB
+  GL_PRIMITIVE_BOUNDING_BOX_EXT
   GL_PRIMITIVE_ID_NV
   GL_PRIMITIVE_RESTART
   GL_PRIMITIVE_RESTART_FIXED_INDEX
   GL_PRIMITIVE_RESTART_FOR_PATCHES_SUPPORTED
+  GL_PRIMITIVE_RESTART_FOR_PATCHES_SUPPORTED_OES
   GL_PRIMITIVE_RESTART_INDEX
   GL_PRIMITIVE_RESTART_INDEX_NV
   GL_PRIMITIVE_RESTART_NV
@@ -11330,7 +14496,10 @@ our @gl_constants = qw(
   GL_PROGRAM_ATTRIB_COMPONENTS_NV
   GL_PROGRAM_BINARY_ANGLE
   GL_PROGRAM_BINARY_FORMATS
+  GL_PROGRAM_BINARY_FORMATS_OES
+  GL_PROGRAM_BINARY_FORMAT_MESA
   GL_PROGRAM_BINARY_LENGTH
+  GL_PROGRAM_BINARY_LENGTH_OES
   GL_PROGRAM_BINARY_RETRIEVABLE_HINT
   GL_PROGRAM_BINDING_ARB
   GL_PROGRAM_ERROR_POSITION_ARB
@@ -11376,6 +14545,7 @@ our @gl_constants = qw(
   GL_PROGRAM_UNDER_NATIVE_LIMITS_ARB
   GL_PROJECTION
   GL_PROJECTION_MATRIX
+  GL_PROJECTION_MATRIX_FLOAT_AS_INT_BITS_OES
   GL_PROJECTION_STACK_DEPTH
   GL_PROTECTED_MEMORY_OBJECT_EXT
   GL_PROVOKING_VERTEX
@@ -11414,12 +14584,15 @@ our @gl_constants = qw(
   GL_PROXY_TEXTURE_RECTANGLE_NV
   GL_PURGEABLE_APPLE
   GL_PURGED_CONTEXT_RESET_NV
+  GL_PVRIC_SIGNATURE_MISMATCH_IMG
   GL_Q
   GL_QUADRATIC_ATTENUATION
   GL_QUADRATIC_CURVE_TO_NV
   GL_QUADS
+  GL_QUADS_EXT
   GL_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION
   GL_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION_EXT
+  GL_QUADS_OES
   GL_QUAD_MESH_SUN
   GL_QUAD_STRIP
   GL_QUARTER_BIT_ATI
@@ -11439,6 +14612,7 @@ our @gl_constants = qw(
   GL_QUERY_COUNTER_BITS
   GL_QUERY_COUNTER_BITS_ANGLE
   GL_QUERY_COUNTER_BITS_ARB
+  GL_QUERY_COUNTER_BITS_EXT
   GL_QUERY_DEPTH_BOUNDS_FAIL_EVENT_BIT_AMD
   GL_QUERY_DEPTH_FAIL_EVENT_BIT_AMD
   GL_QUERY_DEPTH_PASS_EVENT_BIT_AMD
@@ -11453,7 +14627,9 @@ our @gl_constants = qw(
   GL_QUERY_RESULT_AVAILABLE
   GL_QUERY_RESULT_AVAILABLE_ANGLE
   GL_QUERY_RESULT_AVAILABLE_ARB
+  GL_QUERY_RESULT_AVAILABLE_EXT
   GL_QUERY_RESULT_AVAILABLE_NV
+  GL_QUERY_RESULT_EXT
   GL_QUERY_RESULT_NO_WAIT
   GL_QUERY_RESULT_NO_WAIT_AMD
   GL_QUERY_RESULT_NV
@@ -11504,6 +14680,7 @@ our @gl_constants = qw(
   GL_RASTER_SAMPLES_EXT
   GL_READ_BUFFER
   GL_READ_BUFFER_EXT
+  GL_READ_BUFFER_NV
   GL_READ_FRAMEBUFFER
   GL_READ_FRAMEBUFFER_ANGLE
   GL_READ_FRAMEBUFFER_APPLE
@@ -11524,6 +14701,7 @@ our @gl_constants = qw(
   GL_READ_PIXEL_DATA_RANGE_POINTER_NV
   GL_READ_WRITE
   GL_READ_WRITE_ARB
+  GL_RECIP_ADD_SIGNED_ALPHA_IMG
   GL_RECLAIM_MEMORY_HINT_PGI
   GL_RECT_NV
   GL_RED
@@ -11544,13 +14722,23 @@ our @gl_constants = qw(
   GL_REFERENCED_BY_FRAGMENT_SHADER
   GL_REFERENCED_BY_GEOMETRY_SHADER
   GL_REFERENCED_BY_GEOMETRY_SHADER_EXT
+  GL_REFERENCED_BY_GEOMETRY_SHADER_OES
+  GL_REFERENCED_BY_MESH_SHADER_EXT
+  GL_REFERENCED_BY_MESH_SHADER_NV
+  GL_REFERENCED_BY_TASK_SHADER_EXT
+  GL_REFERENCED_BY_TASK_SHADER_NV
   GL_REFERENCED_BY_TESS_CONTROL_SHADER
+  GL_REFERENCED_BY_TESS_CONTROL_SHADER_EXT
+  GL_REFERENCED_BY_TESS_CONTROL_SHADER_OES
   GL_REFERENCED_BY_TESS_EVALUATION_SHADER
+  GL_REFERENCED_BY_TESS_EVALUATION_SHADER_EXT
+  GL_REFERENCED_BY_TESS_EVALUATION_SHADER_OES
   GL_REFERENCED_BY_VERTEX_SHADER
   GL_REFLECTION_MAP
   GL_REFLECTION_MAP_ARB
   GL_REFLECTION_MAP_EXT
   GL_REFLECTION_MAP_NV
+  GL_REFLECTION_MAP_OES
   GL_REGISTER_COMBINERS_NV
   GL_REG_0_ATI
   GL_REG_1_ATI
@@ -11582,33 +14770,46 @@ our @gl_constants = qw(
   GL_RENDERBUFFER
   GL_RENDERBUFFER_ALPHA_SIZE
   GL_RENDERBUFFER_ALPHA_SIZE_EXT
+  GL_RENDERBUFFER_ALPHA_SIZE_OES
   GL_RENDERBUFFER_BINDING
   GL_RENDERBUFFER_BINDING_EXT
+  GL_RENDERBUFFER_BINDING_OES
   GL_RENDERBUFFER_BLUE_SIZE
   GL_RENDERBUFFER_BLUE_SIZE_EXT
+  GL_RENDERBUFFER_BLUE_SIZE_OES
   GL_RENDERBUFFER_COLOR_SAMPLES_NV
   GL_RENDERBUFFER_COVERAGE_SAMPLES_NV
   GL_RENDERBUFFER_DEPTH_SIZE
   GL_RENDERBUFFER_DEPTH_SIZE_EXT
+  GL_RENDERBUFFER_DEPTH_SIZE_OES
   GL_RENDERBUFFER_EXT
   GL_RENDERBUFFER_FREE_MEMORY_ATI
   GL_RENDERBUFFER_GREEN_SIZE
   GL_RENDERBUFFER_GREEN_SIZE_EXT
+  GL_RENDERBUFFER_GREEN_SIZE_OES
   GL_RENDERBUFFER_HEIGHT
   GL_RENDERBUFFER_HEIGHT_EXT
+  GL_RENDERBUFFER_HEIGHT_OES
   GL_RENDERBUFFER_INTERNAL_FORMAT
   GL_RENDERBUFFER_INTERNAL_FORMAT_EXT
+  GL_RENDERBUFFER_INTERNAL_FORMAT_OES
+  GL_RENDERBUFFER_OES
   GL_RENDERBUFFER_RED_SIZE
   GL_RENDERBUFFER_RED_SIZE_EXT
+  GL_RENDERBUFFER_RED_SIZE_OES
   GL_RENDERBUFFER_SAMPLES
   GL_RENDERBUFFER_SAMPLES_ANGLE
   GL_RENDERBUFFER_SAMPLES_APPLE
   GL_RENDERBUFFER_SAMPLES_EXT
+  GL_RENDERBUFFER_SAMPLES_IMG
   GL_RENDERBUFFER_SAMPLES_NV
   GL_RENDERBUFFER_STENCIL_SIZE
   GL_RENDERBUFFER_STENCIL_SIZE_EXT
+  GL_RENDERBUFFER_STENCIL_SIZE_OES
+  GL_RENDERBUFFER_STORAGE_SAMPLES_AMD
   GL_RENDERBUFFER_WIDTH
   GL_RENDERBUFFER_WIDTH_EXT
+  GL_RENDERBUFFER_WIDTH_OES
   GL_RENDERER
   GL_RENDER_DIRECT_TO_FRAMEBUFFER_QCOM
   GL_RENDER_GPU_MASK_NV
@@ -11625,6 +14826,7 @@ our @gl_constants = qw(
   GL_REPLACE_OLDEST_SUN
   GL_REPLACE_VALUE_AMD
   GL_REPLICATE_BORDER
+  GL_REPRESENTATIVE_FRAGMENT_TEST_NV
   GL_REQUIRED_TEXTURE_IMAGE_UNITS_OES
   GL_RESAMPLE_AVERAGE_OML
   GL_RESAMPLE_DECIMATE_OML
@@ -11637,6 +14839,7 @@ our @gl_constants = qw(
   GL_RESCALE_NORMAL_EXT
   GL_RESET_NOTIFICATION_STRATEGY
   GL_RESET_NOTIFICATION_STRATEGY_ARB
+  GL_RESET_NOTIFICATION_STRATEGY_EXT
   GL_RESTART_PATH_NV
   GL_RESTART_SUN
   GL_RETAINED_APPLE
@@ -11693,8 +14896,10 @@ our @gl_constants = qw(
   GL_RGB4_S3TC
   GL_RGB5
   GL_RGB565
+  GL_RGB565_OES
   GL_RGB5_A1
   GL_RGB5_A1_EXT
+  GL_RGB5_A1_OES
   GL_RGB5_EXT
   GL_RGB8
   GL_RGB8I
@@ -11702,6 +14907,7 @@ our @gl_constants = qw(
   GL_RGB8UI
   GL_RGB8UI_EXT
   GL_RGB8_EXT
+  GL_RGB8_OES
   GL_RGB8_SNORM
   GL_RGB9_E5
   GL_RGB9_E5_APPLE
@@ -11734,6 +14940,7 @@ our @gl_constants = qw(
   GL_RGBA4
   GL_RGBA4_DXT5_S3TC
   GL_RGBA4_EXT
+  GL_RGBA4_OES
   GL_RGBA4_S3TC
   GL_RGBA8
   GL_RGBA8I
@@ -11805,6 +15012,7 @@ our @gl_constants = qw(
   GL_SAMPLER_2D_ARRAY_SHADOW_NV
   GL_SAMPLER_2D_MULTISAMPLE
   GL_SAMPLER_2D_MULTISAMPLE_ARRAY
+  GL_SAMPLER_2D_MULTISAMPLE_ARRAY_OES
   GL_SAMPLER_2D_RECT
   GL_SAMPLER_2D_RECT_ARB
   GL_SAMPLER_2D_RECT_SHADOW
@@ -11818,14 +15026,17 @@ our @gl_constants = qw(
   GL_SAMPLER_BUFFER
   GL_SAMPLER_BUFFER_AMD
   GL_SAMPLER_BUFFER_EXT
+  GL_SAMPLER_BUFFER_OES
   GL_SAMPLER_CUBE
   GL_SAMPLER_CUBE_ARB
   GL_SAMPLER_CUBE_MAP_ARRAY
   GL_SAMPLER_CUBE_MAP_ARRAY_ARB
   GL_SAMPLER_CUBE_MAP_ARRAY_EXT
+  GL_SAMPLER_CUBE_MAP_ARRAY_OES
   GL_SAMPLER_CUBE_MAP_ARRAY_SHADOW
   GL_SAMPLER_CUBE_MAP_ARRAY_SHADOW_ARB
   GL_SAMPLER_CUBE_MAP_ARRAY_SHADOW_EXT
+  GL_SAMPLER_CUBE_MAP_ARRAY_SHADOW_OES
   GL_SAMPLER_CUBE_SHADOW
   GL_SAMPLER_CUBE_SHADOW_EXT
   GL_SAMPLER_CUBE_SHADOW_NV
@@ -11885,6 +15096,7 @@ our @gl_constants = qw(
   GL_SAMPLE_POSITION_NV
   GL_SAMPLE_SHADING
   GL_SAMPLE_SHADING_ARB
+  GL_SAMPLE_SHADING_OES
   GL_SATURATE_BIT_ATI
   GL_SCALAR_EXT
   GL_SCALEBIAS_HINT_SGIX
@@ -11895,8 +15107,10 @@ our @gl_constants = qw(
   GL_SCALE_BY_TWO_NV
   GL_SCISSOR_BIT
   GL_SCISSOR_BOX
+  GL_SCISSOR_BOX_EXCLUSIVE_NV
   GL_SCISSOR_COMMAND_NV
   GL_SCISSOR_TEST
+  GL_SCISSOR_TEST_EXCLUSIVE_NV
   GL_SCREEN_COORDINATES_REND
   GL_SCREEN_KHR
   GL_SCREEN_NV
@@ -11925,6 +15139,9 @@ our @gl_constants = qw(
   GL_SELECTED_TEXTURE_TRANSFORM_SGIS
   GL_SELECTION_BUFFER_POINTER
   GL_SELECTION_BUFFER_SIZE
+  GL_SEMAPHORE_TYPE_BINARY_NV
+  GL_SEMAPHORE_TYPE_NV
+  GL_SEMAPHORE_TYPE_TIMELINE_NV
   GL_SEPARABLE_2D
   GL_SEPARABLE_2D_EXT
   GL_SEPARATE_ATTRIBS
@@ -11934,12 +15151,23 @@ our @gl_constants = qw(
   GL_SEPARATE_SPECULAR_COLOR_EXT
   GL_SET
   GL_SET_AMD
+  GL_SGX_BINARY_IMG
+  GL_SGX_PROGRAM_BINARY_IMG
   GL_SHADER
+  GL_SHADER_BINARY_DMP
   GL_SHADER_BINARY_FORMATS
   GL_SHADER_BINARY_FORMAT_SPIR_V
   GL_SHADER_BINARY_FORMAT_SPIR_V_ARB
+  GL_SHADER_BINARY_VIV
   GL_SHADER_COMPILER
   GL_SHADER_CONSISTENT_NV
+  GL_SHADER_CORE_ACTIVE_COUNT_ARM
+  GL_SHADER_CORE_COUNT_ARM
+  GL_SHADER_CORE_FMA_RATE_ARM
+  GL_SHADER_CORE_MAX_WARP_COUNT_ARM
+  GL_SHADER_CORE_PIXEL_RATE_ARM
+  GL_SHADER_CORE_PRESENT_MASK_ARM
+  GL_SHADER_CORE_TEXEL_RATE_ARM
   GL_SHADER_IMAGE_ACCESS_BARRIER_BIT
   GL_SHADER_IMAGE_ACCESS_BARRIER_BIT_EXT
   GL_SHADER_IMAGE_ATOMIC
@@ -11962,6 +15190,47 @@ our @gl_constants = qw(
   GL_SHADE_MODEL
   GL_SHADING_LANGUAGE_VERSION
   GL_SHADING_LANGUAGE_VERSION_ARB
+  GL_SHADING_RATE_16_INVOCATIONS_PER_PIXEL_NV
+  GL_SHADING_RATE_1X1_PIXELS_EXT
+  GL_SHADING_RATE_1X1_PIXELS_QCOM
+  GL_SHADING_RATE_1X2_PIXELS_EXT
+  GL_SHADING_RATE_1X2_PIXELS_QCOM
+  GL_SHADING_RATE_1X4_PIXELS_EXT
+  GL_SHADING_RATE_1_INVOCATION_PER_1X2_PIXELS_NV
+  GL_SHADING_RATE_1_INVOCATION_PER_2X1_PIXELS_NV
+  GL_SHADING_RATE_1_INVOCATION_PER_2X2_PIXELS_NV
+  GL_SHADING_RATE_1_INVOCATION_PER_2X4_PIXELS_NV
+  GL_SHADING_RATE_1_INVOCATION_PER_4X2_PIXELS_NV
+  GL_SHADING_RATE_1_INVOCATION_PER_4X4_PIXELS_NV
+  GL_SHADING_RATE_1_INVOCATION_PER_PIXEL_NV
+  GL_SHADING_RATE_2X1_PIXELS_EXT
+  GL_SHADING_RATE_2X1_PIXELS_QCOM
+  GL_SHADING_RATE_2X2_PIXELS_EXT
+  GL_SHADING_RATE_2X2_PIXELS_QCOM
+  GL_SHADING_RATE_2X4_PIXELS_EXT
+  GL_SHADING_RATE_2_INVOCATIONS_PER_PIXEL_NV
+  GL_SHADING_RATE_4X1_PIXELS_EXT
+  GL_SHADING_RATE_4X2_PIXELS_EXT
+  GL_SHADING_RATE_4X2_PIXELS_QCOM
+  GL_SHADING_RATE_4X4_PIXELS_EXT
+  GL_SHADING_RATE_4X4_PIXELS_QCOM
+  GL_SHADING_RATE_4_INVOCATIONS_PER_PIXEL_NV
+  GL_SHADING_RATE_8_INVOCATIONS_PER_PIXEL_NV
+  GL_SHADING_RATE_ATTACHMENT_EXT
+  GL_SHADING_RATE_EXT
+  GL_SHADING_RATE_IMAGE_BINDING_NV
+  GL_SHADING_RATE_IMAGE_NV
+  GL_SHADING_RATE_IMAGE_PALETTE_COUNT_NV
+  GL_SHADING_RATE_IMAGE_PALETTE_SIZE_NV
+  GL_SHADING_RATE_IMAGE_PER_PRIMITIVE_NV
+  GL_SHADING_RATE_IMAGE_TEXEL_HEIGHT_NV
+  GL_SHADING_RATE_IMAGE_TEXEL_WIDTH_NV
+  GL_SHADING_RATE_NO_INVOCATIONS_NV
+  GL_SHADING_RATE_PRESERVE_ASPECT_RATIO_QCOM
+  GL_SHADING_RATE_QCOM
+  GL_SHADING_RATE_SAMPLE_ORDER_DEFAULT_NV
+  GL_SHADING_RATE_SAMPLE_ORDER_PIXEL_MAJOR_NV
+  GL_SHADING_RATE_SAMPLE_ORDER_SAMPLE_MAJOR_NV
   GL_SHADOW_AMBIENT_SGIX
   GL_SHADOW_ATTENUATION_EXT
   GL_SHARED_EDGE_NV
@@ -12016,6 +15285,8 @@ our @gl_constants = qw(
   GL_SLUMINANCE_NV
   GL_SMALL_CCW_ARC_TO_NV
   GL_SMALL_CW_ARC_TO_NV
+  GL_SMAPHS30_PROGRAM_BINARY_DMP
+  GL_SMAPHS_PROGRAM_BINARY_DMP
   GL_SMOOTH
   GL_SMOOTH_CUBIC_CURVE_TO_NV
   GL_SMOOTH_LINE_WIDTH_GRANULARITY
@@ -12112,6 +15383,7 @@ our @gl_constants = qw(
   GL_STENCIL
   GL_STENCIL_ATTACHMENT
   GL_STENCIL_ATTACHMENT_EXT
+  GL_STENCIL_ATTACHMENT_OES
   GL_STENCIL_BACK_FAIL
   GL_STENCIL_BACK_FAIL_ATI
   GL_STENCIL_BACK_FUNC
@@ -12146,10 +15418,13 @@ our @gl_constants = qw(
   GL_STENCIL_INDEX16
   GL_STENCIL_INDEX16_EXT
   GL_STENCIL_INDEX1_EXT
+  GL_STENCIL_INDEX1_OES
   GL_STENCIL_INDEX4
   GL_STENCIL_INDEX4_EXT
+  GL_STENCIL_INDEX4_OES
   GL_STENCIL_INDEX8
   GL_STENCIL_INDEX8_EXT
+  GL_STENCIL_INDEX8_OES
   GL_STENCIL_OP_VALUE_AMD
   GL_STENCIL_PASS_DEPTH_FAIL
   GL_STENCIL_PASS_DEPTH_PASS
@@ -12183,6 +15458,19 @@ our @gl_constants = qw(
   GL_STRICT_DEPTHFUNC_HINT_PGI
   GL_STRICT_LIGHTING_HINT_PGI
   GL_STRICT_SCISSOR_HINT_PGI
+  GL_SUBGROUP_FEATURE_ARITHMETIC_BIT_KHR
+  GL_SUBGROUP_FEATURE_BALLOT_BIT_KHR
+  GL_SUBGROUP_FEATURE_BASIC_BIT_KHR
+  GL_SUBGROUP_FEATURE_CLUSTERED_BIT_KHR
+  GL_SUBGROUP_FEATURE_PARTITIONED_BIT_NV
+  GL_SUBGROUP_FEATURE_QUAD_BIT_KHR
+  GL_SUBGROUP_FEATURE_SHUFFLE_BIT_KHR
+  GL_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT_KHR
+  GL_SUBGROUP_FEATURE_VOTE_BIT_KHR
+  GL_SUBGROUP_QUAD_ALL_STAGES_KHR
+  GL_SUBGROUP_SIZE_KHR
+  GL_SUBGROUP_SUPPORTED_FEATURES_KHR
+  GL_SUBGROUP_SUPPORTED_STAGES_KHR
   GL_SUBPIXEL_BITS
   GL_SUBPIXEL_PRECISION_BIAS_X_BITS_NV
   GL_SUBPIXEL_PRECISION_BIAS_Y_BITS_NV
@@ -12193,6 +15481,22 @@ our @gl_constants = qw(
   GL_SUCCESS_NV
   GL_SUPERSAMPLE_SCALE_X_NV
   GL_SUPERSAMPLE_SCALE_Y_NV
+  GL_SUPPORTED_MULTISAMPLE_MODES_AMD
+  GL_SURFACE_COMPRESSION_EXT
+  GL_SURFACE_COMPRESSION_FIXED_RATE_10BPC_EXT
+  GL_SURFACE_COMPRESSION_FIXED_RATE_11BPC_EXT
+  GL_SURFACE_COMPRESSION_FIXED_RATE_12BPC_EXT
+  GL_SURFACE_COMPRESSION_FIXED_RATE_1BPC_EXT
+  GL_SURFACE_COMPRESSION_FIXED_RATE_2BPC_EXT
+  GL_SURFACE_COMPRESSION_FIXED_RATE_3BPC_EXT
+  GL_SURFACE_COMPRESSION_FIXED_RATE_4BPC_EXT
+  GL_SURFACE_COMPRESSION_FIXED_RATE_5BPC_EXT
+  GL_SURFACE_COMPRESSION_FIXED_RATE_6BPC_EXT
+  GL_SURFACE_COMPRESSION_FIXED_RATE_7BPC_EXT
+  GL_SURFACE_COMPRESSION_FIXED_RATE_8BPC_EXT
+  GL_SURFACE_COMPRESSION_FIXED_RATE_9BPC_EXT
+  GL_SURFACE_COMPRESSION_FIXED_RATE_DEFAULT_EXT
+  GL_SURFACE_COMPRESSION_FIXED_RATE_NONE_EXT
   GL_SURFACE_MAPPED_NV
   GL_SURFACE_REGISTERED_NV
   GL_SURFACE_STATE_NV
@@ -12233,14 +15537,31 @@ our @gl_constants = qw(
   GL_TANGENT_ARRAY_STRIDE_EXT
   GL_TANGENT_ARRAY_TYPE_EXT
   GL_TANGENT_SPACE_SGIX
+  GL_TASK_SHADER_BIT_EXT
+  GL_TASK_SHADER_BIT_NV
+  GL_TASK_SHADER_EXT
+  GL_TASK_SHADER_INVOCATIONS_EXT
+  GL_TASK_SHADER_NV
+  GL_TASK_SUBROUTINE_EXT
+  GL_TASK_SUBROUTINE_NV
+  GL_TASK_SUBROUTINE_UNIFORM_EXT
+  GL_TASK_SUBROUTINE_UNIFORM_NV
+  GL_TASK_WORK_GROUP_SIZE_EXT
+  GL_TASK_WORK_GROUP_SIZE_NV
   GL_TERMINATE_SEQUENCE_COMMAND_NV
   GL_TESSELLATION_FACTOR_AMD
   GL_TESSELLATION_MODE_AMD
   GL_TESS_CONTROL_OUTPUT_VERTICES
+  GL_TESS_CONTROL_OUTPUT_VERTICES_EXT
+  GL_TESS_CONTROL_OUTPUT_VERTICES_OES
   GL_TESS_CONTROL_PROGRAM_NV
   GL_TESS_CONTROL_PROGRAM_PARAMETER_BUFFER_NV
   GL_TESS_CONTROL_SHADER
   GL_TESS_CONTROL_SHADER_BIT
+  GL_TESS_CONTROL_SHADER_BIT_EXT
+  GL_TESS_CONTROL_SHADER_BIT_OES
+  GL_TESS_CONTROL_SHADER_EXT
+  GL_TESS_CONTROL_SHADER_OES
   GL_TESS_CONTROL_SHADER_PATCHES
   GL_TESS_CONTROL_SHADER_PATCHES_ARB
   GL_TESS_CONTROL_SUBROUTINE
@@ -12250,15 +15571,27 @@ our @gl_constants = qw(
   GL_TESS_EVALUATION_PROGRAM_PARAMETER_BUFFER_NV
   GL_TESS_EVALUATION_SHADER
   GL_TESS_EVALUATION_SHADER_BIT
+  GL_TESS_EVALUATION_SHADER_BIT_EXT
+  GL_TESS_EVALUATION_SHADER_BIT_OES
+  GL_TESS_EVALUATION_SHADER_EXT
   GL_TESS_EVALUATION_SHADER_INVOCATIONS
   GL_TESS_EVALUATION_SHADER_INVOCATIONS_ARB
+  GL_TESS_EVALUATION_SHADER_OES
   GL_TESS_EVALUATION_SUBROUTINE
   GL_TESS_EVALUATION_SUBROUTINE_UNIFORM
   GL_TESS_EVALUATION_TEXTURE
   GL_TESS_GEN_MODE
+  GL_TESS_GEN_MODE_EXT
+  GL_TESS_GEN_MODE_OES
   GL_TESS_GEN_POINT_MODE
+  GL_TESS_GEN_POINT_MODE_EXT
+  GL_TESS_GEN_POINT_MODE_OES
   GL_TESS_GEN_SPACING
+  GL_TESS_GEN_SPACING_EXT
+  GL_TESS_GEN_SPACING_OES
   GL_TESS_GEN_VERTEX_ORDER
+  GL_TESS_GEN_VERTEX_ORDER_EXT
+  GL_TESS_GEN_VERTEX_ORDER_OES
   GL_TEXCOORD1_BIT_PGI
   GL_TEXCOORD2_BIT_PGI
   GL_TEXCOORD3_BIT_PGI
@@ -12345,11 +15678,14 @@ our @gl_constants = qw(
   GL_TEXTURE_2D_BINDING_EXT
   GL_TEXTURE_2D_MULTISAMPLE
   GL_TEXTURE_2D_MULTISAMPLE_ARRAY
+  GL_TEXTURE_2D_MULTISAMPLE_ARRAY_OES
   GL_TEXTURE_2D_STACK_BINDING_MESAX
   GL_TEXTURE_2D_STACK_MESAX
   GL_TEXTURE_3D
   GL_TEXTURE_3D_BINDING_EXT
   GL_TEXTURE_3D_EXT
+  GL_TEXTURE_3D_OES
+  GL_TEXTURE_ALPHA_MODULATE_IMG
   GL_TEXTURE_ALPHA_SIZE
   GL_TEXTURE_ALPHA_SIZE_EXT
   GL_TEXTURE_ALPHA_TYPE
@@ -12367,16 +15703,21 @@ our @gl_constants = qw(
   GL_TEXTURE_BINDING_2D_ARRAY_NV
   GL_TEXTURE_BINDING_2D_MULTISAMPLE
   GL_TEXTURE_BINDING_2D_MULTISAMPLE_ARRAY
+  GL_TEXTURE_BINDING_2D_MULTISAMPLE_ARRAY_OES
   GL_TEXTURE_BINDING_3D
+  GL_TEXTURE_BINDING_3D_OES
   GL_TEXTURE_BINDING_BUFFER
   GL_TEXTURE_BINDING_BUFFER_ARB
   GL_TEXTURE_BINDING_BUFFER_EXT
+  GL_TEXTURE_BINDING_BUFFER_OES
   GL_TEXTURE_BINDING_CUBE_MAP
   GL_TEXTURE_BINDING_CUBE_MAP_ARB
   GL_TEXTURE_BINDING_CUBE_MAP_ARRAY
   GL_TEXTURE_BINDING_CUBE_MAP_ARRAY_ARB
   GL_TEXTURE_BINDING_CUBE_MAP_ARRAY_EXT
+  GL_TEXTURE_BINDING_CUBE_MAP_ARRAY_OES
   GL_TEXTURE_BINDING_CUBE_MAP_EXT
+  GL_TEXTURE_BINDING_CUBE_MAP_OES
   GL_TEXTURE_BINDING_EXTERNAL_OES
   GL_TEXTURE_BINDING_RECTANGLE
   GL_TEXTURE_BINDING_RECTANGLE_ARB
@@ -12390,21 +15731,34 @@ our @gl_constants = qw(
   GL_TEXTURE_BLUE_TYPE_ARB
   GL_TEXTURE_BORDER
   GL_TEXTURE_BORDER_COLOR
+  GL_TEXTURE_BORDER_COLOR_EXT
   GL_TEXTURE_BORDER_COLOR_NV
+  GL_TEXTURE_BORDER_COLOR_OES
   GL_TEXTURE_BORDER_VALUES_NV
   GL_TEXTURE_BUFFER
   GL_TEXTURE_BUFFER_ARB
   GL_TEXTURE_BUFFER_BINDING
+  GL_TEXTURE_BUFFER_BINDING_EXT
+  GL_TEXTURE_BUFFER_BINDING_OES
   GL_TEXTURE_BUFFER_DATA_STORE_BINDING
   GL_TEXTURE_BUFFER_DATA_STORE_BINDING_ARB
   GL_TEXTURE_BUFFER_DATA_STORE_BINDING_EXT
+  GL_TEXTURE_BUFFER_DATA_STORE_BINDING_OES
   GL_TEXTURE_BUFFER_EXT
   GL_TEXTURE_BUFFER_FORMAT
   GL_TEXTURE_BUFFER_FORMAT_ARB
   GL_TEXTURE_BUFFER_FORMAT_EXT
+  GL_TEXTURE_BUFFER_OES
   GL_TEXTURE_BUFFER_OFFSET
   GL_TEXTURE_BUFFER_OFFSET_ALIGNMENT
+  GL_TEXTURE_BUFFER_OFFSET_ALIGNMENT_EXT
+  GL_TEXTURE_BUFFER_OFFSET_ALIGNMENT_OES
+  GL_TEXTURE_BUFFER_OFFSET_EXT
+  GL_TEXTURE_BUFFER_OFFSET_OES
   GL_TEXTURE_BUFFER_SIZE
+  GL_TEXTURE_BUFFER_SIZE_EXT
+  GL_TEXTURE_BUFFER_SIZE_OES
+  GL_TEXTURE_CBCR_DEGAMMA_QCOM
   GL_TEXTURE_COLOR_SAMPLES_NV
   GL_TEXTURE_COLOR_TABLE_SGI
   GL_TEXTURE_COMPARE_FAIL_VALUE_ARB
@@ -12448,6 +15802,7 @@ our @gl_constants = qw(
   GL_TEXTURE_COORD_NV
   GL_TEXTURE_COORD_SET_INTERLEAVE_FACTOR_SGIS
   GL_TEXTURE_COVERAGE_SAMPLES_NV
+  GL_TEXTURE_CROP_RECT_OES
   GL_TEXTURE_CUBE_MAP
   GL_TEXTURE_CUBE_MAP_ARB
   GL_TEXTURE_CUBE_MAP_ARRAY
@@ -12458,21 +15813,28 @@ our @gl_constants = qw(
   GL_TEXTURE_CUBE_MAP_NEGATIVE_X
   GL_TEXTURE_CUBE_MAP_NEGATIVE_X_ARB
   GL_TEXTURE_CUBE_MAP_NEGATIVE_X_EXT
+  GL_TEXTURE_CUBE_MAP_NEGATIVE_X_OES
   GL_TEXTURE_CUBE_MAP_NEGATIVE_Y
   GL_TEXTURE_CUBE_MAP_NEGATIVE_Y_ARB
   GL_TEXTURE_CUBE_MAP_NEGATIVE_Y_EXT
+  GL_TEXTURE_CUBE_MAP_NEGATIVE_Y_OES
   GL_TEXTURE_CUBE_MAP_NEGATIVE_Z
   GL_TEXTURE_CUBE_MAP_NEGATIVE_Z_ARB
   GL_TEXTURE_CUBE_MAP_NEGATIVE_Z_EXT
+  GL_TEXTURE_CUBE_MAP_NEGATIVE_Z_OES
+  GL_TEXTURE_CUBE_MAP_OES
   GL_TEXTURE_CUBE_MAP_POSITIVE_X
   GL_TEXTURE_CUBE_MAP_POSITIVE_X_ARB
   GL_TEXTURE_CUBE_MAP_POSITIVE_X_EXT
+  GL_TEXTURE_CUBE_MAP_POSITIVE_X_OES
   GL_TEXTURE_CUBE_MAP_POSITIVE_Y
   GL_TEXTURE_CUBE_MAP_POSITIVE_Y_ARB
   GL_TEXTURE_CUBE_MAP_POSITIVE_Y_EXT
+  GL_TEXTURE_CUBE_MAP_POSITIVE_Y_OES
   GL_TEXTURE_CUBE_MAP_POSITIVE_Z
   GL_TEXTURE_CUBE_MAP_POSITIVE_Z_ARB
   GL_TEXTURE_CUBE_MAP_POSITIVE_Z_EXT
+  GL_TEXTURE_CUBE_MAP_POSITIVE_Z_OES
   GL_TEXTURE_CUBE_MAP_SEAMLESS
   GL_TEXTURE_DEFORMATION_BIT_SGIX
   GL_TEXTURE_DEPTH
@@ -12496,13 +15858,21 @@ our @gl_constants = qw(
   GL_TEXTURE_FIXED_SAMPLE_LOCATIONS
   GL_TEXTURE_FLOAT_COMPONENTS_NV
   GL_TEXTURE_FORMAT_QCOM
+  GL_TEXTURE_FORMAT_SRGB_OVERRIDE_EXT
+  GL_TEXTURE_FOVEATED_CUTOFF_DENSITY_QCOM
+  GL_TEXTURE_FOVEATED_FEATURE_BITS_QCOM
+  GL_TEXTURE_FOVEATED_FEATURE_QUERY_QCOM
+  GL_TEXTURE_FOVEATED_MIN_PIXEL_DENSITY_QCOM
+  GL_TEXTURE_FOVEATED_NUM_FOCAL_POINTS_QUERY_QCOM
   GL_TEXTURE_FREE_MEMORY_ATI
   GL_TEXTURE_GATHER
   GL_TEXTURE_GATHER_SHADOW
   GL_TEXTURE_GEN_MODE
+  GL_TEXTURE_GEN_MODE_OES
   GL_TEXTURE_GEN_Q
   GL_TEXTURE_GEN_R
   GL_TEXTURE_GEN_S
+  GL_TEXTURE_GEN_STR_OES
   GL_TEXTURE_GEN_T
   GL_TEXTURE_GEQUAL_R_SGIX
   GL_TEXTURE_GREEN_SIZE
@@ -12529,6 +15899,7 @@ our @gl_constants = qw(
   GL_TEXTURE_LIGHT_EXT
   GL_TEXTURE_LOD_BIAS
   GL_TEXTURE_LOD_BIAS_EXT
+  GL_TEXTURE_LOD_BIAS_QCOM
   GL_TEXTURE_LO_SIZE_NV
   GL_TEXTURE_LUMINANCE_SIZE
   GL_TEXTURE_LUMINANCE_SIZE_EXT
@@ -12539,6 +15910,7 @@ our @gl_constants = qw(
   GL_TEXTURE_MATERIAL_FACE_EXT
   GL_TEXTURE_MATERIAL_PARAMETER_EXT
   GL_TEXTURE_MATRIX
+  GL_TEXTURE_MATRIX_FLOAT_AS_INT_BITS_OES
   GL_TEXTURE_MAX_ANISOTROPY
   GL_TEXTURE_MAX_ANISOTROPY_EXT
   GL_TEXTURE_MAX_CLAMP_R_SGIX
@@ -12565,6 +15937,7 @@ our @gl_constants = qw(
   GL_TEXTURE_POINT_SPRITE_ATIX
   GL_TEXTURE_PRIORITY
   GL_TEXTURE_PRIORITY_EXT
+  GL_TEXTURE_PROTECTED_EXT
   GL_TEXTURE_RANGE_LENGTH_APPLE
   GL_TEXTURE_RANGE_POINTER_APPLE
   GL_TEXTURE_RECTANGLE
@@ -12582,6 +15955,7 @@ our @gl_constants = qw(
   GL_TEXTURE_RESIDENT
   GL_TEXTURE_RESIDENT_EXT
   GL_TEXTURE_SAMPLES
+  GL_TEXTURE_SAMPLES_IMG
   GL_TEXTURE_SHADER_NV
   GL_TEXTURE_SHADOW
   GL_TEXTURE_SHARED_SIZE
@@ -12608,6 +15982,7 @@ our @gl_constants = qw(
   GL_TEXTURE_TARGET_QCOM
   GL_TEXTURE_TILING_EXT
   GL_TEXTURE_TYPE_QCOM
+  GL_TEXTURE_UNNORMALIZED_COORDINATES_ARM
   GL_TEXTURE_UNSIGNED_REMAP_MODE_NV
   GL_TEXTURE_UPDATE_BARRIER_BIT
   GL_TEXTURE_UPDATE_BARRIER_BIT_EXT
@@ -12615,26 +15990,34 @@ our @gl_constants = qw(
   GL_TEXTURE_VIEW
   GL_TEXTURE_VIEW_MIN_LAYER
   GL_TEXTURE_VIEW_MIN_LAYER_EXT
+  GL_TEXTURE_VIEW_MIN_LAYER_OES
   GL_TEXTURE_VIEW_MIN_LEVEL
   GL_TEXTURE_VIEW_MIN_LEVEL_EXT
+  GL_TEXTURE_VIEW_MIN_LEVEL_OES
   GL_TEXTURE_VIEW_NUM_LAYERS
   GL_TEXTURE_VIEW_NUM_LAYERS_EXT
+  GL_TEXTURE_VIEW_NUM_LAYERS_OES
   GL_TEXTURE_VIEW_NUM_LEVELS
   GL_TEXTURE_VIEW_NUM_LEVELS_EXT
+  GL_TEXTURE_VIEW_NUM_LEVELS_OES
   GL_TEXTURE_WIDTH
   GL_TEXTURE_WIDTH_QCOM
   GL_TEXTURE_WRAP_R
   GL_TEXTURE_WRAP_R_EXT
+  GL_TEXTURE_WRAP_R_OES
   GL_TEXTURE_WRAP_S
   GL_TEXTURE_WRAP_T
+  GL_TEXTURE_Y_DEGAMMA_QCOM
   GL_TEXT_FRAGMENT_SHADER_ATI
   GL_TILING_TYPES_EXT
+  GL_TIMELINE_SEMAPHORE_VALUE_NV
   GL_TIMEOUT_EXPIRED
   GL_TIMEOUT_EXPIRED_APPLE
   GL_TIMEOUT_IGNORED
   GL_TIMEOUT_IGNORED_APPLE
   GL_TIMESTAMP
   GL_TIMESTAMP_ANGLE
+  GL_TIMESTAMP_EXT
   GL_TIME_ELAPSED
   GL_TIME_ELAPSED_ANGLE
   GL_TIME_ELAPSED_EXT
@@ -12711,6 +16094,7 @@ our @gl_constants = qw(
   GL_TRIANGLES_ADJACENCY
   GL_TRIANGLES_ADJACENCY_ARB
   GL_TRIANGLES_ADJACENCY_EXT
+  GL_TRIANGLES_ADJACENCY_OES
   GL_TRIANGLE_FAN
   GL_TRIANGLE_LIST_SUN
   GL_TRIANGLE_MESH_SUN
@@ -12718,13 +16102,18 @@ our @gl_constants = qw(
   GL_TRIANGLE_STRIP_ADJACENCY
   GL_TRIANGLE_STRIP_ADJACENCY_ARB
   GL_TRIANGLE_STRIP_ADJACENCY_EXT
+  GL_TRIANGLE_STRIP_ADJACENCY_OES
   GL_TRIANGULAR_NV
+  GL_TRP_ERROR_CONTEXT_RESET_IMG
+  GL_TRP_IMG
+  GL_TRP_UNSUPPORTED_CONTEXT_IMG
   GL_TRUE
   GL_TYPE
   GL_UNCORRELATED_NV
   GL_UNDEFINED_APPLE
   GL_UNDEFINED_VERTEX
   GL_UNDEFINED_VERTEX_EXT
+  GL_UNDEFINED_VERTEX_OES
   GL_UNIFORM
   GL_UNIFORM_ADDRESS_COMMAND_NV
   GL_UNIFORM_ARRAY_STRIDE
@@ -12741,6 +16130,10 @@ our @gl_constants = qw(
   GL_UNIFORM_BLOCK_REFERENCED_BY_COMPUTE_SHADER
   GL_UNIFORM_BLOCK_REFERENCED_BY_FRAGMENT_SHADER
   GL_UNIFORM_BLOCK_REFERENCED_BY_GEOMETRY_SHADER
+  GL_UNIFORM_BLOCK_REFERENCED_BY_MESH_SHADER_EXT
+  GL_UNIFORM_BLOCK_REFERENCED_BY_MESH_SHADER_NV
+  GL_UNIFORM_BLOCK_REFERENCED_BY_TASK_SHADER_EXT
+  GL_UNIFORM_BLOCK_REFERENCED_BY_TASK_SHADER_NV
   GL_UNIFORM_BLOCK_REFERENCED_BY_TESS_CONTROL_SHADER
   GL_UNIFORM_BLOCK_REFERENCED_BY_TESS_EVALUATION_SHADER
   GL_UNIFORM_BLOCK_REFERENCED_BY_VERTEX_SHADER
@@ -12763,6 +16156,7 @@ our @gl_constants = qw(
   GL_UNIFORM_TYPE
   GL_UNKNOWN_CONTEXT_RESET
   GL_UNKNOWN_CONTEXT_RESET_ARB
+  GL_UNKNOWN_CONTEXT_RESET_EXT
   GL_UNPACK_ALIGNMENT
   GL_UNPACK_CLIENT_STORAGE_APPLE
   GL_UNPACK_CMYK_HINT_EXT
@@ -12820,9 +16214,11 @@ our @gl_constants = qw(
   GL_UNSIGNED_INT_10F_11F_11F_REV_NV
   GL_UNSIGNED_INT_10_10_10_2
   GL_UNSIGNED_INT_10_10_10_2_EXT
+  GL_UNSIGNED_INT_10_10_10_2_OES
   GL_UNSIGNED_INT_24_8
   GL_UNSIGNED_INT_24_8_EXT
   GL_UNSIGNED_INT_24_8_NV
+  GL_UNSIGNED_INT_24_8_OES
   GL_UNSIGNED_INT_2_10_10_10_REV
   GL_UNSIGNED_INT_2_10_10_10_REV_EXT
   GL_UNSIGNED_INT_5_9_9_9_REV
@@ -12851,10 +16247,12 @@ our @gl_constants = qw(
   GL_UNSIGNED_INT_IMAGE_3D_EXT
   GL_UNSIGNED_INT_IMAGE_BUFFER
   GL_UNSIGNED_INT_IMAGE_BUFFER_EXT
+  GL_UNSIGNED_INT_IMAGE_BUFFER_OES
   GL_UNSIGNED_INT_IMAGE_CUBE
   GL_UNSIGNED_INT_IMAGE_CUBE_EXT
   GL_UNSIGNED_INT_IMAGE_CUBE_MAP_ARRAY
   GL_UNSIGNED_INT_IMAGE_CUBE_MAP_ARRAY_EXT
+  GL_UNSIGNED_INT_IMAGE_CUBE_MAP_ARRAY_OES
   GL_UNSIGNED_INT_S8_S8_8_8_NV
   GL_UNSIGNED_INT_SAMPLER_1D
   GL_UNSIGNED_INT_SAMPLER_1D_ARRAY
@@ -12866,6 +16264,7 @@ our @gl_constants = qw(
   GL_UNSIGNED_INT_SAMPLER_2D_EXT
   GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE
   GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE_ARRAY
+  GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE_ARRAY_OES
   GL_UNSIGNED_INT_SAMPLER_2D_RECT
   GL_UNSIGNED_INT_SAMPLER_2D_RECT_EXT
   GL_UNSIGNED_INT_SAMPLER_3D
@@ -12873,11 +16272,13 @@ our @gl_constants = qw(
   GL_UNSIGNED_INT_SAMPLER_BUFFER
   GL_UNSIGNED_INT_SAMPLER_BUFFER_AMD
   GL_UNSIGNED_INT_SAMPLER_BUFFER_EXT
+  GL_UNSIGNED_INT_SAMPLER_BUFFER_OES
   GL_UNSIGNED_INT_SAMPLER_CUBE
   GL_UNSIGNED_INT_SAMPLER_CUBE_EXT
   GL_UNSIGNED_INT_SAMPLER_CUBE_MAP_ARRAY
   GL_UNSIGNED_INT_SAMPLER_CUBE_MAP_ARRAY_ARB
   GL_UNSIGNED_INT_SAMPLER_CUBE_MAP_ARRAY_EXT
+  GL_UNSIGNED_INT_SAMPLER_CUBE_MAP_ARRAY_OES
   GL_UNSIGNED_INT_SAMPLER_RENDERBUFFER_NV
   GL_UNSIGNED_INT_VEC2
   GL_UNSIGNED_INT_VEC2_EXT
@@ -12896,6 +16297,7 @@ our @gl_constants = qw(
   GL_UNSIGNED_SHORT_4_4_4_4_EXT
   GL_UNSIGNED_SHORT_4_4_4_4_REV
   GL_UNSIGNED_SHORT_4_4_4_4_REV_EXT
+  GL_UNSIGNED_SHORT_4_4_4_4_REV_IMG
   GL_UNSIGNED_SHORT_5_5_5_1
   GL_UNSIGNED_SHORT_5_5_5_1_EXT
   GL_UNSIGNED_SHORT_5_6_5
@@ -12904,7 +16306,9 @@ our @gl_constants = qw(
   GL_UNSIGNED_SHORT_8_8_MESA
   GL_UNSIGNED_SHORT_8_8_REV_APPLE
   GL_UNSIGNED_SHORT_8_8_REV_MESA
+  GL_UPLOAD_GPU_MASK_NVX
   GL_UPPER_LEFT
+  GL_UPPER_LEFT_EXT
   GL_USE_MISSING_GLYPH_NV
   GL_UTF16_NV
   GL_UTF8_NV
@@ -12936,6 +16340,7 @@ our @gl_constants = qw(
   GL_VERTEX_ARRAY_ADDRESS_NV
   GL_VERTEX_ARRAY_BINDING
   GL_VERTEX_ARRAY_BINDING_APPLE
+  GL_VERTEX_ARRAY_BINDING_OES
   GL_VERTEX_ARRAY_BUFFER_BINDING
   GL_VERTEX_ARRAY_BUFFER_BINDING_ARB
   GL_VERTEX_ARRAY_COUNT_EXT
@@ -13155,10 +16560,16 @@ our @gl_constants = qw(
   GL_WEIGHT_ARRAY_ARB
   GL_WEIGHT_ARRAY_BUFFER_BINDING
   GL_WEIGHT_ARRAY_BUFFER_BINDING_ARB
+  GL_WEIGHT_ARRAY_BUFFER_BINDING_OES
+  GL_WEIGHT_ARRAY_OES
   GL_WEIGHT_ARRAY_POINTER_ARB
+  GL_WEIGHT_ARRAY_POINTER_OES
   GL_WEIGHT_ARRAY_SIZE_ARB
+  GL_WEIGHT_ARRAY_SIZE_OES
   GL_WEIGHT_ARRAY_STRIDE_ARB
+  GL_WEIGHT_ARRAY_STRIDE_OES
   GL_WEIGHT_ARRAY_TYPE_ARB
+  GL_WEIGHT_ARRAY_TYPE_OES
   GL_WEIGHT_SUM_UNITY_ARB
   GL_WIDE_LINE_HINT_PGI
   GL_WINDOW_RECTANGLE_EXT
@@ -13169,6 +16580,7 @@ our @gl_constants = qw(
   GL_WRITE_DISCARD_NV
   GL_WRITE_ONLY
   GL_WRITE_ONLY_ARB
+  GL_WRITE_ONLY_OES
   GL_WRITE_PIXEL_DATA_RANGE_LENGTH_NV
   GL_WRITE_PIXEL_DATA_RANGE_NV
   GL_WRITE_PIXEL_DATA_RANGE_POINTER_NV
@@ -13192,6 +16604,7 @@ our @gl_constants = qw(
   GL_ZERO
   GL_ZERO_EXT
   GL_ZERO_TO_ONE
+  GL_ZERO_TO_ONE_EXT
   GL_ZOOM_X
   GL_ZOOM_Y
   GL_Z_EXT
@@ -13206,6 +16619,7 @@ our @glew_functions = qw(
   glewIsSupported
   glewInit
   done_glewInit
+  glewDestroyContext
 );
 our @glp_functions = qw(
   glpSetAutoCheckErrors
@@ -13233,5 +16647,10 @@ our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 
 require XSLoader;
 XSLoader::load( __PACKAGE__, $XS_VERSION );
+
+sub Inline {
+  require OpenGL::Modern::Install::Files;
+  goto &OpenGL::Modern::Install::Files::Inline;
+}
 
 1;

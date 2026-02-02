@@ -2,7 +2,7 @@ package Sisimai;
 use v5.26;
 use strict;
 use warnings;
-use version; our $VERSION = version->declare('v5.5.0'); our $PATCHLV = 0;
+use version; our $VERSION = version->declare('v5.6.0'); our $PATCHLV = 0;
 sub version { return substr($VERSION->stringify, 1).($PATCHLV > 0 ? 'p'.$PATCHLV : '') }
 sub libname { 'Sisimai' }
 
@@ -387,7 +387,7 @@ azumakuniyuki
 
 =head1 COPYRIGHT
 
-Copyright (C) 2014-2025 azumakuniyuki, All rights reserved.
+Copyright (C) 2014-2026 azumakuniyuki, All rights reserved.
 
 =head1 LICENSE
 

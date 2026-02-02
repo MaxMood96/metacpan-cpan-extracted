@@ -60,7 +60,7 @@
    "provides" : {
       "Sisimai" : {
          "file" : "lib/Sisimai.pm",
-         "version" : "v5.5.0"
+         "version" : "v5.6.0"
       },
       "Sisimai::ARF" : {
          "file" : "lib/Sisimai/ARF.pm"
@@ -266,8 +266,8 @@
       "Sisimai::Reason::Delivered" : {
          "file" : "lib/Sisimai/Reason/Delivered.pm"
       },
-      "Sisimai::Reason::ExceedLimit" : {
-         "file" : "lib/Sisimai/Reason/ExceedLimit.pm"
+      "Sisimai::Reason::EmailTooLarge" : {
+         "file" : "lib/Sisimai/Reason/EmailTooLarge.pm"
       },
       "Sisimai::Reason::Expired" : {
          "file" : "lib/Sisimai/Reason/Expired.pm"
@@ -293,9 +293,6 @@
       "Sisimai::Reason::MailerError" : {
          "file" : "lib/Sisimai/Reason/MailerError.pm"
       },
-      "Sisimai::Reason::MesgTooBig" : {
-         "file" : "lib/Sisimai/Reason/MesgTooBig.pm"
-      },
       "Sisimai::Reason::NetworkError" : {
          "file" : "lib/Sisimai/Reason/NetworkError.pm"
       },
@@ -314,6 +311,9 @@
       "Sisimai::Reason::PolicyViolation" : {
          "file" : "lib/Sisimai/Reason/PolicyViolation.pm"
       },
+      "Sisimai::Reason::RateLimited" : {
+         "file" : "lib/Sisimai/Reason/RateLimited.pm"
+      },
       "Sisimai::Reason::Rejected" : {
          "file" : "lib/Sisimai/Reason/Rejected.pm"
       },
@@ -325,9 +325,6 @@
       },
       "Sisimai::Reason::SpamDetected" : {
          "file" : "lib/Sisimai/Reason/SpamDetected.pm"
-      },
-      "Sisimai::Reason::Speeding" : {
-         "file" : "lib/Sisimai/Reason/Speeding.pm"
       },
       "Sisimai::Reason::Suppressed" : {
          "file" : "lib/Sisimai/Reason/Suppressed.pm"
@@ -343,9 +340,6 @@
       },
       "Sisimai::Reason::SystemFull" : {
          "file" : "lib/Sisimai/Reason/SystemFull.pm"
-      },
-      "Sisimai::Reason::TooManyConn" : {
-         "file" : "lib/Sisimai/Reason/TooManyConn.pm"
       },
       "Sisimai::Reason::Undefined" : {
          "file" : "lib/Sisimai/Reason/Undefined.pm"
@@ -448,7 +442,7 @@
       }
    },
    "release_status" : "stable",
-   "version" : "v5.5.0",
+   "version" : "v5.6.0",
    "x_contributors" : [
       "0xcdcdcdcd <0xcdcdcdcd@gmail.com>",
       "Adrian Yee <adrian@gt.net>",

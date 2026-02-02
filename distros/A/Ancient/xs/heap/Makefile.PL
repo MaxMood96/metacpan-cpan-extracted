@@ -5,7 +5,7 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     NAME             => 'heap',
     VERSION_FROM     => '../../lib/heap.pm',
-    MIN_PERL_VERSION => '5.014',
+    MIN_PERL_VERSION => '5.010',
     OBJECT       => 'heap$(OBJ_EXT)',
     C            => ['heap.c'],
     XS           => {},

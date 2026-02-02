@@ -6,7 +6,7 @@
    "dynamic_config" : 0,
    "generated_by" : "Minilla/v3.1.29",
    "license" : [
-      "unknown"
+      "mit"
    ],
    "meta-spec" : {
       "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
@@ -51,7 +51,7 @@
             "Getopt::EX::termcolor" : "0",
             "Getopt::Long::Bash" : "v0.7.1",
             "Term::ANSIColor::Concise" : "3.02",
-            "Text::ANSI::Fold" : "2.33",
+            "Text::ANSI::Fold" : "2.3302",
             "perl" : "5.024"
          }
       },
@@ -64,7 +64,7 @@
    "provides" : {
       "App::mdee" : {
          "file" : "lib/App/mdee.pm",
-         "version" : "0.07"
+         "version" : "0.08"
       }
    },
    "release_status" : "stable",
@@ -79,7 +79,7 @@
          "web" : "https://github.com/tecolicom/App-mdee"
       }
    },
-   "version" : "0.07",
+   "version" : "0.08",
    "x_contributors" : [
       "Kazumasa Utashiro <kaz@utashiro.com>"
    ],

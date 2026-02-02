@@ -20,5 +20,6 @@ rdapper
 README.md
 t/00.use.t
 t/01-l10n.t
+t/02.test.t
 META.yml                                 Module YAML meta-data (added by MakeMaker)
 META.json                                Module JSON meta-data (added by MakeMaker)

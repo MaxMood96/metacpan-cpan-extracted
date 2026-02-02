@@ -128,6 +128,14 @@ BEGIN {
 
 }
 
+{
+    # Delete environment variables used by zstd that could impact the running of the test
+    for my $var (qw( ZSTD_CLEVEL ZSTD_NBTHREADS  ))
+    {
+        delete $ENV{$var};
+    }
+}
+
 # Use short & long content to trigger sroring & compression respectively.
 for my $content ($shortContent, $longContent)
 {

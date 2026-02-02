@@ -32,7 +32,7 @@ use locale;
 use vars qw($VERSION $LH);
 use strict;
 
-$VERSION = '1.22';
+$VERSION = '1.23';
 
 $LH = App::rdapper::l10n->get_handle;
 
@@ -781,7 +781,7 @@ sub print_nameserver {
         $package->print_kv(_('IP Address'), $ip->short, $indent);
     }
 
-    my @types = $nameserver->dns_ttl_values;
+    my @types = $nameserver->dns_ttl_types;
     $package->display_ttl_values($nameserver, $indent) if (scalar(@types) > 0);
 }
 

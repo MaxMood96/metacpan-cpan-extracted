@@ -5,7 +5,7 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     NAME             => 'doubly',
     VERSION_FROM     => '../../lib/doubly.pm',
-    MIN_PERL_VERSION => '5.014',
+    MIN_PERL_VERSION => '5.010',
     OBJECT       => 'doubly$(OBJ_EXT)',
     C            => ['doubly.c'],
     XS           => {},

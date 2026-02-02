@@ -1,0 +1,62 @@
+---
+abstract: 'Command Heuristic Omni-Tracer'
+author:
+  - 'Kazumasa Utashiro'
+build_requires:
+  Test::More: '0.98'
+configure_requires:
+  Module::Build::Tiny: '0.035'
+dynamic_config: 0
+generated_by: 'Minilla/v3.1.29, CPAN::Meta::Converter version 2.150010'
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: App-chot
+no_index:
+  directory:
+    - t
+    - xt
+    - inc
+    - share
+    - eg
+    - examples
+    - author
+    - builder
+provides:
+  App::chot:
+    file: lib/App/chot.pm
+    version: '1.00'
+  App::chot::Command:
+    file: lib/App/chot/Command.pm
+  App::chot::Node:
+    file: lib/App/chot/Node.pm
+  App::chot::Optex:
+    file: lib/App/chot/Optex.pm
+  App::chot::Perl:
+    file: lib/App/chot/Perl.pm
+  App::chot::Python:
+    file: lib/App/chot/Python.pm
+  App::chot::Ruby:
+    file: lib/App/chot/Ruby.pm
+  App::chot::default:
+    file: lib/App/chot/default.pm
+requires:
+  Command::Run: '0'
+  Encode: '0'
+  Getopt::EX::Hashed: '1.05'
+  Getopt::EX::Long: '0'
+  Getopt::EX::termcolor: '0'
+  List::Util: '0'
+  Pod::Usage: '0'
+  perl: v5.24.0
+resources:
+  bugtracker: https://github.com/tecolicom/App-chot/issues
+  homepage: https://github.com/tecolicom/App-chot
+  repository: https://github.com/tecolicom/App-chot.git
+version: '1.00'
+x_authority: cpan:UTASHIRO
+x_contributors:
+  - 'Kazumasa Utashiro <kaz@utashiro.com>'
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'
+x_static_install: 1

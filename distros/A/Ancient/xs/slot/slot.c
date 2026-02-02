@@ -35,7 +35,10 @@ static void fire_watchers(pTHX_ IV idx, SV *new_val);
 static OP* pp_slot_get(pTHX) {
     dSP;
     IV idx = PL_op->op_targ;
-    PUSHs(g_slots[idx]);  /* Stack already extended by call */
+#ifdef DEBUGGING
+    EXTEND(SP, 1);  /* Ensure stack space - only needed for DEBUGGING builds */
+#endif
+    PUSHs(g_slots[idx]);
     RETURN;
 }
 
@@ -795,6 +798,19 @@ static XS(xs_slots) {
     return;
 }
 
+/* slot::exists - check if slot is defined */
+static XS(xs_exists) {
+    dXSARGS;
+    STRLEN name_len;
+    const char *name;
+    if (items != 1) croak("Usage: slot::exists($name)");
+    name = SvPV(ST(0), name_len);
+    if (hv_exists(g_slot_index, name, name_len)) {
+        XSRETURN_YES;
+    }
+    XSRETURN_NO;
+}
+
 /* slot::clear - reset slot value to undef and clear watchers */
 static XS(xs_clear) {
     dXSARGS;
@@ -919,6 +935,7 @@ XS_EXTERNAL(boot_slot) {
         cv_set_call_checker(cv, slot_unwatch_call_checker, (SV*)cv);
     }
     newXS("slot::slots", xs_slots, __FILE__);
+    newXS("slot::exists", xs_exists, __FILE__);
     {
         CV *cv = newXS("slot::clear", xs_clear, __FILE__);
         cv_set_call_checker(cv, slot_clear_call_checker, (SV*)cv);

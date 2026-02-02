@@ -14,6 +14,7 @@
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"
+#include "nvec_compat.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -5962,6 +5963,6 @@ XS_EXTERNAL(boot_nvec) {
         newXS("nvec::(bool", xs_overload_bool, __FILE__);
 
         /* Mark the stash as overloaded */
-        Gv_AMupdate(stash, FALSE);
+        Gv_AMupdate_compat(stash, FALSE);
     }
 }

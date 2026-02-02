@@ -32,17 +32,17 @@
       },
       "runtime" : {
          "requires" : {
-            "perl" : "5.014"
+            "perl" : "5.010"
          }
       }
    },
    "provides" : {
       "Ancient" : {
          "file" : "lib/Ancient.pm",
-         "version" : "0.10"
+         "version" : "0.14"
       }
    },
    "release_status" : "stable",
-   "version" : "0.10",
+   "version" : "0.14",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

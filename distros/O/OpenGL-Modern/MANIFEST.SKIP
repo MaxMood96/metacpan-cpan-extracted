@@ -1,15 +1,10 @@
 \.(def|old)$
 ^blib/
-^pogl_implemented
-^signatures
-^utils/XS_generate_NOTES.txt
 ^lib/OpenGL/Modern/Config\.pm$
-^.git
+^\.git
 ^xt/
 \.sw.$
 \.o$
-.travis.yml
-gdm.diff
 ^Makefile$
 ^MANIFEST.bak$
 ^MANIFEST.SKIP~$
@@ -20,5 +15,5 @@ gdm.diff
 ^MYMETA.*
 \.pm\.bak$
 \.inc$
-^const\.h$
+^lib/OpenGL/Modern/const\.h$
 ~$

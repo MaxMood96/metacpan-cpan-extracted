@@ -6,8 +6,8 @@ Log::Log4perl::Config::YamlConfigurator - Reads Log4perl YAML configurations
 
 =head1 SYNOPSIS
 
-  use Log::Log4perl ();
-  use YAML          qw( Load );
+  use Log::Log4perl qw();
+  use YAML::PP      qw( Load );
 
   use Log::Log4perl::Config::YamlConfigurator ();
 
@@ -77,9 +77,9 @@ The constructor has one additional optional parameter C<data>. Its value is a
 specific Perl data structure: a HASH reference with the mandatory keys
 C<category>, and C<appender>. Optional keys are C<rootLogger>, C<additivity>,
 and some more. The HASH reference is usually the return value of a
-C<YAML::Load()> function call, if a Log4perl configuration is passed as a YAML
-stream to this function. Alternatively you may use the C<text> parameter to
-pass the Log4perl YAML configuration directly to the constructor.
+C<YAML::PP::Load()> function call, if a Log4perl configuration is passed as a
+YAML stream to this function. Alternatively you may use the C<text> parameter
+to pass the Log4perl YAML configuration directly to the constructor.
 
 =head2 parse()
 
@@ -100,7 +100,7 @@ Sven Willenbuecher <sven.willenbuecher@gmx.de>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2024 by Sven Willenbuecher.
+This software is copyright (c) 2024-2026 by Sven Willenbuecher.
 
 This is free software; you can redistribute it and/or modify it under the same
 terms as the Perl 5 programming language system itself.

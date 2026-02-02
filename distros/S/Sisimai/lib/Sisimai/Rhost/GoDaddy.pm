@@ -76,19 +76,19 @@ sub find {
         #   retry. IB605
         # - The message has attempted to mail too many recipients.
         # - Reduce the number of recipients and try again.
-        'IB605' => 'toomanyconn',
+        'IB605' => 'ratelimited',
 
         # - 421 Connection refused, too many sessions from This IP. Lower the number of concurrent
         #   sessions. IB007
         # - This IP address currently has too many sessions open.
         # - Check with your email provider to reduce the number of open sessions on your IP address
         #   and then try again.
-        'IB007' => 'toomanyconn',
+        'IB007' => 'ratelimited',
 
         # - 421 Server temporarily unavailable. Try again later. IB101
         # - The email queue is experiencing higher than normal email volume.
         # - Try again later.
-        'IB101' => 'speeding',
+        'IB101' => 'ratelimited',
 
         # - 554 This IP has been temporarily blocked for attempting to send too many messages
         #   containing content judged to be spam by the Internet community. IB110
@@ -119,16 +119,16 @@ sub find {
 
         # - 550 This IP has sent too many messages this hour. IB504
         # - This IP address has reached the maximum allowed messages for that hour.
-        'IB504' => 'speeding',
+        'IB504' => 'ratelimited',
 
         # - 550 This message has exceeded the max number of messages per session. Open a new session
         #   and try again. IB510
         # - This IP address has reached the maximum allowed messages for that session.
-        'IB510' => 'speeding',
+        'IB510' => 'ratelimited',
 
         # - 550 This IP has sent too many to too many recipients this hour. IB607
         # - This IP address has reached the maximum allowed recipients for that hour.
-        'IB607' => 'speeding',
+        'IB607' => 'ratelimited',
 
         # Remote block list (RBL) bounces
         # -----------------------------------------------------------------------------------------
@@ -150,6 +150,14 @@ sub find {
         'IB106' => 'blocked',
     };
     state $messagesof = {
+        'authfailure' => [
+            # - 550 SPF Sender Invalid - envelope rejected
+            # - 550 5.7.9: This mail has been blocked because the sender is unauthenticated
+            # - 550-5.7.26 DKIM = did not pass
+            "spf sender invalid - envelope rejected",
+            "this mail has been blocked because the sender is unauthenticated",
+            "dkim = did not pass",
+        ],
         'blocked' => [
             # - 554 RBL Reject.
             # - This IP address was blocked from our internal RBL.
@@ -176,6 +184,25 @@ sub find {
             #   make space for more email.
             'account storage limit',
         ],
+        'norelaying' => [
+            # - 550 5.7.1: Relay access denied
+            "relay access denied",
+        ],
+        'ratelimited' => [
+            # - 550 5.7.232 Your message can't be sent because your trial tenant has exceeded
+            #   its daily limit for sending email to external recipients (tenant external recipient rate limit)
+            # - 550 5.7.233 - Your message can't be sent because your tenant exceeded its daily
+            #   limit for sending email to external recipients (tenant external recipient rate limit)
+            "exceeded its daily limit",
+        ],
+        'rejected' => [
+            # - 550 5.1.8 Access denied, bad outbound sender AS (42004)
+            "bad outbound sender as (42004)",
+        ],
+        'securityerror' => [
+            # - 550 Please turn on SMTP Authentication in your mail client
+            "turn on smtp authentication in your mail client",
+        ],
         'spamdetected' => [
             # - 552 Message rejected for spam or virus content
             # - The email message contains a link, attachment, or pattern caught by our filters as spam.
@@ -194,15 +221,6 @@ sub find {
             # - This is oftentimes because the receiver has two addresses that forward to each
             #   other. They need to correct their forwarding settings.
             'message is looping',
-        ],
-        'toomanyconn' => [
-            # - 550 5.7.232 Your message can't be sent because your trial tenant has exceeded
-            #   its daily limit for sending email to external recipients (tenant external
-            #   recipient rate limit)
-            # - 550 5.7.233 - Your message can't be sent because your tenant exceeded its daily
-            #   limit for sending email to external recipients (tenant external recipient rate
-            #   limit)
-            "exceeded its daily limit",
         ],
         'userunknown' => [
             # - 550 Recipient not found
@@ -266,7 +284,7 @@ azumakuniyuki
 
 =head1 COPYRIGHT
 
-Copyright (C) 2017-2018,2020-2025 azumakuniyuki, All rights reserved.
+Copyright (C) 2017-2018,2020-2026 azumakuniyuki, All rights reserved.
 
 =head1 LICENSE
 

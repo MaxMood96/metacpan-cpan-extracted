@@ -53,7 +53,7 @@
    "provides" : {
       "Acme::Bitfield" : {
          "file" : "lib/Acme/Bitfield.pm",
-         "version" : "v1.0.0"
+         "version" : "v1.1.0"
       }
    },
    "release_status" : "stable",
@@ -71,7 +71,7 @@
          "web" : "https://github.com/sanko/Acme-Bitfield.pm"
       }
    },
-   "version" : "v1.0.0",
+   "version" : "v1.1.0",
    "x_help_wanted" : [
       "Tester",
       "Documenter"

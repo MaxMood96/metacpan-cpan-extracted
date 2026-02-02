@@ -4,7 +4,7 @@ package App::mdee;
 # POD documentation is appended from script/mdee at release time.
 # See minil.toml for details.
 
-our $VERSION = "0.07";
+our $VERSION = "0.08";
 
 1;
 =encoding utf-8
@@ -12,12 +12,6 @@ our $VERSION = "0.07";
 =head1 NAME
 
 mdee - Markdown, Easy on the Eyes
-
-=begin html
-
-<p><img width="750" src="https://raw.githubusercontent.com/tecolicom/App-mdee/main/images/manual.png">
-
-=end html
 
 =head1 SYNOPSIS
 
@@ -38,7 +32,7 @@ mdee - Markdown, Easy on the Eyes
      -m  --mode=#           light or dark (default: light)
      -B  --base-color=#     override theme's base color
                             (e.g., Ivory, #780043, (120,0,67))
-         --list-themes      list built-in themes
+         --list-themes      list available themes
          --show=#           set field visibility (e.g., italic=1)
      -C  --pane=#           number of columns
      -R  --row=#            number of rows
@@ -50,10 +44,16 @@ mdee - Markdown, Easy on the Eyes
 
 =head1 VERSION
 
-Version 0.07
+Version 0.08
 
 =cut
 =head1 DESCRIPTION
+
+=begin html
+
+<p><img width="750" src="https://raw.githubusercontent.com/tecolicom/App-mdee/main/images/manual.png">
+
+=end html
 
 B<mdee> is a multi-column Markdown viewer with syntax highlighting,
 combining L<greple(1)> for colorization and L<nup(1)> for paged output.
@@ -182,7 +182,39 @@ bold text, etc.).
 
 =item B<-t> I<NAME>, B<--theme>=I<NAME>
 
-Select a color theme.  Default is C<default>.
+Select a color theme.  Default is C<default>.  Theme files are
+searched in the following order:
+
+=over 4
+
+=item 1. User theme directory: C<${XDG_CONFIG_HOME:-~/.config}/mdee/theme/NAME.sh>
+
+=item 2. Share theme directory: installed with the distribution under C<auto/share/dist/App-mdee/theme/>
+
+=item 3. In-memory variables (built-in themes and themes defined in config.sh)
+
+=back
+
+Theme files are Bash scripts that define associative arrays using
+C<declare -gA>.  Each theme should define a light variant with all
+fields, and optionally a dark variant with only the differences
+(dark inherits undefined fields from light):
+
+    # theme/mytheme.sh
+    declare -gA theme_mytheme_light=(
+        [base]='<DarkCyan>=y25'
+        [bold]='${base}D'
+        [h1]='L25DE/${base}'
+        ...all fields...
+    )
+    declare -gA theme_mytheme_dark=(
+        [base]='<DarkCyan>=y80'
+        [h1]='L00DE/${base}'
+        ...differences only...
+    )
+
+The variable names must follow the pattern C<theme_NAME_light> and
+C<theme_NAME_dark> (or C<theme_NAME> for a mode-independent theme).
 
 =item B<-m> I<MODE>, B<--mode>=I<MODE>
 
@@ -211,9 +243,51 @@ User configuration is loaded from:
 This is a shell script that can set defaults and override colors:
 
     # ~/.config/mdee/config.sh
-    default_mode='dark'              # set default mode
-    colors[base]='<DarkCyan>'        # override base color
-    colors[h1]='L25DE/${base}'       # header with base background
+    default[mode]='dark'             # set default mode
+    default[style]='pager'           # set default style
+    default[width]=100               # set default fold width
+    default[base_color]='DarkCyan'   # set default base color
+
+The C<default> associative array supports the following keys:
+
+=over 4
+
+=item C<default[mode]> - Corresponds to C<--mode> (e.g., C<dark>, C<light>)
+
+=item C<default[theme]> - Corresponds to C<--theme> (e.g., C<default>)
+
+=item C<default[style]> - Corresponds to C<--style> (e.g., C<pager>, C<cat>)
+
+=item C<default[width]> - Corresponds to C<--width> (e.g., C<100>)
+
+=item C<default[base_color]> - Corresponds to C<--base-color> (e.g., C<DarkCyan>)
+
+=back
+
+B<Overriding theme colors>
+
+There are two ways to customize colors in config.sh:
+
+=over 4
+
+=item B<Theme definition (partial)> - modify specific keys before loading:
+
+    theme_default_light[base]='<DarkCyan>=y25'  # change base only
+    theme_default_dark[h1]='L00DE/${base}'      # change h1 only
+
+Since C<${base}> references are expanded after loading, changing the
+base color automatically affects all derived colors (h1, h2, bold, etc.).
+
+=item B<Full theme definition> - define a complete custom theme:
+
+    declare -A theme_mytheme_light=(
+        [base]='<DarkCyan>=y25'
+        [h1]='L25DE/${base}'
+        [bold]='${base}D'
+        ...
+    )
+
+=back
 
 Color specifications use L<Term::ANSIColor::Concise> format.
 The C<FG/BG> notation specifies foreground and background colors
@@ -256,8 +330,8 @@ B<Customizing the default adjustment>:
 The automatic luminance adjustment values can be customized with the
 C<--adjust> option:
 
-    --adjust 'light==y30'      # use =y30 instead of =y25 for light mode
-    --adjust 'dark==y70'       # use =y70 instead of =y80 for dark mode
+    --adjust light='=y30'      # use =y30 instead of =y25 for light mode
+    --adjust dark='=y70'       # use =y70 instead of =y80 for dark mode
 
 B<Note>: Basic ANSI color codes (C<R>, C<G>, C<B>, etc.) cannot be used
 because heading variations require luminance adjustment, which only works
@@ -265,7 +339,7 @@ with full color specifications (X11 names, RGB hex, or RGB decimal).
 
 =item B<--list-themes>
 
-List built-in themes with color samples and exit.
+List available themes with color samples and exit.
 
 =back
 
@@ -287,7 +361,8 @@ Multiple fields can be specified with commas or by repeating the option.
 The special field C<all> affects all fields and is processed first.
 
 Available fields: C<comment>, C<bold>, C<italic>, C<strike>, C<h1>,
-C<h2>, C<h3>, C<h4>, C<h5>, C<h6>, C<inline_code>, C<code_block>.
+C<h2>, C<h3>, C<h4>, C<h5>, C<h6>, C<inline_code>, C<code_block>,
+C<link>, C<image>, C<image_link>.
 
 All fields are enabled by default.
 
@@ -428,7 +503,7 @@ The overall data flow is:
     [pager] --- Pager Output (pager style)
         |
         v
-    Terminal/Pager
+    Terminal
 
 =head2 Pipeline Architecture
 
@@ -597,7 +672,7 @@ When using C<less> as pager, version 566 or later is required with
 C<-R> option.
 
 For OSC 8 specification, see:
-L<https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5fedd>
+L<https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda>
 
 =head1 SEE ALSO
 

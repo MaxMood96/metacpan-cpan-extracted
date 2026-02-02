@@ -12,8 +12,8 @@ use     strict;
 #=============================================================================
 package ODF::lpOD;
 # This is the "master" version number for the whole package
-our $VERSION                    =       "2.001";
-use constant PACKAGE_DATE       =>      "2024-06-10T16:37:39";
+our $VERSION                    =       "2.100";
+use constant PACKAGE_DATE       =>      "2026-02-01T20:00:00";
 use ODF::lpOD::Common;
 #-----------------------------------------------------------------------------
 use ODF::lpOD::Document;

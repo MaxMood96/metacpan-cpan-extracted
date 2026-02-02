@@ -8,7 +8,7 @@ use parent 'Locale::Maketext';
 use I18N::LangTags::Detect;
 use File::Spec;
 use Carp;
-our $VERSION = v0.23.8;
+our $VERSION = v0.23.9;
 
 # Allow unknown phrases to just pass-through.
 our %Lexicon = (
@@ -292,7 +292,7 @@ David E. Wheeler <david@justatheory.com>
 
 =head1 Copyright and License
 
-Copyright (c) 2010-2024 David E. Wheeler.
+Copyright (c) 2010-2026 David E. Wheeler.
 
 This module is free software; you can redistribute it and/or modify it under
 the L<PostgreSQL License|https://www.opensource.org/licenses/postgresql>.

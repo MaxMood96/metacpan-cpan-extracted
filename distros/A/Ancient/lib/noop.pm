@@ -2,7 +2,7 @@ package
     noop;
 use strict;
 use warnings;
-our $VERSION = '0.10';
+our $VERSION = '0.14';
 
 require XSLoader;
 XSLoader::load('noop', $VERSION);

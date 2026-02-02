@@ -8,43 +8,23 @@ require './utils/common.pl';
 This script reads the function signatures from the registry
 and creates XS stubs for each.
 
-This should also autogenerate stub documentation by adding links
-to the OpenGL documentation for each function via
-
-L<https://www.opengl.org/sdk/docs/man/html/glShaderSource.xhtml>
-
 =cut
 
 our %signature;
 *signature = \%OpenGL::Modern::Registry::registry;
+our %groups;
+*groups = \%OpenGL::Modern::Registry::groups;
 
-=head1 Automagic Perlification
-
-We should think about how to ideally enable the typemap
-to automatically perlify the API. Or just handwrite
-it for the _p functions?!
-
-=cut
-
-sub munge_GL_args {
-    my ( @args ) = @_;
-
-    # GLsizei n
-    # GLsizei count
-}
-
+my $g2c2s = assemble_enum_groups(\%groups, \%OpenGL::Modern::Registry::counts);
 sub generate_glew_xs {
   my $content;
-  for my $name (@_ ? @_ : sort keys %signature) {
+  for my $name (@_) {
     my $item = $signature{$name};
-    if ( is_manual($name) ) {
-      print "Skipping $name, already implemented in Modern.xs\n";
-      next;
-    }
-    for my $s (bindings($name, $item)) {
+    for my $s (bindings($name, $item, $g2c2s, \%signature)) {
+      die "Error generating for $name: no return type" if !$s->{xs_rettype};
       my $res = "$s->{xs_rettype}\n$s->{binding_name}($s->{xs_args})\n";
       $res .= $s->{xs_argdecls};
-      $res .= "$s->{aliases}$s->{xs_code}  OGLM_GLEWINIT\n";
+      $res .= make_aliases($s->{aliases})."$s->{xs_code}  OGLM_GLEWINIT\n";
       $res .= "  $s->{error_check}\n" if $s->{error_check};
       $res .= $s->{avail_check} . $s->{beforecall};
       $res .= "  $s->{retcap}$name$s->{callarg_list};";
@@ -52,8 +32,52 @@ sub generate_glew_xs {
       $content .= "$res$s->{aftercall}$s->{retout}\n\n";
     }
   }
-  return $content;
+  $content;
 }
 
-my $xs_code = generate_glew_xs(@ARGV);
-save_file( 'auto-xs.inc', $xs_code );
+my $xs_code = generate_glew_xs(sort grep $signature{$_}{glewtype} eq 'fun', keys %signature);
+save_file('auto-xs.inc', $xs_code);
+my $var_code = generate_glew_xs(sort grep $signature{$_}{glewtype} eq 'var', keys %signature);
+save_file('auto-xs-var.inc', $var_code);
+
+our %enums;
+*enums = \%OpenGL::Modern::Registry::enums;
+my %known_constant = map +($_=>1), @OpenGL::Modern::Registry::glconstants;
+my $enums_code = <<'EOF';
+char *
+enum2name(g, e)
+  char *g;
+  GLenum e;
+CODE:
+  RETVAL = NULL;
+EOF
+for my $g (sort keys %groups) {
+  next if $g eq 'SpecialNumbers';
+  next unless my @names = grep $known_constant{$_}, @{ $groups{$g} };
+  $enums_code .= <<"EOF";
+  if (!strcmp(g, "$g")) {
+    switch (e) {
+EOF
+  my %val2names; push @{ $val2names{$enums{$_}} }, $_ for @names;
+  my @final_names;
+  for my $val (keys %val2names) {
+    my @names = @{ $val2names{$val} };
+    push @final_names, (sort { length($a) <=> length($b) } @names)[0];
+  }
+  $enums_code .= <<"EOF" for sort @final_names;
+      case $_: RETVAL = "$_"; break;
+EOF
+  $enums_code .= <<"EOF";
+      default: RETVAL = "UNKNOWN ENUM";
+    }
+    goto alldone;
+  }
+EOF
+}
+$enums_code .= <<'EOF';
+  if (!RETVAL) RETVAL = "UNKNOWN GROUP";
+  alldone:
+OUTPUT:
+  RETVAL
+EOF
+save_file('auto-xs-enums.inc', $enums_code);

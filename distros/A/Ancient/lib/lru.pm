@@ -2,7 +2,7 @@ package
     lru;
 use strict;
 use warnings;
-our $VERSION = '0.10';
+our $VERSION = '0.14';
 require XSLoader;
 XSLoader::load('lru', $VERSION);
 1;
@@ -124,6 +124,21 @@ Remove all entries.
 
 Returns all keys in order (most recent first).
 
+=head2 $cache->oldest
+
+    my ($key, $value) = $cache->oldest;
+
+Returns the key and value of the least recently used entry (the one
+that would be evicted next if the cache is full). Returns an empty
+list if the cache is empty.
+
+=head2 $cache->newest
+
+    my ($key, $value) = $cache->newest;
+
+Returns the key and value of the most recently used entry.
+Returns an empty list if the cache is empty.
+
 =head1 FUNCTION-STYLE API
 
 For maximum performance, import function-style ops:
@@ -156,6 +171,20 @@ Approximately 2x faster than C<< $cache->peek(...) >>.
 
 Delete a key. Returns the deleted value or undef.
 Approximately 2x faster than C<< $cache->delete(...) >>.
+
+=head2 lru_oldest($cache)
+
+    my ($key, $value) = lru_oldest($cache);
+
+Returns the key and value of the least recently used entry.
+Returns an empty list if the cache is empty.
+
+=head2 lru_newest($cache)
+
+    my ($key, $value) = lru_newest($cache);
+
+Returns the key and value of the most recently used entry.
+Returns an empty list if the cache is empty.
 
 =head1 AUTHOR
 

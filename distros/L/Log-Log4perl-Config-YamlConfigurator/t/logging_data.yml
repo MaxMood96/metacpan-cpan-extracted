@@ -1,0 +1,21 @@
+rootLogger: INFO, SCREEN
+category:
+  Foo:
+    Bar:
+      name: DEBUG, SCREEN, FILE
+      Baz: INFO, FILE
+additivity:
+  Foo:
+    Bar: 0
+appender:
+  SCREEN: 
+    name: Log::Log4perl::Appender::Screen
+    layout: Log::Log4perl::Layout::SimpleLayout
+  FILE: 
+    name: Log::Log4perl::Appender::File
+    filename: file.log
+    mode: append
+    create_at_logtime: 1
+    layout:
+      name: Log::Log4perl::Layout::PatternLayout::Multiline
+      ConversionPattern: '%d{HH:mm:ss} %-5p [%M{3}, %L] - %m%n'

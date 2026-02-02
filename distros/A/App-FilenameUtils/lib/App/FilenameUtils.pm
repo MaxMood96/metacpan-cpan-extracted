@@ -1,14 +1,14 @@
 package App::FilenameUtils;
 
-our $AUTHORITY = 'cpan:PERLANCAR'; # AUTHORITY
-our $DATE = '2020-10-21'; # DATE
-our $DIST = 'App-FilenameUtils'; # DIST
-our $VERSION = '0.002'; # VERSION
-
 use strict;
 use warnings;
 
 use Perinci::Sub::Util qw(gen_modified_sub);
+
+our $AUTHORITY = 'cpan:PERLANCAR'; # AUTHORITY
+our $DATE = '2025-08-23'; # DATE
+our $DIST = 'App-FilenameUtils'; # DIST
+our $VERSION = '0.003'; # VERSION
 
 my %argsopt = (
     quiet => {
@@ -38,9 +38,9 @@ sub _gen_wrapper {
     };
 }
 
-require Filename::Archive;
+require Filename::Type::Archive;
 gen_modified_sub(
-    base_name => 'Filename::Archive::check_archive_filename',
+    base_name => 'Filename::Type::Archive::check_archive_filename',
     add_args => {
         %argsopt,
     },
@@ -52,9 +52,9 @@ gen_modified_sub(
     wrap_code => _gen_wrapper('an archive'),
 );
 
-require Filename::Audio;
+require Filename::Type::Audio;
 gen_modified_sub(
-    base_name => 'Filename::Audio::check_audio_filename',
+    base_name => 'Filename::Type::Audio::check_audio_filename',
     add_args => {
         %argsopt,
     },
@@ -66,9 +66,9 @@ gen_modified_sub(
     wrap_code => _gen_wrapper('an audio file'),
 );
 
-require Filename::Backup;
+require Filename::Type::Backup;
 gen_modified_sub(
-    base_name => 'Filename::Backup::check_backup_filename',
+    base_name => 'Filename::Type::Backup::check_backup_filename',
     add_args => {
         %argsopt,
     },
@@ -80,9 +80,9 @@ gen_modified_sub(
     wrap_code => _gen_wrapper('a backup file'),
 );
 
-require Filename::Compressed;
+require Filename::Type::Compressed;
 gen_modified_sub(
-    base_name => 'Filename::Compressed::check_compressed_filename',
+    base_name => 'Filename::Type::Compressed::check_compressed_filename',
     add_args => {
         %argsopt,
     },
@@ -94,9 +94,9 @@ gen_modified_sub(
     wrap_code => _gen_wrapper('a compressed file'),
 );
 
-require Filename::Ebook;
+require Filename::Type::Ebook;
 gen_modified_sub(
-    base_name => 'Filename::Ebook::check_ebook_filename',
+    base_name => 'Filename::Type::Ebook::check_ebook_filename',
     add_args => {
         %argsopt,
     },
@@ -108,9 +108,9 @@ gen_modified_sub(
     wrap_code => _gen_wrapper('an ebook'),
 );
 
-require Filename::Executable;
+require Filename::Type::Executable;
 gen_modified_sub(
-    base_name => 'Filename::Executable::check_executable_filename',
+    base_name => 'Filename::Type::Executable::check_executable_filename',
     add_args => {
         %argsopt,
     },
@@ -122,9 +122,9 @@ gen_modified_sub(
     wrap_code => _gen_wrapper('an executable'),
 );
 
-require Filename::Image;
+require Filename::Type::Image;
 gen_modified_sub(
-    base_name => 'Filename::Image::check_image_filename',
+    base_name => 'Filename::Type::Image::check_image_filename',
     add_args => {
         %argsopt,
     },
@@ -136,9 +136,9 @@ gen_modified_sub(
     wrap_code => _gen_wrapper('an image (picture)'),
 );
 
-require Filename::Media;
+require Filename::Type::Media;
 gen_modified_sub(
-    base_name => 'Filename::Media::check_media_filename',
+    base_name => 'Filename::Type::Media::check_media_filename',
     add_args => {
         %argsopt,
     },
@@ -150,9 +150,9 @@ gen_modified_sub(
     wrap_code => _gen_wrapper('a media (image/audio/video) file'),
 );
 
-require Filename::Video;
+require Filename::Type::Video;
 gen_modified_sub(
-    base_name => 'Filename::Video::check_video_filename',
+    base_name => 'Filename::Type::Video::check_video_filename',
     add_args => {
         %argsopt,
     },
@@ -179,7 +179,7 @@ App::FilenameUtils - CLIs for Filename::*
 
 =head1 VERSION
 
-This document describes version 0.002 of App::FilenameUtils (from Perl distribution App-FilenameUtils), released on 2020-10-21.
+This document describes version 0.003 of App::FilenameUtils (from Perl distribution App-FilenameUtils), released on 2025-08-23.
 
 =head1 SYNOPSIS
 
@@ -189,23 +189,25 @@ This distribution includes several utilities related to Filename::* modules:
 
 =over
 
-=item * L<check-archive-filename>
+=item 1. L<check-archive-filename>
 
-=item * L<check-audio-filename>
+=item 2. L<check-audio-filename>
 
-=item * L<check-backup-filename>
+=item 3. L<check-backup-filename>
 
-=item * L<check-compressed-filename>
+=item 4. L<check-compressed-filename>
 
-=item * L<check-ebook-filename>
+=item 5. L<check-ebook-filename>
 
-=item * L<check-executable-filename>
+=item 6. L<check-executable-filename>
 
-=item * L<check-image-filename>
+=item 7. L<check-image-filename>
 
-=item * L<check-media-filename>
+=item 8. L<check-media-filename>
 
-=item * L<check-video-filename>
+=item 9. L<check-video-filename>
+
+=item 10. L<parse-media-filename>
 
 =back
 
@@ -216,7 +218,7 @@ This distribution includes several utilities related to Filename::* modules:
 
 Usage:
 
- check_archive_filename(%args) -> [status, msg, payload, meta]
+ check_archive_filename(%args) -> [$status_code, $reason, $payload, \%result_meta]
 
 Check whether filename indicates being an archive file.
 
@@ -226,34 +228,40 @@ Arguments ('*' denotes required arguments):
 
 =over 4
 
-=item * B<ci> => I<bool> (default: 1)
-
-Whether to match case-insensitively.
-
 =item * B<detail> => I<bool>
+
+(No description)
 
 =item * B<filename>* => I<str>
 
+(No description)
+
+=item * B<ignore_case> => I<bool> (default: 1)
+
+Whether to match case-insensitively.
+
 =item * B<quiet> => I<bool>
+
+(No description)
 
 
 =back
 
 Returns an enveloped result (an array).
 
-First element (status) is an integer containing HTTP status code
+First element ($status_code) is an integer containing HTTP-like status code
 (200 means OK, 4xx caller error, 5xx function error). Second element
-(msg) is a string containing error message, or 'OK' if status is
-200. Third element (payload) is optional, the actual result. Fourth
-element (meta) is called result metadata and is optional, a hash
-that contains extra information.
+($reason) is a string containing error message, or something like "OK" if status is
+200. Third element ($payload) is the actual result, but usually not present when enveloped result is an error response ($status_code is not 2xx). Fourth
+element (%result_meta) is called result metadata and is optional, a hash
+that contains extra information, much like how HTTP response headers provide additional metadata.
 
 Return value:  (bool|hash)
 
 
 Return false if no archive suffixes detected. Otherwise return a hash of
 information, which contains these keys: C<archive_name>, C<archive_suffix>,
-C<compressor_info>.
+C<compressor_info>, C<filename_without_suffix>.
 
 
 
@@ -261,7 +269,7 @@ C<compressor_info>.
 
 Usage:
 
- check_audio_filename(%args) -> [status, msg, payload, meta]
+ check_audio_filename(%args) -> [$status_code, $reason, $payload, \%result_meta]
 
 Check whether filename indicates being an audio file.
 
@@ -273,21 +281,27 @@ Arguments ('*' denotes required arguments):
 
 =item * B<detail> => I<bool>
 
+(No description)
+
 =item * B<filename>* => I<filename>
 
+(No description)
+
 =item * B<quiet> => I<bool>
+
+(No description)
 
 
 =back
 
 Returns an enveloped result (an array).
 
-First element (status) is an integer containing HTTP status code
+First element ($status_code) is an integer containing HTTP-like status code
 (200 means OK, 4xx caller error, 5xx function error). Second element
-(msg) is a string containing error message, or 'OK' if status is
-200. Third element (payload) is optional, the actual result. Fourth
-element (meta) is called result metadata and is optional, a hash
-that contains extra information.
+($reason) is a string containing error message, or something like "OK" if status is
+200. Third element ($payload) is the actual result, but usually not present when enveloped result is an error response ($status_code is not 2xx). Fourth
+element (%result_meta) is called result metadata and is optional, a hash
+that contains extra information, much like how HTTP response headers provide additional metadata.
 
 Return value:  (bool|hash)
 
@@ -301,7 +315,7 @@ information.
 
 Usage:
 
- check_backup_filename(%args) -> [status, msg, payload, meta]
+ check_backup_filename(%args) -> [$status_code, $reason, $payload, \%result_meta]
 
 Check whether filename indicates being a backup file.
 
@@ -317,21 +331,27 @@ Whether to match case-insensitively.
 
 =item * B<detail> => I<bool>
 
+(No description)
+
 =item * B<filename>* => I<str>
 
+(No description)
+
 =item * B<quiet> => I<bool>
+
+(No description)
 
 
 =back
 
 Returns an enveloped result (an array).
 
-First element (status) is an integer containing HTTP status code
+First element ($status_code) is an integer containing HTTP-like status code
 (200 means OK, 4xx caller error, 5xx function error). Second element
-(msg) is a string containing error message, or 'OK' if status is
-200. Third element (payload) is optional, the actual result. Fourth
-element (meta) is called result metadata and is optional, a hash
-that contains extra information.
+($reason) is a string containing error message, or something like "OK" if status is
+200. Third element ($payload) is the actual result, but usually not present when enveloped result is an error response ($status_code is not 2xx). Fourth
+element (%result_meta) is called result metadata and is optional, a hash
+that contains extra information, much like how HTTP response headers provide additional metadata.
 
 Return value:  (bool|hash)
 
@@ -348,7 +368,7 @@ on.
 
 Usage:
 
- check_compressed_filename(%args) -> [status, msg, payload, meta]
+ check_compressed_filename(%args) -> [$status_code, $reason, $payload, \%result_meta]
 
 Check whether filename indicates being compressed.
 
@@ -358,27 +378,33 @@ Arguments ('*' denotes required arguments):
 
 =over 4
 
-=item * B<ci> => I<bool> (default: 1)
-
-Whether to match case-insensitively.
-
 =item * B<detail> => I<bool>
+
+(No description)
 
 =item * B<filename>* => I<str>
 
+(No description)
+
+=item * B<ignore_case> => I<bool> (default: 1)
+
+Whether to match case-insensitively.
+
 =item * B<quiet> => I<bool>
+
+(No description)
 
 
 =back
 
 Returns an enveloped result (an array).
 
-First element (status) is an integer containing HTTP status code
+First element ($status_code) is an integer containing HTTP-like status code
 (200 means OK, 4xx caller error, 5xx function error). Second element
-(msg) is a string containing error message, or 'OK' if status is
-200. Third element (payload) is optional, the actual result. Fourth
-element (meta) is called result metadata and is optional, a hash
-that contains extra information.
+($reason) is a string containing error message, or something like "OK" if status is
+200. Third element ($payload) is the actual result, but usually not present when enveloped result is an error response ($status_code is not 2xx). Fourth
+element (%result_meta) is called result metadata and is optional, a hash
+that contains extra information, much like how HTTP response headers provide additional metadata.
 
 Return value:  (bool|hash)
 
@@ -393,7 +419,7 @@ C<uncompressed_filename>.
 
 Usage:
 
- check_ebook_filename(%args) -> [status, msg, payload, meta]
+ check_ebook_filename(%args) -> [$status_code, $reason, $payload, \%result_meta]
 
 Check whether filename indicates being an e-book.
 
@@ -409,21 +435,27 @@ Whether to match case-insensitively.
 
 =item * B<detail> => I<bool>
 
+(No description)
+
 =item * B<filename>* => I<str>
 
+(No description)
+
 =item * B<quiet> => I<bool>
+
+(No description)
 
 
 =back
 
 Returns an enveloped result (an array).
 
-First element (status) is an integer containing HTTP status code
+First element ($status_code) is an integer containing HTTP-like status code
 (200 means OK, 4xx caller error, 5xx function error). Second element
-(msg) is a string containing error message, or 'OK' if status is
-200. Third element (payload) is optional, the actual result. Fourth
-element (meta) is called result metadata and is optional, a hash
-that contains extra information.
+($reason) is a string containing error message, or something like "OK" if status is
+200. Third element ($payload) is the actual result, but usually not present when enveloped result is an error response ($status_code is not 2xx). Fourth
+element (%result_meta) is called result metadata and is optional, a hash
+that contains extra information, much like how HTTP response headers provide additional metadata.
 
 Return value:  (any)
 
@@ -433,7 +465,7 @@ Return value:  (any)
 
 Usage:
 
- check_executable_filename(%args) -> [status, msg, payload, meta]
+ check_executable_filename(%args) -> [$status_code, $reason, $payload, \%result_meta]
 
 Check whether filename indicates being an executable programE<sol>script.
 
@@ -449,21 +481,27 @@ Whether to match case-insensitively.
 
 =item * B<detail> => I<bool>
 
+(No description)
+
 =item * B<filename>* => I<str>
 
+(No description)
+
 =item * B<quiet> => I<bool>
+
+(No description)
 
 
 =back
 
 Returns an enveloped result (an array).
 
-First element (status) is an integer containing HTTP status code
+First element ($status_code) is an integer containing HTTP-like status code
 (200 means OK, 4xx caller error, 5xx function error). Second element
-(msg) is a string containing error message, or 'OK' if status is
-200. Third element (payload) is optional, the actual result. Fourth
-element (meta) is called result metadata and is optional, a hash
-that contains extra information.
+($reason) is a string containing error message, or something like "OK" if status is
+200. Third element ($payload) is the actual result, but usually not present when enveloped result is an error response ($status_code is not 2xx). Fourth
+element (%result_meta) is called result metadata and is optional, a hash
+that contains extra information, much like how HTTP response headers provide additional metadata.
 
 Return value:  (bool|hash)
 
@@ -478,7 +516,7 @@ C<exec_name>.
 
 Usage:
 
- check_image_filename(%args) -> [status, msg, payload, meta]
+ check_image_filename(%args) -> [$status_code, $reason, $payload, \%result_meta]
 
 Check whether filename indicates being an image.
 
@@ -490,21 +528,27 @@ Arguments ('*' denotes required arguments):
 
 =item * B<detail> => I<bool>
 
+(No description)
+
 =item * B<filename>* => I<filename>
 
+(No description)
+
 =item * B<quiet> => I<bool>
+
+(No description)
 
 
 =back
 
 Returns an enveloped result (an array).
 
-First element (status) is an integer containing HTTP status code
+First element ($status_code) is an integer containing HTTP-like status code
 (200 means OK, 4xx caller error, 5xx function error). Second element
-(msg) is a string containing error message, or 'OK' if status is
-200. Third element (payload) is optional, the actual result. Fourth
-element (meta) is called result metadata and is optional, a hash
-that contains extra information.
+($reason) is a string containing error message, or something like "OK" if status is
+200. Third element ($payload) is the actual result, but usually not present when enveloped result is an error response ($status_code is not 2xx). Fourth
+element (%result_meta) is called result metadata and is optional, a hash
+that contains extra information, much like how HTTP response headers provide additional metadata.
 
 Return value:  (bool|hash)
 
@@ -518,7 +562,7 @@ information.
 
 Usage:
 
- check_media_filename(%args) -> [status, msg, payload, meta]
+ check_media_filename(%args) -> [$status_code, $reason, $payload, \%result_meta]
 
 Check whether filename indicates being a media (audioE<sol>videoE<sol>image) file.
 
@@ -530,21 +574,27 @@ Arguments ('*' denotes required arguments):
 
 =item * B<detail> => I<bool>
 
+(No description)
+
 =item * B<filename>* => I<filename>
 
+(No description)
+
 =item * B<quiet> => I<bool>
+
+(No description)
 
 
 =back
 
 Returns an enveloped result (an array).
 
-First element (status) is an integer containing HTTP status code
+First element ($status_code) is an integer containing HTTP-like status code
 (200 means OK, 4xx caller error, 5xx function error). Second element
-(msg) is a string containing error message, or 'OK' if status is
-200. Third element (payload) is optional, the actual result. Fourth
-element (meta) is called result metadata and is optional, a hash
-that contains extra information.
+($reason) is a string containing error message, or something like "OK" if status is
+200. Third element ($payload) is the actual result, but usually not present when enveloped result is an error response ($status_code is not 2xx). Fourth
+element (%result_meta) is called result metadata and is optional, a hash
+that contains extra information, much like how HTTP response headers provide additional metadata.
 
 Return value:  (bool|hash)
 
@@ -558,7 +608,7 @@ information.
 
 Usage:
 
- check_video_filename(%args) -> [status, msg, payload, meta]
+ check_video_filename(%args) -> [$status_code, $reason, $payload, \%result_meta]
 
 Check whether filename indicates being a video file.
 
@@ -570,21 +620,27 @@ Arguments ('*' denotes required arguments):
 
 =item * B<detail> => I<bool>
 
+(No description)
+
 =item * B<filename>* => I<filename>
 
+(No description)
+
 =item * B<quiet> => I<bool>
+
+(No description)
 
 
 =back
 
 Returns an enveloped result (an array).
 
-First element (status) is an integer containing HTTP status code
+First element ($status_code) is an integer containing HTTP-like status code
 (200 means OK, 4xx caller error, 5xx function error). Second element
-(msg) is a string containing error message, or 'OK' if status is
-200. Third element (payload) is optional, the actual result. Fourth
-element (meta) is called result metadata and is optional, a hash
-that contains extra information.
+($reason) is a string containing error message, or something like "OK" if status is
+200. Third element ($payload) is the actual result, but usually not present when enveloped result is an error response ($status_code is not 2xx). Fourth
+element (%result_meta) is called result metadata and is optional, a hash
+that contains extra information, much like how HTTP response headers provide additional metadata.
 
 Return value:  (bool|hash)
 
@@ -600,6 +656,41 @@ Please visit the project's homepage at L<https://metacpan.org/release/App-Filena
 
 Source repository is at L<https://github.com/perlancar/perl-App-FilenameUtils>.
 
+=head1 SEE ALSO
+
+L<Filename::Type::Archive>, L<Filename::Type::Audio>, etc.
+
+L<Filename::Media::Info>.
+
+=head1 AUTHOR
+
+perlancar <perlancar@cpan.org>
+
+=head1 CONTRIBUTING
+
+
+To contribute, you can send patches by email/via RT, or send pull requests on
+GitHub.
+
+Most of the time, you don't need to build the distribution yourself. You can
+simply modify the code, then test via:
+
+ % prove -l
+
+If you want to build the distribution (e.g. to try to install it locally on your
+system), you can install L<Dist::Zilla>,
+L<Dist::Zilla::PluginBundle::Author::PERLANCAR>,
+L<Pod::Weaver::PluginBundle::Author::PERLANCAR>, and sometimes one or two other
+Dist::Zilla- and/or Pod::Weaver plugins. Any additional steps required beyond
+that are considered a bug and can be reported to me.
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is copyright (c) 2025 by perlancar <perlancar@cpan.org>.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
 =head1 BUGS
 
 Please report any bugs or feature requests on the bugtracker website L<https://rt.cpan.org/Public/Dist/Display.html?Name=App-FilenameUtils>
@@ -607,20 +698,5 @@ Please report any bugs or feature requests on the bugtracker website L<https://r
 When submitting a bug or request, please include a test-file or a
 patch to an existing test-file that illustrates the bug or desired
 feature.
-
-=head1 SEE ALSO
-
-L<Filename::Archive>, L<Filename::Audio>, etc.
-
-=head1 AUTHOR
-
-perlancar <perlancar@cpan.org>
-
-=head1 COPYRIGHT AND LICENSE
-
-This software is copyright (c) 2020 by perlancar@cpan.org.
-
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
 
 =cut

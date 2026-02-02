@@ -18,6 +18,7 @@ elsif ($^O eq 'MSWin32' || $^O eq 'cygwin' || $^O eq 'msys') {
 WriteMakefile(
     NAME              => 'nvec',
     VERSION_FROM      => '../../lib/nvec.pm',
+    MIN_PERL_VERSION  => '5.010',
     PREREQ_PM         => {},
     ABSTRACT          => 'SIMD-accelerated numeric vectors',
     AUTHOR            => 'LNATION <email@lnation.org>',

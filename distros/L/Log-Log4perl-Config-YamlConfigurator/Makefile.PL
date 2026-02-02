@@ -1,42 +1,75 @@
 use strict;
 use warnings;
 
-use Config                        qw( %Config );
-use ExtUtils::MakeMaker::CPANfile qw( WriteMakefile );
+use ExtUtils::MM          ();
+use File::Spec::Functions qw( catfile );
 
-my %WriteMakefileArgs = (
-  NAME             => 'Log::Log4perl::Config::YamlConfigurator',
-  AUTHOR           => 'Sven Willenbuecher <sven.willenbuecher@gmx.de>',
-  VERSION_FROM     => 'lib/Log/Log4perl/Config/YamlConfigurator.pm',
-  ABSTRACT_FROM    => 'lib/Log/Log4perl/Config/YamlConfigurator.pod',
-  LICENSE          => 'Perl_5',
-  MIN_PERL_VERSION => '5.006',
-  META_MERGE       => {
-    'meta-spec' => { version => 2 },
-    provides    => {
-      'Log::Log4perl::Config::YamlConfigurator' => {
-        file    => 'lib/Log/Log4perl/Config/YamlConfigurator.pm',
-        version => 'v1.0.0',
-      },
+my $git_base_url = 'https://codeberg.org/XSven';
+
+my $distname = 'Log-Log4perl-Config-YamlConfigurator';
+# Transitions: unstable => testing => stable
+my $release_status = 'stable';
+# PRE_RELEASE_NUMBER is set by CI/CD pipeline
+my $pre_release_extension = $release_status eq 'stable' ? undef : 'TRIAL' . ( $ENV{ PRE_RELEASE_NUMBER } // 1 );
+
+my @main_module_namespace = split /-/, $distname;
+my $main_module           = join '::', @main_module_namespace;
+my $main_module_file      = catfile( 'lib', @main_module_namespace ) . '.pm';
+my $main_module_podfile   = catfile( 'lib', @main_module_namespace ) . '.pod';
+# We are not using
+# VERSION_FROM  => $main_module_file
+# because we have to set the main module version in META_MERGE/provides too
+my $main_module_version = MM->parse_version( $main_module_file );
+
+my %att = (
+  NAME          => $main_module,
+  AUTHOR        => 'Sven Willenbuecher <sven.willenbuecher@gmx.de>',
+  VERSION       => $main_module_version,
+  ABSTRACT_FROM => $main_module_podfile,
+  # Another valid license string is "restricted"
+  # https://metacpan.org/pod/CPAN::Meta::Spec#license
+  LICENSE          => 'perl_5',
+  MIN_PERL_VERSION => '5.006000',
+  DISTNAME         => $distname,
+  DISTVNAME        => join( '-', $distname, $main_module_version, $pre_release_extension // () )
+  ,    # Related to the below release_status metadata field
+  EXE_FILES  => [ glob( join( ' ', map { catfile( $_, '*' ) } qw( bin script ) ) ) ],
+  META_MERGE => {
+    'meta-spec'    => { version => 2 },
+    release_status => $release_status,
+    provides       => {
+      $main_module => {
+        file    => $main_module_file,
+        version => $main_module_version
+      }
     },
     resources => {
       repository => {
         type => 'git',
-        url  => 'git://github.com/XSven/Log-Log4perl-Config-YamlConfigurator.git',
-        web  => 'https://github.com/XSven/Log-Log4perl-Config-YamlConfigurator',
+        url  => "$git_base_url/$distname.git",
+        web  => "$git_base_url/$distname"
       },
       bugtracker => {
-        web => 'https://github.com/XSven/Log-Log4perl-Config-YamlConfigurator/issues',
-      },
-    },
+        web => "$git_base_url/$distname/issues"
+      }
+    }
   },
-  clean     => { FILES                => 'Log-Log4perl-Config-YamlConfigurator-* cover_db' },
-  dist      => { COMPRESS             => 'gzip -9f', SUFFIX => 'gz', },
-  realclean => { FILES                => 'local' },
-  test      => { RECURSIVE_TEST_FILES => 1 },
+  # Check ExtUtils::MakeMaker Changes
+  NORECURS     => 1,
+  NO_PERLLOCAL => 1,
+  clean        => { FILES                => "$distname*" },
+  dist         => { TARFLAGS             => 'cf', COMPRESS => 'gzip -9f', SUFFIX => 'gz' },
+  realclean    => { FILES                => 'cover_db local' },
+  test         => { RECURSIVE_TEST_FILES => 1 }
 );
 
-require './maint/AuthorExtensions.pl'
-  unless ( $Config{ osname } =~ m/\A(?:freebsd|openbsd|solaris)\z/ or exists( $ENV{ MAKELEVEL } ) );
-
-WriteMakefile( %WriteMakefileArgs );
+if ( caller() ) {
+  *WriteMakefile = sub {
+    my $att = { @_ };
+    @ARGV ? $att->{ $ARGV[ 0 ] } : $att
+  }
+} else {
+  require ExtUtils::MakeMaker::CPANfile;
+  ExtUtils::MakeMaker::CPANfile->import
+}
+WriteMakefile( %att )

@@ -9,6 +9,8 @@ images/manual.png
 lib/App/mdee.pm
 minil.toml
 script/mdee
+share/theme/default.sh
+share/theme/warm.sh
 t/00_compile.t
 t/01_mdee.t
 t/test.md

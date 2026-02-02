@@ -1,0 +1,104 @@
+{
+   "abstract" : "Let Me See command",
+   "author" : [
+      "Kazumasa Utashiro"
+   ],
+   "dynamic_config" : 0,
+   "generated_by" : "Minilla/v3.1.29",
+   "license" : [
+      "perl_5"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : "2"
+   },
+   "name" : "App-lms",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "xt",
+         "inc",
+         "share",
+         "eg",
+         "examples",
+         "author",
+         "builder"
+      ]
+   },
+   "prereqs" : {
+      "configure" : {
+         "requires" : {
+            "Module::Build::Tiny" : "0.035"
+         }
+      },
+      "develop" : {
+         "requires" : {
+            "Test::CPAN::Meta" : "0",
+            "Test::MinimumVersion::Fast" : "0.04",
+            "Test::PAUSE::Permissions" : "0.07",
+            "Test::Pod" : "1.41",
+            "Test::Spellunker" : "v0.2.7"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "Command::Run" : "0",
+            "Encode" : "0",
+            "Getopt::EX::Hashed" : "1.05",
+            "Getopt::EX::Long" : "0",
+            "Getopt::EX::termcolor" : "0",
+            "List::Util" : "0",
+            "Pod::Usage" : "0",
+            "perl" : "v5.24.0"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "Test::More" : "0.98"
+         }
+      }
+   },
+   "provides" : {
+      "App::lms" : {
+         "file" : "lib/App/lms.pm",
+         "version" : "0.99"
+      },
+      "App::lms::Command" : {
+         "file" : "lib/App/lms/Command.pm"
+      },
+      "App::lms::Node" : {
+         "file" : "lib/App/lms/Node.pm"
+      },
+      "App::lms::Perl" : {
+         "file" : "lib/App/lms/Perl.pm"
+      },
+      "App::lms::Python" : {
+         "file" : "lib/App/lms/Python.pm"
+      },
+      "App::lms::Ruby" : {
+         "file" : "lib/App/lms/Ruby.pm"
+      },
+      "App::lms::default" : {
+         "file" : "lib/App/lms/default.pm"
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/kaz-utashiro/App-lms/issues"
+      },
+      "homepage" : "https://github.com/kaz-utashiro/App-lms",
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/kaz-utashiro/App-lms.git",
+         "web" : "https://github.com/kaz-utashiro/App-lms"
+      }
+   },
+   "version" : "0.99",
+   "x_authority" : "cpan:UTASHIRO",
+   "x_contributors" : [
+      "Kazumasa Utashiro <kaz@utashiro.com>"
+   ],
+   "x_serialization_backend" : "JSON::PP version 4.16",
+   "x_static_install" : 1
+}

@@ -54,7 +54,7 @@
    "provides" : {
       "Sub::HandlesVia::XS" : {
          "file" : "lib/Sub/HandlesVia/XS.pm",
-         "version" : "0.002000"
+         "version" : "0.003000"
       }
    },
    "release_status" : "stable",
@@ -73,6 +73,6 @@
       },
       "x_identifier" : "http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/project"
    },
-   "version" : "0.002000",
+   "version" : "0.003000",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

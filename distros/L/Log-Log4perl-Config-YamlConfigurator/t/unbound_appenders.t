@@ -9,7 +9,7 @@ use Test::Output qw( stderr_is );
 
 use Log::Log4perl qw();
 use Log::Log4perl::Level;
-use YAML qw( Load );
+use YAML::PP qw( Load );
 
 use Log::Log4perl::Config::YamlConfigurator ();
 

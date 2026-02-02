@@ -6,6 +6,12 @@ Home page:    <https://metacpan.org/release/Sub-HandlesVia-XS>
 Bug tracker:  <https://github.com/tobyink/p5-sub-handlesvia-xs/issues>
 Maintainer:   Toby Inkster (TOBYINK) <tobyink@cpan.org>
 
+0.003000	2026-02-01
+
+ - Added: Two new array methods: none and not_all_true.
+ - Use MULTICALL for most of the methods which run a callback on each array
+   element.
+
 0.002000	2026-01-29
 
  [ Bug Fixes ]

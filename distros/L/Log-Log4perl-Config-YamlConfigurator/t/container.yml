@@ -1,4 +1,4 @@
 logging:
   class: Beam::Wire
   args:
-    file: logging.yml
+    file: logging_container.yml

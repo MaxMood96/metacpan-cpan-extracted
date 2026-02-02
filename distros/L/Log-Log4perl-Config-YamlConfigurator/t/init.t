@@ -8,7 +8,7 @@ use Test::Fatal qw( exception );
 
 use Log::Log4perl ();
 use Log::Log4perl::Level;
-use YAML qw( Load );
+use YAML::PP qw( Load );
 
 use Log::Log4perl::Config::YamlConfigurator ();
 

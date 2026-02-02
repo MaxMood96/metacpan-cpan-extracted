@@ -1,0 +1,13 @@
+name = "App-lms"
+readme_from = "script/lms"
+badges = [ 'github-actions/test' ]
+authority = "cpan:UTASHIRO"
+
+module_maker = "ModuleBuildTiny"
+static_install = "auto"
+
+exclude_match = ['^CLAUDE\.md$']
+
+[release]
+branch = "main"
+do_not_upload_to_cpan = 0

@@ -1,5 +1,8 @@
 #define PERL_NO_GET_CONTEXT
 #include "xshelper.h"
+#include "multicall.h"
+
+#define DO_MULTICALL 1
 
 #define IsObject(sv)    (SvROK(sv) && SvOBJECT(SvRV(sv)))
 #define IsArrayRef(sv)  (SvROK(sv) && !SvOBJECT(SvRV(sv)) && SvTYPE(SvRV(sv)) == SVt_PVAV)
@@ -184,46 +187,41 @@ CODE:
     val = &PL_sv_yes;
 
     SV *sv_dollar_underscore = get_sv("_", 0);
-    SV *ixsv = sv_2mortal(newSViv(0));
     I32 len = av_len(array) + 1;
-    
-    ENTER;
-    SAVETMPS;
 
-    for (I32 i = 0; i < len; i++) {
-        SV **svp = av_fetch(array, i, 0);
-        if (!svp) continue;
-        SV *elem = *svp;
-        sv_setsv(sv_dollar_underscore, elem);
-        sv_setiv(ixsv, i);
-
-        PUSHMARK(SP);
-        XPUSHs(elem);
-        XPUSHs(ixsv);
-        PUTBACK;
-
-        I32 count = call_sv((SV *)callback, G_SCALAR);
-        SPAGAIN;
-
-        SV *ret;
-        if (count > 0)
-            ret = POPs;
-        else
-            ret = &PL_sv_undef;
-
-        if (!SvTRUE(ret)) {
-            PUTBACK;
-            val = &PL_sv_no;
-            break;
+    if ( DO_MULTICALL && !CvISXSUB(callback) ) {
+        dMULTICALL;
+        U8 gimme = G_SCALAR;
+        PUSH_MULTICALL(callback);
+        for (I32 i = 0; i < len; i++) {
+            SV **svp = av_fetch(array, i, 0);
+            SV *elem = svp ? *svp : &PL_sv_undef;
+            sv_setsv(sv_dollar_underscore, elem);
+            MULTICALL;
+            if (!SvTRUEx(*PL_stack_sp)) {
+                val = &PL_sv_no;
+                break;
+            }
         }
-
-        PUTBACK;
-        FREETMPS;
-        SAVETMPS;
+        POP_MULTICALL;
+    }
+    else {
+        for (I32 i = 0; i < len; i++) {
+            dSP;
+            SV **svp = av_fetch(array, i, 0);
+            SV *elem = svp ? *svp : &PL_sv_undef;
+            sv_setsv(sv_dollar_underscore, elem);
+            PUSHMARK(SP);
+            call_sv((SV*)callback, G_SCALAR);
+            if (!SvTRUEx(*PL_stack_sp)) {
+                val = &PL_sv_no;
+                break;
+            }
+        }
     }
 
     FREETMPS;
-    LEAVE;
+    SAVETMPS;
 
     RETURN_ARRAY_EXPECTATION;
 }
@@ -246,46 +244,41 @@ CODE:
     val = &PL_sv_no;
 
     SV *sv_dollar_underscore = get_sv("_", 0);
-    SV *ixsv = sv_2mortal(newSViv(0));
     I32 len = av_len(array) + 1;
 
-    ENTER;
-    SAVETMPS;
-
-    for (I32 i = 0; i < len; i++) {
-        SV **svp = av_fetch(array, i, 0);
-        if (!svp) continue;
-        SV *elem = *svp;
-        sv_setsv(sv_dollar_underscore, elem);
-        sv_setiv(ixsv, i);
-
-        PUSHMARK(SP);
-        XPUSHs(elem);
-        XPUSHs(ixsv);
-        PUTBACK;
-
-        I32 count = call_sv((SV *)callback, G_SCALAR);
-        SPAGAIN;
-
-        SV *ret;
-        if (count > 0)
-            ret = POPs;
-        else
-            ret = &PL_sv_undef;
-
-        if (SvTRUE(ret)) {
-            PUTBACK;
-            val = &PL_sv_yes;
-            break;
+    if ( DO_MULTICALL && !CvISXSUB(callback) ) {
+        dMULTICALL;
+        U8 gimme = G_SCALAR;
+        PUSH_MULTICALL(callback);
+        for (I32 i = 0; i < len; i++) {
+            SV **svp = av_fetch(array, i, 0);
+            SV *elem = svp ? *svp : &PL_sv_undef;
+            sv_setsv(sv_dollar_underscore, elem);
+            MULTICALL;
+            if (SvTRUEx(*PL_stack_sp)) {
+                val = &PL_sv_yes;
+                break;
+            }
         }
-
-        PUTBACK;
-        FREETMPS;
-        SAVETMPS;
+        POP_MULTICALL;
+    }
+    else {
+        for (I32 i = 0; i < len; i++) {
+            dSP;
+            SV **svp = av_fetch(array, i, 0);
+            SV *elem = svp ? *svp : &PL_sv_undef;
+            sv_setsv(sv_dollar_underscore, elem);
+            PUSHMARK(SP);
+            call_sv((SV*)callback, G_SCALAR);
+            if (SvTRUEx(*PL_stack_sp)) {
+                val = &PL_sv_yes;
+                break;
+            }
+        }
     }
 
     FREETMPS;
-    LEAVE;
+    SAVETMPS;
 
     RETURN_ARRAY_EXPECTATION;
 }
@@ -346,46 +339,42 @@ CODE:
     val = &PL_sv_undef;
 
     SV *sv_dollar_underscore = get_sv("_", 0);
-    SV *ixsv = sv_2mortal(newSViv(0));
     I32 len = av_len(array) + 1;
 
-    ENTER;
-    SAVETMPS;
-
-    for (I32 i = 0; i < len; i++) {
-        SV **svp = av_fetch(array, i, 0);
-        if (!svp) continue;
-        SV *elem = *svp;
-        sv_setsv(sv_dollar_underscore, elem);
-        sv_setiv(ixsv, i);
-
-        PUSHMARK(SP);
-        XPUSHs(elem);
-        XPUSHs(ixsv);
-        PUTBACK;
-
-        I32 count = call_sv((SV *)callback, G_SCALAR);
-        SPAGAIN;
-
-        SV *ret;
-        if (count > 0)
-            ret = POPs;
-        else
-            ret = &PL_sv_undef;
-
-        if (SvTRUE(ret)) {
-            PUTBACK;
-            val = newSVsv(elem);
-            break;
+    if ( DO_MULTICALL && !CvISXSUB(callback) ) {
+        dMULTICALL;
+        U8 gimme = G_SCALAR;
+        PUSH_MULTICALL(callback);
+        for (I32 i = 0; i < len; i++) {
+            SV **svp = av_fetch(array, i, 0);
+            SV *elem = svp ? *svp : &PL_sv_undef;
+            sv_setsv(sv_dollar_underscore, elem);
+            MULTICALL;
+            if (SvTRUEx(*PL_stack_sp)) {
+                val = newSVsv(*svp);
+                break;
+            }
         }
-
-        PUTBACK;
-        FREETMPS;
-        SAVETMPS;
+        POP_MULTICALL;
+    }
+    else {
+        for (I32 i = 0; i < len; i++) {
+            dSP;
+            SV **svp = av_fetch(array, i, 0);
+            if (!svp) continue;
+            SV *elem = svp ? *svp : &PL_sv_undef;
+            sv_setsv(sv_dollar_underscore, elem);
+            PUSHMARK(SP);
+            call_sv((SV*)callback, G_SCALAR);
+            if (SvTRUEx(*PL_stack_sp)) {
+                val = newSVsv(*svp);
+                break;
+            }
+        }
     }
 
     FREETMPS;
-    LEAVE;
+    SAVETMPS;
 
     RETURN_ARRAY_EXPECTATION;
 }
@@ -433,6 +422,54 @@ CODE:
 
     FREETMPS;
     LEAVE;
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : for_each2
+
+void
+shvxs_array_for_each2 (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_array_CALLBACK_SIG);
+    GET_ARRAY_FROM_SOURCE;
+
+    GET_CALLBACK_FROM_SOURCE(1);
+    if ( items != ( has_callback ? 1 : 2 ) ) croak(WRONG_NUMBER_OF_PARAMETERS);
+
+    SV *sv_dollar_underscore = get_sv("_", 0);
+    I32 len = av_len(array) + 1;
+
+    if ( DO_MULTICALL && !CvISXSUB(callback) ) {
+        dMULTICALL;
+        U8 gimme = G_VOID;
+        PUSH_MULTICALL(callback);
+        for (I32 i = 0; i < len; i++) {
+            SV **svp = av_fetch(array, i, 0);
+            SV *elem = svp ? *svp : &PL_sv_undef;
+            sv_setsv(sv_dollar_underscore, elem);
+            MULTICALL;
+        }
+        POP_MULTICALL;
+    }
+    else {
+        for (I32 i = 0; i < len; i++) {
+            dSP;
+            SV **svp = av_fetch(array, i, 0);
+            if (!svp) continue;
+            SV *elem = svp ? *svp : &PL_sv_undef;
+            sv_setsv(sv_dollar_underscore, elem);
+            PUSHMARK(SP);
+            call_sv((SV*)callback, G_VOID);
+        }
+    }
+
+    FREETMPS;
+    SAVETMPS;
 
     RETURN_ARRAY_EXPECTATION;
 }
@@ -486,38 +523,40 @@ CODE:
     out = newAV();
 
     SV *sv_dollar_underscore = get_sv("_", 0);
-    SV *ixsv = sv_2mortal(newSViv(0));
     I32 len = av_len(array) + 1;
 
-    ENTER;
-    SAVETMPS;
-
-    for (I32 i = 0; i < len; i++) {
-        SV **svp = av_fetch(array, i, 0);
-        if (!svp) continue;
-        SV *elem = *svp;
-        sv_setsv(sv_dollar_underscore, elem);
-        sv_setiv(ixsv, i);
-
-        PUSHMARK(SP);
-        XPUSHs(elem);
-        XPUSHs(ixsv);
-        PUTBACK;
-
-        I32 count = call_sv((SV *)callback, G_SCALAR);
-        SPAGAIN;
-
-        SV *ret = POPs;
-        if (count > 0 && SvTRUE(ret))
-            av_push(out, SV_SAFE_COPY(*svp));
-
-        PUTBACK;
-        FREETMPS;
-        SAVETMPS;
+    if ( DO_MULTICALL && !CvISXSUB(callback) ) {
+        dMULTICALL;
+        U8 gimme = G_SCALAR;
+        PUSH_MULTICALL(callback);
+        for (I32 i = 0; i < len; i++) {
+            SV **svp = av_fetch(array, i, 0);
+            SV *elem = svp ? *svp : &PL_sv_undef;
+            sv_setsv(sv_dollar_underscore, elem);
+            MULTICALL;
+            if (SvTRUEx(*PL_stack_sp)) {
+                av_push(out, SV_SAFE_COPY(*svp));
+            }
+        }
+        POP_MULTICALL;
+    }
+    else {
+        for (I32 i = 0; i < len; i++) {
+            dSP;
+            SV **svp = av_fetch(array, i, 0);
+            if (!svp) continue;
+            SV *elem = svp ? *svp : &PL_sv_undef;
+            sv_setsv(sv_dollar_underscore, elem);
+            PUSHMARK(SP);
+            call_sv((SV*)callback, G_SCALAR);
+            if (SvTRUEx(*PL_stack_sp)) {
+                av_push(out, SV_SAFE_COPY(*svp));
+            }
+        }
     }
 
     FREETMPS;
-    LEAVE;
+    SAVETMPS;
 
     RETURN_ARRAY_EXPECTATION;
 }
@@ -602,7 +641,6 @@ CODE:
     out = newAV();
 
     SV *sv_dollar_underscore = get_sv("_", 0);
-    SV *ixsv = sv_2mortal(newSViv(0));
     I32 len = av_len(array) + 1;
 
     ENTER;
@@ -613,11 +651,8 @@ CODE:
         if (!svp) continue;
         SV *elem = *svp;
         sv_setsv(sv_dollar_underscore, elem);
-        sv_setiv(ixsv, i);
 
         PUSHMARK(SP);
-        XPUSHs(elem);
-        XPUSHs(ixsv);
         PUTBACK;
 
         I32 count = call_sv((SV *)callback, G_ARRAY);
@@ -639,6 +674,120 @@ CODE:
 
     FREETMPS;
     LEAVE;
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : none
+
+void
+shvxs_array_none (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_array_CALLBACK_SIG);
+    GET_ARRAY_FROM_SOURCE;
+
+    GET_CALLBACK_FROM_SOURCE(1);
+    if ( items != ( has_callback ? 1 : 2 ) ) croak(WRONG_NUMBER_OF_PARAMETERS);
+
+    val = &PL_sv_yes;
+
+    SV *sv_dollar_underscore = get_sv("_", 0);
+    I32 len = av_len(array) + 1;
+
+    if ( DO_MULTICALL && !CvISXSUB(callback) ) {
+        dMULTICALL;
+        U8 gimme = G_SCALAR;
+        PUSH_MULTICALL(callback);
+        for (I32 i = 0; i < len; i++) {
+            SV **svp = av_fetch(array, i, 0);
+            SV *elem = svp ? *svp : &PL_sv_undef;
+            sv_setsv(sv_dollar_underscore, elem);
+            MULTICALL;
+            if (SvTRUEx(*PL_stack_sp)) {
+                val = &PL_sv_no;
+                break;
+            }
+        }
+        POP_MULTICALL;
+    }
+    else {
+        for (I32 i = 0; i < len; i++) {
+            dSP;
+            SV **svp = av_fetch(array, i, 0);
+            SV *elem = svp ? *svp : &PL_sv_undef;
+            sv_setsv(sv_dollar_underscore, elem);
+            PUSHMARK(SP);
+            call_sv((SV*)callback, G_SCALAR);
+            if (SvTRUEx(*PL_stack_sp)) {
+                val = &PL_sv_no;
+                break;
+            }
+        }
+    }
+
+    FREETMPS;
+    SAVETMPS;
+
+    RETURN_ARRAY_EXPECTATION;
+}
+
+#### array : not_all_true
+
+void
+shvxs_array_not_all_true (SV *invocant, ...)
+CODE:
+{
+    dTHX;
+    dSP;
+
+    UNPACK_SIG(shvxs_array_CALLBACK_SIG);
+    GET_ARRAY_FROM_SOURCE;
+
+    GET_CALLBACK_FROM_SOURCE(1);
+    if ( items != ( has_callback ? 1 : 2 ) ) croak(WRONG_NUMBER_OF_PARAMETERS);
+
+    val = &PL_sv_no;
+
+    SV *sv_dollar_underscore = get_sv("_", 0);
+    I32 len = av_len(array) + 1;
+
+    if ( DO_MULTICALL && !CvISXSUB(callback) ) {
+        dMULTICALL;
+        U8 gimme = G_SCALAR;
+        PUSH_MULTICALL(callback);
+        for (I32 i = 0; i < len; i++) {
+            SV **svp = av_fetch(array, i, 0);
+            SV *elem = svp ? *svp : &PL_sv_undef;
+            sv_setsv(sv_dollar_underscore, elem);
+            MULTICALL;
+            if (!SvTRUEx(*PL_stack_sp)) {
+                val = &PL_sv_yes;
+                break;
+            }
+        }
+        POP_MULTICALL;
+    }
+    else {
+        for (I32 i = 0; i < len; i++) {
+            dSP;
+            SV **svp = av_fetch(array, i, 0);
+            SV *elem = svp ? *svp : &PL_sv_undef;
+            sv_setsv(sv_dollar_underscore, elem);
+            PUSHMARK(SP);
+            call_sv((SV*)callback, G_SCALAR);
+            if (!SvTRUEx(*PL_stack_sp)) {
+                val = &PL_sv_yes;
+                break;
+            }
+        }
+    }
+
+    FREETMPS;
+    SAVETMPS;
 
     RETURN_ARRAY_EXPECTATION;
 }
@@ -948,6 +1097,9 @@ ALIAS:
     INSTALL_shvxs_array_any          = 5
     INSTALL_shvxs_array_all_true     = 6
     INSTALL_shvxs_array_sort         = 7
+    INSTALL_shvxs_array_for_each2    = 8
+    INSTALL_shvxs_array_none         = 9
+    INSTALL_shvxs_array_not_all_true = 10
 CODE:
 {
     dTHX;
@@ -982,6 +1134,18 @@ CODE:
         case 7:
             op = XS_Sub__HandlesVia__XS_shvxs_array_sort;
             rp = SHOULD_RETURN_OUT;
+            break;
+        case 8:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_for_each2;
+            rp = SHOULD_RETURN_INVOCANT;
+            break;
+        case 9:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_none;
+            rp = SHOULD_RETURN_VAL;
+            break;
+        case 10:
+            op = XS_Sub__HandlesVia__XS_shvxs_array_not_all_true;
+            rp = SHOULD_RETURN_VAL;
             break;
         default:
             croak("PANIC!");

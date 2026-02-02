@@ -1,11 +1,18 @@
 /*
  * object_compat.h - Perl compatibility macros for object
- * Supports Perl 5.14.0+
+ * Supports Perl 5.10.0+ with graceful degradation
+ * XOP API (5.14+), fallback to PL_custom_op_names (older)
  * Op sibling navigation (5.22+), refcount macros, and boot macros
  */
 
 #ifndef OBJECT_COMPAT_H
 #define OBJECT_COMPAT_H
+
+/* Devel::PPPort compatibility - provides many backported macros */
+#include "ppport.h"
+
+/* Include shared XOP compatibility for custom ops (5.14+ fallback) */
+#include "../xop_compat.h"
 
 /* Version checking macro */
 #ifndef PERL_VERSION_GE
@@ -14,10 +21,47 @@
        (PERL_VERSION > (v) || (PERL_VERSION == (v) && PERL_SUBVERSION >= (s)))))
 #endif
 
-/* Compile-time minimum version check - require 5.14.0 for custom ops and call checker */
-#if !PERL_VERSION_GE(5,14,0)
-#  error "object requires Perl 5.14.0 or later (custom op and call checker APIs)"
+/* Compile-time minimum version check - require 5.10.0 for basic features */
+#if !PERL_VERSION_GE(5,10,0)
+#  error "object requires Perl 5.10.0 or later"
 #endif
+
+/* C99 bool compatibility */
+#ifndef true
+#  define true 1
+#endif
+#ifndef false
+#  define false 0
+#endif
+
+/* OP_AELEMFAST_LEX - introduced in 5.16
+ * Don't define fallback - code should check if it exists */
+
+/* op_contextualize - introduced in 5.14, no-op fallback */
+#if !PERL_VERSION_GE(5,14,0)
+#  define op_contextualize(op, ctx) (op)
+#endif
+
+/* wrap_op_checker - introduced in 5.16 */
+#if !PERL_VERSION_GE(5,16,0)
+#  define wrap_op_checker(opcode, new_checker, old_ptr) \
+    do { \
+        *(old_ptr) = PL_check[opcode]; \
+        PL_check[opcode] = (new_checker); \
+    } while(0)
+#endif
+
+/* cv_set_call_checker - introduced in 5.14 (5.13.006)
+ * No-op fallback: call checkers are an optimization, not required for correctness */
+#if !PERL_VERSION_GE(5,14,0)
+#  define cv_set_call_checker(cv, checker, ckobj) ((void)0)
+#  define OBJECT_HAS_CALL_CHECKER 0
+#else
+#  define OBJECT_HAS_CALL_CHECKER 1
+#endif
+
+/* Backwards compatibility - alias for XOP_COMPAT_HAS_XOP */
+#define OBJECT_HAS_XOP XOP_COMPAT_HAS_XOP
 
 /* Op sibling macros - introduced in 5.22 */
 #ifndef OpHAS_SIBLING
@@ -52,7 +96,11 @@
 
 #if !PERL_VERSION_GE(5,22,0)
 #  ifndef Perl_xs_boot_epilog
-#    define Perl_xs_boot_epilog(aTHX_ ax) XSRETURN_YES
+#    ifdef USE_ITHREADS
+#      define Perl_xs_boot_epilog(ctx, ax) XSRETURN_YES
+#    else
+#      define Perl_xs_boot_epilog(ax) XSRETURN_YES
+#    endif
 #  endif
 #endif
 
@@ -68,6 +116,15 @@
 
 #ifndef PERL_UNUSED_ARG
 #  define PERL_UNUSED_ARG(x) ((void)(x))
+#endif
+
+/* PTR2IV/INT2PTR - should exist but provide fallback */
+#ifndef PTR2IV
+#  define PTR2IV(p) ((IV)(p))
+#endif
+
+#ifndef INT2PTR
+#  define INT2PTR(type, i) ((type)(i))
 #endif
 
 #endif /* OBJECT_COMPAT_H */

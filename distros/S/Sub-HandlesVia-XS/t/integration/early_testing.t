@@ -122,19 +122,17 @@ subtest "Hashref invocant" => sub {
 	is( [ Local::test_7($arr) ], [ 9 ] );
 
 	my $str2 = '';
-	my $str3 = '';
 	Sub::HandlesVia::XS::INSTALL_shvxs_array_for_each(
 		"Local::test_8",
 		{
 			arr_source         => Sub::HandlesVia::XS::ARRAY_SRC_DEREF_HASH,
 			arr_source_string  => 'arr',
-			callback           => sub { $str2 .= $_[0]; $str3 .= $_[1] },
+			callback           => sub { $str2 .= $_ },
 		},
 	);
 	
 	Local::test_8( $arr );
 	is( $str2, join( q{}, -3, -2, -1, 0, 1..5 ) );
-	is( $str3, join( q{}, 0..8 ) );
 };
 
 done_testing;

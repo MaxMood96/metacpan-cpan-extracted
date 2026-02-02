@@ -3,10 +3,6 @@
 
 mdee - Markdown, Easy on the Eyes
 
-<div>
-    <p><img width="750" src="https://raw.githubusercontent.com/tecolicom/App-mdee/main/images/manual.png">
-</div>
-
 # SYNOPSIS
 
     mdee [ options ] file ...
@@ -26,7 +22,7 @@ mdee - Markdown, Easy on the Eyes
      -m  --mode=#           light or dark (default: light)
      -B  --base-color=#     override theme's base color
                             (e.g., Ivory, #780043, (120,0,67))
-         --list-themes      list built-in themes
+         --list-themes      list available themes
          --show=#           set field visibility (e.g., italic=1)
      -C  --pane=#           number of columns
      -R  --row=#            number of rows
@@ -38,9 +34,13 @@ mdee - Markdown, Easy on the Eyes
 
 # VERSION
 
-Version 0.06
+Version 0.07
 
 # DESCRIPTION
+
+<div>
+    <p><img width="750" src="https://raw.githubusercontent.com/tecolicom/App-mdee/main/images/manual.png">
+</div>
 
 **mdee** is a multi-column Markdown viewer with syntax highlighting,
 combining [greple(1)](http://man.he.net/man1/greple) for colorization and [nup(1)](http://man.he.net/man1/nup) for paged output.
@@ -147,7 +147,33 @@ bold text, etc.).
 
 - **-t** _NAME_, **--theme**=_NAME_
 
-    Select a color theme.  Default is `default`.
+    Select a color theme.  Default is `default`.  Theme files are
+    searched in the following order:
+
+    - 1. User theme directory: `${XDG_CONFIG_HOME:-~/.config}/mdee/theme/NAME.sh`
+    - 2. Share theme directory: installed with the distribution under `auto/share/dist/App-mdee/theme/`
+    - 3. In-memory variables (built-in themes and themes defined in config.sh)
+
+    Theme files are Bash scripts that define associative arrays using
+    `declare -gA`.  Each theme should define a light variant with all
+    fields, and optionally a dark variant with only the differences
+    (dark inherits undefined fields from light):
+
+        # theme/mytheme.sh
+        declare -gA theme_mytheme_light=(
+            [base]='<DarkCyan>=y25'
+            [bold]='${base}D'
+            [h1]='L25DE/${base}'
+            ...all fields...
+        )
+        declare -gA theme_mytheme_dark=(
+            [base]='<DarkCyan>=y80'
+            [h1]='L00DE/${base}'
+            ...differences only...
+        )
+
+    The variable names must follow the pattern `theme_NAME_light` and
+    `theme_NAME_dark` (or `theme_NAME` for a mode-independent theme).
 
 - **-m** _MODE_, **--mode**=_MODE_
 
@@ -171,9 +197,39 @@ bold text, etc.).
     This is a shell script that can set defaults and override colors:
 
         # ~/.config/mdee/config.sh
-        default_mode='dark'              # set default mode
-        colors[base]='<DarkCyan>'        # override base color
-        colors[h1]='L25DE/${base}'       # header with base background
+        default[mode]='dark'             # set default mode
+        default[style]='pager'           # set default style
+        default[width]=100               # set default fold width
+        default[base_color]='DarkCyan'   # set default base color
+
+    The `default` associative array supports the following keys:
+
+    - `default[mode]` - Corresponds to `--mode` (e.g., `dark`, `light`)
+    - `default[theme]` - Corresponds to `--theme` (e.g., `default`)
+    - `default[style]` - Corresponds to `--style` (e.g., `pager`, `cat`)
+    - `default[width]` - Corresponds to `--width` (e.g., `100`)
+    - `default[base_color]` - Corresponds to `--base-color` (e.g., `DarkCyan`)
+
+    **Overriding theme colors**
+
+    There are two ways to customize colors in config.sh:
+
+    - **Theme definition (partial)** - modify specific keys before loading:
+
+            theme_default_light[base]='<DarkCyan>=y25'  # change base only
+            theme_default_dark[h1]='L00DE/${base}'      # change h1 only
+
+        Since `${base}` references are expanded after loading, changing the
+        base color automatically affects all derived colors (h1, h2, bold, etc.).
+
+    - **Full theme definition** - define a complete custom theme:
+
+            declare -A theme_mytheme_light=(
+                [base]='<DarkCyan>=y25'
+                [h1]='L25DE/${base}'
+                [bold]='${base}D'
+                ...
+            )
 
     Color specifications use [Term::ANSIColor::Concise](https://metacpan.org/pod/Term%3A%3AANSIColor%3A%3AConcise) format.
     The `FG/BG` notation specifies foreground and background colors
@@ -216,8 +272,8 @@ bold text, etc.).
     The automatic luminance adjustment values can be customized with the
     `--adjust` option:
 
-        --adjust 'light==y30'      # use =y30 instead of =y25 for light mode
-        --adjust 'dark==y70'       # use =y70 instead of =y80 for dark mode
+        --adjust light='=y30'      # use =y30 instead of =y25 for light mode
+        --adjust dark='=y70'       # use =y70 instead of =y80 for dark mode
 
     **Note**: Basic ANSI color codes (`R`, `G`, `B`, etc.) cannot be used
     because heading variations require luminance adjustment, which only works
@@ -225,7 +281,7 @@ bold text, etc.).
 
 - **--list-themes**
 
-    List built-in themes with color samples and exit.
+    List available themes with color samples and exit.
 
 ## Highlight Options
 
@@ -243,7 +299,8 @@ bold text, etc.).
     The special field `all` affects all fields and is processed first.
 
     Available fields: `comment`, `bold`, `italic`, `strike`, `h1`,
-    `h2`, `h3`, `h4`, `h5`, `h6`, `inline_code`, `code_block`.
+    `h2`, `h3`, `h4`, `h5`, `h6`, `inline_code`, `code_block`,
+    `link`, `image`, `image_link`.
 
     All fields are enabled by default.
 
@@ -363,7 +420,7 @@ The overall data flow is:
     [pager] --- Pager Output (pager style)
         |
         v
-    Terminal/Pager
+    Terminal
 
 ## Pipeline Architecture
 
@@ -505,7 +562,7 @@ When using `less` as pager, version 566 or later is required with
 `-R` option.
 
 For OSC 8 specification, see:
-[https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5fedd](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5fedd)
+[https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda)
 
 # SEE ALSO
 

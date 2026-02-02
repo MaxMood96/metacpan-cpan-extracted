@@ -1,3 +1,9 @@
+0.017   2026-02-02  Released-By: PERLANCAR; Urgency: medium
+
+        - Make tempfile also ends with .pdf instead of .tmp to avoid
+          problem with AppArmor.
+
+
 0.016   2024-09-28  Released-By: PERLANCAR; Urgency: medium
 
         - Split convert-epub-to-pdf to another dist.

@@ -6,6 +6,12 @@
 #ifndef NOOP_COMPAT_H
 #define NOOP_COMPAT_H
 
+/* Devel::PPPort compatibility - provides many backported macros */
+#include "ppport.h"
+
+/* Include shared XOP compatibility for custom ops (5.14+ fallback) */
+#include "../xop_compat.h"
+
 /* Version checking */
 #ifndef PERL_VERSION_DECIMAL
 #  define PERL_VERSION_DECIMAL(r,v,s) ((r)*1000000 + (v)*1000 + (s))
@@ -27,7 +33,11 @@
 /* Boot epilog - 5.22+ */
 #if !PERL_VERSION_GE(5,22,0)
 #  ifndef Perl_xs_boot_epilog
-#    define Perl_xs_boot_epilog(aTHX_ ax) XSRETURN_YES
+#    ifdef USE_ITHREADS
+#      define Perl_xs_boot_epilog(ctx, ax) XSRETURN_YES
+#    else
+#      define Perl_xs_boot_epilog(ax) XSRETURN_YES
+#    endif
 #  endif
 #endif
 

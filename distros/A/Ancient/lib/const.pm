@@ -2,7 +2,7 @@ package
     const;
 use strict;
 use warnings;
-our $VERSION = '0.10';
+our $VERSION = '0.14';
 require XSLoader;
 XSLoader::load('const', $VERSION);
 1;
@@ -143,21 +143,6 @@ interpolated in strings without ceremony:
     use const;
     my $PI = const::c(3.14159);
     print "Pi is $PI\n";              # Natural
-
-=head2 Benchmark
-
-    use Benchmark qw(:all);
-    use const;
-    use Const::Fast;
-
-    # Creation benchmark
-    cmpthese(-1, {
-        'const::c literal' => sub { my $x = const::c(42) },
-        'const::c var'     => sub { my $v = 42; my $x = const::c($v) },
-        'Const::Fast'      => sub { Const::Fast::const my $x => 42 },
-    });
-
-    # const::c literal is fastest - compile-time optimization
 
 =head1 SEE ALSO
 

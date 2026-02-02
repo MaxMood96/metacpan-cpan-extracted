@@ -1,0 +1,74 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Acme::UPnP - Cheap UPnP Port Mapping (IGD)
+
+=head1 SYNOPSIS
+
+    use Acme::UPnP;
+
+    my $mapper = Acme::UPnP->new( );
+
+    # Discovery
+    if ( $mapper->discover_device( ) ) {
+        say 'Found router: ' . $mapper->upnp_device->getfriendlyname( );
+
+        # Map a port
+        $mapper->map_port( 8080, 8080, 'TCP', 'My Silly App' );
+    }
+
+    # Clean up on exit
+    $mapper->unmap_port( 8080, 'TCP' );
+
+=head1 DESCRIPTION
+
+C<Acme::UPnP> provides a high-level, easy-to-use interface for the UPnP Internet Gateway Device (IGD) protocol. It
+automates the complex task of requesting port forwarding from residential routers, which is often required for
+peer-to-peer applications and local servers to be accessible from the internet.
+
+=head1 PUBLIC METHODS
+
+=head2 C<discover_device()>
+
+Scans the local network for UPnP-capable gateway devices. Returns true if a device was successfully identified.
+
+=head2 C<map_port( $internal, $external, $protocol, $description )>
+
+Requests a new port mapping.
+
+=over
+
+=item C<$protocol>: 'TCP' or 'UDP'.
+
+=item C<$description>: A label for the router's mapping table.
+
+=item Triggers C<map_success> or C<map_failed> events.
+
+=back
+
+=head2 C<unmap_port( $external, $protocol )>
+
+Removes an existing port mapping.
+
+=head2 C<get_external_ip( )>
+
+Queries the router for its public WAN IP address.
+
+=head2 C<is_available( )>
+
+Returns boolean indicating if the required L<Net::UPnP> dependency is installed.
+
+=head1 AUTHOR
+
+Sanko Robinson E<lt>sanko@cpan.orgE<gt>
+
+=head1 COPYRIGHT
+
+Copyright (C) 2026 by Sanko Robinson.
+
+This library is free software; you can redistribute it and/or modify it under the terms of the Artistic License 2.0.
+
+=cut

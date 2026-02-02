@@ -3,7 +3,7 @@ use ExtUtils::MakeMaker;
 use Devel::CheckLib 'assert_lib';
 use Config;
 
-my $include = "-I. -Iinclude";
+my $include = "-Ilib/OpenGL/Modern -Iinclude";
 my $libs;
 my $define = "-DGLEW_NO_GLU -DGLEW_STATIC";
 my $DYNS;
@@ -43,6 +43,7 @@ WriteMakefile(
     'Capture::Tiny' => 0,
     'Test::More' => '0.88',
   },
+  TYPEMAPS => [qw(lib/OpenGL/Modern/Install/typemap)],
   META_MERGE => {
     "meta-spec" => { version => 2 },
     dynamic_config => 0,
@@ -62,15 +63,28 @@ WriteMakefile(
   XSBUILD => {
     xs => {
       'lib/OpenGL/Modern' => {
-        OBJECT => 'lib/OpenGL/Modern$(OBJ_EXT) glew$(OBJ_EXT)',
+        OBJECT => join(' ', map "lib/OpenGL/Modern$_\$(OBJ_EXT)", '', qw(/glew /gl_counts /oglm)),
+      },
+      'lib/OpenGL/Modern/Const' => {
+        OBJECT => join(' ', map "lib/OpenGL/Modern/$_\$(OBJ_EXT)", qw(Const glew oglm)),
       },
     },
   },
   depend           => {
-    'lib/OpenGL/Modern$(OBJ_EXT)' => 'glew-context.c include/GL/glew.h include/GL/wglew.h gl_errors.h auto-xs.inc', # last is not accurate but forced by XSMULTI which has no intermediate .c target
-    'lib/OpenGL/Modern/Const$(OBJ_EXT)' => 'include/GL/glew.h include/GL/wglew.h const.h',
+    'lib/OpenGL/Modern$(OBJ_EXT)' => join(' ',
+      qw(auto-xs.inc include/GL/glew.h include/GL/wglew.h),
+      map "lib/OpenGL/Modern/$_", qw(
+        glew-context.c gl_counts.h gl_errors.h Install/typemap oglm.h
+    )), # first and last are not accurate but forced by XSMULTI which has no intermediate .c target
+    'lib/OpenGL/Modern/Const$(OBJ_EXT)' => join(' ',
+      qw(auto-xs-enums.inc auto-xs-var.inc include/GL/glew.h include/GL/wglew.h),
+      map "lib/OpenGL/Modern/$_", qw(
+        const.h oglm.h
+    )),
+    'lib/OpenGL/Modern/gl_counts$(OBJ_EXT)' => 'include/GL/glew.h',
   },
-  clean => { FILES => 'auto-xs.inc const.h lib/OpenGL/Modern/Config.pm' },
+  clean => { FILES => 'auto-xs.inc auto-xs-enums.inc auto-xs-var.inc '.join ' ', map qq{lib/OpenGL/Modern/$_},
+    qw(const.h Config.pm glew$(OBJ_EXT) gl_counts$(OBJ_EXT) oglm$(OBJ_EXT)) },
   %buildargs,
 );
 
@@ -87,7 +101,9 @@ sub postamble {
 auto-xs.inc : $deps
 \t\$(PERLRUN) -Ilib utils/generate-XS.pl
 
-const.h : lib/OpenGL/Modern/Registry.pm
+auto-xs-enums.inc auto-xs-var.inc : auto-xs.inc
+
+lib/OpenGL/Modern/const.h : lib/OpenGL/Modern/Registry.pm
 \t$const_cmd >\$@
 EOF
 }
@@ -96,7 +112,7 @@ sub init_PM {
   $eumm->SUPER::init_PM;
   my $pm = $eumm->{PM};
   delete @$pm{grep /(?:\.(?:c|xs|bs)|\Q$::Config{obj_ext}\E)$/, keys %$pm};
-  delete @$pm{grep /\.pl$/, keys %$pm};
+  delete @$pm{grep /\.(?:pl|h)$/, keys %$pm};
 }
 }
 

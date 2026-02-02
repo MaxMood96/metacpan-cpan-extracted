@@ -15,6 +15,7 @@ doap.ttl
 fallback/const-c.inc
 fallback/const-xs.inc
 lib/Sub/HandlesVia/XS.pm
+multicall.h
 ppport.h
 src/Array.c
 src/String.c
@@ -34,11 +35,14 @@ t/unit/array/clear.t
 t/unit/array/count.t
 t/unit/array/first.t
 t/unit/array/for_each.t
+t/unit/array/for_each2.t
 t/unit/array/get.t
 t/unit/array/grep.t
 t/unit/array/is_empty.t
 t/unit/array/join.t
 t/unit/array/map.t
+t/unit/array/none.t
+t/unit/array/not_all_true.t
 t/unit/array/peek.t
 t/unit/array/peekend.t
 t/unit/array/pop.t

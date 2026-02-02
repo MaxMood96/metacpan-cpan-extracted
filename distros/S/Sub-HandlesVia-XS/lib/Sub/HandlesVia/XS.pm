@@ -8,7 +8,7 @@ use Types::Common -is, -types;
 
 BEGIN {
 	our $AUTHORITY = 'cpan:TOBYINK';
-	our $VERSION   = '0.002000';
+	our $VERSION   = '0.003000';
 	
 	require XSLoader;
 	__PACKAGE__->XSLoader::load( $VERSION );

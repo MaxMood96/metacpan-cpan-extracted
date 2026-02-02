@@ -4,7 +4,7 @@ use v5.14;
 use warnings;
 use utf8;
 
-our $VERSION = "2.2702";
+our $VERSION = "2.3302";
 
 use Data::Dumper;
 {
@@ -17,7 +17,6 @@ use Carp;
 use List::Util qw(pairmap pairgrep);
 use Scalar::Util qw(looks_like_number);
 use Text::VisualWidth::PP 'vwidth';
-sub pwidth { vwidth $_[0] =~ s/\X\cH{1,2}//gr }
 
 ######################################################################
 use Exporter 'import';
@@ -53,21 +52,26 @@ our $nonspace_re = qr{ \p{IsPrintableLatin} }x;
 our $reset_re    = qr{ \e \[ [0;]* m }x;
 our $color_re    = qr{ \e \[ [\d;]* m }x;
 our $erase_re    = qr{ \e \[ [\d;]* K }x;
-our $csi_re      = qr{
-    # see ECMA-48 5.4 Control sequences
-    (?: \e\[ | \x9b )	# csi
-    [\x30-\x3f]*	# parameter bytes
-    [\x20-\x2f]*	# intermediate bytes
-    [\x40-\x7e]		# final byte
-}x;
-our $osc_re      = qr{
+
+# see ECMA-48 5.4 Control sequences
+my  $csi_start       = qr{ (?: \e\[ | \x9b ) }x;
+my  $csi_parameter   = qr/[\x30-\x3f]*+/;
+my  $csi_itermidiate = qr/[\x20-\x2f]*+/;
+my  $csi_final       = qr/[\x40-\x7e]/;
+our $csi_body_re     = qr/${csi_start}${csi_parameter}${csi_itermidiate}/;
+our $csi_re          = qr/${csi_start}${csi_parameter}${csi_itermidiate}${csi_final}/;
+
+our $osc_re          = qr{
     # see ECMA-48 8.3.89 OSC - OPERATING SYSTEM COMMAND
     (?: \e\] | \x9d )		# osc
-    [\x08-\x13\x20-\x7d]*+	# command
+    [\x08-\x0d\x20-\x7e]*+	# command
     (?: \e\\ | \x9c | \a )	# st: string terminator
 }x;
 
-use constant SGR_RESET => "\e[m";
+use constant SGR_RESET  => "\e[m";
+use constant OSC8_RESET => "\e]8;;\e\\";
+
+sub pwidth { vwidth $_[0] =~ s/\X\cH{1,2}//gr =~ s/${osc_re}//gr }
 
 sub IsPrintableLatin {
     return <<"END";
@@ -82,6 +86,7 @@ sub IsWideSpacing {
 +utf8::East_Asian_Width=Wide
 +utf8::East_Asian_Width=FullWidth
 -utf8::Nonspacing_Mark
+-utf8::Default_Ignorable_Code_Point
 END
 }
 
@@ -91,6 +96,7 @@ sub IsWideAmbiguousSpacing {
 +utf8::East_Asian_Width=FullWidth
 +utf8::East_Asian_Width=Ambiguous
 -utf8::Nonspacing_Mark
+-utf8::Default_Ignorable_Code_Point
 END
 }
 
@@ -268,6 +274,7 @@ sub configure {
 my @color_stack;
 my @bg_stack;
 my @reset;
+my $osc8_link;
 sub put_reset { @reset = shift };
 sub pop_reset {
     @reset ? do { @color_stack = (); pop @reset } : '';
@@ -309,6 +316,7 @@ sub fold {
     my $eol = '';
     my $room = $width;
     @bg_stack = @color_stack = @reset = ();
+    $osc8_link = undef;
     my $unremarkable_re =
 	$opt->{expand} ? qr/[^\p{IsEOL}\e\t]/
 		       : qr/[^\p{IsEOL}\e]/;
@@ -331,19 +339,32 @@ sub fold {
 	}
 	# carriage return
 	if (s/\A(\r+)//) {
-	    $folded .= $1;
-	    $room = $width;
-	    next;
+	    if (length == 0) {
+		# this must be the part of CRNL
+		$eol = $1;
+		last;
+	    } else {
+		$folded .= $1;
+		$room = $width;
+		next;
+	    }
 	}
 	# ECMA-48 OPERATING SYSTEM COMMAND
 	if (s/\A($osc_re)//) {
-	    $folded .= $1 unless $obj->{discard}->{OSC};
+	    my $osc = $1;
+	    unless ($obj->{discard}->{OSC}) {
+		$folded .= $osc;
+		if ($osc =~ /^(?:\e\]|\x9d)8;[^;]*;(.*?)(?:\e\\|\x9c|\a)$/) {
+		    $osc8_link = $1 ne '' ? $osc : undef;
+		}
+	    }
 	    next;
 	}
 	# erase line (assume 0)
 	if (s/\A($erase_re)//) {
 	    $folded .= $1 unless $obj->{discard}->{EL};
-	    @bg_stack = @color_stack;
+	    @bg_stack = grep { !/$erase_re/ } @color_stack;
+	    push @color_stack, $1;
 	    next;
 	}
 	# reset
@@ -367,6 +388,12 @@ sub fold {
 	    $folded .= $1;
 	    push @color_stack, $1;
 	    next;
+	}
+
+	# imcomplete CSI
+	if (s/\A(\e+|$csi_body_re)\z//) {
+	    $folded .= $1;
+	    last;
 	}
 
 	# tab
@@ -428,8 +455,8 @@ sub fold {
     if ($word_char_re
 	and my($w2) = /\A( (?: ${word_char_re} \cH ? ) + )/x
 	and my($lead, $w1) = $folded =~ m{
-		\A ## avoid CSI final char making a word
-		   ( (?: [^\e]* ${csi_re}++ ) *+ .*? )
+		\A ## avoid CSI/OSC final char making a word
+		   ( (?: [^\e]* (?:${csi_re}|${osc_re})++ ) *+ .*? )
 		   ( (?: ${word_char_re} \cH ? ) + )
 		\z }x
     ) {
@@ -438,7 +465,8 @@ sub fold {
 	my $l = pwidth($w1);
 	## prefix length
 	my $p = $opt->{prefix} eq '' ? 0 : vwidth($opt->{prefix});
-	if ($room + $l < $width - $p and $l + pwidth($w2) <= $width - $p) {
+	if ($room + $l < $width - $p and $l + pwidth($w2) <= $width - $p
+	    and pwidth($lead) > 0) {
 	    $folded = $lead;
 	    $_ = $w1 . pop_reset() . $_;
 	    $room += $l;
@@ -454,7 +482,7 @@ sub fold {
 			    (?: ($prohibition_re{end}) (?: \cH{1,2} \g{-1})* )+
 			  ) \z
 			}xp
-	    and ${^PREMATCH} ne ''
+	    and ${^PREMATCH} ne '' and pwidth(${^PREMATCH}) > 0
 	    and (my $w = pwidth $+{runout}) <= $opt->{runout}) {
 
 	    $folded = ${^PREMATCH};
@@ -495,11 +523,14 @@ sub fold {
 	$folded .= SGR_RESET;
 	$_ = join '', @color_stack, $_ if $_ ne '';
     }
+    if (defined $osc8_link) {
+	$folded .= OSC8_RESET;
+	$_ = $osc8_link . $_ if $_ ne '';
+    }
 
     if ($opt->{padding} and $room > 0) {
 	my $padding = $opt->{padchar} x $room;
 	if (@bg_stack) {
-	    $padding .= $opt->{padchar} x $opt->{runin} if $opt->do_runin;
 	    $padding = join '', @bg_stack, $padding, SGR_RESET;
 	}
 	$folded .= $padding;
@@ -554,8 +585,10 @@ sub retrieve {
     my $obj = shift;
     local *_ = \$obj->{text};
     return '' if not defined $_;
-    (my $folded, $_) = $obj->fold($_, @_);
-    $_ = undef if length == 0;
+    (my $folded, my $rest) = $obj->fold($_, @_);
+    die "panic: retrieve: no progress in fold"
+	if length $rest and length $rest >= length;
+    $_ = length $rest ? $rest : undef;
     $folded;
 }
 
@@ -600,7 +633,7 @@ Text::ANSI::Fold - Text folding library supporting ANSI terminal sequence and As
 
 =head1 VERSION
 
-Version 2.2702
+Version 2.3302
 
 =head1 SYNOPSIS
 
@@ -635,6 +668,10 @@ the width is calculated by its visible representation.  If the text is
 divided in the middle of colored region, reset sequence is appended to
 the former text, and color recover sequence is inserted before the
 latter string.
+
+OSC 8 hyperlink sequences are also handled properly.  If the text is
+divided in the middle of a hyperlink, the link is closed at the end of
+the former text and reopened at the beginning of the latter string.
 
 This module also support Unicode Asian full-width and non-spacing
 combining characters properly.  Japanese text formatting with
@@ -754,7 +791,7 @@ use C<text> and C<chops> in series:
 
     print join "\n", $obj->text($string)->chops;
 
-Actually, text can be set by c<new> or C<configure> method through
+Actually, text can be set by C<new> or C<configure> method through
 C<text> parameter.  Next program just works.
 
     use Text::ANSI::Fold;
@@ -864,6 +901,9 @@ Specify the list reference of control sequence name to be discarded.
 B<EL> means Erase Line; B<OSC> means Operating System Command, defined
 in ECMA-48.  Erase Line right after RESET sequence is always kept.
 
+When OSC is discarded, OSC 8 hyperlink state tracking is also
+disabled.
+
 =item B<linebreak> => I<mode>
 
 =item B<runin> => I<width>
@@ -893,6 +933,18 @@ Import-tag C<:constants> can be used to access these constants.
 
 Option B<runin> and B<runout> is used to set maximum width of moving
 characters.  Default values are both 2.
+
+=item B<margin> => I<width>
+
+This option reserves a margin space within the specified width for
+run-in operation.  When margin is specified, the actual folding width
+becomes C<width - margin>, and the margin space is used for run-in
+characters.  Any unused margin space is filled with padding characters
+if padding is enabled.
+
+If margin is 0 (default), run-in may cause the result to exceed the
+specified width.  Set margin equal to or greater than runin value to
+ensure the result always fits within the specified width.
 
 =item B<splitwide> => I<bool>
 
@@ -1102,7 +1154,7 @@ Kazumasa Utashiro
 
 =head1 LICENSE
 
-Copyright ©︎ 2018-2024 Kazumasa Utashiro.
+Copyright ©︎ 2018-2025 Kazumasa Utashiro.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.

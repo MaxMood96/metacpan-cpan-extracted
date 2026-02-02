@@ -11,6 +11,11 @@
 #include "perl.h"
 #include "XSUB.h"
 
+/* XS_EXTERNAL compatibility - introduced in 5.16 */
+#ifndef XS_EXTERNAL
+#  define XS_EXTERNAL(name) XS(name)
+#endif
+
 /* Include the util export registry API */
 #include "../util/util_export.h"
 

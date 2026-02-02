@@ -24,13 +24,17 @@ sub find {
             "POL-P1",   # Your mail server's IP Address is listed on the Spamhaus PBL.
             "POL-P2",   # Facebook will no longer accept mail from your mail server's IP Address.
             "POL-P3",   # Facebook is not accepting messages from your mail server. This will persist for 4 to 8 hours.
-            "POL-P4",   # Facebook is not accepting messages from your mail server. This will persist for 24 to 48 hours.
-            "POL-T1",   # Facebook is not accepting messages from your mail server, but they may be retried later. This will persist for 1 to 2 hours.
-            "POL-T2",   # Facebook is not accepting messages from your mail server, but they may be retried later. This will persist for 4 to 8 hours.
-            "POL-T3",   # Facebook is not accepting messages from your mail server, but they may be retried later. This will persist for 24 to 48 hours.
+            "POL-P4",   # ". This will persist for 24 to 48 hours.
+            "POL-T1",   # ", but they may be retried later. This will persist for 1 to 2 hours.
+            "POL-T2",   # ", but they may be retried later. This will persist for 4 to 8 hours.
+            "POL-T3",   # ", but they may be retried later. This will persist for 24 to 48 hours.
         ],
         "contenterror" => [
             "MSG-P2",   # The message contains an attachment type that Facebook does not accept.
+        ],
+        "emailtoolarge" => [
+            "MSG-P1",   # The message exceeds Facebook's maximum allowed size.
+            "INT-P2",   # The message exceeds Facebook's maximum allowed size.
         ],
         "filtered" => [
             "RCP-P2",   # The attempted recipient's preferences prevent messages from being delivered.
@@ -39,15 +43,18 @@ sub find {
         "mailboxfull" => [
             "INT-P7",   # The attempted recipient has exceeded their storage quota.
         ],
-        "mesgtoobig" => [
-            "MSG-P1",   # The message exceeds Facebook's maximum allowed size.
-            "INT-P2",   # The message exceeds Facebook's maximum allowed size.
-        ],
         "policyviolation" => [
             "POL-P8",   # The message does not comply with Facebook's abuse policies and will not be accepted.
         ],
         "notcompliantrfc" => [
             "MSG-P3",   # The message contains multiple instances of a header field that can only be present once.
+        ],
+        "ratelimited" => [
+            "CON-T1",   # Facebook's mail server currently has too many connections open to allow another one.
+            "CON-T2",   # Your mail server currently has too many connections open to Facebook's mail servers.
+            "CON-T3",   # Your mail server has opened too many new connections to Facebook's mail servers in a short period of time.
+            "CON-T4",   # Your mail server has exceeded the maximum number of recipients for its current connection.
+            "MSG-T1",   # The number of recipients on the message exceeds Facebook's allowed maximum.
         ],
         "rejected" => [
             "DNS-P1",   # Your SMTP MAIL FROM domain does not exist.
@@ -68,17 +75,10 @@ sub find {
             "RCP-T1",   # The attempted recipient address is not currently available due to an internal system issue. 
             "INT-Tx",   # These codes indicate a temporary issue internal to Facebook's system.
         ],
-        "toomanyconn" => [
-            "CON-T1",   # Facebook's mail server currently has too many connections open to allow another one.
-            "CON-T2",   # Your mail server currently has too many connections open to Facebook's mail servers.
-            "CON-T3",   # Your mail server has opened too many new connections to Facebook's mail servers in a short period of time.
-            "CON-T4",   # Your mail server has exceeded the maximum number of recipients for its current connection.
-            "MSG-T1",   # The number of recipients on the message exceeds Facebook's allowed maximum.
-        ],
         "userunknown" => [
             "RCP-P1",   # The attempted recipient address does not exist.
             "INT-P1",   # The attempted recipient address does not exist.
-            "INT-P3",   # The attempted recpient group address does not exist.
+            "INT-P3",   # The attempted recipient group address does not exist.
             "INT-P4",   # The attempted recipient address does not exist.
         ],
         "virusdetected" => [
@@ -128,7 +128,7 @@ azumakuniyuki
 
 =head1 COPYRIGHT
 
-Copyright (C) 2024-2025 azumakuniyuki, All rights reserved.
+Copyright (C) 2024-2026 azumakuniyuki, All rights reserved.
 
 =head1 LICENSE
 

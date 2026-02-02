@@ -1,11 +1,11 @@
-[![Actions Status](https://github.com/tecolicom/Text-ANSI-Fold/workflows/test/badge.svg)](https://github.com/tecolicom/Text-ANSI-Fold/actions) [![MetaCPAN Release](https://badge.fury.io/pl/Text-ANSI-Fold.svg)](https://metacpan.org/release/Text-ANSI-Fold)
+[![Actions Status](https://github.com/tecolicom/Text-ANSI-Fold/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/tecolicom/Text-ANSI-Fold/actions?workflow=test) [![MetaCPAN Release](https://badge.fury.io/pl/Text-ANSI-Fold.svg)](https://metacpan.org/release/Text-ANSI-Fold)
 # NAME
 
 Text::ANSI::Fold - Text folding library supporting ANSI terminal sequence and Asian wide characters with prohibition character handling.
 
 # VERSION
 
-Version 2.2702
+Version 2.3302
 
 # SYNOPSIS
 
@@ -40,6 +40,10 @@ the width is calculated by its visible representation.  If the text is
 divided in the middle of colored region, reset sequence is appended to
 the former text, and color recover sequence is inserted before the
 latter string.
+
+OSC 8 hyperlink sequences are also handled properly.  If the text is
+divided in the middle of a hyperlink, the link is closed at the end of
+the former text and reopened at the beginning of the latter string.
 
 This module also support Unicode Asian full-width and non-spacing
 combining characters properly.  Japanese text formatting with
@@ -159,7 +163,7 @@ use `text` and `chops` in series:
 
     print join "\n", $obj->text($string)->chops;
 
-Actually, text can be set by c&lt;new> or `configure` method through
+Actually, text can be set by `new` or `configure` method through
 `text` parameter.  Next program just works.
 
     use Text::ANSI::Fold;
@@ -267,6 +271,9 @@ function as well as **new** and **configure** method.
     **EL** means Erase Line; **OSC** means Operating System Command, defined
     in ECMA-48.  Erase Line right after RESET sequence is always kept.
 
+    When OSC is discarded, OSC 8 hyperlink state tracking is also
+    disabled.
+
 - **linebreak** => _mode_
 - **runin** => _width_
 - **runout** => _width_
@@ -294,6 +301,18 @@ function as well as **new** and **configure** method.
 
     Option **runin** and **runout** is used to set maximum width of moving
     characters.  Default values are both 2.
+
+- **margin** => _width_
+
+    This option reserves a margin space within the specified width for
+    run-in operation.  When margin is specified, the actual folding width
+    becomes `width - margin`, and the margin space is used for run-in
+    characters.  Any unused margin space is filled with padding characters
+    if padding is enabled.
+
+    If margin is 0 (default), run-in may cause the result to exceed the
+    specified width.  Set margin equal to or greater than runin value to
+    ensure the result always fits within the specified width.
 
 - **splitwide** => _bool_
 - **lefthalf** => _char_
@@ -484,7 +503,7 @@ Kazumasa Utashiro
 
 # LICENSE
 
-Copyright ©︎ 2018-2024 Kazumasa Utashiro.
+Copyright ©︎ 2018-2025 Kazumasa Utashiro.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.

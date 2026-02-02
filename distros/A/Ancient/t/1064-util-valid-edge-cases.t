@@ -5,38 +5,48 @@ use Test::More;
 use lib 't/lib';
 
 use util qw(
-    first_inline list_callbacks has_callback register_callback
+    list_callbacks has_callback register_callback
     is_between clamp sign maybe
     stub_true stub_false stub_array stub_hash stub_string stub_zero
     force lazy memo
 );
 
+# first_inline requires MULTICALL API (Perl 5.11+)
+my $has_first_inline = $] >= 5.011 && util->can('first_inline');
+if ($has_first_inline) {
+    util->import('first_inline');
+}
+
 # ============================================
 # Edge Cases and Low-Coverage Functions
 # ============================================
 
-subtest 'first_inline - optimized first with inlined block' => sub {
-    # first_inline works like first but inlines pure Perl subs
-    my @numbers = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+SKIP: {
+    skip "first_inline requires Perl 5.11+ (MULTICALL)", 1 unless $has_first_inline;
 
-    my $found = first_inline(sub { $_ > 5 }, @numbers);
-    is($found, 6, 'first_inline finds first > 5');
+    subtest 'first_inline - optimized first with inlined block' => sub {
+        # first_inline works like first but inlines pure Perl subs
+        my @numbers = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
 
-    $found = first_inline(sub { $_ % 2 == 0 }, @numbers);
-    is($found, 2, 'first_inline finds first even');
+        my $found = first_inline(sub { $_ > 5 }, @numbers);
+        is($found, 6, 'first_inline finds first > 5');
 
-    $found = first_inline(sub { $_ > 100 }, @numbers);
-    ok(!defined $found, 'first_inline returns undef when no match');
+        $found = first_inline(sub { $_ % 2 == 0 }, @numbers);
+        is($found, 2, 'first_inline finds first even');
 
-    # Empty list
-    $found = first_inline(sub { 1 });
-    ok(!defined $found, 'first_inline on empty list returns undef');
+        $found = first_inline(sub { $_ > 100 }, @numbers);
+        ok(!defined $found, 'first_inline returns undef when no match');
 
-    # Complex condition
-    my @data = ({ val => 1 }, { val => 5 }, { val => 10 });
-    $found = first_inline(sub { $_->{val} > 3 }, @data);
-    is_deeply($found, { val => 5 }, 'first_inline with complex condition');
-};
+        # Empty list
+        $found = first_inline(sub { 1 });
+        ok(!defined $found, 'first_inline on empty list returns undef');
+
+        # Complex condition
+        my @data = ({ val => 1 }, { val => 5 }, { val => 10 });
+        $found = first_inline(sub { $_->{val} > 3 }, @data);
+        is_deeply($found, { val => 5 }, 'first_inline with complex condition');
+    };
+}
 
 subtest 'callback registry - list and management' => sub {
     # List all built-in callbacks

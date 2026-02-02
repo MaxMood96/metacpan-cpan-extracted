@@ -1,3 +1,6 @@
+2.100   2026-02-01
+  - Fix recursion bug in get_styles (RT-155341)
+  - New module dependency match::simple
 2.001   2024-07-06
   - Remove use of deprecated smartmatch operator (thanks Jim Avera)
     (Note: this will affect functions that used the smartmatch

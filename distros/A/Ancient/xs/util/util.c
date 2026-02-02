@@ -3,6 +3,7 @@
 #include "perl.h"
 #include "XSUB.h"
 #include "util_compat.h"
+#include "../multicall_compat.h"
 #include <string.h>
 
 /* Portable memmem - use system version if available, else our own */
@@ -511,6 +512,44 @@ static void init_callback_registry(pTHX) {
     if (!g_callback_registry) {
         g_callback_registry = newHV();
     }
+}
+
+/* Cleanup callback registry during global destruction */
+static void cleanup_callback_registry(pTHX_ void *data) {
+    HE *entry;
+    PERL_UNUSED_ARG(data);
+
+    if (!g_callback_registry) return;
+
+    /* During global destruction, just NULL out the registry pointer.
+     * Perl will handle freeing the SVs. Trying to free them ourselves
+     * can cause crashes due to destruction order issues. */
+    if (PL_dirty) {
+        g_callback_registry = NULL;
+        return;
+    }
+
+    /* Normal cleanup (not during global destruction) */
+    hv_iterinit(g_callback_registry);
+    while ((entry = hv_iternext(g_callback_registry))) {
+        SV *sv = HeVAL(entry);
+        if (sv && SvOK(sv)) {
+            RegisteredCallback *cb = (RegisteredCallback*)SvIVX(sv);
+            if (cb) {
+                if (cb->perl_callback) {
+                    SvREFCNT_dec(cb->perl_callback);
+                    cb->perl_callback = NULL;
+                }
+                if (cb->name) {
+                    Safefree(cb->name);
+                    cb->name = NULL;
+                }
+                Safefree(cb);
+            }
+        }
+    }
+    SvREFCNT_dec((SV*)g_callback_registry);
+    g_callback_registry = NULL;
 }
 
 static RegisteredCallback* get_registered_callback(pTHX_ const char *name) {
@@ -4501,7 +4540,9 @@ static XS(xs_none) {
    function call overhead. For testing only.
    ============================================ */
 
-/* first_inline - experimental version with inlined runops loop */
+/* first_inline - experimental version with inlined runops loop
+ * Requires MULTICALL API (5.11+) */
+#ifdef dMULTICALL
 static XS(xs_first_inline) {
     dXSARGS;
     if (items < 1) croak("Usage: util::first_inline(\\&block, @list)");
@@ -4526,29 +4567,11 @@ static XS(xs_first_inline) {
     IV num_args = items - 1;
     IV i;
 
-    /* Manually set up the MULTICALL context */
-    PERL_CONTEXT *cx;
-    bool multicall_oldcatch;
-    OP *multicall_cop;
+    /* Use standard MULTICALL API for compatibility */
+    dMULTICALL;
     I32 gimme = G_SCALAR;
 
-    PADLIST *padlist = CvPADLIST(the_cv);
-
-    multicall_oldcatch = CATCH_GET;
-    CATCH_SET(TRUE);
-    PUSHSTACKi(PERLSI_MULTICALL);
-
-    cx = cx_pushblock((CXt_SUB|CXp_MULTICALL), (U8)gimme,
-                      PL_stack_sp, PL_savestack_ix);
-    cx_pushsub(cx, the_cv, NULL, 0);
-
-    SAVEOP();
-    CvDEPTH(the_cv)++;
-    if (CvDEPTH(the_cv) >= 2)
-        Perl_pad_push(aTHX_ padlist, CvDEPTH(the_cv));
-    PAD_SET_CUR_NOSAVE(padlist, CvDEPTH(the_cv));
-
-    multicall_cop = CvSTART(the_cv);
+    PUSH_MULTICALL(the_cv);
 
     /* Save and setup $_ */
     SAVESPTR(GvSV(PL_defgv));
@@ -4558,22 +4581,11 @@ static XS(xs_first_inline) {
         GvSV(PL_defgv) = elem;
         SvTEMP_off(elem);
 
-        /* Inlined MULTICALL - skip CALLRUNOPS function call */
-        PL_op = multicall_cop;
-        {
-            OP *op = PL_op;
-            while ((PL_op = op = op->op_ppaddr(aTHX))) ;
-        }
+        MULTICALL;
 
         if (SvTRUE(*PL_stack_sp)) {
             /* Found it - cleanup and return */
-            cx = CX_CUR();
-            CX_LEAVE_SCOPE(cx);
-            cx_popsub_common(cx);
-            cx_popblock(cx);
-            CX_POP(cx);
-            POPSTACK;
-            CATCH_SET(multicall_oldcatch);
+            POP_MULTICALL;
             SPAGAIN;
 
             ST(0) = elem;
@@ -4581,18 +4593,13 @@ static XS(xs_first_inline) {
         }
     }
 
-    /* Cleanup - POP_MULTICALL equivalent */
-    cx = CX_CUR();
-    CX_LEAVE_SCOPE(cx);
-    cx_popsub_common(cx);
-    cx_popblock(cx);
-    CX_POP(cx);
-    POPSTACK;
-    CATCH_SET(multicall_oldcatch);
+    /* Cleanup */
+    POP_MULTICALL;
     SPAGAIN;
 
     XSRETURN_UNDEF;
 }
+#endif /* dMULTICALL */
 
 
 /* ============================================
@@ -5395,18 +5402,38 @@ static XS(xs_any_cb) {
             }
         }
     } else if (cb->perl_callback) {
-        /* Perl callback fallback */
-        CV *cv = (CV*)SvRV(cb->perl_callback);
+        /* Perl callback fallback - use isolated stack scope */
         for (i = 0; i < len; i++) {
             SV **svp = av_fetch(list, i, 0);
             if (!svp) continue;
-            dSP;
-            PUSHMARK(SP);
-            XPUSHs(*svp);
-            PUTBACK;
-            call_sv(cb->perl_callback, G_SCALAR);
-            SPAGAIN;
-            if (SvTRUE(POPs)) {
+
+            bool matches = FALSE;
+            {
+                dSP;
+                int count;
+                SV *result;
+
+                ENTER;
+                SAVETMPS;
+
+                PUSHMARK(SP);
+                XPUSHs(*svp);
+                PUTBACK;
+
+                count = call_sv(cb->perl_callback, G_SCALAR);
+
+                SPAGAIN;
+                if (count > 0) {
+                    result = POPs;
+                    matches = SvTRUE(result);
+                }
+                PUTBACK;
+
+                FREETMPS;
+                LEAVE;
+            }
+
+            if (matches) {
                 XSRETURN_YES;
             }
         }
@@ -5456,13 +5483,25 @@ static XS(xs_all_cb) {
         for (i = 0; i < len; i++) {
             SV **svp = av_fetch(list, i, 0);
             if (!svp) { XSRETURN_NO; }
-            dSP;
-            PUSHMARK(SP);
-            XPUSHs(*svp);
-            PUTBACK;
-            call_sv(cb->perl_callback, G_SCALAR);
-            SPAGAIN;
-            if (!SvTRUE(POPs)) {
+            bool matches = FALSE;
+            {
+                dSP;
+                int count;
+                SV *result;
+                ENTER; SAVETMPS;
+                PUSHMARK(SP);
+                XPUSHs(*svp);
+                PUTBACK;
+                count = call_sv(cb->perl_callback, G_SCALAR);
+                SPAGAIN;
+                if (count > 0) {
+                    result = POPs;
+                    matches = SvTRUE(result);
+                }
+                PUTBACK;
+                FREETMPS; LEAVE;
+            }
+            if (!matches) {
                 XSRETURN_NO;
             }
         }
@@ -5507,13 +5546,25 @@ static XS(xs_none_cb) {
         for (i = 0; i < len; i++) {
             SV **svp = av_fetch(list, i, 0);
             if (!svp) continue;
-            dSP;
-            PUSHMARK(SP);
-            XPUSHs(*svp);
-            PUTBACK;
-            call_sv(cb->perl_callback, G_SCALAR);
-            SPAGAIN;
-            if (SvTRUE(POPs)) {
+            bool matches = FALSE;
+            {
+                dSP;
+                int count;
+                SV *result;
+                ENTER; SAVETMPS;
+                PUSHMARK(SP);
+                XPUSHs(*svp);
+                PUTBACK;
+                count = call_sv(cb->perl_callback, G_SCALAR);
+                SPAGAIN;
+                if (count > 0) {
+                    result = POPs;
+                    matches = SvTRUE(result);
+                }
+                PUTBACK;
+                FREETMPS; LEAVE;
+            }
+            if (matches) {
                 XSRETURN_NO;
             }
         }
@@ -5559,13 +5610,25 @@ static XS(xs_first_cb) {
         for (i = 0; i < len; i++) {
             SV **svp = av_fetch(list, i, 0);
             if (!svp) continue;
-            dSP;
-            PUSHMARK(SP);
-            XPUSHs(*svp);
-            PUTBACK;
-            call_sv(cb->perl_callback, G_SCALAR);
-            SPAGAIN;
-            if (SvTRUE(POPs)) {
+            bool matches = FALSE;
+            {
+                dSP;
+                int count;
+                SV *result;
+                ENTER; SAVETMPS;
+                PUSHMARK(SP);
+                XPUSHs(*svp);
+                PUTBACK;
+                count = call_sv(cb->perl_callback, G_SCALAR);
+                SPAGAIN;
+                if (count > 0) {
+                    result = POPs;
+                    matches = SvTRUE(result);
+                }
+                PUTBACK;
+                FREETMPS; LEAVE;
+            }
+            if (matches) {
                 ST(0) = *svp;
                 XSRETURN(1);
             }
@@ -5601,13 +5664,15 @@ static XS(xs_grep_cb) {
     IV i;
     IV count = 0;
 
-    SP -= items;
+    /* Collect matching elements in a temporary array first */
+    AV *results = newAV();
+    sv_2mortal((SV*)results);
 
     if (cb->predicate) {
         for (i = 0; i < len; i++) {
             SV **svp = av_fetch(list, i, 0);
             if (svp && cb->predicate(aTHX_ *svp)) {
-                XPUSHs(*svp);
+                av_push(results, SvREFCNT_inc(*svp));
                 count++;
             }
         }
@@ -5615,15 +5680,38 @@ static XS(xs_grep_cb) {
         for (i = 0; i < len; i++) {
             SV **svp = av_fetch(list, i, 0);
             if (!svp) continue;
-            PUSHMARK(SP);
-            XPUSHs(*svp);
-            PUTBACK;
-            call_sv(cb->perl_callback, G_SCALAR);
-            SPAGAIN;
-            if (SvTRUE(POPs)) {
-                XPUSHs(*svp);
+            SV *elem = *svp;
+            bool matches = FALSE;
+            {
+                dSP;
+                int call_count;
+                SV *result;
+                ENTER; SAVETMPS;
+                PUSHMARK(SP);
+                XPUSHs(elem);
+                PUTBACK;
+                call_count = call_sv(cb->perl_callback, G_SCALAR);
+                SPAGAIN;
+                if (call_count > 0) {
+                    result = POPs;
+                    matches = SvTRUE(result);
+                }
+                PUTBACK;
+                FREETMPS; LEAVE;
+            }
+            if (matches) {
+                av_push(results, SvREFCNT_inc(elem));
                 count++;
             }
+        }
+    }
+
+    /* Now push all results to the stack */
+    SP -= items;
+    for (i = 0; i < count; i++) {
+        SV **svp = av_fetch(results, i, 0);
+        if (svp) {
+            XPUSHs(sv_2mortal(SvREFCNT_inc(*svp)));
         }
     }
 
@@ -5668,13 +5756,25 @@ static XS(xs_count_cb) {
         for (i = 0; i < len; i++) {
             SV **svp = av_fetch(list, i, 0);
             if (!svp) continue;
-            dSP;
-            PUSHMARK(SP);
-            XPUSHs(*svp);
-            PUTBACK;
-            call_sv(cb->perl_callback, G_SCALAR);
-            SPAGAIN;
-            if (SvTRUE(POPs)) {
+            bool matches = FALSE;
+            {
+                dSP;
+                int call_count;
+                SV *result;
+                ENTER; SAVETMPS;
+                PUSHMARK(SP);
+                XPUSHs(*svp);
+                PUTBACK;
+                call_count = call_sv(cb->perl_callback, G_SCALAR);
+                SPAGAIN;
+                if (call_count > 0) {
+                    result = POPs;
+                    matches = SvTRUE(result);
+                }
+                PUTBACK;
+                FREETMPS; LEAVE;
+            }
+            if (matches) {
                 count++;
             }
         }
@@ -5726,13 +5826,32 @@ static XS(xs_partition_cb) {
         for (i = 0; i < len; i++) {
             SV **svp = av_fetch(list, i, 0);
             if (!svp) continue;
-            dSP;
-            PUSHMARK(SP);
-            XPUSHs(*svp);
-            PUTBACK;
-            call_sv(cb->perl_callback, G_SCALAR);
-            SPAGAIN;
-            if (SvTRUE(POPs)) {
+            bool matches = FALSE;
+            {
+                dSP;
+                int call_count;
+                SV *result;
+
+                ENTER;
+                SAVETMPS;
+
+                PUSHMARK(SP);
+                XPUSHs(*svp);
+                PUTBACK;
+
+                call_count = call_sv(cb->perl_callback, G_SCALAR);
+
+                SPAGAIN;
+                if (call_count > 0) {
+                    result = POPs;
+                    matches = SvTRUE(result);
+                }
+                PUTBACK;
+
+                FREETMPS;
+                LEAVE;
+            }
+            if (matches) {
                 av_push(pass, SvREFCNT_inc_simple_NN(*svp));
             } else {
                 av_push(fail, SvREFCNT_inc_simple_NN(*svp));
@@ -5785,13 +5904,25 @@ static XS(xs_final_cb) {
         for (i = len - 1; i >= 0; i--) {
             SV **svp = av_fetch(list, i, 0);
             if (!svp) continue;
-            dSP;
-            PUSHMARK(SP);
-            XPUSHs(*svp);
-            PUTBACK;
-            call_sv(cb->perl_callback, G_SCALAR);
-            SPAGAIN;
-            if (SvTRUE(POPs)) {
+            bool matches = FALSE;
+            {
+                dSP;
+                int count;
+                SV *result;
+                ENTER; SAVETMPS;
+                PUSHMARK(SP);
+                XPUSHs(*svp);
+                PUTBACK;
+                count = call_sv(cb->perl_callback, G_SCALAR);
+                SPAGAIN;
+                if (count > 0) {
+                    result = POPs;
+                    matches = SvTRUE(result);
+                }
+                PUTBACK;
+                FREETMPS; LEAVE;
+            }
+            if (matches) {
                 ST(0) = *svp;
                 XSRETURN(1);
             }
@@ -5829,6 +5960,7 @@ static XS(xs_register_callback) {
     cb->predicate = NULL;
     cb->mapper = NULL;
     cb->reducer = NULL;
+    /* Store a copy of the coderef (RV to CV) */
     cb->perl_callback = newSVsv(coderef);
 
     sv = newSViv(PTR2IV(cb));
@@ -6020,7 +6152,9 @@ static void init_export_hash(pTHX) {
     register_export(aTHX_ "all", xs_all, NULL);
     register_export(aTHX_ "none", xs_none, NULL);
     register_export(aTHX_ "final", xs_final, NULL);
+#ifdef dMULTICALL
     register_export(aTHX_ "first_inline", xs_first_inline, NULL);
+#endif
 
     /* Callback-based loop functions */
     register_export(aTHX_ "any_cb", xs_any_cb, NULL);
@@ -6438,7 +6572,9 @@ XS_EXTERNAL(boot_util) {
     newXS("util::any", xs_any, __FILE__);
     newXS("util::all", xs_all, __FILE__);
     newXS("util::none", xs_none, __FILE__);
-    newXS("util::first_inline", xs_first_inline, __FILE__); /* experimental */
+#ifdef dMULTICALL
+    newXS("util::first_inline", xs_first_inline, __FILE__); /* experimental, 5.11+ only */
+#endif
 
     /* Named callback loop functions */
     newXS("util::any_cb", xs_any_cb, __FILE__);
@@ -6664,6 +6800,9 @@ XS_EXTERNAL(boot_util) {
         CV *cv = newXS("util::max2", xs_max2, __FILE__);
         cv_set_call_checker(cv, max2_call_checker, (SV*)cv);
     }
+
+    /* Register cleanup for global destruction */
+    Perl_call_atexit(aTHX_ cleanup_callback_registry, NULL);
 
     Perl_xs_boot_epilog(aTHX_ ax);
 }

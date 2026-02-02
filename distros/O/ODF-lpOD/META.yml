@@ -7,7 +7,7 @@ build_requires:
 configure_requires:
   ExtUtils::MakeMaker: '0'
 dynamic_config: 1
-generated_by: 'ExtUtils::MakeMaker version 7.62, CPAN::Meta::Converter version 2.150010'
+generated_by: 'ExtUtils::MakeMaker version 7.70, CPAN::Meta::Converter version 2.150010'
 license: open_source
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -29,11 +29,11 @@ requires:
   LWP::Simple: '0'
   Time::Local: '1.07'
   XML::Twig: '3.34'
-  experimental: '0'
+  match::simple: '0'
   perl: '5.016000'
 resources:
   bugtracker: https://rt.cpan.org/Public/Dist/Display.html?Name=ODF-lpOD
   homepage: https://github.com/ctrlo/ODF-lpOD/
   repository: https://github.com/ctrlo/ODF-lpOD/
-version: '2.001'
+version: '2.100'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

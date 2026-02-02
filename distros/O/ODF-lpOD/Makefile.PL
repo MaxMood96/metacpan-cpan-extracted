@@ -16,7 +16,7 @@ use Getopt::Long;
 
 sub	default_version
 	{
-	'0.000'
+	'2.100'
 	}
 
 sub	default_author
@@ -117,8 +117,8 @@ WriteMakefile
                 'File::Slurp'       => '0',
                 'File::Type'        => '0',
                 'Image::Size'       => '0',
-                'LWP::Simple'       => '0',
-                'experimental'      => '0'
+                'match::simple'     => '0',
+                'LWP::Simple'       => '0'
                 },
         'EXE_FILES'         =>
                 [

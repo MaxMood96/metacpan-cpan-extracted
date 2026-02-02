@@ -3,9 +3,9 @@
 package App::pdfgrep;
 
 our $AUTHORITY = 'cpan:PERLANCAR'; # AUTHORITY
-our $DATE = '2024-09-28'; # DATE
+our $DATE = '2026-02-02'; # DATE
 our $DIST = 'App-PDFUtils'; # DIST
-our $VERSION = '0.016'; # VERSION
+our $VERSION = '0.017'; # VERSION
 
 use 5.010001;
 use strict;
@@ -131,7 +131,7 @@ App::pdfgrep - Print lines matching text in PDF files
 
 =head1 VERSION
 
-This document describes version 0.016 of App::pdfgrep (from Perl distribution App-PDFUtils), released on 2024-09-28.
+This document describes version 0.017 of App::pdfgrep (from Perl distribution App-PDFUtils), released on 2026-02-02.
 
 =head1 FUNCTIONS
 
@@ -258,7 +258,7 @@ that are considered a bug and can be reported to me.
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2024, 2023, 2022, 2021, 2020, 2017 by perlancar <perlancar@cpan.org>.
+This software is copyright (c) 2026 by perlancar <perlancar@cpan.org>.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

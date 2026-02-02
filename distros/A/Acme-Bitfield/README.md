@@ -53,6 +53,14 @@ Sets the bit at `$index` to 0.
 
 Returns the total number of bits set to 1.
 
+## `is_full( )`
+
+Returns true if all bits are set to 1.
+
+## `is_empty( )`
+
+Returns true if all bits are set to 0.
+
 ## `size( )`
 
 Returns the total capacity of the bitfield.
@@ -61,6 +69,11 @@ Returns the total capacity of the bitfield.
 
 Returns the raw binary string representation of the bitfield.
 
+## `set_data( $string )`
+
+Sets the raw binary representation. The input string will be truncated or padded to match the `size`, and any excess
+bits in the last byte will be zeroed.
+
 ## `fill( )`
 
 Sets all bits within the `size` to 1.
@@ -68,6 +81,22 @@ Sets all bits within the `size` to 1.
 ## `find_missing( )`
 
 Returns the index of the first bit set to 0, or `undef` if all bits are set.
+
+## `inverse( )`
+
+Returns a new bitfield object with all bits within the `size` inverted. Bit 0 becomes 1, and 1 becomes 0.
+
+## `union( $other )`
+
+Returns a new bitfield object representing the bitwise OR of this bitfield and `$other`.
+
+## `intersection( $other )`
+
+Returns a new bitfield object representing the bitwise AND of this bitfield and `$other`.
+
+## `difference( $other )`
+
+Returns a new bitfield object representing the bits set in this bitfield but NOT in `$other` (bitwise AND NOT).
 
 # AUTHOR
 

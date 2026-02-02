@@ -1,3 +1,10 @@
+0.003   2025-08-23  Released-By: PERLANCAR; Urgency: medium
+
+        - Update module names (Filename::* -> Filename::Type::*).
+
+        - Add CLI: parse-media-filename.
+
+
 0.002   2020-10-21  Released-By: PERLANCAR; Urgency: medium
 
 	- Bump prereq versions with those that have Rinci function metadata

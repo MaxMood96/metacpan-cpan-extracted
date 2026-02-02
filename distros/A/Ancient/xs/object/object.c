@@ -71,6 +71,9 @@ typedef struct {
     U8 has_any_defaults;  /* Quick check: any slot has defaults? */
     U8 has_any_triggers;  /* Quick check: any slot has triggers? */
     U8 has_any_required;  /* Quick check: any slot is required? */
+    /* Singleton support */
+    SV *singleton_instance;  /* Cached singleton instance, NULL if not a singleton */
+    U8 is_singleton;         /* Flag: class is a singleton */
 } ClassMeta;
 
 /* Global class registry */
@@ -78,6 +81,14 @@ static HV *g_class_registry = NULL;  /* class name -> ClassMeta* */
 
 /* Global type registry for external plugins */
 static HV *g_type_registry = NULL;   /* type name -> RegisteredType* */
+
+/* Forward declaration for FuncAccessorData */
+typedef struct FuncAccessorData_s FuncAccessorData;
+
+/* Global registry for function accessor data (to avoid storing pointers in op_targ) */
+static FuncAccessorData **g_func_accessor_registry = NULL;
+static IV g_func_accessor_count = 0;
+static IV g_func_accessor_capacity = 0;
 
 /* Forward declarations */
 static ClassMeta* get_class_meta(pTHX_ const char *class_name, STRLEN len);
@@ -109,7 +120,9 @@ static inline bool check_builtin_type(pTHX_ SV *val, BuiltinTypeID type_id) {
         case TYPE_ANY:
             return true;
         case TYPE_DEFINED:
-            return SvOK(val);
+            /* SvOK checks if defined, but be defensive for older Perls */
+            /* where constant 0 might have edge cases */
+            return SvOK(val) || SvIOK(val) || SvNOK(val) || SvPOK(val);
         case TYPE_STR:
             return SvOK(val) && !SvROK(val);  /* defined non-ref */
         case TYPE_INT:
@@ -184,7 +197,8 @@ static bool check_slot_type(pTHX_ SV *val, SlotSpec *spec) {
     if (spec->registered->perl_check) {
         dSP;
         int count;
-        bool result;
+        bool result = false;
+        SV *result_sv;
         ENTER;
         SAVETMPS;
         PUSHMARK(SP);
@@ -192,7 +206,11 @@ static bool check_slot_type(pTHX_ SV *val, SlotSpec *spec) {
         PUTBACK;
         count = call_sv(spec->registered->perl_check, G_SCALAR);
         SPAGAIN;
-        result = (count > 0) ? SvTRUE(POPs) : false;
+        if (count > 0) {
+            result_sv = POPs;
+            result = SvTRUE(result_sv);
+        }
+        PUTBACK;
         FREETMPS;
         LEAVE;
         return result;
@@ -537,6 +555,55 @@ static OP* pp_object_new(pTHX) {
 }
 
 /* ============================================
+   Prototype chain resolution
+   ============================================ */
+
+#define MAX_PROTOTYPE_DEPTH 100
+
+/* Resolve a property through the full prototype chain.
+ * Returns the value if found, or &PL_sv_undef if not.
+ * Detects circular references using depth limit and pointer tracking.
+ */
+static SV* resolve_property_chain(pTHX_ AV *av, IV idx) {
+    int depth = 0;
+    AV *visited[MAX_PROTOTYPE_DEPTH];  /* Simple stack-based cycle detection */
+    int i;
+
+    while (av && depth < MAX_PROTOTYPE_DEPTH) {
+        SV **svp;
+
+        /* Check for circular reference */
+        for (i = 0; i < depth; i++) {
+            if (visited[i] == av) {
+                warn("Circular prototype reference detected");
+                return &PL_sv_undef;
+            }
+        }
+        visited[depth] = av;
+
+        /* Try to fetch the property at this level */
+        svp = av_fetch(av, idx, 0);
+        if (svp && SvOK(*svp)) {
+            return *svp;
+        }
+
+        /* Follow prototype chain (slot 0) */
+        svp = av_fetch(av, 0, 0);
+        if (!svp || !SvROK(*svp) || SvTYPE(SvRV(*svp)) != SVt_PVAV) {
+            break;
+        }
+        av = (AV*)SvRV(*svp);
+        depth++;
+    }
+
+    if (depth >= MAX_PROTOTYPE_DEPTH) {
+        warn("Prototype chain too deep (max %d levels)", MAX_PROTOTYPE_DEPTH);
+    }
+
+    return &PL_sv_undef;
+}
+
+/* ============================================
    Custom OP: property accessor (get)
    ============================================ */
 
@@ -545,31 +612,15 @@ static OP* pp_object_get(pTHX) {
     SV *obj = TOPs;
     IV idx = PL_op->op_targ;
     AV *av;
-    SV **svp;
+    SV *result;
 
     if (!SvROK(obj) || SvTYPE(SvRV(obj)) != SVt_PVAV) {
         croak("Not an object");
     }
 
     av = (AV*)SvRV(obj);
-    svp = av_fetch(av, idx, 0);
-    
-    if (svp && SvOK(*svp)) {
-        SETs(*svp);
-    } else {
-        /* Check prototype chain */
-        SV **proto_svp = av_fetch(av, 0, 0);
-        if (proto_svp && SvROK(*proto_svp)) {
-            /* Recurse into prototype - for now, simple one-level */
-            AV *proto_av = (AV*)SvRV(*proto_svp);
-            svp = av_fetch(proto_av, idx, 0);
-            if (svp && SvOK(*svp)) {
-                SETs(*svp);
-                RETURN;
-            }
-        }
-        SETs(&PL_sv_undef);
-    }
+    result = resolve_property_chain(aTHX_ av, idx);
+    SETs(result);
     RETURN;
 }
 
@@ -612,6 +663,31 @@ typedef struct {
     IV slot_idx;
     ClassMeta *meta;
 } SlotOpData;
+
+/* Helper struct for function-style accessors (cross-class support) */
+struct FuncAccessorData_s {
+    IV slot_idx;
+    ClassMeta *expected_class;  /* Class this accessor expects */
+    IV registry_id;             /* ID in g_func_accessor_registry */
+};
+
+/* Register a FuncAccessorData and return its ID */
+static IV register_func_accessor_data(pTHX_ FuncAccessorData *data) {
+    if (g_func_accessor_count >= g_func_accessor_capacity) {
+        IV new_capacity = g_func_accessor_capacity ? g_func_accessor_capacity * 2 : 64;
+        Renew(g_func_accessor_registry, new_capacity, FuncAccessorData*);
+        g_func_accessor_capacity = new_capacity;
+    }
+    data->registry_id = g_func_accessor_count;
+    g_func_accessor_registry[g_func_accessor_count] = data;
+    return g_func_accessor_count++;
+}
+
+/* Look up FuncAccessorData by ID */
+static FuncAccessorData* get_func_accessor_data(IV id) {
+    if (id < 0 || id >= g_func_accessor_count) return NULL;
+    return g_func_accessor_registry[id];
+}
 
 static OP* pp_object_set_typed(pTHX) {
     dSP;
@@ -886,13 +962,9 @@ static XS(xs_accessor_fallback) {
         ST(0) = ST(1);
         XSRETURN(1);
     } else {
-        /* Getter */
-        SV **svp = av_fetch(av, idx, 0);
-        if (svp && SvOK(*svp)) {
-            ST(0) = *svp;
-        } else {
-            ST(0) = &PL_sv_undef;
-        }
+        /* Getter - use prototype chain resolution */
+        SV *result = resolve_property_chain(aTHX_ av, idx);
+        ST(0) = result;
         XSRETURN(1);
     }
 }
@@ -914,7 +986,7 @@ static void install_constructor(pTHX_ const char *class_name, ClassMeta *meta) {
 
 /* ============================================
    Custom OP: fast function-style getter
-   op_targ = idx, reads object from stack
+   op_targ = registry ID, reads object from stack
    ============================================ */
 static XOP object_func_get_xop;
 static XOP object_func_set_xop;
@@ -922,72 +994,139 @@ static XOP object_func_set_xop;
 static OP* pp_object_func_get(pTHX) {
     dSP;
     SV *obj = TOPs;  /* peek, don't pop */
-    IV idx = PL_op->op_targ;
-    AV *av = (AV*)SvRV(obj);  /* Skip check - trust call checker */
-    SV **svp = AvARRAY(av) + idx;  /* Direct array access */
-    SETs((*svp && SvOK(*svp)) ? *svp : &PL_sv_undef);
+    FuncAccessorData *data = get_func_accessor_data(PL_op->op_targ);
+    IV idx;
+    AV *av;
+    SV **svp;
+
+    if (!data) {
+        croak("Internal error: invalid accessor data");
+    }
+    idx = data->slot_idx;
+
+    if (!SvROK(obj) || SvTYPE(SvRV(obj)) != SVt_PVAV) {
+        croak("Not an object");
+    }
+    av = (AV*)SvRV(obj);
+
+
+    /* Validate object is of expected class (stash pointer comparison) */
+    if (data->expected_class) {
+        if (SvSTASH(SvRV(obj)) != data->expected_class->stash) {
+            croak("Expected object of class '%s', got '%s'",
+                  data->expected_class->class_name,
+                  HvNAME(SvSTASH(SvRV(obj))));
+        }
+    }
+
+    /* Bounds check */
+    if (idx > av_len(av)) {
+        SETs(&PL_sv_undef);
+        RETURN;
+    }
+
+    svp = av_fetch(av, idx, 0);
+    SETs((svp && SvOK(*svp)) ? *svp : &PL_sv_undef);
     RETURN;
 }
 
 static OP* pp_object_func_set(pTHX) {
     dSP;
-    SV *val = TOPs;  /* value on top */
-    SV *obj = TOPm1s;  /* object below */
-    IV idx = PL_op->op_targ;
-    AV *av = (AV*)SvRV(obj);  /* Skip check - trust call checker */
-    SV **slot = AvARRAY(av) + idx;
-    SV *old = *slot;
-    
-    *slot = SvREFCNT_inc_simple_NN(val);  /* Inc refcount in place */
-    if (old) SvREFCNT_dec(old);
-    
-    TOPm1s = val;  /* Replace object with value */
-    SP--;          /* Pop top, leaving value */
+    SV *val = POPs;  /* Pop value first */
+    SV *obj = TOPs;  /* Object left on stack */
+    FuncAccessorData *data = get_func_accessor_data(PL_op->op_targ);
+    IV idx;
+    AV *av;
+
+    if (!data) {
+        croak("Internal error: invalid accessor data");
+    }
+    idx = data->slot_idx;
+
+    if (!SvROK(obj) || SvTYPE(SvRV(obj)) != SVt_PVAV) {
+        croak("Not an object");
+    }
+    av = (AV*)SvRV(obj);
+
+    /* Validate object is of expected class (stash pointer comparison) */
+    if (data->expected_class && SvSTASH(SvRV(obj)) != data->expected_class->stash) {
+        croak("Expected object of class '%s', got '%s'",
+              data->expected_class->class_name,
+              HvNAME(SvSTASH(SvRV(obj))));
+    }
+
+    av_store(av, idx, newSVsv(val));
+
+    SETs(val);  /* Replace object with value */
     RETURN;
+}
+
+/* Check if an op is "simple" (can be safely used in optimized accessor) */
+static inline bool is_simple_op(OP *op) {
+    if (!op) return false;
+    /* Simple ops: pad variables, constants, global variables */
+    switch (op->op_type) {
+        case OP_PADSV:    /* $lexical */
+        case OP_CONST:    /* literal value */
+        case OP_GV:       /* *glob */
+        case OP_GVSV:     /* $global */
+        case OP_AELEMFAST:/* $array[const] */
+#if defined(OP_AELEMFAST_LEX) && OP_AELEMFAST_LEX != OP_AELEMFAST
+        case OP_AELEMFAST_LEX:
+#endif
+        case OP_NULL:     /* Often wraps simple ops */
+            return true;
+        default:
+            return false;
+    }
 }
 
 /* Call checker for function-style accessor: name($obj) or name($obj, $val) */
 static OP* func_accessor_call_checker(pTHX_ OP *entersubop, GV *namegv, SV *ckobj) {
-    IV idx = SvIV(ckobj);
-    OP *pushop, *cvop, *objop, *valop;
+    IV registry_id = SvIV(ckobj);
+    FuncAccessorData *data = get_func_accessor_data(registry_id);
+    OP *pushop, *cvop, *objop, *argop, *valop;
     OP *newop;
 
     PERL_UNUSED_ARG(namegv);
+
+    if (!data) {
+        return entersubop;  /* Fallback if data not found */
+    }
 
     pushop = cUNOPx(entersubop)->op_first;
     if (!OpHAS_SIBLING(pushop)) {
         pushop = cUNOPx(pushop)->op_first;
     }
 
+    /* Walk the op tree like the method-style accessor checker */
     objop = OpSIBLING(pushop);
     cvop = objop;
-    valop = NULL;
-    
+    argop = objop;
     while (OpHAS_SIBLING(cvop)) {
-        valop = cvop;
+        argop = cvop;
         cvop = OpSIBLING(cvop);
     }
 
-    if (valop && valop != objop) {
-        /* Setter: name($obj, $val) */
-        valop = OpSIBLING(objop);
-        OpMORESIB_set(pushop, cvop);
-        OpLASTSIB_set(valop, NULL);
-        OpLASTSIB_set(objop, NULL);
-        
-        newop = newBINOP(OP_CUSTOM, 0, objop, valop);
-        newop->op_ppaddr = pp_object_func_set;
-        newop->op_targ = idx;
-    } else {
-        /* Getter: name($obj) */
-        OpMORESIB_set(pushop, cvop);
-        OpLASTSIB_set(objop, NULL);
-        
-        newop = newUNOP(OP_CUSTOM, 0, objop);
-        newop->op_ppaddr = pp_object_func_get;
-        newop->op_targ = idx;
+    /* Check if there's an argument after obj (setter call) */
+    if (argop != objop) {
+        /* Setter: name($obj, $val) - let XS fallback handle all setters
+         * Force scalar context to prevent void context optimization */
+        return op_contextualize(entersubop, G_SCALAR);
     }
-    
+
+    /* Getter: name($obj) - optimize only if objop is simple */
+    if (!is_simple_op(objop)) {
+        return entersubop;
+    }
+
+    OpMORESIB_set(pushop, cvop);
+    OpLASTSIB_set(objop, NULL);
+
+    newop = newUNOP(OP_CUSTOM, 0, objop);
+    newop->op_ppaddr = pp_object_func_get;
+    newop->op_targ = data->registry_id;  /* Store registry ID, not pointer */
+
     op_free(entersubop);
     return newop;
 }
@@ -995,7 +1134,8 @@ static OP* func_accessor_call_checker(pTHX_ OP *entersubop, GV *namegv, SV *ckob
 /* XS fallback for function-style accessor */
 static XS(xs_func_accessor_fallback) {
     dXSARGS;
-    IV idx = CvXSUBANY(cv).any_iv;
+    FuncAccessorData *data = INT2PTR(FuncAccessorData*, CvXSUBANY(cv).any_iv);
+    IV idx = data->slot_idx;
     SV *obj = ST(0);
     AV *av;
 
@@ -1003,6 +1143,13 @@ static XS(xs_func_accessor_fallback) {
         croak("Not an object");
     }
     av = (AV*)SvRV(obj);
+
+    /* Validate object is of expected class */
+    if (data->expected_class && SvSTASH(SvRV(obj)) != data->expected_class->stash) {
+        croak("Expected object of class '%s', got '%s'",
+              data->expected_class->class_name,
+              HvNAME(SvSTASH(SvRV(obj))));
+    }
 
     if (items > 1) {
         av_store(av, idx, newSVsv(ST(1)));
@@ -1015,17 +1162,32 @@ static XS(xs_func_accessor_fallback) {
 }
 
 /* Install function-style accessor in caller's namespace */
-static void install_func_accessor(pTHX_ const char *pkg, const char *prop_name, IV idx) {
+static void install_func_accessor(pTHX_ const char *pkg, const char *prop_name, IV idx, ClassMeta *expected_class) {
     char full_name[256];
     CV *cv;
     SV *ckobj;
+    FuncAccessorData *data;
+    IV registry_id;
 
     snprintf(full_name, sizeof(full_name), "%s::%s", pkg, prop_name);
-    
+
+    /* Check if this accessor already exists - skip to avoid redefinition warning.
+     * This also preserves any user-defined subs that were defined before import. */
+    cv = get_cvn_flags(full_name, strlen(full_name), 0);
+    if (cv) {
+        return;  /* Already exists, skip to avoid redefinition warning */
+    }
+
+    /* Allocate data for this accessor and register it */
+    Newx(data, 1, FuncAccessorData);
+    data->slot_idx = idx;
+    data->expected_class = expected_class;  /* NULL for same-class, set for cross-class */
+    registry_id = register_func_accessor_data(aTHX_ data);
+
     cv = newXS(full_name, xs_func_accessor_fallback, __FILE__);
-    CvXSUBANY(cv).any_iv = idx;
-    
-    ckobj = newSViv(idx);
+    CvXSUBANY(cv).any_iv = PTR2IV(data);  /* XS fallback still uses pointer directly */
+
+    ckobj = newSViv(registry_id);
     cv_set_call_checker(cv, func_accessor_call_checker, ckobj);
 }
 
@@ -1036,30 +1198,37 @@ static XS(xs_import_accessors) {
     const char *class_pv, *pkg_pv;
     ClassMeta *meta;
     IV i;
-    
+    int is_same_class;
+
     if (items < 1) croak("Usage: object::import_accessors($class [, $package])");
-    
+
     class_pv = SvPV(ST(0), class_len);
-    
+
     if (items > 1) {
         pkg_pv = SvPV(ST(1), pkg_len);
     } else {
         /* Default to caller's package */
         pkg_pv = CopSTASHPV(PL_curcop);
+        pkg_len = strlen(pkg_pv);
     }
-    
+
     meta = get_class_meta(aTHX_ class_pv, class_len);
     if (!meta) {
         croak("Class '%s' not defined with object::define", class_pv);
     }
-    
+
+    /* Check if importing into same class (skip validation for performance) */
+    is_same_class = (class_len == pkg_len && strEQ(class_pv, pkg_pv));
+
     /* Install function-style accessors for each property */
     for (i = 1; i < meta->slot_count; i++) {
         if (meta->idx_to_prop[i]) {
-            install_func_accessor(aTHX_ pkg_pv, meta->idx_to_prop[i], i);
+            /* Pass NULL for same-class (skip validation), meta for cross-class */
+            install_func_accessor(aTHX_ pkg_pv, meta->idx_to_prop[i], i,
+                                  is_same_class ? NULL : meta);
         }
     }
-    
+
     XSRETURN_EMPTY;
 }
 
@@ -1071,41 +1240,47 @@ static XS(xs_import_accessor) {
     ClassMeta *meta;
     SV **idx_svp;
     IV idx;
-    
+    int is_same_class;
+
     if (items < 2) croak("Usage: object::import_accessor($class, $prop [, $alias [, $package]])");
-    
+
     class_pv = SvPV(ST(0), class_len);
     prop_pv = SvPV(ST(1), prop_len);
-    
+
     /* Alias defaults to property name */
     if (items > 2 && SvOK(ST(2))) {
         alias_pv = SvPV(ST(2), alias_len);
     } else {
         alias_pv = prop_pv;
     }
-    
+
     /* Package defaults to caller */
     if (items > 3) {
         pkg_pv = SvPV(ST(3), pkg_len);
     } else {
         pkg_pv = CopSTASHPV(PL_curcop);
+        pkg_len = strlen(pkg_pv);
     }
-    
+
     meta = get_class_meta(aTHX_ class_pv, class_len);
     if (!meta) {
         croak("Class '%s' not defined with object::define", class_pv);
     }
-    
+
     /* Look up property index */
     idx_svp = hv_fetch(meta->prop_to_idx, prop_pv, prop_len, 0);
     if (!idx_svp) {
         croak("Property '%s' not defined in class '%s'", prop_pv, class_pv);
     }
     idx = SvIV(*idx_svp);
-    
-    /* Install with alias name */
-    install_func_accessor(aTHX_ pkg_pv, alias_pv, idx);
-    
+
+    /* Check if importing into same class (skip validation for performance) */
+    is_same_class = (class_len == pkg_len && strEQ(class_pv, pkg_pv));
+
+    /* Install with alias name - pass meta for cross-class validation */
+    install_func_accessor(aTHX_ pkg_pv, alias_pv, idx,
+                          is_same_class ? NULL : meta);
+
     XSRETURN_EMPTY;
 }
 
@@ -1119,10 +1294,16 @@ static void install_accessor(pTHX_ const char *class_name, const char *prop_name
     SV *ckobj;
 
     snprintf(full_name, sizeof(full_name), "%s::%s", class_name, prop_name);
-    
+
+    /* Check if accessor already exists to avoid redefinition warnings */
+    cv = get_cvn_flags(full_name, strlen(full_name), 0);
+    if (cv) {
+        return;  /* Already defined, skip */
+    }
+
     cv = newXS(full_name, xs_accessor_fallback, __FILE__);
     CvXSUBANY(cv).any_iv = idx;
-    
+
     ckobj = newSViv(idx);
     cv_set_call_checker(cv, accessor_call_checker, ckobj);
 }
@@ -1169,9 +1350,9 @@ static XS(xs_accessor_typed_fallback) {
         ST(0) = val;
         XSRETURN(1);
     } else {
-        /* Getter */
-        SV **svp = av_fetch(av, idx, 0);
-        ST(0) = (svp && SvOK(*svp)) ? *svp : &PL_sv_undef;
+        /* Getter - use prototype chain resolution */
+        SV *result = resolve_property_chain(aTHX_ av, idx);
+        ST(0) = result;
         XSRETURN(1);
     }
 }
@@ -1235,15 +1416,21 @@ static void install_accessor_typed(pTHX_ const char *class_name, const char *pro
     SlotOpData *data;
 
     snprintf(full_name, sizeof(full_name), "%s::%s", class_name, prop_name);
-    
+
+    /* Check if accessor already exists to avoid redefinition warnings */
+    cv = get_cvn_flags(full_name, strlen(full_name), 0);
+    if (cv) {
+        return;  /* Already defined, skip */
+    }
+
     /* Allocate persistent data for this slot */
     Newx(data, 1, SlotOpData);
     data->slot_idx = idx;
     data->meta = meta;
-    
+
     cv = newXS(full_name, xs_accessor_typed_fallback, __FILE__);
     CvXSUBANY(cv).any_iv = PTR2IV(data);
-    
+
     ckobj = newSViv(PTR2IV(data));
     cv_set_call_checker(cv, accessor_typed_call_checker, ckobj);
 }
@@ -1338,9 +1525,9 @@ static XS(xs_set_prototype) {
     dXSARGS;
     AV *av;
     MAGIC *mg;
-    
+
     if (items < 2) croak("Usage: object::set_prototype($obj, $proto)");
-    
+
     if (!SvROK(ST(0)) || SvTYPE(SvRV(ST(0))) != SVt_PVAV) {
         croak("Not an object");
     }
@@ -1353,6 +1540,132 @@ static XS(xs_set_prototype) {
 
     av_store(av, 0, newSVsv(ST(1)));
     XSRETURN_EMPTY;
+}
+
+/* Get the full prototype chain as an arrayref */
+static XS(xs_prototype_chain) {
+    dXSARGS;
+    AV *av;
+    AV *chain;
+    AV *visited[MAX_PROTOTYPE_DEPTH];
+    int depth = 0;
+    int i;
+
+    if (items < 1) croak("Usage: object::prototype_chain($obj)");
+
+    if (!SvROK(ST(0)) || SvTYPE(SvRV(ST(0))) != SVt_PVAV) {
+        croak("Not an object");
+    }
+
+    chain = newAV();
+    av = (AV*)SvRV(ST(0));
+
+    while (av && depth < MAX_PROTOTYPE_DEPTH) {
+        SV **proto_svp;
+
+        /* Check for circular reference */
+        for (i = 0; i < depth; i++) {
+            if (visited[i] == av) {
+                goto done;  /* Cycle detected, stop */
+            }
+        }
+        visited[depth] = av;
+
+        /* Add this object to the chain */
+        av_push(chain, newRV_inc((SV*)av));
+
+        /* Follow prototype */
+        proto_svp = av_fetch(av, 0, 0);
+        if (!proto_svp || !SvROK(*proto_svp) || SvTYPE(SvRV(*proto_svp)) != SVt_PVAV) {
+            break;
+        }
+        av = (AV*)SvRV(*proto_svp);
+        depth++;
+    }
+
+done:
+    ST(0) = sv_2mortal(newRV_noinc((SV*)chain));
+    XSRETURN(1);
+}
+
+/* Check if object has a property in its own slots (not prototype) */
+static XS(xs_has_own_property) {
+    dXSARGS;
+    AV *av;
+    SV **svp;
+    const char *class_name;
+    STRLEN class_len;
+    ClassMeta *meta;
+    const char *prop_name;
+    STRLEN prop_len;
+    SV **idx_sv;
+
+    if (items < 2) croak("Usage: object::has_own_property($obj, $property)");
+
+    if (!SvROK(ST(0)) || SvTYPE(SvRV(ST(0))) != SVt_PVAV) {
+        croak("Not an object");
+    }
+
+    av = (AV*)SvRV(ST(0));
+    class_name = sv_reftype(SvRV(ST(0)), TRUE);
+    class_len = strlen(class_name);
+
+    meta = get_class_meta(aTHX_ class_name, class_len);
+    if (!meta) {
+        XSRETURN_NO;
+    }
+
+    prop_name = SvPV(ST(1), prop_len);
+    idx_sv = hv_fetch(meta->prop_to_idx, prop_name, prop_len, 0);
+    if (!idx_sv) {
+        XSRETURN_NO;
+    }
+
+    /* Check if this slot has a defined value */
+    svp = av_fetch(av, SvIV(*idx_sv), 0);
+    if (svp && SvOK(*svp)) {
+        XSRETURN_YES;
+    }
+    XSRETURN_NO;
+}
+
+/* Get the prototype depth (number of prototypes in chain) */
+static XS(xs_prototype_depth) {
+    dXSARGS;
+    AV *av;
+    AV *visited[MAX_PROTOTYPE_DEPTH];
+    int depth = 0;
+    int i;
+
+    if (items < 1) croak("Usage: object::prototype_depth($obj)");
+
+    if (!SvROK(ST(0)) || SvTYPE(SvRV(ST(0))) != SVt_PVAV) {
+        croak("Not an object");
+    }
+
+    av = (AV*)SvRV(ST(0));
+
+    while (av && depth < MAX_PROTOTYPE_DEPTH) {
+        SV **proto_svp;
+
+        /* Check for circular reference */
+        for (i = 0; i < depth; i++) {
+            if (visited[i] == av) {
+                goto done;
+            }
+        }
+        visited[depth] = av;
+
+        proto_svp = av_fetch(av, 0, 0);
+        if (!proto_svp || !SvROK(*proto_svp) || SvTYPE(SvRV(*proto_svp)) != SVt_PVAV) {
+            break;
+        }
+        av = (AV*)SvRV(*proto_svp);
+        depth++;
+    }
+
+done:
+    XSRETURN_IV(depth);
 }
 
 static XS(xs_lock) {
@@ -1425,10 +1738,35 @@ static XS(xs_is_locked) {
 }
 
 /* ============================================
+   Global cleanup
+   ============================================ */
+
+/* Cleanup during global destruction */
+static void object_cleanup_globals(pTHX_ void *data) {
+    PERL_UNUSED_ARG(data);
+
+    /* During global destruction, just NULL out pointers.
+     * Perl handles SV cleanup. Trying to free them ourselves
+     * can cause crashes due to destruction order. */
+    if (PL_dirty) {
+        g_type_registry = NULL;
+        g_class_registry = NULL;
+        g_func_accessor_registry = NULL;
+        return;
+    }
+
+    /* Normal cleanup - not during global destruction */
+    /* Note: Full cleanup omitted for simplicity; Perl handles SV refcounts */
+    g_type_registry = NULL;
+    g_class_registry = NULL;
+    g_func_accessor_registry = NULL;
+}
+
+/* ============================================
    Type Registry API
    ============================================ */
 
-/* C-level registration for external XS modules (called from BOOT) 
+/* C-level registration for external XS modules (called from BOOT)
    This is the fast path - no Perl callback overhead */
 PERL_CALLCONV void object_register_type_xs(pTHX_ const char *name, 
                                            ObjectTypeCheckFunc check,
@@ -1573,6 +1911,107 @@ static XS(xs_list_types) {
 }
 
 /* ============================================
+   Singleton support
+   ============================================ */
+
+/* XS implementation of instance() method for singletons */
+static XS(xs_singleton_instance) {
+    dXSARGS;
+    ClassMeta *meta = INT2PTR(ClassMeta*, CvXSUBANY(cv).any_iv);
+
+    PERL_UNUSED_ARG(items);
+
+    if (!meta) {
+        croak("Singleton metadata not found");
+    }
+
+    /* Return cached instance if it exists */
+    if (meta->singleton_instance && SvOK(meta->singleton_instance)) {
+        ST(0) = meta->singleton_instance;
+        XSRETURN(1);
+    }
+
+    /* Create new instance */
+    {
+        dSP;
+        int count;
+        SV *obj;
+        GV *build_gv;
+        char full_build[256];
+
+        ENTER;
+        SAVETMPS;
+
+        /* Call ClassName->new() */
+        PUSHMARK(SP);
+        XPUSHs(sv_2mortal(newSVpv(meta->class_name, 0)));
+        PUTBACK;
+
+        count = call_method("new", G_SCALAR);
+
+        SPAGAIN;
+
+        if (count != 1) {
+            croak("Singleton new() did not return object");
+        }
+
+        obj = POPs;
+        SvREFCNT_inc(obj);  /* Keep the object alive */
+
+        PUTBACK;
+
+        /* Check for BUILD method and call it */
+        snprintf(full_build, sizeof(full_build), "%s::BUILD", meta->class_name);
+        build_gv = gv_fetchpv(full_build, 0, SVt_PVCV);
+        if (build_gv && GvCV(build_gv)) {
+            PUSHMARK(SP);
+            XPUSHs(obj);
+            PUTBACK;
+            call_method("BUILD", G_VOID | G_DISCARD);
+        }
+
+        /* Cache the instance */
+        meta->singleton_instance = obj;
+
+        FREETMPS;
+        LEAVE;
+
+        ST(0) = obj;
+        XSRETURN(1);
+    }
+}
+
+/* object::singleton("Class") - marks class as singleton and installs instance() method */
+static XS(xs_singleton) {
+    dXSARGS;
+    STRLEN class_len;
+    const char *class_pv;
+    ClassMeta *meta;
+    char full_name[256];
+    CV *instance_cv;
+
+    if (items < 1) croak("Usage: object::singleton($class)");
+
+    class_pv = SvPV(ST(0), class_len);
+
+    meta = get_class_meta(aTHX_ class_pv, class_len);
+    if (!meta) {
+        croak("Class '%s' not defined with object::define", class_pv);
+    }
+
+    /* Mark as singleton */
+    meta->is_singleton = 1;
+    meta->singleton_instance = NULL;
+
+    /* Install instance() class method */
+    snprintf(full_name, sizeof(full_name), "%s::instance", class_pv);
+    instance_cv = newXS(full_name, xs_singleton_instance, __FILE__);
+    CvXSUBANY(instance_cv).any_iv = PTR2IV(meta);
+
+    XSRETURN_EMPTY;
+}
+
+/* ============================================
    Boot
    ============================================ */
 
@@ -1615,6 +2054,9 @@ XS_EXTERNAL(boot_object) {
     newXS("object::import_accessor", xs_import_accessor, __FILE__);
     newXS("object::prototype", xs_prototype, __FILE__);
     newXS("object::set_prototype", xs_set_prototype, __FILE__);
+    newXS("object::prototype_chain", xs_prototype_chain, __FILE__);
+    newXS("object::has_own_property", xs_has_own_property, __FILE__);
+    newXS("object::prototype_depth", xs_prototype_depth, __FILE__);
     newXS("object::lock", xs_lock, __FILE__);
     newXS("object::unlock", xs_unlock, __FILE__);
     newXS("object::freeze", xs_freeze, __FILE__);
@@ -1625,6 +2067,12 @@ XS_EXTERNAL(boot_object) {
     newXS("object::register_type", xs_register_type, __FILE__);
     newXS("object::has_type", xs_has_type, __FILE__);
     newXS("object::list_types", xs_list_types, __FILE__);
+
+    /* Singleton support */
+    newXS("object::singleton", xs_singleton, __FILE__);
+
+    /* Register cleanup for global destruction */
+    Perl_call_atexit(aTHX_ object_cleanup_globals, NULL);
 
     Perl_xs_boot_epilog(aTHX_ ax);
 }

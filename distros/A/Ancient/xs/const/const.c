@@ -187,8 +187,8 @@ static OP* my_ck_sassign(pTHX_ OP *o) {
             if (PL_comppad_name && po < PadnamelistMAX(PL_comppad_name) + 1) {
                 PADNAME *pn = PadnamelistARRAY(PL_comppad_name)[po];
                 if (pn) {
-                    /* Set the const flag */
-                    PadnameFLAGS(pn) |= PADNAMEf_CONST;
+                    /* Set the const flag (no-op on 5.18-5.21 due to lvalue issues) */
+                    CONST_COMPAT_SET_PADNAME_FLAG(pn, PADNAMEf_CONST);
 
                     /* Store the constant value in the pad */
                     SV *constval = cSVOPx_sv(rhs);

@@ -8,53 +8,9 @@
 #include <GL/glew.h>
 #include <glew-context.c>
 
+#include "gl_counts.h"
 #include "gl_errors.h"
-
-static int _done_glewInit = 0;
-static int _auto_check_errors = 0;
-
-#define OGLM_CHECK_ERR(name, cleanup) \
-  if (_auto_check_errors) { \
-    int err = GL_NO_ERROR; \
-    int error_count = 0; \
-    while ((err = glGetError()) != GL_NO_ERROR) { \
-      warn(#name ": OpenGL error: %d %s", err, gl_error_string(err)); \
-      error_count++; \
-    } \
-    if (error_count) { \
-      cleanup; \
-      croak(#name ": %d OpenGL errors encountered.", error_count); \
-    } \
-  }
-#define OGLM_GLEWINIT \
-  if (!_done_glewInit) { \
-    GLenum err; \
-    glewExperimental = GL_TRUE; \
-    err = glewInit(); \
-    if (GLEW_OK != err) \
-      croak("Error: %s", glewGetErrorString(err)); \
-    _done_glewInit++; \
-  }
-#define OGLM_AVAIL_CHECK(impl, name) \
-  if ( !impl ) { \
-    croak(#name " not available on this machine"); \
-  }
-#define OGLM_GEN_SETUP(name, n, buffername) \
-  if (n < 0) croak(#name "_p: called with negative n=%d", n); \
-  if (!n) XSRETURN_EMPTY; \
-  GLuint *buffername = malloc(sizeof(GLuint) * n); \
-  if (!buffername) croak(#name "_p: malloc failed");
-#define OGLM_GEN_FINISH(n, buffername) \
-  EXTEND(sp, n); \
-  { int i; for (i=0;i<n;i++) PUSHs(sv_2mortal(newSVuv(buffername[i]))); } \
-  free(buffername);
-#define OGLM_DELETE_SETUP(name, n, buffername) \
-  if (!n) XSRETURN_EMPTY; \
-  GLuint *buffername = malloc(sizeof(GLuint) * n); \
-  if (!buffername) croak(#name "_p: malloc failed"); \
-  { int i; for (i=0;i<n;i++) PUSHs(sv_2mortal(newSVuv(buffername[i]))); }
-#define OGLM_DELETE_FINISH(buffername) \
-  free(buffername);
+#include "oglm.h"
 
 /*
   Maybe one day we'll allow Perl callbacks for GLDEBUGPROCARB
@@ -63,7 +19,7 @@ static int _auto_check_errors = 0;
 MODULE = OpenGL::Modern		PACKAGE = OpenGL::Modern
 
 GLboolean
-glewCreateContext()
+glewCreateContext(int major=0, int minor=0, int profile_mask=0, int flags=0)
 CODE:
   struct createParams params =
   {
@@ -75,10 +31,10 @@ CODE:
     "",  /* display */
     -1,  /* visual */
 #endif
-    0,   /* major */
-    0,   /* minor */
-    0,   /* profile mask */
-    0    /* flags */
+    major,
+    minor,
+    profile_mask,
+    flags
   };
     RETVAL = glewCreateContext(&params);
 OUTPUT:
@@ -103,27 +59,19 @@ CODE:
 OUTPUT:
     RETVAL
 
-SV*
+char *
 glewGetErrorString(err)
     GLenum err
 CODE:
-    RETVAL = newSVpv((void *)glewGetErrorString(err),0);
+    RETVAL = (void *)glewGetErrorString(err);
 OUTPUT:
     RETVAL
 
-SV*
+char *
 glewGetString(what)
     GLenum what;
 CODE:
-    RETVAL = newSVpv((void *)glewGetString(what),0);
-OUTPUT:
-    RETVAL
-
-SV*
-glGetString(what)
-    GLenum what;
-CODE:
-    RETVAL = newSVpv((void *)glGetString(what),0);
+    RETVAL = (void *)glewGetString(what);
 OUTPUT:
     RETVAL
 
@@ -177,47 +125,5 @@ CODE:
   RETVAL = gl_error_string(err);
 OUTPUT:
   RETVAL
-
-# This isn't a bad idea, but I postpone this API and the corresponding
-# typemap hackery until later
-#GLboolean
-#glAreProgramsResidentNV_p(GLuint* ids);
-#PPCODE:
-#     SV* buf_res = sv_2mortal(newSVpv("",items * sizeof(GLboolean)));
-#     GLboolean* residences = (GLboolean*) SvPV_nolen(buf_res);
-#     glAreProgramsResidentNV(items, ids, residences);
-#     EXTEND(SP, items);
-#     int i2;
-#     for( i2 = 0; i2 < items; i2++ ) {
-#        PUSHs(sv_2mortal(newSViv(residences[i2])));
-#	 };
-
-# Manual implementations go here
-#
-
-#//# glShaderSource_p($shaderObj, @string);
-void
-glShaderSource_p(shader, ...);
-     GLuint shader;
-INIT:
-    int i;
-    GLsizei count = items - 1;
-CODE:
-    if(! __glewShaderSource) {
-    	croak("glShaderSource not available on this machine");
-    };
-    
-    GLchar** string = malloc(sizeof(GLchar *) * count);
-    GLint *length = malloc(sizeof(GLint) * count);
-    
-    for(i=0; i<count; i++) {
-    	string[i] = (GLchar *)SvPV(ST(i+1),PL_na);
-    	length[i] = strlen(string[i]);
-    }
-    
-    glShaderSource(shader, count, (const GLchar *const*)string, (const GLint *)length);
-    
-    free(string);
-    free(length);
 
 INCLUDE: ../../auto-xs.inc

@@ -2,43 +2,42 @@ NAME
 
 Log::Log4perl::Config::YamlConfigurator - Reads Log4perl YAML configurations
 
-DESCRIPTION
-
-This configurator class is able to process Log4perl YAML configurations.
-
 INSTALLATION
 
-To install this module manually, run the following commands:
+To install this module, use your preferred CPAN client. If this is "cpanm" then
+run the command
 
-  perl Makefile.PL
-  make
-  make test
-  make install
+  cpanm Log::Log4perl::Config::YamlConfigurator
 
 DOCUMENTATION
 
-After the installation, you can find further documentation using the commands:
+After the installation, you can find further documentation using the command
 
   perldoc Log::Log4perl::Config::YamlConfigurator
 
-MAINTENANCE
+DEVELOPMENT
 
-To maintain this module, run the following commands:
+After the download of the source code, you have to install the module
+dependencies first. The dependencies are described in a "cpanfile".
+
+It follows the "configure" step that creates a "Makefile"
 
   perl Makefile.PL
-  make PERL_CPANM_OPT="--notest --with-develop --with-recommends" installdeps 
-  perl Makefile.PL
+
+You may explicitly trigger the "build" step, calling
+
   make
-  make RELEASE_TESTING=1 test  # use Test::Harness
-  make RELEASE_TESTING=1 testp # use TAP::Harness
-  make cover                   # coverage statistics in vim format
 
-The second command installs the module dependencies in a "local" directory
-using "cpanm".
+before executing all test scripts
+
+  make test # in lexicographic order
+  prove t   # in random order
+
+The "RELEASE_TESTING" flag enables the release testing context.
 
 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2024 by Sven Willenbuecher.
+This software is copyright (c) 2024-2026 by Sven Willenbuecher.
 
 This is free software; you can redistribute it and/or modify it under the same
 terms as the Perl 5 programming language system itself.

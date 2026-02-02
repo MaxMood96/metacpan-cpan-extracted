@@ -6,7 +6,7 @@ use warnings;
 
 use Test::More;
 
-plan tests => 10 + ($ENV{AUTHOR_TESTING} ? 1 : 0);
+plan tests => 11 + ($ENV{AUTHOR_TESTING} ? 1 : 0);
 
 my @module_files = (
     'App/FilenameUtils.pm'
@@ -21,7 +21,8 @@ my @scripts = (
     'script/check-executable-filename',
     'script/check-image-filename',
     'script/check-media-filename',
-    'script/check-video-filename'
+    'script/check-video-filename',
+    'script/parse-media-filename'
 );
 
 # no fake home requested

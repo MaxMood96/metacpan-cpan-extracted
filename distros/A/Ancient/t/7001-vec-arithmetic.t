@@ -78,12 +78,18 @@ subtest 'add_scalar' => sub {
 };
 
 subtest 'neg' => sub {
-    my $a = nvec::new([1, -2, 3, -4, 0]);
+    # Use vectors without 0 to avoid -0 vs 0 comparison issues
+    my $a = nvec::new([1, -2, 3, -4, 5]);
     my $b = $a->neg;
-    is_deeply($b->to_array, [-1, 2, -3, 4, 0], 'neg flips signs');
-    
+    is_deeply($b->to_array, [-1, 2, -3, 4, -5], 'neg flips signs');
+
     my $c = $b->neg;
-    is_deeply($c->to_array, [1, -2, 3, -4, 0], 'double neg returns original');
+    is_deeply($c->to_array, [1, -2, 3, -4, 5], 'double neg returns original');
+
+    # Test zero separately with numeric comparison (handles -0 == 0)
+    my $z = nvec::new([0]);
+    my $nz = $z->neg;
+    ok($nz->get(0) == 0, 'neg of zero is zero');
 };
 
 subtest 'abs' => sub {

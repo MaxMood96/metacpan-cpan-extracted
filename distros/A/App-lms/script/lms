@@ -1,0 +1,320 @@
+#!/usr/bin/env perl
+our $VERSION = "0.99";
+use strict;
+use warnings;
+use App::lms;
+
+exit App::lms->new->run(splice @ARGV);
+
+=encoding utf-8
+
+=head1 NAME
+
+lms - Let Me See command
+
+=head1 VERSION
+
+Version 0.99
+
+=head1 SYNOPSIS
+
+    lms [options] command/library
+
+  OPTIONS
+     -1   --one           Stop at the first match
+     -d   --debug         Show debug output
+     -n   --dryrun        Show command without executing
+     -h   --help          Print this message
+     -l   --list          Print file path (-ll for ls -l)
+     -m   --man           Show documentation
+     -N   --[no-]number   Line number display (default: off)
+     -r   --raw           Don't resolve Homebrew wrappers
+     -v   --version       Print version
+     -p   --pager=#       Specify pager command
+     -t   --type=#        Specify handler (Command:Perl:Python:Ruby:Node)
+          --py            Shortcut for --type Python
+          --pl            Shortcut for --type Perl
+          --rb            Shortcut for --type Ruby
+          --nd            Shortcut for --type Node
+          --bat-theme     Set bat theme per mode (light=X dark=X)
+
+  EXAMPLES
+    lms greple              # Look at a script command
+    lms Getopt::Long        # Look at a Perl module
+    lms --py json           # Look at a Python module
+    lms --rb json           # Look at a Ruby library
+    lms --nd express        # Look at a Node.js module
+    lms -l greple           # Show file path only
+    lms --py -m json        # Show documentation
+
+=head1 DESCRIPTION
+
+B<lms> (Let Me See) is a utility to locate and display command or library files.
+
+It is convenient to see a command file written in shell or any other
+script language.
+
+For library files, Perl modules are fully supported, and support
+for Python, Ruby, and Node.js libraries is included.
+
+The program searches through all file type handlers (Command, Perl, Python,
+Ruby, Node by default) and displays all matches found using a pager.
+
+For Homebrew-installed commands, both the wrapper script in C<bin/> and
+the actual executable in C<libexec/bin/> are displayed. This is useful
+for understanding how wrapper scripts delegate to their implementations.
+
+=head1 OPTIONS
+
+=over 7
+
+=item B<-1>, B<--one>
+
+Stop at the first handler that finds a match, instead of searching
+all handlers (which is the default behavior).
+
+=item B<-d>, B<--debug>
+
+Show debug output on stderr. Displays which handlers are tried
+and how paths are resolved.
+
+=item B<-n>, B<--dryrun>
+
+Show the command that would be executed without actually running it.
+
+=item B<-h>, B<--help>
+
+Display this help message and exit.
+
+=item B<-l>, B<--list>
+
+Print module path instead of displaying the file contents.
+Use multiple times (C<-ll>) to call C<ls -l> for detailed file information.
+
+=item B<-m>, B<--man>
+
+Display manual/documentation using the appropriate tool for each language:
+- Perl: C<perldoc>
+- Python: C<pydoc>
+- Ruby: C<ri>
+- Node.js: C<npm docs>
+- Command: C<man>
+
+=item B<-N>, B<--number>, B<--no-number>
+
+Enable or disable line number display in the pager.  Default is
+C<--no-number>.
+
+For C<bat>, C<--number> uses C<--style=full> and C<--no-number>
+uses C<--style=header,grid,snip>.  For C<less>, C<--number> adds
+C<-N> option.
+
+=item B<-r>, B<--raw>
+
+Show raw paths without resolving Homebrew wrapper scripts to
+their actual executables.
+
+=item B<-v>, B<--version>
+
+Display version information and exit.
+
+=item B<-p>, B<--pager> I<command>
+
+Specify the pager command to use for displaying files.
+Defaults to the C<$LMS_PAGER> environment variable, or C<bat> if available,
+otherwise C<less>.
+
+When multiple files are found, C<bat> displays all files continuously
+with syntax highlighting. With C<less>, use C<:n> to navigate to the
+next file and C<:p> for the previous file.
+
+=item B<-t>, B<--type> I<handler[:handler:...]>
+
+Specify which file type handlers to use and in what order.
+Handlers are specified as colon-separated names (case-insensitive).
+
+Default: C<Command:Perl:Python:Ruby:Node>
+
+Available handlers:
+- C<Command>: Search for executable commands in C<$PATH>
+- C<Perl>: Search for Perl modules in C<@INC>
+- C<Python>: Search for Python libraries using Python's inspect module
+- C<Ruby>: Search for Ruby libraries using C<$LOADED_FEATURES>
+- C<Node>: Search for Node.js modules using C<require.resolve>
+
+Examples:
+    lms --type Perl Getopt::Long       # Only search Perl modules
+    lms --type python json             # Only search Python modules
+    lms --type ruby yaml               # Only search Ruby libraries
+    lms --type node express            # Only search Node.js modules
+
+=item B<--py>
+
+Shortcut for C<--type Python>. Search only Python modules.
+
+=item B<--pl>
+
+Shortcut for C<--type Perl>. Search only Perl modules.
+
+=item B<--rb>
+
+Shortcut for C<--type Ruby>. Search only Ruby libraries.
+
+=item B<--nd>
+
+Shortcut for C<--type Node>. Search only Node.js modules.
+
+=item B<--bat-theme> I<mode>=I<theme>
+
+Specify the default bat theme for light or dark terminal backgrounds.
+Can be used multiple times.
+
+    --bat-theme light=GitHub --bat-theme dark=Monokai
+
+If C<bat> is used as the pager and C<BAT_THEME> is not set, the
+terminal background luminance is detected and the appropriate theme
+is applied.  Built-in defaults are C<Coldark-Cold> for light and
+C<Coldark-Dark> for dark backgrounds.
+
+=item B<--suffix> I<extension>
+
+Specify file suffix/extension to search for (mainly for Perl modules).
+
+Default: C<.pm>
+
+=item B<--skip> I<pattern>
+
+Specify directory patterns to skip during search.
+Can be used multiple times to specify multiple patterns.
+
+Default: C<.optex.d/bin> (or C<$OPTEX_BINDIR> if set)
+
+=back
+
+=head1 HANDLER MODULES
+
+The program uses a plugin architecture where different file type handlers
+are dynamically loaded based on the C<--type> option. Each handler must
+implement a C<get_path($app, $name)> method.
+
+=over 7
+
+=item B<App::lms::Command>
+
+Handler for executable commands. Searches through C<$PATH> environment
+variable to find executable files.
+
+=item B<App::lms::Perl>
+
+Handler for Perl modules. Searches through C<@INC> paths to find
+Perl module files (.pm and .pl files).
+
+=item B<App::lms::Python>
+
+Handler for Python libraries. Executes Python's C<inspect.getsourcefile()>
+function to locate Python module files.
+
+=item B<App::lms::Ruby>
+
+Handler for Ruby libraries. Loads the specified library with C<require>
+and inspects C<$LOADED_FEATURES> to find the actual file path.
+Documentation is displayed using C<ri>.
+
+=item B<App::lms::Node>
+
+Handler for Node.js modules. Uses C<require.resolve> with global paths
+to locate module entry points.
+Documentation is opened via C<npm docs>.
+
+=back
+
+=head1 EXAMPLES
+
+    # Display a script command (brew is a shell script)
+    lms brew
+
+    # Display a Perl module
+    lms List::Util
+
+    # Display a Python module
+    lms --py json
+
+    # Just show the file path
+    lms -l brew
+
+    # Show detailed file information
+    lms -ll Getopt::Long
+
+    # Show documentation (perldoc for Perl, pydoc for Python, ri for Ruby, etc.)
+    lms -m List::Util
+    lms --py -m json
+    lms --rb -m json
+    lms -m ls
+
+    # Only search for Perl modules
+    lms --pl Data::Dumper
+
+    # Only search for Python modules
+    lms --py os.path
+
+    # Display a Ruby library
+    lms --rb yaml
+
+    # Display a Node.js module
+    lms --nd express
+
+    # Use a custom pager
+    lms --pager "vim -R" List::Util
+
+    # Pass options to the pager (use -- to separate)
+    lms -- +10 List::Util  # Open at line 10
+
+=head1 INSTALLATION
+
+    # Homebrew
+    brew tap tecolicom/tap
+    brew install app-lms
+
+    # From CPAN
+    cpanm App::lms
+
+    # From GitHub
+    cpanm https://github.com/kaz-utashiro/App-lms.git
+
+=head1 ENVIRONMENT
+
+=over 7
+
+=item B<LMS_PAGER>
+
+Default pager command to use when displaying files.
+If not set, C<bat> is used if available, otherwise C<less>.
+
+=item B<BAT_THEME>
+
+Theme for C<bat> pager.  If set, takes precedence over C<--bat-theme>
+option and automatic detection.  See C<bat --list-themes> for available
+themes.
+
+=item B<OPTEX_BINDIR>
+
+If set, overrides the default skip pattern for the C<--skip> option.
+
+=back
+
+=head1 SEE ALSO
+
+L<App::lms>, L<Getopt::EX>, L<Getopt::EX::Hashed>
+
+=head1 AUTHOR
+
+Kazumasa Utashiro
+
+=head1 LICENSE
+
+Copyright 1992-2026 Kazumasa Utashiro.
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.
+
+=cut

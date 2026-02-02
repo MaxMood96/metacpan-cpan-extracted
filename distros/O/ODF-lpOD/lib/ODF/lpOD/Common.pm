@@ -17,6 +17,7 @@ use constant PACKAGE_DATE   => '2014-04-30T08:32:52';
 #-----------------------------------------------------------------------------
 use Scalar::Util ();
 use List::Util qw/any/;
+use match::simple qw(match);
 use Carp qw/carp confess cluck/;
 use Encode;
 use base 'Exporter';
@@ -898,50 +899,12 @@ sub     not_implemented
 
 # Perl 5.38 loudly deprecates 'when' and the ~~ operator, and 5.40 will
 # supposedly remove them entirely.  To preserve existing semantics of
-# existing code including user-visible functions, I'm emulating (a subset of) 
-# the ~~ operator here.  -Jim Avera 6/10/2024
+# existing code including user-visible functions, a subset of the ~~
+# operator is included here. Previously this was a custom function
+# (thanks Jim Avera) but has since been replaced with match::simple
 sub     fake_smartmatch
         {
-          my ($L, $R) = @_;
-          my $err;
-          if (@_ != 2) {
-            $err = "expects two args";
-          }
-          elsif (! defined($L)) {
-            return ! defined($R);
-          }
-          elsif (ref($L) ne "") {
-            $err = "only handles a simple left operand";
-          }
-          elsif (! defined($R)) {
-            return ! defined($L);
-          }
-          elsif ((my $rtype = ref($R)) ne "") {
-            if ($rtype eq "ARRAY") {
-              return any { __SUB__->($L,$_) } @$R;
-            }
-            elsif ($rtype eq "HASH") {
-              return exists($R->{$L});
-            }
-            elsif ($rtype eq "CODE") {
-              return $R->($L);
-            }
-            elsif ($rtype eq "RegExp") {
-              return $L =~ /$R/;
-            }
-            else {
-              $err = "does not handle operand of type $rtype"
-            }
-          }
-          else {
-            if (Scalar::Util::looks_like_number($R) || 
-                               Scalar::Util::looks_like_number($L)) {
-              return $L == $R;
-            } else {
-              return $L eq $R;
-            }
-          }
-          confess "fake_smartmatch $err";
+          return match($_[0], $_[1]);
         }
 
 #=============================================================================

@@ -44,7 +44,7 @@ subtest 'pipeline - data transformation' => sub {
     # String processing pipeline
     my @str_transforms = (
         sub { lc($_[0]) },
-        sub { $_[0] =~ s/\s+/_/gr },
+        sub { my $s = $_[0]; $s =~ s/\s+/_/g; $s },
         sub { "prefix_$_[0]" },
     );
     is(pipeline("Hello World", @str_transforms), 'prefix_hello_world', 'string pipeline');

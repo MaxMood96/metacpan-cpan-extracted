@@ -1,0 +1,11 @@
+log4perl-init:
+  class: Log::Log4perl
+  method: init
+  args:
+    - $ref: log4perl-configurator
+
+log4perl-configurator:
+  class: Log::Log4perl::Config::YamlConfigurator
+  args:
+    data: 
+      $config: logging_data.yml

@@ -2,7 +2,7 @@ package
     object;
 use strict;
 use warnings;
-our $VERSION = '0.10';
+our $VERSION = '0.14';
 require XSLoader;
 XSLoader::load('object', $VERSION);
 1;
@@ -56,23 +56,6 @@ mapped to slot indices at compile time.
 
 Objects are properly blessed into their class, so C<isa>, C<can>, and
 custom package methods all work as expected.
-
-=head2 Performance
-
-Benchmarks show significant improvements over traditional C<bless> with
-hash references:
-
-=over 4
-
-=item * B<Constructor (positional)>: 35% faster than bless
-
-=item * B<Constructor (named)>: 17% faster than bless
-
-=item * B<Getter>: 143% faster (2.4x) than bless
-
-=item * B<Setter>: 107% faster (2x) than bless
-
-=back
 
 =head1 FUNCTIONS
 

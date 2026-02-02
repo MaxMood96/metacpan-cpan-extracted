@@ -6,6 +6,16 @@ Home page:    <https://metacpan.org/release/Sub-HandlesVia>
 Bug tracker:  <https://github.com/tobyink/p5-sub-handlesvia/issues>
 Maintainer:   Toby Inkster (TOBYINK) <tobyink@cpan.org>
 
+0.053004	2026-02-01
+
+ [ Documentation ]
+ - Document exactly which methods may be accelerated by installing
+   Sub::HandlesVia::XS.
+
+ [ Other ]
+ - Added: Array:none.
+ - Added: XS implemention of Array:not_all_true.
+
 0.053003	2026-01-31
 
  - A lot of the array handlers which accepted a coderef which operated on

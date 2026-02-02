@@ -9,6 +9,11 @@
 #include "perl.h"
 #include "XSUB.h"
 
+/* XS_EXTERNAL compatibility - introduced in 5.16 */
+#ifndef XS_EXTERNAL
+#  define XS_EXTERNAL(name) XS(name)
+#endif
+
 /* Include the nvec C API */
 #include "../nvec/nvec_api.h"
 

@@ -1,5 +1,47 @@
 Revision history for Perl extension Text-ANSI-Fold
 
+2.3302 2026-02-01T15:52:56Z
+
+    - Fix infinite loop when folding OSC 8 links at narrow width
+      (pwidth now strips OSC sequences; word boundary and run-out
+      pushback suppressed when no visible chars remain in folded text)
+    - Add progress check in retrieve to panic on no-progress fold
+
+2.3301 2026-02-01T14:44:21Z
+
+    - Fix word boundary regex to skip OSC sequences
+      (prevents splitting SGR sequences like \e[48;5;254m across fold boundaries)
+
+2.33 2026-01-31T01:50:51Z
+
+    - Add OSC 8 hyperlink state tracking across fold boundaries
+
+2.32 2026-01-18T04:06:24Z
+
+    - Fix OSC regex to conform to ECMA-48 specification
+      (0x08-0x0d and 0x20-0x7e for command string)
+    - Add OSC 8 hyperlink tests
+
+2.31 2026-01-11T02:25:18Z
+
+    - restore EL (Erase Line) sequence when folding
+    - fix padding calculation for run-in (remove @bg_stack hack)
+    - document margin parameter
+
+2.30 2025-02-13T12:31:56Z
+
+    - add Default_Ignorable_Code_Point to non-spacing character
+    - CR at the end of string does not reset the position
+
+2.29 2025-01-30T07:26:13Z
+
+    - use Text::VisualWidth::PP@0.07
+      this enables handling Emoji_Modifier and Zero_Width_Joiner
+
+2.28 2025-01-27T13:22:37Z
+
+    - imcomplete CSI sequence consumes zero width
+
 2.2702 2024-12-30T23:48:13Z
 
     - rename "crackwide" to "splitwide"

@@ -46,13 +46,13 @@ sub find {
         # - There is a limit to the number of concurrent SMTP connections per IP address to
         #   protect the systems against attack. Ensure that the sending email server is not
         #   opening more than 10 concurrent connections to avoid reaching this limit.
-        'CXCNCT' => 'toomanyconn',
+        'CXCNCT' => 'ratelimited',
 
         # CXMXRT
         #   - The sender has sent email to too many recipients and needs to wait before sending
         #     more email.
         #   - The email sender has exceeded the maximum number of sent email allowed.
-        'CXMXRT' => 'toomanyconn', 
+        'CXMXRT' => 'ratelimited', 
 
         # CDRBL
         # - The sending IP address has been temporarily blocked by Cox due to exhibiting spam-like
@@ -94,31 +94,18 @@ sub find {
             'cox too many bad commands from',
             'too many invalid recipients',
         ],
-        'requireptr' => [
-            # - The reverse DNS check of the sending server IP address has failed.
-            # - Cox requires that all connecting email servers contain valid reverse DNS PTR records.
-            'dns check failure - try again later',
-            'rejected - no rdns',
-        ],
-        'policyviolation' => [
-            # - The sending server has attempted to communicate too soon within the SMTP transaction
+        'contenterror' => [
             # - The message has been rejected because it contains an attachment with one of the
             #   following prohibited file types, which commonly contain viruses: .shb, .shs, .vbe,
             #   .vbs, .wsc, .wsf, .wsh, .pif, .msc, .msi, .msp, .reg, .sct, .bat, .chm, .isp, .cpl,
             #   .js, .jse, .scr, .exe.
-            'esmtp no data before greeting',
             'attachment extension is forbidden',
         ],
-        'rejected' => [
-            # Cox requires that all sender domains resolve to a valid MX or A-record within DNS.
-            'sender rejected',
+        'policyviolation' => [
+            # - The sending server has attempted to communicate too soon within the SMTP transaction
+            'esmtp no data before greeting',
         ],
-        'systemerror' => [
-            # - Our systems are experiencing an issue which is causing a temporary inability to
-            #   accept new email.
-            'esmtp server temporarily not available',
-        ],
-        'toomanyconn' => [
+        'ratelimited' => [
             # - The sending IP address has exceeded the five maximum concurrent connection limit.
             # - The SMTP connection has exceeded the 100 email message threshold and was disconnected.
             # - The sending IP address has exceeded one of these rate limits and has been temporarily
@@ -128,6 +115,21 @@ sub find {
             'too many sessions from',
             'requested action aborted: try again later',
             'message threshold exceeded',
+        ],
+        'rejected' => [
+            # Cox requires that all sender domains resolve to a valid MX or A-record within DNS.
+            'sender rejected',
+        ],
+        'requireptr' => [
+            # - The reverse DNS check of the sending server IP address has failed.
+            # - Cox requires that all connecting email servers contain valid reverse DNS PTR records.
+            'dns check failure - try again later',
+            'rejected - no rdns',
+        ],
+        'systemerror' => [
+            # - Our systems are experiencing an issue which is causing a temporary inability to
+            #   accept new email.
+            'esmtp server temporarily not available',
         ],
         'userunknown' => [
             # - The intended recipient is not a valid Cox Email account.
@@ -182,7 +184,7 @@ azumakuniyuki
 
 =head1 COPYRIGHT
 
-Copyright (C) 2020-2025 azumakuniyuki, All rights reserved.
+Copyright (C) 2020-2026 azumakuniyuki, All rights reserved.
 
 =head1 LICENSE
 

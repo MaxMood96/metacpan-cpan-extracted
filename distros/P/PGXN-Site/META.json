@@ -46,7 +46,7 @@
             "Template::Declare::Tags" : "0.43",
             "WWW::PGXN" : "v0.12.0",
             "namespace::autoclean" : "0.11",
-            "perl" : "v5.14.0"
+            "perl" : "v5.16.0"
          }
       },
       "test" : {
@@ -70,37 +70,37 @@
    "provides" : {
       "PGXN::Site" : {
          "file" : "lib/PGXN/Site.pm",
-         "version" : "v0.23.8"
+         "version" : "v0.23.9"
       },
       "PGXN::Site::Controller" : {
          "file" : "lib/PGXN/Site/Controller.pm",
-         "version" : "v0.23.8"
+         "version" : "v0.23.9"
       },
       "PGXN::Site::Locale" : {
          "file" : "lib/PGXN/Site/Locale.pm",
-         "version" : "v0.23.8"
+         "version" : "v0.23.9"
       },
       "PGXN::Site::Locale::en" : {
          "file" : "lib/PGXN/Site/Locale/en.pm",
-         "version" : "v0.23.8"
+         "version" : "v0.23.9"
       },
       "PGXN::Site::Locale::fr" : {
          "file" : "lib/PGXN/Site/Locale/fr.pm",
-         "version" : "v0.23.8"
+         "version" : "v0.23.9"
       },
       "PGXN::Site::Router" : {
          "file" : "lib/PGXN/Site/Router.pm",
-         "version" : "v0.23.8"
+         "version" : "v0.23.9"
       },
       "PGXN::Site::Templates" : {
          "file" : "lib/PGXN/Site/Templates.pm",
-         "version" : "v0.23.8"
+         "version" : "v0.23.9"
       }
    },
    "release_status" : "stable",
    "resources" : {
       "homepage" : "https://www.pgxn.org/"
    },
-   "version" : "v0.23.8",
+   "version" : "v0.23.9",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

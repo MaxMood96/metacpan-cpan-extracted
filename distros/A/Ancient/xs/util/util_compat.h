@@ -6,6 +6,12 @@
 #ifndef UTIL_COMPAT_H
 #define UTIL_COMPAT_H
 
+/* Devel::PPPort compatibility - provides many backported macros */
+#include "ppport.h"
+
+/* Include shared XOP compatibility for custom ops (5.14+ fallback) */
+#include "../xop_compat.h"
+
 /* Version checking macro */
 #ifndef PERL_VERSION_GE
 #  define PERL_VERSION_GE(r,v,s) \
@@ -46,7 +52,11 @@
 
 #if !PERL_VERSION_GE(5,22,0)
 #  ifndef Perl_xs_boot_epilog
-#    define Perl_xs_boot_epilog(aTHX_ ax) XSRETURN_YES
+#    ifdef USE_ITHREADS
+#      define Perl_xs_boot_epilog(ctx, ax) XSRETURN_YES
+#    else
+#      define Perl_xs_boot_epilog(ax) XSRETURN_YES
+#    endif
 #  endif
 #endif
 
@@ -71,6 +81,48 @@
 
 #ifndef SAVE_DEFSV
 #  define SAVE_DEFSV SAVESPTR(GvSV(PL_defgv))
+#endif
+
+/* PL_sv_zero - introduced in 5.28 */
+#if !PERL_VERSION_GE(5,28,0)
+/* Pre-5.28: PL_sv_zero doesn't exist, use sv_2mortal(newSViv(0)) */
+#  define PL_sv_zero (*util_compat_get_sv_zero(aTHX))
+static SV* util_compat_get_sv_zero(pTHX) {
+    static SV* sv_zero = NULL;
+    if (!sv_zero) {
+        sv_zero = newSViv(0);
+        SvREADONLY_on(sv_zero);
+    }
+    return sv_zero;
+}
+#endif
+
+/* GvCV_set - introduced in 5.22 */
+#if !PERL_VERSION_GE(5,22,0)
+#  ifndef GvCV_set
+#    define GvCV_set(gv, cv) (GvCV(gv) = (cv))
+#  endif
+#endif
+
+/* Perl_call_checker - introduced in 5.14 */
+#if !PERL_VERSION_GE(5,14,0)
+typedef OP * (*Perl_call_checker)(pTHX_ OP *, GV *, SV *);
+#endif
+
+/* pad_alloc - not exported until 5.14+
+ * Fallback: return 0 (disables pad optimization) */
+#if !PERL_VERSION_GE(5,14,0)
+#  ifndef pad_alloc
+#    define pad_alloc(optype, sv_type) 0
+#  endif
+#endif
+
+/* op_convert_list - introduced in 5.22
+ * Fallback: use Perl_convert which exists in older Perls */
+#if !PERL_VERSION_GE(5,22,0)
+#  ifndef op_convert_list
+#    define op_convert_list(type, flags, op) Perl_convert(aTHX_ type, flags, op)
+#  endif
 #endif
 
 #endif /* UTIL_COMPAT_H */

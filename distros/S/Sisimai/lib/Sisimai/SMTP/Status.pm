@@ -486,10 +486,10 @@ use constant StandardCode => {
     '4.1.7'  => 'rejected',         # Bad sender's mailbox address syntax
     '4.1.8'  => 'rejected',         # Bad sender's system address
     '4.1.9'  => 'systemerror',      # Message relayed to non-compliant mailer
-    '4.2.1'  => 'blocked',          # Mailbox disabled, not accepting messages
+    '4.2.1'  => 'suspend',          # Mailbox disabled, not accepting messages
     '4.2.2'  => 'mailboxfull',      # Mailbox full
-    '4.2.3'  => 'exceedlimit',      # Message length exceeds administrative limit
-    '4.2.4'  => 'filtered',         # Mailing list expansion problem
+    '4.2.3'  => 'emailtoolarge',    # Message length exceeds administrative limit
+    '4.2.4'  => 'systemerror',      # Mailing list expansion problem
     #'4.3.0' => 'systemerror',      # Other or undefined mail system status
     '4.3.1'  => 'systemfull',       # Mail system full
     '4.3.2'  => 'notaccept',        # System not accepting network messages
@@ -505,20 +505,20 @@ use constant StandardCode => {
     '4.4.7'  => 'expired',          # Delivery time expired
     '4.4.8'  => 'networkerror',     # Retry on IPv4
     #'4.5.0'  => 'networkerror',    # Other or undefined protocol status
-    '4.5.3'  => 'systemerror',      # Too many recipients
+    '4.5.3'  => 'ratelimited',      # Too many recipients
     '4.5.5'  => 'systemerror',      # Wrong protocol version
     '4.6.0'  => 'contenterror',     # Other or undefined media error
     '4.6.2'  => 'contenterror',     # Conversion required and prohibited
     '4.6.5'  => 'contenterror',     # Conversion Failed
     #'4.7.0' => 'securityerror',    # Other or undefined security status
     '4.7.1'  => 'blocked',          # Delivery not authorized, message refused
-    '4.7.2'  => 'blocked',          # Mailing list expansion prohibited
+    '4.7.2'  => 'rejected',         # Mailing list expansion prohibited
     '4.7.5'  => 'securityerror',    # Cryptographic failure
     '4.7.6'  => 'securityerror',    # Cryptographic algorithm not supported
     '4.7.7'  => 'securityerror',    # Message integrity failure
     '4.7.12' => 'securityerror',    # A password transition is needed
     '4.7.15' => 'securityerror',    # Priority Level is too low
-    '4.7.16' => 'mesgtoobig',       # Message is too big for the specified priority
+    '4.7.16' => 'emailtoolarge',    # Message is too big for the specified priority
     '4.7.24' => 'authfailure',      # SPF validation error
     '4.7.25' => 'requireptr',       # Reverse DNS validation failed
     '4.7.26' => 'authfailure',      # Must pass either SPF or DKIM validation
@@ -536,19 +536,19 @@ use constant StandardCode => {
     '5.2.0'  => 'filtered',         # Other or undefined mailbox status
     '5.2.1'  => 'filtered',         # Mailbox disabled, not accepting messages
     '5.2.2'  => 'mailboxfull',      # Mailbox full
-    '5.2.3'  => 'exceedlimit',      # Message length exceeds administrative limit
-    '5.2.4'  => 'filtered',         # Mailing list expansion problem
+    '5.2.3'  => 'emailtoolarge',    # Message length exceeds administrative limit
+    '5.2.4'  => 'systemerror',      # Mailing list expansion problem
     '5.3.0'  => 'systemerror',      # Other or undefined mail system status
     '5.3.1'  => 'systemfull',       # Mail system full
     '5.3.2'  => 'notaccept',        # System not accepting network messages
     '5.3.3'  => 'systemerror',      # System not capable of selected features
-    '5.3.4'  => 'mesgtoobig',       # Message too big for system
+    '5.3.4'  => 'emailtoolarge',    # Message too big for system
     '5.3.5'  => 'systemerror',      # System incorrectly configured
     '5.4.0'  => 'networkerror',     # Other or undefined network or routing status
     '5.4.3'  => 'systemerror',      # Directory server failure
     '5.4.4'  => 'hostunknown',      # Unable to route
     '5.5.2'  => 'systemerror',      # If the server cannot BASE64 decode any client response (AUTH)
-    '5.5.3'  => 'toomanyconn',      # Too many recipients
+    '5.5.3'  => 'ratelimited',      # Too many recipients
     '5.5.4'  => 'systemerror',      # Invalid command arguments
     '5.5.5'  => 'systemerror',      # Wrong protocol version
     '5.5.6'  => 'syntaxerror',      # Authentication Exchange line is too long
@@ -558,7 +558,7 @@ use constant StandardCode => {
     '5.6.3'  => 'contenterror',     # Conversion required but not supported
     '5.6.5'  => 'contenterror',     # Conversion Failed
     '5.6.6'  => 'contenterror',     # Message content not available
-    '5.6.7'  => 'contenterror',     # Non-ASCII addresses not permitted for that sender/recipient
+    '5.6.7'  => 'rejected',         # Non-ASCII addresses not permitted for that sender/recipient
     '5.6.8'  => 'contenterror',     # UTF-8 string reply is required, but not permitted by the SMTP client
     '5.6.9'  => 'contenterror',     # UTF-8 header message cannot be transferred to one or more recipients
     '5.7.0'  => 'securityerror',    # Other or undefined security status
@@ -576,10 +576,10 @@ use constant StandardCode => {
     '5.7.13' => 'suspend',          # User Account Disabled
     '5.7.14' => 'securityerror',    # Trust relationship required
     '5.7.15' => 'securityerror',    # Priority Level is too low
-    '5.7.16' => 'mesgtoobig',       # Message is too big for the specified priority
+    '5.7.16' => 'emailtoolarge',    # Message is too big for the specified priority
     '5.7.17' => 'hasmoved',         # Mailbox owner has changed
     '5.7.18' => 'hasmoved',         # Domain owner has changed
-    '5.7.19' => 'securityerror',    # RRVS test cannot be completed
+    '5.7.19' => 'systemerror',      # RRVS test cannot be completed
     '5.7.20' => 'authfailure',      # No passing DKIM signature found
     '5.7.21' => 'authfailure',      # No acceptable DKIM signature found
     '5.7.22' => 'authfailure',      # No valid author-matched DKIM signature found
@@ -594,76 +594,37 @@ use constant StandardCode => {
 };
 
 use constant InternalCode => {
-    'temporary' => {
-        'authfailure'    => '4.0.926',
-        'badreputation'  => '4.0.975',
-        'blocked'        => '4.0.971',
-        'contenterror'   => '4.0.960',
-        'exceedlimit'    => '4.0.923',
-        'expired'        => '4.0.947',
-        'failedstarttls' => '4.0.976',
-        'filtered'       => '4.0.924',
-        #'hasmoved'      => '4.0.916',
-        #'hostunknown'   => '4.0.912',
-        'mailboxfull'    => '4.0.922',
-        'mailererror'    => '4.0.939',
-        'mesgtoobig'     => '4.0.934',
-        'networkerror'   => '4.0.944',
-        'norelaying'     => '4.0.909',
-        'notaccept'      => '4.0.932',
-        'notcompliantrfc'=> '4.0.974',
-        'onhold'         => '4.0.901',
-        'policyviolation'=> '4.0.972',
-        'rejected'       => '4.0.918',
-        'requireptr'     => '4.0.973',
-        'securityerror'  => '4.0.970',
-        'spamdetected'   => '4.0.980',
-        'speeding'       => '4.0.946',
-        'suppressed'     => '4.0.903',
-        'suspend'        => '4.0.921',
-        'systemerror'    => '4.0.930',
-        'systemfull'     => '4.0.931',
-        'syntaxerror'    => '4.0.902',
-        'toomanyconn'    => '4.0.945',
-        #'userunknown'   => '4.0.911',
-        'undefined'      => '4.0.900',
-        'virusdetected'  => '4.0.981',
-    },
-    'permanent' => {
-        'authfailure'    => '5.0.926',
-        'badreputation'  => '5.0.975',
-        'blocked'        => '5.0.971',
-        'contenterror'   => '5.0.960',
-        'exceedlimit'    => '5.0.923',
-        'expired'        => '5.0.947',
-        'failedstarttls' => '5.0.976',
-        'filtered'       => '5.0.910',
-        'hasmoved'       => '5.0.916',
-        'hostunknown'    => '5.0.912',
-        'mailboxfull'    => '5.0.922',
-        'mailererror'    => '5.0.939',
-        'mesgtoobig'     => '5.0.934',
-        'networkerror'   => '5.0.944',
-        'norelaying'     => '5.0.909',
-        'notaccept'      => '5.0.932',
-        'notcompliantrfc'=> '5.0.974',
-        'onhold'         => '5.0.901',
-        'policyviolation'=> '5.0.972',
-        'rejected'       => '5.0.918',
-        'requireptr'     => '5.0.973',
-        'securityerror'  => '5.0.970',
-        'spamdetected'   => '5.0.980',
-        'speeding'       => '5.0.946',
-        'suppressed'     => '5.0.903',
-        'suspend'        => '5.0.921',
-        'systemerror'    => '5.0.930',
-        'systemfull'     => '5.0.931',
-        'syntaxerror'    => '5.0.902',
-        'toomanyconn'    => '5.0.945',
-        'userunknown'    => '5.0.911',
-        'undefined'      => '5.0.900',
-        'virusdetected'  => '5.0.981',
-    },
+    'authfailure'     => ['5.9.130', '4.9.130'],
+    'badreputation'   => ['5.9.132', '4.9.132'],
+    'blocked'         => ['5.9.134', '4.9.134'],
+    'contenterror'    => ['5.9.160', '4.9.160'],
+    'emailtoolarge'   => ['5.9.161', '4.9.161'],
+    'expired'         => ['5.9.340', '4.9.340'],
+    'failedstarttls'  => ['5.9.350', '4.9.350'],
+    'filtered'        => ['5.9.210', '4.9.210'],
+    'hasmoved'        => ['5.9.211', ''],
+    'hostunknown'     => ['5.9.212', ''],
+    'mailboxfull'     => ['5.9.220', '4.9.220'],
+    'mailererror'     => ['5.9.230', '4.9.230'],
+    'networkerror'    => ['5.9.341', '4.9.341'],
+    'norelaying'      => ['5.9.214', '4.9.214'],
+    'notaccept'       => ['5.9.215', '4.9.215'],
+    'notcompliantrfc' => ['5.9.162', '4.9.162'],
+    'onhold'          => ['5.9.301', '4.9.301'],
+    'policyviolation' => ['5.9.371', '4.9.371'],
+    'ratelimited'     => ['5.9.131', '4.9.131'],
+    'rejected'        => ['5.9.110', '4.9.110'],
+    'requireptr'      => ['5.9.133', '4.9.133'],
+    'securityerror'   => ['5.9.370', '4.9.370'],
+    'spamdetected'    => ['5.9.164', '4.9.164'],
+    'suppressed'      => ['5.9.310', '4.9.310'],
+    'suspend'         => ['5.9.221', '4.9.221'],
+    'syntaxerror'     => ['5.9.351', '4.9.351'],
+    'systemerror'     => ['5.9.231', '4.9.231'],
+    'systemfull'      => ['5.9.232', '4.9.232'],
+    'undefined'       => ['5.9.300', '4.9.300'],
+    'userunknown'     => ['5.9.213', ''],
+    'virusdetected'   => ['5.9.165', '4.9.165'],
 };
 
 sub code {
@@ -677,9 +638,8 @@ sub code {
     my $class = shift;
     my $argv1 = shift || return "";
     my $argv2 = shift // 0;
-    my $table = $argv2 ? InternalCode->{'temporary'} : InternalCode->{'permanent'};
-    my $code0 = $table->{ $argv1 } // InternalCode->{'permanent'}->{ $argv1 } // '';
-    return $code0;
+    my $pairs = InternalCode->{ $argv1 } || return "";
+    return $argv2 ? $pairs->[1] : $pairs->[0];
 }
 
 sub name {
@@ -822,6 +782,8 @@ sub prefer {
 
     my $statuscode = $argv0 || return $argv1; return $argv1 unless length $statuscode > 4;
     my $codeinmesg = $argv1 || return $argv0; return $argv0 unless length $codeinmesg > 4;
+    return $codeinmesg if index($statuscode, '.9.') == 1;
+
     my $esmtpreply = $argv2 || 0;
     my $the1stchar = {
         'field' => int substr($statuscode, 0, 1),
@@ -879,7 +841,7 @@ sub is_explicit {
     my $class = shift;
     my $argv1 = shift || return 0;
 
-    return 0 if length($argv1) == 7 && index($argv1, "5.0.9") == 0 || index($argv1, "4.0.9") == 0;
+    return 0 if length($argv1) == 7 && index($argv1, ".9.") == 1;
     return 1;
 }
 
@@ -905,7 +867,7 @@ Sisimai::SMTP::Status - SMTP Enhanced Status Codes related utilities
 =head1 SYNOPSIS
 
     use Sisimai::SMTP::Status;
-    print Sisimai::SMTP::Status->code('userunknown');           # '5.0.911'
+    print Sisimai::SMTP::Status->code('userunknown');           # '5.9.213'
     print Sisimai::SMTP::Status->name('5.1.2');                 # 'hostunknown'
     print Sisimai::SMTP::Status->find('550 5.1.1 Unknown user');# '5.1.1'
 
@@ -921,15 +883,15 @@ getting the reason from the DSN value, and getting the DSN from the text includi
 C<code()> method returns pseudo DSN value from the specified reason string. The second argument is
 a flag for getting pseudo DSN value as a temporary error.
 
-    print Sisimai::SMTP::Status->code('mailboxfull');   # '5.0.922'
-    print Sisimai::SMTP::Status->code('mailboxfull',1); # '4.0.922'
+    print Sisimai::SMTP::Status->code('mailboxfull');   # '5.9.220'
+    print Sisimai::SMTP::Status->code('mailboxfull',1); # '4.9.220'
 
 =head2 C<B<name(I<D.S.N.>)>>
 
 C<name()> method returns the reason string from the specified DSN value.
 
     print Sisimai::SMTP::Status->name('5.1.6');         # 'hasmoved'
-    print Sisimai::SMTP::Status->name('4.2.3');         # 'exceedlimit'
+    print Sisimai::SMTP::Status->name('4.2.3');         # 'emailtoolarge'
 
 =head2 C<B<test(I<D.S.N.>)>>
 
@@ -957,7 +919,7 @@ C<prefer()> method returns the preferred value selected from the arguments.
 
 C<is_explicit()> method returns 0 if the delivery status code is empty or is an internal code
 
-    print Sisimai::SMTP::Status->is_explicit("5.0.901"); # 0
+    print Sisimai::SMTP::Status->is_explicit("5.9.301"); # 0
     print Sisimai::SMTP::Status->is_explicit("5.7.625"); # 1
 
 =head2 C<B<is_ambiguous(I<delivery status code>)
@@ -974,7 +936,7 @@ azumakuniyuki
 
 =head1 COPYRIGHT
 
-Copyright (C) 2015-2018,2020-2025 azumakuniyuki, All rights reserved.
+Copyright (C) 2015-2018,2020-2026 azumakuniyuki, All rights reserved.
 
 =head1 LICENSE
 

@@ -54,6 +54,8 @@ static XOP lru_func_set_xop;
 static XOP lru_func_exists_xop;
 static XOP lru_func_peek_xop;
 static XOP lru_func_delete_xop;
+static XOP lru_func_oldest_xop;
+static XOP lru_func_newest_xop;
 
 /* ============================================
    Magic vtable
@@ -386,6 +388,36 @@ static OP* pp_lru_func_delete(pTHX) {
     RETURN;
 }
 
+/* pp_lru_func_oldest: stack has (cache) - optimized */
+static OP* pp_lru_func_oldest(pTHX) {
+    dSP;
+    SV *cache_sv = TOPs;
+    LRUCache *c = get_lru_cache(aTHX_ cache_sv);
+    
+    if (c->tail) {
+        SETs(c->tail->key);
+        XPUSHs(c->tail->value);
+        RETURN;
+    }
+    POPs;  /* Remove cache from stack */
+    RETURN;
+}
+
+/* pp_lru_func_newest: stack has (cache) - optimized */
+static OP* pp_lru_func_newest(pTHX) {
+    dSP;
+    SV *cache_sv = TOPs;
+    LRUCache *c = get_lru_cache(aTHX_ cache_sv);
+    
+    if (c->head) {
+        SETs(c->head->key);
+        XPUSHs(c->head->value);
+        RETURN;
+    }
+    POPs;  /* Remove cache from stack */
+    RETURN;
+}
+
 /* ============================================
    Call checker for function-style ops
    Replaces entersub with custom op for maximum speed.
@@ -581,6 +613,64 @@ static void install_lru_func_3arg(pTHX_ const char *pkg, const char *name,
     cv_set_call_checker(cv, lru_func_call_checker_3arg, ckobj);
 }
 
+/* 
+ * Call checker for 1-arg functions: lru_oldest($cache), lru_newest($cache)
+ * Uses newUNOP for single argument.
+ */
+static OP* lru_func_call_checker_1arg(pTHX_ OP *entersubop, GV *namegv, SV *ckobj) {
+    lru_ppfunc ppfunc = (lru_ppfunc)SvIVX(ckobj);
+    OP *pushop, *cvop, *cacheop;
+    OP *newop;
+
+    PERL_UNUSED_ARG(namegv);
+
+    /* Navigate to first child */
+    pushop = cUNOPx(entersubop)->op_first;
+    if (!OpHAS_SIBLING(pushop)) {
+        pushop = cUNOPx(pushop)->op_first;
+    }
+
+    /* Get the cache arg: pushmark -> cache -> cv */
+    cacheop = OpSIBLING(pushop);
+    if (!cacheop) return entersubop;
+    
+    cvop = OpSIBLING(cacheop);
+    if (!cvop) return entersubop;
+    
+    /* Verify exactly 1 arg */
+    if (OpSIBLING(cacheop) != cvop) return entersubop;
+
+    /* If arg is $_, fall back to XS */
+    if (lru_op_is_dollar_underscore(aTHX_ cacheop)) {
+        return entersubop;
+    }
+
+    /* Detach cache from the entersub tree */
+    OpMORESIB_set(pushop, cvop);
+    OpLASTSIB_set(cacheop, NULL);
+
+    /* Create custom UNOP */
+    newop = newUNOP(OP_CUSTOM, 0, cacheop);
+    newop->op_ppaddr = ppfunc;
+
+    op_free(entersubop);
+    return newop;
+}
+
+/* Install with 1-arg custom op optimization */
+static void install_lru_func_1arg(pTHX_ const char *pkg, const char *name, 
+                                   XSUBADDR_t xsub, lru_ppfunc ppfunc) {
+    char full_name[256];
+    CV *cv;
+    SV *ckobj;
+    
+    snprintf(full_name, sizeof(full_name), "%s::%s", pkg, name);
+    cv = newXS(full_name, xsub, __FILE__);
+    
+    ckobj = newSViv(PTR2IV(ppfunc));
+    cv_set_call_checker(cv, lru_func_call_checker_1arg, ckobj);
+}
+
 XS_EXTERNAL(XS_lru_func_get) {
     dXSARGS;
     if (items != 2) croak("Usage: lru_get($cache, $key)");
@@ -644,6 +734,36 @@ XS_EXTERNAL(XS_lru_func_delete) {
     XSRETURN_UNDEF;
 }
 
+XS_EXTERNAL(XS_lru_func_oldest) {
+    dXSARGS;
+    if (items != 1) croak("Usage: lru_oldest($cache)");
+    SP -= items;
+    
+    LRUCache *c = get_lru_cache(aTHX_ ST(0));
+    if (c->tail) {
+        EXTEND(SP, 2);
+        PUSHs(c->tail->key);
+        PUSHs(c->tail->value);
+        XSRETURN(2);
+    }
+    XSRETURN_EMPTY;
+}
+
+XS_EXTERNAL(XS_lru_func_newest) {
+    dXSARGS;
+    if (items != 1) croak("Usage: lru_newest($cache)");
+    SP -= items;
+    
+    LRUCache *c = get_lru_cache(aTHX_ ST(0));
+    if (c->head) {
+        EXTEND(SP, 2);
+        PUSHs(c->head->key);
+        PUSHs(c->head->value);
+        XSRETURN(2);
+    }
+    XSRETURN_EMPTY;
+}
+
 /* lru::import - import function-style accessors */
 XS_EXTERNAL(XS_lru_import) {
     dXSARGS;
@@ -671,6 +791,9 @@ XS_EXTERNAL(XS_lru_import) {
         install_lru_func_2arg(aTHX_ pkg, "lru_delete", XS_lru_func_delete, pp_lru_func_delete);
         /* 3-arg function uses nested BINOP optimization */
         install_lru_func_3arg(aTHX_ pkg, "lru_set", XS_lru_func_set, pp_lru_func_set);
+        /* 1-arg functions */
+        install_lru_func_1arg(aTHX_ pkg, "lru_oldest", XS_lru_func_oldest, pp_lru_func_oldest);
+        install_lru_func_1arg(aTHX_ pkg, "lru_newest", XS_lru_func_newest, pp_lru_func_newest);
     }
 
     XSRETURN_EMPTY;
@@ -885,6 +1008,38 @@ XS_EXTERNAL(XS_lru_keys) {
     XSRETURN(c->size);
 }
 
+/* $cache->oldest - returns (key, value) of least recently used entry */
+XS_EXTERNAL(XS_lru_oldest) {
+    dXSARGS;
+    if (items != 1) croak("Usage: $cache->oldest");
+    SP -= items;
+    
+    LRUCache *c = get_lru_cache(aTHX_ ST(0));
+    if (c->tail) {
+        EXTEND(SP, 2);
+        PUSHs(c->tail->key);
+        PUSHs(c->tail->value);
+        XSRETURN(2);
+    }
+    XSRETURN_EMPTY;
+}
+
+/* $cache->newest - returns (key, value) of most recently used entry */
+XS_EXTERNAL(XS_lru_newest) {
+    dXSARGS;
+    if (items != 1) croak("Usage: $cache->newest");
+    SP -= items;
+    
+    LRUCache *c = get_lru_cache(aTHX_ ST(0));
+    if (c->head) {
+        EXTEND(SP, 2);
+        PUSHs(c->head->key);
+        PUSHs(c->head->value);
+        XSRETURN(2);
+    }
+    XSRETURN_EMPTY;
+}
+
 /* ============================================
    Boot function
    ============================================ */
@@ -926,6 +1081,14 @@ XS_EXTERNAL(boot_lru) {
     XopENTRY_set(&lru_func_delete_xop, xop_desc, "lru function delete");
     Perl_custom_op_register(aTHX_ pp_lru_func_delete, &lru_func_delete_xop);
     
+    XopENTRY_set(&lru_func_oldest_xop, xop_name, "lru_func_oldest");
+    XopENTRY_set(&lru_func_oldest_xop, xop_desc, "lru function oldest");
+    Perl_custom_op_register(aTHX_ pp_lru_func_oldest, &lru_func_oldest_xop);
+    
+    XopENTRY_set(&lru_func_newest_xop, xop_name, "lru_func_newest");
+    XopENTRY_set(&lru_func_newest_xop, xop_desc, "lru function newest");
+    Perl_custom_op_register(aTHX_ pp_lru_func_newest, &lru_func_newest_xop);
+    
     /* Register XS subs */
     newXS("lru::new", XS_lru_new, __FILE__);
     newXS("lru::set", XS_lru_set, __FILE__);
@@ -937,6 +1100,8 @@ XS_EXTERNAL(boot_lru) {
     newXS("lru::capacity", XS_lru_capacity, __FILE__);
     newXS("lru::clear", XS_lru_clear, __FILE__);
     newXS("lru::keys", XS_lru_keys, __FILE__);
+    newXS("lru::oldest", XS_lru_oldest, __FILE__);
+    newXS("lru::newest", XS_lru_newest, __FILE__);
     newXS("lru::import", XS_lru_import, __FILE__);
     
 #if PERL_VERSION_GE(5,22,0)

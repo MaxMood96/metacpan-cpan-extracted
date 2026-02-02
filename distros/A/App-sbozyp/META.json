@@ -45,6 +45,6 @@
          "url" : "https://github.com/NicholasBHubbard/sbozyp"
       }
    },
-   "version" : "v1.4.1",
+   "version" : "v1.5.4",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

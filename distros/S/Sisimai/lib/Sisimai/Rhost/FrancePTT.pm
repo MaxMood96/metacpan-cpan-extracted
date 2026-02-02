@@ -53,7 +53,7 @@ sub find {
         # - 421 mwinf5c79 ME Trop de connexions, veuillez verifier votre configuration.
         # - Too many connections, slow down. OFR005_104 [104]
         # - Too many connections, slow down. LPN105_104
-        '104' => 'toomanyconn',
+        '104' => 'ratelimited',
 
         # - Your IP address is missing a DNS PTR record, it also called a rDNS (reverse DNS)
         #   Please set up a valid DNS PTR record for your IP address that point to your domain,
@@ -66,7 +66,7 @@ sub find {
         #   Please reduce the number of messages per connection, recommended value is 100
         #   messages per connections
         # - Veuillez essayer plus tard. LPN003_109
-        "109" => 'toomanyconn',
+        "109" => 'ratelimited',
 
         # - Invalid HELO/EHLO
         #   Please set up a valid HELO/EHLO, it must be fully qualified domain name (FQDN) and
@@ -91,6 +91,11 @@ sub find {
         # - 5.0.1 Emetteur invalide. Invalid Sender. LPN105_405
         # - 501 5.1.0 Emetteur invalide. Invalid Sender. OFR004_405 [405] (in reply to MAIL FROM command))
         '405' => 'rejected',
+
+        # - Your Sender has been rejected
+        #   Please contact Orange by using our contact form and select option
+        #   "Un problème d'envoi d'emails vers les adresses Orange ou Wanadoo (deliverability issue)"
+        "406" => 'rejected',
 
         # - User doesn't exist here
         #   Please remove this email address from your distribution list, it does not exist
@@ -154,7 +159,7 @@ sub find {
         #   are trying to send
         # - 421 mwinf5c77 ME Service refuse. Veuillez essayer plus tard. Service refused, please try
         #   later. OFR_999 [999]
-        "99X" => 'toomanyconn',
+        "99X" => 'ratelimited',
 
         # Other undocumented or old error codes
         "105" => "",                # Veuillez essayer plus tard.
@@ -231,7 +236,7 @@ azumakuniyuki
 
 =head1 COPYRIGHT
 
-Copyright (C) 2017-2021,2023-2025 azumakuniyuki, All rights reserved.
+Copyright (C) 2017-2021,2023-2026 azumakuniyuki, All rights reserved.
 
 =head1 LICENSE
 
