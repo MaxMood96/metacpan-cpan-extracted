@@ -50,9 +50,9 @@ typedef struct {
 #  endif
 
 /* Fallback custom op registration using deprecated interface
- * Handle both threaded and non-threaded builds since aTHX_ expands differently */
+ * Use PERL_IMPLICIT_CONTEXT not USE_ITHREADS - that's what controls aTHX_ expansion */
 #  ifndef Perl_custom_op_register
-#    ifdef USE_ITHREADS
+#    ifdef PERL_IMPLICIT_CONTEXT
 #      define Perl_custom_op_register(ctx, ppfunc, xop) \
           xop_compat_register_custom_op((ctx), (Perl_ppaddr_t)(ppfunc), (xop)->xop_name, (xop)->xop_desc)
 #    else

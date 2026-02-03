@@ -63,3 +63,8 @@ Revision history for LaTeX-Easy-Templates
 1.03    2025-03-24/15:00
         Fixed git repository in Makefile.PL
         Pod enhancements regarding defining functions for use in a template.
+
+1.04    2026-02-02/19:19
+	Added new functionality, tag <<%% eatnewline+ %%>> removes all newlines after it.
+        Pod enhancements.
+        The occasional expletive has been removed.

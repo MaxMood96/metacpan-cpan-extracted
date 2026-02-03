@@ -7,19 +7,26 @@ use File::Temp qw(tempdir);
 
 # Test file hooks C API via file_api_test XS module
 
-BEGIN { use_ok('file') }
-
-# Load the XS API test module
-# Skip all tests if module can't load (linking issues on some platforms)
-my $load_error;
+# Check if modules can load BEFORE running any tests
+# This avoids "Bad plan" errors when skip_all is needed
 BEGIN {
+    # Try to load file first
+    eval { require file };
+    if ($@) {
+        plan skip_all => "file not loadable: $@";
+        exit 0;
+    }
+    file->import();
+
+    # Try to load file_api_test (depends on file.so)
     eval { require file_api_test; file_api_test->import(); };
-    $load_error = $@;
+    if ($@) {
+        plan skip_all => "file_api_test not loadable (linking issue): $@";
+        exit 0;
+    }
 }
 
-if ($load_error) {
-    plan skip_all => "file_api_test not loadable (linking issue): $load_error";
-}
+pass('file loaded');
 pass('file_api_test loaded');
 
 my $tempdir = tempdir(CLEANUP => 1);

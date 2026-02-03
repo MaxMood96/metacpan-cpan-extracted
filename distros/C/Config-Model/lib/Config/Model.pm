@@ -7,7 +7,7 @@
 #
 #   The GNU Lesser General Public License, Version 2.1, February 1999
 #
-package Config::Model 2.155;
+package Config::Model 2.156;
 
 use 5.20.0;
 use strict ;
@@ -66,6 +66,7 @@ has instances => (
         store_instance => 'set',
         get_instance   => 'get',
         has_instance   => 'defined',
+        delete_instance => 'delete',
     },
 );
 
@@ -157,22 +158,6 @@ has skip_inheritance => (
         $self->show_legacy_issue("skip_inheritance is deprecated, use skip_include");
         $self->skip_include = $self->skip_inheritance;
     } );
-
-# remove this hack mid 2022
-around BUILDARGS => sub ($orig, $class, %args) {
-    my %new;
-    foreach my $k (keys %args) {
-        if (defined $args{$k}) {
-            $new{$k} = $args{$k};
-        }
-        else {
-            # cannot use logger, it's not initialised yet
-            croak("Config::Model new: passing undefined constructor argument is deprecated ($k argument)\n");
-        }
-    }
-
-    return $class->$orig(%new);
-};
 
 # keep this as a separate sub from BUILD. So user can call it before
 # creating Config::Model object
@@ -1903,7 +1888,7 @@ Config::Model - a framework to validate, migrate and edit configuration files
 
 =head1 VERSION
 
-version 2.155
+version 2.156
 
 =head1 SYNOPSIS
 
@@ -2496,6 +2481,10 @@ Retrieve an existing instance using its name.
 Check if an instance name already exists
 
   my $maybe = $model->has_instance('test1');
+
+=head2 delete_instance
+
+Delete an instance.
 
 =head2 cme
 

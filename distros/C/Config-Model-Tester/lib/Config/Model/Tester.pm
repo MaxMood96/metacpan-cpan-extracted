@@ -1,13 +1,13 @@
 #
 # This file is part of Config-Model-Tester
 #
-# This software is Copyright (c) 2013-2020 by Dominique Dumont.
+# This software is Copyright (c) 2013-2020, 2026 by Dominique Dumont.
 #
 # This is free software, licensed under:
 #
 #   The GNU Lesser General Public License, Version 2.1, February 1999
 #
-package Config::Model::Tester 4.007;
+package Config::Model::Tester 4.008;
 # ABSTRACT: Test framework for Config::Model
 
 use warnings;
@@ -193,20 +193,32 @@ sub run_update {
 
     local $Config::Model::Value::nowarning = $args{no_warnings} || $t->{no_warnings} || 0;
 
+    my @note_data ;
+    foreach my $key (keys %args) {
+        my $v = $args{$key};
+        if (ref $v eq "ARRAY") {
+            push @note_data, "$key: @$v" if @$v > 0;
+        }
+        else {
+            push @note_data, "$key: $v";
+        }
+    }
+    my $note = join(", ", @note_data);
+
     my $res ;
     if ( my $info = $t->{log4perl_update_warnings}) {
         my $tw = Test::Log::Log4perl->expect( $info );
-        note("updating config with log4perl warning check and args: ". join(' ',%args));
+        note("updating config with log4perl warning check and args: $note");
         $res = $inst->update( from_dir => $dir, %args ) ;
     }
     elsif (my $uw = delete $args{update_warnings}) {
         note("update_warnings param is DEPRECATED. Please use log4perl_update_warnings");
-        note("updating config with warning check and args: ". join(' ',%args));
+        note("updating config with warning check and args: $note");
         warnings_like { $res = $inst->update( from_dir => $dir, %args ); } $uw,
             "Updated configuration with warning check ";
     }
     else {
-        note("updating config with no warning check and args: ". join(' ',%args));
+        note("updating config with no warning check and args: $note");
         $res = $inst->update( from_dir => $dir, %args ) ;
     }
 
@@ -760,7 +772,7 @@ Config::Model::Tester - Test framework for Config::Model
 
 =head1 VERSION
 
-version 4.007
+version 4.008
 
 =head1 SYNOPSIS
 
@@ -1527,7 +1539,7 @@ Dominique Dumont
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2013-2020 by Dominique Dumont.
+This software is Copyright (c) 2013-2020, 2026 by Dominique Dumont.
 
 This is free software, licensed under:
 

@@ -22,5 +22,5 @@ requires:
   File::Which: '0'
   Getopt::Long: '0'
   IO::Trace: '0'
-version: '0.035'
+version: '0.036'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

@@ -6,7 +6,7 @@ sneck - a boopable LibreNMS JSON style SNMP extend for remotely running nagios s
 
 =head1 SYNOPSIS
 
-sneck -u [B<-C> <cache file] [B<-f> <config file>] [B<-p>] [B<-i>] [B<-d>]
+sneck -u [B<-C> <cache file] [B<-f> <config file>] [B<-p>] [B<-i>] [B<-d>] [B<-q>] [B<-l>]
 
 sneck -c [B<-C> <cache file] [B<-b>]
 
@@ -62,6 +62,14 @@ Includes the config file used.
 
 Print debugging info if called with -u.
 
+=head2 -q
+
+Don't print the results for -u. Exit queitly.
+
+=head2 -l
+
+Enable locking for with -u so more than one instance can't run at a time.
+
 =cut
 
 use strict;
@@ -73,6 +81,7 @@ use Monitoring::Sneck  ();
 use MIME::Base64       qw(encode_base64);
 use IO::Compress::Gzip qw(gzip);
 use Pod::Usage         qw(pod2usage);
+use Proc::PID::File    ();
 
 sub main::VERSION_MESSAGE {
 	print 'sneck v. ' . $Monitoring::Sneck::VERSION . "\n";
@@ -94,6 +103,8 @@ my $pretty;
 my $include;
 my $compress;
 my $debug;
+my $quiet;
+my $locking;
 Getopt::Long::Configure('no_ignore_case');
 Getopt::Long::Configure('bundling');
 GetOptions(
@@ -109,6 +120,8 @@ GetOptions(
 	'i'       => \$include,
 	'b'       => \$compress,
 	'd'       => \$debug,
+	'q'       => \$quiet,
+	'l'       => \$locking,
 );
 
 # print version or help if requested
@@ -141,7 +154,20 @@ if ($print_cache) {
 	exit;
 } ## end if ($print_cache)
 
-my $sneck    = Monitoring::Sneck->new( { config => $config_file, include => $include, debug => $debug } );
+my $sneck = Monitoring::Sneck->new( { config => $config_file, include => $include, debug => $debug } );
+# -l if asked for
+if ($locking) {
+	my $alive;
+	eval { $alive = Proc::PID::File->running(); };
+	if ($@) {
+		die( '-l specified and PID file check failed... ' . $@ );
+		exit 255;
+	}
+	if ($alive) {
+		die( 'Already running as ' . $alive );
+		exit 255;
+	}
+} ## end if ($locking)
 my $returned = $sneck->run;
 
 # encode it and print it
@@ -166,7 +192,10 @@ if ( !$pretty ) {
 	$raw_json = $raw_json . "\n";
 }
 
-print $raw_json;
+# don't print it if told to be quiet via -q
+if ( !$quiet ) {
+	print $raw_json;
+}
 
 if ($update) {
 	write_file( $cache_file,           $raw_json );

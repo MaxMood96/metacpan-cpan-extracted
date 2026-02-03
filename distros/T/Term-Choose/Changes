@@ -1,6 +1,28 @@
 Revision history for Term::Choose
 
 
+1.779   2026-02-02
+    - New options bottom_text and tabs_bottom_text.
+    - Bugfix mouse mode with left margin.
+    - Resize window: different fixes.
+    - Skip leading and trailing one-width-entries in char-width tables.
+    - Update year copyright.
+
+1.778_04   2026-01-31
+    - Skip leading and trailing one-width-entries in char-width tables.
+
+1.778_03   2026-01-24
+    - Bugfix hash key name.
+    - Bugfix mouse mode with left margin.
+
+1.778_02   2026-01-12
+    - Resize window fix.
+
+1.778_01   2026-01-08
+    - Resize window: different fixes.
+    - New options bottom_text and tabs_bottom_text.
+    - Update year copyright.
+
 1.777   2025-10-15
     - Set the width of all format code points to zero.
     - Minor corrections to documentation

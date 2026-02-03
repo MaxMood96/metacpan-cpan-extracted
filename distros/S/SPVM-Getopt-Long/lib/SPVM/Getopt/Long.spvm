@@ -2,7 +2,7 @@
 # MIT License
 
 class Getopt::Long {
-  version "0.003";
+  version "0.004";
   
   use Array;
   use Re;
@@ -33,7 +33,7 @@ class Getopt::Long {
     for (my $i = 0; $i < $spec_strings_length; $i++) {
       my $spec_string = $spec_strings->[$i];
       
-      if (my $match = Re->m($spec_string, "^(\w+(?:\|\w+)*)(?:=([\w]))?$")) {
+      if (my $match = Re->m($spec_string, "^([\w-]+(?:\|[\w-]+)*)(?:=([\w]))?$")) {
         my $names_str = $match->cap1;
         my $type_char = $match->cap2;
         
@@ -113,7 +113,7 @@ class Getopt::Long {
           last;
         }
         
-        if (my $match = Re->m($arg, "(--?)(\w+)(?:=([\w\.\-]+))?")) {
+        if (my $match = Re->m($arg, "(--?)([\w-]+)(?:=([\w\.\-]+))?")) {
           
           my $option_hyphen = $match->cap1;
           

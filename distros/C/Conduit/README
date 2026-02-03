@@ -23,9 +23,10 @@ SYNOPSIS
 DESCRIPTION
 
     This module allows a program to respond asynchronously to HTTP requests
-    as part of a program based on Future::IO. It currently only supports a
-    PSGI-based application, but the intention is to allow PAGI and possibly
-    other interface shapes in a later version.
+    as part of a program based on Future::IO. It currently supports either
+    a simple HTTP::Message-based responder or a PSGI application, but the
+    intention is to allow PAGI and possibly other interface shapes in a
+    later version.
 
     This is currently experimental, serving also as a testbed for how to
     design larger systems using Future::IO, and hopefully soon as a way to
@@ -46,14 +47,29 @@ PARAMETERS
     latter is intended for internal and unit-test purposes and will not be
     otherwise documented.
 
+ responder
+
+       responder => $app
+    
+          $response = await $app->( $request );
+
+    A code reference to the responder used for handling requests.
+
+    It will be passed an HTTP::Request instance containing the incoming
+    request and is expected to yield an HTTP::Response instance via a
+    future. As a small convenience, the server will fill in the protocol
+    and content_length fields of the response if they are not provided by
+    the responder.
+
  psgi_app
 
        psgi_app => $app
 
     A code reference to the PSGI application used for handling requests.
 
-    Currently this is mandatory, but the intention is soon to allow other
-    forms of responders, such as PAGI as alternatives.
+    Currently, exactly one of responder or psgi_app must be provided, but
+    the intention is soon to allow other forms of responders, such as PAGI
+    as alternatives.
 
 METHODS
 

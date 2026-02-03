@@ -1,7 +1,7 @@
 package Ancient;
 use strict;
 use warnings;
-our $VERSION = '0.14';
+our $VERSION = '0.16';
 
 1;
 
@@ -210,5 +210,7 @@ LNATION <email@lnation.org>
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.
+
+I have never given you rules on how to live your life.
 
 =cut

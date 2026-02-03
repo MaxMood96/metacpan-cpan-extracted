@@ -4,7 +4,7 @@
       "Andreas Hadjiprocopis <bliako@cpan.org>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "ExtUtils::MakeMaker version 7.70, CPAN::Meta::Converter version 2.150010",
+   "generated_by" : "ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010",
    "license" : [
       "artistic_2"
    ],
@@ -34,7 +34,7 @@
          "requires" : {
             "Clone" : "0",
             "Cwd" : "0",
-            "Data::Roundtrip" : "0.18",
+            "Data::Roundtrip" : "0.30",
             "Exporter" : "0",
             "File::Basename" : "0",
             "File::Copy::Recursive" : "0",
@@ -52,7 +52,7 @@
       "test" : {
          "requires" : {
             "Capture::Tiny" : "0",
-            "Data::Roundtrip" : "0.18",
+            "Data::Roundtrip" : "0.30",
             "File::Basename" : "0",
             "File::Compare" : "0",
             "File::Find::Rule" : "0",
@@ -78,6 +78,6 @@
          "web" : "https://github.com/hadjiprocopis/LaTeX-Easy-Templates"
       }
    },
-   "version" : "1.03",
+   "version" : "1.04",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

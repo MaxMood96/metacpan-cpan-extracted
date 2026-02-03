@@ -2,7 +2,7 @@ package PAGI::Server;
 use strict;
 use warnings;
 
-our $VERSION = '0.001008';
+our $VERSION = '0.001009';
 
 # Future::XS support - opt-in via PAGI_FUTURE_XS=1 environment variable
 # Must be loaded before Future to take effect, so we check env var in BEGIN
@@ -41,13 +41,6 @@ use Future;
 use Future::AsyncAwait;
 
 use Scalar::Util qw(weaken refaddr);
-
-# If Future::IO is available, configure it to use IO::Async
-# This enables Future::IO->sleep() etc. in user apps running under PAGI::Server
-BEGIN {
-    eval { require Future::IO::Impl::IOAsync; 1 };
-    # Silently ignore if not installed - Future::IO is optional
-}
 use POSIX ();
 
 use PAGI::Server::Connection;
@@ -80,6 +73,11 @@ PAGI::Server - PAGI Reference Server Implementation
     use IO::Async::Loop;
     use PAGI::Server;
 
+    # If using Future::IO libraries (Async::Redis, SSE->every, etc.)
+    # configure Future::IO BEFORE loading them:
+    use Future::IO;
+    Future::IO->load_impl('IOAsync');
+
     my $loop = IO::Async::Loop->new;
 
     my $server = PAGI::Server->new(
@@ -91,15 +89,15 @@ PAGI::Server - PAGI Reference Server Implementation
     $loop->add($server);
     $server->listen->get;  # Start accepting connections
 
+See L</LOOP INTEROPERABILITY> for details on Future::IO configuration.
+
 =head1 DESCRIPTION
 
 PAGI::Server is a reference implementation of a PAGI-compliant HTTP server.
 It supports HTTP/1.1, WebSocket, and Server-Sent Events (SSE) as defined
-in the PAGI specification.
-
-This is NOT a production server - it prioritizes spec compliance and code
-clarity over performance optimization. It serves as the canonical reference
-for how PAGI servers should behave.
+in the PAGI specification. It prioritizes spec compliance and code clarity
+over performance optimization. It serves as the canonical reference for how
+PAGI servers should behave.
 
 =head1 PROTOCOL SUPPORT
 
@@ -2562,9 +2560,72 @@ See L<PAGI::Middleware::SecurityHeaders> for full documentation.
 
 =back
 
+=head1 LOOP INTEROPERABILITY
+
+PAGI::Server uses L<IO::Async> as its event loop. When using C<pagi-server>
+(the CLI), if L<Future::IO> is installed, it is automatically configured to use
+the IO::Async backend. This enables seamless integration with Future::IO-based
+libraries like L<Async::Redis>.
+
+=head2 Programmatic Usage
+
+If you're using PAGI::Server programmatically (embedding it in your own
+script rather than using pagi-server), you must configure Future::IO
+yourself before loading any Future::IO-based libraries:
+
+    #!/usr/bin/env perl
+    use strict;
+    use warnings;
+    use IO::Async::Loop;
+    use PAGI::Server;
+
+    # Configure Future::IO BEFORE loading Future::IO-based libraries
+    use Future::IO;
+    Future::IO->load_impl('IOAsync');
+
+    # Now Future::IO libraries work correctly
+    use Async::Redis;
+
+    my $app = sub { ... };
+
+    my $loop = IO::Async::Loop->new;
+    my $server = PAGI::Server->new(
+        app  => $app,
+        port => 8080,
+    );
+
+    $loop->add($server);
+    $server->listen->get;
+    $loop->run;
+
+=head2 Why This Matters
+
+L<Future::IO> provides event loop-agnostic async I/O operations (sleep,
+read, write). Libraries built on Future::IO can work with any event loop,
+but Future::IO must be told which backend to use.
+
+When using C<pagi-server>, this is handled automatically. When embedding
+PAGI::Server, you control the setup and must configure Future::IO explicitly
+if you use libraries that depend on it.
+
+Features that require Future::IO configuration:
+
+=over 4
+
+=item * L<PAGI::SSE/every> - Periodic SSE events
+
+=item * L<Async::Redis> - Redis client
+
+=item * Other Future::IO-based libraries
+
+=back
+
+If Future::IO is not configured, these features will fail with a helpful
+error message explaining how to fix it.
+
 =head1 SEE ALSO
 
-L<PAGI::Server::Connection>, L<PAGI::Server::Protocol::HTTP1>
+L<PAGI::Server::Connection>, L<PAGI::Server::Protocol::HTTP1>, L<Future::IO>
 
 =head1 AUTHOR
 

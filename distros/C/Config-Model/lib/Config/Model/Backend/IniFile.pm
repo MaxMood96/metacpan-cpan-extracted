@@ -7,7 +7,7 @@
 #
 #   The GNU Lesser General Public License, Version 2.1, February 1999
 #
-package Config::Model::Backend::IniFile 2.155;
+package Config::Model::Backend::IniFile 2.156;
 
 use Carp;
 use Mouse;
@@ -427,7 +427,7 @@ Config::Model::Backend::IniFile - Read and write config as a INI file
 
 =head1 VERSION
 
-version 2.155
+version 2.156
 
 =head1 SYNOPSIS
 
@@ -685,7 +685,7 @@ parameter:
       store_class_in_hash => 'my_class_holder',
     }
 
-Of course they are exceptions. For instance, in C<Multistrap>, the C<[General]> 
+Of course they are exceptions. For instance, in late C<Multistrap>, the C<[General]> 
 INI class must be mapped to a specific node object. This can be specified
 with the C<section_map> parameter: 
 

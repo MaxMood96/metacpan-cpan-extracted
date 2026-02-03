@@ -1,60 +1,59 @@
 package SPVM::Mojo::UserAgent;
 
-
-
 1;
 
 =encoding utf-8
 
 =head1 Name
 
-SPVM::Mojo::UserAgent - Non-blocking I/O HTTP and WebSocket user agent
+SPVM::Mojo::UserAgent - Context-aware HTTP and WebSocket user agent
 
 =head1 Description
 
-Mojo::UserAgent class in L<SPVM> is a full featured non-blocking I/O HTTP and WebSocket user agent, with IPv6, TLS, SNI, IDNA,
-HTTP proxy, UNIX domain socket, Comet (long polling), Promises/A+, keep-alive, connection pooling, timeout,
-cookie, multipart, gzip compression and multiple event loop support.
+Mojo::UserAgent class in L<SPVM> is a full featured HTTP and WebSocket user agent.
+Every I/O operation is context-aware and can be canceled via L<Go::Context|SPVM::Go::Context>.
+
+Since this class is designed to be goroutine-safe, you can perform multiple HTTP requests in parallel by creating goroutines. This is efficient for fetching data from multiple APIs simultaneously.
 
 =head1 Usage
 
   use Mojo::UserAgent;
+  use Go::Context;
+  use Go;
 
-  # Fine grained response handling (dies on connection errors)
+  # Note: This version is not compatible with previous versions.
+  # The first argument of I/O methods (get, post, put, patch, delete, head, options, start) 
+  # now requires a Go::Context object.
+
   my $ua  = Mojo::UserAgent->new;
-  my $res = $ua->get("docs.mojolicious.org")->result;
-  if    ($res->is_success)  { say $res->body }
-  elsif ($res->is_error)    { say $res->message }
-  elsif ($res->code == 301) { say $res->headers->location }
-  else                      { say "Whatever..." }
+  my $ctx = Go::Context->background;
 
-  # Say hello to the Unicode snowman and include an Accept header
-  say $ua->get("www.☃.net?hello=there" => {Accept => "*/*"})->result->body;
+  # --- Single request example ---
+  my $res = $ua->get($ctx, "docs.mojolicious.org")->result;
+  say $res->body if $res->is_success;
+  
+  # --- Parallel access example ---
+  # Fetch multiple URLs in parallel using goroutines.
+  # Note: SPVM does not support closures, so variables must be passed as arguments.
+  my $urls = ["https://google.com", "https://github.com", "https://metacpan.org"];
+  for my $url (@$urls) {
+    Go->go([$ctx : Go::Context, $ua : Mojo::UserAgent, $url : string], method : void () {
+      my $tx = $ua->get($ctx, $url);
+      if (my $res = $tx->result) {
+        say "URL: $url, Code: " . $res->code;
+      }
+    });
+  }
+  
+  # Wait for all goroutines to finish
+  Go->gosched;
 
-  # IPv6 PUT request with Content-Type header and content
-  my $tx = $ua->put("[::1]:3000" => {"Content-Type" => "text/plain"} => "Hi!");
-
-  # Quick JSON API request with Basic authentication
-  my $url = (my $_ = Mojo::URL->new("https://example.com/test.json"), $_->set_userinfo("sri:☃"), $_);
-  my $value = $ua->get($url)->result->json;
-
-  # JSON POST (application/json) with TLS certificate authentication
-  my $tx = ($ua->set_cert("tls.crt"), $ua->set_key("tls.key"), $ua->post("https://example.com" => [(object)json => {top => "secret"}]));
-
-  # Form POST (application/x-www-form-urlencoded)
-  my $tx = $ua->post("https://metacpan.org/search" => [(object)form => {q => "mojo"}]);
-
-  # Search DuckDuckGo anonymously through Tor
-  $ua->proxy->http("socks://127.0.0.1:9050");
-  $ua->get("api.3g2upl4pq6kufc4m.onion/?q=mojolicious&format=json")->result->json;
-
-  # GET request via UNIX domain socket "/tmp/myapp.sock" (percent encoded slash)
-  say $ua->get("http+unix://%2Ftmp%2Fmyapp.sock/test")->result->body;
-
-  # Follow redirects to download Mojolicious from GitHub
-  ($ua->set_max_redirects(5),
-    $ua->get("https://www.github.com/mojolicious/mojo/tarball/main")
-    ->result->save_to("/home/sri/mojo.tar.gz"));
+  # --- Request with timeout example ---
+  {
+    my $timeout_ctx_derived = Go::Context->with_timeout($ctx, 0.5);
+    my $timeout_ctx = $timeout_ctx_derived->ctx;
+    my $tx = $ua->get($timeout_ctx, "https://example.com");
+  }
 
 =head1 Class Methods
 
@@ -82,12 +81,12 @@ Examples:
   # Request with custom cookie
   my $tx = $ua->build_tx(GET => "https://example.com/account");
   $tx->req->cookies({name => "user", value => "sri"});
-  $tx = $ua->start($tx);
+  $tx = $ua->start($ctx, $tx);
 
   # Deactivate gzip compression
   my $tx = $ua->build_tx(GET => "example.com");
   $tx->req->headers->remove("Accept-Encoding");
-  $tx = $ua->start($tx);
+  $tx = $ua->start($ctx, $tx);
 
   # Interrupt response by raising an error
   my $tx = $ua->build_tx(GET => "http://example.com");
@@ -100,7 +99,7 @@ Examples:
       die "Oh noes, it is IIS!";
     }
   });
-  $tx = $ua->start($tx);
+  $tx = $ua->start($ctx, $tx);
 
 =head2 build_websocket_tx
 
@@ -108,112 +107,112 @@ Not yet implemented.
 
 =head2 delete
 
-C<method delete : Mojo::Transaction::HTTP ($url : string|L<Mojo::URL|SPVM::Mojo::URL>, $args : object...);>
+C<method delete : Mojo::Transaction::HTTP ($ctx : L<Go::Context|SPVM::Go::Context>, $url : string|L<Mojo::URL|SPVM::Mojo::URL>, $args : object...);>
 
 Perform blocking C<DELETE> request and return resulting L<Mojo::Transaction::HTTP|SPVM::Mojo::Transaction::HTTP> object, takes the same arguments as
 L<Mojo::UserAgent::Transactor/"tx"> (except for the C<DELETE> method, which is implied).
 
 Examples:
 
-  my $tx = $ua->delete("example.com");
-  my $tx = $ua->delete("http://example.com" => {Accept => "*/*"} => "Content!");
-  my $tx = $ua->delete("http://example.com" => {Accept => "*/*"} => [(object)form => {a => "b"}]);
-  my $tx = $ua->delete("http://example.com" => {Accept => "*/*"} => [(object)json => {a => "b"}]);
+  my $tx = $ua->delete($ctx, "example.com");
+  my $tx = $ua->delete($ctx, "http://example.com" => {Accept => "*/*"} => "Content!");
+  my $tx = $ua->delete($ctx, "http://example.com" => {Accept => "*/*"} => [(object)form => {a => "b"}]);
+  my $tx = $ua->delete($ctx, "http://example.com" => {Accept => "*/*"} => [(object)json => {a => "b"}]);
 
 =head2 get
 
-C<method get : Mojo::Transaction::HTTP ($url : string|L<Mojo::URL|SPVM::Mojo::URL>, $args : object...);>
+C<method get : Mojo::Transaction::HTTP ($ctx : L<Go::Context|SPVM::Go::Context>, $url : string|L<Mojo::URL|SPVM::Mojo::URL>, $args : object...);>
 
 Perform blocking C<GET> request and return resulting L<Mojo::Transaction::HTTP|SPVM::Mojo::Transaction::HTTP> object, takes the same arguments as
 L<Mojo::UserAgent::Transactor/"tx"> (except for the C<GET> method, which is implied).
 
 Examples:
 
-  my $tx = $ua->get("example.com");
-  my $tx = $ua->get("http://example.com" => {Accept => "*/*"} => "Content!");
-  my $tx = $ua->get("http://example.com" => {Accept => "*/*"} => [(object)form => {a => "b"}]);
-  my $tx = $ua->get("http://example.com" => {Accept => "*/*"} => [(object)json => {a => "b"}]);
+  my $tx = $ua->get($ctx, "example.com");
+  my $tx = $ua->get($ctx, "http://example.com" => {Accept => "*/*"} => "Content!");
+  my $tx = $ua->get($ctx, "http://example.com" => {Accept => "*/*"} => [(object)form => {a => "b"}]);
+  my $tx = $ua->get($ctx, "http://example.com" => {Accept => "*/*"} => [(object)json => {a => "b"}]);
 
 =head2 head
 
-C<method head : Mojo::Transaction::HTTP ($url : string|L<Mojo::URL|SPVM::Mojo::URL>, $args : object...);>
+C<method head : Mojo::Transaction::HTTP ($ctx : L<Go::Context|SPVM::Go::Context>, $url : string|L<Mojo::URL|SPVM::Mojo::URL>, $args : object...);>
 
 Perform blocking C<HEAD> request and return resulting L<Mojo::Transaction::HTTP|SPVM::Mojo::Transaction::HTTP> object, takes the same arguments as
 L<Mojo::UserAgent::Transactor/"tx"> (except for the C<HEAD> method, which is implied).
 
 Examples:
 
-  my $tx = $ua->head("example.com");
-  my $tx = $ua->head("http://example.com" => {Accept => "*/*"} => "Content!");
-  my $tx = $ua->head("http://example.com" => {Accept => "*/*"} => [(object)form => {a => "b"}]);
-  my $tx = $ua->head("http://example.com" => {Accept => "*/*"} => [(object)json => {a => "b"}]);
+  my $tx = $ua->head($ctx, "example.com");
+  my $tx = $ua->head($ctx, "http://example.com" => {Accept => "*/*"} => "Content!");
+  my $tx = $ua->head($ctx, "http://example.com" => {Accept => "*/*"} => [(object)form => {a => "b"}]);
+  my $tx = $ua->head($ctx, "http://example.com" => {Accept => "*/*"} => [(object)json => {a => "b"}]);
 
 =head2 options
 
-C<method options : Mojo::Transaction::HTTP ($url : string|L<Mojo::URL|SPVM::Mojo::URL>, $args : object...);>
+C<method options : Mojo::Transaction::HTTP ($ctx : L<Go::Context|SPVM::Go::Context>, $url : string|L<Mojo::URL|SPVM::Mojo::URL>, $args : object...);>
 
 Perform blocking C<OPTIONS> request and return resulting L<Mojo::Transaction::HTTP|SPVM::Mojo::Transaction::HTTP> object, takes the same arguments as
 L<Mojo::UserAgent::Transactor/"tx"> (except for the C<OPTIONS> method, which is implied).
 
 Examples:
 
-  my $tx = $ua->options("example.com");
-  my $tx = $ua->options("http://example.com" => {Accept => "*/*"} => "Content!");
-  my $tx = $ua->options("http://example.com" => {Accept => "*/*"} => [(object)form => {a => "b"}]);
-  my $tx = $ua->options("http://example.com" => {Accept => "*/*"} => [(object)json => {a => "b"}]);
+  my $tx = $ua->options($ctx, "example.com");
+  my $tx = $ua->options($ctx, "http://example.com" => {Accept => "*/*"} => "Content!");
+  my $tx = $ua->options($ctx, "http://example.com" => {Accept => "*/*"} => [(object)form => {a => "b"}]);
+  my $tx = $ua->options($ctx, "http://example.com" => {Accept => "*/*"} => [(object)json => {a => "b"}]);
 
 =head2 patch
 
-C<method patch : Mojo::Transaction::HTTP ($url : string|L<Mojo::URL|SPVM::Mojo::URL>, $args : object...);>
+C<method patch : Mojo::Transaction::HTTP ($ctx : L<Go::Context|SPVM::Go::Context>, $url : string|L<L<Mojo::URL|SPVM::Mojo::URL>|SPVM::Mojo::URL>, $args : object...);>
 
 Perform blocking C<PATCH> request and return resulting L<Mojo::Transaction::HTTP|SPVM::Mojo::Transaction::HTTP> object, takes the same arguments as
 L<Mojo::UserAgent::Transactor/"tx"> (except for the C<PATCH> method, which is implied).
 
 Examples:
 
-  my $tx = $ua->patch("example.com");
-  my $tx = $ua->patch("http://example.com" => {Accept => "*/*"} => "Content!");
-  my $tx = $ua->patch("http://example.com" => {Accept => "*/*"} => [(object)form => {a => "b"}]);
-  my $tx = $ua->patch("http://example.com" => {Accept => "*/*"} => [(object)json => {a => "b"}]);
+  my $tx = $ua->patch($ctx, "example.com");
+  my $tx = $ua->patch($ctx, "http://example.com" => {Accept => "*/*"} => "Content!");
+  my $tx = $ua->patch($ctx, "http://example.com" => {Accept => "*/*"} => [(object)form => {a => "b"}]);
+  my $tx = $ua->patch($ctx, "http://example.com" => {Accept => "*/*"} => [(object)json => {a => "b"}]);
 
 =head2 post
 
-C<method post : Mojo::Transaction::HTTP ($url : string|L<Mojo::URL|SPVM::Mojo::URL>, $args : object...);>
+C<method post : Mojo::Transaction::HTTP ($ctx : L<Go::Context|SPVM::Go::Context>, $url : string|L<Mojo::URL|SPVM::Mojo::URL>, $args : object...);>
 
 Perform blocking C<POST> request and return resulting L<Mojo::Transaction::HTTP|SPVM::Mojo::Transaction::HTTP> object, takes the same arguments as
 L<Mojo::UserAgent::Transactor/"tx"> (except for the C<POST> method, which is implied).
 
 Examples:
 
-  my $tx = $ua->post("example.com");
-  my $tx = $ua->post("http://example.com" => {Accept => "*/*"} => "Content!");
-  my $tx = $ua->post("http://example.com" => {Accept => "*/*"} => [(object)form => {a => "b"}]);
-  my $tx = $ua->post("http://example.com" => {Accept => "*/*"} => [(object)json => {a => "b"}]);
+  my $tx = $ua->post($ctx, "example.com");
+  my $tx = $ua->post($ctx, "http://example.com" => {Accept => "*/*"} => "Content!");
+  my $tx = $ua->post($ctx, "http://example.com" => {Accept => "*/*"} => [(object)form => {a => "b"}]);
+  my $tx = $ua->post($ctx, "http://example.com" => {Accept => "*/*"} => [(object)json => {a => "b"}]);
 
 =head2 put
 
-C<method put : Mojo::Transaction::HTTP ($url : string|L<Mojo::URL|SPVM::Mojo::URL>, $args : object...);>
+C<method put : Mojo::Transaction::HTTP ($ctx : L<Go::Context|SPVM::Go::Context>, $url : string|L<Mojo::URL|SPVM::Mojo::URL>, $args : object...);>
 
 Perform blocking C<PUT> request and return resulting L<Mojo::Transaction::HTTP|SPVM::Mojo::Transaction::HTTP> object, takes the same arguments as
 L<Mojo::UserAgent::Transactor/"tx"> (except for the C<PUT> method, which is implied).
 
 Examples:
 
-  my $tx = $ua->put("example.com");
-  my $tx = $ua->put("http://example.com" => {Accept => "*/*"} => "Content!");
-  my $tx = $ua->put("http://example.com" => {Accept => "*/*"} => [(object)form => {a => "b"}]);
-  my $tx = $ua->put("http://example.com" => {Accept => "*/*"} => [(object)json => {a => "b"}]);
+  my $tx = $ua->put($ctx, "example.com");
+  my $tx = $ua->put($ctx, "http://example.com" => {Accept => "*/*"} => "Content!");
+  my $tx = $ua->put($ctx, "http://example.com" => {Accept => "*/*"} => [(object)form => {a => "b"}]);
+  my $tx = $ua->put($ctx, "http://example.com" => {Accept => "*/*"} => [(object)json => {a => "b"}]);
 
 =head2 start
 
-C<method start : Mojo::Transaction::HTTP ($tx : Mojo::Transaction::HTTP);>
+C<method start : Mojo::Transaction::HTTP ($ctx : L<Go::Context|SPVM::Go::Context>, $tx : Mojo::Transaction::HTTP);>
 
 Perform blocking request for a custom L<Mojo::Transaction::HTTP|SPVM::Mojo::Transaction::HTTP> object, which can be prepared manually or with
 L</"build_tx">.
 
 Examples:
 
-  my $tx = $ua->start(Mojo::Transaction::HTTP->new);
+  my $tx = $ua->start($ctx, Mojo::Transaction::HTTP->new);
 
 =head2 websocket
 

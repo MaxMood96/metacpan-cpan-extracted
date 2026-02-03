@@ -14,7 +14,7 @@ our %EXPORT_TAGS = ('all' => [ qw() ]) ;
 our @EXPORT_OK = ( @{$EXPORT_TAGS{'all'} } ) ;
 our @EXPORT = qw(DumpTree PrintTree DumpTrees CreateChainingFilter MD1 MD2) ;
 
-our $VERSION = '0.41' ;
+our $VERSION = '0.43' ;
 
 my $WIN32_CONSOLE ;
 
@@ -1363,6 +1363,7 @@ if('ARRAY' eq $tree_type)
 return('SCALAR', undef, (0))  if('SCALAR'  eq $tree_type) ;
 return('REF',    undef, (0))  if('REF'     eq $tree_type) ;
 return('CODE',   undef, (0))  if('CODE'    eq $tree_type) ;
+return('CODE',   undef, (0))  if('=CODE'   =~ "$tree_type") ;
 
 my @nodes_to_display ;
 undef $tree_type ;
@@ -1397,6 +1398,13 @@ for($tree)
 		last ;
 		} ;
 		
+	obj($_, 'CODE') and do
+		{
+		@nodes_to_display = (0) ;
+		$tree_type = 'CODE' ;
+		last ;
+		} ;
+	
 	warn "TreeDumper: Unsupported underlying type for $tree.\n" ;
 	}
 

@@ -7,7 +7,7 @@
 #
 #   The GNU Lesser General Public License, Version 2.1, February 1999
 #
-package Config::Model::Tk::HashEditor 1.379;
+package Config::Model::Tk::HashEditor 1.380;
 
 use strict;
 use warnings;
@@ -290,7 +290,7 @@ sub update_state {
             $new &&= $wat->{$button}{$c} || $content{$c};
         }
         my $subwidget = $cw->Subwidget($button) || next;
-        $subwidget->configure( -state => $new ? 'normal' : 'disabled' );
+        $subwidget->configure( -state => length($new) > 0 ? 'normal' : 'disabled' );
     }
 }
 

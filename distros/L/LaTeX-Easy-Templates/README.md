@@ -4,7 +4,7 @@ LaTeX::Easy::Templates - Easily format content into PDF/PS/DVI with LaTeX templa
 
 # VERSION
 
-Version 1.03
+Version 1.04
 
 # SYNOPSIS
 
@@ -116,9 +116,9 @@ because of its very good performance when rendering templates.
 
     # templated LaTeX document in-memory
     # (with variables to be substituted)
-    my $latex_template =<<'EOLA';
+    my $latex_templated_string =<<'EOLA';
     % basic LaTeX document
-    \documentclass[a4,12pt]{article}
+    \documentclass[a4paper,12pt]{article}
     \begin{document}
     \title{ <: $data.['title'] :> }
     \author{ <: $data.author.name :> <: $data.author['surname'] :> }
@@ -166,10 +166,14 @@ because of its very good performance when rendering templates.
       },
       'processors' => {
         # if it includes other in-memory templates
-        # then just include them here with their name
+        # then just include them here with their name/identifier,
+        # e.g. here the name is'mytemplate':
         'mytemplate' => {
           'template' => {
-            'content' => $latex_template_string,
+            # this is the in-memory latex code (template)
+            # which will be formatted with some template data
+            # to produce the output pdf specified below:
+            'content' => $latex_templated_string,
           },
           'output' => {
             'filepath' => 'output.pdf'
@@ -180,13 +184,36 @@ because of its very good performance when rendering templates.
     die unless $latte;
 
     my $ret = $latte->format({
+      # template data to replace template variables in
+      # the latex templated in-memory string (specified above):
       'template-data' => $template_data,
       'outfile' => 'xyz.pdf',
-      # this is the in-memory LaTeX template
+      # this is the in-memory LaTeX template identifier
+      # we will use, it was specified above in the
+      # 'processors' section to the constructor parameters:
       'processor' => 'mytemplate'
     });
     die unless $ret;
     # check output xyz.pdf !
+
+    # Some LaTeX formatting is sensitive to newlines
+    # accidentally added by template substitutions
+    # tag <<%% eatnewline %%>> will eat exactly one newline
+    # after it (and the tag itself) and <<%% eatnewline+ %%>>
+    # will eat all the newlines after it (and the tag itself)
+    my $latex_templated_string =<<'EOLA';
+    % basic LaTeX document
+    \documentclass[a4paper,12pt]{article}
+    \begin{document}
+    \title{ <: $data.['title'] :> }
+    \author{ <: $data.author.name :> <: $data.author['surname'] :> }
+    \date{ <: $data.date :> }
+    \maketitle
+    <: $data.content :><<%% eatnewline+ %%>>
+    %% above we will have the content from the template substitution
+    %% without any newline following it at all.
+    \end{document}
+    EOLA
 
 # EXPORT
 
@@ -457,7 +484,10 @@ So if your template data is this:
           name => 'aa',
         }
 
-    Then your template will access `name`'s value via ` <: $data.name :` >
+    Then your template will access `name`'s value via ` <: $data.name :> `
+    or ` <: $data['name'] :> `. Note, the templater's tags ` <: ` and ` :> `.
+    And also note that all the data you pass in can be accessed via ` $data `. This
+    is taken care by the module automatically.
 
     See ["TEMPLATE PROCESSING"](#template-processing) for more on the syntax of the template files.
 
@@ -592,8 +622,10 @@ It returns the hash(ref) of extra information relating to the "processors".
 
 # TEMPLATE PROCESSING
 
-The LaTeX templates will be processed with [Text::Xslate](https://metacpan.org/pod/Text%3A%3AXslate) and must
-follow its rules. It understands two template syntaxes:
+The LaTeX templates will be processed with [Text::Xslate](https://metacpan.org/pod/Text%3A%3AXslate) and
+they must adhere to its rules.
+
+[Text::Xslate](https://metacpan.org/pod/Text%3A%3AXslate)  understands two template syntaxes:
 
 - it's own [Text::Xslate::Syntax::Kolon](https://metacpan.org/pod/Text%3A%3AXslate%3A%3ASyntax%3A%3AKolon)
 - and a subset of Template Toolkit 2 [Text::Xslate::Syntax::TTerse](https://metacpan.org/pod/Text%3A%3AXslate%3A%3ASyntax%3A%3ATTerse)
@@ -616,16 +648,79 @@ So if your template data is this:
       name => 'aa',
     }
 
-Then your template will access `name`'s value via ` <: $data.name :` >.
+Then your template will access `name`'s value via ` <: $data.name :> `
+or ` <: $data['name'] :> `. Note, the templater's tags ` <: ` and ` :> `.
 
 [Text::Xslate](https://metacpan.org/pod/Text%3A%3AXslate) supports loops and conditional statements.
 It also offers a lot of [builtin functions](https://metacpan.org/pod/Text%3A%3AXslate%3A%3AManual%3A%3ABuiltin).
 Additionally you can call user-specified perl subs (or subs from other modules)
 from within a template.
 
-Read
-the documentation for [Text::Xslate](https://metacpan.org/pod/Text%3A%3AXslate)'s syntax
+Read the documentation for [Text::Xslate](https://metacpan.org/pod/Text%3A%3AXslate)'s syntax
 [Text::Xslate::Syntax::Kolon](https://metacpan.org/pod/Text%3A%3AXslate%3A%3ASyntax%3A%3AKolon) or [Text::Xslate::Syntax::TTerse](https://metacpan.org/pod/Text%3A%3AXslate%3A%3ASyntax%3A%3ATTerse).
+
+## DEBUGGING
+
+The most useful [Text::Xslate](https://metacpan.org/pod/Text%3A%3AXslate) command for debugging
+the rendering of templates:
+
+    : $data | dump;
+
+which dumps the templated data passed into it
+to render the document. Again, the variable
+` $data ` is your input data passed into it.
+
+Secondly, you can specify your own temporary directory
+for saving rendered latex code along with all the collected
+images and other dependencies. Switch to that directory
+and inspect the files and even run them yourself from
+the command line to find the problem.
+
+Alternatively, specify this:
+
+    'debug' => {
+        'verbosity' => 4,
+        'cleanup' => 0, ## <<< important
+    }
+
+so that the temporary files are not deleted (they are
+deleted, successfully run or not, if ` cleanup = 1`).
+Note that the ` cleanup ` applies only for temporary
+directories created by the module internally and not
+for the directory you specified via the parameter
+
+    'tempdir'
+
+during construction. That dir will remain intact irrespective
+of the ` cleanup ` value.
+
+Thirdly, a very useful tip: later versions of [Text::Xslate](https://metacpan.org/pod/Text%3A%3AXslate)
+cause a segmentation fault when you try to print undefined variables.
+There is no way to find out where the undefined variable is.
+Thankfully, you can still tell [Text::Xslate](https://metacpan.org/pod/Text%3A%3AXslate) to not use XS
+but use its pure-perl version by setting environment variable
+
+    export PERL_ONLY=1
+
+or
+
+    PERL_ONLY=1 perl ...
+
+The pure-perl version will not crash but instead it will output
+a very friendly message where the undefined variable is located.
+
+Fourthly, there are many LaTeX rendering engines representing
+different specs and formats. For example, ` tex `, ` latex `,
+` pdflatex `, ` xelatex `, ` xetex `, ` luatex ` etc.
+If you do not use the correct engine you will get errors because
+the various rendering engines have some differences to
+the format of the input LaTeX code. So let the module knows
+the correct engine to use by specifying it in its constructor
+parameters:
+
+    'latex-driver-parameters' => {
+        'format' => 'pdf(pdflatex)', # or 'pdf(xelatex') or ...
+    }
 
 # TEMPLATES INCLUDING TEMPLATES
 
@@ -786,6 +881,21 @@ straightforward, just follow the above guidelines.
 
 Mixed templates functionality is demonstrated and tested in
 file `t/500-mix-template-usage-calling-other-mix-templates.t`.
+
+## ACCIDENTAL NEWLINES AFTER SUBSTITUTIONS
+
+Sometimes template substitutions may leave remaining
+newlines which are not desirable as TeX sometimes,
+not as a rule, will take newlines into account when
+formatting. In order to solve this problem, we have
+available two special tags:
+
+- ` <<%% eatnewline %%>> ` will remove
+exactly one newline, if any, following the tag. And the tag itself.
+- ` <<%% eatnewline+ %%>> ` will remove
+all newlines, if any, following the tag. And the tag itself.
+
+The space before and after the keyword `eatnewline` is optional.
 
 # EXAMPLE: PRINTING STICKY LABELS
 
@@ -994,20 +1104,31 @@ Here is a Perl script to render any data structure into PDF:
     # see LaTeX::Driver's doc for other formats, e.g. pdf(xelatex)
     my $latex_driver_and_format = 'pdf(pdflatex)';
 
-    my $nested_data_structure = {'a' => [1,2,3], 'b' => {'c' => [4,5,6, {'z'=>1}]}};
+    my $nested_data_structure = {
+        'a' => [1,2,3],
+        'b' => {
+                'c' => [ 4,5,6, {'z'=>1} ]
+        }
+    };
 
     # debug settings:
-    my $verbosity = 1;
-    # keep intermediate latex file for inspection
-    my $cleanup = 1;
+    my $verbosity = 1; # 0, 1 or more ...
+    # keep temporary files (including latex untemplated document)
+    # for inspection?
+    my $cleanup = 0;
 
     my $latter = LaTeX::Easy::Templates->new({
-      'debug' => {
-        'verbosity' => $verbosity,
-        'cleanup' => $cleanup
-      },
+      # parameters to be passed to the templater's constructor.
       'templater-parameters' => {
+        # Our templater is Text::Xslate and we specify some of our
+        # functions here to be imported into it and be
+        # able to be used inside a template document (optional):
         'function' => {'ref' => sub { return ref($_[0]) } }
+        # optionally, you can pass modules to be imported:
+        #'module' => [
+        #       # and so the exports of this module:
+        #       'Data::Roundtrip' => [qw/perl2json json2perl/], 
+        #],
       },
       'processors' => {
         'nested-data-structures' => {
@@ -1020,7 +1141,23 @@ Here is a Perl script to render any data structure into PDF:
               'format' => $latex_driver_and_format,
             }
           },
-        }
+        },
+      },
+      'debug' => {
+        'verbosity' => $verbosity,
+        'cleanup' => $cleanup
+      },
+        # optionally specify a tempdir to place various files
+        # for example, in-memory latex code will be saved to a .tex
+        # file in this dir.
+        # If you leave this undef or not specified at all, then
+        # the module will use its own temporary dir
+        # which will be cleanup as per the 'debug'->'cleanup'
+        # parameter, at the end successfully run OR NOT.
+        # If you are debugging, then better set this here
+        # in order to easily be able to inspect the rendered
+        # (un-templated /sic/) latex code and various auxiliary files:
+        'tempdir' => 'abc/xyz',
       }
     });
     die "failed to instantiate 'LaTeX::Easy::Templates'" unless defined $latter;

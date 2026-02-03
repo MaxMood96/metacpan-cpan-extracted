@@ -7,7 +7,7 @@ build_requires:
 configure_requires:
   SPVM: '0.990042'
 dynamic_config: 1
-generated_by: 'ExtUtils::MakeMaker version 7.64, CPAN::Meta::Converter version 2.150010'
+generated_by: 'ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010'
 license: mit
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -22,5 +22,5 @@ requires:
   SPVM::Regex: '0.246'
 resources:
   repository: https://github.com/yuki-kimoto/SPVM-Getopt-Long.git
-version: '0.003'
+version: '0.004'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

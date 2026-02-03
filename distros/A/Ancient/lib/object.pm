@@ -2,7 +2,7 @@ package
     object;
 use strict;
 use warnings;
-our $VERSION = '0.14';
+our $VERSION = '0.16';
 require XSLoader;
 XSLoader::load('object', $VERSION);
 1;

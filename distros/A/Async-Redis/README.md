@@ -31,21 +31,17 @@ cpanm Protocol::Redis::XS
 ```perl
 use Async::Redis;
 use Future::AsyncAwait;
+use Future::IO;
 
-# Use any Future::IO-compatible event loop
-# IO::Async example:
-use IO::Async::Loop;
-my $loop = IO::Async::Loop->new;
-
-# Or UV:        use Future::IO; Future::IO->load_impl('UV');
-# Or Glib:      use Future::IO; Future::IO->load_impl('Glib');
+# Automatically select the best available event loop implementation
+Future::IO->load_best_impl;
 
 my $redis = Async::Redis->new(
     host => 'localhost',
     port => 6379,
 );
 
-async sub main {
+(async sub {
     await $redis->connect;
 
     # Basic commands
@@ -61,9 +57,7 @@ async sub main {
     my $results = await $pipe->execute;
 
     $redis->disconnect;
-}
-
-$loop->await(main());
+})->()->await;
 ```
 
 ## Usage Examples
@@ -257,7 +251,7 @@ Pipelining provides ~30x throughput improvement over sequential commands.
 ## Dependencies
 
 **Required:**
-- Future::IO (0.17+)
+- Future::IO (0.19+)
 - Future::AsyncAwait
 - Protocol::Redis
 
@@ -278,7 +272,7 @@ Pipelining provides ~30x throughput improvement over sequential commands.
 
 ## Author
 
-John Googoo
+John Napiorkowski
 
 ## License
 

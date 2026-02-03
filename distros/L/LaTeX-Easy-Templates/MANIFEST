@@ -1,4 +1,3 @@
-a.html
 Changes
 lib/LaTeX/Easy/Templates.pm
 Makefile.PL
@@ -15,6 +14,7 @@ t/120-create_latex_source_from_template-pod-part1.t
 t/121-create_latex_source_from_template-pod-part2.t
 t/130-create_latex_source_from_template-tterse.t
 t/150-create_latex_source_from_template-simple-with-zero-max-filesize.t
+t/170-create_latex_source_from_template-simple-eatnewline.t
 t/200-create_latex_source_from_template-complex.t
 t/220-Xslate-supports-function.t
 t/225-Xslate-supports-module-1.t
@@ -59,6 +59,8 @@ t/templates/multi-language-xelatex/main.tex.tx
 t/templates/nested-data-structures/nested-data-structures.tex.tx
 t/templates/periodico/periodico-2column.tex.tx
 t/templates/periodico/url.txt
+t/templates/simple-eatnewline/main.tex.expected_output
+t/templates/simple-eatnewline/main.tex.tx
 t/templates/simple01/main.tex.expected_output
 t/templates/simple01/main.tex.tx
 t/templates/simple02-included-templates/content.tex.tx

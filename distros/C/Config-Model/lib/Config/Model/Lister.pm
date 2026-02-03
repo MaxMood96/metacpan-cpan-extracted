@@ -7,7 +7,7 @@
 #
 #   The GNU Lesser General Public License, Version 2.1, February 1999
 #
-package Config::Model::Lister 2.155;
+package Config::Model::Lister 2.156;
 
 use strict;
 use warnings;
@@ -92,7 +92,7 @@ Config::Model::Lister - List available models and applications
 
 =head1 VERSION
 
-version 2.155
+version 2.156
 
 =head1 SYNOPSIS
 
@@ -127,13 +127,13 @@ category (system or user or application) => application list. E.g.
 
 application name to model information. E.g.
 
- { 'multistrap' => { model => 'Multistrap', require_config_file => 1 }
+ { 'popcon' => { model => 'Popcon', require_config_file => 1 }
 
 =item *
 
 application name to model name. E.g.
 
- { popcon => 'Popcon', 'multistrap' => 'Multistrap' }
+ { popcon => 'Popcon' }
 
 =back
 

@@ -7,7 +7,7 @@
 #
 #   The GNU Lesser General Public License, Version 2.1, February 1999
 #
-package Config::Model::Tk::NodeEditor 1.379;
+package Config::Model::Tk::NodeEditor 1.380;
 
 use strict;
 use warnings;
@@ -60,10 +60,6 @@ sub Populate {
     if (@rexp) {
         $cw->add_accept_entry(@rexp);
     }
-
-    # add adjuster
-    #require Tk::Adjuster;
-    #$cw -> Adjuster()->pack(-fill => 'x' , -side => 'top') ;
 
     $cw->ConfigModelNoteEditor( -object => $node )->pack;
     $cw->add_info_button()->pack( @fxe1, qw/-anchor n/ );

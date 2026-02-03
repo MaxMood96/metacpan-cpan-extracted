@@ -4,7 +4,6 @@ use ExtUtils::MakeMaker;
 $prerequisits = 
 	{
 	Text::Wrap  => 2001.0929,
-	#Devel::Size => 0.58, 
 	Class::ISA  => 0,
 	Sort::Naturally => 0,
 	Check::ISA => 0,
@@ -26,5 +25,5 @@ WriteMakefile(
     
     ($] >= 5.005 ?    ## Add these new keywords supported since 5.005
       (ABSTRACT_FROM => 'TreeDumper.pm', # retrieve abstract from module
-       AUTHOR     => 'Khemir Nadim ibn Hamouda. <nadim@khemir.net>') : ()),
+       AUTHOR     => 'Khemir Nadim ibn Hamouda. <nadim.khemir@gmail.net>') : ()),
 );

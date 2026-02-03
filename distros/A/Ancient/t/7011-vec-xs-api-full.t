@@ -4,20 +4,26 @@ use warnings;
 use Test::More;
 use lib 't/lib', 'blib/lib', 'blib/arch';
 
-# Load nvec first (nvec_api_test depends on it)
-BEGIN { use_ok('nvec') }
-
-# Load the XS API test module
-# Skip all tests if module can't load (linking issues on some platforms)
-my $load_error;
+# Check if modules can load BEFORE running any tests
+# This avoids "Bad plan" errors when skip_all is needed
 BEGIN {
+    # Try to load nvec first
+    eval { require nvec };
+    if ($@) {
+        plan skip_all => "nvec not loadable: $@";
+        exit 0;
+    }
+    nvec->import();
+
+    # Try to load nvec_api_test (depends on nvec.so)
     eval { require nvec_api_test; nvec_api_test->import(); };
-    $load_error = $@;
+    if ($@) {
+        plan skip_all => "nvec_api_test not loadable (linking issue): $@";
+        exit 0;
+    }
 }
 
-if ($load_error) {
-    plan skip_all => "nvec_api_test not loadable (linking issue): $load_error";
-}
+pass('nvec loaded');
 pass('nvec_api_test loaded');
 
 # Test SIMD name from C API

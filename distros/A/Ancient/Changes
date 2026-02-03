@@ -1,0 +1,24 @@
+Revision history for Ancient
+
+0.16    2026-02-03
+        - Fix pad_alloc undefined symbol on Perl 5.14.x-5.15.x (FreeBSD 5.14.4)
+          by correcting version check from 5.14 to 5.16 in util_compat.h and
+          nvec_compat.h (pad_alloc not exported until 5.15.1)
+        - Fix Perl_xs_boot_epilog macro argument mismatch on threaded Perl 5.16
+          (FreeBSD 5.16.3-thread-multi) by using PERL_IMPLICIT_CONTEXT instead
+          of USE_ITHREADS for context detection in all *_compat.h headers
+        - Fix PADNAMEf_CONST redefinition warning in slot.c
+
+0.15    2026-02-02
+        - Fix quadmath compatibility: use NVgf format macro instead of %g
+          in nvec stringify to prevent panic on __float128 builds
+        - Fix PadnameFLAGS undefined symbol on Perl 5.18-5.21 (FreeBSD 5.20.2)
+          by adding compatibility shim in slot_compat.h
+        - Fix "Bad plan" test failures on systems with XS linking issues
+          by moving skip_all checks before any test output
+        - Enhanced TestVec.pm with multiple float comparison methods:
+          * Relative epsilon comparison (default, handles all magnitudes)
+          * ULP (Units in Last Place) comparison for rigorous testing
+          * Exact bit comparison for strict equality
+          * Automatic NV type detection (double/long double/quadmath)
+        - Improved test compatibility across Perl versions 5.10-5.40

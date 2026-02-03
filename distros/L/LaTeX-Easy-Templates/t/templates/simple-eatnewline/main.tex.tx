@@ -1,0 +1,28 @@
+\documentclass[a4paper]{article}
+\begin{document}
+\title{ <: $data.title :><<%% eatnewline+ %%>>
+
+}
+\maketitle
+: for $data.articles -> $article {
+\section*{<: $article.title :>}
+by <: $article.author :>\\
+---------------\\
+<: $article.content :>
+: }
+
+eatnewline tests:
+
+abc<<%% eatnewline+ %%>>
+
+xyz
+
+abc<<%%		eatnewline+%%>>
+
+xyz
+
+abc<<%% eatnewline %%>>
+xyz
+
+
+\end{document}

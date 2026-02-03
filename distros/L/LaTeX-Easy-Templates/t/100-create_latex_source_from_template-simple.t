@@ -11,7 +11,7 @@ use lib 'blib/lib';
 
 #use utf8;
 
-our $VERSION = '1.03';
+our $VERSION = '1.04';
 
 use Test::More;
 use Test::More::UTF8;
@@ -136,7 +136,8 @@ for my $aprocessorname (sort keys %{$latterparams->{'processors'}}){
 	{ local $/ = undef; $content = <$FH> } close $FH;
 	ok($content !~ /<\:.+?\:>/, 'untemplate()'." : called for processor '$aprocessorname', and latex source (content of file '".$untemplate_ret->{'latex'}->{'filepath'}."') does not look to contain templated var remains.") or BAIL_OUT($content."\n\nno see above latex source content.");
 
-	if( $aprocessorname =~ /on-disk/ ){
+	# this can work for in-memory content too but only for this test file, not others!!
+#	if( $aprocessorname =~ /on-disk/ ){
 		# only for on-disk tests
 		# we have an main.tex.expected_output file in the templates dir
 		# compare its content with returned
@@ -144,7 +145,7 @@ for my $aprocessorname (sort keys %{$latterparams->{'processors'}}){
 		ok(-f $latexsrcf, 'untemplate()'." : called for processor '$aprocessorname', compare1 file ($latexsrcf) exists.") or BAIL_OUT;
 		ok(-f $expected_latex_output_filename, 'untemplate()'." : called for processor '$aprocessorname', compare2 file ($expected_latex_output_filename) exists.") or BAIL_OUT;
 		is(File::Compare::compare($latexsrcf, $expected_latex_output_filename), 0, 'untemplate()'." : called for processor '$aprocessorname', and latex output file ($latexsrcf) is exactly the same as the expected output ($expected_latex_output_filename).") or BAIL_OUT;
-	}
+#	}
 
 	# format
 	my $format_ret = $latter->format({

@@ -32,9 +32,11 @@
 #  define dXSBOOTARGSXSAPIVERCHK dXSARGS
 #endif
 
+/* Perl_xs_boot_epilog - introduced in 5.21.6 (use 5.22 as safe boundary)
+ * Use PERL_IMPLICIT_CONTEXT not USE_ITHREADS - that's what controls aTHX_ expansion */
 #if !PERL_VERSION_GE(5,22,0)
 #  ifndef Perl_xs_boot_epilog
-#    ifdef USE_ITHREADS
+#    ifdef PERL_IMPLICIT_CONTEXT
 #      define Perl_xs_boot_epilog(ctx, ax) XSRETURN_YES
 #    else
 #      define Perl_xs_boot_epilog(ax) XSRETURN_YES
@@ -84,8 +86,8 @@ static MAGIC* nvec_compat_mg_findext(pTHX_ SV *sv, int type, const MGVTBL *vtbl)
 #  define mg_findext(sv, type, vtbl) nvec_compat_mg_findext(aTHX_ sv, type, vtbl)
 #endif
 
-/* pad_alloc - not exported until 5.14+ */
-#if !PERL_VERSION_GE(5,14,0)
+/* pad_alloc - not exported until 5.15.1 (use 5.16 as safe boundary) */
+#if !PERL_VERSION_GE(5,16,0)
 #  ifndef pad_alloc
 #    define pad_alloc(optype, sv_type) 0
 #  endif

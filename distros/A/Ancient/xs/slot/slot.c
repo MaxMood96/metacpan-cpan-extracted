@@ -4,7 +4,9 @@
 #include "slot_compat.h"
 
 /* PADNAMEf_CONST - compile-time constant flag (0x40 is unused in standard perl) */
-#define PADNAMEf_CONST 0x40
+#ifndef PADNAMEf_CONST
+#  define PADNAMEf_CONST 0x40
+#endif
 
 /* Custom op support */
 static XOP slot_get_xop;

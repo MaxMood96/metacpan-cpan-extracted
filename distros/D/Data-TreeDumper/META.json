@@ -1,7 +1,7 @@
 {
    "abstract" : "Improved replacement for Data::Dumper. Powerful filtering capability.",
    "author" : [
-      "Khemir Nadim ibn Hamouda. <nadim@khemir.net>"
+      "Khemir Nadim ibn Hamouda. <nadim.khemir@gmail.net>"
    ],
    "dynamic_config" : 1,
    "generated_by" : "ExtUtils::MakeMaker version 7.70, CPAN::Meta::Converter version 2.150010",
@@ -41,6 +41,6 @@
       }
    },
    "release_status" : "stable",
-   "version" : "0.41",
-   "x_serialization_backend" : "JSON::PP version 4.06"
+   "version" : "0.43",
+   "x_serialization_backend" : "JSON::PP version 4.07"
 }

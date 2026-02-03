@@ -7,7 +7,7 @@
 #
 #   The GNU Lesser General Public License, Version 2.1, February 1999
 #
-package Config::Model::AnyId 2.155;
+package Config::Model::AnyId 2.156;
 
 use 5.020;
 
@@ -1070,7 +1070,7 @@ Config::Model::AnyId - Base class for hash or list element
 
 =head1 VERSION
 
-version 2.155
+version 2.156
 
 =head1 SYNOPSIS
 
@@ -1264,6 +1264,13 @@ When the hash contains leaves, you can also use:
        def_1 => 'def_1 stuff',
        def_2 => 'def_2 stuff'
    }
+
+With a list, you must use numeric keys:
+
+   default_with_init => {
+       0 => 'def_1 stuff',
+       1 => 'def_2 stuff'
+   },
 
 =item migrate_keys_from
 

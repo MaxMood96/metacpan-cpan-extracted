@@ -1,5 +1,9 @@
 Revision History for Git::Server
 
+0.036  2026-02-02 23:30:00
+ - Minor typo in doc.
+ - Fix path in spec for cron ENV.
+
 0.035  2025-10-22 22:00:00
  - Pull out iotrace into its own IO::Trace module.
  - Make iotrace be preferred over strace.

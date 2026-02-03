@@ -5,13 +5,14 @@
 
 use v5.36;
 
+use feature 'try';
 use Future::AsyncAwait;
-use Object::Pad 0.800;
+use Object::Pad 0.807 ':experimental(inherit_field)';
 
-class Conduit::Client 0.02
+class Conduit::Client 0.03
    :strict(params);
 
-no if $^V lt v5.40, warnings => "experimental";
+no if $^V lt v5.40, warnings => "experimental::try", "experimental::builtin";
 
 field $socket :param;
 
@@ -29,7 +30,7 @@ ADJUST {
    );
 }
 
-field $server :param;
+field $server :param :inheritable;
 ADJUST { builtin::weaken( $server ); }
 
 async method read_request ()
@@ -47,10 +48,11 @@ async method read_request ()
       $req->add_content( $body );
    }
 
+   Conduit::Metrics->received_request( $req );
    return $req;
 }
 
-field $bytes_written;
+field $bytes_written :inheritable;
 
 async method write ( $str )
 {
@@ -58,11 +60,54 @@ async method write ( $str )
    $bytes_written += length $str;
 }
 
+class Conduit::Client::_ForHTTP
+   :strict(params);
+inherit Conduit::Client qw( $server $bytes_written );
+
+no if $^V lt v5.40, warnings => "experimental::try", "experimental::builtin";
+
+field $responder :param;
+
 async method run ()
 {
    while( defined( my $req = await $self->read_request ) ) {
-      Conduit::Metrics->received_request( $req );
+      my $resp;
+      try {
+         $resp = await $responder->( $req );
+      }
+      catch( $e ) {
+         chomp $e;
+         $resp = HTTP::Response->new( 500, undef,
+            [ "Content-Type" => "text/plain" ],
+            $e,
+         );
+      }
+      $resp->request( $req );
 
+      $resp->protocol or $resp->protocol( $req->protocol );
+      $resp->content_length or $resp->content_length( length $resp->content );
+
+      $bytes_written = 0;
+
+      $server->on_response_header( $req, $resp )
+         if $server->can( "on_response_header" );
+
+      await $self->write( $resp->as_string( "\x0D\x0A" ) );
+      Conduit::Metrics->sent_response( $resp, $bytes_written );
+   }
+}
+
+class Conduit::Client::_ForPSGI
+   :strict(params);
+inherit Conduit::Client qw( $server $bytes_written );
+
+no if $^V lt v5.40, warnings => "experimental::try", "experimental::builtin";
+
+field $psgi_app :param;
+
+async method run ()
+{
+   while( defined( my $req = await $self->read_request ) ) {
       my $uri = $req->uri;
 
       my $path_info = $uri->path;
@@ -100,7 +145,14 @@ async method run ()
          $env{$name} = $value;
       } );
 
-      my $psgiresp = await $server->respond( \%env );
+      my $psgiresp;
+      try {
+         $psgiresp = $psgi_app->( \%env );
+      }
+      catch( $e ) {
+         chomp $e;
+         $psgiresp = [ 500, [ "Content-Type" => "text/plain" ], [ $e ] ];
+      }
 
       $bytes_written = 0;
 
@@ -185,4 +237,4 @@ async method run ()
    }
 }
 
-1;
+0x55AA;

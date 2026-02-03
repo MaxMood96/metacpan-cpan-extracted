@@ -1,7 +1,7 @@
 ---
 abstract: 'Improved replacement for Data::Dumper. Powerful filtering capability.'
 author:
-  - 'Khemir Nadim ibn Hamouda. <nadim@khemir.net>'
+  - 'Khemir Nadim ibn Hamouda. <nadim.khemir@gmail.net>'
 build_requires:
   ExtUtils::MakeMaker: '0'
 configure_requires:
@@ -23,5 +23,5 @@ requires:
   Sort::Naturally: '0'
   Term::Size: '0.2'
   Text::Wrap: '2001.0929'
-version: '0.41'
+version: '0.43'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

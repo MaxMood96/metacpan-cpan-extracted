@@ -1,5 +1,5 @@
 package MIDI::Drummer::Tiny::Grooves;
-$MIDI::Drummer::Tiny::Grooves::VERSION = '0.7000';
+$MIDI::Drummer::Tiny::Grooves::VERSION = '0.7001';
 our $AUTHORITY = 'cpan:GENE';
 
 use Moo;
@@ -92,6 +92,9 @@ has drummer => (
 #pod The "resolution" duration that is given to the
 #pod L<MIDI::Drummer::Tiny/sync_patterns> method.
 #pod
+#pod This is initialized to the sixteenth duration of the drummer
+#pod L<MIDI::Drummer::Tiny> object.
+#pod
 #pod =cut
 
 has duration => (
@@ -104,11 +107,12 @@ sub _build_duration { shift->drummer->sixteenth }
 #pod   $grooves->kick(36);
 #pod   $kick = $grooves->kick;
 #pod
-#pod The patches that are used by the grooves.
+#pod The drum patches that are used by the grooves.
 #pod
-#pod Each is initialized to a corresponding patch of the
+#pod Each is initialized to a corresponding patch of the drummer
 #pod L<MIDI::Drummer::Tiny> object that is given to, or created by the
-#pod constructor.
+#pod constructor. (So changing these can be done in either the
+#pod L<MIDI::Drummer::Tiny> object, or in the C<Groove> constructor.)
 #pod
 #pod =cut
 
@@ -192,17 +196,17 @@ sub all_grooves {
 
 #pod =head2 search
 #pod
-#pod   $set = $grooves->search({}, { cat => $x, name => $y }); # search all grooves
-#pod   $set = $grooves->search($set, { cat => $x, name => $y }); # search the subset
+#pod   $set = $grooves->search({ cat => $x, name => $y }); # search all grooves
+#pod   $set = $grooves->search({ cat => $x, name => $y }, $set); # search a subset
 #pod
-#pod Return the found grooves with names matching the given B<cat> or
-#pod B<name> strings as a hash reference.
+#pod Return the found grooves with names matching the B<cat> or B<name>
+#pod strings and given an optional set of grooves to search in.
 #pod
 #pod =cut
 
 sub search {
-    my ($self, $set, $args) = @_;
-    unless (keys %$set) {
+    my ($self, $args, $set) = @_;
+    unless ($set && keys %$set) {
         $set = $self->all_grooves;
     }
     my $found = {};
@@ -1320,7 +1324,7 @@ sub _grooves {
             },
         },
 
-
+        # TODO MORE!
         0 => {
             cat  => "",
             name => "",
@@ -1362,7 +1366,7 @@ MIDI::Drummer::Tiny::Grooves
 
 =head1 VERSION
 
-version 0.7000
+version 0.7001
 
 =head1 SYNOPSIS
 
@@ -1439,16 +1443,20 @@ new one is created when a method is called.
 The "resolution" duration that is given to the
 L<MIDI::Drummer::Tiny/sync_patterns> method.
 
+This is initialized to the sixteenth duration of the drummer
+L<MIDI::Drummer::Tiny> object.
+
 =head2 kick, rimshot, snare, clap, cowbell, shaker, closed, open, cymbals, hi_tom, mid_tom, low_tom
 
   $grooves->kick(36);
   $kick = $grooves->kick;
 
-The patches that are used by the grooves.
+The drum patches that are used by the grooves.
 
-Each is initialized to a corresponding patch of the
+Each is initialized to a corresponding patch of the drummer
 L<MIDI::Drummer::Tiny> object that is given to, or created by the
-constructor.
+constructor. (So changing these can be done in either the
+L<MIDI::Drummer::Tiny> object, or in the C<Groove> constructor.)
 
 =head1 METHODS
 
@@ -1477,11 +1485,11 @@ Return all the known grooves as a hash reference.
 
 =head2 search
 
-  $set = $grooves->search({}, { cat => $x, name => $y }); # search all grooves
-  $set = $grooves->search($set, { cat => $x, name => $y }); # search the subset
+  $set = $grooves->search({ cat => $x, name => $y }); # search all grooves
+  $set = $grooves->search({ cat => $x, name => $y }, $set); # search a subset
 
-Return the found grooves with names matching the given B<cat> or
-B<name> strings as a hash reference.
+Return the found grooves with names matching the B<cat> or B<name>
+strings and given an optional set of grooves to search in.
 
 =head1 SEE ALSO
 
@@ -1493,7 +1501,7 @@ Gene Boggs <gene.boggs@gmail.com>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2014-2025 by Gene Boggs.
+This software is copyright (c) 2014-2026 by Gene Boggs.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

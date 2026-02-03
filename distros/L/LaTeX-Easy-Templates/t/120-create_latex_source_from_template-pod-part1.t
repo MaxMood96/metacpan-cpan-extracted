@@ -11,7 +11,7 @@ use lib 'blib/lib';
 
 #use utf8;
 
-our $VERSION = '1.03';
+our $VERSION = '1.04';
 
 use Test::More;
 use Test::More::UTF8;
@@ -48,7 +48,7 @@ my $template_data = {
 
 my $latex_template_string =<<'EOLA';
 % basic LaTeX document
-\documentclass[a4,12pt]{article}
+\documentclass[a4paper,12pt]{article}
 \begin{document}
 
 \title{ <: $data.title :> }

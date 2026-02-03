@@ -3,6 +3,7 @@ abstract: 'Information about the CGI environment'
 author:
   - 'Nigel Horne <njh@nigelhorne.com>'
 build_requires:
+  Errno: '0'
   ExtUtils::MakeMaker: '0'
   File::Temp: '0'
   FindBin: '0'
@@ -10,6 +11,7 @@ build_requires:
   IPC::System::Simple: '0'
   JSON::PP: '4.02'
   LWP::UserAgent: '0'
+  POSIX: '0'
   Taint::Runtime: '0'
   Test::Carp: '0'
   Test::CleanNamespaces: '0'
@@ -69,5 +71,5 @@ resources:
   bugtracker: https://rt.cpan.org/Public/Dist/Display.html?Name=CGI-Info
   homepage: https://metacpan.org/pod/CGI::Info
   repository: git://github.com/nigelhorne/CGI-Info.git
-version: '1.09'
+version: '1.11'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

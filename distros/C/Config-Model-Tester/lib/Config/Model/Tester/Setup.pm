@@ -1,13 +1,13 @@
 #
 # This file is part of Config-Model-Tester
 #
-# This software is Copyright (c) 2013-2020 by Dominique Dumont.
+# This software is Copyright (c) 2013-2020, 2026 by Dominique Dumont.
 #
 # This is free software, licensed under:
 #
 #   The GNU Lesser General Public License, Version 2.1, February 1999
 #
-package Config::Model::Tester::Setup 4.007;
+package Config::Model::Tester::Setup 4.008;
 # ABSTRACT: Common test setup functions for Config::Model
 
 use warnings;
@@ -91,7 +91,7 @@ Config::Model::Tester::Setup - Common test setup functions for Config::Model
 
 =head1 VERSION
 
-version 4.007
+version 4.008
 
 =head1 SYNOPSIS
 
@@ -140,6 +140,12 @@ Note that log tests are disabled when this option is set, so you may see a lot o
 harmless Warning messages during tests (which depend on the tests to be run).
 Experimental.
 
+=item *
+
+C<--trace>: the value of this option is given back to the caller of
+C<init_test>. Usually, this value is used to show more information
+regarding the tests being run.
+
 =back
 
 More options can be passed to C<init_test> using option definitions
@@ -187,7 +193,7 @@ Dominique Dumont
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2013-2020 by Dominique Dumont.
+This software is Copyright (c) 2013-2020, 2026 by Dominique Dumont.
 
 This is free software, licensed under:
 

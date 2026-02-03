@@ -1,10 +1,10 @@
 requires 'perl', '5.024';
 
-requires 'Text::ANSI::Fold', '2.3302';
+requires 'Text::ANSI::Fold', '2.3303';
 
 requires 'App::ansiecho';
-requires 'App::ansifold', '1.34';
-requires 'App::ansicolumn', '1.48';
+requires 'App::ansifold', '1.35';
+requires 'App::ansicolumn', '1.51';
 requires 'Term::ANSIColor::Concise', '3.02';
 
 requires 'App::nup', '0.9906';

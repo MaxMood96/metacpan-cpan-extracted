@@ -1,3 +1,10 @@
+0.042 2026-02-03
+  [Requirement Changes]
+    * Require SPVM::Go 0.024.
+    * Require SPVM 0.990126.
+  [Incompatibe Changes]
+    Inject Go::Context into get, head, delete, options, patch, post, put, and start methods of Mojo::UserAgent.
+
 0.041 2026-01-09
   [Requirement Changes]
     * Require SPVM::Go 0.016.

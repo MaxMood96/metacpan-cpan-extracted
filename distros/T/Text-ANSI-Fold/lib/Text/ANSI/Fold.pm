@@ -4,7 +4,7 @@ use v5.14;
 use warnings;
 use utf8;
 
-our $VERSION = "2.3302";
+our $VERSION = "2.3303";
 
 use Data::Dumper;
 {
@@ -587,7 +587,7 @@ sub retrieve {
     return '' if not defined $_;
     (my $folded, my $rest) = $obj->fold($_, @_);
     die "panic: retrieve: no progress in fold"
-	if length $rest and length $rest >= length;
+	if length $rest and $rest eq $_;
     $_ = length $rest ? $rest : undef;
     $folded;
 }
@@ -633,7 +633,7 @@ Text::ANSI::Fold - Text folding library supporting ANSI terminal sequence and As
 
 =head1 VERSION
 
-Version 2.3302
+Version 2.3303
 
 =head1 SYNOPSIS
 

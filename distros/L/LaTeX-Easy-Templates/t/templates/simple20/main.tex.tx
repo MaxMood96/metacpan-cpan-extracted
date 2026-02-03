@@ -3,7 +3,7 @@
 : # data will contain authors etc.
 : # private will contain filepath of template file etc.
 : ######################################################
-\documentclass[a4]{article}
+\documentclass[a4paper]{article}
 
 % let's go (love you LaTeXXXX)
 

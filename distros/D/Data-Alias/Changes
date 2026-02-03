@@ -1,5 +1,8 @@
 Revision history for Perl module Data::Alias
 
+1.29  2026-02-02  XMATH
+    - Fix compatibility with perl 5.43.8  (contributed by mauke)
+
 1.28  2022-12-21  XMATH
     - Fix compatibliity with perl 5.37.3 and later
     - Fix support for state-variables (alias state $x = ...)

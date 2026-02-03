@@ -1,5 +1,9 @@
 #!/usr/bin/env perl
 
+# Generates the HTML for use as a testing dashboard on GitHub
+# The location will be https://nigelhorne.github.io/$config{github_repo}/coverage/
+# The script is automatically run by each 'git push' by the script .github/workflows/dashboard.yml
+
 use strict;
 use warnings;
 use autodie qw(:all);
@@ -15,6 +19,7 @@ use HTTP::Tiny;
 use Time::HiRes qw(sleep);
 use URI::Escape qw(uri_escape);
 use version;
+use WWW::RT::CPAN;
 
 Readonly my %config => (
 	github_user => 'nigelhorne',
@@ -27,6 +32,12 @@ Readonly my %config => (
 	output => 'cover_html/index.html',
 	max_retry => 3
 );
+
+# -------------------------------
+# Dependency correlation analysis
+# -------------------------------
+my $MAX_REPORTS_PER_GRADE = 20;	# safety rail
+my $ENABLE_DEP_ANALYSIS = 1;
 
 # Read and decode coverage data
 my $data = eval { decode_json(read_file($config{cover_db})) };
@@ -110,6 +121,44 @@ push @html, <<"HTML";
 		tr.cpan-unknown td {
 			background-color: #eee;
 			color: #666;
+		}
+		.new-failure {
+			background: #c00;
+			color: #fff;
+			font-weight: bold;
+			padding: 2px 6px;
+			border-radius: 4px;
+			font-size: 0.85em;
+		}
+		.notice {
+			padding: 8px 12px;
+			margin: 10px 0;
+			border-radius: 4px;
+			font-size: 0.95em;
+		}
+		.notice strong {
+			font-weight: bold;
+		}
+		.notice.perl-version-cliff {
+			background-color: #fff3cd; /* soft amber */
+			border: 1px solid #ffeeba;
+			color: #856404;
+		}
+		.notice.perl-version-cliff a {
+			color: #533f03;
+			text-decoration: underline;
+		}
+		.notice.perl-version-cliff a:hover {
+			text-decoration: none;
+		}
+		.notice.locale-cliff {
+			border-left: 4px solid #d97706;
+			background: #fffbeb;
+			padding: 0.5em 1em;
+		}
+		.notice.rt-issues {
+			background: #fff6e5;
+			border-left: 4px solid #d9822b;
 		}
 	</style>
 </head>
@@ -262,7 +311,7 @@ for my $file (sort keys %{$data->{summary}}) {
 	my $points_attr = join(',', @file_history);
 
 	push @html, sprintf(
-		qq{<tr class="%s"><td><a href="%s" title="View coverage line by line" target="_blank">%s</a> %s<canvas class="sparkline" width="80" height="20" data-points="$points_attr"></canvas></td><td>%.1f</td><td>%.1f</td><td>%.1f</td><td>%.1f</td><td>%s</td>%s</tr>\n},
+		qq{<tr class="%s"><td><a href="%s" title="View coverage line by line" target="_blank">%s</a> %s<canvas class="sparkline" width="80" height="20" data-points="$points_attr"></canvas></td><td>%.1f</td><td>%.1f</td><td>%.1f</td><td>%.1f</td><td>%s</td>%s</tr>},
 		$row_class, $html_file, $file, $source_link,
 		$info->{statement}{percentage} // 0,
 		$info->{branch}{percentage} // 0,
@@ -277,7 +326,7 @@ for my $file (sort keys %{$data->{summary}}) {
 my $avg_coverage = $total_files ? int($total_coverage / $total_files) : 0;
 
 push @html, sprintf(
-	qq{<tr class="summary-row nosort"><td colspan="2"><strong>Summary</strong></td><td colspan="2">%d files</td><td colspan="3">Avg: %d%%, Low: %d</td></tr>\n},
+	qq{<tr class="summary-row nosort"><td colspan="2"><strong>Summary</strong></td><td colspan="2">%d files</td><td colspan="3">Avg: %d%%, Low: %d</td></tr>},
 	$total_files, $avg_coverage, $low_coverage_count
 );
 
@@ -287,7 +336,7 @@ if (my $total_info = $data->{summary}{Total}) {
 	my $class = $total_pct > 80 ? 'high' : $total_pct > 50 ? 'med' : 'low';
 
 	push @html, sprintf(
-		qq{<tr class="%s nosort"><td><strong>Total</strong></td><td>%.1f</td><td>%.1f</td><td>%.1f</td><td>%.1f</td><td colspan="2"><strong>%.1f</strong></td></tr>\n},
+		qq{<tr class="%s nosort"><td><strong>Total</strong></td><td>%.1f</td><td>%.1f</td><td>%.1f</td><td>%.1f</td><td colspan="2"><strong>%.1f</strong></td></tr>},
 		$class,
 		$total_info->{statement}{percentage} // 0,
 		$total_info->{branch}{percentage} // 0,
@@ -708,11 +757,29 @@ HTML
 push @html, '<p><center>Use mouse wheel or pinch to zoom; drag to pan</center></p>';
 
 # -------------------------------
-# Add CPAN Testers failing reports table
+# Issues flagged on RT
+# -------------------------------
+{
+	my $rt_count = fetch_open_rt_ticket_count($config{github_repo});
+	my $rt_url = "https://rt.cpan.org/Public/Dist/Display.html?Name=$config{github_repo}";
+
+	if(defined $rt_count && $rt_count > 0) {
+		push @html, '<p class="notice rt-issues">',
+			'<strong>RT issues:</strong>',
+			"<a href=\"$rt_url\" target=\"_blank\" rel=\"noopener\">",
+			"$rt_count open ticket" . @{[ $rt_count == 1 ? '' : 's' ]},
+			'</a>',
+			'</p>';
+	} else {
+		push @html, "<p>No issues active on <a href=\"$rt_url\">RT</a></p>";
+	}
+}
+
+# -------------------------------
+# CPAN Testers failing reports table
 # -------------------------------
 my $dist_name = $config{github_repo};	# e.g., CGI-Info
-my $cpan_api = "https://api.cpantesters.org/v3/summary/"
-		. uri_escape($dist_name);
+my $cpan_api = "https://api.cpantesters.org/v3/summary/" . uri_escape($dist_name);
 
 my $http = HTTP::Tiny->new(agent => 'cpan-coverage-html/1.0', timeout => 15);
 
@@ -732,25 +799,31 @@ while($retry < $config{max_retry}) {
 	sleep(2 ** $retry);
 }
 
-my $version;
+my $version;	# current version
+my $prev_version;	# may be undef
 
 if($success) {
 	my $releases = eval { decode_json($res->{content}) };
-	foreach my $release(@{$releases}) {
-		if(!defined($version)) {
-			$version = $release->{version};
-		} elsif(version->parse($release->{version}) > version->parse($version)) {
-			$version = $release->{version};
-		}
+	my @versions;
+
+	foreach my $release (@{$releases}) {
+		next unless defined $release->{version};
+		push @versions, $release->{version};
 	}
+
+	@versions = sort { parse_version($b) <=> parse_version($a) } @versions;
+
+	$version = $versions[0];	# current
+	$prev_version = $versions[1];	# previous (may be undef)
 
 	# push @html, "<p>CPAN Release: $version</p>";
 } else {
-	push @html, "<a href=\"$cpan_api\">$cpan_api</a>: $res->{status} $res->{reason}\n";
+	push @html, "<p><a href=\"$cpan_api\">$cpan_api</a>: $res->{status} $res->{reason}</p>";
 }
 
 # $version ||= 'latest';
 my @fail_reports;
+my @pass_reports;
 if($version) {
 	@fail_reports = fetch_reports_by_grades(
 		$dist_name,
@@ -758,34 +831,282 @@ if($version) {
 		'fail',
 		'unknown',
 	);
+	@pass_reports = fetch_reports_by_grades(
+		$dist_name,
+		$version,
+		'pass',
+	);
 
 	if(scalar(@fail_reports)) {
+		push @html, "<h2>CPAN Testers Failures for $dist_name $version</h2>";
+		my @prev_fail_reports;
+		if ($prev_version) {
+			@prev_fail_reports = fetch_reports_by_grades(
+				$dist_name,
+				$prev_version,
+				'fail',
+				'unknown',
+			);
+		}
+
+		if ($ENABLE_DEP_ANALYSIS) {
+			my %dep_stats;
+
+			# Split GUIDs by grade
+			my @fail_guids = map { $_->{guid} } grep { lc($_->{grade} // '') eq 'fail' } @fail_reports;
+			my @unknown_guids = map { $_->{guid} } grep { lc($_->{grade} // '') eq 'unknown' } @fail_reports;
+
+			# FAIL reports
+			aggregate_dependency_stats(
+				guids => \@fail_guids,
+				grade => 'fail',
+				stats_ref => \%dep_stats,
+			);
+
+			# UNKNOWN reports (optional but useful)
+			aggregate_dependency_stats(
+				guids => \@unknown_guids,
+				grade => 'unknown',
+				stats_ref => \%dep_stats,
+			);
+
+			my @suspects = find_suspected_dependencies(\%dep_stats);
+
+			if (@suspects) {
+				push @html, '<h3>Suspected Dependency Interactions</h3>';
+				push @html, '<ul>';
+
+				for my $s (@suspects) {
+					my $line = sprintf(
+						'%s — FAIL: %d%s (%s)',
+						$s->{module},
+						$s->{fail},
+						defined $s->{pass} ? ", PASS: $s->{pass}" : '',
+						$s->{reason},
+					);
+					push @html, "<li>$line</li>";
+				}
+
+				push @html, '</ul>';
+			}
+			my %dep_versions;
+
+			collect_dependency_versions(
+				reports => \@fail_reports,
+				grade => 'fail',
+				store => \%dep_versions,
+			);
+
+			collect_dependency_versions(
+				reports => \@pass_reports,
+				grade => 'pass',
+				store => \%dep_versions,
+			);
+
+			my @cliffs = detect_version_cliffs(\%dep_versions);
+
+			if (@cliffs) {
+				push @html, '<h3>Dependency Version Cliffs</h3>';
+				push @html, '<ul>';
+
+				for my $c (@cliffs) {
+					push @html, sprintf(
+						'<li><b>%s</b>: %s</li>',
+						$c->{module},
+						$c->{message},
+					);
+				}
+
+				push @html, '</ul>';
+			}
+
+			my $perl_cliff = detect_perl_version_cliff(
+				\@fail_reports,
+				\@pass_reports,
+			);
+
+			if ($perl_cliff) {
+				my $perl_cutoff = parse_version($perl_cliff->{fails_up_to});
+
+				my $fail_support = 0;
+				my $pass_contra = 0;
+
+				for my $r (@fail_reports) {
+					next unless $r->{perl};
+					$fail_support++ if parse_version($r->{perl}) < $perl_cutoff;
+				}
+
+				for my $r (@pass_reports) {
+					next unless $r->{perl};
+					$pass_contra++ if parse_version($r->{perl}) < $perl_cutoff;
+				}
+				my ($score, $label) = confidence_score(
+					fail => $fail_support,
+					pass => $pass_contra,
+				);
+
+				my $confidence_html = confidence_badge_html(
+					$score, $label,
+					$fail_support, $pass_contra,
+				);
+
+				my $delta = perldelta_url($perl_cliff->{passes_from});
+
+				push @html,
+					'<p class="notice perl-version-cliff">',
+					sprintf(
+						'Fails on Perl &leq; %s; passes on Perl &geq; %s. ',
+						$perl_cliff->{fails_up_to},
+						$perl_cliff->{passes_from},
+					),
+					sprintf(
+						'<a href="%s" target="_blank">See perldelta for this release</a>',
+						$delta,
+					),
+					"<br>$confidence_html</p>";
+			}
+			push @html, '<h3>Failure Summary</h3>';
+			push @html, '<ul>';
+
+			my %clusters = (
+				perl_series => {},
+				os => {},
+				perl_os => {},
+			);
+
+			for my $r (@fail_reports) {
+				my $perl = perl_series($r->{perl});
+				my $os = $r->{osname} // 'unknown';
+
+				$clusters{perl_series}{$perl}++ if $perl;
+				$clusters{os}{$os}++;
+				$clusters{perl_os}{"$perl / $os"}++ if $perl;
+			}
+
+			my @top_perl_series = sort { $clusters{perl_series}{$b} <=> $clusters{perl_series}{$a} }
+				keys %{ $clusters{perl_series} };
+
+			my @top_os = sort { $clusters{os}{$b} <=> $clusters{os}{$a} }
+				keys %{ $clusters{os} };
+
+			my @top_perl_os = sort { $clusters{perl_os}{$b} <=> $clusters{perl_os}{$a} }
+				keys %{ $clusters{perl_os} };
+
+			if (@top_perl_series) {
+				my $k = $top_perl_series[0];
+				push @html, sprintf(
+					'<li><b>Perl %s.x</b>: %d failures</li>',
+					$k,
+					$clusters{perl_series}{$k},
+				);
+				my $total = scalar @fail_reports;
+				my $ratio_pct = ($clusters{perl_series}{$k} / $total) * 100;
+
+				if ($ratio_pct >= $config{low_threshold}) {
+					push @html, sprintf(
+						'<p><em>%d%% of failures occur on Perl %s.x</em></p>',
+						int($ratio_pct),
+						$k,
+					);
+				}
+			}
+
+			if (@top_os) {
+				my $k = $top_os[0];
+				push @html, sprintf(
+					'<li><b>%s</b>: %d failures</li>',
+					$k,
+					$clusters{os}{$k},
+				);
+			}
+
+			if (@top_perl_os) {
+				my $k = $top_perl_os[0];
+				push @html, sprintf(
+					'<li><b>%s</b>: %d failures</li>',
+					$k,
+					$clusters{perl_os}{$k},
+				);
+			}
+
+			push @html, '</ul>';
+
+			my %locale_stats;
+
+			for my $r (@fail_reports) {
+				my $locale = extract_locale($r) // 'unknown';
+				$locale_stats{$locale}{fail}++;
+			}
+
+			for my $r (@pass_reports) {
+				my $locale = extract_locale($r) // 'unknown';
+				$locale_stats{$locale}{pass}++;
+			}
+
+			my @locale_clusters;
+
+			for my $loc (keys %locale_stats) {
+				next if $loc eq 'unknown';
+
+				my $fail = $locale_stats{$loc}{fail} // 0;
+				my $pass = $locale_stats{$loc}{pass} // 0;
+				my $total = $fail + $pass;
+
+				next if $total < 3;
+
+				my $ratio = $fail / $total * 100;
+
+				if ($ratio >= $config{low_threshold} && is_non_english_locale($loc)) {
+					push @locale_clusters, {
+						locale => $loc,
+						fail => $fail,
+						pass => $pass,
+						ratio => $ratio,
+					};
+				}
+			}
+			if(scalar(@locale_clusters)) {
+				push @html,
+					'<h3>Locale-sensitive failures detected</h3>',
+					'<div class="notice locale-cliff">',
+					'<ul>';
+				foreach my $locale(@locale_clusters) {
+					push @html, "<li><code>$locale->{locale}</code> - $locale->{fail} FAIL / $locale->{pass} PASS ($locale->{ratio}%)</li>";
+				}
+				push @html, '</ul>', '</div>';
+			}
+		}
+
 		push @html, <<"HTML";
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-	function updateCpanVisibility() {
-		const showFail = document.getElementById('toggleFail').checked;
-		const showUnknown = document.getElementById('toggleUnknown').checked;
+	const toggleFail = document.getElementById('toggleFail');
+	const toggleUnknown = document.getElementById('toggleUnknown');
+	const toggleNew = document.getElementById('toggleNew');
 
-		document.querySelectorAll('tr.cpan-fail').forEach(row => {
-			row.style.display = showFail ? '' : 'none';
-		});
-
-		document.querySelectorAll('tr.cpan-unknown').forEach(row => {
-			row.style.display = showUnknown ? '' : 'none';
-		});
+	function update() {
+		if (toggleFail) {
+			document.querySelectorAll('tr.cpan-fail')
+				.forEach(r => r.style.display = toggleFail.checked ? '' : 'none');
+		}
+		if (toggleUnknown) {
+			document.querySelectorAll('tr.cpan-unknown')
+				.forEach(r => r.style.display = toggleUnknown.checked ? '' : 'none');
+		}
+		if (toggleNew) {
+			document.querySelectorAll('tr').forEach(row => {
+				const cell = row.querySelector('.new-failure');
+				if (!cell) return;
+				row.style.display = toggleNew.checked ? '' : 'none';
+			});
+		}
 	}
 
-	const failBox = document.getElementById('toggleFail');
-	const unknownBox = document.getElementById('toggleUnknown');
+	[toggleFail, toggleUnknown, toggleNew].forEach(cb => {
+		if (cb) cb.addEventListener('change', update);
+	});
 
-	if (failBox && unknownBox) {
-		failBox.addEventListener('change', updateCpanVisibility);
-		unknownBox.addEventListener('change', updateCpanVisibility);
-
-		// Apply initial state
-		updateCpanVisibility();
-	}
+	update();
 });
 document.addEventListener("DOMContentLoaded", () => {
 	const th = document.querySelector("table.sortable-table th");
@@ -793,7 +1114,6 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 </script>
 
-<h2>CPAN Testers Failures for $dist_name $version</h2>
 <p><em>Showing one failure per OS/Perl combination.</em></p>
 <div style="margin-bottom: 0.5em;">
 	<label>
@@ -804,23 +1124,31 @@ document.addEventListener("DOMContentLoaded", () => {
 		<input type="checkbox" id="toggleUnknown">
 		UNKNOWN
 	</label>
+	<label style="margin-left: 1em;">
+		<input type="checkbox" id="toggleNew">
+		NEW only
+	</label>
 </div>
 
 <table class="sortable-table" data-sort-col="0" data-sort-order="asc">
 <thead>
 <tr>
 	<th class="sortable" onclick="sortTable(this, 0)">
-		Date <span class="arrow">&#x25B2;</span>
+		<span class="label">Date</span> <span class="arrow">&#x25B2;</span>
 	</th>
 	<th class="sortable" onclick="sortTable(this, 1)">
-		OS / Perl <span class="arrow">&#x25B2;</span>
+		<span class="label">OS</span> <span class="arrow">&#x25B2;</span>
 	</th>
 	<th class="sortable" onclick="sortTable(this, 2)">
-		Reporter <span class="arrow">&#x25B2;</span>
+		<span class="label">Perl</span> <span class="arrow">&#x25B2;</span>
 	</th>
 	<th class="sortable" onclick="sortTable(this, 3)">
-		Report <span class="arrow">&#x25B2;</span>
+		<span class="label">Reporter</span> <span class="arrow">&#x25B2;</span>
 	</th>
+	<th class="sortable" onclick="sortTable(this, 4)">
+		<span class="label">New</span> <span class="arrow">&#x25B2;</span>
+	</th>
+	<th>Report</th>
 </tr>
 </thead>
 <tbody>
@@ -842,6 +1170,14 @@ HTML
 
 		my @deduped = values %best;
 
+		my %prev_fail_set;
+
+		for my $r (@prev_fail_reports) {
+			my $key = join '|', $r->{osname} // '', $r->{perl} // '', $r->{arch} // '';
+
+			$prev_fail_set{$key} = 1;
+		}
+
 		for my $r (@deduped) {
 			my $date = $r->{date} // '';
 			my $perl = $r->{perl} // '';
@@ -849,23 +1185,38 @@ HTML
 			my $grade = lc($r->{grade} // 'unknown');
 			my $row_class = "cpan-$grade";	# cpan-fail or cpan-unknown
 			my $reporter = $r->{reporter} // '';
+			$reporter =~ s/"//g;
+			$reporter =~ s/<.+>//g;
+			$reporter =~ s/\s+$//g;
 			my $guid = $r->{guid} // '';
 			my $url = $guid ? "https://www.cpantesters.org/cpan/report/$guid" : '#';
 
+			my $is_new = !$prev_fail_set{ join '|', $r->{osname} // '', $r->{perl} // '', $r->{arch} // '' };
+			my $new_html = $is_new ? '<span class="new-failure">NEW</span>' : '';
+
 			push @html, sprintf(
-				qq{<tr class="%s"><td>%s</td><td>%s / %s</td><td>%s</td>
-				<td><a href="%s" target="_blank">View</a></td></tr>\n},
-				$row_class, $date, $os, $perl, $reporter, $url
+				qq{<tr class="%s"><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td>
+				<td><a href="%s" target="_blank">View</a></td></tr>},
+				$row_class,
+				$date,
+				$os,
+				$perl,
+				$reporter,
+				$new_html,
+				$url
 			);
 		}
 
-		push @html, "</tbody></table>\n";
+		push @html, '</tbody></table>';
+	} else {
+		# @fail_reports is empty
+		push @html, "<p>No CPAN Testers failures reported for $dist_name $version</p>";
 	}
-} elsif($res->{status} != 404) {	# 404 means no fail reports
-	push @html, "<A HREF=\"$cpan_api\">$cpan_api</A>";
+} elsif($res->{status} == 404) {	# 404 means no fail reports
+	# push @html, "<A HREF=\"$cpan_api\">$cpan_api</A>";
 	push @html, "<p>No CPAN Testers failures reported for $dist_name $version.</p>";
 } else {
-	push @html, "<a href=\"$cpan_api\">$cpan_api</a>: $res->{status} $res->{reason}\n";
+	push @html, "<a href=\"$cpan_api\">$cpan_api</a>: $res->{status} $res->{reason}";
 }
 
 my $timestamp = 'Unknown';
@@ -911,7 +1262,7 @@ sub fetch_reports_by_grades {
 	my @reports;
 
 	for my $grade (@grades) {
-		my $url = "https://api.cpantesters.org/v3/summary/"
+		my $url = 'https://api.cpantesters.org/v3/summary/'
 			. uri_escape($dist)
 			. '/' . uri_escape($version)
 			. "?grade=$grade";
@@ -934,4 +1285,315 @@ sub fetch_reports_by_grades {
 	}
 
 	return @reports;
+}
+
+sub aggregate_dependency_stats {
+	my (%args) = @_;
+
+	my $guids = $args{guids} || [];
+	my $grade = $args{grade} || 'fail';
+	my $stats = $args{stats_ref} || {};
+
+	my $count = 0;
+
+	for my $guid (@$guids) {
+		last if $count++ >= $MAX_REPORTS_PER_GRADE;
+
+		my $html = fetch_report_html($guid) or next;
+		my $mods = extract_installed_modules($html);
+
+		for my $m (keys %$mods) {
+			$stats->{$m}{$grade}++;
+			$stats->{$m}{versions}{ $mods->{$m} }{$grade}++;
+		}
+	}
+
+	return $stats;
+}
+
+sub fetch_report_html {
+	my $guid = $_[0];
+
+	return unless $guid;
+
+	my $url = "https://www.cpantesters.org/cpan/report/$guid";
+	print "fetching report HTML $url\n";
+
+	my $res = $http->get($url);
+	return unless $res->{success};
+
+	return $res->{content};
+}
+
+sub extract_installed_modules {
+	my ($html) = @_;
+	my %mods;
+
+	return \%mods unless $html;
+
+	if ($html =~ /Installed modules:(.*?)(?:\n\n|\z)/s) {
+		my $block = $1;
+		while ($block =~ /^\s*([A-Z]\w*(?:::\w+)*)\s+v?([\d._]+)/mg) {
+			my ($module, $version) = ($1, $2);
+
+			# skip obvious noise
+			next if $module =~ /^(Perl|OS|Reporter|Tester)$/;
+
+			$mods{$module} = $version;
+		}
+	}
+
+	return \%mods;
+}
+
+sub find_suspected_dependencies {
+	my ($stats) = @_;
+	my @suspects;
+
+	for my $mod (sort keys %$stats) {
+		my $fail = $stats->{$mod}{fail} || 0;
+		my $pass = $stats->{$mod}{pass} || 0;
+
+		next unless $fail >= 2;
+
+		# signal 1: fail-only
+		if ($fail && !$pass) {
+			push @suspects, {
+				module => $mod,
+				fail => $fail,
+				pass => 0,
+				reason => 'Seen only in FAIL reports',
+			};
+			next;
+		}
+
+		# signal 2: strong skew
+		my $ratio = $fail / ($fail + $pass);
+		my $ratio_pct = $ratio * 100;
+		if ($fail >= 3 && $ratio_pct >= $config{low_threshold}) {
+			push @suspects, {
+				module => $mod,
+				fail => $fail,
+				pass => $pass,
+				ratio => sprintf('%.2f', $ratio),
+				reason => 'Strong FAIL skew',
+			};
+		}
+	}
+
+	return @suspects;
+}
+
+sub collect_dependency_versions {
+	my (%args) = @_;
+
+	my $reports = $args{reports};	# arrayref of report hashrefs
+	my $dep_store = $args{store};	# hashref
+	my $grade = lc($args{grade});	# fail / pass / unknown
+
+	for my $r (@$reports) {
+		my $pr = $r->{prereqs} or next;
+		my $rt = $pr->{runtime}{requires} or next;
+
+		while (my ($mod, $ver) = each %$rt) {
+			next unless defined $ver && $ver =~ /\d/;
+			push @{ $dep_store->{$mod}{$grade} }, $ver;
+		}
+	}
+}
+
+sub detect_version_cliffs {
+	my ($deps) = @_;
+	my @suspects;
+
+	for my $mod (sort keys %$deps) {
+		my $d = $deps->{$mod};
+
+		next unless $d->{fail} && $d->{pass};
+
+		my @fail = sort { parse_version($a) <=> parse_version($b) } @{ $d->{fail} };
+		my @pass = sort { parse_version($a) <=> parse_version($b) } @{ $d->{pass} };
+
+		my $fail_min = parse_version($fail[0]);
+		my $pass_max = parse_version($pass[-1]);
+
+		# Classic cliff: PASS versions entirely below FAIL versions
+		if ($pass_max < $fail_min) {
+			push @suspects, {
+				module => $mod,
+				type => 'hard',
+				message => sprintf(
+					'PASS ≤ %s, FAIL ≥ %s',
+					$pass[-1],
+					$fail[0],
+				),
+			};
+			next;
+		}
+
+		# Soft cliff: FAIL skewed higher than PASS
+		my $fail_median = $fail[ int(@fail / 2) ];
+		my $pass_median = $pass[ int(@pass / 2) ];
+
+		if (parse_version($fail_median) > parse_version($pass_median)) {
+			push @suspects, {
+				module => $mod,
+				type => 'soft',
+				message => sprintf(
+					'FAIL median %s &gt; PASS median %s',
+					$fail_median,
+					$pass_median,
+				),
+			};
+		}
+	}
+
+	return @suspects;
+}
+
+sub detect_perl_version_cliff {
+	my ($fail_reports, $pass_reports) = @_;
+
+	my @fail_perls = extract_perl_versions($fail_reports);
+	my @pass_perls = extract_perl_versions($pass_reports);
+
+	return unless @fail_perls && @pass_perls;
+
+	my $max_fail = (sort { $b <=> $a } @fail_perls)[0];
+	my $min_pass = (sort { $a <=> $b } @pass_perls)[0];
+
+	return unless $min_pass > $max_fail;
+
+	return { fails_up_to => $max_fail, passes_from => $min_pass };
+}
+
+sub extract_perl_versions {
+	my ($reports) = @_;
+	my @v;
+
+	for my $r (@$reports) {
+		next unless $r->{perl};
+		push @v, parse_version($r->{perl});
+	}
+
+	return @v;
+}
+
+sub perldelta_url {
+	my ($v) = @_;
+	my ($maj, $min) = $v =~ /^v?(\d+)\.(\d+)/;
+	return "https://perldoc.perl.org/perl${maj}${min}0delta";
+}
+
+sub confidence_score {
+	my (%args) = @_;
+
+	my $fail = $args{fail} // 0;
+	my $pass = $args{pass} // 0;
+
+	return (0, 'none') if ($fail + $pass) == 0;
+
+	my $score = $fail / ($fail + $pass);
+
+	# Convert config thresholds from percent → fraction
+	my $med = ($config{med_threshold} // 90) / 100;
+	my $low = ($config{low_threshold} // 70) / 100;
+
+	my $label =
+		$score >= $med ? 'strong' :
+		$score >= $low ? 'moderate' :
+		'weak';
+
+	return ($score, $label);
+}
+
+sub confidence_badge_html {
+	my ($score, $label, $fail, $pass) = @_;
+
+	my %class_for = (
+		strong => 'badge-good',
+		moderate => 'badge-warn',
+		weak => 'badge-bad',
+		none => 'badge-bad',
+	);
+
+	my $pct = sprintf('%.0f%%', $score * 100);
+
+	return sprintf(
+		q{<span class="coverage-badge %s" title="%d fails, %d passes">%s confidence</span>},
+		$class_for{$label} // 'badge-bad',
+		$fail, $pass,
+		ucfirst($label)
+	);
+}
+
+sub perl_series {
+	my $perl = $_[0];
+	return unless defined $perl;
+
+	# map "5.16.3" to "5.16"
+	if ($perl =~ /^(\d+\.\d+)/) {
+		return $1;
+	}
+	return;
+}
+
+sub extract_locale {
+	my $r = $_[0];
+
+	# Preferred: explicit environment
+	for my $k (qw(LANG LC_ALL LC_CTYPE)) {
+		if (my $v = $r->{env}{$k}) {
+			return $v;
+		}
+	}
+
+	# Fallback: scan report body
+	if (my $body = $r->{raw} || $r->{body}) {
+		if ($body =~ /\b([a-z]{2}_[A-Z]{2})\b/) {
+			return $1;
+		}
+	}
+
+	my $url = "https://api.cpantesters.org/v3/report/$r->{guid}";
+
+	my $http = HTTP::Tiny->new(agent => 'cpan-coverage-html/1.0', timeout => 15);
+	my $res = $http->get($url);
+	return unless $res->{success};
+
+	my $report = eval { decode_json($res->{content}) };
+
+	if($report->{result}->{output}->{uncategorized} =~ /\b([a-z]{2}_[A-Z]{2})\b/) {
+		return $1;
+	}
+}
+
+sub is_non_english_locale {
+	my $locale = $_[0];
+
+	return 0 unless $locale;
+
+	# Treat C / POSIX / en_* as English
+	return 0 if $locale =~ /^(C|POSIX|en(_|$))/i;
+
+	return 1;
+}
+
+sub parse_version {
+	my $v = $_[0];
+	return eval { version->parse($v) };
+}
+
+sub fetch_open_rt_ticket_count {
+	my $dist = $_[0];
+
+	my @rc = @{WWW::RT::CPAN::list_dist_active_tickets(dist => $dist)};
+
+	# Defensive checks
+	return undef unless @rc >= 3;
+	return undef unless $rc[0] == 200 && $rc[1] eq 'OK';
+
+	my $tickets = $rc[2] && ref $rc[2] eq 'ARRAY' ? $rc[2] : [];
+
+	return scalar @$tickets;
 }

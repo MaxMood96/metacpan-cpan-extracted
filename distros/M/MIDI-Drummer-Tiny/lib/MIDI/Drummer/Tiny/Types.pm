@@ -1,5 +1,5 @@
 package MIDI::Drummer::Tiny::Types;
-$MIDI::Drummer::Tiny::Types::VERSION = '0.7000';
+$MIDI::Drummer::Tiny::Types::VERSION = '0.7001';
 our $AUTHORITY = 'cpan:GENE';
 
 # ABSTRACT: Type library for MIDI::Drummer::Tiny
@@ -64,7 +64,7 @@ MIDI::Drummer::Tiny::Types - Type library for MIDI::Drummer::Tiny
 
 =head1 VERSION
 
-version 0.7000
+version 0.7001
 
 =head1 TYPES
 
@@ -87,7 +87,7 @@ Gene Boggs <gene.boggs@gmail.com>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2014-2025 by Gene Boggs.
+This software is copyright (c) 2014-2026 by Gene Boggs.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

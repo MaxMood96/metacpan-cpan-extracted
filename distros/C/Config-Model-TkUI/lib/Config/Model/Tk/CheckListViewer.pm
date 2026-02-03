@@ -7,7 +7,7 @@
 #
 #   The GNU Lesser General Public License, Version 2.1, February 1999
 #
-package Config::Model::Tk::CheckListViewer 1.379;
+package Config::Model::Tk::CheckListViewer 1.380;
 
 use strict;
 use warnings;
@@ -60,7 +60,7 @@ sub Populate {
     $cw->add_annotation($leaf)->pack(@fx);
     $cw->add_summary($leaf)->pack(@fx);
 
-    my ( $help_frame, $help_widget ) = $cw->add_help( value => '', 1 );
+    my ( $help_frame, $help_widget ) = $cw->add_help( "Value help" => '', 1 );
     $help_frame->pack(@fx);
     $cw->{value_help_widget} = $help_widget;
     $cw->set_value_help( $leaf->get_checked_list );

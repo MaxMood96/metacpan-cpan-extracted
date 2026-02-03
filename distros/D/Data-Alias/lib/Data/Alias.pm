@@ -5,7 +5,7 @@ use 5.008001;
 use strict;
 use warnings;
 
-our $VERSION = '1.28';
+our $VERSION = '1.29';
 
 use base 'Exporter';
 use base 'DynaLoader';

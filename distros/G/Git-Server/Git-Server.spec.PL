@@ -13,11 +13,19 @@ if (!-f $spec) { open my $fh, ">>", $spec; }
 # Rebuild using cpan2pm if available:
 0 == system "which cpan2rpm >/dev/null 2>/dev/null" and `rpm --eval %_rpmdir` =~ m{^(.+)} and !-d $1 and 0 == system "cpan2rpm --mk-rpm-dirs=~/rpm";
 
+my @make_install_cmd = (
+    'mkdir -v -p %{buildroot}/usr/local/bin',
+    'ln -s -v ../../bin/git-client %{buildroot}/usr/local/bin/git',
+    'make install',
+);
+
 my @cmd = (
     "cpan2rpm",
     "--force",
     "--spec-only",
     "--spec", $spec,
+    "--make-maker","INSTALLDIRS=vendor",
+    "--define", "makeinstall ".join(" ; ",@make_install_cmd),
     "."
     );
 

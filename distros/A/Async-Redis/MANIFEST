@@ -51,8 +51,10 @@ t/01-unit/uri.t
 t/02-nonblocking.t
 t/03-pubsub.t
 t/10-connection/auth.t
+t/10-connection/fork-read-future.t
 t/10-connection/fork-safety.t
 t/10-connection/reconnect.t
+t/10-connection/socket-cleanup.t
 t/10-connection/timeout.t
 t/10-connection/tls.t
 t/20-commands/hashes.t
@@ -105,6 +107,7 @@ t/92-concurrency/parallel-commands.t
 t/92-concurrency/response-ordering.t
 t/93-binary/binary-values.t
 t/93-binary/utf8.t
+t/93-socket-cleanup/close-with-watchers.t
 t/94-observability/debug.t
 t/94-observability/metrics.t
 t/94-observability/redaction.t

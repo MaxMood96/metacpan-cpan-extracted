@@ -47,12 +47,12 @@ For example, as super user, you could do this:
 
 Or as normal user, you could do this:
 
-  [root@deploy-host ~]$ mkdir -p ~/bin
-  [root@deploy-host ~]$ wget -N -P ~/bin https://raw.githubusercontent.com/hookbot/git-server/master/git-client
-  [root@deploy-host ~]$ chmod 755 ~/bin/git-client
-  [root@deploy-host ~]$ ln -s -v git-client ~/bin/git
-  [root@deploy-host ~]$ grep 'PATH=$HOME/bin' ~/.bash_profile || echo 'export PATH=$HOME/bin:$PATH' | tee -a ~/.bash_profile
-  [root@deploy-host ~]$
+  [user@deploy-host ~]$ mkdir -p ~/bin
+  [user@deploy-host ~]$ wget -N -P ~/bin https://raw.githubusercontent.com/hookbot/git-server/master/git-client
+  [user@deploy-host ~]$ chmod 755 ~/bin/git-client
+  [user@deploy-host ~]$ ln -s -v git-client ~/bin/git
+  [user@deploy-host ~]$ grep 'PATH=$HOME/bin' ~/.bash_profile || echo 'export PATH=$HOME/bin:$PATH' | tee -a ~/.bash_profile
+  [user@deploy-host ~]$
 
 =head1 SYNOPSIS
 
@@ -82,7 +82,7 @@ This library is free software; you can redistribute it and/or modify it under th
 use strict;
 use Cwd qw(abs_path);
 
-our $VERSION = "0.035";
+our $VERSION = "0.036";
 
 # Locate the real "git" later in the $PATH (after myself)
 our $real_git = find_real_git();
@@ -178,7 +178,7 @@ sub git {
     };
 }
 
-# Jam equivalent "-c" config settings into @ARGV for any descent .gitconfig files and set GET_CLIENT_OVERRIDE* env.
+# Jam equivalent "-c" config settings into @ARGV for any descent .gitconfig files and set GIT_CLIENT_OVERRIDE* env.
 sub scan_descent_override {
     return if exists $ENV{GIT_CLIENT_OVERRIDE};
     $ENV{GIT_CLIENT_OVERRIDE} = "";

@@ -7,7 +7,7 @@
 #
 #   The GNU Lesser General Public License, Version 2.1, February 1999
 #
-package Config::Model::Tk::AnyViewer 1.379;
+package Config::Model::Tk::AnyViewer 1.380;
 
 use strict;
 use warnings;
@@ -105,27 +105,12 @@ sub add_help {
     my $widget;
     chomp $help;
 
-    #    if (  $force_text_widget eq 'pod' or $help =~ /\n=\w+|[A-Z]</ ) {
     if ( $force_text_widget or $help =~ /\n/ or length($help) > 50 ) {
         $widget = $help_frame->PodText( -height => 6, -scrollbars => 'oe' );
         $widget->base_font_size(12);
         $widget->pack(@fbe1);
         $cw->update_help( $widget, $help );
     }
-
-    # elsif ($force_text_widget or $help =~ /\n/ or length($help) > 50) {
-    # $widget = $help_frame->Scrolled('ROText',
-    # -scrollbars => 'ow',
-    # -wrap => 'word',
-    # -font => $text_font ,
-    # -relief => 'ridge',
-    # -height => 4,
-    # );
-    #
-    # $widget ->pack( @fbe1 ) ->insert('end',$help,'help') ;
-    # $widget
-    # ->tagConfigure(qw/help -lmargin1 2 -lmargin2 2 -rmargin 2/);
-    # }
     elsif ( $help =~ /\w/ ) {
         $widget = $help_frame->Label(
             -text    => $help,
@@ -141,7 +126,7 @@ sub add_help {
 sub update_help {
     my ( $cw, $w, $help ) = @_;
 
-    # work around RT #67306
+    # work around RT https://rt.cpan.org/Ticket/Display.html?id=67306
     my $t = $cw->toplevel->cget('-title');
     $w->text("\n\n=pod\n\n\n=encoding utf8\n\n$help\n\n=cut\n\n");
     $w->toplevel->title($t);

@@ -5000,25 +5000,26 @@ static XS(xs_overload_stringify) {
     v = vec_from_sv(aTHX_ ST(0));
     len = v->len;
 
+    /* Cast double to NV for NVgf format compatibility (handles quadmath builds) */
     if (len <= 10) {
         result = newSVpvs("nvec[");
         for (i = 0; i < len; i++) {
             if (i > 0) sv_catpvs(result, ", ");
-            sv_catpvf(result, "%g", v->data[i]);
+            sv_catpvf(result, "%" NVgf, (NV)v->data[i]);
         }
         sv_catpvs(result, "]");
     } else {
         result = newSVpvs("nvec[");
         for (i = 0; i < 5; i++) {
             if (i > 0) sv_catpvs(result, ", ");
-            sv_catpvf(result, "%g", v->data[i]);
+            sv_catpvf(result, "%" NVgf, (NV)v->data[i]);
         }
         sv_catpvs(result, ", ..., ");
         for (i = len - 3; i < len; i++) {
             if (i > len - 3) sv_catpvs(result, ", ");
-            sv_catpvf(result, "%g", v->data[i]);
+            sv_catpvf(result, "%" NVgf, (NV)v->data[i]);
         }
-        sv_catpvf(result, "] (len=%ld)", (long)len);
+        sv_catpvf(result, "] (len=%" IVdf ")", len);
     }
 
     ST(0) = sv_2mortal(result);

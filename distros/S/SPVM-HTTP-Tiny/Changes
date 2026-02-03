@@ -1,6 +1,10 @@
-0.015 2025-10-13
+0.016 2025-10-13
   [Requirement Changes]
     * Require SPVM::Regex 0.252.
+  [Incompatible Changes]
+    * Rename timeout to inactivity_timeout in HTTP::Tiny and HTTP::Tiny::Handle to clarify its purpose.
+    * Add Go::Context support to HTTP::Tiny and HTTP::Tiny::Handle for context-aware I/O operations and cancellation.
+    
 0.014 2025-10-13
   [Internal Changes]
     * Do internal changes to catch up latest SPVM.

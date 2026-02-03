@@ -14,7 +14,7 @@
 use strict;
 use warnings;
 
-our $VERSION = '1.03';
+our $VERSION = '1.04';
 
 use Test::More;
 use Test::More::UTF8;
@@ -32,7 +32,7 @@ use warnings;
 
 use lib 'blib/lib';
 
-our $VERSION = '1.03';
+our $VERSION = '1.04';
 
 use Test::More;
 use Test::More::UTF8;

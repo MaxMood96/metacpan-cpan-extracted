@@ -1,0 +1,33 @@
+---
+abstract: 'TLS connectivity for Sys::Async::Virt'
+author:
+  - 'Erik Huelsmann <ehuels@gmail.com>'
+build_requires: {}
+configure_requires:
+  ExtUtils::MakeMaker: '0'
+dynamic_config: 0
+generated_by: 'Dist::Zilla version 6.037, CPAN::Meta::Converter version 2.150010'
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: Sys-Async-Virt-Connection-TLS
+provides:
+  Sys::Async::Virt::Connection::TLS:
+    file: lib/Sys/Async/Virt/Connection/TLS.pm
+    version: v0.0.2
+requires:
+  Future::AsyncAwait: '0'
+  Future::IO::TLS: '0'
+  Log::Any: '0'
+  Object::Pad: '0'
+  Protocol::Sys::Virt::URI: '0'
+  Sys::Async::Virt::Connection::TCP: v0.5.2
+  perl: v5.26.0
+resources:
+  bugtracker: https://github.com/ehuelsmann/perl-sys-async-virt-connection-tls/issues
+  repository: https://github.com/ehuelsmann/perl-sys-async-virt-connection-tls.git
+version: 0.0.2
+x_generated_by_perl: v5.38.2
+x_serialization_backend: 'YAML::Tiny version 1.76'
+x_spdx_expression: 'Artistic-1.0-Perl OR GPL-1.0-or-later'

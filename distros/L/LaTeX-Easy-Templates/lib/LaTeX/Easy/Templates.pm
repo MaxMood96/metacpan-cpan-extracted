@@ -10,7 +10,7 @@ use 5.010;
 use strict;
 use warnings;
 
-our $VERSION = '1.03';
+our $VERSION = '1.04';
 
 use Exporter qw(import);
 our @EXPORT = qw(
@@ -28,7 +28,7 @@ use File::Path 'make_path';
 use File::Copy::Recursive qw/fmove rcopy/;
 use Filesys::DiskUsage qw/du/;
 use File::Which;
-use Cwd 'abs_path';
+use Cwd qw/abs_path/;
 
 use Data::Roundtrip qw/perl2dump no-unicode-escape-permanently/;
 
@@ -126,7 +126,8 @@ sub new {
 	# stop silly-escaping for html or xml,
 	# this makes the use of mark_raw redundant ouph!
 	$options->{'templater-parameters'}->{'type'} = 'text';
-	# note: you can specify functions to be called in the template
+	# note: you can specify own functions or perl builtins
+	#       to be called from inside the template
 	#'function' => {
 	#	'templatedir' => sub { # it takes an input param as input $args }
 	#}
@@ -461,12 +462,15 @@ sub format {
 	# will be the same as latex source file except the extension will be .pdf
 	my $actual_pdf_outfile = $latex_info->{'filepath'};
 	$actual_pdf_outfile =~ s/\.tex$/.pdf/i;
+	if( ! -f $actual_pdf_outfile ){ $log->error("${whoami} (via $parent), line ".__LINE__." : error, there is no latex output, file '$actual_pdf_outfile' does not exist."); return undef }
 
 	if( defined $outfile ){
-		# an output file was specified, so we move the produced pdf to that file
-		my $outfiledir = $output_info->{'basedir'};
-		if( ! -d $outfiledir ){ make_path($outfiledir); if( ! -d $outfiledir ){ $log->error("${whoami} (via $parent), line ".__LINE__." : error, the parent dir of the 'outfile' specified ('$outfile' in dir '$outfiledir') could not be created or it is not a dir, exiting but pdf is at '$actual_pdf_outfile'."); return undef } }
-		if( ! File::Copy::Recursive::fmove($actual_pdf_outfile, $outfile) ){ $log->error("${whoami} (via $parent), line ".__LINE__." : error failed to move '$actual_pdf_outfile' to '$outfile': $!"); return undef }
+		if( abs_path($outfile) ne abs_path($actual_pdf_outfile) ){
+			# an output file was specified, so we move the produced pdf to that file
+			my $outfiledir = $output_info->{'basedir'};
+			if( ! -d $outfiledir ){ make_path($outfiledir); if( ! -d $outfiledir ){ $log->error("${whoami} (via $parent), line ".__LINE__." : error, the parent dir of the 'outfile' specified ('$outfile' in dir '$outfiledir') could not be created or it is not a dir, exiting but pdf is at '$actual_pdf_outfile'."); return undef } }
+			if( ! File::Copy::Recursive::fmove($actual_pdf_outfile, $outfile) ){ $log->error("${whoami} (via $parent), line ".__LINE__." : error failed to move '$actual_pdf_outfile' to '$outfile': $!"); return undef }
+		}
 	} else {
 		# no output file was specified so update all the info
 		$outfile = $actual_pdf_outfile;
@@ -475,7 +479,7 @@ sub format {
 		$output_info->{'filename'} = File::Basename::basename($outfile);
 	}
 
-	if( $verbosity > 0 ){ $log->info("${whoami} (via $parent), line ".__LINE__." : done, success in ".(time-$starttime)." seconds. LaTeX was run and pdf output was created into '${outfile}' (source latex file: '".$latex_info->{'filepath'}."').") }
+	if( $verbosity > 0 ){ $log->info("${whoami} (via $parent), line ".__LINE__." : LaTeX was run and pdf output was created into '${outfile}' (source latex file: '".$latex_info->{'filepath'}."').\nDone, success in ".(time-$starttime)." seconds.") }
 
 	return {
 		'latex' => $latex_info,
@@ -624,7 +628,10 @@ sub untemplate {
 			if( $self->max_size_for_filecopy() >= 0 ){
 				# check the max limit if >=0 else we don't do the check
 				my $total_size = Filesys::DiskUsage::du($apath);
-				if( $total_size > $self->max_size_for_filecopy() ){ $log->error("${whoami} (via $parent), line ".__LINE__." : error, the size of '$apath' (specified via 'template'->'auxfiles') is ${total_size} bytes but the maximum size allowed is ".$self->max_size_for_filecopy().". Reconsider or change the max file size via a call to max_size_for_filecopy(). Setting it to -1 will skip this check."); return undef }
+				if( $total_size > $self->max_size_for_filecopy() ){
+					$log->error("${whoami} (via $parent), line ".__LINE__." : error, the size of '$apath' (specified via 'template'->'auxfiles') is ${total_size} bytes but the maximum size allowed is ".$self->max_size_for_filecopy().". Reconsider or change the max file size via a call to ".'max_size_for_filecopy()'.". Setting it to -1 will skip this check.");
+					return undef
+				}
 			}
 			if( ! File::Copy::Recursive::rcopy($apath, $latex_info->{'basedir'}) ){ $log->error("${whoami} (via $parent), line ".__LINE__." : error, failed to copy auxiliary file/dir specified via 'template'->'auxfiles' ($apath) into output dir '".$latex_info->{'basedir'}."'."); return undef }
 			if( $verbosity > 0 ){ $log->info("${whoami} (via $parent), line ".__LINE__." : auxiliary file/dir ($apath) was copied into the output dir (".$latex_info->{'basedir'}.").") }
@@ -649,6 +656,11 @@ sub untemplate {
 		return undef
 	};
 	if( ! defined $latexstr ){ $log->error("--begin template vars:\n".perl2dump($template_data)."--end template vars.\n${whoami} (via $parent), line ".__LINE__." : error, call to ".'render()'." has failed for template file '".$template_info->{'filepath'}."' and above template vars data."); return undef }
+
+	# eat my newline!
+	$latexstr =~ s/<<%%[ \t]*eatnewline[ \t]*%%>>\n?//g;
+	$latexstr =~ s/<<%%[ \t]*eatnewline\+[ \t]*%%>>\n*//g;
+	$latexstr =~ s/<<%%[ \t]*eatnewline.*?%%>>//g;
 
 	# write out the latex src str
 	my $FH;
@@ -1125,13 +1137,15 @@ sub cleanup {
 
 =pod
 
+=encoding utf8
+
 =head1 NAME
 
 LaTeX::Easy::Templates - Easily format content into PDF/PS/DVI with LaTeX templates.
 
 =head1 VERSION
 
-Version 1.03
+Version 1.04
 
 =head1 SYNOPSIS
 
@@ -1244,9 +1258,9 @@ because of its very good performance when rendering templates.
 
     # templated LaTeX document in-memory
     # (with variables to be substituted)
-    my $latex_template =<<'EOLA';
+    my $latex_templated_string =<<'EOLA';
     % basic LaTeX document
-    \documentclass[a4,12pt]{article}
+    \documentclass[a4paper,12pt]{article}
     \begin{document}
     \title{ <: $data.['title'] :> }
     \author{ <: $data.author.name :> <: $data.author['surname'] :> }
@@ -1294,10 +1308,14 @@ because of its very good performance when rendering templates.
       },
       'processors' => {
         # if it includes other in-memory templates
-        # then just include them here with their name
+        # then just include them here with their name/identifier,
+	# e.g. here the name is'mytemplate':
         'mytemplate' => {
           'template' => {
-            'content' => $latex_template_string,
+	    # this is the in-memory latex code (template)
+	    # which will be formatted with some template data
+	    # to produce the output pdf specified below:
+            'content' => $latex_templated_string,
           },
           'output' => {
             'filepath' => 'output.pdf'
@@ -1308,13 +1326,36 @@ because of its very good performance when rendering templates.
     die unless $latte;
 
     my $ret = $latte->format({
+      # template data to replace template variables in
+      # the latex templated in-memory string (specified above):
       'template-data' => $template_data,
       'outfile' => 'xyz.pdf',
-      # this is the in-memory LaTeX template
+      # this is the in-memory LaTeX template identifier
+      # we will use, it was specified above in the
+      # 'processors' section to the constructor parameters:
       'processor' => 'mytemplate'
     });
     die unless $ret;
     # check output xyz.pdf !
+
+    # Some LaTeX formatting is sensitive to newlines
+    # accidentally added by template substitutions
+    # tag <<%% eatnewline %%>> will eat exactly one newline
+    # after it (and the tag itself) and <<%% eatnewline+ %%>>
+    # will eat all the newlines after it (and the tag itself)
+    my $latex_templated_string =<<'EOLA';
+    % basic LaTeX document
+    \documentclass[a4paper,12pt]{article}
+    \begin{document}
+    \title{ <: $data.['title'] :> }
+    \author{ <: $data.author.name :> <: $data.author['surname'] :> }
+    \date{ <: $data.date :> }
+    \maketitle
+    <: $data.content :><<%% eatnewline+ %%>>
+    %% above we will have the content from the template substitution
+    %% without any newline following it at all.
+    \end{document}
+    EOLA
 
 =head1 EXPORT
 
@@ -1669,7 +1710,10 @@ So if your template data is this:
     name => 'aa',
   }
 
-Then your template will access C<name>'s value via C< <: $data.name :> >
+Then your template will access C<name>'s value via C< E<lt>: $data.name :E<gt> >
+or C< E<lt>: $data['name'] :E<gt> >. Note, the templater's tags C< E<lt>: > and C< :E<gt> >.
+And also note that all the data you pass in can be accessed via C< $data >. This
+is taken care by the module automatically.
 
 See L</TEMPLATE PROCESSING> for more on the syntax of the template files.
 
@@ -1823,8 +1867,10 @@ It returns the hash(ref) of extra information relating to the "processors".
 
 =head1 TEMPLATE PROCESSING
 
-The LaTeX templates will be processed with L<Text::Xslate> and must
-follow its rules. It understands two template syntaxes:
+The LaTeX templates will be processed with L<Text::Xslate> and
+they must adhere to its rules.
+
+L<Text::Xslate>  understands two template syntaxes:
 
 =over 2
 
@@ -1852,16 +1898,79 @@ So if your template data is this:
     name => 'aa',
   }
 
-Then your template will access C<name>'s value via C< <: $data.name :> >.
+Then your template will access C<name>'s value via C< E<lt>: $data.name :E<gt> >
+or C< E<lt>: $data['name'] :E<gt> >. Note, the templater's tags C< E<lt>: > and C< :E<gt> >.
 
 L<Text::Xslate> supports loops and conditional statements.
 It also offers a lot of L<builtin functions|Text::Xslate::Manual::Builtin>.
 Additionally you can call user-specified perl subs (or subs from other modules)
 from within a template.
 
-Read
-the documentation for L<Text::Xslate>'s syntax
+Read the documentation for L<Text::Xslate>'s syntax
 L<Text::Xslate::Syntax::Kolon> or L<Text::Xslate::Syntax::TTerse>.
+
+=head2 DEBUGGING
+
+The most useful L<Text::Xslate> command for debugging
+the rendering of templates:
+
+   : $data | dump;
+
+which dumps the templated data passed into it
+to render the document. Again, the variable
+C< $data > is your input data passed into it.
+
+Secondly, you can specify your own temporary directory
+for saving rendered latex code along with all the collected
+images and other dependencies. Switch to that directory
+and inspect the files and even run them yourself from
+the command line to find the problem.
+
+Alternatively, specify this:
+
+    'debug' => {
+	'verbosity' => 4,
+	'cleanup' => 0, ## <<< important
+    }
+
+so that the temporary files are not deleted (they are
+deleted, successfully run or not, if C< cleanup = 1>).
+Note that the C< cleanup > applies only for temporary
+directories created by the module internally and not
+for the directory you specified via the parameter
+
+   'tempdir'
+
+during construction. That dir will remain intact irrespective
+of the C< cleanup > value.
+
+Thirdly, a very useful tip: later versions of L<Text::Xslate>
+cause a segmentation fault when you try to print undefined variables.
+There is no way to find out where the undefined variable is.
+Thankfully, you can still tell L<Text::Xslate> to not use XS
+but use its pure-perl version by setting environment variable
+
+   export PERL_ONLY=1
+
+or
+
+   PERL_ONLY=1 perl ...
+
+The pure-perl version will not crash but instead it will output
+a very friendly message where the undefined variable is located.
+
+Fourthly, there are many LaTeX rendering engines representing
+different specs and formats. For example, C< tex >, C< latex >,
+C< pdflatex >, C< xelatex >, C< xetex >, C< luatex > etc.
+If you do not use the correct engine you will get errors because
+the various rendering engines have some differences to
+the format of the input LaTeX code. So let the module knows
+the correct engine to use by specifying it in its constructor
+parameters:
+
+    'latex-driver-parameters' => {
+	'format' => 'pdf(pdflatex)', # or 'pdf(xelatex') or ...
+    }
 
 =head1 TEMPLATES INCLUDING TEMPLATES
 
@@ -2024,6 +2133,26 @@ straightforward, just follow the above guidelines.
 
 Mixed templates functionality is demonstrated and tested in
 file C<t/500-mix-template-usage-calling-other-mix-templates.t>.
+
+=head2 ACCIDENTAL NEWLINES AFTER SUBSTITUTIONS
+
+Sometimes template substitutions may leave remaining
+newlines which are not desirable as TeX sometimes,
+not as a rule, will take newlines into account when
+formatting. In order to solve this problem, we have
+available two special tags:
+
+=over 2
+
+=item * C< E<lt>E<lt>%% eatnewline %%E<gt>E<gt> > will remove
+exactly one newline, if any, following the tag. And the tag itself.
+
+=item * C< E<lt>E<lt>%% eatnewline+ %%E<gt>E<gt> > will remove
+all newlines, if any, following the tag. And the tag itself.
+
+=back
+
+The space before and after the keyword C<eatnewline> is optional.
 
 
 =head1 EXAMPLE: PRINTING STICKY LABELS
@@ -2239,20 +2368,31 @@ Here is a Perl script to render any data structure into PDF:
     # see LaTeX::Driver's doc for other formats, e.g. pdf(xelatex)
     my $latex_driver_and_format = 'pdf(pdflatex)';
 
-    my $nested_data_structure = {'a' => [1,2,3], 'b' => {'c' => [4,5,6, {'z'=>1}]}};
+    my $nested_data_structure = {
+	'a' => [1,2,3],
+	'b' => {
+		'c' => [ 4,5,6, {'z'=>1} ]
+	}
+    };
 
     # debug settings:
-    my $verbosity = 1;
-    # keep intermediate latex file for inspection
-    my $cleanup = 1;
+    my $verbosity = 1; # 0, 1 or more ...
+    # keep temporary files (including latex untemplated document)
+    # for inspection?
+    my $cleanup = 0;
 
     my $latter = LaTeX::Easy::Templates->new({
-      'debug' => {
-        'verbosity' => $verbosity,
-        'cleanup' => $cleanup
-      },
+      # parameters to be passed to the templater's constructor.
       'templater-parameters' => {
+	# Our templater is Text::Xslate and we specify some of our
+	# functions here to be imported into it and be
+	# able to be used inside a template document (optional):
         'function' => {'ref' => sub { return ref($_[0]) } }
+	# optionally, you can pass modules to be imported:
+	#'module' => [
+	#	# and so the exports of this module:
+	#	'Data::Roundtrip' => [qw/perl2json json2perl/], 
+	#],
       },
       'processors' => {
         'nested-data-structures' => {
@@ -2265,7 +2405,23 @@ Here is a Perl script to render any data structure into PDF:
               'format' => $latex_driver_and_format,
             }
           },
-        }
+        },
+      },
+      'debug' => {
+        'verbosity' => $verbosity,
+        'cleanup' => $cleanup
+      },
+	# optionally specify a tempdir to place various files
+	# for example, in-memory latex code will be saved to a .tex
+	# file in this dir.
+	# If you leave this undef or not specified at all, then
+	# the module will use its own temporary dir
+	# which will be cleanup as per the 'debug'->'cleanup'
+	# parameter, at the end successfully run OR NOT.
+	# If you are debugging, then better set this here
+	# in order to easily be able to inspect the rendered
+	# (un-templated /sic/) latex code and various auxiliary files:
+	'tempdir' => 'abc/xyz',
       }
     });
     die "failed to instantiate 'LaTeX::Easy::Templates'" unless defined $latter;

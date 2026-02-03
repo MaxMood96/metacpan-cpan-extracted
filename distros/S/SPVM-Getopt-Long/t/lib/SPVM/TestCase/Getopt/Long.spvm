@@ -961,6 +961,25 @@ class TestCase::Getopt::Long {
       }
     }
     
+    # Contain hyphen
+    # https://github.com/yuki-kimoto/SPVM-Getopt-Long/issues/1
+    {
+      my $args = ["cmd", "--foo-bar=3"];
+      
+      my $values_h = Hash->new;
+      
+      my $spec_strings = [
+        "foo-bar=s",
+      ];
+      
+      my $args_ref = [$args];
+      Getopt::Long->GetOptionsFromArray($args_ref, $values_h, $spec_strings);
+      
+      unless ($values_h->{"foo-bar"}->(string) eq "3") {
+        return 0;
+      }
+    }
+    
     return 1;
   }
 }

@@ -60,12 +60,14 @@
       },
       "test" : {
          "requires" : {
+            "Errno" : "0",
             "File::Temp" : "0",
             "FindBin" : "0",
             "IPC::Run3" : "0",
             "IPC::System::Simple" : "0",
             "JSON::PP" : "4.02",
             "LWP::UserAgent" : "0",
+            "POSIX" : "0",
             "Taint::Runtime" : "0",
             "Test::Carp" : "0",
             "Test::CleanNamespaces" : "0",
@@ -101,6 +103,6 @@
          "x_repository" : "https://github.com/nigelhorne/CGI-Info"
       }
    },
-   "version" : "1.09",
+   "version" : "1.11",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

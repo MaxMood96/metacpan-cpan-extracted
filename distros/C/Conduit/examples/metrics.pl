@@ -6,11 +6,11 @@ use Future::AsyncAwait;
 
 use Conduit;
 
-use Future::IO;
+use Future::IO 0.18; # ->load_best_impl
 use Metrics::Any::Adapter 'Prometheus';
 use Net::Prometheus;
 
-Future::IO->load_impl(qw( UV Glib IOAsync ));
+Future::IO->load_best_impl;
 
 my $conduit = Conduit->new(
    port => 8080,

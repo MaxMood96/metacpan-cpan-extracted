@@ -36,7 +36,7 @@ ok(-x $mdee, 'mdee is executable');
 # Test: help option
 subtest 'help option' => sub {
     my $out = `$mdee --help 2>&1`;
-    like($out, qr/mdee.*Markdown/i, '--help shows description');
+    like($out, qr/dee.*Markdown/i, '--help shows description');
     like($out, qr/--mode/, '--help shows --mode option');
     like($out, qr/--theme/, '--help shows --theme option');
     like($out, qr/--filter/, '--help shows --filter option');

@@ -1,5 +1,14 @@
 Revision history for Conduit
 
+0.03    2026-02-02
+        [CHANGES]
+         * Support a simple `HTTP::Message`-based responder as an alternative
+           to a PSGI application
+         * Reliability improvements:
+           + Catch responder/applications and turn them into HTTP 500 errors
+           + Don't crash the whole server if one client connection crashes
+         * Use Future::IO 0.18's ->load_best_impl method in example scripts
+
 0.02    2026-01-05
         [CHANGES]
          * Fix a few distrolint complaints

@@ -1,5 +1,26 @@
 Revision history for Future-IO-Redis
 
+0.001004  2026-02-02
+    - Bug Fix: Socket close ordering
+        - Fixed Future::IO corruption when disconnect() called with active watchers
+        - Cancel _current_read_future before socket close ensures Future::IO
+          unregisters watchers while fileno is still valid
+        - Let Perl's DESTROY handle close() after futures are cancelled
+    - Breaking Change: Future::IO configuration
+        - Removed Future::IO->load_best_impl from module
+        - Libraries should not configure Future::IO - only application entry
+          points should (following LeoNerd's guidance)
+        - Added comprehensive EVENT LOOP CONFIGURATION documentation section
+        - Updated SYNOPSIS with proper configuration guidance
+    - Improvements:
+        - Apply connect_timeout to Redis handshake (AUTH, SELECT, CLIENT SETNAME)
+        - Removed unused read_timeout and write_timeout settings
+    - Examples:
+        - Updated pagi-chat example for PAGI 0.001016 auto-configured Future::IO
+    - Testing:
+        - New t/93-socket-cleanup/close-with-watchers.t for disconnect scenarios
+        - Enhanced t/10-connection/socket-cleanup.t
+
 0.001003  2026-01-18
     - New Feature: Enhanced Lua Script Helper API
         - define_command() for registering named scripts with metadata

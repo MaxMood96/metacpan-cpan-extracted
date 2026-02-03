@@ -50,9 +50,11 @@
 #  define dXSBOOTARGSXSAPIVERCHK dXSARGS
 #endif
 
+/* Perl_xs_boot_epilog - introduced in 5.21.6 (use 5.22 as safe boundary)
+ * Use PERL_IMPLICIT_CONTEXT not USE_ITHREADS - that's what controls aTHX_ expansion */
 #if !PERL_VERSION_GE(5,22,0)
 #  ifndef Perl_xs_boot_epilog
-#    ifdef USE_ITHREADS
+#    ifdef PERL_IMPLICIT_CONTEXT
 #      define Perl_xs_boot_epilog(ctx, ax) XSRETURN_YES
 #    else
 #      define Perl_xs_boot_epilog(ax) XSRETURN_YES
@@ -74,7 +76,7 @@
 #  define PERL_UNUSED_ARG(x) ((void)(x))
 #endif
 
-/* PADNAME compatibility - PADNAME type introduced in 5.18, API in 5.22 */
+/* PADNAME compatibility - PADNAME type introduced in 5.18, PadnameFLAGS in 5.21.7 */
 #if !PERL_VERSION_GE(5,18,0)
 /* Pre-5.18: PADNAME doesn't exist, pad names are SVs */
 typedef SV PADNAME;
@@ -83,6 +85,16 @@ typedef SV PADNAME;
 #  define PadnameFLAGS(pn) (SvFLAGS(pn))
 #  ifndef PADNAMEf_CONST
 #    define PADNAMEf_CONST 0  /* Flag doesn't exist pre-5.18, always false */
+#  endif
+#elif !PERL_VERSION_GE(5,22,0)
+/* 5.18-5.21: PADNAME exists but PadnameFLAGS may not be available/lvalue.
+ * PadnameFLAGS was added in 5.21.7 but may have issues on some compilers.
+ * Use SvFLAGS directly on the underlying SV for these versions. */
+#  ifndef PadnameFLAGS
+#    define PadnameFLAGS(pn) (SvFLAGS((SV*)(pn)))
+#  endif
+#  ifndef PADNAMEf_CONST
+#    define PADNAMEf_CONST 0x40  /* May not be defined in all 5.18-5.21 versions */
 #  endif
 #endif
 

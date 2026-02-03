@@ -3,8 +3,8 @@ class TestCase::HTTP::Tiny {
   use Fn;
   use Go;
   use Array;
-  
   use HTTP::Tiny;
+  use Go::Context;
   
   our $RESULT : IntList;
   
@@ -14,15 +14,20 @@ class TestCase::HTTP::Tiny {
     
     my $http = HTTP::Tiny->new;
     
-    my $res = $http->get($url);
+    my $ctx = Go::Context->background;
+    
+    # Pass $ctx as the first argument
+    my $res = $http->get($ctx, $url);
     
     my $content = $res->content;
     
     unless (Fn->contains($content, "www.google.com")) {
+      diag;
       return 0;
     }
     
     unless ($res->status == 200 || $res->status == 301) {
+      diag;
       return 0;
     }
     
@@ -33,33 +38,36 @@ class TestCase::HTTP::Tiny {
     
     $RESULT = IntList->new;
     
-    Go->go(method : void () {
+    my $ctx = Go::Context->background;
+    my $http = HTTP::Tiny->new;
+    
+    # First goroutine
+    Go->go([$ctx : Go::Context, $http : HTTP::Tiny] method : void () {
       my $url = "http://google.com";
       
-      my $http = HTTP::Tiny->new;
-      
-      my $res = $http->get($url);
+      my $res = $http->get($ctx, $url);
       
       my $content = $res->content;
       
       $RESULT->push(Fn->contains($content, "www.google.com"));
     });
     
-    Go->go(method : void () {
+    # Second goroutine
+    Go->go([$ctx : Go::Context, $http : HTTP::Tiny] method : void () {
       my $url = "http://google.com";
       
-      my $http = HTTP::Tiny->new;
-      
-      my $res = $http->get($url);
+      my $res = $http->get($ctx, $url);
       
       my $content = $res->content;
       
       $RESULT->push(Fn->contains($content, "www.google.com"));
     });
     
+    # Wait for all goroutines to finish
     Go->gosched;
     
     unless (Array->equals_int($RESULT->to_array, [1, 1])) {
+      diag;
       return 0;
     }
     

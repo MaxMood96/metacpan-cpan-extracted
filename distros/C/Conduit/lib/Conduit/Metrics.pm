@@ -4,7 +4,7 @@
 #  (C) Paul Evans, 2026 -- leonerd@leonerd.org.uk
 
 use v5.36;
-package Conduit::Metrics 0.02;
+package Conduit::Metrics 0.03;
 
 use experimental 'builtin';
 use builtin qw( refaddr );

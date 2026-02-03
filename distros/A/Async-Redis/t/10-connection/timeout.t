@@ -7,21 +7,25 @@ use Test2::V0;
 use Async::Redis;
 use Time::HiRes qw(time);
 
+# Detect slow/automated environments (Lancaster Consensus + common indicators)
+my $SLOW_ENV = $ENV{AUTOMATED_TESTING}
+            || $ENV{NONINTERACTIVE_TESTING}
+            || $ENV{PERL_BATCH}
+            || $ENV{PERL5_CPAN_IS_RUNNING}
+            || $ENV{CI};
+my $TIMEOUT_SCALE = $SLOW_ENV ? 5 : 1;
+
 # Helper: await a Future and return its result (throws on failure)
 
 subtest 'constructor accepts timeout parameters' => sub {
     my $redis = Async::Redis->new(
         host                    => 'localhost',
         connect_timeout         => 5,
-        read_timeout            => 10,
-        write_timeout           => 10,
         request_timeout         => 3,
         blocking_timeout_buffer => 2,
     );
 
     is($redis->{connect_timeout}, 5, 'connect_timeout');
-    is($redis->{read_timeout}, 10, 'read_timeout');
-    is($redis->{write_timeout}, 10, 'write_timeout');
     is($redis->{request_timeout}, 3, 'request_timeout');
     is($redis->{blocking_timeout_buffer}, 2, 'blocking_timeout_buffer');
 };
@@ -30,7 +34,6 @@ subtest 'default timeout values' => sub {
     my $redis = Async::Redis->new(host => 'localhost');
 
     is($redis->{connect_timeout}, 10, 'default connect_timeout');
-    is($redis->{read_timeout}, 30, 'default read_timeout');
     is($redis->{request_timeout}, 5, 'default request_timeout');
     is($redis->{blocking_timeout_buffer}, 2, 'default blocking_timeout_buffer');
 };
@@ -164,8 +167,8 @@ SKIP: {
     subtest 'blocking command uses extended timeout' => sub {
         my $redis = Async::Redis->new(
             host                    => $ENV{REDIS_HOST} // 'localhost',
-            request_timeout         => 1,
-            blocking_timeout_buffer => 1,
+            request_timeout         => 1 * $TIMEOUT_SCALE,
+            blocking_timeout_buffer => 1 * $TIMEOUT_SCALE,
         );
         run { $redis->connect };
 
@@ -174,14 +177,14 @@ SKIP: {
 
         my $start = time();
         # BLPOP with 0.5s server timeout
-        # Client deadline should be 0.5 + 1 (buffer) = 1.5s
+        # Client deadline should be 0.5 + 1 (buffer) = 1.5s (scaled for slow environments)
         my $result = run { $redis->command('BLPOP', 'timeout:test:list', '0.5') };
         my $elapsed = time() - $start;
 
         # BLPOP returns undef on timeout
         is($result, undef, 'BLPOP returned undef (server timeout)');
         ok($elapsed >= 0.4, "waited for server timeout (${elapsed}s)");
-        ok($elapsed < 1.0, "didn't hit client timeout (${elapsed}s)");
+        ok($elapsed < 1.0 * $TIMEOUT_SCALE, "didn't hit client timeout (${elapsed}s)");
 
         $redis->disconnect;
     };
@@ -189,7 +192,7 @@ SKIP: {
     subtest 'normal commands work within timeout' => sub {
         my $redis = Async::Redis->new(
             host            => $ENV{REDIS_HOST} // 'localhost',
-            request_timeout => 5,
+            request_timeout => 5 * $TIMEOUT_SCALE,
         );
         run { $redis->connect };
 

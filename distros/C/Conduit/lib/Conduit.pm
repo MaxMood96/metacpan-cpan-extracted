@@ -8,7 +8,7 @@ use v5.36;
 use Future::AsyncAwait;
 use Object::Pad 0.800;
 
-package Conduit 0.02;
+package Conduit 0.03;
 class Conduit
    :strict(params);
 
@@ -39,9 +39,10 @@ C<Conduit> - serve HTTP with L<Future::IO>
 =head1 DESCRIPTION
 
 This module allows a program to respond asynchronously to HTTP requests as
-part of a program based on L<Future::IO>. It currently only supports a
-PSGI-based application, but the intention is to allow PAGI and possibly other
-interface shapes in a later version.
+part of a program based on L<Future::IO>. It currently supports either a
+simple L<HTTP::Message>-based responder or a PSGI application, but the
+intention is to allow PAGI and possibly other interface shapes in a later
+version.
 
 This is currently B<experimental>, serving also as a testbed for how to design
 larger systems using C<Future::IO>, and hopefully soon as a way to test out
@@ -90,22 +91,19 @@ ADJUST :params (
 
 method port () { return $listensock->sockport; }
 
-field $selector = Future::Selector->new;
+=head2 responder
 
-async method listen ()
-{
-   while( my $clientsock = await Future::IO->accept( $listensock ) ) {
-      my $client = Conduit::Client->new(
-         server => $self,
-         socket => $clientsock,
-      );
+   responder => $app
 
-      $selector->add(
-         data => $client,
-         f    => $client->run,
-      );
-   }
-}
+      $response = await $app->( $request );
+
+A code reference to the responder used for handling requests.
+
+It will be passed an L<HTTP::Request> instance containing the incoming request
+and is expected to yield an L<HTTP::Response> instance via a future. As a
+small convenience, the server will fill in the C<protocol> and
+C<content_length> fields of the response if they are not provided by the
+responder.
 
 =head2 psgi_app
 
@@ -113,21 +111,62 @@ async method listen ()
 
 A code reference to the L<PSGI> application used for handling requests.
 
-Currently this is mandatory, but the intention is soon to allow other forms of
-responders, such as L<PAGI> as alternatives.
+Currently, exactly one of C<responder> or C<psgi_app> must be provided, but
+the intention is soon to allow other forms of responders, such as L<PAGI> as
+alternatives.
 
 =cut
 
-field $psgi_app :param;
+field $responder :param = undef;
+field $psgi_app :param  = undef;
 
-async method respond ( $env )
-{
-   return $psgi_app->( $env );
+ADJUST {
+   defined $responder or defined $psgi_app or
+      croak "Require either 'responder' or 'psgi_app'";
+
+   defined( $responder ) + defined( $psgi_app ) == 1 or
+      croak "Require exactly one of 'responder' or 'psgi_app'";
 }
 
 =head1 METHODS
 
 =cut
+
+field $selector = Future::Selector->new;
+
+async method listen ()
+{
+   while( my $clientsock = await Future::IO->accept( $listensock ) ) {
+      my $client;
+      if( $responder ) {
+         $client = Conduit::Client::_ForHTTP->new(
+            responder => $responder,
+            server    => $self,
+            socket    => $clientsock,
+         );
+      }
+      elsif( $psgi_app ) {
+         $client = Conduit::Client::_ForPSGI->new(
+            psgi_app => $psgi_app,
+            server   => $self,
+            socket   => $clientsock,
+         );
+      }
+      else {
+         die "TODO: other app shapes?";
+      }
+
+      $selector->add(
+         data => $client,
+         f    => $client->run
+            ->else( sub ( $err, @ ) {
+               chomp $err;
+               warn "Conduit client connection failed: $err\n";
+               Future->done; # don't make the server fail
+            }),
+      );
+   }
+}
 
 =head2 run
 

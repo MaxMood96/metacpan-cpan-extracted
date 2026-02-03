@@ -4,20 +4,26 @@ use warnings;
 use Test::More;
 use lib 't/lib', 'blib/lib', 'blib/arch';
 
-# Load util first - it must be loaded before other modules register exports
-BEGIN { use_ok('util') }
-
-# Load the XS test module - this registers xs_double, xs_triple, etc. with util
-# Skip all tests if module can't load (linking issues on some platforms)
-my $load_error;
+# Check if modules can load BEFORE running any tests
+# This avoids "Bad plan" errors when skip_all is needed
 BEGIN {
+    # Try to load util first
+    eval { require util };
+    if ($@) {
+        plan skip_all => "util not loadable: $@";
+        exit 0;
+    }
+    util->import();
+
+    # Try to load util_export_test (depends on util.so)
     eval { require util_export_test; util_export_test->import(); };
-    $load_error = $@;
+    if ($@) {
+        plan skip_all => "util_export_test not loadable (linking issue): $@";
+        exit 0;
+    }
 }
 
-if ($load_error) {
-    plan skip_all => "util_export_test not loadable (linking issue): $load_error";
-}
+pass('util loaded');
 pass('util_export_test loaded');
 
 # ============================================

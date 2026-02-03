@@ -7,7 +7,7 @@
 #
 #   The GNU Lesser General Public License, Version 2.1, February 1999
 #
-package Config::Model::Tk::NodeViewer 1.379;
+package Config::Model::Tk::NodeViewer 1.380;
 
 use strict;
 use warnings;
@@ -82,11 +82,6 @@ sub Populate {
 
     $cw->SUPER::Populate($args);
 }
-
-#sub DESTROY {
-#    my $cw = shift ;
-#    $cw->{adjust}->packForget(1);
-#}
 
 sub reload {
     my $cw = shift;

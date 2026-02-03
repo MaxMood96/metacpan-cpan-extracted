@@ -34,11 +34,11 @@ CGI::Info - Information about the CGI environment
 
 =head1 VERSION
 
-Version 1.09
+Version 1.11
 
 =cut
 
-our $VERSION = '1.09';
+our $VERSION = '1.11';
 
 =head1 SYNOPSIS
 
@@ -1986,7 +1986,7 @@ Cookie set:
 sub cookie
 {
 	my $self = shift;
-        my $params = Params::Validate::Strict::validate_strict({
+	my $params = Params::Validate::Strict::validate_strict({
 		args => Params::Get::get_params('cookie_name', @_),
 		schema => {
 			cookie_name => {
@@ -2027,7 +2027,7 @@ otherwise an HTTP error code
 =item $status
 
 Optional integer value to be set or retrieved.
-If omitted, the value is retrived.
+If omitted, the value is retrieved.
 
 =back
 
@@ -2294,7 +2294,7 @@ things to happen.
 
 =over 4
 
-=item * L<Test Coverage Report|https://nigelhorne.github.io/CGI-Info/coverage/>
+=item * L<Test Dashboard|https://nigelhorne.github.io/CGI-Info/coverage/>
 
 =item * L<Object::Configure>
 

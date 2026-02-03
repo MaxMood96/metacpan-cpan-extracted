@@ -2,7 +2,7 @@
 #
 # This file is part of Config-Model-Tester
 #
-# This software is Copyright (c) 2013-2020 by Dominique Dumont.
+# This software is Copyright (c) 2013-2020, 2026 by Dominique Dumont.
 #
 # This is free software, licensed under:
 #
@@ -20,5 +20,5 @@ BEGIN {
 use strict;
 use warnings;
 
-use Test::Perl::Critic (-profile => "perlcritic.rc") x!! -e "perlcritic.rc";
+use Test::Perl::Critic;
 all_critic_ok();

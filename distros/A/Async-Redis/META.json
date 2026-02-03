@@ -38,7 +38,7 @@
             "Digest::SHA" : "0",
             "Future" : "0.49",
             "Future::AsyncAwait" : "0.66",
-            "Future::IO" : "0.17",
+            "Future::IO" : "0.19",
             "IO::Socket::INET" : "0",
             "Protocol::Redis" : "0",
             "Socket" : "0",
@@ -72,7 +72,7 @@
          "web" : "https://github.com/jjn1056/Async-Redis"
       }
    },
-   "version" : "0.001003",
+   "version" : "0.001004",
    "x_generated_by_perl" : "v5.40.0",
    "x_serialization_backend" : "Cpanel::JSON::XS version 4.38",
    "x_spdx_expression" : "Artistic-2.0"

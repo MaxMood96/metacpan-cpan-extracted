@@ -4,11 +4,11 @@ use strict;
 use warnings;
 use 5.018;
 
-our $VERSION = '0.001003';
+our $VERSION = '0.001004';
 
 use Future;
 use Future::AsyncAwait;
-use Future::IO 0.17;  # Need read/write methods
+use Future::IO 0.19;
 use Socket qw(pack_sockaddr_in inet_aton AF_INET SOCK_STREAM);
 use IO::Socket::INET;
 use Time::HiRes ();
@@ -99,8 +99,6 @@ sub new {
 
         # Timeout settings
         connect_timeout         => $args{connect_timeout} // 10,
-        read_timeout            => $args{read_timeout} // 30,
-        write_timeout           => $args{write_timeout} // 30,
         request_timeout         => $args{request_timeout} // 5,
         blocking_timeout_buffer => $args{blocking_timeout_buffer} // 2,
 
@@ -153,6 +151,9 @@ sub new {
 
         # Script registry
         _scripts => {},
+
+        # Current read future for clean disconnect cancellation
+        _current_read_future => undef,
 
         # Telemetry options
         debug              => $args{debug},
@@ -208,12 +209,6 @@ async sub connect {
     my $connect_f = Future::IO->connect($socket, $sockaddr);
     my $sleep_f = Future::IO->sleep($self->{connect_timeout});
 
-    # Capture a reference to the IO::Async loop for later cleanup
-    # IO::Async::Future has a ->loop method that returns the loop
-    if ($sleep_f->can('loop')) {
-        $self->{_io_async_loop} = $sleep_f->loop;
-    }
-
     my $timeout_f = $sleep_f->then(sub {
         return Future->fail('connect_timeout');
     });
@@ -231,7 +226,8 @@ async sub connect {
     # Now check the result
     if ($completed_f->is_failed) {
         my ($error) = $completed_f->failure;
-        close $socket;
+        # Don't call close() - let $socket go out of scope when we die.
+        # Perl's DESTROY will close it after the exception unwinds.
 
         if ($error eq 'connect_timeout') {
             die Async::Redis::Error::Timeout->new(
@@ -252,7 +248,8 @@ async sub connect {
             $socket = await $self->_tls_upgrade($socket);
         };
         if ($@) {
-            close $socket;
+            # Don't call close() - let $socket go out of scope when we die.
+            # Perl's DESTROY will close it after the exception unwinds.
             die $@;
         }
     }
@@ -263,6 +260,7 @@ async sub connect {
     $self->{inflight} = [];
     $self->{_reading_responses} = 0;
     $self->{_pid} = $$;  # Track PID for fork safety
+    $self->{_current_read_future} = undef;
 
     # Run Redis protocol handshake (AUTH, SELECT, CLIENT SETNAME)
     await $self->_redis_handshake;
@@ -294,6 +292,10 @@ async sub connect {
 async sub _redis_handshake {
     my ($self) = @_;
 
+    # Use connect_timeout for the entire handshake (AUTH, SELECT, CLIENT SETNAME)
+    # This ensures the handshake can't block forever if Redis hangs
+    my $deadline = Time::HiRes::time() + $self->{connect_timeout};
+
     # AUTH (password or username+password for ACL)
     if ($self->{password}) {
         my @auth_args = ('AUTH');
@@ -303,7 +305,7 @@ async sub _redis_handshake {
         my $cmd = $self->_build_command(@auth_args);
         await $self->_send($cmd);
 
-        my $response = await $self->_read_response();
+        my $response = await $self->_read_response_with_deadline($deadline, ['AUTH']);
         my $result = $self->_decode_response($response);
 
         # AUTH returns OK on success, throws on failure
@@ -320,7 +322,7 @@ async sub _redis_handshake {
         my $cmd = $self->_build_command('SELECT', $self->{database});
         await $self->_send($cmd);
 
-        my $response = await $self->_read_response();
+        my $response = await $self->_read_response_with_deadline($deadline, ['SELECT', $self->{database}]);
         my $result = $self->_decode_response($response);
 
         unless ($result && $result eq 'OK') {
@@ -336,7 +338,7 @@ async sub _redis_handshake {
         my $cmd = $self->_build_command('CLIENT', 'SETNAME', $self->{client_name});
         await $self->_send($cmd);
 
-        my $response = await $self->_read_response();
+        my $response = await $self->_read_response_with_deadline($deadline, ['CLIENT', 'SETNAME']);
         # Ignore result - SETNAME failing shouldn't prevent connection
     }
 }
@@ -353,6 +355,13 @@ sub disconnect {
     $reason //= 'client_disconnect';
 
     my $was_connected = $self->{connected};
+
+    # Cancel any active read future BEFORE closing socket
+    # This ensures Future::IO unregisters its watcher while fileno is still valid
+    if ($self->{_current_read_future} && !$self->{_current_read_future}->is_ready) {
+        $self->{_current_read_future}->cancel;
+        $self->{_current_read_future} = undef;
+    }
 
     # Cancel any pending inflight operations before closing socket
     if (my $inflight = $self->{inflight}) {
@@ -393,44 +402,33 @@ sub DESTROY {
     }
 }
 
-# Properly close socket, cleaning up Future::IO watchers first
+# Properly close socket, canceling any pending futures first
 sub _close_socket {
     my ($self) = @_;
-    my $socket = $self->{socket} or return;
+
+    # Take ownership - removes from $self immediately
+    my $socket = delete $self->{socket} or return;
     my $fileno = fileno($socket);
 
-    # Clean up Future::IO::Impl::IOAsync watchers before closing socket
-    if (defined $fileno) {
-        # Access internal state of Future::IO::Impl::IOAsync to clean up watchers
-        # This is necessary because the module doesn't provide a public cleanup API
-        # and its ready_for_read/ready_for_write don't set up on_cancel handlers
-        no strict 'refs';
-        no warnings 'once';
-
-        # Cancel pending read futures
-        if (my $watching = delete ${'Future::IO::Impl::IOAsync::watching_read_by_fileno'}{$fileno}) {
-            for my $f (@$watching) {
-                $f->cancel if $f && !$f->is_ready;
+    # Cancel any pending inflight futures - this propagates to
+    # Future::IO internals and cleans up any watchers on this socket.
+    # Important: must happen while fileno is still valid!
+    if (my $inflight = delete $self->{inflight}) {
+        for my $entry (@$inflight) {
+            if ($entry->{future} && !$entry->{future}->is_ready) {
+                $entry->{future}->cancel;
             }
-        }
-
-        # Cancel pending write futures
-        if (my $watching = delete ${'Future::IO::Impl::IOAsync::watching_write_by_fileno'}{$fileno}) {
-            for my $f (@$watching) {
-                $f->cancel if $f && !$f->is_ready;
-            }
-        }
-
-        # Unwatch from IO::Async loop before closing socket
-        if (my $loop = $self->{_io_async_loop}) {
-            eval { $loop->unwatch_io(handle => $socket, on_read_ready => 1) };
-            eval { $loop->unwatch_io(handle => $socket, on_write_ready => 1) };
         }
     }
+    $self->{inflight} = [];
 
+    # Initiate clean TCP shutdown (FIN) while fileno still valid
     shutdown($socket, 2) if defined $fileno;
-    close $socket;
-    $self->{socket} = undef;
+
+    # DON'T call close()!
+    # $socket falls out of scope here, Perl's DESTROY calls close().
+    # By this point, Future::IO has already unregistered its watchers
+    # via the cancel() calls above.
 }
 
 # Check if fork occurred and invalidate connection
@@ -439,12 +437,15 @@ sub _check_fork {
 
     if ($self->{_pid} && $self->{_pid} != $$) {
         # Fork detected - invalidate connection (parent owns the socket)
+        # Don't cancel futures - they belong to the parent's event loop
+        # Just clear references so we don't try to use them
         $self->{connected} = 0;
         $self->{socket} = undef;
         $self->{parser} = undef;
         $self->{inflight} = [];
         $self->{_reading_responses} = 0;
-    
+        $self->{_current_read_future} = undef;  # Clear stale reference
+
         my $old_pid = $self->{_pid};
         $self->{_pid} = $$;
 
@@ -873,12 +874,26 @@ async sub _read_response_with_deadline {
 
         # Use wait_any for timeout
         my $read_f = Future::IO->read($self->{socket}, 65536);
+
+        # Store reference so disconnect() can cancel it
+        $self->{_current_read_future} = $read_f;
+
         my $timeout_f = Future::IO->sleep($remaining)->then(sub {
             return Future->fail('read_timeout');
         });
 
         my $wait_f = Future->wait_any($read_f, $timeout_f);
         await $wait_f;
+
+        # Clear stored reference after await completes
+        $self->{_current_read_future} = undef;
+
+        # Check if read was cancelled (by disconnect)
+        if ($read_f->is_cancelled) {
+            die Async::Redis::Error::Disconnected->new(
+                message => "Disconnected during read",
+            );
+        }
 
         if ($wait_f->is_failed) {
             my ($error) = $wait_f->failure;
@@ -922,6 +937,13 @@ sub _reset_connection {
     $reason //= 'timeout';
 
     my $was_connected = $self->{connected};
+
+    # Cancel any active read future BEFORE closing socket
+    # This ensures Future::IO unregisters its watcher while fileno is still valid
+    if ($self->{_current_read_future} && !$self->{_current_read_future}->is_ready) {
+        $self->{_current_read_future}->cancel;
+        $self->{_current_read_future} = undef;
+    }
 
     # Cancel any pending inflight operations before closing socket
     if (my $inflight = $self->{inflight}) {
@@ -1656,15 +1678,9 @@ Async::Redis - Async Redis client using Future::IO
     use Async::Redis;
     use Future::AsyncAwait;
 
-    # Use any Future::IO-compatible event loop
-    # IO::Async:
-    use IO::Async::Loop;
+    # For standalone scripts: configure Future::IO first
     use Future::IO;
-    Future::IO->load_impl('IOAsync');
-    my $loop = IO::Async::Loop->new;
-
-    # Or UV:   Future::IO->load_impl('UV');
-    # Or Glib: Future::IO->load_impl('Glib');
+    Future::IO->load_best_impl;  # Selects UV, IO::Async, etc.
 
     my $redis = Async::Redis->new(
         host => 'localhost',
@@ -1690,9 +1706,12 @@ Async::Redis - Async Redis client using Future::IO
         while (my $msg = await $sub->next_message) {
             print "Received: $msg->{message}\n";
         }
-    })->();
+    })->()->await;
 
-    $loop->run;
+B<Important:> If you're embedding Async::Redis in a larger application
+(web framework, existing event loop, etc.), see L</EVENT LOOP CONFIGURATION>
+for how to properly configure Future::IO. Libraries should never call
+C<load_best_impl> - only your application's entry point should.
 
 =head1 DESCRIPTION
 
@@ -1814,13 +1833,18 @@ Enable TLS/SSL connection. Can be a boolean or hashref with options:
 
 Connection timeout. Default: 10
 
-=item read_timeout => $seconds
-
-Read timeout. Default: 30
-
 =item request_timeout => $seconds
 
-Per-request timeout. Default: 5
+Per-request timeout for commands. Default: 5
+
+Blocking commands (BLPOP, BRPOP, etc.) automatically extend this timeout
+based on their server-side timeout plus C<blocking_timeout_buffer>.
+
+=item blocking_timeout_buffer => $seconds
+
+Extra time added to blocking command timeouts. Default: 2
+
+For example, C<BLPOP key 30> gets a deadline of 30 + 2 = 32 seconds.
 
 =item reconnect => $bool
 
@@ -2196,6 +2220,101 @@ process will automatically invalidate its connection state and
 reconnect when needed. The parent retains ownership of the original
 connection.
 
+=head1 EVENT LOOP CONFIGURATION
+
+Async::Redis uses L<Future::IO> for event loop abstraction, making it
+compatible with IO::Async, UV, AnyEvent, and other event loops. However,
+B<Async::Redis does not choose which event loop to use> - that's the
+application's responsibility.
+
+=head2 The Golden Rule
+
+B<Only executable scripts should configure Future::IO.> Library modules
+(C<.pm> files) should never call C<load_best_impl> or C<load_impl> because
+they don't know what event loop the application wants to use.
+
+When you use Async::Redis inside a larger application, you are a "guest"
+in that application's event loop. The application (the "host") decides
+which Future::IO implementation to use, and all libraries must cooperate.
+
+=head2 For Standalone Scripts
+
+If you're writing a standalone script that uses Async::Redis directly,
+configure Future::IO at the top of your script:
+
+    #!/usr/bin/env perl
+    use strict;
+    use warnings;
+    use Future::IO;
+    Future::IO->load_best_impl;  # Auto-select best available
+
+    use Async::Redis;
+    my $redis = Async::Redis->new(host => 'localhost');
+    # ...
+
+C<load_best_impl> will select the best available backend, typically
+preferring UV if installed, then IO::Async, then others.
+
+=head2 For IO::Async Applications
+
+If your application uses IO::Async for its event loop:
+
+    use IO::Async::Loop;
+    use Future::IO;
+    Future::IO->load_impl('IOAsync');  # Explicitly use IO::Async
+
+    my $loop = IO::Async::Loop->new;
+
+    use Async::Redis;
+    my $redis = Async::Redis->new(host => 'localhost');
+
+=head2 For UV Applications
+
+If your application uses UV (libuv) for its event loop:
+
+    use UV;
+    use Future::IO;
+    Future::IO->load_impl('UV');  # Explicitly use UV
+
+    use Async::Redis;
+    my $redis = Async::Redis->new(host => 'localhost');
+
+=head2 When Using Multiple Async Libraries
+
+When combining Async::Redis with other Future::IO-based libraries (like
+web frameworks, database clients, etc.), all libraries will share the
+same Future::IO backend. This is by design - they're all cooperating
+within the same event loop.
+
+The key is that the B<application> configures Future::IO B<once>, before
+loading any libraries that use it:
+
+    # Application startup
+    use Future::IO;
+    Future::IO->load_impl('IOAsync');  # Application's choice
+
+    # Now load libraries - they all use the configured backend
+    use Async::Redis;
+    use Some::Other::Async::Library;
+    use My::Web::Framework;
+
+=head2 What Happens Without Configuration
+
+If nothing explicitly configures Future::IO before the first async
+operation, Future::IO will auto-select an implementation. This can lead
+to unexpected behavior if different parts of your application assume
+different backends.
+
+To avoid surprises, always configure Future::IO explicitly in your
+application's entry point.
+
+=head2 Checking the Current Implementation
+
+To see which Future::IO implementation is active:
+
+    use Future::IO;
+    print "Using: $Future::IO::IMPL\n";
+
 =head1 OBSERVABILITY
 
 OpenTelemetry integration is available:
@@ -2240,7 +2359,7 @@ This enables:
 
 =head1 AUTHOR
 
-John Googoo
+John Napiorkowski
 
 =head1 COPYRIGHT AND LICENSE
 
