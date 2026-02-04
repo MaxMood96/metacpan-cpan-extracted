@@ -1,5 +1,8 @@
 package DBIx::Class::Async::Storage;
 
+$DBIx::Class::Async::Storage::VERSION   = '0.51';
+$DBIx::Class::Async::Storage::AUTHORITY = 'cpan:MANWAR';
+
 use strict;
 use warnings;
 use Scalar::Util qw(weaken);
@@ -10,11 +13,9 @@ DBIx::Class::Async::Storage - Storage Layer for DBIx::Class::Async
 
 =head1 VERSION
 
-Version 0.49
+Version 0.51
 
 =cut
-
-our $VERSION = '0.49';
 
 =head1 SYNOPSIS
 
@@ -48,40 +49,28 @@ our $VERSION = '0.49';
 
 =head1 DESCRIPTION
 
-C<DBIx::Class::Async::Storage> provides a minimal storage layer implementation
-for L<DBIx::Class::Async>. This class exists primarily for compatibility with
-the L<DBIx::Class> ecosystem, providing the expected storage interface without
-direct database handle management.
-
-In the asynchronous architecture, database operations are delegated to a
-separate worker process or service, so this storage layer does not manage
-traditional database connections.
+C<DBIx::Class::Async::Storage> is the orchestration layer for the asynchronous
+bridge. Unlike standard C<DBIx::Class::Storage::DBI>, this class does not
+connect to the database directly. Instead, it manages the life-cycle of a
+background worker pool.
 
 =head1 CONSTRUCTOR
 
 =head2 new
 
     my $storage = DBIx::Class::Async::Storage->new(
-        _schema => $schema,  # DBIx::Class::Async::Schema instance
+        schema   => $schema,
+        async_db => $bridge_engine,
     );
-
-Creates a new storage object.
 
 =over 4
 
-=item B<Parameters>
+=item * B<async_db>: This is the internal engine (the 'bridge') that handles
+communication with the worker processes.
 
-=over 8
-
-=item C<_schema>
-
-A L<DBIx::Class::Async::Schema> instance. This is typically passed internally.
-
-=back
-
-=item B<Returns>
-
-A new C<DBIx::Class::Async::Storage> object.
+=item * B<Memory Safety>: This constructor automatically weakens the reference
+to the parent L<schema> to prevent circular reference leaks, ensuring that
+worker processes are correctly reaped when the schema object goes out of scope.
 
 =back
 
@@ -92,8 +81,8 @@ sub new {
 
     # Standard DBIC storage expects a reference to the schema
     my $self = bless {
-        _schema  => $args{schema},
-        async_db => $args{async_db}, # The worker pool engine
+        _schema   => $args{schema},
+        _async_db => $args{async_db}, # The worker pool engine
     }, $class;
 
     # WEAKEN the schema reference to prevent circular memory leaks
@@ -147,28 +136,12 @@ sub cursor {
 
 =head2 dbh
 
-  my $dbh = $storage->dbh;
+    my $dbh = $storage->dbh; # Returns undef
 
-Returns C<undef> in async storage mode.
-
-Unlike traditional L<DBIx::Class::Storage>, the async storage layer does not
-maintain a database handle in the parent process. Instead, database handles
-are held by worker processes in the background worker pool, which execute
-queries asynchronously.
-
-This method exists for API compatibility with standard DBIx::Class storage
-objects, but always returns C<undef> to indicate that direct database handle
-access is not available in async mode.
-
-  my $storage = $schema->storage;
-  my $dbh = $storage->dbh;  # Always undef in async mode
-
-  if (!defined $dbh) {
-      say "Running in async mode - no direct DBH access";
-  }
-
-If you need to perform database operations, use the ResultSet and Row
-methods which handle async execution transparently through the worker pool.
+B<STRICT ASYNC ENFORCEMENT>: In this architecture, the Parent process B<must not>
+touch the database. This method always returns C<undef>. Any code relying on
+C<$schema->storage->dbh> will fail, which is intentional to prevent accidental
+blocking I/O in the main event loop.
 
 =cut
 
@@ -209,28 +182,23 @@ sub schema {
 
     $storage->disconnect;
 
-Disconnects from the database.
+Signals the background worker pool to shut down. This is an asynchronous-safe
+cleanup:
 
-=over 4
-
-=item B<Returns>
-
-True (1) on success.
-
-=item B<Notes>
-
-This method calls C<disconnect> on the associated schema object if it exists.
-
-=back
+1. It stops the worker processes.
+2. It closes IPC pipes or sockets used by the bridge.
+3. It clears the local query cache.
 
 =cut
 
 sub disconnect {
     my $self = shift;
-    # Delegate cleanup to the async engine
-    if ($self->{async_db} && $self->{async_db}->can('disconnect')) {
-        $self->{async_db}->disconnect;
+
+    # Delegate cleanup to the functional library
+    if ($self->{_async_db}) {
+        DBIx::Class::Async::disconnect($self->{_async_db});
     }
+
     return 1;
 }
 

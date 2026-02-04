@@ -13,16 +13,15 @@ use FindBin qw($RealBin $RealScript);
 use Getopt::Long qw(:config no_ignore_case);
 use List::Util qw(zip none pairs any);
 use Scalar::Util qw(reftype);
-use Log::Log4perl qw(:easy);
+use Log::Log4perl qw();
+use Data::Dumper;
 
 use Pod::Usage;
 
-our $VERSION              = '1.0.8';
+our $VERSION              = '1.0.11';
 our $GETOPT_EXIT_ON_ERROR = $TRUE;
 our $GETOPT_STATUS;
 our $GETOPT_ERROR_MESSAGE;
-
-use parent qw(Exporter Class::Accessor::Fast);
 
 __PACKAGE__->follow_best_practice;
 __PACKAGE__->mk_accessors(
@@ -35,7 +34,13 @@ __PACKAGE__->mk_accessors(
   )
 );
 
-our $USE_LOGGER = $FALSE;
+our $USE_LOGGER   = $FALSE;
+our $AUTO_DEFAULT = $FALSE;
+our $AUTO_HELP    = $FALSE;
+
+our @EXPORT_OK = qw($AUTO_HELP $AUTO_DEFAULT);
+
+use parent qw(Exporter Class::Accessor::Fast);
 
 ########################################################################
 sub _use_logger {
@@ -54,7 +59,7 @@ sub use_log4perl {
   $level //= $log_level;
 
   {
-    no strict 'refs';  ## no critic (ProhibitNoStrict)
+    no strict 'refs'; ## no critic (ProhibitNoStrict)
 
     $USE_LOGGER = $TRUE;
 
@@ -84,7 +89,7 @@ sub new {
   my ( $default_options, $option_specs, $commands, $extra_options, $abbreviations, $error_handler, $alias )
     = @args{qw(default_options option_specs commands extra_options abbreviations error_handler alias)};
 
-  no strict 'refs';  ## no critic
+  no strict 'refs'; ## no critic
 
   my $stash = \%{ $class . $DOUBLE_COLON };
 
@@ -156,8 +161,8 @@ sub new {
   foreach (@accessors) {
     s/\-/_/xsmg;
 
-    if ( !__PACKAGE__->can( 'get_' . $_ ) ) {
-      __PACKAGE__->mk_accessors($_);
+    if ( !$class->can( 'get_' . $_ ) ) {
+      $class->mk_accessors($_);
     }
 
     $cli_options{$_} = $options->{$_};
@@ -194,7 +199,8 @@ sub new {
       }
     }
 
-    # command aliases are a convenience so someone doesn't have to add to $commands manually
+    # command aliases are a convenience so someone doesn't have to add
+    # to $commands manually
     if ( $alias->{commands} ) {
       foreach my $p ( pairs %{ $alias->{commands} } ) {
         croak sprintf "ERROR: no command: %s\n"
@@ -207,7 +213,8 @@ sub new {
 
   my $self = $class->SUPER::new( \%cli_options );
 
-  if ( scalar keys %{$commands} == 1 ) {
+  # AUTO_DEFAULT uses the only command as the default
+  if ( $AUTO_DEFAULT && scalar keys %{$commands} == 1 ) {
     my ($command) = keys %{$commands};
 
     if ( @ARGV && $ARGV[0] ne $command ) {
@@ -218,11 +225,15 @@ sub new {
     }
   }
 
-  my $command = shift @ARGV;
+  my $command = shift @ARGV // $EMPTY;
 
   if ( !$command ) {
-    $command = 'default';
-    $commands->{default} //= \&usage;
+    if ( $commands->{default} ) {
+      $command = 'default';
+    }
+    elsif ($AUTO_HELP) {
+      $command = 'help';
+    }
   }
 
   $self->set__command($command);
@@ -279,9 +290,10 @@ sub init_logger {
   if ( $self->_use_logger ) {
 
     if ( my $config = $self->get_log4perl_conf ) {
-      Log::Log4perl->init( \$config );
+      Log::Log4perl->init( ref $config ? $config : \$config );
     }
     else {
+      Log::Log4perl->import(':easy');
       Log::Log4perl->easy_init( $LOG_LEVELS{error} );
     }
 
@@ -427,9 +439,12 @@ sub validate_command {
 ########################################################################
   my ($self) = @_;
 
-  my $commands = $self->commands;
-
   my $command = $self->command;
+
+  return
+    if !$command;
+
+  my $commands = $self->commands;
 
   return $command
     if defined $commands->{$command};
@@ -458,10 +473,20 @@ sub run {
 ########################################################################
   my ($self) = @_;
 
-  my $program = $self->program;
   my $command = $self->command;
 
+  ######################################################################
+  # a blank command means that we did not have a default && AUTO_HELP
+  # is off scripter has deliberately decided to allow running of
+  # init() phase w/o a run phase
+  ######################################################################
+
+  return $SUCCESS
+    if !$command;
+
   my $commands = $self->commands;
+
+  my $program = $self->program;
 
   my $handler = $commands->{$command};
 
@@ -469,6 +494,9 @@ sub run {
     if ref $handler ne 'ARRAY';
 
   my ( $sub, $log_level ) = @{$handler};
+
+  croak "ERROR: invalid specification for $command\n"
+    if !ref $sub || reftype($sub) ne 'CODE';
 
   return $sub->($self);
 }
@@ -487,14 +515,17 @@ CLI::Simple - a minimalist object oriented base class for CLI applications
 
 =head1 SYNOPSIS
 
+ #!/usr/bin/env perl
+
  package MyScript;
 
  use strict;
  use warnings;
 
+ use CLI::Simple::Constants qw(:booleans :chars);
+ use CLI::Simple qw($AUTO_HELP $AUTO_DEFAULT);
+
  use parent qw(CLI::Simple);
- 
- caller or __PACKAGE__->main();
  
  sub execute {
    my ($self) = @_;
@@ -513,13 +544,23 @@ CLI::Simple - a minimalist object oriented base class for CLI applications
  }
 
  sub main {
-  CLI::Simple->new(
-   option_specs    => [ qw( help format=s ) ],
-   default_options => { format => 'json' }, # set some defaults
-   extra_options   => [ qw( content ) ], # non-option, setter/getter
-   commands        => { execute => \&execute, list => \&list,  }
-   alias           => { options => {fmt => format}, commands => { ls => list } },
- )->run;
+
+   # Disable auto-default for single commands, enable auto-help
+   $AUTO_DEFAULT = 0;
+   $AUTO_HELP = 1;
+
+   my $cli = MyScript->new(
+    option_specs    => [ qw( help format=s file=s) ],
+    default_options => { format => 'json' }, # set some defaults
+    extra_options   => [ qw( content ) ], # non-option, setter/getter
+    commands        => { execute => \&execute, list => \&list,  }
+    alias           => { options => { fmt => 'format' }, commands => { ls => 'list' } },
+   );
+
+   return $cli->run();
+ }
+
+ exit main();
 
  1;
 
@@ -535,7 +576,33 @@ L<CLI::Simple::Constants>, which pairs naturally with this module.
 
 =head1 VERSION
 
-This documentation refers to version 1.0.8.
+This documentation refers to version 1.0.11.
+
+=head2 Changes from Version 1.0.8
+
+=over 4
+
+=item New package variables $AUTO_HELP and $AUTO_DEFAULT
+
+These new package variables allow finer grained control over default
+behaviors when no command is provided on the command line. These
+changes were made to allow for a more flexible lifecycle. See L</The
+init-run Lifecycle>.
+
+=over 4
+
+=item * In previous versions, by default, C<CLI::Simple> would print help
+information if it was available and if there was no command provided
+on the command line. That behavior is now controlled by $AUTO_HELP.
+
+=item * In previous versions, by default, C<CLI::Simple> would run a
+default command if only one command was defined and there was no
+command on the command line. That behavior is now controlled by
+$AUTO_DEFAULT.
+
+=back
+
+=back
 
 =head2 Features
 
@@ -665,7 +732,7 @@ you want to add on top of it.
 
 =head2 When to Use
 
-CLI::Simple is ideal for:
+C<CLI::Simple> is ideal for:
 
 =over 4
 
@@ -686,6 +753,110 @@ Users who want to subclass a clean, minimal interface
 For more advanced features - like command trees, plugin support, or interactive
 CLI handling - consider heavier modules like L<App::Cmd>, L<CLI::Framework>, or
 L<MooX::Options>.
+
+=head2 The init-run Lifecycle
+
+C<CLI::Simple> is built on a flexible, two-phase lifecycle that 
+separates application setup from command execution.
+
+=over 4
+
+=item * B<Phase 1: Initialization (C<new> =E<gt> C<init>)>
+
+When your script calls C<CLI::Simple-E<gt>>new()>, the constructor parses
+all command-line arguments and then immediately calls your C<init()> 
+method.
+
+Inside C<init()>, your application has full access to the parsed options 
+and arguments. This phase is the ideal hook for all final setup tasks, 
+such as:
+
+=over 4
+
+=item * Validating command-line arguments.
+
+=item * Loading configuration files based on a C<--config> option.
+
+=item * Dynamically overriding the command (e..g, C<$self-E<gt>command('new_default')>).
+
+=item * Performing any setup required B<before> a command is run.
+
+=back
+
+This C<init()> phase B<always runs> as part of object construction.
+
+=item * B<Phase 2: Execution (C<run>)>
+
+After the C<new()> method returns your object, your script then calls
+the C<run()> method. This method is responsible for dispatching to 
+the B<currently set> command.
+
+=back
+
+=head2  "opt-in" Default Command
+
+By design, C<CLI::Simple> B<does not impose a default command>.
+This provides total flexibility for the application author:
+
+=over 4
+
+=item * B<You Can Set a Default:> If your application needs a default
+command (e.g., to run C<help> when no command is given), you can set
+C<$AUTO_HELP>, explicitly set the C<default> command in the C<command>
+hash you pass to the constructor or uset C<command()> to set one
+inside the C<init()> method.
+
+=item * B<You Can Have No Default:> If you do B<not> set a default,
+C<run()> will simply do nothing and return cleanly if no command
+is provided on the command line.
+
+=back
+
+This "no default by default" behavior is what enables a powerful 
+"setup-only" execution mode. A user can run your script I<without>
+specifying a command. This will:
+
+=over 4
+
+=item 1. Run the entire C<new()> / C<init()> phase, performing all setup.
+
+=item 2. Call C<run()>, which will find no command and exit cleanly.
+
+=back
+
+This provides an ideal hook for applications that need to perform
+"on-demand initialization" (e.g., seeding a database, authenticating)
+by checking for a specific flag inside C<init()>, without also
+triggering an unwanted command.
+
+=head2 C<$AUTO_HELP> and C<$AUTO_DEFAULT>
+
+Two package variables can be used to further control the lifecycle. By
+default, the framework provides no default command as explained in the
+sections above. Some scripters may want default behaviors that assume
+a command or provide usage if no command is provided.
+
+=over 4
+
+=item C<$AUTO_HELP>
+
+Set the package variable C<$AUTO_HELP> to a true value if you want
+C<CLI::Simple> to provide help when no command is provided.
+
+default: false
+
+=item C<$AUTO_DEFAULT>
+
+Set the package variable C<$AUTO_DEFAULT> to a true value if you want
+C<CLI::Simple> to automatically select a command if you have only 1
+command defined and no command is provided on the command line. When
+true, it will prepend the single command name to the argument list,
+allowing any subsequent arguments to be correctly parsed as args for
+that command.
+
+default: false
+
+=back
 
 =head1 CONSTANTS
 
@@ -782,12 +953,14 @@ to the subroutine or method to run:
 
   { default => \&main }
 
-If no default is provided, the default command becomes C<usage()>.
+If no default is provided, the behavior is controlled by the
+C<$AUTO_DEFAULT> and C<$AUTO_HELP> package variables.
 
-If your C<commands> hash contains only a single command, that command
-will be run automatically when no command name is given on the command
-line. This allows you to treat the program like a single-command tool,
-where arguments can be passed directly without explicitly naming the
+Setting C<$AUTO_DEFAULT> to true will when your C<commands> hash
+contains only a single command, will cause that command to be run
+automatically when no command name is given on the command line. This
+allows you to treat the program like a single-command tool, where
+arguments can be passed directly without explicitly naming the
 command.
 
 =item * default_options (optional)

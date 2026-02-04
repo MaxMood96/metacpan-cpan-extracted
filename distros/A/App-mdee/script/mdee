@@ -46,7 +46,7 @@ mdee - em·dee, Markdown Easy on the Eyes
 
 =head1 VERSION
 
-Version 0.09
+Version 0.10
 
 =cut
 
@@ -161,7 +161,7 @@ declare -A OPTS=(
 ##############################################################################
 
 # Common color functions
-  osc8_prologue='sub{ sub osc8 { sprintf "\e]8;;%s\e\\%s\e]8;;\e\\", @_ } }'
+  osc8_prologue='sub{ use URI::Escape; sub osc8 { sprintf "\e]8;;%s\e\\%s\e]8;;\e\\", uri_escape_utf8($_[0]), $_[1] } }'
       link_func='sub{ s/   \[(?<txt>.+?)\]\((?<url>.+?)\)/osc8($+{url},  "[$+{txt}]")/xer }'
      image_func='sub{ s/  !\[(?<alt>.+?)\]\((?<url>.+?)\)/osc8($+{url}, "![$+{alt}]")/xer }'
 image_link_func='sub{ s/\[!\[(?<alt>.+?)\]\((?<img>.+?)\)\]\((?<url>.+?)\)/osc8($+{img}, "!") . osc8($+{url}, "[$+{alt}]")/xer }'

@@ -32,7 +32,7 @@
 	doap:maintainer      <http://purl.org/NET/cpan-uri/person/tobyink>;
 	doap:name            "Sub-HandlesVia-XS";
 	doap:programming-language "Perl";
-	doap:release         <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001000>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001001>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001002>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001003>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001004>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-002000>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-003000>;
+	doap:release         <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001000>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001001>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001002>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001003>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001004>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-002000>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-003000>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-003001>;
 	doap:repository      [
 		a doap:GitRepository;
 		doap:browse <https://github.com/tobyink/p5-sub-handlesvia-xs>;
@@ -173,6 +173,32 @@
 	doap-changeset:released-by <http://purl.org/NET/cpan-uri/person/tobyink>;
 	doap:file-release    <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Sub-HandlesVia-XS-0.003000.tar.gz>;
 	doap:revision        "0.003000"^^xsd:string.
+
+<http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-003001>
+	a                    doap:Version;
+	dc:identifier        "Sub-HandlesVia-XS-0.003001"^^xsd:string;
+	dc:issued            "2026-02-03"^^xsd:date;
+	doap-changeset:changeset [
+		doap-changeset:item [
+			a doap-changeset:Bugfix;
+			rdfs:label "Fix issues with CvISXSUB not being defined on Perl older than 5.8.9.";
+		], [
+			a doap-changeset:Bugfix;
+			rdfs:label "Fix segfaults sorting on Perl older than around 5.20.0.";
+		], [
+			a doap-changeset:Bugfix;
+			rdfs:label "Fixes for sorting on non-glibc platforms.";
+		], [
+			a doap-changeset:Change;
+			rdfs:label "Gracefully handle exceptions thrown in a sorting callback.";
+		], [
+			a doap-changeset:Change;
+			rdfs:label "Allow module to be built with MULTICALL disabled (perl Makefile.PL CCFLAGS='-DDO_MULTICALL=0') mostly for testing.";
+		];
+	];
+	doap-changeset:released-by <http://purl.org/NET/cpan-uri/person/tobyink>;
+	doap:file-release    <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Sub-HandlesVia-XS-0.003001.tar.gz>;
+	doap:revision        "0.003001"^^xsd:string.
 
 <http://purl.org/NET/cpan-uri/person/tobyink>
 	a                    foaf:Person;

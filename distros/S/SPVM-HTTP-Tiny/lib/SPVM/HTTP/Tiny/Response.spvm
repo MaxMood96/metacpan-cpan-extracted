@@ -1,23 +1,28 @@
-# Copyright (c) 2023 Yuki Kimoto
+# Copyright (c) 2026 Yuki Kimoto
 # MIT License
 
 class HTTP::Tiny::Response {
   version_from HTTP::Tiny;
   
-  allow HTTP::Tiny::Handle;
   allow HTTP::Tiny;
   
   use Mojo::Headers;
   use Mojo::Content::Single;
+  use Hash;
   
-  has response : Mojo::Message::Response;
+  # Fields
+  has tx : ro Mojo::Transaction::HTTP;
+  
+  has res : virtual ro Mojo::Message::Response
+    get {
+      return $self->{tx}->res;
+    }
+  ;
   
   # Class Methods
-  private static method new : HTTP::Tiny::Response ($response : Mojo::Message::Response) {
+  private static method new : HTTP::Tiny::Response () {
     
     my $self = new HTTP::Tiny::Response;
-    
-    $self->{response} = $response;
     
     return $self;
   }
@@ -25,7 +30,7 @@ class HTTP::Tiny::Response {
   # Instance Methods
   method protocol : string () {
     
-    my $res = $self->{response};
+    my $res = $self->res;
     
     my $version = $res->version;
     
@@ -36,14 +41,14 @@ class HTTP::Tiny::Response {
   
   method status : int () {
     
-    my $res = $self->{response};
+    my $res = $self->res;
     
     return $res->code;
   }
   
   method success : int () {
     
-    my $res = $self->{response};
+    my $res = $self->res;
     
     my $success = $res->is_success;
     
@@ -52,29 +57,33 @@ class HTTP::Tiny::Response {
   
   method reason : string () {
     
-    my $res = $self->{response};
+    my $res = $self->res;
     
     my $reason = $res->message;
     
     return $reason;
   }
   
-  method headers : Mojo::Headers () {
+  method headers : Hash () {
     
-    my $res = $self->{response};
+    my $res = $self->res;
     
-    return $res->headers;
+    my $mojo_headers = $res->headers;
+    
+    # Get headers as a Hash (key is string, value is string or string[])
+    # Note: to_hash returns a Hash where values are typically concatenated with commas or stored as arrays
+    my $headers_hash = $mojo_headers->to_hash;
+    
+    return $headers_hash;
   }
   
   method content : string () {
     
-    my $res = $self->{response};
+    my $res = $self->res;
     
-    # my $content = $res->content_v0;
-    
+    # Extract the response body using Mojo's content structure
     my $content = $res->content->(Mojo::Content::Single)->asset->slurp;
     
     return $content;
   }
-  
 }

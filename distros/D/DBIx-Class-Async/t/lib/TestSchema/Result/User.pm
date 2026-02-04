@@ -4,7 +4,8 @@ use strict;
 use warnings;
 use base 'DBIx::Class::Core';
 
-__PACKAGE__->load_components(qw/Async::ResultComponent Core/);
+__PACKAGE__->load_components(qw/InflateColumn::Serializer Core/);
+
 __PACKAGE__->table('users');
 __PACKAGE__->add_columns(
     id => {
@@ -22,10 +23,24 @@ __PACKAGE__->add_columns(
         size        => 255,
         is_nullable => 1,
     },
+    age  => {
+        data_type => "integer",
+        is_nullable => 1
+    },
     active => {
         data_type     => 'integer',
         is_nullable   => 0,
         default_value => 1,
+    },
+    "settings" =>
+    {
+        data_type => "text",
+        is_nullable => 1,
+        serializer_class => 'JSON',
+    },
+    balance => {
+        data_type => 'decimal',
+        default_value => 0
     },
 );
 

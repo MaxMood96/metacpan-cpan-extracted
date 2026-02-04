@@ -44,12 +44,17 @@ typedef struct {
     SV *default_sv;                 /* Default value (immutable, refcnt'd) */
     SV *trigger_cb;                 /* Trigger callback */
     SV *coerce_cb;                  /* Coercion callback (Perl) */
+    SV *builder_name;               /* Builder method name for lazy attrs */
     U8 is_required;                 /* Croak if not provided in new() */
     U8 is_readonly;                 /* Croak if set after new() */
+    U8 is_lazy;                     /* Build on first access, not at new() */
     U8 has_default;
     U8 has_trigger;
     U8 has_coerce;
     U8 has_type;
+    U8 has_builder;                 /* Has builder method */
+    U8 has_clearer;                 /* Generate clear_X method */
+    U8 has_predicate;               /* Generate has_X method */
 } SlotSpec;
 
 /* Custom op definitions */
@@ -59,7 +64,34 @@ static XOP object_set_xop;
 static XOP object_set_typed_xop;
 
 /* Per-class metadata */
+typedef struct ClassMeta_s ClassMeta;  /* Forward declaration */
+
+/* Method modifier chain - linked list for each type */
+typedef struct MethodModifier_s {
+    SV *callback;
+    struct MethodModifier_s *next;
+} MethodModifier;
+
+/* Modified method wrapper */
 typedef struct {
+    CV *original_cv;
+    MethodModifier *before_chain;
+    MethodModifier *after_chain;
+    MethodModifier *around_chain;
+} ModifiedMethod;
+
+/* Role metadata */
+typedef struct {
+    char *role_name;
+    char **required_methods;   /* Methods consuming class MUST have */
+    IV required_count;
+    SlotSpec **slots;          /* Slots the role provides */
+    IV slot_count;
+    HV *stash;                 /* Role's stash for provided methods */
+} RoleMeta;
+
+/* Per-class metadata */
+struct ClassMeta_s {
     char *class_name;
     HV *prop_to_idx;      /* property name -> slot index */
     char **idx_to_prop;   /* slot index -> property name */
@@ -71,16 +103,27 @@ typedef struct {
     U8 has_any_defaults;  /* Quick check: any slot has defaults? */
     U8 has_any_triggers;  /* Quick check: any slot has triggers? */
     U8 has_any_required;  /* Quick check: any slot is required? */
+    U8 has_any_lazy;      /* Quick check: any slot is lazy? */
     /* Singleton support */
     SV *singleton_instance;  /* Cached singleton instance, NULL if not a singleton */
     U8 is_singleton;         /* Flag: class is a singleton */
-} ClassMeta;
+    /* DEMOLISH support - only set if class has DEMOLISH method */
+    CV *demolish_cv;         /* Cached DEMOLISH method, NULL if none */
+    /* Role support */
+    RoleMeta **consumed_roles;  /* Array of consumed roles, NULL if none */
+    IV role_count;
+    /* Method modifier registry - only allocated if modifiers are used */
+    HV *modified_methods;    /* method name -> ModifiedMethod*, NULL if none */
+};
 
 /* Global class registry */
 static HV *g_class_registry = NULL;  /* class name -> ClassMeta* */
 
 /* Global type registry for external plugins */
 static HV *g_type_registry = NULL;   /* type name -> RegisteredType* */
+
+/* Global role registry */
+static HV *g_role_registry = NULL;   /* role name -> RoleMeta* */
 
 /* Forward declaration for FuncAccessorData */
 typedef struct FuncAccessorData_s FuncAccessorData;
@@ -95,12 +138,16 @@ static ClassMeta* get_class_meta(pTHX_ const char *class_name, STRLEN len);
 static void install_constructor(pTHX_ const char *class_name, ClassMeta *meta);
 static void install_accessor(pTHX_ const char *class_name, const char *prop_name, IV idx);
 static void install_accessor_typed(pTHX_ const char *class_name, const char *prop_name, IV idx, ClassMeta *meta);
+static void install_clearer(pTHX_ const char *class_name, const char *prop_name, IV idx, ClassMeta *meta);
+static void install_predicate(pTHX_ const char *class_name, const char *prop_name, IV idx, ClassMeta *meta);
+static void install_destroy_wrapper(pTHX_ const char *class_name, ClassMeta *meta);
+static RoleMeta* get_role_meta(pTHX_ const char *role_name, STRLEN len);
 
 /* ============================================
    Built-in type checking (inline)
    ============================================ */
 
-static inline BuiltinTypeID parse_builtin_type(const char *type_str, STRLEN len) {
+OBJECT_INLINE BuiltinTypeID parse_builtin_type(const char *type_str, STRLEN len) {
     if (len == 3 && strEQ(type_str, "Str")) return TYPE_STR;
     if (len == 3 && strEQ(type_str, "Int")) return TYPE_INT;
     if (len == 3 && strEQ(type_str, "Num")) return TYPE_NUM;
@@ -115,7 +162,7 @@ static inline BuiltinTypeID parse_builtin_type(const char *type_str, STRLEN len)
 }
 
 /* Inline type check - returns true if value passes check */
-static inline bool check_builtin_type(pTHX_ SV *val, BuiltinTypeID type_id) {
+OBJECT_INLINE bool check_builtin_type(pTHX_ SV *val, BuiltinTypeID type_id) {
     switch (type_id) {
         case TYPE_ANY:
             return true;
@@ -130,9 +177,12 @@ static inline bool check_builtin_type(pTHX_ SV *val, BuiltinTypeID type_id) {
             if (SvPOK(val)) {
                 /* String that looks like integer */
                 STRLEN len;
-                const char *pv = SvPV(val, len);
+                const char *pv;
+                const char *p;
+
+                pv = SvPV(val, len);
                 if (len == 0) return false;
-                const char *p = pv;
+                p = pv;
                 if (*p == '-' || *p == '+') p++;
                 while (*p && *p >= '0' && *p <= '9') p++;
                 return p == pv + len;
@@ -228,42 +278,51 @@ static SlotSpec* parse_slot_spec(pTHX_ const char *spec_str, STRLEN len) {
     const char *p = spec_str;
     const char *end = spec_str + len;
     const char *name_start, *name_end;
-    
+    STRLEN name_len;
+
     Newxz(spec, 1, SlotSpec);
-    
+
     /* Parse property name (before first ':') */
     name_start = p;
     while (p < end && *p != ':') p++;
     name_end = p;
-    
-    STRLEN name_len = name_end - name_start;
+
+    name_len = name_end - name_start;
     Newx(spec->name, name_len + 1, char);
     Copy(name_start, spec->name, name_len, char);
     spec->name[name_len] = '\0';
     
     /* Parse modifiers after name */
     while (p < end) {
+        const char *mod_start;
+        const char *arg_start;
+        const char *arg_end;
+        STRLEN mod_len;
+        STRLEN arg_len;
+        int paren_depth;
+
         if (*p == ':') p++;  /* Skip separator */
         if (p >= end) break;
-        
-        const char *mod_start = p;
-        
+
+        mod_start = p;
+
         /* Check for function-style modifiers: default(...), trigger(...) */
         while (p < end && *p != ':' && *p != '(') p++;
-        
-        STRLEN mod_len = p - mod_start;
-        
+
+        mod_len = p - mod_start;
+
         if (p < end && *p == '(') {
             /* Function-style: default(value) or trigger(&callback) */
-            const char *arg_start = ++p;
-            int paren_depth = 1;
+            p++;
+            arg_start = p;
+            paren_depth = 1;
             while (p < end && paren_depth > 0) {
                 if (*p == '(') paren_depth++;
                 else if (*p == ')') paren_depth--;
                 p++;
             }
-            const char *arg_end = p - 1;  /* Before closing paren */
-            STRLEN arg_len = arg_end - arg_start;
+            arg_end = p - 1;  /* Before closing paren */
+            arg_len = arg_end - arg_start;
             
             if (mod_len == 7 && strncmp(mod_start, "default", 7) == 0) {
                 /* Parse default value */
@@ -333,6 +392,23 @@ static SlotSpec* parse_slot_spec(pTHX_ const char *spec_str, STRLEN len) {
                     spec->coerce_cb = newSVpvn(cb_copy, arg_len);
                     Safefree(cb_copy);
                 }
+            } else if (mod_len == 7 && strncmp(mod_start, "builder", 7) == 0) {
+                /* builder(method_name) - lazy builder method */
+                spec->has_builder = 1;
+                spec->is_lazy = 1;  /* builder implies lazy */
+                if (arg_len > 0) {
+                    char *cb_copy;
+                    Newx(cb_copy, arg_len + 1, char);
+                    Copy(arg_start, cb_copy, arg_len, char);
+                    cb_copy[arg_len] = '\0';
+                    spec->builder_name = newSVpvn(cb_copy, arg_len);
+                    Safefree(cb_copy);
+                } else {
+                    /* Default builder name: _build_<property> */
+                    char build_name[256];
+                    snprintf(build_name, sizeof(build_name), "_build_%s", spec->name);
+                    spec->builder_name = newSVpv(build_name, 0);
+                }
             }
         } else {
             /* Simple modifier: type name or flag */
@@ -340,14 +416,22 @@ static SlotSpec* parse_slot_spec(pTHX_ const char *spec_str, STRLEN len) {
                 spec->is_required = 1;
             } else if (mod_len == 8 && strncmp(mod_start, "readonly", 8) == 0) {
                 spec->is_readonly = 1;
+            } else if (mod_len == 4 && strncmp(mod_start, "lazy", 4) == 0) {
+                spec->is_lazy = 1;
+            } else if (mod_len == 7 && strncmp(mod_start, "clearer", 7) == 0) {
+                spec->has_clearer = 1;
+            } else if (mod_len == 9 && strncmp(mod_start, "predicate", 9) == 0) {
+                spec->has_predicate = 1;
             } else {
                 /* Try as type name */
                 char *type_copy;
+                BuiltinTypeID type_id;
+
                 Newx(type_copy, mod_len + 1, char);
                 Copy(mod_start, type_copy, mod_len, char);
                 type_copy[mod_len] = '\0';
-                
-                BuiltinTypeID type_id = parse_builtin_type(type_copy, mod_len);
+
+                type_id = parse_builtin_type(type_copy, mod_len);
                 if (type_id != TYPE_NONE) {
                     spec->type_id = type_id;
                     spec->has_type = 1;
@@ -1062,7 +1146,7 @@ static OP* pp_object_func_set(pTHX) {
 }
 
 /* Check if an op is "simple" (can be safely used in optimized accessor) */
-static inline bool is_simple_op(OP *op) {
+OBJECT_INLINE bool is_simple_op(OP *op) {
     if (!op) return false;
     /* Simple ops: pad variables, constants, global variables */
     switch (op->op_type) {
@@ -1350,8 +1434,72 @@ static XS(xs_accessor_typed_fallback) {
         ST(0) = val;
         XSRETURN(1);
     } else {
-        /* Getter - use prototype chain resolution */
+        /* Getter - use prototype chain resolution, handle lazy */
         SV *result = resolve_property_chain(aTHX_ av, idx);
+        
+        /* Lazy initialization: if undef and is_lazy, build/default on first access */
+        if (spec->is_lazy && !SvOK(result)) {
+            SV *built_val = NULL;
+            
+            if (spec->has_builder && spec->builder_name) {
+                /* Call builder method */
+                dSP;
+                const char *builder = SvPV_nolen(spec->builder_name);
+                int count;
+                
+                ENTER;
+                SAVETMPS;
+                PUSHMARK(SP);
+                XPUSHs(self);
+                PUTBACK;
+                
+                count = call_method(builder, G_SCALAR);
+                
+                SPAGAIN;
+                if (count > 0) {
+                    /* Copy the value BEFORE FREETMPS to avoid freed scalar issue */
+                    built_val = newSVsv(POPs);
+                } else {
+                    built_val = newSV(0);  /* undef */
+                }
+                PUTBACK;
+                FREETMPS;
+                LEAVE;
+            } else if (spec->has_default && spec->default_sv) {
+                /* Use default value for lazy default */
+                if (SvROK(spec->default_sv)) {
+                    /* Clone reference types (arrays, hashes) */
+                    SV *inner = SvRV(spec->default_sv);
+                    if (SvTYPE(inner) == SVt_PVAV) {
+                        built_val = newRV_noinc((SV*)newAV());
+                    } else if (SvTYPE(inner) == SVt_PVHV) {
+                        built_val = newRV_noinc((SV*)newHV());
+                    } else {
+                        built_val = newSVsv(spec->default_sv);
+                    }
+                } else {
+                    built_val = newSVsv(spec->default_sv);
+                }
+            }
+            
+            if (built_val) {
+                /* Type check the built value */
+                if (spec->has_type && SvOK(built_val)) {
+                    if (!check_slot_type(aTHX_ built_val, spec)) {
+                        const char *type_name = (spec->type_id == TYPE_CUSTOM && spec->registered)
+                            ? spec->registered->name
+                            : type_id_to_name(spec->type_id);
+                        croak("Type constraint failed for lazy '%s': expected %s",
+                              spec->name, type_name);
+                    }
+                }
+                
+                /* Store the built value - built_val already has correct refcount from newSVsv */
+                av_store(av, idx, built_val);
+                result = built_val;
+            }
+        }
+        
         ST(0) = result;
         XSRETURN(1);
     }
@@ -1435,6 +1583,486 @@ static void install_accessor_typed(pTHX_ const char *class_name, const char *pro
     cv_set_call_checker(cv, accessor_typed_call_checker, ckobj);
 }
 
+/* XS fallback for clearer method (clear_X) */
+static XS(xs_clearer_fallback) {
+    dXSARGS;
+    SlotOpData *data = INT2PTR(SlotOpData*, CvXSUBANY(cv).any_iv);
+    IV idx = data->slot_idx;
+    SV *self = ST(0);
+    AV *av;
+    MAGIC *mg;
+
+    PERL_UNUSED_ARG(items);
+
+    if (!SvROK(self) || SvTYPE(SvRV(self)) != SVt_PVAV) {
+        croak("Not an object");
+    }
+    av = (AV*)SvRV(self);
+
+    /* Check frozen */
+    mg = get_object_magic(aTHX_ self);
+    if (mg && (mg->mg_private & OBJ_FLAG_FROZEN)) {
+        croak("Cannot modify frozen object");
+    }
+
+    /* Clear the slot by setting to undef */
+    av_store(av, idx, newSV(0));
+    
+    ST(0) = self;  /* Return self for chaining */
+    XSRETURN(1);
+}
+
+/* Install clearer method (clear_X) */
+static void install_clearer(pTHX_ const char *class_name, const char *prop_name, IV idx, ClassMeta *meta) {
+    char full_name[256];
+    CV *cv;
+    SlotOpData *data;
+
+    snprintf(full_name, sizeof(full_name), "%s::clear_%s", class_name, prop_name);
+
+    /* Check if method already exists */
+    cv = get_cvn_flags(full_name, strlen(full_name), 0);
+    if (cv) {
+        return;
+    }
+
+    Newx(data, 1, SlotOpData);
+    data->slot_idx = idx;
+    data->meta = meta;
+
+    cv = newXS(full_name, xs_clearer_fallback, __FILE__);
+    CvXSUBANY(cv).any_iv = PTR2IV(data);
+}
+
+/* XS fallback for predicate method (has_X) */
+static XS(xs_predicate_fallback) {
+    dXSARGS;
+    SlotOpData *data = INT2PTR(SlotOpData*, CvXSUBANY(cv).any_iv);
+    IV idx = data->slot_idx;
+    SV *self = ST(0);
+    AV *av;
+    SV **svp;
+
+    PERL_UNUSED_ARG(items);
+
+    if (!SvROK(self) || SvTYPE(SvRV(self)) != SVt_PVAV) {
+        croak("Not an object");
+    }
+    av = (AV*)SvRV(self);
+
+    /* Check if slot has a defined value */
+    svp = av_fetch(av, idx, 0);
+    if (svp && SvOK(*svp)) {
+        ST(0) = &PL_sv_yes;
+    } else {
+        ST(0) = &PL_sv_no;
+    }
+    XSRETURN(1);
+}
+
+/* Install predicate method (has_X) */
+static void install_predicate(pTHX_ const char *class_name, const char *prop_name, IV idx, ClassMeta *meta) {
+    char full_name[256];
+    CV *cv;
+    SlotOpData *data;
+
+    snprintf(full_name, sizeof(full_name), "%s::has_%s", class_name, prop_name);
+
+    /* Check if method already exists */
+    cv = get_cvn_flags(full_name, strlen(full_name), 0);
+    if (cv) {
+        return;
+    }
+
+    Newx(data, 1, SlotOpData);
+    data->slot_idx = idx;
+    data->meta = meta;
+
+    cv = newXS(full_name, xs_predicate_fallback, __FILE__);
+    CvXSUBANY(cv).any_iv = PTR2IV(data);
+}
+
+/* ============================================
+   DEMOLISH Support (zero overhead if not used)
+   ============================================ */
+
+/* XS DESTROY wrapper that calls DEMOLISH */
+static XS(xs_destroy_wrapper) {
+    dXSARGS;
+    ClassMeta *meta = INT2PTR(ClassMeta*, CvXSUBANY(cv).any_iv);
+    SV *self = ST(0);
+    
+    PERL_UNUSED_VAR(items);
+    
+    if (meta && meta->demolish_cv) {
+        dSP;
+        ENTER;
+        SAVETMPS;
+        PUSHMARK(SP);
+        XPUSHs(self);
+        PUTBACK;
+        call_sv((SV*)meta->demolish_cv, G_DISCARD | G_EVAL);
+        SPAGAIN;
+        /* Ignore errors in DEMOLISH - don't die during destruction */
+        if (SvTRUE(ERRSV)) {
+            warn("Error in DEMOLISH: %s", SvPV_nolen(ERRSV));
+        }
+        FREETMPS;
+        LEAVE;
+    }
+    
+    XSRETURN_EMPTY;
+}
+
+/* Install DESTROY wrapper - only called if DEMOLISH exists */
+static void install_destroy_wrapper(pTHX_ const char *class_name, ClassMeta *meta) {
+    char full_name[256];
+    CV *cv;
+    
+    snprintf(full_name, sizeof(full_name), "%s::DESTROY", class_name);
+    
+    /* Check if DESTROY already exists - don't override user's DESTROY */
+    cv = get_cvn_flags(full_name, strlen(full_name), 0);
+    if (cv) {
+        return;  /* User has their own DESTROY, don't interfere */
+    }
+    
+    cv = newXS(full_name, xs_destroy_wrapper, __FILE__);
+    CvXSUBANY(cv).any_iv = PTR2IV(meta);
+}
+
+/* ============================================
+   Role Support (zero overhead if not used)
+   ============================================ */
+
+static RoleMeta* get_role_meta(pTHX_ const char *role_name, STRLEN len) {
+    SV **svp;
+    if (!g_role_registry) return NULL;
+    svp = hv_fetch(g_role_registry, role_name, len, 0);
+    if (svp && SvIOK(*svp)) {
+        return INT2PTR(RoleMeta*, SvIV(*svp));
+    }
+    return NULL;
+}
+
+static void register_role_meta(pTHX_ const char *role_name, STRLEN len, RoleMeta *meta) {
+    if (!g_role_registry) {
+        g_role_registry = newHV();
+    }
+    hv_store(g_role_registry, role_name, len, newSViv(PTR2IV(meta)), 0);
+}
+
+/* Copy a method from role stash to class stash */
+static void copy_method(pTHX_ HV *from_stash, HV *to_stash, const char *method_name) {
+    GV *from_gv;
+    CV *cv;
+    char full_name[512];
+    GV *to_gv;
+    
+    from_gv = gv_fetchmeth(from_stash, method_name, strlen(method_name), 0);
+    if (!from_gv || !(cv = GvCV(from_gv))) {
+        return;  /* No such method in role */
+    }
+    
+    /* Check if target already has this method */
+    to_gv = gv_fetchmeth(to_stash, method_name, strlen(method_name), 0);
+    if (to_gv && GvCV(to_gv)) {
+        return;  /* Target already has method, don't override */
+    }
+    
+    /* Install the CV in target stash */
+    snprintf(full_name, sizeof(full_name), "%s::%s", HvNAME(to_stash), method_name);
+    to_gv = gv_fetchpv(full_name, GV_ADD, SVt_PVCV);
+    if (to_gv) {
+        /* Share the CV between role and class */
+        GvCV_set(to_gv, (CV*)SvREFCNT_inc((SV*)cv));
+        GvCVGEN(to_gv) = 0;  /* Clear cache */
+    }
+}
+
+/* Apply a role to a class */
+static void apply_role_to_class(pTHX_ ClassMeta *class_meta, RoleMeta *role_meta) {
+    IV i;
+    HE *entry;
+    
+    /* Check required methods */
+    for (i = 0; i < role_meta->required_count; i++) {
+        const char *required = role_meta->required_methods[i];
+        GV *gv = gv_fetchmeth(class_meta->stash, required, strlen(required), 0);
+        if (!gv || !GvCV(gv)) {
+            croak("Class '%s' does not implement required method '%s' from role '%s'",
+                  class_meta->class_name, required, role_meta->role_name);
+        }
+    }
+    
+    /* Copy role's slots to class */
+    for (i = 0; i < role_meta->slot_count; i++) {
+        SlotSpec *role_slot = role_meta->slots[i];
+        IV new_idx;
+        SV **existing;
+        
+        /* Check for slot name conflict */
+        existing = hv_fetch(class_meta->prop_to_idx, role_slot->name, strlen(role_slot->name), 0);
+        if (existing) {
+            croak("Slot conflict: '%s' already exists in class '%s' (from role '%s')",
+                  role_slot->name, class_meta->class_name, role_meta->role_name);
+        }
+        
+        /* Add slot to class */
+        new_idx = class_meta->slot_count++;
+        Renew(class_meta->slots, class_meta->slot_count, SlotSpec*);
+        Renew(class_meta->idx_to_prop, class_meta->slot_count, char*);
+        
+        /* Copy slot spec */
+        class_meta->slots[new_idx] = role_slot;  /* Share the spec */
+        class_meta->idx_to_prop[new_idx] = role_slot->name;
+        hv_store(class_meta->prop_to_idx, role_slot->name, strlen(role_slot->name), 
+                 newSViv(new_idx), 0);
+        
+        /* Install accessor for this slot */
+        if (role_slot->has_type || role_slot->has_trigger || role_slot->has_coerce || 
+            role_slot->is_readonly || role_slot->is_lazy) {
+            install_accessor_typed(aTHX_ class_meta->class_name, role_slot->name, new_idx, class_meta);
+        } else {
+            install_accessor(aTHX_ class_meta->class_name, role_slot->name, new_idx);
+        }
+        
+        if (role_slot->has_clearer) {
+            install_clearer(aTHX_ class_meta->class_name, role_slot->name, new_idx, class_meta);
+        }
+        if (role_slot->has_predicate) {
+            install_predicate(aTHX_ class_meta->class_name, role_slot->name, new_idx, class_meta);
+        }
+    }
+    
+    /* Copy role's methods to class */
+    if (role_meta->stash) {
+        hv_iterinit(role_meta->stash);
+        while ((entry = hv_iternext(role_meta->stash))) {
+            const char *name = HePV(entry, PL_na);
+            /* Skip special entries and slots (already handled) */
+            if (name[0] != '_' || strncmp(name, "_build_", 7) == 0) {
+                copy_method(aTHX_ role_meta->stash, class_meta->stash, name);
+            }
+        }
+    }
+    
+    /* Track consumed role */
+    Renew(class_meta->consumed_roles, class_meta->role_count + 1, RoleMeta*);
+    class_meta->consumed_roles[class_meta->role_count++] = role_meta;
+}
+
+/* ============================================
+   Method Modifiers (zero overhead if not used)
+   ============================================ */
+
+/* Get or create modified method entry */
+static ModifiedMethod* get_or_create_modified_method(pTHX_ ClassMeta *meta, const char *method_name) {
+    SV **svp;
+    ModifiedMethod *mod;
+    STRLEN name_len = strlen(method_name);
+    
+    if (!meta->modified_methods) {
+        meta->modified_methods = newHV();
+    }
+    
+    svp = hv_fetch(meta->modified_methods, method_name, name_len, 0);
+    if (svp && SvIOK(*svp)) {
+        return INT2PTR(ModifiedMethod*, SvIV(*svp));
+    }
+    
+    /* Create new modified method entry */
+    Newxz(mod, 1, ModifiedMethod);
+    
+    /* Get the original CV */
+    {
+        GV *gv = gv_fetchmeth(meta->stash, method_name, name_len, 0);
+        if (gv && GvCV(gv)) {
+            mod->original_cv = GvCV(gv);
+            SvREFCNT_inc((SV*)mod->original_cv);
+        }
+    }
+    
+    hv_store(meta->modified_methods, method_name, name_len, newSViv(PTR2IV(mod)), 0);
+    return mod;
+}
+
+/* XS wrapper for modified methods */
+static XS(xs_modified_method_wrapper) {
+    dXSARGS;
+    ModifiedMethod *mod = INT2PTR(ModifiedMethod*, CvXSUBANY(cv).any_iv);
+    MethodModifier *m;
+    int count = 0;
+    I32 gimme = GIMME_V;
+    AV *saved_args;
+    AV *saved_results;
+    int i;
+    
+    /* Save original arguments for before/after chains */
+    saved_args = newAV();
+    sv_2mortal((SV*)saved_args);
+    for (i = 0; i < items; i++) {
+        av_push(saved_args, SvREFCNT_inc(ST(i)));
+    }
+    
+    /* Call before chain (in stack order - most recent first) */
+    for (m = mod->before_chain; m; m = m->next) {
+        dSP;
+        ENTER;
+        SAVETMPS;
+        PUSHMARK(SP);
+        for (i = 0; i <= av_len(saved_args); i++) {
+            SV **svp = av_fetch(saved_args, i, 0);
+            XPUSHs(svp ? *svp : &PL_sv_undef);
+        }
+        PUTBACK;
+        call_sv(m->callback, G_DISCARD);
+        FREETMPS;
+        LEAVE;
+    }
+    
+    /* Save results from original/around call */
+    saved_results = newAV();
+    sv_2mortal((SV*)saved_results);
+    
+    /* Call around chain (or original if no around) */
+    if (mod->around_chain) {
+        /* For around, we pass ($orig, $self, @args) */
+        m = mod->around_chain;
+        {
+            dSP;
+            ENTER;
+            SAVETMPS;
+            PUSHMARK(SP);
+            XPUSHs(sv_2mortal(newRV_inc((SV*)mod->original_cv)));
+            for (i = 0; i <= av_len(saved_args); i++) {
+                SV **svp = av_fetch(saved_args, i, 0);
+                XPUSHs(svp ? *svp : &PL_sv_undef);
+            }
+            PUTBACK;
+            count = call_sv(m->callback, gimme == G_ARRAY ? G_LIST : G_SCALAR);
+            SPAGAIN;
+            /* Save results before LEAVE destroys them - they're on stack in reverse */
+            for (i = 0; i < count; i++) {
+                av_push(saved_results, newSVsv(POPs));
+            }
+            FREETMPS;
+            LEAVE;
+        }
+    } else if (mod->original_cv) {
+        /* Call original method */
+        dSP;
+        ENTER;
+        SAVETMPS;
+        PUSHMARK(SP);
+        for (i = 0; i <= av_len(saved_args); i++) {
+            SV **svp = av_fetch(saved_args, i, 0);
+            XPUSHs(svp ? *svp : &PL_sv_undef);
+        }
+        PUTBACK;
+        count = call_sv((SV*)mod->original_cv, gimme == G_ARRAY ? G_LIST : G_SCALAR);
+        SPAGAIN;
+        /* Save results before LEAVE destroys them */
+        for (i = 0; i < count; i++) {
+            av_push(saved_results, newSVsv(POPs));
+        }
+        FREETMPS;
+        LEAVE;
+    }
+    
+    /* Call after chain (in order of registration) */
+    for (m = mod->after_chain; m; m = m->next) {
+        dSP;
+        ENTER;
+        SAVETMPS;
+        PUSHMARK(SP);
+        for (i = 0; i <= av_len(saved_args); i++) {
+            SV **svp = av_fetch(saved_args, i, 0);
+            XPUSHs(svp ? *svp : &PL_sv_undef);
+        }
+        PUTBACK;
+        call_sv(m->callback, G_DISCARD);
+        FREETMPS;
+        LEAVE;
+    }
+    
+    /* Put saved results back on stack (they were saved in reverse order) */
+    {
+        count = av_len(saved_results) + 1;
+        for (i = count - 1; i >= 0; i--) {
+            SV **svp = av_fetch(saved_results, i, 0);
+            /* Use sv_mortalcopy to put a mortal copy on stack */
+            ST(count - 1 - i) = sv_mortalcopy(svp ? *svp : &PL_sv_undef);
+        }
+    }
+    
+    XSRETURN(count);
+}
+
+/* Install the wrapper if not already done */
+static void install_modifier_wrapper(pTHX_ ClassMeta *meta, const char *method_name, ModifiedMethod *mod) {
+    char full_name[256];
+    CV *existing_cv;
+    
+    snprintf(full_name, sizeof(full_name), "%s::%s", meta->class_name, method_name);
+    
+    existing_cv = get_cvn_flags(full_name, strlen(full_name), 0);
+    
+    /* Only install wrapper once - check if it's already our wrapper */
+    if (existing_cv && CvXSUB(existing_cv) == xs_modified_method_wrapper) {
+        return;  /* Already wrapped */
+    }
+    
+    /* Install wrapper without "Subroutine redefined" warning */
+    {
+        GV *gv = gv_fetchpv(full_name, GV_ADD, SVt_PVCV);
+        CV *cv = newXS_flags(NULL, xs_modified_method_wrapper, __FILE__, NULL, 0);
+        CvXSUBANY(cv).any_iv = PTR2IV(mod);
+        /* Silently replace the CV in the GV */
+        if (GvCV(gv)) {
+            SvREFCNT_dec(GvCV(gv));
+        }
+        GvCV_set(gv, cv);
+    }
+}
+
+/* Add a modifier to a method */
+static void add_modifier(pTHX_ ClassMeta *meta, const char *method_name, SV *callback, int type) {
+    ModifiedMethod *mod;
+    MethodModifier *new_mod;
+    
+    mod = get_or_create_modified_method(aTHX_ meta, method_name);
+    
+    Newx(new_mod, 1, MethodModifier);
+    new_mod->callback = newSVsv(callback);
+    new_mod->next = NULL;
+    
+    /* Add to appropriate chain */
+    switch (type) {
+        case 0:  /* before */
+            new_mod->next = mod->before_chain;
+            mod->before_chain = new_mod;
+            break;
+        case 1:  /* after */
+            /* Add to end of after chain */
+            if (!mod->after_chain) {
+                mod->after_chain = new_mod;
+            } else {
+                MethodModifier *last = mod->after_chain;
+                while (last->next) last = last->next;
+                last->next = new_mod;
+            }
+            break;
+        case 2:  /* around */
+            /* around wraps previous around/original */
+            new_mod->next = mod->around_chain;
+            mod->around_chain = new_mod;
+            break;
+    }
+    
+    install_modifier_wrapper(aTHX_ meta, method_name, mod);
+}
+
 /* ============================================
    XS API Functions
    ============================================ */
@@ -1486,17 +2114,43 @@ static XS(xs_define) {
 
         /* Store idx -> name mapping */
         meta->idx_to_prop[idx] = spec->name;  /* Already allocated in parse_slot_spec */
+        
+        /* Update lazy flag */
+        if (spec->is_lazy) meta->has_any_lazy = 1;
 
         /* Install accessor method - typed or plain depending on spec */
-        if (spec->has_type || spec->has_trigger || spec->has_coerce || spec->is_readonly) {
+        if (spec->has_type || spec->has_trigger || spec->has_coerce || spec->is_readonly || spec->is_lazy) {
             install_accessor_typed(aTHX_ class_pv, spec->name, idx, meta);
         } else {
             install_accessor(aTHX_ class_pv, spec->name, idx);
+        }
+        
+        /* Install clearer method if requested */
+        if (spec->has_clearer) {
+            install_clearer(aTHX_ class_pv, spec->name, idx, meta);
+        }
+        
+        /* Install predicate method if requested */
+        if (spec->has_predicate) {
+            install_predicate(aTHX_ class_pv, spec->name, idx, meta);
         }
     }
 
     /* Install constructor */
     install_constructor(aTHX_ class_pv, meta);
+    
+    /* Check for DEMOLISH method - only set up destruction hook if class has one */
+    {
+        char demolish_name[256];
+        CV *demolish_cv;
+        snprintf(demolish_name, sizeof(demolish_name), "%s::DEMOLISH", class_pv);
+        demolish_cv = get_cvn_flags(demolish_name, strlen(demolish_name), 0);
+        if (demolish_cv) {
+            meta->demolish_cv = demolish_cv;
+            /* Install DESTROY wrapper that calls DEMOLISH */
+            install_destroy_wrapper(aTHX_ class_pv, meta);
+        }
+    }
     
     XSRETURN_EMPTY;
 }
@@ -1727,14 +2381,179 @@ static XS(xs_is_frozen) {
 static XS(xs_is_locked) {
     dXSARGS;
     MAGIC *mg;
-    
+
     if (items < 1) croak("Usage: object::is_locked($obj)");
-    
+
     mg = get_object_magic(aTHX_ ST(0));
     if (mg && (mg->mg_private & OBJ_FLAG_LOCKED)) {
         XSRETURN_YES;
     }
     XSRETURN_NO;
+}
+
+/* ============================================
+   Introspection API
+   ============================================ */
+
+/* object::clone($obj) - create shallow copy of object */
+static XS(xs_clone) {
+    dXSARGS;
+    AV *src_av, *dst_av;
+    SV *src_obj, *dst_obj;
+    const char *class_name;
+    ClassMeta *meta;
+    IV i, len;
+
+    if (items < 1) croak("Usage: object::clone($obj) or $obj->clone()");
+
+    src_obj = ST(0);
+
+    if (!SvROK(src_obj) || SvTYPE(SvRV(src_obj)) != SVt_PVAV || !SvOBJECT(SvRV(src_obj))) {
+        croak("object::clone: argument is not an object");
+    }
+
+    src_av = (AV*)SvRV(src_obj);
+
+    /* Get class metadata from the blessed stash */
+    class_name = HvNAME(SvSTASH(SvRV(src_obj)));
+    meta = get_class_meta(aTHX_ class_name, strlen(class_name));
+
+    /* Create new AV with same size */
+    len = av_len(src_av);
+    dst_av = newAV();
+    av_extend(dst_av, len);
+
+    /* Shallow copy all slots */
+    for (i = 0; i <= len; i++) {
+        SV **svp = av_fetch(src_av, i, 0);
+        if (svp && SvOK(*svp)) {
+            av_store(dst_av, i, newSVsv(*svp));
+        } else {
+            av_store(dst_av, i, newSV(0));
+        }
+    }
+
+    /* Create blessed reference to same class (clone is NOT frozen/locked) */
+    dst_obj = newRV_noinc((SV*)dst_av);
+    sv_bless(dst_obj, meta ? meta->stash : SvSTASH(SvRV(src_obj)));
+
+    ST(0) = sv_2mortal(dst_obj);
+    XSRETURN(1);
+}
+
+/* object::properties($class) - return property names for a class */
+static XS(xs_properties) {
+    dXSARGS;
+    STRLEN class_len;
+    const char *class_pv;
+    ClassMeta *meta;
+    IV i;
+
+    if (items < 1) croak("Usage: object::properties($class)");
+
+    class_pv = SvPV(ST(0), class_len);
+
+    meta = get_class_meta(aTHX_ class_pv, class_len);
+    if (!meta) {
+        /* Non-existent class: return empty list / 0 */
+        if (GIMME_V == G_ARRAY) {
+            XSRETURN_EMPTY;
+        } else {
+            XSRETURN_IV(0);
+        }
+    }
+
+    if (GIMME_V == G_ARRAY) {
+        /* List context: return property names */
+        IV count = meta->slot_count - 1;  /* -1 because slot 0 is prototype */
+        SP -= items;
+        EXTEND(SP, count);
+
+        for (i = 1; i < meta->slot_count; i++) {
+            if (meta->idx_to_prop[i]) {
+                PUSHs(sv_2mortal(newSVpv(meta->idx_to_prop[i], 0)));
+            }
+        }
+        XSRETURN(count);
+    } else {
+        /* Scalar context: return count */
+        XSRETURN_IV(meta->slot_count - 1);
+    }
+}
+
+/* object::slot_info($class, $property) - return hashref with slot metadata */
+static XS(xs_slot_info) {
+    dXSARGS;
+    STRLEN class_len, prop_len;
+    const char *class_pv, *prop_pv;
+    ClassMeta *meta;
+    SV **idx_svp;
+    IV idx;
+    SlotSpec *spec;
+    HV *info;
+
+    if (items < 2) croak("Usage: object::slot_info($class, $property)");
+
+    class_pv = SvPV(ST(0), class_len);
+    prop_pv = SvPV(ST(1), prop_len);
+
+    /* Look up class meta */
+    meta = get_class_meta(aTHX_ class_pv, class_len);
+    if (!meta) {
+        XSRETURN_UNDEF;
+    }
+
+    /* Look up property index - O(1) hash lookup */
+    idx_svp = hv_fetch(meta->prop_to_idx, prop_pv, prop_len, 0);
+    if (!idx_svp) {
+        XSRETURN_UNDEF;
+    }
+    idx = SvIV(*idx_svp);
+
+    /* Build result hashref */
+    info = newHV();
+
+    /* Basic info always present */
+    hv_store(info, "name", 4, newSVpv(prop_pv, prop_len), 0);
+    hv_store(info, "index", 5, newSViv(idx), 0);
+
+    /* Get slot spec if available */
+    spec = (meta->slots && idx < meta->slot_count) ? meta->slots[idx] : NULL;
+
+    if (spec && spec->has_type) {
+        const char *type_name;
+        if (spec->type_id == TYPE_CUSTOM && spec->registered) {
+            type_name = spec->registered->name;
+        } else {
+            type_name = type_id_to_name(spec->type_id);
+        }
+        hv_store(info, "type", 4, newSVpv(type_name, 0), 0);
+    }
+
+    /* Boolean flags */
+    hv_store(info, "is_required", 11, newSViv(spec ? spec->is_required : 0), 0);
+    hv_store(info, "is_readonly", 11, newSViv(spec ? spec->is_readonly : 0), 0);
+    hv_store(info, "is_lazy", 7, newSViv(spec ? spec->is_lazy : 0), 0);
+    hv_store(info, "has_default", 11, newSViv(spec ? spec->has_default : 0), 0);
+    hv_store(info, "has_trigger", 11, newSViv(spec ? spec->has_trigger : 0), 0);
+    hv_store(info, "has_coerce", 10, newSViv(spec ? spec->has_coerce : 0), 0);
+    hv_store(info, "has_builder", 11, newSViv(spec ? spec->has_builder : 0), 0);
+    hv_store(info, "has_clearer", 11, newSViv(spec ? spec->has_clearer : 0), 0);
+    hv_store(info, "has_predicate", 13, newSViv(spec ? spec->has_predicate : 0), 0);
+    hv_store(info, "has_type", 8, newSViv(spec ? spec->has_type : 0), 0);
+
+    /* Default value (if present) */
+    if (spec && spec->has_default && spec->default_sv) {
+        hv_store(info, "default", 7, newSVsv(spec->default_sv), 0);
+    }
+
+    /* Builder method name */
+    if (spec && spec->has_builder && spec->builder_name) {
+        hv_store(info, "builder", 7, newSVsv(spec->builder_name), 0);
+    }
+
+    ST(0) = sv_2mortal(newRV_noinc((SV*)info));
+    XSRETURN(1);
 }
 
 /* ============================================
@@ -1981,6 +2800,276 @@ static XS(xs_singleton_instance) {
     }
 }
 
+/* ============================================
+   Role API
+   ============================================ */
+
+/* object::role("RoleName", @slot_specs) - define a role */
+static XS(xs_role) {
+    dXSARGS;
+    STRLEN role_len;
+    const char *role_pv;
+    RoleMeta *meta;
+    IV i;
+    
+    if (items < 1) croak("Usage: object::role($role_name, @slot_specs)");
+    
+    role_pv = SvPV(ST(0), role_len);
+    
+    /* Check if role already exists */
+    meta = get_role_meta(aTHX_ role_pv, role_len);
+    if (meta) {
+        croak("Role '%s' already defined", role_pv);
+    }
+    
+    /* Create role meta */
+    Newxz(meta, 1, RoleMeta);
+    Newxz(meta->role_name, role_len + 1, char);
+    Copy(role_pv, meta->role_name, role_len, char);
+    meta->role_name[role_len] = '\0';
+    meta->stash = gv_stashpvn(role_pv, role_len, GV_ADD);
+    
+    /* Allocate slots array */
+    if (items > 1) {
+        Newx(meta->slots, items - 1, SlotSpec*);
+        meta->slot_count = 0;
+        
+        for (i = 1; i < items; i++) {
+            STRLEN spec_len;
+            const char *spec_pv = SvPV(ST(i), spec_len);
+            SlotSpec *spec = parse_slot_spec(aTHX_ spec_pv, spec_len);
+            meta->slots[meta->slot_count++] = spec;
+        }
+    }
+    
+    register_role_meta(aTHX_ role_pv, role_len, meta);
+    
+    XSRETURN_EMPTY;
+}
+
+/* object::requires("RoleName", @method_names) - declare required methods */
+static XS(xs_requires) {
+    dXSARGS;
+    STRLEN role_len;
+    const char *role_pv;
+    RoleMeta *meta;
+    IV i;
+    
+    if (items < 2) croak("Usage: object::requires($role_name, @method_names)");
+    
+    role_pv = SvPV(ST(0), role_len);
+    meta = get_role_meta(aTHX_ role_pv, role_len);
+    if (!meta) {
+        croak("Role '%s' not defined", role_pv);
+    }
+    
+    /* Add required methods */
+    Renew(meta->required_methods, meta->required_count + items - 1, char*);
+    for (i = 1; i < items; i++) {
+        STRLEN name_len;
+        const char *name_pv = SvPV(ST(i), name_len);
+        Newx(meta->required_methods[meta->required_count], name_len + 1, char);
+        Copy(name_pv, meta->required_methods[meta->required_count], name_len, char);
+        meta->required_methods[meta->required_count][name_len] = '\0';
+        meta->required_count++;
+    }
+    
+    XSRETURN_EMPTY;
+}
+
+/* object::with("ClassName", @role_names) - apply roles to a class */
+static XS(xs_with) {
+    dXSARGS;
+    STRLEN class_len;
+    const char *class_pv;
+    ClassMeta *class_meta;
+    IV i;
+    
+    if (items < 2) croak("Usage: object::with($class_name, @role_names)");
+    
+    class_pv = SvPV(ST(0), class_len);
+    class_meta = get_class_meta(aTHX_ class_pv, class_len);
+    if (!class_meta) {
+        croak("Class '%s' not defined with object::define", class_pv);
+    }
+    
+    for (i = 1; i < items; i++) {
+        STRLEN role_len;
+        const char *role_pv = SvPV(ST(i), role_len);
+        RoleMeta *role_meta = get_role_meta(aTHX_ role_pv, role_len);
+        
+        if (!role_meta) {
+            croak("Role '%s' not defined", role_pv);
+        }
+        
+        apply_role_to_class(aTHX_ class_meta, role_meta);
+    }
+    
+    XSRETURN_EMPTY;
+}
+
+/* object::does("ClassName" or $obj, "RoleName") - check if class/object does role */
+static XS(xs_does) {
+    dXSARGS;
+    ClassMeta *meta;
+    STRLEN role_len;
+    const char *role_pv;
+    IV i;
+    
+    if (items < 2) croak("Usage: object::does($class_or_obj, $role_name)");
+    
+    /* Get class meta from class name or object */
+    if (SvROK(ST(0))) {
+        /* Object - get stash name */
+        HV *stash = SvSTASH(SvRV(ST(0)));
+        meta = get_class_meta(aTHX_ HvNAME(stash), HvNAMELEN(stash));
+    } else {
+        STRLEN class_len;
+        const char *class_pv = SvPV(ST(0), class_len);
+        meta = get_class_meta(aTHX_ class_pv, class_len);
+    }
+    
+    if (!meta) {
+        XSRETURN_NO;
+    }
+    
+    role_pv = SvPV(ST(1), role_len);
+    
+    /* Check if role is in consumed_roles */
+    for (i = 0; i < meta->role_count; i++) {
+        if (strEQ(meta->consumed_roles[i]->role_name, role_pv)) {
+            XSRETURN_YES;
+        }
+    }
+    
+    XSRETURN_NO;
+}
+
+/* ============================================
+   Method Modifier API
+   ============================================ */
+
+/* object::before("Class::method", \&callback) */
+static XS(xs_before) {
+    dXSARGS;
+    STRLEN full_name_len;
+    const char *full_name;
+    char *class_name, *method_name, *sep;
+    ClassMeta *meta;
+    
+    if (items != 2) croak("Usage: object::before('Class::method', \\&callback)");
+    
+    full_name = SvPV(ST(0), full_name_len);
+    if (!SvROK(ST(1)) || SvTYPE(SvRV(ST(1))) != SVt_PVCV) {
+        croak("Second argument must be a code reference");
+    }
+    
+    /* Parse "Class::method" */
+    sep = strstr(full_name, "::");
+    if (!sep) {
+        croak("Method name must be fully qualified (Class::method)");
+    }
+    
+    {
+        STRLEN class_len = sep - full_name;
+        Newx(class_name, class_len + 1, char);
+        Copy(full_name, class_name, class_len, char);
+        class_name[class_len] = '\0';
+        method_name = sep + 2;
+    }
+    
+    meta = get_class_meta(aTHX_ class_name, strlen(class_name));
+    if (!meta) {
+        Safefree(class_name);
+        croak("Class '%s' not defined with object::define", class_name);
+    }
+    
+    add_modifier(aTHX_ meta, method_name, ST(1), 0);  /* 0 = before */
+    
+    Safefree(class_name);
+    XSRETURN_EMPTY;
+}
+
+/* object::after("Class::method", \&callback) */
+static XS(xs_after) {
+    dXSARGS;
+    STRLEN full_name_len;
+    const char *full_name;
+    char *class_name, *method_name, *sep;
+    ClassMeta *meta;
+    
+    if (items != 2) croak("Usage: object::after('Class::method', \\&callback)");
+    
+    full_name = SvPV(ST(0), full_name_len);
+    if (!SvROK(ST(1)) || SvTYPE(SvRV(ST(1))) != SVt_PVCV) {
+        croak("Second argument must be a code reference");
+    }
+    
+    sep = strstr(full_name, "::");
+    if (!sep) {
+        croak("Method name must be fully qualified (Class::method)");
+    }
+    
+    {
+        STRLEN class_len = sep - full_name;
+        Newx(class_name, class_len + 1, char);
+        Copy(full_name, class_name, class_len, char);
+        class_name[class_len] = '\0';
+        method_name = sep + 2;
+    }
+    
+    meta = get_class_meta(aTHX_ class_name, strlen(class_name));
+    if (!meta) {
+        Safefree(class_name);
+        croak("Class '%s' not defined with object::define", class_name);
+    }
+    
+    add_modifier(aTHX_ meta, method_name, ST(1), 1);  /* 1 = after */
+    
+    Safefree(class_name);
+    XSRETURN_EMPTY;
+}
+
+/* object::around("Class::method", \&callback) */
+static XS(xs_around) {
+    dXSARGS;
+    STRLEN full_name_len;
+    const char *full_name;
+    char *class_name, *method_name, *sep;
+    ClassMeta *meta;
+    
+    if (items != 2) croak("Usage: object::around('Class::method', \\&callback)");
+    
+    full_name = SvPV(ST(0), full_name_len);
+    if (!SvROK(ST(1)) || SvTYPE(SvRV(ST(1))) != SVt_PVCV) {
+        croak("Second argument must be a code reference");
+    }
+    
+    sep = strstr(full_name, "::");
+    if (!sep) {
+        croak("Method name must be fully qualified (Class::method)");
+    }
+    
+    {
+        STRLEN class_len = sep - full_name;
+        Newx(class_name, class_len + 1, char);
+        Copy(full_name, class_name, class_len, char);
+        class_name[class_len] = '\0';
+        method_name = sep + 2;
+    }
+    
+    meta = get_class_meta(aTHX_ class_name, strlen(class_name));
+    if (!meta) {
+        Safefree(class_name);
+        croak("Class '%s' not defined with object::define", class_name);
+    }
+    
+    add_modifier(aTHX_ meta, method_name, ST(1), 2);  /* 2 = around */
+    
+    Safefree(class_name);
+    XSRETURN_EMPTY;
+}
+
 /* object::singleton("Class") - marks class as singleton and installs instance() method */
 static XS(xs_singleton) {
     dXSARGS;
@@ -2062,7 +3151,12 @@ XS_EXTERNAL(boot_object) {
     newXS("object::freeze", xs_freeze, __FILE__);
     newXS("object::is_frozen", xs_is_frozen, __FILE__);
     newXS("object::is_locked", xs_is_locked, __FILE__);
-    
+
+    /* Introspection API */
+    newXS("object::clone", xs_clone, __FILE__);
+    newXS("object::properties", xs_properties, __FILE__);
+    newXS("object::slot_info", xs_slot_info, __FILE__);
+
     /* Type registry API */
     newXS("object::register_type", xs_register_type, __FILE__);
     newXS("object::has_type", xs_has_type, __FILE__);
@@ -2070,6 +3164,17 @@ XS_EXTERNAL(boot_object) {
 
     /* Singleton support */
     newXS("object::singleton", xs_singleton, __FILE__);
+    
+    /* Role API */
+    newXS("object::role", xs_role, __FILE__);
+    newXS("object::requires", xs_requires, __FILE__);
+    newXS("object::with", xs_with, __FILE__);
+    newXS("object::does", xs_does, __FILE__);
+    
+    /* Method modifier API */
+    newXS("object::before", xs_before, __FILE__);
+    newXS("object::after", xs_after, __FILE__);
+    newXS("object::around", xs_around, __FILE__);
 
     /* Register cleanup for global destruction */
     Perl_call_atexit(aTHX_ object_cleanup_globals, NULL);

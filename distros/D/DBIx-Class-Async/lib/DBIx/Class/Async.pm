@@ -1,15 +1,152 @@
 package DBIx::Class::Async;
 
-$DBIx::Class::Async::VERSION   = '0.49';
+$DBIx::Class::Async::VERSION   = '0.51';
 $DBIx::Class::Async::AUTHORITY = 'cpan:MANWAR';
+
+=encoding utf8
 
 =head1 NAME
 
-DBIx::Class::Async - Asynchronous database operations for DBIx::Class
+DBIx::Class::Async - Non-blocking, multi-worker asynchronous wrapper for DBIx::Class
 
 =head1 VERSION
 
-Version 0.49
+Version 0.51
+
+=head1 DISCLAIMER
+
+B<This is pure experimental currently.>
+
+You are encouraged to try and share your suggestions.
+
+=head1 QUICK START
+
+This example demonstrates how to set up a small C<SQLite> database and
+perform an asynchronous B<"Create and Count"> operation.
+
+    use strict;
+    use warnings;
+    use IO::Async::Loop;
+    use DBIx::Class::Async::Schema;
+
+    my $loop = IO::Async::Loop->new;
+
+    # 1. Connect to your database
+    my $schema = DBIx::Class::Async::Schema->connect(
+        "dbi:SQLite:dbname=myapp.db", undef, undef, {},
+        {
+            workers      => 2,              # Keep 2 database connections ready
+            schema_class => 'MyApp::Schema' # Your DBIC Schema name
+        }
+    );
+
+    # 2. Deploy (Create tables if they don't exist)
+    $schema->await($schema->deploy);
+
+    # 3. Non-blocking workflow
+    # We don't "wait" for the DB; we tell the loop what to do when it's done.
+    $schema->resultset('User')
+           ->create({ name => 'Starlight', email => 'star@perl.org' })
+           ->then(
+                sub {
+                    return $schema->resultset('User')->count;
+                })
+           ->on_done(
+                sub {
+                    my $count = shift;
+                    print "User saved! Total users now: $count\n";
+                })
+           ->on_fail(
+                sub {
+                    warn "Something went wrong: @_\n";
+                });
+
+    # 4. Start the engine
+    $loop->run;
+
+=head1 SYNOPSIS
+
+    use IO::Async::Loop;
+    use DBIx::Class::Async::Schema;
+
+    my $loop = IO::Async::Loop->new;
+
+    # Connect returns a "Virtual Schema" that behaves like DBIC
+    # but returns Futures instead of data.
+    my $schema = DBIx::Class::Async::Schema->connect(
+        "dbi:SQLite:dbname=app.db", undef, undef, {},
+        {
+            workers      => 4,             # Parallel database connections
+            schema_class => 'My::Schema',  # Your standard DBIC Schema
+            async_loop   => $loop,
+        }
+    );
+
+    # 1. Simple CRUD (Returns a Future)
+    my $future = $schema->resultset('User')->find(1);
+
+    $future->on_done(sub {
+        my $user = shift;
+        print "Found: " . $user->name . "\n" if $user;
+    });
+
+    # 2. Modern Async/Await style
+    async sub get_user_count {
+        my $count = await $schema->resultset('User')->count;
+        return $count;
+    }
+
+    # 3. Batch Transactions
+    my $tx = await $schema->txn_do([
+        { action => 'create', resultset => 'User', data => { name => 'Alice' }, name => 'new_user'  },
+        { action => 'create', resultset => 'Log',  data => { msg  => "Created user \$new_user.id" } }
+    ]);
+
+=head1 THE ASYNC DESIGN APPROACH
+
+The "Real Truth" about L<DBIx::Class> is that it is inherently synchronous. Under the hood, L<DBI> and most database drivers (like L<DBD::SQLite> or L<DBD::mysql>) block the entire Perl process while waiting for the database to respond.
+
+=head2 How it used to be (The Old Design)
+
+In traditional async Perl, developers often tried to wrap DBIC calls in a simple L<Future>. However, because the underlying L<DBI> call was still blocking, one slow query would "freeze" the entire event loop. Your UI would hang, and other network requests would stop.
+
+=head2 How we do it now (The "Bridge & Worker" Design)
+
+C<DBIx::Class::Async> uses a B<Worker-Pool Architecture>.
+
+=over 4
+
+=item * The Bridge (Main Process)
+
+When you call C<find>, C<search>, or C<create>, the main process doesn't talk to the database. It packages your request and sends it over a pipe to an available worker. It then immediately returns a L<Future> and goes back to work handling other events.
+
+=item * The Workers (Background Processes)
+
+We maintain a pool of background processes. Each worker has its own dedicated connection to the database. The worker performs the blocking DBIC call, serialises the result, and sends it back to the Bridge.
+
+=item * The Result
+
+The Bridge receives the data, resolves the C<Future>, and your code continues.
+
+=back
+
+=head2 Why this is better:
+
+=over 4
+
+=item * Zero Loop Freezing
+
+Even if a query takes 10 seconds, your main application loop remains 100% responsive.
+
+=item * True Parallelism
+
+With 4 workers, you can execute 4 heavy database queries simultaneously. Standard DBIC can only do 1 at a time.
+
+=item * Automatic Serialisation
+
+We handle the complex task of turning "live" DBIC objects into data structures that can safely travel between processes.
+
+=back
 
 =cut
 
@@ -31,6 +168,7 @@ use Scalar::Util qw(blessed);
 use DBIx::Class::Async::Row;
 use Types::Standard qw(Str ScalarRef HashRef ArrayRef Maybe Int CodeRef);
 
+use constant ASYNC_TRACE => $ENV{ASYNC_TRACE} || 0;
 our $METRICS;
 
 use constant {
@@ -41,171 +179,23 @@ use constant {
     HEALTH_CHECK_INTERVAL => 300,
 };
 
-=head1 DISCLAIMER
+=head1 METHODS
 
-B<This is pure experimental currently.>
+=head2 create_async_db
 
-You are encouraged to try and share your suggestions.
+Initialises the async environment and spawns workers.
 
-=head1 SYNOPSIS
-
-    use IO::Async::Loop;
-    use DBIx::Class::Async;
-
-    my $loop = IO::Async::Loop->new;
-
-    # Initialise the Async bridge
-    my $db = DBIx::Class::Async->new(
-        schema_class => 'MyApp::Schema',
-        connect_info => [ 'dbi:SQLite:dbname=my.db', '', '' ],
-        workers      => 4,
-        loop         => $loop,
+    my $db = DBIx::Class::Async->create_async_db(
+        schema_class  => 'MyApp::Schema',
+        connect_info  => [ 'dbi:SQLite:db.sqlite' ],
+        workers       => 4,
+        cache_ttl     => 300, # 5 minutes
+        enable_retry  => 1,
     );
-
-    # Access a ResultSet bridge
-    my $rs = $db->resultset('User');
-
-    # 1. High-level Atomic Operations (Race-condition safe)
-    $rs->find_or_create({
-        email => 'john@example.com',
-        name  => 'John'
-    })->then(sub {
-        my $user = shift;
-        say "Found or created user: " . $user->name;
-
-        # 2. Chained async updates
-        return $user->update({ last_login => time });
-    })->then(sub {
-        # 3. Complex searching with Future results
-        return $rs->search({ active => 1 })->all;
-    })->then(sub {
-        my @users = @_;
-        say "Active users: " . scalar @users;
-        $loop->stop;
-        return Future->done;
-    })->catch(sub {
-        my $error = shift;
-        warn "Database error occurred: $error";
-        $loop->stop;
-    });
-
-    $loop->run;
-
-=head1 DESCRIPTION
-
-C<DBIx::Class::Async> provides asynchronous access to L<DBIx::Class> using a
-process-based worker pool built on L<IO::Async::Function>.
-
-Each worker maintains a persistent database connection and executes blocking
-DBIx::Class operations outside the main event loop, returning results via
-L<Future> objects.
-
-Returned rows are plain Perl data structures (hashrefs), making results safe
-to pass across process boundaries.
-
-Features include:
-
-=over 4
-
-=item * Process-based worker pool using L<IO::Async>
-
-=item * Persistent L<DBIx::Class> connections per worker
-
-=item * Non-blocking CRUD operations via L<Future>
-
-=item * Optional result caching via L<CHI>
-
-=item * Transaction support (single worker only)
-
-=item * Optional retry with exponential backoff
-
-=item * Health checks and graceful shutdown
-
-=back
-
-=head1 CONSTRUCTOR
-
-=head2 new
-
-Creates a new C<DBIx::Class::Async> instance.
-
-    my $async_db = DBIx::Class::Async->new(
-        schema_class   => 'MyApp::Schema', # Required
-        connect_info   => $connect_info,   # Required
-        workers        => 4,               # Optional, default 4
-        loop           => $loop,           # Optional IO::Async::Loop
-        cache_ttl      => 300,             # Optional cache TTL in secs
-        cache          => $chi_object,     # Optional custom cache
-        enable_retry   => 1,               # Optional, default 0
-        max_retries    => 3,               # Optional, default 3
-        retry_delay    => 1,               # Optional, default 1 sec
-        query_timeout  => 30,              # Optional, default 30 secs
-        enable_metrics => 1,               # Optional, default 0
-        health_check   => 300,             # Optional health check interval
-        on_connect_do  => $sql_commands,   # Optional SQL to run on connect
-    );
-
-Parameters:
-
-=over 4
-
-=item * B<schema_class> (Required)
-
-The L<DBIx::Class::Schema> class name.
-
-=item * B<connect_info> (Required)
-
-Arrayref of connection parameters passed to C<< $schema_class->connect() >>.
-
-=item * B<workers> (Optional, default: 4)
-
-Number of worker processes for the connection pool.
-
-=item * B<loop> (Optional)
-
-L<IO::Async::Loop> instance. A new loop will be created if not provided.
-
-=item * B<cache_ttl> (Optional, default: 300)
-
-Cache time-to-live in seconds. Set to 0 to disable caching.
-
-=item * B<cache> (Optional)
-
-L<CHI> cache object for custom cache configuration.
-
-=item * B<enable_retry> (Optional, default: 0)
-
-Enable automatic retry for deadlocks and timeouts.
-
-=item * B<max_retries> (Optional, default: 3)
-
-Maximum number of retry attempts.
-
-=item * B<retry_delay> (Optional, default: 1)
-
-Initial delay between retries in seconds (uses exponential backoff).
-
-=item * B<query_timeout> (Optional, default: 30)
-
-Query timeout in seconds.
-
-=item * B<enable_metrics> (Optional, default: 0)
-
-Enable metrics collection (requires L<Metrics::Any>).
-
-=item * B<health_check> (Optional, default: 300)
-
-Health check interval in seconds. Set to 0 to disable health checks.
-
-=item * B<on_connect_do> (Optional)
-
-Arrayref of SQL statements to execute after connecting.
-
-=back
 
 =cut
 
-sub new {
+sub create_async_db {
     my ($class, %args) = @_;
 
     my $schema_class = $args{schema_class} or croak "schema_class required";
@@ -216,7 +206,7 @@ sub new {
         croak "Cannot load schema class $schema_class: $@";
     }
 
-    # Handle cache_ttl - default to 300, but if explicitly set to 0, use undef
+    # Preserving your TTL logic exactly
     my $cache_ttl = $args{cache_ttl};
     if (defined $cache_ttl) {
         $cache_ttl = undef if $cache_ttl == 0;
@@ -225,1672 +215,585 @@ sub new {
         $cache_ttl = DEFAULT_CACHE_TTL;
     }
 
-    my $self = bless {
-        schema_class    => $schema_class,
-        connect_info    => $connect_info,
-        loop            => $args{loop} || IO::Async::Loop->new,
-        workers         => [],
-        workers_config  => {
-            count          => $workers,
-            query_timeout  => $args{query_timeout} || DEFAULT_QUERY_TIMEOUT,
-            on_connect_do  => $args{on_connect_do} || [],
-        },
-        cache           => $args{cache} || _build_default_cache($cache_ttl),
-        cache_ttl       => $cache_ttl,  # undef means no expiration
-        enable_retry    => $args{enable_retry} // 0,
-        retry_config    => {
-            max_retries => $args{max_retries} || DEFAULT_RETRIES,
-            delay       => $args{retry_delay} || 1,
-            factor      => 2,  # Exponential backoff
-        },
-        enable_metrics  => $args{enable_metrics} // 0,
-        is_connected    => 1,
-        worker_idx      => 0,
-        stats           => {
-            queries      => 0,
-            errors       => 0,
-            cache_hits   => 0,
-            cache_misses => 0,
-            deadlocks    => 0,
-            retries      => 0,
-        },
-    }, $class;
-
-    $self->_init_metrics if $self->{enable_metrics};
-
-    $self->_init_workers;
-
-    if (my $interval = $args{health_check} // HEALTH_CHECK_INTERVAL) {
-        $self->_start_health_checks($interval);
+    # 1. Extract Column Metadata (Inflators/Deflators)
+    # We do this before creating the hashref so we can include it
+    my $custom_inflators = {};
+    if ($schema_class->can('sources')) {
+        foreach my $source_name ($schema_class->sources) {
+            my $source = $schema_class->source($source_name);
+            foreach my $col ($source->columns) {
+                my $info = $source->column_info($col);
+                if ($info->{deflate} || $info->{inflate}) {
+                    $custom_inflators->{$source_name}{$col} = {
+                        deflate => $info->{deflate},
+                        inflate => $info->{inflate},
+                    };
+                }
+            }
+        }
     }
 
-    return $self;
-}
+    # 2. Build the async_db state hashref
+    my $async_db = {
+        _schema_class      => $schema_class,
+        _connect_info      => $connect_info,
+        _custom_inflators  => $custom_inflators,
+        _loop              => $args{loop} || IO::Async::Loop->new,
+        _workers           => [],
+        _workers_config    => {
+            _count         => $workers,
+            _query_timeout => $args{query_timeout} || DEFAULT_QUERY_TIMEOUT,
+            _on_connect_do => $args{on_connect_do} || [],
+        },
+        _cache             => $args{cache} || _build_default_cache($cache_ttl),
+        _cache_ttl         => $cache_ttl,
+        _enable_retry      => $args{enable_retry} // 0,
+        _retry_config      => {
+            _max_retries   => $args{max_retries} || DEFAULT_RETRIES,
+            _delay         => $args{retry_delay} || 1,
+            _factor        => 2,
+        },
+        _enable_metrics    => $args{enable_metrics} // 0,
+        _is_connected      => 1,
+        _worker_idx        => 0,
+        _query_cache       => {},
+        _stats             => {
+            _queries       => 0,
+            _errors        => 0,
+            _cache_hits    => 0,
+            _cache_misses  => 0,
+            _deadlocks     => 0,
+            _retries       => 0,
+        },
+    };
 
-=head1 METHODS
+    _init_metrics($async_db) if $async_db->{_enable_metrics};
+    _init_workers($async_db);
 
-=head2 count
+    if (my $interval = $args{health_check} // HEALTH_CHECK_INTERVAL) {
+        _start_health_checks($async_db, $interval);
+    }
 
-Counts rows matching conditions.
-
-    my $count = await $async_db->count(
-        $resultset_name,
-        { active => 1, status => 'pending' }  # Optional
-    );
-
-Returns: Integer count.
-
-=cut
-
-sub count {
-    my ($self, $resultset, $search_args, $attrs) = @_;
-
-    # Allow Hash (standard), Array (OR/AND logic), or ScalarRef (Literal SQL)
-    state $check = compile(Str, Maybe[ HashRef | ArrayRef | ScalarRef ]);
-    $check->($resultset, $search_args);
-
-    $self->{stats}{queries}++;
-    $self->_record_metric('inc', 'db_async_queries_total');
-
-    my $start_time = time;
-
-    return $self->_call_worker('count', $resultset, $search_args, $attrs)->then(sub {
-        my ($result) = @_;
-        my $duration = time - $start_time;
-        $self->_record_metric('observe', 'db_async_query_duration_seconds', $duration);
-
-        if (my $error = $self->_check_response($result)) {
-            return Future->fail($error);
-        }
-
-        return Future->done($result);
-    });
-}
-
-=head2 create
-
-Creates a new row.
-
-    my $new_row = await $async_db->create(
-        $resultset_name,
-        { name => 'John', email => 'john@example.com' }
-    );
-
-Returns a L<DBIx::Class::Async::Row> object.
-
-=cut
-
-sub create {
-    my ($self, $resultset, $data) = @_;
-
-    state $check = compile(Str, HashRef);
-    $check->($resultset, $data);
-
-    $self->{stats}{queries}++;
-    $self->_record_metric('inc', 'db_async_queries_total');
-
-    $self->_invalidate_cache_for($resultset);
-
-    my $start_time = time;
-
-    my $deflated_data = $self->_deflate_args($resultset, $data);
-
-    return $self->_call_worker('create', $resultset, $deflated_data)->then(sub {
-        my ($result) = @_;
-
-        # Record metrics
-        my $duration = time - $start_time;
-        $self->_record_metric('observe', 'db_async_query_duration_seconds', $duration);
-
-        if (my $error = $self->_check_response($result)) {
-            return Future->fail($error);
-        }
-
-        my $final_data = $self->_merge_result_data($resultset, $deflated_data, $result);
-        my $in_storage = 1;
-        return Future->done($self->_inflate_row($resultset, $final_data, $in_storage));
-    })
-    ->catch(sub {
-        my ($error) = @_;
-
-        # If it's a DBIC Exception object, extract the message
-        my $error_message = (ref $error && $error->can('msg'))
-            ? $error->msg
-            : "$error";
-
-        # Standardize the failure so the ResultSet catch can regex it
-        return Future->fail($error_message);
-    });
-}
-
-=head2 delete
-
-Deletes a row.
-
-    my $success = await $async_db->delete($resultset_name, $id);
-
-Returns: 1 if deleted, 0 if row not found.
-
-=cut
-
-sub delete {
-    my ($self, $resultset, $id) = @_;
-
-    state $check = compile(Str, Int|Str|HashRef);
-    $check->($resultset, $id);
-
-    $self->{stats}{queries}++;
-    $self->_record_metric('inc', 'db_async_queries_total');
-
-    $self->_invalidate_cache_for($resultset);
-    $self->_invalidate_cache_for("$resultset:$id");
-
-    my $start_time = time;
-
-    return $self->_call_worker('delete', $resultset, $id)->then(sub {
-        my ($result) = @_;
-        my $duration = time - $start_time;
-        $self->_record_metric('observe', 'db_async_query_duration_seconds', $duration);
-
-        if (my $error = $self->_check_response($result)) {
-            return Future->fail($error);
-        }
-
-        return Future->done($result);
-    });
-}
-
-=head2 deploy
-
-    my $future = $schema->deploy(\%sqlt_args?, $dir?);
-
-    $future->on_done(sub {
-        my $self = shift;
-        print "Database schema deployed successfully.\n";
-    });
-
-=over 4
-
-=item Arguments: C<\%sqlt_args?>, C<$dir?>
-
-=item Return Value: L<Future> resolving to C<$self>
-
-=back
-
-Asynchronously deploys the schema to the database.
-
-This method dispatches the deployment task to a background worker process via
-the internal worker pool. This ensures that the often-slow process of
-generating SQL (via L<SQL::Translator>) and executing DDL statements does
-not block the main application thread or event loop.
-
-The arguments are passed directly to the underlying L<DBIx::Class::Schema/deploy>
-method in the worker. Common C<%sqlt_args> include:
-
-=over 4
-
-=item * C<add_drop_table> - Add a C<DROP TABLE> before each C<CREATE>.
-
-=item * C<quote_identifiers> - Toggle database-specific identifier quoting.
-
-=back
-
-If the deployment fails (e.g., due to permission issues or missing dependencies
-like L<SQL::Translator>), the returned L<Future> will fail with the error
-string returned by the worker.
-
-=cut
-
-sub deploy {
-    my ($self, $sqlt_args, $dir) = @_;
-
-    return $self->_call_worker('deploy', $sqlt_args, $dir)->then(sub {
-        my ($result) = @_;
-
-        if (my $error = $self->_check_response($result)) {
-            return Future->fail($error);
-        }
-
-        return Future->done($result);
-    });
+    return $async_db;
 }
 
 =head2 disconnect
 
-Gracefully disconnects all workers and cleans up resources.
+Gracefully shuts down all background workers and clears timers. Always call this before your application exits.
 
-    $async_db->disconnect;
+    DBIx::Class::Async->disconnect($db);
 
 =cut
 
 sub disconnect {
-    my $self = shift;
+    my ($db) = @_;
 
-    return unless $self->{is_connected};
+    return unless $db && ref $db eq 'HASH';
 
-    # During Global Destruction, IO::Async handles its own cleanup.
-    # Manually calling remove() then often triggers "Notifier does not exist"
-    # or uninitialised value warnings in the Loop.
-    my $in_destruction = (${^GLOBAL_PHASE} eq 'DESTRUCT');
-
-    # Stop health checks
-    if ($self->{health_check_timer}) {
-        if (!$in_destruction && $self->{loop}) {
-            eval { $self->{loop}->remove($self->{health_check_timer}) };
-        }
-        undef $self->{health_check_timer};
+    # 1. Clear the health check timer
+    if ($db->{_health_check_timer}) {
+        $db->{_loop}->remove($db->{_health_check_timer});
+        delete $db->{_health_check_timer};
     }
 
-    # Stop all workers
-    for my $worker (@{$self->{workers}}) {
-        if (defined $worker->{instance}) {
-            if (!$in_destruction && $self->{loop}) {
-                # eval protects against the "Notifier does not exist" race condition
-                eval { $self->{loop}->remove($worker->{instance}) };
+    # 2. Shutdown workers
+    if ($db->{_workers}) {
+        foreach my $worker_info (@{ $db->{_workers} }) {
+            if (my $instance = $worker_info->{instance}) {
+                $db->{_loop}->remove($instance);
             }
-            undef $worker->{instance};
         }
+        $db->{_workers} = [];
     }
 
-    $self->{workers} = [];
-    $self->{is_connected} = 0;
+    # 3. Final state update
+    $db->{_is_connected} = 0;
 
-    # Clear cache
-    if (defined $self->{cache}) {
-        $self->{cache}->clear;
-    }
-}
-
-=head2 find
-
-Finds a single row by primary key.
-
-    my $row = await $async_db->find($resultset_name, $id);
-
-Returns: Hashref of row data or undef if not found.
-
-=cut
-
-sub find {
-    my ($self, $resultset, $id, $attrs) = @_;
-
-    #state $check = compile(Str, Int|Str|HashRef, Maybe[HashRef]);
-    #$check->($resultset, $id, $attrs);
-
-    $self->{stats}{queries}++;
-    $self->_record_metric('inc', 'db_async_queries_total');
-
-    my $start_time = time;
-
-    return $self->_call_worker('find', $resultset, $id, $attrs)->then(sub {
-        my ($result) = @_;
-        my $duration = time - $start_time;
-        $self->_record_metric('observe', 'db_async_query_duration_seconds', $duration);
-
-        if (my $error = $self->_check_response($result)) {
-            return Future->fail($error);
-        }
-
-        return Future->done($self->_inflate_row($resultset, $result));
-    });
-}
-
-=head2 health_check
-
-Performs health check on all workers.
-
-    my $healthy_workers = await $async_db->health_check;
-
-Returns: Number of healthy workers.
-
-=cut
-
-sub health_check {
-    my $self = shift;
-
-    my @checks = map {
-        my $worker_info = $_;
-        my $worker = $worker_info->{instance};
-        $worker->call(
-            args => [
-                $self->{schema_class},
-                $self->{connect_info},
-                $self->{workers_config},
-                'health_check',
-            ],
-            timeout => 5,
-        )->then(sub {
-            $worker_info->{healthy} = 1;
-            return Future->done(1);
-        }, sub {
-            $worker_info->{healthy} = 0;
-            return Future->done(0);
-        })
-    } @{$self->{workers}};
-
-    return Future->wait_all(@checks)->then(sub {
-        my @results = @_;
-        my $healthy_count = grep { $_->get } @results;
-
-        $self->_record_metric('set', 'db_async_workers_active', $healthy_count);
-
-        return Future->done($healthy_count);
-    });
-}
-
-=head2 inflate_column
-
-  $async_db->inflate_column($source_name, $column_name, {
-      inflate => sub { my ($value, $rowobj) = @_; ... },
-      deflate => sub { my ($value, $rowobj) = @_; ... },
-  });
-
-Registers custom inflation and deflation logic for a specific column within a
-ResultSource. This allows you to transform raw database values into complex
-objects (inflation) and back into raw storage formats (deflation).
-
-=over 4
-
-=item * C<$source_name> - The name of the ResultSource (e.g., 'User').
-
-=item * C<$column_name> - The name of the column to attach handlers to.
-
-=item * C<$handlers> - Hashref containing C<inflate> and C<deflate> coderefs.
-
-=back
-
-B<DESIGN DECISIONS & DIFFERENCES FROM L<DBIx::Class>>
-
-While this method shares a name with the standard L<DBIx::Class::InflateColumn>
-feature, its implementation and lifecycle differ significantly:
-
-=over 4
-
-=item B<Late-Bound Metadata Injection>
-
-In standard L<DBIx::Class>, inflation is usually defined at compile-time within
-the Result Class file. In C<DBIx::Class::Async>, this method allows for
-B<dynamic, runtime injection> of handlers. This is particularly useful in
-environments where the Schema is shared or where the asynchronous driver needs
-to intercept data transformations without modifying the original Result Classes.
-
-=item B<Schema Instance Requirement>
-
-Unlike the standard ORM which assumes an active connection, this method
-operates on the C<ResultSource> metadata. If no internal schema instance
-exists, it will attempt to lazily instantiate one via C<schema_class>. This
-ensures that metadata transformations are available even if the database
-worker has not yet been dispatched.
-
-=item B<Explicit Manual Registration>
-
-In L<DBIx::Class>, loading a component like C<InflateColumn> automatically
-sets up the infrastructure. In this module, C<inflate_column> acts as a
-bridge, explicitly attaching handlers to the underlying C<column_info>
-hash so that the L<DBIx::Class::Async::Row> C<AUTOLOAD> mechanism can
-access them during object lifecycle events.
-
-=back
-
-=cut
-
-sub inflate_column {
-    my ($self, $source_name, $column, $handlers) = @_;
-
-    # 1. If we don't have a schema instance, try to make one
-    if (!$self->{schema} && $self->{schema_class}) {
-        my $class = $self->{schema_class};
-        eval "require $class"
-            or die "Could not load schema class $class: $@";
-        # We don't necessarily need a DB connection in the parent just for
-        # metadata,so we can just call ->setup or ->clone
-        $self->{schema} = $class->clone;
-    }
-
-    croak "Cannot inflate_column: No schema instance available"
-        unless $self->{schema};
-
-    # 2. Get the Source metadata
-    my $source = eval { $self->_schema_instance->source($source_name) };
-
-    if (!$source) {
-        croak "Could not find result source for '$source_name'.";
-    }
-
-    # 3. Inject the handlers into the Source's column info
-    my $col_info = $source->column_info($column);
-    croak "Column '$column' does not exist in source '$source_name'"
-        unless keys %$col_info;
-
-    $source->add_column($column => {
-        %$col_info,
-        inflate => $handlers->{inflate},
-        deflate => $handlers->{deflate},
-    });
-}
-
-=head2 loop
-
-Returns the L<IO::Async::Loop> instance.
-
-    my $loop = $async_db->loop;
-
-=cut
-
-sub loop {
-    my $self = shift;
-    return $self->{loop};
-}
-
-=head2 raw_query
-
-Executes raw SQL query.
-
-    my $results = await $async_db->raw_query(
-        'SELECT * FROM users WHERE age > ? AND status = ?',
-        [25, 'active']  # Optional bind values
-    );
-
-Returns: Arrayref of hashrefs.
-
-=cut
-
-sub raw_query {
-    my ($self, $query, $bind_values) = @_;
-
-    state $check = compile(Str, Maybe[ArrayRef]);
-    $check->($query, $bind_values);
-
-    $self->{stats}{queries}++;
-    $self->_record_metric('inc', 'db_async_queries_total');
-
-    my $start_time = time;
-
-    return $self->_call_worker('raw_query', $query, $bind_values)->then(sub {
-        my ($result) = @_;
-        my $duration = time - $start_time;
-        $self->_record_metric('observe', 'db_async_query_duration_seconds', $duration);
-
-        if (my $error = $self->_check_response($result)) {
-            return Future->fail($error);
-        }
-
-        return Future->done($result);
-    });
-}
-
-=head2 resultset
-
-  my $rs = $async_db->resultset('User');
-
-Returns a L<DBIx::Class::Async::ResultSet> object for the specified source name.
-This is the primary entry point for performing asynchronous queries against
-your database.
-
-=over 4
-
-=item * C<$source_name>
-
-The name of the ResultSource (e.g., 'User', 'Product') as defined in your
-C<DBIx::Class> schema.
-
-=back
-
-B<DESIGN DECISIONS & DIFFERENCES FROM L<DBIx::Class>>
-
-=over 4
-
-=item B<Deferred Execution (Promises/Futures)>
-
-In standard L<DBIx::Class>, calling C<search> on a ResultSet often triggers
-immediate database activity. In C<DBIx::Class::Async>, the ResultSet acts
-as a factory for L<Future> objects. No database interaction occurs until
-terminal methods (like C<find>, C<update>, or C<search> in a specific context)
-are called and awaited.
-
-=item B<Decoupled Architecture>
-
-In standard L<DBIx::Class>, the ResultSet is tightly coupled to the C<Storage>
-engine. In this implementation, the ResultSet is a "thin" wrapper that
-communicates with the database via the C<async_db> driver. This decoupling
-allows the ResultSet to be used in non-blocking environments (like IO::Async
-or Mojo) without stalling the main event loop.
-
-=item B<Implicit Metadata Resolution>
-
-The ResultSet automatically resolves its internal metadata by calling
-C<_schema_instance> on the parent object. This differs from standard DBIC
-where the ResultSet usually inherits an already-active connection. Here,
-the connection state is managed by the C<async_db> worker, while the
-ResultSet manages the query logic.
-
-=back
-
-=cut
-
-sub resultset {
-    my ($self, $source_name) = @_;
-
-    require DBIx::Class::Async::ResultSet;
-    return DBIx::Class::Async::ResultSet->new(
-        async_db    => $self,
-        source_name => $source_name,
-        schema      => $self->_schema_instance,
-    );
-}
-
-=head2 schema_class
-
-Returns the schema class name.
-
-    my $class = $async_db->schema_class;
-
-=cut
-
-sub schema_class {
-    my $self = shift;
-    return $self->{schema_class};
-}
-
-=head2 search
-
-Performs a search query.
-
-    my $results = await $async_db->search(
-        $resultset_name,
-        $search_conditions,    # Optional hashref
-        $attributes,           # Optional hashref
-    );
-
-Attributes may include:
-
-    {
-        order_by  => 'name DESC',
-        rows      => 50,
-        page      => 2,
-        columns   => [qw/id name/],
-        prefetch  => 'relation',
-        cache     => 1,
-        cache_key => 'custom_key',
-    }
-
-All results are returned as arrayrefs of hashrefs.
-
-=cut
-
-sub search {
-    my ($self, $resultset, $search_args, $attrs) = @_;
-
-    # Change HashRef to allow ArrayRef and ScalarRef (for literal SQL)
-    state $check = compile(Str, Maybe[ HashRef | ArrayRef | ScalarRef ], Maybe[HashRef]);
-    $check->($resultset, $search_args, $attrs);
-
-    $self->{stats}{queries}++;
-    $self->_record_metric('inc', 'db_async_queries_total');
-
-    my $use_cache = exists $attrs->{cache}
-        ? delete $attrs->{cache}
-        : defined $self->{cache_ttl};
-
-    my $cache_key;
-    if ($use_cache) {
-        $cache_key = delete $attrs->{cache_key}
-            // _generate_cache_key('search', $resultset, $search_args, $attrs);
-    }
-
-    if ($use_cache) {
-        my $cached = $self->{cache}->get($cache_key);
-        if ($cached) {
-            $self->{stats}{cache_hits}++;
-            $self->_record_metric('inc', 'db_async_cache_hits_total');
-
-            # Transform cached raw hashrefs into Row objects
-            my $rows = [ map { $self->_inflate_row($resultset, $_) } @$cached ];
-
-            return Future->done($rows);
-        }
-        $self->{stats}{cache_misses}++;
-        $self->_record_metric('inc', 'db_async_cache_misses_total');
-    }
-
-    my $start_time = time;
-
-    my $future = $self->{enable_retry}
-        ? $self->_call_with_retry('search', $resultset, $search_args, $attrs)
-        : $self->_call_worker('search', $resultset, $search_args, $attrs);
-
-    return $future->then(sub {
-        my ($result) = @_;
-
-        my $duration = time - $start_time;
-        $self->_record_metric('observe', 'db_async_query_duration_seconds', $duration);
-
-        # 1. Intercept errors before they touch the cache or the map
-        if (my $error = $self->_check_response($result)) {
-            return Future->fail($error);
-        }
-
-        # 2. Now it is safe to cache
-        if ($use_cache && defined $self->{cache_ttl}) {
-            $self->{cache}->set($cache_key, $result, $self->{cache_ttl});
-        }
-
-        # 3. Now it is safe to inflate (we know it's an ArrayRef)
-        my $rows = [ map { $self->_inflate_row($resultset, $_) } @$result ];
-
-        return Future->done($rows);
-    });
-}
-
-=head2 search_multi
-
-Executes multiple search queries concurrently.
-
-    my @results = await $async_db->search_multi(
-        ['User',    { active => 1 }, { rows => 10 }],
-        ['Product', { category => 'books' }],
-        ['Order',   undef, { order_by => 'created_at DESC', rows => 5 }],
-    );
-
-Returns: Array of results in the same order as queries.
-
-=cut
-
-sub search_multi {
-    my ($self, @queries) = @_;
-
-    my $start_time = time;
-
-    # 1. Reuse the hardened search() method for each query
-    my @futures = map {
-        my ($resultset, $search_args, $attrs) = @$_;
-        $self->search($resultset, $search_args, $attrs)
-    } @queries;
-
-    # 2. Use needs_all so the entire batch fails if ANY single query fails
-    return Future->needs_all(@futures)->then(sub {
-        my @results = @_;
-
-        my $duration = time - $start_time;
-        $self->_record_metric('observe', 'db_async_query_duration_seconds', $duration);
-
-        # Results are now already inflated Row objects and error-checked
-        return Future->done(@results);
-    });
-}
-
-=head2 search_with_prefetch
-
-    my $future = $async_db->search_with_prefetch(
-        $source_name,
-        \%condition,
-        $prefetch_spec,
-        \%extra_attributes
-    );
-
-Performs an asynchronous search while eager-loading related data. This method
-is specifically designed to solve the "N+1 query" problem in an asynchronous
-environment.
-
-Arguments:
-
-=over 4
-
-=item * C<$source_name>: The name of the ResultSource (e.g., 'User').
-
-=item * C<\%condition>: A standard C<DBIx::Class> search condition.
-
-=item * C<$prefetch_spec>: A standard C<prefetch> attribute (string, arrayref, or hashref).
-
-=item * C<\%extra_attributes>: Optional search attributes (order_by, rows, etc.).
-
-=back
-
-This method performs "Deep Serialiisation." Since C<DBIx::Class> row objects
-contain live database handles that cannot be sent across process boundaries,
-this method ensures that the background worker:
-
-=over 4
-
-=item 1. Executes the join and B<collapses> the result set to avoid duplicate parent rows.
-
-=item 2. Recursively converts the nested object tree into a transportable data structure.
-
-=item 3. Transports the data to the parent process where it is re-inflated into
-L<DBIx::Class::Async::Row> objects, with the relationship data accessible
-via standard accessors.
-
-=back
-
-B<Note:> Unlike standard C<DBIx::Class>, accessing a relationship that was
-B<not> prefetched will fail, as the result row does not have a persistent
-connection to the database in the parent process.
-
-=cut
-
-sub search_with_prefetch {
-    my ($self, $source_name, $cond, $prefetch, $attrs) = @_;
-    $attrs ||= {};
-
-    # We force these into the attributes so execute_operation sees them
-    $attrs->{prefetch} = $prefetch;
-    $attrs->{collapse} = 1;
-
-    # We call our existing async search, which eventually
-    # triggers execute_operation in the worker
-    return $self->search($source_name, $cond, $attrs)
-        ->then(sub {
-            my ($rows) = @_;
-
-            # Check if we need to deflate these for the test
-            if (($attrs->{result_class} // '') eq 'DBIx::Class::ResultClass::HashRefInflator') {
-                my @deflated = map {
-                     # { %$_ } creates a NEW unblessed hash reference
-                     # This satisfies the (ref eq 'HASH') check
-                     my $hash = { %$_ };
-
-                     # Clean up any internal keys that might have been blessed
-                     delete $hash->{_source};
-                     delete $hash->{_result_source};
-
-                     $hash;
-                } @$rows;
-
-                return Future->done(\@deflated);
-            }
-
-            return Future->done($rows);
-        });
-}
-
-=head2 stats
-
-Returns statistics about database operations.
-
-    my $stats = $async_db->stats;
-
-Returns: Hashref with query counts, cache hits, errors, etc.
-
-=cut
-
-sub stats {
-    my $self = shift;
-    return { %{$self->{stats}} };  # Return copy
-}
-
-=head2 txn_batch
-
-Executes a batch of operations within a transaction. This is the recommended
-alternative to C<txn_do> as it avoids CODE reference serialisation issues.
-
-    my $result = await $async_db->txn_batch(
-        # Update operations
-        { type => 'update', resultset => 'Account', id => 1,
-          data => { balance => \'balance - 100' } },
-        { type => 'update', resultset => 'Account', id => 2,
-          data => { balance => \'balance + 100' } },
-
-        # Create operation
-        { type => 'create', resultset => 'Log',
-          data => { event => 'transfer', amount => 100, timestamp => \'NOW()' } },
-    );
-
-    # Returns count of successful operations
-    say "Executed $result operations in transaction";
-
-Supported operation types:
-
-=over 4
-
-=item * B<update> - Update an existing record
-
-    {
-        type      => 'update',
-        resultset => 'User',       # ResultSet name
-        id        => 123,          # Primary key value
-        data      => { name => 'New Name', status => 'active' }
-    }
-
-=item * B<create> - Create a new record
-
-    {
-        type      => 'create',
-        resultset => 'Order',
-        data      => { user_id => 1, amount => 99.99, status => 'pending' }
-    }
-
-=item * B<delete> - Delete a record
-
-    {
-        type      => 'delete',
-        resultset => 'Session',
-        id        => 456
-    }
-
-=item * B<raw> - Execute raw SQL (Atomic)
-
-    {
-        type => 'raw',
-        sql  => 'UPDATE accounts SET balance = balance - ? WHERE id = ?',
-        bind => [100, 1]
-    }
-
-Executes a raw SQL statement via the worker's database handle. B<Note:> Always
-use placeholders (C<?> and the C<bind> attribute) to prevent SQL injection.
-
-=back
-
-B<Literal SQL Support>
-
-All C<data> hashes support standard L<DBIx::Class> literal SQL via scalar
-references, for example: C<< data => { updated_at => \'NOW()' } >>. These are
-safely serialised and executed within the worker transaction.
-
-B<Atomicity and Error Handling>
-
-All operations within the batch are wrapped in a single database transaction.
-If any operation fails (e.g., a constraint violation or a missing record),
-the worker will immediately:
-
-=over 4
-
-=item 1. Roll back all changes made within that batch.
-
-=item 2. Fail the L<Future> in the parent process with the specific error message.
-
-=back
-
-B<Note on Concurrency:> This entire batch is dispatched to a single worker
-process to ensure that the transaction maintains ACID properties. While the
-batch is running, that specific worker is "pinned" and unavailable for other
-queries.
-
-=cut
-
-sub txn_batch {
-    my $self = shift;
-
-    # Allow both txn_batch([$h1, $h2]) and txn_batch($h1, $h2)
-    my @operations = (ref $_[0] eq 'ARRAY') ? @{$_[0]} : @_;
-
-    # 1. Validate operations
-    for my $op (@operations) {
-        unless (ref $op eq 'HASH' && $op->{type}) {
-            croak "Each operation must be a hashref with 'type' key";
-        }
-
-        if ($op->{type} eq 'update' || $op->{type} eq 'delete') {
-            croak "Operation type '$op->{type}' requires 'id' parameter"
-                unless exists $op->{id};
-        }
-
-        if ($op->{type} eq 'update' || $op->{type} eq 'create') {
-            croak "Operation type '$op->{type}' requires 'data' parameter"
-                unless ref $op->{data} eq 'HASH';
-        }
-
-        if ($op->{type} eq 'raw') {
-            croak "Operation type 'raw' requires 'sql' parameter"
-                unless $op->{sql};
-        }
-    }
-
-    # 2. Stats and Cache
-    $self->{stats}{queries}++;
-    $self->_record_metric('inc', 'db_async_queries_total');
-
-    if (defined $self->{cache_ttl} && $self->{cache_ttl} > 0) {
-        $self->{cache}->clear;
-    }
-
-    my $start_time = time;
-
-    # 3. Execution
-    return $self->_call_worker('txn_batch', \@operations)->then(sub {
-        my ($result) = @_;
-        my $duration = time - $start_time;
-        $self->_record_metric('observe', 'db_async_query_duration_seconds', $duration);
-
-        if (my $error = $self->_check_response($result)) {
-            return Future->fail($error);
-        }
-
-        return Future->done($result);
-    })->catch(sub {
-        my ($error) = @_;
-        return Future->fail("Batch Transaction Failed: $error");
-    });
-}
-
-=head2 txn_do
-
-Executes a transaction.
-
-    my $result = await $async_db->txn_do(sub {
-        my $schema = shift;
-
-        # Multiple operations that should succeed or fail together
-        $schema->resultset('Account')->find(1)->update({ balance => \'balance - 100' });
-        $schema->resultset('Account')->find(2)->update({ balance => \'balance + 100' });
-
-        return 'transfer_complete';
-    });
-
-The callback receives a L<DBIx::Class::Schema> instance and should return the
-transaction result.
-
-B<IMPORTANT:> This method has limitations due to serialisation constraints.
-The CODE reference passed to C<txn_do> must be serialisable by L<Sereal>,
-which may not support anonymous subroutines or CODE references with closed
-over variables in all configurations.
-
-If you encounter serialisation errors, consider:
-
-=over 4
-
-=item * Using named subroutines instead of anonymous ones
-
-=item * Recompiling L<Sereal> with C<ENABLE_SRL_CODEREF> support
-
-=item * Using individual async operations instead of transactions
-
-=item * Using the C<txn_batch> method for predefined operations
-
-=back
-
-Common error: C<Found type 13 CODE(...), but it is not representable by the
-Sereal encoding format>
-
-=cut
-
-sub txn_do {
-    my ($self, $code) = @_;
-
-    state $check = compile(CodeRef);
-    $check->($code);
-
-    $self->{stats}{queries}++;
-    $self->_record_metric('inc', 'db_async_queries_total');
-
-    if (defined $self->{cache_ttl} && $self->{cache_ttl} > 0) {
-        $self->{cache}->clear;
-    }
-
-    my $start_time = time;
-
-    # Try to pass the CODE ref directly - this might fail with Sereal
-    # but let the error propagate naturally
-    return $self->_call_worker('txn_do', $code)->then(sub {
-        my ($result) = @_;
-        my $duration = time - $start_time;
-        $self->_record_metric('observe', 'db_async_query_duration_seconds', $duration);
-        return Future->done($result);
-    })->catch(sub {
-        my $error = shift;
-        # If it fails due to serialisation, provide a better error message
-        if ($error =~ /not representable by the Sereal encoding format/) {
-            return Future->fail(
-                "txn_do cannot serialise CODE references through IO::Async workers. " .
-                "Consider using individual async methods or a different approach."
-            );
-        }
-        return Future->fail($error);
-    });
-}
-
-=head2 update
-
-Updates an existing row.
-
-    my $updated_row = await $async_db->update(
-        $resultset_name,
-        $id,
-        { name => 'Jane', status => 'active' }
-    );
-
-Returns: Hashref of updated row data or undef if row not found.
-
-=cut
-
-sub update {
-    my ($self, $resultset, $id, $data) = @_;
-
-    state $check = compile(Str, Int|Str|HashRef, HashRef);
-    $check->($resultset, $id, $data);
-
-    $self->{stats}{queries}++;
-    $self->_record_metric('inc', 'db_async_queries_total');
-
-    $self->_invalidate_cache_for($resultset);
-    $self->_invalidate_cache_for("$resultset:$id");
-
-    my $start_time = time;
-
-    return $self->_call_worker('update', $resultset, $id, $data)->then(sub {
-        my ($result) = @_;
-        my $duration = time - $start_time;
-        $self->_record_metric('observe', 'db_async_query_duration_seconds', $duration);
-
-        # 1. SUCCESSFUL SINGLE UPDATE: Re-fetch and return the Row object
-        if ($result eq "1" && !ref $id) {
-            return $self->find($resultset, $id);
-        }
-
-        # 2. FAILED SINGLE UPDATE: Return undef
-        if ($result eq "0" && !ref $id) {
-            return Future->done(undef);
-        }
-
-        # 3. BULK UPDATE: Return the count (e.g., "0", "5", "50")
-        return Future->done($result);
-    });
-}
-
-=head2 update_bulk
-
-    $db->update_bulk($table, $condition, $data);
-
-Performs a bulk update operation on multiple rows in the specified table.
-
-This method updates all rows in the given table that match the specified
-conditions with the provided data values. It is particularly useful for
-batch operations where multiple records need to be modified with the same
-set of changes.
-
-=over 4
-
-=item Parameters
-
-=over 8
-
-=item C<$table>
-
-The name of the table to update (String, required).
-
-=item C<$condition>
-
-A hash reference specifying the WHERE conditions for selecting rows to update.
-Each key-value pair in the hash represents a column and its required value.
-Rows matching ALL conditions will be updated (HashRef, required).
-
-Example: C<< { status => 'pending', active => 1 } >>
-
-=item C<$data>
-
-A hash reference containing the column-value pairs to update.
-Each key-value pair specifies a column and its new value (HashRef, required).
-
-Example: C<< { status => 'processed', updated_at => '2024-01-01 10:00:00' } >>
-
-=back
-
-=item Returns
-
-Returns the result of the update operation from the worker. Typically this
-would be the number of rows affected or a success indicator, depending on
-your worker implementation.
-
-=item Exceptions
-
-=over 4
-
-=item *
-
-Throws a validation error if any parameter does not match the expected type.
-
-=item *
-
-Throws an exception if the underlying worker call fails.
-
-=back
-
-=item Examples
-
-    # Update all pending orders from a specific customer
-    my $result = $db->update_bulk(
-        'orders',
-        { customer_id => 123, status => 'pending' },
-        { status      => 'processed', processed_at => \'NOW()' }
-    );
-
-    print "Updated $result rows\n";
-
-    # Deactivate all users who haven't logged in since 2023
-    $db->update_bulk(
-        'users',
-        { last_login => { '<' => '2023-01-01' } },
-        { active     => 0, deactivation_date => \'CURRENT_DATE' }
-    );
-
-=back
-
-=cut
-
-sub update_bulk {
-    my ($self, $table, $condition, $data) = @_;
-
-    state $check = compile(Str, HashRef, HashRef);
-    $check->($table, $condition, $data);
-
-    $self->{stats}{queries}++;
-    $self->_record_metric('inc', 'db_async_queries_total');
-    $self->_invalidate_cache_for($table);
-
-    my $start_time = time;
-
-    return $self->_call_worker('update_bulk', $table, $condition, $data)->then(sub {
-        my ($result) = @_;
-
-        # 2. Metrics
-        my $duration = time - $start_time;
-        $self->_record_metric('observe', 'db_async_query_duration_seconds', $duration);
-
-        # 3. Standard error check
-        if (my $error = $self->_check_response($result)) {
-            return Future->fail($error);
-        }
-
-        # Bulk updates usually return the count of affected rows
-        return Future->done($result);
-    });
+    return 1;
 }
 
 #
 #
-# INTERNAL METHODS
-
-sub _build_default_cache {
-    my ($ttl) = @_;
-
-    my %params = (
-        driver => 'Memory',
-        global => 1,
-    );
-
-    # Add expires_in only if ttl is defined (undef means never expire in CHI)
-    $params{expires_in} = $ttl if defined $ttl;
-
-    return CHI->new(%params);
-}
+# PRIVATE METHODS
 
 sub _call_worker {
-    my ($self, $operation, @args) = @_;
+    my ($db, $operation, @args) = @_;
 
-    my $worker = $self->_next_worker;
+    warn "[PID $$] Bridge - sending '$operation' to worker." if ASYNC_TRACE;
 
-    return $worker->call(
+    my $worker = _next_worker($db);
+
+    my $future = $worker->call(
         args => [
-            $self->{schema_class},
-            $self->{connect_info},
-            $self->{workers_config},
+            $db->{_schema_class},
+            $db->{_connect_info},
+            $db->{_workers_config},
             $operation,
             @args,
         ],
-        timeout => $self->{workers_config}{query_timeout},
     );
+
+    # Use followed_by which handles both nested and non-nested Futures
+    return $future->followed_by(sub {
+        my ($f) = @_;
+
+        # Handle failure
+        if ($f->is_failed) {
+            $db->{_stats}->{_errors}++;
+            return Future->fail($f->failure);
+        }
+
+        # Get the result
+        my $result = ($f->get)[0];
+
+        # If result is itself a Future, flatten it
+        if (Scalar::Util::blessed($result) && $result->isa('Future')) {
+            return $result->followed_by(sub {
+                my ($inner_f) = @_;
+
+                if ($inner_f->is_failed) {
+                    $db->{_stats}->{_errors}++;
+                    return Future->fail($inner_f->failure);
+                }
+
+                my $inner_result = ($inner_f->get)[0];
+
+                # Check for worker errors
+                if (ref($inner_result) eq 'HASH' && exists $inner_result->{error}) {
+                    $db->{_stats}->{_errors}++;
+                    return Future->fail($inner_result->{error});
+                }
+
+                $db->{_stats}->{_queries}++
+                    unless $operation =~ /^(?:ping|health_check|deploy)$/;
+                return Future->done($inner_result);
+            });
+        }
+
+        # Not a nested Future - handle normally
+        # Check for worker errors
+        if (ref($result) eq 'HASH' && exists $result->{error}) {
+            $db->{_stats}->{_errors}++;
+            return Future->fail($result->{error});
+        }
+
+        $db->{_stats}->{_queries}++
+            unless $operation =~ /^(?:ping|health_check|deploy)$/;
+        return Future->done($result);
+    });
 }
 
-sub _call_with_retry {
-    my ($self, $operation, @args) = @_;
+sub _init_workers {
+    my $db = shift;
 
-    my $retry_config = $self->{retry_config};
-    my $max_retries  = $retry_config->{max_retries};
-    my $delay        = $retry_config->{delay};
-    my $factor       = $retry_config->{factor};
+    for my $worker_id (1..$db->{_workers_config}{_count}) {
+        my $worker = IO::Async::Function->new(
+            code => sub {
+                use strict;
+                use warnings;
+                use feature 'state';
 
-    # Start with the initial call
-    my $future = $self->_call_worker($operation, @args);
 
-    # Add retry handlers
-    for my $retry_num (1..$max_retries) {
-        $future = $future->catch(sub {
-            my $error = shift;
+                my ($schema_class, $connect_info, $worker_config, $operation, $payload) = @_;
 
-            # Check if this error should be retried
-            return Future->fail($error) unless $self->_should_retry_error($error);
+                if (ASYNC_TRACE) {
+                    warn "[PID $$] Worker CODE block started";
+                    warn "[PID $$] Worker received " . scalar(@_) . " arguments";
+                    warn "[PID $$] Schema class: $schema_class";
+                    warn "[PID $$] Operation: $operation";
+                    warn "[PID $$] STAGE 4 (Worker): Received operation: $operation";
+                }
 
-            $self->{stats}{retries}++;
+                my $deflator;
+                $deflator = sub {
+                    my ($data) = @_;
+                    return $data unless defined $data;
 
-            # Calculate delay with exponential backoff
-            my $current_delay = $delay * ($factor ** ($retry_num - 1));
-
-            # Delay then retry with a fresh call
-            return $self->{loop}->delay_future(after => $current_delay)
-                ->then(sub {
-                    return $self->_call_worker($operation, @args);
-                });
-        });
-    }
-
-    return $future;
-}
-
-sub _deflate_args {
-    my ($self, $source_name, $data) = @_;
-    return $data unless ref $data eq 'HASH';
-
-    my $source = $self->_schema_instance->source($source_name);
-    my %deflated = %$data;
-
-    for my $col (keys %deflated) {
-        my $info = $source->column_info($col);
-
-        if ($info->{deflate} && defined $deflated{$col} && ref $deflated{$col}) {
-            $deflated{$col} = $info->{deflate}->($deflated{$col}, $self);
-        }
-    }
-    return \%deflated;
-}
-
-sub _execute_operation {
-    my ($schema, $operation, @args) = @_;
-
-    if ($operation eq 'search') {
-        my ($resultset, $search_args, $attrs) = @args;
-
-        my $results = eval {
-            my $rs = $schema->resultset($resultset);
-
-            # Use collapse if prefetch is present to avoid duplicate parent rows
-            if ($attrs->{prefetch}) {
-                $attrs->{collapse} = 1;
-            }
-
-            $rs = $rs->search($search_args || {}, $attrs || {});
-            my @rows = $rs->all;
-
-            # 1. If user used HashRefInflator, rows are already plain hashes
-            if (($attrs->{result_class} || '') =~ /HashRefInflator/) {
-                return [ map { { %$_, _in_storage => 1 } } @rows ];
-            }
-
-            # 2. Otherwise, we must recursively turn Objects into Nested Hashes
-            my @results = map {
-                _serialise_row_with_prefetch($_, $attrs->{prefetch})
-            } @rows;
-
-            \@results;
-        };
-
-        if ($@) {
-            die "Search operation failed: $@";
-        }
-
-        return $results;
-    }
-    elsif ($operation eq 'find') {
-        my ($source_name, $id, $attrs) = @args;
-
-        my $row = eval {
-            my $rs = $schema->resultset($source_name);
-
-            # Step 1: Normalise the condition to a HashRef if it's a scalar
-            my $query_cond = ref $id
-                ? $id
-                : { ($rs->result_source->primary_columns)[0] => $id };
-
-            # Step 2: Explicitly set rows => 1 in a fresh resultset
-            my $limited_rs = $rs->search($query_cond, { %{$attrs || {}}, rows => 1 });
-
-            # Step 3: Use first()
-            return $limited_rs->first;
-        };
-
-        if ($@) { die "Find operation failed on $source_name: $@"; }
-
-        return $row ? _serialise_row_with_prefetch($row, $attrs->{prefetch}) : undef;
-    }
-    elsif ($operation eq 'create') {
-        my ($source_name, $data) = @args;
-        try {
-            my $rs  = $schema->resultset($source_name);
-            my $row = $rs->create($data);
-
-            $row->discard_changes;
-
-            return { $row->get_columns };
-        }
-        catch {
-            return { __error => $_ };
-        }
-    }
-    elsif ($operation eq 'populate') {
-        my ($source_name, $data) = @args;
-        try {
-            my $rs = $schema->resultset($source_name);
-
-            # DBIC's populate returns objects or data depending on context.
-            # Here we call it and ensure we return the column data for the async side
-            # to re-inflate into objects.
-            my @rows = $rs->populate($data);
-
-            return [ map { { $_->get_columns } } @rows ];
-        }
-        catch {
-            return { __error => $_ };
-        }
-    }
-    elsif ($operation eq 'populate_bulk') {
-        my ($source_name, $data) = @args;
-        try {
-            # Calling in void context triggers DBIC's fast path
-            $schema->resultset($source_name)->populate($data);
-            return { success => 1 };
-        }
-        catch {
-            return { __error => $_ };
-        }
-    }
-    elsif ($operation eq 'update') {
-        my ($source_name, $id, $data, $attrs) = @args;
-
-        return eval {
-            my $rs = $schema->resultset($source_name);
-
-            # 1. Standardise the condition
-            # (Handles scalar ID or bulk HashRef)
-            my $cond = ref $id
-                ? $id
-                : { ($rs->result_source->primary_columns)[0] => $id };
-
-            # 2. Perform update and get count
-            # Adding { rows => undef } or similar isn't needed here,
-            # because ->update on a resultset returns the count.
-            my $rows_affected = $rs->search($cond)->update($data);
-
-            # 3. Always return the count (numeric 0 instead of 0E0)
-            return $rows_affected + 0;
-        };
-    }
-    elsif ($operation eq 'update_bulk') {
-        my ($source_name, $condition, $data) = @args;
-
-        # Use eval or your try/catch, but ensure the error propagates
-        my $count = eval {
-            my $rs = $schema->resultset($source_name);
-            $rs = $rs->search($condition) if $condition && %$condition;
-
-            # This executes a single UPDATE statement in the DB
-            $rs->update($data);
-        };
-
-        if ($@) {
-            # Log the error or re-throw so the Future in the main process fails
-            die "Bulk update failed on $source_name: $@";
-        }
-
-        return $count; # Returns number of rows updated
-    }
-    elsif ($operation eq 'delete') {
-        my ($source_name, $id, $attrs) = @args;
-
-        my $result = eval {
-            my $rs = $schema->resultset($source_name);
-
-            return 0 unless defined $id && $id ne '';
-
-            # SAFETY: If condition is empty/undef, don't delete everything!
-            if (!defined $id || (ref $id eq 'HASH' && !keys %$id) || $id eq '') {
-                return 0;
-            }
-
-            # If $id is just a number/string, find the PK column name
-            my $cond = $id;
-            if (!ref $id) {
-                my ($pk) = $rs->result_source->primary_columns;
-                $cond = { $pk => $id };
-            }
-
-            my $rows = $rs->search($cond)->delete;
-
-            return $rows + 0;
-        };
-
-        if ($@) {
-            my $err = $@ || 'No error message captured';
-            $err = $err->{msg} if ref $err eq 'HASH' && $err->{msg};
-            die "Delete operation failed on $source_name: $err";
-        };
-
-        return $result; # This now returns the real count (0, 1, or 50)
-    }
-    elsif ($operation eq 'count') {
-        my ($source_name, $search_args, $attrs) = @args;
-
-        my $count = eval {
-            my $rs = $schema->resultset($source_name);
-            my $query_rs = $rs->search($search_args || {}, $attrs || {});
-
-            # If is_subquery is present, we want the count of the SLICE
-            if ($attrs && $attrs->{is_subquery}) {
-                my $subquery = $query_rs->as_query;
-
-                # Create a virtual ResultSet using the subquery as the 'from' source
-                return $schema->resultset($source_name)->search(
-                    {},
-                    {
-                        from => [ { subq => $subquery } ],
-                        alias => 'subq'
+                    if ( eval { $data->isa('DBIx::Class::Row') } ) {
+                        my %cols = $data->get_inflated_columns;
+                        # Recurse for prefetched relations
+                        foreach my $k (keys %cols) {
+                            if (ref $cols{$k}) { $cols{$k} = $deflator->($cols{$k}) }
+                        }
+                        return \%cols;
                     }
-                )->count;
-            }
 
-            # Standard count (ignores rows/offset)
-            return $query_rs->count;
-        };
+                    if ( eval { $data->isa('DBIx::Class::ResultSet') } ) {
+                        return [ map { $deflator->($_) } $data->all ];
+                    }
+                    if ( ref($data) eq 'ARRAY' ) {
+                        return [ map { $deflator->($_) } @$data ];
+                    }
 
-        if ($@) {
-            my $err = $@ || 'Unknown DBIC count error';
-            die "Count operation failed on $source_name: $err";
-        }
+                    return $data;
+                };
 
-        return $count;
-    }
-    elsif ($operation eq 'raw_query') {
-        my ($query, $bind_values) = @args;
-        my $sth = $schema->storage->dbh->prepare($query);
-        $sth->execute(@{$bind_values || []});
-        return $sth->fetchall_arrayref({});
-    }
-    elsif ($operation eq 'txn_do') {
-        my ($code) = @args;
-        return $schema->txn_do($code);
-    }
-    elsif ($operation eq 'txn_batch') {
-        my ($operations) = @args;
+                # Create or reuse schema connection
+                state $schema_cache = {};
+                my $pid = $$;
 
-        return $schema->txn_do(sub {
-            my $success_count = 0;
+                warn "[PID $$] Checking schema cache for PID $pid" if ASYNC_TRACE;
 
-            foreach my $op (@$operations) {
-                if ($op->{type} eq 'update') {
-                    my $row = $schema->resultset($op->{resultset})->find($op->{id});
-                    croak "Record not found for update: $op->{resultset} ID $op->{id}"
-                        unless $row;
-                    $row->update($op->{data});
-                    $success_count++;
+                unless (exists $schema_cache->{$pid}) {
+                    if (ASYNC_TRACE) {
+                        warn "[PID $$] Worker initialising new schema connection";
+                        warn "[PID $$] About to require $schema_class";
+                    }
+
+
+                    # Load schema class in worker process
+                    my $require_result = eval "require $schema_class; 1";
+                    if (!$require_result || $@) {
+                        my $err = $@ || 'Unknown error';
+                        warn "[PID $$] FAILED to load schema class: $err"
+                            if ASYNC_TRACE;
+                        die "Worker Load Fail: $err";
+                    }
+
+                    warn "[PID $$] Schema class loaded successfully"
+                        if ASYNC_TRACE;
+
+                    unless ($schema_class->can('connect')) {
+                        warn "[PID $$] Schema class has no 'connect' method!"
+                            if ASYNC_TRACE;
+                        die "Schema class $schema_class does not provide 'connect' method";
+                    }
+
+                    warn "[PID $$] Attempting database connection..."
+                        if ASYNC_TRACE;
+
+                    # Connect to database
+                    my $schema = eval { $schema_class->connect(@$connect_info); };
+                    if ($@) {
+                        warn "[PID $$] Database connection FAILED: $@"
+                            if ASYNC_TRACE;
+                        die "Failed to connect to database: $@";
+                    }
+                    unless (defined $schema) {
+                        warn "[PID $$] Schema connection returned undef!"
+                            if ASYNC_TRACE;
+                        die "Schema connection returned undef";
+                    }
+
+                    warn "[PID $$] Database connected successfully"
+                        if ASYNC_TRACE;
+
+                    $schema_cache->{$pid} = $schema;
+
+                    warn "[PID $$] Worker initialisation complete"
+                        if ASYNC_TRACE;
                 }
-                elsif ($op->{type} eq 'create') {
-                    $schema->resultset($op->{resultset})->create($op->{data});
-                    $success_count++;
-                }
-                elsif ($op->{type} eq 'delete') {
-                    my $row = $schema->resultset($op->{resultset})->find($op->{id});
-                    croak "Record not found for delete: $op->{resultset} ID $op->{id}"
-                        unless $row;
-                    $row->delete;
-                    $success_count++;
-                }
-                elsif ($op->{type} eq 'raw') {
-                    my $sth = $schema->storage->dbh->prepare($op->{sql});
-                    $sth->execute(@{$op->{bind} || []});
-                    $success_count++;
-                }
-                else {
-                    croak "Unknown operation type: $op->{type}";
-                }
-            }
 
-            return $success_count;
-        });
-    }
-    elsif ($operation eq 'search_with_prefetch') {
-        my ($resultset, $search_args, $prefetch, $attrs) = @args;
-        $attrs ||= {};
-        $attrs->{prefetch} = $prefetch;
+                warn "[PID $$] STAGE 5 (Worker): Executing operation: $operation"
+                    if ASYNC_TRACE;
 
-        my $rs = $schema->resultset($resultset)->search($search_args || {}, $attrs);
-        return [ map { _inflate_row_with_prefetch($_, $prefetch) } $rs->all ];
-    }
-    elsif ($operation eq 'health_check') {
-        eval {
-            $schema->storage->dbh->ping;
-            $schema->storage->dbh->do('SELECT 1');
-        };
-        return $@ ? 0 : 1;
-    }
-    elsif ($operation eq 'deploy') {
-        my ($sqlt_args, $dir) = @args;
+                my $result = try {
+                    my $schema = $schema_cache->{$pid};
 
-        eval {
-            $schema->deploy($sqlt_args || {}, $dir);
-        };
+                    warn "[PID $$] Schema from cache: " . (defined $schema ? ref($schema) : "UNDEF")
+                        if ASYNC_TRACE;
 
-        if ($@) {
-            return { __error => "Deploy operation failed: $@" };
-        }
+                    if ($operation =~ /^(count|sum|max|min|avg|average)$/) {
+                        warn "[PID $$] STAGE 6 (Worker): Performing aggregate $operation"
+                            if ASYNC_TRACE;
 
-        return { success => 1 };
-    }
-    else {
-        die "Unknown operation: $operation";
-    }
-}
+                        my $source_name = $payload->{source_name};
+                        my $cond        = $payload->{cond}  // {};
+                        my $attrs       = $payload->{attrs} // {};
+                        my $column      = $payload->{column};
 
-sub _generate_cache_key {
-    my ($operation, @args) = @_;
+                        my $rs = $schema->resultset($source_name)->search($cond, $attrs);
 
-    # The first element of @args is almost always the ResultSource name
-    # (e.g., 'User', 'Order'). We extract it to use as a searchable prefix.
-    my $source_prefix = (defined $args[0] && !ref $args[0]) ? $args[0] : 'global';
+                        # Use eval to catch DBIC errors (e.g., column doesn't exist)
+                        my $val = eval {
+                            if ($operation eq 'count') {
+                                return $column ? $rs->get_column($column)->func('COUNT') : $rs->count;
+                            }
 
-    my @clean_args = map {
-        if (!defined $_) {
-            'UNDEF';
-        } elsif (ref $_ eq 'HASH') {
-            my $hashref = $_;
-            join(',', sort map { "$_=>$hashref->{$_}" } keys %$hashref);
-        } elsif (ref $_ eq 'ARRAY') {
-            # Deep join for nested arrays (prefetch/columns)
-            join(',', map { ref $_ ? 'REF' : ($_ // 'UNDEF') } @$_);
-        } elsif (ref $_ eq 'SCALAR') {
-            # Handle Literal SQL like \'NOW()'
-            ${$_};
-        } else {
-            $_;
-        }
-    } @args;
+                            if ($operation =~ /^(avg|average)$/) {
+                                return $rs->get_column($column)->func('AVG');
+                            }
 
-    return join(':', $source_prefix, $operation, md5_hex(join('|', @clean_args)));
-}
+                            return $rs->get_column($column)->$operation;
+                        };
 
-sub _inflate_row {
-    my ($self, $source_name, $data, $in_storage_override) = @_;
-    return undef unless defined $data;
+                        if ($@) {
+                            warn "[PID $$] WORKER ERROR: $@" if ASYNC_TRACE;
+                            return { error => $@ };
+                        }
+                        else {
+                            # IMPORTANT: Force to scalar to avoid HASH(0x...) in Parent
+                            # This stringifies potential Math::BigInt objects or references
+                            warn "[PID $$] $operation complete: $val"
+                                if ASYNC_TRACE;
+                            return defined $val ? "$val" : undef;
+                        }
+                    }
+                    elsif ($operation eq 'search' || $operation eq 'all') {
+                        my $source_name = $payload->{source_name};
+                        my $attrs       = $payload->{attrs} || {};
 
-    if (my $error = $self->_check_response($data)) {
-        return $error;
-    }
+                        # Force collapse so DBIC merges the JOINed rows into nested objects
+                        $attrs->{collapse} = 1 if $attrs->{prefetch};
 
-    # Determine storage state FIRST
-    my $is_in_storage = $in_storage_override;
-    if (!defined $is_in_storage) {
-        $is_in_storage = (ref $data eq 'HASH' && exists $data->{_in_storage})
-            ? $data->{_in_storage} # Check before shallow copy if you like
-            : 0;
-    }
+                        my $rs = $schema->resultset($source_name)->search($payload->{cond}, $attrs);
+                        my @rows = $rs->all;
 
-    # 2. Shallow copy
-    my $inflated = { %$data };
+                        # Use your proven old-design logic here
+                        return [
+                            map { _serialise_row_with_prefetch($_, $attrs->{prefetch}, {}) } @rows
+                        ];
+                    }
+                    elsif ($operation eq 'update') {
+                        my $source_name = $payload->{source_name};
+                        my $cond        = $payload->{cond};
+                        my $updates     = $payload->{updates};
 
-    # 3. Walk the relationships to find nested data
-    my $source = $self->_schema_instance->source($source_name);
+                        if (!$updates || !keys %$updates) {
+                            return 0;
+                        }
+                        else {
+                            return $schema->resultset($source_name)
+                                          ->search($cond)
+                                          ->update($updates);
+                        }
+                    }
+                    elsif ($operation eq 'create') {
+                        my $source_name = $payload->{source_name};
+                        my $data        = $payload->{data};
 
-    # Only walk relationships if the source supports it
-    if ($source->can('relationships')) {
-        foreach my $rel ($source->relationships) {
-            if (exists $inflated->{$rel} && defined $inflated->{$rel}) {
-                my $rel_info   = $source->relationship_info($rel);
-                my $rel_source = $rel_info->{source};
+                        # Perform the actual DBIC insert
+                        my $row = $schema->resultset($source_name)->create($data);
 
-                if (ref $inflated->{$rel} eq 'ARRAY') {
-                    $inflated->{$rel} = [
-                        map {
-                            $self->_inflate_row($rel_source, $_, $is_in_storage)
-                        } @{$inflated->{$rel}}
-                    ];
-                }
-                elsif (ref $inflated->{$rel} eq 'HASH') {
-                    $inflated->{$rel} = $self->_inflate_row($rel_source, $inflated->{$rel}, $is_in_storage);
-                }
-            }
-        }
-    }
+                        # Sync with DB to get the Auto-Increment ID
+                        # Some DBD drivers need this to populate the primary key in the object
+                        $row->discard_changes;
 
-    # 4. Dynamic Subclassing (to satisfy isa_ok checks in tests)
-    my $row_class = "DBIx::Class::Async::Row::$source_name";
-    {
-        no strict 'refs';
-        unless (@{"${row_class}::ISA"}) {
-            @{"${row_class}::ISA"} = ('DBIx::Class::Async::Row');
-        }
-    }
+                        my %raw = $row->get_columns;
+                        my %clean_data;
+                        for my $key (keys %raw) {
+                            # Force stringification/numification to strip any DBIC internal "magic"
+                            $clean_data{$key} = defined $raw{$key} ? "$raw{$key}" : undef;
+                        }
+                        return \%clean_data;
+                    }
+                    elsif ($operation eq 'delete') {
+                        my $source_name = $payload->{source_name};
+                        my $cond        = $payload->{cond};
 
-    return $row_class->new(
-        schema      => $self->_schema_instance,
-        async_db    => $self,
-        source_name => $source_name,
-        row_data    => $inflated,
-        in_storage  => $is_in_storage,
-    );
-}
+                        # Direct delete on the resultset matching the condition
+                        return $schema->resultset($source_name)->search($cond)->delete + 0;
+                    }
+                    elsif ($operation =~ /^populate(?:_bulk)?$/) {
+                        my $source_name = $payload->{source_name};
+                        my $data        = $payload->{data};
 
-sub _inflate_row_with_prefetch {
-    my ($row, $prefetch) = @_;
+                        my $val = eval {
+                            my $rs = $schema->resultset($source_name);
 
-    my $result = {$row->get_columns};
+                            if ($operation eq 'populate') {
+                                # Standard populate can return objects.
+                                # We inflate them to HashRefs to pass back.
+                                my @rows = $rs->populate($data);
+                                return [ map { _serialise_row_with_prefetch($_, undef, {}) } @rows ];
+                            }
+                            else {
+                                # populate_bulk is for speed; typically returns a count or truthy
+                                $rs->populate($data); # DBIC void context usually
+                                return 1;
+                            }
+                        };
 
-    # Handle both single relationship and array of relationships
-    my @rel_names = ref $prefetch eq 'ARRAY' ? @$prefetch : ($prefetch);
+                        if ($@) {
+                            warn "[PID $$] WORKER ERROR: $@" if ASYNC_TRACE;
+                            return { error => "$@" };
+                        }
+                        else {
+                            return $val;
+                        }
+                    }
+                    elsif ($operation eq 'find') {
+                        my $source_name = $payload->{source_name};
+                        my $query       = $payload->{query};
+                        my $attrs       = $payload->{attrs} || {};
 
-    foreach my $rel_name (@rel_names) {
-        # Check if prefetched data exists in related_resultsets
-        if (my $related_resultsets = $row->{related_resultsets}) {
-            if (my $prefetched_data = $related_resultsets->{$rel_name}) {
-                # If it has an all() method (ResultSet), call it to get rows
-                if (ref $prefetched_data && $prefetched_data->can('all')) {
-                    my @related_rows = $prefetched_data->all;
-                    if (@related_rows) {
-                        $result->{$rel_name} = [ map { {$_->get_columns} } @related_rows ];
+                        my $row = $schema->resultset($source_name)->find($query, $attrs);
+
+                        if ($row) {
+                            return _serialise_row_with_prefetch($row, undef, $attrs);
+                        }
+                        else {
+                            return;
+                        }
+                    }
+                    elsif ($operation eq 'deploy') {
+                        my ($sqlt_args, $dir) = (ref $payload eq 'ARRAY') ? @$payload : ($payload);
+                        eval {
+                            $schema->deploy($sqlt_args // {}, $dir);
+                        };
+                        if ($@) {
+                            return { error => "Deploy operation failed: $@" };
+                        }
+                        else {
+                            return { success => 1 };
+                        }
+                    }
+                    elsif ($operation eq 'txn_batch') {
+                        my $operations = $payload;
+
+                        my $batch_result = eval {
+                            $schema->txn_do(sub {
+                                my $success_count = 0;
+                                foreach my $op (@$operations) {
+                                    my $type = $op->{type};
+                                    my $rs_name = $op->{resultset};
+
+                                    if ($type eq 'update') {
+                                        my $row = $schema->resultset($rs_name)->find($op->{id});
+                                        die "Record not found for update: $rs_name ID $op->{id}\n"
+                                            unless $row;
+                                        $row->update($op->{data});
+                                        $success_count++;
+                                    }
+                                    elsif ($type eq 'create') {
+                                        $schema->resultset($rs_name)->create($op->{data});
+                                        $success_count++;
+                                    }
+                                    elsif ($type eq 'delete') {
+                                        my $row = $schema->resultset($rs_name)->find($op->{id});
+                                        die "Record not found for delete: $rs_name ID $op->{id}\n"
+                                            unless $row;
+                                        $row->delete;
+                                        $success_count++;
+                                    }
+                                    elsif ($type eq 'raw') {
+                                        $schema->storage->dbh->do($op->{sql}, undef, @{$op->{bind} || []});
+                                        $success_count++;
+                                    }
+                                    else {
+                                        die "Unknown operation type: $type\n";
+                                    }
+                                }
+                                return { count => $success_count, success => 1 };
+                            });
+                        };
+
+                        if ($@) {
+                            return { error => "Batch Transaction Aborted: $@", success => 0 };
+                        }
+                        else {
+                            return $batch_result;
+                        }
+                    }
+                    elsif ($operation eq 'txn_do') {
+                        my $steps = $payload;
+                        my %register;
+
+                        my $txn_result = eval {
+                            $schema->txn_do(sub {
+                                my @step_results;
+
+                                foreach my $step (@$steps) {
+                                    next unless $step && ref $step eq 'HASH'; # Skip empty/invalid steps
+                                    next unless $step->{action};              # Skip steps with no action
+
+                                    # 1. Resolve variables from previous steps
+                                    # e.g., changing '$user_id' to the actual ID found in step 1
+                                    _resolve_placeholders($step, \%register);
+
+                                    # my $rs = $schema->resultset($step->{resultset});
+                                    my $action = $step->{action};
+                                    my $result_data;
+
+                                    if ($action eq 'raw') {
+                                        # Raw SQL bypasses the Resultset layer
+                                        my $dbh = $schema->storage->dbh;
+                                        $dbh->do($step->{sql}, undef, @{$step->{bind} || []});
+                                        $result_data = { success => 1 };
+                                    }
+                                    else {
+                                        # CRUD operations require a Resultset
+                                        my $rs_name = $step->{resultset}
+                                            or die "txn_do: action '$action' requires a 'resultset' parameter";
+                                        my $rs = $schema->resultset($rs_name);
+
+                                        if ($action eq 'create') {
+                                            my $row = $rs->create($step->{data});
+                                            $result_data = { id => $row->id, data => { $row->get_columns } };
+                                        }
+                                        elsif ($action eq 'find') {
+                                            my $row = $rs->find($step->{id});
+                                            die "txn_do: record not found" unless $row;
+                                            $result_data = { id => $row->id, data => { $row->get_columns } };
+                                        }
+                                        elsif ($action eq 'update') {
+                                            my $row = $rs->find($step->{id});
+                                            die "txn_do: record not found for update" unless $row;
+                                            $row->update($step->{data});
+                                            $result_data = { success => 1, id => $row->id };
+                                        }
+                                    }
+
+                                    if ($step->{name} && $result_data->{id}) {
+                                        $register{ '$' . $step->{name} . '.id' } = $result_data->{id};
+                                    }
+                                    push @step_results, $result_data;
+                                }
+                                return { results => \@step_results, success => 1 };
+                            });
+                        };
+
+                        return $@ ? { error => "Transaction failed: $@", success => 0 }
+                                  : $txn_result;
+                    }
+                    elsif ($operation eq 'txn_begin') {
+                        $schema->storage->txn_begin;
+                        return { success => 1 };
+                    }
+                    elsif ($operation eq 'txn_commit') {
+                        $schema->storage->txn_commit;
+                        return { success => 1 };
+                    }
+                    elsif ($operation eq 'txn_rollback') {
+                        $schema->storage->txn_rollback;
+                        return { success => 1 };
+                    }
+                    elsif ($operation eq 'ping') {
+                        my $alive = eval { $schema->storage->dbh->do("SELECT 1") };
+                        return { success => ($alive ? 1 : 0), status => "pong" };
+                    }
+                    else {
+                        die "Unknown operation: $operation";
                     }
                 }
-                # Already have rows (arrayref)
-                elsif (ref $prefetched_data eq 'ARRAY') {
-                    $result->{$rel_name} = [ map { {$_->get_columns} } @$prefetched_data ];
-                }
-                # Single row object
-                elsif (ref $prefetched_data) {
-                    $result->{$rel_name} = {$prefetched_data->get_columns};
-                }
-            }
-        }
-    }
+                catch {
+                    warn "[PID $$] Worker execution error: $_"
+                        if ASYNC_TRACE;
+                    return { error => "$_", success => 0 };
+                };
 
-    return $result;
+                my $safe_result = $deflator->($result);
+                if (ASYNC_TRACE) {
+                    warn "[PID $$] Worker returning result type: " . ref($safe_result);
+                    warn "[PID $$] Worker returning: $safe_result";
+                }
+                return $safe_result;
+            },
+            max_workers => 1,
+        );
+
+        $db->{_loop}->add($worker);
+
+        push @{$db->{_workers}}, {
+            instance => $worker,
+            healthy  => 1,
+            pid      => undef,
+        };
+    }
 }
 
 sub _init_metrics {
-    my $self = shift;
+    my $db = shift;
 
     # Try to load Metrics::Any
     eval {
@@ -1908,477 +811,280 @@ sub _init_metrics {
 
     # Silently ignore if Metrics::Any is not available
     if ($@) {
-        $self->{enable_metrics} = 0;
+        $db->{_enable_metrics} = 0;
         undef $METRICS;
     }
 }
 
-sub _init_workers {
-    my $self = shift;
-
-    for my $worker_id (1..$self->{workers_config}{count}) {
-        my $worker = IO::Async::Function->new(
-            code => sub {
-                use feature 'state';
-                my ($schema_class, $connect_info, $worker_config, $operation, @op_args) = @_;
-
-                # Get worker PID for state management
-                my $pid = $$;
-
-                # Create or reuse schema connection
-                state $schema_cache = {};
-
-                unless (exists $schema_cache->{$pid}) {
-                    # Load schema class in worker process
-                    eval "require $schema_class; 1;" or do {
-                        my $error = $@ || 'Unknown error loading schema class';
-                        die "Failed to load schema class $schema_class: $error";
-                    };
-
-                    # Verify the class loaded correctly
-                    unless ($schema_class->can('connect')) {
-                        die "Schema class $schema_class does not provide 'connect' method";
-                    }
-
-                    # Connect to database with error handling
-                    my $schema = eval {
-                        $schema_class->connect(@$connect_info);
-                    };
-
-                    if ($@) {
-                        die "Failed to connect to database: $@";
-                    }
-
-                    unless (defined $schema) {
-                        die "Schema connection returned undef";
-                    }
-
-                    $schema_cache->{$pid} = $schema;
-
-                    # Execute on_connect_do statements
-                    if (@{$worker_config->{on_connect_do}}) {
-                        eval {
-                            my $storage = $schema_cache->{$pid}->storage;
-                            my $dbh = $storage->dbh;
-                            $dbh->do($_) for @{$worker_config->{on_connect_do}};
-                        };
-                        if ($@) {
-                            warn "on_connect_do failed: $@";
-                        }
-                    }
-
-                    # Set connection attributes
-                    eval {
-                        $schema_cache->{$pid}->storage->debug(0) unless $ENV{DBIC_TRACE};
-                    };
-
-                    # Verify schema instance has sources
-                    eval {
-                        my @instance_sources = $schema_cache->{$pid}->sources;
-                        unless (@instance_sources) {
-                            # Try to force reload the schema
-                            delete $schema_cache->{$pid};
-                            die "Connected schema instance has no registered sources";
-                        }
-                    };
-                    if ($@) {
-                        # If sources check failed, don't cache this connection
-                        delete $schema_cache->{$pid};
-                        die "Schema validation failed: $@";
-                    }
-                }
-
-                # Execute operation with timeout
-                local $SIG{ALRM} = sub {
-                    die "Query timeout after $worker_config->{query_timeout} seconds\n"
-                };
-
-                alarm($worker_config->{query_timeout});
-
-                my $result;
-                eval {
-                    $result = _execute_operation($schema_cache->{$pid}, $operation, @op_args);
-                };
-                my $error = $@;
-
-                alarm(0);
-
-                if ($error) {
-                    die $error;
-                }
-
-                return $result;
-            },
-            max_workers => 1,  # One process per worker
-        );
-
-        $self->{loop}->add($worker);
-        push @{$self->{workers}}, {
-            instance => $worker,
-            healthy  => 1,
-            pid      => undef,  # Will be set on first use
-        };
-    }
-}
-
-sub _invalidate_cache_for {
-   my ($self, $pattern) = @_;
-
-   return unless defined $self->{cache_ttl} && $self->{cache_ttl} > 0;
-
-   # Simple pattern-based invalidation
-   my @keys = grep { /$pattern/ } $self->{cache}->get_keys;
-   $self->{cache}->remove($_) for @keys;
-}
-
 sub _next_worker {
-    my $self = shift;
+    my ($db) = @_;
 
-    # Simple round-robin selection
-    my $idx    = $self->{worker_idx};
-    my $worker = $self->{workers}[$idx];
+    return unless $db->{_workers} && @{$db->{_workers}};
 
-    $self->{worker_idx} = ($idx + 1) % @{$self->{workers}};
+    $db->{_worker_idx} //= 0;
+
+    die "No workers available" unless $db->{_workers} && @{$db->{_workers}};
+
+    my $idx    = $db->{_worker_idx};
+    my $worker = $db->{_workers}[$idx];
+
+    $db->{_worker_idx} = ($idx + 1) % @{$db->{_workers}};
 
     return $worker->{instance};
 }
 
-sub _normalise_prefetch {
-    my $p = shift;
-    return {} unless $p;
-    return { $p => undef } if !ref $p;
-    return { map { $_ => undef } @$p } if ref $p eq 'ARRAY';
-    return $p if ref $p eq 'HASH';
-    return {};
+sub _start_health_checks {
+    my ($db, $interval) = @_;
+
+    return if $interval <= 0;
+
+    # Try to create the timer
+    eval {
+        require IO::Async::Timer::Periodic;
+
+        my $timer = IO::Async::Timer::Periodic->new(
+            interval => $interval,
+            on_tick  => sub {
+                # Don't use async here - just fire and forget
+                _health_check($db)->retain;
+            },
+        );
+
+        $db->{_loop}->add($timer);
+        $timer->start;
+
+        $db->{_health_check_timer} = $timer;
+    };
+
+    if ($@) {
+        # If repeat fails, try a different approach or disable health checks
+        warn "Failed to start health checks: $@" if ASYNC_TRACE;
+    }
+}
+
+sub _health_check {
+    my $db = shift;
+
+    my @checks = map {
+        my $worker_info = $_;
+        my $worker = $worker_info->{instance};
+        $worker->call(
+            args => [
+                $db->{_schema_class},
+                $db->{_connect_info},
+                $db->{_workers_config},
+                'health_check',
+            ],
+            timeout => 5,
+        )->then(
+        sub {
+            $worker_info->{healthy} = 1;
+            return Future->done(1);
+        },
+        sub {
+            $worker_info->{healthy} = 0;
+            return Future->done(0);
+        })
+    } @{$db->{_workers}};
+
+    return Future->wait_all(@checks)->then(sub {
+        my @results = @_;
+        my $healthy_count = grep { $_->get } @results;
+
+        _record_metric($db, 'set', 'db_async_workers_active', $healthy_count);
+
+        return Future->done($healthy_count);
+    });
 }
 
 sub _record_metric {
-    my ($self, $type, $name, @args) = @_;
+    my ($db, $type, $name, @args) = @_;
 
-    return unless $self->{enable_metrics} && defined $METRICS;
+    return unless $db->{_enable_metrics} && defined $METRICS;
 
     if ($type eq 'inc') {
         $METRICS->inc($name, @args);
-    } elsif ($type eq 'observe') {
+    }
+    elsif ($type eq 'observe') {
         $METRICS->observe($name, @args);
-    } elsif ($type eq 'set') {
+    }
+    elsif ($type eq 'set') {
         $METRICS->set($name, @args);
     }
 }
 
-sub _schema_instance {
-    my $self = shift;
+sub _resolve_placeholders {
+    my ($item, $reg) = @_;
+    return unless defined $item;
 
-    # If we already have it, return it
-    return $self->{schema} if $self->{schema} && ref $self->{schema};
+    if (ref $item eq 'HASH') {
+        for my $key (keys %$item) {
+            if (ref $item->{$key}) {
+                # Dive deeper into nested structures
+                _resolve_placeholders($item->{$key}, $reg);
+            }
+            elsif (defined $item->{$key} && exists $reg->{$item->{$key}}) {
+                # Exact match: Swap '$user.id' for 42
+                $item->{$key} = $reg->{$item->{$key}};
+            }
+            elsif (defined $item->{$key} && !ref $item->{$key}) {
+                # String interpolation: Handle "ID is $user.id"
+                $item->{$key} = _interpolate_string($item->{$key}, $reg);
+            }
+        }
+    }
+    elsif (ref $item eq 'ARRAY') {
+        for my $i (0 .. $#$item) {
+            if (ref $item->[$i]) {
+                _resolve_placeholders($item->[$i], $reg);
+            }
+            elsif (defined $item->[$i] && exists $reg->{$item->[$i]}) {
+                $item->[$i] = $reg->{$item->[$i]};
+            }
+        }
+    }
+}
 
-    # Otherwise, we need to build it from schema_class
-    if ($self->{schema_class}) {
-        my $class = $self->{schema_class};
-        eval "require $class" or die "Could not load $class: $@";
+sub _interpolate_string {
+    my ($string, $reg) = @_;
+    return $string unless $string =~ /\$/;
 
-        # Instantiate the schema (cloning or connecting)
-        $self->{schema} = $class->connect(@{ $self->{connect_info} || [] });
-        return $self->{schema};
+    # Use a regex to find all keys in the register and replace them
+    # Example: "INSERT INTO logs VALUES ('Created user $user.id')"
+    foreach my $key (keys %$reg) {
+        my $val = $reg->{$key};
+        # Escape the key for regex safety (since it contains $)
+        my $quoted_key = quotemeta($key);
+        $string =~ s/$quoted_key/$val/g;
+    }
+    return $string;
+}
+
+sub _build_default_cache {
+    my ($ttl) = @_;
+
+    my %params = (
+        driver => 'Memory',
+        global => 1,
+    );
+
+    # Add expires_in only if ttl is defined (undef means never expire in CHI)
+    $params{expires_in} = $ttl if defined $ttl;
+
+    return CHI->new(%params);
+}
+
+sub _normalise_prefetch {
+    my $pref = shift;
+
+    return {} unless $pref;
+    return { $pref => undef } unless ref $pref;
+
+    if (ref $pref eq 'ARRAY') {
+        return { map { %{ _normalise_prefetch($_) } } @$pref };
     }
 
-    die "Async object has no schema or schema_class defined";
+    if (ref $pref eq 'HASH') {
+        return $pref; # Already a spec
+    }
+
+    return {};
 }
 
 sub _serialise_row_with_prefetch {
     my ($row, $prefetch) = @_;
     return unless $row;
 
-    # 1. Get the base columns
+    # 1. If it's a plain HASH (from HashRefInflator),
+    # just return it. DBIC already structured it for us.
+    return $row if ref($row) eq 'HASH';
+
+    # 2. If it's an object, we proceed with manual extraction
     my %data = $row->get_columns;
 
-    # 2. Process Prefetches
     if ($prefetch) {
-        # Normalise prefetch into a hash for easier recursion
-        # (Handles strings, arrays, and nested hashes like { comments => 'user' })
         my $spec = _normalise_prefetch($prefetch);
-
         foreach my $rel (keys %$spec) {
-            # Check if DBIC actually prefetched this relationship
-            # we check if the object has the related object already 'inflated'
-            if ($row->has_column_loaded($rel) || $row->can($rel)) {
+            # Only call methods if we have a blessed object
+            if (blessed($row) && $row->can($rel)) {
                 my $related = eval { $row->$rel };
                 next if $@ || !defined $related;
 
-                if (ref($related) eq 'DBIx::Class::ResultSet' || eval { $related->isa('DBIx::Class::ResultSet') }) {
-                    # has_many relationship
-                    # Only call ->all if we are sure we want to fetch/serialise these
-                    my @items = $related->all;
+                if (blessed($related)
+                    && $related->isa('DBIx::Class::ResultSet')) {
                     $data{$rel} = [
-                        map { _serialise_row_with_prefetch($_, $spec->{$rel}) } @items
+                        map {
+                            _serialise_row_with_prefetch($_, $spec->{$rel})
+                        } $related->all
                     ];
-                } elsif (eval { $related->isa('DBIx::Class::Row') }) {
-                    # single relationship (belongs_to / might_have)
+                }
+                else {
                     $data{$rel} = _serialise_row_with_prefetch($related, $spec->{$rel});
                 }
             }
         }
     }
-
     return \%data;
 }
-
-sub _should_retry_error {
-    my ($self, $error) = @_;
-
-    # Retry on deadlocks, lock timeouts, and connection issues
-    return 1 if $error =~ /deadlock|lock wait timeout exceeded|timeout/i;
-    return 1 if $error =~ /MySQL server has gone away|Lost connection to MySQL server/i;
-    return 1 if $error =~ /connection.*closed|socket.*closed/i;
-
-    # Don't retry on validation errors or other application errors
-    return 0 if $error =~ /unique constraint|duplicate entry|validation failed/i;
-    return 0 if $error =~ /syntax error|unknown column|table.*doesn't exist/i;
-
-    return 0;
-}
-
-sub _start_health_checks {
-    my ($self, $interval) = @_;
-
-    return if $interval <= 0;
-
-    # Try to create the timer
-    eval {
-        $self->{health_check_timer} = $self->{loop}->repeat(
-            interval => $interval,
-            code => sub {
-                # Don't use async here - just fire and forget
-                $self->health_check->retain;
-            },
-        );
-    };
-
-    if ($@) {
-        # If repeat fails, try a different approach or disable health checks
-        warn "Failed to start health checks: $@" if $ENV{DBIC_ASYNC_DEBUG};
-    }
-}
-
-sub DESTROY {
-    my $self = shift;
-    $self->disconnect if $self->{is_connected};
-}
-
-#
-#
-# REALLY PRIVATE METHODS
-
-sub _check_response {
-    my ($self, $res) = @_;
-
-    return unless defined $res;
-
-    if (blessed($res) && $res->isa('DBIx::Class::Exception')) {
-        return $res;
-    }
-
-    if (ref $res eq 'HASH' && $res->{__error}) {
-        return $res->{__error};
-    }
-
-    return; # Not an error
-}
-
-# This handles three distinct database response patterns:
-# HASH  : The driver returned specific column/value pairs (e.g., PostgreSQL RETURNING).
-# ARRAY : The driver returned a list of values corresponding to the Primary Keys.
-#         We map these in order to the defined PK columns.
-# SCALAR: The driver returned a single value (e.g., SQLite last_insert_rowid).
-#         This is only mapped if the table has exactly one Primary Key.
-
-sub _merge_result_data {
-    my ($self, $source_name, $original_data, $returned_result) = @_;
-
-    my $merged = { %$original_data };
-    my $source = $self->_schema_instance->source($source_name);
-    my @pks    = $source->primary_columns;
-
-    if (ref $returned_result eq 'HASH') {
-        @{$merged}{keys %$returned_result} = values %$returned_result;
-    }
-    elsif (defined $returned_result && !ref $returned_result) {
-        # Only assign if there is exactly one PK (typical for auto-inc)
-        if (scalar @pks == 1) {
-            $merged->{$pks[0]} = $returned_result;
-        }
-    }
-    elsif (ref $returned_result eq 'ARRAY') {
-        # Map array values to PK columns in order
-        my $return_count = scalar @$returned_result;
-        for (my $i = 0; $i < @pks; $i++) {
-            # Safety: Don't overwrite if the DB didn't return enough values
-            last if $i >= $return_count;
-
-            $merged->{$pks[$i]} = $returned_result->[$i];
-        }
-    }
-
-    return $merged;
-}
-
-=head1 INTEGRATION WITH RESULT CLASSES
-
-To enable asynchronous row-level methods (C<update> and C<delete>), you must
-load the C<Async::ResultComponent> in your specific Result classes. This
-registration allows the row objects to intercept standard blocking calls and
-reroute them to the background worker pool.
-
-B<Configuration>
-
-In each of your Result files (e.g., C<My/Schema/Result/User.pm>), add the
-component to the C<load_components> call. B<Note:> It is recommended to load
-this component before C<Core>.
-
-    package My::Schema::Result::User;
-
-    use strict;
-    use warnings;
-    use base 'DBIx::Class::Core';
-
-    __PACKAGE__->load_components(qw/Async::ResultComponent Core/);
-
-    __PACKAGE__->table('users');
-    # ... column and relationship definitions ...
-
-B<IMPORTANT: Return Values (Futures)>
-
-Unlike standard L<DBIx::Class>, where C<update> and C<delete> return the row
-object or success count immediately, these methods now return a B<Future>.
-You must use asynchronous chaining to handle the results:
-
-    $row->update({ name => 'New Name' })->then(sub {
-        my $updated_row = shift;
-        say "Update complete for: " . $updated_row->name;
-    });
-
-B<Why this is necessary?>
-
-Without this component, calling C<$row-E<gt>delete> would use the base
-L<DBIx::Class::Row> implementation, which is synchronous and blocking.
-Loading this component provides three critical benefits:
-
-=over 4
-
-=item * B<Non-blocking Row Logic>: Prevents a single row update from "freezing" your event loop.
-
-=item * B<Automatic Future Wrapping>: Ensures consistency with your ResultSet queries by returning a L<Future> object.
-
-=item * B<Context Awareness>: The component knows how to extract its own Primary Key and table name, so you don't have to pass them manually.
-
-=back
-
-B<Implementation Note: Automatic Identity Mapping>
-
-The component is B<Zero-Config>. It utilises the internal C<ident_condition>
-logic of L<DBIx::Class> to identify the row in the background worker.
-
-This means that whether your table uses a simple integer ID or a B<composite
-primary key> (e.g., C<user_id> + C<role_id>), the component automatically
-handles the construction of the complex C<WHERE> clause required by the bridge.
-You do not need to change how you define your schemas; simply ensure
-C<set_primary_key> is correctly defined as usual.
-
-=cut
 
 =head1 PERFORMANCE TIPS
 
 =over 4
 
-=item * Worker Count
+=item * Worker Count & CPU Affinity
 
-Adjust the C<workers> parameter based on your database connection limits and
-expected concurrency. Typically 2-4 workers per CPU core works well.
+Adjust the C<workers> parameter based on your database connection limits and expected concurrency. Since each worker is a separate process, 2-4 workers per CPU core is the sweet spot. Too many workers can cause context-switching overhead on your OS.
 
-=item * Caching
+=item * Caching Strategy
 
-Use caching for read-heavy workloads. Set C<cache_ttl> appropriately for your
-data volatility.
+The new design uses C<CHI> for memory-efficient caching. For read-heavy workloads, ensure C<cache_ttl> is set. Setting it to C<0> will disable caching, which is useful for data that changes every second.
 
-=item * Batch Operations
+=item * Batch Operations (Concurrent Execution)
 
-Use C<search_multi> for fetching unrelated data concurrently rather than
-sequential C<await> calls.
+Instead of sequential C<await> calls, which force workers to sit idle, use C<Future->wait_all> or C<Future->needs_all> to fire multiple queries across your worker pool simultaneously.
 
-=item * Connection Pooling
+=item * Connection Persistence
 
-Each worker maintains its own persistent connection. Monitor database
-connection counts if using many instances.
+Each worker maintains a persistent connection to the database. This eliminates the "connection tax" (handshake time) for every query. Monitor your database's C<max_connections> setting to ensure it can handle C<Total Apps * Workers Per App>.
 
-=item * Timeouts
+=item * Timeout Guardrails
 
-Set appropriate C<query_timeout> values to prevent hung queries from
-blocking workers.
+The C<query_timeout> (default 30s) is your safety net. In the new design, a hung query only blocks B<one> worker; the others stay active. Without a timeout, a single "zombie" query could permanently reduce your pool size.
 
 =back
 
 =head1 ERROR HANDLING
 
-All methods throw exceptions on failure. Common error scenarios:
+The bridge uses C<< Future->fail >> to propagate errors from the workers back to your main process. You should handle these using C<await> within a C<try/catch> block or the C<< ->catch >> method.
 
 =over 4
 
-=item * Database connection failures
+=item * Worker Connectivity
 
-Thrown during initial connection or health checks.
+If a worker cannot connect to the DB, it will throw an exception during the first query or a health check.
 
-=item * Query timeouts
+=item * Automatic Retries
 
-Thrown when queries exceed C<query_timeout>.
+If C<enable_retry> is true, the bridge will automatically retry queries that fail due to transient issues (like database deadlocks) using an exponential backoff (starting at 1s, doubling each time).
 
-=item * Deadlocks
+=item * Serialisation Failures
 
-Automatically retried if C<enable_retry> is true.
-
-=item * Invalid SQL/schema errors
-
-Passed through from DBIx::Class.
+Because data must travel between processes, any custom objects in your ResultSets must be serialiisable. The new design handles most DBIC inflation automatically, but be wary of passing "live" filehandles or sockets.
 
 =back
-
-Use C<try/catch> blocks or C<< ->catch >> on futures to handle errors.
 
 =head1 METRICS
 
-When C<enable_metrics> is true and L<Metrics::Any> is installed, the module
-collects:
+If C<< enable_metrics => 1 >> is passed to the constructor and L<Metrics::Any> is available, the following gauges and counters are tracked:
 
-=over 4
-
-=item * C<db_async_queries_total> - Total query count
-
-=item * C<db_async_cache_hits_total> - Cache hit count
-
-=item * C<db_async_cache_misses_total> - Cache miss count
-
-=item * C<db_async_query_duration_seconds> - Query duration histogram
-
-=item * C<db_async_workers_active> - Active worker count
-
-=back
-
-=head1 LIMITATIONS
-
-=over 4
-
-=item * Result objects
-
-Returned rows are plain hashrefs, not L<DBIx::Class> row objects.
-
-=item * Transactions
-
-Transactions execute on a single worker only.
-
-=item * Large result sets
-
-All rows are loaded into memory. Use pagination for large datasets.
-
-=back
+    +------------------------------------+-----------+-----------------------------------------------------+
+    | Metric                             | Type      | Description                                         |
+    +------------------------------------+-----------+-----------------------------------------------------+
+    | C<db_async_queries_total>          | Counter   | Total number of operations sent to workers.         |
+    | C<db_async_cache_hits_total>       | Counter   | Queries resolved via the internal C<CHI> cache.     |
+    | C<db_async_query_duration_seconds> | Histogram | Latency distribution of database operations.        |
+    | C<db_async_workers_active>         | Gauge     | Number of workers passing the periodic health check.|
+    +------------------------------------+-----------+-----------------------------------------------------+
 
 =head1 DEDICATION
 
@@ -2431,21 +1137,16 @@ Copyright (C) 2026 Mohammad Sajid Anwar.
 This program  is  free software; you can redistribute it and / or modify it under
 the  terms  of the the Artistic License (2.0). You may obtain a  copy of the full
 license at:
-
 L<http://www.perlfoundation.org/artistic_license_2_0>
-
 Any  use,  modification, and distribution of the Standard or Modified Versions is
 governed by this Artistic License.By using, modifying or distributing the Package,
 you accept this license. Do not use, modify, or distribute the Package, if you do
 not accept this license.
-
 If your Modified Version has been derived from a Modified Version made by someone
 other than you,you are nevertheless required to ensure that your Modified Version
  complies with the requirements of this license.
-
 This  license  does  not grant you the right to use any trademark,  service mark,
 tradename, or logo of the Copyright Holder.
-
 This license includes the non-exclusive, worldwide, free-of-charge patent license
 to make,  have made, use,  offer to sell, sell, import and otherwise transfer the
 Package with respect to any patent claims licensable by the Copyright Holder that
@@ -2453,7 +1154,6 @@ are  necessarily  infringed  by  the  Package. If you institute patent litigatio
 (including  a  cross-claim  or  counterclaim) against any party alleging that the
 Package constitutes direct or contributory patent infringement,then this Artistic
 License to you shall terminate on the date that such litigation is filed.
-
 Disclaimer  of  Warranty:  THE  PACKAGE  IS  PROVIDED BY THE COPYRIGHT HOLDER AND
 CONTRIBUTORS  "AS IS'  AND WITHOUT ANY EXPRESS OR IMPLIED WARRANTIES. THE IMPLIED
 WARRANTIES    OF   MERCHANTABILITY,   FITNESS   FOR   A   PARTICULAR  PURPOSE, OR

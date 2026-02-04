@@ -1,5 +1,54 @@
 package DBIx::Class::Async::Schema;
 
+$DBIx::Class::Async::Schema::VERSION   = '0.51';
+$DBIx::Class::Async::Schema::AUTHORITY = 'cpan:MANWAR';
+
+=encoding utf8
+
+=head1 NAME
+
+DBIx::Class::Async::Schema - Non-blocking, worker-pool based Proxy for DBIx::Class::Schema
+
+=head1 VERSION
+
+Version 0.51
+
+=head1 SYNOPSIS
+
+    use IO::Async::Loop;
+    use DBIx::Class::Async::Schema;
+
+    my $loop = IO::Async::Loop->new;
+
+    # Connect returns a proxy object immediately
+    my $schema = DBIx::Class::Async::Schema->connect(
+        "dbi:SQLite:dbname=myapp.db", undef, undef, {},
+        {
+            schema_class   => 'MyApp::Schema',
+            workers        => 4,
+            enable_metrics => 1,
+            loop           => $loop,
+        }
+    );
+
+    # Use the 'await' helper for one-off scripts
+    my $count = $schema->await( $schema->resultset('User')->count_future );
+
+    # Or use standard Future chaining for web/event apps
+    $schema->resultset('User')->find_future(1)->then(sub {
+        my $user = shift;
+        print "Found async user: " . $user->name;
+    })->retain;
+
+=head1 DESCRIPTION
+
+C<DBIx::Class::Async::Schema> acts as a non-blocking bridge to your standard
+L<DBIx::Class> schemas. Instead of executing queries in the main event loop
+(which would block your UI or web server), this module offloads queries to a
+managed pool of background worker processes.
+
+=cut
+
 use strict;
 use warnings;
 use utf8;
@@ -12,130 +61,28 @@ use DBIx::Class::Async;
 use DBIx::Class::Async::Storage;
 use DBIx::Class::Async::ResultSet;
 use DBIx::Class::Async::Storage::DBI;
+use Data::Dumper;
 
-our $VERSION = '0.49';
+our $METRICS;
+use constant ASYNC_TRACE => $ENV{ASYNC_TRACE} || 0;
 
-=head1 NAME
-
-DBIx::Class::Async::Schema - Asynchronous schema for DBIx::Class::Async
-
-=head1 VERSION
-
-Version 0.49
-
-=head1 SYNOPSIS
-
-    use DBIx::Class::Async::Schema;
-    use IO::Async::Loop;
-
-    my $loop = IO::Async::Loop->new;
-
-    # Connect returns a schema proxy that delegates queries to a worker pool
-    my $schema = DBIx::Class::Async::Schema->connect(
-        'dbi:SQLite:dbname=myapp.db', # DBI DSN
-        undef,                        # User
-        undef,                        # Pass
-        { sqlite_unicode => 1 },      # Standard DBIx::Class options
-        {                             # Async-specific configuration
-            schema_class => 'MyApp::Schema',
-            workers      => 5,        # Number of background worker processes
-            loop         => $loop,    # IO::Async::Loop instance
-        }
-    );
-
-    # Get a ResultSet bridge (returns a DBIx::Class::Async::ResultSet)
-    my $rs = $schema->resultset('User');
-
-    # All persistence and retrieval methods return Futures
-    $rs->search({ active => 1 })->all->then(sub {
-        my @users = @_;
-        say "Fetched " . scalar(@users) . " users asynchronously.";
-
-        # Perform more async work
-        return $users[0]->update({ last_seen => time });
-    })->catch(sub {
-        my $err = shift;
-        warn "Database error: $err";
-    });
-
-    # The event loop manages the worker communication
-    $loop->run;
-
-    # Clean shutdown of worker pool
-    $schema->disconnect;
-
-=head1 DESCRIPTION
-
-C<DBIx::Class::Async::Schema> provides an asynchronous schema class that mimics
-the L<DBIx::Class::Schema> API but performs all database operations
-asynchronously using L<Future> objects.
-
-This class acts as a bridge between the synchronous DBIx::Class API and the
-asynchronous backend provided by L<DBIx::Class::Async>. It manages connection
-pooling, result sets, and transaction handling in an asynchronous context.
-
-=head1 CONSTRUCTOR
+=head1 METHODS
 
 =head2 connect
 
-    my $schema = DBIx::Class::Async::Schema->connect(
-        $dsn,           # Database DSN
-        $user,          # Database username
-        $password,      # Database password
-        $db_options,    # Hashref of DBI options
-        $async_options, # Hashref of async options
-    );
+    my $schema = DBIx::Class::Async::Schema->connect($dsn, $user, $pass, $dbi_attrs, \%async_attrs);
 
-Connects to a database and creates an asynchronous schema instance.
+Initialises the worker pool and returns a proxy schema instance.
 
 =over 4
 
-=item B<Parameters>
+=item * C<schema_class> (Required): The name of your existing DBIC Schema class.
 
-The first four parameters are standard DBI connection parameters. The fifth
-parameter is a hash reference containing asynchronous configuration:
+=item * C<workers>: Number of background processes (Default: 2).
 
-=over 8
+=item * C<loop>: An L<IO::Async::Loop> instance. If not provided, one will be created.
 
-=item C<schema_class> (required)
-
-The name of the DBIx::Class schema class to use (e.g., 'MyApp::Schema').
-
-=item C<workers>
-
-Number of worker processes (default: 4).
-
-=item C<connect_timeout>
-
-Connection timeout in seconds (default: 10).
-
-=item C<max_retries>
-
-Maximum number of retry attempts for failed operations (default: 3).
-
-=back
-
-=item B<Returns>
-
-A new C<DBIx::Class::Async::Schema> instance.
-
-=item B<Throws>
-
-=over 4
-
-=item *
-
-Croaks if C<schema_class> is not provided.
-
-=item *
-
-Croaks if the schema class cannot be loaded.
-
-=item *
-
-Croaks if the async instance cannot be created.
-
-=back
+=item * C<enable_retry>: Automatically retry deadlocks/transient errors.
 
 =back
 
@@ -147,26 +94,20 @@ sub connect {
     # Separate async options from connect_info
     my $async_options = {};
     if (ref $args[-1] eq 'HASH' && !exists $args[-1]->{RaiseError}) {
-        # Last arg is async options hash
         $async_options = pop @args;
     }
 
     my $schema_class = $async_options->{schema_class}
-        or croak "schema_class is required in async options";
+       or croak "schema_class is required in async options";
 
     my $schema_loaded = 0;
-
-    # Method 1: Check if class already exists
     if (eval { $schema_class->can('connect') }) {
         $schema_loaded = 1;
     }
-    # Method 2: Try to require it (for .pm files)
     elsif (eval "require $schema_class") {
         $schema_loaded = 1;
     }
-    # Method 3: Check if it's defined in memory (inline class)
     elsif (eval "package main; \$${schema_class}::VERSION ||= '0.01'; 1") {
-        # The class exists in memory (defined inline)
         $schema_loaded = 1;
     }
 
@@ -175,7 +116,7 @@ sub connect {
     }
 
     my $async_db = eval {
-        DBIx::Class::Async->new(
+        DBIx::Class::Async->create_async_db(
             schema_class => $schema_class,
             connect_info => \@args,
             %$async_options,
@@ -183,15 +124,19 @@ sub connect {
     };
 
     if ($@) {
-        croak "Failed to create async instance: $@";
+        croak "Failed to create async engine: $@";
     }
 
+    my $native_schema = $schema_class->connect(@args);
+
     my $self = bless {
-        async_db      => $async_db,
-        schema_class  => $schema_class,
-        connect_info  => \@args,
-        sources_cache => {},  # Cache for source lookups
+        _async_db      => $async_db,
+        _native_schema => $native_schema,
+        _sources_cache => {},
     }, $class;
+
+    # Populate the inflator map
+    $async_db->{_custom_inflators} = $self->_build_inflator_map($native_schema);
 
     my $storage = DBIx::Class::Async::Storage::DBI->new(
         schema   => $self,
@@ -203,877 +148,863 @@ sub connect {
     return $self;
 }
 
-=head1 METHODS
+sub await {
+    my ($self, $future) = @_;
 
-=head2 class
+    my $loop = $self->{_async_db}->{_loop};
+    my @results = $loop->await($future);
 
-  my $class = $schema->class('User');
-  # Returns: 'MyApp::Schema::Result::User'
+    # Unwrap nested Futures
+    while (@results == 1
+           && defined $results[0]
+           && Scalar::Util::blessed($results[0])
+           && $results[0]->isa('Future')) {
 
-Returns the class name for the given source name or moniker.
+        if (!$results[0]->is_ready) {
+            @results = $loop->await($results[0]);
+        } elsif ($results[0]->is_failed) {
+            my ($error) = $results[0]->failure;
+            die $error;
+        } else {
+            @results = $results[0]->get;
+        }
+    }
 
-=over 4
+    return wantarray ? @results : $results[0];
+}
 
-=item B<Arguments>
+# Cache specific
+sub cache_hits    { shift->{_async_db}->{_stats}->{_cache_hits}   // 0 }
+sub cache_misses  { shift->{_async_db}->{_stats}->{_cache_misses} // 0 }
+sub cache_retries { shift->{_async_db}->{_stats}->{_retries}      // 0 }
 
-=over 8
+# Execution specific
+sub total_queries { shift->{_async_db}->{_stats}->{_queries}      // 0 }
+sub error_count   { shift->{_async_db}->{_stats}->{_errors}       // 0 }
+sub deadlock_count{ shift->{_async_db}->{_stats}->{_deadlocks}    // 0 }
 
-=item C<$source_name>
-
-The name of the source/moniker (e.g., 'User', 'Order').
-
-=back
-
-=item B<Returns>
-
-The full class name of the Result class (e.g., 'MyApp::Schema::Result::User').
-
-=item B<Throws>
-
-Dies if the source doesn't exist.
-
-=item B<Examples>
-
-  # Get the Result class for User
-  my $user_class = $schema->class('User');
-  # $user_class is now 'MyApp::Schema::Result::User'
-
-  # Can be used to call class methods
-  my $user_class = $schema->class('User');
-  my @columns = $user_class->columns;
-
-  # Or to create new objects directly
-  my $user = $schema->class('User')->new({
-      name => 'Alice',
-      email => 'alice@example.com',
-  });
-
-=back
-
-=cut
 
 sub class {
     my ($self, $source_name) = @_;
 
-    require Carp;
-    Carp::croak("source_name required") unless defined $source_name;
+    croak("source_name required") unless defined $source_name;
 
-    # Get the source object
+    # Fetch metadata (this uses your existing _sources_cache)
     my $source = eval { $self->source($source_name) };
 
-    if ($@) {
-        Carp::croak("No such source '$source_name'");
+    if ($@ || !$source) {
+        croak("No such source '$source_name'");
     }
 
-    # Return the result class
-    return $source->result_class;
+    return $source->{result_class};
 }
-
-=head2 clone
-
-    my $cloned_schema = $schema->clone;
-
-Creates a clone of the schema with a fresh worker pool.
-
-=over 4
-
-=item B<Returns>
-
-A new C<DBIx::Class::Async::Schema> instance with fresh connections.
-
-=item B<Notes>
-
-The cloned schema shares no state with the original and has its own
-worker processes and source cache.
-
-=back
-
-=cut
 
 sub clone {
-    my $self = shift;
-    my %args = @_;
+    my ($self, %args) = @_;
 
+    # 1. Determine worker count
+    my $orig_db = $self->{_async_db};
     my $worker_count = $args{workers}
-        || $self->{async_db}->{workers_config}{count}
-        || $self->{async_db}->workers  # If there's a method
-        || 2;                          # Sensible default
+        || ($orig_db
+            && $orig_db->{_workers_config}
+            && $orig_db->{_workers_config}{_count})
+        || 2;
 
-    return bless {
+    # 2. Re-create the async engine
+    my $new_async_db;
+    if ($orig_db) {
+        $new_async_db = DBIx::Class::Async->create_async_db(
+            schema_class   => $orig_db->{_schema_class},
+            connect_info   => $orig_db->{_connect_info},
+            workers        => $worker_count,
+            loop           => $orig_db->{_loop},
+            enable_metrics => $orig_db->{_enable_metrics},
+            enable_retry   => $orig_db->{_enable_retry},
+        );
+    }
+
+    # 3. Build the new schema object (strictly internal keys)
+    my $new_self = bless {
         %$self,
-        # Clone with fresh worker pool
-        async_db => DBIx::Class::Async->new(
-            schema_class => $self->{schema_class},
-            connect_info => [@{$self->{connect_info}}],
-            workers      => $worker_count,
-            (defined $self->{loop} ? (loop => $self->{loop}) : ()),
-        ),
-        sources_cache => {},  # Fresh cache
+        _async_db      => $new_async_db,
+        _sources_cache => {},
     }, ref $self;
+
+    # 4. Re-attach storage
+    if ($new_async_db) {
+        $new_self->{_storage} = DBIx::Class::Async::Storage::DBI->new(
+            schema   => $new_self,
+            async_db => $new_async_db,
+        );
+    }
+
+    return $new_self;
 }
-
-=head2 deploy
-
-    my $future = $schema->deploy(\%sqlt_args?, $dir?);
-
-    $future->on_done(sub {
-        my $self = shift;
-        say "Schema deployed successfully.";
-    });
-
-=over 4
-
-=item Arguments: \%sqlt_args?, $dir?
-
-=item Return Value: L<Future> resolving to $self
-
-=back
-
-Asynchronously deploys the database schema.
-
-This is a non-blocking proxy for L<DBIx::Class::Schema/deploy>. The actual SQL
-translation (via L<SQL::Translator>) and DDL execution are performed in a
-background worker process to prevent the main event loop from stalling.
-
-The optional C<\%sqlt_args> are passed directly to the worker-side
-C<deploy> method. Common options include:
-
-=over 4
-
-=item * C<add_drop_table> - Prepends a C<DROP TABLE> statement for each table.
-
-=item * C<quote_identifiers> - Ensures database identifiers are correctly quoted.
-
-=back
-
-On success, the returned L<Future> resolves to the schema object (C<$self>),
-allowing for easy method chaining. On failure, the Future fails with the
-error message generated by the worker.
-
-=cut
 
 sub deploy {
     my ($self, $sqlt_args, $dir) = @_;
 
-    croak "Async database handle not initialised" unless $self->{async_db};
+    my $async_db = $self->{_async_db};
 
-    return $self->{async_db}->deploy($sqlt_args, $dir)->then(sub {
+    return DBIx::Class::Async::_call_worker(
+        $async_db, 'deploy', [ $sqlt_args, $dir ],
+    )->then(sub {
         my ($res) = @_;
 
-        if (ref $res eq 'HASH' && $res->{__error}) {
-            return Future->fail($res->{__error});
-        }
-
-        return Future->done($self);
+        # Return the result (usually { success => 1 } or similar)
+        # or return $self if you want to allow chaining.
+        return $res;
     });
 }
 
-=head2 disconnect
-
-    $schema->disconnect;
-
-Disconnects all worker processes and cleans up resources.
-
-=over 4
-
-=item B<Notes>
-
-This method is called automatically when the schema object is destroyed,
-but it's good practice to call it explicitly when done with the schema.
-
-=back
-
-=cut
-
 sub disconnect {
     my $self = shift;
-    $self->{async_db}->disconnect if $self->{async_db};
+
+    if (ref $self->{_async_db} eq 'HASH') {
+        # 1. Properly stop every worker in the array
+        if (my $workers = $self->{_async_db}->{_workers}) {
+            for my $worker (@$workers) {
+                if (blessed($worker) && $worker->can('stop')) {
+                    eval { $worker->stop };
+                }
+            }
+        }
+
+        # 2. Clear the internal hash contents to break any circular refs
+        %{$self->{_async_db}} = ();
+    }
+
+    # 3. Remove the manager entirely
+    delete $self->{_async_db};
+
+    # 4. Flush the metadata cache
+    $self->{_sources_cache} = {};
+
+    return $self;
 }
 
-=head2 populate
+sub health_check {
+    my ($self) = @_;
 
-  # Array of hashrefs format
-  my $users = $schema->populate('User', [
-      { name => 'Alice', email => 'alice@example.com' },
-      { name => 'Bob',   email => 'bob@example.com' },
-  ])->get;
+    my $async_db = $self->{_async_db};
 
-  # Column list + rows format
-  my $users = $schema->populate('User', [
-      [qw/ name email /],
-      ['Alice', 'alice@example.com'],
-      ['Bob',   'bob@example.com'],
-  ])->get;
+    my @futures;
+    for (1 .. $async_db->{_workers_config}->{_count}) {
+        push @futures, DBIx::Class::Async::_call_worker($async_db, 'ping', {});
+    }
 
-A convenience shortcut to L<DBIx::Class::Async::ResultSet/populate>.
-Creates multiple rows efficiently.
+    return Future->wait_all(@futures)->then(sub {
+        my @res_futures = @_;
 
-=over 4
+        # Count how many actually returned a successful ping
+        my $healthy_count = grep {
+            $_->is_done && !$_->failure && ($_->get->{success} // 0)
+        } @res_futures;
 
-=item B<Arguments>
+        # Record the metric
+        $self->_record_metric('set', 'db_async_workers_active', $healthy_count);
 
-=over 8
+        return Future->done($healthy_count);
+    });
+}
 
-=item C<$source_name>
+sub inflate_column {
+    my ($self, $source_name, $column, $handlers) = @_;
 
-The name of the source/moniker (e.g., 'User', 'Order').
+    my $schema = $self->{_native_schema};
 
-=item C<$data>
+    my @known_sources = $schema->sources;
+    warn "[PID $$] Parent Schema class: " . ref($schema) if ASYNC_TRACE;
 
-Either:
+    # Attempt lookup
+    my $source = eval { $schema->source($source_name) };
 
-- Array of hashrefs: C<< [ \%col_data, \%col_data, ... ] >>
+    if (!$source) {
+        warn "[PID $$] Source '$source_name' not found. Attempting force-load via resultset..."
+            if ASYNC_TRACE;
+        eval { $schema->resultset($source_name) };
+        $source = eval { $schema->source($source_name) };
+    }
 
-- Column list + rows: C<< [ \@column_list, \@row_values, \@row_values, ... ] >>
+    croak "Could not find result source for '$source_name' in Parent process."
+        unless $source;
 
-=back
+    # Apply the handlers to the Parent's schema instance
+    my $col_info = $source->column_info($column);
+    $source->add_column($column => {
+        %$col_info,
+        inflate => $handlers->{inflate},
+        deflate => $handlers->{deflate},
+    });
 
-=item B<Returns>
+    # Registry for Parent-side inflation of results coming back from Worker
+    $self->{_async_db}{_custom_inflators}{$source_name}{$column} = $handlers;
+}
 
-A L<Future> that resolves to an arrayref of L<DBIx::Class::Async::Row> objects
-in scalar context, or a list in list context.
-
-=item B<Examples>
-
-  # Array of hashrefs
-  $schema->populate('User', [
-      { name => 'Alice', email => 'alice@example.com', active => 1 },
-      { name => 'Bob',   email => 'bob@example.com',   active => 1 },
-      { name => 'Carol', email => 'carol@example.com', active => 0 },
-  ])->then(sub {
-      my ($users) = @_;
-      say "Created " . scalar(@$users) . " users";
-  });
-
-  # Column list + rows (more efficient for many rows)
-  $schema->populate('User', [
-      [qw/ name email active /],
-      ['Alice', 'alice@example.com', 1],
-      ['Bob',   'bob@example.com',   1],
-      ['Carol', 'carol@example.com', 0],
-  ])->then(sub {
-      my ($users) = @_;
-      foreach my $user (@$users) {
-          say "Created: " . $user->name;
-      }
-  });
-
-=back
-
-=cut
+sub loop          { shift->{_async_db}->{_loop}  }
+sub stats         { shift->{_async_db}->{_stats} }
+sub native_schema { shift->{_native_schema}      }
 
 sub populate {
     my ($self, $source_name, $data) = @_;
 
+    # 1. Standard Guard Clauses
+    croak("Schema is disconnected")   unless $self->{_async_db};
     croak("source_name required")     unless defined $source_name;
     croak("data required")            unless defined $data;
     croak("data must be an arrayref") unless ref $data eq 'ARRAY';
+    croak("data cannot be empty")     unless scalar @$data;
 
-    # Delegate to resultset->populate
+    # 2. Delegate to ResultSet
+    # This creates the RS and immediately triggers the bulk insert logic
     return $self->resultset($source_name)->populate($data);
 }
-
-=head2 register_class
-
-  $schema->register_class($source_name => $result_class);
-
-Registers a new Result class with the schema. This is a convenience method
-that loads the Result class, gets its result source, and registers it.
-
-B<Arguments>
-
-=over 4
-
-=item * C<$source_name> - String name for the source (e.g., 'User', 'Product')
-
-=item * C<$result_class> - Fully qualified Result class name
-
-=back
-
-  # Register a Result class
-  $schema->register_class('Product' => 'MyApp::Schema::Result::Product');
-
-  # Now you can use it
-  my $rs = $schema->resultset('Product');
-
-This method will load the Result class if it hasn't been loaded yet.
-
-=cut
 
 sub register_class {
     my ($self, $source_name, $result_class) = @_;
 
-    # Load the class if not already loaded
-    eval "require $result_class";
-    if ($@) {
-        croak "Failed to load Result class '$result_class': $@";
+    croak("source_name and result_class required")
+        unless $source_name && $result_class;
+
+    # 1. Load the class in the Parent process
+    # We do this to extract metadata (columns, relationships)
+    unless ($result_class->can('result_source_instance')) {
+        eval "require $result_class";
+        if ($@) {
+            croak("Failed to load Result class '$result_class': $@");
+        }
     }
 
-    # Get the result source instance
-    my $source = $result_class->result_source_instance;
+    # 2. Get the ResultSource instance from the class
+    # This contains the column definitions and table name
+    my $source = eval { $result_class->result_source_instance };
+    if ($@ || !$source) {
+        croak("Class '$result_class' does not appear to be a valid DBIx::Class Result class");
+    }
 
-    # Register it
+    # 3. Register the source
+    # This will populate your { _sources_cache } or internal metadata map
     return $self->register_source($source_name, $source);
 }
-
-=head2 register_source
-
-  $schema->register_source($source_name => $source);
-
-Registers a new result source with the schema. This is used to add new tables
-or views to the schema at runtime.
-
-B<Arguments>
-
-=over 4
-
-=item * C<$source_name> - String name for the source (e.g., 'User', 'Product')
-
-=item * C<$source> - A L<DBIx::Class::ResultSource> instance
-
-=back
-
-  # Define a new Result class
-  package MyApp::Schema::Result::Product;
-  use base 'DBIx::Class::Core';
-
-  __PACKAGE__->table('products');
-  __PACKAGE__->add_columns(
-      id => { data_type => 'integer', is_auto_increment => 1 },
-      name => { data_type => 'text' },
-  );
-  __PACKAGE__->set_primary_key('id');
-
-  # Register it with the schema
-  $schema->register_source('Product',
-      MyApp::Schema::Result::Product->result_source_instance
-  );
-
-=cut
 
 sub register_source {
     my ($self, $source_name, $source) = @_;
 
-    # Delegate to the underlying sync schema class
-    my $schema_class = $self->{_schema_class};
+    # 1. Update Parent Instance
+    $self->{_sources_cache}->{$source_name} = $source;
 
-    # Register with the class, not the instance
-    return $schema_class->register_source($source_name, $source);
+    # 2. Track this for Workers
+    # Store the 'source' metadata so we can send it to workers if needed
+    $self->{_dynamic_sources}->{$source_name} = $source;
+
+    # 3. Class-level registration (for future local instances)
+    my $schema_class = $self->{_schema_class};
+    $schema_class->register_source($source_name, $source) if $schema_class;
+
+    return $source;
 }
 
 =head2 resultset
 
-    my $rs = $schema->resultset('User');
+    my $rs = $schema->resultset('Source');
 
-Returns a result set for the specified source/table.
-
-=over 4
-
-=item B<Parameters>
-
-=over 8
-
-=item C<$source_name>
-
-Name of the result source (table) to get a result set for.
-
-=back
-
-=item B<Returns>
-
-A L<DBIx::Class::Async::ResultSet> object.
-
-=item B<Throws>
-
-Croaks if C<$source_name> is not provided.
-
-=back
+Returns a L<DBIx::Class::Async::ResultSet> object. This RS behaves like
+standard DBIC but provides C<*_future> variants (e.g., C<all_future>,
+C<count_future>).
 
 =cut
 
 sub resultset {
     my ($self, $source_name) = @_;
 
-    croak "resultset() requires a source name" unless $source_name;
+    unless (defined $source_name && length $source_name) {
+        croak("resultset() requires a source name");
+    }
 
+    # 1. Check our cache for the source metadata
+    # (In DBIC, a 'source' contains column info, class names, etc.)
+    my $source = $self->{_sources_cache}{$source_name};
+
+    unless ($source) {
+        # Fetch metadata from the real DBIx::Class::Schema class
+        $source = $self->_resolve_source($source_name);
+        $self->{_sources_cache}{$source_name} = $source;
+    }
+
+    my $result_class = $self->class($source_name);
+    # 2. Create the new Async ResultSet
     return DBIx::Class::Async::ResultSet->new(
-        schema      => $self,
-        async_db    => $self->{async_db},
-        source_name => $source_name,
+        source_name     => $source_name,
+        schema_instance => $self,              # Access to _record_metric
+        async_db        => $self->{_async_db}, # Access to _call_worker
+        result_class    => $result_class,
     );
 }
 
-=head2 schema_version
+sub search_with_prefetch {
+    my ($self, $source_name, $cond, $prefetch, $attrs) = @_;
 
-    my $version = $schema->schema_version;
+    $attrs ||= {};
+    my %merged_attrs = ( %$attrs, prefetch => $prefetch, collapse => 1 );
 
-Returns the normalised version string of the underlying L<DBIx::Class::Schema>
-class.
-
-=cut
-
-sub schema_version {
-    my $self  = shift;
-    my $class = $self->{schema_class};
-
-    croak("schema_class is not defined in " . ref($self)) unless $class;
-
-    # Delegates to the class method on the Result class
-    return $class->schema_version;
+    return $self->resultset($source_name)
+                ->search($cond, \%merged_attrs)
+                ->all_future
+                ->then(sub { my ($rows) = @_; return $rows; });
 }
-
-=head2 set_default_context
-
-    $schema->set_default_context;
-
-Sets the default context for the schema.
-
-=over 4
-
-=item B<Returns>
-
-The schema object itself (for chaining).
-
-=item B<Notes>
-
-This is a no-op method provided for compatibility with DBIx::Class.
-
-=back
-
-=cut
 
 sub set_default_context {
     my $self = shift;
-    # No-op for compatibility
+
+    # No-op for compatibility with external libraries
+    # that expect a standard DBIC Schema interface.
+    # In an Async world, we avoid global context to prevent
+    # cross-talk between event loop cycles.
+
     return $self;
 }
 
-=head2 source
+sub schema_version {
+    my $self  = shift;
+    my $class = $self->{_async_db}->{_schema_class};
 
-    my $source = $schema->source('User');
+    unless ($class) {
+        croak("schema_class is not defined in " . ref($self));
+    }
 
-Returns the result source object for the specified source/table.
+    return $class->schema_version if $class->can('schema_version');
 
-=over 4
+    return undef;
+}
 
-=item B<Parameters>
+sub sync_metadata {
+    my ($self) = @_;
 
-=over 8
+    my $async_db = $self->{_async_db};
+    my @futures;
 
-=item C<$source_name>
+    # Ping every worker in the pool
+    for (1 .. $async_db->{_workers_config}->{_count}) {
+        push @futures, DBIx::Class::Async::_call_worker($async_db, 'ping', {});
+    }
 
-Name of the result source (table).
+    return Future->wait_all(@futures);
+}
 
-=back
+sub schema_class { shift->{_async_db}->{_schema_class}; }
 
-=item B<Returns>
+sub source_ {
+    my ($self, $source_name) = @_;
 
-A L<DBIx::Class::ResultSource> object.
+    unless (exists $self->{_sources_cache}{$source_name}) {
+        my $source = eval { $self->{_native_schema}->source($source_name) };
 
-=item B<Notes>
+        croak("No such source '$source_name'") if $@ || !$source;
 
-Sources are cached internally after first lookup to avoid repeated
-database connections.
+        $self->{_sources_cache}{$source_name} = $source;
+    }
 
-=back
+    return $self->{_sources_cache}{$source_name};
+}
 
-=cut
+sub sources_ { shift->{_native_schema}->sources; }
+
+sub storage  { shift->{_storage}; }
 
 sub source {
     my ($self, $source_name) = @_;
 
-    unless (exists $self->{sources_cache}{$source_name}) {
-        my $temp_schema = $self->{schema_class}->connect(@{$self->{connect_info}});
-        $self->{sources_cache}{$source_name} = $temp_schema->source($source_name);
-        $temp_schema->storage->disconnect;
+    # 1. Retrieve the cached entry
+    my $cached = $self->{_sources_cache}{$source_name};
+
+    # 2. Check if we need to (re)fetch:
+    #    Either we have no entry, or it's a raw HASH (autovivification artifact)
+    if (!$cached || !blessed($cached)) {
+
+        # Clean up any "ghost" hash before re-fetching
+        delete $self->{_sources_cache}{$source_name};
+
+        # 3. Use the persistent provider to keep ResultSource objects alive
+        $self->{_metadata_provider} ||= do {
+            my $class = $self->{_async_db}->{_schema_class};
+            eval "require $class" or die "Could not load schema class $class: $@";
+            $class->connect(@{$self->{_async_db}->{_connect_info}});
+        };
+
+        # 4. Fetch the source and validate its blessing
+        my $source_obj = eval { $self->{_metadata_provider}->source($source_name) };
+
+        if (blessed($source_obj)) {
+            $self->{_sources_cache}{$source_name} = $source_obj;
+        } else {
+            return undef;
+        }
     }
 
-    return $self->{sources_cache}{$source_name};
+    return $self->{_sources_cache}{$source_name};
 }
-
-=head2 sources
-
-    my @source_names = $schema->sources;
-
-Returns a list of all available source/table names.
-
-=over 4
-
-=item B<Returns>
-
-Array of source names (strings).
-
-=item B<Notes>
-
-This method creates a temporary synchronous connection to the database
-to fetch the source list.
-
-=back
-
-=cut
 
 sub sources {
     my $self = shift;
 
-    my $temp_schema = $self->{schema_class}->connect(@{$self->{connect_info}});
+    my $schema_class = $self->{_async_db}->{_schema_class};
+    my $connect_info = $self->{_async_db}->{_connect_info};
+    my $temp_schema = $schema_class->connect(@{$connect_info});
     my @sources = $temp_schema->sources;
+
     $temp_schema->storage->disconnect;
 
     return @sources;
 }
 
-=head2 storage
-
-    my $storage = $schema->storage;
-
-Returns a storage object for compatibility with DBIx::Class.
-
-=over 4
-
-=item B<Returns>
-
-A L<DBIx::Class::Async::Storage> object.
-
-=item B<Notes>
-
-This storage object does not provide direct database handle access
-since operations are performed asynchronously by worker processes.
-
-=back
-
-=cut
-
-sub storage {
+sub txn_begin {
     my $self = shift;
-    return $self->{_storage};
+
+    # We return the future so the caller can wait for the 'BEGIN' to finish
+    return DBIx::Class::Async::_call_worker(
+        $self->{_async_db},
+        'txn_begin',
+        {}
+    );
 }
 
-=head2 txn_batch
+sub txn_commit {
+    my $self = shift;
 
-    my $result = await $schema->txn_batch(@operations);
+    return DBIx::Class::Async::_call_worker(
+        $self->{_async_db},
+        'txn_commit',
+        {}
+    );
+}
 
-A proxy method for L<DBIx::Class::Async/txn_batch>. Executes a series of
-database operations (create, update, delete, or raw SQL) atomically
-within a single background transaction.
+sub txn_rollback {
+    my $self = shift;
 
-=cut
+    return DBIx::Class::Async::_call_worker(
+        $self->{_async_db},
+        'txn_rollback',
+        {}
+    );
+}
+
+sub txn_do {
+    my ($self, $steps) = @_;
+
+    croak "txn_do requires an ARRAYREF of steps"
+        unless ref $steps eq 'ARRAY';
+
+    return DBIx::Class::Async::_call_worker(
+        $self->{_async_db},
+        'txn_do',
+        $steps
+    )->then(sub {
+        my ($result) = @_;
+        return Future->fail($result->{error}) if ref $result eq 'HASH' && $result->{error};
+        return Future->done($result);
+    });
+}
 
 sub txn_batch {
     my ($self, @args) = @_;
 
     croak "Async database handle not initialised in schema."
-        unless $self->{async_db};
+        unless $self->{_async_db};
 
-    return $self->{async_db}->txn_batch(@args);
-}
+    # Allow both txn_batch([$h1, $h2]) and txn_batch($h1, $h2)
+    my @operations = (ref $args[0] eq 'ARRAY') ? @{$args[0]} : @args;
 
-=head2 txn_do
+    # 1. Parent-side Validation
+    for my $op (@operations) {
+        croak "Each operation must be a hashref with 'type' key"
+            unless (ref $op eq 'HASH' && $op->{type});
 
-    $schema->txn_do(sub {
-        my $txn_schema = shift;
-        # Perform async operations within transaction
-        return $txn_schema->resultset('User')->create({
-            name  => 'Alice',
-            email => 'alice@example.com',
-        });
-    })->then(sub {
+        if ($op->{type} =~ /^(update|delete|create)$/) {
+            croak "Operation type '$op->{type}' requires 'resultset' parameter"
+                unless $op->{resultset};
+        }
+    }
+
+    # 2. Direct call to the worker
+    return DBIx::Class::Async::_call_worker(
+        $self->{_async_db},
+        'txn_batch',
+        \@operations
+    )->then(sub {
         my ($result) = @_;
-        # Transaction committed successfully
-    })->catch(sub {
-        my ($error) = @_;
-        # Transaction rolled back
+
+        # Ensure we handle the result correctly
+        if (ref $result eq 'HASH' && $result->{error}) {
+            return Future->fail($result->{error});
+        }
+
+        return Future->done($result);
     });
-
-Executes a code reference within a database transaction.
-
-=over 4
-
-=item B<Parameters>
-
-=over 8
-
-=item C<$code>
-
-Code reference to execute within the transaction. The code receives
-the schema instance as its first argument.
-
-=item C<@args>
-
-Additional arguments to pass to the code reference.
-
-=back
-
-=item B<Returns>
-
-A L<Future> that resolves to the return value of the code reference
-if the transaction commits, or rejects with an error if the transaction
-rolls back.
-
-=item B<Throws>
-
-=over 4
-
-=item *
-
-Croaks if the first argument is not a code reference.
-
-=back
-
-=back
-
-=cut
-
-sub txn_do {
-    my ($self, $code, @args) = @_;
-
-    croak "txn_do requires a coderef" unless ref $code eq 'CODE';
-
-    return $self->{async_db}->txn_do($code);
 }
-
-=head2 unregister_source
-
-    $schema->unregister_source($source_name);
-
-Arguments: $source_name
-
-Removes the specified L<DBIx::Class::ResultSource> from the schema class.
-This is useful in test suites to ensure a clean state between tests.
-
-=cut
 
 sub unregister_source {
     my ($self, $source_name) = @_;
-    my $class = $self->{schema_class};
 
-    croak("schema_class is not defined in " . ref($self)) unless $class;
+    croak("source_name is required") unless defined $source_name;
 
-    return $class->unregister_source($source_name);
+    # 1. Reach into the manager hashref (the "Async DB" manager)
+    my $class = $self->{_async_db}->{_schema_class};
+    unless ($class) {
+        croak("schema_class is not defined in manager for " . ref($self));
+    }
+
+    # 2. Local Cache Cleanup
+    # Even if the file stays on disk, we prevent the Parent from
+    # attempting to generate new ResultSets for this source.
+    delete $self->{_sources_cache}->{$source_name};
+
+    # 3. Class-Level Cleanup
+    # This prevents any future workers (or re-initializations)
+    # from seeing this source definition.
+    if ($class->can('unregister_source')) {
+        $class->unregister_source($source_name);
+    }
+
+    return $self;
 }
-
-=head1 AUTOLOAD
-
-The schema uses AUTOLOAD to delegate unknown methods to the underlying
-L<DBIx::Class::Async> instance. This allows direct access to async
-methods like C<search>, C<find>, C<create>, etc., without going through
-a resultset.
-
-Example:
-
-    # These are equivalent:
-    $schema->find('User', 123);
-    $schema->resultset('User')->find(123);
-
-Methods that are not found in the schema or the async instance will
-throw an error.
-
-=cut
 
 sub AUTOLOAD {
     my $self = shift;
+
+    return unless ref $self;
 
     our $AUTOLOAD;
     my ($method) = $AUTOLOAD =~ /([^:]+)$/;
 
     return if $method eq 'DESTROY';
 
-    if ($self->{async_db} && $self->{async_db}->can($method)) {
-        return $self->{async_db}->$method(@_);
+    if ($self->{_async_db} && exists $self->{_async_db}->{schema}) {
+        my $real_schema = $self->{_async_db}->{schema};
+        if ($real_schema->can($method)) {
+            return $real_schema->$method(@_);
+        }
     }
 
     croak "Method $method not found in " . ref($self);
 }
 
-=head1 DESTROY
+#
+#
+# PRIVATE METHODS
 
-The schema's destructor automatically calls C<disconnect> to clean up
-worker processes and other resources.
+sub _record_metric {
+    my ($self, $type, $name, @args) = @_;
 
-=cut
+    # 1. Check if metrics are enabled via the async_db state
+    # 2. Ensure the global $METRICS object exists
+    return unless $self->{_async_db}
+               && $self->{_async_db}{_enable_metrics}
+               && defined $METRICS;
 
-sub DESTROY {
-    my $self = shift;
-    $self->disconnect;
+    # 3. Handle different metric types (parity with old design)
+    if ($type eq 'inc') {
+        # Usage: $schema->_record_metric('inc', 'query_count', 1)
+        $METRICS->inc($name, @args);
+    }
+    elsif ($type eq 'observe') {
+        # Usage: $schema->_record_metric('observe', 'query_duration', 0.05)
+        $METRICS->observe($name, @args);
+    }
+    elsif ($type eq 'set') {
+        # Usage: $schema->_record_metric('set', 'worker_pool_size', 5)
+        $METRICS->set($name, @args);
+    }
+
+    return;
 }
 
-=head1 DESIGN ARCHITECTURE
+sub _resolve_source {
+    my ($self, $source_name) = @_;
 
-This module acts as an asynchronous proxy for L<DBIx::Class::Schema>. While
-data-retrieval methods (like C<search>, C<create>, and C<find>) return
-L<Future> objects and execute in worker pools, metadata management methods
-(like C<unregister_source> and C<schema_version>) are delegated directly
-to the underlying synchronous schema class to ensure metadata consistency
-across processes.
+    croak "Missing source name." unless defined $source_name;
 
-=head1 ARCHITECTURAL NOTE
+    my $schema_class = $self->{_async_db}{_schema_class};
 
-B<Removal of txn_scope_guard>
+    croak "Schema class not found." unless defined $schema_class;
 
-In C<DBIx::Class::Async>, the traditional C<txn_scope_guard> pattern has been
-intentionally removed. While this pattern is a staple of synchronous
-L<DBIx::Class> development, it is fundamentally incompatible with an
-asynchronous, worker-pool architecture.
+    # 1. Ask the main DBIC Schema class for the source metadata
+    # We call this on the class name, not an instance, to stay "light"
+    my $source = eval { $schema_class->source($source_name) };
 
-The following analysis explains the technical limitations that led to this
-decision.
+    if ($@ || !$source) {
+        croak "Could not resolve source '$source_name' in $schema_class: $@";
+    }
 
-=head2 1. The Scope vs. Execution Race Condition
+    # 2. Extract only what we need for the Async side
+    return {
+        result_class  => $source->result_class,
+        columns       => [ $source->columns ],
+        relationships => {
+            # We map relationships to know how to handle joins/prefetch later
+            map { $_ => $source->relationship_info($_) } $source->relationships
+        },
+    };
+}
 
-In a synchronous environment, a scope guard works because the program pauses
-until every line inside the block completes. The C<DESTROY> method (which
-triggers an automatic rollback) only fires after all work is done.
+sub _build_inflator_map {
+    my ($self, $schema) = @_;
 
-In an asynchronous environment, the block often finishes execution and
-destroys the guard while the database requests are still in flight.
+    my $map = {};
+    foreach my $source_name ($schema->sources) {
+        my $source = $schema->source($source_name);
+        foreach my $col ($source->columns) {
+            my $info = $source->column_info($col);
 
-  {
-      my $guard = $schema->txn_scope_guard;
-      $schema->resultset('User')->create({ name => 'Bob' });
-      # Request is sent to the worker; a Future is returned immediately.
-  }
-  # 1. The block ends here.
-  # 2. $guard is destroyed, triggering an immediate ROLLBACK command.
-  # 3. The ROLLBACK may arrive at the worker before the 'create' is processed.
+            # Extract both inflate and deflate coderefs
+            if ($info->{deflate} || $info->{inflate}) {
+                $map->{$source_name}{$col} = {
+                    deflate => $info->{deflate},
+                    inflate => $info->{inflate},
+                };
+            }
+            # Explicit check for JSON Serializer
+            elsif ($info->{serializer_class}
+                   && $info->{serializer_class} eq 'JSON') {
+                require JSON;
+                my $json = JSON->new->utf8->allow_nonref;
+                $map->{$source_name}{$col} = {
+                    inflate => sub {
+                        my $val = shift;
+                        return $val if !defined $val || ref($val);
 
-This results in a "Silent Failure" where the application receives a success
-notification from the L<Future>, but the data is never committed to the disk.
+                        my $decoded;
+                        eval  {
+                            $decoded = $json->decode($val); 1;
+                        }
+                        or do {
+                            warn "Failed to inflate JSON in $col: $@ (Value: $val)";
+                            return $val;
+                        };
+                        return $decoded;
+                    },
+                    deflate => sub {
+                        my $val = shift;
+                        return $val if !defined $val || !ref($val);
 
-=head2 2. Worker Affinity and Statelessness
+                        return $json->encode($val);
+                    },
+                };
+            }
+        }
+    }
 
-C<DBIx::Class::Async> utilises a pool of background worker processes to
-achieve concurrency. Transactions are inherently "stateful" - a database
-handle must remain assigned to a specific transaction until it is finished.
+    return $map;
+}
+
+=head1 METADATA & REFLECTION
 
 =over 4
 
-=item * B<The Affinity Problem:> Without pinning a user session to a
-specific worker, Operation A might go to Worker 1, while Operation B goes
-to Worker 2. Worker 2 has no context regarding the transaction started
-on Worker 1.
+=item B<source( $source_name )>
 
-=item * B<Worker Starvation:> To support a Scope Guard, a worker would have
-to "lock" itself to a single caller and refuse all other work until a
-C<commit> or C<rollback> is received. In a high-concurrency environment, a
-few unclosed guards could easily exhaust the worker pool, causing the
-entire application to hang.
+Returns the L<DBIx::Class::ResultSource> for the given name.
+
+Unlike standard DBIC, this uses a B<persistent metadata provider> (a cached
+internal schema) to ensure that ResultSource objects remain stable across
+async calls without re-connecting to the database unnecessarily.
+
+=item B<sources()>
+
+Returns a list of all source names available in the schema. This creates a
+temporary, light-weight connection to extract the current schema structure
+and then immediately disconnects to save resources.
+
+=item B<class( $source_name )>
+
+Returns the Result Class string (e.g., C<MyApp::Schema::Result::User>) for
+the given source. Useful for dynamic inspections.
+
+=item B<schema_class()>
+
+Returns the name of the base L<DBIx::Class> schema class being proxied.
+
+=item B<schema_version()>
+
+Returns the version number defined in your DBIC Schema class, if available.
 
 =back
 
-=head2 3. The Recommended Alternative: txn_batch
+=head1 TRANSACTION MANAGEMENT
 
-To provide the same atomicity and safety as a transaction guard without the
-architectural risks, use the L</txn_batch> method.
+=over 4
 
-C<txn_batch> packages all operations into a single atomic message sent to
-a single worker. The worker opens the transaction, executes all queries,
-and commits the results before returning the handle to the pool.
+=item B<txn_begin / txn_commit / txn_rollback>
 
-=head2 4. Comparison at a Glance
+These methods return L<Future> objects. Because workers are persistent,
+calling C<txn_begin> pins your current logic to a specific worker until
+C<commit> or C<rollback> is called.
 
-    Feature            | txn_scope_guard   | txn_batch
-    -------------------|-------------------|------------------
-    Execution          | Non-deterministic | Atomic / Single-hop
-    Worker Logic       | Stateful (Risky)  | Stateless (Safe)
-    Cleanup            | Perl DESTROY      | Internal Worker Logic
-    Race Conditions    | High Risk         | None
+B<Note:> Use these carefully in an async loop to avoid "Worker Starvation"
+where all workers are waiting on long-running manual transactions.
 
-=head1 PERFORMANCE OPTIMISATION
+=item B<txn_batch( @operations | \@operations )>
 
-=head2 Resolving the N+1 Query Problem
+The high-performance alternative to manual transactions. It sends a "bundle"
+of operations to a worker to be executed in a single atomic block.
 
-One of the most common performance bottlenecks in ORMs is the "N+1" query pattern. This occurs when you fetch a set of rows and then loop through them to fetch a related row for each member of the set.
-
-In an asynchronous environment, this is particularly costly due to the overhead of message passing between the main process and the database worker pool.
-
-L<DBIx::Class::Async::Schema> resolves this by supporting the standard L<DBIx::Class> B<prefetch> attribute.
-
-=head3 The Slow Way (N+1 Pattern)
-
-In this example, if there are 50 orders, this code will perform 51 database round-trips.
-
-    my $orders = await $async_schema->resultset('Order')->all;
-
-    foreach my $order (@$orders) {
-        # Each call here triggers a NEW asynchronous find() query to a worker
-        my $user = await $order->user;
-        say "Order for: " . $user->name;
-    }
-
-=head3 The Optimised Way (Eager Loading)
-
-By using C<prefetch>, you instruct the worker to perform a C<JOIN> in the background. The related data is serialised and sent back in the primary payload. The library then automatically hydrates the nested data into blessed Row objects.
-
-    # Only ONE database round-trip for any number of orders
-    my $orders = await $async_schema->resultset('Order')->search(
-        {},
-        { prefetch => 'user' }
+    $schema->txn_batch(
+        { type      => 'create',
+          resultset => 'User',
+          data      => { name => 'Alice' }
+        },
+        { type      => 'update',
+          resultset => 'Stats',
+          data      => { count => 1 },
+          where     => { id    => 5 }
+        }
     );
 
-    foreach my $order (@$orders) {
-        # This returns a resolved Future immediately from the internal cache.
-        # No extra SQL or worker communication is required.
-        my $user = await $order->user;
-        say "Order for: " . $user->name;
-    }
+=back
 
-=head2 Complex Prefetching
+=head1 LIFECYCLE & STATE
 
-The hydration logic is recursive. You can prefetch multiple levels of relationships or multiple independent relationships simultaneously.
+=over 4
 
-    my $rs = $async_schema->resultset('Order')->search({}, {
-        prefetch => [
-            { user => 'profile' }, # Nested: Order -> User -> Profile
-            'status_logs'          # Direct: Order -> Logs
-        ]
+=item B<clone( workers => $count )>
+
+Creates a fresh instance of the Async Schema. This is useful if you need a
+separate pool of workers for "heavy" reporting queries vs. "light" web queries.
+
+=item B<disconnect()>
+
+Gracefully shuts down all background worker processes and flushes the metadata
+caches. Use this during app shutdown to prevent zombie processes.
+
+=item B<storage()>
+
+Returns the C<DBIx::Class::Async::Storage::DBI> wrapper. This is provided for
+compatibility with components that expect to inspect the DBIC storage layer.
+
+=back
+
+=head1 UTILITIES
+
+=over 4
+
+=item B<populate( $source_name, \@data )>
+
+Performs a high-speed bulk insert. This delegates to the ResultSet's C<populate>
+logic and is significantly faster than calling C<create> in a loop.
+
+=item B<search_with_prefetch( $source_name, \%cond, \@prefetch, \%attrs )>
+
+A specialised shortcut for complex joins. It forces C<collapse => 1> to ensure
+that the data structure returned from the worker process is properly "folded"
+into objects, preventing Cartesian product issues over IPC.
+
+=back
+
+=head1 Recursive Future Unwrapping
+
+The C<await> method in this package implements a recursive unwrapping strategy.
+In complex Async applications, it is common for a Future to return *another*
+Future (e.g., a C<search> that triggers a C<prefetch> or a C<txn_do>).
+
+Traditional C<await> calls might return the inner Future object itself rather
+than the data. This implementation detects nested Futures and continues to
+resolve them until the final data payload is reached.
+
+=over 4
+
+=item 1. Resolves the top-level Future via the L<IO::Async::Loop>.
+
+=item 2. Inspects the result; if it is another L<Future>, it re-enters the loop.
+
+=item 3. Throws an exception immediately if any Future in the chain fails.
+
+=item 4. Returns the final "leaf" value to the caller.
+
+=back
+
+=head1 CUSTOM INFLATION & SERIALISATION
+
+Because this module uses a Worker-Pool architecture, data must travel across
+process boundaries. Standard Perl objects (like L<DateTime> or L<JSON> blobs)
+cannot simply be "shared" as live memory.
+
+C<DBIx::Class::Async::Schema> automatically detects your DBIC C<inflate_column>
+definitions and mirrors them in the Worker processes.
+
+=head2 How it works
+
+=over 4
+
+=item 1. Deflation (Main to Worker)
+
+When you pass an object to C<create> or C<update>, the bridge deflates it into
+a storable format before sending it to the worker.
+
+=item 2. Inflation (Worker to Main)
+
+When results come back, the bridge automatically re-applies your C<inflate> coderefs
+to turn raw strings back into rich objects.
+
+=back
+
+=head2 JSON Support
+
+The new design includes built-in support for C<serializer_class => 'JSON'>.
+If detected in your ResultSource metadata, it will automatically handle the
+C<decode>/C<encode> cycle using L<JSON> in a non-blocking manner.
+
+=head2 Manual Registration
+
+If you have complex objects that aren't handled by standard DBIC inflation,
+you can register them manually:
+
+    $schema->inflate_column('User', 'preferences', {
+        inflate => sub { my $val = shift; decode_json($val) },
+        deflate => sub { my $obj = shift; encode_json($obj) },
     });
 
-    my $orders = await $rs->all;
+=head1 PERFORMANCE TIPS
 
-    # All the following are available instantly:
-    my $user    = await $orders->[0]->user;
-    my $profile = await $user->profile;
+=head2 Worker Count
 
-=head2 Implementation Details
+Adjust the C<workers> parameter based on your database connection limits.
+Typically **2-4 workers per CPU core** works well. Each worker maintains its
+own persistent DB connection.
+
+=head2 Prefetching
+
+Use C<search_with_prefetch> to fetch related data in one trip across the
+process boundary. This significantly reduces the overhead of IPC (Inter-Process
+Communication).
+
+=head1 ERROR HANDLING
+
+All methods return L<Future> objects. Errors from workers (SQL errors,
+timeouts, connection drops) are propagated as Future failures. Use
+C<< ->catch >> or C<try/catch> with C<await>.
+
+=head1 STATISTICS & METRICS
+
+If C<enable_metrics> is enabled, you can query the internal state:
 
 =over 4
 
-=item * B<Automation>: Prefetched data is automatically cached in an internal C<_prefetched> slot within the L<DBIx::Class::Async::Row> object during inflation.
+=item * C<total_queries()>: Total operations processed.
 
-=item * B<Transparency>: The relationship accessors generated by L<DBIx::Class::Async::Row> transparently check this cache before attempting a lazy-load via the worker pool.
+=item * C<cache_hits()>: Operations resolved via the internal cache.
 
-=item * B<Efficiency>: By collapsing multiple queries into one, you significantly reduce the latency introduced by inter-process communication (IPC) and database contention.
-
-=back
-
-=head1 SEE ALSO
-
-=over 4
-
-=item *
-
-L<DBIx::Class::Async> - Core asynchronous L<DBIx::Class> implementation
-
-=item *
-
-L<DBIx::Class::Async::ResultSet> - Asynchronous result sets
-
-=item *
-
-L<DBIx::Class::Async::Row> - Asynchronous row objects
-
-=item *
-
-L<DBIx::Class::Async::Storage> - Storage compatibility layer
-
-=item *
-
-L<DBIx::Class::Schema> - Standard DBIx::Class schema
-
-=item *
-
-L<Future> - Asynchronous programming abstraction
+=item * C<error_count()>: Total failed operations.
 
 =back
+
+=head1 EXTENSIBILITY & AUTOLOAD
+
+If you call a method on this object that is not defined in the Async package,
+it will attempt to proxy the call to the B<Native DBIC Schema>.
+
+This allows you to use custom methods defined in your C<MyApp::Schema> class
+seamlessly. However, be aware that calls made via C<AUTOLOAD> are executed in
+the **Parent Process context** and may be blocking unless they specifically
+return a L<Future>.
 
 =head1 AUTHOR
 
@@ -1120,21 +1051,16 @@ Copyright (C) 2026 Mohammad Sajid Anwar.
 This program  is  free software; you can redistribute it and / or modify it under
 the  terms  of the the Artistic License (2.0). You may obtain a  copy of the full
 license at:
-
 L<http://www.perlfoundation.org/artistic_license_2_0>
-
 Any  use,  modification, and distribution of the Standard or Modified Versions is
 governed by this Artistic License.By using, modifying or distributing the Package,
 you accept this license. Do not use, modify, or distribute the Package, if you do
 not accept this license.
-
 If your Modified Version has been derived from a Modified Version made by someone
 other than you,you are nevertheless required to ensure that your Modified Version
  complies with the requirements of this license.
-
 This  license  does  not grant you the right to use any trademark,  service mark,
 tradename, or logo of the Copyright Holder.
-
 This license includes the non-exclusive, worldwide, free-of-charge patent license
 to make,  have made, use,  offer to sell, sell, import and otherwise transfer the
 Package with respect to any patent claims licensable by the Copyright Holder that
@@ -1142,7 +1068,6 @@ are  necessarily  infringed  by  the  Package. If you institute patent litigatio
 (including  a  cross-claim  or  counterclaim) against any party alleging that the
 Package constitutes direct or contributory patent infringement,then this Artistic
 License to you shall terminate on the date that such litigation is filed.
-
 Disclaimer  of  Warranty:  THE  PACKAGE  IS  PROVIDED BY THE COPYRIGHT HOLDER AND
 CONTRIBUTORS  "AS IS'  AND WITHOUT ANY EXPRESS OR IMPLIED WARRANTIES. THE IMPLIED
 WARRANTIES    OF   MERCHANTABILITY,   FITNESS   FOR   A   PARTICULAR  PURPOSE, OR

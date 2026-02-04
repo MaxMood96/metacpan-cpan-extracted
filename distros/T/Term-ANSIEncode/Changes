@@ -352,3 +352,7 @@
 1.86    Jan 31, 2026
 
         Added Windows Warp terminal detection (handles 24 bit color)
+
+1.87    Feb 02, 2026
+
+        Moved many funtions to the module.

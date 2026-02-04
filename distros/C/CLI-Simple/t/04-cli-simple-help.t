@@ -35,9 +35,13 @@ local @ARGV = qw(--help);
 local $ENV{PAGER}   = q{};
 local $ENV{PERLDOC} = q{};
 
+use CLI::Simple qw($AUTO_HELP);
+
 ########################################################################
 subtest 'help' => sub {
 ########################################################################
+  $AUTO_HELP = 1;
+
   stdout_like(
     sub {
       exits_ok {
@@ -51,4 +55,3 @@ subtest 'help' => sub {
 done_testing;
 
 1;
-

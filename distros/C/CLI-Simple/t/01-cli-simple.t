@@ -45,7 +45,13 @@ subtest 'bad option' => sub {
 
   local @ARGV = '--bad-option foo';
 
-  exits_ok { CLI::Simple->new( commands => { foo => \&foo }, option_specs => \@options ), 1, 'called exit' };
+  stderr_like(
+    sub {
+      exits_ok { CLI::Simple->new( commands => { foo => \&foo }, option_specs => \@options ), 1, 'called exit' }
+    },
+    qr/bad-option/xsmi
+  );
+
 };
 
 ########################################################################

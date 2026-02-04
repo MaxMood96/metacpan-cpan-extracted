@@ -5,7 +5,7 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     NAME             => 'Ancient',
     DISTNAME         => 'Ancient',
-    VERSION          => '0.16',
+    VERSION          => '0.18',
     ABSTRACT         => 'Post-Apocalyptic Perl',
     MIN_PERL_VERSION => '5.010',
     AUTHOR       => 'LNATION <email@lnation.org>',
@@ -17,7 +17,7 @@ WriteMakefile(
         provides => {
             'Ancient' => {
                 file    => 'lib/Ancient.pm',
-                version => '0.16',
+                version => '0.17',
             },
         },
     },

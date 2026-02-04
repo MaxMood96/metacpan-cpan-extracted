@@ -1,5 +1,8 @@
 package DBIx::Class::Async::Storage::DBI;
 
+$DBIx::Class::Async::Storage::DBI::VERSION   = '0.51';
+$DBIx::Class::Async::Storage::DBI::AUTHORITY = 'cpan:MANWAR';
+
 use strict;
 use warnings;
 use base 'DBIx::Class::Async::Storage';
@@ -11,11 +14,7 @@ DBIx::Class::Async::Storage::DBI - DBI-based async storage backend for DBIx::Cla
 
 =head1 VERSION
 
-Version 0.49
-
-=cut
-
-our $VERSION = '0.49';
+Version 0.51
 
 =head1 SYNOPSIS
 
@@ -52,6 +51,18 @@ our $VERSION = '0.49';
             ->then(sub {
                 say "Bulk update complete.";
             });
+
+    # Modern Async/Await iteration (Recommended)
+    use Future::AsyncAwait;
+
+    my $cursor = $schema->storage->cursor($rs);
+
+    async sub process_all_users {
+        while (my $row = await $cursor->next) {
+            say "Streaming user: " . $row->name;
+        }
+        say "All users processed.";
+    }
 
 =head1 DESCRIPTION
 
@@ -236,6 +247,42 @@ Despite the async architecture, the API remains similar to standard L<DBIx::Clas
 making migration easier.
 
 =back
+
+=head1 CAVEATS
+
+=head2 Transaction Management
+
+Transactions in L<DBIx::Class::Async> are handled differently than in standard
+DBIC. Because the Storage layer delegates to a worker pool, you cannot
+rely on local C<BEGIN/COMMIT> blocks.
+
+Currently, it is recommended to use database-level atomic operations or
+ensure that your business logic is idempotent across multiple async calls.
+
+=head1 ERROR HANDLING
+
+All methods return a L<Future> that may fail with two categories of error:
+
+=over 4
+
+=item * logic_error
+
+The request was invalid before reaching the database (e.g., calling C<update>
+on a row not in storage).
+
+=item * db_error
+
+The database worker returned an error (e.g., unique constraint violation,
+syntax error).
+
+=back
+
+    $storage->cursor($rs)->next->catch(sub {
+        my ($error, $type) = @_;
+        if ($type eq 'db_error') {
+            warn "Database complained: $error";
+        }
+    });
 
 =head1 SEE ALSO
 

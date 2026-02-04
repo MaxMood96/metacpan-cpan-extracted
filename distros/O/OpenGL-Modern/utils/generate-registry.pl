@@ -282,21 +282,50 @@ for my $name (sort {uc$a cmp uc$b} keys %signature) {
 }
 @features{keys %features} = map [sort keys %$_], values %features;
 
-my %nonglew2alias;
+{
+my (%alias2real, %real2aliases);
 for (grep $_, split /\n/, slurp('utils/aliases.txt')) {
   my ($to, $from) = split ' ';
-  my $alias_feature = $signature{$from}{feature};
-  if (exists $signature{$to}) {
-    # do nothing
-  } elsif (exists $nonglew2alias{$to}) {
-    $to = $nonglew2alias{$to};
-  } else {
-    $nonglew2alias{$to} = $from;
-    $signature{$to} = $signature{$from};
-    ($to, $from) = ($from, $to);
+  $alias2real{$from} = $to;
+  push @{ $real2aliases{$to} }, $from;
+}
+for my $alias (grep !exists $signature{$alias2real{$_}}, sort keys %alias2real) {
+  next unless my $real = $alias2real{$alias};
+  next if !$real2aliases{$real}; # already done
+  die "non-existent alias '$alias' to non-existent '$real'" if !$signature{$alias};
+  my ($actual_real, $actual_alias) = ($alias, $real);
+  my @bad_aliases = grep $_ ne $actual_real, @{ delete $real2aliases{$real} };
+  delete @alias2real{$actual_real, @bad_aliases};
+  $alias2real{$_} = $actual_real for $actual_alias, @bad_aliases;
+}
+for (sort keys %alias2real) {
+  my ($to, $from) = ($alias2real{$_}, $_);
+  my ($from_sig, $to_sig) = @signature{$from, $to};
+  die "no sig for '$to'" if !$to_sig;
+  if ($from_sig && $from_sig != $to_sig) {
+    my ($from_data, $to_data) = map $_->{argdata}, $from_sig, $to_sig;
+    if ($from_data && $to_data) {
+      next if @$from_data != @$to_data;
+      my ($from_types, $to_types) = map [map {
+        my $type = $_->[1] =~ s#(?: |ARB|EXT|GL|const)##gr;
+        $type eq 'enum' ? 'int' : $type
+      } @$_], $from_data, $to_data;
+      my @difftypeind = grep $from_types->[$_] ne $to_types->[$_], 0..$#$from_types;
+      if (@difftypeind) {
+        # print "$from diff $to at (@difftypeind) = (@{[map qq{'$from_types->[$_]' ne '$to_types->[$_]'}, @difftypeind]})\n";
+        if (my $to_dyn = $to_sig->{dynlang}) {
+          # relying on only difference being GLhandleARB vs GLuint, non-"pointer" args
+          $from_sig->{dynlang} = { %$to_dyn };
+          my $new_from_data = $from_sig->{argdata} = [ map [@$_], @$to_data ];
+          $new_from_data->[$_][1] = $from_data->[$_][1] for 0..$#$new_from_data;
+        }
+        next;
+      }
+    }
   }
-  $signature{$to}{aliases}{$from} = $alias_feature;
+  $to_sig->{aliases}{$from} = $from_sig->{feature};
   delete $signature{$from};
+}
 }
 
 my @version_features = grep /^GL_VERSION/, keys %features;

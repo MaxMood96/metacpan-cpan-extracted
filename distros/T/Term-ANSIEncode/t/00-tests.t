@@ -14,6 +14,7 @@ use Test::More tests => 2087;
 # use Test::More 'no_plan';
 
 BEGIN {
+	$ENV{'PATH'} .= ';/usr/bin';
     use_ok('Term::ANSIEncode') || BAIL_OUT('Cannot load Term::ANSIEncode!');
 }
 

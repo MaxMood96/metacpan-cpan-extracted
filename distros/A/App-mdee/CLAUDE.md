@@ -2,7 +2,7 @@
 
 ## Overview
 
-em·dee (Markdown, Easy on the Eyes) is a Markdown viewer command implemented as a Bash script. It combines greple for syntax highlighting with nup for multi-column paged output.
+em·dee (mdee: Markdown, Easy on the Eyes) is a Markdown viewer command implemented as a Bash script. It combines greple for syntax highlighting with nup for multi-column paged output.
 
 ## Project Structure
 
@@ -436,14 +436,20 @@ Key rules:
 Links are converted to [OSC 8 terminal hyperlinks](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda) for clickable URLs:
 
 ```bash
-# Define osc8 function via --prologue
-osc8_prologue='sub{ sub osc8 { sprintf "\e]8;;%s\e\\%s\e]8;;\e\\", @_ } }'
+# Define osc8 function via --prologue (uses URI::Escape for spec compliance)
+osc8_prologue='sub{ use URI::Escape; sub osc8 { sprintf "\e]8;;%s\e\\%s\e]8;;\e\\", uri_escape_utf8($_[0]), $_[1] } }'
 
 # Color functions using named captures
     link_func='sub{ s/   \[(?<txt>.+?)\]\((?<url>.+?)\)/osc8($+{url},  "[$+{txt}]")/xer }'
    image_func='sub{ s/  !\[(?<alt>.+?)\]\((?<url>.+?)\)/osc8($+{url}, "![$+{alt}]")/xer }'
 image_link_func='sub{ s/\[!\[(?<alt>.+?)\]\((?<img>.+?)\)\]\((?<url>.+?)\)/osc8($+{img}, "!") . osc8($+{url}, "[$+{alt}]")/xer }'
 ```
+
+**URL Encoding**: OSC 8 specification requires URLs to contain only bytes in the 32-126 range. From the [spec](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda) (Encodings section):
+
+> For portability, the parameters and the URI must not contain any bytes outside of the 32–126 range. If they do, the behavior is undefined. Bytes outside of this range in the URI must be URI-encoded.
+
+Non-ASCII characters (e.g., Japanese filenames) are handled by `uri_escape_utf8`.
 
 Three link patterns:
 

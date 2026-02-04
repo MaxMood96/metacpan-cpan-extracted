@@ -2,7 +2,7 @@ package
     slot;
 use strict;
 use warnings;
-our $VERSION = '0.16';
+our $VERSION = '0.18';
 require XSLoader;
 XSLoader::load('slot', $VERSION);
 1;

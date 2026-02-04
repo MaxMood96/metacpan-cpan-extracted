@@ -11,7 +11,7 @@ use Syntax::Keyword::Match;
 
 use IPC::MicroSocket;
 
-class IPC::MicroSocket::Client 0.04;
+class IPC::MicroSocket::Client 0.05;
 
 use Carp;
 

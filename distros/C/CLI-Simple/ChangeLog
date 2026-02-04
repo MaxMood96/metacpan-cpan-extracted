@@ -1,3 +1,41 @@
+Tue Feb  3 16:20:20 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[1.0.11]:
+	* VERSION: bump
+	* src/main/bash/bin/modulino.sh.in
+	- MODULINO_PATH, not $MODULION_PATH
+	* src/main/perl/lib/CLI/Simple.pm.in
+	- whitespace
+	- fixed pod alias example
+	(init_logger)
+	- allow ref or scalar for config
+	* src/main/perl/lib/CLI/Simple/README.md: generated
+
+Mon Dec 15 11:57:08 2025  Rob Lauer  <rclauer@gmail.com>
+
+	[1.0.10]:
+	* VERSION: bump
+	* src/main/perl/lib/CLI/Simple.pm.in
+	(new): create accessors in actual class, not base class
+
+Wed Nov  5 07:57:44 2025  Rob Lauer  <rclauer@gmail.com>
+
+	[1.0.9]:
+	* VERSION: bump
+	* src/main/perl/lib/CLI/Simple.pm.in
+	- pod updates to explain lifecycle
+	(@EXPORT_OK): + $AUTO_HELP, $AUTO_DEFAULT
+	(new)
+	- only use single command as default if $AUTO_DEFAULT enabled
+	- only provide usage if no command when $AUTO_HELP is enabled
+	(validate_command)
+	- just return if command $EMPTY
+	(run): likewise
+	* src/main/perl/lib/CLI/Simple/README.md: generated
+	* src/main/perl/lib/t/04_cli-simple-help.t.in: $AUTO_HELP
+	* src/main/perl/lib/t/06-cli-simple-default.t.in: likewise
+	* src/main/perl/lib/t/01-cli-simple.t: check bad-option output
+
 Tue Oct  7 14:23:24 2025  Rob Lauer  <rlauer6@comcast.net>
 
 	[1.0.8]:

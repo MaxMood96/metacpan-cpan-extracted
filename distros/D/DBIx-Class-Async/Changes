@@ -1,5 +1,33 @@
 Revision history for DBIx::Class::Async
 
+0.51 2026-02-03
+     - Bumped version as PAUSE was unhappy with previous tar ball.
+
+0.50 2026-02-03
+     [MAJOR ARCHITECTURAL OVERHAUL]
+     - Complete rewrite of the Storage and Persistence layer to use a
+       decoupled "Bridge & Worker" architecture.
+     - Implementation of DBIx::Class::Async::Row lifecycle management:
+        * Introduced "Dirty" column tracking to minimize SQL UPDATE payloads.
+        * Added shadow-key optimization for high-speed attribute access.
+        * Robust AUTOLOAD mechanism for transparent ResultSet/Row interaction.
+     - Enhanced Race Condition Recovery:
+        * find_or_create() now handles unique constraint collisions
+          automatically via a catch-and-retry strategy.
+     - Improved Memory & Process Management:
+        * Weakened schema references in Storage to prevent worker leaks.
+        * Refined worker pool lifecycle (connect/disconnect) for cleaner
+          shutdowns in event-loop environments.
+     - Streaming Support:
+        * Introduced DBIx::Class::Async::Storage::DBI::Cursor for
+          non-blocking, memory-efficient iteration over large result sets.
+     - Persistence Integrity:
+        * Added strict Primary Key validation in find(), update(), and delete()
+          to prevent ambiguous database operations.
+     - Documentation:
+        * Full POD refresh for Row, ResultSet, and Storage classes reflecting
+          the new async design patterns.
+
 0.49 2026-01-22
      - [IMPROVEMENT] Fixed ResultSet->slice to correctly return a ResultSet
        in scalar context.

@@ -26,12 +26,39 @@
 #  error "object requires Perl 5.10.0 or later"
 #endif
 
-/* C99 bool compatibility */
-#ifndef true
-#  define true 1
+/* C89/C99/C23 bool compatibility
+ * - C89: no bool type, need typedef
+ * - C99: bool from <stdbool.h> (macro expanding to _Bool)
+ * - C23: bool is a keyword, cannot typedef over it
+ *
+ * Note: Old Perl defines 'bool' as a macro but not 'true'/'false'
+ */
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L
+   /* C23: bool is a keyword, true/false are keywords - nothing to do */
+#elif defined(__bool_true_false_are_defined)
+   /* stdbool.h already included with true/false - nothing to do */
+#else
+   /* bool may or may not be defined by perl.h, but we need true/false */
+#  ifndef bool
+     typedef int bool;
+#  endif
+#  ifndef true
+#    define true 1
+#  endif
+#  ifndef false
+#    define false 0
+#  endif
 #endif
-#ifndef false
-#  define false 0
+
+/* C89 inline compatibility - C89 has no inline keyword */
+#ifndef OBJECT_INLINE
+#  if defined(__GNUC__) || defined(__clang__)
+#    define OBJECT_INLINE static __inline__
+#  elif defined(_MSC_VER)
+#    define OBJECT_INLINE static __inline
+#  else
+#    define OBJECT_INLINE static
+#  endif
 #endif
 
 /* OP_AELEMFAST_LEX - introduced in 5.16
@@ -127,6 +154,21 @@
 
 #ifndef INT2PTR
 #  define INT2PTR(type, i) ((type)(i))
+#endif
+
+/* GvCV_set - introduced in 5.13.3 (use 5.14 as safe boundary) */
+#ifndef GvCV_set
+#  define GvCV_set(gv, cv) (GvCV(gv) = (cv))
+#endif
+
+/* HvNAMELEN - introduced in 5.16 */
+#ifndef HvNAMELEN
+#  define HvNAMELEN(hv) (HvNAME(hv) ? strlen(HvNAME(hv)) : 0)
+#endif
+
+/* newXS_flags - may not exist on older perls */
+#ifndef newXS_flags
+#  define newXS_flags(name, xsub, file, proto, flags) newXS(name, xsub, file)
 #endif
 
 #endif /* OBJECT_COMPAT_H */

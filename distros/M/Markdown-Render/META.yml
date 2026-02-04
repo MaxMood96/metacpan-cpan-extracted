@@ -9,7 +9,7 @@ configure_requires:
   ExtUtils::MakeMaker: '6.64'
   File::ShareDir::Install: '0'
 dynamic_config: 1
-generated_by: 'ExtUtils::MakeMaker version 7.64, CPAN::Meta::Converter version 2.150010'
+generated_by: 'ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -22,8 +22,10 @@ no_index:
 provides:
   Markdown::Render:
     file: lib/Markdown/Render.pm
-    version: v1.60.4
+    version: v2.0.2
 requires:
+  CLI::Simple: '0'
+  CLI::Simple::Constants: '0'
   Class::Accessor::Fast: '0'
   Config::Tiny: '0'
   Date::Format: '0'
@@ -33,5 +35,5 @@ requires:
   LWP::UserAgent: '0'
   Readonly: '0'
   perl: '5.016'
-version: v1.60.4
+version: v2.0.2
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

@@ -3,34 +3,157 @@ class TestCase::HTTP::Tiny {
   use Fn;
   use Go;
   use Array;
-  use HTTP::Tiny;
+  use IntList;
   use Go::Context;
   
   our $RESULT : IntList;
   
   static method test : int () {
     
-    my $url = "http://google.com";
+    {
+      # Use httpbin.org/get
+      my $url = "https://httpbin.org/get";
+      
+      my $http = HTTP::Tiny->new;
+      my $ctx = Go::Context->background;
+      
+      my $res = $http->get($ctx, $url);
+      
+      # 1. success: Check if the request was successful
+      unless ($res->success) {
+        diag;
+        return 0;
+      }
+      
+      # 2. status: Check HTTP status code
+      unless ($res->status == 200) {
+        diag;
+        return 0;
+      }
+      
+      # 3. reason: Check status message (e.g., "OK")
+      my $reason = $res->reason;
+      unless (Fn->length($reason) > 0) {
+        diag;
+        return 0;
+      }
+      
+      # 4. protocol: Check HTTP protocol version (e.g., "HTTP/1.1")
+      my $protocol = $res->protocol;
+      unless (Fn->contains($protocol, "HTTP/")) {
+        diag;
+        return 0;
+      }
+      
+      # 5. content: Verify response body
+      my $content = $res->content;
+      unless (Fn->contains($content, "httpbin.org")) {
+        diag;
+        return 0;
+      }
+      
+      # 6. headers: Verify headers Hash
+      my $headers = $res->headers;
+      my $content_type = (string)$headers->get("content-type");
+      unless (Fn->contains($content_type, "application/json")) {
+        diag;
+        return 0;
+      }
+
+      # 7. res (field): Verify the underlying Mojo::Message::Response object
+      my $mojo_res = $res->res;
+      unless ($mojo_res isa Mojo::Message::Response) {
+        diag;
+        return 0;
+      }
+      
+      # Double check using mojo_res directly
+      unless ($mojo_res->code == 200) {
+        diag;
+        return 0;
+      }
+    }
     
+    {
+      my $url = "https://httpbin.org/get";
+      
+      my $http = HTTP::Tiny->new;
+      
+      my $ctx = Go::Context->background;
+      
+      # Use request method explicitly for GET
+      my $res = $http->request($ctx, "GET", $url);
+      
+      my $content = $res->content;
+      
+      # Verify host connection
+      unless (Fn->contains($content, "httpbin.org")) {
+        diag;
+        return 0;
+      }
+      
+      unless ($res->status == 200) {
+        diag;
+        return 0;
+      }
+    }
+    
+    return 1;
+  }
+  
+  static method test_methods : int () {
     my $http = HTTP::Tiny->new;
-    
     my $ctx = Go::Context->background;
-    
-    # Pass $ctx as the first argument
-    my $res = $http->get($ctx, $url);
-    
-    my $content = $res->content;
-    
-    unless (Fn->contains($content, "www.google.com")) {
-      diag;
-      return 0;
+
+=pod TODO:Temporarily disable HEAD method test due to hang issue in SPVM::Mojo::UserAgent
+
+    # HEAD (Body must be empty)
+    {
+      my $res = $http->head($ctx, "https://httpbin.org/get");
+      unless ($res->status == 200 && (Fn->length($res->content) == 0)) {
+        diag;
+        return 0;
+      }
     }
-    
-    unless ($res->status == 200 || $res->status == 301) {
-      diag;
-      return 0;
+
+=cut
+
+    # POST
+    {
+      my $res = $http->post($ctx, "https://httpbin.org/post");
+      unless ($res->status == 200 && Fn->contains($res->content, "httpbin.org/post")) {
+        diag;
+        return 0;
+      }
     }
-    
+
+    # PUT
+    {
+      my $res = $http->put($ctx, "https://httpbin.org/put");
+      unless ($res->status == 200 && Fn->contains($res->content, "httpbin.org/put")) {
+        diag;
+        return 0;
+      }
+    }
+
+    # PATCH
+    {
+      my $res = $http->patch($ctx, "https://httpbin.org/patch");
+      unless ($res->status == 200 && Fn->contains($res->content, "httpbin.org/patch")) {
+        diag;
+        return 0;
+      }
+    }
+
+    # DELETE
+    {
+      my $res = $http->delete($ctx, "https://httpbin.org/delete");
+      unless ($res->status == 200 && Fn->contains($res->content, "httpbin.org/delete")) {
+        diag;
+        return 0;
+      }
+    }
+
     return 1;
   }
   
@@ -43,24 +166,18 @@ class TestCase::HTTP::Tiny {
     
     # First goroutine
     Go->go([$ctx : Go::Context, $http : HTTP::Tiny] method : void () {
-      my $url = "http://google.com";
-      
+      my $url = "https://httpbin.org/get";
       my $res = $http->get($ctx, $url);
-      
       my $content = $res->content;
-      
-      $RESULT->push(Fn->contains($content, "www.google.com"));
+      $RESULT->push(Fn->contains($content, "httpbin.org"));
     });
     
     # Second goroutine
     Go->go([$ctx : Go::Context, $http : HTTP::Tiny] method : void () {
-      my $url = "http://google.com";
-      
+      my $url = "https://httpbin.org/get";
       my $res = $http->get($ctx, $url);
-      
       my $content = $res->content;
-      
-      $RESULT->push(Fn->contains($content, "www.google.com"));
+      $RESULT->push(Fn->contains($content, "httpbin.org"));
     });
     
     # Wait for all goroutines to finish

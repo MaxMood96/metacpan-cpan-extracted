@@ -19,6 +19,30 @@
        (PERL_VERSION > (v) || (PERL_VERSION == (v) && PERL_SUBVERSION >= (s)))))
 #endif
 
+/* C89/C99/C23 bool compatibility
+ * - C89: no bool type, need typedef
+ * - C99: bool from <stdbool.h> (macro expanding to _Bool)
+ * - C23: bool is a keyword, cannot typedef over it
+ *
+ * Note: Old Perl defines 'bool' as a macro but not 'true'/'false'
+ */
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L
+   /* C23: bool is a keyword, true/false are keywords - nothing to do */
+#elif defined(__bool_true_false_are_defined)
+   /* stdbool.h already included with true/false - nothing to do */
+#else
+   /* bool may or may not be defined by perl.h, but we need true/false */
+#  ifndef bool
+     typedef int bool;
+#  endif
+#  ifndef true
+#    define true 1
+#  endif
+#  ifndef false
+#    define false 0
+#  endif
+#endif
+
 /* Op sibling macros - introduced in 5.22 */
 #ifndef OpHAS_SIBLING
 #  define OpHAS_SIBLING(o)      ((o)->op_sibling != NULL)

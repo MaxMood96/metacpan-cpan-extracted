@@ -5,7 +5,7 @@ use Carp;
 
 { #<<< A non-indenting brace to contain all lexical variables
 
-our $VERSION = '20260109';
+our $VERSION = '20260204';
 use English qw( -no_match_vars );
 use Scalar::Util 'refaddr';    # perl 5.8.1 and later
 use Perl::Tidy::VerticalAligner::Alignment;
@@ -114,12 +114,11 @@ sub Fault {
     # except if there has been a bug introduced by a recent program change.
     # Please add comments at calls to Fault to explain why the call
     # should not occur, and where to look to fix it.
-    my ( $package0_uu, $filename0_uu, $line0,    $subroutine0_uu ) = caller(0);
-    my ( $package1_uu, $filename1,    $line1,    $subroutine1 )    = caller(1);
-    my ( $package2_uu, $filename2_uu, $line2_uu, $subroutine2 )    = caller(2);
-    my $pkg = __PACKAGE__;
-
-    my $input_stream_name = get_input_stream_name();
+    my ( $package0_uu, $filename0_uu, $line0, $subroutine0_uu ) = caller(0);
+    my ( $package1_uu, $filename1, $line1, $subroutine1 )       = caller(1);
+    my ( $package2_uu, $filename2_uu, $line2_uu, $subroutine2 ) = caller(2);
+    my $pkg               = __PACKAGE__;
+    my $input_stream_name = Perl::Tidy::get_input_stream_name();
 
     Die(<<EOM);
 ==============================================================================
@@ -412,7 +411,6 @@ sub new {
     initialize_step_B_cache();
     initialize_valign_buffer();
     initialize_decode();
-    set_logger_object( $args{logger_object} );
 
     # Initialize all variables in $self.
     # To add an item to $self, first define a new constant index in the BEGIN
@@ -511,39 +509,14 @@ sub write_diagnostics {
     return;
 } ## end sub write_diagnostics
 
-{    ## begin closure for logger routines
-    my $logger_object;
-
-    # Called once per file to initialize the logger object
-    sub set_logger_object {
-        $logger_object = shift;
-        return;
+sub warning {
+    my ( $self, $msg ) = @_;
+    my $logger_object = $self->[_logger_object_];
+    if ($logger_object) {
+        $logger_object->warning($msg);
     }
-
-    sub get_input_stream_name {
-        my $input_stream_name = EMPTY_STRING;
-        if ($logger_object) {
-            $input_stream_name = $logger_object->get_input_stream_name();
-        }
-        return $input_stream_name;
-    } ## end sub get_input_stream_name
-
-    sub warning {
-        my ($msg) = @_;
-        if ($logger_object) {
-            $logger_object->warning($msg);
-        }
-        return;
-    } ## end sub warning
-
-    sub write_logfile_entry {
-        my ($msg) = @_;
-        if ($logger_object) {
-            $logger_object->write_logfile_entry($msg);
-        }
-        return;
-    } ## end sub write_logfile_entry
-}
+    return;
+} ## end sub warning
 
 sub get_cached_line_count {
     my $self = shift;
@@ -1415,7 +1388,10 @@ sub fix_terminal_else {
     my $jparen    = 0;
     my $tok_paren = '(' . $depth_brace;
     my $tok_test  = $rtokens_old->[$jparen];
-    return if ( $tok_test ne $tok_paren );    # shouldn't happen
+    if ( $tok_test ne $tok_paren ) {
+        ## no opening paren - possible syntax error - give up.
+        return;
+    }
 
     # Now find the opening block brace
     my ($jbrace);
@@ -1426,7 +1402,10 @@ sub fix_terminal_else {
             last;
         }
     }
-    return if ( !defined($jbrace) );          # shouldn't happen
+    if ( !defined($jbrace) ) {
+        ## no opening brace - possible syntax error - give up.
+        return;
+    }
 
     # Now splice the tokens and patterns of the previous line
     # into the else line to insure a match.  Add empty fields
@@ -1607,7 +1586,7 @@ sub check_fit {
     # identical numbers of alignment tokens.
     if ( $jmax_old ne $jmax ) {
 
-        warning(<<EOM);
+        $self->warning(<<EOM);
 Program bug detected in Perl::Tidy::VerticalAligner sub check_fit
 unexpected difference in array lengths: $jmax != $jmax_old
 EOM
@@ -2039,7 +2018,10 @@ sub _flush_group_lines {
         $grp_level  = $group_level;
         $rgroups    = [];
         initialize_for_new_rgroup();
-        return unless ( @{$rlines} );    # shouldn't happen
+        if ( !@{$rlines} ) {
+            DEVEL_MODE && Fault("Unexpected empty alignment group\n");
+            return;
+        }
 
         # Unset the _end_group flag for the last line if it set because it
         # is not needed and can causes problems for -lp formatting
@@ -2064,7 +2046,7 @@ sub _flush_group_lines {
             if ( !defined($jbeg) ) {
 
                 # safety check, shouldn't happen
-                warning(<<EOM);
+                $self->warning(<<EOM);
 Program bug detected in Perl::Tidy::VerticalAligner sub sweep_top_down
 undefined index for group line count $group_line_count
 EOM
@@ -3066,7 +3048,6 @@ sub make_alignment_info {
     #----------------
     my $rline_hashes = [];
     my @equals_info;
-    my @line_info;    # no longer used
     my $jmax         = @{$rnew_lines} - 1;
     my $max_lev_diff = 0;
     foreach my $line ( @{$rnew_lines} ) {
@@ -3114,8 +3095,7 @@ sub make_alignment_info {
             $i++;
         }
         push @{$rline_hashes}, $rhash;
-        push @equals_info,     [ $i_eq,    $tok_eq, $pat_eq ];
-        push @line_info,       [ $lev_min, $lev_max ];
+        push @equals_info,     [ $i_eq, $tok_eq, $pat_eq ];
         if ( defined($lev_min) ) {
             my $lev_diff = $lev_max - $lev_min;
             if ( $lev_diff > $max_lev_diff ) { $max_lev_diff = $lev_diff }
@@ -3419,14 +3399,14 @@ sub delete_unmatched_tokens_main_loop {
                         }
                     }
                 }
-            }    # End loop over alignment tokens
+            }    ## End loop over alignment tokens
 
             # Process all deletion requests for this line
             if (@idel) {
                 delete_selected_tokens( $line, \@idel );
             }
-        }    # End loop over lines
-    } ## end main loop over subgroups
+        }    ## End loop over lines
+    }    ## End main loop over subgroups
 
     return;
 } ## end sub delete_unmatched_tokens_main_loop
@@ -4547,8 +4527,8 @@ sub is_marginal_match {
     if ( $is_assignment{$raw_tokb} ) {
 
         # undo marginal flag if first line is semicolon terminated
-        # and leading patters match
-        if ($sc_term0) {    # && $sc_term1) {
+        # and leading patterns match
+        if ($sc_term0) {
             $is_marginal = $pat0 ne $pat1;
         }
     }
@@ -7138,7 +7118,7 @@ sub get_output_line_number {
 
 sub add_leading_tabs {
 
-    my ( $line, $leading_space_count, $level ) = @_;
+    my ( $self, $line, $leading_space_count, $level ) = @_;
 
     # Convert leading whitespace to use tabs if -et or -t are set
 
@@ -7170,7 +7150,7 @@ EOM
         # Skip tabbing if actual whitespace is less than expected
         if ( $leading_space_count_test < $leading_space_count ) {
             DEBUG_TABS
-              && warning(<<EOM);
+              && $self->warning(<<EOM);
 Error entabbing: expected count=$leading_space_count but only found $leading_space_count_test for line:
 '$line'
 EOM
@@ -7209,7 +7189,7 @@ EOM
             # But it could be an outdented comment
             if ( $line !~ /^\s*#/ ) {
                 DEBUG_TABS
-                  && warning(
+                  && $self->warning(
 "Error entabbing in valign_output_step_D: for level=$level count=$leading_space_count\n"
                   );
             }
@@ -7244,7 +7224,7 @@ sub valign_output_step_D {
 
     # Convert leading whitespace to use tabs if requested.
     if ( $require_tabs && $leading_space_count > 0 ) {
-        $line = add_leading_tabs( $line, $leading_space_count, $level );
+        $line = $self->add_leading_tabs( $line, $leading_space_count, $level );
     }
 
     my $file_writer_object = $self->[_file_writer_object_];
@@ -7258,25 +7238,27 @@ sub valign_output_step_D {
 ##########################
 
 sub report_anything_unusual {
-    my $self = shift;
+    my $self          = shift;
+    my $logger_object = $self->[_logger_object_];
+    return if ( !$logger_object );
 
     my $outdented_line_count = $self->[_outdented_line_count_];
     if ( $outdented_line_count > 0 ) {
-        write_logfile_entry(
+        $logger_object->write_logfile_entry(
             "$outdented_line_count long lines were outdented:\n");
         my $first_outdented_line_at = $self->[_first_outdented_line_at_];
-        write_logfile_entry(
+        $logger_object->write_logfile_entry(
             "  First at output line $first_outdented_line_at\n");
 
         if ( $outdented_line_count > 1 ) {
             my $last_outdented_line_at = $self->[_last_outdented_line_at_];
-            write_logfile_entry(
+            $logger_object->write_logfile_entry(
                 "   Last at output line $last_outdented_line_at\n");
         }
-        write_logfile_entry(
+        $logger_object->write_logfile_entry(
             "  use -noll to prevent outdenting, -l=n to increase line length\n"
         );
-        write_logfile_entry("\n");
+        $logger_object->write_logfile_entry("\n");
     }
     return;
 } ## end sub report_anything_unusual

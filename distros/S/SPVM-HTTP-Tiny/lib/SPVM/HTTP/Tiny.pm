@@ -1,18 +1,18 @@
 package SPVM::HTTP::Tiny;
 
-our $VERSION = "0.016";
+our $VERSION = "0.017";
 
 1;
 
 =head1 Name
 
-SPVM::HTTP::Tiny - HTTP Client
+SPVM::HTTP::Tiny - A User-Friendly HTTP Client based on Mojo::UserAgent
 
 =head1 Description
 
-HTTP::Tiny class in L<SPVM> is a HTTP client.
+L<HTTP::Tiny|SPVM::HTTP::Tiny> class in L<SPVM> is a simple HTTP client.
 
-B<This class is highly experimental. Many dramatic incompatibilities are expected.>.
+B<This class is highly experimental. Many dramatic incompatibilities are expected.>
 
 =head1 Usage
 
@@ -20,111 +20,108 @@ B<This class is highly experimental. Many dramatic incompatibilities are expecte
   use Go::Context;
   
   my $ctx = Go::Context->background;
-  my $response = HTTP::Tiny->new->get($ctx, 'http://example.com/');
+  my $http = HTTP::Tiny->new;
+  
+  # GET request
+  my $response = $http->get($ctx, 'http://example.com/');
   
   unless ($response->success) {
-    die "Failed!";
+    die "Failed to fetch!";
   }
   
-  say $response->status;
+  # Status and Reason
+  my $status = $response->status;
+  my $reason = $response->reason;
   
-  say $response->reason;
+  # Accessing headers
+  my $headers = $response->headers;
+  my $content_type = $headers->header("Content-Type");
   
-  for my $header_name (@{$response->headers->names}) {
-    my $header_value = $response->headers->header($header_name);
-    
-    say $header_value;
-  }
-  
-  if (length $response->content) {
-    print $response->content;
+  # Accessing content
+  my $content = $response->content;
+  if (Fn->length($content) > 0) {
+    print $content;
   }
 
 =head1 Details
 
-=head2 Note
+=head2 Wrapper of Mojo::UserAgent
 
-This class is a wrapper of L<Mojo::User::Agent|SPVM::Mojo::User::Agent>. So this class has a lot of dependencies instead of Perl's one.
+This class is a wrapper of L<Mojo::UserAgent|SPVM::Mojo::UserAgent>. Unlike Perl's original C<HTTP::Tiny>, this implementation depends on the Mojo stack to support non-blocking I/O and L<Go|SPVM::Go> coroutines.
 
 =head1 Fields
 
-=head2 agent
+=head2 ua
 
-C<has agent : ro string;>
+C<has ua : ro L<Mojo::UserAgent|SPVM::Mojo::UserAgent>;>
 
-The user agent.
-
-=head2 inactivity_timeout
-
-C<has inactivity_timeout : ro double;>
-
-The request inactivity_timeout seconds.
+The L<Mojo::UserAgent|SPVM::Mojo::UserAgent> object used for HTTP requests.
 
 =head1 Class Methods
 
 =head2 new
 
-C<static method new : HTTP::Tiny ($options : object[] = undef);>
+C<static method new : L<HTTP::Tiny|SPVM::HTTP::Tiny> ($options : object[] = undef);>
 
 Creates a new L<HTTP::Tiny|SPVM::HTTP::Tiny> object.
 
-Options:
-
-=over 2
-
-=item C<agent> : string
-
-Sets the L</"agent"> field.
-
-=item C<inactivity_timeout> : Double
-
-Sets the L</"inactivity_timeout"> field.
-
-=back
+B<Note:> Currently, C<$options> are ignored in the C<new> method. The default User-Agent string is C<SPVM/HTTP::Tiny/$VERSION> and C<max_redirects> is set to 5.
 
 =head1 Instance Methods
 
 =head2 get
 
-C<method get : HTTP::Tiny::Response ($ctx : L<Go::Context|SPVM::Go::Context>, $url : string, $options : object[] = undef);>
+C<method get : L<HTTP::Tiny::Response|SPVM::HTTP::Tiny::Response> ($ctx : L<Go::Context|SPVM::Go::Context>, $url : string, $options : object[] = undef);>
 
-Gets the HTTP response by sending an HTTP GET request to the URL $url.
-
-The HTTP response is a L<HTTP::Tiny::Response|SPVM::HTTP::Tiny::Response> object.
-
-Options:
-
-=over 2
-
-=item C<headers> : L<HTTP::Tiny::Headers|SPVM::HTTP::Tiny::Headers>
-
-Headers for an HTTP request.
-
-=item C<inactivity_timeout> : Double
-
-Timeout seconds.
-
-=back
+Sends an HTTP C<GET> request.
 
 =head2 head
 
-C<method head : HTTP::Tiny::Response ($ctx : L<Go::Context|SPVM::Go::Context>, $url : string, $options : object[] = undef);>
+C<method head : L<HTTP::Tiny::Response|SPVM::HTTP::Tiny::Response> ($ctx : L<Go::Context|SPVM::Go::Context>, $url : string, $options : object[] = undef);>
+
+Sends an HTTP C<HEAD> request.
 
 =head2 put
 
-C<method put : HTTP::Tiny::Response ($ctx : L<Go::Context|SPVM::Go::Context>, $url : string, $options : object[] = undef);>
+C<method put : L<HTTP::Tiny::Response|SPVM::HTTP::Tiny::Response> ($ctx : L<Go::Context|SPVM::Go::Context>, $url : string, $options : object[] = undef);>
+
+Sends an HTTP C<PUT> request.
 
 =head2 post
 
-C<method post : HTTP::Tiny::Response ($ctx : L<Go::Context|SPVM::Go::Context>, $url : string, $options : object[] = undef);>
+C<method post : L<HTTP::Tiny::Response|SPVM::HTTP::Tiny::Response> ($ctx : L<Go::Context|SPVM::Go::Context>, $url : string, $options : object[] = undef);>
+
+Sends an HTTP C<POST> request.
 
 =head2 patch
 
-C<method patch : HTTP::Tiny::Response ($ctx : L<Go::Context|SPVM::Go::Context>, $url : string, $options : object[] = undef);>
+C<method patch : L<HTTP::Tiny::Response|SPVM::HTTP::Tiny::Response> ($ctx : L<Go::Context|SPVM::Go::Context>, $url : string, $options : object[] = undef);>
+
+Sends an HTTP C<PATCH> request.
 
 =head2 delete
 
-C<method delete : HTTP::Tiny::Response ($ctx : L<Go::Context|SPVM::Go::Context>, $url : string, $options : object[] = undef);>
+C<method delete : L<HTTP::Tiny::Response|SPVM::HTTP::Tiny::Response> ($ctx : L<Go::Context|SPVM::Go::Context>, $url : string, $options : object[] = undef);>
+
+Sends an HTTP C<DELETE> request.
+
+=head2 request
+
+C<method request : L<HTTP::Tiny::Response|SPVM::HTTP::Tiny::Response> ($ctx : L<Go::Context|SPVM::Go::Context>, $method : string, $url : string, $options : object[] = undef);>
+
+Sends an HTTP request with the specified method.
+
+Options (as a C<Hash>):
+
+=over 2
+
+=item * C<headers> : object[] (Hash-like)
+
+Custom headers for the request.
+
+  my $res = $http->request($ctx, "GET", $url, {headers => {"X-Custom" => "Value"}});
+
+=back
 
 =head1 Repository
 
@@ -136,6 +133,6 @@ Yuki Kimoto C<kimoto.yuki@gmail.com>
 
 =head1 Copyright & License
 
-Copyright (c) 2023 Yuki Kimoto
+Copyright (c) 2026 Yuki Kimoto
 
 MIT License

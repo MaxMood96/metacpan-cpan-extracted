@@ -12,7 +12,7 @@ use JSON;
 use LWP::UserAgent;
 use List::Util qw(none);
 
-our $VERSION = '1.60.4';
+our $VERSION = '2.0.2';
 
 use parent qw(Class::Accessor::Fast);
 
@@ -38,12 +38,14 @@ __PACKAGE__->mk_accessors(
 
 use Readonly;
 
-Readonly our $GITHUB_API  => 'https://api.github.com/markdown';
-Readonly our $EMPTY       => q{};
-Readonly our $SPACE       => q{ };
-Readonly our $TOC_TITLE   => 'Table of Contents';
-Readonly our $TOC_BACK    => 'Back to Table of Contents';
-Readonly our $DEFAULT_CSS => 'https://cdn.simplecss.org/simple-v1.css';
+Readonly::Scalar our $GITHUB_API  => 'https://api.github.com/markdown';
+Readonly::Scalar our $EMPTY       => q{};
+Readonly::Scalar our $SPACE       => q{ };
+Readonly::Scalar our $TOC_TITLE   => 'Table of Contents';
+Readonly::Scalar our $TOC_BACK    => 'Back to Table of Contents';
+Readonly::Scalar our $DEFAULT_CSS => 'https://cdn.simplecss.org/simple-v1.css';
+Readonly::Scalar our $TRUE        => 1;
+Readonly::Scalar our $FALSE       => 0;
 
 caller or __PACKAGE__->main;
 
@@ -241,7 +243,7 @@ sub _fix_header {
 
   $anchor = lc $anchor;
   $anchor =~ s/\s+/-/gxsm;                        # spaces become '-'
-  $anchor =~ s/[.:\?_.\@'(),\`]//xsmg;            # known weird characters, but expect more
+  $anchor =~ s/[.:\?_.\@'(),\`\*]//xsmg;          # known weird characters, but expect more
   $anchor =~ s/\///xsmg;
 
   $line
@@ -360,8 +362,17 @@ sub create_toc {
 
   my $toc = $self->get_no_title ? $EMPTY : "# \@TOC_TITLE\@\n\n";
 
+  my $in_code_block = $FALSE;
+
   while (<$fh>) {
     chomp;
+
+    if (/^\s*```/xsm) {
+      $in_code_block = $in_code_block ? $FALSE : $TRUE;
+      next;
+    }
+
+    next if $in_code_block;
 
     /^(\#+)\s+(.*?)$/xsm && do {
       my $level = $1;
@@ -376,7 +387,7 @@ sub create_toc {
 
       $link =~ s/\s+/-/gxsm;  # spaces become '-'
 
-      $link =~ s/[\?\_:.\@'(),\`]//xsmg;  # known weird characters, but expect more
+      $link =~ s/[\?\_:.\@'(),\`\*]//xsmg;  # known weird characters, but expect more
 
       $link =~ s/\///xsmg;
 
@@ -613,6 +624,10 @@ will be added to the document.
 =head1 AUTHOR
 
 Rob Lauer - rlauer6@comcast.net
+
+=head1 LICENSE
+
+This software is licensed under the same terms as Perl.
 
 =head1 SEE OTHER
 

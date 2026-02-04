@@ -2,7 +2,7 @@ package
     object;
 use strict;
 use warnings;
-our $VERSION = '0.16';
+our $VERSION = '0.18';
 require XSLoader;
 XSLoader::load('object', $VERSION);
 1;
@@ -115,6 +115,16 @@ The following types are available with inline checks (zero overhead):
 
 =item * B<default(value)> - default value if not provided
 
+=item * B<lazy> - value computed on first access (requires builder)
+
+=item * B<builder(method)> - method name to build lazy value
+
+=item * B<clearer> - install a clear_* method to reset value
+
+=item * B<predicate> - install a has_* method to check if set
+
+=item * B<trigger(method)> - method called when value changes
+
 =back
 
 Default values support:
@@ -126,6 +136,35 @@ Default values support:
     default([])        # fresh empty array per object
     default({})        # fresh empty hash per object
     default(undef)     # explicit undef
+
+=head3 Lazy and Builder
+
+Lazy slots defer computation until first access:
+
+    object::define('Config',
+        'settings:HashRef:lazy:builder(_build_settings)',
+    );
+    
+    package Config;
+    sub _build_settings {
+        my $self = shift;
+        return { load_from_file() };  # Only called when accessed
+    }
+
+=head3 Clearer and Predicate
+
+Install helper methods to clear and check slot values:
+
+    object::define('Person',
+        'nickname:Str:clearer:predicate',
+    );
+    
+    my $p = new Person;
+    $p->has_nickname;     # false
+    $p->nickname('Bob');
+    $p->has_nickname;     # true
+    $p->clear_nickname;   # reset to undef
+    $p->has_nickname;     # false
 
 =head2 object::register_type($name, $check, $coerce)
 
@@ -316,6 +355,103 @@ Returns true if object is frozen.
 
 Returns true if object is locked (but may not be frozen).
 
+=head2 object::clone($obj)
+
+Create a shallow copy of an object. All property values are copied, but
+references share the same underlying referent. The clone is a fresh object
+that is NOT frozen or locked, even if the original was.
+
+    my $original = new Cat name => 'Whiskers', age => 3;
+    object::freeze($original);
+
+    my $clone = object::clone($original);
+    $clone->age(4);  # works - clone is not frozen
+    print $clone->name;  # "Whiskers"
+
+Shallow copy means array/hash reference properties will share data:
+
+    $original->tags(['fluffy']);
+    my $clone = $original->clone;
+    push @{$clone->tags}, 'playful';
+    # $original->tags is now ['fluffy', 'playful']
+
+=head2 object::properties($class)
+
+Return the property names for a class. In list context, returns the property
+names. In scalar context, returns the count.
+
+    my @props = object::properties('Cat');   # ('name', 'age')
+    my $count = object::properties('Cat');   # 2
+
+    # Check if property exists
+    if (grep { $_ eq 'color' } object::properties('Cat')) {
+        ...
+    }
+
+Returns an empty list (or 0 in scalar context) for non-existent classes.
+
+=head2 object::slot_info($class, $property)
+
+Return detailed metadata about a property slot. Returns a hashref with
+information about the slot, or C<undef> if the class or property doesn't
+exist.
+
+    my $info = object::slot_info('Person', 'name');
+    # Returns:
+    # {
+    #     name         => 'name',
+    #     index        => 1,
+    #     type         => 'Str',
+    #     is_required  => 1,
+    #     is_readonly  => 0,
+    #     is_lazy      => 0,
+    #     has_default  => 0,
+    #     has_trigger  => 0,
+    #     has_coerce   => 0,
+    #     has_builder  => 0,
+    #     has_clearer  => 0,
+    #     has_predicate => 0,
+    #     has_type     => 1,
+    # }
+
+The returned hash always contains these boolean flags:
+
+=over 4
+
+=item * B<is_required> - Property must be provided in new()
+
+=item * B<is_readonly> - Setter disabled after construction
+
+=item * B<is_lazy> - Value computed on first access
+
+=item * B<has_default> - Has a default value
+
+=item * B<has_trigger> - Has a trigger callback
+
+=item * B<has_coerce> - Has coercion enabled
+
+=item * B<has_builder> - Has a builder method
+
+=item * B<has_clearer> - Has a clearer method
+
+=item * B<has_predicate> - Has a predicate method
+
+=item * B<has_type> - Has a type constraint
+
+=back
+
+Additional keys may be present depending on the slot configuration:
+
+=over 4
+
+=item * B<type> - The type name (if has_type is true)
+
+=item * B<default> - The default value (if has_default is true)
+
+=item * B<builder> - The builder method name (if has_builder is true)
+
+=back
+
 =head2 object::import_accessors($class, $target)
 
 Import function-style accessors for maximum performance. This enables
@@ -373,6 +509,107 @@ Parameters:
 
 Function-style accessors are compiled to custom ops at compile time,
 giving performance competitive with or faster than C<slot>.
+
+=head1 DEMOLISH
+
+Define a C<DEMOLISH> method in your class to run cleanup code when
+objects are destroyed. The C<object> module automatically installs
+a C<DESTROY> wrapper that calls your C<DEMOLISH> method.
+
+    package FileHandle;
+    
+    sub DEMOLISH {
+        my $self = shift;
+        close $self->fh if $self->fh;
+    }
+    
+    package main;
+    object::define('FileHandle', 'fh', 'path:Str');
+
+Zero overhead: The DESTROY wrapper is only installed for classes that
+define a DEMOLISH method.
+
+=head1 ROLES
+
+Roles provide reusable bundles of slots and methods that can be composed
+into classes. Zero overhead if not used.
+
+=head2 object::role($name, @slot_specs)
+
+Define a role with slots:
+
+    object::role('Serializable', 'format:Str:default(json)');
+    
+    package Serializable;
+    sub serialize {
+        my $self = shift;
+        return $self->format eq 'json' ? to_json($self) : to_yaml($self);
+    }
+
+=head2 object::requires($role, @method_names)
+
+Declare methods that consuming classes must implement:
+
+    object::requires('Serializable', 'to_hash');
+
+=head2 object::with($class, @roles)
+
+Compose roles into a class:
+
+    object::define('Document', 'title:Str', 'content:Str');
+    object::with('Document', 'Serializable');
+    
+    my $doc = new Document title => 'Test', content => 'Hello';
+    print $doc->format;      # 'json' (from role)
+    print $doc->serialize;   # JSON output
+
+=head2 object::does($obj_or_class, $role)
+
+Check if an object or class consumes a role:
+
+    if (object::does($doc, 'Serializable')) { ... }
+
+=head1 METHOD MODIFIERS
+
+Wrap existing methods with before, after, or around hooks. Zero overhead
+for classes that don't use modifiers.
+
+=head2 object::before($method, $callback)
+
+Run code before a method. Arguments are passed to the callback.
+
+    object::before('Person::save', sub {
+        my ($self) = @_;
+        $self->updated_at(time);
+    });
+
+=head2 object::after($method, $callback)
+
+Run code after a method. Arguments are passed to the callback.
+
+    object::after('Person::save', sub {
+        my ($self) = @_;
+        log_action("Saved person: " . $self->name);
+    });
+
+=head2 object::around($method, $callback)
+
+Wrap a method. Receives C<$orig> as first argument:
+
+    object::around('Person::age', sub {
+        my ($orig, $self, @args) = @_;
+        if (@args) {
+            die "Age must be positive" if $args[0] < 0;
+        }
+        return $self->$orig(@args);
+    });
+
+Multiple modifiers can be stacked:
+
+    object::before('Class::method', \&first);
+    object::before('Class::method', \&second);  # runs before first
+    object::after('Class::method', \&third);    # runs after method
+    object::after('Class::method', \&fourth);   # runs after third
 
 =head1 PERFORMANCE COMPARISON
 

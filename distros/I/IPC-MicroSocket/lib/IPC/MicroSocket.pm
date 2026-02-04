@@ -8,7 +8,7 @@ use Object::Pad 0.817;  # class :abstract
 use Future::AsyncAwait;
 use Syntax::Keyword::Match;
 
-package IPC::MicroSocket 0.04;
+package IPC::MicroSocket 0.05;
 
 =head1 NAME
 
@@ -62,17 +62,22 @@ not plain byte strings, you must serialise/deserialise them.
 class IPC::MicroSocket::Connection :abstract
 {
    use Future::Buffer;
-   use Future::IO;
+   use Future::IO 0.17;
    use Future::Selector 0.02; # ->run_until_ready
 
    field $fh :param;
+   ADJUST {
+      # Normally these are real filehandles, but in unit tests they're plain
+      # strings. The 'ref' test just stops that from being a problem
+      $fh->blocking( 0 ) if ref $fh;
+   }
 
    # A message is a sigil (U8), argc (U8), args (argc * U32+bytes)
 
    async method _recv ()
    {
       my $buffer = Future::Buffer->new(
-         fill => sub () { Future::IO->sysread( $fh, 256 ) },
+         fill => sub () { Future::IO->read( $fh, 256 ) },
       );
 
       MESSAGE: while(1) {
@@ -98,7 +103,7 @@ class IPC::MicroSocket::Connection :abstract
 
    async method send ( $sigil, @args )
    {
-      await Future::IO->syswrite( $fh,
+      await Future::IO->write_exactly( $fh,
          join "",
             $sigil,
             pack( "C", scalar @args ),

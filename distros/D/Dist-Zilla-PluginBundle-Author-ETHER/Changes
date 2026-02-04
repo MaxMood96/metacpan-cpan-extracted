@@ -1,5 +1,9 @@
 Revision history for Dist-Zilla-PluginBundle-Author-ETHER
 
+0.171     2026-02-03 23:02:10Z
+          - addendum to generated CONTRIBUTING file regarding AI-generated
+            contributions
+
 0.170     2025-11-09 01:48:49Z
           - patch around broken Dist::Zilla 6.034
 

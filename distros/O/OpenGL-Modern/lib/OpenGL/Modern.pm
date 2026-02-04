@@ -8,7 +8,7 @@ use Exporter 'import';
 
 use OpenGL::Modern::Const;
 
-our $VERSION    = '0.0402';
+our $VERSION    = '0.0403';
 our $XS_VERSION = $VERSION; # capture before strip, as EUMM reads statically in setting version for .xs file
 $VERSION =~ tr/_//d;
 
@@ -5362,9 +5362,7 @@ our %EXPORT_TAGS_GL = (
     'glMemoryBarrierByRegion'
   ],
   'GL_ARB_ES3_2_compatibility' => [
-    'glPrimitiveBoundingBox',
-    'glPrimitiveBoundingBoxARB',
-    'glPrimitiveBoundingBoxEXT'
+    'glPrimitiveBoundingBoxARB'
   ],
   'GL_ARB_base_instance' => [
     'glDrawArraysInstancedBaseInstance',
@@ -7794,9 +7792,7 @@ our %EXPORT_TAGS_GL = (
     'glTexScissorINTEL'
   ],
   'GL_KHR_blend_equation_advanced' => [
-    'glBlendBarrier',
-    'glBlendBarrierKHR',
-    'glBlendBarrierNV'
+    'glBlendBarrierKHR'
   ],
   'GL_KHR_debug' => [
     'glDebugMessageCallback_c',

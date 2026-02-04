@@ -10,7 +10,7 @@ use Sublike::Extended 0.29 'method';
 
 use IPC::MicroSocket;
 
-package IPC::MicroSocket::Server 0.04;  # this 'package' statement just to keep CPAN indexers happy
+package IPC::MicroSocket::Server 0.05;  # this 'package' statement just to keep CPAN indexers happy
 class IPC::MicroSocket::Server :abstract;
 
 use Carp;
@@ -54,6 +54,11 @@ methods that contain the actual behaviour for the server.
 =cut
 
 field $fh :param;
+ADJUST {
+   # Normally these are real filehandles, but in unit tests they're plain
+   # strings. The 'ref' test just stops that from being a problem
+   $fh->blocking( 0 ) if ref $fh;
+}
 
 field $connection_class :param = "IPC::MicroSocket::Server::_Connection";
 

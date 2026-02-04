@@ -1,5 +1,39 @@
 package DBIx::Class::Async::ResultSet;
 
+$DBIx::Class::Async::ResultSet::VERSION   = '0.51';
+$DBIx::Class::Async::ResultSet::AUTHORITY = 'cpan:MANWAR';
+
+=head1 NAME
+
+DBIx::Class::Async::ResultSet - Non-blocking resultset proxy with Future-based execution
+
+=head1 VERSION
+
+Version 0.51
+
+=head1 SYNOPSIS
+
+    my $rs = $schema->resultset('User')->search({ active => 1 });
+
+    # Async execution using Futures
+    $rs->all->then(sub {
+        my $users = shift; # Arrayref of DBIx::Class::Async::Row objects
+        foreach my $user (@$users) {
+            print "Found: " . $user->username . "\n";
+        }
+    })->retain;
+
+    # Using the await helper
+    my $count = $schema->await( $rs->count );
+
+=head1 DESCRIPTION
+
+This class provides an asynchronous interface to L<DBIx::Class::ResultSet>. Most
+methods that would normally perform I/O (like C<all>, C<count>, or C<create>)
+return a L<Future> object instead of raw data.
+
+=cut
+
 use strict;
 use warnings;
 use utf8;
@@ -7,155 +41,61 @@ use v5.14;
 
 use Carp;
 use Future;
+use Data::Dumper;
 use Scalar::Util 'blessed';
+use DBIx::Class::Async;
 use DBIx::Class::Async::Row;
+use DBIx::Class::Async::ResultSetColumn;
 
-=head1 NAME
+use constant ASYNC_TRACE => $ENV{ASYNC_TRACE} || 0;
 
-DBIx::Class::Async::ResultSet - Asynchronous resultset for DBIx::Class::Async
-
-=head1 VERSION
-
-Version 0.49
-
-=cut
-
-our $VERSION = '0.49';
-
-=head1 SYNOPSIS
-
-    # Typically obtained via the DBIx::Class::Async bridge
-    my $rs = $async_db->resultset('User');
-
-    # Data Retrieval (All return Future objects)
-
-    # Simple retrieval with chaining
-    $rs->search({ active => 1 })
-       ->order_by({ -desc => 'created_at' })
-       ->rows(10)
-       ->all
-       ->then(sub {
-           my @users = @_; # Inflated Row objects
-           say "Found " . scalar(@users) . " active users";
-           return Future->done;
-       });
-
-    # Aggregates
-    $rs->count->then(sub {
-        my $count = shift;
-        say "Total users: $count";
-    });
-
-    # Persistence & Concurrency-Safe Operations
-
-    # find_or_create handles race conditions automatically
-    $rs->find_or_create({
-        email => 'alice@example.com',
-        name  => 'Alice'
-    })->then(sub {
-        my $user = shift;
-        say "User retrieved/created with ID: " . $user->id;
-    });
-
-    # update_or_create performs an atomic upsert
-    $rs->update_or_create({
-        email => 'alice@example.com',
-        name  => 'Alice Revised'
-    })->then(sub {
-        my $updated_user = shift;
-        say "User profile synchronized.";
-    });
-
-    # Raw Data Access
-
-    # all_future returns a raw arrayref of hashrefs (faster for large sets)
-    $rs->search({ status => 'archived' })->all_future->then(sub {
-        my $raw_data = shift;
-        foreach my $row (@$raw_data) {
-            say "Archived: $row->{email}";
-        }
-    });
-
-=head1 DESCRIPTION
-
-C<DBIx::Class::Async::ResultSet> provides an asynchronous result set interface
-for L<DBIx::Class::Async>. It mimics the L<DBIx::Class::ResultSet> API but
-returns L<Future> objects for database operations, allowing non-blocking
-asynchronous database access.
-
-This class supports both synchronous-style iteration (using C<next> and C<reset>)
-and asynchronous operations (using C<then> callbacks). All database operations
-are delegated to the underlying L<DBIx::Class::Async> instance.
-
-=head1 ARCHITECTURAL ROLE
-
-In a standard DBIC environment, the ResultSet holds a live database handle. In
-the C<Async> environment, the "real" ResultSet lives in a background worker.
-This class exists on the application side to provide:
-
-=over 4
-
-=item B<Lazy Inflation>
-
-Results are not turned into objects until they are actually needed. This saves
-CPU cycles if you are only passing data through to a JSON encoder.
-
-=item B<Relationship Stitching>
-
-When C<search_with_prefetch> is used, the worker sends back a nested data structure.
-This class's C<new_result> method is responsible for "stitching" that data back
-together so that C<< $user->orders >> returns the prefetched collection without
-triggering new database queries.
-
-=item B<Dynamic Class Hijacking>
-
-This class uses an anonymous proxy pattern to ensure that if a user requests a
-custom C<result_class>, the resulting objects inherit correctly from both the
-Async framework and the user's custom class.
-
-=back
-
-=head1 CONSTRUCTOR
+=head1 METHODS
 
 =head2 new
 
     my $rs = DBIx::Class::Async::ResultSet->new(
-        schema      => $schema,            # DBIx::Class::Schema instance
-        async_db    => $async_db,          # DBIx::Class::Async instance
-        source_name => $source_name,       # Result source name
+        schema_instance => $schema,
+        source_name     => 'User',
+        cond            => { is_active => 1 },
+        attrs           => { order_by => 'created_at' },
     );
 
-Creates a new asynchronous result set.
+Instantiates a new asynchronous ResultSet. While typically called internally
+by C<< $schema->resultset('Source') >>, it can be used to manually construct
+a result set with a specific state.
 
 =over 4
 
-=item B<Parameters>
-
-=over 8
-
-=item C<schema>
-
-A L<DBIx::Class::Schema> instance. Required.
-
-=item C<async_db>
-
-A L<DBIx::Class::Async> instance. Required.
-
-=item C<source_name>
-
-The name of the result source (table). Required.
-
-=back
-
-=item B<Throws>
+=item * Required Arguments
 
 =over 4
 
-=item *
+=item * C<schema_instance>: The L<DBIx::Class::Async::Schema> object.
 
-Croaks if any required parameter is missing.
+=item * C<source_name>: The string name of the ResultSource (e.g., 'User').
 
 =back
+
+=item * Optional Arguments
+
+=over 4
+
+=item * C<async_db>: The worker bridge. If omitted, it defaults to the bridge
+        associated with the C<schema_instance>.
+
+=item * C<cond>: A hashref of search conditions (the C<WHERE> clause).
+
+=item * C<attrs>: A hashref of query attributes (C<join>, C<prefetch>, C<rows>, etc.).
+
+=item * C<result_class>: The class used to inflate rows. Defaults to C<DBIx::Class::Core>.
+
+=back
+
+=item * Internal State
+
+The constructor initializes buffers for rows (C<_rows>) and iteration
+cursors (C<_pos>), ensuring that newly created ResultSets are always
+in a "clean" state ready for fresh execution.
 
 =back
 
@@ -164,50 +104,52 @@ Croaks if any required parameter is missing.
 sub new {
     my ($class, %args) = @_;
 
-    croak "Missing required argument: schema"      unless $args{schema};
-    croak "Missing required argument: async_db"    unless $args{async_db};
-    croak "Missing required argument: source_name" unless $args{source_name};
+    # 1. Validation
+    croak "Missing required argument: schema_instance" unless $args{schema_instance};
+    croak "Missing required argument: source_name"     unless $args{source_name};
 
+    # 2. Blessing the unified state
     return bless {
-        schema        => $args{schema},
-        async_db      => $args{async_db},
-        source_name   => $args{source_name},
-        result_class  => $args{result_class},
-        _source       => undef,
-        _cond         => $args{_cond}  || $args{cond}  || {},
-        _attrs        => $args{_attrs} || $args{attrs} || {},
-        _rows         => undef,
-        _pos          => 0,
-        _pager        => $args{_pager} || undef,
-        entries       => $args{entries}       || undef, # For prefetched data
-        is_prefetched => $args{is_prefetched} || 0,     # Flag for prefetch
+        # Core Infrastructure
+        _schema_instance => $args{schema_instance},
+        _async_db        => $args{async_db} // $args{_schema_instance}->{_async_db},
+
+        # Source Metadata
+        _source_name     => $args{source_name},
+        _result_class    => $args{result_class} // 'DBIx::Class::Core',
+
+        # Query State
+        _cond            => $args{cond}  // {},
+        _attrs           => $args{attrs} // {},
+
+        # Result State (Usually reset on clone)
+        _rows            => $args{rows} // undef,
+        _pos             => $args{pos}  // 0,
+
+        # Prefetch/Pager logic
+        _is_prefetched   => $args{is_prefetched} // 0,
+        _pager           => $args{pager},
     }, $class;
 }
 
 =head2 new_result
 
-    my $row = $rs->new_result($data, { in_storage => 1 });
-
-Inflates a raw data structure into a L<DBIx::Class::Async::Row> object.
-
-This method is the heart of the Async ORM's inflation layer. It handles:
+Internal method used to turn a raw database hashref into a L<DBIx::Class::Async::Row> object. It handles:
 
 =over 4
 
-=item * B<State Tracking>
+=item * Dotted Key Expansion
 
-Unlike standard DBIC, which guesses storage state based on primary keys, this method
-explicitly sets the C<in_storage> flag based on the provided attributes.
+Expands C<< {'user.name' => 'Bob'} >> into nested hashes for prefetched relationships.
 
-=item * B<Recursive Prefetching>
+=item * Relationship Inflation
 
-If C<$data> contains nested hashes or arrays (from a JOIN/prefetch), they are
-automatically inflated into related Row objects or ResultSets.
+Automatically turns prefetched relationship data into nested Row objects.
 
-=item * B<Polymorphic Class Support>
+=item * Class Hijacking
 
-Supports custom C<result_class> settings by dynamically generating anonymous
-proxy classes via multiple inheritance.
+If a custom C<result_class> is used, it dynamically creates an anonymous class
+inheriting from both the async row and your custom class.
 
 =back
 
@@ -215,192 +157,435 @@ proxy classes via multiple inheritance.
 
 sub new_result {
     my ($self, $data, $attrs) = @_;
-    return undef unless defined $data;
+    return unless defined $data;
 
-    # Extract storage hint from attributes hashref
-    my $storage_hint = (ref $attrs eq 'HASH') ? $attrs->{in_storage} : undef;
+    my $in_storage = (ref $attrs eq 'HASH' && exists $attrs->{in_storage})
+                     ? $attrs->{in_storage}
+                     : 0;  # Default to NOT in storage
 
-    # 1. Delegate to the Async bridge if it's available and capable
-    my $row;
-    if ($self->{async_db} && $self->{async_db}->can('_inflate_row')) {
-        $row = $self->{async_db}->_inflate_row(
-            $self->{source_name},
-            $data,
-            $storage_hint,
-        );
+    # Ensure we are working with a hash copy
+    my %raw_data = ref $data eq 'HASH' ? %$data : ();
+    my %col_data;
+    my %rel_data;
+
+    # It converts {'user.id' => 2, 'user.name' => 'Bob'}
+    # into { user => { id => 2, name => 'Bob' } }
+    my @all_keys = keys %raw_data;
+
+    foreach my $key (@all_keys) {
+        # Check for dots (e.g., 'user.name')
+        if ($key =~ /^(.+)\.(.+)$/) {
+            my ($rel, $subcol) = ($1, $2);
+
+            # Initialize the nested hash if it doesn't exist
+            $raw_data{$rel} //= {};
+
+            # Move the value into the nested hash
+            $raw_data{$rel}{$subcol} = $raw_data{$key};
+
+            # Delete the original dotted key safely
+            delete $raw_data{$key};
+        }
     }
-    else {
-        # Fallback for Mocks or tests that don't provide a full bridge
-        # We use the generic Row class here
-        $row = DBIx::Class::Async::Row->new(
-            schema      => $self->{schema},
-            async_db    => $self->{async_db},
-            source_name => $self->{source_name},
-            row_data    => $data,
-            in_storage  => $storage_hint // 0,
-        );
+
+    foreach my $key (keys %raw_data) {
+        my $val = $raw_data{$key};
+
+        # Only treat as a relationship if the source explicitly says it is
+        if ($self->result_source->has_relationship($key) &&
+            !$self->result_source->has_column($key)) {
+
+            my $rel_info = $self->result_source->relationship_info($key);
+            if (defined $val) {
+                if ($rel_info->{attrs}{accessor} eq 'multi') {
+                    $rel_data{$key} = $self->_new_prefetched_dataset($val, $key);
+                }
+                else {
+                    # belongs_to / might_have: Inflate into a Row object immediately
+                    if (ref $val eq 'HASH' && grep { defined } values %$val) {
+                        my $rel_rs = $self->result_source->schema->resultset($rel_info->{source});
+                        $rel_data{$key} = $rel_rs->new_result($val);
+                    }
+                    else {
+                        $rel_data{$key} = undef;
+                    }
+                }
+            }
+        }
+        else {
+            # Regular database column
+            $col_data{$key} = $val;
+        }
     }
 
-    # 2. Dynamic Class Hijacking (Custom Result Classes)
-    my $target_class = $self->result_class;
-    my $base_row_class = ref($row);
+    # Create Row using the proper constructor
+    my $new_row = DBIx::Class::Async::Row->new(
+        schema_instance => $self->{_schema_instance},
+        async_db        => $self->{_async_db},
+        source_name     => $self->{_source_name},
+        result_source   => $self->result_source,
+        row_data        => \%col_data,
+        in_storage      => $in_storage,
+    );
 
-    # If the user requested a specific class (not the standard one), we re-bless
-    if ($target_class ne $base_row_class
-        && $target_class ne $self->result_source->result_class) {
+    # Set the relationship data
+    $new_row->{_relationship_data} = { %rel_data };
 
-        my $anon_class = "${base_row_class}::WITH::" . $target_class;
-        $anon_class =~ s/::/_/g;
-        $anon_class = "DBIx::Class::Async::Anon::$anon_class";
+    # Dynamic Class Hijacking - handle custom result_class
+    my $target_class = $self->{_attrs}->{result_class} || $self->result_class;
+    my $base_row_class = ref($new_row);
+
+    if ($target_class && $target_class ne $base_row_class) {
+        # Create anonymous class name
+        my $safe_target = $target_class =~ s/::/_/gr;
+        my $anon_class = "DBIx::Class::Async::Anon::${safe_target}";
 
         no strict 'refs';
         unless (@{"${anon_class}::ISA"}) {
-            eval "require $target_class" unless $target_class->can('new');
-            # Async::Row methods must come first to ensure async-safety
+            # Load the custom class if not already loaded
+            unless ($target_class->can('can')) {
+                eval "require $target_class" or die "Could not load $target_class: $@";
+            }
+
+            # Set up inheritance: Anon -> AsyncRow -> CustomClass
             @{"${anon_class}::ISA"} = ($base_row_class, $target_class);
         }
-        bless $row, $anon_class;
+
+        # Re-bless into the anonymous class
+        bless $new_row, $anon_class;
+
+        # Ensure accessors are created
+        $new_row->_ensure_accessors if $new_row->can('_ensure_accessors');
     }
 
-    return $row;
+    # ACTIVATE the accessors in Row.pm
+    if ($new_row->can('_install_prefetch_accessors')) {
+        $new_row->_install_prefetch_accessors;
+    }
+
+    return $new_row;
 }
 
 =head2 new_result_set
 
-  my $new_rs = $rs->new_result_set({
-      entries       => \@prefetched_data,
-      is_prefetched => 0
-  });
+    my $new_rs = $rs->new_result_set({ cond => { active => 1 } });
 
-Creates a new instance (clone) of the current ResultSet class, inheriting the
-schema, database connection, and source name.
+An internal but critical factory method used to spawn new instances of the
+ResultSet while preserving the asynchronous execution context.
 
-This is primarily used internally to handle prefetched relationships. When a
-C<has_many> relationship is accessed, this method creates a "virtual" ResultSet
-seeded with the data already retrieved in the initial query, preventing
-unnecessary follow-up database hits.
+This method performs a "smart clone" of the current object's state, ensuring
+that the background worker pool and metadata links are carried over to the
+derived ResultSet.
 
-Accepts a hashref of attributes to override in the new instance.
+=over 4
+
+=item * B<State Mapping>
+
+It automatically maps internal underscored attributes
+(e.g., C<_source_name>) to clean constructor arguments (C<source_name>).
+
+=item * B<Infrastructure Persistence>*
+
+Explicitly carries over the C<async_db> (the worker bridge) and the C<schema_instance>.
+
+=item * B<Override Injection>
+
+Accepts a hashref of overrides to modify the state of the new instance (commonly
+used for merging new search conditions or attributes).
+
+=back
+
+Example: Manual ResultSet Cloning
+
+If you were extending this library and needed to create a specialized ResultSet
+that shares the same worker pool:
+
+    sub specialised_search {
+        my ($self, $extra_logic) = @_;
+
+        # This ensures the new RS knows how to talk to the workers
+        return $self->new_result_set({
+            cond  => { %{$self->{_cond}},  %$extra_logic },
+            attrs => { %{$self->{_attrs}}, cache_for => '1 hour' }
+        });
+    }
 
 =cut
 
 sub new_result_set {
-    my ($self, $args) = @_;
-    $args //= {};
+    my ($self, $overrides) = @_;
 
-    # 1. Create a clean base of inherited values
-    my %new_args = (
-        schema       => $self->{schema},
-        async_db     => $self->{async_db},
-        source_name  => $self->{source_name},
-        result_class => $self->{result_class},
-        _cond        => $self->{_cond},
-        _attrs       => $self->{_attrs},
-        # Flatten the incoming overrides over the defaults
-        %$args,
-    );
+    my %args;
+    foreach my $internal_key (keys %$self) {
+        # 1. Only process keys starting with an underscore
+        next unless $internal_key =~ /^_/;
 
-    # 2. Return the new object
-    return (ref $self)->new(%new_args);
+        # 2. Strip leading underscore for the "clean" argument name
+        my $clean_key = $internal_key;
+        $clean_key =~ s/^_//;
+
+        $args{$clean_key} = $self->{$internal_key};
+    }
+
+    $args{async_db}        = $self->{_async_db};
+    $args{schema_instance} = $self->{_schema_instance};
+
+    # 3. Apply overrides
+    if ($overrides) {
+        @args{keys %$overrides} = values %$overrides;
+    }
+
+    # 4. Call new() with a flat list (%args)
+    return (ref $self)->new(%args);
 }
-
-=head1 METHODS
 
 =head2 all
 
-    $rs->all->then(sub {
-        my $rows = shift; # Arrayref of Row objects
+    my $future = $rs->all;
+    $future->on_done(sub {
+        my $rows = shift; # Arrayref of row objects
+        say $_->name for @$rows;
     });
 
-Returns a L<Future> that resolves to an array reference of inflated
-L<DBIx::Class::Async::Row> objects.
+The primary method for retrieving all results from the ResultSet. It returns a
+L<Future> that resolves to an arrayref of L<DBIx::Class::Async::Row> objects.
 
-If the ResultSet was created via a relationship prefetch, C<all> will return
-the cached, already-inflated objects without performing a new database query.
-Objects returned by this method are automatically marked as C<in_storage>.
+=over 4
+
+=item * Tier 1: Prefetched/Injected Data
+
+If data was manually injected via C<set_cache> or arrived as raw hashrefs,
+C<all> automatically inflates them into full Row objects, injecting the necessary
+C<async_db> bridge and metadata into each.
+
+=item * Tier 2: Local Buffer
+
+If the ResultSet has already been executed and the rows are held in memory
+(C<_rows>), it returns them immediately wrapped in a resolved Future.
+
+=item * Tier 3: Shared Query Cache
+
+Before hitting the database, it consults the C<_query_cache> using a surgical
+lookup based on the source name and query signature.
+
+=item * Tier 4: Non-Blocking Fetch
+
+On a cache miss, it dispatches the request to the worker pool via C<all_future>.
+Once results return, they are indexed in the cache for future requests.
+
+=back
+
+B<Efficiency Note:> This method is highly optimised to prevent redundant IPC
+(Inter-Process Communication). Multiple calls to C<all> on the same ResultSet
+will only ever trigger a single network request.
 
 =cut
 
 sub all {
-    my $self = shift;
+    my ($self) = @_;
+    my $db     = $self->{_async_db};
+    my $source = $self->{_source_name};
 
-    # 1. Return cached objects if we have them
-    return Future->done($self->{_rows}) if $self->{_rows};
-
-    # 2. Handle Prefetched/Manual entries
-    if ($self->{is_prefetched} && $self->{entries}) {
-        # Ensure these are marked as in_storage
+    # 1. Check for prefetched entries
+    if ($self->{_is_prefetched} && $self->{_entries}) {
+        my $class = $self->result_source->result_class;
         $self->{_rows} = [
             map {
-                (ref($_) && $_->isa('DBIx::Class::Async::Row'))
-                ? $_
-                : $self->new_result($_, { in_storage => 1 })
-            } @{$self->{entries}}
+                # 1. If it's already an object, just keep it!
+                if (ref($_) && ref($_) ne 'HASH') {
+                    $_;
+                }
+                else {
+                    # 2. If it's a hash, inflate it manually
+                    my $row = $class->new($_);
+                    $row->{_async_db}      = $db;
+                    $row->{_result_source} = $self->result_source;
+                    $row->{_source_name}   = $source;
+                    $row->{_in_storage}    = 1;
+                    $row;
+                }
+            } @{$self->{_entries}}
         ];
+
+        $self->{_is_prefetched} = 0;
         return Future->done($self->{_rows});
     }
 
-    # 3. Standard Async Fetch
-    # all_future now returns OBJECTS (marked in_storage => 1)
-    return $self->all_future->then(sub {
-        my ($rows) = @_; # This is now an arrayref of objects
-        $self->{_rows} = $rows;
-        $self->{_pos}  = 0;
+    # 2. Fallback: If we already have inflated _rows, use them
+    if ($self->{_rows}
+        && ref($self->{_rows}) eq 'ARRAY'
+        && @{$self->{_rows}}) {
         return Future->done($self->{_rows});
+    }
+
+    # 3. Check Shared Cache
+    my $cache_key = $self->_generate_cache_key(0);
+    if (my $cached = $self->is_cache_found($cache_key)) {
+        $db->{_stats}->{_cache_hits}++;
+        $self->{_rows} = $cached;
+        return Future->done($cached);
+    }
+
+    # 4. Standard Async Fetch (The Miss)
+    $db->{_stats}->{_cache_misses}++;
+    return $self->all_future->on_done(sub {
+        my $rows = shift;
+
+        # Use the key to store it where is_cache_found can see it
+        $db->{_cache}{$cache_key} = $rows if $db->{cache_ttl};
+
+        $self->{_rows} = $rows;
+
+        # Save to surgical bucket
+        if ($db->{_query_cache}) {
+            $db->{_query_cache}->{$source}->{$cache_key} = $rows;
+        }
+
+        return $rows;
     });
 }
 
 =head2 all_future
 
-    $rs->all_future->then(sub {
-        my $raw_data = shift; # Arrayref of Hashrefs
-    });
+    my $future = $rs->all_future($cond?, \%attrs?);
 
-Returns a L<Future> that resolves to the **raw** data returned by the database.
-
-B<Note:> This is the high-performance path. It bypasses the creation of
-L<DBIx::Class::Async::Row> objects. Use this when you need to stream large
-datasets directly to a JSON encoder or template engine.
-
-=cut
-
-sub all_future {
-    my $self = shift;
-
-    return $self->{async_db}->search(
-        $self->{source_name},
-        $self->{_cond},
-        $self->{_attrs}
-    )->then(sub {
-        my ($rows_data) = @_;
-        # Store raw data so iterator methods can use them without re-fetching
-        $self->{_rows}  = $rows_data;
-        $self->{_pos}   = 0;
-        my @objects = map { $self->new_result($_, { in_storage => 1 }) } @$rows_data;
-        return Future->done(\@objects);
-    });
-}
-
-=head2 as_query
-
-    my ($cond, $attrs) = $rs->as_query;
-
-Returns the internal search conditions and attributes.
+The low-level execution engine for searches. Dispatches a search request to the
+background worker and returns a L<Future>.
 
 =over 4
 
-=item B<Returns>
+=item * Payload Construction
 
-A list containing two hash references: conditions and attributes.
+Merges the ResultSet's internal state (C<cond> and C<attrs>) with any temporary
+overrides passed to the method. It uses C<_build_payload> to ensure the data
+is serialisable for IPC.
+
+=item * Worker Dispatch
+
+Calls the C<search> method on the background worker pool via the internal C<_call_worker>
+bridge.
+
+=item * Post-Fetch Inflation (Tier 1)
+
+Before creating objects, it runs custom column inflators. This is where database
+strings (like JSON or custom types) are converted back into Perl structures.
+
+=item * Inflation Logic (Tier 2)
+
+=over 4
+
+=item * If C<HashRefInflator> is requested, it returns the raw data structures
+        for maximum performance.
+
+=item * Otherwise, it maps the data through C<_inflate_row> to produce fully
+        functional L<DBIx::Class::Async::Row> objects.
+
+=back
 
 =back
 
 =cut
 
+sub all_future {
+    my ($self, $cond, $attrs) = @_;
+
+    my $db      = $self->{_async_db};
+    my $payload = $self->_build_payload();
+    $payload->{source_name} = $self->{_source_name};
+
+    $payload->{cond}  = $cond  // $self->{_cond}  // {};
+    $payload->{attrs} = $attrs // $self->{_attrs} // {};
+
+    return DBIx::Class::Async::_call_worker(
+        $db,
+        'search',
+        $payload,
+    )->then(sub {
+        my $rows_data = shift;
+
+        if (!ref($rows_data) || ref($rows_data) ne 'ARRAY') {
+            return [];
+        }
+
+        # 1. Apply Column Inflators (JSON -> HASH) to the raw data first
+        my $moniker      = $self->{_source_name};
+        my $source_class = $self->result_source->result_class;
+
+        my $inflators = $db->{_custom_inflators}{$moniker}
+                     || $db->{_custom_inflators}{$source_class}
+                     || {};
+
+        if (keys %$inflators) {
+            foreach my $row (@$rows_data) {
+                foreach my $col (keys %$inflators) {
+                    if (exists $row->{$col} && defined $row->{$col} && !ref $row->{$col}) {
+                        $row->{$col} = $inflators->{$col}{inflate}->($row->{$col});
+                    }
+                }
+            }
+        }
+
+        # 2. Decide based on result_class
+        my $result_class = $self->{_attrs}{result_class} || '';
+        if ($result_class eq 'DBIx::Class::ResultClass::HashRefInflator') {
+            return $rows_data;
+        }
+
+        # 3. Otherwise, turn into Row objects
+        my @objects = map { $self->_inflate_row($_, { in_storage => 1 }) } @$rows_data;
+        return \@objects;
+    });
+}
+
+=head2 as_query
+
+    my ($sql, @bind) = @{ $rs->as_query };
+
+Returns a representation of the SQL query and its bind parameters that would be
+executed by this ResultSet.
+
+Unlike most other methods in this package, C<as_query> is B<synchronous> and
+returns a standard DBIC query arrayref immediately. It does not communicate
+with the worker pool.
+
+=over 4
+
+=item * Shadow Schema Execution
+
+Internally, it maintains a C<dbi:NullP:> (Null Proxy) connection. This allows
+the L<DBIx::Class> SQL generator to function in the parent process without
+requiring a real database socket.
+
+=item * Metadata Awareness
+
+It automatically loads your C<schema_class> if it isn't already in memory to
+ensure relationships and column types are correctly mapped to SQL.
+
+=item * Warning Suppression
+
+It intelligently silences "Generic Driver" warnings (like C<undetermined_driver>)
+that typically occur when generating SQL without an active database handle, keeping
+your logs clean while preserving actual errors if C<ASYNC_TRACE> is enabled.
+
+=back
+
+Example: Debugging a complex join
+
+    my $rs = $schema->resultset('User')->search(
+        { 'orders.status' => 'shipped' },
+        { join => 'orders' }
+    );
+
+    my ($sql, @bind) = @{ $rs->as_query };
+    print "Generated SQL: $sql\n";
+
+=cut
+
 sub as_query {
     my $self = shift;
-    my $bridge = $self->{async_db};
-    my $schema_class = $bridge->{schema_class};
+
+    my $bridge       = $self->{_async_db};
+    my $schema_class = $bridge->{_schema_class};
 
     unless ($schema_class->can('resultset')) {
         eval "require $schema_class" or die "as_query: $@";
@@ -408,7 +593,9 @@ sub as_query {
 
     # Silence the "Generic Driver" warnings for the duration of this method
     local $SIG{__WARN__} = sub {
-        warn @_ unless $_[0] =~ /undetermined_driver|sql_limit_dialect|GenericSubQ/
+        if (ASYNC_TRACE) {
+            warn @_ unless $_[0] =~ /undetermined_driver|sql_limit_dialect|GenericSubQ/
+        }
     };
 
     unless ($bridge->{_metadata_schema}) {
@@ -417,7 +604,7 @@ sub as_query {
 
     # SQL is generated lazily; warnings often trigger here or at as_query()
     my $real_rs = $bridge->{_metadata_schema}
-                         ->resultset($self->{source_name})
+                         ->resultset($self->{_source_name})
                          ->search($self->{_cond}, $self->{_attrs});
 
     return $real_rs->as_query;
@@ -425,150 +612,413 @@ sub as_query {
 
 =head2 clear_cache
 
-  $rs->clear_cache;
-
-Clears the internal cache of the ResultSet. This forces the next execution
-of the ResultSet to fetch fresh data from the database (or the global
-query cache). Returns C<undef>.
+Clears both the local ResultSet buffer and the central query cache for this
+specific source.
 
 =cut
 
 sub clear_cache {
+    my ($self) = @_;
+    my $source = $self->{_source_name};
+    my $db     = $self->{_async_db};
+
+    # 1. Kill the local ghost
+    $self->{_rows} = undef;
+
+    return unless $db;
+
+    # 2. Kill the central surgical bucket (the nested one)
+    if ($db->{_query_cache}) {
+         delete $db->{_query_cache}->{$source};
+    }
+
+    # 3. NEW: Kill the general cache (the flat one we use for count)
+    if ($db->{_cache}) {
+        foreach my $key (keys %{$db->{_cache}}) {
+            if ($key =~ /^\Q$source\E\|/) {
+                delete $db->{_cache}->{$key};
+            }
+        }
+    }
+}
+
+=head2 cursor
+
+    my $cursor = $rs->cursor;
+
+Returns a storage-level cursor object for the current ResultSet.
+
+This is a low-level method typically used when you need to handle extremely
+large result sets that would exceed memory limits if fetched all at once via
+C<all>.
+
+=over 4
+
+=item * Async Integration
+
+The returned cursor is not a standard DBI cursor; it is wrapped by
+C<DBIx::Class::Async::Storage>, ensuring that calls to C<next> or C<all>
+on the cursor itself are still routed through the non-blocking worker pool.
+
+=item * Efficiency
+
+Use this when you intend to process thousands of rows and want to maintain a
+constant memory footprint.
+
+=back
+
+Example: Manual Cursor Iteration
+
+    my $cursor = $rs->search({ type => 'heavy_report' })->cursor;
+
+    # While this looks synchronous, the underlying storage handle
+    # manages the async state transitions.
+    while (my @row = $cursor->next) {
+        process_data(@row);
+    }
+
+=cut
+
+sub cursor {
     my $self = shift;
-    $self->{_rows}         = undef;
-    $self->{entries}       = undef;
-    $self->{is_prefetched} = 0;
-    return undef;
+
+    return $self->{_schema_instance}->storage->cursor($self);
+}
+
+=head2 create
+
+    my $future = $rs->create({
+        username => 'jdoe',
+        profile  => { theme => 'dark' } # Automatically deflated if configured
+    });
+
+Asynchronously inserts a new record into the database. Returns a L<Future>
+that resolves to a L<DBIx::Class::Async::Row> object representing the
+persisted data (including database-generated defaults and IDs).
+
+=over 4
+
+=item * Auto-Deflation
+
+Before sending data to the worker pool, the method strips table aliases (C<me.>,
+C<self.>) and applies custom deflation logic (e.g., serialising a hashref to
+a JSON string).
+
+=item * Cache Invalidation
+
+Calling C<create> automatically clears the ResultSet's internal cache via
+L</clear_cache> to ensure subsequent queries reflect the new state of the
+database.
+
+=item * Lifecycle Management
+
+Upon a successful insert, the worker returns  the raw record data. The parent process then:
+
+=over 4
+
+=item 1. Re-inflates complex types (e.g., strings back to objects).
+
+=item 2. Instantiates a Row object via L</new_result>.
+
+=item 3. Marks the object as C<in_storage>, making it ready for immediate updates or deletions.
+
+=back
+
+=back
+
+Example: Handling a New User Signup
+
+    $schema->resultset('User')->create({ email => 'new@user.com' })
+        ->then(sub {
+            my $user = shift;
+            say "Created user with ID: " . $user->id;
+        })
+        ->catch(sub {
+            warn "Failed to create user: " . shift;
+        });
+
+=cut
+
+sub create {
+    my ($self, $raw_data) = @_;
+    my $db          = $self->{_async_db};
+    my $source_name = $self->{_source_name};
+
+    $self->clear_cache;
+
+    # 1. Fetch inflators
+    my $inflators = $db->{_custom_inflators}{$source_name} || {};
+
+    # 2. Deflate the incoming data (Parent Side)
+    my %deflated_data;
+    while (my ($k, $v) = each %$raw_data) {
+        my $clean_key = $k;
+        $clean_key =~ s/^(?:foreign|self|me)\.//;
+
+        if ($inflators->{$clean_key} && $inflators->{$clean_key}{deflate}) {
+            $v = $inflators->{$clean_key}{deflate}->($v);
+        }
+        $deflated_data{$clean_key} = $v;
+    }
+
+    # 3. Leverage specialised payload builder
+    my $payload = {
+        source_name => $self->{_source_name},
+        data        => \%deflated_data,
+        attrs       => $self->{_attrs} || {},
+    };
+
+    # 4. Dispatch with correct signature
+    return DBIx::Class::Async::_call_worker(
+        $db,
+        'create',
+        $payload
+    )->then(sub {
+        my $db_row = shift;
+        return Future->done(undef) unless $db_row;
+
+        # 5. Inflation of return data
+        for my $col (keys %$inflators) {
+            if (exists $db_row->{$col} && $inflators->{$col}{inflate}) {
+                $db_row->{$col} = $inflators->{$col}{inflate}->($db_row->{$col});
+            }
+        }
+
+        # 6. Use new_result to create new row
+        my $obj = $self->new_result($db_row, { in_storage => 1 });
+
+        return Future->done($obj);
+    });
 }
 
 =head2 count
 
-    my $count = await $rs->search(undef, { rows => 10 })->count;
+    my $future = $rs->count({ status => 'active' });
+    $future->on_done(sub {
+        my $count = shift;
+        say "Found $count active records.";
+    });
 
-Returns the number of rows in the B<current ResultSet>.
-If a limit (rows) or offset is applied, this returns the size of that slice
-(via an efficient SQL subquery).
+Executes a C<SELECT COUNT(*)> query against the database asynchronously. Returns
+a L<Future> resolving to the integer count.
+
+=over 4
+
+=item * Optimisation - Row Limit
+
+If the ResultSet has a fixed number of C<rows> defined in its attributes and
+no additional conditions are passed to C<count>, the method returns the C<rows>
+value immediately without hitting the database.
+
+=item * Caching
+
+Uses a specialised cache key (suffix C<:count>) to store results in the
+C<async_db> cache. Aggregate queries are often expensive; this ensures that
+multiple count requests for the same criteria are served from memory.
+
+=item * Worker Dispatch
+
+Dispatches the C<count> command to the background worker pool, keeping the
+parent process non-blocking.
+
+=back
+
+Example: Conditional Counting
+
+    $rs->count({ category_id => 5 })->then(sub {
+        my $count = shift;
+        return $count > 0 ? $rs->all : Future->done([]);
+    });
 
 =cut
 
 sub count {
-    my $self = shift;
+    my ($self, $cond, $attrs) = @_;
 
-    # Check for anything that constitutes a "Slice"
-    if ( $self->{_attrs}{rows} || $self->{_attrs}{offset} || $self->{_attrs}{limit} ) {
-        return $self->{async_db}->count(
-            $self->{source_name},
-            $self->{_cond},
-            {
-                %{$self->{_attrs}},
-                alias       => 'subquery_for_count',
-                is_subquery => 1
-            }
-        );
+    if (!defined $cond && exists $self->{_attrs}{rows}) {
+        return Future->done($self->{_attrs}{rows});
     }
 
-    return $self->{async_db}->count(
-        $self->{source_name},
-        $self->{_cond},
-        $self->{_attrs}
-    );
+    my $db = $self->{_async_db};
+
+    my $cache_key = $self->_generate_cache_key(1);
+    if (defined $cache_key && exists $db->{_cache}{$cache_key}) {
+        $db->{_stats}{_cache_hits}++;
+        return Future->done($db->{_cache}{$cache_key});
+    }
+
+    $db->{_stats}{_cache_misses}++;
+
+    my $payload = $self->_build_payload($cond, $attrs);
+
+    warn "[PID $$] STAGE 1 (Parent): Dispatching count" if ASYNC_TRACE;
+
+    # This returns a Future that will be resolved by the worker
+    return DBIx::Class::Async::_call_worker(
+        $db, 'count', $payload)->on_done(sub {
+        my $result = shift;
+        $db->{_cache}{$cache_key} = $result if defined $cache_key;
+    });
 }
 
 =head2 count_future
 
-    $rs->count_future->then(sub {
-        my ($count) = @_;
-        # Same as count(), alias for API consistency
-    });
+    my $future = $rs->count_future;
 
-Alias for C<count>. Returns the count of rows matching the current search criteria.
+Returns a L<Future> that resolves to the row count, bypassing all parent-process
+caching mechanisms.
+
+Unlike the standard L</count> method, which may return a cached result or an
+in-memory attribute value, C<count_future> always dispatches a C<SELECT COUNT(*)>
+request directly to the worker pool.
 
 =over 4
 
-=item B<Returns>
+=item * Bypasses Cache
 
-A L<Future> that resolves to the number of matching rows.
+Ignores any data stored in the C<_query_cache> or the shared C<_cache> bucket.
+
+=item * Stateless
+
+Does not inspect C<$rs->{_attrs}->{rows}>. It forces the database to perform
+the calculation.
+
+=item * Direct Dispatch
+
+Uses the low-level C<_call_worker> interface to ensure the smallest possible
+overhead between the method call and the IPC (Inter-Process Communication) layer.
 
 =back
+
+Example: Forcing a fresh count in a high-concurrency environment
+
+    # count() might return a cached value from 2 seconds ago
+    # count_future() hits the metal
+
+    $rs->count_future->on_done(sub {
+        my $exact_count = shift;
+        print "Live DB Count: $exact_count\n";
+    });
 
 =cut
 
 sub count_future {
     my $self = shift;
+    my $db   = $self->{_async_db};
 
-    return $self->{async_db}->count(
-        $self->{source_name},
-        $self->{_cond}
-    );
+    return DBIx::Class::Async::_call_worker(
+        $db, 'count', {
+        source_name => $self->{_source_name},
+        cond        => $self->{_cond},
+        attrs       => $self->{_attrs},
+    });
 }
 
 =head2 count_literal
 
-    my $count = await $rs->count_literal('age > ? AND status = ?', 18, 'active');
+    my $future = $rs->count_literal('age > ? AND status = "active"', 21);
+
+Performs a count operation using a raw SQL fragment. This is useful for complex
+filtering that is difficult to express via standard L<SQL::Abstract> syntax.
+
+Returns a L<Future> resolving to the integer count.
 
 =over 4
 
-=item Arguments: $sql_fragment, @standalone_bind_values
+=item * Fluent Chaining
 
-=item Return Value: L<Future> (resolving to Integer)
+Internally, this method calls C<search_literal> to generate a transient, specialised
+ResultSet and then immediately calls C<count> on it.
+
+=item * Infrastructure Inheritance
+
+The transient ResultSet automatically inherits the C<_async_db> worker bridge
+and C<_schema_instance> from the parent, ensuring the raw SQL is executed in
+the correct worker process.
+
+=item * Security
+
+Always pass parameters as a bind list (e.g., C<@bind>) rather than interpolating
+variables directly into the SQL string to prevent SQL injection.
 
 =back
 
-Counts the results in a literal query.
+Example: Using Database-Specific Functions
 
-This method is provided primarily for L<Class::DBI> compatibility. It is
-equivalent to calling L</search_literal> with the passed arguments,
-followed by L</count>.
+    # Using Postgres-specific ILIKE for case-insensitive counting
+    my $future = $rs->count_literal('email ILIKE ?', '%@GMAIL.COM');
 
-Because this triggers an immediate database query, it returns a L<Future>
-that will resolve to the integer count once the worker process has
-completed the execution.
-
-B<Note:> Always use placeholders (C<?>) in your C<$sql_fragment> to
-maintain security and prevent SQL injection.
+    $future->on_done(sub {
+        my $gmail_users = shift;
+        print "Found $gmail_users Gmail accounts.\n";
+    });
 
 =cut
 
 sub count_literal {
     my ($self, $sql_fragment, @bind) = @_;
 
-    # This satisfies your requirement: search_literal then count.
-    # Since search_literal returns a ResultSet, and count returns a Future,
-    # this returns the Future for the count operation.
+    # 1. search_literal() creates a NEW ResultSet instance.
+    # 2. Because we fixed search_literal/new_result_set, this new RS
+    #    already shares the same _async_db and _schema_instance.
+    # 3. We then chain the count() call which returns the Future.
+
     return $self->search_literal($sql_fragment, @bind)->count;
 }
 
 =head2 count_rs
 
-    my $count_rs = $rs->count_rs({ active => 1 });
-    # Use as a subquery:
-    my $users = await $schema->resultset('User')->search({
-        login_count => $count_rs->as_query
-    })->all;
+    my $count_rs = $rs->count_rs($cond?, \%attrs?);
+
+Returns a new L<DBIx::Class::Async::ResultSet> specifically configured to
+perform a C<COUNT(*)> operation.
+
+Unlike L</count>, which returns a B<Future> that executes immediately,
+C<count_rs> is synchronous and returns a B<ResultSet>. This allows you to
+pre-define a count query and pass it around your application or combine it with
+further search modifiers before execution.
 
 =over 4
 
-=item Arguments: $cond?, \%attrs?
+=item * Chainability
 
-=item Return Value: L<DBIx::Class::Async::ResultSet>
+Because it returns a ResultSet, you can continue chaining methods like C<search>
+or C<attr> before eventually calling C<all> or C<next> to get the value.
+
+=item * Infrastructure Guarantee
+
+Internally calls C<search>, ensuring the newly created ResultSet remains pinned to
+the same C<async_db> worker bridge and parent C<schema_instance>.
+
+=item * Automatic Projection
+
+Automatically sets the C<select> attribute to C<{ count => '*' }> and the
+C<as> alias to C<'count'>.
 
 =back
 
-Returns a new ResultSet object that, when executed, performs a C<COUNT(*)>
-operation. Unlike C<count>, this method is lazy and does not dispatch a
-request to the worker pool immediately. It is primarily useful for
-constructing subqueries or complex joins where the count is part of a
-larger query.
+Example: Defining a count query for later execution
+
+    # Create the count-specific ResultSet
+    my $pending_count_rs = $rs->count_rs({ status => 'pending' });
+
+    # ... later in the code ...
+
+    # Execute it via the standard async 'all' or 'next'
+    $pending_count_rs->next->then(sub {
+        my $row = shift;
+        print "Pending count: " . $row->get_column('count') . "\n";
+    });
 
 =cut
 
 sub count_rs {
     my ($self, $cond, $attrs) = @_;
 
-    # count_rs is lazy. It doesn't call the worker yet.
-    # It returns a new ResultSet constrained to a count.
+    # By calling $self->search, we guarantee the new RS
+    # inherits the pinned _async_db and _schema_instance.
     return $self->search($cond, {
-        %{$attrs || {}},
+        %{ $attrs || {} },
         select => [ { count => '*' } ],
         as     => [ 'count' ],
     });
@@ -576,206 +1026,218 @@ sub count_rs {
 
 =head2 count_total
 
-    my $total = await $rs->search(undef, { rows => 10 })->count_total;
+    my $total_future = $rs->count_total($extra_cond?, \%extra_attrs?);
 
-Returns the total number of rows matching the search criteria, B<ignoring>
-any C<rows> or C<offset> attributes. Use this for generating pagination links.
+Returns a L<Future> resolving to the total number of records matching the current
+filter, specifically ignoring any pagination or sorting attributes.
+
+This is primarily used to calculate the "Total Pages" in a paginated UI, where
+the current ResultSet might be sliced to only 20 rows, but you need to know
+that 5,000 total records match the criteria.
+
+=over 4
+
+=item * Attribute Stripping
+
+Automatically removes C<rows>, C<offset>, C<page>, and C<order_by> from the
+query. This ensures the database doesn't perform unnecessary sorting or slicing,
+resulting in a much faster count.
+
+=item * Parameter Merging
+
+Allows passing in C<$cond> and C<$attrs> which are merged with the existing
+ResultSet state before execution.
+
+=item * Direct Execution
+
+Like L</count_future>, this bypasses any local result buffers and asks the
+worker to perform a fresh C<COUNT(*)> on the un-sliced dataset.
+
+=back
+
+Example: Implementing Pagination Metadata
+
+    my $paged_rs = $rs->search({ category => 'electronics' })
+                      ->page(1)
+                      ->rows(10);
+
+    # This resolves to 10 (the current page size)
+    my $current_count_f = $paged_rs->count;
+
+    # This resolves to the absolute total (e.g., 450)
+    my $grand_total_f = $paged_rs->count_total;
+
+    Future->needs_all($current_count_f, $grand_total_f)->then(sub {
+        my ($current, $total) = @_;
+        print "Showing $current of $total total items.\n";
+    });
 
 =cut
 
 sub count_total {
     my ($self, $cond, $attrs) = @_;
 
-    # Merge incoming parameters with ResultSet state
+    # 1. Merge incoming parameters with existing ResultSet state
     my %merged_cond  = ( %{ $self->{_cond}  || {} }, %{ $cond  || {} } );
     my %merged_attrs = ( %{ $self->{_attrs} || {} }, %{ $attrs || {} } );
 
-    # Strip the slicing attributes to get the absolute total
-    delete $merged_attrs{rows};
-    delete $merged_attrs{offset};
-    delete $merged_attrs{page};
+    # 2. Strip slicing/ordering attributes to get the absolute total
+    delete @merged_attrs{qw(rows offset page order_by)};
 
-    # Ensure order_by is also removed
-    delete $merged_attrs{order_by};
-
-    return $self->{async_db}->count(
-        $self->{source_name},
-        \%merged_cond,
-        \%merged_attrs,
-    );
-}
-
-=head2 create
-
-    $rs->create({ name => 'New User' })->then(sub { my $row = shift; ... });
-
-Inserts a new record into the database and returns a L<Future> resolving to the
-inflated Row object.
-
-This method handles complex database return patterns:
-- B<PostgreSQL>: Supports C<RETURNING> clauses (merges returned HashRef).
-- B<SQLite/MySQL>: Supports auto-incrementing scalars.
-- B<Composite PKs>: Safely handles multi-column primary keys without data corruption.
-
-=cut
-
-sub create {
-    my ($self, $data) = @_;
-
-    # Combine the ResultSet's current search condition, which contains
-    # the foreign key) with the new data provided by the user.
-    my %to_insert = ( %{$self->{_cond} || {}}, %$data );
-
-    # Clean up prefixes: DBIC sometimes stores conditions as 'foreign.user_id'
-    # but we need 'user_id' for the INSERT statement.
-    my %final_data;
-    while (my ($k, $v) = each %to_insert) {
-        my $clean_key = $k;
-        $clean_key =~ s/^(?:foreign|self)\.//;
-        $final_data{$clean_key} = $v;
-    }
-
-    return $self->{async_db}->create(
-        $self->{source_name},
-        \%final_data
-    )->then(sub {
-        my ($result) = @_;
-
-        if (ref $result eq 'HASH'
-            && ($result->{error} || $result->{__error})) {
-            my $err = $result->{error} // $result->{__error};
-            return Future->fail($err, 'db_error');
-        }
-
-        return Future->done($self->new_result($result, { in_storage => 1 }));
-    });
-}
-
-=head2 cursor
-
-  my $cursor = $rs->cursor;
-
-Returns a L<DBIx::Class::Async::Storage::DBI::Cursor> object for iterating
-through the ResultSet's rows asynchronously.
-
-The cursor provides a low-level interface for fetching rows one at a time
-using Futures, which is useful for processing large result sets without
-loading all rows into memory at once.
-
-  use Future::AsyncAwait;
-
-  my $rs = $schema->resultset('User');
-  my $cursor = $rs->cursor;
-
-  my $iter = async sub {
-      while (my $row = await $cursor->next) {
-          # Process each row asynchronously
-          say $row->name;
-      }
-  };
-
-  $iter->get;  # Wait for iteration to complete
-
-The cursor respects the ResultSet's C<rows> attribute for batch fetching:
-
-  my $rs = $schema->resultset('User')->search(undef, { rows => 50 });
-  my $cursor = $rs->cursor;  # Will fetch 50 rows at a time
-
-See L<DBIx::Class::Async::Storage::DBI::Cursor> for available cursor methods
-including C<next()> and C<reset()>.
-
-=cut
-
-sub cursor {
-    my $self = shift;
-    return $self->schema->storage->cursor($self);
+    # 3. Use the static call exactly like your other count() implementations
+    return DBIx::Class::Async::_call_worker(
+        $self->{_async_db},
+        'count',
+        {
+            source_name => $self->{_source_name},
+            cond        => \%merged_cond,
+            attrs       => \%merged_attrs,
+        });
 }
 
 =head2 delete
 
-    $rs->search({ status => 'inactive' })->delete->then(sub {
-        my ($deleted_count) = @_;
-        say "Deleted $deleted_count rows";
-    });
+    my $future = $rs->search({ status => 'obsolete' })->delete;
 
-Deletes all rows matching the current search criteria.
+Asynchronously removes records matching the ResultSet's criteria from the database.
+Returns a L<Future> resolving to the number of rows deleted.
 
 =over 4
 
-=item B<Returns>
+=item * Auto-Routing Logic
 
-A L<Future> that resolves to the number of rows deleted.
+=over 4
 
-=item B<Notes>
+=item * Direct Path
 
-This method fetches all matching rows first to count them and get their IDs,
-then deletes them individually. For large result sets, consider using a direct
-SQL delete via the underlying database handle.
+If the query is a simple attribute-free HASH (e.g., C<< { id => 5 } >>), it
+dispatches a single C<DELETE> command directly to the worker.
+
+=item * Safe Path (delete_all)
+
+If the ResultSet contains complex logic (joins, limits, or offsets), it automatically
+delegates to L</delete_all> to avoid database-specific restrictions on
+multi-table deletes.
 
 =back
+
+=item * Cache Invalidation
+
+Immediately calls L</clear_cache> on the ResultSet to prevent the application
+from reading stale data that has been removed from the physical storage.
+
+=item * Non-Blocking
+
+Like all write operations in this library, the process is handed off to the
+worker pool, allowing your main application to continue processing other
+requests.
+
+=back
+
+Example: Safe Deletion of Limited Sets
+
+    # This uses the 'Safe Path' because of the 'rows' attribute
+    $rs->search({ type => 'log' }, { rows => 100 })->delete
+       ->on_done(sub {
+           my $count = shift;
+           say "Cleaned up $count log entries.";
+       });
 
 =cut
 
 sub delete {
     my $self = shift;
-    my $bridge = $self->{async_db};
 
-    return $self->delete_all if keys %{$self->{attrs} || {}};
+    $self->clear_cache;
 
-    # SAFETY CHECK: Only use Path A if we have a simple condition
-    # AND no complex attributes (rows, offset, etc.)
-    # AND the condition is a HASH with actual keys.
-    if ( !keys %{$self->{attrs} || {}}
-         && ref($self->{cond}) eq 'HASH'
-         && keys %{$self->{cond}} ) {
-
-        return $bridge->delete($self->{source_name}, $self->{cond});
+    # If we have complex attributes (LIMIT, OFFSET, JOINs),
+    # we MUST use the safe path.
+    if ( keys %{$self->{_attrs} || {}} ) {
+        return $self->delete_all;
     }
 
-    # DEFAULT/PATH B: Use the safe ID-mapping path.
+    # Path A: Simple, direct DELETE if condition is a clean HASH
+    if ( ref($self->{_cond}) eq 'HASH' && keys %{$self->{_cond}} ) {
+        return DBIx::Class::Async::_call_worker(
+            $self->{_async_db},
+            'delete',
+            {
+                source_name => $self->{_source_name},
+                cond        => $self->{_cond}
+            }
+        );
+    }
+
+    # Default to the safe path for everything else
     return $self->delete_all;
 }
 
 =head2 delete_all
 
-    $rs->delete_all->then(sub { my $count = shift; });
+    my $future = $rs->search({ status => 'expired' })->delete_all;
 
-Deletes all rows matching the current ResultSet criteria.
+Performs a two-stage asynchronous deletion. First, it retrieves the records
+matching the criteria to identify their unique Primary Keys, then it issues a
+targeted bulk delete for those specific records.
 
-This method performs a "Safe Delete":
-1. It fetches the Primary Keys of all matching rows (respecting LIMIT/OFFSET).
-2. It executes a single bulk C<DELETE ... WHERE PK IN (...)> via the worker.
+=over 4
 
-This ensures that only the specific rows visible to the ResultSet are removed,
-even if the underlying table data changed during the process.
+=item * Precision
+
+This method is safer than a direct C<delete> when dealing with ResultSets
+that use C<rows>, C<offset>, or complex C<join> attributes, as it ensures
+only the specific records visible to the ResultSet are removed.
+
+=item * Composite Key Support
+
+Automatically detects and handles tables with multiple primary keys, constructing
+a complex C<-or> condition to ensure the correct rows are targeted.
+
+=item * Short-Circuiting
+
+If the initial search yields no results, the method returns a resolved Future
+with a value of C<0>, saving an unnecessary round-trip to the database worker.
+
+=item * Return Value
+
+Resolves to the number of rows that were successfully identified and sent for
+deletion.
+
+=back
+
+Example: Safely Deleting with Relationships
+
+    # Delete orders for inactive users (complex join)
+    $schema->resultset('Order')->search({ 'user.is_active' => 0 }, { join => 'user' })
+           ->delete_all
+           ->on_done(sub {
+               my $deleted = shift;
+               print "Purged $deleted orders from inactive accounts.\n";
+           });
 
 =cut
 
 sub delete_all {
-    my $self   = shift;
-    my $bridge = $self->{async_db};
+    my $self = shift;
 
-    # Step 1: Fetch the rows matching the search (honours LIMIT/OFFSET)
+    # Step 1: Use our working 'all' method to get the targets
     return $self->all->then(sub {
-        my ($rows) = @_;
+        my $rows = shift;
 
-        # Step 2: If no rows found, return 0 immediately (as a Future)
         return Future->done(0) unless $rows && @$rows;
 
-        # Step 3: Extract Primary Keys
-        my @pks   = $self->_primary_columns;
+        # Step 2: Identify Primary Keys
+        my @pks   = $self->result_source->primary_columns;
         my $count = scalar @$rows;
-
         my $condition;
+
         if (scalar @pks == 1) {
-            # Path A: Standard Single PK (e.g., 'id')
             my $pk_col = $pks[0];
             my @ids    = map { $_->get_column($pk_col) } @$rows;
             $condition = { $pk_col => { -in => \@ids } };
         }
         else {
-            # Path B: Composite PK (e.g., 'user_id', 'role_id')
-            # We build an -or list of identifying hashes
+            # Handle Composite Keys
             $condition = { -or => [
                 map {
                     my $row = $_;
@@ -784,97 +1246,188 @@ sub delete_all {
             ]};
         }
 
-        # Step 4: Send ONE bulk request to the bridge using WHERE IN (...)
-        return $bridge->delete($self->{source_name}, $condition)
-            ->then(sub {
-                # Step 5: Return the count of rows we actually deleted
-                return Future->done($count);
-            });
+        # Step 3: Send the targeted delete to the worker
+        return DBIx::Class::Async::_call_worker(
+            $self->{_async_db},
+            'delete',
+            {
+                source_name => $self->{_source_name},
+                cond        => $condition
+            }
+        )->then(sub {
+            return Future->done($count);
+        });
     });
+}
+
+=head2 first_future
+
+An alias for L</first>. This naming convention is provided for consistency with
+other C<*_future> methods in the library, signaling that the return value is
+an asynchronous L<Future>.
+
+Example: Retrieving the most recent login
+
+    my $future = $schema->resultset('UserLog')->search(
+        { user_id => 42 },
+        { order_by => { -desc => 'login_at' } }
+    )->first;
+
+    $future->on_done(sub {
+        my $log = shift;
+        print "Last seen: " . $log->login_at if $log;
+    });
+
+=cut
+
+sub first_future  { shift->first(@_) }
+
+=head2 first
+
+    my $future = $rs->first;
+
+Returns a L<Future> resolving to the first L<DBIx::Class::Async::Row> object in
+the ResultSet, or C<undef> if the set is empty.
+
+=over 4
+
+=item * Memory First
+
+If the ResultSet has already been populated (e.g. via a previous call to C<all>),
+this method returns the first element from the internal C<_rows> buffer immediately
+without a database hit.
+
+=item * Auto-Inflation
+
+If the internal buffer contains raw data (hashrefs), it is automatically inflated
+into a proper Row object before the Future resolves.
+
+=item * Optimised Fetch
+
+If no data is in memory, it executes a targeted query with C<< rows => 1 >> (SQL C<LIMIT 1>).
+This is significantly faster and more memory-efficient than fetching the entire result set.
+
+=back
+
+=cut
+
+sub first {
+    my $self = shift;
+
+    # 1. If we already have data in memory, use it!
+    if ($self->{_rows} && @{$self->{_rows}}) {
+        my $data = $self->{_rows}[0];
+        my $row = (ref($data) eq 'HASH') ? $self->_inflate_row($data, { in_storage => 1 }) : $data;
+        return Future->done($row);
+    }
+
+    # 2. If no cache, force a LIMIT 1 query to be fast
+    return $self->search(undef, { rows => 1 })->next;
 }
 
 =head2 find
 
-    $rs->find($id)->then(sub {
-        my ($row) = @_;
-        if ($row) {
-            say "Found: " . $row->name;
-        } else {
-            say "Not found";
-        }
-    });
+    # Find by Primary Key scalar
+    my $user_f = $rs->find(123);
 
-Finds a single row by primary key.
+    # Find by unique constraint hashref
+    my $user_f = $rs->find({ email => 'gemini@example.com' });
 
-=over 4
-
-=item B<Parameters>
-
-=over 8
-
-=item C<$id>
-
-Primary key value, or hash reference for composite primary key lookup.
-
-=back
-
-=item B<Returns>
-
-A L<Future> that resolves to a L<DBIx::Class::Async::Row> object if found,
-or C<undef> if not found.
-
-=item B<Throws>
+Retrieves a single row from the database based on a unique identifier. Returns
+a L<Future> resolving to a single L<DBIx::Class::Async::Row> object or C<undef>
+if no match is found.
 
 =over 4
 
-=item *
+=item * Scalar Lookup
 
-Dies if composite primary key is not supported.
+If a single value is provided, it is automatically mapped to the table's
+Primary Key column. Note: This only works for tables with a single Primary Key.
 
-=back
+=item * HashRef Lookup
+
+If a hashref is provided, it is used as a specific search condition. This is
+useful for finding records by unique columns other than the primary key
+(e.g., C<username> or C<slug>).
+
+=item * Short-Circuiting
+
+If C<undef> is passed as the identifier, the method immediately returns a
+resolved Future containing C<undef>, avoiding a pointless database round-trip.
+
+=item * Under the Hood
+
+This method is a wrapper around L</search> and L</single>, ensuring that a
+C<LIMIT 1> is always applied to the query for maximum performance.
 
 =back
 
 =cut
 
 sub find {
-    my ($self, @args) = @_;
+    my ($self, $id_or_cond) = @_;
 
-    # Extract attributes if the last argument is a hashref
-    # and we have more than one argument total.
-    my $attrs = (ref $args[-1] eq 'HASH' && @args > 1) ? pop @args : {};
+    return Future->done(undef) unless defined $id_or_cond;
 
     my $cond;
-    my @pk_names = $self->_primary_columns;
-
-    if (@args == 1 && !ref $args[0]) {
-        # Standard: find(5)
-        $cond = { $pk_names[0] => $args[0] };
-    }
-    elsif (ref $args[0] eq 'HASH') {
-        # Standard: find({ email => 'test@example.com' })
-        $cond = $args[0];
+    if (ref($id_or_cond) eq 'HASH') {
+        $cond = $id_or_cond;
     }
     else {
-        # Composite PK: find(1, 2)
-        my @pk = $self->result_source->primary_columns;
-        $cond = { map { $pk_names[$_] => $args[$_] } 0 .. $#pk_names };
+        # GET THE REAL PK NAME
+        my @pks = $self->result_source->primary_columns;
+        die "find() with scalar only works on single PK tables" if @pks > 1;
+        $cond = { $pks[0] => $id_or_cond };
     }
 
-    return $self->single_future($cond, $attrs);
+    return $self->search($cond)->single;
 }
 
 =head2 find_or_new
 
-  my $future = $rs->find_or_new({ name => 'Alice' }, { key => 'user_name' });
+    my $future = $rs->find_or_new({ email => 'user@example.com' }, \%attrs?);
 
-  $future->on_done(sub {
-      my $user = shift;
-      $user->insert if !$user->in_storage;
-  });
+Attempts to find a record in the database using unique constraints. If found,
+it returns the existing row. If not, it returns a new, **in-memory** row object
+populated with the provided data.
 
-Finds a record using C<find>. If no row is found, it returns a new Result object
-inflated with the provided data. This object is B<not> yet saved to the database.
+Returns a L<Future> resolving to a L<DBIx::Class::Async::Row> object.
+
+=over 4
+
+=item * Unique Lookup
+
+Uses an internal helper to extract unique identifiers (Primary Keys or Unique
+Constraints) from the provided data for the initial C<find> call.
+
+=item * Data Merging
+
+If the record is not found, the new object is created by merging the provided
+C<$data> with any existing constraints (C<where> clauses) currently on the ResultSet.
+
+=item * Namespace Cleaning
+
+Automatically strips DBIC aliases like C<me.>, C<foreign.>, or C<self.> from
+column names to ensure the new object has clean, accessible attributes.
+
+=item * Non-Blocking
+
+Even though it may return a "new" object that hasn't hit the DB yet, it still
+returns a L<Future> to maintain API consistency with the asynchronous C<find> operation.
+
+=back
+
+Example: Preparing a record for a form
+
+    $schema->resultset('User')->find_or_new({
+        username => 'jdoe'
+    })->then(sub {
+        my $user = shift;
+
+        # If $user->in_storage is false, we know this is a fresh object
+        say "Welcome back, " . $user->username if $user->in_storage;
+        say "Sign up now, "  . $user->username unless $user->in_storage;
+    });
 
 =cut
 
@@ -882,13 +1435,18 @@ sub find_or_new {
     my ($self, $data, $attrs) = @_;
     $attrs //= {};
 
+    # 1. Identify what makes this record unique
     my $lookup = $self->_extract_unique_lookup($data, $attrs);
 
+    # 2. Call our newly ported find()
     return $self->find($lookup, $attrs)->then(sub {
         my ($row) = @_;
+
+        # If found, return it immediately
         return Future->done($row) if $row;
 
-        # Clean prefix logic
+        # 3. Otherwise, prepare data for a new local object
+        # We merge existing constraints with the provided data
         my %new_data = ( %{$self->{_cond} || {}}, %$data );
         my %clean_data;
         while (my ($k, $v) = each %new_data) {
@@ -896,16 +1454,56 @@ sub find_or_new {
             $clean_data{$clean_key} = $v;
         }
 
-        return Future->done($self->new_result(\%clean_data, { in_storage => 0 }));
+        # 4. Return a "new" result object (local memory only)
+        # Note: new_result should handle passing the _async_db to the row
+        return Future->done($self->new_result(\%clean_data));
     });
 }
 
 =head2 find_or_create
 
-  my $future = $rs->find_or_create({ name => 'Bob' });
+    my $future = $rs->find_or_create({
+        email => 'user@example.com',
+        name  => 'John Doe'
+    });
 
-Attempts to find a record. If it does not exist, it performs an C<INSERT> and
-returns the resulting Result object.
+Ensures a record exists in the database. Returns a L<Future> resolving to a
+L<DBIx::Class::Async::Row> object.
+
+=over 4
+
+=item * Optimistic Strategy
+
+First attempts to locate the record using L</find>. If the record is found,
+it is returned immediately.
+
+=item * Atomic Creation
+
+If the record is missing, it attempts to L</create> it.
+
+=item * Race Condition Recovery
+
+In distributed systems, a "Time-of-Check to Time-of-Use" (TOCTOU) race can
+occur. If another process inserts the record after our C<find> but before
+our C<create>, the database will throw a Unique Constraint error. This
+method catches that error and performs one final C<find> to retrieve the
+"winning" record.
+
+=item * Payload Handling
+
+Automatically extracts unique constraints from the provided data to build
+the lookup criteria.
+
+=back
+
+Example: Safe Tagging System
+
+    # Multiple workers might try to create the 'perl' tag at once
+    $schema->resultset('Tag')->find_or_create({ name => 'perl' })
+           ->then(sub {
+               my $tag = shift;
+               return $post->add_to_tags($tag);
+           });
 
 =cut
 
@@ -915,89 +1513,60 @@ sub find_or_create {
 
     my $lookup = $self->_extract_unique_lookup($data, $attrs);
 
+    # 1. First attempt: Find
     return $self->find($lookup, $attrs)->then(sub {
         my ($row) = @_;
         return Future->done($row) if $row;
 
+        # 2. Second attempt: Create
+        # This calls your async create() which goes through the bridge
         return $self->create($data)->catch(sub {
             my ($error) = @_;
+
+            # 3. Race Condition Recovery
+            # If the error is about a unique constraint, someone else inserted it
+            # between our 'find' and 'create' calls.
             if ("$error" =~ /unique constraint|already exists/i) {
-                return $self->find($lookup, $attrs); # Race recovery
+                warn "[PID $$] Race condition detected in find_or_create, retrying find"
+                    if ASYNC_TRACE;
+                return $self->find($lookup, $attrs);
             }
+
+            # If it's a real error (connection, etc.), fail forward
             return Future->fail($error);
         });
     });
 }
 
-=head2 first
+=head2 get_attribute
 
-    $rs->first->then(sub {
-        my ($row) = @_;
-        if ($row) {
-            say "First row: " . $row->name;
-        }
-    });
+    my $rows_limit = $rs->get_attribute('rows');
 
-Returns the first row matching the current search criteria.
-
-=over 4
-
-=item B<Returns>
-
-A L<Future> that resolves to a L<DBIx::Class::Async::Row> object if found,
-or C<undef> if no rows match.
-
-=back
+Returns the value of a specific attribute (e.g., C<rows>, C<offset>, C<join>)
+currently set on the ResultSet. This is a synchronous read from the internal
+C<_attrs> hashref.
 
 =cut
 
-sub first {
-    my $self = shift;
-
-    # Handle prefetch
-    if ($self->{is_prefetched} && $self->{entries}) {
-        return Future->done($self->new_result($self->{entries}[0]));
-    }
-
-    return $self->search(undef, { rows => 1 })
-                ->all
-                ->then(sub {
-                    my ($rows) = @_;
-                    return Future->done($rows->[0]);
-                });
+sub get_attribute {
+    my ($self, $key) = @_;
+    return $self->{_attrs}->{$key};
 }
-
-=head2 first_future
-
-    $rs->first_future->then(sub {
-        # Same as single_future, alias for API consistency
-    });
-
-Alias for C<single_future>.
-
-=cut
-
-sub first_future { shift->single_future(@_) }
 
 =head2 get
 
-    my $rows = $rs->get;
-    # Returns cached rows, or empty arrayref if not fetched
+    my $data = $rs->get;
 
-Returns the currently cached rows.
+Returns the current "raw" state of the ResultSet's data buffer.
 
 =over 4
 
-=item B<Returns>
+=item * Returns the arrayref of inflated B<Row objects> if they exist.
 
-Array reference of cached rows (either raw data or row objects, depending on
-how they were fetched).
+=item * Falls back to returning B<raw hashrefs> (C<_entries>) if they have been
+        fetched from a worker but not yet inflated.
 
-=item B<Notes>
-
-This method returns immediately without performing any database operations.
-It only returns data that has already been fetched via C<all>, C<all_future>,
-or similar methods.
+=item * Returns an empty arrayref C<[]> if no data has been fetched.
 
 =back
 
@@ -1005,54 +1574,57 @@ or similar methods.
 
 sub get {
     my $self = shift;
-    # Returns current cached rows (raw or objects)
-    return $self->{_rows} || [];
+    # 1. Check for inflated objects first
+    return $self->{_rows} if $self->{_rows} && ref($self->{_rows}) eq 'ARRAY';
+
+    # 2. Check for raw data awaiting inflation
+    return $self->{_entries} if $self->{_entries} && ref($self->{_entries}) eq 'ARRAY';
+
+    return [];
 }
 
 =head2 get_cache
 
-  my $cached_rows = $rs->get_cache;
+    my $rows = $rs->get_cache;
 
-Returns the current contents of the ResultSet's internal cache. This will be
-an arrayref of L<DBIx::Class::Async::Row> objects if the cache has been
-populated via C<set_cache> or a previous execution of C<all>. Returns
-C<undef> if no cache exists.
+Specifically returns the internal buffer of B<inflated Row objects>. Unlike C<get>,
+this will return C<undef> if the objects haven't been created yet, adhering
+to the standard DBIC behaviour where "cache" implies fully realised results.
 
 =cut
 
 sub get_cache {
     my $self = shift;
+    # Align with your all() logic: Return _rows if populated, otherwise undef
+    return $self->{_rows} if $self->{_rows} && ref($self->{_rows}) eq 'ARRAY';
 
-    # Return the inflated rows if they exist, or the raw entries
-    return $self->{_rows}   if $self->{_rows};
-    return $self->{entries} if $self->{entries};
+    # Optional: If you want get_cache to be "smart" like your line 85,
+    # you could return _entries here, but usually get_cache implies inflated rows.
     return undef;
 }
 
 =head2 get_column
 
-    $rs->get_column('name')->then(sub {
-        my ($names) = @_;
-        # $names is an arrayref of name values
-    });
+    my $col_obj = $rs->get_column('price');
 
-Returns values from a single column for all rows matching the current criteria.
+Returns a L<DBIx::Class::Async::ResultSetColumn> object for the specified
+column.
+
+This pivots the API from row-based operations to column-based aggregate
+functions. The returned object allows you to perform asynchronous math
+directly on the database:
+
+    $rs->get_column('age')->func_future('AVG')->on_done(sub {
+        my $avg = shift;
+        print "Average Age: $avg\n";
+    });
 
 =over 4
 
-=item B<Parameters>
+=item * Context Preservation
 
-=over 8
-
-=item C<$column>
-
-Column name to retrieve values from.
-
-=back
-
-=item B<Returns>
-
-A L<Future> that resolves to an array reference of column values.
+The column object inherits the ResultSet's current filters (C<where> clause)
+and the C<async_db> worker bridge.
 
 =back
 
@@ -1061,370 +1633,348 @@ A L<Future> that resolves to an array reference of column values.
 sub get_column {
     my ($self, $column) = @_;
 
-    # Don't die if column doesn't exist, just return undef or check _data
-    return $self->{_data}{$column} if exists $self->{_data}{$column};
+    return DBIx::Class::Async::ResultSetColumn->new(
+        resultset => $self,
+        column    => $column,
+        async_db  => $self->{_async_db},
+    );
+}
+
+=head2 is_cache_found
+
+    my $cached_rows = $rs->is_cache_found($cache_key);
+
+Queries the shared async infrastructure to see if a specific query result is
+already available in the C<_query_cache>.
+
+This is a "surgical" cache lookup. Instead of searching a flat global cache,
+it first identifies the "bucket" for the current B<source_name> and then
+looks for the specific B<key>.
+
+=over 4
+
+=item * Returns
+
+The cached arrayref of rows if found, or C<undef> if the cache is empty or expired.
+
+=item * Scope
+
+This lookup is scoped to the C<_async_db> instance, allowing multiple ResultSets
+to benefit from the same background fetch.
+
+=back
+
+=cut
+
+sub is_cache_found {
+    my ($self, $key) = @_;
+
+    my $db     = $self->{_async_db};
+    my $source = $self->{_source_name};
+
+    # Return only if both the source bucket and the specific key exist
+    return $db->{_query_cache}->{$source}->{$key}
+        if exists $db->{_query_cache}->{$source}
+        && exists $db->{_query_cache}->{$source}->{$key};
 
     return undef;
 }
 
-=head2 is_paged
-
-    if ($rs->is_paged) { ... }
-
-Returns a boolean (1 or 0) indicating whether the ResultSet has pagination
-attributes (specifically the C<page> key) defined.
-
-=cut
-
-sub is_paged {
-    my $self = shift;
-    return exists $self->{_attrs}->{page} ? 1 : 0;
-}
-
 =head2 is_ordered
 
-    my $bool = $rs->is_ordered;
+    if ($rs->is_ordered) { ... }
 
-Returns B<true> (1) if the ResultSet has an C<order_by> attribute set, B<false> (0)
-otherwise. It is highly recommended to ensure a ResultSet B<is_ordered> before
-performing pagination to ensure consistent results across pages.
+Returns a boolean indicating whether the ResultSet has an C<order_by> attribute
+defined.
+
+This is used internally by methods like L</pager> to issue warnings when
+pagination is attempted on unordered data, which can lead to non-deterministic
+results in distributed systems.
 
 =cut
 
 sub is_ordered {
     my $self = shift;
+    # Check if 'order_by' exists in the attributes hashref
+    return (exists $self->{_attrs}->{order_by} && defined $self->{_attrs}->{order_by}) ? 1 : 0;
+}
 
-    return exists $self->{_attrs}->{order_by} ? 1 : 0;
+=head2 is_paged
+
+    say "This is a subset" if $rs->is_paged;
+
+Returns a boolean indicating whether the ResultSet has a C<page> attribute
+defined. This is a reliable way to check if the current ResultSet represents
+a "slice" of data rather than the full set.
+
+=cut
+
+sub is_paged {
+    my $self = shift;
+    return (exists $self->{_attrs}->{page} && defined $self->{_attrs}->{page}) ? 1 : 0;
 }
 
 =head2 next
 
-    while (my $row = $rs->next) {
-        say "Row: " . $row->name;
-    }
+    $rs->next->then(sub {
+        my $row = shift;
+        return unless $row;
+        # Process row...
+    });
 
-Returns the next row from the cached result set.
-
-=over 4
-
-=item B<Returns>
-
-A L<DBIx::Class::Async::Row> object, or C<undef> when no more rows are available.
-
-=item B<Notes>
-
-If no rows have been fetched yet, this method performs a blocking fetch via
-C<all>. The results are cached for subsequent C<next> calls. Call C<reset>
-to restart iteration.
-
-=back
+Iterates through the resultset. If the buffer is empty, it triggers an C<all>
+call internally to populate the local cache and then returns the first element.
 
 =cut
 
 sub next {
     my $self = shift;
 
-    # 1. If we already have the rows in the buffer
+    # 1. Check if the buffer already exists (Memory Hit)
     if ($self->{_rows}) {
         $self->{_pos} //= 0;
+
         if ($self->{_pos} >= @{$self->{_rows}}) {
             return Future->done(undef);
         }
 
         my $data = $self->{_rows}[$self->{_pos}++];
 
-        # Ensure we return an object.
-        # If it's already an object (from our new all_future), this is a no-op.
-        # If it's a raw hash, we inflate it and mark it as in-storage.
+        # Inflate if it's raw data
         my $row = (ref($data) eq 'HASH')
-            ? $self->new_result($data, { in_storage => 1 })
+            ? $self->_inflate_row($data)
             : $data;
 
         return Future->done($row);
     }
 
-    # 2. If the buffer is empty, use 'all' (which calls all_future)
+    # 2. Buffer empty: Trigger 'all' (Database Hit)
     return $self->all->then(sub {
+        # $self->all already inflated the rows into $self->{_rows}
+        # and returns an arrayref of objects.
         my $rows = shift;
 
         if (!$rows || !@$rows) {
             return Future->done(undef);
         }
 
-        # all_future now populates $self->{_rows} with OBJECTS.
-        # We just grab the first one.
-        return Future->done($self->{_rows}[$self->{_pos}++]);
+        # Reset position and return the first inflated result
+        $self->{_rows} = $rows;
+        $self->{_pos}  = 0;
+        my $row = $self->{_rows}[$self->{_pos}++];
+
+        $row = $self->_inflate_row($row) if ref($row) eq 'HASH';
+
+        return Future->done($row);
     });
 }
 
-=head2 page
+=head2 page / pager
 
-    my $paged_rs = $rs->page(3);
+    my $paged_rs = $rs->page(2);
+    my $pager    = $paged_rs->pager; # Returns DBIx::Class::Async::ResultSet::Pager
 
-Returns a new ResultSet clone with the C<page> and C<rows> attributes set. If
-C<rows> (entries per page) has not been previously set on the ResultSet, it
-defaults to 10.
-
-This method is chainable and does not execute a query immediately.
+C<page> returns a cloned RS with paging attributes. C<pager> provides an object
+for UI pagination logic (e.g., C<last_page>, C<entries_per_page>).
 
 =cut
 
 sub page {
     my ($self, $page_number) = @_;
 
-    # We use the existing search() method to handle the cloning.
-    # This avoids calling new() directly and hitting those validation croaks.
+    # 1. Ensure we have a valid page number (default to 1)
+    my $page = $page_number || 1;
+
+    # 2. Capture existing rows attribute from _attrs, or default to 10
+    # This matches your old design's requirement
+    my $rows = $self->{_attrs}->{rows} || 10;
+
+    # 3. Delegate to search() for cloning and state preservation
+    # This passes through your bridge validation logic
     return $self->search(undef, {
-        page => $page_number || 1,
-        rows => $self->{_attrs}->{rows} || 10
+        page => $page,
+        rows => $rows,
     });
 }
-
-=head2 pager
-
-    my $pager = $rs->page(1)->pager;
-
-Returns a L<DBIx::Class::Async::ResultSet::Pager> object for the current
-ResultSet. This object provides methods to calculate the total number of pages,
-next/previous page numbers, and entry counts.
-
-B<Note:> This method will C<die> if called on a ResultSet that has not been
-paged via the L</page> method.
-
-B<PRO-TIP>: Warn the user if they are paginating unordered data.
-
-=cut
 
 sub pager {
     my $self = shift;
 
+    # 1. Return cached pager if it exists
     return $self->{_pager} if $self->{_pager};
 
+    # 2. Strict check for paging attributes
     unless ($self->is_paged) {
         die "Cannot call ->pager on a non-paged resultset. Call ->page(\$n) first.";
     }
 
-    # Warn only if unordered AND not running in a test suite
+    # 3. Warning for unordered results (crucial for consistent pagination)
+    # Checks if we are NOT in a test environment (HARNESS_ACTIVE)
     if (!$self->is_ordered && !$ENV{HARNESS_ACTIVE}) {
         warn "DBIx::Class::Async Warning: Calling ->pager on an unordered ResultSet. " .
-             "Results may be inconsistent across pages.\n";
+             "Results may be inconsistent across pages.\n" if ASYNC_TRACE;
     }
 
+    # 4. Lazy-load and instantiate the Async Pager
     require DBIx::Class::Async::ResultSet::Pager;
     return $self->{_pager} = DBIx::Class::Async::ResultSet::Pager->new(resultset => $self);
 }
 
-=head2 populate
+=head2 populate / populate_bulk
 
-  # Array of hashrefs format
-  $rs->populate([
-      { name => 'Alice', email => 'alice@example.com' },
-      { name => 'Bob',   email => 'bob@example.com' },
-  ])->then(sub {
-      my ($users) = @_;
-      say "Created " . scalar(@$users) . " users";
-  });
+    $rs->populate([
+        { name => 'Alice', age => 30 },
+        { name => 'Bob',   age => 25 },
+    ]);
 
-  # Column list + rows format
-  $rs->populate([
-      [qw/ name email /],
-      ['Alice', 'alice@example.com'],
-      ['Bob',   'bob@example.com'],
-  ])->then(sub {
-      my ($users) = @_;
-  });
-
-Creates multiple rows at once. More efficient than calling C<create> multiple times.
-
-=over 4
-
-=item B<Arguments>
-
-=over 8
-
-=item C<$data>
-
-Either:
-
-- Array of hashrefs: C<< [ \%col_data, \%col_data, ... ] >>
-
-- Column list + rows: C<< [ \@column_list, \@row_values, \@row_values, ... ] >>
-
-=back
-
-=item B<Returns>
-
-A L<Future> that resolves to an arrayref of created L<DBIx::Class::Async::Row> objects.
-
-=back
+High-speed bulk insertion. Deflates all rows in the parent process before sending
+a single batch request to the worker. Returns a L<Future> resolving to an arrayref
+of created objects.
 
 =cut
 
 sub populate {
     my ($self, $data) = @_;
-
-    croak("data required")            unless defined $data;
-    croak("data must be an arrayref") unless ref $data eq 'ARRAY';
-    croak("data cannot be empty")     unless @$data;
-
-    # Detect format: hashref array or column list + rows
-    my $first_elem = $data->[0];
-    my $is_column_list_format = ref $first_elem eq 'ARRAY';
-
-    my @rows_to_create;
-
-    if ($is_column_list_format) {
-        # Format: [ [qw/col1 col2/], [val1, val2], [val3, val4], ... ]
-        my @columns = @{ $data->[0] };
-
-        for my $i (1 .. $#$data) {
-            my @values = @{ $data->[$i] };
-
-            croak("Row $i has different number of values than columns")
-                unless @values == @columns;
-
-            my %row;
-            for my $j (0 .. $#columns) {
-                $row{$columns[$j]} = $values[$j];
-            }
-
-            push @rows_to_create, \%row;
-        }
-    } else {
-        # Format: [ {col1 => val1}, {col1 => val2}, ... ]
-        @rows_to_create = @$data;
-    }
-
-    # Create all rows
-    my @futures;
-    foreach my $row_data (@rows_to_create) {
-        # Create the row, then immediately discard_changes to fetch defaults
-        my $f = $self->create($row_data)->then(sub {
-            my $new_row = shift;
-            return $new_row->discard_changes; # Returns a future resolving to the refreshed row
-        });
-        push @futures, $f;
-    }
-
-    # Wait for all creates to complete
-    return Future->wait_all(@futures)->then(sub {
-        my @results;
-        foreach my $f (@_) {
-            my $row = eval { $f->get };
-            push @results, $row if $row && !$@;
-        }
-
-        return Future->done(\@results);
-    });
+    return $self->_do_populate('populate', $data);
 }
-
-=head2 populate_bulk
-
-  my $future = $rs->populate_bulk(\@large_dataset);
-
-  $future->on_done(sub {
-      print "Bulk insert successful\n";
-  });
-
-A high-performance version of C<populate> intended for large-scale data ingestion.
-
-=over 4
-
-=item * B<Arguments:> C<[ \%col_data, ... ]> or C<[ \@column_list, [ \@row_values, ... ] ]>
-
-=item * B<Return Value:> A L<Future> that resolves to a truthy value (1) on success.
-
-=back
-
-B<Key Differences from populate:>
-
-=over 4
-
-=item 1. B<Context:> Executes the database operation in void context on the worker side.
-
-=item 2. B<No Inflation:> Does not create Result objects for the inserted rows.
-
-=item 3. B<Efficiency:> Reduces memory overhead and Inter-Process Communication (IPC)
-payload by only returning a success status rather than the full row data.
-
-=back
-
-Use this method when you need to "fire and forget" large amounts of data where
-individual object manipulation is not required immediately after insertion.
-
-=cut
 
 sub populate_bulk {
     my ($self, $data) = @_;
+    return $self->_do_populate('populate_bulk', $data);
+}
 
-    # 1. Validation: Ensure we have an arrayref
-    unless (ref $data eq 'ARRAY') {
-        return Future->fail("populate_bulk() requires an arrayref", "usage_error");
-    }
+sub _do_populate {
+    my ($self, $operation, $data) = @_;
 
-    # 1. Data Preparation: Handle potential prefixes and merge ResultSet conditions
-    my $final_data = $data;
+    croak("data required") unless defined $data;
+    croak("data must be an arrayref") unless ref $data eq 'ARRAY';
+    croak("data cannot be empty") unless @$data;
 
-    # We only perform merging/cleaning if we are dealing with an array of hashrefs.
-    # If it's an array of arrays (bulk insert), we pass it through as-is for maximum speed.
-    if (ref $data->[0] eq 'HASH') {
-        $final_data = [ map {
-            my $row = $_;
-            my %to_insert = ( %{$self->{_cond} || {}}, %$row );
-            my %clean_data;
-            while (my ($k, $v) = each %to_insert) {
-                my $clean_key = $k;
-                $clean_key =~ s/^(?:foreign|self)\.//;
-                $clean_data{$clean_key} = $v;
+    # 1. Build payload and STRICTLY validate
+    my $payload = $self->_build_payload();
+
+    croak("Failed to build payload: _build_payload returned undef")
+        unless ref $payload eq 'HASH';
+
+    croak("Missing source_name in ResultSet")
+        unless $payload->{source_name} || $self->{_source_name};
+
+    # 2. Deflate the data for the Worker
+    my $db          = $self->{_async_db};
+    my $source_name = $self->{_source_name};
+    my $inflators   = $db->{_custom_inflators}{$source_name} || {};
+
+    # 1. Deflate the data for the Worker
+    my @deflated_data;
+
+    # Check if this is the "Array of Arrays" format (first element is an arrayref)
+    if (ref $data->[0] eq 'ARRAY') {
+        # This is the header-style populate: [['col1', 'col2'], [val1, val2]]
+        # We pass it through raw, as the Worker should handle the mapping,
+        # but we still want to keep our deflation logic if possible.
+        my @rows = @$data; # Copy to avoid mutating original if needed
+        my $header = shift @rows;
+        my $expected_count = scalar @$header;
+
+        foreach my $row (@rows) {
+            if (scalar @$row != $expected_count) {
+                croak("Row has a different number of columns than the header");
             }
-            \%clean_data;
-        } @$data ];
+        }
+        @deflated_data = @$data;
+    }
+    else {
+        # This is the "Array of Hashes" format
+        # 1. Properly declare $source and %col_info
+        my $source   = $self->result_source;
+        my %col_info = %{ $source->columns_info };
+
+        foreach my $row_data (@$data) {
+            croak("populate row must be a HASH ref")
+                unless ref $row_data eq 'HASH';
+
+            # 2. Merge Default Values
+            my %merged_row = %$row_data;
+            while (my ($col, $info) = each %col_info) {
+                if (!exists $merged_row{$col}
+                    && exists $info->{default_value}) {
+                    $merged_row{$col} = $info->{default_value};
+                }
+            }
+
+            # 3. Deflate for Worker
+            my %deflated_row;
+            while (my ($k, $v) = each %merged_row) {
+                my $clean_key = $k;
+                $clean_key =~ s/^(?:foreign|self|me)\.//;
+
+                if ($inflators->{$clean_key}
+                    && $inflators->{$clean_key}{deflate}) {
+                    $v = $inflators->{$clean_key}{deflate}->($v);
+                }
+                $deflated_row{$clean_key} = $v;
+            }
+            push @deflated_data, \%deflated_row;
+        }
     }
 
-    # 3. Execute: Call the background worker using the 'populate_bulk' operation
-    return $self->{async_db}->populate_bulk(
-        $self->{source_name},
-        $final_data
+    # 3. Patch and Dispatch
+    $payload->{source_name} //= $source_name;
+    $payload->{data}          = \@deflated_data;
+
+    return DBIx::Class::Async::_call_worker(
+        $db,
+        $operation,
+        $payload
     )->then(sub {
-        my ($result) = @_;
+        my $results = shift;
+        return Future->done([]) unless $results && ref $results eq 'ARRAY';
 
-        # 4. Error Handling
-        if (ref $result eq 'HASH' && $result->{__error}) {
-            return Future->fail($result->{__error}, 'db_error');
-        }
-
-        # 5. Return Success: We return a simple truthy value instead of a list of objects
-        return Future->done(1);
+        my @objects = map { $self->_inflate_row($_) } @$results;
+        return Future->done(\@objects);
     });
 }
 
 =head2 prefetch
 
-    my $rs_with_prefetch = $rs->prefetch('related_table');
+    my $paged_rs = $rs->prefetch({ 'orders' => 'order_items' });
 
-Adds a prefetch clause to the result set for eager loading of related data.
+Informs the ResultSet to fetch related data alongside the primary records in a
+single query.
+
+This is an alias for calling C<< $rs->search(undef, { prefetch => $prefetch }) >>.
 
 =over 4
 
-=item B<Parameters>
+=item * Efficiency
 
-=over 8
+Reduces the number of round-trips to the worker pool. Without prefetch,
+accessing a relationship on a row might trigger a new asynchronous request;
+with it, the data is already present in the row's internal buffer.
 
-=item C<$prefetch>
+=item * Deep Nesting
 
-Prefetch specification (string or arrayref).
+Supports the standard L<DBIx::Class> syntax for nested relationships (hashes
+for single dependencies, arrays for multiple).
+
+=item * Async Inflation
+
+When the worker returns the data, the parent process's C<new_result> method
+automatically identifies the prefetched columns and inflates them into nested
+L<DBIx::Class::Async::Row> objects.
 
 =back
 
-=item B<Returns>
+Example: Eager Loading for an API Response
 
-A new result set object with the prefetch clause added.
-
-=item B<Notes>
-
-This method returns a clone of the result set and does not modify the original.
-
-=back
+    # Fetch users and their profiles in one go
+    $schema->resultset('User')->prefetch('profile')->all->then(sub {
+        my $users = shift;
+        foreach my $user (@$users) {
+            # This is now a synchronous, in-memory call because of prefetch
+            print $user->username . " lives in " . $user->profile->city . "\n";
+        }
+    });
 
 =cut
 
@@ -1433,108 +1983,209 @@ sub prefetch {
     return $self->search(undef, { prefetch => $prefetch });
 }
 
+=head2 result_class
+
+    $rs->result_class('DBIx::Class::ResultClass::HashRefInflator');
+
+Gets or sets the class used to inflate rows. If set to C<HashRefInflator>, C<all>
+will return raw hashrefs instead of Row objects, which is significantly faster
+for read-only APIs.
+
+=cut
+
+sub result_class {
+    my $self = shift;
+
+    if (@_) {
+        my $new_class = shift;
+        # Clone the RS to allow chaining: $rs->result_class('...')->search(...)
+        my $cloned = { %$self };
+        $cloned->{_attrs} = { %{ $self->{_attrs} || {} } }; # Shallow copy attributes
+        $cloned->{_attrs}->{result_class} = $new_class;
+        return bless $cloned, ref $self;
+    }
+
+    # Hierarchy:
+    # 1. Attribute override
+    # 2. Schema metadata (via source name)
+    # 3. Default fallback
+    return $self->{_attrs}->{result_class}
+        || $self->{_result_class} # Value passed during construction
+        || 'DBIx::Class::Core';
+}
+
 =head2 related_resultset
 
-  my $users_rs = $orders_rs->related_resultset('user');
+    my $orders_rs = $user_rs->related_resultset('orders');
 
-Returns a new ResultSet for a related table based on a relationship name.
-The new ResultSet will be constrained to only include records that are
-related to records in the current ResultSet.
+Returns a new ResultSet representing a relationship. It automatically handles
+the JOIN logic and prefixes existing conditions
+(e.g., turning C<{ id = 5 }> into C<{ 'user.id' = 5 }>).
 
 =cut
 
 sub related_resultset {
-    my ($self, $relation) = @_;
+    my ($self, $rel_name) = @_;
 
-    croak("Relationship name is required") unless defined $relation;
-
-    my $source = $self->result_source;
-
-    unless ($source->has_relationship($relation)) {
-        croak("No such relationship '$relation' on " . $source->source_name);
+    unless (defined $rel_name && length $rel_name) {
+        croak "relationship_name is required for related_resultset";
     }
 
-    my $rel_info   = $source->relationship_info($relation);
-    my $rel_source = $source->related_source($relation);
-    my $cond       = $rel_info->{cond};
+    # 1. Get current source and schema link
+    my $source        = $self->result_source;
+    my $schema_inst   = $self->{_schema_instance};
+    my $native_schema = $schema_inst->{_native_schema};
 
-    # Build the join condition
-    my ($foreign_key, $self_key);
+    # 2. Resolve relationship info
+    my $rel_info = $source->relationship_info($rel_name)
+        or die "No such relationship '$rel_name' on " . $source->source_name;
 
-    if (ref $cond eq 'HASH') {
-        my ($foreign_col, $self_col) = %$cond;
+    # 3. Determine the Target Moniker
+    # DBIC often returns full class names (TestSchema::Result::Order)
+    # but ->source() and ->resultset() want the moniker (Order)
+    my $target_moniker = $rel_info->{source};
+    $target_moniker =~ s/^.*::Result:://;
 
-        # Handle complex condition structures
-        if (ref $self_col eq 'HASH') {
-            my ($op, $col) = %$self_col;
-            $self_col = $col;
-        }
+    # 4. Resolve the target source object (for metadata/pivoting)
+    my $rel_source_obj = eval { $native_schema->source($target_moniker) }
+        || eval { $native_schema->source($rel_info->{source}) };
 
-        $foreign_col =~ s/^foreign\.//;
-        $self_col    =~ s/^self\.//;
-        $foreign_key =  $foreign_col;
-        $self_key    =  $self_col;
-    } else {
-        croak("Complex relationship conditions not yet supported");
+    unless ($rel_source_obj) {
+        die "Could not resolve source for relationship '$rel_name' (target: $target_moniker)";
     }
 
-    my $reverse_rel = $self->_find_reverse_relationship($source, $rel_source, $relation);
+    # 5. Find the reverse relationship (e.g., 'user') for the JOIN
+    my $reverse_rel = $self->_find_reverse_relationship($source, $rel_source_obj, $rel_name)
+        or die "Could not find reverse relationship for '$rel_name' to " . $source->source_name;
 
-    unless ($reverse_rel) {
-        croak("Cannot find reverse relationship from " .
-              $rel_source->source_name . " back to " .
-              $source->source_name);
-    }
-
-    # Build new search condition with prefixed keys
-    my %prefixed_cond;
-    while (my ($key, $value) = each %{$self->{_cond}}) {
-        # Add the reverse relationship prefix to existing conditions
-        if ($key =~ /\./) {
-            $prefixed_cond{$key} = $value;
-        } else {
-            $prefixed_cond{"$reverse_rel.$key"} = $value;
+    # 6. Prefix existing conditions (Pivot logic)
+    # Turns { age => 30 } into { 'user.age' => 30 }
+    my %new_cond;
+    if ($self->{_cond} && ref $self->{_cond} eq 'HASH') {
+        while (my ($key, $val) = each %{$self->{_cond}}) {
+            my $new_key = ($key =~ /\./) ? $key : "$reverse_rel.$key";
+            $new_cond{$new_key} = $val;
         }
     }
 
-    # Get all columns from the related source for proper GROUP BY
-    my @columns = $rel_source->columns;
-    my @select = map { "me.$_" } @columns;
-    my @group_by = map { "me.$_" } @columns;
-
-    # Create attributes with join
-    my %new_attrs = (
-        join     => $reverse_rel,
-        select   => \@select,
-        as       => \@columns,
-        group_by => \@group_by,
-        %{$self->{_attrs}},
+    # 7. Build the new Async ResultSet using the MONIKER
+    # We call resultset('Order'), NOT resultset('orders')
+    return $schema_inst->resultset($target_moniker)->search(
+        \%new_cond,
+        { join => $reverse_rel }
     );
+}
 
-    # Remove any conflicting attributes from the original ResultSet
-    delete $new_attrs{prefetch} if exists $new_attrs{prefetch};
+=head2 result_source
 
-    # Create and return the new ResultSet
-    return $self->{schema}->resultset($rel_source->source_name)->search(
-        \%prefixed_cond,
-        \%new_attrs
-    );
+    my $source = $rs->result_source;
+
+Returns the L<DBIx::Class::ResultSource> object for the current ResultSet.
+
+This object contains the structural definition of the data source, including
+column names, data types, relationships, and the primary key configuration.
+
+=over 4
+
+=item * Metadata Access
+
+Use this to introspect the schema at runtime (e.g., checking if a column
+exists or retrieving relationship metadata).
+
+=item * Internal Proxy
+
+This is a wrapper around the internal C<_get_source> method, which ensures
+the metadata is lazily loaded from the schema definition if it isn't already
+present in the parent process.
+
+=item * Consistency
+
+While the ResultSet handles the *query logic*, the ResultSource handles the
+*data contract*.
+
+=back
+
+Example: Introspecting Column Types
+
+    my $source = $rs->result_source;
+    my $info   = $source->column_info('created_at');
+
+    print "Column Type: " . $info->{data_type} . "\n";
+
+=cut
+
+sub result_source { shift->_get_source; }
+
+sub _get_source {
+    my $self = shift;
+
+    $self->{_source} ||= $self->{_schema_instance}->source($self->{_source_name});
+
+    return $self->{_source};
+}
+
+=head2 reset_stats
+
+    $rs->reset_stats;
+
+Clears all performance and telemetry counters within the associated asynchronous
+bridge (C<_async_db>).
+
+This resets counters such as query execution counts, worker round-trip times,
+and cache hit/miss ratios to zero. It is typically used at the start of a
+profiling block to measure the impact of a specific set of operations.
+
+=over 4
+
+=item * Global Scope
+
+Note that because stats are stored on the C<async_db> object, calling this on
+one ResultSet will reset the statistics for all ResultSets sharing that same
+worker bridge.
+
+=item * Chainable
+
+Returns the ResultSet object to allow for fluent calling styles.
+
+=back
+
+=cut
+
+sub reset_stats {
+    my $self = shift;
+    foreach my $key (keys %{ $self->{_async_db}->{_stats} }) {
+        $self->{_async_db}->{_stats}->{$key} = 0;
+    }
+    return $self;
 }
 
 =head2 reset
 
     $rs->reset;
-    # Now $rs->next will start from the first row again
 
-Resets the internal iterator position.
+Resets the internal cursor position (C<_pos>) of the ResultSet to the beginning.
+
+After calling C<reset>, the next call to C<next> or C<next_future> will return
+the first row in the result set again. This is useful for re-iterating over
+results already stored in the local buffer without re-fetching them from the
+database.
 
 =over 4
 
-=item B<Returns>
+=item * Local Operation
 
-The result set object itself (for chaining).
+This only affects the iteration state of the current ResultSet instance.
 
 =back
+
+Example: Measuring query impact
+
+    $rs->reset_stats;
+
+    $rs->search({ type => 'critical' })->all->then(sub {
+        my $stats = $rs->{_async_db}->{_stats};
+        print "Queries executed: " . $stats->{query_count} . "\n";
+    });
 
 =cut
 
@@ -1544,187 +2195,102 @@ sub reset {
     return $self;
 }
 
-=head2 result_class
+=head2 source
 
-    $rs->result_class('My::Custom::Row::Class');
-    my $class = $rs->result_class;
+    my $source = $rs->source;
 
-Gets or sets the result class (inflation class) for the ResultSet.
+A convenient alias for L</result_source>.
 
-In C<DBIx::Class::Async>, this method plays a critical role in maintaining
-Object-Oriented compatibility. When a custom result class is specified,
-the library automatically generates an anonymous proxy class that inherits
-from both the internal asynchronous logic and your custom class.
-
-This ensures that:
-
-=over 4
-
-=item 1. Custom row methods (e.g., C<hello_name>) are available on returned objects.
-
-=item 2. The objects correctly pass C<< $row->isa('My::Custom::Row::Class') >> checks.
-
-=item 3. Database interactions remain asynchronous and non-blocking.
-
-=back
-
-The method resolves the class using the following priority:
-
-=over 4
-
-=item 1. Explicitly set value via this accessor.
-
-=item 2. Attributes passed during the C<search> call (C<result_class>).
-
-=item 3. The default C<result_class> defined in the L<DBIx::Class::ResultSource>.
-
-=back
-
-Returns the ResultSet object when used as a setter to allow method chaining.
+Returns the L<DBIx::Class::ResultSource> object for the current ResultSet. This
+object is the "source of truth" for the table's structure, including column
+definitions and relationship mappings.
 
 =cut
 
-sub result_class {
-    my ($self, $class) = @_;
-    if ($class) {
-        $self->{result_class} = $class;
-        return $self;
-    }
-    # If we have it stored, use it.
-    # Otherwise, fall back to the Source default.
-    return $self->{result_class}
-        || $self->{schema}->source($self->{source_name})->result_class;
-}
-
-=head2 result_source
-
-    my $source = $rs->result_source;
-
-Returns the result source object for this result set.
-
-=over 4
-
-=item B<Returns>
-
-A L<DBIx::Class::ResultSource> object.
-
-=back
-
-=cut
-
-sub result_source {
+sub source {
     my $self = shift;
     return $self->_get_source;
 }
 
-=head2 schema
+=head2 source_name
 
-  my $schema = $rs->schema;
+    my $name = $rs->source_name;
 
-Returns the L<DBIx::Class::Async::Schema> object that this ResultSet belongs to.
+Returns the string identifier of the ResultSource (e.g., C<'User'> or C<'Order'>).
 
-This provides access to the parent schema, allowing you to access other
-ResultSources, the storage layer, or schema-level operations from within
-a ResultSet context.
+This is a high-performance, synchronous accessor. In an asynchronous
+architecture, the C<source_name> is the primary key used to tell the background
+worker which table logic to load before executing a query.
 
-  my $rs = $schema->resultset('User');
-  my $parent_schema = $rs->schema;
+=over 4
 
-  # Access other result sources
-  my $orders_rs = $parent_schema->resultset('Order');
+=item * Immutable
 
-  # Access storage
-  my $storage = $parent_schema->storage;
+This value is set when the ResultSet is first instantiated and persists through
+searches and clones.
 
-  # Perform schema-level operations
-  $parent_schema->txn_do(sub { ... });
+=item * Lightweight
 
-This method is particularly useful in ResultSet method chains or custom
-ResultSet classes where you need to access the schema without passing it
-as a parameter.
+Unlike C<source>, this does not trigger any lazy-loading of metadata; it simply
+returns the stored string from the internal state.
+
+=back
+
+Example: Dynamic Dispatch based on Source
+
+    my $rs = get_some_resultset();
+
+    if ($rs->source_name eq 'User') {
+        # Perform user-specific async logic
+        $rs->search({ is_active => 1 })->all->...
+    }
 
 =cut
 
-sub schema {
+sub source_name {
     my $self = shift;
-    return $self->{_schema};
+    return $self->{_source_name};
 }
 
 =head2 search
 
-    my $filtered_rs = $rs->search({ active => 1 }, { order_by => 'name' });
+    my $new_rs = $rs->search(
+        { age      => { '>' => 21 } },
+        { order_by => 'name'        }
+    );
 
-Adds search conditions and attributes to the result set.
-
-=over 4
-
-=item B<Parameters>
-
-=over 8
-
-=item C<$cond>
-
-Hash reference of search conditions (optional).
-
-=item C<$attrs>
-
-Hash reference of search attributes like order_by, rows, etc. (optional).
-
-=back
-
-=item B<Returns>
-
-A new result set object with the combined conditions and attributes.
-
-=item B<Notes>
-
-This method returns a clone of the result set. Conditions and attributes
-are merged with any existing ones from the original result set.
-
-=back
+Returns a new ResultSet object with the added conditions and attributes. This
+is a synchronous, non-I/O operation that clones the current state.
 
 =cut
 
 sub search {
     my ($self, $cond, $attrs) = @_;
 
-    # Handle the condition merging carefully
     my $new_cond;
 
-    # 1. If the new condition is a literal (Scalar/Ref), it overrides/becomes the condition
     if (ref $cond eq 'REF' || ref $cond eq 'SCALAR') {
         $new_cond = $cond;
     }
-
-    # 2. If the current existing condition is a literal,
-    # and we try to add a hash, we usually want to encapsulate or override.
-    # For now, let's allow the new condition to take precedence if it's a hash.
     elsif (ref $cond eq 'HASH') {
         if (ref $self->{_cond} eq 'HASH' && keys %{$self->{_cond}}) {
-            # ONLY use -and if we actually have two sets of criteria to join
             $new_cond = { -and => [ $self->{_cond}, $cond ] };
         }
         else {
-            # If the current condition is empty/undef, just use the new one
             $new_cond = $cond;
         }
     }
     else {
-        # Fallback for simple cases or undef
         $new_cond = $cond || $self->{_cond};
     }
 
     my $merged_attrs = { %{$self->{_attrs} || {}}, %{$attrs || {}} };
 
     return $self->new_result_set({
-        _cond         => $new_cond,
-        _attrs        => $merged_attrs,
+        cond          => $new_cond,
         attrs         => $merged_attrs,
-        # Only reset these if they aren't in the merged attributes
-        result_class  => $attrs->{result_class} // $self->{result_class},
-        _rows         => $merged_attrs->{rows}  // undef,
-        _pos          => 0,
-        _pager        => undef,
+        pos           => 0,
+        pager         => undef,
         entries       => undef,
         is_prefetched => 0,
     });
@@ -1732,11 +2298,8 @@ sub search {
 
 =head2 search_future
 
-    $rs->search_future->then(sub {
-        # Same as all_future, alias for API consistency
-    });
-
-Alias for C<all_future>.
+An alias for L</all_future>. Returns a L<Future> that resolves to the
+full list of results matching the current ResultSet.
 
 =cut
 
@@ -1744,97 +2307,184 @@ sub search_future { shift->all_future(@_)  }
 
 =head2 search_literal
 
-    my $rs = $schema->resultset('User')->search_literal(
-        'age > ? AND status = ?',
-        18, 'active'
-    );
+    my $new_rs = $rs->search_literal('price > ?', 100);
+
+Adds a raw SQL fragment to the query criteria.
 
 =over 4
 
-=item Arguments: $sql_fragment, @bind_values
+=item * Safety
 
-=item Return Value: L<DBIx::Class::Async::ResultSet>
+Parameters are passed as a bind list, preventing SQL injection.
+
+=item * Chainability
+
+Returns a new ResultSet, allowing you to chain further C<search> or
+C<search_related> calls.
 
 =back
-
-Performs a search using a literal SQL fragment. This is provided for
-compatibility with L<Class::DBI>.
-
-B<Warning:> Use this method with caution. Always use placeholders (C<?>)
-for values to prevent SQL injection. Literal fragments are not parsed or
-validated by the ORM before being sent to the database.
 
 =cut
 
 sub search_literal {
     my ($self, $sql_fragment, @bind) = @_;
 
-    # In DBIC, search_literal is a shorthand for passing
-    # the literal SQL as the first element of the condition.
+    # By passing it to $self->search, we guarantee:
+    # 1. The new ResultSet gets the pinned _async_db and _schema_instance.
+    # 2. Any existing 'where' or 'attrs' (like rows/order_by) are merged.
     return $self->search(
         \[ $sql_fragment, @bind ]
     );
 }
 
+=head2 search_rs
+
+    my $new_rs = $rs->search_rs({ status => 'active' });
+
+A synchronous method that returns a new ResultSet object with the added
+search constraints. This is the standard way to chain query builders.
+
+=cut
+
+sub search_rs {
+    my $self = shift;
+    return $self->search(@_);
+}
+
 =head2 search_related
 
-  # Scalar context: returns a ResultSet
-  my $new_rs = $rs->search_related('orders');
+    my $future = $user_rs->search_related('orders');
 
-  # List context: returns a Future (implicit ->all)
-  my $future = $rs->search_related('orders');
-  my @orders = $future->get;
-
-In scalar context, works exactly like L</search_related_rs>. In list context, it
-returns a L<Future> that resolves to the list of objects in that relationship.
+Like C<search_related_rs>, but immediately triggers the database fetch.
+Returns a L<Future> resolving to an arrayref of related Row objects.
 
 =cut
 
 sub search_related {
-    my $self = shift;
-    return wantarray
-        ? $self->_do_search_related(@_)->all
-        : $self->_do_search_related(@_);
+    my ($self, $rel_name, $cond, $attrs) = @_;
+
+    # Use the helper to get the new configuration
+    my $new_rs = $self->search_related_rs($rel_name, $cond, $attrs);
+
+    # In an async context, search_related usually implies
+    # wanting the ResultSet object to call ->all_future on later.
+    return $new_rs->all;
 }
 
 =head2 search_related_rs
 
-  my $rel_rs = $rs->search_related_rs('relationship_name', \%cond?, \%attrs?);
+    my $orders_rs = $user_rs->search_related_rs('orders', { status => 'shipped' });
 
-Returns a new L<DBIx::Class::Async::ResultSet> representing the specified relationship.
-This is a synchronous metadata operation and does not hit the database.
+Pivots from the current ResultSet to a related data source. This is the core of
+L<DBIx::Class> relational power.
+
+=over 4
+
+=item * Shadow Translation
+
+Internally uses a temporary L<DBIx::Class::ResultSet> to calculate the complex
+join logic and foreign key mappings.
+
+=item * State Persistence
+
+The resulting ResultSet inherits the C<async_db> and C<schema_instance>, allowing
+it to execute the related query on the background worker.
+
+=item * Namespace Resolution
+
+Automatically resolves the target C<source_name> based on the relationship mapping.
+
+=back
 
 =cut
 
 sub search_related_rs {
-    my $self = shift;
-    return $self->_do_search_related(@_);
+    my ($self, $rel_name, $cond, $attrs) = @_;
+
+    # 1. Get the source. If _source is undef, pull it from the schema
+    my $source = $self->{_result_source}
+              || $self->{_schema_instance}->resultset($self->{_source_name})->result_source;
+
+    # 2. Create the Shadow RS starting from the PARENT source
+    require DBIx::Class::ResultSet;
+    my $parent_shadow = DBIx::Class::ResultSet->new($source, {
+         cond  => $self->{_cond}  || {},
+         attrs => $self->{_attrs} || {},
+    });
+
+    # 3. Pivot
+    # my $related_shadow = $shadow_rs->search_related($rel_name, $cond, $attrs);
+
+    # 3. Pivot using the standard DBIC logic
+    # This forces DBIC to calculate the JOIN or the subquery for 'orders'
+    my $related_shadow = $parent_shadow->search_related($rel_name, $cond, $attrs);
+
+    # 4. Wrap with ALL required keys
+    return DBIx::Class::Async::ResultSet->new(
+        schema_instance => $self->{_schema_instance},
+        async_db        => $self->{_async_db},
+        source_name     => $related_shadow->result_source->source_name,
+
+        cond => $related_shadow->{attrs}{where} || $related_shadow->{cond},
+
+        # Only pass serialisable attrs
+        attrs => {
+            where    => $related_shadow->{attrs}{where},
+            join     => $related_shadow->{attrs}{join},
+            order_by => $related_shadow->{attrs}{order_by},
+            rows     => $related_shadow->{attrs}{rows},
+            page     => $related_shadow->{attrs}{page},
+        },
+    );
 }
 
 =head2 search_with_pager
 
-    my $future = $rs->search_with_pager({ status => 'active' }, { rows => 20 });
+    my ($rows_f, $pager_f) = $rs->search_with_pager({ status => 'active' }, { rows => 20 });
 
-    $future->then(sub {
-        my ($rows, $pager) = @_;
-        print "Displaying page " . $pager->current_page;
-        return Future->done;
-    })->get;
+Executes a paginated search and returns a L<Future> that resolves to both the
+retrieved rows and a populated L<Data::Page> (or Async Pager) object.
 
-This is a convenience method that performs a search and initialises a pager
-simultaneously. It returns a L<Future> which, when resolved, provides two values:
-an arrayref of result objects (C<$rows>) and a L<DBIx::Class::Async::ResultSet::Pager>
-object (C<$pager>).
+This is the most efficient way to handle UI pagination because it dispatches
+the data fetch and the total count calculation simultaneously to the background
+workers.
 
-B<Performance Note>
+=over 4
 
-Unlike standard synchronous pagination where you must first fetch the data and
-then fetch the count (or vice versa), C<search_with_pager> fires both the
-C<SELECT> and the C<COUNT> queries to the database worker pool in parallel using
-L<Future/needs_all>. This can significantly reduce latency in web applications.
+=item * Auto-Paging
 
-If the ResultSet is not already paged when this method is called, it
-automatically applies C<< ->page(1) >>.
+If no C<page> or C<rows> attributes are provided in C<$attrs>, the method defaults
+to C<page(1)> to ensure a pager can be instantiated.
+
+=item * Parallel Execution
+
+Unlike standard synchronous code which fetches rows and *then* counts them, this
+method uses C<Future->needs_all> to maximize throughput by running both queries
+at once.
+
+=item * Pager Syncing
+
+The returned pager object is fully "hydrated" with the total entry count, meaning
+methods like C<last_page>, C<entries_on_this_page>, and C<next_page> are immediately
+available for use in your templates or API responses.
+
+=back
+
+Example: Implementing a Paginated API Endpoint
+
+    $rs->search_with_pager({ category => 'books' }, { page => 2, rows => 50 })
+       ->then(sub {
+           my ($rows, $pager) = @_;
+
+           return Future->done({
+               data => [ map { $_->TO_JSON } @$rows ],
+               meta => {
+                   total_records => $pager->total_entries,
+                   current_page  => $pager->current_page,
+                   total_pages   => $pager->last_page,
+               }
+           });
+       });
 
 =cut
 
@@ -1842,362 +2492,569 @@ sub search_with_pager {
     my ($self, $cond, $attrs) = @_;
 
     # 1. Create the paged resultset
+    # This applies any search conditions and returns a new RS instance
     my $paged_rs = $self->search($cond, $attrs);
+
+    # 2. Ensure paging is actually active
+    # If the user didn't provide 'rows' or 'page' in $attrs, we force page 1
     if (!$paged_rs->is_paged) {
         $paged_rs = $paged_rs->page(1);
     }
 
-    # 2. Fire both requests in parallel
+    # 3. Instantiate the Async Pager (using your existing method)
+    my $pager = $paged_rs->pager;
+
+    # 4. Fire parallel requests to the worker pool
+    # 'all' initiates the data fetch; 'total_entries' initiates the count(*)
     my $data_f  = $paged_rs->all;
-    my $pager   = $paged_rs->pager;
     my $total_f = $pager->total_entries;
 
-    # 3. Return a combined Future
+    # 5. Return a combined Future
+    # This resolves only when BOTH the data and the count are back from workers
     return Future->needs_all($data_f, $total_f)->then(sub {
         my ($rows, $total) = @_;
+
+        # At this point, $pager->total_entries is already resolved internally
+        # so the user can immediately call $pager->last_page, etc.
         return Future->done($rows, $pager);
     });
 }
 
-=head2 set_cache
-
-  $rs->set_cache(\@row_objects);
-
-Manually populates the ResultSet cache with the provided arrayref of row objects.
-Once a cache is set, any subsequent data-fetching operations (like C<all> or
-C<single_future>) will return the cached objects immediately instead of
-querying the database or the global worker cache.
-
-Expects an arrayref of objects of the same class as those normally produced
-by the ResultSet.
-
-=cut
-
-sub set_cache {
-    my ($self, $cache) = @_;
-
-    if (defined $cache && ref $cache ne 'ARRAY') {
-        croak("set_cache expects an arrayref of objects");
-    }
-
-    # Standard DBIC behavior: setting cache populates the result list
-    $self->{_rows}         = $cache;
-    $self->{is_prefetched} = 1;
-
-    # Also store as raw entries if these are objects,
-    # ensuring compatibility with your current 'all' logic
-    $self->{entries} = $cache;
-
-    return $cache;
-}
-
 =head2 single
 
-    my $row = $rs->single;
-    # Returns first row (blocking), or undef
+    my $future = $rs->single($cond?);
 
-Returns the first row from the result set (blocking version).
-
-=over 4
-
-=item B<Returns>
-
-A L<DBIx::Class::Async::Row> object, or C<undef> if no rows match.
-
-=item B<Notes>
-
-This method performs a blocking fetch. For non-blocking operation, use
-C<first> or C<single_future>.
-
-=back
+An alias for L</first>. Retrieves the first row matching the ResultSet's
+criteria.
 
 =cut
 
-sub single {
-    my $self = shift;
-
-    return $self->search(undef, { rows => 1 })->next;
-}
+sub single { shift->first }
 
 =head2 single_future
 
-    $rs->single_future->then(sub {
-        my ($row) = @_;
-        if ($row) {
-            # Process single row
-        }
-    });
+    my $user_f = $rs->single_future({ username => 'm_smith' });
 
-Returns a single row matching the current search criteria (non-blocking).
+A convenience method that performs a search for a specific condition and
+immediately calls L</first>. It returns a L<Future> resolving to a single
+Row object or C<undef>.
 
 =over 4
 
-=item B<Returns>
+=item * Contextual Search
 
-A L<Future> that resolves to a L<DBIx::Class::Async::Row> object if found,
-or C<undef> if not found.
+If a C<$cond> (hashref) is provided, it creates a temporary narrowed ResultSet
+before fetching.
 
-=item B<Notes>
+=item * Efficiency
 
-For simple primary key lookups, this method optimises by using C<find>
-internally. For complex queries, it adds C<rows =E<gt> 1> to the search
-attributes.
+Like C<first>, this automatically applies a C<LIMIT 1> if no data is already
+cached, ensuring the worker doesn't fetch unnecessary rows.
 
 =back
 
 =cut
 
 sub single_future {
-    my ($self, $cond, $attrs) = @_;
+    my ($self, $cond) = @_;
 
-    # 1. Handle prefetched cache
-    if ($self->{is_prefetched} && $self->{entries}) {
-        my $data = $self->{entries}[0];
-        # Mark as in_storage if data exists
-        return Future->done($data ? $self->new_result($data, { in_storage => 1 }) : undef);
-    }
-
-    my @pk = $self->result_source->primary_columns;
-    my $cond_type = ref $self->{_cond};
-
-    # 2. Optimized find path
-    if (@pk == 1
-        && $cond_type eq 'HASH'
-        && !exists $self->{_attrs}->{select}
-        && keys %{$self->{_cond}} == 1
-        && exists $self->{_cond}{$pk[0]}
-        && !ref $self->{_cond}{$pk[0]}) {
-
-        return $self->{async_db}->find(
-            $self->{source_name},
-            $self->{_cond}{$pk[0]}
-        )->then(sub {
-            my $data = shift;
-            # Mark as in_storage
-            return Future->done($data ? $self->new_result($data, { in_storage => 1 }) : undef);
-        });
-    }
-
-    # 3. Fallback search path
-    return $self->search($cond, { %{ $attrs || {} }, rows => 1 })->all->then(sub {
-        my $results = shift;
-        my $row = ($results && @$results) ? $results->[0] : undef;
-        $row->in_storage(1) if $row;
-        return Future->done($row);
-    });
+    # If a condition is provided, chain it.
+    # Otherwise, just call first on the current resultset.
+    return $cond ? $self->search($cond)->first : $self->first;
 }
 
-=head2 slice
+=head2 stats
 
-  my ($first, $second, $third) = $rs->slice(0, 2);
-  my @records = $rs->slice(5, 10);
-  my $sliced_rs = $rs->slice(0, 9);  # scalar context
+    my $all_stats = $rs->stats;
+    my $q_count   = $rs->stats('queries');
 
-Returns a resultset or object list representing a subset of elements from the
-resultset. Indexes are from 0.
+Returns performance metrics from the underlying asynchronous bridge.
 
 =over 4
 
-=item B<Parameters>
+=item * Key Mapping
 
-=over 8
+Automatically handles both "clean" keys (C<queries>) and internal
+keys (C<_queries>).
 
-=item C<$first>
+=item * Metrics included
 
-Zero-based starting index (inclusive).
-
-=item C<$last>
-
-Zero-based ending index (inclusive).
+Usually contains C<queries> (execution count), C<cache_hits>, and C<errors>.
 
 =back
 
-=item B<Returns>
+=cut
 
-In list context: Array of L<DBIx::Class::Async::Row> objects.
+sub stats {
+    my ($self, $key) = @_;
 
-In scalar context: A new L<DBIx::Class::Async::ResultSet> with appropriate
-C<rows> and C<offset> attributes set.
+    # Return the whole stats hash if no key is provided
+    return $self->{_async_db}->{_stats} unless $key;
 
-=item B<Examples>
+    # Otherwise return the specific metric (e.g., 'queries')
+    # Note: We map the public 'queries' to the internal '_queries'
+    my $internal_key = $key =~ /^_/ ? $key : "_$key";
+    return $self->{_async_db}->{_stats}->{$internal_key};
+}
 
-  # Get first 3 records
-  my ($one, $two, $three) = $rs->slice(0, 2);
+=head2 schema
 
-  # Get records 10-19
-  my @batch = $rs->slice(10, 19);
+    my $schema = $rs->schema;
 
-  # Get a ResultSet for records 5-14 (for further chaining)
-  my $subset_rs = $rs->slice(5, 14);
-  my $count = $subset_rs->count->get;
+Returns the L<DBIx::Class::Async::Schema> instance that originally spawned
+this ResultSet. This is useful for pivoting to other ResultSets from within
+a row-processing callback.
+
+=cut
+
+sub schema { shift->{_schema}; }
+
+=head2 slice
+
+    # Scalar context: returns a new ResultSet
+    my $sub_rs = $rs->slice(10, 19);
+
+    # List context: triggers execution
+    my $future = $rs->slice(0, 4);
+
+Returns a subset of the ResultSet based on specific start and end indices.
+
+=over 4
+
+=item * Zero-Indexed
+
+Unlike C<page>, C<slice> uses 0-based indexing. For example, C<slice(0, 9)>
+retrieves the first 10 rows.
+
+=item * Mathematical Translation
+
+Automatically converts the indices into C<offset> and C<rows> attributes
+for the SQL generator.
+
+=item * Context Sensitivity
+
+=over 4
+
+=item * In scalar context, it returns a new ResultSet object. This is
+        ideal for further chaining or passing to a view.
+
+=item * In list context, it behaves like L</all> and initiates an
+        asynchronous fetch, returning a B<Future>.
 
 =back
+
+=item * Validation
+
+Strictly enforces that indices are non-negative and that the first index
+does not exceed the last.
+
+=back
+
+Example: Retrieving a specific "chunk" for processing
+
+    # Get rows 100 through 150 (inclusive)
+    $rs->slice(100, 149)->all->then(sub {
+        my $rows = shift;
+        process_batch($rows);
+    });
 
 =cut
 
 sub slice {
-    my ($self, $start, $end) = @_;
+    my ($self, $first, $last) = @_;
 
-    croak("slice requires two arguments (start and end index)")
-        unless defined $start && defined $end;
-
+    # 1. Validation logic (remains the same)
+    croak("slice requires two arguments (first and last index)")
+        unless defined $first && defined $last;
     croak("slice indices must be non-negative integers")
-        if $start < 0 || $end < 0;
+        if $first < 0 || $last < 0;
+    croak("first index must be less than or equal to last index")
+        if $first > $last;
 
-    croak("start index must be less than or equal to end index")
-        if $start > $end;
+    # 2. Calculate pagination parameters
+    my $offset = $first;
+    my $rows   = $last - $first + 1;
 
-    my $rows = $end - $start + 1;
-
-    my $sliced_rs = $self->new_result_set({
-        _attrs => {
-            %{$self->{_attrs} || {}},
-            offset => $start,
-            rows   => $rows,
-        }
+    # 3. Create the limited ResultSet
+    # Since search() already handles cloning and attr merging, use it!
+    my $sliced_rs = $self->search(undef, {
+        offset => $offset,
+        rows   => $rows,
     });
 
-    if (wantarray) {
-        return @{ $sliced_rs->all->get };
+    # 4. Context-aware return
+    if (!wantarray) {
+        # Scalar context: Return the RS for further chaining
+        return $sliced_rs;
     }
 
-    return $sliced_rs;
+    # List context: This is tricky in Async.
+    # In standard DBIC, slice() in list context executes immediately.
+    # To keep your current test style, we'll return the results of 'all'.
+    # Note: If your 'all' returns a Future, list context users must
+    # be aware they are getting a single Future object, not the rows yet.
+    return $sliced_rs->all;
 }
 
-=head2 source
+=head2 set_cache
 
-    my $source = $rs->source;
+    $rs->set_cache(\@data);
 
-Alias for C<result_source>.
-
-=over 4
-
-=item B<Returns>
-
-A L<DBIx::Class::ResultSource> object.
-
-=back
-
-sub source { shift->_get_source }
-
-=head2 source_name
-
-    my $source_name = $rs->source_name;
-
-Returns the source name for this result set.
+Manually populates the internal data buffer of the ResultSet.
 
 =over 4
 
-=item B<Returns>
+=item * Input Format
 
-The source name (string).
+Requires an arrayref of either raw hashrefs (column data) or already-inflated Row objects.
+
+=item * Inflation Trigger
+
+By setting the internal C<_is_prefetched> flag, this method ensures that the
+next time L</all> or L</next> is called, the library will process these entries
+through the standard inflation logic.
+
+=item * State Reset
+
+Automatically clears any previously cached rows (C<_rows>) and resets the
+internal cursor position (C<_pos>) to zero. This ensures that iteration
+starts fresh with the new dataset.
+
+=item * Chainable
+
+Returns the ResultSet object, allowing for fluent initialisation.
 
 =back
+
+Example: Hydrating a ResultSet from an external cache
+
+    my $cached_data = $memcached->get("users_batch_1");
+
+    if ($cached_data) {
+        $rs->set_cache($cached_data);
+    }
+
+    # Now $rs acts like it just hit the DB
+    $rs->all->then(sub {
+        my $rows = shift;
+        say $_->email for @$rows;
+    });
 
 =cut
 
-sub source_name {
-    my $self = shift;
-    return $self->{source_name};
+sub set_cache {
+    my ($self, $cache) = @_;
+
+    require Carp;
+    Carp::croak("set_cache expects an arrayref of entries/objects")
+        unless defined $cache && ref $cache eq 'ARRAY';
+
+    # 1. Store as raw entries
+    # This feeds line 129 in your 'all' method
+    $self->{_entries} = $cache;
+
+    # 2. Mark as prefetched
+    # This triggers the inflation logic in line 129
+    $self->{_is_prefetched} = 1;
+
+    # 3. Clear any existing inflated rows and reset position
+    # This ensures that if the cache is updated, the inflation happens again
+    $self->{_rows} = undef;
+    $self->{_pos}  = 0;
+
+    return $self;
 }
 
 =head2 update
 
-    $rs->search({ status => 'pending' })->update({ status => 'processed' })
-       ->then(sub {
-           my ($rows_affected) = @_;
-           say "Updated $rows_affected rows";
-       });
+    # Bulk update all rows in the current ResultSet
+    $rs->search({ status => 'pending' })->update({ status => 'processing' });
 
-Updates all rows matching the current search criteria.
+    # Single targeted update ignoring current RS filters
+    $rs->update({ id => 42 }, { status => 'archived' });
+
+Performs an asynchronous C<UPDATE> operation on the database.
 
 =over 4
 
-=item B<Parameters>
+=item * Set-Based Operation
 
-=over 8
+Unlike a row-level update, this method acts on the entire scope of the
+ResultSet in a single database round-trip.
 
-=item C<$data>
+=item * Cache Invalidation
 
-Hash reference containing column-value pairs to update.
+Automatically calls C<clear_cache> on the ResultSet. This prevents the
+parent process from serving stale data after the update has completed.
+
+=item * Deflation Support
+
+Automatically detects columns that require custom serialization (e.g.,
+JSON to string, DateTime to ISO string) by consulting the C<_custom_inflators> registry.
+
+=item * Flexible Signature
+
+=over 4
+
+=item * C<update(\%updates)>: Uses the ResultSet's existing C<where> clause.
+
+=item * C<update(\%cond, \%updates)>: Overrides the current filters with the provided C<%cond>.
 
 =back
 
-=item B<Returns>
-
-A L<Future> that resolves to the number of rows affected.
-
-=item B<Notes>
-
-This performs a bulk update using the search conditions. For individual
-row updates, use C<update> on the row object instead.
-
 =back
+
+Example: Atomic Batch Update with Deflation
+
+    # Assuming 'metadata' is a column that deflates to JSON
+    my $future = $rs->search({ active => 1 })
+                    ->update({
+                        last_updated => \'NOW()',
+                        metadata     => { version => '2.0', source => 'api' }
+                    });
+
+    $future->on_done(sub { say "Batch update complete." });
 
 =cut
 
 sub update {
-    my ($self, $data) = @_;
+    my $self = shift;
+    my ($cond, $updates);
 
-    # PATH A: Fast Path
-    # If there are no complex attributes (like rows/offset),
-    # send the condition directly to the bridge.
-    if ( keys %{$self->{attrs} || {}} == 0 && $self->{cond} && keys %{$self->{cond}} ) {
-        return $self->{async_db}->update($self->{source_name}, $self->{cond}, $data);
+    $self->clear_cache;
+
+    # Logic to handle both:
+    #   ->update({ col => val })
+    #   ->update({ id => 1 }, { col => val })
+    if (@_ > 1) {
+        ($cond, $updates) = @_;
+    } else {
+        $updates = shift;
+        $cond    = $self->{_cond}; # Use the ResultSet's internal filter
     }
 
-    # PATH B: Safe Path (The Optimisation)
-    # Use the ID-mapping strategy to respect LIMIT/OFFSET.
-    return $self->update_all($data);
+    my $db = $self->{_async_db};
+    my $inflators = $db->{_custom_inflators}{ $self->{_source_name} } || {};
+
+    # Ensure nested Hashes are turned back into Strings for the database
+    foreach my $col (keys %$updates) {
+        if ($inflators->{$col} && $inflators->{$col}{deflate}) {
+            $updates->{$col} = $inflators->{$col}{deflate}->($updates->{$col});
+        }
+    }
+
+    # Dispatch via the main Async module's update handler
+    # This uses the resolved $cond we figured out above
+    return DBIx::Class::Async::_call_worker(
+        $db,
+        'update',
+        {
+            source_name => $self->{_source_name},
+            cond        => $cond,
+            updates     => $updates,
+        }
+    );
 }
 
+=head2 update_all
+
+    my $future = $rs->search({ type => 'temporary' })->update_all({ type => 'permanent' });
+
+Performs a two-step asynchronous update. First, it retrieves all rows matching
+the current criteria to identify their Primary Keys, then it issues a
+bulk update targeting those specific IDs.
+
+=over 4
+
+=item * Precision
+
+By fetching the IDs first, this method ensures that triggers or logic dependent
+on the primary key are correctly handled.
+
+=item * Safety
+
+If no rows match the initial search, the method short-circuits and returns a
+resolved Future with a value of C<0>, avoiding an unnecessary database trip
+for the update phase.
+
+=item * Traceability
+
+Supports C<ASYNC_TRACE> logging to help debug empty sets or unexpected data
+types during the fetch phase.
+
+=item * Atomicity Note
+
+Unlike C<update>, this involves two distinct database interactions. If the
+data changes between the fetch and the update phase, only the rows identified
+in the first phase will be updated.
+
+=back
+
+Example: Safe Batch Update
+
+    $rs->update_all({ last_processed => \'NOW()' })->on_done(sub {
+        my $count = shift;
+        print "Successfully updated $count specific records.\n";
+    });
+
+=cut
 
 sub update_all {
     my ($self, $updates) = @_;
-    my $bridge = $self->{async_db};
+    my $bridge = $self->{_async_db};
 
     return $self->all->then(sub {
-        my ($rows) = @_;
-        return Future->done(0) unless $rows && @$rows;
+        my $rows = shift;
+
+        # Hard check: is it really an arrayref?
+        unless ($rows && ref($rows) eq 'ARRAY' && @$rows) {
+            warn "[PID $$] update_all found no rows to update or invalid data type"
+                if ASYNC_TRACE;
+            return Future->done(0);
+        }
 
         my ($pk) = $self->result_source->primary_columns;
         my @ids  = map { $_->get_column($pk) } @$rows;
 
-        # Send ONE bulk update to the bridge
-        return $bridge->update(
-            $self->{source_name},
-            { $pk => { -in => \@ids } },
-            $updates
-        )->then(sub { Future->done(scalar @ids) });
+         my $payload = {
+            source_name => $self->{_source_name},
+            cond        => { $pk => { -in => \@ids } },
+            updates     => $updates,
+        };
+
+        return DBIx::Class::Async::_call_worker(
+            $bridge,
+            'update',
+            $payload)->then(sub {
+            my $affected = shift;
+            return Future->done($affected);
+        });
+    });
+}
+
+=head2 update_or_new
+
+    my $future = $rs->update_or_new({
+        email => 'dev@example.com',
+        name  => 'Gemini'
+    });
+
+Attempts to locate a record using its unique constraints or primary key.
+
+=over 4
+
+=item * Action on Success
+
+If the record is found, it immediately triggers an asynchronous C<update>
+with the provided data and returns a L<Future> resolving to the updated Row object.
+
+=item * Action on Failure
+
+If no record is found, it creates a new B<in-memory> row object. This object
+is B<not> yet saved to the database (C<in_storage> will be false).
+
+=item * Data Sanitization
+
+Automatically strips table aliases (C<me.>, C<foreign.>) from the data keys
+to ensure the Row object constructor receives clean column names.
+
+=item * Consistency
+
+This method always returns a B<Future>, regardless of whether it performed a
+database update or a local object instantiation.
+
+=back
+
+Example: Syncing User Profiles
+
+    $rs->update_or_new({
+        external_id => $id,
+        last_login  => \'NOW()'
+    })->then(sub {
+        my $user = shift;
+        if ($user->in_storage) {
+            say "Updated existing user: " . $user->id;
+        } else {
+            say "Prepared new user for registration.";
+            # You must call ->insert on the new object to persist it
+            return $user->insert;
+        }
+    });
+
+=cut
+
+sub update_or_new {
+    my ($self, $data, $attrs) = @_;
+    $attrs //= {};
+
+    # Identify the primary key or unique constraint values for the lookup
+    my $lookup = $self->_extract_unique_lookup($data, $attrs);
+
+    return $self->find($lookup, $attrs)->then(sub {
+        my ($row) = @_;
+
+        if ($row) {
+            # Object found in DB: trigger an async UPDATE
+            return $row->update($data);
+        }
+
+        # Object NOT found: merge condition and data for a local 'new' object
+        my %new_data = ( %{$self->{_cond} || {}}, %$data );
+        my %clean_data;
+        while (my ($k, $v) = each %new_data) {
+            # Strip DBIC aliases so they don't crash the Row constructor
+            (my $clean_key = $k) =~ s/^(?:me|foreign|self)\.//;
+            $clean_data{$clean_key} = $v;
+        }
+
+        # Returns a Future wrapping the local Row object (in_storage = 0)
+        return Future->done($self->new_result(\%clean_data));
     });
 }
 
 =head2 update_or_create
 
     my $future = $rs->update_or_create({
-         email => 'user@example.com',
-         name  => 'Updated Name',
-        active => 1
-    }, { key => 'user_email' });
-
-    $future->on_done(sub {
-        my $row = shift;
-        print "Upserted user ID: " . $row->id;
+        username => 'coder123',
+        last_seen => \'NOW()'
     });
 
-An "upsert" operation. It first attempts to locate an existing record using the unique
-constraints provided in the data hashref (or specified by the C<key> attribute).
+Attempts to find a record by its unique constraints. If found, it updates it.
+If not, it creates a new record in the database.
 
 =over 4
 
-=item * If a matching record is found, it is updated with the remaining values in the hashref.
+=item * Atomic Strategy
 
-=item * If no matching record is found, a new record is inserted into the database.
+This method manages the "Check-then-Act" pattern safely across asynchronous workers.
+
+=item * Race Condition Recovery
+
+In highly concurrent systems, a record might be inserted by another process
+between this method's C<find> and C<create> steps. This method detects that
+specific database conflict (Unique Constraint Violation) and automatically
+recovers by re-finding the newly created record and updating it instead.
+
+=item * Error Handling
+
+While it handles "Already Exists" conflicts gracefully, other database errors
+(like type mismatches or connection issues) will still trigger a C<fail>
+state in the returned Future.
 
 =back
 
-Returns a L<Future> which, when resolved, provides the L<DBIx::Class::Async::Row>
-object representing the updated or newly created record.
+Example: Distributed Token Sync
+
+    # Multiple workers might run this for the same 'service_key'
+    $schema->resultset('AuthToken')->update_or_create({
+        service_key => 'worker_node_1',
+        token       => $new_secure_token
+    })->on_done(sub {
+        my $row = shift;
+        say "Token synced for ID: " . $row->id;
+    })->on_fail(sub {
+        die "Sync failed: " . shift;
+    });
 
 =cut
 
@@ -2211,213 +3068,196 @@ sub update_or_create {
         my ($row) = @_;
 
         if ($row) {
-            # Found: Update it
+            # 1. Standard Update Path
             return $row->update($data);
         }
 
-        # Not Found: Try to create it
+        # 2. Not Found: Attempt Create
         return $self->create($data)->catch(sub {
-            my ($error) = @_;
-            # If a race occurred, catch the unique constraint error
-            if ("$error" =~ /unique constraint|already exists/i) {
-                # Find the record that "won" and update it instead
+            my ($error, $type) = @_;
+
+            # If it's a DB unique constraint error, someone else beat us to the insert
+            if ($type eq 'db_error' && "$error" =~ /unique constraint|already exists/i) {
+
+                # 3. Race Recovery: Re-find the winner and update them
                 return $self->find($lookup, $attrs)->then(sub {
                     my ($recovered) = @_;
-                    return $recovered ? $recovered->update($data)
-                                      : Future->fail("Race recovery failed in update_or_create");
+                    return $recovered
+                        ? $recovered->update($data)
+                        : Future->fail("Race recovery failed: record vanished after conflict", "logic_error");
                 });
             }
-            return Future->fail($error);
+
+            # Otherwise, bubble up the original error
+            return Future->fail($error, $type);
         });
     });
 }
 
-=head2 update_or_new
+#
+#
+# PRIVATE METHODS
 
-    my $future = $rs->update_or_new({
-         email => 'user@example.com',
-         name  => 'New Name'
-    }, { key => 'user_email' });
+sub _new_prefetched_dataset {
+    my ($self, $data, $rel_name) = @_;
 
-Similar to L</update_or_create>, but with a focus on in-memory instantiation.
+    # 1. Identify the target source for the relationship
+    my $rel_info = $self->result_source->relationship_info($rel_name)
+        or die "No relationship info found for: $rel_name";
 
-=over 4
+    my $rel_source_class = $rel_info->{source};
 
-=item * If a matching record is found in the database, it is updated and the resulting
-object is returned.
+    # Extract moniker: "TestSchema::Result::Order" -> "Order"
+    my $rel_moniker = $rel_source_class;
+    $rel_moniker    =~ s/^.*::Result:://;
 
-=item * If no record is found, a new row object is instantiated (using L</new_result>)
-but B<not yet saved> to the database.
+    # 2. Build args - let the schema handle the source lookup
+    my %new_args = (
+        schema_instance => $self->{_schema_instance},
+        async_db        => $self->{_async_db},
+        source_name     => $rel_moniker,
+        cond            => {},
+        attrs           => {},
+    );
 
-=back
+    # 3. Create ResultSet via schema to ensure proper source binding
+    my $new_rs = $self->{_schema_instance}->resultset($rel_moniker);
 
-This is useful for workflows where you want to ensure an object is synchronised with
-the database if it exists, but you aren't yet ready to commit a new record to storage.
+    # 4. Populate internal cache with inflated Row objects
+    my @rows_data     = (ref $data eq 'ARRAY') ? @$data : ($data);
+    my @inflated_rows = map { $new_rs->new_result($_) } grep { defined } @rows_data;
 
-Returns a L<Future> resolving to a L<DBIx::Class::Async::Row> object.
+    $new_rs->{_entries} = \@inflated_rows;
+    $new_rs->{_is_prefetched} = 1;
 
-=cut
-
-sub update_or_new {
-    my ($self, $data, $attrs) = @_;
-    $attrs //= {};
-
-    my $lookup = $self->_extract_unique_lookup($data, $attrs);
-
-    return $self->find($lookup, $attrs)->then(sub {
-        my ($row) = @_;
-
-        if ($row) {
-            # It exists: Update and return
-            return $row->update($data);
-        }
-
-        # It doesn't exist: Return a new local result
-        my %new_data = ( %{$self->{_cond} || {}}, %$data );
-        my %clean_data;
-        while (my ($k, $v) = each %new_data) {
-            (my $clean_key = $k) =~ s/^(?:me|foreign|self)\.//;
-            $clean_data{$clean_key} = $v;
-        }
-
-        return Future->done($self->new_result(\%clean_data));
-    });
+    return $new_rs;
 }
 
-=head1 CHAINABLE MODIFIERS
+sub _generate_cache_key {
+    my ($self, $is_count_op) = @_;
 
-The following methods return a new result set with the specified attribute
-added or modified:
+    # Force Data::Dumper to be a "pure" string generator
+    local $Data::Dumper::Terse    = 1;
+    local $Data::Dumper::Indent   = 0;
+    local $Data::Dumper::Sortkeys = 1;
 
-=over 4
+    my %clean_attrs;
+    my $orig_attrs = $self->{_attrs} // {};
 
-=item C<rows($number)> - Limits the number of rows returned
+    # Whitelist only keys that affect SQL
+    foreach my $key (qw(rows offset alias page order_by group_by select as join prefetch)) {
+        $clean_attrs{$key} = $orig_attrs->{$key} if exists $orig_attrs->{$key};
+    }
 
-=item C<page($number)> - Specifies the page number for pagination
+    if ($is_count_op && ($clean_attrs{rows} || $clean_attrs{offset})) {
+         $clean_attrs{alias}       //= 'subquery_for_count';
+         $clean_attrs{is_subquery} //= 1;
+    }
 
-=item C<order_by($spec)> - Specifies the sort order
-
-=item C<columns($spec)> - Specifies which columns to select
-
-=item C<group_by($spec)> - Specifies GROUP BY clause
-
-=item C<having($spec)> - Specifies HAVING clause
-
-=item C<distinct($bool)> - Specifies DISTINCT modifier
-
-=back
-
-Example:
-
-    my $paginated = $rs->rows(10)->page(2)->order_by('created_at DESC');
-
-These methods do not modify the original result set and do not execute any
-database queries.
-
-=head1 CACHING METHODS
-
-These methods allow for manual management of the ResultSet's internal data cache.
-Note that this is separate from the global query cache managed by the L<DBIx::Class::Async> object.
-
-=over 4
-
-=item get_cache
-
-=item set_cache
-
-=item clear_cache
-
-=back
-
-=head1 INTERNAL METHODS
-
-These methods are for internal use and are documented for completeness.
-
-=head2 _do_search_related
-
-  my $new_async_rs = $rs->_do_search_related($rel_name, $cond, $attrs);
-
-An internal helper method that performs the heavy lifting for L</search_related>
-and L</search_related_rs>.
-
-B<NOTE:> This method exists to break deep recursion issues caused by
-L<DBIx::Class> method aliasing. It bypasses the standard method dispatcher by
-manually instantiating a native L<DBIx::Class::ResultSet> to calculate
-relationship metadata before re-wrapping the result in the Async class.
-
-=over 4
-
-=item * B<Arguments:> Same as L</search_related_rs>.
-
-=item * B<Returns:> A new L<DBIx::Class::Async::ResultSet> object.
-
-=back
-
-=cut
-
-sub _do_search_related {
-    my ($self, $rel_name, $cond, $attrs) = @_;
-
-    # 1. Get the Raw ResultSource
-    my $source = $self->{_source} || $self->{schema}->source($self->{source_name});
-
-    # 2. Create a NATIVE DBIC ResultSet directly from the source
-    require DBIx::Class::ResultSet;
-    my $native_rs = DBIx::Class::ResultSet->new($source, {
-        cond  => $self->{_cond},
-        attrs => $self->{_attrs}
-    });
-
-    # 3. Perform the pivot on the native object
-    my $related_native_rs = $native_rs->search_related($rel_name, $cond, $attrs);
-
-    # 4. Manually construct the new Async RS object (Bypassing 'new')
-    return bless {
-        %$self,
-        source_name => $related_native_rs->result_source->source_name,
-        _cond       => $related_native_rs->{cond},
-        _attrs      => $related_native_rs->{attrs},
-        _source     => $related_native_rs->result_source,
-        _rows       => undef,
-        _pos        => 0,
-    }, ref($self);
+    return join('|',
+        $self->{_source_name} // '',
+        Data::Dumper->new([ $self->{_cond}  // {} ])->Dump, # Settings applied globally
+        Data::Dumper->new([ \%clean_attrs ])->Dump,
+    );
 }
 
-=head2 _extract_unique_lookup
+sub _build_payload {
+    my ($self, $cond, $attrs, $is_count_op) = @_;
 
-    my $lookup = $self->_extract_unique_lookup($data, $attrs);
+    # 1. Condition Merging (Improved Literal Awareness)
+    my $base_cond = $self->{_cond};
+    my $new_cond  = $cond;
+    my $merged_cond;
 
-An internal helper method used by L</find_or_create> and L</find_or_new> to
-determine the most appropriate unique identifier for a C<find> operation.
+    if (ref($base_cond) eq 'HASH' && ref($new_cond) eq 'HASH') {
+        $merged_cond = { %$base_cond, %$new_cond };
+    }
+    elsif (ref($new_cond) && ref($new_cond) ne 'HASH') {
+        $merged_cond = $new_cond; # Literal SQL takes priority
+    }
+    else {
+        $merged_cond = $new_cond // $base_cond // {};
+    }
 
-It attempts to resolve the lookup columns in the following order:
+    # 2. Attribute Merging (Harden against non-HASH attrs)
+    my $merged_attrs = (ref($self->{_attrs}) eq 'HASH' && ref($attrs) eq 'HASH')
+        ? { %{$self->{_attrs}}, %{$attrs // {}} }
+        : ($attrs // $self->{_attrs} // {});
 
-=over 4
+    # 3. Only apply the Subquery Alias if we are specifically doing a COUNT
+    # and there is a limit/offset involved.
+    if ( $is_count_op
+        && ( $merged_attrs->{rows}
+             || $merged_attrs->{offset}
+             || $merged_attrs->{limit} ) ) {
+        $merged_attrs->{alias}       //= 'subquery_for_count';
+        $merged_attrs->{is_subquery} //= 1;
+    }
 
-=item 1.
+    return {
+        source_name => $self->{_source_name},
+        cond        => $merged_cond,
+        attrs       => $merged_attrs,
+    };
+}
 
-The specific constraint name provided in C<$attrs-E<gt>{key}>.
+sub _find_reverse_relationship {
+    my ($self, $source, $rel_source, $forward_rel) = @_;
 
-=item 2.
+    unless (ref $rel_source && $rel_source->can('relationships')) {
+        confess("Critical Error: _find_reverse_relationship expected a ResultSource object but got: " . ($rel_source // 'undef'));
+    }
 
-The Primary Key (if all PK columns are present in the data).
+    my @rel_names    = $rel_source->relationships;
+    my $forward_info = $source->relationship_info($forward_rel);
+    my $forward_cond = $forward_info->{cond};
 
-=item 3.
+    # 1. Extract keys from forward condition (e.g., 'foreign.user_id' => 'self.id')
+    my ($forward_foreign, $forward_self);
+    if (ref $forward_cond eq 'HASH') {
+        my ($f, $s) = %$forward_cond;
+        # Handle cases where value is a hash (like { -ident => 'id' })
+        $s = $s->{'-ident'} // $s if ref $s eq 'HASH';
 
-Smart Discovery: The first unique constraint found where all constituent
-columns exist within the provided C<$data> hashref.
+        $forward_foreign = $f =~ s/^foreign\.//r;
+        $forward_self    = $s =~ s/^self\.//r;
+    }
 
-=item 4.
+    # 2. Look for a relationship that points back to our source with matching keys
+    foreach my $rev_rel (@rel_names) {
+        my $rev_info       = $rel_source->relationship_info($rev_rel);
+        my $rev_source_obj = $rel_source->related_source($rev_rel);
 
-Fallback: The entire C<$data> hashref.
+        # Check if this relationship points back to our original source
+        next unless $rev_source_obj->source_name eq $source->source_name;
 
-=back
+        # Validate the foreign keys match (in reverse)
+        my $rev_cond = $rev_info->{cond};
+        if (ref $rev_cond eq 'HASH') {
+            my ($rev_foreign, $rev_self) = %$rev_cond;
+            $rev_self = $rev_self->{'-ident'} // $rev_self if ref $rev_self eq 'HASH';
 
-This ensures that searches are targeted to unique indexes, which is critical
-for recovering from race conditions without hitting "Multiple rows found"
-errors or searching on non-indexed fields.
+            my $rf_clean = $rev_foreign =~ s/^foreign\.//r;
+            my $rs_clean = $rev_self    =~ s/^self\.//r;
 
-=cut
+            # The logic check:
+            # If Forward is: Order(user_id) -> User(id)
+            # Reverse must be: User(id) -> Order(user_id)
+            if ($rf_clean eq $forward_self && $rs_clean eq $forward_foreign) {
+                return $rev_rel;
+            }
+        }
+    }
+
+    # 3. Fallback: If we couldn't find it by key matching, try by source name only
+    foreach my $rev_rel (@rel_names) {
+        if ($rel_source->related_source($rev_rel)->source_name eq $source->source_name) {
+            return $rev_rel;
+        }
+    }
+
+    return undef;
+}
 
 sub _extract_unique_lookup {
     my ($self, $data, $attrs) = @_;
@@ -2426,414 +3266,62 @@ sub _extract_unique_lookup {
     my $key_name = $attrs->{key} || 'primary';
     my @unique_cols = $source->unique_constraint_columns($key_name);
 
-    # Smart Discovery: If primary key isn't in data, look for other unique constraints
-    if (!grep { exists $data->{$_} } @unique_cols) {
+    # Alias-aware grep for primary check
+    if (!grep { exists $data->{$_} || exists $data->{"me.$_"} } @unique_cols) {
         foreach my $constraint ($source->unique_constraint_names) {
             my @cols = $source->unique_constraint_columns($constraint);
-            if (grep { exists $data->{$_} } @cols) {
+            # Alias-aware grep for discovery loop
+            if (grep { exists $data->{$_} || exists $data->{"me.$_"} } @cols) {
                 @unique_cols = @cols;
                 last;
             }
         }
     }
 
-    # Build the lookup only from those specific columns
-    my %lookup = map { $_ => $data->{$_} } grep { exists $data->{$_} } @unique_cols;
+    # Build the lookup, checking for aliases
+    my %lookup;
+    foreach my $col (@unique_cols) {
+        if (exists $data->{$col}) {
+            $lookup{$col} = $data->{$col};
+        }
+        elsif (exists $data->{"me.$col"}) {
+            $lookup{$col} = $data->{"me.$col"};
+        }
+    }
 
     # Absolute fallback
     return keys %lookup ? \%lookup : $data;
 }
 
-=head2 _get_source
+sub _inflate_row {
+    my ($self, $hash) = @_;
+    return undef unless $hash;
 
-    my $source = $rs->_get_source;
+    # Apply Column Inflation
+    my $db          = $self->{_async_db};
+    my $source_name = $self->{_source_name};
+    my $inflators   = $db->{_custom_inflators}{$source_name} || {};
 
-Returns the result source object, loading it lazily if needed.
-
-=cut
-
-sub _get_source {
-    my $self = shift;
-    $self->{_source} ||= $self->{schema}->source($self->{source_name});
-    return $self->{_source};
-}
-
-sub _inflate_collection {
-    my ($self, $rows_data) = @_;
-    return [] unless $rows_data && ref $rows_data eq 'ARRAY';
-
-    my $prefetch = $self->{_attrs}{prefetch};
-
-    return [ map {
-        my $row_data = $_;
-        my $row = $self->new_result($row_data);
-
-        # This is what fixed the HasMany failure:
-        if ($prefetch) {
-            $self->_inflate_prefetch($row, $row_data, $prefetch);
-        }
-        $row;
-    } @$rows_data ];
-}
-
-=head2 _inflate_prefetch
-
-Inflates prefetched relationship data into the row object.
-
-=cut
-
-sub _inflate_prefetch {
-    my ($self, $row, $raw_data, $prefetch) = @_;
-
-    return unless $prefetch;
-
-    # Normalise prefetch to an array for easier looping
-    my @prefetches = ref $prefetch eq 'ARRAY' ? @$prefetch
-                        : ref $prefetch eq 'HASH'  ? keys %$prefetch
-                        : ($prefetch);
-
-    foreach my $rel_name (@prefetches) {
-        # The worker sends prefetched data under the relationship name
-        my $rel_data = $raw_data->{$rel_name};
-        next unless defined $rel_data;
-
-        my $rel_info = $self->result_source->relationship_info($rel_name);
-        next unless $rel_info;
-
-        # Get the ResultSource for the related table
-        my $rel_source_name = $rel_info->{source};
-        my $rel_rs = $self->{schema}->resultset($rel_source_name);
-
-        if (ref $rel_data eq 'ARRAY') {
-            # has_many relationship: turn array of hashes into a virtual ResultSet
-            my @rel_objs = map { $rel_rs->new_result($_) } @$rel_data;
-
-            $row->{_relationship_data}{$rel_name} = $rel_rs->new_result_set({
-                entries       => \@rel_objs,
-                is_prefetched => 1,
-            });
-        }
-        elsif (ref $rel_data eq 'HASH') {
-             # belongs_to / might_have: turn single hash into a Row object
-             $row->{_relationship_data}{$rel_name} = $rel_rs->new_result($rel_data);
-        }
-
-        # Recursive prefetch: If the prefetch arg was a hash,
-        # dive deeper (e.g., { orders => 'order_items' })
-        if (ref $prefetch eq 'HASH' && ref $prefetch->{$rel_name}) {
-            my $sub_row = $row->{_relationship_data}{$rel_name};
-
-            # If it's a single row, inflate its sub-children
-            if (blessed($sub_row)) {
-                 $self->_inflate_prefetch($sub_row, $rel_data, $prefetch->{$rel_name});
-            }
-        }
-    }
-}
-
-=head2 _inflate_simple_prefetch
-
-Inflates a simple (non-nested) prefetched relationship.
-
-=cut
-
-sub _inflate_simple_prefetch {
-    my ($self, $row, $data, $rel_name) = @_;
-
-    # Get the relationship info from the result source
-    my $source = $self->result_source;
-
-    # Verify relationship exists
-    return unless $source->has_relationship($rel_name);
-
-    my $rel_info = $source->relationship_info($rel_name);
-    return unless $rel_info;
-
-    # Check if prefetch data exists in the row data
-    # Try multiple possible keys for prefetch data
-    my $prefetch_data;
-    for my $key ("prefetch_${rel_name}", $rel_name, "${rel_name}_prefetch") {
-        if (exists $data->{$key}) {
-            $prefetch_data = $data->{$key};
-            last;
+    foreach my $col (keys %$inflators) {
+        if (exists $hash->{$col} && $inflators->{$col}{inflate}) {
+            # This turns your JSON string back into a HASH ref!
+            $hash->{$col} = $inflators->{$col}{inflate}->($hash->{$col});
         }
     }
 
-    return unless defined $prefetch_data;
+    # Create the base row object
+    my $row = $self->new_result($hash);
+    $row->in_storage(1);
 
-    my $rel_type = $rel_info->{attrs}{accessor} || 'single';
-
-    if ($rel_type eq 'multi') {
-        # has_many relationship - create a prefetched ResultSet
-        my $rel_source = $source->related_source($rel_name);
-
-        # Ensure prefetch_data is an arrayref
-        my $entries =
-            ref $prefetch_data eq 'ARRAY' ? $prefetch_data : [$prefetch_data];
-
-        my $rel_rs = $self->new_result_set({
-            source_name => $rel_source->source_name,
-            entries => $entries,
-            is_prefetched => 1,
-        });
-
-        # Store the prefetched ResultSet in the row
-        $row->{_prefetched}{$rel_name} = $rel_rs;
-
-    } else {
-        # belongs_to or might_have - single related object
-        if ($prefetch_data && ref $prefetch_data eq 'HASH') {
-            my $rel_source = $source->related_source($rel_name);
-
-            my $rel_row = $self->new_result_set({
-                source_name => $rel_source->source_name,
-            })->new_result($prefetch_data);
-
-            # Store the prefetched row
-            $row->{_prefetched}{$rel_name} = $rel_row;
-        } elsif (!$prefetch_data) {
-            # NULL relationship (e.g., optional belongs_to)
-            $row->{_prefetched}{$rel_name} = undef;
-        }
-    }
-}
-
-=head2 _inflate_nested_prefetch
-
-Inflates nested prefetched relationships (e.g., 'comments.user').
-
-=cut
-
-sub _inflate_nested_prefetch {
-    my ($self, $row, $data, $parts) = @_;
-
-    my $first_rel = shift @$parts;
-    my $remaining_path = join('.', @$parts);
-
-    # Inflate the first level
-    $self->_inflate_simple_prefetch($row, $data, $first_rel);
-
-    # If there are more levels, handle them recursively
-    if (@$parts && exists $row->{_prefetched}{$first_rel}) {
-        my $first_level = $row->{_prefetched}{$first_rel};
-
-        # Check if it's a ResultSet (has_many)
-        if (blessed($first_level)
-            && $first_level->isa('DBIx::Class::Async::ResultSet')) {
-            # Get the entries from the prefetched ResultSet
-            my $entries = $first_level->{entries} || [];
-
-            foreach my $nested_data (@$entries) {
-                my $rel_source = $self->result_source->related_source($first_rel);
-                my $nested_rs  = $self->new_result_set({
-                    source_name => $rel_source->source_name,
-                });
-
-                # Create a row object for this entry
-                my $nested_row = $nested_rs->new_result($nested_data);
-
-                # Recursively inflate the remaining path
-                $nested_rs->_inflate_nested_prefetch(
-                    $nested_row,
-                    $nested_data,
-                    [@$parts]
-                );
-            }
-
-        } elsif (blessed($first_level)
-                && $first_level->isa('DBIx::Class::Async::Row')) {
-            # Single related object (belongs_to)
-            my $rel_source = $self->result_source->related_source($first_rel);
-            my $nested_rs  = $self->new_result_set({
-                source_name => $rel_source->source_name,
-            });
-
-            # Get the raw data from the row
-            my $nested_data = $first_level->{_data};
-
-            # Recursively inflate the remaining path
-            $nested_rs->_inflate_nested_prefetch(
-                $first_level,
-                $nested_data,
-                [@$parts]
-            );
-        }
-    }
-}
-
-=head2 _find_reverse_relationship
-
-Finds the reverse relationship name on the related source.
-
-=cut
-
-sub _find_reverse_relationship {
-    my ($self, $source, $rel_source, $forward_rel) = @_;
-
-    my @rel_names    = $rel_source->relationships;
-    my $forward_info = $source->relationship_info($forward_rel);
-    my $forward_cond = $forward_info->{cond};
-
-    # Extract keys from forward condition
-    my ($forward_foreign, $forward_self);
-    if (ref $forward_cond eq 'HASH') {
-        my ($f, $s) = %$forward_cond;
-        if (ref $s eq 'HASH') {
-            my ($op, $col) = %$s;
-            $s = $col;
-        }
-        $forward_foreign = $f;
-        $forward_self    = $s;
-        $forward_foreign =~ s/^foreign\.//;
-        $forward_self    =~ s/^self\.//;
-    }
-
-    # Look for a relationship that points back to our source
-    foreach my $rev_rel (@rel_names) {
-        my $rev_info       = $rel_source->relationship_info($rev_rel);
-        my $rev_source_obj = $rel_source->related_source($rev_rel);
-
-        # Check if this relationship points back to our original source
-        next unless $rev_source_obj->source_name eq $source->source_name;
-
-        # Check if the foreign keys match (in reverse)
-        my $rev_cond = $rev_info->{cond};
-        if (ref $rev_cond eq 'HASH') {
-            my ($rev_foreign, $rev_self) = %$rev_cond;
-
-            if (ref $rev_self eq 'HASH') {
-                my ($op, $col) = %$rev_self;
-                $rev_self = $col;
-            }
-
-            $rev_foreign =~ s/^foreign\.//;
-            $rev_self    =~ s/^self\.//;
-
-            # Check if the keys match in reverse
-            # Forward: foreign.id => self.user_id
-            # Reverse: foreign.user_id => self.id
-            if ($rev_foreign eq $forward_self && $rev_self eq $forward_foreign) {
-                return $rev_rel;
-            }
+    # Inject Relationship Data (already perfect)
+    for my $rel ($self->result_source->relationships) {
+        if (exists $hash->{$rel}) {
+            $row->{_relationship_data}{$rel} = $hash->{$rel};
         }
     }
 
-    # If we couldn't find it by key matching, try by source name
-    # This is a fallback for simple cases
-    foreach my $rev_rel (@rel_names) {
-        my $rev_info       = $rel_source->relationship_info($rev_rel);
-        my $rev_source_obj = $rel_source->related_source($rev_rel);
-
-        if ($rev_source_obj->source_name eq $source->source_name) {
-            return $rev_rel;
-        }
-    }
-
-    return undef;
+    return $row;
 }
-
-=head2 _primary_columns
-
-    my @pks = $self->_primary_columns;
-
-A private internal helper used to retrieve the primary key columns for the
-current ResultSource.
-
-B<Safeguards:>
-
-=over 4
-
-=item * Verifies that the ResultSource actually has primary keys defined. If no
-primary keys are found (common in incorrectly configured Result classes
-or database Views), it will C<croak> with a descriptive error message.
-
-=item * Ensures identity-based operations like L</find> and L</delete_all> are
-performed safely without generating malformed or overly broad SQL.
-
-=back
-
-B<Returns:> A list of primary column names in the order they were defined
-in the schema.
-
-=cut
-
-sub _primary_columns {
-    my $self = shift;
-
-    # Retrieve columns from the ResultSource metadata
-    my @pks = $self->result_source->primary_columns;
-
-    # Safeguard: ID-based operations (find, delete_all, etc) require a PK
-    unless (@pks) {
-        croak sprintf(
-            "Operation failed: ResultSource '%s' has no primary keys defined. " .
-            "Check your Result class configuration.",
-            $self->source_name
-        );
-    }
-
-    return @pks;
-}
-
-=head2 _resolved_attrs
-
-    my $attrs = $rs->_resolved_attrs;
-    my $rows  = $attrs->{rows};
-
-=over 4
-
-=item Return Value: HashRef
-
-=back
-
-An internal helper method that returns the raw attributes hash for the current
-ResultSet. This includes things like C<order_by>, C<join>, C<prefetch>, C<rows>,
-and C<offset>.
-
-If no attributes have been set, it returns an empty anonymous hash reference
-(C<{}>) to ensure that calls to specific keys (e.g., C<$rs->_resolved_attrs->{rows}>)
-do not trigger "not a HASH reference" errors.
-
-B<Note:> This is intended for internal use and testing. To modify attributes,
-use the L</search> method to create a new ResultSet.
-
-=cut
-
-sub _resolved_attrs {
-    my $self = shift;
-    return $self->{_attrs} // {};
-}
-
-# Chainable modifiers
-foreach my $method (qw(rows order_by columns group_by having distinct)) {
-    no strict 'refs';
-    *{$method} = sub {
-        my ($self, $value) = @_;
-        return $self->search(undef, { $method => $value });
-    };
-}
-
-=head1 SEE ALSO
-
-=over 4
-
-=item *
-
-L<DBIx::Class::Async> - Asynchronous DBIx::Class interface
-
-=item *
-
-L<DBIx::Class::ResultSet> - Synchronous DBIx::Class result set interface
-
-=item *
-
-L<DBIx::Class::Async::Row> - Asynchronous row objects
-
-=item *
-
-L<Future> - Asynchronous programming abstraction
-
-=back
 
 =head1 AUTHOR
 
@@ -2880,21 +3368,16 @@ Copyright (C) 2026 Mohammad Sajid Anwar.
 This program  is  free software; you can redistribute it and / or modify it under
 the  terms  of the the Artistic License (2.0). You may obtain a  copy of the full
 license at:
-
 L<http://www.perlfoundation.org/artistic_license_2_0>
-
 Any  use,  modification, and distribution of the Standard or Modified Versions is
 governed by this Artistic License.By using, modifying or distributing the Package,
 you accept this license. Do not use, modify, or distribute the Package, if you do
 not accept this license.
-
 If your Modified Version has been derived from a Modified Version made by someone
 other than you,you are nevertheless required to ensure that your Modified Version
  complies with the requirements of this license.
-
 This  license  does  not grant you the right to use any trademark,  service mark,
 tradename, or logo of the Copyright Holder.
-
 This license includes the non-exclusive, worldwide, free-of-charge patent license
 to make,  have made, use,  offer to sell, sell, import and otherwise transfer the
 Package with respect to any patent claims licensable by the Copyright Holder that
@@ -2902,7 +3385,6 @@ are  necessarily  infringed  by  the  Package. If you institute patent litigatio
 (including  a  cross-claim  or  counterclaim) against any party alleging that the
 Package constitutes direct or contributory patent infringement,then this Artistic
 License to you shall terminate on the date that such litigation is filed.
-
 Disclaimer  of  Warranty:  THE  PACKAGE  IS  PROVIDED BY THE COPYRIGHT HOLDER AND
 CONTRIBUTORS  "AS IS'  AND WITHOUT ANY EXPRESS OR IMPLIED WARRANTIES. THE IMPLIED
 WARRANTIES    OF   MERCHANTABILITY,   FITNESS   FOR   A   PARTICULAR  PURPOSE, OR

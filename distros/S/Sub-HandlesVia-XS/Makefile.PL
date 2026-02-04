@@ -31,7 +31,7 @@ my $meta = {
                                      },
                       },
   "provides"       => {
-                        "Sub::HandlesVia::XS" => { file => "lib/Sub/HandlesVia/XS.pm", version => "0.003000" },
+                        "Sub::HandlesVia::XS" => { file => "lib/Sub/HandlesVia/XS.pm", version => 0.003001 },
                       },
   "release_status" => "stable",
   "resources"      => {
@@ -45,7 +45,7 @@ my $meta = {
                                         },
                         x_identifier => "http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/project",
                       },
-  "version"        => "0.003000",
+  "version"        => 0.003001,
 };
 
 my %dynamic_config;

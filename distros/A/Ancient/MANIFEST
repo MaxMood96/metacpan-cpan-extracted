@@ -225,6 +225,12 @@ t/4015-object-loop-underscore.t
 t/4016-object-is-locked.t
 t/4017-object-prototype-chain-full.t
 t/4018-object-multi-import.t
+t/4019-object-introspection.t
+t/4021-object-lazy-builder.t
+t/4022-object-clearer-predicate.t
+t/4023-object-demolish.t
+t/4024-object-roles.t
+t/4025-object-modifiers.t
 t/5000-lru-load.t
 t/5001-lru-basic.t
 t/5002-lru-keys.t
@@ -330,11 +336,15 @@ t/9045-leak-noop-leaktrace.t
 t/9046-leak-file-iterator.t
 t/9047-leak-doubly-leaktrace.t
 t/9048-leak-util-extended.t
+t/9049-leak-object-introspection.t
 t/9050-nvec-valid-statistics.t
 t/9051-nvec-valid-signal.t
 t/9052-nvec-valid-ml.t
 t/9053-nvec-valid-finance.t
 t/9054-nvec-valid-physics.t
+t/9055-leak-object-lazy.t
+t/9056-leak-object-clearer-predicate.t
+t/9057-leak-object-singleton.t
 t/9100-bigmath-quadmath.t
 t/9501-integration-data-pipeline.t
 t/9502-integration-object-store.t
@@ -414,5 +424,6 @@ xs/util/util_compat.h
 xs/util/util_export.h
 xs/vec/vec.c
 xs/xop_compat.h
+xt/c-compat.t
 META.yml                                 Module YAML meta-data (added by MakeMaker)
 META.json                                Module JSON meta-data (added by MakeMaker)

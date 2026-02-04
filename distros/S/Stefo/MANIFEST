@@ -1,0 +1,26 @@
+bench/advanced.pl
+bench/benchmark.pl
+bench/quick.pl
+lib/Stefo.pm
+Makefile.PL
+MANIFEST			This list of files
+ppport.h
+Stefo.xs
+t/01-basic.t
+t/02-comprehensive.t
+t/03-extended.t
+t/04-edge-cases.t
+t/05-helpers.t
+t/05-many-patterns.t
+t/06-ref-type-debug.t
+t/07-new-patterns.t
+t/10-collection-ops.t
+t/11-string-ops.t
+t/12-math-ops.t
+t/13-bitwise-ops.t
+t/15-index-fixed.t
+t/16-new-string-ops.t
+t/17-time-and-misc.t
+xt/c-compat.t
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

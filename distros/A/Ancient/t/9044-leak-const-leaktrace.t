@@ -4,6 +4,9 @@ use warnings;
 use Test::More;
 
 BEGIN {
+    # Skip on Perl < 5.16 due to "Bizarre copy of UNKNOWN" errors with readonly SVs
+    plan skip_all => 'Perl 5.16+ required (readonly SV issues on older Perls)'
+        if $] < 5.016;
     eval { require Test::LeakTrace };
     plan skip_all => 'Test::LeakTrace required' if $@;
 }

@@ -1,7 +1,6 @@
 package TestSchema::Result::Product;
 use base 'DBIx::Class::Core';
 
-__PACKAGE__->load_components(qw/Async::ResultComponent Core/);
 __PACKAGE__->table('products');
 __PACKAGE__->add_columns(
     id => {

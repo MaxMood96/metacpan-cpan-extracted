@@ -4,6 +4,12 @@ use warnings;
 no warnings 'void';
 use Test::More;
 
+# Skip on Perl < 5.16 due to "Bizarre copy of UNKNOWN" errors with readonly SVs
+BEGIN {
+    plan skip_all => 'Perl 5.16+ required (readonly SV issues on older Perls)'
+        if $] < 5.016;
+}
+
 # Skip if ps command not available (Windows, minimal docker containers, etc.)
 my $ps_available = eval { my $r = `ps -o rss= -p $$ 2>/dev/null`; defined $r && $r =~ /\d/ };
 plan skip_all => 'ps command not available' unless $ps_available;

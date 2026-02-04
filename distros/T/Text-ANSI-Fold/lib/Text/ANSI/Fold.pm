@@ -4,7 +4,7 @@ use v5.14;
 use warnings;
 use utf8;
 
-our $VERSION = "2.3303";
+our $VERSION = "2.3304";
 
 use Data::Dumper;
 {
@@ -63,9 +63,10 @@ our $csi_re          = qr/${csi_start}${csi_parameter}${csi_itermidiate}${csi_fi
 
 our $osc_re          = qr{
     # see ECMA-48 8.3.89 OSC - OPERATING SYSTEM COMMAND
-    (?: \e\] | \x9d )		# osc
-    [\x08-\x0d\x20-\x7e]*+	# command
-    (?: \e\\ | \x9c | \a )	# st: string terminator
+    # Extended to accept non-ASCII (undefined but tolerated)
+    (?: \e\] | \x9d )			  # osc
+    [^\x00-\x07\x0e-\x1f\x7f-\x9f]*+	  # command (excludes C1 controls)
+    (?: \e\\ | \x9c | \a )		  # st: string terminator
 }x;
 
 use constant SGR_RESET  => "\e[m";
@@ -633,7 +634,7 @@ Text::ANSI::Fold - Text folding library supporting ANSI terminal sequence and As
 
 =head1 VERSION
 
-Version 2.3303
+Version 2.3304
 
 =head1 SYNOPSIS
 
@@ -1089,6 +1090,22 @@ returned.  If it is found at the beginning of a string, it is added to
 the folded text and processing continues.
 
 =back
+
+=head1 OSC 8 HYPERLINKS
+
+This module handles OSC 8 hyperlink sequences.  The OSC (Operating
+System Command) is defined in ECMA-48, and OSC 8 is an extension for
+terminal hyperlinks.
+
+The command string in OSC is defined in ECMA-48 8.3.89 to consist of
+characters in the range 00/08-00/13 and 02/00-07/14.  However, this
+module extends the definition to accept non-ASCII characters, since
+they may appear in URLs even though the OSC 8 specification recommends
+URI encoding.  The behavior for non-ASCII is undefined in the spec, but
+this module tolerates it for practical compatibility.
+
+The only exception is U+009C (STRING TERMINATOR), which is excluded
+because it terminates the OSC sequence.
 
 =head1 SEE ALSO
 

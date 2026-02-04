@@ -1,3 +1,5 @@
+package Perl::Tidy::Formatter;
+
 ####################################################################
 #
 # The Perl::Tidy::Formatter package adds indentation, whitespace, and
@@ -61,7 +63,6 @@
 # CODE SECTION 1: Preliminary code and global definitions up to sub new
 #######################################################################
 
-package Perl::Tidy::Formatter;
 use strict;
 use warnings;
 
@@ -77,7 +78,7 @@ use constant BACKSLASH    => q{\\};
 use Carp;
 use English    qw( -no_match_vars );
 use List::Util qw( min max first );    # min, max first are in Perl 5.8
-our $VERSION = '20260109';
+our $VERSION = '20260204';
 
 # List of hash keys to prevent -duk from listing them.
 # 'Unicode::Collate::Locale' is in the data for scan_unique_keys
@@ -142,7 +143,7 @@ sub Fault {
     my ( $package1_uu, $filename1, $line1, $subroutine1 )       = caller(1);
     my ( $package2_uu, $filename2_uu, $line2_uu, $subroutine2 ) = caller(2);
     my $pkg               = __PACKAGE__;
-    my $input_stream_name = get_input_stream_name();
+    my $input_stream_name = Perl::Tidy::get_input_stream_name();
     my $error_message     = <<EOM;
 ==============================================================================
 While operating on input stream with name: '$input_stream_name'
@@ -237,6 +238,7 @@ my (
     $rOpts_delete_closing_side_comments,
     $rOpts_delete_old_whitespace,
     $rOpts_delete_side_comments,
+    $rOpts_delete_block_comments,
     $rOpts_delete_trailing_commas,
     $rOpts_delete_lone_trailing_commas,
     $rOpts_delete_weld_interfering_commas,
@@ -320,6 +322,7 @@ my (
     %is_my_our_local,
     %is_soft_keep_break_type,
     %is_indirect_object_taker,
+    %is_binary_operator_type,
     @all_operators,
     %is_do_follower,
     %is_anon_sub_brace_follower,
@@ -479,6 +482,9 @@ my (
     $keyword_group_list_pattern,
     $keyword_group_list_comment_pattern,
 
+    # INITIALIZER: sub make_delete_side_comments_exception_pattern
+    $delete_side_comment_exception_pattern,
+
     # INITIALIZER: sub initialize_keep_old_blank_lines_hash
     %keep_old_blank_lines_exceptions,
 
@@ -518,7 +524,7 @@ my (
     #--------------------------------------------------------
 
     # These are re-initialized for each batch of code
-    # INITIALIZER: sub initialize_batch_variables
+    # INITIALIZER: sub initialize_closure_batch_variables
     $max_index_to_go,
     @block_type_to_go,
     @type_sequence_to_go,
@@ -855,6 +861,15 @@ BEGIN {
       . : ? && || and or err xor
     };
 
+    my @binary_ops = qw#
+      !~ =~ . .. : && || // = + - x
+      **= += -= .= /= *= %= x= &= |= ^= <<= >>= &&= ||= //=
+      <= >= == != > < % * / ? & | ** <=> ~~ !~~ <<~
+      >> << ^
+      ^. |. &. ^.= |.= &.= ^^
+      #;
+    $is_binary_operator_type{$_} = 1 for @binary_ops;
+
     # We can remove semicolons after blocks preceded by these keywords
     @q = qw(
       BEGIN     END      CHECK INIT    AUTOLOAD DESTROY
@@ -1021,6 +1036,7 @@ sub new {
         length_function    => undef,
         is_encoded_data    => EMPTY_STRING,
         fh_tee             => undef,
+        display_name       => '(not defined)',
     );
     my %args = ( %defaults, @arglist );
 
@@ -1030,10 +1046,11 @@ sub new {
     my $length_function    = $args{length_function};
     my $is_encoded_data    = $args{is_encoded_data};
     my $fh_tee             = $args{fh_tee};
+    my $display_name       = $args{display_name};
 
     # Be sure we have a sink_object to receive formatted lines
     if ( !defined($sink_object) ) {
-        Fault("Did not receive a sink_object\n");
+        croak("Did not receive a sink_object\n");
     }
 
     # Create a FileWriter object to receive lines from the vertical aligner
@@ -1065,28 +1082,25 @@ sub new {
     $self->[_save_logfile_] =
       defined($logger_object) && $logger_object->get_save_logfile();
     $self->[_saw_VERSION_in_this_file_] = !$rOpts->{'pass-version-line'};
-    $self->[_input_stream_name_] =
-      defined($logger_object)
-      ? $logger_object->get_input_stream_name()
-      : EMPTY_STRING;
+    $self->[_input_stream_name_]        = $display_name;
 
     # Initialize all other self vars
     $self->initialize_self_vars();
 
-    # Initialize closure variables...
-    $self->initialize_closure_variables();
+    # Initialize all closure variables
+    $self->initialize_all_closures();
 
     # Be sure all variables in $self have been initialized above.  To find the
     # correspondence of index numbers and array names, copy a list to a file
     # and use the unix 'nl' command to number lines 1..
-    my @non_existant;
+    my @missing;
     foreach ( 0 .. _LAST_SELF_INDEX_ ) {
         if ( !exists $self->[$_] ) {
-            push @non_existant, $_;
+            push @missing, $_;
         }
     }
-    if (@non_existant) {
-        Fault("These indexes in self not initialized: (@non_existant)\n");
+    if (@missing) {
+        Fault("These indexes in self are not initialized: (@missing)\n");
     }
 
     # Safety check..this is not a class
@@ -1097,18 +1111,19 @@ sub new {
 
     # Ready to start formatting
     if ($logger_object) {
-        write_logfile_entry("\nStarting tokenization pass...\n");
+        $self->write_logfile_entry("\nStarting tokenization pass...\n");
 
         if ( $rOpts->{'entab-leading-whitespace'} ) {
-            write_logfile_entry(
+            $self->write_logfile_entry(
 "Leading whitespace will be entabbed with $rOpts->{'entab-leading-whitespace'} spaces per tab\n"
             );
         }
         elsif ( $rOpts->{'tabs'} ) {
-            write_logfile_entry("Indentation will be with a tab character\n");
+            $self->write_logfile_entry(
+                "Indentation will be with a tab character\n");
         }
         else {
-            write_logfile_entry(
+            $self->write_logfile_entry(
                 "Indentation will be with $rOpts->{'indent-columns'} spaces\n");
         }
     }
@@ -1280,22 +1295,20 @@ sub initialize_self_vars {
     return;
 } ## end sub initialize_self_vars
 
-sub initialize_closure_variables {
+sub initialize_all_closures {
     my ($self) = @_;
-    my $logger_object = $self->[_logger_object_];
-    set_logger_object($logger_object);
-    initialize_lp_vars();
-    initialize_csc_vars();
-    initialize_break_lists();
-    initialize_undo_ci();
-    initialize_process_line_of_CODE();
-    initialize_grind_batch_of_CODE();
-    initialize_get_final_indentation();
-    initialize_postponed_breakpoint();
-    initialize_batch_variables();
-    $self->initialize_write_line();
+    initialize_closure_lp_vars();
+    initialize_closure_csc_vars();
+    initialize_closure_break_lists();
+    initialize_closure_undo_ci();
+    initialize_closure_process_line_of_CODE();
+    initialize_closure_grind_batch_of_CODE();
+    initialize_closure_get_final_indentation();
+    initialize_closure_postponed_breakpoint();
+    initialize_closure_batch_variables();
+    $self->initialize_closure_write_line();
     return;
-} ## end sub initialize_closure_variables
+} ## end sub initialize_all_closures
 
 ######################################
 # CODE SECTION 2: Some Basic Utilities
@@ -1508,76 +1521,60 @@ EOM
     } ## end sub check_line_hashes
 } ## end closure check_line_hashes
 
-{    ## begin closure for logger routines
+sub warning {
+    my ( $self, $msg, ($msg_line_number) ) = @_;
 
-    # TODO: eliminate this closure; first need to convert all callers,
-    # including Fault* to $self-> calls. Put input_stream_name in $self.
-    my $logger_object;
-
-    # Called once per file to initialize the logger object
-    sub set_logger_object {
-        $logger_object = shift;
-        return;
+    # Issue a warning message
+    # Given:
+    #   $msg = text of warning
+    #   $msg_line_number = optional line number prefix
+    my $logger_object = $self->[_logger_object_];
+    if ($logger_object) {
+        $logger_object->warning( $msg, $msg_line_number );
     }
+    return;
+} ## end sub warning
 
-    sub get_input_stream_name {
-        my $input_stream_name = EMPTY_STRING;
-        if ($logger_object) {
-            $input_stream_name = $logger_object->get_input_stream_name();
-        }
-        return $input_stream_name;
-    } ## end sub get_input_stream_name
+sub write_logfile_entry {
+    my ( $self, @msg ) = @_;
+    my $logger_object = $self->[_logger_object_];
+    if ($logger_object) {
+        $logger_object->write_logfile_entry(@msg);
+    }
+    return;
+} ## end sub write_logfile_entry
 
-    # interface to Perl::Tidy::Logger routines
-    sub warning {
-        my ( $msg, ($msg_line_number) ) = @_;
+sub complain {
+    my ( $self, $msg, ($msg_line_number) ) = @_;
 
-        # Issue a warning message
-        # Given:
-        #   $msg = text of warning
-        #   $msg_line_number = optional line number prefix
-        if ($logger_object) {
-            $logger_object->warning( $msg, $msg_line_number );
-        }
-        return;
-    } ## end sub warning
+    # Issue a complaint message
+    # Given:
+    #   $msg = text of complaint
+    #   $msg_line_number = optional line number prefix
+    my $logger_object = $self->[_logger_object_];
+    if ($logger_object) {
+        $logger_object->complain( $msg, $msg_line_number );
+    }
+    return;
+} ## end sub complain
 
-    sub complain {
-        my ( $msg, ($msg_line_number) ) = @_;
+sub get_saw_brace_error {
+    my $self          = shift;
+    my $logger_object = $self->[_logger_object_];
+    if ($logger_object) {
+        return $logger_object->get_saw_brace_error();
+    }
+    return;
+} ## end sub get_saw_brace_error
 
-        # Issue a complaint message
-        # Given:
-        #   $msg = text of complaint
-        #   $msg_line_number = optional line number prefix
-        if ($logger_object) {
-            $logger_object->complain( $msg, $msg_line_number );
-        }
-        return;
-    } ## end sub complain
-
-    sub write_logfile_entry {
-        my @msg = @_;
-        if ($logger_object) {
-            $logger_object->write_logfile_entry(@msg);
-        }
-        return;
-    } ## end sub write_logfile_entry
-
-    sub get_saw_brace_error {
-        if ($logger_object) {
-            return $logger_object->get_saw_brace_error();
-        }
-        return;
-    } ## end sub get_saw_brace_error
-
-    sub we_are_at_the_last_line {
-        if ($logger_object) {
-            $logger_object->we_are_at_the_last_line();
-        }
-        return;
-    } ## end sub we_are_at_the_last_line
-
-} ## end closure for logger routines
+sub we_are_at_the_last_line {
+    my $self          = shift;
+    my $logger_object = $self->[_logger_object_];
+    if ($logger_object) {
+        $logger_object->we_are_at_the_last_line();
+    }
+    return;
+} ## end sub we_are_at_the_last_line
 
 # Available for debugging but not normally used
 sub write_diagnostics {
@@ -2310,13 +2307,14 @@ EOM
 } ## end sub check_for_valid_keywords
 
 sub check_for_valid_token_types {
-    my ( $rlist, ( $option_name, $die_on_error ) ) = @_;
+    my ( $rlist, $option_name, ( $die_on_error, $rkeyword_list ) ) = @_;
 
     # Given:
     #   $rlist = ref to list of possible token types
-    #   ($option_name) = optional name of option to use if a warning message
-    #                    should be issued (caller should add leading dash(es))
+    #   $option_name = name of option to use if a warning message
+    #                  should be issued (caller should add leading dash(es))
     #   ($die_on_error) = optional flag, true=>Die instead of Warn on error
+    #   ($rkeyword_list) = optional ref to list of acceptable keywords
     # Return:
     #   nothing if no errors, or
     #   ref to list of unknown token types
@@ -2326,9 +2324,14 @@ sub check_for_valid_token_types {
 
     return if ( !defined($rlist) );
 
+    my %in_keyword_list;
+    if ( defined($rkeyword_list) ) {
+        $in_keyword_list{$_} = 1 for @{$rkeyword_list};
+    }
+
     my @unknown_types;
     foreach my $type ( @{$rlist} ) {
-        if ( !is_valid_token_type($type) ) {
+        if ( !is_valid_token_type($type) && !$in_keyword_list{$type} ) {
             push @unknown_types, $type;
         }
     }
@@ -2338,11 +2341,12 @@ sub check_for_valid_token_types {
         my $num = @unknown_types;
         local $LIST_SEPARATOR = SPACE;
         my $msg = <<EOM;
-$num unrecognized token types were input with $option_name :
+$num unrecognized token types or keywords input with $option_name :
  @unknown_types
 Use 'perltidy -dtt' to dump a list of valid token types to standard output
 EOM
         Die($msg) if ($die_on_error);
+        $msg = "Ignoring " . $msg;
         Warn($msg);
     }
     return \@unknown_types;
@@ -2409,6 +2413,8 @@ sub check_options {
     make_blank_line_pattern();
 
     make_keyword_group_list_pattern();
+
+    make_delete_side_comments_exception_pattern();
 
     prepare_cuddled_block_types();
 
@@ -3419,14 +3425,20 @@ sub initialize_token_break_preferences {
     $break_before->(@all_operators)
       if ( $rOpts->{'break-before-all-operators'} );
 
+    # These keywords are accepted by -wbb and -wba (fixes git #195):
+    my @ok = qw( and eq err ge gt le lt ne or xor );
+
+    # It is safe to keep going because invalid types are ignored.
+    my $die_on_error = 0;
+
     my $optname = 'want-break-after';
     if ( my @q = split_words( $rOpts->{$optname} ) ) {
-        check_for_valid_token_types( \@q, "--$optname", 1 );
+        check_for_valid_token_types( \@q, "--$optname", $die_on_error, \@ok );
         $break_after->(@q);
     }
     $optname = 'want-break-before';
     if ( my @q = split_words( $rOpts->{$optname} ) ) {
-        check_for_valid_token_types( \@q, "--$optname", 1 );
+        check_for_valid_token_types( \@q, "--$optname", $die_on_error, \@ok );
         $break_before->(@q);
     }
 
@@ -4001,6 +4013,7 @@ sub initialize_global_option_vars {
     $rOpts_extended_continuation_indentation =
       $rOpts->{'extended-continuation-indentation'};
     $rOpts_delete_side_comments   = $rOpts->{'delete-side-comments'};
+    $rOpts_delete_block_comments  = $rOpts->{'delete-block-comments'};
     $rOpts_delete_trailing_commas = $rOpts->{'delete-trailing-commas'};
     $rOpts_delete_lone_trailing_commas =
       $rOpts->{'delete-lone-trailing-commas'};
@@ -6609,6 +6622,12 @@ EOM
         $binary_bond_strength{'R}'}->{'[['} = 0.9 * STRONG + 0.1 * NOMINAL;
         $binary_bond_strength{'R}'}->{'L{'} = 0.9 * STRONG + 0.1 * NOMINAL;
 
+        # avoid break before a comma, added for b1562
+        $binary_bond_strength{'R}'}->{','} = 0.1 * STRONG + 0.9 * NOMINAL;
+        $binary_bond_strength{'}}'}->{','} = 0.1 * STRONG + 0.9 * NOMINAL;
+        $binary_bond_strength{']]'}->{','} = 0.1 * STRONG + 0.9 * NOMINAL;
+        $binary_bond_strength{'))'}->{','} = 0.1 * STRONG + 0.9 * NOMINAL;
+
         # increase strength to the point where a break in the following
         # will be after the opening paren rather than at the arrow:
         #    $a->$b($c);
@@ -8017,6 +8036,41 @@ EOM
     return;
 } ## end sub make_closing_side_comment_prefix
 
+sub make_delete_side_comments_exception_pattern {
+
+    # Create the pattern used to find side comments which should be ignored
+    # if -dsc is set. Leave the pattern undefined if not used.
+    $delete_side_comment_exception_pattern = undef;
+
+    my $dscxp_string = $rOpts->{'delete-side-comments-exception-pattern'};
+
+    # -dscxp=0 or an empty string is equivalent to not defining -dscxp
+    return if ( !$dscxp_string );
+
+    # And a string of spaces is equivalent to not defining -dscxp
+    return if ( $dscxp_string =~ /^\s*$/ );
+
+    # Otherwise, the pattern must begin with '#'
+    if (   substr( $dscxp_string, 0, 1 ) ne '#'
+        && substr( $dscxp_string, 0, 2 ) ne '\#' )
+    {
+        Die(<<EOM);
+-dscxp string = '$dscxp_string' must begin with '#' or '\\#'
+Note that some shells require escaping # symbols with backslashes
+EOM
+    }
+
+    my $pattern = '^' . $dscxp_string;
+    if ( bad_pattern($pattern) ) {
+        Die(
+"ERROR: -dscxp='$dscxp_string' causes the invalid regex '$pattern'\n"
+        );
+    }
+
+    $delete_side_comment_exception_pattern = $pattern;
+    return;
+} ## end sub make_delete_side_comments_exception_pattern
+
 sub initialize_keep_old_blank_lines_hash {
 
     # Initialize the control hash for --keep-old-blank-lines-exceptions
@@ -8116,7 +8170,7 @@ EOM
     my $rI_opening;
     my $rI_closing;
 
-    sub initialize_write_line {
+    sub initialize_closure_write_line {
 
         my ($self) = shift;
 
@@ -8140,7 +8194,7 @@ EOM
         $rI_closing          = $self->[_rI_closing_];
 
         return;
-    } ## end sub initialize_write_line
+    } ## end sub initialize_closure_write_line
 
     sub check_sequence_numbers {
 
@@ -8617,14 +8671,11 @@ EOM
         # make and push closing sequenced item ')'
         if ($closing) {
 
-            # OPTIONAL: remove a previous comma if it is the only one. This can
+            # Remove a previous comma if it is the only one. This can
             # happen if this closing paren starts a new line and there was just
-            # one word in the qw list. The reason for doing this would be
-            # to avoid possible instability, but none is currently known. b1491.
-            # This has been tested but is currently inactive because it has not
-            # been found to be necessary.
-            if (   0
-                && !@words
+            # one word in the qw list. This was tested in b1491 and activated
+            # for b1567.
+            if (  !@words
                 && $in_qw_comma_count == 1
                 && $rLL->[-1]->[_TYPE_] eq ',' )
             {
@@ -8948,7 +8999,7 @@ EOM
         # Values needed by Logger if a logfile is saved:
         if ( $self->[_save_logfile_] ) {
             $line_of_tokens->{_level_0}    = $rlevels->[0];
-            $line_of_tokens->{_ci_level_0} = 0;               # fix later
+            $line_of_tokens->{_ci_level_0} = 0;    # temp value, updated later
             $line_of_tokens->{_nesting_blocks_0} =
               $line_of_tokens_old->{_nesting_blocks_0};
             $line_of_tokens->{_nesting_tokens_0} =
@@ -8984,7 +9035,7 @@ sub finish_formatting {
     # verbatim if there are brace errors.  This fixes issue c160.
     my $severe_error        = $rtokenization_info->{severe_error};
     my $early_FS_end_marker = $rtokenization_info->{early_FS_end_marker};
-    $severe_error ||= get_saw_brace_error();
+    $severe_error ||= $self->get_saw_brace_error();
 
     # Check the maximum level. If it is extremely large we will give up and
     # output the file verbatim.  Note that the actual maximum level is 1
@@ -11394,7 +11445,7 @@ sub warn_unique_or_similar_keys {
         $message .= $output_string;
         $message .= "End scan for --$wuk_key\n";
         $message .= "\n";
-        warning($message);
+        $self->warning($message);
     }
 
     $output_string = $rhash->{similar};
@@ -11402,7 +11453,7 @@ sub warn_unique_or_similar_keys {
         my $message = "\nBegin scan for --$wsk_key\n";
         $message .= $output_string;
         $message .= "End scan for --$wsk_key\n";
-        warning($message);
+        $self->warning($message);
     }
 
     return;
@@ -12936,7 +12987,7 @@ sub set_CODE_type {
           )
         {
             $In_format_skipping_section = 0;
-            write_logfile_entry(
+            $self->write_logfile_entry(
 "Line $input_line_no: Entering selected format section $rOpts_skip_formatting_except_id\n"
             );
         }
@@ -12952,7 +13003,7 @@ sub set_CODE_type {
         if ( !$Inverted_skip_mode ) {
             if ( !$In_format_skipping_section ) {
                 $In_format_skipping_section = 1;
-                write_logfile_entry(
+                $self->write_logfile_entry(
 "Line 1: Entering automatically detected format-skipping section\n"
                 );
             }
@@ -13050,7 +13101,7 @@ sub set_CODE_type {
                     # Start format skipping at #<<< in normal mode
                     if ( !$Inverted_skip_mode ) {
                         $In_format_skipping_section = $input_line_no;
-                        write_logfile_entry(
+                        $self->write_logfile_entry(
 "Line $input_line_no: Entering format-skipping section\n"
                         );
                     }
@@ -13070,7 +13121,7 @@ sub set_CODE_type {
                     else {
 
                         # warn of duplicate starting comment lines, git #118
-                        warning(
+                        $self->warning(
 "Already in format-skipping section which started at line $In_format_skipping_section\n",
                             $input_line_no,
                         );
@@ -13096,7 +13147,7 @@ sub set_CODE_type {
 
                         # End skipping at a #<<< in normal mode
                         $In_format_skipping_section = 0;
-                        write_logfile_entry(
+                        $self->write_logfile_entry(
 "Line $input_line_no: Exiting format-skipping section\n"
                         );
                         $CODE_type = 'FS';
@@ -13105,7 +13156,7 @@ sub set_CODE_type {
                     else {
 
                         # '#>>>' not following '#<<<' in inverted mode
-                        write_logfile_entry(
+                        $self->write_logfile_entry(
 "Line $input_line_no: Ignoring #>>> not following #<<<\n"
                         );
                     }
@@ -13113,14 +13164,14 @@ sub set_CODE_type {
                 else {
                     if ($Inverted_skip_mode) {
                         $In_format_skipping_section = $input_line_no;
-                        write_logfile_entry(
+                        $self->write_logfile_entry(
 "Line $input_line_no: Exiting selected format section $rOpts_skip_formatting_except_id\n"
                         );
                     }
                     else {
 
                         # '#>>>' not following '#<<<' in normal mode
-                        write_logfile_entry(
+                        $self->write_logfile_entry(
 "Line $input_line_no: Ignoring #>>> not following #<<<\n"
                         );
                     }
@@ -13317,7 +13368,8 @@ sub set_CODE_type {
             /^[^;]*;?[^;]*([\$*])(([\w\:\']*)\bVERSION)\b.*\=/ )
         {
             $Saw_VERSION_in_this_file = 1;
-            write_logfile_entry("passing VERSION line; -npvl deactivates\n");
+            $self->write_logfile_entry(
+                "passing VERSION line; -npvl deactivates\n");
 
             # This code type has lower priority than others
             $CODE_type = 'VER';
@@ -15486,7 +15538,7 @@ Line:Issue: Var: note
 EOM
         $message .= $message_middle;
         $message .= "End scan for --$wv_key=$wv_option:\n";
-        warning($message);
+        $self->warning($message);
     }
     return;
 } ## end sub warn_variable_types
@@ -15920,9 +15972,9 @@ EOM
         }
         $message .= "End scan for --$opt_name\n";
 
-        # Note that this is sent in a single call to warning() in order
+        # Note that this is sent in a single call to $self->warning() in order
         # to avoid triggering a stop on large warning count
-        warning($message);
+        $self->warning($message);
     }
     return;
 } ## end sub scan_call_parens
@@ -16080,7 +16132,7 @@ sub interbracket_arrow_check {
         my $ess1 = $num_changes == 1 ? EMPTY_STRING : 's';
         my $ess2 = $num_lno == 1     ? EMPTY_STRING : 's';
         my $msg  = "$first_word $num_changes '->'$ess1 at line$ess2 $str\n";
-        warning($msg);
+        $self->warning($msg);
         return;
     }; ## end $warn = sub
 
@@ -16252,12 +16304,18 @@ sub delete_side_comments {
     my $rseqno_non_indenting_brace_by_ix =
       $self->[_rseqno_non_indenting_brace_by_ix_];
 
+    my %is_deletable_CODE_type;
+    $is_deletable_CODE_type{$_} = 1 for qw(HSC NIN IO VER);
+
     foreach my $ix ( @{$rix_side_comments} ) {
+
+        # Never delete special control side comments
+        next if ( $rseqno_non_indenting_brace_by_ix->{$ix} );
+
         my $line_of_tokens = $rlines->[$ix];
         my $line_type      = $line_of_tokens->{_line_type};
 
-        # This fault shouldn't happen because we only saved CODE lines with
-        # side comments in the TASK 1 loop above.
+        # Only CODE lines should be in @{$rix_side_comments}
         if ( $line_type ne 'CODE' ) {
             if (DEVEL_MODE) {
                 my $lno = $ix + 1;
@@ -16272,7 +16330,14 @@ EOM
         my $rK_range  = $line_of_tokens->{_rK_range};
         my ( $Kfirst, $Klast ) = @{$rK_range};
 
-        if ( !defined($Kfirst) || $rLL->[$Klast]->[_TYPE_] ne '#' ) {
+        # Be sure this line ends in a side comment. Note that 'HSC' lines
+        # are special: they may only have one token.
+        if (   !defined($Kfirst)
+            || $rLL->[$Klast]->[_TYPE_] ne '#'
+            || ( $Klast <= $Kfirst && $CODE_type ne 'HSC' ) )
+        {
+
+            # The caller passed a bad array @{$rix_side_comments}
             if (DEVEL_MODE) {
                 my $lno = $ix + 1;
                 Fault(<<EOM);
@@ -16282,30 +16347,32 @@ EOM
             next;
         }
 
-        my $delete_side_comment =
-             $rOpts_delete_side_comments
-          && ( $Klast > $Kfirst || $CODE_type eq 'HSC' )
-          && (!$CODE_type
-            || $CODE_type eq 'HSC'
-            || $CODE_type eq 'IO'
-            || $CODE_type eq 'NIN' );
+        # Only delete side comments from certain non-blank CODE types
+        next if ( $CODE_type && !$is_deletable_CODE_type{$CODE_type} );
 
-        # Do not delete special control side comments
-        if ( $rseqno_non_indenting_brace_by_ix->{$ix} ) {
-            $delete_side_comment = 0;
+        my $token = $rLL->[$Klast]->[_TOKEN_];
+
+        # Do not delete '## no critic' side comments
+        next
+          if ( !$rOpts_ignore_perlcritic_comments
+            && length($token) > 10
+            && substr( $token, 1, 1 ) eq '#'
+            && $token =~ /^##\s*no\s+critic\b/ );
+
+        my $delete_side_comment;
+
+        # CASE 1: implement -dsc if requested
+        if ($rOpts_delete_side_comments) {
+            $delete_side_comment =
+              defined($delete_side_comment_exception_pattern)
+              && $token =~ /$delete_side_comment_exception_pattern/ ? 0 : 1;
         }
 
-        if (
-               $rOpts_delete_closing_side_comments
+        # CASE 2: implement -dcsc if requested
+        if (   $rOpts_delete_closing_side_comments
             && !$delete_side_comment
-            && $Klast > $Kfirst
-            && (  !$CODE_type
-                || $CODE_type eq 'HSC'
-                || $CODE_type eq 'IO'
-                || $CODE_type eq 'NIN' )
-          )
+            && $Klast > $Kfirst )
         {
-            my $token  = $rLL->[$Klast]->[_TOKEN_];
             my $K_m    = $Klast - 1;
             my $type_m = $rLL->[$K_m]->[_TYPE_];
             if ( $type_m eq 'b' && $K_m > $Kfirst ) { $K_m-- }
@@ -16334,29 +16401,30 @@ EOM
             }
         } ## end if ( $rOpts_delete_closing_side_comments...)
 
-        if ($delete_side_comment) {
+        next if ( !$delete_side_comment );
 
-            # We are actually just changing the side comment to a blank.
-            # This may produce multiple blanks in a row, but sub respace_tokens
-            # will check for this and fix it.
-            $rLL->[$Klast]->[_TYPE_]  = 'b';
-            $rLL->[$Klast]->[_TOKEN_] = SPACE;
+        # OK to delete this side comment:
 
-            # The -io option outputs the line text, so we have to update
-            # the line text so that the comment does not reappear.
-            if ( $CODE_type eq 'IO' ) {
-                my $line = EMPTY_STRING;
-                foreach my $KK ( $Kfirst .. $Klast - 1 ) {
-                    $line .= $rLL->[$KK]->[_TOKEN_];
-                }
-                $line =~ s/\s+$//;
-                $line_of_tokens->{_line_text} = $line . "\n";
+        # We are actually just changing the side comment to a blank.
+        # This may produce multiple blanks in a row, but sub respace_tokens
+        # will check for this and fix it.
+        $rLL->[$Klast]->[_TYPE_]  = 'b';
+        $rLL->[$Klast]->[_TOKEN_] = SPACE;
+
+        # The -io option outputs the line text, so we have to update
+        # the line text so that the comment does not reappear.
+        if ( $CODE_type eq 'IO' ) {
+            my $line = EMPTY_STRING;
+            foreach my $KK ( $Kfirst .. $Klast - 1 ) {
+                $line .= $rLL->[$KK]->[_TOKEN_];
             }
-
-            # If we delete a hanging side comment the line becomes blank.
-            if ( $CODE_type eq 'HSC' ) { $line_of_tokens->{_code_type} = 'BL' }
+            $line =~ s/\s+$//;
+            $line_of_tokens->{_line_text} = $line . "\n";
         }
-    }
+
+        # If we delete a hanging side comment the line becomes blank.
+        if ( $CODE_type eq 'HSC' ) { $line_of_tokens->{_code_type} = 'BL' }
+    }    ## End loop over all side comments
     return;
 } ## end sub delete_side_comments
 
@@ -16812,7 +16880,7 @@ sub respace_tokens {
                     $ris_permanently_broken );
             }
         }
-    }    # End line loop
+    }    ## End line loop
 
     # finalize data structures
     $self->respace_post_loop_ops();
@@ -17312,7 +17380,7 @@ sub respace_tokens_inner_loop {
                     next;
                 }
                 else {
-                    write_logfile_entry("Extra ';'\n");
+                    $self->write_logfile_entry("Extra ';'\n");
                 }
             }
         }
@@ -17338,12 +17406,12 @@ sub respace_tokens_inner_loop {
                 # comment.  See test 'mangle4.in'
                 my $lno = 1 + $rLL->[$KK]->[_LINE_INDEX_];
                 if ( $KK eq $Kfirst && $rLL->[$Klast]->[_TYPE_] eq '#' ) {
-                    complain(
+                    $self->complain(
                         "repeated comma before side comment, not deleted\n",
                         $lno );
                 }
                 else {
-                    complain( "deleted repeated ','\n", $lno );
+                    $self->complain( "deleted repeated ','\n", $lno );
                     next;
                 }
             }
@@ -17351,7 +17419,7 @@ sub respace_tokens_inner_loop {
                 && $rOpts->{'delete-repeated-commas'} )
             {
                 my $lno = 1 + $rLL->[$KK]->[_LINE_INDEX_];
-                complain( "found '=>,' ... error?\n", $lno );
+                $self->complain( "found '=>,' ... error?\n", $lno );
             }
             else {
                 # not a repeated comma type
@@ -17404,12 +17472,12 @@ EOM
                 # comment.  See test 'mangle4.in'
                 my $lno = 1 + $rLL->[$KK]->[_LINE_INDEX_];
                 if ( $KK eq $Kfirst && $rLL->[$Klast]->[_TYPE_] eq '#' ) {
-                    complain(
+                    $self->complain(
                         "-repeated '=>' before side comment, not deleted\n",
                         $lno );
                 }
                 else {
-                    complain( "deleted repeated '=>'\n", $lno );
+                    $self->complain( "deleted repeated '=>'\n", $lno );
                     next;
                 }
             }
@@ -17554,7 +17622,7 @@ EOM
         }
         $self->store_token($rtoken_vars);
 
-    }    # End token loop
+    }    ## End token loop
 
     return;
 } ## end sub respace_tokens_inner_loop
@@ -17640,7 +17708,7 @@ EOM
                 # tricky and not done yet.
                 if ( $token_opening eq '(' || $token_opening eq '[' ) {
                     my $lno = $rLL_new->[$K_opening]->[_LINE_INDEX_] + 1;
-                    complain(<<EOM);
+                    $self->complain(<<EOM);
 Unexpected ';' in container beginning with '$token_opening' at line $lno
 EOM
                 }
@@ -19483,7 +19551,7 @@ sub check_Q {
     {
         my $lno   = 1 + $rLL_new->[$Kp]->[_LINE_INDEX_];
         my $guess = substr( $previous_nonblank_token, 0, 1 ) . '~';
-        complain(
+        $self->complain(
 "Line $lno: Note: be sure you want '$previous_nonblank_token' instead of '$guess' here\n"
         );
     }
@@ -22198,7 +22266,7 @@ sub cross_check_sub_calls {
             $output_string .=
 "$line_number: \$self->$sub_called in parent line $ln_parent with self=$parent_self to receiver line $ln_receiver with self=$receiver_self\n";
         }
-        warning($output_string);
+        $self->warning($output_string);
     }
 
     #-------------------------------
@@ -22871,7 +22939,7 @@ sub warn_mismatched {
         my $output_lines = $rhash->{call_arg_warning_output};
         if ($output_lines) {
             chomp $output_lines;
-            warning(<<EOM);
+            $self->warning(<<EOM);
 
 Begin scan for --$wma_key
 $output_lines
@@ -22885,7 +22953,7 @@ EOM
         my $output_lines = $rhash->{return_warning_output};
         if ($output_lines) {
             chomp $output_lines;
-            warning(<<EOM);
+            $self->warning(<<EOM);
 
 Begin scan for --$wmr_key
 $output_lines
@@ -23018,7 +23086,7 @@ sub warn_nested_ternaries {
     if ($output_string) {
         my $opt_name = 'warn-nested-ternaries';
         chomp $output_string;
-        warning(<<EOM);
+        $self->warning(<<EOM);
 
 Begin scan for --$opt_name
 $output_string
@@ -26511,6 +26579,14 @@ sub is_fragile_block_type {
     # - sub process_line where variable '$rbrace_follower' is set
     # - sub process_line_inner_loop where variable '$is_opening_BLOCK' is set,
 
+    # one-line subs welded right can reform after breaking: b1564
+    if ( $total_weld_count && $block_type eq 'sub' ) {
+        my $KK_o = $self->[_K_opening_container_]->{$seqno};
+        if ( defined($KK_o) && defined( $self->[_rK_weld_right_]->{$KK_o} ) ) {
+            return 0;
+        }
+    }
+
     if (   $is_sort_map_grep_eval{$block_type}
         || $block_type eq 't'
         || $self->[_rshort_nested_]->{$seqno} )
@@ -26674,6 +26750,107 @@ sub is_fragile_block_type {
 
         my $K_start_multiline_qw;
         my $level_start_multiline_qw = 0;
+
+        my $skip_line_length_sum = sub {
+            my ( $K_first, $K_terminal ) = @_;
+
+            # Decide if it is ok to include the full line length for a line
+            # ending in a comma in interrupted mode.  This is always ok in a
+            # simple list of comma-separated items, but in some rare, unusual
+            # cases it can lead to instability.
+
+            # Given:
+            #  $K_first, $K_last = index range of the current line
+            # Return:
+            #  true  => skip use of full line length (possible instability)
+            #  false => ok to use full line length
+
+            # Okay if previous CODE token is a comma or opening container
+            return if ( $last_nonblank_type eq ',' );
+            return if ( $is_opening_type{$last_nonblank_type} );
+
+            # or last line ended in a comment,
+            my $K_prev = $self->K_previous_nonblank($K_first);
+            return if ( !$K_prev );
+            my $type_prev = $rLL->[$K_prev]->[_TYPE_];
+            return if ( $type_prev eq '#' );
+
+            # or this line begins with a comma,
+            my $type_first = $rLL->[$K_first]->[_TYPE_];
+            return if ( $type_first eq ',' );
+
+            # or a continued quote,
+            return if ( $type_first eq 'Q' && $type_prev eq 'Q' );
+            return if ( $type_first eq 'q' && $type_prev eq 'q' );
+
+            # or was a blank line.
+            my $ln      = $rLL->[$K_first]->[_LINE_INDEX_];
+            my $ln_prev = $rLL->[$K_prev]->[_LINE_INDEX_];
+            return if ( $ln_prev < $ln - 1 );
+
+            # Otherwise, skip if the last line did not end in '=>'
+            if ( $last_nonblank_type ne '=>' ) { return 1 }
+
+            # Decide if a line following a '=>' can be stable.
+            # We have to scan the line for weak tokens, like ',' and '='
+
+            my $K_test = $K_first - 1;
+            while ( ++$K_test < $K_terminal ) {
+
+                my $type = $rLL->[$K_test]->[_TYPE_];
+                next if ( $type eq 'b' );
+
+                # Check for issue b1566:
+                # where a line with a weak binary operator can be unstable, i.e.
+
+                #   OutputHandle => $heap->{pipe_write} =
+                #     $b_write,
+
+                #   OutputHandle =>
+                #   $heap->{pipe_write} = $b_write,
+
+                # The b1566 instability is caused by the '=' which is weak.
+                # For generality we check for any binary operator.
+                if ( $is_binary_operator_type{$type} ) { return 1 }
+
+                # Check for a container
+                my $seqno = $rLL->[$K_test]->[_TYPE_SEQUENCE_];
+                if ( $is_opening_type{$type} ) {
+
+                    # Check for issue b1565:
+                    # where the one-line block formatting could be unstable due
+                    # to alternating length estimates if the line is an intact
+                    # list preceded by a '=>' on the previous line, like this:
+                    #      isa =>
+                    #      ['My::LDAPConnect', 'SPOPS::LDAP::MultiDatasource'],
+                    # Deactivated: replaced with more general fix b1565a
+                    if (   0
+                        && $K_test == $K_first
+                        && $self->[_ris_list_by_seqno_]->{$seqno} )
+                    {
+                        return 1;
+                    }
+
+                    # Skip past this container
+                    my $Kc = $self->[_K_closing_container_]->{$seqno};
+                    if ( $Kc && $Kc > $K_test ) {
+                        $K_test = $Kc;
+                        next;
+                    }
+
+                    # Safety exit, shouldn't happen
+                    if (DEVEL_MODE) {
+                        my $lno = $rLL->[$K_test]->[_LINE_INDEX_] + 1;
+                        Fault(
+                            "Bad loop indexes near line $lno, seqno=$seqno\n");
+                    }
+                    return 1;
+                }
+            } ## end while ( ++$K_test < $K_terminal)
+
+            # Ok, no problems detected
+            return;
+        }; ## end $skip_line_length_sum = sub
 
         xlp_collapsed_lengths_initialize();
 
@@ -26894,12 +27071,11 @@ sub is_fragile_block_type {
                                 }
                             }
                         }
-                    }
+                    }    # END patch for issue b1408
 
-                    #--------------------------
-                    # END patch for issue b1408
-                    #--------------------------
-                    if ( $rLL->[$K_terminal]->[_TYPE_] eq ',' ) {
+                    if ( $rLL->[$K_terminal]->[_TYPE_] eq ','
+                        && !$skip_line_length_sum->( $K_first, $K_terminal ) )
+                    {
 
                         # Fix for b1536a: add $is_interrupted flag
                         my $is_interrupted = 1;
@@ -27035,10 +27211,21 @@ sub is_fragile_block_type {
                     }
                     else {
                         if ( $is_handle_type{$last_nonblank_type} ) {
-                            $handle_len = $len;
-                            $handle_len += 1
-                              if ( $KK > 0
-                                && $rLL->[ $KK - 1 ]->[_TYPE_] eq 'b' );
+
+                            # Do not add a handle length if this could be a
+                            # force break before this token due to -bbhb.
+                            # b1565, b1565a, b1570.
+                            if (   $last_nonblank_type eq '=>'
+                                && $break_before_container_types{$token} )
+                            {
+                                ##
+                            }
+                            else {
+                                $handle_len = $len;
+                                $handle_len += 1
+                                  if ( $KK > 0
+                                    && $rLL->[ $KK - 1 ]->[_TYPE_] eq 'b' );
+                            }
                         }
                     }
 
@@ -27152,7 +27339,7 @@ sub is_fragile_block_type {
                         # This can happen if input file has brace errors.
                         # Otherwise it shouldn't happen.  Not fatal but -lp
                         # formatting could get messed up.
-                        if ( DEVEL_MODE && !get_saw_brace_error() ) {
+                        if ( DEVEL_MODE && !$self->get_saw_brace_error() ) {
                             Fault(<<EOM);
 sequence numbers differ; at CLOSING line $iline, seq=$seqno, Kc=$KK .. at OPENING line $iline_o, seq=$seqno_o, Ko=$K_o, expecting Kc=$K_c_expect
 EOM
@@ -28238,7 +28425,12 @@ EOM
                 # if there are blank lines, we require that at least $num lines
                 # be non-blank up to the boundary with the next subgroup.
                 my $nog_b = my $nog_e = 1;
-                if ( @iblanks && !$rOpts_kgb_delete ) {
+
+                # Added -kobl check for b1568
+                if (   @iblanks
+                    && !$rOpts_kgb_delete
+                    && $rOpts->{'keep-old-blank-lines'} )
+                {
                     my $j_bb = $j_b + $num - 1;
                     my ( $i_bb_uu, $tok_bb_uu, $count_bb ) = @{ $group[$j_bb] };
                     $nog_b = $count_bb - $count_b + 1 == $num;
@@ -28735,7 +28927,7 @@ EOM
     );
 
     # Called once at the start of a new file
-    sub initialize_process_line_of_CODE {
+    sub initialize_closure_process_line_of_CODE {
         $K_last_nonblank_code       = undef;
         $K_dangling_elsif           = 0;
         $is_static_block_comment    = 0;
@@ -28743,7 +28935,7 @@ EOM
         $next_parent_seqno          = SEQ_ROOT;
         $next_slevel                = undef;
         return;
-    } ## end sub initialize_process_line_of_CODE
+    } ## end sub initialize_closure_process_line_of_CODE
 
     # Batch variables: these describe the current batch of code being formed
     # and sent down the pipeline.  They are initialized in the next
@@ -28754,7 +28946,7 @@ EOM
     );
 
     # Called before the start of each new batch
-    sub initialize_batch_variables {
+    sub initialize_closure_batch_variables {
 
         # Initialize array values for a new batch.  Any changes here must be
         # carefully coordinated with sub store_token_to_go.
@@ -28814,7 +29006,7 @@ EOM
         $forced_breakpoint_undo_count = 0;
 
         return;
-    } ## end sub initialize_batch_variables
+    } ## end sub initialize_closure_batch_variables
 
     sub leading_spaces_to_go {
 
@@ -29000,7 +29192,7 @@ EOM
         $token_lengths_to_go[$max_index_to_go] = $length;
 
         # Skip point initialization for these sparse arrays - undef's okay;
-        # See also related code in sub initialize_batch_variables.
+        # See also related code in sub initialize_closure_batch_variables.
         ## $old_breakpoint_to_go[$max_index_to_go]    = 0;
         ## $forced_breakpoint_to_go[$max_index_to_go] = 0;
         ## $block_type_to_go[$max_index_to_go]        = EMPTY_STRING;
@@ -29124,7 +29316,7 @@ EOM
         $self->grind_batch_of_CODE();
 
         # Done .. this batch is history
-        initialize_batch_variables();
+        initialize_closure_batch_variables();
 
         return;
     } ## end sub flush_batch_of_CODE
@@ -29348,9 +29540,20 @@ EOM
         #------------------------------------
         if ($is_block_comment) {
 
-            if ( $rOpts->{'delete-block-comments'} ) {
-                $self->flush();
-                return;
+            if ($rOpts_delete_block_comments) {
+
+                # do not delete '## no critic' comments
+                my $token = $rLL->[$K_last]->[_TOKEN_];
+                my $is_no_critic =
+                     !$rOpts_ignore_perlcritic_comments
+                  && length($token) > 10
+                  && substr( $token, 1, 1 ) eq '#'
+                  && $token =~ /^##\s*no\s+critic\b/;
+
+                if ( !$is_no_critic ) {
+                    $self->flush();
+                    return;
+                }
             }
 
             $index_start_one_line_block = undef;
@@ -30078,7 +30281,7 @@ EOM
                     {
                         # check for 'elsif' or 'else'
                         if ( !$is_elsif_else{$next_nonblank_token} ) {
-                            write_logfile_entry("(No else block)\n");
+                            $self->write_logfile_entry("(No else block)\n");
 
                             # Note that we cannot add a missing else block
                             # in this case because more code follows the
@@ -30086,7 +30289,7 @@ EOM
                             if ( $rOpts_warn_missing_else && !DEVEL_MODE ) {
                                 my $lno =
                                   $rLL->[$Ktoken_vars]->[_LINE_INDEX_] + 1;
-                                warning("$lno: No else block\n");
+                                $self->warning("$lno: No else block\n");
                             }
                         }
                     }
@@ -30099,16 +30302,16 @@ EOM
                             || !$is_elsif_else{ $rLL->[$K_next]->[_TOKEN_] } )
                         {
                             $K_dangling_elsif = $Ktoken_vars;
-                            write_logfile_entry("(No else block)\n");
+                            $self->write_logfile_entry("(No else block)\n");
                             if ( $rOpts_warn_missing_else && !DEVEL_MODE ) {
                                 my $lno =
                                   $rLL->[$Ktoken_vars]->[_LINE_INDEX_] + 1;
                                 if ($rOpts_add_missing_else) {
-                                    warning(
+                                    $self->warning(
                                         "$lno: Adding missing else block\n");
                                 }
                                 else {
-                                    warning(
+                                    $self->warning(
 "$lno: No else block (use -ame to add one)\n"
                                     );
                                 }
@@ -30828,7 +31031,7 @@ sub compare_indentation_levels {
             $self->[_tabbing_disagreement_count_]++;
 
             if ( $self->[_tabbing_disagreement_count_] <= MAX_NAG_MESSAGES ) {
-                write_logfile_entry(
+                $self->write_logfile_entry(
 "Start indentation disagreement: input=$guessed_indentation_level; output=$structural_indentation_level\n"
                 );
             }
@@ -30845,13 +31048,13 @@ sub compare_indentation_levels {
         if ($in_tabbing_disagreement) {
 
             if ( $self->[_tabbing_disagreement_count_] <= MAX_NAG_MESSAGES ) {
-                write_logfile_entry(
+                $self->write_logfile_entry(
 "End indentation disagreement from input line $in_tabbing_disagreement\n"
                 );
 
                 if ( $self->[_tabbing_disagreement_count_] == MAX_NAG_MESSAGES )
                 {
-                    write_logfile_entry(
+                    $self->write_logfile_entry(
                         "No further tabbing disagreements will be noted\n");
                 }
             }
@@ -31106,7 +31309,7 @@ EOM
 
     my %postponed_breakpoint;
 
-    sub initialize_postponed_breakpoint {
+    sub initialize_closure_postponed_breakpoint {
         %postponed_breakpoint = ();
         return;
     }
@@ -31167,13 +31370,13 @@ EOM
     # variables to keep track of indentation of unmatched containers.
     my %saved_opening_indentation;
 
-    sub initialize_grind_batch_of_CODE {
+    sub initialize_closure_grind_batch_of_CODE {
         @nonblank_lines_at_depth   = ();
         $peak_batch_size           = 0;
         $batch_count               = 0;
         %saved_opening_indentation = ();
         return;
-    } ## end sub initialize_grind_batch_of_CODE
+    } ## end sub initialize_closure_grind_batch_of_CODE
 
     # sub grind_batch_of_CODE receives sections of code which are the longest
     # possible lines without a break.  In other words, it receives what is left
@@ -32109,8 +32312,9 @@ EOM
         $nline = $#{$ri_last};
     }
 
-    $rindentation_list->[0] =
-      $nline;    # save line number to start looking next call
+    # save line number to start looking next call
+    $rindentation_list->[0] = $nline;
+
     my $ibeg       = $ri_first->[$nline];
     my $offset     = token_sequence_length( $ibeg, $i_opening ) - 1;
     my $is_leading = ( $ibeg == $i_opening );
@@ -32190,7 +32394,7 @@ sub pad_array_to_go {
             # Nesting depths are set to be >=0 in sub write_line, so it should
             # not be possible to get here unless the code has a bracing error
             # which leaves a closing brace with zero nesting depth.
-            if ( !get_saw_brace_error() ) {
+            if ( !$self->get_saw_brace_error() ) {
                 if (DEVEL_MODE) {
                     Fault(<<EOM);
 Program bug in pad_array_to_go: hit nesting error which should have been caught
@@ -34735,7 +34939,7 @@ sub note_added_semicolon {
         $self->[_first_added_semicolon_at_] = $line_number;
     }
     $self->[_added_semicolon_count_]++;
-    write_logfile_entry("Added ';' here\n");
+    $self->write_logfile_entry("Added ';' here\n");
     return;
 } ## end sub note_added_semicolon
 
@@ -34746,7 +34950,8 @@ sub note_deleted_semicolon {
         $self->[_first_deleted_semicolon_at_] = $line_number;
     }
     $self->[_deleted_semicolon_count_]++;
-    write_logfile_entry("Deleted unnecessary ';' at line $line_number\n");
+    $self->write_logfile_entry(
+        "Deleted unnecessary ';' at line $line_number\n");
     return;
 } ## end sub note_deleted_semicolon
 
@@ -34759,7 +34964,7 @@ sub note_embedded_tab {
     }
 
     if ( $self->[_embedded_tab_count_] <= MAX_NAG_MESSAGES ) {
-        write_logfile_entry("Embedded tabs in quote or pattern\n");
+        $self->write_logfile_entry("Embedded tabs in quote or pattern\n");
     }
     return;
 } ## end sub note_embedded_tab
@@ -36077,7 +36282,7 @@ sub do_colon_breaks {
     my $length_tol;
     my $lp_tol_boost;
 
-    sub initialize_break_lists {
+    sub initialize_closure_break_lists {
         @dont_align         = ();
         @has_broken_sublist = ();
         @want_comma_break   = ();
@@ -36144,7 +36349,7 @@ sub do_colon_breaks {
         # This is now '$high_stress_level'.
 
         return;
-    } ## end sub initialize_break_lists
+    } ## end sub initialize_closure_break_lists
 
     # routine to define essential variables when we go 'up' to
     # a new depth
@@ -36201,6 +36406,34 @@ sub do_colon_breaks {
         }
         return;
     } ## end sub check_for_new_minimum_depth
+
+    sub binary_operator_break_location {
+        my ( $type_ii, $token_ii ) = @_;
+
+        # Given:
+        #   $type_ii = token type
+        #   $token_ii = token text
+        # Returns:
+        #  -1 if want break before this binary operator
+        #   1 if want break after this binary operator
+        #   0 if neither
+        my $tok_ii = $type_ii;
+        if ( $type_ii ne 'k' ) {
+            return 0 if ( !$is_binary_operator_type{$type_ii} );
+        }
+        else {
+            $tok_ii = $token_ii;
+            return 0 if ( !$is_and_or{$tok_ii} );
+        }
+        my $lbs = $left_bond_strength{$tok_ii};
+        return 0 if ( !defined($lbs) );
+        my $rbs = $right_bond_strength{$tok_ii};
+        return 0 if ( !defined($rbs) );
+
+        return -1 if ( $rbs > $lbs );
+        return 1  if ( $rbs < $lbs );
+        return 0;
+    } ## end sub binary_operator_break_location
 
     sub set_comma_breakpoints {
 
@@ -36424,17 +36657,24 @@ EOM
                     # the token could also be checked if type_m eq 'k'
                     if ( $is_uncontained_comma_break_included_type{$type_m} ) {
 
-                        # Rule added to fix b1449:
-                        # Do not break before a '?' if -nbot is set
-                        # Otherwise, we may alternately arrive here and
-                        # set the break, or not, depending on the input.
-                        my $no_break;
+                        my $no_break = 0;
                         my $ibreak_p = $inext_to_go[$ibreak_m];
-                        if (  !$rOpts_break_at_old_ternary_breakpoints
-                            && $ibreak_p <= $max_index_to_go )
-                        {
+                        if ( $ibreak_p <= $max_index_to_go ) {
                             my $type_p = $types_to_go[$ibreak_p];
-                            $no_break = $type_p eq '?';
+
+                            # Rule added to fix b1449:
+                            # Do not break before a '?' if -nbot is set
+                            # Otherwise, we may alternately arrive here and
+                            # set the break, or not, depending on the input.
+                            if ( !$rOpts_break_at_old_ternary_breakpoints ) {
+                                $no_break = $type_p eq '?';
+                            }
+
+                            # Do not break ahead of a binary operator which
+                            # disagrees with break preferences (b1569).
+                            $no_break ||=
+                              binary_operator_break_location( $type_p,
+                                $tokens_to_go[$ibreak_p] ) > 0;
                         }
 
                         $self->set_forced_breakpoint($ibreak)
@@ -38293,7 +38533,7 @@ EOM
 
         my (
 
-            $self,    #
+            $self,
 
             $number_of_fields_best,
             $rhash_IN,
@@ -38670,7 +38910,8 @@ EOM
 
             # use old breakpoints if this is a 'big' list
             if ( $packed_lines > 2 && $item_count > 10 ) {
-                write_logfile_entry("List sparse: using old breakpoints\n");
+                $self->write_logfile_entry(
+                    "List sparse: using old breakpoints\n");
                 $self->copy_old_breakpoints( $i_first_comma, $i_last_comma,
                     $break_at_old_commas );
             }
@@ -39269,7 +39510,7 @@ EOM
             $use_separate_first_term,
         ) = @_;
 
-        write_logfile_entry(
+        $self->write_logfile_entry(
             "List: auto formatting with $number_of_fields fields/row\n");
 
         if ( $number_of_fields < 1 ) {
@@ -39792,7 +40033,7 @@ sub get_available_spaces_to_go {
         };
     } ## end BEGIN
 
-    sub initialize_lp_vars {
+    sub initialize_closure_lp_vars {
 
         # initialize gnu variables for a new file;
         # must be called once at the start of a new file.
@@ -39831,7 +40072,7 @@ sub get_available_spaces_to_go {
         $rLP->[$max_lp_stack]->[_lp_space_count_]     = 0;
 
         return;
-    } ## end sub initialize_lp_vars
+    } ## end sub initialize_closure_lp_vars
 
     # hashes for efficient testing
     my %hash_test1;
@@ -42471,7 +42712,7 @@ sub undo_contained_ci {
 {
     my %undo_extended_ci;
 
-    sub initialize_undo_ci {
+    sub initialize_closure_undo_ci {
         %undo_extended_ci = ();
         return;
     }
@@ -44101,12 +44342,12 @@ sub make_paren_name {
     my ( $last_indentation_written, $last_unadjusted_indentation,
         $last_leading_token );
 
-    sub initialize_get_final_indentation {
+    sub initialize_closure_get_final_indentation {
         $last_indentation_written    = 0;
         $last_unadjusted_indentation = 0;
         $last_leading_token          = EMPTY_STRING;
         return;
-    } ## end sub initialize_get_final_indentation
+    } ## end sub initialize_closure_get_final_indentation
 
     sub get_final_indentation {
 
@@ -45814,7 +46055,7 @@ sub set_vertical_tightness_flags {
     my $leading_block_text_line_length;
     my $leading_block_text_line_number;
 
-    sub initialize_csc_vars {
+    sub initialize_closure_csc_vars {
         $rblock_leading_text          = {};
         %block_opening_line_number    = ();
         $csc_new_statement_ok         = 1;
@@ -45824,7 +46065,7 @@ sub set_vertical_tightness_flags {
         $accumulating_text_for_block  = EMPTY_STRING;
         reset_block_text_accumulator();
         return;
-    } ## end sub initialize_csc_vars
+    } ## end sub initialize_closure_csc_vars
 
     sub reset_block_text_accumulator {
 
@@ -46309,8 +46550,9 @@ sub add_closing_side_comment {
 
     # add closing side comments after closing block braces if -csc used
 
-    my $rLL        = $self->[_rLL_];
-    my $this_batch = $self->[_this_batch_];
+    my $rLL             = $self->[_rLL_];
+    my $length_function = $self->[_length_function_];
+    my $this_batch      = $self->[_this_batch_];
 
     my $ri_first = $this_batch->[_ri_first_];
     my $ri_last  = $this_batch->[_ri_last_];
@@ -46474,7 +46716,7 @@ sub add_closing_side_comment {
                         if ( defined($K) ) {
                             $msg_line_number = $rLL->[$K]->[_LINE_INDEX_] + 1;
                         }
-                        warning(
+                        $self->warning(
 "perltidy -cscw replaced: $tokens_to_go[$max_index_to_go]\n",
                             $msg_line_number,
                         );
@@ -46529,7 +46771,10 @@ sub add_closing_side_comment {
             # switch to the new csc (unless we deleted it!)
             if ($token) {
 
-                my $len_tok = length($token); # NOTE: length no longer important
+                my $len_tok =
+                    $length_function
+                  ? $length_function->($token)
+                  : length($token);
                 my $added_len =
                   $len_tok - $token_lengths_to_go[$max_index_to_go];
 
@@ -46573,11 +46818,11 @@ sub wrapup {
     my $file_writer_object = $self->[_file_writer_object_];
     $file_writer_object->decrement_output_line_number()
       ;    # fix up line number since it was incremented
-    we_are_at_the_last_line();
+    $self->we_are_at_the_last_line();
 
     my $max_depth = $self->[_maximum_BLOCK_level_];
     my $at_line   = $self->[_maximum_BLOCK_level_at_line_];
-    write_logfile_entry(
+    $self->write_logfile_entry(
 "Maximum leading structural depth is $max_depth in input at line $at_line\n"
     );
 
@@ -46589,16 +46834,17 @@ sub wrapup {
         my $first = ( $added_semicolon_count > 1 ) ? "First" : EMPTY_STRING;
         my $what =
           ( $added_semicolon_count > 1 ) ? "semicolons were" : "semicolon was";
-        write_logfile_entry("$added_semicolon_count $what added:\n");
-        write_logfile_entry(
+        $self->write_logfile_entry("$added_semicolon_count $what added:\n");
+        $self->write_logfile_entry(
             "  $first at input line $first_added_semicolon_at\n");
 
         if ( $added_semicolon_count > 1 ) {
-            write_logfile_entry(
+            $self->write_logfile_entry(
                 "   Last at input line $last_added_semicolon_at\n");
         }
-        write_logfile_entry("  (Use -nasc to prevent semicolon addition)\n");
-        write_logfile_entry("\n");
+        $self->write_logfile_entry(
+            "  (Use -nasc to prevent semicolon addition)\n");
+        $self->write_logfile_entry("\n");
     }
 
     my $deleted_semicolon_count    = $self->[_deleted_semicolon_count_];
@@ -46610,17 +46856,18 @@ sub wrapup {
           ( $deleted_semicolon_count > 1 )
           ? "semicolons were"
           : "semicolon was";
-        write_logfile_entry(
+        $self->write_logfile_entry(
             "$deleted_semicolon_count unnecessary $what deleted:\n");
-        write_logfile_entry(
+        $self->write_logfile_entry(
             "  $first at input line $first_deleted_semicolon_at\n");
 
         if ( $deleted_semicolon_count > 1 ) {
-            write_logfile_entry(
+            $self->write_logfile_entry(
                 "   Last at input line $last_deleted_semicolon_at\n");
         }
-        write_logfile_entry("  (Use -ndsm to prevent semicolon deletion)\n");
-        write_logfile_entry("\n");
+        $self->write_logfile_entry(
+            "  (Use -ndsm to prevent semicolon deletion)\n");
+        $self->write_logfile_entry("\n");
     }
 
     my $embedded_tab_count    = $self->[_embedded_tab_count_];
@@ -46632,17 +46879,19 @@ sub wrapup {
           ( $embedded_tab_count > 1 )
           ? "quotes or patterns"
           : "quote or pattern";
-        write_logfile_entry("$embedded_tab_count $what had embedded tabs:\n");
-        write_logfile_entry(
+        $self->write_logfile_entry(
+            "$embedded_tab_count $what had embedded tabs:\n");
+        $self->write_logfile_entry(
 "This means the display of this script could vary with device or software\n"
         );
-        write_logfile_entry("  $first at input line $first_embedded_tab_at\n");
+        $self->write_logfile_entry(
+            "  $first at input line $first_embedded_tab_at\n");
 
         if ( $embedded_tab_count > 1 ) {
-            write_logfile_entry(
+            $self->write_logfile_entry(
                 "   Last at input line $last_embedded_tab_at\n");
         }
-        write_logfile_entry("\n");
+        $self->write_logfile_entry("\n");
     }
 
     my $first_tabbing_disagreement = $self->[_first_tabbing_disagreement_];
@@ -46650,7 +46899,7 @@ sub wrapup {
     my $in_tabbing_disagreement    = $self->[_in_tabbing_disagreement_];
 
     if ($first_tabbing_disagreement) {
-        write_logfile_entry(
+        $self->write_logfile_entry(
 "First indentation disagreement seen at input line $first_tabbing_disagreement\n"
         );
     }
@@ -46659,46 +46908,46 @@ sub wrapup {
     if ($first_btd) {
         my $msg =
 "First closing brace indentation disagreement started at input line $first_btd\n";
-        write_logfile_entry($msg);
+        $self->write_logfile_entry($msg);
 
         # leave a hint in the .ERR file if there was a brace error
-        if ( get_saw_brace_error() ) { warning("NOTE: $msg") }
+        if ( $self->get_saw_brace_error() ) { $self->warning("NOTE: $msg") }
     }
 
     my $in_btd = $self->[_in_brace_tabbing_disagreement_];
     if ($in_btd) {
         my $msg =
 "Ending with brace indentation disagreement which started at input line $in_btd\n";
-        write_logfile_entry($msg);
+        $self->write_logfile_entry($msg);
 
         # leave a hint in the .ERR file if there was a brace error
-        if ( get_saw_brace_error() ) { warning("NOTE: $msg") }
+        if ( $self->get_saw_brace_error() ) { $self->warning("NOTE: $msg") }
     }
 
     if ($in_tabbing_disagreement) {
         my $msg =
 "Ending with indentation disagreement which started at input line $in_tabbing_disagreement\n";
-        write_logfile_entry($msg);
+        $self->write_logfile_entry($msg);
     }
     else {
 
         if ($last_tabbing_disagreement) {
 
-            write_logfile_entry(
+            $self->write_logfile_entry(
 "Last indentation disagreement seen at input line $last_tabbing_disagreement\n"
             );
         }
         else {
-            write_logfile_entry("No indentation disagreement seen\n");
+            $self->write_logfile_entry("No indentation disagreement seen\n");
         }
     }
 
     if ($first_tabbing_disagreement) {
-        write_logfile_entry(
+        $self->write_logfile_entry(
 "Note: Indentation disagreement detection is not accurate for outdenting and -lp.\n"
         );
     }
-    write_logfile_entry("\n");
+    $self->write_logfile_entry("\n");
 
     my $vao = $self->[_vertical_aligner_object_];
     $vao->report_anything_unusual();

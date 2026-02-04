@@ -14,7 +14,7 @@ my $build = Module::Build->new(
       'Syntax::Keyword::Match' => 0,
 
       'Future::Buffer' => '0.03',
-      'Future::IO' => 0,
+      'Future::IO' => '0.17',
       'Future::Selector' => '0.02',
    },
    test_requires => {

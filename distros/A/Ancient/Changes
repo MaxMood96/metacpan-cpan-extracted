@@ -1,5 +1,41 @@
 Revision history for Ancient
 
+0.18    2026-02-03
+        - Fix C23 bool/true/false compatibility across all XS modules
+          * Old Perl defines 'bool' but not 'true'/'false' - now handled
+          * Updated 6 compat headers with proper C23 guards
+        - Add xt/c-compat.t author test for C standard compatibility
+          * Checks for C23 keyword conflicts (bool, true, false, nullptr)
+          * Checks for C89/C99 portability issues
+          * Checks for unsafe functions (sprintf, strcpy, gets)
+          * Checks for compiler-specific extensions
+
+0.17    2026-02-03
+        - object: Add DEMOLISH support for destructor callbacks
+          * Define DEMOLISH method in class, auto-wrapped DESTROY installed
+          * Zero overhead: wrapper only installed if DEMOLISH exists
+        - object: Add Role system for reusable slot/method bundles
+          * object::role($name, @slots) - define a role with slots
+          * object::requires($role, @methods) - declare required methods
+          * object::with($class, @roles) - compose roles into class
+          * object::does($obj, $role) - check role consumption
+          * Copies slots and methods, validates required methods
+        - object: Add Method Modifiers (before/after/around)
+          * object::before('Class::method', \&callback)
+          * object::after('Class::method', \&callback)
+          * object::around('Class::method', sub { my ($orig, $self) = @_; ... })
+          * Multiple modifiers stack correctly
+          * Zero overhead: wrapper only installed when modifier added
+        - object: Add lazy/builder support for deferred slot initialization
+          * 'slot:Type:lazy:builder(_build_method)' syntax
+          * Value computed on first access, cached thereafter
+        - object: Add clearer/predicate support
+          * 'slot:Type:clearer' installs clear_slot() method
+          * 'slot:Type:predicate' installs has_slot() method
+        - Add GvCV_set, HvNAMELEN, newXS_flags compat macros for Perl 5.10
+        - All new features have zero overhead when not used
+        - Updated POD documentation for all new features
+
 0.16    2026-02-03
         - Fix pad_alloc undefined symbol on Perl 5.14.x-5.15.x (FreeBSD 5.14.4)
           by correcting version check from 5.14 to 5.16 in util_compat.h and
@@ -8,6 +44,8 @@ Revision history for Ancient
           (FreeBSD 5.16.3-thread-multi) by using PERL_IMPLICIT_CONTEXT instead
           of USE_ITHREADS for context detection in all *_compat.h headers
         - Fix PADNAMEf_CONST redefinition warning in slot.c
+        - Skip const leak tests on Perl < 5.16 to avoid "Bizarre copy of UNKNOWN"
+          errors with readonly SVs on older Perls (FreeBSD 5.14.4)
 
 0.15    2026-02-02
         - Fix quadmath compatibility: use NVgf format macro instead of %g

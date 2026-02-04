@@ -8,8 +8,6 @@ Changes
 helper/generate_header_methods.pl
 lib/SPVM/HTTP/Tiny.pm
 lib/SPVM/HTTP/Tiny.spvm
-lib/SPVM/HTTP/Tiny/Handle.pm
-lib/SPVM/HTTP/Tiny/Handle.spvm
 lib/SPVM/HTTP/Tiny/Response.pm
 lib/SPVM/HTTP/Tiny/Response.spvm
 LICENSE
@@ -18,7 +16,6 @@ MANIFEST			This list of files
 MANIFEST.SKIP
 README.md
 t/HTTP-Tiny-online.t
-t/HTTP-Tiny.t.disable
 t/lib/SPVM/TestCase/HTTP/Tiny.spvm
 t/webapp/basic.pl
 META.yml                                 Module YAML meta-data (added by MakeMaker)

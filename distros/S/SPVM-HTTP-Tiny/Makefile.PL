@@ -48,17 +48,6 @@ WriteMakefile(
   },
   PREREQ_PM         => {
     %configure_and_runtime_requires,
-    'SPVM::IO' => '0.211',
-    'SPVM::Regex' => '0.252',
-    'SPVM::Mozilla::CA' => '0.001',
-    'SPVM::File::Temp' => '0.021',
-    'SPVM::Time::Piece' => '0.003',
-    'SPVM::Time::Local' => '0.112',
-    'SPVM::File::Temp' => '0.026',
-    'SPVM::File::Copy' => '0.022',
-    'SPVM::Digest::SHA' => '0.065',
-    'SPVM::MIME::Base64' => '1.003',
-    'SPVM::JSON' => '1.002',
     'SPVM::Mojolicious' => '0.042',
   },
 );

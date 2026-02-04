@@ -2,7 +2,7 @@ package Blessed::Merge;
 
 use 5.006;
 
-our $VERSION = '1.01';
+our $VERSION = '1.02';
 use strict;
 use warnings;
 use Scalar::Util qw/reftype/;
@@ -107,7 +107,7 @@ Blessed::Merge - Merge Blessed Refs.
 
 =head1 VERSION
 
-Version 1.01
+Version 1.02
 
 =cut
 

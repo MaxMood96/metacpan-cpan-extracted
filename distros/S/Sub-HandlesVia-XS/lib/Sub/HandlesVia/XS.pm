@@ -8,7 +8,7 @@ use Types::Common -is, -types;
 
 BEGIN {
 	our $AUTHORITY = 'cpan:TOBYINK';
-	our $VERSION   = '0.003000';
+	our $VERSION   = '0.003001';
 	
 	require XSLoader;
 	__PACKAGE__->XSLoader::load( $VERSION );
@@ -157,7 +157,6 @@ This software is copyright (c) 2026 by Toby Inkster.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.
-
 
 =head1 DISCLAIMER OF WARRANTIES
 

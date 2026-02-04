@@ -1,4 +1,5 @@
 #!/usr/bin/env perl
+package Markdown::Render::CLI;
 
 use strict;
 use warnings;
@@ -6,6 +7,7 @@ use warnings;
 use Carp;
 use Cwd;
 use Config::Tiny;
+use CLI::Simple::Constants qw(:chars :booleans);
 use Data::Dumper;
 use English qw(-no_match_vars);
 use File::Basename;
@@ -14,78 +16,33 @@ use Readonly;
 
 use Markdown::Render;
 
-our $VERSION = $Markdown::Render::VERSION;
+our $VERSION = '2.0.2';
 
-Readonly our $EMPTY => q{};
-Readonly our $TRUE  => 1;
-Readonly our $FALSE => 0;
+use parent qw(CLI::Simple);
 
 ########################################################################
-sub version {
+sub choose(&) { ## no critic
 ########################################################################
-  my ($name) = File::Basename::fileparse( $PROGRAM_NAME, qr/[.][^.]+$/xsm );
-
-  print "$name $VERSION\n";
-
-  return;
+  return $_[0]->();
 }
 
 ########################################################################
-sub usage {
+sub cmd_version {
 ########################################################################
-  print <<'END_OF_USAGE';
-usage: md-utils.pl options [markdown-file]
+  my ($self) = @_;
 
-Utility to add a table of contents and other goodies to your GitHub
-flavored markdown.
+  my ($name) = File::Basename::fileparse( $PROGRAM_NAME, qr/[.][^.]+$/xsm );
 
- - Add @TOC@ where you want to see your TOC.
- - Add @TOC_BACK@ to insert an internal link to TOC
- - Add @DATE(format-str)@ where you want to see a formatted date
- - Add @GIT_USER@ where you want to see your git user name
- - Add @GIT_EMAIL@ where you want to see your git email address
- - Use the --render option to render the HTML for the markdown
+  print {*STDOUT} "$name $VERSION\n";
 
-Examples:
----------
- md-utils.pl README.md.in > README.md
-
- md-utils.pl -r README.md.in
-
-Options
--------
--B, --body     default is to add body tag, use --nobody to prevent    
--b, --both     interpolates intermediate file and renders HTML
--c, --css      css file
--e, --engine   github, text_markdown (default: github)
--h             help
--i, --infile   input file, default: STDIN
--m, --mode     for GitHub API mode is 'gfm' or 'markdown' (default: markdown)
--n, --no-titl  do not print a title for the TOC
--o, --outfile  outfile, default: STDOUT
--r, --render   render only, does NOT interpolate keywords
--R, --raw      return raw HTML from engine
--t, --title    string to use for a custom title, default: "Table of Contents"
--v, --version  version
--N, --nocss    do not add any CSS link
-
-Tips
-----
-* Use !# to prevent a header from being include in the table of contents.
-  Add your own custom back to TOC message @TOC_BACK(Back to Index)@
-
-* Date format strings are based on format strings supported by the Perl
-  module 'Date::Format'.  The default format is %Y-%m-%d if not format is given.
-
-* use the --nobody tag to return the HTML without the <html><body></body></html>
-  wrapper. --raw mode will also return HTML without wrapper
-END_OF_USAGE
-  return;
+  return $SUCCESS;
 }
 
 ########################################################################
 sub get_git_user {
 ########################################################################
+  my ($self) = @_;
+
   my ( $git_user, $git_email );
 
   for ( ( getcwd . '.git/config' ), "$ENV{HOME}/.gitconfig" ) {
@@ -101,101 +58,224 @@ sub get_git_user {
   return ( $git_user, $git_email );
 }
 
-# +------------------------ +
-# | MAIN SCRIPT STARTS HERE |
-# +------------------------ +
+########################################################################
+sub new {
+########################################################################
+  my ( $class, @args ) = @_;
 
-my %options;
+  # spoof CLI::Simple - force command render and preserve argument position
+  unshift @ARGV, 'render';
 
-my @options_spec = qw(
-  body|B!
-  both|b
-  css=s
-  debug
-  engine=s
-  help
-  infile=s
-  mode=s
-  no-title
-  nocss|N
-  outfile=s
-  raw|R
-  render|r
-  title=s
-  version
-);
-
-GetOptions( \%options, @options_spec )
-  or croak 'could not parse options';
-
-$options{body} //= $TRUE;
-
-if ( $options{raw} ) {
-  $options{body} = $FALSE;
+  return $class->SUPER::new(@args);
 }
 
-if ( exists $options{help} ) {
-  usage;
-  exit 0;
-}
+########################################################################
+sub init {
+########################################################################
+  my ($self) = @_;
 
-if ( exists $options{version} ) {
-  version;
-  exit 0;
-}
-
-$options{no_title} = delete $options{'no-title'};
-
-my $markdown;
-
-if ( !$options{infile} ) {
-
-  if (@ARGV) {
-    $options{infile} = shift @ARGV;
+  if ( $self->get_raw ) {
+    $self->set_body($FALSE);
   }
-  elsif ( !-t STDIN ) {  ## no critic (ProhibitInteractiveTest)
-    local $RS = undef;
 
-    my $fh = *STDIN;
+  return;
+}
+
+########################################################################
+sub cmd_render {
+########################################################################
+  my ($self) = @_;
+
+  my $markdown;
+
+  my $infile = $self->get_infile;
+
+  if ( !$infile ) {
+    ($infile) = $self->get_args;
+
+    my $fh = choose {
+      return *STDIN
+        if !$infile && !-t STDIN;
+
+      open my $fh, '<', $infile
+        or croak sprintf "ERROR: could not open %s for reading\n%s", $infile, $OS_ERROR;
+
+      return $fh;
+    };
+
+    local $RS = undef;
 
     $markdown = <$fh>;
   }
+
+  my ( $git_user, $git_email ) = $self->get_git_user();
+
+  my $md = Markdown::Render->new(
+    markdown  => $markdown,
+    body      => $self->get_body,
+    css       => $self->get_css,
+    engine    => $self->get_engine,
+    git_email => $git_email,
+    user      => $git_user,
+    html      => $self->get_html,
+    mode      => $self->get_mode,
+    no_title  => $self->get_no_title,
+    raw       => $self->get_raw,
+    render    => $self->get_render,
+    title     => $self->get_title,
+  );
+
+  my $ofh = choose {
+    my $outfile = $self->get_outfile;
+
+    return *STDOUT
+      if !$outfile;
+
+    open my $fh, '>', $outfile
+      or croak sprintf "ERROR: could not open output file\n%s", $self->get_outfile, $OS_ERROR;
+
+    return $fh;
+  };
+
+  eval {
+    if ( $self->get_both ) {
+      $md->finalize_markdown->render_markdown;
+
+      $md->print_html(
+        fh    => $ofh,
+        body  => $self->get_body,
+        css   => $self->get_css,
+        title => $self->get_title,
+      );
+    }
+    elsif ( $self->get_render ) {
+      $md->render_markdown;
+      $md->print_html(
+        fh    => $ofh,
+        body  => $self->get_body,
+        css   => $self->get_css,
+        title => $self->get_title,
+      );
+    }
+    else {
+      $md->finalize_markdown;
+      print {$ofh} $md->get_markdown;
+    }
+  };
+
+  croak "ERROR: $EVAL_ERROR"
+    if $EVAL_ERROR;
+
+  close $ofh;
+
+  return $SUCCESS;
 }
 
-my ( $git_user, $git_email ) = get_git_user();
+########################################################################
+sub main {
+########################################################################
 
-$options{git_user}  = $git_user  // $EMPTY;
-$options{git_email} = $git_email // $EMPTY;
+  my @option_specs = qw(
+    body|B!
+    both|b
+    css=s
+    debug
+    engine=s
+    help
+    infile=s
+    mode=s
+    no-title
+    nocss|N
+    outfile=s
+    raw|R
+    render|r
+    title=s
+    version
+  );
 
-my $md = Markdown::Render->new( %options, markdown => $markdown );
+  my %commands = ( version => \&cmd_version, render => \&cmd_render );
 
-my $ofh = *STDOUT;
+  my $cli = Markdown::Render::CLI->new(
+    option_specs    => \@option_specs,
+    commands        => \%commands,
+    default_options => { body => $TRUE, },
+    extra_options   => [qw(git_user git_email html)],
+  );
 
-if ( exists $options{outfile} ) {
-  open $ofh, '>', $options{outfile}  ## no critic (RequireBriefOpen)
-    or croak "could not open output file\n";
+  return $cli->run();
+
 }
 
-eval {
-  if ( $options{both} ) {
-    $md->finalize_markdown->render_markdown;
-    $md->print_html( %options, fh => $ofh );
-  }
-  elsif ( $options{render} ) {
-    $md->render_markdown;
-    $md->print_html( %options, fh => $ofh );
-  }
-  else {
-    $md->finalize_markdown;
-    print {$ofh} $md->get_markdown;
-  }
-};
-
-croak "ERROR: $EVAL_ERROR"
-  if $EVAL_ERROR;
-
-close $ofh;
-
-exit 0;
+exit main();
 
 __END__
+
+=pod
+
+=head1 USAGE
+
+ md-utils.pl options [markdown-file]
+
+Utility to add a table of contents and other goodies to your GitHub
+flavored markdown.
+
+=over 4
+
+=item * @TOC@ where you want to see your TOC.
+
+=item * @TOC_BACK@ to insert an internal link to TOC
+
+=item * @DATE(format-str)@ where you want to see a formatted date
+
+=item * @GIT_USER@ where you want to see your git user name
+
+=item * @GIT_EMAIL@ where you want to see your git email address
+
+=item * the --render option to render the HTML for the markdown
+
+=back
+
+=head2 Examples
+
+ md-utils.pl README.md.in > README.md
+
+ md-utils.pl -r README.md.in
+
+
+=head2 Options
+
+ -B, --body     default is to add body tag, use --nobody to prevent    
+ -b, --both     interpolates intermediate file and renders HTML
+ -c, --css      css file
+ -e, --engine   github, text_markdown (default: github)
+ -h             help
+ -i, --infile   input file, default: STDIN
+ -m, --mode     for GitHub API mode is 'gfm' or 'markdown' (default: markdown)
+ -n, --no-titl  do not print a title for the TOC
+ -o, --outfile  outfile, default: STDOUT
+ -r, --render   render only, does NOT interpolate keywords
+ -R, --raw      return raw HTML from engine
+ -t, --title    string to use for a custom title, default: "Table of Contents"
+ -v, --version  version
+ -N, --nocss    do not add any CSS link
+
+=head2 Tips
+
+=over 4
+
+=item *  Use !# to prevent a header from being include in the table of contents.
+
+Add your own custom back to TOC message @TOC_BACK(Back to Index)@
+
+=item *  Date format strings are based on format strings supported by the Perl module 'Date::Format'.
+
+The default format is %Y-%m-%d if not format is given.
+
+=item *  use the --nobody tag to return the HTML without the <html><body></body></html>
+  wrapper. 
+
+C<--raw> mode will also return HTML without wrapper.
+
+=back
+
+=cut

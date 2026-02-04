@@ -29,6 +29,9 @@ WriteMakefile(
         'Type::Params'        => 0,
         'Types::Standard'     => 0,
         'Scalar::Util'        => 0,
+        'DBIx::Class'         => 0,
+        'DBIx::Class'         => '0.082841',
+        'DBIx::Class::InflateColumn::Serializer' => '0',
     },
     TEST_REQUIRES => {
         'DBI'                 => 0,
@@ -54,9 +57,9 @@ WriteMakefile(
                 file    => 'lib/DBIx/Class/Async/ResultSet.pm',
                 version => MM->parse_version('lib/DBIx/Class/Async/ResultSet.pm')
             },
-            'DBIx::Class::Async::ResultComponent' => {
-                file    => 'lib/DBIx/Class/Async/ResultComponent.pm',
-                version => MM->parse_version('lib/DBIx/Class/Async/ResultComponent.pm')
+            'DBIx::Class::Async::ResultSetColumn' => {
+                file    => 'lib/DBIx/Class/Async/ResultSetColumn.pm',
+                version => MM->parse_version('lib/DBIx/Class/Async/ResultSetColumn.pm')
             },
             'DBIx::Class::Async::ResultSet::Pager' => {
                 file    => 'lib/DBIx/Class/Async/ResultSet/Pager.pm',

@@ -29,7 +29,7 @@ optional_features: {}
 provides:
   Sub::HandlesVia::XS:
     file: lib/Sub/HandlesVia/XS.pm
-    version: '0.003000'
+    version: '0.003001'
 requires:
   Types::Common: '2.010001'
   perl: '5.008008'
@@ -39,5 +39,5 @@ resources:
   homepage: https://metacpan.org/release/Sub-HandlesVia-XS
   license: http://dev.perl.org/licenses/
   repository: git://github.com/tobyink/p5-sub-handlesvia-xs.git
-version: '0.003000'
+version: '0.003001'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

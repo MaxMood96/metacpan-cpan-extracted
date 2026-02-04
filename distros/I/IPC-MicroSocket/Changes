@@ -1,5 +1,9 @@
 Revision history for IPC-MicroSocket
 
+0.05    2026-02-03
+        [BUGFIXES]
+         * Remember to set O_NONBLOCK on server and client filehandles
+
 0.04    2026-01-29
         [CHANGES]
          * Provide a `->new_inprocess` client constructor for convenience of

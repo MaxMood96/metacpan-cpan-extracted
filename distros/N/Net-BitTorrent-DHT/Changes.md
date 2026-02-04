@@ -1,6 +1,15 @@
 # Changelog
 
-All notable changes to Net::BitTorrent::DHT will be documented in this file.
+All notable changes to Net::BitTorrent::DHT will probably be documented in this file.
+
+## [v2.0.6] - 2026-02-04
+
+### Added
+
+- Added `node_id_rotation_interval` parameter to constructor (default: 2 hours).
+- Added high-level `announce_infohash($ih, $port)` method which simplifies the multi-step `get_peers` and `announce_peer` process.
+- Added `export_state()` and `import_state()` methods to facilitate DHT routing table persistence across sessions.
+- Added `validate_node_id()` method to `Net::BitTorrent::DHT::Security` for BEP 42 compliance.
 
 ## [v2.0.5] - 2026-01-30
 
@@ -103,7 +112,8 @@ This is a total rewrite. I was breaking apart the Kademlia stuff into smaller pi
 
 - original version (broken from unstable Net::BitTorrent dist)
 
-[Unreleased]: https://github.com/sanko/Net-BitTorrent-DHT.pm/compare/v2.0.5...HEAD
+[Unreleased]: https://github.com/sanko/Net-BitTorrent-DHT.pm/compare/v2.0.6...HEAD
+[v2.0.6]: https://github.com/sanko/Net-BitTorrent-DHT.pm/compare/v2.0.5...v2.0.6
 [v2.0.5]: https://github.com/sanko/Net-BitTorrent-DHT.pm/compare/v2.0.4...v2.0.5
 [v2.0.4]: https://github.com/sanko/Net-BitTorrent-DHT.pm/compare/v2.0.3...v2.0.4
 [v2.0.3]: https://github.com/sanko/Net-BitTorrent-DHT.pm/compare/v2.0.2...v2.0.3

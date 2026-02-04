@@ -6,6 +6,18 @@ Home page:    <https://metacpan.org/release/Sub-HandlesVia-XS>
 Bug tracker:  <https://github.com/tobyink/p5-sub-handlesvia-xs/issues>
 Maintainer:   Toby Inkster (TOBYINK) <tobyink@cpan.org>
 
+0.003001	2026-02-03
+
+ [ Bug Fixes ]
+ - Fix issues with CvISXSUB not being defined on Perl older than 5.8.9.
+ - Fix segfaults sorting on Perl older than around 5.20.0.
+ - Fixes for sorting on non-glibc platforms.
+
+ [ Other ]
+ - Allow module to be built with MULTICALL disabled (perl Makefile.PL
+   CCFLAGS='-DDO_MULTICALL=0') mostly for testing.
+ - Gracefully handle exceptions thrown in a sorting callback.
+
 0.003000	2026-02-01
 
  - Added: Two new array methods: none and not_all_true.

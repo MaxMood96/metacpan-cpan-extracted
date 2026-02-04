@@ -1,7 +1,11 @@
 package DBIx::Class::Async::ResultSet::Pager;
 
+$DBIx::Class::Async::ResultSet::Pager::VERSION   = '0.51';
+$DBIx::Class::Async::ResultSet::Pager::AUTHORITY = 'cpan:MANWAR';
+
 use strict;
 use warnings;
+use Carp;
 use Future;
 use POSIX qw(ceil);
 
@@ -11,11 +15,9 @@ DBIx::Class::Async::ResultSet::Pager - Asynchronous pagination handling for Asyn
 
 =head1 VERSION
 
-Version 0.49
+Version 0.51
 
 =cut
-
-our $VERSION = '0.49';
 
 =head1 SYNOPSIS
 
@@ -81,6 +83,22 @@ sub new {
 
 =head1 METHODS
 
+=cut
+
+sub has_next {
+    my $self = shift;
+    # If next_page returns a number (2, 3, etc), this becomes true.
+    # If it returns undef, it stays false.
+    return $self->next_page ? 1 : 0;
+}
+
+sub has_previous {
+    my $self = shift;
+    return $self->previous_page ? 1 : 0;
+}
+
+
+
 =head2 total_entries
 
 Returns a L<Future> that resolves to the total number of entries matching the
@@ -130,7 +148,10 @@ been resolved. If not, it defaults to 1.
 
 sub last_page {
     my $self = shift;
-    my $total = $self->{_total_entries} // 0;
+    croak "Pager not initialized. Call ->total_entries first"
+        unless defined $self->{_total_entries};
+
+    my $total = $self->{_total_entries};
     return 1 if $total == 0;
     return ceil($total / $self->{_rows});
 }
