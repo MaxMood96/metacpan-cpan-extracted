@@ -1,0 +1,21 @@
+\frametitle{Sorting and Uniqueness (sort, uniq)}
+\begin{alertblock}{Why?}
+\texttt{uniq} only works on \alert{adjacent} lines. That's why we almost always \texttt{sort} before we \texttt{uniq}.
+\end{alertblock}
+\begin{block}<2->{Examples with Output}
+\begin{verbatim}
+# Sample file: fruits.txt (apple, banana, apple, cherry, banana)
+
+# Count unique occurrences
+$ sort fruits.txt | uniq -c
+   2 apple
+   2 banana
+   1 cherry
+
+# Sort by frequency (descending)
+$ sort fruits.txt | uniq -c | sort -rn
+   2 banana
+   2 apple
+   1 cherry
+\end{verbatim}
+\end{block}

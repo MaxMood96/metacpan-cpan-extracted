@@ -1,0 +1,16 @@
+\frametitle{PATH Variable - Example}
+\begin{block}{Exploring PATH}
+\begin{verbatim}
+# Display your PATH
+$ echo $PATH
+/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+
+# Find where a command actually lives (portable)
+$ command -v ls
+/bin/ls
+
+# Run directly without relying on PATH
+$ /bin/date
+# sample output: Fri Jan 30 14:00:00 EST 2026
+\end{verbatim}
+\end{block}

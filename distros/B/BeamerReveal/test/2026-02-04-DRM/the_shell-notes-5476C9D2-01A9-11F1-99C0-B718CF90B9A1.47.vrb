@@ -1,0 +1,24 @@
+\frametitle{Redirection Basics}
+\begin{columns}
+\begin{column}{0.35\columnwidth}
+\begin{block}{Problem}
+Output goes to screen and disappears
+\end{block}
+\end{column}
+\begin{column}{0.6\columnwidth}
+\begin{exampleblock}{Solution}\label{sec:orgc31c962}
+\begin{center}
+\begin{tabular}{ll}
+Operator & Action\\
+\hline
+\texttt{>} & Overwrite file\\
+\texttt{>{}>{}} & Append to file\\
+\texttt{2>} & Redirect errors\\
+\texttt{\&>} & Redirect everything\\
+\end{tabular}
+\end{center}
+
+Note: \texttt{command \&> file} works in bash/zsh; the portable form is \texttt{command > file 2>\&1}.
+\end{exampleblock}
+\end{column}
+\end{columns}

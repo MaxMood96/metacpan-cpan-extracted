@@ -1,0 +1,9 @@
+\frametitle{Time to Explore: Environment}
+\begin{block}{Challenge}
+\begin{enumerate}
+\item Type \texttt{env} and look at the output. Can you find \texttt{SHELL} and \texttt{PWD}?
+\item Create a variable: \texttt{MY\_NAME}"Your Name"\texttt{. Try =echo \$MY\_NAME}.
+\item Open a \alert{new} terminal window. Is \texttt{\$MY\_NAME} still there?
+\item Try \texttt{export PS1}"Ready> "= (or something fun). What happened to your prompt?
+\end{enumerate}
+\end{block}

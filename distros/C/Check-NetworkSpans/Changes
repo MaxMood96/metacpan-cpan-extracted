@@ -1,5 +1,10 @@
 Revision history for Check-NetworkSpans
 
+0.1.0	2026-02-04/15:00
+		- now ignores ARP packets
+		- fix handling of UDP packets
+		- minor formatting fixes for some debugging output
+
 0.0.2	2025-01-31/16:30
 		- properly print ignored items
 		- save the alert level value for alert type

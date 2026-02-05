@@ -1,0 +1,17 @@
+\frametitle{File Paths}
+\begin{block}{Types}
+\alert{Absolute:} \texttt{/home/user/docs} (from root)
+
+\alert{Relative:} \texttt{../other/file.txt} (from current location)
+\end{block}
+\begin{exampleblock}<2->{Special Symbols}\label{sec:orgedc1002}
+\begin{center}
+\begin{tabular}{ll}
+Symbol & Meaning\\
+\hline
+\texttt{.} & Current directory\\
+\texttt{..} & Parent directory\\
+\texttt{\textasciitilde{}} & Home directory\\
+\end{tabular}
+\end{center}
+\end{exampleblock}

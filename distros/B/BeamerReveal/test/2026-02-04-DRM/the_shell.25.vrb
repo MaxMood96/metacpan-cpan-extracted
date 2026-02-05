@@ -1,0 +1,11 @@
+\frametitle{PATH: Finding Programs}
+\begin{block}{How does the shell know where 'ls' is?}
+The \texttt{PATH} environment variable is a list of directories the shell searches through every time you type a command.
+\end{block}
+\begin{exampleblock}{Key Points}\label{sec:orga95829a}
+\begin{itemize}
+\item Colon-separated list: \texttt{/usr/local/bin:/usr/bin:/bin}
+\item \alert{First match wins:} The shell searches from left to right.
+\item If it's not in \texttt{PATH}, use an explicit path (e.g., \texttt{/usr/local/bin/my\_prog} or \texttt{./my\_prog}).
+\end{itemize}
+\end{exampleblock}

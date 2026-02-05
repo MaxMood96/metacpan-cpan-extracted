@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Protected Content - Plack::Middleware::ProofOfWork</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 900px;
+            margin: 50px auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1 {
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #555;
+            margin-top: 30px;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-left: 5px solid #28a745;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .info-box {
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            border-left: 5px solid #667eea;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        pre {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 0.9em;
+        }
+        .actions {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        .actions a {
+            display: inline-block;
+            margin: 5px 10px 5px 0;
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+        .actions a:hover {
+            background: #5568d3;
+        }
+        .actions a.danger {
+            background: #dc3545;
+        }
+        .actions a.danger:hover {
+            background: #c82333;
+        }
+        ul {
+            line-height: 1.8;
+        }
+        .version {
+            text-align: center;
+            color: #999;
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎉 Protected Content</h1>
+    
+    <div class="success">
+        <strong>✓ Success!</strong> You have successfully solved the Proof-of-Work challenge and gained access.
+    </div>
+    
+    <h2>What Just Happened?</h2>
+    <p>
+        When you first visited this page, your browser automatically solved a cryptographic
+        puzzle (Proof-of-Work). This protects the page from automated bots and scraping attempts
+        while allowing legitimate users through after a brief calculation.
+    </p>
+    
+    <div class="info-box">
+        <strong>🔐 How It Works:</strong>
+        <ol>
+            <li>Your browser received a challenge page</li>
+            <li>JavaScript calculated a SHA-256 based proof-of-work</li>
+            <li>A cookie was set with the valid solution</li>
+            <li>The page reloaded and you gained access</li>
+        </ol>
+    </div>
+    
+    <h2>Technical Details</h2>
+    <ul>
+        <li><strong>Algorithm:</strong> SHA-256 hashing with fractional difficulty support</li>
+        <li><strong>Difficulty:</strong> 4 leading zeros (approx. 65,000 attempts, ~1-2 seconds)</li>
+        <li><strong>Cookie validity:</strong> 5 days</li>
+        <li><strong>Search engines:</strong> Automatically allowed (Googlebot, Bingbot, etc.)</li>
+        <li><strong>Bot protection:</strong> PoW validated <em>before</em> bot check (v0.05+)</li>
+        <li><strong>Template system:</strong> External HTML template (v0.05+)</li>
+    </ul>
+    
+    <h2>Your Browser Information</h2>
+    <pre id="env"></pre>
+    
+    <h2>What Happens on Next Visit?</h2>
+    <p>
+        For the next 5 days, you can visit this page without recalculation.
+        Your browser will present the valid cookie automatically. After the cookie expires,
+        you'll need to solve a new puzzle.
+    </p>
+    
+    <div class="info-box">
+        <strong>💡 Fun Fact:</strong> The middleware checks your cookie <em>before</em> checking 
+        if you're a bot. This means even bots with invalid cookies must solve the proof-of-work!
+    </div>
+    
+    <h2>Try It Out</h2>
+    <div class="actions">
+        <a href="?refresh=1">🔄 Reload Page</a>
+        <span style="color: #999;">(no PoW needed - you have a valid cookie)</span>
+        <br><br>
+        <a href="javascript:document.cookie='pow=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'; location.reload();" 
+           class="danger">
+            🗑️ Delete Cookie & Force New PoW
+        </a>
+        <span style="color: #999;">(you'll see the challenge page again)</span>
+    </div>
+    
+    <h2>Configuration Used</h2>
+    <pre>enable "ProofOfWork",
+    difficulty => 4,           # 4 leading zeros (~1-2 seconds)
+    cookie_name => 'pow',      # Cookie name
+    cookie_duration => 5,      # 5 days validity
+    allow_bots => 1;           # Allow search engines</pre>
+    
+    <h2>Customization Options</h2>
+    <ul>
+        <li><strong>difficulty:</strong> Use fractional values like 4.5 for fine-grained control</li>
+        <li><strong>js_file:</strong> Replace <code>share/pow.js</code> with your custom logic</li>
+        <li><strong>html_file:</strong> Replace <code>share/challenge.html</code> with your custom UI</li>
+        <li><strong>bot_patterns:</strong> Customize which bots are allowed through</li>
+    </ul>
+    
+    <div class="version">
+        <p>
+            <strong>Plack::Middleware::ProofOfWork v0.07</strong><br>
+            Example application • See README.md for full documentation
+        </p>
+    </div>
+    
+    <script>
+        const envInfo = {
+            'User-Agent': navigator.userAgent,
+            'Language': navigator.language,
+            'Languages': navigator.languages,
+            'Platform': navigator.platform,
+            'Screen Resolution': screen.width + 'x' + screen.height,
+            'Cookies Enabled': navigator.cookieEnabled,
+            'Online': navigator.onLine,
+            'Hardware Concurrency': navigator.hardwareConcurrency || 'N/A',
+            'Connection': navigator.connection ? navigator.connection.effectiveType : 'N/A'
+        };
+        document.getElementById('env').textContent = JSON.stringify(envInfo, null, 2);
+    </script>
+</body>
+</html>

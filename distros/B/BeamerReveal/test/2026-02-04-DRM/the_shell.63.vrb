@@ -1,0 +1,25 @@
+\frametitle{Data Wrangling Example}
+\begin{block}{Real-World Pipeline}
+\begin{verbatim}
+# Analyze web server logs
+# Find most common ERROR messages
+cat access.log \
+  | grep "ERROR" \
+  | awk '{print $5}' \
+  | sort \
+  | uniq -c \
+  | sort -rn \
+  | head -10
+\end{verbatim}
+\end{block}
+\begin{block}{Analysis}
+\begin{enumerate}
+\item \alert{Read:} Opens the log file.
+\item \alert{Filter:} Keeps only ERROR lines.
+\item \alert{Extract:} Pulls the 5th column (the error type).
+\item \alert{Sort:} Groups identical messages.
+\item \alert{Count:} Counts unique occurrences.
+\item \alert{Rank:} Sorts by frequency.
+\item \alert{Top 10:} Shows the most common errors.
+\end{enumerate}
+\end{block}

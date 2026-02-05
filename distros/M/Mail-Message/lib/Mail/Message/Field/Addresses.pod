@@ -60,11 +60,15 @@ Extends L<"OVERLOADED" in Mail::Message::Field::Structured|Mail::Message::Field:
 
 Inherited, see L<Mail::Message::Field::Full/"OVERLOADED">
 
-=item overload: B<0+> numification
+=item overload: B<'""'> stringification
 
 Inherited, see L<Mail::Message::Field/"OVERLOADED">
 
-=item overload: B<<=>> numeric comparison
+=item overload: B<'0+'> numification
+
+Inherited, see L<Mail::Message::Field/"OVERLOADED">
+
+=item overload: B<'<=>'> numeric comparison
 
 Inherited, see L<Mail::Message::Field/"OVERLOADED">
 
@@ -130,6 +134,38 @@ Inherited, see L<Mail::Message::Field::Structured/"METHODS">
 
 Extends L<"Attributes" in Mail::Message::Field::Structured|Mail::Message::Field::Structured/"Attributes">.
 
+=over 4
+
+=item $obj-E<gt>B<Name>()
+
+Inherited, see L<Mail::Message::Field/"Attributes">
+
+=item $obj-E<gt>B<body>()
+
+Inherited, see L<Mail::Message::Field/"Attributes">
+
+=item $obj-E<gt>B<folded>()
+
+Inherited, see L<Mail::Message::Field/"Attributes">
+
+=item $obj-E<gt>B<foldedBody>( [$body] )
+
+Inherited, see L<Mail::Message::Field/"Attributes">
+
+=item $obj-E<gt>B<name>()
+
+Inherited, see L<Mail::Message::Field/"Attributes">
+
+=item $obj-E<gt>B<unfoldedBody>( [$body, [$wrap]] )
+
+Inherited, see L<Mail::Message::Field/"Attributes">
+
+=item $obj-E<gt>B<wellformedName>( [STRING] )
+
+Inherited, see L<Mail::Message::Field/"Attributes">
+
+=back
+
 =head2 The field
 
 Extends L<"The field" in Mail::Message::Field::Structured|Mail::Message::Field::Structured/"The field">.
@@ -166,55 +202,15 @@ Inherited, see L<Mail::Message::Field/"The field">
 
 =back
 
-=head2 Access to the name
-
-Extends L<"Access to the name" in Mail::Message::Field::Structured|Mail::Message::Field::Structured/"Access to the name">.
-
-=over 4
-
-=item $obj-E<gt>B<Name>()
-
-Inherited, see L<Mail::Message::Field/"Access to the name">
-
-=item $obj-E<gt>B<name>()
-
-Inherited, see L<Mail::Message::Field/"Access to the name">
-
-=item $obj-E<gt>B<wellformedName>( [STRING] )
-
-Inherited, see L<Mail::Message::Field/"Access to the name">
-
-=back
-
 =head2 Access to the body
 
 Extends L<"Access to the body" in Mail::Message::Field::Structured|Mail::Message::Field::Structured/"Access to the body">.
 
 =over 4
 
-=item $obj-E<gt>B<body>()
-
-Inherited, see L<Mail::Message::Field/"Access to the body">
-
 =item $obj-E<gt>B<decodedBody>(%options)
 
 Inherited, see L<Mail::Message::Field::Full/"Access to the body">
-
-=item $obj-E<gt>B<folded>()
-
-Inherited, see L<Mail::Message::Field/"Access to the body">
-
-=item $obj-E<gt>B<foldedBody>( [$body] )
-
-Inherited, see L<Mail::Message::Field/"Access to the body">
-
-=item $any-E<gt>B<stripCFWS>( [STRING] )
-
-Inherited, see L<Mail::Message::Field/"Access to the body">
-
-=item $obj-E<gt>B<unfoldedBody>( [$body, [$wrap]] )
-
-Inherited, see L<Mail::Message::Field/"Access to the body">
 
 =back
 
@@ -299,6 +295,10 @@ Inherited, see L<Mail::Message::Field::Full/"Access to the content">
 
 Inherited, see L<Mail::Message::Field::Full/"Access to the content">
 
+=item $any-E<gt>B<dateToTimestamp>(STRING)
+
+Inherited, see L<Mail::Message::Field/"Access to the content">
+
 =item $obj-E<gt>B<group>($name)
 
 Returns the group of addresses with the specified C<$name>, or C<undef>
@@ -314,6 +314,10 @@ Returns a list with all group names which are defined.
 Returns all address groups which are defined in this field.  Each
 element is a L<Mail::Message::Field::AddrGroup|Mail::Message::Field::AddrGroup> object.
 
+=item $any-E<gt>B<stripCFWS>( [STRING] )
+
+Inherited, see L<Mail::Message::Field/"Access to the content">
+
 =item $obj-E<gt>B<study>()
 
 Inherited, see L<Mail::Message::Field/"Access to the content">
@@ -328,55 +332,19 @@ Inherited, see L<Mail::Message::Field/"Access to the content">
 
 =back
 
-=head2 Other methods
-
-Extends L<"Other methods" in Mail::Message::Field::Structured|Mail::Message::Field::Structured/"Other methods">.
-
-=over 4
-
-=item $any-E<gt>B<dateToTimestamp>(STRING)
-
-Inherited, see L<Mail::Message::Field/"Other methods">
-
-=back
-
 =head2 Internals
 
 Extends L<"Internals" in Mail::Message::Field::Structured|Mail::Message::Field::Structured/"Internals">.
 
 =over 4
 
-=item $obj-E<gt>B<consume>( $line | <$name,<$body|$objects>> )
-
-Inherited, see L<Mail::Message::Field/"Internals">
-
 =item $any-E<gt>B<decode>(STRING, %options)
 
 Inherited, see L<Mail::Message::Field::Full/"Internals">
 
-=item $obj-E<gt>B<defaultWrapLength>( [$length] )
-
-Inherited, see L<Mail::Message::Field/"Internals">
-
 =item $obj-E<gt>B<encode>(STRING, %options)
 
 Inherited, see L<Mail::Message::Field::Full/"Internals">
-
-=item $any-E<gt>B<fold>( $name, $body, [$maxchars] )
-
-Inherited, see L<Mail::Message::Field/"Internals">
-
-=item $obj-E<gt>B<setWrapLength>( [$length] )
-
-Inherited, see L<Mail::Message::Field/"Internals">
-
-=item $obj-E<gt>B<stringifyData>(STRING|ARRAY|$objects)
-
-Inherited, see L<Mail::Message::Field/"Internals">
-
-=item $obj-E<gt>B<unfold>(STRING)
-
-Inherited, see L<Mail::Message::Field/"Internals">
 
 =back
 
@@ -385,6 +353,10 @@ Inherited, see L<Mail::Message::Field/"Internals">
 Extends L<"Parsing" in Mail::Message::Field::Structured|Mail::Message::Field::Structured/"Parsing">.
 
 =over 4
+
+=item $obj-E<gt>B<consume>( $line | <$name,<$body|$objects>> )
+
+Inherited, see L<Mail::Message::Field/"Parsing">
 
 =item $obj-E<gt>B<consumeAddress>(STRING, %options)
 
@@ -413,6 +385,14 @@ Inherited, see L<Mail::Message::Field::Full/"Parsing">
 
 Inherited, see L<Mail::Message::Field::Structured/"Parsing">
 
+=item $obj-E<gt>B<defaultWrapLength>( [$length] )
+
+Inherited, see L<Mail::Message::Field/"Parsing">
+
+=item $any-E<gt>B<fold>( $name, $body, [$maxchars] )
+
+Inherited, see L<Mail::Message::Field/"Parsing">
+
 =item $obj-E<gt>B<parse>($string)
 
 Inherited, see L<Mail::Message::Field::Full/"Parsing">
@@ -420,6 +400,18 @@ Inherited, see L<Mail::Message::Field::Full/"Parsing">
 =item $obj-E<gt>B<produceBody>()
 
 Inherited, see L<Mail::Message::Field::Full/"Parsing">
+
+=item $obj-E<gt>B<setWrapLength>( [$length] )
+
+Inherited, see L<Mail::Message::Field/"Parsing">
+
+=item $obj-E<gt>B<stringifyData>(STRING|ARRAY|$objects)
+
+Inherited, see L<Mail::Message::Field/"Parsing">
+
+=item $obj-E<gt>B<unfold>(STRING)
+
+Inherited, see L<Mail::Message::Field/"Parsing">
 
 =back
 
@@ -526,8 +518,8 @@ Cast by C<addAttribute()>
 
 =head1 SEE ALSO
 
-This module is part of Mail-Message version 4.03,
-built on January 26, 2026. Website: F<http://perl.overmeer.net/CPAN/>
+This module is part of Mail-Message version 4.04,
+built on February 04, 2026. Website: F<http://perl.overmeer.net/CPAN/>
 
 =head1 LICENSE
 

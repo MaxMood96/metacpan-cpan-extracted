@@ -1,0 +1,16 @@
+\frametitle{Think-Pair-Share: The Needle in the Haystack}
+\begin{block}{The Challenge}
+You are working on a massive project. You need to find a "TODO" comment related to "authentication" in any file.
+
+\alert{\alert{Task:}} How would you find this line using only \texttt{grep}? Discuss with your neighbor the flags you'd need.
+\end{block}
+\begin{alertblock}<2->{Possible Solution}
+\begin{verbatim}
+$ grep -rn "TODO.*authentication" .
+\end{verbatim}
+
+\begin{itemize}
+\item \alert{-r}: Search all files in all subdirectories.
+\item \alert{-n}: Tell me exactly which line the comment is on!
+\end{itemize}
+\end{alertblock}

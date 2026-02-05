@@ -1,0 +1,22 @@
+\frametitle{File and Directory Manipulation}
+\begin{block}{Common Operations}
+\begin{center}
+\begin{tabular}{ll}
+Command & Description\\
+\hline
+\texttt{mkdir <dir>} & Make directory\\
+\texttt{touch <file>} & Create empty file / update timestamp\\
+\texttt{cp <src> <dst>} & Copy files/directories\\
+\texttt{mv <src> <dst>} & Move/rename files\\
+\texttt{rm <file>} & Remove files\\
+\end{tabular}
+\end{center}
+\end{block}
+\begin{alertblock}<2->{What do these flags actually do?}
+\begin{itemize}[<+->]
+\item \alert{-r}: Recursive (directories)
+\item \alert{-i}: Interactive (ask before delete)
+\item \alert{-f}: Force (no prompt)
+\item \alert{-v}: Verbose (show progress)
+\end{itemize}
+\end{alertblock}

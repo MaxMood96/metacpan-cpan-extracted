@@ -1,6 +1,6 @@
 package DBIx::Class::Async::ResultSet::Pager;
 
-$DBIx::Class::Async::ResultSet::Pager::VERSION   = '0.51';
+$DBIx::Class::Async::ResultSet::Pager::VERSION   = '0.54';
 $DBIx::Class::Async::ResultSet::Pager::AUTHORITY = 'cpan:MANWAR';
 
 use strict;
@@ -15,7 +15,7 @@ DBIx::Class::Async::ResultSet::Pager - Asynchronous pagination handling for Asyn
 
 =head1 VERSION
 
-Version 0.51
+Version 0.54
 
 =cut
 
@@ -148,7 +148,7 @@ been resolved. If not, it defaults to 1.
 
 sub last_page {
     my $self = shift;
-    croak "Pager not initialized. Call ->total_entries first"
+    croak "Pager not initialised. Call ->total_entries first"
         unless defined $self->{_total_entries};
 
     my $total = $self->{_total_entries};

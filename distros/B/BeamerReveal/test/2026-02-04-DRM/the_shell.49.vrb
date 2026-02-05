@@ -1,0 +1,18 @@
+\frametitle{Redirection Examples}
+\begin{block}{Using Redirection}
+\begin{verbatim}
+# Redirect output to file
+echo "Hello" > output.txt
+ls -l >> listing.txt
+
+# Redirect input
+sort < unsorted.txt
+
+# Redirect errors
+command 2> errors.log
+
+# Combine stdout and stderr
+command > all.log 2>&1
+command &> all.log  # Shorter syntax
+\end{verbatim}
+\end{block}

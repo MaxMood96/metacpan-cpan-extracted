@@ -1,0 +1,9 @@
+\frametitle{Analysis: Auto-Backup}
+\begin{exampleblock}{Best Practices}\label{sec:org5a927e5}
+\begin{enumerate}
+\item \alert{Safety:} \texttt{set -euo pipefail} ensures the script stops if a directory can't be created or a command fails.
+\item \alert{Dynamic:} Uses \texttt{\$@} to process any number of folders passed as arguments.
+\item \alert{Error Handling:} Redirects warnings to \texttt{stderr} (\texttt{>\&2}) so they don't pollute the standard output.
+\item \alert{Clean Paths:} Uses \texttt{basename} to ensure the archive name is clean even if a full path is provided.
+\end{enumerate}
+\end{exampleblock}

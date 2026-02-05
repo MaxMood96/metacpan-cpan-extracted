@@ -1,0 +1,15 @@
+\frametitle{Searching and Finding}
+\begin{block}{Why search from the CLI?}
+Imagine searching through 100,000 lines of logs or finding a specific file in a project with 50 subdirectories.
+\end{block}
+\begin{block}<2->{Search Commands}
+\begin{center}
+\begin{tabular}{lll}
+Command & Description & Useful Flags\\
+\hline
+\texttt{find} & Find files & \texttt{-name}, \texttt{-type}, \texttt{-size}\\
+\texttt{grep} & Search text & \texttt{-r} (recursive), \texttt{-i} (case), \texttt{-n} (line\#)\\
+\texttt{which} & Find exe & -\\
+\end{tabular}
+\end{center}
+\end{block}

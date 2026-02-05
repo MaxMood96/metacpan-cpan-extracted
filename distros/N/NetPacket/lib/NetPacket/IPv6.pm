@@ -1,7 +1,7 @@
 package NetPacket::IPv6;
 our $AUTHORITY = 'cpan:YANICK';
 # ABSTRACT: Assemble and disassemble IPv6 (Internet Protocol version 6) packets.
-$NetPacket::IPv6::VERSION = '1.7.2';
+$NetPacket::IPv6::VERSION = '1.8.0';
 use strict;
 use warnings;
 
@@ -199,7 +199,7 @@ sub pseudo_header {
     my $src_ip = inet_pton(AF_INET6, $self->{src_ip});
     my $dest_ip = inet_pton(AF_INET6, $self->{dest_ip});
 
-    return pack('a16a16Na3C', $src_ip, $dest_ip, $length, 0, $next_header);
+    return pack('a16a16Nx3C', $src_ip, $dest_ip, $length, $next_header);
 }
 
 #
@@ -218,7 +218,7 @@ NetPacket::IPv6 - Assemble and disassemble IPv6 (Internet Protocol version 6) pa
 
 =head1 VERSION
 
-version 1.7.2
+version 1.8.0
 
 =head1 SYNOPSIS
 

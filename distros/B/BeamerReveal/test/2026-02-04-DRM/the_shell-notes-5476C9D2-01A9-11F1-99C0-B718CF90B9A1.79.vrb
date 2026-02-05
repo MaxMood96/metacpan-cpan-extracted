@@ -1,0 +1,38 @@
+\frametitle{Iteration (for, while)}
+\begin{columns}
+\begin{column}{0.48\columnwidth}
+\begin{verbatim}
+# Range
+for i in {1..5}; do
+  echo "$i"
+done
+
+# Files
+for f in *.txt; do
+  mv "$f" "${f}.bak"
+done
+\end{verbatim}
+\end{column}
+\begin{column}{0.48\columnwidth}
+\begin{verbatim}
+# Read file line-by-line
+while read -r line; do
+  echo "PROCESSED: $line"
+done < file.txt
+
+# Counter
+while [ $c -lt 5 ]; do
+  ((c++))
+done
+\end{verbatim}
+\end{column}
+\end{columns}
+\begin{exampleblock}{Practice: Bulk Rename}\label{sec:org28f723e}
+\begin{enumerate}[<+->]
+\item Write a \texttt{for} loop that adds a \texttt{.old} extension to every file in the current directory.
+\item \alert{Answer:} \texttt{for f in *; do mv "\$f" "\$f.old"; done}
+\item \texttt{for f in *} is safer and faster than \texttt{for f in \$(ls)}.
+\item Use \texttt{while read} for processing large files line-by-line.
+\item \texttt{(( ... ))} is used for arithmetic in Bash.
+\end{enumerate}
+\end{exampleblock}

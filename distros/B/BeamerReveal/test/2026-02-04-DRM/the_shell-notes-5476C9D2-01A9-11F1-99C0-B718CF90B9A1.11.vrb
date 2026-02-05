@@ -1,0 +1,12 @@
+\frametitle{Why Do We Need It?}
+\begin{block}{Power \& Efficiency}
+\begin{itemize}[<+->]
+\item \alert{Speed:} Automate repetitive tasks
+\item \alert{Control:} Do things GUIs simply can't
+\item \alert{Remote Machines:} The standard way to manage servers
+\end{itemize}
+\end{block}
+\begin{alertblock}<2->{Why Bash?}
+We focus on \alert{Bash} because it's common and the skills are largely transferable.
+On macOS the default interactive shell is often \texttt{zsh}, but the core concepts and scripting translate.
+\end{alertblock}

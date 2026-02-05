@@ -42,6 +42,7 @@ t/method/is_meta.t
 t/regression/60_unprefixed_meta.t
 t/service/attributes.t
 t/service/class_args.t
+t/service/class_version.t
 t/service/config.t
 t/service/env.t
 t/service/event_listener.t

@@ -1,0 +1,20 @@
+\frametitle{Capturing Errors vs Output}
+\begin{block}{Debugging Example}
+\begin{verbatim}
+# Script that produces both stdout and stderr
+$ python buggy_script.py
+Processing file1.txt
+ERROR: file2.txt not found
+Done
+
+# Capture separately
+$ python buggy_script.py > output.txt 2> errors.txt
+
+$ cat output.txt
+Processing file1.txt
+Done
+
+$ cat errors.txt
+ERROR: file2.txt not found
+\end{verbatim}
+\end{block}

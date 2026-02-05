@@ -36,6 +36,7 @@
             "File::Globstar" : "0",
             "File::Temp" : "0",
             "Filter::Util::Call" : "0",
+            "Getopt::Long" : "0",
             "IO::Select" : "0",
             "IO::Socket::UNIX" : "0",
             "List::Util" : "0",
@@ -77,7 +78,7 @@
          "web" : "http://github.com/gflohr/Chess-Plisco.git"
       }
    },
-   "version" : "v1.0.2",
+   "version" : "v1.0.3",
    "x_generated_by_perl" : "v5.40.0",
    "x_serialization_backend" : "Cpanel::JSON::XS version 4.38"
 }

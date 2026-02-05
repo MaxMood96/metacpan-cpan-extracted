@@ -3,7 +3,7 @@
 
 
 package BeamerReveal;
-our $VERSION = '20260130.1210'; # VERSION
+our $VERSION = '20260205.0754'; # VERSION
 
 use strict;
 use warnings;
@@ -26,6 +26,13 @@ sub new {
   bless $self, $class;
 
   return $self;
+}
+
+
+
+sub reset {
+  my $self = shift;
+  $self->{rawpage} = 0;
 }
 
 
@@ -61,7 +68,7 @@ BeamerReveal - BeamerReveal
 
 =head1 VERSION
 
-version 20260130.1210
+version 20260205.0754
 
 =head1 SYNOPSIS
 
@@ -75,6 +82,12 @@ These objects correspond to the actual beamer to reveal conversion.
   $f = BeamerReveal->new()
 
 Constructor
+
+=head2 reset()
+
+  $f->reset()
+
+Reset the factory for the second pass parsing
 
 =head2 createFromChunk
 

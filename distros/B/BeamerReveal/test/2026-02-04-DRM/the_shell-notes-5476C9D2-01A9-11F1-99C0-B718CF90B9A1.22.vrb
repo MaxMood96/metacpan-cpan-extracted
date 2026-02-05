@@ -1,0 +1,17 @@
+\frametitle{Viewing File Contents}
+\begin{block}{Why not just use VS Code?}
+What if the file is on a remote server? What if it's 10GB?
+\end{block}
+\begin{block}<2->{Viewing Commands}
+\begin{center}
+\begin{tabular}{ll}
+Command & Description\\
+\hline
+\texttt{cat <file>} & Display entire file\\
+\texttt{less <file>} & Page through file (q to quit)\\
+\texttt{head -n N <file>} & Show first N lines\\
+\texttt{tail -n N <file>} & Show last N lines\\
+\texttt{tail -f <file>} & Follow file updates (logs)\\
+\end{tabular}
+\end{center}
+\end{block}

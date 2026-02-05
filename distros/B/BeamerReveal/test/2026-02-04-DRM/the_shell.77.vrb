@@ -1,0 +1,21 @@
+\frametitle{Positional Arguments}
+\begin{block}{Communicating with Scripts}
+\begin{center}
+\begin{tabular}{ll}
+Variable & Description\\
+\hline
+\texttt{\$0} & The script name itself\\
+\texttt{\$1, \$2..} & First, second arguments\\
+\texttt{\$\#} & Number of arguments passed\\
+\texttt{\$@} & All arguments as a list\\
+\texttt{\$?} & Exit status of the \alert{last} command\\
+\end{tabular}
+\end{center}
+\end{block}
+\begin{exampleblock}{Practice: Arg Grep}\label{sec:org8b32bdb}
+\begin{enumerate}
+\item Create a script that takes a word as \texttt{\$1} and a file as \texttt{\$2} and greps for it.
+\item \alert{Answer:} \texttt{grep "\$1" "\$2"}
+\item Use \texttt{\$@} for looping over arguments.
+\end{enumerate}
+\end{exampleblock}

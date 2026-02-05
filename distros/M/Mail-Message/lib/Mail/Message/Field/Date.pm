@@ -1,4 +1,4 @@
-# This code is part of Perl distribution Mail-Message version 4.03.
+# This code is part of Perl distribution Mail-Message version 4.04.
 # The POD got stripped from this file by OODoc version 3.06.
 # For contributors see file ChangeLog.
 
@@ -10,7 +10,7 @@
 
 
 package Mail::Message::Field::Date;{
-our $VERSION = '4.03';
+our $VERSION = '4.04';
 }
 
 use parent 'Mail::Message::Field::Structured';
@@ -27,9 +27,10 @@ use POSIX qw/mktime tzset/;
 my $dayname = qr/Mon|Tue|Wed|Thu|Fri|Sat|Sun/;
 my @months  = qw/Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec/;
 my %monthnr; { my $i; $monthnr{$_} = ++$i for @months }
-my %tz      = qw/EDT -0400  EST -0500  CDT -0500  CST -0600
-				MDT -0600  MST -0700  PDT -0700  PST -0800
-				UT  +0000  GMT +0000/;
+my %tz      = qw/
+	EDT -0400  EST -0500  CDT -0500  CST -0600
+	MDT -0600  MST -0700  PDT -0700  PST -0800
+	UT  +0000  GMT +0000/;
 
 sub parse($)
 {	my ($self, $string) = @_;
@@ -41,11 +42,11 @@ sub parse($)
 			( [A-Z][a-z][a-z]|[0-9][0-9]  ) \s+  # month
 			( (?: 19 | 20 | ) [0-9][0-9]  ) \s+  # year
 			( [0-1]?[0-9] | 2[0-3] )        \s*  # hour
-				[:.] ( [0-5][0-9] )         \s*  # minute
+			    [:.] ( [0-5][0-9] )         \s*  # minute
 			(?: [:.] ( [0-5][0-9] ) )?      \s*  # second (optional)
 			( [+-][0-9]{4} | [A-Z]+ )?           # zone
-			\s*
-		$ /x or return undef;
+			                                     # optionally followed by trash
+		/x or return undef;
 
 	$dn //= '';
 	$dn   =~ s/\s+//g;
@@ -64,7 +65,6 @@ sub parse($)
 }
 
 sub produceBody() { $_[0]->{MMFD_date} }
-sub date() { $_[0]->{MMFD_date} }
 
 #--------------------
 
@@ -74,8 +74,11 @@ sub addAttribute($;@)
 }
 
 
+sub date() { $_[0]->{MMFD_date} }
+
+
 sub time()
-{	my $date = shift->{MMFD_date};
+{	my $date = shift->date or return;
 	my ($d, $mon, $y, $h, $min, $s, $z) = $date =~ m/
 		^ (?:\w\w\w\,\s+)? (\d\d)\s+(\w+)\s+(\d\d\d\d) \s+ (\d\d)\:(\d\d)\:(\d\d) \s+ ([+-]\d\d\d\d)? \s* $
 	/x;

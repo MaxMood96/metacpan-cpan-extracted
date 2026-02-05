@@ -1,0 +1,15 @@
+\frametitle{Command Substitution Examples}
+\begin{block}{Substitution Syntax}
+\begin{verbatim}
+# Using $(command) syntax (preferred)
+echo "Today is $(date)"
+files=$(ls -1)
+echo "Found $(wc -l < file.txt) lines"
+
+# Using backticks (older syntax)
+echo "Today is `date`"
+
+# Nested substitution
+echo "User $(whoami) in $(pwd)"
+\end{verbatim}
+\end{block}

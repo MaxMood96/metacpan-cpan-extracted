@@ -6,6 +6,12 @@ Home page:    <https://metacpan.org/release/Sub-HandlesVia>
 Bug tracker:  <https://github.com/tobyink/p5-sub-handlesvia/issues>
 Maintainer:   Toby Inkster (TOBYINK) <tobyink@cpan.org>
 
+0.053005	2026-02-04
+
+ [ Test Suite ]
+ - Make t/99shvxs.t into an author-only test. Set the AUTHOR_TESTING
+   environment variable to true if you really want to run it.
+
 0.053004	2026-02-01
 
  [ Documentation ]

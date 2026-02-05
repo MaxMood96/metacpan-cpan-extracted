@@ -8,7 +8,7 @@
             has_ix = TRUE;                                              \
             ix = sig->index;                                            \
         }                                                               \
-        else if (items > z) {                                           \
+        else if (items > (z)) {                                         \
             bool ok = check_type(ST(z), TYPE_BASE_INT, NULL);           \
             if (!ok) type_error(ST(z), "$_", z, TYPE_BASE_INT, NULL);   \
             has_ix = FALSE;                                             \
@@ -27,7 +27,7 @@
             has_curried_sv = TRUE;                                      \
             curried_sv = sig->curried_sv;                               \
         }                                                               \
-        else if (items > z) {                                           \
+        else if (items > (z)) {                                         \
             has_curried_sv = FALSE;                                     \
             curried_sv = newSVsv(ST(z));                                \
         }                                                               \
@@ -44,7 +44,7 @@
              has_curried_sv = TRUE;                                      \
              curried_sv = sig->curried_sv;                               \
          }                                                               \
-         else if (items > z) {                                           \
+         else if (items > (z)) {                                         \
              has_curried_sv = FALSE;                                     \
              curried_sv = newSVsv(ST(z));                                \
          }                                                               \
@@ -63,7 +63,7 @@
             callback = sig->callback;                                   \
             has_callback = TRUE;                                        \
         }                                                               \
-        else if (items <= z ) {                                         \
+        else if (items <= (z) ) {                                       \
             croak(WRONG_NUMBER_OF_PARAMETERS);                          \
         }                                                               \
         else if ( !SvROK(ST(z)) || SvTYPE(SvRV(ST(z))) != SVt_PVCV ) {  \
@@ -79,7 +79,7 @@
     bool has_callback = FALSE;                                          \
     STMT_START {                                                        \
         if (sig->callback) {                                            \
-            if (items > z && SvOK(ST(z))) {                             \
+            if (items > (z) && SvOK(ST(z))) {                           \
                 if (SvROK(ST(z)) && SvTYPE(SvRV(ST(z))) == SVt_PVCV) {  \
                     croak(WRONG_NUMBER_OF_PARAMETERS);                  \
                 }                                                       \
@@ -88,7 +88,7 @@
             has_callback = TRUE;                                        \
         }                                                               \
         else {                                                          \
-            if (items <= z                                              \
+            if (items <= (z)                                            \
                 || !SvROK(ST(z))                                        \
                 || SvTYPE(SvRV(ST(z))) != SVt_PVCV) {                   \
                 callback = NULL;                                        \

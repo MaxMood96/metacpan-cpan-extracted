@@ -1,0 +1,284 @@
+%% Beamer-reveal driver file (v1.07-2026-02-02)
+@@Presentation: 
+-parameters:sourcefilename={the_shell-notes-5476C9D2-01A9-11F1-99C0-B718CF90B9A1.tex},title={Course Overview and The Shell},author={Mohammad Durrani},compiler={lualatex},canvaswidth={1920},canvasheight={1200}
+@@BeamerFrame: 
+-parameters:rawpage={1},truepage={1},overlay={1},transition={},title={}
+@@BeamerFrame: 
+-parameters:rawpage={1},truepage={2},overlay={1},transition={none},title={Welcome To Class!}
+@@BeamerFrame: 
+-parameters:rawpage={1},truepage={3},overlay={1},transition={none},title={Icebreaker}
+-hasnote:true
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={4},overlay={1},transition={none},title={About The Class}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={5},overlay={1},transition={none},title={About Me - Mohammad}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={6},overlay={1},transition={none},title={What To Expect}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={7},overlay={1},transition={none},title={Course Logistics}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={8},overlay={1},transition={none},title={Application Days}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={8},overlay={2},transition={none},title={Application Days}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={9},overlay={1},transition={none},title={Grade Distribution}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={10},overlay={1},transition={none},title={What is the Shell?}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={10},overlay={2},transition={none},title={What is the Shell?}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={11},overlay={1},transition={none},title={Why Do We Need It?}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={11},overlay={2},transition={none},title={Why Do We Need It?}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={11},overlay={3},transition={none},title={Why Do We Need It?}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={12},overlay={1},transition={none},title={The Prompt}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={13},overlay={1},transition={none},title={Basic Commands}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={13},overlay={2},transition={none},title={Basic Commands}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={14},overlay={1},transition={none},title={File Paths}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={14},overlay={2},transition={none},title={File Paths}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={15},overlay={1},transition={none},title={Essential Navigation Commands}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={15},overlay={2},transition={none},title={Essential Navigation Commands}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={16},overlay={1},transition={none},title={Navigation Examples}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={16},overlay={2},transition={none},title={Navigation Examples}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={17},overlay={1},transition={none},title={Think-Pair-Share: Navigation Puzzle}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={17},overlay={2},transition={none},title={Think-Pair-Share: Navigation Puzzle}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={17},overlay={3},transition={none},title={Think-Pair-Share: Navigation Puzzle}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={17},overlay={4},transition={none},title={Think-Pair-Share: Navigation Puzzle}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={17},overlay={5},transition={none},title={Think-Pair-Share: Navigation Puzzle}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={18},overlay={1},transition={none},title={File and Directory Manipulation}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={18},overlay={2},transition={none},title={File and Directory Manipulation}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={18},overlay={3},transition={none},title={File and Directory Manipulation}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={18},overlay={4},transition={none},title={File and Directory Manipulation}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={19},overlay={1},transition={none},title={File Manipulation Examples}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={20},overlay={1},transition={none},title={Time to Explore: File Operations}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={21},overlay={2},transition={none},title={Solutions: File Operations}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={22},overlay={1},transition={none},title={Viewing File Contents}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={22},overlay={2},transition={none},title={Viewing File Contents}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={23},overlay={1},transition={none},title={Viewing Examples}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={24},overlay={1},transition={none},title={Think-Pair-Share: Which tool when?}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={24},overlay={2},transition={none},title={Think-Pair-Share: Which tool when?}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={24},overlay={3},transition={none},title={Think-Pair-Share: Which tool when?}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={24},overlay={4},transition={none},title={Think-Pair-Share: Which tool when?}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={25},overlay={1},transition={none},title={PATH: Finding Programs}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={26},overlay={1},transition={none},title={PATH Variable - Example}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={27},overlay={1},transition={none},title={Modifying PATH}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={27},overlay={2},transition={none},title={Modifying PATH}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={28},overlay={1},transition={none},title={Environment Variables}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={29},overlay={1},transition={none},title={Time to Explore: Environment}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={30},overlay={2},transition={none},title={Solutions: Environment}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={30},overlay={3},transition={none},title={Solutions: Environment}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={31},overlay={1},transition={none},title={Searching and Finding}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={31},overlay={2},transition={none},title={Searching and Finding}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={32},overlay={1},transition={none},title={find: Locate Files}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={33},overlay={1},transition={none},title={grep: Search File Contents}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={34},overlay={1},transition={none},title={Think-Pair-Share: The Needle in the Haystack}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={34},overlay={2},transition={none},title={Think-Pair-Share: The Needle in the Haystack}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={35},overlay={1},transition={none},title={Wildcards and Globbing}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={36},overlay={1},transition={none},title={Globbing Examples}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={37},overlay={1},transition={none},title={Globbing Examples - Advanced}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={38},overlay={1},transition={none},title={Time to Explore: Globbing}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={38},overlay={2},transition={none},title={Time to Explore: Globbing}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={38},overlay={3},transition={none},title={Time to Explore: Globbing}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={38},overlay={4},transition={none},title={Time to Explore: Globbing}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={39},overlay={1},transition={none},title={Brace Expansion}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={40},overlay={1},transition={none},title={Command History}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={41},overlay={1},transition={none},title={History Examples}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={42},overlay={1},transition={none},title={Tab Completion}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={42},overlay={2},transition={none},title={Tab Completion}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={42},overlay={3},transition={none},title={Tab Completion}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={43},overlay={1},transition={none},title={Command Substitution}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={44},overlay={1},transition={none},title={Command Substitution Execution Order}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={45},overlay={1},transition={none},title={Command Substitution Examples}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={46},overlay={1},transition={none},title={Think-Pair-Share: Creative Substitution}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={46},overlay={2},transition={none},title={Think-Pair-Share: Creative Substitution}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={47},overlay={1},transition={none},title={Redirection Basics}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={48},overlay={1},transition={none},title={File Descriptors \& Redirection}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={48},overlay={2},transition={none},title={File Descriptors \& Redirection}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={48},overlay={3},transition={none},title={File Descriptors \& Redirection}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={49},overlay={1},transition={none},title={Redirection Examples}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={50},overlay={1},transition={none},title={Capturing Errors vs Output}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={51},overlay={1},transition={none},title={Think-Pair-Share: Redirection Pitfalls}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={51},overlay={2},transition={none},title={Think-Pair-Share: Redirection Pitfalls}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={51},overlay={3},transition={none},title={Think-Pair-Share: Redirection Pitfalls}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={52},overlay={1},transition={none},title={Pipes}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={52},overlay={2},transition={none},title={Pipes}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={53},overlay={1},transition={none},title={How Pipes Work (Visual)}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={54},overlay={1},transition={none},title={Pipe Examples}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={54},overlay={2},transition={none},title={Pipe Examples}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={55},overlay={1},transition={none},title={Building Pipes Step-by-Step}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={56},overlay={1},transition={none},title={Think-Pair-Share: Debug the Pipeline}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={56},overlay={2},transition={none},title={Think-Pair-Share: Debug the Pipeline}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={57},overlay={1},transition={none},title={xargs: Bridging the Gap}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={57},overlay={2},transition={none},title={xargs: Bridging the Gap}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={58},overlay={1},transition={none},title={xargs: Usage and Options}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={58},overlay={2},transition={none},title={xargs: Usage and Options}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={59},overlay={1},transition={none},title={System Health with top}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={59},overlay={2},transition={none},title={System Health with top}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={60},overlay={1},transition={none},title={Section 3: Data Wrangling}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={61},overlay={1},transition={none},title={Data Wrangling Overview}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={62},overlay={1},transition={none},title={Sorting and Uniqueness (sort, uniq)}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={62},overlay={2},transition={none},title={Sorting and Uniqueness (sort, uniq)}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={63},overlay={1},transition={none},title={Data Wrangling Example}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={64},overlay={1},transition={none},title={Regular Expressions (Regex)}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={65},overlay={1},transition={none},title={Regex Flavors: A Shell Caveat}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={66},overlay={1},transition={none},title={Pattern Cheat Sheet}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={66},overlay={2},transition={none},title={Pattern Cheat Sheet}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={66},overlay={3},transition={none},title={Pattern Cheat Sheet}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={66},overlay={4},transition={none},title={Pattern Cheat Sheet}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={67},overlay={1},transition={none},title={The sed Execution Model}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={67},overlay={2},transition={none},title={The sed Execution Model}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={68},overlay={1},transition={none},title={sed: Search and Replace}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={69},overlay={1},transition={none},title={sed: Addressing and Ranges}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={69},overlay={2},transition={none},title={sed: Addressing and Ranges}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={70},overlay={1},transition={none},title={More sed Examples}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={71},overlay={1},transition={none},title={awk: The Pattern-Action Model}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={71},overlay={2},transition={none},title={awk: The Pattern-Action Model}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={72},overlay={1},transition={none},title={awk: Context and Math}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={72},overlay={2},transition={none},title={awk: Context and Math}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={73},overlay={1},transition={none},title={Practice: Data Extraction}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={73},overlay={2},transition={none},title={Practice: Data Extraction}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={74},overlay={1},transition={none},title={More awk Examples}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={75},overlay={1},transition={none},title={Scripting Basics}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={76},overlay={1},transition={none},title={Variables in Scripts}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={77},overlay={1},transition={none},title={Positional Arguments}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={78},overlay={1},transition={none},title={Logic and Conditionals}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={78},overlay={2},transition={none},title={Logic and Conditionals}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={79},overlay={1},transition={none},title={Iteration (for, while)}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={79},overlay={2},transition={none},title={Iteration (for, while)}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={79},overlay={3},transition={none},title={Iteration (for, while)}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={79},overlay={4},transition={none},title={Iteration (for, while)}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={79},overlay={5},transition={none},title={Iteration (for, while)}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={80},overlay={1},transition={none},title={Functions and Scope}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={80},overlay={2},transition={none},title={Functions and Scope}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={81},overlay={1},transition={none},title={Robust Scripting and Debugging}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={81},overlay={2},transition={none},title={Robust Scripting and Debugging}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={81},overlay={3},transition={none},title={Robust Scripting and Debugging}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={82},overlay={1},transition={none},title={Example: Auto-Backup}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={83},overlay={1},transition={none},title={Analysis: Auto-Backup}
+@@BeamerFrame: 
+-parameters:rawpage={2},truepage={84},overlay={1},transition={none},title={Questions?}

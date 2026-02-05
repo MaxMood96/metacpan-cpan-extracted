@@ -48,8 +48,8 @@ _S_nv_is_integer (NV const nv) {
     }
     else {
         char buf[64];  /* Must fit sprintf/Gconvert of longest NV */
-        const char* p;
-        (void)Gconvert(nv, NV_DIG, 0, buf);
+        intptr_t ignored = (intptr_t)Gconvert(nv, NV_DIG, 0, buf);
+        (void)ignored;
         return _S_pv_is_integer(buf);
     }
 }
@@ -99,7 +99,7 @@ _is_class_loaded (SV* const klass) {
     return FALSE;
 }
 
-// Full version of check_type
+/* Full version of check_type */
 static bool
 check_type(SV* const val, int flags, CV* check_cv)
 {
@@ -115,16 +115,15 @@ check_type(SV* const val, int flags, CV* check_cv)
         SV* result;
 
         dSP;
-        int count;
         ENTER;
         SAVETMPS;
         PUSHMARK(SP);
         EXTEND(SP, 1);
         PUSHs(sv_2mortal(val));
         PUTBACK;
-        count  = call_sv((SV *)check_cv, G_SCALAR);
+        int count = call_sv((SV *)check_cv, G_SCALAR|G_EVAL);
         SPAGAIN;
-        result = POPs;
+        result = count ? POPs : &PL_sv_undef;
         bool return_val = SvTRUE(result);
         FREETMPS;
         LEAVE;
@@ -186,27 +185,27 @@ check_type(SV* const val, int flags, CV* check_cv)
             }
             else if ( sv_true( val ) ) {
                 if ( SvPOKp(val) ) {
-                    // String "1"
+                    /* String "1" */
                     return SvCUR(val) == 1 && SvPVX(val)[0] == '1';
                 }
                 else if ( SvIOKp(val) ) {
-                    // Integer 1
+                    /* Integer 1 */
                     return SvIVX(val) == 1;
                 }
                 else if( SvNOKp(val) ) {
-                    // Float 1.0
+                    /* Float 1.0 */
                     return SvNVX(val) == 1.0;
                 }
                 else {
-                    // Another way to check for string "1"???
+                    /* Another way to check for string "1"??? */
                     STRLEN len;
                     char* ptr = SvPV(val, len);
                     return len == 1 && ptr[0] == '1';
                 }
             }
             else {
-                // Any non-reference non-true value (0, undef, "", "0")
-                // is a valid Bool.
+                /* Any non-reference non-true value (0, undef, "", "0")
+                 * is a valid Bool. */
                 return TRUE;
             }
         }
@@ -245,7 +244,7 @@ check_type(SV* const val, int flags, CV* check_cv)
             return ( (len > 0 && i[0] != '-') ? TRUE : FALSE );
         }
         case TYPE_BASE_NUM:
-            // In Perl We Trust
+            /* In Perl We Trust */
             return looks_like_number(val);
         case TYPE_BASE_PZNUM:
             if ( ! looks_like_number(val) ) {
@@ -276,7 +275,7 @@ check_type(SV* const val, int flags, CV* check_cv)
     }
 }
 
-// Macro version which falls back to the full version
+/* Macro version which falls back to the full version */
 #define CHECK_TYPE(ok, val, flags, check_cv)                      \
     STMT_START {                                                  \
         switch (flags) {                                          \

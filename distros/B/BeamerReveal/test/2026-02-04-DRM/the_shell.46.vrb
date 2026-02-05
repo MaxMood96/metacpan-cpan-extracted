@@ -1,0 +1,13 @@
+\frametitle{Think-Pair-Share: Creative Substitution}
+\begin{block}{Scenario}
+You want to create a directory named after the current year and month, and then move all your \texttt{.log} files into it.
+\end{block}
+\begin{exampleblock}{Challenge}\label{sec:org6dd2c1c}
+How can you do this in one or two lines using command substitution? (Hint: check \texttt{man date})
+\end{exampleblock}
+\begin{alertblock}<2->{Answer}
+\begin{verbatim}
+mkdir "$(date +%Y-%m)"
+mv *.log "$(date +%Y-%m)"
+\end{verbatim}
+\end{alertblock}

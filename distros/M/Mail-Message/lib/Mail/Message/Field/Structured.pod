@@ -44,11 +44,15 @@ Extends L<"OVERLOADED" in Mail::Message::Field::Full|Mail::Message::Field::Full/
 
 Inherited, see L<Mail::Message::Field::Full/"OVERLOADED">
 
-=item overload: B<0+> numification
+=item overload: B<'""'> stringification
 
 Inherited, see L<Mail::Message::Field/"OVERLOADED">
 
-=item overload: B<<=>> numeric comparison
+=item overload: B<'0+'> numification
+
+Inherited, see L<Mail::Message::Field/"OVERLOADED">
+
+=item overload: B<'<=>'> numeric comparison
 
 Inherited, see L<Mail::Message::Field/"OVERLOADED">
 
@@ -95,7 +99,7 @@ A set of values which shape the line.
 
 =back
 
-The C<$name> is a wellformed header name (you may use L<wellformedName()|Mail::Message::Field/"Access to the name">) to
+The C<$name> is a wellformed header name (you may use L<wellformedName()|Mail::Message::Field/"Attributes">) to
 be sure about the casing.  The C<$body> is a string, one body object, or an
 ARRAY of body objects.  In case of objects, they must fit to the
 constructor of the field: the types which are accepted may differ.
@@ -125,8 +129,8 @@ L<Mail::Message::Field::Attribute|Mail::Message::Field::Attribute> objects.
 =item datum => $date
 
 The method name I<body> is very confusing, even in the RFC.  In MailBox,
-for historical reasons, L<body()|Mail::Message::Field/"Access to the body"> returns the part of the field contents
-before the first semi-colon.  L<foldedBody()|Mail::Message::Field/"Access to the body"> and L<unfoldedBody()|Mail::Message::Field/"Access to the body">
+for historical reasons, L<body()|Mail::Message::Field/"Attributes"> returns the part of the field contents
+before the first semi-colon.  L<foldedBody()|Mail::Message::Field/"Attributes"> and L<unfoldedBody()|Mail::Message::Field/"Attributes">
 address the whole field.
 
 There is no common name for the piece of data before the parameters
@@ -152,6 +156,38 @@ it C<datum>.
 =head2 Attributes
 
 Extends L<"Attributes" in Mail::Message::Field::Full|Mail::Message::Field::Full/"Attributes">.
+
+=over 4
+
+=item $obj-E<gt>B<Name>()
+
+Inherited, see L<Mail::Message::Field/"Attributes">
+
+=item $obj-E<gt>B<body>()
+
+Inherited, see L<Mail::Message::Field/"Attributes">
+
+=item $obj-E<gt>B<folded>()
+
+Inherited, see L<Mail::Message::Field/"Attributes">
+
+=item $obj-E<gt>B<foldedBody>( [$body] )
+
+Inherited, see L<Mail::Message::Field/"Attributes">
+
+=item $obj-E<gt>B<name>()
+
+Inherited, see L<Mail::Message::Field/"Attributes">
+
+=item $obj-E<gt>B<unfoldedBody>( [$body, [$wrap]] )
+
+Inherited, see L<Mail::Message::Field/"Attributes">
+
+=item $obj-E<gt>B<wellformedName>( [STRING] )
+
+Inherited, see L<Mail::Message::Field/"Attributes">
+
+=back
 
 =head2 The field
 
@@ -189,55 +225,15 @@ Inherited, see L<Mail::Message::Field/"The field">
 
 =back
 
-=head2 Access to the name
-
-Extends L<"Access to the name" in Mail::Message::Field::Full|Mail::Message::Field::Full/"Access to the name">.
-
-=over 4
-
-=item $obj-E<gt>B<Name>()
-
-Inherited, see L<Mail::Message::Field/"Access to the name">
-
-=item $obj-E<gt>B<name>()
-
-Inherited, see L<Mail::Message::Field/"Access to the name">
-
-=item $obj-E<gt>B<wellformedName>( [STRING] )
-
-Inherited, see L<Mail::Message::Field/"Access to the name">
-
-=back
-
 =head2 Access to the body
 
 Extends L<"Access to the body" in Mail::Message::Field::Full|Mail::Message::Field::Full/"Access to the body">.
 
 =over 4
 
-=item $obj-E<gt>B<body>()
-
-Inherited, see L<Mail::Message::Field/"Access to the body">
-
 =item $obj-E<gt>B<decodedBody>(%options)
 
 Inherited, see L<Mail::Message::Field::Full/"Access to the body">
-
-=item $obj-E<gt>B<folded>()
-
-Inherited, see L<Mail::Message::Field/"Access to the body">
-
-=item $obj-E<gt>B<foldedBody>( [$body] )
-
-Inherited, see L<Mail::Message::Field/"Access to the body">
-
-=item $any-E<gt>B<stripCFWS>( [STRING] )
-
-Inherited, see L<Mail::Message::Field/"Access to the body">
-
-=item $obj-E<gt>B<unfoldedBody>( [$body, [$wrap]] )
-
-Inherited, see L<Mail::Message::Field/"Access to the body">
 
 =back
 
@@ -309,6 +305,14 @@ Inherited, see L<Mail::Message::Field::Full/"Access to the content">
 
 Inherited, see L<Mail::Message::Field::Full/"Access to the content">
 
+=item $any-E<gt>B<dateToTimestamp>(STRING)
+
+Inherited, see L<Mail::Message::Field/"Access to the content">
+
+=item $any-E<gt>B<stripCFWS>( [STRING] )
+
+Inherited, see L<Mail::Message::Field/"Access to the content">
+
 =item $obj-E<gt>B<study>()
 
 Inherited, see L<Mail::Message::Field/"Access to the content">
@@ -323,55 +327,19 @@ Inherited, see L<Mail::Message::Field/"Access to the content">
 
 =back
 
-=head2 Other methods
-
-Extends L<"Other methods" in Mail::Message::Field::Full|Mail::Message::Field::Full/"Other methods">.
-
-=over 4
-
-=item $any-E<gt>B<dateToTimestamp>(STRING)
-
-Inherited, see L<Mail::Message::Field/"Other methods">
-
-=back
-
 =head2 Internals
 
 Extends L<"Internals" in Mail::Message::Field::Full|Mail::Message::Field::Full/"Internals">.
 
 =over 4
 
-=item $obj-E<gt>B<consume>( $line | <$name,<$body|$objects>> )
-
-Inherited, see L<Mail::Message::Field/"Internals">
-
 =item $any-E<gt>B<decode>(STRING, %options)
 
 Inherited, see L<Mail::Message::Field::Full/"Internals">
 
-=item $obj-E<gt>B<defaultWrapLength>( [$length] )
-
-Inherited, see L<Mail::Message::Field/"Internals">
-
 =item $obj-E<gt>B<encode>(STRING, %options)
 
 Inherited, see L<Mail::Message::Field::Full/"Internals">
-
-=item $any-E<gt>B<fold>( $name, $body, [$maxchars] )
-
-Inherited, see L<Mail::Message::Field/"Internals">
-
-=item $obj-E<gt>B<setWrapLength>( [$length] )
-
-Inherited, see L<Mail::Message::Field/"Internals">
-
-=item $obj-E<gt>B<stringifyData>(STRING|ARRAY|$objects)
-
-Inherited, see L<Mail::Message::Field/"Internals">
-
-=item $obj-E<gt>B<unfold>(STRING)
-
-Inherited, see L<Mail::Message::Field/"Internals">
 
 =back
 
@@ -380,6 +348,10 @@ Inherited, see L<Mail::Message::Field/"Internals">
 Extends L<"Parsing" in Mail::Message::Field::Full|Mail::Message::Field::Full/"Parsing">.
 
 =over 4
+
+=item $obj-E<gt>B<consume>( $line | <$name,<$body|$objects>> )
+
+Inherited, see L<Mail::Message::Field/"Parsing">
 
 =item $any-E<gt>B<consumeComment>(STRING)
 
@@ -397,6 +369,14 @@ Inherited, see L<Mail::Message::Field::Full/"Parsing">
 
 The part of the field before the semi-colon (C<;>).
 
+=item $obj-E<gt>B<defaultWrapLength>( [$length] )
+
+Inherited, see L<Mail::Message::Field/"Parsing">
+
+=item $any-E<gt>B<fold>( $name, $body, [$maxchars] )
+
+Inherited, see L<Mail::Message::Field/"Parsing">
+
 =item $obj-E<gt>B<parse>(STRING)
 
 Inherited, see L<Mail::Message::Field::Full/"Parsing">
@@ -404,6 +384,18 @@ Inherited, see L<Mail::Message::Field::Full/"Parsing">
 =item $obj-E<gt>B<produceBody>()
 
 Inherited, see L<Mail::Message::Field::Full/"Parsing">
+
+=item $obj-E<gt>B<setWrapLength>( [$length] )
+
+Inherited, see L<Mail::Message::Field/"Parsing">
+
+=item $obj-E<gt>B<stringifyData>(STRING|ARRAY|$objects)
+
+Inherited, see L<Mail::Message::Field/"Parsing">
+
+=item $obj-E<gt>B<unfold>(STRING)
+
+Inherited, see L<Mail::Message::Field/"Parsing">
 
 =back
 
@@ -496,8 +488,8 @@ Cast by C<encode()>
 
 =head1 SEE ALSO
 
-This module is part of Mail-Message version 4.03,
-built on January 26, 2026. Website: F<http://perl.overmeer.net/CPAN/>
+This module is part of Mail-Message version 4.04,
+built on February 04, 2026. Website: F<http://perl.overmeer.net/CPAN/>
 
 =head1 LICENSE
 

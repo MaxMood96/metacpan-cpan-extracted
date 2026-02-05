@@ -27,6 +27,12 @@ as a reference implementation for your own experiments and tests.
 	- [Engine](#engine)
 		- [Running the Engine](#running-the-engine)
 		- [Graphical User Interfaces](#graphical-user-interfaces)
+		- [Syzygy Endgame Tablebases](#syzygy-endgame-tablebases)
+		- [Differences to Other UCI Engines](#differences-to-other-uci-engines)
+			- [Commandline Options](#commandline-options)
+			- [Option `SyzygyPath`](#option-syzygypath)
+			- [Options `Syzygy7TimeCushion` and `Syzygy3TimeCushion`](#options-syzygy7timecushion-and-syzygy3timecushion)
+			- [Option `Move Overhead`](#option-move-overhead)
 	- [Internals](#internals)
 	- [Copryight](#copryight)
 
@@ -170,6 +176,69 @@ interface.  Try using one of these:
 * [Cute Chess](https://cutechess.com/) (Linux, MacOS, and Windows)
 * [Banksia GUI](https://banksiagui.com/) (Linux, MacOS, and Windows)
 * [Arena](http://www.playwitharena.de/) (Linux, Windows)
+
+### Syzygy Endgame Tablebases
+
+When you want to use Syzygy Endgame Tablebases, make sure that they are stored
+on a fast SSD disk. Conventional spinning disks are way too small.
+
+The DTZ files are optional but improve performance. They can be stored on a
+slower storage medium. However, try to make sure that the disk does not go to
+sleep while playing. Waking the disk up can take several seconds and that can
+cause the engine to lose on time.
+
+### Differences to Other UCI Engines
+
+#### Commandline Options
+
+The program understands several commandline options. Try `plisco --help` for
+details.
+
+#### Option `SyzygyPath`
+
+Unlike other engines do, directories are searched recursively for tablebase
+files.
+
+#### Options `Syzygy7TimeCushion` and `Syzygy3TimeCushion`
+
+Probing the table bases in Perl is a lot slower than in C or similar languages
+because the records have to be decompressed.
+
+The engine will therefore not sort root moves if it is likely to be flagged
+because of the tablebase probes. But the performance largely depends on the
+speed of your storage media.
+
+These two non-standard options control whether the engine will try to order
+the root moves with tablebase probes.  The default values for T7
+(`Syzygy7TimeCushion`) is 5000 (milliseconds) and the default value for T3
+(`Syzygy3TimeCushion`) is 500 (milliseconds). If there are 7 pieces on the
+board, and the maximum allocated time for the move is less than T7, no
+tablebase will be probed. For fewer pieces, the formula is as follows:
+
+    min_time_left = max(T3, T7 / 5^(7 - n))
+
+Where n is the number of pieces on the board.
+
+If you see that the engine often loses on time, escpecially, with few pieces
+on the board, increase the values accordingly.
+
+#### Option `Move Overhead`
+
+You can use the option name `Move Overhead` or `MoveOverhead`, whatever you
+prefer.
+
+The default value for the move overhead is displayed as 10 ms. But this is
+only the initial value, and in reality, the move overhead is determined
+dynamically accurately measured. That has the advantage that the engine
+automatically detects network lags or other performance penalties.
+
+The downside of this is that the engine output is not deterministic, which
+can be a problem for debugging. You can avoid that by specifying the move
+overhead explicitely:
+
+```
+setoption name Move Overhead value 10
+```
 
 ## Internals
 

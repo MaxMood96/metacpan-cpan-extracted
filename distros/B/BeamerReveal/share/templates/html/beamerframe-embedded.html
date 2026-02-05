@@ -1,0 +1,20 @@
+<section class="slide"
+	 id="---SLIDEID---"
+	 data-menu-title="---DATAMENUTITLE---"
+	 data-transition="---TRANSITION---"
+	 data-background-transition="---TRANSITION---"
+	 ---AUTOSLIDE---
+	 >
+  <script type="module">
+    const encoded = `
+---SLIDEEMBEDDEDB64---`;
+    const bytes = Uint8Array.from(atob(encoded), c =>c.charCodeAt(0));
+    const blob = new Blob([bytes], { type: "---MIMETYPE---" });
+    
+    const slide = document.getElementById("---SLIDEID---");
+    slide.setAttribute( "data-background-image", URL.createObjectURL(blob) );
+    if (window.Reveal) Reveal.sync();
+  </script>
+---SLIDECONTENT---
+<aside class="notes">---NOTESIMAGE---</aside>
+</section>

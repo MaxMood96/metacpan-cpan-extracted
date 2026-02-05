@@ -1,7 +1,7 @@
 package NetPacket::TCP;
 our $AUTHORITY = 'cpan:YANICK';
 # ABSTRACT: Assemble and disassemble TCP (Transmission Control Protocol) packets.
-$NetPacket::TCP::VERSION = '1.7.2';
+$NetPacket::TCP::VERSION = '1.8.0';
 use strict;
 use warnings;
 
@@ -179,9 +179,7 @@ sub parse_tcp_options {
   my $opts = $self->{options};
   my @bytes = split //, $opts;
   my %options;
-  my $size;
  ENTRY:
-  $size = $#bytes;
   foreach my $byte (@bytes) {
     my $kind = unpack('C', $byte);
     if($kind == 2) {
@@ -282,7 +280,7 @@ NetPacket::TCP - Assemble and disassemble TCP (Transmission Control Protocol) pa
 
 =head1 VERSION
 
-version 1.7.2
+version 1.8.0
 
 =head1 SYNOPSIS
 

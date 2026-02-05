@@ -1,0 +1,16 @@
+\frametitle{History Examples}
+\begin{block}{Using History}
+\begin{verbatim}
+# View last 20 commands
+history 20
+
+# Forgot sudo?
+$ ls /var/root
+ls: /var/root: Permission denied
+$ sudo !!
+
+# Search history
+(Press Ctrl+R, then type 'ssh')
+(reverse-i-search)`ssh': ssh user@umd.edu
+\end{verbatim}
+\end{block}

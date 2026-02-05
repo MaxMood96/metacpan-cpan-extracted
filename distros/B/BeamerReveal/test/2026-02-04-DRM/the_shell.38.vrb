@@ -1,0 +1,21 @@
+\frametitle{Time to Explore: Globbing}
+\begin{block}{Files in Directory}
+\texttt{img1.png}, \texttt{img10.png}, \texttt{img2.png}, \texttt{image.png}, \texttt{backup\_img1.png}
+\end{block}
+\begin{exampleblock}{Predict}\label{sec:org735de1c}
+Which files match these patterns?
+\begin{enumerate}
+\item \texttt{img?.png}
+\item \texttt{img*.png}
+\item \texttt{img[1-9].png}
+\item \texttt{*img1.png}
+\end{enumerate}
+\end{exampleblock}
+\begin{alertblock}<2->{Answers}
+\begin{enumerate}[<+->]
+\item \texttt{img1.png}, \texttt{img2.png}
+\item \texttt{img1.png}, \texttt{img10.png}, \texttt{img2.png}
+\item \texttt{img1.png}, \texttt{img2.png}
+\item \texttt{img1.png}, \texttt{backup\_img1.png}
+\end{enumerate}
+\end{alertblock}

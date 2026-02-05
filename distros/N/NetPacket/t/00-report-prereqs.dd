@@ -6,15 +6,16 @@ do { my $x = {
                       },
        'develop' => {
                       'requires' => {
+                                      'Software::Security::Policy::Individual' => '0',
                                       'Test::More' => '0.96',
                                       'Test::Vars' => '0'
                                     }
                     },
        'runtime' => {
                       'recommends' => {
-                                      'Net::Pcap' => '0',
-                                      'Net::PcapUtils' => '0'
-                                    },
+                                        'Net::Pcap' => '0',
+                                        'Net::PcapUtils' => '0'
+                                      },
                       'requires' => {
                                       'Carp' => '0',
                                       'Exporter' => '0',
@@ -35,6 +36,7 @@ do { my $x = {
                                    'File::Spec' => '0',
                                    'IO::Handle' => '0',
                                    'IPC::Open3' => '0',
+                                   'Test2::Bundle::More' => '0',
                                    'Test::More' => '0'
                                  }
                  }

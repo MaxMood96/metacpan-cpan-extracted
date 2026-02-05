@@ -1,0 +1,27 @@
+\frametitle{Pipes}
+\begin{columns}
+\begin{column}{0.48\columnwidth}
+\begin{block}{Problem}
+Count .txt files:
+\begin{itemize}
+\item \texttt{ls} shows files
+\item \texttt{grep} filters
+\item \texttt{wc -l} counts
+\end{itemize}
+
+How to connect?
+\end{block}
+\end{column}
+\begin{column}{0.48\columnwidth}
+\begin{exampleblock}{Solution}\label{sec:orgc7d8ba1}
+Use pipes (\texttt{|})
+
+\begin{verbatim}
+ls -l | grep txt | wc -l
+\end{verbatim}
+\end{exampleblock}
+\end{column}
+\end{columns}
+\begin{alertblock}<2->{Philosophy}
+"Do one thing well" — combine simple tools for complex tasks
+\end{alertblock}

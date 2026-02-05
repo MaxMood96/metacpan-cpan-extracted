@@ -1,0 +1,17 @@
+\frametitle{Think-Pair-Share: Debug the Pipeline}
+\begin{block}{The Goal}
+Find all lines with "Error" in \texttt{app.log} and count them.
+\end{block}
+\begin{exampleblock}{Broken Commands}\label{sec:orgfd47812}
+Identify the flaw in each command:
+\begin{enumerate}
+\item \texttt{grep "Error" app.log > wc -l}
+\item \texttt{cat app.log | grep Error | wc}
+\end{enumerate}
+\end{exampleblock}
+\begin{alertblock}<2->{Answers}
+\begin{enumerate}[<+->]
+\item \alert{Redirection Error:} \texttt{>} sends output to a \alert{file} named \texttt{wc}. Use \texttt{|} to send to a \alert{program}.
+\item \alert{Ambiguous Output:} \texttt{wc} shows lines, words, AND characters. Use \texttt{wc -l} for just lines.
+\end{enumerate}
+\end{alertblock}

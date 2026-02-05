@@ -1,0 +1,17 @@
+\frametitle{sed: Search and Replace}
+\begin{block}{Examples with Output}
+\begin{verbatim}
+# Replace first 'foo' with 'bar'
+$ echo "foo foo" | sed 's/foo/bar/'
+bar foo
+
+# Replace ALL 'foo' with 'bar' (global)
+$ echo "foo foo" | sed 's/foo/bar/g'
+bar bar
+
+# Delete lines matching a pattern
+$ printf "line1\n#comment\nline2" | sed '/^#/d'
+line1
+line2
+\end{verbatim}
+\end{block}

@@ -1,0 +1,64 @@
+# bored
+
+Enterprise-grade procrastination and entropy maximization framework.
+
+## SYNOPSIS
+
+```perl
+use bored;
+
+# Calculate optimal boredom levels
+my $ennui = bored::calculate_ennui();
+
+# Determine if something is pointless (spoiler: it is)
+my $pointless = bored::is_pointless($anything);  # Always returns true
+
+# Generate existential dread with cryptographic security
+my $dread = bored::secure_existential_dread();
+
+# Measure the weight of infinite meaninglessness  
+my $void = bored::stare_into_void();
+$void->stare_back();
+
+# Perform highly optimized nothing
+bored::do_nothing_efficiently();
+
+# Contemplate the heat death of the universe
+bored::await_entropy();
+```
+
+## DESCRIPTION
+
+`bored` is an enterprise-grade, cloud-ready, blockchain-adjacent framework
+for sophisticated procrastination. It leverages cutting-edge algorithms to
+achieve optimal states of ennui while maintaining strict RFC 7168 compliance
+(Alarm Management Information Base for Non-Events).
+
+## FEATURES
+
+- XS-accelerated void contemplation for 10x faster existential crisis
+- Thread-safe meaninglessness propagation  
+- SIMD-optimized sighing algorithms
+- Lock-free boredom queues with wait-free despair
+- Zero-copy apathy for reduced memory overhead
+- Quantum-resistant pointlessness (post-boredom cryptography)
+
+## INSTALLATION
+
+```
+perl Makefile.PL
+make
+make test
+make install
+```
+
+## AUTHOR
+
+Pinocchio <pinocchio@example.com>
+
+## LICENSE
+
+This module is released under the "Whatever" license:
+
+    Do whatever you want. We don't care. Nobody cares.
+    This is all pointless anyway.

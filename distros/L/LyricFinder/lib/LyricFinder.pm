@@ -7,7 +7,7 @@ use warnings;
 use Carp;
 use parent 'LyricFinder::_Class';
 
-# LyricFinder - A Derived work, by (c) 2020-2025 Jim Turner <turnerjw784 at yahoo.com> of:
+# LyricFinder - A Derived work, by (c) 2020-2026 Jim Turner <turnerjw784 at yahoo.com> of:
 #
 # Lyrics Fetcher
 #
@@ -34,10 +34,10 @@ use parent 'LyricFinder::_Class';
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-our $VERSION = '1.50';
+our $VERSION = '1.60';
 our $DEBUG = 0;  # If you want debug messages, set debug to a true value
 
-my @supported_mods = (qw(Cache ApiLyricsOvh AZLyrics ChartLyrics Genius Letras Lrclib Musixmatch));
+my @supported_mods = (qw(Cache ApiLyricsOvh AZLyrics Genius Letras Lrclib Musixmatch));
 
 my %haveit;
 
@@ -241,7 +241,7 @@ LyricFinder - Fetch song lyrics from several internet lyric sites.
 
 =head1 AUTHOR
 
-This module is Copyright (c) 2020-2025 by
+This module is Copyright (c) 2020-2026 by
 
 Jim Turner, C<< <turnerjw784 at yahoo.com> >>
 		
@@ -307,8 +307,7 @@ lyrics sites for song lyrics, and, if found, returns them as a string.
 
 The supported and currently-installed modules are:  
 L<LyricFinder::ApiLyricsOvh> (for searching api.lyrics.ovh), 
-L<LyricFinder::AZLyrics> (www.azlyrics.com), 
-L<LyricFinder::ChartLyrics> (api.chartlyrics.com), L<LyricFinder::Genius> 
+L<LyricFinder::AZLyrics> (www.azlyrics.com), L<LyricFinder::Genius> 
 (genius.com), L<LyricFinder::Letras> (www.letras.mus.br), 
 L<LyricFinder::Lrclib> (lrclib.net), and L<LyricFinder::Musixmatch> 
 (www.musixmatch.com).  There is a special module for storing and / or fetching 
@@ -344,16 +343,20 @@ a reference to a list of module names to skip,
 ie. I<-omit =>> I<'AZLyrics,Genius'> in the I<new LyricFinder()> function.  
 If you want to use one or more specific sites, or enforce 
 a specific search order, you can call the fetch() method with a third 
-argument consisting of the site module name, ie. "Musixmatch", or reference to 
-an array of site module names, ie. [Genius, AZLyrics].  If you specify "Cache" 
-as the single module name (and provide a "-cache" directory containing lyrics 
-files on your hard drive), LyricFinder will only search that directory for 
-lyrics, and not the internet.  Otherwise, specifying a "-cache" directory 
-will cause LyricFinder to first look in your cache directory for matching 
-lyrics first, and only search any of the lyrics sites if not found, then will 
-cache the lyrics found on the internet to a new lyric file in your lyrics 
-directory eleminating re-searching the web when you play the same song 
-again later and reducing internet bandwidth usage!
+argument consisting of either a string consisting of one, or more site module-
+names separated by commas - ie. "Musixmatch", or a reference to an array of 
+site module names, ie. [qw(Genius, AZLyrics)].  The lyric sites will be 
+searched in the order specified until either lyrics are found, or all site(s) 
+specified have been searched.  To search all the sites instead in random order, 
+specify the special value I<"random">.  If you specify "Cache" as the 
+single module name (and provide a "-cache" directory containing lyrics files 
+on your hard drive), LyricFinder will only search that directory for lyrics, 
+and not the internet.  Otherwise, specifying a "-cache" directory will cause 
+LyricFinder to first look in your cache directory for matching lyrics first, 
+and only search any of the lyrics sites if not found, then will cache the 
+lyrics found on the internet to a new lyric file in your lyrics directory 
+eleminating re-searching the web when you play the same song again later and 
+reducing internet bandwidth usage!
 
 In case of problems with fetching lyrics, the error string will be returned by 
 $finder->message().  If all goes well, it will have 'Ok' in it.
@@ -404,7 +407,7 @@ be I<1> ("I<true>").  The currently-supported options are:
 
 =over 4
 
-=item B<-agent> => I<"user-agent string">
+=item B<-agent> => I<"user-agent-string">
 
 Specifies an alternate "user-agent" string sent to the lyric sites when 
 attempting to fetch lyrics.  Get / set the desired user-agent 
@@ -486,7 +489,7 @@ the various sites, so this should only be needed in special cases.
 
 Example:  "-Musixmatch => { -noextra => 1 }"
 
-Default:  none (no site-specific options)
+Default:  I<none> (no site-specific options)
 
 NOTE:  The "-cache" (cache-directory) option is needed by the main LyricFinder 
 module and the site submodules in order to use the caching feature, so passing 
@@ -510,6 +513,11 @@ LyricFinder::Lrclib, but will serve up "plain-text" lyrics, by default, as the
 default is "NO" if this option false or not specified 
 (Except is I<-synced> => I<"ONLY"> is specified, in which either timestamped 
 lyrics or no lyrics will be returned).
+
+Note, for the best opportunity to obtain timestamped lyrics, it is reccomended 
+to specify the fetch order as either I<"Lrclib"> or I<"Lrclib,random">, which 
+ensures that I<LyricFinder::Lrclib> is always tried first.  
+(See I<fetch>() method).
 
 =back 
 
@@ -573,7 +581,7 @@ string, if none found.  NOTE:  The only site that supports this currently
 is B<AZLyrics>.
 
 =item I<$string> = $finder->B<fetch>(I<$artist>, 
-I<$title> [, I<$source[. source2...]> | I<\@sources> [, I<$limit>]])
+I<$title> [, I<"source[, source2...]"> | I<\@sources> [, I<$limit>]])
 
 Attempt to fetch the lyrics for the given artist and title.
 One or more source site module names can be specified as either a comma-
@@ -589,7 +597,7 @@ equivalent to the full list of modules in their fixed, alphabetical order.
 Default:  I<"random"> (search all available sites in random order until lyrics 
 are found or all available sites have been searched).  
 
-B<fetch()>() is the primary method call, and the only one required 
+B<fetch()> is the primary method call, and the only one required 
 (besides B<new>()) to be called to obtain lyrics.  $limit (if specified) is an 
 integer number to limit the max. number of fetchers to try (normally used with 
 $source = "random") to limit the time needed to search for lyrics 
@@ -606,13 +614,13 @@ If a list of modules is provided, they will be searched in the order they
 appear in the list.
 
 The currently-installed and supported modules are:  ApiLyricsOvh, AZLyrics, 
-ChartLyrics, Genius, Letras, Lrclib, and Musixmatch 
+Genius, Letras, Lrclib, and Musixmatch 
 (NOTE the "x" in the spelling of "Musixmatch")!
 
-B<fetch()>() returns lyrics as a string (includes line-breaks appropriate for 
+B<fetch()> returns lyrics as a string (includes line-breaks appropriate for 
 the user's operating system), or an empty string, if no lyrics found.
 
-=item [ I<$lyrics-option-string> = ] $finder->B<fetch_synced_lyrics>( [ I<string> )
+=item [ I<$lyrics-option-string> = ] $finder->B<fetch_synced_lyrics>( [ I<string> ] )
 
 Get / Set the desired synced-lyrics fetching option.  The valid string values 
 are / returned are:  I<"YES"> | I<"NO"> | I<"OK"> | I<"ONLY">.
@@ -628,10 +636,9 @@ modules currently ignore this option.
 =item I<$scalar> = $finder->B<image_url>()
 
 Returns a URL for a cover-art image, if one found on the lyrics page.  
-Currently, only the LyricFinder::ChartLyrics, LyricFinder::Genius and 
-LyricFinder::Musixmatch sites contain cover-art images.  For the other sites, 
-or if no image is found, an empty string will be returned if 
-this method is called.
+Currently, only the LyricFinder::Genius and LyricFinder::Musixmatch sites 
+contain cover-art images.  For the other sites, or if no image is found, an 
+empty string will be returned if this method is called.
 
 =item I<$scalar> = $finder->B<message>()
 
@@ -665,7 +672,8 @@ Returns either a comma-separated list or an array of the site modules
 actually tried when fetching lyrics.  This is useful to see what sites were 
 actually hit and in what order if I<random> order is being used.  Similar 
 to B<order>(), except only sites actually hit are shown (the last one is 
-the one that successfully fetched the lyrics).
+the one that successfully fetched the lyrics, or the last one tried 
+before giving up).
 
 =item I<$scalar> = $finder->B<url>()
 
@@ -688,8 +696,6 @@ The current version# of LyricFinder
 L<HTML::Strip>, L<HTTP::Request>, L<LWP::UserAgent>, L<URI::Escape>
 
 =head1 RECOMMENDS
-
-L<XML::Simple> (required to use L<LyricFinder::ChartLyrics>)
 
 =head1 BUGS
 
@@ -727,7 +733,7 @@ L<http://search.cpan.org/dist/LyricFinder/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2020-2025 Jim Turner.
+Copyright (c) 2020-2026 Jim Turner.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the the Artistic License (2.0). You may obtain a

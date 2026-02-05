@@ -37,9 +37,12 @@ Extends L<"OVERLOADED" in User::Identity::Collection::Emails|User::Identity::Col
 =item overload: B<""> stringification
 
 Returns the L<string()|Mail::Message::Field::AddrGroup/"METHODS"> value.
-Improves base, see L<User::Identity::Collection/"OVERLOADED">
 
-=item overload: B<@{}> array dereference
+=item overload: B<'""'> stringification
+
+Inherited, see L<User::Identity::Collection/"OVERLOADED">
+
+=item overload: B<'@{}'> array dereference
 
 Inherited, see L<User::Identity::Collection/"OVERLOADED">
 
@@ -261,8 +264,8 @@ Cast by C<addRole()>
 
 =head1 SEE ALSO
 
-This module is part of Mail-Message version 4.03,
-built on January 26, 2026. Website: F<http://perl.overmeer.net/CPAN/>
+This module is part of Mail-Message version 4.04,
+built on February 04, 2026. Website: F<http://perl.overmeer.net/CPAN/>
 
 =head1 LICENSE
 

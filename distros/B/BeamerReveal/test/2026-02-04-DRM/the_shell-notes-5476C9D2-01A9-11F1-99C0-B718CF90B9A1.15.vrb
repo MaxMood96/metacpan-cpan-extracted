@@ -1,0 +1,18 @@
+\frametitle{Essential Navigation Commands}
+\begin{block}{Why?}
+How do you know where you are in a system with millions of files?
+\end{block}
+\begin{block}<2->{Commands}
+\begin{center}
+\begin{tabular}{ll}
+Command & Description\\
+\hline
+\texttt{pwd} & Print working directory\\
+\texttt{cd <dir>} & Change directory\\
+\texttt{ls [dir]} & List directory contents\\
+\texttt{ls -l} & Long format listing\\
+\texttt{ls -a} & Show hidden files\\
+\texttt{ls -lh} & Human-readable sizes\\
+\end{tabular}
+\end{center}
+\end{block}

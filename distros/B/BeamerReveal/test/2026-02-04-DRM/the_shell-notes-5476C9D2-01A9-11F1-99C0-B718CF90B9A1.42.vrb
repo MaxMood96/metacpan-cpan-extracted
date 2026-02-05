@@ -1,0 +1,11 @@
+\frametitle{Tab Completion}
+\begin{exampleblock}{Productivity Booster}\label{sec:org7559290}
+\alert{Tab completion} saves time and prevents typos. If you aren't mashing the Tab key, you're working too hard.
+\end{exampleblock}
+\begin{block}{How it works}
+\begin{itemize}[<+->]
+\item Press \texttt{Tab} once to complete a unique match.
+\item Press \texttt{Tab} twice to see all possibilities if it's ambiguous.
+\item Example: \texttt{cd /u[TAB]l[TAB]b[TAB]} \(\rightarrow\) \texttt{cd /usr/local/bin/}
+\end{itemize}
+\end{block}

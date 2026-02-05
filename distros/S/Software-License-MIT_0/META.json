@@ -1,0 +1,80 @@
+{
+   "abstract" : "MIT No Attribution License (MIT-0)",
+   "author" : [
+      "ryoskzypu <ryoskzypu@proton.me>"
+   ],
+   "dynamic_config" : 1,
+   "generated_by" : "ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010",
+   "license" : [
+      "open_source"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "Software-License-MIT_0",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "inc"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "6.64"
+         }
+      },
+      "develop" : {
+         "recommends" : {
+            "App::CPANTS::Lint" : "0",
+            "Data::Printer" : "0",
+            "Devel::Cover" : "0",
+            "Perl::Critic" : "0",
+            "Perl::Tidy" : "0",
+            "Pod::Markdown" : "0",
+            "Pod::Markdown::Githubert" : "0"
+         },
+         "requires" : {
+            "Test::CPAN::Changes" : "0",
+            "Test::Kwalitee" : "0",
+            "Test::Perl::Critic" : "0",
+            "Test::Pod" : "0",
+            "Test::Pod::Coverage" : "0",
+            "Test::Spelling" : "0"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "Software::License" : "0",
+            "perl" : "5.012000"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "Test2::V1" : "0"
+         }
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/ryoskzypu/Software-License-MIT_0/issues"
+      },
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/ryoskzypu/Software-License-MIT_0.git",
+         "web" : "https://github.com/ryoskzypu/Software-License-MIT_0"
+      }
+   },
+   "version" : "v1.0.0",
+   "x_contributors" : [
+      "ryoskzypu <ryoskzypu@proton.me>"
+   ],
+   "x_serialization_backend" : "JSON::PP version 4.16"
+}

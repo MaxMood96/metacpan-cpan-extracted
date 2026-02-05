@@ -9,7 +9,7 @@ use List::Util 1.45 qw( uniq );
 
 BEGIN {
 	our $AUTHORITY = 'cpan:TOBYINK';
-	our $VERSION   = '0.023002';
+	our $VERSION   = '0.023005';
 	
 	if ( eval { require Types::Standard; 1 } ) {
 		Types::Standard->import(
@@ -993,6 +993,15 @@ do.
 
 These can all be useful features of course, but if speed is critical, consider
 looking at ways to eliminate them.
+
+=head1 INSTALLATION
+
+If the environment variable C<PERL_XS_STRICTC89> is set to true when running
+Makefile.PL, strict C89 flags will be passed to the C compiled when compiling
+Class::XSConstructor. This will also happen if Makefile.PL detects it is
+likely being run in the author's development environment.
+
+In general, the module should work the same in either case.
 
 =head1 SEE ALSO
 

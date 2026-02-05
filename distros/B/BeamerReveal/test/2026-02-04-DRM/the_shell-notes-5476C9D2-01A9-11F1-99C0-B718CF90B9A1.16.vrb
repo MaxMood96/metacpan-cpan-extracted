@@ -1,0 +1,35 @@
+\frametitle{Navigation Examples}
+\begin{columns}
+\begin{column}{0.48\columnwidth}
+\begin{block}{Our Filesystem Structure}
+\begin{verbatim}
+/ (root)
+├── bin/
+├── home/
+│   └── user/
+│       ├── docs/
+│       └── photos/
+└── usr/
+\end{verbatim}
+\end{block}
+\end{column}
+\begin{column}{0.48\columnwidth}
+\begin{exampleblock}<2->{Using Navigation Commands}\label{sec:org4c12b05}
+\begin{verbatim}
+$ pwd
+/home/user
+
+$ ls -F          # -F adds / to directories
+docs/  photos/
+
+$ cd docs
+$ pwd
+/home/user/docs
+
+$ cd ..
+$ pwd
+/home/user
+\end{verbatim}
+\end{exampleblock}
+\end{column}
+\end{columns}

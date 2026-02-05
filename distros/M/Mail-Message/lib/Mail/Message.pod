@@ -28,15 +28,15 @@ Mail::Message - general message object
 =head1 SYNOPSIS
 
   use Mail::Box::Manager;
-  my $mgr    = Mail::Box::Manager->new;
-  my $folder = $mgr->open(folder => 'InBox');
-  my $msg    = $folder->message(2);    # $msg is a Mail::Message now
+  my $mgr     = Mail::Box::Manager->new;
+  my $folder  = $mgr->open(folder => 'INBOX');
+  my $msg     = $folder->message(2);   # $msg is a Mail::Message
 
   my $subject = $msg->subject;         # The message's subject
   my @cc      = $msg->cc;              # List of Mail::Address'es
 
-  my Mail::Message::Head $head = $msg->head;
-  my Mail::Message::Body $body = $msg->decoded;
+  my $head    = $msg->head;            # Mail::Message::Head
+  my $body    = $msg->decoded;         # Mail::Message::Body
   $msg->decoded->print($outfile);
 
   # Send a simple email
@@ -47,8 +47,10 @@ Mail::Message - general message object
     data           => "Some plain text content"
   )->send(via => 'postfix');
 
-  my $reply_msg = Mail::Message->reply(...);
-  my $frwd_msg  = Mail::Message->forward(...);
+  my $msg       = Mail::Message->read(\@lines);
+  my $reply_msg = $msg->reply(...);
+  my $frwd_msg  = $msg->forward(...);
+  my $bounce    = $msg->bounce(...);
 
 =head1 DESCRIPTION
 
@@ -82,8 +84,8 @@ Extends L<"Constructors" in Mail::Reporter|Mail::Reporter/"Constructors">.
 =item $obj-E<gt>B<clone>(%options)
 
 Create a copy of this message.  Returned is a C<Mail::Message> object.
-The head and body, the log and trace levels are taken.  Labels are
-copied with the message, but the delete and modified flags are not.
+The head and body are taken.  Labels are copied with the message, but
+the delete and modified flags are not.
 
 BE WARNED: the clone of any kind of message (or a message part)
 will B<always> be a C<Mail::Message> object.  For example, a
@@ -125,9 +127,9 @@ because the header fields can be updated, for instance when labels change.
 
 =back
 
-» example: 
+» example: of cloning
 
-  $copy = $msg->clone;
+  my $copy = $msg->clone;
 
 =item $class-E<gt>B<new>(%options)
 
@@ -462,7 +464,7 @@ L<sender()|Mail::Message/"The header">.
 Returns the value which is stored in the header field with the specified
 name.  The C<$fieldname> is case insensitive.  The I<unfolded body> of the
 field is returned, stripped from any attributes.
-See L<Mail::Message::Field::body()|Mail::Message::Field/"Access to the body">.
+See L<Mail::Message::Field::body()|Mail::Message::Field/"Attributes">.
 
 If the field has multiple appearances in the header, only the last
 instance is returned.  If you need more complex handing of fields, then
@@ -1293,8 +1295,8 @@ Cast by C<build()>
 
 =head1 SEE ALSO
 
-This module is part of Mail-Message version 4.03,
-built on January 26, 2026. Website: F<http://perl.overmeer.net/CPAN/>
+This module is part of Mail-Message version 4.04,
+built on February 04, 2026. Website: F<http://perl.overmeer.net/CPAN/>
 
 =head1 LICENSE
 

@@ -4,7 +4,6 @@ lib/LyricFinder/_Class.pm
 lib/LyricFinder/ApiLyricsOvh.pm
 lib/LyricFinder/AZLyrics.pm
 lib/LyricFinder/Cache.pm
-lib/LyricFinder/ChartLyrics.pm
 lib/LyricFinder/Genius.pm
 lib/LyricFinder/Letras.pm
 lib/LyricFinder/Lrclib.pm

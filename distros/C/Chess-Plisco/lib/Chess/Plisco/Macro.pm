@@ -10,7 +10,7 @@
 # http://www.wtfpl.net/ for more details.
 
 package Chess::Plisco::Macro;
-$Chess::Plisco::Macro::VERSION = 'v1.0.2';
+$Chess::Plisco::Macro::VERSION = 'v1.0.3';
 use strict;
 
 use Filter::Util::Call;
@@ -199,6 +199,8 @@ _define_from_file _cp_pos_move_pinned =>
 _define_from_file _cp_pos_colour_attacked => '$p', '$c', '$shift', 'attacked.pm';
 _define_from_file _cp_pos_move_attacked => '$p', '$from', '$to', 'moveAttacked.pm';
 _define _cp_pawn_double_step => '$f', '$t', '(!(($t - $f) & 0x9))';
+
+_define _cp_is_decisive => '$v', '(($v >= VALUE_TB_WIN_IN_MAX_PLY) || ($v <= VALUE_TB_LOSS_IN_MAX_PLY))';
 
 # Bit twiddling.
 _define_from_file cp_abs => '$v', 'abs.pm';

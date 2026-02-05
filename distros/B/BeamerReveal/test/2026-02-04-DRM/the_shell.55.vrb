@@ -1,0 +1,19 @@
+\frametitle{Building Pipes Step-by-Step}
+\begin{block}{Progressive Example}
+\begin{verbatim}
+# 1. See all lines
+$ cat app.log
+ERROR: connection failed
+INFO: started successfully
+ERROR: timeout
+
+# 2. Filter errors only
+$ cat app.log | grep ERROR
+ERROR: connection failed
+ERROR: timeout
+
+# 3. Count errors
+$ cat app.log | grep ERROR | wc -l
+2
+\end{verbatim}
+\end{block}

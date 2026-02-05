@@ -1,0 +1,167 @@
+----------------------------------------------------------------------------
+--  beamer-reveal.pl                                       v20260204.0909 --
+--  (C) 2025-2026 Walter PM Daems <wdaems@cpan.org>                 GPLv3 --
+--  This script uses materials from:                                      --
+--    - reveal.js (C) Hakim El Hattab and contributors        MIT license --
+--    - Quarto    (C) Posit Software, PBC and contributors    MIT license --
+----------------------------------------------------------------------------
+- Using the following directories:
+  aux-files    : '.'
+  pdf-files    : '.'
+  output-files : '.'
+- Reading driver file ./the_shell.rvl
+- Parsing driver file ./the_shell.rvl
+- Installing quarto/reveal.js boilerplate
+- Generating the images
+- Generating the notes pages
+  - Reading LaTeX source file
+  - Writing LaTeX notes file
+- Processing the presentation
+  - making slide 1
+  - making slide 2
+  - making slide 3
+  - making slide 4
+  - making slide 5
+  - making slide 6
+  - making slide 7
+  - making slide 8
+  - making slide 9
+  - making slide 10
+  - making slide 11
+  - making slide 12
+  - making slide 13
+  - making slide 14
+  - making slide 15
+  - making slide 16
+  - making slide 17
+  - making slide 18
+  - making slide 19
+  - making slide 20
+  - making slide 21
+  - making slide 22
+  - making slide 23
+  - making slide 24
+  - making slide 25
+  - making slide 26
+  - making slide 27
+  - making slide 28
+  - making slide 29
+  - making slide 30
+  - making slide 31
+  - making slide 32
+  - making slide 33
+  - making slide 34
+  - making slide 35
+  - making slide 36
+  - making slide 37
+  - making slide 38
+  - making slide 39
+  - making slide 40
+  - making slide 41
+  - making slide 42
+  - making slide 43
+  - making slide 44
+  - making slide 45
+  - making slide 46
+  - making slide 47
+  - making slide 48
+  - making slide 49
+  - making slide 50
+  - making slide 51
+  - making slide 52
+  - making slide 53
+  - making slide 54
+  - making slide 55
+  - making slide 56
+  - making slide 57
+  - making slide 58
+  - making slide 59
+  - making slide 60
+  - making slide 61
+  - making slide 62
+  - making slide 63
+  - making slide 64
+  - making slide 65
+  - making slide 66
+  - making slide 67
+  - making slide 68
+  - making slide 69
+  - making slide 70
+  - making slide 71
+  - making slide 72
+  - making slide 73
+  - making slide 74
+  - making slide 75
+  - making slide 76
+  - making slide 77
+  - making slide 78
+  - making slide 79
+  - making slide 80
+  - making slide 81
+  - making slide 82
+  - making slide 83
+  - making slide 84
+  - making slide 85
+  - making slide 86
+  - making slide 87
+  - making slide 88
+  - making slide 89
+  - making slide 90
+  - making slide 91
+  - making slide 92
+  - making slide 93
+  - making slide 94
+  - making slide 95
+  - making slide 96
+  - making slide 97
+  - making slide 98
+  - making slide 99
+  - making slide 100
+  - making slide 101
+  - making slide 102
+  - making slide 103
+  - making slide 104
+  - making slide 105
+  - making slide 106
+  - making slide 107
+  - making slide 108
+  - making slide 109
+  - making slide 110
+  - making slide 111
+  - making slide 112
+  - making slide 113
+  - making slide 114
+  - making slide 115
+  - making slide 116
+  - making slide 117
+  - making slide 118
+  - making slide 119
+  - making slide 120
+  - making slide 121
+  - making slide 122
+  - making slide 123
+  - making slide 124
+  - making slide 125
+  - making slide 126
+  - making slide 127
+  - making slide 128
+  - making slide 129
+  - making slide 130
+  - making slide 131
+  - making slide 132
+  - making slide 133
+  - making slide 134
+  - making slide 135
+  - making slide 136
+  - making slide 137
+  - making slide 138
+  - making slide 139
+  - making slide 140
+- Collecting all existing media
+- Generating animations
+- Generating stills
+- Generating all new media
+- Producing presentation
+  - Writing ./the_shell.html
+  - Creating index.html link
+Done

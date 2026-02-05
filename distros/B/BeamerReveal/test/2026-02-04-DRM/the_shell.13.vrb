@@ -1,0 +1,14 @@
+\frametitle{Basic Commands}
+\begin{block}{How It Works}
+Type command → shell splits on whitespace → runs program with arguments
+
+Prompts vary and are customizable (your \texttt{PS1} controls this).
+\end{block}
+\begin{exampleblock}<2->{Examples}\label{sec:org4be45af}
+\begin{verbatim}
+date                    # Show date/time
+echo hello              # Print text
+echo "Hello World"      # Handle spaces
+ls -l ~                # Command with flags
+\end{verbatim}
+\end{exampleblock}

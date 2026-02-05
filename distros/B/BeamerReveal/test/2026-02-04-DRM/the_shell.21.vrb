@@ -1,0 +1,21 @@
+\frametitle{Solutions: File Operations}
+\begin{exampleblock}{Steps}\label{sec:orgb76a3eb}
+\begin{verbatim}
+# 1. Create nested
+mkdir -p STIC/lab1
+
+# 2. Create files
+touch STIC/lab1/test1.py STIC/lab1/test2.py STIC/lab1/notes.txt
+
+# 3. Copy
+cp STIC/lab1/notes.txt STIC/lab1/README.md
+
+# 4. Move
+mkdir STIC/lab1/src
+mv STIC/lab1/*.py STIC/lab1/src/
+
+# 5. Why fail?
+rmdir STIC  # Fails: "Directory not empty"
+rm -r STIC  # Use recursive remove instead!
+\end{verbatim}
+\end{exampleblock}

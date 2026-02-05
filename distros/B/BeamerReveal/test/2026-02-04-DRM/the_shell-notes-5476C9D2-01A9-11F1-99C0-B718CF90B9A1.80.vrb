@@ -1,0 +1,29 @@
+\frametitle{Functions and Scope}
+\begin{columns}
+\begin{column}{0.48\columnwidth}
+\begin{verbatim}
+greet() {
+  local name=$1
+  echo "Hello $name"
+}
+
+greet "Alice"
+\end{verbatim}
+\end{column}
+\begin{column}{0.48\columnwidth}
+\begin{block}{}
+\begin{itemize}
+\item Use \alert{local} variables
+\item Return status (0-255)
+\item Arguments are \texttt{\$1, \$2..}
+\item Name functions clearly
+\end{itemize}
+\end{block}
+\end{column}
+\end{columns}
+\begin{exampleblock}{Practice: Math Function}\label{sec:org47c6fc4}
+\begin{enumerate}[<+->]
+\item Create a function \texttt{square} that prints the square of its first argument.
+\item \alert{Answer:} \texttt{square() \{ echo \$((\$1 * \$1)); \}}
+\end{enumerate}
+\end{exampleblock}

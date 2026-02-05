@@ -27,13 +27,13 @@
             : newSVsv(val)                                \
     )
 
-// Utility macros, typedefs, etc.
+/* Utility macros, typedefs, etc. */
 #include "src/types.c"
 #include "src/should_return.c"
 #include "src/unpacking.c"
 #include "src/sorting.c"
 
-// Type-specific macros, typedefs, etc.
+/* Type-specific macros, typedefs, etc. */
 #include "src/Array.c"
 #include "src/String.c"
 
@@ -106,8 +106,10 @@ CODE:
     if (real_ix < 0)
         real_ix += len;
 
-    //warn("HERE, items=%d, sig.has_curried_sv=%d, sig.index=%d, sig.has_index=%d, ix=%d, real_ix=%d, has_ix=%d", items, sig->has_curried_sv, sig->index, sig->has_index, ix, real_ix, has_ix);
-    //Perl_sv_dump(sig->curried_sv);
+    /*
+    warn("HERE, items=%d, sig.has_curried_sv=%d, sig.index=%d, sig.has_index=%d, ix=%d, real_ix=%d, has_ix=%d", items, sig->has_curried_sv, sig->index, sig->has_index, ix, real_ix, has_ix);
+    Perl_sv_dump(sig->curried_sv);
+    */
 
     if ( items > ( has_ix ? 1 : 2 ) || sig->has_curried_sv ) {
 
@@ -195,12 +197,13 @@ CODE:
 
     SV *sv_dollar_underscore = get_sv("_", 0);
     I32 len = av_len(array) + 1;
+    I32 i;
 
     if ( DO_MULTICALL && !CvISXSUB(callback) ) {
         dMULTICALL;
         U8 gimme = G_SCALAR;
         PUSH_MULTICALL(callback);
-        for (I32 i = 0; i < len; i++) {
+        for (i = 0; i < len; i++) {
             SV **svp = av_fetch(array, i, 0);
             SV *elem = svp ? *svp : &PL_sv_undef;
             sv_setsv(sv_dollar_underscore, elem);
@@ -213,8 +216,7 @@ CODE:
         POP_MULTICALL;
     }
     else {
-        for (I32 i = 0; i < len; i++) {
-            dSP;
+        for (i = 0; i < len; i++) {
             SV **svp = av_fetch(array, i, 0);
             SV *elem = svp ? *svp : &PL_sv_undef;
             sv_setsv(sv_dollar_underscore, elem);
@@ -252,12 +254,13 @@ CODE:
 
     SV *sv_dollar_underscore = get_sv("_", 0);
     I32 len = av_len(array) + 1;
+    I32 i;
 
     if ( DO_MULTICALL && !CvISXSUB(callback) ) {
         dMULTICALL;
         U8 gimme = G_SCALAR;
         PUSH_MULTICALL(callback);
-        for (I32 i = 0; i < len; i++) {
+        for (i = 0; i < len; i++) {
             SV **svp = av_fetch(array, i, 0);
             SV *elem = svp ? *svp : &PL_sv_undef;
             sv_setsv(sv_dollar_underscore, elem);
@@ -270,8 +273,7 @@ CODE:
         POP_MULTICALL;
     }
     else {
-        for (I32 i = 0; i < len; i++) {
-            dSP;
+        for (i = 0; i < len; i++) {
             SV **svp = av_fetch(array, i, 0);
             SV *elem = svp ? *svp : &PL_sv_undef;
             sv_setsv(sv_dollar_underscore, elem);
@@ -347,12 +349,13 @@ CODE:
 
     SV *sv_dollar_underscore = get_sv("_", 0);
     I32 len = av_len(array) + 1;
+    I32 i;
 
     if ( DO_MULTICALL && !CvISXSUB(callback) ) {
         dMULTICALL;
         U8 gimme = G_SCALAR;
         PUSH_MULTICALL(callback);
-        for (I32 i = 0; i < len; i++) {
+        for (i = 0; i < len; i++) {
             SV **svp = av_fetch(array, i, 0);
             SV *elem = svp ? *svp : &PL_sv_undef;
             sv_setsv(sv_dollar_underscore, elem);
@@ -365,8 +368,7 @@ CODE:
         POP_MULTICALL;
     }
     else {
-        for (I32 i = 0; i < len; i++) {
-            dSP;
+        for (i = 0; i < len; i++) {
             SV **svp = av_fetch(array, i, 0);
             if (!svp) continue;
             SV *elem = svp ? *svp : &PL_sv_undef;
@@ -404,11 +406,12 @@ CODE:
     SV *sv_dollar_underscore = get_sv("_", 0);
     SV *ixsv = sv_2mortal(newSViv(0));
     I32 len = av_len(array) + 1;
+    I32 i;
 
     ENTER;
     SAVETMPS;
 
-    for (I32 i = 0; i < len; i++) {
+    for (i = 0; i < len; i++) {
         SV **svp = av_fetch(array, i, 0);
         if (!svp) continue;
         SV *elem = *svp;
@@ -450,12 +453,13 @@ CODE:
 
     SV *sv_dollar_underscore = get_sv("_", 0);
     I32 len = av_len(array) + 1;
+    I32 i;
 
     if ( DO_MULTICALL && !CvISXSUB(callback) ) {
         dMULTICALL;
         U8 gimme = G_VOID;
         PUSH_MULTICALL(callback);
-        for (I32 i = 0; i < len; i++) {
+        for (i = 0; i < len; i++) {
             SV **svp = av_fetch(array, i, 0);
             SV *elem = svp ? *svp : &PL_sv_undef;
             sv_setsv(sv_dollar_underscore, elem);
@@ -464,14 +468,15 @@ CODE:
         POP_MULTICALL;
     }
     else {
-        for (I32 i = 0; i < len; i++) {
-            dSP;
+        for (i = 0; i < len; i++) {
             SV **svp = av_fetch(array, i, 0);
             if (!svp) continue;
             SV *elem = svp ? *svp : &PL_sv_undef;
             sv_setsv(sv_dollar_underscore, elem);
             PUSHMARK(SP);
+            PUTBACK;
             call_sv((SV*)callback, G_VOID);
+            SPAGAIN;
         }
     }
 
@@ -531,12 +536,13 @@ CODE:
 
     SV *sv_dollar_underscore = get_sv("_", 0);
     I32 len = av_len(array) + 1;
+    I32 i;
 
     if ( DO_MULTICALL && !CvISXSUB(callback) ) {
         dMULTICALL;
         U8 gimme = G_SCALAR;
         PUSH_MULTICALL(callback);
-        for (I32 i = 0; i < len; i++) {
+        for (i = 0; i < len; i++) {
             SV **svp = av_fetch(array, i, 0);
             SV *elem = svp ? *svp : &PL_sv_undef;
             sv_setsv(sv_dollar_underscore, elem);
@@ -548,8 +554,7 @@ CODE:
         POP_MULTICALL;
     }
     else {
-        for (I32 i = 0; i < len; i++) {
-            dSP;
+        for (i = 0; i < len; i++) {
             SV **svp = av_fetch(array, i, 0);
             if (!svp) continue;
             SV *elem = svp ? *svp : &PL_sv_undef;
@@ -614,7 +619,9 @@ CODE:
     val = newSVpv("", 0);
 
     I32 len = av_len(array) + 1;
-    for (I32 i = 0; i < len; i++) {
+    I32 i;
+
+    for (i = 0; i < len; i++) {
         SV **svp = av_fetch(array, i, 0);
 
         if (i > 0)
@@ -649,11 +656,12 @@ CODE:
 
     SV *sv_dollar_underscore = get_sv("_", 0);
     I32 len = av_len(array) + 1;
+    I32 i, j;
 
     ENTER;
     SAVETMPS;
 
-    for (I32 i = 0; i < len; i++) {
+    for (i = 0; i < len; i++) {
         SV **svp = av_fetch(array, i, 0);
         if (!svp) continue;
         SV *elem = *svp;
@@ -668,7 +676,7 @@ CODE:
         /* stack is LIFO; preserve order */
         if (count > 0) {
             SV **results = SP - count + 1;
-            for (I32 j = 0; j < count; j++) {
+            for (j = 0; j < count; j++) {
                 av_push(out, SV_SAFE_COPY(results[j]));
             }
             SP -= count;
@@ -704,12 +712,13 @@ CODE:
 
     SV *sv_dollar_underscore = get_sv("_", 0);
     I32 len = av_len(array) + 1;
+    I32 i;
 
     if ( DO_MULTICALL && !CvISXSUB(callback) ) {
         dMULTICALL;
         U8 gimme = G_SCALAR;
         PUSH_MULTICALL(callback);
-        for (I32 i = 0; i < len; i++) {
+        for (i = 0; i < len; i++) {
             SV **svp = av_fetch(array, i, 0);
             SV *elem = svp ? *svp : &PL_sv_undef;
             sv_setsv(sv_dollar_underscore, elem);
@@ -722,8 +731,7 @@ CODE:
         POP_MULTICALL;
     }
     else {
-        for (I32 i = 0; i < len; i++) {
-            dSP;
+        for (i = 0; i < len; i++) {
             SV **svp = av_fetch(array, i, 0);
             SV *elem = svp ? *svp : &PL_sv_undef;
             sv_setsv(sv_dollar_underscore, elem);
@@ -761,12 +769,13 @@ CODE:
 
     SV *sv_dollar_underscore = get_sv("_", 0);
     I32 len = av_len(array) + 1;
+    I32 i;
 
     if ( DO_MULTICALL && !CvISXSUB(callback) ) {
         dMULTICALL;
         U8 gimme = G_SCALAR;
         PUSH_MULTICALL(callback);
-        for (I32 i = 0; i < len; i++) {
+        for (i = 0; i < len; i++) {
             SV **svp = av_fetch(array, i, 0);
             SV *elem = svp ? *svp : &PL_sv_undef;
             sv_setsv(sv_dollar_underscore, elem);
@@ -779,8 +788,7 @@ CODE:
         POP_MULTICALL;
     }
     else {
-        for (I32 i = 0; i < len; i++) {
-            dSP;
+        for (i = 0; i < len; i++) {
             SV **svp = av_fetch(array, i, 0);
             SV *elem = svp ? *svp : &PL_sv_undef;
             sv_setsv(sv_dollar_underscore, elem);
@@ -837,7 +845,8 @@ CODE:
     GET_ARRAY_FROM_SOURCE;
 
     bool ok;
-    for (I32 i = 1; i < items; i++) {
+    I32 i;
+    for (i = 1; i < items; i++) {
         val = ST(i);
         CHECK_TYPE(ok, newSVsv(val), sig->element_type, sig->element_type_cv);
         TRY_COERCE_TYPE(ok, val, sig->element_type, sig->element_type_cv, sig->element_coercion_cv);
@@ -867,8 +876,10 @@ CODE:
     if (len >= 0)
         av_extend(out, len);
 
-    for (I32 i = len; i >= 0; i--) {
-        SV **svp = av_fetch(array, i, 0);
+    I32 i;
+    SV **svp;
+    for (i = len; i >= 0; i--) {
+        svp = av_fetch(array, i, 0);
         av_push(out, svp ? newSVsv(*svp) : &PL_sv_undef);
     }
 
@@ -975,7 +986,8 @@ CODE:
         if (!elems)
             croak("Out of memory");
 
-        for (I32 i = 0; i < len; i++) {
+        I32 i;
+        for (i = 0; i < len; i++) {
             SV **svp = av_fetch(array, i, 0);
             elems[i] = svp ? *svp : &PL_sv_undef;
         }
@@ -993,7 +1005,7 @@ CODE:
 
         av_extend(out, len - 1);
 
-        for (I32 i = 0; i < len; i++) {
+        for (i = 0; i < len; i++) {
             av_push(out, newSVsv(elems[i]));
         }
 
@@ -1018,11 +1030,12 @@ CODE:
     dTHX;
     dSP;
 
-    UNPACK_SIG(shvxs_array_NEW_ELEMS_SIG); // reuse from push
+    UNPACK_SIG(shvxs_array_NEW_ELEMS_SIG);
     GET_ARRAY_FROM_SOURCE;
 
     bool ok;
-    for (I32 i = items - 1; i >= 1; i--) {
+    I32 i;
+    for (i = items - 1; i >= 1; i--) {
         val = ST(i);
         CHECK_TYPE(ok, newSVsv(val), sig->element_type, sig->element_type_cv);
         TRY_COERCE_TYPE(ok, val, sig->element_type, sig->element_type_cv, sig->element_coercion_cv);

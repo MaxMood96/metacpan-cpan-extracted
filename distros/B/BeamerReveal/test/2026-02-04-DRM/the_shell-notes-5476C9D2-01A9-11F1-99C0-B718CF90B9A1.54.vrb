@@ -1,0 +1,19 @@
+\frametitle{Pipe Examples}
+\begin{block}{Basic Piping}
+\begin{verbatim}
+# Count entries in directory listing
+ls -1 | wc -l
+
+# Search and sort
+cat file.txt | grep "pattern" | sort
+
+# Find largest files
+du -h | sort -rh | head -10
+
+# Process logs
+cat access.log | grep "404" | wc -l
+\end{verbatim}
+\end{block}
+\begin{alertblock}<2->{Career Note}
+Data pipelines are used everywhere: ETL jobs, log analysis, build systems.
+\end{alertblock}

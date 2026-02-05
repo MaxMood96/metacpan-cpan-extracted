@@ -1,0 +1,12 @@
+Revision history for bored
+
+0.01  2025-01-XX
+    - Initial release
+    - Implemented core boredom engine with XS acceleration
+    - do_nothing_efficiently() achieves O(1) nothing
+    - SIMD-optimized sighing algorithms
+    - Quantum boredom calculations
+    - Void contemplation with stare-back functionality
+    - is_pointless() returns true (always accurate)
+    - whatever() and meh() for calibrated apathy
+    - Enterprise-grade documentation

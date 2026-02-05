@@ -5,7 +5,7 @@ NAME
 
 VERSION
 
-    version 20260130.1210
+    version 20260205.0754
 
 SYNOPSIS
 
@@ -41,6 +41,11 @@ OPTIONS
     --man | -m
 
       prints manual page on standard output
+
+    --debug | -d
+
+      runs tool in debug mode (i.e. no file cleaning in
+      \jobname_files/meda)
 
     --output-directory | -o
 

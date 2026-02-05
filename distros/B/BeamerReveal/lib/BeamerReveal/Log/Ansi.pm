@@ -3,7 +3,7 @@
 
 
 package BeamerReveal::Log::Ansi;
-our $VERSION = '20260130.1210'; # VERSION
+our $VERSION = '20260205.0754'; # VERSION
 
 use parent 'BeamerReveal::Log';
 use Carp;
@@ -82,7 +82,7 @@ BeamerReveal::Log::Ansi - Log::Ansi
 
 =head1 VERSION
 
-version 20260130.1210
+version 20260205.0754
 
 =head1 SYNOPSIS
 

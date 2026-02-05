@@ -34,7 +34,7 @@ Extends L<"OVERLOADED" in Mail::Message::Body|Mail::Message::Body/"OVERLOADED">.
 
 =over 4
 
-=item overload: B<""> stringification
+=item overload: B<'""'> stringification
 
 Inherited, see L<Mail::Message::Body/"OVERLOADED">
 
@@ -42,7 +42,7 @@ Inherited, see L<Mail::Message::Body/"OVERLOADED">
 
 Inherited, see L<Mail::Message::Body/"OVERLOADED">
 
-=item overload: B<@{}> addressed as array
+=item overload: B<'@{}'> addressed as array
 
 Inherited, see L<Mail::Message::Body/"OVERLOADED">
 
@@ -431,11 +431,11 @@ Cast by C<nrLines()>
 
 =item Fault: cannot read from file $name: $!
 
-Cast by C<print()>
+Cast by C<string()>
 
 =item Fault: cannot read from file $name: $!
 
-Cast by C<string()>
+Cast by C<print()>
 
 =item Fault: cannot read from file $name: $!
 
@@ -526,8 +526,8 @@ Cast by C<eol()>
 
 =head1 SEE ALSO
 
-This module is part of Mail-Message version 4.03,
-built on January 26, 2026. Website: F<http://perl.overmeer.net/CPAN/>
+This module is part of Mail-Message version 4.04,
+built on February 04, 2026. Website: F<http://perl.overmeer.net/CPAN/>
 
 =head1 LICENSE
 

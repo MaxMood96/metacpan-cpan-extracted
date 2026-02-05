@@ -1,8 +1,0 @@
-<section class="slide"
-	 data-menu-title="---DATAMENUTITLE---" data-background-image="---SLIDEIMAGE---"
-	 data-transition="---TRANSITION---" data-background-transition="---TRANSITION---">
----SLIDECONTENT---
-<aside class="notes">
----NOTESIMAGE---
-</aside>
-</section>

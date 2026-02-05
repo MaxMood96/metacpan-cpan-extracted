@@ -1,0 +1,24 @@
+\frametitle{The sed Execution Model}
+\begin{block}{The sed Cycle}
+\begin{center}
+\begin{tikzpicture}[
+    scale=0.8, every node/.style={scale=0.8},
+    node distance=1cm,
+    box/.style={rectangle, draw, thick, minimum width=2.5cm, minimum height=0.6cm, align=center, fill=blue!10},
+    arrow/.style={->, thick}
+]
+    \node[box] (read) {Read Line};
+    \node[box, below=of read, fill=yellow!20] (pattern) {Pattern Space};
+    \node[box, below=of pattern, fill=green!10] (command) {Apply Commands};
+    \node[box, below=of command] (output) {Output \& Clear};
+
+    \draw[arrow] (read) -- (pattern);
+    \draw[arrow] (pattern) -- (command);
+    \draw[arrow] (command) -- (output);
+    \draw[arrow] (output.west) -- ++(-0.5,0) |- (read.west);
+\end{tikzpicture}
+\end{center}
+\end{block}
+\begin{alertblock}<2->{Key Concept}
+\texttt{sed} works line-by-line. It never modifies the original file unless you use the \texttt{-i} (in-place) flag.
+\end{alertblock}

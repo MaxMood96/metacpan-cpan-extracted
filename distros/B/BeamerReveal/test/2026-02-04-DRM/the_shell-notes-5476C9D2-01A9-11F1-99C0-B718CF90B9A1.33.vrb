@@ -1,0 +1,18 @@
+\frametitle{grep: Search File Contents}
+\begin{block}{Examples}
+\begin{verbatim}
+$ grep "error" app.log
+Connection error at 10:32
+
+# Show line numbers (-n)
+$ grep -n "error" app.log
+15:Connection error at 10:32
+
+# Recursive search (-r) in a directory
+$ grep -r "TODO" src/
+src/main.py: # TODO: optimize this
+
+# Case-insensitive (-i)
+$ grep -i "ERROR" app.log
+\end{verbatim}
+\end{block}

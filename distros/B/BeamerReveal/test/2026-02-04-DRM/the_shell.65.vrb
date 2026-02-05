@@ -1,0 +1,23 @@
+\frametitle{Regex Flavors: A Shell Caveat}
+\begin{block}{Comparison}
+\begin{center}
+\begin{tabular}{llll}
+Feature & BRE (Basic) & ERE (Extended) & PCRE (Perl/JS/Py)\\
+\hline
+Tools & \texttt{grep}, \texttt{sed} & \texttt{grep -E}, \texttt{awk} & \texttt{grep -P}, Python\\
+\texttt{+}, \texttt{?} & Need \texttt{\textbackslash{}} & Raw: \texttt{+}, \texttt{?} & Raw: \texttt{+}, \texttt{?}\\
+\texttt{()}, \texttt{\{\}} & Need \texttt{\textbackslash{}} & Raw: \texttt{()}, \texttt{\{\}} & Raw: \texttt{()}, \texttt{\{\}}\\
+\end{tabular}
+\end{center}
+
+\begin{itemize}[<+->]
+\item \alert{Note:} macOS BSD \texttt{grep} usually lacks \texttt{-P}. Prefer \texttt{grep -E} or install GNU \texttt{grep} (often \texttt{ggrep}).
+\end{itemize}
+\end{block}
+\begin{exampleblock}{Example: Matching "1 or more"}\label{sec:org189b4f5}
+\begin{itemize}
+\item \alert{BRE:} \texttt{grep 'a\textbackslash{}+'}
+\item \alert{ERE:} \texttt{grep -E 'a+'}
+\item \alert{PCRE:} \texttt{grep -P 'a+'}
+\end{itemize}
+\end{exampleblock}

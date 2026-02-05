@@ -1,0 +1,14 @@
+\frametitle{Practice: Data Extraction}
+\begin{block}{Challenge}
+You have a CSV (\texttt{Name,Age,Score}) called \texttt{class.csv}.
+\begin{enumerate}
+\item Print only the names of students older than 20.
+\item Calculate the total number of words in a text file.
+\end{enumerate}
+\end{block}
+\begin{alertblock}<2->{Answers}
+\begin{enumerate}[<+->]
+\item \texttt{awk -F',' '\$2 > 20 \{print \$1\}' class.csv}
+\item \texttt{awk '\{total +} NF\} END \{print total\}' file.txt=
+\end{enumerate}
+\end{alertblock}

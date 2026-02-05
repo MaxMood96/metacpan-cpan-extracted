@@ -17,6 +17,8 @@ WriteMakefile(
     },
     PREREQ_PM => {
         'CHI'                 => 0,
+        'JSON'                => 0,
+        'JSON::MaybeXS'       => 0,
         'Carp'                => 0,
         'Try::Tiny'           => 0,
         'Data::Page'          => 0,

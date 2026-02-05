@@ -1,0 +1,25 @@
+\frametitle{xargs: Usage and Options}
+\begin{block}{Examples}
+\begin{verbatim}
+# Delete all .tmp files (safe with spaces)
+find . -name "*.tmp" -print0 | xargs -0 rm
+
+# Run 1 command per input line (NUL-delimited)
+printf '%s\0' dir1 dir2 dir3 | xargs -0 -n 1 mkdir
+
+# Custom placement of arguments (safe with spaces)
+find . -maxdepth 1 -name "*.txt" -print0 | xargs -0 -I {} mv "{}" backup/
+\end{verbatim}
+\end{block}
+\begin{exampleblock}<2->{Common Flags}\label{sec:org6389170}
+\begin{center}
+\begin{tabular}{ll}
+Option & Description\\
+\hline
+\texttt{-n N} & Use at most N args per command\\
+\texttt{-I \{\}} & Replace \{\} with the input string\\
+\texttt{-0} & Read NUL-delimited input (safe)\\
+\texttt{-P N} & Run N processes in parallel (Fast!)\\
+\end{tabular}
+\end{center}
+\end{exampleblock}

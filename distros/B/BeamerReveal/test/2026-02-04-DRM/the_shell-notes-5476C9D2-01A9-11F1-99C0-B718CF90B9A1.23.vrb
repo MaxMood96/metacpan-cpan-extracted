@@ -1,0 +1,19 @@
+\frametitle{Viewing Examples}
+\begin{block}{File Viewing}
+\begin{verbatim}
+# Display entire file
+cat file.txt
+
+# Page through file (Search with /, quit with q)
+less file.txt
+
+# First 20 lines
+head -n 20 file.txt
+
+# Last 15 lines
+tail -n 15 file.txt
+
+# Follow log file as it grows
+tail -f /var/log/system.log
+\end{verbatim}
+\end{block}

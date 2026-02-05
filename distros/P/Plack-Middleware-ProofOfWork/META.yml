@@ -1,0 +1,45 @@
+---
+abstract: 'Proof-of-Work based bot protection for Plack applications'
+author:
+  - 'Oliver Paukstadt <cpan@sourcentral.org>'
+build_requires:
+  ExtUtils::MakeMaker: '0'
+configure_requires:
+  ExtUtils::MakeMaker: '6.64'
+  File::ShareDir::Install: '0.06'
+dynamic_config: 1
+generated_by: 'ExtUtils::MakeMaker version 7.70, CPAN::Meta::Converter version 2.150010'
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: Plack-Middleware-ProofOfWork
+no_index:
+  directory:
+    - t
+    - inc
+requires:
+  Digest::SHA: '0'
+  File::ShareDir: '1.00'
+  File::Spec: '0'
+  MIME::Base64: '0'
+  Plack: '1.0000'
+  Plack::Middleware: '0'
+  Plack::Request: '0'
+  Plack::Response: '0'
+  Socket: '0'
+  Time::HiRes: '0'
+  parent: '0'
+  perl: '5.008001'
+resources:
+  bugtracker: https://github.com/pstadt/Plack-Middleware-ProofOfWork/issues
+  repository:
+    type: git
+    url: https://github.com/pstadt/Plack-Middleware-ProofOfWork.git
+    web: https://github.com/pstadt/Plack-Middleware-ProofOfWork
+test_requires:
+  HTTP::Request::Common: '0'
+  Plack::Test: '0'
+  Test::More: '0.98'
+version: '0.21'
+x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

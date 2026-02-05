@@ -7,22 +7,27 @@ use TestSchema;
 use IO::Async::Loop;
 use DBIx::Class::Async::Schema;
 use Time::HiRes qw(gettimeofday tv_interval);
+use Scalar::Util qw(blessed);
 
 print "DBIx::Class::Async Performance Benchmark (MySQL)\n\n";
 print "-" x 70 . "\n";
 
 my $loop = IO::Async::Loop->new;
-my ($raw_schema, $async_schema) = setup_environment();
+my ($raw_schema, $async_schema) = setup_environment($loop);
 
 my (@results, $baseline_time);
 
 for my $count (50, 100, 200) {
     print "\n" . "Testing with $count queries...\n";
-    run_bench("Standard DBIx::Class (Sequential/Blocking)", 0, $count);
-    run_bench("DBIx::Class::Async (Parallel/Non-Blocking)", 1, $count);
+    run_bench(
+        "Standard DBIx::Class (Sequential/Blocking)", 0,
+        $count, $raw_schema, $async_schema, $loop);
+    run_bench(
+        "DBIx::Class::Async (Parallel/Non-Blocking)", 1,
+        $count, $raw_schema, $async_schema, $loop);
 }
 
-print_summary();
+print_summary(@results);
 
 $async_schema->disconnect;
 
@@ -31,6 +36,8 @@ $async_schema->disconnect;
 # METHODS
 
 sub setup_environment {
+    my $loop = shift;
+
     print "Setting up MySQL database with 10,000 records...\n\n";
 
     my $dsn      = "dbi:mysql:database=testdb";
@@ -62,7 +69,7 @@ sub setup_environment {
 }
 
 sub run_bench {
-    my ($name, $is_async, $query_count) = @_;
+    my ($name, $is_async, $query_count, $raw_schema, $async_schema, $loop) = @_;
 
     print "\n" . "-" x 70 . "\n";
     print "$name\n";
@@ -78,10 +85,11 @@ sub run_bench {
     $loop->add($timer->start);
 
     my $t0 = [gettimeofday];
+    my $total_rows_verified = 0;
+    my $objects_inflated    = 0;
 
     my $heavy_search = sub {
         my $schema = shift;
-        # More complex query to emphasize network latency
         return $schema->resultset('User')->search(
             {
                 age    => { '>' => 30 },
@@ -102,15 +110,30 @@ sub run_bench {
             $heavy_search->($async_schema)->all
         } (1..$query_count);
 
-        $async_schema->await( Future->wait_all(@futures) );
+        # Process each future
+        for my $f (@futures) {
+            my $rows = $async_schema->await($f);
+
+            $total_rows_verified += scalar(@$rows);
+            if (@$rows && Scalar::Util::blessed($rows->[0])) {
+                $objects_inflated += scalar(@$rows);
+            }
+        }
     } else {
-        # Sequential execution
+        # Sequential execution WITH VERIFICATION
         for (1..$query_count) {
-            my @results = $heavy_search->($raw_schema)->all;
+            my @rows = $heavy_search->($raw_schema)->all;
+
+            # VERIFY PAYLOAD
+            $total_rows_verified += scalar(@rows);
+            if (@rows && Scalar::Util::blessed($rows[0])) {
+                $objects_inflated += scalar(@rows);
+            }
         }
     }
 
     my $elapsed = tv_interval($t0);
+    $elapsed = 0.0001 if $elapsed <= 0;
 
     $timer->stop;
     $loop->remove($timer);
@@ -123,28 +146,19 @@ sub run_bench {
 
     printf "Execution Time:     %.4f seconds\n", $elapsed;
     printf "Throughput:         %.2f queries/second\n", $throughput;
+    printf "Data Integrity:     %d rows verified (%d objects inflated)\n",
+           $total_rows_verified, $objects_inflated;
     printf "Event Loop Health:  %.1f%% responsive (%d/%d ticks)\n",
            $responsiveness, $ticks, $expected_ticks;
 
     if (!$is_async) {
         $baseline_time = $elapsed;
-        my $status = $ticks == 0
-                     ? "COMPLETELY BLOCKED"
-                     : "SEVERELY DEGRADED";
-
-        print "System Status:      $status\n";
+        print "System Status:      " . ($ticks == 0 ? "COMPLETELY BLOCKED" : "DEGRADED") . "\n";
         print "Performance:        [BASELINE]\n";
     } else {
         my $speedup = $baseline_time / $elapsed;
-        my $status = $responsiveness > 80
-                     ? "HEALTHY & NON-BLOCKING"
-                     : "BUSY";
-
-        print  "System Status:      $status\n";
+        print "System Status:      " . ($responsiveness > 80 ? "HEALTHY" : "BUSY") . "\n";
         printf "Performance:        %.2fx FASTER than baseline\n", $speedup;
-        printf "Time Saved:         %.4f seconds (%.1f%% improvement)\n",
-             ($baseline_time - $elapsed),
-            (($baseline_time - $elapsed) / $baseline_time * 100);
     }
 
     push @results, {
@@ -159,6 +173,8 @@ sub run_bench {
 }
 
 sub print_summary {
+    my @results = @_;
+
     print "\n" . "-" x 70 . "\n";
     print "SUMMARY\n";
     print "-" x 70 . "\n";
@@ -198,34 +214,34 @@ sub print_summary {
 
     printf "Across all %d test runs:\n", scalar(@results) / 2;
     printf "\nPerformance Results:\n";
-    printf "  • Average Speedup:     %.2fx faster\n", $avg_speedup;
-    printf "  • Maximum Speedup:     %.2fx faster\n", $max_speedup;
-    printf "  • Total Time (Sync):   %.4f seconds\n", $total_sync_time;
-    printf "  • Total Time (Async):  %.4f seconds\n", $total_async_time;
-    printf "  • Time Saved:          %.4f seconds (%.1f%% improvement)\n",
+    printf "  - Average Speedup:     %.2fx faster\n", $avg_speedup;
+    printf "  - Maximum Speedup:     %.2fx faster\n", $max_speedup;
+    printf "  - Total Time (Sync):   %.4f seconds\n", $total_sync_time;
+    printf "  - Total Time (Async):  %.4f seconds\n", $total_async_time;
+    printf "  - Time Saved:          %.4f seconds (%.1f%% improvement)\n",
         $total_time_saved, $total_improvement;
 
     printf "\nEvent Loop Health:\n";
-    printf "  • Average Responsiveness: %.1f%%\n", $avg_responsiveness;
-    printf "  • Sequential Blocking:    0.0%% (completely blocked)\n";
+    printf "  - Average Responsiveness: %.1f%%\n", $avg_responsiveness;
+    printf "  - Sequential Blocking:    0.0%% (completely blocked)\n";
 
     print "\n What This Means:\n";
-    print "  • TRUE parallel query execution across network connections\n";
+    print "  - TRUE parallel query execution across network connections\n";
 
     if ($avg_speedup > 50) {
-        printf "  • Exceptional performance: %.0fx faster with worker pool\n", $avg_speedup;
-        print "  • Worker process caching and connection reuse is highly effective\n";
+        printf "  - Exceptional performance: %.0fx faster with worker pool\n", $avg_speedup;
+        print "  - Worker process caching and connection reuse is highly effective\n";
     }
     elsif ($avg_speedup > 2) {
-        printf "  • Strong performance: %.1fx faster with parallelism\n", $avg_speedup;
+        printf "  - Strong performance: %.1fx faster with parallelism\n", $avg_speedup;
     }
     else {
-        printf "  • Similar speed (%.1fx), but with %.1f%% event loop responsiveness\n",
+        printf "  - Similar speed (%.1fx), but with %.1f%% event loop responsiveness\n",
             $avg_speedup, $avg_responsiveness;
     }
 
-    print "  • Non-blocking event loop maintains application responsiveness\n";
-    print "  • Better scalability as query count increases\n";
+    print "  - Non-blocking event loop maintains application responsiveness\n";
+    print "  - Better scalability as query count increases\n";
 
     if ($max_speedup > 100) {
         print "\nKey Insight: Worker pool caching delivered exceptional results!\n";

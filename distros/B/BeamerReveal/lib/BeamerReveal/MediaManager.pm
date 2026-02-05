@@ -3,7 +3,7 @@
 
 
 package BeamerReveal::MediaManager;
-our $VERSION = '20260130.1210'; # VERSION
+our $VERSION = '20260205.0754'; # VERSION
 
 use strict;
 use warnings;
@@ -45,12 +45,13 @@ sub nofdigits { length( "$_[0]" ) }
 
 sub new {
   my $class = shift;
-  my ( $jobname, $odir, $base, $presentationprms ) = @_;
+  my ( $jobname, $odir, $base, $presentationprms, $debug ) = @_;
 
   my $self = {
 	      jobname    => $jobname,
 	      outputdir  => $odir,
 	      base       => $base,
+	      debug      => $debug,
 	     };
   $class = (ref $class ? ref $class : $class );
   bless $self, $class;
@@ -64,6 +65,7 @@ sub new {
   $self->{audios}     = "$self->{base}/media/Audios";	
   $self->{images}     = "$self->{base}/media/Images";	
   $self->{animations} = "$self->{base}/media/Animations";	
+  $self->{stills}     = "$self->{base}/media/Stills";	
   $self->{iframes}    = "$self->{base}/media/Iframes";	
   $self->{slides}     = "$self->{base}/media/Slides";
   $self->{reveal}     = "$self->{base}/libs";
@@ -74,7 +76,9 @@ sub new {
     local $CWD = $self->{outputdir};
   
     # create animation path, but don't remove contents
-    File::Path::make_path( $self->{animations} );
+    for my $item ( qw(animations stills) ) {
+      File::Path::make_path( $self->{$item} );
+    }
 
     # create all the ohter paths and also clean them
     for my $item ( qw(reveal videos audios iframes images) ) {
@@ -111,24 +115,26 @@ sub new {
   # check all the preconditions for running our tools
   $self->{compiler} = File::Which::which( $self->{presentationparameters}->{compiler} )
     or $logger->fatal( "Error: your setup is incomplete, I cannot find your $self->{presentationparameters}->{compiler } compiler (should be part of your TeX installation)\n" .
-	    "Make sure it is accessible in a directory on your PATH list variable\n" );
+		       "Make sure it is accessible in a directory on your PATH list variable\n" );
   
   $self->{pdftoppm} = File::Which::which( 'pdftoppm' )
     or $logger->fatal( "Error: your setup is incomplete, I cannot find pdftoppm (part of the poppler library)\n" .
-	    "Install 'Poppler-utils' and make sure pdftoppm is accessible in a directory on your PATH list variable\n" );
+		       "Install 'Poppler-utils' and make sure pdftoppm is accessible in a directory on your PATH list variable\n" );
 
   $self->{pdfcrop} = File::Which::which( 'pdfcrop' )
     or $logger->fatal( "Error: your setup is incomplete, I cannot find pdfcrop (should be part of your TeX installation)\n" .
-	    "Make sure it is accessible in a directory on your PATH list variable\n" );
+		       "Make sure it is accessible in a directory on your PATH list variable\n" );
   $self->{ffmpeg} = File::Which::which( 'ffmpeg' )
     or $logger->fatal( "Error: your setup is incomplete, I cannot find ffmpeg\n" .
-	    "Install 'FFmpeg' (from www.ffmpeg.org) and make sure ffmpeg is accessible in a directory on your PATH list variable\n" );
+		       "Install 'FFmpeg' (from www.ffmpeg.org) and make sure ffmpeg is accessible in a directory on your PATH list variable\n" );
 
   ##########################################################################
   # We sell things, before we make the, so we need to keep a backorder list
 
   $self->{copyBackOrders}  = [];
-  $self->{constructionBackOrders} = {};
+  $self->{constructionBackOrders} = { 'animations' => {},
+				      'stills'     => {}
+				    };
 
   return $self;
 }
@@ -145,14 +151,65 @@ sub revealToStore {
 }
 
 
+sub backgroundsToStore() {
+  my $self = shift;
+  my ( $bgs ) = @_;
+  $self->{backgrounds} = $bgs;
+}
+
+
+sub notesToStore() {
+  my $self = shift;
+  my ( $notes ) = @_;
+  $self->{notes} = $notes;
+}
+
+
 sub slideFromStore {
   my $self = shift;
-  my ( $slide, %optargs ) = @_;
+  my ( $slidectr, %optargs ) = @_;
   
-  # copy file
-  my $fullpathid = "$self->{slides}/$slide";
-  # return store id
-  return $fullpathid;
+  my $logger = $BeamerReveal::Log::logger;
+  
+  my $fileName = $self->{backgrounds}->[$slidectr];
+  my $fileType = $self->{mtoracle}->mimeTypeOf( $fileName );
+  
+  if( exists $optargs{to_embed} ) {
+    my $file = do {
+      local $/ = undef;
+      open my $fh, "<". $fileName
+	or $logger->fatal( "Cannot open $fileType-file $fileName to read" );
+      <$fh>;
+    };
+    return ( $fileType, encode_base64( $file ) );
+  }
+  else {
+    return ( $fileType, $fileName );
+  }
+}
+
+
+sub noteFromStore {
+  my $self = shift;
+  my ( $notectr, %optargs ) = @_;
+  
+  my $logger = $BeamerReveal::Log::logger;
+
+  my $fileName = $self->{notes}->[$notectr];
+  my $fileType = $self->{mtoracle}->mimeTypeOf( $fileName );
+  
+  if( exists $optargs{to_embed} ) {
+    my $file = do {
+      local $/ = undef;
+      open my $fh, "<". $fileName
+	or $logger->fatal( "Cannot open $fileType-file $fileName to read" );
+      <$fh>;
+    };
+    return ( $fileType, encode_base64( $file ) );
+  }
+  else {
+    return ( $fileType, $fileName );
+  }
 }
 
 
@@ -161,7 +218,7 @@ sub animationFromStore {
   my ( $animation, %optargs ) = @_;
   
   my $logger = $BeamerReveal::Log::logger;
-  
+
   my $animid  = Digest::SHA::hmac_sha256_hex( $animation->{tex} );
   my $animdir = "$self->{animations}/$animid";
   my $fullpathid = $animdir . ".mp4";
@@ -182,13 +239,14 @@ sub animationFromStore {
       };
     my $fileContent = BeamerReveal::TemplateStore::stampTemplate( $tTemplate, $tStamps );
   
-    my $nofFrames = floor( $animation->{framerate} * $animation->{duration} );
+    my $nofFrames = floor( $animation->{framerate} * $animation->{duration} ) + 1;
+    # one extra frame to cover the final value \progress = 1.
     my $nofCores  = MCE::Util::get_ncpu();
     if ( $nofCores > 4 ) {
       $nofCores = ceil( $nofCores / 2 );
     }
     
-    $self->{constructionBackOrders}->{$animid} = 
+    $self->{constructionBackOrders}->{animations}->{$animid} = 
       {
        animation   => $animation,
        fileContent => $fileContent,
@@ -196,22 +254,60 @@ sub animationFromStore {
        nofCores    => $nofCores,
       };
   }
+  
   return $fullpathid;
 }
 
 
-sub processConstructionBackOrders {
+sub stillFromStore {
   my $self = shift;
-  my ( $progressId ) = @_;
+  my ( $still, %optargs ) = @_;
   
   my $logger = $BeamerReveal::Log::logger;
   
-  my $totalNofBackOrders = scalar keys %{$self->{constructionBackOrders}};
+  my $stillid  = Digest::SHA::hmac_sha256_hex( $still->{tex} );
+  my $stilldir = "$self->{stills}/$stillid";
+  my $fullpathid = $stilldir . ".mp4";
+  # correct the effective path to reside in the output directory
+  $stilldir = $self->{outputdir} . '/' . $stilldir;
+  
+  unless ( -r ( $self->{outputdir} . '/' . $fullpathid ) ) {
+    File::Path::make_path( $stilldir );
 
-  $logger->progress( $progressId, 1, 'reusing cached data', 1 ) unless $totalNofBackOrders;
+    my $templateStore = BeamerReveal::TemplateStore->new();
+    my $tTemplate = $templateStore->fetch( 'tex', 'still.tex' );
+    my $tStamps =
+      {
+       'PREAMBLE'  => $self->{preamble},
+       'STILL' => builtin::trim($still->{tex}),
+      };
+    my $fileContent = BeamerReveal::TemplateStore::stampTemplate( $tTemplate, $tStamps );
+  
+    $self->{constructionBackOrders}->{stills}->{$stillid} = 
+      {
+       still       => $still,
+       fileContent => $fileContent,
+      };
+  }
+  return $fullpathid;
+}
 
+
+sub processAnimationBackOrders {
+  my $self = shift;
+  my ( $animProgressId ) = @_;
+  
+  my $logger = $BeamerReveal::Log::logger;
+  
+  ####################
+  # treat animations
+  
+  my $totalNofBackOrders = scalar keys %{$self->{constructionBackOrders}->{animations}};
+  
+  $logger->progress( $animProgressId, 1, 'reusing cached data', 1 ) unless $totalNofBackOrders;
+  
   my $i = -1;
-  while( my ( $animid, $bo ) = each %{$self->{constructionBackOrders}} ) {
+  while ( my ( $animid, $bo ) = each %{$self->{constructionBackOrders}->{animations}} ) {
     ++$i;
     my $animation   = $bo->{animation};
     my $fileContent = $bo->{fileContent};
@@ -226,20 +322,18 @@ sub processConstructionBackOrders {
       $logger->log( 2, "- Preparing media generation of $nofFrames (alas, no parallellization on MS-Windows)" );
       $nofCores = 1;
       $progress = MCE::Shared::Scalar->new( 0 );
-    }
-    elsif ( $nofCores == 1 ) {
+    } elsif ( $nofCores == 1 ) {
       $progress = MCE::Shared::Scalar->new( 0 );
-    }      
-    else {
+    } else {
       $sliceSize = ceil( $nofFrames / $nofCores );
       $logger->log( 2, "- Preparing media generation of $nofFrames frames in $nofCores threads at $sliceSize frames per thread" );
       $progress = MCE::Shared->scalar( 0 );
     }
-
+    
     # make planning
     my $frameCounter = 0;
     my $planning = [];
-    for( my $core = 0; $core < $nofCores; ++$core ) {
+    for ( my $core = 0; $core < $nofCores; ++$core ) {
       # make plan for core
       my $plan = { nstart => $frameCounter,
 		   nstop  => min( $frameCounter + $sliceSize, $nofFrames ),
@@ -251,31 +345,30 @@ sub processConstructionBackOrders {
       
       # register plan
       push @$planning, $plan;
-
+      
       # prepare for next core
       $frameCounter += $sliceSize;
     }
     
-    $logger->progress( $progressId, 0, "animation @{[$i+1]}/$totalNofBackOrders",
+    $logger->progress( $animProgressId, 0, "animation @{[$i+1]}/$totalNofBackOrders",
 		       $nofFrames + $nofCores * 3 );
     
     if ( $nofCores == 1 ) {
       # single-threaded
-      for( my $i = 0; $i < @$planning; ++$i ) {
+      for ( my $i = 0; $i < @$planning; ++$i ) {
 	_animWork( $planning->[$i], $nofCores, $fileContent, $animdir, $self, $animation,
-		   $sliceSize, $progress, $progressId );
+		   $sliceSize, $progress, $animProgressId );
       }
-    }
-    else {
+    } else {
       my @hobos;
       # multi-threaded
-      for( my $i = 0; $i < @$planning; ++$i ) {
+      for ( my $i = 0; $i < @$planning; ++$i ) {
 	push @hobos, MCE::Hobo->create
 	  (
 	   sub {
 	     _animWork( @_ )
 	   }, ( $planning->[$i], $nofCores, $fileContent, $animdir, $self, $animation,
-		$sliceSize, $progress, $progressId )
+		$sliceSize, $progress, $animProgressId )
 	  );
       }
       
@@ -293,7 +386,7 @@ sub processConstructionBackOrders {
 	  --$activeworkers;
 	}
 	
- 	$logger->progress( $progressId, $progress->get() );
+ 	$logger->progress( $animProgressId, $progress->get() );
 	
 	Time::HiRes::usleep(250);
       }
@@ -304,10 +397,10 @@ sub processConstructionBackOrders {
     
     # rename all files in order
     my $framecounter = 0;
-    for( my $core = 0; $core < @$planning; ++$core ) {
+    for ( my $core = 0; $core < @$planning; ++$core ) {
       my $plan = $planning->[$core];
       my $coreId = sprintf( '%0' . nofdigits( $nofCores ) . 'd', $core );
-      for( my $frameno = $plan->{slicestart}; $frameno <= $plan->{slicestop}; ++$frameno ) {
+      for ( my $frameno = $plan->{slicestart}; $frameno <= $plan->{slicestop}; ++$frameno ) {
 	my $frameId = sprintf( '%0' . nofdigits( $sliceSize ) . 'd', $frameno );
 	my $src = "$animdir/frame-$coreId-$frameId.jpg";
 	my $dst = sprintf( "$animdir/frame-%06d.jpg", $framecounter++ );
@@ -316,26 +409,80 @@ sub processConstructionBackOrders {
     }
     
     # run ffmpeg or avconv
-    my $cmd = [ $self->{ffmpeg}, '-r', "$animation->{framerate}", '-i', 'frame-%06d.jpg', '-vf', "pad='ceil(iw/2)*2':'ceil(ih/2)*2'", 'animation.mp4' ];
+    my $cmd = [ $self->{ffmpeg}, '-r', "$animation->{framerate}", '-i', 'frame-%06d.jpg', '-vf', 'crop=iw-mod(iw\,2):ih-mod(ih\,2)', 'animation.mp4' ];
     BeamerReveal::IPC::Run::run( $cmd, 0, 8, $animdir, "Error: ffmpeg run failed" );
     File::Copy::move( "$animdir/animation.mp4",
 		      "$animdir/../$animid.mp4" );
-
-
-    File::Path::rmtree( $animdir ) unless( exists $ENV{BEAMERREVEAL_ANIMDEBUG} );
-
+    
+    
+    File::Path::rmtree( $animdir ) unless( defined $self->{debug} );
+    
     # all is done
-    $logger->progress( $progressId, 1, "animation @{[$i+1]}/$totalNofBackOrders", 1 );
+    $logger->progress( $animProgressId, 1, "animation @{[$i+1]}/$totalNofBackOrders", 1 );
+  }
+}
+
+sub processStillBackOrders {
+  my $self = shift;
+  my ( $stillProgressId ) = @_;
+  
+  my $logger = $BeamerReveal::Log::logger;
+  ###############
+  # treat stills
+  
+  my $totalNofBackOrders = scalar keys %{$self->{constructionBackOrders}->{stills}};
+  
+  $logger->progress( $stillProgressId, 1, 'reusing cached data', 1 ) unless $totalNofBackOrders;
+  
+  my $i = -1;
+  while ( my ( $stillid, $bo ) = each %{$self->{constructionBackOrders}->{stills}} ) {
+    ++$i;
+    my $still       = $bo->{still};
+    my $fileContent = $bo->{fileContent};
+    my $stilldir    = $self->{outputdir} . '/' . $self->{stills} . '/' . $stillid;
+    
+    $logger->progress( $stillProgressId, 0, "still @{[$i+1]}/$totalNofBackOrders", 5 );
+    
+    _stillWork( $fileContent, $stilldir, $self, $still, $stillProgressId );
+    
+    # run ffmpeg or avconv
+    my $cmd = [ $self->{ffmpeg}, '-r', '1', '-i', 'frame-1.jpg', '-vf', 'crop=iw-mod(iw\,2):ih-mod(ih\,2)', 'still.mp4' ];
+    BeamerReveal::IPC::Run::run( $cmd, 0, 8, $stilldir, "Error: ffmpeg run failed" );
+    File::Copy::move( "$stilldir/still.mp4",
+		      "$stilldir/../$stillid.mp4" );
+    
+    File::Path::rmtree( $stilldir ) unless( defined $self->{debug} );
+    
+    # all is done
+    $logger->progress( $stillProgressId, 5 );
   }
 }
     
+# =method imageFromStore()
+  
+#   $path = $mm->imageFromStore( $image )
+  
+# Fetches the unique ID of the C<$image> and returns that ID (the filename of the oject in the media store). The object is put in back-order such that it can be copied later, using C<processCopyBackOrders>.
+ 
+# =over 4
+
+# =item . C<$image>
+
+# the $image file to store in the media store.
+
+# =item . C<$path>
+
+# the path to the image (in the media store)
+
+# =back
+
+# =cut
 
 sub imageFromStore {
   my $self = shift;
   my ( $image, %optargs ) = @_;
   return $self->_fromStore( 'Images', $image, %optargs );
 }
-
 
 
 sub videoFromStore {
@@ -358,15 +505,15 @@ sub audioFromStore {
   return $self->_fromStore( 'Audios', $audio, %optargs );
 }
 
-
+  
 sub _fromStore {
   my $self = shift;
   my ( $fileType, $fileName, %optargs ) = @_;
   
   my $logger = $BeamerReveal::Log::logger;
-
+  
   my $mimeType = $self->{mtoracle}->mimeTypeOf( $fileName );
-
+  
   if ( exists $optargs{to_embed} ) {
     my $file = do {
       local $/ = undef;
@@ -374,21 +521,19 @@ sub _fromStore {
 	or $logger->fatal( "Cannot open $fileType-file $fileName to read" );
       <$fh>;
     };
-
     
     return ( $mimeType, encode_base64( $file ) );
-  }
-  else {
+  } else {
     # find extension
     my ( undef, undef, $ext ) = File::Basename::fileparse( $fileName, qr/\.[^.]+$/ );
-  
+    
     # create store id
     my $id = Data::UUID->new();
     my $fullpathid;
     do {
       my $uuid = $id->create();
       $fullpathid = "$self->{base}/media/$fileType/@{[$id->to_string( $uuid )]}$ext";
-    } until( ! -e $fullpathid );
+    } until ( ! -e $fullpathid );
     
     # register backorder
     push @{$self->{copyBackOrders}},
@@ -397,7 +542,7 @@ sub _fromStore {
        from => $fileName,
        to   => $self->{outputdir} . '/' . $fullpathid,
       };
-  
+    
     return ( $mimeType, $fullpathid );
   }
 }
@@ -406,17 +551,17 @@ sub _fromStore {
 sub processCopyBackOrders {
   my $self = shift;
   my ( $progressId ) = @_;
-
+  
   my $logger = $BeamerReveal::Log::logger;
   
   my $totalNofBackOrders = @{$self->{copyBackOrders}};
-
-  for( my $i = 0; $i < $totalNofBackOrders; ++$i ) {
+  
+  for ( my $i = 0; $i < $totalNofBackOrders; ++$i ) {
     my $bo = $self->{copyBackOrders}->[$i];
-
+    
     # verify if source file exists
     $logger->fatal( "Error: cannot find media file '$bo->{from}'\n" ) unless( -r $bo->{from} );
-
+    
     # report progress and copy
     $logger->progress( $progressId, $i, "file $i/$totalNofBackOrders", $totalNofBackOrders );
     File::Copy::cp( $bo->{from}, $bo->{to} );
@@ -428,14 +573,14 @@ sub processCopyBackOrders {
 
 sub _animWork {
   my ( $plan, $nofCores, $fileContent, $animdir, $self, $animation, $sliceSize, $progress, $progressId ) = @_;
-
+  
   my $cmd;
   my $logFile = IO::File->new();
   my $coreId = sprintf( '%0' . nofdigits( $nofCores ) . 'd', $plan->{nr} );
   my $logFileName = "$animdir/animation-$coreId-overall.log";
   $logFile->open( ">$logFileName" )
     or die( "Error: cannot open logfile $logFileName" );
-
+  
   say $logFile "- Generating TeX file";
   # generate TeX -file
   my $perCoreContent = BeamerReveal::TemplateStore::stampTemplate
@@ -446,28 +591,28 @@ sub _animWork {
        NSTART      => $plan->{nstart},
       }
     );
-	   
+  
   my $texFileName = "$animdir/animation-$coreId.tex";
   my $texFile = IO::File->new();
   $texFile->open( ">$texFileName" )
     or die( "Error: cannot open animation file '$texFileName' for writing\n" );
   print $texFile $perCoreContent;
   $texFile->close();
-
+  
   say $logFile "- Running TeX";
   # run TeX
   $cmd = [ $self->{compiler},
 	   "-halt-on-error", "-interaction=nonstopmode", "-output-directory=$animdir", "$texFileName" ];
   my $logFilename = $texFileName;
   $logFilename =~ s/\.tex$/.log/;
-
+  
   my $logger = $BeamerReveal::Log::logger;
   my $counter = 0;
   BeamerReveal::IPC::Run::runsmart( $cmd, 1, qr/\[(\d+)\]/,
 				    sub {
-				      while( scalar @_ ) {
+				      while ( scalar @_ ) {
 					my $a = shift @_;
-					while( $a > $counter ) {
+					while ( $a > $counter ) {
 					  ++$counter;
 					  $progress->incr();
 					  if ( $nofCores == 1 ) {
@@ -516,6 +661,72 @@ sub _animWork {
   $progress->incr();
 }
 
+
+sub _stillWork {
+  my ( $fileContent, $stilldir, $self, $still, $progressId ) = @_;
+
+  my $logger = $BeamerReveal::Log::logger;
+
+  my $cmd;
+  my $logFile = IO::File->new();
+  my $logFileName = "$stilldir/still.log";
+  $logFile->open( ">$logFileName" )
+    or die( "Error: cannot open logfile $logFileName" );
+
+  say $logFile "- Generating TeX file";
+  # generate TeX -file
+  my $content = BeamerReveal::TemplateStore::stampTemplate
+    ( $fileContent,
+      {
+       PROGRESS  => $still->{progress},
+      }
+    );
+
+  my $texFileName = "$stilldir/still.tex";
+  my $texFile = IO::File->new();
+  $texFile->open( ">$texFileName" )
+    or die( "Error: cannot open still file '$texFileName' for writing\n" );
+  print $texFile $content;
+  $texFile->close();
+  $logger->progress( $progressId, 1 );
+  
+  say $logFile "- Running TeX";
+  # run TeX
+  $cmd = [ $self->{compiler},
+	   "-halt-on-error", "-interaction=nonstopmode", "-output-directory=$stilldir", "$texFileName" ];
+  my $logFilename = $texFileName;
+  $logFilename =~ s/\.tex$/.log/;
+
+  my $counter = 0;
+  BeamerReveal::IPC::Run::runsmart( $cmd, 1, qr/\[(\d+)\]/,
+				    sub {},
+				    1,
+				    4,
+				    undef, # directory
+				    "Error: still generation failed: check $logFilename"
+				  );
+  $logger->progress( $progressId, 2 );
+  
+  say $logFile "- Cropping PDF file";
+  # run pdfcrop
+  $cmd = [ $self->{pdfcrop}, '--hires', '--margins', '-0.5', "still.pdf" ];
+  BeamerReveal::IPC::Run::run( $cmd, 1, 8, $stilldir, "Error: pdfcrop run failed" );
+  $logger->progress( $progressId, 3 );
+
+  # run pdftoppm
+  my $xrange = 2 * int( $self->{presentationparameters}->{canvaswidth} * $still->{width} );
+  my $yrange = 2 * int( $self->{presentationparameters}->{canvasheight} * $still->{height} );
+	   
+  say $logFile "- Generating jpg file";
+  $cmd = [ $self->{pdftoppm},
+	   '-scale-to-x', "$xrange",
+	   '-scale-to-y', '-1',
+	   "still-crop.pdf", "./frame", '-jpeg' ];
+  BeamerReveal::IPC::Run::run( $cmd, 1, 8, $stilldir, "Error: pdftoppm run failed" );
+  $logFile->close();
+  $logger->progress( $progressId, 4 );
+}
+
     
 1;
 
@@ -531,7 +742,7 @@ BeamerReveal::MediaManager - MediaManager
 
 =head1 VERSION
 
-version 20260130.1210
+version 20260205.0754
 
 =head1 SYNOPSIS
 
@@ -549,7 +760,7 @@ we reuse the generated video file. If the source data has changed, we regenerate
 
 =head2 new()
 
-  $mm = BeamerReveal::MediaManager->new( $jobname, $base, $presoparams, $id )
+  $mm = BeamerReveal::MediaManager->new( $jobname, $base, $presoparams, $id, $debug )
 
 The constructor sets up the manager.
 
@@ -575,6 +786,10 @@ file, followed by the suffix '_files'.
 parameters of the presentation. This is required to know the compiler and the resolution of the
 presentation
 
+=item . C<$debug>
+
+debug flag (undef = off, defined = on) - runs mediamanager in debug mode, i.e. no file cleaning
+
 =item . C<$mm>
 
 return value: the mediamanager object
@@ -587,22 +802,83 @@ return value: the mediamanager object
 
 Fetches the original reveal support files and copies them into the media store.
 
-=head2 slideFromStore()
+=head2 backgroundsToStore()
 
-  $path = $mm->slideFromStore( $slide )
+  $mm->backgroundsToStore( $bgarray )
 
-Fetches the media store pathname of $slide. Slides are entered into the store by the
-C<Frameconverter>.
+Registers the backgrounds into the mediastore.
 
 =over 4
 
-=item . C<$slide>
+=item . C<$bgarray> reference to array containing all backgrounds; in normal format these
+are just filenames, in embed format, these are Base64-encode ASCII strings.
+
+=back
+
+=head2 notesToStore()
+
+  $mm->notesToStore( $notearray )
+
+Registers the notes into the mediastore.
+
+=over 4
+
+=item . C<$notearray> reference to array containing all notes; in normal format these
+are just filenames, in embed format, these are Base64-encode ASCII strings.
+
+=back
+
+=head2 slideFromStore()
+
+  ( $mimetype, $string ) = $mm->slideFromStore( $slidenr )
+
+Fetches the media string of slide with number  $slidenr. Slides are
+entered into the store by the C<Frameconverter>. If there is an
+C<to_embed> key in the C<%optargs> argument, a base64-encoded ASCII
+string will be returned, else the filename will be returned.
+
+=over 4
+
+=item . C<$slidenr>
 
 the slide to fetch
 
-=item . C<$path>
+=item . C<$mimetype>
 
-the path of the slide (in the media store)
+string describing the mimetype of the file
+
+=item . C<$string>
+
+If there is an C<to_embed> key in the C<%optargs> argument, a
+base64-encoded ASCII string will be returned, else the filename will
+be returned.
+
+=back
+
+=head2 noteFromStore()
+
+  ( $mimetype, $string ) = $mm->noteFromStore( $notenr )
+
+Fetches the media string of note with number  $notenr. Notes are
+entered into the store by the C<NoteFactory>. If there is an
+C<to_embed> key in the C<%optargs> argument, a base64-encoded ASCII
+string will be returned, else the filename will be returned.
+
+=over 4
+
+=item . C<$notenr>
+
+the note to fetch
+
+=item . C<$mimetype>
+
+string describing the mimetype of the file
+
+=item . C<$string>
+
+If there is an C<to_embed> key in the C<%optargs> argument, a
+base64-encoded ASCII string will be returned, else the filename will
+be returned.
 
 =back
 
@@ -624,6 +900,24 @@ the path of the animation (in the media store)
 
 =back
 
+=head2 stillFromStore()
+
+  $path = $mm->stillFromStore( $still )
+
+Returns the media store path to the still. If the still is not yet constructed, it will be put in back order, such that it can be generated later by C<processConstructionBackOrders()>.
+
+=over 4
+
+=item . C<$still>
+
+the $still object as it was read from the C<.rvl> file.
+
+=item . C<$path>
+
+the path of the still (in the media store)
+
+=back
+
 =head2 processConstructionBackOrders()
 
   $mm->processConnstructionBackOrders( $id )
@@ -638,24 +932,6 @@ is no working multithreading/multiprocessing.
 =item . C<$id>
 
 progress ID (controls the corresonding progressbar)
-
-=back
-
-=head2 imageFromStore()
-
-  $path = $mm->imageFromStore( $image )
-
-Fetches the unique ID of the C<$image> and returns that ID (the filename of the oject in the media store). The object is put in back-order such that it can be copied later, using C<processCopyBackOrders>.
-
-=over 4
-
-=item . C<$image>
-
-the $image file to store in the media store.
-
-=item . C<$path>
-
-the path to the image (in the media store)
 
 =back
 
@@ -732,6 +1008,10 @@ progress ID (controls the corresponding progressbar)
 =back
 
 =head2 _animWork()
+
+Worker function; do not use directly.
+
+=head2 _stillWork()
 
 Worker function; do not use directly.
 

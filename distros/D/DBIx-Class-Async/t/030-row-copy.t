@@ -72,7 +72,7 @@ subtest 'Copy with replacement data' => sub {
     is($copy->description, 'Enhanced gadget', 'Description was replaced');
     isnt($copy->id, $original->id, 'Copy has different ID');
     is($original->name, 'Gadget', 'Original name unchanged');
-    is($original->price, 49.99, 'Original price unchanged');
+    is(sprintf('%.2f', $original->price), '49.99', 'Original price unchanged');
     is($copy->active, 1, 'Active flag was copied');
 };
 
@@ -93,7 +93,7 @@ subtest 'Copy with partial replacement data' => sub {
     })->get;
 
     is($copy->name, 'Doohickey XL', 'Name was replaced');
-    is($copy->price, 15.50, 'Price was copied from original');
+    is(sprintf('%.2f', $copy->price), '15.50', 'Price was copied from original');
     is($copy->description, 'A small doohickey', 'Description was copied');
     isnt($copy->id, $original->id, 'Copy has different ID');
 };
@@ -233,7 +233,7 @@ subtest 'Copy with all columns replaced' => sub {
     })->get;
 
     is($copy->name, 'Completely New', 'Name replaced');
-    is($copy->price, 99.99, 'Price replaced');
+    is(sprintf('%.2f', $copy->price), '99.99', 'Price replaced');
     is($copy->description, 'New description', 'Description replaced');
     is($copy->active, 0, 'Active flag replaced');
     isnt($copy->id, $original->id, 'ID still different');

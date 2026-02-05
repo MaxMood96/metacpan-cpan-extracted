@@ -1,0 +1,27 @@
+\frametitle{Scripting Basics}
+\begin{columns}
+\begin{column}{0.45\columnwidth}
+\begin{block}{}
+\begin{itemize}
+\item Automate repetitive tasks
+\item Combine multiple commands
+\item Add logic (if/loops)
+\item Reproducibility
+\end{itemize}
+\end{block}
+\end{column}
+\begin{column}{0.5\columnwidth}
+\begin{verbatim}
+#!/bin/bash
+# hello.sh
+echo "Hello, $USER!"
+echo "Date: $(date)"
+\end{verbatim}
+\end{column}
+\end{columns}
+\begin{exampleblock}{Making it Executable}\label{sec:orgaab8643}
+\begin{verbatim}
+chmod +x hello.sh
+./hello.sh
+\end{verbatim}
+\end{exampleblock}

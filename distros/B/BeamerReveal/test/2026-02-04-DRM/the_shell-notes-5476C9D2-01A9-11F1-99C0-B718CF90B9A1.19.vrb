@@ -1,0 +1,16 @@
+\frametitle{File Manipulation Examples}
+\begin{block}{Examples}
+\begin{verbatim}
+# Create nested directories
+mkdir -p project/src/utils
+
+# Copy a folder and all its contents
+cp -r folder1 folder1_backup
+
+# Rename a file
+mv old_name.txt new_name.txt
+
+# Remove a folder and its contents (be careful!)
+rm -rf temporary_work
+\end{verbatim}
+\end{block}

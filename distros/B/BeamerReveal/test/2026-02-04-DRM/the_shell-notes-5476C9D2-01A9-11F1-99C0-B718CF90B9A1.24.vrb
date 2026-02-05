@@ -1,0 +1,17 @@
+\frametitle{Think-Pair-Share: Which tool when?}
+\begin{block}{Match the tool to the task}
+\begin{enumerate}
+\item You want to see the last 5 errors in a log file.
+\item You want to read a 1GB text file without crashing your computer.
+\item You want to see the first line of every \texttt{.txt} file in a directory.
+\item You want to watch a log file update in real-time as you run a server.
+\end{enumerate}
+\end{block}
+\begin{exampleblock}<2->{Answers}\label{sec:orgc6b9cf6}
+\begin{enumerate}[<+->]
+\item \texttt{tail -n 5}
+\item \texttt{less} (it doesn't load the whole file at once!)
+\item \texttt{head -n 1 *.txt}
+\item \texttt{tail -f}
+\end{enumerate}
+\end{exampleblock}

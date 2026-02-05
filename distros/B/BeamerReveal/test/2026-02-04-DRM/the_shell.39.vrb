@@ -1,0 +1,18 @@
+\frametitle{Brace Expansion}
+\begin{definition}[Creating Multiple Arguments]\label{sec:orgde064d7}
+Brace expansion generates multiple strings from a pattern. Excellent for bulk creation.
+\end{definition}
+\begin{block}{Examples}
+\begin{verbatim}
+# Create multiple files at once
+touch file{1,2,3}.txt
+# Creates: file1.txt, file2.txt, file3.txt
+
+# Ranges
+echo {1..10}
+echo {a..z}
+
+# Nested expansion
+mkdir -p project/{src,test,docs}
+\end{verbatim}
+\end{block}

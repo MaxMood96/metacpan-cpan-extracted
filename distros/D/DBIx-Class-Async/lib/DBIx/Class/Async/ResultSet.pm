@@ -1,6 +1,6 @@
 package DBIx::Class::Async::ResultSet;
 
-$DBIx::Class::Async::ResultSet::VERSION   = '0.51';
+$DBIx::Class::Async::ResultSet::VERSION   = '0.54';
 $DBIx::Class::Async::ResultSet::AUTHORITY = 'cpan:MANWAR';
 
 =head1 NAME
@@ -9,7 +9,7 @@ DBIx::Class::Async::ResultSet - Non-blocking resultset proxy with Future-based e
 
 =head1 VERSION
 
-Version 0.51
+Version 0.54
 
 =head1 SYNOPSIS
 
@@ -93,7 +93,7 @@ a result set with a specific state.
 
 =item * Internal State
 
-The constructor initializes buffers for rows (C<_rows>) and iteration
+The constructor initialises buffers for rows (C<_rows>) and iteration
 cursors (C<_pos>), ensuring that newly created ResultSets are always
 in a "clean" state ready for fresh execution.
 
@@ -177,7 +177,7 @@ sub new_result {
         if ($key =~ /^(.+)\.(.+)$/) {
             my ($rel, $subcol) = ($1, $2);
 
-            # Initialize the nested hash if it doesn't exist
+            # Initialise the nested hash if it doesn't exist
             $raw_data{$rel} //= {};
 
             # Move the value into the nested hash
@@ -279,16 +279,16 @@ derived ResultSet.
 
 =over 4
 
-=item * B<State Mapping>
+=item * State Mapping
 
 It automatically maps internal underscored attributes
 (e.g., C<_source_name>) to clean constructor arguments (C<source_name>).
 
-=item * B<Infrastructure Persistence>*
+=item * Infrastructure Persistence
 
 Explicitly carries over the C<async_db> (the worker bridge) and the C<schema_instance>.
 
-=item * B<Override Injection>
+=item * Override Injection
 
 Accepts a hashref of overrides to modify the state of the new instance (commonly
 used for merging new search conditions or attributes).
@@ -297,7 +297,7 @@ used for merging new search conditions or attributes).
 
 Example: Manual ResultSet Cloning
 
-If you were extending this library and needed to create a specialized ResultSet
+If you were extending this library and needed to create a specialised ResultSet
 that shares the same worker pool:
 
     sub specialised_search {
@@ -2459,7 +2459,7 @@ to C<page(1)> to ensure a pager can be instantiated.
 =item * Parallel Execution
 
 Unlike standard synchronous code which fetches rows and *then* counts them, this
-method uses C<Future->needs_all> to maximize throughput by running both queries
+method uses C<Future->needs_all> to maximise throughput by running both queries
 at once.
 
 =item * Pager Syncing
@@ -2789,7 +2789,7 @@ parent process from serving stale data after the update has completed.
 
 =item * Deflation Support
 
-Automatically detects columns that require custom serialization (e.g.,
+Automatically detects columns that require custom serialisation (e.g.,
 JSON to string, DateTime to ISO string) by consulting the C<_custom_inflators> registry.
 
 =item * Flexible Signature
@@ -2953,7 +2953,7 @@ with the provided data and returns a L<Future> resolving to the updated Row obje
 If no record is found, it creates a new B<in-memory> row object. This object
 is B<not> yet saved to the database (C<in_storage> will be false).
 
-=item * Data Sanitization
+=item * Data Sanitisation
 
 Automatically strips table aliases (C<me.>, C<foreign.>) from the data keys
 to ensure the Row object constructor receives clean column names.

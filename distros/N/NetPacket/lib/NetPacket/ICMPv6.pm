@@ -1,7 +1,7 @@
 package NetPacket::ICMPv6;
 our $AUTHORITY = 'cpan:YANICK';
 # ABSTRACT: Assemble and disassemble ICMPv6 (Internet Control Message Protocol for IPv6) packets. 
-$NetPacket::ICMPv6::VERSION = '1.7.2';
+$NetPacket::ICMPv6::VERSION = '1.8.0';
 use strict;
 use warnings;
 
@@ -270,7 +270,7 @@ sub checksum {
     my ($ipv6) = @_;
 
     # Put the packet together for checksumming
-    my $len = length($self->{data}) + 32;
+    my $len = length($self->{data}) + 4;
     my $packet = $ipv6->pseudo_header($len, IP_PROTO_ICMPv6);
     $packet .= pack("CCna*", $self->{type}, $self->{code}, 0, $self->{data});
 
@@ -294,7 +294,7 @@ NetPacket::ICMPv6 - Assemble and disassemble ICMPv6 (Internet Control Message Pr
 
 =head1 VERSION
 
-version 1.7.2
+version 1.8.0
 
 =head1 SYNOPSIS
 

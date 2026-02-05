@@ -1,0 +1,20 @@
+\frametitle{Variables in Scripts}
+\begin{block}{Definition and Scope}
+\begin{verbatim}
+# Definition: No spaces around =
+name="STIC Class"
+count=42
+
+# Access: Use the $ sign
+echo "Welcome to $name"
+
+# Command Substitution: Use $()
+current_user=$(whoami)
+\end{verbatim}
+\end{block}
+\begin{alertblock}{Important Rules}
+\begin{itemize}
+\item \alert{Quotes Matter:} Use \texttt{"\$var"} to prevent word splitting if your variable contains spaces.
+\item \alert{Braces:} Use \texttt{\$\{var\}} for clarity or when appending text: \texttt{echo "\$\{name\}\_backup"}.
+\end{itemize}
+\end{alertblock}

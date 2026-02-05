@@ -8,7 +8,7 @@ use Types::Common -is, -types;
 
 BEGIN {
 	our $AUTHORITY = 'cpan:TOBYINK';
-	our $VERSION   = '0.003001';
+	our $VERSION   = '0.003004';
 	
 	require XSLoader;
 	__PACKAGE__->XSLoader::load( $VERSION );
@@ -137,6 +137,15 @@ Sub::HandlesVia::XS - XS parts for Sub::HandlesVia; no user-serviceable parts in
 
 Use L<Sub::HandlesVia>. That module will make use of Sub::HandlesVia::XS when
 it can.
+
+=head1 INSTALLATION
+
+If the environment variable C<PERL_XS_STRICTC89> is set to true when running
+Makefile.PL, strict C89 flags will be passed to the C compiled when compiling
+Sub::HandlesVia::XS. This will also happen if Makefile.PL detects it is
+likely being run in the author's development environment.
+
+In general, the module should work the same in either case.
 
 =head1 BUGS
 

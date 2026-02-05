@@ -1,0 +1,10 @@
+Makefile.PL
+MANIFEST
+README.md
+Changes
+JAVASCRIPT_API.md
+example-protected.html
+lib/Plack/Middleware/ProofOfWork.pm
+share/pow.js
+share/challenge.html
+t/01-basic.t

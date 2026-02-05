@@ -1,0 +1,39 @@
+\frametitle{File Descriptors \& Redirection}
+\begin{block}{Visual Model}
+\begin{center}
+\begin{tikzpicture}[
+    node distance=0.3cm,
+    process/.style={rectangle, draw, very thick, minimum width=4cm, minimum height=3cm, align=left, fill=blue!10},
+    file/.style={rectangle, draw, thick, minimum width=2.5cm, minimum height=0.7cm, align=center, fill=orange!20},
+    label/.style={font=\small\ttfamily}
+]
+    % Process box
+    \node[process] (proc) at (0,0) {
+        \textbf{Process}\\[1em]
+        \texttt{stdin  (0)}\\
+        \texttt{stdout (1)}\\
+        \texttt{stderr (2)}
+    };
+
+    % Input file
+    \node[file, left=2cm of proc, yshift=0.8cm] (input) {\texttt{input.txt}};
+
+    % Output file
+    \node[file, right=2cm of proc, yshift=0.3cm] (output) {\texttt{output.txt}};
+
+    % Error file
+    \node[file, right=2cm of proc, yshift=-0.8cm] (errors) {\texttt{errors.log}};
+
+    % Arrows
+    \draw[->, very thick] (input.east) -- node[above, label] {\texttt{<}} (proc.west |- input);
+    \draw[->, very thick] (proc.east |- output) -- node[above, label] {\texttt{>}} (output.west);
+    \draw[->, very thick] (proc.east |- errors) -- node[above, label] {\texttt{2>}} (errors.west);
+\end{tikzpicture}
+\end{center}
+
+\begin{itemize}[<+->]
+\item \texttt{command > file} → stdout to file
+\item \texttt{command 2>\&1} → stderr to stdout
+\item \texttt{command \&> file} → both to file
+\end{itemize}
+\end{block}

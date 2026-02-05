@@ -1,6 +1,6 @@
 package DBIx::Class::Async::Storage::DBI;
 
-$DBIx::Class::Async::Storage::DBI::VERSION   = '0.51';
+$DBIx::Class::Async::Storage::DBI::VERSION   = '0.54';
 $DBIx::Class::Async::Storage::DBI::AUTHORITY = 'cpan:MANWAR';
 
 use strict;
@@ -14,7 +14,7 @@ DBIx::Class::Async::Storage::DBI - DBI-based async storage backend for DBIx::Cla
 
 =head1 VERSION
 
-Version 0.51
+Version 0.54
 
 =head1 SYNOPSIS
 
@@ -222,67 +222,77 @@ sub debug {
 
 =head1 ARCHITECTURE
 
-This storage class operates differently from traditional L<DBIx::Class::Storage::DBI>:
+This storage class implements a distributed, non-blocking execution model that
+differs fundamentally from traditional L<DBIx::Class::Storage::DBI>:
 
 =over 4
 
-=item * B<No Parent Process DBH>
+=item B<No Parent Process DBH>
 
-The parent process does not hold database handles. All database connections
-are managed by worker processes.
+The parent process never instantiates a L<DBI> handle. All database connections
+are isolated within worker processes. This prevents the "forked handle"
+corruption common in multiprocess Perl applications and keeps the main event
+loop lightweight.
 
-=item * B<Async Operations>
+=item B<Async Operations>
 
-All database operations return L<Future> objects, enabling non-blocking
-asynchronous execution.
+Every database interaction (search, create, update, etc.) returns an
+L<IO::Async::Future> object. This allows the main application to continue
+processing web requests, timers, or other I/O while waiting for the worker
+to return results.
 
-=item * B<Worker Pool>
+=item B<Worker Pool via IO::Async::Function>
 
-Database queries are distributed across a pool of worker processes, allowing
-for parallel execution and improved throughput.
+Queries are dispatched to a persistent pool of background workers. By using
+persistent workers with C<state>-cached connections, the bridge eliminates
+the latency of C<connect/disconnect> cycles for every query.
 
-=item * B<Transparent API>
+=item B<Transparent API>
 
-Despite the async architecture, the API remains similar to standard L<DBIx::Class>,
-making migration easier.
+The bridge provides a high degree of parity with the standard DBIC API.
+Advanced features like C<prefetch>, C<collapse>, and complex transactions
+(C<txn_do>) are supported through a specialised serialisation layer that
+reconstructs object graphs across process boundaries.
 
 =back
+
+=cut
 
 =head1 CAVEATS
 
 =head2 Transaction Management
 
-Transactions in L<DBIx::Class::Async> are handled differently than in standard
-DBIC. Because the Storage layer delegates to a worker pool, you cannot
-rely on local C<BEGIN/COMMIT> blocks.
+Transactions in L<DBIx::Class::Async> differ from standard L<DBIx::Class>
+because the I/O is delegated to a worker pool. You cannot use the
+traditional C<< $schema->storage->txn_begin >> pattern in a non-blocking
+loop, as subsequent calls might be routed to different workers.
 
-Currently, it is recommended to use database-level atomic operations or
-ensure that your business logic is idempotent across multiple async calls.
+=head3 The Recommended Approach: C<txn_do>
 
-=head1 ERROR HANDLING
+To ensure atomicity, use the C<txn_do> or C<txn_batch> methods. These
+methods bundle multiple operations into a single "Instruction Set" that
+is dispatched to a B<single worker process>.
 
-All methods return a L<Future> that may fail with two categories of error:
+The worker executes the entire block within a local database transaction.
+If any step fails, the worker performs a local C<rollback> and returns
+the error to the parent process.
 
-=over 4
+=head3 Placeholder Resolution
 
-=item * logic_error
+The async C<txn_do> supports internal variable registration. You can
+create a record in Step A and use its auto-incremented ID in Step B
+using the C<$name.id> syntax. This allows for complex, multi-step
+dependent operations to remain fully asynchronous and atomic.
 
-The request was invalid before reaching the database (e.g., calling C<update>
-on a row not in storage).
+=head2 ResultSet State
 
-=item * db_error
+Because data is deflated for transport between the worker and the parent,
+the objects returned by C<on_done> are "POPO" (Plain Old Perl Objects/HashRefs)
+rather than "Live" L<DBIx::Class::Row> objects. Calling methods like
+C<update> or C<delete> on these returned objects will not affect the
+database directly.
 
-The database worker returned an error (e.g., unique constraint violation,
-syntax error).
-
-=back
-
-    $storage->cursor($rs)->next->catch(sub {
-        my ($error, $type) = @_;
-        if ($type eq 'db_error') {
-            warn "Database complained: $error";
-        }
-    });
+=cut
 
 =head1 SEE ALSO
 

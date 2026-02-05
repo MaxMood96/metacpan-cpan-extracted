@@ -3,7 +3,7 @@
 
 
 package BeamerReveal::NotesFactory;
-our $VERSION = '20260130.1210'; # VERSION
+our $VERSION = '20260205.0754'; # VERSION
 
 use strict;
 use warnings;
@@ -25,16 +25,17 @@ sub nofdigits { length( "$_[0]" ) }
 
 sub new {
   my $class = shift;
-  my ( $base, $pdf_dir, $presentationparameters, $xres, $yres, $progressId ) = @_;
+  my ( $base, $pdf_dir, $presentationparameters, $xres, $yres, $progressId, $debug ) = @_;
 
   my $self = {
-      base       => $base,
-      pdf_dir    => $pdf_dir,
-      presentationparameters => $presentationparameters,
-      xres       => $xres,
-      yres       => $yres,
-      progressId => $progressId,
-  };
+	      base       => $base,
+	      pdf_dir    => $pdf_dir,
+	      presentationparameters => $presentationparameters,
+	      xres       => int( $xres ), 
+	      yres       => int( $yres ),
+	      progressId => $progressId,
+	      debug      => $debug,
+	     };
   $class = (ref $class ? ref $class : $class );
   bless $self, $class;
 
@@ -81,7 +82,7 @@ sub toJPG {
 
   # 2. alter it
   my $notesMagic = '';
-  $source =~ s/\\begin\{document\}/\\setbeameroption\{show only notes\}\n\\begin\{document\}/;
+  $source =~ s/\\begin\{document\}/\\setbeamertemplate\{note page\}\{\\insertnote\}\n\\setbeameroption\{show only notes\}\n\\begin\{document\}/;
 
 
   # 3. write it to a temporary file
@@ -144,13 +145,15 @@ sub toJPG {
 	   '-scale-to-y', @{[1.5*$self->{yres}]},
 	   '-progress',
 	 ];
+  my $maxNote = 0;
   BeamerReveal::IPC::Run::runsmart( $cmd, 2, qr/^(\d+) (\d+) .*$/,
 				    sub {
-					while( scalar @_ ) {
-					    my ( $a, $b ) = ( shift @_, shift @_ );
-					    $logger->progress( $self->{progressId},
-							       $a, "note $1/$2", $b );
-					}
+				      while( scalar @_ ) {
+					my ( $a, $b ) = ( shift @_, shift @_ );
+					$logger->progress( $self->{progressId},
+							   $a, "note $1/$2", $b );
+					$maxNote = $b;
+				      }
 				    },
 				    0, # coreId
 				    2, # indent
@@ -160,8 +163,16 @@ sub toJPG {
 
   $notesFileName =~ s/\.\w+$//;
   foreach my $file ( glob( "$notesFileName*" ) ) {
-      unlink $file;
+    unlink $file unless( defined $self->{debug} );
   }
+
+  my @list = ( 0 ); # create a dummy element to allow for one-indexed addressing
+  
+  for (my $i = 1; $i <= $maxNote; ++$i ) {
+    push @list, sprintf( "$self->{slides}/notes-%0" . nofdigits( $maxNote ) . 'd.jpg',
+			 $i );
+  }
+  return \@list;
 }
 
 1;
@@ -178,7 +189,7 @@ BeamerReveal::NotesFactory - NotesFactory
 
 =head1 VERSION
 
-version 20260130.1210
+version 20260205.0754
 
 =head1 SYNOPSIS
 
@@ -188,7 +199,7 @@ Worker object to distill notes from the original Beamer TeX file.
 
 =head2 new()
 
-  $nf = BeamerReveal::NotesFactory->new( $base, $presentationparameters $xres, $yres, $progressId );
+  $nf = BeamerReveal::NotesFactory->new( $base, $presentationparameters $xres, $yres, $progressId, $debug );
 
 =over 4
 
@@ -212,6 +223,9 @@ the x-resolution of the canvas. This will determine the resolution at which the 
 
 the ID of the progress bar that displays the progress on screen.
 
+=item . C<$debug>
+
+runs the factory in debug mode (undef = off, defined = on),  i.e. no intermediate files are cleaned.
 =item . <$nf>
 
 the notes factory

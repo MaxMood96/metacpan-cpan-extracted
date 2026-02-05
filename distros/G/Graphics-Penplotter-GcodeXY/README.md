@@ -388,11 +388,12 @@ error condition (e.g. insufficient arguments).
         # draw a square with lower left point at (10,10)
         $g->polygonR(1,1, 1,2, 2,2, 2,1, 1,1);
 
-- polygonround(r, x1,y1, x2,y2, ..., xn,yn)
+- polygonround(r, x1,y1, x2,y2, x3,y3, ..., xn,yn)
 
     Draws a polygon starting from the current position, using absolute coordinates, with rounded
-    corners between the line segments whose radius is dtermined by `r`. Lines with rounded corners
-    will then be drawn from (`x1`,`y1`) to (`x2`,`y2`), and so on.
+    corners between the line segments whose radius is determined by `r`. Lines with rounded corners
+    will then be drawn from (`x1`,`y1`) to (`x2`,`y2`), and so on. Specify at least three pairs
+    of coordinates (i.e. two line segments).
 
     Example:
 

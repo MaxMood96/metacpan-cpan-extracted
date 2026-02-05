@@ -1,0 +1,20 @@
+\frametitle{The Prompt}
+\begin{block}{Anatomy of the Prompt}
+\texttt{username@host:directory\$}
+\end{block}
+\begin{columns}
+\begin{column}{1.0\columnwidth}
+\begin{center}
+\begin{tabular}{ll}
+Component & Description\\
+\hline
+username & Currently logged in user\\
+@ & Separator (convention)\\
+host & Machine name\\
+directory & Current working directory\\
+\$ & User-level shell indicator\\
+\texttt{\#} & Root-level shell indicator\\
+\end{tabular}
+\end{center}
+\end{column}
+\end{columns}

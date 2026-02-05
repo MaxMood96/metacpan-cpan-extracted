@@ -32,7 +32,7 @@
 	doap:maintainer      <http://purl.org/NET/cpan-uri/person/tobyink>;
 	doap:name            "Sub-HandlesVia-XS";
 	doap:programming-language "Perl";
-	doap:release         <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001000>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001001>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001002>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001003>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001004>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-002000>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-003000>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-003001>;
+	doap:release         <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001000>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001001>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001002>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001003>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-001004>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-002000>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-003000>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-003001>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-003002>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-003003>, <http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-003004>;
 	doap:repository      [
 		a doap:GitRepository;
 		doap:browse <https://github.com/tobyink/p5-sub-handlesvia-xs>;
@@ -85,7 +85,7 @@
 			rdfs:label "Check parameters passed to sort methods are actually coderefs.";
 		], [
 			a doap-changeset:Change;
-			rdfs:label "Check indices passed to get, set, and accessor methods are actually integers.";
+			rdfs:label "Check indices pa to get, set, and accessor methods are actually integers.";
 		];
 	];
 	doap-changeset:released-by <http://purl.org/NET/cpan-uri/person/tobyink>;
@@ -199,6 +199,54 @@
 	doap-changeset:released-by <http://purl.org/NET/cpan-uri/person/tobyink>;
 	doap:file-release    <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Sub-HandlesVia-XS-0.003001.tar.gz>;
 	doap:revision        "0.003001"^^xsd:string.
+
+<http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-003002>
+	a                    doap:Version;
+	dc:identifier        "Sub-HandlesVia-XS-0.003002"^^xsd:string;
+	dc:issued            "2026-02-04"^^xsd:date;
+	doap-changeset:changeset [
+		doap-changeset:item [
+			a doap-changeset:Bugfix;
+			rdfs:label "Make all the C code C89-compliant.";
+		];
+	];
+	doap-changeset:released-by <http://purl.org/NET/cpan-uri/person/tobyink>;
+	doap:file-release    <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Sub-HandlesVia-XS-0.003002.tar.gz>;
+	doap:revision        "0.003002"^^xsd:string.
+
+<http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-003003>
+	a                    doap:Version;
+	dc:identifier        "Sub-HandlesVia-XS-0.003003"^^xsd:string;
+	dc:issued            "2026-02-04"^^xsd:date;
+	doap-changeset:changeset [
+		doap-changeset:item [
+			a doap-changeset:Bugfix;
+			rdfs:label "Avoid redefining the newAV_mortal macro.";
+		], [
+			a doap-changeset:Packaging;
+			rdfs:label "Remove superfluous files from packaging.";
+		];
+	];
+	doap-changeset:released-by <http://purl.org/NET/cpan-uri/person/tobyink>;
+	doap:file-release    <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Sub-HandlesVia-XS-0.003003.tar.gz>;
+	doap:revision        "0.003003"^^xsd:string.
+
+<http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/v_0-003004>
+	a                    doap:Version;
+	dc:identifier        "Sub-HandlesVia-XS-0.003004"^^xsd:string;
+	dc:issued            "2026-02-04"^^xsd:date;
+	doap-changeset:changeset [
+		doap-changeset:item [
+			a doap-changeset:Bugfix;
+			rdfs:label "More C89 fixes.";
+		], [
+			a doap-changeset:Bugfix;
+			rdfs:label "Fix for_each2 on older Perls, before around 5.22.";
+		];
+	];
+	doap-changeset:released-by <http://purl.org/NET/cpan-uri/person/tobyink>;
+	doap:file-release    <http://backpan.cpan.org/authors/id/T/TO/TOBYINK/Sub-HandlesVia-XS-0.003004.tar.gz>;
+	doap:revision        "0.003004"^^xsd:string.
 
 <http://purl.org/NET/cpan-uri/person/tobyink>
 	a                    foaf:Person;

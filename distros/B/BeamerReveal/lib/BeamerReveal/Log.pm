@@ -3,7 +3,7 @@
 
 
 package BeamerReveal::Log;
-our $VERSION = '20260130.1210'; # VERSION
+our $VERSION = '20260205.0754'; # VERSION
 
 use parent 'Exporter';
 use Carp;
@@ -33,7 +33,7 @@ sub new {
 
   $self->{tasks} = [];
 
-  $self->{termwidth} = $self->_terminal_width() - 2;
+  $self->{termwidth} = $self->_terminal_width();
   $self->{barsize} = $self->{termwidth} - $self->{labelsize} - $self->{activitysize} - 12;
   
   $self->{logfile} = IO::File->new();
@@ -109,13 +109,22 @@ sub _bar_line {
   my $filled = int($pct * $width);
   my $empty  = $width - $filled;
 
-  return sprintf("%-${labelsize}s: %-${activitysize}s [%s%s] %5.1f%%",
+  if ( $width < 0 ) {
+    return sprintf("%s: %s / %5.1f%%",
 		 $label,
 		 $activity,
-		 '#' x $filled,
-		 '-' x $empty,
 		 $pct * 100
-		);
+		  );
+  }
+  else {
+    return sprintf("%-${labelsize}s: %-${activitysize}s [%s%s] %5.1f%%",
+		   $label,
+		   $activity,
+		   '#' x $filled,
+		   '-' x $empty,
+		   $pct * 100
+		  );
+  }
 }
 
 sub _formatLines {
@@ -130,8 +139,7 @@ sub _formatLines {
     else {
       my $llen = length( $left );
       my $rlen = length( $right );
-      my $midspace = $width - $llen - $rlen;
-      die( "Error $left | $right\n" ) if( $midspace < 0 );
+      my $midspace = max( 1, $width - $llen - $rlen );
       $openinglines .= $extra . $left . ( ' ' x $midspace ) . $right . "\n";
     }
   }
@@ -151,7 +159,7 @@ BeamerReveal::Log - Log
 
 =head1 VERSION
 
-version 20260130.1210
+version 20260205.0754
 
 =head1 SYNOPSIS
 

@@ -1,0 +1,13 @@
+\frametitle{Globbing Examples}
+\begin{block}{Basic Wildcards}
+\begin{verbatim}
+# All .txt files
+ls *.txt
+
+# Files starting with 'test'
+ls test*
+
+# Single character: matches file1.txt but not file10.txt
+ls file?.txt
+\end{verbatim}
+\end{block}

@@ -41,10 +41,10 @@ my $meta = {
                                      },
                       },
   "provides"       => {
-                        "Class::XSConstructor" => { file => "lib/Class/XSConstructor.pm", version => 0.023002 },
-                        "Class::XSDelegation"  => { file => "lib/Class/XSDelegation.pm", version => 0.023002 },
-                        "Class::XSDestructor"  => { file => "lib/Class/XSDestructor.pm", version => 0.023002 },
-                        "Class::XSReader"      => { file => "lib/Class/XSReader.pm", version => 0.023002 },
+                        "Class::XSConstructor" => { file => "lib/Class/XSConstructor.pm", version => 0.023005 },
+                        "Class::XSDelegation"  => { file => "lib/Class/XSDelegation.pm", version => 0.023005 },
+                        "Class::XSDestructor"  => { file => "lib/Class/XSDestructor.pm", version => 0.023005 },
+                        "Class::XSReader"      => { file => "lib/Class/XSReader.pm", version => 0.023005 },
                       },
   "release_status" => "stable",
   "resources"      => {
@@ -60,7 +60,7 @@ my $meta = {
                                         },
                         x_identifier => "http://purl.org/NET/cpan-uri/dist/Class-XSConstructor/project",
                       },
-  "version"        => 0.023002,
+  "version"        => 0.023005,
 };
 
 my %dynamic_config;
@@ -76,9 +76,21 @@ if (eval "use Devel::PPPort 3.42; 1") {
 	Devel::PPPort::WriteFile();
 }
 
-%dynamic_config = (
-	OBJECT => '$(O_FILES)',
-);
+$dynamic_config{OBJECT} ='$(O_FILES)';
+
+my $STRICT;
+$STRICT++ if ( $ENV{GITHUB_REPOSITORY} and $ENV{GITHUB_REPOSITORY} =~ /p5-class-xsconstructor/ );
+$STRICT++ if ( $ENV{EXTENDED_TESTING}  and $ENV{USER} and $ENV{USER} eq 'tai' );
+$STRICT++ if ( $ENV{PERL_XS_STRICTC89} );
+if ( $STRICT ) {
+	require Config;
+	my $SPACE = q{ };
+	$dynamic_config{CCFLAGS} = join $SPACE => (
+		$Config::Config{ccflags},
+		'-std=c89',
+		# '-Werror',
+	);
+}
 
 };
 

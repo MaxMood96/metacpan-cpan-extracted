@@ -1,0 +1,21 @@
+\frametitle{awk: Context and Math}
+\begin{block}{Built-in Variables}
+\begin{itemize}
+\item \alert{\alert{NR:}} Number of Records (Line Number)
+\item \alert{\alert{NF:}} Number of Fields (Columns in current line)
+\item \alert{\alert{\$0:}} The entire line
+\end{itemize}
+\end{block}
+\begin{exampleblock}<2->{Examples with Output}\label{sec:orgc5e587b}
+\begin{verbatim}
+# Print line number and the line
+$ awk '{print NR, $0}' file.txt
+
+# Sum values in the first column
+$ awk '{sum += $1} END {print "Total:", sum}' numbers.txt
+Total: 450
+
+# Calculate average of 1st column
+$ awk '{s+=$1; c++} END {print "Avg:", s/c}' numbers.txt
+\end{verbatim}
+\end{exampleblock}

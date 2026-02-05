@@ -1,0 +1,8 @@
+\frametitle{Solutions: Environment}
+\begin{exampleblock}{Key Takeaways}\label{sec:orge318c3d}
+\begin{itemize}[<+->]
+\item \alert{Ephemeral:} Variables die when the terminal is closed.
+\item \alert{Local vs Export:} Without \texttt{export}, child programs (like scripts you run) can't see the variable.
+\item \alert{Customization:} \texttt{PS1} is the variable that controls what your prompt looks like!
+\end{itemize}
+\end{exampleblock}

@@ -88,6 +88,12 @@
   </helper>
   <helper>
     <foaf:Person>
+      <foaf:name>Stan Schwertly</foaf:name>
+      <foaf:mbox rdf:resource="mailto:stan@linode.com" />
+    </foaf:Person>
+  </helper>
+  <helper>
+    <foaf:Person>
       <foaf:name>Stephanie Wehner</foaf:name>
       <foaf:mbox rdf:resource="mailto:atrak@cpan.org" />
     </foaf:Person>
@@ -285,6 +291,12 @@
     <Version>
       <revision rdf:datatype="http://www.w3.org/2001/XMLSchema#string">1.7.1</revision>
       <dc:issued rdf:datatype="http://www.w3.org/2001/XMLSchema#date">2019-06-08</dc:issued>
+    </Version>
+  </release>
+  <release>
+    <Version>
+      <revision rdf:datatype="http://www.w3.org/2001/XMLSchema#string">1.7.2</revision>
+      <dc:issued rdf:datatype="http://www.w3.org/2001/XMLSchema#date">2019-07-20</dc:issued>
     </Version>
   </release>
   <programming-language>Perl</programming-language>

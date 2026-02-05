@@ -1,0 +1,14 @@
+\frametitle{System Health with top}
+\begin{block}{Monitoring System Resources}
+\texttt{top} displays real-time system statistics: CPU, memory, running processes.
+
+\begin{verbatim}
+# macOS: Run top once and exit immediately
+$ top -l 1 -n 0
+\end{verbatim}
+
+\alert{Flags:} \texttt{-l 1} runs top once (1 iteration). \texttt{-n 0} displays 0 processes (header stats only).
+\end{block}
+\begin{exampleblock}<2->{Common Use Case}\label{sec:org0285027}
+Capture CPU and memory usage in scripts for logging or alerting.
+\end{exampleblock}

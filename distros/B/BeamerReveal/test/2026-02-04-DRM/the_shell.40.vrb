@@ -1,0 +1,14 @@
+\frametitle{Command History}
+\begin{block}{History Features}
+\begin{center}
+\begin{tabular}{ll}
+Key/Command & Action\\
+\hline
+Up/Down arrows & Navigate history\\
+\texttt{history} & Show command history\\
+\texttt{!!} & Repeat last command\\
+\texttt{!grep} & Execute last command starting with grep\\
+Ctrl+R & Reverse search history (The MVP!)\\
+\end{tabular}
+\end{center}
+\end{block}

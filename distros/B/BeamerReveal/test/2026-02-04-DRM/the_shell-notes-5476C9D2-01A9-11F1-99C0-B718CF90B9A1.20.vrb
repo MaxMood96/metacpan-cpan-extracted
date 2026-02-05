@@ -1,0 +1,12 @@
+\frametitle{Time to Explore: File Operations}
+\begin{block}{Challenge}
+Perform the following tasks using only the shell:
+
+\begin{enumerate}
+\item Create a directory named \texttt{STIC}, and inside it, a directory named \texttt{lab1}.
+\item Create three empty files in \texttt{lab1} named \texttt{test1.py}, \texttt{test2.py}, and \texttt{notes.txt}.
+\item Copy \texttt{notes.txt} to a new file called \texttt{README.md}.
+\item Move all \texttt{.py} files into a new subdirectory called \texttt{src}.
+\item Try to remove the \texttt{STIC} directory using \texttt{rmdir}. Why does it fail?
+\end{enumerate}
+\end{block}

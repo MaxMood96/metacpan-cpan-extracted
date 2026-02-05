@@ -1,0 +1,18 @@
+Changes
+lib/Software/License/MIT_0.pm
+LICENSE
+Makefile.PL
+MANIFEST			This list of files
+README
+t/00-load.t
+t/mit-0.t
+xt/boilerplate.t
+xt/cpan-changes.t
+xt/critic.t
+xt/kwalitee.t
+xt/manifest.t
+xt/pod-coverage.t
+xt/pod-spell.t
+xt/pod-syntax.t
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

@@ -1,0 +1,14 @@
+----------------------------------------------------------------------------
+--  beamer-reveal.pl                                       v20260204.0848 --
+--  (C) 2025-2026 Walter PM Daems <wdaems@cpan.org>                 GPLv3 --
+--  This script uses materials from:                                      --
+--    - reveal.js (C) Hakim El Hattab and contributors        MIT license --
+--    - Quarto    (C) Posit Software, PBC and contributors    MIT license --
+----------------------------------------------------------------------------
+- Using the following directories:
+  aux-files    : '.'
+  pdf-files    : '.'
+  output-files : '.'
+- Reading driver file ./beamer-reveal-example.rvl
+Error: cannot read reveal file './beamer-reveal-example.rvl'
+

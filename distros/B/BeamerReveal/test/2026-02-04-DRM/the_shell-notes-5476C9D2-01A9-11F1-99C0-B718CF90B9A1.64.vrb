@@ -1,0 +1,4 @@
+\frametitle{Regular Expressions (Regex)}
+\begin{block}{Why Regex?}
+Regex patterns allow for powerful, flexible text matching beyond simple wildcards.
+\end{block}

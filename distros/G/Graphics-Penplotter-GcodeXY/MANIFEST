@@ -27,6 +27,16 @@ t/00_compile.t
 t/01-gcode.t
 t/02-alphabet.t
 t/03-svgimport.t
+t/04-geometry.t
+t/05-transforms.t
+t/06-internals.t
+t/07-io.t
+t/08-gcodexy_tests.t
+t/09-gcodexy_font_tests.t
+t/10-gcodexy_svg_tests.t
 t/data/LiberationSans-Regular.ttf
+t/data/Test Suite README and Documentation.pdf
 t/data/car-vp.svg
+t/data/test_archive_script.sh
+t/data/test_readme.md
 META.yml

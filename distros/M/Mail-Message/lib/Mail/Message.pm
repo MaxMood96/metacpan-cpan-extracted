@@ -1,4 +1,4 @@
-# This code is part of Perl distribution Mail-Message version 4.03.
+# This code is part of Perl distribution Mail-Message version 4.04.
 # The POD got stripped from this file by OODoc version 3.06.
 # For contributors see file ChangeLog.
 
@@ -10,7 +10,7 @@
 
 
 package Mail::Message;{
-our $VERSION = '4.03';
+our $VERSION = '4.04';
 }
 
 use parent 'Mail::Reporter';
@@ -18,7 +18,7 @@ use parent 'Mail::Reporter';
 use strict;
 use warnings;
 
-use Log::Report     'mail-message', import => [ qw/__x error info panic trace/ ];
+use Log::Report     'mail-message', import => [ qw/__x error info panic/ ];
 
 use Mail::Message::Part            ();
 use Mail::Message::Head::Complete  ();
@@ -57,14 +57,9 @@ sub init($)
 		$body->message($self);
 	}
 
-	$self->{MM_body_type} = $args->{body_type}
-		if defined $args->{body_type};
-
-	$self->{MM_head_type} = $args->{head_type}
-		if defined $args->{head_type};
-
-	$self->{MM_field_type} = $args->{field_type}
-		if defined $args->{field_type};
+	$self->{MM_body_type}  = $args->{body_type}  if defined $args->{body_type};
+	$self->{MM_head_type}  = $args->{head_type}  if defined $args->{head_type};
+	$self->{MM_field_type} = $args->{field_type} if defined $args->{field_type};
 
 	my $labels = $args->{labels} || [];
 	my @labels = ref $labels eq 'ARRAY' ? @$labels : %$labels;
@@ -87,8 +82,7 @@ sub clone(@)
 	$body = $body->clone unless $args{shallow} || $args{shallow_body};
 	my $clone  = Mail::Message->new(head => $head, body => $body);
 
-	my $labels = $self->labels;
-	my %labels = %$labels;
+	my %labels = %{$self->labels};
 	delete $labels{deleted};
 	$clone->{MM_labels} = \%labels;
 

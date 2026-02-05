@@ -6,7 +6,7 @@ enum ArraySource {
     ARRAY_SRC_CALL_METHOD,
 };
 
-// SIMPLE SIG: all, count, pop, shift, etc
+/* SIMPLE SIG: all, count, pop, shift, etc */
 typedef struct {
     char*               name;
     enum ArraySource    arr_source;
@@ -18,7 +18,7 @@ typedef struct {
     char*               method_return_constructor;
 } shvxs_array_SIMPLE_SIG;
 
-// NEW ELEMS SIG: push, unshift, etc (add new elements to arrayref, so need a type)
+/* NEW ELEMS SIG: push, unshift, etc (add new elements to arrayref, so need a type) */
 typedef struct {
     char*               name;
     enum ArraySource    arr_source;
@@ -35,7 +35,7 @@ typedef struct {
     char*               method_return_constructor;
 } shvxs_array_NEW_ELEMS_SIG;
 
-// CODEREF SIG: for_each, map, grep, etc (methods which accept a potentially curried coderef)
+/* CODEREF SIG: for_each, map, grep, etc (methods which accept a potentially curried coderef) */
 typedef struct {
     char*               name;
     enum ArraySource    arr_source;
@@ -48,7 +48,7 @@ typedef struct {
     char*               method_return_constructor;
 } shvxs_array_CALLBACK_SIG;
 
-// INDEX SIG: get, etc (methods which accept a potentially curried index)
+/* INDEX SIG: get, etc (methods which accept a potentially curried index) */
 typedef struct {
     char*               name;
     enum ArraySource    arr_source;
@@ -62,7 +62,7 @@ typedef struct {
     char*               method_return_constructor;
 } shvxs_array_INDEX_SIG;
 
-// SV SIG: join, etc (methods which accept a potentially curried scalar)
+/* SV SIG: join, etc (methods which accept a potentially curried scalar) */
 typedef struct {
     char*               name;
     enum ArraySource    arr_source;
@@ -76,7 +76,7 @@ typedef struct {
     char*               method_return_constructor;
 } shvxs_array_SV_SIG;
 
-// SETTER SIG: accessor, set (combination of NEW_ELEMS, INDEX, and SV)
+/* SETTER SIG: accessor, set (combination of NEW_ELEMS, INDEX, and SV) */
 typedef struct {
     char*               name;
     enum ArraySource    arr_source;
@@ -348,10 +348,12 @@ shvxs_array_return_sv_object(
             }                                                           \
                                                                         \
             if (n > 0) {                                                \
+                I32 i;                                                  \
+                SV **svp;                                               \
                 SP = MARK;                                              \
                 EXTEND(SP, n);                                          \
-                for (I32 i = 0; i < n; i++) {                           \
-                    SV **svp = av_fetch(array, i, 0);                   \
+                for (i = 0; i < n; i++) {                               \
+                    svp = av_fetch(array, i, 0);                        \
                     PUSHs(svp ? sv_2mortal(newSVsv(*svp))               \
                                : &PL_sv_undef);                         \
                 }                                                       \
@@ -384,10 +386,12 @@ shvxs_array_return_sv_object(
             }                                                           \
                                                                         \
             if (n > 0) {                                                \
+                I32 i;                                                  \
+                SV **svp;                                               \
                 SP = MARK;                                              \
                 EXTEND(SP, n);                                          \
-                for (I32 i = 0; i < n; i++) {                           \
-                    SV **svp = av_fetch(out, i, 0);                     \
+                for (i = 0; i < n; i++) {                               \
+                    svp = av_fetch(out, i, 0);                          \
                     PUSHs(svp ? sv_2mortal(newSVsv(*svp))               \
                                : &PL_sv_undef);                         \
                 }                                                       \

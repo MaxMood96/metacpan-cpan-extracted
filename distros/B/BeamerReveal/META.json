@@ -89,51 +89,51 @@
    "provides" : {
       "BeamerReveal" : {
          "file" : "lib/BeamerReveal.pm",
-         "version" : "20260130.1210"
+         "version" : "20260205.0754"
       },
       "BeamerReveal::FrameConverter" : {
          "file" : "lib/BeamerReveal/FrameConverter.pm",
-         "version" : "20260130.1210"
+         "version" : "20260205.0754"
       },
       "BeamerReveal::IPC::Run" : {
          "file" : "lib/BeamerReveal/IPC/Run.pm",
-         "version" : "20260130.1210"
+         "version" : "20260205.0754"
       },
       "BeamerReveal::Log" : {
          "file" : "lib/BeamerReveal/Log.pm",
-         "version" : "20260130.1210"
+         "version" : "20260205.0754"
       },
       "BeamerReveal::Log::Ansi" : {
          "file" : "lib/BeamerReveal/Log/Ansi.pm",
-         "version" : "20260130.1210"
+         "version" : "20260205.0754"
       },
       "BeamerReveal::MediaManager" : {
          "file" : "lib/BeamerReveal/MediaManager.pm",
-         "version" : "20260130.1210"
+         "version" : "20260205.0754"
       },
       "BeamerReveal::NotesFactory" : {
          "file" : "lib/BeamerReveal/NotesFactory.pm",
-         "version" : "20260130.1210"
+         "version" : "20260205.0754"
       },
       "BeamerReveal::Object" : {
          "file" : "lib/BeamerReveal/Object.pm",
-         "version" : "20260130.1210"
+         "version" : "20260205.0754"
       },
       "BeamerReveal::Object::BeamerFrame" : {
          "file" : "lib/BeamerReveal/Object/BeamerFrame.pm",
-         "version" : "20260130.1210"
+         "version" : "20260205.0754"
       },
       "BeamerReveal::Object::Presentation" : {
          "file" : "lib/BeamerReveal/Object/Presentation.pm",
-         "version" : "20260130.1210"
+         "version" : "20260205.0754"
       },
       "BeamerReveal::TemplateStore" : {
          "file" : "lib/BeamerReveal/TemplateStore.pm",
-         "version" : "20260130.1210"
+         "version" : "20260205.0754"
       }
    },
    "release_status" : "stable",
-   "version" : "20260130.1210",
+   "version" : "20260205.0754",
    "x_Dist_Zilla" : {
       "perl" : {
          "version" : "5.042000"
@@ -510,7 +510,7 @@
       }
    },
    "x_generated_by_perl" : "v5.42.0",
-   "x_serialization_backend" : "JSON::PP version 4.16",
+   "x_serialization_backend" : "Cpanel::JSON::XS version 4.40",
    "x_spdx_expression" : "GPL-3.0-only"
 }
 

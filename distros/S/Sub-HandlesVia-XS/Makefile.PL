@@ -31,7 +31,7 @@ my $meta = {
                                      },
                       },
   "provides"       => {
-                        "Sub::HandlesVia::XS" => { file => "lib/Sub/HandlesVia/XS.pm", version => 0.003001 },
+                        "Sub::HandlesVia::XS" => { file => "lib/Sub/HandlesVia/XS.pm", version => 0.003004 },
                       },
   "release_status" => "stable",
   "resources"      => {
@@ -45,7 +45,7 @@ my $meta = {
                                         },
                         x_identifier => "http://purl.org/NET/cpan-uri/dist/Sub-HandlesVia-XS/project",
                       },
-  "version"        => 0.003001,
+  "version"        => 0.003004,
 };
 
 my %dynamic_config;
@@ -75,6 +75,20 @@ do {
 			my $fallback = File::Spec->catfile('fallback', $file);
 			copy($fallback, $file) or die "Can't copy $fallback to $file: $!";
 		}
+	}
+
+	my $STRICT;
+	$STRICT++ if ( $ENV{GITHUB_REPOSITORY} and $ENV{GITHUB_REPOSITORY} =~ /p5-sub-handlesvia/ );
+	$STRICT++ if ( $ENV{EXTENDED_TESTING}  and $ENV{USER} and $ENV{USER} eq 'tai' );
+	$STRICT++ if ( $ENV{PERL_XS_STRICTC89} );
+	if ( $STRICT ) {
+		require Config;
+		my $SPACE = q{ };
+		$dynamic_config{CCFLAGS} = join $SPACE => (
+			$Config::Config{ccflags},
+			'-std=c89',
+			#'-Werror',
+		);
 	}
 
 };

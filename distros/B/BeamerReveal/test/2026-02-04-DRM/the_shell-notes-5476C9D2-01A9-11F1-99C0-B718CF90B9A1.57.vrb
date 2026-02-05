@@ -1,0 +1,7 @@
+\frametitle{xargs: Bridging the Gap}
+\begin{definition}[What is it?]\label{sec:orge01f27c}
+\texttt{xargs} builds and executes command lines from standard input. It converts lines of text into \alert{arguments} for another command.
+\end{definition}
+\begin{block}<2->{Why do we need it?}
+Some commands (like \texttt{rm}, \texttt{mkdir}, \texttt{mv}) don't read from standard input. They only accept arguments. \texttt{xargs} bridges this gap.
+\end{block}

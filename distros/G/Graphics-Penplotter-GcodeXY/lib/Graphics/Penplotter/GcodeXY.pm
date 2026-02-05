@@ -1,4 +1,4 @@
-package Graphics::Penplotter::GcodeXY v0.5.22;
+package Graphics::Penplotter::GcodeXY v0.6.3;   # !! 0.6.0 AI modified
 
 use v5.38.2;  # required by List::Util and Term::ANSIcolor (perl testers matrix)
 use strict;
@@ -17,6 +17,7 @@ use Carp qw( croak );
 use Term::ANSIColor qw( RED RESET YELLOW );
 use File::Temp qw( tempfile );
 use parent qw(Exporter);
+#use Data::Dumper;
 
 our @EXPORT_OK = qw(translate translateC stroketextfill stroketext strokefill stroke split
                     skewX skewY sethatchsep setfontsize setfont scale rotate polygonR polygonC
@@ -146,8 +147,7 @@ my @locations = (   './',
                 );
 
 # object allocation
-sub new {
-    my ( $class, %data ) = @_;
+sub new ($class, %data) {
     my $self = {
         # public:
         papersize     => undef,   # paper size e.g. "A3"
@@ -156,8 +156,8 @@ sub new {
         units         => 'in',    # inches is used internally
         header        => "G20\nG90\nG17\nF 50\nG92 X 0 Y 0 Z 0\nG00 Z 0\n",  # must end with penup
         trailer       => "G00 Z 0\nG00 X 0 Y 0\n",
-        penupcmd      => "G00 Z 0\n",
-        pendowncmd    => "G00 Z 0.2\n",
+        penupcmd      => "G00 Z 0",
+        pendowncmd    => "G00 Z 0.2",
         margin        => 1.0,     # margin as a PERCENTAGE
         outfile       => $EMPTY_STR,
         curvepts      => 50,
@@ -193,8 +193,7 @@ sub new {
     return $self;
 }
 
-sub init {
-    my $self = shift;
+sub init ($self) {
     # Units
     $self->{units} = lc $self->{units};
     if ( defined( $unit_to_inches{ $self->{units} } ) ) {
@@ -207,6 +206,9 @@ sub init {
     # Paper size
     if ( defined $self->{papersize} ) {
         $self->{papersize} = uc $self->{papersize};
+        if ( !defined $pspaper{ $self->{papersize} } ) {
+            $self->_croak("paper size '$self->{papersize}' not supported");
+        }
     }
     # warn and/or check
     if ( defined $self->{papersize} && defined $pspaper{ $self->{papersize} } )
@@ -241,8 +243,7 @@ sub init {
 #------------------------------------------------------------------------------
 
 # graphics state manipulation, saving, restoring
-sub gsave {
-    my $self = shift;
+sub gsave ($self) {
     push @{ $self->{gstate} }, $self->{fontname};
     push @{ $self->{gstate} }, $self->{fontsize};
     push @{ $self->{gstate} }, $self->{curvepts};
@@ -261,8 +262,7 @@ sub gsave {
     return 1;
 }
 
-sub grestore {
-    my $self = shift;
+sub grestore ($self) {
     $self->{CTM}->[2][2] = pop @{ $self->{gstate} };
     $self->{CTM}->[2][1] = pop @{ $self->{gstate} };
     $self->{CTM}->[2][0] = pop @{ $self->{gstate} };
@@ -286,13 +286,7 @@ sub grestore {
 #
 # Move to a position on the page. Lift the pen first, then lower it on arrival
 #
-sub moveto {
-    my $self = shift;
-    if ( @_ != 2 ) {
-        $self->_croak('wrong number of args for moveto');
-        return 0;
-    }
-    my ( $x, $y ) = @_;
+sub moveto ($self, $x, $y) {
     $self->penup();
     $self->_genfastmove( $x, $y );
     $self->pendown();
@@ -303,13 +297,7 @@ sub moveto {
 # Move to a position on the page relative to the current position.
 # Lift the pen first, then lower it on arrival
 #
-sub movetoR {
-    my $self = shift;
-    if ( @_ != 2 ) {
-        $self->_croak('wrong number of args for movetoR');
-        return 0;
-    }
-    my ( $x,  $y )  = @_;
+sub movetoR ($self, $x, $y) {
     my ( $cx, $cy ) = $self->currentpoint();
     $self->penup();
     $self->_genfastmove( $x + $cx, $y + $cy );
@@ -320,11 +308,10 @@ sub movetoR {
 #
 # return or set the current point in USER coordinates
 #
-sub currentpoint {
-    my $self = shift;
-    if ( @_ == 2 ) {  # set the current point
-        $self->{posx} = shift;
-        $self->{posy} = shift;
+sub currentpoint ($self, $new_x = undef, $new_y = undef) {
+    if ( defined $new_x ) {  # set the current point
+        $self->{posx} = $new_x;
+        $self->{posy} = $new_y;
         return 1;
     }
     else {  # return the current point
@@ -342,9 +329,7 @@ sub currentpoint {
 #
 # return the paper coordinates of a point in user space, i.e. cumulative transformations
 #
-sub _u_to_p {
-    my $self = shift;
-    my ( $x, $y ) = @_;
+sub _u_to_p ($self, $x, $y) {
     my @point = ();
     push @point, ( $x, $y );
     $self->_transform( 1, \@point );
@@ -354,9 +339,7 @@ sub _u_to_p {
 #
 # return the device coordinates of a point in paper space (e.g. convert pt to inches)
 #
-sub _p_to_d {
-    my $self = shift;
-    my ( $x, $y ) = @_;
+sub _p_to_d ($self, $x, $y) {
     my ( $dx, $dy );
     $dx = $x * $self->{dscale};
     $dy = $y * $self->{dscale};
@@ -366,9 +349,7 @@ sub _p_to_d {
 #
 # return the device coordinates of a point in user space
 #
-sub _u_to_d {
-    my $self = shift;
-    my ( $x,  $y )  = @_;
+sub _u_to_d ($self, $x, $y) {
     my ( $rx, $ry ) = $self->_u_to_p( $x, $y );
     my ( $dx, $dy ) = $self->_p_to_d( $rx, $ry );
     return ( $dx, $dy );
@@ -381,37 +362,32 @@ sub _u_to_d {
 # If there are 2 parameters, a relative move from the current position is executed,
 # and the pen is assumed to be already on the paper.
 #
-sub line {
-    my $self = shift;
-    my ( $x1, $y1, $x2, $y2 );
-    if ( (@_ != 4) && (@_ != 2)) {
+sub line ($self, $x1, $y1 = undef, $x2 = undef, $y2 = undef) {
+    if ( (defined $x2) && (defined $y2)) {
+        # 4 parameters
+        $self->moveto( $x1, $y1 );
+        $self->_genslowmove( $x2, $y2 );
+        return 1;
+    } elsif (defined $x2 && !defined $y2) {
+        # 3 parameters - invalid
+        $self->_croak('wrong number of args for line (2 or 4)');
+        return 0;
+    } elsif (defined $y1) {
+        # 2 parameters - relative (but to absolute coord) move
+        $self->_genslowmove( $x1, $y1 );
+        return 1;
+    }
+    else {
         $self->_croak('wrong number of args for line (2 or 4)');
         return 0;
     }
-    # 2 parameters - relative move
-    if (@_ == 2) {
-        ($x1, $y1) = @_;
-        $self->_genslowmove( $x1, $y1 );
-    return 1;
-    }
-    # else we have 4 parameters
-    ( $x1, $y1, $x2, $y2 ) = @_;
-    $self->moveto( $x1, $y1 );
-    $self->_genslowmove( $x2, $y2 );
-    return 1;
 }
 
 #
 # Create a line starting from the current point, in relative coordinates, i.e. the parameters
 # are added to the current point..
 #
-sub lineR {
-    my $self = shift;
-    if ( @_ != 2 ) {
-        $self->_croak('wrong number of args for lineR');
-        return 0;
-    }
-    my ( $x,  $y )  = @_;
+sub lineR ($self, $x, $y) {
     my ( $cx, $cy ) = $self->currentpoint();
     $self->_genslowmove( $x + $cx, $y + $cy );
     return 1;
@@ -420,22 +396,19 @@ sub lineR {
 #
 # Create a series of consecutive line segments
 #
-sub polygon {
-    my $self = shift;
-    if ( scalar @_ < 2 ) {
-        $self->_croak('bad polygon - not enough points');
+sub polygon ($self, $x, $y, @rest) {
+    if ( scalar @rest == 0 ) {
+        $self->_croak('bad polygon - no line segments found');
         return 0;
     }
-    if ( scalar @_ % 2 ) {
+    if ( scalar @rest % 2 ) {
         $self->_croak('bad polygon - odd number of points');
         return 0;
     }
-    my $x = shift;
-    my $y = shift;
     $self->moveto( $x, $y );
-    while ( @_ > 0 ) {
-        $x = shift;
-        $y = shift;
+    while ( @rest > 0 ) {
+        $x = shift @rest;
+        $y = shift @rest;
         $self->line( $x, $y );
     }
     return 1;
@@ -445,20 +418,19 @@ sub polygon {
 # Create a series of consecutive line segments from the current position,
 # in absolute coordinates
 #
-sub polygonC {
-    my $self = shift;
-    if ( scalar @_ < 2 ) {
+sub polygonC ($self, @coords) {
+    if ( scalar @coords < 2 ) {
         $self->_croak('bad polygon (C) - not enough points');
         return 0;
     }
-    if ( scalar @_ % 2 ) {
+    if ( scalar @coords % 2 ) {
         $self->_croak('bad polygon (C) - odd number of points');
         return 0;
     }
     my ( $x, $y );
-    while ( @_ > 0 ) {
-        $x = shift;
-        $y = shift;
+    while ( @coords > 0 ) {
+        $x = shift @coords;
+        $y = shift @coords;
 
         $self->line( $x, $y );
     }
@@ -469,21 +441,20 @@ sub polygonC {
 # Create a series of consecutive line segments specified in terms of increments
 # relative to the current position
 #
-sub polygonR {
-    my $self = shift;
-    if ( scalar @_ < 2 ) {
+sub polygonR ($self, @coords) {
+    if ( scalar @coords < 2 ) {
         $self->_croak('bad polygon (C) - not enough points');
         return 0;
     }
-    if ( scalar @_ % 2 ) {
+    if ( scalar @coords % 2 ) {
         $self->_croak('bad polygon (C) - odd number of points');
         return 0;
     }
     my ( $cx, $cy, $x, $y );
-    while ( @_ > 0 ) {
+    while ( @coords > 0 ) {
         ( $cx, $cy ) = $self->currentpoint();
-        $x = shift;
-        $y = shift;
+        $x = shift @coords;
+        $y = shift @coords;
 
         $self->line( $x + $cx, $y + $cy );
     }
@@ -491,40 +462,40 @@ sub polygonR {
 }
 
 #
-# draw a polygon with rounded corners between the line segments
+# draw a polygon with rounded corners between the line segments.
+# We need at least two line segments, i.e. 3 points, i.e. 6 numbers.
 #
-sub polygonround {
-    my $self = shift;
-    if ( scalar @_ < 3 ) {
-        $self->_croak('bad polygonround - not enough parameters');
+sub polygonround ($self, $r, @rest) {
+    if ( scalar @rest < 6 ) {
+        $self->_croak('bad polygonround - need at least 3 points (6 numbers)');
         return 0;
     }
-    my $r = shift;  # corner radius
-    if ( scalar @_ % 2 ) {
-        $self->_croak('bad polygonround - odd number of points');
+    if ( scalar @rest % 2 ) {
+        $self->_croak('bad polygonround - odd number of coordinates');
         return 0;
     }
-    # move to the start
-    my $x = shift;
-    my $y = shift;
+    my $x = shift @rest;
+    my $y = shift @rest;
     $self->moveto( $x, $y );
-    # plot the first half of the first segment
-    my $dx = shift; # destination x of first segment
-    my $dy = shift; # destination y of first segment
+    my $dx = shift @rest; # destination x of first segment
+    my $dy = shift @rest; # destination y of first segment
     # calculate midpoint of first segment
     my $halfx = ( $dx - $x ) / 2.0;
     my $halfy = ( $dy - $y ) / 2.0;
+    
     # draw the first half of the first segment, relative
     $self->lineR($halfx, $halfy);
+    
     # now loop through the rest
-    my $len = scalar @_ / 2.0;  # number of (x,y) pairs left
+    my $len = scalar @rest / 2.0;  # number of (x,y) pairs left
     my ($newhalfx, $newhalfy);
-    foreach (1 .. $len) {
+    # Need to iterate over @rest
+    while (@rest) {
         # move on one pair
         $x  = $dx;
         $y  = $dy;
-        $dx = shift;
-        $dy = shift;
+        $dx = shift @rest;
+        $dy = shift @rest;
         $newhalfx = ( $dx - $x ) / 2.0;
         $newhalfy = ( $dy - $y ) / 2.0;
         # do an arcto of the second half of the current segment,
@@ -543,21 +514,19 @@ sub polygonround {
 #
 # Create a rectangle. Begin by moving to the bottom left hand corner.
 #
-sub box {
-    my $self = shift;
-    if ( (@_ != 4) && (@_ != 2) ) {
-        $self->_croak('box: wrong number of arguments (must be 2 or 4)');
-        return 0;
-    }
-    my ( $x1, $y1, $x2, $y2 ) = @_;
-    if (@_ == 2) {
+sub box ($self, $x1, $y1, $x2 = undef, $y2 = undef) {
+    if (defined $x2 && defined $y2) {
+        # 4 params
+        $self->polygon( $x1, $y1, $x2, $y1, $x2, $y2, $x1, $y2, $x1, $y1 );
+    } elsif (!defined $x2 && !defined $y2) {
+        # 2 params
         $x2 = $x1;
         $y2 = $y1;
         ($x1, $y1 ) = $self->currentpoint();
         $self->polygonC( $x2, $y1, $x2, $y2, $x1, $y2, $x1, $y1 );
-    }
-    else { # must be 4
-        $self->polygon( $x1, $y1, $x2, $y1, $x2, $y2, $x1, $y2, $x1, $y1 );
+    } else {
+        $self->_croak('box: wrong number of arguments (must be 2 or 4)');
+        return 0;
     }
     return 1;
 }
@@ -565,13 +534,7 @@ sub box {
 #
 # Create a rectangle starting from the current point, using relative coordinates.
 #
-sub boxR {
-    my $self = shift;
-    if ( @_ != 2 ) {
-        $self->_croak('boxR: wrong number of arguments');
-        return 0;
-    }
-    my ( $x,  $y )  = @_;
+sub boxR ($self, $x, $y) {
     my ( $cx, $cy ) = $self->currentpoint();
     $self->polygonR( $x, 0, 0, $y, -$x, 0, 0, -$y );
     return 1;
@@ -581,13 +544,7 @@ sub boxR {
 # create a box with rounded corners
 # (special and more efficient case of polygonround, also easier to specify)
 #
-sub boxround {
-    my $self = shift;
-    if ( @_ != 5 ) {
-        $self->_croak('boxround: wrong number of arguments (need 5)');
-        return 0;
-    }
-    my ( $r, $bx, $by, $tx, $ty) = @_;
+sub boxround ($self, $r, $bx, $by, $tx, $ty) {
     my $halfheight = ( $ty - $by ) / 2.0;
     my $halfwidth  = ( $tx - $bx ) / 2.0;
     $self->moveto($bx, $by + $halfheight );
@@ -601,14 +558,7 @@ sub boxround {
 #
 # create an arrowhead
 #
-sub arrowhead {
-    my $self = shift;
-    if ( @_ < 2 || @_ > 3) {
-        $self->_croak('arrowhead: wrong number of arguments (need 2 or 3)');
-        return 0;
-    }
-    my ($length, $width, $type) = @_;
-    if (!defined $type) { $type = 'open' }
+sub arrowhead ($self, $length, $width, $type = 'open') {
     my ($tailx, $taily, $tipx, $tipy, $dx, $dy, $angle);
     # get the direction form the last segment, if there is one
     if (scalar $self->{psegments} > 0) {
@@ -645,13 +595,7 @@ sub arrowhead {
 #
 # create a page border. Needs a margin specified in current units
 #
-sub pageborder {
-    my $self = shift;
-    if ( @_ != 1 ) {
-        $self->_croak('wrong number of args for pageborder');
-        return 0;
-    }
-    my $margin = shift;
+sub pageborder ($self, $margin) {
     $self->box(
         $margin, $margin,
         $self->{xsize} - $margin, $self->{ysize} - $margin
@@ -662,13 +606,11 @@ sub pageborder {
 #
 # draw a bezier curve
 #
-sub curve {
-    my $self = shift;
-    if ( @_ < 6 ) {
+sub curve ($self, @control) {
+    if ( scalar @control < 6 ) {
         $self->_croak('wrong number of args for curve');
         return 0;
     }
-    my @control = @_;                   # begin, end, and control points
     my $pts;
     my @points;
     if ( scalar @control == 6 ) {       # quadratic
@@ -691,13 +633,11 @@ sub curve {
 #
 # draw a bezier curve starting from the current position
 #
-sub curveto {
-    my $self = shift;
-    if ( @_ < 6 ) {
+sub curveto ($self, @control) {
+    if ( scalar @control < 6 ) {
         $self->_croak('wrong number of args for curveto');
         return 0;
     }
-    my @control = @_;                           # begin, end, and control points
     my $pts;
     my @points;
     unshift @control, $self->currentpoint();    # add the start point
@@ -728,8 +668,7 @@ sub curveto {
 #
 # draw a quadratic bezier curve
 #
-sub _curve3 {
-    my ( $self, $x1, $y1, $x2, $y2, $x3, $y3, $x4, $y4 ) = @_;
+sub _curve3 ($self, $x1, $y1, $x2, $y2, $x3, $y3) {
     @m_points = ();
     push @m_points, ( $x1, $y1 );
     $self->_recbezier3( $x1, $y1, $x2, $y2, $x3, $y3, 0 );
@@ -739,8 +678,7 @@ sub _curve3 {
     return 1;
 }
 
-sub _recbezier3 {
-    my ( $self, $x1, $y1, $x2, $y2, $x3, $y3, $level ) = @_;
+sub _recbezier3 ($self, $x1, $y1, $x2, $y2, $x3, $y3, $level) {
     if ( $level > $curve_reclim ) {
         return;
     }
@@ -808,8 +746,7 @@ sub _recbezier3 {
 #
 # draw a cubic bezier curve
 #
-sub _curve4 {
-    my ( $self, $x1, $y1, $x2, $y2, $x3, $y3, $x4, $y4 ) = @_;
+sub _curve4 ($self, $x1, $y1, $x2, $y2, $x3, $y3, $x4, $y4) {
     @m_points = ();
     push @m_points, ( $x1, $y1 );
     $self->_recbezier4( $x1, $y1, $x2, $y2, $x3, $y3, $x4, $y4, 0 );
@@ -823,8 +760,7 @@ sub _curve4 {
 # find the best places for splitting up the curve given its shape.
 # Code translated from Anti Grain Graphics library.
 #
-sub _recbezier4 {
-    my ( $self, $x1, $y1, $x2, $y2, $x3, $y3, $x4, $y4, $level ) = @_;
+sub _recbezier4 ($self, $x1, $y1, $x2, $y2, $x3, $y3, $x4, $y4, $level) {
     my ( $da1, $da2, $k );
     if ( $level > $curve_reclim ) {
         return;
@@ -991,14 +927,21 @@ sub _recbezier4 {
 #
 # straightforward arc implementation (incomplete circle)
 #
-sub arc {
-    my $self = shift;
-    if ( scalar @_ < 5 ) {
+sub arc ($self, $x, $y, $r, $start, $finish, $steps = undef) {
+    # check for correct number of args?
+    # Original: if ( scalar @_ < 5 ) { croak }
+    # Sig: $self, $x, $y, $r, $start, $finish. 6 args.
+    # If called with fewer, perl will die? No, only if checking.
+    # Perl signatures validate arity if strict?
+    # "Any arguments not passed are undef".
+    # So we should check for definedness of mandatory args if strict validation needed.
+    # OR rely on signature.
+    # original check: @_ < 5 (after shift of self). So 5 mandatory args.
+    if ( !defined $finish ) { # check last mandatory arg
         $self->_croak('bad arc - need x, y, r, start, finish');
         return 0;
     }
-    my ( $x, $y, $r, $start, $finish ) = ( shift, shift, shift, shift, shift );
-    my $steps = shift;
+    
     if ( !defined $steps ) {
         $steps = $self->_calc_numsteps( $r, $r );    # for a whole circle
         $steps = int( _fabs( $steps * ( $start - $finish ) / 360.0 ) );
@@ -1024,13 +967,11 @@ sub arc {
 # Joining Two Lines with a Circular Arc Fillet
 # Robert D. Miller, Graphics Gems III
 #
-sub arcto {
-    my $self = shift;
-    if ( scalar @_ != 5 ) {
+sub arcto ($self, $x2, $y2, $x4, $y4, $r) {
+    if (!defined $r) {
         $self->_croak('bad arcto - need x1, y1, x2, y2, r');
         return 0;
     }
-    my ( $x2, $y2, $x4, $y4, $r ) = @_;    # x3* are the same as x2*
     my ( $x1, $y1 ) = $self->currentpoint();
     # call fillet for the hard work, and collect return values.
     # line segments are almost always shorter than the originals
@@ -1051,27 +992,23 @@ sub arcto {
 }
 
 # cross product
-sub _cross2 {
-    my ( $self, $v1x, $v1y, $v2x, $v2y ) = @_;
+sub _cross2 ($self, $v1x, $v1y, $v2x, $v2y) {
     return ( $v1x * $v2y - $v2x * $v1y );
 }
 
 # turn degrees into radians
-sub radians {
-    my $deg = shift;
+sub radians ($deg) {
     return $deg * $D2R;
 }
 
 # turn radians into degrees
-sub degrees {
-    my $rad = shift;
+sub degrees ($rad) {
     return $rad / $D2R;
 }
 
 # Return angle subtended by two vectors.
 # cos(a) = u.v / (||u||*||v||)
-sub _dot2 {
-    my ( $self, $ux, $uy, $vx, $vy ) = @_;
+sub _dot2 ($self, $ux, $uy, $vx, $vy) {
     my ( $d, $t );
     $d = sqrt(
         ( ( $ux * $ux ) + ( $uy * $uy ) ) * ( ( $vx * $vx ) + ( $vy * $vy ) ) );    # denominator
@@ -1085,8 +1022,7 @@ sub _dot2 {
 }
 
 # Find a,b,c in Ax + By + C = 0  for line p1,p2.
-sub _linecoefs {
-    my ( $self, $p1x, $p1y, $p2x, $p2y ) = @_;
+sub _linecoefs ($self, $p1x, $p1y, $p2x, $p2y) {
     my ( $a, $b, $c );
     $c = ( $p2x * $p1y ) - ( $p1x * $p2y );
     $a = $p2y - $p1y;
@@ -1095,8 +1031,7 @@ sub _linecoefs {
 }
 
 # Return signed distance from line Ax + By + C = 0 to point P.
-sub _linetopoint {
-    my ( $self, $a, $b, $c, $px, $py ) = @_;
+sub _linetopoint ($self, $a, $b, $c, $px, $py) {
     my ( $d, $lp );
     $d = sqrt( ( $a * $a ) + ( $b * $b ) );
     if ( $d == 0.0 ) {
@@ -1110,8 +1045,7 @@ sub _linetopoint {
 
 # Given line l = ax + by + c = 0 and point p,
 # compute x,y so p(x,y) is perpendicular to l.
-sub _pointperp {
-    my ( $self, $a, $b, $c, $px, $py ) = @_;
+sub _pointperp ($self, $a, $b, $c, $px, $py) {
     my ( $x, $y, $d, $cp );
     $x  = 0.0;
     $y  = 0.0;
@@ -1126,8 +1060,7 @@ sub _pointperp {
 
 #  Compute a circular arc fillet between lines L1 (p1 to p2) and
 #  L2 (p3 to p4) with radius R.  The circle center is xc,yc.
-sub _fillet {
-    my ( $self, $p1x, $p1y, $p2x, $p2y, $p3x, $p3y, $p4x, $p4y, $r ) = @_;
+sub _fillet ($self, $p1x, $p1y, $p2x, $p2y, $p3x, $p3y, $p4x, $p4y, $r) {
     my ( $a1, $b1, $c1, $a2, $b2, $c2, $c1p, $c2p, $d1, $d2, $xa, $xb, $ya, $yb, $d, $rr );
     my ( $mpx,  $mpy,  $pcx, $pcy, $gv1x, $gv1y, $gv2x, $gv2y, $xc, $yc, $pa, $aa );
     ( $a1, $b1, $c1 ) = $self->_linecoefs( $p1x, $p1y, $p2x, $p2y );
@@ -1187,25 +1120,20 @@ sub _fillet {
 # translated into Perl
 
 # rotate about any point, referenced by optional point in USER coordinates
-sub rotate {
-    my $self = shift;
+sub rotate ($self, $a, $rxx = undef, $ryy = undef) {
     my @m;
-    my ( $a, $rx, $ry, $rxx, $ryy );
-    if ( scalar @_ < 1 ) {
+    my ( $rx, $ry );
+    
+    if ( !defined $a ) {
         $self->_croak('bad rotate - need 1 or 3 parameters');
         return 0;
     }
-    if ( scalar @_ == 1 ) {    # no optional point specified
-        $a = shift;
+    if ( !defined $rxx ) {    # no optional point specified
         ( $rx, $ry ) = $self->_u_to_p( 0, 0 );    # use origin, translated into device coords
     }
     else {
-        $a   = shift;
-        $rxx = shift;
-        $ryy = shift;
         ( $rx, $ry ) = $self->_u_to_p( $rxx, $ryy );    # translate into device coords
     }
-
     # algorithm from Hearn's book
     $a = radians($a);
     @m       = ( [ 1, 0, 0 ], [ 0, 1, 0 ], [ 0, 0, 1 ] );
@@ -1219,8 +1147,7 @@ sub rotate {
     return 1;
 }
 
-sub initmatrix {
-    my $self = shift;
+sub initmatrix ($self) {
     $self->{CTM} = [ [ 1, 0, 0 ], [ 0, 1, 0 ], [ 0, 0, 1 ] ]; # current transformation matrix
     return 1;
 }
@@ -1229,13 +1156,11 @@ sub initmatrix {
 # move another location to the origin. The params are coords in the current
 # coordinate system, and are subject to scaling and rotation.
 #
-sub translate {
-    my $self = shift;
-    if ( @_ != 2 ) {
+sub translate ($self, $tx, $ty) {
+    if ( !defined $ty ) {
         $self->_croak('wrong number of args for translate');
         return 0;
     }
-    my ( $tx, $ty ) = @_;
     $self->moveto( $tx, $ty );    # new current point, scaled and rotated
     $self->translateC();
     return 1;
@@ -1244,8 +1169,7 @@ sub translate {
 #
 # move the current page location (in user coords) to the origin
 #
-sub translateC {
-    my $self = shift;
+sub translateC ($self) {
     my ( $x, $y, $v, $w );
     ( $x, $y ) = $self->currentpoint();       # user
     ( $v, $w ) = $self->_u_to_p( $x, $y );    # page
@@ -1257,30 +1181,25 @@ sub translateC {
 
 #
 # scaling, with optional reference point
+# if $ry is not given it's equal to $rx
 #
-sub scale {
-    my $self = shift;
-    my ( $sx, $sy, $rx, $ry, $rxx, $ryy );
+sub scale ($self, $sx, $sy = undef, $rxx = undef, $ryy = undef) {
+    my ( $rx, $ry );
     my @ma;
-    if ( (scalar @_ == 3) || (scalar @_ > 4) ) {
+    
+    if ( defined $rxx && !defined $ryy ) {
+        # 3 parameters provided
         $self->_croak('bad scaling - need 1, 2 or 4 parameters');
         return 0;
     }
-    if ( scalar @_ == 1 ) {
-        $sx = shift;
+    if ( !defined $sy ) {
         $sy = $sx;
         ( $rx, $ry ) = $self->_u_to_p( 0, 0 );    # use origin, translated into device coords
     }
-    elsif ( scalar @_ == 2 ) {
-        $sx = shift;
-        $sy = shift;
+    elsif ( !defined $rxx ) {
         ( $rx, $ry ) = $self->_u_to_p( 0, 0 );    # use origin, translated into device coords
     }
     else {
-        $sx  = shift;
-        $sy  = shift;
-        $rxx = shift;
-        $ryy = shift;
         ( $rx, $ry ) = $self->_u_to_p( $rxx, $ryy );    # translate into device coords
     }
     @ma       = ( [ 1, 0, 0 ], [ 0, 1, 0 ], [ 0, 0, 1 ] );
@@ -1293,13 +1212,11 @@ sub scale {
 }
 
 # skew/shear in the X direction
-sub skewX {
-    my $self = shift;
-    if ( @_ != 1 ) {
+sub skewX ($self, $deg) {
+    if ( !defined $deg ) {
         $self->_croak('wrong number of args for skewX');
         return 0;
     }
-    my $deg    = shift;
     my $rad    = radians($deg);
     my $tana   = tan $rad;
     my @matrix = ( [ 1, $tana, 0, ], [ 0, 1, 0, ], [ 0, 0, 1, ], );
@@ -1308,13 +1225,11 @@ sub skewX {
 }
 
 # skew/shear in the Y direction
-sub skewY {
-    my $self = shift;
-    if ( @_ != 1 ) {
+sub skewY ($self, $deg) {
+    if ( !defined $deg ) {
         $self->_croak('wrong number of args for skewY');
         return 0;
     }
-    my $deg    = shift;
     my $rad    = radians($deg);
     my $tana   = tan $rad;
     my @matrix = ( [ 1, 0, 0, ], [ $tana, 1, 0, ], [ 0, 0, 1, ], );
@@ -1323,8 +1238,7 @@ sub skewY {
 }
 
 # Multiplies matrix a times b, putting result in b
-sub _premulmat {
-    my ( $self, $aref, $bref ) = @_;
+sub _premulmat ($self, $aref, $bref) {
     my @a = @{$aref};
     my @b = @{$bref};
     my @tmp;
@@ -1345,8 +1259,7 @@ sub _premulmat {
 }
 
 # apply CTM to array of points
-sub _transform {
-    my ( $self, $npts, $ptsref ) = @_;
+sub _transform ($self, $npts, $ptsref) {
     my $tmp;
     foreach my $k ( 0 .. $npts - 1 ) {
         $tmp =
@@ -1365,15 +1278,13 @@ sub _transform {
 #--------------------------------------------------------------------------------
 
 # floating point abs value
-sub _fabs {
-    my $val = shift;
+sub _fabs ($val) {
     if ( $val >= 0.0 ) { return $val }
     return ( -1.0 * $val );
 }
 
 # floating point equality
-sub _feq {
-    my ( $x, $y ) = @_;
+sub _feq ($x, $y) {
     if ( _fabs( $x - $y ) < $EPSILON ) {
         return 1;
     }
@@ -1381,37 +1292,34 @@ sub _feq {
 }
 
 # square of distance betwen two points
-sub _calc_sq_distance {
-    my ( $x1, $y1, $x2, $y2 ) = @_;
+sub _calc_sq_distance ($x1, $y1, $x2, $y2) {
     return ( $x2 - $x1 ) * ( $x2 - $x1 ) + ( $y2 - $y1 ) * ( $y2 - $y1 );
 }
 
 #
 # circle
 #
-sub circle {
-    my $self = shift;
-    if ( scalar @_ < 3 ) {
+sub circle ($self, $x, $y, $r, $steps = undef) {
+    if ( !defined $r ) {
         $self->_croak('bad circle - need x, y, r');
         return 0;
     }
-    my ( $x, $y, $r ) = ( shift, shift, shift );
-    $self->ellipse( $x, $y, $r, $r );
+    $self->ellipse( $x, $y, $r, $r, $steps );
     return 1;
 }
 
 #
 # straightforward ellipse implementation
 #
-sub ellipse {
-    my $self = shift;
-    if ( scalar @_ < 4 ) {
+sub ellipse ($self, $x, $y, $a, $b, $steps = undef) {
+    if ( !defined $b ) {
         $self->_croak('bad ellipse - need x, y, a, b');
         return 0;
     }
-    my ( $x, $y, $a, $b ) = ( shift, shift, shift, shift );
     my $angle;
-    my $steps = shift || $self->_calc_numsteps( $a, $b );
+    if ( !defined $steps ) {
+        $steps = $self->_calc_numsteps( $a, $b );
+    }
     if ( $steps < 20 ) { $steps = 20 }    # TODO hack!!
     my @points = ();
     foreach my $i ( 0 .. $steps ) {
@@ -1425,8 +1333,7 @@ sub ellipse {
 
 # general estimate of the number of line segments needed for ellipse
 # Copied from Anti Grain Graphics library
-sub _calc_numsteps {
-    my ( $self, $ra, $rb ) = @_;
+sub _calc_numsteps ($self, $ra, $rb) {
     my $av    = ( $ra + $rb ) / 2.0;
     my $da    = acos( $av / ( $av + 0.125 ) ) * 2;
     my $m_num = int( 2 * $PI / $da );
@@ -1440,8 +1347,7 @@ sub _calc_numsteps {
 #
 # find and open a font, and set its size
 #
-sub setfont {
-    my ( $self, $font, $size ) = @_;
+sub setfont ($self, $font, $size = undef) {
     if ( !defined $font ) {
         $self->_croak('setfont: no font name specified');
         return undef;
@@ -1470,21 +1376,18 @@ sub setfont {
 
 #
 # globally set a font size
-sub setfontsize {
-    my $self = shift;
-    if ( @_ != 1 ) {
+sub setfontsize ($self, $size) {
+    if ( !defined $size ) {
         $self->_croak('wrong number of args for setfontsize');
         return 0;
     }
-    $self->{fontsize} = shift;
     return 1;
 }
 
 #
 # do the actual font rendering
 #
-sub _doglyphs {
-    my ( $self, $face, $s, $fill ) = @_;
+sub _doglyphs ($self, $face, $s, $fill) {
     my @chars = split //, $s;           # string to array
     my $len   = scalar @chars;
     my $k     = 0;                      # for kerning
@@ -1495,7 +1398,7 @@ sub _doglyphs {
     foreach my $i ( 0 .. $len - 1 ) {
         $glyph = $face->glyph_from_char_code( ord $chars[$i] );
         if ( !defined $glyph ) {
-            $self->_error( 'char not found in font: ' . $chars[$i] );
+            $self->_croak( 'char not found in font: ' . $chars[$i] );
         }
         $d = $glyph->svg_path();
         # empty $d probably means it was a space
@@ -1540,13 +1443,11 @@ sub _doglyphs {
 #
 # locate a font
 #
-sub findfont {
-    my $self = shift;
-    if ( @_ != 1 ) {
+sub findfont ($self, $name) {
+    if ( !defined $name ) {
         $self->_croak('expecting 1 argument for findfont');
         return 0;
     }
-    my $name = shift;
     my $s    = $EMPTY_STR;
     # ~ is not recognised
     $name =~ s{\N{TILDE}}{$home};
@@ -1575,13 +1476,12 @@ sub findfont {
 #
 # add an absolute file path to the list of dirs to seach
 #
-sub addfontpath {
-    my $self = shift;
-    if ( @_ < 1 ) {
+sub addfontpath ($self, @paths) {
+    if ( !@paths ) {
         $self->_croak('addfontpath: missing parameter(s)');
         return 0;
     }
-    for (@_) {
+    for (@paths) {
         my $path = $_;
         # ~ is not recognised
         $path =~ s{\A\N{TILDE}}{$home};
@@ -1596,8 +1496,7 @@ sub addfontpath {
 
 # stroke a text string, or use chr(...) to stroke a char code, without hatching
 # The path is cleared after each character.
-sub stroketext {
-    my ( $self, $face, $string ) = @_;
+sub stroketext ($self, $face, $string) {
     if ( !defined $string ) {
         $self->_croak('stroketext: no string specified');
         return 0;
@@ -1613,8 +1512,7 @@ sub stroketext {
 
 # stroke and hatch a text string or char code.
 # The path is cleared after each character.
-sub stroketextfill {
-    my ( $self, $face, $string ) = @_;
+sub stroketextfill ($self, $face, $string) {
     if ( !defined $string ) {
         $self->_croak('stroketextfill: no string specified');
         return 0;
@@ -1630,13 +1528,13 @@ sub stroketextfill {
 
 # calculate and return the width of a string
 # params are face and string
-sub textwidth {
-    my $self = shift;
-    if ( @_ != 2 ) {
-        $self->_croak('wrong number of args for textwidth (2)');
-        return 0;
-    }
-    my ( $face, $s ) = @_;
+sub textwidth ($self, $face, $s) {
+    #my $self = shift;
+    #if ( @_ != 2 ) {
+    #    $self->_croak('wrong number of args for textwidth (2)');
+    #    return 0;
+    #}
+    #my ( $face, $s ) = @_;
     my @chars = split //, $s;    # string to array
     my $len   = scalar @chars;   # number of chars in string
     my $k     = 0;               # for kerning
@@ -1649,7 +1547,7 @@ sub textwidth {
     foreach my $i ( 0 .. $len - 1 ) {
         $glyph = $face->glyph_from_char_code( ord $chars[$i] );
         if ( !defined $glyph ) {
-            $self->_error( 'char not found in font: ' . $chars[$i] );
+            $self->_croak( 'char not found in font: ' . $chars[$i] );
         }
         $adv = $glyph->horizontal_advance();
         if ( $gprev && $hk ) {
@@ -1663,14 +1561,12 @@ sub textwidth {
 }
 
 # translate 'pt' into whatever unit is currently selected
-sub _pt_unitfied {
-    my ($self, $p) = @_;
+sub _pt_unitfied ($self, $p) {
     return $p * $inches_to_unit{$self->{units}} / $inches_to_unit{pt}
 }
 
 # translate 'in' into whatever unit is currently selected
-sub _in_unitfied {
-    my ($self, $p) = @_;
+sub _in_unitfied ($self, $p) {
     return $p * $inches_to_unit{$self->{units}}
 }
 
@@ -1715,8 +1611,7 @@ sub _in_unitfied {
 #     y5 = y1 + k (y2 - y1)
 #
 # 'Touching' segments are considered as not intersecting
-sub _getsegintersect {
-    my ( $self, $p0x, $p0y, $p1x, $p1y, $p2x, $p2y, $p3x, $p3y ) = @_;
+sub _getsegintersect ($self, $p0x, $p0y, $p1x, $p1y, $p2x, $p2y, $p3x, $p3y) {
     my ( $s02x, $s02y, $s10x, $s10y, $s32x, $s32y, $s_numer, $t_numer, $denom );
     # calculate determinant
     $s10x  = $p1x - $p0x;
@@ -1754,8 +1649,7 @@ sub _getsegintersect {
 #
 # initialize the segment path
 #
-sub newpath {
-    my $self = shift;
+sub newpath ($self) {
     @{ $self->{psegments} } = ();
     @{ $self->{hsegments} } = ();
     return 1;
@@ -1764,8 +1658,7 @@ sub newpath {
 #
 # close the segment path
 #
-sub _closepath {
-    my $self = shift;
+sub _closepath ($self) {
     my ( $x, $y ) = $self->currentpoint();
     my $tx = $self->{psegments}[0]{sx};
     my $ty = $self->{psegments}[0]{sy};
@@ -1777,14 +1670,12 @@ sub _closepath {
 #
 # add to the segment path
 #
-sub _addpath {
-    my $self = shift;
+sub _addpath ($self, $key, $sx, $sy, $dx, $dy) {
     my $len  = scalar @{ $self->{psegments} };
-    if ( @_ != 5 ) {
-        $self->_error('need 5 parameters for addpath');
+    if (!defined $dy) {
+        $self->_croak('need 5 parameters for addpath');
         return 0;
     }
-    my ( $key, $sx, $sy, $dx, $dy ) = @_;
     # could insert LiangBarsky here to do cropping for svg viewbox
     $self->{psegments}[$len] = { key => $key, sx => $sx, sy => $sy, dx => $dx, dy => $dy };
     return 1;
@@ -1793,21 +1684,18 @@ sub _addpath {
 #
 # add to the segment path
 #
-sub addcomment {
-    my $self = shift;
+sub addcomment ($self, $s) {
     my $len  = scalar @{ $self->{psegments} };
-    if ( @_ != 1 ) {
-        $self->_error('need 1 parameter for addcomment');
+    if ( !defined $s ) {
+        $self->_croak('need 1 parameter for addcomment');
         return 0;
     }
-    my $s = shift;
     $self->{psegments}[$len] = { key => 'c', s => $s, sx => 0, sy => 0, dx => 0, dy => 0 };
     return 1;
 }
 
 # paint the current path, then clear it
-sub stroke {
-    my $self = shift;
+sub stroke ($self) {
     $self->_flushPsegments();
     $self->newpath();
     return 1;
@@ -1816,8 +1704,7 @@ sub stroke {
 #
 # translate the segment queue into gcode
 #
-sub _flushPsegments {
-    my $self = shift;
+sub _flushPsegments ($self) {
     my $len  = scalar @{ $self->{psegments} };
     my ( $k, $d );
     if ( !$len ) { return }                  # empty queue
@@ -1839,7 +1726,8 @@ sub _flushPsegments {
         }
         if ( $k eq 'l' ) {    # lineto, the most frequent instruction
             $self->_addtopage(
-                sprintf "G01 X %.5f Y %.5f" . $EOL,
+                #sprintf "G01 X %.5f Y %.5f" . $EOL,
+                sprintf "G01 X %.5f Y %.5f",
                 $self->{psegments}[$i]{dx},
                 $self->{psegments}[$i]{dy}
             );
@@ -1848,7 +1736,8 @@ sub _flushPsegments {
         }
         if ( $k eq 'm' ) {    # moveto
             $self->_addtopage(
-                sprintf "G00 X %.5f Y %.5f" . $EOL,
+                #sprintf "G00 X %.5f Y %.5f" . $EOL,
+                sprintf "G00 X %.5f Y %.5f",
                 $self->{psegments}[$i]{dx},
                 $self->{psegments}[$i]{dy}
             );
@@ -1857,7 +1746,8 @@ sub _flushPsegments {
         }
         if ( $k eq 'c' ) {    # comment
             $self->_addtopage(
-                sprintf "(%s)" . $EOL,
+                #sprintf "(%s)" . $EOL,
+                sprintf "(%s)",
                 $self->{psegments}[$i]{s}
             );
             next SEGMENT;
@@ -1882,8 +1772,7 @@ sub _flushPsegments {
 #
 # get the bounding box of the current path
 #
-sub _get_bbox {
-    my $self  = shift;
+sub _get_bbox ($self) {
     my $maxx  = 0.0;
     my $maxy  = 0.0;
     my $minx  = $BBMAX;
@@ -1922,15 +1811,12 @@ sub _get_bbox {
 #
 # add to the list of hatching segments
 #
-sub _addhsegmentpath {
-    my $self = shift;
-    my ( $key, $sx, $sy, $dx, $dy ) = @_;
-    my $len = scalar @{ $self->{hsegments} };
-    if ( @_ != 5 ) {
-        $self->_error(
-            'need 4 numbers for addhsegpath, found ' . ( scalar @_ ) );
+sub _addhsegmentpath ($self, $key, $sx, $sy, $dx, $dy) {
+    if ( !defined $dy ) {
+        $self->_croak('need 4 numbers for addhsegpath' ); 
         return 0;
     }
+    my $len = scalar @{ $self->{hsegments} };
     $self->{hsegments}[$len] = { key => $key, sx => $sx, sy => $sy, dx => $dx, dy => $dy };
     return 1;
 }
@@ -1938,16 +1824,14 @@ sub _addhsegmentpath {
 #
 # initialize the list of hatching segments
 #
-sub _newhpath {
-    my $self = shift;
+sub _newhpath ($self) {
     @{ $self->{hsegments} } = ();
     return 1;
 }
 
 # optimize the plotting of hatch lines
 # a good strategy will significantly reduce the plotter's work
-sub _hoptimize {  # TODO
-    my $self = shift;
+sub _hoptimize ($self) {
     # See vecsort.c for a general procedure:
     # - compare start and end points of all remaining L segments to endpoint of current segment
     #   and locate the nearest one
@@ -1961,8 +1845,7 @@ sub _hoptimize {  # TODO
 # render the generated list of hatching segments
 # we have only 'l' and 'm' segments here.
 # We're working in device coordinates here
-sub _flushHsegments {
-    my $self = shift;
+sub _flushHsegments ($self) {
     my $len  = scalar @{ $self->{hsegments} };
     my $d;
     if ( !$len ) {
@@ -2010,8 +1893,7 @@ sub _flushHsegments {
 # start the hatching process. Parameters are the chosen box around the hatching area.
 # Must make sure that the graphics state upon exit is unaltered from entry.
 # Note that we are working in device coordinates here.
-sub _dohatching {
-    my $self = shift;
+sub _dohatching ($self) {
     my ( $xmind, $ymind, $xmaxd, $ymaxd );
     my ( @crossings, @csorted );
     my $perc    = 0;
@@ -2126,9 +2008,7 @@ sub _dohatching {
 }
 
 # determine if two line segments are identical, possibly in reverse
-sub _identical {
-    my $self = shift;
-    my ( $seg1, $seg2 ) = @_;
+sub _identical ($self, $seg1, $seg2) {
     my %h1 = %{ $self->{psegments}[$seg1] };
     my %h2 = %{ $self->{psegments}[$seg2] };
     # first segment goes from (ax,ay) to (bx,by)
@@ -2152,9 +2032,7 @@ sub _identical {
 
 # determine if two line segments with common vertex are on the same
 # side of a horizontal line.
-sub _sameside {
-    my $self = shift;
-    my ( $y, $seg1, $seg2 ) = @_;
+sub _sameside ($self, $y, $seg1, $seg2) {
     my %h1 = %{ $self->{psegments}[$seg1] };
     my %h2 = %{ $self->{psegments}[$seg2] };
     # first segment goes from (ax,ay) to (bx,by)
@@ -2195,23 +2073,19 @@ sub _sameside {
 }
 
 # set the separation between hatch lines, in current units
-sub sethatchsep {
-    my $self = shift;
-    if ( @_ != 1 ) {
-        $self->_error('wrong number of args for sethatchsep');
+sub sethatchsep ($self, $sep) {
+    if ( !defined $sep ) {
+        $self->_croak('wrong number of args for sethatchsep');
         return 0;
     }
-    $self->{hatchsep} = shift;
+    $self->{hatchsep} = $sep;
     return 1;
 }
 
 # Add hatches to the current path, stroke the current path, then clear it
-sub strokefill {
-    my $self = shift;
-    my ( $minx, $miny, $maxx, $maxy ) = $self->_get_bbox();
-
+sub strokefill ($self) {
     # calculate the hatching segments
-    $self->_dohatching( $minx, $miny, $maxx, $maxy );
+    $self->_dohatching();
     $self->_flushPsegments();    # do this last before clearing the path
     $self->newpath();
     return 1;
@@ -2222,8 +2096,7 @@ sub strokefill {
 #
 # Lift the pen
 #
-sub penup {
-    my $self = shift;
+sub penup ($self) {
     #$self->{pencount}++;
     if ( !$self->{penlocked} ) { $self->_addpath( 'u', -1, -1, -1, -1 ) }
     return 1;
@@ -2232,8 +2105,7 @@ sub penup {
 #
 # Lower the pen
 #
-sub pendown {
-    my $self = shift;
+sub pendown ($self) {
     if ( !$self->{penlocked} ) { $self->_addpath( 'd', -1, -1, -1, -1 ) }
     return 1;
 }
@@ -2242,13 +2114,11 @@ sub pendown {
 # Add a line of text to the output. No checking is done.
 # All currently queued segments are flushed first.
 #
-sub addtopage {
-    my $self = shift;
-    if ( !@_ ) {
+sub addtopage ($self, $data) {
+    if ( !defined $data ) {
         $self->_croak('addtopage: no data provided');
         return 0;
     }
-    my $data = shift;
     $self->_flushPsegments();
     $self->_addtopage($data);
     return 1;
@@ -2257,18 +2127,18 @@ sub addtopage {
 #
 # Create output file and report statistics
 #
-sub output {
-    my $self = shift;
-    my $file = shift || $self->{outfile};
+sub output ($self, $file = undef) {
+    $file ||= $self->{outfile};
     if ( $file eq $EMPTY_STR ) {
-        croak 'Must supply a filename for output';
+        $self->_croak('Must supply a filename for output');
     }
     my $out;
     $self->_flushPsegments();
     open $out, '>', $file or croak "Cannot write to file $file";
     my $count = scalar @{ $self->{currentpage} };
     foreach my $i ( @{ $self->{currentpage} } ) {
-        print {$out} $i;
+        #print {$out} $i;
+        print {$out} $i . $EOL;
     }
     $self->_closepage($out);    # write the trailer to file, but not memory
     close $out;
@@ -2285,8 +2155,7 @@ sub output {
 #
 # print statistics about the gcode program
 #
-sub _stats {
-    my $self = shift;
+sub _stats ($self) {
     my $f    = $self->{fastdistcount};
     my $s    = $self->{slowdistcount};
     print STDOUT "=== Object \'" . $self->{id} . "\'===" . $EOL;
@@ -2305,9 +2174,9 @@ sub _stats {
 #
 # set up a page, by adding the header
 #
-sub _openpage {
-    my $self = shift;
+sub _openpage ($self) {
     $self->_addtopage( $self->{header} );
+    $self->_addtopage( $self->{penupcmd} );  # added just to be sure
     return 1;
 }
 
@@ -2315,9 +2184,7 @@ sub _openpage {
 # Close a page by adding a trailer, either by adding to currentpage
 # or to an output file
 #
-sub _closepage {
-    my $self = shift;
-    my $out  = shift;
+sub _closepage ($self, $out = undef) {
     if ( defined $out ) {
         print {$out} $self->{trailer} . $EOL;
     }
@@ -2330,36 +2197,30 @@ sub _closepage {
 #
 # Add a line to the page
 #
-sub _addtopage {
-    my ( $self, $data ) = @_;
+sub _addtopage ($self, $data) {
     my $p = $self->{currentpage};
     push @{$p}, $data;
     return 1;
 }
 
-sub _penunlock {
-    my $self = shift;
+sub _penunlock ($self) {
     $self->{penlocked} = 0;
     return 1;
 }
 
-sub _penlock {
-    my $self = shift;
+sub _penlock ($self) {
     $self->{penlocked} = 1;
     return 1;
 }
 
-sub _penlocked {
-    my $self = shift;
+sub _penlocked ($self) {
     return $self->{penlocked};
 }
 
 #
 # Report a serious internal error and quit
 #
-sub _error {
-    my $self = shift;
-    my $msg  = shift;
+sub _error ($self, $msg) {
     die RED $msg, RESET;
     return 0;
 }
@@ -2367,9 +2228,7 @@ sub _error {
 #
 # Report a serious user error and quit
 #
-sub _croak {
-    my $self = shift;
-    my $msg  = shift;
+sub _croak ($self, $msg) {
     croak YELLOW $msg, RESET;
     return 0;
 }
@@ -2377,10 +2236,7 @@ sub _croak {
 #
 # generate a pen move -  from user coords
 #
-sub _genmove {
-    my $self = shift;
-    my $mode = shift;
-    my ( $x, $y ) = @_;
+sub _genmove ($self, $mode, $x, $y) {
     my @point    = ();
     my @pointold = ();
     my $opcode = 'm';
@@ -2424,18 +2280,16 @@ sub _genmove {
 #
 # generate a slow move (pen on paper)
 #
-sub _genslowmove {
-    my $self = shift;
-    $self->_genmove( 'slow', @_ );
+sub _genslowmove ($self, $x, $y) {
+    $self->_genmove( 'slow', $x, $y );
     return 1;
 }
 
 #
 # generate a fast move (pen off paper)
 #
-sub _genfastmove {
-    my $self = shift;
-    $self->_genmove( 'fast', @_ );
+sub _genfastmove ($self, $x, $y) {
+    $self->_genmove( 'fast', $x, $y );
     return 1;
 }
 
@@ -2443,8 +2297,7 @@ sub _genfastmove {
 # Warn if the pen ends up outside the page boundary
 # We need DEVICE coordinates here for obvious reasons
 #
-sub _warn {
-    my ( $self, $x, $y ) = @_;
+sub _warn ($self, $x, $y) {
     my ( $x0clip, $y0clip, $x1clip, $y1clip, $info );
     if ( !$self->{warn} ) { return 0 }
     # we check only the endpoint for now.
@@ -2479,8 +2332,7 @@ sub _warn {
 # is 2, in which case -1 is returned.
 # This code is self contained, so suitable for inclusion elsewhere, and well tested
 # (remove $self if necessary).
-sub _LiangBarsky {
-    my ( $self, $botx, $boty, $topx, $topy, $x0src, $y0src, $x1src, $y1src ) = @_;
+sub _LiangBarsky ( $self, $botx, $boty, $topx, $topy, $x0src, $y0src, $x1src, $y1src ) {
     my $t0     = 0.0;
     my $t1     = 1.0;
     my $xdelta = $x1src - $x0src;
@@ -2552,8 +2404,7 @@ my @a_sizes = (
 );
 
 # check if a design fits landscape
-sub _checkl {
-my $self = shift;
+sub _checkl ($self) {
 my $y = $self->{maxx} * $I2P;  # swap for landscape
 my $x = $self->{maxy} * $I2P;
 my $best_fit = 'size too big for 4A0 landscape!';
@@ -2570,8 +2421,7 @@ my $best_fit = 'size too big for 4A0 landscape!';
 }
 
 # check if a design fits portrait
-sub _checkp {
-my $self = shift;
+sub _checkp ($self) {
 my $x = $self->{maxx} * $I2P;
 my $y = $self->{maxy} * $I2P;
 my $best_fit = 'size too big for 4A0 portrait!';
@@ -2596,8 +2446,7 @@ my $svgw;     # width of the svg
 my $svgh;     # height of the svg
 my $svgvb;    # viewbox of the svg
 
-sub _svg_value_to_inches {
-    my $value = shift;
+sub _svg_value_to_inches ($value) {
     my ($num, $unit) = $value =~ /^([\d.]+)(\D*)$/;
     $unit = 'px' if (! defined $unit);                 # px is svg default
     $unit = 'px' unless exists $unit_to_inches{$unit}; # default to px if not specified or unknown
@@ -2606,16 +2455,18 @@ sub _svg_value_to_inches {
 
 # convert an svg number with unit, like "100mm", into the user specified unit.
 # first convert it to inches, then convert the inches to the required unit
-sub _svgconvert {
-    my ($self, $value) = @_;
+sub _svgconvert ($self, $value) {
+    if  ( !defined $value ) {
+        $self->_croak('svgconvert: no value provided');
+        return 0;
+    }
     my $inches = _svg_value_to_inches($value);
     return $inches * $inches_to_unit{$self->{units}};   # $value converted to user units
     # ?? need to return both inches and value?
 }
 
 # import the svg
-sub importsvg {
-    my ( $self, $file ) = @_;
+sub importsvg ($self, $file) {
     use XML::Parser ();
     my $p = XML::Parser->new(
         Handlers => {
@@ -2628,7 +2479,7 @@ sub importsvg {
         print STDOUT "$file:" . $EOL;
     }
     $self->gsave();
-    $p->parsefile($file) or die "Error $file: ";
+    $p->parsefile($file) or die "XML Parse Error in $file: ";
     $self->grestore();
     # if we warned about unimpemented tags, print a newline
     if ( !$first ) {
@@ -2639,16 +2490,14 @@ sub importsvg {
     return 1;
 }
 
-sub _endtag {
-    my ( $self, $expat, $element, %attr ) = @_;
+sub _endtag ($self, $expat, $element, %attr) {
     if ( $element eq 'g' ) {
         $self->grestore();
     }
     return 1;
 }
 
-sub _starttag {
-    my ( $self, $expat, $element, %attr ) = @_;
+sub _starttag ($self, $expat, $element, %attr) {
     my $x    = undef;    # stores start of path, for closepath later
     my $y    = undef;
     my $curx = 0;
@@ -2677,13 +2526,29 @@ sub _starttag {
     }
     # line tag
     if ( $element eq 'line' ) {
-        my $x1 = $attr{x1} || 0;
+        my $x1 = $attr{x1};
+        if (! defined $x1 ) {
+            $self->_croak('line: x1 attribute missing');
+            return;
+        }
         $x1 = $self->_svgconvert($x1);
-        my $y1 = $attr{y1} || 0;
+        my $y1 = $attr{y1};
+        if (! defined $y1 ) {
+            $self->_croak('line: y1 attribute missing');
+            return;
+        }
         $y1 = $self->_svgconvert($y1);
-        my $x2 = $attr{x2} || 0;
+        my $x2 = $attr{x2};
+        if (! defined $x2 ) {
+            $self->_croak('line: x2 attribute missing');
+            return;
+        }
         $x2 = $self->_svgconvert($x2);
-        my $y2 = $attr{y2} || 0;
+        my $y2 = $attr{y2};
+        if (! defined $y2 ) {
+            $self->_croak('line: y2 attribute missing');
+            return;
+        }
         $y2 = $self->_svgconvert($y2);
         my $t  = $attr{transform};
         if ($t) {
@@ -2698,18 +2563,38 @@ sub _starttag {
     }
     # rect tag
     if ( $element eq 'rect' ) {
-        my $x      = $attr{x} || 0;
+        my $x      = $attr{x};
+        if (! defined $x ) {
+            $self->_croak('rect: x attribute missing');
+            return;
+        }
         $x = $self->_svgconvert($x);
-        my $y      = $attr{y} || 0;
+        my $y      = $attr{y};
+        if (! defined $y ) {
+            $self->_croak('rect: y attribute missing');
+            return;
+        }
         $y = $self->_svgconvert($y);
         my $width  = $attr{width};
+        if (! defined $width ) {
+            $self->_croak('rect: width attribute missing');
+            return;
+        }
         $width = $self->_svgconvert($width);
         my $height = $attr{height};
+        if (! defined $height ) {
+            $self->_croak('rect: height attribute missing');
+            return;
+        }
         $height = $self->_svgconvert($height);
         my $rx     = $attr{rx};
-        $rx = $self->_svgconvert($rx);
+        if (defined $rx ) {
+            $rx = $self->_svgconvert($rx);
+        }
         my $ry     = $attr{ry};
-        $ry = $self->_svgconvert($ry);
+        if (defined $ry ) {
+            $ry = $self->_svgconvert($ry);
+        }
         my $t      = $attr{transform};
         if ($t) {
             $self->gsave();
@@ -2727,14 +2612,31 @@ sub _starttag {
         return;
     }
     # ellipse tag
+    # !! does not currently work because of Expat bug - rx and ry not found
     if ( $element eq 'ellipse' ) {
-        my $cx = $attr{cx} || 0;
+        my $cx = $attr{cx};
+        if (! defined $cx ) {
+            $self->_croak('ellipse: cx attribute missing');
+            return;
+        }
         $cx = $self->_svgconvert($cx);
-        my $cy = $attr{cy} || 0;
+        my $cy = $attr{cy};
+        if (! defined $cy ) {
+            $self->_croak('ellipse: cy attribute missing');
+            return;
+        }
         $cy = $self->_svgconvert($cy);
         my $rx = $attr{rx};
+        if (defined $rx ) {
+            $self->_croak('ellipse: rx attribute missing');
+            return;
+        }
         $rx = $self->_svgconvert($rx);
         my $ry = $attr{ry};
+        if (! defined $ry ) {
+            $self->_croak('ellipse: ry attribute missing');
+            return;
+        }
         $ry = $self->_svgconvert($ry);
         my $t  = $attr{transform};
         if ($t) {
@@ -2749,11 +2651,23 @@ sub _starttag {
     }
     # circle tag
     if ( $element eq 'circle' ) {
-        my $cx = $attr{cx} || 0;
+        my $cx = $attr{cx};
+        if (! defined $cx ) {
+            $self->_croak('circle: cx attribute missing');
+            return;
+        }
         $cx = $self->_svgconvert($cx);
-        my $cy = $attr{cy} || 0;
+        my $cy = $attr{cy};
+        if (! defined $cy ) {
+            $self->_croak('circle: cy attribute missing');
+            return;
+        }
         $cy = $self->_svgconvert($cy);
         my $r  = $attr{r};
+        if (! defined $r ) {
+            $self->_croak('circle: r attribute missing');
+            return;
+        }
         $r = $self->_svgconvert($r);
         # if there's a transform, save the graphics state,
         # do the work, then restore the graphics state
@@ -2845,8 +2759,7 @@ sub _starttag {
 }
 
 # perform a series of path commands
-sub _dopath {
-    my ( $self, $d ) = @_;    # rr is ref to array
+sub _dopath ($self, $d) {
     my @r    = extract_path_info( $d, { absolute => 1, no_smooth => 1 } );
     my $x    = undef;         # stores start of path, for closepath later
     my $y    = undef;
@@ -2937,8 +2850,7 @@ sub _dopath {
     return 1;
 }
 
-sub _dotransform {
-    my ( $self, $t ) = @_;
+sub _dotransform ($self, $t) {
     # parse the transform string, create array of hashes
     my $tr = Image::SVG::Transform->new();
     $tr->extract_transforms($t);
@@ -2995,8 +2907,7 @@ sub _dotransform {
 # Since we measure angle between radii of circular arcs,
 # we can use simplified math (without length normalization)
 #
-sub _unit_vector_angle {
-    my ( $ux, $uy, $vx, $vy ) = @_;
+sub _unit_vector_angle ($ux, $uy, $vx, $vy) {
     my $sign = ( $ux * $vy - $uy * $vx < 0 ) ? -1 : 1;
     my $dot  = $ux * $vx + $uy * $vy;
     # Add this to work with arbitrary vectors:
@@ -3010,8 +2921,7 @@ sub _unit_vector_angle {
 # Convert from endpoint to center parameterization,
 # see http:#www.w3.org/TR/SVG11/implnote.html#ArcImplementationNotes
 # Return [cx, cy, theta1, delta_theta]
-sub _get_arc_center {
-    my ( $x1, $y1, $x2, $y2, $fa, $fs, $rx, $ry, $sin_phi, $cos_phi ) = @_;
+sub _get_arc_center ($x1, $y1, $x2, $y2, $fa, $fs, $rx, $ry, $sin_phi, $cos_phi) {
     # Step 1.
     #
     # Moving an ellipse so origin will be the middlepoint between our two
@@ -3065,8 +2975,7 @@ sub _get_arc_center {
 
 # Approximate one unit arc segment with bézier curves,
 # see http:#math.stackexchange.com/questions/873224
-sub _approximate_unit_arc {
-    my ( $theta1, $delta_theta ) = @_;
+sub _approximate_unit_arc ($theta1, $delta_theta) {
     my $alpha = 4 / 3 * tan( $delta_theta / 4 );
     my $x1    = cos $theta1;
     my $y1    = sin $theta1;
@@ -3082,8 +2991,7 @@ sub _approximate_unit_arc {
     );
 }
 
-sub _a2c {
-    my ( $self, $x1, $y1, $rx, $ry, $phi, $fa, $fs, $x2, $y2 ) = @_;
+sub _a2c ($self, $x1, $y1, $rx, $ry, $phi, $fa, $fs, $x2, $y2) {
     my $sin_phi = sin( $phi * $TWOPI / 360 );
     my $cos_phi = cos( $phi * $TWOPI / 360 );
     # Make sure radii are valid
@@ -3142,9 +3050,8 @@ sub _a2c {
 #------------------------------------------------------------------------------------
 
 # Postscript output
-sub exporteps {
-    my $self  = shift;
-    my $gcout = shift || die 'outputpeps: need filename';
+sub exporteps ($self, $gcout = undef) {
+    if (!$gcout) { die 'outputpeps: no filename provided' }
     my $op    = $EMPTY_STR;                                 # current op
     my $xn    = $EMPTY_STR;                                 # current x coord
     my $yn    = $EMPTY_STR;                                 # current y coord
@@ -3218,6 +3125,7 @@ sub exporteps {
         print {$out} "<< /PageSize [595 842] /Orientation 0 >> setpagedevice $EOL";
         print {$out} "%%EndSetup $EOL";
     }
+    print {$out} "0 0 moveto $EOL";   # set the current point to (0,0)
     while ( $linecount < $limit ) {
         $linecount++;
         $line = $self->{currentpage}[ $linecount - 1 ];
@@ -3268,9 +3176,8 @@ sub exporteps {
 }
 
 # SVG output
-sub exportsvg {
-    my $self  = shift;
-    my $gcout = shift || die 'exportsvg: output filename missing';
+sub exportsvg ($self, $gcout = undef) {
+    if (!$gcout) { die 'exportsvg: output filename not provided' }
     my $op    = $EMPTY_STR;   # current op
     my $xn    = $EMPTY_STR;   # current x coord
     my $yn    = $EMPTY_STR;   # current y coord
@@ -3282,6 +3189,10 @@ sub exportsvg {
     my ( $x, $y, $line, $st );
     $self->_flushPsegments();
     my $limit = scalar @{ $self->{currentpage} };
+    if (! $limit) {
+        croak "exportsvg: $gcout: empty queue. Aborting.";
+        return 0;
+    }
     open( my $out, '>', $gcout ) or croak "exportsvg: cannot open output file $gcout";
     # process the gcode header
     HEADER:
@@ -3289,7 +3200,7 @@ sub exportsvg {
         $linecount++;
         $line = $self->{currentpage}[ $linecount - 1 ];
         last HEADER
-            if ( $line eq $self->{penupcmd} );     # better make sure it's there
+            if ( $line eq $self->{penupcmd} );     # added by openpage()
     }
     # collect the SVG output
     $st = $EMPTY_STR;
@@ -3363,8 +3274,7 @@ sub exportsvg {
 }
 
 # parsing of instruction
-sub _parse {
-    my ( $self, $ss ) = @_;
+sub _parse ($self, $ss) {
     my ( $opp, $x, $xcoord, $y, $ycoord, $rest );
     # some lines can be ignored
     if ( $ss =~ m{\A\s*\z} ) { return ( $NOOP, 0, 0 ) }    # ignore empty line
@@ -3400,10 +3310,9 @@ sub _parse {
 #
 # for convenience
 #
-sub _fprintf {
-    my $info = shift;
+sub _fprintf ($info, @args) {
     print STDOUT "$info: ";
-    foreach (@_) {
+    foreach (@args) {
         printf STDOUT "%5.2f ", $_
     }
     print STDOUT $EOL;
@@ -3416,8 +3325,7 @@ my $optline = 0;
 
 # Path segment peephole optimization.
 # this should be applied immediately before gcode generation.
-sub _optimize {
-    my $self = shift;
+sub _optimize ($self) {
     my ( $op, $xs, $ys, $xn, $yn, $tmpx, $tmpy, $tmpx2, $tmpy2, $xd, $yd );
     my ( $before, $after, $line, $rest );
     if ( !$self->{optimize} ) { return 0 }    # user does not want optimization
@@ -3724,8 +3632,7 @@ sub _optimize {
 # The patterns.
 # Note that the order in which these are executed matters: generally start with the longest.
 
-sub _pattern1 {
-    my ( $self, $line, $rest ) = @_;
+sub _pattern1 ($self, $line, $rest) {
     if ( $rest < 5 ) { return 0 }
     if (
             ( $self->{psegments}[ $line + 0 ]{key} eq 'm' )
@@ -3741,8 +3648,7 @@ sub _pattern1 {
     return 0;
 }
 
-sub _pattern2 {
-    my ( $self, $line, $rest ) = @_;
+sub _pattern2 ($self, $line, $rest) {
     if ( $rest < 6 ) { return 0 }
     if (
             ( $self->{psegments}[ $line + 0 ]{key} eq 'l' )
@@ -3759,8 +3665,7 @@ sub _pattern2 {
     return 0;
 }
 
-sub _pattern10 {
-    my ( $self, $line, $rest ) = @_;
+sub _pattern10 ($self, $line, $rest) {
     my ( $a, $b, $c, $d );
     if ( $rest < 5 ) { return 0 }
     $a = $self->{psegments}[ $line + 0 ]{sx};
@@ -3786,8 +3691,7 @@ sub _pattern10 {
     return 0;
 }
 
-sub _pattern3 {
-    my ( $self, $line, $rest ) = @_;
+sub _pattern3 ($self, $line, $rest) {
     if ( $rest < 4 ) { return 0 }
     if (
             ( $self->{psegments}[ $line + 0 ]{key} eq 'l' )
@@ -3802,8 +3706,7 @@ sub _pattern3 {
     return 0;
 }
 
-sub _pattern4 {
-    my ( $self, $line, $rest ) = @_;
+sub _pattern4 ($self, $line, $rest) {
     if ( $rest < 6 ) { return 0 }
     if (
             ( $self->{psegments}[ $line + 0 ]{key} eq 'u' )
@@ -3820,8 +3723,7 @@ sub _pattern4 {
     return 0;
 }
 
-sub _pattern11 {
-    my ( $self, $line, $rest ) = @_;
+sub _pattern11 ($self, $line, $rest) {
     if ( $rest < 6 ) { return 0 }
     if (
             ( $self->{psegments}[ $line + 0 ]{key} eq 'u' )
@@ -3836,8 +3738,7 @@ sub _pattern11 {
     return 0;
 }
 
-sub _pattern5 {
-    my ( $self, $line, $rest ) = @_;
+sub _pattern5 ($self, $line, $rest) {
     if ( $rest < 2 ) { return 0 }
     if (   ( $self->{psegments}[ $line + 0 ]{key} eq 'u' )
         && ( $self->{psegments}[ $line + 1 ]{key} eq 'd' ) )
@@ -3847,8 +3748,7 @@ sub _pattern5 {
     return 0;
 }
 
-sub _pattern6 {
-    my ( $self, $line, $rest ) = @_;
+sub _pattern6 ($self, $line, $rest) {
     if ( $rest < 2 ) { return 0 }
     if (   ( $self->{psegments}[ $line + 0 ]{key} eq 'u' )
         && ( $self->{psegments}[ $line + 1 ]{key} eq 'u' ) )
@@ -3858,8 +3758,7 @@ sub _pattern6 {
     return 0;
 }
 
-sub _pattern7 {
-    my ( $self, $line, $rest ) = @_;
+sub _pattern7 ($self, $line, $rest) {
     if ( $rest < 2 ) { return 0 }
     if (   ( $self->{psegments}[ $line + 0 ]{key} eq 'd' )
         && ( $self->{psegments}[ $line + 1 ]{key} eq 'd' ) )
@@ -3869,8 +3768,7 @@ sub _pattern7 {
     return 0;
 }
 
-sub _pattern8 {
-    my ( $self, $line, $rest ) = @_;
+sub _pattern8 ($self, $line, $rest) {
     if ( $rest < 2 ) { return 0 }
     if (   ( $self->{psegments}[ $line + 0 ]{key} eq 'd' )
         && ( $self->{psegments}[ $line + 1 ]{key} eq 'u' ) )
@@ -3880,8 +3778,7 @@ sub _pattern8 {
     return 0;
 }
 
-sub _pattern9 {
-    my ( $self, $line, $rest ) = @_;
+sub _pattern9 ($self, $line, $rest) {
     if ( $rest < 1 ) { return 0 }
     if (
         (
@@ -3906,8 +3803,7 @@ sub _pattern9 {
 # We also exclude the first few instructions from optimization because they are
 # dependent upon the user's manual setting of the pen, so are not the result of
 # any actions in this library.
-sub _adjust {
-    my ( $self, $lref, $rref ) = @_;
+sub _adjust ($self, $lref, $rref) {
     my $len = scalar @{ $self->{psegments} };
     ${$lref} -= $LONGEST;
     ${$rref} = $len - $$lref;
@@ -3920,8 +3816,7 @@ sub _adjust {
 
 #
 # return current segment, as pointed to by $line
-sub _curseg {
-    my ( $self, $line ) = @_;
+sub _curseg ($self, $line) {
     return (
         $self->{psegments}[$line]{key}, $self->{psegments}[$line]{sx},
         $self->{psegments}[$line]{sy},  $self->{psegments}[$line]{dx},
@@ -3930,8 +3825,7 @@ sub _curseg {
 }
 
 # modify the current instruction to a slow move with the stated values
-sub _slowmove {
-    my ( $self, $line, $xs, $ys, $x, $y ) = @_;
+sub _slowmove ($self, $line, $xs, $ys, $x, $y) {
     $self->{psegments}[$line]{key} = 'l';
     $self->{psegments}[$line]{sx}  = $xs;
     $self->{psegments}[$line]{sy}  = $ys;
@@ -3941,8 +3835,7 @@ sub _slowmove {
 }
 
 # modify the current instruction to a fast move with the stated values
-sub _fastmove {
-    my ( $self, $line, $xs, $ys, $x, $y ) = @_;
+sub _fastmove ($self, $line, $xs, $ys, $x, $y) {
     $self->{psegments}[$line]{key} = 'm';
     $self->{psegments}[$line]{sx}  = $xs;
     $self->{psegments}[$line]{sy}  = $ys;
@@ -3952,9 +3845,7 @@ sub _fastmove {
 }
 
 # remove an item, pointer stays same, rest decreases
-sub _drop {
-    my $self = shift;
-    my ( $line, $refrest ) = @_;
+sub _drop ($self, $line, $refrest) {
     if ($self->{opt_debug}) {
         print STDOUT "drop ";
         $self->_prPseg($line);
@@ -3965,9 +3856,7 @@ sub _drop {
 }
 
 # keep an item, move the pointer, rest decreases
-sub _keep {
-    my $self = shift;
-    my ( $line, $refrest ) = @_;
+sub _keep ($self, $line, $refrest) {
     if ($self->{opt_debug}) {
         print STDOUT "keep ";
         $self->_prPseg(${$line});
@@ -3978,8 +3867,7 @@ sub _keep {
 }
 
 # debugging
-sub _prPseg {
-    my ( $self, $index ) = @_;
+sub _prPseg ($self, $index) {
     my $len = scalar @{ $self->{psegments} };
     if ( ($index > $len-1) || (!defined $self->{psegments}[$index]{key})) {
         print STDOUT "    UNDEFINED$EOL";
@@ -4032,8 +3920,7 @@ my ( $xoffset, $yoffset );   # adjustments for non-blhc sheets
 my ( $xwhite,  $ywhite );    # whitespace margins
 my ( $xlen, $ylen );         # length of subsheet
 
-sub _sheetinfo {
-    my ($self, $dest) = @_;
+sub _sheetinfo ($self, $dest) {
     $sheets{'4A0'} = { rank => 12, maxx => 66.22, maxy => 93.62 };
     $sheets{'2A0'} = { rank => 11, maxx => 46.81, maxy => 66.22 };
     $sheets{'A0'}  = { rank => 10, maxx => 33.11, maxy => 46.81 };
@@ -4053,8 +3940,7 @@ sub _sheetinfo {
 }
 
 # setup the coordinates of the corners of each sheet, used for Liang-Barsky
-sub _corners {
-    my ( $self, $dest ) = @_;
+sub _corners ($self, $dest) {
     my $bigsheet = $self->{papersize};
     # decide sheets in x and y direction, p or l
     my $diff = $sheets{$bigsheet}{rank} - $sheets{$dest}{rank};
@@ -4100,11 +3986,9 @@ sub _corners {
 }
 
 # entry point.
-sub split {
-    my $self = shift;
+sub split ($self, $dest, $file) {
     # check for sensible parameters
-    if (scalar @_ != 2) { $self->_croak("wrong number of args for split")}
-    my ( $dest, $file ) = @_;
+    if (!defined $file) { $self->_croak("wrong number of args for split")}
     if (! defined $self->{papersize}) {$self->_croak("cannot split if paper size undefined")}
     # setup data for sheet sizes
     $self->_sheetinfo( $dest );
@@ -4252,15 +4136,13 @@ sub split {
     return 1;
 }
 
-sub do_penup {
-    my $self = shift;
+sub do_penup ($self) {
     $self->_addpath('u', -1, -1, -1, -1);
     $penstate = $PENUP;
     return 1;
 }
 
-sub do_pendown {
-    my $self = shift;
+sub do_pendown ($self) {
     $self->_addpath('d', -1,-1, -1, -1);
     $penstate = $PENDOWN;
     return 1;
@@ -4273,8 +4155,7 @@ sub do_pendown {
 
 # generate a G00 or G01
 # Move the sheet to the origin and possibly rotate it
-sub _addmove {
-    my ( $self, $x, $y, $speed ) = @_;
+sub _addmove ($self, $x, $y, $speed) {
     # calculate new coordinates
     my ($newx, $newy);
     if ($mode eq 'p') { # just shift
@@ -4296,22 +4177,19 @@ sub _addmove {
 }
 
 # generate a G01
-sub _addslowmove {
-    my ( $self, $x, $y ) = @_;
+sub _addslowmove ($self, $x, $y) {
     $self->_addmove($x, $y, 'slow');
     return 1;
 }
 
 # generate a G00
-sub _addfastmove {
-    my ( $self, $x, $y ) = @_;
+sub _addfastmove ($self, $x, $y) {
         $self->_addmove($x, $y, 'fast');
     return 1;
 }
 
 # save the current coords before they are overwritten
-sub _setprevious {
-    my ( $self, $op, $xn, $yn ) = @_;
+sub _setprevious ($self, $op, $xn, $yn) {
     if ( $current eq $EMPTY_STR ) { return }  # first entry after header
     # don't want pen cmds as previous:
     if ( $current eq $self->{penupcmd} || $current eq $self->{pendowncmd} ) {
@@ -4325,8 +4203,7 @@ sub _setprevious {
 }
 
 # debugging
-sub printcorner {
-    my ( $self, $sx, $sy ) = @_;
+sub printcorner ($self, $sx, $sy) {
     foreach my $i ( 0 .. $sx - 1 ) {
         foreach my $j ( 0 .. $sy - 1 ) {
             print STDOUT "$i $j      "
@@ -4351,63 +4228,71 @@ sub printcorner {
 # vpype interface
 
 # linesort: minimise the amount the pen has to travel
-sub vpype_linesort {
-    my $self = shift;
-    # generate two temp files
-    my ($fin,  $vin)  = tempfile(); 
-    my ($fout, $vout) = tempfile();
-    # write the current design to vin
+
+sub vpype_linesort ($self) {
+    # create two temp SVG filenames
+    my ($fh_in,  $vin)  = tempfile( SUFFIX => '.svg' );
+    my ($fh_out, $vout) = tempfile( SUFFIX => '.svg' );
+    close $fh_in  if defined $fh_in;
+    close $fh_out if defined $fh_out;
+    # export current design to temporary input svg
     $self->exportsvg($vin);
-    # compose the vpype command
-    my @command = ( 
-        'vpype', # '-v', # for debug output
-        'read', $vin, 
+    # build vpype command; include page-size only if set
+    my @cmd = (
+        'vpype',
+        'read', $vin,
         'linemerge',
-        '-t', '0.01mm', 
-        'linesort', 
+        '-t', '0.01mm',
+        'linesort',
         'write',
-        '--page-size', (lc $self->{papersize}),
         '--format', 'svg',
-        $vout
+        $vout,
     );
-    # Execute the command
-    system(@command) == 0 or die "Failed to execute command: $!";
-    # declare new graphics object, copying most of $self
-    my $v = new GcodeXY(
+    if ( defined $self->{papersize} && $self->{papersize} ne $EMPTY_STR ) {
+        splice @cmd, -2, 0, '--page-size', lc $self->{papersize};
+    }
+    # run vpype
+    my $rc = system(@cmd);
+    if ( $rc != 0 ) {
+        unlink $vin  if -e $vin;
+        unlink $vout if -e $vout;
+        $self->_croak("vpype_linesort: vpype command failed (exit=$rc)");
+    }
+    # instantiate a new object of the same class and import vpype output
+    my $class = ref($self) || $self;
+    my $v = $class->new(
         papersize     => $self->{papersize},
-        xsize         => $self->{xsize}, 
+        xsize         => $self->{xsize},
         ysize         => $self->{ysize},
         units         => $self->{units},
-        header        => $self->{header}, 
+        header        => $self->{header},
         trailer       => $self->{trailer},
-        penupcmd      => $self->{penupcmd},  
+        penupcmd      => $self->{penupcmd},
         pendowncmd    => $self->{pendowncmd},
         margin        => $self->{margin},
         curvepts      => $self->{curvepts},
-        check         => $self->{check}, 
+        check         => $self->{check},
         warn          => $self->{warn},
         hatchsep      => $self->{hatchsep},
         id            => 'vpype-linesort',
         optimize      => $self->{optimize},
         dscale        => $self->{dscale},
         opt_debug     => $self->{opt_debug},
-        maxx          => $self->{maxx},
-        maxy          => $self->{maxy},
-        minx          => $self->{minx},
-        miny          => $self->{miny},
         fontsize      => $self->{fontsize},
         fontname      => $self->{fontname},
-        pencount      => 0,
-        slowdistcount => 0,
-        fastdistcount => 0,
     );
-    # import the vpype output (second temp file) into the new graphics object
     $v->importsvg($vout);
-    # clean up
-    unlink($vin);
-    unlink($vout);
-    # return the new object
+    # cleanup
+    unlink $vin  if -e $vin;
+    unlink $vout if -e $vout;
     return $v;
+}
+
+sub getsegpath ($self) {
+    if (scalar @{ $self->{psegments} } == 0) {
+        return ();
+    }
+    return @{ $self->{psegments} };
 }
 
 1;
@@ -4688,6 +4573,9 @@ Get a copy of the current segment path. This returns an array of hashes containi
 points of the segments.
 Example:
     @points = getsegpath();
+=cut
+
+
 
 =item grestore()
 
@@ -4819,11 +4707,12 @@ Example:
     # draw a square with lower left point at (10,10)
     $g->polygonR(1,1, 1,2, 2,2, 2,1, 1,1);
 
-=item polygonround(r, x1,y1, x2,y2, ..., xn,yn)
+=item polygonround(r, x1,y1, x2,y2, x3,y3, ..., xn,yn)
 
 Draws a polygon starting from the current position, using absolute coordinates, with rounded
-corners between the line segments whose radius is dtermined by C<r>. Lines with rounded corners
-will then be drawn from (C<x1>,C<y1>) to (C<x2>,C<y2>), and so on.
+corners between the line segments whose radius is determined by C<r>. Lines with rounded corners
+will then be drawn from (C<x1>,C<y1>) to (C<x2>,C<y2>), and so on. Specify at least three pairs
+of coordinates (i.e. two line segments).
 
 Example:
 

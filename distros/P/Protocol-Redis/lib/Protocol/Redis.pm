@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use 5.008_001;
 
-our $VERSION = '2.0000';
+our $VERSION = '2.0001';
 
 require Carp;
 
@@ -221,7 +221,7 @@ sub _encode_resp3 {
         # Double
         elsif ($message->{type} eq ',') {
             # inf
-            if ($message->{data} == $message->{data} * 2) {
+            if ($message->{data} != 0 and $message->{data} == $message->{data} * 2) {
                 $encoded_message .= ',' . ($message->{data} > 0 ? '' : '-') . "inf\r\n";
             }
             # nan
@@ -665,7 +665,7 @@ Yaroslav Korshak (yko)
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011-2024, Serhii Zasenko.
+Copyright (C) 2011-2026, Serhii Zasenko.
 
 This program is free software, you can redistribute it and/or modify it under
 the same terms as Perl 5.10.

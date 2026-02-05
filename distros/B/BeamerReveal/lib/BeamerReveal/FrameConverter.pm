@@ -3,7 +3,7 @@
 
 
 package BeamerReveal::FrameConverter;
-our $VERSION = '20260130.1210'; # VERSION
+our $VERSION = '20260205.0754'; # VERSION
 
 use strict;
 use warnings;
@@ -70,12 +70,14 @@ sub toJPG {
 	      '-progress',
 	    ];
   my $logger = $BeamerReveal::Log::logger;
+  my $maxSlide = 0;
   BeamerReveal::IPC::Run::runsmart( $cmd, 2, qr/^(\d+) (\d+) .*$/,
 				    sub {
 				      while( scalar @_ ) {
 					my ( $a, $b ) = ( shift @_, shift @_ );
 					$logger->progress( $self->{progressId},
 							   $a, "background $1/$2", $b );
+					$maxSlide = $b;
 				      }
 				    },
 				    0, # coreId
@@ -83,6 +85,14 @@ sub toJPG {
 				    undef, # directory
 				    "Error: frame conversion failed, is your beamer PDF damaged?"
 				  );
+
+  my @list = ( 0 ); # create a dummy element to allow for one-indexed addressing
+   
+  for (my $i = 1; $i <= $maxSlide; ++$i ) {
+    push @list, sprintf( "$self->{slides}/slide-%0" . nofdigits( $maxSlide ) . 'd.jpg',
+			 $i );
+  }
+  return \@list;
 }
 
 1;
@@ -99,7 +109,7 @@ BeamerReveal::FrameConverter - FrameConverter
 
 =head1 VERSION
 
-version 20260130.1210
+version 20260205.0754
 
 =head1 SYNOPSIS
 

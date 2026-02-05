@@ -1,6 +1,6 @@
 package DBIx::Class::Async::Schema;
 
-$DBIx::Class::Async::Schema::VERSION   = '0.51';
+$DBIx::Class::Async::Schema::VERSION   = '0.54';
 $DBIx::Class::Async::Schema::AUTHORITY = 'cpan:MANWAR';
 
 =encoding utf8
@@ -11,7 +11,7 @@ DBIx::Class::Async::Schema - Non-blocking, worker-pool based Proxy for DBIx::Cla
 
 =head1 VERSION
 
-Version 0.51
+Version 0.54
 
 =head1 SYNOPSIS
 
@@ -659,7 +659,7 @@ sub unregister_source {
     delete $self->{_sources_cache}->{$source_name};
 
     # 3. Class-Level Cleanup
-    # This prevents any future workers (or re-initializations)
+    # This prevents any future workers (or re-initialisations)
     # from seeing this source definition.
     if ($class->can('unregister_source')) {
         $class->unregister_source($source_name);
@@ -865,7 +865,7 @@ of operations to a worker to be executed in a single atomic block.
 
 =over 4
 
-=item B<clone( workers => $count )>
+=item B<clone( workers =E<gt> $count )>
 
 Creates a fresh instance of the Async Schema. This is useful if you need a
 separate pool of workers for "heavy" reporting queries vs. "light" web queries.

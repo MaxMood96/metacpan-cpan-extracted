@@ -13,7 +13,7 @@
 # ABSTRACT: Analyze chess games in PGN format
 
 package Chess::Plisco::Engine::TimeControl;
-$Chess::Plisco::Engine::TimeControl::VERSION = 'v1.0.2';
+$Chess::Plisco::Engine::TimeControl::VERSION = 'v1.0.3';
 use strict;
 
 use Time::HiRes qw(gettimeofday);

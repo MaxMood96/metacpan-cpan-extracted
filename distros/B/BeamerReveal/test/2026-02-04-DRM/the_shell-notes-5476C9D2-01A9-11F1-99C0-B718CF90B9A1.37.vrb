@@ -1,0 +1,13 @@
+\frametitle{Globbing Examples - Advanced}
+\begin{block}{Character Sets and Negation}
+\begin{verbatim}
+# Match specific numbers
+ls file[123].txt
+
+# Match any lowercase letter
+ls [a-z]*.txt
+
+# Negation: anything NOT starting with a-z
+ls [!a-z]*
+\end{verbatim}
+\end{block}

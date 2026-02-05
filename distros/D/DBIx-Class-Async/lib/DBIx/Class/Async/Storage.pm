@@ -1,6 +1,6 @@
 package DBIx::Class::Async::Storage;
 
-$DBIx::Class::Async::Storage::VERSION   = '0.51';
+$DBIx::Class::Async::Storage::VERSION   = '0.54';
 $DBIx::Class::Async::Storage::AUTHORITY = 'cpan:MANWAR';
 
 use strict;
@@ -13,7 +13,7 @@ DBIx::Class::Async::Storage - Storage Layer for DBIx::Class::Async
 
 =head1 VERSION
 
-Version 0.51
+Version 0.54
 
 =cut
 
@@ -63,16 +63,12 @@ background worker pool.
         async_db => $bridge_engine,
     );
 
-=over 4
-
-=item * B<async_db>: This is the internal engine (the 'bridge') that handles
+B<async_db> is the internal engine (the 'bridge') that handles
 communication with the worker processes.
 
-=item * B<Memory Safety>: This constructor automatically weakens the reference
-to the parent L<schema> to prevent circular reference leaks, ensuring that
-worker processes are correctly reaped when the schema object goes out of scope.
-
-=back
+This constructor automatically weakens the reference to the parent L<schema>
+to prevent circular reference leaks, ensuring that worker processes are
+correctly reaped when the schema object goes out of scope.
 
 =cut
 
@@ -138,10 +134,10 @@ sub cursor {
 
     my $dbh = $storage->dbh; # Returns undef
 
-B<STRICT ASYNC ENFORCEMENT>: In this architecture, the Parent process B<must not>
-touch the database. This method always returns C<undef>. Any code relying on
-C<$schema->storage->dbh> will fail, which is intentional to prevent accidental
-blocking I/O in the main event loop.
+In this architecture, the Parent process B<must not> touch the database. This
+method always returns C<undef>. Any code relying on C<$schema->storage->dbh>
+will fail, which is intentional to prevent accidental blocking I/O in the
+main event loop.
 
 =cut
 
@@ -186,7 +182,9 @@ Signals the background worker pool to shut down. This is an asynchronous-safe
 cleanup:
 
 1. It stops the worker processes.
+
 2. It closes IPC pipes or sockets used by the bridge.
+
 3. It clears the local query cache.
 
 =cut
@@ -204,32 +202,37 @@ sub disconnect {
 
 =head1 INTERNAL NOTES
 
-This class implements a minimal subset of the L<DBIx::Class::Storage> interface
-required for compatibility with the L<DBIx::Class> ecosystem. Key differences:
+This class implements a specialised B<"Proxy Storage"> layer for the L<DBIx::Class::Async>
+ecosystem. Unlike standard DBIC storage, this layer does not hold a local
+database connection. Instead, it acts as a B<Command Dispatcher>.
+
+B<Key Architectural Differences>:
 
 =over 4
 
-=item *
+=item * Proxied Execution
 
-No direct database handle management
+SQL generation and execution occur within persistent background workers
+via L<IO::Async::Function>.
 
-=item *
+=item * Asynchronous Transactions
 
-No SQL generation or execution
+Transactional integrity is maintained by routing related commands (C<txn_do>,
+C<txn_batch>) to a single dedicated worker to ensure atomicity.
 
-=item *
+=item * Distributed State
 
-No transaction management at this level
+Database handle management is isolated to the worker process, utilising
 
-=item *
+B<InactiveDestroy> to prevent handle leakage or cross-process corruption.
 
-Debug methods are no-ops or return mock objects
+=item * Compatibility Shim
+
+It provides enough of the L<DBIx::Class::Storage> API to allow standard
+ResultSets to function while redirecting all I/O to the L<IO::Async> event
+loop.
 
 =back
-
-Database operations in C<DBIx::Class::Async> are performed by a separate worker
-process or service, so this storage layer acts primarily as a compatibility
-shim.
 
 =head1 SEE ALSO
 

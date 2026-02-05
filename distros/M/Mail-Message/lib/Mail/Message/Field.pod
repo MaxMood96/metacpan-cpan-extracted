@@ -54,11 +54,11 @@ Extends L<"DESCRIPTION" in Mail::Reporter|Mail::Reporter/"DESCRIPTION">.
 
 =over 4
 
-=item overload: B<""> stringification
+=item overload: B<'""'> stringification
 
 Produces the unfolded body of the field, which may be what you expect.
 This is what makes what the field object seems to be a simple string. The
-string is produced by L<unfoldedBody()|Mail::Message::Field/"Access to the body">.
+string is produced by L<unfoldedBody()|Mail::Message::Field/"Attributes">.
 
 » example: 
 
@@ -68,13 +68,13 @@ string is produced by L<unfoldedBody()|Mail::Message::Field/"Access to the body"
   my $subject = $msg->get('subject') || 'your mail';
   print "Re: $subject\n";
 
-=item overload: B<0+> numification
+=item overload: B<'0+'> numification
 
 When the field is numeric, the value will be returned.
 The result is produced by L<toInt()|Mail::Message::Field/"Access to the content">.  If the value is not correct,
 a C<0> is produced, to simplify calculations.
 
-=item overload: B<<=>> numeric comparison
+=item overload: B<'<=>'> numeric comparison
 
 Compare the integer field contents with something else.
 
@@ -120,6 +120,85 @@ Improves base, see L<Mail::Reporter/"Constructors">
 
 Extends L<"Attributes" in Mail::Reporter|Mail::Reporter/"Attributes">.
 
+=over 4
+
+=item $obj-E<gt>B<Name>()
+
+Returns the name of this field in original casing.  See L<name()|Mail::Message::Field/"Attributes"> as well.
+
+=item $obj-E<gt>B<body>()
+
+This method may not be what you want: the L<foldedBody()|Mail::Message::Field/"Attributes"> and
+L<unfoldedBody()|Mail::Message::Field/"Attributes"> are probably where you are looking for.  Those will
+return the full content of a field, even when it is structured.
+
+Returns the body of the field.  When this field is structured, it will
+be B<stripped> from everything what is behind the first semi-color (C<;>).
+In any case, the string is unfolded.
+Whether the field is structured is defined by L<isStructured()|Mail::Message::Field/"The field">.
+
+=item $obj-E<gt>B<folded>()
+
+Returns the folded version of the whole header.  When the header is
+shorter than the wrap length, a list of one line is returned.  Otherwise
+more lines will be returned, all but the first starting with at least
+one blank.  See also L<foldedBody()|Mail::Message::Field/"Attributes"> to get the same information without
+the field's name.
+
+In scalar context, the lines are delived into one string, which is
+a little faster because that's the way they are stored internally...
+
+» example: 
+
+  my @lines = $field->folded;
+  print $field->folded;
+  print scalar $field->folded; # faster
+
+=item $obj-E<gt>B<foldedBody>( [$body] )
+
+Returns the body as a set of lines. In scalar context, this will be
+one line containing newlines.  Be warned about the newlines when you do
+pattern matching on the result of this method.
+
+The optional C<$body> argument changes the field's body.  The folding of the
+argument must be correct.
+
+=item $obj-E<gt>B<name>()
+
+Returns the name of this field, with all characters lower-cased for
+ease of comparison.  See L<Name()|Mail::Message::Field/"Attributes"> as well.
+
+=item $obj-E<gt>B<unfoldedBody>( [$body, [$wrap]] )
+
+Returns the body as one single line, where all folding information (if
+available) is removed.  This line will also NOT end on a new-line.
+
+The optional C<$body> argument changes the field's body.  The right folding is
+performed before assignment.  The C<$wrap> may be specified to enforce a
+folding size.
+
+» example: 
+
+  my $body = $field->unfoldedBody;
+  print "$field";   # via overloading
+
+=item $obj-E<gt>B<wellformedName>( [STRING] )
+
+(Instance method class method)
+As instance method, the current field's name is correctly formatted
+and returned.  When a C<STRING> is used, that one is formatted.
+
+» example: 
+
+  print Mail::Message::Field->Name('content-type')
+    # -->  Content-Type
+
+  my $field = $head->get('date');
+  print $field->Name;
+    # -->  Date
+
+=back
+
 =head2 The field
 
 =over 4
@@ -161,7 +240,7 @@ as L<length()|Mail::Message::Field/"The field">.
 =item $obj-E<gt>B<string>( [$wrap] )
 
 Returns the field as string.  By default, this returns the same as
-L<folded()|Mail::Message::Field/"Access to the body">. However, the optional C<$wrap> will cause to re-fold to take
+L<folded()|Mail::Message::Field/"Attributes">. However, the optional C<$wrap> will cause to re-fold to take
 place (without changing the folding stored inside the field).
 
 =item $obj-E<gt>B<toDisclose>()
@@ -173,135 +252,38 @@ See also L<Mail::Message::Head::Complete::printUndisclosed()|Mail::Message::Head
 
 =back
 
-=head2 Access to the name
-
-=over 4
-
-=item $obj-E<gt>B<Name>()
-
-Returns the name of this field in original casing.  See L<name()|Mail::Message::Field/"Access to the name"> as well.
-
-=item $obj-E<gt>B<name>()
-
-Returns the name of this field, with all characters lower-cased for
-ease of comparison.  See L<Name()|Mail::Message::Field/"Access to the name"> as well.
-
-=item $obj-E<gt>B<wellformedName>( [STRING] )
-
-(Instance method class method)
-As instance method, the current field's name is correctly formatted
-and returned.  When a C<STRING> is used, that one is formatted.
-
-» example: 
-
-  print Mail::Message::Field->Name('content-type')
-    # -->  Content-Type
-
-  my $field = $head->get('date');
-  print $field->Name;
-    # -->  Date
-
-=back
-
-=head2 Access to the body
-
-=over 4
-
-=item $obj-E<gt>B<body>()
-
-This method may not be what you want: the L<foldedBody()|Mail::Message::Field/"Access to the body"> and
-L<unfoldedBody()|Mail::Message::Field/"Access to the body"> are probably where you are looking for.  Those will
-return the full content of a field, even when it is structured.
-
-Returns the body of the field.  When this field is structured, it will
-be B<stripped> from everything what is behind the first semi-color (C<;>).
-In any case, the string is unfolded.
-Whether the field is structured is defined by L<isStructured()|Mail::Message::Field/"The field">.
-
-=item $obj-E<gt>B<folded>()
-
-Returns the folded version of the whole header.  When the header is
-shorter than the wrap length, a list of one line is returned.  Otherwise
-more lines will be returned, all but the first starting with at least
-one blank.  See also L<foldedBody()|Mail::Message::Field/"Access to the body"> to get the same information without
-the field's name.
-
-In scalar context, the lines are delived into one string, which is
-a little faster because that's the way they are stored internally...
-
-» example: 
-
-  my @lines = $field->folded;
-  print $field->folded;
-  print scalar $field->folded; # faster
-
-=item $obj-E<gt>B<foldedBody>( [$body] )
-
-Returns the body as a set of lines. In scalar context, this will be
-one line containing newlines.  Be warned about the newlines when you do
-pattern matching on the result of this method.
-
-The optional C<$body> argument changes the field's body.  The folding of the
-argument must be correct.
-
-=item $any-E<gt>B<stripCFWS>( [STRING] )
-
-Remove the I<comments> and I<folding white spaces> from the C<STRING>.  Without
-string and only as instance method, the L<unfoldedBody()|Mail::Message::Field/"Access to the body"> is being stripped
-and returned.
-
-WARNING: This operation is only allowed for structured header fields (which
-are defined by the various RFCs as being so.  You don't want parts within
-braces which are in the Subject header line to be removed, to give an
-example.
-
-=item $obj-E<gt>B<unfoldedBody>( [$body, [$wrap]] )
-
-Returns the body as one single line, where all folding information (if
-available) is removed.  This line will also NOT end on a new-line.
-
-The optional C<$body> argument changes the field's body.  The right folding is
-performed before assignment.  The C<$wrap> may be specified to enforce a
-folding size.
-
-» example: 
-
-  my $body = $field->unfoldedBody;
-  print "$field";   # via overloading
-
-=back
-
 =head2 Access to the content
 
 =over 4
 
 =item $obj-E<gt>B<addresses>()
 
-Returns a list of L<Mail::Address|Mail::Address> objects, which represent the
-e-mail addresses found in this header line.
+Returns a list of L<Mail::Address|Mail::Address> objects, which represent the e-mail addresses
+found in this header line.  Only applicable to fields which contain addresses.
 
 » example: 
 
-  my @addr = $message->head->get('to')->addresses;
-  my @addr = $message->to;
+  my @addrs = $message->get('to')->addresses;
+  my @addrs = $message->to;
+
+  # Better, uses Mail::Message::Field::Addresses
+  my @addrs = $message->study('to')->addresses;
 
 =item $obj-E<gt>B<attribute>( $name, [$value] )
 
-Get the value of an attribute, optionally after setting it to a new value.
-Attributes are part of some header lines, and hide themselves in the
-comment field.  If the attribute does not exist, then C<undef> is
-returned.  The attribute is still encoded.
+Get the value of an B<body> attribute, optionally after setting it
+to a new value.  Attributes are part of some header lines, and hide
+themselves in the comment field.  If the attribute does not exist,
+then C<undef> is returned.  The attribute is still encoded.
 
 » example: 
 
   my $field = Mail::Message::Field->new(
-   'Content-Type: text/plain; charset="us-ascii"');
+    'Content-Type: text/plain; charset="us-ascii"');
 
-  print $field->attribute('charset');
-    # --> us-ascii
+  print $field->attribute('charset');   # --> us-ascii
 
-  print $field->attribute('bitmap') || 'no'
-    # --> no
+  print $field->attribute('bitmap') || 'no'; # --> no
 
   $field->atrribute(filename => '/tmp/xyz');
   $field->print;
@@ -329,6 +311,28 @@ Whether the field is structured is defined by L<isStructured()|Mail::Message::Fi
 The I<comment> part of a header field often contains C<attributes>.  Often
 it is preferred to use L<attribute()|Mail::Message::Field/"Access to the content"> on them.
 
+=item $any-E<gt>B<dateToTimestamp>(STRING)
+
+Convert a C<STRING> which represents and RFC compliant time string into
+a timestamp like is produced by the local C<POSIX::time()> function.
+Only applicable to fields which contain a date.
+
+Better result:
+
+  my $df = $msg->study('Date') or return;
+  $df->time;
+
+=item $any-E<gt>B<stripCFWS>( [STRING] )
+
+Remove the I<comments> and I<folding white spaces> from the C<STRING>.  Without
+string and only as instance method, the L<unfoldedBody()|Mail::Message::Field/"Attributes"> is being stripped
+and returned.
+
+WARNING: This operation is only allowed for structured header fields (which
+are defined by the various RFCs as being so.  You don't want parts within
+braces which are in the Subject header line to be removed, to give an
+example.
+
 =item $obj-E<gt>B<study>()
 
 Study the header field in detail: turn on the full parsing and detailed
@@ -339,6 +343,7 @@ L<Mail::Message::Field::Full|Mail::Message::Field::Full> object.
 » example: 
 
   my $subject = $msg->head->get('subject')->study;
+  my $subject = $msg->get('subject')->study;   # same
   my $subject = $msg->head->study('subject');  # same
   my $subject = $msg->study('subject');        # same
 
@@ -371,18 +376,7 @@ performed whether this is right.
 
 =back
 
-=head2 Other methods
-
-=over 4
-
-=item $any-E<gt>B<dateToTimestamp>(STRING)
-
-Convert a C<STRING> which represents and RFC compliant time string into
-a timestamp like is produced by the C<time> function.
-
-=back
-
-=head2 Internals
+=head2 Parsing
 
 =over 4
 
@@ -416,7 +410,7 @@ mainly ignored because it would make folding too slow.
 =item $obj-E<gt>B<setWrapLength>( [$length] )
 
 Force the wrapping of this field to the specified C<$length> characters. The
-wrapping is performed with L<fold()|Mail::Message::Field/"Internals"> and the results stored within
+wrapping is performed with L<fold()|Mail::Message::Field/"Parsing"> and the results stored within
 the field object.
 
 » example: refolding the field
@@ -430,7 +424,7 @@ ascii fields.  The process is explained in L</Specifying field data>.
 
 =item $obj-E<gt>B<unfold>(STRING)
 
-The reverse action of L<fold()|Mail::Message::Field/"Internals">: all lines which form the body of a field
+The reverse action of L<fold()|Mail::Message::Field/"Parsing">: all lines which form the body of a field
 are joined into one by removing all line terminators (even the last).
 Possible leading blanks on the first line are removed as well.
 
@@ -650,19 +644,19 @@ many ways to process this data within the field.
 Returns the text of the body exactly as will be printed to file when
 L<print()|Mail::Message::Field/"The field"> is called, so name, main body, and attributes.
 
-=item * L<foldedBody()|Mail::Message::Field/"Access to the body">
+=item * L<foldedBody()|Mail::Message::Field/"Attributes">
 
 Returns the text of the body, like L<string()|Mail::Message::Field/"The field">, but without the name of
 the field.
 
-=item * L<unfoldedBody()|Mail::Message::Field/"Access to the body">
+=item * L<unfoldedBody()|Mail::Message::Field/"Attributes">
 
-Returns the text of the body, like L<foldedBody()|Mail::Message::Field/"Access to the body">, but then with all
+Returns the text of the body, like L<foldedBody()|Mail::Message::Field/"Attributes">, but then with all
 new-lines removed.  This is the normal way to get the content of
 unstructured fields.  Character-set encodings will still be in place.
 Fields are stringified into their unfolded representation.
 
-=item * L<stripCFWS()|Mail::Message::Field/"Access to the body">
+=item * L<stripCFWS()|Mail::Message::Field/"Access to the content">
 
 Returns the text of structured fields, where new-lines and comments are
 removed from the string.  This is a good start for parsing the field,
@@ -713,7 +707,7 @@ of strings and objects.  On the moment, objects are only used to help
 the construction on e-mail addresses, however you may add some of your
 own.
 
-The following rules (implemented in L<stringifyData()|Mail::Message::Field/"Internals">) are obeyed given
+The following rules (implemented in L<stringifyData()|Mail::Message::Field/"Parsing">) are obeyed given
 the argument is:
 
 =over 4
@@ -865,8 +859,8 @@ Cast by C<consume()>
 
 =head1 SEE ALSO
 
-This module is part of Mail-Message version 4.03,
-built on January 26, 2026. Website: F<http://perl.overmeer.net/CPAN/>
+This module is part of Mail-Message version 4.04,
+built on February 04, 2026. Website: F<http://perl.overmeer.net/CPAN/>
 
 =head1 LICENSE
 

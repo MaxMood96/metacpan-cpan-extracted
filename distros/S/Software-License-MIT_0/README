@@ -1,0 +1,42 @@
+Software::License::MIT_0
+
+This module is a Software::License subclass implementation of the MIT No Attribution
+License. The "MIT No Attribution" or "MIT-0" license is a variant of the permissive
+MIT license that removes the requirement for attribution.
+
+
+INSTALLATION
+
+To download and install this module, use your favorite CPAN client:
+
+    cpanm Software::License::MIT_0
+
+To do it manually, run the following commands (after downloading and unpacking
+the tarball):
+
+    perl Makefile.PL
+    make
+    make test
+    make install
+
+
+SUPPORT AND DOCUMENTATION
+
+After installing, you can find documentation for this module with the perldoc
+command:
+
+    perldoc Software::License::MIT_0
+
+You can also look for information at:
+
+    GitHub issue tracker (report bugs here)
+        https://github.com/ryoskzypu/Software-License-MIT_0/issues
+
+    Search CPAN
+        https://metacpan.org/dist/Software-License-MIT_0
+
+
+COPYRIGHT
+
+Copyright © 2026 ryoskzypu
+MIT-0 License. See LICENSE for details.

@@ -1,6 +1,6 @@
 package DBIx::Class::Async::Storage::DBI::Cursor;
 
-$DBIx::Class::Async::Storage::DBI::Cursor::VERSION   = '0.51';
+$DBIx::Class::Async::Storage::DBI::Cursor::VERSION   = '0.54';
 $DBIx::Class::Async::Storage::DBI::Cursor::AUTHORITY = 'cpan:MANWAR';
 
 use strict;
@@ -13,7 +13,7 @@ DBIx::Class::Async::Storage::DBI::Cursor - Asynchronous cursor for DBIx::Class R
 
 =head1 VERSION
 
-Version 0.51
+Version 0.54
 
 =cut
 
@@ -236,15 +236,30 @@ sub next {
 
 =head1 LIMITATIONS
 
-=over 4
+=head2 Stateless Iteration
 
-=item * Requires a ResultSet that supports paging via C<page> and C<rows>
+Unlike traditional DBI cursors, C<DBIx::Class::Async::Cursor> operates over a
+stateless worker pool. To prevent "Worker Starvation," it does not hold
+database-level cursors open. Instead:
 
-=item * Assumes that C<< $rs->search(...)->all >> returns a L<Future>
+* It requires a ResultSet that supports L<DBIx::Class> paging (C<page> and C<rows>).
 
-=item * Not thread-safe
+* It fetches data in discrete batches to keep workers available for other tasks.
 
-=back
+=head2 Non-Blocking Requirement
+
+The cursor assumes that the underlying C<search> operation returns an
+L<IO::Async::Future>. It is designed to work exclusively with the
+C<DBIx::Class::Async> bridge.
+
+=head2 Concurrency Safety
+
+The Cursor object is intended for use within a single event loop iteration
+or C<Future> chain. While the underlying worker pool is process-safe,
+sharing a single Cursor instance across multiple C<ithreads> is not
+supported and may result in undefined behavior.
+
+=cut
 
 =head1 SEE ALSO
 

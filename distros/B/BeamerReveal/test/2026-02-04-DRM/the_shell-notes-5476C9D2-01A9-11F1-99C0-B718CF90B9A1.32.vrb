@@ -1,0 +1,15 @@
+\frametitle{find: Locate Files}
+\begin{block}{Examples with Output}
+\begin{verbatim}
+$ find . -name "*.txt"
+./notes.txt
+./data/results.txt
+
+# Find directories only
+$ find . -type d -name "test*"
+./project/tests
+
+# Find files larger than 100MB
+$ find /var/log -size +100M
+\end{verbatim}
+\end{block}

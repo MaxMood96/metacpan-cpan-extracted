@@ -1,0 +1,26 @@
+\frametitle{Data Wrangling Overview}
+\begin{columns}
+\begin{column}{0.45\columnwidth}
+\begin{block}{}
+Cleaning, transforming, and analyzing data using command-line tools.
+
+\alert{Tasks:}
+\begin{itemize}
+\item Extract fields
+\item Count frequencies
+\item Filter \& Transform
+\item Reformat output
+\end{itemize}
+\end{block}
+\end{column}
+\begin{column}{0.5\columnwidth}
+\begin{block}{}
+\begin{itemize}
+\item \alert{Filtering:} \texttt{grep}, \texttt{head}, \texttt{tail}
+\item \alert{Sorting:} \texttt{sort}, \texttt{uniq}
+\item \alert{Editing:} \texttt{sed}, \texttt{awk}, \texttt{tr}
+\item \alert{Stats:} \texttt{wc}
+\end{itemize}
+\end{block}
+\end{column}
+\end{columns}

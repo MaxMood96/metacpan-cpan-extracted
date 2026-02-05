@@ -105,3 +105,6 @@ Revision history for LyricFinder
         others in random order, and even followed up by one to be searched last 
         (without repeating a call to a previously-searched module.
         - Misc. doc. touchups.
+1.60    2026/02/04
+        - LyricFinder::ChartLyrics - Removed, as Chartlyrics.com 
+        (api.chartlyrics.com) has shut down.

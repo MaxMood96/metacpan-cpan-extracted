@@ -1,0 +1,23 @@
+\frametitle{Think-Pair-Share: Redirection Pitfalls}
+\begin{block}{Sequence}
+\begin{verbatim}
+echo "Hello" > greeting.txt
+echo "World" >> greeting.txt
+echo "Goodbye" > greeting.txt
+cat greeting.txt
+\end{verbatim}
+\end{block}
+\begin{exampleblock}{Discussion}\label{sec:org6fb99fa}
+\begin{enumerate}
+\item What is the final content of \texttt{greeting.txt}?
+\item What happens if you run \texttt{cat greeting.txt > greeting.txt}? \alert{WARNING: Don't do this yet!}
+\item How can you save both errors and output to the same file?
+\end{enumerate}
+\end{exampleblock}
+\begin{alertblock}<2->{Answer}
+\begin{enumerate}[<+->]
+\item \alert{Goodbye} (The final \texttt{>} nuked previous content).
+\item The file becomes \alert{empty}! (The shell truncates the file for writing before \texttt{cat} can read it).
+\item \texttt{command \&> file}
+\end{enumerate}
+\end{alertblock}

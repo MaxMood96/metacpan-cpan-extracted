@@ -1,0 +1,19 @@
+\frametitle{Example: Auto-Backup}
+\begin{block}{A Robust Backup Script}
+\begin{verbatim}
+#!/bin/bash
+set -euo pipefail
+
+DEST="/backups/$(date +%Y-%m-%d)"
+mkdir -p "$DEST"
+
+for dir in "$@"; do
+  if [ -d "$dir" ]; then
+    echo "Backing up $dir..."
+    tar -czf "$DEST/$(basename "$dir").tar.gz" "$dir"
+  else
+    echo "Warning: $dir is not a directory" >&2
+  fi
+done
+\end{verbatim}
+\end{block}

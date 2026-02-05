@@ -1,0 +1,33 @@
+\frametitle{Logic and Conditionals}
+\begin{columns}
+\begin{column}{0.5\columnwidth}
+\begin{verbatim}
+if [ "$1" -gt 10 ]; then
+  echo "Large"
+elif [ -f "$1" ]; then
+  echo "It's a file"
+else
+  echo "Small/Unknown"
+fi
+\end{verbatim}
+\end{column}
+\begin{column}{0.45\columnwidth}
+\begin{center}
+\begin{tabular}{ll}
+Test & True if\ldots{}\\
+\hline
+\texttt{-f} & Regular file\\
+\texttt{-d} & Directory\\
+\texttt{-eq} & Equal (numeric)\\
+\texttt{-z} & Empty string\\
+\texttt{=} & Equal (string)\\
+\end{tabular}
+\end{center}
+\end{column}
+\end{columns}
+\begin{exampleblock}{Practice: File Safety}\label{sec:org2d0a908}
+\begin{enumerate}[<+->]
+\item Write a script that checks if a directory exists before creating it.
+\item \alert{Answer:} \texttt{if [ ! -d "\$dir" ]; then mkdir "\$dir"; fi}
+\end{enumerate}
+\end{exampleblock}

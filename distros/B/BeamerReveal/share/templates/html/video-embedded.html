@@ -13,8 +13,7 @@
     const encoded = `
 ---VIDEOEMBEDDEDB64---`;
     const bytes = Uint8Array.from(atob(encoded), c =>c.charCodeAt(0));
-    const blob = new Blob([bytes], { type: "---MIMETYPE---" });
-    
+    const blob = new Blob([bytes], { type: "---MIMETYPE---" });    
     const video = document.getElementById("---VIDEOID---");
     video.src = URL.createObjectURL(blob);
   </script>

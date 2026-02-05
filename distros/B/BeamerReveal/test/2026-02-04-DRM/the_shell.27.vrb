@@ -1,0 +1,11 @@
+\frametitle{Modifying PATH}
+\begin{exampleblock}{Adding to PATH}\label{sec:org83effdd}
+\begin{verbatim}
+export PATH="$HOME/my_tools:$PATH"
+\end{verbatim}
+
+This adds \texttt{my\_tools} to the beginning of your PATH, giving it priority.
+\end{exampleblock}
+\begin{alertblock}<2->{Rhetorical Question}
+Why might it be dangerous to add \texttt{.} (current directory) to the \alert{start} of your PATH?
+\end{alertblock}

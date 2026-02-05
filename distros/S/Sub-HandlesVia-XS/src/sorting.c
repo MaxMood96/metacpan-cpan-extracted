@@ -2,7 +2,7 @@ typedef struct {
 #ifdef USE_ITHREADS
     PerlInterpreter *my_perl;
 #endif
-    CV *callback; // can be NULL
+    CV *callback; /* can be NULL */
     SV *err;
 } sort_ctx_t;
 

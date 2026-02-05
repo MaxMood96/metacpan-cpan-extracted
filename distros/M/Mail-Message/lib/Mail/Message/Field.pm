@@ -1,4 +1,4 @@
-# This code is part of Perl distribution Mail-Message version 4.03.
+# This code is part of Perl distribution Mail-Message version 4.04.
 # The POD got stripped from this file by OODoc version 3.06.
 # For contributors see file ChangeLog.
 
@@ -10,7 +10,7 @@
 
 
 package Mail::Message::Field;{
-our $VERSION = '4.03';
+our $VERSION = '4.04';
 }
 
 use parent 'Mail::Reporter';
@@ -49,6 +49,45 @@ sub new(@)
 	$class->SUPER::new(@_);
 }
 
+
+#--------------------
+
+# attempt to change the case of a tag to that required by RFC822. That
+# being all characters are lowercase except the first of each
+# word. Also if the word is an `acronym' then all characters are
+# uppercase. We, rather arbitrarily, decide that a word is an acronym
+# if it does not contain a vowel and isn't the well-known 'Cc' or
+# 'Bcc' headers.
+
+my %wf_lookup = qw/mime MIME  ldap LDAP  soap SOAP  swe SWE  bcc Bcc  cc Cc  id ID/;
+
+sub wellformedName(;$)
+{	my $thing = shift;
+	my $name = @_ ? shift : $thing->name;
+
+	join '-',
+		map { $wf_lookup{lc $_} || ( /[aeiouyAEIOUY]/ ? ucfirst lc : uc ) }
+		split /\-/, $name, -1;
+}
+
+
+sub folded { $_[0]->notImplemented }
+
+
+sub body()
+{	my $self = shift;
+	my $body = $self->unfoldedBody;
+	$self->isStructured or return $body;
+
+	my ($first) = $body =~ m/^((?:"[^"]*"|'[^']*'|[^;])*)/;
+	$first =~ s/\s+$//r;
+}
+
+
+sub foldedBody { $_[0]->notImplemented }
+
+
+sub unfoldedBody { $_[0]->notImplemented }
 
 #--------------------
 
@@ -110,45 +149,6 @@ sub nrLines() { my @l = $_[0]->foldedBody; scalar @l }
 
 #--------------------
 
-# attempt to change the case of a tag to that required by RFC822. That
-# being all characters are lowercase except the first of each
-# word. Also if the word is an `acronym' then all characters are
-# uppercase. We, rather arbitrarily, decide that a word is an acronym
-# if it does not contain a vowel and isn't the well-known 'Cc' or
-# 'Bcc' headers.
-
-my %wf_lookup = qw/mime MIME  ldap LDAP  soap SOAP  swe SWE  bcc Bcc  cc Cc  id ID/;
-
-sub wellformedName(;$)
-{	my $thing = shift;
-	my $name = @_ ? shift : $thing->name;
-
-	join '-',
-		map { $wf_lookup{lc $_} || ( /[aeiouyAEIOUY]/ ? ucfirst lc : uc ) }
-		split /\-/, $name, -1;
-}
-
-#--------------------
-
-sub folded { $_[0]->notImplemented }
-
-
-sub body()
-{	my $self = shift;
-	my $body = $self->unfoldedBody;
-	$self->isStructured or return $body;
-
-	my ($first) = $body =~ m/^((?:"[^"]*"|'[^']*'|[^;])*)/;
-	$first =~ s/\s+$//r;
-}
-
-
-sub foldedBody { $_[0]->notImplemented }
-
-
-sub unfoldedBody { $_[0]->notImplemented }
-
-
 sub stripCFWS($)
 {	my $thing  = shift;
 
@@ -164,7 +164,7 @@ sub stripCFWS($)
 	while(@s)
 	{	my $s = shift @s;
 
-			if(CORE::length($r)&& substr($r, -1) eq "\\")  { $r .= $s }
+		   if(CORE::length($r)&& substr($r, -1) eq "\\")  { $r .= $s }
 		elsif($s eq '"')   { $in_dquotes = not $in_dquotes; $r .= $s }
 		elsif($s eq '(' && !$in_dquotes) { $open_paren++ }
 		elsif($s eq ')' && !$in_dquotes) { $open_paren-- }
@@ -176,7 +176,6 @@ sub stripCFWS($)
 	$r =~ s/\s+/ /grs =~ s/\s+$//r =~ s/^\s+//r;
 }
 
-#--------------------
 
 sub comment(;$)
 {	my $self = shift;
@@ -290,7 +289,6 @@ sub study()
 	Mail::Message::Field::Full->new(scalar $self->folded);
 }
 
-#--------------------
 
 sub dateToTimestamp($)
 {	my $string = $_[0]->stripCFWS($_[1]);
@@ -301,7 +299,6 @@ sub dateToTimestamp($)
 	require Date::Parse;
 	Date::Parse::str2time($string, 'GMT');
 }
-
 
 #--------------------
 

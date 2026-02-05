@@ -1,0 +1,21 @@
+\frametitle{sed: Addressing and Ranges}
+\begin{block}{Target Specific Lines}
+\begin{verbatim}
+# Delete only the first 2 lines
+$ sed '1,2d' file.txt
+
+# Print only lines 5 through 10
+$ sed -n '5,10p' file.txt
+
+# Substitute only on lines containing 'error'
+$ sed '/error/s/false/true/' log.txt
+\end{verbatim}
+\end{block}
+\begin{exampleblock}{Practice: config cleanup}\label{sec:org2a90bc6}
+\begin{enumerate}
+\item Task: Remove all comments (\texttt{\#}) and empty lines from a file.
+\end{enumerate}
+\end{exampleblock}
+\begin{alertblock}<2->{Answer}
+\texttt{sed -e '/\textasciicircum{}\#/d' -e '/\textasciicircum{}\$/d' config.txt}
+\end{alertblock}

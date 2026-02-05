@@ -114,7 +114,7 @@ subtest 'Order operations' => sub {
                        ->get;
 
     isa_ok($order, 'DBIx::Class::Async::Row');
-    is($order->amount, 49.99);
+    is(sprintf('%.2f', $order->amount), '49.99');
     is($order->user_id, $user->id);
 
     # Test belongs_to

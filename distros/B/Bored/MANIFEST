@@ -1,0 +1,12 @@
+Changes
+lib/Bored.pm
+Bored.xs
+Makefile.PL
+MANIFEST
+ppport.h
+README
+t/00-load.t
+t/01-basic.t
+t/02-void.t
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

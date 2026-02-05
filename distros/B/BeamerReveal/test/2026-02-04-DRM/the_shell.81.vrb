@@ -1,0 +1,30 @@
+\frametitle{Robust Scripting and Debugging}
+\begin{columns}
+\begin{column}{0.48\columnwidth}
+\begin{alertblock}{}
+\texttt{set -euo pipefail}
+
+\begin{itemize}
+\item \alert{-e}: Exit on error
+\item \alert{-u}: Error on unset var
+\item \alert{pipefail}: Pipeline fails if ANY part fails
+\end{itemize}
+\end{alertblock}
+\end{column}
+\begin{column}{0.48\columnwidth}
+\begin{block}{}
+\begin{itemize}
+\item \alert{set -x}: Print commands
+\item \alert{bash -n}: Check syntax
+\item \alert{shellcheck}: (External tool) highly recommended!
+\end{itemize}
+\end{block}
+\end{column}
+\end{columns}
+\begin{exampleblock}{Practice: Safety First}\label{sec:org4491911}
+\begin{enumerate}[<+->]
+\item What happens if you run \texttt{rm -rf \$DIR/file} and \texttt{\$DIR} is undefined?
+\item How does \texttt{set -u} prevent this disaster?
+\item \alert{Answer:} Without \texttt{-u}, it runs \texttt{rm -rf /file}. With \texttt{-u}, the script exits immediately.
+\end{enumerate}
+\end{exampleblock}

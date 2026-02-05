@@ -1,0 +1,20 @@
+\frametitle{More awk Examples}
+\begin{block}{Advanced Features}
+\begin{verbatim}
+# Formatted printing (printf)
+awk '{printf "Name: %-10s ID: %03d\n", $1, $2}' students.txt
+
+# Length of string
+awk 'length($0) > 80' file.txt  # Print lines > 80 chars
+
+# Logical conditions (AND/OR)
+awk '$1 == "POST" && $9 == 200' access.log
+
+# Range pattern (start, end)
+awk '/START/,/END/' data.txt
+
+# Filter by timestamp range and format output
+awk '$1 >= "2026-01-20" && $1 <= "2026-01-25" \
+  {printf "[%s %s] %s\n", $1, $2, substr($0, index($0,$3))}' system.log
+\end{verbatim}
+\end{block}

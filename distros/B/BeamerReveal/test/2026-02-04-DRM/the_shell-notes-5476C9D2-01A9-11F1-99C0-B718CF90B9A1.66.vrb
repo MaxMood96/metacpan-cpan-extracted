@@ -1,0 +1,19 @@
+\frametitle{Pattern Cheat Sheet}
+\begin{center}
+\begin{tabular}{lll}
+Type & Pattern & Matches\\
+\hline
+\alert{Anchors} & \texttt{\textasciicircum{}} / \texttt{\$} & Start / End of line\\
+\alert{Quantify} & \texttt{*} / \texttt{+} & Zero+ / One+ repetitions\\
+\alert{Groups} & \texttt{[]} / \texttt{()} & Sets / Capture groups\\
+\alert{Wildcard} & \texttt{.} & Any single character\\
+\end{tabular}
+\end{center}
+\begin{exampleblock}<2->{Basic Examples}\label{sec:org5bb71c4}
+\begin{itemize}[<+->]
+\item \texttt{\textasciicircum{}apple} matches "apple pie" but not "red apple"
+\item \texttt{dog\$} matches "hot dog" but not "dogwood"
+\item \texttt{ba+na} matches "banana", "baana", but not "bana"
+\item \texttt{[0-9]\{3\}} matches exactly three digits
+\end{itemize}
+\end{exampleblock}

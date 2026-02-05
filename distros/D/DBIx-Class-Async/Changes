@@ -1,5 +1,35 @@
 Revision history for DBIx::Class::Async
 
+0.54 2026-02-04
+     [TEST SUITE]
+     - Fixed t/145-mojo-integration.t to prevent compile-time failures on
+       environments where Mojo::IOLoop is not installed.
+
+     [DOCUMENTATION]
+     - Formalised Event Loop Agnosticism: Explicitly documented the
+       ability to inject external IO::Async::Loop instances.
+
+0.53 2026-02-04
+     [TEST SUITE]
+     - Added t/144-loop-engine.t: Validates "Smart Default" auto-initialisation
+       and verified "Injection Pattern" for custom IO::Async::Loop instances.
+     - Added t/145-mojo-integration.t: Established formal support for
+       Mojo::IOLoop environments, proving non-blocking co-existence
+       between DBIC workers and Mojo timers.
+
+     [DOCUMENTATION]
+     - Updated DBI.pm/Storage.pm: Clearly defined the "Master-Worker"
+       architecture and the separation of the Parent process from the
+       DBI Handle (Ghost DBH pattern).
+     - Enhanced CAVEATS: Documented why traditional txn_begin/commit
+       blocks are replaced by the atomic instruction-set logic of txn_do.
+
+0.52 2026-02-04
+     - Proposed patch for issue #4 (-Duselongdouble), thanks @eserte.
+     - Proposed patch for issue #9 (seg fault), thanks @eserte.
+     - Proposed patch for issue #7 (missing prereq). thanks @szabgab.
+     - Merged pull request #8 (add more versions of Perl to CI), thanks @szabgab.
+
 0.51 2026-02-03
      - Bumped version as PAUSE was unhappy with previous tar ball.
 
@@ -8,8 +38,8 @@ Revision history for DBIx::Class::Async
      - Complete rewrite of the Storage and Persistence layer to use a
        decoupled "Bridge & Worker" architecture.
      - Implementation of DBIx::Class::Async::Row lifecycle management:
-        * Introduced "Dirty" column tracking to minimize SQL UPDATE payloads.
-        * Added shadow-key optimization for high-speed attribute access.
+        * Introduced "Dirty" column tracking to minimise SQL UPDATE payloads.
+        * Added shadow-key optimisation for high-speed attribute access.
         * Robust AUTOLOAD mechanism for transparent ResultSet/Row interaction.
      - Enhanced Race Condition Recovery:
         * find_or_create() now handles unique constraint collisions
@@ -61,7 +91,7 @@ Revision history for DBIx::Class::Async
      - [FIX] Resolved "Cannot update row: not in storage" errors in
        complex workflows by propagating storage state through recursive
        relationship inflation.
-     - [REFACTOR] Centralized row inflation logic into Async.pm bridge to
+     - [REFACTOR] Centralised row inflation logic into Async.pm bridge to
        ensure consistent object creation across all ResultSet fetch paths.
      - [FIX] Updated find_or_new to correctly distinguish between persistent
        and transient objects.

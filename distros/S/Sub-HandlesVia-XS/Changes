@@ -6,6 +6,25 @@ Home page:    <https://metacpan.org/release/Sub-HandlesVia-XS>
 Bug tracker:  <https://github.com/tobyink/p5-sub-handlesvia-xs/issues>
 Maintainer:   Toby Inkster (TOBYINK) <tobyink@cpan.org>
 
+0.003004	2026-02-04
+
+ [ Bug Fixes ]
+ - Fix for_each2 on older Perls, before around 5.22.
+ - More C89 fixes.
+
+0.003003	2026-02-04
+
+ [ Bug Fixes ]
+ - Avoid redefining the newAV_mortal macro.
+
+ [ Packaging ]
+ - Remove superfluous files from packaging.
+
+0.003002	2026-02-04
+
+ [ Bug Fixes ]
+ - Make all the C code C89-compliant.
+
 0.003001	2026-02-03
 
  [ Bug Fixes ]
@@ -65,7 +84,7 @@ Maintainer:   Toby Inkster (TOBYINK) <tobyink@cpan.org>
    better.
  - Change missing parameter error messages to 'Wrong number of parameters'
    for closer consistency with Type::Params.
- - Check indices passed to get, set, and accessor methods are actually
+ - Check indices pa to get, set, and accessor methods are actually
    integers.
  - Check parameters passed to sort methods are actually coderefs.
  - Check strings passed to join methods are actually strings.

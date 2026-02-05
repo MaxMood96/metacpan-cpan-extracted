@@ -1,0 +1,18 @@
+Revision history for Plack-Middleware-ProofOfWork
+
+0.21  2026-02-04
+    - Corrected repository URLs to https://github.com/pstadt/Plack-Middleware-ProofOfWork
+    - Updated all META files with correct repository path
+    - Updated Makefile.PL with correct repository path
+
+0.20  2026-02-04
+    - First public CPAN release
+    - Added META.json and META.yml files
+    - Complete English documentation
+    - Professional appearance without emojis
+    - Correct copyright year (2026)
+    - Bot verification with DNS checks (default level 2)
+    - Fractional difficulty support (e.g. 4.5)
+    - External HTML and JavaScript templates
+    - CSS customization support
+    - Comprehensive test suite

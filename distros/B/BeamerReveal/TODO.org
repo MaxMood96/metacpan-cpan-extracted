@@ -1,7 +1,17 @@
 - [ ] Windows installer (for the perl package + the pdftoppm Poppler)
 - [X] make menu use short title entries instead of long ones
 - [X] insert facility for animations to generate multiple handouts slides
-- [ ] insert speaker notes (in text mode)
 - [X] insert speaker notes (graphical)
 - [ ] make filenames of ancillary files unique / not changing
 - [X] make inline version for all media objects
+- [-] finish embed mode (to embed !everything!)
+  - [X] embedding of slides and notes
+  - [ ] embedding of animations and stills
+- [ ] fix problem with missing handout progress in stills
+      (make default handout progress based on pdf progress)
+- [-] enable autoslide option:
+  - [X] global
+  - [X] per slide
+  - [ ] per element
+- [X] nakijken negatieve plaatsing van elementen
+  (dit kan zonder problemen)

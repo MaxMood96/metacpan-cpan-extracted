@@ -1,0 +1,16 @@
+\frametitle{More sed Examples}
+\begin{block}{Advanced Usage}
+\begin{verbatim}
+# Change delimiter (useful for paths)
+sed 's|/usr/local|/opt|g' paths.txt
+
+# Backreferences (Swap first two words)
+echo "Hello World" | sed 's/\(\w\+\) \(\w\+\)/\2 \1/'
+
+# Multiple commands
+sed -e 's/foo/bar/g' -e 's/baz/qux/g' file.txt
+
+# In-place editing (GNU/BSD differ; macOS needs -i '')
+sed -i.bak 's/debug/info/g' config.yml
+\end{verbatim}
+\end{block}

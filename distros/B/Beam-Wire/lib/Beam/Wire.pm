@@ -1,5 +1,5 @@
 package Beam::Wire;
-our $VERSION = '1.029';
+our $VERSION = '1.030';
 # ABSTRACT: Lightweight Dependency Injection Container
 
 #pod =head1 SYNOPSIS
@@ -395,8 +395,13 @@ sub normalize_config {
 #pod
 #pod =item class
 #pod
-#pod The class name of an object to create. Can be combined with C<method>,
-#pod and C<args>. An object of any class can be created with Beam::Wire.
+#pod The class name of an object to create. Can be combined with C<version>,
+#pod C<method>, and C<args>. An object of any class can be created with Beam::Wire.
+#pod
+#pod =item version
+#pod
+#pod The minimum version required for a class based service. Has to be combined with
+#pod C<class>.
 #pod
 #pod =item args
 #pod
@@ -573,7 +578,7 @@ sub create_service {
         config => \%service_info,
     );
 
-    use_module( $service_info{class} );
+    $service_info{version} ? use_module( $service_info{class}, $service_info{version} ) : use_module( $service_info{class} );
 
     if ( my $with = $service_info{with} ) {
         my @roles = ref $with ? @{ $with } : ( $with );
@@ -885,6 +890,7 @@ sub get_meta_names {
         method      => "${prefix}method",
         args        => "${prefix}args",
         class       => "${prefix}class",
+        version     => "${prefix}version",
         extends     => "${prefix}extends",
         sub         => "${prefix}sub",
         call        => "${prefix}call",
@@ -1408,7 +1414,7 @@ Beam::Wire - Lightweight Dependency Injection Container
 
 =head1 VERSION
 
-version 1.029
+version 1.030
 
 =head1 SYNOPSIS
 
@@ -1586,8 +1592,13 @@ contain the following keys:
 
 =item class
 
-The class name of an object to create. Can be combined with C<method>,
-and C<args>. An object of any class can be created with Beam::Wire.
+The class name of an object to create. Can be combined with C<version>,
+C<method>, and C<args>. An object of any class can be created with Beam::Wire.
+
+=item version
+
+The minimum version required for a class based service. Has to be combined with
+C<class>.
 
 =item args
 
@@ -1941,7 +1952,7 @@ Al Newkirk <anewkirk@ana.io>
 
 =head1 CONTRIBUTORS
 
-=for stopwords Al Tom Ben Moon Bruce Armstrong Diab Jerius Kent Fredric mauke Mohammad S Anwar mohawk2 Sven Willenbuecher
+=for stopwords Al Tom Ben Moon Bruce Armstrong Diab Jerius Kent Fredric mauke Mohammad S Anwar mohawk2 Sven Willenbuecher XSven
 
 =over 4
 
@@ -1980,6 +1991,10 @@ mohawk2 <mohawk2@users.noreply.github.com>
 =item *
 
 Sven Willenbuecher <sven.willenbuecher@kuehne-nagel.com>
+
+=item *
+
+XSven <XSven@users.noreply.github.com>
 
 =back
 

@@ -1,0 +1,37 @@
+\frametitle{Environment Variables}
+\begin{columns}
+\begin{column}{0.48\columnwidth}
+\begin{definition}[Definition]\label{sec:orgaa2da59}
+Variables that define the environment in which your programs run.
+\end{definition}
+\begin{block}{Common Variables}
+\begin{center}
+\begin{tabular}{ll}
+Var & Meaning\\
+\hline
+\texttt{PATH} & Command search\\
+\texttt{HOME} & Home directory\\
+\texttt{USER} & Username\\
+\texttt{PWD} & Current dir\\
+\end{tabular}
+\end{center}
+\end{block}
+\end{column}
+\begin{column}{0.48\columnwidth}
+\begin{block}{Usage Examples}
+\begin{verbatim}
+# Display
+echo $USER
+
+# Set (local to shell)
+MY_VAR="value"
+
+# Export (available to child procs)
+export MY_VAR="value"
+
+# View all
+env | head
+\end{verbatim}
+\end{block}
+\end{column}
+\end{columns}

@@ -1,0 +1,21 @@
+\frametitle{Think-Pair-Share: Navigation Puzzle}
+\begin{block}{The Path}
+You start in \texttt{/home/user/docs}. You run the following command:
+
+\begin{verbatim}
+cd .././photos/../././docs/../../
+\end{verbatim}
+\end{block}
+\begin{exampleblock}{The Question}\label{sec:org030ec48}
+Where are you now? Work with a partner to trace the path step-by-step.
+\end{exampleblock}
+\begin{alertblock}<2->{Answer}
+\alert{/home}
+\begin{enumerate}[<+->]
+\item \texttt{..} \(\rightarrow\) \texttt{/home/user}
+\item \texttt{./photos} \(\rightarrow\) \texttt{/home/user/photos}
+\item \texttt{..} \(\rightarrow\) \texttt{/home/user}
+\item \texttt{././docs} \(\rightarrow\) \texttt{/home/user/docs}
+\item \texttt{../../} \(\rightarrow\) \texttt{/home}
+\end{enumerate}
+\end{alertblock}

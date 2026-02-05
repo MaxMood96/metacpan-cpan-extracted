@@ -13,7 +13,7 @@
 # ABSTRACT: Analyze chess games in PGN format
 
 package Chess::Plisco::Engine::LimitsType;
-$Chess::Plisco::Engine::LimitsType::VERSION = 'v1.0.2';
+$Chess::Plisco::Engine::LimitsType::VERSION = 'v1.0.3';
 use strict;
 
 sub new {

@@ -3,14 +3,13 @@ package Check::NetworkSpans;
 use 5.006;
 use strict;
 use warnings;
-use Rex::Commands::Gather;
-use Regexp::IPv4 qw($IPv4_re);
-use Regexp::IPv6 qw($IPv6_re);
-use Scalar::Util qw(looks_like_number);
-use File::Temp   qw/ tempdir /;
-use String::ShellQuote;
-use JSON;
-use Data::Dumper;
+use Rex::Commands::Gather qw( network_interfaces );
+use Regexp::IPv4          qw($IPv4_re);
+use Regexp::IPv6          qw($IPv6_re);
+use Scalar::Util          qw(looks_like_number);
+use File::Temp            qw( tempdir );
+use String::ShellQuote    qw(shell_quote);
+use JSON                  qw(decode_json);
 
 =head1 NAME
 
@@ -18,11 +17,11 @@ Check::NetworkSpans - See if bidirectional traffic is being seen on spans.
 
 =head1 VERSION
 
-Version 0.0.2
+Version 0.1.0
 
 =cut
 
-our $VERSION = '0.0.2';
+our $VERSION = '0.1.0';
 
 =head1 SYNOPSIS
 
@@ -365,6 +364,11 @@ sub check {
 			$ignore_IPs_int++;
 		}
 		$filter =~ s/^ //;
+		if ( $ignore_IPs_int > 0 ) {
+			$filter = $filter . ' and not arp';
+		} else {
+			$filter = 'not arp';
+		}
 		if ( $self->{debug} ) {
 			print 'DEBUG: Finished generating filter... filter=' . $filter . "\n";
 		}
@@ -389,14 +393,14 @@ sub check {
 			print 'DEBUG: calling tshark for span '
 				. $span_name
 				. "\nDEBUG: args... '"
-				. join( '\' ', @tshark_args ) . "'\n";
+				. join( '\' \'', @tshark_args ) . "'\n";
 			print "DEBUG: calling env...\n";
 			system('env');
 			system(@tshark_args);
 		} else {
 			push( @tshark_args, '-Q' );
 			my @tshark_args_quoted;
-			my $command=shell_quote(@tshark_args);
+			my $command       = shell_quote(@tshark_args);
 			my $tshark_output = `$command 2>&1`;
 		}
 		if ( $self->{debug} ) {
@@ -582,8 +586,8 @@ sub check {
 						&& defined( $packet->{_source}{layers}{tcp}{'tcp.srcport'} )
 					)
 					|| (   defined( $packet->{_source}{layers}{udp} )
-						&& defined( $packet->{_source}{layers}{udp}{'tcp.dstport'} )
-						&& defined( $packet->{_source}{layers}{udp}{'tcp.srcport'} ) )
+						&& defined( $packet->{_source}{layers}{udp}{'udp.dstport'} )
+						&& defined( $packet->{_source}{layers}{udp}{'udp.srcport'} ) )
 				)
 				)
 			{
@@ -800,9 +804,9 @@ sub check {
 			my $message = 'missing interfaces... ' . join( ',', @missing_interfaces );
 			push( @{ $results->{$level} }, $message );
 		}
-	}else {
+	} else {
 		push( @{ $results->{oks} }, 'no missing interfaces' );
-	} ## end if ( $#{ $self->{interfaces_missing} } >= ...)
+	}
 
 	# sets the final status
 	# initially set to 0, OK
