@@ -89,7 +89,8 @@ test_psgi $app, sub {
     
     # Test 5: Invalid cookie should return challenge
     {
-        my $req = GET "/", 
+        my $req = GET "/",
+            'User-Agent' => 'Mozilla/5.0 (Test Browser)',
             'Cookie' => 'test_pow=invalid_token';
         
         my $res = $cb->($req);

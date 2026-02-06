@@ -4,7 +4,7 @@ package App::mdee;
 # POD documentation is appended from script/mdee at release time.
 # See minil.toml for details.
 
-our $VERSION = "0.10";
+our $VERSION = "0.11";
 
 1;
 =encoding utf-8
@@ -20,6 +20,7 @@ mdee - em·dee, Markdown Easy on the Eyes
      -h  --help             show help
          --version          show version
      -d  --debug            debug level (repeatable)
+     -x  --[no-]trace       trace mode (set -x)
      -n  --dryrun           dry-run mode
      -s  --style=#          output style (nup/pager/cat/filter/raw)
      -f  --filter           shortcut for --style=filter
@@ -44,7 +45,7 @@ mdee - em·dee, Markdown Easy on the Eyes
 
 =head1 VERSION
 
-Version 0.10
+Version 0.11
 
 =cut
 =head1 DESCRIPTION
@@ -108,6 +109,12 @@ Above, plus full command lines for each pipeline stage.
 
 =back
 
+=item B<-x>, B<--trace>, B<--no-trace>
+
+Enable or disable shell trace mode (C<set -x>).  Useful for
+debugging script execution.  Can be toggled: C<-x --no-x> enables
+then disables tracing.
+
 =item B<-n>, B<--dryrun>
 
 Dry-run mode. Show the pipeline without executing.
@@ -162,6 +169,9 @@ outputs through a pager (C<$PAGER> or C<less>) instead of nup.
 Enable or disable line folding for list items.  When enabled, long
 lines in list items are wrapped with proper indentation using
 L<ansifold(1)|App::ansifold>.  Default is enabled.
+
+Supported list markers: C<*>, C<->, C<1.>, C<1)>, C<#.>, C<#)>.
+The C<#.> and C<#)> forms are Pandoc's auto-numbered list syntax.
 
 =item B<--[no-]table>
 
@@ -564,36 +574,14 @@ Code block detection follows the CommonMark specification:
 
 =back
 
-B<Color Specifications>
-
-Colors are specified using L<Term::ANSIColor::Concise> format.
-The C<--cm> option maps colors to captured groups.  For example,
-C<L00DE/${base}> specifies gray foreground on base-colored background.
-
-The color specification supports modifiers:
-
-=over 4
-
-=item * C<+y10> / C<-y10>: Adjust luminance by percentage
-
-=item * C<=y50>: Set absolute luminance
-
-=item * C<D>: Bold, C<U>: Underline, C<E>: Erase line
-
-=back
-
-Example greple invocation:
-
-    greple -G --ci=G --all --need=0 \
-        --cm 'L00DE/${base}' -E '^#\h+.*' \
-        --cm '${base}D' -E '\*\*.*?\*\*' \
-        file.md
-
 =head4 Text Folding
 
 The second stage wraps long lines in list items using L<ansifold(1)|App::ansifold>
 via L<Greple::tee>.  It preserves ANSI escape sequences and maintains
 proper indentation for nested lists.
+
+Recognized list markers include C<*>, C<->, C<1.>, C<1)>, C<#.>,
+and C<#)>.  The C<#> marker is Pandoc's auto-numbered list syntax.
 
 The folding width is controlled by C<--width> option (default: 80).
 
@@ -633,7 +621,25 @@ after theme loading.  The base color is determined by the
 C<--base-color> option (default: RoyalBlue) with automatic luminance
 adjustment based on mode (C<=y25> for light, C<=y80> for dark).
 
-=head4 Terminal Mode Detection
+=head3 Color Specifications
+
+Colors are specified using L<Term::ANSIColor::Concise> format.
+The C<--cm> option maps colors to captured groups.  For example,
+C<L00DE/${base}> specifies gray foreground on base-colored background.
+
+The color specification supports modifiers:
+
+=over 4
+
+=item * C<+y10> / C<-y10>: Adjust luminance by percentage
+
+=item * C<=y50>: Set absolute luminance
+
+=item * C<D>: Bold, C<U>: Underline, C<E>: Erase line
+
+=back
+
+=head3 Terminal Mode Detection
 
 B<em·dee> uses L<Getopt::EX::termcolor> to detect terminal background
 luminance.  If luminance is below 50%, dark mode is automatically

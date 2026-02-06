@@ -2,6 +2,7 @@
 
 use strict;
 use warnings;
+
 use Test::More;
 use File::Temp qw(tempdir);
 use File::Spec::Functions qw(catfile);
@@ -12,8 +13,7 @@ use lib 't/lib';
 
 my $dir     = tempdir(CLEANUP => 1);
 my $db_file = catfile($dir, 'test.db');
-
-my $dbh = DBI->connect("dbi:SQLite:dbname=$db_file", "", "", {
+my $dbh     = DBI->connect("dbi:SQLite:dbname=$db_file", "", "", {
     RaiseError => 1,
     AutoCommit => 1,
 });
@@ -28,72 +28,72 @@ $dbh->do(q{
 $dbh->do(q{ INSERT INTO users (name) VALUES ('Alice') });
 $dbh->do(q{ INSERT INTO users (name) VALUES ('Bob') });
 $dbh->do(q{ INSERT INTO users (name) VALUES ('Charlie') });
-
 $dbh->disconnect;
 
 require_ok('Test::Schema');
-require_ok('Test::Schema::Result::User');
-require_ok('DBIx::Class::Async');
+require_ok('DBIx::Class::Async::Schema');
 
-my $loop  = IO::Async::Loop->new;
-my $async = DBIx::Class::Async->new(
-    schema_class => 'Test::Schema',
-    connect_info => [
-        "dbi:SQLite:dbname=$db_file",
-        '',
-        '',
-        { sqlite_unicode => 1 },
-    ],
-    workers => 2,
-    loop    => $loop,
+my $loop   = IO::Async::Loop->new;
+my $schema = DBIx::Class::Async::Schema->connect(
+    "dbi:SQLite:dbname=$db_file",
+    '',
+    '',
+    { sqlite_unicode => 1 },
+    {
+        schema_class => 'Test::Schema',
+        workers      => 2,
+        loop         => $loop,
+    }
 );
 
-subtest 'Count' => sub {
+my $async = $schema;
 
-    my $count = $async->count('User')->get;
-    is($count, 3, 'Count returns 3 users');
+subtest 'Count' => sub {
+    my $count = $schema->resultset('User')->count->get;
+    is($count, 3, 'Count returns 3 users via ResultSet proxy');
 };
 
 subtest 'Find' => sub {
-
-    my $user = $async->find('User', 1)->get;
+    my $user = $schema->resultset('User')->find(1)->get;
     ok($user, 'Find returns a user');
-    is($user->{name}, 'Alice', 'Found user is Alice');
+
+    isa_ok($user, 'DBIx::Class::Async::Anon::Test_Schema_Result_User');
+
+    is($user->{name}, 'Alice', 'Found user is Alice via hash access');
+
+    is($user->name, 'Alice', 'Found user is Alice via accessor');
 };
 
 subtest 'Search' => sub {
-
-    my $users = $async->search('User', { name => 'Bob' })->get;
+    my $users = $schema->resultset('User')->search({ name => 'Bob' })->all->get;
     is($users->[0]{name}, 'Bob', 'Search finds Bob');
 };
 
 subtest 'Create' => sub {
-
-    my $result = $async->create('User', { name => 'David' })->get;
+    my $result = $schema->resultset('User')->create({ name => 'David' })->get;
     ok($result, 'Create succeeded');
+    is($result->{name}, 'David', 'Created user name matches');
 
-    my $count = $async->count('User')->get;
+    my $count = $schema->resultset('User')->count->get;
     is($count, 4, 'Count increased to 4');
 };
 
 subtest 'Update' => sub {
+    my $result = $schema->resultset('User')->search({ id => 1 })->update({ name => 'Alice Updated' })->get;
+    ok($result, 'Update command succeeded');
 
-    my $result = $async->update('User', 1, { name => 'Alice Updated' })->get;
-    ok($result, 'Update succeeded');
-
-    my $user = $async->find('User', 1)->get;
-    is($user->{name}, 'Alice Updated', 'User was updated');
+    my $user = $schema->resultset('User')->find(1)->get;
+    is($user->{name}, 'Alice Updated', 'User was updated in the DB');
 };
 
 subtest 'Delete' => sub {
+    my $result = $schema->resultset('User')->search({ id => 2 })->delete->get;
+    ok($result, 'Delete command succeeded');
 
-    my $result = $async->delete('User', 2)->get;
-    ok($result, 'Delete succeeded');
-
-    my $count = $async->count('User')->get;
+    my $count = $schema->resultset('User')->count->get;
     is($count, 3, 'Count decreased to 3');
 };
 
-$async->disconnect if $async->can('disconnect');
+$schema->storage->disconnect if $schema->storage->can('disconnect');
 
-done_testing();
+done_testing;

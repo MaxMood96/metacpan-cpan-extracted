@@ -1,5 +1,9 @@
 Revision history for URI-Shorten
 
+1.005 2026-02-05 TEODESIAN
+    - Remove unneeded deps from BEGIN
+    - Add note about GRANTS
+
 1.004 2025-02-19 TEODESIAN
     - Add support for mysql/postgres
     - Add support for alternative table/index names

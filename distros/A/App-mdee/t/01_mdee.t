@@ -180,6 +180,34 @@ subtest 'tee fold execution' => sub {
     like($out, qr/\e\[/, 'output contains ANSI escape sequences');
 };
 
+# Test: list marker patterns in fold
+subtest 'list marker patterns' => sub {
+    use File::Temp qw(tempfile);
+    my $long = "x" x 80;
+
+    # Helper: count output lines from fold
+    my $fold_lines = sub {
+        my ($input) = @_;
+        my ($fh, $tmp) = tempfile(SUFFIX => '.md', UNLINK => 1);
+        print $fh $input;
+        close $fh;
+        my $out = `$mdee --no-nup --no-table --fold --width=40 --mode=light $tmp 2>&1`;
+        return split /\n/, $out;
+    };
+
+    # 1. (traditional) should fold
+    ok($fold_lines->("1. $long\n") > 1, '1. list item is folded');
+
+    # 1) (CommonMark paren) should fold
+    ok($fold_lines->("1) $long\n") > 1, '1) list item is folded');
+
+    # #. (Pandoc auto-number) should fold
+    ok($fold_lines->("    #. $long\n") > 1, '#. list item is folded');
+
+    # #) should fold
+    ok($fold_lines->("    #) $long\n") > 1, '#) list item is folded');
+};
+
 # Test: tee module with table (actual execution)
 subtest 'tee table execution' => sub {
     # Run with table formatting enabled

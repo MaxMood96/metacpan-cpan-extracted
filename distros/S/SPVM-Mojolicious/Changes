@@ -1,3 +1,7 @@
+0.043 2026-02-06
+  [Test Improvement]
+    * Update TestCase::Online to use httpbin.org instead of google.com and ensure all test methods return 1 on success.
+  
 0.042 2026-02-03
   [Requirement Changes]
     * Require SPVM::Go 0.024.

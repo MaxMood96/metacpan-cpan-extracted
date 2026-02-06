@@ -245,9 +245,9 @@ Adds a guide on the methods and functions of the modules (C<lib/**.pm>) to their
 
 =over
 
-=item 1. Methods are a Perl subprogram starting with the keyword C<sub>.
+=item 1. Methods is a Perl subroutine starting with the C<sub> keyword.
 
-=item 2. Features are the properties of copies added by OOP-frameworks, such as C<Aion>, C<Moose>, C<Moo>, C<Mo>, and starting with the keyword C<has>.
+=item 2. Features are instance properties added by OOP frameworks such as C<Aion>, C<Mouse>, C<Moose>, C<Moo>, C<Mo>, and starting with the C<has> keyword.
 
 =back
 

@@ -6,6 +6,11 @@ on 'develop' => sub {
 	requires 'Data::Printer', '1.000004';
 	requires 'Minilla', 'v3.1.19';
 	requires 'Software::License::GPL_3';
+	requires 'Test::CPAN::Meta';
+	requires 'Test::MinimumVersion::Fast';
+	requires 'Test::PAUSE::Permissions';
+	requires 'Test::Pod';
+	requires 'Test::Spellunker';
 	requires 'V';
 	requires 'Version::Next';
 };
@@ -54,3 +59,5 @@ requires 'Template', '3.101';
 requires 'Test::More', '0.98';
 requires 'Text::Trim';
 requires 'UUID', '0.37';
+requires 'open';
+requires 'parent';

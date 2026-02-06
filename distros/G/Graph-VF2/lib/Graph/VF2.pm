@@ -1,7 +1,7 @@
 package Graph::VF2;
 
 # ABSTRACT: VF2 subgraph isomorphism detection method for Perl Graph
-our $VERSION = '0.1.0'; # VERSION
+our $VERSION = '0.2.0'; # VERSION
 
 =head1 NAME
 
@@ -57,6 +57,13 @@ A subroutine reference used to evaluate the equality of vertices, called with C<
 Should return Perl true and false equivalents to signify match and non-match, accordingly.
 Unless provided, all vertices are treated as equal.
 
+=item C<edge_correspondence_sub>
+
+A subroutine reference used to evaluate the equality of edges, called with C<$v1> and C<$v2> from C<$g1>, and C<$v3> and C<$v4> from C<$g2>, accordingly.
+Edges are represented as pairs of vertices and are passed as a flat array.
+Should return Perl true and false equivalents to signify match and non-match, accordingly.
+Unless provided, all edges are treated as equal.
+
 =back
 
 =cut
@@ -72,6 +79,9 @@ sub matches
     my $vertex_correspondence_sub = exists $options->{vertex_correspondence_sub}
                                          ? $options->{vertex_correspondence_sub}
                                          : sub { 1 };
+    my $edge_correspondence_sub   = exists $options->{edge_correspondence_sub}
+                                         ? $options->{edge_correspondence_sub}
+                                         : sub { 1 };
 
     my @vertices1 = $g1->vertices;
     my %vertices1 = map { $vertices1[$_] => $_ } 0..$#vertices1;
@@ -80,12 +90,19 @@ sub matches
     my %vertices2 = map { $vertices2[$_] => $_ } 0..$#vertices2;
     my @edges2    = map { [ $vertices2{$_->[0]}, $vertices2{$_->[1]} ] } $g2->edges;
 
-    my $map = [];
-    for my $vertex (@vertices1) {
-        push @$map, [ map { int $vertex_correspondence_sub->($vertex, $_) } @vertices2 ];
+    my $vertex_map = [];
+    for my $vertex (@vertices2) {
+        push @$vertex_map, [ map { int $vertex_correspondence_sub->($_, $vertex) } @vertices1 ];
+    }
+    my $edge_map = [];
+    for my $edge (@edges2) {
+        push @$edge_map, [ map { int $edge_correspondence_sub->( ( map { $vertices1[$_] } @$_ ),
+                                                                 ( map { $vertices2[$_] } @$edge) ) } @edges1 ];
     }
 
-    my $correspondence = _vf2( \@vertices1, \@edges1, \@vertices2, \@edges2, $map );
+    my $correspondence = _vf2( \@vertices1, \@edges1,
+                               \@vertices2, \@edges2,
+                               $vertex_map, $edge_map );
 
     my @matches;
     while (my @match = splice @$correspondence, 0, 2 * @vertices1) {

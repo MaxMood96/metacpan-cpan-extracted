@@ -1,6 +1,4 @@
 package Liveman::App::liveman;
-use 5.22.0;
-use open qw/:std :utf8/;
 use common::sense;
 
 use Getopt::Long qw(:config no_ignore_case bundling);

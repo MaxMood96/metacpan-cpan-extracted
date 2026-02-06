@@ -1,5 +1,6 @@
 requires 'perl', '5.024';
 
+requires 'File::Share';
 requires 'Text::ANSI::Fold', '2.3304';
 requires 'URI::Escape';
 

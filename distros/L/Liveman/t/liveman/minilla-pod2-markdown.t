@@ -52,6 +52,7 @@ local ($::_g0 = do {$mark->as_markdown}, $::_e0 = "hi!"); ::ok $::_g0 eq $::_e0,
 # 
 # 1. badges - все бейджи.
 # 2. github-actions - бейдж на тесты гитхаба.
+# 2. github-issues - бейдж на задачи.
 # 3. metacpan - бейдж на релиз.
 # 4. cover - бейдж на покрытие который создаёт `liveman` при прохождении теста в `doc/badges/total.svg`.
 # 

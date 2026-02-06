@@ -22,6 +22,7 @@ mdee - em·dee, Markdown Easy on the Eyes
      -h  --help             show help
          --version          show version
      -d  --debug            debug level (repeatable)
+     -x  --[no-]trace       trace mode (set -x)
      -n  --dryrun           dry-run mode
      -s  --style=#          output style (nup/pager/cat/filter/raw)
      -f  --filter           shortcut for --style=filter
@@ -46,7 +47,7 @@ mdee - em·dee, Markdown Easy on the Eyes
 
 =head1 VERSION
 
-Version 0.10
+Version 0.11
 
 =cut
 
@@ -71,12 +72,7 @@ fi
 ##############################################################################
 
 find_share_dir() {
-    perl -MFile::Spec -e '
-        for (@INC) {
-            my $d = File::Spec->catdir($_, qw(auto share dist App-mdee));
-            if (-d $d) { print $d; exit }
-        }
-    ' 2>/dev/null
+    perl -MFile::Share=dist_dir -e 'print dist_dir("App-mdee")' 2>/dev/null
 }
 
 # User theme directory
@@ -133,6 +129,7 @@ declare -A OPTS=(
     [         help | h   !         # show help         ]=
     [      version |     !         # show version      ]=
     [        debug | d  +          # debug level       ]=0
+    [        trace | x   !         # trace mode        ]=
     [       dryrun | n             # dry-run mode      ]=
     [        style | s  :          # output style      ]=
     [       filter | f   !         # filter mode       ]=
@@ -196,6 +193,33 @@ declare -A theme_default_dark=(
              [h3]='L00DN/${base}-y25'
     [inline_code]='L12/L05,/L05,L12/L05'
      [code_block]='L10 , L12 , /L05;E , L10'
+)
+
+# Patterns (name-pattern pairs)
+declare -a patterns_default=(
+    # Highlighting patterns (used with colors)
+    comment      '^<!--(?![->])(?s:.+?)-->'
+    bold         '(?<!\\)\*\*.*?(?<!\\)\*\*'
+    bold         '(?<!\\)(?<![`\w])__.*?(?<!\\)__(?!\w)'
+    italic       '(?<!\\)(?<![`\w])_(?:(?!_).)+(?<!\\)_(?!\w)'
+    italic       '(?<!\\)(?<!\*)\*(?:(?!\*).)+(?<!\\)\*(?!\*)'
+    strike       '~~.+?~~'
+    h1           '^#\h+.*'
+    h2           '^##\h+.*'
+    h3           '^###\h+.*'
+    h4           '^####\h+.*'
+    h5           '^#####\h+.*'
+    h6           '^######+.*'
+    inline_code  '(?<bt>`++)((?:(?!\g{bt}).)++)(\g{bt})'
+    code_block   '^ {0,3}(?<bt>`{3,}+|~{3,}+)(.*)\n((?s:.*?))^ {0,3}(\g{bt})'
+    image_link   '\[!\[[^\]\n]+\]\([^)\n]+\)\]\(<?[^>)\s\n]+>?\)'
+    image        '!\[[^\]\n]+\]\(<?[^>)\s\n]+>?\)'
+    link         '(?<!!)\[[^\]\n]+\]\(<?[^>)\s\n]+>?\)'
+    table        '^ {0,3}(\|.+\|\n){3,}'
+    # Folding patterns (used without colors)
+    item_prefix  '^\h*(?:[*-]|(?:\d+|#)[.)])\h+'
+    def_pattern  '(?:\A|\G\n|\n\n).+\n\n?(:\h+.*\n)'
+    autoindent   '^\h*(?:[*-]|(?:\d+|#)[.)]|:)\h+|^\h+'
 )
 
 # Active color scheme
@@ -299,6 +323,10 @@ filter() {
 
 plain() {
     [[ $plain ]] && style=pager || style=nup
+}
+
+trace() {
+    [[ $trace ]] && set -x || set +x
 }
 
 show() {
@@ -514,23 +542,16 @@ add_pattern() {
     [[ $val && $val != 0 ]] && greple_opts+=(--cm "${colors[$name]}" -E "$pattern") || :
 }
 
-add_pattern comment   '^<!--(?![->])(?s:.+?)-->'
-add_pattern bold      '(?<!\\)\*\*.*?(?<!\\)\*\*'
-add_pattern bold      '(?<!\\)(?<![`\w])__.*?(?<!\\)__(?!\w)'
-add_pattern italic    '(?<!\\)(?<![`\w])_(?:(?!_).)+(?<!\\)_(?!\w)'
-add_pattern italic    '(?<!\\)(?<!\*)\*(?:(?!\*).)+(?<!\\)\*(?!\*)'
-add_pattern strike    '~~.+?~~'
-add_pattern h1        '^#\h+.*'
-add_pattern h2        '^##\h+.*'
-add_pattern h3        '^###\h+.*'
-add_pattern h4        '^####\h+.*'
-add_pattern h5        '^#####\h+.*'
-add_pattern h6        '^######+.*'
-add_pattern inline_code '(?<bt>`++)((?:(?!\g{bt}).)++)(\g{bt})'
-add_pattern code_block  '^ {0,3}(?<bt>`{3,}+|~{3,}+)(.*)\n((?s:.*?))^ {0,3}(\g{bt})'
-add_pattern image_link  '\[!\[[^\]\n]+\]\([^)\n]+\)\]\(<?[^>)\s\n]+>?\)'
-add_pattern image       '!\[[^\]\n]+\]\(<?[^>)\s\n]+>?\)'
-add_pattern link        '(?<!!)\[[^\]\n]+\]\(<?[^>)\s\n]+>?\)'
+patterns=("${patterns_default[@]}")
+
+# Build associative array (join patterns with same name using |)
+declare -A pattern
+for ((i=0; i<${#patterns[@]}; i+=2)); do
+    name=${patterns[i]}
+    [[ -v pattern[$name] ]] && pattern[$name]+='|'
+    pattern[$name]+=${patterns[i+1]}
+    [[ ${colors[$name]:-} ]] && add_pattern "$name" "${patterns[i+1]}"
+done
 
 ##############################################################################
 # Build command pipeline
@@ -543,10 +564,6 @@ for file in "$@"; do
 done
 
 # Define pipeline stage functions
-ITEM_PREFIX='^\h*(?:[*-]|\d+\.)\h+'
-DEF_PATTERN='(?:\A|\G\n|\n\n).+\n\n?(:\h+.*\n)'
-AUTOINDENT='^\h*(?:[*-]|\d+\.|:)\h+'
-
 invoke() {
     (( debug > 1 )) && echo "debug: $(printf '%q ' "$@")" >&2
     [[ ${dryrun:-} ]] && return
@@ -557,15 +574,18 @@ run_greple()    { invoke greple "${greple_opts[@]}" "$@"; }
 
 run_fold() {
     invoke greple \
-        -Mtee "&ansifold" --crmode --autoindent="$AUTOINDENT" -sw${width} -- \
-        -G -E "${ITEM_PREFIX}.*\\n" -E "${DEF_PATTERN}" \
+        -Mtee "&ansifold" --crmode --autoindent="${pattern[autoindent]}" -sw${width} -- \
+        --exclude "${pattern[code_block]}" \
+        --exclude "${pattern[comment]}" \
+        --exclude "${pattern[table]}" \
+        -G -E "${pattern[item_prefix]}.*\\n" -E "${pattern[def_pattern]}" \
         --crmode --all --need=0 --no-color
 }
 
 run_table() {
     invoke greple \
         -Mtee::config=discrete,bulkmode "&ansicolumn" -s '|' -o '|' -t --cu=1 -- \
-        -E '^(\|.+\|\n){3,}' --all --need=0 --no-color
+        -E "${pattern[table]}" --all --need=0 --no-color
 }
 
 define fix_table_script <<'EOS'
@@ -674,6 +694,12 @@ Above, plus full command lines for each pipeline stage.
 
 =back
 
+=item B<-x>, B<--trace>, B<--no-trace>
+
+Enable or disable shell trace mode (C<set -x>).  Useful for
+debugging script execution.  Can be toggled: C<-x --no-x> enables
+then disables tracing.
+
 =item B<-n>, B<--dryrun>
 
 Dry-run mode. Show the pipeline without executing.
@@ -728,6 +754,9 @@ outputs through a pager (C<$PAGER> or C<less>) instead of nup.
 Enable or disable line folding for list items.  When enabled, long
 lines in list items are wrapped with proper indentation using
 L<ansifold(1)|App::ansifold>.  Default is enabled.
+
+Supported list markers: C<*>, C<->, C<1.>, C<1)>, C<#.>, C<#)>.
+The C<#.> and C<#)> forms are Pandoc's auto-numbered list syntax.
 
 =item B<--[no-]table>
 
@@ -1130,36 +1159,14 @@ Code block detection follows the CommonMark specification:
 
 =back
 
-B<Color Specifications>
-
-Colors are specified using L<Term::ANSIColor::Concise> format.
-The C<--cm> option maps colors to captured groups.  For example,
-C<L00DE/${base}> specifies gray foreground on base-colored background.
-
-The color specification supports modifiers:
-
-=over 4
-
-=item * C<+y10> / C<-y10>: Adjust luminance by percentage
-
-=item * C<=y50>: Set absolute luminance
-
-=item * C<D>: Bold, C<U>: Underline, C<E>: Erase line
-
-=back
-
-Example greple invocation:
-
-    greple -G --ci=G --all --need=0 \
-        --cm 'L00DE/${base}' -E '^#\h+.*' \
-        --cm '${base}D' -E '\*\*.*?\*\*' \
-        file.md
-
 =head4 Text Folding
 
 The second stage wraps long lines in list items using L<ansifold(1)|App::ansifold>
 via L<Greple::tee>.  It preserves ANSI escape sequences and maintains
 proper indentation for nested lists.
+
+Recognized list markers include C<*>, C<->, C<1.>, C<1)>, C<#.>,
+and C<#)>.  The C<#> marker is Pandoc's auto-numbered list syntax.
 
 The folding width is controlled by C<--width> option (default: 80).
 
@@ -1199,7 +1206,25 @@ after theme loading.  The base color is determined by the
 C<--base-color> option (default: RoyalBlue) with automatic luminance
 adjustment based on mode (C<=y25> for light, C<=y80> for dark).
 
-=head4 Terminal Mode Detection
+=head3 Color Specifications
+
+Colors are specified using L<Term::ANSIColor::Concise> format.
+The C<--cm> option maps colors to captured groups.  For example,
+C<L00DE/${base}> specifies gray foreground on base-colored background.
+
+The color specification supports modifiers:
+
+=over 4
+
+=item * C<+y10> / C<-y10>: Adjust luminance by percentage
+
+=item * C<=y50>: Set absolute luminance
+
+=item * C<D>: Bold, C<U>: Underline, C<E>: Erase line
+
+=back
+
+=head3 Terminal Mode Detection
 
 B<em·dee> uses L<Getopt::EX::termcolor> to detect terminal background
 luminance.  If luminance is below 50%, dark mode is automatically

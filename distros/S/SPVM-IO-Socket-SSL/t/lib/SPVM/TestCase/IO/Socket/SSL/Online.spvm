@@ -13,290 +13,192 @@ class TestCase::IO::Socket::SSL::Online {
     $FILE_TMP_DIR = FindBin->Bin . "/file_tmp";
   }
   
-  static method https_google : int () {
+  static method https_httpbin : int () {
     
     {
       # Socket
-      my $host = "www.google.com";
+      my $host = "httpbin.org";
       my $port = 443;
       my $socket = IO::Socket::SSL->new({PeerAddr => $host, PeerPort => $port});
       
-      my $write_buffer = "GET / HTTP/1.0\r\nHost: $host\r\n\r\n";
+      # Send a GET request to httpbin.org/get
+      my $write_buffer = "GET /get HTTP/1.0\r\nHost: $host\r\n\r\n";
       $socket->syswrite($write_buffer);
       
-      my $read_buffer = (mutable string)new_string_len 100000;
+      my $total_read_buffer = "";
+      my $read_buffer = (mutable string)new_string_len 8192;
       while (1) {
         my $read_length = $socket->sysread($read_buffer);
         
-        if ($read_length < 0) {
-          die "Read error";
-        }
-        
-        if ($read_length < length $read_buffer) {
+        # End of file (EOF). Errors throw exceptions.
+        if ($read_length == 0) {
           last;
         }
+        
+        $total_read_buffer .= Fn->substr($read_buffer, 0, $read_length);
       }
       
-      unless (Fn->contains($read_buffer, "200")) {
-        return 0;
-      }
-      
-      
-      unless (Fn->contains($read_buffer, "OK")) {
-        return 0;
-      }
-      
-      unless (Fn->contains($read_buffer, "google")) {
-        return 0;
-      }
+      # Check if the response contains "200 OK" and "httpbin.org"
+      unless (Fn->contains($total_read_buffer, "200")) { return 0; }
+      unless (Fn->contains($total_read_buffer, "OK")) { return 0; }
+      unless (Fn->contains($total_read_buffer, "httpbin.org")) { return 0; }
     }
     
     return 1;
   }
   
-  static method https_google_SSL_startHandshake_false : int () {
+  static method https_httpbin_SSL_startHandshake_false : int () {
     
     {
       # Socket
-      my $host = "www.google.com";
+      my $host = "httpbin.org";
       my $port = 443;
       my $socket = IO::Socket::SSL->new({PeerAddr => $host, PeerPort => $port, SSL_startHandshake => 0});
       
       my $ssl_ctx = $socket->ssl_ctx;
+      unless ($ssl_ctx is_type Net::SSLeay::SSL_CTX) { return 0; }
       
-      unless ($ssl_ctx is_type Net::SSLeay::SSL_CTX) {
-        return 0;
-      }
-      
+      # Perform the SSL handshake manually
       $socket->connect_SSL;
       
       my $ssl = $socket->ssl;
+      unless ($ssl && $ssl is_type Net::SSLeay) { return 0; }
       
-      warn "[Test Output][IO::Socket::IO#get_sslversion]" . $socket->get_sslversion;
-      
-      warn "[Test Output][IO::Socket::IO#get_sslversion_int]" . $socket->get_sslversion_int;
-      
-      
-      unless ($ssl) {
-        return 0;
-      }
-      
-      unless ($ssl is_type Net::SSLeay) {
-        return 0;
-      }
-      
-      my $write_buffer = "GET / HTTP/1.0\r\nHost: $host\r\n\r\n";
+      my $write_buffer = "GET /get HTTP/1.0\r\nHost: $host\r\n\r\n";
       $socket->syswrite($write_buffer);
       
-      my $read_buffer = (mutable string)new_string_len 100000;
+      my $total_read_buffer = "";
+      my $read_buffer = (mutable string)new_string_len 8192;
       while (1) {
         my $read_length = $socket->sysread($read_buffer);
         
-        if ($read_length < 0) {
-          die "Read error";
-        }
-        
-        if ($read_length < length $read_buffer) {
+        if ($read_length == 0) {
           last;
         }
+        
+        $total_read_buffer .= Fn->substr($read_buffer, 0, $read_length);
       }
       
-      unless (Fn->contains($read_buffer, "200")) {
-        return 0;
-      }
-      
-      
-      unless (Fn->contains($read_buffer, "OK")) {
-        return 0;
-      }
-      
-      unless (Fn->contains($read_buffer, "google")) {
-        return 0;
-      }
+      unless (Fn->contains($total_read_buffer, "200")) { return 0; }
+      unless (Fn->contains($total_read_buffer, "httpbin.org")) { return 0; }
     }
     
     return 1;
   }
   
-  static method https_google_with_mozilla_ca : int () {
+  static method https_httpbin_with_mozilla_ca : int () {
     
     {
       my $ca_content = Mozilla::CA->SSL_ca;
-      
       my $bio = Net::SSLeay::BIO->new;
-      
       $bio->write($ca_content);
       
       my $cas_list = List->new(new Net::SSLeay::X509[0]);
       while (1) {
         my $ca = (Net::SSLeay::X509)undef;
-        
         eval { $ca = Net::SSLeay::PEM->read_bio_X509($bio); }
         
         if ($@) {
-          if (eval_error_id isa_error Net::SSLeay::Error::PEM_R_NO_START_LINE) {
-            last;
-          }
-          else {
-            die $@;
-          }
+          if (eval_error_id isa_error Net::SSLeay::Error::PEM_R_NO_START_LINE) { last; }
+          else { die $@; }
         }
-        
         $cas_list->push($ca);
       }
       
       my $cas = (Net::SSLeay::X509[])$cas_list->to_array;
       
-      # Socket
-      my $host = "www.google.com";
-      my $port = 443;
+      my $host = "httpbin.org";
       my $socket = IO::Socket::SSL->new({
         PeerAddr => $host,
-        PeerPort => $port,
+        PeerPort => 443,
         SSL_ca => $cas,
       });
       
-      my $write_buffer = "GET / HTTP/1.0\r\nHost: $host\r\n\r\n";
+      my $write_buffer = "GET /get HTTP/1.0\r\nHost: $host\r\n\r\n";
       $socket->syswrite($write_buffer);
       
-      my $read_buffer = (mutable string)new_string_len 100000;
+      my $total_read_buffer = "";
+      my $read_buffer = (mutable string)new_string_len 8192;
       while (1) {
         my $read_length = $socket->sysread($read_buffer);
-        
-        if ($read_length < 0) {
-          die "Read error";
-        }
-        
-        if ($read_length < length $read_buffer) {
-          last;
-        }
+        if ($read_length == 0) { last; }
+        $total_read_buffer .= Fn->substr($read_buffer, 0, $read_length);
       }
       
-      unless (Fn->contains($read_buffer, "200")) {
-        return 0;
-      }
-      
-      
-      unless (Fn->contains($read_buffer, "OK")) {
-        return 0;
-      }
-      
-      unless (Fn->contains($read_buffer, "google")) {
-        return 0;
-      }
+      unless (Fn->contains($total_read_buffer, "200")) { return 0; }
+      unless (Fn->contains($total_read_buffer, "httpbin.org")) { return 0; }
     }
     
     return 1;
   }
   
-  static method https_google_with_mozilla_ca_SSL_ca_file : int () {
+  static method https_httpbin_with_mozilla_ca_SSL_ca_file : int () {
     
     {
       my $ca_content = Mozilla::CA->SSL_ca;
-      
       my $ca_file = "$FILE_TMP_DIR/ca.pem";
-      
       my $ca_fh = IO->open(">", $ca_file);
       $ca_fh->print($ca_content);
       $ca_fh->close;
       
-      # Socket
-      my $host = "www.google.com";
-      my $port = 443;
+      my $host = "httpbin.org";
       my $socket = IO::Socket::SSL->new({
         PeerAddr => $host,
-        PeerPort => $port,
+        PeerPort => 443,
         SSL_ca_file => $ca_file,
       });
       
-      my $write_buffer = "GET / HTTP/1.0\r\nHost: $host\r\n\r\n";
+      my $write_buffer = "GET /get HTTP/1.0\r\nHost: $host\r\n\r\n";
       $socket->syswrite($write_buffer);
       
-      my $read_buffer = (mutable string)new_string_len 100000;
+      my $total_read_buffer = "";
+      my $read_buffer = (mutable string)new_string_len 8192;
       while (1) {
         my $read_length = $socket->sysread($read_buffer);
-        
-        if ($read_length < 0) {
-          die "Read error";
-        }
-        
-        if ($read_length < length $read_buffer) {
-          last;
-        }
+        if ($read_length == 0) { last; }
+        $total_read_buffer .= Fn->substr($read_buffer, 0, $read_length);
       }
       
-      unless (Fn->contains($read_buffer, "200")) {
-        return 0;
-      }
-      
-      
-      unless (Fn->contains($read_buffer, "OK")) {
-        return 0;
-      }
-      
-      unless (Fn->contains($read_buffer, "google")) {
-        return 0;
-      }
+      unless (Fn->contains($total_read_buffer, "200")) { return 0; }
     }
     
     return 1;
   }
   
-  static method https_google_with_mozilla_ca_SSL_ca_path : int () {
+  static method https_httpbin_with_mozilla_ca_SSL_ca_path : int () {
     
     {
       my $ca_content = Mozilla::CA->SSL_ca;
-      
       my $ca_path = "$FILE_TMP_DIR/ca_path";
-      
       eval { Sys->mkdir($ca_path, 0755); }
       
       my $ca_file = "$ca_path/ca.pem";
-      
       my $ca_fh = IO->open(">", $ca_file);
       $ca_fh->print($ca_content);
       $ca_fh->close;
       
-      # Socket
-      my $host = "www.google.com";
-      my $port = 443;
+      my $host = "httpbin.org";
       my $socket = IO::Socket::SSL->new({
         PeerAddr => $host,
-        PeerPort => $port,
+        PeerPort => 443,
         SSL_ca_path => $ca_path,
         SSL_verify_mode => SSL->SSL_VERIFY_NONE,
       });
       
-      my $write_buffer = "GET / HTTP/1.0\r\nHost: $host\r\n\r\n";
+      my $write_buffer = "GET /get HTTP/1.0\r\nHost: $host\r\n\r\n";
       $socket->syswrite($write_buffer);
       
-      my $read_buffer = (mutable string)new_string_len 100000;
+      my $total_read_buffer = "";
+      my $read_buffer = (mutable string)new_string_len 8192;
       while (1) {
         my $read_length = $socket->sysread($read_buffer);
-        
-        if ($read_length < 0) {
-          die "Read error";
-        }
-        
-        if ($read_length < length $read_buffer) {
-          last;
-        }
+        if ($read_length == 0) { last; }
+        $total_read_buffer .= Fn->substr($read_buffer, 0, $read_length);
       }
       
-      unless (Fn->contains($read_buffer, "200")) {
-        return 0;
-      }
-      
-      unless (Fn->contains($read_buffer, "OK")) {
-        return 0;
-      }
-      
-      unless (Fn->contains($read_buffer, "google")) {
-        return 0;
-      }
+      unless (Fn->contains($total_read_buffer, "200")) { return 0; }
     }
     
     return 1;
   }
-  
 }

@@ -1,8 +1,7 @@
 package Liveman;
-use 5.22.0;
 use common::sense;
 
-our $VERSION = "4.0";
+our $VERSION = "4.1";
 
 use File::Basename qw/dirname/;
 use File::Find::Wanted qw/find_wanted/;
@@ -544,7 +543,7 @@ Liveman - compiler from Markdown to tests and documentation
 
 =head1 VERSION
 
-4.0
+4.1
 
 =head1 SYNOPSIS
 

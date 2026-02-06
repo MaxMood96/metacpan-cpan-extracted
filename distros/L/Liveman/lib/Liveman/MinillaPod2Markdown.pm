@@ -41,6 +41,8 @@ sub as_markdown {
     $md
 }
 
+my @badges = qw/github-actions github-issues metacpan cover/;
+
 # parse !options on first line
 sub parse_options {
 	my ($self, $options) = @_;
@@ -48,12 +50,16 @@ sub parse_options {
 	$options =~ s/^!//;
 	$options =~ s/\s*$//;
 	$options =~ s/^\w+:\w+,?//;
-	my @options = map { $_ eq "badges"? qw/github-actions metacpan cover/: $_ } split /,/, $options;
+	my @options = map { $_ eq "badges"? @badges: $_ } split /,/, $options;
 	
 	$options = join " ", map {
 		if($_ eq 'github-actions') {
 			my $github = $self->github_path;
 			"[![Actions Status](https://github.com/$github/actions/workflows/test.yml/badge.svg)](https://github.com/$github/actions)"
+		}
+		elsif($_ eq 'github-issues') {
+		my $github = $self->github_path;
+			"[![GitHub Issues](https://img.shields.io/github/issues/$github?logo=perl)](https://github.com/$github/issues)";
 		}
 		elsif($_ eq 'metacpan') {
 			my $name = $self->{name};
@@ -173,9 +179,11 @@ Badge List:
 
 =item 2. github-actions - badge for GitHub tests.
 
-=item 3. metacpan - badge for release.
+=item 3. github-issues - badge for issues.
 
-=item 4. cover - badge for coverage that creates C<liveman> when passing the test in C<doc/badges/total.svg>.
+=item 4. metacpan - release badge.
+
+=item 5. cover - a cover badge that is created by C<liveman> when passing the test in C<doc/badges/total.svg>.
 
 =back
 

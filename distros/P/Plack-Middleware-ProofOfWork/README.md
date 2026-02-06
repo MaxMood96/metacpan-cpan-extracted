@@ -67,18 +67,24 @@ Hash-ref of bot types with DNS verification patterns.
 
 ```perl
 bot_patterns => {
-    'googlebot' => qr/crawl.*google\.com$/,
-    'mybot'     => qr/mybot.*example\.com$/,
+    'googlebot/' => qr/crawl.*\.googlebot\.com$/,
+    'mybot'      => qr/mybot.*example\.com$/,
 }
 ```
 
-Default includes:
-- `googlebot` → `crawl.*google.com$`
-- `applebot` → `applebot.*apple.com$`
-- `bingbot` → `bingbot.*bing.com$`
+Default includes 14 known bots:
+- `googlebot/` → `crawl.*.googlebot.com$`
+- `applebot/` → `applebot.apple.com$`
+- `bingbot/` → `bingbot.*.bing.com$`
+- `yandexbot/` → `.yandex.(ru|net|com)$`
+- `petalbot` → `petalbot.*.petalsearch.com$`
+- `ahrefsbot/` → `.ahrefs.(com|net)$`
+- `barkrowler/` → `.babbar.eu$`
+- `claudebot/`, `oai-searchbot/`, `gptbot/`, `mj12bot/`, `amazonbot/`, `perplexitybot/`, `duckduckbot/` → `^%$` (no DNS verification)
 
 The hash keys are used for case-insensitive User-Agent matching.
 The regex values verify the reverse DNS hostname.
+Pattern `^%$` means no DNS verification required (User-Agent only at level 1+).
 
 ## bot_verification_level
 

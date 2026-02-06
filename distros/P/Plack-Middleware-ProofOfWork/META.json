@@ -66,6 +66,6 @@
          "web" : "https://github.com/pstadt/Plack-Middleware-ProofOfWork"
       }
    },
-   "version" : "0.21",
+   "version" : "0.23",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

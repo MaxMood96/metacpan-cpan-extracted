@@ -1,42 +1,53 @@
 Revision history for Dist-Zilla-Plugin-SchwartzRatio
 
-0.3.4 2019-07-21
-  [ BUG FIXES ]
-    - quote 'next' so it's not confusing to the parser.
+0.3.5 2026-02-05
+ [API CHANGES]
+ [BUG FIXES]
+ [DOCUMENTATION]
+ [ENHANCEMENTS]
+ [NEW FEATURES]
+ [MAINTENANCE]
+ - Move testing to Test2.
 
-  [ STATISTICS ]
-    - code churn: 2 files changed, 9 insertions(+), 3 deletions(-)
+ [STATISTICS]
+ - code churn: 7 files changed, 194 insertions(+), 75 deletions(-)
+
+0.3.4 2019-07-21
+ [BUG FIXES]
+ - quote 'next' so it's not confusing to the parser.
+
+ [STATISTICS]
+ - code churn: 2 files changed, 9 insertions(+), 3 deletions(-)
 
 0.3.3 2019-07-04
-  [ BUG FIXES ]
-    - don't count the releases on backpan.
+ [BUG FIXES]
+ - don't count the releases on backpan.
 
-  [ STATISTICS ]
-    - code churn: 10 files changed, 164 insertions(+), 60 deletions(-)
+ [STATISTICS]
+ - code churn: 10 files changed, 164 insertions(+), 60 deletions(-)
 
 0.3.2 2017-07-05
-  - drop the requirement to perl 5.14.
-
-  [ STATISTICS ]
-    - code churn: 4 files changed, 25 insertions(+), 16 deletions(-)
+ [drop the requirement to perl 5.14.]
+ [STATISTICS]
+ - code churn: 4 files changed, 25 insertions(+), 16 deletions(-)
 
 0.3.1 2017-07-04
-  [ DOCUMENTATION ]
-    - Fix typo (GH#3, brian greenfield)
+ [DOCUMENTATION]
+ - Fix typo (GH#3, brian greenfield)
 
-  [ STATISTICS ]
-    - code churn: 3 files changed, 16 insertions(+), 4 deletions(-)
+ [STATISTICS]
+ - code churn: 3 files changed, 16 insertions(+), 4 deletions(-)
 
 0.3.0 2017-07-03
-  [ DOCUMENTATION ]
-    - Mention pause-cleanup as a companion tool. (GH#1)
+ [DOCUMENTATION]
+ - Mention pause-cleanup as a companion tool. (GH#1)
 
-  [ ENHANCEMENTS ]
-    - Use MetaCPAN::Client instead of scraping the CPAN Search webpage like
-      a savage. (GH#2)
+ [ENHANCEMENTS]
+ - Use MetaCPAN::Client instead of scraping the CPAN Search webpage like a
+   savage. (GH#2)
 
-  [ STATISTICS ]
-    - code churn: 9 files changed, 212 insertions(+), 363 deletions(-)
+ [STATISTICS]
+ - code churn: 9 files changed, 212 insertions(+), 363 deletions(-)
 
 0.2.0 2012-03-19
-  - release the Kraken!
+ - release the Kraken!

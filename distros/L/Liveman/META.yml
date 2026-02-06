@@ -38,7 +38,7 @@ no_index:
 provides:
   Liveman:
     file: lib/Liveman.pm
-    version: '4.0'
+    version: '4.1'
   Liveman::App::liveman:
     file: lib/Liveman/App/liveman.pm
   Liveman::Append:
@@ -77,12 +77,14 @@ requires:
   Text::Trim: '0'
   UUID: '0.37'
   common::sense: '3.75'
+  open: '0'
+  parent: '0'
   perl: v5.22.0
 resources:
   bugtracker: https://github.com/darviarush/perl-liveman/issues
   homepage: https://github.com/darviarush/perl-liveman
   repository: https://github.com/darviarush/perl-liveman.git
-version: '4.0'
+version: '4.1'
 x_authority: cpan:DART
 x_contributors:
   - 'Yaroslav O. Kosmina <dart@cpan.org>'

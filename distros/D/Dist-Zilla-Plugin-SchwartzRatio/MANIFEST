@@ -1,5 +1,6 @@
 AUTHOR_PLEDGE
 CODE_OF_CONDUCT.md
+CONTRIBUTING.md
 CONTRIBUTORS
 Changes
 INSTALL
@@ -10,6 +11,7 @@ META.json
 META.yml
 Makefile.PL
 README.mkdn
+SECURITY.md
 SIGNATURE
 cpanfile
 dist.ini

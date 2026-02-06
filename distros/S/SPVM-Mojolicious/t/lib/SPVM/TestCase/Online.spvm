@@ -12,13 +12,14 @@ class TestCase::Online {
   
   our $RESULT : IntList;
   
+  # Test a simple HTTP GET request
   static method one_get_request : int () {
     
     my $ua = Mojo::UserAgent->new;
     my $ctx = Go::Context->background;
     
     {
-      my $url = "http://www.google.com";
+      my $url = "http://httpbin.org/get";
       
       my $res = $ua->get($ctx, $url)->result;
       
@@ -26,22 +27,22 @@ class TestCase::Online {
         return 0;
       }
       
-      unless (Fn->contains($res->body, "<html")) {
-        return 0;
+      if (Fn->contains($res->body, "httpbin.org")) {
+        return 1;
       }
-      
     }
     
-    return 1;
+    return 0;
   }
   
+  # Test a simple HTTPS GET request (Exercises SSL handshake and shutdown)
   static method one_get_request_https : int () {
     
     my $ua = Mojo::UserAgent->new;
     my $ctx = Go::Context->background;
     
     {
-      my $url = "https://www.google.com";
+      my $url = "https://httpbin.org/get";
       
       my $res = $ua->get($ctx, $url)->result;
       
@@ -49,61 +50,67 @@ class TestCase::Online {
         return 0;
       }
       
-      unless (Fn->contains($res->body, "<html")) {
-        return 0;
+      if (Fn->contains($res->body, "https")) {
+        return 1;
       }
-      
     }
     
-    return 1;
+    return 0;
   }
   
+  # Test HTTP GET with multiple redirects
   static method one_get_request_redirect : int () {
-    
+
     my $ua = Mojo::UserAgent->new;
     my $ctx = Go::Context->background;
     
     $ua->set_max_redirects(20);
     
     {
-      my $url = "http://google.com";
+      # httpbin.org/redirect/n redirects n times
+      my $url = "http://httpbin.org/redirect/3";
       
-      my $res = $ua->get($ctx, $url)->result;
+      my $tx = $ua->get($ctx, $url);
+      
+      my $res = $tx->result;
       
       unless ($res->code == 200) {
+        diag $res->code;
+        diag dump $tx;
         return 0;
       }
       
-      unless (Fn->contains($res->body, "<html")) {
-        return 0;
+      if (Fn->contains($res->body, "httpbin.org")) {
+        diag $res->body;
+        return 1;
       }
-      
     }
     
-    return 1;
+    return 0;
   }
   
+  # Test Keep-Alive behavior without following redirects
   static method test_keep_alive_no_redirect : int () {
     
     my $ua = Mojo::UserAgent->new;
     my $ctx = Go::Context->background;
     
     {
-      my $url = "http://google.com";
+      my $url = "http://httpbin.org/redirect/1";
       
       my $res = $ua->get($ctx, $url)->result;
       
-      unless ($res->code == 301) {
+      unless ($res->code == 302) {
         return 0;
       }
     }
     
     {
-      my $url = "http://google.com";
+      my $url = "http://httpbin.org/redirect/1";
       
       my $res = $ua->get($ctx, $url)->result;
       
-      unless ($res->code == 301) {
+      unless ($res->code == 302) {
         return 0;
       }
     }
@@ -111,9 +118,10 @@ class TestCase::Online {
     return 1;
   }
   
+  # Test HTTPS with redirects and small body
   static method test_https_tiny : int () {
     
-    my $url = "https://google.com";
+    my $url = "https://httpbin.org/redirect-to?url=https%3A%2F%2Fhttpbin.org%2Fget";
     
     my $ua = Mojo::UserAgent->new;
     my $ctx = Go::Context->background;
@@ -126,18 +134,17 @@ class TestCase::Online {
       return 0;
     }
     
-    my $body = $res->body;
-    
-    unless (Fn->contains($body, "<")) {
-      return 0;
+    if (Fn->contains($res->body, "httpbin.org")) {
+      return 1;
     }
     
-    return 1;
+    return 0;
   }
   
+  # Test HTTP with redirects and small body
   static method test_http_tiny : int () {
     
-    my $url = "http://google.com";
+    my $url = "http://httpbin.org/get";
     
     my $ua = Mojo::UserAgent->new;
     my $ctx = Go::Context->background;
@@ -150,62 +157,52 @@ class TestCase::Online {
       return 0;
     }
     
-    my $body = $res->body;
-    
-    unless (Fn->contains($body, "google")) {
-      return 0;
+    if (Fn->contains($res->body, "httpbin.org")) {
+      return 1;
     }
     
-    return 1;
+    return 0;
   }
   
+  # Test concurrent requests using goroutines
   static method go : int () {
     
     $RESULT = IntList->new;
     
     Go->go(method : void () {
+      # Request 1: HTTP with query params
       Go->go(method : void () {
-        my $url = "http://google.com";
-        
+        my $url = "http://httpbin.org/get?foo=bar";
         my $ua = Mojo::UserAgent->new;
         my $ctx = Go::Context->background;
-        
         my $res = $ua->get($ctx, $url)->result;
         
-        my $body = $res->body;
-        
-        $RESULT->push(Fn->contains($body, "www.google.com"));
+        $RESULT->push(Fn->contains($res->body, "foo"));
       });
       
+      # Request 2: HTTP with different query params
       Go->go(method : void () {
-        my $url = "http://google.com";
-        
+        my $url = "http://httpbin.org/get?hoge=fuga";
         my $ua = Mojo::UserAgent->new;
         my $ctx = Go::Context->background;
-        
         my $res = $ua->get($ctx, $url)->result;
         
-        my $body = $res->body;
-        
-        $RESULT->push(Fn->contains($body, "www.google.com"));
+        $RESULT->push(Fn->contains($res->body, "hoge"));
       });
       
+      # Request 3: HTTPS request
       Go->go(method : void () {
-        my $url = "https://google.com";
-        
+        my $url = "https://httpbin.org/get";
         my $ua = Mojo::UserAgent->new;
         my $ctx = Go::Context->background;
-        
         $ua->set_max_redirects(20);
-        
         my $res = $ua->get($ctx, $url)->result;
         
-        my $body = $res->body;
-        
-        $RESULT->push(Fn->contains($body, "</html>"));
+        $RESULT->push($res->code == 200);
       });
     });
     
+    # Wait for goroutines to finish
     Go->gosched;
     
     unless (Array->equals_int($RESULT->to_array, [1, 1, 1])) {

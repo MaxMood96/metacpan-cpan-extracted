@@ -1,5 +1,5 @@
 package Future::IO::Impl::Uring;
-$Future::IO::Impl::Uring::VERSION = '0.006';
+$Future::IO::Impl::Uring::VERSION = '0.007';
 use 5.020;
 use warnings;
 use experimental 'signatures';
@@ -7,7 +7,7 @@ use experimental 'signatures';
 use parent 'Future::IO::ImplBase';
 __PACKAGE__->APPLY;
 
-use IO::Uring qw/IORING_TIMEOUT_ABS IORING_TIMEOUT_REALTIME IORING_TIMEOUT_ETIME_SUCCESS P_PID P_PGID P_ALL WEXITED/;
+use IO::Uring 0.011 qw/IORING_TIMEOUT_ABS IORING_TIMEOUT_REALTIME IORING_TIMEOUT_ETIME_SUCCESS P_PID P_PGID P_ALL WEXITED/;
 use Errno 'ETIME';
 use Signal::Info qw/CLD_EXITED/;
 use Time::Spec;
@@ -42,7 +42,6 @@ sub alarm($self, $seconds) {
 		} else {
 			$future->done;
 		}
-		$time_spec;
 	});
 	$future->on_cancel(sub { $ring->cancel($id, 0, 0) });
 	return $future;
@@ -103,7 +102,6 @@ sub send($self, $fh, $buffer, $flags, $to) {
 			local $! = -$res;
 			$future->fail("send: $!\n", send => $fh, $!);
 		}
-		$buffer;
 	};
 	$flags //= 0;
 	my $id;
@@ -126,7 +124,6 @@ sub sleep($self, $seconds) {
 		} else {
 			$future->done;
 		}
-		$time_spec;
 	});
 	$future->on_cancel(sub { $ring->cancel($id, 0, 0) });
 	return $future;
@@ -158,7 +155,6 @@ sub syswrite($self, $fh, $buffer) {
 			local $! = -$res;
 			$future->fail("syswrite: $!\n", syswrite => $fh, $!);
 		}
-		$buffer;
 	});
 	$future->on_cancel(sub { $ring->cancel($id, 0, 0) });
 	return $future;
@@ -173,7 +169,7 @@ sub waitpid($self, $pid) {
 			$future->done($info->code == CLD_EXITED ? ($info->status << 8) : $info->status);
 		} else {
 			local $! = -$res;
-			$future->fail("waitpid: $!", waitpid => $pid, $!);
+			$future->fail("waitpid: $!\n", waitpid => $pid, $!);
 		}
 	});
 	$future->on_cancel(sub { $ring->cancel($id, 0, 0) });
@@ -206,7 +202,7 @@ Future::IO::Impl::Uring - A Future::IO implementation for IO::Uring
 
 =head1 VERSION
 
-version 0.006
+version 0.007
 
 =head1 DESCRIPTION
 

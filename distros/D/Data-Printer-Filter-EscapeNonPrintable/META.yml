@@ -1,0 +1,33 @@
+---
+abstract: 'escape missing ASCII nonprintable characters'
+author:
+  - 'ryoskzypu <ryoskzypu@proton.me>'
+build_requires:
+  Data::Printer::Filter: '0'
+  Data::Printer::Object: '0'
+  ExtUtils::MakeMaker: '0'
+  Test2::V1: '0'
+configure_requires:
+  ExtUtils::MakeMaker: '6.64'
+dynamic_config: 1
+generated_by: 'ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010'
+license: open_source
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: Data-Printer-Filter-EscapeNonPrintable
+no_index:
+  directory:
+    - t
+    - inc
+requires:
+  Data::Printer: '1.000000'
+  Data::Printer::Filter: '0'
+  perl: '5.026000'
+resources:
+  bugtracker: https://github.com/ryoskzypu/Data-Printer-Filter-EscapeNonPrintable/issues
+  repository: https://github.com/ryoskzypu/Data-Printer-Filter-EscapeNonPrintable.git
+version: v1.0.0
+x_contributors:
+  - 'ryoskzypu <ryoskzypu@proton.me>'
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

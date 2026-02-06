@@ -5,9 +5,9 @@ msgid "Добавляет руководство по методам и функ
 msgstr "Adds a guide on the methods and functions of the modules (`lib/**.pm`) to their guidelines (`lib/**.md`)."
 
 msgid "1. Методы — это Perl-подпрограмма, начинающаяся с ключевого слова `sub`.\n"
-"1. Особенности — это свойства экземпляров добавляемые ООП-фреймворками, такими как `Aion`, `Moose`, `Moo`, `Mo`, и начинающиеся с ключевого слова `has`."
-msgstr "1. Methods are a Perl subprogram starting with the keyword `sub`.\n"
-"1. Features are the properties of copies added by OOP-frameworks, such as `Aion`, `Moose`, `Moo`, `Mo`, and starting with the keyword `has`."
+"1. Особенности — это свойства экземпляров добавляемые ООП-фреймворками, такими как `Aion`, `Mouse`, `Moose`, `Moo`, `Mo`, и начинающиеся с ключевого слова `has`."
+msgstr "1. Methods is a Perl subroutine starting with the `sub` keyword.\n"
+"1. Features are instance properties added by OOP frameworks such as `Aion`, `Mouse`, `Moose`, `Moo`, `Mo`, and starting with the `has` keyword."
 
 msgid "Конструктор."
 msgstr "Constructor."

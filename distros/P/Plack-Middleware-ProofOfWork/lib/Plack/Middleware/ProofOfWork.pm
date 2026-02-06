@@ -26,7 +26,7 @@ use File::Spec;
 use Socket qw(:addrinfo SOCK_RAW AF_INET AF_INET6 NI_NUMERICHOST inet_pton inet_ntop);
 use Time::HiRes qw(alarm);
 
-our $VERSION = '0.21';
+our $VERSION = '0.23';
 
 sub prepare_app {
     my $self = shift;
@@ -42,9 +42,20 @@ sub prepare_app {
     # Default bot patterns with DNS verification patterns
     unless (defined $self->bot_patterns) {
         $self->bot_patterns({
-            'googlebot' => qr/crawl.*google\.com$/,
-            'applebot'  => qr/applebot.*apple\.com$/,
-            'bingbot'   => qr/bingbot.*bing\.com$/,
+            'googlebot/' => qr/crawl.*\.googlebot\.com$/,
+            'applebot/'  => qr/applebot\.apple\.com$/,
+            'bingbot/'   => qr/bingbot.*\.bing\.com$/,
+            'yandexbot/' => qr/\.yandex\.(ru|net|com)$/,
+            'petalbot' => qr/petalbot.*\.petalsearch\.com$/,
+            'ahrefsbot/' => qr/\.ahrefs\.(com|net)$/,
+            'barkrowler/' => qr/\.babbar\.eu$/,
+            'claudebot/' => qr/^%$/,
+            'oai-searchbot/' => qr/^%$/,
+            'gptbot/' => qr/^%$/,
+            'mj12bot/' => qr/^%$/,
+            'amazonbot/' => qr/^%$/,
+            'perplexitybot/' => qr/^%$/,
+            'duckduckbot/' => qr/^%$/,
         });
     }
     
@@ -424,15 +435,20 @@ Cookie validity duration in days (default: 5).
 
 =item bot_patterns
 
-Hash-ref of bot types with DNS verification patterns (default: Googlebot, Applebot, Bingbot).
+Hash-ref of bot types with DNS verification patterns (default: 14 known bots).
 
   bot_patterns => {
-      'googlebot' => qr/crawl.*google\.com$/,
-      'mybot'     => qr/mybot.*example\.com$/,
+      'googlebot/' => qr/crawl.*\.googlebot\.com$/,
+      'mybot'      => qr/mybot.*example\.com$/,
   }
+
+Default bots: googlebot/, applebot/, bingbot/, yandexbot/, petalbot, 
+ahrefsbot/, barkrowler/, claudebot/, oai-searchbot/, gptbot/, mj12bot/, 
+amazonbot/, perplexitybot/, duckduckbot/.
 
 The hash keys are used for User-Agent matching (case-insensitive).
 The regex values are used for reverse DNS hostname verification.
+Pattern ^%$ means no DNS verification (User-Agent only at level 1+).
 
 =item bot_verification_level
 

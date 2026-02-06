@@ -1,4 +1,4 @@
-package URI::Shortener 1.004;
+package URI::Shortener 1.005;
 
 #ABSTRACT: Shorten URIs so that you don't have to rely on external services
 
@@ -11,9 +11,6 @@ use Capture::Tiny qw{capture_merged};
 use Carp::Always;
 use POSIX qw{floor};
 use DBI;
-use DBD::SQLite;
-use DBD::Pg;
-use DBD::mysql;
 use File::Touch;
 use Crypt::PRNG;
 
@@ -259,6 +256,7 @@ sub _my_dbh {
 
     my $db = DBI->connect($dsn, $user, $pass);
     $db->do($self->{mysql_schema}) or die "Could not ensure database consistency: " . $db->errstr;
+
     $self->{dbh}->{$dbname} = $db;
     return $db;
 }
@@ -277,7 +275,7 @@ URI::Shortener - Shorten URIs so that you don't have to rely on external service
 
 =head1 VERSION
 
-version 1.004
+version 1.005
 
 =head1 SYNOPSIS
 
@@ -392,6 +390,13 @@ Here are the defaults:
     created_idxname  => 'created_idx',
 
 Be aware that this is done via regexp replacement, so if you have too similar of names, bad things will occur.
+
+=head2 GRANTS
+
+On DBs that support grants, it is your responsibility to setup grants for the various users accessing these tables.
+In general we make the assumption that the creator of the tables is the exclusive user of it, and this is generally a wise policy.
+Specific functions on public DBs should have their own users to minimize the impact of any given login being compromised.
+This module is designed to be self-contained and never really needs to be queried in any way other than normal operation.
 
 =head2 MYSQL LIMITATIONS
 

@@ -239,7 +239,7 @@ enable "ProofOfWork",
 
 ---
 
-**Version:** 0.09  
-**New in 0.09:** CSS customization via css parameter  
-**Author:** Your Name  
+**Version:** 0.22  
+**New in 0.22:** Extended bot list with 14 different bots  
+**Author:** Oliver Paukstadt  
 **License:** Perl (Artistic/GPL)

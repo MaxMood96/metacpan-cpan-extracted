@@ -522,4 +522,335 @@ class TestCase::IO::Socket::SSL {
     return $success_ref->[0];
   }
   
+  static method connect_deadline : int ($port : int) {
+    
+    my $success_ref = [1];
+    
+    {
+      my $host = "127.0.0.1";
+      
+      # Use a deadline that has already passed to ensure an immediate timeout.
+      my $deadline = Go::Time->now->add(Go::Duration_1l->new_from_sec(-1.0));
+      
+      my $socket = (IO::Socket::SSL)undef;
+      eval {
+        $socket = IO::Socket::SSL->new({
+          PeerAddr => $host,
+          PeerPort => $port,
+          Deadline => $deadline,
+          SSL_verify_mode => SSL->SSL_VERIFY_NONE,
+        });
+      }
+      
+      if ($@) {
+        unless ($@ isa Go::Context::Error::DeadlineExceeded) {
+          warn "Unexpected error: " . $@;
+          $success_ref->[0] = 0;
+        }
+      }
+      else {
+        warn "Connection unexpectedly succeeded despite an expired deadline.";
+        $success_ref->[0] = 0;
+        if ($socket) { $socket->close; }
+      }
+    }
+    
+    return $success_ref->[0];
+  }
+  
+  static method read_deadline : int ($port : int) {
+    
+    my $success_ref = [1];
+    
+    # Server side
+    Go->go([$port : int] method : void () {
+      eval {
+        my $listen_socket = IO::Socket::SSL->new({
+          LocalAddr => "127.0.0.1",
+          LocalPort => $port,
+          Listen => 5,
+          ReuseAddr => 1,
+          SSL_cert_file => "$FILE_DIR/simple-cert.cert.pem",
+          SSL_key_file => "$FILE_DIR/simple-cert.key.pem",
+        });
+        
+        my $client_socket = $listen_socket->accept;
+        
+        # Sleep longer than the client's deadline to trigger the timeout.
+        Go->sleep(Go::Duration_1l->new_from_sec(1.0));
+        
+        $client_socket->close;
+        $listen_socket->close;
+      }
+      if ($@) { warn "Server error: " . $@; }
+    });
+    
+    # Client side
+    Go->go([$port : int, $success_ref : int[]] method : void () {
+      eval {
+        my $host = "127.0.0.1";
+        
+        # Connect to the server
+        my $socket = IO::Socket::SSL->new({
+          PeerAddr => $host,
+          PeerPort => $port,
+          SSL_verify_mode => SSL->SSL_VERIFY_NONE,
+        });
+        
+        # Set a short deadline (0.5 seconds from now)
+        my $deadline = Go::Time->now->add(Go::Duration_1l->new_from_sec(0.5));
+        $socket->set_deadline($deadline);
+        
+        my $buffer = (mutable string)new_string_len 1024;
+        
+        # This should block and eventually throw DeadlineExceeded because the server sends nothing.
+        $socket->sysread($buffer);
+        
+        # If no exception is thrown, it's a failure.
+        warn "sysread unexpectedly succeeded or returned 0 before deadline.";
+        $success_ref->[0] = 0;
+        $socket->close;
+      }
+      if ($@) {
+        # Check if the error is exactly Go::Context::Error::DeadlineExceeded
+        unless ($@ isa Go::Context::Error::DeadlineExceeded) {
+          warn "Unexpected error type: " . $@;
+          $success_ref->[0] = 0;
+        }
+      }
+    });
+    
+    # Run the scheduler until all goroutines are finished.
+    Go->gosched;
+    
+    return $success_ref->[0];
+  }
+  
+    static method accept_deadline : int ($port : int) {
+    
+    my $success_ref = [1];
+    
+    # Server side
+    Go->go([$port : int, $success_ref : int[]] method : void () {
+      eval {
+        my $listen_socket = IO::Socket::SSL->new({
+          LocalAddr => "127.0.0.1",
+          LocalPort => $port,
+          Listen => 5,
+          ReuseAddr => 1,
+          SSL_cert_file => "$FILE_DIR/simple-cert.cert.pem",
+          SSL_key_file => "$FILE_DIR/simple-cert.key.pem",
+        });
+        
+        # Set a short deadline for accept and accept_SSL.
+        my $deadline = Go::Time->now->add(Go::Duration_1l->new_from_sec(0.5));
+        $listen_socket->set_deadline($deadline);
+        
+        # This should block and eventually throw DeadlineExceeded because no client connects.
+        my $client_socket = $listen_socket->accept;
+        
+        warn "accept unexpectedly succeeded before deadline.";
+        $success_ref->[0] = 0;
+        $client_socket->close;
+        $listen_socket->close;
+      }
+      if ($@) {
+        unless ($@ isa Go::Context::Error::DeadlineExceeded) {
+          warn "Unexpected error type in accept: " . $@;
+          $success_ref->[0] = 0;
+        }
+      }
+    });
+    
+    Go->gosched;
+    
+    return $success_ref->[0];
+  }
+  
+    static method write_deadline : int ($port : int) {
+    
+    my $success_ref = [1];
+    my $ch_ready = Go->make(1);
+    
+    # Server side
+    Go->go([$port : int, $ch_ready : Go::Channel] method : void () {
+      eval {
+        my $listen_socket = IO::Socket::SSL->new({
+          LocalAddr => "127.0.0.1",
+          LocalPort => $port,
+          Listen => 5,
+          ReuseAddr => 1,
+          SSL_cert_file => "$FILE_DIR/simple-cert.cert.pem",
+          SSL_key_file => "$FILE_DIR/simple-cert.key.pem",
+        });
+        
+        $ch_ready->write(1);
+        
+        # Accept the connection but DO NOT read.
+        my $client_socket = $listen_socket->accept;
+        
+        # Keep the connection alive longer than the client's deadline.
+        Go->sleep(Go::Duration_1l->new_from_sec(2.0));
+        
+        $client_socket->close;
+        $listen_socket->close;
+      }
+      if ($@) { warn "Server error: " . $@; }
+    });
+    
+    # Client side
+    Go->go([$port : int, $success_ref : int[], $ch_ready : Go::Channel] method : void () {
+      eval {
+        $ch_ready->read;
+        
+        my $host = "127.0.0.1";
+        my $socket = IO::Socket::SSL->new({
+          PeerAddr => $host,
+          PeerPort => $port,
+          SSL_verify_mode => SSL->SSL_VERIFY_NONE,
+        });
+        
+        # Set a very short deadline to ensure it triggers.
+        my $deadline = Go::Time->now->add(Go::Duration_1l->new_from_sec(0.5));
+        $socket->set_deadline($deadline);
+        
+        # Smaller payload, but send many times to fill the buffer.
+        my $payload = Fn->repeat("a", 8192);
+        
+        while (1) {
+          $socket->syswrite($payload);
+        }
+      }
+      if ($@) {
+        unless ($@ isa Go::Context::Error::DeadlineExceeded) {
+          warn "Unexpected error: " . $@;
+          $success_ref->[0] = 0;
+        }
+      } else {
+        warn "Exited loop without exception";
+        $success_ref->[0] = 0;
+      }
+    });
+    
+    Go->gosched;
+    return $success_ref->[0];
+  }
+  
+  static method read_deadline_specific : int ($port : int) {
+    
+    my $success_ref = [1];
+    my $ch_ready = Go->make(1);
+    
+    # Server side
+    Go->go([$port : int, $ch_ready : Go::Channel] method : void () {
+      eval {
+        my $listen_socket = IO::Socket::SSL->new({
+          LocalAddr => "127.0.0.1",
+          LocalPort => $port,
+          Listen => 5,
+          ReuseAddr => 1,
+          SSL_cert_file => "$FILE_DIR/simple-cert.cert.pem",
+          SSL_key_file => "$FILE_DIR/simple-cert.key.pem",
+        });
+        $ch_ready->write(1);
+        my $client_socket = $listen_socket->accept;
+        
+        # Server sleeps to trigger client-side read timeout
+        Go->sleep(Go::Duration_1l->new_from_sec(1.0));
+        
+        $client_socket->close;
+        $listen_socket->close;
+      }
+    });
+    
+    # Client side
+    Go->go([$port : int, $success_ref : int[], $ch_ready : Go::Channel] method : void () {
+      eval {
+        $ch_ready->read;
+        my $socket = IO::Socket::SSL->new({
+          PeerAddr => "127.0.0.1",
+          PeerPort => $port,
+          SSL_verify_mode => SSL->SSL_VERIFY_NONE,
+        });
+        
+        my $read_deadline = Go::Time->now->add(Go::Duration_1l->new_from_sec(0.3));
+        $socket->set_read_deadline($read_deadline);
+        
+        my $buffer = (mutable string)new_string_len 1024;
+        $socket->sysread($buffer);
+        
+        warn "sysread unexpectedly succeeded before ReadDeadline.";
+        $success_ref->[0] = 0;
+      }
+      if ($@) {
+        unless ($@ isa Go::Context::Error::DeadlineExceeded) {
+          warn "Unexpected error type in sysread: " . $@;
+          $success_ref->[0] = 0;
+        }
+      }
+    });
+    
+    Go->gosched;
+    return $success_ref->[0];
+  }
+  
+  static method write_deadline_specific : int ($port : int) {
+    
+    my $success_ref = [1];
+    my $ch_ready = Go->make(1);
+    
+    # Server side
+    Go->go([$port : int, $ch_ready : Go::Channel] method : void () {
+      eval {
+        my $listen_socket = IO::Socket::SSL->new({
+          LocalAddr => "127.0.0.1",
+          LocalPort => $port,
+          Listen => 5,
+          ReuseAddr => 1,
+          SSL_cert_file => "$FILE_DIR/simple-cert.cert.pem",
+          SSL_key_file => "$FILE_DIR/simple-cert.key.pem",
+        });
+        $ch_ready->write(1);
+        my $client_socket = $listen_socket->accept;
+        
+        # Do not read to let the client's send buffer fill up.
+        Go->sleep(Go::Duration_1l->new_from_sec(2.0));
+        
+        $client_socket->close;
+        $listen_socket->close;
+      }
+    });
+    
+    # Client side
+    Go->go([$port : int, $success_ref : int[], $ch_ready : Go::Channel] method : void () {
+      eval {
+        $ch_ready->read;
+        my $socket = IO::Socket::SSL->new({
+          PeerAddr => "127.0.0.1",
+          PeerPort => $port,
+          SSL_verify_mode => SSL->SSL_VERIFY_NONE,
+        });
+        
+        my $write_deadline = Go::Time->now->add(Go::Duration_1l->new_from_sec(0.3));
+        $socket->set_write_deadline($write_deadline);
+        
+        my $payload = Fn->repeat("a", 8192);
+        while (1) {
+          $socket->syswrite($payload);
+        }
+      }
+      if ($@) {
+        unless ($@ isa Go::Context::Error::DeadlineExceeded) {
+          warn "Unexpected error type in syswrite: " . $@;
+          $success_ref->[0] = 0;
+        }
+      } else {
+        $success_ref->[0] = 0;
+      }
+    });
+    
+    Go->gosched;
+    return $success_ref->[0];
+  }
+  
 }

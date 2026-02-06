@@ -1,14 +1,16 @@
 package Dist::Zilla::Plugin::SchwartzRatio;
 our $AUTHORITY = 'cpan:YANICK';
 # ABSTRACT: display the Schwartz ratio of the distribution upon release
-$Dist::Zilla::Plugin::SchwartzRatio::VERSION = '0.3.4';
+$Dist::Zilla::Plugin::SchwartzRatio::VERSION = '0.3.5';
 
-use 5.14.0;
+use 5.20.0;
 use strict;
 use warnings;
 
 use List::UtilsBy qw/ sort_by /;
 use MetaCPAN::Client;
+
+use feature qw/ signatures /;
 
 use Moose;
 
@@ -40,8 +42,7 @@ has releases => (
         nbr_releases => 'count',
     },
     lazy => 1,
-    default => sub {
-        my $self = shift;
+    default => sub($self) {
 
         my $releases = $self->mcpan->release({
             distribution => $self->zilla->name
@@ -60,8 +61,7 @@ has releases => (
     },
 );
 
-sub after_release {
-    my $self = shift;
+sub after_release($self,@) {
 
     $self->log( sprintf "Total number of releases: %d", $self->total_nbr );
 
@@ -85,7 +85,7 @@ Dist::Zilla::Plugin::SchwartzRatio - display the Schwartz ratio of the distribut
 
 =head1 VERSION
 
-version 0.3.4
+version 0.3.5
 
 =head1 SYNOPSIS
 
@@ -121,7 +121,7 @@ Yanick Champoux <yanick@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2019, 2017, 2012 by Yanick Champoux.
+This software is copyright (c) 2026 by Yanick Champoux.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

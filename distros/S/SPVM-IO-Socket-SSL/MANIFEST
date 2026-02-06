@@ -16,6 +16,7 @@ MANIFEST			This list of files
 MANIFEST.SKIP
 README.md
 t/basic.t
+t/deadline.t
 t/file/binary-test.file
 t/file/extended-cert.cert.der
 t/file/extended-cert.cert.dump

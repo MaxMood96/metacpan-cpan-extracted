@@ -9,56 +9,31 @@ BEGIN { $ENV{SPVM_BUILD_DIR} = "$FindBin::Bin/.spvm_build"; }
 use SPVM 'Fn';
 use SPVM 'TestCase::IO::Socket::SSL::Online';
 
+# Check network connectivity to httpbin.org using Perl's HTTP::Tiny
+use HTTP::Tiny;
+my $res = HTTP::Tiny->new(timeout => 5)->get("http://httpbin.org/get");
+unless ($res->{success}) {
+  plan skip_all => "No internet connection or httpbin.org is down (verified by Perl's HTTP::Tiny)";
+}
+
 my $api = SPVM::api();
 
 my $start_memory_blocks_count = $api->get_memory_blocks_count;
 
-my $ok = 0;
+# Basic HTTPS GET request
+ok(SPVM::TestCase::IO::Socket::SSL::Online->https_httpbin);
 
-eval { $ok = SPVM::TestCase::IO::Socket::SSL::Online->https_google };
+# Manual handshake with SSL_startHandshake => 0
+ok(SPVM::TestCase::IO::Socket::SSL::Online->https_httpbin_SSL_startHandshake_false);
 
-if ($@) {
-  warn "[Skip]https_google test failed. The system may be offline:$@";
-}
-else {
-  ok($ok);
-}
+# CA verification using Mozilla::CA (Memory)
+ok(SPVM::TestCase::IO::Socket::SSL::Online->https_httpbin_with_mozilla_ca);
 
-eval { $ok = SPVM::TestCase::IO::Socket::SSL::Online->https_google_SSL_startHandshake_false };
+# CA verification using a temporary file (SSL_ca_file)
+ok(SPVM::TestCase::IO::Socket::SSL::Online->https_httpbin_with_mozilla_ca_SSL_ca_file);
 
-if ($@) {
-  warn "[Skip]https_google_SSL_startHandshake_false test failed. The system may be offline:$@";
-}
-else {
-  ok($ok);
-}
-
-eval { $ok = SPVM::TestCase::IO::Socket::SSL::Online->https_google_with_mozilla_ca };
-
-if ($@) {
-  warn "[Skip]https_google_with_mozilla_ca test failed. The system may be offline:$@";
-}
-else {
-  ok($ok);
-}
-
-eval { $ok = SPVM::TestCase::IO::Socket::SSL::Online->https_google_with_mozilla_ca_SSL_ca_file };
-
-if ($@) {
-  warn "[Skip]https_google_with_mozilla_ca_SSL_ca_file test failed. The system may be offline:$@";
-}
-else {
-  ok($ok);
-}
-
-$ok = SPVM::TestCase::IO::Socket::SSL::Online->https_google_with_mozilla_ca_SSL_ca_path;
-
-if ($@) {
-  warn "[Skip]https_google_with_mozilla_ca_SSL_ca_path test failed. The system may be offline:$@";
-}
-else {
-  ok($ok);
-}
+# CA verification using a directory (SSL_ca_path)
+ok(SPVM::TestCase::IO::Socket::SSL::Online->https_httpbin_with_mozilla_ca_SSL_ca_path);
 
 SPVM::Fn->destroy_runtime_permanent_vars;
 

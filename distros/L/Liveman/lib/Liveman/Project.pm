@@ -2,9 +2,10 @@ package Liveman::Project;
 use common::sense;
 
 use File::Slurper qw/read_text write_text/;
-use File::Spec qw/catfile updir/;
+use File::Spec;
 use File::Path qw/mkpath rmtree/;
 use Liveman::Append;
+use Liveman::Cpanfile;
 
 # Конструктор
 sub new {
@@ -30,7 +31,7 @@ sub make {
     die "Pkg is one identifier or more via ::, but input `$pkg`!\n" if $pkg !~ /^[a-z]\w*(::[a-z]\w*)*\z/ai;
 
     $self->{name} = my $name = $pkg =~ s/::/-/gr;
-    $self->{path} = my $path = catfile("lib", split /::/, $pkg);
+    $self->{path} = my $path = File::Spec->catfile("lib", split /::/, $pkg);
     my $dir = "perl-" . lc $name;
 
     system "minil new $name" and return $self;
@@ -39,19 +40,20 @@ sub make {
 
     $self->minil_toml;
     $self->license;
-    $self->cpanfile;
     $self->mkpm;
 
     Liveman::Append->new->mkmd("$path.md");
 
-    _replace { s!("5.22"),[^\]]*?(\s*\])!$1$2! } catfile(qw/ .github workflows test.yml /);
+    _replace { s!("5.22"),[^\]]*?(\s*\])!$1$2! } File::Spec->catfile(qw/ .github workflows test.yml /);
+
+    $self->cpanfile;
 
     eval { rmtree("t") } or do { print STDERR $@; return $self };
     system "git init" and return $self;
     system "git remote add origin git\@github.com:darviarush/$dir.git" and return $self;
     system "opera \"https://github.com/new?name=$dir&description=$pkg%20is%20\" &> /dev/null";
 
-    chdir updir();
+    chdir File::Spec->updir;
     $self
 }
 
@@ -60,7 +62,7 @@ sub minil_toml {
     my ($self) = @_;
 
     my $authority = "???";
-    my $pause = catfile($ENV{HOME}, ".pause");
+    my $pause = File::Spec->catfile($ENV{HOME}, ".pause");
     if(length $ENV{HOME} and -f $pause) {
         $authority = $1 if read_text($pause) =~ /\buser[\t ]+(\S+)/;
     }
@@ -91,38 +93,7 @@ Test::More
 
 sub cpanfile {
     my ($self) = @_;
-    write_text "cpanfile", << "END";
-requires 'perl', '5.22.0';
-
-on 'develop' => sub {
-	requires 'App::cpm';
-	requires 'CPAN::Uploader';
-	requires 'Data::Printer', '1.000004';
-	requires 'Minilla', 'v3.1.19';
-	requires 'Software::License::GPL_3';
-	requires 'V';
-	requires 'Version::Next';
-};
-
-on 'test' => sub {
-    requires 'Test::More', '0.98';
-
-    requires 'Carp';
-    requires 'Cwd';
-    requires 'common::sense';
-    requires 'Data::Dumper';
-    requires 'File::Basename';
-    requires 'File::Find';
-    requires 'File::Path';
-    requires 'File::Slurper';
-    requires 'File::Spec';
-    requires 'Scalar::Util';
-    requires 'String::Diff';
-    requires 'Term::ANSIColor';
-};
-
-requires 'common::sense', '3.75';
-END
+    write_text "cpanfile", Liveman::Cpanfile->cpanfile;
     $self
 }
 

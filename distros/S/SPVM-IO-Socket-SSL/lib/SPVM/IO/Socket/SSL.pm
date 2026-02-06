@@ -1,47 +1,90 @@
 package SPVM::IO::Socket::SSL;
 
-our $VERSION = "0.016";
+our $VERSION = "0.018";
 
 1;
 
 =head1 Name
 
-SPVM::IO::Socket::SSL - Sockets for SSL Communication.
+SPVM::IO::Socket::SSL - SSL/TLS Sockets with Goroutine and Context/Deadline Support.
 
 =head1 Description
 
-IO::Socket::SSL class in L<SPVM> represents sockets for SSL communication.
+L<IO::Socket::SSL> in L<SPVM> provides SSL/TLS communication for sockets.
+
+It is fully compatible with L<Go|SPVM::Go> goroutines. I/O operations (read, write, handshake, accept) yield control to the L<Go|SPVM::Go> scheduler when they would block by calling C<Go#gosched_io_read> or C<Go#gosched_io_write> internally.
+
+As a subclass of L<IO::Socket|SPVM::IO::Socket>, it inherits the support for **deadlines** (C<Deadline>, C<ReadDeadline>, and C<WriteDeadline> options). These are highly compatible with L<Go::Context>, allowing for seamless timeout management across API boundaries.
 
 =head1 Usage
 
   use IO::Socket::SSL;
-  
-  # Client
-  my $host = "www.google.com";
-  my $port = 443;
-  my $socket = IO::Socket::SSL->new({PeerAddr => $host, PeerPort => $port});
-  
-  my $write_buffer = "GET / HTTP/1.0\r\nHost: $host\r\n\r\n";
-  $socket->syswrite($write_buffer);
-  
-  my $read_buffer = (mutable string)new_string_len 100000;
-  while (1) {
-    my $read_length = $socket->sysread($read_buffer);
+  use Go;
+  use Go::Context;
+  use Go::Time;
+  use Fn;
+
+  # --- Client with Go::Context and Deadline ---
+  Go->go(method : void () {
+    my $host = "httpbin.org";
+    my $port = 443;
     
-    if ($read_length < 0) {
-      die "Read error";
-    }
+    # Create a context with a 5-second timeout
+    my $ctx_derived = Go::Context->with_timeout_sec(Go::Context->background, 5.0);
+    my $ctx = $ctx_derived->ctx;
     
-    if ($read_length < length $read_buffer) {
-      last;
+    # Use "Deadline" option (defined in IO::Socket)
+    my $socket = IO::Socket::SSL->new({
+      PeerAddr => $host, 
+      PeerPort => $port,
+      Deadline => $ctx->deadline,
+    });
+    
+    # Send a request
+    my $write_buffer = "GET /get HTTP/1.0\r\nHost: $host\r\n\r\n";
+    $socket->syswrite($write_buffer);
+    
+    # Read response
+    my $total_read_buffer = "";
+    my $read_buffer = (mutable string)new_string_len 8192;
+    eval {
+      while (1) {
+        # This yields control to the scheduler.
+        # If the deadline is reached, it throws an exception.
+        my $read_length = $socket->sysread($read_buffer);
+        
+        if ($read_length == 0) { last; }
+        
+        $total_read_buffer .= Fn->substr($read_buffer, 0, $read_length);
+      }
+    };
+    
+    if ($@) {
+      warn "Error: $@";
     }
-  }
-  
-  # Server
-  my $server_socket = IO::Socket::SSL->new({
-    Listen => 10,
+    else {
+      # Use total_read_buffer
+    }
   });
-  my $accepted_socket = $server_socket->accept;
+
+  # --- Server with Goroutines ---
+  my $server_socket = IO::Socket::SSL->new({
+    LocalPort => 443,
+    Listen    => 10,
+    SSL_cert_file => "server.crt",
+    SSL_key_file  => "server.key",
+  });
+
+  while (1) {
+    # accept() yields control to the scheduler
+    my $accepted_socket = $server_socket->accept;
+    
+    # Handle each connection in a new goroutine
+    Go->go([$accepted_socket : IO::Socket::SSL] method : void () {
+      $accepted_socket->syswrite("HTTP/1.0 200 OK\r\n\r\nHello from Goroutine!");
+      $accepted_socket->close;
+    });
+  }
 
 =head1 Super Class
 
@@ -319,15 +362,23 @@ If timeout occurs, an exception is thrown with C<eval_error_id> set to the basic
 
 C<method shutdown_SSL : int ();>
 
-Shutdowns the SSL connection by calling L<Net::SSLeay#shutdown|SPVM::Net::SSLeay/"shutdown"> method.
+Shuts down the SSL connection by calling the L<Net::SSLeay#shutdown|SPVM::Net::SSLeay/"shutdown"> method.
 
-If an IO wait occurs, the program jumps to the L<goroutine scheduler|SPVM::Go>, and retries this operation until it succeeds or the timeout seconds set by L<Timeout|SPVM::IO::Socket/"Timeout"> field expires.
+If an IO wait occurs, the current goroutine is suspended, and the control jumps to the L<goroutine scheduler|SPVM::Go>. This operation is retried until it succeeds or the deadline is reached.
+
+The deadline is determined by the L<ReadDeadline|SPVM::IO::Socket/"ReadDeadline">, L<WriteDeadline|SPVM::IO::Socket/"WriteDeadline">, or L<Deadline|SPVM::IO::Socket/"Deadline"> fields.
+
+Note that even though this is a shutdown (writing a close notify), it may wait for a read event if the underlying SSL protocol requires it (C<SSL_ERROR_WANT_READ>).
 
 Exceptions:
 
-Exceptions thrown by L<Net::SSLeay#shutdown|SPVM::Net::SSLeay/"shutdown"> method could be thrown.
+Exceptions thrown by the L<Net::SSLeay#shutdown|SPVM::Net::SSLeay/"shutdown"> method could be thrown.
 
-If timeout occurs, an exception is thrown with C<eval_error_id> set to the basic type ID of L<Go::Error::IOTimeout|SPVM::Go::Error::IOTimeout>.
+If a timeout occurs, an exception is thrown. 
+
+If the timeout is caused by a deadline exceedance, the C<eval_error_id> is set to the basic type ID of L<Go::Context::Error::DeadlineExceeded|SPVM::Go::Context::Error::DeadlineExceeded>. 
+
+Otherwise, if it's a general IO timeout, the C<eval_error_id> is set to the basic type ID of L<Go::Error::IOTimeout|SPVM::Go::Error::IOTimeout>.
 
 =head2 alpn_selected
 

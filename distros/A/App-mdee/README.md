@@ -10,6 +10,7 @@ mdee - em·dee, Markdown Easy on the Eyes
      -h  --help             show help
          --version          show version
      -d  --debug            debug level (repeatable)
+     -x  --[no-]trace       trace mode (set -x)
      -n  --dryrun           dry-run mode
      -s  --style=#          output style (nup/pager/cat/filter/raw)
      -f  --filter           shortcut for --style=filter
@@ -34,7 +35,7 @@ mdee - em·dee, Markdown Easy on the Eyes
 
 # VERSION
 
-Version 0.09
+Version 0.10
 
 # DESCRIPTION
 
@@ -89,6 +90,12 @@ inline code, code blocks, HTML comments, tables, and list items.
 
         Above, plus full command lines for each pipeline stage.
 
+- **-x**, **--trace**, **--no-trace**
+
+    Enable or disable shell trace mode (`set -x`).  Useful for
+    debugging script execution.  Can be toggled: `-x --no-x` enables
+    then disables tracing.
+
 - **-n**, **--dryrun**
 
     Dry-run mode. Show the pipeline without executing.
@@ -131,6 +138,9 @@ inline code, code blocks, HTML comments, tables, and list items.
     Enable or disable line folding for list items.  When enabled, long
     lines in list items are wrapped with proper indentation using
     [ansifold(1)](https://metacpan.org/pod/App%3A%3Aansifold).  Default is enabled.
+
+    Supported list markers: `*`, `-`, `1.`, `1)`, `#.`, `#)`.
+    The `#.` and `#)` forms are Pandoc's auto-numbered list syntax.
 
 - **--\[no-\]table**
 
@@ -466,30 +476,14 @@ Code block detection follows the CommonMark specification:
 - Closing fence: 0-3 spaces indentation, same character, same or more count
 - Backticks and tildes cannot be mixed (```` ``` ```` must close with ```` ``` ````)
 
-**Color Specifications**
-
-Colors are specified using [Term::ANSIColor::Concise](https://metacpan.org/pod/Term%3A%3AANSIColor%3A%3AConcise) format.
-The `--cm` option maps colors to captured groups.  For example,
-`L00DE/${base}` specifies gray foreground on base-colored background.
-
-The color specification supports modifiers:
-
-- `+y10` / `-y10`: Adjust luminance by percentage
-- `=y50`: Set absolute luminance
-- `D`: Bold, `U`: Underline, `E`: Erase line
-
-Example greple invocation:
-
-    greple -G --ci=G --all --need=0 \
-        --cm 'L00DE/${base}' -E '^#\h+.*' \
-        --cm '${base}D' -E '\*\*.*?\*\*' \
-        file.md
-
 #### Text Folding
 
 The second stage wraps long lines in list items using [ansifold(1)](https://metacpan.org/pod/App%3A%3Aansifold)
 via [Greple::tee](https://metacpan.org/pod/Greple%3A%3Atee).  It preserves ANSI escape sequences and maintains
 proper indentation for nested lists.
+
+Recognized list markers include `*`, `-`, `1.`, `1)`, `#.`,
+and `#)`.  The `#` marker is Pandoc's auto-numbered list syntax.
 
 The folding width is controlled by `--width` option (default: 80).
 
@@ -529,7 +523,19 @@ after theme loading.  The base color is determined by the
 `--base-color` option (default: RoyalBlue) with automatic luminance
 adjustment based on mode (`=y25` for light, `=y80` for dark).
 
-#### Terminal Mode Detection
+### Color Specifications
+
+Colors are specified using [Term::ANSIColor::Concise](https://metacpan.org/pod/Term%3A%3AANSIColor%3A%3AConcise) format.
+The `--cm` option maps colors to captured groups.  For example,
+`L00DE/${base}` specifies gray foreground on base-colored background.
+
+The color specification supports modifiers:
+
+- `+y10` / `-y10`: Adjust luminance by percentage
+- `=y50`: Set absolute luminance
+- `D`: Bold, `U`: Underline, `E`: Erase line
+
+### Terminal Mode Detection
 
 **em·dee** uses [Getopt::EX::termcolor](https://metacpan.org/pod/Getopt%3A%3AEX%3A%3Atermcolor) to detect terminal background
 luminance.  If luminance is below 50%, dark mode is automatically

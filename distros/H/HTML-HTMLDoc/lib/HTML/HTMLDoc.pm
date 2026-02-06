@@ -9,7 +9,7 @@ use HTML::HTMLDoc::PDF;
 use vars qw(@ISA $VERSION);
 
 @ISA = qw();
-$VERSION = '0.23';
+$VERSION = '0.24';
 my $DEBUG = 0;
 
 ###############
@@ -1277,6 +1277,12 @@ This module is just a front-end to the HTMLDOC program, therefore you must have
 that program installed prior to attempting to install and utilize this module.
 
 The HTMLDOC home page at L<https://www.msweet.org/htmldoc>
+
+=head1 NOTE ON IPC
+
+More recent versions of FreeBSD and Debian do not play well with IPC, so
+the tests use 'file' mode.  This module may default to that 'file' mode
+in future releases.
 
 =head1 DESCRIPTION
 

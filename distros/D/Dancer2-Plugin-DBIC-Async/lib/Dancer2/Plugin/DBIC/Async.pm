@@ -1,47 +1,45 @@
 package Dancer2::Plugin::DBIC::Async;
 
-$Dancer2::Plugin::DBIC::Async::VERSION   = '0.03';
+$Dancer2::Plugin::DBIC::Async::VERSION   = '0.05';
 $Dancer2::Plugin::DBIC::Async::AUTHORITY = 'cpan:MANWAR';
 
 use strict;
 use warnings;
+use feature 'state';
 
-use IO::Async::Loop;
 use Dancer2::Plugin;
-use DBIx::Class::Async;
+use IO::Async::Loop;
+use DBIx::Class::Async::Schema;
 use Module::Runtime qw(use_module);
 
 =encoding utf8
 
 =head1 NAME
 
-Dancer2::Plugin::DBIC::Async - Asynchronous DBIx::Class::Async plugin for Dancer2
+Dancer2::Plugin::DBIC::Async - High-concurrency DBIx::Class bridge for Dancer2
 
 =head1 VERSION
 
-Version 0.03
+Version 0.05
 
 =head1 BENEFITS
 
-The primary benefit of L<Dancer2::Plugin::DBIC::Async> over the standard L<Dancer2::Plugin::DBIC>
-is the ability to handle high-concurrency database operations without blocking the web server's
-worker processes.
-
-In a standard sync environment, every database query is a B<"stop-the-world"> event for that
-specific request handler. In an async environment, the worker can handle other tasks while waiting
-for the database to respond.
+The primary benefit of this plugin is B<Concurrency Throughput>. Unlike traditional
+database plugins that block your Dancer2 worker during a query, this plugin
+delegates I/O to a background worker pool.
 
 =head2 Non-Blocking I/O (Concurrency)
 
-In a traditional sync app, if a database query takes B<500ms>, that L<Dancer2> worker is B<"busy"> and
-cannot accept any other incoming requests for that B<half a second>.
+In a traditional sync app, if a database query takes B<500ms>, that L<Dancer2>
+worker is B<"busy"> and cannot accept any other incoming requests for that
+B<half a second>.
 
 =over 4
 
 =item Sync
 
-10 workers can handle exactly 10 simultaneous long-running queries. The 11th user
-must wait in the TCP queue.
+B<10 workers> can handle exactly B<10 simultaneous long-running queries>. The
+11th user must wait in the B<TCP queue>.
 
 =item Async
 
@@ -70,18 +68,25 @@ simultaneously.
     # Wait for all to finish
     my ($user, $posts, $friends) = Future->wait_all($user_f, $posts_f, $friends_f)->get;
 
-=head2 Integration with Modern Event Loops
-
-The async plugin allows your L<Dancer2> app to play nicely with L<IO::Async>,
-L<Mojo::IOLoop>, or L<AnyEvent>. This is critical if your app also needs to:
+=head2 Key Technical Differences
 
 =over 4
 
-=item - Talk to external WebSockets.
+=item B<Context Switching>
 
-=item - Call multiple Microservices via async HTTP clients.
+In the sync version, the operating system might pause the process (context switch)
+while waiting for the disk. In the async version, the Event Loop (L<IO::Async>) manages
+this, which is much lighter on the CPU.
 
-=item - Perform background processing without a separate task runner like L<Minion>.
+=item B<Wait vs. Block>
+
+In the async version, we use B<wait_all> or B<then>. This tells the server:
+B<"Keep this request in mind, but go help other users until the data comes back.">
+
+=item B<Error Handling>
+
+L<Futures> have built-in B<on_fail> handlers, making it easier to manage database
+timeouts without crashing the whole worker process.
 
 =back
 
@@ -102,147 +107,142 @@ Low Memory usage (1 worker handles 100 connections).
 
 =back
 
-=head1 DEMO
-
-To illustrate the power of async in L<Dancer2>, let's take a common scenario: a B<"User Dashboard">.
-
-In a standard sync route, the server waits for the database three separate times. If each query
-takes B<100ms>, the user waits B<300ms> plus overhead.
-
-With the async plugin, the total wait time is just B<100ms> (the time of the slowest query) because
-they run in parallel.
-
-=over 4
-
-=item The Synchronous Way
-
-This blocks the worker process three times in a row.
-
-    get '/dashboard/:id' => sub {
-        my $id = route_parameters->get('id');
-
-        # Each line below stops the entire process until the DB responds
-        my $user     = rset('User')->find($id);
-        my @posts    = rset('Post')->search({ author_id => $id })->all;
-        my @comments = rset('Comment')->search({ user_id => $id })->all;
-
-        return template 'dashboard', {
-            user     => $user,
-            posts    => \@posts,
-            comments => \@comments,
-        };
-    };
-
-=item The Asynchronous Way
-
-This fires all queries at once. The worker process can even handle other people's requests while
-the database is working on these three queries.
-
-    get '/dashboard/:id' => sub {
-        my $id = route_parameters->get('id');
-
-        # Fire all queries simultaneously
-        # These return "Future" objects immediately
-        my $user_f     = async_rs('User')->find($id);
-        my $posts_f    = async_rs('Post')->search({ author_id => $id })->all;
-        my $comments_f = async_rs('Comment')->search({ user_id => $id })->all;
-
-        # Combine the futures into one master future
-        my $combined_f = Future->wait_all($user_f, $posts_f, $comments_f);
-
-        # Wait for the database results (non-blocking if using an async server like Twiggy)
-        $combined_f->get;
-
-        return template 'dashboard', {
-            user     => $user_f->get,
-            posts    => [ $posts_f->get ],
-            comments => [ $comments_f->get ],
-        };
-    };
-
-=item Advanced: Using "Then" (Chaining)
-
-Sometimes you need the result of one query to start the next. You can chain them so
-the worker stays free between the steps.
-
-    get '/profile/:username' => sub {
-        my $name = route_parameters->get('username');
-
-        return async_rs('User')->find({ username => $name })->then(sub {
-            my $user = shift;
-            die "Not found" unless $user;
-
-            # Fetch posts only after we confirmed the user exists
-            return async_rs('Post')->search({ user_id => $user->id })->all;
-        })->then(sub {
-            my @posts = @_;
-            return "User has " . scalar(@posts) . " posts";
-        })->get;
-    };
-
-=back
-
-=head2 Key Technical Differences
-
-=over 4
-
-=item Context Switching
-
-In the sync version, the operating system might pause the process (context switch)
-while waiting for the disk. In the async version, the Event Loop (L<IO::Async>) manages
-this, which is much lighter on the CPU.
-
-=item Wait vs. Block
-
-In the async version, we use B<wait_all> or B<then>. This tells the server: B<"Keep this
-request in mind, but go help other users until the data comes back.">
-
-=item Error Handling
-
-L<Futures> have built-in B<->on_fail> handlers, making it easier to manage database timeouts
-without crashing the whole worker.
-
-=back
-
 =head1 SYNOPSIS
 
-  # In config.yml
-  plugins:
-    DBIC::Async:
-      default:
-        schema_class: MyApp::Schema
-        dsn: "dbi:SQLite:dbname=myapp.db"
-        user: ""
-        password: ""
-        options:
-          sqlite_unicode: 1
-        async:
-          workers: 4
+    # In config.yml
+    plugins:
+      "DBIC::Async":
+        default:
+          schema_class: "MyApp::Schema"
+          dsn: "dbi:SQLite:dbname=myapp.db"
+          async:
+            workers: 4
 
-  # In your Dancer2 app
-  use Dancer2::Plugin::DBIC::Async;
+    # In your Dancer2 app
+    use Dancer2;
+    use Dancer2::Plugin::DBIC::Async;
+    use Future;
 
-  get '/users' => sub {
-      my $count = async_count('User')->get;
-      return to_json({ count => $count });
-  };
+    # Basic non-blocking count
+    get '/count' => sub {
+        my $count = async_count('User')->get;
+        return to_json({ total_users => $count });
+    };
 
-  get '/users/:id' => sub {
-      my $user = async_find('User', route_parameters->get('id'))->get;
-      return to_json($user);
-  };
+    # Advanced: Parallel queries (non-blocking)
+    get '/dashboard' => sub {
+        my $query = query_parameters->get('q');
 
-=head1 DESCRIPTION
+        # 1. Fire multiple queries simultaneously
+        my $search_f = async_search('User', { name => { -like => "%$query%" } });
+        my $count_f  = async_count('User');
 
-This plugin provides asynchronous database access using L<DBIx::Class::Async>
-in L<Dancer2> applications.
+        # 2. Wait for all background workers to finish
+        Future->wait_all($search_f, $count_f)->get;
+
+        # 3. Retrieve results (already deflated to HashRefs)
+        my @users = @{ $search_f->get };
+        my $total = $count_f->get;
+
+        template 'dashboard' => {
+            users => \@users,
+            total => $total,
+        };
+    };
+
+    # Flexible Update (Scalar ID or HashRef query)
+    post '/user/:id/deactivate' => sub {
+        my $id = route_parameters->get('id');
+        async_update('User', $id, { active => 0 })->get;
+        return "User deactivated";
+    };
+
+=head1 KEYWORDS
+
+=head2 async_db
+
+    my $schema = async_db();
+    my $schema = async_db('custom_connection');
+
+Returns the underlying L<DBIx::Class::Async::Schema> instance for the
+specified connection. Use this for complex operations like C<txn_do> or
+direct storage management. The connection name defaults to C<'default'>.
+
+=head2 async_rs
+
+    my $rs = async_rs('User');
+    my $f  = $rs->search({ active => 1 })->page(2)->all;
+
+Returns a L<DBIx::Class::ResultSet> proxy for the specified source. Methods
+called on this proxy return L<Future> objects instead of data. This is the
+most flexible way to build complex, non-blocking queries.
+
+=head2 async_count
+
+    my $f = async_count('User');
+    my $f = async_count('User', 'custom_connection');
+
+Returns a L<Future> that resolves to the integer count of records in the
+specified source.
+
+=head2 async_find
+
+    my $f = async_find('User', $id);
+    my $f = async_find('User', $id, 'custom_connection');
+
+Returns a L<Future> that resolves to a single record (as a deflated HashRef)
+matching the provided primary key. Returns C<undef> if no record is found.
+
+=head2 async_search
+
+    my $f = async_search('Contact', { active => 1 });
+    my $f = async_search('Contact', { id => 5 }, 'archive');
+
+Returns a L<Future> that resolves to an ArrayRef of HashRefs representing
+the rows. This is the recommended way to fetch multiple records for
+non-blocking templates or JSON responses.
+
+=head2 async_create
+
+    my $f = async_create('User', { name => 'Alice', email => 'alice@example.com' });
+
+Returns a L<Future> that resolves to the newly created record as a deflated HashRef.
+
+=head2 async_update
+
+    my $f = async_update('User', $id, { status => 'inactive' });
+    my $f = async_update('User', { status => 'pending' }, { status => 'active' });
+
+Returns a L<Future> that resolves to the number of rows updated (as an integer).
+
+B<Note:> The second argument can be either a scalar primary key (assumed to
+be the column C<'id'>) or a standard L<DBIx::Class> search HashRef for
+complex updates.
+
+=head2 async_delete
+
+    my $f = async_delete('User', $id);
+    my $f = async_delete('User', { status => 'spam' });
+
+Returns a L<Future> that resolves to the number of rows deleted (as an integer).
+
+B<Note:> Like C<async_update>, the second argument can be a scalar primary
+key (targeting the column C<'id'>) or a search HashRef.
+
+=head1 DATA FORMAT
+
+All keywords that return row data (C<async_find>, C<async_search>, C<async_create>)
+return B<deflated HashRefs> rather than L<DBIx::Class::Row> objects. This
+ensures that the data is safe to use outside of the background worker's event
+loop and is ready for serialization to JSON or rendering in templates.
 
 =cut
 
-my %ASYNC;
+my %INSTANCES;
 
 plugin_keywords qw(
     async_db
+    async_rs
     async_count
     async_find
     async_search
@@ -251,157 +251,160 @@ plugin_keywords qw(
     async_delete
 );
 
-=head1 KEYWORDS
-
-=head2 async_db
-
-  my $async_db = async_db();
-  my $async_db = async_db('connection_name');
-
-Returns the DBIx::Class::Async object for direct method calls.
-
-=cut
-
 sub async_db :PluginKeyword {
     my ($plugin, $name) = @_;
     return _get_async($plugin, $name);
 }
 
-=head2 async_count
-
-  my $count_future = async_count('User');
-  my $count_future = async_count('User', 'connection_name');
-  my $count = $count_future->get;
-
-Returns a Future that resolves to the count of records.
-
-=cut
+sub async_rs :PluginKeyword {
+    my ($plugin, $source, $name) = @_;
+    return _get_async($plugin, $name)->resultset($source);
+}
 
 sub async_count :PluginKeyword {
     my ($plugin, $source, $name) = @_;
-    my $async = _get_async($plugin, $name);
-    return $async->count($source);
+    return _get_async($plugin, $name)->resultset($source)->count->transform(
+        done => sub {
+            my $count = shift;
+            return $count + 0;
+        }
+    );
 }
-
-=head2 async_find
-
-  my $user_future = async_find('User', $id);
-  my $user = $user_future->get;
-
-Returns a Future that resolves to a single record.
-
-=cut
 
 sub async_find :PluginKeyword {
     my ($plugin, $source, $id, $name) = @_;
-    my $async = _get_async($plugin, $name);
-    return $async->find($source, $id);
+
+    # If the user passed a HashRef into the $name slot, they likely forgot
+    # the connection name is optional.
+    $name = undef if ref $name;
+
+    return _get_async($plugin, $name)->resultset($source)->find($id)->transform(
+        done => sub {
+            my $row = shift;
+            return undef unless $row;
+            return { $row->get_columns };
+        }
+    );
 }
-
-=head2 async_search
-
-  my $users_future = async_search('User', { active => 1 });
-  my $users = $users_future->get;
-
-Returns a Future that resolves to an arrayref of matching records.
-
-=cut
 
 sub async_search :PluginKeyword {
     my ($plugin, $source, $cond, $name) = @_;
-    my $async = _get_async($plugin, $name);
-    return $async->search($source, $cond);
+
+    # Defensive check: If $cond was skipped and $name was passed in 3rd slot
+    # or if $name is a HashRef (meaning it's actually the condition).
+    if (ref $name eq 'HASH') {
+        # This shouldn't happen with the current signature, but protects
+        # against users confusing argument order.
+        my $tmp = $cond;
+        $cond = $name;
+        $name = $tmp;
+    }
+
+    # Pass $name to _get_async; our improved _get_async
+    # will handle it if it's undef or invalid.
+    return _get_async($plugin, $name)
+        ->resultset($source)
+        ->search($cond)
+        ->all
+        ->transform(
+            done => sub {
+                my $rows = shift;
+                return [ map {
+                    my %data = $_->get_columns;
+                    \%data
+                } @$rows ];
+            }
+        );
 }
-
-=head2 async_create
-
-  my $user_future = async_create('User', { name => 'John' });
-  my $user = $user_future->get;
-
-Returns a Future that resolves to the created record.
-
-=cut
 
 sub async_create :PluginKeyword {
     my ($plugin, $source, $data, $name) = @_;
-    my $async = _get_async($plugin, $name);
-    return $async->create($source, $data);
+
+    $name = undef if ref $name;
+
+    return _get_async($plugin, $name)->resultset($source)->create($data)->transform(
+        done => sub {
+            my $row = shift;
+            return { $row->get_columns };
+        }
+    );
 }
-
-=head2 async_update
-
-  my $result_future = async_update('User', $id, { name => 'Jane' });
-  my $result = $result_future->get;
-
-Returns a Future that resolves to the update result.
-
-=cut
 
 sub async_update :PluginKeyword {
-    my ($plugin, $source, $id, $data, $name) = @_;
-    my $async = _get_async($plugin, $name);
-    return $async->update($source, $id, $data);
+    my ($plugin, $source, $query, $data, $name) = @_;
+
+    # Defensive check: if $query is just a scalar ID, turn it into a hashref
+    $query = { id => $query } unless ref $query;
+    $name  = undef if ref $name;
+
+    return _get_async($plugin, $name)
+        ->resultset($source)
+        ->search($query)
+        ->update($data)
+        ->transform(
+            done => sub {
+                my $result = shift;
+                # DBIC update returns the number of rows affected.
+                # We ensure it's returned as a pure integer.
+                return int($result // 0);
+            }
+        );
 }
-
-=head2 async_delete
-
-  my $result_future = async_delete('User', $id);
-  my $result = $result_future->get;
-
-Returns a Future that resolves to the delete result.
-
-=cut
 
 sub async_delete :PluginKeyword {
-    my ($plugin, $source, $id, $name) = @_;
-    my $async = _get_async($plugin, $name);
-    return $async->delete($source, $id);
-}
+    my ($plugin, $source, $query, $name) = @_;
 
-#
-#
-# INTERNAL METHOD
+    # Defensive check: handle scalar ID for backward compatibility in tests
+    $query = { id => $query } unless ref $query;
+    $name  = undef if ref $name;
+
+    return _get_async($plugin, $name)
+        ->resultset($source)
+        ->search($query)
+        ->delete
+        ->transform(
+            done => sub {
+                my $result = shift;
+                # Return strictly as an integer
+                return int($result // 0);
+            }
+        );
+}
 
 sub _get_async {
     my ($plugin, $name) = @_;
-    $name ||= 'default';
 
-    return $ASYNC{$name} if $ASYNC{$name};
+    # If $name is a reference (like a condition hash) or missing,
+    # it's clearly not the connection name.
+    if (!defined $name || ref $name) {
+        $name = 'default';
+    }
 
-    my $app            = $plugin->app;
-    my $plugins_config = $app->config->{plugins} || {};
-    my $dbic_config    = $plugins_config->{'DBIC::Async'} || {};
-    my $conf           = $dbic_config->{$name};
+    return $INSTANCES{$name} if $INSTANCES{$name};
 
-    die "No configuration for connection '$name'"
-        unless $conf;
+    my $app    = $plugin->app;
+    my $config = $app->config->{plugins}{'DBIC::Async'}{$name}
+        or die "No configuration for DBIC::Async connection '$name'";
 
-    my $schema_class = $conf->{schema_class}
-        or die "schema_class required for connection '$name'";
-
+    my $schema_class = $config->{schema_class} or die "schema_class required";
     use_module($schema_class);
 
-    my @connect_info = (
-        $conf->{dsn}      || die("dsn required"),
-        $conf->{user}     || '',
-        $conf->{password} || '',
-        $conf->{options}  || {},
+    state $loop = IO::Async::Loop->new;
+
+    my $schema = DBIx::Class::Async::Schema->connect(
+        $config->{dsn},
+        $config->{user},
+        $config->{password},
+        $config->{options} || {},
+        {
+            schema_class => $schema_class,
+            loop         => $loop,
+            %{ $config->{async} || {} },
+        }
     );
 
-    my $loop       = IO::Async::Loop->new;
-    my %async_opts = %{ $conf->{async} || {} };
-    delete $async_opts{loop};
-
-    my $async = DBIx::Class::Async->new(
-        schema_class => $schema_class,
-        connect_info => \@connect_info,
-        loop         => $loop,  # Use our new loop
-        %async_opts,
-    );
-
-    $ASYNC{$name} = $async;
-
-    return $async;
+    $INSTANCES{$name} = $schema;
+    return $schema;
 }
 
 =head1 AUTHOR

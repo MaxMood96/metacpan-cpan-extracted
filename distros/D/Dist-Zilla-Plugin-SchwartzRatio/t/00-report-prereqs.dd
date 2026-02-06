@@ -6,6 +6,7 @@ do { my $x = {
                       },
        'develop' => {
                       'requires' => {
+                                      'Software::Security::Policy::Individual' => '0',
                                       'Test::More' => '0.96',
                                       'Test::Vars' => '0'
                                     }
@@ -17,7 +18,8 @@ do { my $x = {
                                       'List::UtilsBy' => '0',
                                       'MetaCPAN::Client' => '0',
                                       'Moose' => '0',
-                                      'perl' => 'v5.14.0',
+                                      'feature' => '0',
+                                      'perl' => 'v5.20.0',
                                       'strict' => '0',
                                       'warnings' => '0'
                                     }
@@ -31,10 +33,10 @@ do { my $x = {
                                    'File::Spec' => '0',
                                    'IO::Handle' => '0',
                                    'IPC::Open3' => '0',
+                                   'Test2::Bundle::More' => '0',
                                    'Test::DZil' => '0',
-                                   'Test::Deep' => '0',
                                    'Test::MockObject' => '0',
-                                   'Test::More' => '0.96'
+                                   'Test::More' => '0'
                                  }
                  }
      };

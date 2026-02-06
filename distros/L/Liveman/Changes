@@ -1,5 +1,11 @@
 Revision history for Perl extension Liveman
 
+4.1 2026-02-06T08:53:12Z
+
+    - fix new dist (-A pkg)
+    - generate cpanfile (-d, -D)
+    - symbolic diff in tests (expected, got)
+
 4.0 2025-12-09T16:19:29Z
 
     - fix bug with name _string_diff without _

@@ -1,5 +1,29 @@
 Revision history for Dancer2::Plugin::DBIC::Async
 
+0.05 2026-02-05
+     - [ENHANCEMENT] Keywords async_update and async_delete now support
+       both scalar IDs and standard DBIC search HashRefs.
+     - [ENHANCEMENT] All keywords now defensively handle optional
+       $connection_name, defaulting to 'default' if omitted or
+       if a HashRef is detected in the slot.
+     - [FIX] Forced numeric context (int) for count, update, and delete
+       returns to prevent string concatenation issues in tests and
+       template logic.
+     - [FIX] Updated internal signatures to prevent DBIC deprecation
+       warnings when passing scalar IDs to search-based keywords.
+     - [DOCS] Significant overhaul of SYNOPSIS and KEYWORDS documentation
+       to clarify parallel execution patterns and deflated HashRef
+       return types.
+
+0.04 2026-02-05
+     - Upgrade to DBIx::Class::Async 0.54 for stable resultset proxy support.
+     - Internal refactor: Use DBIx::Class::Async::Schema as the primary bridge.
+     - Improvement: Keywords now return plain Data (HashRefs/Scalars) instead
+       of blessed Row objects to ensure compatibility with Dancer2's
+       automatic JSON serialization.
+     - Fix: Ensure IO::Async::Loop is maintained as a singleton state variable.
+     - Updated test suite to use dynamic counting and JSON content negotiation.
+
 0.03  2026-01-14
       - Tidied up pod further.
       - Added standard unit test: t/pod.t and t/manifest.t

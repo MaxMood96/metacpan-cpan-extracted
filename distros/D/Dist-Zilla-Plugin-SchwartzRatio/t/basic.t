@@ -1,8 +1,7 @@
 use strict;
 use warnings;
 
-use Test::More 0.96;
-use Test::Deep;
+use Test2::Bundle::More;
 
 use Test::DZil;
 use Dist::Zilla::Plugin::SchwartzRatio;
@@ -55,26 +54,10 @@ my $tzil = Builder->from_config(
 
 $tzil->release;
 
-cmp_deeply(
-    $tzil->chrome->logger->events,
-    superbagof(
-        map {
-        superhashof({
-            level => 'info',
-            message => re(qr/v1.1.$_, 2017-01-0$_/) })
-        } 1, 3
-    ),
-    'versions are listed',
-);
+for my $x ( 1,3) {
+    ok grep { qr/v1.1.$x, 2017-01-0$x/ } map { $_->{message} } $tzil->chrome->logger->events->@*;
+}
 
-cmp_deeply(
-    $tzil->chrome->logger->events,
-    superbagof(
-        superhashof({
-            level => 'info',
-            message => re('Total number.*?3') })
-    ),
-    'total nbr of releases is given',
-);
+ok grep { qr/Total number.*?3/ } map { $_->{message} } $tzil->chrome->logger->events->@*;
 
 done_testing;

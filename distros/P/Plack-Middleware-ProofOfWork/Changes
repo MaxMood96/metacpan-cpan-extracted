@@ -1,5 +1,16 @@
 Revision history for Plack-Middleware-ProofOfWork
 
+0.23  2026-02-04
+    - Fixed test suite: Added explicit User-Agent to invalid cookie test
+    - Prevents accidental bot matching with default User-Agent
+
+0.22  2026-02-04
+    - Extended bot_patterns to support 14 different bots
+    - Added: yandexbot/, petalbot, ahrefsbot/, barkrowler/
+    - Added: claudebot/, oai-searchbot/, gptbot/, mj12bot/, amazonbot/, perplexitybot/, duckduckbot/
+    - Pattern ^%$ for bots without DNS verification (User-Agent only)
+    - Updated documentation with complete bot list
+
 0.21  2026-02-04
     - Corrected repository URLs to https://github.com/pstadt/Plack-Middleware-ProofOfWork
     - Updated all META files with correct repository path

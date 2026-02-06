@@ -1,0 +1,56 @@
+Data::Printer::Filter::EscapeNonPrintable
+
+This module is a filter plugin for Data::Printer.
+
+Rationale:
+
+    Since DDP does not escape all ASCII control chars in print_escapes, this
+    filter escapes them to octal notation. Vertical tab ("\x0b") and DEL ("\x7f")
+    chars are also missed, thus escaped.
+
+    All the missing chars are colorized to their "escaped" color theme.
+
+    Note that this is a hack; the proper way to fix this should be to patch DDP.
+
+    See:
+
+        https://github.com/garu/Data-Printer/issues/184
+        https://github.com/garu/Data-Printer/pull/101
+        https://github.com/garu/Data-Printer/pull/201
+
+
+INSTALLATION
+
+To download and install this module, use your favorite CPAN client:
+
+    cpanm Data::Printer::Filter::EscapeNonPrintable
+
+To do it manually, run the following commands (after downloading and unpacking
+the tarball):
+
+    perl Makefile.PL
+    make
+    make test
+    make install
+
+
+SUPPORT AND DOCUMENTATION
+
+After installing, you can find documentation for this module with the perldoc
+command:
+
+    perldoc Data::Printer::Filter::EscapeNonPrintable
+
+You can also look for information at:
+
+    GitHub issue tracker (report bugs here)
+        https://github.com/ryoskzypu/Data-Printer-Filter-EscapeNonPrintable/issues
+
+    Search CPAN
+        https://metacpan.org/dist/Data-Printer-Filter-EscapeNonPrintable
+
+
+COPYRIGHT
+
+Copyright © 2026 ryoskzypu
+MIT-0 License. See LICENSE for details.

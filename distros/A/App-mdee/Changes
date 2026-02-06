@@ -1,5 +1,13 @@
 Revision history for Perl extension App-mdee
 
+0.11 2026-02-06T02:08:25Z
+
+    - Add -x/--trace option for shell trace mode (set -x)
+    - Support Pandoc-style list markers (#. #) 1)) in fold/autoindent
+    - Exclude tables from fold processing to preserve formatting
+    - Use File::Share for share directory discovery
+    - Consolidate all patterns into patterns_default array for centralized management
+
 0.10 2026-02-03T12:23:51Z
 
     - URI-encode URLs in OSC 8 hyperlinks for spec compliance

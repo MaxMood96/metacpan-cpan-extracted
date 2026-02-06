@@ -1,5 +1,9 @@
 Revision history for Future-IO-Impl-Uring
 
+0.007     2026-02-05 18:21:36+01:00 Europe/Brussels
+          - Use IO::Uring 0.011 for easier memory management
+          - Add newline to failure message of waitpid
+
 0.006     2026-01-24 22:52:10+01:00 Europe/Brussels
           - Capture buffer in write and send handler
 

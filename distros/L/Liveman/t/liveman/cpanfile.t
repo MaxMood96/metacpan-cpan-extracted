@@ -21,6 +21,11 @@ on 'develop' => sub {
 	requires 'Minilla', 'v3.1.19';
 	requires 'Liveman', '1.0';
 	requires 'Software::License::GPL_3';
+	requires 'Test::CPAN::Meta';
+	requires 'Test::MinimumVersion::Fast';
+	requires 'Test::PAUSE::Permissions';
+	requires 'Test::Pod';
+	requires 'Test::Spellunker';
 	requires 'V';
 	requires 'Version::Next';
 };

@@ -5,7 +5,7 @@ chot - Command Heuristic Omni-Tracer
 
 # VERSION
 
-Version 1.00
+Version 1.01
 
 # SYNOPSIS
 
@@ -55,6 +55,86 @@ Ruby, Node by default) and displays all matches found using a pager.
 For Homebrew-installed commands, both the wrapper script in `bin/` and
 the actual executable in `libexec/bin/` are displayed. This is useful
 for understanding how wrapper scripts delegate to their implementations.
+
+For [optex](https://metacpan.org/pod/App%3A%3Aoptex) commands (symlinks in `~/.optex.d/bin/`
+pointing to the `optex` binary), the actual command is resolved by
+searching `$PATH`.  If an alias is defined in
+`~/.optex.d/config.toml`, the alias target is followed.
+Configuration files (`~/.optex.d/NAME.rc`) are also included in
+the results.  Use `-i` to see the full resolution chain including
+alias definitions.
+
+# TRACING MECHANISM
+
+**chot** traces commands and libraries through multiple layers of
+indirection to find the actual source files.
+
+## Command Tracing
+
+The Command handler resolves commands through the following pipeline:
+
+    PATH search → optex resolution → pyenv shim resolution → Homebrew wrapper resolution
+
+- 1. **PATH search**
+
+    Searches `$PATH` directories for executable files matching the given
+    name.
+
+- 2. **optex resolution**
+
+    If the found path is a symlink to the [optex](https://metacpan.org/pod/App%3A%3Aoptex) binary
+    (typically in `~/.optex.d/bin/`), resolves it to the actual command
+    by searching `$PATH` (skipping other optex symlinks).  Alias
+    definitions in `~/.optex.d/config.toml` and configuration files
+    (`~/.optex.d/NAME.rc`) are also included.
+
+- 3. **pyenv shim resolution**
+
+    If the path is a pyenv shim (in `~/.pyenv/shims/`), resolves it to
+    the actual executable using `pyenv which`.  Both the shim and the
+    resolved path are included in the output.
+
+- 4. **Homebrew wrapper resolution**
+
+    If the path is in a Homebrew prefix (e.g., `/opt/homebrew/bin/`),
+    checks whether it is a shell wrapper that delegates to a script in
+    `libexec/bin/`.  If so, both the wrapper and the actual script are
+    included.
+
+## Python Module Tracing
+
+The Python handler performs additional resolution to locate meaningful
+source files:
+
+- **Name normalization**
+
+    Hyphens in command names are converted to underscores for Python
+    module lookup (e.g., `pandoc-embedz` is searched as `pandoc_embedz`).
+    This follows the Python packaging convention where distribution names
+    use hyphens but module names use underscores.
+
+- **Entry point resolution**
+
+    When the Python module resolves to an `__init__.py` file, the handler
+    searches for a more substantive source file in this order:
+
+    - 1. A file matching the module name (e.g., `gpty.py` for `gpty`)
+    - 2. `main.py` (common entry point for CLI tools)
+    - 3. `__main__.py`
+    - 4. The first non-empty `.py` file in the package directory
+
+    If `__init__.py` is empty, only the alternative file is returned.
+    If `__init__.py` has content, both files are included.
+
+## Example
+
+For a pyenv-installed Python command `pandoc-embedz`:
+
+    $ chot -l pandoc-embedz
+    /Users/you/.pyenv/shims/pandoc-embedz        # pyenv shim
+    /Users/you/.pyenv/versions/.../bin/pandoc-embedz  # actual entry point
+    .../pandoc_embedz/__init__.py                 # package init
+    .../pandoc_embedz/main.py                     # main source
 
 # OPTIONS
 
@@ -301,7 +381,7 @@ implement a `get_path($app, $name)` method.
 
 # SEE ALSO
 
-[App::chot](https://metacpan.org/pod/App%3A%3Achot), [Getopt::EX](https://metacpan.org/pod/Getopt%3A%3AEX), [Getopt::EX::Hashed](https://metacpan.org/pod/Getopt%3A%3AEX%3A%3AHashed)
+[App::chot](https://metacpan.org/pod/App%3A%3Achot), [App::optex](https://metacpan.org/pod/App%3A%3Aoptex), [Getopt::EX](https://metacpan.org/pod/Getopt%3A%3AEX), [Getopt::EX::Hashed](https://metacpan.org/pod/Getopt%3A%3AEX%3A%3AHashed)
 
 # AUTHOR
 

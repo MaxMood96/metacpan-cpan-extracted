@@ -52,6 +52,7 @@ $mark->as_markdown  # => hi!
 
 1. badges - все бейджи.
 2. github-actions - бейдж на тесты гитхаба.
+2. github-issues - бейдж на задачи.
 3. metacpan - бейдж на релиз.
 4. cover - бейдж на покрытие который создаёт `liveman` при прохождении теста в `doc/badges/total.svg`.
 

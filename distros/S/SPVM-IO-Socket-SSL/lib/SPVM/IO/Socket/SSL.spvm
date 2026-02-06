@@ -2,7 +2,7 @@
 # MIT License
 
 class IO::Socket::SSL extends IO::Socket::IP {
-  version "0.016";
+  version "0.018";
   
   use IO::Socket::SSL::Callback::BeforeConnectSSL;
   use IO::Socket::SSL::Callback::BeforeAcceptSSL;
@@ -349,7 +349,7 @@ class IO::Socket::SSL extends IO::Socket::IP {
         eval { $x509_crl = Net::SSLeay::PEM->read_bio_X509_CRL($bio); }
         
         if ($@) {
-          if (eval_error_id isa_error Net::SSLeay::Error::PEM_R_NO_START_LINE) {
+          if ($@ isa Net::SSLeay::Error::PEM_R_NO_START_LINE) {
             last;
           }
           else {
@@ -386,37 +386,49 @@ class IO::Socket::SSL extends IO::Socket::IP {
   
   method connect_SSL : void () {
     
-    my $timeout = $self->{Timeout};
-    
     my $fd = $self->{FD};
-    
     my $ssl_ctx = $self->{ssl_ctx};
-    
     my $ssl = Net::SSLeay->new($ssl_ctx);
-    
     $ssl->set_fd($fd);
     
     my $before_connect_SSL_cbs = (List of IO::Socket::SSL::Callback::BeforeConnectSSL)List->new_ref($self->{before_connect_SSL_cbs});
-    my $before_connect_SSL_cbs_length = @$before_connect_SSL_cbs;
-    for (my $i = 0; $i < $before_connect_SSL_cbs_length; $i++) {
-      my $cb = $before_connect_SSL_cbs->[$i];
-      $cb->($self, $ssl);
+    for (my $i = 0; $i < @$before_connect_SSL_cbs; $i++) {
+      $before_connect_SSL_cbs->[$i]->($self, $ssl);
     }
     
     while (1) {
+      my $timeout_duration = $self->get_remaining_duration(1);
+      
       eval { $ssl->connect; }
       
       if ($@) {
-        my $again_read = eval_error_id isa_error Net::SSLeay::Error::SSL_ERROR_WANT_READ;
-        
-        my $again_write = eval_error_id isa_error Net::SSLeay::Error::SSL_ERROR_WANT_WRITE;
+        my $again_read = $@ isa Net::SSLeay::Error::SSL_ERROR_WANT_READ;
+        my $again_write = $@ isa Net::SSLeay::Error::SSL_ERROR_WANT_WRITE;
         
         if ($again_read) {
-          Go->gosched_io_read_sec($fd, $timeout);
+          eval { Go->gosched_io_read($fd, $timeout_duration); }
+          if ($@) {
+            if ($@ isa Go::Error::IOTimeout) {
+              my $deadline = $self->{ReadDeadline} ? $self->{ReadDeadline} : $self->{Deadline};
+              if ($deadline && Go::Time->now->after($deadline)) {
+                die Go::Context::Error::DeadlineExceeded "The deadline has been exceeded.";
+              }
+            }
+            die $@;
+          }
           next;
         }
         elsif ($again_write) {
-          Go->gosched_io_write_sec($fd, $timeout);
+          eval { Go->gosched_io_write($fd, $timeout_duration); }
+          if ($@) {
+            if ($@ isa Go::Error::IOTimeout) {
+              my $deadline = $self->{WriteDeadline} ? $self->{WriteDeadline} : $self->{Deadline};
+              if ($deadline && Go::Time->now->after($deadline)) {
+                die Go::Context::Error::DeadlineExceeded "The deadline has been exceeded.";
+              }
+            }
+            die $@;
+          }
           next;
         }
         else {
@@ -427,44 +439,53 @@ class IO::Socket::SSL extends IO::Socket::IP {
         last;
       }
     }
-    
     $self->{ssl} = $ssl;
-    
   }
   
   method accept_SSL : void () {
-    
     my $fd = $self->{FD};
-    
-    my $timeout = $self->{Timeout};
-    
     my $ssl_ctx = $self->{ssl_ctx};
-    
     my $ssl = Net::SSLeay->new($ssl_ctx);
-    
     $ssl->set_fd($fd);
     
     my $before_accept_SSL_cbs = (List of IO::Socket::SSL::Callback::BeforeAcceptSSL)List->new_ref($self->{before_accept_SSL_cbs});
-    my $before_accept_SSL_cbs_length = @$before_accept_SSL_cbs;
-    for (my $i = 0; $i < $before_accept_SSL_cbs_length; $i++) {
-      my $cb = $before_accept_SSL_cbs->[$i];
-      $cb->($self, $ssl);
+    for (my $i = 0; $i < @$before_accept_SSL_cbs; $i++) {
+      $before_accept_SSL_cbs->[$i]->($self, $ssl);
     }
     
     while (1) {
+      my $timeout_duration = $self->get_remaining_duration(0);
+      
       eval { $ssl->accept; }
       
       if ($@) {
-        my $again_read = eval_error_id isa_error Net::SSLeay::Error::SSL_ERROR_WANT_READ;
-        
-        my $again_write = eval_error_id isa_error Net::SSLeay::Error::SSL_ERROR_WANT_WRITE;
+        my $again_read = $@ isa Net::SSLeay::Error::SSL_ERROR_WANT_READ;
+        my $again_write = $@ isa Net::SSLeay::Error::SSL_ERROR_WANT_WRITE;
         
         if ($again_read) {
-          Go->gosched_io_read_sec($fd, $timeout);
+          eval { Go->gosched_io_read($fd, $timeout_duration); }
+          if ($@) {
+            if ($@ isa Go::Error::IOTimeout) {
+              my $deadline = $self->{ReadDeadline} ? $self->{ReadDeadline} : $self->{Deadline};
+              if ($deadline && Go::Time->now->after($deadline)) {
+                die Go::Context::Error::DeadlineExceeded "The deadline has been exceeded.";
+              }
+            }
+            die $@;
+          }
           next;
         }
         elsif ($again_write) {
-          Go->gosched_io_write_sec($fd, $timeout);
+          eval { Go->gosched_io_write($fd, $timeout_duration); }
+          if ($@) {
+            if ($@ isa Go::Error::IOTimeout) {
+              my $deadline = $self->{WriteDeadline} ? $self->{WriteDeadline} : $self->{Deadline};
+              if ($deadline && Go::Time->now->after($deadline)) {
+                die Go::Context::Error::DeadlineExceeded "The deadline has been exceeded.";
+              }
+            }
+            die $@;
+          }
           next;
         }
         else {
@@ -475,7 +496,6 @@ class IO::Socket::SSL extends IO::Socket::IP {
         last;
       }
     }
-    
     $self->{ssl} = $ssl;
   }
   
@@ -495,28 +515,43 @@ class IO::Socket::SSL extends IO::Socket::IP {
   }
   
   method sysread : int ($buffer : mutable string, $length : int = -1, $offset : int = 0) {
-    
     my $ssl = $self->{ssl};
-    
     my $fd = $self->{FD};
-    
-    my $timeout = $self->{Timeout};
-    
     my $read_length = -1;
+    
     while (1) {
+      my $timeout_duration = $self->get_remaining_duration(0);
+      
       eval { $read_length = $ssl->read($buffer, $length, $offset); }
       
       if ($@) {
-        my $again_read = eval_error_id isa_error Net::SSLeay::Error::SSL_ERROR_WANT_READ;
-        
-        my $again_write = eval_error_id isa_error Net::SSLeay::Error::SSL_ERROR_WANT_WRITE;
+        my $again_read = $@ isa Net::SSLeay::Error::SSL_ERROR_WANT_READ;
+        my $again_write = $@ isa Net::SSLeay::Error::SSL_ERROR_WANT_WRITE;
         
         if ($again_read) {
-          Go->gosched_io_read_sec($fd, $timeout);
+          eval { Go->gosched_io_read($fd, $timeout_duration); }
+          if ($@) {
+            if ($@ isa Go::Error::IOTimeout) {
+              my $deadline = $self->{ReadDeadline} ? $self->{ReadDeadline} : $self->{Deadline};
+              if ($deadline && Go::Time->now->after($deadline)) {
+                die Go::Context::Error::DeadlineExceeded "The deadline has been exceeded.";
+              }
+            }
+            die $@;
+          }
           next;
         }
         elsif ($again_write) {
-          Go->gosched_io_write_sec($fd, $timeout);
+          eval { Go->gosched_io_write($fd, $timeout_duration); }
+          if ($@) {
+            if ($@ isa Go::Error::IOTimeout) {
+              my $deadline = $self->{WriteDeadline} ? $self->{WriteDeadline} : $self->{Deadline};
+              if ($deadline && Go::Time->now->after($deadline)) {
+                die Go::Context::Error::DeadlineExceeded "The deadline has been exceeded.";
+              }
+            }
+            die $@;
+          }
           next;
         }
         else {
@@ -527,7 +562,6 @@ class IO::Socket::SSL extends IO::Socket::IP {
         last;
       }
     }
-    
     return $read_length;
   }
   
@@ -539,29 +573,43 @@ class IO::Socket::SSL extends IO::Socket::IP {
   }
   
   method syswrite : int ($buffer : string, $length : int = -1, $offset : int = 0) {
-    
     my $ssl = $self->{ssl};
-    
     my $fd = $self->{FD};
-    
-    my $timeout = $self->{Timeout};
-    
     my $write_length = -1;
+    
     while (1) {
+      my $timeout_duration = $self->get_remaining_duration(1);
       
       eval { $write_length = $ssl->write($buffer, $length, $offset); }
       
       if ($@) {
-        my $again_read = eval_error_id isa_error Net::SSLeay::Error::SSL_ERROR_WANT_READ;
-        
-        my $again_write = eval_error_id isa_error Net::SSLeay::Error::SSL_ERROR_WANT_WRITE;
+        my $again_read = $@ isa Net::SSLeay::Error::SSL_ERROR_WANT_READ;
+        my $again_write = $@ isa Net::SSLeay::Error::SSL_ERROR_WANT_WRITE;
         
         if ($again_read) {
-          Go->gosched_io_read_sec($fd, $timeout);
+          eval { Go->gosched_io_read($fd, $timeout_duration); }
+          if ($@) {
+            if ($@ isa Go::Error::IOTimeout) {
+              my $deadline = $self->{ReadDeadline} ? $self->{ReadDeadline} : $self->{Deadline};
+              if ($deadline && Go::Time->now->after($deadline)) {
+                die Go::Context::Error::DeadlineExceeded "The deadline has been exceeded.";
+              }
+            }
+            die $@;
+          }
           next;
         }
         elsif ($again_write) {
-          Go->gosched_io_write_sec($fd, $timeout);
+          eval { Go->gosched_io_write($fd, $timeout_duration); }
+          if ($@) {
+            if ($@ isa Go::Error::IOTimeout) {
+              my $deadline = $self->{WriteDeadline} ? $self->{WriteDeadline} : $self->{Deadline};
+              if ($deadline && Go::Time->now->after($deadline)) {
+                die Go::Context::Error::DeadlineExceeded "The deadline has been exceeded.";
+              }
+            }
+            die $@;
+          }
           next;
         }
         else {
@@ -572,7 +620,6 @@ class IO::Socket::SSL extends IO::Socket::IP {
         last;
       }
     }
-    
     return $write_length;
   }
   
@@ -586,27 +633,42 @@ class IO::Socket::SSL extends IO::Socket::IP {
   method shutdown_SSL : int () {
     
     my $ssl = $self->{ssl};
-    
     my $fd = $self->{FD};
-    
-    my $timeout = $self->{Timeout};
     
     my $status = -1;
     while (1) {
+      my $timeout_duration = $self->get_remaining_duration(1);
       
       eval { $status = $ssl->shutdown; }
       
       if ($@) {
-        my $again_read = eval_error_id isa_error Net::SSLeay::Error::SSL_ERROR_WANT_READ;
-        
-        my $again_write = eval_error_id isa_error Net::SSLeay::Error::SSL_ERROR_WANT_WRITE;
+        my $again_read = $@ isa Net::SSLeay::Error::SSL_ERROR_WANT_READ;
+        my $again_write = $@ isa Net::SSLeay::Error::SSL_ERROR_WANT_WRITE;
         
         if ($again_read) {
-          Go->gosched_io_read_sec($fd, $timeout);
+          eval { Go->gosched_io_read($fd, $timeout_duration); }
+          if ($@) {
+            if ($@ isa Go::Error::IOTimeout) {
+              my $deadline = $self->{ReadDeadline} ? $self->{ReadDeadline} : $self->{Deadline};
+              if ($deadline && Go::Time->now->after($deadline)) {
+                die Go::Context::Error::DeadlineExceeded "The deadline has been exceeded.";
+              }
+            }
+            die $@;
+          }
           next;
         }
         elsif ($again_write) {
-          Go->gosched_io_write_sec($fd, $timeout);
+          eval { Go->gosched_io_write($fd, $timeout_duration); }
+          if ($@) {
+            if ($@ isa Go::Error::IOTimeout) {
+              my $deadline = $self->{WriteDeadline} ? $self->{WriteDeadline} : $self->{Deadline};
+              if ($deadline && Go::Time->now->after($deadline)) {
+                die Go::Context::Error::DeadlineExceeded "The deadline has been exceeded.";
+              }
+            }
+            die $@;
+          }
           next;
         }
         else {

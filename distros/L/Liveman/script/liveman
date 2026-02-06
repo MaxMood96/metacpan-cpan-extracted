@@ -1,3 +1,5 @@
 #!/usr/bin/env perl
 
+use open qw/:std :utf8/;
+
 require Liveman::App::liveman;
