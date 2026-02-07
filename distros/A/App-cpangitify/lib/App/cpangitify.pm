@@ -21,7 +21,7 @@ use CPAN::ReleaseHistory;
 use HTTP::Tiny;
 
 # ABSTRACT: Convert cpan distribution from BackPAN to a git repository
-our $VERSION = '0.20'; # VERSION
+our $VERSION = '0.21'; # VERSION
 
 
 our $ua  = HTTP::Tiny->new( verify_SSL => 1 );
@@ -97,8 +97,8 @@ sub main ($, @args)
 
   my %skip;
   my $opt_backpan_index_url;
-  my $opt_backpan_url = "http://backpan.perl.org/authors/id";
-  $opt_metacpan_url   = "http://fastapi.metacpan.org/";
+  my $opt_backpan_url = "https://cpan.metacpan.org/authors/id";
+  $opt_metacpan_url   = "https://fastapi.metacpan.org/";
   my $opt_trace = 0;
   my $opt_output;
   my $opt_resume;
@@ -279,7 +279,7 @@ App::cpangitify - Convert cpan distribution from BackPAN to a git repository
 
 =head1 VERSION
 
-version 0.20
+version 0.21
 
 =head1 DESCRIPTION
 
@@ -299,7 +299,7 @@ Mohammad S Anwar (MANWAR)
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2013-2022 by Graham Ollis.
+This software is copyright (c) 2013-2024 by Graham Ollis.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

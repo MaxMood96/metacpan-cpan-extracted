@@ -1,6 +1,6 @@
 package DBIx::Class::Async::Schema;
 
-$DBIx::Class::Async::Schema::VERSION   = '0.54';
+$DBIx::Class::Async::Schema::VERSION   = '0.55';
 $DBIx::Class::Async::Schema::AUTHORITY = 'cpan:MANWAR';
 
 =encoding utf8
@@ -11,7 +11,7 @@ DBIx::Class::Async::Schema - Non-blocking, worker-pool based Proxy for DBIx::Cla
 
 =head1 VERSION
 
-Version 0.54
+Version 0.55
 
 =head1 SYNOPSIS
 
@@ -171,6 +171,19 @@ sub await {
     }
 
     return wantarray ? @results : $results[0];
+}
+
+sub await_all {
+    my ($self, @futures) = @_;
+
+    my $combined = Future->needs_all(@futures);
+    return $self->await($combined);
+}
+
+sub run_parallel {
+    my ($self, @tasks) = @_;
+    my @futures = map { $_->($self) } @tasks;
+    return Future->needs_all(@futures);
 }
 
 # Cache specific
@@ -899,27 +912,56 @@ into objects, preventing Cartesian product issues over IPC.
 
 =back
 
-=head1 Recursive Future Unwrapping
+=head1 Future Handling and Unwrapping
 
-The C<await> method in this package implements a recursive unwrapping strategy.
-In complex Async applications, it is common for a Future to return *another*
-Future (e.g., a C<search> that triggers a C<prefetch> or a C<txn_do>).
+This package provides methods to handle L<Future> objects, including recursive
+unwrapping for complex async operations and methods for parallel execution.
 
-Traditional C<await> calls might return the inner Future object itself rather
-than the data. This implementation detects nested Futures and continues to
-resolve them until the final data payload is reached.
+=head2 await
 
-=over 4
+    my $data = $schema->await($future);
+    my @data_list = $schema->await($future);
 
-=item 1. Resolves the top-level Future via the L<IO::Async::Loop>.
+Suspends the current process, running the underlying L<IO::Async::Loop>
+until the provided C<Future> is ready.
 
-=item 2. Inspects the result; if it is another L<Future>, it re-enters the loop.
+This method implements recursive unwrapping of nested Futures. If the
+top-level Future resolves to another Future (e.g., a C<txn_do> call), this
+method will continue to resolve them until the final data payload is reached.
 
-=item 3. Throws an exception immediately if any Future in the chain fails.
+Throws an exception immediately if the Future chain fails.
 
-=item 4. Returns the final "leaf" value to the caller.
+Returns the final B<"leaf"> value(s) to the caller. The return value respects
+the context of the caller (list or scalar).
 
-=back
+=head2 run_parallel
+
+    my $combined_future = $schema->run_parallel(
+        sub { $_[0]->resultset('User')->find_future(1) },
+        sub { $_[0]->resultset('Log')->count_future() },
+    );
+
+Takes a list of coderefs, executes them concurrently passing the schema
+object as the first argument, and returns a single L<Future>. This returned
+Future resolves to a list of all results when all tasks have completed.
+
+B<Note>: The coderefs passed to this method must return a L<Future> object.
+Typically, you would use async methods like C<find_future> or C<search_future>
+within these coderefs.
+
+=head2 await_all
+
+    my ($user, $log_count) = $schema->await_all($combined_future);
+    # OR
+    my ($user, $log_count) = $schema->await_all($f1, $f2);
+
+Takes a single combined L<Future> (like one returned by L</run_parallel>)
+or a list of individual L<Future> objects.
+
+It uses L</await> to synchronously wait for all provided Futures to resolve,
+and returns the final data results in the same order as the inputs.
+
+Throws an exception if any of the Futures fail.
 
 =head1 CUSTOM INFLATION & SERIALISATION
 
@@ -948,7 +990,7 @@ to turn raw strings back into rich objects.
 
 =head2 JSON Support
 
-The new design includes built-in support for C<serializer_class => 'JSON'>.
+The new design includes built-in support for C<serializer_class =E<gt> 'JSON'>.
 If detected in your ResultSource metadata, it will automatically handle the
 C<decode>/C<encode> cycle using L<JSON> in a non-blocking manner.
 
@@ -967,7 +1009,7 @@ you can register them manually:
 =head2 Worker Count
 
 Adjust the C<workers> parameter based on your database connection limits.
-Typically **2-4 workers per CPU core** works well. Each worker maintains its
+Typically B<2-4 workers per CPU core> works well. Each worker maintains its
 own persistent DB connection.
 
 =head2 Prefetching
@@ -1003,7 +1045,7 @@ it will attempt to proxy the call to the B<Native DBIC Schema>.
 
 This allows you to use custom methods defined in your C<MyApp::Schema> class
 seamlessly. However, be aware that calls made via C<AUTOLOAD> are executed in
-the **Parent Process context** and may be blocking unless they specifically
+the B<Parent Process context> and may be blocking unless they specifically
 return a L<Future>.
 
 =head1 AUTHOR

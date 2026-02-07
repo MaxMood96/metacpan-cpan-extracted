@@ -1,5 +1,11 @@
 Revision history for Dancer2::Plugin::DBIC::Async
 
+0.06 2026-02-06
+     [UNIT TEST]
+     - Clean up unit test: t/04-plugin-async-operations.t
+     [UPGRADE]
+     - Updated the dependency on DBIx::Class::Async v0.55.
+
 0.05 2026-02-05
      - [ENHANCEMENT] Keywords async_update and async_delete now support
        both scalar IDs and standard DBIC search HashRefs.

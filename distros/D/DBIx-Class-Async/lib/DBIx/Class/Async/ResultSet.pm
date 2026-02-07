@@ -1,6 +1,6 @@
 package DBIx::Class::Async::ResultSet;
 
-$DBIx::Class::Async::ResultSet::VERSION   = '0.54';
+$DBIx::Class::Async::ResultSet::VERSION   = '0.55';
 $DBIx::Class::Async::ResultSet::AUTHORITY = 'cpan:MANWAR';
 
 =head1 NAME
@@ -9,7 +9,7 @@ DBIx::Class::Async::ResultSet - Non-blocking resultset proxy with Future-based e
 
 =head1 VERSION
 
-Version 0.54
+Version 0.55
 
 =head1 SYNOPSIS
 

@@ -8,7 +8,7 @@ use mro 'c3';
 use Carp;
 use Data::Dump qw( dump );
 
-our $VERSION = '0.303';
+our $VERSION = '0.304';
 
 __PACKAGE__->mk_ro_accessors(
     qw( name manager treat_like_int load_with related_load_with ));

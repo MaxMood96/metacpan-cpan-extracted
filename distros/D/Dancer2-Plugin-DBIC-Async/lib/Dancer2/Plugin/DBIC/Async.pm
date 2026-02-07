@@ -1,6 +1,6 @@
 package Dancer2::Plugin::DBIC::Async;
 
-$Dancer2::Plugin::DBIC::Async::VERSION   = '0.05';
+$Dancer2::Plugin::DBIC::Async::VERSION   = '0.06';
 $Dancer2::Plugin::DBIC::Async::AUTHORITY = 'cpan:MANWAR';
 
 use strict;
@@ -20,7 +20,7 @@ Dancer2::Plugin::DBIC::Async - High-concurrency DBIx::Class bridge for Dancer2
 
 =head1 VERSION
 
-Version 0.05
+Version 0.06
 
 =head1 BENEFITS
 

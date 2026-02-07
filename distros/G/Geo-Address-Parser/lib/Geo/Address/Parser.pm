@@ -6,9 +6,10 @@ use warnings;
 
 use Carp;
 use Module::Runtime qw(use_module);
-use Object::Configure;
+use Object::Configure 0.16;
 use Params::Get 0.13;
-use Return::Set;
+use Params::Validate::Strict qw(validate_strict);
+use Return::Set 0.02;
 use Text::Capitalize 'capitalize_title';
 
 =head1 NAME
@@ -17,11 +18,11 @@ Geo::Address::Parser - Lightweight country-aware address parser from flat text
 
 =head1 VERSION
 
-Version 0.06
+Version 0.07
 
 =cut
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 # Supported countries and their corresponding rule modules
 my %COUNTRY_MODULE = (
@@ -30,7 +31,7 @@ my %COUNTRY_MODULE = (
 	UK => 'Geo::Address::Parser::Rules::UK',
 	GB => 'Geo::Address::Parser::Rules::UK',
 	CA => 'Geo::Address::Parser::Rules::CA',
-	'Canada' => 'Geo::Address::Parser::Rules::CA',
+	'CANADA' => 'Geo::Address::Parser::Rules::CA',
 	AU => 'Geo::Address::Parser::Rules::AU',
 	'AUSTRALIA' => 'Geo::Address::Parser::Rules::AU',
 	IE => 'Geo::Address::Parser::Rules::IRL',     # Ireland ISO code
@@ -64,7 +65,7 @@ setting C<$ENV{'GEO__ADDRESS__PARSER__carp_on_warn'}> causes warnings to use L<C
 For more information about runtime configuration,
 see L<Object::Configure>.
 
-=head2 new(country => $code)
+=head2 new(country)
 
 Creates a new parser for a specific country (US, UK, CA, AU, NZ).
 
@@ -82,19 +83,39 @@ Creates a new parser for a specific country (US, UK, CA, AU, NZ).
     country? ∈ supported
     parser! = parserFor(country?)
 
+=head3 API SPECIFICATION
+
+=head4 INPUT
+
+  {
+    'country' => {
+      'type' => 'string', 'min' => 2, 'matches' => qr/^[A-Za-z\s]+$/
+    }
+  }
+
+=head4 OUTPUT
+
+=over 4
+
+=item * Error: log (if set); croak
+
+=item * Can't parse: undef
+
+=item * Otherwise: Geo::Address::Parser object
+
+=back
+
 =cut
 
 sub new {
 	my $class = shift;
 
-	my $params = Params::Get::get_params('country', \@_);
-
-	if(!defined($params->{country})) {
-		if($params->{'logger'}) {
-			$params->{'logger'}->warn("Missing required 'country' parameter");
+	my $params = Params::Validate::Strict::validate_strict({
+		args => Params::Get::get_params('country', \@_),
+		schema => {
+			'country' => { 'type' => 'string', 'min' => 2, 'matches' => qr/^[A-Za-z\s]+$/ }
 		}
-		croak("Missing required 'country' parameter");
-	}
+	});
 
 	$params = Object::Configure::configure($class, $params);
 
@@ -117,21 +138,45 @@ sub new {
 	}, $class;
 }
 
-=head2 parse($text)
+=head2 parse
 
-Parses a flat string and returns a hashref with the following fields:
+Takes a string and returns a hashref with the following fields:
 
 =over
 
 =item * name
 
-=item * street
+=item * road
 
 =item * city
 
 =item * region
 
 =item * country
+
+=back
+
+=head3 API SPECIFICATION
+
+=head4 INPUT
+
+  {
+    'text' => { 'type' => 'string', 'min' => 2
+  }
+
+=head4 OUTPUT
+
+=over 4
+
+=item * Error: log (if set); croak
+
+=item * Can't parse: undef
+
+=item * Otherwise:
+
+  {
+    'type' => 'hashref', 'min' => 2
+  }
 
 =back
 
@@ -161,15 +206,19 @@ sub parse
 {
 	my $self = shift;
 
-	my $params = Params::Get::get_params('text', \@_);
-
-	my $text = $params->{'text'};
-
-	if(!defined($text)) {
-		if($self->{'logger'}) {
-			$self->{'logger'}->error(ref($self) . ':parse(): No input text provided');
+	my $params = Params::Validate::Strict::validate_strict({
+		args => Params::Get::get_params('text', \@_),
+		schema => {
+			'text' => { 'type' => 'string', 'min' => 2 }
 		}
-		croak('No input text provided');
+	});
+
+	if(!defined($params)) {
+		croak(__PACKAGE__, '::parse: Usage($text => string)');
+	}
+	my $text = $params->{'text'};
+	if(!defined($text)) {
+		croak(__PACKAGE__, '::parse: Usage($text => string)');
 	}
 
 	my $parser = $self->{module};
@@ -180,15 +229,19 @@ sub parse
 	$text =~ s/\s$//g;
 	$text =~ s/\s,/,/g;
 
-	my $result = $parser->parse_address($text);
+	if(my $result = $parser->parse_address($text)) {
+		# FIXME: The code addeth and the code taketh away.  It shouldn't addeth in the first place
+		for my $key (keys %{$result}) {
+			delete $result->{$key} unless defined $result->{$key};
+		}
+		# Add country field to result if not already present
+		$result->{country} //= $self->{country} if $result;
 
-	# Add country field to result if not already present
-	$result->{country} //= $self->{country} if $result;
+		$result->{'name'} = capitalize_title($result->{'name'}) if($result->{'name'});
 
-	$result->{'name'} = capitalize_title($result->{'name'}) if($result->{'name'});
-
-	# Returns a hashref with at least two items: name and country
-	return Return::Set::set_return($result, { 'type' => 'hashref', 'min' => 2 });
+		# Returns a hashref with at least two items: name and country
+		return Return::Set::set_return($result, { 'type' => 'hashref', 'min' => 2 });
+	}
 }
 
 =head1 SUPPORT
@@ -205,13 +258,15 @@ automatically be notified of progress on your bug as I make changes.
 
 =over 4
 
+=item * L<Test Dashboard|https://nigelhorne.github.io/Geo-Address-Parser/coverage/>
+
 =item * L<Object::Configure>
 
 =back
 
 =head1 LICENCE AND COPYRIGHT
 
-Copyright 2025 Nigel Horne.
+Copyright 2025-2026 Nigel Horne.
 
 Usage is subject to licence terms.
 

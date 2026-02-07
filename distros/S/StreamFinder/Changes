@@ -784,3 +784,37 @@ Revision history for StreamFinder
         "yes" as yt-dlp is now required to fetch Bitchute streams.  Also 
         clean up code & docs a bit.
         StreamFinder::(Anystream,Subsplash) - Touch up docs a bit.
+2.60    2016/02/07
+        - Did a quick test of all StreamFinder modules to see if they still 
+        work (many I haven't used in ages, and sites change!).  Results below:
+        - StreamFinder::BrandNewTube - Refactor to work again after 
+        brandnewtube.com became onevsp.com and ugettube.com close up shop.
+        onevsp.com also does not appear to support "embed" pages.
+        - StreamFinder::Apple - Refactor to work again after site completely 
+        redid itself.  Also return the page-stated length of the podcast in 
+        milliseconds, needed for Fauxdacious & perhaps others to be able to 
+        display the length of podcasts and allow limited seeking.
+        - StreamFinder::RadioNet - Refactor to work again after some site-
+        changes.  Also, site now supports podcasts (podcast pages, but NOT 
+        individual episode pages, so user must call $object->get('playlist') 
+        to get a list of episodes other than the first (latest) episode for 
+        a podcast page.
+        - StreamFinder::Rcast - Refactor to work again after some site-
+        changes.
+        - StreamFinder::Zeno - Refactor to work again after numerous site-
+        changes, also note in docs. that Zeno podcasts are also supported.
+        - StreamFinder::EpochTV - episode playlists no longer supported.
+        Also tweaked to fetch best art-icon url.
+        - StreamFinder::IHeartRadio - Add missing $object->{'Url'}.
+        - StreamFinder::InternetRadio - Refactor to work again after some 
+        site-changes.
+        - StreamFinder::Rumble - Trim albumartist field unless "-notrim" 
+        specified.
+        - StreamFinder::SermonAudio - Add "-notrim" option, further metadata 
+        improvements made.  Also make sure smaller speaker icon used if using 
+        speaker for icon, and the larger one if used as image (when 
+        church/channel is used for icon - see "-speaker" option).
+        - StreamFinder::Youtube - Try harder to get proper artist & albumartist 
+        from Youtube web-pages.  Fix potential issue with the ID field returned.
+        - Many small doc. cleanups & copyright-year updates.
+        - Misc. code & doc. tweaks in various modules.

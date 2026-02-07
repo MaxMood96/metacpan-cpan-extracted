@@ -5,7 +5,7 @@ podcasts on podcasts.apple.com
 
 =head1 AUTHOR
 
-This module is Copyright (C) 2017-2021 by
+This module is Copyright (C) 2017-2026 by
 
 Jim Turner, C<< <turnerjw784 at yahoo.com> >>
 		
@@ -102,12 +102,15 @@ all-purpose media player called "fauxdacious" (his custom hacked version of
 the open-source "audacious" audio player.  "fauxdacious" incorporates this 
 module to decode and play podcasts.apple.com streams.
 
-NOTE:  The URL must be either a podcast site, format:  
+NOTE:  The URL must be either a podcast site, (format:  
 https://podcasts.apple.com/I<country>/podcast/idB<podcast#> 
-(returns stream(s) for all "episodes" for that site, OR a specific podcast / 
-"episode" page site, format:  
+(returns stream(s) for the first (latest?) "episode" for that site); OR, a 
+specific podcast episode page site, (format:  
 https://podcasts.apple.com/I<country>/podcast/idB<podcast#>?i=B<episode#> 
-(returns a single stream for that specific podcast).  
+(returns stream(s) for that specific podcast episode).  
+
+Note:  Apple no longer returns a playlist of episodes for podcast pages, as 
+the stream urls are no longer in the podcast pages.
 
 =head1 SUBROUTINES/METHODS
 
@@ -115,12 +118,12 @@ https://podcasts.apple.com/I<country>/podcast/idB<podcast#>?i=B<episode#>
 
 =item B<new>(I<ID>|I<url> [I<-secure> [ => 0|1 ]] [, I<-debug> [ => 0|1|2 ]])
 
-Accepts a podcasts.apple.com ID or URL and creates and 
+Accepts a podcasts.apple.com podcast or episode ID or URL and creates and 
 returns a new podcast object, or I<undef> if the URL is not a valid podcast, 
 album, etc. or no streams are found.  The URL can be the full URL, 
-ie. https://podcasts.apple.com/podcast/idI<podcast-id>, 
-https://podcasts.apple.com/podcast/idB<podcast-id>?i=B<episode-id>, or just 
-I<podcast-id>, or I<podcast-id>/I<episode-id>.  
+ie. I<https://podcasts.apple.com/podcast/id>B<podcast-id>, 
+I<https://podcasts.apple.com/podcast/id>B<podcast-id>I<?i=>B<episode-id>, 
+or just I<podcast-id>, or I<podcast-id>/I<episode-id>.  
 
 The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  If 1 
 then only secure ("https://") streams will be returned.
@@ -146,15 +149,9 @@ The valid field I<[variables]> are:  [stream]: The url of the first/best stream 
 [description], [year], [genre], [total], [albumartist]:  The corresponding field data 
 returned (or "I<-na->", if no value).
 
-=item $podcast->B<get>(['playlist'])
+=item $podcast->B<get>()
 
 Returns an array of strings representing all stream urls found.
-If I<"playlist"> is specified, then an extended m3u playlist is returned 
-instead of stream url(s).  NOTE:  If an author / channel page url is given, 
-rather than an individual podcast episode's url, get() returns the first 
-(latest?) podcast episode found, and get("playlist") returns an extended 
-m3u playlist containing the urls, titles, etc. for all the podcast 
-episodes found on that page url.
 
 =item $podcast->B<getURL>([I<options>])
 
@@ -172,12 +169,9 @@ If I<"noplaylists"> is specified, and the stream to be returned is a
 entry (or a random entry if I<"random"> is specified) in the playlist 
 is returned.
 
-=item $podcast->B<count>(['playlist'])
+=item $podcast->B<count>()
 
 Returns the number of streams found for the podcast.
-If I<"playlist"> is specified, the number of episodes returned in the 
-playlist is returned (the playlist can have more than one item if a 
-podcast page URL is specified).
 
 =item $podcast->B<getID>()
 
@@ -303,10 +297,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-Apple>
 
 L<http://annocpan.org/dist/StreamFinder-Apple>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-Apple>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder-Apple/>
@@ -315,7 +305,7 @@ L<http://search.cpan.org/dist/StreamFinder-Apple/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2017-2021 Jim Turner.
+Copyright 2017-2026 Jim Turner.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the the Artistic License (2.0). You may obtain a
@@ -381,7 +371,7 @@ sub new
 	if ($url2fetch =~ m#^https?\:\/\/(?:embed\.)?podcasts\.apple\.#) {
 #EXAMPLE1:my $url = 'https://podcasts.apple.com/us/podcast/wnbc-sec-shorts-josh-snead/id1440412195?i=1000448441439';
 #EXAMPLE2:my $url = 'https://podcasts.apple.com/us/podcast/good-bull-hunting-for-texas-a-m-fans/id1440412195';
-		$self->{'id'} = ($url =~ m#\/(?:id)?(\d+)(?:\?i\=(\d+))?\/?#) ? $1 : '';
+		$self->{'id'} = ($url =~ m#\/(?:id)?(\d\d\d\d\d+)(?:\?i\=(\d+))?\/?#) ? $1 : '';
 		$self->{'id'} .= '/'. $2  if (defined $2);
 	} elsif ($url2fetch !~ m#^https?\:\/\/#) {
 		my ($id, $podcastid) = split(m#\/#, $url2fetch);
@@ -400,11 +390,7 @@ sub new
 	$ua->cookie_jar({});
 	$ua->env_proxy;
 	my $response;
-	$self->{'albumartist'} = $url2fetch;
-	my @epiTitles = ();
-	my @epiStreams = ();
-	my @epiGenres = ();
-	my $embedepisode = '';
+#	$self->{'albumartist'} = $url2fetch;
 
 	if ($self->{'id'} !~ m#\/#) {   #PAGE (multiple episodes):
 		print STDERR "i:FETCHING PAGE URL ($url2fetch)...\n"  if ($DEBUG);
@@ -416,11 +402,11 @@ sub new
 			my $no_wget = system('wget','-V');
 			unless ($no_wget) {
 				print STDERR "\n..trying wget...\n"  if ($DEBUG);
-				$html = `wget -t 2 -T 20 -O- -o /dev/null \"$url2fetch\" 2>/dev/null `;
+				$html = `wget -t 2 -T 20 -O- -o /dev/null "$url2fetch" 2>/dev/null `;
 			}
 		}
-
 		print STDERR "-1: html=$html=\n"  if ($DEBUG > 1);
+
 		return undef  unless ($html);
 
 		if ($url2fetch =~ s#\/\/embed.podcast#\/\/podcast#) {  #HANDLE "EMBEDDED PODCAST URLS:
@@ -434,54 +420,28 @@ sub new
 				my $no_wget = system('wget','-V');
 				unless ($no_wget) {
 					print STDERR "\n..trying wget...\n"  if ($DEBUG);
-					$html = `wget -t 2 -T 20 -O- -o /dev/null \"$url2fetch\" 2>/dev/null `;
+					$html = `wget -t 2 -T 20 -O- -o /dev/null "$url2fetch" 2>/dev/null `;
 				}
 			}
 
 			print STDERR "-1: html=$html=\n"  if ($DEBUG > 1);
 			return undef  unless ($html);
 
-			$embedepisode = $url2fetch;
-			if ($html =~ m#${embedepisode}\?i\=(\d+)#s) {
+			if ($html =~ m#${url2fetch}\?i\=(\d+)#s) {
 				$self->{'id'} = $1;
 				$url2fetch .= '?i=' . $1;
 				print STDERR "--3: EMBEDDED EPISODE FOUND (id=$1): URL=$url2fetch)!\n"  if ($DEBUG);
 			} else {
+				print STDERR "f:Could not find embedded episode in ($url2fetch), aborting!\n";
 				return undef;
 			}
 		} else {
-			my $ep1id = $1  if ($html =~ m#\bdata\-episode\-id\=\"([^\"]+)#);
-			$ep1id ||= $1  if ($html =~ m#\btargetId\&quot\;\:\&quot\;(\d+)#);
-			return undef  unless ($ep1id);
-
-			$url2fetch = 'https://podcasts.apple.com/podcast/id' . $self->{'id'}
-					. '?i=' . $ep1id;
-			$self->{'id'} .= '/' . $ep1id;
-
-			$self->{'articonurl'} = ($html =~ m#\<img\s+class\=\".*?src\=\"([^\"]+)#s) ? $1 : '';
-			$self->{'articonurl'} = ($html =~ /\s+srcset\=\"([^\"\s]+)/s) ? $1 : ''
-					if ($self->{'articonurl'} !~ /^http/);
-
-			$html =~ s#^.+?\"episodes\\?\"\:\{##s;
-			while ($html =~ s#^(.+?)\"assetUrl\\?\"\:\\?\"([^\\\"]+)##so) {
-				my $pre = $1;
-				my $stream = $2;
-				next  if ($self->{'secure'} && $stream !~ /^https/o);
-
-				my $title = ($pre =~ s#\"(?:name|itunesTitle)\\?\"\:\\?\"(.+?)\\?\"\,##so) ? $1 : '';
-				next  unless ($title);
-
-				$title =~ s#\\##g;
-				$title = HTML::Entities::decode_entities($title);
-				$title = uri_unescape($title);
-				$title =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
-				my $genre = ($pre =~ m#\"genreNames\\?\"\:\[\\?\"(.+?)\\?\"[\,\]]#so) ? $1 : '';
-				$genre =~ s#\\##g;
-
-				push @epiStreams, $stream;
-				push @epiTitles, $title;
-				push @epiGenres, $genre;
-			}
+			$url2fetch = ($html =~ m#\,\"uploadDate\"\:\"[^\"]+\"\,\"url\"\:\"([^\"]+)#)
+					? $1 : '';
+			return undef  unless ($url2fetch);
+			$self->{'id'} = ($url2fetch =~ m#\/(?:id)?(\d\d\d\d\d+)(?:\?i\=(\d+))?\/?#) ? $1 : '';
+			$self->{'id'} .= '/'. $2  if (defined $2);
+			print "--FETCH EPISODE ID=$$self{'id'}= URL=$url2fetch=\n"  if ($DEBUG);
 		}
  	}
 
@@ -496,41 +456,26 @@ sub new
 		my $no_wget = system('wget','-V');
 		unless ($no_wget) {
 			print STDERR "\n..trying wget...\n"  if ($DEBUG);
-			$html = `wget -t 2 -T 20 -O- -o /dev/null \"$url2fetch\" 2>/dev/null `;
+			$html = `wget -t 2 -T 20 -O- -o /dev/null "$url2fetch" 2>/dev/null `;
 		}
 	}
 
 	print STDERR "-2: html=$html=\n"  if ($DEBUG > 1);
 	return undef  unless ($html);
 
-	$html =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
-	$self->{'iconurl'} = ($html =~ m#\<img\s+class\=\".*?src\=\"([^\"]+)#s) ? $1 : '';
-	if ($self->{'iconurl'} !~ /^http/) {
-		$self->{'iconurl'} = ($html =~ /\s+srcset\=\"([^\"\s]+)/s) ? $1 : '';
+	$self->{'iconurl'} = ($html =~ /\bsrcset\=\"([^\"\s]+)/s) ? $1 : '';
+	$self->{'iconurl'} = ($html =~ m#\"thumbnailUrl\"\:\"([^\"]+)#s) ? $1 : ''
+			if (!$self->{'iconurl'} || $self->{'iconurl'} !~ /^http/);
+	$self->{'imageurl'} = $1  if ($html =~ m#\<meta\s+property\=\"(?:og|twitter)\:image\:secure\_url\"\s+content\=\"([^\"\s]+)#s);
+	$self->{'imageurl'} ||= $1  if ($html =~ m#\<meta\s+(?:property|name)\=\"(?:og|twitter)\:image\"\s+content\=\"([^\"\s]+)#s);
+	$self->{'imageurl'} = $self->{'iconurl'}
+			if (!$self->{'imageurl'}  || $self->{'imageurl'} !~ /^http/);
+	$self->{'iconurl'} ||= $self->{'imageurl'};
+	if ($html =~ m#\:\{\"\@type\"\:\"CreativeWorkSeries\"([^\}]+)#s) {
+		my $artistdata = $1;
+		$self->{'artist'} = $1  if ($artistdata =~ m#\"name\"\:\"([^\"]+)\"#s);
+		$self->{'albumartist'} = $1  if ($artistdata =~ m#\"url\"\:\"([^\"]+)\"#s);
 	}
-	$self->{'imageurl'} = $self->{'iconurl'};
-	
-	if ($html =~ m#\<span\s+class\=\"product\-header\_\_identity(.+?)\<\/span\>#s) {
-		my $span = $1;
-		$self->{'album'} = $1  if ($span =~ m#\>\s*([^\<]+)\<\/a#s);
-		if ($self->{'album'} !~ /\w/) {
-			$self->{'album'} = $1  if ($span =~ m#\>\s*([^\<]+)#s);
-		}
-		$self->{'album'} =~ s/\s+$//;
-		$self->{'albumartist'} = $1  if ($span =~ m#href\=\"([^\"]+)\"\s+class\=\"link#is);
-	}
-	$self->{'artist'} = $1  if ($html =~ m#\"creator\"\:\"([^\"]+)#);
-	if (!$self->{'artist'} && $html =~ m#\<li\s+class\=\"tracklist\-footer\_\_item\"\>([^\<]+)#s) {
-		$self->{'artist'} = $1;
-		$self->{'artist'} =~ s/^\s+//s;
-		$self->{'artist'} =~ s/\s+$//s;
-	}
-	if ($html =~ m#\<li\s+class\=\"product\-header\_\_list\_\_item\"\>(.*?)\<\/ul\>#s) {
-		my $prodlistitemdata = $1;
-		$self->{'genre'} = $1  if ($prodlistitemdata =~ s#genre\"?\>\s*([^\<]+)\<\/##s);
-		$self->{'year'} = $1  if ($prodlistitemdata =~ m#\>([\d]+)\D*\<\/time\>#s);
-	}
-	$self->{'genre'} ||= $1  if ($html =~ m#\<li\s+class\=\"inline\-list\_\_item[^\>]+\>(.*?)\<\/li\>#s);
 	if ($html =~ m#\<h1(.+?)\<\/h1\>#si) {
 		my $titlestuff = $1;
 		if ($titlestuff =~ m#\s+aria\-label\=\"([^\"]+)#s) {
@@ -541,29 +486,37 @@ sub new
 	}
 	$self->{'title'} ||= $1  if ($html =~ s#\"(?:name|itunesTitle)\\?\"\:\\?\"(.+?)\\?\"\,##so);
 	$self->{'title'} =~ s#\\##g;
-	if ($html =~ m#episode\-description\>(.+?)\<\/section\>#s) {
-		$self->{'description'} = $1;
-		$self->{'description'} =~ s#\<p[^\>]*\>(.+?)\<\/p\>#$1#s;
+	$self->{'title'} =~ s#\<[^\>]+\>##g;
+	$self->{'description'} = $1
+			if ($html =~ m#\>\<\!\-\- HTML\_TAG\_START \-\-\>(.+?)\<\!\-\- HTML\_TAG\_END \-\-\>#s);
+	#JWT:I DO NOT FULLY TRUST THE REGEX JUST ABOVE!:
+	my $shorterDesc = ($html =~ m#\"description\"\:\"([^\\\"]+)#s) ? $1 : '';
+	$shorterDesc ||= $1  if ($html =~ m#\<meta\s+name\=\"description\"\s+content\=\"([^\"]+)\"#s);
+	if ($shorterDesc && $shorterDesc =~ /\w\w+/) {
+		$shorterDesc =~ s/^\s+//s;
+		$self->{'description'} = $shorterDesc
+			if (length($shorterDesc) > length($self->{'description'}));
 	}
-	$self->{'description'} ||= $1  if ($html =~ m#\"description\\?\"\:\{\\?\"standard\\?\"\:\\?\"([^\\\"]+)#s);
-	$self->{'description'} ||= $1  if ($html =~ m#\"short\"\:\"([^\"]+)\"#s);
 	$self->{'created'} = $1  if ($html =~ m#\"datePublished\"\:\"([^\"]+)#s);
-	while ($html =~ s#\"assetUrl\\?\"\:\\?\"([^\\\"]+)##s) {
+	my %streamHash = ();
+	while ($html =~ s#\"streamUrl\"\:\"([^\\\"]+)##s) {
 		my $stream = $1;
-		push (@{$self->{'streams'}}, $stream)  unless ($self->{'secure'} && $stream !~ /^https/o);
+		$stream =~ s#www.podtrac.com/pts/redirect.mp3/pdst.fm/e/pscrb.fm/rss/p/claritaspod.com/measure/traffic(.megaphone.fm\/[A-Z0-9]+\.mp3).*$#dcs-spotify$1#;
+		$streamHash{$stream} = 1;
 	}
-	$self->{'cnt'} = scalar @{$self->{'streams'}};
-	$self->{'total'} = $self->{'cnt'};
-	return undef  unless ($self->{'total'} > 0);
-
+	foreach my $s (keys %streamHash) {
+		print STDERR "--FOUND STREAM=$s=\n"  if ($DEBUG);
+		push (@{$self->{'streams'}}, $s)  unless ($self->{'secure'} && $s !~ /^https/o);
+	}
 	$self->{'year'} = $1  if ($self->{'created'} =~ /(\d\d\d\d)/);
-	if ($self->{'genre'})	{
-		$self->{'genre'} =~ s/^\s+//;
-		$self->{'genre'} =~ s/\s+$//;
-	} else {
-		$self->{'genre'} = 'Podcast';
+	if ($html =~ m#\,\"genre\"\:\[([^\]]+)#s) {
+		my $genredata = $1;
+		while ($genredata =~ s#\"([^\"]+)\"##) {
+			$self->{'genre'} .= "$1, ";
+		}
+		$self->{'genre'} =~ s/\,\s+$//  if ($self->{'genre'});
 	}
-	$self->{'imageurl'} = $self->{'iconurl'};
+	$self->{'genre'} ||= 'Podcast';
 	if ($self->{'description'} =~ /\w/) {
 		$self->{'description'} =~ s/\s+$//;
 		$self->{'description'} =~ s/^\s+//;
@@ -573,39 +526,38 @@ sub new
 	foreach my $i (qw(title artist album description genre)) {
 		$self->{$i} = HTML::Entities::decode_entities($self->{$i});
 		$self->{$i} = uri_unescape($self->{$i});
-		$self->{$i} =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
+		$self->{$i} =~ s/(?:\%|\\[ux\%]?00|\bu00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
 	}
-	$self->{'Url'} = $self->{'streams'}->[0];
-	print STDERR "-SUCCESS: 1st stream=".$self->{'Url'}."= total=".$self->{'total'}."=\n"  if ($DEBUG);
-	$self->{'playlist'} = "#EXTM3U\n";
-	if ($#epiStreams >= 0) {
-		$self->{'playlist_cnt'} = scalar @epiStreams;
-		for (my $i=0;$i<=$#epiStreams;$i++) {
-			last  if ($i > $#epiTitles);
-			$self->{'playlist'} .= "#EXTINF:-1, " . $epiTitles[$i] . "\n";
-			$self->{'playlist'} .= "#EXTART:" . $self->{'artist'} . "\n"
-					if ($self->{'artist'});
-			$self->{'playlist'} .= "#EXTALB:" . $self->{'album'} . "\n"
-					if ($self->{'album'});
-			$self->{'playlist'} .= "#EXTGENRE:" . ($epiGenres[$i] || $self->{'genre'}) . "\n"
-					if ($self->{'genre'});
-			$self->{'playlist'} .= $epiStreams[$i] . "\n";
+	$self->{'cnt'} = scalar @{$self->{'streams'}};
+	$self->{'total'} = $self->{'cnt'};
+
+	if ($self->{'cnt'} > 0) {  #MANY APPLE PODCASTS DO NOT PROVIDE LENGTH IN STREAMS, SO CALCULATE IT!:
+		if ($html =~ m#Length\<\/div\>\s+\<div[^\>]+\>([^\<]+)#s) {
+			my $lengthdata = $1;
+			my $len = 0;
+			$len += ($1 * 3600)  if ($lengthdata =~ /(\d+)h/i);
+			$len += ($1 * 60)  if ($lengthdata =~ /(\d+)m/i);
+			$len += $1  if ($lengthdata =~ /(\d+)s/);
+			$len *= 1000;  #NEED IT IN MILLISECS!
+			$self->{'length'} = $len;
 		}
-	} else {
+		$self->{'Url'} = $self->{'streams'}->[0];
 		$self->{'playlist_cnt'} = 1;
+		$self->{'playlist'} = "#EXTM3U\n";
 		$self->{'playlist'} .= "#EXTINF:-1, " . $self->{'title'} . "\n";
 		$self->{'playlist'} .= "#EXTART:" . $self->{'artist'} . "\n"
 				if ($self->{'artist'});
-		$self->{'playlist'} .= "#EXTALB:" . $self->{'album'} . "\n"
-				if ($self->{'album'});
+		$self->{'playlist'} .= "#EXTALB:" . $self->{'albumartist'} . "\n"
+				if ($self->{'albumartist'});
 		$self->{'playlist'} .= "#EXTGENRE:" . $self->{'genre'} . "\n"
 				if ($self->{'genre'});
-		$self->{'playlist'} .= ${$self->{'streams'}}[0] . "\n";
+		$self->{'playlist'} .= $self->{'Url'} . "\n";
 	}
 	if ($DEBUG) {
 		foreach my $f (sort keys %{$self}) {
 			print "--KEY=$f= VAL=$$self{$f}=\n";
 		}
+		print STDERR "-SUCCESS: 1st stream=".$self->{'Url'}."=\n"  if ($self->{'cnt'} > 0);
 	}
 
 	$self->_log($url);
@@ -631,26 +583,31 @@ sub getIconURL
 		$ua->cookie_jar({});
 		$ua->env_proxy;
 		my $response = $ua->get($url2fetch);
-		if ($response->is_success) {
-			$html = $response->decoded_content;
-		} else {
-			print STDERR $response->status_line  if ($DEBUG);
-			my $no_wget = system('wget','-V');
-			unless ($no_wget) {
-				print STDERR "\n..trying wget...\n"  if ($DEBUG);
-				$html = `wget -t 2 -T 20 -O- -o /dev/null \"$url2fetch\" 2>/dev/null `;
-			}
-		}
-
+		$html = $response->decoded_content  if ($response->is_success);
 		print STDERR "-1: html=$html=\n"  if ($DEBUG > 1);
 		return ''  unless ($html);
 
-		$self->{'articonurl'} = ($html =~ m#\<img\s+class\=\".*?src\=\"([^\"]+)#s) ? $1 : '';
-		$self->{'articonurl'} = ($html =~ /\s+srcset\=\"([^\"\s]+)/s) ? $1 : ''
-				if ($self->{'articonurl'} !~ /^http/);
+		$self->{'articonurl'} = ($html =~ /\bsrcset\=\"([^\"\s]+)/s) ? $1 : '';
+		$self->{'artimageurl'} = $1  if ($html =~ m#\<meta\s+property\=\"(?:og|twitter)\:image\:secure\_url\"\s+content\=\"([^\"\s]+)#s);
+		$self->{'artimageurl'} ||= $1  if ($html =~ m#\<meta\s+(?:property|name)\=\"(?:og|twitter)\:image\"\s+content\=\"([^\"\s]+)#s);
+		$self->{'artimageurl'} = ($html =~ m#\"thumbnailUrl\"\:\"([^\"]+)#s) ? $1 : ''
+				if (!$self->{'artimageurl'} || $self->{'artimageurl'} !~ /^http/);
+		$self->{'articonurl'} ||= $self->{'artimageurl'};
+		$self->{'articonurl'} = $self->{'artimageurl'}
+				if (!$self->{'articonurl'} || $self->{'articonurl'} !~ /^http/);
+		$self->{'artimageurl'} ||= $self->{'articonurl'};
 		print STDERR "--ART ICON URL=".$self->{'articonurl'}."=\n"  if ($DEBUG);
 	}
 	return $self->{'articonurl'};
+}
+
+sub getImageURL
+{
+	my $self = shift;
+	return $self->{'imageurl'}  unless (defined($_[0]) && $_[0] =~ /^\-?artist/i);
+
+	$self->getIconURL(@_)  unless ($self->{'articonurl'});
+	return $self->{'artimageurl'};		
 }
 
 1

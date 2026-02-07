@@ -290,10 +290,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-Anystream>
 
 L<http://annocpan.org/dist/StreamFinder-Anystream>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-Anystream>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder-Anystream/>

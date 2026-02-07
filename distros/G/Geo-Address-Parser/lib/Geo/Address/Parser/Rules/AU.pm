@@ -5,6 +5,8 @@ use warnings;
 use Exporter 'import';
 our @EXPORT_OK = qw(parse_address);
 
+our $VERSION = '0.07';
+
 # Australian states and territories (2–3 letter abbreviations)
 my $state_re = qr/\b(ACT|NSW|NT|QLD|SA|TAS|VIC|WA)\b/i;
 
@@ -53,7 +55,7 @@ Geo::Address::Parser::Rules::AU - Parsing rules for Australian addresses
 
 =head1 DESCRIPTION
 
-Parses a flat Australian address string into components: name, road, suburb, state, postcode.
+Parses a flat Australian address string into components: name, road, suburb, region, postcode.
 
 =head1 EXPORTS
 
@@ -69,7 +71,9 @@ Returns a hashref with keys:
 
 =item * suburb
 
-=item * region (state)
+=item * region
+
+This contains the state
 
 =item * postcode
 

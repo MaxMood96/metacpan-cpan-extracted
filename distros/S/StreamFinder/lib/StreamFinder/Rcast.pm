@@ -4,7 +4,7 @@ StreamFinder::Rcast - Fetch actual raw streamable URLs from radio-station websit
 
 =head1 AUTHOR
 
-This module is Copyright (C) 2023 by
+This module is Copyright (C) 2023-2026 by
 
 Jim Turner, C<< <turnerjw784 at yahoo.com> >>
 		
@@ -93,8 +93,8 @@ station object, or I<undef> if the URL is not a valid rcast.net
 station or no streams are found.  The URL can be the full URL, 
 ie. https://dir.rcast.net/radio/B<station-id>, or just I<station-id>.
 
-The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  If 1 
-then only secure ("https://") streams will be returned.  NOTE:  rcast.net 
+The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  
+If 1 then only secure ("https://") streams will be returned.  NOTE:  rcast.net 
 currently only returns https (secure) stream URLs, as the stream URL is a 
 reformat of the station's url.
 
@@ -104,8 +104,9 @@ Additional options:
 
 I<-log> => "I<logfile>"
 
-Specify path to a log file.  If a valid and writable file is specified, A line will be 
-appended to this file every time one or more streams is successfully fetched for a url.
+Specify path to a log file.  If a valid and writable file is specified, A line 
+will be appended to this file every time one or more streams is successfully 
+fetched for a url.
 
 DEFAULT I<-none-> (no logging).
 
@@ -113,11 +114,11 @@ I<-logfmt> specifies a format string for lines written to the log file.
 
 DEFAULT "I<[time] [url] - [site]: [title] ([total])>".  
 
-The valid field I<[variables]> are:  [stream]: The url of the first/best stream found.  
-[site]:  The site name (Rcast).  [url]:  The url searched for streams.  
-[time]: Perl timestamp when the line was logged.  [title], [artist], [album], 
-[description], [year], [genre], [total], [albumartist]:  The corresponding field data 
-returned (or "I<-na->", if no value).
+The valid field I<[variables]> are:  [stream]: The url of the first/best 
+stream found.  [site]:  The site name (Rcast).  [url]:  The url searched for 
+streams.  [time]: Perl timestamp when the line was logged.  [title], [artist], 
+[album], [description], [year], [genre], [total], [albumartist]:  
+The corresponding field data returned (or "I<-na->", if no value).
 
 =item $station->B<get>()
 
@@ -265,10 +266,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-Rcast>
 
 L<http://annocpan.org/dist/StreamFinder-Rcast>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-Rcast>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder-Rcast/>
@@ -277,7 +274,7 @@ L<http://search.cpan.org/dist/StreamFinder-Rcast/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2023 Jim Turner.
+Copyright 2023-2026 Jim Turner.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the the Artistic License (2.0). You may obtain a
@@ -340,7 +337,7 @@ sub new
 
 	my $url2fetch = $url;
 	if ($url =~ /^https?\:/) {
-		$self->{'id'} = $1  if ($url2fetch =~ m#\/([0-9]+)\/?$#);
+		$self->{'id'} = $1  if ($url2fetch =~ m#\/([0-9]+)#);
 	} else {
 		$self->{'id'} = $url;
 		$url2fetch = 'https://dir.rcast.net/radio/' . $url;
@@ -370,37 +367,43 @@ sub new
 		$self->{'albumartist'} = $1  if ($goodpart =~ m#(https?\:[^\<]+)#s);
 	}
 	$self->{'albumartist'} ||= $1  if ($html =~ m#\<meta\s+property\=\"(?:og|twitter)\:url\"\s+content\=\"(https?\:\/\/[^\"]+)\"#s);
-	if ($html =~ m#\<label\>Genre\<\/label\>(.+?)\<label\>#si) {
-		my $goodpart = $1;
-		$self->{'genre'} = '';
-		while ($goodpart =~ s#\s+title\=\"[^\"]+\"\>([^\<]+)\<\/a\>##sio) {
-			$self->{'genre'} .= "$1, ";
-		}
-		$self->{'genre'} =~ s/\, $//  if ($self->{'genre'});
+	$self->{'genre'} = '';
+	while ($html =~ s#\<span\s+class\=\"badge\s+text\-bg\-secondary\"\>([^\<]+)##s) {
+		$self->{'genre'} .= "$1, ";
 	}
+	$self->{'genre'} =~ s/\, $//  if ($self->{'genre'});
 	$self->{'imageurl'} = $self->{'iconurl'};
 
 	#GET THE STREAM:
-	@{$self->{'streams'}} = ('https://stream.rcast.net/'.$self->{'id'});  #SO FAR, THIS IS ALWAYS *THE* STREAM URL.
+	while ($html =~ s#\bdata\-stream\=\"([^\"]+)\"##s) {
+		my $s = $1;
+		unless ($self->{'secure'} && $s !~ /^https/) {
+			push @{$self->{'streams'}}, $s;
+			print STDERR "--STATION STREAM FOUND=$s=!\n"  if ($DEBUG);
+		}
+	}
+	#FALLBACK STREAM:  SO FAR, THIS ONE SEEMS TO ALWAYS? WORK:
+	push @{$self->{'streams'}}, "https://stream.rcast.net/$$self{'id'}";
 	$self->{'cnt'} = scalar @{$self->{'streams'}};
 	foreach my $field (qw(description genre)) {
 		$self->{$field} = HTML::Entities::decode_entities($self->{$field});
 		$self->{$field} = uri_unescape($self->{$field});
-		$self->{$field} =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/eg;
+		$self->{$field} =~ s/(?:\%|\\[ux\%]?00|\bu00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
 	}
 	$self->{'description'} = $self->{'title'};  #rcast.net DOES NOT PROVIDE LONG DESCRIPTIONS!
 	$self->{'title'} =~ s#\s*\-\s*RCAST.NET##i;
 
-	print STDERR "-2: ID=".$self->{'id'}."=\ntitle=".$self->{'title'}."=\ngenre=".$self->{'genre'}."=\ndesc=".$self->{'description'}."=\nalbum_artist=".$self->{'albumartist'}."=\n"  if ($DEBUG);
+	print STDERR "-2: ID=".$self->{'id'}."=\ntitle=".$self->{'title'}."=\ngenre="
+			.$self->{'genre'}."=\ndesc=".$self->{'description'}."=\nalbum_artist="
+			.$self->{'albumartist'}."=\n"  if ($DEBUG);
 	$self->{'total'} = $self->{'cnt'};
 	$self->{'Url'} = ($self->{'total'} > 0) ? $self->{'streams'}->[0] : '';
 	if ($DEBUG) {
-		foreach my $i (sort keys %{$self}) {
-			print STDERR "---($i) FOUND, IS(".$self->{$i}.").\n";
+		foreach my $f (sort keys %{$self}) {
+			print STDERR "--KEY=$f= VAL=$$self{$f}=\n";
 		}
+		print STDERR "-SUCCESS: 1st stream=".$self->{'Url'}."=\n"  if ($self->{'cnt'} > 0);
 	}
-	print STDERR "--SUCCESS: 1st stream=".$self->{'Url'}."= total=".$self->{'total'}."=\n"
-			if ($DEBUG && $self->{'cnt'} > 0);
 	$self->_log($url);
 
 	bless $self, $class;   #BLESS IT!

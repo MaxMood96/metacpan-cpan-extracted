@@ -5,7 +5,7 @@ use warnings;
 use POSIX qw(strftime);
 use Cwd qw(getcwd);
 
-our $VERSION = '2.0.0';
+our $VERSION = '2.0.1';
 
 =head1 NAME
 
@@ -46,7 +46,7 @@ following git-flow methodology.
 
 =head1 AUTHOR
 
-saumon <sshrekrobu@gmail.com>
+saumon <shrekrobu@gmail.com>
 
 =head1 LICENSE
 

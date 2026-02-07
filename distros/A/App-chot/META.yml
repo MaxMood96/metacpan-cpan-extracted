@@ -26,7 +26,7 @@ no_index:
 provides:
   App::chot:
     file: lib/App/chot.pm
-    version: '1.01'
+    version: '1.02'
   App::chot::Command:
     file: lib/App/chot/Command.pm
   App::chot::Node:
@@ -54,7 +54,7 @@ resources:
   bugtracker: https://github.com/tecolicom/App-chot/issues
   homepage: https://github.com/tecolicom/App-chot
   repository: https://github.com/tecolicom/App-chot.git
-version: '1.01'
+version: '1.02'
 x_authority: cpan:UTASHIRO
 x_contributors:
   - 'Kazumasa Utashiro <kaz@utashiro.com>'

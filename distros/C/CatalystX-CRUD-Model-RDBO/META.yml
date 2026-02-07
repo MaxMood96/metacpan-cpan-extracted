@@ -28,5 +28,9 @@ requires:
   Rose::DBx::TestDB: '0'
   Sort::SQL: '0.05'
   Test::More: '0'
-version: '0.303'
+resources:
+  bugtracker: https://github.com/karpet/catalystx-crud-model-rdbo
+  homepage: https://github.com/karpet/catalystx-crud-model-rdbo
+  repository: https://github.com/karpet/catalystx-crud-model-rdbo.git
+version: '0.304'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

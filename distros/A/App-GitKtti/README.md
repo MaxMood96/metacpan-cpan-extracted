@@ -30,12 +30,22 @@ The `gitktti` scripts are provided to help developers safely use git flow. So po
     - [Manual Installation](#manual-installation)
   - [🗑️ Uninstallation](#️-uninstallation)
   - [⚒️ Available Commands](#️-available-commands)
-  - [🚀 Quick Start](#-quick-start)
+  - [🐰 Quick Start](#-quick-start)
   - [⭐️ Recommended aliases](#️-recommended-aliases)
     - [Alias descriptions](#alias-descriptions)
     - [Usage examples](#usage-examples)
+  - [🚀 CPAN Distribution Guide](#-cpan-distribution-guide)
+    - [Prerequisites](#prerequisites)
+    - [Command Line Upload](#command-line-upload)
+      - [Step 1: Install Upload Tool](#step-1-install-upload-tool)
+      - [Step 2: Configure PAUSE Credentials](#step-2-configure-pause-credentials)
+      - [Step 3: Prepare Distribution](#step-3-prepare-distribution)
+      - [Step 4: Upload to CPAN](#step-4-upload-to-cpan)
+      - [What Happens Next](#what-happens-next)
+      - [Complete Example](#complete-example)
   - [📋 Recent Releases](#-recent-releases)
-    - [Release `2.0.0` - 10/09/2025 🆕](#release-200---10092025-)
+    - [Release `2.0.1` - 01/02/2026](#release-201---01022026)
+    - [Release `2.0.0` - 10/09/2025](#release-200---10092025)
     - [Release `1.3.3` - 27/08/2025](#release-133---27082025)
     - [Release `1.3.2` - 25/08/2025](#release-132---25082025)
     - [Release `1.3.1` - 24/08/2025](#release-131---24082025)
@@ -298,6 +308,10 @@ kfixend
 ### From CPAN (Recommended)
 
 ```bash
+# Preferred method
+cpanm App::GitKtti
+
+# Alternative
 cpan App::GitKtti
 ```
 
@@ -349,7 +363,7 @@ After installation, the following commands are available:
 
 Each command supports `--help` for detailed usage information.
 
-## 🚀 Quick Start
+## 🐰 Quick Start
 
 ```bash
 # Run diagnostics
@@ -454,16 +468,111 @@ gitktti-delete --name feature/old-feature
 gitktti-tests
 ```
 
+## 🚀 CPAN Distribution Guide
+
+This section is for maintainers who want to upload new versions of GitKtti to CPAN.
+
+### Prerequisites
+
+1. **PAUSE Account**: Create an account at https://pause.perl.org/pause/query?ACTION=request_id
+2. **Quality Check**: Ensure your code passes all tests and quality checks
+
+```bash
+# Run quality checks
+perlcritic lib/App/GitKtti.pm
+perl Makefile.PL
+make test
+make disttest
+```
+
+### Command Line Upload
+
+The recommended method for uploading to CPAN using the command line:
+
+#### Step 1: Install Upload Tool
+
+```bash
+# Install CPAN::Uploader (preferred method)
+cpanm CPAN::Uploader
+# or
+cpan CPAN::Uploader
+```
+
+#### Step 2: Configure PAUSE Credentials
+
+```bash
+# Create credentials file (one time setup)
+echo "user YOUR_PAUSE_ID" > ~/.pause
+echo "password YOUR_PASSWORD" >> ~/.pause
+chmod 600 ~/.pause
+```
+
+Replace `YOUR_PAUSE_ID` and `YOUR_PASSWORD` with your actual PAUSE credentials.
+
+#### Step 3: Prepare Distribution
+
+```bash
+# Clean and build distribution
+make realclean
+perl Makefile.PL
+make
+make test
+make dist
+```
+
+This creates: `App-GitKtti-X.Y.Z.tar.gz`
+
+#### Step 4: Upload to CPAN
+
+```bash
+# Upload your distribution
+cpan-upload App-GitKtti-X.Y.Z.tar.gz
+```
+
+#### What Happens Next
+
+1. **Immediate confirmation**: Command line feedback
+2. **PAUSE email**: Confirmation email from PAUSE
+3. **CPAN indexing**: ~15-30 minutes to appear on CPAN
+4. **MetaCPAN**: Module visible on https://metacpan.org/
+
+#### Complete Example
+
+```bash
+# Full workflow example
+cd ~/work/scripts/perl/gitktti
+
+# Quality checks
+perlcritic lib/App/GitKtti.pm
+make realclean
+perl Makefile.PL
+make test
+make disttest
+
+# Build distribution
+make dist
+
+# Upload (assuming credentials already configured)
+cpan-upload App-GitKtti-2.0.0.tar.gz
+```
+
+**Note**: Only authorized maintainers with PAUSE access can upload to CPAN.
+
 ***
 
 ## 📋 Recent Releases
 
-### Release `2.0.0` - 10/09/2025 🆕
+### Release `2.0.1` - 01/02/2026
+
+- Lint fixes
+- **kfixend**: GitHub spec-kit feature branches compatibility
+
+### Release `2.0.0` - 10/09/2025
 
 **🚀 MAJOR MODERNIZATION RELEASE - CPAN READY!**
 
 - **BREAKING CHANGES:** Complete architecture modernization for CPAN distribution
-- **NEW:** CPAN installable with `cpan App::GitKtti`
+- **NEW:** CPAN installable with `cpanm App::GitKtti` or `cpan App::GitKtti`
 - **NEW:** Scripts renamed with `gitktti-` prefix (e.g., `gitktti-checkout`)
 - **NEW:** Professional test suite and modern documentation
 - **MIGRATION:** Old `perl gitktti_*.pl` → New `gitktti-*` commands

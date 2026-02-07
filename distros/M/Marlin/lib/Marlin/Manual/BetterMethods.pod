@@ -1,0 +1,256 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Marlin::Manual::BetterMethods - better methods with Marlin
+
+=head1 DESCRIPTION
+
+=head2 Method Signatures
+
+Although it's not part of Marlin, Marlin works well hand in hand with
+the C<signature_for> method of L<Type::Params>. This allows you to
+specify signatures for your methods, indicating what parameters the
+method expects and what types of data they should be.
+
+The L<Types::Common> module which has already been introduced re-exports
+C<signature_for>.
+
+B<< Example: Positional Signatures >>
+
+  # This is a method which (apart from the object itself)
+  # accepts one positional parameter, a string.
+  #
+  signature_for change_password_to => (
+    method      => true,
+    positional  => [ Str ],
+  );
+  
+  sub change_password_to ( $self, $new_password ) {
+    
+    die "Password too short" if length($new_password) < 6;
+    
+    $self->_set_password( $new_password );
+    $self->_set_updated( time() );
+    
+    return $self;
+  }
+
+A change password function might instead accept the old password
+(to make sure you have permission to change the password), plus two
+copies of the new password to make sure you didn't mistype it.
+When a method takes a lot of parameters, it can be a good idea to
+make them named parameters so they don't get mixed up.
+
+B<< Example: Named Signatures >>
+
+  signature_for change_password_to => (
+    method  => true,
+    named   => [
+      old_password      => Str,
+      new_password      => Str,
+      confirm_password  => Str,
+    ],
+  );
+
+  sub change_password_to ( $self, $args ) {
+    
+    die "Unauthorized" if $arg->old_password ne $self->password;
+    die "Mistyped" if $arg->new_password ne $arg->confirm_password; 
+    die "Password too short" if length($arg->new_password) < 6;
+    
+    $self->_set_password( $arg->new_password );
+    $self->_set_updated( time() );
+    
+    return $self;
+  }
+  
+  ...
+  
+  $alice->change_password_to(
+    old_password      => "S3CRET",
+    new_password      => "UwillNEVERguess",
+    confirm_password  => "IwillNEVERguess",
+  );
+
+For more information on C<signature_for>, see L<Type::Tiny::Manual> and
+L<Type::Params>.
+
+=head2 Method Modifiers
+
+Although it doesn't provide these keywords by default, Marlin is able to
+set up C<before>, C<after>, and C<around> keywords for your class allowing
+you to hook method calls.
+
+Include C<< -modifiers >> in the C<< use Marlin >> to get these methods.
+
+Here is another way to set the updated time when the password is changed.
+
+B<< Example: Method Modifier >>
+
+  use Marlin
+    ...,  # attribute definitions
+    -modifiers;
+    
+  after change_password_to => sub ( $self, $args ) {
+    $self->_set_updated( time() );
+  };
+  
+  signature_for change_password_to => (
+    method  => true,
+    named   => [ ... ],
+  );
+  
+  sub change_password_to ( $self, $args ) {
+    ...
+  }
+
+Marlin classes (but not roles) are also given a C<fresh> keyword to install
+a new method while checking no parent classes have a method of that name.
+
+See L<Class::Method::Modifiers> for more details about how method modifiers
+work.
+
+=head3 Combining method modifiers with signatures
+
+Signatures are effectively a type of C<around> modifier. Each modifier you
+apply to a method wraps it a bit like an onion: layers within layers.
+Layers you specify early form the inner layers, and layers you specify
+later form the inner layers.
+
+If one of those layers is a signature then layers further inside the onion
+will be able to see any changes the signature makes to the method arguments,
+such as any defaults or type coercions. Layers further out of the onion
+will not be able to see them.
+
+For this reason, it's often best to declare the method's signature I<after>
+any C<before>, C<after>, and C<around> modfiers.
+
+=head2 Object Lifecycle Methods
+
+Marlin allows you to define specially-named methods which affect how your
+objects are constructed and destroyed.
+
+C<BUILDARGS>, C<BUILD>, C<FOREIGNBUILDARGS>, and C<DEMOLISH> are supported.
+These are methods you can define in your class to influence how the constructor
+and destructor work.
+
+If you define a C<BUILDARGS> method, then it will be passed the constructor's
+C<< @_ >> and expected to return a hashref mapping attribute names to values.
+The default is something like this:
+
+  sub BUILDARGS {
+    my $class = shift;
+    if ( @_ == 1 and is_HashRef $_[0] ) {
+      return $_[0];
+    }
+    my %args = @_;
+    return \%args;
+  }
+
+It is usually a good idea to I<not> provide a C<BUILDARGS> method as the
+default behaviour is coded in fast C. However, you may sometimes need this
+flexibility/
+
+If you define a C<BUILD> method, it will be called after your object has
+been created but before the constructor returns it. It is passed a copy
+of the hashref returned by C<BUILDARGS>. In an inheritance heirarchy,
+the constructor will call C<BUILD> for B<all> the parent classes too,
+starting at the very base class.
+
+Because C<BUILD> is called before the strict constructor check, it has
+an opportunity to remove particular keys from the args hashref if they
+are likely to trigger the strict constructor to die.
+
+You can also call C<< $object->BUILDALL( \%args ) >> at any time to
+run all the C<BUILD> methods on an existing object, though quite why
+you'd want to is beyond my comprehension. Maybe some kind of
+inflate/deflate situation?
+
+If you define a C<DEMOLISH> method, this is treated like C<BUILD>, but
+for the constructor. The inheritance heirarchy is traversed in reverse.
+
+When you are inheriting from a non-Marlin, non-Class::XSConstructor class
+(a "foreign class"), Marlin will want to call the base class's constructor.
+It has two different techniques, depending on whether it appears to be a
+"friendly foreign class" (built by Class::Tiny, Moo, or Moose) or a
+"difficult foreign class".
+
+=over
+
+=item *
+
+Marlin decides a parent class is a B<< friendly foreign class >> if the
+parent class has a C<BUILDALL> method. Marlin will never call that method,
+but its presence indicates that it was built by a sensible OO framework.
+
+It will do roughly this:
+
+  my $foreign_constructor = $foreignclass->can( 'new' );
+  my $foreign_buildargs   = $foreignclass->can( 'BUILDARGS' )
+                           || $default_buildargs;
+  
+  my $args = $ourclass->$foreign_buildargs( @_ );
+  my $object = do {
+    local $args->{__no_BUILD__} = true;
+    $ourclass->$foreign_constructor( $args );
+  };
+  
+  # ... then initialize our attributes from $args
+  # ... then call BUILD methods, passing them $args
+  # ... then do the strict constructor check on $args
+  # ... then return $object
+
+The friendly foreign class is supposed to honour C<__no_BUILD__> and skip
+calling C<BUILD> methods. Marlin is going to call them and they shouldn't
+be called twice. Moose, Moo, and Class::Tiny all honour that parameter.
+
+=item *
+
+If it's a B<< difficult foreign class >>, Marlin will do this instead:
+
+  my $foreign_constructor = $foreignclass->can( 'new' );
+  
+  my @foreign_args = $ourclass->can('FOREIGNBUILDARGS')
+    ? $ourclass->FOREIGNBUILDARGS( @_ )
+    : @_;
+  my $args = $ourclass->can('BUILDARGS')
+    ? $ourclass->BUILDARGS( @_ )
+    : $outclass->$default_buildargs( @_ );
+  
+  my $object = $ourclass->$foreign_constructor( @foreign_args );
+  
+  # ... then initialize our attributes from $args
+  # ... then call BUILD methods, passing them $args
+  # ... then do the strict constructor check on $args
+  # ... then return $object
+
+We just hope that the foreign class does not try to call C<BUILD>.
+(It probably won't.)
+
+=back
+
+=head1 SEE ALSO
+
+L<Marlin::Manual::ClassOptions> - class-wide options.
+
+L<Marlin>, L<Marlin::Util>.
+
+=head1 AUTHOR
+
+Toby Inkster E<lt>tobyink@cpan.orgE<gt>.
+
+=head1 COPYRIGHT AND LICENCE
+
+This software is copyright (c) 2026 by Toby Inkster.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=head1 DISCLAIMER OF WARRANTIES
+
+THIS PACKAGE IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR IMPLIED
+WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
+MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.

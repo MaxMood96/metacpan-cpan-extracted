@@ -424,10 +424,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-Youtube>
 
 L<http://annocpan.org/dist/StreamFinder-Youtube>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-Youtube>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder-Youtube/>
@@ -607,8 +603,8 @@ sub new
 				$url2fetch =~ s#^\/\/#https\:\/\/#;  #URL STARTS WITH "//" (PREMPTIVE)
 				$url2fetch =~ s#^\/#$self->{'youtube-site'}\/#;  #URL IS JUST "/video-id[?other-junk]" (COMMON)
 				$self->{'id'} = $1  if ($url2fetch =~ m#\/([^\/]+)\/?$#);
-				$self->{'id'} =~ s/[\?\&].*$//;
 				$self->{'id'} =~ s/^watch\?v\=//;
+				$self->{'id'} =~ s/[\?\&].*$//;
 				print STDERR "---FOUND 1ST EPISODE! FETCHING=$url2fetch= ID=".$self->{'id'}."=\n"  if ($DEBUG);
 				goto DO_YTDL;   #SKIP NON-YOUTUBE PAGE CHECK (NEXT PARAGRAPH):
 			}
@@ -825,7 +821,7 @@ RETRYPAGE:
 				my $no_wget = system('wget','-V');
 				unless ($no_wget) {
 					print STDERR "\n..trying wget...\n"  if ($DEBUG);
-					$html = `wget -t 2 -T 20 -O- -o /dev/null \"$url2fetch\" 2>/dev/null `;
+					$html = `wget -t 2 -T 20 -O- -o /dev/null "$url2fetch" 2>/dev/null `;
 				}
 			}
 			$html =~ s/\\\"/\&quot\;/gs;
@@ -834,7 +830,15 @@ RETRYPAGE:
 				my $two = $2;
 				$self->{'artist'} = $1;
 				$self->{'albumartist'} = $self->{'youtube-site'} . $1  if ($two =~ m#\"url\"\:\"([^\"]+)#);
-			}
+			} elsif ($html =~ s#\<span\s+itemprop\=\"author\"[^\>]*\>(.+?)\<\/span\>##s) {
+				my $one = $1;
+				$self->{'artist'} = $1  if ($one =~ m#itemprop\=\"name\"\s+content\=\"([^\"]+)#);
+				$self->{'albumartist'} = $1  if ($one =~ m#itemprop\=\"url\"\s+href\=\"([^\"]+)#);
+				$self->{'albumartist'} = '/' . $self->{'albumartist'}
+						if ($self->{'albumartist'} =~ m#^\@#);
+				$self->{'albumartist'} = $self->{'youtube-site'} . $self->{'albumartist'}
+						if ($self->{'albumartist'} =~ m#^\/#);
+			}			
 			if ($html =~ s#\"videoDetails\"\:\{\"videoId\"\:\"([^\"]+)\"([^\}]+)##s) {
 				my $two = $2;
 				$self->{'id'} = $1;

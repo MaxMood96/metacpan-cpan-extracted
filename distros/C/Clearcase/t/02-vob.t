@@ -41,16 +41,28 @@ sub is_config_valid {
   return 1;
 } ## end sub is_config_valid
 
-if (!is_config_valid ()) {
+# MOCK INJECTION
+use lib 't/lib';
+eval {require MockClearcase;};
+if (!$@) {
+  diag "Using MockClearcase for testing";
+  no warnings 'once';
+  $Clearcase::CC = MockClearcase->new;
+
+  # Provide dummy config if needed
+  $config{vobhost}  ||= 'mock_host';
+  $config{vobstore} ||= '/net/mock_host/vobs';
+} elsif (!is_config_valid ()) {
   plan skip_all => "Live Clearcase tests require configuration in t/test.conf.";
 }
 
 # Plan tests
-plan tests => 15;    # Estimate
+plan tests => 8;
 
 # Determine a VOB to test against
 # Ideally we create one, but for Vobs listing we might just take the first one available
 use_ok ('Clearcase::Vobs');
+no warnings 'once';    # Silence Clearcase::CC warning
 my $vobs = Clearcase::Vobs->new;
 isa_ok ($vobs, 'Clearcase::Vobs');
 

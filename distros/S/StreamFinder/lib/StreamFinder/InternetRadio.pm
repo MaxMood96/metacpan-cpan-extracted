@@ -4,7 +4,7 @@ StreamFinder::InternetRadio - Fetch actual raw streamable URLs from radio-statio
 
 =head1 AUTHOR
 
-This module is Copyright (C) 2022 by
+This module is Copyright (C) 2022-2026 by
 
 Jim Turner, C<< <turnerjw784 at yahoo.com> >>
 		
@@ -281,10 +281,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-InternetRadio>
 
 L<http://annocpan.org/dist/StreamFinder-InternetRadio>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-InternetRadio>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder-InternetRadio/>
@@ -293,7 +289,7 @@ L<http://search.cpan.org/dist/StreamFinder-InternetRadio/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2022 Jim Turner.
+Copyright 2022-2026 Jim Turner.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the the Artistic License (2.0). You may obtain a
@@ -390,12 +386,8 @@ sub new
 	$self->{'title'} = $1  if ($html =~ m#\<(?:h1|title)\>([^\<]+)#si);
 	if ($html =~ m#\<br\>Genres\s*\:\s*(.+?)\<\/div\>#si) {
 		my $goodpart = $1;
-		$self->{'genre'} = ($goodpart =~ s#^([^\<]+)\<##s) ? $1 : '';
-		if ($self->{'genre'}) {
-			$self->{'genre'} =~ s/ $//;
-			$self->{'genre'} .= ', ';
-		}
-		while ($goodpart =~ s#\'startpage\'\,\s*\'([^\']+)\'\)\;##so) {
+		$self->{'genre'} = '';
+		while ($goodpart =~ s#\>([^\<]+)\<\/a##s) {
 			my $one = $1;
 			$self->{'genre'} .= $one . ', '  unless ($one =~ m#[\:\/\;]#o);
 		}
@@ -405,32 +397,46 @@ sub new
 		my $goodpart = $1;
 		$self->{'albumartist'} = $1  if ($goodpart =~ m#\>(http[^\<]+)#s);
 	}
+	#Internet-radio.com DOES NOT PROVIDE ICONS OR DESCRIPTIONS!
 	$self->{'imageurl'} = $self->{'iconurl'} = '';
-	$self->{'description'} = $self->{'title'};  #Internet-radio.com DOES NOT PROVIDE ICONS OR DESCRIPTIONS!
+	$self->{'description'} = $self->{'title'};
 	$self->{'title'} =~ s#\s*\-\s*Internet Radio##;
 
 	#TRY TO FETCH THE STREAMS:
-	my %streamHash = ();  #PREVENT DUPLICATES.
-	while ($html =~ s#\,\s*\'play\w+\'\,\s*\'(http[^\']+)##so) {
-		my $stream = $1;
-		$stream =~ s/\.(pls|m3u)[\?\&].+$/\.$1/  unless ($self->{'notrim'});   #STRIP OFF EXTRA GARBAGE PARMS, COMMENT OUT IF STARTS FAILING!
-		unless ($self->{'secure'} && $stream !~ /^https/o) {
-print STDERR "----FOUND STREAM=$stream=\n"  if ($DEBUG);
-			$streamHash{$stream} = $stream;
+	my $protocol = $self->{'secure'} ? '' : '?';
+	while ($html =~ s#\bvar\s+stream\d*\s*\=\s*\{([^\}]+)\}##s) {
+		my $streamdata = $1;
+		while ($streamdata =~ s#\"(https${protocol}\:\/\/[^\"]+)\"##s) {
+			my $stream = $1;
+			print STDERR "----FOUND STREAM=$stream=\n"  if ($DEBUG);
+			push @{$self->{'streams'}}, $stream;
+			$self->{'cnt'}++;
 		}
 	}
-	@{$self->{'streams'}} = keys %streamHash;
-	$self->{'cnt'} = scalar @{$self->{'streams'}};
+	foreach my $player ('Winamp', 'RealPlayer') {
+		if ($html =~ s#\<a\s+title\=\"Play in $player\"\s+href\=\"([^\"]+)\"##s) {
+			(my $stream = $1) =~ s#^.+?\?u\=##;
+			$stream =~ s#^.*?http#http#;
+			print STDERR "----FOUND ALT STREAM=$stream=\n"  if ($DEBUG);
+			push @{$self->{'streams'}}, $stream  unless ($self->{'secure'} && $stream !~ /^https/);
+			$self->{'cnt'}++;
+		}
+	}
 	foreach my $field (qw(description title genre)) {
 		$self->{$field} = HTML::Entities::decode_entities($self->{$field});
 		$self->{$field} = uri_unescape($self->{$field});
-		$self->{$field} =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/eg;
+		$self->{$field} =~ s/(?:\%|\\[ux\%]?00|\bu00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
 	}
 	print STDERR "-2: ID=".$self->{'id'}."=\ntitle=".$self->{'title'}."=\ngenre=".$self->{'genre'}."=\ndesc=".$self->{'description'}."=\nalbum_artist=".$self->{'albumartist'}."=\n"  if ($DEBUG);
 	$self->{'total'} = $self->{'cnt'};
 	$self->{'Url'} = ($self->{'total'} > 0) ? $self->{'streams'}->[0] : '';
-	print STDERR "--SUCCESS: 1st stream=".$self->{'Url'}."= total=".$self->{'total'}."=\n"
-			if ($DEBUG && $self->{'cnt'} > 0);
+	if ($DEBUG) {
+		foreach my $f (sort keys %{$self}) {
+			print STDERR "--KEY=$f= VAL=$$self{$f}=\n";
+		}
+		print STDERR "-SUCCESS: 1st stream=".$self->{'Url'}."=\n"  if ($self->{'cnt'} > 0);;
+	}
+
 	$self->_log($url);
 
 	bless $self, $class;   #BLESS IT!

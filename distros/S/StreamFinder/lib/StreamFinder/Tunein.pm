@@ -4,7 +4,7 @@ StreamFinder::Tunein - Fetch actual raw streamable URLs from radio-station websi
 
 =head1 AUTHOR
 
-This module is Copyright (C) 2021-2022 by
+This module is Copyright (C) 2021-2026 by
 
 Jim Turner, C<< <turnerjw784 at yahoo.com> >>
 		
@@ -314,10 +314,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-Tunein>
 
 L<http://annocpan.org/dist/StreamFinder-Tunein>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-Tunein>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder-Tunein/>
@@ -326,7 +322,7 @@ L<http://search.cpan.org/dist/StreamFinder-Tunein/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2021-2022 Jim Turner.
+Copyright 2021-2026 Jim Turner.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the the Artistic License (2.0). You may obtain a
@@ -434,7 +430,7 @@ TRYIT:
 		my $no_wget = system('wget','-V');
 		unless ($no_wget) {
 			print STDERR "\n..trying wget...\n"  if ($DEBUG);
-			$html = `wget -t 2 -T 20 -O- -o /dev/null \"$url2fetch\" 2>/dev/null `;
+			$html = `wget -t 2 -T 20 -O- -o /dev/null "$url2fetch" 2>/dev/null `;
 		}
 	}
 	print STDERR "-1: html=$html=\n"  if ($DEBUG > 1);
@@ -487,7 +483,7 @@ TRYIT:
 	my $stationID = $self->{'id'};
 	while ($html =~ s#\"playUrl\"\:\"([^\"]+)\"#STREAMFINDER_MARK#i) {  #PROBABLY A PODCAST?:
 		(my $one = $1) =~ s#\\u002F#\/#g;
-		$one =~ s/\.(mp3|pls)\?.*$/\.$1/  unless ($self->{'notrim'});   #STRIP OFF EXTRA GARBAGE PARMS, COMMENT OUT IF STARTS FAILING!
+		$one =~ s/\b(mp3|m3u8|pls)\?.*$/$1/  unless ($self->{'notrim'});   #STRIP OFF EXTRA GARBAGE PARMS, COMMENT OUT IF STARTS FAILING!
 		unless ($self->{'secure'} && $one !~ /^https/o) {
 			push @{$self->{'streams'}}, $one;
 			$self->{'cnt'}++;
@@ -517,7 +513,7 @@ TRYIT:
 			my $no_wget = system('wget','-V');
 			unless ($no_wget) {
 				print STDERR "\n..trying wget...\n"  if ($DEBUG);
-				$html = `wget -t 2 -T 20 -O- -o /dev/null \"$url2fetch\" 2>/dev/null `;
+				$html = `wget -t 2 -T 20 -O- -o /dev/null "$url2fetch" 2>/dev/null `;
 			}
 		}
 
@@ -525,7 +521,7 @@ TRYIT:
 			print STDERR "-2a opml.radiotime.com returned HTML==>$html<==\n"  if ($DEBUG > 1);
 			while ($html =~ s#\"url\"\:\s*\"([^\"]+)\"##so) {
 				my $stream = $1;
-				$stream =~ s/\.(mp3|pls)\?.*$/\.$1/  unless ($self->{'notrim'});
+				$stream =~ s/\b(mp3|m3u8|pls)\?.*$/$1/  unless ($self->{'notrim'});
 				unless ($self->{'secure'} && $stream !~ /^https/o) {
 					my $ext = $1  if ($stream =~ m#\.(\w+)#);
 					if ($okStreams =~ m#(?:any|all)#io || (defined($ext) && $okStreams =~ m#$ext#i)) {
@@ -546,9 +542,13 @@ TRYIT:
 	$self->{'description'} = HTML::Entities::decode_entities($self->{'description'});
 	$self->{'description'} = uri_unescape($self->{'description'});
 	$self->{'Url'} = ($self->{'total'} > 0) ? $self->{'streams'}->[0] : '';
+	if ($DEBUG) {
+		foreach my $i (sort keys %{$self}) {
+			print STDERR "--KEY=$i= VAL=".$self->{$i}."=\n";
+		}
+	}
 	print STDERR "--SUCCESS: 1st stream=".$self->{'Url'}."= total=".$self->{'total'}."=\n"
 			if ($DEBUG && $self->{'cnt'} > 0);
-	print STDERR "\n--ID=".$self->{'id'}."=\n--TITLE=".$self->{'title'}."\n--ARTIST=".$self->{'artist'}."=\n--GENRE=".$self->{'genre'}."=\n--ICON=".$self->{'iconurl'}."=\n--IMAGE=".$self->{'imageurl'}."=\n--STREAMS=".join('|',@{$self->{'streams'}})."=\n"  if ($DEBUG);
 	$self->_log($url);
 
 	bless $self, $class;   #BLESS IT!

@@ -1,6 +1,6 @@
 package DBIx::Class::Async::Storage;
 
-$DBIx::Class::Async::Storage::VERSION   = '0.54';
+$DBIx::Class::Async::Storage::VERSION   = '0.55';
 $DBIx::Class::Async::Storage::AUTHORITY = 'cpan:MANWAR';
 
 use strict;
@@ -13,7 +13,7 @@ DBIx::Class::Async::Storage - Storage Layer for DBIx::Class::Async
 
 =head1 VERSION
 
-Version 0.54
+Version 0.55
 
 =cut
 
@@ -50,7 +50,7 @@ Version 0.54
 =head1 DESCRIPTION
 
 C<DBIx::Class::Async::Storage> is the orchestration layer for the asynchronous
-bridge. Unlike standard C<DBIx::Class::Storage::DBI>, this class does not
+bridge. Unlike standard L<DBIx::Class::Storage::DBI>, this class does not
 connect to the database directly. Instead, it manages the life-cycle of a
 background worker pool.
 
@@ -135,7 +135,7 @@ sub cursor {
     my $dbh = $storage->dbh; # Returns undef
 
 In this architecture, the Parent process B<must not> touch the database. This
-method always returns C<undef>. Any code relying on C<$schema->storage->dbh>
+method always returns C<undef>. Any code relying on C<$schema-E<gt>storage-E<gt>dbh>
 will fail, which is intentional to prevent accidental blocking I/O in the
 main event loop.
 

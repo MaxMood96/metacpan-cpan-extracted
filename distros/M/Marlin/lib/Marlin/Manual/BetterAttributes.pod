@@ -1,0 +1,1088 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Marlin::Manual::BetterAttributes - better attributes with Marlin
+
+=head1 DESCRIPTION
+
+Towards the end of L<Marlin::Manual::Beginning>, attribute options hashrefs
+were introduced. This manual page lists the various options available and
+when they might be useful.
+
+=head2 The C<< is >> Option
+
+The C<is> option is a shorthand for setting other options. Assuming your
+attribute is named "foo", then:
+
+=over
+
+=item C<ro>
+
+Setting C<< is => 'ro' >> is a shorthand for C<< reader => 'foo' >>. This is
+Marlin's default anyway.
+
+=item C<rw>
+
+Setting C<< is => 'rw' >> is a shorthand for C<< accessor => 'foo' >>. Marlin
+alternatively allows you to declare the attribute as C<< "foo==" >>
+which has the same effect.
+
+=item C<rwp>
+
+Setting C<< is => 'rwp' >> is a shorthand for
+C<< reader => 'foo', writer => "_set_foo" >>. Marlin alternatively allows you
+to declare the attribute as C<< "foo=" >> which has the same effect.
+
+=item C<lazy>
+
+Setting C<< is => 'lazy' >> is a shorthand for C<< lazy => true >>, and will
+also set C<< builder => '_build_foo' >> unless the attribute has an existing
+C<< builder >> or C<< default >> option.
+
+=item C<bare>
+
+Setting C<< is => 'bare' >> does not do anything in itself, but allows you
+to override the default of C<< is => 'ro' >>.
+
+=back
+
+For each of these values, L<Marlin::Util> exports a constant allowing you
+to avoid quoting them.
+
+B<< Example: Bareword Constants >>
+
+  use Marlin::Util -all;
+  use Marlin
+    foo => { is => ro },
+    bar => { is => rw };
+
+=head2 Documenting Attributes
+
+The C<documentation> option does nothing, but allows you to provide
+documentation for an attribute.
+
+B<< Example: Documenting Attributes >>
+
+  use Marlin::Util -all;
+  use Marlin
+    foo => { is => ro, documentation => "See Chapter 3" },
+    bar => { is => rw, documentation => "See Chapter 4" };
+
+I cannot emphasize enough that this does nothing.
+
+=head2 Options Affecting Constructor Behaviour
+
+=head3 C<< init_arg >>
+
+The name of the argument passed to the constructor which will be used
+to initialize this attribute.
+
+B<< Example: Custom Initialization Argument >>
+
+  package Thing {
+    use Marlin foo => { init_arg => 'my_foo' };
+  }
+  
+  my $thing = Thing->new( my_foo => 123 );
+  say $thing->foo;
+
+Setting to an explicit C<undef> prevents the constructor from initializing
+the attribute from the arguments passed to it.
+
+B<< Example: No Initialization Argument >>
+
+  package Thing {
+    use Marlin foo => { init_arg => undef };
+  }
+  
+  # ERROR!
+  my $thing = Thing->new( foo => 123 );
+
+=head3 C<< required >>
+
+If true, indicates that callers must provide a value for this attribute
+to the constructor. If false, indicates that it is optional.
+
+Marlin alternatively allows you to declare an attribute with an exclamation
+mark. The following two examples are equivalent.
+
+B<< Example: Longhand >>
+
+  use Marlin::Util qw( ro rw true false );
+  use Marlin
+    foo => { is => ro, required => true },
+    bar => { is => ro, required => false };
+
+B<< Example: Shorthand >>
+
+  use Marlin qw( foo! bar! );
+
+To indicate that the attribute is I<forbidden> in the constructor,
+use a combination of C<< init_arg => undef >> and a strict constructor.
+
+=head3 C<< undef_tolerant >>
+
+If you set an attribute to C<< undef_tolerant => true >>, and then try to
+initialized it to C<undef> in the constructor, it will be treated as if
+you hadn't passed it to the constructor at all. See L<MooseX::UndefTolerant>.
+
+To make all attributes in your class or role undef tolerant, see
+L<Marlin::X::UndefTolerant>.
+
+=head2 Options Declaring Accessors Etc
+
+=head3 C<< reader >>
+
+You can specify the name for a reader method:
+
+B<< Example: Custom Named Reader >>
+
+  use Marlin name => { reader => "get_name" };
+
+If you use C<< reader => 1 >> or C<< reader => true >>, Marlin will pick a
+default name for your reader by adding "_get" to the front of attributes that
+have a leading underscore and "get_" otherwise.
+
+=head3 C<< writer >>
+
+Like C<reader>, but a writer method.
+
+If you use C<< writer => 1 >> or C<< writer => true >>, Marlin will pick a
+default name for your writer by adding "_set" to the front of attributes that
+have a leading underscore and "set_" otherwise.
+
+=head3 C<< accessor >>
+
+A combination reader or writer, depending on whether it's called with a
+parameter or not.
+
+If you use C<< accessor => 1 >> or C<< accessor => true >>, Marlin will pick a
+default name for your writer which is just the same as your attribute's name.
+
+=head3 C<< clearer >>
+
+Like C<reader>, but a clearer method. A clearer deletes the value of an
+attribute so that the attribute is no longer considered to be set at all,
+not even set to false.
+
+If an attribute has a lazy default or builder, after it has been cleared
+it will be reinitialized to the default value the next time you try to
+read it. If it had an eager default or builder, that will not happen.
+
+If you use C<< clearer => 1 >> or C<< clearer => true >>, Marlin will pick a
+default name for your clearer by adding "_clear" to the front of attributes that
+have a leading underscore and "clear_" otherwise.
+
+=head3 C<< predicate >>
+
+Like C<reader>, but a predicate method, checking whether a value was supplied
+for the attribute. (It checks C<exists>, not C<defined>!)
+
+If you use C<< predicate => 1 >> or C<< predicate => true >>, Marlin will pick a
+default name for your predicate by adding "_has" to the front of attributes that
+have a leading underscore and "has_" otherwise.
+
+=head2 Lexical Accessors Etc
+
+Marlin supports a number of options to keep your accessors truly private.
+(More so than just a leading "_".)
+
+=head3 CodeRef Lexical Methods
+
+You can specify a scalarref variable to install the reader into.
+
+B<< Example: Declaring a CodeRef Lexical Reader >>
+
+  use Marlin name => { reader => \( my $get_name ) };
+
+The coderef won't be assessible outside the scope where you declared
+it, so presumably only within your class. (Assuming your class
+declaration is in its own scope, like in C<< {...} >> or in its own
+file.) This prevents outside code from calling it.
+
+This is equivalent to defining a reader like this.
+
+B<< Example: What is a CodeRef Lexical Reader? >>
+
+  # This is what Marlin is doing for you
+  my $get_name = sub ( $self ) {
+    ...;
+  };
+
+You can call your reader using this syntax:
+
+B<< Example: Using a CodeRef Lexical Reader >>
+
+  say $thingy->$get_name();
+
+And in outside code, the C<< $get_name >> variable won't exist, so it
+becomes a compilation error to even try to use it.
+
+=head3 True Lexical Methods
+
+From Perl v5.12.0 onwards, the following is also supported.
+
+B<< Example: Declaring a True Lexical Reader >>
+
+  use Marlin name => { reader => 'my get_name' };
+
+This is equivalent to using lexical subs which were a feature introduced
+in Perl 5.18. (But yes, we support it from Perl 5.12!)
+
+B<< Example: What is a True Lexical Reader? >>
+
+  # This is what Marlin is doing for you
+  my sub get_name ( $self ) {
+    ...;
+  }
+
+You need to call true lexical readers like functions, not using the
+C<< -> >> method syntax, unless you have a very recent version of Perl.
+
+B<< Example: Using a True Lexical Reader >>
+
+  say get_name( $thingy );
+
+Perl v5.42.0 introduces a syntax for calling lexical subs as methods.
+
+B<< Example: Using a True Lexical Reader on Ultra-Modern Perl >>
+
+  say $thingy->&get_name();
+
+If you attempt to use the C<< 'my get_name' >> syntax on Perl versions older
+that 5.12, Marlin will make a best effort to do what you want. They will be
+installed as a normal sub in the caller package. (Note that the caller package
+might differ from the class currently being built, especially in the case of
+L<Marlin::Struct> classes.) Marlin will attempt to clean them later with
+L<namespace::clean>.
+
+=head2 Attribute Default Values
+
+=head3 C<< builder >>, C<< default >>, and C<< lazy >>
+
+The C<default> can be set to a coderef or a non-reference value to set a
+default value for the attribute.
+
+As an extension to what Moose and Moo allow, you can also set the default
+to a reference to a string of Perl code.
+
+B<< Example: Specifying Defaults With Quoted Perl Code >>
+
+  default => \'[]'
+
+Alternatively, C<builder> can be used to provide the name of a method to
+call which will generate a default value.
+
+If you use C<< builder => 1 >> or C<< builder => true >>, Marlin will assume
+a builder name of "_build_" followed by your attribute name. If you use
+C<< builder => sub {...} >> then the coderef will be installed with that
+name.
+
+If you choose C<lazy>, then the default or builder will be run when the
+value of the attribute is first needed. Otherwise it will be run in the
+constructor.
+
+If you use lazy builders/defaults, readers/accessors for the affected
+attributes will be implemented in Perl rather than XS. This is a good
+reason to have separate methods for readers and writers, so that the
+reader can remain fast!
+
+=head3 C<< constant >>
+
+Defines a constant attribute, effectively an attribute with a default
+that can never be changed.
+
+B<< Example: Constant Attributes >>
+
+  package Person {
+    use Marlin
+      ...,
+      species => { constant => 'Homo sapiens' };
+  }
+  
+  my $bob = Person->new( ... );
+  say $bob->species;
+
+Constants attributes cannot have writers, clearers, predicates, builders,
+defaults, or triggers. They must be a simple non-reference value. They cannot
+be passed to the constructor. They I<can> have a type constraint and coercion,
+which will be used I<once> at compile time. They can have C<handles> and
+C<handles_via>, provided the delegated methods do not attempt to alter the
+constant.
+
+These constant attributes are still intended to be called as object methods.
+Calling them as functions is I<not supported> and even though it might
+sometimes work, no guarantees are provided that it will continue to work.
+
+B<< Example: Reading Constant Attributes >>
+
+  say $bob->species;      # GOOD
+  say Person::species();  # BAD
+
+If you want that type of constant, use the L<constant> pragma.
+
+=head2 Attribute Validation
+
+=head3 C<< isa >>
+
+A type constraint for an attribute. We recommend the use of L<Types::Common>
+as a type constraint library.
+
+B<< Example: Type Constraints >>
+
+  package Local::Location {
+    ...;
+  }
+  
+  package Local::Person {
+    use Types::Common -all;
+    use Marlin
+      name              => { isa => Str },
+      age               => { isa => Int },
+      place_of_birth    => { isa => InstanceOf['Local::Location'] },
+      favourite_colour  => { isa => Enum['blue', 'pink', 'black'] },
+      favourite_numbers => { isa => ArrayRef[Num] },
+      children          => { isa => ArrayRef },
+      ...;
+  }
+
+Any type checks or coercions will force the accessors and writers for those
+attributes to be implemented in Perl instead of XS. This is a good reason to
+have separate reader and writer methods for attributes, because the readers
+don't need to care about type constraints, so can be faster.
+
+L<Type::Tiny::Manual> has more information about advanced uses of type
+constraints, such as:
+
+B<< Example: Advanced Type Constraints >>
+
+  age => { isa => Int->where( sub { $_ >= 0 } ) }
+
+You can use C<< isa => sub { ... } >> to write a custom type check. The
+coderef should either die or return false to indicate a failure.
+
+If the type constraint is a string, Marlin will use C<dwim_type> from
+L<Type::Utils> to determine what you meant, falling back to assuming
+it was a class name. The previous example can be written as:
+
+B<< Example: Stringy Type Constraints >>
+
+  package Local::Person {
+    use Marlin
+      name              => { isa => "Str" },
+      age               => { isa => "Int" },
+      place_of_birth    => { isa => "Local::Location" },
+      favourite_colour  => { isa => "Enum['blue', 'pink', 'black']" },
+      favourite_numbers => { isa => "ArrayRef[Num]" },
+      children          => { isa => "ArrayRef" },
+      ...;
+  }
+
+=head3 C<< enum >>
+
+You can use C<< enum => ['foo','bar'] >> as a shortcut for
+C<< isa => Enum['foo','bar'] >>
+
+B<< Example: Using C<enum> >>
+
+  package Local::Person {
+    use Types::Common -all;
+    use Marlin
+      name              => { isa  => Str },
+      age               => { isa  => Int },
+      place_of_birth    => { isa  => "Local::Location" },
+      favourite_colour  => { enum => ['blue', 'pink', 'black'] },
+      favourite_numbers => { isa  => ArrayRef[Num] },
+      children          => { isa  => ArrayRef },
+      ...;
+  }
+
+=head3 C<< does >>
+
+You can use C<< does => "Role::Name" > as a shortcut for
+C<< isa => ConsumerOf["Role::Name"] >>.
+
+B<< Example: Using C<does> >>
+
+  package Local::Marryable {
+    use Marlin::Role ...;
+  }
+  
+  package Local::EiffelTower {
+    use Marlin
+      -with     => [ "Local::Marryable" ],
+      ...;
+  }
+  
+  package Local::Person {
+    use Marlin::Util -all;
+    use Types::Common -all;
+    use Marlin
+      -with     => [ "Local::Marryable" ],
+      children  => { isa  => ArrayRef },
+      spouse    => {
+        is        => rw,
+        does      => "Local::Marryable",
+        clearer   => true,
+      },
+      ...;
+  }
+  
+  my $alice  = Local::Person->new;
+  my $eiffel = Local::EiffelTower->new;
+  
+  ...;
+  
+  if ( $alice->spouse == $bob ) {
+    $alice->clear_spouse;
+    $bob->clear_spouse;
+    $alice->spouse( $eiffel );
+  }
+
+=head3 C<< coerce >>
+
+Setting C<< coerce => true >> enables type coercion for the attribute.
+
+B<< Example: Using C<coerce> >>
+
+  package Person {
+    use Marlin
+      likes_cheese => { isa => 'Bool', coerce => true },
+      ...;
+  }
+  
+  my $alice = Person->new( ..., likes_cheese => 4 );
+
+The value '4' in the above example isn't a valid boolean, but the B<Bool>
+type constraint defines rules for coercing other values into booleans, and
+the value '4' becomes true.
+
+For this to work, your type constraint needs to have coercions defined!
+
+B<< Example: Defining a Coercion Inline >>
+
+  package Person {
+    use Marlin::Util qw( true false );
+    use Types::Common -all;
+    use Marlin
+      "name!"     => Str,
+      "nicknames" => {
+        isa    => ArrayRef->plus_coercions(
+          Str, sub { split ":", $_ },
+        ),
+        coerce => true,
+      },
+      ...;
+  }
+  
+  my $bob = Person->new(
+    name      => "Robert",
+    nicknames => "Bob:Bobby:Robbie:Rob",
+  );
+
+The value "Bob:Bobby:Robbie:Rob" isn't an B<ArrayRef> so is coerced according
+to the rules for B<Str> (strings).
+
+The C<coerce> option can alternatively be set to a coderef or an object with
+a C<coerce> method.
+
+B<< Example: Defining a CodeRef Coercion >>
+
+  package Person {
+    use Marlin::Util qw( true false );
+    use Types::Common -all;
+    use Marlin
+      "name!"     => Str,
+      "nicknames" => {
+        isa    => ArrayRef,
+        coerce => sub { split ":", assert_Str($_) },
+      },
+      ...;
+  }
+  
+  my $bob = Person->new(
+    name      => "Robert",
+    nicknames => "Bob:Bobby:Robbie:Rob",
+  );
+
+=head2 Delegation
+
+=head3 C<< handles >>
+
+If your attribute value is an object, delegation allows you to forward
+certain methods of your class to that object to be handled.
+
+B<< Example: Simple Delegation >>
+
+  package Person {
+    use Marlin
+      left_hand  => {
+        isa        => Object,
+      },
+      right_hand => {
+        isa        => Object,
+        handles    => { wave_hand => 'wave' },
+      },
+      ...;
+  }
+  
+  my $alice = Person->new(...);
+  
+  # Equivalent to:
+  # $alice->right_hand->wave( speed => 4, time => '5 sec' );
+  $alice->wave_hand( speed => 4, time => '5 sec' );
+
+It's possible to "curry" parameters. This means that some of the parameters
+which would be passed to the method are defined as part of declaring the
+delegation, so they don't need to be (and cannot be!) passed to the delegated
+method later.
+
+B<< Example: Currying >>
+
+  use v5.42.0;
+  
+  package Person {
+    use Marlin
+      left_hand  => {
+        isa        => Object,
+      },
+      right_hand => {
+        isa        => Object,
+        handles    => {
+          wave_hand_quickly => [ 'wave', speed => 5 ],
+          wave_hand_normal  => [ 'wave', speed => 3 ],
+          wave_hand_slowly  => [ 'wave', speed => 1 ],
+          'my wave_hand'    => 'wave', # lexical!
+        },
+      },
+      ...;
+      
+      sub wave_hand_unsurely_at_first( $self ) {
+        $self->&wave_hand( speed => 1, time => '3 sec' );
+        sleep( 1 );
+        $self->wave_hand_normal( time => '3 sec' );
+      }
+  }
+
+  my $alice = Person->new(...);
+  $alice->wave_hand_unsurely_at_first;
+
+It is a really good idea to expose the functionality of your attributes this
+way. It's far better for someone using your Rocket object to be able to do:
+
+  $rocket->launch;
+
+Instead of:
+
+  $rocket->engine->thruster->launch;
+
+It means that they can launch your rocket without having to understand
+anything about its internal structure and which components do what.
+You might later replace your engine with an anti-gravity field and
+the C<< $rocket->launch >> method you provide might remain unchanged
+from the perspective of outside code.
+
+=head3 C<< handles_via >>.
+
+Marlin supports C<handles_via> with L<Sub::HandlesVia>. This allows
+you to delegate methods to values which are not objects but are Perl
+built-in types like hashrefs, arrayrefs, numbers, strings, etc.
+
+  use v5.42.0;
+  
+  package Person {
+    use Types::Common -lexical, -types;
+    
+    use Marlin
+      name   => Str,
+      emails => {
+        is           => 'ro',
+        isa          => ArrayRef[Str]
+        default      => sub { [] },
+        handles_via  => 'Array',
+        handles      => {
+          'add_email'       => 'push',
+          'my find_emails'  => 'grep', # lexical!
+        },
+      };
+    
+    sub has_hotmail ( $self ) {
+      my @h = $self->&find_emails( sub { /\@hotmail\./ } );
+      return( @h > 0 );
+    }
+  }
+  
+  my $bob = Person->new( name => 'Bob' );
+  $bob->add_email( 'bob@hotmail.example' );
+  die unless $bob->has_hotmail;
+  
+  die if $bob->can('find_emails');  # will not die
+
+=head2 Altering the Behaviour of Attributes
+
+=head3 C<< alias >> and C<< alias_for >>
+
+Allows you to establish aliases for an attribute.
+
+B<< Example: Aliases >>
+
+  use Marlin
+    name => {
+      required   => true,
+      isa        => Str,
+      alias      => [ 'moniker', 'label' ],
+    }, ...;
+
+Aliases are accepted in the constructor and also additional reader methods
+(or accessor methods for C<< is => 'rw' >> attributes) are installed for
+each alias.
+
+You can use C<< alias_for => 'reader' >> or C<< alias_for => 'accessor' >>
+to override which type of method is installed (though not on a per-alias
+basis). Technically it's possible to create writer/predicate/clearer aliases
+but that would be weird.
+
+=head3 C<< trigger >>
+
+A method name or coderef to call after an attribute has been set.
+
+If you use C<< trigger => 1 >> or C<< trigger => true >>, Marlin will assume
+a trigger name of "_trigger_" followed by your attribute name.
+
+Marlin's triggers are a little more sophisticated than Moose's: within the
+trigger, you can call the setter again without worrying about re-triggering
+the trigger.
+
+B<< Example: Using Triggers >>
+
+  use v5.42.0;
+  
+  package Person {
+    use Types::Common -types, -lexical;
+    use Marlin::Util -all, -lexical;
+    
+    use Marlin
+      first_name => {
+        is      => rw,
+        isa     => Str,
+        trigger => sub ($me) { $me->clear_full_name },
+      },
+      last_name => {
+        is      => rw,
+        isa     => Str,
+        trigger => sub ($me) { $me->clear_full_name },
+      },
+      full_name => {
+        is      => lazy,
+        isa     => Str,
+        clearer => true,
+        builder => sub ($me) {
+          join q[ ], $me->first_name, $me->last_name;
+        },
+      };
+  }
+  
+  my $person = Person->new(
+    first_name  => 'Alice',
+    last_name   => 'Smith',
+  );
+  say $person->full_name;  # Alice Smith
+  $person->last_name( 'Jones' );
+  say $person->full_name;  # Alice Jones
+
+Currently if your class has any triggers, this will force any writers/accessors
+for the affected attributes to be implemented in Perl instead of XS. This is
+a good reason to have separate methods for readers and writers, so that the
+reader can remain fast!
+
+It is usually possible to design your API in ways that don't require
+triggers.
+
+B<< Example: API Design to Avoid Triggers >>
+
+  use v5.42.0;
+  
+  package Person {
+    use Types::Common -types, -lexical;
+    use Marlin::Util -all, -lexical;
+    
+    use Marlin
+      first_name => {
+        is      => ro,
+        isa     => Str,
+        writer  => 'my set_first_name',
+      },
+      last_name => {
+        is      => ro,
+        isa     => Str,
+        writer  => 'my set_last_name',
+      },
+      full_name => {
+        is      => lazy,
+        isa     => Str,
+        clearer => 'my clear_full_name',
+        builder => sub ($me) {
+          join q[ ], $me->first_name, $me->last_name;
+        },
+      };
+    
+    signature_for rename => (
+      method  => true,
+      named   => [
+        first_name => Optional[Str],
+        last_name  => Optional[Str],
+      ],
+    );
+    
+    sub rename ( $self, $arg ) {
+      $self->&set_first_name( $arg->first_name )
+        if $arg->has_first_name;
+      $self->&set_last_name( $arg->last_name )
+        if $arg->has_last_name;
+      $self->&clear_full_name;
+      return $self;
+    }
+  }
+  
+  my $person = Person->new(
+    first_name  => 'Alice',
+    last_name   => 'Smith',
+  );
+  say $person->full_name;  # Alice Smith
+  $person->rename( last_name => 'Jones' );
+  say $person->full_name;  # Alice Jones
+
+=head3 C<< auto_deref >>
+
+Rarely used Moose option. If you call a reader or accessor in list context,
+will automatically apply C<< @{} >> or C<< %{} >> to the value if it's an
+arrayref or hashref.
+
+B<< Example: Using Auto-Deref >>
+
+  package Numbers {
+    use Marlin::Util -all;
+    use Marlin list => { is => ro, auto_deref => true };
+  }
+  
+  my $primes = Numbers->new( list => [ 2, 3, 5, 7, 11 ] );
+  
+  my $arrayref = $primes->list;
+  
+  my ( $two, $three, $five, $seven, $eleven ) = $primes->list;
+
+This option usually causes more issues than it solves. It is not
+recommended, but is supported because L<Moose> supports it.
+
+=head3 C<< chain >>
+
+By default, Marlin's writers, clearers, and (when used as writers) accessors
+are chainable. That means, they return the object itself. So this works:
+
+B<< Example: Using Chaining >>
+
+  my $result = $object->set_foo(1)->set_bar(2)->foobar;
+  $object->clear_foo->clear_bar;
+
+However, you can set them to be not chainable using C<< chain => false >>.
+Non-chainable clearers return the old value (like C<delete> does).
+Non-chainable writers and accessors used as writers return the new value.
+
+Chainable versions are usually I<slightly> more useful, so that is the
+default since Marlin 0.022000.
+
+=head3 C<< storage >>
+
+It is possible to give a hint to Marlin about how to store an attribute.
+
+B<< Example: The C<storage> Option >>
+
+  use v5.12.0;
+  use Marlin::Util -all, -lexical;
+  use Types::Common -types, -lexical;
+  
+  package Local::User {
+    use Marlin
+      'username!',  => Str,
+      'password!'   => {
+        is            => bare,
+        isa           => Str,
+        writer        => 'change_password',
+        required      => true,
+        storage       => 'PRIVATE',
+        handles_via   => 'String',
+        handles       => { check_password => 'eq' },
+      };
+  }
+  
+  my $bob = Local::User->new(
+    username => 'bd',
+    password => 'zi1ch',
+  );
+  
+  die if exists $bob->{password};   # will not die
+  die if $bob->can('password');     # will not die
+  
+  if ( $bob->check_password( 'zi1ch' ) ) {
+    ...;  # this code should execute
+  }
+  
+  $bob->change_password( 'monk33' );
+
+Note that in the above example, setting C<< is => bare >> prevents any reader
+from being created, so you cannot call C<< $bob->password >> to discover his
+password. This would normally suffer the issue that the password is still
+stored in C<< $bob->{password} >> if you access the object as a hashref.
+
+However, setting C<< storage => "PRIVATE" >> tells Marlin to store the value
+privately so it no longer appears in the hashref, so won't be included in any
+Data::Dumper dumps sent to your logger, etc. This does complicate things if
+you ever need to serialize your object to a file or database though! (Note
+that while the value is not stored in the hashref, it is still stored
+I<somewhere>. A determined Perl hacker can easily figure out where. This
+shouldn't be relied on in place of proper security.)
+
+Marlin supports three storage methods for attributes: "HASH" (the default),
+"PRIVATE" (as above), and "NONE" (only used for constants).
+
+=head3 Cloning Attribute Values
+
+References provide shortcuts to data structures I<inside> your object,
+allowing code outside your class to tamper with your object's internals
+in unpredictable ways.
+
+B<< Example: The Need for Cloning >>
+
+  my @array  = ( 1, 2, 3 );
+  my $object = Local::Thing->new( numbers => \@array );
+  push @array, "Hello world";
+
+Setting C<clone_on_write> signals to the constructor and any writer/accessor
+methods that when they get passed a value, they should instead keep a I<clone>
+of the value, breaking any references outside code might be keeping to it.
+So in the previous example, C<< $object >> wouldn't have a reference to
+C<< @array >>, but a reference to a clone of that array. Altering C<< @array >>
+later wouldn't alter the copy that C<< $object >> had.
+
+Setting C<clone_on_read> does the same thing for reader/accessor methods and
+avoids this altering your object:
+
+B<< Example: The Need for Cloning, Again >>
+
+  push @{ $object->numbers }, "Hello world";
+
+Because C<< $object->numbers >> would be returning a clone of the data the
+object holds internally instead of returning a direct reference to its
+internal data.
+
+C<clone_on_write> and C<clone_on_read> can be set to true to enable deep
+cloning of values. If you need more fine-grained control of cloning, you
+can set them to a coderef or a method name.
+
+B<< Example: Fine-Grained Cloning Controls >>
+
+  package Local::Thing {
+    use Types::Common -types;
+    use Marlin
+      numbers => {
+        is             => 'rw',
+        isa            => ArrayRef[Int],
+        clone_on_write => sub ( $self, $attrname, $value ) {
+          ...;
+          retun $cloned_value;
+        },
+        clone_on_read => '_clone',
+        handles_via   => 'Array',
+        handles       => { add_number => 'push' },
+      };
+    
+    sub _clone ( $self, $attrname, $value ) {
+      ...;
+      return $cloned_value;
+    }
+  }
+
+The C<clone> option is a shortcut for setting both C<clone_on_write> and
+C<clone_on_read>. You should usually use that as it's rare to need
+such fine-grained control.
+
+Delegated methods (see C<handles> and C<handles_via>) operate on the
+internal copy of the data, bypassing the clone options. This means
+that in our example C<< $object->add_number( 4 ) >> will correctly
+push a number onto the object's internal numbers arrayref instead of
+pushing it onto an ephemeral copy of the numbers arrayref.
+
+It is worth noting that your I<internal> use of the attributes will
+also trigger cloning. So for example, this will not work how you
+want it to.
+
+B<< Example: Cloning Gotcha >>
+
+  package Local::Thing {
+    use Types::Common -types;
+    use Marlin
+      numbers => {
+        is      => 'rw',
+        isa     => ArrayRef[Int],
+        clone   => 1,
+      };
+    
+    sub push_numbers ( $self, @more_numbers ) {
+      push @{ $self->numbers }, @more_numbers;
+    }
+  }
+
+The C<clone_bypass> option creates a second, internal accessor.
+
+B<< Example: The C<clone_bypass> Option >>
+
+  package Local::Thing {
+    use Types::Common -types;
+    use Marlin
+      numbers => {
+        is           => 'rw',
+        isa          => ArrayRef[Int],
+        clone        => 1,
+        clone_bypass => '_numbers_ref',
+      };
+    
+    sub push_numbers ( $self, @more_numbers ) {
+      push @{ $self->_numbers_ref }, @more_numbers;
+    }
+  }
+
+(Note that C<clone_bypass> methods are always accessors, allowing you
+to get/set the attribute, even for read-only attributes! They are intended
+for your class's internal use only. Lexical clone bypass methods are
+supported and indeed recommended!)
+
+Setting the cloning options makes most sense for attributes which you expect
+to be arrayrefs, hashrefs, or annoyingly mutable objects (like L<DateTime>).
+It makes little sense for other attributes. It will slow down accessors and
+object construction.
+
+This feature is inspired by L<MooseX::Extended::Manual::Cloning>.
+
+=head2 Extending Parent Attributes
+
+You can use C<extends> to indicate that this attribute extends or modifies
+an attribute inherited from a parent class or role.
+
+B<< Example: Extending Base Class Attributes >>
+
+  package Local::Person {
+    use Types::Common -types;
+    use Marlin
+      name => NonEmptyStr,
+      age  => PositiveOrZeroNum;
+  }
+  
+  package Local::Employee {
+    use Types::Common -types;
+    use Marlin::Util qw( true false );
+    
+    use Marlin
+      -base => 'Local::Person',
+      # Require name for employees.
+      name => {
+        extends  => true,
+        required => true,
+      },
+      # We only employ adults.
+      age => {
+        extends  => true,
+        required => true,
+        isa      => NumRange[ 18, undef ]
+      };
+  }
+
+A shortcut for C<extends> is a leading plus sign.
+
+B<< Example: Extending Base Class Attributes, Shorthand >>
+
+  package Local::Employee {
+    use Types::Common -types;
+    use Marlin -base => 'Local::Person',
+      '+name!',                          # Required
+      '+age!' => NumRange[ 18, undef ];  # Adults only
+  }
+
+Marlin limits what changes child classes are allowed to make to the API they
+inherited from their parents. Some of the limitations:
+
+=over
+
+=item *
+
+Optional attributes can be made required, but required attributes cannot
+be made optional unless you also provide a default/builder.
+
+=item *
+
+Type constraints can be made more strict, but not looser. Type coercions
+can be enabled by child classes but not disabled if they're already enabled
+in the parent class.
+
+=item *
+
+Accessor-like methods (reader, writer, accessor, clearer, predicate)
+can be added, but accessors defined in parent classes cannot be replaced
+or removed.
+
+=item *
+
+Attribute storage type cannot be changed.
+
+=item *
+
+The auto_deref status cannot be changed.
+
+=back
+
+In the rare case where an attribute has an option which you wish to
+delete, you can use C<< $Marlin::Attribute::NONE >>.
+
+B<< Example: An Explicit NONE >>
+
+  package Local::ChildClass {
+  
+    use Marlin::Attribute ();
+    use Marlin::Util -all;
+    
+    use Marlin
+      -base => "Local::ParentClass",
+      # Parent class defined a default for this attribute
+      someattr => {
+        extends  => true,
+        required => true,
+        default  => $Marlin::Attribute::NONE,
+      };
+  }
+
+=back
+
+=head1 SEE ALSO
+
+L<Marlin::Manual::BetterMethods> - next steps defining methods.
+
+L<Marlin>, L<Marlin::Util>.
+
+=head1 AUTHOR
+
+Toby Inkster E<lt>tobyink@cpan.orgE<gt>.
+
+=head1 COPYRIGHT AND LICENCE
+
+This software is copyright (c) 2026 by Toby Inkster.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=head1 DISCLAIMER OF WARRANTIES
+
+THIS PACKAGE IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR IMPLIED
+WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
+MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.

@@ -1,5 +1,8 @@
 Revision history for App-cpangitify
 
+0.21      2026-02-06 09:18:53 -0700
+  - Fetch dist tarballs from metacpan instead of BackPAN (gh#21)
+
 0.20      2022-09-01 19:15:57 -0600
   - Validate SSL with (gh#19)
 

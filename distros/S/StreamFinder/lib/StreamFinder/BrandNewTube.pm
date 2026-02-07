@@ -1,10 +1,10 @@
 =head1 NAME
 
-StreamFinder::BrandNewTube - Fetch actual raw streamable URLs from BrandNewTube.com & UGetube.com.
+StreamFinder::BrandNewTube - Fetch actual raw streamable URLs from BrandNewTube.com.
 
 =head1 AUTHOR
 
-This module is Copyright (C) 2023 by
+This module is Copyright (C) 2026 by
 
 Jim Turner, C<< <turnerjw784 at yahoo.com> >>
 		
@@ -90,12 +90,11 @@ file.
 
 =head1 DESCRIPTION
 
-NOTE:  brandnewtube.com appears to no longer be scrapable for video-streams, 
-but ugetube.com still seems to work, but I'm hesitant for now to rename 
-this module to StreamFinder::UGetube.
+NOTE:  Ugetube.com appears to have closed up shop and brandnewtube.com has 
+renamed itself and redirects to onevsp.com".
 
 StreamFinder::BrandNewTube accepts a valid brandnewtube.com video ID or 
-page URL -OR- a ugetube.com page URL (either one of their ".html" or "embed" 
+page URL (either one of their ".html" or "embed" 
 URL) and returns the actual stream URL, title, and cover art icon for that 
 video.  The purpose is that one needs this URL in order to have the option to 
 stream the video in one's own choice of media player software rather than 
@@ -104,7 +103,7 @@ cookies, trackers, web-bugs, and other crapware that can come with that
 method of play.  The author uses his own custom all-purpose media player 
 called "fauxdacious" (his custom hacked version of the open-source 
 "audacious" audio player).  "fauxdacious" incorporates this module to 
-decode and play brandnewtube.com and ugetube.com videos.  This is a submodule 
+decode and play brandnewtube.com (onevsp).  This is a submodule 
 of the general StreamFinder module.
 
 Depends:  
@@ -118,20 +117,15 @@ L<URI::Escape>, L<HTML::Entities>, and L<LWP::UserAgent>.
 =item B<new>(I<ID>|I<url> [, I<-secure> [ => 0|1 ]] 
 [, I<-debug> [ => 0|1|2 ]])
 
-Accepts a brandnewtube.com video ID or URL -OR ugetube.com URL and creates and 
-returns a new video object, or I<undef> if the URL is not a valid BrandNewTube 
-video or no streams are found.  For brandnewtube.com The URL can be the full 
-URL, ie. https://brandnewtube.com/B<video-id>.html, 
-https://brandnewtube.com/B<@channel-id>, 
-https://brandnewtube.com/embed/B<video-id> or just B<video-id> or 
+Accepts a onevsp.com (previously brandnewtube.com) video ID or URL and creates 
+and returns a new video object, or I<undef> if the URL is not a valid 
+BrandNewTube video or no streams are found.  For brandnewtube.com The URL can 
+be the full URL, ie. https://onevsp.com/B<video-id>.html, 
+https://onevsp.com/B<@channel-id>, 
+https://onevsp.com/embed/B<video-id> or just B<video-id> or 
 I<@channel-id>.  If a channel URL is given, then the first (latest) video of 
 that channel will be returned.  Note:  Channel-ids are distinguished by the 
 "@"-sign.  
-
-NOTE:  For ugetube.com, a full URL must be given (not just an ID), as there's 
-no way to distinguish them from brandnewtube.com IDs and we decided to use 
-this code to handle both sites, as they are both very similar (originally 
-written for brandnewtube.com)!
 
 The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  
 If 1 then only secure ("https://") streams will be returned.
@@ -300,10 +294,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-BrandNewTube>
 
 L<http://annocpan.org/dist/StreamFinder-BrandNewTube>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-BrandNewTube>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder-BrandNewTube/>
@@ -312,7 +302,7 @@ L<http://search.cpan.org/dist/StreamFinder-BrandNewTube/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2023 Jim Turner.
+Copyright 2026 Jim Turner.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the the Artistic License (2.0). You may obtain a
@@ -380,22 +370,21 @@ sub new
 	my $response;
 	$self->{'genre'} = 'Video';
 
-	unless ($url =~ m#https?\:#) {  #NOTE: ASSUME brandnewtube ID!:
-		if ($url =~ /^\@/) {
-			$url = 'https://brandnewtube.com/@' . $url;
-		} else {
-			$url = ($url =~ m#\-#)
-					? "https://brandnewtube.com/watch/${url}.html"
-					: "https://brandnewtube.com/embed/${url}/";
-		}
+	my $url2fetch = $url;
+	if ($url =~ m#^https?\:#) {  #NOTE: ASSUME brandnewtube ID!:
+		$url2fetch =~ s#brandnewtube.com#onevsp.com#;
+	} else {
+		$url2fetch = ($url =~ /^\@/) ? 'https://onevsp.com/' . $url
+				: "https://onevsp.com/watch/${url}/";
 	}
 
-	my $domain = ($url =~ m#(https?\:\/\/[^\/]+)#) ? $1 : 'https://brandnewtube.com';
+	my $baseURL = ($url2fetch =~ m#(https?\:\/\/[^\/]+)#) ? $1 : 'https://onevsp.com';
 
-	if ($url =~ /\@/) {
+	print STDERR "-0(RadioNet): URL=$url2fetch=\n"  if ($DEBUG);
+	if ($url2fetch =~ /\@/) {
 		my $html = '';
-		print STDERR "-FETCHING CHANNEL URL=$url=\n"  if ($DEBUG);
-		$response = $ua->get($url);
+		print STDERR "-FETCHING CHANNEL URL=$url2fetch=\n"  if ($DEBUG);
+		$response = $ua->get($url2fetch);
 		if ($response->is_success) {
 			$html = $response->decoded_content;
 		} else {
@@ -403,20 +392,20 @@ sub new
 			my $no_wget = system('wget','-V');
 			unless ($no_wget) {
 				print STDERR "\n..trying wget...\n"  if ($DEBUG);
-				$html = `wget -t 2 -T 20 -O- -o /dev/null \"$url\" 2>/dev/null `;
+				$html = `wget -t 2 -T 20 -O- -o /dev/null "$url2fetch" 2>/dev/null `;
 			}
 		}
-		if ($html && $html =~ m#\<a\s+href\=\"($domain\/watch\/[^\"]+)#s) {
-			$url = $1;
-			print STDERR "---FOUND 1ST EPISODE URL=$url= IN CHANNEL PAGE, RUN WITH THAT!\n"  if ($DEBUG);
+		if ($html =~ m#\<a\s+href\=\"([^\"]+)\"\s+class\=\"video\-title\-link\"\>#s) {
+			$url2fetch = $1;
+			print STDERR "---FOUND 1ST EPISODE URL=$url2fetch= IN CHANNEL PAGE, RUN WITH THAT!\n"  if ($DEBUG);
 		}
 	}
 
 	my $html = '';
-	if ($url =~ m#\/watch\/([^\/\.]+)#) {
+	if ($url2fetch =~ m#\/watch\/([^\/\.]+)#) {
 		$self->{'id'} = $1;
-		print STDERR "-FETCHING HTML URL=$url= ID=".$self->{'id'}."=\n"  if ($DEBUG);
-		$response = $ua->get($url);
+		print STDERR "-FETCHING HTML URL=$url2fetch= ID=".$self->{'id'}."=\n"  if ($DEBUG);
+		$response = $ua->get($url2fetch);
 		if ($response->is_success) {
 			$html = $response->decoded_content;
 		} else {
@@ -424,7 +413,7 @@ sub new
 			my $no_wget = system('wget','-V');
 			unless ($no_wget) {
 				print STDERR "\n..trying wget...\n"  if ($DEBUG);
-				$html = `wget -t 2 -T 20 -O- -o /dev/null \"$url\" 2>/dev/null `;
+				$html = `wget -t 2 -T 20 -O- -o /dev/null "$url2fetch" 2>/dev/null `;
 			}
 		}
 		if ($html) {
@@ -433,98 +422,46 @@ sub new
 			$self->{'title'} =~ s#\s+$##;
 			$self->{'title'} =~ s#\s*\-\s+Brand New Tube$##;
 
-			if ($html =~ m#<div class="publisher-name(.+?)\/div\>#s) {
-				my $publisherHtml = $1;
-				if ($publisherHtml =~ m#\<a\s+href\=\"([^\"]+)\"\>([^\<]+)#s) {
-					$self->{'albumartist'} = $1;
-					$self->{'artist'} = $2;
-				}
-				if ($publisherHtml =~ m#\<span\s+title="Published on\s+([^\"]+)#s) {
-					$self->{'created'} = $1;
-				}
-				$self->{'year'} ||= $1  if ($publisherHtml =~ m#(\d+)\<\/span#s);
-			} elsif ($html =~ m#Published\s+on\s+([^\<]+)#) {
-				$self->{'created'} = $1;
-			}
-			$self->{'year'} ||= $1  if ($self->{'created'} =~ /(\d\d\d\d)/);
-				
-			if ($html =~ m#<div class="publisher-avatar(.+?)\<\/div\>#s) {  #UGETube?:
-				my $publisherHtml = $1;
-				$self->{'articonurl'} = $1  if ($publisherHtml =~ m#\<img\s+src\=\"([^\"]+)#s);
-				$self->{'albumartist'} ||= $1  if ($publisherHtml =~ m#\<a\s+href\=\"([^\"]+)#s);
-			} elsif ($html =~ m#\<span\s+class\=\"mr\-3\"\>(.+?)\<\/span\>#s) {  #brandnewtube?:
-				my $publisherHtml = $1;
-				$self->{'albumartist'} ||= $1  if ($publisherHtml =~ m#\<a\s+href\=\"([^\"]+)#s);
-				$self->{'articonurl'} = $1  if ($publisherHtml =~ m#\<img\s+.*?src\=\"([^\?\"]+)#s);
-				$self->{'artist'} = $1  if ($publisherHtml =~ m# title\=\"([^\"]+)#s);
-			}
-			if ($html =~ m#<div class="video-published(.+?)\/div\>#s) {
-				my $publisherHtml = $1;
-				$self->{'genre'} = HTML::Entities::decode_entities($1)  if ($publisherHtml =~ m#\>([^\<]+)\<\/a#s);
-				#UGETube-specific year & genre:
-				if ($publisherHtml =~ m#Published on\s+(.+)#s) {
-					$self->{'created'} ||= $1;
-					$self->{'created'} =~ s/\s+$//;
-					if ($self->{'created'} =~ s#\s*\/\s+In\s+(.+)$##s) {
-						my $genredata = $1;
-						$genredata =~ s#\<[^\>]+\>##gs;
-						$self->{'genre'} ||= $genredata;
+			if ($html =~ m#\<div\s+class\=\"video\-date\"\>(.+?)\<\/div\>#s) {
+				($self->{'created'} = $1) =~ s/^\s+//s;
+				$self->{'created'} =~ s/\s+$//s;
+				if ($self->{'created'} =~ /(\d\d\d\d)/) {
+					$self->{'year'} = $1;
+				} else {
+					#YES, THEY DO STUPID STUFF LIKE THIS!:
+					my @timestuff = localtime(time);
+					my $curyear = $timestuff[5] + 1900;
+					if ($self->{'created'} =~ /(\d)\s+years?\s+ago/) {
+						$self->{'year'} = $curyear - $1;
+					} elsif ($self->{'created'} =~ /months?\s+ago/) {
+						$self->{'year'} = $curyear;
 					}
-					$self->{'year'} ||= $1  if ($self->{'created'} =~ /(\d\d\d\d)/);
 				}
 			}
-
-			#Below seems to be UGETube-only now?:
-			$self->{'description'} = $1  if ($html =~ m# itemprop\=\"description\"\>(.+?)\<\/p\>#s);
-			$self->{'description'} ||= $1  if ($html =~ m#<meta\s+name\=\"(?:og\:|twitter\:)?description\"\s+content\=\"([^\"]+)#s);
-
-			$self->{'iconurl'} = $1  if ($html =~ m#<meta\s+name\=\"thumbnail\"\s+content\=\"([^\"]+)#s);
-			$self->{'iconurl'} ||= $1  if ($html =~ m#<meta\s+name\=\"(?:og\:|twitter\:)?image\"\s+content\=\"([^\"]+)#s);
-
-			$self->{'imageurl'} = $1  if ($html =~ m# poster\=\"([^\"]+)#s);
-
-			foreach my $i (qw(description title artist genre)) {
-				$self->{$i} = HTML::Entities::decode_entities($self->{$i});
-				$self->{$i} = uri_unescape($self->{$i});
-				$self->{$i} =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/egso;
+			$self->{'description'} = $self->{'title'};
+			$self->{'imageurl'} = $1  if ($html =~ m#\bdata\-poster\=\"([^\"]+)#s);
+			#THIS IS UGLY:
+			if ($html =~ m#\<div\s+class\=\"col\-md\-1\s+col\-sm\-2\s+col\-2\s+pb\-3\"\>(.+?)\<\/div\>#s) {
+				my $channelstuff = $1;
+				$self->{'albumartist'} = $1  if ($channelstuff =~ m#\<a\s+href\=\"([^\"]+)#s);
+				$self->{'articonurl'} = $1  if ($channelstuff =~ m#\<img\s+src\=\"([^\"]+)#s);
+			}
+			if ($html =~ m#\<a\s+href\=\"([^\"]+)\"\s+class\=\"video\-username\"\>\s*([^\<]+)#s) {
+				$self->{'albumartist'} ||= $1;
+				($self->{'artist'} = $2) =~ s#\s+$##s;
 			}
 
 			#TRY TO FETCH STREAMS:
-			while ($html =~ s#\<source\s+.*?src\=\"([^\"]+)\"##so) {
+			while ($html =~ s#\<source\s+.*?src\=\"([^\"]+)\"##s) {
 				my $one = $1;
-				push @{$self->{'streams'}}, $one  unless ($self->{'secure'} && $one !~ /^https/o);
+				push @{$self->{'streams'}}, $one  unless ($self->{'secure'} && $one !~ /^https/);
 				$self->{'cnt'}++;
 			}
-			#STEP 2:  FETCH THE EMBED URL:
-			if ($html =~ m#\<iframe\s+src\=\"($domain\/embed\/[^\"]+)#s) {
-				$url = $1  unless ($self->{'cnt'} > 0);
-			}
-		}
-	}
-	if ($url =~ m#\/embed\/([^\/]+)$#) {
-		$self->{'id'} ||= $1;
-		print STDERR "-FETCHING EMBED URL=$url= ID=".$self->{'id'}."=\n"  if ($DEBUG);
-		$response = $ua->get($url);
-		if ($response->is_success) {
-			$html = $response->decoded_content;
-		} else {
-			print STDERR $response->status_line  if ($DEBUG);
-			my $no_wget = system('wget','-V');
-			unless ($no_wget) {
-				print STDERR "\n..trying wget...\n"  if ($DEBUG);
-				$html = `wget -t 2 -T 20 -O- -o /dev/null \"$url\" 2>/dev/null `;
-			}
-		}
-		if ($html) {
-			$self->{'title'} ||= ($html =~ m#\<title\>([^\<]+)\<\/title\>#s) ? $1 : '';
-			$self->{'title'} ||= $1  if ($html =~ m#\<meta\s+property\=\"?og\:title\"?\s+content\=\"([^\"]+)\"#s);
-			$self->{'imageurl'} ||= $1  if ($html =~ m# poster\=\"([^\"]+)#s);
-			$self->{'cnt'} = 0;
-			while ($html =~ s#\<source\s+src\=\"([^\"]+)\"##so) {
-				my $one = $1;
-				push @{$self->{'streams'}}, $one  unless ($self->{'secure'} && $one !~ /^https/o);
-				$self->{'cnt'}++;
-			}
+			#STEP 2:  TRY FETCHING THE EMBED URL UNLESS WE FOUND STREAM(S):
+#DEPRECIATED?			$url2fetch = $1  if ($self->{'cnt'} <= 0
+#DEPRECIATED?					&& $html =~ m#\<iframe\s+src\=\"($baseURL\/embed\/[^\"]+)#s);
+			print STDERR "*** EMBED PAGE URL($1) FOUND!\n"  if ($self->{'cnt'} <= 0
+					&& $html =~ m#\<iframe\s+src\=\"($baseURL\/embed\/[^\"]+)#s);
 		}
 	}
 
@@ -540,16 +477,21 @@ sub new
 	$self->{'title'} =~ s/\\x[0-9a-f][0-9a-f][0-9a-f]+//g;
 	$self->{'title'} =~ s/\\x\{?([0-9A-Fa-f]{2})\}?/chr(hex($1))/eg;
 
-	$self->{'imageurl'} ||= $self->{'iconurl'};
 	$self->{'iconurl'} ||= $self->{'imageurl'};
 	$self->{'iconurl'} ||= $self->{'articonurl'}  if ($self->{'articonurl'});
+	$self->{'artimageurl'} ||= $self->{'articonurl'};
+	foreach my $field (qw(iconurl imageurl articonurl artimageurl)) {
+		$self->{$field} =~ s/\&amp\;/\&/g;
+	}
 	$self->{'total'} = $self->{'cnt'};
 	$self->{'Url'} = ($self->{'cnt'} > 0) ? $self->{'streams'}->[0] : '';
-	print STDERR "--SUCCESS: 1st stream=".$self->{'Url'}."= total=".$self->{'total'}."=\n"
-			if ($DEBUG && $self->{'cnt'} > 0);
-	print STDERR "\n--ID=".$self->{'id'}."=\n--TITLE=".$self->{'title'}."= ARTIST=".$self->{'artist'}."=\n--CNT="
-			.$self->{'cnt'}."=\n--ICON=".$self->{'iconurl'}."=\n--1ST=".$self->{'Url'}
-			."=\n--streams=".join('|',@{$self->{'streams'}})."=\n"  if ($DEBUG);
+	if ($DEBUG) {
+		foreach my $f (sort keys %{$self}) {
+			print STDERR "--KEY=$f= VAL=$$self{$f}=\n";
+		}
+		print STDERR "-SUCCESS: 1st stream=".$self->{'Url'}."=\n"  if ($self->{'cnt'} > 0);;
+	}
+
 	$self->_log($url);
 
 	bless $self, $class;   #BLESS IT!

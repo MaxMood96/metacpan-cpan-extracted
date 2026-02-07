@@ -311,10 +311,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-EpochTV>
 
 L<http://annocpan.org/dist/StreamFinder-EpochTV>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-EpochTV>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder-EpochTV/>
@@ -480,6 +476,7 @@ TRYIT:
 		$self->{'albumartist'} = $1;
 		my $channeldata = $2;
 		$self->{'articonurl'} = $1  if ($channeldata =~ m#\burl\=([^\"]+)#s);
+		$self->{'articonurl'} =~ s/\s+\dx.+$//s  if ($self->{'articonurl'});
 		print STDERR "i:channel avatar found($$self{'articonurl'}).\n"  if ($DEBUG);
 	}
 	#FETCH ARTIST'S DATA (ARTIST/AUTHOR MAY NOT BE SAME AS CHANNEL)!:
@@ -503,7 +500,6 @@ TRYIT:
 					unless ($self->{'_artisturl'} =~ m#^https?\:#);
 		}
 	}
-	$self->{'articonurl'} ||= $1  if ($html =~ m#\\\"termIcon\\\"\:\\\"([^\\]+)#s);
 	$self->{'articonurl'} ||= $1  if ($html =~ m#\\\"termIcon\\\"\:\\\"([^\\]+)#s);
 	$self->{'articonurl'} = HTML::Entities::decode_entities($self->{'articonurl'});
 	$self->{'articonurl'} = uri_unescape($self->{'articonurl'});
@@ -555,20 +551,21 @@ TRYIT:
 		print STDERR "--0:EPISODE($epiCnt): T=$$self{'title'}= S=$epiHash{$$self{'title'}}=\n"  if ($DEBUG);
 		$epiTitlesSorted{sprintf('%3.3d', $epiCnt++)} = $self->{'title'};
 	}
-	unless ($isEpisode) {
-		while ($html =~ s#^.+?\\\"(?:video|audio)\\\"\:\{\\\"id\\\"\:\\\"##sio) {
-			if ($html =~ m#\\\"url\\\"\:\\\"(https${protocol}\:[^\\]+)#s) {
-				my $epiStream = $1;
-				if ($epiStream =~ /\.(?:mp3|m3u8|mp4|m4a|pls)/o && $html =~ m#\d\d\,\\\"(?:title|caption)\\\"\:\\\"([^\\]+)#so) {
-					my $epiTitle = $1;
-					unless (defined $epiHash{$epiTitle}) {
-						$epiHash{$epiTitle} = $epiStream;
-						$epiTitlesSorted{sprintf('%3.3d', $epiCnt++)} = $epiTitle;
-					}
-				}
-			}
-		}
-	}
+#DEPRECIATED (DATA NO LONGER SEEMS TO BE PROVIDED!):
+#DEPRECIATED: 	unless ($isEpisode) {
+#DEPRECIATED: 		while ($html =~ s#^.+?\\\"(?:video|audio)\\\"\:\{\\\"id\\\"\:\\\"##sio) {
+#DEPRECIATED: 			if ($html =~ m#\\\"url\\\"\:\\\"(https${protocol}\:[^\\]+)#s) {
+#DEPRECIATED: 				my $epiStream = $1;
+#DEPRECIATED: 				if ($epiStream =~ /\.(?:mp3|m3u8|mp4|m4a|pls)/o && $html =~ m#\d\d\,\\\"(?:title|caption)\\\"\:\\\"([^\\]+)#so) {
+#DEPRECIATED: 					my $epiTitle = $1;
+#DEPRECIATED: 					unless (defined $epiHash{$epiTitle}) {
+#DEPRECIATED: 						$epiHash{$epiTitle} = $epiStream;
+#DEPRECIATED: 						$epiTitlesSorted{sprintf('%3.3d', $epiCnt++)} = $epiTitle;
+#DEPRECIATED: 					}
+#DEPRECIATED: 				}
+#DEPRECIATED: 			}
+#DEPRECIATED: 		}
+#DEPRECIATED: 	}
 
 	$self->{'playlist'} = "#EXTM3U\n";
 	$self->{'playlist_cnt'} = 0;

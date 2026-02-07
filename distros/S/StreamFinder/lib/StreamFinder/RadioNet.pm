@@ -1,10 +1,10 @@
 =head1 NAME
 
-StreamFinder::RadioNet - Fetch actual raw streamable URLs from radio-station websites on radio.net
+StreamFinder::RadioNet - Fetch actual raw streamable URLs from radio-stations and podcasts on radio.net
 
 =head1 AUTHOR
 
-This module is Copyright (C) 2017-2021 by
+This module is Copyright (C) 2017-2026 by
 
 Jim Turner, C<< <turnerjw784 at yahoo.com> >>
 		
@@ -28,6 +28,8 @@ file.
 
 	my $station = new StreamFinder::RadioNet($ARGV[0]);
 
+	#Note:  $station may be either a radio-station or podcast!
+
 	die "Invalid URL or no streams found!\n"  unless ($station);
 
 	my $firstStream = $station->get();
@@ -37,6 +39,12 @@ file.
 	my $url = $station->getURL();
 
 	print "Stream URL=$url\n";
+
+	my $playlist = $station->getURL('playlist');
+
+	print "Extended m3u episodes playlist =$playlist\n"
+
+		if ($playlist);  #IF PODCAST PAGE!
 
 	my $stationTitle = $station->getTitle();
 	
@@ -86,16 +94,16 @@ file.
 
 =head1 DESCRIPTION
 
-StreamFinder::RadioNet accepts a valid radio station ID or URL on Radio.net 
-and returns the actual stream URL(s), title, and cover art icon for that station.  
-The purpose is that one needs one of these URLs in order to have the option to 
-stream the station in one's own choice of media player software rather than 
-using their web browser and accepting any / all flash, ads, javascript, 
-cookies, trackers, web-bugs, and other crapware that can come with that method 
-of play.  The author uses his own custom all-purpose media player called 
-"fauxdacious" (his custom hacked version of the open-source "audacious" 
-audio player).  "fauxdacious" can incorporate this module to decode and play 
-Radio.net streams.
+StreamFinder::RadioNet accepts a valid radio station or podcast ID or URL on 
+Radio.net and returns the actual stream URL(s), title, and cover art icon for 
+that station or podcast.  The purpose is that one needs one of these URLs in 
+order to have the option to stream the station in one's own choice of media 
+player software rather than using their web browser and accepting any / all 
+flash, ads, javascript, cookies, trackers, web-bugs, and other crapware that 
+can come with that method of play.  The author uses his own custom all-purpose 
+media player called "fauxdacious" (his custom hacked version of the open-source 
+"audacious" audio player).  "fauxdacious" can incorporate this module to decode 
+and play Radio.net streams.
 
 One or more streams can be returned for each station.  
 
@@ -105,13 +113,14 @@ One or more streams can be returned for each station.
 
 =item B<new>(I<ID>|I<url> [, I<-secure> [ => 0|1 ]] [, I<-debug> [ => 0|1|2 ]])
 
-Accepts a Radio.net station ID or URL and creates and returns a new station 
-object, or I<undef> if the URL is not a valid Radio.net station or no 
-streams are found.  The URL can be the full URL, 
-ie. https://www.radio.net/s/B<station-id>, or just I<station-id>.
+Accepts a Radio.net station or podcast ID or URL, and creates and 
+returns a new station (or podcast) object, or I<undef> if the URL is not a 
+valid Radio.net station or no streams are found.  The URL can be the full URL, 
+ie. I<https://www.radio.net/s/>B<station-id>, or just I<station-id>, or 
+I<https://www.radio.net/podcast/>B<podcast-id> or just I<p/podcast-id>.
 
-The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  If 1 
-then only secure ("https://") streams will be returned.
+The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  
+If 1 then only secure ("https://") streams will be returned.
 
 DEFAULT I<-secure> is 0 (false) - return all streams (http and https).
 
@@ -119,8 +128,9 @@ Additional options:
 
 I<-log> => "I<logfile>"
 
-Specify path to a log file.  If a valid and writable file is specified, A line will be 
-appended to this file every time one or more streams is successfully fetched for a url.
+Specify path to a log file.  If a valid and writable file is specified, A line 
+will be appended to this file every time one or more streams is successfully 
+fetched for a url.
 
 DEFAULT I<-none-> (no logging).
 
@@ -128,20 +138,33 @@ I<-logfmt> specifies a format string for lines written to the log file.
 
 DEFAULT "I<[time] [url] - [site]: [title] ([total])>".  
 
-The valid field I<[variables]> are:  [stream]: The url of the first/best stream found.  
-[site]:  The site name (RadioNet).  [url]:  The url searched for streams.  
-[time]: Perl timestamp when the line was logged.  [title], [artist], [album], 
-[description], [year], [genre], [total], [albumartist]:  The corresponding field data 
-returned (or "I<-na->", if no value).
+The valid field I<[variables]> are:  [stream]: The url of the first/best 
+stream found.  [site]:  The site name (RadioNet).  [url]:  The url searched 
+for streams.  [time]: Perl timestamp when the line was logged.  [title], 
+[artist], [album], [description], [year], [genre], [total], [albumartist]:  
+The corresponding field data returned (or "I<-na->", if no value).
 
-=item $station->B<get>()
+=item $station->B<get>(I<['playlist']>)
 
-Returns an array of strings representing all stream URLs found.
+Returns an array of strings representing all stream URLs found.  
+If I<"playlist"> is specified, and the URL is a podcast page, then an extended 
+m3u playlist is returned instead of stream url(s), Otherwise, the array will 
+likely contain a stream for each episode found in order of latest to oldest, 
+as displayed on the podcast's web-page.
+
+NOTE: Radio.net does not provide web-pages for individual podcast episodes.  
+Therefore, if a podcast page url is given, rather than a radio-station page, 
+get() returns the first (latest?) podcast episode found, and get("playlist") 
+returns an extended m3u playlist containing the urls, titles, etc. for all the 
+podcast episodes found on that page url from latest to oldest.  One must fetch 
+the I<playlist> in order to get specific episodes other than the first one.
 
 =item $station->B<getURL>([I<options>])
 
 Similar to B<get>() except it only returns a single stream representing 
-the first valid stream found.  
+the first valid stream found.  For podcast pages, this will be the stream 
+for the first (usually latest) episode.  Radio.net does not provide web-pages 
+for individual podcast episodes.
 
 Current options are:  I<"random">, I<"nopls">, and I<"noplaylists">.  
 By default, the first ("best"?) stream is returned.  If I<"random"> is 
@@ -160,15 +183,15 @@ Returns the number of streams found for the station.
 
 =item $station->B<getID>()
 
-Returns the station's Radio.net ID (alphanumeric).
+Returns the station's or podcast's Radio.net ID (alphanumeric).
 
 =item $station->B<getTitle>(['desc'])
 
-Returns the station's title, or (long description).  
+Returns the station's or podcast's title, or (long description).  
 
 =item $station->B<getIconURL>()
 
-Returns the URL for the station's "cover art" icon image, if any.
+Returns the URL for the station's or podcast's "cover art" icon image, if any.
 
 =item $station->B<getIconData>()
 
@@ -177,7 +200,7 @@ Returns a two-element array consisting of the extension (ie. "png",
 
 =item $station->B<getImageURL>()
 
-Returns the URL for the station's "cover art" (usually larger) 
+Returns the URL for the station's or podcast's "cover art" (usually larger) 
 banner image.
 
 =item $station->B<getImageData>()
@@ -216,7 +239,8 @@ and the options are loaded into a hash used only by the specific
 (submodule) specified.  Valid options include 
 I<-debug> => [0|1|2] and most of the L<LWP::UserAgent> options.  
 
-Options specified here override any specified in I<~/.config/StreamFinder/config>.
+Options specified here override any specified in 
+I<~/.config/StreamFinder/config>.
 
 =item ~/.config/StreamFinder/config
 
@@ -270,10 +294,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-RadioNet>
 
 L<http://annocpan.org/dist/StreamFinder-RadioNet>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-RadioNet>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder-RadioNet/>
@@ -282,7 +302,7 @@ L<http://search.cpan.org/dist/StreamFinder-RadioNet/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2017-2021 Jim Turner.
+Copyright 2017-2026 Jim Turner.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the the Artistic License (2.0). You may obtain a
@@ -347,8 +367,14 @@ sub new
 	if ($url =~ /^https?\:/) {
 		$self->{'id'} = $1  if ($url2fetch =~ m#\/([^\/]+)\/?$#);
 	} else {
-		$self->{'id'} = $url;
-		$url2fetch = 'https://www.radio.net/s/' . $url;
+		my ($type, $id) = split(m#\/#, $url);
+		if (defined $id) {
+			$self->{'id'} = $id;
+			$type = 'podcast'  if ($type eq 'p');
+			$url2fetch = "https://www.radio.net/${type}/$id";
+		} else {
+			$url2fetch = 'https://www.radio.net/s/' . $url;
+		}
 	}
 	my $html = '';
 	print STDERR "-0(RadioNet): URL=$url2fetch=\n"  if ($DEBUG);
@@ -364,16 +390,19 @@ sub new
 	}
 	print STDERR "-1: html=$html=\n"  if ($DEBUG > 1);
 	return undef  unless ($html);  #STEP 1 FAILED, INVALID STATION URL, PUNT!
+	my @epiTitles = ();
+	my @epiStreams  = ();
+	my $epiCnt = 0;
 	$self->{'iconurl'} = ($html =~ m#\"og\:image\"\s+content\=\"([^\"]+)\"#s) ? $1 : '';
 	my $logoSz = 0;
-	while ($html =~ s#\"logo(\d+)x\d+\"\:\"([^\"]+)\"##s) {
+	while ($html =~ s#\\\"logo(\d+)x\d+\\\"\:\\\"([^\\]+)##s) {
 		if ($1 > $logoSz) {
 			$logoSz = $1;
 			$self->{'imageurl'} = $2;
 		}
 	}
+	$self->{'_isPodcast'} = 0;
 	$self->{'imageurl'} ||= $self->{'iconurl'};
-	$html =~ s/\\\"/\&quot\;/gs;
 	$self->{'title'} = ($html =~ m#\"og\:title\"\s+content\=\"([^\"]+)\"#s) ? $1 : '';
 	$self->{'description'} = ($html =~ m#\b(?:name\=\"twitter|property\=\"og)\:description\"\s+content\=\"([^\"]+)\"#s) ? $1 : $self->{'title'};
 	$self->{'title'} = HTML::Entities::decode_entities($self->{'title'});
@@ -390,24 +419,64 @@ sub new
 	$self->{'albumartist'} = ($html =~ s# href\=\"([^\"]+)\"\>Station website\<##s) ? $1 : '';
 	print STDERR "-2: icon=".$self->{'iconurl'}."= title=".$self->{'title'}."= image=".$self->{'imageurl'}."=\n"  if ($DEBUG);
 	$self->{'cnt'} = 0;
-	while ($html =~ s#\"streamUrl\"\:\"([^\"]+)\"##s) {
-		my $one = $1;
-		unless ($self->{'secure'} && $one !~ /^https/o) {
-			push @{$self->{'streams'}}, $one;
-			$self->{'cnt'}++;
+	while ($html =~ s#\\\"streams\\\"\:\[([^\]]+)\]##s) {
+		my $streamdata = $1;
+		if ($streamdata =~ m#\\\"url\\\"\:\\\"([^\\]+)#) {
+			my $s = $1;
+			unless ($self->{'secure'} && $s !~ /^https/) {
+				push @{$self->{'streams'}}, $s;
+				print STDERR "----STATION STREAM FOUND=$s=!\n"  if ($DEBUG);
+				$self->{'cnt'}++;
+			}
 		}
 	}
-	while ($html =~ s#\{\"url\"\:\"([^\"]+)\"##s) {
-		my $one = $1;
-		unless ($self->{'secure'} && $one !~ /^https/o) {
-			push @{$self->{'streams'}}, $one;
+	while ($html =~ s#\\\"title\\\"\:\\\"([^\\]+)\\\"\,\\\"url\\\"\:\\\"([^\\]+)\\\"##s) {
+		my $title = $1;
+		my $stream = $2;
+		print "----EPISODE STREAM FOUND=$stream= ($title)!\n"  if ($DEBUG);
+		unless ($self->{'secure'} && $stream !~ /^https/o) {
+			push @{$self->{'streams'}}, $stream;
 			$self->{'cnt'}++;
+			$epiTitles[$epiCnt] = $title;
+			$epiStreams[$epiCnt++] = $stream;
 		}
+		$self->{'_isPodcast'} = 1;
 	}
 	$self->{'total'} = $self->{'cnt'};
 	$self->{'Url'} = ($self->{'total'} > 0) ? $self->{'streams'}->[0] : '';
-	print STDERR "--SUCCESS: 1st stream=".$self->{'Url'}."= total=".$self->{'total'}."=\n"
-			if ($DEBUG && $self->{'cnt'} > 0);
+	foreach my $f (qw(iconurl imageurl)) {
+		$self->{$f} =~ s/\?.*$//;
+	}
+
+	if ($self->{'_isPodcast'}) {
+		if ($html =~ m#\"PodcastSeries\"\,\"name\"\:\"([^\"]+)\"\,\"author\"\:\{([^\}]+)#s) {
+			$self->{'title'} = $1;  #OVERRIDE (BETTER TITLE)
+			my $artistData = $2;
+			$self->{'artist'} = $1  if ($artistData =~ m#\"name\"\:\"([^\"]+)#);
+		}			
+		$self->{'genre'} ||= 'Podcast';
+		if ($epiCnt > 0) {
+			my $artist = $self->{'artist'} || $self->{'title'};
+			$self->{'playlist'} = "#EXTM3U\n";
+			$self->{'playlist_cnt'} = 0;
+			for (my $i=0;$i<$epiCnt;$i++) {
+				$self->{'playlist'} .= "#EXTINF:-1, $epiTitles[$i]\n";
+				$self->{'playlist'} .= "#EXTART:$artist\n";
+				$self->{'playlist'} .= "#EXTALB:$url\n";
+				$self->{'playlist'} .= "#EXTGENRE:" . $self->{'genre'} . "\n";
+				$self->{'playlist'} .= "$epiStreams[$i]\n";
+				++$self->{'playlist_cnt'};
+			}
+		}
+	} else {
+		$self->{'genre'} ||= 'Radio';
+	}
+	if ($DEBUG) {
+		foreach my $f (sort keys %{$self}) {
+			print STDERR "--KEY=$f= VAL=$$self{$f}=\n";
+		}
+		print STDERR "-SUCCESS: 1st stream=".$self->{'Url'}."=\n"  if ($self->{'cnt'} > 0);;
+	}
 	$self->_log($url);
 
 	bless $self, $class;   #BLESS IT!

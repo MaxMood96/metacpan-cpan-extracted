@@ -1,4 +1,11 @@
-2.29  2026-02-05
+2.30  2026-02-07
+
+  - Skip executing the delpaths boolean-segment array-index test on Perl
+    versions 5.32 and below by moving the query execution inside the SKIP block.
+
+  - Bump module version to 2.30.
+
+2.29  2026-01-29
 
   - Treat only canonical numeric keys as array indices in from_entries so
     keys with leading zeros remain object keys, with added coverage.
@@ -1444,6 +1451,7 @@
     - Removed use of eval in _evaluate_condition for better performance and stability.
     - Refactored _traverse for readability and maintainability.
     - Added support for multi-level array traversal (e.g., .users[].friends[].name).
+
 
 
 

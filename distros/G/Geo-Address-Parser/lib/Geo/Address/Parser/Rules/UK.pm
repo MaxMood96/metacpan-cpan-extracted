@@ -7,6 +7,8 @@ use warnings;
 use Exporter 'import';
 our @EXPORT_OK = qw(parse_address);
 
+our $VERSION = '0.07';
+
 =head1 NAME
 
 Geo::Address::Parser::Rules::UK - Parsing rules for UK addresses
@@ -65,7 +67,7 @@ my %uk_counties = map { $_ => 1 } (
 		'Isle of Anglesey', 'Merthyr Tydfil', 'Monmouthshire', 'Neath Port Talbot', 'Newport',
 		'Pembrokeshire', 'Powys', 'Rhondda Cynon Taf', 'Swansea', 'Torfaen',
 		'Vale of Glamorgan', 'Wrexham',
-# Northern Ieland
+# Northern Ireland
 		'Antrim', 'Armagh', 'Belfast', 'Castlereagh', 'Coleraine',
 		'Cookstown', 'Craigavon', 'Down', 'Dungannon', 'Fermanagh',
 		'Larne', 'Limavady', 'Lisburn', 'Londonderry', 'Magherafelt',

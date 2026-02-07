@@ -5,7 +5,7 @@ use warnings;
 package Marlin::Attribute;
 
 our $AUTHORITY = 'cpan:TOBYINK';
-our $VERSION   = '0.022001';
+our $VERSION   = '0.023000';
 
 BEGIN { our @ISA = 'Sub::Accessor::Small' };
 
@@ -574,12 +574,13 @@ sub install_accessors {
 			$me->inline_predicate if $me->{storage} ne 'NONE';
 			$me->inline_clearer   if $me->{storage} ne 'NONE';
 
-			# We specifically want to suppress cloning
+			# We specifically want to suppress cloning and chaining
 			delete local $me->{clone_on_read};
 			delete local $me->{clone_on_write};
+			delete local $me->{chain};
 
-			require Sub::HandlesVia::Toolkit::SubAccessorSmall;
-			my $SHV = 'Sub::HandlesVia::Toolkit::SubAccessorSmall'->new(
+			require Marlin::Attribute::SHVToolkit;
+			my $SHV = 'Marlin::Attribute::SHVToolkit'->new(
 				attr => $me,
 				handles_map => \%handles_map,
 			);
@@ -788,6 +789,82 @@ sub xs_constructor_args {
 	$opt->{clone_on_write}   = $me->{clone_on_write};
 	
 	return ( $name . $req => $opt );
+}
+
+sub shvxs_info {
+	my $me = shift;
+
+	require Sub::HandlesVia;
+	return unless Sub::HandlesVia->can('HAS_SHVXS') && Sub::HandlesVia::HAS_SHVXS();
+
+	# These seem too complicated to handle via direct hashref access.
+	return if $me->{trigger};
+	return if $me->{storage} ne 'HASH';
+	
+	# How to get an ArrayRef from an object.
+	my %xs_info = (
+		arr_source         => Sub::HandlesVia::XS->ArraySource( 'DEREF_HASH' ),
+		arr_source_string  => $me->{slot},
+	);
+		
+	# In the direct hashref case, if the key doesn't exist, try calling the
+	# reader method first because that might have a lazy default or builder!
+	if ( $me->{lazy} ) {
+		$xs_info{arr_source_fallback} = $me->{reader} || $me->{accessor};
+		return unless defined $xs_info{arr_source_fallback};
+	}
+
+	# Strings are found the same way!
+	for my $key ( sort keys %xs_info ) {
+		my ( $stub ) = ( $key =~ /^arr_(.+)$/ ) or next;
+		
+		if ( exists $xs_info{"arr_$stub"} and not exists $xs_info{"str_$stub"} ) {
+			$xs_info{"str_$stub"} = $xs_info{"arr_$stub"};
+		}
+	}
+	
+	# Type constraints in a form Sub::HandlesVia::XS can understand.
+	if ( my $type = $me->{isa} ) {
+		if ( Types::Common::is_Object $type and $type->isa('Type::Tiny') ) {
+			return if ref $me->{coerce};
+			
+			my ( $coderef, $flags ) = Sub::HandlesVia::XS->TypeInfo( $me->{isa} );
+			$xs_info{type}        = $flags;
+			$xs_info{type_cv}     = $coderef;
+			$xs_info{type_tiny}   = $type;
+			$xs_info{coercion_cv} = $type->coercion->compiled_coercion if ( $me->{coerce} and $type->has_coercion );
+			
+			my $constraining_type = $type->find_constraining_type;
+			if ( $constraining_type == Types::Common::ArrayRef ) {
+				$constraining_type = Types::Common::ArrayRef->of( Types::Common::Any );
+			}
+			
+			if ( $constraining_type == $type
+			and  $constraining_type->is_parameterized
+			and  ( $constraining_type->parent == Types::Common::ArrayRef or $constraining_type->parent == Types::Common::HashRef )
+			and  @{ $constraining_type->parameters } == 1 ) {
+				my $element_type = $constraining_type->type_parameter;
+				my ( $coderef, $flags ) = Sub::HandlesVia::XS->TypeInfo( $element_type );
+				$xs_info{element_type}        = $flags;
+				$xs_info{element_type_cv}     = $coderef;
+				$xs_info{element_type_tiny}   = $element_type;
+				$xs_info{element_coercion_cv} = $element_type->coercion->compiled_coercion if ( $me->{coerce} and $element_type->has_coercion );
+			}
+		}
+		else {
+			return if $me->{coerce} && !ref $me->{coerce};
+			
+			my ( $coderef, $flags ) = Sub::HandlesVia::XS->TypeInfo( $me->{isa} );
+			$xs_info{type}        = $flags;
+			$xs_info{type_cv}     = $coderef;
+			$xs_info{coercion_cv} = $me->{coerce} if $me->{coerce};
+		}
+	}
+	elsif ( $me->{coerce} ) {
+		return;
+	}
+	
+	return \%xs_info;
 }
 
 sub _moose_safe_default {

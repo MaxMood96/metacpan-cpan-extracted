@@ -215,7 +215,8 @@ subtest 'tee table execution' => sub {
     is($?, 0, 'mdee with table exits successfully');
     # Table should be formatted with aligned columns
     # The separator line |---|---|---| should have consistent dashes
-    like($out, qr/\|-+\|-+\|-+\|/, 'table separator is formatted');
+    use Encode 'decode_utf8';
+    like(decode_utf8($out), qr/├─+┼─+┼─+┤/, 'table separator is formatted');
     # Check that ANSI sequences are present
     like($out, qr/\e\[/, 'output contains ANSI escape sequences');
 };

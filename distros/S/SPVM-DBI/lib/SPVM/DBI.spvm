@@ -1,0 +1,81 @@
+# Copyright (c) 2026 Yuki Kimoto
+# MIT License
+
+class DBI {
+  version "0.001";
+
+  use DBI::Dr;
+  use DBI::Db;
+  use Hash;
+  use Go::Context;
+
+  # --- Global Variables (Matching Perl's 'our' variables) ---
+  
+  # Standard SQLSTATE (5 characters)
+  our $state : public rw string;
+  
+  # This corresponds to $DBI::err
+  our $err : public rw int;
+  
+  # This corresponds to $DBI::errstr
+  our $errstr : public rw string;
+  
+  # This corresponds to $DBI::rows
+  our $rows : public rw int;
+  
+  # This is for internal driver management.
+  our $driver_registry : private Hash;
+  
+  # --- Class Methods ---
+  
+  # The primary gateway to establish a connection.
+  # Corresponds to DBI->connect(...)
+  static method connect : DBI::Db ($context : Go::Context, $dsn : string, $user : string = undef, $password : string = undef, $attr : Hash = undef) {
+    
+    # 1. Parse DSN to find which driver to use
+    my $driver_name = &parse_dsn_for_driver($dsn);
+    
+    # 2. Retrieve or load the driver manager (dr)
+    my $dr = &install_driver($context, $driver_name);
+    
+    # 3. Request the driver to create a database handle (db)
+    my $dbh = $dr->connect($context, $dsn, $user, $password, $attr);
+    
+    return $dbh;
+  }
+
+  # Load and manage driver singleton objects.
+  # Corresponds to DBI->install_driver(...)
+  static method install_driver : DBI::Dr ($context : Go::Context, $driver_name : string, $attr : Hash = undef) {
+    die "TODO";
+  }
+
+  # Return a list of all currently available drivers.
+  static method available_drivers : string[] ($context : Go::Context) {
+    die "TODO";
+  }
+
+  # --- Utility Methods ---
+
+  # Internal logic to parse DSN strings like "dbi:SQLite:dbname=..."
+  private static method parse_dsn_for_driver : string ($dsn : string) {
+    unless ($dsn) {
+      die "DSN must be defined.";
+    }
+
+    # Extract driver name: "dbi:SQLite:..." -> "SQLite"
+    if (my $match = Re->m($dsn, "^dbi:([^:]+):")) {
+      return $match->cap1;
+    }
+    else {
+      die "Invalid DSN format: \"$dsn\". It must follow the 'dbi:DriverName:...' pattern.";
+    }
+    
+    return (string)undef;
+  }
+
+  # Global utility for data source discovery.
+  static method data_sources : string[] ($context : Go::Context, $driver_name : string, $attr : Hash = undef) {
+    die "TODO";
+  }
+}

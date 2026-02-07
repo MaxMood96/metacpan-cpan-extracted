@@ -6,7 +6,7 @@ use utf8;
 package Marlin::Role;
 
 our $AUTHORITY = 'cpan:TOBYINK';
-our $VERSION   = '0.022001';
+our $VERSION   = '0.023000';
 
 # Marlin::Role is itself a Marlin class!
 use Marlin qw( requires ), -base => 'Marlin';

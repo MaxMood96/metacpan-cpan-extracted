@@ -181,3 +181,12 @@ docker run --rm derfnull/hafas-m:latest --version
 
 Documentation is not available in this image. Please refer to the
 [online hafas-m manual](https://man.finalrewind.org/1/hafas-m/) instead.
+
+## References
+
+Mirrors of this repository are available at the following locations.
+
+* [Chaosdorf](https://chaosdorf.de/git/derf/Travel-Status-DE-HAFAS)
+* [Codeberg](https://codeberg.org/derf/Travel-Status-DE-HAFAS)
+* [Finalrewind](https://git.finalrewind.org/derf/Travel-Status-DE-HAFAS)
+* [GitHub](https://github.com/derf/Travel-Status-DE-HAFAS)

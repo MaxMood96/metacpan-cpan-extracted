@@ -85,7 +85,7 @@ if ($opts{clipboard}) {
     open my $file, '<', $opts{file}
       or error "Unable to open $opts{file} - $!", 1;
 
-    $msg = <$file>;
+    $msg = do {local $/; <$file>};
 
     close $file;
   }    # if

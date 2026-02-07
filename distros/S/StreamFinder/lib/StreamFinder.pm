@@ -131,7 +131,7 @@ The currently-supported websites are:
 podcasts.apple.com podcasts (L<StreamFinder::Apple>), 
 bitchute.com videos (L<StreamFinder::Bitchute>), 
 blogger.com videos (L<StreamFinder::Blogger>), 
-ugetube.com videos (L<StreamFinder::BrandNewTube>), 
+brandnewtube.com (now onevsp.com) videos (L<StreamFinder::BrandNewTube>), 
 brighteon.com videos (L<StreamFinder::Brighteon>), 
 castbox.fm podcasts (L<StreamFinder::Castbox>), 
 theepochtimes.com/epochtv videos (L<StreamFinder::EpochTV>), 
@@ -483,10 +483,6 @@ Fauxdacious media player - (L<https://wildstar84.wordpress.com/fauxdacious>)
 
 L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder/>
@@ -543,7 +539,7 @@ use strict;
 use warnings;
 use vars qw(@ISA @EXPORT $VERSION);
 
-our $VERSION = '2.51';
+our $VERSION = '2.60';
 our $DEBUG = 0;
 
 require Exporter;
@@ -596,7 +592,7 @@ sub new
 	} elsif ($url =~ m#\bpodcastaddict\.# && $useit{'PodcastAddict'}) {
 		eval { require 'StreamFinder/PodcastAddict.pm'; $haveit = 1; };
 		return new StreamFinder::PodcastAddict($url, @args)  if ($haveit);
-	} elsif ($url =~ m#\b(?:brandnew|uge)tube\.# && $useit{'BrandNewTube'}) { #HANDLES brandnewtube & ugetube!
+	} elsif ($url =~ m#\b(?:onevsp|brandnewtube)\.# && $useit{'BrandNewTube'}) {
 		eval { require 'StreamFinder/BrandNewTube.pm'; $haveit = 1; };
 		return new StreamFinder::BrandNewTube($url, @args)  if ($haveit);
 	} elsif ($url =~ m#\bbitchute\.# && $useit{'Bitchute'}) {

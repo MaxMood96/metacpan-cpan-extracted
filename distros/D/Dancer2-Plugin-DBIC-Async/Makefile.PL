@@ -13,7 +13,7 @@ WriteMakefile(
     PREREQ_PM => {
         'Dancer2'            => 0,
         'Dancer2::Plugin'    => 0,
-        'DBIx::Class::Async' => '0.54',
+        'DBIx::Class::Async' => '0.55',
         'Module::Runtime'    => 0,
     },
     TEST_REQUIRES => {

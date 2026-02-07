@@ -3,7 +3,7 @@
 # vim: tabstop=4
 
 # Makefile generator for libintl-perl.
-# Copyright (C) 2002-2017 Guido Flohr <guido.flohr@cantanea.com>, 
+# Copyright (C) 2002-2026 Guido Flohr <guido.flohr@cantanea.com>, 
 # all rights reserved.
 
 # This program is free software; you can redistribute it and/or modify it
@@ -249,13 +249,13 @@ all :: Credits Changes README
 # Make search.cpan.org happy but still follow GNU standards:
 # # (Thanks to Graham Barr for the hint)
 Credits: THANKS
-	cat THANKS >$@
+	-@cat THANKS >$@
 
 Changes: NEWS
-	cat NEWS >$@
+	-@cat NEWS >$@
 
 README: README.md
-	cat README.md >$@
+	-@cat README.md >$@
 '
 }
 

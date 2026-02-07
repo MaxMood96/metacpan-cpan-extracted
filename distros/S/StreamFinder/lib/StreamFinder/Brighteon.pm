@@ -333,10 +333,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-Brighteon>
 
 L<http://annocpan.org/dist/StreamFinder-Brighteon>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-Brighteon>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder-Brighteon/>
@@ -457,7 +453,7 @@ sub new
 		my $no_wget = system('wget','-V');
 		unless ($no_wget) {
 			print STDERR "\n..trying wget...\n"  if ($DEBUG);
-			$html = `wget -t 2 -T 20 -O- -o /dev/null \"$url2fetch\" 2>/dev/null `;
+			$html = `wget -t 2 -T 20 -O- -o /dev/null "$url2fetch" 2>/dev/null `;
 		}
 	}
 	return undef  unless ($html);
@@ -477,7 +473,7 @@ sub new
 				my $no_wget = system('wget','-V');
 				unless ($no_wget) {
 					print STDERR "\n..trying wget...\n"  if ($DEBUG);
-					$html = `wget -t 2 -T 20 -O- -o /dev/null \"$url2fetch\" 2>/dev/null `;
+					$html = `wget -t 2 -T 20 -O- -o /dev/null "$url2fetch" 2>/dev/null `;
 				}
 			}
 			return undef  unless ($html);
@@ -654,7 +650,8 @@ sub new
 	foreach my $i (qw(title artist description)) {
 		$self->{$i} = HTML::Entities::decode_entities($self->{$i});
 		$self->{$i} = uri_unescape($self->{$i});
-		$self->{$i} =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/egso;
+		$self->{$i} =~ s/(?:\%|\\[ux\%]?00|\bu00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
+
 	}
 	$self->{'total'} = $self->{'cnt'};
 	$self->{'Url'} = ($self->{'cnt'} > 0) ? $self->{'streams'}->[0] : '';

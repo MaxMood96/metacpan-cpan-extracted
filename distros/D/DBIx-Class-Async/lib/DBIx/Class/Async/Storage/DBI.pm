@@ -1,6 +1,6 @@
 package DBIx::Class::Async::Storage::DBI;
 
-$DBIx::Class::Async::Storage::DBI::VERSION   = '0.54';
+$DBIx::Class::Async::Storage::DBI::VERSION   = '0.55';
 $DBIx::Class::Async::Storage::DBI::AUTHORITY = 'cpan:MANWAR';
 
 use strict;
@@ -14,7 +14,7 @@ DBIx::Class::Async::Storage::DBI - DBI-based async storage backend for DBIx::Cla
 
 =head1 VERSION
 
-Version 0.54
+Version 0.55
 
 =head1 SYNOPSIS
 
@@ -93,7 +93,7 @@ not maintain a database handle in the parent process. Instead, database handles
 are held by worker processes in the background worker pool, which execute
 queries asynchronously.
 
-This method exists for API compatibility with standard DBIx::Class storage
+This method exists for API compatibility with standard L<DBIx::Class> storage
 objects, but always returns C<undef> to indicate that direct database handle
 access is not available in async mode.
 
@@ -104,8 +104,9 @@ access is not available in async mode.
       say "Running in async mode - no direct DBH access";
   }
 
-If you need to perform database operations, use the ResultSet and Row
-methods which handle async execution transparently through the worker pool.
+If you need to perform database operations, use the L<DBIx::Class::Async::ResultSet>
+and L<DBIx::Class::Async::Row> methods which handle async execution transparently
+through the worker pool.
 
 =cut
 
@@ -209,7 +210,7 @@ The current or newly set debug level.
   # Disable debugging
   $storage->debug(0);
 
-Note: The actual debug output behavior may vary depending on the storage
+B<Note>: The actual debug output behavior may vary depending on the storage
 implementation and connected database driver.
 
 =cut
@@ -230,7 +231,7 @@ differs fundamentally from traditional L<DBIx::Class::Storage::DBI>:
 =item B<No Parent Process DBH>
 
 The parent process never instantiates a L<DBI> handle. All database connections
-are isolated within worker processes. This prevents the "forked handle"
+are isolated within worker processes. This prevents the B<"forked handle">
 corruption common in multiprocess Perl applications and keeps the main event
 loop lightweight.
 
@@ -244,7 +245,7 @@ to return results.
 =item B<Worker Pool via IO::Async::Function>
 
 Queries are dispatched to a persistent pool of background workers. By using
-persistent workers with C<state>-cached connections, the bridge eliminates
+persistent workers with B<state-cached connections>, the bridge eliminates
 the latency of C<connect/disconnect> cycles for every query.
 
 =item B<Transparent API>

@@ -1,0 +1,168 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Marlin::Manual::ClassOptions - class-wide options
+
+=head1 DESCRIPTION
+
+L<Marlin::Manual::Beginning> introduced some class-wide options:
+C<< -extends >> for indicating a base class or parent class, and
+C<< -with >> for composing roles.
+
+L<Marlin::Manual::BetterMethods>> introduced C<< -modifiers >>.
+
+These options which don't declare a specific attribute start with
+a leading hyphen, and there are more of them! This part of the manual
+lists the other class-wide options and goes into more detail on
+the options that have already been mentioned.
+
+=head2 C<< -base >> or C<< -parents >> or C<< -isa >> or C<< -extends >>
+
+Sets the base class (or classes) of your class.
+
+B<< Example: Inheitance >>
+
+  package Employee {
+    use Marlin -base => 'Person', qw( employee_id payroll_number );
+  }
+
+Note that multiple inheritance is supported, though roles may be a better
+way of structuring your code.
+
+B<< Example: Multiple Inheitance >>
+
+  package FlyingCar {
+    use Marlin -extends => [ 'Car', 'Plane' ];
+  }
+  
+  # Better?
+  package FlyingCar {
+    use Marlin -extends => 'Car', -with => 'Flight';
+  }
+
+Marlin currently only supports inheriting from other Marlin classes, or
+from L<Class::XSConstructor>, L<Class::Tiny>, L<Moo>, L<Moose>, and
+L<Mouse> classes. Other base classes I<may> work, especially if they use
+blessed hashref instances and don't do anything fancy in their constructor.
+
+Marlin can inherit from classes built with L<Mite>, provided that the
+MOP option was enabled (see L<Mite::Manual::MOP>) and Moose is available.
+(Mite doesn't expose attribute metadata, so Marlin needs to force the
+class to "upgrade itself" to a Moose class.)
+
+You can include version numbers:
+
+B<< Example: Inheitance with Version Numbers >>
+
+  package Employee 1.0 {
+    use Marlin -base => 'Person 2.000', ...;
+  }
+
+You can technically manually set your C<< @ISA >>, but must do it I<before>
+Marlin creates your class; otherwise Marlin won't be able to see any
+attribute definitions in parent classes.
+
+  package Employee {
+    use Person 1.0;
+    BEGIN { @ISA = ( 'Person' ) };
+    use Marlin qw( employee_id payroll_number );
+  }
+
+I don't know why you'd want to do that though.
+
+=head2 C<< -with >> or C<< -roles >> or C<< -does >>
+
+Composes roles into your class.
+
+  package Payable {
+    use Marlin::Role -requires => ['payroll_number'];
+  }
+  
+  package Employee {
+    use Marlin
+      -extends => ['Person'],
+      -with    => ['Payable'],
+      qw( employee_id payroll_number );
+  }
+
+Marlin classes can accept roles built with L<Marlin::Role>, L<Role::Tiny>,
+L<Moo::Role>, L<Moose::Role>, or L<Mouse::Role>.
+
+Like C<< -base >>, you can include version numbers.
+
+=head2 C<< -this >> or C<< -self >> or C<< -class >>
+
+Specifies the name of your class. If you don't include this, it will
+just use C<caller>, which is normally what you want.
+
+The following are roughly equivalent:
+
+  package Person {
+    use Marlin 'name!';
+  }
+  
+  use Marlin -this => 'Person', 'name!';
+
+The main difference is what scope any lexical subs Marlin creates will end
+up in. (And if your version of Perl is too old to support lexical subs,
+the "scope" they will be installed in is actually the caller package!)
+
+=head2 C<< -constructor >>
+
+Tells Marlin to use a constructor name other than C<new>:
+
+  package Person {
+    use Marlin -constructor => 'create', 'name!';
+  }
+  
+  my $bob = Person->create( name => 'Bob' );
+
+It can sometimes be useful to name your constructor something like
+C<< _new >> if you wish to create your own C<< new >> method wrapping
+it.
+
+=head2 C<< -strict >> or C<< -strict_constructor >>
+
+Tells Marlin to build a constructor like L<MooX::StrictConstructor> or 
+L<MooseX::StrictConstructor>, which will reject unknown arguments.
+
+Since version 0.007000, this is the default.
+
+=head2 C<< -sloppy >> or C<< -sloppy_constructor >> or C<< -loose >> or C<< -loose_constructor >>
+
+Switches off the strict constructor.
+
+Option introduced in version 0.007000. This was previously the default.
+
+=head2 C<< -mods >> or C<< -modifiers >>
+
+Exports the C<before>, C<after>, C<around>, and C<fresh> method modifiers
+from L<Class::Method::Modifiers>, but lexical versions of them.
+
+In L<Marlin::Role>, doesn't import C<fresh>.
+
+=head1 SEE ALSO
+
+L<Marlin::Manual::Comparison> - comparing Marlin with other OO frameworks.
+
+L<Marlin>, L<Marlin::Util>.
+
+=head1 AUTHOR
+
+Toby Inkster E<lt>tobyink@cpan.orgE<gt>.
+
+=head1 COPYRIGHT AND LICENCE
+
+This software is copyright (c) 2026 by Toby Inkster.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=head1 DISCLAIMER OF WARRANTIES
+
+THIS PACKAGE IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR IMPLIED
+WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
+MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.

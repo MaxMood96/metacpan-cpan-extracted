@@ -6,6 +6,16 @@ Home page:    <https://metacpan.org/release/Marlin>
 Bug tracker:  <https://github.com/tobyink/p5-marlin/issues>
 Maintainer:   Toby Inkster (TOBYINK) <tobyink@cpan.org>
 
+0.023000	2026-02-06
+
+ [ Documentation ]
+ - Major documentation improvements.
+
+ [ Other ]
+ - Use Sub::HandlesVia::XS if it's installed. Currently this results in
+   negligible speed-ups (and in some cases small slow-downs) for delegated
+   methods. Over time it will hopefully make delegated methods faster.
+
 0.022001	2026-01-23
 
  [ Bug Fixes ]

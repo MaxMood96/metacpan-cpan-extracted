@@ -1,5 +1,23 @@
 Revision history for DBIx::Class::Async
 
+0.55 2026-02-06
+     [NEW FEATURES]
+     - Added run_parallel() method to DBIx::Class::Async::Schema. This method
+       accepts a list of code references, executes them concurrently using
+       the asynchronous schema connection, and returns a `Future` that
+       resolves when all tasks are complete.
+     - Added await_all() method to DBIx::Class::Async::Schema. This method
+       takes one or more Future objects and synchronously blocks until all
+       of them have completed, returning the list of results.
+     [DOCUMENTATION]
+     - Added comprehensive POD for run_parallel() and await_all() in Schema.pm,
+       including usage examples for maximizing query performance.
+     [TEST SUITE]
+     - Added t/146-await-all.t to verify synchronous waiting and error
+       propagation for await_all().
+     - Added t/147-run-parallel.t to verify concurrent execution, aggregation
+       of results, and error propagation for run_parallel().
+
 0.54 2026-02-04
      [TEST SUITE]
      - Fixed t/145-mojo-integration.t to prevent compile-time failures on

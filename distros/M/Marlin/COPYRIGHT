@@ -9,6 +9,7 @@ Files: Changes
  dist.ini
  doap.ttl
  lib/Marlin/Attribute.pm
+ lib/Marlin/Attribute/SHVToolkit.pm
  lib/Marlin/TypeConstraint.pm
  t/integration/clone.t
  t/integration/conflicts.t
@@ -61,7 +62,11 @@ Files: t/00start.t
 Copyright: This software is copyright (c) 2025 by Toby Inkster.
 License: GPL-1.0+ or Artistic-1.0
 
-Files: lib/Marlin/X.pm
+Files: lib/Marlin/Manual/Beginning.pod
+ lib/Marlin/Manual/BetterAttributes.pod
+ lib/Marlin/Manual/BetterMethods.pod
+ lib/Marlin/Manual/ClassOptions.pod
+ lib/Marlin/X.pm
  lib/MooX/Marlin.pm
  lib/MooseX/Marlin.pm
  t/integration/alias-moose.t

@@ -23,7 +23,7 @@ use Travel::Status::DE::HAFAS::Product;
 use Travel::Status::DE::HAFAS::Services;
 use Travel::Status::DE::HAFAS::StopFinder;
 
-our $VERSION = '6.24';
+our $VERSION = '6.25';
 
 # {{{ Endpoint Definition
 
@@ -913,7 +913,7 @@ monitors
 
 =head1 VERSION
 
-version 6.24
+version 6.25
 
 =head1 DESCRIPTION
 
@@ -1255,7 +1255,7 @@ service.
 
 =head1 AUTHOR
 
-Copyright (C) 2015-2025 Birte Kristina Friesel E<lt>derf@finalrewind.orgE<gt>
+Copyright (C) 2015-2026 Birte Kristina Friesel E<lt>derf@finalrewind.orgE<gt>
 
 =head1 LICENSE
 

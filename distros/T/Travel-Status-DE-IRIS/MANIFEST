@@ -3,7 +3,6 @@ bin/db-iris
 Build.PL
 Changelog
 cpanfile
-cpanfile.snapshot
 Dockerfile
 examples/traintrack
 lib/Travel/Status/DE/IRIS.pm

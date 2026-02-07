@@ -1,10 +1,10 @@
 =head1 NAME
 
-StreamFinder::SermonAudio - Fetch actual raw streamable URLs on sermonaudio.com
+StreamFinder::SermonAudio - Fetch actual raw streamable URLs on sermonaudio.com.
 
 =head1 AUTHOR
 
-This module is Copyright (C) 2021-2025 by
+This module is Copyright (C) 2021-2026 by
 
 Jim Turner, C<< <turnerjw784 at yahoo.com> >>
 		
@@ -87,13 +87,13 @@ file.
 =head1 DESCRIPTION
 
 StreamFinder::SermonAudio accepts a valid podcast (sermon) ID or URL on 
-SermonAudio.com and returns the actual stream URL(s), title, and cover art icon.  
-The purpose is that one needs one of these URLs in order to have the option to 
-stream the podcast in one's own choice of media player software rather than 
-using their web browser and accepting any / all flash, ads, javascript, 
-cookies, trackers, web-bugs, and other crapware that can come with that method 
-of play.  The author uses his own custom all-purpose media player called 
-"fauxdacious" (his custom hacked version of the open-source "audacious" 
+SermonAudio.com and returns the actual stream URL(s), title, and cover art 
+icon.  The purpose is that one needs one of these URLs in order to have the 
+option to stream the podcast in one's own choice of media player software 
+rather than using their web browser and accepting any / all flash, ads, 
+javascript, cookies, trackers, web-bugs, and other crapware that can come with 
+that method of play.  The author uses his own custom all-purpose media player 
+called "fauxdacious" (his custom hacked version of the open-source "audacious" 
 audio player).  "fauxdacious" can incorporate this module to decode and play 
 SermonAudio.com streams.
 
@@ -105,7 +105,8 @@ One or more stream URLs can be returned for each podcast.
 
 =item B<new>(I<ID>|I<url> [, I<-quality> => audio|any ] 
 [, I<-speakericon> [ => 0|1 ]] [, I<-secure> [ => 0|1 ]] 
-[, I<-nowebp> [ => 0|1 ]] [, I<-debug> [ => 0|1|2 ]])
+[, I<-notrim> [ => 0|1 ]] [, I<-nowebp> [ => 0|1 ]] 
+[, I<-debug> [ => 0|1|2 ]])
 
 Accepts a www.sermonaudio.com podcast (sermon) ID or URL and creates and 
 returns a a new podcast object, or I<undef> if the URL is not a valid podcast, 
@@ -135,12 +136,24 @@ The optional I<-speakericon> argument can be set to reverse the artist
 (channel) icon and artist image, usually resulting in the artist icon being a 
 photo of the preacher, instead of his church's thumbnail icon.
 
-DEFAULT zero (I<false>): Don't reverse the artist icon and image.
+DEFAULT I<-quality> is 0 (I<false>): Don't reverse the artist icon and image.
 
 The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  
 If 1 then only secure ("https://") streams will be returned.
 
 DEFAULT I<-secure> is 0 (false) - return all streams (http and https).
+
+The optional I<-notrim> argument can be either 0 or 1 (I<false> or I<true>).  
+If 0 (I<false>) then stream URLs are trimmed of excess "ad" parameters 
+(everything after the first "?" character, ie. "?ads.cust_params=premium" is 
+removed, including the "?".  Otherwise, the stream URLs are returned as-is.  
+
+DEFAULT I<-notrim> is 0 (I<false>) and URLs are trimmed.  If 
+I<-notrim> is specified without argument, the default is 1 (I<true>).  Try 
+using I<-notrim> if stream will not play without the extra arguments.
+
+Note:  -notrim = 0 will not trim the "webp=true" portion of icon / image URLs 
+unless -nowebp is set to 1.
 
 The optional I<-nowebp> argument can be either 0 or 1 (I<false> or I<true>).  
 If 1 then image files specified as "img.{png|jpg|jpeg|gif}?webp=true" are 
@@ -148,7 +161,7 @@ stripped of the "?webp=true" part which causes them to be downloaded in
 their native format instead of webp.  This is needed by the GTK versions 
 of Fauxdacious.
 
-DEFAULT zero (I<false>): Download webp images as webp.
+DEFAULT I<-nowebp> is 0 (I<false>): Download webp images as webp.
 
 Additional options:
 
@@ -262,7 +275,8 @@ and the options are loaded into a hash used only by the specific
 (submodule) specified.  Valid options include 
 I<-debug> => [0|1|2] and most of the L<LWP::UserAgent> options.  
 
-Options specified here override any specified in I<~/.config/StreamFinder/config>.
+Options specified here override any specified in 
+I<~/.config/StreamFinder/config>.
 
 =item ~/.config/StreamFinder/config
 
@@ -316,10 +330,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-SermonAudio>
 
 L<http://annocpan.org/dist/StreamFinder-SermonAudio>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-SermonAudio>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder-SermonAudio/>
@@ -328,42 +338,42 @@ L<http://search.cpan.org/dist/StreamFinder-SermonAudio/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2021-2025 Jim Turner.
+Copyright 2021-2026 Jim Turner.
 
-This program is free software; you can redistribute it and/or modify it
-under the terms of the the Artistic License (2.0). You may obtain a
+This program is free software; you can redistribute it and/or modify it 
+under the terms of the the Artistic License (2.0). You may obtain a 
 copy of the full license at:
 
 L<http://www.perlfoundation.org/artistic_license_2_0>
 
-Any use, modification, and distribution of the Standard or Modified
-Versions is governed by this Artistic License. By using, modifying or
-distributing the Package, you accept this license. Do not use, modify,
+Any use, modification, and distribution of the Standard or Modified 
+Versions is governed by this Artistic License. By using, modifying or 
+distributing the Package, you accept this license. Do not use, modify, 
 or distribute the Package, if you do not accept this license.
 
-If your Modified Version has been derived from a Modified Version made
-by someone other than you, you are nevertheless required to ensure that
+If your Modified Version has been derived from a Modified Version made 
+by someone other than you, you are nevertheless required to ensure that 
 your Modified Version complies with the requirements of this license.
 
-This license does not grant you the right to use any trademark, service
+This license does not grant you the right to use any trademark, service 
 mark, tradename, or logo of the Copyright Holder.
 
-This license includes the non-exclusive, worldwide, free-of-charge
-patent license to make, have made, use, offer to sell, sell, import and
-otherwise transfer the Package with respect to any patent claims
-licensable by the Copyright Holder that are necessarily infringed by the
-Package. If you institute patent litigation (including a cross-claim or
-counterclaim) against any party alleging that the Package constitutes
-direct or contributory patent infringement, then this Artistic License
+This license includes the non-exclusive, worldwide, free-of-charge 
+patent license to make, have made, use, offer to sell, sell, import and 
+otherwise transfer the Package with respect to any patent claims 
+licensable by the Copyright Holder that are necessarily infringed by the 
+Package. If you institute patent litigation (including a cross-claim or 
+counterclaim) against any party alleging that the Package constitutes 
+direct or contributory patent infringement, then this Artistic License 
 to you shall terminate on the date that such litigation is filed.
 
-Disclaimer of Warranty: THE PACKAGE IS PROVIDED BY THE COPYRIGHT HOLDER
+Disclaimer of Warranty: THE PACKAGE IS PROVIDED BY THE COPYRIGHT HOLDER 
 AND CONTRIBUTORS "AS IS' AND WITHOUT ANY EXPRESS OR IMPLIED WARRANTIES.
-THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
-PURPOSE, OR NON-INFRINGEMENT ARE DISCLAIMED TO THE EXTENT PERMITTED BY
-YOUR LOCAL LAW. UNLESS REQUIRED BY LAW, NO COPYRIGHT HOLDER OR
-CONTRIBUTOR WILL BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, OR
-CONSEQUENTIAL DAMAGES ARISING IN ANY WAY OUT OF THE USE OF THE PACKAGE,
+THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR 
+PURPOSE, OR NON-INFRINGEMENT ARE DISCLAIMED TO THE EXTENT PERMITTED BY 
+YOUR LOCAL LAW. UNLESS REQUIRED BY LAW, NO COPYRIGHT HOLDER OR 
+CONTRIBUTOR WILL BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, OR 
+CONSEQUENTIAL DAMAGES ARISING IN ANY WAY OUT OF THE USE OF THE PACKAGE, 
 EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 =cut
@@ -402,6 +412,9 @@ sub new
 		} elsif ($_[0] =~ /^\-?speakericon$/o) {
 			shift;
 			$self->{'speakericon'} = (defined $_[0]) ? shift : 1;
+		} elsif ($_[0] =~ /^\-?notrim$/o) {
+			shift;
+			$self->{'notrim'} = (defined $_[0]) ? shift : 1;
 		} elsif ($_[0] =~ /^\-?nowebp$/o) {
 			shift;
 			$self->{'nowebp'} = (defined $_[0]) ? shift : 1;
@@ -411,11 +424,13 @@ sub new
 	}
 	$self->{'quality'} = 'any'  unless (defined $self->{'quality'});
 	$self->{'speakericon'} = 0  unless (defined $self->{'speakericon'});
+	$self->{'notrim'} = 0  unless (defined $self->{'notrim'});
 	$self->{'nowebp'} = 0  unless (defined $self->{'nowebp'});
 
 	my $isEpisode = 1;
 	$url =~ s#\\##g;
 	(my $url2fetch = $url);
+	$url2fetch =~ s#\?.*$##  unless ($self->{'notrim'});
 	if ($url =~ /^https?\:/) {  #FULL URL:
 		$self->{'id'} = $1  if ($url2fetch =~ m#\?SID\=([\d]+)#);
 		unless ($self->{'id'}) {  #WE'RE ONE OF SERMONAUDIO'S ALTERNATE URLS:
@@ -494,6 +509,7 @@ TRYIT:
 		if ($self->{'quality'} !~ /audio/i && $html =~ s#\<video.+?src\=\"([^\"]+)##s) {
 			my $mediaurl = $1;
 			unless ($self->{'secure'} && $mediaurl !~ /^https/o) {
+				$mediaurl =~ s#\?.*$##  unless ($self->{'notrim'});  #STRIP OFF ANY EXTRA ARGS
 				push @{$self->{'streams'}}, $mediaurl;
 				print STDERR "--stream found=$mediaurl=\n"  if ($DEBUG);
 				$self->{'cnt'}++;
@@ -502,6 +518,7 @@ TRYIT:
 		if ($html =~ s#\<audio.+?src\=\"([^\"]+)##s) {
 			my $audiourl = $1;
 			unless ($self->{'secure'} && $audiourl !~ /^https/o) {
+				$audiourl =~ s#\?.*$##  unless ($self->{'notrim'});  #STRIP OFF ANY EXTRA ARGS
 				push @{$self->{'streams'}}, $audiourl;
 				print STDERR "--stream found=$audiourl=\n"  if ($DEBUG);
 				$self->{'cnt'}++;
@@ -516,10 +533,12 @@ TRYIT:
 		$self->{'description'} = $1  if ($html =~ m#subtitle\:\w\,moreInfoText\:\"([^\"]+)#s);
 		$self->{'description'} ||= $1  if ($html =~ m#\-\-md\-spacing\:1em\;\"\>\<p\>(.+?)\<\/p\>#is);
 		$self->{'description'} ||= $self->{'title'};
-		$self->{'genre'} = $1  if ($html =~ m#\>Category\<\/td\>\s*\<td[^\>]*\>(.+?)\<\/td\>#s);
+		$self->{'genre'} = $1  if ($html =~ m#\>\s*Category\s*\<\/td\>\s*\<td[^\>]*\>(.+?)\<\/td\>#s);
+		$self->{'genre'} =~ s/\<[^\>]+\>//gs;
 		$self->{'genre'} =~ s/^\s+//s;
 		$self->{'genre'} =~ s/\s+$//s;
-		if ($html =~ m#\>Date\<\/td\>\s*\<td[^\>]*\>(.+?)\<\/td\>#s) {
+		if ($html =~ m#(?:\"uploadDate\"\:|\<time\s+datetime\=)\"([^\"]+)#
+				|| $html =~ m#\>Date\<\/td\>\s*\<td[^\>]*\>(.+?)\<\/td\>#s) {
 			$self->{'created'} = $1;
 			$self->{'year'} = $1  if ($self->{'created'} =~ /(\d\d\d\d)/);
 		}
@@ -534,18 +553,19 @@ TRYIT:
 			my $data = $1;
 			$self->{'imageurl'} = $1  if ($data =~ m#\"background\-image\:url\((http[^\)]+)#s);
 		}
-		$self->{'articonurl'} = $1  if ($html =~ m#\<span\s+class\=\"bg\-cover.+?style\=\"background\-image\:url\((http[^\)]+)#s);
+
+#BEGIN LIKELY-DEPRECIATED:
+		if ($html =~ m#\<span\s+class\=\"bg\-cover.+?style\=\"background\-image\:url\((http[^\)]+)#s) {
+			$self->{'articonurl'} = $1;
+		} elsif ($html =~ s#<div class="bg-cover[^\"]+\"\s+style\=\"background\-image\:url\((http[^\)]+)\)##s) {
+			$self->{'articonurl'} = $1;
+		}
 		$self->{'iconurl'} ||= $1  if ($html =~ s#\<img\s+src\=\"(http[^\"]+)##s);
 		$self->{'artimageurl'} = $1  if ($html =~ s#\<img\s+src\=\"(http[^\"]+)##s);
 		$self->{'imageurl'} ||= $self->{'iconurl'};
 		$self->{'artimageurl'} = 'https:' . $self->{'artimageurl'}  if ($self->{'artimageurl'} =~ m#^\/\/#);
 		$self->{'articonurl'} ||= $self->{'artimageurl'};
 		
-		if ($self->{'speakericon'} && $self->{'artimageurl'}) {  #USE PREACHER'S THUMBNAIL (REVERSE articon AND artimage):
-			my $x = $self->{'artimageurl'};
-			$self->{'artimageurl'} = $self->{'articonurl'};
-			$self->{'articonurl'} = $x;
-		}
 		if ($html =~ s#\<a\s+href\=\"([^\"]*?\/broadcasters?\/[^\/]+\/)\"\s+class\=\"link\"[^\>]*\>([^\<]+)##s) {
 			my ($one, $two) = ($1, $2);
 			$one = $baseURL . $one  if ($one =~ m#^\/broadcaster#);
@@ -555,29 +575,61 @@ TRYIT:
 			my ($one, $two) = ($1, $2);
 			$one = $baseURL . $one  if ($one =~ m#^\/speaker#);
 			$self->{'artist'} = $two;
-#APPENDS SPEAKER'S URL TO ARTIST FIELD:			if ($self->{'albumartist'} && $self->{'albumartist'} !~ m#$one#) {
-#APPENDS SPEAKER'S URL TO ARTIST FIELD:				$self->{'artist'} .= " - $one";
-#APPENDS SPEAKER'S URL TO ARTIST FIELD:			} else {
 			unless ($self->{'albumartist'} && $self->{'albumartist'} !~ m#$one#) {
 				$self->{'albumartist'} ||= $one;
-			}
-		}
-		if ($self->{'nowebp'}) {
-			foreach my $field (qw(iconurl imageurl articonurl artimageurl)) {
-				$self->{$field} =~ s#\.(png|jpe?g|gif)\?webp\=true#\.$1#;
 			}
 		}
 		if (!$self->{'artist'} && $html =~ m#\<meta\s+name\=\"description\"\s+content\=\"([^\"]+)"#s) {
 			($self->{'artist'} = $1) =~ s/\s+\|.*$//;
 		}
+#END LIKELY-DEPRECIATED
+
+		#NEWER? JASON TAKES PRECEDENCE FOR ARTIST & ALBUMARTIST DATA:
+		if ($html =~ s#\{"\@type":"Person",([^\}]+)\}##s) {
+			my $artistStuff = $1;
+			my $artistURL = ($artistStuff =~ m#\"\@id\"\:\"([^\"]+)#) ? $1 : '';
+			$artistURL ||= $1  if ($artistStuff =~ m#\"url\"\:\"([^\"]+)#);
+			$self->{'artist'} = $1  if ($artistStuff =~ m#\"name\"\:\"([^\"]+)#);
+			if ($artistURL) {
+				$self->{'artist'} .= ' - '  if ($self->{'artist'});
+				$self->{'artist'} .= $artistURL;
+			}
+			$self->{'artimageurl'} ||= $1  if ($artistStuff =~ m#\"image\"\:\"([^\"]+)#);
+		}
+		if ($html =~ s#\{"\@type":"Organization",([^\}]+)\}##s) {
+			my $channelStuff = $1;
+			$self->{'albumartist'} = ($channelStuff =~ m#\"\@id\"\:\"([^\"]+)#) ? $1 : '';
+			$self->{'album'} = $1  if ($channelStuff =~ m#\"name\"\:\"([^\"]+)#);
+			$self->{'articonurl'} = $1  if ($channelStuff =~ m#\"image\"\:\"([^\"]+)#);
+		}
+
+		if ($self->{'speakericon'} && $self->{'artimageurl'}) {  #USE PREACHER'S THUMBNAIL (REVERSE articon AND artimage):
+			my $x = $self->{'artimageurl'};
+			$self->{'artimageurl'} = $self->{'articonurl'};
+			$self->{'articonurl'} = ($html =~ s#\<\/i\>\s+\<img\s+src\=\"(http[^\"]+)##s)
+					? $1 : $x;
+		}
 		$self->{'album'} = $1  if ($html =~ m#\<meta\s+name\=\"description\"\s+content\=\"([^\"]+)#s);
 		$self->{'album'} ||= $1  if ($html =~ m#\<meta\s+property\=\"og\:description\"\s+content\=\"([^\"]+)#s);
 		$self->{'album'} =~ s#$self->{'artist'}\s*\|\s*##  if ($self->{'artist'});
 		$self->{'albumartist'} ||= $1  if ($html =~ m#href\=\"([^\"]+)\"\>Web\<\/a\>#s);
+		$self->{'articonurl'} ||= $self->{'artimageurl'};
 		$self->{'Url'} = ($self->{'total'} > 0) ? $self->{'streams'}->[0] : '';
-		print STDERR "-(all)count=".$self->{'cnt'}."= iconurl=".$self->{'iconurl'}."= TITLE=".$self->{'title'}."= DESC=".$self->{'description'}."= YEAR=".$self->{'year'}."=\n"  if ($DEBUG);
-		print STDERR "--SUCCESS: 1st stream=".$self->{'Url'}."= total=".$self->{'total'}."=\n"
-				if ($DEBUG && $self->{'cnt'} > 0);
+
+		if ($self->{'notrim'}) {
+			if ($self->{'nowebp'}) {
+				foreach my $field (qw(iconurl imageurl articonurl artimageurl)) {
+					$self->{$field} =~ s#[\&\?]webp\=[a-z]+##;
+					$self->{$field} =~ s#\.(png|jpe?g|gif)\&#\.$1\?#;
+				}
+			}
+		} else {
+			foreach my $field (qw(iconurl imageurl articonurl artimageurl)) {
+				my $webp = ($self->{$field} =~ /[\&\?](webp\=[a-z]+)/) ? $1 : 0;
+				$self->{$field} =~ s#\.(png|jpe?g|gif)[\&\?].*$#\.$1#;
+				$self->{$field} .= "?$webp"  if ($webp && !$self->{'nowebp'});
+			}
+		}
 	} else {
 		print STDERR "--NOT EPISODE, tried=$tried=\n"  if ($DEBUG);
 		if ($tried < 2) {   #WE'RE A PODCAST PAGE!:

@@ -15,14 +15,13 @@ Andrew DeFaria <Andrew@DeFaria.com>
 
 =item Revision
 
-$Revision: 1.0 $
+$Revision: 1.01 $
 
 =item Created
 
-Wed 24 Feb 2021 11:05:36 AM PST
-
 =item Modified
 
+Fri 06 Sep 2026 08:30:00 AM PST
 
 =back
 
@@ -49,7 +48,7 @@ use base 'Exporter';
 
 use Clipboard;
 
-our $VERSION = '1.0';
+our $VERSION = '1.01';
 
 {
 
@@ -283,6 +282,24 @@ Returns:
     append      => 1,
   ) unless $log;
 
+  $msg = Clipboard->paste unless $msg;
+  $msg = do {local $/; <$msg>} if ref $msg eq 'GLOB';
+
+  # Sanitize escape sequences
+  # 1. Remove bells (\a)
+  $msg =~ s/(\\a|\a)//g;
+
+  # 2. Convert other escapes to space
+  # Literals: \n, \t, \r, \f, \b
+  $msg =~ s/\\[ntrfb]/ /g;
+
+  # 3. Convert actual control characters to space
+  $msg =~ s/[\n\t\r\f\b]/ /g;
+
+  # 4. Collapse multiple spaces
+  $msg =~ s/\s+/ /g;
+  $msg =~ s/^\s+|\s+$//g;
+
   my @mute_paths =
     ($ENV{SPEAK_MUTE}, $ENV{HOME} . "/.speak/shh", "/etc/speak/shh");
 
@@ -293,9 +310,6 @@ Returns:
       return;
     }
   } ## end foreach my $path (@mute_paths)
-
-  $msg = Clipboard->paste unless $msg;
-  $msg = <$msg> if ref $msg eq 'GLOB';
 
   $log->msg ($msg);
 

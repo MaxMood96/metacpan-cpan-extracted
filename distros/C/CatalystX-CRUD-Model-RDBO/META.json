@@ -46,6 +46,17 @@
       }
    },
    "release_status" : "stable",
-   "version" : "0.303",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/karpet/catalystx-crud-model-rdbo"
+      },
+      "homepage" : "https://github.com/karpet/catalystx-crud-model-rdbo",
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/karpet/catalystx-crud-model-rdbo.git",
+         "web" : "https://github.com/karpet/catalystx-crud-model-rdbo"
+      }
+   },
+   "version" : "0.304",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

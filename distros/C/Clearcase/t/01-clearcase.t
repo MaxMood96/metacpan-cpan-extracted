@@ -44,12 +44,25 @@ sub is_config_valid {
   return 1;
 } ## end sub is_config_valid
 
-if (!is_config_valid ()) {
+# MOCK INJECTION
+use lib 't/lib';
+eval {require MockClearcase;};
+if (!$@) {
+  diag "Using MockClearcase for testing";
+  no warnings 'once';
+  $Clearcase::CC = MockClearcase->new;
+
+  # Provide dummy config if needed
+  $config{vobhost}   ||= 'mock_host';
+  $config{vobstore}  ||= '/net/mock_host/vobs';
+  $config{viewhost}  ||= 'mock_host';
+  $config{viewstore} ||= '/net/mock_host/views';
+} elsif (!is_config_valid ()) {
   plan skip_all =>
 "Live Clearcase tests require configuration in t/test.conf. Please configure variables (vobhost, etc) to run these tests.";
 }
 
-# If we are here, we are running live tests!
+# If we are here, we are running tests (live or mock)!
 plan tests => 15;    # Estimate, will adjust
 
 # Load other modules

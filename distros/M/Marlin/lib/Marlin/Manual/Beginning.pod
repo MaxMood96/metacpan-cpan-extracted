@@ -1,0 +1,857 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Marlin::Manual::Beginning - getting started with object-oriented programming and Marlin
+
+=head1 DESCRIPTION
+
+The examples in this manual assume you are using Perl 5.20 or above,
+and have included C<< use v5.20; >> (or a higher version) at the top of
+your file to enable any modern Perl features that are disabled by default.
+Marlin does support older version of Perl, but this manual is written with
+modern Perl in mind.
+
+Additionally, they assume you have subroutine signatures enabled.
+This is enabled by default if you have C<< use v5.36; >> (or a higher
+version) at the top of your file. If you are targetting older versions
+of Perl, you can enable it using C<< use experimental "signatures"; >>.
+In summary, make sure your file starts with one of these two prologues:
+
+  use v5.20; # or higher
+  use experimental "signatures";
+
+Or:
+
+  use v5.36; # or higher
+
+=head2 Objects
+
+Object-oriented programming is a programming style based on I<objects>,
+which are entities that encapsulate data and can be manipulated by calling
+I<methods>.
+
+B<< Example 1 >>
+
+  my $user = get_current_user();
+  
+  $user->change_password_to( "S3CRET" );
+
+Here C<< $user >> is an object and C<< change_password_to >> is method that
+we are calling on the object. Presumably one of the pieces of data
+encapsulated by the C<< $user >> object is a password. It probably has
+other information associated with the user too, like their username and
+perhaps their real name, email address, and so on.
+
+One of the principles of encapsulation is that from outside the object,
+we don't always need to think about what data is stored inside the object.
+When we call the C<< change_password_to >> method, we assume it's probably
+updating a password it has stored internally, but it may also be doing
+other things like setting a "last updated" date, and emailing the user to
+inform them that their password was changed. (Though hopefully not insecurely
+including the new password in the email!)
+
+=head2 Classes and Instances
+
+Objects are typically defined using I<classes>. A class can be thought of as
+a "kind" or "type of thing". Rather than Alice's user object and Bob's user
+object needing to define what data they store and what methods they provide
+from scratch, we define a "User" class which C<< $alice >> and C<< $bob >>
+will be I<instances> of.
+
+In Perl, a class is just a Perl package that we decide to use as a class.
+For example:
+
+B<< Example 2 >>
+
+  package Local::User {}
+
+This class is not very interesting or very useful.
+
+=head2 Constructors
+
+We need a way to make instances of the class. We do that with a I<constructor>.
+A simple constructor is pretty easy to write in Perl.
+
+B<< Example 3 >>
+
+  package Local::User {
+    sub new ( $class ) {
+      return bless( {}, $class );
+    }
+  }
+
+The C<bless> keyword is a Perl built-in that takes any reference and
+associates it with a particular package.
+
+We can now use our constructor.
+
+B<< Example 3.1 >>
+
+  my $alice = Local::User->new();
+  my $bob   = Local::User->new();
+  
+  die if $alice == $bob;  # different objects, does not die
+
+This is slightly more useful than Example 2 because at least we
+can create instances of the class.
+
+While writing simple constructors like this is easy in Perl, it is also
+repetitive. Writing complex constructors is an even bigger chore and it's
+easy to mess up and get things wrong. For this reason, Perl has a number
+of toolkits to do it for you. In Perl v5.38 and above, there's even a newer,
+improved way to define classes.
+
+Here is how this class could have been written using a few of those
+toolkits.
+
+B<< Example 4 >>
+
+  # Moose
+  package Local::User {
+    use Moose;
+  }
+  
+  # Moo
+  package Local::User {
+    use Moo;
+  }
+  
+  # Mouse
+  package Local::User {
+    use Mouse;
+  }
+  
+  # Class::Tiny
+  package Local::User {
+    use Class::Tiny;
+  }
+  
+  # Marlin
+  package Local::User {
+    use Marlin;
+  }
+  
+  # New Perl 5.38 style
+  use v5.38;
+  use feature 'class';
+  class Local::User {}
+
+Apart from the last one, I'm sure you can see a pattern here.
+
+This is the Marlin manual, so of course we will focus on using Marlin
+to build your classes, but we may touch on the others occasionally.
+
+As an aside, there are object-oriented languages which don't use
+classes, or rely less on the idea of classes. It is possible to
+program like that in Perl too, but class-based object-oriented
+programming is what dominates, in Perl and in most languages.
+
+=head2 Attributes
+
+The objects constructed in Example 3 are a start. We can create
+two Local::User objects and see that they're different users,
+but that's pretty much all we can do. We're not storing any information
+about Alice and Bob in the objects, so they're not really meaningfully
+different.
+
+When we introduced the idea of objects, we said they encapsulate data.
+To do this, we define I<attributes> (also referred to as properties or
+members in some programming languages). Let's assume that we want our
+Local::User objects to store the user's username, password,
+real name, email address, and timestamps for when the user was created
+and when it was last updated. In Marlin, this is really easy:
+
+B<< Example 5 >>
+
+  package Local::User {
+    use Marlin qw( username password name email created updated );
+  }
+
+(The C<< qw() >> operator is a simple way to create a list or words
+in Perl. It is not specific to Marlin. C<< qw( foo bar ) >> creates a list
+C<< ( "foo", "bar" ) >>. Expect this manual to frequently switch between
+using C<< qw() >> and more explicit lists with no further explanation.
+See L<perlop> for more information on the C<< qw() >> operator.)
+
+If you're familiar with L<Moose>, L<Mouse>, or L<Moo>, that might be
+more familiar as:
+
+B<< Example 5.1 >>
+
+  package Local::User {
+    use Moose;
+    has username  => ( is => 'ro' );
+    has password  => ( is => 'ro' );
+    has name      => ( is => 'ro' );
+    has email     => ( is => 'ro' );
+    has created   => ( is => 'ro' );
+    has updated   => ( is => 'ro' );
+  }
+
+Instantly you can see Marlin saves a lot of typing. (Or a lot of copy and
+pasting!) One principle Marlin follows is to try to encourage good practices
+by making them easy. This is an example of that.
+
+Now let's create some users.
+
+B<< Example 5.2 >>
+
+  my $alice = Local::User->new(
+    name      => 'Alice Smith',
+    username  => 'as1',
+    password  => 'S3CRET',
+  );
+  
+  my $bob = Local::User->new(
+    name      => 'Bob Dobalina',
+    username  => 'bd1',
+    password  => 'h1dd3n',
+    email     => 'bob.dob@example.net',
+  );
+
+As you can see, the values for each attribute are passed to the constructor
+as key-value pairs. The constructor uses those values to I<initialize>
+each attribute.
+
+=head2 Required and Optional Attributes
+
+As you can see in Example 5.2, we didn't initialize all of the attributes.
+We didn't initialize Alice's email address, nor the created/updated
+timestamps for either user. But if certain attributes are missing, it
+may make using the objects harder in the future. How would we be able
+to log in as a user if there is no username?
+
+Let's decide to make at least the username and password I<required>, but
+leave the rest as I<optional>.
+
+B<< Example 6 >>
+
+  package Local::User {
+    use Marlin qw(
+      username!
+      password!
+      name?
+      email?
+      created?
+      updated?
+    );
+  }
+
+Adding the exclmation mark indicates that an attribute is required.
+It means that it is an error to create an object without providing
+those values to the constructor. The constructor will complain if
+you forget them.
+
+B<< Example 6.1 >>
+
+  # This will result in an error!
+  my $eve = Local::User->new( name => 'Eve Jones' );
+
+Adding the question mark indicates that an attribute is optional,
+and automatically creates a method for the object to check if a
+value was provided.
+
+B<< Example 6.2 >>
+
+  if ( $alice->has_email ) {
+    say $alice->email;
+  }
+
+The C<has_email> method returns true if C<email> was set, and false
+if it was not. The C<has_email> method is called a I<predicate> method,
+while the C<email> method is called a I<reader> or I<getter>. Readers
+for an attribute usually have the same name as the attribute itself.
+
+The default, if neither an exclamation mark nor a question mark is used,
+is for the attribute to be optional, but no predicate method created.
+
+It is possible to set the C<email> attribute to a false or empty value
+and C<has_email> will still return true. Setting an attribute, even to
+a false value, still counts as setting it.
+
+B<< Example 6.3 >>
+
+  my $eve = Local::User->new(
+    username  => 'ej1',
+    password  => 'UwillNEVERguess',
+    email     => undef,
+  );
+  
+  if ( $eve->has_email ) {
+    # This will try to print an undefined value and
+    # may issue a warning because of that!
+    say $eve->email;
+  }
+
+Type constraints can help protect against situations like that.
+
+=head2 Type Constraints
+
+It is useful to be able to indicate for each attribute, what type of data
+it should expect. Passing the wrong kind of data to the constructor will
+then result in an error.
+
+B<< Example 7 >>
+
+  package Local::User {
+    use Email::Address;
+    use Types::Common -types, -lexical;
+    use Marlin
+      'username!'  => NonEmptyStr,
+      'password!'  => NonEmptyStr,
+      'name?'      => NonEmptyStr,
+      'email?'     => StrMatch[ $Email::Address::addr_spec ],
+      'created?'   => PositiveOrZeroInt,  # timestamp
+      'updated?'   => PositiveOrZeroInt;  # timestamp
+  }
+
+Marlin works in conjunction with L<Types::Standard>, L<Types::Common>, and
+other L<Type::Tiny>-based type libraries. Just import your preferred type
+library before you C<< use Marlin >> and you'll be able to validate each
+attribute using I<type constraints>.
+
+B<< Example 7.1 >>
+
+  # This will result in an error because the email isn't a
+  # string matching the required regular expression.
+  my $eve = Local::User->new(
+    username  => 'ej1',
+    password  => 'UwillNEVERguess',
+    email     => undef,
+  );
+
+=head2 Defaults for Attributes
+
+For non-required attributes, it may make sense to provide a I<default> value.
+This is very simple: just provide a reference to a sub which returns the
+default value.
+
+B<< Example 8 >>
+
+  package Local::User {
+    use Email::Address;
+    use Types::Common -types, -lexical;
+    use Marlin
+      'username!'  => NonEmptyStr,
+      'password!'  => NonEmptyStr,
+      'name?'      => NonEmptyStr,
+      'email?'     => StrMatch[ $Email::Address::addr_spec ],
+      'created'    => sub { return time() },
+      'updated'    => sub { return time() };
+  }
+
+Here we've removed the question marks by the C<created> and C<updated>
+attributes because we no longer really need C<has_created> and
+C<has_updated> predicate methods. We know the object will always have
+a C<created> timestamp and a C<updated> timestamp because if they are
+not passed to the constructor the default will be used.
+
+=head2 Methods
+
+A method is a thing your object is capable of doing. To add methods to
+a class, we just defined subs in the class. Each method takes the object
+as its first argument. By convention, the variable name for the object
+is C<< $self >>.
+
+Let's define a C<< change_password_to >> method.
+
+B<< Example 9 >>
+
+  package Local::User {
+    use Email::Address;
+    use Types::Common -types, -lexical;
+    use Marlin
+      'username!'  => NonEmptyStr,
+      'password!'  => NonEmptyStr,
+      'name?'      => NonEmptyStr,
+      'email?'     => StrMatch[ $Email::Address::addr_spec ],
+      'created'    => sub { return time() },
+      'updated'    => sub { return time() };
+    
+    sub change_password_to ( $self, $new_password ) {
+      
+      die "Password too short" if length($new_password) < 6;
+      ...;
+    }
+  }
+
+Seems simple, right?
+
+But that leads us to the next topic. How does the method alter the data
+stored in C<< $self >> to update the user's password?
+
+=head2 Writer Methods
+
+Similar to the reader (or getter) method introduced in Example 6.2,
+Marlin can create I<writer> methods, also called I<setter> methods.
+By default, Marlin does not create writer methods, but you can add
+them on a per-attribute basis.
+
+B<< Example 10 >>
+
+  package Local::User {
+    use Email::Address;
+    use Types::Common -types, -lexical;
+    use Marlin
+      'username!'   => NonEmptyStr,
+      'password=!'  => NonEmptyStr,
+      'name?'       => NonEmptyStr,
+      'email?'      => StrMatch[ $Email::Address::addr_spec ],
+      'created'     => sub { return time() },
+      'updated='    => sub { return time() };
+    
+    sub change_password_to ( $self, $new_password ) {
+      
+      die "Password too short" if length($new_password) < 6;
+      
+      $self->_set_password( $new_password );
+      $self->_set_updated( time() );
+      
+      return $self;
+    }
+  }
+
+Adding an equals sign instructs Marlin to create a writer method. Marlin
+names the writer method "_set_" followed by the attribute name. By
+convention, any methods that start with an underscore are considered
+part of the class's internal API and should not be used by third parties.
+
+The C<change_password_to> method simply calls the C<_set_password> method
+to change the password data stored inside the object. It also calls
+C<< _set_updated >> to change the updated timestamp, recording when the
+user object was last updated.
+
+Let's see our new method being used.
+
+B<< Example 10.1 >>
+
+  my $eve = Local::User->new(
+    username  => 'ej1',
+    password  => 'UwillNEVERguess',
+  );
+  
+  $eve->change_password_to( 'even+MORE_secret~4-u' );
+  
+  say $eve->password;  # should say the new password
+
+Note that it doesn't matter which way around you include these trailing
+symbols in the attribute name: C<< 'password=!' >> or C<< 'password!=' >>
+are the same thing.
+
+=head2 Accessors
+
+The C<< change_password_to >> method allows our class a lot of control
+over how passwords will be changed, enforcing security policies, updating
+the C<updated> timestamp, etc.
+
+Sometimes we wish to allow an attribute to be updated with a lot less
+ceremony. Take, for example, Local::User's C<name> attribute. For the
+purposes of running the system, it doesn't really matter what a user's
+real name is. In this case we can provide an I<accessor> method to allow
+people to update it. Accessor methods are sometime also called I<mutators>.
+
+An I<accessor> is a combined reader and writer method. To request an
+accessor, use a double-equals sign. See the C<< "name==?" >> attribute
+in Example 11.
+
+B<< Example 11 >>
+
+  package Local::User {
+    use Email::Address;
+    use Types::Common -types, -lexical;
+    use Marlin
+      'username!'   => NonEmptyStr,
+      'password=!'  => NonEmptyStr,
+      'name==?'     => NonEmptyStr,
+      'email?'      => StrMatch[ $Email::Address::addr_spec ],
+      'created'     => sub { return time() },
+      'updated='    => sub { return time() };
+    
+    sub change_password_to ( $self, $new_password ) { ... }
+  }
+
+Marlin will name the accessor what it would have named the reader, and create
+the accessor instead of the reader.
+
+When calling the accesor method without any extra arguments, it acts like
+a reader. But when you include an additional argument, it acts like a
+writer.
+
+B<< Example 11.1 >>
+
+  my $eve = Local::User->new(
+    name      => 'Eve Jones',
+    username  => 'ej1',
+    password  => 'UwillNEVERguess',
+  );
+  
+  # Acts like a reader
+  say "My name is " . $eve->name;
+  
+  # Acts like a writer
+  $eve->name( "Slim Shady" );
+  
+  # Acts like a reader again
+  say "My name is " . $eve->name;
+
+Note that the term I<accessor> is also used as an umbrella term to cover
+I<readers>, I<writers>, I<accessors>, I<predicates>, and (though these
+haven't been introduced in the manual yet) I<clearers>.
+
+=head3 When to use readers/getters and when to use accessors/mutators
+
+It makes sense to default to attributes having only reader methods.
+If you change your mind later and realize you want the attribute to
+be read-write, you can turn it into an accessor later. For anybody
+who is already using that method as a reader, it will continue to
+work as normal.
+
+Changing your mind the other way, and switching what was an accessor
+into just a reader could break the code of anybody trying to use the
+accessor to set a new value.
+
+Your class is also likely to be easier to understand and debug if you
+know that code outside your class isn't going to be tampering with the
+values of your attributes.
+
+=head2 Forbidding Explicit Attribute Initialization
+
+If the Local::User class is capable of managing the C<created> and
+C<updated> timestamps itself, we might not want code outside the
+class setting them.
+
+If the attributes just have readers, outside code can't set a new
+timestamp using an accessor. The code in Example 12 should result in
+an error.
+
+B<< Example 12 >>
+
+  # Alice was created in the future???
+  $alice->created( time() + 3600 );
+
+However, code outside the class can set them when the object is
+first created. See Example 12.1.
+
+B<< Example 12.1 >>
+
+  # Alice was created in the future???
+  my $alice = Local::User->new(
+    username  => 'as1',
+    password  => 'S3CR3T',
+    created   => time() + 3600,
+  );
+
+We can prevent this by forbidding passing a value for that attribute to
+the constructor.
+
+B<< Example 12.2 >>
+
+  package Local::User {
+    use Email::Address;
+    use Types::Common -types, -lexical;
+    use Marlin
+      'username!'   => NonEmptyStr,
+      'password=!'  => NonEmptyStr,
+      'name==?'     => NonEmptyStr,
+      'email?'      => StrMatch[ $Email::Address::addr_spec ],
+      '.created'    => sub { return time() },
+      '.updated='   => sub { return time() };
+    
+    sub change_password_to ( $self, $new_password ) { ... }
+  }
+
+Note the dot before the attribute name. This is the only piece of modifying
+punctuation that occurs at the start of the attribute name, though it is
+also supported at the end for consistency with the exclamation mark and
+question mark.
+
+With this change, the code in Example 12.1 will result in an error. The
+C<created> and C<updated> attributes cannot be explicitly set when
+constructing the object.
+
+Note that if you forbid an attribute from being initialized like this, you
+should probably ensure there is another way to set its value, like a
+writer or a default. Otherwise there's not much point in the attribute
+exiting at all!
+
+=head2 Options Hashrefs
+
+One thing that I glossed over but you may have noticed is that each
+of our attributes has either a type constraint or a default, but there
+doesn't seem to be a way for an attribute to have both!
+
+If you want to have both, you'll have to switch to using a slightly
+more verbose syntax and provide a hashref of options for the attribute.
+Let's ensure that our timestamps have the type B<PositiveOrZeroInt>.
+
+B<< Example 13 >>
+
+  package Local::User {
+    use Email::Address;
+    use Types::Common -types, -lexical;
+    use Marlin
+      'username!'   => NonEmptyStr,
+      'password=!'  => NonEmptyStr,
+      'name==?'     => NonEmptyStr,
+      'email?'      => StrMatch[ $Email::Address::addr_spec ],
+      '.created'    => {
+        isa           => PositiveOrZeroInt,
+        default       => sub { return time() },
+      },
+      '.updated='   => {
+        isa           => PositiveOrZeroInt,
+        default       => sub { return time() },
+      };
+    
+    sub change_password_to ( $self, $new_password ) { ... }
+  }
+
+Instead of following the attribute name with a type constraint or a
+coderef for a default, we have a hashref that includes both of them.
+Other options are also allowed in this hashref. In this part of the
+manual, we will only address one other option.
+
+=head2 Eager Versus Lazy Defaults
+
+The defaults introduced in Example 8 and the defaults shown in
+Example 13 actually have a subtle difference.
+
+Defaults provided by a simple coderef without an options hashref
+(like in Example 8) are I<< lazy builders >>. This means that the
+constructor actually ignores the default, and instead the reader
+method will set the attribute value to the default if it notices
+the attribute hasn't been set yet.
+
+When you supply a default using a hashref, it is no longer lazy;
+it is eager. This means that the default value will be set in the
+constructor.
+
+In our case the values being generated are timestamps, so are time
+sensitive. For that reason, we probably do want them to happen in
+the constructor. But we can control whether they are lazy or eager
+via another option.
+
+B<< Example 14 >>
+
+  package Local::User {
+    use Email::Address;
+    use Marlin::Util qw( true false ), -lexical;
+    use Types::Common -types, -lexical;
+    use Marlin
+      'username!'   => NonEmptyStr,
+      'password=!'  => NonEmptyStr,
+      'name==?'     => NonEmptyStr,
+      'email?'      => StrMatch[ $Email::Address::addr_spec ],
+      '.created'    => {
+        isa           => PositiveOrZeroInt,
+        lazy          => false,
+        default       => sub { return time() },
+      },
+      '.updated='   => {
+        isa           => PositiveOrZeroInt,
+        lazy          => false,
+        default       => sub { return time() },
+      };
+    
+    sub change_password_to ( $self, $new_password ) { ... }
+  }
+
+The C<lazy> option controls whether a default is lazy or eager. If you
+don't include the C<lazy> option, defaults will default to being eager
+B<< unless you provide a default without a hashref >>, in which case they
+default to being lazy.
+
+Note that we imported C<true> and C<false> keywords from L<Marlin::Util>.
+There are other modules that offer convenient boolean keywords, such
+as L<boolean> and L<builtin>. Alternatively, the numbers 0 for false and
+1 for true also work.
+
+=head2 Polymorphism
+
+This is a big and important part of object-oriented programming. It was
+previously mentioned that because of I<encapsulation>, an object not
+only contains all the data it needs, but all the methods needed to
+operate on that data.
+
+So for example a C<< Local::User >> object might have a C<rename>
+method to change the user's name. But a C<< Local::Video >> object
+might also have a C<rename> method. And so might a C<< Local::Image >>
+object.
+
+B<< Example 15 >>
+
+  # Is it a user, a video, or an image?
+  # We don't care!
+  $object->rename( $new_name );
+
+=head3 Inheritance
+
+Rather than writing separate C<rename> method for videos and images, we
+might define a class C<< Local::Media >> and indicate that videos and
+images are just different kinds of media.
+
+B<< Example 16 >>
+
+  package Local::Media {
+    use Marlin
+      qw( name== );
+    
+    sub rename ( $self, $new_name ) {
+      warn "Renaming to $new_name...";
+      $self->_set_name( $new_name );
+    }
+    
+    sub rename_randomly ( $self ) {
+      my $random_name = ...;
+      $self->rename( $random_name );
+    }
+  }
+  
+  package Local::Video {
+    use Marlin -extends => "Local::Media",
+      qw( height width runtime );
+    
+    sub play ( $self ) {
+      ...;
+    }
+  }
+  
+  package Local::Image {
+    use Marlin -extends => "Local::Media",
+      qw( height width );
+      
+    sub show ( $self ) {
+      ...;
+    }
+  }
+  
+  my $pic = Local::Image->new;
+  my $vid = Local::Video->new;
+  
+  for my $thing ( $pic, $vid ) {
+    $thing->rename_randomly if $thing->isa( 'Local::Media' );
+  }
+
+The C<< Local::Media >> class is called a I<< base class >> or
+I<< parent class >>. C<< Local::Video >> and C<< Local::Image >>
+are both I<< derived classes >> or I<< child classes >> which
+I<< inherit from >> or I<< extend >> the base class.
+
+This example also shows the C<isa> method, a special method which
+all objects in Perl have. It can be used to check if an object
+is an instance of a particular class, and it takes inheritance into
+account.
+
+As you can see in the example, Marlin indicates the base class using
+the C<< -extends >> option. Alternatively you can use the C<< -parent >>,
+C<< -base >>, or C<< -isa >> options. They all do the same thing;
+just use whichever you like the sound of more.
+
+B<< Example 16.1 >>
+
+  package Local::AudioRecording {
+    use Marlin -base => "Local::Media", qw( runtime );
+  }
+  
+  package Local::Sketch {
+    use Marlin -parent => "Local::Image";
+  }
+  
+  package Local::Photograph {
+    use Marlin -isa => "Local::Image";
+  }
+
+=head3 Roles
+
+Sometimes there's not an obvious base class to put shared methods into.
+Like C<< Local::User >> also has a rename method, but it's not a type of
+media. In this case, you can create a special type of package called a
+I<role>. Just use L<Marlin::Role> instead of L<Marlin>.
+
+B<< Example 17 >>
+
+  package Local::Nameable {
+    use Marlin::Role qw( name== );
+    
+    sub rename ( $self, $new_name ) {
+      $self->_set_name( $new_name );
+    }
+    
+    sub rename_randomly ( $self ) {
+      my $random_name = ...;
+      $self->rename( $random_name );
+    }
+  }
+  
+  package Local::User {
+    use Email::Address;
+    use Marlin::Util qw( true false ), -lexical;
+    use Types::Common -types, -lexical;
+    use Marlin
+      -with         => [ "Local::Nameable" ],
+      'username!'   => NonEmptyStr,
+      'password=!'  => NonEmptyStr,
+      'email?'      => StrMatch[ $Email::Address::addr_spec ],
+      '.created'    => {
+        isa           => PositiveOrZeroInt,
+        lazy          => false,
+        default       => sub { return time() },
+      },
+      '.updated='   => {
+        isa           => PositiveOrZeroInt,
+        lazy          => false,
+        default       => sub { return time() },
+      };
+    
+    sub change_password_to ( $self, $new_password ) { ... }
+  }
+  
+  package Local::Media {
+    use Marlin -with => [ "Local::Nameable" ];
+  }
+  
+  package Local::Video {
+    use Marlin -base => "Local::Media",
+      qw( height width runtime );
+    
+    sub play ( $self ) {
+      ...;
+    }
+  }
+  
+  ...;
+
+The C<< Local::Nameable >> package is now a role. A role is like a class,
+except that you cannot create instances of it. It needs to be I<consumed>
+by classes, and you can create instances of those classes.
+
+The C<< -with >> option indicates which roles a class should consume.
+It can also be written as C<< -does >> or C<< -roles >>. Again they all do
+the same thing; just use whichever you like the sound of more.
+
+=head1 SEE ALSO
+
+L<Marlin::Manual::BetterAttributes> - next steps defining attributes.
+
+L<Marlin>, L<Marlin::Util>.
+
+=head1 AUTHOR
+
+Toby Inkster E<lt>tobyink@cpan.orgE<gt>.
+
+=head1 COPYRIGHT AND LICENCE
+
+This software is copyright (c) 2026 by Toby Inkster.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=head1 DISCLAIMER OF WARRANTIES
+
+THIS PACKAGE IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR IMPLIED
+WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
+MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+

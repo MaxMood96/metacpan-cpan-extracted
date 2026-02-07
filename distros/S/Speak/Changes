@@ -1,4 +1,8 @@
-Revision history for Speak
+Changes file for Speak
+
+1.01    2026-02-06
+        - Fixed issue where 'speak' script only read the first line of an input file.
+        - Fixed pronunciation of escape sequences (literal \n, \t etc) by replacing them with spaces.
 
 1.0     2026-01-11
         - Initial packaging of Speak.pm and its dependencies for CPAN.

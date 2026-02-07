@@ -13,13 +13,14 @@ use DateTime::Format::Strptime;
 use Encode qw(decode encode);
 use JSON;
 use LWP::UserAgent;
+use UUID qw(uuid4);
 
 use Travel::Status::DE::DBRIS::Formation;
 use Travel::Status::DE::DBRIS::JourneyAtStop;
 use Travel::Status::DE::DBRIS::Journey;
 use Travel::Status::DE::DBRIS::Location;
 
-our $VERSION = '0.22';
+our $VERSION = '0.23';
 
 # {{{ Constructors
 
@@ -34,6 +35,20 @@ sub new {
 		$ua->env_proxy;
 	}
 
+	my @ua_base = (
+'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.XXXX.YYY Mobile Safari/537.36',
+'Mozila/5.0 (Linux; Android 14; SM-S928B/DS) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.XXXX.YYY Mobile Safari/537.36',
+'Mozilla/5.0 (Linux; Android 14; Pixel 9 Pro Build/AD1A.240418.003; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/124.0.XXXX.YYY Mobile Safari/537.36',
+'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.XXXX.YYY Mobile Safari/537.36',
+'Mozilla/5.0 (Linux; Android 15; moto g - 2025 Build/V1VK35.22-13-2; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/132.0.XXXX.YYY Mobile Safari/537.36',
+'Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.XXXX.YYY Safari/537.36',
+	);
+
+	my $rand1  = int( rand(1000) );
+	my $rand2  = int( rand(100) );
+	my $ua_str = $ua_base[ int( rand(@ua_base) ) ] =~ s{XXXX}{$rand1}r
+	  =~ s{YYY}{$rand2}r;
+
 	my $self = {
 		cache          => $conf{cache},
 		failure_cache  => $conf{failure_cache},
@@ -42,6 +57,14 @@ sub new {
 		results        => [],
 		station        => $conf{station},
 		ua             => $ua,
+		header         => {
+			'accept'           => 'application/json',
+			'content-type'     => 'application/json; charset=utf-8',
+			'Origin'           => 'https://www.bahn.de',
+			'Referer'          => 'https://www.bahn.de/buchung/fahrplan/suche',
+			'User-Agent'       => $ua_str,
+			'x-correlation-id' => uuid4() . '_' . uuid4(),
+		},
 	};
 
 	bless( $self, $obj );
@@ -135,6 +158,10 @@ sub new {
 	else {
 		if ( $self->{developer_mode} ) {
 			say "requesting $req";
+		}
+
+		while ( my ( $key, $value ) = each %{ $self->{header} } ) {
+			$ua->default_header( $key => $value );
 		}
 
 		my ( $content, $error ) = $self->get_with_cache($req);
@@ -317,7 +344,7 @@ sub get_with_cache_p {
 		say '  cache miss';
 	}
 
-	$self->{ua}->get_p($url)->then(
+	$self->{ua}->get_p( $url => $self->{header} )->then(
 		sub {
 			my ($tx) = @_;
 			if ( my $err = $tx->error ) {
@@ -473,7 +500,7 @@ Non-blocking variant;
 
 =head1 VERSION
 
-version 0.22
+version 0.23
 
 =head1 DESCRIPTION
 

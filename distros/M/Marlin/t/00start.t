@@ -37,6 +37,7 @@ my @modules = qw(
 	Role::Tiny
 	Scalar::Util
 	Sub::HandlesVia
+	Sub::HandlesVia::XS
 	Sub::Accessor::Small
 	Test2::V0
 	Type::Tiny

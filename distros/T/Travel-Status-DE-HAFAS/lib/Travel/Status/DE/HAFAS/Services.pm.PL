@@ -179,7 +179,6 @@ my %hafas_instance = (
 		load_instance(
 			'at/oebb',
 			lang => 'deu',
-			ver  => '1.57'
 		),
 		stopfinder => 'https://fahrplan.oebb.at/bin/ajax-getstop.exe',
 	},
@@ -243,7 +242,7 @@ use warnings;
 use 5.014;
 use utf8;
 
-our $VERSION = '6.24';
+our $VERSION = '6.25';
 
 # Most of these have been adapted from
 # <https://github.com/public-transport/transport-apis> and

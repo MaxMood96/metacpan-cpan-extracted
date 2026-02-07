@@ -1,0 +1,7 @@
+Revision history for SPVM::DBI
+
+0.001 2026-02-07
+  [Changes]
+    * First release. (Experimental)
+    * Define the skeleton of DBI and DBI::Dr.
+    * This version is under development and not yet functional.

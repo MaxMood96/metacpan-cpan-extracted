@@ -4,7 +4,7 @@ StreamFinder::IHeartRadio - Fetch actual raw streamable URLs from radio-station 
 
 =head1 AUTHOR
 
-This module is Copyright (C) 2017-2023 by
+This module is Copyright (C) 2017-2026 by
 
 Jim Turner, C<< <turnerjw784 at yahoo.com> >>
 		
@@ -325,10 +325,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-IHeartRadio>
 
 L<http://annocpan.org/dist/StreamFinder-IHeartRadio>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-IHeartRadio>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder-IHeartRadio/>
@@ -337,7 +333,7 @@ L<http://search.cpan.org/dist/StreamFinder-IHeartRadio/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2017-2023 Jim Turner.
+Copyright 2017-2026 Jim Turner.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the the Artistic License (2.0). You may obtain a
@@ -590,6 +586,7 @@ TRYIT:
 		$self->{'imageurl'} = ($html =~ s#\"imageUrl\"\:\"([^\"]+)\"##s) ? $1 : '';
 		$self->{'iconurl'} = $self->{'imageurl'};
 		$self->{'total'} = $self->{'cnt'};
+		$self->{'Url'} = ($self->{'total'} > 0) ? $self->{'streams'}->[0] : '';
 		if ($DEBUG) {
 			foreach my $i (sort keys %{$self}) {
 				print STDERR "--KEY=$i= VAL=".$self->{$i}."=\n";

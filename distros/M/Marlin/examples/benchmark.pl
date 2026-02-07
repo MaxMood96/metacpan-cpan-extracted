@@ -6,7 +6,7 @@ no warnings 'once';
 use Benchmark 'cmpthese';
 use FindBin '$Bin';
 
-use constant ITERATIONS => $ENV{PERL_MARLIN_BENCH_ITERATIONS} // -3;
+use constant ITERATIONS => $ENV{PERL_MARLIN_BENCH_ITERATIONS} // -1;
 use constant NONOO      => $ENV{PERL_MARLIN_BENCH_NONOO}      //  0;
 
 use lib "$Bin/lib";
@@ -178,17 +178,17 @@ if ( NONOO ) {
 	};
 }
 
-say "[[ SIMPLE CONSTRUCTORS ]]";
-cmpthese( ITERATIONS, \%simple_constructors );
-say "";
+#say "[[ SIMPLE CONSTRUCTORS ]]";
+#cmpthese( ITERATIONS, \%simple_constructors );
+#say "";
 
-say "[[ SIMPLE ACCESSORS ]]";
-cmpthese( ITERATIONS, \%simple_accessors );
-say "";
+#say "[[ SIMPLE ACCESSORS ]]";
+#cmpthese( ITERATIONS, \%simple_accessors );
+#say "";
 
-say "[[ SIMPLE COMBINED ]]";
-cmpthese( ITERATIONS, \%simple_combined );
-say "";
+#say "[[ SIMPLE COMBINED ]]";
+#cmpthese( ITERATIONS, \%simple_combined );
+#say "";
 
 say "[[ COMPLEX CONSTRUCTORS ]]";
 cmpthese( ITERATIONS, \%constructors );
@@ -208,71 +208,64 @@ say "";
 
 __END__
 [[ SIMPLE CONSTRUCTORS ]]
-          Rate   Tiny  Moose    Moo  Plain  Mouse Marlin   Core
-Tiny    3071/s     --   -44%   -63%   -73%   -75%   -80%   -86%
-Moose   5444/s    77%     --   -35%   -53%   -56%   -65%   -75%
-Moo     8354/s   172%    53%     --   -28%   -32%   -46%   -61%
-Plain  11541/s   276%   112%    38%     --    -6%   -26%   -46%
-Mouse  12300/s   301%   126%    47%     7%     --   -21%   -43%
-Marlin 15513/s   405%   185%    86%    34%    26%     --   -28%
-Core   21452/s   598%   294%   157%    86%    74%    38%     --
+          Rate   Tiny    Moo  Moose  Plain  Mouse Marlin
+Tiny    2567/s     --   -37%   -43%   -68%   -75%   -79%
+Moo     4094/s    59%     --    -9%   -50%   -60%   -67%
+Moose   4479/s    74%     9%     --   -45%   -56%   -64%
+Plain   8145/s   217%    99%    82%     --   -20%   -34%
+Mouse  10192/s   297%   149%   128%    25%     --   -17%
+Marlin 12281/s   378%   200%   174%    51%    20%     --
 
 [[ SIMPLE ACCESSORS ]]
-          Rate   Core  Moose   Tiny  Plain  Mouse Marlin    Moo
-Core   29332/s     --    -9%   -11%   -26%   -48%   -60%   -60%
-Moose  32172/s    10%     --    -2%   -19%   -43%   -56%   -56%
-Tiny   32809/s    12%     2%     --   -17%   -42%   -55%   -55%
-Plain  39565/s    35%    23%    21%     --   -30%   -46%   -46%
-Mouse  56758/s    93%    76%    73%    43%     --   -22%   -22%
-Marlin 72614/s   148%   126%   121%    84%    28%     --    -0%
-Moo    72878/s   148%   127%   122%    84%    28%     0%     --
+          Rate  Moose   Tiny  Plain    Moo  Mouse Marlin
+Moose  25048/s     --    -6%   -24%   -44%   -50%   -54%
+Tiny   26613/s     6%     --   -19%   -41%   -47%   -51%
+Plain  32844/s    31%    23%     --   -27%   -34%   -39%
+Moo    44776/s    79%    68%    36%     --   -10%   -17%
+Mouse  49778/s    99%    87%    52%    11%     --    -8%
+Marlin 54234/s   117%   104%    65%    21%     9%     --
 
 [[ SIMPLE COMBINED ]]
-          Rate   Tiny  Moose   Core  Plain    Moo  Mouse Marlin
-Tiny    6492/s     --   -24%   -35%   -47%   -53%   -60%   -64%
-Moose   8540/s    32%     --   -15%   -30%   -38%   -47%   -53%
-Core   10052/s    55%    18%     --   -18%   -28%   -37%   -45%
-Plain  12222/s    88%    43%    22%     --   -12%   -24%   -33%
-Moo    13869/s   114%    62%    38%    13%     --   -14%   -24%
-Mouse  16033/s   147%    88%    59%    31%    16%     --   -12%
-Marlin 18185/s   180%   113%    81%    49%    31%    13%     --
+          Rate   Tiny  Moose  Plain  Mouse    Moo Marlin
+Tiny    3796/s     --   -40%   -52%   -66%   -67%   -74%
+Moose   6343/s    67%     --   -20%   -43%   -44%   -57%
+Plain   7905/s   108%    25%     --   -29%   -31%   -46%
+Mouse  11108/s   193%    75%    41%     --    -3%   -24%
+Moo    11395/s   200%    80%    44%     3%     --   -22%
+Marlin 14602/s   285%   130%    85%    31%    28%     --
 
 [[ COMPLEX CONSTRUCTORS ]]
-         Rate  Plain   Tiny    Moo  Moose   Core Marlin  Mouse
-Plain  1350/s     --    -1%   -46%   -55%   -73%   -73%   -78%
-Tiny   1369/s     1%     --   -45%   -54%   -72%   -72%   -78%
-Moo    2495/s    85%    82%     --   -17%   -50%   -50%   -60%
-Moose  3001/s   122%   119%    20%     --   -40%   -40%   -52%
-Core   4974/s   268%   263%    99%    66%     --    -0%   -20%
-Marlin 4979/s   269%   264%   100%    66%     0%     --   -20%
-Mouse  6218/s   360%   354%   149%   107%    25%    25%     --
+         Rate  Plain   Tiny    Moo  Moose Marlin  Mouse
+Plain   867/s     --    -3%   -30%   -44%   -73%   -78%
+Tiny    895/s     3%     --   -28%   -42%   -73%   -78%
+Moo    1245/s    44%    39%     --   -20%   -62%   -69%
+Moose  1550/s    79%    73%    24%     --   -52%   -61%
+Marlin 3258/s   276%   264%   162%   110%     --   -19%
+Mouse  4021/s   364%   349%   223%   160%    23%     --
 
 [[ COMPLEX ACCESSORS ]]
-          Rate   Core   Tiny  Moose  Plain    Moo Marlin  Mouse
-Core   19907/s     --    -8%    -9%   -10%   -43%   -54%   -57%
-Tiny   21561/s     8%     --    -2%    -3%   -38%   -50%   -53%
-Moose  21913/s    10%     2%     --    -1%   -37%   -50%   -53%
-Plain  22119/s    11%     3%     1%     --   -36%   -49%   -52%
-Moo    34662/s    74%    61%    58%    57%     --   -20%   -25%
-Marlin 43555/s   119%   102%    99%    97%    26%     --    -6%
-Mouse  46291/s   133%   115%   111%   109%    34%     6%     --
+          Rate   Tiny  Plain  Moose    Moo Marlin  Mouse
+Tiny   12822/s     --    -6%   -16%   -42%   -51%   -59%
+Plain  13608/s     6%     --   -11%   -39%   -48%   -56%
+Moose  15335/s    20%    13%     --   -31%   -42%   -51%
+Moo    22191/s    73%    63%    45%     --   -15%   -28%
+Marlin 26256/s   105%    93%    71%    18%     --   -15%
+Mouse  31030/s   142%   128%   102%    40%    18%     --
 
 [[ COMPLEX DELEGATIONS ]]
-         Rate   Tiny  Mouse   Core  Plain  Moose    Moo Marlin
-Tiny    822/s     --   -34%   -56%   -57%   -59%   -62%   -63%
-Mouse  1247/s    52%     --   -33%   -35%   -38%   -42%   -43%
-Core   1855/s   126%    49%     --    -3%    -8%   -14%   -15%
-Plain  1913/s   133%    53%     3%     --    -5%   -11%   -13%
-Moose  2021/s   146%    62%     9%     6%     --    -6%    -8%
-Moo    2149/s   162%    72%    16%    12%     6%     --    -2%
-Marlin 2193/s   167%    76%    18%    15%     9%     2%     --
+         Rate   Tiny  Mouse Marlin    Moo  Plain  Moose
+Tiny    549/s     --   -11%   -42%   -50%   -53%   -57%
+Mouse   617/s    12%     --   -35%   -44%   -47%   -51%
+Marlin  946/s    72%    53%     --   -14%   -18%   -25%
+Moo    1100/s   101%    78%    16%     --    -5%   -13%
+Plain  1159/s   111%    88%    23%     5%     --    -8%
+Moose  1266/s   131%   105%    34%    15%     9%     --
 
 [[ COMPLEX COMBINED ]]
-         Rate   Tiny  Mouse  Plain  Moose   Core    Moo Marlin
-Tiny    677/s     --   -41%   -48%   -57%   -57%   -59%   -64%
-Mouse  1151/s    70%     --   -11%   -27%   -27%   -31%   -39%
-Plain  1292/s    91%    12%     --   -18%   -18%   -22%   -31%
-Moose  1575/s   133%    37%    22%     --    -0%    -5%   -16%
-Core   1577/s   133%    37%    22%     0%     --    -5%   -16%
-Moo    1662/s   146%    44%    29%     6%     5%     --   -12%
-Marlin 1879/s   178%    63%    45%    19%    19%    13%     --
+        Rate   Tiny  Mouse  Moose  Plain    Moo Marlin
+Tiny   430/s     --   -37%   -45%   -50%   -50%   -54%
+Mouse  686/s    60%     --   -13%   -20%   -20%   -27%
+Moose  789/s    83%    15%     --    -8%    -8%   -16%
+Plain  856/s    99%    25%     9%     --    -0%    -9%
+Moo    858/s   100%    25%     9%     0%     --    -9%
+Marlin 939/s   118%    37%    19%    10%     9%     --

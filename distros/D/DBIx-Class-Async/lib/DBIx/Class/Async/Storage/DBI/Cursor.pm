@@ -1,6 +1,6 @@
 package DBIx::Class::Async::Storage::DBI::Cursor;
 
-$DBIx::Class::Async::Storage::DBI::Cursor::VERSION   = '0.54';
+$DBIx::Class::Async::Storage::DBI::Cursor::VERSION   = '0.55';
 $DBIx::Class::Async::Storage::DBI::Cursor::AUTHORITY = 'cpan:MANWAR';
 
 use strict;
@@ -13,7 +13,7 @@ DBIx::Class::Async::Storage::DBI::Cursor - Asynchronous cursor for DBIx::Class R
 
 =head1 VERSION
 
-Version 0.54
+Version 0.55
 
 =cut
 

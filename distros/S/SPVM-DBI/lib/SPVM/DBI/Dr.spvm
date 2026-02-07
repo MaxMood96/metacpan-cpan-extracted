@@ -1,0 +1,33 @@
+# Copyright (c) 2026 Yuki Kimoto
+# MIT License
+
+class DBI::Dr {
+  version_from DBI;
+
+  use DBI::Db;
+  use Hash;
+  use Go::Context;
+
+  # --- Instance Methods ---
+
+  # Create a new database handle (DBI::Db).
+  # This method must be overridden by the child class (e.g., DBD::SQLite::Dr).
+  public method connect : DBI::Db ($context : Go::Context, $dsn : string, $user : string = undef, $password : string = undef, $attr : Hash = undef) {
+    die "The \"connect\" method is not implemented in this driver.";
+  }
+
+  # Return a list of available data sources for this driver.
+  public method data_sources : string[] ($context : Go::Context, $attr : Hash = undef) {
+    die "The \"data_sources\" method is not implemented in this driver.";
+  }
+
+  # Return the driver-specific attributes.
+  public method get_attributes : Hash ($context : Go::Context) {
+    die "The \"get_attributes\" method is not implemented in this driver.";
+  }
+
+  # Disconnect all active database handles managed by this driver.
+  public method disconnect_all : void ($context : Go::Context) {
+    die "The \"disconnect_all\" method is not implemented in this driver.";
+  }
+}

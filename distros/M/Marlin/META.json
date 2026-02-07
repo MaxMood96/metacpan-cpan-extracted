@@ -45,7 +45,8 @@
             "List::Util" : "1.45",
             "Role::Tiny" : "0",
             "Sub::Accessor::Small" : "1.001000",
-            "Sub::HandlesVia" : "0.052000",
+            "Sub::HandlesVia" : "0.053000",
+            "Sub::HandlesVia::XS" : "0.001001",
             "Type::Tiny" : "2.010001",
             "Type::Tiny::XS" : "0",
             "perl" : "5.008008"
@@ -68,41 +69,45 @@
    "provides" : {
       "Marlin" : {
          "file" : "lib/Marlin.pm",
-         "version" : "0.022001"
+         "version" : "0.023000"
       },
       "Marlin::Attribute" : {
          "file" : "lib/Marlin/Attribute.pm",
-         "version" : "0.022001"
+         "version" : "0.023000"
       },
       "Marlin::Attribute::NONE" : {
          "file" : "lib/Marlin/Attribute.pm"
+      },
+      "Marlin::Attribute::SHVToolkit" : {
+         "file" : "lib/Marlin/Attribute/SHVToolkit.pm",
+         "version" : "0.023000"
       },
       "Marlin::Meta::Class" : {
          "file" : "lib/MooseX/Marlin.pm"
       },
       "Marlin::Role" : {
          "file" : "lib/Marlin/Role.pm",
-         "version" : "0.022001"
+         "version" : "0.023000"
       },
       "Marlin::Struct" : {
          "file" : "lib/Marlin/Struct.pm",
-         "version" : "0.022001"
+         "version" : "0.023000"
       },
       "Marlin::TypeConstraint" : {
          "file" : "lib/Marlin/TypeConstraint.pm",
-         "version" : "0.022001"
+         "version" : "0.023000"
       },
       "Marlin::Util" : {
          "file" : "lib/Marlin/Util.pm",
-         "version" : "0.022001"
+         "version" : "0.023000"
       },
       "Marlin::X" : {
          "file" : "lib/Marlin/X.pm",
-         "version" : "0.022001"
+         "version" : "0.023000"
       },
       "MooseX::Marlin" : {
          "file" : "lib/MooseX/Marlin.pm",
-         "version" : "0.022001"
+         "version" : "0.023000"
       }
    },
    "release_status" : "stable",
@@ -121,6 +126,6 @@
       },
       "x_identifier" : "http://purl.org/NET/cpan-uri/dist/Marlin/project"
    },
-   "version" : "0.022001",
+   "version" : "0.023000",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

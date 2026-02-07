@@ -315,10 +315,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-Vimeo>
 
 L<http://annocpan.org/dist/StreamFinder-Vimeo>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-Vimeo>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder-Vimeo/>
@@ -425,7 +421,7 @@ sub new
 		my $no_wget = system('wget','-V');
 		unless ($no_wget) {
 			print STDERR "\n..trying wget...\n"  if ($DEBUG);
-			$html = `wget -t 2 -T 20 -O- -o /dev/null \"$player_url\" 2>/dev/null `;
+			$html = `wget -t 2 -T 20 -O- -o /dev/null "$player_url" 2>/dev/null `;
 		}
 	}
 	$html =~ s/\\\"/\&quot\;/gs;

@@ -2,81 +2,33 @@
 
 use strict;
 use warnings;
+
 use JSON;
 use Test::More;
-use File::Path qw(make_path);
-use File::Temp qw(tempdir);
-use File::Spec::Functions qw(catfile);
 
-use DBI;
 use Plack::Test;
 use HTTP::Request::Common qw(GET POST PUT DELETE);
 
-my $dir     = tempdir(CLEANUP => 1);
-my $db_file = catfile($dir, 'test.db');
-my $lib_dir = catfile($dir, 'lib');
+use DBIx::Class::Async::Schema;
 
-make_path($lib_dir);
-unshift @INC, $lib_dir;
+use lib 't/lib';
 
-my $schema_file = catfile($lib_dir, 'Test', 'Schema.pm');
-make_path(catfile($lib_dir, 'Test'));
-
-open my $fh, '>', $schema_file or die "Cannot create $schema_file: $!";
-print $fh <<'END_SCHEMA';
-package Test::Schema;
-use base 'DBIx::Class::Schema';
-
-__PACKAGE__->load_namespaces;
-
-1;
-END_SCHEMA
-close $fh;
-
-my $user_file = catfile($lib_dir, 'Test', 'Schema', 'Result', 'User.pm');
-make_path(catfile($lib_dir, 'Test', 'Schema', 'Result'));
-
-open $fh, '>', $user_file or die "Cannot create $user_file: $!";
-print $fh <<'END_USER';
-package Test::Schema::Result::User;
-use base 'DBIx::Class::Core';
-
-__PACKAGE__->load_components('Core');
-__PACKAGE__->table('users');
-__PACKAGE__->add_columns(
-    id => {
-        data_type => 'integer',
-        is_auto_increment => 1,
-        is_nullable => 0,
-    },
-    name => {
-        data_type => 'text',
-        is_nullable => 0,
+my ($fh, $db_file) = File::Temp::tempfile(UNLINK => 1);
+my $schema         = DBIx::Class::Async::Schema->connect(
+    "dbi:SQLite:dbname=$db_file", undef, undef, {},
+    { workers      => 2,
+      schema_class => 'Test::Schema',
+      cache_ttl    => 60,
     },
 );
-__PACKAGE__->set_primary_key('id');
 
-1;
-END_USER
-close $fh;
-
-my $dbh = DBI->connect("dbi:SQLite:dbname=$db_file", "", "", {
-    RaiseError => 1,
-    AutoCommit => 1,
-});
-
-$dbh->do(q{
-    CREATE TABLE users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL
-    )
-});
+$schema->await($schema->deploy({ add_drop_table => 1 }));
 
 for my $i (1..10) {
-    $dbh->do(qq{ INSERT INTO users (name) VALUES ('User$i') });
+    $schema->resultset('User')->create({ name => "User$i" })->get;
 }
 
-$dbh->disconnect;
+$schema->disconnect;
 
 {
     package TestApp;

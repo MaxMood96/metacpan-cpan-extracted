@@ -4,7 +4,7 @@ use v5.14;
 use warnings;
 use utf8;
 
-our $VERSION = "2.3304";
+our $VERSION = "2.3305";
 
 use Data::Dumper;
 {
@@ -457,7 +457,7 @@ sub fold {
 	and my($w2) = /\A( (?: ${word_char_re} \cH ? ) + )/x
 	and my($lead, $w1) = $folded =~ m{
 		\A ## avoid CSI/OSC final char making a word
-		   ( (?: [^\e]* (?:${csi_re}|${osc_re})++ ) *+ .*? )
+		   ( (?: [^\e\x9b\x9d]* (?:${csi_re}|${osc_re})++ ) *+ .*? )
 		   ( (?: ${word_char_re} \cH ? ) + )
 		\z }x
     ) {
@@ -634,7 +634,7 @@ Text::ANSI::Fold - Text folding library supporting ANSI terminal sequence and As
 
 =head1 VERSION
 
-Version 2.3304
+Version 2.3305
 
 =head1 SYNOPSIS
 

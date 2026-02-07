@@ -1,10 +1,10 @@
 =head1 NAME
 
-StreamFinder::Zeno - Fetch actual raw streamable URLs from radio-station websites on zeno.fm
+StreamFinder::Zeno - Fetch actual raw streamable URLs from radio-stations and podcasts on zeno.fm
 
 =head1 AUTHOR
 
-This module is Copyright (C) 2017-2023 by
+This module is Copyright (C) 2017-2026 by
 
 Jim Turner, C<< <turnerjw784 at yahoo.com> >>
 		
@@ -103,28 +103,21 @@ Generally, only one stream will be returned for each station.
 
 =over 4
 
-=item B<new>(I<ID>|I<url> [, I<-notrim> [ => 0|1 ]] [, I<-secure> [ => 0|1 ]] 
+=item B<new>(I<ID>|I<url> [, I<-secure> [ => 0|1 ]] 
 [, I<-debug> [ => 0|1|2 ]])
 
-Accepts a Zeno.fm station ID or URL and creates and returns a new station 
-object, or I<undef> if the URL is not a valid Zeno.fm station or no 
+Accepts a Zeno.fm station or podcast ID or URL and creates and returns a new 
+station object, or I<undef> if the URL is not a valid Zeno.fm station or no 
 streams are found.  The URL can be the full URL, 
-ie. https://www.zeno.fm/radio/B<station-id>, or just I<station-id>, 
-https://www.zeno.fm/podcast/B<podcast-id>/episodes/B<episode-id> or just 
-I<podcast-id>/I<episode-id>.  If a podcast URL is specified without the 
-episode-id part, then the first episode will be returned.
-
-The optional I<-notrim> argument can be either 0 or 1 (I<false> or I<true>).  
-If 0 (I<false>) then stream URLs are trimmed of excess "ad" parameters 
-(everything after the first "?" character, ie. "?ads.cust_params=premium" is 
-removed, including the "?".  Otherwise, the stream URLs are returned as-is.  
-
-DEFAULT I<-notrim> (if not given) is 0 (I<false>) and URLs are trimmed.  If 
-I<-notrim> is specified without argument, the default is 1 (I<true>).  Try 
-using I<-notrim> if stream will not play without the extra arguments.
+ie. I<https://www.zeno.fm/radio/>B<station-id>, or just I<station-id>, 
+I<https://www.zeno.fm/podcast/>B<podcast-id>/episodes/B<episode-id> or just 
+I<podcast-id>/I<episode-id>, or I<https://www.zeno.fm/podcast/>B<podcast-id> or 
+just I<p/podcast-id>.  If a podcast page URL is specified without the 
+episode-id part, then the first (latest?) episode will be returned.
 
 The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  
-If 1 then only secure ("https://") streams will be returned.
+If 1 then only secure ("https://") streams will be returned.  Currently, all 
+known Zeno streams seem to be secure ("https://").
 
 DEFAULT I<-secure> is 0 (false) - return all streams (http and https).
 
@@ -149,10 +142,13 @@ for streams.
 [description], [year], [genre], [total], [albumartist]:  The corresponding 
 field data returned (or "I<-na->", if no value).
 
-=item $station->B<get>()
+=item $station->B<get>(I<['playlist']>)
 
 Returns an array of strings representing all stream URLs found.
-
+If I<"playlist"> is specified, and the URL is a podcast page, then an extended 
+m3u playlist is returned instead of stream url(s), Otherwise, the array will 
+likely contain a stream for each episode found in order of latest to oldest, 
+as displayed on the podcast's web-page.
 =item $station->B<getURL>([I<options>])
 
 Similar to B<get>() except it only returns a single stream representing 
@@ -169,10 +165,13 @@ If I<"noplaylists"> is specified, and the stream to be returned is a
 entry (or a random entry if I<"random"> is specified) in the playlist 
 is returned.
 
-=item $station->B<count>()
+=item $station->B<count>(I<['playlist']>)
 
 Returns the number of streams found for the station or podcasts 
-(almost always 1 for Zeno.fm).
+(almost always 1 for Zeno.fm).  If I<"playlist"> is specified, the number of 
+episodes returned in the playlist is returned (the playlist can have more than 
+one item if a podcast page URL is specified).
+
 
 =item $station->B<getID>()
 
@@ -233,7 +232,8 @@ and the options are loaded into a hash used only by the specific
 (submodule) specified.  Valid options include 
 I<-debug> => [0|1|2] and most of the L<LWP::UserAgent> options.  
 
-Options specified here override any specified in I<~/.config/StreamFinder/config>.
+Options specified here override any specified in 
+I<~/.config/StreamFinder/config>.
 
 Among options valid for Zeno streams is the I<-notrim> described in the 
 B<new()> function.  
@@ -290,10 +290,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-Zeno>
 
 L<http://annocpan.org/dist/StreamFinder-Zeno>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-Zeno>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder-Zeno/>
@@ -302,7 +298,7 @@ L<http://search.cpan.org/dist/StreamFinder-Zeno/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2017-2023 Jim Turner.
+Copyright 2017-2026 Jim Turner.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the the Artistic License (2.0). You may obtain a
@@ -372,6 +368,7 @@ sub new
 		}
 	}
 
+	my $baseURL = 'https://zeno.fm';
 	my $isStation;
 	my $isPodcastPage;
 	my @epiStreams = ();
@@ -380,25 +377,39 @@ sub new
 
 TRYIT:
 	(my $url2fetch = $url) =~ s#\/$##;
+	print STDERR "-0(Zeno): URL=$url= try=$tryit=\n"  if ($DEBUG);
 	if ($url =~ /^https?\:/) {
-		$self->{'id'} = ($url =~ m#\/([^\/]+)\/episodes?\/([^\/]+)#)
-				? "$1/$2" : '';
+		if ($url =~ m#\/podcast\/([^\/]+)\/episodes?\/([^\/\?\&]+)#) {
+			$self->{'id'} = "$1/$2";
+			$url2fetch =~ s#\/episode\/#\/episodes\/#;  #CATCH SOME FAT-FINGERS!
+		} elsif ($url =~ m#\/(podcast|radio)\/([^\/\?\&]+)#) {
+			$self->{'id'} = $2;
+		} else {
+			print STDERR "--Invalid Zeno URL (not station, podcast or episode), PUNT!\n";
+			return undef;
+		}
 		$isStation = ($url =~ m#\/radio\/#) ? 1 : 0;
-		$self->{'id'} ||= $1  if ($url2fetch =~ m#\/([^\/]+)\/?$#);
+		my $pctype = ($self->{'id'} =~ m#\/# ? 'EPISODE' : 'PODCAST');
+		print STDERR "-We're a full " . ($isStation ? 'STATION' : $pctype)
+				. " url($url2fetch).\n"  if ($DEBUG);
 	} elsif ($url =~ m#\/#) {
-		my ($pcid, $epid) = split(m#\/#);
-		$self->{'id'} = "$pcid/$epid";
-		$url2fetch = "https://www.zeno.fm/podcast/$pcid/episodes/$epid";
+		my ($pcid, $epid) = split(m#\/#, $url);
+		$self->{'id'} = $url;
+		$url2fetch = "${baseURL}/podcast/" . (($self->{'id'} =~ s#^p(?:odcast)?\/##)
+				? $epid : "$pcid/episodes/$epid");
 		$isStation = 0;
+		print STDERR "-We're a podcast or episode-ID(".$self->{'id'}.") (url:=$url2fetch).\n"
+				if ($DEBUG);
 	} else {
 		$self->{'id'} = $url;
 		$url2fetch = 'https://www.zeno.fm/radio/' . $url;
 		$isStation = 1;
+		print STDERR "-We're a radio-station ID(".$self->{'id'}.") (url:=$url2fetch).\n"
+				if ($DEBUG);
 	}
 	$isPodcastPage = ($isStation || $self->{'id'} =~ m#\/#) ? 0 : 1;
 	$self->{'cnt'} = 0;
 	my $html = '';
-	print STDERR "-0(Zeno): URL=$url2fetch=\n"  if ($DEBUG);
 	my $ua = LWP::UserAgent->new(@{$self->{'_userAgentOps'}});		
 	$ua->timeout($self->{'timeout'});
 	$ua->cookie_jar({});
@@ -412,151 +423,180 @@ TRYIT:
 	print STDERR "-1: html=$html=\n"  if ($DEBUG > 1);
 	return undef  unless ($html);  #STEP 1 FAILED, INVALID STATION URL, PUNT!
 
-	my $json = '';
-	$json = $1  if ($html =~ s#\btype\=\"application\/json\"\>\{(.+)##s);
-	if ($json) {
-		print STDERR "..JSON data found, fetching data we can here first.\n"  if ($DEBUG);
-		my $have1stepisode = 0;
-		if ($isPodcastPage) {   #WE'RE A PODCAST PAGE (NOT SPECIFIC EPISODE), GATHER PLAYLIST DATA:
-			print STDERR "..Podcast PAGE, extract episodes for playlist, then return 1st episode:\n"  if ($DEBUG);
-			my $podcastdata = ($json =~ s#^(.+?)\"episodes\"\:##s) ? $1 : '';
-			while ($json =~ s#^.+?\"title\"\:\"([^\"]+)\"##so) {
-				my $epititle = $1;
-				my $epistream = ($json =~ m#\"file\_url\"\:\"([^\"]+)\"#so) ? $1 : '';
-				next  unless ($epititle && $epistream);
-				next  if ($self->{'secure'} && $epistream !~ /^https/o);
-
-				if ($json =~ m#\"url\"\:\"([^\"]+)\"#so) {
-					$have1stepisode ||= $1;
-					$epistream =~ s/\.(mp3|m3u8|pls)\?.*$/\.$1/  unless ($self->{'notrim'});   #STRIP OFF EXTRA GARBAGE PARMS, COMMENT OUT IF STARTS FAILING!
-					push @epiStreams, $epistream;
-					push @epiTitles, $epititle;
+	my $have1stepisode = 0;
+	if ($isPodcastPage) {   #WE'RE A PODCAST PAGE (NOT SPECIFIC EPISODE), GATHER PLAYLIST DATA:
+		print STDERR "..Podcast PAGE, extract episodes for playlist, then return 1st episode:\n"  if ($DEBUG);
+		$html =~ s#^.+?\,\{\"podcastId\"\:\d+\}\,#AGGIES#s;
+		while ($html =~ s#(^.+?)\,\{"podcastId\"\:\d+\,\"episodeId\"\:\d+\}\,##so) {
+			my $epistuff = $1;
+			if ($epistuff =~ m#\d\}\,\"[a-zA-Z0-9\-\_]+\"\,\"([^\"]+)\"\,\"([^\"]+)\"#s) {
+				my $epiID = $1;
+				my $epititle = $2;
+				if ($epistuff =~ s#\,\"(https?\:\/\/anchor\.fm\/[^\"]*)\"##s
+						|| $epistuff =~ s#\,\"(https?\:\/\/[^\"]+(?:mp3|ogg|flac|webm|acc|m3u8))\"##s) {
+					my $epistream = $1;
+					unless ($self->{'secure'} && $epistream !~ /^https/o) {
+						push @{$self->{'streams'}}, $epistream;
+						$self->{'cnt'}++;
+						push @epiStreams, $epistream;
+						push @epiTitles, $epititle;
+						$have1stepisode ||= $epiID;						
+					}
 				}
 			}
-			$json = $podcastdata  if ($podcastdata);
+		}
+	}
+	if ($isStation) {   #WE'RE A RADIO-STATION:  PROGRMMER NOTE: DO *NOT* USE elsif HERE!
+		print STDERR "-We're a radio-station page!\n"  if ($DEBUG);
+		$self->{'title'} = $1  if ($html =~ m#\,\"$$self{'id'}\"\,\"([^\"]+)#s);
+		$self->{'title'} ||= $1  if ($html =~ m#\<meta\s+property="(?:og|twitter)\:title\"\s+content\=\"([^\"]+)\"#s);
+		$self->{'title'} ||= $1  if ($html =~ m#\<title\>([^\<]+)\"#si);
+		$self->{'description'} = $1  if ($html =~ s#\<div\s+class\=\"description[^\>]+\>(.+?)\<\/div\>##s);
+		$self->{'description'} ||= $self->{'title'};
+		if ($html =~ s#\<h2\>(.+?\<\/h2\>)##si) {
+			my $channeldata = $1;
+			$self->{'albumartist'} = $1  if ($channeldata =~ s#\<a(?:.+?)href\=\"([^\"]+)\"[^\>]*\>##s);
+			$self->{'albumartist'} = $baseURL . $self->{'albumartist'}  if ($self->{'albumartist'} =~ m#^\/#);
+			$self->{'artist'} = $1  if ($channeldata =~ m#\s*([^\<]+)#s);
+		} else {
+			($self->{'albumartist'} = $url2fetch) =~ s#\/podcast\/.+$#\/#;
+		}
+		$self->{'created'} = ($html =~ m#\>([^\<]+)\<\/span\>\<\/div\>\<h1#) ? $1 : '';
+		$self->{'total'} = $self->{'cnt'};
+		$self->{'Url'} = ($self->{'total'} > 0) ? $self->{'streams'}->[0] : '';
+		while ($html =~ s#\,\"(https?\:\/\/anchor\.fm\/[^\"]*)\"##s
+				|| $html =~ s#\,\"(https?\:\/\/[^\"]+(?:mp3|ogg|flac|webm|acc|m3u8))\"##s) {
+			my $stream = $1;
+			print STDERR "----RADIO STREAM FOUND1 ($stream)!\n"  if ($DEBUG);
+			unless ($self->{'secure'} && $stream !~ /^https/o) {
+				push @{$self->{'streams'}}, $stream;
+				$self->{'cnt'}++;
+			}
 		}
 
-		$json =~ s#\"CardSupportDonations\"\:.+##s;
-		$self->{'articonurl'} = (!$isStation && $json =~ s#\"logo\"\:\"([^\"]+)\"##s) ? $1 : '';
-		$self->{'iconurl'} = ($json =~ s#\"logo\"\:\"([^\"]+)\"##s) ? $1 : $self->{'articonurl'};
-		$self->{'imageurl'} = ($json =~ m#\"background\"\:\"([^\"]+)\"#s) ? $1 : '';
-		$self->{'description'} = ($json =~ s#\"description\"\:\"([^\"]+)\"##s) ? $1 : '';
-		$self->{'albumartist'} = ($json =~ m#\"url\"\:\"([^\"]+)\"#s) ? $1 : '';
-		if ($isStation) {   #WE'RE A RADIO-STATION:
-			$self->{'genre'} = ($json =~ m#\"genre\"\:\"([^\"]+)\"#s) ? $1 : '';
-			while ($json =~ s#\"streamURL\"\:\"([^\"]+)\"##si) {
-				my $one = $1;
-				unless ($self->{'secure'} && $one !~ /^https/o) {
-					$one =~ s/\.(mp3|m3u8|pls)\?.*$/\.$1/  unless ($self->{'notrim'});   #STRIP OFF EXTRA GARBAGE PARMS, COMMENT OUT IF STARTS FAILING!
-					push @{$self->{'streams'}}, $one;
-					$self->{'cnt'}++;
-				}
-			}
-		} else {   #WE'RE A PODCAST OR PODCAST EPISODE PAGE:
-			$self->{'album'} = $1  if ($json =~ s#\"title\"\:\"([^\"]+)\"##);
-			$self->{'artist'} = $1  if ($json =~ m#\"author\"\:\"([^\"]+)\"#);
-			if ($json =~ m#\"categories\"\:\[([^\]]+)\]#) {
-				($self->{'genre'} = $1) =~ s/\"//g;
-				$self->{'genre'} =~ s/\,(\S)/\, $1/g;
-			} elsif ($json =~ m#\"categories\"\:\"([^\"]+)\"#) {
-				$self->{'genre'} = $1;
-			} else {
-				$self->{'genre'} = 'Podcast';
-			}
-			if ($isPodcastPage && $have1stepisode && !$tryit) {
-				$url = $have1stepisode;
-				++$tryit;
-				print STDERR "--Podcast PAGE: loopback & fetch 1st episode ($url)\n"  if ($DEBUG);
-				goto TRYIT;  #PODCAST PAGE: LOOP BACK TO FETCH 1ST EPISODE:
-			}
+		#NOW REMOVE A BUNCH OF HTML TO MAKE REST EASIER:
 
-			#IF HERE, WE'RE EITHER A RADIO STATION OR HAVE A SPECIFIC PODCAST EPISODE:
-			#NOW GATHER DATA WE CAN FROM JSON:
-			print STDERR "--We have an EPISODE page!\n"  if ($DEBUG);
-			$self->{'description'} = ($json =~ m#\"description\"\:\"([^\"]+)\"#s) ? $1 : '';
-			if ($json =~ m#\"published\_at\"\:\"([^\"]+)\"#) {
-				$self->{'created'} = $1;
-				$self->{'year'} = $1  if ($self->{'created'} =~ /(\d\d\d\d)/);
+		$html =~ s#^.+?(\<script\s+type\=\"application\/json\")#$1#s;
+
+		if ($html =~ s#\,\"(https?\:\/\/stream[^\"]+)\"##) {
+			my $stream = $1;
+			print STDERR "----RADIO STREAM FOUND2 ($stream)!\n"  if ($DEBUG);
+			unless ($self->{'secure'} && $stream !~ /^https/o) {
+				push @{$self->{'streams'}}, $stream;
+				$self->{'cnt'}++;
 			}
-			if ($json =~ m#\"file\_url\"\:\"([^\"]+)\"#si) {  #FETCH THE STREAM:
-				my $one = $1;
-				unless ($self->{'secure'} && $one !~ /^https/o) {
-					$one =~ s/\.(mp3|m3u8|pls)\?.*$/\.$1/  unless ($self->{'notrim'});   #STRIP OFF EXTRA GARBAGE PARMS, COMMENT OUT IF STARTS FAILING!
-					push @{$self->{'streams'}}, $one;
-					$self->{'cnt'}++;
+		}
+		$self->{'iconurl'} = $1  if ($html =~ s#\,\"(https?\:\/\/[^\"]*)\"##s);
+		$html =~ s#\,\"(https?\:\/\/[^\"]*)\"##s;  #THIS ONE'S NO GOOD (SKIP OVER)!
+		$self->{'imageurl'} = ($html =~ s#\,\"(https?\:\/\/[^\"]*)\"##s) ? $1 : $self->{'artimageurl'};
+
+		$self->{'iconurl'} ||= $1  if ($html =~ s#^.+?\,\"(https?\:\/\/image[^\"]+)\"##s);
+		$self->{'iconurl'} ||= ($html =~ m#\,\"(https?\:\/\/[^\"]+)#s) ? $1 : $self->{'iconurl'};
+		$self->{'imageurl'} ||= $self->{'iconurl'};
+	} else {   #WE'RE A PODCAST OR PODCAST EPISODE PAGE:
+		print STDERR "---isPodcastPage=$isPodcastPage, have1stEp=$have1stepisode, tryit=$tryit.\n";
+		if ($isPodcastPage && $have1stepisode && !$tryit) {
+			$url = "$$self{'id'}/$have1stepisode";
+			++$tryit;
+			if ($DEBUG) {
+				foreach my $f (sort keys %{$self}) {
+					print STDERR "--PODCAST.KEY=$f= VAL=$$self{$f}=\n";
 				}
 			}
-			#IF WAS ORIGINALLY A PODCAST PAGE (NOW 1ST EPISODE), BUILD THE PLAYLIST:
-			$self->{'playlist'} = "#EXTM3U\n";
-			if ($#epiStreams >= 0) {
-				$self->{'playlist_cnt'} = scalar @epiStreams;
-				for (my $i=0;$i<=$#epiStreams;$i++) {
-					last  if ($i > $#epiTitles);
-					$self->{'playlist'} .= "#EXTINF:-1, " . $epiTitles[$i] . "\n";
-					$self->{'playlist'} .= "#EXTART:" . $self->{'artist'} . "\n"
-							if ($self->{'artist'});
-					$self->{'playlist'} .= "#EXTALB:" . $self->{'album'} . "\n"
-							if ($self->{'album'});
-					$self->{'playlist'} .= "#EXTGENRE:" . $self->{'genre'} . "\n"
-							if ($self->{'genre'});
-					$self->{'playlist'} .= $epiStreams[$i] . "\n";
-				}
-			} else {
-				$self->{'playlist_cnt'} = 1;
-				$self->{'playlist'} .= "#EXTINF:-1, " . $self->{'title'} . "\n";
+			print STDERR "------Podcast PAGE: loopback & FETCH 1ST EPISODE ($url)\n\n"
+					if ($DEBUG);
+
+			goto TRYIT;  #PODCAST PAGE: LOOP BACK TO FETCH 1ST EPISODE:
+		}
+
+		#IF HERE, WE HAVE A SPECIFIC PODCAST EPISODE:
+		print STDERR "--We are an EPISODE page!\n"  if ($DEBUG);
+		$self->{'genre'} = 'Podcast';
+		my $epID = ($self->{'id'} =~ m#\/(.+)$#) ? $1 : '';
+		$self->{'title'} = $1  if ($epID && $html =~ m#\,\"$epID\"\,\"([^\"]+)#s);
+		$self->{'title'} ||= $1  if ($html =~ m#\<meta\s+property="(?:og|twitter)\:title\"\s+content\=\"([^\"]+)\"#s);
+		$self->{'title'} ||= $1  if ($html =~ m#\<title\>([^\<]+)\"#si);
+		$self->{'description'} = $1  if ($html =~ s#\<div\s+class\=\"description[^\>]+\>(.+?)\<\/div\>##s);
+		$self->{'description'} ||= $self->{'title'};
+		if ($html =~ s#\<h2\>(.+?\<\/h2\>)##si) {
+			my $channeldata = $1;
+			$self->{'albumartist'} = $1  if ($channeldata =~ s#\<a(?:.+?)href\=\"([^\"]+)\"[^\>]*\>##s);
+			$self->{'albumartist'} = $baseURL . $self->{'albumartist'}  if ($self->{'albumartist'} =~ m#^\/#);
+			$self->{'artist'} = $1  if ($channeldata =~ m#\s*([^\<]+)#s);
+		} else {
+			($self->{'albumartist'} = $url2fetch) =~ s#\/podcast\/.+$#\/#;
+		}
+		$self->{'created'} = ($html =~ m#\>([^\<]+)\<\/span\>\<\/div\>\<h1#) ? $1 : '';
+
+		#NOW REMOVE A BUNCH OF HTML TO MAKE REST EASIER:
+
+		$html =~ s#^.+?(\<script\s+type\=\"application\/json\")#$1#s;
+
+		if ($html =~ s#\,\"(https?\:\/\/[^\"]*)\"##s) {
+			my $artist_website = $1;
+			$self->{'artist'} .= ' - '  if ($self->{'artist'});
+			$self->{'artist'} .= $artist_website;
+		}
+		$self->{'artimageurl'} = $1  if ($html =~ s#\,\"(https?\:\/\/[^\"]*)\"##s);
+		$self->{'articonurl'} = ($html =~ s#\,\"(https?\:\/\/[^\"]*)\"##s) ? $1 : $self->{'artimageurl'};
+
+		while ($html =~ s#\,\"(https?\:\/\/anchor\.fm\/[^\"]*)\"##s
+				|| $html =~ s#\,\"(https?\:\/\/[^\"]+(?:mp3|ogg|flac|webm|acc|m3u8))\"##s) {
+			my $stream = $1;
+			unless ($self->{'secure'} && $stream !~ /^https/o) {
+				push @{$self->{'streams'}}, $stream;
+				$self->{'cnt'}++;
+			}
+		}
+		$self->{'iconurl'} = $1  if ($html =~ s#^.+?\,\"(https?\:\/\/image[^\"]+)\"##s);
+		$self->{'imageurl'} = ($html =~ m#\,\"(https?\:\/\/[^\"]+)#s) ? $1 : $self->{'iconurl'};
+		$self->{'iconurl'} ||= $self->{'imageurl'};
+		$self->{'created'} ||= $1  if ($html =~ m#\}\,\"([^\"]")\,\[#s);
+		$self->{'year'} = ($self->{'created'} && $self->{'created'} =~ /(\d\d\d\d)/s) ? $1 : '';
+		#IF WAS ORIGINALLY A PODCAST PAGE (NOW 1ST EPISODE), BUILD THE PLAYLIST:
+		$self->{'playlist'} = "#EXTM3U\n";
+		if ($#epiStreams >= 0) {  #PODCAST PAGE (MULTIPLE EPISODES):
+			$self->{'playlist_cnt'} = scalar @epiStreams;
+			for (my $i=0;$i<=$#epiStreams;$i++) {
+				last  if ($i > $#epiTitles);
+				$self->{'playlist'} .= "#EXTINF:-1, " . $epiTitles[$i] . "\n";
 				$self->{'playlist'} .= "#EXTART:" . $self->{'artist'} . "\n"
 						if ($self->{'artist'});
 				$self->{'playlist'} .= "#EXTALB:" . $self->{'album'} . "\n"
 						if ($self->{'album'});
 				$self->{'playlist'} .= "#EXTGENRE:" . $self->{'genre'} . "\n"
 						if ($self->{'genre'});
-				$self->{'playlist'} .= ${$self->{'streams'}}[0] . "\n";
+				$self->{'playlist'} .= $epiStreams[$i] . "\n";
 			}
+		} else {   #EPISODE PAGE (SINGLE EPISODE):
+			$self->{'playlist_cnt'} = 1;
+			$self->{'playlist'} .= "#EXTINF:-1, " . $self->{'title'} . "\n";
+			$self->{'playlist'} .= "#EXTART:" . $self->{'artist'} . "\n"
+					if ($self->{'artist'});
+			$self->{'playlist'} .= "#EXTALB:" . $self->{'album'} . "\n"
+					if ($self->{'album'});
+			$self->{'playlist'} .= "#EXTGENRE:" . $self->{'genre'} . "\n"
+					if ($self->{'genre'});
+			$self->{'playlist'} .= ${$self->{'streams'}}[0] . "\n";
 		}
 	}
-	#TRY TO SCOOP UP ANY DATA NOT FOUND IN JSON:
-	$self->{'title'} = $1  if ($html =~ m#\<title\>(.+?)\<\/title\>#si);
-	$self->{'title'} ||= $1  if ($html =~ m#\<meta\s+property="og\:title\"\s+content\=\"([^\"]+)\"#s);
-	$self->{'title'} ||= $1  if ($html =~ m#\<meta\s+name\=\"twitter\:title\"\s+content\=\"([^\"]+)\"#s);
-	$self->{'albumartist'} ||= $1  if ($html =~ m#\<meta\s+property\=\"og\:url\"\s+content\=\"([^\"]+)\"#s);
-	$self->{'iconurl'} ||= ($html =~ m#\"og\:image\"\s+content\=\"([^\"]+)\"#s) ? $1 : '';
-	$self->{'iconurl'} ||= ($html =~ m#\"twitter\:image\"\s+content\=\"([^\"]+)\"#s) ? $1 : '';
-	if ($html =~ m#\<img\s+([^\<]+)#s) {
-		my $firstimg = $1;
-		$self->{'title'} ||= $1  if ($firstimg =~ s#\balt\=\"([^\"]+)\"##s);
-		my $srcset = ($firstimg =~ s#\bsrcSet\=\"([^\"]+)\"##) ? $1 : '';
-		$self->{'imageurl'} ||= HTML::Entities::decode_entities($1)
-				if ($srcset && $srcset =~ m#\?url\=([^\s\;]+)#);
-	}			
-	$self->{'imageurl'} ||= $self->{'iconurl'};
-	$self->{'iconurl'} ||= $self->{'imageurl'};
+	#CLEAN UP SOME COMMON FIELDS:
 	$self->{'title'} = HTML::Entities::decode_entities($self->{'title'});
 	$self->{'title'} = uri_unescape($self->{'title'});
-	$self->{'title'} =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
+	$self->{'title'} =~ s/(?:\%|\\[ux\%]?00|\bu00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
 	$self->{'title'} =~ s/^\s*Listen to\s+//i;  #TIDY UP TITLE A BIT.
 	$self->{'title'} =~ s/\s*\|\s*Zeno.FM//;  #TIDY UP TITLE A BIT.
 	$self->{'description'} = HTML::Entities::decode_entities($self->{'description'});
 	$self->{'description'} = uri_unescape($self->{'description'});
-	$self->{'description'} =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
-	$self->{'description'} =~ s/\<(?:br|p>)[^\>]*\>/\n/gs;
-	unless ($self->{'cnt'} > 0) {
-		if ($html =~ m#\<meta\s+name\=\"twitter\:player\:stream\"\s+content\=\"([^\"]+)\"#s) {
-			my $one = $1;
-			unless ($self->{'secure'} && $one !~ /^https/o) {
-				push @{$self->{'streams'}}, $one;
-				$self->{'cnt'}++;
-			}
-		}
-	}
+	$self->{'description'} =~ s/(?:\%|\\[ux\%]?00|\bu00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;  #\u003C
 
 	$self->{'total'} = $self->{'cnt'};
 	$self->{'Url'} = ($self->{'total'} > 0) ? $self->{'streams'}->[0] : '';
 	if ($DEBUG) {
-		foreach my $x (sort keys %{$self}) {
-			print STDERR "--KEY=$x= VAL=".$self->{$x}."=\n";
+		foreach my $f (sort keys %{$self}) {
+			print STDERR "--KEY=$f= VAL=$$self{$f}=\n";
 		}
-		print STDERR "--SUCCESS: 1st stream=".$self->{'Url'}."= total=".$self->{'total'}."=\n"
-				if ($self->{'cnt'} > 0);
+		print STDERR "-SUCCESS: 1st stream=".$self->{'Url'}."=\n"  if ($self->{'cnt'} > 0);;
 	}
 
 	$self->_log($url);

@@ -122,10 +122,10 @@ or I<undef> if the URL is not a valid Blogger video or no streams are found.
 The URL can be the full URL, ie. https://www.blogger.com/B<video-id>, 
 or just I<video-id>.
 
-The optional I<-keep> argument can be either a comma-separated string or an array 
-reference ([...]) of stream types to keep (include) and returned in order specified 
-(type1, type2...).  Each "type" can be one of:  extension (ie. m4a, mp4, etc.), 
-"playlist", "stream", or ("any" or "all").
+The optional I<-keep> argument can be either a comma-separated string or an 
+array reference ([...]) of stream types to keep (include) and returned in order 
+specified (type1, type2...).  Each "type" can be one of:  extension (ie. m4a, 
+mp4, etc.), "playlist", "stream", or ("any" or "all").
 
 DEFAULT I<-keep> list is:  'm4a,mpd,stream,all', meaning that all m4a streams 
 followed by all "mpd" streams, followed by non-playlists, followed by all 
@@ -141,8 +141,8 @@ streams youtube-dl finds; or "I<first>" - include streams youtube-dl
 finds first.  Default is B<"no">.
 
 
-The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  If 1 
-then only secure ("https://") streams will be returned.
+The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  
+If 1 then only secure ("https://") streams will be returned.
 
 DEFAULT I<-secure> is 0 (false) - return all streams (http and https).
 
@@ -158,8 +158,9 @@ applicable when using the option: I<-youtube> => I<yes|only|top>, etc.
 
 I<-log> => "I<logfile>"
 
-Specify path to a log file.  If a valid and writable file is specified, A line will be 
-appended to this file every time one or more streams is successfully fetched for a url.
+Specify path to a log file.  If a valid and writable file is specified, A line 
+will be appended to this file every time one or more streams is successfully 
+fetched for a url.
 
 DEFAULT I<-none-> (no logging).
 
@@ -167,11 +168,11 @@ I<-logfmt> specifies a format string for lines written to the log file.
 
 DEFAULT "I<[time] [url] - [site]: [title] ([total])>".  
 
-The valid field I<[variables]> are:  [stream]: The url of the first/best stream found.  
-[site]:  The site name (Blogger).  [url]:  The url searched for streams.  
-[time]: Perl timestamp when the line was logged.  [title], [artist], [album], 
-[description], [year], [genre], [total], [albumartist]:  The corresponding field data 
-returned (or "I<-na->", if no value).
+The valid field I<[variables]> are:  [stream]: The url of the first/best 
+stream found.  [site]:  The site name (Blogger).  [url]:  The url searched 
+for streams.  [time]: Perl timestamp when the line was logged.  [title], 
+[artist], [album], [description], [year], [genre], [total], [albumartist]:  
+The corresponding field data returned (or "I<-na->", if no value).
 
 =item $video->B<get>()
 
@@ -185,12 +186,12 @@ the first valid stream found.
 Current options are:  I<"random">, I<"nopls">, and I<"noplaylists">.  
 By default, the first ("best"?) stream is returned.  If I<"random"> is 
 specified, then a random one is selected from the list of streams found.  
-If I<"nopls"> is specified, and the stream to be returned is a ".pls" playlist, 
-it is first fetched and the first entry (or a random entry if I<"random"> is 
-specified) is returned.  This is needed by Fauxdacious Mediaplayer.
-If I<"noplaylists"> is specified, and the stream to be returned is a 
-"playlist" (either .pls or .m3u? extension), it is first fetched and the first 
-entry (or a random entry if I<"random"> is specified) in the playlist 
+If I<"nopls"> is specified, and the stream to be returned is a ".pls" 
+playlist, it is first fetched and the first entry (or a random entry if 
+I<"random"> is specified) is returned.  This is needed by Fauxdacious 
+Mediaplayer.  If I<"noplaylists"> is specified, and the stream to be returned 
+is a "playlist" (either .pls or .m3u? extension), it is first fetched and the 
+first entry (or a random entry if I<"random"> is specified) in the playlist 
 is returned.
 
 =item $video->B<count>()
@@ -256,16 +257,17 @@ and the options are loaded into a hash used only by the specific
 (submodule) specified.  Valid options include 
 I<-debug> => [0|1|2] and most of the L<LWP::UserAgent> options.  
 
-Options specified here override any specified in I<~/.config/StreamFinder/config>.
+Options specified here override any specified in 
+I<~/.config/StreamFinder/config>.
 
 Among options valid for Blogger streams is the I<-keep> and 
 I<-youtube> options described in the B<new()> function.  Also, 
 various youtube-dl (L<StreamFinder::Youtube>) configuration options, 
-namely I<format>, I<formatonly>, I<youtube-dl-args>, and I<youtube-dl-add-args> 
-can be overridden here by specifying I<youtube-format>, I<youtube-formatonly>, 
-I<youtube-dl-args>, and I<youtube-dl-add-args> arguments respectively.  
-NOTE:  These are only applicable when using the option:  
-I<-youtube> => I<yes|only|top>, etc.
+namely I<format>, I<formatonly>, I<youtube-dl-args>, and 
+I<youtube-dl-add-args> can be overridden here by specifying 
+I<youtube-format>, I<youtube-formatonly>, I<youtube-dl-args>, and 
+I<youtube-dl-add-args> arguments respectively.  NOTE:  These are only 
+applicable when using the option:  I<-youtube> => I<yes|only|top>, etc.
 
 =item ~/.config/StreamFinder/config
 
@@ -425,7 +427,7 @@ sub new
 		my $no_wget = system('wget','-V');
 		unless ($no_wget) {
 			print STDERR "\n..trying wget...\n"  if ($DEBUG);
-			$html = `wget -t 2 -T 20 -O- -o /dev/null \"$url2fetch\" 2>/dev/null `;
+			$html = `wget -t 2 -T 20 -O- -o /dev/null "$url2fetch" 2>/dev/null `;
 		}
 	}
 

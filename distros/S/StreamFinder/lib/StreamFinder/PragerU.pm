@@ -301,10 +301,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-PragerU>
 
 L<http://annocpan.org/dist/StreamFinder-PragerU>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-PragerU>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder-PragerU/>
@@ -465,7 +461,7 @@ sub new
 	foreach my $i (qw(title artist description)) {
 		$self->{$i} = HTML::Entities::decode_entities($self->{$i});
 		$self->{$i} = uri_unescape($self->{$i});
-		$self->{$i} =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/egso;
+		$self->{$i} =~ s/(?:\%|\\[ux\%]?00|\bu00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
 	}
 
 	#NOW FIND THE STREAM(S):

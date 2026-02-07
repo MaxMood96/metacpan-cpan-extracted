@@ -4,12 +4,12 @@
 
 =head1 NAME
 
-Marlin::Manual::Comparison - comparing Moo, Moose, and C<class> with Marlin
+Marlin::Manual::Comparison - comparing Moo, Moose, C<class>, and Marlin
 
 =head1 EXAMPLES
 
 This section shows the same class hierarchy written with Moo, Moose,
-the Perl C<class> keyword, Marlin, and old-school blessed hashrefs.
+the Perl C<class> keyword, and Marlin.
 
 =head2 Moo
 
@@ -173,108 +173,6 @@ be extremely slow.
     __PACKAGE__->meta->make_immutable;
   }
 
-=head2 Class::Tiny
-
-Class::Tiny's constructors aren't strict, so here we're using a C<BUILD>
-method in the NamedThing class to enforce strictness. Superclasses can
-override C<EXPECTED_KEYS> to indicate what additional keys the constructor
-should allow.
-
-  use v5.20.0;
-  use experimental 'signatures';
-  use Types::Common -lexical, -types, -assert;
-  
-  push @Local::Example::ALL, 'Local::Example::Tiny';
-  
-  package Local::Example::Tiny::NamedThing {
-    use Class::Tiny { name => sub { die "Name is required" } };
-    
-    sub EXPECTED_KEYS {
-      return qr/\A(name)\z/;
-    }
-    
-    sub BUILD ( $self, $args ) {
-      my $expected = $self->EXPECTED_KEYS;
-      die if grep !/$expected/, keys %$args;
-      
-      assert_Str( $args->{name} );
-    }
-  }
-  
-  package Local::Example::Tiny::DoesIntro {
-    use Role::Tiny;
-    
-    requires 'name';
-    
-    sub introduction ( $self ) {
-      return sprintf( "Hi, my name is %s!", $self->name );
-    }
-  }
-  
-  package Local::Example::Tiny::Person {
-    use parent -norequire, 'Local::Example::Tiny::NamedThing';
-    use Class::Tiny 'age';
-    
-    use Role::Tiny::With;
-    with 'Local::Example::Tiny::DoesIntro';
-    
-    sub has_age ( $self ) {
-      exists $self->{age};
-    }
-    
-    sub EXPECTED_KEYS {
-      return qr/\A(name|age)\z/;
-    }
-  }
-  
-  package Local::Example::Tiny::Employee {
-    use parent -norequire, 'Local::Example::Tiny::Person';
-    use Class::Tiny { employee_id => sub { "Employee id is required" } };
-    
-    sub EXPECTED_KEYS {
-      return qr/\A(name|age|employee_id)\z/;
-    }
-  }
-  
-  package Local::Example::Tiny::Employee::Developer {
-    use parent -norequire, 'Local::Example::Tiny::Employee';
-    
-    sub _languages;
-    use Class::Tiny { '_languages' => sub { [] } };
-    
-    sub get_languages ( $self ) {
-      $self->{_languages} //= [];
-    }
-     
-    sub clear_languages ( $self ) {
-      delete $self->{_languages};
-    }
-    
-    use Sub::HandlesVia 'delegations';
-    
-    delegations(
-      attribute   => [ 'get_languages', '{_languages}' ],
-      handles_via => 'Array',
-      handles     => {
-        add_language  => 'push',
-        all_languages => 'elements',
-      }
-    );
-    
-    signature_for add_language => (
-      method => !!1,
-      pos    => [ Str ],
-    );
-    
-    sub introduction ( $self, @args ) {
-      my $orig = $self->next::method( @args );
-      if ( my @lang = $self->all_languages ) {
-        return sprintf( "%s I know: %s.", $orig, join q[, ], @lang );
-      }
-      return $orig;
-    }
-  }
-
 =head2 The core C<class> keyword
 
   use v5.40.0;
@@ -403,220 +301,6 @@ should allow.
     };
   }
 
-=head2 Old-School Perl
-
-This is effectively the same thing in old-school Perl, using C<bless>, etc.
-In practice, most people writing Perl classes without an OO framework would
-leave a lot of this out, especially a lot of the correctness checks in the
-constructors. It would be rare to implement C<BUILD> methods. This also
-includes a homegrown basic implementation of roles.
-
-  use v5.20.0;
-  use experimental 'signatures';
-  
-  package Local::Example::Plain::NamedThing {
-    use mro 'c3';
-    
-    sub new ( $invocant, @args ) {
-      my $class = ref($invocant) || $invocant;
-      my %args = ( @args==1 and ref($args[0]) eq 'HASH' )
-        ? %{shift(@args)}
-        : @args;
-      
-      my $self = bless( {}, $class );
-      
-      die "Expected name" if !exists $args{name};
-      die if ( !defined $args{name} or ref $args{name} );
-      $self->{name} = $args{name};
-      
-      if ( $class eq __PACKAGE__ ) {
-        unless ( $args{__no_BUILD__} ) {
-          our $BUILD_CACHE ||= do {
-            no strict 'refs';
-            my $linear_isa = mro::get_linear_isa($class);
-            [
-              map { ( *{$_}{CODE} ) ? ( *{$_}{CODE} ) : () }
-              map { "$_\::BUILD" }
-              reverse @$linear_isa
-            ];
-          };
-          $_->( $self, \%args ) for $BUILD_CACHE->@*;
-        }
-        my @unknown = grep !/\A(?:name)\z/, keys %args;
-        die "Unknown parameters: @unknown" if @unknown;
-      }
-      
-      return $self;
-    }
-    
-    sub name ( $self ) {
-      return $self->{name};
-    }
-  }
-
-  package Local::Example::Plain::DoesIntro {
-    sub introduction ( $self ) {
-      return sprintf( "Hi, my name is %s!", $self->name );
-    }
-    sub WITH ( $role, $target=undef ) {
-      no strict 'refs';
-      $target //= caller;
-      
-      *{"$target\::$_"} = \&{"$role\::$_"} for qw/introduction/;
-      
-      my $next = $target->can('DOES');
-      *{"$target\::DOES"} = sub ( $self, $query ) {
-        $query eq $role or $self->$next( $query );
-      };
-      
-      return;
-    }
-  }
-
-  package Local::Example::Plain::Person {
-    use mro 'c3';
-    use parent -norequire, 'Local::Example::Plain::NamedThing';
-    Local::Example::Plain::DoesIntro->WITH;
-
-    sub new ( $invocant, @args ) {
-      my $class = ref($invocant) || $invocant;
-      my %args = ( @args==1 and ref($args[0]) eq 'HASH' )
-        ? %{shift(@args)}
-        : @args;
-      
-      my $self = $invocant->SUPER::new( %args, __no_BUILD__ => 1 );
-      
-      $self->{age} = $args{age} if exists $args{age};
-      
-      if ( $class eq __PACKAGE__ ) {
-        unless ( $args{__no_BUILD__} ) {
-          our $BUILD_CACHE ||= do {
-            no strict 'refs';
-            my $linear_isa = mro::get_linear_isa($class);
-            [
-              map { ( *{$_}{CODE} ) ? ( *{$_}{CODE} ) : () }
-              map { "$_\::BUILD" }
-              reverse @$linear_isa
-            ];
-          };
-          $_->( $self, \%args ) for $BUILD_CACHE->@*;
-        }
-        my @unknown = grep !/\A(?:name|age)\z/, keys %args;
-        die "Unknown parameters: @unknown" if @unknown;
-      }
-      
-      return $self;
-    }
-    
-    sub age ( $self ) {
-      return $self->{age};
-    }
-    
-    sub has_age ( $self ) {
-      return exists $self->{age};
-    }
-  }
-
-  package Local::Example::Plain::Employee {
-    use mro 'c3';
-    use parent -norequire, 'Local::Example::Plain::Person';
-    
-    sub new ( $invocant, @args ) {
-      my $class = ref($invocant) || $invocant;
-      my %args = ( @args==1 and ref($args[0]) eq 'HASH' )
-        ? %{shift(@args)}
-        : @args;
-      
-      my $self = $invocant->SUPER::new( %args, __no_BUILD__ => 1 );
-      
-      die "Expected employee_id" if !exists $args{employee_id};
-      $self->{employee_id} = $args{employee_id};
-      
-      if ( $class eq __PACKAGE__ ) {
-        unless ( $args{__no_BUILD__} ) {
-          our $BUILD_CACHE ||= do {
-            no strict 'refs';
-            my $linear_isa = mro::get_linear_isa($class);
-            [
-              map { ( *{$_}{CODE} ) ? ( *{$_}{CODE} ) : () }
-              map { "$_\::BUILD" }
-              reverse @$linear_isa
-            ];
-          };
-          $_->( $self, \%args ) for $BUILD_CACHE->@*;
-        }
-        my @unknown = grep !/\A(?:name|age|employee_id)\z/, keys %args;
-        die "Unknown parameters: @unknown" if @unknown;
-      }
-      
-      return $self;
-    }
-    
-    sub employee_id ( $self ) {
-      return $self->{employee_id};
-    }
-  }
-
-  package Local::Example::Plain::Employee::Developer {
-    use mro 'c3';
-    use parent -norequire, 'Local::Example::Plain::Employee';
-
-    sub new ( $invocant, @args ) {
-      my $class = ref($invocant) || $invocant;
-      my %args = ( @args==1 and ref($args[0]) eq 'HASH' )
-        ? %{shift(@args)}
-        : @args;
-      
-      my $self = $invocant->SUPER::new( %args, __no_BUILD__ => 1 );
-      
-      if ( $class eq __PACKAGE__ ) {
-        unless ( $args{__no_BUILD__} ) {
-          our $BUILD_CACHE ||= do {
-            no strict 'refs';
-            my $linear_isa = mro::get_linear_isa($class);
-            [
-              map { ( *{$_}{CODE} ) ? ( *{$_}{CODE} ) : () }
-              map { "$_\::BUILD" }
-              reverse @$linear_isa
-            ];
-          };
-          $_->( $self, \%args ) for $BUILD_CACHE->@*;
-        }
-        my @unknown = grep !/\A(?:name|age|employee_id)\z/, keys %args;
-        die "Unknown parameters: @unknown" if @unknown;
-      }
-      
-      return $self;
-    }
-    
-    sub get_languages ( $self ) {
-      $self->{_languages} //= [];
-    }
-    
-    sub clear_languages ( $self ) {
-      delete $self->{_languages};
-    }
-    
-    sub add_language ( $self, @langs ) {
-      for my $lang ( @langs ) {
-        die if ( !defined $lang or ref $lang );
-      }
-      push $self->get_languages->@*, @langs;
-    }
-    
-    sub all_languages ( $self ) {
-      return $self->get_languages->@*;
-    }
-    
-    sub introduction ( $self, @args ) {
-      my $orig = $self->SUPER::introduction( @args );
-      if ( my @lang = $self->all_languages ) {
-        return sprintf( "%s I know: %s.", $orig, join q[, ], @lang );
-      }
-      return $orig;
-    }
-  }
-
 =head1 BENCHMARKS
 
 I wrote three simple coderefs to test the constructor, accessors, and
@@ -686,80 +370,98 @@ The full benchmarking script is included in the distribution tarball,
 so you can run it on your own machine. Exact speeds will depend on your
 hardware and environment.
 
-  [[ CONSTRUCTORS ]]
-           Rate   Tiny  Plain    Moo  Moose Marlin   Core
-  Tiny   1317/s     --    -2%   -48%   -53%   -54%   -72%
-  Plain  1340/s     2%     --   -47%   -53%   -53%   -72%
-  Moo    2527/s    92%    89%     --   -11%   -12%   -47%
-  Moose  2828/s   115%   111%    12%     --    -2%   -40%
-  Marlin 2873/s   118%   114%    14%     2%     --   -39%
-  Core   4727/s   259%   253%    87%    67%    65%     --
+  [[ COMPLEX CONSTRUCTORS ]]
+           Rate  Plain   Tiny    Moo  Moose   Core  Mouse Marlin
+  Plain  1274/s     --    -5%   -49%   -56%   -73%   -78%   -81%
+  Tiny   1334/s     5%     --   -47%   -54%   -72%   -77%   -80%
+  Moo    2511/s    97%    88%     --   -13%   -48%   -58%   -63%
+  Moose  2875/s   126%   115%    14%     --   -40%   -51%   -57%
+  Core   4799/s   277%   260%    91%    67%     --   -19%   -28%
+  Mouse  5910/s   364%   343%   135%   106%    23%     --   -12%
+  Marlin 6699/s   426%   402%   167%   133%    40%    13%     --
   
-  [[ ACCESSORS ]]
-            Rate   Tiny  Moose  Plain   Core    Moo Marlin
-  Tiny   17345/s     --    -1%    -3%    -7%   -36%   -45%
-  Moose  17602/s     1%     --    -2%    -6%   -35%   -44%
-  Plain  17893/s     3%     2%     --    -4%   -34%   -44%
-  Core   18732/s     8%     6%     5%     --   -31%   -41%
-  Moo    27226/s    57%    55%    52%    45%     --   -14%
-  Marlin 31688/s    83%    80%    77%    69%    16%     --
+  [[ COMPLEX ACCESSORS ]]
+            Rate  Moose   Core  Plain   Tiny    Moo Marlin  Mouse
+  Moose  17965/s     --    -8%    -9%   -11%   -48%   -58%   -62%
+  Core   19504/s     9%     --    -1%    -3%   -44%   -54%   -59%
+  Plain  19746/s    10%     1%     --    -2%   -43%   -54%   -58%
+  Tiny   20197/s    12%     4%     2%     --   -42%   -53%   -58%
+  Moo    34600/s    93%    77%    75%    71%     --   -19%   -27%
+  Marlin 42666/s   137%   119%   116%   111%    23%     --   -10%
+  Mouse  47574/s   165%   144%   141%   136%    37%    12%     --
   
-  [[ DELEGATIONS ]]
-           Rate   Tiny   Core  Plain  Moose    Moo Marlin
-  Tiny    675/s     --   -56%   -57%   -59%   -61%   -61%
-  Core   1518/s   125%     --    -4%    -8%   -13%   -13%
-  Plain  1581/s   134%     4%     --    -4%    -9%   -10%
-  Moose  1642/s   143%     8%     4%     --    -5%    -6%
-  Moo    1736/s   157%    14%    10%     6%     --    -1%
-  Marlin 1752/s   160%    15%    11%     7%     1%     --
+  [[ COMPLEX DELEGATIONS ]]
+           Rate   Tiny  Mouse  Plain    Moo Marlin   Core  Moose
+  Tiny    792/s     --   -30%   -55%   -55%   -56%   -56%   -59%
+  Mouse  1131/s    43%     --   -36%   -36%   -37%   -38%   -42%
+  Plain  1767/s   123%    56%     --    -1%    -2%    -2%    -9%
+  Moo    1777/s   124%    57%     1%     --    -1%    -2%    -9%
+  Marlin 1801/s   128%    59%     2%     1%     --    -1%    -8%
+  Core   1810/s   129%    60%     2%     2%     1%     --    -7%
+  Moose  1950/s   146%    72%    10%    10%     8%     8%     --
   
-  [[ COMBINED ]]
-           Rate   Tiny  Plain   Core  Moose    Moo Marlin
-  Tiny    545/s     --   -48%   -56%   -58%   -60%   -64%
-  Plain  1051/s    93%     --   -16%   -19%   -22%   -31%
-  Core   1249/s   129%    19%     --    -4%    -8%   -18%
-  Moose  1304/s   139%    24%     4%     --    -4%   -14%
-  Moo    1355/s   148%    29%     8%     4%     --   -11%
-  Marlin 1519/s   179%    45%    22%    17%    12%     --
+  [[ COMPLEX COMBINED ]]
+           Rate   Tiny  Mouse  Plain    Moo  Moose   Core Marlin
+  Tiny    621/s     --   -42%   -49%   -57%   -58%   -59%   -61%
+  Mouse  1067/s    72%     --   -13%   -26%   -28%   -30%   -33%
+  Plain  1230/s    98%    15%     --   -15%   -17%   -19%   -23%
+  Moo    1450/s   133%    36%    18%     --    -2%    -5%    -9%
+  Moose  1474/s   137%    38%    20%     2%     --    -3%    -8%
+  Core   1520/s   145%    43%    24%     5%     3%     --    -5%
+  Marlin 1599/s   157%    50%    30%    10%     9%     5%     --
 
 =head2 XSUB versus Pure Perl
 
 The following table shows which methods were accellerated via XS.
 
-  ==================================================================
-  Method          Moo     Moose   Tiny    Core    Plain   Marlin 
-  ==================================================================
+  ========================================================================
+  Method          Moo     Moose   Mouse   Tiny    Core    Plain   Marlin 
+  ========================================================================
   [ NamedThing ]
-  new             PP      PP      pp      XS      PP      XS     
-  name            XS      PP      PP      PP      PP      XS     
+  new             PP      PP      XS      pp      XS      PP      XS     
+  name            XS      PP      XS      PP      PP      PP      XS     
+  BUILDALL        pp      pp      xs      pp      --      --      XS     
+  DEMOLISHALL     pp      pp      xs      --      --      --      --     
+  DESTROY         --      PP      XS      pp      --      --      --     
   [ Person ]
-  new             PP      PP      pp      XS      PP      XS     
-  name            xs      pp      pp      pp      pp      XS     
-  age             XS      PP      PP      PP      PP      XS     
-  has_age         XS      PP      PP      PP      PP      XS     
-  introduction    PP      PP      PP      PP      PP      PP     
+  new             PP      PP      XS      pp      XS      PP      XS     
+  name            xs      pp      xs      pp      pp      pp      XS     
+  age             XS      PP      XS      PP      PP      PP      XS     
+  has_age         XS      PP      XS      PP      PP      PP      XS     
+  introduction    PP      PP      PP      PP      PP      PP      PP     
+  BUILDALL        pp      pp      xs      pp      --      --      XS     
+  DEMOLISHALL     pp      pp      xs      --      --      --      --     
+  DESTROY         --      PP      XS      pp      --      --      --     
   [ Employee ]
-  new             PP      PP      pp      XS      PP      XS     
-  name            xs      pp      pp      pp      pp      XS     
-  age             xs      pp      pp      pp      pp      XS     
-  has_age         xs      pp      pp      pp      pp      XS     
-  employee_id     XS      PP      PP      PP      PP      XS     
-  introduction    pp      pp      pp      pp      pp      PP     
+  new             PP      PP      XS      pp      XS      PP      XS     
+  name            xs      pp      xs      pp      pp      pp      XS     
+  age             xs      pp      xs      pp      pp      pp      XS     
+  has_age         xs      pp      xs      pp      pp      pp      XS     
+  employee_id     XS      PP      XS      PP      PP      PP      XS     
+  introduction    pp      pp      pp      pp      pp      pp      PP     
+  BUILDALL        pp      pp      xs      pp      --      --      XS     
+  DEMOLISHALL     pp      pp      xs      --      --      --      --     
+  DESTROY         --      PP      XS      pp      --      --      --     
   [ Employee::Developer ]
-  new             PP      PP      pp      XS      PP      XS     
-  name            xs      pp      pp      pp      pp      XS     
-  age             xs      pp      pp      pp      pp      XS     
-  has_age         xs      pp      pp      pp      pp      XS     
-  employee_id     xs      pp      pp      pp      pp      XS     
-  introduction    PP      PP      PP      PP      PP      PP     
-  get_languages   PP      PP      PP      PP      PP      PP     
-  all_languages   PP      PP      PP      PP      PP      PP     
-  add_language    PP      PP      PP      PP      PP      PP     
-  ==================================================================
+  new             PP      PP      XS      pp      XS      PP      XS     
+  name            xs      pp      xs      pp      pp      pp      XS     
+  age             xs      pp      xs      pp      pp      pp      XS     
+  has_age         xs      pp      xs      pp      pp      pp      XS     
+  employee_id     xs      pp      xs      pp      pp      pp      XS     
+  introduction    PP      PP      PP      PP      PP      PP      PP     
+  get_languages   PP      PP      XS      PP      PP      PP      XS     
+  all_languages   XS      PP      PP      PP      PP      PP      XS     
+  add_language    XS      PP      PP      PP      PP      PP      XS     
+  BUILDALL        pp      pp      xs      pp      --      --      XS     
+  DEMOLISHALL     pp      pp      xs      --      --      --      --     
+  DESTROY         --      PP      XS      pp      --      --      --     
+  ========================================================================
   Key: XS = XSUB, PP = Pure Perl, lowercase = via inheritance.
-  ==================================================================
+  ========================================================================
 
 =head1 SEE ALSO
+
+L<Marlin::Manual::Principles> - general design principles of Marlin.
 
 L<Marlin>.
 

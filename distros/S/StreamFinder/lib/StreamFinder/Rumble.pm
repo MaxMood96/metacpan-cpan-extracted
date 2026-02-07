@@ -323,10 +323,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-Rumble>
 
 L<http://annocpan.org/dist/StreamFinder-Rumble>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-Rumble>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder-Rumble/>
@@ -395,6 +391,7 @@ sub new
 
 	my $self = $class->SUPER::new('Rumble', @_);
 	$DEBUG = $self->{'debug'}  if (defined $self->{'debug'});
+	my $baseURL = 'https://rumble.com';
 
 	$self->{'notrim'} = 0;
 	$self->{'order'} = 'quality';
@@ -449,10 +446,11 @@ sub new
 			my $no_wget = system('wget','-V');
 			unless ($no_wget) {
 				print STDERR "\n..trying wget...\n"  if ($DEBUG);
-				$html = `wget -t 2 -T 20 -O- -o /dev/null \"$url2fetch\" 2>/dev/null `;
+				$html = `wget -t 2 -T 20 -O- -o /dev/null "$url2fetch" 2>/dev/null `;
 			}
 		}
-		if ($html && $html =~ m#(?:class\=video\-item\-\-a\b|\<\/h3\>\s*\<a)([^\>]+)#s) {
+#x		if ($html && $html =~ m#(?:class\=video\-item\-\-a\b|\<\/h3\>\s*\<a)([^\>]+)#s) {
+		if ($html && $html =~ m#\bclass\=\"videostream\_\_link([^\>]+)#s) {
 			my $urldata = $1;
 			($url2 = $1) =~ s#^\/##  if ($urldata =~ m#href\=\"?([^\"\>\s]+)#);
 			print STDERR "---FOUND 1ST EPISODE URL=$url2= IN CHANNEL PAGE, RUN WITH THAT!\n"  if ($DEBUG);
@@ -467,7 +465,8 @@ sub new
 		my $html = '';
 
 		#DEPRECIATED (VIDEO-IDS NOW INCLUDE STUFF BEFORE THE DASH: ($self->{'id'} = $url) =~ s#^.*\-([a-z]\d+)\/?$#$1#;
-		if ($url2fetch =~ m#^https?\:#) {
+		if ($url2fetch =~ m#^(https?\:\/\/[^\/]+)#) {
+			$baseURL = $1;
 			$url2fetch =~ s#\?.*$##  unless ($self->{'notrim'});  #STRIP OFF ANY EXTRA ARGS, IE. "?e2s=blahblah"
 #			$url2fetch .= '.html'  unless ($url2fetch =~ /\.html?$/);  #NEEDED FOR Fauxdacious!
 			$self->{'id'} = $1  if ($url2fetch =~ m#\/([^\/]+)\.html?#);
@@ -478,7 +477,7 @@ sub new
 			$self->{'id'} =~ s#^\-?([^\-\.]+).*$#$1#;
 		} else {
 			$self->{'id'} = $url;
-			$url2fetch = 'https://rumble.com/' . $url . '.html';
+			$url2fetch = "$baseURL/${url}.html";
 		}
 
 		print STDERR "-FETCHING HTML URL=$url2fetch= ID=".$self->{'id'}."=\n"  if ($DEBUG);
@@ -490,7 +489,7 @@ sub new
 			my $no_wget = system('wget','-V');
 			unless ($no_wget) {
 				print STDERR "\n..trying wget...\n"  if ($DEBUG);
-				$html = `wget -t 2 -T 20 -O- -o /dev/null \"$url2fetch\" 2>/dev/null `;
+				$html = `wget -t 2 -T 20 -O- -o /dev/null "$url2fetch" 2>/dev/null `;
 			}
 		}
 		if ($html && $html =~ m#\"embedUrl\"\:\"([^\"]+)#s) {
@@ -508,17 +507,13 @@ sub new
 			$self->{'artist'} =~ s/^\s+//s;
 			$self->{'artist'} =~ s/\s+$//s;
 
-			$self->{'albumartist'} = 'https://rumble.com' . $1  if ($html =~ m#href\=\"([^\"]+)\" rel=author#s);
+			$self->{'albumartist'} = $baseURL . $1  if ($html =~ m#href\=\"([^\"]+)\" rel=author#s);
 
 			$self->{'description'} = $1  if ($html =~ m#\<p\s+class\=\"media\-description\s+media\-description[^\>]*\>(.+?)\<\/p\>#s);
 			$self->{'description'} ||= $1  if ($html =~ m#\"description\"\:\"([^\"]+)#s);
 			$self->{'description'} ||= $1  if ($html =~ m#<meta\s+name\=description\"?\s+content\=\"\:\"([^\"]+)#s);
 			$self->{'description'} ||= $1  if ($html =~ m#<meta\s+property\=\"?og\:description\"?\s+content\=\"\:\"([^\"]+)#s);
 			$self->{'description'} ||= $1  if ($html =~ m#\<meta\s+name\=\"?twitter\:description\"?\s+content\=\"([^\"]+)\"#s);
-			$self->{'description'} = HTML::Entities::decode_entities($self->{'description'});
-			$self->{'description'} = uri_unescape($self->{'description'});
-			$self->{'description'} =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
-			$self->{'description'} =~ s/\<\/?(?:br|p|button)[^\>]*\>/\n/gis;
 			$self->{'description'} =~ s/^\s+//s;
 			$self->{'description'} =~ s/\n\n\n+/\n\n/s;
 			$self->{'description'} =~ s/\s+$//s;
@@ -555,7 +550,7 @@ sub new
 			my $no_wget = system('wget','-V');
 			unless ($no_wget) {
 				print STDERR "\n..trying wget...\n"  if ($DEBUG);
-				$html = `wget -t 2 -T 20 -O- -o /dev/null \"$url2fetch\" 2>/dev/null `;
+				$html = `wget -t 2 -T 20 -O- -o /dev/null "$url2fetch" 2>/dev/null `;
 			}
 		}
 		if ($html) {
@@ -662,7 +657,7 @@ sub new
 		return '';
 	};
 
-	$url = "https://rumble.com/embed/${url}/"  if ($url !~ m#http# && $url !~ m#\-#);
+	$url = "$baseURL/embed/${url}/"  if ($url !~ m#http# && $url !~ m#\-#);
 	my $tried = 0;
 TRYIT:
 	print STDERR "-${tried}(Rumble): URL=$url=\n"  if ($DEBUG);
@@ -692,11 +687,13 @@ TRYIT:
 	foreach my $field (qw(description artist title)) {
 		$self->{$field} = HTML::Entities::decode_entities($self->{$field});
 		$self->{$field} = uri_unescape($self->{$field});
-		$self->{$field} =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/eg;
+		$self->{$field} =~ s/(?:\%|\\[ux\%]?00|\bu00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
+		$self->{$field} =~ s/\\u\d\d\d\d/ /gs;
 	}
 	$self->{'title'} =~ s/\s+\-\s+$self->{'artist'}\s*$//;  #CONVERT "Title - Artist" => "Title"
 	$self->{'iconurl'} ||= $self->{'articonurl'}  if ($self->{'articonurl'});
 	$self->{'imageurl'} = $self->{'iconurl'};
+	$self->{'albumartist'} =~ s#\?.*$##  unless ($self->{'notrim'});  #STRIP OFF ANY EXTRA ARGS, IE. "?e2s=blahblah"
 	$self->{'total'} = $self->{'cnt'};
 	$self->{'Url'} = ($self->{'cnt'} > 0) ? $self->{'streams'}->[0] : '';
 	if ($DEBUG) {

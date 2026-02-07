@@ -1,5 +1,16 @@
 Revision history for Perl extension App-mdee
 
+0.13 2026-02-07T04:10:31Z
+
+    - Add --[no-]rule option for Unicode table borders (│ ├ ┤ ┼ ─)
+    - Remove unused ansi_color import from fix_table_script
+
+0.12 2026-02-06T11:02:50Z
+
+    - Add backtick protection to bold/italic/strike patterns (avoid matching inside inline code)
+    - Add backslash escape handling to strike pattern
+    - Set LESS and LESSANSIENDCHARS defaults for pager support
+
 0.11 2026-02-06T02:08:25Z
 
     - Add -x/--trace option for shell trace mode (set -x)

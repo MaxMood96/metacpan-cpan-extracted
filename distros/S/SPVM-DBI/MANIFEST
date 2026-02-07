@@ -1,0 +1,20 @@
+.gitattributes
+.gitignore
+Changes
+lib/SPVM/DBI.pm
+lib/SPVM/DBI.spvm
+lib/SPVM/DBI/Db.pm
+lib/SPVM/DBI/Db.spvm
+lib/SPVM/DBI/Dr.pm
+lib/SPVM/DBI/Dr.spvm
+lib/SPVM/DBI/St.pm
+lib/SPVM/DBI/St.spvm
+LICENSE
+Makefile.PL
+MANIFEST			This list of files
+MANIFEST.SKIP
+README.md
+t/basic.t
+t/lib/SPVM/TestCase/DBI.spvm
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

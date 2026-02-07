@@ -25,6 +25,11 @@ examples/peek_at_delegations.pl
 examples/test.pl
 lib/Marlin.pm
 lib/Marlin/Attribute.pm
+lib/Marlin/Attribute/SHVToolkit.pm
+lib/Marlin/Manual/Beginning.pod
+lib/Marlin/Manual/BetterAttributes.pod
+lib/Marlin/Manual/BetterMethods.pod
+lib/Marlin/Manual/ClassOptions.pod
 lib/Marlin/Manual/Comparison.pod
 lib/Marlin/Manual/Principles.pod
 lib/Marlin/Role.pm
