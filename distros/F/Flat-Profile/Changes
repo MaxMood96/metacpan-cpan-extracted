@@ -1,0 +1,15 @@
+Revision history for Flat-Profile
+
+0.02 2026-02-07T23:12:47Z
+    - Documentation fixes (POD as source of truth)
+    - Prevent README.md regeneration surprises during release
+    - No functional code changes
+
+0.01  2026-02-07
+    - Initial CPAN release
+    - Streaming CSV/TSV iterator (iter_rows)
+    - Streaming file profiler (profile_file)
+    - Configurable null policies (null_empty, null_tokens)
+    - Ragged row diagnostics (short/long rows; data-row numbering)
+    - Stable report format with metadata (report_version, generated_at, versions)
+

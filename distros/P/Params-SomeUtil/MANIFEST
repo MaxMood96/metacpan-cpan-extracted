@@ -1,0 +1,31 @@
+Changes
+lib/Params/SomeUtil.pm
+LICENSE
+Makefile.PL
+MANIFEST			This list of files
+META.json			Module JSON meta-data (added by MakeMaker)
+META.yml			Module YAML meta-data (added by MakeMaker)
+README
+README.md
+SomeUtil.xs
+t/01_compile.t
+t/02_main.t
+t/03_all.t
+t/04_codelike.t
+t/05_typelike.t
+t/06_invocant.t
+t/07_handle.t
+t/08_driver.t
+t/09_insideout.t
+t/driver/A.pm
+t/driver/B.pm
+t/driver/D.pm
+t/driver/E.pm
+t/driver/F.pm
+t/driver/My_B.pm
+t/handles/handle.txt
+t/handles/readfile.txt
+t/alt.t
+xt/meta.t
+xt/pmv.t
+xt/pod.t

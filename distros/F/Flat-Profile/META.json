@@ -1,0 +1,82 @@
+{
+   "abstract" : "Streaming-first profiling for CSV/TSV flat files",
+   "author" : [
+      "Sergio de Sousa"
+   ],
+   "dynamic_config" : 0,
+   "generated_by" : "Minilla/v3.1.29",
+   "license" : [
+      "gpl_1"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : "2"
+   },
+   "name" : "Flat-Profile",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "xt",
+         "inc",
+         "share",
+         "eg",
+         "examples",
+         "author",
+         "builder"
+      ]
+   },
+   "prereqs" : {
+      "configure" : {
+         "requires" : {
+            "Module::Build::Tiny" : "0.035"
+         }
+      },
+      "develop" : {
+         "requires" : {
+            "Test::CPAN::Meta" : "0",
+            "Test::MinimumVersion::Fast" : "0.04",
+            "Test::PAUSE::Permissions" : "0.07",
+            "Test::Pod" : "1.41",
+            "Test::Spellunker" : "v0.2.7"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "Text::CSV" : "0",
+            "perl" : "5.008001"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "Test::More" : "0.98"
+         }
+      }
+   },
+   "provides" : {
+      "Flat::Profile" : {
+         "file" : "lib/Flat/Profile.pm",
+         "version" : "0.02"
+      },
+      "Flat::Profile::Iterator" : {
+         "file" : "lib/Flat/Profile/Iterator.pm"
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/sergio-desousa/Flat-Profile/issues"
+      },
+      "homepage" : "https://github.com/sergio-desousa/Flat-Profile",
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/sergio-desousa/Flat-Profile.git",
+         "web" : "https://github.com/sergio-desousa/Flat-Profile"
+      }
+   },
+   "version" : "0.02",
+   "x_contributors" : [
+      "Sergio de Sousa <sergio@serso.com>"
+   ],
+   "x_serialization_backend" : "JSON::PP version 4.16",
+   "x_static_install" : 1
+}

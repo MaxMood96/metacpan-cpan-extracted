@@ -7,11 +7,11 @@ use strict;
 use warnings;
 
 package Net::Proxmox::VE;
-$Net::Proxmox::VE::VERSION = '0.43';
-use HTTP::Headers;
-use HTTP::Request::Common qw(GET POST DELETE);
-use JSON::MaybeXS         qw(decode_json);
-use LWP::UserAgent;
+$Net::Proxmox::VE::VERSION = '0.44';
+use HTTP::Headers  ();
+use HTTP::Request::Common ();
+use JSON::MaybeXS  qw(decode_json);
+use LWP::UserAgent ();
 
 use Net::Proxmox::VE::Exception;
 
@@ -104,15 +104,17 @@ sub action {
     my $response;
     if ( $params{method} =~ m/^(PUT|POST)$/ ) {
         $request->uri($url);
-        my $content = join '&', map { $_ . '=' . $params{post_data}->{$_} }
-          sort keys %{ $params{post_data} };
+        my $content = join( '&',
+            map { $_ . '=' . $params{post_data}->{$_} }
+            sort keys %{ $params{post_data} } );
         $request->content($content);
         $response = $ua->request($request);
     }
     if ( $params{method} =~ m/^(GET|DELETE)$/ ) {
         if ( %{ $params{post_data} } ) {
-            my $qstring = join '&', map { $_ . '=' . $params{post_data}->{$_} }
-              sort keys %{ $params{post_data} };
+            my $qstring = join( '&',
+                map { $_ . '=' . $params{post_data}->{$_} }
+                sort keys %{ $params{post_data} } );
             $request->uri("$url?$qstring");
         }
         else {
@@ -121,7 +123,6 @@ sub action {
         $response = $ua->request($request);
     }
     unless ( defined $response ) {
-
         # this shouldnt happen
         Net::Proxmox::VE::Exception->throw(
             'This shouldnt happen. Unknown method: ' . $params{method} );
@@ -171,6 +172,7 @@ sub api_version {
 
 
 sub api_version_check {
+
     my $self = shift or return;
 
     my $data = $self->api_version;
@@ -199,8 +201,7 @@ sub check_login_ticket {
     my $is_valid =
          $ticket->{ticket}
       && $ticket->{CSRFPreventionToken}
-      && $ticket->{username} eq
-      "$self->{params}{username}\@$self->{params}{realm}"
+      && $ticket->{username} eq "$self->{params}{username}\@$self->{params}{realm}"
       && $self->{ticket_timestamp}
       && ( $self->{ticket_timestamp} + $self->{ticket_life} ) > time();
 
@@ -246,19 +247,30 @@ sub debug {
 
 
 sub delete {
+
     my $self = shift or return;
-    my @path = @_    or return;    # using || breaks this
+    my $delete_data;
+    $delete_data = pop
+      if ref $_[-1];
+    my @path = @_ or return; # using || breaks this
 
     if ( $self->nodes ) {
-        return $self->action( path => join( '/', @path ), method => 'DELETE' );
+
+        return $self->action(
+            path      => join( '/', @path ),
+            method    => 'DELETE',
+            post_data => $delete_data
+        );
+
     }
     return;
 }
 
 
 sub _get {
+
     my $self      = shift;
-    my $post_data = pop @_;
+    my $post_data = pop;
     my @path      = @_;
     return $self->action(
         path      => join( '/', @path ),
@@ -268,11 +280,12 @@ sub _get {
 }
 
 sub get {
+
     my $self = shift or return;
     my $post_data;
     $post_data = pop
       if ref $_[-1];
-    my @path = @_ or return;    # using || breaks this
+    my @path = @_ or return;   # using || breaks this
 
     # Calling nodes method here would call get method itself and so on
     # Commented out to avoid an infinite loop
@@ -393,12 +406,12 @@ sub _load_auth {
 
     if ( $params->{password} ) {
         my $password = delete $params->{password}
-          || Net::Proxmox::VE::Exception->throw('password param is required');
+          or Net::Proxmox::VE::Exception->throw('password param is required');
         $self->{'params'}->{'password'} = $password;
         $self->{'params'}->{'realm'}    = $realm;
         $self->{'params'}->{'username'} = $username;
         $self->{'params'}->{'totp'}     = delete $params->{totp}
-            if defined $params->{totp};
+          if defined $params->{totp};
         $self->{'ticket'}               = undef;
         $self->{'ticket_timestamp'}     = undef;
         $self->{'ticket_life'}          = 7200;        # 2 Hours
@@ -408,14 +421,13 @@ sub _load_auth {
     if ( $params->{tokenid} and $params->{secret} ) {
         my $tokenid = delete $params->{tokenid};
         my $secret  = delete $params->{secret};
-        $self->{'pveapitoken'} =
-          sprintf( '%s@%s!%s=%s', $username, $realm, $tokenid, $secret );
+        $self->{'pveapitoken'} = sprintf( '%s@%s!%s=%s', $username, $realm, $tokenid, $secret );
         return 1;
     }
 
     Net::Proxmox::VE::Exception->throw(
-            'Incomplete authentication credentials provided.'
-          . 'Either a password or tokenid and secret must be provided' );
+        'Incomplete authentication credentials provided.'
+        . 'Either a password or tokenid and secret must be provided' );
 
 }
 
@@ -465,7 +477,7 @@ sub new {
 
     my $debug = delete $params{debug};
     my $host  = delete $params{host}
-      || Net::Proxmox::VE::Exception->throw('host param is required');
+      or Net::Proxmox::VE::Exception->throw('host param is required');
     my $port    = delete $params{port}    || $DEFAULT_PORT;
     my $timeout = delete $params{timeout} || $DEFAULT_TIMEOUT;
 
@@ -561,7 +573,7 @@ Net::Proxmox::VE - Pure Perl API for Proxmox Virtual Environment
 
 =head1 VERSION
 
-version 0.43
+version 0.44
 
 =head1 SYNOPSIS
 
@@ -683,8 +695,11 @@ Returns the resultant debug status (perl style true or false)
 
 =head2 delete
 
-An action helper method that just takes a path as an argument and returns the
+An action helper method that takes a path list and delete data as an argument and returns the
 value of action() with the DELETE method
+
+ $obj->delete( @path );
+ $obj->delete( @path, \%delete_data );
 
 =head2 get
 
@@ -855,7 +870,7 @@ Dean Hamstead <dean@fragfest.com.au>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2025 by Dean Hamstead.
+This software is Copyright (c) 2026 by Dean Hamstead.
 
 This is free software, licensed under:
 

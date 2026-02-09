@@ -134,7 +134,6 @@ beamer-reveal-example_files/media/Slides/slide-17.jpg
 beamer-reveal-example_files/media/Slides/slide-18.jpg
 beamer-reveal-example_files/media/Slides/slide-19.jpg
 bin/beamer-reveal.pl
-bin/beamer-reveal.pl~
 dist.ini
 err
 lib/BeamerReveal.pm
@@ -335,7 +334,6 @@ share/templates/html/image-embedded.html
 share/templates/html/image.html
 share/templates/html/main.html
 share/templates/html/note-embedded.html
-share/templates/html/note-embedded.html~
 share/templates/html/note.html
 share/templates/html/still-embedded.html
 share/templates/html/still.html

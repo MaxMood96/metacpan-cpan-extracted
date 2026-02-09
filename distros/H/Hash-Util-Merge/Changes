@@ -1,5 +1,39 @@
 Revision history for Hash-Util-Merge:
 
+v0.3.0    2026-02-07 15:37:41+00:00 Europe/London
+  [Enhancements]
+  - Any number of hashes can be merged.
+
+  - Duplicate keys are not reprocessed.
+
+  [Bugs]
+  - Clean namespace.
+
+  [Documentation]
+  - Improved the discussion of the merge function.
+
+  - Updated copyright year.
+
+  - README.md is buillt using Dist::Zilla UsefulReadme plugin.
+
+  - Replaced INSTALL with section in README.md.
+
+  - Added a LICENSE and SECURITY.md to the distribution.
+
+  - Reorganised POD with a SUPPORT section.
+
+  [Tests]
+  - Changed the module used for MANIFEST testing.
+
+  - Moved author/release tests into the xt directory.
+
+  - Added more author tests.
+
+  - Switched to Test2::V0.
+
+  [Toolchain]
+  - Updated the Dist::Zilla configuration.
+
 v0.2.0    2023-05-24 17:02:55+01:00 Europe/London
   [Incompatible Changes]
   - Bumped minimum version of Perl to v5.14.

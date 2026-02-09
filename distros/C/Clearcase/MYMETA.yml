@@ -21,5 +21,5 @@ requires:
   Carp: '0'
   IPC::Open3: '0'
   Test::More: '0'
-version: '1.01'
+version: '1.02'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

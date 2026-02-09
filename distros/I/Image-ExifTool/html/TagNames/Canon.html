@@ -565,6 +565,11 @@
 <td class=c>-</td>
 <td>--&gt; <a href='Canon.html#RawBurstInfo'>Canon RawBurstInfo Tags</a></td></tr>
 <tr class=b>
+<td title='0x4053 = 16467'>0x4053</td>
+<td>FocusBracketingInfo</td>
+<td class=c>-</td>
+<td>--&gt; <a href='Canon.html#FocusBracketingInfo'>Canon FocusBracketingInfo Tags</a></td></tr>
+<tr>
 <td title='0x4059 = 16473'>0x4059</td>
 <td>LevelInfo</td>
 <td class=c>-</td>
@@ -1951,6 +1956,8 @@ others use a range of 0 to 7 where 0 is no sharpening)</span></span></td></tr>
 </tr><tr><td>61182</td><td>= Canon RF 20mm F1.4 L VCM</td>
 </tr><tr><td>61182</td><td>= Canon RF 85mm F1.4 L VCM</td>
 </tr><tr><td>61182</td><td>= Canon RF 45mm F1.2 STM</td>
+</tr><tr><td>61182</td><td>= Canon RF 7-14mm F2.8-3.5 L FISHEYE STM</td>
+</tr><tr><td>61182</td><td>= Canon RF 14mm F1.4 L VCM</td>
 </tr><tr><td>61491</td><td>= Canon CN-E 14mm T3.1 L F</td>
 </tr><tr><td>61492</td><td>= Canon CN-E 24mm T1.5 L F</td>
 </tr><tr><td>61494</td><td>= Canon CN-E 85mm T1.3 L F</td>
@@ -5834,9 +5841,9 @@ versions 1.0.x, but they may be different for other firmware versions.</p>
 <th>Writable</th><th>Values / <span class=n>Notes</span></th></tr>
 <tr>
 <td class=r title='2157 = 0x86d'>2157</td>
-<td>ShutterCount</td>
-<td class=c>int32u</td>
-<td><span class=s><span class=n>(includes electronic + mechanical shutter)</span></span></td></tr>
+<td>ImageCount</td>
+<td class=c>int16u</td>
+<td>&nbsp;</td></tr>
 </table></td></tr></table></blockquote>
 
 <h2><a name='CameraInfoG5XII'>Canon CameraInfoG5XII Tags</a></h2>
@@ -6774,7 +6781,9 @@ valid for all camera models)</span></span></td></tr>
   <br>326 = Canon RF 24mm F1.4 L VCM
   <br>327 = Canon RF 20mm F1.4 L VCM
   <br>328 = Canon RF 85mm F1.4 L VCM
-  <br>330 = Canon RF 45mm F1.2 STM</span></td></tr>
+  <br>330 = Canon RF 45mm F1.2 STM
+  <br>331 = Canon RF 7-14mm F2.8-3.5 L FISHEYE STM
+  <br>332 = Canon RF 14mm F1.4 L VCM</span></td></tr>
 </table></td></tr></table></blockquote>
 
 <h2><a name='SerialInfo'>Canon SerialInfo Tags</a></h2>
@@ -12057,7 +12066,8 @@ to the one printed on the lens)</span></span></td></tr>
 <td class=c>int32s</td>
 <td><span class=s>0 = Initial Priority
   <br>1 = On Subject
-  <br>2 = Switch Subject</span></td></tr>
+  <br>2 = Switch Subject
+  <br>2147483647 = n/a</span></td></tr>
 <tr class=b>
 <td class=r title='24 = 0x18'>24</td>
 <td>EyeDetection</td>
@@ -12116,6 +12126,53 @@ to the one printed on the lens)</span></span></td></tr>
 <td class=r title='2 = 0x2'>2</td>
 <td>RawBurstImageCount</td>
 <td class=c>int32u</td>
+<td>&nbsp;</td></tr>
+</table></td></tr></table></blockquote>
+
+<h2><a name='FocusBracketingInfo'>Canon FocusBracketingInfo Tags</a></h2>
+<blockquote>
+<table class=frame><tr><td>
+<table class=inner cellspacing=1>
+<tr class=h><th>Index4</th><th>Tag Name</th>
+<th>Writable</th><th>Values / <span class=n>Notes</span></th></tr>
+<tr>
+<td class=r title='1 = 0x1'>1</td>
+<td>FocusBracketing</td>
+<td class=c>int32s</td>
+<td><span class=s>0 = Off
+  <br>1 = On</span></td></tr>
+<tr class=b>
+<td class=r title='2 = 0x2'>2</td>
+<td>FocusBracketingImageCount</td>
+<td class=c>int32s</td>
+<td>&nbsp;</td></tr>
+<tr>
+<td class=r title='3 = 0x3'>3</td>
+<td>FocusBracketingFocusIncrement</td>
+<td class=c>int32s</td>
+<td>&nbsp;</td></tr>
+<tr class=b>
+<td class=r title='4 = 0x4'>4</td>
+<td>FocusBracketingExposureSmoothing</td>
+<td class=c>int32s</td>
+<td><span class=s>0 = Off
+  <br>1 = On</span></td></tr>
+<tr>
+<td class=r title='5 = 0x5'>5</td>
+<td>FocusBracketingDepthComposite</td>
+<td class=c>int32s</td>
+<td><span class=s>0 = Off
+  <br>1 = On</span></td></tr>
+<tr class=b>
+<td class=r title='6 = 0x6'>6</td>
+<td>FocusBracketingCropDepthComposite</td>
+<td class=c>int32s</td>
+<td><span class=s>0 = Off
+  <br>1 = On</span></td></tr>
+<tr>
+<td class=r title='7 = 0x7'>7</td>
+<td>FocusBracketingFlashInterval</td>
+<td class=c>int32s</td>
 <td>&nbsp;</td></tr>
 </table></td></tr></table></blockquote>
 
@@ -12406,7 +12463,7 @@ SX280, and CR3 images from cameras such as the EOS M50.</p>
 
 <hr>
 (This document generated automatically by Image::ExifTool::BuildTagLookup)
-<br><i>Last revised Dec 3, 2025</i>
+<br><i>Last revised Feb 6, 2026</i>
 <p class=lf><a href='index.html'>&lt;-- ExifTool Tag Names</a></p>
 </body>
 </html>

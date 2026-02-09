@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Net::Proxmox::VE::Access;
-$Net::Proxmox::VE::Access::VERSION = '0.43';
+$Net::Proxmox::VE::Access::VERSION = '0.44';
 use parent 'Exporter';
 
 use Net::Proxmox::VE::Exception;
@@ -16,13 +16,28 @@ use JSON::MaybeXS qw(decode_json);
 
 our @EXPORT = qw(
   access
-  access_domains access_groups access_roles
-  create_access_domains create_access_groups create_access_roles create_access_users
-  delete_access_domains delete_access_groups delete_access_roles delete_access_users
-  get_access_domains get_access_groups get_access_roles get_access_users
-  update_access_domains update_access_groups update_access_roles update_access_users
+  access_domains
+  access_groups
+  access_roles
+  create_access_domains
+  create_access_groups
+  create_access_roles
+  create_access_users
+  delete_access_domains
+  delete_access_groups
+  delete_access_roles
+  delete_access_users
+  get_access_domains
+  get_access_groups
+  get_access_roles
+  get_access_users
+  update_access_domains
+  update_access_groups
+  update_access_roles
+  update_access_users
   sync_access_domains
-  get_access_acl update_access_acl
+  get_access_acl
+  update_access_acl
   update_access_password
 );
 
@@ -550,7 +565,7 @@ Net::Proxmox::VE::Access - Functions for the 'access' portion of the API
 
 =head1 VERSION
 
-version 0.43
+version 0.44
 
 =head1 SYNOPSIS
 
@@ -1086,7 +1101,7 @@ Dean Hamstead <dean@fragfest.com.au>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2025 by Dean Hamstead.
+This software is Copyright (c) 2026 by Dean Hamstead.
 
 This is free software, licensed under:
 

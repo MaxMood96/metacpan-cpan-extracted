@@ -1,7 +1,0 @@
-########## feature evalbytes
-use feature 'evalbytes';
----
-use VERSION;
-use feature 'evalbytes';
---- v5.16
-use VERSION;

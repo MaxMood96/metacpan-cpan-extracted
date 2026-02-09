@@ -4,14 +4,14 @@
 - [X] insert speaker notes (graphical)
 - [ ] make filenames of ancillary files unique / not changing
 - [X] make inline version for all media objects
-- [-] finish embed mode (to embed !everything!)
+- [X] finish embed mode (to embed !everything!)
   - [X] embedding of slides and notes
-  - [ ] embedding of animations and stills
-- [ ] fix problem with missing handout progress in stills
+  - [X] embedding of animations and stills (plan uitgewerkt)
+- [X] fix problem with missing handout progress in stills
       (make default handout progress based on pdf progress)
-- [-] enable autoslide option:
+- [X] enable autoslide option:
   - [X] global
   - [X] per slide
-  - [ ] per element
 - [X] nakijken negatieve plaatsing van elementen
   (dit kan zonder problemen)
+- [ ] slide crossing music

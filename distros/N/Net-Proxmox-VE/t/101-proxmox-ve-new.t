@@ -1,4 +1,5 @@
 #!/usr/bin/env perl
+# vim: softtabstop=4 tabstop=4 shiftwidth=4 ft=perl expandtab smarttab
 
 use strict;
 use warnings;
@@ -6,8 +7,10 @@ use v5.10;
 
 use Test::More import =>
   [qw( BAIL_OUT cmp_ok note ok plan require_ok subtest )];
-use IO::Socket::SSL qw( SSL_VERIFY_NONE );
 use Test::Trap;
+
+use lib 't/lib';
+use Test::Helpers qw( $SSL_OPTS );
 
 if (   not $ENV{PROXMOX_USERPASS_TEST_URI}
     or not $ENV{PROXMOX_APITOKEN_TEST_URI} )
@@ -21,7 +24,7 @@ else {
 }
 
 require_ok('Net::Proxmox::VE')
-  or die "# Net::Proxmox::VE not available\n";
+  or BAIL_OUT( "# Net::Proxmox::VE not available\n" );
 
 =head1 ENVIRONMENT
 
@@ -99,12 +102,9 @@ subtest 'User/Password Testing' => sub {
 
     plan tests => 17;
 
-    my ( $user, $pass, $host, $port, $realm ) =
-      $ENV{PROXMOX_USERPASS_TEST_URI} =~
-      m{^(\w+):(\w+)\@([\w\.]+):([0-9]+)/(\w+)$}
-      or BAIL_OUT
-q|PROXMOX_USERPASS_TEST_URI didnt match form 'user:pass@hostname:port/realm'|
-      . "\n";
+    my ( $user, $pass, $host, $port, $realm ) = $ENV{PROXMOX_USERPASS_TEST_URI} =~
+        m{^(\w+):(\w+)\@([\w\.]+):([0-9]+)/(\w+)$}
+      or BAIL_OUT "PROXMOX_USERPASS_TEST_URI didnt match form 'user:pass\@hostname:port/realm\n";
 
     test_all_the_things(
         {
@@ -112,10 +112,7 @@ q|PROXMOX_USERPASS_TEST_URI didnt match form 'user:pass@hostname:port/realm'|
             password => $pass,
             port     => $port,
             realm    => $realm,
-            ssl_opts => {
-                SSL_verify_mode => SSL_VERIFY_NONE,
-                verify_hostname => 0
-            },
+            ssl_opts => $SSL_OPTS,
             username => $user,
         }
     );
@@ -135,12 +132,9 @@ subtest 'API Token Testing' => sub {
 
     plan tests => 15;
 
-    my ( $user, $tokenid, $secret, $host, $port, $realm ) =
-      $ENV{PROXMOX_APITOKEN_TEST_URI} =~
-      m{^(\w+):(\w+)=([A-z0-9\-]+)\@([\w\.]+):([0-9]+)/(\w+)$}
-      or BAIL_OUT
-q|PROXMOX_APITOKEN_TEST_URI didnt match form 'user:tokenid=secret@hostname:port/realm'|
-      . "\n";
+    my ( $user, $tokenid, $secret, $host, $port, $realm ) = $ENV{PROXMOX_APITOKEN_TEST_URI} =~
+        m{^(\w+):(\w+)=([A-z0-9\-]+)\@([\w\.]+):([0-9]+)/(\w+)$}
+      or BAIL_OUT "PROXMOX_APITOKEN_TEST_URI didnt match form 'user:tokenid=secret\@hostname:port/realm\n";
 
     test_all_the_things(
         {
@@ -148,10 +142,7 @@ q|PROXMOX_APITOKEN_TEST_URI didnt match form 'user:tokenid=secret@hostname:port/
             port     => $port,
             realm    => $realm,
             secret   => $secret,
-            ssl_opts => {
-                SSL_verify_mode => SSL_VERIFY_NONE,
-                verify_hostname => 0
-            },
+            ssl_opts => $SSL_OPTS,
             tokenid  => $tokenid,
             username => $user,
         }
@@ -197,8 +188,8 @@ Then use the helper function
 
 =cut
 
-    cmp_ok( $obj->api_version->{release},
-        '>=', 2, 'manually: check remote version is 2+' );
+    cmp_ok( $obj->api_version->{release}, '>=', 2,
+        'manually: check remote version is 2+' );
     ok( $obj->api_version_check, 'helper: check remote version is 2+' );
     note( 'API Version Observed: ' . $obj->api_version->{release} // 'null' );
 

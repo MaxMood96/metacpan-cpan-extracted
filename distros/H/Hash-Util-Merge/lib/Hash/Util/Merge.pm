@@ -4,9 +4,10 @@ use v5.14;
 use warnings;
 
 use Exporter 5.57 ();
-use Sub::Util 1.40 qw( set_prototype );
+use List::Util 1.45 ();
+use Sub::Util 1.45 ();
 
-our $VERSION = 'v0.2.0';
+our $VERSION = 'v0.3.0';
 
 # ABSTRACT: utility functions for merging hashes
 
@@ -35,22 +36,30 @@ sub mergemap {
     my $glob_a = \ *{"${pkg}::a"};
     my $glob_b = \ *{"${pkg}::b"};
 
-    my ($f, $x, $y) = @_;
+    my $f = shift;
+    my $x = shift // { };
 
-    my %r;
+    while (@_) {
 
-    for my $k (keys %$x, keys %$y) {
-        next if exists $r{$k};
-        local *$glob_a = \ $x->{$k};
-        local *$glob_b = \ $y->{$k};
-        $r{$k} = $f->();
+        my $y = shift;
+
+        my %r;
+        for my $k ( List::Util::uniqstr( keys %$x, keys %$y ) ) {
+            next if exists $r{$k};
+            local *$glob_a = \$x->{$k};
+            local *$glob_b = \$y->{$k};
+            $r{$k} = $f->();
+        }
+
+        $x = \%r;
+
     }
 
-    return \%r;
+    return $x;
 }
 
 BEGIN {
-    set_prototype '&$$' => \&mergemap;
+    Sub::Util::set_prototype '&@' => \&mergemap;
 }
 
 
@@ -68,7 +77,9 @@ Hash::Util::Merge - utility functions for merging hashes
 
 =head1 VERSION
 
-version v0.2.0
+version v0.3.0
+
+=for stopwords Anwar mergemap
 
 =head1 SYNOPSIS
 
@@ -92,24 +103,28 @@ None by default.
 
 =head2 mergemap
 
-  $hashref = mergemap { fn($a,$b) } \%a, \%b;
+  $hashref = mergemap { fn($a,$b) } \%a, \%b, \%c ...;
 
-For each key in the hashes C<%a> and C<%b>, this function applies the
-user-supplied function C<fn> to the corresponding values of that key,
-in the resulting hash reference.
+This returns a hash reference whose values are the result of repeatedly applying
+a function to the values from all hashes, for each key.
 
-If a key does not exist in either of the hashes, then it will return
-C<undef>.
+The variables C<$a> and C<$b> refer to the value from the accumulator
+(initialised to the first hash in the list) and the remaining hashes.
 
-=head1 SUPPORT FOR OLDER PERL VERSIONS
+For example,
 
-Since v0.2.0, the this module requires Perl v5.14 or later.
+  my %a = ( x => 5, y => 6 );
+  my %b = ( x => 2, y => 1 );
 
-Future releases may only support Perl versions released in the last ten years.
+  my $c = mergemap { $a - $b } \%a, \%b;
 
-If you need this module on Perl v5.10, please use one of the v0.1.x
-versions of this module.  Significant bug or security fixes may be
-backported to those versions.
+Returns the hash reference
+
+  ( x => 3, y => 5 );
+
+If the hashes do not have the same set of keys, then C<$a> or C<$b>
+will be C<undef> if the key is missing. (There is no means of
+differentiating between a key that exists vs an C<undef> value.)
 
 =head1 KNOWN ISSUES
 
@@ -120,12 +135,15 @@ when merged with a hash that has other keys.
 
 L<Hash::Merge>
 
-=head1 SOURCE
+=head1 SUPPORT
 
-The development version is on github at L<https://github.com/robrwo/Hash-Util-Merge>
-and may be cloned from L<git://github.com/robrwo/Hash-Util-Merge.git>
+Only the latest version of this module will be supported.
 
-=head1 BUGS
+This module requires Perl v5.14 or later.
+
+Future releases may only support Perl versions released in the last ten years.
+
+=head2 Reporting Bugs and Submitting Feature Requests
 
 Please report any bugs or feature requests on the bugtracker website
 L<https://github.com/robrwo/Hash-Util-Merge/issues>
@@ -133,6 +151,14 @@ L<https://github.com/robrwo/Hash-Util-Merge/issues>
 When submitting a bug or request, please include a test-file or a
 patch to an existing test-file that illustrates the bug or desired
 feature.
+
+If the bug you are reporting has security implications which make it inappropriate to send to a public issue tracker,
+then see F<SECURITY.md> for instructions how to report security vulnerabilities.
+
+=head1 SOURCE
+
+The development version is on github at L<https://github.com/robrwo/Hash-Util-Merge>
+and may be cloned from L<git://github.com/robrwo/Hash-Util-Merge.git>
 
 =head1 AUTHOR
 
@@ -151,7 +177,7 @@ Mohammad S Anwar <mohammad.anwar@yahoo.com>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2020-2023 by Robert Rothenberg.
+This software is Copyright (c) 2020-2026 by Robert Rothenberg.
 
 This is free software, licensed under:
 

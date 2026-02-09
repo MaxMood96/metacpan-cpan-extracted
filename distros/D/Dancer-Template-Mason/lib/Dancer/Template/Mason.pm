@@ -1,9 +1,7 @@
 package Dancer::Template::Mason;
-BEGIN {
-  $Dancer::Template::Mason::AUTHORITY = 'cpan:YANICK';
-}
+our $AUTHORITY = 'cpan:YANICK';
 # ABSTRACT: Mason wrapper for Dancer
-$Dancer::Template::Mason::VERSION = '0.004001';
+$Dancer::Template::Mason::VERSION = '0.004002';
 use strict;
 use warnings;
 
@@ -16,6 +14,8 @@ use Moo;
 require FindBin;
 require Dancer::Config;
 
+use experimental qw/ signatures /;
+
 Dancer::Config->import( 'setting' );
 
 extends 'Dancer::Template::Abstract';
@@ -23,10 +23,11 @@ extends 'Dancer::Template::Abstract';
 has _engine => (
     is => 'ro',
     lazy => 1,
-    default => sub {
-        my %config = %{$_[0]->config || {}};
+    default => sub($self) {
+        my %config = %{$self->config || {}};
 
-        delete $config{$_} for qw/ environment location extension /;
+        delete @config{qw/ environment location extension /};
+
         HTML::Mason::Interp->new( %config );
     },
 );
@@ -34,27 +35,26 @@ has _engine => (
 has _root_dir => (
     is => 'rw',
     lazy => 1,
-    default => sub {
-        $_[0]->config->{comp_root} ||= 
+    default => sub($self) {
+        $self->config->{comp_root} ||= 
             setting( 'views' ) || $FindBin::Bin . '/views';
     },
 );
 
-sub _build_name { 'Dancer::Template::Mason' }
+sub _build_name { __PACKAGE__ }
 
 has default_tmpl_ext => (
     is => 'ro',
     lazy => 1,
-    default => sub {
-        $_[0]->config->{extension} || 'mason';
+    default => sub($self) {
+        $self->config->{extension} || 'mason';
     },
 );
 
-sub render {
-    my ($self, $template, $tokens) = @_;
+sub render($self, $template, $tokens) {
 
     my $root_dir = $self->_root_dir;
-    
+
     $template =~ s/^\Q$root_dir//;  # cut the leading path
 
     my $content;
@@ -77,7 +77,7 @@ Dancer::Template::Mason - Mason wrapper for Dancer
 
 =head1 VERSION
 
-version 0.004001
+version 0.004002
 
 =head1 SYNOPSIS
 
@@ -138,7 +138,7 @@ Yanick Champoux <yanick@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2014 by Yanick Champoux.
+This software is copyright (c) 2026, 2010 by Yanick Champoux.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

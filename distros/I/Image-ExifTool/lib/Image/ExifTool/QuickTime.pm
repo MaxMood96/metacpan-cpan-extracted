@@ -49,7 +49,7 @@ use Image::ExifTool qw(:DataAccess :Utils);
 use Image::ExifTool::Exif;
 use Image::ExifTool::GPS;
 
-$VERSION = '3.25';
+$VERSION = '3.29';
 
 sub ProcessMOV($$;$);
 sub ProcessKeys($$$);
@@ -972,6 +972,7 @@ my %userDefined = (
         Binary => 1,
         # note that this may be written and/or deleted, but can't currently be added back again
         Writable => 'undef',
+        WriteLast => 1, # (must come after mdat according to https://developer.android.com/media/platform/motion-photo-format)
     },
     # '35AX'? - seen "AT" (Yada RoadCam Pro 4K dashcam)
     cust => 'CustomInfo', # 70mai A810
@@ -6925,17 +6926,17 @@ my %userDefined = (
         # the 'Triplet' flag tells ProcessMOV() to generate
         # a single tag from the mean/name/data triplet
         Triplet => 1,
-        Hidden => 1,
+        Hidden => 2,
     },
     name => {
         Name => 'Name',
         Triplet => 1,
-        Hidden => 1,
+        Hidden => 2,
     },
     data => {
         Name => 'Data',
         Triplet => 1,
-        Hidden => 1,
+        Hidden => 2,
     },
     # the tag ID's below are composed from "mean/name",
     # but "mean/" is omitted if it is "com.apple.iTunes/":
@@ -10325,7 +10326,7 @@ ItemID:         foreach $id (reverse sort { $a <=> $b } keys %$items) {
                         if ($tag eq 'ipco' and not $$et{IsItemProperty}) {
                             $$et{ItemPropertyContainer} = [ \%dirInfo, $subTable, $proc ];
                             $et->VPrint(0,"$$et{INDENT}\[Process ipco box later]");
-                        } else {
+                        } elsif ($fast < 2 or not $$tagInfo{MakerNotes}) {
                             $et->ProcessDirectory(\%dirInfo, $subTable, $proc);
                         }
                     }
@@ -10546,8 +10547,12 @@ ItemID:         foreach $id (reverse sort { $a <=> $b } keys %$items) {
                 $raf->Seek($seekTo);
             }
             unless ($raf->Seek($seekTo-1) and $raf->Read($buff, 1) == 1) {
-                my $t = PrintableTagID($tag,2);
-                $warnStr = sprintf("Truncated '${t}' data at offset 0x%x", $lastPos);
+                if (pack('N',$size) =~ /^<b[r>]/) { # check for corrupted HEIC file downloaded from heic.digital
+                    $warnStr = sprintf('Extraneous HTML text appended to file at offset 0x%x', $lastPos);
+                } else {
+                    my $t = PrintableTagID($tag,2);
+                    $warnStr = sprintf("Truncated '${t}' data at offset 0x%x", $lastPos);
+                }
                 last;
             }
         }
@@ -10634,7 +10639,7 @@ QTLang: foreach $tag (@{$$et{QTLang}}) {
     }
     # brute force scan for metadata embedded in media data
     # (and process Insta360 trailer if it exists)
-    ScanMediaData($et) if $ee and $topLevel;
+    ScanMediaData($et) if $ee and $topLevel and not $$et{OPTIONS}{FastScan};
 
     # restore any changed options
     $et->Options($_ => $saveOptions{$_}) foreach keys %saveOptions;
@@ -10689,7 +10694,7 @@ information from QuickTime and MP4 video, M4A audio, and HEIC image files.
 
 =head1 AUTHOR
 
-Copyright 2003-2025, Phil Harvey (philharvey66 at gmail.com)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

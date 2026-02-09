@@ -25,6 +25,7 @@ my @files = (
     't/00-compile.t',
     't/00-report-prereqs.dd',
     't/00-report-prereqs.t',
+    't/000-test-helpers.t',
     't/001-proxmox-ve-exception.t',
     't/101-proxmox-ve-new.t',
     't/120-proxmox-ve-access.t',
@@ -40,7 +41,7 @@ my @files = (
     't/author-pod-linkcheck.t',
     't/author-pod-syntax.t',
     't/author-portability.t',
-    't/release-kwalitee.t',
+    't/lib/Test/Helpers.pm',
     't/release-pause-permissions.t',
     't/release-test-legal.t',
     't/release-unused-vars.t'

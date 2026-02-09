@@ -3,7 +3,7 @@
 
 
 package BeamerReveal::Object::BeamerFrame;
-our $VERSION = '20260205.0754'; # VERSION
+our $VERSION = '20260207.2052'; # VERSION
 
 use parent 'BeamerReveal::Object';
 use Carp;
@@ -41,6 +41,7 @@ sub new {
   $self->{animations} = [];
   $self->{stills}     = [];
   $self->{hasnotes}   = 0;
+  $self->{mtoracle}   = MIME::Types->new();
 
   ++$lineCtr;
   for ( my $i = 0; $i < @$lines; ++$i ) {
@@ -81,9 +82,46 @@ sub new {
 }
 
 
-sub makeSlide {
+
+sub extractGenerationContent {
   my $self = shift;
   my ( $i, $mediaManager, $presentation ) = @_;
+
+  my $logger = $BeamerReveal::Log::logger;
+  $logger->log( 2, "- extracting generation content from slide $i" );
+
+  my $generatedContent = {
+			  animations => [],
+			  stills => [],
+			 };
+  
+  #########################
+  # process all animations
+  foreach my $animation (@{$self->{animations}}) {
+    $logger->log( 4, "- extracting animation" );
+    
+    # 1. Generate the animation
+    push @{$generatedContent->{animations}}, $mediaManager->animationRegisterInStore( $animation );
+  }
+
+  #####################
+  # process all stills 
+  foreach my $still (@{$self->{stills}}) {
+    $logger->log( 4, "- adding still" );
+
+    # 1. Generate the animation
+    push @{$generatedContent->{stills}}, $mediaManager->stillRegisterInStore( $still );
+  }
+
+  return $generatedContent;
+}
+
+
+
+
+sub makeSlide {
+  my $self = shift;
+  my ( $i, $mediaManager, $presentation, $generatedContent ) = @_;
 
   my $logger = $BeamerReveal::Log::logger;
   $logger->log( 2, "- making slide $i" );
@@ -116,7 +154,7 @@ sub makeSlide {
       $logger->log( 4, "- adding embedded video" );
       $vTemplate = $templateStore->fetch( 'html', 'video-embedded.html' );
       my ( $mimeType ) = $mediaManager->videoFromStore( $video->{file},
-								       to_embed => 1 );
+							to_embed => 1 );
       $vStamps = { %commonStamps,
 		   VIDEOID          => 'embedded-id-' . $embeddedID++,
 		   VIDEOEMBEDDEDB64 => $videoContent,
@@ -226,7 +264,7 @@ sub makeSlide {
     } else {
       $logger->log( 4, "- adding iframe" );
       $iTemplate = $templateStore->fetch( 'html', 'iframe.html' );
-      my ( $mimeType, $iframeFile ) = $mediaManager->iframeFromStore( $iframe->{file} );
+      my ( undef, $iframeFile ) = $mediaManager->iframeFromStore( $iframe->{file} );
       $iStamps = { %commonStamps,
 		   IFRAME => $iframeFile,
 		 };
@@ -237,50 +275,91 @@ sub makeSlide {
 
   ##################################################
   # process all animations / cannot yet be embedded
+  my $aCounter = 0;
   foreach my $animation (@{$self->{animations}}) {
-    $logger->log( 4, "- adding animation" );
+    my %commonStamps = (X => _topercent( $animation->{x} ),
+			Y => _topercent( $animation->{y} ),
+			W => _topercent( $animation->{width} ),
+			H => _topercent( $animation->{height} ),
+			AUTOPLAY  => exists $animation->{autoplay} ? 'data-autoplay' : '',
+			CONTROLS  => exists $animation->{controls} ? 'controls' : '',
+			LOOP      => exists $animation->{loop} ? 'loop' : '',
+			FIT       => $animation->{fit},
+		       );
     
     my $aTemplate;
     my $aStamps;
-
-    # 1. Generate the animation
-    my $file = $mediaManager->animationFromStore( $animation );
-    
-    # 2. Embed it into the html
-    $aTemplate = $templateStore->fetch( 'html', 'animation.html' );
-    $aStamps =
-      { X => _topercent( $animation->{x} ),
-	Y => _topercent( $animation->{y} ),
-	W => _topercent( $animation->{width} ),
-	H => _topercent( $animation->{height} ),
-	AUTOPLAY  => exists $animation->{autoplay} ? 'data-autoplay' : '',
-	CONTROLS  => exists $animation->{controls} ? 'controls' : '',
-	LOOP      => exists $animation->{loop} ? 'loop' : '',
-	ANIMATION => $file,
-	FIT       => $animation->{fit}
-      };
+    if ( exists $animation->{embed} or $slideEmbed ) {
+      $logger->log( 4, "- adding embedded animation" );
+      $aTemplate = $templateStore->fetch( 'html', 'animation-embedded.html' );
+      my ( $mimeType, $videoContent ) =
+	$mediaManager->animationFromStore( $generatedContent->{animations}->[$aCounter++],
+				      to_embed => 1 );
+      $aStamps =
+	{
+	 %commonStamps,
+	 ANIMATIONID          => 'embedded-id-' . $embeddedID++,
+	 ANIMATIONEMBEDDEDB64 => $videoContent,
+	 MIMETYPE             => $mimeType,
+	 FIT                  => $image->{fit}
+	};
+    }
+    else {
+      $logger->log( 4, "- adding animation: " . $generatedContent->{animations}->[$aCounter] );
+      $aTemplate = $templateStore->fetch( 'html', 'animation.html' );
+      my ( $undef, $file ) =
+	$mediaManager->animationFromStore( $generatedContent->{animations}->[$aCounter++] );
+      
+      $aStamps =
+	{
+	 %commonStamps,
+	 ANIMATION => $file,
+	};
+    }
     $content .= BeamerReveal::TemplateStore::stampTemplate( $aTemplate,
 							    $aStamps );
   }
 
   ##############################################
   # process all stills / cannot yet be embedded
+  my $sCounter = 0;
   foreach my $still (@{$self->{stills}}) {
-    $logger->log( 4, "- adding still" );
+    my %commonStamps = ( X => _topercent( $still->{x} ),
+			 Y => _topercent( $still->{y} ),
+			 W => _topercent( $still->{width} ),
+			 H => _topercent( $still->{height} ),
+			 FIT       => $still->{fit},
+		       );
 
-    # 1. Generate the animation
-    my $file = $mediaManager->stillFromStore( $still );
-    
-    # 2. Embed it into the html
-    my $sTemplate = $templateStore->fetch( 'html', 'still.html' );
-    my $sStamps =
-      { X => _topercent( $still->{x} ),
-	Y => _topercent( $still->{y} ),
-	W => _topercent( $still->{width} ),
-	H => _topercent( $still->{height} ),
-	STILL => $file,
-	FIT       => $still->{fit}
-      };
+    my $sTemplate;
+    my $sStamps;
+    if ( exists $still->{embed} or $slideEmbed ) {
+      $logger->log( 4, "- adding embedded still" );
+      $sTemplate = $templateStore->fetch( 'html', 'still-embedded.html' );
+      my ( $mimeType, $videoContent ) =
+	$mediaManager->stillFromStore( $generatedContent->{stills}->[$sCounter++],
+				       to_embed => 1 );
+      $sStamps =
+	{
+	 %commonStamps,
+	 STILLID          => 'embedded-id-' . $embeddedID++,
+	 STILLEMBEDDEDB64 => $videoContent,
+	 MIMETYPE         => $mimeType,
+	 FIT              => $image->{fit}
+	};
+    }
+    else {
+      $logger->log( 4, "- adding still: " . $generatedContent->{stills}->[$sCounter] );
+      $sTemplate = $templateStore->fetch( 'html', 'still.html' );
+      my ( undef, $file ) =
+	$mediaManager->stillFromStore( $generatedContent->{stills}->[$sCounter++] );
+
+      $sStamps =
+	{
+	 %commonStamps,
+	 STILL => $file,
+	};
+    }
     $content .= BeamerReveal::TemplateStore::stampTemplate( $sTemplate,
 							    $sStamps );
   }
@@ -481,7 +560,7 @@ BeamerReveal::Object::BeamerFrame - BeamerFrame object
 
 =head1 VERSION
 
-version 20260205.0754
+version 20260207.2052
 
 =head1 SYNOPSIS
 
@@ -515,9 +594,35 @@ the beamerframe object
 
 =back
 
+=head2 extractGenerationContent()
+
+  $content = $bf->extractGenerationContent( $i, $mediaManager, $presentation )
+
+extract the content to be generated (animations and stills) from this beamerframe.
+
+=over 4
+
+=item . C<$i>
+
+the number of the slide that is generated; needed because slide number in LaTeX is dubious.
+
+=item . C<$mediaManager>
+
+mediamanager to use, to access all media files (and geneate animations when needed)
+
+=item . C<$presentation>
+
+presentation of wich the slide is a part.
+
+=item . C<$content>
+
+Content to be generated
+
+=back
+
 =head2 makeSlide()
 
-  $html = $bf->makeSlide( $i, $mediaManager, $nofNotes )
+  $html = $bf->makeSlide( $i, $mediaManager, $presentation, $genContent )
 
 generate a HTML slides from this beamerframe.
 
@@ -531,10 +636,13 @@ the number of the slide that is generated; needed because slide number in LaTeX 
 
 mediamanager to use, to access all media files (and geneate animations when needed)
 
-=item . C<$nofNotes>
+=item . C<$presentation>
 
-total number of notes attached to the presentation; needed to zero-pad the node count in the
-filenames of the note-images that are linked.
+presentation of wich the slide is a part.
+
+=item . C<$genContent>
+
+generated content (animations and stills) that belong to the slide.
 
 =item . C<$html>
 

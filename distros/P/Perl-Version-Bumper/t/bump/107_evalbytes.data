@@ -1,0 +1,12 @@
+########## feature evalbytes
+use feature 'evalbytes';
+---
+use VERSION;
+use feature 'evalbytes';
+--- v5.16
+use VERSION;
+########## no feature evalbytes
+no feature 'evalbytes';
+---
+use VERSION;
+no feature 'evalbytes';

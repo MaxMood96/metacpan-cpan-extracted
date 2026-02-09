@@ -1,0 +1,43 @@
+---
+abstract: 'Streaming-first profiling for CSV/TSV flat files'
+author:
+  - 'Sergio de Sousa'
+build_requires:
+  Test::More: '0.98'
+configure_requires:
+  Module::Build::Tiny: '0.035'
+dynamic_config: 0
+generated_by: 'Minilla/v3.1.29, CPAN::Meta::Converter version 2.150010'
+license: gpl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: Flat-Profile
+no_index:
+  directory:
+    - t
+    - xt
+    - inc
+    - share
+    - eg
+    - examples
+    - author
+    - builder
+provides:
+  Flat::Profile:
+    file: lib/Flat/Profile.pm
+    version: '0.02'
+  Flat::Profile::Iterator:
+    file: lib/Flat/Profile/Iterator.pm
+requires:
+  Text::CSV: '0'
+  perl: '5.008001'
+resources:
+  bugtracker: https://github.com/sergio-desousa/Flat-Profile/issues
+  homepage: https://github.com/sergio-desousa/Flat-Profile
+  repository: https://github.com/sergio-desousa/Flat-Profile.git
+version: '0.02'
+x_contributors:
+  - 'Sergio de Sousa <sergio@serso.com>'
+x_serialization_backend: 'CPAN::Meta::YAML version 0.018'
+x_static_install: 1

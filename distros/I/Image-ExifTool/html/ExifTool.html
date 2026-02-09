@@ -761,6 +761,15 @@ effect as a value of 0 for options with numerical values.</p>
     <tr><td valign=top align=right><b>M</b>,&nbsp;<b>m</b>&nbsp;or&nbsp;<b>mph</b></td><td>=&nbsp;mph</td></tr>
     <tr><td valign=top align=right><i>(anything else)</i></td><td>=&nbsp;knots</td></tr>
     </table></td><td align=center>undef</td></tr>
+<tr id="GeoUserTag"><td>GeoUserTag</td><td>Additional user-defined tags to write
+    when geotagging from GPX or CSV files.  Format is '<i>TAG</i>=<i>TOKEN</i>,...'
+    where <i>TAG</i> is an ExifTool tag name (with optional group name), and
+    <i>TOKEN</i> is is the GPX property name or CSV column name.  eg)
+    '<code>Location=desc</code>' will write the Location tag based on value of
+    'desc' in the GPS log file. The tag value is taken from the nearest fix in
+    time.  Multiple tags may be specified using comma separators.</td>
+    <td align=center>String of the form '<i>TAG</i>=<i>TOKEN</i>,...'</td>
+    <td align=center>undef</td></tr>
 <tr id="GlobalTimeShift"><td>GlobalTimeShift</td>
     <td>Time shift to apply to all extracted date/time PrintConv values.  Does
     not affect ValueConv values. When specifying a number of months and/or years
@@ -1068,6 +1077,13 @@ effect as a value of 0 for options with numerical values.</p>
     FileInodeNumber, FileHardLinks, FileUserID, FileGroupID, FileDeviceID,
     FileBlockSize and FileBlockCount.</td>
     <td align=center>0 or 1</td><td align=center>undef</td></tr>
+<tr id="SystemTimeRes"><td>SystemTimeRes</td><td>Number of digits in sub-seconds
+    for system times and some other epoch times.  A value of 0 rounds to the
+    nearest second.  Negative values cause trailing zeros to be removed.  eg) A
+    value of <code>-6</code> returns system times to 6 decimal places with
+    trailing zeros removed. Note that round-off errors may appear starting at
+    the 6th decimal place for some time formats.</td>
+    <td align=center>Any integer</td><td align=center>0</td></tr>
 <tr id="TextOut"><td>TextOut</td><td>Output file for Verbose and HtmlDump options.</td>
     <td align=center>File reference</td><td align=center>\*STDOUT</td></tr>
 <tr id="TimeZone"><td>TimeZone</td><td>Set the time zone for local date/time values. The

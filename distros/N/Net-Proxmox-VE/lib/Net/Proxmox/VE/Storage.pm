@@ -7,15 +7,15 @@ use strict;
 use warnings;
 
 package Net::Proxmox::VE::Storage;
-$Net::Proxmox::VE::Storage::VERSION = '0.43';
+$Net::Proxmox::VE::Storage::VERSION = '0.44';
 use parent 'Exporter';
 
 use Net::Proxmox::VE::Exception;
 
 
-our @EXPORT = qw( storages );
+our @EXPORT = qw( storage );
 
-my $BASEPATH = '/storages';
+my $BASEPATH = '/storage';
 
 
 sub storage {
@@ -128,7 +128,7 @@ Net::Proxmox::VE::Storage - Store object
 
 =head1 VERSION
 
-version 0.43
+version 0.44
 
 =head1 SYNOPSIS
 
@@ -160,9 +160,9 @@ straight to the server API. So garbage-in, garbage-out!
 
 =head1 METHODS
 
-=head2 storages
+=head2 storage
 
-Gets a list of storages (aka the a Storage Index)
+Gets a list of storage (aka the a Storage Index)
 
   @storage = $obj->storage();
 
@@ -344,7 +344,7 @@ Dean Hamstead <dean@fragfest.com.au>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2025 by Dean Hamstead.
+This software is Copyright (c) 2026 by Dean Hamstead.
 
 This is free software, licensed under:
 

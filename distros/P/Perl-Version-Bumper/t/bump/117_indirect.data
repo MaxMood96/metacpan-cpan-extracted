@@ -1,0 +1,38 @@
+########## no feature indirect
+no feature 'indirect';
+---
+use VERSION;
+no feature 'indirect';
+--- v5.36
+use VERSION;
+########## feature indirect
+use feature 'indirect';
+---
+use VERSION;
+--- v5.36
+use VERSION;
+use feature 'indirect';
+########## experimental indirect
+no experimental 'indirect';
+---
+use VERSION;
+no experimental 'indirect';
+--- v5.36
+use VERSION;
+########## feature indirect replaces indirect
+use indirect;
+---
+use VERSION;
+--- v5.36
+use VERSION;
+use feature 'indirect';
+########## no feature indirect replaces no indirect
+no indirect;
+---
+use VERSION;
+no indirect;
+--- v5.32
+use VERSION;
+no feature 'indirect';
+--- v5.36
+use VERSION;

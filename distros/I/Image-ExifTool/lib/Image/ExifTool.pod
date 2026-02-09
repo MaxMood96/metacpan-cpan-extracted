@@ -5,7 +5,7 @@
 #
 # URL:          https://exiftool.org/
 #
-# Legal:        Copyright (c) 2003-2025, Phil Harvey (philharvey66 at gmail.com)
+# Legal:        Copyright (c) 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 #               This library is free software; you can redistribute it and/or
 #               modify it under the same terms as Perl itself.
 #------------------------------------------------------------------------------
@@ -815,6 +815,16 @@ Reference units for writing GPSSpeed when geotagging:
     'M', 'm' or 'mph'   - mph
     <anything else>     - knots (default undef)
 
+=item GeoUserTag
+
+Additional user-defined tags to write when geotagging from GPX or CSV files.
+Format is 'I<TAG>=I<TOKEN>,...' where I<TAG> is an ExifTool tag name (with
+optional group name), and I<TOKEN> is is the GPX property name or CSV column
+name.  eg) C<Location=desc> will write the Location tag based on the value
+of 'desc' in the GPS log file.  The tag value is taken from the nearest fix
+in time.  Multiple tags may be specified using comma separators. Default is
+undef.
+
 =item GlobalTimeShift
 
 Time shift to apply to all extracted date/time PrintConv values.  Does not
@@ -1192,6 +1202,15 @@ structure.
 Flag to extract the following additional File System tags:  FileAttributes,
 FileDeviceNumber, FileInodeNumber, FileHardLinks, FileUserID, FileGroupID,
 FileDeviceID, FileBlockSize and FileBlockCount.
+
+=item SystemTimeRes
+
+Number of digits in sub-seconds for system times and some other epoch times.
+A value of 0 rounds to the nearest second.  Negative values cause trailing
+zeros to be removed.  eg) A value of C<-6> returns system times to 6 decimal
+places with trailing zeros removed. Default is 0, which rounds to the
+nearest second.  Note that round-off errors may appear starting at the 6th
+decimal place for some time formats.
 
 =item TextOut
 
@@ -3045,7 +3064,7 @@ specified by the L</Charset> option.
 
 =head1 AUTHOR
 
-Copyright 2003-2025, Phil Harvey
+Copyright 2003-2026, Phil Harvey
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

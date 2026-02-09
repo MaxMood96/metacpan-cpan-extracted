@@ -2,7 +2,7 @@
 # -*- cperl -*-
 # PODNAME: beamer-reveal.pl
 # ABSTRACT: converts the .rvl file and the corresponding pdf file to a full reveal website
-our $VERSION = '20260205.0754'; # VERSION
+our $VERSION = '20260207.2052'; # VERSION
 
 
 use strict;
@@ -31,6 +31,7 @@ sub unixify;
 ####################################
 
 my $opt_help;
+my $opt_version;
 my $opt_man;
 my $opt_debug;
 my $output_dir;
@@ -39,6 +40,7 @@ my $pdf_dir;
 
 my $result = 
   GetOptions( "help"               => \$opt_help,
+	      "version"            => \$opt_version,
 	      "man"                => \$opt_man,
 	      "debug"              => \$opt_debug,
 	      "output-directory=s" => \$output_dir,
@@ -51,6 +53,11 @@ pod2usage( -exitval => 100, -verbose => 1 ) if ($opt_help);
 pod2usage( -exitval => 101, -verbose => 2 ) if ($opt_man);
 
 my $argument = $ARGV[0] if( @ARGV == 1 );
+
+if ( $opt_version ) {
+  say STDOUT "v${BeamerReveal::VERSION}";
+  exit(0);
+}
 
 pod2usage( -message => "Incorrect number of arguments",
 	   -exitval => 1,
@@ -107,14 +114,6 @@ my $ng_id =
   $logger->registerTask( label    => "Note generation",
 			 progress => 0,
 			 total    => 1 );
-my $proc_id =
-  $logger->registerTask( label    => "Slide processing",
-			 progress => 0,
-			 total    => 1 );
-my $mmcop_id =
-  $logger->registerTask( label    => "Media copying",
-			 progress => 0,
-			 total    => 1 );
 my $mmanimgen_id =
   $logger->registerTask( label    => "Animation generation",
 			 progress => 0,
@@ -123,10 +122,18 @@ my $mmstillgen_id =
   $logger->registerTask( label    => "Still generation",
 			 progress => 0,
 			 total    => 1 );
+my $proc_id =
+  $logger->registerTask( label    => "Slide processing",
+			 progress => 0,
+			 total    => 1 );
+my $mmcop_id =
+  $logger->registerTask( label    => "Media copying",
+			 progress => 0,
+			 total    => 1 );
 my $overall_id =
   $logger->registerTask( label    => "Overall progress",
 			 progress => 0,
-			 total    => 6 );
+			 total    => 8 );
 
 $logger->activate();
 
@@ -165,12 +172,19 @@ for( my $i = 0; $i < @chunks; ++$i ) {
 # parse the file
 
 $logger->log( 0, "- Parsing driver file $rvlFileName" );
-$logger->progress( $overall_id, 1, 'parsing driver file' );
+$logger->progress( $overall_id, 0.25, 'parsing driver file' );
 
 my $factory = BeamerReveal->new();
 
 ## the first chunk needs to be a presentation chunk
 my $presentation = $factory->createFromChunk( $chunks[0], $chunksLineNrs[0] );
+
+my $mediaManager =
+  BeamerReveal::MediaManager->new( $jobname,
+				   $output_dir,
+				   "${jobname}_files",
+				   $presentation->{parameters},
+				   $opt_debug );
 
 ## parse all slides
 my $slides = [];
@@ -179,7 +193,11 @@ eval {
   for( my $i = 1; $i < @chunks; ++$i ) {
     my $object = $factory->createFromChunk( $chunks[$i], $chunksLineNrs[$i] );
     $object->{hasnotes} = ++$nofNotes if( $object->{hasnotes} ); #if notes, add sequence number
-    push @$slides, $object;
+    my $generatedContent = $object->extractGenerationContent( $i, $mediaManager, $presentation );
+    push @$slides, {
+		    slide => $object,
+		    generatedContent => $generatedContent
+		   };
   }
   1;
 } or do {
@@ -187,13 +205,7 @@ eval {
 };
 $presentation->{parameters}->{nofnotes} = $nofNotes;
 
-$logger->progress( $overall_id, 1.5, 'installing boiler plate' );
-my $mediaManager =
-  BeamerReveal::MediaManager->new( $jobname,
-				   $output_dir,
-				   "${jobname}_files",
-				   $presentation->{parameters},
-				   $opt_debug );
+$logger->progress( $overall_id, 0.5, 'installing boiler plate' );
 
 # storing the reveal framework
 $logger->log( 0, "- Installing quarto/reveal.js boilerplate" );
@@ -201,7 +213,7 @@ $mediaManager->revealToStore();
 
 ######################
 # generate all images
-$logger->progress( $overall_id, 2, 'generating backgrounds' );
+$logger->progress( $overall_id, 1, 'generating backgrounds' );
 
 $logger->log( 0, "- Generating the images" );
 my $frameConvertor = BeamerReveal::FrameConverter->new( "$output_dir/${jobname}_files",
@@ -214,7 +226,7 @@ $mediaManager->backgroundsToStore( $frameConvertor->toJPG() );
 
 ##########################
 # geneate the notes pages
-$logger->progress( $overall_id, 3, 'generating notes pages' );
+$logger->progress( $overall_id, 2, 'generating notes pages' );
 
 $logger->log( 0, "- Generating the notes pages" );
 if ( $nofNotes ) {
@@ -231,53 +243,67 @@ else {
   $logger->progress( $ng_id, 1, 'no notes found', 1 );
 }
 
-# here's the plan:
-# - make a class 'embed' option, with possible arguments 'all', 'slides', 'slides and notes'
-# - further implement base64 encoding of slides and notes in BeamerFrame.pm
-# - still have to check all the options to the \media commands for scrutiny
-
-
-######################
-# process the content
-
-
-# generating the content
-$logger->log( 0, "- Processing the presentation" );
-$logger->progress( $overall_id, 4, 'processing presentation' );
-
-my $slideCollection;
-my $i = 0;
-my $nofSlides = @$slides;
-foreach my $slide ( @$slides ) {
-  $logger->progress( $proc_id, $i++, "slide $i/$nofSlides", $nofSlides );
-  $slideCollection .= $slide->makeSlide( $i, $mediaManager, $presentation );
-}
-$logger->progress( $proc_id, $i );
-sleep(5);
-
-
-################################
-# generate the copy back-orders
-$logger->progress( $overall_id, 5, 'media copying' );
-
-$logger->log( 0, "- Collecting all existing media" );
-$mediaManager->processCopyBackOrders( $mmcop_id );
+# here's the plan/issue
+# - creating slidecollection late because we need images and notes to be present for embedding
+# - problem: at that moment, the animation generation and media-copying has not been done yet.
+# - yet, these need to be present also for embedding before we can create the slide collection.
+# Question: can we postpone making the slidecollection until after copying media and generating animations/stills?
+# - problem: MM->mediaFromStore() composes the basic info that is needed for the generation. It is only called
+# - when processing the slidecollection.
+# Possible solution: work in two passes
+# Can we only treat animations/stills and the detection of notes in the first pass?
+# Make a method next to makeSlide() that is extractGenerationContent(), that only treats animations and stills
+# and prepares the backorders with the required info.
+# then we can generate the backorders
+# processs the backorders
+# and go to makeslide.
+# The only issue is that the filenaming using the hamac_sha256_hex may not be unique if the same expand-once
+# command is used in multiple stills and animations... the filename will not be unique
+# the naming needs to be based on the full stamped tex-file instead of on the argument of the \animation command only.
+# remaining issue:
+# _fromStore does a correct job for embedding, but not for the non-embedding, because this
+# tires to coume up with a new filename...
 
 ################################
 # generate the generation back-orders
 
-$logger->progress( $overall_id, 5.25, 'animation generation' );
+$logger->progress( $overall_id, 3, 'animation generation' );
 $logger->log( 0, "- Generating animations" );
 $mediaManager->processAnimationBackOrders( $mmanimgen_id );
 
-$logger->progress( $overall_id, 5.5, 'still generation' );
+$logger->progress( $overall_id, 4, 'still generation' );
 $logger->log( 0, "- Generating stills" );
 $logger->log( 0, "- Generating all new media" );
 $mediaManager->processStillBackOrders( $mmstillgen_id );
 
 ######################
+# process the content
+# generating the content
+$logger->log( 0, "- Processing the presentation" );
+$logger->progress( $overall_id, 5, 'processing presentation' );
+
+my $slideCollection;
+my $i = 0;
+my $nofSlides = @$slides;
+foreach my $object ( @$slides ) {
+  $logger->progress( $proc_id, $i++, "slide $i/$nofSlides", $nofSlides );
+  $slideCollection .= $object->{slide}->makeSlide( $i, $mediaManager, $presentation,
+						   $object->{generatedContent} );
+}
+$logger->progress( $proc_id, $i );
+
+
+################################
+# generate the copy back-orders
+$logger->progress( $overall_id, 6, 'media copying' );
+
+$logger->log( 0, "- Collecting all existing media" );
+$mediaManager->processCopyBackOrders( $mmcop_id );
+
+
+######################
 # write the main file
-$logger->progress( $overall_id, 5.75, 'writing presentation file' );
+$logger->progress( $overall_id, 7, 'writing presentation file' );
 
 $logger->log( 0, "- Producing presentation" );
 
@@ -293,7 +319,7 @@ $oFile->open( ">$oFileName" )
   or $logger->fatal( "Error: cannot write to '$oFileName'" );
 print $oFile
   BeamerReveal::TemplateStore::stampTemplate( $mainTemplate,
-					      { PRODUCER  => "beamer-reveal.pl v${BeamerReveal::VERSION}",
+					      { PRODUCER  => "beamer-reveal.sty $presentation->{parameters}->{latexversion} / beamer-reveal.pl v${BeamerReveal::VERSION}",
 						TITLE     => $presentation->{parameters}->{title},
 						AUTHOR    => $presentation->{parameters}->{author},
 						AUTOSLIDE => $presentation->{parameters}->{autoslide},
@@ -307,7 +333,7 @@ $oFile->close();
 # finally let's create an index.html link
 $logger->log( 2, "- Creating index.html link" );
 link( "$oFileName", "$output_dir/index.html" );
-$logger->progress( $overall_id, 6, 'done' );
+$logger->progress( $overall_id, 8, 'done' );
 
 ########################
 # generate closing line
@@ -334,11 +360,11 @@ beamer-reveal.pl - converts the .rvl file and the corresponding pdf file to a fu
 
 =head1 VERSION
 
-version 20260205.0754
+version 20260207.2052
 
 =head1 SYNOPSIS
 
-beamer-reveal.pl [--help | -h] [--man|-m] <jobname>
+beamer-reveal.pl [options] <jobname>
 
 =head1 DESCRIPTION
 
@@ -369,13 +395,17 @@ beamer-reveal.pl - from beamer slides to reveal presentation
 
 prints help message on standard output
 
+=item B<--version> | B<-v>
+
+prints version number on standard output
+
 =item B<--man> | B<-m>
 
 prints manual page on standard output
 
 =item B<--debug> | B<-d>
 
-runs tool in debug mode (i.e. no file cleaning in \jobname_files/meda)
+runs tool in debug mode (i.e. no file cleaning in \jobname_files/media and for the notes in your working directory)
 
 =item B<--output-directory> | B<-o>
 

@@ -7,16 +7,16 @@ use strict;
 use warnings;
 
 package Net::Proxmox::VE::Exception;
-$Net::Proxmox::VE::Exception::VERSION = '0.43';
+$Net::Proxmox::VE::Exception::VERSION = '0.44';
 
 sub _new {
 
-    my $c     = shift;
-    my %args  = @_;
+    my ($c, %args) = @_;
     my $class = ref($c) || $c;
     my $self  = \%args;
 
     return bless $self, $class;
+
 }
 
 
@@ -70,12 +70,12 @@ Net::Proxmox::VE::Exception - Functions for the 'cluster' portion of the API
 
 =head1 VERSION
 
-version 0.43
+version 0.44
 
 =head1 SYNOPSIS
 
-    use Net::Proxmox::VE::Exception;
-    Net::Proxmox::VE::Exception->throw( "What went wrong" )
+  use Net::Proxmox::VE::Exception;
+  Net::Proxmox::VE::Exception->throw( "What went wrong" )
 
 =head1 INTERNAL METHODS
 
@@ -92,25 +92,25 @@ Any argument will be included in the object.
 
 The exception details as human readable string
 
-    $obj->as_string()
+  $obj->as_string()
 
 =head2 file
 
 File that called the function
 
-    $obj->file()
+  $obj->file()
 
 =head2 line
 
 Line in the file that called the function
 
-    $obj->line()
+  $obj->line()
 
 =head2 message
 
 Message why the exception occured
 
-    $obj->message()
+  $obj->message()
 
 =head2 throw
 
@@ -118,9 +118,9 @@ This is intended as the public interface.
 
 To be used like this
 
-    use Net::Proxmox::VE::Exception;
-    Net::Proxmox::VE::Exception->throw( "message")
-    Net::Proxmox::VE::Exception->throw( { message => "message" } )
+  use Net::Proxmox::VE::Exception;
+  Net::Proxmox::VE::Exception->throw( "message")
+  Net::Proxmox::VE::Exception->throw( { message => "message" } )
 
 =head1 SEE ALSO
 
@@ -132,7 +132,7 @@ Dean Hamstead <dean@fragfest.com.au>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2025 by Dean Hamstead.
+This software is Copyright (c) 2026 by Dean Hamstead.
 
 This is free software, licensed under:
 

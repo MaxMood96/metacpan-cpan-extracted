@@ -1,7 +1,0 @@
-########## feature current_sub
-use feature 'current_sub';
----
-use VERSION;
-use feature 'current_sub';
---- v5.16
-use VERSION;

@@ -88,7 +88,7 @@ sub ProcessCTMD($$$);
 sub ProcessExifInfo($$$);
 sub SwapWords($);
 
-$VERSION = '5.00';
+$VERSION = '5.03';
 
 # Note: Removed 'USM' from 'L' lenses since it is redundant - PH
 # (or is it?  Ref 32 shows 5 non-USM L-type lenses)
@@ -645,6 +645,8 @@ $VERSION = '5.00';
    '61182.64' => 'Canon RF 20mm F1.4 L VCM', #42
    '61182.65' => 'Canon RF 85mm F1.4 L VCM', #github350
    '61182.66' => 'Canon RF 45mm F1.2 STM', #42
+   '61182.67' => 'Canon RF 7-14mm F2.8-3.5 L FISHEYE STM', #42
+   '61182.68' => 'Canon RF 14mm F1.4 L VCM', #42
     65535 => 'n/a',
 );
 
@@ -2165,6 +2167,13 @@ my %offOn = ( 0 => 'Off', 1 => 'On' );
         }
     },
   # 0x4049 - related to croping (forum13491) - "8 0 0 0" = no crop, "8 1 0 1" = crop enabled
+    0x4053 => { #github380
+        Name => 'FocusBracketingInfo',
+        SubDirectory => {
+            Validate => 'Image::ExifTool::Canon::Validate($dirData,$subdirStart,$size)',
+            TagTable => 'Image::ExifTool::Canon::FocusBracketingInfo',
+        }
+    },
     0x4059 => { #forum16111
         Name => 'LevelInfo',
         SubDirectory => {
@@ -4806,13 +4815,9 @@ my %ciMaxFocal = (
     PRIORITY => 0,
     GROUPS => { 0 => 'MakerNotes', 2 => 'Camera' },
     NOTES => 'CameraInfo tags for the EOS R6 Mark II.',
-    0x086d => { #forum17745
-        Name => 'ShutterCount',
-        Format => 'int32u',
-        # (upper 2 bytes are currently unknown for this tag in JPEG images --
-        #  we need samples ideally spanning the 65536 count)
-        RawConv => '$$self{PATH}[2] eq "UUID-Canon" ? $val : $val & 0xffff',
-        Notes => 'includes electronic + mechanical shutter',
+    0x086d => { #forum17745 (+ private email)
+        Name => 'ImageCount', # (resets to 0 when SD card is formatted)
+        Format => 'int16u',
     },
 );
 
@@ -7078,6 +7083,8 @@ my %ciMaxFocal = (
             327 => 'Canon RF 20mm F1.4 L VCM', #42
             328 => 'Canon RF 85mm F1.4 L VCM', #42/github350
             330 => 'Canon RF 45mm F1.2 STM', #42
+            331 => 'Canon RF 7-14mm F2.8-3.5 L FISHEYE STM', #42
+            332 => 'Canon RF 14mm F1.4 L VCM', #42
             # Note: add new RF lenses to %canonLensTypes with ID 61182
         },
     },
@@ -9397,6 +9404,7 @@ my %filterConv = (
             0 => 'Initial Priority',
             1 => 'On Subject',
             2 => 'Switch Subject',
+            0x7fffffff => 'n/a',
         },
     },
     24 => { #forum16068  #KG extensions for 'left' and 'right'
@@ -9506,6 +9514,33 @@ my %filterConv = (
         PrintConvInv => '$val=~s/\s*mm//;$val',
     },
 
+);
+
+#github380
+%Image::ExifTool::Canon::FocusBracketingInfo = (
+    %binaryDataAttrs,
+    FORMAT => 'int32s',
+    FIRST_ENTRY => 1,
+    GROUPS => { 0 => 'MakerNotes', 2 => 'Camera' },
+    1 => {
+        Name => 'FocusBracketing',
+        PrintConv => \%offOn,
+    },
+    2 => 'FocusBracketingImageCount', # (value: 1-999)
+    3 => 'FocusBracketingFocusIncrement', # (value: 1-10)
+    4 => {
+        Name => 'FocusBracketingExposureSmoothing',
+        PrintConv => \%offOn,
+    },
+    5 => {
+        Name => 'FocusBracketingDepthComposite',
+        PrintConv => \%offOn,
+    },
+    6 => {
+        Name => 'FocusBracketingCropDepthComposite',
+        PrintConv => \%offOn,
+    },
+    7 => 'FocusBracketingFlashInterval', # in seconds
 );
 
 # Canon UUID atoms (ref PH, SX280)
@@ -9697,6 +9732,7 @@ my %filterConv = (
     },
     0x927c => {
         Name => 'MakerNoteCanon',
+        MakerNotes => 1,
         SubDirectory => {
             TagTable => 'Image::ExifTool::Canon::Main',
             ProcessProc => \&Image::ExifTool::ProcessTIFF,
@@ -10052,8 +10088,10 @@ sub PrintLensID(@)
         foreach $lens (@lenses) {
             push @user, $lens if $Image::ExifTool::userLens{$lens};
         }
+        my @tcs = (1, 1.4, 2, 2.8);
+        @tcs = ( $3 ) if $lensModel =~ / \+ ((EXTENDER )?RF)?(\d+(\.\d*)?)x\b/;
         # attempt to determine actual lens
-        foreach $tc (1, 1.4, 2, 2.8) {  # loop through teleconverter scaling factors
+        foreach $tc (@tcs) {  # loop through teleconverter scaling factors
             foreach $lens (@lenses) {
                 next unless $lens =~ /(\d+)(?:-(\d+))?mm.*?(?:[fF]\/?)(\d+(?:\.\d+)?)(?:-(\d+(?:\.\d+)?))?/;
                 # ($1=short focal, $2=long focal, $3=max aperture wide, $4=max aperture tele)
@@ -10068,7 +10106,16 @@ sub PrintLensID(@)
                 }
                 next if abs($shortFocal - $sf * $tc) > 0.9;
                 my $tclens = $lens;
-                $tclens .= " + ${tc}x" if $tc > 1;
+                if ($lens =~ /^(.*) \+ (RF)?(\d+(\.\d*)?)x$/) {
+                    next unless $3 eq $tc;
+                    # remove previous entry if same lens
+                    my $lns = $1;
+                    pop @maybe if @maybe and $maybe[-1] =~ /^$lns/;
+                    pop @likely if @likely and $likely[-1] =~ /^$lns/;
+                    pop @matches if @matches and $matches[-1] =~ /^$lns/;
+                } elsif ($tc > 1) {
+                    $tclens .= " + ${tc}x";
+                }
                 push @maybe, $tclens;
                 next if abs($longFocal  - $lf * $tc) > 0.9;
                 push @likely, $tclens;
@@ -10726,7 +10773,7 @@ Canon maker notes in EXIF information.
 
 =head1 AUTHOR
 
-Copyright 2003-2025, Phil Harvey (philharvey66 at gmail.com)
+Copyright 2003-2026, Phil Harvey (philharvey66 at gmail.com)
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

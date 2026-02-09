@@ -61,11 +61,11 @@ DIRFILESEP = /
 DFSEP = $(DIRFILESEP)
 NAME = Clearcase
 NAME_SYM = Clearcase
-VERSION = 1.01
+VERSION = 1.02
 VERSION_MACRO = VERSION
-VERSION_SYM = 1_01
+VERSION_SYM = 1_02
 DEFINE_VERSION = -D$(VERSION_MACRO)=\"$(VERSION)\"
-XS_VERSION = 1.01
+XS_VERSION = 1.02
 XS_VERSION_MACRO = XS_VERSION
 XS_DEFINE_VERSION = -D$(XS_VERSION_MACRO)=\"$(XS_VERSION)\"
 INST_ARCHLIB = blib/arch
@@ -292,7 +292,7 @@ RCS_LABEL = rcs -Nv$(VERSION_SYM): -q
 DIST_CP = best
 DIST_DEFAULT = tardist
 DISTNAME = Clearcase
-DISTVNAME = Clearcase-1.01
+DISTVNAME = Clearcase-1.02
 
 
 # --- MakeMaker macro section:
@@ -569,7 +569,7 @@ metafile : create_distdir
 	$(NOECHO) $(ECHO) '  Carp: '\''0'\''' >> META_new.yml
 	$(NOECHO) $(ECHO) '  IPC::Open3: '\''0'\''' >> META_new.yml
 	$(NOECHO) $(ECHO) '  Test::More: '\''0'\''' >> META_new.yml
-	$(NOECHO) $(ECHO) 'version: '\''1.01'\''' >> META_new.yml
+	$(NOECHO) $(ECHO) 'version: '\''1.02'\''' >> META_new.yml
 	$(NOECHO) $(ECHO) 'x_serialization_backend: '\''CPAN::Meta::YAML version 0.018'\''' >> META_new.yml
 	-$(NOECHO) $(MV) META_new.yml $(DISTVNAME)/META.yml
 	$(NOECHO) $(ECHO) Generating META.json
@@ -614,7 +614,7 @@ metafile : create_distdir
 	$(NOECHO) $(ECHO) '      }' >> META_new.json
 	$(NOECHO) $(ECHO) '   },' >> META_new.json
 	$(NOECHO) $(ECHO) '   "release_status" : "stable",' >> META_new.json
-	$(NOECHO) $(ECHO) '   "version" : "1.01",' >> META_new.json
+	$(NOECHO) $(ECHO) '   "version" : "1.02",' >> META_new.json
 	$(NOECHO) $(ECHO) '   "x_serialization_backend" : "JSON::PP version 4.16"' >> META_new.json
 	$(NOECHO) $(ECHO) '}' >> META_new.json
 	-$(NOECHO) $(MV) META_new.json $(DISTVNAME)/META.json
@@ -900,7 +900,7 @@ testdb_static :: static pure_all
 # --- MakeMaker ppd section:
 # Creates a PPD (Perl Package Description) for a binary distribution.
 ppd :
-	$(NOECHO) $(ECHO) '<SOFTPKG NAME="Clearcase" VERSION="1.01">' > Clearcase.ppd
+	$(NOECHO) $(ECHO) '<SOFTPKG NAME="Clearcase" VERSION="1.02">' > Clearcase.ppd
 	$(NOECHO) $(ECHO) '    <ABSTRACT>Object oriented interface to Clearcase.</ABSTRACT>' >> Clearcase.ppd
 	$(NOECHO) $(ECHO) '    <AUTHOR>Andrew DeFaria &lt;Andrew@DeFaria.com&gt;</AUTHOR>' >> Clearcase.ppd
 	$(NOECHO) $(ECHO) '    <IMPLEMENTATION>' >> Clearcase.ppd

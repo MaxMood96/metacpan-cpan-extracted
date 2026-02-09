@@ -19,7 +19,7 @@ my %module_build_args = (
     "Dean Hamstead <dean\@fragfest.com.au>"
   ],
   "dist_name" => "Net-Proxmox-VE",
-  "dist_version" => "0.43",
+  "dist_version" => "0.44",
   "license" => "mit",
   "module_name" => "Net::Proxmox::VE",
   "recursive_test_files" => 1,

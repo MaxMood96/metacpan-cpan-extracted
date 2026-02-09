@@ -5,11 +5,11 @@ NAME
 
 VERSION
 
-    version 20260205.0754
+    version 20260207.2052
 
 SYNOPSIS
 
-    beamer-reveal.pl [--help | -h] [--man|-m] <jobname>
+    beamer-reveal.pl [options] <jobname>
 
 DESCRIPTION
 
@@ -38,6 +38,10 @@ OPTIONS
 
       prints help message on standard output
 
+    --version | -v
+
+      prints version number on standard output
+
     --man | -m
 
       prints manual page on standard output
@@ -45,7 +49,7 @@ OPTIONS
     --debug | -d
 
       runs tool in debug mode (i.e. no file cleaning in
-      \jobname_files/meda)
+      \jobname_files/media and for the notes in your working directory)
 
     --output-directory | -o
 

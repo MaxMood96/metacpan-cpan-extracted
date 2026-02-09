@@ -1,28 +1,31 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
+# vim: softtabstop=4 tabstop=4 shiftwidth=4 ft=perl expandtab smarttab
+
 use strict;
 use warnings;
-use Test::More import =>
-  [qw( done_testing is isa_ok like ok require_ok subtest )];
+
+use Test::More import => [qw( BAIL_OUT done_testing is isa_ok like ok require_ok subtest )];
 use Test::Exception;
 
 require_ok('Net::Proxmox::VE::Exception')
-  or die "# Net::Proxmox::VE::Exception not available\n";
+  or BAIL_OUT( "# Net::Proxmox::VE::Exception not available\n" );
 
 my $file = $0;
 
 # Test object creation
 subtest 'Object creation' => sub {
+    my $line = 42;
     my $exception = Net::Proxmox::VE::Exception->_new(
         message => 'Test error',
         file    => 'test.pl',
-        line    => 42
+        line    => $line
     );
 
     isa_ok( $exception, 'Net::Proxmox::VE::Exception',
         'Object is of correct class' );
     is( $exception->message, 'Test error', 'Message is set correctly' );
     is( $exception->file,    'test.pl',    'File is set correctly' );
-    is( $exception->line,    42,           'Line is set correctly' );
+    is( $exception->line,    $line,         'Line is set correctly' );
 };
 
 # Test as_string method
@@ -42,15 +45,16 @@ subtest 'as_string method' => sub {
 
 # Test accessor methods
 subtest 'Accessor methods' => sub {
+    my $line = 99;
     my $exception = Net::Proxmox::VE::Exception->_new(
         message => 'Test error',
         file    => 'test.pl',
-        line    => 42
+        line    => $line
     );
 
     is( $exception->message, 'Test error', 'message accessor' );
     is( $exception->file,    'test.pl',    'file accessor' );
-    is( $exception->line,    42,           'line accessor' );
+    is( $exception->line,    $line,        'line accessor' );
 };
 
 # Test throw method with string argument
@@ -86,10 +90,10 @@ subtest 'Throw with hashref argument' => sub {
     }
     'Throws exception with hashref argument';
 
-    my $exception;
+    my ($line, $exception);
     throws_ok(
         sub {
-            Net::Proxmox::VE::Exception->throw(
+            $line = __LINE__; Net::Proxmox::VE::Exception->throw(
                 {
                     message => 'Test error',
                 }
@@ -102,7 +106,9 @@ subtest 'Throw with hashref argument' => sub {
 
     is( $exception->message, 'Test error', 'Message is set correctly' );
     is( $exception->file,    $file,        'File is set correctly' );
-    is( $exception->line,    92,           'Line is set correctly' );
+    is( $exception->line,    $line,        'Line is set correctly' );
 };
 
 done_testing();
+
+1;

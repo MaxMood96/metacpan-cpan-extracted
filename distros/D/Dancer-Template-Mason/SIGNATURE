@@ -1,5 +1,5 @@
 This file contains message digests of all files listed in MANIFEST,
-signed via the Module::Signature module, version 0.73.
+signed via the Module::Signature module, version 0.93.
 
 To verify the content in this distribution, first make sure you have
 Module::Signature installed, then type:
@@ -12,47 +12,50 @@ the distribution may already have been compromised, and you should
 not run its Makefile.PL or Build.PL.
 
 -----BEGIN PGP SIGNED MESSAGE-----
-Hash: SHA1
+Hash: RIPEMD160
 
-SHA1 8a990ccf3adc8f6dab240ac218edf60ea3fad2ff AUTHOR_PLEDGE
-SHA1 f470c5d7660ebf5e5bf9b19732dd96f19d17ee9f Build.PL
-SHA1 881820b53684f72ec7d37a2153f202b7f17ffe98 CONTRIBUTORS
-SHA1 59a6131e4a3da38aa9780f77a58cf0cde2e13b8f Changes
-SHA1 855212a08c80ca380bef93d1821889107230f8df INSTALL
-SHA1 73f01167fe93f49e71989d82937f26f2b9bb52f2 LICENSE
-SHA1 ffe6bcd6e7ce6baea49a59c2fdc3e3d5a82dd80d MANIFEST
-SHA1 e6fa5b8d6e5f5cb7c099ed2bc061d2e4a71da0bf META.json
-SHA1 b32a35d2e02f20eb0601ac4592655192887657b9 META.yml
-SHA1 3215fa019486c5c5b458fd018c52575cf046c9eb README
-SHA1 51ead77d06926b9d47e5d4f5d972346c9c0d28f8 README.mkdn
-SHA1 834f1086bc640d6e63cae621cf81570b8aa39c2b inc/Devel/AssertOS.pm
-SHA1 66351fdd4353b5147e2d42f4500414a489a14d93 inc/Devel/CheckOS.pm
-SHA1 8a4fadd2468e18f9cb77978a41d089199ace5d9d lib/Dancer/Template/Mason.pm
-SHA1 082ec2258c891f9b65982f711de975eb5c33328c t/00-compile.t
-SHA1 981f8f6aa069e101b0661cd0ad10f650ead127d0 t/00-load.t
-SHA1 ed95580bd587888abf1771a8d700f3386a093c73 t/000-report-versions-tiny.t
-SHA1 e19d10e972676bd73e9515fed961e00bea55e0c9 t/01-basic.t
-SHA1 adbeaa54ad26cbe2f2b8c9de6b4383fc1abbe830 t/apps/Foo/Makefile.PL
-SHA1 48bc96d7f0f92280af20542294089a9eee7589cc t/apps/Foo/bin/app.pl
-SHA1 067f91005653e91e81efdf35cf341a4332ffbb98 t/apps/Foo/lib/Foo.pm
-SHA1 da39a3ee5e6b4b0d3255bfef95601890afd80709 t/apps/Foo/logs/development.log
-SHA1 65a3587fd665bf5063dd22b35c4ac44610a9ddd1 t/apps/Foo/public/404.html
-SHA1 75e50e254bce4d608656d831d493d93c50b187cf t/apps/Foo/public/500.html
-SHA1 36b2401eb7cad2fb4c394205563ae973243480c4 t/apps/Foo/public/css/error.css
-SHA1 1fddd8bf080c4e51e08fe6e5115c13e58f388699 t/apps/Foo/public/css/style.css
-SHA1 0ab12e8a2cb6caa6a96890f921202296a4228305 t/apps/Foo/public/dispatch.cgi
-SHA1 ee989b7cc5adf812098091213cf982cb37daa7b8 t/apps/Foo/public/dispatch.fcgi
-SHA1 65cbff4e9d95d47a6f31d96ab4ea361c1f538a7b t/apps/Foo/public/javascripts/jquery.js
-SHA1 b6721bb8d1ab661336bf4c95b10400df7465f49b t/apps/Foo/views/index.m
-SHA1 a92355b9a5069c26892308d590148046cce084cd t/interp_config-d2.t
-SHA1 bd57ebf95ee95f107f2b9c33f76a935dd2bc9889 t/interp_config.t
-SHA1 5c882b9f7036692d77ea929e10aee9446f89316b t/views/index
-SHA1 b6721bb8d1ab661336bf4c95b10400df7465f49b t/views/index.m
-SHA1 d1fe7d94b3edc7847eb187d4ee41f66e19cf8907 xt/release/unused-vars.t
+SHA256 8dec74095fb4d3e7e4c8540872321a161f4286027259e844aaafb085dcb126ca AUTHOR_PLEDGE
+SHA256 6238bb7d4a4e1028777feb605f4f3253efe2baf2b24635f255a18bc51ea63be7 CODE_OF_CONDUCT.md
+SHA256 b3de4868f6117794e8b47576d1e747d50c9107968b9338b4e99bf1288fea8473 CONTRIBUTING.md
+SHA256 3bdb29d94a69b79f10490c77c28cb0dfd3fcffd6634bc1639428ca14ffe01bda CONTRIBUTORS
+SHA256 bd1b5d3d490971abb5fea21db2da5722c49d1291a4bc2f2a0309ac0c0c1197c3 Changes
+SHA256 508b109b6afd2cd4eb1baa5a8d5ebab10551a77d7a226296db4311ddb253bfae INSTALL
+SHA256 ca003c6be06f81f890200278eaa47469736118448a0e2fc0fe6020083004e0eb LICENSE
+SHA256 57ad2740c42cfb99374063ddc147ea181bb8dad58ad3cf36082c61415225e30c MANIFEST
+SHA256 026bb0bb89f45c42f1e40cb5bcffc6f951e08d45957febcd58a85381f77b6faf META.json
+SHA256 15e475f6db985d5952ddea00035f2e00bba6df56b4535ccc5beee4711f01f32f META.yml
+SHA256 0b5e8dd0151d1bb5f00776ba1f82fd596aa9765775f817ebe68eef40225babd4 Makefile.PL
+SHA256 60083d892c97f714dd37e2527f4c0ba9b6984ad20d397e8b3654909c3e5b318a README.mkdn
+SHA256 96807574ede179ba8e42d77796f670d97a953ef34c267557d23f6ac0ad561ccf SECURITY.md
+SHA256 c30c8e4422996f5b24ce2c30dbec699bbc0052d2ca5d3845364599cd58d10f03 cpanfile
+SHA256 8b840fadb0502f9dde2139da87b1211e4aee49810a3a42971d4b09cc7cf09c26 doap.xml
+SHA256 747859ae60ea87d4ee326f8d3f33801ed3be5a4e230acc092af0e78caa8dc465 inc/Devel/AssertOS.pm
+SHA256 565f180f52c210a31c89cd8e447c7fee93bfb2e96ea513c7edf55390224f9b6f inc/Devel/AssertOS/Alias/MacOS.pm
+SHA256 7a14a7a794e4c3482d0e95f1d18f266b4a09a77800d22de46286b6eb2fb97479 inc/Devel/CheckOS.pm
+SHA256 3c1a6be411dd0b47f120a3f5339678ce3cbb4563c8ac94728489bf64bd89249b lib/Dancer/Template/Mason.pm
+SHA256 6fde9a857b77c92010f6ba5661b6a244e12e14970e0344cea5b7b12653f09bf8 t/00-compile.t
+SHA256 c70b7dbe9bf53536eda9fae3066062bbf2c737e3daee8746d3c174b1b3c1a114 t/00-report-prereqs.dd
+SHA256 5996417e8ae9973f82860dcf6d5f180d285d5c4b046e0346d06ed22802a3452b t/00-report-prereqs.t
+SHA256 2448e3a01aebb921343f13a11a99a3f213841e5d38c6cff8cbc4e801600732a4 t/01-basic.t
+SHA256 a6d3481b97a3d0d1bb83db35c67bc92ab6cc2e20d41d065785417b6a14a5fe6c t/apps/Foo/Makefile.PL
+SHA256 b1cf34279cfdf2ef2e18f1205144bc2991675647205cced69412c5078bc89ccd t/apps/Foo/bin/app.pl
+SHA256 5f8f5b810150d5d41eed064d2210e1954a9678e805c6fc1879f6f5f3e582ba2d t/apps/Foo/lib/Foo.pm
+SHA256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 t/apps/Foo/logs/development.log
+SHA256 7225b925af725a5ec31f5c01b17fdc192d232d465b24b4307eed511000f84aa4 t/apps/Foo/public/404.html
+SHA256 38b1950fe9a4bf20790a9ce7fb3ff3a81923db1672fc16370f831c4f258e8993 t/apps/Foo/public/500.html
+SHA256 3fc1c2f5183e36dce1b107c395b8b2202005abec527e4389d93b7d2256451e55 t/apps/Foo/public/css/error.css
+SHA256 ea98984369248b515249ee7a4bec7938a613477528fdb3dd4ecf242cc77eb6d7 t/apps/Foo/public/css/style.css
+SHA256 07bd0f5fecebc488eb7e81dd072dc402bc01372267d98a0ecab04a98137e3c02 t/apps/Foo/public/dispatch.cgi
+SHA256 cfeee345b6915853071fc054d5bd66fe4abb5805659542083cd318f9307af012 t/apps/Foo/public/dispatch.fcgi
+SHA256 e23a2a4e2d7c2b41ebcdd8ffc0679df7140eb7f52e1eebabf827a88182643c59 t/apps/Foo/public/javascripts/jquery.js
+SHA256 246078ec2823b37deddd4c48c4058bf2b143b7114da7fb765cf941f96f91df92 t/apps/Foo/views/index.m
+SHA256 a5476af9570ad533c0ce4886a5cdc44134e61e9ce95a11b3560d6485eac5bf3f t/interp_config.t
+SHA256 967d96f45a87089025542953b9ead0e3f33d4be2c624d220e016598fa4e4f05b t/views/index
+SHA256 246078ec2823b37deddd4c48c4058bf2b143b7114da7fb765cf941f96f91df92 t/views/index.m
+SHA256 d34f839d8340478663bd6ae59c72760d7e1a2b7a2d4879ad1ec97db1a2271b2f xt/release/unused-vars.t
 -----BEGIN PGP SIGNATURE-----
-Version: GnuPG v1
 
-iEYEARECAAYFAlPvrMgACgkQ34Hwf+GwC4zqIQCgqb0lFLafzxOcjY2xdQuzxmfQ
-ET4AnAiQa2CXD9lVE5+UyubXwPbQcyWF
-=GHS7
+iF0EAREDAB0WIQS4RMr2LZlyA/IlbHHfgfB/4bALjAUCaYdd8gAKCRDfgfB/4bAL
+jM7FAKDLu1MevL629BshxmrcIGjkpJw2pgCg8NaBAkOj13awKrCuwY5QdNnwHzw=
+=XHFt
 -----END PGP SIGNATURE-----

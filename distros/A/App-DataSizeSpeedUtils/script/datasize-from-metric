@@ -1,0 +1,188 @@
+#!perl
+
+use 5.010001;
+use strict;
+use warnings;
+
+use Getopt::Long;
+
+our $AUTHORITY = 'cpan:PERLANCAR'; # AUTHORITY
+our $DATE = '2025-09-24'; # DATE
+our $DIST = 'App-DataSizeSpeedUtils'; # DIST
+our $VERSION = '0.001'; # VERSION
+
+my $prog = $0 =~ /datasize/ ? "datasize-from-metric" : "dataspeed-from-metric";
+
+sub parse_cmdline {
+    Getopt::Long::Configure("gnu_getopt", "no_ignore_case");
+    my $res = GetOptions(
+        'help|h'           => sub {
+            print <<USAGE;
+Usage:
+  $prog [OPTIONS]... [NUMBER]...
+  $prog --help, -h
+  $prog --version, -v
+Options:
+For more details, see the manpage/documentation.
+USAGE
+            exit 0;
+        },
+        'version|v' => sub {
+            print "$prog version ", ($main::VERSION // 'dev'), "\n";
+            exit 0;
+        },
+    );
+    exit 99 if !$res;
+}
+
+sub run {
+    my @numbers;
+    if (@ARGV) {
+        @numbers = @ARGV;
+    } else {
+        while (<>) {
+            chomp;
+            push @numbers, $_;
+        }
+    }
+
+    require Data::Sah::Coerce;
+    my $c = Data::Sah::Coerce::gen_coercer(
+        type               => 'float',
+        coerce_rules       => ['From_str::suffix_' . ($prog eq 'datasize-from-metric' ? 'datasize' : 'dataspeed')],
+    );
+
+    for my $number (@numbers) {
+        print $c->($number), "\n";
+    }
+}
+
+# MAIN
+
+parse_cmdline();
+run();
+
+1;
+# ABSTRACT: Convert number from metric prefix, e.g. '10KB' or '10Kbps' to '1024'
+# PODNAME: datasize-from-metric
+
+__END__
+
+=pod
+
+=encoding UTF-8
+
+=head1 NAME
+
+datasize-from-metric - Convert number from metric prefix, e.g. '10KB' or '10Kbps' to '1024'
+
+=head1 VERSION
+
+This document describes version 0.001 of datasize-from-metric (from Perl distribution App-DataSizeSpeedUtils), released on 2025-09-24.
+
+=head1 SYNOPSIS
+
+ datasize-from-metric [OPTION]... [NUMBER]...
+ echo 'NUMBER' | datasize-from-metric [OPTION]...
+
+ dataspeed-from-metric [OPTION]... [NUMBER]...
+ echo 'NUMBER' | dataspeed-from-metric [OPTION]...
+
+See examples in L</EXAMPLES>.
+
+=head1 DESCRIPTION
+
+=head1 EXIT CODES
+
+0 on success.
+
+255 on I/O error.
+
+99 on command-line options error.
+
+=head1 OPTIONS
+
+=over
+
+=item * --help, -h
+
+Show help message then exit.
+
+=item * --version, -v
+
+Show version then exit.
+
+=back
+
+=head1 FAQ
+
+=head1 EXAMPLES
+
+ # numbers can be specified as command-line arguments ...
+ % datasize-from-metric 10.1KB 9.8MB
+ 10342.4
+ 10276044.8
+
+ % dataspeed-from-metric 13Mbps 1.5Kbps 1.5KB/s
+ 1703936
+ 192
+ 1536
+
+ # ... or read from stdin
+ % echo 10KB | datasize-from-metric
+ 10240
+
+ # undetected format will be re-outputted as-is
+ % echo foo | datasize-from-metric
+ foo
+
+=head1 HOMEPAGE
+
+Please visit the project's homepage at L<https://metacpan.org/release/App-DataSizeSpeedUtils>.
+
+=head1 SOURCE
+
+Source repository is at L<https://github.com/perlancar/perl-App-DataSizeSpeedUtils>.
+
+=head1 SEE ALSO
+
+L<datasize-to-metric>, L<dataspeed-to-metric>.
+
+=head1 AUTHOR
+
+perlancar <perlancar@cpan.org>
+
+=head1 CONTRIBUTING
+
+
+To contribute, you can send patches by email/via RT, or send pull requests on
+GitHub.
+
+Most of the time, you don't need to build the distribution yourself. You can
+simply modify the code, then test via:
+
+ % prove -l
+
+If you want to build the distribution (e.g. to try to install it locally on your
+system), you can install L<Dist::Zilla>,
+L<Dist::Zilla::PluginBundle::Author::PERLANCAR>,
+L<Pod::Weaver::PluginBundle::Author::PERLANCAR>, and sometimes one or two other
+Dist::Zilla- and/or Pod::Weaver plugins. Any additional steps required beyond
+that are considered a bug and can be reported to me.
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is copyright (c) 2025 by perlancar <perlancar@cpan.org>.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=head1 BUGS
+
+Please report any bugs or feature requests on the bugtracker website L<https://rt.cpan.org/Public/Dist/Display.html?Name=App-DataSizeSpeedUtils>
+
+When submitting a bug or request, please include a test-file or a
+patch to an existing test-file that illustrates the bug or desired
+feature.
+
+=cut

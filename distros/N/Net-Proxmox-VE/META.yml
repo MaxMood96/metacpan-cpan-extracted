@@ -28,25 +28,25 @@ name: Net-Proxmox-VE
 provides:
   Net::Proxmox::VE:
     file: lib/Net/Proxmox/VE.pm
-    version: '0.43'
+    version: '0.44'
   Net::Proxmox::VE::Access:
     file: lib/Net/Proxmox/VE/Access.pm
-    version: '0.43'
+    version: '0.44'
   Net::Proxmox::VE::Cluster:
     file: lib/Net/Proxmox/VE/Cluster.pm
-    version: '0.43'
+    version: '0.44'
   Net::Proxmox::VE::Exception:
     file: lib/Net/Proxmox/VE/Exception.pm
-    version: '0.43'
+    version: '0.44'
   Net::Proxmox::VE::Nodes:
     file: lib/Net/Proxmox/VE/Nodes.pm
-    version: '0.43'
+    version: '0.44'
   Net::Proxmox::VE::Pools:
     file: lib/Net/Proxmox/VE/Pools.pm
-    version: '0.43'
+    version: '0.44'
   Net::Proxmox::VE::Storage:
     file: lib/Net/Proxmox/VE/Storage.pm
-    version: '0.43'
+    version: '0.44'
 requires:
   HTTP::Headers: '0'
   HTTP::Request::Common: '0'
@@ -61,7 +61,7 @@ resources:
   bugtracker: https://github.com/djzort/proxmox-ve-api-perl/issues
   homepage: https://github.com/djzort/proxmox-ve-api-perl
   repository: https://github.com/djzort/proxmox-ve-api-perl.git
-version: '0.43'
+version: '0.44'
 x_author_pledge:
   version: 1
 x_contributors:

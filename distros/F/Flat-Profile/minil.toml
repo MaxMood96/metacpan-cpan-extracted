@@ -1,0 +1,11 @@
+name = "Flat-Profile"
+
+# Ensure Minilla generates README.md from the POD you control.
+readme_from  = "lib/Flat/Profile.pm"
+abstract_from = "lib/Flat/Profile.pm"
+authors_from  = "lib/Flat/Profile.pm"
+
+# Enforce your preferred tag style for Minilla-created release tags.
+# (Stops Minilla from tagging "0.02" and uses "v0.02" instead.)
+tag_format = "v%v"
+

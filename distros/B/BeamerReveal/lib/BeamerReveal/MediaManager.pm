@@ -3,7 +3,7 @@
 
 
 package BeamerReveal::MediaManager;
-our $VERSION = '20260205.0754'; # VERSION
+our $VERSION = '20260207.2052'; # VERSION
 
 use strict;
 use warnings;
@@ -213,9 +213,9 @@ sub noteFromStore {
 }
 
 
-sub animationFromStore {
+sub animationRegisterInStore {
   my $self = shift;
-  my ( $animation, %optargs ) = @_;
+  my ( $animation ) = @_;
   
   my $logger = $BeamerReveal::Log::logger;
 
@@ -259,9 +259,16 @@ sub animationFromStore {
 }
 
 
-sub stillFromStore {
+sub animationFromStore {
   my $self = shift;
-  my ( $still, %optargs ) = @_;
+  my ( $animation, %optargs ) = @_;
+  return $self->_rawFromStore( 'Animations', $animation, %optargs );
+}
+
+
+sub stillRegisterInStore {
+  my $self = shift;
+  my ( $still ) = @_;
   
   my $logger = $BeamerReveal::Log::logger;
   
@@ -290,6 +297,14 @@ sub stillFromStore {
       };
   }
   return $fullpathid;
+}
+
+
+
+sub stillFromStore {
+  my $self = shift;
+  my ( $still, %optargs ) = @_;
+  return $self->_rawFromStore( 'Stills', $still, %optargs );
 }
 
 
@@ -509,7 +524,7 @@ sub audioFromStore {
 sub _fromStore {
   my $self = shift;
   my ( $fileType, $fileName, %optargs ) = @_;
-  
+
   my $logger = $BeamerReveal::Log::logger;
   
   my $mimeType = $self->{mtoracle}->mimeTypeOf( $fileName );
@@ -525,6 +540,7 @@ sub _fromStore {
     return ( $mimeType, encode_base64( $file ) );
   } else {
     # find extension
+    $logger->log(0, "### " . $fileName );
     my ( undef, undef, $ext ) = File::Basename::fileparse( $fileName, qr/\.[^.]+$/ );
     
     # create store id
@@ -542,8 +558,32 @@ sub _fromStore {
        from => $fileName,
        to   => $self->{outputdir} . '/' . $fullpathid,
       };
-    
+
     return ( $mimeType, $fullpathid );
+  }
+}
+
+
+  
+sub _rawFromStore {
+  my $self = shift;
+  my ( $fileType, $fileName, %optargs ) = @_;
+
+  my $logger = $BeamerReveal::Log::logger;
+  
+  my $mimeType = $self->{mtoracle}->mimeTypeOf( $fileName );
+  
+  if ( exists $optargs{to_embed} ) {
+    my $file = do {
+      local $/ = undef;
+      open my $fh, "<". $fileName
+	or $logger->fatal( "Cannot open $fileType-file $fileName to read" );
+      <$fh>;
+    };
+    return ( $mimeType, encode_base64( $file ) );
+    
+  } else {
+    return ( $mimeType, $fileName );
   }
 }
 
@@ -742,7 +782,7 @@ BeamerReveal::MediaManager - MediaManager
 
 =head1 VERSION
 
-version 20260205.0754
+version 20260207.2052
 
 =head1 SYNOPSIS
 
@@ -882,11 +922,11 @@ be returned.
 
 =back
 
-=head2 animationFromStore()
+=head2 animationRegisterInStore()
 
-  $path = $mm->animationFromStore( $animation )
+  $path = $mm->animationRegisterInStore( $animation )
 
-Returns the media store path to the animation. If the animation is not yet constructed, it will be put in back order, such that it can be generated later by C<processConstructionBackOrders()>.
+Prepare and register the animation in back order such that it can be generated later by C<processConstructionBackOrders()>.
 
 =over 4
 
@@ -900,9 +940,45 @@ the path of the animation (in the media store)
 
 =back
 
+=head2 animationFromStore()
+
+  $path = $mm->animationFromStore( $animationid )
+
+Returns the media store path to the animationid.
+
+=over 4
+
+=item . C<$animationid>
+
+the $animationod as it was read from the C<.rvl> file.
+
+=item . C<$path>
+
+the path of the animation (in the media store)
+
+=back
+
+=head2 stillRegisterInStore()
+
+  $path = $mm->stillRegisterInStore( $still )
+
+Prepare and register the still in back order such that it can be generated later by C<processConstructionBackOrders()>.
+
+=over 4
+
+=item . C<$still>
+
+the $still object as it was read from the C<.rvl> file.
+
+=item . C<$path>
+
+the path of the still (in the media store)
+
+=back
+
 =head2 stillFromStore()
 
-  $path = $mm->stillFromStore( $still )
+  $path = $mm->stillFromStore( $stillfile )
 
 Returns the media store path to the still. If the still is not yet constructed, it will be put in back order, such that it can be generated later by C<processConstructionBackOrders()>.
 
@@ -990,6 +1066,10 @@ the path to the audio (in the media store)
 =back
 
 =head2 _fromStore()
+
+Helper function; do not use directly.
+
+=head2 _rawFromStore()
 
 Helper function; do not use directly.
 

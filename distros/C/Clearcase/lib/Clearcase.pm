@@ -3,7 +3,7 @@ package Clearcase;
 use strict;
 use warnings;
 
-our $VERSION = '1.01';
+our $VERSION = '1.02';
 
 =pod
 
@@ -757,11 +757,18 @@ Array of output lines from the cleartool command execution.
   if (!$clearpid) {
 
     # Simple check to see if we can execute cleartool
-    @output = `$cleartool -ver 2>&1`;
-    @output = ();
+    eval {
+      no warnings 'exec';
+      @output = `$cleartool -ver 2>&1`;
+    };
 
-    return (-1, 'Clearcase not installed')
-      unless $? == 0;
+    if ($@ or $? != 0) {
+      @output = ();
+      warn "Warning: Clearcase not found on this system\n";
+      return (-1, 'Clearcase not installed');
+    }    # if
+
+    @output = ();
 
     $clearpid = open3 ($clearin, $clearout, $clearout, $cleartool, "-status");
 

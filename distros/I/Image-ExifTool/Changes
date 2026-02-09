@@ -4,8 +4,78 @@ ExifTool Version History
 
 RSS feed: https://exiftool.org/rss.xml
 
-Note: The most recent production release is Version 13.44. (Other versions are
+Note: The most recent production release is Version 13.50. (Other versions are
 considered development releases, and are not uploaded to MetaCPAN.)
+
+Feb. 7, 2026 - Version 13.50 (production release)
+
+  - Added a few new Sony lenses (thanks Jos Roost)
+  - Added a couple of new Canon lenses (thanks Norbert Wasser)
+  - Decode another Samsung trailer tag
+  - Decode BlackLevels from some Canon CRW files (github #387)
+  - Updated Sony maker note decoding for the ILCE-7M5 (thanks Jos Roost)
+  - Patched potential MacOS security issue (thanks Tay Kiat Loong)
+  - Fixed -list options so reading image files beforehand doesn't add tags to
+    the output when running multiple commands using the -execute feature
+
+Feb. 3, 2026 - Version 13.49
+
+  - Decode a couple of new Samsung trailer tags
+  - Disabled decoding of MenuSettings for the Nikon Z6III firmware 2.0 until the
+    changes can be worked through in detail
+  - Fixed problem where Google Photos had problems displaying ExifTool-edited
+    HEIC MotionPhoto images.  Files written by older versions of ExifTool may be
+    repaired by re-writing with 13.49 or later
+
+Jan. 31, 2026 - Version 13.48
+
+  - Added a new Nikon LensID (github #385)
+  - Added support for quoted entries in input -geotag CSV files
+  - Fixed decoding of Nikon Z6III menu settings for firmware 2.0 update
+  - Fixed -fast2 to avoid processing maker notes in some QuickTime-based files
+  - Fixed bug introduced in version 13.46 where some tags may be associated with
+    the next fix when geotagging from GPX files
+
+Jan. 27, 2026 - Version 13.47
+
+  - Enhanced -fast option to avoid scanning QuickTime MediaData for metadata
+    (improves performance when reading CR3 files from slow media, github #384)
+    and -fast2 to avoid reading HDRP maker notes
+  - Fixed hang problem when reading HDRPMakerNotes from some Google phones
+  - API Changes:
+      - Added CSV support to GeoUserTag option
+
+Jan. 25, 2026 - Version 13.46
+
+  - Added a new Pentax LensType
+  - Decode some new Canon tags (github #380)
+  - Renamed a newly added Canon tag (thanks Martin Chvatal)
+  - Improved identification of Canon RF lenses in edited images when an extender
+    was used
+  - Changed description of FocalLength35efl to add "35mm Equiv"
+  - Patched -validate option to recognize DNG 1.7.1 tags
+  - Patched to remove maker note error/warning when writing files from some
+    Google phones (github #377)
+  - Patched to improve warning for corrupted HEIC files downloaded from
+    heic.digital, and added ability to delete this garbage when writing
+    (github #361 and #378)
+  - Fixed minor error when writing some DJI DNG files
+  - API Changes:
+      - Added GeoUserTag option
+
+Dec. 26, 2025 - Version 13.45
+
+  - Added a number of new values for some Sony tags (thanks Milos Komarcevic)
+  - Added a few new button functions for the Nikon Z9 (thanks Warren Hatch)
+  - Added some Nikon subject detection values (thanks Warren Hatch)
+  - Added a new Canon SubjectSwitching value
+  - Decode Ricoh APP7 maker notes
+  - Patched to allow a specific PreviewImage to be written to a DNG file
+    containing multiple previews
+  - Fixed bug reading large Protobuf integers on 32-bit systems (github #373)
+  - Fixed minor error when writing some DJI DNG files
+  - API Changes:
+      - Added SystemTimeRes option
 
 Dec. 15, 2025 - Version 13.44 (production release)
 
@@ -15,7 +85,7 @@ Dec. 15, 2025 - Version 13.44 (production release)
   - Added a few new Matroska tags
   - Added a few values related to the new RAW file types for the Sony ILCE-7M5
     (thanks Milos Komarcevic)
-  - Decode a few new PhaseOne tags ( (github #372)
+  - Decode a few new PhaseOne tags (github #372)
   - Decode timed GPS and other metadata from Kandao MP4 videos
   - Improvements to family 1 and 5 groups for tags in Matroska videos, and
     prioritize top-level tags when duplicates exist

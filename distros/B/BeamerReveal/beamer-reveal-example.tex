@@ -24,11 +24,12 @@
 %% 
 %% The Current Maintainer of this work is Walter Daems.
 %% 
+
 %%
 \documentclass[11pt,aspectratio=169,t]{beamer}%
 \setbeamertemplate{navigation symbols}{}
 
-\usepackage[width=1920,embed,autoslide=4000,loop]{beamer-reveal}
+\usepackage[width=1920,autoslide=4000]{beamer-reveal}
 \usepackage{tikz}
 \usepackage{siunitx}
 
@@ -272,7 +273,7 @@
 
   \begin{center}
     \animation<1|handout:1-3>[framerate=25,duration=7.5,autoplay,
-      pdf progress=0.1,handout progress={1:0,2:0.2,3:0.5},expand once] {\myanimation}
+      pdf progress=0.1,handout progress={1:0,2:0.2,3:0.5},expand once,embed] {\myanimation}
   \end{center}
 \end{frame}
 

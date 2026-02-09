@@ -1,0 +1,50 @@
+NAME
+
+    IO::Async::Loop::FutureIO - use IO::Async with Future::IO
+
+SYNOPSIS
+
+       use IO::Async::Loop::FutureIO;
+    
+       use Future::IO:
+       Future::IO->load_best_impl;
+
+DESCRIPTION
+
+    This subclass of IO::Async::Loop uses Future::IO to perform its work.
+
+    Currently there are a few features that don't yet work, due to missing
+    support from Future::IO itself. Hopefully a later version of Future::IO
+    will be able to provide these missing pieces, and then this module will
+    be shipped by default in the main IO-Async distribution.
+
+ Missing Features
+
+    Currently the following things do not work with this module:
+
+    Signals
+
+      The watch_signal and unwatch_signal methods are not currently
+      implemented, because Future::IO does not support a general purpose
+      signal wait ability. Once this is available, these methods can be
+      added.
+
+    Watching PID 0
+
+      Likewise, as Future::IO only supports watching specific PIDs and not
+      a repeating wait for any process, this is not permitted here.
+
+    is_running
+
+      The is_running method cannot reliably answer whether Future::IO
+      itself is currently blocked awaiting IO, so it is also not provided.
+
+    Metrics
+
+      This module would not be able to provide metrics on the overall
+      operation of Future::IO, so it is not provided.
+
+AUTHOR
+
+    Paul Evans <leonerd@leonerd.org.uk>
+

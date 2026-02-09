@@ -1,7 +1,9 @@
 use strict;
 use warnings;
 use FindBin qw($Bin);
-use Test::More tests => 2;
+use Test2::Bundle::More; 
+
+plan tests => 2;
 
 use Dancer::FileUtils 'path';
 use Dancer::Template::Mason;

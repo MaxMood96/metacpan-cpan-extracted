@@ -7,13 +7,19 @@ use strict;
 use warnings;
 
 package Net::Proxmox::VE::Pools;
-$Net::Proxmox::VE::Pools::VERSION = '0.43';
+$Net::Proxmox::VE::Pools::VERSION = '0.44';
 use parent 'Exporter';
 
 use Net::Proxmox::VE::Exception;
 
 
-our @EXPORT = qw( pools get_pool create_pool delete_pool update_pool );
+our @EXPORT = qw(
+  pools
+  get_pool
+  create_pool
+  delete_pool
+  update_pool
+);
 
 my $BASEPATH = '/pools';
 
@@ -21,6 +27,25 @@ my $BASEPATH = '/pools';
 sub pools {
 
     my $self = shift or return;
+    my @p = @_;
+
+    # optional query parameters
+    if (@p) {
+        my %args;
+        if ( @p == 1 ) {
+            Net::Proxmox::VE::Exception->throw(
+                'Single argument not a hash for pools()')
+              unless ref $p[0] eq 'HASH';
+            %args = %{ $p[0] };
+        }
+        else {
+            Net::Proxmox::VE::Exception->throw(
+                'Odd number of arguments for pools()')
+              if ( scalar @p % 2 != 0 );
+            %args = @p;
+        }
+        return $self->get( $BASEPATH, \%args );
+    }
 
     return $self->get($BASEPATH);
 
@@ -62,6 +87,12 @@ sub create_pool {
           if ( scalar @p % 2 != 0 );
         %args = @p;
     }
+
+    # enforce required poolid
+    Net::Proxmox::VE::Exception->throw('poolid is required for create_pool()')
+      unless exists $args{poolid} && defined $args{poolid};
+    Net::Proxmox::VE::Exception->throw('poolid must be a scalar for create_pool()')
+      if ref $args{poolid};
 
     return $self->post( $BASEPATH, \%args );
 
@@ -127,7 +158,7 @@ Net::Proxmox::VE::Pools - Presents a pool object
 
 =head1 VERSION
 
-version 0.43
+version 0.44
 
 =head1 SYNOPSIS
 
@@ -149,25 +180,47 @@ you should use the API via that module. This documentation is for detailed refer
 
 To be clear, this module isn't useful as a stand alone piece of software.
 
+Pools can be used to group a set of virtual machines and datastores. You can then simply
+set permissions on pools, which are inherited by all pool members. This is a great way
+to simplify access control.
+
 =head1 NOTE
 
 String formats that are mentioned herein are done so for convenience and
 are defined in detail in the Proxmox API documents on the Proxmox project website.
 
-This module doesnt enforce them, it will send whatever garbage you provide
+This module doesn't enforce them, it will send whatever garbage you provide
 straight to the server API. So garbage-in, garbage-out!
 
 =head1 METHODS
 
 =head2 pools
 
-Gets a list of pools (aka the a Pool Index)
+Gets a list of pools or get a single pool configuration..
 
+Accepts optional query parameters (hashref or key/value list) to filter results.
+
+Examples:
+
+  # list all pools
   @pools = $obj->pools();
 
-=head2 get_pool
+  # retrieve a single pool via query parameter (preferred; replaces deprecated get_pool())
+  @one = $obj->pools({ poolid => 'mypool' });
 
-Gets a single pool's configuration details
+  # filter by pool id and type
+  @filtered = $obj->pools( poolid => 'mypool', type => 'qemu' );
+
+Available types (at time of writing) are: qemu, lxc, storage
+
+=head2 get_pool
+DEPRECATED IN API: The Proxmox API marks the per-pool endpoint as deprecated (no support for nested pools).
+
+This module retains `get_pool()` for backward compatibility and will continue to provide it
+until the Proxmox API removes the endpoint. New code should use `pools()` with the
+`poolid` query parameter (preferred),
+
+Retrieves a single storage pool
 
   $pool = $obj->get_pool( $poolid );
 
@@ -195,6 +248,10 @@ String. This is a comment associated with the new pool, this is optional
 =back
 
 =head2 delete_pool
+DEPRECATED IN API: The Proxmox API marks the per-pool delete endpoint as deprecated (no support for nested pools).
+
+This module keeps `update_pool()` for backward compatibility and will remove the
+subroutine when the API no longer exposes the per-pool endpoint.
 
 Deletes a single pool
 
@@ -203,6 +260,10 @@ Deletes a single pool
 Where $poolid is a string in pve-poolid format
 
 =head2 update_pool
+DEPRECATED IN API: The Proxmox API marks the per-pool update endpoint as deprecated (no support for nested pools).
+
+This module keeps `update_pool()` for backward compatibility and will remove the
+subroutine when the API no longer exposes the per-pool endpoint.
 
 Updates (sets) a pool's data
 
@@ -243,7 +304,7 @@ Dean Hamstead <dean@fragfest.com.au>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2025 by Dean Hamstead.
+This software is Copyright (c) 2026 by Dean Hamstead.
 
 This is free software, licensed under:
 

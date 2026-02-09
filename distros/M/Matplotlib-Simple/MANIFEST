@@ -8,8 +8,6 @@ README.md
 README.pod
 arr.pl
 change.log.txt
-color.table.pl
-colored.table.pl
 css4.colors.txt
 dist.ini
 lib/Matplotlib/Simple.pm
@@ -69,6 +67,7 @@ t/output.images/histogram.svg
 t/output.images/hlines.svg
 t/output.images/imshow.multiple.svg
 t/output.images/imshow.single.svg
+t/output.images/key.colors.bar.svg
 t/output.images/pie.svg
 t/output.images/plot.single.arr.svg
 t/output.images/plot.single.svg

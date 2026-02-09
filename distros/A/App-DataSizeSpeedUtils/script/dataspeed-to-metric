@@ -1,0 +1,217 @@
+#!perl
+
+use 5.010001;
+use strict;
+use warnings;
+
+use Getopt::Long;
+
+our $AUTHORITY = 'cpan:PERLANCAR'; # AUTHORITY
+our $DATE = '2025-09-24'; # DATE
+our $DIST = 'App-DataSizeSpeedUtils'; # DIST
+our $VERSION = '0.001'; # VERSION
+
+my $prog = $0 =~ /datasize/ ? "datasize-to-metric" : "dataspeed-to-metric";
+
+my %Opts = (
+    additional_prefix => ($prog eq 'datasize-to-metric' ? "B" : "bps"),
+    uppercase_k => 1,
+    base => 2,
+    precision => 1,
+);
+
+sub parse_cmdline {
+    Getopt::Long::Configure("gnu_getopt", "no_ignore_case");
+    my $res = GetOptions(
+        'additional-prefix|a=s' => \$Opts{additional_prefix},
+        'uppercase-k!' => \$Opts{uppercase_k},
+        'base=i' => \$Opts{base},
+        'precision|p=i' => \$Opts{precision},
+        'help|h'           => sub {
+            print <<USAGE;
+Usage:
+  $prog [OPTIONS]... [NUMBER]...
+  $prog --help, -h
+  $prog --version, -v
+Options:
+  --additional-prefix=s, -a
+  --no-uppercase-k
+  --base=i
+  --precision=i, -p
+For more details, see the manpage/documentation.
+USAGE
+            exit 0;
+        },
+        'version|v' => sub {
+            print "$prog version ", ($main::VERSION // 'dev'), "\n";
+            exit 0;
+        },
+    );
+    exit 99 if !$res;
+}
+
+sub run {
+    my @numbers;
+    if (@ARGV) {
+        @numbers = @ARGV;
+    } else {
+        while (<>) {
+            chomp;
+            push @numbers, $_;
+        }
+    }
+
+    require Number::Format::Metric;
+    my $opts = {
+        base => $Opts{base},
+        precision => $Opts{precision},
+        uppercase_k => $Opts{uppercase_k},
+        additional_prefix => $Opts{additional_prefix},
+    };
+    for my $number (@numbers) {
+        print Number::Format::Metric::format_metric($number, $opts), "\n";
+    }
+}
+
+# MAIN
+
+parse_cmdline();
+run();
+
+1;
+# ABSTRACT: Convert number to use metric prefix, e.g. '10000000' to '9.5MB' or '9.5Mbps'
+# PODNAME: dataspeed-to-metric
+
+__END__
+
+=pod
+
+=encoding UTF-8
+
+=head1 NAME
+
+dataspeed-to-metric - Convert number to use metric prefix, e.g. '10000000' to '9.5MB' or '9.5Mbps'
+
+=head1 VERSION
+
+This document describes version 0.001 of dataspeed-to-metric (from Perl distribution App-DataSizeSpeedUtils), released on 2025-09-24.
+
+=head1 SYNOPSIS
+
+ datasize-to-metric [OPTION]... [NUMBER]...
+ echo 'NUMBER' | datasize-to-metric [OPTION]...
+
+ dataspeed-to-metric [OPTION]... [NUMBER]...
+ echo 'NUMBER' | dataspeed-to-metric [OPTION]...
+
+See examples in L</EXAMPLES>.
+
+=head1 DESCRIPTION
+
+=head1 EXIT CODES
+
+0 on success.
+
+255 on I/O error.
+
+99 on command-line options error.
+
+=head1 OPTIONS
+
+=over
+
+=item * --additional-prefix, -p
+
+Set additional prefix. Default is "B" (for B<datasize-to-metric>) or "bps" (for
+B<dataspeed-to-metric>).
+
+=item * --no-uppercase-k
+
+Show kilo as "k" instead of the default "K". Note that in SI, the standard
+prefix is indeed "k" (lowercase).
+
+=item * --base=i
+
+Default 2 (binary or base-2 prefix). To use base-10 prefix, set to 10.
+
+=item * --precision=i
+
+Default 1.
+
+=item * --help, -h
+
+Show help message then exit.
+
+=item * --version, -v
+
+Show version then exit.
+
+=back
+
+=head1 FAQ
+
+=head1 EXAMPLES
+
+ # numbers can be specified as command-line arguments ...
+ % datasize-to-metric 1000 10000000
+ 1000.0B
+ 9.5MB
+
+ % dataspeed-to-metric 2000 20000000
+ 2.0Kbps
+ 19.1Mbps
+
+ # ... or read from stdin
+ % echo 10000 | datasize-to-metric --no-uppercase-k
+ 9.8kB
+
+=head1 HOMEPAGE
+
+Please visit the project's homepage at L<https://metacpan.org/release/App-DataSizeSpeedUtils>.
+
+=head1 SOURCE
+
+Source repository is at L<https://github.com/perlancar/perl-App-DataSizeSpeedUtils>.
+
+=head1 SEE ALSO
+
+L<datasize-from-metric>, L<dataspeed-from-metric>.
+
+=head1 AUTHOR
+
+perlancar <perlancar@cpan.org>
+
+=head1 CONTRIBUTING
+
+
+To contribute, you can send patches by email/via RT, or send pull requests on
+GitHub.
+
+Most of the time, you don't need to build the distribution yourself. You can
+simply modify the code, then test via:
+
+ % prove -l
+
+If you want to build the distribution (e.g. to try to install it locally on your
+system), you can install L<Dist::Zilla>,
+L<Dist::Zilla::PluginBundle::Author::PERLANCAR>,
+L<Pod::Weaver::PluginBundle::Author::PERLANCAR>, and sometimes one or two other
+Dist::Zilla- and/or Pod::Weaver plugins. Any additional steps required beyond
+that are considered a bug and can be reported to me.
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is copyright (c) 2025 by perlancar <perlancar@cpan.org>.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=head1 BUGS
+
+Please report any bugs or feature requests on the bugtracker website L<https://rt.cpan.org/Public/Dist/Display.html?Name=App-DataSizeSpeedUtils>
+
+When submitting a bug or request, please include a test-file or a
+patch to an existing test-file that illustrates the bug or desired
+feature.
+
+=cut

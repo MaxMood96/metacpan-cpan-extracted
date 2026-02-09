@@ -29,14 +29,14 @@ developer to copy and paste into their code.
 
 # RECENT CHANGES
 
-Changes for version v0.2.3 (2025-08-16)
+Changes for version v0.2.4 (2026-02-08)
 
-- Enhancements
-    - Internal code improvements.
+- Documentation
+    - Updated SUPPORT section to clarify the minimum Perl version.
+    - Bumped copyright year.
+    - Updated LICENSE file.
 - Tests
-    - Use Dumper instead of explain for test diagnostics.
-    - Add more author tests.
-    - Cleaned up cut-and-paste from other tests.
+    - Updated author tests.
 
 See the `Changes` file for more details.
 
@@ -99,8 +99,7 @@ For more information, see [How to install CPAN modules](https://www.cpan.org/mod
 
 Only the latest version of this module will be supported.
 
-This module requires Perl v5.20 or later.  Future releases may only support Perl versions released in the last ten
-years.
+This module requires Perl v5.20 or later, based on the minimum Perl supported by [Dist::Zilla](https://metacpan.org/pod/Dist%3A%3AZilla).
 
 ## Reporting Bugs and Submitting Feature Requests
 
@@ -132,7 +131,7 @@ Graham Knop <haarg@haarg.org>
 
 # COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2025 by Robert Rothenberg.
+This software is copyright (c) 2025-2026 by Robert Rothenberg.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

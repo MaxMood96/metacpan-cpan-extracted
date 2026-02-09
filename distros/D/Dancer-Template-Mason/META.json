@@ -4,13 +4,13 @@
       "Yanick Champoux <yanick@cpan.org>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Dist::Zilla version 5.020, CPAN::Meta::Converter version 2.140640",
+   "generated_by" : "Dist::Zilla version 6.036, CPAN::Meta::Converter version 2.150010",
    "license" : [
       "perl_5"
    ],
    "meta-spec" : {
       "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
-      "version" : "2"
+      "version" : 2
    },
    "name" : "Dancer-Template-Mason",
    "no_index" : {
@@ -19,19 +19,16 @@
       ]
    },
    "prereqs" : {
-      "build" : {
-         "requires" : {
-            "Module::Build" : "0.28"
-         }
-      },
       "configure" : {
          "requires" : {
-            "Module::Build" : "0.28"
+            "ExtUtils::MakeMaker" : "0"
          }
       },
       "develop" : {
          "requires" : {
-            "version" : "0.9901"
+            "Software::Security::Policy::Individual" : "0",
+            "Test::More" : "0.96",
+            "Test::Vars" : "0"
          }
       },
       "runtime" : {
@@ -40,11 +37,15 @@
             "FindBin" : "0",
             "HTML::Mason::Interp" : "0",
             "Moo" : "0",
+            "experimental" : "0",
             "strict" : "0",
             "warnings" : "0"
          }
       },
       "test" : {
+         "recommends" : {
+            "CPAN::Meta" : "2.120900"
+         },
          "requires" : {
             "Dancer::FileUtils" : "0",
             "Dancer::Test" : "0",
@@ -54,16 +55,16 @@
             "IPC::Open3" : "0",
             "Plack::Handler::FCGI" : "0",
             "Plack::Runner" : "0",
-            "Test::More" : "0.88",
-            "lib" : "0",
-            "perl" : "5.006"
+            "Test2::Bundle::More" : "0",
+            "Test::More" : "0",
+            "lib" : "0"
          }
       }
    },
    "provides" : {
       "Dancer::Template::Mason" : {
          "file" : "lib/Dancer/Template/Mason.pm",
-         "version" : "0.004001"
+         "version" : "0.004002"
       }
    },
    "release_status" : "stable",
@@ -71,23 +72,30 @@
       "bugtracker" : {
          "web" : "https://github.com/yanick/Dancer-Template-Mason/issues"
       },
-      "homepage" : "http://search.cpan.org/dist/Dancer-Template-Mason/",
+      "homepage" : "https://github.com/yanick/Dancer-Template-Mason",
       "repository" : {
          "type" : "git",
          "url" : "https://github.com/yanick/Dancer-Template-Mason.git",
          "web" : "https://github.com/yanick/Dancer-Template-Mason"
       }
    },
-   "version" : "0.004001",
+   "version" : "0.004002",
    "x_author_pledge" : {
       "version" : 1
    },
    "x_authority" : "cpan:YANICK",
+   "x_contributor_covenant" : {
+      "version" : 0.02
+   },
    "x_contributors" : [
-      "Danijel Tasov <dt@korn.shell.la>",
-      "Steve Simms <steve@deefs.net>",
       "boris shomodjvarac <shomodj@oginwm09.(none)>",
-      "franck cuny <franck@lumberjaph.net>"
-   ]
+      "Danijel Tasov <dt@korn.shell.la>",
+      "franck cuny <franck@lumberjaph.net>",
+      "Steve Simms <steve@deefs.net>",
+      "Yanick Champoux <yanick@babyl.ca>"
+   ],
+   "x_generated_by_perl" : "v5.42.0",
+   "x_serialization_backend" : "Cpanel::JSON::XS version 4.40",
+   "x_spdx_expression" : "Artistic-1.0-Perl OR GPL-1.0-or-later"
 }
 

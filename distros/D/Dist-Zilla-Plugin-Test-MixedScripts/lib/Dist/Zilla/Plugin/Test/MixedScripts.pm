@@ -28,7 +28,7 @@ with
   },
   'Dist::Zilla::Role::PrereqSource';
 
-our $VERSION = 'v0.2.3';
+our $VERSION = 'v0.2.4';
 
 
 has filename => (
@@ -150,7 +150,7 @@ Dist::Zilla::Plugin::Test::MixedScripts - author tests to ensure there is no mix
 
 =head1 VERSION
 
-version v0.2.3
+version v0.2.4
 
 =for stopwords Cushing Etheridge Florian Ragwitz Unicode
 
@@ -232,8 +232,7 @@ for example, in the F<dist.ini>:
 
 Only the latest version of this module will be supported.
 
-This module requires Perl v5.20 or later.  Future releases may only support Perl versions released in the last ten
-years.
+This module requires Perl v5.20 or later, based on the minimum Perl supported by L<Dist::Zilla>.
 
 =head2 Reporting Bugs and Submitting Feature Requests
 
@@ -267,7 +266,7 @@ Graham Knop <haarg@haarg.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2025 by Robert Rothenberg.
+This software is copyright (c) 2025-2026 by Robert Rothenberg.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

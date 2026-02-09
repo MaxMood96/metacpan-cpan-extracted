@@ -1,7 +1,7 @@
 use v5.10;
 
 package Perl::Version::Bumper;
-$Perl::Version::Bumper::VERSION = '0.181';
+$Perl::Version::Bumper::VERSION = '0.218';
 
 use strict;
 use warnings;
@@ -13,25 +13,38 @@ use PPI::Token::Operator;
 use PPI::Token::Attribute;
 use Carp qw( carp croak );
 
-# reconstruct everything we know about every feature from the DATA section
-my ( $feature_version, %feature );
-while (<DATA>) {
-    chomp;
-    if (/\A *([1-9][0-9.]*)/) {    # header line
-        $feature_version = version_fmt($1);
-        next;
+# CLASS METHODS
+
+my $feature_version;
+
+sub feature_version { $feature_version }
+
+# reconstruct everything we know about every feature
+# from the $DATA variable defined at the end of the file
+my $FEATURE_DATA;
+
+sub feature_data {
+    my %feature;
+    for ( grep !/\A(?:=|\z)/, split /\n/, $FEATURE_DATA ) {
+        if (/\A *([1-9][0-9.]*)/) {    # header line
+            $feature_version = version_fmt($1);
+            next;
+        }
+        my $feature  = substr $_, 0, 33, '';    # %32s
+        my $known    = substr $_, 0, 9,  '';    # %-8s
+        my $enabled  = substr $_, 0, 9,  '';    # %-8s
+        my $disabled = substr $_, 0, 9,  '';    # %-8s
+        my @compat   = split ' ';               # %s
+        y/ //d for $feature, $known, $enabled, $disabled;
+        $feature{$feature}{known}    = $known;
+        $feature{$feature}{enabled}  = $enabled  if $enabled;
+        $feature{$feature}{disabled} = $disabled if $disabled;
+        $feature{$feature}{compat}   = {@compat} if @compat;
     }
-    my $feature  = substr $_, 0, 27, '';    # %26s
-    my $known    = substr $_, 0, 9,  '';    # %-8s
-    my $enabled  = substr $_, 0, 9,  '';    # %-8s
-    my $disabled = substr $_, 0, 9,  '';    # %-8s
-    my @compat = split ' ';                 # %s
-    y/ //d for $feature, $known, $enabled, $disabled;
-    $feature{$feature}{known}    = $known;
-    $feature{$feature}{enabled}  = $enabled  if $enabled;
-    $feature{$feature}{disabled} = $disabled if $disabled;
-    $feature{$feature}{compat}   = {@compat} if @compat;
+    return \%feature;
 }
+
+my %feature = %{ feature_data() };
 
 # EXPORTABLE FUNCTIONS
 
@@ -86,10 +99,6 @@ sub stable_version_dec {
       ? $s                         # dev -> previous stable
       : sprintf "%.3f", $s - 0.002 # previous stable
 }
-
-# CLASS METHODS
-
-sub feature_version { $feature_version }
 
 # CONSTRUCTOR
 
@@ -386,6 +395,24 @@ TODO_COMMENT
             $proto->remove;
         }
     },
+
+    # the 'fc' feature means CORE::fc is not required
+    fc => sub {
+        my ($doc) = @_;
+
+        # find all occurences of 'CORE::fc'
+        my $core_fc = $doc->find(
+            sub {
+                my ( $root, $elem ) = @_;
+                return !!1 if $elem->isa('PPI::Token::Word') && $elem eq 'CORE::fc';
+                return !!0;
+            }
+        );
+        return unless $core_fc;
+
+        # and replace them by 'fc'
+        $_->replace( PPI::Token::Word->new('fc') ) for @$core_fc;
+    },
 );
 
 # PRIVATE "METHODS"
@@ -454,7 +481,7 @@ sub _cleanup_bundled_features {
     my ( $self, $doc, $old_num ) = @_;
     my $version_num       = $self->version_num;
     my $feature_in_bundle = $self->{feature_in_bundle};
-    my %enabled_in_code;
+    my ( %enabled_in_code, %disabled_in_code );
 
     # drop features enabled in this bundle
     # (also if they were enabled with `use experimental`)
@@ -481,31 +508,36 @@ sub _cleanup_bundled_features {
     # deal with compat modules
     $self->_handle_compat_modules($doc);
 
+    # drop disabled features that are not part of the bundle
+    # (also if they were disabled with `no experimental`)
+    for my $module (qw( feature experimental )) {
+        for my $no_feature ( _find_include( $module => $doc, 'no' ) ) {
+            my @old_args = _ppi_list_to_perl_list( $no_feature->arguments );
+            $disabled_in_code{$_}++ for @old_args;
+            my @new_args =                # keep disabling features
+              grep exists $feature{$_}    # that actually exist and are
+              && !exists $feature_in_bundle->{disabled}{$_},    # not disabled yet
+              @old_args;
+            next if @new_args == @old_args;                     # nothing to change
+            if (@new_args) {    # replace old statement with a smaller one
+                my $new_no_feature = PPI::Document->new(
+                    \"no $module @{[ join ', ', map qq{'$_'}, @new_args]};" );
+                $no_feature->insert_before( $_->remove )
+                  for $new_no_feature->elements;
+                $no_feature->remove;
+            }
+            else { _drop_statement($no_feature); }
+        }
+    }
+
     # apply some feature shine when crossing the feature enablement boundary
     for my $feature ( sort grep exists $feature{$_}{enabled}, keys %feature_shine ) {
         my $feature_enabled = $feature{$feature}{enabled};
         $feature_shine{$feature}->($doc)
           if $old_num < $feature_enabled         # code from before the feature
           && $version_num >= $feature_enabled    # bumped to after the feature
-          && !$enabled_in_code{$feature};        # and not enabling the feature
-    }
-
-    # drop disabled features that are not part of the bundle
-    for my $no_feature ( _find_include( feature => $doc, 'no' ) ) {
-        my @old_args = _ppi_list_to_perl_list( $no_feature->arguments );
-        my @new_args =                # keep disabling features
-          grep exists $feature{$_}    # that actually exist and are
-          && !exists $feature_in_bundle->{disabled}{$_},    # not disabled yet
-          @old_args;
-        next if @new_args == @old_args;                     # nothing to change
-        if (@new_args) {    # replace old statement with a smaller one
-            my $new_no_feature = PPI::Document->new(
-                \"no feature @{[ join ', ', map qq{'$_'}, @new_args]};" );
-            $no_feature->insert_before( $_->remove )
-              for $new_no_feature->elements;
-            $no_feature->remove;
-        }
-        else { _drop_statement($no_feature); }
+          && !$enabled_in_code{$feature}         # not enabling the feature
+          && !$disabled_in_code{$feature};       # and not disabling the feature
     }
 
     # drop experimental warnings, if any
@@ -641,7 +673,7 @@ sub bump_file {
     my $code   = Path::Tiny->new($file)->slurp;
     my $bumped = $self->bump( $code, $file );
     if ( $bumped ne $code ) {
-        $file->spew($bumped);
+        $file->append( { truncate => 1 }, $bumped );
         return !!1;
     }
     return !!0;
@@ -708,7 +740,8 @@ sub bump_file_safely {
     croak "Parsing of $file failed" unless defined $doc;
     my ( $bumped_doc, $version ) =
       @{ $self->_bump_ppi_safely( $doc, $options ) };
-    Path::Tiny->new($file)->spew( $bumped_doc->serialize ) if $version;
+    Path::Tiny->new($file)->append( { truncate => 1 }, $bumped_doc->serialize )
+      if $version;
     return $version;
 }
 
@@ -814,6 +847,12 @@ by this module. It is not possible to bump code over that version.
 
 The current value of C<feature_version> is: C<5.040>.
 
+=head2 feature_data
+
+Return a I<copy> of the internal data structure containing all the
+information about features. That should only be needed for testing
+and debugging.
+
 =head1 METHODS
 
 =head2 version_num
@@ -873,9 +912,8 @@ Which fails to compile with the following error:
 It's not possible to just bump this code up to C<v5.40> and expect it to
 work, because it uses multidimensional array emulation, and the feature
 that represents this (C<multidimensional>) was disabled in C<v5.36>.
-The actual cause for the error is that Perl v5.36 doesn't support
-multidimensional array emulation. This code will in fact fail to compile
-with all versions greater or equal to C<v5.36>.
+This code will in fact fail to compile with all version bundles greater
+or equal to C<v5.36>.
 
 A I<safe way> to try to bump this code to C<v5.40> is to try with
 C<v5.40>, detect it fails to compile, try again with C<v5.38> and
@@ -886,7 +924,7 @@ bundle). Leaving us with the following code:
     use v5.34;
     my %h; $h{ 1, 2 } = 3;    # same as $foo{"1\x{1c}2"} = 3;
 
-The code needs to be updated to not use multidimensional array emulation
+The code needs to be updated to I<not> use multidimensional array emulation
 before it can I<safely> be bumped past version C<v5.34>.
 
 =head2 Process of a safe bump
@@ -999,6 +1037,290 @@ Return the stable version following the given version, as a number.
 
 Return the stable version preceding the given version, as a number.
 
+=head1 VERSION UPGRADE ALGORITHM
+
+For a given version number, a feature has three attributes:
+
+=over 4
+
+=item known
+
+the B<perl> I<binary> knows about the feature starting from that version.
+
+If it's not known, passing it to C<use feature> will I<die> during
+compilation with C<Feature "XXX" is not supported by Perl 5.x.y> (where
+5.x.y is the version of the binary program).
+
+=item enabled
+
+the feature is enabled starting with the corresponding I<feature> bundle
+(i.e. C<use VERSION> will implicitely enable it).
+
+=item disabled
+
+the feature is disabled starting from the corresponding I<feature> bundle
+(i.e. C<use VERSION> will implicitely disable it).
+
+This is the case for so-called "unfeatures", i.e. constructs that were
+deemed undesirable and removed from the language (e.g. C<indirect>,
+C<bareword_filehandles>, etc.).
+
+=back
+
+If there is more than one C<use VERSION> line in the file, the algorithm
+will bail out. Otherwise, the previous C<use VERSION> line will be
+removed, and a new one added at the top of the file (line 1).
+
+The features that were enabled via C<use feature> and are part of the
+C<VERSION> feature bundle will be removed from the corresponding C<use
+feature> or C<use experimental> lines. The disabling of the corresponding
+C<experimental> warnings will be removed.
+
+The features that were disabled via C<no feature> and are disabled as part
+of the C<VERSION> feature bundle will be removed from the corresponding
+C<use feature> or C<use experimental> lines.
+
+If compatibility modules (CPAN modules that provide support for the
+feature in older Perls) were loaded, they will removed if the feature
+is enabled in the feature bundle for C<VERSION>, or replaced by the
+corresponding C<use feature> if the feature is known by the corresponding
+C<perl> binary but not yet enabled by the feature bundle.
+
+When a feature is enabled (or disabled) in the context of a feature
+version bundle that's less than the version when the feature was known
+by Perl, the line won't be removed.
+
+For example this line:
+
+    use feature 'signatures';
+
+will die with any perl before perl5.20.0, because the binary does not
+know about the feature itself.
+
+When writing code like this:
+
+    use v5.10;
+    use feature 'signatures';
+
+one is opting into a version of the Perl language that is not described
+by any specific feature bundle. However, any perl that knows about the
+C<signatures> feature will know how to run it.
+
+Bumping it to the feature bundle for v5.16, for example, is valid,
+and will work with any B<perl> that knows about the C<signatures> feature:
+
+    use v5.16;
+    use feature 'signatures';
+
+And so on until v5.36, when the C<signatures> feature was enabled by
+the corresponding version bundle:
+
+    use v5.36;
+
+Finally, some features may imply extra edits:
+
+=over 4
+
+=item bitwise
+
+When the C<bitwise> feature is enabled, the behaviour of the bitwise
+operators (C<&>, C<|>, C<~> and C<^>) is modified. If the code makes use
+of one of them, and the code is moved from a version I<before> v5.28
+to a version greater or equal to v5.28, the C<bitwise> feature will
+be I<disabled>, and a comment will be added, asking the maintainer to
+review their use according to the C<bitwise> feature before removing it.
+
+=item signatures
+
+When signatures are implicitely enabled, any prototypes will be rewritten
+with the prototype attribute syntax. For example:
+
+    sub foo ($@) { ... }
+
+will become:
+
+    sub foo :prototype($@) { ... }
+
+=item fc
+
+Once C<fc> is implicitely enabled, All uses of C<CORE::fc> will be
+replaced by a bare C<fc>.
+
+=back
+
+=head2 Feature/version data table
+
+The following table is used to generate the feature data hash.
+
+It is generated using the C<bin/build_feature_data.pl> script
+shipped with the distribution.
+
+The keys are:
+
+=over 4
+
+=item known
+
+when perl first learnt about the feature
+
+=item enabled
+
+when the feature was first enabled (may be before it was known)
+
+=item disabled
+
+when the feature was first disabled
+
+=item compat
+
+replacement modules for features to be deprecated / added
+
+=back
+
+Different features have different lifecycles:
+
+=over 4
+
+=item *
+
+New features (i.e. additional behaviour that didn't exist in Perl v5.8):
+
+=over 4
+
+=item *
+
+are C<known> in the Perl release that introduced them
+
+=item *
+
+are C<enabled> either in the same version (e.g. C<say>, C<state>)
+or after an "experimental" phase (e.g. C<signatures>, C<bitwise>)
+
+=item *
+
+once enabled, they are not meant to be C<disabled> in a later bundle.
+
+=back
+
+=item *
+
+Unfeatures, or backwards compatibility features (features that existed
+in older Perls,  but were later deemed undesirable, and scheduled for
+being eventually disabled or removed):
+
+=over 4
+
+=item *
+
+are C<enabled> in the C<:default> bundle (they were part of the old
+Perl 5 behaviour) before they are even C<known> (a feature that
+represents them was added to Perl).
+
+=item *
+
+are meant to be manually disabled (with C<no feature>), until a
+later feature bundle eventually disables them by default.
+
+=back
+
+=back
+
+"compat" modules are CPAN modules meant to add support to the feature on
+perls where it's not available yet. They exist both for new features and
+backwards compatibility features. The number following the module name in
+the data structure below is the sum of 1 (if the module has an C<import>
+method) and -1 (if the module has an C<unimport> method).
+
+=cut
+
+BEGIN {
+    $FEATURE_DATA = << '=cut';
+
+=pod
+
+                  5.040 features known    enabled  disabled compat
+                             say   5.010    5.010           Perl6::Say 1 Say::Compat 1
+                           state   5.010    5.010
+                          switch   5.010    5.010    5.036
+                 unicode_strings   5.012    5.012
+                      array_base   5.016    5.010    5.016
+                     current_sub   5.016    5.016
+                       evalbytes   5.016    5.016
+                              fc   5.016    5.016
+                    unicode_eval   5.016    5.016
+                    lexical_subs   5.018    5.026
+                       postderef   5.020    5.024
+                    postderef_qq   5.020    5.024
+                      signatures   5.020    5.036
+                     refaliasing   5.022
+                         bitwise   5.022    5.028
+                   declared_refs   5.026
+                        indirect   5.032    5.010    5.036  indirect 0
+                             isa   5.032    5.036
+                multidimensional   5.034    5.010    5.036  multidimensional 0
+            bareword_filehandles   5.034    5.010    5.038  bareword::filehandles 0
+                             try   5.034    5.040           Feature::Compat::Try 1 Syntax::Feature::Try 0 Syntax::Keyword::Try 0
+                           defer   5.036                    Feature::Compat::Defer 1 Syntax::Keyword::Defer 0
+         extra_paired_delimiters   5.036
+                           class   5.038                    Feature::Compat::Class 1
+                     module_true   5.038    5.038
+
+=cut
+
+}
+
+=head1 ADDITIONAL INFORMATION ABOUT PERL FEATURES AND CONSTRUCTS
+
+=head2 Official documentation
+
+=over 4
+
+=item L<feature>
+
+Perl pragma to enable new features.
+
+=item L<perlexperiment>
+
+A listing of experimental features in Perl.
+
+=item L<experimental>
+
+This pragma provides an easy and convenient way to enable or disable
+experimental features.
+
+=back
+
+=head2 CPAN Modules
+
+=over 4
+
+=item L<Syntax::Construct>
+
+For some new syntactic constructs, there is the L<feature pragma>.
+For the rest, there is L<Syntax::Construct>.::
+
+=item L<Perl::MinimumVersion>
+
+Find a minimum required version of C<perl> for Perl code.
+
+=item L<Perl::MinimumVersion::Fast>
+
+L<Perl::MinimumVersion::Fast> is an alternative fast & lightweight
+implementation of L<Perl::MinimumVersion>.
+
+=back
+
+=head2 Other
+
+=over 4
+
+=item L<https://sheet.shiar.nl/perl>
+
+The most significant features introduced for recent versions of the Perl
+scripting language.
+
+=back
+
 =head1 ACKNOWLEDGMENT
 
 This software was originally developed at Booking.com. With approval
@@ -1011,7 +1333,7 @@ Philippe Bruhat (BooK) <book@cpan.org>
 
 =head1 COPYRIGHT
 
-Copyright 2024 Philippe Bruhat (BooK), all rights reserved.
+Copyright 2024-2026 Philippe Bruhat (BooK), all rights reserved.
 
 =head1 LICENSE
 
@@ -1019,65 +1341,3 @@ This program is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
 
 =cut
-
-# The following data is used to generate the %feature hash.
-#
-# It is generated using the bin/build_feature_data.pl script
-# shipped with the distribution.
-#
-# The keys are:
-# - known:    when perl first learnt about the feature
-# - enabled:  when the feature was first enabled (may be before it was known)
-# - disabled: when the feature was first disabled
-# - compat:   replacement modules for features to be deprecated / added
-#
-# Different features have different lifecycles:
-#
-# * New features (i.e. additional behaviour that didn't exist in Perl v5.8):
-#   - are 'known' in the Perl release that introduced them
-#   - are 'enabled' either in the same version (e.g. 'say', 'state') or
-#     after an "experimental" phase (e.g. 'signatures', 'bitwise')
-#   - once enabled, they are not meant to be 'disabled'
-#
-# * Backwards compatibility features (features that existed in older
-#   Perls,  but were later deemed undesirable, and scheduled for being
-#   eventuall disabled or removed):
-#   - are 'enabled' in the :default bundle (they were part of the old
-#     Perl 5 behaviour) before they are even 'known' (a feature that
-#     represents them was added to Perl).
-#   - are meant to be manually disabled (with `no feature`), until a
-#     later feature bundle eventually disables them by default.
-#
-# "compat" modules are meant to add support to the feature on perls where
-# it's not available yet. They exist both for new features and backwards
-# compatibility features. The number following the module name in the
-# data structure below is the sum of 1 (if the module has an `import`
-# method) and -1 (if the module has an `unimport` method).
-
-__DATA__
-            5.040 features known    enabled  disabled compat
-                       say   5.010    5.010           Perl6::Say 1 Say::Compat 1
-                     state   5.010    5.010
-                    switch   5.010    5.010    5.036
-           unicode_strings   5.012    5.012
-                array_base   5.016    5.010    5.016
-               current_sub   5.016    5.016
-                 evalbytes   5.016    5.016
-                        fc   5.016    5.016
-              unicode_eval   5.016    5.016
-              lexical_subs   5.018    5.026
-                 postderef   5.020    5.024
-              postderef_qq   5.020    5.024
-                signatures   5.020    5.036
-                   bitwise   5.022    5.028
-               refaliasing   5.022
-             declared_refs   5.026
-                  indirect   5.032    5.010    5.036  indirect 0
-                       isa   5.032    5.036
-      bareword_filehandles   5.034    5.010    5.038  bareword::filehandles 0
-          multidimensional   5.034    5.010    5.036  multidimensional 0
-                       try   5.034    5.040           Feature::Compat::Try 1 Syntax::Feature::Try 0 Syntax::Keyword::Try 0
-                     defer   5.036                    Feature::Compat::Defer 1 Syntax::Keyword::Defer 0
-   extra_paired_delimiters   5.036
-                     class   5.038                    Feature::Compat::Class 1
-               module_true   5.038    5.038
