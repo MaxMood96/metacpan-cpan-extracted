@@ -7,8 +7,7 @@ use lib $Bin;
 use NetServerTest qw(prepare_test ok use_ok note skip);
 my $env = prepare_test({n_tests => 5, start_port => 20200, n_ports => 1}); # runs three of its own tests
 
-if (! eval { require IO::Socket::SSL }
-   ) {
+if (!eval { require Net::Server::Proto::SSL }) { # Safer than loading IO::Socket::SSL directly to keep warnings clean
   SKIP: { skip("Cannot load IO::Socket::SSL libraries to test Socket SSL server: $@", 2); };
     exit;
 }
@@ -93,6 +92,7 @@ my $ok = eval {
         my $remote = IO::Socket::SSL->new(
             PeerAddr => $env->{'hostname'},
             PeerPort => $env->{'ports'}->[0],
+            Family => ($env->{'ipv'} =~ /[6*]/ ? Socket::AF_INET6() : Socket::AF_INET()),
             SSL_verify_mode => $mode,
         ) || die "Couldn't open child to sock: $!";
 

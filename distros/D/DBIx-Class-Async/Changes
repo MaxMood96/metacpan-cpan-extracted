@@ -1,5 +1,13 @@
 Revision history for DBIx::Class::Async
 
+0.56 2026-02-08
+     [TEST SUITE]
+     - Fixed t/030-row-copy.t to deal in system with -Duselongdouble as
+       reported in the issue #4 by @eserte.
+     - Fixed t/145-mojo-integration.t to skip test unless Mojo::IOLoop and
+       IO::Async::Loop::Mojois are found as reported in the issue #5
+       by @eserte.
+
 0.55 2026-02-06
      [NEW FEATURES]
      - Added run_parallel() method to DBIx::Class::Async::Schema. This method

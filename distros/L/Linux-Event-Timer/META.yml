@@ -1,0 +1,32 @@
+---
+abstract: 'Thin wrapper around Linux::FD::Timer (timerfd)'
+author:
+  - 'Joshua Day'
+build_requires:
+  ExtUtils::MakeMaker: '0'
+  Test::More: '0'
+  Time::HiRes: '0'
+configure_requires:
+  ExtUtils::MakeMaker: '0'
+dynamic_config: 1
+generated_by: 'ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150012'
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: Linux-Event-Timer
+no_index:
+  directory:
+    - t
+    - inc
+requires:
+  Carp: '0'
+  Fcntl: '0'
+  Linux::FD::Timer: '0.015'
+  Scalar::Util: '0'
+  perl: '5.036'
+resources:
+  bugtracker: https://github.com/haxmeister/perl-linux-event-timer/issues
+  repository: https://github.com/haxmeister/perl-linux-event-timer.git
+version: '0.010'
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

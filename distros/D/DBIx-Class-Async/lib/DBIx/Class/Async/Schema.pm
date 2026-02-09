@@ -1,6 +1,6 @@
 package DBIx::Class::Async::Schema;
 
-$DBIx::Class::Async::Schema::VERSION   = '0.55';
+$DBIx::Class::Async::Schema::VERSION   = '0.56';
 $DBIx::Class::Async::Schema::AUTHORITY = 'cpan:MANWAR';
 
 =encoding utf8
@@ -11,7 +11,7 @@ DBIx::Class::Async::Schema - Non-blocking, worker-pool based Proxy for DBIx::Cla
 
 =head1 VERSION
 
-Version 0.55
+Version 0.56
 
 =head1 SYNOPSIS
 
@@ -906,13 +906,13 @@ logic and is significantly faster than calling C<create> in a loop.
 
 =item B<search_with_prefetch( $source_name, \%cond, \@prefetch, \%attrs )>
 
-A specialised shortcut for complex joins. It forces C<collapse => 1> to ensure
+A specialised shortcut for complex joins. It forces C<collapse =E<gt> 1> to ensure
 that the data structure returned from the worker process is properly "folded"
 into objects, preventing Cartesian product issues over IPC.
 
 =back
 
-=head1 Future Handling and Unwrapping
+=head1 FUTURE HANDLING & UNWRAPPING
 
 This package provides methods to handle L<Future> objects, including recursive
 unwrapping for complex async operations and methods for parallel execution.

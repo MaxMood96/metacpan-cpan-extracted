@@ -317,43 +317,58 @@ subtest 'config file defaults' => sub {
     {
         open my $fh, '>', "$config_dir/config.sh" or die;
         print $fh <<'CONF';
-declare -A theme_custom_light=(
-    [base]='<DarkCyan>=y25'
-    [comment]='${base}+r60'
-    [bold]='${base}D'
-    [strike]='X'
-    [italic]='I'
-    [link]="$link_func"
-    [image]="$image_func"
-    [image_link]="$image_link_func"
-    [h1]='L25DE/${base}'
-    [h2]='L25DE/${base}+y20'
-    [h3]='L25DN/${base}+y30'
-    [h4]='${base}UD'
-    [h5]='${base}+y20;U'
-    [h6]='${base}+y20'
-    [inline_code]='L15/L23,/L23,L15/L23'
-    [code_block]='L20 , L18 , /L23;E , L20'
-)
+theme_light[base]='<DarkCyan>=y25'
+theme_dark[base]='<DarkCyan>=y80'
 CONF
         close $fh;
-        my $out = `XDG_CONFIG_HOME=$tmpdir $mdee -d --dryrun --mode=light --theme=custom $test_md 2>&1`;
+        my $out = `XDG_CONFIG_HOME=$tmpdir $mdee -d --dryrun --mode=light $test_md 2>&1`;
         like($out, qr/DarkCyan/, 'custom theme from config.sh is loaded');
     }
 
     # Test theme partial override in config.sh
     {
         open my $fh, '>', "$config_dir/config.sh" or die;
-        print $fh "theme_default_light[base]='<Crimson>=y25'\n";
+        print $fh "theme_light[base]='<Crimson>=y25'\n";
         close $fh;
         my $out = `XDG_CONFIG_HOME=$tmpdir $mdee -d --dryrun --mode=light $test_md 2>&1`;
         like($out, qr/Crimson/, 'theme partial override in config.sh works');
     }
 
+    # Test default[theme] with single theme
+    {
+        open my $fh, '>', "$config_dir/config.sh" or die;
+        print $fh "default[theme]='warm'\n";
+        close $fh;
+        my $out = `XDG_CONFIG_HOME=$tmpdir $mdee -d --dryrun --mode=light $test_md 2>&1`;
+        is($?, 0, 'default[theme]=warm loads successfully');
+        like($out, qr/Coral/, 'default[theme]=warm applies Coral base color');
+    }
+
+    # Test default[theme] with comma-separated themes
+    {
+        open my $fh, '>', "$config_dir/config.sh" or die;
+        print $fh "default[theme]='warm,closing'\n";
+        close $fh;
+        my $out = `XDG_CONFIG_HOME=$tmpdir $mdee -d --dryrun --mode=light $test_md 2>&1`;
+        is($?, 0, 'default[theme]=warm,closing loads successfully');
+        like($out, qr/Coral/, 'default[theme]=warm,closing applies warm');
+        like($out, qr/sub\{/, 'default[theme]=warm,closing applies closing');
+    }
+
+    # Test --theme overrides default[theme]
+    {
+        open my $fh, '>', "$config_dir/config.sh" or die;
+        print $fh "default[theme]='warm'\n";
+        close $fh;
+        my $out = `XDG_CONFIG_HOME=$tmpdir $mdee -d --dryrun --mode=light --theme=closing $test_md 2>&1`;
+        unlike($out, qr/Coral/, '--theme overrides default[theme]');
+        like($out, qr/RoyalBlue/, '--theme=closing uses default base color');
+    }
+
     # Test --base-color overrides config theme override
     {
         open my $fh, '>', "$config_dir/config.sh" or die;
-        print $fh "theme_default_light[base]='<Crimson>=y25'\n";
+        print $fh "theme_light[base]='<Crimson>=y25'\n";
         close $fh;
         my $out = `XDG_CONFIG_HOME=$tmpdir $mdee -d --dryrun --mode=light -B Ivory $test_md 2>&1`;
         like($out, qr/Ivory/, '--base-color overrides config theme override');
@@ -368,35 +383,11 @@ subtest 'external theme file' => sub {
     my $theme_dir = "$tmpdir/mdee/theme";
     system("mkdir -p $theme_dir") == 0 or die "mkdir failed";
 
-    # Create a test theme file
+    # Create a test theme file (modifies theme_light/theme_dark)
     open my $fh, '>', "$theme_dir/testtheme.sh" or die;
     print $fh <<'THEME';
-declare -gA theme_testtheme_light=(
-    [base]='<Crimson>=y25'
-    [comment]='${base}+r60'
-    [bold]='${base}D'
-    [strike]='X'
-    [italic]='I'
-    [link]="$link_func"
-    [image]="$image_func"
-    [image_link]="$image_link_func"
-    [h1]='L25DE/${base}'
-    [h2]='L25DE/${base}+y20'
-    [h3]='L25DN/${base}+y30'
-    [h4]='${base}UD'
-    [h5]='${base}+y20;U'
-    [h6]='${base}+y20'
-    [inline_code]='L15/L23,/L23,L15/L23'
-    [code_block]='L20 , L18 , /L23;E , L20'
-)
-declare -gA theme_testtheme_dark=(
-    [base]='<Crimson>=y80'
-    [h1]='L00DE/${base}'
-    [h2]='L00DE/${base}-y15'
-    [h3]='L00DN/${base}-y25'
-    [inline_code]='L12/L05,/L05,L12/L05'
-    [code_block]='L10 , L12 , /L05;E , L10'
-)
+theme_light[base]='<Crimson>=y25'
+theme_dark[base]='<Crimson>=y80'
 THEME
     close $fh;
 
@@ -410,9 +401,9 @@ THEME
     is($?, 0, 'external dark theme loads successfully');
     like($dark, qr/Crimson/, 'external dark theme has base color');
 
-    # Test --list-themes shows external theme
-    my $list = `XDG_CONFIG_HOME=$tmpdir $mdee --list-themes 2>&1`;
-    like($list, qr/testtheme/, '--list-themes shows external theme');
+    # Test --theme=? shows external theme name
+    my $list = `XDG_CONFIG_HOME=$tmpdir $mdee --theme='?' 2>&1`;
+    like($list, qr/testtheme/, '--theme=? shows external theme');
 
     # Test --theme=FILE (file path direct loading)
     my $out_file = `XDG_CONFIG_HOME=$tmpdir $mdee -d --dryrun --mode=light --theme=$theme_dir/testtheme.sh $test_md 2>&1`;

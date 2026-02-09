@@ -3,7 +3,7 @@
 
 
 package BeamerReveal::Object::BeamerFrame;
-our $VERSION = '20260207.2052'; # VERSION
+our $VERSION = '20260208.1851'; # VERSION
 
 use parent 'BeamerReveal::Object';
 use Carp;
@@ -273,8 +273,8 @@ sub makeSlide {
 							    $iStamps );
   }
 
-  ##################################################
-  # process all animations / cannot yet be embedded
+  ###########################################
+  # process all animations / can be embedded
   my $aCounter = 0;
   foreach my $animation (@{$self->{animations}}) {
     my %commonStamps = (X => _topercent( $animation->{x} ),
@@ -320,8 +320,8 @@ sub makeSlide {
 							    $aStamps );
   }
 
-  ##############################################
-  # process all stills / cannot yet be embedded
+  #######################################
+  # process all stills / can be embedded
   my $sCounter = 0;
   foreach my $still (@{$self->{stills}}) {
     my %commonStamps = ( X => _topercent( $still->{x} ),
@@ -560,7 +560,7 @@ BeamerReveal::Object::BeamerFrame - BeamerFrame object
 
 =head1 VERSION
 
-version 20260207.2052
+version 20260208.1851
 
 =head1 SYNOPSIS
 

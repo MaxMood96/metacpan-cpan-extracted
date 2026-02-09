@@ -3,7 +3,7 @@
 
 
 package BeamerReveal::IPC::Run;
-our $VERSION = '20260207.2052'; # VERSION
+our $VERSION = '20260208.1851'; # VERSION
 
 use strict;
 use warnings;
@@ -82,7 +82,7 @@ BeamerReveal::IPC::Run - IPC::Run
 
 =head1 VERSION
 
-version 20260207.2052
+version 20260208.1851
 
 =head1 SYNOPSIS
 

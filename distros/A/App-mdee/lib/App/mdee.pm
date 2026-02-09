@@ -4,7 +4,7 @@ package App::mdee;
 # POD documentation is appended from script/mdee at release time.
 # See minil.toml for details.
 
-our $VERSION = "0.13";
+our $VERSION = "0.14";
 
 1;
 =encoding utf-8
@@ -24,13 +24,13 @@ mdee - em·dee, Markdown Easy on the Eyes
      -n  --dryrun           dry-run mode
      -s  --style=#          output style (nup/pager/cat/filter/raw)
      -f  --filter           shortcut for --style=filter
-     -p  --plain             shortcut for --style=pager
+     -p  --plain            shortcut for --style=pager
          --[no-]fold        line folding (default: on)
          --[no-]table       table formatting (default: on)
          --[no-]nup         nup paged output (default: on)
          --[no-]rule        use Unicode rules for tables (default: on)
      -w  --width=#          fold width (default: 80)
-     -t  --theme=#          color theme
+     -t  --theme=#[,#,...]  color theme(s)
      -m  --mode=#           light or dark (default: light)
      -B  --base-color=#     override theme's base color
                             (e.g., Ivory, #780043, (120,0,67))
@@ -46,7 +46,7 @@ mdee - em·dee, Markdown Easy on the Eyes
 
 =head1 VERSION
 
-Version 0.13
+Version 0.14
 
 =cut
 =head1 DESCRIPTION
@@ -209,10 +209,17 @@ bold text, etc.).
 
 =over 4
 
-=item B<-t> I<NAME>, B<--theme>=I<NAME>
+=item B<-t> I<NAME>, B<--theme>=I<NAME>[,I<NAME>,...]
 
-Select a color theme.  Default is C<default>.  Theme files are
-searched in the following order:
+Select color themes.  Multiple themes can be specified as
+comma-separated names or by repeating the option.  Each theme is
+applied in order as a transformation to the default theme:
+
+    mdee --theme=warm file.md             # warm base color
+    mdee --theme=warm,closing file.md     # warm + closing hashes
+    mdee --theme=warm --theme=closing     # same effect
+
+Theme files are searched in the following order:
 
 =over 4
 
@@ -220,30 +227,21 @@ searched in the following order:
 
 =item 2. Share theme directory: installed with the distribution under C<auto/share/dist/App-mdee/theme/>
 
-=item 3. In-memory variables (built-in themes and themes defined in config.sh)
-
 =back
 
-Theme files are Bash scripts that define associative arrays using
-C<declare -gA>.  Each theme should define a light variant with all
-fields, and optionally a dark variant with only the differences
-(dark inherits undefined fields from light):
+Theme files are Bash scripts that modify C<theme_light>
+and/or C<theme_dark> arrays directly:
 
-    # theme/mytheme.sh
-    declare -gA theme_mytheme_light=(
-        [base]='<DarkCyan>=y25'
-        [bold]='${base}D'
-        [h1]='L25DE/${base}'
-        ...all fields...
-    )
-    declare -gA theme_mytheme_dark=(
-        [base]='<DarkCyan>=y80'
-        [h1]='L00DE/${base}'
-        ...differences only...
-    )
+    # theme/warm.sh — change base color
+    theme_light[base]='<Coral>=y25'
+    theme_dark[base]='<Coral>=y80'
 
-The variable names must follow the pattern C<theme_NAME_light> and
-C<theme_NAME_dark> (or C<theme_NAME> for a mode-independent theme).
+    # theme/closing.sh — append closing hashes to h3-h6
+    for _mode in light dark; do
+        declare -n _theme="theme_${_mode}"
+        _theme[h3]+=';sub{s/(?<!#)$/ ###/r}'
+        ...
+    done
 
 =item B<-m> I<MODE>, B<--mode>=I<MODE>
 
@@ -264,64 +262,6 @@ color with automatic luminance adjustment:
 =item C<dark> - RoyalBlue with luminance 80 (bright text for dark backgrounds)
 
 =back
-
-User configuration is loaded from:
-
-    ${XDG_CONFIG_HOME:-~/.config}/mdee/config.sh
-
-This is a shell script that can set defaults and override colors:
-
-    # ~/.config/mdee/config.sh
-    default[mode]='dark'             # set default mode
-    default[style]='pager'           # set default style
-    default[width]=100               # set default fold width
-    default[base_color]='DarkCyan'   # set default base color
-
-The C<default> associative array supports the following keys:
-
-=over 4
-
-=item C<default[mode]> - Corresponds to C<--mode> (e.g., C<dark>, C<light>)
-
-=item C<default[theme]> - Corresponds to C<--theme> (e.g., C<default>)
-
-=item C<default[style]> - Corresponds to C<--style> (e.g., C<pager>, C<cat>)
-
-=item C<default[width]> - Corresponds to C<--width> (e.g., C<100>)
-
-=item C<default[base_color]> - Corresponds to C<--base-color> (e.g., C<DarkCyan>)
-
-=back
-
-B<Overriding theme colors>
-
-There are two ways to customize colors in config.sh:
-
-=over 4
-
-=item B<Theme definition (partial)> - modify specific keys before loading:
-
-    theme_default_light[base]='<DarkCyan>=y25'  # change base only
-    theme_default_dark[h1]='L00DE/${base}'      # change h1 only
-
-Since C<${base}> references are expanded after loading, changing the
-base color automatically affects all derived colors (h1, h2, bold, etc.).
-
-=item B<Full theme definition> - define a complete custom theme:
-
-    declare -A theme_mytheme_light=(
-        [base]='<DarkCyan>=y25'
-        [h1]='L25DE/${base}'
-        [bold]='${base}D'
-        ...
-    )
-
-=back
-
-Color specifications use L<Term::ANSIColor::Concise> format.
-The C<FG/BG> notation specifies foreground and background colors
-(e.g., C<L25DE/${base}> means gray foreground on base-colored background).
-The C<${base}> string is expanded to the base color value after loading.
 
 =item B<-B> I<COLOR>, B<--base-color>=I<COLOR>
 
@@ -438,6 +378,62 @@ or C<--no-pager> to disable paging.
 
 =back
 
+=head1 CONFIGURATION
+
+User configuration is loaded from:
+
+    ${XDG_CONFIG_HOME:-~/.config}/mdee/config.sh
+
+This is a shell script that can set defaults and override colors:
+
+    # ~/.config/mdee/config.sh
+    default[mode]='dark'             # set default mode
+    default[theme]='warm,closing'    # set default theme(s)
+    default[style]='pager'           # set default style
+    default[width]=100               # set default fold width
+    default[base_color]='DarkCyan'   # set default base color
+
+The C<default> associative array supports the following keys:
+
+=over 4
+
+=item C<default[mode]> - Corresponds to C<--mode> (e.g., C<dark>, C<light>)
+
+=item C<default[theme]> - Corresponds to C<--theme> (e.g., C<warm>, C<warm,closing>)
+
+=item C<default[style]> - Corresponds to C<--style> (e.g., C<pager>, C<cat>)
+
+=item C<default[width]> - Corresponds to C<--width> (e.g., C<100>)
+
+=item C<default[base_color]> - Corresponds to C<--base-color> (e.g., C<DarkCyan>)
+
+=back
+
+B<Overriding theme colors>
+
+Config.sh can modify theme arrays directly, using the same mechanism
+as theme files:
+
+    # Change base color for both modes
+    theme_light[base]='<DarkCyan>=y25'
+    theme_dark[base]='<DarkCyan>=y80'
+
+    # Append to both light and dark using declare -n
+    for _array in theme_light theme_dark; do
+        declare -n _theme=$_array
+        _theme[h3]+=';sub{s/(?<!#)$/ ###/r}'
+    done
+
+Since C<${base}> references are expanded after loading, changing the
+base color automatically affects all derived colors (h1, h2, bold, etc.).
+
+B<Color specification format>
+
+Color specifications use L<Term::ANSIColor::Concise> format.
+The C<FG/BG> notation specifies foreground and background colors
+(e.g., C<L25DE/${base}> means gray foreground on base-colored background).
+The C<${base}> string is expanded to the base color value after loading.
+
 =head1 EXAMPLES
 
     mdee README.md              # view markdown file
@@ -465,11 +461,13 @@ or C<--no-pager> to disable paging.
     mdee -p --no-fold file.md   # pager without fold
 
     # Theme examples
-    mdee --mode=dark file.md             # use dark mode
-    mdee --mode=light file.md            # use light mode
-    mdee -B Ivory file.md                # override base color
-    mdee --mode=dark -B '#780043' file.md # dark mode with burgundy
-    mdee --list-themes                   # list available themes
+    mdee --mode=dark file.md               # use dark mode
+    mdee --mode=light file.md              # use light mode
+    mdee -B Ivory file.md                  # override base color
+    mdee --mode=dark -B '#780043' file.md  # dark mode with burgundy
+    mdee --theme=warm file.md              # warm (Coral) base color
+    mdee --theme=warm,closing file.md      # warm + closing hashes
+    mdee --list-themes                     # list available themes
 
 =head1 INSTALLATION
 
@@ -608,20 +606,20 @@ directly to nup.
 
 =head2 Theme System
 
-B<em·dee> implements a theme system with light and dark mode variants.
+B<em·dee> implements a theme system where themes are transformations
+applied to the built-in default theme.  Multiple themes can be
+chained via C<--theme=NAME1,NAME2,...>.
 
 =head3 Theme Structure
 
-Each theme is defined as a Bash associative array with color
-definitions for each Markdown element.  The C<${base}> placeholder
-references the base color (set via C<--base-color> option):
+The built-in default theme is defined as C<theme_light> and
+C<theme_dark> associative arrays.  Dark inherits undefined
+keys from light immediately after declaration.  Theme files modify
+these arrays directly:
 
-    declare -A theme_default_dark=(
-        [h1]='L00DE/${base}'
-        [h2]='L00DE/${base}-y15'
-        [h3]='L00DN/${base}-y25'
-        ...
-    )
+    # theme/warm.sh
+    theme_light[base]='<Coral>=y25'
+    theme_dark[base]='<Coral>=y80'
 
 =head4 Base Color Expansion
 

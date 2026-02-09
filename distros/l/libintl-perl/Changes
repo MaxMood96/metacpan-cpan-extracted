@@ -1,4 +1,10 @@
-Version 1.36 - 06 Feb 2025
+Version 1.37 - 07 Feb 2026
+
+* Bugs fixed:
+
+  https://github.com/gflohr/libintl-perl/issues/23
+
+Version 1.36 - 06 Feb 2026
 
 * Important: The library now tries to implement the effect of environment
   variables exactly as described in the GNU gettext documentation at

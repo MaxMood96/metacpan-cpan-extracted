@@ -3,7 +3,7 @@
 
 
 package BeamerReveal::MediaManager;
-our $VERSION = '20260207.2052'; # VERSION
+our $VERSION = '20260208.1851'; # VERSION
 
 use strict;
 use warnings;
@@ -177,7 +177,7 @@ sub slideFromStore {
   if( exists $optargs{to_embed} ) {
     my $file = do {
       local $/ = undef;
-      open my $fh, "<". $fileName
+      open my $fh, '<' . $self->{outputdir} . '/' . $fileName
 	or $logger->fatal( "Cannot open $fileType-file $fileName to read" );
       <$fh>;
     };
@@ -201,7 +201,7 @@ sub noteFromStore {
   if( exists $optargs{to_embed} ) {
     my $file = do {
       local $/ = undef;
-      open my $fh, "<". $fileName
+      open my $fh, '<' . $self->{outputdir} . '/' . $fileName
 	or $logger->fatal( "Cannot open $fileType-file $fileName to read" );
       <$fh>;
     };
@@ -218,8 +218,9 @@ sub animationRegisterInStore {
   my ( $animation ) = @_;
   
   my $logger = $BeamerReveal::Log::logger;
-
-  my $animid  = Digest::SHA::hmac_sha256_hex( $animation->{tex} );
+  $Data::Dumper::Terse = 1;
+  $Data::Dumper::Indent = 0;
+  my $animid  = Digest::SHA::hmac_sha256_hex( Data::Dumper->Dump( [ $animation ] ) );
   my $animdir = "$self->{animations}/$animid";
   my $fullpathid = $animdir . ".mp4";
   # correct the effective path to reside in the output directory
@@ -272,7 +273,9 @@ sub stillRegisterInStore {
   
   my $logger = $BeamerReveal::Log::logger;
   
-  my $stillid  = Digest::SHA::hmac_sha256_hex( $still->{tex} );
+  $Data::Dumper::Terse = 1;
+  $Data::Dumper::Indent = 0;
+  my $stillid  = Digest::SHA::hmac_sha256_hex( Data::Dumper->Dump( [ $still ] ) );
   my $stilldir = "$self->{stills}/$stillid";
   my $fullpathid = $stilldir . ".mp4";
   # correct the effective path to reside in the output directory
@@ -782,7 +785,7 @@ BeamerReveal::MediaManager - MediaManager
 
 =head1 VERSION
 
-version 20260207.2052
+version 20260208.1851
 
 =head1 SYNOPSIS
 

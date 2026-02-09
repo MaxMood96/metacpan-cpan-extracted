@@ -1,0 +1,11 @@
+\B\.git\b
+\B\.github\b
+\Bblib\b
+\BMakefile$
+\BMakefile\.old$
+\BMYMETA\.(json|yml)$
+\Bpm_to_blib\b
+\BLinux-Event-Timer-[0-9._]+/
+\B\.DS_Store$
+\B\.swp$
+\B\.tmp$

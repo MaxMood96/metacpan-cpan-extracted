@@ -2,9 +2,10 @@
 abstract: 'Extensible Perl internet server'
 author:
   - 'Paul Seamons <paul@seamons.com> and Rob Brown <bbb@cpan.org>'
-build_requires: {}
+build_requires:
+  ExtUtils::MakeMaker: '0'
 configure_requires:
-  ExtUtils::MakeMaker: '6.30'
+  ExtUtils::MakeMaker: '0'
 dynamic_config: 1
 generated_by: 'ExtUtils::MakeMaker version 7.60, CPAN::Meta::Converter version 2.150010'
 license: perl
@@ -27,5 +28,5 @@ resources:
   bugtracker: https://github.com/rhandom/perl-net-server/issues
   homepage: https://github.com/rhandom/perl-net-server
   repository: https://github.com/rhandom/perl-net-server
-version: '2.016'
+version: '2.017'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

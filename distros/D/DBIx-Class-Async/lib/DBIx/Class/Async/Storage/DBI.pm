@@ -1,6 +1,6 @@
 package DBIx::Class::Async::Storage::DBI;
 
-$DBIx::Class::Async::Storage::DBI::VERSION   = '0.55';
+$DBIx::Class::Async::Storage::DBI::VERSION   = '0.56';
 $DBIx::Class::Async::Storage::DBI::AUTHORITY = 'cpan:MANWAR';
 
 use strict;
@@ -14,7 +14,7 @@ DBIx::Class::Async::Storage::DBI - DBI-based async storage backend for DBIx::Cla
 
 =head1 VERSION
 
-Version 0.55
+Version 0.56
 
 =head1 SYNOPSIS
 

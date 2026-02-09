@@ -9,18 +9,20 @@ my %env;
 use constant debug => $ENV{'NS_DEBUG'} ? 1 : 0;
 
 END {
-    warn "# number of tests ran ".($env{'_ok_n'} || 0)." did not match number of specified tests ".($env{'_ok_N'} || 0)."\n"
-        if ($env{'_ok_N'} || 0) ne ($env{'_ok_n'} || 0) && ($env{'_ok_pid'} || 0) == $$;
+    if (($env{'_ok_pid'} || 0) == $$) {
+        my $should = 0+$env{'_ok_N'};
+        my $actual = 0+$env{'_ok_n'};
+        my $exit = scalar keys %{ $env{'_not_ok'} };
+        $exit = 254 if $exit > 254;
+        $exit ||= -1 and warn "# Looks like you planned $should tests but ran $actual\n" if $should ne $actual;
+        exit $exit if $exit;
+    }
 }
 
 sub skip_without_ipv6 {
-    my $err = "";
-    if (!eval { require IO::Socket::IP; IO::Socket::IP->new(LocalAddr=>"[::]",Listen=>1) or die ($@ || "IP CRASH $!") } and
-        do { delete $INC{'IO/Socket/IP.pm'}; ($err=$@)=~s/\s*$//; 1 } and
-        !eval { require IO::Socket::INET6; IO::Socket::INET6->new(LocalAddr=>"[::]",Listen=>1)}) {
-        my $reason = "SKIP ".(shift || "IPv6 is not supported");
-        $reason .= "\nIP - $err" if $err;
-        $reason .= "\nINET6 - $@" if $@;
+    if (!eval { require Net::Server::Proto; Net::Server::Proto->ipv6_package->new(LocalAddr=>"[::]",Listen=>1) or die ($@ || "IP CRASH $!")  }) {
+        my $reason = shift || "IPv6 is not supported";
+        $reason = "SKIP $reason\n$@";
         $reason =~ s/\s*$/\n/;
         $reason =~ s/^/# /gm;
         print "1..0 $reason";
@@ -91,7 +93,7 @@ sub prepare_test {
     is(read(NST_READ, my $buf, 2), 2, "Pipe works") || do { SKIP: { skip ("Couldn't use working pipe", $N - 3) }; exit };
     warn "# Checked pipe serialization\n" if debug;
     $env{'block_until_ready_to_test'} = sub { read(NST_READ, my $buf, 1) };
-    $env{'signal_ready_to_test'}      = sub { print NST_WRITE "1"; NST_WRITE->flush; };
+    $env{'signal_ready_to_test'}      = sub { alarm $env{'timeout'}; print NST_WRITE "1"; NST_WRITE->flush; };
 
     return \%env;
 }
@@ -166,12 +168,13 @@ sub get_ports {
 sub ok {
     my ($ok, $msg, $level) = @_;
     my $n = ++$env{'_ok_n'};
-    print "".($ok ? "" : "not ")."ok $n";
-    print " - $msg" if defined $msg;
-    print "\n" if $msg !~ /\n\Z/;
+    print (($ok ? "" : "not ")."ok $n");
+    print " - $msg" if defined $msg && $msg =~ s/\s*$//;
+    print "\n";
     if (! $ok) {
         my ($pkg, $file, $line) = caller($level || 0);
         print "#   failed at $file line $line\n";
+        $env{'_not_ok'}->{$n} = $line;
     }
     return $ok;
 }

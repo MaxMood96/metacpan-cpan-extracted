@@ -2,7 +2,7 @@
 # MIT License
 
 class IO::Socket::SSL extends IO::Socket::IP {
-  version "0.018";
+  version "0.019";
   
   use IO::Socket::SSL::Callback::BeforeConnectSSL;
   use IO::Socket::SSL::Callback::BeforeAcceptSSL;
@@ -406,29 +406,11 @@ class IO::Socket::SSL extends IO::Socket::IP {
         my $again_write = $@ isa Net::SSLeay::Error::SSL_ERROR_WANT_WRITE;
         
         if ($again_read) {
-          eval { Go->gosched_io_read($fd, $timeout_duration); }
-          if ($@) {
-            if ($@ isa Go::Error::IOTimeout) {
-              my $deadline = $self->{ReadDeadline} ? $self->{ReadDeadline} : $self->{Deadline};
-              if ($deadline && Go::Time->now->after($deadline)) {
-                die Go::Context::Error::DeadlineExceeded "The deadline has been exceeded.";
-              }
-            }
-            die $@;
-          }
+          Go->gosched_io_read($fd, $timeout_duration);
           next;
         }
         elsif ($again_write) {
-          eval { Go->gosched_io_write($fd, $timeout_duration); }
-          if ($@) {
-            if ($@ isa Go::Error::IOTimeout) {
-              my $deadline = $self->{WriteDeadline} ? $self->{WriteDeadline} : $self->{Deadline};
-              if ($deadline && Go::Time->now->after($deadline)) {
-                die Go::Context::Error::DeadlineExceeded "The deadline has been exceeded.";
-              }
-            }
-            die $@;
-          }
+          Go->gosched_io_write($fd, $timeout_duration);
           next;
         }
         else {
@@ -463,29 +445,11 @@ class IO::Socket::SSL extends IO::Socket::IP {
         my $again_write = $@ isa Net::SSLeay::Error::SSL_ERROR_WANT_WRITE;
         
         if ($again_read) {
-          eval { Go->gosched_io_read($fd, $timeout_duration); }
-          if ($@) {
-            if ($@ isa Go::Error::IOTimeout) {
-              my $deadline = $self->{ReadDeadline} ? $self->{ReadDeadline} : $self->{Deadline};
-              if ($deadline && Go::Time->now->after($deadline)) {
-                die Go::Context::Error::DeadlineExceeded "The deadline has been exceeded.";
-              }
-            }
-            die $@;
-          }
+          Go->gosched_io_read($fd, $timeout_duration);
           next;
         }
         elsif ($again_write) {
-          eval { Go->gosched_io_write($fd, $timeout_duration); }
-          if ($@) {
-            if ($@ isa Go::Error::IOTimeout) {
-              my $deadline = $self->{WriteDeadline} ? $self->{WriteDeadline} : $self->{Deadline};
-              if ($deadline && Go::Time->now->after($deadline)) {
-                die Go::Context::Error::DeadlineExceeded "The deadline has been exceeded.";
-              }
-            }
-            die $@;
-          }
+          Go->gosched_io_write($fd, $timeout_duration);
           next;
         }
         else {
@@ -529,29 +493,11 @@ class IO::Socket::SSL extends IO::Socket::IP {
         my $again_write = $@ isa Net::SSLeay::Error::SSL_ERROR_WANT_WRITE;
         
         if ($again_read) {
-          eval { Go->gosched_io_read($fd, $timeout_duration); }
-          if ($@) {
-            if ($@ isa Go::Error::IOTimeout) {
-              my $deadline = $self->{ReadDeadline} ? $self->{ReadDeadline} : $self->{Deadline};
-              if ($deadline && Go::Time->now->after($deadline)) {
-                die Go::Context::Error::DeadlineExceeded "The deadline has been exceeded.";
-              }
-            }
-            die $@;
-          }
+          Go->gosched_io_read($fd, $timeout_duration);
           next;
         }
         elsif ($again_write) {
-          eval { Go->gosched_io_write($fd, $timeout_duration); }
-          if ($@) {
-            if ($@ isa Go::Error::IOTimeout) {
-              my $deadline = $self->{WriteDeadline} ? $self->{WriteDeadline} : $self->{Deadline};
-              if ($deadline && Go::Time->now->after($deadline)) {
-                die Go::Context::Error::DeadlineExceeded "The deadline has been exceeded.";
-              }
-            }
-            die $@;
-          }
+          Go->gosched_io_write($fd, $timeout_duration);
           next;
         }
         else {
@@ -587,29 +533,11 @@ class IO::Socket::SSL extends IO::Socket::IP {
         my $again_write = $@ isa Net::SSLeay::Error::SSL_ERROR_WANT_WRITE;
         
         if ($again_read) {
-          eval { Go->gosched_io_read($fd, $timeout_duration); }
-          if ($@) {
-            if ($@ isa Go::Error::IOTimeout) {
-              my $deadline = $self->{ReadDeadline} ? $self->{ReadDeadline} : $self->{Deadline};
-              if ($deadline && Go::Time->now->after($deadline)) {
-                die Go::Context::Error::DeadlineExceeded "The deadline has been exceeded.";
-              }
-            }
-            die $@;
-          }
+          Go->gosched_io_read($fd, $timeout_duration);
           next;
         }
         elsif ($again_write) {
-          eval { Go->gosched_io_write($fd, $timeout_duration); }
-          if ($@) {
-            if ($@ isa Go::Error::IOTimeout) {
-              my $deadline = $self->{WriteDeadline} ? $self->{WriteDeadline} : $self->{Deadline};
-              if ($deadline && Go::Time->now->after($deadline)) {
-                die Go::Context::Error::DeadlineExceeded "The deadline has been exceeded.";
-              }
-            }
-            die $@;
-          }
+          Go->gosched_io_write($fd, $timeout_duration);
           next;
         }
         else {
@@ -646,29 +574,11 @@ class IO::Socket::SSL extends IO::Socket::IP {
         my $again_write = $@ isa Net::SSLeay::Error::SSL_ERROR_WANT_WRITE;
         
         if ($again_read) {
-          eval { Go->gosched_io_read($fd, $timeout_duration); }
-          if ($@) {
-            if ($@ isa Go::Error::IOTimeout) {
-              my $deadline = $self->{ReadDeadline} ? $self->{ReadDeadline} : $self->{Deadline};
-              if ($deadline && Go::Time->now->after($deadline)) {
-                die Go::Context::Error::DeadlineExceeded "The deadline has been exceeded.";
-              }
-            }
-            die $@;
-          }
+          Go->gosched_io_read($fd, $timeout_duration);
           next;
         }
         elsif ($again_write) {
-          eval { Go->gosched_io_write($fd, $timeout_duration); }
-          if ($@) {
-            if ($@ isa Go::Error::IOTimeout) {
-              my $deadline = $self->{WriteDeadline} ? $self->{WriteDeadline} : $self->{Deadline};
-              if ($deadline && Go::Time->now->after($deadline)) {
-                die Go::Context::Error::DeadlineExceeded "The deadline has been exceeded.";
-              }
-            }
-            die $@;
-          }
+          Go->gosched_io_write($fd, $timeout_duration);
           next;
         }
         else {

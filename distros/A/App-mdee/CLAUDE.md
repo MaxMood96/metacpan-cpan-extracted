@@ -4,6 +4,18 @@
 
 em·dee (mdee: Markdown, Easy on the Eyes) is a Markdown viewer command implemented as a Bash script. It combines greple for syntax highlighting with nup for multi-column paged output.
 
+## Dependencies
+
+| Tool | Package | Role |
+|------|---------|------|
+| greple | App::Greple | Regex-based syntax highlighting |
+| ansifold | App::ansifold | ANSI-aware line folding |
+| ansicolumn | App::ansicolumn | Table column alignment |
+| nup | App::nup | Multi-column paged output |
+| ansiecho | App::ansiecho | Color output utility |
+| getoptlong.sh | Getopt::Long::Bash | Bash option parsing |
+| termcolor | Getopt::EX::termcolor | Terminal luminance detection |
+
 ## Project Structure
 
 - `script/mdee` - Main script (Bash) with POD documentation
@@ -27,43 +39,78 @@ em·dee (mdee: Markdown, Easy on the Eyes) is a Markdown viewer command implemen
 
 ### Theme System
 
-Themes are defined as Bash associative arrays:
-- `theme_default_light` - Light mode theme (full definition, includes `[base]`)
-- `theme_default_dark` - Dark mode theme (only differences from light, includes `[base]`)
+Built-in themes are defined as Bash associative arrays:
+- `theme_light` - Light mode theme (full definition, includes `[base]`)
+- `theme_dark` - Dark mode theme (differences from light, includes `[base]`)
 
-Dark theme inherits from light theme automatically in `load_theme()`.
+Dark theme inherits undefined keys from light immediately after declaration (before config.sh is sourced). This ensures that both arrays have all keys, so config.sh and theme files can safely use `+=` on any key.
 
-### External Theme Files
+#### Theme as Transformation
 
-Themes can be provided as external Bash scripts. Search order:
+Themes are not independent definitions — they are **transformations applied to `theme_light`/`theme_dark`**. Each theme file is a Bash script that modifies these arrays directly:
+
+```bash
+# share/theme/warm.sh — change base color
+theme_light[base]='<Coral>=y25'
+theme_dark[base]='<Coral>=y80'
+```
+
+```bash
+# share/theme/closing.sh — append closing hashes to h3-h6
+for _mode in light dark; do
+    declare -n _theme="theme_${_mode}"
+    _theme[h3]+=';sub{s/(?<!#)$/ ###/r}'
+    _theme[h4]+=';sub{s/(?<!#)$/ ####/r}'
+    _theme[h5]+=';sub{s/(?<!#)$/ #####/r}'
+    _theme[h6]+=';sub{s/(?<!#)$/ ######/r}'
+done
+```
+
+#### Chaining Themes
+
+The `--theme` option is an array (`@` type), supporting comma-separated values and repeated options. Themes are applied in order, each modifying `theme_light`/`theme_dark`:
+
+```bash
+mdee --theme=warm,closing file.md    # Coral base + closing hashes
+mdee --theme=warm --theme=closing    # same effect
+```
+
+Processing flow:
+1. Each theme file is sourced in order (modifies `theme_light`/`theme_dark`)
+2. `load_theme "default" "$mode"` copies the final result to `colors[]`
+3. `expand_theme` expands `${base}` references
+
+#### Theme File Locations
+
+Search order for theme files:
 
 1. User theme: `${XDG_CONFIG_HOME:-$HOME/.config}/mdee/theme/NAME.sh`
 2. Share theme: `$share_dir/theme/NAME.sh` (installed via distribution or `../share` in development)
-3. In-memory variables (built-in themes, config.sh definitions)
-
-Theme file format (`declare -gA` for global scope from within functions):
-
-```bash
-# share/theme/warm.sh
-declare -gA theme_warm_light=(
-    [base]='<Coral>=y25'
-    [bold]='${base}D'
-    ...all fields...
-)
-declare -gA theme_warm_dark=(
-    [base]='<Coral>=y80'
-    [h1]='L00DE/${base}'
-    ...differences only (inherits from light)...
-)
-```
 
 The `find_share_dir()` function discovers the installed share directory via `@INC`, with a development fallback to `$0/../share`.
+
+#### User Configuration as Theme
+
+Config.sh can also modify themes directly, using the same mechanism:
+
+```bash
+# config.sh example: append to both light and dark
+for _array in theme_light theme_dark; do
+    declare -n _theme=$_array
+    _theme[h3]+=';sub{s/(?<!#)$/ ###/r}'
+done
+```
+
+#### Theme Listing
+
+- `--list-themes`: Shows preview samples for all available themes. Each theme is previewed by temporarily applying it to a copy of the default, then restoring.
+- `--theme=?`: Lists theme names only.
 
 Field names are derived from theme keys (excluding `base`):
 
 ```bash
 declare -a show_fields=()
-for k in "${!theme_default_light[@]}"; do
+for k in "${!theme_light[@]}"; do
     [[ $k != base ]] && show_fields+=("$k")
 done
 ```
@@ -295,19 +342,27 @@ Regex pattern ([CommonMark Code Spans](https://spec.commonmark.org/0.31.2/#code-
 
 ### Header Colors
 
-Light mode uses light background with dark text:
+Light mode uses light background with dark text (h1-h3), base color text (h4-h6):
 ```bash
 [h1]='L25DE/${base}'       # Gray text on base background
 [h2]='L25DE/${base}+y20'   # Lighter background
 [h3]='L25DN/${base}+y30'   # Normal weight, even lighter
+[h4]='${base}UD'           # Base color, underline, bold
+[h5]='${base}+y20;U'       # Lighter base, underline
+[h6]='${base}+y20'         # Lighter base
 ```
 
-Dark mode uses dark background with light text:
+Dark mode uses dark background with light text (h1-h3), base color text (h4-h6):
 ```bash
 [h1]='L00DE/${base}'       # Black text on base background
 [h2]='L00DE/${base}-y15'   # Darker background
 [h3]='L00DN/${base}-y25'   # Normal weight, even darker
+[h4]='${base}UD'           # Base color, underline, bold
+[h5]='${base}-y20;U'       # Darker base, underline
+[h6]='${base}-y20'         # Darker base
 ```
+
+Pattern: light uses `+y` to lighten (reduce emphasis), dark uses `-y` to darken (reduce emphasis).
 
 ### Greple::tee Module
 

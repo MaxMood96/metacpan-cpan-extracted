@@ -7,8 +7,11 @@ use Test::More;
 
 use lib 't/lib';
 
-eval { require Mojo::IOLoop; require IO::Async::Loop::Mojo; 1 }
-    or plan skip_all => "Mojo::IOLoop and IO::Async::Loop::Mojo required for this test";
+eval "use Mojo::IOLoop";
+plan skip_all => "Mojo::IOLoop required" if $@;
+
+eval "use IO::Async::Loop::Mojo";
+plan skip_all => "IO::Async::Loop::Mojo required" if $@;
 
 use Mojo::IOLoop;
 use DBIx::Class::Async::Schema;
@@ -19,7 +22,7 @@ my $schema_class = "TestSchema";
 subtest "Integration: Sharing the Mojo Heartbeat" => sub {
     # 1. Create the Mojo-backed IO::Async loop
     # This loop is a "guest" inside Mojo's IOLoop
-    my $mojo_bridge = IO::Async::Loop::Mojo->new();
+    my $mojo_bridge = IO::Async::Loop::Mojo->new;
 
     # 2. Connect the Schema using this bridge
     my $schema = DBIx::Class::Async::Schema->connect(

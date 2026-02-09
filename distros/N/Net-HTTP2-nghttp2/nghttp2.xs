@@ -136,27 +136,41 @@ static ssize_t perl_data_source_read_callback(
     }
 
     /* Special case: if callback is NULL but user_data contains body, use it directly */
-    if (!dp->callback && dp->user_data && SvOK(dp->user_data) && !dp->eof) {
-        STRLEN body_len;
-        const char *body_ptr = SvPVbyte(dp->user_data, body_len);
+    if (!dp->callback && dp->user_data && SvOK(dp->user_data)) {
+        STRLEN full_len;
+        const char *body_ptr = SvPVbyte(dp->user_data, full_len);
+        STRLEN send_len = (full_len > length) ? length : full_len;
 
-        if (body_len > length) {
-            body_len = length;
-        }
-        if (body_len > 0) {
-            memcpy(buf, body_ptr, body_len);
+        if (send_len > 0) {
+            memcpy(buf, body_ptr, send_len);
         }
 
-        /* Mark as EOF - we send the entire body in one go */
-        *data_flags |= NGHTTP2_DATA_FLAG_EOF;
-        dp->eof = 1;
+        if (send_len >= full_len) {
+            /* All data consumed */
+            SvREFCNT_dec(dp->user_data);
+            dp->user_data = NULL;
+            if (dp->eof) {
+                *data_flags |= NGHTTP2_DATA_FLAG_EOF;
+            }
+        } else {
+            /* Partial send - keep remainder for next call */
+            SV *remaining = newSVpvn(body_ptr + send_len, full_len - send_len);
+            SvREFCNT_dec(dp->user_data);
+            dp->user_data = remaining;
+        }
 
-        return (ssize_t)body_len;
+        return (ssize_t)send_len;
     }
 
+    /* No callback and no pending data */
     if (!dp->callback || !SvOK(dp->callback)) {
-        *data_flags |= NGHTTP2_DATA_FLAG_EOF;
-        return 0;
+        if (dp->eof) {
+            *data_flags |= NGHTTP2_DATA_FLAG_EOF;
+            return 0;
+        }
+        /* No EOF requested - defer until more data arrives via submit_data */
+        dp->deferred = 1;
+        return NGHTTP2_ERR_DEFERRED;
     }
 
     ENTER;
@@ -1092,36 +1106,51 @@ _submit_response_streaming(self, stream_id, headers_av, data_callback, cb_user_d
     OUTPUT:
         RETVAL
 
-# Submit DATA frame directly (for simple cases)
+# Queue data to send on an existing stream.
+# The stream must already have a data provider (from submit_request or
+# submit_response with a streaming body callback).  This sets the data
+# provider's user_data to the given data and eof flag, clears the deferred
+# state, and calls nghttp2_session_resume_data so the next mem_send will
+# invoke the read callback which returns this data.
 int
-submit_data(self, stream_id, data, eof)
+submit_data(self, stream_id, data_sv, eof)
         SV *self
         int stream_id
-        SV *data
+        SV *data_sv
         int eof
     PREINIT:
         nghttp2_perl_session *ps;
-        STRLEN len;
-        const uint8_t *buf;
+        nghttp2_perl_data_provider *dp;
         int rv;
-        uint8_t flags = NGHTTP2_FLAG_NONE;
     CODE:
         ps = (nghttp2_perl_session *)SvIV(SvRV(self));
 
-        if (eof) {
-            flags |= NGHTTP2_FLAG_END_STREAM;
+        dp = find_data_provider(ps, stream_id);
+        if (!dp) {
+            croak("submit_data: no data provider for stream %d "
+                  "(submit_request or submit_response with body callback first)",
+                  stream_id);
         }
 
-        buf = (const uint8_t *)SvPVbyte(data, len);
-
-        /* Use nghttp2_submit_data to queue data */
-        /* Note: This requires the stream to already have a response submitted */
-        rv = nghttp2_submit_data(ps->session, flags, stream_id, NULL);
-
-        if (rv != 0) {
-            croak("nghttp2_submit_data failed: %s", nghttp2_strerror(rv));
+        /* Replace the callback with NULL (one-shot static body mode) and
+           store the data in user_data for the read callback to pick up */
+        if (dp->callback) {
+            SvREFCNT_dec(dp->callback);
+            dp->callback = NULL;
         }
-        RETVAL = rv;
+        if (dp->user_data) {
+            SvREFCNT_dec(dp->user_data);
+        }
+        dp->user_data = SvOK(data_sv) ? newSVsv(data_sv) : NULL;
+        dp->eof = eof ? 1 : 0;
+        dp->deferred = 0;
+
+        /* Resume the stream so nghttp2 calls the read callback */
+        rv = nghttp2_session_resume_data(ps->session, stream_id);
+        if (rv != 0 && rv != NGHTTP2_ERR_INVALID_ARGUMENT) {
+            croak("submit_data: resume failed: %s", nghttp2_strerror(rv));
+        }
+        RETVAL = 0;
     OUTPUT:
         RETVAL
 
@@ -1274,19 +1303,28 @@ _submit_request_xs(self, headers_av, body_sv)
         }
 
         /* Check if we have a body to send */
-        if (SvOK(body_sv) && SvPOK(body_sv)) {
+        if (SvOK(body_sv) && SvROK(body_sv) && SvTYPE(SvRV(body_sv)) == SVt_PVCV) {
+            /* CODE ref body: streaming callback data provider */
+            Newxz(dp, 1, nghttp2_perl_data_provider);
+            dp->stream_id = 0;  /* Will be set after submit */
+            dp->eof = 0;
+            dp->deferred = 0;
+            dp->callback = newSVsv(body_sv);
+
+            data_prd.source.ptr = dp;
+            data_prd.read_callback = perl_data_source_read_callback;
+            data_prd_ptr = &data_prd;
+        }
+        else if (SvOK(body_sv) && SvPOK(body_sv)) {
             const char *body_ptr = SvPVbyte(body_sv, body_len);
             if (body_len > 0) {
-                /* Create a simple one-shot data provider for the body */
+                /* Static string body: one-shot data provider */
                 Newxz(dp, 1, nghttp2_perl_data_provider);
                 dp->stream_id = 0;  /* Will be set after submit */
-                dp->eof = 0;
+                dp->eof = 1;       /* Static bodies always want EOF after sending */
                 dp->deferred = 0;
-
-                /* Store body as a callback that returns the body once */
-                /* We'll use a closure-like approach: store body in user_data */
                 dp->user_data = newSVsv(body_sv);
-                dp->callback = NULL;  /* Special marker: use user_data as body */
+                dp->callback = NULL;  /* Use user_data as body */
 
                 data_prd.source.ptr = dp;
                 data_prd.read_callback = perl_data_source_read_callback;
@@ -1300,6 +1338,7 @@ _submit_request_xs(self, headers_av, body_sv)
 
         if (stream_id < 0) {
             if (dp) {
+                if (dp->callback) SvREFCNT_dec(dp->callback);
                 if (dp->user_data) SvREFCNT_dec(dp->user_data);
                 Safefree(dp);
             }

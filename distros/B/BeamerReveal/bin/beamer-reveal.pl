@@ -2,7 +2,7 @@
 # -*- cperl -*-
 # PODNAME: beamer-reveal.pl
 # ABSTRACT: converts the .rvl file and the corresponding pdf file to a full reveal website
-our $VERSION = '20260207.2052'; # VERSION
+our $VERSION = '20260208.1851'; # VERSION
 
 
 use strict;
@@ -216,13 +216,15 @@ $mediaManager->revealToStore();
 $logger->progress( $overall_id, 1, 'generating backgrounds' );
 
 $logger->log( 0, "- Generating the images" );
-my $frameConvertor = BeamerReveal::FrameConverter->new( "$output_dir/${jobname}_files",
+my $frameConvertor = BeamerReveal::FrameConverter->new( "${jobname}_files",
+							$output_dir,
 							"$pdf_dir/$jobname.pdf",
 							$presentation->{parameters}->{canvaswidth},
 							$presentation->{parameters}->{canvasheight},
 							$fc_id,
 							$opt_debug );
-$mediaManager->backgroundsToStore( $frameConvertor->toJPG() );
+my $list = $frameConvertor->toJPG();
+$mediaManager->backgroundsToStore( $list );
 
 ##########################
 # geneate the notes pages
@@ -230,14 +232,16 @@ $logger->progress( $overall_id, 2, 'generating notes pages' );
 
 $logger->log( 0, "- Generating the notes pages" );
 if ( $nofNotes ) {
-  my $notesFactory = BeamerReveal::NotesFactory->new( "$output_dir/${jobname}_files",
+  my $notesFactory = BeamerReveal::NotesFactory->new( "${jobname}_files",
+						      $output_dir,
 						      $pdf_dir,
 						      $presentation->{parameters},
 						      $presentation->{parameters}->{canvaswidth} / 2,
 						      $presentation->{parameters}->{canvasheight} / 2,
 						      $ng_id,
 						      $opt_debug);
-  $mediaManager->notesToStore( $notesFactory->toJPG() );
+  my $list = $notesFactory->toJPG();
+  $mediaManager->notesToStore( $list );
 }
 else {
   $logger->progress( $ng_id, 1, 'no notes found', 1 );
@@ -360,7 +364,7 @@ beamer-reveal.pl - converts the .rvl file and the corresponding pdf file to a fu
 
 =head1 VERSION
 
-version 20260207.2052
+version 20260208.1851
 
 =head1 SYNOPSIS
 

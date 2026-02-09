@@ -17,7 +17,6 @@ use_ok('Net::Server');
 
 sub accept {
     $env->{'signal_ready_to_test'}->();
-    alarm($env->{'timeout'});
     return shift->SUPER::accept(@_);
 }
 
@@ -32,18 +31,19 @@ my $ok = eval {
     if ($pid) {
         $env->{'block_until_ready_to_test'}->();
 
-        ### connect to child using IPv4
+        ### connect to child using IPv6
         my $remote = Net::Server::Proto->ipv6_package->new(
+            Timeout  => $env->{'timeout'}-1, # Successful loopback network connection ought to be very fast
             PeerAddr => $fail,
             PeerPort => $env->{'ports'}->[0],
             Proto    => 'tcp');
         die "IPv6 listener accepted IPv4 connection to [$fail] [$env->{'ports'}->[0]]" if $remote;
 
-        ### connect to child using IPv6
+        ### connect to child using IPv4
         $remote = Net::Server::Proto->ipv6_package->new(
             PeerAddr => $good,
             PeerPort => $env->{'ports'}->[0],
-            Proto    => 'tcp') || die "Couldn't open sock: $!";
+            Proto    => 'tcp') or die "IPv4 connection failed to [$good] [$env->{'ports'}->[0]]: [$!] $@";
 
         my $line = <$remote>;
         die "Didn't get the type of line we were expecting: ($line)" if $line !~ /Net::Server/;

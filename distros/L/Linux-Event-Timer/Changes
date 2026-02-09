@@ -1,0 +1,7 @@
+Revision history for Linux::Event::Timer
+
+0.009  2026-02-08
+  - Use Linux::FD::Timer's documented API (timer object is itself a filehandle).
+  - read_ticks() now drains via ->receive (returning 0 when not ready).
+0.010  2026-02-08
+  - Corrected distribution for cpan and pause

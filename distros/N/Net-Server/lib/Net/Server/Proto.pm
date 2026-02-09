@@ -2,9 +2,11 @@
 #
 #  Net::Server::Proto - Net::Server Protocol compatibility layer
 #
-#  Copyright (C) 2001-2022
+#  Copyright (C) 2001-2026
 #
 #    Paul Seamons <paul@seamons.com>
+#
+#    Rob Brown <bbb@cpan.org>
 #
 #  This package may be distributed under the terms of either the
 #  GNU General Public License
@@ -36,9 +38,6 @@ our @EXPORT;
 our @EXPORT_OK; # Allow any routine defined in this module to be exported, except block these static methods:
 our @EXPORT_DENIED = qw[
     import
-    parse_info
-    get_addr_info
-    object
 ];
 sub IPV6_V6ONLY();
 
@@ -47,6 +46,7 @@ sub import {
     my $callpkg = caller;
     foreach my $func (@_) {
         if (!grep {$_ eq $func} @EXPORT_OK) { # Trying to import something not in my list
+            croak "$func: Can't import underbar routine" if $func =~ /^_/;
             if (!exists &$func) { # Symbol doesn't exist here yet
                 grep {$_ eq $func} @Socket::EXPORT,@Socket::EXPORT_OK # Is exportable by Socket
                 or ($have6 || !defined $have6 && eval{($have6=0)=require Socket6}) && # Or else if Socket6 is available, AND
@@ -102,14 +102,12 @@ BEGIN {
         my $fullname = __PACKAGE__."::".(my $basename = shift);
         # Manually run routine if import failed to brick over symbol in local namespace during the last attempt.
         $sub->{$fullname} ? (return $sub->{$fullname}->(@_)) : (die "$fullname: Unable to replace symbol") if exists $sub->{$fullname};
-        # Always try Socket.pm first, then Socket6.pm
-        $sub->{$fullname} = Socket->can($basename) || $have6 && Socket6->can($basename) || eval { # Only try to load Socket6 once
-            die "No Socket6" if defined $have6 && !$have6; ($have6||=0)||=do{require Socket6;1};
-            Socket6->can($basename) or do{no strict 'refs';&{"Socket6::$basename"};0} or # Avoid Crash: Can't use string as a subroutine ref while "strict refs"
-            Socket6->can($basename); # Socket6 will conjure the constant routine on-the-fly via AUTOLOAD upon invocation, so "can" will work the second time.
-        };
+        # Socket < 2.xxx and Socket6 can conjure constant routine on-the-fly via AUTOLOAD upon invocation, so "can" may not work until the second time.
+        no strict 'refs'; # Avoid Crash: Can't use string as a subroutine ref while "strict refs"
+        $sub->{$fullname}  = Socket ->can($basename) || eval { &{"Socket ::$basename"};0} || Socket ->can($basename); # Always try Socket.pm first, then Socket6.pm
+        $sub->{$fullname}||= Socket6->can($basename) || eval { &{"Socket6::$basename"};0} || Socket6->can($basename)
+            if $have6 or !defined $have6 && eval { ($have6||=0)||=do{require Socket6;1} }; # Only try to load Socket6 the first time Socket couldn't find something.
         if (my $code = $sub->{$fullname}) {
-            no strict 'refs';
             no warnings qw(redefine prototype); # Don't spew when redefining the stub in the packages that imported it (as well as mine) with the REAL routine
             eval { *{"$_\::$basename"}=$code foreach keys %{$exported->{$basename}}; *$fullname=$code } or warn "$fullname: On-The-Fly replacement failed: $@";
             my @res = (); # Run REAL routine preserving the same wantarray-ness context as caller
@@ -176,7 +174,8 @@ sub CAN_DISABLE_V6ONLY {
 }
 
 sub parse_info {
-    my ($class, $port, $host, $proto, $ipv, $server) = @_;
+    my $class = $_[0] eq __PACKAGE__ ? shift : __PACKAGE__;
+    my ($port, $host, $proto, $ipv, $server) = @_;
 
     my $info;
     if (ref($port) eq 'HASH') {
@@ -256,19 +255,20 @@ sub parse_info {
 }
 
 sub get_addr_info {
-    my ($class, $host, $port, $proto, $server) = @_;
+    my $class = $_[0] eq __PACKAGE__ ? shift : __PACKAGE__;
+    my ($host, $port, $proto, $server) = @_;
     $host  = '*'   if ! defined $host;
     $port  = 0     if ! defined $port;
     $proto = 'tcp' if ! defined $proto;
     $server = {}   if ! defined $server;
     return ([$host, $port, '*']) if $proto =~ /UNIX/i;
-    $port = (getservbyname($port, $proto))[2] or croak "Could not determine port number from host [$host]:$_[2]" if $port =~ /\D/;
+    $port = (getservbyname($port, $proto))[2] or croak "Could not determine port number from host [$host]:$_[1]" if $port =~ /\D/;
 
     my @info;
     if ($host =~ /^\d+(?:\.\d+){3}$/) {
         my $addr = inet_aton($host) or croak "Unresolveable host [$host]:$port: invalid ip";
         push @info, [inet_ntoa($addr), $port, 4];
-    } elsif (eval { $class->ipv6_package($server) }) { # Hopefully IPv6 package has already been loaded by now, if it's available.
+    } elsif (eval { ipv6_package()->new(LocalAddr=>"::", Listen=>1) }) { # PreTest to ensure we can even handle a simple IPv6 Addr
         my $proto_id = getprotobyname(lc($proto) eq 'udp' ? 'udp' : 'tcp');
         my $socktype = lc($proto) eq 'udp' ? SOCK_DGRAM : SOCK_STREAM;
         my @res = safe_addr_info($host eq '*' ? '' : $host, $port, { family=>AF_UNSPEC, socktype=>$socktype, protocol=>$proto_id, flags=>AI_PASSIVE });
@@ -311,7 +311,8 @@ sub get_addr_info {
 }
 
 sub object {
-    my ($class, $info, $server) = @_;
+    my $class = $_[0] eq __PACKAGE__ ? shift : __PACKAGE__;
+    my ($info, $server) = @_;
     my $proto_class = $info->{'proto'};
     if ($proto_class !~ /::/) {
         $server->fatal("Invalid proto class \"$proto_class\"") if $proto_class !~ /^\w+$/;
@@ -319,35 +320,19 @@ sub object {
     }
     (my $file = "${proto_class}.pm") =~ s|::|/|g;
     $server->fatal("Unable to load module for proto \"$proto_class\": $@") if ! eval { require $file };
+    if (my $pkg = $server->{'server'}->{'ipv6_package'} and !$Net::Server::IP::ipv6_package) {
+        eval {require Net::Server::IP;$Net::Server::IP::ipv6_package=$pkg};
+    }
     return $proto_class->object($info, $server);
 }
 
 sub requires_ipv6 { $requires_ipv6 ? 1 : undef }
 
 sub ipv6_package {
-    my ($class, $server) = @_;
     return $ipv6_package if $ipv6_package;
     return undef if $ENV{'NO_IPV6'};
-
-    my $pkg = $server->{'server'}->{'ipv6_package'};
-    if ($pkg) {
-        (my $file = "$pkg.pm") =~ s|::|/|g;
-        eval { require $file } or $server->fatal("Could not load ipv6_package $pkg: $@");
-    } elsif ($INC{'IO/Socket/IP.pm'}) { # already loaded
-        $pkg = 'IO::Socket::IP';
-    } elsif ($INC{'IO/Socket/INET6.pm'}) {
-        $pkg = 'IO::Socket::INET6';
-    } elsif (eval { require IO::Socket::IP }) {
-        $pkg = 'IO::Socket::IP';
-    } else {
-        my $err = $@;
-        if (eval { require IO::Socket::INET6 }) {
-            $pkg = 'IO::Socket::INET6';
-        } else {
-            croak "Port configuration using IPv6 could not be started. Could not find or load IO::Socket::IP or IO::Socket::INET6:\n  $err  $@";
-        }
-    }
-    return $ipv6_package = $pkg;
+    eval {require Net::Server::IP;1} or !warn "ipv6_package: Failure! [$!] [$@]" or die "ipv6_package: Failure! [$!] [$@]";
+    return $ipv6_package = "Net::Server::IP";
 }
 
 our $IPV6_V6ONLY;
@@ -879,7 +864,18 @@ examples:
     #     ipv   => 4, # IPv4
     # });
 
-=head1 LICENCE
+=head1 AUTHOR
+
+Paul Seamons <paul@seamons.com>
+
+Rob Brown <bbb@cpan.org>
+
+=head1 SEE ALSO
+
+L<Socket>,
+L<Socket6>
+
+=head1 LICENSE
 
 Distributed under the same terms as Net::Server
 

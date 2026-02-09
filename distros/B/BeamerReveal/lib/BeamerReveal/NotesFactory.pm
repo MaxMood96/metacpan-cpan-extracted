@@ -3,7 +3,7 @@
 
 
 package BeamerReveal::NotesFactory;
-our $VERSION = '20260207.2052'; # VERSION
+our $VERSION = '20260208.1851'; # VERSION
 
 use strict;
 use warnings;
@@ -25,10 +25,11 @@ sub nofdigits { length( "$_[0]" ) }
 
 sub new {
   my $class = shift;
-  my ( $base, $pdf_dir, $presentationparameters, $xres, $yres, $progressId, $debug ) = @_;
+  my ( $base, $output_dir, $pdf_dir, $presentationparameters, $xres, $yres, $progressId, $debug ) = @_;
 
   my $self = {
 	      base       => $base,
+	      output_dir => $output_dir,
 	      pdf_dir    => $pdf_dir,
 	      presentationparameters => $presentationparameters,
 	      xres       => int( $xres ), 
@@ -137,7 +138,7 @@ sub toJPG {
   $notesFileName =~ s/\.\w+$/.pdf/;
   $cmd = [ $self->{pdftoppm},
 	   $notesFileName,
-	   "$self->{slides}/notes",
+	   "$self->{output_dir}/$self->{slides}/notes",
 	   '-jpeg',
 	   '-jpegopt',
 	   'optimize=y,quality=85',
@@ -189,7 +190,7 @@ BeamerReveal::NotesFactory - NotesFactory
 
 =head1 VERSION
 
-version 20260207.2052
+version 20260208.1851
 
 =head1 SYNOPSIS
 

@@ -23,6 +23,7 @@ use IO::Socket::INET;
 use Fcntl ();
 use Errno ();
 use Socket qw(SOMAXCONN);
+use Carp qw(croak);
 
 BEGIN {
     eval { require Net::SSLeay; 1 }
@@ -155,7 +156,7 @@ sub bind_SSL {
 
     Net::SSLeay::CTX_set_options($ctx, Net::SSLeay::OP_ALL());  $sock->SSLeay_check_fatal("SSLeay bind_SSL CTX_set_options");
 
-    # 0x1:  SSL_MODE_ENABLE_PARTIAL_WRITE
+    # 0x01: SSL_MODE_ENABLE_PARTIAL_WRITE
     # 0x10: SSL_MODE_RELEASE_BUFFERS (ignored before OpenSSL v1.0.0)
     Net::SSLeay::CTX_set_mode($ctx, 0x11);  $sock->SSLeay_check_fatal("SSLeay bind_SSL CTX_set_mode");
 
@@ -170,7 +171,12 @@ sub bind_SSL {
 sub close {
     my $sock = shift;
     if ($sock->SSLeay_is_client) {
-        Net::SSLeay::free($sock->SSLeay);
+        if (my $ssl = ${*$sock}{'SSLeay'}) { # Avoid trying to build a new ctx just to throw it away
+            my $should_shutdown = 1; # Net::SSLeay <= 1.85 does not have is_init_finished(), so just attempt shutdown in this case:
+            eval { $should_shutdown = 0 if !Net::SSLeay::is_init_finished($ssl) };
+            Net::SSLeay::shutdown($ssl) if $should_shutdown;
+            Net::SSLeay::free($ssl);
+        }
     } else {
         Net::SSLeay::CTX_free($sock->SSLeay_context);
     }
@@ -227,7 +233,7 @@ sub SSLeay {
 sub SSLeay_check_fatal {
     my ($client, $msg) = @_;
     if (my $err = $client->SSLeay_check_error($msg, 1)) {
-        my ($file, $pkg, $line) = caller;
+        my ($pkg, $file, $line) = caller;
         die "$msg at $file line $line\n  ".join('  ', @$err);
     }
 }
@@ -246,98 +252,125 @@ sub SSLeay_check_error {
     return;
 }
 
+# my $err = $sock->SSLeay_check_perm($msg)
+# Returns permanent error string for $sock, or undef if no permanent error.
+# Do not call this method unless you receive an unknown error response
+# from one of the Net::SSLeay::* routines. If a temporary error is detected,
+# then it will run select() using the corresponding READ or WRITE bits
+# before returning undef.
+sub SSLeay_check_perm {
+    my ($client, $msg) = @_;
+    my $perm;
+    if (my $ssl = ${*$client}{'SSLeay'} and my $fn = $client->fileno()) {
+        my $err = Net::SSLeay::get_error($ssl, -1);
+        return if !$err;
+        vec(my $vec = '', $fn, 1) = 1;
+        if ($err == Net::SSLeay::ERROR_WANT_READ()) {
+            select($vec, undef, undef, undef); # This is not a real error. SSLeay just wants to read, so block until something is ready.
+            return;
+        }
+        if ($err == Net::SSLeay::ERROR_WANT_WRITE()) {
+            select(undef, $vec, undef, undef); # This is not a real error. SSLeay just wants to write, so block until socket has room.
+            return;
+        }
+        return if $!{'EAGAIN'} || $!{'EINTR'} || $!{'ENOBUFS'}; # Retryable safe errno
+        ($perm = "FD$fn-sslerr[$err] - ".Net::SSLeay::ERR_error_string($err)." [$!] $@")=~s/\s+$//;
+    }
+    return if !$perm;
+
+    $msg ||= "SSL ERROR";
+    my $errs = [ ${*$client}{'_error'} = $perm = "$msg: ($perm)" ];
+    if (my $cb = $client->SSL_error_callback) {
+        $cb->($client, $msg, $errs);
+    }
+    return $errs->[0];
+}
+
+# my $bytes = $sock->pending();
+# Returns number of bytes in the buffer.
+sub pending {
+    my $sock = shift;
+    my $ssl = $sock && ${*$sock}{'SSLeay'} or return 0;
+    return length ${*$sock}{'SSLeay_buffer'} if defined ${*$sock}{'SSLeay_buffer'};
+    return Net::SSLeay::pending($ssl);
+}
+
 
 ###----------------------------------------------------------------###
 
 sub read_until {
-    my ($client, $bytes, $end_qr, $non_greedy) = @_;
+    my ($client, $bytes, $end_qr) = @_;
+
+    croak "read_until: bytes must be positive, or else undef" if defined $bytes and !$bytes || $bytes !~ /^\d+$/;
 
     my $ssl = $client->SSLeay;
-    my $content = ${*$client}{'SSLeay_buffer'};
-    $content = '' if ! defined $content;
+
+    my $content = '';
     my $ok = 0;
-
-    # the rough outline for this loop came from http://devpit.org/wiki/OpenSSL_with_nonblocking_sockets_%28in_Perl%29
-    OUTER: while (1) {
-        if (!length($content)) {
-        }
-        elsif (defined($bytes) && length($content) >= $bytes) {
-            ${*$client}{'SSLeay_buffer'} = substr($content, $bytes, length($content), '');
-            $ok = 2;
-            last;
-        }
-        elsif (defined($end_qr) && $content =~ m/$end_qr/g) {
-            my $n = pos($content);
-            ${*$client}{'SSLeay_buffer'} = substr($content, $n, length($content), '');
+    my $n = undef;
+    while (!$ok) {
+        $client->sysread($content, 16384, length $content) or last;
+        if (defined($end_qr) && $content =~ m/$end_qr/g) {
+            $n = pos($content);
             $ok = 1;
-            last;
         }
-
-        # 'select' prevents spinloops waiting for new data on the socket, and are necessary for non-blocking filehandles.
-        vec(my $vec = '', $client->fileno, 1) = 1;
-        select($vec, undef, undef, undef);
-
-        my $n_empty = 0;
-        while (1) {
-            # 16384 is the maximum amount read() can return
-            my $n = 16384;
-            $n -= ($bytes - length($content)) if $non_greedy && ($bytes - length($content)) < $n;
-            my ($buf, $rv) = Net::SSLeay::read($ssl, 16384); # read the most we can - continue reading until the buffer won't read any more
-            if ($client->SSLeay_check_error('SSLeay read_until read')) {
-                last OUTER;
-            }
-
-            if (! defined($buf)) {
-                # Preserved from Net/Server/Proto/SSLEAY's version
-                last if $!{'EAGAIN'} || $!{'EINTR'} || $!{'ENOBUFS'};
-
-                # Treat these renegotiation errors like EAGAIN - select will handle it and the next SSL_read will resolve it.
-                last if $rv && ($rv == Net::SSLeay::ERROR_WANT_READ() || $rv == Net::SSLeay::ERROR_WANT_WRITE());
-
-                die "SSLeay read_until: $!\n";
-            }
-
-            if (!length($buf)) {
-                last OUTER if !length($buf) && $n_empty++;
-            } else {
-                $content .= $buf;
-                if ($non_greedy && length($content) == $bytes) {
-                    $ok = 3;
-                    last;
-                }
-            }
+        if ($bytes and length $content >= $bytes and !$ok || $n > $bytes) { # Keep qr match only if found earlier than $bytes
+            $n = $bytes;
+            $ok = 2;
         }
+    }
+    my $got = length $content;
+    if ($ok and $n and $got > $n) { # Whoops, got a little too much, so prepend the extra onto the front of the buffer for later
+        defined ${*$client}{'SSLeay_buffer'} or ${*$client}{'SSLeay_buffer'} = '';
+        ${*$client}{'SSLeay_buffer'} = substr($content,$n,$got-$n,'') . ${*$client}{'SSLeay_buffer'};
     }
     return wantarray ? ($ok, $content) : $content;
 }
 
 sub read {
     my ($client, $buf, $size, $offset) = @_;
-    my ($ok, $read) = $client->read_until($size, undef, 1);
+    my ($ok, $read) = $client->read_until($size);
     defined($_[1]) or $_[1] = '';
-    substr($_[1], $offset || 0, defined($buf) ? length($buf) : 0, $read);
+    substr($_[1], $offset || 0, length($_[1]), $read);
     return length $read;
 }
 
-sub sysread  {
-    my ($client, $buf, $length, $offset) = @_;
-    $length = length $buf unless defined $length;
-    $offset = 0 unless defined $offset;
-    my $ssl = $client->SSLeay;
-    my $data = Net::SSLeay::read($ssl, $length);
-
-    return if $!{EAGAIN} || $!{EINTR};
-
-    die "SSLeay print: $!\n" unless defined $data;
-
-    $length = length($data);
-    $$buf = '' if !defined $buf;
-
-    if ($offset > length($$buf)) {
-        $$buf .= "\0" x ($offset - length($buf));
+sub sysread {
+    my ($client, $buf, $max, $offset) = @_;
+    delete ${*$client}{'_error'};
+    $max = 1 if !$max || $max<0;
+    $offset ||= 0;
+    ref $buf or $buf = \$_[1];
+    my $ssl = $client->SSLeay or return;
+    my $max_bytes = 16384; # Read as many bytes as possible
+    my ($retries, $data, $rv) = 5;
+    if (my $ready = $client->pending) {
+        my $buffer_size = defined ${*$client}{'SSLeay_buffer'} && length ${*$client}{'SSLeay_buffer'};
+        if (!$buffer_size) {
+            ($data, $rv) = Net::SSLeay::read($ssl, $max_bytes); # Hopefully $rv >= $ready
+            $buffer_size = length (${*$client}{'SSLeay_buffer'} = $data) if defined $data; # Successfully consumed Net::SSLeay buffer
+        }
+        !$buffer_size and ${*$client}{'_error'} = "SSLEAY failed reading buffer" and return;
+        $data = delete ${*$client}{'SSLeay_buffer'};
     }
 
-    substr($$buf, $offset, length($$buf), $data);
+    while ($retries-->0 and !defined $data) {
+        $! = 0;
+        ($data, $rv) = Net::SSLeay::read($ssl, $max_bytes);
+        last if defined $data;
+        return if $client->SSLeay_check_perm("SSLEAY sysread");
+    }
+
+    defined $data or return;
+    my $length = length $data;
+    $length>$max and ${*$client}{'SSLeay_buffer'} = substr $data,$max,$length-$max,''; # If too long, leave the extraneous bytes in the buffer
+
+    defined $$buf or $$buf = '';
+    if ($offset > length($$buf)) {
+        $$buf .= "\0" x ($offset - length($$buf));
+    }
+
+    substr $$buf, $offset, length($$buf)-$offset, $data;
     return $length;
 }
 
@@ -348,18 +381,18 @@ sub syswrite {
     delete ${*$client}{'_error'};
 
     $length = length $buf unless defined $length;
-    $offset = 0 unless defined $offset;
-    my $ssl    = $client->SSLeay;
-
-    my $write = Net::SSLeay::write_partial($ssl, $offset, $length, $buf);
-
-    return if $!{EAGAIN} || $!{EINTR};
-    if ($write < 0) {
-        ${*$client}{'_error'} = "SSLeay print: $!\n";
-        return;
+    $offset ||= 0;
+    my $ssl = $client->SSLeay;
+    my $content = substr $buf, $offset, $length;
+    my $tries = 5;
+    while ($tries-->0) {
+        $! = 0;
+        my $wrote = Net::SSLeay::write($ssl, $buf);
+        return $wrote if $wrote >= 0;
+        return if $client->SSLeay_check_perm("SSLEAY syswrite");
     }
 
-    return $write;
+    return;
 }
 
 sub getline {
@@ -382,21 +415,9 @@ sub getlines {
 sub print {
     my $client = shift;
     delete ${*$client}{'_error'};
-    my $buf    = @_ == 1 ? $_[0] : join('', @_);
-    my $ssl    = $client->SSLeay;
-    while (length $buf) {
-        vec(my $vec = '', $client->fileno, 1) = 1;
-        select(undef, $vec, undef, undef);
-
-        my $write = Net::SSLeay::write($ssl, $buf);
-        return 0 if $client->SSLeay_check_error('SSLeay write');
-        if ($write == -1 && !$!{EAGAIN} && !$!{EINTR} && !$!{ENOBUFS}) {
-            ${*$client}{'_error'} = "SSLeay print: $!\n";
-            return;
-        }
-        substr($buf, 0, $write, "") if $write > 0;
-    }
-    return 1;
+    my $OFS = defined $, ? $, : '';
+    my $buf = join $OFS, @_;
+    return $client->write($buf);
 }
 
 sub printf {
@@ -409,11 +430,23 @@ sub say {
     $client->print(@_, "\n");
 }
 
+# my $bytes = $sock->write($data, $length, $offset)
+# Returns the number of bytes from $data sent to the $sock
+# beginning at $offset and sending up to $length bytes.
+# If length is omitted, the entire $data string is sent.
+# If $offset is omitted, then starts from the beginning (0).
+# If only partial data is sent, then it will keep retrying
+# until all the data has been encrypted and sent.
 sub write {
     my $client = shift;
     my $buf    = shift;
     $buf = substr($buf, $_[1] || 0, $_[0]) if @_;
-    $client->print($buf);
+    my $total = 0;
+    while (my $sent = $client->syswrite($buf, length($buf)-$total, $total)) {
+        $total += $sent;
+        return $total if $total >= length $buf;
+    }
+    return;
 }
 
 sub seek {
@@ -577,16 +610,24 @@ There are some additions though:
 
 =over 4
 
+=item C<pending>
+
+Returns how many bytes are in the memory buffer ready to read.
+This is required in order to be compatible with IO::Select::SSL
+and avoid infinite waiting for bytes that are already available.
+
 =item C<read_until>
 
-Takes bytes and match qr.  If bytes is defined - it will read until
-that many bytes are found.  If match qr is defined, it will read until
-the buffer matches that qr.  If both are undefined, it will read until
-there is nothing left to read.
+  my $match = $sock->read_until($bytes, $end_qr);
+
+If $bytes is defined - it will read until that many bytes are found.
+If $end_qr is defined, it will read until the buffer matches that RegEx.
+If both are defined, it will read until whichever comes first.
+If both are undefined, it will read until there is nothing left to read.
 
 =item C<error>
 
-If an error occurred while writing, this method will return that error.
+If an error occurred during io, this method will return that error.
 
 =back
 

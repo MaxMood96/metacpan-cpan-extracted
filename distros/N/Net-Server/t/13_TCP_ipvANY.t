@@ -8,6 +8,7 @@ use FindBin qw($Bin);
 use lib $Bin;
 use NetServerTest qw(prepare_test ok use_ok note skip_without_ipv6);
 skip_without_ipv6;
+exit 0+!print "1..0 # SKIP Platform does not permit disabling V6ONLY\n" if !Net::Server::Proto->CAN_DISABLE_V6ONLY;
 my $IPv4 = "127.0.0.1"; # Should connect to IPv4
 my $IPv6 = "::1"; # Should also connect to IPv6
 my $env = prepare_test({n_tests => 5, start_port => 20700, n_ports => 1}); # runs three of its own tests
@@ -17,7 +18,6 @@ use_ok('Net::Server');
 
 sub accept {
     $env->{'signal_ready_to_test'}->();
-    alarm($env->{'timeout'});
     return shift->SUPER::accept(@_);
 }
 
@@ -36,14 +36,13 @@ my $ok = eval {
         my $remote = Net::Server::Proto->ipv6_package->new(
             PeerAddr => $IPv4,
             PeerPort => $env->{'ports'}->[0],
-            Proto    => 'tcp');
-        die "IPv4 connection failed to [$IPv4] [$env->{'ports'}->[0]]" if !$remote;
+            Proto    => 'tcp') or die "IPv4 connection failed to [$IPv4] [$env->{'ports'}->[0]]: [$!] $@";
 
         ### connect to child using IPv6
         $remote = Net::Server::Proto->ipv6_package->new(
             PeerAddr => $IPv6,
             PeerPort => $env->{'ports'}->[0],
-            Proto    => 'tcp') || die "Couldn't open sock to [$IPv6] [$env->{'ports'}->[0]]: $!";
+            Proto    => 'tcp') or die "IPv4 connection failed to [$IPv6] [$env->{'ports'}->[0]]: [$!] $@";
 
         my $line = <$remote>;
         die "Didn't get the type of line we were expecting: ($line)" if $line !~ /Net::Server/;

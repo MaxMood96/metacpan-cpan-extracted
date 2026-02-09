@@ -1,0 +1,10 @@
+Revision history for Linux-Event-Clock
+
+0.011  2026-02-09
+  - Fix: restore full POD documentation in Clock.pm
+
+0.010  2026-02-09
+  - Initial release (cached monotonic now + deadline math)
+
+0.011  2026-02-09
+  - Added missing POD

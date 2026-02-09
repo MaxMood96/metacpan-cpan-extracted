@@ -21,11 +21,13 @@
    },
    "prereqs" : {
       "build" : {
-         "requires" : {}
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
       },
       "configure" : {
          "requires" : {
-            "ExtUtils::MakeMaker" : "6.30"
+            "ExtUtils::MakeMaker" : "0"
          }
       },
       "runtime" : {
@@ -37,9 +39,6 @@
             "Socket" : "0",
             "Time::HiRes" : "0"
          }
-      },
-      "test" : {
-         "requires" : {}
       }
    },
    "release_status" : "stable",
@@ -54,6 +53,6 @@
          "web" : "https://github.com/rhandom/perl-net-server"
       }
    },
-   "version" : "2.016",
+   "version" : "2.017",
    "x_serialization_backend" : "JSON::PP version 4.06"
 }

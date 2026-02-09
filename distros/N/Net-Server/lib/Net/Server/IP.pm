@@ -1,0 +1,203 @@
+# -*- perl -*-
+#
+#  Net::Server::IP - IPv4 / IPv6 compatibility module
+#
+#  Copyright (C) 2025-2026
+#
+#    Rob Brown <bbb@cpan.org>
+#
+#  This package may be distributed under the terms of either the
+#  GNU General Public License
+#    or the
+#  Perl Artistic License
+#
+#  All rights reserved.
+#
+################################################################
+
+package Net::Server::IP;
+
+use strict;
+use warnings;
+use Net::Server::Proto qw(AF_INET AF_INET6 AF_UNSPEC IPPROTO_IPV6 IPV6_V6ONLY);
+use IO::Socket::INET ();
+use Exporter qw(import);
+
+our @ISA = qw(IO::Socket::INET); # we may dynamically change this to an IPv6-compatible class based upon our configuration
+our $ipv6_package = undef;
+our @preferred = qw(IO::Socket::IP IO::Socket::INET6);
+our $fake_danger = undef; # Detect if fake interface is spoofed by kernel (e.g. OpenVZ venet) instead of a real public network interface.
+
+sub configure {
+    my ($self, $arg) = @_;
+    die "configure: no arg" if !$arg or !%$arg;
+    my $family = delete $arg->{'Family'};
+    if (defined (my $family2 = delete $arg->{'Domain'}) and !defined $family) { $family = $family2 };
+    if (!defined $family and my $addr = $arg->{'LocalHost'} || $arg->{'PeerHost'} || $arg->{'LocalAddr'} || $arg->{'PeerAddr'}) {
+        # Use Addr arg to hint which Family to use.
+        if ($addr =~ /^(\d+\.\d+\.\d+\.\d+)(|:\w+|\w+\(\d+\))$/) {
+            $family = AF_INET; # Surely IPv4
+        } elsif ($addr =~ /^\[[a-fA-F\d:]+\](|:\w+|\w+\(\d+\))$/ or $addr =~ /^(?:[a-fA-F\d]*:){2,7}([a-fA-F\d]*|\d+\.\d+\.\d+\.\d+)$/) {
+            $family = AF_INET6; # Surely IPv6
+        } else {
+            $family = AF_UNSPEC; # Some other Host, maybe a DNS word, so can't tell if it's IPv4 or IPv6 yet.
+        }
+    }
+    if ($ISA[0] eq "IO::Socket::INET" and defined $family and $family ne AF_INET) {
+        # Look for IPv6-compatible module
+        my @try = ($ipv6_package?($ipv6_package):(), @preferred);
+        my $pm = sub { (my $f="$_[0].pm") =~ s|::|/|g; $f};
+        my ($pkg) = grep { $INC{$pm->($_)} && !$_->isa(__PACKAGE__) } @try;
+        my $err = '';
+        for (@try) { last if $pkg; eval{local $^W=0;require $pm->($_);die "Circular ISA" if $_->isa(__PACKAGE__);$pkg=$_} or $err .= $@=~/^(.*)/ && "\n[$_] ($!) $1"; }
+        if ($pkg) {
+            my $args = { Listen=>1 };
+            if (not $pkg->new(LocalAddr=>"[::]", Listen=>1) or not $pkg->new(LocalAddr=>"127.0.0.1", Listen=>1)) { # Simple ephemeral sanity pre-check didn't even work
+                if ($pkg->new(LocalAddr=>"[::]", Listen=>1, GetAddrInfoFlags => 0) or $pkg->new(LocalAddr=>"127.0.0.1", Listen=>1, GetAddrInfoFlags => 0)) { # Yet DOES work without doing that getaddrinfo AI_ADDRCONFIG AF_NETLINK SOCK_RAW sendto RTM_GETADDR recvmsg interferfaces pre-check boogie dance?
+                    $fake_danger = 1; $@ = ""; # Flag to remember this special network configuration. Pretend like there is no error.
+                } else {
+                    $@ = "bind: $pkg failed: $! $@"; $pkg = undef; # This $pkg is of no use. Set error $@ with good excuse.
+                }
+            } else {
+                $fake_danger = 0; # Works fine without monkeying anything.
+            }
+            $ISA[0] = $ipv6_package = $pkg if $pkg;
+        } else {
+            return if $@ = "Preferred ipv6_package (@try) could not be loaded:$err" and $family;
+            $family = undef;
+        }
+    }
+    if (defined $family) { # Set the corresponding 'Family' arg:
+        $arg->{'Family'} = $family if $self->isa("IO::Socket::IP");
+        $arg->{'Domain'} = $family if $self->isa("IO::Socket::INET6");
+        $arg->{'GetAddrInfoFlags'} = 0 if !defined $arg->{'GetAddrInfoFlags'} and $fake_danger; # Special delicate network
+        if (defined $arg->{'V6Only'} and $self->isa("IO::Socket::INET6")) {
+            ${ *$self }{'NS_v6only'} = delete $arg->{'V6Only'};
+            delete ${ *$self }{'NS_v6only'} if $family eq AF_INET;
+        }
+    }
+    return $self->SUPER::configure($arg);
+}
+
+sub socket {
+    my $self = shift;
+    my $ret  = $self->SUPER::socket(@_);
+    if (defined (my $opt = ${ *$self }{'NS_v6only'})) {
+        eval { $self->setsockopt( IPPROTO_IPV6, IPV6_V6ONLY, $opt?1:0 ) } or warn "setsockopt(IPV6_V6ONLY) failed: ($!) ($@)";
+    }
+    return $ret;
+}
+
+1;
+
+__END__
+
+=head1 NAME
+
+Net::Server::IP - IPv4 / IPv6 compatibility module
+
+=head1 SYNOPSIS
+
+    use Net::Server::IP;
+
+    my $sock = Net::Server::IP->new(
+        LocalAddr => "[::]",
+        LocalPort => 8080,
+        Listen => 1,
+    ) or die "IPv6 listen error: $@ $!";
+
+    my $sock = Net::Server::IP->new(
+        PeerAddr => "[::1]:8080",
+    ) or die "IPv6 connect error: $@ $!";
+
+    my $sock = Net::Server::IP->new(
+        PeerAddr => "127.0.0.1:8080",
+    ) or die "IPv4 connect error: $@ $!";
+
+=head1 DESCRIPTION
+
+In order to support IPv6, Net::Server:IP inherits from either
+IO::Socket::IP or IO::Socket::INET6, whichever is available.
+This provides a consistent convention regardless of any
+differences between these modules. If only IPv4 is required
+based on its parameters, then neither module needs to be
+installed. Everything will still work fine by only inheriting
+from IO::Socket::INET. IO::Socket::IP will take preference,
+if available. To override this default behavior:
+
+    $Net::Server::IP::ipv6_package = 'Custom::Mod::Handle';
+
+=head1 INPUTS
+
+=head2 $sock = Net::Server::IP->new( %args )
+
+Creates a new C<Net::Server::IP> handle object.  The arguments
+recognized are similar to C<IO::Socket::IP> or C<IO::Socket::INET6>.
+If the constructor fails, check C<$@> for the error message.
+
+Special consideration applies to the following parameters:
+
+=over 8
+
+=item Family => INT (like C<IO::Socket::IP>)
+
+=item Domain => INT (like C<IO::Socket::INET6>)
+
+Address family for the socket. (e.g. C<AF_INET>, C<AF_INET6>)
+C<Domain> is synonym for C<Family>. Both args are the same.
+C<Family> will take precedence if both are supplied.
+
+If provided, this will be used to determine if IPv6 is required.
+
+=item LocalHost => STRING
+
+=item LocalAddr => STRING
+
+=item PeerHost => STRING
+
+=item PeerAddr => STRING
+
+Hostname with optional Port. If C<Family> is not provided,
+then this will be scanned as a hint for which C<Family> to use.
+
+=item GetAddrInfoFlags => INT
+
+Normally with IO::Socket::IP, GetAddrInfoFlags will default this to
+Socket::AI_ADDRCONFIG. But this can cause problems on certain legacy
+emulation platforms, such as the OpenVZ spoofed venet and loopback
+interface. In such cases, GetAddrInfoFlags will default to 0 instead.
+
+=item V6Only => BOOL
+
+With IO::Socket::IP nothing will change. IO::Socket::INET6 normally
+ignores V6Only, so to make the convention consistent, now the same
+functionality will just work. So even if IO::Socket::IP is not
+installed, the V6Only option will be emulated with IO::Socket::INET6.
+
+If V6Only is true, then IPv4 sockets will not work on this handle.
+Set V6Only to 0 to enable Dual-Stack sockets to support IPv4-mapped
+IPv6 addresses (i.e., ::ffff:127.0.0.1) within the same handle.
+If V6Only is not set or is undef, then the Dual-Stack behavior will
+be whatever the Operating System default is. To avoid expected
+behaviors across different platforms, the V6Only arg should always
+be explicitly set (i.e., 0 or 1) rather than letting the OS choose.
+
+=back
+
+=head1 AUTHOR
+
+Paul Seamons <paul@seamons.com>
+
+Rob Brown <bbb@cpan.org>
+
+=head1 SEE ALSO
+
+L<IO::Socket::IP>,
+L<IO::Socket::INET>,
+L<IO::Socket::INET6>
+
+=head1 LICENSE
+
+Distributed under the same terms as Net::Server
+
+=cut

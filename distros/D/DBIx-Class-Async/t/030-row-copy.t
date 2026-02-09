@@ -68,7 +68,7 @@ subtest 'Copy with replacement data' => sub {
     })->get;
 
     is($copy->name, 'Gadget Pro', 'Name was replaced');
-    is($copy->price, 79.99, 'Price was replaced');
+    is(sprintf('%.2f', $copy->price), '79.99', 'Price was replaced');
     is($copy->description, 'Enhanced gadget', 'Description was replaced');
     isnt($copy->id, $original->id, 'Copy has different ID');
     is($original->name, 'Gadget', 'Original name unchanged');

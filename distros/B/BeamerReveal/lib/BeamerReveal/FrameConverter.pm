@@ -3,7 +3,7 @@
 
 
 package BeamerReveal::FrameConverter;
-our $VERSION = '20260207.2052'; # VERSION
+our $VERSION = '20260208.1851'; # VERSION
 
 use strict;
 use warnings;
@@ -23,13 +23,14 @@ sub nofdigits { length( "$_[0]" ) }
 
 sub new {
   my $class = shift;
-  my ( $base, $pdffile, $xres, $yres, $progressId ) = @_;
+  my ( $base, $outputdir, $pdffile, $xres, $yres, $progressId ) = @_;
 
   my $self = {
-	      base => $base,
-	      xres => $xres,
-	      yres => $yres,
-	      file => $pdffile,
+	      base       => $base,
+	      outputdir  => $outputdir,
+	      xres       => $xres,
+	      yres       => $yres,
+	      file       => $pdffile,
 	      progressId => $progressId,
 	     };
   $class = (ref $class ? ref $class : $class );
@@ -46,8 +47,8 @@ sub new {
   $self->{slides} = "$self->{base}/media/Slides";
   
   for my $item ( qw(slides) ) {
-    File::Path::rmtree( $self->{$item} );
-    File::Path::make_path( $self->{$item} );
+    File::Path::rmtree( "$outputdir/$self->{$item}" );
+    File::Path::make_path( "$outputdir/$self->{$item}" );
   }
 
   return $self;
@@ -61,7 +62,7 @@ sub toJPG {
   
   my $cmd = [ $self->{pdftoppm},
 	      $self->{file},
-	      "$self->{slides}/slide",
+	      "$self->{outputdir}/$self->{slides}/slide",
 	      '-jpeg',
 	      '-jpegopt',
 	      'optimize=y,quality=85',
@@ -109,7 +110,7 @@ BeamerReveal::FrameConverter - FrameConverter
 
 =head1 VERSION
 
-version 20260207.2052
+version 20260208.1851
 
 =head1 SYNOPSIS
 

@@ -1,5 +1,14 @@
 Revision history for Perl extension App-mdee
 
+0.14 2026-02-09T09:55:18Z
+
+    - Redesign theme system: themes as transformations with chaining
+    - Support comma-separated themes in default[theme] config
+    - Fix OSC 8 URL encoding (no longer over-encodes :// and ::)
+    - Refactor: remove resolve_theme(), simplify load_theme()
+    - Move CONFIGURATION section out of OPTIONS into its own top-level section
+    - Add dependencies table to CLAUDE.md
+
 0.13 2026-02-07T04:10:31Z
 
     - Add --[no-]rule option for Unicode table borders (│ ├ ┤ ┼ ─)

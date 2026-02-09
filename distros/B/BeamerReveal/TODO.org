@@ -15,3 +15,5 @@
 - [X] nakijken negatieve plaatsing van elementen
   (dit kan zonder problemen)
 - [ ] slide crossing music
+- [X] solve problem with multiple animations having the same filename for the video
+- [X] simplify progress flags: progress={0.7|handout:1/0.23,2/0.34}

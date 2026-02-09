@@ -1,0 +1,62 @@
+{
+   "abstract" : "Thin wrapper around Linux::FD::Timer (timerfd)",
+   "author" : [
+      "Joshua Day"
+   ],
+   "dynamic_config" : 0,
+   "generated_by" : "ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150012",
+   "license" : [
+      "perl_5"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "Linux-Event-Timer",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "inc"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "Carp" : "0",
+            "Fcntl" : "0",
+            "Linux::FD::Timer" : "0.015",
+            "Scalar::Util" : "0",
+            "perl" : "5.036"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "Test::More" : "0",
+            "Time::HiRes" : "0"
+         }
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/haxmeister/perl-linux-event-timer/issues"
+      },
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/haxmeister/perl-linux-event-timer.git",
+         "web" : "https://github.com/haxmeister/perl-linux-event-timer"
+      }
+   },
+   "version" : "0.010",
+   "x_serialization_backend" : "JSON::PP version 4.16"
+}

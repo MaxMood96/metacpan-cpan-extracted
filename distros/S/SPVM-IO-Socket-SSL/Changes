@@ -1,3 +1,10 @@
+0.019 2026-02-09
+  [Incompatible Changes]
+    * Remove Deadline field and update set_deadline to set both ReadDeadline and WriteDeadline for Go compatibility.
+    * Change I/O timeout exception from Go::Context::Error::DeadlineExceeded to Go::Error::IOTimeout.
+  [Requirement Changes]
+    * Require SPVM::IO SPVM::IO.
+    
 0.018 2026-02-06
   [Changes]
     * Implement strict deadline handling in IO::Socket::SSL#shutdown_SSL by using get_remaining_duration and catching IOTimeout.

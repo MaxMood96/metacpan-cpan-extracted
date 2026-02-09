@@ -50,7 +50,7 @@ WriteMakefile(
   },
   PREREQ_PM         => {
     %configure_and_runtime_requires,
-    'SPVM::IO' => '0.229',
+    'SPVM::IO' => '0.248',
     'SPVM::Net::SSLeay' => '0.042',
     'SPVM::Sys' => '0.528',
     'SPVM::Regex' => '0.246',

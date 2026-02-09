@@ -2,7 +2,7 @@
 # Light mode: full definition
 # Dark mode: differences only (inherits from light)
 
-declare -gA theme_default_light=(
+declare -gA theme_light=(
            [base]='<RoyalBlue>=y25'
         [comment]='${base}+r60'
            [bold]='${base}D'
@@ -21,11 +21,14 @@ declare -gA theme_default_light=(
      [code_block]='L20 , L18 , /L23;E , L20'
 )
 
-declare -gA theme_default_dark=(
+declare -gA theme_dark=(
            [base]='<RoyalBlue>=y80'
              [h1]='L00DE/${base}'
              [h2]='L00DE/${base}-y15'
              [h3]='L00DN/${base}-y25'
+             [h4]='${base}UD'
+             [h5]='${base}-y20;U'
+             [h6]='${base}-y20'
     [inline_code]='L12/L05,/L05,L12/L05'
      [code_block]='L10 , L12 , /L05;E , L10'
 )
