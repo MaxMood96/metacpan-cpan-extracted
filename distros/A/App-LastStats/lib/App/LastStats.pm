@@ -14,7 +14,7 @@ class App::LastStats {
   use Getopt::Long;
   use JSON;
 
-  our $VERSION = '0.0.10';
+  our $VERSION = '0.1.0';
 
   field $username   :param = 'davorg';
   field $period     :param = '7day';
@@ -37,15 +37,6 @@ class App::LastStats {
   };
 
   method run {
-    GetOptions(
-      'user=s'      => \$username,
-      'period=s'    => \$period,
-      'format=s'    => \$format,
-      'count=i'     => \$count,
-      'api-key=s'   => \$api_key,
-      'api-secret=s'=> \$api_secret,
-    );
-
     $self->validate;
     $self->laststats;
     $self->render;
@@ -78,13 +69,14 @@ class App::LastStats {
       position => $pos++,
       name     => $_->{name},
       count    => $_->{playcount},
+      url      => $_->{url}
     } } @artists;
     say JSON->new->canonical(1)->pretty(1)->encode(\@data);
   }
 
   method render_html {
     my $html = "<ol>\n";
-    $html .= "  <li>$_->{name} ($_->{playcount})</li>\n" for @artists;
+    $html .= qq[  <li><a href="$_->{url}">$_->{name}</a> ($_->{playcount})</li>\n] for @artists;
     $html .= "</ol>";
     say $html;
   }

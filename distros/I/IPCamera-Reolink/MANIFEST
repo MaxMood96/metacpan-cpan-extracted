@@ -7,5 +7,6 @@ t/00-load.t
 t/manifest.t
 t/pod-coverage.t
 t/pod.t
+documentation/camera-http-api-user-guide-version-8-2023-4.pdf
 META.yml                                 Module YAML meta-data (added by MakeMaker)
 META.json                                Module JSON meta-data (added by MakeMaker)

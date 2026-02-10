@@ -52,6 +52,6 @@
          "web" : "https://github.com/davorg-cpan/app-laststats"
       }
    },
-   "version" : "v0.0.10",
+   "version" : "v0.1.0",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

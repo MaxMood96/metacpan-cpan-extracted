@@ -8,6 +8,8 @@ use File::Temp;
 use IO::Async::Loop;
 use DBIx::Class::Async::Schema;
 
+#use Scalar::Util 'refaddr';
+
 use lib 't/lib';
 
 my $loop           = IO::Async::Loop->new;
@@ -31,7 +33,6 @@ my $user = $schema->resultset('User')
                   ->get;
 
 subtest 'Empty results' => sub {
-
     my $rows = $schema->resultset('User')
                       ->search({ name => 'X' })
                       ->all_future
@@ -63,7 +64,6 @@ subtest 'Empty results' => sub {
 };
 
 subtest 'Encoding and special chars' => sub {
-
     my $new_name = "O'Connor & \"Special\" <Chars>";
     my $new_user = $schema->resultset('User')
                           ->create({ name   => $new_name,
@@ -84,7 +84,6 @@ subtest 'Encoding and special chars' => sub {
 };
 
 subtest 'Large result sets' => sub {
-
     # Create many users
     my $batch_size = 50;
     my @futures;
@@ -122,51 +121,65 @@ subtest 'Large result sets' => sub {
 
 };
 
-subtest 'Concurrent access' => sub {
-
+subtest 'Concurrent access with transactions' => sub {
     # Create user
-    my $new_user = $schema->resultset('User')
-                          ->create({
-                                name   => 'Concurrent Test',
-                                email  => 'concurrent@example.com',
-                                active => 1 })
-                          ->get;
-
+    my $new_user = $schema->await(
+        $schema->resultset('User')->create({
+            name   => 'Concurrent Test',
+            email  => 'concurrent@example.com',
+            active => 1
+        })
+    );
     my $user_id = $new_user->id;
 
-    my @updates;
-    for my $i (1..5) {
-        push @updates, $schema->resultset('User')
-                              ->find($user_id)
-                              ->then(sub {
-                                    my $user = shift;
-                                    return Future->done(undef) unless $user;
-                                    return $user->update({ name => "Update $i" });
-                                });
-    }
+    # Test 1: Multiple updates in a transaction (atomic)
+    my @operations = (
+        {
+            type       => 'update',
+            resultset  => 'User',
+            id         => $user_id,
+            data       => { name => 'Update 1' },
+        },
+        {
+            type       => 'update',
+            resultset  => 'User',
+            id         => $user_id,
+            data       => { name => 'Update 2' },
+        },
+        {
+            type       => 'update',
+            resultset  => 'User',
+            id         => $user_id,
+            data       => { name => 'Update 3' },
+        },
+    );
 
-    my $updates = Future->wait_all(@updates)->get;
+    my $batch_future = $schema->txn_batch(\@operations);
+    $schema->await($batch_future);
 
-    my $final_user = $schema->resultset('User')->find($user_id)->get;
-    ok($final_user, 'User still exists after concurrent updates');
-    like($final_user->name, qr/^Update \d+$/, 'User was updated');
+    # Verify the last update in the batch won (sequential within transaction)
+    my $after_batch = $schema->await(
+        $schema->resultset('User')->find($user_id, { cache => 0 })
+    );
+    is($after_batch->name, 'Update 3', 'Last update in batch persisted');
 
+    # Test 2: Concurrent reads still work (no transaction needed)
     my @reads;
     for my $i (1..10) {
         push @reads, $schema->resultset('User')->find($user_id);
     }
 
-    my $reads = Future->wait_all(@reads)->get;
+    $schema->await(Future->wait_all(@reads));
 
     my $all_ok = 1;
     foreach my $f (@reads) {
         my $user = $f->get;
-        $all_ok &&= $user && $user->id == $user_id;
+        $all_ok &&= defined $user && $user->id == $user_id;
     }
+    ok($all_ok, 'All concurrent reads succeeded');
 
-    ok($reads, 'All concurrent reads succeeded');
-
-    $final_user->delete->get;
+    # Cleanup
+    $schema->await($after_batch->delete);
 };
 
 subtest 'Error recovery' => sub {

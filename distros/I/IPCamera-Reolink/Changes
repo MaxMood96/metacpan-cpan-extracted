@@ -28,3 +28,7 @@ Revision history for IPCamera-Reolink
 
 1.09    Sat 06 Sep 2025 04:41:48 PM EDT
         - added SetWhiteLed() and GetWhiteLed() to control camera spotlight.
+
+1.10    Mon 09 Feb 2026 09:38:46 PM EST
+        - added IPCamera::Reolink::GetIrLights() and IPCamera::Reolink::SetIrLights()  methods for control of camera IR LEDs.
+        - added documentation directory containing the "Camera HTTP API User Guide Version 8 2023-4" document that describes the Reolink HTTP(S)/REST interface.

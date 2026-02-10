@@ -71,7 +71,7 @@ subtest 'The Chain: find()->then(delete)' => sub {
     is($deleted_count + 0, 1, 'Chain successfully deleted the row');
 
     # Verify it's gone
-    my $gone = $rs->find($id)->get;
+    my $gone = $rs->search({ id => $id }, { cache => 0 })->single->get;
     is($gone, undef, 'Confirmed: Record is no longer in DB');
 };
 

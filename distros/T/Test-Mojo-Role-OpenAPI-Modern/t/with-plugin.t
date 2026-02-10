@@ -38,7 +38,7 @@ subtest 'openapi object from the Mojo plugin' => sub {
     'openapi object on the application is constructed correctly');
   is($t->openapi, $t->app->openapi, 'the test openapi object is the same as in the application');
 
-  $t->post_ok('/foo/123', json => {})
+  $t->post_ok('/foo/a', json => {})
     ->status_is(200)
     ->json_is('/status', 'ok')
     ->request_valid

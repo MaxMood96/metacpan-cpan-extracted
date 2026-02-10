@@ -1,5 +1,15 @@
 Revision history for SPVM::DBI
 
+0.002 2026-02-10
+  [New Features]
+    - Add the following modules with implementation and documentation:
+      - SPVM::DBI
+      - SPVM::DBI::Dr
+      - SPVM::DBI::Db
+      - SPVM::DBI::St
+      - SPVM::DBI::Constant
+      - SPVM::DBI::Error::SQLState
+    
 0.001 2026-02-07
   [Changes]
     * First release. (Experimental)

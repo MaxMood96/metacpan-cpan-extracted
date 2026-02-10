@@ -1,5 +1,8 @@
 Revision history for OpenAPI-Modern
 
+0.127     2026-02-09 19:01:59Z
+          - fix bad parsing of server object in link object
+
 0.126     2026-01-31 01:04:02Z
           - recursive_get() now preserves summary, description fields from the
             original object when following $refs

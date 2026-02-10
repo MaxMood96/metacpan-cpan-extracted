@@ -1,5 +1,11 @@
 Revision history for Perl extension Devel::Size.
 
+0.86 2026-02-10 nicholas
+ [no changes]
+
+0.85_50 2026-04-06 nicholas
+  * Handle MULTIPARAM.
+
 0.85 2025-05-23 nicholas
  [no changes]
 

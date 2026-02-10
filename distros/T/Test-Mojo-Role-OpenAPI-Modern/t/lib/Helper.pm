@@ -38,7 +38,8 @@ paths:
       in: path
       required: true
       schema:
-        type: integer
+        type: string
+        maxLength: 1
     post:
       operationId: my_foo_request
       requestBody:
@@ -49,7 +50,7 @@ paths:
               type: object
               properties:
                 kaboom:
-                  $ref: '#/$defs/i_do_not_exist'
+                  $ref: 'https://nowhere.example.com#/$defs/i_do_not_exist'
       responses:
         200:
           description: success
@@ -62,7 +63,7 @@ paths:
                   status:
                     const: ok
                   kaboom:
-                    $ref: '#/$defs/i_do_not_exist'
+                    $ref: 'https://nowhere.example.com#/$defs/i_do_not_exist'
 YAML
 
 our $doc_uri = Mojo::URL->new('/api');

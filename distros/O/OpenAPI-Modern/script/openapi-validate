@@ -131,7 +131,8 @@ sub encode ($input, $filetype = 'json') {
       ->convert_blessed(1)
       ->utf8(0)
       ->canonical(1)
-      ->pretty(1);
+      ->pretty(1)
+      ->space_before(0);
     $encoder->indent_length(2) if $encoder->can('indent_length');
     $encoder->encode($input);
   }
@@ -155,7 +156,7 @@ openapi-validate - A command-line interface to OpenAPI document validation
 
 =head1 VERSION
 
-version 0.126
+version 0.127
 
 =head1 SYNOPSIS
 

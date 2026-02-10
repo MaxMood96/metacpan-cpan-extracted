@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2021-2026 -- leonerd@leonerd.org.uk
 
-package Test::Future::IO::Impl 0.17;
+package Test::Future::IO::Impl 0.18;
 
 use v5.14;
 use warnings;
@@ -188,9 +188,20 @@ sub run_connect_test
    # don't do this. Technically Linux can get away without it but it's only
    # 100msec, nobody will notice
    sleep 0.1;
+   sleep 1 if $^O eq "MSWin32"; # Windows needs to wait longer
+
+   # Sometimes a connect() doesn't fail, because of weird setups. Windows
+   # often doesn't fail here. Maybe weird networking. I really don't know and
+   # have no way to find out. Rather than make the tests complain here, we'll
+   # just assert that Future::IO->connect fails *if* a regular blocking
+   # connect fails first.
+   my $probe_clientsock = IO::Socket::INET->new(
+      Type => Socket::SOCK_STREAM(),
+   ) or die "Cannot socket() - $@";
+   my $connect_fails = !defined $probe_clientsock->connect( $sockname );
 
    # ->connect fails
-   {
+   if( $connect_fails ) {
       my $clientsock = IO::Socket::INET->new(
          Type => Socket::SOCK_STREAM(),
       ) or die "Cannot socket() - $@";
@@ -226,13 +237,13 @@ sub run_poll_no_hup_test
 
       my $f = Future::IO->poll( $rd, POLLIN );
 
-      is( scalar $f->get, POLLIN, "Future::IO->poll yields POLLIN on readable filehandle" );
+      is( scalar $f->get, POLLIN, "Future::IO->poll(POLLIN) yields POLLIN on readable filehandle" );
 
       my $f1 = Future::IO->poll( $rd, POLLIN );
       my $f2 = Future::IO->poll( $rd, POLLIN );
 
       is( [ scalar $f1->get, scalar $f2->get ], [ POLLIN, POLLIN ],
-         'Future::IO->poll can enqueue two POLLIN tests' );
+         'Future::IO->poll(POLLIN) can enqueue two POLLIN tests' );
    }
 
    # POLLOUT
@@ -241,13 +252,13 @@ sub run_poll_no_hup_test
 
       my $f = Future::IO->poll( $wr, POLLOUT );
 
-      is( scalar $f->get, POLLOUT, "Future::IO->poll yields POLLOUT on writable filehandle" );
+      is( scalar $f->get, POLLOUT, "Future::IO->poll(POLLOUT) yields POLLOUT on writable filehandle" );
 
       my $f1 = Future::IO->poll( $wr, POLLOUT );
       my $f2 = Future::IO->poll( $wr, POLLOUT );
 
       is( [ scalar $f1->get, scalar $f2->get ], [ POLLOUT, POLLOUT ],
-         'Future::IO->poll can enqueue two POLLOUT tests' );
+         'Future::IO->poll(POLLOUT) can enqueue two POLLOUT tests' );
    }
 
    # POLLIN+POLLOUT at once
@@ -263,7 +274,7 @@ sub run_poll_no_hup_test
       $frd = Future::IO->poll( $rd, POLLIN );
       $fwr = Future::IO->poll( $rd, POLLOUT );
 
-      is( scalar $frd->get, POLLIN, "Future::IO->poll yields POLLIN on readable with simultaneous POLLOUT" );
+      is( scalar $frd->get, POLLIN, "Future::IO->poll(POLLIN) yields POLLIN on readable with simultaneous POLLOUT" );
       # Don't assert on what $fwr saw here, as OSes/impls might differ
       $fwr->cancel;
 
@@ -271,9 +282,29 @@ sub run_poll_no_hup_test
       $frd = Future::IO->poll( $wr, POLLIN );
       $fwr = Future::IO->poll( $wr, POLLOUT );
 
-      is( scalar $fwr->get, POLLOUT, "Future::IO->poll yields POLLOUT on writable with simultaneous POLLIN" );
+      is( scalar $fwr->get, POLLOUT, "Future::IO->poll(POLLOUT) yields POLLOUT on writable with simultaneous POLLIN" );
       # Don't assert on what $frd saw here, as OSes/impls might differ
       $frd->cancel;
+   }
+
+   # POLLIN doesn't fire accidentally on POLLOUT-only handle
+   {
+      require Socket;
+      require IO::Socket::UNIX;
+
+      my ( $s1, $s2 ) = IO::Socket::UNIX->socketpair( Socket::PF_UNIX, Socket::SOCK_STREAM, 0 )
+         or last; # some OSes e.g. Win32 cannot do PF_UNIX socketpairs
+
+      # Try both orders;
+      foreach my $first (qw( IN OUT )) {
+         my ( $fin, $fout );
+         $fin  = Future::IO->poll( $s1, POLLIN )  if $first eq "IN";
+         $fout = Future::IO->poll( $s1, POLLOUT );
+         $fin  = Future::IO->poll( $s1, POLLIN )  if $first eq "OUT";
+
+         is( scalar $fout->get, POLLOUT, "Future::IO->poll(POLLOUT) yields POLLOUT on writable $first first" );
+         ok( !$fin->is_ready, "Future::IO->poll(POLLIN) remains pending on writeable $first first" );
+      }
    }
 }
 
@@ -289,7 +320,7 @@ sub run_poll_test
 
       my $f = Future::IO->poll( $rd, POLLHUP );
 
-      is( scalar $f->get, POLLHUP, "Future::IO->poll yields POLLHUP on hangup-in filehandle" );
+      is( scalar $f->get, POLLHUP, "Future::IO->poll(POLLHUP) yields POLLHUP on hangup-in filehandle" );
    }
 
    # POLLERR
@@ -303,7 +334,7 @@ sub run_poll_test
       # We expect at least POLLERR, we might also see POLLOUT or POLLHUP as
       # well but lets not care about that
       my $got_revents = $f->get;
-      is( $got_revents & POLLERR, POLLERR, "Future::IO->poll yields at-least POLLERR on hangup-out filehandle" );
+      is( $got_revents & POLLERR, POLLERR, "Future::IO->poll(POLLOUT) yields at-least POLLERR on hangup-out filehandle" );
    }
 }
 

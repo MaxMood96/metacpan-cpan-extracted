@@ -88,6 +88,7 @@ subtest 'Real Data: SQL Prefetch Inflation' => sub {
 };
 
 subtest 'The "Memory-Only" Proof' => sub {
+    $schema->{_async_db}->{_cache_ttl} = 300;
     my $rs = $schema->resultset('User');
 
     my $user = $rs->new_result({

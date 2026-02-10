@@ -1,5 +1,14 @@
 Revision history for DBIx::Class::Async
 
+0.57 2026-02-10
+     - [FEATURE] Changed caching to be disabled by default (TTL set to 0).
+     - [FEATURE] Added automatic detection of non-deterministic SQL functions
+       (NOW, RAND, etc.) to automatically bypass cache for safety.
+     - [FIX] Improved cache invalidation on update/delete operations to use
+       specific primary key keys, preventing stale data scenarios.
+     - [FIX] count() queries are no longer cached by default due to high
+       risk of stale data, ensuring accurate row counts.
+
 0.56 2026-02-08
      [TEST SUITE]
      - Fixed t/030-row-copy.t to deal in system with -Duselongdouble as
@@ -12,7 +21,7 @@ Revision history for DBIx::Class::Async
      [NEW FEATURES]
      - Added run_parallel() method to DBIx::Class::Async::Schema. This method
        accepts a list of code references, executes them concurrently using
-       the asynchronous schema connection, and returns a `Future` that
+       the asynchronous schema connection, and returns a Future that
        resolves when all tasks are complete.
      - Added await_all() method to DBIx::Class::Async::Schema. This method
        takes one or more Future objects and synchronously blocks until all
@@ -30,7 +39,6 @@ Revision history for DBIx::Class::Async
      [TEST SUITE]
      - Fixed t/145-mojo-integration.t to prevent compile-time failures on
        environments where Mojo::IOLoop is not installed.
-
      [DOCUMENTATION]
      - Formalised Event Loop Agnosticism: Explicitly documented the
        ability to inject external IO::Async::Loop instances.

@@ -1,0 +1,86 @@
+#!/usr/bin/env perl
+use v5.20;
+use warnings;
+use feature 'signatures';
+no warnings 'experimental::signatures';
+use FindBin;
+use lib "$FindBin::Bin/../lib";
+
+use Term::CmdLine;
+
+# Define some sample commands for demonstration
+my %cmds = (
+  echo => {
+    help        => 'echo <text>',
+    description => 'Echo the text back',
+  },
+  date => {
+    help        => 'date',
+    description => 'Display current date/time',
+  },
+  uptime => {
+    help        => 'uptime',
+    description => 'Show how long the CLI has been running',
+  },
+);
+
+# Create the command line interface
+my $cmdline =
+  Term::CmdLine->new ("$ENV{HOME}/.testcli_history", \&eval_cmd, %cmds);
+
+$cmdline->set_prompt ('testcli> ');
+
+print "Term::CmdLine Test Harness\n";
+print "Type 'help' for available commands, 'exit' to quit\n\n";
+
+my $start_time = time;
+
+# Main command loop
+# The get() method returns empty list when exit/quit/EOF is encountered
+while (my ($line, $result) = $cmdline->get) {
+
+  # Skip empty lines
+  next if $line =~ /^\s*$/;
+
+  # Extract command from line
+  my $cmd = '';
+  if ($line =~ /^\s*(\S+)/) {
+    $cmd = $1;
+  }
+
+  # The get() method already handles builtin commands (including exit/quit)
+  # We only get here for user-defined commands
+
+  if ($cmd eq 'echo') {
+    my $text = $line;
+    $text =~ s/^echo\s+//;
+    print "$text\n";
+  } elsif ($cmd eq 'date') {
+    print scalar (localtime) . "\n";
+  } elsif ($cmd eq 'uptime') {
+    my $elapsed = time - $start_time;
+    my $mins    = int ($elapsed / 60);
+    my $secs    = $elapsed % 60;
+    print "CLI has been running for ${mins}m ${secs}s\n";
+  } else {
+
+    # Unknown command
+    print "\"$cmd\" is an unknown command\n";
+  }
+} ## end while (my ($line, $result...))
+
+print "Goodbye!\n";
+
+# Evaluation function for variable expansion
+sub eval_cmd {
+  my ($cmd) = @_;
+
+  # Evaluate the expression using Perl's eval
+  # This allows mathematical operations like: set y=$x+1
+  ## no critic (ProhibitStringyEval)
+  my $result = eval $cmd;
+  ## use critic
+
+  # Return the result if evaluation succeeded, otherwise return original
+  return defined $result ? $result : $cmd;
+} ## end sub eval_cmd

@@ -1,11 +1,11 @@
 use strict;
 use warnings;
-package Test::Mojo::Role::OpenAPI::Modern; # git description: v0.009-3-g2de4222
+package Test::Mojo::Role::OpenAPI::Modern; # git description: v0.010-3-ge7925fd
 # vim: set ts=8 sts=2 sw=2 tw=100 et :
 # ABSTRACT: Test::Mojo role providing access to an OpenAPI document and parser
 # KEYWORDS: validation evaluation JSON Schema OpenAPI Swagger HTTP request response
 
-our $VERSION = '0.010';
+our $VERSION = '0.011';
 
 use 5.020;  # for fc, unicode_strings features
 use strictures 2;
@@ -171,7 +171,7 @@ Test::Mojo::Role::OpenAPI::Modern - Test::Mojo role providing access to an OpenA
 
 =head1 VERSION
 
-version 0.010
+version 0.011
 
 =head1 SYNOPSIS
 
@@ -394,6 +394,14 @@ L<https://learn.openapis.org/>
 L<https://spec.openapis.org/oas/latest.html>
 
 =back
+
+=head1 GIVING THANKS
+
+=for stopwords MetaCPAN GitHub
+
+If you found this module to be useful, please show your appreciation by
+adding a +1 in L<MetaCPAN|https://metacpan.org/dist/Test-Mojo-Role-OpenAPI-Modern>
+and a star in L<GitHub|https://github.com/karenetheridge/Test-Mojo-Role-OpenAPI-Modern>.
 
 =head1 SUPPORT
 

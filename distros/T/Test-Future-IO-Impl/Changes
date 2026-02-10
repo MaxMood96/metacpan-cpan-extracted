@@ -1,5 +1,14 @@
 Revision history for Test-Future-IO-Impl
 
+0.18    2026-02-09
+        [CHANGES]
+         * Additionally tests that `->poll(POLLIN)` doesn't accidentally fire
+           on POLLOUT-only handle
+
+        [BUGFIXES]
+         * Improvements to `connect` tests that might reduce false negatives
+           on Windows and other platforms
+
 0.17    2026-01-18
         [CHANGES]
          * Added tests for `poll` method

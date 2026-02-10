@@ -688,6 +688,186 @@ SKIP: {
         done_testing;
     };
 
+    #==========================================================================
+    # Test: header_table_size setting is sent in SETTINGS frame
+    #==========================================================================
+    subtest 'header_table_size setting is sent in SETTINGS' => sub {
+        my $session = Net::HTTP2::nghttp2::Session->new_server(
+            callbacks => {
+                on_begin_headers => sub { return 0; },
+                on_header        => sub { return 0; },
+                on_frame_recv    => sub { return 0; },
+            },
+        );
+
+        $session->send_connection_preface(
+            header_table_size => 8192,
+        );
+
+        my $response = $session->mem_send();
+        my ($frames, $remaining) = parse_frames($response);
+
+        # Find SETTINGS frame (not ACK)
+        my @settings_frames = grep {
+            $_->{type} == FRAME_SETTINGS && !($_->{flags} & FLAG_ACK)
+        } @$frames;
+
+        ok(scalar @settings_frames >= 1, 'Got at least one SETTINGS frame');
+
+        # Parse settings payload to find HEADER_TABLE_SIZE
+        my $found = 0;
+        for my $frame (@settings_frames) {
+            my $payload = $frame->{payload};
+            while (length($payload) >= 6) {
+                my ($id, $value) = unpack('nN', $payload);
+                if ($id == SETTINGS_HEADER_TABLE_SIZE) {
+                    is($value, 8192, 'HEADER_TABLE_SIZE is 8192');
+                    $found = 1;
+                }
+                $payload = substr($payload, 6);
+            }
+        }
+        ok($found, 'HEADER_TABLE_SIZE setting was included');
+
+        done_testing;
+    };
+
+    #==========================================================================
+    # Test: max_header_list_size setting is sent in SETTINGS frame
+    #==========================================================================
+    subtest 'max_header_list_size setting is sent in SETTINGS' => sub {
+        my $session = Net::HTTP2::nghttp2::Session->new_server(
+            callbacks => {
+                on_begin_headers => sub { return 0; },
+                on_header        => sub { return 0; },
+                on_frame_recv    => sub { return 0; },
+            },
+        );
+
+        $session->send_connection_preface(
+            max_header_list_size => 65536,
+        );
+
+        my $response = $session->mem_send();
+        my ($frames, $remaining) = parse_frames($response);
+
+        my @settings_frames = grep {
+            $_->{type} == FRAME_SETTINGS && !($_->{flags} & FLAG_ACK)
+        } @$frames;
+
+        ok(scalar @settings_frames >= 1, 'Got at least one SETTINGS frame');
+
+        my $found = 0;
+        for my $frame (@settings_frames) {
+            my $payload = $frame->{payload};
+            while (length($payload) >= 6) {
+                my ($id, $value) = unpack('nN', $payload);
+                if ($id == SETTINGS_MAX_HEADER_LIST_SIZE) {
+                    is($value, 65536, 'MAX_HEADER_LIST_SIZE is 65536');
+                    $found = 1;
+                }
+                $payload = substr($payload, 6);
+            }
+        }
+        ok($found, 'MAX_HEADER_LIST_SIZE setting was included');
+
+        done_testing;
+    };
+
+    #==========================================================================
+    # Test: max_send_header_block_length session option (via nghttp2_option)
+    #==========================================================================
+    subtest 'max_send_header_block_length session option works' => sub {
+        # Create a session with max_send_header_block_length option
+        # This uses nghttp2_option + nghttp2_session_server_new2
+        my $session = Net::HTTP2::nghttp2::Session->new_server(
+            callbacks => {
+                on_begin_headers => sub { return 0; },
+                on_header        => sub { return 0; },
+                on_frame_recv    => sub { return 0; },
+            },
+            max_send_header_block_length => 65536,
+        );
+
+        # Session should be created successfully
+        ok($session, 'Session created with max_send_header_block_length option');
+
+        $session->send_connection_preface();
+        my $response = $session->mem_send();
+        ok(length($response) > 0, 'Session produces valid output');
+
+        done_testing;
+    };
+
+    #==========================================================================
+    # Test: NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE constant is available
+    #==========================================================================
+    subtest 'NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE constant' => sub {
+        my $val = Net::HTTP2::nghttp2::NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE();
+        is($val, -521, 'NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE is -521');
+        done_testing;
+    };
+
+    #==========================================================================
+    # Test: Returning TEMPORAL_CALLBACK_FAILURE from on_header resets stream
+    #==========================================================================
+    subtest 'on_header returning TEMPORAL_CALLBACK_FAILURE resets stream' => sub {
+        my $header_count = 0;
+        my @closed_streams;
+
+        my $session = Net::HTTP2::nghttp2::Session->new_server(
+            callbacks => {
+                on_begin_headers => sub { return 0; },
+                on_header        => sub {
+                    my ($stream_id, $name, $value, $flags) = @_;
+                    $header_count++;
+                    # Reject after seeing a few headers
+                    if ($header_count > 3) {
+                        return Net::HTTP2::nghttp2::NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE();
+                    }
+                    return 0;
+                },
+                on_frame_recv    => sub { return 0; },
+                on_stream_close  => sub {
+                    my ($stream_id, $error_code) = @_;
+                    push @closed_streams, { stream_id => $stream_id, error => $error_code };
+                    return 0;
+                },
+            },
+        );
+
+        $session->send_connection_preface();
+        $session->mem_send();
+
+        my $header_block = encode_headers([
+            [':method', 'GET'],
+            [':path', '/'],
+            [':scheme', 'https'],
+            [':authority', 'localhost'],
+            ['x-extra', 'should-trigger-rejection'],
+        ]);
+
+        my $client_data = CLIENT_PREFACE
+            . build_settings_frame()
+            . build_headers_frame(
+                stream_id    => 1,
+                header_block => $header_block,
+                end_stream   => 1,
+                end_headers  => 1,
+            );
+
+        $session->mem_recv($client_data);
+
+        my $response = $session->mem_send();
+        my ($frames, $remaining) = parse_frames($response);
+
+        # Should get RST_STREAM for the rejected stream
+        my @rst = grep { $_->{type} == FRAME_RST_STREAM } @$frames;
+        ok(scalar @rst >= 1, 'RST_STREAM sent for rejected headers');
+
+        done_testing;
+    };
+
 }
 
 done_testing;

@@ -1,0 +1,8 @@
+Revision history for Perl extension IO-Divert
+
+0.99 2026-02-09T12:58:20Z
+
+    - Extracted from App::sdif::Divert as an independent module
+    - Add cancel method to suppress FINAL callback and autoprint
+    - Improve DESTROY robustness: restore STDOUT before closing filehandle
+

@@ -26,7 +26,7 @@ $SIG{__WARN__} = sub {
     warn @_;
 };
 
-# This is mostly a test for the benifit of taunting ASAN and the warnings code.
+# This is mostly a test for the benefit of taunting ASAN and the warnings code.
 
 cmp_ok(total_size(sub ($foo) {}), '>', 0, "basic signature");
 cmp_ok(total_size(sub ($bar = "x" x 1024) {}), '>', 1024, "signature with default");

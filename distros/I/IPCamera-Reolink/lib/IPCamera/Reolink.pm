@@ -141,7 +141,14 @@ use constant AAP_AlarmModeManual => "manu"; # play continuously until next Audio
 # IPCamera::Reolink:AudioAlarmPlay() alarm_mode values as list.
 our @AAP_AlarmMode_list = (AAP_AlarmModeTimes, AAP_AlarmModeManual, );
 
-our $VERSION = '1.09';
+# IPCamera::Reolink::GetIrLights() and IPCamera::Reolink::SetIrLights() IrLights_State values
+use constant IrLights_State_Auto => "Auto"; # IR lights will automatically turn on in dim light and turn off when there is sufficient lighting.
+use constant IrLights_State_Off => "Off"; # IR lights will stay off 
+use constant IrLights_State_On => "On"; # IR lights will stay on
+
+our @IrLights_State_list = (IrLights_State_Auto. IrLights_State_Off, IrLights_State_On, );
+
+our $VERSION = '1.10';
 
 our $DEBUG = 0; # > 0 for debug output to STDERR
 
@@ -471,6 +478,38 @@ sub SetOsd($$$$$$){
     } # if
 } # SetOsd()
 
+# GetIrLights() - implement camera API GetIrLights interface, used to get the IrLights values.
+sub GetIrLights($){
+    my($self, $channel) = @_;
+    if(!_checkLoginLeaseTime($self)){
+        return (undef, undef, undef);
+    } # if
+    my($_camera_rest_client, $_camera_login_token) = ($self->{_camera_rest_client}, $self->{_camera_login_token});
+    my $getirlights_r = [ {cmd => "GetIrLights", action => 1, param => { channel => int($channel), }} ];
+    my $response_r = _sendCameraCommand($_camera_rest_client, 'GetIrLights', $getirlights_r, $_camera_login_token);
+    if(defined($response_r)){
+        return (@$response_r[0]->{value}, @$response_r[0]->{range}, @$response_r[0]->{initial}, );
+    }else{
+        return (undef, undef, undef);
+    } # if
+} # GetIrLights()
+
+# SetIrLights() - implement camera API SetIrLights interface, used to set the IrLights State value.
+sub SetIrLights($$$){
+    my($self, $channel, $irlightsState) = @_;
+    if(!_checkLoginLeaseTime($self)){
+        return 0;
+    } # if
+    my($_camera_rest_client, $_camera_login_token) = ($self->{_camera_rest_client}, $self->{_camera_login_token});
+    my $setirlights_r = [ {cmd => "SetIrLights", param => { IrLights => { channel => int($channel), state => $irlightsState, }}} ];
+    my $response_r = _sendCameraCommand($_camera_rest_client, 'SetIrLights', $setirlights_r, $_camera_login_token);
+    if(defined($response_r)){
+        return 1;
+    }else{
+        return 0;
+    } # if
+} # SetIrLights()
+
 # GetPtzPreset() - implement camera API GetPtzPreset iterface, used to get configuration of Ptz Preset.
 sub GetPtzPreset($){
     my($self, $channel) = @_;
@@ -614,7 +653,7 @@ IPCamera::Reolink - Reolink API provides access to the System, Security, Network
 
 =head1 VERSION
 
-1.09
+1.10
 
 =head1 SYNOPSIS
 
@@ -688,7 +727,7 @@ IPCamera::Reolink - Reolink API provides access to the System, Security, Network
 
  # Turn the spotlight off.
  
- $camera->SetWhiteLed(IPCamera::Reolink::ChannelDefault, IPCamera::Reolink::WhiteLed_StateOff, undef, undef, undef);
+ $camera->SetWhiteLed(IPCamera::Reolink::ChannelDefault, IPCamera::Reolink::WhiteLed_StateOff, undef, undef, undef, undef);
 
  # Set the spotlight brightness to maximum.
  
@@ -704,6 +743,17 @@ IPCamera::Reolink - Reolink API provides access to the System, Security, Network
  print STDERR  "White Led Value: state=" . $whiteled_value_r->{WhiteLed}->{state};
  print STDERR  "White Led Value: LightingSchedule: StartHour=" . $whiteled_value_r->{WhiteLed}->{LightingSchedule}->{StartHour}, 0);
 
+ # Current IR leds state
+
+ my($irlights_value_r, $irlights_range_r, $irlights_initial_r) = $camera->GetIrLights(IPCamera::Reolink::ChannelDefault);
+ die "IPCamera::Reolink::GetIrLights() failed\n" if(!defined($irlights_value_r));
+ my $irlights_state = $irlights_value_r->{IrLights}->{state};
+ print STDERR  "IrLights State Value: " . $irlights_state;
+
+ # Set IR leds state to auto, IR lights will automatically turn on in dim light and turn off when there is sufficient lighting.
+ 
+ die "IPCamera::Reolink::SetIrLights() failed\n" if(!$camera->SetIrLights(IPCamera::Reolink::ChannelDefault, IPCamera::Reolink::IrLights_State_Auto));
+
  # Logout of camera
 
  $camera->Logout();
@@ -717,8 +767,11 @@ Based on the "Reolink Camera API User Guide_V8 (Updated in April 2023)" document
 https://github.com/mnpg/Reolink_api_documentations
 
 
-As the author is primarily interested in accessing the Pan/Tilt/Zoom (PTZ) functions of his Reolink RLC-823A-16x IP camera,
-only the subset of functions described in the above document needed to access these features have been implemented.
+As the author is primarily interested in accessing the Pan/Tilt/Zoom (PTZ) functions of his Reolink RLC-823S2 IP camera,
+a subset of functions described in the above document needed to access these features have been implemented as well as some non PTZ functions.
+
+Other cameras tested include the RLC-1240A and Duo 3 PoE, the non PTZ functions all work.
+
 
 Other functions may be added in the future based on the need/whims of the author and requests from other (if any) users of this module.
 
@@ -926,13 +979,49 @@ White Led off.
 
 =back
 
-=head2 IPCamera::Reolink::SetPtzPreset() maximum legth of preset name.
+=head2 IPCamera::Reolink::SetWhiteLed() mode values.
 
 =over 4
 
-=item  PTZ_PresetMaxNameLength => 31;
+=item IPCamera::Reolink::WhiteLed_ModeOff => 0; 
 
-IPCamera::Reolink::SetPtzPrest() maximum legth of preset name.
+White Led always light at night.
+
+=item IPCamera::Reolink::WhiteLed_ModeNightSmart => 1; 
+
+White led alarm trigger mode
+
+=item IPCamera::Reolink::WhiteLed_ModeTimer => 3; 
+
+White led light on for specific periods
+
+=back
+
+=head2 IPCamera::Reolink::SetPtzPreset() maximum length of preset name.
+
+=over 4
+
+=item PTZ_PresetMaxNameLength => 31;
+
+IPCamera::Reolink::SetPtzPrest() maximum length of preset name.
+
+=back
+
+=head2 IPCamera::Reolink::GetIrLights() and IPCamera::Reolink::SetIrLights() IrLights_State values
+
+=over 4
+
+=item IrLights_State_Auto => "Auto";
+
+I<$IPCamera::Reolink::IrLights_State_Auto> IR lights will automatically turn on in dim light and turn off when there is sufficient lighting.
+
+=item IrLights_State_Off => "Off";
+
+I<$IPCamera::Reolink::IrLights_State_Off> IR lights will stay off 
+
+=item IrLights_State_On => "On";
+
+I<$IPCamera::Reolink::IrLights_State_On>  IR lights will stay on
 
 =back
 
@@ -963,6 +1052,10 @@ I<$IPCamera::Reolink::OSD_pos_list> is the IPCamera::Reolink::SetOsd() pos value
 =head2 AAP_AlarmMode_list
 
 I<IPCamera::Reolink::AAP_AlarmMode_list> is the IPCamera::Reolink::AudioAlarmPlay() alarm_mode values as list.
+
+=head2 IrLights_State_list
+
+I<$IPCamera::Reolink::IrLights_State_list> is the IPCamera::Reolink::GetIrLights() and IPCamera::Reolink::SetIrLights() IrLights_State values as list.
 
 =head1 METHODS
 
@@ -1016,7 +1109,7 @@ TBD.
 
 Login to the camera using the credentials provided to new() (above).
 
-Upon successful Login the camera passes back a Login token and lease time that is used internally by other IPCamera::Reolink camera API methods.
+Upon successful Login the camera passes back a Login token and lease time that are used internally by other IPCamera::Reolink camera API methods.
 
 The token is valid for the specified lease time.
 
@@ -1602,6 +1695,7 @@ Hash reference to camera OSD initial values.
 
 =back
 
+
 =head2 SetOsd($camera_channel, $enableChannel, $channelName, $channelPos, $enableTime, $timePos)
 
 Set camera On Screen Display (OSD) values.
@@ -1711,6 +1805,132 @@ OSD position "Bottom Center"
 OSD position "Lower Right"
 
 =back
+
+=back
+
+=head2 GetIrLights($camera_channel)
+
+Return camera IrLights state value.
+
+=over 4
+
+=item $camera_channel 
+
+Perform camera operation on specified camera channel.
+
+=over 4
+
+=item IPCamera::Reolink::ChannelDefault 
+
+If you are connected to a camera then there is (usually) only 1 channel.
+
+=item integer >= 0
+
+If you are connected to an NVR then there is usually one channel per attached camera starting at integer value 0.
+
+=back
+
+=item return
+
+Returns (undef, undef, undef) if the GetIrLights function failed or ($irlights_value_r, $irlights_range_r, $irlights_initial_r) on success, hash references to IrLights current value, range and initial values information if successful, fields most likely subject to change (typical values in parenthesis):
+
+=over 4
+
+=item $irlights_value_r
+
+Hash reference to current camera IrLights values.
+
+=over 4
+
+=item $irlights_value_r->{IrLights}
+
+Current camera IrLights values.
+
+=over 4
+
+=item $irlights_value_r->{IrLights}->{state} ("Auto", Off", "On")
+
+Current camera IrLights state value ("Auto", Off", "On")
+
+=item $irlights_value_r->{IrLights}->{channel} (0)
+
+=over 4
+
+=item IPCamera::Reolink::ChannelDefault 
+
+If you are connected to a camera then there is (usually) only 1 channel.
+
+=item integer >= 0
+
+If you are connected to an NVR then there is usually one channel per attached camera starting at integer value 0.
+
+=back
+
+=item $irlights_range_r
+
+Hash reference to camera IrLights value ranges.
+
+=over 4
+
+=item TBD
+
+=back
+
+=item $irlights_initial_r
+
+Hash reference to camera IrLights initial values.
+
+=over 4
+
+=item TBD
+
+=back
+
+=back
+
+=back
+
+=back
+
+=back
+
+=head2 SetIrLights($camera_channel, $irlights_state)
+
+Return camera IrLights state value.
+
+=over 4
+
+=item $camera_channel 
+
+Perform camera operation on specified camera channel.
+
+=over 4
+
+=item IPCamera::Reolink::ChannelDefault 
+
+If you are connected to a camera then there is (usually) only 1 channel.
+
+=item integer >= 0
+
+If you are connected to an NVR then there is usually one channel per attached camera starting at integer value 0.
+
+=back
+
+=item $irlights_state
+
+=over 4
+
+=item IrLights_State_Auto => "Auto"; # IR lights will automatically turn on in dim light and turn off when there is sufficient lighting.
+
+=item IrLights_State_Off => "Off"; # IR lights will stay off 
+
+=item IrLights_State_On => "On"; # IR lights will stay on
+
+=back
+
+=item return
+
+Returns 0 if the SetIrLights function failed or 1 on success.
 
 =back
 
@@ -2076,6 +2296,8 @@ If you are connected to an NVR then there is usually one channel per attached ca
 Returns undef if the GetWhiteLed function failed.
 
 Returns ($whiteled_value_r, $whiteled_range_r, $whiteled_initial_r).
+
+=back
 
 =back
 

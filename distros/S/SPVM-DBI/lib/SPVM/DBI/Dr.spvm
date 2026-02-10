@@ -3,31 +3,68 @@
 
 class DBI::Dr {
   version_from DBI;
-
+  
   use DBI::Db;
-  use Hash;
-  use Go::Context;
-
-  # --- Instance Methods ---
-
-  # Create a new database handle (DBI::Db).
-  # This method must be overridden by the child class (e.g., DBD::SQLite::Dr).
-  public method connect : DBI::Db ($context : Go::Context, $dsn : string, $user : string = undef, $password : string = undef, $attr : Hash = undef) {
-    die "The \"connect\" method is not implemented in this driver.";
+  
+  method connect : DBI::Db ($ctx : Go::Context, $dsn : string, $user : string = undef, $password : string = undef, $options : object[] = undef) {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
   }
+  
+  protected method connect_common : void ($dbh : DBI::Db, $ctx : Go::Context, $dsn : string, $user : string = undef, $password : string = undef, $options : object[] = undef) {
+    
+    Fn->check_option_names($options, $dbh->option_names);
+    
+    # DSN is mandatory for initialization.
+    unless ($dsn) {
+      die "The data source name $dsn must be defined.";
+    }
 
-  # Return a list of available data sources for this driver.
-  public method data_sources : string[] ($context : Go::Context, $attr : Hash = undef) {
-    die "The \"data_sources\" method is not implemented in this driver.";
+    # Redefine $options as a Hash.
+    my $options = Fn->to_hash($options);
+    
+    # Parse Name and Username from DSN
+    # Extract everything after "dbi:driver:" as Name
+    if (my $m = Re->m($dsn, "^dbi:[^:]+:(.+)")) {
+      $dbh->{Name} = $m->cap(1);
+    }
+    
+    # Extract user from "dbi:driver:db;user=xxx" or similar patterns
+    if (my $m = Re->m($dsn, ["[;:]user=([^;:]+)", "i"])) {
+      $dbh->{Username} = $m->cap(1);
+    }
+    
+    # Always set to 1
+    $dbh->{AutoCommit} = 1;
+    
+    # Set fields from options if they exist
+    if ($options->exists("InactiveDestroy")) {
+      $dbh->{InactiveDestroy} = $options->get("InactiveDestroy")->(byte);
+    }
+    
+    if ($options->exists("IdleTimeoutDurationNsec")) {
+      $dbh->{IdleTimeoutDurationNsec} = $options->get("IdleTimeoutDurationNsec")->(long);
+    }
+    
+    if ($options->exists("ConnectTimeoutDurationNsec")) {
+      $dbh->{ConnectTimeoutDurationNsec} = $options->get("ConnectTimeoutDurationNsec")->(long);
+    }
+    
+    if ($options->exists("ReadTimeoutDurationNsec")) {
+      $dbh->{ReadTimeoutDurationNsec} = $options->get("ReadTimeoutDurationNsec")->(long);
+    }
+    
+    if ($options->exists("WriteTimeoutDurationNsec")) {
+      $dbh->{WriteTimeoutDurationNsec} = $options->get("WriteTimeoutDurationNsec")->(long);
+    }
+    
+    if ($options->exists("SocketKeepAliveDurationNsec")) {
+      $dbh->{SocketKeepAliveDurationNsec} = $options->get("SocketKeepAliveDurationNsec")->(long);
+    }
+    
+    if ($options->exists("TCPNoDelay")) {
+      $dbh->{TCPNoDelay} = $options->get("TCPNoDelay")->(byte);
+    }
+    
   }
-
-  # Return the driver-specific attributes.
-  public method get_attributes : Hash ($context : Go::Context) {
-    die "The \"get_attributes\" method is not implemented in this driver.";
-  }
-
-  # Disconnect all active database handles managed by this driver.
-  public method disconnect_all : void ($context : Go::Context) {
-    die "The \"disconnect_all\" method is not implemented in this driver.";
-  }
+  
 }

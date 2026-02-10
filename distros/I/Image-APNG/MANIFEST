@@ -1,0 +1,14 @@
+Build.PL
+INSTALL
+LICENSE
+MANIFEST
+META.json
+META.yml
+README.md
+lib/Image/APNG.pm
+t/00-load.t
+t/01-basic.t
+t/02-options.t
+t/pod.t
+examples/example_usage.pl
+Makefile.PL

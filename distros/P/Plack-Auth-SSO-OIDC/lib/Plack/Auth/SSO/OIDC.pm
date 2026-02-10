@@ -16,7 +16,7 @@ use MIME::Base64;
 use Digest::SHA;
 use Try::Tiny;
 
-our $VERSION = "0.014";
+our $VERSION = "0.015";
 
 with "Plack::Auth::SSO";
 
@@ -69,6 +69,12 @@ has allowed_authorize_params => (
     default => sub { []; },
     required => 1
 );
+
+has store_oidc_response => (
+    is => "ro",
+    default => sub { 1; },
+);
+
 
 # internal (non overwritable) moo attributes
 has json => (
@@ -468,20 +474,22 @@ sub to_app {
 
         $self->cleanup($session);
 
-        $self->set_auth_sso(
-            $session,
-            {
-                extra => {},
-                info  => $claims,
-                uid   => $claims->{ $self->uid_key() },
-                package    => __PACKAGE__,
-                package_id => $self->id,
-                response   => {
-                    content => $self->json->encode($tokens),
-                    content_type => "application/json"
-                }
-            }
-        );
+        my $session_data = +{
+            extra       => {},
+            info        => $claims,
+            uid         => $claims->{ $self->uid_key() },
+            package     => __PACKAGE__,
+            package_id  => $self->id,
+        };
+
+        if ($self->store_oidc_response()) {
+            $session_data->{response} = +{
+                content         => $self->json->encode($tokens),
+                content_type    => "application/json"
+            };
+        }
+
+        $self->set_auth_sso($session, $session_data);
 
         $self->log->debugf("auth_sso: %s", $self->get_auth_sso($session))
             if $self->log->is_debug();
@@ -689,6 +697,13 @@ take precedence.
 Attribute from claims to be used as uid
 
 Note that all claims are also stored in C<< $session->get("auth_sso")->{info} >>
+
+=item C<< store_oidc_response >>
+
+Store C<< content >> and C<< content_type >> of returned OIDC response in session key `auth_sso.response.content` and `auth_sso.response.content_type`
+respectively. This can exhaust the cookie length if all session data is stored in the cookie.
+
+Default: C<< 1 >>
 
 =back
 

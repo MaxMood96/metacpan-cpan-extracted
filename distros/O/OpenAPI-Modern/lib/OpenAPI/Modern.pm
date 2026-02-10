@@ -1,10 +1,10 @@
 use strictures 2;
-package OpenAPI::Modern; # git description: v0.125-6-g0c91af95
+package OpenAPI::Modern; # git description: v0.126-4-gfb0df051
 # vim: set ts=8 sts=2 sw=2 tw=100 et :
 # ABSTRACT: Validate HTTP requests and responses against an OpenAPI v3.0, v3.1 or v3.2 document
 # KEYWORDS: validation evaluation JSON Schema OpenAPI v3.0 v3.1 v3.2 Swagger HTTP request response
 
-our $VERSION = '0.126';
+our $VERSION = '0.127';
 
 use 5.020;
 use utf8;
@@ -1651,7 +1651,7 @@ OpenAPI::Modern - Validate HTTP requests and responses against an OpenAPI v3.0, 
 
 =head1 VERSION
 
-version 0.126
+version 0.127
 
 =head1 SYNOPSIS
 

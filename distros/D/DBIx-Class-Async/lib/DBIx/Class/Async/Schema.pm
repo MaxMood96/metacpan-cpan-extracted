@@ -1,6 +1,6 @@
 package DBIx::Class::Async::Schema;
 
-$DBIx::Class::Async::Schema::VERSION   = '0.56';
+$DBIx::Class::Async::Schema::VERSION   = '0.57';
 $DBIx::Class::Async::Schema::AUTHORITY = 'cpan:MANWAR';
 
 =encoding utf8
@@ -11,7 +11,7 @@ DBIx::Class::Async::Schema - Non-blocking, worker-pool based Proxy for DBIx::Cla
 
 =head1 VERSION
 
-Version 0.56
+Version 0.57
 
 =head1 SYNOPSIS
 
@@ -114,6 +114,8 @@ sub connect {
     unless ($schema_loaded) {
         croak "Cannot load schema class $schema_class: $@";
     }
+
+    $async_options->{cache_ttl} //= 0;  # Caching is OFF by default.
 
     my $async_db = eval {
         DBIx::Class::Async->create_async_db(

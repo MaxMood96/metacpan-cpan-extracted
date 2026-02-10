@@ -6,7 +6,8 @@ use ExtUtils::MakeMaker;
 my %WriteMakefileArgs = (
     NAME             => 'IPCamera::Reolink',
     AUTHOR           => q{Stephen Oberski <cpan@cargocult.ca>},
-    VERSION_FROM     => 'lib/IPCamera/Reolink.pm',
+    #VERSION_FROM     => 'lib/IPCamera/Reolink.pm',
+    VERSION          => '1.10',
     ABSTRACT_FROM    => 'lib/IPCamera/Reolink.pm',
     LICENSE          => 'artistic_2',
     MIN_PERL_VERSION => '5.006',

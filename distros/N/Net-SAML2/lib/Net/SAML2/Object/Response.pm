@@ -1,7 +1,7 @@
 package Net::SAML2::Object::Response;
 use Moose;
 
-our $VERSION = '0.84'; # VERSION
+our $VERSION = '0.85'; # VERSION
 
 use overload '""' => 'to_string';
 
@@ -127,7 +127,7 @@ Net::SAML2::Object::Response - A response object
 
 =head1 VERSION
 
-version 0.84
+version 0.85
 
 =head1 SYNOPSIS
 

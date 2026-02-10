@@ -1,7 +1,7 @@
 package Net::SAML2::Role::XMLLang;
 use Moose::Role;
 
-our $VERSION = '0.84'; # VERSION
+our $VERSION = '0.85'; # VERSION
 
 # ABSTRACT: Common behaviour for XML language settings
 
@@ -34,7 +34,7 @@ Net::SAML2::Role::XMLLang - Common behaviour for XML language settings
 
 =head1 VERSION
 
-version 0.84
+version 0.85
 
 =head1 CONSTRUCTOR ARGUMENTS
 

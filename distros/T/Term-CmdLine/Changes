@@ -1,0 +1,19 @@
+Revision history for Term-CmdLine
+
+2.00    2026-02-09
+        - BREAKING: Modernized to require Perl 5.20 or higher
+        - Converted to use function signatures
+        - Replaced 'use strict; use warnings;' with 'use v5.20;'
+        - Added exit/quit/EOF as implicit builtin commands
+        - Fixed math evaluation in variables
+        - Expanded test suite to 36 tests
+        - Fixed Perl::Critic violations
+        - Added history file save/restore tests
+
+1.00    2026-02-09
+        - Initial CPAN release
+        - Subsumed dependencies (Display, Utils, OSDep) into main module
+        - Renamed from CmdLine to Term::CmdLine
+        - Updated all references from ClearSCM to DeFaria
+        - Added comprehensive test suite
+        - Full POD documentation

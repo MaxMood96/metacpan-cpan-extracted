@@ -1,5 +1,10 @@
 Revision history for Test-Mojo-Role-OpenAPI-Modern
 
+0.011     2026-02-09 23:31:18Z
+          - update tests for new $ref validation in OpenAPI::Modern 0.120
+          - update tests for changed parameter deserialization in
+            OpenAPI::Modern 0.121
+
 0.010     2025-06-17 21:45:20Z
           - update tests for error and routing changes in OpenAPI::Modern 0.087
 

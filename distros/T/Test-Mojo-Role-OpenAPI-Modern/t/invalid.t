@@ -40,8 +40,14 @@ subtest 'request or response not valid' => sub {
 
   is(
     Mojo::JSON::Pointer->new($t->request_validation_result->TO_JSON)->get('/errors/0/error'),
-    'incorrect Content-Type "application/x-www-form-urlencoded"',
+    'length is greater than 1',
     'request validation first error',
+  );
+
+  is(
+    Mojo::JSON::Pointer->new($t->request_validation_result->TO_JSON)->get('/errors/1/error'),
+    'incorrect Content-Type "application/x-www-form-urlencoded"',
+    'request validation second error',
   );
 
   is(
@@ -52,19 +58,19 @@ subtest 'request or response not valid' => sub {
 
   $t->post_ok('/foo/hello', json => { salutation => 'hi' })
     ->status_is(200)
-    ->request_not_valid(q{'/request/uri/path/foo_id': got string, not integer});
+    ->request_not_valid(q{'/request/uri/path/foo_id': length is greater than 1});
 
   cmp_deeply(
     $t->request_validation_result->recommended_response,
-    [ 400, q{'/request/uri/path/foo_id': got string, not integer} ],
+    [ 400, q{'/request/uri/path/foo_id': length is greater than 1} ],
     'request validation primary error falls back to first error string',
   );
 
   $t->post_ok('/foo/123', json => { kaboom => 'oh noes' })
     ->status_is(200)
-    ->request_not_valid(q{'/request/body/kaboom': EXCEPTION: unable to find resource "/api#/$defs/i_do_not_exist"})
+    ->request_not_valid(q{'/request/body/kaboom': EXCEPTION: unable to find resource "https://nowhere.example.com#/$defs/i_do_not_exist"})
     ->request_not_valid('Internal Server Error')
-    ->response_not_valid(q{'/response/body/kaboom': EXCEPTION: unable to find resource "/api#/$defs/i_do_not_exist"});
+    ->response_not_valid(q{'/response/body/kaboom': EXCEPTION: unable to find resource "https://nowhere.example.com#/$defs/i_do_not_exist"});
 
   cmp_deeply(
     $t->request_validation_result->recommended_response,

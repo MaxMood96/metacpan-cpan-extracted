@@ -106,6 +106,7 @@ t/144-loop-engine.t
 t/145-mojo-integration.t
 t/146-await-all.t
 t/147-run-parallel.t
+t/148-caching.t
 t/benchmark.pl
 t/manifest.t
 t/pod.t

@@ -35,7 +35,7 @@ use Exporter 'import';
 
 our @EXPORT_OK = qw(generate);
 
-our $VERSION = '0.27';
+our $VERSION = '0.28';
 
 use constant {
 	DEFAULT_ITERATIONS => 50,
@@ -50,7 +50,7 @@ App::Test::Generator - Generate fuzz and corpus-driven test harnesses from test 
 
 =head1 VERSION
 
-Version 0.27
+Version 0.28
 
 =head1 SYNOPSIS
 
@@ -243,6 +243,26 @@ Setting this to 0 disables timeout testing.
 =back
 
 All values default to C<true>.
+
+=head3 C<%accessor> - this is an accessor routine
+
+  accessor:
+    property: ua
+    type: getset
+
+Has two mandatory elements:
+
+=over 4
+
+=item * C<property>
+
+The name of the property in the object that the routine controls.
+
+=item * C<type>
+
+One of C<getter>, C<setter>, C<getset>.
+
+=back
 
 =head3 C<%transforms> - list of transformations from input sets to output sets
 
@@ -1276,6 +1296,7 @@ sub generate
 	my %input = %{_load_schema_section($schema, 'input', $schema_file)};
 	my %output = %{_load_schema_section($schema, 'output', $schema_file)};
 	my %transforms = %{_load_schema_section($schema, 'transforms', $schema_file)};
+	my %accessor = %{_load_schema_section($schema, 'accessor', $schema_file)};
 
 	my %cases = %{$schema->{cases}} if(exists($schema->{cases}));
 	my %edge_cases = %{$schema->{edge_cases}} if(exists($schema->{edge_cases}));
@@ -1476,6 +1497,24 @@ sub generate
 		$transform_properties_code = _render_properties($properties);
 	}
 
+	if(keys %accessor) {
+		# Sanity test
+		my $property = $accessor{property};
+		my $type = $accessor{type};
+
+		if(!defined($new)) {
+			croak("$property: accessor $type can only work on an object");
+		}
+		if($type eq 'getset') {
+			if(scalar(keys %input) != 1) {
+				croak("$property: getset must take one input argument");
+			}
+			if(scalar(keys %output) == 0) {
+				croak("$property: getset must give one output");
+			}
+		}
+	}
+
 	# Setup / call code (always load module)
 	my $setup_code = ($module) ? "BEGIN { use_ok('$module') }" : '';
 	my $call_code;	# Code to call the function being test when used with named arguments
@@ -1484,28 +1523,45 @@ sub generate
 	if(defined($new)) {
 		# keep use_ok regardless (user found earlier issue)
 		if($new_code eq '') {
-			$setup_code .= "\nmy \$obj = new_ok('$module');";
+			$new_code = "new_ok('$module')";
 		} else {
-			$setup_code .= "\nmy \$obj = new_ok('$module' => [ { $new_code } ] );";
+			$new_code = "new_ok('$module' => [ { $new_code } ] )";
 		}
+		$setup_code .= "\nmy \$obj = $new_code;";
 		if($has_positions) {
-			$position_code = "(\$result = scalar(\@alist) == 1) ? \$obj->$function(\$alist[0]) : (scalar(\@alist) == 0) ? \$obj->$function() : \$obj->$function(\@alist);";
+			$position_code = "\$result = (scalar(\@alist) == 1) ? \$obj->$function(\$alist[0]) : (scalar(\@alist) == 0) ? \$obj->$function() : \$obj->$function(\@alist);";
+			if(defined($accessor{type})) {
+				if($accessor{type} eq 'getset') {
+					$position_code .= 'if(scalar(@alist) == 1) { ';
+					$position_code .= "cmp_ok(\$result, 'eq', \$alist[0], 'getset function returns what was put in'); ok(\$obj->$function() eq \$result, 'test getset accessor');";
+					$position_code .= '}';
+				}
+				if(($accessor{type} eq 'getset') || ($accessor{type} eq 'getter')) {
+					# Since Perl doesn't support data encapsulation, we can test the getter returns the correct item
+					$position_code .= 'if(scalar(@alist) == 1) { ';
+					$position_code .= "cmp_ok(\$result, 'eq', \$obj->{$function}, 'getset function returns correct item');";
+					$position_code .= '}';
+				}
+			}
 		} else {
 			$call_code = "\$result = \$obj->$function(\$input);";
 			if($output{'_returns_self'}) {
 				$call_code .= "ok(defined(\$result)); ok(\$result eq \$obj, '$function returns self')";
 			}
+			if(defined($accessor{type}) && ($accessor{type} eq 'getset')) {
+				$call_code .= "ok(\$obj->$function() eq \$result, 'test getset accessor');"
+			}
 		}
 	} elsif(defined($module) && length($module)) {
 		if($function eq 'new') {
 			if($has_positions) {
-				$position_code = "(\$result = scalar(\@alist) == 1) ? ${module}\->$function(\$alist[0]) : (scalar(\@alist) == 0) ? ${module}\->$function() : ${module}\->$function(\@alist);";
+				$position_code = "\$result = (scalar(\@alist) == 1) ? ${module}\->$function(\$alist[0]) : (scalar(\@alist) == 0) ? ${module}\->$function() : ${module}\->$function(\@alist);";
 			} else {
 				$call_code = "\$result = ${module}\->$function(\$input);";
 			}
 		} else {
 			if($has_positions) {
-				$position_code = "(\$result = scalar(\@alist) == 1) ? ${module}::$function(\$alist[0]) : (scalar(\@alist) == 0) ? ${module}::$function() : ${module}::$function(\@alist);";
+				$position_code = "\$result = (scalar(\@alist) == 1) ? ${module}::$function(\$alist[0]) : (scalar(\@alist) == 0) ? ${module}::$function() : ${module}::$function(\@alist);";
 			} else {
 				$call_code = "\$result = ${module}::$function(\$input);";
 			}
@@ -1627,7 +1683,7 @@ sub generate
 		'eval { $result2 = do { ' . (defined($position_code) ? $position_code : $call_code) . " }; };\n" .
 		'is_deeply($result2, $result, "deterministic result for same input");' .
 		"\n";
-	
+
 	# Generate the test content
 	my $tt = Template->new({ ENCODING => 'utf8', TRIM => 1 });
 
@@ -2313,7 +2369,7 @@ sub _detect_transform_properties {
 			name => 'exact_value',
 			# code => "\$result == $expected"
 			(ref($expected))
-			? "\$result == $expected"  # maybe
+			? "\$result == $expected"	# maybe
 			: "\$result eq " . perl_quote($expected)
 		};
 	}

@@ -3,4 +3,67 @@
 
 class DBI::St {
   version_from DBI;
+  
+  allow DBI::Db;
+  
+  use Fn;
+  use DBI::Error::SQLState;
+  
+  # Fields
+  has Database : ro DBI::Db;
+  
+  has Statement : ro string;
+  
+  # Instance Methods
+  protected method option_names : string[] () {
+    
+    my $option_names = new string[0];
+    
+    return $option_names;
+  }
+  
+  method NUM_OF_FIELDS : int ($ctx : Go::Context) {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
+  }
+  
+  method NAME : string[] ($ctx : Go::Context) {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
+  }
+  
+  method NULLABLE : int[] ($ctx : Go::Context) {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
+  }
+  
+  method TYPE : int[] ($ctx : Go::Context) {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
+  }
+  
+  method PRECISION : int[] ($ctx : Go::Context) {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
+  }
+  
+  method SCALE : int[] ($ctx : Go::Context) {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
+  }
+  
+  method execute : long ($ctx : Go::Context, $bind_values : object[] = undef) {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
+  }
+  
+  method fetchrow_array : object[] ($ctx : Go::Context) {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
+  }
+  
+  method rows : long ($ctx : Go::Context) {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
+  }
+  
+  method finish : void () {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
+  }
+  
+  method DESTROY : void () {
+    $self->finish;
+  }
+
 }

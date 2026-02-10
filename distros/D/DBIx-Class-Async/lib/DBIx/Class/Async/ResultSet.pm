@@ -1,6 +1,6 @@
 package DBIx::Class::Async::ResultSet;
 
-$DBIx::Class::Async::ResultSet::VERSION   = '0.56';
+$DBIx::Class::Async::ResultSet::VERSION   = '0.57';
 $DBIx::Class::Async::ResultSet::AUTHORITY = 'cpan:MANWAR';
 
 =head1 NAME
@@ -9,7 +9,7 @@ DBIx::Class::Async::ResultSet - Non-blocking resultset proxy with Future-based e
 
 =head1 VERSION
 
-Version 0.56
+Version 0.57
 
 =head1 SYNOPSIS
 
@@ -232,7 +232,7 @@ sub new_result {
     $new_row->{_relationship_data} = { %rel_data };
 
     # Dynamic Class Hijacking - handle custom result_class
-    my $target_class = $self->{_attrs}->{result_class} || $self->result_class;
+    my $target_class   = $self->{_attrs}->{result_class} || $self->result_class;
     my $base_row_class = ref($new_row);
 
     if ($target_class && $target_class ne $base_row_class) {
@@ -383,64 +383,98 @@ will only ever trigger a single network request.
 
 sub all {
     my ($self) = @_;
-    my $db     = $self->{_async_db};
-    my $source = $self->{_source_name};
+    my $db = $self->{_async_db};
 
-    # 1. Check for prefetched entries
+    # 1. Check if caching is explicitly disabled for this query
+    if (exists $self->{_attrs}{cache} && !$self->{_attrs}{cache}) {
+        return $self->all_future;
+    }
+
+    if ($self->can('_has_dynamic_sql') && $self->_has_dynamic_sql) {
+        return $self->all_future;
+    }
+
+    # 2. Check cache_ttl (use both _cache_ttl and cache_ttl for compatibility)
+    my $cache_ttl = $self->{_attrs}{cache_ttl}
+                 // $db->{_cache_ttl}
+                 // 0;
+
+    # 3. If no caching, skip to query
+    if (!$cache_ttl) {
+        return $self->all_future;
+    }
+
+    # 4. Check for dynamic SQL
+    if ($self->can('_has_dynamic_sql') && $self->_has_dynamic_sql) {
+        return $self->all_future;
+    }
+
+    # 5. Check for prefetched data first
     if ($self->{_is_prefetched} && $self->{_entries}) {
-        my $class = $self->result_source->result_class;
-        $self->{_rows} = [
-            map {
-                # 1. If it's already an object, just keep it!
-                if (ref($_) && ref($_) ne 'HASH') {
-                    $_;
-                }
-                else {
-                    # 2. If it's a hash, inflate it manually
-                    my $row = $class->new($_);
-                    $row->{_async_db}      = $db;
-                    $row->{_result_source} = $self->result_source;
-                    $row->{_source_name}   = $source;
-                    $row->{_in_storage}    = 1;
-                    $row;
-                }
-            } @{$self->{_entries}}
-        ];
+        my @blessed_rows = map {
+            if (ref($_) eq 'HASH') {
+                $self->_inflate_row($_, { in_storage => 1 })
+            }
+            else {
+                $_; # Already a Row object
+            }
+        } @{$self->{_entries}};
 
-        $self->{_is_prefetched} = 0;
+        $self->{_entries} = \@blessed_rows;
+        $self->{_rows}    = \@blessed_rows;
+        return Future->done($self->{_entries});
+    }
+
+    # 6. Check in-memory cache (_rows)
+    if ($self->{_rows} && ref($self->{_rows}) eq 'ARRAY' && @{$self->{_rows}}) {
         return Future->done($self->{_rows});
     }
 
-    # 2. Fallback: If we already have inflated _rows, use them
-    if ($self->{_rows}
-        && ref($self->{_rows}) eq 'ARRAY'
-        && @{$self->{_rows}}) {
-        return Future->done($self->{_rows});
-    }
-
-    # 3. Check Shared Cache
+    # 7. Generate cache key
     my $cache_key = $self->_generate_cache_key(0);
-    if (my $cached = $self->is_cache_found($cache_key)) {
-        $db->{_stats}->{_cache_hits}++;
-        $self->{_rows} = $cached;
-        return Future->done($cached);
+
+    if ($db->{_cache} && defined $cache_key) {
+        my $cached_data = eval { $db->{_cache}->get($cache_key) };
+        if (defined $cached_data && ref($cached_data) eq 'ARRAY') {
+            $db->{_stats}{_cache_hits}++;
+
+            my @rows = map {
+                $self->new_result($_, { in_storage => 1 })
+            } @$cached_data;
+
+            $self->{_rows} = \@rows;
+            return Future->done(\@rows);
+        }
     }
 
-    # 4. Standard Async Fetch (The Miss)
-    $db->{_stats}->{_cache_misses}++;
+    # 9. Cache miss - increment counter and fetch from database
+    $db->{_stats}{_cache_misses}++;
+
     return $self->all_future->on_done(sub {
         my $rows = shift;
 
-        # Use the key to store it where is_cache_found can see it
-        $db->{_cache}{$cache_key} = $rows if $db->{cache_ttl};
+        # Store UNBLESSED data in CHI
+        if ($db->{_cache} && defined $cache_key && $cache_ttl) {
+            my @cache_data;
 
-        $self->{_rows} = $rows;
+            # Check if rows are already hashrefs (from HashRefInflator)
+            if (@$rows && ref($rows->[0]) eq 'HASH' && !blessed($rows->[0])) {
+                # Already hashrefs, use directly
+                @cache_data = @$rows;
+            }
+            else {
+                # Blessed Row objects, extract columns
+                @cache_data = map {
+                    my %cols = $_->get_columns;
+                    \%cols;
+                } @$rows;
+            }
 
-        # Save to surgical bucket
-        if ($db->{_query_cache}) {
-            $db->{_query_cache}->{$source}->{$cache_key} = $rows;
+            eval { $db->{_cache}->set($cache_key, \@cache_data) };
         }
 
+
+        $self->{_rows} = $rows;
         return $rows;
     });
 }
@@ -527,12 +561,15 @@ sub all_future {
 
         # 2. Decide based on result_class
         my $result_class = $self->{_attrs}{result_class} || '';
+
         if ($result_class eq 'DBIx::Class::ResultClass::HashRefInflator') {
+            $self->{_rows} = $rows_data;
             return $rows_data;
         }
 
         # 3. Otherwise, turn into Row objects
         my @objects = map { $self->_inflate_row($_, { in_storage => 1 }) } @$rows_data;
+        $self->{_rows} = \@objects;
         return \@objects;
     });
 }
@@ -618,28 +655,28 @@ specific source.
 =cut
 
 sub clear_cache {
-    my ($self) = @_;
-    my $source = $self->{_source_name};
-    my $db     = $self->{_async_db};
+    my ($self, $cache_key) = @_;
+    my $db = $self->{_async_db};
 
-    # 1. Kill the local ghost
-    $self->{_rows} = undef;
+    # Clear local in-memory cache
+    delete $self->{_rows};
 
-    return unless $db;
-
-    # 2. Kill the central surgical bucket (the nested one)
+    # Clear surgical query cache
     if ($db->{_query_cache}) {
-         delete $db->{_query_cache}->{$source};
+        my $source = $self->{_source_name};
+        delete $db->{_query_cache}->{$source};
     }
 
-    # 3. NEW: Kill the general cache (the flat one we use for count)
     if ($db->{_cache}) {
-        foreach my $key (keys %{$db->{_cache}}) {
-            if ($key =~ /^\Q$source\E\|/) {
-                delete $db->{_cache}->{$key};
-            }
+        if (defined $cache_key) {
+            $db->{_cache}->remove($cache_key);
+        }
+        else {
+            $db->{_cache}->clear();
         }
     }
+
+    return $self;
 }
 
 =head2 cursor
@@ -841,24 +878,13 @@ sub count {
 
     my $db = $self->{_async_db};
 
-    my $cache_key = $self->_generate_cache_key(1);
-    if (defined $cache_key && exists $db->{_cache}{$cache_key}) {
-        $db->{_stats}{_cache_hits}++;
-        return Future->done($db->{_cache}{$cache_key});
-    }
-
-    $db->{_stats}{_cache_misses}++;
-
     my $payload = $self->_build_payload($cond, $attrs);
 
     warn "[PID $$] STAGE 1 (Parent): Dispatching count" if ASYNC_TRACE;
 
     # This returns a Future that will be resolved by the worker
     return DBIx::Class::Async::_call_worker(
-        $db, 'count', $payload)->on_done(sub {
-        my $result = shift;
-        $db->{_cache}{$cache_key} = $result if defined $cache_key;
-    });
+        $db, 'count', $payload);
 }
 
 =head2 count_future
@@ -2821,8 +2847,6 @@ sub update {
     my $self = shift;
     my ($cond, $updates);
 
-    $self->clear_cache;
-
     # Logic to handle both:
     #   ->update({ col => val })
     #   ->update({ id => 1 }, { col => val })
@@ -2830,8 +2854,25 @@ sub update {
         ($cond, $updates) = @_;
     } else {
         $updates = shift;
-        $cond    = $self->{_cond}; # Use the ResultSet's internal filter
+        $cond    = $self->{_cond};
     }
+
+    my @pk_cols = $self->result_source->primary_columns;
+    my $cache_key;
+
+    if (ref($cond) eq 'HASH' && @pk_cols) {
+        my %pk_cond = map {
+            $_ => $cond->{$_}
+        } grep {
+            exists $cond->{$_}
+        } @pk_cols;
+
+        if (%pk_cond) {
+            $cache_key = $self->_generate_cache_key(0, \%pk_cond);
+        }
+    }
+
+    $cache_key ||= $self->_generate_cache_key(0, $cond);
 
     my $db = $self->{_async_db};
     my $inflators = $db->{_custom_inflators}{ $self->{_source_name} } || {};
@@ -2843,8 +2884,6 @@ sub update {
         }
     }
 
-    # Dispatch via the main Async module's update handler
-    # This uses the resolved $cond we figured out above
     return DBIx::Class::Async::_call_worker(
         $db,
         'update',
@@ -3134,7 +3173,12 @@ sub _new_prefetched_dataset {
 }
 
 sub _generate_cache_key {
-    my ($self, $is_count_op) = @_;
+    my ($self, $is_count_op, $specific_cond) = @_;
+
+    # Don't cache if there's dynamic SQL
+    if ($self->_has_dynamic_sql) {
+        return undef;
+    }
 
     # Force Data::Dumper to be a "pure" string generator
     local $Data::Dumper::Terse    = 1;
@@ -3154,11 +3198,174 @@ sub _generate_cache_key {
          $clean_attrs{is_subquery} //= 1;
     }
 
+    # Use specific condition if provided (for updates), otherwise fall back to internal
+    my $cond = $specific_cond // $self->{_cond} // {};
+
+    # Ensure key is based on Primary Key if possible
+    my @pk_cols = $self->result_source->primary_columns;
+    if (ref($cond) eq 'HASH' && @pk_cols && exists $cond->{$pk_cols[0]}) {
+        $cond = { map { $_ => $cond->{$_} } @pk_cols };
+    }
+
+    # Format Dumper output cleanly
+    my $dumped_cond  = Data::Dumper->new([$cond])->Dump;
+    my $dumped_attrs = Data::Dumper->new([\%clean_attrs])->Dump;
+    $dumped_cond  =~ s/\n/ /g;
+    $dumped_attrs =~ s/\n/ /g;
+
     return join('|',
         $self->{_source_name} // '',
-        Data::Dumper->new([ $self->{_cond}  // {} ])->Dump, # Settings applied globally
-        Data::Dumper->new([ \%clean_attrs ])->Dump,
+        $dumped_cond,
+        $dumped_attrs,
     );
+}
+
+sub _has_dynamic_sql {
+    my ($self) = @_;
+
+    my $attrs = $self->{_attrs} || {};
+
+    # List of non-deterministic SQL functions that should not be cached
+    my $dynamic_functions = qr/\b(?:
+    NOW|CURTIME|CURDATE|CURRENT_TIME|CURRENT_DATE|CURRENT_TIMESTAMP|
+    SYSDATE|LOCALTIME|LOCALTIMESTAMP|UTC_TIME|UTC_DATE|UTC_TIMESTAMP|
+    UNIX_TIMESTAMP|
+    DATETIME|
+    TIMESTAMP|
+    RAND|RANDOM|
+    UUID|UUID_SHORT
+    )\s*\(/ix;
+
+    # Helper to check if a value contains dynamic SQL
+    my $check_value = sub {
+        my ($val) = @_;
+
+        # Check for ScalarRef (literal SQL)
+        if (ref($val) eq 'SCALAR') {
+            return 1 if $$val =~ $dynamic_functions;
+        }
+        # Check for RefRef (escaped literal)
+        elsif (ref($val) eq 'REF' && ref($$val) eq 'SCALAR') {
+            return 1 if $$$val =~ $dynamic_functions;
+        }
+        # Check for plain strings that might contain SQL
+        elsif (!ref($val) && defined $val) {
+            return 1 if $val =~ $dynamic_functions;
+        }
+
+        return 0;
+    };
+
+    # Check +select (additional columns)
+    if ($attrs->{'+select'}) {
+        my @selects = ref($attrs->{'+select'}) eq 'ARRAY'
+                     ? @{$attrs->{'+select'}}
+                     : ($attrs->{'+select'});
+
+        for my $sel (@selects) {
+            # Hash form: { '' => \'NOW()', -as => 'current_time' }
+            if (ref($sel) eq 'HASH') {
+                for my $key (keys %$sel) {
+                    next if $key eq '-as';  # Skip alias
+                    return 1 if $check_value->($sel->{$key});
+                }
+            }
+            # Direct form: \'NOW()'
+            else {
+                return 1 if $check_value->($sel);
+            }
+        }
+    }
+
+    # Check select (column list)
+    if ($attrs->{select}) {
+        my @selects = ref($attrs->{select}) eq 'ARRAY'
+                     ? @{$attrs->{select}}
+                     : ($attrs->{select});
+
+        for my $sel (@selects) {
+            # Hash form: { count => 'id', -as => 'total' }
+            if (ref($sel) eq 'HASH') {
+                for my $key (keys %$sel) {
+                    next if $key eq '-as';  # Skip alias
+                    return 1 if $check_value->($sel->{$key});
+                }
+            }
+            # Direct form
+            else {
+                return 1 if $check_value->($sel);
+            }
+        }
+    }
+
+    # Check +columns (similar to +select)
+    if ($attrs->{'+columns'}) {
+        my @cols = ref($attrs->{'+columns'}) eq 'ARRAY'
+                  ? @{$attrs->{'+columns'}}
+                  : ($attrs->{'+columns'});
+
+        for my $col (@cols) {
+            if (ref($col) eq 'HASH') {
+                for my $val (values %$col) {
+                    return 1 if $check_value->($val);
+                }
+            }
+            else {
+                return 1 if $check_value->($col);
+            }
+        }
+    }
+
+    # Check having clause (may contain aggregate functions with dynamic SQL)
+    if ($attrs->{having}) {
+        if (ref($attrs->{having}) eq 'HASH') {
+            for my $val (values %{$attrs->{having}}) {
+                return 1 if $check_value->($val);
+            }
+        }
+    }
+
+    # Check where conditions for literal SQL
+    if ($self->{_cond}) {
+        my $check_cond;
+        $check_cond = sub {
+            my ($cond) = @_;
+
+            if (ref($cond) eq 'HASH') {
+                for my $key (keys %$cond) {
+                    my $val = $cond->{$key};
+
+                    # Check the key itself (might be literal SQL)
+                    return 1 if $check_value->($key);
+
+                    # Recursively check nested conditions
+                    if (ref($val) eq 'HASH') {
+                        return 1 if $check_cond->($val);
+                    }
+                    elsif (ref($val) eq 'ARRAY') {
+                        for my $item (@$val) {
+                            return 1 if $check_value->($item);
+                            return 1 if ref($item) eq 'HASH' && $check_cond->($item);
+                        }
+                    }
+                    else {
+                        return 1 if $check_value->($val);
+                    }
+                }
+            }
+            elsif (ref($cond) eq 'ARRAY') {
+                for my $item (@$cond) {
+                    return 1 if $check_cond->($item);
+                }
+            }
+
+            return 0;
+        };
+
+        return 1 if $check_cond->($self->{_cond});
+    }
+
+    return 0;
 }
 
 sub _build_payload {
@@ -3322,6 +3529,15 @@ sub _inflate_row {
 
     return $row;
 }
+
+=head2 Automatic Cache Safety
+
+L<DBIx::Class::Async> automatically analyses your queries for non-deterministic
+SQL functions (e.g., B<NOW()>, B<CURTIME()>, B<RAND()>, B<UUID()>).
+
+If detected in the B<WHERE> clause, B<SELECT> list, or B<HAVING> clause, the
+caching mechanism will be B<automatically bypassed> for that specific query,
+even if B<cache_ttl> is enabled, to ensure data integrity.
 
 =head1 AUTHOR
 

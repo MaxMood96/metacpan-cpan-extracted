@@ -192,7 +192,7 @@ subtest 'Row errors' => sub {
     # Delete already deleted row
     my $delete_again = $temp_user->delete;
     my $result = $delete_again->get;
-    ok(!$result, 'Delete already deleted returns false');
+    is($result, 0, 'Delete already deleted row fails appropriately');
 };
 
 subtest 'Row inflation' => sub {

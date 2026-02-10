@@ -15,7 +15,7 @@ use Safe;
 use Scalar::Util qw(looks_like_number);
 use YAML::XS;
 
-our $VERSION = '0.27';
+our $VERSION = '0.28';
 
 =head1 NAME
 
@@ -23,7 +23,7 @@ App::Test::Generator::SchemaExtractor - Extract test schemas from Perl modules
 
 =head1 VERSION
 
-Version 0.27
+Version 0.28
 
 =head1 SYNOPSIS
 
@@ -123,8 +123,8 @@ The extracted schemas follow this YAML structure:
 =item * B<Accessor Method Detection>
 
 Automatically identifies getter, setter, and combined accessor methods
-by analyzing common patterns like C<return $self-E<gt>{field}> and
-C<$self-E<gt>{field} = $value>.
+by analyzing common patterns like C<return $self-E<gt>{property}> and
+C<$self-E<gt>{property} = $value>.
 
 =item * B<Boolean Return Inference>
 
@@ -1508,8 +1508,8 @@ sub _analyze_method {
 	my $schema = {
 		function => $method->{name},
 		_confidence => {
-			'input' => 'unknown',
-			'output' => 'unknown',
+			'input' => {},
+			'output' => {}
 		},
 		input => {},
 		output => {},
@@ -1730,74 +1730,27 @@ sub _detect_accessor_methods {
 	$code =~ s/\s+/ /g;
 
 	# -------------------------------
-	# Getter
-	# -------------------------------
-	if ($code =~ /(?:return\s+)?\$self\s*->\s*\{\s*['"]?([^}'"]+)['"]?\s*\}\s*;/) {
-		my $field = $1;
-
-		$schema->{_accessor} = {
-			type => 'getter',
-			field => $field,
-		};
-
-		$self->_log("  Detected getter accessor for field: $field");
-
-		$schema->{input} = {};
-		$schema->{input_style} = 'none';
-		$schema->{_confidence}{input} = {
-			level => 'high',
-			factors => ['Detected getter/accessor method'],
-		};
-
-		return; # hard stop
-	}
-
-	# -------------------------------
-	# Setter
-	# -------------------------------
-	if (
-		$code =~ /return\s+\$self\b/ &&
-		$code =~ /\$self\s*->\s*\{\s*['"]?([^}'"]+)['"]?\s*\}\s*=\s*\$(\w+)\s*;/
-	) {
-		my ($field, $param) = ($1, $2);
-
-		$schema->{_accessor} = {
-			type => 'setter',
-			field => $field,
-			param => $param,
-		};
-
-		$self->_log("  Detected setter accessor for field: $field");
-
-		$schema->{input} = {
-			$param => { type => 'string' }, # safe default
-		};
-		$schema->{input_style} = 'hash';
-
-		$schema->{_confidence}{input} = {
-			level => 'high',
-			factors => ['Detected setter/accessor method'],
-		};
-
-		return;
-	}
-
-	# -------------------------------
 	# Getter/Setter combo
 	# -------------------------------
 	if (
 		$code =~ /\$self\s*->\s*\{\s*['"]?([^}'"]+)['"]?\s*\}\s*=\s*shift\s*;/ &&
 		$code =~ /return\s+\$self\s*->\s*\{/ &&
-		$code =~ /if\s*\(\s*\@_\s*>\s*1\s*\)/
+		$code =~ /if\s*\(\s*\@_\s*(?:>\s*1)?\s*\)/
 	) {
-		my $field = $1;
+		my $property = $1;
 
-		$schema->{_accessor} = {
+		if(!defined($property)) {
+			if($code =~ /\$self\s*->\s*\{\s*['"]?([^}'"]+)['"]?\s*\}\s*=\s*shift\s*;/) {
+				$property = $1;
+			}
+		}
+
+		$schema->{accessor} = {
 			type => 'getset',
-			field => $field,
+			property => $property,
 		};
 
-		$self->_log("  Detected getter/setter accessor for field: $field");
+		$self->_log("  Detected getter/setter accessor for property: $property");
 
 		$schema->{input} = {
 			value => { type => 'string', optional => 1 },
@@ -1808,8 +1761,156 @@ sub _detect_accessor_methods {
 			level => 'high',
 			factors => ['Detected combined getter/setter accessor'],
 		};
+		if (my $pod = $method->{pod}) {
+			if ($pod =~ /\b(LWP::UserAgent(::\w+)*)\b/) {
+				my $class = $1;
+				$schema->{output} = {
+					type => 'object',
+					isa => $class,
+				};
+				$schema->{input}{$property} = {
+					type => 'object',
+					isa => $class,
+					optional => 1,
+				};
 
-		return;
+				$schema->{_confidence}{output} = {
+					level => 'high',
+					factors => ['POD specifies UserAgent object'],
+				};
+			}
+		}
+	} elsif (
+		$code =~ /if\s*\(\s*\@_\s*\)/ &&
+		$code =~ /\$self\s*->\s*\{\s*['"]?([^}'"]+)['"]?\s*\}\s*=/ &&
+		$code =~ /return\s+\$self\s*->\s*\{/
+	) {
+		# -------------------------------
+		# Getter/Setter (validated input)
+		# -------------------------------
+		my $property = $1;
+
+		if(!defined($property)) {
+			if($code =~ /\$self\s*->\s*\{\s*['"]?([^}'"]+)['"]?\s*\}\s*=/) {
+				$property = $1;
+			}
+		}
+		if ($code =~ /validate_strict/) {
+			push @{ $schema->{_confidence}{input}{factors} }, 'Setter uses Params::Validate::Strict';
+		}
+		$schema->{accessor} = {
+			type => 'getset',
+			property => $property,
+		};
+
+		$self->_log("  Detected getter/setter accessor for property: $property");
+		if (my $pod = $method->{pod}) {
+			if ($pod =~ /\b(LWP::UserAgent(::\w+)*)\b/) {
+				my $class = $1;
+				$schema->{output} = {
+					type => 'object',
+					isa => $class,
+				};
+				$schema->{input}{$property} = {
+					type => 'object',
+					isa => $class,
+					optional => 1,
+				};
+
+				$schema->{_confidence}{output} = {
+					level => 'high',
+					factors => ['POD specifies UserAgent object'],
+				};
+			}
+		}
+		my %input = $schema->{input};
+		if(scalar keys(%input) > 1) {
+			croak(__PACKAGE__, ': A getset accessor function can have at most one argument');
+		}
+		$schema->{input}{$property}->{position} = 0;
+	} elsif($code =~ /(?:return\s+)?\$self\s*->\s*\{\s*['"]?([^}'"]+)['"]?\s*\}\s*;/) {
+		# -------------------------------
+		# Getter
+		# -------------------------------
+		my $property = $1;
+
+		$schema->{accessor} = {
+			type => 'getter',
+			property => $property,
+		};
+
+		$self->_log("  Detected getter accessor for property: $property");
+
+		$schema->{input} = {};
+		$schema->{input_style} = 'none';
+		$schema->{_confidence}{input} = {
+			level => 'high',
+			factors => ['Detected getter method'],
+		};
+		my %input = $schema->{input};
+		if(scalar keys(%input) > 1) {
+			croak(__PACKAGE__, ': A getter accessor function can have at most one argument');
+		}
+		$schema->{input}{$property}->{position} = 0;
+	} elsif (
+		$code =~ /return\s+\$self\b/ &&
+		$code =~ /\$self\s*->\s*\{\s*['"]?([^}'"]+)['"]?\s*\}\s*=\s*\$(\w+)\s*;/
+	) {
+		# -------------------------------
+		# Setter
+		# -------------------------------
+		my ($property, $param) = ($1, $2);
+
+		$schema->{accessor} = {
+			type => 'setter',
+			property => $property,
+			param => $param,
+		};
+
+		$self->_log("  Detected setter accessor for property: $property");
+
+		$schema->{input} = {
+			$param => { type => 'string' }, # safe default
+		};
+		$schema->{input_style} = 'hash';
+
+		$schema->{_confidence}{input} = {
+			level => 'high',
+			factors => ['Detected setter/accessor method'],
+		};
+	}
+
+	if($schema->{accessor}{type} && $schema->{accessor}{type} =~ /setter|getset/ && $schema->{input}) {
+		for my $param (keys %{ $schema->{input} }) {
+			my $in = $schema->{input}{$param};
+
+			if ($in->{type} && ($in->{type} eq 'object')) {
+				$schema->{output} = {
+					type => 'object',
+					($in->{isa} ? (isa => $in->{isa}) : ()),
+				};
+
+				$schema->{_confidence}{output} = {
+					level => 'high',
+					factors => ['Output type propagated from setter input'],
+				};
+			}
+		}
+	}
+
+	if($schema->{accessor}{type} && ($schema->{accessor}{type} =~ /getter|getset/) &&
+	   ((!defined($schema->{output}{type})) || ($schema->{output}{type} eq 'string'))) {
+		if (my $pod = $method->{pod}) {
+			# POD says "UserAgent object"
+			if ($pod =~ /\bUser[- ]?Agent\b.*\bobject\b/i) {
+				$schema->{output}{type} = 'object';
+				$schema->{output}{isa} = 'LWP::UserAgent';
+
+				push @{ $schema->{_confidence}{output}{factors} }, 'POD indicates UserAgent object';
+
+				$schema->{_confidence}{output}{level} = 'high';
+			}
+		}
 	}
 }
 
@@ -1864,7 +1965,7 @@ sub _parse_schema_hash {
 				next unless $k && $v;
 
 				my $keyname = $k->content;
-				my $value   = $v->can('content') ? $v->content : undef;
+				my $value = $v->can('content') ? $v->content : undef;
 				$value =~ s/^['"]|['"]$//g if defined $value;
 
 				if ($keyname eq 'type') {
@@ -1878,7 +1979,7 @@ sub _parse_schema_hash {
 				}
 			}
 
-			$param{type}     //= 'string';
+			$param{type} //= 'string';
 			$param{optional} //= 0;
 
 			$result{$key} = \%param;
@@ -2301,7 +2402,7 @@ sub _analyze_pod {
 				$params{$name}{type} = $type;
 
 				# Parse constraints
-				if ($constraint) {
+				if($constraint) {
 					$self->_parse_constraints($params{$name}, $constraint);
 				}
 
@@ -2397,7 +2498,7 @@ sub _analyze_pod {
 		$params{$name} ||= { _source => 'pod' };
 
 		# Explicit typed form only:
-		#   $param - type (constraints)
+		#	$param - type (constraints)
 		if ($desc =~ /^\s*(string|integer|int|number|num|float|boolean|bool|array|arrayref|hash|hashref)\b(?:\s*\(([^)]+)\))?/i) {
 			my $type = lc($1);
 			my $constraint = $2;
@@ -2779,8 +2880,9 @@ sub _analyze_output_from_code
 					$return_types{hashref}++;
 				} elsif ($ret =~ m{
 					# Numeric expressions (heuristic, medium confidence)
+					# Don't match ->
 				    (?:
-					\+ | - | \* | / | %
+					\+ | -\b | \* | / | %
 				      | \+\+ | --
 				    )
 				}x) {
@@ -3245,10 +3347,10 @@ sub _infer_type_from_expression {
 		return { type => 'arrayref' };
 	}
 
-    # Check for hash reference
-    if ($expr =~ /^\{/ || $expr =~ /^\\\%/) {
-        return { type => 'hashref' };
-    }
+	# Check for hash reference
+	if ($expr =~ /^\{/ || $expr =~ /^\\\%/) {
+		return { type => 'hashref' };
+	}
 
     # Check for hash
     if ($expr =~ /^\%\w+/ || $expr =~ /^\%\{/) {
@@ -3268,16 +3370,16 @@ sub _infer_type_from_expression {
         return { type => 'number' };
     }
 
-    # Check for booleans
-    if ($expr =~ /^[01]$/) {
-        return { type => 'boolean' };
-    }
+	# Check for booleans
+	if ($expr =~ /^[01]$/) {
+		return { type => 'boolean' };
+	}
 
 	# Check for objects
 	if ($expr =~ /bless/) {
 		return { type => 'object' };
 	}
-    
+
 	if($expr =~ /\blength\s*\(/) {
 		return { type => 'integer', min => 0 };
 	}
@@ -4763,7 +4865,7 @@ sub _determine_optional_status {
 }
 
 
-=head2 _calculate_confidence
+=head2 _calculate_input_confidence
 
 Calculate confidence score for parameter analysis.
 
@@ -5559,6 +5661,7 @@ sub _write_schema {
 
 	if($schema->{'output'}{'type'} && ($schema->{'output'}{'type'} eq 'scalar')) {
 		$schema->{'output'}{'type'} = 'string';
+		$schema->{_confidence}{output}->{level} = 'low';	# A guess
 	}
 
 	# Add 'new' field if object instantiation is needed
@@ -5573,9 +5676,20 @@ sub _write_schema {
 		}
 	}
 
+	if(!defined($schema->{_confidence}{input}->{level})) {
+		$schema->{_confidence}{input} = $self->_calculate_input_confidence($schema->{input});
+	}
+	if(!defined($schema->{_confidence}{output}->{level})) {
+		$schema->{_confidence}{output} = $self->_calculate_output_confidence($schema->{output});
+	}
+
 	# Add relationships if detected
 	if ($schema->{relationships} && @{$schema->{relationships}}) {
 		$output->{relationships} = $schema->{relationships};
+	}
+
+	if($schema->{accessor}) {
+		$output->{accessor} = $schema->{accessor};
 	}
 
 	open my $fh, '>', $filename;
@@ -5601,7 +5715,7 @@ sub _generate_schema_comments {
 	my @comments;
 
 	push @comments, '';
-	push @comments, "# Generated by " . ref($self);
+	push @comments, '# Generated by ' . ref($self);
 	push @comments, "# Run: fuzz-harness-generator -r $self->{output_dir}/${method_name}.yml";
 	push @comments, '#';
 	push @comments, "# Input confidence: $schema->{_confidence}{input}->{level}";

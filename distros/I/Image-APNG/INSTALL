@@ -1,0 +1,132 @@
+INSTALLATION
+
+Image::APNG uses Module::Build for installation. The basic installation process is:
+
+    perl Build.PL
+    ./Build
+    ./Build test
+    ./Build install
+
+DEPENDENCIES
+
+Required:
+    - Perl 5.10 or higher
+    - Image::Magick 6.0 or higher
+
+Build/Test:
+    - Module::Build 0.42 or higher
+    - Test::More 0.98 or higher
+
+Optional (for testing):
+    - Test::Pod
+    - Test::Pod::Coverage
+
+INSTALLING IMAGE::MAGICK
+
+Image::Magick can be challenging to install. Here are platform-specific instructions:
+
+Debian/Ubuntu:
+    apt-get install libimage-magick-perl
+
+RedHat/CentOS/Fedora:
+    yum install perl-Image-Magick
+    # or
+    dnf install perl-Image-Magick
+
+macOS (with Homebrew):
+    brew install imagemagick
+    cpan Image::Magick
+
+Windows (with Strawberry Perl):
+    cpan Image::Magick
+
+From CPAN:
+    cpan Image::Magick
+    # or
+    cpanm Image::Magick
+
+INSTALLATION FROM CPAN
+
+The easiest way to install this module is via CPAN:
+
+    cpan Image::APNG
+
+Or using cpanminus:
+
+    cpanm Image::APNG
+
+INSTALLATION FROM SOURCE
+
+To install this module from source:
+
+1. Extract the distribution:
+    tar xzf Image-APNG-1.0.0.tar.gz
+    cd Image-APNG-1.0.0
+
+2. Build the module:
+    perl Build.PL
+    ./Build
+
+3. Test the module:
+    ./Build test
+
+4. Install the module:
+    ./Build install
+
+   You may need to use sudo or run as administrator:
+    sudo ./Build install
+
+INSTALLATION IN A LOCAL DIRECTORY
+
+If you don't have permission to install in the system Perl directories:
+
+    perl Build.PL --install_base ~/perl5
+    ./Build
+    ./Build test
+    ./Build install
+
+Then add to your shell profile (~/.bashrc or ~/.profile):
+
+    export PERL5LIB=~/perl5/lib/perl5:$PERL5LIB
+    export PATH=~/perl5/bin:$PATH
+
+MANUAL DEPENDENCIES INSTALLATION
+
+If automatic dependency resolution fails, install dependencies manually:
+
+    cpan Module::Build
+    cpan Image::Magick
+    cpan Test::More
+
+TROUBLESHOOTING
+
+If tests fail:
+    - Ensure Image::Magick is properly installed
+    - Check that you have write permissions in /tmp
+    - Try running tests with verbose output:
+        ./Build test verbose=1
+
+If installation fails:
+    - Check that you have write permissions to Perl library directories
+    - Try installing to a local directory (see above)
+    - Ensure all dependencies are installed
+
+For Image::Magick installation issues:
+    - Ensure ImageMagick C library is installed first
+    - Check ImageMagick version compatibility
+    - See: https://imagemagick.org/script/perl-magick.php
+
+SUPPORT
+
+For bugs and issues:
+    https://github.com/username/Image-APNG/issues
+
+CPAN rating:
+    http://cpanratings.perl.org/d/Image-APNG
+
+COPYRIGHT AND LICENSE
+
+This software is copyright (c) 2025 by the author.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.

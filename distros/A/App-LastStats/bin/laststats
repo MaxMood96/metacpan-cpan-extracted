@@ -9,7 +9,14 @@ use Pod::Usage;
 use App::LastStats;
 
 my %opts;
-GetOptions(\%opts, 'user=s', 'count=i', 'format=s', 'period=s', 'help');
+GetOptions(\%opts,
+  'username=s',
+  'count=i',
+  'format=s',
+  'period=s',
+  'api-key=s',
+  'api-secret=s',
+  'help');
 
 if ($opts{help}) {
   pod2usage(1);

@@ -1,6 +1,6 @@
 package DBIx::Class::Async::Row;
 
-$DBIx::Class::Async::Row::VERSION   = '0.56';
+$DBIx::Class::Async::Row::VERSION   = '0.57';
 $DBIx::Class::Async::Row::AUTHORITY = 'cpan:MANWAR';
 
 =head1 NAME
@@ -9,7 +9,7 @@ DBIx::Class::Async::Row - Asynchronous Row object representing a single database
 
 =head1 VERSION
 
-Version 0.56
+Version 0.57
 
 =head1 SYNOPSIS
 
@@ -251,52 +251,37 @@ sub delete {
     my ($self) = @_;
 
     unless ($self->in_storage) {
+        # Idempotent - already deleted, just return 0
         return Future->done(0);
     }
 
-    # 1. Handle Single or Composite Primary Keys
-    my @pk_cols = $self->{_result_source}->primary_columns;
-    my %cond;
+    my $db          = $self->{_async_db};
+    my $source_name = $self->{_source_name};
+    my $source      = $self->result_source;
+    my ($pk_col)    = $source->primary_columns;
 
-    foreach my $col (@pk_cols) {
-        my $val = $self->get_column($col);
-        croak "Cannot delete row: Primary key column '$col' is undefined"
-            unless defined $val;
-        $cond{$col} = $val;
+    my $id_val = $self->{_data}{$pk_col}
+              // ($self->can($pk_col) ? $self->$pk_col : undef)
+              // $self->{$pk_col};
+
+    if (!defined $id_val) {
+        return Future->fail("Cannot delete: Primary key ($pk_col) is missing");
     }
 
-    if (my $db = $self->{_async_db}) {
-        my $source = $self->{_source_name};
-
-        # Clear the surgical/nested cache
-        delete $db->{_query_cache}->{$source};
-
-        # Clear the flat cache used by count/all
-        if ($db->{_cache}) {
-            foreach my $key (keys %{$db->{_cache}}) {
-                if ($key =~ /^\Q$source\E\|/) {
-                    delete $db->{_cache}->{$key};
-                }
-            }
-        }
-    }
-
-    # 2. Use the Bridge (Ensure you use the key names the Worker expects)
     return DBIx::Class::Async::_call_worker(
-        $self->{_async_db},
+        $db,
         'delete',
         {
-            source_name => $self->{_source_name},
-            cond        => \%cond
+            source_name => $source_name,
+            cond        => { $pk_col => $id_val }
         }
     )->then(sub {
-        my $rows_affected = shift;
+        my $result = shift;
 
-        # 3. Mark as no longer in DB
-        $self->{_in_storage} = 0;
+        # Mark as not in storage
+        $self->in_storage(0);
 
-        # Return 1 for success (standard DBIC behavior)
-        return Future->done($rows_affected + 0);
+        return Future->done($result);
     });
 }
 
@@ -558,6 +543,7 @@ sub related_resultset {
     # 3. Finalise condition and source name
     my $final_cond = { %$join_cond, %{ $cond || {} } };
     my $foreign_source_name = $rel_info->{source};
+    my $target_result_class = $rel_info->{class} || $foreign_source_name;
 
     # 4. Path A: Prefetched Data Cache
     if (exists $self->{_relationship_data}{$rel_name}) {
@@ -568,6 +554,7 @@ sub related_resultset {
              async_db        => $self->{_async_db},
              source_name     => $foreign_source_name,
              cond            => $final_cond,    # Crucial for create_related
+             result_class    => $target_result_class,
              attrs           => $attrs || {},
         );
 
@@ -581,6 +568,7 @@ sub related_resultset {
          schema_instance => $self->{_schema_instance},
          async_db        => $self->{_async_db},
          source_name     => $foreign_source_name,
+         result_class    => $target_result_class,
          cond            => $final_cond,
          attrs           => $attrs || {},
     );
@@ -651,15 +639,38 @@ sub set_columns {
     return $self;
 }
 
+sub _update_internal_state {
+    my ($self, $res) = @_;
+
+    # 1. Update the internal data hash directly
+    # This assumes $res contains the updated column data
+    if (ref $res eq 'HASH') {
+        foreach my $col (keys %$res) {
+            $self->{_data}{$col} = $res->{$col};
+            # Optionally update the shadow variable if necessary
+            $self->{$col} = $res->{$col} if exists $self->{$col};
+        }
+    }
+
+    # 2. Update state flags
+    $self->{_in_storage} = 1;
+    delete $self->{_dirty}; # Clear dirty flags
+
+    return $self;
+}
+
 sub update {
     my ($self, $values) = @_;
 
-    # 1. Validation
+    if (!$self->{_schema_instance}) {
+        # Return a failed future to prevent further cascading failures
+        return Future->fail("ResultSet is not initialized with a schema instance.");
+    }
+
     unless ($self->in_storage) {
         return Future->fail("Cannot update row: not in storage. Did you mean to call insert or update_or_insert?");
     }
 
-    # 2. If values are passed, update internal state via set_column first
     if ($values) {
         croak("Usage: update({ col => val })") unless ref $values eq 'HASH';
         foreach my $col (keys %$values) {
@@ -667,10 +678,29 @@ sub update {
         }
     }
 
-    # 3. Delegate to update_or_insert
-    # Since in_storage is true, update_or_insert will correctly
-    # run the UPDATE logic and clear dirty flags on success.
-    return $self->update_or_insert;
+    return $self->update_or_insert->on_done(sub {
+        # 1. Get the source and necessary metadata
+        my $source = $self->result_source;
+        my $schema = $source->schema;
+        my $source_name = $source->source_name;
+
+        # 2. Explicitly create the custom ResultSet object using your new() method
+        my $rs = DBIx::Class::Async::ResultSet->new(
+            schema_instance => $schema,
+            source_name     => $source_name,
+            async_db        => $self->{_async_db},
+        );
+
+        # 3. Construct the PK condition
+        my @pk_cols = $source->primary_columns;
+        my %pk_cond = map { $_ => $self->get_column($_) } @pk_cols;
+
+        # 4. Now we can safely call _generate_cache_key
+        my $cache_key = $rs->_generate_cache_key(0, \%pk_cond);
+
+        $rs->clear_cache($cache_key);
+        return $self->_update_internal_state($rs);
+    });
 }
 
 sub update_or_insert {
