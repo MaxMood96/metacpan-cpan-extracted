@@ -1,5 +1,9 @@
 Revision history for ExtUtils-Typemaps-Signal
 
+0.009     2026-02-10 20:54:01+01:00 Europe/Brussels
+          - Split typemap bundle into 3 separate ones
+          - Allow 0 in T_SIGNO
+
 0.008     2025-02-16 16:26:30+01:00 Europe/Brussels
           - Allow Time::Spec objects for time values
 

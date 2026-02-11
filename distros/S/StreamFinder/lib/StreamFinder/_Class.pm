@@ -151,7 +151,7 @@ sub getURL   #LIKE GET, BUT ONLY RETURN THE SINGLE ONE W/BEST BANDWIDTH AND RELI
 			my $no_wget = system('wget','-V');
 			unless ($no_wget) {
 				print STDERR "\n..trying wget...\n"  if ($DEBUG);
-				$html = `wget -t 2 -T 20 -O- -o /dev/null \"$firstStream\" 2>/dev/null `;
+				$html = `wget -t 2 -T 20 -O- -o /dev/null "$firstStream" 2>/dev/null `;
 			}
 		}
 		my @lines = split(/\r?\n/, $html);
@@ -287,7 +287,7 @@ sub getIconData
 		unless ($no_wget) {
 			print STDERR "\n..trying wget...\n"  if ($DEBUG);
 			my $iconUrl = $self->{$whichurl};
-			$art_image = `wget -t 2 -T 20 -O- -o /dev/null \"$iconUrl\" 2>/dev/null `;
+			$art_image = `wget -t 2 -T 20 -O- -o /dev/null "$iconUrl" 2>/dev/null `;
 		}
 	}
 	return ()  unless ($art_image);
@@ -328,7 +328,7 @@ sub getImageData
 		unless ($no_wget) {
 			print STDERR "\n..trying wget...\n"  if ($DEBUG);
 			my $iconUrl = $self->{$whichurl};
-			$art_image = `wget -t 2 -T 20 -O- -o /dev/null \"$iconUrl\" 2>/dev/null `;
+			$art_image = `wget -t 2 -T 20 -O- -o /dev/null "$iconUrl" 2>/dev/null `;
 		}
 	}
 	return ()  unless ($art_image);

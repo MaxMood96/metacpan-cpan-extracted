@@ -71,7 +71,7 @@ static inline bool sbc_bitmap_test(const uint64_t *bitmap, U8 c) {
 }
 
 /* Helper to test if a unicode codepoint matches the charset */
-static bool sbc_test_codepoint(pTHX_ const secret_buffer_charset *cset, uint32_t cp) {
+static bool sbc_test_codepoint(pTHX_ const secret_buffer_charset *cset, U32 cp) {
    /* Codepoints 0..7F are cached.  Could cache up to 0xFF but locale might mess things up */
    if (cp <= 0x80)
       return sbc_bitmap_test(cset->bitmap, (U8) cp);
@@ -97,7 +97,7 @@ static bool sbc_test_codepoint(pTHX_ const secret_buffer_charset *cset, uint32_t
 bool secret_buffer_charset_test_byte(const secret_buffer_charset *cset, U8 b) {
    return sbc_bitmap_test(cset->bitmap, b);
 }
-bool secret_buffer_charset_test_codepoint(const secret_buffer_charset *cset, uint32_t cp) {
+bool secret_buffer_charset_test_codepoint(const secret_buffer_charset *cset, U32 cp) {
    dTHX;
    return sbc_test_codepoint(aTHX_ cset, cp);
 }

@@ -4,7 +4,7 @@ StreamFinder::Spreaker - Fetch actual raw streamable URLs on widget.spreaker.com
 
 =head1 AUTHOR
 
-This module is Copyright (C) 2021-2024 by
+This module is Copyright (C) 2021-2026 by
 
 Jim Turner, C<< <turnerjw784 at yahoo.com> >>
 		
@@ -105,16 +105,16 @@ One or more stream URLs can be returned for each podcast.
 
 =item B<new>(I<ID>|I<url> [, I<-secure> [ => 0|1 ]] [, I<-debug> [ => 0|1|2 ]])
 
-Accepts a spreaker.com podcast ID or URL and creates and returns a 
-a new podcast object, or I<undef> if the URL is not a valid podcast, or no streams 
+Accepts a spreaker.com podcast ID or URL and creates and returns a new podcast 
+object, or I<undef> if the URL is not a valid podcast, or no streams 
 are found.  The URL can be the full URL, ie. 
-https://widget.spreaker.com/player?episode_id=B<episode-id>, 
-https://www.spreaker.com/user/B<user-id>/B<podcast-id-string>, or just 
-I<podcast-id>.  Due to multiple Spreaker URL combinations, it is advised to provide 
-a full Spreaker URL, if possible.
+I<https://widget.spreaker.com/player?episode_id=>B<episode-id>, 
+I<https://www.spreaker.com/user/B<user-id>/>B<podcast-id-string>, or just 
+I<podcast-id>.  Due to multiple Spreaker URL combinations, it is advised to 
+provide a full Spreaker URL, if possible.
 
-The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  If 1 
-then only secure ("https://") streams will be returned.
+The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  
+If 1 then only secure ("https://") streams will be returned.
 
 DEFAULT I<-secure> is 0 (false) - return all streams (http and https).
 
@@ -122,8 +122,9 @@ Additional options:
 
 I<-log> => "I<logfile>"
 
-Specify path to a log file.  If a valid and writable file is specified, A line will be 
-appended to this file every time one or more streams is successfully fetched for a url.
+Specify path to a log file.  If a valid and writable file is specified, A line 
+will be appended to this file every time one or more streams is successfully 
+fetched for a url.
 
 DEFAULT I<-none-> (no logging).
 
@@ -131,11 +132,11 @@ I<-logfmt> specifies a format string for lines written to the log file.
 
 DEFAULT "I<[time] [url] - [site]: [title] ([total])>".  
 
-The valid field I<[variables]> are:  [stream]: The url of the first/best stream found.  
-[site]:  The site name (Spreaker).  [url]:  The url searched for streams.  
-[time]: Perl timestamp when the line was logged.  [title], [artist], [album], 
-[description], [year], [genre], [total], [albumartist]:  The corresponding field data 
-returned (or "I<-na->", if no value).
+The valid field I<[variables]> are:  [stream]: The url of the first/best 
+stream found.  [site]:  The site name (Spreaker).  [url]:  The url searched 
+for streams.  [time]: Perl timestamp when the line was logged.  [title], 
+[artist], [album], [description], [year], [genre], [total], [albumartist]:  
+The corresponding field data returned (or "I<-na->", if no value).
 
 =item $podcast->B<get>(['playlist'])
 
@@ -225,7 +226,8 @@ and the options are loaded into a hash used only by the specific
 (submodule) specified.  Valid options include 
 I<-debug> => [0|1|2] and most of the L<LWP::UserAgent> options.  
 
-Options specified here override any specified in I<~/.config/StreamFinder/config>.
+Options specified here override any specified in 
+I<~/.config/StreamFinder/config>.
 
 =item ~/.config/StreamFinder/config
 
@@ -253,8 +255,6 @@ L<URI::Escape>, L<HTML::Entities>, L<LWP::UserAgent>
 
 =head1 RECCOMENDS
 
-wget
-
 =head1 BUGS
 
 Please report any bugs or feature requests to C<bug-streamFinder-iheartradio at rt.cpan.org>, or through
@@ -279,10 +279,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-Spreaker>
 
 L<http://annocpan.org/dist/StreamFinder-Spreaker>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-Spreaker>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder-Spreaker/>
@@ -291,7 +287,7 @@ L<http://search.cpan.org/dist/StreamFinder-Spreaker/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2021-2024 Jim Turner.
+Copyright 2021-2026 Jim Turner.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the the Artistic License (2.0). You may obtain a
@@ -459,7 +455,10 @@ sub new
 		$self->{'title'} = ($html =~ s#\"title\"\:\"([^\"]+)##s) ? $1 : '';
 		$self->{'description'} = ($html =~ m#\"description\"\:\"([^\"]+)#s) ? $1 : '';
 		$self->{'description'} = HTML::Entities::decode_entities($self->{'description'});
-		$self->{'description'} =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
+#x		$self->{'description'} =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
+		$self->{'description'} =~ s/(?:\%|\\[ux\%]?00|\bu00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
+		#FIX QUOTES:
+		$self->{'description'} =~ s/\\u201([89cd])/($1 =~ m#[89]#o) ? "'" : '"'/egs;
 		$self->{'description'} =~ s#\\$##gs;
 		$self->{'album'} = ($html =~ m#\"title\"\:\"([^\"]+)#s) ? $1 : '';
 		$self->{'iconurl'} = ($html =~ s#\"medium\_url\"\:\"([^\"]+)##s) ? $1 : '';
@@ -511,7 +510,10 @@ sub new
 						print STDERR "---GRABBED EPI=$epiID= title=$title=\n"  if ($DEBUG);
 						$self->{'description'} = $1  if ($ephtml =~ m#\"description\"\:\"([^\"]+)\"#so);
 						$self->{'description'} = HTML::Entities::decode_entities($self->{'description'});
-						$self->{'description'} =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
+#						$self->{'description'} =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
+						$self->{'description'} =~ s/(?:\%|\\[ux\%]?00|\bu00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
+						#FIX QUOTES:
+						$self->{'description'} =~ s/\\u201([89cd])/($1 =~ m#[89]#o) ? "'" : '"'/egs;
 						$self->{'description'} =~ s#\\$##gs;
 						$self->{'iconurl'} = $1  if ($ephtml =~ m#\"image\_url\"\:\"([^\"]+)\"#so);
 						$self->{'imageurl'} = $1  if ($ephtml =~ m#\"image\_original\_url\"\:\"([^\"]+)\"#so);
@@ -530,44 +532,41 @@ sub new
 	$self->{'total'} = $self->{'cnt'};
 	$self->{'Url'} = ($self->{'total'} > 0) ? $self->{'streams'}->[0] : '';
 
-	print STDERR "-(all)count=".$self->{'total'}."= ID=".$self->{'id'}."= iconurl="
-			.$self->{'iconurl'}."= TITLE=".$self->{'title'}."= DESC=".$self->{'description'}
-			."= YEAR=".$self->{'year'}."=\n"  if ($DEBUG);
-	return undef  unless ($self->{'cnt'} > 0);
-
 	#GENERATE EXTENDED-M3U PLAYLIST:
 
-	$self->{'playlist'} = "#EXTM3U\n";
-	if ($#epiStreams >= 0) {  #PLAYLIST PAGE SPECIFIED, ADD ALL EPISODES TO PLAYLIST:
-		$self->{'playlist_cnt'} = scalar @epiStreams;
-		for (my $i=0;$i<=$#epiStreams;$i++) {
-			last  if ($i > $#epiTitles);
-			$self->{'playlist'} .= "#EXTINF:-1, " . $epiTitles[$i] . "\n";
+	if ($self->{'cnt'} > 0) {
+		$self->{'playlist'} = "#EXTM3U\n";
+		if ($#epiStreams >= 0) {  #PLAYLIST PAGE SPECIFIED, ADD ALL EPISODES TO PLAYLIST:
+			$self->{'playlist_cnt'} = scalar @epiStreams;
+			for (my $i=0;$i<=$#epiStreams;$i++) {
+				last  if ($i > $#epiTitles);
+				$self->{'playlist'} .= "#EXTINF:-1, " . $epiTitles[$i] . "\n";
+				$self->{'playlist'} .= "#EXTART:" . $self->{'artist'} . "\n"
+						if ($self->{'artist'});
+				$self->{'playlist'} .= "#EXTALB:" . $self->{'album'} . "\n"
+						if ($self->{'album'});
+				$self->{'playlist'} .= "#EXTGENRE:" . $self->{'genre'} . "\n"
+						if ($self->{'genre'});
+				$self->{'playlist'} .= $epiStreams[$i] . "\n";
+			}
+		} else {  #EPISODE PAGE SPECIFIED, ONLY THAT EPISODE ADDED TO PLAYLIST:
+			$self->{'playlist_cnt'} = 1;
+			$self->{'playlist'} .= "#EXTINF:-1, " . $self->{'title'} . "\n";
 			$self->{'playlist'} .= "#EXTART:" . $self->{'artist'} . "\n"
 					if ($self->{'artist'});
 			$self->{'playlist'} .= "#EXTALB:" . $self->{'album'} . "\n"
 					if ($self->{'album'});
 			$self->{'playlist'} .= "#EXTGENRE:" . $self->{'genre'} . "\n"
 					if ($self->{'genre'});
-			$self->{'playlist'} .= $epiStreams[$i] . "\n";
+			$self->{'playlist'} .= ${$self->{'streams'}}[0] . "\n";
 		}
-	} else {  #EPISODE PAGE SPECIFIED, ONLY THAT EPISODE ADDED TO PLAYLIST:
-		$self->{'playlist_cnt'} = 1;
-		$self->{'playlist'} .= "#EXTINF:-1, " . $self->{'title'} . "\n";
-		$self->{'playlist'} .= "#EXTART:" . $self->{'artist'} . "\n"
-				if ($self->{'artist'});
-		$self->{'playlist'} .= "#EXTALB:" . $self->{'album'} . "\n"
-				if ($self->{'album'});
-		$self->{'playlist'} .= "#EXTGENRE:" . $self->{'genre'} . "\n"
-				if ($self->{'genre'});
-		$self->{'playlist'} .= ${$self->{'streams'}}[0] . "\n";
 	}
 
 	if ($DEBUG) {
 		foreach my $i (sort keys %{$self}) {
 			print STDERR "--KEY=$i= VAL=".$self->{$i}."=\n";
 		}
-		print STDERR "-SUCCESS: 1st stream=".$self->{'Url'}."=\n"  if ($DEBUG);
+		print STDERR "-SUCCESS: 1st stream=".$self->{'Url'}."=\n"  if ($self->{'cnt'} > 0);
 	}
 
 	$self->_log($url);

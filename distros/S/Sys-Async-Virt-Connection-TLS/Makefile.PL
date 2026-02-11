@@ -17,6 +17,8 @@ my %WriteMakefileArgs = (
   "MIN_PERL_VERSION" => "5.026000",
   "NAME" => "Sys::Async::Virt::Connection::TLS",
   "PREREQ_PM" => {
+    "Crypt::OpenSSL3::SSL" => 0,
+    "Crypt::OpenSSL3::SSL::Context" => 0,
     "Future::AsyncAwait" => 0,
     "Future::IO::TLS" => 0,
     "Log::Any" => 0,
@@ -24,7 +26,7 @@ my %WriteMakefileArgs = (
     "Protocol::Sys::Virt::URI" => 0,
     "Sys::Async::Virt::Connection::TCP" => "0.5.2"
   },
-  "VERSION" => "0.0.2",
+  "VERSION" => "0.0.4",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -32,6 +34,8 @@ my %WriteMakefileArgs = (
 
 
 my %FallbackPrereqs = (
+  "Crypt::OpenSSL3::SSL" => 0,
+  "Crypt::OpenSSL3::SSL::Context" => 0,
   "Future::AsyncAwait" => 0,
   "Future::IO::TLS" => 0,
   "Log::Any" => 0,

@@ -50,7 +50,7 @@ class DBI::St {
     die DBI::Error::SQLState "IM001: this method is not implemented.";
   }
   
-  method fetchrow_array : object[] ($ctx : Go::Context) {
+  method fetch : object[] ($ctx : Go::Context, $bind_columns : object[] = undef, $ret_row : object[] = undef) {
     die DBI::Error::SQLState "IM001: this method is not implemented.";
   }
   

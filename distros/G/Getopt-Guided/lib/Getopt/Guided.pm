@@ -1,11 +1,11 @@
 # Prefer numeric version for backwards compatibility
-BEGIN { require 5.010_000 }; ## no critic ( RequireUseStrict, RequireUseWarnings )
+BEGIN { require 5.010000 }; ## no critic ( RequireUseStrict, RequireUseWarnings )
 use strict;
 use warnings;
 
 package Getopt::Guided;
 
-$Getopt::Guided::VERSION = 'v3.0.2';
+$Getopt::Guided::VERSION = 'v3.0.3';
 
 # Options Delimiter
 sub OD () { '-' }
@@ -150,11 +150,15 @@ sub getopts ( $\%;\@ ) {
   @error == 0
 }
 
+# Prepare and print version info message:
+# - Program name and version (first line)
+# - Interpreter name ("perl") and version (second line)
 sub print_version_info {
-  # Prepare and print version info message:
-  # - Program name and version (first line)
-  # - Interpreter name ("perl") and version (second line)
-  printf STDOUT "%s %s\nperl v%vd\n", basename( $0 ), $main::VERSION, $^V;
+  # call frame 0: processopts() (the caller) calls print_version_info()
+  #               the caller's package name is Getopt::Guided
+  # call frame 1: a run() function/method (the caller) usually calls processopts()
+  #               the caller's package name is whatever it is (could be "main")
+  printf STDOUT "%s %s\nperl v%vd\n", basename( $0 ), ( caller( 1 ) // 'main' )->VERSION, $^V;
   EOOD
 }
 

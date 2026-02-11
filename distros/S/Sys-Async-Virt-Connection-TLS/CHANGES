@@ -1,5 +1,14 @@
 -----
 
+0.0.4    2026-02-10
+    [Fixed]
+       * Kwalitee reported dist problems
+       * POD problem reported by Kwalitee, MetaCPAN and Test::Pod
+
+0.0.3    2026-02-10
+    [Fixed]
+       * Pass end-of-stream condition back to caller by returning 'undef'
+
 0.0.2    2026-02-02
     [Fixed]
        * Use MetaProvides::Class to detect class versions declared

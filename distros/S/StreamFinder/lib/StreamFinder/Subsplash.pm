@@ -519,6 +519,8 @@ sub new
 		$self->{'artist'} =~ s/\s+$//s;
 	} elsif ($html =~ m#\\\"speaker\\\"\:\\\"(.+?)\\\"#s) {
 		$self->{'artist'} = $1;
+	} elsif ($html =~ m#\<meta\s+property\="(?:og|twitter)\:site\_name\"\s+content\=\"([^\"]+)#s) {
+		$self->{'artist'} = $1;
 	}
 	$self->{'genre'} = $1  if ($html =~ m#\\\"topic\:(.+?)\\\"#s);
 	if ($html =~ m#\<div\s+class\=\"route\-media\-item\_\_more\-items\-title\"(.+?)\<\/div\>#s) {

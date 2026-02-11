@@ -1,5 +1,10 @@
 Revision history for Future-IO
 
+0.20    2026-02-10
+        [CHANGES]
+         * Also export and document the `POLLPRI` polling constant
+         * Add `PERL_FUTURE_IO_IMPL` environment variable
+
 0.19    2026-01-18
         [CHANGES]
          * Added new `->poll` method as a neater and standardised way of doing

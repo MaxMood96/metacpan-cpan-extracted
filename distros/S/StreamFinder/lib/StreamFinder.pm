@@ -141,7 +141,7 @@ www.internet-radio.com radio stations (L<StreamFinder::InternetRadio>),
 onlineradiobox.com radio stations (L<StreamFinder::OnlineRadiobox>), 
 odysee.com videos (L<StreamFinder::Odysee>), 
 podbean.com podcasts (L<StreamFinder::Podbean>), 
-podcastaddict.com podcasts (L<StreamFinder::PodcastAddict>) (DEPRECIATED), 
+podcastaddict.com podcasts (L<StreamFinder::PodcastAddict>), 
 podchaser.com podcasts (L<StreamFinder::Podchaser>), 
 prageru.com videos (L<StreamFinder::PragerU>), 
 radio.net radio stations (L<StreamFinder::RadioNet>), 
@@ -159,14 +159,10 @@ zeno.fm radio stations and podcasts (L<StreamFinder::Zeno>),
 and L<StreamFinder::Anystream> - search any (other) webpage URL (not supported 
 by any of the other submodules) for streams.  
 
-NOTE:  StreamFinder::Google has been removed as Google Podcasts has shut down.
+NOTE:  StreamFinder::Podcastaddict is now fully-functional again including 
+being able to return playlists from podcast pages!
 
-NOTE:  StreamFinder::Podcastaddict is now considered depreciated and may be 
-removed in a later StreamFinder release as it now requires a specific valid 
-episode page to fetch streams from, as Podcastaddict.com has javascripted up 
-their podcast pages now to the point that it is no longer possible to obtain 
-a playlist from them via our scripts.  However, it still seems to be able to 
-return the first episode data when given a podcast page for now.
+NOTE:  StreamFinder::Google has been removed as Google Podcasts has shut down.
 
 NOTE:  Users should also consider StreamFinder::SoundCloud to now be 
 depreciated, as they've added cookie and tracker requirements making it 
@@ -539,7 +535,7 @@ use strict;
 use warnings;
 use vars qw(@ISA @EXPORT $VERSION);
 
-our $VERSION = '2.60';
+our $VERSION = '2.61';
 our $DEBUG = 0;
 
 require Exporter;
@@ -631,7 +627,7 @@ sub new
 	} elsif ($url =~ m#\bodysee\.com\/# && $useit{'Odysee'}) {
 		eval { require 'StreamFinder/Odysee.pm'; $haveit = 1; };
 		return new StreamFinder::Odysee($url, @args)  if ($haveit);
-	} elsif ($url =~ m#\bpodbean\.com\/# && $useit{'Podbean'}) {
+	} elsif ($url =~ m#\bpodbean\.com\b# && $useit{'Podbean'}) {
 		eval { require 'StreamFinder/Podbean.pm'; $haveit = 1; };
 		return new StreamFinder::Podbean($url, @args)  if ($haveit);
 	} elsif ($url =~ m#\bonlineradiobox\.# && $useit{'OnlineRadiobox'}) {

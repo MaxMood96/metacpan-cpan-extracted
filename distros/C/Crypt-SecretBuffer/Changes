@@ -1,3 +1,23 @@
+Version 0.018 - 2026-02-11
+  - New exportable span() function which universally constructs a span
+    from a SecretBuffer, Span object, or plain scalar.
+  - PEM object header values are no longer secrets, by default.
+    This is a breaking change, but the module has been out less than two months.
+  - New methods to encode and decode variable-length integers and
+    length-prefixed strings:
+     - append_lenprefixed     / parse_lenprefixed
+     - append_base128le       / parse_base128le
+     - append_base128be       / parse_base128be
+     - append_asn1_der_length / parse_asn1_der_length
+  - New method Span->append_to, and normalize Span->copy_to to overwrite.
+    This is a breaking change in that ->copy_to used to append to SecretBuffer
+    but overwrite scalars.  Now copy_to overwrites for both destination types
+    and append_to appends to both destination types.
+  - Change type of secret_buffer_charset_test_codepoint codepoint from `uint32_t`
+    to `U32` so that users of Inline aren't forced to `#include <stdint.h>`
+    This is a breaking change for any C code which was looking up the function by
+    name in the %C_API hash, but the ABI is unchanged.
+
 Version 0.017 - 2025-12-28
   - New features for append_console_line: char_mask, char_count, char_class
   - New attribute 'line_input' for ConsoleState toggles line buffering

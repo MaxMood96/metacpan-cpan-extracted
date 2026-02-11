@@ -1,5 +1,5 @@
 This file contains message digests of all files listed in MANIFEST,
-signed via the Module::Signature module, version 0.93.
+signed via the Module::Signature module, version 0.88.
 
 To verify the content in this distribution, first make sure you have
 Module::Signature installed, then type:
@@ -12,19 +12,19 @@ the distribution may already have been compromised, and you should
 not run its Makefile.PL or Build.PL.
 
 -----BEGIN PGP SIGNED MESSAGE-----
-Hash: SHA256
+Hash: RIPEMD160
 
-SHA256 0132fb0526ed90256f15c5f1ce87996d14055eb45c81bee7089cd5c19868eed4 Changes
-SHA256 6786b3260c041ce394a0dcfd6c94d7140d5b49545373d07896f85afb3ba532b5 MANIFEST
+SHA256 2fe20770e9371a544554db0634e41f344c10b47f431f1cf64d02d21dfb19458f Changes
+SHA256 986ba1a6dbc3795af1a1823c38bcf3b9849a481febacac9c9764cf2b34cb6dde MANIFEST
 SHA256 f73f2221da30982a69ff4d6207def5734ce40b819ad30e7a3331bd224914f751 MANIFEST.SKIP
-SHA256 e40aee237592ed2416a5eaaf9b479ee1aae1a3d5631361dde90db4c3ce76f8e7 META.yml
+SHA256 1ec786b6d980bc86a19fe4c14fb73ffdd6387c25b5295de780b72b5d1f4390f2 META.yml
 SHA256 effff9417fcc36db459b69c7334394fca8bc1bce728952bd3327366dec39d262 Makefile.PL
 SHA256 ef506d3b99e1feb9c4a23d66b56e50eb0c87aee10af9b4e2bfe7993c2851d04f README
 SHA256 71f128683e28e7791a69ed30bcd5de3c398a5f17c135cba23426868c4f9408de bin/rt-clean-merged-users.in
 SHA256 134841d68e0f827e1721d2f9f2919075197a59e15feb96fb6382084887baced3 bin/rt-merge-users.in
 SHA256 16ad0e05066338fe5ebdec577c3f0915d36e2d43849fd6b6569c6f16e4cecf91 bin/rt-update-merged-users.in
 SHA256 ba9ab9446c20a83ef67c46f2a100e50c0a4c83e4cad0d2d6bb740c045a90fe23 html/Callbacks/RT-Extension-MergeUsers/Admin/Users/Modify.html/BeforeUpdate
-SHA256 abec324ebe033b5df3c64bbed805cca39b0269e91b3f5aa0944a03ba86fcc153 html/Callbacks/RT-Extension-MergeUsers/Admin/Users/Modify.html/RightColumnBottom
+SHA256 aaaa30a1df41422d35e75998cf13ae1be4e93ab69a4a42984681f7d8b71c19a4 html/Callbacks/RT-Extension-MergeUsers/Admin/Users/Modify.html/RightColumnBottom
 SHA256 cd5397bbe618f5bbd4e12a33b0cf5d21114e771c2dbd0ce28e2135beb52c35a8 inc/Module/Install.pm
 SHA256 798836f9ccb8d204b1be31fc3835631f57e9d818b21a8f0d14bfcfb82ff4a72a inc/Module/Install/Base.pm
 SHA256 d64cd4c16f83c5baf11f64a44bea3a0abc060a49da5aba040f0eb01394bf75ab inc/Module/Install/Can.pm
@@ -39,20 +39,27 @@ SHA256 9f50489182b83fb275494764918038d1f176067f32bd59bad7b912cc6d29cacb inc/Modu
 SHA256 4c746c02c5cc19bed4c352e76205b4adff4c45ce8310d71294e1b83c059659c2 inc/Module/Install/Win32.pm
 SHA256 d3d9b4583243c470ae895defa4c44564485b53693cba1c50ab0320768f443e97 inc/Module/Install/WriteAll.pm
 SHA256 7c4ad7f9916feb5fa7e045af6ac6ecf8230942c18576c100509f978f6504a1db inc/YAML/Tiny.pm
-SHA256 1fa462eed334ca254f1d1616dfa753e1197c9456da749eba685639afd9286150 lib/RT/Extension/MergeUsers.pm
+SHA256 a9ac7aa50f70301d68ccd039679ea2e530061b10dee76a85aea1900b6de795ab lib/RT/Extension/MergeUsers.pm
 SHA256 11a23060bb14d29b568848982185a92ed6af80f36cb1258d4c95725dcf16ddcb lib/RT/Extension/MergeUsers/Test.pm.in
 SHA256 229b2300ff7fe6f4fcf7a7e8b75dd5190704362bb14d3a05210badbdc3142b36 lib/RT/REST2/Resource/User_Overlay.pm
+SHA256 f38806669802be8d136b0e50a6fbb1902c9e632acaef244f2e02a862c48e5da1 po/fr.po
+SHA256 246873e33900475221f3dd65f85e7d5ae8ef7a958bd496b0ac8686f67dea3eb5 po/mergeusers.pot
 SHA256 a2f7e40f1b5786721a36446494124572a5f49ecdbcf5ea38951295cfe805c8d4 xt/01merge_users.t
 SHA256 d80420c68c9f77edbd97b29a7742b199346781d1e2a91b5772426ea4e43ddc00 xt/change_email.t
 SHA256 e527d79480292bdd12a7e96b2622b81241e797d131c88292ccf26b38c023f87b xt/collection.t
 -----BEGIN PGP SIGNATURE-----
 
-iQEzBAEBCAAdFiEExJs3Lyv4ShkBFmAnDfCig/6sgLIFAmllJ90ACgkQDfCig/6s
-gLLfxQgAju6FdZ2DU/myblKxUiCUrz6pdU5350Ndex214kxfzaNIPc3KinLehB20
-kK6LcqV9DZwAeWru9r4dJBmgShsmJ+DqhTV0wJjPpqS7HM4zOxHX0TouMcvYBfQM
-YkZSeM/cO70V/DJJFxeUg3cZ74kBWOfBiSteMhyoOFWoyFZabCCr+nPfpd9+bvEq
-ggb5LcvnB1vdi95hsU1us9tiW7RlobkBc8rguRYbYpXtk1ylUtmUzwmpvk50C5Ly
-OW3FRD6Z8vILvyjQ5l4hIguSJJsVhZijXBm/B2ZEx7UeS2RmuoV5TV2UT/d8pw5n
-Swn4B7X70Oe8hby5PnE09nmh1whBmw==
-=63Ax
+iQIzBAEBAwAdFiEEbn9h2azDQTpw4+gUmnkrNzXUEXIFAmmLdy8ACgkQmnkrNzXU
+EXJPEw/+JzXkCVrT2M9tsaSVJrwWWgf78oSxTVMLgwMSHG1ftkbD3ctCy8qEkGVb
+Y+IpKpCHFgqi2cihj/+30i+cNF3G3nL5YxPBQSn8KtHe3L/cUP0xWCKM5+HtGck6
+Yye9byilcGD+zehu7uSfjdn/N8f3MVD+Z26BouMxDx9vqsW5AiK4XsmaI7+5qGQF
+DUAhIWBERbxRTrOjCLeuwPuEsJW3Peqv+1WhFGss8HVhXYU1qx0CKCUvmzFlNIHB
+JYYa4L/3juK53laHDFEcYmP/UfuUa0bgFqg13ATuCPxY1DQn7UCyppJIy1MgxgZQ
+6HjeT84/dfIbO3OcOeG+Ym2jGd/Tx7q0u2kRN3osaSwf7z/SV/oa/XeOq8e2rL7f
+TcZ24R0CnVcFc5TDJdsO5MAxtht/fXNypdFKHL2WdPJqLPr/MZQcgjN+nQqN7kM1
+/b3paspziyETeRSj9SwUNz9n+dYE5OwsGvj8EMw55J0yJQQnmxLoh49enLiQ+8pu
+qvByBu9y7xam0irF5bxbw1vNCI5RRxYGZLfO14J6zTOi5dF+EnlSz1qdg8ilac65
+lA0178MPb7xs8UM51EmO2kG+dzK59uQVR34g+EPgjBzDle9qa0NlSyrfUKN05vmG
+4Gie5ckFBf3p//vGrjLb3cTZEo4vE2eHf5aWdQ8V4VorMhX8+jk=
+=bcY4
 -----END PGP SIGNATURE-----

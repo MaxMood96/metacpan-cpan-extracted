@@ -157,14 +157,11 @@ stream found.
 [description], [year], [genre], [total], [albumartist]:  The corresponding 
 field data returned (or "I<-na->", if no value).
 
-=item $video->B<get>(['playlist'])
+=item $video->B<get>()
 
 Returns an array of strings representing all stream URLs found.
 Note:  If an author / channel page url is given, rather than an individual 
-video episode's url, get() returns the first (latest?) video episode found, 
-and get("playlist") returns an extended m3u playlist containing the urls, 
-titles, etc. for all the video episodes found on that page url starting with 
-the latest or most popular.
+video episode's url, get() returns the first (latest?) video episode found.
 
 =item $video->B<getURL>([I<options>])
 

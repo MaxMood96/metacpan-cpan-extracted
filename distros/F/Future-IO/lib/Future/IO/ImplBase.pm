@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2019-2026 -- leonerd@leonerd.org.uk
 
-package Future::IO::ImplBase 0.19;
+package Future::IO::ImplBase 0.20;
 
 use v5.14;
 use warnings;

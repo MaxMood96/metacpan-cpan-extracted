@@ -1,10 +1,10 @@
 =head1 NAME
 
-StreamFinder::Castbox - Fetch actual raw streamable podcast URLs on castbox.com
+StreamFinder::Castbox - Fetch actual raw streamable podcast URLs on castbox.fm
 
 =head1 AUTHOR
 
-This module is Copyright (C) 2021-2024 by
+This module is Copyright (C) 2021-2026 by
 
 Jim Turner, C<< <turnerjw784 at yahoo.com> >>
 		
@@ -87,7 +87,7 @@ file.
 =head1 DESCRIPTION
 
 StreamFinder::Castbox accepts a valid podcast ID or URL on 
-Castbox.com and returns the actual stream URL(s), title, and cover art icon.  
+Castbox.fm and returns the actual stream URL(s), title, and cover art icon.  
 The purpose is that one needs one of these URLs in order to have the option to 
 stream the podcast in one's own choice of media player software rather than 
 using their web browser and accepting any / all flash, ads, javascript, 
@@ -95,7 +95,7 @@ cookies, trackers, web-bugs, and other crapware that can come with that method
 of play.  The author uses his own custom all-purpose media player called 
 "fauxdacious" (his custom hacked version of the open-source "audacious" 
 audio player).  "fauxdacious" can incorporate this module to decode and play 
-Castbox.com streams.
+Castbox.fm streams.
 
 One or more stream URLs can be returned for each podcast.  
 
@@ -105,17 +105,17 @@ One or more stream URLs can be returned for each podcast.
 
 =item B<new>(I<url> [, I<-secure> [ => 0|1 ]] [, I<-debug> [ => 0|1|2 ] ... ])
 
-Accepts a www.castbox.com podcast URL and creates and returns a 
+Accepts a www.castbox.fm podcast URL and creates and returns a 
 a new podcast object, or I<undef> if the URL is not a valid podcast, or no 
 streams are found.  The URL MUST be the full URL, ie. 
-https://castbox.fm/episode/I<title>-idB<channel-id>-idB<episode-id>, or 
-https://castbox.fm/channel/idB<channel-id> 
+I<https://castbox.fm/episode/>B<title>-idB<channel-id>-idB<episode-id>, or 
+I<https://castbox.fm/channel/id>B<channel-id> 
 as I know of no way to look up a podcast on Castbox with just an episode ID.
 If no I<episode-id> is specified, the first (latest) episode for the channel 
 is returned.
 
-The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  If 1 
-then only secure ("https://") streams will be returned.
+The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  
+If 1 then only secure ("https://") streams will be returned.
 
 DEFAULT I<-secure> is 0 (false) - return all streams (http and https).
 
@@ -123,8 +123,9 @@ Additional options:
 
 I<-log> => "I<logfile>"
 
-Specify path to a log file.  If a valid and writable file is specified, A line will be 
-appended to this file every time one or more streams is successfully fetched for a url.
+Specify path to a log file.  If a valid and writable file is specified, A line 
+will be appended to this file every time one or more streams is successfully 
+fetched for a url.
 
 DEFAULT I<-none-> (no logging).
 
@@ -132,11 +133,11 @@ I<-logfmt> specifies a format string for lines written to the log file.
 
 DEFAULT "I<[time] [url] - [site]: [title] ([total])>".  
 
-The valid field I<[variables]> are:  [stream]: The url of the first/best stream found.  
-[site]:  The site name (Castbox).  [url]:  The url searched for streams.  
-[time]: Perl timestamp when the line was logged.  [title], [artist], [album], 
-[description], [year], [genre], [total], [albumartist]:  The corresponding field data 
-returned (or "I<-na->", if no value).
+The valid field I<[variables]> are:  [stream]: The url of the first/best 
+stream found.  [site]:  The site name (Castbox).  [url]:  The url searched for 
+streams.  [time]: Perl timestamp when the line was logged.  [title], [artist], 
+[album], [description], [year], [genre], [total], [albumartist]:  The 
+corresponding field data returned (or "I<-na->", if no value).
 
 =item $podcast->B<get>(['playlist'])
 
@@ -234,7 +235,8 @@ and the options are loaded into a hash used only by the specific
 (submodule) specified.  Valid options include 
 I<-debug> => [0|1|2] and most of the L<LWP::UserAgent> options.  
 
-Options specified here override any specified in I<~/.config/StreamFinder/config>.
+Options specified here override any specified in 
+I<~/.config/StreamFinder/config>.
 
 =item ~/.config/StreamFinder/config
 
@@ -288,10 +290,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-Castbox>
 
 L<http://annocpan.org/dist/StreamFinder-Castbox>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-Castbox>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder-Castbox/>
@@ -300,7 +298,7 @@ L<http://search.cpan.org/dist/StreamFinder-Castbox/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2021-2024 Jim Turner.
+Copyright 2021-2026 Jim Turner.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the the Artistic License (2.0). You may obtain a
@@ -448,12 +446,12 @@ sub new
 					$haveit = 1;
 					$self->{'title'} = $one;
 					$self->{'title'} = HTML::Entities::decode_entities($self->{'title'});
-					$self->{'title'} =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/eg;
+					$self->{'title'} =~ s/(?:\%|\\[ux\%]?00|\bu00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;;
 					print STDERR "-----GRABBED THIS EPISODE=$epiID!= TITLE=$$self{'title'}= stream=$stream\n"  if ($DEBUG);
 					$self->{'artist'} = $1  if ($ephtml =~ m#\"author\"\:\"([^\"]+)\"#so);
 					$self->{'description'} = $1  if ($ephtml =~ m#\"description\"\:\"([^\"]+)\"#so);
 					$self->{'description'} = HTML::Entities::decode_entities($self->{'description'});
-					$self->{'description'} =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/eg;
+					$self->{'description'} =~ s/(?:\%|\\[ux\%]?00|\bu00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
 					$self->{'description'} =~ s#\\$##gs;
 					$self->{'iconurl'} = $1  if ($ephtml =~ m#\"cover\_url\"\:\"([^\"]+)\"#so);
 					$self->{'iconurl'} ||= $1  if ($ephtml =~ m#\"small\_cover\_url\"\:\"([^\"]+)\"#so);
@@ -507,7 +505,7 @@ sub new
 			if ($lyrics) {
 				print STDERR "--WE HAVE LYRICS!, COOL!\n"  if ($DEBUG);
 				$lyrics = HTML::Entities::decode_entities($lyrics);
-				$lyrics =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/eg;
+				$lyrics =~ s/(?:\%|\\[ux\%]?00|\bu00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
 				$self->{'description'} .= "\n\nTranscript:  $lyrics";
 			}
 		} else {

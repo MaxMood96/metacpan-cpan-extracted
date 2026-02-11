@@ -1,6 +1,6 @@
 package SPVM::DBI;
 
-our $VERSION = "0.002";
+our $VERSION = "0.003";
 
 1;
 
@@ -36,15 +36,29 @@ This module is not yet tested and is in a highly experimental stage. The interfa
   my $sql = "SELECT id, name FROM users WHERE id > ?";
   my $sth = $dbh->prepare($ctx, $sql);
   
-  # 3. Execute with bind values (Box primitives using (object))
+  # 3. Execute with bind values
   $sth->execute($ctx, [(object)10]);
   
-  # 4. Fetch rows in a while loop
-  while (my $row = $sth->fetchrow_array($ctx)) {
-    my $id = $row->[0]->(int);
+  # 4. Fetch rows in a while loop (Simple usage)
+  while (my $row = $sth->fetch($ctx)) {
+    my $id   = $row->[0]->(int);
     my $name = $row->[1]->(string);
     
     # Process the data...
+  }
+
+  # 5. Fast fetch with buffer reuse (Zero-allocation)
+  # Prepare the "vessels" (objects) in advance to avoid allocations inside the loop.
+  # Use new_string_len to allocate a string buffer without redundant initialization.
+  my $columns = [(object)Int->new(0), new_string_len 100]; 
+  my $ret_row = new object[2];
+  
+  while (my $row = $sth->fetch($ctx, $columns, $ret_row)) {
+    # The driver updates the existing objects in $columns.
+    # $row is the same as $ret_row.
+    my $id   = $row->[0]->(int);
+    my $name = $row->[1]->(string);
+    
   }
 
 =head1 Modules
@@ -69,7 +83,7 @@ This module is not yet tested and is in a highly experimental stage. The interfa
 
 C<our $DRIVERS_H : cache L<Hash|SPVM::Hash> of L<DBI::Dr|SPVM::DBI::Dr>;>
 
-A cache for driver handles. The keys are driver names (e.g., "SQLite"), and the values are their corresponding driver handle objects (L<DBI::Dr|SPVM::DBI::Dr>). This cache is used by L</"connect"> to reuse existing driver instances.
+A cache for driver handles.
 
 =head1 Class Methods
 
@@ -79,45 +93,27 @@ C<static method connect : L<DBI::Db|SPVM::DBI::Db> ($ctx : L<Go::Context|SPVM::G
 
 Establishes a connection to the database specified by the C<$dsn>.
 
-This method performs the following:
+For more information about the available options that can be passed in C<$options> (such as timeouts and TCP settings), please see the L<DBI::Dr#connect|SPVM::DBI::Dr/"connect"> method.
+
+This method performs the following steps:
 
 =over 2
 
-=item 1.
+=item 1. DSN Parsing
 
-Parses the C<$dsn> to identify the driver name (e.g., "SQLite" in "dbi:SQLite:...").
+Validates the C<$dsn> and parses it to extract the driver name (e.g., extracting "SQLite" from "dbi:SQLite:dbname=:memory:").
 
-=item 2.
+=item 2. Driver Resolution
 
-Checks the internal driver cache L</"$DRIVERS_H">. If an instance of the driver already exists, it is reused.
+Checks the internal cache L</"$DRIVERS_H">. If the driver (e.g., C<DBD::SQLite>) is already loaded, it reuses the existing driver instance.
 
-=item 3.
+=item 3. Dynamic Driver Creation
 
-If the driver is not cached, it loads the corresponding driver class (e.g., C<DBD::SQLite>), creates a new instance, and stores it in the L</"$DRIVERS_H"> cache for future use.
+If the driver is not in the cache, creates a new instance of the driver class calling C<new> method. The new instance is then stored in the cache.
 
-=item 4.
+=item 4. Handover to Driver
 
-Calls the L<connect|SPVM::DBI::Dr/"connect"> method of the driver and returns a database handle (L<DBI::Db|SPVM::DBI::Db>).
-
-=back
-
-C<$options> is an array of key-value pairs. Supported options are defined in L<option_names|SPVM::DBI::Db/"option_names">.
-
-Exceptions:
-
-=over 2
-
-=item *
-
-If C<$dsn> is not defined.
-
-=item *
-
-If the DSN format is invalid.
-
-=item *
-
-If the driver class cannot be loaded or an error occurs during connection.
+Calls the L<connect|SPVM::DBI::Dr/"connect"> method of the resolved driver handle (L<DBI::Dr|SPVM::DBI::Dr>) to obtain a database handle (L<DBI::Db|SPVM::DBI::Db>).
 
 =back
 

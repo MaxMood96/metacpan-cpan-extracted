@@ -486,6 +486,14 @@ TRYIT:
 				$self->{'cnt'}++;
 			}
 		}
+		if ($html =~ s#\,\"(http[^\"]+)\"\,\"[^\"]+\"\,(?:true|false)\,\"https\:\/\/audioad\.zenomedia\.com\/##s) {
+			my $stream = $1;
+			print STDERR "----RADIO STREAM FOUND3 ($stream)!\n"  if ($DEBUG);
+			unless ($self->{'secure'} && $stream !~ /^https/o) {
+				push @{$self->{'streams'}}, $stream;
+				$self->{'cnt'}++;
+			}
+		}
 		$self->{'iconurl'} = $1  if ($html =~ s#\,\"(https?\:\/\/[^\"]*)\"##s);
 		$html =~ s#\,\"(https?\:\/\/[^\"]*)\"##s;  #THIS ONE'S NO GOOD (SKIP OVER)!
 		$self->{'imageurl'} = ($html =~ s#\,\"(https?\:\/\/[^\"]*)\"##s) ? $1 : $self->{'artimageurl'};

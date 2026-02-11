@@ -1,5 +1,7 @@
 Revision history for Perl extension Acme::Damn.
 
+0.09  Tue Feb 10 21:37:20 2026
+  - fix bad DynaLoader import, which caused errors
 
 0.06  Sun Oct 26 20:50:12 2014
   - support for Perl >= v5.18
@@ -22,3 +24,4 @@ Revision history for Perl extension Acme::Damn.
 
 0.01	Sun Jun  8 13:40:03 2003
   - initial Acme::Damn release
+

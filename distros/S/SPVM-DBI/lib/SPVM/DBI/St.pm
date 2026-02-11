@@ -14,15 +14,22 @@ L<DBI::St|SPVM::DBI::St> class in L<SPVM> represents a statement handle. This cl
 
 =head1 Usage
 
-  class DBD::MyDiriver::St extends DBI::St {
-    
-    # Overriding a method
-    method execute : long ($ctx : Go::Context, $bind_values : object[] = undef) {
-      
-      # Implement a logic
-    }
-    
+A statement handle is typically created by calling the L<prepare|SPVM::DBI::Db/"prepare"> method of a database handle (L<DBI::Db|SPVM::DBI::Db>).
+
+  # Create a statement handle
+  my $sth = $dbh->prepare($ctx, "SELECT id, name FROM users WHERE id = ?");
+  
+  # Execute with bind values
+  $sth->execute($ctx, [(object)1]);
+  
+  # Fetch rows
+  while (my $row = $sth->fetch($ctx)) {
+    my $id = $row->[0]->(int);
+    my $name = $row->[1]->(string);
   }
+  
+  # Finish explicitly
+  $sth->finish;
 
 =head1 Fields
 
@@ -44,113 +51,156 @@ The SQL statement string.
 
 C<protected method option_names : string[] ()>
 
-Returns the valid option names for this statement handle. This method is intended to be overridden in child classes.
+Returns the valid option names for this statement handle.
 
 =head2 NUM_OF_FIELDS
 
 C<method NUM_OF_FIELDS : int ($ctx : L<Go::Context|SPVM::Go::Context>)>
 
-In a child class, this method must return the number of fields (columns) in the result set.
-
-Exceptions:
-
-Always throws a L<DBI::Error::SQLState|SPVM::DBI::Error::SQLState> exception whose message begins with a 5-character SQLSTATE "IM001" because this method is not implemented.
+Returns the number of fields (columns) in the result set.
 
 =head2 NAME
 
 C<method NAME : string[] ($ctx : L<Go::Context|SPVM::Go::Context>)>
 
-In a child class, this method must return an array of column names.
-
-Exceptions:
-
-Always throws a L<DBI::Error::SQLState|SPVM::DBI::Error::SQLState> exception whose message begins with a 5-character SQLSTATE "IM001" because this method is not implemented.
+Returns an array of column names.
 
 =head2 NULLABLE
 
 C<method NULLABLE : int[] ($ctx : L<Go::Context|SPVM::Go::Context>)>
 
-In a child class, this method must return an array indicating if each column is nullable.
-
-Exceptions:
-
-Always throws a L<DBI::Error::SQLState|SPVM::DBI::Error::SQLState> exception whose message begins with a 5-character SQLSTATE "IM001" because this method is not implemented.
+Returns an array indicating if each column is nullable.
 
 =head2 TYPE
 
 C<method TYPE : int[] ($ctx : L<Go::Context|SPVM::Go::Context>)>
 
-In a child class, this method must return an array of column types.
-
-Exceptions:
-
-Always throws a L<DBI::Error::SQLState|SPVM::DBI::Error::SQLState> exception whose message begins with a 5-character SQLSTATE "IM001" because this method is not implemented.
+Returns an array of column types.
 
 =head2 PRECISION
 
 C<method PRECISION : int[] ($ctx : L<Go::Context|SPVM::Go::Context>)>
 
-In a child class, this method must return an array of column precision values.
-
-Exceptions:
-
-Always throws a L<DBI::Error::SQLState|SPVM::DBI::Error::SQLState> exception whose message begins with a 5-character SQLSTATE "IM001" because this method is not implemented.
+Returns an array of column precision values.
 
 =head2 SCALE
 
 C<method SCALE : int[] ($ctx : L<Go::Context|SPVM::Go::Context>)>
 
-In a child class, this method must return an array of column scale values.
-
-Exceptions:
-
-Always throws a L<DBI::Error::SQLState|SPVM::DBI::Error::SQLState> exception whose message begins with a 5-character SQLSTATE "IM001" because this method is not implemented.
+Returns an array of column scale values.
 
 =head2 execute
 
 C<method execute : long ($ctx : L<Go::Context|SPVM::Go::Context>, $bind_values : object[] = undef)>
 
-In a child class, this method must execute the prepared statement and return the number of affected rows, or -1 if unknown.
+Executes the prepared statement and return the number of affected rows, or -1 if unknown.
 
-Exceptions:
+=head2 fetch
 
-Always throws a L<DBI::Error::SQLState|SPVM::DBI::Error::SQLState> exception whose message begins with a 5-character SQLSTATE "IM001" because this method is not implemented.
+C<method fetch : object[] ($ctx : L<Go::Context|SPVM::Go::Context>, $bind_columns : object[] = undef, $ret_row : object[] = undef)>
 
-=head2 fetchrow_array
+Fetches the next row of data from the result set.
 
-C<method fetchrow_array : object[] ($ctx : L<Go::Context|SPVM::Go::Context>)>
+Arguments:
 
-In a child class, this method must fetch the next row of data and return an array of objects or C<undef> if there are no more rows.
+=over 4
 
-Exceptions:
+=item * C<$ctx> : L<Go::Context|SPVM::Go::Context>
 
-Always throws a L<DBI::Error::SQLState|SPVM::DBI::Error::SQLState> exception whose message begins with a 5-character SQLSTATE "IM001" because this method is not implemented.
+The context for goroutine-like execution and cancellation.
+
+=item * C<$bind_columns> : object[] (Optional)
+
+An array of objects used as persistent buffers for column values.
+
+=over 8
+
+=item * If a slot is C<undef>, the driver creates a new object (e.g., C<Int>, C<String>) and stores it in this array.
+
+=item * If a slot already contains an object, the driver reuses it by updating its value (mutable update), which avoids new memory allocations.
+
+=back
+
+=item * C<$ret_row> : object[] (Optional)
+
+An array to store the result of the current row (the pointers to objects in C<$bind_columns> or C<undef> for C<NULL>).
+
+=over 8
+
+=item * If this argument is C<undef>, the driver creates a new array for the row.
+
+=item * If an array is provided, the driver fills it and returns it.
+
+=back
+
+=back
+
+Return Value:
+
+Returns the fetched row as an array of objects.
+
+=over 8
+
+=item * If C<$ret_row> was provided, that same array is returned (with updated values).
+
+=item * If C<$ret_row> was C<undef>, a newly allocated array is returned.
+
+=item * Returns C<undef> when there are no more rows.
+
+=back
 
 =head2 rows
 
 C<method rows : long ($ctx : L<Go::Context|SPVM::Go::Context>)>
 
-In a child class, this method must return the number of rows affected by the last execute.
-
-Exceptions:
-
-Always throws a L<DBI::Error::SQLState|SPVM::DBI::Error::SQLState> exception whose message begins with a 5-character SQLSTATE "IM001" because this method is not implemented.
+Returns the number of rows affected by the last execute.
 
 =head2 finish
 
 C<method finish : void ()>
 
-In a child class, this method is expected to indicate that no more data will be fetched from this statement handle.
-
-Exceptions:
-
-Always throws a L<DBI::Error::SQLState|SPVM::DBI::Error::SQLState> exception whose message begins with a 5-character SQLSTATE "IM001" because this method is not implemented.
+Indicates that no more data will be fetched from this statement handle before it is prepared again or destroyed. 
 
 =head2 DESTROY
 
 C<method DESTROY : void ()>
 
-The destructor. Calls L</"finish">.
+The destructor. Calls L</"finish"> method.
+
+=head1 For Driver Authors
+
+=head2 Extending DBI::St
+
+The following example shows how to implement a specific database statement handle (DBD) by extending the L<DBI::St|SPVM::DBI::St> class.
+
+  class DBD::MyDriver::St extends DBI::St {
+    
+    # Overriding the execute method
+    method execute : long ($ctx : Go::Context, $bind_values : object[] = undef) {
+      
+      # Implement the logic to execute the prepared statement.
+      # Return the number of affected rows, or -1 if unknown.
+      # ...
+    }
+    
+    # Overriding the fetch method
+    method fetch : object[] ($ctx : Go::Context, $bind_columns : object[] = undef, $ret_row : object[] = undef) {
+      
+      # Implement the logic to fetch one row.
+      # Use $bind_columns and $ret_row to minimize memory allocations.
+      # ...
+    }
+  }
+
+=head2 Overriding option_names
+
+Returns the valid option names for this statement handle. Override this method if your statement handle supports specific options. These names are used to validate the options passed to L<DBI::Db#prepare_common|SPVM::DBI::Db/"prepare_common"> method.
+
+=head2 Abstract Methods
+
+The following methods are intended to be overridden in child classes. If a method is not overridden, it throws a L<DBI::Error::SQLState|SPVM::DBI::Error::SQLState> exception with SQLSTATE "IM001" (Driver does not support this function) to indicate that the driver implementation is missing:
+
+L</"NUM_OF_FIELDS">, L</"NAME">, L</"NULLABLE">, L</"TYPE">, L</"PRECISION">, L</"SCALE">, L</"execute">, L</"fetch">, L</"rows">, L</"finish">.
 
 =head1 See Also
 

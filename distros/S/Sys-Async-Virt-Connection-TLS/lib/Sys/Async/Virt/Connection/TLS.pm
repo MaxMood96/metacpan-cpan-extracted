@@ -5,7 +5,7 @@ use experimental 'signatures';
 use Future::AsyncAwait;
 use Object::Pad ':experimental(inherit_field)';
 
-class Sys::Async::Virt::Connection::TLS v0.0.2;
+class Sys::Async::Virt::Connection::TLS v0.0.4;
 
 inherit Sys::Async::Virt::Connection::TCP '$_socket', '$_url';
 
@@ -81,12 +81,13 @@ async method _read_internal( $len ) {
             if $buf ne "\1";
     }
     my $data = '';
-    my $read = '';
     do {
-        $read = await $_tls->read( $_socket, $len );
-        $data .= $read;
+        my $read = await $_tls->read( $_socket, $len );
+        unless (defined $read) {
+            return ($data ? $data : undef);
+        }
         $len -= length($read);
-    } while ($read and $len > 0);
+    } while ($len > 0);
     return $data;
 }
 
@@ -115,7 +116,7 @@ Sys::Async::Virt::Connection::TLS - Connection to LibVirt server over TLS socket
 
 =head1 VERSION
 
-v0.0.2
+v0.0.4
 
 =head1 SYNOPSIS
 
@@ -180,7 +181,7 @@ Returns C<true>.
 
 =item * No verification of the server parameters
 
-=item * No support for L<https://libvirt.org/kbase/tlscerts.html#multiple-parallel-certificate-identities|multiple parallel certificates>
+=item * No support for L<multiple parallel certificates|https://libvirt.org/kbase/tlscerts.html#multiple-parallel-certificate-identities>
 
 =back
 

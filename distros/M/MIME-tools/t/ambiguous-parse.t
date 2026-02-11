@@ -2,7 +2,7 @@
 use strict;
 use warnings;
 use Test::Deep;
-use Test::More tests => 20;
+use Test::More tests => 32;
 
 use MIME::Entity;
 use MIME::Parser;
@@ -51,4 +51,28 @@ $entity = MIME::Entity->build(From => 'x@example.org',
                               Type => 'text/plain',
                               Data => ['Hello, world!']);
 ok($entity->ambiguous_content(), 'Newly-built entity correctly detects ambiguous content');
+
+$entity = $parser->parse_open('testmsgs/triple-boundary-one-empty.msg');
+$ans = $entity->head->mime_attr('content-type.@duplicate_parameters');
+cmp_deeply($ans, ['boundary'], 'Duplicate "boundary" parameter was detected in bad message');
+$ans = $entity->head->mime_attr('content-type.@empty_parameters');
+cmp_deeply($ans, ['boundary'], 'Empty "boundary" parameter value was detected in bad message');
+ok($parser->ambiguous_content(), 'Ambiguous content was detected in message with 3 boundary parameters, one of them empty');
+ok($entity->ambiguous_content(), 'Entity method matches parser method');
+
+$entity = $parser->parse_open('testmsgs/empty-boundary.msg');
+$ans = $entity->head->mime_attr('content-type.@duplicate_parameters');
+ok(!defined($ans), 'No duplicate parameters');
+$ans = $entity->head->mime_attr('content-type.@empty_parameters');
+cmp_deeply($ans, ['boundary'], 'Empty "boundary" parameter value was detected in bad message');
+ok($parser->ambiguous_content(), 'Ambiguous content was detected in message with empty boundary parameter');
+ok($entity->ambiguous_content(), 'Entity method matches parser method');
+
+$entity = $parser->parse_open('testmsgs/empty-quoted-boundary.msg');
+$ans = $entity->head->mime_attr('content-type.@duplicate_parameters');
+ok(!defined($ans), 'No duplicate parameters');
+$ans = $entity->head->mime_attr('content-type.@empty_parameters');
+cmp_deeply($ans, ['boundary'], 'Empty "boundary" parameter value was detected in bad message');
+ok($parser->ambiguous_content(), 'Ambiguous content was detected in message with "" boundary parameter');
+ok($entity->ambiguous_content(), 'Entity method matches parser method');
 

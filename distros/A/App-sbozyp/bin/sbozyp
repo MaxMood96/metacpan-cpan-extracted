@@ -6,7 +6,7 @@ use v5.34.0; # The Perl version on Slackware 15.0 (sbozyp's min supported versio
 
 package Sbozyp;
 
-our $VERSION = '1.5.4';
+our $VERSION = '1.5.5';
 
 use Cwd qw();
 use Digest::MD5 qw();
@@ -493,7 +493,7 @@ sub parse_info_file {
     my $info_file_content = do { local $/; <$fh> }; # slurp the info file
     my %info = $info_file_content =~ /^(\w+)="([^"]*)"/mg;
     # Multiline values are broken up with newline escapes. Lets squish them into single spaces.
-    $info{$_} =~ s/\\\n\s+//g for keys %info;
+    $info{$_} =~ s/\\\n\s*//g for keys %info;
     return %info;
 }
 
@@ -619,7 +619,7 @@ sub pkg_prepare_for_build {
     my $staging_dir = File::Temp->newdir(DIR => $CONFIG{TMPDIR}, TEMPLATE => 'sbozyp_XXXXXX');
     sbozyp_copy($pkg->{PKGDIR}, $staging_dir);
     for my $url (sort keys %url_md5) {
-        my $src_filename = basename(decode_url($url));
+        my $src_filename = decode_url(basename($url));
         if ($keep_src && -r "$CONFIG{SRCDIR}/$src_filename") {
             # Sources stored from previous downloads have already been md5 checked
             sbozyp_print_stderr("$pkg->{PKGNAME}: using previously downloaded src: $src_filename\n");
@@ -656,7 +656,7 @@ sub build_slackware_pkg {
     });
     my $slackware_pkg; while (my $line = <$cmd>) {
         $slackware_pkg = $1 if $line =~ /^Slackware package (.+) created\.$/;
-        print $line; # magically knows to print to stdout or stderr
+        print $line;
     }
     close $cmd;
     sbozyp_die("failed to build $pkg->{PKGNAME}") if $? != 0;

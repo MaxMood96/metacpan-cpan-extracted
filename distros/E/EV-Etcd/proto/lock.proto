@@ -1,0 +1,30 @@
+syntax = "proto3";
+package v3lockpb;
+
+import "rpc.proto";
+
+message LockRequest {
+  // name is the identifier for the distributed shared lock to be acquired.
+  bytes name = 1;
+  // lease is the ID of the lease that will be attached to ownership of the
+  // lock. If the lease expires or is revoked and currently holds the lock,
+  // the lock is automatically released.
+  int64 lease = 2;
+}
+
+message LockResponse {
+  etcdserverpb.ResponseHeader header = 1;
+  // key is a key that will exist on etcd for the duration that the Lock caller
+  // owns the lock. Users should not modify this key or the lock may exhibit
+  // undefined behavior.
+  bytes key = 2;
+}
+
+message UnlockRequest {
+  // key is the lock ownership key granted by Lock.
+  bytes key = 1;
+}
+
+message UnlockResponse {
+  etcdserverpb.ResponseHeader header = 1;
+}

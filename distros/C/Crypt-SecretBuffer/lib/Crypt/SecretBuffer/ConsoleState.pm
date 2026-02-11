@@ -1,7 +1,7 @@
 package Crypt::SecretBuffer::ConsoleState;
 # VERSION
 # ABSTRACT: Disable TTY echo within a scope
-$Crypt::SecretBuffer::ConsoleState::VERSION = '0.017';
+$Crypt::SecretBuffer::ConsoleState::VERSION = '0.018';
 1;
 
 __END__
@@ -88,7 +88,7 @@ Set the console/tty state to the original value seen when the object was created
 
 =head1 VERSION
 
-version 0.017
+version 0.018
 
 =head1 AUTHOR
 
@@ -96,7 +96,7 @@ Michael Conrad <mike@nrdvana.net>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2025 by Michael Conrad.
+This software is copyright (c) 2026 by Michael Conrad.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

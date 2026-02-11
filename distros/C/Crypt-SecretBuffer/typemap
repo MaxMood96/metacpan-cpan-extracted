@@ -16,10 +16,15 @@ auto_secret_buffer_span          O_SECRET_BUFFER_SPAN
 
 secret_buffer_io_flags           O_IO_FLAGS
 secret_buffer_alloc_flags        O_ALLOC_FLAGS
+secret_buffer_lenprefixed_type   O_LENPREFIXED_TYPE
 
 INPUT
 O_SECRET_BUFFER
    $var= secret_buffer_from_magic($arg, SECRET_BUFFER_MAGIC_OR_DIE @{[ $type =~ /^maybe/? q{| SECRET_BUFFER_MAGIC_UNDEF_OK} : $type =~ /^auto/? q{| SECRET_BUFFER_MAGIC_AUTOCREATE} : q{} ]});
+
+OUTPUT
+O_SECRET_BUFFER
+   sv_setrv_inc($arg, ($var)->wrapper);
 
 INPUT
 O_SECRET_BUFFER_CHARSET
@@ -44,3 +49,7 @@ O_IO_FLAGS
 INPUT
 O_ALLOC_FLAGS
    $var= parse_alloc_flags(aTHX_ $arg);
+
+INPUT
+O_LENPREFIXED_TYPE
+   $var= parse_lenprefixed_type(aTHX_ $arg);

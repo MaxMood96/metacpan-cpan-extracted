@@ -36,7 +36,7 @@ extern bool secret_buffer_charset_test_byte(const secret_buffer_charset *cset, U
 /* Test whether the charset contains a unicode character.  This uses the perl regex
  * engine if the codepoint is higher than 0x7F, to ensure correct matching.
  */
-extern bool secret_buffer_charset_test_codepoint(const secret_buffer_charset *cset, uint32_t cp);
+extern bool secret_buffer_charset_test_codepoint(const secret_buffer_charset *cset, U32 cp);
 
 /* encoding flags can be combined with other flags */
 #define SECRET_BUFFER_ENCODING_MASK      0xFF
@@ -56,11 +56,17 @@ extern bool secret_buffer_charset_test_codepoint(const secret_buffer_charset *cs
    || (x) == SECRET_BUFFER_ENCODING_ISO8859_1 \
    )
 
+/* secret_buffer_parse struct is used as a generic way to support parsing on whole
+ * secret_buffers or on spans within one, or even a span within a perl SV.
+ * Crypt::SecretBuffer::Span does not have a public struct for now, but can be
+ * used to initialize a parse struct using secret_buffer_parse_init_from_sv.
+ */
 typedef struct {
    U8 *pos, *lim;
    const char *error;
    int encoding;
    U8 pos_bit, lim_bit;
+   secret_buffer *sbuf; /* may be NULL when referencing a span from a plain PV */
 } secret_buffer_parse;
 
 /* Initialize a parse struct, and also verify that the described span is within the
@@ -72,6 +78,15 @@ extern bool secret_buffer_parse_init(secret_buffer_parse *parse,
 /* Initialize a parse struct, either from a Span, or a SecretBuffer, or a plain Scalar.
  */
 extern bool secret_buffer_parse_init_from_sv(secret_buffer_parse *parse, SV *sv);
+
+/* Create a Crypt::SecretBuffer::Span object, returning a mortal ref */
+extern SV * secret_buffer_span_new_obj(secret_buffer *buf, size_t pos, size_t lim, int encoding);
+
+/* Create a Crypt::SecretBuffer::Span object for the specified span of a SecretBuffer
+ * and return a mortal ref to that object.  The parse struct 'sbuf' field must not be NULL
+ * because the span needs to hold a reference to it.
+ */
+extern SV * secret_buffer_span_new_obj_from_parse(secret_buffer_parse *p);
 
 /* Scan through a SecretBuffer looking for the first (and maybe also last)
  * character belonging to a set.  The 'pos' and 'lim' of the parse struct
@@ -110,6 +125,7 @@ extern bool secret_buffer_match_bytestr(secret_buffer_parse *p, char *data, size
  */
 extern SSize_t secret_buffer_sizeof_transcode(secret_buffer_parse *src, int dst_encoding);
 extern bool secret_buffer_transcode(secret_buffer_parse *src, secret_buffer_parse *dst);
+extern bool secret_buffer_copy_to(secret_buffer_parse *src, SV *dst_sv, int encoding, bool append);
 
 /* Create a new Crypt::SecretBuffer object with a mortal ref and return its secret_buffer
  * struct pointer.
@@ -117,7 +133,8 @@ extern bool secret_buffer_transcode(secret_buffer_parse *src, secret_buffer_pars
  * FREETMPS destroys the ref which destroys the object which destroys the magic which destroys
  * the secret_buffer struct which also clears it.
  * If you supply a pointer to receive ref_out, you can then increment the refcount or copy the
- * ref to a new SV if you want to keep the object.
+ * ref to a new SV if you want to keep the object.  As a weak-ref, it's also convenient to push
+ * onto perl's stack.
  * Always returns a secret_buffer, or croaks on failure.
  */
 extern secret_buffer * secret_buffer_new(size_t capacity, SV **ref_out);
@@ -153,6 +170,26 @@ extern void secret_buffer_alloc_at_least(secret_buffer *buf, size_t min_capacity
  * If it grows, the new bytes are zeroes (by virtue of having already cleared the allocation)
  */
 extern void secret_buffer_set_len(secret_buffer *buf, size_t new_len);
+
+/* Encode/decode a variable-length integer using the DER encoding of ASN.1
+ * (this is not a full ASN.1 element, just the length piece)
+ */
+extern void secret_buffer_append_uv_asn1_der_length(secret_buffer *buf, UV val);
+extern bool secret_buffer_parse_uv_asn1_der_length(secret_buffer_parse *parse, UV *out);
+
+/* Encode/decode a variable-length integer using unsigned Base128-LittleEndian
+ * (using high-bit of each byte as a continuation flag)
+ * as seen in ProtocolBuffers and other formats.
+ */
+extern void secret_buffer_append_uv_base128le(secret_buffer *buf, UV val);
+extern bool secret_buffer_parse_uv_base128le(secret_buffer_parse *parse, UV *out);
+
+/* Encode/decode a variable-length integer using unsigned Base128-BigEndian
+ * (using high-bit of each byte as a continuation flag)
+ * as seen in extended type codes of ASN.1 and perl's pack('w',)
+ */
+extern void secret_buffer_append_uv_base128be(secret_buffer *buf, UV val);
+extern bool secret_buffer_parse_uv_base128be(secret_buffer_parse *parse, UV *out);
 
 /* Overwrite a span of the buffer with the supplied bytes.  The buffer length is updated
  * to match.  Offset and length are unsigned, so they do not support the "negative from end of

@@ -3,8 +3,8 @@ use lib "$FindBin::Bin/lib";
 use Test2AndUtils;
 use Encode qw( encode decode );
 use MIME::Base64;
-use Crypt::SecretBuffer qw( secret UTF8 ISO8859_1 UTF16LE UTF16BE HEX BASE64
-  MATCH_NEGATE MATCH_MULTI );
+use Crypt::SecretBuffer qw( secret span UTF8 ISO8859_1 UTF16LE UTF16BE
+  HEX BASE64 MATCH_NEGATE MATCH_MULTI );
 
 subtest constructors => sub {
    my $buf= secret("abcdef");
@@ -115,6 +115,10 @@ subtest constructors => sub {
          call len => 1;
       },
       'sub-span negative indices relative to parent span';
+
+   is span(secret("AB\xC8\x80"), 2, 2, UTF8)->cmp("\x{200}"), 0, 'span of secret';
+   is span(secret("AB\xC8\x80")->span(1), 1, 2)->cmp("\xC8\x80"), 0, 'span of span';
+   is span("AB\xC8\x80", encoding => UTF8)->cmp("AB\x{200}"), 0, 'span of scalar';
 };
 
 subtest starts_with => sub {
@@ -276,18 +280,29 @@ subtest copy_iso8859 => sub {
          call sub { shift->span->starts_with("abcdef") } => T;
       },
       'copy';
-   my $str;
+   my $str= 'will get overwritten';
    $s->copy_to($str);
    is( $str, "abcdef", "copy to scalar" );
-   my $buf= secret("");
+   $s->append_to($str);
+   is( $str, "abcdefabcdef", "append to scalar" );
+
+   my $buf= secret("will get overwritten");
    $s->copy_to($buf);
    is $buf,
       object {
          call stringify => '[REDACTED]';
          call length => 6;
-         call sub { shift->span->starts_with("abcdef") } => T;
+         call [ memcmp => "abcdef" ] => 0;
       },
       'copy to secret';
+   $s->append_to($buf);
+   is $buf,
+      object {
+         call stringify => '[REDACTED]';
+         call length => 12;
+         call [ memcmp => "abcdefabcdef" ] => 0;
+      },
+      'append to secret';
 
    # Try to specify something out of bounds
    $s->buf->length(4);
@@ -307,9 +322,12 @@ subtest copy_widechar => sub {
    my $unicode= "\0\x{10}\x{100}\x{1000}\x{10000}\x{10FFFD}";
 
    my $utf8= encode('UTF-8', $unicode);
-   my $buf= '';
+   my $buf= 'will get overwritten';
    secret($utf8)->span(encoding => UTF8)->copy_to($buf);
    is( $buf, $unicode, 'round trip through UTF-8' )
+      or note map escape_nonprintable($_)."\n", $utf8, $buf;
+   secret($utf8)->span(encoding => UTF8)->append_to($buf);
+   is( $buf, $unicode x 2, 'round trip through UTF-8, append' )
       or note map escape_nonprintable($_)."\n", $utf8, $buf;
 
    my $utf16le= encode('UTF-16LE', $unicode);
@@ -349,6 +367,7 @@ subtest copy_base64 => sub {
       my $tmp;
       secret($str)->span->copy_to($tmp, encoding => BASE64);
       is( $tmp, $b64, "encode $str" );
+      undef $tmp;
       secret($b64)->span(encoding => BASE64)->copy_to($tmp, encoding => ISO8859_1);
       is( $tmp, $str, "decode $b64" );
    }

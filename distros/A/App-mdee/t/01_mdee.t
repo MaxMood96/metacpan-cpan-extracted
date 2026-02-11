@@ -150,11 +150,11 @@ subtest 'list-themes option' => sub {
     like($out, qr/default/, '--list-themes shows default theme');
 };
 
-# Test: theme name listing (-t ?)
+# Test: theme name listing (--list-themes)
 subtest 'theme name listing' => sub {
-    my $out = `$mdee --theme='?' 2>&1`;
-    is($?, 0, '--theme=? exits successfully');
-    like($out, qr/^default$/m, '--theme=? lists default theme');
+    my $out = `$mdee --list-themes 2>&1`;
+    is($?, 0, '--list-themes exits successfully');
+    like($out, qr/default/, '--list-themes lists default theme');
 };
 
 # Test: width option
@@ -240,29 +240,29 @@ subtest 'show option' => sub {
         return () = $line =~ /\h-E\h/g;
     }
 
-    # all fields enabled by default (17 patterns)
+    # all fields enabled by default (15 patterns: bold and italic combined with |)
     my $default = `$mdee -ddn $test_md 2>&1`;
-    is(count_patterns($default), 17, 'default has 17 patterns');
+    is(count_patterns($default), 15, 'default has 15 patterns');
 
-    # --show italic=0 disables italic (15 patterns: 17 - 2 italic patterns)
+    # --show italic=0 disables italic (14 patterns: 15 - 1)
     my $no_italic = `$mdee -ddn --show italic=0 $test_md 2>&1`;
-    is(count_patterns($no_italic), 15, '--show italic=0 removes 2 patterns');
+    is(count_patterns($no_italic), 14, '--show italic=0 removes 1 pattern');
 
-    # --show bold=0 disables bold (15 patterns: 17 - 2 bold patterns)
+    # --show bold=0 disables bold (14 patterns: 15 - 1)
     my $no_bold = `$mdee -ddn --show bold=0 $test_md 2>&1`;
-    is(count_patterns($no_bold), 15, '--show bold=0 removes 2 patterns');
+    is(count_patterns($no_bold), 14, '--show bold=0 removes 1 pattern');
 
-    # --show all enables all fields (17 patterns)
+    # --show all enables all fields (15 patterns)
     my $all = `$mdee -ddn --show all $test_md 2>&1`;
-    is(count_patterns($all), 17, '--show all has 17 patterns');
+    is(count_patterns($all), 15, '--show all has 15 patterns');
 
-    # --show h6=0 disables h6 (16 patterns: 17 - 1 h6 pattern)
+    # --show h6=0 disables h6 (14 patterns: 15 - 1)
     my $no_h6 = `$mdee -ddn --show h6=0 $test_md 2>&1`;
-    is(count_patterns($no_h6), 16, '--show h6=0 removes 1 pattern');
+    is(count_patterns($no_h6), 14, '--show h6=0 removes 1 pattern');
 
-    # --show all= --show bold enables only bold (2 patterns)
+    # --show all= --show bold enables only bold (1 pattern)
     my $only_bold = `$mdee -ddn '--show=all=' --show=bold $test_md 2>&1`;
-    is(count_patterns($only_bold), 2, '--show all= --show bold has 2 patterns');
+    is(count_patterns($only_bold), 1, '--show all= --show bold has 1 pattern');
 
     # unknown field should error
     my $unknown = `$mdee --dryrun --show unknown $test_md 2>&1`;
@@ -300,8 +300,8 @@ subtest 'config file defaults' => sub {
         open my $fh, '>', "$config_dir/config.sh" or die;
         print $fh "default[base_color]='Crimson'\n";
         close $fh;
-        my $out = `XDG_CONFIG_HOME=$tmpdir $mdee -d --dryrun --mode=light $test_md 2>&1`;
-        like($out, qr/Crimson/, 'default[base_color]=Crimson is applied');
+        my $out = `XDG_CONFIG_HOME=$tmpdir $mdee -dd --dryrun --mode=light $test_md 2>&1`;
+        like($out, qr/colors\[base\].*Crimson/, 'default[base_color]=Crimson is applied');
     }
 
     # Test command-line overrides config defaults
@@ -347,22 +347,22 @@ CONF
     # Test default[theme] with comma-separated themes
     {
         open my $fh, '>', "$config_dir/config.sh" or die;
-        print $fh "default[theme]='warm,closing'\n";
+        print $fh "default[theme]='warm,hashed'\n";
         close $fh;
         my $out = `XDG_CONFIG_HOME=$tmpdir $mdee -d --dryrun --mode=light $test_md 2>&1`;
-        is($?, 0, 'default[theme]=warm,closing loads successfully');
-        like($out, qr/Coral/, 'default[theme]=warm,closing applies warm');
-        like($out, qr/sub\{/, 'default[theme]=warm,closing applies closing');
+        is($?, 0, 'default[theme]=warm,hashed loads successfully');
+        like($out, qr/Coral/, 'default[theme]=warm,hashed applies warm');
+        like($out, qr/sub\{/, 'default[theme]=warm,hashed applies hashed');
     }
 
-    # Test --theme overrides default[theme]
+    # Test --theme skips default[theme] (flag set by callback)
     {
         open my $fh, '>', "$config_dir/config.sh" or die;
         print $fh "default[theme]='warm'\n";
         close $fh;
-        my $out = `XDG_CONFIG_HOME=$tmpdir $mdee -d --dryrun --mode=light --theme=closing $test_md 2>&1`;
-        unlike($out, qr/Coral/, '--theme overrides default[theme]');
-        like($out, qr/RoyalBlue/, '--theme=closing uses default base color');
+        my $out = `XDG_CONFIG_HOME=$tmpdir $mdee -d --dryrun --mode=light --no-theme --theme=warm $test_md 2>&1`;
+        like($out, qr/Coral/, '--no-theme --theme=warm applies warm');
+        unlike($out, qr/###/, '--no-theme --theme=warm skips hashed');
     }
 
     # Test --base-color overrides config theme override
@@ -370,9 +370,9 @@ CONF
         open my $fh, '>', "$config_dir/config.sh" or die;
         print $fh "theme_light[base]='<Crimson>=y25'\n";
         close $fh;
-        my $out = `XDG_CONFIG_HOME=$tmpdir $mdee -d --dryrun --mode=light -B Ivory $test_md 2>&1`;
-        like($out, qr/Ivory/, '--base-color overrides config theme override');
-        unlike($out, qr/Crimson/, '--base-color takes priority over config');
+        my $out = `XDG_CONFIG_HOME=$tmpdir $mdee -dd --dryrun --mode=light -B Ivory $test_md 2>&1`;
+        like($out, qr/colors\[base\].*Ivory/, '--base-color overrides config theme override');
+        unlike($out, qr/colors\[base\].*Crimson/, '--base-color takes priority over config');
     }
 };
 
@@ -401,9 +401,9 @@ THEME
     is($?, 0, 'external dark theme loads successfully');
     like($dark, qr/Crimson/, 'external dark theme has base color');
 
-    # Test --theme=? shows external theme name
-    my $list = `XDG_CONFIG_HOME=$tmpdir $mdee --theme='?' 2>&1`;
-    like($list, qr/testtheme/, '--theme=? shows external theme');
+    # Test --list-themes shows external theme name
+    my $list = `XDG_CONFIG_HOME=$tmpdir $mdee --list-themes 2>&1`;
+    like($list, qr/testtheme/, '--list-themes shows external theme');
 
     # Test --theme=FILE (file path direct loading)
     my $out_file = `XDG_CONFIG_HOME=$tmpdir $mdee -d --dryrun --mode=light --theme=$theme_dir/testtheme.sh $test_md 2>&1`;

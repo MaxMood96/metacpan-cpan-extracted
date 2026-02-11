@@ -1,5 +1,7 @@
 
 requires 'perl' => 'v5.26';
+requires 'Crypt::OpenSSL3::SSL';
+requires 'Crypt::OpenSSL3::SSL::Context';
 requires 'Future::AsyncAwait';
 requires 'Future::IO::TLS';
 requires 'Log::Any';

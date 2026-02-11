@@ -12,8 +12,16 @@ my @files = (
     't/00-report-prereqs.dd',
     't/00-report-prereqs.t',
     't/backslash-0.t',
+    't/build-map.t',
+    't/coderef-map.t',
+    't/deletion.t',
+    't/iv-map.t',
+    't/replace-inplace.t',
     't/replace.t',
-    't/trim.t'
+    't/taint-safety.t',
+    't/trim-inplace.t',
+    't/trim.t',
+    't/utf8-safety.t'
 );
 
 notabs_ok($_) foreach @files;

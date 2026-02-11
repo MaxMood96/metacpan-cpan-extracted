@@ -10,8 +10,8 @@ static int sb_parse_next_codepoint(secret_buffer_parse *parse);
 static bool sb_parse_encode_codepoint(secret_buffer_parse *parse, int codepoint);
 static bool sb_parse_match_charset_bytes(secret_buffer_parse *parse, const secret_buffer_charset *cset, int flags);
 static bool sb_parse_match_charset_codepoints(secret_buffer_parse *parse, const secret_buffer_charset *cset, int flags);
-static bool sb_parse_match_str_U8(secret_buffer_parse *parse, const U8 *pattern, int pattern_len, int flags);
-static bool sb_parse_match_str_I32(secret_buffer_parse *parse, const I32 *pattern, int pattern_len, int flags);
+static bool sb_parse_match_str_U8(secret_buffer_parse *parse, const U8 *pattern, size_t pattern_len, int flags);
+static bool sb_parse_match_str_I32(secret_buffer_parse *parse, const I32 *pattern, size_t pattern_len, int flags);
 
 static bool parse_encoding(pTHX_ SV *sv, int *out) {
    int enc;
@@ -58,6 +58,7 @@ bool secret_buffer_parse_init(secret_buffer_parse *parse,
    parse->pos= ((U8*) buf->data) + pos;
    parse->lim= ((U8*) buf->data) + lim;
    parse->encoding= encoding;
+   parse->sbuf= buf;
    return true;
 }
 
@@ -223,36 +224,34 @@ static const char base64_alphabet[64]=
    "abcdefghijklmnopqrstuvwxyz"
    "0123456789+/";
 
+/*
+perl -E 'my @tbl= (-1)x256;
+$tbl[ord]= -ord(A)+ord for A..Z;
+$tbl[ord]= 26-ord(a)+ord for a..z;
+$tbl[ord]= 52-ord(0)+ord for 0..9;
+$tbl[ord "+"]= 62;
+$tbl[ord "/"]= 63;
+$tbl[ord "="]= 64;
+say join ",\n", map join(",", @tbl[$_*16 .. $_*16+15]), 0..0xF'
+*/
 static const int8_t base64_decode_table[256]= {
-   [0 ... 42] = -1, [44 ... 46] = -1, [58 ... 60] = -1,
-   [62 ... 64] = -1, [91 ... 96] = -1, [123 ... 255] = -1,
-   /* A–Z = 0–25 */
-   ['A'] = 0,  ['B'] = 1,  ['C'] = 2,  ['D'] = 3,
-   ['E'] = 4,  ['F'] = 5,  ['G'] = 6,  ['H'] = 7,
-   ['I'] = 8,  ['J'] = 9,  ['K'] = 10, ['L'] = 11,
-   ['M'] = 12, ['N'] = 13, ['O'] = 14, ['P'] = 15,
-   ['Q'] = 16, ['R'] = 17, ['S'] = 18, ['T'] = 19,
-   ['U'] = 20, ['V'] = 21, ['W'] = 22, ['X'] = 23,
-   ['Y'] = 24, ['Z'] = 25,
-   /* a–z = 26–51 */
-   ['a'] = 26, ['b'] = 27, ['c'] = 28, ['d'] = 29,
-   ['e'] = 30, ['f'] = 31, ['g'] = 32, ['h'] = 33,
-   ['i'] = 34, ['j'] = 35, ['k'] = 36, ['l'] = 37,
-   ['m'] = 38, ['n'] = 39, ['o'] = 40, ['p'] = 41,
-   ['q'] = 42, ['r'] = 43, ['s'] = 44, ['t'] = 45,
-   ['u'] = 46, ['v'] = 47, ['w'] = 48, ['x'] = 49,
-   ['y'] = 50, ['z'] = 51,
-   /* 0–9 = 52–61 */
-   ['0'] = 52, ['1'] = 53, ['2'] = 54, ['3'] = 55,
-   ['4'] = 56, ['5'] = 57, ['6'] = 58, ['7'] = 59,
-   ['8'] = 60, ['9'] = 61,
-
-   /* + and / */
-   ['+'] = 62, ['/'] = 63,
-   /* = flushes out the remaining bits */
-   ['='] = 64
+   -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+   -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+   -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,62,-1,-1,-1,63,
+   52,53,54,55,56,57,58,59,60,61,-1,-1,-1,64,-1,-1,
+   -1,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,
+   15,16,17,18,19,20,21,22,23,24,25,-1,-1,-1,-1,-1,
+   -1,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,
+   41,42,43,44,45,46,47,48,49,50,51,-1,-1,-1,-1,-1,
+   -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+   -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+   -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+   -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+   -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+   -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+   -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+   -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1
 };
-
 
 /* Transcode characters from one parse state into another.
  * This works sort of like
@@ -333,6 +332,327 @@ bool secret_buffer_transcode(secret_buffer_parse *src, secret_buffer_parse *dst)
          return false;
       }
    }
+   return true;
+}
+
+bool
+secret_buffer_copy_to(secret_buffer_parse *src, SV *dst_sv, int encoding, bool append) {
+   dTHX;
+   secret_buffer_parse dst;
+   secret_buffer *dst_sbuf= NULL;
+   SSize_t need_bytes;
+   bool dst_wide= false;
+
+   Zero(&dst, 1, secret_buffer_parse);
+   // Encoding may be -1 to indicate the user didn't specify, in which case we use the
+   // same encoding as the source, unless the destination is a perl scalar (handled below)
+   dst.encoding= encoding >= 0? encoding : src->encoding;
+   if (sv_isobject(dst_sv)) {
+      // if object, must be a SecretBuffer
+      dst_sbuf= secret_buffer_from_magic(dst_sv, SECRET_BUFFER_MAGIC_OR_DIE);
+   }
+   else {
+      // Going to overwrite the scalar, or if its a scalar-ref, overwrite that.
+      if (SvROK(dst_sv) && !sv_isobject(dst_sv) && SvTYPE(SvRV(dst_sv)) <= SVt_PVMG)
+         dst_sv= SvRV(dst_sv);
+      // Refuse to overwrite any other kind of ref
+      if (SvTYPE(dst_sv) > SVt_PVMG || SvROK(dst_sv)) {
+         src->error= "Can only copy_to scalars or scalar-refs";
+         return false;
+      }
+      // If the source encoding is a type of unicode, and the destination encoding is not
+      // specified, then write wide characters (utf-8) to the perl scalar and flag it as utf8
+      if (encoding < 0 && SECRET_BUFFER_ENCODING_IS_UNICODE(src->encoding)) {
+         dst.encoding= SECRET_BUFFER_ENCODING_UTF8;
+         dst_wide= true;
+      }
+   }
+   // Determine how many bytes we need
+   need_bytes= secret_buffer_sizeof_transcode(src, dst.encoding);
+   if (need_bytes < 0)
+      return false;
+   // Prepare the buffers for that many bytes
+   if (dst_sbuf) {
+      // For destination SecretBuffer, set length to 0 unless appending, then
+      // ensure enough allocated space for need_bytes, then transcode and update
+      // the length in the block below.
+      if (!append)
+         secret_buffer_set_len(dst_sbuf, 0); /* clears secrets */
+      secret_buffer_alloc_at_least(dst_sbuf, dst_sbuf->len + need_bytes);
+      dst.pos= dst_sbuf->data + dst_sbuf->len;
+      dst.lim= dst.pos + need_bytes;
+   }
+   else {
+      // For destination SV, set length to 0 unless appending, then force it to
+      // be bytes or utf-8, then grow it to ensure room for additional `need_bytes`.
+      STRLEN len;
+      char *pv;
+      // If overwriting, set the length to 0 before forcing to bytes or utf8
+      if (!append)
+         sv_setpvn(dst_sv, "", 0);
+      // force it to the type required
+      if (dst_wide) SvPVutf8(dst_sv, len);
+      else SvPVbyte(dst_sv, len);
+      // grow it to the required length, for writing
+      sv_grow(dst_sv, (append? len : 0) + need_bytes + 1);
+      dst.pos= SvPVX_mutable(dst_sv) + len;
+      dst.lim= dst.pos + need_bytes;
+      // don't forget the NUL terminator
+      *dst.lim= '\0';
+   }
+   if (!secret_buffer_transcode(src, &dst)) {
+      if (!src->error) src->error= dst.error;
+      return false;
+   }
+   /* update the lengths */
+   if (dst_sbuf) {
+      dst_sbuf->len += need_bytes;
+   }
+   else {
+      SvCUR_set(dst_sv, SvCUR(dst_sv) + need_bytes);
+      SvSETMAGIC(dst_sv);
+   }
+   return true;
+}
+
+/* Append DER length octets (ASN.1 Length field, definite form only).
+ *
+ * DER rules:
+ *  - If len <= 127: single byte [0x00..0x7F]
+ *  - Else: first byte is 0x80 | N, where N is # of following length bytes (big-endian),
+ *          and the length must be encoded in the minimal number of bytes (no leading 0x00).
+ *
+ * This function encodes ONLY the length field (not tag/value).
+ */
+void
+secret_buffer_append_uv_asn1_der_length(secret_buffer *buf, UV val) {
+   dTHX;
+   int enc_len = 1;
+   U8 *pos;
+   if (val > 127) {
+      /* Determine minimal number of bytes needed to represent len in base-256. */
+      UV tmp = val;
+      while (tmp) {
+         enc_len++;
+         tmp >>= 8;
+      }
+   }
+   /* In BER/DER, the long-form initial octet has 7 bits of length-of-length.
+    * 0x80 is indefinite length (forbidden in DER), 0xFF would mean 127 length bytes.
+    * With 64-bit UV enc_len will never exceed 9.
+    */
+   ASSUME(enc_len < 127);
+   secret_buffer_set_len(buf, buf->len + enc_len);
+   pos= buf->data + buf->len - 1;
+   if (val <= 127) {
+      *pos = (U8) val;
+   } else {
+      UV tmp = val;
+      /* Write the length big-endian into enc[1..n]. */
+      while (tmp) {
+         *pos-- = (U8)(tmp & 0xFF);
+         tmp >>= 8;
+      }
+      *pos= (U8) (0x80 | (U8)(enc_len-1));
+   }
+}
+
+/* Parse ASN.1 DER Length (definite form only) */
+bool
+secret_buffer_parse_uv_asn1_der_length(secret_buffer_parse *parse, UV *out) {
+   /* Work on a local cursor so we can roll back on failure */
+   U8 *pos = parse->pos;
+   U8 *lim = parse->lim;
+   UV result;
+   int n;
+
+   if (pos >= lim) {
+      parse->error = "unexpected end of buffer";
+      return false;
+   }
+
+   result = *pos++;
+
+   /* If 0..127, the byte is the length value itself, otherwise it is the number of octets
+    * to read following that byte. */
+   if ((result & 0x80)) {
+      int n = result & 0x7F;
+      /* 0x80 means indefinite length (BER/CER), forbidden in DER */
+      if (n == 0) {
+         parse->error = "ASN.1 DER indefinite length not allowed";
+         return false;
+      }
+      /* Number of octets should be smallest possible encoding, so if it is larger than size_t
+       * don't even bother trying to decode it.
+       */
+      if (n > sizeof(UV)) {
+         parse->error = "ASN.1 DER length too large for perl UV";
+         return false;
+      }
+      /* ensure we have that many bytes */
+      if ((size_t)(lim - pos) < (size_t)n) {
+         parse->error = "unexpected end of buffer";
+         return false;
+      }
+      /* DER minimal encoding rules:
+       * - no leading 0x00 in the length octets
+       * - long form must not be used for lengths <= 127
+       */
+      lim= pos + n;
+      result= *pos++;
+      if (!result) {
+         parse->error = "ASN.1 DER length has leading zero (non-minimal)";
+         return false;
+      }
+      /* Parse remaining bytes of big-endian unsigned integer */
+      while (pos < lim)
+         result= (result << 8) | *pos++;
+      /* DER should not use 1-byte encoding if it would have fit in the initial byte */
+      if (result < 0x80) {
+         parse->error = "ASN.1 DER length should use short form (non-minimal)";
+         return false;
+      }
+   }
+   if (out) *out = result;
+   parse->pos = pos;
+   parse->error = NULL;
+   return true;
+}
+
+/* Append canonical unsigned Base128, Little-Endian
+ *
+ * Rules:
+ *  - 7 data bits per byte, little-endian (least significant group first)
+ *  - High bit 0x80 set on all bytes except the final byte
+ *  - Canonical/minimal: stop as soon as remaining value is 0
+ */
+void
+secret_buffer_append_uv_base128le(secret_buffer *buf, UV val) {
+   dTHX;
+   U8 *pos;
+   int enc_len= 1;
+   UV tmp= val >> 7;
+   while (tmp) {
+      enc_len++;
+      tmp >>= 7;
+   }
+   secret_buffer_set_len(buf, buf->len + enc_len);
+   pos= buf->data + buf->len - enc_len;
+   /* Encode */
+   tmp= val;
+   do {
+      U8 byte = (U8)(tmp & 0x7F);
+      tmp >>= 7;
+      if (tmp)
+         byte |= 0x80;
+      *pos++ = byte;
+   } while (tmp);
+   ASSUME(pos == (U8*)(buf->data + buf->len));
+}
+
+/* Parse Unsigned LittleEndian Base128 (also requiring canonical / minimal encoding) */
+bool
+secret_buffer_parse_uv_base128le(secret_buffer_parse *parse, UV *out) {
+   U8 *pos = parse->pos;
+   U8 *lim = parse->lim;
+   UV result= 0, payload;
+   int shift= 7;
+
+   if (pos >= lim) {
+      parse->error = "unexpected end of buffer";
+      return false;
+   }
+   result= payload= *pos & 0x7F;
+   /* Scan forward looking for the first byte without the continuation flag */
+   while (*pos++ & 0x80) {
+      if (pos >= lim) {
+         parse->error = "unexpected end of buffer";
+         return false;
+      }
+      payload= *pos & 0x7F;
+      if (shift > sizeof(UV)*8 - 7) {
+         /* Do any of the bits overflow? Is the continuation flag set? */
+         if (shift >= sizeof(UV)*8 || (payload >> (sizeof(UV)*8 - shift))) {
+            parse->error = "Base128-LE value overflows perl UV";
+            return false;
+         }
+      }
+      result |= payload << shift;
+      shift += 7;
+   }
+   /* check if the high bits were all zero, meaning an unnecessary byte was encoded */
+   if (!payload && result != 0) {
+      parse->error = "Over-long encoding of Base128-LE";
+      return false;
+   }
+   if (out) *out = result;
+   parse->pos = pos;
+   parse->error = NULL;
+   return true;
+}
+
+/* Append canonical unsigned Base128, Big-Endian
+ *
+ * Rules:
+ *  - 7 data bits per byte, big-endian (most significant group first)
+ *  - High bit 0x80 set on all bytes except the final byte
+ *  - Canonical/minimal: stop as soon as remaining value is 0
+ */
+void
+secret_buffer_append_uv_base128be(secret_buffer *buf, UV val) {
+   dTHX;
+   U8 *pos;
+   int enc_len= 1, shift;
+   UV tmp= val >> 7;
+   while (tmp) {
+      enc_len++;
+      tmp >>= 7;
+   }
+   secret_buffer_set_len(buf, buf->len + enc_len);
+   pos= buf->data + buf->len - enc_len;
+   /* Encode */
+   for (shift= (enc_len-1) * 7; shift >= 0; shift -= 7) {
+      U8 byte = (U8)((val >> shift) & 0x7F);
+      if (shift)
+         byte |= 0x80;
+      *pos++ = byte;
+   }
+   ASSUME(pos == (U8*)(buf->data + buf->len));
+}
+
+/* Parse Unsigned BigEndian Base128 (also requiring canonical / minimal encoding) */
+bool
+secret_buffer_parse_uv_base128be(secret_buffer_parse *parse, UV *out) {
+   U8 *pos = parse->pos;
+   U8 *lim = parse->lim;
+   UV result= 0;
+   int shift= 0;
+
+   if (pos >= lim) {
+      parse->error = "unexpected end of buffer";
+      return false;
+   }
+   /* high-bit payload == 0 with continue bit set is an error. */
+   if (*pos == 0x80) {
+      parse->error = "Over-long encoding of Base128-BE";
+      return false;
+   }
+   result= *pos & 0x7F;
+   while (*pos++ & 0x80) {
+      /* Will existing bits overflow UV when shifted? */
+      if (result >> (sizeof(UV)*8 - 7)) {
+         parse->error = "Base128-BE value overflows perl UV";
+         return false;
+      }
+      if (pos >= lim) {
+         parse->error = "unexpected end of buffer";
+         return false;
+      }
+      result= (result << 7) | (*pos & 0x7F);
+   }
+   if (out) *out = result;
+   parse->pos = pos;
+   parse->error = NULL;
    return true;
 }
 

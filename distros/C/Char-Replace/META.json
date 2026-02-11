@@ -55,7 +55,7 @@
    "provides" : {
       "Char::Replace" : {
          "file" : "lib/Char/Replace.pm",
-         "version" : "0.006"
+         "version" : "0.007"
       }
    },
    "release_status" : "stable",
@@ -69,7 +69,7 @@
          "web" : "https://github.com/atoomic/Char-Replace.git"
       }
    },
-   "version" : "0.006",
+   "version" : "0.007",
    "x_Dist_Zilla" : {
       "perl" : {
          "version" : "5.040000"
@@ -396,7 +396,7 @@
                   "branch" : null,
                   "changelog" : "Changes",
                   "signed" : 0,
-                  "tag" : "v0.006",
+                  "tag" : "v0.007",
                   "tag_format" : "v%V",
                   "tag_message" : "v%V"
                },

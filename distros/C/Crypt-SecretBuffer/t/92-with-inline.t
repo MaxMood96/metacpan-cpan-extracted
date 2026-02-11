@@ -35,6 +35,13 @@ int test(secret_buffer *buf) {
    return buf->len;
 }
 
+SV *make_span(secret_buffer *buf, UV pos, UV lim) {
+   SV *s= secret_buffer_span_new_obj(buf, pos, lim, 0);
+   /* Return value of SV expects a positive refcount, but have a mortal */
+   SvREFCNT_inc(s);
+   return s;
+}
+
 END_C
 
 1;
@@ -42,6 +49,16 @@ END_PM
    {
       my $secret= secret(length => 10);
       is( TestSecretBufferWithInline::test($secret), 10, 'called Inline fn on SecretBuffer' );
+      is( TestSecretBufferWithInline::make_span($secret, 1, 2),
+         object {
+            call buffer => $secret;
+            call pos => 1;
+            call lim => 2;
+            call len => 1;
+            call encoding => 'ISO-8859-1';
+         },
+         'secret_buffer_span_new_obj'
+      );
    }
    else {
       diag $@;

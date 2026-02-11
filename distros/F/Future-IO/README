@@ -130,11 +130,11 @@ METHODS
 
     Returns a Future that will become done when the indicated IO operations
     can be performed on the given filehandle. $events should be a bitfield
-    of one or more of the POSIX POLL* constants, such as POLLIN or POLLOUT.
-    The result of the future will be a similar bitfield, indicating which
-    operations may now take place. If the POLLHUP, POLLERR or POLLNVAL
-    events happen, they will always be reported; you do not need to request
-    these specifically.
+    of one or more of the POSIX POLL* constants, such as POLLIN, POLLOUT or
+    POLLPRI. The result of the future will be a similar bitfield,
+    indicating which operations may now take place. If the POLLHUP, POLLERR
+    or POLLNVAL events happen, they will always be reported; you do not
+    need to request these specifically.
 
     Multiple outstanding futures may be enqueued for the same filehandle.
     When an event happens, only the first outstanding future that is
@@ -358,14 +358,23 @@ METHODS
     currently-known CPAN modules which provide implementations, and
     attempts them in a given preference order.
 
-      1. First, any of the modules that attempt to wrap other event systems
+    The environment variable PERL_FUTURE_IO_IMPL offers further control of
+    the behaviour of this method. Its value should be a comma-separated
+    list of implementation names to be attempted, in preference to any of
+    the others. Names prefixed with a hyphen will be skipped entirely by
+    any attempt.
+
+      1. First, if PERL_FUTURE_IO_IMPL is set, any of the names given are
+      tried, in order.
+
+      2. Then any of the modules that attempt to wrap other event systems
       such as UV or Glib are attempted if it is detected that the other
       event system is already loaded.
 
-      2. If none of these were successful, next it attempts any OS-specific
+      3. If none of these were successful, next it attempts any OS-specific
       modules based on the OS name (given by $^O).
 
-      3. Finally, a list of other generic modules is attempted, which also
+      4. Finally, a list of other generic modules is attempted, which also
       includes any of the wrapper implementations that can be started
       independently.
 

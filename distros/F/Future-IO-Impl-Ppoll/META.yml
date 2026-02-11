@@ -17,14 +17,14 @@ name: Future-IO-Impl-Ppoll
 provides:
   Future::IO::Impl::Ppoll:
     file: lib/Future/IO/Impl/Ppoll.pm
-    version: '0.03'
+    version: '0.04'
 requires:
   Future: '0'
-  Future::IO::ImplBase: '0.17'
+  Future::IO::ImplBase: '0.19'
   IO::Ppoll: '0'
   Struct::Dumb: '0'
   perl: '5.020'
 resources:
   license: http://dev.perl.org/licenses/
-version: '0.03'
+version: '0.04'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

@@ -12,7 +12,7 @@
  *    matched.  For 'multi', this means it returns the span *until* the first
  *    match of the pattern begins.
  */
-bool SB_PARSE_MATCH_STR_FN(secret_buffer_parse *parse, SB_PATTERN_EL_TYPE *pattern, int pattern_len, int flags) {
+bool SB_PARSE_MATCH_STR_FN(secret_buffer_parse *parse, SB_PATTERN_EL_TYPE *pattern, size_t pattern_len, int flags) {
    bool reverse=  0 != (flags & SECRET_BUFFER_MATCH_REVERSE);
    bool multi=    0 != (flags & SECRET_BUFFER_MATCH_MULTI);
    bool anchored= 0 != (flags & SECRET_BUFFER_MATCH_ANCHORED);

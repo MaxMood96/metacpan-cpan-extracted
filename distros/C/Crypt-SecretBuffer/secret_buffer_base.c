@@ -252,7 +252,6 @@ IV secret_buffer_append_random(secret_buffer *buf, size_t n, unsigned flags) {
  */
 IV secret_buffer_append_sysread(secret_buffer *buf, PerlIO *stream, size_t count) {
    dTHX;
-   int ret;
    int stream_fd= PerlIO_fileno(stream);
    if (stream_fd < 0)
       croak("Handle has no system file descriptor (fileno)");
@@ -279,7 +278,7 @@ IV secret_buffer_append_sysread(secret_buffer *buf, PerlIO *stream, size_t count
    }
 #else
    {
-      ret= read(stream_fd, buf->data + buf->len, count);
+      int ret= read(stream_fd, buf->data + buf->len, count);
       if (ret > 0)
          secret_buffer_set_len(buf, buf->len + ret);
       return ret;
@@ -317,21 +316,21 @@ IV secret_buffer_syswrite(secret_buffer *buf, PerlIO *stream, IV offset, IV coun
 }
 
 /* Read any existing buffered data from Perl, and sysread otherwise.
- * There's not much point if the handle is virtual because the secret will be
- * elsewhere in memory, but 
+ * There's not much point if the handle is virtual, because the secret will be
+ * elsewhere in memory, but this gives the user flexibility.
  */
 IV secret_buffer_append_read(secret_buffer *buf, PerlIO *stream, size_t count) {
    dTHX;
    int stream_fd= PerlIO_fileno(stream);
-   int n_buffered= PerlIO_get_cnt(stream);
+   SSize_t n_buffered= PerlIO_get_cnt(stream);
    char *perlbuffer;
    /* if it's a virtual handle, or if perl has already buffered some data, then read from PerlIO */
    if (stream_fd < 0 || n_buffered > 0) {
-      if (!n_buffered) {
+      if (n_buffered <= 0) {
          if (PerlIO_fill(stream) < 0)
             return -1;
          n_buffered= PerlIO_get_cnt(stream);
-         if (!n_buffered)
+         if (n_buffered <= 0)
             return 0;
       }
       /* Read from Perl's buffer, then wipe it if safe to do so */

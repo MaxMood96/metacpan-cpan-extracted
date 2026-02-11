@@ -34,7 +34,8 @@ END
        'parse'
    ) or diag explain $pem;
 
-   is( $pem->serialize->memcmp($buf), 0, 'serialize' );
+   is( $pem->serialize->memcmp($buf), 0, 'serialize' )
+      or note dump_span($pem->serialize);
 };
 
 # I frequently encounter PEM data where the END marker lacks a newline.
@@ -92,7 +93,7 @@ qwertyuiopqwertyuiop
 -----END CUSTOM FORMAT-----
 END
 
-   my $pem= Crypt::SecretBuffer::PEM->parse($buf->span);
+   my $pem= Crypt::SecretBuffer::PEM->parse($buf->span, secret_headers => 1);
    is( $pem,
        object {
          call label => 'CUSTOM FORMAT';
@@ -106,6 +107,25 @@ END
        'parse'
    ) or diag explain $pem;
 
+   $pem= Crypt::SecretBuffer::PEM->parse($buf->span);
+   is( $pem,
+       object {
+         call label => 'CUSTOM FORMAT';
+         call header_kv => [ 'Param1', 1, 'x', 2 ];
+         call headers => { Param1 => 1, x => 2 };
+         call content => object {
+            call [ memcmp => "qwertyuiopqwertyuiop\n" ], 0;
+            call [ cmp => "\xab\x07\xab\xb7\x2b\xa2\xa2\x9a\xb0\x7a\xbb\x72\xba\x2a\x29" ], 0;
+         };
+       },
+       'parse'
+   ) or diag explain $pem;
+
+   is( $pem->serialize->memcmp($canonical), 0, 'serialize' )
+      or diag dump_span($pem->serialize);
+   # Try again with nonsecret content
+   $pem->content("\xab\x07\xab\xb7\x2b\xa2\xa2\x9a\xb0\x7a\xbb\x72\xba\x2a\x29");
+   $pem->header_kv->[1]= '1';
    is( $pem->serialize->memcmp($canonical), 0, 'serialize' )
       or diag dump_span($pem->serialize);
 };

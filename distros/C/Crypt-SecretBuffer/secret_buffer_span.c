@@ -48,3 +48,29 @@ static SV *new_mortal_span_obj(pTHX_ secret_buffer *buf, UV pos, UV lim, int enc
    span->encoding= encoding;
    return ref;
 }
+
+/* Public API: Return a mortal ref to a new SecretBuffer::Span */
+extern SV *secret_buffer_span_new_obj(secret_buffer *buf, size_t pos, size_t lim, int encoding) {
+   dTHX;
+   return new_mortal_span_obj(aTHX_ buf, pos, lim, encoding);
+}
+
+/* Public API: Return a mortal ref to a new SecretBuffer::Span using fields of a parse */
+extern SV *secret_buffer_span_new_obj_from_parse(secret_buffer_parse *src) {
+   dTHX;
+   U8 *sbuf_start, *sbuf_lim;
+   if (!src->sbuf)
+      croak("parse struct lacks secret_buffer reference");
+   /* sanity check on pos and lim since this is about to subtract pointers */
+   sbuf_start= src->sbuf->data;
+   sbuf_lim= sbuf_start + src->sbuf->len;
+   if (src->pos < sbuf_start || src->pos > sbuf_lim)
+      croak("parse->pos out of bounds");
+   if (src->pos_bit)
+      croak("parse->pos is not on a byte boundary");
+   if (src->lim < src->pos || src->lim > sbuf_lim)
+      croak("parse->lim out of bounds");
+   if (src->lim_bit)
+      croak("parse->lim is not on a byte boundary");
+   return new_mortal_span_obj(aTHX_ src->sbuf, src->pos - sbuf_start, src->lim - sbuf_start, src->encoding);
+}

@@ -39,15 +39,15 @@
    "provides" : {
       "Future::IO" : {
          "file" : "lib/Future/IO.pm",
-         "version" : "0.19"
+         "version" : "0.20"
       },
       "Future::IO::ImplBase" : {
          "file" : "lib/Future/IO/ImplBase.pm",
-         "version" : "0.19"
+         "version" : "0.20"
       },
       "Future::IO::System" : {
          "file" : "lib/Future/IO/System.pm",
-         "version" : "0.19"
+         "version" : "0.20"
       }
    },
    "release_status" : "stable",
@@ -56,6 +56,6 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.19",
+   "version" : "0.20",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

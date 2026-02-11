@@ -136,7 +136,7 @@ The optional I<-speakericon> argument can be set to reverse the artist
 (channel) icon and artist image, usually resulting in the artist icon being a 
 photo of the preacher, instead of his church's thumbnail icon.
 
-DEFAULT I<-quality> is 0 (I<false>): Don't reverse the artist icon and image.
+DEFAULT I<-speakericon> is 0 (I<false>): Don't reverse the artist icon and image.
 
 The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  
 If 1 then only secure ("https://") streams will be returned.

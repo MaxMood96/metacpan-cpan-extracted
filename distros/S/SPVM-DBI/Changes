@@ -1,5 +1,11 @@
 Revision history for SPVM::DBI
 
+0.003 2026-02-11
+  [Incompatible Changes]
+    * Rename the fetchrow_array method to fetch and unify data fetching into this single method.
+  [New Features]
+    * Enhance the fetch method to support buffer reuse (zero-allocation) by adding bind_columns and ret_row arguments.
+  
 0.002 2026-02-10
   [New Features]
     - Add the following modules with implementation and documentation:

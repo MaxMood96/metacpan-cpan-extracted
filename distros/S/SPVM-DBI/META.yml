@@ -23,5 +23,5 @@ requires:
   SPVM::Regex: '0.258'
 resources:
   repository: https://github.com/yuki-kimoto/SPVM-DBI.git
-version: '0.002'
+version: '0.003'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

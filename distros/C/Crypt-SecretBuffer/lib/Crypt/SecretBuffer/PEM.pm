@@ -1,16 +1,16 @@
 package Crypt::SecretBuffer::PEM;
 # VERSION
 # ABSTRACT: Parse PEM format from a SecretBuffer
-$Crypt::SecretBuffer::PEM::VERSION = '0.017';
+$Crypt::SecretBuffer::PEM::VERSION = '0.018';
 use strict;
 use warnings;
 use Carp;
 use Scalar::Util qw( blessed );
-use Crypt::SecretBuffer qw/ secret MATCH_NEGATE MATCH_MULTI ISO8859_1 BASE64 /;
+use Crypt::SecretBuffer qw/ secret span MATCH_NEGATE MATCH_MULTI ISO8859_1 BASE64 /;
 
 
 sub parse {
-   my ($class, $span)= @_;
+   my ($class, $span, %options)= @_;
    while (my $begin= $span->scan("-----BEGIN ")) {
       $span->pos($begin->lim);
       my $label= $span->parse(qr/[A-Z0-9 ]+/);
@@ -38,14 +38,19 @@ sub parse {
       my @headers;
       while (my $sep_or_eol= $inner->scan(qr/[:\n]/)) {
          if ($sep_or_eol->starts_with(':')) {
-            my $name;
+            my ($name, $value);
             $inner->clone(lim => $sep_or_eol->pos)->copy_to($name);
             $inner->pos($sep_or_eol->lim);
             my $eol= $inner->scan("\n") or die "BUG"; # inner ends with "\n", checked above
-            my $value= $inner->clone(lim => $eol->pos);
-            $value->ltrim(' '); # remove one optional space character
+            my $val_span= $inner->clone(lim => $eol->pos)
+               ->ltrim(' '); # remove one optional space character following ':'
             $inner->pos($eol->lim);
-            push @headers, $name, $value;
+            if ($options{secret_headers}) {
+               push @headers, $name, $val_span;
+            } else {
+               $val_span->copy_to($value);
+               push @headers, $name, $value;
+            }
          }
          else {
             # If any headers were found, there needs to be a blank line
@@ -71,9 +76,9 @@ sub parse {
 }
 
 sub parse_all {
-   my ($class, $span)= @_;
+   my ($class, $span, %options)= @_;
    my @pem;
-   while (my $pem= $class->parse($span)) {
+   while (my $pem= $class->parse($span, %options)) {
       push @pem, $pem;
    }
    return @pem;
@@ -110,21 +115,21 @@ sub serialize {
    if (@header_kv) {
       while (@header_kv) {
          my ($k, $v)= splice @header_kv, 0, 2;
-         # Sanity checks, key cannot contain control chars or :
-         croak "PEM Header name cannot contain ':' or control characters"
+         # Sanity checks, key cannot contain control chars or ':'
+         croak "PEM Header name '$k' contains ':' or control characters"
             if $k =~ /[\0-\x1F:]/;
-         croak "PEM value cannot contain newline"
+         croak "PEM header value for '$k' must be defined"
+            unless defined $v;
+         croak "PEM header value for '$k' contains a newline"
             if blessed($v) && $v->can('scan')? $v->scan("\n") : $v =~ /\n/;
          $out->append("$k: ")->append($v)->append("\n");
       }
       $out->append("\n"); # empty line terminates headers
    }
-   if ($self->content->encoding == BASE64) {
-      $out->append($self->content);
-   } else {
-      $out->append($self->content->copy(encoding => BASE64));
-   }
-   $out->append('-----END '.$self->label."-----\n");
+   my $content_span= span($self->content);
+   $content_span->append_to($out, encoding => BASE64);
+   $out->append(($content_span->length? "\n" : '')
+                .'-----END '.$self->label."-----\n");
    return $out;
 }
 
@@ -164,7 +169,7 @@ payload remain inside secret Span objects.
 
 =head2 parse
 
-  my $pem= Crypt::SecretBuffer::PEM->parse($span);
+  my $pem= Crypt::SecretBuffer::PEM->parse($span, %options);
 
 Parse the next PEM block found in the L<Span|Crypt::SecretBuffer::Span>.  The span is updated to
 begin on the line following the PEM block.  If no PEM block is found, the span object remains
@@ -173,9 +178,20 @@ unchanged.
 Invalid PEM blocks (such as mismatched BEGIN/END markers) are ignored, as well as any text
 outside of the markers.
 
+Options:
+
+=over
+
+=item secret_headers
+
+Whether the values of the PEM headers should be stored in L<Crypt::SecretBuffer::Span> objects.
+Default is false.
+
+=back
+
 =head2 parse_all
 
-  my @pem_blocks= Crypt::SecretBuffer::PEM->parse_all($span);
+  my @pem_blocks= Crypt::SecretBuffer::PEM->parse_all($span, %options);
 
 A file can contain more than one PEM block (such as a SSL certificate chain, and its key)
 This just calls L</parse> in a loop until no more PEM blocks are found.
@@ -228,7 +244,7 @@ falling back to the L</headers> hashref.
 
 =head1 VERSION
 
-version 0.017
+version 0.018
 
 =head1 AUTHOR
 
@@ -236,7 +252,7 @@ Michael Conrad <mike@nrdvana.net>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2025 by Michael Conrad.
+This software is copyright (c) 2026 by Michael Conrad.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

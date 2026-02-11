@@ -1,11 +1,13 @@
-#!/usr/bin/env perl
+#!perl
+use 5.008003;
 use strict;
 use warnings;
-use Test::More tests => 2;
+use Test::More;
+
+plan tests => 1;
 
 BEGIN {
-    use_ok('Bored') or BAIL_OUT("Cannot load Bored");
+    use_ok( 'Bored' ) || print "Bail out!\n";
 }
 
-diag("Testing Bored $Bored::VERSION");
-ok($Bored::VERSION, "version is defined: $Bored::VERSION");
+diag( "Testing Bored $Bored::VERSION, Perl $], $^X" );

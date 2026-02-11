@@ -23,6 +23,7 @@ t/01_destination.bats
 t/02_passthru.bats
 t/03_oneliner.bats
 t/04_whitespace.bats
+t/05_permute.bats
 t/10_repeat.bats
 t/Makefile
 t/test_helper.bash

@@ -1,5 +1,14 @@
 Revision history for Future-IO-Impl-Ppoll
 
+0.04    2026-02-10
+        [CHANGES]
+         * Print a warning if the event system is recursed into
+
+        [BUGFIXES]
+         * Depend on Future::IO v0.19 to ensure we get the POLL* constants
+         * Improved handling of polling around closed filehandles
+         * Mask revents bits given to pollers to only those they asked for
+
 0.03    2026-01-18
         [CHANGES]
          * Implement the new `->poll` method of Future::IO v0.19

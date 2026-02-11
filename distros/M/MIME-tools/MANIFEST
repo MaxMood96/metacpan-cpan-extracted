@@ -160,6 +160,8 @@ testmsgs/double-semicolon.msg
 testmsgs/double-semicolon2.msg
 testmsgs/dup-names.msg
 testmsgs/dup-names.ref
+testmsgs/empty-boundary.msg
+testmsgs/empty-quoted-boundary.msg
 testmsgs/empty-preamble.msg
 testmsgs/frag.msg
 testmsgs/german-qp.msg
@@ -199,6 +201,7 @@ testmsgs/russian.ref
 testmsgs/simple.msg
 testmsgs/simple.ref
 testmsgs/ticket-60931.msg
+testmsgs/triple-boundary-one-empty.msg
 testmsgs/utf8-bom-at-start.msg
 testmsgs/uu-junk-extracted.ref
 testmsgs/uu-junk-target.msg

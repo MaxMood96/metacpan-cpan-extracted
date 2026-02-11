@@ -1,6 +1,25 @@
+5.517	  2026-02-10  Dianne Skoll <dianne@skoll.ca>
+
+	* VERSION 5.517 RELEASED
+
+	* Add a missing test message file that was causing tests to fail.
+
+5.516	  2026-02-10  Dianne Skoll <dianne@skoll.ca>
+
+	* VERSION 5.516 RELEASED
+
+	* Handle MIME parameters of the form param= better (ie,
+	  a parameter with no value at all.)  It's treated the
+	  same as param="" rather than aborting the parse.
+
+	* Diagnose additional types of malformed MIME as ambiguous.
+	  Specifically, an empty boundary parameters like boundary= or
+	  boundary="" is treated as ambiguous.  Thanks to Stoiko Ivanov
+	  <s.ivanov@proxmox.com> for pointing out this missing case.
+
 5.515	  2024-04-24  Dianne Skoll <dianne@skoll.ca>
 
-	* VERSION 5.514 RELEASED
+	* VERSION 5.515 RELEASED
 
 	* Fix the "version" setting in META.yml.  There are no other changes
 	  since 5.514.

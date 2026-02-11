@@ -4,7 +4,7 @@ StreamFinder::Podchaser - Fetch actual raw streamable URLs on podchaser.com
 
 =head1 AUTHOR
 
-This module is Copyright (C) 2023-2024 by
+This module is Copyright (C) 2023-2026 by
 
 Jim Turner, C<< <turnerjw784 at yahoo.com> >>
 		
@@ -94,7 +94,7 @@ file.
 
 =head1 DESCRIPTION
 
-StreamFinder::Podchaser accepts a valid podcast ID or URL on 
+StreamFinder::Podchaser accepts a valid podcast or episode ID or URL on 
 Podchaser.com and returns the actual stream URL(s), title, and cover art icon.  
 The purpose is that one needs one of these URLs in order to have the option to 
 stream the podcast in one's own choice of media player software rather than 
@@ -117,17 +117,17 @@ One or more stream URLs can be returned for each podcast.
 Accepts a podchaser.com podcast-ID, episode-ID or URL and creates and returns a 
 a new podcast object, or I<undef> if the URL is not a valid podcast, or no 
 streams are found.  The URL can be the full URL, ie. 
-https://www.podchaser.com/podcasts/B<podcast-id>/episodes/B<episode-id>, 
-https://www.podchaser.com/podcasts/B<podcast-id>, or just 
+I<https://www.podchaser.com/podcasts/>B<podcast-id>I</episodes/>B<episode-id>, 
+I<https://www.podchaser.com/podcasts/>B<podcast-id>, or just 
 B<podcast-id/episode-id> or B<podcast-id>.  I do not (yet) know how to fetch 
 a podchaser.com episode with just the I<episode-ID>, though it IS legal to just 
 supply the numeric part of episode-IDs 
 (as long as you also have the podcast-ID).
 
 Some other URL formats also seem to work well, such as:  
-https://www.podchaser.com/creators/B<creator-id> and 
-https://www.podchaser.com/creators/B<creator-id>/appearances (both formats are 
-podcast pages (multiple episodes).
+I<https://www.podchaser.com/creators/>B<creator-id> and 
+I<https://www.podchaser.com/creators/>B<creator-id>I</appearances: (both 
+formats are podcast pages (multiple episodes).
 
 The optional I<-notrim> argument can be either 0 or 1 (I<false> or I<true>).  
 If 0 (I<false>) then stream URLs are trimmed of excess "ad" parameters 
@@ -306,10 +306,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-Podchaser>
 
 L<http://annocpan.org/dist/StreamFinder-Podchaser>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-Podchaser>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder-Podchaser/>
@@ -318,7 +314,7 @@ L<http://search.cpan.org/dist/StreamFinder-Podchaser/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2023-2024 Jim Turner.
+Copyright 2023-2026 Jim Turner.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the the Artistic License (2.0). You may obtain a
@@ -388,6 +384,7 @@ sub new
 		}
 	}
 
+	my $baseURL = 'https://www.podchaser.com';
 	$self->{'id'} = '';
 	$self->{'_podcast_id'} = '';
 	(my $url2fetch = $url) =~ s#\/$##;
@@ -403,13 +400,16 @@ sub new
 	my $isEpisode;
 
 TRYIT:
-	if ($url2fetch =~ m#^https?\:\/\/#) {
+	if ($url2fetch =~ m#^(https?\:\/\/[^\/]+)#) {
+		$baseURL = $1;
 		$url2fetch =~ s#\/episodes\/recent$##;  #"recent" IS SPECIAL CASE, TREAT AS PODCAST PAGE!:
 		if ($url2fetch =~ m#\/episodes?\/(.+)$#) {
-			$self->{'id'} = $1;
+			($self->{'id'} = $1) =~ s#^[^\d]+##;
+			($self->{'_podcast_id'} = $1) =~ s#^[^\d]+##
+					if ($url2fetch =~ m#\/podcasts?\/([^\/]+)#);
 			$isEpisode = 1;
 		} elsif ($url2fetch =~ m#\/([^\/]+)$#) {
-			$self->{'id'} = $1;
+			$self->{'id'} = $self->{'_podcast_id'} = $1;
 			$isEpisode = 0;
 			$url2fetch .= '/episodes/recent';  #NOW REQUIRED TO GET ANYTHING FROM PODCAST PAGES:
 		}
@@ -418,12 +418,15 @@ TRYIT:
 		$isEpisode = ($url2fetch =~ m#\/#) ? 1 : 0;
 		if ($isEpisode) {
 			my ($podcastID, $episodeID) = split(m#\/#, $self->{'id'});
-			$url2fetch = "https://www.podchaser.com/podcasts/${podcastID}/episodes/${episodeID}";
-			$self->{'id'} = $episodeID;
+			$url2fetch = "$baseURL/podcasts/${podcastID}/episodes/${episodeID}";
+			($self->{'id'} = $episodeID) =~ s#^[^\d]+##;
+			($self->{'_podcast_id'} = $podcastID) =~ s#^[^\d]+##;
 		} else {
-			$url2fetch = "https://www.podchaser.com/podcasts/$$self{'id'}/episodes/recent";
+			$url2fetch = "$baseURL/podcasts/$$self{'id'}/episodes/recent";
+			$self->{'id'} =~ s#^[^\d]+##;
 		}
 	}
+	print STDERR "--ID=$$self{'id'}= fetchURL=$url2fetch= isEP=$isEpisode=\n"  if ($DEBUG);
 	return undef  unless ($self->{'id'});  #INVALID ID/URL!
 
 	$html = '';
@@ -437,14 +440,17 @@ TRYIT:
 	print STDERR "-1: html=$html=\n"  if ($DEBUG > 1);
 	return undef  unless ($html);  #STEP 1 FAILED, INVALID PODCAST URL, PUNT!
 
-	$html =~ s/\\u00([0-9A-Fa-f]{2})/chr(hex($1))/egs;
-	$html =~ s#\\##gs;
-
 	$self->{'genre'} = 'Podcast';  #DEFAULT.
 	print STDERR "---ID=".$self->{'id'}."= tried=$tried=\n"  if ($DEBUG);
 	if ($isEpisode) {   #EPISODE PAGE (NOW GET THE DETAILED EPISODE METADATA & WE'RE DONE):
 		print STDERR "-----WE'RE AN EPISODE PAGE: ID=".$self->{'id'}."!\n"  if ($DEBUG);
-		$self->{'title'} = $1  if ($html =~ m#\"\,\"name\"\:\"([^\"]+)#s);
+		$html =~ s#\\\"description\_sanitized\\\"\:##s;  #SKIP PODCAST DESCRIPTION!
+		($self->{'description'} = $1) =~ s/[\\]+\"/\"/gs
+				if ($html =~ m#\\\"description\_sanitized\\\"\:\\\"(.+?)\\\"\,\\\"\w#);
+				
+		$html =~ s/\\u00([0-9A-Fa-f]{2})/chr(hex($1))/egs;
+		$html =~ s#\\##gs;
+
 		$self->{'title'} ||= $1  if ($html =~ m#\<h1\s+class\=\"[^\"]*\"\s+title\=\"[^\>]+\>([^\<]+)#s);
 		$self->{'iconurl'} = $1  if ($html =~ m# (?:name|itemProp|property)\=\"image\"\s+content\=\"([^\"]+)#s);
 		$self->{'iconurl'} ||= $1  if ($html =~ m# property\=\"(?:ogg|twitter)\:image(?:\:src)?\"\s+content\=\"([^\"]+)#s);
@@ -471,9 +477,8 @@ TRYIT:
 			$self->{'created'} = $1;
 			$self->{'year'} = ($self->{'created'} =~ /(\d\d\d\d)/) ? $1 : '';
 		}
-		$self->{'description'} = $1
-				if ($html =~ m#\"id\"\:$$self{'id'}\,\"creator_count\"\:\d+\,\"exclusive_to\"\:(?:null|\"[^\"]*\")\,\"description\":\"([^\"]+)#s);
 		unless ($self->{'description'}) {
+			#last resort for description:
 			$self->{'description'} = $1  if ($html =~ m# (?:name|itemProp|property)\=\"description\"\s+content\=\"([^\"]+)#s);
 			$self->{'description'} =~ s/\x{2026}$/\.\.\.)/;
 			$self->{'description'} ||= $self->{'title'};
@@ -514,54 +519,29 @@ TRYIT:
 		#Podchaser.com PODCAST PAGES HAVE THE LATEST AND/OR FEATURED EPISODE AT THE TOP, BUT OFTEN
 		#(BUT NOT ALWAYS) REPEATED AGAIN IN THE EPISODE LIST:
 		#THE "LATEST EPISODE" MAY NOT ALWAYS BE THE LATEST EITHER, GO FIGURE! :/
+		my $firstEp = 0;
 		foreach my $special (qw(latest featured)) {
-			if ($html =~ s#\"${special}_episode\"\:\{([^\}]+)\}##s) {
-				my $latest = $1;
-				my @streams = ();
-				foreach my $av (qw(video audio)) {
-					while ($latest =~ s#\"${av}_url\"\:\"([^\"]+)##s) {
-						my $streamURL = uri_unescape($1);
-						next  if ($self->{'secure'} && $streamURL !~ /^https/o);
-
-						$streamURL =~ s/\.(mp3|m3u8|pls)\?.*$/\.$1/  unless ($self->{'notrim'});   #STRIP OFF EXTRA GARBAGE PARMS, COMMENT OUT IF STARTS FAILING!
-						push @streams, $streamURL;
-					}
-				}
-				next  unless ($#streams >= 0);  #SKIP EPISODE IF NO STREAMS.
-
-				#EPISODES HERE HAVE INCOMPLETE DATA, SO SCRAPE ENOUGH FOR PLAYLIST ENTRIES,
-				#SAVE IN THE HASH, AND HOPE THEY SHOW UP AGAIN IN THE MAIN EPISODE-LIST,
-				#THAT WAY, THEY'LL STILL APPEAR IN THE PLAYLIST, AND IF THE MAIN LIST IS
-				#EMPTY, WE CAN USE THIS AND FETCH THE REST OF THE DATA VIA THEN FETCHING
-				#THE EPISODE PAGE:
-				my $created = $1  if ($latest =~ m#\"air_date\"\:\"([^\"]+)#s);
-				my $ep1id = $1  if ($latest =~ m#\"id\"\:\"?(\d+)#s);
-				next  unless ($ep1id);  #SKIP EPISODE IF NO EPISODE-ID (SHOULD NOT HAPPEN).
-
-				my $title = $1  if ($latest =~ m#\"title\"\:\"([^\"]+)#s);
-				my $epikey = "$created|$title";
-				print STDERR "---FOUND ($special) EPISODE($created): $title ($streams[0])\n"  if ($DEBUG);
-				$epiHash{$epikey} = "id=$ep1id\x02_complete=0";
-				$epiHash{$epikey} .= "\x02_epiurl=" . $1
-						if ($latest =~ m#\"url\"\:\"([^\"]+)#s);
-				$epiHash{$epikey} .= "\x02streamstr=";
-				foreach my $s (@streams) {
-					$epiHash{$epikey} .= $s . '|';
-				}
-				$epiHash{$epikey} =~ s#\|$##o;
+			if ($html =~ s#\"${special}\_episode\\\"\:\{\\\"id\\\"\:[^\d\-\,]*(\d+)\,\\\"podcast\_id\\\"\:[^\d\-\,]*(\d+)##s) {
+				$firstEp = $1;
+				$self->{'_podcast_id'} = $2;
+				print STDERR "----FOUND $special EPISODE ID=$$self{'_podcast_id'}/$firstEp=!\n"
+						if ($DEBUG);
+				last;
 			}
 		}
-
 		#NOTE:  Podchaser.com HAS AN ABBREVIATED LIST OF MOST RECENT EPISODES SORTED IN REVERSE ORDER
 		#(LATEST|FEATURED, THEN OLDEST TO NEWEST):
-		$html =~ s#^.+?\"episodes\"\:\{##s;
-		while ($html =~ s#^(.+?)\"user_data\"\:\{##so) {
-			my $epihtml = $1;
+		while ($html =~ s#\\\"(\d+)\\\"\:\{\\\"air\_date\\\"\:(.+?)\,\\\"user\_data\\\"##so) {
+			my $epid = $1;
+			next  if ($epid == $firstEp);   #WILL ADD LATER!
+
+			my $epihtml = $2;
 			#SCRAPE THE STREAM(S) FOR EACH EPISODE (WE DON'T KNOW WHICH ONE IS LATEST YET):
 			my @streams = ();
 			foreach my $av (qw(video audio)) {
-				while ($epihtml =~ s#\"${av}_url\"\:\"([^\"]+)##s) {
+				while ($epihtml =~ s#\\\"${av}_url\\\"\:\\\"(.+?)\\\"##s) {
 					my $streamURL = uri_unescape($1);
+					$streamURL	=~ s/(?:\%|\\[ux\%]?00|\bu00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
 					next  if ($self->{'secure'} && $streamURL !~ /^https/o);
 
 					$streamURL =~ s/\.(mp3|m3u8|pls)\?.*$/\.$1/  unless ($self->{'notrim'});   #STRIP OFF EXTRA GARBAGE PARMS, COMMENT OUT IF STARTS FAILING!
@@ -570,48 +550,42 @@ TRYIT:
 			}
 			next  unless ($#streams >= 0);  #SKIP EPISODE IF NO STREAMS.
 
-			my $epid = $1  if ($epihtml =~ m#\"(\d+)\"\:\{#o);
-			next  unless ($epid);  #SKIP EPISODE IF NO EPISODE-ID (SHOULD NOT HAPPEN).
-
 			#SCRAPE THE DETAILED METADATA FOR EACH EPISODE (WE DON'T KNOW WHICH ONE IS LATEST YET):
-			if ($epihtml =~ s#\,\"podcast_id\"\:\"?(\d+)##o) {
-				my $temp;
-				$temp->{'_podcast_id'} = $1;
-				if ($epihtml =~ s#\,\"title\"\:\"([^\"]+)##o) {
-					$temp->{'title'} = $1;
-					next  if ($temp->{'title'} =~ /Date Aired/o);  #HACK!
+			my $temp;
+			$temp->{'_podcast_id'} = ($epihtml =~ s#\,\\\"podcast_id\\\"\:\\\"(\d+)##o)
+					? $1 : $self->{'_podcast_id'};
+			$temp->{'artist'} = ($epihtml =~ s#\,\\\"title\\\"\:\\\"(.+?)\\\"##o)
+					? $1 : $self->{'artist'};
+			$temp->{'id'} = $epid;
+			if ($epihtml =~ s#\,\\\"title\\\"\:\\\"(.+?)\\\"##o) {
+				$temp->{'title'} = $1;
+				next  if ($temp->{'title'} =~ /Date Aired/o);  #HACK!
 
-					foreach my $field (qw(album genre created year iconurl articonurl description)) {
-						$temp->{$field} = '';   #INIT 'EM TO AVOID PERL NANNY WARNINGS.
-					}
-					if ($epihtml =~ m#\"air_date\"\:\"([^\"]+)#so) {
-						$temp->{'created'} = $1;
-						$temp->{'year'} = ($temp->{'created'} =~ /(\d\d\d\d)/o) ? $1 : '';
-					}
-					$temp->{'articonurl'} = $self->{'articonurl'};
-					$temp->{'articonurl'} ||= $1  if ($epihtml =~ s#\:\{\"image\_url\"\:\"([^\"]+)##so);
-					$temp->{'articonurl'} ||= $1  if ($epihtml =~ s#\,\"image\_url\"\:\"([^\"]+)##so);
-					$temp->{'iconurl'} = $1  if ($epihtml =~ s#\,\"image\_url\"\:\"([^\"]+)##so);  #2ND IMAGE!!!
-					$temp->{'album'} = ($epihtml =~ m#\,\"title\"\:\"([^\"]+)#so) ? $1 : $self->{'album'};
-					$temp->{'description'} = $1  if ($epihtml =~ m#\,\"description\"\:\"([^\"]+)#so);
-					$temp->{'genre'} = $1  if ($epihtml =~ m#\,\"text\"\:\"([^\"]+)#so);
-					$temp->{'_complete'} = 1;
-					@{$temp->{'streams'}} = @streams;
-
-					#STORE SCRAPED METADATA IN EPISODE HASH FOR LATER SORTING:
-					my $epikey = "$$temp{'created'}|$$temp{'title'}";
-					$epiHash{$epikey} = "id=$epid";
-					foreach my $field (qw(_complete _podcast_id album genre created year iconurl articonurl description)) {
-						$epiHash{$epikey} .= "\x02${field}=$$temp{$field}";
-					}
-					$epiHash{$epikey} .= "\x02_epiurl=" . $1
-							if ($epihtml =~ m#\"url\"\:\"([^\"]+)#s);
-					$epiHash{$epikey} .= "\x02streamstr=";
-					foreach my $s (@{$temp->{'streams'}}) {
-						$epiHash{$epikey} .= $s . '|';
-					}
-					$epiHash{$epikey} =~ s#\|$##o;
+				foreach my $field (qw(genre created year)) {
+					$temp->{$field} = '';   #INIT 'EM TO AVOID PERL NANNY WARNINGS.
 				}
+				if ($epihtml =~ m#^\\\"(.+?)\\\"#so) {
+					$temp->{'created'} = $1;
+					$temp->{'year'} = ($temp->{'created'} =~ /(\d\d\d\d)/o) ? $1 : '';
+				}
+				$temp->{'genre'} = ($epihtml =~ m#\,\\\"text\\\"\:\\\"(.+?)\\\"#so)
+						? $1 : $self->{'genre'};
+				@{$temp->{'streams'}} = @streams;
+
+				#STORE SCRAPED METADATA IN EPISODE HASH FOR LATER SORTING:
+				my $epikey = "$$temp{'created'}|$$temp{'title'}";
+				print STDERR "---EPIKEY=$epikey=\n"  if ($DEBUG);
+				$epiHash{$epikey} = "id=$epid";
+				foreach my $field (qw(id _podcast_id genre created year)) {
+					$epiHash{$epikey} .= "\x02${field}=$$temp{$field}";
+				}
+				$epiHash{$epikey} .= "\x02_epiurl=" . $1
+						if ($epihtml =~ m#\"url\"\:\"([^\"]+)#s);
+				$epiHash{$epikey} .= "\x02streamstr=";
+				foreach my $s (@{$temp->{'streams'}}) {
+					$epiHash{$epikey} .= $s . '|';
+				}
+				$epiHash{$epikey} =~ s#\|$##o;
 			}
 		}
 
@@ -620,86 +594,50 @@ TRYIT:
 		my ($name, $value);
 		foreach my $epikey (sort { $b cmp $a } keys %epiHash) {
 			my @data = split(/\x02/o, $epiHash{$epikey});
-			if ($first) {  #LOOK FOR 1ST (LATEST) EPISODE W/COMPLETE DATA TO BE THE EPISODE RETURNED:
-				(undef, $self->{'title'}) = split(/\|/o, $epikey);
-				foreach my $f (@data) {
-					($name, $value) = split(/\=/o, $f);
-					$self->{$name} = $value;
-				}
-				$url2fetch = $self->{'_epiurl'};
-				$first = 0  if ($self->{'_complete'});  #STOP LOOKING IF EPISODE HAS COMPLETE DATA.
-				@{$self->{'streams'}} = split(/\|/o, $self->{'streamstr'});
-				unless ($titleHash{$self->{'title'}}) { #ADD TO PLAYLIST UNLESS DUPLICATE TITLE:
-					print STDERR "----1ADD($$self{'title'}) TO PLAYLIST.\n"  if ($DEBUG);
-					push @epiTitles, $self->{'title'};
-					push @epiStreams, ${$self->{'streams'}}[0];
-					$titleHash{$self->{'title'}} = 1;
-				}
-				delete $self->{'streamstr'};
-			} else {  #WE ALREADY HAVE OUR COMPLETE EPISODE, SO JUST ADD REST TO PLAYLIST:
-				my (undef, $epiTitle) = split(/\|/o, $epikey);
-				next  if ($titleHash{$epiTitle});
+			my (undef, $epiTitle) = split(/\|/o, $epikey);
+			next  if ($titleHash{$epiTitle});
 
-				foreach my $f (@data) {
-					($name, $value) = split(/\=/o, $f);
-					if ($name eq 'streamstr') {
-						my ($epiStream) = split(/\|/o, $value);
-						push @epiTitles, $epiTitle;
-						print "----2ADD($epiTitle) TO PLAYLIST.\n"  if ($DEBUG);
-						push @epiStreams, $epiStream;
-						$titleHash{$epiTitle} = 1;
-					} elsif ($name eq 'id') {
-						$self->{'id'} ||= $value;
-					} elsif ($name eq '_epiurl') {
-						($url2fetch = $value) =~ s/\\u00([0-9A-Fa-f]{2})/chr(hex($1))/e;
-						print STDERR "--WILL TRY EPI URL=$url2fetch!=\n"  if ($DEBUG);
-					}
+			foreach my $f (@data) {
+				($name, $value) = split(/\=/o, $f);
+				if ($name eq 'streamstr') {
+					my ($epiStream) = split(/\|/o, $value);
+					push @epiTitles, $epiTitle;
+					push @epiStreams, $epiStream;
+					$titleHash{$epiTitle} = 1;
+				} elsif ($name eq 'id') {
+					$firstEp ||= $value;
+				} elsif ($name eq '_epiurl') {
+					($url2fetch = $value) =~ s/\\u00([0-9A-Fa-f]{2})/chr(hex($1))/e;
+					print STDERR "--WILL TRY EPI URL=$url2fetch!=\n"  if ($DEBUG);
 				}
 			}
 		}
-		if ($DEBUG) {
-			print STDERR "--ep1id=".$self->{'id'}."= title=".$self->{'title'}."= First=".$self->{'Url'}."=\n";
-			for (my $i=0;$i<=$#epiStreams;$i++) {
-				print STDERR "-----EPISODE: $epiTitles[$i] ($epiStreams[$i])\n";
-			}
-		}
-		if ($self->{'id'} && $tried < 1) {   #EMPTY EP. LIST, BUT HAVE LATEST|FEATURED (INCOMPLETE DATA, MUST FETCH EP. PAGE)!:
+		if ($firstEp && $tried < 1) {   #EMPTY EP. LIST, BUT HAVE LATEST|FEATURED (INCOMPLETE DATA, MUST FETCH EP. PAGE)!:
 			++$tried;
 			$url2fetch =~ s#\/episodes\/recent.*$##;
-			$url2fetch .= '/episodes/' . $self->{'id'}
+			$url2fetch .= '/episodes/' . $firstEp
 					unless ($url2fetch =~ m#\/episodes\/#);
 
-			print STDERR "i:No episode list, but have featured episode($$self{'id'}), BUT INCOMPLETE DATA, SO FETCH URL=$url2fetch=\n"  if ($DEBUG);
+			print STDERR "======loopback & FETCH 1ST EPISODE ($url2fetch)\n\n"
+					if ($DEBUG);
 			goto TRYIT;
 		}
-	}
 
+	}
 	$self->{'imageurl'} ||= $self->{'iconurl'};
 	$self->{'artimageurl'} ||= $self->{'articonurl'};
 	$self->{'cnt'} = scalar(@{$self->{'streams'}});
 	$self->{'total'} = $self->{'cnt'};
 	$self->{'Url'} = ($self->{'total'} > 0) ? $self->{'streams'}->[0] : '';
-
-	return undef  unless ($self->{'cnt'} > 0);
+	foreach my $i (qw(title artist album description genre)) {
+		$self->{$i} = HTML::Entities::decode_entities($self->{$i});
+		$self->{$i} = uri_unescape($self->{$i});
+		$self->{$i} =~ s/(?:\%|\\[ux\%]?00|\bu00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
+	}
 
 	#GENERATE EXTENDED-M3U PLAYLIST (NOTE: MAY NOT BE ABLE TO UNTIL USER CALLS $podcast->get('playlist')!):
-	$self->{'playlist'} = "#EXTM3U\n";
-	if ($#epiStreams >= 0) {
-		$self->{'playlist_cnt'} = scalar @epiStreams;
-		for (my $i=0;$i<=$#epiStreams;$i++) {
-
-			last  if ($i > $#epiTitles);
-			$self->{'playlist'} .= "#EXTINF:-1, " . $epiTitles[$i] . "\n";
-			$self->{'playlist'} .= "#EXTART:" . $self->{'artist'} . "\n"
-					if ($self->{'artist'});
-			$self->{'playlist'} .= "#EXTALB:" . $self->{'album'} . "\n"
-					if ($self->{'album'});
-			$self->{'playlist'} .= "#EXTGENRE:" . $self->{'genre'} . "\n"
-					if ($self->{'genre'});
-			$self->{'playlist'} .= $epiStreams[$i] . "\n";
-		}
-	} else {
-		$self->{'playlist_cnt'} = 1;
+	if ($self->{'cnt'} > 0) {
+		$self->{'playlist'} = "#EXTM3U\n";
 		$self->{'playlist'} .= "#EXTINF:-1, " . $self->{'title'} . "\n";
 		$self->{'playlist'} .= "#EXTART:" . $self->{'artist'} . "\n"
 				if ($self->{'artist'});
@@ -708,13 +646,29 @@ TRYIT:
 		$self->{'playlist'} .= "#EXTGENRE:" . $self->{'genre'} . "\n"
 				if ($self->{'genre'});
 		$self->{'playlist'} .= ${$self->{'streams'}}[0] . "\n";
+		$self->{'playlist_cnt'} = 1;
+		if ($#epiStreams >= 0) {
+			$self->{'playlist_cnt'} += scalar @epiStreams;
+			for (my $i=0;$i<=$#epiStreams;$i++) {
+				last  if ($i > $#epiTitles);
+				$self->{'playlist'} .= "#EXTINF:-1, " . $epiTitles[$i] . "\n";
+				$self->{'playlist'} .= "#EXTART:" . $self->{'artist'} . "\n"
+						if ($self->{'artist'});
+				$self->{'playlist'} .= "#EXTALB:" . $self->{'album'} . "\n"
+						if ($self->{'album'});
+				$self->{'playlist'} .= "#EXTGENRE:" . $self->{'genre'} . "\n"
+						if ($self->{'genre'});
+				$self->{'playlist'} .= $epiStreams[$i] . "\n";
+			}
+		}
 	}
 
 	if ($DEBUG) {
 		foreach my $i (sort keys %{$self}) {
 			print STDERR "--KEY=$i= VAL=".$self->{$i}."=\n";
 		}
-		print STDERR "-SUCCESS: 1st stream=".$self->{'Url'}."=\n";
+		print STDERR "-SUCCESS: 1st stream=".$self->{'Url'}."=\n"
+				if ($self->{'total'} > 0);
 	}
 
 	$self->_log($url);

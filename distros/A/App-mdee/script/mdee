@@ -32,7 +32,7 @@ mdee - em·dee, Markdown Easy on the Eyes
          --[no-]nup         nup paged output (default: on)
          --[no-]rule        use Unicode rules for tables (default: on)
      -w  --width=#          fold width (default: 80)
-     -t  --theme=#[,#,...]  color theme(s)
+     -t  --theme=#[,#,...]  color theme(s) (default: hashed)
      -m  --mode=#           light or dark (default: light)
      -B  --base-color=#     override theme's base color
                             (e.g., Ivory, #780043, (120,0,67))
@@ -48,7 +48,7 @@ mdee - em·dee, Markdown Easy on the Eyes
 
 =head1 VERSION
 
-Version 0.14
+Version 0.15
 
 =cut
 
@@ -90,6 +90,17 @@ else
 fi
 unset _share_dir _dev_share
 
+# Print unique elements, preserving order
+uniq_array() {
+    local -A _seen=()
+    local _e
+    for _e in "$@"; do
+        [[ ${_seen[$_e]:-} ]] && continue
+        _seen[$_e]=1
+        printf '%s\n' "$_e"
+    done
+}
+
 # Load a theme file by name
 # Searches user_theme_dir then share_theme_dir, trying .sh and .bash
 load_theme_file() {
@@ -123,9 +134,8 @@ declare -A show=()
 declare -A default=()
 
 declare -A adjust=([light]='=y25' [dark]='=y80')
-
 declare -A OPTS=(
-    [&REQUIRE]=0.7.1 [&USAGE]="$USAGE"
+    [&REQUIRE]=0.7.2 [&USAGE]="$USAGE"
     [         help | h   !         # show help             ]=
     [      version |     !         # show version          ]=
     [        debug | d  +          # debug level           ]=0
@@ -139,7 +149,7 @@ declare -A OPTS=(
     [          nup |               # use nup               ]=_
     [         rule |               # table rule lines      ]=_
     [        width | w  :=i        # fold width            ]=0
-    [        theme | t  @          # color theme           ]=
+    [        theme | t  @          # color theme           ]=hashed
     [         mode | m  :          # light or dark         ]=
     [   base-color | B  :          # base color            ]=
     [       adjust |    %          # color adjustment      ]=
@@ -204,6 +214,9 @@ for _k in "${!theme_light[@]}"; do
     [[ -v theme_dark[$_k] ]] || theme_dark[$_k]=${theme_light[$_k]}
 done
 
+# Link text pattern: backtick spans, backslash escapes, and normal chars
+_link_text='(?:`[^`\n]*+`|\\.|[^`\\\n\]]++)+' # [...] inner match
+
 # Patterns (name-pattern pairs)
 declare -a patterns_default=(
     # Highlighting patterns (used with colors)
@@ -218,18 +231,27 @@ declare -a patterns_default=(
     h3           '^###\h+.*'
     h4           '^####\h+.*'
     h5           '^#####\h+.*'
-    h6           '^######+.*'
+    h6           '^######+\h+.*'
     inline_code  '(?<bt>`++)((?:(?!\g{bt}).)++)(\g{bt})'
     code_block   '^ {0,3}(?<bt>`{3,}+|~{3,}+)(.*)\n((?s:.*?))^ {0,3}(\g{bt})'
-    image_link   '\[!\[[^\]\n]+\]\([^)\n]+\)\]\(<?[^>)\s\n]+>?\)'
-    image        '!\[[^\]\n]+\]\(<?[^>)\s\n]+>?\)'
-    link         '(?<!!)\[[^\]\n]+\]\(<?[^>)\s\n]+>?\)'
+    image_link   "\[!\[${_link_text}\]\([^)\n]+\)\]\(<?[^>)\s\n]+>?\)"
+    image        "!\[${_link_text}\]\(<?[^>)\s\n]+>?\)"
+    link         "(?<!!)\[${_link_text}\]\(<?[^>)\s\n]+>?\)"
     table        '^ {0,3}(\|.+\|\n){3,}'
     # Folding patterns (used without colors)
     item_prefix  '^\h*(?:[*-]|(?:\d+|#)[.)])\h+'
     def_pattern  '(?:\A|\G\n|\n\n).+\n\n?(:\h+.*\n)'
     autoindent   '^\h*(?:[*-]|(?:\d+|#)[.)]|:)\h+|^\h+'
 )
+
+# Build pattern associative array from patterns_default
+# (built before theme loading so themes can modify patterns)
+declare -A pattern
+for ((_i=0; _i<${#patterns_default[@]}; _i+=2)); do
+    _name=${patterns_default[_i]}
+    [[ -v pattern[$_name] ]] && pattern[$_name]+='|'
+    pattern[$_name]+=${patterns_default[_i+1]}
+done
 
 # Active color scheme
 declare -A colors
@@ -301,6 +323,9 @@ plain() {
 trace() {
     [[ $trace ]] && set -x || set +x
 }
+
+_theme_specified=
+theme() { _theme_specified=1; }
 
 show() {
     local arg=$2 key val
@@ -425,13 +450,11 @@ fi
 # Load user config (may set default[theme], default[mode], default[style], etc.)
 [[ -f "$config_file" ]] && . "$config_file" || :
 
-# Apply config defaults if theme not specified (split on comma)
-if (( ${#theme[@]} == 0 )) && [[ ${default[theme]:-} ]]; then
+# Apply config defaults if theme not explicitly specified
+if [[ ! $_theme_specified ]] && [[ ${default[theme]:-} ]]; then
     IFS=, read -ra theme <<< "${default[theme]}"
 fi
 
-# List theme names and exit if --theme=?
-[[ ${theme[0]:-} == '?' ]] && list_theme_names
 # Set mode: explicit option > config default > terminal detection > "light"
 : ${mode:=${default[mode]:-$(detect_terminal_mode)}}
 : ${mode:=light}
@@ -464,13 +487,13 @@ esac
 [[ ${rule:-} ]] && rule='│'
 
 # Load theme files: each modifies theme_light/theme_dark arrays
-for _t in "${theme[@]}"; do
+while IFS= read -r _t; do
     if [[ -f "$_t" ]]; then
         . "$_t"
     else
         load_theme_file "$_t" || die "theme not found: $_t"
     fi
-done
+done < <(uniq_array "${theme[@]}")
 load_theme "$mode"
 
 # Override base color if specified via --base-color or default[base_color]
@@ -498,10 +521,20 @@ for name in "${!show[@]}"; do
 done
 
 (( debug > 0 )) && {
-    echo "debug: color values:" >&2
-    for key in "${!colors[@]}"; do
-        echo "debug:   $key = ${colors[$key]}"
-    done | sort >&2
+    for _mode in light dark; do
+        declare -n _ref="theme_${_mode}"
+        for key in "${!_ref[@]}"; do
+            printf "theme_%s[%s]='%s'\n" "$_mode" "$key" "${_ref[$key]//\'/\'\\\'\'}"
+        done | sort >&2
+    done
+    (( debug > 1 )) && {
+        for key in "${!colors[@]}"; do
+            printf "colors[%s]='%s'\n" "$key" "${colors[$key]//\'/\'\\\'\'}"
+        done | sort >&2
+        for key in "${!pattern[@]}"; do
+            printf "pattern[%s]='%s'\n" "$key" "${pattern[$key]//\'/\'\\\'\'}"
+        done | sort >&2
+    }
 }
 
 ##############################################################################
@@ -514,16 +547,13 @@ add_pattern() {
     local name=$1 pattern=$2
     # Check show hash: unset=default(on), empty or 0=off, non-empty=on
     local val=${show[$name]-1}
-    [[ $val && $val != 0 ]] && greple_opts+=(--cm "${colors[$name]}" -E "$pattern") || :
+    [[ $val && $val != 0 ]] && greple_opts+=(--cm "${colors[$name]}" -E "(?|$pattern)") || :
 }
 
-# Build associative array (join patterns with same name using |)
-declare -A pattern
-for ((i=0; i<${#patterns_default[@]}; i+=2)); do
-    name=${patterns_default[i]}
-    [[ -v pattern[$name] ]] && pattern[$name]+='|'
-    pattern[$name]+=${patterns_default[i+1]}
-    [[ ${colors[$name]:-} ]] && add_pattern "$name" "${patterns_default[i+1]}"
+# Add patterns with colors to greple options
+# (use pattern[] so theme modifications are reflected)
+for _name in "${!pattern[@]}"; do
+    [[ ${colors[$_name]:-} ]] && add_pattern "$_name" "${pattern[$_name]}"
 done
 
 ##############################################################################
@@ -625,8 +655,10 @@ useful for reading documents generated by LLMs.
 It displays Markdown text as-is with minimal formatting: syntax
 highlighting, line folding for long list items, and table column
 alignment.  Markup characters (C<**>, C<`>, C<#>, etc.) are
-preserved in the output.  Link URLs are removed from the display,
-showing only the link text (e.g., C<[text](url)> becomes
+preserved in the output.  By default, closing hashes are appended
+to h3-h6 headers (via the built-in C<hashed> theme) to make
+heading levels visually distinct.  Link URLs are removed from the
+display, showing only the link text (e.g., C<[text](url)> becomes
 C<[text]>).  On terminals supporting OSC 8 hyperlinks, the link
 text remains clickable.
 
@@ -646,6 +678,19 @@ inline code, code blocks, HTML comments, tables, and list items.
 <p><img width="750" src="https://raw.githubusercontent.com/tecolicom/App-mdee/main/images/3-column.png">
 
 =end html
+
+=head1 INSTALLATION
+
+=head2 Homebrew
+
+Use L<tecolicom/tap|https://github.com/tecolicom/homebrew-tap>:
+
+    brew tap tecolicom/tap
+    brew install app-mdee
+
+=head2 CPAN
+
+    cpanm -n App::mdee
 
 =head1 OPTIONS
 
@@ -669,11 +714,14 @@ Set debug level.  Can be repeated for increasing verbosity.
 
 =item C<-d>
 
-Show color values and pipeline stage names.
+Show theme values (C<theme_light[]>/C<theme_dark[]>) and pipeline
+stage names.  Output is in sourceable format that can be used in
+theme files or config.sh.
 
 =item C<-dd>
 
-Above, plus full command lines for each pipeline stage.
+Above, plus expanded color values (C<colors[]>), pattern definitions
+(C<pattern[]>), and full command lines for each pipeline stage.
 
 =back
 
@@ -778,13 +826,21 @@ bold text, etc.).
 
 =item B<-t> I<NAME>, B<--theme>=I<NAME>[,I<NAME>,...]
 
-Select color themes.  Multiple themes can be specified as
-comma-separated names or by repeating the option.  Each theme is
-applied in order as a transformation to the default theme:
+Select color themes.  The default is C<hashed>, which appends
+closing hashes to h3-h6 headers.
 
-    mdee --theme=warm file.md             # warm base color
-    mdee --theme=warm,closing file.md     # warm + closing hashes
-    mdee --theme=warm --theme=closing     # same effect
+Themes specified with C<--theme> are added to the default, not
+replacing it.  Multiple themes can be specified as comma-separated
+names or by repeating the option.  Each theme is applied in order
+as a transformation:
+
+    mdee --theme=warm file.md         # hashed (default) + warm
+    mdee --theme=warm,hashed file.md  # same (hashed already in default)
+    mdee --no-theme --theme=warm      # warm only (clear default first)
+    mdee --no-theme file.md           # no theme
+
+Use C<--no-theme> to clear the default theme.  It can be combined
+with C<--theme> to start fresh.
 
 Theme files are searched in the following order:
 
@@ -796,19 +852,24 @@ Theme files are searched in the following order:
 
 =back
 
-Theme files are Bash scripts that modify C<theme_light>
-and/or C<theme_dark> arrays directly:
+Theme files are Bash scripts that modify C<theme_light>,
+C<theme_dark>, and/or C<pattern[]> arrays directly:
 
     # theme/warm.sh — change base color
     theme_light[base]='<Coral>=y25'
     theme_dark[base]='<Coral>=y80'
 
-    # theme/closing.sh — append closing hashes to h3-h6
+    # theme/hashed.sh — append closing hashes to h3-h6
     for _mode in light dark; do
         declare -n _theme="theme_${_mode}"
         _theme[h3]+=';sub{s/(?<!#)$/ ###/r}'
         ...
     done
+
+    # modify matching pattern
+    pattern[link]='...'
+
+Use C<-d> to dump current theme values in sourceable format.
 
 =item B<-m> I<MODE>, B<--mode>=I<MODE>
 
@@ -955,7 +1016,7 @@ This is a shell script that can set defaults and override colors:
 
     # ~/.config/mdee/config.sh
     default[mode]='dark'             # set default mode
-    default[theme]='warm,closing'    # set default theme(s)
+    default[theme]='warm'            # set default theme(s)
     default[style]='pager'           # set default style
     default[width]=100               # set default fold width
     default[base_color]='DarkCyan'   # set default base color
@@ -966,7 +1027,7 @@ The C<default> associative array supports the following keys:
 
 =item C<default[mode]> - Corresponds to C<--mode> (e.g., C<dark>, C<light>)
 
-=item C<default[theme]> - Corresponds to C<--theme> (e.g., C<warm>, C<warm,closing>)
+=item C<default[theme]> - Corresponds to C<--theme> (e.g., C<warm>, C<warm,hashed>)
 
 =item C<default[style]> - Corresponds to C<--style> (e.g., C<pager>, C<cat>)
 
@@ -976,10 +1037,10 @@ The C<default> associative array supports the following keys:
 
 =back
 
-B<Overriding theme colors>
+B<Overriding theme colors and patterns>
 
-Config.sh can modify theme arrays directly, using the same mechanism
-as theme files:
+Config.sh can modify theme arrays and patterns directly, using the
+same mechanism as theme files:
 
     # Change base color for both modes
     theme_light[base]='<DarkCyan>=y25'
@@ -991,8 +1052,13 @@ as theme files:
         _theme[h3]+=';sub{s/(?<!#)$/ ###/r}'
     done
 
+    # Modify matching patterns
+    pattern[link]='...'
+
 Since C<${base}> references are expanded after loading, changing the
 base color automatically affects all derived colors (h1, h2, bold, etc.).
+
+Use C<-d> to dump current theme and pattern values in sourceable format.
 
 B<Color specification format>
 
@@ -1033,19 +1099,8 @@ The C<${base}> string is expanded to the base color value after loading.
     mdee -B Ivory file.md                  # override base color
     mdee --mode=dark -B '#780043' file.md  # dark mode with burgundy
     mdee --theme=warm file.md              # warm (Coral) base color
-    mdee --theme=warm,closing file.md      # warm + closing hashes
+    mdee --theme=warm,hashed file.md      # warm + closing hashes
     mdee --list-themes                     # list available themes
-
-=head1 INSTALLATION
-
-=head2 Homebrew (macOS)
-
-    brew tap tecolicom/tap
-    brew install app-mdee
-
-=head2 CPAN
-
-    cpanm -n App::mdee
 
 =head1 DEPENDENCIES
 
@@ -1181,12 +1236,15 @@ chained via C<--theme=NAME1,NAME2,...>.
 
 The built-in default theme is defined as C<theme_light> and
 C<theme_dark> associative arrays.  Dark inherits undefined
-keys from light immediately after declaration.  Theme files modify
-these arrays directly:
+keys from light immediately after declaration.  Theme files can
+modify these arrays and the C<pattern[]> array directly:
 
-    # theme/warm.sh
+    # theme/warm.sh — change colors
     theme_light[base]='<Coral>=y25'
     theme_dark[base]='<Coral>=y80'
+
+    # modify matching patterns
+    pattern[link]='...'
 
 =head4 Base Color Expansion
 

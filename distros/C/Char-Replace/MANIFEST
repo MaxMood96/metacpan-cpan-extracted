@@ -10,6 +10,7 @@ README
 Replace.xs
 cpanfile
 dist.ini
+examples/benchmark-fastpath.pl
 examples/benchmark-replace.pl
 examples/benchmark-trim.pl
 examples/synopsis.pl
@@ -18,8 +19,16 @@ t/00-load.t
 t/00-report-prereqs.dd
 t/00-report-prereqs.t
 t/backslash-0.t
+t/build-map.t
+t/coderef-map.t
+t/deletion.t
+t/iv-map.t
+t/replace-inplace.t
 t/replace.t
+t/taint-safety.t
+t/trim-inplace.t
 t/trim.t
+t/utf8-safety.t
 tidyall.ini
 weaver.ini
 xt/author/00-compile.t

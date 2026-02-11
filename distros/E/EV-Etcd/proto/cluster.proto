@@ -1,0 +1,78 @@
+syntax = "proto3";
+package etcdserverpb;
+
+import "rpc.proto";
+
+message Member {
+  // ID is the member ID for this member
+  uint64 ID = 1;
+  // name is the human-readable name of the member
+  string name = 2;
+  // peerURLs is the list of URLs the member exposes to the cluster for communication
+  repeated string peerURLs = 3;
+  // clientURLs is the list of URLs the member exposes to clients for communication
+  repeated string clientURLs = 4;
+  // isLearner indicates if the member is a learner
+  bool isLearner = 5;
+}
+
+message MemberAddRequest {
+  // peerURLs is the list of URLs the added member will use to communicate with the cluster
+  repeated string peerURLs = 1;
+  // isLearner indicates if the added member is a learner
+  bool isLearner = 2;
+}
+
+message MemberAddResponse {
+  ResponseHeader header = 1;
+  // member is the member information for the added member
+  Member member = 2;
+  // members is a list of all members after adding the new member
+  repeated Member members = 3;
+}
+
+message MemberRemoveRequest {
+  // ID is the member ID of the member to remove
+  uint64 ID = 1;
+}
+
+message MemberRemoveResponse {
+  ResponseHeader header = 1;
+  // members is a list of all members after removing the member
+  repeated Member members = 2;
+}
+
+message MemberUpdateRequest {
+  // ID is the member ID of the member to update
+  uint64 ID = 1;
+  // peerURLs is the new list of URLs the member will use to communicate with the cluster
+  repeated string peerURLs = 2;
+}
+
+message MemberUpdateResponse {
+  ResponseHeader header = 1;
+  // members is a list of all members after updating the member
+  repeated Member members = 2;
+}
+
+message MemberListRequest {
+  // linearizable indicates if the member list should be linearizable
+  bool linearizable = 1;
+}
+
+message MemberListResponse {
+  ResponseHeader header = 1;
+  // members is a list of all members in the cluster
+  repeated Member members = 2;
+}
+
+message MemberPromoteRequest {
+  // ID is the member ID of the member to promote
+  uint64 ID = 1;
+}
+
+message MemberPromoteResponse {
+  ResponseHeader header = 1;
+  // members is a list of all members after promoting the member
+  repeated Member members = 2;
+}

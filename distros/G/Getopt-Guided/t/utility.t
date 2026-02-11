@@ -10,7 +10,7 @@ use File::Spec::Functions qw( catfile );
 subtest 'Utility is broken: getopts has $spec error' => sub {
   plan tests => 3;
 
-  my $utility = catfile( qw( t examples broken ) );
+  my $utility = catfile( qw( t utility broken ) );
   script_compiles $utility;
   script_fails $utility, { exit => 255 }, 'Check exit status';
   script_stderr_like
@@ -21,7 +21,7 @@ subtest 'Utility is broken: getopts has $spec error' => sub {
 subtest 'Utility is fine but called wrongly: unknown option' => sub {
   plan tests => 3;
 
-  my $utility = catfile( qw( t examples fine ) );
+  my $utility = catfile( qw( t utility fine ) );
   script_compiles $utility;
   script_fails [ $utility, '-g' ], { exit => 2 }, 'Check exit status';
   script_stderr_is basename( $utility ) . ": illegal option -- g\n", 'Check standard error output'
@@ -30,7 +30,7 @@ subtest 'Utility is fine but called wrongly: unknown option' => sub {
 subtest 'Premature stop: ask utility for its version information' => sub {
   plan tests => 3;
 
-  my $utility = catfile( qw( t examples fine ) );
+  my $utility = catfile( qw( t utility fine ) );
   script_compiles $utility;
   script_runs [ $utility, '-V' ], 'Check exit status';
   script_stdout_like qr/\A ${ \( basename( $utility ) ) } \  v6\.6\.6 \n perl \  v\d+\.\d+\.\d+ \n \z/x,
@@ -40,7 +40,7 @@ subtest 'Premature stop: ask utility for its version information' => sub {
 subtest 'Normal utility run' => sub {
   plan tests => 2;
 
-  my $utility = catfile( qw( t examples fine ) );
+  my $utility = catfile( qw( t utility fine ) );
   script_compiles $utility;
   script_fails [ $utility, '-x' ], { exit => 3 }, 'Check exit status'
 }

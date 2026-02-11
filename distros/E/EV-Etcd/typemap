@@ -1,0 +1,17 @@
+TYPEMAP
+int64_t	T_IV
+EV::Etcd	T_PTROBJ
+EV::Etcd::Watch	T_PTROBJ
+
+INPUT
+T_PTROBJ
+    if (SvROK($arg) && sv_derived_from($arg, \"${ntype}\")) {
+        IV tmp = SvIV((SV*)SvRV($arg));
+        $var = INT2PTR($type, tmp);
+    } else {
+        croak(\"$var is not of type ${ntype}\");
+    }
+
+OUTPUT
+T_PTROBJ
+    sv_setref_pv($arg, \"${ntype}\", (void*)$var);

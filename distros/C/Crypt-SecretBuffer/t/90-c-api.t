@@ -17,7 +17,7 @@ is \%Crypt::SecretBuffer::C_API,
       secret_buffer_charset_test_byte =>
          'bool secret_buffer_charset_test_byte(const secret_buffer_charset *cset, U8 b)',
       secret_buffer_charset_test_codepoint =>
-         'bool secret_buffer_charset_test_codepoint(const secret_buffer_charset *cset, uint32_t cp)',
+         'bool secret_buffer_charset_test_codepoint(const secret_buffer_charset *cset, U32 cp)',
       secret_buffer_parse_init =>
          'bool secret_buffer_parse_init(secret_buffer_parse *parse, secret_buffer *buf, size_t pos, size_t lim, int encoding)',
       secret_buffer_parse_init_from_sv =>
@@ -32,6 +32,12 @@ is \%Crypt::SecretBuffer::C_API,
          'SSize_t secret_buffer_sizeof_transcode(secret_buffer_parse *src, int dst_encoding)',
       secret_buffer_transcode =>
          'bool secret_buffer_transcode(secret_buffer_parse *src, secret_buffer_parse *dst)',
+      secret_buffer_copy_to =>
+         'bool secret_buffer_copy_to(secret_buffer_parse *src, SV *dst_sv, int encoding, bool append)',
+      secret_buffer_span_new_obj =>
+         'SV * secret_buffer_span_new_obj(secret_buffer *buf, size_t pos, size_t lim, int encoding)',
+      secret_buffer_span_new_obj_from_parse =>
+         'SV * secret_buffer_span_new_obj_from_parse(secret_buffer_parse *p)',
       secret_buffer_new =>
          'secret_buffer * secret_buffer_new(size_t capacity, SV **ref_out)',
       secret_buffer_from_magic =>
@@ -48,6 +54,18 @@ is \%Crypt::SecretBuffer::C_API,
          'void secret_buffer_splice(secret_buffer *buf, size_t ofs, size_t len, const char *replacement, size_t replacement_len)',
       secret_buffer_splice_sv =>
          'void secret_buffer_splice_sv(secret_buffer *buf, size_t ofs, size_t len, SV *replacement)',
+      secret_buffer_append_uv_asn1_der_length =>
+         'void secret_buffer_append_uv_asn1_der_length(secret_buffer *buf, UV val)',
+      secret_buffer_parse_uv_asn1_der_length =>
+         'bool secret_buffer_parse_uv_asn1_der_length(secret_buffer_parse *parse, UV *out)',
+      secret_buffer_append_uv_base128le =>
+         'void secret_buffer_append_uv_base128le(secret_buffer *buf, UV val)',
+      secret_buffer_parse_uv_base128le =>
+         'bool secret_buffer_parse_uv_base128le(secret_buffer_parse *parse, UV *out)',
+      secret_buffer_append_uv_base128be =>
+         'void secret_buffer_append_uv_base128be(secret_buffer *buf, UV val)',
+      secret_buffer_parse_uv_base128be =>
+         'bool secret_buffer_parse_uv_base128be(secret_buffer_parse *parse, UV *out)',
       secret_buffer_append_random =>
          'IV secret_buffer_append_random(secret_buffer *buf, size_t n, unsigned flags)',
       secret_buffer_append_sysread =>

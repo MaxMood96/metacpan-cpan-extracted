@@ -185,6 +185,22 @@ The C<processopts()> function returns true (C<!!1>) on success; otherwise the
 function returns false (C<!!0>). If the function stops prematurely, its return
 value for true changes to the option name prefixed by the options delimiter.
 
+=head1 C<-V>
+
+The GNU coding standard provides some guideline how a "-V" (version) option
+should behave. This module exports the C<print_version_info()> function on
+request. It can be used as a "-V" option destination callback function. The
+function implements some recommendations. It prints information about the
+program name L<$0|perlvar/$0>, and its version to standard output. As a
+second information line it prints the version of the perl interpreter to
+standard output too. Example output:
+
+  utility v1.2.3
+  perl v5.14.2
+
+The function returns the end of options delimiter, so that the C<processopts()>
+function stops prematurely.
+
 =head1 SEE ALSO
 
 =over 2

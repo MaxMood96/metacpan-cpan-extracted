@@ -4,7 +4,7 @@ StreamFinder::Podbean - Fetch actual raw streamable podcast URLs on podbean.com
 
 =head1 AUTHOR
 
-This module is Copyright (C) 2021-2022 by
+This module is Copyright (C) 2021-2026 by
 
 Jim Turner, C<< <turnerjw784 at yahoo.com> >>
 		
@@ -108,14 +108,14 @@ One or more stream URLs can be returned for each podcast.
 Accepts a www.podbean.com podcast URL and creates and returns a 
 a new podcast object, or I<undef> if the URL is not a valid podcast, or no 
 streams are found.  The URL MUST be either a I<CHANNEL-id> or the full URL, 
-ie. https://B<channel-id>.podbean.com/e/B<episode-id>, or 
-https://B<channel-id>.podbean.com, 
-https://www.podbean.com/podcast-detail/B<channel-id>/..., 
-https://www.podbean.com/ew/B<episode-id>, 
-https://www.podbean.com/media/share/B<episode-id>..., 
-https://www.podbean.com/site/EpisodeDownload/B<episode-id>, B<channel-id> or 
-B<channel-id/episode-id>.  NOTE:  If only a I<channel-id> is specified, it 
-must be the channel-id of a Podbean-hosted podcast channel site 
+ie. I<https://B<channel-id>.podbean.com/e/>B<episode-id>, or 
+I<https://>B<channel-id>I<.podbean.com>, 
+I<https://www.podbean.com/podcast-detail/>B<channel-id>/..., 
+I<https://www.podbean.com/ew/B><episode-id>, 
+I<https://www.podbean.com/media/share/B<episode-id>..., 
+I<https://www.podbean.com/site/EpisodeDownload/>B<episode-id>, or just 
+I<channel-id> or I<channel-id/episode-id>.  NOTE:  If only a I<channel-id> is 
+specified, it must be the channel-id of a Podbean-hosted podcast channel site 
 (https://I<channel-id>.podbean.com), and for I<all> non-episode URLs, the 
 first (latest) episode for the channel is returned.  
 
@@ -294,10 +294,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-Podbean>
 
 L<http://annocpan.org/dist/StreamFinder-Podbean>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-Podbean>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder-Podbean/>
@@ -306,7 +302,7 @@ L<http://search.cpan.org/dist/StreamFinder-Podbean/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2021-2022 Jim Turner.
+Copyright 2021-2026 Jim Turner.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the the Artistic License (2.0). You may obtain a
@@ -417,13 +413,23 @@ sub new
 		print STDERR "-1a: html=$html=\n"  if ($DEBUG > 1);
 		return undef  unless ($html);  #STEP 1 FAILED, INVALID PODCAST URL, PUNT!
 
-		$self->{'albumartist'} = "https://${channelID}.podbean.com";
-		$self->{'album'} = $1  if ($html =~ m#\<title\>(.+?)\<\/title\>#s);
-		$self->{'genre'} = $1  if ($html =~ m#\<category\>(.+?)\<\/category\>#s);
-		$self->{'iconurl'} = $self->{'imageurl'} = $1
-				if ($html =~ m#image\s+href\=\"([^\"]+)#);
+		my $channelxml = ($html =~ s#^(.+?)\<item\>#\<item\>#s) ? $1 : '';
+		$self->{'albumartist'} = ($channelxml =~ m#\<link\>(.+?)\<\/link\>#s)
+				? $1 : "https://${channelID}.podbean.com";
+		$self->{'album'} = $1  if ($channelxml =~ m#\<title\>(.+?)\<\/title\>#s);
+		$self->{'genre'} = $1  if ($channelxml =~ m#\<category\>(.+?)\<\/category\>#s);
+		$self->{'articonurl'} = $1
+				if ($channelxml =~ m#image\s+href\=\"([^\"]+)#);
+		unless ($self->{'articonurl'}) {
+			if ($channelxml =~ m#\<image\>(.+?)\<\/image\>#s) {
+				my $imgdata = $1;
+				($self->{'articonurl'} = $1) =~ s#\s+$##s
+						if ($imgdata =~ m#\<url\>\s*(.+?)\<\/url\>#s);
+			}
+		}
+		$self->{'articonurl'} = $self->{'articonurl'};
 
-		#FETCH PODCAST PAGE:
+		#FETCH DATA FOR EPISODES:
 
 		my $epiFound = 0;
 		while ($html =~ s#\<item\>(.+?)\<\/item\>##so) {
@@ -433,8 +439,8 @@ sub new
 				if ($streamdata =~ m#\burl\=\"([^\"]+)#o) {
 					my $stream = $1;
 					next  if ($self->{'secure'} && $stream !~ /^https/o);
-					if ($epidata =~ m#\<title\>(.+?)\<\/title\>#so) {
-						my $title = $1;
+					if ($epidata =~ m#\<title\>\s*(.+?)\<\/title\>#so) {
+						(my $title = $1) =~ s/\s+$//s;
 						unless ($episodeID) {
 							push @epiTitles, $title;
 							push @epiStreams, $stream;
@@ -463,14 +469,16 @@ sub new
 									$self->{'year'} = $1  if ($self->{'created'} =~ /(\d\d\d\d)/);
 								}
 								$self->{'description'} = $1
-										if ($epidata =~ m#\<description\>(.+?)\<\/description\>#s);
-								$self->{'description'} ||= $1
 										if ($epidata =~ m#\<content\:encoded\>(.+?)\<\/content\:encoded\>#s);
+								$self->{'description'} ||= $1
+										if ($epidata =~ m#\<description\>(.+?)\<\/description\>#s);
 								if ($self->{'description'}) {
 									$self->{'description'} =~ s#\<\!\[CDATA\[##o;
 									$self->{'description'} =~ s#\]\]\>##so;
 								}
 								$self->{'artist'} = $1  if ($epidata =~ m#\bauthor\>([^\<]+)#);
+								$self->{'iconurl'} = $self->{'imageurl'} = $1
+										if ($epidata =~ m#image\s+href\=\"([^\"]+)#);
 								last  if ($episodeID);
 							}
 						}
@@ -480,12 +488,13 @@ sub new
 		}
 	} else {
 		unless ($isEpisode) {
-			print STDERR "-0(Podbean unhosted page): FETCHING URL=$url2fetch= ID=".$self->{'id'}."=\n"  if ($DEBUG);
 			my $ua = LWP::UserAgent->new(@{$self->{'_userAgentOps'}});		
 			$ua->timeout($self->{'timeout'});
 			$ua->cookie_jar({});
 			$ua->env_proxy;
-			my $response = $ua->get($url2fetch);
+			my $urlx = ($url =~ /^https?\:/) ? $url : $url2fetch;  #WE NEED THAT "\?.*$" STUFF WE TRIMMED!
+			print STDERR "-0(Podbean unhosted page): FETCHING URL=$urlx= ID=".$self->{'id'}."=\n"  if ($DEBUG);
+			my $response = $ua->get($urlx);
 			if ($response->is_success) {
 				$html = $response->decoded_content;
 			} else {
@@ -498,21 +507,23 @@ sub new
 			$html =~ s#.+\<tbody\s+class\=\"items\"\>##s;
 			if ($html =~ s#\<tr\>(.+?)\<\/tr\>##s) {  #items:
 				my $epidata = $1;
-				if ($epidata =~ m#<a\s+target\=\"\_blank\"\s+href\=\"([^\"]+)#so) {
+				if ($epidata =~ m#<a\s+target\=\"\_blank\"\s+href\=\"([^\"]+)#s) {
 					$url2fetch = $1;
 				}
 			}
+			$url2fetch = $1  if (!$url2fetch && $html =~ m#\b(?:href|src)\=\"(https?\:\/\/www\.podbean\.com\/ew?\/[^\"]+)#s);
 
 			return undef  unless ($url2fetch);  #STEP 1 FAILED, INVALID PODCAST URL, PUNT!
 		}
 
 		#SHOULD NOW HAVE AN EPISODE URL:
-		print STDERR "-1(Podbean unhosted episode): FETCHING URL=$url2fetch= ID=".$self->{'id'}."=\n"  if ($DEBUG);
 		my $ua = LWP::UserAgent->new(@{$self->{'_userAgentOps'}});		
 		$ua->timeout($self->{'timeout'});
 		$ua->cookie_jar({});
 		$ua->env_proxy;
-		my $response = $ua->get($url2fetch);
+		my $urlx = ($url =~ /^https?\:/) ? $url : $url2fetch;  #WE NEED THAT "\?.*$" STUFF WE TRIMMED!
+		print STDERR "-1(Podbean unhosted episode): FETCHING URL=$urlx= ID=".$self->{'id'}."=\n"  if ($DEBUG);
+		my $response = $ua->get($urlx);
 		if ($response->is_success) {
 			$html = $response->decoded_content;
 		} else {
@@ -561,11 +572,10 @@ sub new
 	foreach my $field (qw(title description artist album genre)) {
 		$self->{$field} = HTML::Entities::decode_entities($self->{$field});
 		$self->{$field} = uri_unescape($self->{$field});
-		$self->{$field} =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
+		$self->{$field} =~ s/(?:\%|\\[ux\%]?00|\bu00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
 	}
 
 	$self->{'Url'} = $self->{'streams'}->[0];
-	print STDERR "--SUCCESS: 1st stream=".$self->{'Url'}."= total=".$self->{'total'}."=\n"  if ($DEBUG);
 	$self->{'playlist'} = "#EXTM3U\n";
 	if ($#epiStreams >= 0) {
 		$self->{'playlist_cnt'} = scalar @epiStreams;
@@ -590,6 +600,12 @@ sub new
 		$self->{'playlist'} .= "#EXTGENRE:" . $self->{'genre'} . "\n"
 				if ($self->{'genre'});
 		$self->{'playlist'} .= ${$self->{'streams'}}[0] . "\n";
+	}
+	if ($DEBUG) {
+		foreach my $f (sort keys %{$self}) {
+			print STDERR "--KEY=$f= VAL=$$self{$f}=\n";
+		}
+		print STDERR "-SUCCESS: 1st stream=".$self->{'Url'}."=\n"  if ($self->{'cnt'} > 0);;
 	}
 
 	$self->_log($url);

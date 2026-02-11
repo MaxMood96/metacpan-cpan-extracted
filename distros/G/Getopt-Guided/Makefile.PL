@@ -4,33 +4,34 @@ use warnings;
 use ExtUtils::MM          ();
 use File::Spec::Functions qw( catfile );
 
-my $git_host_profile_url = 'https://github.com/XSven';
+my $git_base_url = 'https://codeberg.org/XSven';
 
-my @main_module_namespace = qw( Getopt Guided );
-my $release_status        = 'stable';              # Transitions: unstable => testing => stable
-my $pre_release_number    = 1;
+my $distname = 'Getopt-Guided';
+# Transitions: unstable => testing => stable
+my $release_status = 'stable';
+# PRE_RELEASE_NUMBER is set by CI/CD pipeline
+my $pre_release_extension = $release_status eq 'stable' ? undef : 'TRIAL' . ( $ENV{ PRE_RELEASE_NUMBER } // 1 );
 
-my $distname            = join '-',  @main_module_namespace;
-my $main_module         = join '::', @main_module_namespace;
-my $main_module_file    = catfile( @main_module_namespace ) . '.pm';
-my $main_module_podfile = catfile( @main_module_namespace ) . '.pod';
+my @main_module_namespace = split /-/, $distname;
+my $main_module           = join '::', @main_module_namespace;
+my $main_module_file      = catfile( 'lib', @main_module_namespace ) . '.pm';
+my $main_module_podfile   = catfile( 'lib', @main_module_namespace ) . '.pod';
 # We are not using
-# VERSION_FROM  => catfile( 'lib', $main_module_file )
+# VERSION_FROM  => $main_module_file
 # because we have to set the main module version in META_MERGE/provides too
-my $main_module_version = MM->parse_version( catfile( 'lib', $main_module_file ) );
+my $main_module_version = MM->parse_version( $main_module_file );
 
 my %att = (
   NAME          => $main_module,
   AUTHOR        => 'Sven Willenbuecher <sven.willenbuecher@gmx.de>',
   VERSION       => $main_module_version,
-  ABSTRACT_FROM => catfile( 'lib', $main_module_podfile ),
+  ABSTRACT_FROM => $main_module_podfile,
   # Another valid license string is "restricted"
   # https://metacpan.org/pod/CPAN::Meta::Spec#license
   LICENSE          => 'perl_5',
   MIN_PERL_VERSION => '5.010000',
   DISTNAME         => $distname,
-  DISTVNAME        =>
-    join( '-', $distname, $main_module_version, ( $release_status ne 'stable' ? "TRIAL$pre_release_number" : () ) )
+  DISTVNAME        => join( '-', $distname, $main_module_version, $pre_release_extension // () )
   ,    # Related to the below release_status metadata field
   EXE_FILES  => [ glob( join( ' ', map { catfile( $_, '*' ) } qw( bin script ) ) ) ],
   META_MERGE => {
@@ -38,18 +39,18 @@ my %att = (
     release_status => $release_status,
     provides       => {
       $main_module => {
-        file    => catfile( 'lib', $main_module_file ),
+        file    => $main_module_file,
         version => $main_module_version
       }
     },
     resources => {
       repository => {
         type => 'git',
-        url  => "$git_host_profile_url/$distname.git",
-        web  => "$git_host_profile_url/$distname"
+        url  => "$git_base_url/$distname.git",
+        web  => "$git_base_url/$distname"
       },
       bugtracker => {
-        web => "$git_host_profile_url/$distname/issues"
+        web => "$git_base_url/$distname/issues"
       }
     }
   },
@@ -63,8 +64,10 @@ my %att = (
 );
 
 if ( caller() ) {
-  # +{ @_ } == \%att
-  *WriteMakefile = sub { @ARGV ? +{ @_ }->{ $ARGV[ 0 ] } : +{ @_ } }
+  *WriteMakefile = sub {
+    my $att = { @_ };
+    @ARGV ? $att->{ $ARGV[ 0 ] } : $att
+  }
 } else {
   require ExtUtils::MakeMaker::CPANfile;
   ExtUtils::MakeMaker::CPANfile->import

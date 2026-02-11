@@ -8,7 +8,7 @@ my $module;
 
 BEGIN {
   $module = 'Getopt::Guided';
-  use_ok $module, qw( getopts ) or BAIL_OUT "Cannot loade module '$module'!"
+  use_ok $module, qw( getopts ) or BAIL_OUT "Cannot load module '$module'!"
 }
 
 subtest 'Validate $spec parameter' => sub {

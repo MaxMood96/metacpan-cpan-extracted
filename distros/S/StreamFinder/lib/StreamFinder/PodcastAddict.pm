@@ -4,7 +4,7 @@ StreamFinder::PodcastAddict - Fetch actual raw streamable URLs on podcastaddict.
 
 =head1 AUTHOR
 
-This module is Copyright (C) 2023 by
+This module is Copyright (C) 2023-2026 by
 
 Jim Turner, C<< <turnerjw784 at yahoo.com> >>
 		
@@ -122,9 +122,9 @@ One or more stream URLs can be returned for each podcast.
 Accepts a podcastaddict.com podcast ID or URL and creates and returns a 
 a new podcast object, or I<undef> if the URL is not a valid podcast, or no streams 
 are found.  The URL can be the full URL, ie. 
-https://podcastaddict.com/episode/B<episode-id#>, 
-https://podcastaddict.com/podcast/B<podcast-id#>, or just 
-I<episode-id#>.
+I<https://podcastaddict.com/episode/>B<episode-id#>, 
+I<https://podcastaddict.com/podcast/>B<podcast-id#>, or just 
+I<podcast-id#> or I<podcast-id/episode-id>.
 
 The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  If 1 
 then only secure ("https://") streams will be returned.
@@ -292,10 +292,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-PodcastAddict>
 
 L<http://annocpan.org/dist/StreamFinder-PodcastAddict>
 
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-PodcastAddict>
-
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/StreamFinder-PodcastAddict/>
@@ -304,7 +300,7 @@ L<http://search.cpan.org/dist/StreamFinder-PodcastAddict/>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2023 Jim Turner.
+Copyright 2023-2026 Jim Turner.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the the Artistic License (2.0). You may obtain a
@@ -364,6 +360,7 @@ sub new
 
 	my $self = $class->SUPER::new('PodcastAddict', @_);
 	$DEBUG = $self->{'debug'}  if (defined $self->{'debug'});
+	my $baseURL = 'https://podcastaddict.com';
 	$self->{'id'} = '';
 	$self->{'_podcast_id'} = '';
 	my $url2fetch = $url;
@@ -391,7 +388,7 @@ sub new
 TRYIT:
 	if ($url2fetch =~ m#^([0-9]+)$#) {  #ASSUME PODCAST-ID, AS EPISODES NO LONGER HAVE DESCERNABLE IDs:
 		$self->{'id'} = $1;
-		$url2fetch = 'https://podcastaddict.com/podcast/'.$self->{'id'};
+		$url2fetch = "$baseURL/podcast/".$self->{'id'};
 		$isEpisode = 0;
 		print STDERR "-1- PODCAST ID, ID=".$self->{'id'}."= found ($url2fetch)\n"  if ($DEBUG);
 	} elsif ($url2fetch =~ m#\/episode\/https?#) { #(LONG) EPISODE URL (ON PODCAST PAGES, ESCAPED):
@@ -400,13 +397,21 @@ TRYIT:
 		$isEpisode = 1;
 		print STDERR "-2- EPISODE URL, ID=UNKNOWN= found ($url2fetch)\n"  if ($DEBUG);
 	} elsif ($url2fetch =~ m#\/episode\/(\d+)\/?$#) {  #CLASSIC (SHORT) EPISODE URL WITH ID. (DEPRECIATED)
-		$self->{'id'} = $1;  #CLASSIC EPISODE URLS HAVE A PROPER EPISODE-ID EMBEDDED!
+		$self->{'id'} = $2;  #CLASSIC EPISODE URLS HAVE A PROPER EPISODE-ID EMBEDDED!
 		$isEpisode = 1;
 		print STDERR "-3- CLASSIC EPISODE URL, ID=".$self->{'id'}."= found ($url2fetch)\n"  if ($DEBUG);
-	} elsif ($url2fetch =~ m#\/podcast\/#) {  #PODCAST URL
+	} elsif ($url2fetch =~ m#\/podcast\/([^\/]+)#) {  #PODCAST URL
 		$self->{'id'} = $1;  #USE UNIQUE NUMBER AS A MADE-UP "EPISODE-ID"
+		$self->{'id'} = $1  if ($url2fetch =~ m#\/(\d\d\d\d+)$#);
 		$isEpisode = 0;
 		print STDERR "-4- PODCAST URL, ID=".$self->{'id'}."= found ($url2fetch)\n"  if ($DEBUG);
+	} elsif ($url2fetch =~ m#^([^\/]+)\/(\d+)#) {  #EPISODE-ID:
+		my $podcastID = $1;
+		my $episodeID = $2;
+		$url2fetch = "$baseURL/$podcastID/episode/$episodeID";
+		$self->{'id'} = "$podcastID/$episodeID";  #USE UNIQUE NUMBER AS A MADE-UP "EPISODE-ID"
+		$isEpisode = 1;
+		print STDERR "-5- EPISODE ID=".$self->{'id'}."= found ($url2fetch)\n"  if ($DEBUG);
 	} else {
 		return undef;  #INVALID ID/URL!
 	}
@@ -448,14 +453,17 @@ TRYIT:
 				(my $stream = uri_unescape($streamURL)) =~ s#^https?\:\/\/podcastaddict\.\w+\/episode\/##o;
 				next  if ($self->{'secure'} && $stream !~ /^https/o);
 
-				$ep1id ||= $streamURL;
-				$stream =~ s#\?utm_source=Podcast.*$##o;
-				$stream =~ s#[\?\&]from\=PodcastAddict$##o;
-				$stream =~ s#\.mp3\?.*$#\.mp3#o;
-				if ($html =~ m#\<h5\>(.+?)\<\/h5\>#o) {
-					my $title = $1;
-					push @epiStreams, $stream;
-					push @epiTitles, $title;
+				if ($ep1id) {
+					$stream =~ s#\?utm_source=Podcast.*$##o;
+					$stream =~ s#[\?\&]from\=PodcastAddict$##o;
+					$stream =~ s#\.mp3\?.*$#\.mp3#o;
+					if ($html =~ m#\<h3[^\>]*\>(.+?)\<\/h3>#o) {
+						(my $title = $1) =~ s#\<[^\>]*\>##go;
+						push @epiStreams, $stream;
+						push @epiTitles, $title;
+					}
+				} else {
+					$ep1id = $streamURL;
 				}
 			}
 		}
@@ -468,23 +476,27 @@ TRYIT:
 			print STDERR "e:Podcast ($url2fetch) has no episodes!\n";
 		}
 	} else {   #EPISODE PAGE ID (NOW GET THE DETAILED EPISODE METADATA & WE'RE DONE):
+		my $epid = $1  if ($html =~ m#\<meta\s+name="(?:og|twitter)\:url\"\s+content\=\"([^\"]+)#);
+		$self->{'id'} = "$1/$2"  if ($epid && $epid =~ m#^$baseURL\/([^\/]+)\/episode\/([^\/]+)#);
 		print STDERR "-----WE'RE AN EPISODE PAGE: ID=".$self->{'id'}."!\n"  if ($DEBUG);
-		if ($html =~ m#\<h1\>(.+?)\<\/h1\>#s) {
+		if ($html =~ m#\<h1[^\>]*\>(.+?)\<\/h1\>#s) {
 			my $h1data = $1;
 			if ($h1data =~ m#\<a\s+href\=\"([^\"]+)#s) {
 				$self->{'albumartist'} = $1;
 				my $channelID = $1  if ($self->{'albumartist'} =~ m#\/(\d+)$#);  #USE PODCAST'S ID FOR ARTIST ICON.
 				$self->{'id'} ||= $channelID;  #USE PODCAST'S ID SINCE NEWER (LONG) EPISODES DON'T HAVE ONE.
-				$self->{'articonurl'} ||= 'https://podcastaddict.com/cache/artwork/thumb/'.$channelID;
+				$self->{'articonurl'} ||= "$baseURL/cache/artwork/thumb/$channelID";
 			}
 			#NOTE:  podcastaddict DOES NOT INCLUDE THE PODCAST ALBUM'S NAME IN EPISODE PAGES.
 			#IF WE ALREADY HAVE (THE CORRECT) ALBUM FIELD, IT MEANS WE FETCHED A PODCAST 
 			#PAGE FIRST AND HERE WE'RE FETCHING THE 1ST EPISODE, SO LEAVE 'EM ALONE (THEY'RE CORRECT)!:
 			#(FOR REFERENCE, NORMALLY THE "ARTIST" IS THE PODCAST'S ARTIST'S NAME, AND ALBUM IS THE 
 			#PODCAST'S NAME (AN ARTIST CAN HAVE MULTIPLE PODCASTS & A PODCAST CAN HAVE MULT. EPISODES)!)
-			$self->{'artist'} ||= $1  if ($h1data =~ m#\>(.+?)\<\/a\>#s);
+			$self->{'album'} = $1  if ($h1data =~ m#\>(.+?)\<\/a\>#s);
 		}
-		$self->{'title'} = $1  if ($html =~ m#\<h4\>(.+?)\<\/h4\>#s);
+		$self->{'artist'} = $1  if ($html =~ m# by ([^\"]+?) on Podcast Addict\"#s);
+		$self->{'title'} = $1  if ($html =~ m#\<h2[^\>]*\>(.+?)\<\/h2>#s);
+		$self->{'title'} ||= $1  if ($html =~ m#\<meta\s+property\=\"(?:og|twitter)\:title\"\s+content\=\"([^\"]+)#s);
 		$self->{'imageurl'} = $1  if ($html =~ m#Artwork\"\s+src\=\"([^\"]+)#s);
 		$self->{'imageurl'} ||= $1  if ($html =~ m#\<meta\s+property\=\"og\:image\"\s+content\=\"([^\"]+)#);
 		$self->{'iconurl'} = $self->{'imageurl'};
@@ -493,7 +505,7 @@ TRYIT:
 			$self->{'year'} = $2;
 			($self->{'created'} = $1 . $2) =~ s/^\s+//;
 		}
-		$self->{'description'} = $1  if ($html =~ m#\<meta\s+property\=\"og\:description\"\s+content\=\"(.+?)\"\>#);
+		$self->{'description'} = $1  if ($html =~ m#\<meta\s+property\=\"(?:og|twitter)\:description\"\s+content\=\"(.+?)\"\s*\>#);
 		while ($html =~ s#\<video(.+?)</video>##sio) {   #GRAB ANY VIDEO STREAMS (PODCASTADDICT SUPPORTS VIDEO PODCASTS!):
 			my $videodata = $1;
 			my $stream = $1  if ($videodata =~ m#src\=\"([^\"]+)#s);
@@ -501,7 +513,7 @@ TRYIT:
 				next  if ($self->{'secure'} && $stream !~ /^https/o);
 
 				$stream =~ s#\?utm\_source\=.*$##o;
-#				$stream =~ s#\&from\=PodcastAddict##o;
+				$stream =~ s#\&from\=PodcastAddict##o;
 				$stream =~ s#[\?\&]from\=PodcastAddict$##o;
 				$stream =~ s#\.mp3\?.*$#\.mp3#o;
 				push @{$self->{'streams'}}, $stream;
@@ -521,49 +533,79 @@ TRYIT:
 				$self->{'cnt'}++;
 			}
 		}
+		#FALLBACK TO JSON, (IN CASE ANYTHING'S MISSING):
+		if ($html =~ s#\<script\s+type\=\"application\/ld\+json\"\s*\>##s) {
+			if ($html =~ s#\"name\"\:\s+\"([^\"]+)\"\,##s) {
+				$self->{'title'} ||= $1;
+			}
+			if ((!$self->{'created'} || !$self->{'year'})
+					&& $html =~ s#\"datePublished\"\:\s*\"([^\"]+)\"\,##s) {
+				$self->{'created'} = $1;
+				$self->{'year'} = $1  if ($self->{'created'} =~ /(\d\d\d\d)/);
+			}
+			$self->{'description'} ||= $1
+					if ($html =~ s#\"description\"\:\s*\"([^\"]+)\"\,##s);
+			if ($self->{'cnt'} <= 0
+					&& $html =~ s#\"contentUrl\"\:\s*\"(https?\:\/\/[^\"]+)\"##s) {
+				my $stream = $1;
+				if ($stream) {
+					unless ($self->{'secure'} && $stream !~ /^https/o) {
+						$stream =~ s#\?utm\_source\=.*$##o;
+						$stream =~ s#[\?\&]from\=PodcastAddict$##o;
+						$stream =~ s#\.mp3\?.*$#\.mp3#o;
+						print STDERR "-----FOUND LAST-DITCH STREAM=$stream=!\n"
+								if ($DEBUG);
+						push @{$self->{'streams'}}, $stream;
+						$self->{'cnt'}++;
+					}
+				}
+			}
+			$self->{'album'} ||= $1  if ($html =~ s#\"name\"\:\s*\"([^\"]+)\"\,##s);
+		}
 	}
 
 	$self->{'total'} = $self->{'cnt'};
 	$self->{'Url'} = ($self->{'total'} > 0) ? $self->{'streams'}->[0] : '';
-
-	if ($DEBUG) {
-		print STDERR "-(all)count=".$self->{'total'}."= ID=".$self->{'id'}."=\n";
-		foreach my $f (sort keys %{$self}) {
-			print STDERR "--field($f)=".$self->{$f}."=\n";
-		}
-		foreach my $s (@{$self->{'streams'}}) {
-			print STDERR "-----stream=$s=\n";
-		}
+	foreach my $i (qw(title artist album description genre)) {
+		$self->{$i} = HTML::Entities::decode_entities($self->{$i});
+		$self->{$i} = uri_unescape($self->{$i});
+		$self->{$i} =~ s/(?:\%|\\[ux\%]?00|\bu00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
 	}
-	return undef  unless ($self->{'cnt'} > 0);
 
 	#GENERATE EXTENDED-M3U PLAYLIST (NOTE: MAY NOT BE ABLE TO UNTIL USER CALLS $podcast->get('playlist')!):
-
-	$self->{'playlist'} = "#EXTM3U\n";
-	if ($#epiStreams >= 0) {
-		$self->{'playlist_cnt'} = scalar @epiStreams;
-		for (my $i=0;$i<=$#epiStreams;$i++) {
-
-			last  if ($i > $#epiTitles);
-			$self->{'playlist'} .= "#EXTINF:-1, " . $epiTitles[$i] . "\n";
-			$self->{'playlist'} .= "#EXTART:" . $self->{'artist'} . "\n"
-					if ($self->{'artist'});
-			$self->{'playlist'} .= "#EXTALB:" . $self->{'album'} . "\n"
-					if ($self->{'album'});
-			$self->{'playlist'} .= "#EXTGENRE:" . $self->{'genre'} . "\n"
-					if ($self->{'genre'});
-			$self->{'playlist'} .= $epiStreams[$i] . "\n";
-		}
-	} else {
-		$self->{'playlist_cnt'} = 1;
+	if ($self->{'cnt'} > 0) {
+		$self->{'playlist'} = "#EXTM3U\n";
+		$self->{'playlist'} = "#EXTM3U\n";
 		$self->{'playlist'} .= "#EXTINF:-1, " . $self->{'title'} . "\n";
 		$self->{'playlist'} .= "#EXTART:" . $self->{'artist'} . "\n"
 				if ($self->{'artist'});
 		$self->{'playlist'} .= "#EXTALB:" . $self->{'album'} . "\n"
 				if ($self->{'album'});
-		$self->{'playlist'} .= "#EXTGENRE:" . $self->{'genre'} . "\n"
-				if ($self->{'genre'});
+		$self->{'playlist'} .= "#EXTGENRE:" . $self->{'genre'} . "\n";
 		$self->{'playlist'} .= ${$self->{'streams'}}[0] . "\n";
+		$self->{'playlist_cnt'} = 1;
+		if ($#epiStreams >= 0) {
+			$self->{'playlist_cnt'} += scalar @epiStreams;
+			for (my $i=0;$i<=$#epiStreams;$i++) {
+				last  if ($i > $#epiTitles);
+				$self->{'playlist'} .= "#EXTINF:-1, " . $epiTitles[$i] . "\n";
+				$self->{'playlist'} .= "#EXTART:" . $self->{'artist'} . "\n"
+						if ($self->{'artist'});
+				$self->{'playlist'} .= "#EXTALB:" . $self->{'album'} . "\n"
+						if ($self->{'album'});
+				$self->{'playlist'} .= "#EXTGENRE:" . $self->{'genre'} . "\n";
+				$self->{'playlist'} .= $epiStreams[$i] . "\n";
+			}
+		}
+	}
+
+	$self->{'total'} = $self->{'cnt'};
+	$self->{'Url'} = ($self->{'total'} > 0) ? $self->{'streams'}->[0] : '';
+	if ($DEBUG) {
+		foreach my $f (sort keys %{$self}) {
+			print STDERR "--KEY=$f= VAL=$$self{$f}=\n";
+		}
+		print STDERR "-SUCCESS: 1st stream=".$self->{'Url'}."=\n"  if ($self->{'cnt'} > 0);;
 	}
 
 	$self->_log($url);

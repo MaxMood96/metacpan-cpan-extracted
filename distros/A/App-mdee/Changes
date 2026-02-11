@@ -1,5 +1,13 @@
 Revision history for Perl extension App-mdee
 
+0.15 2026-02-11T10:04:47Z
+
+    - Make hashed theme the default (--no-theme to clear, --theme accumulates)
+    - Deduplicate themes to prevent double-application warnings
+    - Improve link patterns with backtick span and backslash escape support
+    - Unify pattern[] with theme system, fix h6 multi-hash pattern
+    - Require Getopt::Long::Bash 0.7.2 for permute loop fix
+
 0.14 2026-02-09T09:55:18Z
 
     - Redesign theme system: themes as transformations with chaining

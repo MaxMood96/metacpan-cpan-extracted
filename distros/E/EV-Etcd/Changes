@@ -1,0 +1,16 @@
+Revision history for EV-Etcd
+
+0.02  2026-02-10
+    - Initial release
+    - KV operations: get, put, delete, range, txn (compare-and-swap)
+    - Watch with bidirectional streaming and auto-reconnect
+    - Lease: grant, revoke, keepalive, time-to-live, leases
+    - Lock and unlock tied to leases
+    - Election: campaign, proclaim, leader, resign, observe
+    - Cluster: member list/add/remove/update/promote
+    - Maintenance: status, compact, defragment, alarm, hash_kv, move_leader
+    - Auth: user/role management, authenticate, enable/disable
+    - Health monitoring with configurable interval and callback
+    - Automatic retries for transient gRPC failures
+    - Multiple endpoint support with failover
+    - Structured error callbacks ({code, message, source})

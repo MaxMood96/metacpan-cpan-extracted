@@ -6,10 +6,13 @@ use warnings;
 
 use Test::More;
 
-plan tests => 1 + ($ENV{AUTHOR_TESTING} ? 1 : 0);
+plan tests => 4 + ($ENV{AUTHOR_TESTING} ? 1 : 0);
 
 my @module_files = (
-    'ExtUtils/Typemaps/Signal.pm'
+    'ExtUtils/Typemaps/SigSet.pm',
+    'ExtUtils/Typemaps/Signal.pm',
+    'ExtUtils/Typemaps/Signo.pm',
+    'ExtUtils/Typemaps/TimeSpec.pm'
 );
 
 

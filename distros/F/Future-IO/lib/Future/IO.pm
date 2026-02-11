@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2019-2026 -- leonerd@leonerd.org.uk
 
-package Future::IO 0.19;
+package Future::IO 0.20;
 
 use v5.14;
 use warnings;
@@ -20,12 +20,12 @@ our $IMPL;
 our $MAX_READLEN = 8192;
 our $MAX_WRITELEN = 8192;
 
-use IO::Poll qw( POLLIN POLLOUT POLLHUP POLLERR POLLNVAL );
+use IO::Poll qw( POLLIN POLLOUT POLLPRI POLLHUP POLLERR POLLNVAL );
 
 use Exporter 'import';
 BEGIN {
    # This needs to happen at BEGIN time because stupid cyclic reasons
-   our @EXPORT_OK = qw( POLLIN POLLOUT POLLHUP POLLERR POLLNVAL );
+   our @EXPORT_OK = qw( POLLIN POLLOUT POLLPRI POLLHUP POLLERR POLLNVAL );
 }
 
 =head1 NAME
@@ -197,11 +197,11 @@ I<Since version 0.19.>
 
 Returns a L<Future> that will become done when the indicated IO operations
 can be performed on the given filehandle. I<$events> should be a bitfield of
-one or more of the POSIX C<POLL*> constants, such as C<POLLIN> or C<POLLOUT>.
-The result of the future will be a similar bitfield, indicating which
-operations may now take place. If the C<POLLHUP>, C<POLLERR> or C<POLLNVAL>
-events happen, they will always be reported; you do not need to request these
-specifically.
+one or more of the POSIX C<POLL*> constants, such as C<POLLIN>, C<POLLOUT> or
+C<POLLPRI>. The result of the future will be a similar bitfield, indicating
+which operations may now take place. If the C<POLLHUP>, C<POLLERR> or
+C<POLLNVAL> events happen, they will always be reported; you do not need to
+request these specifically.
 
 Multiple outstanding futures may be enqueued for the same filehandle. When an
 event happens, only the first outstanding future that is interested in it is
@@ -634,20 +634,30 @@ This method works by attempting a few different strategies to determine the
 modules which provide implementations, and attempts them in a given preference
 order.
 
+The environment variable C<PERL_FUTURE_IO_IMPL> offers further control of the
+behaviour of this method. Its value should be a comma-separated list of
+implementation names to be attempted, in preference to any of the others.
+Names prefixed with a hyphen will be skipped entirely by any attempt.
+
 =over 4
 
 =item 1.
 
-First, any of the modules that attempt to wrap other event systems such
-as L<UV> or L<Glib> are attempted if it is detected that the other event
-system is already loaded.
+First, if C<PERL_FUTURE_IO_IMPL> is set, any of the names given are tried, in
+order.
 
 =item 2.
+
+Then any of the modules that attempt to wrap other event systems such as L<UV>
+or L<Glib> are attempted if it is detected that the other event system is
+already loaded.
+
+=item 3.
 
 If none of these were successful, next it attempts any OS-specific modules
 based on the OS name (given by C<$^O>).
 
-=item 3.
+=item 4.
 
 Finally, a list of other generic modules is attempted, which also includes
 any of the wrapper implementations that can be started independently.
@@ -687,9 +697,27 @@ sub load_best_impl
 {
    shift;
 
+   my @prefer;
+   my %veto;
+
+   foreach ( split m/,/, $ENV{PERL_FUTURE_IO_IMPL} // "" ) {
+      if( s/^-// ) {
+         $veto{$_} = 1;
+      }
+      else {
+         push @prefer, $_;
+      }
+   }
+
+   foreach my $impl ( @prefer ) {
+      $veto{$impl} and next;
+      Future::IO->try_load_impl( $impl ) and return 1;
+   }
+
    # First, load a wrapper impl if the wrapped system is already loaded
    foreach ( @IMPLS_WRAPPER ) {
       my ( $impl, $package ) = ref $_ ? @$_ : ( $_, $_ );
+      $veto{$impl} and next;
       eval { $package->VERSION(0) } or next;
 
       Future::IO->try_load_impl( $impl ) and return 1;
@@ -697,11 +725,13 @@ sub load_best_impl
 
    # OK, maybe we can find a good impl for this particular OS
    foreach my $impl ( @{ $IMPLS_FOR_OS{$^O} || [] } ) {
+      $veto{$impl} and next;
       Future::IO->try_load_impl( $impl ) and return 1;
    }
 
    # Failing all of that, try the generic ones
    foreach my $impl ( @IMPLS_GENERIC ) {
+      $veto{$impl} and next;
       Future::IO->try_load_impl( $impl ) and return 1;
    }
 

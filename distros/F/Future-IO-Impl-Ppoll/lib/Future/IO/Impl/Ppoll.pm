@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2026 -- leonerd@leonerd.org.uk
 
-package Future::IO::Impl::Ppoll 0.03;
+package Future::IO::Impl::Ppoll 0.04;
 
 use v5.20;
 use warnings;
@@ -13,6 +13,7 @@ use feature qw( postderef signatures );
 no warnings qw( experimental::postderef experimental::signatures );
 
 use Carp;
+our @CARP_NOT = qw( Future::IO::Impl::Ppoll::_Future );
 
 use IO::Ppoll qw( POLLIN POLLOUT POLLHUP POLLERR POLLNVAL );
 use POSIX qw( SIG_BLOCK sigprocmask );
@@ -31,6 +32,7 @@ BEGIN {
 }
 
 BEGIN {
+   Future::IO->VERSION( '0.19' );
    # Just check for sanity
    IO::Ppoll->$_ == Future::IO->$_ or die "This implementation relies on the Future::IO $_ constant being the same as system\n"
       for qw( POLLIN POLLOUT POLLHUP POLLERR POLLNVAL );
@@ -78,7 +80,7 @@ sub ppoll () { $ppoll //= IO::Ppoll->new }
 sub _update_poll ( $fh )
 {
    my $refaddr = refaddr $fh;
-   $fh->fileno or
+   defined $fh->fileno or
       carp "Filehandle $fh lost its fileno (was closed?) during poll";
 
    my $mask = 0;
@@ -94,8 +96,13 @@ sub _update_poll ( $fh )
    }
 }
 
+our $RECURSION;
+
 sub _tick ( $ )
 {
+   carp "Future::IO::Impl::Ppoll is not reentrant; strange things may happen" if $RECURSION;
+   local $RECURSION = 1;
+
    my $ppoll = ppoll();
 
    my $timeout = undef;
@@ -109,19 +116,22 @@ sub _tick ( $ )
 
    foreach my $refaddr ( keys %fh_by_refaddr ) {
       my $fh = $fh_by_refaddr{$refaddr};
-      my $revents = $ppoll->events( $fh ) or next;
+      # If the filehandle has no fileno, that means it was closed. It was
+      # definitely invalid
+      my $revents = ( defined $fh->fileno ) ? $ppoll->events( $fh ) : POLLNVAL
+         or next;
 
       my $pollers = $pollers_by_refaddr{$refaddr} or next;
       # TODO: if nobody cared, maybe we should remove it?
 
       # Find the next poller which cares about at least one of these events
       foreach my $idx ( 0 .. $#$pollers ) {
-         $pollers->[$idx]->events & $revents or       # This poller cares about this event
-         ( $revents & (POLLHUP|POLLERR|POLLNVAL) ) or # All pollers should receive this
-            next;
+         my $want_revents = $revents & ( $pollers->[$idx]->events | POLLHUP|POLLERR|POLLNVAL )
+            or next;
 
          my ( $poller ) = splice @$pollers, $idx, 1, ();
-         $poller and $poller->f and $poller->f->done( $revents );
+
+         $poller and $poller->f and $poller->f->done( $want_revents );
          last;
       }
 

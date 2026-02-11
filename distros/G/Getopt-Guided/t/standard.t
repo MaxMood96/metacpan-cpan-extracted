@@ -8,7 +8,7 @@ my $module;
 
 BEGIN {
   if ( defined $ENV{ UUT } and ( $module = $ENV{ UUT } ) eq 'Getopt::Std' ) {
-    require_ok $module or BAIL_OUT "Cannot loade module '$module'!";
+    require_ok $module or BAIL_OUT "Cannot load module '$module'!";
     # Wrap Getopt::Std::getopts() to patch its PROTO section
     *getopts = sub ( $\%;\@ ) {
       my ( $spec, $opts, $argv ) = @_;
@@ -17,7 +17,7 @@ BEGIN {
     }
   } else {
     $module = 'Getopt::Guided';
-    use_ok $module, qw( getopts ) or BAIL_OUT "Cannot loade module '$module'!"
+    use_ok $module, qw( getopts ) or BAIL_OUT "Cannot load module '$module'!"
   }
 }
 

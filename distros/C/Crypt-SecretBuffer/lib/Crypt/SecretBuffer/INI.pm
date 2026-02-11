@@ -1,7 +1,7 @@
 package Crypt::SecretBuffer::INI;
 # VERSION
 # ABSTRACT: Parse INI format from a SecretBuffer
-$Crypt::SecretBuffer::INI::VERSION = '0.017';
+$Crypt::SecretBuffer::INI::VERSION = '0.018';
 use strict;
 use warnings;
 use Carp;
@@ -196,7 +196,7 @@ sub parse {
       croak $tokens->{error}
          if defined $tokens->{error};
       if (defined $tokens->{section}) {
-         $tokens->{section}->copy_to($section);
+         $tokens->{section}->copy_to($section= '');
          if (defined $sep) {
             $node= $root;
             for (split $sep, $section) {
@@ -216,7 +216,7 @@ sub parse {
                push @$root, '', ($node= {});
             }
          }
-         $tokens->{key}->copy_to($key);
+         $tokens->{key}->copy_to($key= '');
          if (!$tokens->{value}) {
             $value= undef;
          } else {
@@ -405,7 +405,7 @@ This function dies on any parse errors.
 
 =head1 VERSION
 
-version 0.017
+version 0.018
 
 =head1 AUTHOR
 
@@ -413,7 +413,7 @@ Michael Conrad <mike@nrdvana.net>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2025 by Michael Conrad.
+This software is copyright (c) 2026 by Michael Conrad.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

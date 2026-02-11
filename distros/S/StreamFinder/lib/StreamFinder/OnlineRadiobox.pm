@@ -1,9 +1,10 @@
 =head1 NAME
 
 StreamFinder::OnlineRadiobox - Fetch actual raw streamable URLs from radio-station websites on Onlineradiobox.com
+
 =head1 AUTHOR
 
-This module is Copyright (C) 2022 by
+This module is Copyright (C) 2022-2026 by
 
 Jim Turner, C<< <turnerjw784 at yahoo.com> >>
 		
@@ -108,7 +109,8 @@ One or more streams can be returned for each station.
 Accepts an Onlineradiobox.com station ID or URL and creates and returns a new 
 station object, or I<undef> if the URL is not a valid Onlineradiobox.com 
 station or no streams are found.  The URL can be the full URL, 
-ie. https://Onlineradiobox.com/B<country-code>/B<station-id>, or just I<station-id>.
+ie. I<https://Onlineradiobox.com/>B<country-code>/B<station-id>, 
+or just I<station-id>.
 
 The optional I<-notrim> argument can be either 0 or 1 (I<false> or I<true>).  
 If 0 (I<false>) then stream URLs are trimmed of excess "ad" parameters 
@@ -119,8 +121,8 @@ DEFAULT I<-notrim> (if not given) is 0 (I<false>) and URLs are trimmed.  If
 I<-notrim> is specified without argument, the default is 1 (I<true>).  Try 
 using I<-notrim> if stream will not play without the extra arguments.
 
-The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  If 1 
-then only secure ("https://") streams will be returned.
+The optional I<-secure> argument can be either 0 or 1 (I<false> or I<true>).  
+If 1 then only secure ("https://") streams will be returned.
 
 DEFAULT I<-secure> is 0 (false) - return all streams (http and https).
 
@@ -128,8 +130,9 @@ Additional options:
 
 I<-log> => "I<logfile>"
 
-Specify path to a log file.  If a valid and writable file is specified, A line will be 
-appended to this file every time one or more streams is successfully fetched for a url.
+Specify path to a log file.  If a valid and writable file is specified, A line 
+will be appended to this file every time one or more streams is successfully 
+fetched for a url.
 
 DEFAULT I<-none-> (no logging).
 
@@ -137,11 +140,12 @@ I<-logfmt> specifies a format string for lines written to the log file.
 
 DEFAULT "I<[time] [url] - [site]: [title] ([total])>".  
 
-The valid field I<[variables]> are:  [stream]: The url of the first/best stream found.  
-[site]:  The site name (OnlineRadiobox).  [url]:  The url searched for streams.  
-[time]: Perl timestamp when the line was logged.  [title], [artist], [album], 
-[description], [year], [genre], [total], [albumartist]:  The corresponding field data 
-returned (or "I<-na->", if no value).
+The valid field I<[variables]> are:  [stream]: The url of the first/best 
+stream found.  [site]:  The site name (OnlineRadiobox).  [url]:  The url 
+searched for streams.  [time]: Perl timestamp when the line was logged.  
+[title], [artist], [album], [description], [year], [genre], [total], 
+[albumartist]:  The corresponding field data returned (or "I<-na->", 
+if no value).
 
 =item $station->B<get>()
 
@@ -231,7 +235,8 @@ and the options are loaded into a hash used only by the specific
 (submodule) specified.  Valid options include 
 I<-debug> => [0|1|2] and most of the L<LWP::UserAgent> options.  
 
-Options specified here override any specified in I<~/.config/StreamFinder/config>.
+Options specified here override any specified in 
+I<~/.config/StreamFinder/config>.
 
 Among options valid for OnlineRadioBox streams is the I<-notrim> described 
 in the B<new()> function.  
@@ -287,10 +292,6 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=StreamFinder-OnlineRadiobox>
 =item * AnnoCPAN: Annotated CPAN documentation
 
 L<http://annocpan.org/dist/StreamFinder-OnlineRadiobox>
-
-=item * CPAN Ratings
-
-L<http://cpanratings.perl.org/d/StreamFinder-OnlineRadiobox>
 
 =item * Search CPAN
 
@@ -399,7 +400,8 @@ sub new
 		$self->{'title'} ||= $1  if ($goodpart =~ m#\bradioName\=\"([^\"]+)#s);
 		if ($goodpart =~ m#\bradioImg\=\"([^\"]+)#s) {
 			$self->{'iconurl'} = $1;
-			$self->{'iconurl'} = 'https:' . $self->{'iconurl'}  if ($self->{'iconurl'} =~ m#^\/\/#);
+			$self->{'iconurl'} = 'https:' . $self->{'iconurl'}
+					if ($self->{'iconurl'} =~ m#^\/\/#);
 		}
 		$self->{'fccid'} = $1  if ($goodpart =~ m#\bradioId\=\"([^\"]+)#s);
 
@@ -407,13 +409,14 @@ sub new
 		if ($goodpart =~ m#\bstream\=\"([^\"]+)#si) {
 			my $one = $1;
 			unless ($self->{'secure'} && $one !~ /^https/o) {
-				$one =~ s/\.(\w+)\?.*$/\.$1/  unless ($self->{'notrim'});   #STRIP OFF EXTRA GARBAGE PARMS, COMMENT OUT IF STARTS FAILING!
+				$one =~ s/\.(\w+)\?.*$/\.$1/  unless ($self->{'notrim'}); #STRIP OFF EXTRA GARBAGE PARMS, COMMENT OUT IF STARTS FAILING!
 				push @{$self->{'streams'}}, $one;
 				$self->{'cnt'}++;
 			}
 		}
 	}
-	$self->{'description'} = $1  if ($html =~ m#\<div\s+class\=\"station\_\_description\"[^\>]*\>([^\<]+)#si);
+	$self->{'description'} = $1
+			if ($html =~ m#\<div\s+class\=\"station\_\_description\"[^\>]*\>([^\<]+)#si);
 	if ($html =~ m#\<ul\s+class\=\"station\_\_tags\"(.+?)\<\/ul\>#si) {
 		my $goodpart = $1;
 		$self->{'genre'} = '';
@@ -430,13 +433,17 @@ sub new
 	foreach my $field (qw(description title genre)) {
 		$self->{$field} = HTML::Entities::decode_entities($self->{$field});
 		$self->{$field} = uri_unescape($self->{$field});
-		$self->{$field} =~ s/(?:\%|\\?u?00)([0-9A-Fa-f]{2})/chr(hex($1))/eg;
+		$self->{$field} =~ s/(?:\%|\\[ux\%]?00|\bu00)([0-9A-Fa-f]{2})/chr(hex($1))/egs;
 	}
-	print STDERR "-2: ID=".$self->{'id'}."=\nicon=".$self->{'iconurl'}."=\ntitle=".$self->{'title'}."=\ngenre=".$self->{'genre'}."=\ndesc=".$self->{'description'}."=\nalbum_artist=".$self->{'albumartist'}."=\n"  if ($DEBUG);
 	$self->{'total'} = $self->{'cnt'};
 	$self->{'Url'} = ($self->{'total'} > 0) ? $self->{'streams'}->[0] : '';
-	print STDERR "--SUCCESS: 1st stream=".$self->{'Url'}."= total=".$self->{'total'}."=\n"
-			if ($DEBUG && $self->{'cnt'} > 0);
+	if ($DEBUG) {
+		foreach my $f (sort keys %{$self}) {
+			print STDERR "--KEY=$f= VAL=$$self{$f}=\n";
+		}
+		print STDERR "-SUCCESS: 1st stream=".$self->{'Url'}."=\n"  if ($self->{'cnt'} > 0);;
+	}
+
 	$self->_log($url);
 
 	bless $self, $class;   #BLESS IT!

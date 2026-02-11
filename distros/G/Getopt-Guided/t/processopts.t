@@ -12,7 +12,7 @@ my $module;
 
 BEGIN {
   $module = 'Getopt::Guided';
-  use_ok $module, qw( EOOD print_version_info processopts ) or BAIL_OUT "Cannot loade module '$module'!"
+  use_ok $module, qw( EOOD print_version_info processopts ) or BAIL_OUT "Cannot load module '$module'!"
 }
 
 my $fail_cb = sub { fail "'$_[ 1 ]' callback shouldn't be called" };

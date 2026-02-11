@@ -1,5 +1,13 @@
 Release history for Getopt-Guided
 
+3.0.3    Tue Feb 10 12:28:24 PM CET 2026
+         - Describe print_version_info()
+         - Improve Makefile.PL modulino setup:
+           - Make $distname the leading information piece
+           - lib/ is now part of $main_module_file and $main_module_podfile
+         - Improve min version requirement setups
+         - Migrated to Codeberg
+
 3.0.2    Sun Jan 25 09:22:55 AM CET 2026
          - Describe processopts()
          - Exit with code 255, if "broken" utility dies

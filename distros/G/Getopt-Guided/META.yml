@@ -31,7 +31,7 @@ no_index:
 provides:
   Getopt::Guided:
     file: lib/Getopt/Guided.pm
-    version: v3.0.2
+    version: v3.0.3
 requires:
   Carp: '1.32'
   File::Basename: '0'
@@ -39,6 +39,6 @@ requires:
   strict: '0'
   warnings: '0'
 resources:
-  bugtracker: https://github.com/XSven/Getopt-Guided/issues
-  repository: https://github.com/XSven/Getopt-Guided.git
-version: v3.0.2
+  bugtracker: https://codeberg.org/XSven/Getopt-Guided/issues
+  repository: https://codeberg.org/XSven/Getopt-Guided.git
+version: v3.0.3

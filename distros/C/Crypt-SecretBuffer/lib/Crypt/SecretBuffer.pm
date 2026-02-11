@@ -1,7 +1,7 @@
 package Crypt::SecretBuffer;
 # VERSION
 # ABSTRACT: Prevent accidentally leaking a string of sensitive data
-$Crypt::SecretBuffer::VERSION = '0.017';
+$Crypt::SecretBuffer::VERSION = '0.018';
 
 use strict;
 use warnings;
@@ -18,33 +18,24 @@ bootstrap Crypt::SecretBuffer;
 
 {
    package Crypt::SecretBuffer::Exports;
-$Crypt::SecretBuffer::Exports::VERSION = '0.017';
-use Exporter 'import';
+$Crypt::SecretBuffer::Exports::VERSION = '0.018';
+   use Exporter 'import';
    @Crypt::SecretBuffer::Exports::EXPORT_OK= qw(
-      secret_buffer secret unmask_secrets_to memcmp
+      secret_buffer secret span unmask_secrets_to memcmp
       NONBLOCK AT_LEAST ISO8859_1 ASCII UTF8 UTF16LE UTF16BE HEX BASE64
       MATCH_MULTI MATCH_REVERSE MATCH_NEGATE MATCH_ANCHORED
    );
-   *NONBLOCK=       *Crypt::SecretBuffer::NONBLOCK;
-   *AT_LEAST=       *Crypt::SecretBuffer::AT_LEAST;
-   *ISO8859_1=      *Crypt::SecretBuffer::ISO8859_1;
-   *ASCII=          *Crypt::SecretBuffer::ASCII;
-   *UTF8=           *Crypt::SecretBuffer::UTF8;
-   *UTF16LE=        *Crypt::SecretBuffer::UTF16LE;
-   *UTF16BE=        *Crypt::SecretBuffer::UTF16BE;
-   *HEX=            *Crypt::SecretBuffer::HEX;
-   *BASE64=         *Crypt::SecretBuffer::BASE64;
-   *MATCH_MULTI=    *Crypt::SecretBuffer::MATCH_MULTI;
-   *MATCH_REVERSE=  *Crypt::SecretBuffer::MATCH_REVERSE;
-   *MATCH_NEGATE=   *Crypt::SecretBuffer::MATCH_NEGATE;
-   *MATCH_ANCHORED= *Crypt::SecretBuffer::MATCH_ANCHORED;
 }
 
+# Some of the exported functions are not methods, so instead of having them in the object's
+# namespace I put them in the ::Exports namespace.  Importing from Crypt::SecretBuffer is
+# equivalent to importing from Crypt::SecretBuffer::Exports.
 sub import {
    splice(@_, 0, 1, 'Crypt::SecretBuffer::Exports');
    goto \&Crypt::SecretBuffer::Exports::import;
 }
 
+# For "use Inline -with => 'Crypt::SecretBuffer';" but lazy-load the data.
 sub Inline {
    require Crypt::SecretBuffer::Install::Files;
    goto \&Crypt::SecretBuffer::Install::Files::Inline;
@@ -232,8 +223,8 @@ Crypt::SecretBuffer - Prevent accidentally leaking a string of sensitive data
 
   use Crypt::SecretBuffer 'secret';
   $buf= secret;
-  print "Enter your password: ";
-  $buf->append_console_line(STDIN)   # read TTY with echo disabled
+  # read TTY with echo disabled
+  $buf->append_console_line(STDIN, prompt => 'password: ')
     or die "Aborted";
   say $buf;                          # prints "[REDACTED]"
   
@@ -273,8 +264,6 @@ benefit.
 The SecretBuffer is a blessed reference, and the buffer itself is stored in XS in a way that
 the Perl interpreter has no knowledge of.  Any time the buffer needs reallocated, a new buffer
 is allocated, the secret is copied, and the old buffer is wiped clean before freeing it.
-It also guards against timing attacks by copying all the allocated buffer space instead of
-just the length that is occupied by the secret.
 
 The API also provides you with a few ways to read or write the secret, since any read/write code
 implemented directly in Perl would potentially expose your secret to having copies made in
@@ -544,6 +533,35 @@ L<Span object|Crypt::SecretBuffer::Span> and then call its methods.
 Compare contents of the buffer byte-by-byte to another SecretBuffer (or Span, or plain scalar)
 in the same manner as the C function C<memcmp>.  (returns C<< <0 >>, C<0>, or C<< >0 >>)
 
+=head2 append_lenprefixed
+
+  $buf->append_lenprefixed(@byte_strings);
+
+Append one or more strings (which can be a SecretBuffer, L<Span|Crypt::SecretBuffer::Span>, or
+plain scalar of bytes) to the buffer, prefixing each with a variable-length encoding of the
+number of bytes that follows.
+The variable length encoding is base128 big-endian, the same as implemented in
+C<< pack('w',...) >>.  In other words,
+
+  for (@byte_strings) {
+    my $len= ref($_)? $_->length : length($_);
+    $buf->append(pack("w", $len))->append($_);
+  }
+
+See L<Crypt::SecretBuffer::Span/parse_lenprefixed> for the decoding routine.
+
+=head2 append_base128be
+
+Append a variable-length integer encoded as base128 big-endian.  (same as C<< pack('w') >>)
+
+=head2 append_base128le
+
+Append a variable-length integer encoded as base128 little-endian.
+
+=head2 append_asn1_der_length
+
+Append a variable-length integer encoded as the format used by ASN.1 DER for element lengths.
+
 =head2 append_random
 
   $byte_count= $buf->append_random($n_bytes);
@@ -736,6 +754,23 @@ Shorthand function for calling L</new>.
 
 Shorthand function for calling L</new>.
 
+=item span
+
+  $span= span($secret_buffer_or_span_or_scalar, $pos, $len, $encoding);
+  $span= span($secret_buffer_or_span_or_scalar, %attributes);
+
+This is sort of a coercion function that takes the first argument and makes it
+into a buffer of bytes from which a span can be returned.  If the first argument
+is a Span object, the return value is a clone rather than a pass-through.
+The equivalent perl would be roughly:
+
+  my $thing= shift;
+  return $thing->isa('Crypt::SecretBuffer')? $thing->span(@_)
+       : $thing->isa('Crypt::SecretBuffer::Span')? $thing->subspan(@_)
+       : secret($thing)->span(@_);
+
+See L<Crypt::SecretBuffer::Span/new> for a list of attributes.
+
 =item unmask_secrets_to
 
   @ret= unmask_secrets_to \&coderef, $arg1, $arg2, ...;
@@ -875,7 +910,7 @@ instructions how to report security vulnerabilities.
 
 =head1 VERSION
 
-version 0.017
+version 0.018
 
 =head1 AUTHOR
 
@@ -883,7 +918,7 @@ Michael Conrad <mike@nrdvana.net>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2025 by Michael Conrad.
+This software is copyright (c) 2026 by Michael Conrad.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

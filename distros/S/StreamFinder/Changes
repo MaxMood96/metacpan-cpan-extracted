@@ -788,7 +788,7 @@ Revision history for StreamFinder
         - Did a quick test of all StreamFinder modules to see if they still 
         work (many I haven't used in ages, and sites change!).  Results below:
         - StreamFinder::BrandNewTube - Refactor to work again after 
-        brandnewtube.com became onevsp.com and ugettube.com close up shop.
+        brandnewtube.com became onevsp.com and ugettube.com closed up shop.
         onevsp.com also does not appear to support "embed" pages.
         - StreamFinder::Apple - Refactor to work again after site completely 
         redid itself.  Also return the page-stated length of the podcast in 
@@ -818,3 +818,16 @@ Revision history for StreamFinder
         from Youtube web-pages.  Fix potential issue with the ID field returned.
         - Many small doc. cleanups & copyright-year updates.
         - Misc. code & doc. tweaks in various modules.
+2.61    2026/02/10
+        - StreamFinder::Zeno - Try harder to find radio-station streams.
+        - StreamFinder::Podbean - Make fuller use of the provided XML api. for 
+        fetching episode metadata fields, including obtaining channel icons 
+        (articon).  Also improve support for "non Podbean-hosted" podcasts.
+        - StreamFinder::PodcastAddict - "UN-depreciate" by restoring the lost 
+        ability to return first episode and episode-playlists from their 
+        podcast pages, as this is now scrapeable again!
+        - StreamFinder::Podchaser - Make work again on podcast pages (fetching 
+        latest episode and episode playlists.
+        - Tweak handling and conversion of various hex character formats, 
+        misc. doc. tweets, etc. to several others (it seems a cpl. source 
+        files somehow did not make it over into the last release.

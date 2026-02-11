@@ -4,7 +4,7 @@
 # GetOptLong: Getopt Library for Bash Script
 # Copyright 2025 Office TECOLI, LLC <https://github.com/tecolicom/getoptlong>
 # MIT License: See <https://opensource.org/licenses/MIT>
-: ${GOL_VERSION:=0.7.1}
+: ${GOL_VERSION:=0.7.2}
 ###############################################################################
 # Check for nameref support (bash 4.3+)
 declare -n > /dev/null 2>&1 || { echo "Does not support ${BASH_VERSION}" >&2 ; exit 1 ; }
@@ -300,7 +300,7 @@ gol_parse_() { local gol_OPT SAVEARG=() SAVEIND= ;
 	    }
 	done
 	: ${SAVEIND:=$OPTIND}
-	[[ ! $_PERMUTE || $OPTIND > $# || ${@:$(($OPTIND-1)):1} == -- ]] && break
+	[[ ! $_PERMUTE || $OPTIND -gt $# || ${@:$(($OPTIND-1)):1} == -- ]] && break
 	_gol_debug "SAVE PARAM: ${!OPTIND}"
 	SAVEARG+=("${!OPTIND}")
     done

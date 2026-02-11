@@ -5,11 +5,11 @@ use strict;
 use warnings;
 
 use Exporter;
-use DynaLoader  qw( AUTOLOAD );
+use DynaLoader;
 
 use vars qw( $VERSION @ISA @EXPORT @EXPORT_OK );
 
-  $VERSION    = '0.08';
+  $VERSION    = '0.09';
   @ISA        = qw( Exporter DynaLoader );
   @EXPORT     = qw( damn                );
   @EXPORT_OK  = qw( bless               );
@@ -100,7 +100,7 @@ Acme::Damn - 'Unbless' Perl objects.
 
   my $ref = ... some reference ...
   my $obj = bless $ref , 'Some::Class';
-  
+
   ... do something with your object ...
 
      $ref = damn $obj;   # recover the original reference (unblessed)
@@ -201,6 +201,7 @@ Ian Brayshaw, E<lt>ibb@cpan.orgE<gt>
 Copyright 2003-2016 Ian Brayshaw
 
 This library is free software; you can redistribute it and/or modify
-it under the same terms as Perl itself. 
+it under the same terms as Perl itself.
 
 =cut
+

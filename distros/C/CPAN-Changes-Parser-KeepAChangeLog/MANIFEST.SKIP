@@ -1,0 +1,50 @@
+# Version control files and dirs
+\bRCS\b
+\bCVS\b
+^SCCS$
+,v$
+\B\.svn\b
+\B\.git\b
+\B\.gitignore\b
+^\.github/
+
+# Generated files
+^Makefile$
+^Makefile\.old$
+^blib/
+^pm_to_blib\.?
+^blibdirs\.?
+\.old$
+\.bak$
+^MANIFEST\.bak
+^MYMETA\.
+
+# Build artifacts
+^_build/
+^Build$
+^Build\.bat$
+\.tar\.gz$
+\.tgz$
+\.zip$
+
+# Testing
+^cover_db/
+^xt/
+^\.prove$
+
+# Editor/IDE files
+~$
+\.swp$
+\.swo$
+\#$
+\b\.#
+^\.project$
+\.DS_Store
+\.vscode/
+\.idea/
+
+# Temporary and backup files
+^tmp/
+^temp/
+\.tmp$
+\.temp$

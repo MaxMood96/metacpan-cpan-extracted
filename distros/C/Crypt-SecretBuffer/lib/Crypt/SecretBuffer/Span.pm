@@ -1,7 +1,7 @@
 package Crypt::SecretBuffer::Span;
 # VERSION
 # ABSTRACT: Reference a span of bytes within a SecretBuffer
-$Crypt::SecretBuffer::Span::VERSION = '0.017';
+$Crypt::SecretBuffer::Span::VERSION = '0.018';
 use strict;
 use warnings;
 use Crypt::SecretBuffer; # loads XS methods into this package
@@ -137,6 +137,11 @@ Read-only; this determines how characters will be iterated within the SecretBuff
 This carries over to Span objects created from this span.
 See L<Crypt::SecretBuffer/Character Encodings>.
 
+=head2 last_error
+
+Some parse functions return C<undef> on failure and set this attribute to something more
+informative.  Only check this attribute after one of those parse functions has failed.
+
 =head1 METHODS
 
 =head2 parse
@@ -184,16 +189,56 @@ Only remove from the end of the Span
 
 =back
 
-=head2 set_up_us_the_bom
+=head2 parse_lenprefixed
+
+  $span= $span->parse_lenprefixed # count=1
+    or croak $span->last_error;
+  @spans= $span->parse_lenprefixed($count)
+    or croak $span->last_error;
+  @spans= $span->parse_lenprefixed(-1);
+
+Parse one or more length-prefixed spans from the start of this span, returning a list of Span
+objects and updating C<pos> if fully successful.  This first parses a variable-length
+Base128-BigEndian integer, then ensures that there are that many bytes remaining in the span,
+then creates a Span object describing those bytes and advances C<pos> and possibly repeats.
+If the variable-length intgeer is malformed, or not enough bytes remain for the span, the method
+returns an empty list and sets the L</last_error> attribute.
+If you request a count greater than one, all the attempts must succeed or the method returns an
+empty list and sets C<last_error>.  Requesting a count of C<-1> means to consume the remainder
+of the span, which must terminate cleanly at the end of a length-prefixed string.
+
+=head2 parse_base128be
+
+  $len= $span->parse_base128be;
+
+Parse a big-endian base128 encoding where the high-bit indicates continuation, same as
+C<< unpack 'w' >>.  On failure, returns C<undef> and sets L</last_error>.
+
+=head2 parse_base128le
+
+  $len= $span->parse_base128le;
+
+Parse a little-endian base128 encoding where the high-bit indicates continuation, such as used
+by Google Protocol Buffers.  On failure, returns C<undef> and sets L</last_error>.
+
+=head2 parse_asn1_der_length
+
+  $len= $span->parse_asn1_der_length;
+
+Parse the variable-length integer used by ASN.1 DER encoding for the length of an element.
+On failure, returns C<undef> and sets L</last_error>.
+
+=head2 consume_bom
 
   # On a buffer which may begin with a BOM:
-  $something->set_up_us_the_bom->cmp("All your base");
+  $span->consume_bom->cmp("\x{100}");
 
 Look for an optional L<Byte-Order-Mark|https://en.wikipedia.org/wiki/Byte_order_mark> at the
 start of the span, and if found, change the encoding and advance the span start to the next
 character.
 
   First bytes       Encoding
+  -----------       --------
   FE FF             UTF16BE
   FF FE             UTF16LE
   EF BB BF          UTF8
@@ -207,9 +252,9 @@ need to use L</copy> to create a new SecretBuffer of raw bytes, then decode the 
 
 =over
 
-=item consume_bom
+=item set_up_us_the_bom
 
-Provided as an alias, for anyone too embarrassed to put Zero Wing jokes in their code.
+Provided as an alias, for fun.
 
 =back
 
@@ -237,12 +282,15 @@ See L<Crypt::SecretBuffer/Match Flags> for the list of flags.
 
 =head2 copy_to
 
+=head2 append_to
+
   $secret= $span->copy(%options);
   $span->copy_to($scalar_or_secret, %options);
+  $span->append_to($scalar_or_secret, %options);
 
-Copy the current span of bytes.  C<copy> returns a new SecretBuffer object.  C<copy_to> writes
-into an existing buffer, which can be either a SecretBuffer or a scalar for non-secrets.  There
-is intentionally I<not> a method to I<return> a scalar, to avoid easily leaking secrets.
+Copy the current span of bytes.  C<copy> returns a new SecretBuffer object.  C<copy_to> replaces
+the content of a SecretBuffer or scalar.  C<append_to> appends to a SecretBuffer or scalar.
+(There is intentionally I<not> a method to I<return> a scalar, to avoid easily leaking secrets)
 
 Options:
 
@@ -276,7 +324,7 @@ This is B<not> a locale-aware comparison.
 
 =head1 VERSION
 
-version 0.017
+version 0.018
 
 =head1 AUTHOR
 
@@ -284,7 +332,7 @@ Michael Conrad <mike@nrdvana.net>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2025 by Michael Conrad.
+This software is copyright (c) 2026 by Michael Conrad.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

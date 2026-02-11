@@ -1,5 +1,10 @@
 Revision history for Getopt-Long-Bash
 
+0.7.2 2026-02-11T09:40:06Z
+
+    - Fix numeric comparison bug in permute loop (string > vs -gt)
+    - Add permute mode tests
+
 0.7.1 2026-01-17T02:19:55Z
 
     - Fix callback function naming for hyphenated options (list-themes calls list_themes)

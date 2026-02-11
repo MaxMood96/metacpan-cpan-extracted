@@ -1,0 +1,62 @@
+syntax = "proto3";
+package v3electionpb;
+
+import "rpc.proto";
+import "kv.proto";
+
+message LeaderKey {
+  // name is the election identifier for the leadership
+  bytes name = 1;
+  // key is an opaque key representing the ownership of the election
+  bytes key = 2;
+  // rev is the creation revision of the key
+  int64 rev = 3;
+  // lease is the lease ID of the election leader
+  int64 lease = 4;
+}
+
+message CampaignRequest {
+  // name is the election's identifier for the campaign
+  bytes name = 1;
+  // lease is the ID of the lease attached to leadership
+  int64 lease = 2;
+  // value is the initial value to set for the leader key
+  bytes value = 3;
+}
+
+message CampaignResponse {
+  etcdserverpb.ResponseHeader header = 1;
+  // leader describes the resources used for holding leadership
+  LeaderKey leader = 2;
+}
+
+message LeaderRequest {
+  // name is the election identifier for the leadership info
+  bytes name = 1;
+}
+
+message LeaderResponse {
+  etcdserverpb.ResponseHeader header = 1;
+  // kv is the key-value pair representing the latest leader
+  mvccpb.KeyValue kv = 2;
+}
+
+message ResignRequest {
+  // leader is the leadership to relinquish
+  LeaderKey leader = 1;
+}
+
+message ResignResponse {
+  etcdserverpb.ResponseHeader header = 1;
+}
+
+message ProclaimRequest {
+  // leader is the leadership key
+  LeaderKey leader = 1;
+  // value is the new value to set for the key
+  bytes value = 2;
+}
+
+message ProclaimResponse {
+  etcdserverpb.ResponseHeader header = 1;
+}

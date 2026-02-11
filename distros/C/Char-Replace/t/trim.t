@@ -54,4 +54,22 @@ use Char::Replace;
     is $str, q[   some spaces   ], 'original PV preserved';
 } 
 
+{
+    note "edge cases: empty and all-whitespace strings";
+    is Char::Replace::trim(''),       '',  "trim( '' ) - empty string";
+    is Char::Replace::trim('   '),    '',  "trim( '   ' ) - only spaces";
+    is Char::Replace::trim("\n\r\t"), '',  "trim( newlines/tabs ) - only whitespace";
+    is Char::Replace::trim(' '),      '',  "trim( ' ' ) - single space";
+}
+
+{
+    note "vertical tab (\\v / 0x0B): should be treated as whitespace";
+    is Char::Replace::trim("\x0Bhello\x0B"), 'hello',
+        "trim strips vertical tabs";
+    is Char::Replace::trim("\x0B\t\n hello \r\f\x0B"), 'hello',
+        "trim strips vertical tab mixed with other whitespace";
+    is Char::Replace::trim("\x0B\x0B\x0B"), '',
+        "trim all-vertical-tab string -> empty";
+}
+
 done_testing;
