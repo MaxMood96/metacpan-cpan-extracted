@@ -2,7 +2,7 @@ package Bored;
 
 use 5.008003;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 use base 'Import::Export';
 
@@ -19,7 +19,11 @@ sub bored_one {
 }
 
 sub pointless {
-	return 'invisible';
+	return 'leadership';
+}
+
+sub tortured {
+	return 'souls';
 }
 
 1;
@@ -32,7 +36,7 @@ Bored - news!
 
 =head1 VERSION
 
-Version 0.02
+Version 0.03
 
 =cut
 
@@ -44,7 +48,7 @@ Version 0.02
 
     my $you = Bored->new();
     $you->pointless();
-	
+    $you->tortured();
     ...
 
 =head1 AUTHOR

@@ -17,6 +17,10 @@ use PAGI::Server::ConnectionState;
 
 use constant FILE_CHUNK_SIZE => 65536;  # 64KB chunks for file streaming
 
+# Per-second cache for CLF timestamp in access log (same pattern as HTTP1::format_date)
+my $_cached_log_timestamp;
+my $_cached_log_time = 0;
+
 # =============================================================================
 # Unrecognized Event Type Handler (PAGI spec compliance)
 # =============================================================================
@@ -121,6 +125,7 @@ sub new {
         sse_idle_timeout => $args{sse_idle_timeout} // 0,  # SSE idle timeout (0 = disabled)
         max_body_size     => $args{max_body_size},  # 0 = unlimited
         access_log        => $args{access_log},     # Filehandle for access logging
+        _access_log_formatter => $args{_access_log_formatter},  # Pre-compiled format closure
         max_receive_queue => $args{max_receive_queue} // 1000,  # Max WebSocket receive queue size
         max_ws_frame_size => $args{max_ws_frame_size} // 65536,  # Max WebSocket frame size in bytes
         sync_file_threshold => $args{sync_file_threshold} // 65536,  # Threshold for sync file reads (default 64KB)
@@ -136,6 +141,7 @@ sub new {
         closed        => 0,
         response_started => 0,
         response_status  => undef,  # Track response status for logging
+        _response_size   => 0,      # Track response body bytes for logging
         request_start    => undef,  # Track request start time for logging
         idle_timer    => undef,  # IO::Async::Timer for idle timeout
         stall_timer   => undef,  # IO::Async::Timer for request stall timeout
@@ -166,6 +172,13 @@ sub new {
         ws_keepalive_timeout  => 0,    # Current pong timeout (0 = no timeout check)
         sse_keepalive_timer => undef,  # Periodic timer for sending SSE keepalive comments
         sse_keepalive_comment => '',   # Comment text to send
+        # HTTP/2 state
+        alpn_protocol     => $args{alpn_protocol},    # ALPN-negotiated protocol (e.g. 'h2', 'http/1.1')
+        h2_protocol       => $args{h2_protocol},      # PAGI::Server::Protocol::HTTP2 instance
+        h2c_enabled       => $args{h2c_enabled} // 0, # Allow h2c preface detection on cleartext
+        is_h2             => 0,                        # Set during start() if HTTP/2 detected
+        h2_session        => undef,                    # PAGI::Server::Protocol::HTTP2::Session
+        h2_streams        => {},                       # Per-stream state for HTTP/2
         # Cached connection info (populated in start(), used by _create_scope)
         client_host       => '127.0.0.1',
         client_port       => 0,
@@ -209,6 +222,11 @@ sub start {
         # Ignore errors - keep defaults if extraction fails
     }
 
+    # Detect HTTP/2 via ALPN negotiation
+    if ($self->{alpn_protocol} && $self->{alpn_protocol} eq 'h2' && $self->{h2_protocol}) {
+        $self->_init_h2_session;
+    }
+
     # Set up idle timeout timer
     if ($self->{timeout} && $self->{timeout} > 0 && $self->{server}) {
         my $timer = IO::Async::Timer::Countdown->new(
@@ -246,10 +264,31 @@ sub start {
                 return 0;
             }
 
+            # h2c detection: check if cleartext connection starts with HTTP/2 preface
+            if ($weak_self->{h2c_enabled} && !$weak_self->{is_h2}) {
+                if (length($weak_self->{buffer}) >= 24) {  # HTTP/2 preface is 24 bytes
+                    if ($weak_self->{h2_protocol} && PAGI::Server::Protocol::HTTP2->detect_preface($weak_self->{buffer})) {
+                        $weak_self->_init_h2_session;
+                        $weak_self->{h2c_enabled} = 0;  # Detection done
+                    } else {
+                        $weak_self->{h2c_enabled} = 0;  # Not h2c, stop checking
+                    }
+                } else {
+                    # Not enough data yet to determine protocol, wait for more
+                    return 0;
+                }
+            }
+
             # Wrap processing in eval to prevent exceptions from crashing the event loop
             # This is critical - Protocol::WebSocket::Frame can throw exceptions for
             # oversized payloads, and other parsing code may throw as well
             eval {
+                # HTTP/2: feed data to session for frame processing
+                if ($weak_self->{is_h2}) {
+                    $weak_self->_h2_process_data;
+                    return;
+                }
+
                 # If in WebSocket mode, process WebSocket frames
                 if ($weak_self->{websocket_mode}) {
                     $weak_self->_process_websocket_frames;
@@ -300,6 +339,846 @@ sub _stop_idle_timer {
         $self->{server}->remove_child($self->{idle_timer});
     }
     $self->{idle_timer} = undef;
+}
+
+# =============================================================================
+# HTTP/2 Session Initialization
+# =============================================================================
+
+sub _init_h2_session {
+    my ($self) = @_;
+
+    $self->{is_h2} = 1;
+
+    weaken(my $weak_self = $self);
+
+    $self->{h2_session} = $self->{h2_protocol}->create_session(
+        on_request => sub {
+            my ($stream_id, $pseudo, $headers, $has_body) = @_;
+            return unless $weak_self;
+            $weak_self->_h2_on_request($stream_id, $pseudo, $headers, $has_body);
+        },
+        on_body => sub {
+            my ($stream_id, $data, $eof) = @_;
+            return unless $weak_self;
+            $weak_self->_h2_on_body($stream_id, $data, $eof);
+        },
+        on_close => sub {
+            my ($stream_id, $error_code) = @_;
+            return unless $weak_self;
+            $weak_self->_h2_on_close($stream_id, $error_code);
+        },
+    );
+
+    # Send initial SETTINGS to client
+    $self->_h2_write_pending;
+}
+
+sub _h2_process_data {
+    my ($self) = @_;
+    return unless $self->{h2_session};
+
+    if (length($self->{buffer}) > 0) {
+        $self->{h2_session}->feed($self->{buffer});
+        $self->{buffer} = '';
+    }
+
+    $self->_h2_write_pending;
+
+    # Close connection when session is done (GOAWAY received or sent)
+    if ($self->{h2_session} && !$self->{h2_session}->want_read) {
+        $self->_h2_write_pending;  # Flush any remaining output
+        $self->_handle_disconnect_and_close;
+    }
+}
+
+sub _h2_write_pending {
+    my ($self) = @_;
+    return unless $self->{h2_session};
+    while (1) {
+        my $data = $self->{h2_session}->extract;
+        last unless defined $data && length($data) > 0;
+        $self->{stream}->write($data);
+    }
+}
+
+# =============================================================================
+# HTTP/2 Stream Callbacks
+# =============================================================================
+
+sub _h2_on_request {
+    my ($self, $stream_id, $pseudo, $headers, $has_body) = @_;
+
+    # Detect CONNECT method
+    my $is_websocket = 0;
+    if (($pseudo->{':method'} // '') eq 'CONNECT') {
+        if (($pseudo->{':protocol'} // '') eq 'websocket') {
+            # Extended CONNECT for WebSocket (RFC 8441)
+            $is_websocket = 1;
+        } else {
+            # Plain CONNECT not supported — defer response to avoid
+            # re-entrant nghttp2 calls (we're inside feed/mem_recv)
+            weaken(my $ws = $self);
+            $self->{server}->loop->later(sub {
+                return unless $ws;
+                return if $ws->{closed};
+                $ws->{h2_session}->submit_response($stream_id,
+                    status  => 501,
+                    headers => [['content-type', 'text/plain']],
+                    body    => "CONNECT method not supported\n",
+                );
+                $ws->_h2_write_pending;
+            });
+            return;
+        }
+    }
+
+    # Initialize per-stream state
+    $self->{h2_streams}{$stream_id} = {
+        pseudo    => $pseudo,
+        headers   => $headers,
+        has_body  => $has_body,
+        body      => '',
+        body_complete => !$has_body,
+        body_pending  => undef,   # Future for body availability
+        receive_queue => [],
+        response_started => 0,
+        is_websocket => $is_websocket,
+        ws_accepted  => 0,
+        ws_frame     => undef,   # Protocol::WebSocket::Frame for parsing
+        ws_connect_sent => 0,
+    };
+
+    # Check Content-Length against max_body_size limit before dispatching
+    # (after stream init so _h2_on_body/_h2_on_close can find the stream)
+    if ($self->{max_body_size} && $has_body) {
+        for my $h (@$headers) {
+            if ($h->[0] eq 'content-length') {
+                if ($h->[1] > $self->{max_body_size}) {
+                    # Defer response to avoid re-entrant nghttp2 calls
+                    weaken(my $ws = $self);
+                    $self->{server}->loop->later(sub {
+                        return unless $ws;
+                        return if $ws->{closed};
+                        $ws->{h2_session}->submit_response($stream_id,
+                            status  => 413,
+                            headers => [['content-type', 'text/plain']],
+                            body    => "Payload Too Large\n",
+                        );
+                        $ws->_h2_write_pending;
+                    });
+                    return;
+                }
+                last;
+            }
+        }
+    }
+
+    # Defer dispatch to next event loop tick to prevent re-entrant nghttp2 calls
+    weaken(my $weak_self = $self);
+    $self->{server}->loop->later(sub {
+        return unless $weak_self;
+        return if $weak_self->{closed};
+        $weak_self->_h2_dispatch_stream($stream_id);
+    });
+}
+
+sub _h2_on_body {
+    my ($self, $stream_id, $data, $eof) = @_;
+
+    my $stream = $self->{h2_streams}{$stream_id};
+    return unless $stream;
+
+    if ($stream->{is_websocket} && $stream->{ws_accepted}) {
+        # WebSocket: DATA frames contain raw WebSocket frames
+        $self->_h2_process_ws_frames($stream_id, $stream, $data) if length($data);
+
+        if ($eof) {
+            # END_STREAM = client closing the WebSocket stream
+            push @{$stream->{receive_queue}}, {
+                type   => 'websocket.disconnect',
+                code   => 1005,
+                reason => '',
+            };
+            $self->_h2_wake_pending($stream);
+        }
+        return;
+    }
+
+    if (length($data) > 0) {
+        $stream->{body} .= $data;
+
+        # Enforce max_body_size (0 = unlimited)
+        if ($self->{max_body_size} && length($stream->{body}) > $self->{max_body_size}) {
+            $self->{h2_session}->submit_response($stream_id,
+                status  => 413,
+                headers => [['content-type', 'text/plain']],
+                body    => 'Payload Too Large',
+            );
+            # No _h2_write_pending here — we're inside feed(); _h2_process_data
+            # flushes after feed() returns
+            delete $self->{h2_streams}{$stream_id};
+            return;
+        }
+    }
+
+    if ($eof) {
+        $stream->{body_complete} = 1;
+    }
+
+    $self->_h2_wake_pending($stream);
+}
+
+sub _h2_wake_pending {
+    my ($self, $stream) = @_;
+    if ($stream->{body_pending} && !$stream->{body_pending}->is_ready) {
+        my $f = $stream->{body_pending};
+        $stream->{body_pending} = undef;
+        $f->done;
+    }
+}
+
+sub _h2_on_close {
+    my ($self, $stream_id, $error_code) = @_;
+
+    my $stream = $self->{h2_streams}{$stream_id};
+    return unless $stream;
+
+    # Mark body complete to unblock any pending receive
+    $stream->{body_complete} = 1;
+
+    # Enqueue disconnect event
+    if ($stream->{is_websocket}) {
+        push @{$stream->{receive_queue}}, {
+            type   => 'websocket.disconnect',
+            code   => 1006,
+            reason => '',
+        };
+    } else {
+        push @{$stream->{receive_queue}}, { type => 'http.disconnect' };
+    }
+
+    $self->_h2_wake_pending($stream);
+
+    # Clean up after a delay (let any pending futures resolve)
+    weaken(my $weak_self = $self);
+    $self->{server}->loop->later(sub {
+        return unless $weak_self;
+        delete $weak_self->{h2_streams}{$stream_id};
+    });
+}
+
+# =============================================================================
+# HTTP/2 Stream Dispatch (scope/receive/send creation)
+# =============================================================================
+
+sub _h2_dispatch_stream {
+    my ($self, $stream_id) = @_;
+
+    my $stream_state = $self->{h2_streams}{$stream_id};
+    return unless $stream_state;
+
+    my ($scope, $receive, $send);
+
+    if ($stream_state->{is_websocket}) {
+        $scope   = $self->_h2_create_websocket_scope($stream_id, $stream_state);
+        $receive = $self->_h2_create_websocket_receive($stream_id, $stream_state);
+        $send    = $self->_h2_create_websocket_send($stream_id, $stream_state);
+    } else {
+        $scope   = $self->_h2_create_scope($stream_id, $stream_state);
+        $receive = $self->_h2_create_receive($stream_id, $stream_state);
+        $send    = $self->_h2_create_send($stream_id, $stream_state);
+    }
+
+    weaken(my $weak_self = $self);
+
+    my $future = (async sub {
+        eval {
+            await $weak_self->{app}->($scope, $receive, $send);
+        };
+        if (my $error = $@) {
+            warn "PAGI application error (HTTP/2 stream $stream_id): $error\n";
+            if ($weak_self && !$stream_state->{response_started}) {
+                eval {
+                    $weak_self->{h2_session}->submit_response($stream_id,
+                        status  => 500,
+                        headers => [['content-type', 'text/plain']],
+                        body    => "Internal Server Error\n",
+                    );
+                    $weak_self->_h2_write_pending;
+                };
+            }
+        }
+
+        # Notify server that request completed (for max_requests tracking)
+        $weak_self->{server}->_on_request_complete if $weak_self && $weak_self->{server};
+    })->();
+
+    $self->{server}->adopt_future($future);
+}
+
+sub _h2_create_scope {
+    my ($self, $stream_id, $stream_state) = @_;
+
+    my $pseudo  = $stream_state->{pseudo};
+    my $headers = $stream_state->{headers};
+
+    # Parse path and query string from :path pseudo-header
+    my $full_path = $pseudo->{':path'} // '/';
+    my ($path, $query_string) = split(/\?/, $full_path, 2);
+    $query_string //= '';
+
+    # Decode percent-encoded path for scope (keep raw_path as-is)
+    my $decoded_path = $path;
+    $decoded_path =~ s/%([0-9A-Fa-f]{2})/chr(hex($1))/ge;
+
+    my $connection_state = PAGI::Server::ConnectionState->new(
+        connection => $self,
+    );
+
+    return {
+        type         => 'http',
+        pagi         => {
+            version      => '0.2',
+            spec_version => '0.2',
+            features     => {},
+        },
+        http_version => '2',
+        method       => $pseudo->{':method'} // 'GET',
+        scheme       => $pseudo->{':scheme'} // $self->_get_scheme,
+        path         => $decoded_path,
+        raw_path     => $path,
+        query_string => $query_string,
+        root_path    => '',
+        headers      => $headers,
+        client       => [$self->{client_host}, $self->{client_port}],
+        server       => [$self->{server_host}, $self->{server_port}],
+        state        => keys %{$self->{state}} ? { %{$self->{state}} } : {},
+        extensions   => $self->_get_extensions_for_scope,
+        'pagi.connection' => $connection_state,
+    };
+}
+
+sub _h2_create_receive {
+    my ($self, $stream_id, $stream_state) = @_;
+
+    weaken(my $weak_self = $self);
+
+    return sub {
+        return Future->done({ type => 'http.disconnect' }) unless $weak_self;
+        return Future->done({ type => 'http.disconnect' }) if $weak_self->{closed};
+
+        my $ss = $weak_self->{h2_streams}{$stream_id};
+        return Future->done({ type => 'http.disconnect' }) unless $ss;
+
+        my $future = (async sub {
+            return { type => 'http.disconnect' } unless $weak_self;
+
+            my $ss = $weak_self->{h2_streams}{$stream_id};
+            return { type => 'http.disconnect' } unless $ss;
+
+            # Check queue first
+            if (@{$ss->{receive_queue}}) {
+                return shift @{$ss->{receive_queue}};
+            }
+
+            # If body is already complete, return final body event
+            if ($ss->{body_complete}) {
+                my $body = $ss->{body};
+                $ss->{body} = '';
+                return {
+                    type => 'http.request',
+                    body => $body,
+                    more => 0,
+                };
+            }
+
+            # Wait for body data
+            if (!$ss->{body_pending}) {
+                $ss->{body_pending} = Future->new;
+            }
+            await $ss->{body_pending};
+
+            # Re-fetch stream state (may have changed)
+            $ss = $weak_self->{h2_streams}{$stream_id};
+            return { type => 'http.disconnect' } unless $ss;
+
+            # Check queue after waking
+            if (@{$ss->{receive_queue}}) {
+                return shift @{$ss->{receive_queue}};
+            }
+
+            my $body = $ss->{body};
+            $ss->{body} = '';
+            return {
+                type => 'http.request',
+                body => $body,
+                more => $ss->{body_complete} ? 0 : 1,
+            };
+        })->();
+
+        return $future;
+    };
+}
+
+sub _h2_create_send {
+    my ($self, $stream_id, $stream_state) = @_;
+
+    weaken(my $weak_self = $self);
+
+    my $status;
+    my @response_headers;
+
+    # Streaming state for deferred data provider pattern
+    my @data_queue;
+    my $eof_pending = 0;
+    my $streaming_started = 0;
+
+    # Data callback for nghttp2's streaming response.
+    # Returns ($data, $eof) when data is available, or undef to defer.
+    my $data_callback = sub {
+        my ($cb_stream_id, $max_len) = @_;
+
+        if (@data_queue) {
+            my $chunk = shift @data_queue;
+            # Respect max_len — XS truncates without preserving remainder
+            if (length($chunk) > $max_len) {
+                unshift @data_queue, substr($chunk, $max_len);
+                $chunk = substr($chunk, 0, $max_len);
+            }
+            my $eof = (!@data_queue && $eof_pending) ? 1 : 0;
+            return ($chunk, $eof);
+        }
+
+        # Queue empty but EOF pending — signal end of stream
+        if ($eof_pending) {
+            return ('', 1);
+        }
+
+        # Queue empty, more data expected — defer (NGHTTP2_ERR_DEFERRED in C layer)
+        return undef;
+    };
+
+    return async sub {
+        my ($event) = @_;
+        return unless $weak_self;
+        return if $weak_self->{closed};
+
+        my $type = $event->{type} // '';
+
+        if ($type eq 'http.response.start') {
+            my $ss = $weak_self->{h2_streams}{$stream_id} or return;
+            return if $ss->{response_started};
+            $ss->{response_started} = 1;
+
+            $status = $event->{status} // 200;
+            @response_headers = map {
+                [_validate_header_name($_->[0]), _validate_header_value($_->[1])]
+            } @{$event->{headers} // []};
+        }
+        elsif ($type eq 'http.response.body') {
+            my $ss = $weak_self->{h2_streams}{$stream_id} or return;
+            return unless $ss->{response_started};
+
+            my $body = $event->{body} // '';
+            my $more = $event->{more} // 0;
+
+            if ($more) {
+                if (!$streaming_started) {
+                    # First streaming chunk — submit with data callback
+                    $streaming_started = 1;
+                    push @data_queue, $body if length($body);
+                    $weak_self->{h2_session}->submit_response_streaming(
+                        $stream_id,
+                        status        => $status,
+                        headers       => \@response_headers,
+                        data_callback => $data_callback,
+                    );
+                    $weak_self->_h2_write_pending;
+                } else {
+                    # Subsequent chunk — backpressure check then push and resume
+                    if ($weak_self->_get_write_buffer_size >= $weak_self->{write_high_watermark}) {
+                        await $weak_self->_wait_for_drain;
+                        return unless $weak_self;
+                        return if $weak_self->{closed};
+                        return unless $weak_self->{h2_streams}{$stream_id};
+                    }
+                    push @data_queue, $body if length($body);
+                    $weak_self->{h2_session}->resume_stream($stream_id);
+                    $weak_self->_h2_write_pending;
+                }
+            } else {
+                if ($streaming_started) {
+                    # Final chunk on an already-streaming response
+                    if ($weak_self->_get_write_buffer_size >= $weak_self->{write_high_watermark}) {
+                        await $weak_self->_wait_for_drain;
+                        return unless $weak_self;
+                        return if $weak_self->{closed};
+                        return unless $weak_self->{h2_streams}{$stream_id};
+                    }
+                    $eof_pending = 1;
+                    push @data_queue, $body if length($body);
+                    $weak_self->{h2_session}->resume_stream($stream_id);
+                    $weak_self->_h2_write_pending;
+                } else {
+                    # Non-streaming: single response (unchanged one-shot path)
+                    $weak_self->{h2_session}->submit_response($stream_id,
+                        status  => $status,
+                        headers => \@response_headers,
+                        body    => $body,
+                    );
+                    $weak_self->_h2_write_pending;
+                }
+            }
+        }
+        else {
+            _unrecognized_event_type($type, 'http');
+        }
+    };
+}
+
+# =============================================================================
+# HTTP/2 WebSocket over HTTP/2 (RFC 8441)
+# =============================================================================
+
+sub _h2_create_websocket_scope {
+    my ($self, $stream_id, $stream_state) = @_;
+
+    my $pseudo  = $stream_state->{pseudo};
+    my $headers = $stream_state->{headers};
+
+    my $full_path = $pseudo->{':path'} // '/';
+    my ($path, $query_string) = split(/\?/, $full_path, 2);
+    $query_string //= '';
+
+    my $decoded_path = $path;
+    $decoded_path =~ s/%([0-9A-Fa-f]{2})/chr(hex($1))/ge;
+
+    # Extract subprotocols from headers
+    my @subprotocols;
+    for my $header (@$headers) {
+        my ($name, $value) = @$header;
+        if ($name eq 'sec-websocket-protocol') {
+            push @subprotocols, map { s/^\s+|\s+$//gr } split /,/, $value;
+        }
+    }
+
+    my $connection_state = PAGI::Server::ConnectionState->new(
+        connection => $self,
+    );
+
+    return {
+        type         => 'websocket',
+        pagi         => {
+            version      => '0.2',
+            spec_version => '0.2',
+            features     => {},
+        },
+        http_version => '2',
+        scheme       => $self->_get_ws_scheme,
+        path         => $decoded_path,
+        raw_path     => $path,
+        query_string => $query_string,
+        root_path    => '',
+        headers      => $headers,
+        client       => [$self->{client_host}, $self->{client_port}],
+        server       => [$self->{server_host}, $self->{server_port}],
+        subprotocols => \@subprotocols,
+        state        => keys %{$self->{state}} ? { %{$self->{state}} } : {},
+        extensions   => $self->_get_extensions_for_scope,
+        'pagi.connection' => $connection_state,
+    };
+}
+
+sub _h2_create_websocket_receive {
+    my ($self, $stream_id, $stream_state) = @_;
+
+    weaken(my $weak_self = $self);
+
+    return sub {
+        return Future->done({ type => 'websocket.disconnect', code => 1006, reason => '' })
+            unless $weak_self;
+        return Future->done({ type => 'websocket.disconnect', code => 1006, reason => '' })
+            if $weak_self->{closed};
+
+        my $ss = $weak_self->{h2_streams}{$stream_id};
+        return Future->done({ type => 'websocket.disconnect', code => 1006, reason => '' })
+            unless $ss;
+
+        my $future = (async sub {
+            return { type => 'websocket.disconnect', code => 1006, reason => '' }
+                unless $weak_self;
+
+            my $ss = $weak_self->{h2_streams}{$stream_id};
+            return { type => 'websocket.disconnect', code => 1006, reason => '' }
+                unless $ss;
+
+            # Check queue first
+            if (@{$ss->{receive_queue}}) {
+                return shift @{$ss->{receive_queue}};
+            }
+
+            # First call returns websocket.connect
+            if (!$ss->{ws_connect_sent}) {
+                $ss->{ws_connect_sent} = 1;
+                return { type => 'websocket.connect' };
+            }
+
+            # Wait for events
+            while (1) {
+                if (@{$ss->{receive_queue}}) {
+                    return shift @{$ss->{receive_queue}};
+                }
+
+                return { type => 'websocket.disconnect', code => 1006, reason => '' }
+                    if $weak_self->{closed};
+
+                if (!$ss->{body_pending}) {
+                    $ss->{body_pending} = Future->new;
+                }
+                await $ss->{body_pending};
+
+                $ss = $weak_self->{h2_streams}{$stream_id};
+                return { type => 'websocket.disconnect', code => 1006, reason => '' }
+                    unless $ss;
+            }
+        })->();
+
+        return $future;
+    };
+}
+
+sub _h2_create_websocket_send {
+    my ($self, $stream_id, $stream_state) = @_;
+
+    weaken(my $weak_self = $self);
+
+    return async sub {
+        my ($event) = @_;
+        return unless $weak_self;
+        return if $weak_self->{closed};
+
+        my $ss = $weak_self->{h2_streams}{$stream_id};
+        return unless $ss;
+
+        my $type = $event->{type} // '';
+
+        if ($type eq 'websocket.accept') {
+            return if $ss->{ws_accepted};
+
+            # HTTP/2 WebSocket: respond with 200 (not 101)
+            my @headers;
+            if (my $subprotocol = $event->{subprotocol}) {
+                $subprotocol = _validate_subprotocol($subprotocol);
+                push @headers, ['sec-websocket-protocol', $subprotocol];
+            }
+            if (my $extra = $event->{headers}) {
+                push @headers, map {
+                    [_validate_header_name($_->[0]), _validate_header_value($_->[1])]
+                } @$extra;
+            }
+
+            $ss->{ws_accepted} = 1;
+            $ss->{response_started} = 1;
+            $ss->{ws_frame} = Protocol::WebSocket::Frame->new(
+                max_payload_size => $weak_self->{max_ws_frame_size},
+            );
+
+            # Submit 200 response with streaming body that defers
+            $weak_self->{h2_session}->submit_response($stream_id,
+                status  => 200,
+                headers => \@headers,
+                body    => sub { return undef },  # defer until submit_data
+            );
+            $weak_self->_h2_write_pending;
+
+            # Process any data that arrived before accept
+            if (length($ss->{body}) > 0) {
+                my $buffered = $ss->{body};
+                $ss->{body} = '';
+                $weak_self->_h2_process_ws_frames($stream_id, $ss, $buffered);
+            }
+        }
+        elsif ($type eq 'websocket.send') {
+            return unless $ss->{ws_accepted};
+
+            my $frame;
+            if (defined $event->{text}) {
+                $frame = Protocol::WebSocket::Frame->new(
+                    buffer => $event->{text},
+                    type   => 'text',
+                );
+            }
+            elsif (defined $event->{bytes}) {
+                $frame = Protocol::WebSocket::Frame->new(
+                    buffer => $event->{bytes},
+                    type   => 'binary',
+                );
+            }
+            else {
+                return;
+            }
+
+            my $bytes = $frame->to_bytes;
+            $weak_self->{h2_session}->submit_data($stream_id, $bytes, 0);
+            $weak_self->_h2_write_pending;
+        }
+        elsif ($type eq 'websocket.close') {
+            if (!$ss->{ws_accepted}) {
+                # Reject: send 403
+                $weak_self->{h2_session}->submit_response($stream_id,
+                    status  => 403,
+                    headers => [['content-type', 'text/plain']],
+                    body    => 'Forbidden',
+                );
+                $weak_self->_h2_write_pending;
+                return;
+            }
+
+            my $code = $event->{code} // 1000;
+            my $reason = $event->{reason} // '';
+
+            my $frame = Protocol::WebSocket::Frame->new(
+                type   => 'close',
+                buffer => pack('n', $code) . $reason,
+            );
+
+            # Send close frame + END_STREAM
+            $weak_self->{h2_session}->submit_data($stream_id, $frame->to_bytes, 1);
+            $weak_self->_h2_write_pending;
+        }
+
+        return;
+    };
+}
+
+sub _h2_process_ws_frames {
+    my ($self, $stream_id, $stream, $data) = @_;
+
+    my $frame = $stream->{ws_frame};
+    return unless $frame;
+
+    $frame->append($data);
+
+    while (defined(my $bytes = $frame->next_bytes)) {
+        my $opcode = $frame->opcode;
+
+        if ($opcode == 1) {
+            # Text frame
+            my $text = eval { Encode::decode('UTF-8', $bytes, Encode::FB_CROAK) };
+            unless (defined $text) {
+                $self->_h2_ws_close($stream_id, 1007, 'Invalid UTF-8');
+                return;
+            }
+            push @{$stream->{receive_queue}}, {
+                type => 'websocket.receive',
+                text => $text,
+            };
+        }
+        elsif ($opcode == 2) {
+            # Binary frame
+            push @{$stream->{receive_queue}}, {
+                type  => 'websocket.receive',
+                bytes => $bytes,
+            };
+        }
+        elsif ($opcode == 8) {
+            # Close frame
+            my ($code, $reason) = (1005, '');
+
+            # RFC 6455 Section 5.5.1: Close frame payload is 0 or >=2 bytes
+            if (length($bytes) == 1) {
+                $self->_h2_ws_close($stream_id, 1002, 'Invalid close frame');
+                push @{$stream->{receive_queue}}, {
+                    type   => 'websocket.disconnect',
+                    code   => 1002,
+                    reason => 'Invalid close frame',
+                };
+                $self->_h2_wake_pending($stream);
+                return;
+            }
+
+            if (length($bytes) >= 2) {
+                $code = unpack('n', substr($bytes, 0, 2));
+                $reason = substr($bytes, 2) // '';
+
+                # RFC 6455 Section 7.4.1: Validate close code
+                my $valid_code = 0;
+                if ($code == 1000 || $code == 1001 || $code == 1002 || $code == 1003) {
+                    $valid_code = 1;
+                }
+                elsif ($code >= 1007 && $code <= 1011) {
+                    $valid_code = 1;
+                }
+                elsif ($code >= 3000 && $code <= 4999) {
+                    $valid_code = 1;
+                }
+                unless ($valid_code) {
+                    $self->_h2_ws_close($stream_id, 1002, 'Invalid close code');
+                    push @{$stream->{receive_queue}}, {
+                        type   => 'websocket.disconnect',
+                        code   => 1002,
+                        reason => 'Invalid close code',
+                    };
+                    $self->_h2_wake_pending($stream);
+                    return;
+                }
+
+                # RFC 6455: Close reason must be valid UTF-8
+                if (length($reason) > 0) {
+                    my $reason_copy = $reason;
+                    my $decoded = eval { Encode::decode('UTF-8', $reason_copy, Encode::FB_CROAK) };
+                    unless (defined $decoded) {
+                        $self->_h2_ws_close($stream_id, 1007, 'Invalid UTF-8 in close reason');
+                        push @{$stream->{receive_queue}}, {
+                            type   => 'websocket.disconnect',
+                            code   => 1007,
+                            reason => 'Invalid UTF-8 in close reason',
+                        };
+                        $self->_h2_wake_pending($stream);
+                        return;
+                    }
+                }
+            }
+
+            # Send close frame back + END_STREAM
+            my $close_frame = Protocol::WebSocket::Frame->new(
+                type   => 'close',
+                buffer => pack('n', $code) . $reason,
+            );
+            $self->{h2_session}->submit_data($stream_id, $close_frame->to_bytes, 1);
+            # No _h2_write_pending — inside feed(); flushed by _h2_process_data
+
+            push @{$stream->{receive_queue}}, {
+                type   => 'websocket.disconnect',
+                code   => $code,
+                reason => $reason,
+            };
+        }
+        elsif ($opcode == 9) {
+            # Ping — respond with pong
+            my $pong = Protocol::WebSocket::Frame->new(
+                type   => 'pong',
+                buffer => $bytes,
+            );
+            $self->{h2_session}->submit_data($stream_id, $pong->to_bytes, 0);
+            # No _h2_write_pending — inside feed(); flushed by _h2_process_data
+        }
+        # Opcode 10 (pong) — ignore
+    }
+
+    $self->_h2_wake_pending($stream);
+}
+
+sub _h2_ws_close {
+    my ($self, $stream_id, $code, $reason) = @_;
+
+    my $frame = Protocol::WebSocket::Frame->new(
+        type   => 'close',
+        buffer => pack('n', $code) . ($reason // ''),
+    );
+    $self->{h2_session}->submit_data($stream_id, $frame->to_bytes, 1);
+    # No _h2_write_pending — called from inside feed(); flushed by _h2_process_data
 }
 
 # Request stall timeout - closes connection if no I/O activity during request processing
@@ -851,6 +1730,7 @@ async sub _handle_request {
         $self->{handling_request} = 0;
         $self->{response_started} = 0;
         $self->{response_status} = undef;
+        $self->{_response_size} = 0;
         $self->{request_start} = undef;
         $self->{current_request} = undef;
         $self->{request_future} = undef;
@@ -924,7 +1804,7 @@ sub _create_scope {
         client       => [$self->{client_host}, $self->{client_port}],
         server       => [$self->{server_host}, $self->{server_port}],
         # Optimized: avoid hash copy when state is empty (common case)
-        state        => %{$self->{state}} ? { %{$self->{state}} } : {},
+        state        => keys %{$self->{state}} ? { %{$self->{state}} } : {},
         extensions   => $self->_get_extensions_for_scope,
         # Connection state for non-destructive disconnect detection (PAGI spec 0.3)
         'pagi.connection' => $connection_state,
@@ -1267,6 +2147,8 @@ sub _create_send {
                 $body //= '';
                 my $more = $event->{more} // 0;
 
+                $weak_self->{_response_size} += length($body);
+
                 if ($chunked) {
                     if (length $body) {
                         my $len = sprintf("%x", length($body));
@@ -1362,35 +2244,48 @@ sub _write_access_log {
     return unless $self->{current_request};
 
     my $request = $self->{current_request};
-    my $method = $request->{method} // '-';
-    my $path = $request->{raw_path} // '/';
-    my $query = $request->{query_string};
-    $path .= "?$query" if defined $query && length $query;
-
-    my $status = $self->{response_status} // '-';
 
     # Calculate request duration
-    my $duration = '-';
+    my $duration = 0;
     if ($self->{request_start}) {
-        $duration = sprintf("%.3f", tv_interval($self->{request_start}));
+        $duration = tv_interval($self->{request_start});
     }
 
-    # Get client IP
-    my $client_ip = '-';
-    my $handle = $self->{stream} ? $self->{stream}->read_handle : undef;
-    if ($handle && $handle->can('peerhost')) {
-        $client_ip = $handle->peerhost // '-';
+    # Per-second cached CLF timestamp
+    my $now = time();
+    if ($now != $_cached_log_time) {
+        $_cached_log_time = $now;
+        my @gmt = gmtime($now);
+        my @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
+        $_cached_log_timestamp = sprintf("%02d/%s/%04d:%02d:%02d:%02d +0000",
+            $gmt[3], $months[$gmt[4]], $gmt[5] + 1900,
+            $gmt[2], $gmt[1], $gmt[0]);
     }
 
-    # Format: client_ip - - [timestamp] "METHOD /path" status duration
-    my @gmt = gmtime(time);
-    my @months = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
-    my $timestamp = sprintf("%02d/%s/%04d:%02d:%02d:%02d +0000",
-        $gmt[3], $months[$gmt[4]], $gmt[5] + 1900,
-        $gmt[2], $gmt[1], $gmt[0]);
+    my $info = {
+        client_ip       => $self->{client_host} // '-',
+        timestamp       => $_cached_log_timestamp,
+        method          => $request->{method} // '-',
+        path            => $request->{raw_path} // '/',
+        query           => $request->{query_string},
+        http_version    => $request->{http_version} // '1.1',
+        status          => $self->{response_status} // '-',
+        size            => $self->{_response_size} // 0,
+        duration        => $duration,
+        request_headers => $request->{headers} // [],
+    };
 
-    my $log = $self->{access_log};
-    print $log "$client_ip - - [$timestamp] \"$method $path\" $status ${duration}s\n";
+    my $formatter = $self->{_access_log_formatter};
+    if ($formatter) {
+        print {$self->{access_log}} $formatter->($info), "\n";
+    }
+    else {
+        # Fallback (should not happen with properly initialized server)
+        my $path = $info->{path};
+        my $query = $info->{query};
+        $path .= "?$query" if defined $query && length $query;
+        print {$self->{access_log}} "$info->{client_ip} - - [$info->{timestamp}] \"$info->{method} $path\" $info->{status} $info->{duration}s\n";
+    }
 }
 
 sub _handle_disconnect {
@@ -1472,6 +2367,20 @@ sub _close {
 
     # Cancel pending drain waiters early (before other cleanup)
     $self->_cancel_drain_waiters('connection closing');
+
+    # Clean up HTTP/2 per-stream state
+    if ($self->{h2_streams}) {
+        for my $stream (values %{$self->{h2_streams}}) {
+            if ($stream->{body_pending} && !$stream->{body_pending}->is_ready) {
+                $stream->{body_pending}->done({ type => 'http.disconnect' });
+            }
+        }
+        delete $self->{h2_streams};
+    }
+    if ($self->{h2_session}) {
+        eval { $self->{h2_session}->terminate(0) };
+        delete $self->{h2_session};
+    }
 
     # Clean up WebSocket frame parser to free memory immediately
     delete $self->{websocket_frame};
@@ -1762,7 +2671,7 @@ sub _create_sse_scope {
         client       => [$self->{client_host}, $self->{client_port}],
         server       => [$self->{server_host}, $self->{server_port}],
         # Optimized: avoid hash copy when state is empty (common case)
-        state        => %{$self->{state}} ? { %{$self->{state}} } : {},
+        state        => keys %{$self->{state}} ? { %{$self->{state}} } : {},
         extensions   => $self->_get_extensions_for_scope,
     };
 
@@ -1952,8 +2861,9 @@ sub _create_sse_send {
             }
 
             # data: field (required) - handle multi-line data
+            # Split on CRLF, LF, or bare CR per SSE spec (WHATWG)
             my $data = $event->{data} // '';
-            for my $line (split /\n/, $data, -1) {
+            for my $line (split /\r?\n|\r/, $data, -1) {
                 $sse_data .= "data: $line\n";
             }
 
@@ -1979,10 +2889,14 @@ sub _create_sse_send {
             # Used for keepalives that shouldn't trigger onmessage
             return unless $weak_self->{sse_started};
 
-            my $comment = $event->{comment} // '';
-            # Ensure comment starts with : and ends with newlines
-            $comment = ":$comment" unless $comment =~ /^:/;
-            $comment .= "\n\n";
+            my $comment_text = $event->{comment} // '';
+            # Split on CRLF, LF, or bare CR and prefix each line with :
+            my $comment = '';
+            for my $line (split /\r?\n|\r/, $comment_text, -1) {
+                $line = ":$line" unless $line =~ /^:/;
+                $comment .= "$line\n";
+            }
+            $comment .= "\n";
 
             my $len = sprintf("%x", length($comment));
             $weak_self->{stream}->write("$len\r\n$comment\r\n");
@@ -2098,7 +3012,7 @@ sub _create_websocket_scope {
         server       => [$self->{server_host}, $self->{server_port}],
         subprotocols => \@subprotocols,
         # Optimized: avoid hash copy when state is empty (common case)
-        state        => %{$self->{state}} ? { %{$self->{state}} } : {},
+        state        => keys %{$self->{state}} ? { %{$self->{state}} } : {},
         extensions   => $self->_get_extensions_for_scope,
     };
 
@@ -2455,7 +3369,8 @@ sub _process_websocket_frames {
 
                 # RFC 6455: Close reason must be valid UTF-8
                 if (length($reason) > 0) {
-                    my $decoded = eval { Encode::decode('UTF-8', $reason, Encode::FB_CROAK) };
+                    my $reason_copy = $reason;
+                    my $decoded = eval { Encode::decode('UTF-8', $reason_copy, Encode::FB_CROAK) };
                     unless (defined $decoded) {
                         $self->_send_close_frame(1007, 'Invalid UTF-8 in close reason');
                         $self->_handle_disconnect_and_close('protocol_error');
@@ -2512,6 +3427,8 @@ async sub _send_file_response {
     my $file_size = -s $file;
     die "Cannot stat file $file: $!" unless defined $file_size;
     $length //= $file_size - $offset;
+
+    $self->{_response_size} += $length;
 
     my $stream = $self->{stream};
 
@@ -2593,6 +3510,8 @@ async sub _send_fh_response {
 
         last if !defined $bytes_read;  # Error
         last if $bytes_read == 0;      # EOF
+
+        $self->{_response_size} += $bytes_read;
 
         if ($chunked) {
             my $len = sprintf("%x", length($chunk));

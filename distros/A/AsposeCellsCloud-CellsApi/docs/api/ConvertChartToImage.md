@@ -24,8 +24,8 @@ This method reads a chart of spreadsheet file from the local file system, conver
 | Parameter Name | Type | Path/Query String/HTTPBody | Description | 
 | :- | :- | :- |:- | 
 |Spreadsheet|File|FormData|Upload spreadsheet file.|
-|worksheet|String|Query||
-|chartIndex|Integer|Query||
+|worksheet|String|Query|worksheet name of spreadsheet.|
+|chartIndex|Integer|Query|chart index of worksheet.|
 |format|String|Query|(Required) The desired image type (e.g., svg, png, jpg).|
 |outPath|String|Query|(Optional) The folder path where the workbook is stored. The default is null.|
 |outStorageName|String|Query|Output file Storage Name.|
@@ -44,3 +44,6 @@ File
 ## OpenAPI Specification
 
 The [OpenAPI Specification](https://reference.aspose.cloud/cells/#/ConversionController/ConvertChartToImage) defines a publicly accessible programming interface and lets you carry out REST interactions directly from a web browser.
+
+[[Back to API list]](../DeveloperGuide.md#api-reference)  
+[[Back to README]](../../README.md)

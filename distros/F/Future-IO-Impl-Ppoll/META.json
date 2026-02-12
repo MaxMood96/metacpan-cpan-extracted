@@ -22,8 +22,9 @@
       "runtime" : {
          "requires" : {
             "Future" : "0",
-            "Future::IO::ImplBase" : "0.19",
-            "IO::Ppoll" : "0",
+            "Future::IO" : "0.20",
+            "Future::IO::ImplBase" : "0",
+            "IO::Ppoll" : "0.14",
             "Struct::Dumb" : "0",
             "perl" : "5.020"
          }
@@ -31,14 +32,14 @@
       "test" : {
          "requires" : {
             "Test2::V0" : "0",
-            "Test::Future::IO::Impl" : "0.17"
+            "Test::Future::IO::Impl" : "0.19"
          }
       }
    },
    "provides" : {
       "Future::IO::Impl::Ppoll" : {
          "file" : "lib/Future/IO/Impl/Ppoll.pm",
-         "version" : "0.04"
+         "version" : "0.05"
       }
    },
    "release_status" : "stable",
@@ -47,6 +48,6 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.04",
+   "version" : "0.05",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

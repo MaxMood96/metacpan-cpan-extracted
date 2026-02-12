@@ -4,7 +4,7 @@ author:
   - 'Paul Evans <leonerd@leonerd.org.uk>'
 build_requires:
   Test2::V0: '0'
-  Test::Future::IO::Impl: '0.17'
+  Test::Future::IO::Impl: '0.19'
 configure_requires:
   Module::Build: '0.4004'
 dynamic_config: 1
@@ -17,13 +17,14 @@ name: Future-IO-Impl-Glib
 provides:
   Future::IO::Impl::Glib:
     file: lib/Future/IO/Impl/Glib.pm
-    version: '0.03'
+    version: '0.04'
 requires:
   Future: '0'
-  Future::IO::ImplBase: '0.19'
+  Future::IO: '0.20'
+  Future::IO::ImplBase: '0'
   Glib: '0'
   perl: '5.014'
 resources:
   license: http://dev.perl.org/licenses/
-version: '0.03'
+version: '0.04'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

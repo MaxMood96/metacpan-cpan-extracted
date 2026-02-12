@@ -30,6 +30,12 @@
             "ExtUtils::MakeMaker" : "0"
          }
       },
+      "develop" : {
+         "requires" : {
+            "Pod::Readme::Brief" : "0",
+            "Pod::Simple::JustPod" : "0"
+         }
+      },
       "runtime" : {
          "requires" : {
             "Carp" : "0",
@@ -53,6 +59,6 @@
          "web" : "https://github.com/und3f/protocol-redis"
       }
    },
-   "version" : "2.0001",
+   "version" : "2.0002",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

@@ -1,0 +1,41 @@
+# Version control files
+^\.git
+^\.gitattributes
+^\.gitignore
+
+# macOS files
+\.DS_Store
+\._
+
+# Build artifacts
+^Makefile$
+^Makefile\.old$
+^blib/
+pm_to_blib
+\.o$
+\.so$
+
+# Temporary files
+~$
+\.bak$
+\.tmp$
+\.$
+
+# Test coverage reports
+^cover_db/
+\.gcov$
+\.gcda$
+\.gcno$
+
+# Editor files
+\.swp$
+\.swo$
+^#.*
+
+# CPAN metadata (auto-generated)
+^MYMETA\.(json|yml)
+
+# Project-specific exclusions
+^examples/
+^docs/
+^ZZZ_archive/

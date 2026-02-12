@@ -1,0 +1,16 @@
+Revision history for Concierge-Sessions
+
+v0.8.1 2026-02-10
+    - Initial CPAN release
+    - SQLite and File storage backends
+    - Session objects with get/set data, save, status checks
+    - Sliding window expiration and indefinite sessions
+    - Single-session enforcement per user
+    - Expired session cleanup
+v0.8.2 2026-02-11
+    - Improved documentation
+v0.8.4 2026-02-12
+    - Fixed integration test timing margins for slow platforms (Windows/Strawberry Perl)
+v0.8.3 2026-02-11
+    - Fixed session expiration tests that were timing out too fast
+

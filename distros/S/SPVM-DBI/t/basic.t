@@ -15,7 +15,9 @@ my $api = SPVM::api();
 
 my $start_memory_blocks_count = $api->get_memory_blocks_count;
 
-ok(SPVM::TestCase::DBI->test);
+ok(SPVM::TestCase::DBI->data);
+
+ok(SPVM::TestCase::DBI->driver);
 
 # Version check
 is($SPVM::DBI::VERSION, $api->get_version_string("DBI"));

@@ -1,0 +1,331 @@
+#!/usr/bin/env perl
+use v5.36;
+
+use lib '../blib', '/Volumes/Main/Development/Repositories/Concierge-Users/lib';  
+use Concierge::Users;
+use File::Spec;
+use Cwd 'abs_path';
+
+my $base_dir = abs_path('./');
+my $data_dir = File::Spec->catdir($base_dir, 'data');
+my $config_file = File::Spec->catfile($data_dir, 'users-config.json');
+
+my $command = shift @ARGV;
+
+# No command - show help
+unless ($command) {
+    say "Usage: $0 <command> [args]";
+    say "Commands:";
+    say "  setup                      - Initialize database backend";
+    say "  add user_id=X email=Y ...  - Register new user";
+    say "  get <user_id>              - Retrieve user";
+    say "  list                       - List all users";
+    say "  update <user_id> k=v ...   - Update user";
+    say "  delete <user_id>           - Delete user";
+    exit;
+}
+
+# SETUP command
+if ($command eq 'setup') {
+    say "Setting up Database backend...";
+    my $config = {
+        storage_dir => $data_dir,
+        backend => 'database',
+        include_standard_fields => 'all',
+
+        # NEW: Override built-in field definitions
+        field_overrides => [
+        	{ field_name => 'text_ok', default => 0 },
+        ],
+
+        app_fields => [
+            {
+                field_name => 'first_act',
+                type => 'enum',
+                options => ['*Home', 'System', 'Projects', 'Dashboard', 'My Settings'],
+            },
+        ],
+    };
+    my $result = Concierge::Users->setup($config);
+    say $result->{success} ? "✅ Setup successful: $result->{message}" : "❌ Setup failed: $result->{message}";
+    if ($result->{success}) {
+        say "Config file: $result->{config_file}";
+    }
+    exit;
+}
+
+# Load existing config
+unless (-e $config_file) {
+    die "❌ Config not found. Run '$0 setup' first.\n";
+}
+
+my $users = Concierge::Users->new($config_file);
+
+# ADD command
+if ($command eq 'add') {
+    # Show field help if no arguments
+    unless (@ARGV) {
+        say "Available fields for 'add':\n";
+        my $fields = $users->get_user_fields();
+        my (@required, @optional);
+
+        foreach my $field (@$fields) {
+            my $def = $users->get_field_definition($field);
+            next unless $def;
+            # Skip system fields (auto-generated) except user_id
+            next if $def->{type} eq 'system' && $field ne 'user_id';
+            if ($def->{required}) {
+                push @required, $field;
+            } else {
+                push @optional, $field;
+            }
+        }
+
+        say "Required fields:";
+        foreach my $field (@required) {
+            my $def = $users->get_field_definition($field);
+            my $label = $def->{label} || $field;
+            my $type = $def->{type} || '';
+            my $line = "  $field ($type) - $label";
+            if ($type eq 'enum' && $def->{options} && @{$def->{options}}) {
+                my $opts = join(', ', @{$def->{options}});
+                $line .= " [$opts]";
+            }
+            say $line;
+        }
+
+        say "\nOptional fields:";
+        foreach my $field (@optional) {
+            my $def = $users->get_field_definition($field);
+            my $label = $def->{label} || $field;
+            my $type = $def->{type} || '';
+            my $line = "  $field ($type) - $label";
+            if ($type eq 'enum' && $def->{options} && @{$def->{options}}) {
+                my $opts = join(', ', @{$def->{options}});
+                $line .= " [$opts]";
+            }
+            say $line;
+        }
+
+        say "\nUsage: $0 add user_id=YOUR_ID moniker=YOUR_MONIKER email=your\@example.com ...";
+        exit;
+    }
+
+    my %params = map { split(/=\s*/, $_, 2) } @ARGV;
+    say "Adding user: $params{user_id}";
+    my $result = $users->register_user(\%params);
+    say $result->{success} ? "✅ $result->{message}" : "❌ $result->{message}";
+    if ($result->{warnings}) {
+        say "Warnings: " . join(', ', @{$result->{warnings}});
+    }
+    exit;
+}
+
+# GET command
+if ($command eq 'get') {
+    my $user_id 	= shift @ARGV or die "Usage: $0 get <user_id>\n";
+    my @get_flds	= qw/ user_id moniker first_name last_name email phone/;
+     my $result = $users->get_user($user_id, { fields => [@get_flds], });
+#    my $result = $users->get_user($user_id);
+    if ($result->{success}) {
+        say "✅ User found:";
+        my @res	= $result->{user}->@{@get_flds};
+        say join "\t" => @res;
+    } else {
+        say "❌ $result->{message}";
+    }
+    exit;
+}
+
+# LIST command
+if ($command eq 'list') {
+    my $result = $users->list_users( ); # 'access_level!admin'
+    if ($result->{success} && $result->{user_ids}) {
+        my $count = $result->{total_count};
+        say "✅ Found $count user(s):\n";
+
+        # Define fields to show in table
+        my @fields = qw(user_id moniker first_name last_name phone text_ok email access_level term_ends);
+
+        # Fetch full data for each user
+        my @users_data;
+        foreach my $user_id (@{$result->{user_ids}}) {
+            my $user_result = $users->get_user($user_id);
+            if ($user_result->{success}) {
+                push @users_data, $user_result->{user};
+            }
+        }
+
+        # Calculate column widths
+        my %widths;
+        foreach my $field (@fields) {
+            $widths{$field} = length($field);
+        }
+        foreach my $user (@users_data) {
+            foreach my $field (@fields) {
+                my $val = $user->{$field} // '';
+                my $len = length($val);
+                $widths{$field} = $len if $len > $widths{$field};
+            }
+        }
+
+        # Add padding
+        foreach my $field (@fields) {
+            $widths{$field} += 2;
+        }
+
+        # Print header
+        my $header_line = '';
+        foreach my $field (@fields) {
+            $header_line .= sprintf("%-${widths{$field}}s", $field);
+        }
+        say $header_line;
+
+        # Print separator
+        my $sep_line = '';
+        foreach my $field (@fields) {
+            $sep_line .= '-' x ($widths{$field} - 1) . ' ';
+        }
+        say $sep_line;
+
+        # Print user rows
+        foreach my $user (@users_data) {
+            my $line = '';
+            foreach my $field (@fields) {
+                my $val = $user->{$field} // '';
+                $line .= sprintf("%-${widths{$field}}s", $val);
+            }
+            say $line;
+        }
+    } elsif ($result->{success}) {
+        say "✅ No users found";
+    } else {
+        say "❌ $result->{message}";
+    }
+    exit;
+}
+
+# UPDATE command
+if ($command eq 'update') {
+    my $user_id = shift @ARGV or die "Usage: $0 update <user_id> field=value ...\n";
+
+    # Show field help if no field=value arguments
+    unless (@ARGV) {
+        say "Current data for '$user_id':\n";
+
+        # Get current user data
+        my $user_result = $users->get_user($user_id);
+        if ($user_result->{success}) {
+            my $current_data = $user_result->{user};
+
+            # Get updatable fields
+            my $fields = $users->get_user_fields();
+
+            foreach my $field (@$fields) {
+                my $def = $users->get_field_definition($field);
+                next unless $def;
+
+                # Skip system fields and user_id
+                next if $def->{type} eq 'system';
+                next if $field eq 'user_id';
+
+                my $label = $def->{label} || $field;
+                my $type = $def->{type} || '';
+                my $current_val = $current_data->{$field} // '';
+
+                # Format the value
+#                 if ($current_val eq '' || $current_val eq '0000-00-00 00:00:00') {
+                if ($current_val eq $def->{null_value}) {
+                    $current_val = '<empty>';
+                }
+
+                my $line = "  $field ($type): $current_val";
+                if ($type eq 'enum' && $def->{options} && @{$def->{options}}) {
+                    my $opts = join(', ', @{$def->{options}});
+                    $line .= "\n    Options: [$opts]";
+                }
+                say $line;
+            }
+        } else {
+            say "❌ User '$user_id' not found";
+        }
+
+        say "\nUsage: $0 update $user_id email=new\@example.com phone=555-9999 ...";
+        exit;
+    }
+
+    my %params = map { split(/=/, $_, 2) } @ARGV;
+    say "Updating user: $user_id";
+    my $result = $users->update_user($user_id, \%params);
+    say $result->{success} ? "✅ $result->{message}" : "❌ $result->{message}";
+    if ($result->{warnings}) {
+        say "Warnings: " . join(', ', @{$result->{warnings}});
+    }
+    exit;
+}
+
+# DELETE command
+if ($command eq 'delete') {
+    my $user_id = shift @ARGV or die "Usage: $0 delete <user_id>\n";
+    say "Deleting user: $user_id";
+    my $result = $users->delete_user($user_id);
+    say $result->{success} ? "✅ $result->{message}" : "❌ $result->{message}";
+    exit;
+}
+
+if ($command eq 'load_test_data') {
+    say "Loading test data ...";
+    my @db_fields	= $users->get_user_fields->@*;
+    say join ' ' => @db_fields;
+    my %OKfields	= map { $_ => 1 } @db_fields;
+    my $hdr_line	= <DATA>;
+    chomp $hdr_line;
+    my @header		= split "\t" => $hdr_line;
+    say join ' ' => @header;
+    my $cntr	= 0;
+    while (my $u = <DATA>) {
+    	chomp $u;
+    	my @record	= map { $_ || '' } split "\t" => $u;
+    	say join ' ' => @record;
+    	my %data; @data{@header} = @record;
+    	%data	= map {  $OKfields{ $_ } ? ($_ => $data{$_} || '' ) : () } (@header);
+    	my $result = $users->register_user(\%data);
+    	say $result->{success} ? "✅ $result->{message}" : "❌ $result->{message}";
+    	$cntr++ if $result->{success};
+    	if ($result->{warnings}) {
+    		say "Warnings: " . join(', ', @{$result->{warnings}});
+    	}
+    }
+    say "OK, $cntr test records added to the Users data store.";
+	exit;
+}
+
+if ($command eq 'show_config') {
+	say $users->show_config();
+	exit;
+}
+
+if ($command eq 'show_def_config') {
+	say $users->show_default_config();
+	exit;
+}
+
+die "Unknown command: $command\n";
+
+
+__DATA__
+user_id	last_login_date	last_mod_date	organization	first_name	last_name	moniker	phone	text_ok	email	user_status	access_level	term_ends	first_act	
+bva	2025-09-09T19:44:59	2021-07-25 12:15:54		Bruce	Van Allen	BVA	831-332-3649		bva@cruzio.com	OK	admin	2026-01-01		
+bw	2025-10-20T10:35:30			Bruce	Wright	BW	8314291688		bva@cruzio.com	OK	staff	2026-01-01		
+js	2025-09-09T20:54:49			Jeffrey	Smedberg	JS	831-612-2414‬		santacruz4bernie@gmail.com	OK	staff	2026-01-03		
+nh	2025-07-15T18:10:02			Nora	Hochman	NH	831-334-2003		nolden98@comcast.net	OK	staff	2025-12-31		
+rs	2025-08-28T16:21:03			Roland	Saher	RS	831-251-2793		rolandsaher@gmail.com	OK	staff	2025-12-31		
+lm	2025-08-21T17:06:26			Lynda	Marin	LM	831-840-4176		lmarin@cruzio.com	OK	staff	2025-12-31		
+et	2025-07-29T16:16:47			Etta	Tyler	ET	831-345-1664		ettatyler@gmail.com	OK	staff	2025-12-31		
+lg	2025-09-15T16:15:11			Lorna	Grundeman	LG	831-234-7459		lornagrundeman@comcast.net	OK	staff	2025-12-31		
+kw	2025-07-03T11:52:13			Kira	Walker	KW	412-720-5997		kirawalker2017@gmail.com	OK	staff	2025-12-31		
+sc4b	2025-10-19T07:02:35			SC4B	Admin	SC4B			santacruz4bernie@gmail.com	OK	admin	2026-01-04		
+NK	2025-06-28T16:37:17			Nancy 	Krusoe	NK	831-566-4421		nkrusoe@cruzio.com	OK	staff	2026-01-06		
+CK	2025-07-28T13:22:40			Chris	Krohn	CK	831-454-6170		ckrohn@cruzio.com	OK	staff	2026-01-04		
+is	2025-08-12T10:04:21			Irana	Shepherd	IS	8313259566		roni@cruzio.com	OK	staff	2026-01-04		
+ge	2025-08-13T11:53:57			Gerda	Endemann	GE	650-814-4914		gerda.endemann@gmail.com	OK	staff	2026-01-04		

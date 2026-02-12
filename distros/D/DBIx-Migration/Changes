@@ -1,5 +1,12 @@
 Revision history for perl distribution DBIx-Migration
 
+0.32 Wed Feb 11 03:58:21 PM CET 2026
+        - Introduce $Driver type constraint to improve dsn parse error
+          handling in CLI
+        - Set $VERSION in CLI sub module and Pg sub module explicitly (should
+          fix 02packages.details.txt.gz)
+        - Add missing requires prerequisites
+
 0.31 Mon Jun 23 10:17:37 AM CEST 2025
         - Fix DBD::SQLite minimum version requirement
 

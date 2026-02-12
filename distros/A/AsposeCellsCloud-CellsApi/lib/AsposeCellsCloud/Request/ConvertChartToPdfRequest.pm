@@ -61,8 +61,8 @@ sub new {
 
 # Run Operation Request
 # ConvertChartToPdfRequest.Spreadsheet : Upload spreadsheet file.  ,
-# ConvertChartToPdfRequest.worksheet :   ,
-# ConvertChartToPdfRequest.chartIndex :   ,
+# ConvertChartToPdfRequest.worksheet : worksheet name of spreadsheet.  ,
+# ConvertChartToPdfRequest.chartIndex : chart index of worksheet.  ,
 # ConvertChartToPdfRequest.outPath : (Optional) The folder path where the workbook is stored. The default is null.  ,
 # ConvertChartToPdfRequest.outStorageName : Output file Storage Name.  ,
 # ConvertChartToPdfRequest.fontsLocation : Use Custom fonts.  ,
@@ -159,14 +159,14 @@ __PACKAGE__->method_documentation({
      'worksheet' => {
      	datatype => 'string',
      	base_name => 'worksheet',
-     	description => '',
+     	description => 'worksheet name of spreadsheet.',
      	format => '',
      	read_only => '',
      		},
      'chart_index' => {
      	datatype => 'int',
      	base_name => 'chartIndex',
-     	description => '',
+     	description => 'chart index of worksheet.',
      	format => '',
      	read_only => '',
      		},

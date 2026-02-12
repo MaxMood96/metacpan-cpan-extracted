@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2021-2026 -- leonerd@leonerd.org.uk
 
-package Future::IO::Impl::Tickit 0.02;
+package Future::IO::Impl::Tickit 0.03;
 
 use v5.14;
 use warnings;
@@ -13,7 +13,7 @@ use Carp;
 
 __PACKAGE__->APPLY;
 
-use Future::IO qw( POLLIN POLLOUT POLLHUP POLLERR );
+use Future::IO 0.20 qw( POLLIN POLLOUT POLLPRI POLLHUP POLLERR );
 use Tickit;
 my $tickit;
 
@@ -104,6 +104,10 @@ sub poll
       croak "Need a Tickit instance with ->set_tickit before calling Future::IO->poll";
 
    my $f = Future::IO::Impl::Tickit::_Future->new;
+
+   if( $events & POLLPRI ) {
+      croak "Tickit cannot currently handle POLLPRI IO watches";
+   }
 
    if( $events & (POLLIN|POLLHUP) ) {
       my $futures = $read_futures_by_fileno{ $fd } //= [];

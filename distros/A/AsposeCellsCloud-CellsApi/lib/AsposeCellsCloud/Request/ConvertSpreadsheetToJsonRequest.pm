@@ -76,7 +76,7 @@ sub new {
        }
     };
     __PACKAGE__->method_documentation->{ 'convert_spreadsheet_to_json' } = { 
-    	summary => '',
+    	summary => 'Converts a spreadsheet on a local drive to the JSON file.',
         params => $params,
         returns => 'string',
     };

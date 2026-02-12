@@ -1,6 +1,226 @@
 class TestCase::DBI {
   use DBI;
-  static method test : int () {
+  use DBI::Data;
+  use DBD::TestCaseMinimal;
+  use Go::Context;
+
+  static method driver : int () {
+    
+    my $ctx = Go::Context->background;
+    
+    # Connect via DBI using DSN with username/password and options
+    my $user = "kimocchan";
+    my $pass = "password";
+    my $options = {
+      Host => "localhost",
+      Port => 3306,
+      Database => "test_db"
+    };
+    
+    my $dbh = DBD::TestCaseMinimal->connect($ctx, $user, $pass, $options);
+    
+    # Test Db fields (Host, Port, Database, and Username)
+    {
+      unless ($dbh->Host eq "localhost") {
+        diag $dbh->Host;
+        return 0;
+      }
+      
+      unless ($dbh->Port == 3306) {
+        diag (string)$dbh->Port;
+        return 0;
+      }
+      
+      unless ($dbh->Database eq "test_db") {
+        diag $dbh->Database;
+        return 0;
+      }
+      
+      unless ($dbh->Username eq $user) {
+        diag $dbh->Username;
+        return 0;
+      }
+    }
+
+    # Test Db methods
+    {
+      unless ($dbh->ping($ctx) == 1) {
+        diag;
+        return 0;
+      }
+      unless ((string)$dbh->get_info($ctx, 0) eq "TestCaseMinimal Info") {
+        diag;
+        return 0;
+      }
+      unless ((long)$dbh->last_insert_id($ctx) == 123456789L) {
+        diag;
+        return 0;
+      }
+      unless ($dbh->quote($ctx, "foo") eq "'foo'") {
+        diag;
+        return 0;
+      }
+      unless ($dbh->quote_identifier($ctx, undef, undef, "bar") eq "\"bar\"") {
+        diag;
+        return 0;
+      }
+      
+      $dbh->begin_work($ctx);
+      $dbh->commit($ctx);
+      $dbh->rollback($ctx);
+    }
+
+    # Test St methods
+    {
+      my $sql = "select * from dummy";
+      my $sth = $dbh->prepare($ctx, $sql);
+      
+      unless ($sth->Statement eq $sql) {
+        diag;
+        return 0;
+      }
+
+      unless ($sth->execute($ctx) == 2147483649L) {
+        diag;
+        return 0;
+      }
+
+      unless ($sth->NUM_OF_FIELDS($ctx) == 12345678) {
+        diag;
+        return 0;
+      }
+      unless ($sth->rows($ctx) == 4611686018427387903L) {
+        diag;
+        return 0;
+      }
+      
+      my $names = $sth->NAME($ctx);
+      unless ($names->[0] eq "col1" && $names->[1] eq "col2") {
+        diag;
+        return 0;
+      }
+      
+      my $nullable = $sth->NULLABLE($ctx);
+      unless ($nullable->[0] == 1 && $nullable->[1] == 0) {
+        diag;
+        return 0;
+      }
+      
+      my $types = $sth->TYPE($ctx);
+      unless ($types->[0] == 10000001 && $types->[1] == 10000002) {
+        diag;
+        return 0;
+      }
+      
+      my $precision = $sth->PRECISION($ctx);
+      unless ($precision->[0] == 20000001 && $precision->[1] == 20000002) {
+        diag;
+        return 0;
+      }
+      
+      my $scale = $sth->SCALE($ctx);
+      unless ($scale->[0] == 30000001 && $scale->[1] == 30000002) {
+        diag;
+        return 0;
+      }
+
+      # fetch variants
+      {
+        my $row1 = $sth->fetch($ctx);
+        unless ((string)$row1->[1] eq "no_input") {
+          diag;
+          return 0;
+        }
+
+        my $bind_cols = [(object)99, (object)"input"];
+        my $row2 = $sth->fetch($ctx, $bind_cols);
+        unless ((int)$row2->[0] == 99 && (string)$row2->[1] eq "input") {
+          diag;
+          return 0;
+        }
+
+        my $ret_row = new object[2];
+        my $row3 = $sth->fetch($ctx, $bind_cols, $ret_row);
+        unless ($row3 == $ret_row && (int)$row3->[0] == 99) {
+          diag;
+          return 0;
+        }
+      }
+
+      my $table_info = $dbh->table_info($ctx, undef, undef, undef, undef);
+      unless ($table_info->Statement eq "TABLE_INFO") {
+        diag;
+        return 0;
+      }
+      
+      my $column_info = $dbh->column_info($ctx, undef, undef, undef, undef);
+      unless ($column_info->Statement eq "COLUMN_INFO") {
+        diag;
+        return 0;
+      }
+
+      $sth->finish;
+    }
+
+    $dbh->disconnect;
+    
+    return 1;
+  }
+
+  static method data : int () {
+    # big_int helper
+    {
+      my $val = "170141183460469231731687303715884105727";
+      my $data = DBI->big_int($val);
+      unless ($data->type_id == DBI::Data->TYPE_ID_BIG_INT) {
+        diag;
+        return 0;
+      }
+      unless ($data->value eq $val) {
+        diag;
+        return 0;
+      }
+      unless ($data->to_string eq $val) {
+        diag;
+        return 0;
+      }
+    }
+
+    # big_float helper
+    {
+      my $val = "1.23456789012345678901234567890";
+      my $data = DBI->big_float($val);
+      unless ($data->type_id == DBI::Data->TYPE_ID_BIG_FLOAT) {
+        diag;
+        return 0;
+      }
+      unless ($data->value eq $val) {
+        diag;
+        return 0;
+      }
+      unless ($data->to_string eq $val) {
+        diag;
+        return 0;
+      }
+    }
+
+    # blob helper
+    {
+      my $val = "abc\0def"; # binary
+      my $data = DBI->blob($val);
+      unless ($data->type_id == DBI::Data->TYPE_ID_BLOB) {
+        diag;
+        return 0;
+      }
+      unless ($data->value eq $val) {
+        diag;
+        return 0;
+      }
+      unless ($data->to_string eq $val) {
+        diag;
+        return 0;
+      }
+    }
     
     return 1;
   }

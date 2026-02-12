@@ -1,6 +1,6 @@
 NAME
 
-    IO::Ppoll - Object interface to Linux's ppoll() call
+    IO::Ppoll - Object interface to the ppoll() system call
 
 SYNOPSIS
 
@@ -21,11 +21,11 @@ SYNOPSIS
 
 DESCRIPTION
 
-    IO::Ppoll is a simple interface to Linux's ppoll() system call. It
-    provides an interface that is drop-in compatible with IO::Poll. The
-    object stores a signal mask that will be in effect during the actual
-    ppoll() system call and has additional methods for manipulating the
-    signal mask.
+    IO::Ppoll is a simple interface to the ppoll() system call. It provides
+    an interface that is drop-in compatible with IO::Poll. The object
+    stores a signal mask that will be in effect during the actual ppoll()
+    system call and has additional methods for manipulating the signal
+    mask.
 
     The ppoll() system call atomically switches the process's signal mask
     to that provided by the call, waits identically to poll(), then
@@ -37,10 +37,15 @@ DESCRIPTION
     application is interested in during the normal running of code.
     Whenever the ppoll() wait is entered the process signal mask will be
     switched to that stored in the object. If there are any pending
-    signals, the Linux kernel will then deliver them and make ppoll()
-    return -1 with errno set to EINTR. If no signals are pending, it will
-    wait as a normal poll() would. This guarantees the signals will only be
-    delivered during the ppoll() wait, when it would be safe to do so.
+    signals, the kernel will then deliver them and make ppoll() return -1
+    with errno set to EINTR. If no signals are pending, it will wait as a
+    normal poll() would. This guarantees the signals will only be delivered
+    during the ppoll() wait, when it would be safe to do so.
+
+    The ppoll() system call was originally implemented on Linux, but has
+    also been implemented on other operating systems such as many of the
+    BSD-derived ones. This module attempts not to be Linux-specific, and so
+    should work on any OS where the system call is available.
 
 CONSTRUCTOR
 
@@ -159,7 +164,7 @@ SEE ALSO
       * ppoll(2) - wait for some event on a file descriptor (Linux
       manpages)
 
-      * IO::Async::Loop::IO_Ppoll - a Loop using an IO::Ppoll object
+      * IO::Async::Loop::Ppoll - a Loop using an IO::Ppoll object
 
 AUTHOR
 

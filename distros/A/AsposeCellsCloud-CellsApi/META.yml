@@ -20,7 +20,7 @@ provides:
     file: lib/AsposeCellsCloud/ApiFactory.pm
   AsposeCellsCloud::CellsApi:
     file: lib/AsposeCellsCloud/CellsApi.pm
-    version: 26.1
+    version: 26.2
   AsposeCellsCloud::Configuration:
     file: lib/AsposeCellsCloud/Configuration.pm
   AsposeCellsCloud::Role:
@@ -929,8 +929,8 @@ provides:
     file: lib/AsposeCellsCloud/Object/WorksheetDataStatistics.pm
   AsposeCellsCloud::Request::DecomposeUserTaskRequest:
     file: lib/AsposeCellsCloud/Request/DecomposeUserTaskRequest.pm
-  AsposeCellsCloud::Request::TranslationSpreadsheetRequest:
-    file: lib/AsposeCellsCloud/Request/TranslationSpreadsheetRequest.pm
+  AsposeCellsCloud::Request::TranslateSpreadsheetRequest:
+    file: lib/AsposeCellsCloud/Request/TranslateSpreadsheetRequest.pm
   AsposeCellsCloud::Request::TranslateTextFileRequest:
     file: lib/AsposeCellsCloud/Request/TranslateTextFileRequest.pm
   AsposeCellsCloud::Request::AggregateCellsByColorRequest:
@@ -965,6 +965,10 @@ provides:
     file: lib/AsposeCellsCloud/Request/ConvertWorksheetToImageRequest.pm
   AsposeCellsCloud::Request::ConvertWorksheetToPdfRequest:
     file: lib/AsposeCellsCloud/Request/ConvertWorksheetToPdfRequest.pm
+  AsposeCellsCloud::Request::ConvertWorksheetToJsonRequest:
+    file: lib/AsposeCellsCloud/Request/ConvertWorksheetToJsonRequest.pm
+  AsposeCellsCloud::Request::ConvertWorksheetToCsvRequest:
+    file: lib/AsposeCellsCloud/Request/ConvertWorksheetToCsvRequest.pm
   AsposeCellsCloud::Request::ConvertWorksheetToHtmlRequest:
     file: lib/AsposeCellsCloud/Request/ConvertWorksheetToHtmlRequest.pm
   AsposeCellsCloud::Request::ConvertWorksheetToHtmlTableRequest:
@@ -1019,6 +1023,8 @@ provides:
     file: lib/AsposeCellsCloud/Request/GetPublicKeyRequest.pm
   AsposeCellsCloud::Request::CreateSpreadsheetRequest:
     file: lib/AsposeCellsCloud/Request/CreateSpreadsheetRequest.pm
+  AsposeCellsCloud::Request::GetWorksheetsWithLocalSpreadsheetRequest:
+    file: lib/AsposeCellsCloud/Request/GetWorksheetsWithLocalSpreadsheetRequest.pm
   AsposeCellsCloud::Request::AddWorksheetToSpreadsheetRequest:
     file: lib/AsposeCellsCloud/Request/AddWorksheetToSpreadsheetRequest.pm
   AsposeCellsCloud::Request::DeleteWorksheetFromSpreadsheetRequest:
@@ -1031,12 +1037,20 @@ provides:
     file: lib/AsposeCellsCloud/Request/CompressSpreadsheetRequest.pm
   AsposeCellsCloud::Request::RepairSpreadsheetRequest:
     file: lib/AsposeCellsCloud/Request/RepairSpreadsheetRequest.pm
+  AsposeCellsCloud::Request::GetMergedCellsInRemotedWorksheetRequest:
+    file: lib/AsposeCellsCloud/Request/GetMergedCellsInRemotedWorksheetRequest.pm
+  AsposeCellsCloud::Request::GetMergedCellsInWorksheetRequest:
+    file: lib/AsposeCellsCloud/Request/GetMergedCellsInWorksheetRequest.pm
   AsposeCellsCloud::Request::ProtectSpreadsheetRequest:
     file: lib/AsposeCellsCloud/Request/ProtectSpreadsheetRequest.pm
   AsposeCellsCloud::Request::UnprotectSpreadsheetRequest:
     file: lib/AsposeCellsCloud/Request/UnprotectSpreadsheetRequest.pm
   AsposeCellsCloud::Request::SpreadsheetDigitalsignatureRequest:
     file: lib/AsposeCellsCloud/Request/SpreadsheetDigitalsignatureRequest.pm
+  AsposeCellsCloud::Request::SearchAllTextItemsInRemoteSpreadsheetRequest:
+    file: lib/AsposeCellsCloud/Request/SearchAllTextItemsInRemoteSpreadsheetRequest.pm
+  AsposeCellsCloud::Request::SearchSpreadsheetAllTextItemsRequest:
+    file: lib/AsposeCellsCloud/Request/SearchSpreadsheetAllTextItemsRequest.pm
   AsposeCellsCloud::Request::SearchSpreadsheetContentRequest:
     file: lib/AsposeCellsCloud/Request/SearchSpreadsheetContentRequest.pm
   AsposeCellsCloud::Request::SearchContentInRemoteSpreadsheetRequest:
@@ -1828,5 +1842,5 @@ requires:
   strict: '0'
   utf8: '0'
   warnings: '0'
-version: 26.1
+version: 26.2
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

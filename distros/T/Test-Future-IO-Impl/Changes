@@ -1,5 +1,10 @@
 Revision history for Test-Future-IO-Impl
 
+0.19    2026-02-11
+        [BUGFIXES]
+         * Don't expect exactly `POLLERR` for the hangup-out test case, as
+           OSes differ in exact behaviour here
+
 0.18    2026-02-09
         [CHANGES]
          * Additionally tests that `->poll(POLLIN)` doesn't accidentally fire

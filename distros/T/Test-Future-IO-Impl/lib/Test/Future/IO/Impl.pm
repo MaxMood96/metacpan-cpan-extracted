@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2021-2026 -- leonerd@leonerd.org.uk
 
-package Test::Future::IO::Impl 0.18;
+package Test::Future::IO::Impl 0.19;
 
 use v5.14;
 use warnings;
@@ -331,10 +331,11 @@ sub run_poll_test
 
       my $f = Future::IO->poll( $wr, POLLOUT );
 
-      # We expect at least POLLERR, we might also see POLLOUT or POLLHUP as
+      # We expect at least one of POLLERR or POLLHUP, we might also see POLLOUT
       # well but lets not care about that
       my $got_revents = $f->get;
-      is( $got_revents & POLLERR, POLLERR, "Future::IO->poll(POLLOUT) yields at-least POLLERR on hangup-out filehandle" );
+      ok( $got_revents & (POLLERR|POLLHUP),
+         "Future::IO->poll(POLLOUT) yields POLLERR or POLLHUP on hangup-out filehandle" );
    }
 }
 

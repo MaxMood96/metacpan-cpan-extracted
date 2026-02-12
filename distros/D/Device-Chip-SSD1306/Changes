@@ -1,5 +1,14 @@
 Revision history for Device-Chip-SSD1306
 
+0.15    2026-02-11
+        [CHANGES]
+         * Added ->draw_glyph and ->draw_rect methods
+         * Allow overriding of contrast and VCOMH settings to reduce screen
+           burn-in on long-term displays
+         * More efficient framebuffer for drawing, written in XS
+         * General module refresh
+            + Minor Pod style fixes
+
 0.14    2023-09-13
         [CHANGES]
          * General module style updates:

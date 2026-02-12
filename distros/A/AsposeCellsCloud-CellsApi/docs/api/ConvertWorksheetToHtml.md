@@ -7,6 +7,8 @@ Converts a worksheet of spreadsheet on a local drive to the html file.
 
 - **Base URL**: `http://api.aspose.cloud/v4.0`
 - **Authentication Method**: `JWT (OAuth2, application)`  **Token URL**: `https://api.aspose.cloud/connect/token`
+- **Example** 
+
 ## **Interface Details**
 
 ### **Endpoint** 
@@ -40,3 +42,6 @@ File
 ## OpenAPI Specification
 
 The [OpenAPI Specification](https://reference.aspose.cloud/cells/#/ConversionController/ConvertWorksheetToHtml) defines a publicly accessible programming interface and lets you carry out REST interactions directly from a web browser.
+
+[[Back to API list]](../DeveloperGuide.md#api-reference)  
+[[Back to README]](../../README.md)

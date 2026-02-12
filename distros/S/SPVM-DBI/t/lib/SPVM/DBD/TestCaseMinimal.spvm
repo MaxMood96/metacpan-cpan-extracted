@@ -1,0 +1,67 @@
+# Copyright (c) 2026 Yuki Kimoto
+# MIT License
+
+class DBD::TestCaseMinimal extends DBI {
+  use DBD::TestCaseMinimal::St;
+  
+  static method connect : DBD::TestCaseMinimal ($ctx : Go::Context, $user : string = undef, $password : string = undef, $options : object[] = undef) {
+    my $self = new DBD::TestCaseMinimal;
+
+    $self->connect_common($ctx, $user, $password, $options);
+
+    return $self;
+  }
+  
+  static method new : DBD::TestCaseMinimal () {
+    return new DBD::TestCaseMinimal;
+  }
+
+  method prepare : DBI::St ($ctx : Go::Context, $sql : string, $options : object[] = undef) {
+    my $sth = DBD::TestCaseMinimal::St->new;
+    
+    $self->prepare_common($sth, $ctx, $sql, $options);
+    
+    return $sth;
+  }
+
+  method begin_work : void ($ctx : Go::Context) {
+  }
+
+  method commit : void ($ctx : Go::Context) {
+  }
+
+  method rollback : void ($ctx : Go::Context) {
+  }
+
+  method last_insert_id : object ($ctx : Go::Context, $catalog : string = undef, $schema : string = undef, $table : string = undef, $field : string = undef, $options : object[] = undef) {
+    return (object)123456789L;
+  }
+
+  method ping : int ($ctx : Go::Context) {
+    return 1;
+  }
+
+  method get_info : object ($ctx : Go::Context, $info_type : int) {
+    return (object)"TestCaseMinimal Info";
+  }
+
+  method table_info : DBI::St ($ctx : Go::Context, $catalog : string, $schema : string, $table : string, $type : string, $options : object[] = undef) {
+    return $self->prepare($ctx, "TABLE_INFO", $options);
+  }
+
+  method column_info : DBI::St ($ctx : Go::Context, $catalog : string, $schema : string, $table : string, $column : string) {
+    return $self->prepare($ctx, "COLUMN_INFO", undef);
+  }
+
+  method quote : string ($ctx : Go::Context, $str : string, $type : int = -1) {
+    return "'" . $str . "'";
+  }
+
+  method quote_identifier : string ($ctx : Go::Context, $catalog : string, $schema : string, $table : string, $options : object[] = undef) {
+    return "\"" . $table . "\"";
+  }
+
+  method disconnect : void () {
+    diag "[Test Output]DBD::TestCaseMinimal#disconnect";
+  }
+}

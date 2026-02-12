@@ -1,6 +1,6 @@
 package DBIx::Migration::Pg;
 
-our $VERSION = $DBIx::Migration::VERSION;
+our $VERSION = '0.32';
 
 use Moo;
 use MooX::StrictConstructor;

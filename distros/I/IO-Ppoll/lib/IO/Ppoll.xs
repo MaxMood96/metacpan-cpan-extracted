@@ -30,6 +30,7 @@ BOOT:
   stash = gv_stashpvn("IO::Ppoll", 9, TRUE);
   newCONSTSUB(stash, "POLLIN",  newSViv(POLLIN));
   newCONSTSUB(stash, "POLLOUT", newSViv(POLLOUT));
+  newCONSTSUB(stash, "POLLPRI", newSViv(POLLPRI));
   newCONSTSUB(stash, "POLLERR", newSViv(POLLERR));
   newCONSTSUB(stash, "POLLHUP", newSViv(POLLHUP));
   newCONSTSUB(stash, "POLLNVAL",newSViv(POLLNVAL));

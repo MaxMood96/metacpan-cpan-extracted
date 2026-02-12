@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2026 -- leonerd@leonerd.org.uk
 
-package Future::IO::Impl::Ppoll 0.04;
+package Future::IO::Impl::Ppoll 0.05;
 
 use v5.20;
 use warnings;
@@ -15,7 +15,7 @@ no warnings qw( experimental::postderef experimental::signatures );
 use Carp;
 our @CARP_NOT = qw( Future::IO::Impl::Ppoll::_Future );
 
-use IO::Ppoll qw( POLLIN POLLOUT POLLHUP POLLERR POLLNVAL );
+use IO::Ppoll 0.14 qw( POLLIN POLLOUT POLLPRI POLLHUP POLLERR POLLNVAL );
 use POSIX qw( SIG_BLOCK sigprocmask );
 use Struct::Dumb qw( readonly_struct );
 use Time::HiRes qw( time );
@@ -32,10 +32,10 @@ BEGIN {
 }
 
 BEGIN {
-   Future::IO->VERSION( '0.19' );
+   Future::IO->VERSION( '0.20' );
    # Just check for sanity
    IO::Ppoll->$_ == Future::IO->$_ or die "This implementation relies on the Future::IO $_ constant being the same as system\n"
-      for qw( POLLIN POLLOUT POLLHUP POLLERR POLLNVAL );
+      for qw( POLLIN POLLOUT POLLPRI POLLHUP POLLERR POLLNVAL );
 }
 
 __PACKAGE__->APPLY;

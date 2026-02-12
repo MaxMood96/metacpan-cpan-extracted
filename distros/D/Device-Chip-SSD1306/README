@@ -64,7 +64,7 @@ CONSTRUCTOR
        $chip = Device::Chip::SSD1306->new(
           model => $model,
           ...
-       )
+       );
 
     Returns a new Device::Chip::SSD1306 driver instance for the given model
     name, which must be one of the models listed in "DEVICE MODELS". If no
@@ -80,6 +80,16 @@ CONSTRUCTOR
       by the hardware. In particular, if both are true, this inverts the
       orientation of the display, if it is mounted upside-down.
 
+    contrast => INT
+
+      Normally set to 0x9F, but you may wish to set a lower value to avoid
+      display burn-in on rarely-updated static displays.
+
+    vcomh => INT
+
+      Normally set to 4, but you may wish to set a lower value to avoid
+      display burn-in on rarely-updated static displays.
+
 METHODS
 
     The following methods documented in an await expression return Future
@@ -89,9 +99,9 @@ METHODS
 
  columns
 
-       $n = $chip->rows
+       $n = $chip->rows;
     
-       $n = $chip->columns
+       $n = $chip->columns;
 
     Simple accessors that return the number of rows or columns present on
     the physical display.
@@ -135,20 +145,20 @@ DRAWING METHODS
 
  clear
 
-       $chip->clear
+       $chip->clear;
 
     Resets the stored framebuffer to blank.
 
  draw_pixel
 
-       $chip->draw_pixel( $x, $y, $val = 1 )
+       $chip->draw_pixel( $x, $y, $val = 1 );
 
     Draw the given pixel. If the third argument is false, the pixel will be
     cleared instead of set.
 
  draw_hline
 
-       $chip->draw_hline( $x1, $x2, $y, $val = 1 )
+       $chip->draw_hline( $x1, $x2, $y, $val = 1 );
 
     Draw a horizontal line in the given $y row, between the columns $x1 and
     $x2 (inclusive). If the fourth argument is false, the pixels will be
@@ -156,15 +166,25 @@ DRAWING METHODS
 
  draw_vline
 
-       $chip->draw_vline( $x, $y1, $y2, $val = 1 )
+       $chip->draw_vline( $x, $y1, $y2, $val = 1 );
 
     Draw a vertical line in the given $x column, between the rows $y1 and
     $y2 (inclusive). If the fourth argument is false, the pixels will be
     cleared instead of set.
 
+ draw_rect
+
+       $chip->draw_rect( $x1, $y1, $x2, $y2, $val = 1 );
+
+    Since version 0.15.
+
+    Draw a solid rectangle in between the given $x1 to $2 columns and rows
+    $y1 to $y2 (all inclusive). If the final argument is false, the pixels
+    will be cleared instead of set.
+
  draw_blit
 
-       $chip->draw_blit( $x, $y, @lines )
+       $chip->draw_blit( $x, $y, @lines );
 
     Draws a bitmap pattern by copying the data given in lines, starting at
     the given position.
@@ -183,6 +203,39 @@ DRAWING METHODS
           "######",
           "   ## ",
           "   #  " );
+
+ draw_glyph
+
+       $chip->draw_glyph( $x, $y, $glyph, $val = 1, $bg = undef );
+
+    Since version 0.15.
+
+    Draws a glyph by copying the bitmap data out of the $glyph argument, as
+    if it were a single glyph structure obtained from Font::PCF. The bitmap
+    is copied starting at the given position, and extends rightward and
+    downward for whatever is the defined size of the glyph given by its
+    data. For each pixel set in the glyph's bitmap, the corresponding pixel
+    of the display is set to $val; the other pixels are set to $bg. Either
+    of these last two values may be set to undef to not modify those
+    corresponding pixels.
+
+    Note that neither this module nor its tests actually depend on
+    Font::PCF itself; it merely invokes methods on the object consistent
+    with that API. Specifically, it expects the following methods:
+
+    width
+
+         $cols = $glyph->width;
+
+      Returns the number of columns wide that contain pixels of glyph data.
+
+    bitmap
+
+         [ $row0, $row1, ... ] = $glyph->bitmap;
+
+      Returns an ARRAY reference of rows of pixel data. Each row is
+      represented by a big-endian 32bit integer. The topmost bit
+      corresponds to the leftmost pixel.
 
  refresh
 

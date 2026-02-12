@@ -1,5 +1,9 @@
 Revision history for Data-MoneyCurrency
 
+0.30    Mi 11 Feb 2026 22:57:18 CET
+        - improved POD
+        - some conf updates for XFP and ARS
+
 0.29    Mon Dec 22 19:22:41 CET 2025
         - BG uses the Euro from 1 Jan 2026
 

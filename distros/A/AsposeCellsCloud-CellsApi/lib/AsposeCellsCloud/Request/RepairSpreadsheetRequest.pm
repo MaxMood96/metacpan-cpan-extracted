@@ -75,7 +75,7 @@ sub new {
        }
     };
     __PACKAGE__->method_documentation->{ 'repair_spreadsheet' } = { 
-    	summary => '',
+    	summary => 'The Web API endpoint allows users to repair a spreadsheet.',
         params => $params,
         returns => 'string',
     };

@@ -61,8 +61,8 @@ sub new {
 
 # Run Operation Request
 # ConvertChartToImageRequest.Spreadsheet : Upload spreadsheet file.  ,
-# ConvertChartToImageRequest.worksheet :   ,
-# ConvertChartToImageRequest.chartIndex :   ,
+# ConvertChartToImageRequest.worksheet : worksheet name of spreadsheet.  ,
+# ConvertChartToImageRequest.chartIndex : chart index of worksheet.  ,
 # ConvertChartToImageRequest.format : (Required) The desired image type (e.g., svg, png, jpg).  ,
 # ConvertChartToImageRequest.outPath : (Optional) The folder path where the workbook is stored. The default is null.  ,
 # ConvertChartToImageRequest.outStorageName : Output file Storage Name.  ,
@@ -164,14 +164,14 @@ __PACKAGE__->method_documentation({
      'worksheet' => {
      	datatype => 'string',
      	base_name => 'worksheet',
-     	description => '',
+     	description => 'worksheet name of spreadsheet.',
      	format => '',
      	read_only => '',
      		},
      'chart_index' => {
      	datatype => 'int',
      	base_name => 'chartIndex',
-     	description => '',
+     	description => 'chart index of worksheet.',
      	format => '',
      	read_only => '',
      		},

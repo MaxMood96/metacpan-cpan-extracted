@@ -1,5 +1,11 @@
 Revision history for Future-IO-Impl-UV
 
+0.08    2026-02-12
+        [CHANGES]
+         * Pull in latest Future::IO (for POLLPRI constant)
+         * Implement POLLPRI in `->poll`
+         * Pull in latest Test::Future::IO::Impl for bugfixes in tests
+
 0.07    2026-01-18
         [CHANGES]
          * Implement the new `->poll` method of Future::IO v0.19

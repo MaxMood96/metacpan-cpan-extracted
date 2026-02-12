@@ -1,5 +1,14 @@
 Revision history for IO-Ppoll
 
+0.14    2026-02-12
+        [CHANGES]
+         * Fix link to `IO::Async::Loop::Ppoll` since it was renamed
+         * Adjust module docs to be less Linux-specific, now that ppoll(2) is
+           part of POSIX 2024 and some other OSes implement it
+         * Improved croak messages when working with filehandles that have
+           lost their fileno
+         * Remember to provide the `POLLPRI` constant
+
 0.13    2026-01-16
         [CHANGES]
          * Various module modernisations

@@ -14,6 +14,11 @@
    },
    "name" : "Device-Chip-SSD1306",
    "prereqs" : {
+      "build" : {
+         "requires" : {
+            "ExtUtils::CBuilder" : "0"
+         }
+      },
       "configure" : {
          "requires" : {
             "Module::Build" : "0.4004"
@@ -37,15 +42,15 @@
    "provides" : {
       "Device::Chip::SSD1306" : {
          "file" : "lib/Device/Chip/SSD1306.pm",
-         "version" : "0.14"
+         "version" : "0.15"
       },
       "Device::Chip::SSD1306::I2C" : {
          "file" : "lib/Device/Chip/SSD1306/I2C.pm",
-         "version" : "0.14"
+         "version" : "0.15"
       },
       "Device::Chip::SSD1306::SPI4" : {
          "file" : "lib/Device/Chip/SSD1306/SPI4.pm",
-         "version" : "0.14"
+         "version" : "0.15"
       }
    },
    "release_status" : "stable",
@@ -54,6 +59,6 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.14",
-   "x_serialization_backend" : "JSON::PP version 4.07"
+   "version" : "0.15",
+   "x_serialization_backend" : "JSON::PP version 4.16"
 }

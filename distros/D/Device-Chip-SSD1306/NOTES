@@ -1,0 +1,29 @@
+Flexcable pinout    SPI3   SPI4   I²C
+   1  n/c
+   2  C2P
+   3  C2N
+   4  C1P
+   5  C1N
+   6  VBAT
+   7  n/c
+   8  VSS=DGND
+   9  VDD=+ve
+  10  BS0           1      0      0
+  11  BS1           0      0      1
+  12  BS2           0      0      0
+  13  CS#           CS#    CS#    0
+  14  RES#
+  15  D/C#          0      D/C#   A0
+  16  R/W#          0      0      0
+  17  E/RD#         0      0      0
+  18  D0            CLK    CLK    SCL
+  19  D1            MOSI   MOSI   SDA[in]
+  20  D2            n/c    n/c    SDA[out]
+  21  D3            0      0      0
+  ...
+  25  D7            0      0      0
+  26  IREF
+  27  VCOM
+  28  VCC =+ve
+  29  VLSS=AGND
+  30  n/c

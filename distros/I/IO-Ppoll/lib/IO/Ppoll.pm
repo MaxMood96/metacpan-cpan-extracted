@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2008-2026 -- leonerd@leonerd.org.uk
 
-package IO::Ppoll 0.13;
+package IO::Ppoll 0.14;
 
 use v5.14;
 use warnings;
@@ -14,6 +14,7 @@ use Exporter 'import';
 our @EXPORT = qw(
    POLLIN
    POLLOUT
+   POLLPRI
    POLLERR
    POLLHUP
    POLLNVAL
@@ -26,7 +27,7 @@ XSLoader::load( __PACKAGE__, our $VERSION );
 
 =head1 NAME
 
-C<IO::Ppoll> - Object interface to Linux's C<ppoll()> call
+C<IO::Ppoll> - Object interface to the C<ppoll()> system call
 
 =head1 SYNOPSIS
 
@@ -49,10 +50,10 @@ C<IO::Ppoll> - Object interface to Linux's C<ppoll()> call
 
 =head1 DESCRIPTION
 
-C<IO::Ppoll> is a simple interface to Linux's C<ppoll()> system call. It
-provides an interface that is drop-in compatible with L<IO::Poll>. The object
-stores a signal mask that will be in effect during the actual C<ppoll()>
-system call and has additional methods for manipulating the signal mask.
+C<IO::Ppoll> is a simple interface to the C<ppoll()> system call. It provides
+an interface that is drop-in compatible with L<IO::Poll>. The object stores a
+signal mask that will be in effect during the actual C<ppoll()> system call
+and has additional methods for manipulating the signal mask.
 
 The C<ppoll()> system call atomically switches the process's signal mask to
 that provided by the call, waits identically to C<poll()>, then switches it
@@ -62,11 +63,16 @@ signals, without needing such tricks as a self-connected pipe or socket.
 The usual way in which this is used is to block the signals the application is
 interested in during the normal running of code. Whenever the C<ppoll()> wait
 is entered the process signal mask will be switched to that stored in the 
-object. If there are any pending signals, the Linux kernel will then deliver
-them and make C<ppoll()> return -1 with C<errno> set to C<EINTR>. If no
-signals are pending, it will wait as a normal C<poll()> would. This guarantees
-the signals will only be delivered during the C<ppoll()> wait, when it would
-be safe to do so.
+object. If there are any pending signals, the kernel will then deliver them
+and make C<ppoll()> return -1 with C<errno> set to C<EINTR>. If no signals are
+pending, it will wait as a normal C<poll()> would. This guarantees the signals
+will only be delivered during the C<ppoll()> wait, when it would be safe to do
+so.
+
+The C<ppoll()> system call was originally implemented on Linux, but has also
+been implemented on other operating systems such as many of the BSD-derived
+ones. This module attempts not to be Linux-specific, and so should work on any
+OS where the system call is available.
 
 =cut
 
@@ -119,8 +125,10 @@ sub mask
    my $self = shift;
    my ( $handle, $newmask ) = @_;
 
-   my $fd = fileno $handle;
-   defined $fd or croak "Expected a filehandle";
+   $handle or croak "Expected a filehandle";
+
+   defined( my $fd = fileno $handle ) or
+      croak "Expected a filehandle with a fileno";
 
    if( @_ > 1 ) {
       if( $newmask ) {
@@ -163,8 +171,10 @@ sub mask_add
    my $self = shift;
    my ( $handle, $addbits ) = @_;
 
-   my $fd = fileno $handle;
-   defined $fd or croak "Expected a filehandle";
+   $handle or croak "Expected a filehandle";
+
+   defined( my $fd = fileno $handle ) or
+      croak "Expected a filehandle with a fileno";
 
    mas_events( $self->{fds}, $self->{nfds}, $fd, ~0, $addbits );
 }
@@ -174,8 +184,10 @@ sub mask_del
    my $self = shift;
    my ( $handle, $delbits ) = @_;
 
-   my $fd = fileno $handle;
-   defined $fd or croak "Expected a filehandle";
+   $handle or croak "Expected a filehandle";
+
+   defined( my $fd = fileno $handle ) or
+      croak "Expected a filehandle with a fileno";
 
    mas_events( $self->{fds}, $self->{nfds}, $fd, ~$delbits, 0 );
 }
@@ -217,8 +229,10 @@ sub events
    my $self = shift;
    my ( $handle ) = @_;
 
-   my $fd = fileno $handle;
-   defined $fd or croak "Expected a filehandle";
+   $handle or croak "Expected a filehandle";
+
+   defined( my $fd = fileno $handle ) or
+      croak "Expected a filehandle with a fileno";
 
    return get_revents( $self->{fds}, $self->{nfds}, $fd );
 }
@@ -363,7 +377,7 @@ C<ppoll(2)> - wait for some event on a file descriptor (Linux manpages)
 
 =item *
 
-L<IO::Async::Loop::IO_Ppoll> - a Loop using an IO::Ppoll object
+L<IO::Async::Loop::Ppoll> - a Loop using an IO::Ppoll object
 
 =back
 

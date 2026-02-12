@@ -74,9 +74,9 @@ sub new {
        }
     };
     __PACKAGE__->method_documentation->{ 'translate_text_file' } = { 
-    	summary => '',
+    	summary => 'Translates text file content to the specified target language.',
         params => $params,
-        returns => 'string',
+        returns => '',
     };
 }
 
@@ -86,7 +86,7 @@ sub run_http_request {
     my $client = $args{'client'};
 
     # parse inputs
-    my $_resource_path = 'v4.0/cells/ai/translate/text';
+    my $_resource_path = 'v4.0/cells/ai/translate/text-file';
 
     my $_method = 'PUT';
     my $query_params = {};

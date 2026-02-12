@@ -1,5 +1,10 @@
 Revision history for Future-IO-Impl-Ppoll
 
+0.05    2026-02-12
+        [CHANGES]
+         * Pull in latest Future::IO (for POLLPRI constant)
+         * Pull in latest Test::Future::IO::Impl for bugfixes in tests
+
 0.04    2026-02-10
         [CHANGES]
          * Print a warning if the event system is recursed into

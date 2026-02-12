@@ -1,5 +1,5 @@
 {
-   "abstract" : "Database Independent Interface",
+   "abstract" : "Base Class for Database Drivers Providing Common Utilities",
    "author" : [
       "Yuki Kimoto<kimoto.yuki@gmail.com>"
    ],
@@ -49,6 +49,6 @@
          "web" : "https://github.com/yuki-kimoto/SPVM-DBI"
       }
    },
-   "version" : "0.003",
+   "version" : "0.004",
    "x_serialization_backend" : "JSON::PP version 4.07"
 }

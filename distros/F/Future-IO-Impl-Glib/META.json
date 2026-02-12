@@ -22,7 +22,8 @@
       "runtime" : {
          "requires" : {
             "Future" : "0",
-            "Future::IO::ImplBase" : "0.19",
+            "Future::IO" : "0.20",
+            "Future::IO::ImplBase" : "0",
             "Glib" : "0",
             "perl" : "5.014"
          }
@@ -30,14 +31,14 @@
       "test" : {
          "requires" : {
             "Test2::V0" : "0",
-            "Test::Future::IO::Impl" : "0.17"
+            "Test::Future::IO::Impl" : "0.19"
          }
       }
    },
    "provides" : {
       "Future::IO::Impl::Glib" : {
          "file" : "lib/Future/IO/Impl/Glib.pm",
-         "version" : "0.03"
+         "version" : "0.04"
       }
    },
    "release_status" : "stable",
@@ -46,6 +47,6 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.03",
+   "version" : "0.04",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

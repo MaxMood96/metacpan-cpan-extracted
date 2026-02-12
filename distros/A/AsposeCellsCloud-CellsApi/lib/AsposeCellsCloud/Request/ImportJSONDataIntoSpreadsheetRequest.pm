@@ -62,9 +62,9 @@ sub new {
 # Run Operation Request
 # ImportJSONDataIntoSpreadsheetRequest.datafile : Upload data file.  ,
 # ImportJSONDataIntoSpreadsheetRequest.Spreadsheet : Upload spreadsheet file.  ,
-# ImportJSONDataIntoSpreadsheetRequest.worksheet :   ,
-# ImportJSONDataIntoSpreadsheetRequest.startcell :   ,
-# ImportJSONDataIntoSpreadsheetRequest.insert :   ,
+# ImportJSONDataIntoSpreadsheetRequest.worksheet : Need to import JSON data into the worksheet.  ,
+# ImportJSONDataIntoSpreadsheetRequest.startcell : Starting position for data import  ,
+# ImportJSONDataIntoSpreadsheetRequest.insert : Controls the insertion behavior. true: inserts data; false: overwrites existing data.  ,
 # ImportJSONDataIntoSpreadsheetRequest.outPath : (Optional) The folder path where the workbook is stored. The default is null.  ,
 # ImportJSONDataIntoSpreadsheetRequest.outStorageName : Output file Storage Name.  ,
 # ImportJSONDataIntoSpreadsheetRequest.fontsLocation : Use Custom fonts.  ,
@@ -80,7 +80,7 @@ sub new {
        }
     };
     __PACKAGE__->method_documentation->{ 'import_json_data_into_spreadsheet' } = { 
-    	summary => '',
+    	summary => 'Import JSON data file into the local spreadsheet.',
         params => $params,
         returns => 'string',
     };
@@ -177,21 +177,21 @@ __PACKAGE__->method_documentation({
      'worksheet' => {
      	datatype => 'string',
      	base_name => 'worksheet',
-     	description => '',
+     	description => 'Need to import JSON data into the worksheet.',
      	format => '',
      	read_only => '',
      		},
      'startcell' => {
      	datatype => 'string',
      	base_name => 'startcell',
-     	description => '',
+     	description => 'Starting position for data import',
      	format => '',
      	read_only => '',
      		},
      'insert' => {
      	datatype => 'string',
      	base_name => 'insert',
-     	description => '',
+     	description => 'Controls the insertion behavior. true: inserts data; false: overwrites existing data.',
      	format => '',
      	read_only => '',
      		},

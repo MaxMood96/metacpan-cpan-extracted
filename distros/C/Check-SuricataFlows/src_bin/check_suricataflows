@@ -1,0 +1,136 @@
+#!perl
+
+use warnings;
+use strict;
+use Getopt::Long qw(:config no_ignore_case);
+use Pod::Usage   qw( pod2usage );
+use Check::SuricataFlows;
+
+=head1 NAME
+
+check_sureicataflows - A Nagios style check to see if a Suricata flows EVE JSON contains bi-directional flows.
+
+=head1 SYNOPSIS
+
+check_suricataflows [B<-f> <flows.json>] [B<-a> <alert count>] [B<-w> <warn count>]
+[B<-t> <seconds>] [<-m> <max lines>]
+
+check_suricataflows -h/--help
+
+check_suricataflows -v/--version
+
+=head1 DESCRIPTION
+
+This reads the Suricata EVE JSON flow data file.
+
+    .timestamp :: Used for double checking to make sure we don't read farther
+        back than we need to.
+
+If the following is found, the entry is checked.
+
+    .dest_ip
+    .src_ip
+    .flow.pkts_toclient
+    .flow.pkts_toserver
+
+Bi-directional is when .flow.pkts_toclient and .flow.pkts_toserver are both greater
+than zero.
+
+Uni-directional is when only .flow.pkts_toclient or .flow.pkts_toserver is greater
+than zero and the other is zero.
+
+If all entries found are uni-directional then it is safe to assume the monitored span
+is misconfigured.
+
+=head1 FLAGS
+
+=head2 -f <flows.json>
+
+The flows EVE JSON location.
+
+Default: /var/log/suricata/flows/current/flow.json
+
+=head2 -a <alert count>
+
+Alert if the number of bidirectional flows are less than this.
+
+Default: 10
+
+=head2 -w <warn count>
+
+Warn if the number of directional flows are less than this.
+
+Default: 20
+
+=head2 -t <seconds>
+
+How far back into the file to read in seconds.
+
+Default: 300
+
+=head2 -m <max lines>
+
+Max number of lines to read in.
+
+=cut
+
+sub version {
+	print 'check_networkspans v. ' . $Check::NetworkSpans::VERSION . "\n";
+}
+
+sub help {
+	pod2usage( -exitval => 255, -verbose => 2, -output => \*STDOUT );
+}
+
+my $help;
+my $version;
+my $flow_file;
+my $alert_count;
+my $warn_count;
+my $read_back_time;
+my $max_lines;
+GetOptions(
+	'version' => \$version,
+	'v'       => \$version,
+	'help'    => \$help,
+	'h'       => \$help,
+	'f=s'     => \$flow_file,
+	'a=i'     => \$alert_count,
+	'w=i'     => \$warn_count,
+	's=i'     => \$read_back_time,
+	'm=i'     => \$max_lines,
+);
+
+if ($help) {
+	&help;
+	exit 255;
+}
+if ($version) {
+	&version;
+	exit 255;
+}
+
+my $flow_checker;
+eval {
+	$flow_checker = Check::SuricataFlows->new(
+		max_lines      => $max_lines,
+		read_back_time => $read_back_time,
+		warn_count     => $warn_count,
+		alert_count    => $alert_count,
+		flow_file      => $flow_file,
+	);
+};
+if ($@) {
+	print 'Failed to call Check::SuricataFlows->new... ' . $@ . "\n";
+	exit 3;
+}
+
+my $results;
+eval { $results = $flow_checker->run; };
+if ($@) {
+	print 'Failed to call $flow_checker->run... ' . $@ . "\n";
+	exit 3;
+}
+
+print $results->{status};
+exit $results->{status_code};

@@ -1,5 +1,11 @@
 Revision history for Future-IO-Impl-Glib
 
+0.04    2026-02-12
+        [CHANGES]
+         * Pull in latest Future::IO (for POLLPRI constant)
+         * Implement `->poll` for POLLPRI
+         * Pull in latest Test::Future::IO::Impl for bugfixes in tests
+
 0.03    2026-01-18
         [CHANGES]
          * Implement the new `->poll` method of Future::IO v0.19

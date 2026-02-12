@@ -61,9 +61,9 @@ sub new {
 
 # Run Operation Request
 # RemoveDuplicatesRequest.Spreadsheet : Upload spreadsheet file.  ,
-# RemoveDuplicatesRequest.worksheet :   ,
-# RemoveDuplicatesRequest.range :   ,
-# RemoveDuplicatesRequest.table :   ,
+# RemoveDuplicatesRequest.worksheet : The worksheet name.  ,
+# RemoveDuplicatesRequest.range : Range name that need deduplication.  ,
+# RemoveDuplicatesRequest.table : Table name that need deduplication.  ,
 # RemoveDuplicatesRequest.outPath : (Optional) The folder path where the workbook is stored. The default is null.  ,
 # RemoveDuplicatesRequest.outStorageName : Output file Storage Name.  ,
 # RemoveDuplicatesRequest.region : The spreadsheet region setting.  ,
@@ -78,7 +78,7 @@ sub new {
        }
     };
     __PACKAGE__->method_documentation->{ 'remove_duplicates' } = { 
-    	summary => '',
+    	summary => 'Removes duplicate values in the worksheet/range/table.',
         params => $params,
         returns => 'string',
     };
@@ -159,21 +159,21 @@ __PACKAGE__->method_documentation({
      'worksheet' => {
      	datatype => 'string',
      	base_name => 'worksheet',
-     	description => '',
+     	description => 'The worksheet name.',
      	format => '',
      	read_only => '',
      		},
      'range' => {
      	datatype => 'string',
      	base_name => 'range',
-     	description => '',
+     	description => 'Range name that need deduplication.',
      	format => '',
      	read_only => '',
      		},
      'table' => {
      	datatype => 'string',
      	base_name => 'table',
-     	description => '',
+     	description => 'Table name that need deduplication.',
      	format => '',
      	read_only => '',
      		},

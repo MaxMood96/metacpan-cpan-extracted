@@ -3,6 +3,7 @@ abstract: 'chip driver for monochrome OLED modules'
 author:
   - 'Paul Evans <leonerd@leonerd.org.uk>'
 build_requires:
+  ExtUtils::CBuilder: '0'
   Test2::V0: '0'
   Test::Device::Chip::Adapter: '0'
 configure_requires:
@@ -17,13 +18,13 @@ name: Device-Chip-SSD1306
 provides:
   Device::Chip::SSD1306:
     file: lib/Device/Chip/SSD1306.pm
-    version: '0.14'
+    version: '0.15'
   Device::Chip::SSD1306::I2C:
     file: lib/Device/Chip/SSD1306/I2C.pm
-    version: '0.14'
+    version: '0.15'
   Device::Chip::SSD1306::SPI4:
     file: lib/Device/Chip/SSD1306/SPI4.pm
-    version: '0.14'
+    version: '0.15'
 requires:
   Device::Chip: '0'
   Future::AsyncAwait: '0.39'
@@ -31,5 +32,5 @@ requires:
   perl: '5.026'
 resources:
   license: http://dev.perl.org/licenses/
-version: '0.14'
+version: '0.15'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

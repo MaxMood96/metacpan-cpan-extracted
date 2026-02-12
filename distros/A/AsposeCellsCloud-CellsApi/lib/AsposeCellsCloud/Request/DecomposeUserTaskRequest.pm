@@ -60,7 +60,7 @@ sub new {
 
 
 # Run Operation Request
-# DecomposeUserTaskRequest.TaskDescription :   ,
+# DecomposeUserTaskRequest.TaskDescription : Decompose user task description.  ,
 # DecomposeUserTaskRequest.region : The spreadsheet region setting.  ,
 # DecomposeUserTaskRequest.password : The password for opening spreadsheet file.   
 
@@ -73,7 +73,7 @@ sub new {
        }
     };
     __PACKAGE__->method_documentation->{ 'decompose_user_task' } = { 
-    	summary => 'Translates the entire spreadsheet to the specified target language.',
+    	summary => 'AI task decomposition: Convert user objectives to sequential action plans with formatted file export.',
         params => $params,
         returns => 'string',
     };
@@ -99,10 +99,6 @@ sub run_http_request {
     }
     $header_params->{'Content-Type'} = $client->select_header_content_type('application/json');
  
-    if(defined $self->task_description){
-        $query_params->{'TaskDescription'} = $client->to_query_value($self->task_description);      
-    }
-
     if(defined $self->region){
         $query_params->{'region'} = $client->to_query_value($self->region);      
     }
@@ -111,6 +107,12 @@ sub run_http_request {
         $query_params->{'password'} = $client->to_query_value($self->password);      
     } 
     my $_body_data;
+
+
+    # body params
+    if (defined $self->task_description) {
+         $_body_data = JSON->new->convert_blessed->encode( $self->task_description);
+    }
 
  
 
@@ -127,7 +129,7 @@ __PACKAGE__->method_documentation({
      'task_description' => {
      	datatype => 'string',
      	base_name => 'TaskDescription',
-     	description => '',
+     	description => 'Decompose user task description.',
      	format => '',
      	read_only => '',
      		},

@@ -2,49 +2,195 @@
 # MIT License
 
 class DBI {
-  version "0.003";
-
-  use DBI::Db;
-  use Go::Context;
-  use Native::MethodCall;
-  use DBI::Constant;
+  version "0.004";
   
-  # Class Variables
-  our $DRIVERS_H : cache Hash of DBI::Dr;
+  use DBI::St;
+  use Go::Context;
+  use Go::Time;
+  use DBI::Data;
+  
+  # Fields
+  has Username : ro string;
+  
+  has Database : ro string;
+  
+  has Host : ro string;
+  
+  has Port : ro int;
+  
+  has AutoCommit : ro byte;
+  
+  has InactiveDestroy : rw byte;
+  
+  has IdleTimeoutDurationNsec : rw long; 
+  
+  has ConnectTimeoutDurationNsec : rw long; 
+  
+  has ReadTimeoutDurationNsec : rw long; 
+  
+  has WriteTimeoutDurationNsec : rw long; 
+  
+  has SocketKeepAliveDurationNsec : rw long;
+  
+  has TCPNoDelay : rw byte;
   
   # Class Methods
-  static method connect : DBI::Db ($ctx : Go::Context, $dsn : string, $user : string = undef, $password : string = undef, $options : object[] = undef) {
+  static method blob : DBI::Data ($value : string) {
+    my $data = DBI::Data->new;
+    $data->set_type_id(DBI::Data->TYPE_ID_BLOB);
+    $data->set_value($value);
+    return $data;
+  }
+  
+  static method big_int : DBI::Data ($value : string) {
+    my $data = DBI::Data->new;
+    $data->set_type_id(DBI::Data->TYPE_ID_BIG_INT);
+    $data->set_value($value);
+    return $data;
+  }
+  
+  static method big_float : DBI::Data ($value : string) {
+    my $data = DBI::Data->new;
+    $data->set_type_id(DBI::Data->TYPE_ID_BIG_FLOAT);
+    $data->set_value($value);
+    return $data;
+  }
+  
+  # Instance Methods
+  protected method connect_common : void ($ctx : Go::Context, $user : string = undef, $password : string = undef, $options : object[] = undef) {
     
-    unless ($dsn) {
-      die "DSN must be defined.";
+    Fn->check_option_names($options, $self->option_names);
+    
+    # Redefine $options as a Hash.
+    my $options = Fn->to_hash($options);
+    
+    # Extract user from "dbi:driver:db;user=xxx" or similar patterns
+    $self->{Username} = $user;
+    
+    if ($options->exists("Host")) {
+      $self->{Host} = $options->get("Host")->(string);
     }
     
-    # Parse DSN to find which driver to use
-    my $driver_name = (string)undef;
-    if (my $match = Re->m($dsn, "^dbi:([^:]+):")) {
-      $driver_name = $match->cap1;
-    }
-    unless ($driver_name) {
-      die "Invalid DSN format: '$dsn'. It must follow the 'dbi:DriverName:...' pattern.";
+    if ($options->exists("Port")) {
+      $self->{Port} = $options->get("Port")->(int);
     }
     
-    # Retrieve or load the driver manager. Initialize the driver cache if it doesn't exist.
-    unless ($DRIVERS_H) {
-      $DRIVERS_H = Hash->new;
+    if ($options->exists("Database")) {
+      $self->{Database} = $options->get("Database")->(string);
     }
-    my $driver = $DRIVERS_H->get($driver_name);
     
-    # Load the driver class and create an instance if not cached.
-    unless ($driver) {
-      my $driver_class_name = "DBD::" . $driver_name;
-      $driver = (DBI::Dr)Native::MethodCall->call_class_method($driver_class_name, "new");
-      $DRIVERS_H->set($driver_name, $driver);
+    # Always set to 1
+    $self->{AutoCommit} = 1;
+    
+    # Set fields from options if they exist
+    if ($options->exists("InactiveDestroy")) {
+      $self->{InactiveDestroy} = $options->get("InactiveDestroy")->(byte);
     }
-      
-    # Request the driver to create a database handle
-    my $dbh = $driver->connect($ctx, $dsn, $user, $password, $options);
     
-    return $dbh;
+    if ($options->exists("IdleTimeoutDurationNsec")) {
+      $self->{IdleTimeoutDurationNsec} = $options->get("IdleTimeoutDurationNsec")->(long);
+    }
+    
+    if ($options->exists("ConnectTimeoutDurationNsec")) {
+      $self->{ConnectTimeoutDurationNsec} = $options->get("ConnectTimeoutDurationNsec")->(long);
+    }
+    
+    if ($options->exists("ReadTimeoutDurationNsec")) {
+      $self->{ReadTimeoutDurationNsec} = $options->get("ReadTimeoutDurationNsec")->(long);
+    }
+    
+    if ($options->exists("WriteTimeoutDurationNsec")) {
+      $self->{WriteTimeoutDurationNsec} = $options->get("WriteTimeoutDurationNsec")->(long);
+    }
+    
+    if ($options->exists("SocketKeepAliveDurationNsec")) {
+      $self->{SocketKeepAliveDurationNsec} = $options->get("SocketKeepAliveDurationNsec")->(long);
+    }
+    
+    if ($options->exists("TCPNoDelay")) {
+      $self->{TCPNoDelay} = $options->get("TCPNoDelay")->(byte);
+    }
+    
+  }
+  
+  protected method option_names : string[] () {
+    
+    my $option_names = [
+      "Host",
+      "Port",
+      "Database",
+      "InactiveDestroy",
+      "IdleTimeoutDurationNsec",
+      "ConnectTimeoutDurationNsec",
+      "ReadTimeoutDurationNsec",
+      "WriteTimeoutDurationNsec",
+      "SocketKeepAliveDurationNsec",
+      "TCPNoDelay"
+    ];
+    
+    return $option_names;
+  }
+  
+  method begin_work : void ($ctx : Go::Context) {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
+  }
+  
+  method commit : void ($ctx : Go::Context) {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
+  }
+  
+  method rollback : void ($ctx : Go::Context) {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
+  }
+  
+  method last_insert_id : object ($ctx : Go::Context, $catalog : string = undef, $schema : string = undef, $table : string = undef, $field : string = undef, $options : object[] = undef) {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
+  }
+  
+  method ping : int ($ctx : Go::Context) {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
+  }
+  
+  method get_info : object ($ctx : Go::Context, $info_type : int) {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
+  }
+  
+  method table_info : DBI::St ($ctx : Go::Context, $catalog : string, $schema : string, $table : string, $type : string, $options : object[] = undef) {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
+  }
+  
+  method column_info : DBI::St ($ctx : Go::Context, $catalog : string, $schema : string, $table : string, $column : string) {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
+  }
+  
+  method quote : string ($ctx : Go::Context, $str : string, $type : int = -1) {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
+  }
+  
+  method quote_identifier : string ($ctx : Go::Context, $catalog : string, $schema : string, $table : string, $options : object[] = undef) {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
+  }
+  
+  method disconnect : void () {
+    die DBI::Error::SQLState "IM001: this method is not implemented.";
+  }
+  
+  method DESTROY : void () {
+    unless ($self->{InactiveDestroy}) {
+      $self->disconnect;
+    }
+  }
+  
+  method prepare : DBI::St ($ctx : Go::Context, $sql : string, $options : object[] = undef) {
+    die DBI::Error::SQLState "IM001: 'prepare' method is not implemented.";
+  }
+  
+  protected method prepare_common : void ($sth : DBI::St, $ctx : Go::Context, $sql : string, $options : object[] = undef) {
+    
+    Fn->check_option_names($options, $sth->option_names);
+    
+    $sth->{Database} = (DBI)$self;
+    $sth->{Statement} = $sql;
   }
   
 }

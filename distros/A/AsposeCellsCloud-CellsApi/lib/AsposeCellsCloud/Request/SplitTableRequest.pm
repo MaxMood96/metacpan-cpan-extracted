@@ -82,7 +82,7 @@ sub new {
        }
     };
     __PACKAGE__->method_documentation->{ 'split_table' } = { 
-    	summary => 'Split an Excel worksheet into multiple sheets by column value.',
+    	summary => 'Split an Excel worksheet tale into multiple sheets by column value.',
         params => $params,
         returns => 'string',
     };

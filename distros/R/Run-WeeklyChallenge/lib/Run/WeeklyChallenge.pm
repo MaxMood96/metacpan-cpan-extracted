@@ -42,7 +42,7 @@ Example usage running a "solution" to sum integers:
         "additionalProperties": false
     }';
 
-    Run::WeeklyChallenge::run_weekly_challenge($run_solution, $inputs_example, $inputs_schema_json);
+    Run::WeeklyChallenge::run_weekly_challenge_v2($run_solution, $inputs_example, $inputs_schema_json);
 
 Example output:
 
@@ -57,13 +57,22 @@ You must provide an example JSON inputs string (used in error messages), a JSON 
 =cut
 
 package Run::WeeklyChallenge {
-$Run::WeeklyChallenge::VERSION = '0.001';
+$Run::WeeklyChallenge::VERSION = '0.002';
 use Cpanel::JSON::XS;
     use JSON::Schema::Modern;
-    my $json = Cpanel::JSON::XS->new->allow_nonref;
+    my $json = Cpanel::JSON::XS->new->ascii->allow_nonref;
     my $validator = JSON::Schema::Modern->new( 'specification_version' => 'draft2020-12', 'output_format' => 'flag' );
 
+    sub run_weekly_challenge_v2($run_solution, $inputs_example, $inputs_schema_json) {
+        _run_weekly_challenge(2, $run_solution, $inputs_example, $inputs_schema_json);
+    }
+
+    # like run_weekly_challenge_v2 but expects run_solution to return a string, not something arbitrary to JSON encode
     sub run_weekly_challenge($run_solution, $inputs_example, $inputs_schema_json) {
+        _run_weekly_challenge(1, $run_solution, $inputs_example, $inputs_schema_json);
+    }
+
+    sub _run_weekly_challenge($version, $run_solution, $inputs_example, $inputs_schema_json) {
 
         my $inputs_schema = $json->decode($inputs_schema_json);
 
@@ -82,6 +91,7 @@ use Cpanel::JSON::XS;
                 else {
                     try {
                         my $result = $run_solution->($inputs);
+                        $result = $json->encode($result) if $version > 1;
                         say "Output: $result";
                     }
                     catch ($e) {

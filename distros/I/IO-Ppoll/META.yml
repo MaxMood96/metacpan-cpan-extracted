@@ -1,5 +1,5 @@
 ---
-abstract: "Object interface to Linux's C<ppoll()> call"
+abstract: 'Object interface to the C<ppoll()> system call'
 author:
   - 'Paul Evans <leonerd@leonerd.org.uk>'
 build_requires:
@@ -18,11 +18,11 @@ name: IO-Ppoll
 provides:
   IO::Ppoll:
     file: lib/IO/Ppoll.pm
-    version: '0.13'
+    version: '0.14'
 requires:
   Exporter: '5.57'
   perl: '5.014'
 resources:
   license: http://dev.perl.org/licenses/
-version: '0.13'
+version: '0.14'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

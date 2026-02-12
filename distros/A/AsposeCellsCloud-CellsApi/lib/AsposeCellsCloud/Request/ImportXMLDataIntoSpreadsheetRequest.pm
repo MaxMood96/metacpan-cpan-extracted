@@ -62,9 +62,9 @@ sub new {
 # Run Operation Request
 # ImportXMLDataIntoSpreadsheetRequest.datafile : Upload data file.  ,
 # ImportXMLDataIntoSpreadsheetRequest.Spreadsheet : Upload spreadsheet file.  ,
-# ImportXMLDataIntoSpreadsheetRequest.worksheet :   ,
-# ImportXMLDataIntoSpreadsheetRequest.startcell :   ,
-# ImportXMLDataIntoSpreadsheetRequest.insert :   ,
+# ImportXMLDataIntoSpreadsheetRequest.worksheet : Need to import XML data into the worksheet.  ,
+# ImportXMLDataIntoSpreadsheetRequest.startcell : Starting position for data import  ,
+# ImportXMLDataIntoSpreadsheetRequest.insert : Controls the insertion behavior. true: inserts data; false: overwrites existing data.  ,
 # ImportXMLDataIntoSpreadsheetRequest.outPath : (Optional) The folder path where the workbook is stored. The default is null.  ,
 # ImportXMLDataIntoSpreadsheetRequest.outStorageName : Output file Storage Name.  ,
 # ImportXMLDataIntoSpreadsheetRequest.fontsLocation : Use Custom fonts.  ,
@@ -80,7 +80,7 @@ sub new {
        }
     };
     __PACKAGE__->method_documentation->{ 'import_xml_data_into_spreadsheet' } = { 
-    	summary => '',
+    	summary => 'Import XML data file into the local spreadsheet.',
         params => $params,
         returns => 'string',
     };
@@ -177,21 +177,21 @@ __PACKAGE__->method_documentation({
      'worksheet' => {
      	datatype => 'string',
      	base_name => 'worksheet',
-     	description => '',
+     	description => 'Need to import XML data into the worksheet.',
      	format => '',
      	read_only => '',
      		},
      'startcell' => {
      	datatype => 'string',
      	base_name => 'startcell',
-     	description => '',
+     	description => 'Starting position for data import',
      	format => '',
      	read_only => '',
      		},
      'insert' => {
      	datatype => 'string',
      	base_name => 'insert',
-     	description => '',
+     	description => 'Controls the insertion behavior. true: inserts data; false: overwrites existing data.',
      	format => '',
      	read_only => '',
      		},

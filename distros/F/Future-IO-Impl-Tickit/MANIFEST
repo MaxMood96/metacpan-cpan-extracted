@@ -2,7 +2,11 @@
 Build.PL
 Changes
 lib/Future/IO/Impl/Tickit.pm
+LICENSE
 MANIFEST			This list of files
+META.json
+META.yml
+README
 t/00use.t
 t/01sleep.t
 t/02poll.t
@@ -14,7 +18,3 @@ t/14send.t
 t/15recv.t
 t/16waitpid.t
 t/99pod.t
-README
-LICENSE
-META.yml
-META.json

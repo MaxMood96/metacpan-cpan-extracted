@@ -176,6 +176,7 @@ lib/PAGI/Server/Connection.pm
 lib/PAGI/Server/ConnectionState.pm
 lib/PAGI/Server/EventValidator.pm
 lib/PAGI/Server/Protocol/HTTP1.pm
+lib/PAGI/Server/Protocol/HTTP2.pm
 lib/PAGI/Spec.pod
 lib/PAGI/Spec/Lifespan.pod
 lib/PAGI/Spec/Tls.pod
@@ -230,6 +231,9 @@ t/40-connection-limiting.t
 t/40-event-validation.t
 t/41-connection-limiting-stress.t
 t/42-file-response.t
+t/44-access-log-format.t
+t/46-multiworker-bugs.t
+t/47-worker-heartbeat.t
 t/app-file.t
 t/app-router.t
 t/app/01-static-files.t
@@ -257,6 +261,19 @@ t/endpoint/07-websocket-to-app.t
 t/endpoint/08-sse-constructor.t
 t/endpoint/09-sse-lifecycle.t
 t/endpoint/10-integration.t
+t/http2/01-protocol.t
+t/http2/02-server-config.t
+t/http2/03-detection.t
+t/http2/04-read-handler.t
+t/http2/05-request-lifecycle.t
+t/http2/06-integration.t
+t/http2/07-websocket.t
+t/http2/08-websocket-edge.t
+t/http2/09-cli.t
+t/http2/09-multiworker.t
+t/http2/10-h2c.t
+t/http2/11-streaming.t
+t/http2/12-error-handling.t
 t/integration-endpoint-router-demo.t
 t/lib/Test/PAGI/Server.pm
 t/lifespan.t
@@ -319,6 +336,7 @@ t/sse/07-last-event-id.t
 t/sse/08-keepalive.t
 t/sse/09-iteration.t
 t/sse/10-integration.t
+t/sse/11-wire-format.t
 t/static_test_files/app.js
 t/static_test_files/hello.txt
 t/static_test_files/index.html

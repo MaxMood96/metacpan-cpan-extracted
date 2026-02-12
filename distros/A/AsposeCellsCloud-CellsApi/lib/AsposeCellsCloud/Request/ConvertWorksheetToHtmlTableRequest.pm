@@ -61,7 +61,7 @@ sub new {
 
 # Run Operation Request
 # ConvertWorksheetToHtmlTableRequest.Spreadsheet : Upload spreadsheet file.  ,
-# ConvertWorksheetToHtmlTableRequest.worksheet :   ,
+# ConvertWorksheetToHtmlTableRequest.worksheet : worksheet name of spreadsheet.  ,
 # ConvertWorksheetToHtmlTableRequest.region : The spreadsheet region setting.  ,
 # ConvertWorksheetToHtmlTableRequest.password : The password for opening spreadsheet file.   
 
@@ -74,7 +74,7 @@ sub new {
        }
     };
     __PACKAGE__->method_documentation->{ 'convert_worksheet_to_html_table' } = { 
-    	summary => '',
+    	summary => 'Converts a worksheet of spreadsheet on a local drive to the HTML table file.',
         params => $params,
         returns => 'string',
     };
@@ -139,7 +139,7 @@ __PACKAGE__->method_documentation({
      'worksheet' => {
      	datatype => 'string',
      	base_name => 'worksheet',
-     	description => '',
+     	description => 'worksheet name of spreadsheet.',
      	format => '',
      	read_only => '',
      		},

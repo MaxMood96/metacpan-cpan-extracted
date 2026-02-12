@@ -2,7 +2,7 @@ package PAGI::Server;
 use strict;
 use warnings;
 
-our $VERSION = '0.001009';
+our $VERSION = '0.001010';
 
 # Future::XS support - opt-in via PAGI_FUTURE_XS=1 environment variable
 # Must be loaded before Future to take effect, so we check env var in BEGIN
@@ -36,6 +36,7 @@ use parent 'IO::Async::Notifier';
 use IO::Async::Listener;
 use IO::Async::Stream;
 use IO::Async::Loop;
+use IO::Async::Timer::Periodic;
 use IO::Socket::INET;
 use Future;
 use Future::AsyncAwait;
@@ -58,6 +59,17 @@ BEGIN {
 }
 
 sub has_tls { return $TLS_AVAILABLE }
+
+# Check HTTP/2 module availability (cached at load time)
+our $HTTP2_AVAILABLE;
+BEGIN {
+    $HTTP2_AVAILABLE = eval {
+        require PAGI::Server::Protocol::HTTP2;
+        PAGI::Server::Protocol::HTTP2->available;
+    } ? 1 : 0;
+}
+
+sub has_http2 { return $HTTP2_AVAILABLE }
 
 # Windows doesn't support Unix signals - signal handling is conditional
 use constant WIN32 => $^O eq 'MSWin32';
@@ -107,7 +119,9 @@ B<Currently supported:>
 
 =item * HTTP/1.1 (full support including chunked encoding, trailers, keepalive)
 
-=item * WebSocket (RFC 6455)
+=item * HTTP/2 (B<experimental> - via nghttp2, h2 over TLS and h2c cleartext)
+
+=item * WebSocket (RFC 6455, including over HTTP/2 via RFC 8441)
 
 =item * Server-Sent Events (SSE)
 
@@ -117,14 +131,11 @@ B<Not yet implemented:>
 
 =over 4
 
-=item * HTTP/2 - Planned for a future release
-
 =item * HTTP/3 (QUIC) - Under consideration
 
 =back
 
-For HTTP/2 support today, run PAGI::Server behind a reverse proxy like nginx
-or Caddy that handles HTTP/2 on the frontend and speaks HTTP/1.1 to PAGI.
+For HTTP/2, see L</ENABLING HTTP/2 SUPPORT (EXPERIMENTAL)>.
 
 =head1 WINDOWS SUPPORT
 
@@ -264,6 +275,24 @@ externally (e.g., by a reverse proxy).
     my $server = PAGI::Server->new(
         app        => $app,
         access_log => undef,
+    );
+
+=item access_log_format => $format_or_preset
+
+Access log format string or preset name. Default: C<'clf'>
+
+Named presets:
+
+    clf      - PAGI default: IP, timestamp, method/path, status, duration
+    combined - Apache combined: adds Referer and User-Agent
+    common   - Apache common: adds response size
+    tiny     - Minimal: method, path, status, duration
+
+Custom format strings use Apache-style atoms. See L</ACCESS LOG FORMAT>.
+
+    my $server = PAGI::Server->new(
+        app               => $app,
+        access_log_format => 'combined',
     );
 
 =item log_level => $level
@@ -757,6 +786,50 @@ B<CLI:> C<--sse-idle-timeout 120>
 B<Note:> For SSE connections that may be legitimately idle, use
 C<< $sse->keepalive($interval) >> to send periodic comment keepalives.
 
+=item heartbeat_timeout => $seconds
+
+Worker liveness timeout in seconds. Only active in multi-worker mode
+(C<< workers >= 2 >>). Has no effect in single-worker mode — use
+C<timeout> for idle connection management there.
+
+Each worker sends a heartbeat to the parent process via a Unix pipe at
+an interval of C<heartbeat_timeout / 5>. The parent checks for missed
+heartbeats every C<heartbeat_timeout / 2>. If a worker has not sent a
+heartbeat within C<heartbeat_timeout> seconds, the parent kills it with
+SIGKILL and respawns a replacement.
+
+B<What this detects:> Event loop starvation — when the worker's event
+loop is completely blocked and cannot process any events. This happens
+with blocking syscalls (C<sleep()>, synchronous DNS, blocking database
+drivers), deadlocks, runaway CPU-bound computation, or any code that
+does not yield to the event loop.
+
+B<What this does NOT detect:> Slow async operations. A request handler
+that does C<< await $db->query(...) >> for 5 minutes is fine — the
+C<await> returns control to the event loop, so heartbeats continue
+normally. This value should be larger than the maximum time you expect
+any single operation to block the event loop without yielding.
+
+B<Default:> 50 (seconds). Set to 0 to disable.
+
+B<Example:>
+
+    # Tighter heartbeat for latency-sensitive service
+    my $server = PAGI::Server->new(
+        app               => $app,
+        workers           => 4,
+        heartbeat_timeout => 20,
+    );
+
+    # Disable heartbeat monitoring
+    my $server = PAGI::Server->new(
+        app               => $app,
+        workers           => 4,
+        heartbeat_timeout => 0,
+    );
+
+B<CLI:> C<--heartbeat-timeout 20>
+
 =item loop_type => $backend
 
 Specifies the IO::Async::Loop subclass to use when calling C<run()>.
@@ -783,6 +856,89 @@ B<CLI:> C<--loop EPoll> (via pagi-server)
 
 B<Note:> The specified backend module must be installed. For example,
 C<loop_type =E<gt> 'EPoll'> requires L<IO::Async::Loop::EPoll>.
+
+=item h2_max_concurrent_streams => $count
+
+B<(Experimental - HTTP/2 support may change in future releases.)>
+
+Maximum number of concurrent HTTP/2 streams per connection. Each stream
+represents an in-flight request/response exchange. Limits resource consumption
+and provides protection against rapid-reset attacks.
+
+B<Default:> 100
+
+This matches Apache httpd, H2O, and Hypercorn defaults. The RFC 7540 default
+is unlimited, but 100 is the industry consensus for a safe maximum.
+
+B<Tuning:> Increase for API gateways handling many small concurrent requests.
+Decrease for memory-constrained environments or when each request is expensive.
+
+=item h2_initial_window_size => $bytes
+
+B<(Experimental)>
+
+Initial HTTP/2 flow control window size per stream, in bytes. Controls how
+much data a client can send before the server must acknowledge receipt. Also
+affects how much response data the server can buffer per stream before the
+client acknowledges.
+
+B<Default:> 65535 (64KB minus 1, the RFC 7540 default)
+
+B<Tuning:> Increase to 131072-262144 for high-throughput file upload/download
+workloads where the default window causes flow control stalls on high-latency
+connections. The tradeoff is higher per-stream memory usage.
+
+=item h2_max_frame_size => $bytes
+
+B<(Experimental)>
+
+Maximum size of a single HTTP/2 frame payload, in bytes. Must be between
+16384 (16KB, the RFC minimum) and 16777215 (16MB, the RFC maximum).
+
+B<Default:> 16384 (16KB, the RFC 7540 default)
+
+Most servers use the RFC default. Larger frames reduce framing overhead but
+increase head-of-line blocking within a stream.
+
+=item h2_enable_push => $bool
+
+B<(Experimental)>
+
+Enable HTTP/2 server push (SETTINGS_ENABLE_PUSH). When enabled, the server
+can proactively push resources to the client before they are requested.
+
+B<Default:> 0 (disabled)
+
+Server push is effectively deprecated. Chrome removed support in 2022,
+and nginx deprecated it in version 1.25.1. Unless you have a specific use
+case requiring server push, leave this disabled.
+
+=item h2_enable_connect_protocol => $bool
+
+B<(Experimental)>
+
+Enable the Extended CONNECT protocol (RFC 8441, SETTINGS_ENABLE_CONNECT_PROTOCOL).
+Required for WebSocket-over-HTTP/2 tunneling.
+
+B<Default:> 1 (enabled)
+
+When enabled, clients can use the Extended CONNECT method with a C<:protocol>
+pseudo-header to establish WebSocket connections over HTTP/2 streams. Disable
+this only if you do not need WebSocket support over HTTP/2.
+
+=item h2_max_header_list_size => $bytes
+
+B<(Experimental)>
+
+Maximum total size of the header block that the server will accept, in bytes.
+This is the sum of all header name lengths, value lengths, and 32-byte per-entry
+overhead as defined by RFC 7540 Section 6.5.2.
+
+B<Default:> 65536 (64KB)
+
+Matches Hypercorn and Node.js defaults. Provides a guard against header-based
+memory exhaustion attacks while being generous enough for normal use including
+large cookies and authorization tokens.
 
 =back
 
@@ -1050,6 +1206,103 @@ See the C<ssl> option in L</CONSTRUCTOR> for details on:
 
 =back
 
+=head1 ENABLING HTTP/2 SUPPORT (EXPERIMENTAL)
+
+B<HTTP/2 support is experimental.> The API and behavior may change in future
+releases. Please report issues and provide feedback.
+
+PAGI::Server provides native HTTP/2 support via the nghttp2 C library
+(L<Net::HTTP2::nghttp2>). When enabled, the server supports both TLS-based
+HTTP/2 (h2 via ALPN negotiation) and cleartext HTTP/2 (h2c).
+
+=head2 Requirements
+
+L<Net::HTTP2::nghttp2> must be installed, which requires the nghttp2 C library:
+
+    # Install the C library
+    brew install nghttp2          # macOS
+    apt-get install libnghttp2-dev  # Debian/Ubuntu
+
+    # Install the Perl bindings
+    cpanm Net::HTTP2::nghttp2
+
+=head2 Enabling HTTP/2
+
+B<Via CLI (pagi-server):>
+
+    # HTTP/2 over TLS (recommended for production)
+    pagi-server --http2 --ssl-cert cert.pem --ssl-key key.pem --app myapp.pl
+
+    # HTTP/2 cleartext (h2c, for development/testing)
+    pagi-server --http2 --app myapp.pl
+
+B<Via constructor:>
+
+    my $server = PAGI::Server->new(
+        app   => $app,
+        http2 => 1,
+        ssl   => { cert_file => 'cert.pem', key_file => 'key.pem' },
+    );
+
+=head2 How It Works
+
+With TLS, the server advertises C<h2> and C<http/1.1> via ALPN during the
+TLS handshake. Clients that support HTTP/2 will negotiate C<h2> automatically;
+others fall back to HTTP/1.1 transparently.
+
+Without TLS, the server detects HTTP/2 via the client connection preface
+(h2c mode). HTTP/1.1 clients are handled normally.
+
+=head2 HTTP/2 Features
+
+=over 4
+
+=item * Stream multiplexing (100 concurrent streams per connection by default)
+
+=item * HPACK header compression
+
+=item * Per-stream and connection-level flow control
+
+=item * GOAWAY graceful session shutdown
+
+=item * Stream state validation (RST_STREAM on protocol violations)
+
+=item * WebSocket over HTTP/2 via Extended CONNECT (RFC 8441)
+
+=back
+
+=head2 Conformance
+
+Tested against h2spec (the HTTP/2 conformance test suite): B<137/146 (93.8%)>.
+All 9 remaining failures are shared with the bare nghttp2 C library and cannot
+be fixed at the application level.
+
+Load tested with h2load: 60,000 requests across 50 concurrent connections with
+zero failures.
+
+See L<PAGI::Server::Compliance> for full compliance details.
+
+=head2 Configuration
+
+HTTP/2 protocol settings are tuned via constructor options prefixed with
+C<h2_>. See L</CONSTRUCTOR> for details on:
+
+=over 4
+
+=item * C<h2_max_concurrent_streams> - Max streams per connection (default: 100)
+
+=item * C<h2_initial_window_size> - Flow control window (default: 65535)
+
+=item * C<h2_max_frame_size> - Max frame payload (default: 16384)
+
+=item * C<h2_enable_push> - Server push (default: disabled)
+
+=item * C<h2_enable_connect_protocol> - WebSocket over HTTP/2 (default: enabled)
+
+=item * C<h2_max_header_list_size> - Max header block size (default: 65536)
+
+=back
+
 =head1 SIGNAL HANDLING
 
 PAGI::Server responds to Unix signals for process management. Signal behavior
@@ -1117,6 +1370,8 @@ When running with C<< workers => N >> (where N > 1):
 
 =item * Workers that crash are automatically respawned
 
+=item * Heartbeat monitoring detects workers with blocked event loops and replaces them automatically (see C<heartbeat_timeout>)
+
 =back
 
 =head2 Examples
@@ -1174,6 +1429,10 @@ sub _init {
     $self->{extensions}       = delete $params->{extensions} // {};
     $self->{on_error}         = delete $params->{on_error} // sub { warn @_ };
     $self->{access_log}       = exists $params->{access_log} ? delete $params->{access_log} : \*STDERR;
+    $self->{access_log_format} = delete $params->{access_log_format} // 'clf';
+    $self->{_access_log_formatter} = $self->_compile_access_log_format(
+        $self->{access_log_format}
+    );
     $self->{quiet}            = delete $params->{quiet} // 0;
     $self->{log_level}        = delete $params->{log_level} // 'info';
     # Validate log level
@@ -1197,12 +1456,24 @@ sub _init {
     $self->{request_timeout}     = delete $params->{request_timeout} // 0;  # Request stall timeout in seconds (0 = disabled, default for performance)
     $self->{ws_idle_timeout}     = delete $params->{ws_idle_timeout} // 0;   # WebSocket idle timeout (0 = disabled)
     $self->{sse_idle_timeout}    = delete $params->{sse_idle_timeout} // 0;  # SSE idle timeout (0 = disabled)
+    $self->{heartbeat_timeout}   = delete $params->{heartbeat_timeout} // 50;  # Worker heartbeat timeout (0 = disabled)
     $self->{write_high_watermark} = delete $params->{write_high_watermark} // 65536;   # 64KB - pause sending above this
     $self->{write_low_watermark}  = delete $params->{write_low_watermark}  // 16384;   # 16KB - resume sending below this
     $self->{loop_type}           = delete $params->{loop_type};  # Optional loop backend (EPoll, EV, Poll, etc.)
     # Dev-mode event validation: explicit flag, or auto-enable in development mode
     $self->{validate_events}     = delete $params->{validate_events}
         // (($ENV{PAGI_ENV} // '') eq 'development' ? 1 : 0);
+
+    # HTTP/2 support (opt-in, experimental)
+    $self->{http2} = delete $params->{http2} // $ENV{_PAGI_SERVER_HTTP2} // 0;
+
+    # HTTP/2 protocol settings (only used when http2 is enabled)
+    my $h2_max_concurrent_streams  = delete $params->{h2_max_concurrent_streams}  // 100;
+    my $h2_initial_window_size     = delete $params->{h2_initial_window_size}     // 65535;
+    my $h2_max_frame_size          = delete $params->{h2_max_frame_size}          // 16384;
+    my $h2_enable_push             = delete $params->{h2_enable_push}             // 0;
+    my $h2_enable_connect_protocol = delete $params->{h2_enable_connect_protocol} // 1;
+    my $h2_max_header_list_size    = delete $params->{h2_max_header_list_size}    // 65536;
 
     $self->{running}     = 0;
     $self->{bound_port}  = undef;
@@ -1216,6 +1487,35 @@ sub _init {
     $self->{worker_pids} = {};  # Track worker PIDs in multi-worker mode
     $self->{is_worker}   = 0;   # True if this is a worker process
 
+    # Initialize HTTP/2 protocol handler if enabled and available
+    if ($self->{http2}) {
+        if ($HTTP2_AVAILABLE) {
+            $self->{http2_protocol} = PAGI::Server::Protocol::HTTP2->new(
+                max_concurrent_streams  => $h2_max_concurrent_streams,
+                initial_window_size     => $h2_initial_window_size,
+                max_frame_size          => $h2_max_frame_size,
+                enable_push             => $h2_enable_push,
+                enable_connect_protocol => $h2_enable_connect_protocol,
+                max_header_list_size    => $h2_max_header_list_size,
+            );
+            $self->{http2_enabled} = 1;
+
+            # h2c mode: HTTP/2 over cleartext (no TLS)
+            if (!$self->{ssl}) {
+                $self->{h2c_enabled} = 1;
+            }
+        } else {
+            die <<"END_HTTP2_ERROR";
+HTTP/2 support requested but Net::HTTP2::nghttp2 is not installed.
+
+To install:
+    cpanm Net::HTTP2::nghttp2
+
+Or disable HTTP/2:
+    http2 => 0
+END_HTTP2_ERROR
+        }
+    }
 
     $self->SUPER::_init($params);
 }
@@ -1297,6 +1597,9 @@ sub configure {
     if (exists $params{sse_idle_timeout}) {
         $self->{sse_idle_timeout} = delete $params{sse_idle_timeout};
     }
+    if (exists $params{http2}) {
+        $self->{http2} = delete $params{http2};
+    }
 
     $self->SUPER::configure(%params);
 }
@@ -1324,6 +1627,16 @@ sub _tls_status_string {
         return 'on';
     }
     return $TLS_AVAILABLE ? 'available' : 'not installed';
+}
+
+# Returns a human-readable HTTP/2 status string for the startup banner
+sub _http2_status_string {
+    my ($self) = @_;
+
+    if ($self->{http2_enabled}) {
+        return $self->{h2c_enabled} ? 'on (h2c)' : 'on';
+    }
+    return $HTTP2_AVAILABLE ? 'available' : 'not installed';
 }
 
 # Returns a human-readable Future::XS status string for the startup banner
@@ -1357,6 +1670,49 @@ Or on Debian/Ubuntu:
 
 Then restart your application.
 END_TLS_ERROR
+}
+
+# Build SSL configuration parameters for use by both single-worker and multi-worker modes.
+# Returns a hashref of SSL params (including SSL_reuse_ctx) or undef if no SSL configured.
+sub _build_ssl_config {
+    my ($self) = @_;
+    my $ssl = $self->{ssl} or return;
+
+    $self->_check_tls_available;
+
+    my %ssl_params;
+    $ssl_params{SSL_server}      = 1;
+    $ssl_params{SSL_cert_file}   = $ssl->{cert_file} if $ssl->{cert_file};
+    $ssl_params{SSL_key_file}    = $ssl->{key_file}  if $ssl->{key_file};
+    $ssl_params{SSL_version}     = $ssl->{min_version} // 'TLSv1_2';
+    $ssl_params{SSL_cipher_list} = $ssl->{cipher_list}
+        // 'ECDHE+AESGCM:DHE+AESGCM:ECDHE+CHACHA20:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA';
+
+    if ($ssl->{verify_client}) {
+        # SSL_VERIFY_PEER (0x01) | SSL_VERIFY_FAIL_IF_NO_PEER_CERT (0x02)
+        $ssl_params{SSL_verify_mode} = 0x03;
+        $ssl_params{SSL_ca_file} = $ssl->{ca_file} if $ssl->{ca_file};
+    } else {
+        $ssl_params{SSL_verify_mode} = 0x00;  # SSL_VERIFY_NONE
+    }
+
+    # ALPN negotiation for HTTP/2 support
+    if ($self->{http2} && $HTTP2_AVAILABLE) {
+        $ssl_params{SSL_alpn_protocols} = ['h2', 'http/1.1'];
+        $self->{http2_enabled} = 1;
+        $self->{h2c_enabled} = 0;  # TLS mode, not cleartext
+    }
+
+    # Pre-create shared SSL context to avoid per-connection CA bundle parsing
+    my $ssl_ctx = IO::Socket::SSL::SSL_Context->new(\%ssl_params);
+    $self->{_ssl_ctx} = $ssl_ctx;
+    $ssl_params{SSL_reuse_ctx} = $ssl_ctx;
+
+    # Mark TLS enabled and auto-add tls extension
+    $self->{tls_enabled} = 1;
+    $self->{extensions}{tls} = {} unless exists $self->{extensions}{tls};
+
+    return \%ssl_params;
 }
 
 =head2 run
@@ -1489,34 +1845,14 @@ async sub _listen_singleworker {
     );
 
     # Add SSL options if configured
-    if (my $ssl = $self->{ssl}) {
-        $self->_check_tls_available;
+    if (my $ssl_params = $self->_build_ssl_config) {
         $listen_opts{extensions} = ['SSL'];
-        $listen_opts{SSL_server} = 1;
-        $listen_opts{SSL_cert_file} = $ssl->{cert_file} if $ssl->{cert_file};
-        $listen_opts{SSL_key_file} = $ssl->{key_file} if $ssl->{key_file};
+        %listen_opts = (%listen_opts, %$ssl_params);
 
-        # TLS hardening: minimum version TLS 1.2 (configurable)
-        $listen_opts{SSL_version} = $ssl->{min_version} // 'TLSv1_2';
-
-        # TLS hardening: secure cipher suites (configurable)
-        $listen_opts{SSL_cipher_list} = $ssl->{cipher_list} //
-            'ECDHE+AESGCM:DHE+AESGCM:ECDHE+CHACHA20:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA';
-
-        # Client certificate verification
-        if ($ssl->{verify_client}) {
-            # SSL_VERIFY_PEER (0x01) | SSL_VERIFY_FAIL_IF_NO_PEER_CERT (0x02)
-            $listen_opts{SSL_verify_mode} = 0x03;
-            $listen_opts{SSL_ca_file} = $ssl->{ca_file} if $ssl->{ca_file};
-        } else {
-            $listen_opts{SSL_verify_mode} = 0x00;  # SSL_VERIFY_NONE
-        }
-
-        # Mark that TLS is enabled
-        $self->{tls_enabled} = 1;
-
-        # Auto-add tls extension when SSL is configured
-        $self->{extensions}{tls} = {} unless exists $self->{extensions}{tls};
+        $listen_opts{on_ssl_error} = sub {
+            return unless $weak_self;
+            $weak_self->_log(debug => "SSL handshake failed: $_[0]");
+        };
     }
 
     # Start listening
@@ -1578,6 +1914,7 @@ async sub _listen_singleworker {
     $loop_class =~ s/^IO::Async::Loop:://;  # Shorten for display
     my $max_conn = $self->effective_max_connections;
     my $tls_status = $self->_tls_status_string;
+    my $http2_status = $self->_http2_status_string;
     my $future_xs_status = $self->_future_xs_status_string;
 
     # Warn if access_log is a terminal (slow for benchmarks)
@@ -1588,7 +1925,7 @@ async sub _listen_singleworker {
         );
     }
 
-    $self->_log(info => "PAGI Server listening on $scheme://$self->{host}:$self->{bound_port}/ (loop: $loop_class, max_conn: $max_conn, tls: $tls_status, future_xs: $future_xs_status)");
+    $self->_log(info => "PAGI Server listening on $scheme://$self->{host}:$self->{bound_port}/ (loop: $loop_class, max_conn: $max_conn, http2: $http2_status, tls: $tls_status, future_xs: $future_xs_status)");
 
     # Warn in production if using default max_connections
     if (($ENV{PAGI_ENV} // '') eq 'production' && !$self->{max_connections}) {
@@ -1640,12 +1977,19 @@ sub _listen_multiworker {
 
     $self->{running} = 1;
 
+    # Validate TLS modules and set tls_enabled before forking workers
+    if ($self->{ssl}) {
+        $self->_check_tls_available;
+        $self->{tls_enabled} = 1;
+    }
+
     my $scheme = $self->{ssl} ? 'https' : 'http';
     my $loop_class = ref($self->loop);
     $loop_class =~ s/^IO::Async::Loop:://;  # Shorten for display
     my $mode = $reuseport ? 'reuseport' : 'shared-socket';
     my $max_conn = $self->effective_max_connections;
     my $tls_status = $self->_tls_status_string;
+    my $http2_status = $self->_http2_status_string;
     my $future_xs_status = $self->_future_xs_status_string;
 
     # Warn if access_log is a terminal (slow for benchmarks)
@@ -1656,7 +2000,7 @@ sub _listen_multiworker {
         );
     }
 
-    $self->_log(info => "PAGI Server (multi-worker, $mode) listening on $scheme://$self->{host}:$self->{bound_port}/ with $workers workers (loop: $loop_class, max_conn: $max_conn/worker, tls: $tls_status, future_xs: $future_xs_status)");
+    $self->_log(info => "PAGI Server (multi-worker, $mode) listening on $scheme://$self->{host}:$self->{bound_port}/ with $workers workers (loop: $loop_class, max_conn: $max_conn/worker, http2: $http2_status, tls: $tls_status, future_xs: $future_xs_status)");
 
     # Warn in production if using default max_connections
     if (($ENV{PAGI_ENV} // '') eq 'production' && !$self->{max_connections}) {
@@ -1685,6 +2029,44 @@ sub _listen_multiworker {
         $loop->watch_signal(TTOU => sub { $self->_decrease_workers });
     }
 
+    # Start heartbeat monitor if enabled
+    if ($self->{heartbeat_timeout} && $self->{heartbeat_timeout} > 0) {
+        my $hb_timeout = $self->{heartbeat_timeout};
+        my $check_interval = $hb_timeout / 2;
+        weaken(my $weak_self = $self);
+
+        my $hb_check_timer = IO::Async::Timer::Periodic->new(
+            interval => $check_interval,
+            on_tick  => sub {
+                return unless $weak_self;
+                return if $weak_self->{shutting_down};
+
+                my $now = time();
+                for my $pid (keys %{$weak_self->{worker_pids}}) {
+                    my $info = $weak_self->{worker_pids}{$pid};
+                    next unless $info->{heartbeat_rd};
+
+                    # Drain all available heartbeat bytes
+                    while (sysread($info->{heartbeat_rd}, my $buf, 64)) {
+                        $info->{last_heartbeat} = $now;
+                    }
+
+                    # Kill if heartbeat expired
+                    if ($now - $info->{last_heartbeat} > $hb_timeout) {
+                        $weak_self->_log(warn =>
+                            "Worker $pid (worker $info->{worker_num}) heartbeat " .
+                            "timeout after ${hb_timeout}s, sending SIGKILL");
+                        kill 'KILL', $pid;
+                    }
+                }
+            },
+        );
+
+        $self->add_child($hb_check_timer);
+        $hb_check_timer->start;
+        $self->{_heartbeat_check_timer} = $hb_check_timer;
+    }
+
     # Store the socket for cleanup during shutdown (only in traditional mode)
     $self->{listen_socket} = $listen_socket if $listen_socket;
 
@@ -1701,6 +2083,13 @@ sub _initiate_multiworker_shutdown {
     $self->{shutting_down} = 1;
     $self->{running} = 0;
 
+    # Stop heartbeat monitoring — shutdown escalation timer handles stuck workers
+    if ($self->{_heartbeat_check_timer}) {
+        $self->{_heartbeat_check_timer}->stop;
+        $self->remove_child($self->{_heartbeat_check_timer});
+        delete $self->{_heartbeat_check_timer};
+    }
+
     # Close the listen socket to stop accepting new connections
     if ($self->{listen_socket}) {
         close($self->{listen_socket});
@@ -1715,8 +2104,23 @@ sub _initiate_multiworker_shutdown {
     # If no workers, stop the loop immediately
     if (!keys %{$self->{worker_pids}}) {
         $self->loop->stop;
+        return;
     }
-    # Otherwise, watch_process callbacks will stop the loop when all workers exit
+
+    # Escalate to SIGKILL after shutdown_timeout for workers that ignore SIGTERM
+    my $timeout = $self->{shutdown_timeout} // 30;
+    weaken(my $weak_self = $self);
+    $self->{_shutdown_kill_timer} = $self->loop->watch_time(
+        after => $timeout,
+        code  => sub {
+            return unless $weak_self;
+            for my $pid (keys %{$weak_self->{worker_pids}}) {
+                $weak_self->_log(warn =>
+                    "Worker $pid did not exit after ${timeout}s, sending SIGKILL");
+                kill 'KILL', $pid;
+            }
+        },
+    );
 }
 
 # Graceful restart: replace all workers one by one
@@ -1729,8 +2133,23 @@ sub _graceful_restart {
 
     # Signal all current workers to shutdown
     # watch_process callbacks will respawn them
+    my $timeout = $self->{shutdown_timeout} // 30;
     for my $pid (keys %{$self->{worker_pids}}) {
         kill 'TERM', $pid;
+
+        # Escalate to SIGKILL if worker doesn't exit within shutdown_timeout
+        weaken(my $weak_self = $self);
+        $self->{_restart_kill_timers}{$pid} = $self->loop->watch_time(
+            after => $timeout,
+            code  => sub {
+                return unless $weak_self;
+                if (exists $weak_self->{worker_pids}{$pid}) {
+                    $weak_self->_log(warn =>
+                        "Worker $pid did not exit after ${timeout}s during restart, sending SIGKILL");
+                    kill 'KILL', $pid;
+                }
+            },
+        );
     }
 }
 
@@ -1772,6 +2191,12 @@ sub _spawn_worker {
     my $loop = $self->loop;
     weaken(my $weak_self = $self);
 
+    # Create heartbeat pipe if enabled
+    my ($hb_rd, $hb_wr);
+    if ($self->{heartbeat_timeout} && $self->{heartbeat_timeout} > 0) {
+        pipe($hb_rd, $hb_wr) or die "Cannot create heartbeat pipe: $!";
+    }
+
     # Set IGNORE before fork - child inherits it. IO::Async only resets
     # CODE refs, so 'IGNORE' (a string) survives. Child must NOT call
     # watch_signal(INT) or it will overwrite the IGNORE.
@@ -1780,7 +2205,8 @@ sub _spawn_worker {
 
     my $pid = $loop->fork(
         code => sub {
-            $self->_run_as_worker($listen_socket, $worker_num);
+            close($hb_rd) if $hb_rd;
+            $self->_run_as_worker($listen_socket, $worker_num, $hb_wr);
             return 0;
         },
     );
@@ -1790,10 +2216,18 @@ sub _spawn_worker {
 
     die "Fork failed" unless defined $pid;
 
+    # Parent — close write end, set read end non-blocking
+    if ($hb_wr) {
+        close($hb_wr);
+        $hb_rd->blocking(0);
+    }
+
     # Parent - track the worker
     $self->{worker_pids}{$pid} = {
-        worker_num => $worker_num,
-        started    => time(),
+        worker_num     => $worker_num,
+        started        => time(),
+        heartbeat_rd   => $hb_rd,
+        last_heartbeat => time(),
     };
 
     # Use watch_process to handle worker exit (replaces manual SIGCHLD handling)
@@ -1801,8 +2235,18 @@ sub _spawn_worker {
         my ($exit_pid, $exitcode) = @_;
         return unless $weak_self;
 
+        # Close heartbeat pipe read end
+        if (my $info = $weak_self->{worker_pids}{$exit_pid}) {
+            close($info->{heartbeat_rd}) if $info->{heartbeat_rd};
+        }
+
         # Remove from tracking
         delete $weak_self->{worker_pids}{$exit_pid};
+
+        # Cancel per-worker restart kill timer if one exists
+        if (my $timer_id = delete $weak_self->{_restart_kill_timers}{$exit_pid}) {
+            $loop->unwatch_time($timer_id);
+        }
 
         # Check exit code: exit(2) = startup failure, don't respawn
         my $exit_code = $exitcode >> 8;
@@ -1820,6 +2264,11 @@ sub _spawn_worker {
 
         # Check if all workers have exited (for shutdown)
         if ($weak_self->{shutting_down} && !keys %{$weak_self->{worker_pids}}) {
+            # Cancel the shutdown SIGKILL escalation timer
+            if ($weak_self->{_shutdown_kill_timer}) {
+                $loop->unwatch_time($weak_self->{_shutdown_kill_timer});
+                delete $weak_self->{_shutdown_kill_timer};
+            }
             $loop->stop;
         }
     });
@@ -1828,7 +2277,7 @@ sub _spawn_worker {
 }
 
 sub _run_as_worker {
-    my ($self, $listen_socket, $worker_num) = @_;
+    my ($self, $listen_socket, $worker_num, $heartbeat_wr) = @_;
 
     # Note: $ONE_TRUE_LOOP already cleared by $loop->fork(), so this creates a fresh loop
     # Note: $SIG{INT} = 'IGNORE' inherited from parent - do NOT call watch_signal(INT)
@@ -1855,6 +2304,7 @@ sub _run_as_worker {
         host            => $self->{host},
         port            => $self->{port},
         ssl             => $self->{ssl},
+        http2           => $self->{http2},
         extensions      => $self->{extensions},
         on_error        => $self->{on_error},
         access_log      => $self->{access_log},
@@ -1865,6 +2315,15 @@ sub _run_as_worker {
         max_header_count => $self->{max_header_count},
         max_body_size    => $self->{max_body_size},
         max_requests     => $self->{max_requests},
+        shutdown_timeout    => $self->{shutdown_timeout},
+        request_timeout     => $self->{request_timeout},
+        ws_idle_timeout     => $self->{ws_idle_timeout},
+        sse_idle_timeout    => $self->{sse_idle_timeout},
+        sync_file_threshold => $self->{sync_file_threshold},
+        max_receive_queue   => $self->{max_receive_queue},
+        max_ws_frame_size   => $self->{max_ws_frame_size},
+        write_high_watermark => $self->{write_high_watermark},
+        write_low_watermark  => $self->{write_low_watermark},
         workers          => 0,  # Single-worker mode in worker process
     );
     $worker_server->{is_worker} = 1;
@@ -1873,6 +2332,9 @@ sub _run_as_worker {
     $worker_server->{bound_port} = $listen_socket->sockport;
 
     $loop->add($worker_server);
+
+    # Build SSL config for this worker (each worker gets its own SSL context post-fork)
+    my $ssl_params = $worker_server->_build_ssl_config;
 
     # Set up graceful shutdown on SIGTERM using IO::Async's signal watching
     # (raw $SIG handlers don't work reliably when the loop is running)
@@ -1931,15 +2393,43 @@ sub _run_as_worker {
 
     my $listener = IO::Async::Listener->new(
         handle => $listen_socket,
-        on_stream => sub  {
-        my ($listener, $stream) = @_;
+        on_stream => sub {
+            my ($listener, $stream) = @_;
             return unless $weak_server;
-            $weak_server->_on_connection($stream);
+
+            if ($ssl_params) {
+                $loop->SSL_upgrade(
+                    handle        => $stream,
+                    SSL_server    => 1,
+                    SSL_reuse_ctx => $worker_server->{_ssl_ctx},
+                )->on_done(sub {
+                    $weak_server->_on_connection($stream) if $weak_server;
+                })->on_fail(sub {
+                    my ($failure) = @_;
+                    $weak_server->_log(debug => "SSL handshake failed: $failure")
+                        if $weak_server;
+                });
+            } else {
+                $weak_server->_on_connection($stream);
+            }
         },
     );
 
     $worker_server->add_child($listener);
     $worker_server->{listener} = $listener;
+
+    # Set up heartbeat writer: periodically signal liveness to parent
+    if ($heartbeat_wr) {
+        my $interval = ($self->{heartbeat_timeout} || 50) / 5;
+        my $hb_timer = IO::Async::Timer::Periodic->new(
+            interval => $interval,
+            on_tick  => sub {
+                syswrite($heartbeat_wr, "\x00", 1);
+            },
+        );
+        $worker_server->add_child($hb_timer);
+        $hb_timer->start;
+    }
 
     # Configure accept error handler - try but ignore if it fails (SSL listeners may not support it)
     eval {
@@ -1958,7 +2448,8 @@ sub _run_as_worker {
     # Run the event loop
     $loop->run;
 
-    # Clean up listen socket before exit (avoid FD leak)
+    # Clean up FDs before exit
+    close($heartbeat_wr)  if $heartbeat_wr;
     close($listen_socket) if $listen_socket;
     exit(0);
 }
@@ -1976,6 +2467,15 @@ sub _on_connection {
         return;
     }
 
+    # Detect ALPN-negotiated protocol from TLS handle
+    my $alpn_protocol;
+    if ($self->{tls_enabled} && $self->{http2_enabled}) {
+        my $handle = $stream->write_handle // $stream->read_handle;
+        if ($handle && $handle->can('alpn_selected')) {
+            $alpn_protocol = eval { $handle->alpn_selected };
+        }
+    }
+
     my $conn = PAGI::Server::Connection->new(
         stream            => $stream,
         app               => $self->{app},
@@ -1990,12 +2490,18 @@ sub _on_connection {
         sse_idle_timeout  => $self->{sse_idle_timeout},
         max_body_size     => $self->{max_body_size},
         access_log        => $self->{access_log},
+        _access_log_formatter => $self->{_access_log_formatter},
         max_receive_queue => $self->{max_receive_queue},
         max_ws_frame_size => $self->{max_ws_frame_size},
         sync_file_threshold => $self->{sync_file_threshold},
         validate_events   => $self->{validate_events},
         write_high_watermark => $self->{write_high_watermark},
         write_low_watermark  => $self->{write_low_watermark},
+        ($self->{http2_enabled} ? (
+            h2_protocol   => $self->{http2_protocol},
+            alpn_protocol => $alpn_protocol,
+            h2c_enabled   => $self->{h2c_enabled} // 0,
+        ) : ()),
     );
 
     # Track the connection (O(1) hash insert)
@@ -2353,6 +2859,133 @@ async sub _drain_connections {
     return;
 }
 
+# --- Access log format compiler ---
+
+my %ACCESS_LOG_PRESETS = (
+    clf      => '%h - - [%t] "%m %U%q" %s %ds',
+    combined => '%h - - [%t] "%r" %s %b "%{Referer}i" "%{User-Agent}i"',
+    common   => '%h - - [%t] "%r" %s %b',
+    tiny     => '%m %U%q %s %Dms',
+);
+
+sub _compile_access_log_format {
+    my ($class_or_self, $format) = @_;
+
+    # Resolve preset names
+    if (exists $ACCESS_LOG_PRESETS{$format}) {
+        $format = $ACCESS_LOG_PRESETS{$format};
+    }
+
+    # Parse format string into a list of fragments (closures or literal strings)
+    my @fragments;
+    my $pos = 0;
+    my $len = length($format);
+
+    while ($pos < $len) {
+        my $ch = substr($format, $pos, 1);
+
+        if ($ch eq '%') {
+            $pos++;
+            last if $pos >= $len;
+
+            my $next = substr($format, $pos, 1);
+
+            if ($next eq '%') {
+                # Literal percent
+                push @fragments, '%';
+                $pos++;
+            }
+            elsif ($next eq '{') {
+                # Header extraction: %{Name}i
+                my $end = index($format, '}', $pos);
+                die "Unterminated %{...} in access log format\n" if $end < 0;
+                my $header_name = substr($format, $pos + 1, $end - $pos - 1);
+                $pos = $end + 1;
+
+                # Must be followed by 'i' (request header)
+                die "Expected 'i' after %{$header_name} in access log format\n"
+                    if $pos >= $len || substr($format, $pos, 1) ne 'i';
+                $pos++;
+
+                my $lc_name = lc($header_name);
+                push @fragments, sub {
+                    my ($info) = @_;
+                    for my $h (@{$info->{request_headers}}) {
+                        return $h->[1] if lc($h->[0]) eq $lc_name;
+                    }
+                    return '-';
+                };
+            }
+            else {
+                # Simple atom
+                my $atom = $next;
+                $pos++;
+
+                my $frag = _access_log_atom($atom);
+                push @fragments, $frag;
+            }
+        }
+        else {
+            # Literal text: collect until next %
+            my $next_pct = index($format, '%', $pos);
+            if ($next_pct < 0) {
+                push @fragments, substr($format, $pos);
+                $pos = $len;
+            }
+            else {
+                push @fragments, substr($format, $pos, $next_pct - $pos);
+                $pos = $next_pct;
+            }
+        }
+    }
+
+    # Build a single closure from fragments
+    return sub {
+        my ($info) = @_;
+        return join('', map { ref $_ ? $_->($info) : $_ } @fragments);
+    };
+}
+
+sub _access_log_atom {
+    my ($atom) = @_;
+
+    my %atoms = (
+        h => sub { $_[0]->{client_ip} // '-' },
+        l => sub { '-' },
+        u => sub { '-' },
+        t => sub { $_[0]->{timestamp} // '-' },
+        r => sub {
+            my $i = $_[0];
+            my $uri = $i->{path} // '/';
+            my $qs = $i->{query};
+            $uri .= "?$qs" if defined $qs && length $qs;
+            sprintf('%s %s HTTP/%s', $i->{method} // '-', $uri, $i->{http_version} // '1.1');
+        },
+        m => sub { $_[0]->{method} // '-' },
+        U => sub { $_[0]->{path} // '/' },
+        q => sub {
+            my $qs = $_[0]->{query};
+            (defined $qs && length $qs) ? "?$qs" : '';
+        },
+        H => sub { 'HTTP/' . ($_[0]->{http_version} // '1.1') },
+        s => sub { $_[0]->{status} // '-' },
+        b => sub {
+            my $size = $_[0]->{size} // 0;
+            $size ? $size : '-';
+        },
+        B => sub { $_[0]->{size} // 0 },
+        d => sub { sprintf('%.3f', $_[0]->{duration} // 0) },
+        D => sub { int(($_[0]->{duration} // 0) * 1_000_000) },
+        T => sub { int($_[0]->{duration} // 0) },
+    );
+
+    if (my $frag = $atoms{$atom}) {
+        return $frag;
+    }
+
+    die "Unknown access log format atom '%$atom'\n";
+}
+
 sub port {
     my ($self) = @_;
 
@@ -2508,6 +3141,77 @@ and find what works best.   Your notes and updates appreciated.
 
 =cut
 
+=head1 ACCESS LOG FORMAT
+
+The C<access_log_format> option accepts Apache-style format strings or preset
+names. Format strings are pre-compiled into closures at server startup for
+fast per-request formatting.
+
+=head2 Format Atoms
+
+=over 4
+
+=item C<%h> - Client IP address
+
+=item C<%l> - Remote logname (always C<->)
+
+=item C<%u> - Remote user (always C<->)
+
+=item C<%t> - CLF timestamp (e.g., C<10/Feb/2026:12:34:56 +0000>)
+
+=item C<%r> - Request line (e.g., C<GET /path?query HTTP/1.1>)
+
+=item C<%m> - Request method
+
+=item C<%U> - URL path (without query string)
+
+=item C<%q> - Query string (with leading C<?>, or empty)
+
+=item C<%H> - Protocol (e.g., C<HTTP/1.1>)
+
+=item C<%s> - Response status code
+
+=item C<%b> - Response body size in bytes (C<-> if zero)
+
+=item C<%B> - Response body size in bytes (C<0> if zero)
+
+=item C<%d> - Duration in seconds with 3 decimal places (e.g., C<0.123>)
+
+=item C<%D> - Duration in microseconds (integer)
+
+=item C<%T> - Duration in seconds (integer)
+
+=item C<%{Header}i> - Value of request header (case-insensitive, C<-> if missing)
+
+=item C<%%> - Literal percent sign
+
+=back
+
+=head2 Named Presets
+
+=over 4
+
+=item C<clf> (default)
+
+C<%h - - [%t] "%m %U%q" %s %ds> - PAGI's default format with fractional
+second duration.
+
+=item C<combined>
+
+C<%h - - [%t] "%r" %s %b "%{Referer}i" "%{User-Agent}i"> - Apache combined
+format with referrer and user agent.
+
+=item C<common>
+
+C<%h - - [%t] "%r" %s %b> - Apache common log format with response size.
+
+=item C<tiny>
+
+C<%m %U%q %s %Dms> - Minimal format showing method, path, status, and
+duration in milliseconds.
+
+=back
+
 =head1 RECOMMENDED MIDDLEWARE
 
 For production deployments, consider enabling these middleware components:
@@ -2625,7 +3329,9 @@ error message explaining how to fix it.
 
 =head1 SEE ALSO
 
-L<PAGI::Server::Connection>, L<PAGI::Server::Protocol::HTTP1>, L<Future::IO>
+L<PAGI::Server::Connection>, L<PAGI::Server::Protocol::HTTP1>,
+L<PAGI::Server::Protocol::HTTP2>, L<PAGI::Server::Compliance>,
+L<Net::HTTP2::nghttp2>, L<Future::IO>
 
 =head1 AUTHOR
 

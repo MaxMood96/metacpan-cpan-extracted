@@ -1,6 +1,6 @@
 # ABSTRACT: Get information for different currencies
 package Data::MoneyCurrency;
-$Data::MoneyCurrency::VERSION = '0.29';
+$Data::MoneyCurrency::VERSION = '0.30';
 use strict;
 use warnings;
 use utf8;
@@ -373,55 +373,133 @@ Data::MoneyCurrency - Get information for different currencies
 
 =head1 VERSION
 
-version 0.29
+version 0.30
 
 =head1 SYNOPSIS
 
-Get currency information for different currencies.
-
-    use Data::MoneyCurrency qw(get_currency);
+    use Data::MoneyCurrency qw(get_currency get_currencies_for_country);
 
     my $currency = get_currency(currency => 'usd');
     # $currency = {
-    #    # ...
-    # }
-    my $currency = get_currency(country => 'fr');
-    # $currency = {
-    #   # ...
+    #     alternate_symbols    => ['US$'],
+    #     decimal_mark         => '.',
+    #     disambiguate_symbol  => 'US$',
+    #     html_entity          => '$',
+    #     iso_code             => 'USD',
+    #     iso_numeric          => '840',
+    #     name                 => 'United States Dollar',
+    #     priority             => 1,
+    #     smallest_denomination => 1,
+    #     subunit              => 'Cent',
+    #     subunit_to_unit      => 100,
+    #     symbol               => '$',
+    #     symbol_first         => 1,
+    #     thousands_separator  => ',',
     # }
 
-This uses some data found in the Ruby library
-L<money|https://github.com/RubyMoney/money/tree/main/config>, but it has no
-dependency on it, the relevant data files are already included.
+    my $currency = get_currency(country => 'fr');
+    # $currency contains the hash for EUR
+
+    my $currencies = get_currencies_for_country('cu');
+    # $currencies = ['cuc', 'cup']
+
+=head1 DESCRIPTION
+
+Data::MoneyCurrency provides currency data lookup by ISO 4217 currency code or
+ISO 3166-1 alpha-2 country code.  It covers all ISO 4217 currencies plus
+select non-ISO currencies (e.g. BTC) and 250+ countries and territories.
+
+The currency data is sourced from the Ruby
+L<Money|https://github.com/RubyMoney/money/tree/main/config> library but is
+maintained independently.  The relevant data files are already included in this
+distribution, so there is no dependency on Ruby.
 
 =head1 EXPORT
+
+Nothing is exported by default.  The following functions are available for
+export:
+
+    use Data::MoneyCurrency qw(get_currency get_currencies_for_country);
 
 =head1 SUBROUTINES/METHODS
 
 =head2 get_currency
 
-Takes hash of arguments, and returns a reference to hash containing information
-about that currency (character strings), or undef if the currency or the
-country is not recognised. Pass either 'currency' or 'country' as the only key
-of the hash of arguments, with the currency code or the ISO 3166-2 alpha-2
-country code respectively.
+    my $currency = get_currency(currency => 'USD');
+    my $currency = get_currency(country  => 'fr');
 
-    my $currency = get_currency(currency => 'usd');
-    # $currency = {
-    #    # ...
-    # }
-    my $currency = get_currency(country => 'fr');
-    # $currency = {
-    #   # ...
-    # }
+Takes a hash of arguments with exactly one key — either C<currency> (an
+ISO 4217 currency code such as C<usd>) or C<country> (an ISO 3166-1 alpha-2
+country code such as C<fr>).  Input is case-insensitive.
+
+Returns a hashref containing currency information, or C<undef> if the
+currency or country is not recognised.  The returned hash contains the
+following keys:
+
+=over 4
+
+=item C<iso_code> — ISO 4217 currency code (e.g. C<USD>)
+
+=item C<iso_numeric> — ISO 4217 numeric code (e.g. C<840>)
+
+=item C<name> — full currency name (e.g. C<United States Dollar>)
+
+=item C<symbol> — currency symbol (e.g. C<$>)
+
+=item C<alternate_symbols> — arrayref of alternate symbols (e.g. C<['US$']>)
+
+=item C<disambiguate_symbol> — symbol used when disambiguation is needed
+
+=item C<html_entity> — HTML entity for the symbol
+
+=item C<subunit> — name of the fractional unit (e.g. C<Cent>)
+
+=item C<subunit_to_unit> — number of subunits per unit (e.g. C<100>)
+
+=item C<symbol_first> — C<1> if the symbol precedes the amount, C<0> otherwise
+
+=item C<decimal_mark> — character used as the decimal separator
+
+=item C<thousands_separator> — character used as the thousands separator
+
+=item C<smallest_denomination> — smallest amount of cash in circulation (in subunits)
+
+=item C<priority> — relative priority for display ordering
+
+=back
+
+Croaks if called with no arguments, with both C<currency> and C<country>, or
+with unrecognised keys.
+
+When using C<country> for a country that has multiple currencies (e.g. Cuba),
+the function croaks.  Use L</get_currencies_for_country> to retrieve the full
+list first.
 
 =head2 get_currencies_for_country
 
-Takes one argument, a country code in ISO 3166-1 alpha-2 format, and returns a
-reference to an array of strings that are currency codes.
+    my $currencies = get_currencies_for_country('cu');
+    # $currencies = ['cuc', 'cup']
 
-    my $rv = get_currencies_for_country('fr');
-    # $rv = ["eur"];
+    my $currencies = get_currencies_for_country('fr');
+    # $currencies = ['eur']
+
+Takes a single argument — an ISO 3166-1 alpha-2 country code (case-insensitive)
+— and returns an arrayref of lowercase currency code strings.  Returns C<undef>
+if the country is not recognised.
+
+Croaks if called with no arguments or more than one argument.
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<Ruby Money|https://github.com/RubyMoney/money> — the source of the currency data
+
+=item * L<ISO 4217|https://en.wikipedia.org/wiki/ISO_4217> — the standard for currency codes
+
+=item * L<ISO 3166-1 alpha-2|https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2> — the standard for country codes
+
+=back
 
 =head1 BUGS
 
@@ -454,7 +532,7 @@ edf <cpan@opencagedata.com>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2025 by OpenCage GmbH.
+This software is copyright (c) 2026 by OpenCage GmbH.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

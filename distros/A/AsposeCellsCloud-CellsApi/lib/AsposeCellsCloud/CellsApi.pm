@@ -61,9 +61,9 @@ sub new {
 #
 # DecomposeUserTaskRequest
 #
-# Translates the entire spreadsheet to the specified target language.
+# AI task decomposition: Convert user objectives to sequential action plans with formatted file export.
 # 
-# @TaskDescription  string (required)    
+# @TaskDescription  string (required)  Decompose user task description.  
 # @region  string   The spreadsheet region setting.  
 # @password  string   The password for opening spreadsheet file.   
 #
@@ -76,7 +76,7 @@ sub new {
        }
     };
     __PACKAGE__->method_documentation->{ 'decompose_user_task' } = { 
-    	summary => 'Translates the entire spreadsheet to the specified target language.',
+    	summary => 'AI task decomposition: Convert user objectives to sequential action plans with formatted file export.',
         params => $params,
         returns => 'string',
     };
@@ -96,7 +96,7 @@ sub decompose_user_task{
 }
 
 #
-# TranslationSpreadsheetRequest
+# TranslateSpreadsheetRequest
 #
 # Translates the entire spreadsheet to the specified target language.
 # 
@@ -108,12 +108,12 @@ sub decompose_user_task{
 {
     my $params = {
        'request' =>{
-            data_type => 'TranslationSpreadsheetRequest',
-            description => 'TranslationSpreadsheet Request.',
+            data_type => 'TranslateSpreadsheetRequest',
+            description => 'TranslateSpreadsheet Request.',
             required => '0',
        }
     };
-    __PACKAGE__->method_documentation->{ 'translation_spreadsheet' } = { 
+    __PACKAGE__->method_documentation->{ 'translate_spreadsheet' } = { 
     	summary => 'Translates the entire spreadsheet to the specified target language.',
         params => $params,
         returns => 'string',
@@ -122,7 +122,7 @@ sub decompose_user_task{
 #
 # @return string
 #
-sub translation_spreadsheet{
+sub translate_spreadsheet{
     my ($self, %args) = @_;
     my $request = $args{'request'};
     my $response = $request->run_http_request('client' => $self->{api_client} );
@@ -136,7 +136,7 @@ sub translation_spreadsheet{
 #
 # TranslateTextFileRequest
 #
-# 
+# Translates text file content to the specified target language.
 # 
 # @Spreadsheet  string (required)  Upload spreadsheet file.  
 # @targetLanguage  string (required)  The target language code for translation (e.g., "es", "fr", "de").  
@@ -152,13 +152,13 @@ sub translation_spreadsheet{
        }
     };
     __PACKAGE__->method_documentation->{ 'translate_text_file' } = { 
-    	summary => '',
+    	summary => 'Translates text file content to the specified target language.',
         params => $params,
-        returns => 'string',
+        returns => '',
     };
 }
 #
-# @return string
+# @return 
 #
 sub translate_text_file{
     my ($self, %args) = @_;
@@ -167,7 +167,7 @@ sub translate_text_file{
     if (!$response) {
         return;
     }
-    my $_response_object = $self->{api_client}->deserialize('string', $response);
+    my $_response_object = $self->{api_client}->deserialize('', $response);
     return $_response_object;
 }
 
@@ -664,7 +664,7 @@ sub convert_spreadsheet_to_pdf{
 #
 # ConvertSpreadsheetToJsonRequest
 #
-# 
+# Converts a spreadsheet on a local drive to the JSON file.
 # 
 # @Spreadsheet  string (required)  Upload spreadsheet file.  
 # @outPath  string   (Optional) The folder path where the workbook is stored. The default is null.  
@@ -682,7 +682,7 @@ sub convert_spreadsheet_to_pdf{
        }
     };
     __PACKAGE__->method_documentation->{ 'convert_spreadsheet_to_json' } = { 
-    	summary => '',
+    	summary => 'Converts a spreadsheet on a local drive to the JSON file.',
         params => $params,
         returns => 'string',
     };
@@ -825,6 +825,88 @@ sub convert_worksheet_to_pdf{
 }
 
 #
+# ConvertWorksheetToJsonRequest
+#
+# Converts a worksheet of spreadsheet on a local drive to the JSON file.
+# 
+# @Spreadsheet  string (required)  Upload spreadsheet file.  
+# @worksheet  string (required)  worksheet name of spreadsheet.  
+# @outPath  string   (Optional) The folder path where the workbook is stored. The default is null.  
+# @outStorageName  string   Output file Storage Name.  
+# @fontsLocation  string   Use Custom fonts.  
+# @region  string   The spreadsheet region setting.  
+# @password  string   The password for opening spreadsheet file.   
+#
+{
+    my $params = {
+       'request' =>{
+            data_type => 'ConvertWorksheetToJsonRequest',
+            description => 'ConvertWorksheetToJson Request.',
+            required => '0',
+       }
+    };
+    __PACKAGE__->method_documentation->{ 'convert_worksheet_to_json' } = { 
+    	summary => 'Converts a worksheet of spreadsheet on a local drive to the JSON file.',
+        params => $params,
+        returns => 'string',
+    };
+}
+#
+# @return string
+#
+sub convert_worksheet_to_json{
+    my ($self, %args) = @_;
+    my $request = $args{'request'};
+    my $response = $request->run_http_request('client' => $self->{api_client} );
+    if (!$response) {
+        return;
+    }
+    my $_response_object = $self->{api_client}->deserialize('string', $response);
+    return $_response_object;
+}
+
+#
+# ConvertWorksheetToCsvRequest
+#
+# Converts a worksheet of spreadsheet on a local drive to the CSV file.
+# 
+# @Spreadsheet  string (required)  Upload spreadsheet file.  
+# @worksheet  string (required)  worksheet name of spreadsheet.  
+# @outPath  string   (Optional) The folder path where the workbook is stored. The default is null.  
+# @outStorageName  string   Output file Storage Name.  
+# @fontsLocation  string   Use Custom fonts.  
+# @region  string   The spreadsheet region setting.  
+# @password  string   The password for opening spreadsheet file.   
+#
+{
+    my $params = {
+       'request' =>{
+            data_type => 'ConvertWorksheetToCsvRequest',
+            description => 'ConvertWorksheetToCsv Request.',
+            required => '0',
+       }
+    };
+    __PACKAGE__->method_documentation->{ 'convert_worksheet_to_csv' } = { 
+    	summary => 'Converts a worksheet of spreadsheet on a local drive to the CSV file.',
+        params => $params,
+        returns => 'string',
+    };
+}
+#
+# @return string
+#
+sub convert_worksheet_to_csv{
+    my ($self, %args) = @_;
+    my $request = $args{'request'};
+    my $response = $request->run_http_request('client' => $self->{api_client} );
+    if (!$response) {
+        return;
+    }
+    my $_response_object = $self->{api_client}->deserialize('string', $response);
+    return $_response_object;
+}
+
+#
 # ConvertWorksheetToHtmlRequest
 #
 # Converts a worksheet of spreadsheet on a local drive to the html file.
@@ -868,10 +950,10 @@ sub convert_worksheet_to_html{
 #
 # ConvertWorksheetToHtmlTableRequest
 #
-# 
+# Converts a worksheet of spreadsheet on a local drive to the HTML table file.
 # 
 # @Spreadsheet  string (required)  Upload spreadsheet file.  
-# @worksheet  string (required)    
+# @worksheet  string (required)  worksheet name of spreadsheet.  
 # @region  string   The spreadsheet region setting.  
 # @password  string   The password for opening spreadsheet file.   
 #
@@ -884,7 +966,7 @@ sub convert_worksheet_to_html{
        }
     };
     __PACKAGE__->method_documentation->{ 'convert_worksheet_to_html_table' } = { 
-    	summary => '',
+    	summary => 'Converts a worksheet of spreadsheet on a local drive to the HTML table file.',
         params => $params,
         returns => 'string',
     };
@@ -1332,8 +1414,8 @@ sub convert_range_to_json{
 # Converts a chart of spreadsheet on a local drive to image.
 # 
 # @Spreadsheet  string (required)  Upload spreadsheet file.  
-# @worksheet  string (required)    
-# @chartIndex  int (required)    
+# @worksheet  string (required)  worksheet name of spreadsheet.  
+# @chartIndex  int (required)  chart index of worksheet.  
 # @format  string (required)  (Required) The desired image type (e.g., svg, png, jpg).  
 # @outPath  string   (Optional) The folder path where the workbook is stored. The default is null.  
 # @outStorageName  string   Output file Storage Name.  
@@ -1375,8 +1457,8 @@ sub convert_chart_to_image{
 # Converts a chart of spreadsheet on a local drive to pdf.
 # 
 # @Spreadsheet  string (required)  Upload spreadsheet file.  
-# @worksheet  string (required)    
-# @chartIndex  int (required)    
+# @worksheet  string (required)  worksheet name of spreadsheet.  
+# @chartIndex  int (required)  chart index of worksheet.  
 # @outPath  string   (Optional) The folder path where the workbook is stored. The default is null.  
 # @outStorageName  string   Output file Storage Name.  
 # @fontsLocation  string   Use Custom fonts.  
@@ -1632,7 +1714,7 @@ sub split_spreadsheet{
 #
 # SplitTableRequest
 #
-# Split an Excel worksheet into multiple sheets by column value.
+# Split an Excel worksheet tale into multiple sheets by column value.
 # 
 # @Spreadsheet  string (required)  Upload spreadsheet file.  
 # @worksheet  string (required)  Worksheet containing the table.  
@@ -1656,7 +1738,7 @@ sub split_spreadsheet{
        }
     };
     __PACKAGE__->method_documentation->{ 'split_table' } = { 
-    	summary => 'Split an Excel worksheet into multiple sheets by column value.',
+    	summary => 'Split an Excel worksheet tale into multiple sheets by column value.',
         params => $params,
         returns => 'string',
     };
@@ -1769,13 +1851,13 @@ sub import_data_into_spreadsheet{
 #
 # ImportJSONDataIntoSpreadsheetRequest
 #
-# 
+# Import JSON data file into the local spreadsheet.
 # 
 # @datafile  string (required)  Upload data file.  
 # @Spreadsheet  string (required)  Upload spreadsheet file.  
-# @worksheet  string (required)    
-# @startcell  string (required)    
-# @insert  boolean     
+# @worksheet  string (required)  Need to import JSON data into the worksheet.  
+# @startcell  string (required)  Starting position for data import  
+# @insert  boolean   Controls the insertion behavior. true: inserts data; false: overwrites existing data.  
 # @outPath  string   (Optional) The folder path where the workbook is stored. The default is null.  
 # @outStorageName  string   Output file Storage Name.  
 # @fontsLocation  string   Use Custom fonts.  
@@ -1791,7 +1873,7 @@ sub import_data_into_spreadsheet{
        }
     };
     __PACKAGE__->method_documentation->{ 'import_json_data_into_spreadsheet' } = { 
-    	summary => '',
+    	summary => 'Import JSON data file into the local spreadsheet.',
         params => $params,
         returns => 'string',
     };
@@ -1813,13 +1895,13 @@ sub import_json_data_into_spreadsheet{
 #
 # ImportXMLDataIntoSpreadsheetRequest
 #
-# 
+# Import XML data file into the local spreadsheet.
 # 
 # @datafile  string (required)  Upload data file.  
 # @Spreadsheet  string (required)  Upload spreadsheet file.  
-# @worksheet  string (required)    
-# @startcell  string (required)    
-# @insert  boolean     
+# @worksheet  string (required)  Need to import XML data into the worksheet.  
+# @startcell  string (required)  Starting position for data import  
+# @insert  boolean   Controls the insertion behavior. true: inserts data; false: overwrites existing data.  
 # @outPath  string   (Optional) The folder path where the workbook is stored. The default is null.  
 # @outStorageName  string   Output file Storage Name.  
 # @fontsLocation  string   Use Custom fonts.  
@@ -1835,7 +1917,7 @@ sub import_json_data_into_spreadsheet{
        }
     };
     __PACKAGE__->method_documentation->{ 'import_xml_data_into_spreadsheet' } = { 
-    	summary => '',
+    	summary => 'Import XML data file into the local spreadsheet.',
         params => $params,
         returns => 'string',
     };
@@ -1857,14 +1939,14 @@ sub import_xml_data_into_spreadsheet{
 #
 # ImportCSVDataIntoSpreadsheetRequest
 #
-# 
+# Import CSV data file into the local spreadsheet.
 # 
 # @datafile  string (required)  Upload data file.  
 # @Spreadsheet  string (required)  Upload spreadsheet file.  
-# @worksheet  string (required)    
-# @startcell  string (required)    
-# @insert  boolean     
-# @convertNumericData  boolean     
+# @worksheet  string (required)  Need to import CSV data into the worksheet.  
+# @startcell  string (required)  Starting position for data import  
+# @insert  boolean   Controls the insertion behavior. true: inserts data; false: overwrites existing data.  
+# @convertNumericData  boolean   Whether the string in text file is converted to numeric data.  
 # @splitter  string     
 # @outPath  string   (Optional) The folder path where the workbook is stored. The default is null.  
 # @outStorageName  string   Output file Storage Name.  
@@ -1881,7 +1963,7 @@ sub import_xml_data_into_spreadsheet{
        }
     };
     __PACKAGE__->method_documentation->{ 'import_csv_data_into_spreadsheet' } = { 
-    	summary => '',
+    	summary => 'Import CSV data file into the local spreadsheet.',
         params => $params,
         returns => 'string',
     };
@@ -1965,6 +2047,43 @@ sub get_public_key{
 # @return string
 #
 sub create_spreadsheet{
+    my ($self, %args) = @_;
+    my $request = $args{'request'};
+    my $response = $request->run_http_request('client' => $self->{api_client} );
+    if (!$response) {
+        return;
+    }
+    my $_response_object = $self->{api_client}->deserialize('string', $response);
+    return $_response_object;
+}
+
+#
+# GetWorksheetsWithLocalSpreadsheetRequest
+#
+# Fetches a complete list of worksheets from the currently active local spreadsheet.
+# 
+# @Spreadsheet  string (required)  Upload spreadsheet file.  
+# @region  string   The spreadsheet region setting.  
+# @password  string   The password for opening spreadsheet file.   
+#
+{
+    my $params = {
+       'request' =>{
+            data_type => 'GetWorksheetsWithLocalSpreadsheetRequest',
+            description => 'GetWorksheetsWithLocalSpreadsheet Request.',
+            required => '0',
+       }
+    };
+    __PACKAGE__->method_documentation->{ 'get_worksheets_with_local_spreadsheet' } = { 
+    	summary => 'Fetches a complete list of worksheets from the currently active local spreadsheet.',
+        params => $params,
+        returns => 'string',
+    };
+}
+#
+# @return string
+#
+sub get_worksheets_with_local_spreadsheet{
     my ($self, %args) = @_;
     my $request = $args{'request'};
     my $response = $request->run_http_request('client' => $self->{api_client} );
@@ -2182,7 +2301,7 @@ sub compress_spreadsheet{
 #
 # RepairSpreadsheetRequest
 #
-# 
+# The Web API endpoint allows users to repair a spreadsheet.
 # 
 # @Spreadsheet  string (required)  Upload spreadsheet file.  
 # @outPath  string   (Optional) The folder path where the workbook is stored. The default is null.  
@@ -2199,7 +2318,7 @@ sub compress_spreadsheet{
        }
     };
     __PACKAGE__->method_documentation->{ 'repair_spreadsheet' } = { 
-    	summary => '',
+    	summary => 'The Web API endpoint allows users to repair a spreadsheet.',
         params => $params,
         returns => 'string',
     };
@@ -2215,6 +2334,84 @@ sub repair_spreadsheet{
         return;
     }
     my $_response_object = $self->{api_client}->deserialize('string', $response);
+    return $_response_object;
+}
+
+#
+# GetMergedCellsInRemotedWorksheetRequest
+#
+# Get all merged cell area form a remote spreadsheet worksheet.
+# 
+# @name  string (required)  spreadsheet name  
+# @worksheet  string (required)  worksheet name  
+# @folder  string   The cloud storage path of the spreadsheet.  
+# @storageName  string   (Optional) The name of the storage if using custom cloud storage. Use default storage if omitted.  
+# @region  string   The spreadsheet region setting.  
+# @password  string   The password for opening spreadsheet file.   
+#
+{
+    my $params = {
+       'request' =>{
+            data_type => 'GetMergedCellsInRemotedWorksheetRequest',
+            description => 'GetMergedCellsInRemotedWorksheet Request.',
+            required => '0',
+       }
+    };
+    __PACKAGE__->method_documentation->{ 'get_merged_cells_in_remoted_worksheet' } = { 
+    	summary => 'Get all merged cell area form a remote spreadsheet worksheet.',
+        params => $params,
+        returns => 'ARRAY[CellArea]',
+    };
+}
+#
+# @return ARRAY[CellArea]
+#
+sub get_merged_cells_in_remoted_worksheet{
+    my ($self, %args) = @_;
+    my $request = $args{'request'};
+    my $response = $request->run_http_request('client' => $self->{api_client} );
+    if (!$response) {
+        return;
+    }
+    my $_response_object = $self->{api_client}->deserialize('ARRAY[CellArea]', $response);
+    return $_response_object;
+}
+
+#
+# GetMergedCellsInWorksheetRequest
+#
+# Get all merged cell area form a local spreadsheet worksheet.
+# 
+# @Spreadsheet  string (required)  Upload spreadsheet file.  
+# @worksheet  string (required)    
+# @region  string   The spreadsheet region setting.  
+# @password  string   The password for opening spreadsheet file.   
+#
+{
+    my $params = {
+       'request' =>{
+            data_type => 'GetMergedCellsInWorksheetRequest',
+            description => 'GetMergedCellsInWorksheet Request.',
+            required => '0',
+       }
+    };
+    __PACKAGE__->method_documentation->{ 'get_merged_cells_in_worksheet' } = { 
+    	summary => 'Get all merged cell area form a local spreadsheet worksheet.',
+        params => $params,
+        returns => 'ARRAY[CellArea]',
+    };
+}
+#
+# @return ARRAY[CellArea]
+#
+sub get_merged_cells_in_worksheet{
+    my ($self, %args) = @_;
+    my $request = $args{'request'};
+    my $response = $request->run_http_request('client' => $self->{api_client} );
+    if (!$response) {
+        return;
+    }
+    my $_response_object = $self->{api_client}->deserialize('ARRAY[CellArea]', $response);
     return $_response_object;
 }
 
@@ -2334,6 +2531,82 @@ sub spreadsheet_digitalsignature{
         return;
     }
     my $_response_object = $self->{api_client}->deserialize('string', $response);
+    return $_response_object;
+}
+
+#
+# SearchAllTextItemsInRemoteSpreadsheetRequest
+#
+# Get all text items in the remote spreadsheet.
+# 
+# @name  string (required)  The name of the workbook file.  
+# @folder  string (required)  The folder path where the workbook is stored.  
+# @storageName  string   (Optional) The name of the storage if using custom cloud storage. Use default storage if omitted.  
+# @region  string   The spreadsheet region setting.  
+# @password  string   The password for opening spreadsheet file.   
+#
+{
+    my $params = {
+       'request' =>{
+            data_type => 'SearchAllTextItemsInRemoteSpreadsheetRequest',
+            description => 'SearchAllTextItemsInRemoteSpreadsheet Request.',
+            required => '0',
+       }
+    };
+    __PACKAGE__->method_documentation->{ 'search_all_text_items_in_remote_spreadsheet' } = { 
+    	summary => 'Get all text items in the remote spreadsheet.',
+        params => $params,
+        returns => 'SearchResponse',
+    };
+}
+#
+# @return SearchResponse
+#
+sub search_all_text_items_in_remote_spreadsheet{
+    my ($self, %args) = @_;
+    my $request = $args{'request'};
+    my $response = $request->run_http_request('client' => $self->{api_client} );
+    if (!$response) {
+        return;
+    }
+    my $_response_object = $self->{api_client}->deserialize('SearchResponse', $response);
+    return $_response_object;
+}
+
+#
+# SearchSpreadsheetAllTextItemsRequest
+#
+# Get all text items in the remote spreadsheet.
+# 
+# @Spreadsheet  string (required)  Upload spreadsheet file.  
+# @region  string   The spreadsheet region setting.  
+# @password  string   The password for opening spreadsheet file.   
+#
+{
+    my $params = {
+       'request' =>{
+            data_type => 'SearchSpreadsheetAllTextItemsRequest',
+            description => 'SearchSpreadsheetAllTextItems Request.',
+            required => '0',
+       }
+    };
+    __PACKAGE__->method_documentation->{ 'search_spreadsheet_all_text_items' } = { 
+    	summary => 'Get all text items in the remote spreadsheet.',
+        params => $params,
+        returns => 'SearchResponse',
+    };
+}
+#
+# @return SearchResponse
+#
+sub search_spreadsheet_all_text_items{
+    my ($self, %args) = @_;
+    my $request = $args{'request'};
+    my $response = $request->run_http_request('client' => $self->{api_client} );
+    if (!$response) {
+        return;
+    }
+    my $_response_object = $self->{api_client}->deserialize('SearchResponse', $response);
     return $_response_object;
 }
 
@@ -3432,12 +3705,12 @@ sub remove_spreadsheet_blank_worksheets{
 #
 # RemoveDuplicatesRequest
 #
-# 
+# Removes duplicate values in the worksheet/range/table.
 # 
 # @Spreadsheet  string (required)  Upload spreadsheet file.  
-# @worksheet  string     
-# @range  string     
-# @table  string     
+# @worksheet  string   The worksheet name.  
+# @range  string   Range name that need deduplication.  
+# @table  string   Table name that need deduplication.  
 # @outPath  string   (Optional) The folder path where the workbook is stored. The default is null.  
 # @outStorageName  string   Output file Storage Name.  
 # @region  string   The spreadsheet region setting.  
@@ -3452,7 +3725,7 @@ sub remove_spreadsheet_blank_worksheets{
        }
     };
     __PACKAGE__->method_documentation->{ 'remove_duplicates' } = { 
-    	summary => '',
+    	summary => 'Removes duplicate values in the worksheet/range/table.',
         params => $params,
         returns => 'string',
     };
@@ -3517,12 +3790,12 @@ sub swap_range{
 #
 # FlipDataRequest
 #
-# 
+# Transposes a specified data range (rows become columns, columns become rows).
 # 
 # @Spreadsheet  string (required)  Upload spreadsheet file.  
-# @worksheet  string (required)    
-# @cellArea  string (required)    
-# @Horizontal  boolean     
+# @worksheet  string (required)  The worksheet name.  
+# @cellArea  string (required)  A specified data range  
+# @Horizontal  boolean   Horizontal/Vertical Flip.  
 # @outPath  string   (Optional) The folder path where the workbook is stored. The default is null.  
 # @outStorageName  string   Output file Storage Name.  
 # @region  string   The spreadsheet region setting.  
@@ -3537,7 +3810,7 @@ sub swap_range{
        }
     };
     __PACKAGE__->method_documentation->{ 'flip_data' } = { 
-    	summary => '',
+    	summary => 'Transposes a specified data range (rows become columns, columns become rows).',
         params => $params,
         returns => 'string',
     };

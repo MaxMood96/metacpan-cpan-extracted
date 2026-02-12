@@ -4,13 +4,13 @@
 class DBI::St {
   version_from DBI;
   
-  allow DBI::Db;
+  allow DBI;
   
   use Fn;
   use DBI::Error::SQLState;
   
   # Fields
-  has Database : ro DBI::Db;
+  has Database : ro DBI;
   
   has Statement : ro string;
   

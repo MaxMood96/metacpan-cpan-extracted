@@ -1,6 +1,6 @@
 package DBIx::Migration;
 
-our $VERSION = '0.31';
+our $VERSION = '0.32';
 
 use feature qw( state );
 
@@ -17,7 +17,7 @@ use Type::Params            qw( signature );
 use Types::Common::Numeric  qw( PositiveInt PositiveOrZeroInt );
 use Types::Path::Tiny       qw( Dir );
 use Types::Self             qw( Self );
-use Types::Standard         qw( ArrayRef HashRef Str );
+use Types::Standard         qw( ArrayRef Defined HashRef Str );
 
 use namespace::clean -except => [ qw( before new ) ];
 
@@ -100,7 +100,12 @@ sub create_tracking_table {
 sub driver {
   my ( $self, $dsn ) = @_;
 
-  return ( DBI->parse_dsn( defined $dsn ? $dsn : $self->dsn ) )[ 1 ];
+  state $Driver = Type::Tiny->new(
+    name    => 'Driver',
+    parent  => Defined,
+    message => sub { "Parsing the '$dsn' cannot extract driver name" }
+  );
+  return $Driver->assert_return( ( DBI->parse_dsn( defined $dsn ? $dsn : $self->dsn ) )[ 1 ] );
 }
 
 sub latest {

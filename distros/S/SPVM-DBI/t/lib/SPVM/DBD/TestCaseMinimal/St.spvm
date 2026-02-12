@@ -1,0 +1,66 @@
+# Copyright (c) 2026 Yuki Kimoto
+# MIT License
+
+class DBD::TestCaseMinimal::St extends DBI::St {
+  use DBI::Data;
+
+  # Class Methods
+  static method new : DBD::TestCaseMinimal::St () {
+    return new DBD::TestCaseMinimal::St;
+  }
+
+  # Instance Methods
+  method execute : long ($ctx : Go::Context, $bind_values : object[] = undef) {
+    # Returns a specific long value (2^31 + 1) to ensure it's handled as 64-bit
+    return 2147483649L;
+  }
+
+  method fetch : object[] ($ctx : Go::Context, $bind_columns : object[] = undef, $ret_row : object[] = undef) {
+    if ($bind_columns && $ret_row) {
+        $ret_row->[0] = $bind_columns->[0];
+        $ret_row->[1] = $bind_columns->[1];
+        return $ret_row;
+    }
+
+    if ($bind_columns) {
+        return [$bind_columns->[0], $bind_columns->[1]];
+    }
+
+    return [(object)0, "no_input"];
+  }
+  
+  method NUM_OF_FIELDS : int ($ctx : Go::Context) {
+    # Returns a specific int value to check type correctness
+    return 12345678;
+  }
+
+  method NAME : string[] ($ctx : Go::Context) {
+    return ["col1", "col2"];
+  }
+
+  method NULLABLE : int[] ($ctx : Go::Context) {
+    return [1, 0];
+  }
+
+  method TYPE : int[] ($ctx : Go::Context) {
+    return [10000001, 10000002];
+  }
+
+  method PRECISION : int[] ($ctx : Go::Context) {
+    return [20000001, 20000002];
+  }
+
+  method SCALE : int[] ($ctx : Go::Context) {
+    return [30000001, 30000002];
+  }
+
+  method rows : long ($ctx : Go::Context) {
+    # Returns a large long value (2^62 - 1) to test full 64-bit range
+    return 4611686018427387903L;
+  }
+
+  method finish : void () {
+    # Use diag for debugging output
+    diag "[Test Output]DBD::TestCaseMinimal::St#finish";
+  }
+}

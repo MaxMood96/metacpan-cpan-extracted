@@ -16,7 +16,7 @@ requires:
   Cpanel::JSON::XS: '0'
   JSON::Schema::Modern: '0'
   perl: '5.040'
-version: '0.001'
+version: '0.002'
 x_generated_by_perl: v5.42.0
 x_serialization_backend: 'YAML::Tiny version 1.76'
 x_spdx_expression: MIT

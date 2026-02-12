@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2021-2026 -- leonerd@leonerd.org.uk
 
-package Future::IO::Impl::UV 0.07;
+package Future::IO::Impl::UV 0.08;
 
 use v5.20;
 use warnings;
@@ -12,10 +12,10 @@ use base qw( Future::IO::ImplBase );
 use feature qw( postderef signatures );
 no warnings qw( experimental::postderef experimental::signatures );
 
-use Future::IO qw( POLLIN POLLOUT POLLHUP POLLERR );
+use Future::IO 0.20 qw( POLLIN POLLOUT POLLPRI POLLHUP POLLERR );
 
 use UV;
-use UV::Poll;
+use UV::Poll 2.002;  # fh class bugfix
 use UV::Timer;
 use UV::Signal;
 
@@ -86,6 +86,7 @@ sub _update_poll ( $fh )
             my $revents = 0;
             $revents |= POLLIN  if $events & UV::Poll::UV_READABLE;
             $revents |= POLLOUT if $events & UV::Poll::UV_WRITABLE;
+            $revents |= POLLPRI if $events & UV::Poll::UV_PRIORITIZED;
             $revents |= POLLHUP if $events & UV::Poll::UV_DISCONNECT;
             $revents |= POLLERR if $status;
 
@@ -106,9 +107,10 @@ sub _update_poll ( $fh )
 
    my $want = 0;
    foreach my $poller ( $pollers_by_refaddr{$refaddr}->@* ) {
-      $want |= UV::Poll::UV_READABLE   if $poller->events & POLLIN;
-      $want |= UV::Poll::UV_WRITABLE   if $poller->events & POLLOUT;
-      $want |= UV::Poll::UV_DISCONNECT if $poller->events & POLLHUP;
+      $want |= UV::Poll::UV_READABLE    if $poller->events & POLLIN;
+      $want |= UV::Poll::UV_WRITABLE    if $poller->events & POLLOUT;
+      $want |= UV::Poll::UV_PRIORITIZED if $poller->events & POLLPRI;
+      $want |= UV::Poll::UV_DISCONNECT  if $poller->events & POLLHUP;
    }
 
    if( $want ) {

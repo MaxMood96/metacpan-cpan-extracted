@@ -3,12 +3,20 @@
 # Handle compile-time options before loading any modules
 # Future::XS must be loaded before Future, so check early
 BEGIN {
+    my @to_splice;
     for my $i (0 .. $#ARGV) {
         if ($ARGV[$i] eq '--future-xs') {
             $ENV{PAGI_FUTURE_XS} = 1;
-            splice @ARGV, $i, 1;  # Remove from ARGV
-            last;
+            push @to_splice, $i;
         }
+        elsif ($ARGV[$i] eq '--http2') {
+            $ENV{_PAGI_SERVER_HTTP2} = 1;
+            push @to_splice, $i;
+        }
+    }
+    # Remove processed flags in reverse order to preserve indices
+    for my $i (reverse @to_splice) {
+        splice @ARGV, $i, 1;
     }
 }
 
@@ -259,9 +267,34 @@ WebSocket idle timeout in seconds (default: 0, disabled)
 
 SSE idle timeout in seconds (default: 0, disabled)
 
+=item B<--heartbeat-timeout> NUM
+
+Worker heartbeat timeout in seconds (default: 50, 0 = disabled).
+Only active in multi-worker mode. Workers send periodic heartbeats to
+the parent via a Unix pipe. If a worker's event loop is blocked for
+longer than this timeout (blocking syscall, deadlock, CPU-bound work),
+the parent kills it with SIGKILL and respawns a replacement.
+
+This should be larger than the maximum time you expect any single
+operation to block the event loop. Async operations using C<await> do
+not block the event loop and will never trigger this timeout.
+
 =item B<--sync-file-threshold> NUM
 
 Sync file read threshold in bytes (default: 65536)
+
+=item B<--access-log-format> FORMAT
+
+Access log format string or preset name (default: C<clf>).
+
+Preset names: C<clf>, C<combined>, C<common>, C<tiny>.
+
+Custom format strings use Apache-style atoms:
+
+    --access-log-format combined
+    --access-log-format '%h %s %Dms'
+
+See L<PAGI::Server/ACCESS LOG FORMAT> for the full atoms table.
 
 =item B<--future-xs>
 
@@ -269,6 +302,17 @@ Enable L<Future::XS> for improved Future performance.
 Must be installed separately: C<cpanm Future::XS>
 
 Can also be enabled via environment variable: C<PAGI_FUTURE_XS=1>
+
+=item B<--http2>
+
+Enable HTTP/2 support. Requires L<Net::HTTP2::nghttp2>.
+
+When combined with C<--ssl-cert>/C<--ssl-key>, uses ALPN negotiation
+(h2/http/1.1). Without TLS, enables h2c (cleartext HTTP/2) mode.
+
+See L<PAGI::Server> for HTTP/2 protocol tuning options
+(C<h2_max_concurrent_streams>, C<h2_initial_window_size>, etc.)
+which can be passed via the constructor API.
 
 =back
 

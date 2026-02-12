@@ -1,0 +1,65 @@
+{
+   "abstract" : "Dedicated user data management system with multiple storage backends",
+   "author" : [
+      "Bruce Van Allen <bva@cruzio.com>"
+   ],
+   "dynamic_config" : 1,
+   "generated_by" : "ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010",
+   "license" : [
+      "artistic_2"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "Concierge-Users",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "inc"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "Carp" : "0",
+            "DBD::SQLite" : "0",
+            "DBI" : "0",
+            "File::Path" : "0",
+            "File::Spec" : "0",
+            "JSON::PP" : "0",
+            "Text::CSV" : "0",
+            "YAML::Tiny" : "0",
+            "perl" : "5.036"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "Test2::V0" : "0"
+         }
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/bwva/Concierge-Users/issues"
+      },
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/bwva/Concierge-Users.git",
+         "web" : "https://github.com/bwva/Concierge-Users"
+      }
+   },
+   "version" : "v0.7.2",
+   "x_serialization_backend" : "JSON::PP version 4.16"
+}

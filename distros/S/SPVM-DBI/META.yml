@@ -1,5 +1,5 @@
 ---
-abstract: 'Database Independent Interface'
+abstract: 'Base Class for Database Drivers Providing Common Utilities'
 author:
   - 'Yuki Kimoto<kimoto.yuki@gmail.com>'
 build_requires:
@@ -23,5 +23,5 @@ requires:
   SPVM::Regex: '0.258'
 resources:
   repository: https://github.com/yuki-kimoto/SPVM-DBI.git
-version: '0.003'
+version: '0.004'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

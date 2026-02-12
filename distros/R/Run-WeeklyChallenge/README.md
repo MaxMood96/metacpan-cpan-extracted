@@ -37,7 +37,7 @@ my $inputs_schema_json = '{
     "additionalProperties": false
 }';
 
-Run::WeeklyChallenge::run_weekly_challenge($run_solution, $inputs_example, $inputs_schema_json);
+Run::WeeklyChallenge::run_weekly_challenge_v2($run_solution, $inputs_example, $inputs_schema_json);
 ```
 
 Example output:

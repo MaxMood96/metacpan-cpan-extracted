@@ -26,5 +26,5 @@ resources:
   bugtracker: https://github.com/und3f/protocol-redis/issues
   license: http://dev.perl.org/licenses/
   repository: https://github.com/und3f/protocol-redis.git
-version: '2.0001'
+version: '2.0002'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

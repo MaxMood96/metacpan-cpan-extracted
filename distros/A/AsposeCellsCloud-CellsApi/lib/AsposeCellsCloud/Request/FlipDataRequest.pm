@@ -61,9 +61,9 @@ sub new {
 
 # Run Operation Request
 # FlipDataRequest.Spreadsheet : Upload spreadsheet file.  ,
-# FlipDataRequest.worksheet :   ,
-# FlipDataRequest.cellArea :   ,
-# FlipDataRequest.Horizontal :   ,
+# FlipDataRequest.worksheet : The worksheet name.  ,
+# FlipDataRequest.cellArea : A specified data range  ,
+# FlipDataRequest.Horizontal : Horizontal/Vertical Flip.  ,
 # FlipDataRequest.outPath : (Optional) The folder path where the workbook is stored. The default is null.  ,
 # FlipDataRequest.outStorageName : Output file Storage Name.  ,
 # FlipDataRequest.region : The spreadsheet region setting.  ,
@@ -78,7 +78,7 @@ sub new {
        }
     };
     __PACKAGE__->method_documentation->{ 'flip_data' } = { 
-    	summary => '',
+    	summary => 'Transposes a specified data range (rows become columns, columns become rows).',
         params => $params,
         returns => 'string',
     };
@@ -159,21 +159,21 @@ __PACKAGE__->method_documentation({
      'worksheet' => {
      	datatype => 'string',
      	base_name => 'worksheet',
-     	description => '',
+     	description => 'The worksheet name.',
      	format => '',
      	read_only => '',
      		},
      'cell_area' => {
      	datatype => 'string',
      	base_name => 'cellArea',
-     	description => '',
+     	description => 'A specified data range',
      	format => '',
      	read_only => '',
      		},
      'horizontal' => {
      	datatype => 'string',
      	base_name => 'Horizontal',
-     	description => '',
+     	description => 'Horizontal/Vertical Flip.',
      	format => '',
      	read_only => '',
      		},

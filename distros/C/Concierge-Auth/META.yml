@@ -1,0 +1,36 @@
+---
+abstract: 'Password authentication and token generation using Crypt::Passphrase'
+author:
+  - 'Bruce Van Allen <bva@cruzio.com>'
+build_requires:
+  ExtUtils::MakeMaker: '0'
+  Test2::V0: '0'
+configure_requires:
+  ExtUtils::MakeMaker: '0'
+dynamic_config: 1
+generated_by: 'ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010'
+license: artistic_2
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: Concierge-Auth
+no_index:
+  directory:
+    - t
+    - inc
+requires:
+  Carp: '0'
+  Crypt::PRNG: '0'
+  Crypt::Passphrase: '0'
+  Crypt::Passphrase::Argon2: '0'
+  Crypt::Passphrase::Bcrypt: '0'
+  Exporter: '0'
+  Fcntl: '0'
+  Time::HiRes: '0'
+  parent: '0'
+  perl: '5.036'
+resources:
+  bugtracker: https://github.com/bwva/Concierge-Auth/issues
+  repository: https://github.com/bwva/Concierge-Auth.git
+version: v0.3.2
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

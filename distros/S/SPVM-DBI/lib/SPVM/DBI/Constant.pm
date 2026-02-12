@@ -14,7 +14,7 @@ SPVM::DBI::Constant - Database Information and Capability Constants
 
 L<SPVM::DBI::Constant> class in L<SPVM> defines various constants used by the L<DBI|SPVM::DBI> interface. 
 
-These constants are primarily used as arguments for the C<get_info> method in L<DBI::Db|SPVM::DBI::Db> to query database-specific information, such as supported features, data types, and limitations.
+These constants are primarily used as arguments for the C<get_info> method in L<DBI|SPVM::DBI> to query database-specific information, such as supported features, data types, and limitations.
 
 =head1 Usage
 

@@ -3,13 +3,13 @@
 #
 #  (C) Paul Evans, 2020-2026 -- leonerd@leonerd.org.uk
 
-package Future::IO::Impl::Glib 0.03;
+package Future::IO::Impl::Glib 0.04;
 
 use v5.14;
 use warnings;
 use base qw( Future::IO::ImplBase );
 
-use Future::IO qw( POLLIN POLLOUT POLLHUP POLLERR );
+use Future::IO 0.20 qw( POLLIN POLLOUT POLLPRI POLLHUP POLLERR );
 
 use Glib;
 
@@ -56,11 +56,13 @@ sub sleep
 
 my %read_futures_by_fileno;  # {fileno} => [@futures]
 my %write_futures_by_fileno; # {fileno} => [@futures]
+my %prio_futures_by_fileno;  # {fileno} => [@futures]
 my %hup_futures_by_fileno;   # {fileno} => [@futures]
 
 my %revents_map = (
    in  => POLLIN,
    out => POLLOUT,
+   pri => POLLPRI,
    hup => POLLHUP,
    err => POLLERR,
 );
@@ -103,6 +105,29 @@ sub poll
 
       Glib::IO->add_watch( $fh->fileno,
          ['out', 'hup', 'err'],
+         sub {
+            my ( $id, $ev ) = @_;
+
+            my $revents = 0;
+            $revents |= $revents_map{$_} for @$ev;
+
+            $futures->[0]->done( $revents );
+            shift @$futures;
+
+            return 1 if scalar @$futures;
+            return 0;
+         }
+      ) if !$was;
+   }
+
+   if( $events & POLLPRI ) {
+      my $futures = $prio_futures_by_fileno{ $fh->fileno } //= [];
+
+      my $was = scalar @$futures;
+      push @$futures, $f;
+
+      Glib::IO->add_watch( $fh->fileno,
+         ['pri', 'hup', 'err'],
          sub {
             my ( $id, $ev ) = @_;
 

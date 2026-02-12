@@ -6,10 +6,8 @@ lib/SPVM/DBI.pm
 lib/SPVM/DBI.spvm
 lib/SPVM/DBI/Constant.pm
 lib/SPVM/DBI/Constant.spvm
-lib/SPVM/DBI/Db.pm
-lib/SPVM/DBI/Db.spvm
-lib/SPVM/DBI/Dr.pm
-lib/SPVM/DBI/Dr.spvm
+lib/SPVM/DBI/Data.pm
+lib/SPVM/DBI/Data.spvm
 lib/SPVM/DBI/Error/SQLState.pm
 lib/SPVM/DBI/Error/SQLState.spvm
 lib/SPVM/DBI/St.pm
@@ -20,6 +18,8 @@ MANIFEST			This list of files
 MANIFEST.SKIP
 README.md
 t/basic.t
+t/lib/SPVM/DBD/TestCaseMinimal.spvm
+t/lib/SPVM/DBD/TestCaseMinimal/St.spvm
 t/lib/SPVM/TestCase/DBI.spvm
 META.yml                                 Module YAML meta-data (added by MakeMaker)
 META.json                                Module JSON meta-data (added by MakeMaker)

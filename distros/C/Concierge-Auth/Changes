@@ -1,0 +1,9 @@
+Revision history for Concierge-Auth
+
+v0.19.0 2026-02-10
+    - Initial CPAN release
+    - Argon2 password hashing with Bcrypt legacy validation
+    - File-based password storage with file locking
+    - Token and random value generation (Concierge::Auth::Generators)
+v0.3.1 2026-02-11
+    - Documentation improvements

@@ -1,5 +1,12 @@
 Revision history for Future-IO-Impl-Tickit
 
+0.03    2026-02-12
+        [CHANGES]
+         * Pull in latest Future::IO (for POLLPRI constant)
+         * Complain if asked to `->poll` for POLLPRI, because libtickit
+           doesn't currently support it
+         * Pull in latest Test::Future::IO::Impl for bugfixes in tests
+
 0.02    2026-01-18
         [CHANGES]
          * Implement the new `->poll` method of Future::IO v0.19

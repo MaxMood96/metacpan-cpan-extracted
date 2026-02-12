@@ -2,9 +2,10 @@ use Test::More;
 
 use Bored qw/bored_one/;
 
-is(bored_one(), 1, 'very easy');
+is(bored_one(), 1, 'very easy when you know everything right?');
 
 my $bored = Bored->new();
-is($bored->pointless(), 'invisible');
+is($bored->pointless(), 'leadership');
+is($bored->tortured(), 'souls');
 
 done_testing();

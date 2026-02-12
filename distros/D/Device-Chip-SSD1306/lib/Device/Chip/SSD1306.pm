@@ -1,19 +1,22 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2015-2023 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2015-2026 -- leonerd@leonerd.org.uk
 
 use v5.26;
 use warnings;
 use Object::Pad 0.800 ':experimental(adjust_params)';
 
-package Device::Chip::SSD1306 0.14;
+package Device::Chip::SSD1306 0.15;
 class Device::Chip::SSD1306
    :isa(Device::Chip)
    :strict(params);
 
 use Carp;
 use Future::AsyncAwait;
+
+require XSLoader;
+XSLoader::load( __PACKAGE__, our $VERSION );
 
 =encoding UTF-8
 
@@ -22,6 +25,8 @@ use Future::AsyncAwait;
 C<Device::Chip::SSD1306> - chip driver for monochrome OLED modules
 
 =head1 DESCRIPTION
+
+=for highlighter language=perl
 
 This abstract L<Device::Chip> subclass provides communication to an
 F<SSD1306>, F<SSD1309> or F<SH1106> chip attached by an adapter. To actually
@@ -132,7 +137,7 @@ my %MODELS = (
    $chip = Device::Chip::SSD1306->new(
       model => $model,
       ...
-   )
+   );
 
 Returns a new C<Device::Chip::SSD1306> driver instance for the given model
 name, which must be one of the models listed in L</DEVICE MODELS>. If no model
@@ -150,6 +155,16 @@ If true, the order of columns or rows respectively will be reversed by the
 hardware. In particular, if both are true, this inverts the orientation of
 the display, if it is mounted upside-down.
 
+=item contrast => INT
+
+Normally set to 0x9F, but you may wish to set a lower value to avoid display
+burn-in on rarely-updated static displays.
+
+=item vcomh => INT
+
+Normally set to 4, but you may wish to set a lower value to avoid display
+burn-in on rarely-updated static displays.
+
 =back
 
 =cut
@@ -161,6 +176,9 @@ field $_column_offset;
 field $_set_com_pins_arg;
 field $_xflip            :param = 0;
 field $_yflip            :param = 0;
+
+field $_contrast :param = 0x9F;
+field $_vcomh    :param = 4;
 
 ADJUST :params ( :$model = "SSD1306-128x64" )
 {
@@ -181,9 +199,9 @@ instances.
 
 =head2 columns
 
-   $n = $chip->rows
+   $n = $chip->rows;
 
-   $n = $chip->columns
+   $n = $chip->columns;
 
 Simple accessors that return the number of rows or columns present on the
 physical display.
@@ -253,9 +271,9 @@ async method init ()
    await $self->send_cmd( CMD_SET_SEGMENT_REMAP | ( $_xflip ? 1 : 0 ) );
    await $self->send_cmd( CMD_SET_COM_SCAN_DIR  | ( $_yflip ? 1<<3 : 0 ) );
    await $self->send_cmd( CMD_SET_COM_PINS,     $_set_com_pins_arg );
-   await $self->send_cmd( CMD_SET_CONTRAST,     0x9F );
+   await $self->send_cmd( CMD_SET_CONTRAST,     $_contrast );
    await $self->send_cmd( CMD_SET_PRECHARGE,    ( 0x0f << 4 ) | ( 1 ) );
-   await $self->send_cmd( CMD_SET_VCOMH_LEVEL,  ( 4 << 4 ) );
+   await $self->send_cmd( CMD_SET_VCOMH_LEVEL,  ( $_vcomh << 4 ) );
 }
 
 =head2 display
@@ -332,15 +350,17 @@ chip after calling them.
 
 =cut
 
-# The internal framebuffer
-field @_display;
-field $_display_dirty;
-field $_display_dirty_xlo;
-field $_display_dirty_xhi;
+# The internal framebuffer is now implemented by XS code, we just need an SV
+# to attach it to
+field $_framebuffer;
+method DESTROY
+{
+   $_framebuffer and _framebuffer_free( $_framebuffer );
+}
 
 =head2 clear
 
-   $chip->clear
+   $chip->clear;
 
 Resets the stored framebuffer to blank.
 
@@ -348,17 +368,15 @@ Resets the stored framebuffer to blank.
 
 method clear ()
 {
-   @_display = (
-      map { [ ( 0 ) x $_columns ] } 1 .. $_rows
-   );
-   $_display_dirty = ( 1 << $_rows/8 ) - 1;
-   $_display_dirty_xlo = 0;
-   $_display_dirty_xhi = $_columns-1;
+   $_framebuffer or
+      _framebuffer_new( $_framebuffer, $_rows, $_columns );
+
+   _framebuffer_clear( $_framebuffer );
 }
 
 =head2 draw_pixel
 
-   $chip->draw_pixel( $x, $y, $val = 1 )
+   $chip->draw_pixel( $x, $y, $val = 1 );
 
 Draw the given pixel. If the third argument is false, the pixel will be
 cleared instead of set.
@@ -367,15 +385,15 @@ cleared instead of set.
 
 method draw_pixel ( $x, $y, $val = 1 )
 {
-   $_display[$y][$x] = $val;
-   $_display_dirty |= ( 1 << int( $y / 8 ) );
-   $_display_dirty_xlo = $x if $_display_dirty_xlo > $x;
-   $_display_dirty_xhi = $x if $_display_dirty_xhi < $x;
+   $_framebuffer or
+      _framebuffer_new( $_framebuffer, $_rows, $_columns );
+
+   _framebuffer_draw_pixel( $_framebuffer, $x, $y, $val );
 }
 
 =head2 draw_hline
 
-   $chip->draw_hline( $x1, $x2, $y, $val = 1 )
+   $chip->draw_hline( $x1, $x2, $y, $val = 1 );
 
 Draw a horizontal line in the given I<$y> row, between the columns I<$x1> and
 I<$x2> (inclusive). If the fourth argument is false, the pixels will be
@@ -385,15 +403,15 @@ cleared instead of set.
 
 method draw_hline ( $x1, $x2, $y, $val = 1 )
 {
-   $_display[$y][$_] = $val for $x1 .. $x2;
-   $_display_dirty |= ( 1 << int( $y / 8 ) );
-   $_display_dirty_xlo = $x1 if $_display_dirty_xlo > $x1;
-   $_display_dirty_xhi = $x2 if $_display_dirty_xhi < $x2;
+   $_framebuffer or
+      _framebuffer_new( $_framebuffer, $_rows, $_columns );
+
+   _framebuffer_draw_hline( $_framebuffer, $x1, $x2, $y, $val );
 }
 
 =head2 draw_vline
 
-   $chip->draw_vline( $x, $y1, $y2, $val = 1 )
+   $chip->draw_vline( $x, $y1, $y2, $val = 1 );
 
 Draw a vertical line in the given I<$x> column, between the rows I<$y1> and
 I<$y2> (inclusive). If the fourth argument is false, the pixels will be
@@ -405,15 +423,35 @@ method draw_vline ( $x, $y1, $y2, $val = 1 )
 {
    $val //= 1;
 
-   $_display[$_][$x] = $val for $y1 .. $y2;
-   $_display_dirty |= ( 1 << int( $_ / 8 ) ) for $y1 .. $y2;
-   $_display_dirty_xlo = $x if $_display_dirty_xlo > $x;
-   $_display_dirty_xhi = $x if $_display_dirty_xhi < $x;
+   $_framebuffer or
+      _framebuffer_new( $_framebuffer, $_rows, $_columns );
+
+   _framebuffer_draw_vline( $_framebuffer, $x, $y1, $y2, $val );
+}
+
+=head2 draw_rect
+
+   $chip->draw_rect( $x1, $y1, $x2, $y2, $val = 1 );
+
+I<Since version 0.15.>
+
+Draw a solid rectangle in between the given I<$x1> to I<$2> columns and rows
+I<$y1> to I<$y2> (all inclusive). If the final argument is false, the pixels
+will be cleared instead of set.
+
+=cut
+
+method draw_rect ( $x1, $y1, $x2, $y2, $val = 1 )
+{
+   $_framebuffer or
+      _framebuffer_new( $_framebuffer, $_rows, $_columns );
+
+   _framebuffer_draw_rect( $_framebuffer, $x1, $y1, $x2, $y2, $val );
 }
 
 =head2 draw_blit
 
-   $chip->draw_blit( $x, $y, @lines )
+   $chip->draw_blit( $x, $y, @lines );
 
 Draws a bitmap pattern by copying the data given in lines, starting at the
 given position.
@@ -437,6 +475,10 @@ For example, to draw an rightward-pointing arrow:
 
 method draw_blit ( $x0, $y, @lines )
 {
+   $_framebuffer or
+      _framebuffer_new( $_framebuffer, $_rows, $_columns );
+
+   # TODO: more efficient in XS, somehow...?
    for( ; @lines; $y++ ) {
       my @pixels = split m//, shift @lines;
       @pixels or next;
@@ -446,14 +488,68 @@ method draw_blit ( $x0, $y, @lines )
          my $p = shift @pixels;
 
          $p eq " " ? next :
-         $p eq "-" ? ( $_display[$y][$x] = 0 ) :
-                     ( $_display[$y][$x] = 1 );
+         $p eq "-" ? _framebuffer_draw_pixel( $_framebuffer, $x, $y, 0 ) :
+                     _framebuffer_draw_pixel( $_framebuffer, $x, $y, 1 );
       }
-      $x--;
+   }
+}
 
-      $_display_dirty |= ( 1 << int( $y / 8 ) );
-      $_display_dirty_xlo = $x0 if $_display_dirty_xlo > $x0;
-      $_display_dirty_xhi = $x  if $_display_dirty_xhi < $x;
+=head2 draw_glyph
+
+   $chip->draw_glyph( $x, $y, $glyph, $val = 1, $bg = undef );
+
+I<Since version 0.15.>
+
+Draws a glyph by copying the bitmap data out of the C<$glyph> argument, as if
+it were a single glyph structure obtained from L<Font::PCF>. The bitmap is
+copied starting at the given position, and extends rightward and downward for
+whatever is the defined size of the glyph given by its data. For each pixel
+set in the glyph's bitmap, the corresponding pixel of the display is set to
+C<$val>; the other pixels are set to C<$bg>. Either of these last two values
+may be set to C<undef> to not modify those corresponding pixels.
+
+Note that neither this module nor its tests actually depend on C<Font::PCF>
+itself; it merely invokes methods on the object consistent with that API.
+Specifically, it expects the following methods:
+
+=over 4
+
+=item width
+
+   $cols = $glyph->width;
+
+Returns the number of columns wide that contain pixels of glyph data.
+
+=item bitmap
+
+   [ $row0, $row1, ... ] = $glyph->bitmap;
+
+Returns an C<ARRAY> reference of rows of pixel data. Each row is represented
+by a big-endian 32bit integer. The topmost bit corresponds to the leftmost
+pixel.
+
+=back
+
+=cut
+
+method draw_glyph ( $x0, $y0, $glyph, $val = 1, $bg = undef )
+{
+   my $bitmap = $glyph->bitmap;
+   my $width_1 = $glyph->width - 1;
+
+   $_framebuffer or
+      _framebuffer_new( $_framebuffer, $_rows, $_columns );
+
+   # TODO: more efficient in XS, somehow...?
+   foreach my $row ( 0 .. $#$bitmap ) {
+      my $pixels = $bitmap->[$row];
+      my $y = $y0 + $row;
+
+      foreach my $col ( 0 .. $width_1 ) {
+         # $pixels is 32bit big-endian
+         my $update = ( $pixels & (1<<(31-$col)) ) ? $val : $bg;
+         _framebuffer_draw_pixel( $_framebuffer, $x0+$col, $y, $update ) if defined $update;
+      }
    }
 }
 
@@ -467,30 +563,25 @@ Sends the framebuffer to the display chip.
 
 async method refresh ()
 {
+   $_framebuffer or
+      return; # nothing to do
+
    my $maxcol = $_columns - 1;
-   my $column = $_column_offset + $_display_dirty_xlo;
+   my ( $dirty_xlo, $dirty_xhi ) = _framebuffer_dirty_xlohi( $_framebuffer );
+   my $column = $_column_offset + $dirty_xlo;
 
    foreach my $page ( 0 .. ( $_rows / 8 ) - 1 ) {
-      next unless $_display_dirty & ( 1 << $page );
-      my $row = $page * 8;
+      next unless _framebuffer_is_dirty_page( $_framebuffer, $page );
 
-      my $data = "";
-      foreach my $col ( $_display_dirty_xlo .. $_display_dirty_xhi ) {
-         my $v = 0;
-         $v <<= 1, $_display[$row+$_][$col] && ( $v |= 1 ) for reverse 0 .. 7;
-         $data .= chr $v;
-      }
+      my $data = _framebuffer_pagedata( $_framebuffer, $page, $dirty_xlo, $dirty_xhi );
 
       await $self->send_cmd( CMD_SET_PAGE_START + $page );
       await $self->send_cmd( CMD_SET_LOW_COLUMN | $column & 0x0f );
       await $self->send_cmd( CMD_SET_HIGH_COLUMN | $column >> 4 );
       await $self->send_data( $data );
-
-      $_display_dirty &= ~( 1 << $page );
    }
 
-   $_display_dirty_xlo = $_columns;
-   $_display_dirty_xhi = -1;
+   _framebuffer_cleaned( $_framebuffer );
 }
 
 =head1 TODO

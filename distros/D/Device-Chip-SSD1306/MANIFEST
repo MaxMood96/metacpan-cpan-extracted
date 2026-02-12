@@ -3,12 +3,14 @@ Build.PL
 Changes
 examples/ssd1306.pl
 lib/Device/Chip/SSD1306.pm
+lib/Device/Chip/SSD1306.xs
 lib/Device/Chip/SSD1306/I2C.pm
 lib/Device/Chip/SSD1306/SPI4.pm
 LICENSE
 MANIFEST			This list of files
 META.json
 META.yml
+NOTES
 README
 t/00use.t
 t/01spi4.t

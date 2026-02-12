@@ -62,10 +62,10 @@ sub new {
 # Run Operation Request
 # ImportCSVDataIntoSpreadsheetRequest.datafile : Upload data file.  ,
 # ImportCSVDataIntoSpreadsheetRequest.Spreadsheet : Upload spreadsheet file.  ,
-# ImportCSVDataIntoSpreadsheetRequest.worksheet :   ,
-# ImportCSVDataIntoSpreadsheetRequest.startcell :   ,
-# ImportCSVDataIntoSpreadsheetRequest.insert :   ,
-# ImportCSVDataIntoSpreadsheetRequest.convertNumericData :   ,
+# ImportCSVDataIntoSpreadsheetRequest.worksheet : Need to import CSV data into the worksheet.  ,
+# ImportCSVDataIntoSpreadsheetRequest.startcell : Starting position for data import  ,
+# ImportCSVDataIntoSpreadsheetRequest.insert : Controls the insertion behavior. true: inserts data; false: overwrites existing data.  ,
+# ImportCSVDataIntoSpreadsheetRequest.convertNumericData : Whether the string in text file is converted to numeric data.  ,
 # ImportCSVDataIntoSpreadsheetRequest.splitter :   ,
 # ImportCSVDataIntoSpreadsheetRequest.outPath : (Optional) The folder path where the workbook is stored. The default is null.  ,
 # ImportCSVDataIntoSpreadsheetRequest.outStorageName : Output file Storage Name.  ,
@@ -82,7 +82,7 @@ sub new {
        }
     };
     __PACKAGE__->method_documentation->{ 'import_csv_data_into_spreadsheet' } = { 
-    	summary => '',
+    	summary => 'Import CSV data file into the local spreadsheet.',
         params => $params,
         returns => 'string',
     };
@@ -187,28 +187,28 @@ __PACKAGE__->method_documentation({
      'worksheet' => {
      	datatype => 'string',
      	base_name => 'worksheet',
-     	description => '',
+     	description => 'Need to import CSV data into the worksheet.',
      	format => '',
      	read_only => '',
      		},
      'startcell' => {
      	datatype => 'string',
      	base_name => 'startcell',
-     	description => '',
+     	description => 'Starting position for data import',
      	format => '',
      	read_only => '',
      		},
      'insert' => {
      	datatype => 'string',
      	base_name => 'insert',
-     	description => '',
+     	description => 'Controls the insertion behavior. true: inserts data; false: overwrites existing data.',
      	format => '',
      	read_only => '',
      		},
      'convert_numeric_data' => {
      	datatype => 'string',
      	base_name => 'convertNumericData',
-     	description => '',
+     	description => 'Whether the string in text file is converted to numeric data.',
      	format => '',
      	read_only => '',
      		},
