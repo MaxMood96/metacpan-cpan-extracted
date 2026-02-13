@@ -18,28 +18,28 @@ has ini => (is => 'ro', isa => Maybe[Str], default => INI);
 has pleroma => (is => 'ro', isa => HashRef[Str], default => sub {
 	my ($self) = @_;
 	
-	my %pleroma = %{&PLEROMA};
-	return \%pleroma unless defined $self->ini;
-	
+	my %pleroma = (%{&PLEROMA}, 'Aion::Pleroma' => 'Aion::Pleroma#new');
+	return \%pleroma unless defined $self->ini and -e $self->ini;
+
 	open my $f, '<:utf8', INI or die "Not open ${\$self->ini}: $!";
 	while(<$f>) {
 		close($f), die "${\$self->ini} corrupt at line $.: $_" unless /^([\w:]+)#(\w*),\d+=(.*)$/;
 		my ($pkg, $sub, $key) = ($1, $2, $3);
 		my $action = join "#", $pkg, $sub || 'new';
-		
+
 		$key = $key ne ""? $key: ($sub? "$pkg#$sub": $pkg);
-		
+
 		close($f), die "The eon $key is $pleroma{$key}, but added other $action" if exists $pleroma{$key};
-		
+
 		$pleroma{$key} = $action;
 	}
 	close $f;
-	
+
 	\%pleroma
 });
 
 # Совокупность порождённых эонов (сервисов)
-has eon => (is => 'ro', isa => HashRef[Object], lazy => 0, default => sub { +{} });
+has eon => (is => 'ro', isa => HashRef[Object], lazy => 0, default => sub { +{'Aion::Pleroma' => shift} });
 
 # Получить эон из контейнера
 sub get {
@@ -62,6 +62,22 @@ sub resolve {
 	my ($self, $key) = @_;
 	
 	$self->get($key) // die "$key is'nt eon!"
+}
+
+# Добавить в плерому пакет
+sub autoware {
+	my ($self, $action, $key) = @_;
+	my ($pkg, $sub) = $action =~ /#/? ($`, $'): ($action, 'new');
+	$action = "$pkg#$sub";
+	$key //= $action =~ /#new$/? $pkg: $action;
+
+	if(my $action2 = $self->pleroma->{$key}) {
+		die "Added eon $key twice, with $action ne $action2" if $action2 ne $action;
+	}
+	else {
+		$self->pleroma->{$key} = $action;
+	}
+	$self
 }
 
 1;
@@ -132,7 +148,7 @@ File etc/annotation/eon.ann:
 
 
 
-	Aion::Pleroma->new->pleroma # --> {"Ex::Eon::AnimalEon" => "Ex::Eon::AnimalEon#new", "Ex::Eon::AnimalEon#dog" => "Ex::Eon::AnimalEon#dog", "ex.cat" => "Ex::Eon::AnimalEon#cat"}
+	Aion::Pleroma->new->pleroma # --> {"Ex::Eon::AnimalEon" => "Ex::Eon::AnimalEon#new", "Ex::Eon::AnimalEon#dog" => "Ex::Eon::AnimalEon#dog", "ex.cat" => "Ex::Eon::AnimalEon#cat", "Aion::Pleroma" => "Aion::Pleroma#new"}
 
 =head2 eon
 
@@ -140,9 +156,9 @@ The totality of generated eons.
 
 	my $pleroma = Aion::Pleroma->new;
 	
-	$pleroma->eon # --> {}
+	$pleroma->eon # --> { "Aion::Pleroma" => $pleroma }
 	my $cat = $pleroma->resolve('ex.cat');
-	$pleroma->eon # --> { "ex.cat" => $cat }
+	$pleroma->eon # --> { "ex.cat" => $cat, "Aion::Pleroma" => $pleroma }
 
 =head1 SUBROUTINES
 
@@ -161,6 +177,32 @@ Get an eon from the container or an exception if it is not there.
 	my $pleroma = Aion::Pleroma->new;
 	$pleroma->resolve('e.ibex') # @=> e.ibex is'nt eon!
 	$pleroma->resolve('Ex::Eon::AnimalEon#dog')->role # => dog
+
+=head2 autoware ($action, [$key])
+
+Add a key to the pleroma.
+
+File lib/Ex/Eon/AstroEon.pm:
+
+	package Ex::Eon::AstroEon;
+	use common::sense;
+	use Aion;
+	
+	has role => (is => 'ro', default => 'upiter');
+	sub mars { __PACKAGE__->new(role => 'mars') }
+	sub venus { __PACKAGE__->new(role => 'venus') }
+	
+	1;
+
+
+
+	my $pleroma = Aion::Pleroma->new;
+	$pleroma->autoware('Ex::Eon::AstroEon')->get('Ex::Eon::AstroEon')->role # => upiter
+	$pleroma->autoware('Ex::Eon::AstroEon#mars', 'ex.mars')->get('ex.mars')->role # => mars
+	$pleroma->autoware('Ex::Eon::AstroEon#venus')->get('Ex::Eon::AstroEon#venus')->role # => venus
+	
+	$pleroma->autoware('Ex::Eon::AstroEon')->get('Ex::Eon::AstroEon')->role # => upiter
+	$pleroma->autoware('Ex::Eon::AstroEon#mars', 'Ex::Eon::AstroEon#venus') # @-> Added eon Ex::Eon::AstroEon#venus twice, with Ex::Eon::AstroEon#mars ne Ex::Eon::AstroEon#venus
 
 =head1 AUTHOR
 

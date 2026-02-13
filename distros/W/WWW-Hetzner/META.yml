@@ -30,7 +30,7 @@ resources:
   bugtracker: https://github.com/Getty/p5-www-hetzner/issues
   homepage: https://github.com/Getty/p5-www-hetzner
   repository: https://github.com/Getty/p5-www-hetzner.git
-version: '0.003'
+version: '0.100'
 x_Dist_Zilla:
   perl:
     version: '5.036000'
@@ -284,7 +284,7 @@ x_Dist_Zilla:
           branch: ~
           changelog: Changes
           signed: 0
-          tag: '0.003'
+          tag: '0.100'
           tag_format: '%v'
           tag_message: v%V
         Dist::Zilla::Role::Git::Repo:

@@ -1,0 +1,15 @@
+extract: warning
+type: table
+empty: "Sin alertas."
+columns:
+  - field: title
+    header: TÍTULO
+    width: 40
+    wrap: true
+  - field: subtitle
+    header: SUBTÍTULO
+    width: 40
+    wrap: true
+  - field: isBlocked
+    header: BLOCKED
+    width: 7

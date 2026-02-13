@@ -14,7 +14,7 @@ WriteMakefile(
     PREREQ_PM => {
         'Carp'               => 0,
         'JSON::PP'           => 0,
-        'Params::Filter'     => 0,
+        'Params::Filter'     => '0.014',
         'Concierge::Auth'    => 0,
         'Concierge::Sessions' => 0,
         'Concierge::Users'   => 0,

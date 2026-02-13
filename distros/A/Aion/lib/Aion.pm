@@ -2,7 +2,7 @@ package Aion;
 
 use common::sense;
 
-our $VERSION = "1.5";
+our $VERSION = "1.6";
 
 use Aion::Types qw//;
 use Aion::Meta::RequiresAnyFunction;
@@ -148,12 +148,12 @@ sub eon_aspect {
 	require Aion::Pleroma, $pleroma = Aion::Pleroma->new unless $pleroma;
 
 	if($key eq 1) {
-		my $isa = $feature->{opt}{isa};
+		my $isa = $feature->{isa};
 		$key = $isa && $isa->{name} eq "Object" && $isa->{args}[0]
 			or die "use: has $feature->{name} => (isa => Object[...], eon => 1)";
 	}
 	elsif($key eq 2) {
-		my $isa = $feature->{opt}{isa};
+		my $isa = $feature->{isa};
 		$key = ($isa && $isa->{name} eq "Object" && $isa->{args}[0]
 			or die "use: has $feature->{name} => (isa => Object[...], eon => 2)")
 		. "#$feature->{name}";
@@ -181,7 +181,7 @@ sub default_aspect {
 		$feature->{builder} = $default;
 	} else {
 		$feature->{default} = $default;
-		$feature->{opt}{isa}->validate($default, $name) if $feature->{opt}{isa};
+		$feature->{isa}->validate($default, $name) if $feature->{isa};
 	}
 
 	if($feature->{opt}{lazy} // $default_is_code) {
@@ -534,7 +534,7 @@ Aion - a postmodern object system for Perl 5, such as “Mouse”, “Moose”, 
 
 =head1 VERSION
 
-1.5
+1.6
 
 =head1 SYNOPSIS
 

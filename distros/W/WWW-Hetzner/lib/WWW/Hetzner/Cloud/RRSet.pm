@@ -1,7 +1,7 @@
 package WWW::Hetzner::Cloud::RRSet;
 # ABSTRACT: Hetzner Cloud DNS RRSet object
 
-our $VERSION = '0.003';
+our $VERSION = '0.100';
 
 use Moo;
 use Carp qw(croak);
@@ -90,7 +90,7 @@ WWW::Hetzner::Cloud::RRSet - Hetzner Cloud DNS RRSet object
 
 =head1 VERSION
 
-version 0.003
+version 0.100
 
 =head1 SYNOPSIS
 

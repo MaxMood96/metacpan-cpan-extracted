@@ -20,7 +20,7 @@ use WWW::Hetzner::Cloud::API::Certificates;
 use WWW::Hetzner::Cloud::API::PlacementGroups;
 use namespace::clean;
 
-our $VERSION = '0.003';
+our $VERSION = '0.100';
 
 
 has token => (
@@ -160,7 +160,7 @@ WWW::Hetzner::Cloud - Perl client for Hetzner Cloud API
 
 =head1 VERSION
 
-version 0.003
+version 0.100
 
 =head1 SYNOPSIS
 
@@ -381,6 +381,22 @@ By default, logs are discarded. To see them, configure a Log::Any adapter:
     use Log::Any::Adapter ('Dispatch', dispatcher => $dispatcher);
 
 See L<Log::Any::Adapter> for all available adapters.
+
+=head2 HTTP Debugging with LWP::ConsoleLogger
+
+When using the default L<WWW::Hetzner::LWPIO> backend, you can enable
+full HTTP request/response logging with L<LWP::ConsoleLogger::Everywhere>.
+No code changes required — just load the module:
+
+    # In your script
+    use LWP::ConsoleLogger::Everywhere;
+
+    # Or from the command line
+    perl -MLWP::ConsoleLogger::Everywhere your_script.pl
+
+This shows complete request and response headers, status codes, and
+decoded response bodies in a readable table format. Useful for debugging
+API issues without adding any code.
 
 =head1 SEE ALSO
 

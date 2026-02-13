@@ -1,0 +1,10 @@
+type: table
+empty: "Keine Daten."
+columns:
+  - field: state
+    header: BUNDESLAND
+    width: 15
+  - field: holidays
+    header: FEIERTAGE
+    width: 60
+    wrap: true

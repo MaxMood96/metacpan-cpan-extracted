@@ -10,7 +10,7 @@ use WWW::Hetzner::Robot::API::Reset;
 use WWW::Hetzner::Robot::API::Traffic;
 use namespace::clean;
 
-our $VERSION = '0.003';
+our $VERSION = '0.100';
 
 
 has user => (
@@ -58,8 +58,10 @@ around _request => sub {
 
 # Override auth for Basic Auth
 sub _set_auth {
-    my ($self, $request) = @_;
-    $request->authorization_basic($self->user, $self->password);
+    my ($self, $headers) = @_;
+    require MIME::Base64;
+    $headers->{Authorization} = 'Basic ' .
+        MIME::Base64::encode_base64($self->user . ':' . $self->password, '');
 }
 
 
@@ -109,7 +111,7 @@ WWW::Hetzner::Robot - Perl client for Hetzner Robot API (Dedicated Servers)
 
 =head1 VERSION
 
-version 0.003
+version 0.100
 
 =head1 SYNOPSIS
 

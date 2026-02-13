@@ -1,0 +1,12 @@
+type: record
+fields:
+  - field: id
+    label: ID
+  - field: name
+    label: Name
+  - field: taetigkeit
+    label: Tätigkeit
+  - field: registernummer
+    label: Registernummer
+  - field: eintragsdatum
+    label: Eintragsdatum

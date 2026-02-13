@@ -397,31 +397,31 @@ subtest 'Session extends when saved (sliding window)' => sub {
         storage_dir => $temp_dir,
     );
 
-    # Create session with 20 second timeout
-    # (Using wider margins to accommodate slow/debug Perl builds)
+    # Create session with 30 second timeout
+    # (Using wide margins to accommodate slow/debug Perl builds and Windows)
     my $session = $manager->new_session(
         user_id         => 'extension_test',
-        session_timeout => 20,
+        session_timeout => 30,
         data            => { counter => 0 },
     );
 
     my $session_id = $session->{session}->session_id();
 
-    # Wait 10 seconds
-    sleep(10);
+    # Wait 15 seconds
+    sleep(15);
 
     # Save session (should extend expiration)
     $session->{session}->set_data({ counter => 1 });
     $session->{session}->save();
 
-    # Wait another 16 seconds (total 26 seconds from creation)
-    # Under the old system, session would have expired at 20 seconds
-    # With sliding window, it should still be valid (extended at 10 seconds, now expires at 30)
-    sleep(16);
+    # Wait another 20 seconds (total 35 seconds from creation)
+    # Under the old system, session would have expired at 30 seconds
+    # With sliding window, it should still be valid (extended at 15 seconds, now expires at 45)
+    sleep(20);
 
-    # Session should still be retrievable (extended)
+    # Session should still be retrievable (extended) - 10 second margin
     my $retrieved = $manager->get_session($session_id);
-    is($retrieved->{success}, 1, 'Session extended by save() - still valid after 26 seconds');
+    is($retrieved->{success}, 1, 'Session extended by save() - still valid after 35 seconds');
 
     my $data_result = $retrieved->{session}->get_data();
     is($data_result->{value}{counter}, 1, 'Extended session has correct data');

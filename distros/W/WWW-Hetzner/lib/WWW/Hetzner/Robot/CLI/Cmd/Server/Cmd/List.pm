@@ -1,7 +1,7 @@
 package WWW::Hetzner::Robot::CLI::Cmd::Server::Cmd::List;
 # ABSTRACT: List dedicated servers
 
-our $VERSION = '0.003';
+our $VERSION = '0.100';
 
 use Moo;
 use MooX::Cmd;
@@ -54,7 +54,7 @@ WWW::Hetzner::Robot::CLI::Cmd::Server::Cmd::List - List dedicated servers
 
 =head1 VERSION
 
-version 0.003
+version 0.100
 
 =head1 SYNOPSIS
 

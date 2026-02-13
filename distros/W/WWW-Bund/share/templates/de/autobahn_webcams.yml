@@ -1,0 +1,13 @@
+extract: webcam
+type: table
+empty: "Keine Webcams."
+columns:
+  - field: title
+    header: TITEL
+    width: 30
+  - field: subtitle
+    header: UNTERTITEL
+    width: 30
+  - field: linkurl
+    header: URL
+    width: 50

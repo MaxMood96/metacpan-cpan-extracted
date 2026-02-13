@@ -1,19 +1,8 @@
-# PODNAME: Data::BytesLocker
-# ABSTRACT: Guarded storage for sensitive data
-
-__END__
-
-=pod
-
-=encoding UTF-8
+=encoding utf8
 
 =head1 NAME
 
 Data::BytesLocker - Guarded storage for sensitive data
-
-=head1 VERSION
-
-version 1.0.8.0
 
 =head1 SYNOPSIS
 
@@ -302,13 +291,13 @@ specified number of times.
 
 =head1 AUTHOR
 
-Alex J. G. Burzyński <ajgb@cpan.org>
+Alex J. G. Burzyński <F<ajgb@cpan.org>>
 
-=head1 COPYRIGHT AND LICENSE
+=head1 COPYRIGHT & LICENSE
 
-This software is copyright (c) 2015 by Alex J. G. Burzyński <ajgb@cpan.org>.
+Copyright (c) 2015 Alex J. G. Burzyński. All rights reserved.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This program is free software; you can redistribute it and/or modify it
+under the same terms as Perl itself.
 
 =cut

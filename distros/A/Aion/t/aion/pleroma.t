@@ -66,7 +66,7 @@ local ($::_g0 = do {Aion::Pleroma->new->ini}, $::_e0 = "etc/annotation/eon.ann")
 #@< EOF
 # 
 ::done_testing; }; subtest 'pleroma' => sub { 
-local ($::_g0 = do {Aion::Pleroma->new->pleroma}, $::_e0 = do {{"Ex::Eon::AnimalEon" => "Ex::Eon::AnimalEon#new", "Ex::Eon::AnimalEon#dog" => "Ex::Eon::AnimalEon#dog", "ex.cat" => "Ex::Eon::AnimalEon#cat"}}); ::is_deeply $::_g0, $::_e0, 'Aion::Pleroma->new->pleroma # --> {"Ex::Eon::AnimalEon" => "Ex::Eon::AnimalEon#new", "Ex::Eon::AnimalEon#dog" => "Ex::Eon::AnimalEon#dog", "ex.cat" => "Ex::Eon::AnimalEon#cat"}' or ::diag ::_struct_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
+local ($::_g0 = do {Aion::Pleroma->new->pleroma}, $::_e0 = do {{"Ex::Eon::AnimalEon" => "Ex::Eon::AnimalEon#new", "Ex::Eon::AnimalEon#dog" => "Ex::Eon::AnimalEon#dog", "ex.cat" => "Ex::Eon::AnimalEon#cat", "Aion::Pleroma" => "Aion::Pleroma#new"}}); ::is_deeply $::_g0, $::_e0, 'Aion::Pleroma->new->pleroma # --> {"Ex::Eon::AnimalEon" => "Ex::Eon::AnimalEon#new", "Ex::Eon::AnimalEon#dog" => "Ex::Eon::AnimalEon#dog", "ex.cat" => "Ex::Eon::AnimalEon#cat", "Aion::Pleroma" => "Aion::Pleroma#new"}' or ::diag ::_struct_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
 
 # 
 # ## eon
@@ -76,9 +76,9 @@ local ($::_g0 = do {Aion::Pleroma->new->pleroma}, $::_e0 = do {{"Ex::Eon::Animal
 ::done_testing; }; subtest 'eon' => sub { 
 my $pleroma = Aion::Pleroma->new;
 
-local ($::_g0 = do {$pleroma->eon}, $::_e0 = do {{}}); ::is_deeply $::_g0, $::_e0, '$pleroma->eon # --> {}' or ::diag ::_struct_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
+local ($::_g0 = do {$pleroma->eon}, $::_e0 = do {{ "Aion::Pleroma" => $pleroma }}); ::is_deeply $::_g0, $::_e0, '$pleroma->eon # --> { "Aion::Pleroma" => $pleroma }' or ::diag ::_struct_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
 my $cat = $pleroma->resolve('ex.cat');
-local ($::_g0 = do {$pleroma->eon}, $::_e0 = do {{ "ex.cat" => $cat }}); ::is_deeply $::_g0, $::_e0, '$pleroma->eon # --> { "ex.cat" => $cat }' or ::diag ::_struct_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
+local ($::_g0 = do {$pleroma->eon}, $::_e0 = do {{ "ex.cat" => $cat, "Aion::Pleroma" => $pleroma }}); ::is_deeply $::_g0, $::_e0, '$pleroma->eon # --> { "ex.cat" => $cat, "Aion::Pleroma" => $pleroma }' or ::diag ::_struct_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
 
 # 
 # # SUBROUTINES
@@ -101,6 +101,33 @@ local ($::_g0 = do {$pleroma->get('Ex::Eon::AnimalEon#dog')->role}, $::_e0 = "do
 my $pleroma = Aion::Pleroma->new;
 eval {$pleroma->resolve('e.ibex')}; local ($::_g0 = $@, $::_e0 = "e.ibex is'nt eon!"); ok defined($::_g0) && $::_g0 =~ /^${\quotemeta $::_e0}/, '$pleroma->resolve(\'e.ibex\') # @=> e.ibex is\'nt eon!' or ::diag ::_string_diff($::_g0, $::_e0, 1); undef $::_g0; undef $::_e0;
 local ($::_g0 = do {$pleroma->resolve('Ex::Eon::AnimalEon#dog')->role}, $::_e0 = "dog"); ::ok $::_g0 eq $::_e0, '$pleroma->resolve(\'Ex::Eon::AnimalEon#dog\')->role # => dog' or ::diag ::_string_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
+
+# 
+# ## autoware ($action, [$key])
+# 
+# Добавить ключ в плерому.
+# 
+# Файл lib/Ex/Eon/AstroEon.pm:
+#@> lib/Ex/Eon/AstroEon.pm
+#>> package Ex::Eon::AstroEon;
+#>> use common::sense;
+#>> use Aion;
+#>> 
+#>> has role => (is => 'ro', default => 'upiter');
+#>> sub mars { __PACKAGE__->new(role => 'mars') }
+#>> sub venus { __PACKAGE__->new(role => 'venus') }
+#>> 
+#>> 1;
+#@< EOF
+# 
+::done_testing; }; subtest 'autoware ($action, [$key])' => sub { 
+my $pleroma = Aion::Pleroma->new;
+local ($::_g0 = do {$pleroma->autoware('Ex::Eon::AstroEon')->get('Ex::Eon::AstroEon')->role}, $::_e0 = "upiter"); ::ok $::_g0 eq $::_e0, '$pleroma->autoware(\'Ex::Eon::AstroEon\')->get(\'Ex::Eon::AstroEon\')->role # => upiter' or ::diag ::_string_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
+local ($::_g0 = do {$pleroma->autoware('Ex::Eon::AstroEon#mars', 'ex.mars')->get('ex.mars')->role}, $::_e0 = "mars"); ::ok $::_g0 eq $::_e0, '$pleroma->autoware(\'Ex::Eon::AstroEon#mars\', \'ex.mars\')->get(\'ex.mars\')->role # => mars' or ::diag ::_string_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
+local ($::_g0 = do {$pleroma->autoware('Ex::Eon::AstroEon#venus')->get('Ex::Eon::AstroEon#venus')->role}, $::_e0 = "venus"); ::ok $::_g0 eq $::_e0, '$pleroma->autoware(\'Ex::Eon::AstroEon#venus\')->get(\'Ex::Eon::AstroEon#venus\')->role # => venus' or ::diag ::_string_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
+
+local ($::_g0 = do {$pleroma->autoware('Ex::Eon::AstroEon')->get('Ex::Eon::AstroEon')->role}, $::_e0 = "upiter"); ::ok $::_g0 eq $::_e0, '$pleroma->autoware(\'Ex::Eon::AstroEon\')->get(\'Ex::Eon::AstroEon\')->role # => upiter' or ::diag ::_string_diff($::_g0, $::_e0); undef $::_g0; undef $::_e0;
+eval {$pleroma->autoware('Ex::Eon::AstroEon#mars', 'Ex::Eon::AstroEon#venus')}; local ($::_g0 = $@, $::_e0 = 'Added eon Ex::Eon::AstroEon#venus twice, with Ex::Eon::AstroEon#mars ne Ex::Eon::AstroEon#venus'); ok defined($::_g0) && $::_g0 =~ /^${\quotemeta $::_e0}/, '$pleroma->autoware(\'Ex::Eon::AstroEon#mars\', \'Ex::Eon::AstroEon#venus\') # @-> Added eon Ex::Eon::AstroEon#venus twice, with Ex::Eon::AstroEon#mars ne Ex::Eon::AstroEon#venus' or ::diag ::_string_diff($::_g0, $::_e0, 1); undef $::_g0; undef $::_e0;
 
 # 
 # # AUTHOR

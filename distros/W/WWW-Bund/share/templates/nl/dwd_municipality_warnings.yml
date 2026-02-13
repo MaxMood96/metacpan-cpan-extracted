@@ -1,0 +1,18 @@
+extract: warnings
+type: table
+empty: "No weather warnings."
+columns:
+  - field: headLine
+    header: WAARSCHUWING
+    width: 40
+    wrap: true
+  - field: event
+    header: EVENT
+    width: 18
+  - field: level
+    header: LEVEL
+    width: 6
+  - field: descriptionText
+    header: BESCHRIJVING
+    width: 50
+    wrap: true

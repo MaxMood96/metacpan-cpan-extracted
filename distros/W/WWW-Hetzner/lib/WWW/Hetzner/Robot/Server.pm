@@ -1,7 +1,7 @@
 package WWW::Hetzner::Robot::Server;
 # ABSTRACT: Hetzner Robot Server entity
 
-our $VERSION = '0.003';
+our $VERSION = '0.100';
 
 use Moo;
 use namespace::clean;
@@ -93,7 +93,7 @@ WWW::Hetzner::Robot::Server - Hetzner Robot Server entity
 
 =head1 VERSION
 
-version 0.003
+version 0.100
 
 =head2 server_number
 

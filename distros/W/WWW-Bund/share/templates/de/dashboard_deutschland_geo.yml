@@ -1,0 +1,10 @@
+type: record
+fields:
+  - field: type
+    label: Typ
+  - field: features
+    label: Features
+  - field: geometry
+    label: Geometrie
+  - field: properties
+    label: Eigenschaften

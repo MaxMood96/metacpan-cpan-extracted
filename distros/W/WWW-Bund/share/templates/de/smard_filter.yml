@@ -1,0 +1,10 @@
+type: record
+fields:
+  - field: timestamp
+    label: Zeitstempel
+  - field: region
+    label: Region
+  - field: resolution
+    label: Auflösung
+  - field: filter
+    label: Filter

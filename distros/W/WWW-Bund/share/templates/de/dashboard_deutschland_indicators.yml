@@ -1,0 +1,13 @@
+type: table
+empty: "Keine Daten."
+columns:
+  - field: name
+    header: NAME
+    width: 30
+  - field: description
+    header: BESCHREIBUNG
+    width: 40
+    wrap: true
+  - field: unit
+    header: EINHEIT
+    width: 15

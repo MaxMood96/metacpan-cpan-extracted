@@ -23,7 +23,6 @@
       "build" : {
          "requires" : {
             "List::Util" : "1.20",
-            "Test2::Require::AuthorTesting" : "0",
             "Test::More" : "1.00"
          }
       },
@@ -40,7 +39,6 @@
             "Getopt::Long" : "0",
             "List::Util" : "1.20",
             "Text::Format" : "0",
-            "Text::Wrap::Smart" : "0",
             "Time::HiRes" : "0",
             "charnames" : "0",
             "perl" : "5.020"
@@ -48,6 +46,6 @@
       }
    },
    "release_status" : "stable",
-   "version" : "1.87",
+   "version" : "1.88",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

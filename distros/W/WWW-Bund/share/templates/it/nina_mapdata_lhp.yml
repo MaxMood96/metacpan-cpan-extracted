@@ -1,0 +1,16 @@
+type: table
+empty: "Nessuna allerta."
+columns:
+  - field: i18nTitle.de
+    header: ALLERTA
+    width: 50
+    wrap: true
+  - field: severity
+    header: GRAVITÀ
+    width: 10
+  - field: type
+    header: TIPO
+    width: 8
+  - field: startDate
+    header: DA
+    width: 20

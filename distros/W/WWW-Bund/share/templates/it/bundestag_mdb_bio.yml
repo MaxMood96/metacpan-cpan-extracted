@@ -1,0 +1,21 @@
+type: record
+extract: mdbInfo
+fields:
+  - field: mdbVorname
+    label: First Name
+  - field: mdbZuname
+    label: Last Name
+  - field: mdbFraktion
+    label: Party
+  - field: mdbLand
+    label: State
+  - field: mdbWahlkreis.mdbWahlkreisName
+    label: Constituency
+  - field: mdbGewaehlt
+    label: Mandate
+  - field: mdbGeburtsdatum
+    label: Date of Birth
+  - field: mdbBeruf._text
+    label: Profession
+  - field: mdbBioURL
+    label: Bio URL

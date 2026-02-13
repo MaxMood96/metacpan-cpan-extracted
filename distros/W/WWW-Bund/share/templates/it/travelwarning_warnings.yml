@@ -1,0 +1,17 @@
+type: table
+empty: "Nessuna allerta."
+extract: response
+columns:
+  - field: countryName
+    header: PAESE
+    width: 25
+  - field: title
+    header: TITOLO
+    width: 35
+    wrap: true
+  - field: warning
+    header: ALLERTA
+    width: 10
+  - field: partialWarning
+    header: PARTIAL
+    width: 12

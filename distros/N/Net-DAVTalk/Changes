@@ -1,5 +1,8 @@
 Revision history for Net-DAVTalk
 
+0.24    Thu Feb 12 09:29:06 EST 2026
+  - add "SafeRequest" API to capture errors (thanks rjbs) PR#6 PR#7
+
 0.23    Wed 22 Jan 15:55 2025
   - pass SSL_options through to HTTP::Tiny
 

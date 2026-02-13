@@ -1,0 +1,10 @@
+type: table
+extract: speakers.speaker
+columns:
+  - field: name
+    header: NAME
+    width: 30
+  - field: party
+    header: PARTEI
+    width: 15
+empty: "Keine aktiven Redner."

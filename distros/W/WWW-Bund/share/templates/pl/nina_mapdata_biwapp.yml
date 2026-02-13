@@ -1,0 +1,16 @@
+type: table
+empty: "Brak ostrzeżeń."
+columns:
+  - field: i18nTitle.de
+    header: OSTRZEŻENIE
+    width: 50
+    wrap: true
+  - field: severity
+    header: DOTKLIWOŚĆ
+    width: 10
+  - field: type
+    header: TYP
+    width: 8
+  - field: startDate
+    header: OD
+    width: 20

@@ -1,0 +1,8 @@
+type: table
+columns:
+  - field: timestamp
+    header: CZASSTAMP
+    width: 30
+  - field: value
+    header: VALUE
+    width: 15

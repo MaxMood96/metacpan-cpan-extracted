@@ -1,7 +1,7 @@
-package Concierge v0.5.2;
+package Concierge v0.5.6;
 use v5.36;
 
-our $VERSION = 'v0.5.2';
+our $VERSION = 'v0.5.6';
 
 # ABSTRACT: Service layer orchestrator for authentication, sessions, and user data
 
@@ -786,7 +786,7 @@ Concierge - Service layer orchestrator for authentication, sessions, and user da
 
 =head1 VERSION
 
-v0.5.2
+v0.5.6
 
 =head1 SYNOPSIS
 
@@ -813,7 +813,7 @@ v0.5.2
 
     # User object provides direct access
     say $user->moniker;         # "Alice"
-    say $user->session_id;      # UUID
+    say $user->session_id;      # random hex string
     say $user->is_logged_in;    # 1
 
     # Restore user from a cookie on next request

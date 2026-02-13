@@ -1,0 +1,13 @@
+type: table
+empty: "Nessun dato."
+columns:
+  - field: name
+    header: NOME
+    width: 30
+  - field: description
+    header: DESCRIZIONE
+    width: 40
+    wrap: true
+  - field: tags
+    header: TAGS
+    width: 20

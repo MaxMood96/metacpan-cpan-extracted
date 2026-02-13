@@ -1,4 +1,4 @@
-package Concierge::Auth v0.3.2;
+package Concierge::Auth v0.3.4;
 use v5.36;
 
 # ABSTRACT: Concierge authorization using Crypt::Passphrase
@@ -436,6 +436,15 @@ sub gen_uuid {
 		: reject("gen_uuid: Failed to generate UUID");
 }
 
+sub gen_random_id {
+	my $self = shift;
+	my ($id, $msg) = Concierge::Auth::Generators::gen_random_id(@_);
+
+	return defined $id
+		? reply($id, $msg)
+		: reject("gen_random_id: Failed to generate random ID");
+}
+
 sub gen_token {
 	goto &gen_random_token;
 }
@@ -514,7 +523,8 @@ v0.19.0
     my ($ok, $msg) = $auth->deleteID('alice');
 
     # Generate tokens and random values
-    my ($uuid, $msg)   = $auth->gen_uuid();
+    my ($uuid, $msg)   = $auth->gen_uuid();           # v4 UUID
+    my ($id, $msg)     = $auth->gen_random_id();       # 40-char hex ID
     my ($token, $msg)  = $auth->gen_random_token(32);
     my ($string, $msg) = $auth->gen_random_string(16);
     my ($phrase, $msg) = $auth->gen_word_phrase(4, 4, 7, '-');
@@ -700,8 +710,18 @@ list context, C<$value> in scalar context.
 
     my ($uuid, $msg) = $auth->gen_uuid();
 
-Generates a UUID via the system C<uuidgen> command. Falls back to a
-random token if C<uuidgen> is unavailable.
+Generates a version 4 (random) UUID using C<Crypt::PRNG::random_bytes>.
+No external commands are used.
+
+=head3 gen_random_id
+
+    my ($id, $msg) = $auth->gen_random_id();       # 20 bytes / 40 hex chars
+    my ($id, $msg) = $auth->gen_random_id(32);      # 32 bytes / 64 hex chars
+
+Generates a hex-encoded random ID from cryptographic random bytes.
+Default is 20 bytes (40 hex characters, 160 bits). Suitable for session
+IDs, API keys, and other security tokens where UUID format is not
+required.
 
 =head3 gen_random_token
 

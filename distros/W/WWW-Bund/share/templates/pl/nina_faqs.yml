@@ -1,0 +1,11 @@
+extract: FAQ
+type: table
+columns:
+  - field: question
+    header: QUESTION
+    width: 40
+    wrap: true
+  - field: answer
+    header: ANSWER
+    width: 55
+    wrap: true

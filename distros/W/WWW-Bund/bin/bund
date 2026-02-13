@@ -1,0 +1,288 @@
+#!/usr/bin/env perl
+
+# PODNAME: bund
+# ABSTRACT: CLI client for German Federal Government APIs (bund.dev)
+
+use strict;
+use warnings;
+use lib 'lib';
+
+binmode(STDOUT, ':encoding(UTF-8)');
+binmode(STDERR, ':encoding(UTF-8)');
+
+# Map CLI aliases to Cmd package names
+my %aliases = (
+    'pegel-online' => 'pegel',
+    'pegel_online' => 'pegel',
+    'eco-visio' => 'ecovisio',
+    'eco_visio' => 'ecovisio',
+);
+
+for my $i (0 .. $#ARGV) {
+    next if $ARGV[$i] =~ /^-/;
+    if (exists $aliases{lc $ARGV[$i]}) {
+        $ARGV[$i] = $aliases{lc $ARGV[$i]};
+        last;
+    }
+}
+
+use WWW::Bund::CLI;
+
+WWW::Bund::CLI->new_with_cmd;
+
+__END__
+
+=pod
+
+=encoding UTF-8
+
+=head1 NAME
+
+bund - CLI client for German Federal Government APIs (bund.dev)
+
+=head1 VERSION
+
+version 0.001
+
+=head1 SYNOPSIS
+
+  # List all available APIs
+  bund list
+
+  # Get help for a specific API
+  bund info autobahn
+  bund autobahn
+
+  # Call API endpoints
+  bund autobahn roads
+  bund autobahn roadworks A5
+  bund pegel stations
+  bund tagesschau search Ukraine
+  bund nina warnings 091620000000
+  bund bundestag conferences
+
+  # Change output format
+  bund -o json autobahn roads
+  bund -o yaml pegel stations
+
+  # Use custom template
+  bund -t my_template.yaml autobahn roads
+
+  # Change language at runtime
+  bund --lang en autobahn roads
+
+=head1 DESCRIPTION
+
+B<bund> is a command-line client for German Federal Government APIs (bund.dev).
+It provides unified access to 16 public APIs with over 75 endpoints, including:
+
+=over 4
+
+=item * Autobahn - Traffic data, roadworks, webcams
+
+=item * Pegel Online - Water level measurements
+
+=item * Tagesschau - News from ARD Tagesschau
+
+=item * NINA - Emergency warnings and disaster alerts
+
+=item * Bundestag - Parliamentary data and videos
+
+=item * DWD - Weather warnings from German Weather Service
+
+=item * Bundesrat - Federal Council data
+
+=item * Feiertage - German public holidays
+
+=item * And 8 more APIs...
+
+=back
+
+By default, B<bund> outputs data in German using human-readable templates.
+All responses are cached locally (XDG-compliant) with appropriate TTLs.
+
+=head1 COMMANDS
+
+=over 4
+
+=item B<list>
+
+Show all available APIs with descriptions
+
+=item B<info> I<api>
+
+Show detailed information and available endpoints for a specific API
+
+=item B<E<lt>apiE<gt>> [I<action>] [I<args>...]
+
+Call an API endpoint. Each API has its own subcommands (actions).
+Run C<bund E<lt>apiE<gt>> without arguments to see available actions.
+
+=back
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-o, --output> I<format>
+
+Output format: C<template> (default), C<json>, C<yaml>
+
+=item B<--lang> I<language>
+
+Override language: C<de> (default), C<en>, C<fr>, C<es>, C<it>, C<nl>, C<pl>
+
+=item B<-t, --template> I<file>
+
+Use custom template file instead of built-in templates
+
+=item B<-h, --help>
+
+Show help message
+
+=back
+
+=head1 EXAMPLES
+
+=head2 Traffic Information
+
+  # List all Autobahns
+  bund autobahn roads
+
+  # Get roadworks on A5
+  bund autobahn roadworks A5
+
+  # Get warnings for A1
+  bund autobahn warnings A1
+
+=head2 Water Levels
+
+  # List all measurement stations
+  bund pegel stations
+
+  # Get specific station details
+  bund pegel station MAINZ
+
+  # Get current measurements
+  bund pegel measurements MAINZ W
+
+=head2 News and Weather
+
+  # Tagesschau homepage
+  bund tagesschau homepage
+
+  # Search news
+  bund tagesschau search "Bundestag"
+
+  # DWD weather warnings for municipalities
+  bund dwd municipality-warnings
+
+=head2 Emergency Warnings
+
+  # NINA warnings for a specific region (ARS code)
+  bund nina warnings 091620000000
+
+  # Get all MOWAS warnings
+  bund nina mapdata-mowas
+
+=head2 Parliamentary Data
+
+  # List Bundestag conferences
+  bund bundestag conferences
+
+  # List committees
+  bund bundestag ausschuesse
+
+  # Bundesrat members
+  bund bundesrat mitglieder renderXml
+
+=head2 Other Languages
+
+  # Use English output (or use 'bunden' command)
+  bund --lang en autobahn roads
+
+  # French
+  bund --lang fr autobahn roads
+
+  # Get JSON output
+  bund -o json autobahn roads
+
+=head1 CACHE
+
+GET responses are cached in C<$XDG_CACHE_HOME/www-bund/> (default: C<~/.cache/www-bund/>).
+
+Cache TTLs vary by endpoint type:
+
+=over 4
+
+=item * 120s - Emergency warnings (NINA, DWD)
+
+=item * 300s - Real-time data (traffic, news)
+
+=item * 1800s - Moderate updates (webcams, search)
+
+=item * 86400s - Static data (station lists, metadata)
+
+=back
+
+=head1 LANGUAGE VARIANTS
+
+=over 4
+
+=item B<bund>
+
+German interface (default language: de)
+
+=item B<bunden>
+
+English interface (default language: en)
+
+=item B<bundfr>
+
+French interface (default language: fr)
+
+=item B<bundes>
+
+Spanish interface (default language: es)
+
+=item B<bundit>
+
+Italian interface (default language: it)
+
+=item B<bundnl>
+
+Dutch interface (default language: nl)
+
+=item B<bundpl>
+
+Polish interface (default language: pl)
+
+=back
+
+=head1 SEE ALSO
+
+L<WWW::Bund>, L<https://bund.dev>
+
+=head1 SUPPORT
+
+=head2 Issues
+
+Please report bugs and feature requests on GitHub at
+L<https://github.com/Getty/p5-www-bund/issues>.
+
+=head1 CONTRIBUTING
+
+Contributions are welcome! Please fork the repository and submit a pull request.
+
+=head1 AUTHOR
+
+Torsten Raudssus <torsten@raudssus.de>
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is copyright (c) 2026 by Torsten Raudssus.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=cut

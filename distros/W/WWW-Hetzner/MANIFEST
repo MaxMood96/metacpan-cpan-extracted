@@ -133,6 +133,9 @@ lib/WWW/Hetzner/Cloud/Server.pm
 lib/WWW/Hetzner/Cloud/ServerType.pm
 lib/WWW/Hetzner/Cloud/Volume.pm
 lib/WWW/Hetzner/Cloud/Zone.pm
+lib/WWW/Hetzner/HTTPRequest.pm
+lib/WWW/Hetzner/HTTPResponse.pm
+lib/WWW/Hetzner/LWPIO.pm
 lib/WWW/Hetzner/Robot.pm
 lib/WWW/Hetzner/Robot/API/IPs.pm
 lib/WWW/Hetzner/Robot/API/Keys.pm
@@ -151,6 +154,7 @@ lib/WWW/Hetzner/Robot/IP.pm
 lib/WWW/Hetzner/Robot/Key.pm
 lib/WWW/Hetzner/Robot/Server.pm
 lib/WWW/Hetzner/Role/HTTP.pm
+lib/WWW/Hetzner/Role/IO.pm
 t/author-pod-syntax.t
 t/basic.t
 t/cloud_certificates.t
@@ -235,6 +239,7 @@ t/fixtures/zones_get.json
 t/fixtures/zones_list.json
 t/fixtures/zones_update.json
 t/integration_cloud.t
+t/io.t
 t/lib/Test/WWW/Hetzner/Mock.pm
 t/logging.t
 t/robot_ips.t

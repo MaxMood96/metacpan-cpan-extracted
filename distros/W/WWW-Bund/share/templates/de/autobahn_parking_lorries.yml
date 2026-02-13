@@ -1,0 +1,13 @@
+extract: parking_lorry
+type: table
+empty: "Keine Rastplaetze."
+columns:
+  - field: title
+    header: TITEL
+    width: 40
+  - field: subtitle
+    header: UNTERTITEL
+    width: 40
+  - field: isBlocked
+    header: GESPERRT
+    width: 7

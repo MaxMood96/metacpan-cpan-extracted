@@ -1,0 +1,12 @@
+type: record
+fields:
+  - field: id
+    label: ID
+  - field: name
+    label: Name
+  - field: standort
+    label: Location
+  - field: zaehlung
+    label: Count
+  - field: datum
+    label: Date

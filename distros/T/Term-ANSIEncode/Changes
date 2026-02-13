@@ -356,3 +356,7 @@
 1.87    Feb 02, 2026
 
         Moved many funtions to the module.
+
+1.88    Feb 12, 2026
+
+        Removed unneeded prerequisites from install process.

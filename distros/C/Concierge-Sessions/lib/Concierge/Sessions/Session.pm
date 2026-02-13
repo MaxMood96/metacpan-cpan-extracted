@@ -1,4 +1,4 @@
-package Concierge::Sessions::Session v0.8.4;
+package Concierge::Sessions::Session v0.8.6;
 use v5.36;
 
 # ABSTRACT: Individual session objects created by Concierge::Sessions
@@ -161,7 +161,7 @@ Concierge::Sessions::Session - Individual session objects for data access and pe
 
 =head1 VERSION
 
-version 0.8.4
+version 0.8.5
 
 =head1 SYNOPSIS
 
@@ -401,7 +401,7 @@ Returns the unique session identifier.
 
     my $id = $session->session_id();
 
-Returns: String containing the UUID session ID.
+Returns: 40-character lowercase hex string (cryptographically random).
 
 This ID is generated when the session is created and remains constant for
 the life of the session. Use it to retrieve the session later via

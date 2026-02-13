@@ -7,7 +7,7 @@ use WWW::Hetzner::Cloud;
 use WWW::Hetzner::Robot;
 use namespace::clean;
 
-our $VERSION = '0.003';
+our $VERSION = '0.100';
 
 
 has cloud => (
@@ -43,7 +43,7 @@ WWW::Hetzner - Perl client for Hetzner APIs (Cloud, Storage, Robot)
 
 =head1 VERSION
 
-version 0.003
+version 0.100
 
 =head1 SYNOPSIS
 

@@ -1,0 +1,10 @@
+type: record
+fields:
+  - field: title
+    label: Title
+  - field: date
+    label: Date
+  - field: text
+    label: Text
+  - field: sourceURL
+    label: URL

@@ -220,6 +220,50 @@ hrobot.pl traffic query --ip 1.2.3.4 --from 2024-01-01
 | Locations | list, get, get_by_name |
 | Datacenters | list, get, get_by_name |
 
+## Async Support
+
+For non-blocking IO::Async integration, see
+[Net::Async::Hetzner](https://metacpan.org/pod/Net::Async::Hetzner):
+
+```perl
+use IO::Async::Loop;
+use Net::Async::Hetzner::Cloud;
+
+my $loop = IO::Async::Loop->new;
+my $cloud = Net::Async::Hetzner::Cloud->new(token => $ENV{HETZNER_API_TOKEN});
+$loop->add($cloud);
+
+my $data = $cloud->get('/servers')->get;  # Future-based
+```
+
+## Custom HTTP Backend
+
+HTTP transport is pluggable via `WWW::Hetzner::Role::IO`. The default backend
+is `WWW::Hetzner::LWPIO` (synchronous, LWP::UserAgent). You can swap it for
+custom backends:
+
+```perl
+my $cloud = WWW::Hetzner::Cloud->new(
+    token => $ENV{HETZNER_API_TOKEN},
+    io    => My::CustomIO->new,
+);
+```
+
+A custom backend implements `WWW::Hetzner::Role::IO` and its `call` method:
+
+```perl
+package My::CustomIO;
+use Moo;
+with 'WWW::Hetzner::Role::IO';
+
+sub call {
+    my ($self, $req) = @_;
+    # $req->method, $req->url, $req->headers, $req->content
+    # ... execute HTTP request ...
+    return WWW::Hetzner::HTTPResponse->new(status => $status, content => $body);
+}
+```
+
 ## Logging
 
 Uses [Log::Any](https://metacpan.org/pod/Log::Any) for flexible logging integration.
@@ -236,6 +280,15 @@ use Log::Any::Adapter ('Log4perl');
 ```
 
 Log levels: `debug` (requests/responses), `info` (successful calls), `error` (API errors).
+
+### HTTP Debugging
+
+For full HTTP request/response dumps (headers, bodies, status), use
+[LWP::ConsoleLogger::Everywhere](https://metacpan.org/pod/LWP::ConsoleLogger::Everywhere):
+
+```bash
+perl -MLWP::ConsoleLogger::Everywhere your_script.pl
+```
 
 ## Hetzner APIs
 

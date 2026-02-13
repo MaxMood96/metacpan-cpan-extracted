@@ -1,4 +1,20 @@
 Revision history for Concierge
 
+v0.5.6 2026-02-13
+    - Fixed CPAN testers build failure: require Params::Filter 0.014
+      (earlier versions do not export make_filter)
+
+v0.5.5 2026-02-12
+    - Rebuilt tarball with GNU tar (fixes PaxHeader issue on CPAN)
+
+v0.5.4 2026-02-12
+    - Fixed CPAN testers timeout failure on Windows: session expiry in
+      installation tests now mocked via direct SQLite update (no sleep).
+      Real-time timeout tests moved to xt/ (author tests only).
+
+v0.5.3 2026-02-12
+    - Updated docs: session IDs are now random hex strings, not UUIDs
+      (reflects Concierge::Sessions v0.8.5 security improvement)
+
 v0.5.2 2026-02-11
     - Corrected production of tar file

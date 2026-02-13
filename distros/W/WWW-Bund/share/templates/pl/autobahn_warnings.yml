@@ -1,0 +1,15 @@
+extract: warning
+type: table
+empty: "Brak ostrzeżeń."
+columns:
+  - field: title
+    header: TYTUŁ
+    width: 40
+    wrap: true
+  - field: subtitle
+    header: SUBTYTUŁ
+    width: 40
+    wrap: true
+  - field: isBlocked
+    header: BLOCKED
+    width: 7

@@ -1,0 +1,15 @@
+extract: news
+type: table
+empty: "Keine Nachrichten."
+columns:
+  - field: title
+    header: TITEL
+    width: 45
+    wrap: true
+  - field: firstSentence
+    header: ZUSAMMENFASSUNG
+    width: 50
+    wrap: true
+  - field: date
+    header: DATUM
+    width: 16

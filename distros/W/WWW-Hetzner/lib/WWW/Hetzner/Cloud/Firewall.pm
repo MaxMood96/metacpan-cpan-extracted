@@ -1,7 +1,7 @@
 package WWW::Hetzner::Cloud::Firewall;
 # ABSTRACT: Hetzner Cloud Firewall object
 
-our $VERSION = '0.003';
+our $VERSION = '0.100';
 
 use Moo;
 use Carp qw(croak);
@@ -132,7 +132,7 @@ WWW::Hetzner::Cloud::Firewall - Hetzner Cloud Firewall object
 
 =head1 VERSION
 
-version 0.003
+version 0.100
 
 =head1 SYNOPSIS
 

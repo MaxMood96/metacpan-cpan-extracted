@@ -34,6 +34,12 @@ msgstr "Receive an eon from the container."
 msgid "Получить эон из контейнера или исключение, если его там нет."
 msgstr "Get an eon from the container or an exception if it is not there."
 
+msgid "Добавить ключ в плерому."
+msgstr "Add a key to the pleroma."
+
+msgid "Файл lib/Ex/Eon/AstroEon.pm:"
+msgstr "File lib/Ex/Eon/AstroEon.pm:"
+
 msgid "⚖ **GPLv3**"
 msgstr "⚖ **GPLv3**"
 

@@ -1,0 +1,10 @@
+type: table
+empty: "Nessun dato."
+columns:
+  - field: state
+    header: STATE
+    width: 15
+  - field: holidays
+    header: HOLIDAYS
+    width: 60
+    wrap: true

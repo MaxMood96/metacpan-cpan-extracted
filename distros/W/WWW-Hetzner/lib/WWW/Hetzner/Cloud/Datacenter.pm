@@ -1,7 +1,7 @@
 package WWW::Hetzner::Cloud::Datacenter;
 # ABSTRACT: Hetzner Cloud Datacenter object
 
-our $VERSION = '0.003';
+our $VERSION = '0.100';
 
 use Moo;
 use namespace::clean;
@@ -54,7 +54,7 @@ WWW::Hetzner::Cloud::Datacenter - Hetzner Cloud Datacenter object
 
 =head1 VERSION
 
-version 0.003
+version 0.100
 
 =head1 SYNOPSIS
 

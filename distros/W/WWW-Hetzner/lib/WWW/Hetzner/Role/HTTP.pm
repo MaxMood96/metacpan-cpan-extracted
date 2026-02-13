@@ -3,26 +3,22 @@ package WWW::Hetzner::Role::HTTP;
 # ABSTRACT: HTTP client role for Hetzner API clients
 
 use Moo::Role;
-use LWP::UserAgent;
+use WWW::Hetzner::HTTPRequest;
+use WWW::Hetzner::HTTPResponse;
+use WWW::Hetzner::LWPIO;
 use JSON::MaybeXS qw(decode_json encode_json);
 use Carp qw(croak);
 use Log::Any qw($log);
 
-our $VERSION = '0.003';
+our $VERSION = '0.100';
 
 
 requires 'token';
 requires 'base_url';
 
-has ua => (
+has io => (
     is      => 'lazy',
-    builder => sub {
-        my $self = shift;
-        LWP::UserAgent->new(
-            agent   => 'WWW-Hetzner/' . $VERSION,
-            timeout => 30,
-        );
-    },
+    builder => sub { WWW::Hetzner::LWPIO->new },
 );
 
 
@@ -51,15 +47,13 @@ sub delete {
 
 
 sub _set_auth {
-    my ($self, $request) = @_;
-    $request->header('Authorization' => 'Bearer ' . $self->token);
+    my ($self, $headers) = @_;
+    $headers->{Authorization} = 'Bearer ' . $self->token;
 }
 
 
-sub _request {
+sub _build_request {
     my ($self, $method, $path, %opts) = @_;
-
-    croak "No API token configured" unless $self->token;
 
     my $url = $self->base_url . $path;
 
@@ -76,33 +70,54 @@ sub _request {
 
     $log->debug("$method $url");
 
-    my $request = HTTP::Request->new($method => $url);
-    $self->_set_auth($request);
-    $request->header('Content-Type' => 'application/json');
+    my %headers;
+    $self->_set_auth(\%headers);
+    $headers{'Content-Type'} = 'application/json';
+
+    my %req_args = (
+        method  => $method,
+        url     => $url,
+        headers => \%headers,
+    );
 
     if ($opts{body}) {
-        my $json = encode_json($opts{body});
-        $request->content($json);
-        $log->debugf("Body: %s", $json);
+        $req_args{content} = encode_json($opts{body});
+        $log->debugf("Body: %s", $req_args{content});
     }
 
-    my $response = $self->ua->request($request);
+    return WWW::Hetzner::HTTPRequest->new(%req_args);
+}
 
-    $log->debugf("Response: %s", $response->status_line);
+
+sub _parse_response {
+    my ($self, $response, $method, $path) = @_;
+
+    $log->debugf("Response: %s", $response->status);
 
     my $data;
     if ($response->content && $response->content =~ /^\s*[\{\[]/) {
         $data = decode_json($response->content);
     }
 
-    unless ($response->is_success) {
-        my $error = $data->{error}{message} // $response->status_line;
+    unless ($response->status >= 200 && $response->status < 300) {
+        my $error = $data->{error}{message} // $response->status;
         $log->errorf("API error: %s", $error);
         croak "Hetzner API error: $error";
     }
 
-    $log->infof("%s %s -> %s", $method, $path, $response->status_line);
+    $log->infof("%s %s -> %s", $method, $path, $response->status);
     return $data;
+}
+
+
+sub _request {
+    my ($self, $method, $path, %opts) = @_;
+
+    croak "No API token configured" unless $self->token;
+
+    my $req = $self->_build_request($method, $path, %opts);
+    my $response = $self->io->call($req);
+    return $self->_parse_response($response, $method, $path);
 }
 
 
@@ -120,7 +135,7 @@ WWW::Hetzner::Role::HTTP - HTTP client role for Hetzner API clients
 
 =head1 VERSION
 
-version 0.003
+version 0.100
 
 =head1 SYNOPSIS
 
@@ -137,6 +152,10 @@ version 0.003
 This role provides HTTP methods (GET, POST, PUT, DELETE) for Hetzner API
 clients. It handles JSON encoding/decoding, authentication, and error handling.
 
+HTTP transport is delegated to a pluggable L<WWW::Hetzner::Role::IO> backend
+(default: L<WWW::Hetzner::LWPIO>), making it possible to use async HTTP
+clients.
+
 Uses L<Log::Any> for logging HTTP requests and responses.
 
 =head1 REQUIRED ATTRIBUTES
@@ -151,9 +170,16 @@ Classes consuming this role must provide:
 
 =back
 
-=head2 ua
+=head2 io
 
-L<LWP::UserAgent> instance for making HTTP requests.
+Pluggable HTTP backend implementing L<WWW::Hetzner::Role::IO>.
+Defaults to L<WWW::Hetzner::LWPIO>.
+
+    # Use a custom IO backend
+    my $cloud = WWW::Hetzner::Cloud->new(
+        token => $token,
+        io    => My::AsyncIO->new,
+    );
 
 =head2 get
 
@@ -181,23 +207,40 @@ Perform a DELETE request.
 
 =head2 _set_auth
 
-Override this method to change authentication. Default is Bearer token:
+Sets authentication headers. Override for different auth mechanisms:
 
+    # Default: Bearer token
     sub _set_auth {
-        my ($self, $request) = @_;
-        $request->header('Authorization' => 'Bearer ' . $self->token);
+        my ($self, $headers) = @_;
+        $headers->{Authorization} = 'Bearer ' . $self->token;
     }
 
-For Basic Auth (e.g. Robot API):
-
+    # Basic Auth (e.g. Robot API)
     sub _set_auth {
-        my ($self, $request) = @_;
-        $request->authorization_basic($self->user, $self->password);
+        my ($self, $headers) = @_;
+        require MIME::Base64;
+        $headers->{Authorization} = 'Basic ' .
+            MIME::Base64::encode_base64($self->user . ':' . $self->password, '');
     }
+
+=head2 _build_request
+
+    my $req = $self->_build_request('GET', '/servers', params => { page => 1 });
+
+Builds a L<WWW::Hetzner::HTTPRequest> without executing it. Useful for
+async workflows where request creation and execution are separate steps.
+
+=head2 _parse_response
+
+    my $data = $self->_parse_response($response, 'GET', '/servers');
+
+Parses a L<WWW::Hetzner::HTTPResponse>: decodes JSON, checks for errors.
+Useful for async workflows where response parsing happens after transport.
 
 =head1 SEE ALSO
 
-L<WWW::Hetzner::Cloud>, L<Log::Any>
+L<WWW::Hetzner::Cloud>, L<WWW::Hetzner::Role::IO>, L<WWW::Hetzner::LWPIO>,
+L<Log::Any>
 
 =head1 SUPPORT
 

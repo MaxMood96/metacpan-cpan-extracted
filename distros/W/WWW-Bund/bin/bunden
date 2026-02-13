@@ -1,0 +1,122 @@
+#!/usr/bin/env perl
+
+# PODNAME: bunden
+# ABSTRACT: CLI client for German Federal Government APIs (English)
+
+use strict;
+use warnings;
+use lib 'lib';
+
+binmode(STDOUT, ':encoding(UTF-8)');
+binmode(STDERR, ':encoding(UTF-8)');
+
+# Map CLI aliases to Cmd package names
+my %aliases = (
+    'pegel-online' => 'pegel',
+    'pegel_online' => 'pegel',
+    'eco-visio' => 'ecovisio',
+    'eco_visio' => 'ecovisio',
+);
+
+for my $i (0 .. $#ARGV) {
+    next if $ARGV[$i] =~ /^-/;
+    if (exists $aliases{lc $ARGV[$i]}) {
+        $ARGV[$i] = $aliases{lc $ARGV[$i]};
+        last;
+    }
+}
+
+$ENV{WWW_BUND_LANG} //= 'en';
+
+use WWW::Bund::CLI;
+
+WWW::Bund::CLI->new_with_cmd;
+
+__END__
+
+=pod
+
+=encoding UTF-8
+
+=head1 NAME
+
+bunden - CLI client for German Federal Government APIs (English)
+
+=head1 VERSION
+
+version 0.001
+
+=head1 SYNOPSIS
+
+  # List all available APIs
+  bunden list
+
+  # Get help for a specific API
+  bunden info autobahn
+  bunden autobahn
+
+  # Call API endpoints
+  bunden autobahn roads
+  bunden autobahn roadworks A5
+  bunden pegel stations
+  bunden tagesschau search Ukraine
+
+  # Change output format
+  bunden -o json autobahn roads
+
+  # Override language
+  bunden --lang de autobahn roads
+
+=head1 DESCRIPTION
+
+B<bunden> is the English-language variant of the B<bund> command-line client
+for German Federal Government APIs (bund.dev). It defaults to English output
+(C<lang=en>) while providing access to the same 16 public APIs with over 75 endpoints.
+
+For full documentation, see C<bund --help> or C<perldoc bund>.
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-o, --output> I<format>
+
+Output format: C<template> (default), C<json>, C<yaml>
+
+=item B<--lang> I<language>
+
+Override language: C<en> (default for bunden), C<de>, C<fr>, C<es>, C<it>, C<nl>, C<pl>
+
+=item B<-h, --help>
+
+Show help message
+
+=back
+
+=head1 SEE ALSO
+
+L<bund>, L<WWW::Bund>, L<https://bund.dev>
+
+=head1 SUPPORT
+
+=head2 Issues
+
+Please report bugs and feature requests on GitHub at
+L<https://github.com/Getty/p5-www-bund/issues>.
+
+=head1 CONTRIBUTING
+
+Contributions are welcome! Please fork the repository and submit a pull request.
+
+=head1 AUTHOR
+
+Torsten Raudssus <torsten@raudssus.de>
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is copyright (c) 2026 by Torsten Raudssus.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=cut

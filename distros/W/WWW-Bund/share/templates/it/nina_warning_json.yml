@@ -1,0 +1,10 @@
+type: record
+fields:
+  - field: msgType
+    label: Type
+  - field: sender
+    label: Sender
+  - field: status
+    label: Status
+  - field: scope
+    label: Scope

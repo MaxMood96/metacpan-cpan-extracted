@@ -1,0 +1,13 @@
+type: table
+extract: ausschuesse.ausschuss
+columns:
+  - field: id
+    header: ID
+    width: 5
+  - field: ausschussKurzName
+    header: AUSSCHUSS
+    width: 40
+  - field: lastChanged
+    header: GEAENDERT
+    width: 12
+empty: "Keine Ausschuesse gefunden."

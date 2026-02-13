@@ -1,0 +1,7 @@
+extract: notfalltipps.category
+type: table
+columns:
+  - field: title
+    header: KATEGORIE
+    width: 60
+    wrap: true

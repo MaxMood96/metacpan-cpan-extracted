@@ -1,0 +1,16 @@
+type: record
+fields:
+  - field: shortname
+    label: Station
+  - field: longname
+    label: Name
+  - field: water.shortname
+    label: Water
+  - field: km
+    label: Kilometer
+  - field: latitude
+    label: Latitude
+  - field: longitude
+    label: Longitude
+  - field: agency
+    label: Agency

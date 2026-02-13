@@ -1,0 +1,13 @@
+type: table
+empty: "Aucune donnée."
+columns:
+  - field: name
+    header: NOM
+    width: 30
+  - field: description
+    header: DESCRIPTION
+    width: 40
+    wrap: true
+  - field: unit
+    header: UNIT
+    width: 15

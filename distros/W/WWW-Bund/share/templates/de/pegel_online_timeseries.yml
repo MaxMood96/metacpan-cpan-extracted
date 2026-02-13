@@ -1,0 +1,10 @@
+type: record
+fields:
+  - field: shortname
+    label: Reihe
+  - field: longname
+    label: Name
+  - field: unit
+    label: Einheit
+  - field: equidistance
+    label: Aequidistanz

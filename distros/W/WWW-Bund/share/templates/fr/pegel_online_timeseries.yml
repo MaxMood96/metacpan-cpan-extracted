@@ -1,0 +1,10 @@
+type: record
+fields:
+  - field: shortname
+    label: Series
+  - field: longname
+    label: Name
+  - field: unit
+    label: Unit
+  - field: equidistance
+    label: Interval

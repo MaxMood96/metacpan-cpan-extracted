@@ -1,0 +1,17 @@
+type: table
+empty: "Geen waarschuwingen."
+extract: response
+columns:
+  - field: countryName
+    header: LAND
+    width: 25
+  - field: title
+    header: TITEL
+    width: 35
+    wrap: true
+  - field: warning
+    header: WAARSCHUWING
+    width: 10
+  - field: partialWarning
+    header: PARTIAL
+    width: 12

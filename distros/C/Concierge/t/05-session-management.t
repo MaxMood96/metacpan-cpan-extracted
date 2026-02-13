@@ -3,6 +3,8 @@ use v5.36;
 use lib 'lib';
 use Test2::V0;
 use File::Temp qw(tempdir);
+use File::Spec;
+use DBI;
 
 use Concierge::Setup;
 use Concierge;
@@ -187,12 +189,17 @@ subtest 'restore_user fails for invalid key' => sub {
 };
 
 subtest 'restore_user fails for expired session' => sub {
-    # Create a guest with a very short timeout
-    my $guest_result = $concierge->checkin_guest({ timeout => 1 });
-    my $user_key = $guest_result->{user}->user_key();
+    # Create a guest with normal timeout, then force-expire via DB
+    my $guest_result = $concierge->checkin_guest();
+    my $user_key   = $guest_result->{user}->user_key();
+    my $session_id = $guest_result->{user}->session_id();
 
-    # Wait for session to expire
-    sleep 2;
+    # Directly set expires_at to the past in the sessions database
+    my $db_file = File::Spec->catfile($test_dir, 'sessions.db');
+    my $dbh = DBI->connect("dbi:SQLite:dbname=$db_file", "", "", { RaiseError => 1 });
+    $dbh->do("UPDATE sessions SET expires_at = ? WHERE session_id = ?",
+        undef, time() - 3600, $session_id);
+    $dbh->disconnect;
 
     my $result = $concierge->restore_user($user_key);
     ok !$result->{success}, 'fails for expired session';

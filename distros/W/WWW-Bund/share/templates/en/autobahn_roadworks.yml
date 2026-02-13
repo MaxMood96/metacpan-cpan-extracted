@@ -1,0 +1,15 @@
+extract: roadworks
+type: table
+empty: "No roadworks."
+columns:
+  - field: title
+    header: TITLE
+    width: 40
+    wrap: true
+  - field: subtitle
+    header: SUBTITLE
+    width: 40
+    wrap: true
+  - field: isBlocked
+    header: BLOCKED
+    width: 7

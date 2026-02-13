@@ -1,0 +1,14 @@
+type: record
+fields:
+  - field: id
+    label: ID
+  - field: name
+    label: Name
+  - field: adresse
+    label: Adresse
+  - field: steckertyp
+    label: Steckertyp
+  - field: leistung
+    label: Leistung
+  - field: verfuegbarkeit
+    label: Verfügbarkeit

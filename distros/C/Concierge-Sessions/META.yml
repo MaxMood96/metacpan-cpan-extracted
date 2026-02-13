@@ -20,6 +20,7 @@ no_index:
     - inc
 requires:
   Carp: '0'
+  Crypt::URandom: '0'
   DBD::SQLite: '0'
   DBI: '0'
   File::Spec: '0'
@@ -29,5 +30,5 @@ requires:
 resources:
   bugtracker: https://github.com/bwva/Concierge-Sessions/issues
   repository: https://github.com/bwva/Concierge-Sessions.git
-version: v0.8.4
+version: v0.8.6
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

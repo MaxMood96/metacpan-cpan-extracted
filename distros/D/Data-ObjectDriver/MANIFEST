@@ -43,6 +43,7 @@ t/07-has-a-cached.t
 t/07-has-a.t
 t/08-iterator.t
 t/09-resultset.t
+t/10-resultset-blob.t
 t/10-resultset-peek.t
 t/11-sql-with-models.t
 t/11-sql.t

@@ -1,0 +1,17 @@
+type: table
+empty: "Aucune alerte."
+extract: response
+columns:
+  - field: countryName
+    header: PAYS
+    width: 25
+  - field: title
+    header: TITRE
+    width: 35
+    wrap: true
+  - field: warning
+    header: ALERTE
+    width: 10
+  - field: partialWarning
+    header: PARTIAL
+    width: 12

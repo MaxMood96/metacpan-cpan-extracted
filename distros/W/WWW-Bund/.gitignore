@@ -1,0 +1,55 @@
+# Dist::Zilla build artifacts
+/.build/
+/WWW-Bund-*/
+*.tar.gz
+*.zip
+
+# Perl Module::Build artifacts
+Build
+Build.bat
+_build/
+blib/
+META.yml
+META.json
+MYMETA.yml
+MYMETA.json
+pm_to_blib
+
+# Perl coverage artifacts
+cover_db/
+nytprof.out
+nytprof/
+
+# Perl test artifacts
+t/*.tmp
+*.bak
+*.old
+*~
+
+# Editor artifacts
+.*.swp
+.*.swo
+*~
+\#*\#
+.#*
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+*.tmp
+
+# Carton/cpanm artifacts
+local/
+.carton/
+cpanfile.snapshot
+
+# Cache directories
+.cache/
+
+# IDE artifacts
+.idea/
+.vscode/
+*.iml
+
+# Backup files
+README.md.bak

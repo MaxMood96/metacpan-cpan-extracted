@@ -1,0 +1,10 @@
+extract: charging_station
+type: table
+empty: "No charging stations."
+columns:
+  - field: title
+    header: TITLE
+    width: 40
+  - field: subtitle
+    header: SUBTITLE
+    width: 40

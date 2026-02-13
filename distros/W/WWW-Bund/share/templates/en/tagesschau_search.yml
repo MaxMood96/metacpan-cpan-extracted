@@ -1,0 +1,10 @@
+extract: searchResults
+type: table
+empty: "No search results."
+columns:
+  - field: title
+    header: TITLE
+    width: 50
+  - field: date
+    header: DATE
+    width: 25

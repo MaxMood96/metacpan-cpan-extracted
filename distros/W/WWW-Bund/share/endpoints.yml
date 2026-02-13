@@ -1,0 +1,623 @@
+# Endpoint definitions for WWW::Bund
+# Each entry maps a unique endpoint name to its API, base URL, path, and HTTP method.
+# Path parameters use {name} syntax and are substituted from params.
+# cache_ttl: seconds to cache GET responses (default 3600 if omitted)
+#   120   = emergency (warnings, alerts)
+#   300   = realtime (traffic, news, measurements)
+#   1800  = moderate (webcams, search, timeseries)
+#   86400 = static (station lists, road lists, metadata)
+
+# --- Autobahn API ---
+- name: autobahn_roads
+  api: autobahn
+  base_url: https://verkehr.autobahn.de/o/autobahn
+  path: /
+  method: get
+  cache_ttl: 86400
+
+- name: autobahn_roadworks
+  api: autobahn
+  base_url: https://verkehr.autobahn.de/o/autobahn
+  path: /{roadId}/services/roadworks
+  method: get
+  cache_ttl: 300
+
+- name: autobahn_warnings
+  api: autobahn
+  base_url: https://verkehr.autobahn.de/o/autobahn
+  path: /{roadId}/services/warning
+  method: get
+  cache_ttl: 120
+
+- name: autobahn_webcams
+  api: autobahn
+  base_url: https://verkehr.autobahn.de/o/autobahn
+  path: /{roadId}/services/webcam
+  method: get
+  cache_ttl: 1800
+
+- name: autobahn_closures
+  api: autobahn
+  base_url: https://verkehr.autobahn.de/o/autobahn
+  path: /{roadId}/services/closure
+  method: get
+  cache_ttl: 300
+
+- name: autobahn_charging_stations
+  api: autobahn
+  base_url: https://verkehr.autobahn.de/o/autobahn
+  path: /{roadId}/services/charging_station
+  method: get
+  cache_ttl: 1800
+
+- name: autobahn_parking_lorries
+  api: autobahn
+  base_url: https://verkehr.autobahn.de/o/autobahn
+  path: /{roadId}/services/parking_lorry
+  method: get
+  cache_ttl: 1800
+
+# --- NINA API (Katastrophenwarnungen) ---
+- name: nina_warnings
+  api: nina
+  base_url: https://warnung.bund.de/api31
+  path: /dashboard/{ARS}.json
+  method: get
+  cache_ttl: 120
+
+- name: nina_warning_json
+  api: nina
+  base_url: https://warnung.bund.de/api31
+  path: /warnings/{identifier}.json
+  method: get
+  cache_ttl: 120
+
+- name: nina_warning_geojson
+  api: nina
+  base_url: https://warnung.bund.de/api31
+  path: /warnings/{identifier}.geojson
+  method: get
+  cache_ttl: 120
+
+- name: nina_mapdata_katwarn
+  api: nina
+  base_url: https://warnung.bund.de/api31
+  path: /katwarn/mapData.json
+  method: get
+  cache_ttl: 120
+
+- name: nina_mapdata_biwapp
+  api: nina
+  base_url: https://warnung.bund.de/api31
+  path: /biwapp/mapData.json
+  method: get
+  cache_ttl: 120
+
+- name: nina_mapdata_mowas
+  api: nina
+  base_url: https://warnung.bund.de/api31
+  path: /mowas/mapData.json
+  method: get
+  cache_ttl: 120
+
+- name: nina_mapdata_dwd
+  api: nina
+  base_url: https://warnung.bund.de/api31
+  path: /dwd/mapData.json
+  method: get
+  cache_ttl: 120
+
+- name: nina_mapdata_lhp
+  api: nina
+  base_url: https://warnung.bund.de/api31
+  path: /lhp/mapData.json
+  method: get
+  cache_ttl: 120
+
+- name: nina_mapdata_police
+  api: nina
+  base_url: https://warnung.bund.de/api31
+  path: /police/mapData.json
+  method: get
+  cache_ttl: 120
+
+- name: nina_version
+  api: nina
+  base_url: https://warnung.bund.de/api31
+  path: /dynamic/version/dataVersion.json
+  method: get
+  cache_ttl: 300
+
+- name: nina_logos
+  api: nina
+  base_url: https://warnung.bund.de/api31
+  path: /appdata/gsb/logos/logos.json
+  method: get
+  cache_ttl: 86400
+
+- name: nina_event_codes
+  api: nina
+  base_url: https://warnung.bund.de/api31
+  path: /appdata/gsb/eventCodes/eventCodes.json
+  method: get
+  cache_ttl: 86400
+
+- name: nina_notfalltipps
+  api: nina
+  base_url: https://warnung.bund.de/api31
+  path: /appdata/gsb/notfalltipps/DE/notfalltipps.json
+  method: get
+  cache_ttl: 86400
+
+- name: nina_faqs
+  api: nina
+  base_url: https://warnung.bund.de/api31
+  path: /appdata/gsb/faqs/DE/faq.json
+  method: get
+  cache_ttl: 86400
+
+# --- Pegel-Online API ---
+- name: pegel_online_stations
+  api: pegel_online
+  base_url: https://www.pegelonline.wsv.de/webservices/rest-api/v2
+  path: /stations.json
+  method: get
+  cache_ttl: 86400
+
+- name: pegel_online_station
+  api: pegel_online
+  base_url: https://www.pegelonline.wsv.de/webservices/rest-api/v2
+  path: /stations/{station}.json
+  method: get
+  cache_ttl: 1800
+
+- name: pegel_online_waters
+  api: pegel_online
+  base_url: https://www.pegelonline.wsv.de/webservices/rest-api/v2
+  path: /waters.json
+  method: get
+  cache_ttl: 86400
+
+- name: pegel_online_timeseries
+  api: pegel_online
+  base_url: https://www.pegelonline.wsv.de/webservices/rest-api/v2
+  path: /stations/{station}/{timeseries}.json
+  method: get
+  cache_ttl: 1800
+
+- name: pegel_online_measurements
+  api: pegel_online
+  base_url: https://www.pegelonline.wsv.de/webservices/rest-api/v2
+  path: /stations/{station}/{timeseries}/measurements.json
+  method: get
+  cache_ttl: 300
+
+# --- Tagesschau API ---
+- name: tagesschau_homepage
+  api: tagesschau
+  base_url: https://www.tagesschau.de
+  path: /api2u/homepage
+  method: get
+  cache_ttl: 300
+
+- name: tagesschau_news
+  api: tagesschau
+  base_url: https://www.tagesschau.de
+  path: /api2u/news
+  method: get
+  cache_ttl: 300
+
+- name: tagesschau_search
+  api: tagesschau
+  base_url: https://www.tagesschau.de
+  path: /api2u/search
+  method: get
+  cache_ttl: 1800
+  query_params:
+    - searchText
+
+- name: tagesschau_channels
+  api: tagesschau
+  base_url: https://www.tagesschau.de
+  path: /api2u/channels
+  method: get
+  cache_ttl: 1800
+
+# --- Bundestag API ---
+- name: bundestag_speaker
+  api: bundestag
+  base_url: https://www.bundestag.de
+  path: /static/appdata/plenum/v2/speaker.xml
+  method: get
+  cache_ttl: 86400
+
+- name: bundestag_conferences
+  api: bundestag
+  base_url: https://www.bundestag.de
+  path: /static/appdata/plenum/v2/conferences.xml
+  method: get
+  cache_ttl: 86400
+
+- name: bundestag_ausschuesse
+  api: bundestag
+  base_url: https://www.bundestag.de
+  path: /xml/v2/ausschuesse/index.xml
+  method: get
+  cache_ttl: 86400
+
+- name: bundestag_ausschuss
+  api: bundestag
+  base_url: https://www.bundestag.de
+  path: /xml/v2/ausschuesse/{AUSSCHUSS_ID}.xml
+  method: get
+  cache_ttl: 86400
+
+- name: bundestag_mdb_index
+  api: bundestag
+  base_url: https://www.bundestag.de
+  path: /xml/v2/mdb/index.xml
+  method: get
+  cache_ttl: 86400
+
+- name: bundestag_mdb_bio
+  api: bundestag
+  base_url: https://www.bundestag.de
+  path: /xml/v2/mdb/biografien/{MDB_ID}.xml
+  method: get
+  cache_ttl: 86400
+
+- name: bundestag_article
+  api: bundestag
+  base_url: https://www.bundestag.de
+  path: /blueprint/servlet/content/{ARTICLE_ID}/asAppV2NewsarticleXml
+  method: get
+  cache_ttl: 1800
+
+- name: bundestag_video_feed
+  api: bundestag
+  base_url: http://webtv.bundestag.de
+  path: /iptv/player/macros/_x_s-144277506/bttv/mobile/feed_vod.xml
+  method: get
+  cache_ttl: 1800
+
+# --- DWD API (Wetterdaten) ---
+- name: dwd_station_overview
+  api: dwd
+  base_url: https://app-prod-ws.warnwetter.de/v30
+  path: /stationOverviewExtended
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - stationIds
+
+- name: dwd_warnings_nowcast
+  api: dwd
+  base_url: https://s3.eu-central-1.amazonaws.com/app-prod-static.warnwetter.de/v16
+  path: /warnings_nowcast.json
+  method: get
+  cache_ttl: 120
+
+- name: dwd_municipality_warnings
+  api: dwd
+  base_url: https://s3.eu-central-1.amazonaws.com/app-prod-static.warnwetter.de/v16
+  path: /gemeinde_warnings_v2.json
+  method: get
+  cache_ttl: 120
+
+- name: dwd_coast_warnings
+  api: dwd
+  base_url: https://s3.eu-central-1.amazonaws.com/app-prod-static.warnwetter.de/v16
+  path: /warnings_coast.json
+  method: get
+  cache_ttl: 120
+
+- name: dwd_crowd_reports
+  api: dwd
+  base_url: https://s3.eu-central-1.amazonaws.com/app-prod-static.warnwetter.de/v16
+  path: /crowd_meldungen_overview_v2.json
+  method: get
+  cache_ttl: 300
+
+# --- Feiertage API ---
+- name: feiertage_list
+  api: feiertage
+  base_url: https://feiertage-api.de/api
+  path: /
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - jahr
+    - nur_land
+    - nur_daten
+
+# --- SMARD API (Strommarktdaten) ---
+- name: smard_indices
+  api: smard
+  base_url: https://www.smard.de/app
+  path: /chart_data/{filter}/{region}/index_{resolution}.json
+  method: get
+  cache_ttl: 1800
+
+- name: smard_timeseries
+  api: smard
+  base_url: https://www.smard.de/app
+  path: /chart_data/{filter}/{region}/{filterCopy}_{regionCopy}_{resolution}_{timestamp}.json
+  method: get
+  cache_ttl: 1800
+
+- name: smard_table
+  api: smard
+  base_url: https://www.smard.de/app
+  path: /table_data/{filter}/{region}/{filterCopy}_{regionCopy}_quarterhour_{timestamp}.json
+  method: get
+  cache_ttl: 1800
+
+# --- Bundeshaushalt API ---
+- name: bundeshaushalt_budget_data
+  api: bundeshaushalt
+  base_url: https://bundeshaushalt.de
+  path: /internalapi/budgetData
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - year
+    - account
+    - quota
+    - unit
+    - id
+
+# --- Bundesrat API ---
+- name: bundesrat_startlist
+  api: bundesrat
+  base_url: https://www.bundesrat.de
+  path: /iOS/v3/startlist_table.xml
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - view
+
+- name: bundesrat_aktuelles
+  api: bundesrat
+  base_url: https://www.bundesrat.de
+  path: /iOS/v3/01_Aktuelles/aktuelles_table.xml
+  method: get
+  cache_ttl: 300
+  query_params:
+    - view
+
+- name: bundesrat_termine
+  api: bundesrat
+  base_url: https://www.bundesrat.de
+  path: /iOS/v3/02_Termine/termine_table.xml
+  method: get
+  cache_ttl: 300
+  query_params:
+    - view
+
+- name: bundesrat_plenum_kompakt
+  api: bundesrat
+  base_url: https://www.bundesrat.de
+  path: /iOS/v3/03_Plenum/plenum_kompakt_table.xml
+  method: get
+  cache_ttl: 300
+  query_params:
+    - view
+
+- name: bundesrat_plenum_aktuelle_sitzung
+  api: bundesrat
+  base_url: https://www.bundesrat.de
+  path: /iOS/SharedDocs/3_Plenum/plenum_aktuelleSitzung_table.xml
+  method: get
+  cache_ttl: 300
+  query_params:
+    - view
+
+- name: bundesrat_plenum_chronologisch
+  api: bundesrat
+  base_url: https://www.bundesrat.de
+  path: /iOS/SharedDocs/3_Plenum/plenum_toChronologisch_table.xml
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - view
+
+- name: bundesrat_plenum_naechste_sitzungen
+  api: bundesrat
+  base_url: https://www.bundesrat.de
+  path: /iOS/SharedDocs/3_Plenum/plenum_naechsteSitzungen.xml
+  method: get
+  cache_ttl: 300
+  query_params:
+    - view
+
+- name: bundesrat_mitglieder
+  api: bundesrat
+  base_url: https://www.bundesrat.de
+  path: /iOS/SharedDocs/2_Mitglieder/mitglieder_table.xml
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - view
+
+- name: bundesrat_stimmverteilung
+  api: bundesrat
+  base_url: https://www.bundesrat.de
+  path: /iOS/v3/06_Stimmen/stimmverteilung.xml
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - view
+
+- name: bundesrat_praesidium
+  api: bundesrat
+  base_url: https://www.bundesrat.de
+  path: /iOS/v3/05_Bundesrat/Praesidium/bundesrat_praesidium.xml
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - view
+
+# --- Bundestag Lobbyregister API ---
+- name: bundestag_lobbyregister_search
+  api: bundestag_lobbyregister
+  base_url: https://www.lobbyregister.bundestag.de
+  path: /sucheDetailJson
+  method: get
+  cache_ttl: 1800
+  query_params:
+    - suchbegriff
+    - registerNummer
+
+# --- Dashboard Deutschland API ---
+- name: dashboard_deutschland_get
+  api: dashboard_deutschland
+  base_url: https://www.dashboard-deutschland.de
+  path: /api/dashboard/get
+  method: get
+  cache_ttl: 1800
+
+- name: dashboard_deutschland_indicators
+  api: dashboard_deutschland
+  base_url: https://www.dashboard-deutschland.de
+  path: /api/tile/indicators
+  method: get
+  cache_ttl: 1800
+
+- name: dashboard_deutschland_geo
+  api: dashboard_deutschland
+  base_url: https://www.dashboard-deutschland.de
+  path: /geojson/de-all.geo.json
+  method: get
+  cache_ttl: 86400
+
+# --- Travelwarning API (Reisewarnungen) ---
+- name: travelwarning_warnings
+  api: travelwarning
+  base_url: https://www.auswaertiges-amt.de
+  path: /opendata/travelwarning
+  method: get
+  cache_ttl: 1800
+
+- name: travelwarning_warning
+  api: travelwarning
+  base_url: https://www.auswaertiges-amt.de
+  path: /opendata/travelwarning/{contentId}
+  method: get
+  cache_ttl: 1800
+
+- name: travelwarning_representatives_germany
+  api: travelwarning
+  base_url: https://www.auswaertiges-amt.de
+  path: /opendata/representativesInGermany
+  method: get
+  cache_ttl: 86400
+
+- name: travelwarning_representatives_country
+  api: travelwarning
+  base_url: https://www.auswaertiges-amt.de
+  path: /opendata/representativesInCountry
+  method: get
+  cache_ttl: 86400
+
+- name: travelwarning_state_names
+  api: travelwarning
+  base_url: https://www.auswaertiges-amt.de
+  path: /opendata/stateNames
+  method: get
+  cache_ttl: 86400
+
+- name: travelwarning_healthcare
+  api: travelwarning
+  base_url: https://www.auswaertiges-amt.de
+  path: /opendata/healthcare
+  method: get
+  cache_ttl: 86400
+
+# --- Ladestationen API ---
+# DISABLED: Endpoint now requires authentication (Token Required error 499)
+# Upstream changed from public GeoJSON download to ArcGIS FeatureServer with auth
+# - name: ladestationen_query
+#   api: ladestationen
+#   base_url: https://services6.arcgis.com/6jU7RmJig2Wwo1b0/ArcGIS/rest/services/Ladesaeulenregister/FeatureServer/7
+#   path: /query
+#   method: get
+#   cache_ttl: 86400
+#   query_params:
+#     - geometry
+#     - geometryType
+#     - outFields
+#     - f
+
+# --- Eco Visio API (Fahrrad-Zähler) ---
+- name: eco_visio_counters
+  api: eco_visio
+  base_url: https://www.eco-visio.net
+  path: /api/aladdin/1.0.0/pbl/publicwebpageplus/{idOrganisme}
+  method: get
+  cache_ttl: 86400
+
+- name: eco_visio_data
+  api: eco_visio
+  base_url: https://www.eco-visio.net
+  path: /api/aladdin/1.0.0/pbl/publicwebpageplus/data/{idPdc}
+  method: get
+  cache_ttl: 1800
+  query_params:
+    - interval
+    - flowIds
+    - begin
+    - end
+
+# --- Hilfsmittel API ---
+- name: hilfsmittel_tree
+  api: hilfsmittel
+  base_url: https://hilfsmittel-api.gkv-spitzenverband.de/api/verzeichnis
+  path: /VerzeichnisTree/{level}
+  method: get
+  cache_ttl: 86400
+
+- name: hilfsmittel_produktgruppe
+  api: hilfsmittel
+  base_url: https://hilfsmittel-api.gkv-spitzenverband.de/api/verzeichnis
+  path: /Produktgruppe/{id}
+  method: get
+  cache_ttl: 86400
+
+- name: hilfsmittel_untergruppe
+  api: hilfsmittel
+  base_url: https://hilfsmittel-api.gkv-spitzenverband.de/api/verzeichnis
+  path: /Untergruppe/{id}
+  method: get
+  cache_ttl: 86400
+
+- name: hilfsmittel_produktart
+  api: hilfsmittel
+  base_url: https://hilfsmittel-api.gkv-spitzenverband.de/api/verzeichnis
+  path: /Produktart/{id}
+  method: get
+  cache_ttl: 86400
+
+- name: hilfsmittel_produkte
+  api: hilfsmittel
+  base_url: https://hilfsmittel-api.gkv-spitzenverband.de/api/verzeichnis
+  path: /Produkt
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - ProduktgruppeId
+    - UnterruppeId
+    - ProduktartId
+
+- name: hilfsmittel_produkt
+  api: hilfsmittel
+  base_url: https://hilfsmittel-api.gkv-spitzenverband.de/api/verzeichnis
+  path: /Produkt/{id}
+  method: get
+  cache_ttl: 86400
+
+- name: hilfsmittel_nachweisschema
+  api: hilfsmittel
+  base_url: https://hilfsmittel-api.gkv-spitzenverband.de/api/verzeichnis
+  path: /Nachweisschema/{id}
+  method: get
+  cache_ttl: 86400

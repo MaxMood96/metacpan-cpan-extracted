@@ -1,0 +1,11 @@
+type: table
+columns:
+  - field: shortname
+    header: ESTACIÓN
+    width: 25
+  - field: water.shortname
+    header: WATER
+    width: 20
+  - field: km
+    header: KM
+    width: 10

@@ -1,0 +1,14 @@
+type: table
+extract: item
+columns:
+  - field: title
+    header: TITRE
+    width: 45
+    wrap: true
+  - field: date
+    header: DATE
+    width: 12
+  - field: url
+    header: URL
+    width: 40
+empty: "No videos found."

@@ -1,0 +1,12 @@
+type: record
+fields:
+  - field: name
+    label: Name
+  - field: address
+    label: Address
+  - field: phone
+    label: Phone
+  - field: email
+    label: Email
+  - field: openingHours
+    label: Opening Hours

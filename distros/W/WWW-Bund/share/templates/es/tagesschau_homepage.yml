@@ -1,0 +1,14 @@
+extract: news
+type: table
+empty: "No news."
+columns:
+  - field: topline
+    header: TOPLINE
+    width: 30
+  - field: title
+    header: TÍTULO
+    width: 50
+    wrap: true
+  - field: date
+    header: FECHA
+    width: 16

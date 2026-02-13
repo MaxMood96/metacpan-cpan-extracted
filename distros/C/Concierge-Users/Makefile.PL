@@ -23,7 +23,8 @@ WriteMakefile(
     },
 
     TEST_REQUIRES => {
-        'Test2::V0' => 0,
+        'Test2::V0'     => 0,
+        'Capture::Tiny' => 0,
     },
 
     EXE_FILES => [],

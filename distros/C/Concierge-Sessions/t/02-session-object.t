@@ -42,7 +42,7 @@ subtest 'Session->new() creates session via backend' => sub {
     my $session = $result->{session};
 
     ok($session->session_id(), 'Session ID accessible via accessor');
-    like($session->session_id(), qr/^[a-f0-9-]+$/, 'Session ID format correct');
+    like($session->session_id(), qr/^[a-f0-9]{40}$/, 'Session ID is 40-char hex string');
     ok($session->created_at(), 'created_at set via accessor');
     ok($session->expires_at(), 'expires_at set via accessor');
     is($session->status()->{state}, 'active', 'Initial state is active');
@@ -430,7 +430,7 @@ subtest 'session_id() returns session ID' => sub {
     my $id = $session->session_id();
 
     ok($id, 'session_id returns value');
-    like($id, qr/^[a-f0-9-]+$/, 'Session ID is UUID format');
+    like($id, qr/^[a-f0-9]{40}$/, 'Session ID is 40-char hex string');
 };
 
 subtest 'created_at() returns creation timestamp' => sub {

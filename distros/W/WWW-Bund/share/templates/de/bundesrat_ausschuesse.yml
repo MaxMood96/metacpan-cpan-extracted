@@ -1,0 +1,10 @@
+type: record
+fields:
+  - field: name
+    label: Name
+  - field: kuerzel
+    label: Kürzel
+  - field: beschreibung
+    label: Beschreibung
+  - field: vorsitz
+    label: Vorsitz

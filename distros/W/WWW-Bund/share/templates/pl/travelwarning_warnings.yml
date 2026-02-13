@@ -1,0 +1,17 @@
+type: table
+empty: "Brak ostrzeżeń."
+extract: response
+columns:
+  - field: countryName
+    header: KRAJ
+    width: 25
+  - field: title
+    header: TYTUŁ
+    width: 35
+    wrap: true
+  - field: warning
+    header: OSTRZEŻENIE
+    width: 10
+  - field: partialWarning
+    header: PARTIAL
+    width: 12

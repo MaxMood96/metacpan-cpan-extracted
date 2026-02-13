@@ -1,0 +1,80 @@
+package IO::K8s::ApiextensionsApiserver::Pkg::Apis::Apiextensions::V1::CustomResourceDefinitionStatus;
+# ABSTRACT: CustomResourceDefinitionStatus indicates the state of the CustomResourceDefinition
+our $VERSION = '1.000';
+use IO::K8s::Resource;
+
+k8s acceptedNames => 'Apiextensions::V1::CustomResourceDefinitionNames';
+
+
+k8s conditions => ['Apiextensions::V1::CustomResourceDefinitionCondition'];
+
+
+k8s storedVersions => [Str];
+
+
+1;
+
+__END__
+
+=pod
+
+=encoding UTF-8
+
+=head1 NAME
+
+IO::K8s::ApiextensionsApiserver::Pkg::Apis::Apiextensions::V1::CustomResourceDefinitionStatus - CustomResourceDefinitionStatus indicates the state of the CustomResourceDefinition
+
+=head1 VERSION
+
+version 1.000
+
+=head2 acceptedNames
+
+acceptedNames are the names that are actually being used to serve discovery. They may be different than the names in spec.
+
+=head2 conditions
+
+conditions indicate state for particular aspects of a CustomResourceDefinition
+
+=head2 storedVersions
+
+storedVersions lists all versions of CustomResources that were ever persisted. Tracking these versions allows a migration path for stored versions in etcd. The field is mutable so a migration controller can finish a migration to another version (ensuring no old objects are left in storage), and then remove the rest of the versions from this list. Versions may not be removed from `spec.versions` while they exist in this list.
+
+=head1 SUPPORT
+
+=head2 Issues
+
+Please report bugs and feature requests on GitHub at
+L<https://github.com/pplu/io-k8s-p5/issues>.
+
+=head2 IRC
+
+Join C<#kubernetes> on C<irc.perl.org> or message Getty directly.
+
+=head1 CONTRIBUTING
+
+Contributions are welcome! Please fork the repository and submit a pull request.
+
+=head1 AUTHORS
+
+=over 4
+
+=item *
+
+Torsten Raudssus <torsten@raudssus.de>
+
+=item *
+
+Jose Luis Martinez <jlmartinez@capside.com> (original author, inactive)
+
+=back
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is Copyright (c) 2018 by CAPSiDE.
+
+This is free software, licensed under:
+
+  The Apache License, Version 2.0, January 2004
+
+=cut

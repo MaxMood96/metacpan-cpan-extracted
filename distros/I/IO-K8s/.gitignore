@@ -1,0 +1,16 @@
+# Build artifacts
+IO-K8s-*/
+IO-K8s-*.tar.gz
+
+# Carton / local libs
+cpanfile.snapshot
+local/
+dzil-local/
+
+# spec only used by AI, not committed
+spec/
+
+# Editor backups
+*~
+*.swp
+*.bak

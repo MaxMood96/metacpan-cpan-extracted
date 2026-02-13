@@ -1,7 +1,7 @@
 package WWW::Hetzner::Cloud::API::FloatingIPs;
 # ABSTRACT: Hetzner Cloud Floating IPs API
 
-our $VERSION = '0.003';
+our $VERSION = '0.100';
 
 use Moo;
 use Carp qw(croak);
@@ -135,7 +135,7 @@ WWW::Hetzner::Cloud::API::FloatingIPs - Hetzner Cloud Floating IPs API
 
 =head1 VERSION
 
-version 0.003
+version 0.100
 
 =head1 SYNOPSIS
 

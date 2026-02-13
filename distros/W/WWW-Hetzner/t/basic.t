@@ -9,6 +9,12 @@ use_ok('WWW::Hetzner');
 
 # Role
 use_ok('WWW::Hetzner::Role::HTTP');
+use_ok('WWW::Hetzner::Role::IO');
+
+# HTTP abstraction
+use_ok('WWW::Hetzner::HTTPRequest');
+use_ok('WWW::Hetzner::HTTPResponse');
+use_ok('WWW::Hetzner::LWPIO');
 
 # Cloud API
 use_ok('WWW::Hetzner::Cloud');

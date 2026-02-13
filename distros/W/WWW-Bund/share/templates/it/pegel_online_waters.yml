@@ -1,0 +1,8 @@
+type: table
+columns:
+  - field: shortname
+    header: SHORT
+    width: 20
+  - field: longname
+    header: NOME
+    width: 40

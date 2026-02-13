@@ -1,0 +1,13 @@
+type: table
+empty: "Brak danych."
+columns:
+  - field: name
+    header: NAZWA
+    width: 30
+  - field: description
+    header: OPIS
+    width: 40
+    wrap: true
+  - field: tags
+    header: TAGS
+    width: 20

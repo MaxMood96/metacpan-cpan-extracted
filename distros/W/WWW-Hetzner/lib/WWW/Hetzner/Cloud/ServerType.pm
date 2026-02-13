@@ -1,7 +1,7 @@
 package WWW::Hetzner::Cloud::ServerType;
 # ABSTRACT: Hetzner Cloud ServerType object
 
-our $VERSION = '0.003';
+our $VERSION = '0.100';
 
 use Moo;
 use namespace::clean;
@@ -72,7 +72,7 @@ WWW::Hetzner::Cloud::ServerType - Hetzner Cloud ServerType object
 
 =head1 VERSION
 
-version 0.003
+version 0.100
 
 =head1 SYNOPSIS
 

@@ -1,0 +1,118 @@
+#!/usr/bin/env perl
+
+# PODNAME: bundfr
+# ABSTRACT: CLI client for German Federal Government APIs (French)
+
+use strict;
+use warnings;
+use lib 'lib';
+
+binmode(STDOUT, ':encoding(UTF-8)');
+binmode(STDERR, ':encoding(UTF-8)');
+
+# Map CLI aliases to Cmd package names
+my %aliases = (
+    'pegel-online' => 'pegel',
+    'pegel_online' => 'pegel',
+    'eco-visio' => 'ecovisio',
+    'eco_visio' => 'ecovisio',
+);
+
+for my $i (0 .. $#ARGV) {
+    next if $ARGV[$i] =~ /^-/;
+    if (exists $aliases{lc $ARGV[$i]}) {
+        $ARGV[$i] = $aliases{lc $ARGV[$i]};
+        last;
+    }
+}
+
+$ENV{WWW_BUND_LANG} //= 'fr';
+
+use WWW::Bund::CLI;
+
+WWW::Bund::CLI->new_with_cmd;
+
+__END__
+
+=pod
+
+=encoding UTF-8
+
+=head1 NAME
+
+bundfr - CLI client for German Federal Government APIs (French)
+
+=head1 VERSION
+
+version 0.001
+
+=head1 SYNOPSIS
+
+  # Liste de toutes les API disponibles
+  bundfr list
+
+  # Aide pour une API spécifique
+  bundfr info autobahn
+  bundfr autobahn
+
+  # Appeler des endpoints d'API
+  bundfr autobahn roads
+  bundfr pegel stations
+  bundfr tagesschau search Ukraine
+
+  # Changer le format de sortie
+  bundfr -o json autobahn roads
+
+=head1 DESCRIPTION
+
+B<bundfr> est la variante française du client en ligne de commande B<bund>
+pour les API du gouvernement fédéral allemand (bund.dev). Par défaut, elle
+affiche en français (C<lang=fr>) tout en donnant accès aux mêmes 16 API publiques.
+
+Pour la documentation complète, voir C<bund --help> ou C<perldoc bund>.
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-o, --output> I<format>
+
+Format de sortie: C<template> (défaut), C<json>, C<yaml>
+
+=item B<--lang> I<langue>
+
+Remplacer la langue: C<fr> (défaut pour bundfr), C<de>, C<en>, C<es>, C<it>, C<nl>, C<pl>
+
+=item B<-h, --help>
+
+Afficher l'aide
+
+=back
+
+=head1 SEE ALSO
+
+L<bund>, L<WWW::Bund>, L<https://bund.dev>
+
+=head1 SUPPORT
+
+=head2 Issues
+
+Please report bugs and feature requests on GitHub at
+L<https://github.com/Getty/p5-www-bund/issues>.
+
+=head1 CONTRIBUTING
+
+Contributions are welcome! Please fork the repository and submit a pull request.
+
+=head1 AUTHOR
+
+Torsten Raudssus <torsten@raudssus.de>
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is copyright (c) 2026 by Torsten Raudssus.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=cut

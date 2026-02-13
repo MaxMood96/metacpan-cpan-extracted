@@ -1,0 +1,16 @@
+type: table
+empty: "Geen waarschuwingen."
+columns:
+  - field: i18nTitle.de
+    header: WAARSCHUWING
+    width: 50
+    wrap: true
+  - field: severity
+    header: ERNST
+    width: 10
+  - field: type
+    header: TYPE
+    width: 8
+  - field: startDate
+    header: SINDS
+    width: 20

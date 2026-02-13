@@ -1,5 +1,14 @@
 Revision history for WWW-Hetzner
 
+0.100     2026-02-12 17:13:58Z
+    - Pluggable HTTP transport via WWW::Hetzner::Role::IO
+      - New: WWW::Hetzner::HTTPRequest, WWW::Hetzner::HTTPResponse
+      - New: WWW::Hetzner::Role::IO interface role
+      - New: WWW::Hetzner::LWPIO (default sync backend using LWP::UserAgent)
+      - Role::HTTP split into _build_request, io->call, _parse_response
+      - Enables async HTTP backends (Mojo::UserAgent, Net::Async::HTTP, etc.)
+    - Document LWP::ConsoleLogger::Everywhere for HTTP debugging
+
 0.003     2026-01-28 05:56:39Z
     - Add comprehensive POD documentation for all API modules
 

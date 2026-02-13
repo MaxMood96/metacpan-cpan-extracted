@@ -78,7 +78,6 @@ WriteMakefile(
         'Term::ReadKey'       => '0',
     },
     BUILD_REQUIRES => {
-		'Test2::Require::AuthorTesting' => '0',
         'Test::More' => '1.00',
         'List::Util' => '1.20',
     },
@@ -89,7 +88,6 @@ WriteMakefile(
         'List::Util'        => '1.20',
         'Time::HiRes'       => '0',
         'Getopt::Long'      => '0',
-        'Text::Wrap::Smart' => '0',
 		'Text::Format'      => '0',
     },
     EXE_FILES => ['bin/ansi-encode'],

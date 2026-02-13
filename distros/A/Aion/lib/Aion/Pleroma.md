@@ -66,7 +66,7 @@ Ex::Eon::AnimalEon#dog,13=Ex::Eon::AnimalEon#dog
 ```
 
 ```perl
-Aion::Pleroma->new->pleroma # --> {"Ex::Eon::AnimalEon" => "Ex::Eon::AnimalEon#new", "Ex::Eon::AnimalEon#dog" => "Ex::Eon::AnimalEon#dog", "ex.cat" => "Ex::Eon::AnimalEon#cat"}
+Aion::Pleroma->new->pleroma # --> {"Ex::Eon::AnimalEon" => "Ex::Eon::AnimalEon#new", "Ex::Eon::AnimalEon#dog" => "Ex::Eon::AnimalEon#dog", "ex.cat" => "Ex::Eon::AnimalEon#cat", "Aion::Pleroma" => "Aion::Pleroma#new"}
 ```
 
 ## eon
@@ -76,9 +76,9 @@ Aion::Pleroma->new->pleroma # --> {"Ex::Eon::AnimalEon" => "Ex::Eon::AnimalEon#n
 ```perl
 my $pleroma = Aion::Pleroma->new;
 
-$pleroma->eon # --> {}
+$pleroma->eon # --> { "Aion::Pleroma" => $pleroma }
 my $cat = $pleroma->resolve('ex.cat');
-$pleroma->eon # --> { "ex.cat" => $cat }
+$pleroma->eon # --> { "ex.cat" => $cat, "Aion::Pleroma" => $pleroma }
 ```
 
 # SUBROUTINES
@@ -101,6 +101,33 @@ $pleroma->get('Ex::Eon::AnimalEon#dog')->role # => dog
 my $pleroma = Aion::Pleroma->new;
 $pleroma->resolve('e.ibex') # @=> e.ibex is'nt eon!
 $pleroma->resolve('Ex::Eon::AnimalEon#dog')->role # => dog
+```
+
+## autoware ($action, [$key])
+
+Добавить ключ в плерому.
+
+Файл lib/Ex/Eon/AstroEon.pm:
+```perl
+package Ex::Eon::AstroEon;
+use common::sense;
+use Aion;
+
+has role => (is => 'ro', default => 'upiter');
+sub mars { __PACKAGE__->new(role => 'mars') }
+sub venus { __PACKAGE__->new(role => 'venus') }
+
+1;
+```
+
+```perl
+my $pleroma = Aion::Pleroma->new;
+$pleroma->autoware('Ex::Eon::AstroEon')->get('Ex::Eon::AstroEon')->role # => upiter
+$pleroma->autoware('Ex::Eon::AstroEon#mars', 'ex.mars')->get('ex.mars')->role # => mars
+$pleroma->autoware('Ex::Eon::AstroEon#venus')->get('Ex::Eon::AstroEon#venus')->role # => venus
+
+$pleroma->autoware('Ex::Eon::AstroEon')->get('Ex::Eon::AstroEon')->role # => upiter
+$pleroma->autoware('Ex::Eon::AstroEon#mars', 'Ex::Eon::AstroEon#venus') # @-> Added eon Ex::Eon::AstroEon#venus twice, with Ex::Eon::AstroEon#mars ne Ex::Eon::AstroEon#venus
 ```
 
 # AUTHOR

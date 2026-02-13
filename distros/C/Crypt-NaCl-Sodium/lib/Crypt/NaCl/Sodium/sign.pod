@@ -1,19 +1,8 @@
-# PODNAME: Crypt::NaCl::Sodium::sign
-# ABSTRACT: Public-key signatures (Ed25519)
-
-__END__
-
-=pod
-
-=encoding UTF-8
+=encoding utf8
 
 =head1 NAME
 
-Crypt::NaCl::Sodium::sign - Public-key signatures (Ed25519)
-
-=head1 VERSION
-
-version 1.0.8.0
+Crypt::NaCl::Sodium::sign - Public-key signatures
 
 =head1 SYNOPSIS
 
@@ -280,13 +269,13 @@ AES-128, small keys and signatures, and is immune to side-channel attacks.
 
 =head1 AUTHOR
 
-Alex J. G. Burzyński <ajgb@cpan.org>
+Alex J. G. Burzyński <F<ajgb@cpan.org>>
 
-=head1 COPYRIGHT AND LICENSE
+=head1 COPYRIGHT & LICENSE
 
-This software is copyright (c) 2015 by Alex J. G. Burzyński <ajgb@cpan.org>.
+Copyright (c) 2015 Alex J. G. Burzyński. All rights reserved.
 
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
+This program is free software; you can redistribute it and/or modify it
+under the same terms as Perl itself.
 
 =cut

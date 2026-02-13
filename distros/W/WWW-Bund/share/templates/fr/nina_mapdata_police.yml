@@ -1,0 +1,16 @@
+type: table
+empty: "Aucune alerte."
+columns:
+  - field: i18nTitle.de
+    header: ALERTE
+    width: 50
+    wrap: true
+  - field: severity
+    header: GRAVITÉ
+    width: 10
+  - field: type
+    header: TYPE
+    width: 8
+  - field: startDate
+    header: DEPUIS
+    width: 20

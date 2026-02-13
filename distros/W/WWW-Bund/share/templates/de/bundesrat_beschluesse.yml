@@ -1,0 +1,10 @@
+type: record
+fields:
+  - field: titel
+    label: Titel
+  - field: datum
+    label: Datum
+  - field: beschlusstyp
+    label: Beschlusstyp
+  - field: url
+    label: URL

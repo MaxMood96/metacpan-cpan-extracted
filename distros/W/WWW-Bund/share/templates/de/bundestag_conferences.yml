@@ -1,0 +1,14 @@
+type: table
+extract: tagesordnung
+columns:
+  - field: date
+    header: DATUM
+    width: 12
+  - field: sitzungsnummer
+    header: NR
+    width: 5
+  - field: name
+    header: SITZUNG
+    width: 55
+    wrap: true
+empty: "Keine Sitzungen gefunden."

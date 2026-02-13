@@ -1,0 +1,12 @@
+type: record
+fields:
+  - field: id
+    label: ID
+  - field: name
+    label: Name
+  - field: kategorie
+    label: Kategorie
+  - field: hersteller
+    label: Hersteller
+  - field: beschreibung
+    label: Beschreibung

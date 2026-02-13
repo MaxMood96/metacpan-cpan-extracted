@@ -7,3 +7,12 @@ v0.19.0 2026-02-10
     - Token and random value generation (Concierge::Auth::Generators)
 v0.3.1 2026-02-11
     - Documentation improvements
+v0.3.2 2026-02-11
+    - Corrected dependency list in distro
+v0.3.4 2026-02-12
+    - Rebuilt tarball with GNU tar (fixes PaxHeader issue on CPAN)
+
+v0.3.3 2026-02-12
+    - gen_uuid now generates v4 UUIDs using Crypt::PRNG (no longer shells out to uuidgen)
+    - Added gen_random_id for hex-encoded cryptographic random IDs
+    - Added generator test suite (t/05-generators.t)

@@ -1,0 +1,14 @@
+type: record
+fields:
+  - field: titel
+    label: Titel
+  - field: dokumentnummer
+    label: Dokumentnummer
+  - field: datum
+    label: Datum
+  - field: typ
+    label: Typ
+  - field: zusammenfassung
+    label: Zusammenfassung
+  - field: url
+    label: URL

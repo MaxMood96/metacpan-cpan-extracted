@@ -1,0 +1,10 @@
+type: record
+fields:
+  - field: countryName
+    label: Country
+  - field: healthcareInfo
+    label: Healthcare Info
+  - field: vaccinations
+    label: Vaccinations
+  - field: emergencyNumber
+    label: Emergency Number

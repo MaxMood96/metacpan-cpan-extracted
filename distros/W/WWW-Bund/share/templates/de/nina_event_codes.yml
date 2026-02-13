@@ -1,0 +1,9 @@
+extract: eventCodes
+type: table
+columns:
+  - field: eventCode
+    header: EVENT-CODE
+    width: 20
+  - field: imageUrl
+    header: BILD
+    width: 30

@@ -1,10 +1,32 @@
-0.03 2018-05-15
- - add convenience to_json method to all objects (meis)
- - add Test::Exception as dependency (manwar)
+Revision history for IO-K8s
 
-0.02 2018-05-08
- - Kubernetes API sometimes returns key => undef. We handle this not initializing the attribute to undef,
-   since it's functionally the same to initialize it to undef or not initialize it
+1.000     2026-02-13 01:52:24Z
+  - Major refactoring: Migrated from Moose to Moo for lighter dependencies
+  - Replaced YAML::XS with YAML::PP for pure Perl implementation
+  - Updated to Kubernetes v1.31 API objects
+  - New IO::K8s::List class for unified list handling
+  - Improved attribute metadata handling with IO::K8s::Resource
+  - Added IO::K8s::APIObject and IO::K8s::Role::APIObject for better API object support
+  - Added support for namespaced resources via IO::K8s::Role::Namespaced
+  - Added resource_plural support to IO::K8s::Role::APIObject for CRD classes
+  - IO::K8s::APIObject accepts import parameters (api_version, resource_plural) for CRDs
+  - IO::K8s::AutoGen supports CRD metadata (api_version, kind, resource_plural, is_namespaced)
+  - expand_class recognizes already-loaded classes (needed for CRD classes)
+  - Improved JSON serialization with canonical output
+  - Better handling of opaque fields (fieldsV1, rawExtension, raw)
+  - Deprecation stubs for removed List classes (backwards compatibility)
+  - Added IO::K8s::Types for Type::Tiny type library integration
 
-0.01 2018-05-04
- - Initial release to an unsupecting world
+0.04     2018-12-11 00:00:00Z
+  - Update to Kubernetes v1.14 API objects
+
+0.03     2018-05-15 00:00:00Z
+  - add convenience to_json method to all objects (meis)
+  - add Test::Exception as dependency (manwar)
+
+0.02     2018-05-08 00:00:00Z
+  - Kubernetes API sometimes returns key => undef. We handle this not initializing the attribute to undef,
+    since it's functionally the same to initialize it to undef or not initialize it
+
+0.01     2018-05-04 00:00:00Z
+  - Initial release to an unsuspecting world

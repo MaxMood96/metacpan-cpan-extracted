@@ -1,7 +1,7 @@
-package Concierge::User v0.5.2;
+package Concierge::User v0.5.6;
 use v5.36;
 
-our $VERSION = 'v0.5.2';
+our $VERSION = 'v0.5.6';
 
 # ABSTRACT: User object enabled by Concierge
 
@@ -179,7 +179,7 @@ Concierge::User - User object enabled by Concierge
 
 =head1 VERSION
 
-v0.5.2
+v0.5.6
 
 =head1 SYNOPSIS
 
@@ -195,7 +195,7 @@ v0.5.2
     # Identity
     say $user->user_id;       # "alice"
     say $user->user_key;      # random token
-    say $user->session_id;    # UUID
+    say $user->session_id;    # random hex string
 
     # Status
     say $user->is_logged_in;  # 1

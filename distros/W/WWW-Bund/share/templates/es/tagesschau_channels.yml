@@ -1,0 +1,10 @@
+extract: channels
+type: table
+columns:
+  - field: title
+    header: CHANNEL
+    width: 40
+  - field: streams.adaptivestreaming
+    header: STREAM
+    width: 60
+    wrap: true

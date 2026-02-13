@@ -1,7 +1,7 @@
 package WWW::Hetzner::Cloud::Location;
 # ABSTRACT: Hetzner Cloud Location object
 
-our $VERSION = '0.003';
+our $VERSION = '0.100';
 
 use Moo;
 use namespace::clean;
@@ -60,7 +60,7 @@ WWW::Hetzner::Cloud::Location - Hetzner Cloud Location object
 
 =head1 VERSION
 
-version 0.003
+version 0.100
 
 =head1 SYNOPSIS
 

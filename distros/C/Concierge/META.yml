@@ -24,10 +24,10 @@ requires:
   Concierge::Sessions: '0'
   Concierge::Users: '0'
   JSON::PP: '0'
-  Params::Filter: '0'
+  Params::Filter: '0.014'
   perl: '5.036'
 resources:
   bugtracker: https://github.com/bwva/Concierge/issues
   repository: https://github.com/bwva/Concierge.git
-version: v0.5.2
+version: v0.5.6
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

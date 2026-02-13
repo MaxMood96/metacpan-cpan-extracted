@@ -7,7 +7,7 @@ use MooX::Cmd;
 use MooX::Options;
 use WWW::Hetzner::Robot;
 
-our $VERSION = '0.003';
+our $VERSION = '0.100';
 
 
 option user => (
@@ -89,7 +89,7 @@ WWW::Hetzner::Robot::CLI - Hetzner Robot CLI
 
 =head1 VERSION
 
-version 0.003
+version 0.100
 
 =head1 SYNOPSIS
 

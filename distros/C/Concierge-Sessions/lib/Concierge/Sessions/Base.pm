@@ -1,5 +1,7 @@
-package Concierge::Sessions::Base v0.8.4;
+package Concierge::Sessions::Base v0.8.6;
 use v5.36;
+
+use Crypt::URandom qw(urandom);
 
 sub new {
     my ($class, %args) = @_;
@@ -16,21 +18,7 @@ sub delete_user_session { die "Subclass must implement delete_user_session" }
 
 # Utilities
 sub generate_session_id {
-    my $uuid = qx(uuidgen 2>/dev/null);
-    if ($? == 0 and defined $uuid) {
-        chomp $uuid;
-        return lc $uuid;
-    }
-    # Fallback: UUID v4-like random token
-    my $pseudo_uuid = sprintf(
-        '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
-        rand(0x10000), rand(0x10000),  # 8 hex digits
-        rand(0x10000),                  # 4 hex digits
-        (rand(0x10000) & 0x0fff) | 0x4000,  # 4 hex digits, version 4
-        (rand(0x10000) & 0x3fff) | 0x8000,  # 4 hex digits, variant bits
-        rand(0x10000), rand(0x10000), rand(0x10000)  # 12 hex digits
-    );
-    return lc $pseudo_uuid;
+    return unpack('H*', urandom(20));
 }
 
 1;
@@ -43,7 +31,7 @@ Concierge::Sessions::Base - Base class for session storage backends
 
 =head1 VERSION
 
-version 0.8.4
+version 0.8.5
 
 =head1 SYNOPSIS
 
@@ -89,7 +77,7 @@ Must return:
 
     {
         success => 1,
-        session_id => 'uuid-string',
+        session_id => 'hex-string',
     }
 
 =head2 get_session_info
@@ -103,7 +91,7 @@ Must return:
     {
         success => 1,
         info => {
-            session_id      => 'uuid',
+            session_id      => 'hex-string',
             user_id         => 'user123',
             session_timeout => 3600,
             data            => \%data,
@@ -189,14 +177,12 @@ Must return:
 
 =head2 generate_session_id
 
-Generates a unique session ID using UUID v4 format.
+Generates a cryptographically secure random session ID.
 
-    my $uuid = $backend->generate_session_id();
+    my $id = $backend->generate_session_id();
 
-Returns: Lowercase UUID string such as 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'.
-
-This method attempts to use the system's C<uuidgen> command if available,
-with a fallback to a Perl-based UUID v4 generator.
+Returns: 40-character lowercase hex string (160 bits of entropy) generated
+from the operating system's CSPRNG via L<Crypt::URandom>.
 
 =head1 SEE ALSO
 

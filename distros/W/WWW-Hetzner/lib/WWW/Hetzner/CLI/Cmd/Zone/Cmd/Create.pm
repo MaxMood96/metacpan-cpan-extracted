@@ -1,7 +1,7 @@
 package WWW::Hetzner::CLI::Cmd::Zone::Cmd::Create;
 # ABSTRACT: Create a DNS zone
 
-our $VERSION = '0.003';
+our $VERSION = '0.100';
 
 use Moo;
 use MooX::Cmd;
@@ -67,7 +67,7 @@ WWW::Hetzner::CLI::Cmd::Zone::Cmd::Create - Create a DNS zone
 
 =head1 VERSION
 
-version 0.003
+version 0.100
 
 =head1 SUPPORT
 

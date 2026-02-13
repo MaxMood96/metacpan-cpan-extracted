@@ -1,0 +1,118 @@
+#!/usr/bin/env perl
+
+# PODNAME: bundpl
+# ABSTRACT: CLI client for German Federal Government APIs (Polish)
+
+use strict;
+use warnings;
+use lib 'lib';
+
+binmode(STDOUT, ':encoding(UTF-8)');
+binmode(STDERR, ':encoding(UTF-8)');
+
+# Map CLI aliases to Cmd package names
+my %aliases = (
+    'pegel-online' => 'pegel',
+    'pegel_online' => 'pegel',
+    'eco-visio' => 'ecovisio',
+    'eco_visio' => 'ecovisio',
+);
+
+for my $i (0 .. $#ARGV) {
+    next if $ARGV[$i] =~ /^-/;
+    if (exists $aliases{lc $ARGV[$i]}) {
+        $ARGV[$i] = $aliases{lc $ARGV[$i]};
+        last;
+    }
+}
+
+$ENV{WWW_BUND_LANG} //= 'pl';
+
+use WWW::Bund::CLI;
+
+WWW::Bund::CLI->new_with_cmd;
+
+__END__
+
+=pod
+
+=encoding UTF-8
+
+=head1 NAME
+
+bundpl - CLI client for German Federal Government APIs (Polish)
+
+=head1 VERSION
+
+version 0.001
+
+=head1 SYNOPSIS
+
+  # Lista wszystkich dostępnych API
+  bundpl list
+
+  # Pomoc dla konkretnego API
+  bundpl info autobahn
+  bundpl autobahn
+
+  # Wywoływanie punktów końcowych API
+  bundpl autobahn roads
+  bundpl pegel stations
+  bundpl tagesschau search Ukraina
+
+  # Zmiana formatu wyjścia
+  bundpl -o json autobahn roads
+
+=head1 DESCRIPTION
+
+B<bundpl> to polska wersja klienta wiersza poleceń B<bund> dla niemieckich
+rządowych API (bund.dev). Domyślnie wyświetla po polsku (C<lang=pl>),
+zapewniając dostęp do tych samych 16 publicznych API.
+
+Pełna dokumentacja w C<bund --help> lub C<perldoc bund>.
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-o, --output> I<format>
+
+Format wyjścia: C<template> (domyślny), C<json>, C<yaml>
+
+=item B<--lang> I<język>
+
+Zmiana języka: C<pl> (domyślny dla bundpl), C<de>, C<en>, C<fr>, C<es>, C<it>, C<nl>
+
+=item B<-h, --help>
+
+Pokaż pomoc
+
+=back
+
+=head1 SEE ALSO
+
+L<bund>, L<WWW::Bund>, L<https://bund.dev>
+
+=head1 SUPPORT
+
+=head2 Issues
+
+Please report bugs and feature requests on GitHub at
+L<https://github.com/Getty/p5-www-bund/issues>.
+
+=head1 CONTRIBUTING
+
+Contributions are welcome! Please fork the repository and submit a pull request.
+
+=head1 AUTHOR
+
+Torsten Raudssus <torsten@raudssus.de>
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is copyright (c) 2026 by Torsten Raudssus.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=cut

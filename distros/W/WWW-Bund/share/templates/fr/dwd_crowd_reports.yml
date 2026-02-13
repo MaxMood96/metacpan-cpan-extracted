@@ -1,0 +1,19 @@
+extract: meldungen
+type: table
+empty: "No reports."
+columns:
+  - field: place
+    header: PLACE
+    width: 20
+  - field: category
+    header: CATEGORY
+    width: 18
+  - field: auspraegung
+    header: TYPE
+    width: 25
+  - field: timestamp
+    header: HEURE
+    width: 16
+  - field: likeCount
+    header: LIKES
+    width: 6

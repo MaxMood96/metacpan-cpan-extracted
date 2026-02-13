@@ -1,4 +1,4 @@
-package Concierge::Users::Database v0.7.2;
+package Concierge::Users::Database v0.7.4;
 use v5.36;
 use Carp qw/ croak /;
 use DBI;
@@ -427,7 +427,7 @@ Concierge::Users::Database - SQLite storage backend for Concierge::Users
 
 =head1 VERSION
 
-v0.7.2
+v0.7.4
 
 =head1 SYNOPSIS
 

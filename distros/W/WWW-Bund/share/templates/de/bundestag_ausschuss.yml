@@ -1,0 +1,14 @@
+type: record
+fields:
+  - field: ausschussName
+    label: Name
+  - field: ausschussKurzName
+    label: Kurzname
+  - field: ausschussId
+    label: ID
+  - field: ausschussAufgabe
+    label: Aufgabe
+  - field: ausschussKontakt
+    label: Kontakt
+  - field: ausschussSourceURL
+    label: URL

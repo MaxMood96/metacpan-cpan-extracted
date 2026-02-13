@@ -7,7 +7,7 @@ use MooX::Cmd;
 use MooX::Options;
 use WWW::Hetzner::Cloud;
 
-our $VERSION = '0.003';
+our $VERSION = '0.100';
 
 
 option token => (
@@ -94,7 +94,7 @@ WWW::Hetzner::CLI - Hetzner Cloud CLI
 
 =head1 VERSION
 
-version 0.003
+version 0.100
 
 =head1 SYNOPSIS
 

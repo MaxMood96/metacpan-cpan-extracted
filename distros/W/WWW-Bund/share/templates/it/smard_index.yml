@@ -1,0 +1,8 @@
+type: record
+fields:
+  - field: timestamp
+    label: Timestamp
+  - field: indices
+    label: Indices
+  - field: metadata
+    label: Metadata

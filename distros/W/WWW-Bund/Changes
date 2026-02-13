@@ -1,0 +1,52 @@
+0.001     2026-02-13 06:21:13Z
+
+  - Initial release with comprehensive German Federal Government API support
+
+  APIs & Endpoints:
+  - 15 public APIs with 76 endpoints implemented: Autobahn, NINA, Pegel-Online,
+    Tagesschau, Bundestag, DWD, Feiertage, SMARD, Bundeshaushalt, Bundesrat,
+    Bundestag Lobbyregister, Dashboard Deutschland, Travelwarning, Eco-Visio,
+    Hilfsmittel
+  - Ladestationen API disabled (requires authentication since 2026)
+  - Fixed endpoint definitions: Bundeshaushalt query params, Bundesrat view param,
+    Hilfsmittel base URL, Eco-Visio path params
+
+  Multi-Language Support:
+  - 7 languages: German, English, French, Spanish, Italian, Dutch, Polish
+  - 665 YAML templates (95 templates × 7 languages)
+  - 7 localized bin commands: bund, bunden, bundfr, bundes, bundit, bundnl, bundpl
+  - Language-specific strings with sprintf support
+
+  CLI Architecture:
+  - Modern MooX::Cmd + MooX::Options architecture
+  - Shared Role::APICommand for generic API dispatch
+  - 18 CLI command classes (List, Info, + 16 API commands)
+  - Automatic help generation from MooX::Options
+  - Comprehensive POD documentation in all 7 bin scripts
+
+  Output & Formatting:
+  - Template-based formatting: table, list, record types
+  - JSON and YAML output modes
+  - Custom template support via --template flag
+  - Dotted-path field access in templates
+
+  Core Features:
+  - GET response caching with XDG-compliant paths
+  - Per-endpoint TTLs (120s-86400s based on data freshness)
+  - Per-API rate limiting support
+  - Pluggable HTTP transport (LWP default, MockIO for tests)
+  - XML and JSON response parsing with UTF-8 handling
+  - Optional typed API adapter classes with convenience methods
+
+  Documentation:
+  - Comprehensive POD in all 42 lib modules (2,112 lines)
+  - Inline =attr and =method POD for PodWeaver
+  - Complete README.md with live CLI examples and API roadmap
+  - CLAUDE.md with architecture details and best practices
+
+  Testing:
+  - 290 tests across 10 test files, all passing
+  - Unit tests for all components
+  - CLI subprocess tests
+  - Optional live integration tests (WWW_BUND_LIVE_TEST=1)
+  - 72.5% code coverage

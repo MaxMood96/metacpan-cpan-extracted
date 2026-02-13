@@ -1,0 +1,16 @@
+type: table
+extract: mdbs.mdb
+columns:
+  - field: mdbName._text
+    header: NAME
+    width: 30
+  - field: fraktion
+    header: FRAKTION
+    width: 12
+  - field: mdbLand
+    header: LAND
+    width: 25
+  - field: mdbGewaehlt
+    header: MANDAT
+    width: 15
+empty: "Keine Abgeordneten gefunden."

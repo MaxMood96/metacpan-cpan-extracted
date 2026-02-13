@@ -1,0 +1,10 @@
+type: record
+fields:
+  - field: timestamp
+    label: Zeitstempel
+  - field: values
+    label: Werte
+  - field: unit
+    label: Einheit
+  - field: metadata
+    label: Metadaten

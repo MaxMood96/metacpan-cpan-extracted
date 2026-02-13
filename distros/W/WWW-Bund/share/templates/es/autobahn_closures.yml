@@ -1,0 +1,16 @@
+extract: closure
+type: table
+full_grid: true
+empty: "No closures."
+columns:
+  - field: title
+    header: TÍTULO
+    width: 40
+    wrap: true
+  - field: subtitle
+    header: SUBTÍTULO
+    width: 40
+    wrap: true
+  - field: isBlocked
+    header: BLOCKED
+    width: 7

@@ -1,0 +1,16 @@
+type: table
+extract: mdbs.mdb
+columns:
+  - field: mdbName._text
+    header: NAZWA
+    width: 30
+  - field: fraktion
+    header: PARTY
+    width: 12
+  - field: mdbLand
+    header: STATE
+    width: 25
+  - field: mdbGewaehlt
+    header: MANDATA
+    width: 15
+empty: "No members found."

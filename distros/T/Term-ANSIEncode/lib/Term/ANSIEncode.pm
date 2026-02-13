@@ -1,4 +1,4 @@
-package Term::ANSIEncode 1.87;
+package Term::ANSIEncode 1.88;
 
 #######################################################################
 #            _   _  _____ _____   ______                     _        #
@@ -59,7 +59,7 @@ BEGIN {
     our @EXPORT_OK = qw(ansi_colors);
 } ## end BEGIN
 
-our $VERSION = '1.87';
+our $VERSION = '1.88';
 
 # Package-level caches so large tables are built only once per process.
 our $GLOBAL_ANSI_META = _global_ansi_meta();
@@ -135,7 +135,7 @@ VERSION
 }
 
 sub expand_tokens {
-	my $self = shift;
+	my $self  = shift;
 
 	my $bar = '[% BRIGHT GREEN %]│[% RESET %]';
     my $to  = <<'TOKENS';

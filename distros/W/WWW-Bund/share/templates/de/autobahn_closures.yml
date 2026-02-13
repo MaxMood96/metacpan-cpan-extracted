@@ -1,0 +1,16 @@
+extract: closure
+type: table
+full_grid: true
+empty: "Keine Sperrungen."
+columns:
+  - field: title
+    header: TITEL
+    width: 40
+    wrap: true
+  - field: subtitle
+    header: UNTERTITEL
+    width: 40
+    wrap: true
+  - field: isBlocked
+    header: GESPERRT
+    width: 8

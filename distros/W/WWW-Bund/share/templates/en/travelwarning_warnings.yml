@@ -1,0 +1,17 @@
+type: table
+empty: "No warnings."
+extract: response
+columns:
+  - field: countryName
+    header: COUNTRY
+    width: 25
+  - field: title
+    header: TITLE
+    width: 35
+    wrap: true
+  - field: warning
+    header: WARNING
+    width: 10
+  - field: partialWarning
+    header: PARTIAL
+    width: 12

@@ -1,0 +1,12 @@
+type: record
+fields:
+  - field: sitzungsnummer
+    label: Session Number
+  - field: datum
+    label: Date
+  - field: tagesordnung
+    label: Agenda
+  - field: inhalt
+    label: Content
+  - field: url
+    label: URL

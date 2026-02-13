@@ -1,0 +1,9 @@
+extract: logos
+type: table
+columns:
+  - field: name
+    header: NAME
+    width: 50
+  - field: senderId
+    header: SENDER-ID
+    width: 30

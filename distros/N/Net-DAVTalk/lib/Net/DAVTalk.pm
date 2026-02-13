@@ -21,16 +21,16 @@ Net::DAVTalk - Interface to talk to DAV servers
 
 =head1 VERSION
 
-Version 0.23
+Version 0.24
 
 =cut
 
-our $VERSION = '0.23';
+our $VERSION = '0.24';
 
 =head1 SYNOPSIS
 
 Net::DAVTalk is was originally designed as a service module for Net::CalDAVTalk
-and Net::DAVTalk, abstracting the process of connecting to a DAV server and
+and Net::CardDAVTalk, abstracting the process of connecting to a DAV server and
 parsing the XML responses.
 
 Example:
@@ -254,9 +254,27 @@ endpoint, returning the response as a parsed hash.
 
    headers: additional headers to add to request, i.e (Depth => 1)
 
+In the event of timeout or most HTTP errors, an exception will be raised.
+
+=head2 $Self->SafeRequest($method, $path, $content, %headers)
+
+  my $Result = $DAVTalk->SafeRequest($method, $path, $content, %headers)
+
+This is mostly Request, but it won't throw an exception on most errors.
+
+Instead, it always returns a reference to a hash with these entries:
+
+  payload       - a structured representation of the DAV response, if possible;
+                  this is the same thing that the ->Request method returns
+  http_response - the underlying HTTP response from HTTP::Tiny
+  error         - a string describing the error condition, if any
+
+The C<Request> method uses C<SafeRequest> under the hood, converting error
+results into exceptions.
+
 =cut
 
-sub Request {
+sub SafeRequest {
   my ($Self, $Method, $Path, $Content, %Headers) = @_;
 
   # setup request {{{
@@ -290,7 +308,10 @@ sub Request {
   });
 
   if ($Response->{status} == '599' and $Response->{content} =~ m/timed out/i) {
-    confess "Error with $Method for $URI (504, Gateway Timeout)";
+    return {
+      http_response => $Response,
+      error         => "Error with $Method for $URI (504, Gateway Timeout)",
+    };
   }
 
   my $count = 0;
@@ -306,7 +327,10 @@ sub Request {
     });
 
     if ($Response->{status} == '599' and $Response->{content} =~ m/timed out/i) {
-      confess "Error with $Method for $location (504, Gateway Timeout)";
+      return {
+        http_response => $Response,
+        error         => "Error with $Method for $location (504, Gateway Timeout)",
+      };
     }
   }
 
@@ -324,21 +348,32 @@ sub Request {
     # maybe invalid sync token, need to return that fact
     my $Xml = xmlToHash($ResponseContent);
     if (exists $Xml->{"{DAV:}valid-sync-token"}) {
+      # This weird "return error in payload" behavior is legacy behavior, and
+      # quite possibly should be changed.  It's the only place we returned an
+      # "error" in the hashref from Request before writing SafeRequest.
+      # -- rjbs, 2026-02-11
       return {
-        error => "valid-sync-token",
+        http_response => $Response,
+        payload       => { error => "valid-sync-token" },
       };
     }
   }
 
   unless ($Response->{success}) {
-    confess("ERROR WITH REQUEST\n" .
-         "<<<<<<<< $Method $URI HTTP/1.1\n$Bytes\n" .
-         ">>>>>>>> $Response->{protocol} $Response->{status} $Response->{reason}\n$ResponseContent\n" .
-         "========\n\n");
+    return {
+      http_response => $Response,
+      error         => "ERROR WITH REQUEST\n"
+       . "<<<<<<<< $Method $URI HTTP/1.1\n$Bytes\n"
+       . ">>>>>>>> $Response->{protocol} $Response->{status} $Response->{reason}\n$ResponseContent\n"
+       . "========\n\n",
+    };
   }
 
   if ((grep { $Method eq $_ } qw{GET DELETE}) or ($Response->{status} != 207) or (not $ResponseContent)) {
-    return { content => $ResponseContent };
+    return {
+      http_response => $Response,
+      payload       => { content => $ResponseContent },
+    };
   }
 
   # }}}
@@ -362,9 +397,23 @@ sub Request {
     }
   }
 
-  return $Xml;
+  return {
+    http_response => $Response,
+    payload       => $Xml,
+  };
 
   # }}}
+}
+
+sub Request {
+  my ($Self, @Rest) = @_;
+  my ($Struct) = $Self->SafeRequest(@Rest);
+
+  if ($Struct->{error}) {
+    confess $Struct->{error};
+  }
+
+  return $Struct->{payload};
 }
 
 =head2 $Self->GetProps($Path, @Props)

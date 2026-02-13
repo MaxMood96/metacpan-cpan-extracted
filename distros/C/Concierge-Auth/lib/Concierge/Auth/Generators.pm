@@ -1,15 +1,16 @@
-package Concierge::Auth::Generators v0.3.2;
+package Concierge::Auth::Generators v0.3.4;
 use v5.36;
 
 # ABSTRACT: Value generation utilities for Concierge::Auth
 
 use Carp qw/carp/;
 use Time::HiRes qw/gettimeofday/;
-use Crypt::PRNG qw/rand random_string random_string_from/;
+use Crypt::PRNG qw/rand random_bytes random_string random_string_from/;
 use Exporter 'import';
 
 our @EXPORT_OK = qw(
     gen_uuid
+    gen_random_id
     gen_random_token
     gen_crypt_token
     gen_random_string
@@ -18,9 +19,9 @@ our @EXPORT_OK = qw(
 
 our %EXPORT_TAGS	= (
 	str 	=> [qw/gen_random_string gen_word_phrase/],
-	rand	=> [qw/gen_random_token gen_random_string/],
-	tok		=> [qw/gen_random_token gen_crypt_token gen_uuid/],
-	all		=> [qw/gen_uuid gen_random_token gen_crypt_token gen_random_string gen_word_phrase/],
+	rand	=> [qw/gen_random_id gen_random_token gen_random_string/],
+	tok		=> [qw/gen_random_id gen_random_token gen_crypt_token gen_uuid/],
+	all		=> [qw/gen_uuid gen_random_id gen_random_token gen_crypt_token gen_random_string gen_word_phrase/],
 );
 
 ## Generator response methods
@@ -41,17 +42,32 @@ sub g_error {
     wantarray ? (undef, $message) : undef;
 }
 
-## gen_uuid: generate a UUID using uuidgen command
-## Returns: UUID string or undef on failure
+## gen_uuid: generate a version 4 (random) UUID using Crypt::PRNG
+## Returns: UUID string (e.g., "550e8400-e29b-41d4-a716-446655440000")
 sub gen_uuid {
-    my $uuid = qx(uuidgen 2>/dev/null);
-    if ($? == 0 and defined $uuid) {
-        chomp $uuid;
-        return g_success($uuid, "UUID generated.");
-    }
-    carp "gen_uuid: uuidgen command failed, falling back to random string";
-    my $pseudo_uuid	= gen_random_token(36); # Fallback: UUID-like random token
-    return g_success($pseudo_uuid, "Random string substituted for UUID.");
+    my @bytes = unpack('C*', random_bytes(16));
+
+    # Set version 4 (bits 12-15 of time_hi_and_version)
+    $bytes[6] = ($bytes[6] & 0x0f) | 0x40;
+    # Set variant 1 (bits 6-7 of clock_seq_hi_and_reserved)
+    $bytes[8] = ($bytes[8] & 0x3f) | 0x80;
+
+    my $uuid = sprintf(
+        '%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x',
+        @bytes
+    );
+    return g_success($uuid, "UUID v4 generated.");
+}
+
+## gen_random_id: generate a random hex ID from cryptographic random bytes
+## Parameters: byte_length (optional, default 20 = 40 hex chars)
+## Returns: hex-encoded random string
+sub gen_random_id {
+    my $bytes = shift || 20;
+    $bytes = $bytes =~ /^\d+$/ ? $bytes : 20;
+
+    my $id = unpack('H*', random_bytes($bytes));
+    return g_success($id, "Random ID generated ($bytes bytes).");
 }
 
 ## gen_token: deprecated alias for gen_random_token
@@ -178,11 +194,14 @@ Concierge::Auth::Generators - Value generation utilities for Concierge::Auth
 
 =head1 SYNOPSIS
 
-    use Concierge::Auth::Generators qw(gen_uuid gen_random_token);
+    use Concierge::Auth::Generators qw(gen_uuid gen_random_id gen_random_token);
 
     # Direct functional usage
-    my $uuid = gen_uuid();                      # Scalar: direct value
+    my $uuid = gen_uuid();                      # Scalar: v4 UUID
     my ($uuid, $msg) = gen_uuid();              # List: value + message
+
+    my $id = gen_random_id();                   # 40-char hex string (20 bytes)
+    my $id = gen_random_id(32);                 # 64-char hex string (32 bytes)
 
     my $token = gen_random_token(32);           # 32-char token
     my $phrase = gen_word_phrase(4, 4, 7, '-'); # "Word1-Word2-Word3-Word4"
@@ -202,10 +221,21 @@ All generator functions return:
 
 =head2 gen_uuid()
 
-Generates a UUID using the system's uuidgen command.
-Falls back to random token generation if uuidgen unavailable.
+Generates a version 4 (random) UUID using C<Crypt::PRNG::random_bytes>.
+No external commands are used. The result is a standard RFC 4122 v4 UUID
+with 122 bits of cryptographic randomness.
 
     my $uuid = gen_uuid();  # e.g., "550e8400-e29b-41d4-a716-446655440000"
+
+=head2 gen_random_id($byte_length)
+
+Generates a hex-encoded random ID from cryptographic random bytes
+(C<Crypt::PRNG::random_bytes>). Default is 20 bytes (40 hex characters,
+160 bits). Suitable for session IDs, API keys, and other security tokens
+where UUID format is not required.
+
+    my $id = gen_random_id();     # 40-char hex string (20 bytes / 160 bits)
+    my $id = gen_random_id(32);   # 64-char hex string (32 bytes / 256 bits)
 
 =head2 gen_random_token($length)
 

@@ -1,0 +1,12 @@
+type: record
+fields:
+  - field: name
+    label: Name
+  - field: kuerzel
+    label: Abbreviation
+  - field: beschreibung
+    label: Description
+  - field: vorsitz
+    label: Chair
+  - field: mitglieder
+    label: Members

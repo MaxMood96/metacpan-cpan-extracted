@@ -1,0 +1,13 @@
+type: table
+extract: ausschuesse.ausschuss
+columns:
+  - field: id
+    header: ID
+    width: 5
+  - field: ausschussKurzName
+    header: COMMITTEE
+    width: 40
+  - field: lastChanged
+    header: CHANGED
+    width: 12
+empty: "No committees found."

@@ -1,5 +1,9 @@
 Revision history for Perl extension Aion
 
+1.6 2026-02-12T21:11:30Z
+
+    - fix bug: isa => string and eon => 1
+
 1.5 2025-12-19T13:03:59Z
 
     - added External[A]

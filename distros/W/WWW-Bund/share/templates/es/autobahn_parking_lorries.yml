@@ -1,0 +1,13 @@
+extract: parking_lorry
+type: table
+empty: "No truck parking areas."
+columns:
+  - field: title
+    header: TÍTULO
+    width: 40
+  - field: subtitle
+    header: SUBTÍTULO
+    width: 40
+  - field: isBlocked
+    header: BLOCKED
+    width: 7

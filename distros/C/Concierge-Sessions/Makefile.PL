@@ -11,12 +11,13 @@ WriteMakefile(
     MIN_PERL_VERSION => '5.036',
 
     PREREQ_PM => {
-        'Carp'       => 0,
-        'DBI'        => 0,
-        'DBD::SQLite' => 0,
-        'Time::HiRes' => 0,
-        'File::Spec' => 0,
-        'JSON::PP'   => 0,
+        'Carp'           => 0,
+        'Crypt::URandom' => 0,
+        'DBI'            => 0,
+        'DBD::SQLite'    => 0,
+        'Time::HiRes'    => 0,
+        'File::Spec'     => 0,
+        'JSON::PP'       => 0,
     },
 
     TEST_REQUIRES => {

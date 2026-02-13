@@ -1,0 +1,12 @@
+type: record
+fields:
+  - field: jahr
+    label: Year
+  - field: einzelplan
+    label: Budget Section
+  - field: titel
+    label: Title
+  - field: betrag
+    label: Amount
+  - field: kategorie
+    label: Category

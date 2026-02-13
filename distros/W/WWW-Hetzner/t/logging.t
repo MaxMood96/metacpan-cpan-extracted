@@ -8,6 +8,9 @@ use Test::More;
 use Log::Any::Test;
 use Log::Any qw($log);
 
+use lib 't/lib';
+use Test::WWW::Hetzner::Mock;
+
 use_ok('WWW::Hetzner::Cloud');
 
 subtest 'uses Log::Any' => sub {
@@ -16,22 +19,13 @@ subtest 'uses Log::Any' => sub {
     ok($http_log, 'WWW::Hetzner::Role::HTTP has a Log::Any logger');
 };
 
-subtest 'logging with mocked UA' => sub {
-    my $cloud = WWW::Hetzner::Cloud->new(token => 'test-token');
-
-    # Clear any previous log messages
+subtest 'logging with mocked IO' => sub {
     Log::Any->get_logger(category => 'WWW::Hetzner::Role::HTTP')->clear;
 
-    # Mock the UA to return a valid response
-    no warnings 'redefine';
-    local *LWP::UserAgent::request = sub {
-        my ($self, $request) = @_;
-        my $response = HTTP::Response->new(200, 'OK');
-        $response->content('{"servers":[]}');
-        return $response;
-    };
+    my $cloud = mock_cloud(
+        'GET /servers' => { servers => [] },
+    );
 
-    # Make a request
     eval { $cloud->servers->list };
 
     # Check logs
@@ -39,7 +33,7 @@ subtest 'logging with mocked UA' => sub {
 
     my @debug = grep { $_->{level} eq 'debug' } @$msgs;
     ok(@debug >= 1, 'has debug messages');
-    like($debug[0]->{message}, qr{GET.*/servers}, 'debug logs request URL');
+    like($debug[0]->{message}, qr{GET.*servers}, 'debug logs request URL');
 
     my @info = grep { $_->{level} eq 'info' } @$msgs;
     ok(@info >= 1, 'has info messages');
@@ -47,17 +41,16 @@ subtest 'logging with mocked UA' => sub {
 };
 
 subtest 'debug logs request body for POST' => sub {
-    my $cloud = WWW::Hetzner::Cloud->new(token => 'test-token');
-
     Log::Any->get_logger(category => 'WWW::Hetzner::Role::HTTP')->clear;
 
-    no warnings 'redefine';
-    local *LWP::UserAgent::request = sub {
-        my ($self, $request) = @_;
-        my $response = HTTP::Response->new(200, 'OK');
-        $response->content('{"server":{"id":1,"name":"test","status":"running","public_net":{"ipv4":{"ip":"1.2.3.4"}}}}');
-        return $response;
-    };
+    my $cloud = mock_cloud(
+        'POST /servers' => {
+            server => {
+                id => 1, name => 'test', status => 'running',
+                public_net => { ipv4 => { ip => '1.2.3.4' } },
+            },
+        },
+    );
 
     eval {
         $cloud->servers->create(
@@ -78,17 +71,14 @@ subtest 'debug logs request body for POST' => sub {
 };
 
 subtest 'error logging on API error' => sub {
-    my $cloud = WWW::Hetzner::Cloud->new(token => 'test-token');
-
     Log::Any->get_logger(category => 'WWW::Hetzner::Role::HTTP')->clear;
 
-    no warnings 'redefine';
-    local *LWP::UserAgent::request = sub {
-        my ($self, $request) = @_;
-        my $response = HTTP::Response->new(401, 'Unauthorized');
-        $response->content('{"error":{"message":"Invalid token"}}');
-        return $response;
-    };
+    my $cloud = mock_cloud(
+        'GET /servers' => WWW::Hetzner::HTTPResponse->new(
+            status  => 401,
+            content => '{"error":{"message":"Invalid token"}}',
+        ),
+    );
 
     eval { $cloud->servers->list };
 
