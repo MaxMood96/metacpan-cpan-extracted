@@ -1,5 +1,31 @@
 Revision history for Concierge-Sessions
 
+v0.9.0 2026-02-13
+    - Added META provides (resolves CPANTS meta_yml_has_provides)
+    - Added SECURITY.md with vulnerability reporting policy
+      (resolves CPANTS has_security_doc, security_doc_contains_contact)
+    - Added CONTRIBUTING.md with contribution guidelines
+      (resolves CPANTS has_contributing_doc)
+    - Added xt/pod-no-nonascii.t author test to guard against non-ASCII in POD
+    - Fixed stale POD versions in Base.pm, Session.pm, SQLite.pm, File.pm
+    - Bumped all module versions to v0.9.0
+
+v0.8.9 2026-02-13
+    - Removed non-ASCII characters from POD in Files.pm
+
+v0.8.8 2026-02-13
+    - Switched session ID generation from Crypt::URandom to Crypt::PRNG
+      (random_bytes), aligning with Concierge::Auth::Generators and reducing
+      overall Concierge suite dependencies
+    - CVE-2026-2439: Insecure session ID generation via uuidgen/rand fallback
+      was fixed in v0.8.5; this entry documents the assigned CVE
+
+v0.8.7 2026-02-13
+    - Fixed CPAN tester timeout failures: session expiry in installation
+      tests now mocked via direct SQLite update (no sleep). Real-time
+      timeout tests moved to xt/ (author tests only, skipped under
+      AUTOMATED_TESTING).
+
 v0.8.6 2026-02-12
     - Rebuilt tarball with GNU tar (fixes PaxHeader issue on CPAN)
 

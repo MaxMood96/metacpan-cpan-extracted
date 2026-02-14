@@ -4,7 +4,7 @@ package App::mdee;
 # POD documentation is appended from script/mdee at release time.
 # See minil.toml for details.
 
-our $VERSION = "0.15";
+our $VERSION = "0.16";
 
 1;
 =encoding utf-8
@@ -32,7 +32,7 @@ mdee - em·dee, Markdown Easy on the Eyes
      -w  --width=#          fold width (default: 80)
      -t  --theme=#[,#,...]  color theme(s) (default: hashed)
      -m  --mode=#           light or dark (default: light)
-     -B  --base-color=#     override theme's base color
+     -B  --base-color=#     override base color of theme
                             (e.g., Ivory, #780043, (120,0,67))
          --list-themes      list available themes
          --show=#           set field visibility (e.g., italic=1)
@@ -46,7 +46,7 @@ mdee - em·dee, Markdown Easy on the Eyes
 
 =head1 VERSION
 
-Version 0.15
+Version 0.16
 
 =cut
 =head1 DESCRIPTION
@@ -75,6 +75,34 @@ L<nup(1)|App::nup> for multi-column paged output.
 
 Supported elements: headers (h1-h6), bold, italic, strikethrough,
 inline code, code blocks, HTML comments, tables, and list items.
+
+=head2 Multi-column Layout and Pagination
+
+By default, B<mdee> calculates the number of display columns by
+dividing the terminal width by the pane width (default 85
+characters).  This determines how the output is laid out and
+paginated.
+
+When two or more columns fit, L<nup(1)|App::nup> arranges output
+in multi-column layout with page-by-page pagination — content is
+split into terminal-height pages viewed through a pager.
+
+When only one column fits, B<mdee> still uses nup for formatting
+(borders, document layout) but disables page-by-page splitting,
+so the content scrolls continuously in the pager.  This avoids
+wasted space from page breaks on narrow terminals while
+maintaining the same visual appearance.
+
+To force page-by-page pagination even in single-column layout,
+specify C<--nup> explicitly.  The C<--pane-width> (C<-S>) option
+adjusts the column width used for this calculation, and
+C<--pane> (C<-C>) sets the number of columns directly.
+
+Use C<-p> (C<--style=pager>) for a simpler view without nup
+formatting — highlighted output is piped directly through a
+pager.  Use C<-f> (C<--style=filter>) to write highlighted
+output to stdout without a pager, suitable for piping into
+other commands.
 
 =begin html
 
@@ -200,9 +228,11 @@ Default is enabled.
 
 =item B<--[no-]nup>
 
-Enable or disable L<nup(1)|App::nup> for multi-column paged output.  When
-disabled, output goes directly to stdout without formatting.
-Default is enabled.
+Enable or disable L<nup(1)|App::nup> for multi-column paged output.
+When disabled, output goes directly to stdout without formatting.
+Default is enabled.  When explicitly specified, forces nup's
+native pagination even in single-column layout (which normally
+uses the pager instead).
 
 =item B<--[no-]rule>
 
@@ -214,8 +244,10 @@ rules (C<─>).  Default is enabled.
 
 =item B<-w> I<N>, B<--width>=I<N>
 
-Set the fold width for text wrapping. Default is 80.
-Only effective when C<--fold> is enabled.
+Set the fold width for text wrapping.  Default is calculated from
+C<--pane-width> minus 5 (margin for borders and padding), which
+gives 80 when pane-width is 85.  Only effective when C<--fold> is
+enabled.
 
 =back
 
@@ -374,7 +406,11 @@ All fields are enabled by default.
 
 =item B<-C> I<N>, B<--pane>=I<N>
 
-Set the number of columns (panes).
+Set the number of columns (panes).  When not specified (or 0),
+the number of columns is calculated from the terminal width and
+C<--pane-width>.  If only 1 column fits, nup formatting (borders
+etc.) is preserved but pagination is handled by the pager instead.
+Use C<--nup> to force nup's native pagination even in single column.
 
 =item B<-R> I<N>, B<--row>=I<N>
 
@@ -390,7 +426,9 @@ Set the page height in lines.
 
 =item B<-S> I<N>, B<--pane-width>=I<N>
 
-Set the pane width in characters. Default is 85.
+Set the pane width in characters.  Default is 85.  This value is
+used to calculate the number of columns and the default fold
+width.
 
 =item B<--bs>=I<STYLE>, B<--border-style>=I<STYLE>
 
@@ -435,6 +473,10 @@ The C<default> associative array supports the following keys:
 =item C<default[style]> - Corresponds to C<--style> (e.g., C<pager>, C<cat>)
 
 =item C<default[width]> - Corresponds to C<--width> (e.g., C<100>)
+
+=item C<default[pane_width]> - Corresponds to C<--pane-width> (e.g., C<100>)
+
+=item C<default[pane]> - Corresponds to C<--pane> (e.g., C<2>)
 
 =item C<default[base_color]> - Corresponds to C<--base-color> (e.g., C<DarkCyan>)
 
@@ -697,6 +739,9 @@ Multi-line emphasis text is not supported.
 
 Link patterns do not span multiple lines.  The link text and URL must
 be on the same line.
+
+Links inside other highlighted elements (such as headings or bold
+text) are not processed.
 
 Reference-style links (C<[text][ref]> with C<[ref]: url> elsewhere)
 are not supported.

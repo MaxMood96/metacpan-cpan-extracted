@@ -1,0 +1,370 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Net::BitTorrent::Protocol::PeerHandler - High-level Peer Protocol Orchestrator
+
+=head1 SYNOPSIS
+
+    # Inherits from BEP 06, which inherits from BEP 52, then BEP 11, etc.
+    use Net::BitTorrent::Protocol::PeerHandler;
+
+    my $handler = Net::BitTorrent::Protocol::PeerHandler->new(
+        infohash => $ih,
+        peer_id   => $id,
+        features  => { bep06 => 1, bep10 => 1 }
+    );
+
+    # Link to the high-level Peer object
+    $handler->set_peer( $peer );
+
+    # Feed raw data from the transport
+    $handler->receive_data( $raw_bytes );
+
+=head1 DESCRIPTION
+
+C<Net::BitTorrent::Protocol::PeerHandler> is the "brain" of the Peer Wire Protocol implementation. It utilizes multiple
+inheritance (via the C<class> feature) to consolidate all supported BitTorrent extensions into a single, unified
+interface.
+
+It works closely with L<Net::BitTorrent::Peer> to manage the lifecycle of a connection:
+
+=over
+
+=item 1. B<Handshake>: Negotiates protocol version (v1 vs v2) and reserved bits.
+
+=item 2. B<Extensions>: If B<BEP 10> is negotiated, it exchanges extended handshakes to discover support for PEX, Metadata, etc.
+
+=item 3. B<Steady State>: Dispatches standard messages (Piece, Request) and extensions (PEX, Merkle hashes) to the high-level Peer object.
+
+=back
+
+=head2 Supported Extensions:
+
+=over
+
+=item * B<BEP 03>: Standard Handshake and Core Messages (Choke, Have, Request, etc.)
+
+=item * B<BEP 06 (Fast)>: Reduced latency messages (Allowed Fast, Suggest Piece, Reject)
+
+=item * B<BEP 09 (Metadata)>: UT_METADATA exchange for Magnet links.
+
+=item * B<BEP 10 (Extension)>: Capability negotiation.
+
+=item * B<BEP 11 (PEX)>: Peer Exchange.
+
+=item * B<BEP 52 (v2)>: Merkle Tree synchronization (HASHES, HASH_REQUEST).
+
+=item * B<BEP 55 (Holepunch)>: NAT traversal support.
+
+=back
+
+=head1 METHODS
+
+=head2 C<set_peer( $peer )>
+
+Associates the handler with a Peer object.
+
+    $handler->set_peer( $peer_obj );
+
+Expected parameters:
+
+=over
+
+=item C<$peer>
+
+The L<Net::BitTorrent::Peer> object.
+
+=back
+
+=head2 C<handshake> event
+
+Emitted when a PWP handshake is completed.
+
+    $proto->on( handshake => sub ( $self, $infohash, $peer_id ) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<$infohash>
+
+The 20 or 32-byte infohash.
+
+=item C<$peer_id>
+
+The 20-byte peer ID.
+
+=back
+
+=head2 C<ext_handshake> event
+
+Emitted when an extended handshake is received.
+
+    $proto->on( ext_handshake => sub ( $self, $data ) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<$data>
+
+The decoded handshake dictionary.
+
+=back
+
+=head2 C<metadata_request> event
+
+Emitted when a metadata request is received.
+
+    $proto->on( metadata_request => sub ( $self, $piece ) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<$piece>
+
+The piece index.
+
+=back
+
+=head2 C<metadata_data> event
+
+Emitted when metadata data is received.
+
+    $proto->on( metadata_data => sub ( $self, $piece, $total_size, $data ) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<$piece>
+
+The piece index.
+
+=item C<$total_size>
+
+The total metadata size.
+
+=item C<$data>
+
+The piece data.
+
+=back
+
+=head2 C<metadata_reject> event
+
+Emitted when a metadata request is rejected.
+
+    $proto->on( metadata_reject => sub ( $self, $piece ) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<$piece>
+
+The piece index.
+
+=back
+
+=head2 C<hash_request> event
+
+Emitted when a Merkle tree hash request is received (BEP 52).
+
+    $proto->on( hash_request => sub ( $self, $root, $proof_layer, $base_layer, $index, $length ) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<$root>
+
+The 32-byte Merkle root.
+
+=item C<$proof_layer>
+
+The proof layer index.
+
+=item C<$base_layer>
+
+The base layer index.
+
+=item C<$index>
+
+The starting index.
+
+=item C<$length>
+
+The number of hashes.
+
+=back
+
+=head2 C<hashes> event
+
+Emitted when Merkle tree hashes are received.
+
+    $proto->on( hashes => sub ( $self, $root, $proof_layer, $base_layer, $index, $length, $hashes ) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<$root>
+
+The 32-byte Merkle root.
+
+=item C<$proof_layer>
+
+The proof layer.
+
+=item C<$base_layer>
+
+The base layer.
+
+=item C<$index>
+
+The starting index.
+
+=item C<$length>
+
+The number of hashes.
+
+=item C<$hashes>
+
+The binary hashes.
+
+=back
+
+=head2 C<hash_reject> event
+
+Emitted when a hash request is rejected.
+
+    $proto->on( hash_reject => sub ( $self, $root, $proof_layer, $base_layer, $index, $length ) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<$root>
+
+The 32-byte Merkle root.
+
+=item C<$proof_layer>
+
+The proof layer.
+
+=item C<$base_layer>
+
+The base layer.
+
+=item C<$index>
+
+The starting index.
+
+=item C<$length>
+
+The number of hashes.
+
+=back
+
+=head2 C<pex> event
+
+Emitted when PEX data is received.
+
+    $proto->on( pex => sub ( $self, $added, $dropped, $added6, $dropped6 ) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<$added>
+
+Added IPv4 peers.
+
+=item C<$dropped>
+
+Dropped IPv4 peers.
+
+=item C<$added6>
+
+Added IPv6 peers.
+
+=item C<$dropped6>
+
+Dropped IPv6 peers.
+
+=back
+
+=head2 C<hp_rendezvous> event
+
+Emitted when a holepunch rendezvous is requested.
+
+    $proto->on( hp_rendezvous => sub ( $self, $id ) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<$id>
+
+The target peer ID.
+
+=back
+
+=head2 C<hp_connect> event
+
+Emitted when a holepunch connect instruction is received.
+
+    $proto->on( hp_connect => sub ( $self, $ip, $port ) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<$ip>
+
+The IP address.
+
+=item C<$port>
+
+The port number.
+
+=back
+
+=head2 C<hp_error> event
+
+Emitted when a holepunch error is received.
+
+    $proto->on( hp_error => sub ( $self, $err ) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<$err>
+
+The error code.
+
+=back
+
+=head2 C<peer( )>
+
+Returns the associated Peer object.
+
+    my $p = $handler->peer();
+
+=head1 AUTHOR
+
+Sanko Robinson E<lt>sanko@cpan.orgE<gt>
+
+=head1 COPYRIGHT
+
+Copyright (C) 2008-2026 by Sanko Robinson.
+
+This library is free software; you can redistribute it and/or modify it under the terms of the Artistic License 2.0.
+
+=cut

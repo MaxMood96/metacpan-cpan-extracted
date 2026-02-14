@@ -1,0 +1,22 @@
+# Copyright (c) 2026 Yuki Kimoto
+# MIT License
+
+class DBI::BindData::Blob {
+  version_from DBI;
+  
+  # Interfaces
+  interface Stringable;
+  
+  # Fields
+  has value : rw string;
+  
+  # Class Methods
+  static method new : DBI::BindData::Blob ($binary: string = undef) {
+    return new DBI::BindData::Blob;
+  }
+  
+  # Instance Methods
+  method to_string : string () {
+    return $self->value;
+  }
+}

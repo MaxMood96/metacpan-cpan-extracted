@@ -1,0 +1,109 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Net::BitTorrent::Protocol::BEP11 - Peer Exchange (PEX) Implementation
+
+=head1 SYNOPSIS
+
+    # Inherits from Net::BitTorrent::Protocol::BEP09
+    use Net::BitTorrent::Protocol::BEP11;
+
+    # Notify peer about new and dropped neighbors
+    $proto->send_pex(
+        [{ ip => '1.2.3.4', port => 6881 }], # added
+        [{ ip => '5.6.7.8', port => 6881 }]  # dropped
+    );
+
+=head1 DESCRIPTION
+
+C<Net::BitTorrent::Protocol::BEP11> implements the Peer Exchange (PEX, BEP 11) protocol. PEX allows peers to directly
+share the addresses of other peers they are connected to, dramatically reducing the time it takes to find a healthy
+swarm and reducing load on trackers and DHT nodes.
+
+It runs as a sub-protocol of the Extension Protocol (BEP 10) under the name C<ut_pex>.
+
+=head1 METHODS
+
+=head2 C<send_pex( [$added], [$dropped], [$added6], [$dropped6] )>
+
+Sends a Peer Exchange update.
+
+    $proto->send_pex(
+        [{ ip => '1.2.3.4', port => 6881 }],
+        [{ ip => '5.6.7.8', port => 6881 }]
+    );
+
+This method sends a C<ut_pex> message containing lists of newly discovered and recently disconnected peers.
+
+Expected parameters:
+
+=over
+
+=item C<$added> - optional
+
+Array reference of newly discovered IPv4 peers. Each must be a hash reference with C<ip> and C<port>.
+
+=item C<$dropped> - optional
+
+Array reference of IPv4 peers that have disconnected.
+
+=item C<$added6> - optional
+
+Array reference of newly discovered IPv6 peers.
+
+=item C<$dropped6> - optional
+
+Array reference of IPv6 peers that have disconnected.
+
+=back
+
+=head2 C<pex> event
+
+Emitted when a PEX message is received.
+
+    $proto->on( pex => sub ( $self, $added, $dropped, $added6, $dropped6 ) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<$added>
+
+Array reference of added IPv4 peers.
+
+=item C<$dropped>
+
+Array reference of dropped IPv4 peers.
+
+=item C<$added6>
+
+Array reference of added IPv6 peers.
+
+=item C<$dropped6>
+
+Array reference of dropped IPv6 peers.
+
+=back
+
+=head1 SPECIFICATIONS
+
+=over
+
+=item * BEP 11: Peer Exchange (PEX)
+
+=back
+
+=head1 AUTHOR
+
+Sanko Robinson E<lt>sanko@cpan.orgE<gt>
+
+=head1 COPYRIGHT
+
+Copyright (C) 2008-2026 by Sanko Robinson.
+
+This library is free software; you can redistribute it and/or modify it under the terms of the Artistic License 2.0.
+
+=cut

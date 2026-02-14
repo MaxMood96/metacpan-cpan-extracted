@@ -7,7 +7,7 @@ define() { IFS='\n' read -r -d '' ${1} || true ; }
 
 myname="${0##*/}"
 
-define pod <<"=cut"
+define pod <<'__POD__'
 
 =encoding utf-8
 
@@ -34,7 +34,7 @@ mdee - em·dee, Markdown Easy on the Eyes
      -w  --width=#          fold width (default: 80)
      -t  --theme=#[,#,...]  color theme(s) (default: hashed)
      -m  --mode=#           light or dark (default: light)
-     -B  --base-color=#     override theme's base color
+     -B  --base-color=#     override base color of theme
                             (e.g., Ivory, #780043, (120,0,67))
          --list-themes      list available themes
          --show=#           set field visibility (e.g., italic=1)
@@ -48,9 +48,11 @@ mdee - em·dee, Markdown Easy on the Eyes
 
 =head1 VERSION
 
-Version 0.15
+Version 0.16
 
 =cut
+
+__POD__
 
 [[ $pod =~ Version\ +([0-9.]+) ]] && my_version=${BASH_REMATCH[1]}
 
@@ -156,11 +158,11 @@ declare -A OPTS=(
     [  list-themes |     !         # list available themes ]=
     [         show |    %!         # field visibility      ]=
     [        pager |    ?!         # pager command         ]=
+    [         pane | C  :=i        # number of columns     ]=0
+    [   pane-width | S  :=i        # pane width            ]=85
     [         grid | G  :>nup_opts # grid layout           ]=
-    [         pane | C  :>nup_opts # number of columns     ]=
     [          row | R  :>nup_opts # number of rows        ]=
     [         page | P  :>nup_opts # page height           ]=
-    [   pane-width | S  :>nup_opts # pane width            ]=
     [ border-style | bs :>nup_opts # border style          ]=
 )
 
@@ -187,8 +189,8 @@ declare -A theme_light=(
              [h2]='L25DE/${base}+y20'
              [h3]='L25DN/${base}+y30'
              [h4]='${base}UD'
-             [h5]='${base}+y20;U'
-             [h6]='${base}+y20'
+             [h5]='${base}U'
+             [h6]='${base}'
     [inline_code]='L15/L23,/L23,L15/L23'
      [code_block]='L20 , L18 , /L23;E , L20'
 )
@@ -203,8 +205,8 @@ declare -A theme_dark=(
              [h2]='L00DE/${base}-y15'
              [h3]='L00DN/${base}-y25'
              [h4]='${base}UD'
-             [h5]='${base}-y20;U'
-             [h6]='${base}-y20'
+             [h5]='${base}U'
+             [h6]='${base}'
     [inline_code]='L12/L05,/L05,L12/L05'
      [code_block]='L10 , L12 , /L05;E , L10'
 )
@@ -436,16 +438,12 @@ list_themes() {
 . getoptlong.sh OPTS "$@"
 
 ##############################################################################
-# Main
+# Apply config defaults and resolve options
 ##############################################################################
 
 if (( $# == 0 )) && [[ -t 0 ]] && [[ ${theme[0]:-} != '?' ]]; then
     help
 fi
-
-##############################################################################
-# Theme setup
-##############################################################################
 
 # Load user config (may set default[theme], default[mode], default[style], etc.)
 [[ -f "$config_file" ]] && . "$config_file" || :
@@ -459,15 +457,36 @@ fi
 : ${mode:=${default[mode]:-$(detect_terminal_mode)}}
 : ${mode:=light}
 
-##############################################################################
-# Apply style defaults for fold/table/nup
-##############################################################################
+# Apply config defaults for pane/pane-width
+(( pane_width == 85 )) && pane_width=${default[pane_width]:-85}
+(( pane == 0 ))        && pane=${default[pane]:-0}
+
+# Calculate columns from terminal width and pane width
+: ${COLUMNS:=$(tput cols)}
+(( debug > 0 )) && echo "debug: COLUMNS=${COLUMNS:-unset} pane=$pane pane_width=$pane_width" >&2
+if (( pane > 0 )); then
+    _cols=$pane
+elif [[ ${COLUMNS:-} ]]; then
+    _cols=$(( COLUMNS / pane_width ))
+    (( _cols < 1 )) && _cols=1
+else
+    _cols=0  # unknown
+fi
 
 # Apply style default: explicit option > config default > "nup"
 : ${style:=${default[style]:-nup}}
 
-# Apply width default: explicit option (non-zero) > config default > 80
-(( width == 0 )) && width=${default[width]:-80}
+# Apply width default: explicit option (non-zero) > config default > (actual pane width - 5)
+# Actual pane width = COLUMNS / _cols (varies with column count)
+if (( width == 0 )); then
+    if [[ ${default[width]:-} ]]; then
+        width=${default[width]}
+    elif (( _cols > 0 )); then
+        width=$(( ${COLUMNS:-80} / _cols - 5 ))
+    else
+        width=$(( pane_width - 5 ))
+    fi
+fi
 
 # Style determines default values for fold, table, nup.
 # Sentinel "_" means not explicitly set by user.
@@ -482,6 +501,7 @@ case $style in
 esac
 [[ $fold  == _ ]] && fold=${style_defaults[fold]}
 [[ $table == _ ]] && table=${style_defaults[table]}
+[[ $nup   != _ ]] && _nup_explicit=1
 [[ $nup   == _ ]] && nup=${style_defaults[nup]}
 [[ $rule  == _ ]] && rule=${style_defaults[rule]}
 [[ ${rule:-} ]] && rule='│'
@@ -608,19 +628,29 @@ EOS
 
 run_table_fix() { invoke perl -CSA -E "$fix_table_script" "${rule:-}"; }
 
-run_nup()   { invoke nup "${nup_opts[@]}"; }
-
-run_pager() { invoke ${PAGER:-less}; }
+run_nup()    { invoke nup "${nup_opts[@]}"; }
+run_column() { invoke nup "${nup_opts[@]}" --no-pager --fold --pane=1; }
+run_pager()  { invoke ${PAGER:-less}; }
 
 # Set defaults for less environment
 export LESS="${LESS:--R}"
 export LESSANSIENDCHARS="${LESSANSIENDCHARS:-mK}"
 
+# Add pane/pane-width to nup_opts
+(( pane_width != 85 )) && nup_opts+=("--pane-width=$pane_width")
+(( pane != 0 ))        && nup_opts+=("--pane=$pane")
+
 # Collect pipeline stages
 declare -a stages=(run_greple)
 [[ $fold  ]] && stages+=(run_fold)
 [[ $table ]] && stages+=(run_table run_table_fix)
-[[ $nup   ]] && stages+=(run_nup)
+if [[ $nup ]]; then
+    if (( _cols == 1 )) && [[ ! ${_nup_explicit:-} ]]; then
+        stages+=(run_column run_pager)
+    else
+        stages+=(run_nup)
+    fi
+fi
 [[ $style == pager ]] && stages+=(run_pager)
 
 # Build and execute pipeline
@@ -644,7 +674,7 @@ else
     eval "$pipeline"
 fi
 
-: <<'=cut'
+: <<'__POD__'
 
 =head1 DESCRIPTION
 
@@ -672,6 +702,34 @@ L<nup(1)|App::nup> for multi-column paged output.
 
 Supported elements: headers (h1-h6), bold, italic, strikethrough,
 inline code, code blocks, HTML comments, tables, and list items.
+
+=head2 Multi-column Layout and Pagination
+
+By default, B<mdee> calculates the number of display columns by
+dividing the terminal width by the pane width (default 85
+characters).  This determines how the output is laid out and
+paginated.
+
+When two or more columns fit, L<nup(1)|App::nup> arranges output
+in multi-column layout with page-by-page pagination — content is
+split into terminal-height pages viewed through a pager.
+
+When only one column fits, B<mdee> still uses nup for formatting
+(borders, document layout) but disables page-by-page splitting,
+so the content scrolls continuously in the pager.  This avoids
+wasted space from page breaks on narrow terminals while
+maintaining the same visual appearance.
+
+To force page-by-page pagination even in single-column layout,
+specify C<--nup> explicitly.  The C<--pane-width> (C<-S>) option
+adjusts the column width used for this calculation, and
+C<--pane> (C<-C>) sets the number of columns directly.
+
+Use C<-p> (C<--style=pager>) for a simpler view without nup
+formatting — highlighted output is piped directly through a
+pager.  Use C<-f> (C<--style=filter>) to write highlighted
+output to stdout without a pager, suitable for piping into
+other commands.
 
 =begin html
 
@@ -797,9 +855,11 @@ Default is enabled.
 
 =item B<--[no-]nup>
 
-Enable or disable L<nup(1)|App::nup> for multi-column paged output.  When
-disabled, output goes directly to stdout without formatting.
-Default is enabled.
+Enable or disable L<nup(1)|App::nup> for multi-column paged output.
+When disabled, output goes directly to stdout without formatting.
+Default is enabled.  When explicitly specified, forces nup's
+native pagination even in single-column layout (which normally
+uses the pager instead).
 
 =item B<--[no-]rule>
 
@@ -811,8 +871,10 @@ rules (C<─>).  Default is enabled.
 
 =item B<-w> I<N>, B<--width>=I<N>
 
-Set the fold width for text wrapping. Default is 80.
-Only effective when C<--fold> is enabled.
+Set the fold width for text wrapping.  Default is calculated from
+C<--pane-width> minus 5 (margin for borders and padding), which
+gives 80 when pane-width is 85.  Only effective when C<--fold> is
+enabled.
 
 =back
 
@@ -971,7 +1033,11 @@ All fields are enabled by default.
 
 =item B<-C> I<N>, B<--pane>=I<N>
 
-Set the number of columns (panes).
+Set the number of columns (panes).  When not specified (or 0),
+the number of columns is calculated from the terminal width and
+C<--pane-width>.  If only 1 column fits, nup formatting (borders
+etc.) is preserved but pagination is handled by the pager instead.
+Use C<--nup> to force nup's native pagination even in single column.
 
 =item B<-R> I<N>, B<--row>=I<N>
 
@@ -987,7 +1053,9 @@ Set the page height in lines.
 
 =item B<-S> I<N>, B<--pane-width>=I<N>
 
-Set the pane width in characters. Default is 85.
+Set the pane width in characters.  Default is 85.  This value is
+used to calculate the number of columns and the default fold
+width.
 
 =item B<--bs>=I<STYLE>, B<--border-style>=I<STYLE>
 
@@ -1032,6 +1100,10 @@ The C<default> associative array supports the following keys:
 =item C<default[style]> - Corresponds to C<--style> (e.g., C<pager>, C<cat>)
 
 =item C<default[width]> - Corresponds to C<--width> (e.g., C<100>)
+
+=item C<default[pane_width]> - Corresponds to C<--pane-width> (e.g., C<100>)
+
+=item C<default[pane]> - Corresponds to C<--pane> (e.g., C<2>)
 
 =item C<default[base_color]> - Corresponds to C<--base-color> (e.g., C<DarkCyan>)
 
@@ -1295,6 +1367,9 @@ Multi-line emphasis text is not supported.
 Link patterns do not span multiple lines.  The link text and URL must
 be on the same line.
 
+Links inside other highlighted elements (such as headings or bold
+text) are not processed.
+
 Reference-style links (C<[text][ref]> with C<[ref]: url> elsewhere)
 are not supported.
 
@@ -1362,3 +1437,5 @@ This software is released under the MIT License.
 L<https://opensource.org/licenses/MIT>
 
 =cut
+
+__POD__

@@ -1,0 +1,179 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+
+use App::pod2gfm;
+
+exit App::pod2gfm->new->init(@ARGV)->run;
+
+=encoding UTF-8
+
+=head1 NAME
+
+pod2gfm - convert POD to GitHub Flavored Markdown
+
+=head1 SYNOPSIS
+
+B<pod2gfm> [I<OPTION>]... [I<INFILE>]... [I<OUTFILE>]...
+
+Options:
+
+  -a, --auto                   write to a file named INFILE.md
+  -e, --file-extension=EXT     use EXT as extension (--auto)
+      --no-strip-ext           do not remove extension (--auto)
+  -t, --target-directory=DIR   convert all files into DIR (--auto)
+      --force                  overwrite existing files
+      --hl-language=LANG       set default LANG for syntax highlighting
+      --man-url-prefix=URL     set man page URL for L<> codes
+      --perldoc-url-prefix=URL set perldoc URL for L<> codes
+  -h, --help                   show this help and exit
+  -v, --version                show version info and exit
+
+Examples:
+
+=for highlighter language=shell
+
+  $ pod2gfm                   # Convert STDIN, print to STDOUT
+  $ pod2gfm - file.md         # "       STDIN, print to OUTFILE
+  $ pod2gfm file.pod          # "       INFILE, print to STDOUT
+  $ pod2gfm file.pod file.md  # "       INFILE, print to OUTFILE
+  $ pod2gfm file.pod -a       # Ditto
+
+  # Convert multiple files (pairs)
+  $ pod2gfm \
+      foo.pod foo.md \
+      bar.pod bar.md
+
+  # Convert all files
+  $ pod2gfm -a foo.pod bar.pod baz.pod
+
+If no I<INFILE> is given or I<INFILE> is C<->, read standard input.
+
+If no I<OUTFILE> is given, write to standard output (unless B<--auto> is set).
+
+=head1 DESCRIPTION
+
+B<pod2gfm> is a command-line utility based on L<pod2markdown> for L<Pod::Markdown::Githubert>,
+a subclass of L<Pod::Markdown> that adds GitHub-specific features like fenced
+code blocks (C<```>) with language tags for syntax highlighting.
+
+See L<Pod::Markdown::Githubert/DESCRIPTION> for details.
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-a>, B<--auto>
+
+Write to a file named after I<INFILE> with a F<.md> extension instead of I<OUTFILE>.
+
+Note that any F<.pod>, F<.pm>, or F<.pl> suffix is removed before appending F<.md>
+(unless B<--no-strip-ext> is set).
+
+=item B<-e>, B<--file-extension>=I<EXT>
+
+If B<--auto> is set, use I<EXT> as extension suffix.
+
+=item B<--no-strip-ext>
+
+If B<--auto> is set, do not remove any F<.pod>, F<.pm>, or F<.pl> suffix from I<INFILE>.
+
+=item B<--target-directory>=I<DIR>
+
+If B<--auto> is set, convert all files into I<DIR>.
+
+=item B<--force>
+
+Overwrite existing files silently.
+
+=item B<--hl-language>=I<LANG>
+
+Set the default I<LANG> for syntax highlighting in code blocks. See L<Pod::Markdown::Githubert/hl_language>.
+
+=item B<--man-url-prefix>=I<URL>
+
+Alter the man page I<URL>s that are created from C<< LE<lt>E<gt> >> codes. Default:
+C<http://man.he.net/man>.
+
+See L<Pod::Markdown/man_url_prefix>.
+
+=item B<--perldoc-url-prefix>=I<URL>
+
+Alter the perldoc I<URL>s that are created from C<< LE<lt>E<gt> >> codes. Default:
+C<metacpan>.
+
+See L<Pod::Markdown/perldoc_url_prefix>.
+
+=item B<-h>, B<--help>
+
+Display a summary of options and exit.
+
+=item B<-v>, B<--version>
+
+Display the B<pod2gfm> version number and exit.
+
+=back
+
+=head2 COMPLETION
+
+To enable tab completion in bash, put the script in the C<PATH> and run this
+in the shell or add it to a bash startup file (e.g. F</etc/bash.bashrc> or F<~/.bashrc>):
+
+=for highlighter language=shell
+
+  complete -C pod2gfm pod2gfm
+
+=head1 EXIT STATUS
+
+=for highlighter
+
+  0  success
+  1  general failure
+  2  command-line usage error
+
+=head1 BUGS
+
+Report bugs at L<https://github.com/author/App-pod2gfm/issues>.
+
+=head1 AUTHOR
+
+ryoskzypu <ryoskzypu@proton.me>
+
+=head1 SEE ALSO
+
+=over 4
+
+=item *
+
+L<GFM Syntax highlighting|https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-and-highlighting-code-blocks#syntax-highlighting>
+
+=item *
+
+L<Pod::Markdown>
+
+=back
+
+These are similar utilities but they try to guess the language syntax for the
+fenced code blocks, unlike L<Pod::Markdown::Githubert> (which lets you specify
+a language in POD).
+
+=over 4
+
+=item *
+
+L<Pod::Markdown::Github>
+
+=item *
+
+L<Pod::Github>
+
+=back
+
+=head1 COPYRIGHT
+
+Copyright © 2026 ryoskzypu
+
+MIT-0 License. See LICENSE for details.
+
+=cut

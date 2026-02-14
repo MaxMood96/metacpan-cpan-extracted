@@ -1,0 +1,170 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Net::BitTorrent::Protocol::BEP09 - Metadata Exchange Implementation
+
+=head1 SYNOPSIS
+
+    # Inherits from Net::BitTorrent::Protocol::BEP10 (Extension Protocol)
+    use Net::BitTorrent::Protocol::BEP09;
+
+    my $proto = Net::BitTorrent::Protocol::BEP09->new(...);
+
+    # Request segment 0 of the info dictionary
+    $proto->send_metadata_request(0);
+
+    # Handle incoming metadata pieces
+    $proto->on(metadata_data => sub ( $emitter, $piece, $total, $data ) {
+        say "Received metadata piece $piece of $total";
+    });
+
+=head1 DESCRIPTION
+
+C<Net::BitTorrent::Protocol::BEP09> implements the B<Extension for Peers to Send Metadata Files (BEP 09)>. This is the
+protocol that makes B<Magnet Links> work by allowing a client to download the torrent's C<info> dictionary directly
+from other peers when the local C<.torrent> file is missing.
+
+It works as a sub-protocol of the B<Extension Protocol (BEP 10)>, using the C<ut_metadata> message name.
+
+=head1 METHODS
+
+=head2 C<send_metadata_request( $piece )>
+
+Sends a metadata piece request.
+
+    $proto->send_metadata_request( 0 );
+
+This method sends a C<ut_metadata> request for a 16KiB segment of the torrent's metadata.
+
+Expected parameters:
+
+=over
+
+=item C<$piece>
+
+The zero-based metadata piece index.
+
+=back
+
+=head2 C<send_metadata_data( $piece, $total_size, $data )>
+
+Sends a metadata piece.
+
+    $proto->send_metadata_data( 0, 32768, $piece_data );
+
+This method provides a segment of the info dictionary to a peer in response to a request.
+
+Expected parameters:
+
+=over
+
+=item C<$piece>
+
+The metadata piece index.
+
+=item C<$total_size>
+
+The full length of the bencoded info dictionary in bytes.
+
+=item C<$data>
+
+The raw 16KiB piece data.
+
+=back
+
+=head2 C<send_metadata_reject( $piece )>
+
+Rejects a metadata request.
+
+    $proto->send_metadata_reject( 0 );
+
+This method informs the peer that the requested metadata segment cannot be provided.
+
+Expected parameters:
+
+=over
+
+=item C<$piece>
+
+The metadata piece index.
+
+=back
+
+=head2 C<metadata_request> event
+
+Emitted when a metadata request is received.
+
+    $proto->on( metadata_request => sub ( $self, $piece ) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<$piece>
+
+The requested metadata piece index.
+
+=back
+
+=head2 C<metadata_data> event
+
+Emitted when metadata data is received.
+
+    $proto->on( metadata_data => sub ( $self, $piece, $total_size, $data ) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<$piece>
+
+The metadata piece index.
+
+=item C<$total_size>
+
+The total size of the metadata.
+
+=item C<$data>
+
+The received piece data.
+
+=back
+
+=head2 C<metadata_reject> event
+
+Emitted when a metadata request is rejected.
+
+    $proto->on( metadata_reject => sub ( $self, $piece ) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<$piece>
+
+The piece index that was rejected.
+
+=back
+
+=head1 SPECIFICATIONS
+
+=over
+
+=item * B<BEP 09>: Extension for Peers to Send Metadata Files
+
+=back
+
+=head1 AUTHOR
+
+Sanko Robinson E<lt>sanko@cpan.orgE<gt>
+
+=head1 COPYRIGHT
+
+Copyright (C) 2008-2026 by Sanko Robinson.
+
+This library is free software; you can redistribute it and/or modify it under the terms of the Artistic License 2.0.
+
+=cut

@@ -6,6 +6,12 @@ Home page:    <https://metacpan.org/release/Marlin>
 Bug tracker:  <https://github.com/tobyink/p5-marlin/issues>
 Maintainer:   Toby Inkster (TOBYINK) <tobyink@cpan.org>
 
+0.023001	2026-02-14
+
+ [ Documentation ]
+ - Add quick start for people already familiar with Moose/Moo.
+ - Fix minor typos, etc in pod.
+
 0.023000	2026-02-06
 
  [ Documentation ]

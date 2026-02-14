@@ -58,3 +58,8 @@ Revision history for Perl extension LaTeX::Replicase.
 	- Fixed tests.
 	- The manual has been corrected and expanded.
 
+0.593 Fri Feb 13 13:13:13 2026
+	- Corrected backslash replacement (escaping).
+	- Corrected the behavior of an empty array.
+	- Fixed tests.
+	- The manual has been corrected.

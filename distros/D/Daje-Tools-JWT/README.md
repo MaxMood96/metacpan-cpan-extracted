@@ -1,4 +1,4 @@
-[![Actions Status](https://github.com/janeskil1525/Daje-Tools-JWT/actions/workflows/test.yml/badge.svg)](https://github.com/janeskil1525/Daje-Tools-JWT/actions)
+[![Actions Status](https://github.com/janeskil1525/Daje-Tools-JWT/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/janeskil1525/Daje-Tools-JWT/actions?workflow=test)
 # NAME
 
 Daje::Tools::JWT - It's module for JWT's

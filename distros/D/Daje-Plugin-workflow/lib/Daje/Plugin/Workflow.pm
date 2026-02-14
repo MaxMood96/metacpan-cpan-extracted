@@ -40,8 +40,9 @@ use v5.40;
 # janeskil1525 E<lt>janeskil1525@gmail.comE<gt>
 #
 
-our $VERSION = "0.20";
+our $VERSION = "0.35";
 
+use Data::Dumper;
 use Daje::Workflow::Database;
 use Daje::Workflow::Loader;
 use Daje::Workflow;
@@ -51,9 +52,11 @@ sub register ($self, $app, $config) {
 
     $app->log->debug("Daje::Plugin::Workflow::register starts");
 
-    my $migrations->{class} = 'Daje::Workflow::Database';
-    $migrations->{name} = 'workflow';
-    $migrations->{migration} = 4;
+    my $migration->{class} = 'Daje::Workflow::Database';
+    $migration->{name} = 'workflow';
+    $migration->{migration} = 4;
+    my $migrations;
+    push @{$migrations}, $migration;
     try {
         Daje::Database::Migrator->new(
             pg         => $app->pg,
@@ -62,6 +65,7 @@ sub register ($self, $app, $config) {
     } catch ($e) {
         $app->log->error($e);
     };
+    push @{$app->routes->namespaces}, 'Daje::Controller::Workflows';
 
     my $loader;
     try { # '/home/jan/Project/Daje-Workflow-Workflows/Workflows'
@@ -74,20 +78,21 @@ sub register ($self, $app, $config) {
         $app->log->error($e);
     };
 
-    my $workflow;
+    my $workflow_engine;
     try {
-        $workflow = Daje::Workflow->new(
+        $workflow_engine = Daje::Workflow->new(
             pg     => $app->pg,
             loader => $loader->loader,
         );
     } catch ($e) {
         $app->log->error($e);
     };
-    push @{$app->routes->namespaces}, 'Daje::Controller::Workflow';
-    $app->helper(workflow => sub {$workflow});
 
-    my $r = $app->routes;
-    $r->put('/workflow/api/execute')->to('Workflow#execute');
+    my $r = $app->auth;
+
+    $r->put('workflow/execute')->to('Workflows#execute');
+
+    $app->helper(workflow_engine => sub {$workflow_engine});
 
     $app->log->debug("Daje::Plugin::Workflow registered");
 }

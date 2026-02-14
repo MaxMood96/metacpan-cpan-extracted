@@ -63,7 +63,7 @@ use Class::Load qw(is_class_loaded);
 use Daje::Document::Load::Template;
 use Data::Dumper;
 
-our $VERSION = "0.10";
+our $VERSION = "0.15";
 
 has 'data';
 has 'source';
@@ -97,8 +97,10 @@ sub process($self) {
                 push @{$documents}, $section;
             }
             $self->error->add_error($tt->error) if (defined $tt->error);
+            say $tt->error if (defined $tt->error);
             $self->output($documents);
         } catch($e) {
+            say $e;
             $self->error->add_error($e);
         }
     } else {

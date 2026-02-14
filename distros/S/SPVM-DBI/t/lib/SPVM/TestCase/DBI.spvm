@@ -1,6 +1,6 @@
 class TestCase::DBI {
   use DBI;
-  use DBI::Data;
+  use DBI::BindData::Blob;
   use DBD::TestCaseMinimal;
   use Go::Context;
 
@@ -14,7 +14,15 @@ class TestCase::DBI {
     my $options = {
       Host => "localhost",
       Port => 3306,
-      Database => "test_db"
+      Database => "test_db",
+      InactiveDestroy => (byte)1,
+      IdleTimeout => 1000.5,
+      ConnectTimeout => 2000.5,
+      ReadTimeout => 3000.5,
+      WriteTimeout => 4000.5,
+      SocketKeepAlive => (byte)1,
+      TCPKeepIdle => 5000,
+      TCPNoDelay => (byte)1
     };
     
     my $dbh = DBD::TestCaseMinimal->connect($ctx, $user, $pass, $options);
@@ -38,6 +46,92 @@ class TestCase::DBI {
       
       unless ($dbh->Username eq $user) {
         diag $dbh->Username;
+        return 0;
+      }
+
+      unless ($dbh->InactiveDestroy == 1) {
+        diag (string)(int)$dbh->InactiveDestroy;
+        return 0;
+      }
+
+      unless ($dbh->IdleTimeout == 1000.5) {
+        diag (string)$dbh->IdleTimeout;
+        return 0;
+      }
+
+      unless ($dbh->ConnectTimeout == 2000.5) {
+        diag (string)$dbh->ConnectTimeout;
+        return 0;
+      }
+
+      unless ($dbh->ReadTimeout == 3000.5) {
+        diag (string)$dbh->ReadTimeout;
+        return 0;
+      }
+
+      unless ($dbh->WriteTimeout == 4000.5) {
+        diag (string)$dbh->WriteTimeout;
+        return 0;
+      }
+
+      unless ($dbh->SocketKeepAlive == 1) {
+        diag (string)(int)$dbh->SocketKeepAlive;
+        return 0;
+      }
+
+      unless ($dbh->TCPKeepIdle == 5000) {
+        diag (string)$dbh->TCPKeepIdle;
+        return 0;
+      }
+
+      unless ($dbh->TCPNoDelay == 1) {
+        diag (string)(int)$dbh->TCPNoDelay;
+        return 0;
+      }
+
+      unless ($dbh->AutoCommit == 1) {
+        diag (string)(int)$dbh->AutoCommit;
+        return 0;
+      }
+
+      # Test Read-Write Accessors
+      $dbh->set_InactiveDestroy(0);
+      unless ($dbh->InactiveDestroy == 0) {
+        return 0;
+      }
+
+      $dbh->set_IdleTimeout(9001L);
+      unless ($dbh->IdleTimeout == 9001L) {
+        return 0;
+      }
+
+      $dbh->set_ConnectTimeout(9002L);
+      unless ($dbh->ConnectTimeout == 9002L) {
+        return 0;
+      }
+
+      $dbh->set_ReadTimeout(9003L);
+      unless ($dbh->ReadTimeout == 9003L) {
+        return 0;
+      }
+
+      $dbh->set_WriteTimeout(9004.5);
+      unless ($dbh->WriteTimeout == 9004.5) {
+        return 0;
+      }
+      
+      $dbh->set_SocketKeepAlive(0);
+      unless ($dbh->SocketKeepAlive == 0) {
+        return 0;
+      }
+      
+      $dbh->set_TCPKeepIdle(9000);
+      unless ($dbh->TCPKeepIdle == 9000) {
+        return 0;
+      }
+      
+      $dbh->set_TCPNoDelay(0);
+      unless ($dbh->TCPNoDelay == 0) {
         return 0;
       }
     }
@@ -133,14 +227,16 @@ class TestCase::DBI {
         }
 
         my $bind_cols = [(object)99, (object)"input"];
-        my $row2 = $sth->fetch($ctx, $bind_cols);
+        my $row2 = $sth->fetch_with_bind_columns($ctx, $bind_cols);
         unless ((int)$row2->[0] == 99 && (string)$row2->[1] eq "input") {
           diag;
           return 0;
         }
 
         my $ret_row = new object[2];
-        my $row3 = $sth->fetch($ctx, $bind_cols, $ret_row);
+        my $created_count = 0;
+        my $extended_count = 0;
+        my $row3 = $sth->fetch_with_bind_columns($ctx, $bind_cols, $ret_row, \$created_count, \$extended_count);
         unless ($row3 == $ret_row && (int)$row3->[0] == 99) {
           diag;
           return 0;
@@ -168,48 +264,11 @@ class TestCase::DBI {
   }
 
   static method data : int () {
-    # big_int helper
-    {
-      my $val = "170141183460469231731687303715884105727";
-      my $data = DBI->big_int($val);
-      unless ($data->type_id == DBI::Data->TYPE_ID_BIG_INT) {
-        diag;
-        return 0;
-      }
-      unless ($data->value eq $val) {
-        diag;
-        return 0;
-      }
-      unless ($data->to_string eq $val) {
-        diag;
-        return 0;
-      }
-    }
-
-    # big_float helper
-    {
-      my $val = "1.23456789012345678901234567890";
-      my $data = DBI->big_float($val);
-      unless ($data->type_id == DBI::Data->TYPE_ID_BIG_FLOAT) {
-        diag;
-        return 0;
-      }
-      unless ($data->value eq $val) {
-        diag;
-        return 0;
-      }
-      unless ($data->to_string eq $val) {
-        diag;
-        return 0;
-      }
-    }
-
     # blob helper
     {
       my $val = "abc\0def"; # binary
       my $data = DBI->blob($val);
-      unless ($data->type_id == DBI::Data->TYPE_ID_BLOB) {
-        diag;
+      unless ($data is_type DBI::BindData::Blob) {
         return 0;
       }
       unless ($data->value eq $val) {

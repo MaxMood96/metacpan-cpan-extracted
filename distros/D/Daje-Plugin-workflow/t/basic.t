@@ -29,14 +29,14 @@ helper jwt => sub ($c) {
     return Daje::Tools::JWT->new()
 };
 
-push @{app->plugins->namespaces}, 'Daje::Plugin';
-push @{app->routes->namespaces}, 'Daje::Controller';
-
-app->log->path('/home/jan/Project/Daje-Plugin-Workflow/Log/workflow.log');
-app->log->level('debug');
-
-plugin 'Config' => { file => '../conf/config.conf' };
-plugin 'Workflow';
+# push @{app->plugins->namespaces}, 'Daje::Plugin';
+# push @{app->routes->namespaces}, 'Daje::Controller';
+#
+# app->log->path('/home/jan/Project/Daje-Plugin-Workflow/Log/workflow.log');
+# app->log->level('debug');
+#
+# plugin 'Config' => { file => '../conf/config.conf' };
+# plugin 'Workflow';
 
 # put '/workflow/api/execute' => sub {
 #   my $c = shift;

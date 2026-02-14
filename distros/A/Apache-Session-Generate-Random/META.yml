@@ -1,0 +1,41 @@
+---
+abstract: 'use system randomness for generating session ids'
+author:
+  - 'Robert Rothenberg <rrwo@cpan.org>'
+build_requires:
+  ExtUtils::MakeMaker: '7.22'
+  File::Spec: '0'
+  Module::Metadata: '1.000015'
+  Test::More: '0'
+configure_requires:
+  ExtUtils::MakeMaker: '0'
+dynamic_config: 0
+generated_by: 'Dist::Zilla version 6.037, CPAN::Meta::Converter version 2.150011'
+keywords:
+  - apache
+  - session
+  - security
+license: artistic_2
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: Apache-Session-Generate-Random
+provides:
+  Apache::Session::Generate::Random:
+    file: lib/Apache/Session/Generate/Random.pm
+    version: '0.001000'
+recommends:
+  Crypt::SysRandom::XS: '0'
+requires:
+  Crypt::SysRandom: '0'
+  perl: '5.006'
+  strict: '0'
+  warnings: '0'
+resources:
+  bugtracker: https://github.com/robrwo/perl-Apache-Session-Generate-Random/issues
+  repository: git://github.com/robrwo/perl-Apache-Session-Generate-Random.git
+version: '0.001000'
+x_authority: cpan:RRWO
+x_generated_by_perl: v5.40.2
+x_serialization_backend: 'YAML::Tiny version 1.76'
+x_spdx_expression: Artistic-2.0

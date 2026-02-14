@@ -1,0 +1,129 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Net::BitTorrent::Tracker::WebSeed - HTTP WebSeed Client (BEP 19 / BEP 17)
+
+=head1 SYNOPSIS
+
+    use Net::BitTorrent::Tracker::WebSeed;
+
+    my $ws = Net::BitTorrent::Tracker::WebSeed->new(
+        url => "https://archive.org/download/my_torrent/"
+    );
+
+    # Fetch a piece using segments mapped by the storage layer
+    my $data = $ws->fetch_piece([
+        { rel_path => "file1.bin", offset => 0, length => 16384 }
+    ]);
+
+    say "Successfully fetched piece" if $data;
+
+=head1 DESCRIPTION
+
+C<Net::BitTorrent::Tracker::WebSeed> implements B<BEP 19 (WebSeeding)>. It allows a client to download pieces of a
+torrent from a standard HTTP or FTP server. This is highly effective for ensuring swarm availability when no regular
+BitTorrent seeders are online.
+
+=head1 METHODS
+
+=head2 C<new( %params )>
+
+Creates a new WebSeed object.
+
+    my $ws = Net::BitTorrent::Tracker::WebSeed->new(
+        url => $base_url
+    );
+
+Expected parameters:
+
+=over
+
+=item C<url>
+
+The base URL of the web seed.
+
+=back
+
+=head2 C<fetch_piece( $segments )>
+
+Attempts to fetch a piece from the web seed.
+
+    my $data = $ws->fetch_piece( $segments );
+
+Expected parameters:
+
+=over
+
+=item C<$segments>
+
+An array reference of segments, each containing C<file>, C<offset>, and C<length>.
+
+=back
+
+Uses HTTP L<Range requests|https://httpwg.org/specs/rfc7233.html> to fetch only the specific bytes required for the
+piece. Automatically follows up to 5 redirects. Handles C<410 Gone> status codes by permanently disabling the web seed
+instance.
+
+=head2 C<fetch_piece_legacy( $index, $piece_length, $total_size )>
+
+Legacy method for fetching a single piece from a single-file torrent.
+
+    my $data = $ws->fetch_piece_legacy( 0, 262144, 1048576 );
+
+Expected parameters:
+
+=over
+
+=item C<$index>
+
+The piece index.
+
+=item C<$piece_length>
+
+The piece length in bytes.
+
+=item C<$total_size>
+
+The total size of the file.
+
+=back
+
+=head2 C<url( )>
+
+Returns the base URL of the web seed.
+
+=head2 C<disabled( )>
+
+Returns true if the web seed has been disabled (e.g., due to 410 Gone).
+
+=head1 Architecture
+
+For multi-file torrents, if the URL ends in a slash (C</>), the module automatically appends the relative path of each
+file within the swarm to build the target URL.
+
+This module is designed to be called by L<Net::BitTorrent::Torrent> when a piece cannot be found in the P2P swarm.
+
+=head1 Specifications
+
+=over
+
+=item * B<BEP 19>: WebSeed - HTTP/FTP Seeding (GetRight style)
+
+=item * B<BEP 17>: HTTP Seeding (Hoffman-style)
+
+=back
+
+=head1 AUTHOR
+
+Sanko Robinson E<lt>sanko@cpan.orgE<gt>
+
+=head1 COPYRIGHT
+
+Copyright (C) 2008-2026 by Sanko Robinson.
+
+This library is free software; you can redistribute it and/or modify it under the terms of the Artistic License 2.0.
+
+=cut

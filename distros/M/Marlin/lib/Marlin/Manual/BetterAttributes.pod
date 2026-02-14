@@ -118,7 +118,7 @@ B<< Example: Longhand >>
 
 B<< Example: Shorthand >>
 
-  use Marlin qw( foo! bar! );
+  use Marlin qw( foo! bar? );
 
 To indicate that the attribute is I<forbidden> in the constructor,
 use a combination of C<< init_arg => undef >> and a strict constructor.
@@ -126,7 +126,7 @@ use a combination of C<< init_arg => undef >> and a strict constructor.
 =head3 C<< undef_tolerant >>
 
 If you set an attribute to C<< undef_tolerant => true >>, and then try to
-initialized it to C<undef> in the constructor, it will be treated as if
+initialize it to C<undef> in the constructor, it will be treated as if
 you hadn't passed it to the constructor at all. See L<MooseX::UndefTolerant>.
 
 To make all attributes in your class or role undef tolerant, see
@@ -198,7 +198,7 @@ B<< Example: Declaring a CodeRef Lexical Reader >>
 
   use Marlin name => { reader => \( my $get_name ) };
 
-The coderef won't be assessible outside the scope where you declared
+The coderef won't be accessible outside the scope where you declared
 it, so presumably only within your class. (Assuming your class
 declaration is in its own scope, like in C<< {...} >> or in its own
 file.) This prevents outside code from calling it.
@@ -253,7 +253,7 @@ B<< Example: Using a True Lexical Reader on Ultra-Modern Perl >>
   say $thingy->&get_name();
 
 If you attempt to use the C<< 'my get_name' >> syntax on Perl versions older
-that 5.12, Marlin will make a best effort to do what you want. They will be
+than 5.12, Marlin will make a best effort to do what you want. It will be
 installed as a normal sub in the caller package. (Note that the caller package
 might differ from the class currently being built, especially in the case of
 L<Marlin::Struct> classes.) Marlin will attempt to clean them later with
@@ -306,7 +306,7 @@ B<< Example: Constant Attributes >>
   my $bob = Person->new( ... );
   say $bob->species;
 
-Constants attributes cannot have writers, clearers, predicates, builders,
+Constant attributes cannot have writers, clearers, predicates, builders,
 defaults, or triggers. They must be a simple non-reference value. They cannot
 be passed to the constructor. They I<can> have a type constraint and coercion,
 which will be used I<once> at compile time. They can have C<handles> and
@@ -402,7 +402,7 @@ B<< Example: Using C<enum> >>
 
 =head3 C<< does >>
 
-You can use C<< does => "Role::Name" > as a shortcut for
+You can use C<< does => "Role::Name" >> as a shortcut for
 C<< isa => ConsumerOf["Role::Name"] >>.
 
 B<< Example: Using C<does> >>
@@ -483,7 +483,7 @@ B<< Example: Defining a Coercion Inline >>
     nicknames => "Bob:Bobby:Robbie:Rob",
   );
 
-The value "Bob:Bobby:Robbie:Rob" isn't an B<ArrayRef> so is coerced according
+The value "Bob:Bobby:Robbie:Rob" isn't an C<ArrayRef> so is coerced according
 to the rules for B<Str> (strings).
 
 The C<coerce> option can alternatively be set to a coderef or an object with

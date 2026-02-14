@@ -1,0 +1,123 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Net::BitTorrent::Protocol::BEP53 - Magnet URI Parser and Generator
+
+=head1 SYNOPSIS
+
+    use Net::BitTorrent::Protocol::BEP53;
+
+    # Parse an incoming URI
+    my $m = Net::BitTorrent::Protocol::BEP53->parse( $uri_string );
+
+    say 'Name: ' . $m->name;
+    say 'V2 Hash: ' . unpack('H*', $m->infohash_v2) if $m->infohash_v2;
+
+    # Generate a new URI
+    my $new_uri = Net::BitTorrent::Protocol::BEP53->new(
+        inf_hash_v2  => $ih2,
+        name         => 'Special Linux Distro',
+        trackers     => ['udp://tracker.example.com:80']
+    )->to_string();
+
+=head1 DESCRIPTION
+
+C<Net::BitTorrent::Protocol::BEP53> implements the magnet URI extension (BEP 53). It provides a robust parser and
+generator for magnet links, specifically updated to support the multihash SHA-256 identifiers required for BitTorrent
+v2.
+
+=head2 Multihash Support
+
+This module correctly identifies and extracts:
+
+=over
+
+=item v1 (legacy): C<urn:btih:...> (SHA-1)
+
+=item v2 (modern): C<urn:btmh:1220...> (SHA-256 multihash)
+
+=back
+
+=head1 METHODS
+
+=head2 C<parse( $uri )>
+
+Parses a Magnet URI string.
+
+    my $m = Net::BitTorrent::Protocol::BEP53->parse( $uri );
+
+This method parses the query parameters of a magnet link and returns a new C<Net::BitTorrent::Protocol::BEP53> object.
+It handles multihash identifiers (BEP 53).
+
+Expected parameters:
+
+=over
+
+=item C<$uri>
+
+The Magnet URI string.
+
+=back
+
+=head2 C<to_string( )>
+
+Generates a Magnet URI string.
+
+    my $uri = $m->to_string();
+
+This method returns the URI-encoded magnet representation of the object's current state.
+
+=head2 C<infohash_v1( )>
+
+Returns the 20-byte binary v1 infohash.
+
+    my $ih = $m->infohash_v1();
+
+=head2 C<infohash_v2( )>
+
+Returns the 32-byte binary v2 infohash.
+
+    my $ih = $m->infohash_v2();
+
+=head2 C<trackers( )>
+
+Returns the list of tracker URLs.
+
+    my $tr = $m->trackers();
+
+=head2 C<name( )>
+
+Returns the display name (dn).
+
+    my $name = $m->name();
+
+=head2 C<nodes( )>
+
+Returns the list of DHT bootstrap nodes (x.pe).
+
+    my $nodes = $m->nodes();
+
+=head1 SPECIFICATIONS
+
+=over
+
+=item * B<BEP 09>: Magnet URI format (Foundational)
+
+=item * B<BEP 53>: Magnet URI extension (v2 and multihash)
+
+=back
+
+=head1 AUTHOR
+
+Sanko Robinson E<lt>sanko@cpan.orgE<gt>
+
+=head1 COPYRIGHT
+
+Copyright (C) 2008-2026 by Sanko Robinson.
+
+This library is free software; you can redistribute it and/or modify it under the terms of the Artistic License 2.0.
+
+=cut

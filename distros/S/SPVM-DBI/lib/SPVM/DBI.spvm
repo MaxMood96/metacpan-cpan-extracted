@@ -2,12 +2,12 @@
 # MIT License
 
 class DBI {
-  version "0.004";
+  version "0.008";
   
   use DBI::St;
   use Go::Context;
   use Go::Time;
-  use DBI::Data;
+  use DBI::BindData::Blob;
   
   # Fields
   has Username : ro string;
@@ -22,36 +22,23 @@ class DBI {
   
   has InactiveDestroy : rw byte;
   
-  has IdleTimeoutDurationNsec : rw long; 
+  has IdleTimeout : rw double; 
   
-  has ConnectTimeoutDurationNsec : rw long; 
+  has ConnectTimeout : rw double; 
   
-  has ReadTimeoutDurationNsec : rw long; 
+  has ReadTimeout : rw double; 
   
-  has WriteTimeoutDurationNsec : rw long; 
+  has WriteTimeout : rw double; 
   
-  has SocketKeepAliveDurationNsec : rw long;
+  has SocketKeepAlive : rw byte;
+  
+  has TCPKeepIdle : rw int;
   
   has TCPNoDelay : rw byte;
   
   # Class Methods
-  static method blob : DBI::Data ($value : string) {
-    my $data = DBI::Data->new;
-    $data->set_type_id(DBI::Data->TYPE_ID_BLOB);
-    $data->set_value($value);
-    return $data;
-  }
-  
-  static method big_int : DBI::Data ($value : string) {
-    my $data = DBI::Data->new;
-    $data->set_type_id(DBI::Data->TYPE_ID_BIG_INT);
-    $data->set_value($value);
-    return $data;
-  }
-  
-  static method big_float : DBI::Data ($value : string) {
-    my $data = DBI::Data->new;
-    $data->set_type_id(DBI::Data->TYPE_ID_BIG_FLOAT);
+  static method blob : DBI::BindData::Blob ($value : string) {
+    my $data = DBI::BindData::Blob->new;
     $data->set_value($value);
     return $data;
   }
@@ -87,24 +74,28 @@ class DBI {
       $self->{InactiveDestroy} = $options->get("InactiveDestroy")->(byte);
     }
     
-    if ($options->exists("IdleTimeoutDurationNsec")) {
-      $self->{IdleTimeoutDurationNsec} = $options->get("IdleTimeoutDurationNsec")->(long);
+    if ($options->exists("IdleTimeout")) {
+      $self->{IdleTimeout} = $options->get("IdleTimeout")->(double);
     }
     
-    if ($options->exists("ConnectTimeoutDurationNsec")) {
-      $self->{ConnectTimeoutDurationNsec} = $options->get("ConnectTimeoutDurationNsec")->(long);
+    if ($options->exists("ConnectTimeout")) {
+      $self->{ConnectTimeout} = $options->get("ConnectTimeout")->(double);
     }
     
-    if ($options->exists("ReadTimeoutDurationNsec")) {
-      $self->{ReadTimeoutDurationNsec} = $options->get("ReadTimeoutDurationNsec")->(long);
+    if ($options->exists("ReadTimeout")) {
+      $self->{ReadTimeout} = $options->get("ReadTimeout")->(double);
     }
     
-    if ($options->exists("WriteTimeoutDurationNsec")) {
-      $self->{WriteTimeoutDurationNsec} = $options->get("WriteTimeoutDurationNsec")->(long);
+    if ($options->exists("WriteTimeout")) {
+      $self->{WriteTimeout} = $options->get("WriteTimeout")->(double);
     }
     
-    if ($options->exists("SocketKeepAliveDurationNsec")) {
-      $self->{SocketKeepAliveDurationNsec} = $options->get("SocketKeepAliveDurationNsec")->(long);
+    if ($options->exists("SocketKeepAlive")) {
+      $self->{SocketKeepAlive} = $options->get("SocketKeepAlive")->(byte);
+    }
+    
+    if ($options->exists("TCPKeepIdle")) {
+      $self->{TCPKeepIdle} = $options->get("TCPKeepIdle")->(int);
     }
     
     if ($options->exists("TCPNoDelay")) {
@@ -120,11 +111,12 @@ class DBI {
       "Port",
       "Database",
       "InactiveDestroy",
-      "IdleTimeoutDurationNsec",
-      "ConnectTimeoutDurationNsec",
-      "ReadTimeoutDurationNsec",
-      "WriteTimeoutDurationNsec",
-      "SocketKeepAliveDurationNsec",
+      "IdleTimeout",
+      "ConnectTimeout",
+      "ReadTimeout",
+      "WriteTimeout",
+      "SocketKeepAlive",
+      "TCPKeepIdle",
       "TCPNoDelay"
     ];
     

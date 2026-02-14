@@ -143,6 +143,18 @@ sub _apply_to_number {
     return $value;
 }
 
+sub _extract_numeric_values {
+    my ($values) = @_;
+
+    return () unless ref $values eq 'ARRAY';
+
+    return map {
+        JSON::PP::is_bool($_) ? ($_ ? 1 : 0) : 0 + $_;
+    } grep {
+        defined $_ && (JSON::PP::is_bool($_) || (!ref $_ && looks_like_number($_)));
+    } @$values;
+}
+
 sub _normalize_percentile {
     my ($value) = @_;
 
@@ -339,7 +351,17 @@ sub _apply_map_values {
     }
 
     if (ref $value eq 'ARRAY') {
-        return [ map { _apply_map_values($self, $_, $filter) } @$value ];
+        my @result;
+        for my $original (@$value) {
+            if (ref $original eq 'HASH' || ref $original eq 'ARRAY') {
+                push @result, _apply_map_values($self, $original, $filter);
+                next;
+            }
+
+            my @outputs = $self->run_query(_encode_json($original), $filter);
+            push @result, $outputs[0] if @outputs;
+        }
+        return \@result;
     }
 
     return $value;
@@ -1408,7 +1430,9 @@ sub _apply_uri {
         $text = "$value";
     }
 
-    my $encoded = encode('UTF-8', $text);
+    my $encoded = is_utf8($text, 1)
+        ? encode('UTF-8', $text)
+        : $text;
     $encoded =~ s/([^A-Za-z0-9\-._~])/sprintf('%%%02X', ord($1))/ge;
     return $encoded;
 }

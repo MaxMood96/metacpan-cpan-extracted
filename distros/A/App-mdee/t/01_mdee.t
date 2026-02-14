@@ -53,7 +53,7 @@ subtest 'version option' => sub {
 
 # Test: dryrun option
 subtest 'dryrun option' => sub {
-    my $out = `$mdee --dryrun $test_md 2>&1`;
+    my $out = `COLUMNS=200 $mdee --dryrun $test_md 2>&1`;
     like($out, qr/greple/, '--dryrun shows greple command');
     like($out, qr/nup/, '--dryrun shows nup command');
 };
@@ -93,7 +93,7 @@ subtest 'filter option' => sub {
 
 # Test: style option
 subtest 'style option' => sub {
-    my $nup = `$mdee --dryrun --style=nup $test_md 2>&1`;
+    my $nup = `COLUMNS=200 $mdee --dryrun --style=nup $test_md 2>&1`;
     like($nup, qr/run_fold/, '--style=nup includes fold');
     like($nup, qr/run_table/, '--style=nup includes table');
     like($nup, qr/run_nup/, '--style=nup includes nup');
@@ -309,7 +309,7 @@ subtest 'config file defaults' => sub {
         open my $fh, '>', "$config_dir/config.sh" or die;
         print $fh "default[style]='pager'\ndefault[width]=40\n";
         close $fh;
-        my $out = `XDG_CONFIG_HOME=$tmpdir $mdee --dryrun --mode=light -s nup -w 120 $test_md 2>&1`;
+        my $out = `COLUMNS=200 XDG_CONFIG_HOME=$tmpdir $mdee --dryrun --mode=light -s nup -w 120 $test_md 2>&1`;
         like($out, qr/run_nup/, '-s nup overrides default[style]=pager');
     }
 

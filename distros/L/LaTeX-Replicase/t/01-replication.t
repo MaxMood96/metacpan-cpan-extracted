@@ -850,7 +850,7 @@ my $msg_ref_19_2 = [
 	'~~> l.16 WARNING#4: wrong type (not SCALAR|ARRAY|HASH) of \'RefSub\' in %%%V:RefSub',
 	'~~> l.59 WARNING#6: mixed types (ARRAY with HASH with SCALAR or other) of %%%VAR:Mixed',
 	'~~> l.61 WARNING#3: unknown sub-key \'@\' in %%%V:@',
-	'~~> l.64 WARNING#7: empty ARRAY of %%%VAR:emptyArray'
+	'~~> l.66 WARNING#7: empty ARRAY of %%%VAR:emptyArray'
 ];
 
 is_deeply( $msg, $msg_ref_19_2, "Test #19.2: '$file_s'");
@@ -898,8 +898,6 @@ $msg_ref_s = [
 '~ %%%ADD:%',
 'SPECIFY VALUE %%%V:@',
 'emptyArray:',
-'%%%VAR: emptyArray',
-'~ %%%ADD:%',
 'aa0',
 'aa1',
 'aa2',

@@ -1,0 +1,45 @@
+---
+abstract: 'Deterministic schema contracts for flat files'
+author:
+  - 'Sergio de Sousa <sergio@serso.com>'
+build_requires:
+  Test::More: '0'
+configure_requires:
+  Module::Build::Tiny: '0.035'
+dynamic_config: 0
+generated_by: 'Minilla/v3.1.29, CPAN::Meta::Converter version 2.150010'
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: Flat-Schema
+no_index:
+  directory:
+    - t
+    - xt
+    - inc
+    - share
+    - eg
+    - examples
+    - author
+    - builder
+provides:
+  Flat::Schema:
+    file: lib/Flat/Schema.pm
+    version: '0.01'
+requires:
+  Carp: '0'
+  Encode: '0'
+  ExtUtils::MakeMaker: '0'
+  Module::Metadata: '0'
+  Moo: '0'
+  Pod::Escapes: '0'
+  perl: '5.032000'
+resources:
+  bugtracker: https://github.com/sergio-desousa/Flat-Schema/issues
+  homepage: https://github.com/sergio-desousa/Flat-Schema
+  repository: https://github.com/sergio-desousa/Flat-Schema.git
+version: '0.01'
+x_authority: cpan:SDS
+x_serialization_backend: 'CPAN::Meta::YAML version 0.018'
+x_static_install: 1

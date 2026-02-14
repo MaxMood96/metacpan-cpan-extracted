@@ -1,0 +1,43 @@
+{
+   "description" : "Example test file (check your harness works!)",
+   "ref" : "MIDI 1.0 Detailed Specification, Details -> Channel Voice Messages",
+   "standard" : true,
+   "tests" : [
+      {
+         "data" : "90 45 7f 90 46 7f",
+         "description" : "Two full note-on messages",
+         "expect" : [
+            {
+               "channel" : 0,
+               "name" : "note_on",
+               "note" : 69,
+               "velocity" : 127
+            },
+            {
+               "channel" : 0,
+               "name" : "note_on",
+               "note" : 70,
+               "velocity" : 127
+            }
+         ]
+      },
+      {
+         "data" : "81 45 7f 81 46 7f",
+         "description" : "Two full note-off messages, channel 1",
+         "expect" : [
+            {
+               "channel" : 1,
+               "name" : "note_off",
+               "note" : 69,
+               "velocity" : 127
+            },
+            {
+               "channel" : 1,
+               "name" : "note_off",
+               "note" : 70,
+               "velocity" : 127
+            }
+         ]
+      }
+   ]
+}

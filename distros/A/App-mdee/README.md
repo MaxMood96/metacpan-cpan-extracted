@@ -22,7 +22,7 @@ mdee - em·dee, Markdown Easy on the Eyes
      -w  --width=#          fold width (default: 80)
      -t  --theme=#[,#,...]  color theme(s) (default: hashed)
      -m  --mode=#           light or dark (default: light)
-     -B  --base-color=#     override theme's base color
+     -B  --base-color=#     override base color of theme
                             (e.g., Ivory, #780043, (120,0,67))
          --list-themes      list available themes
          --show=#           set field visibility (e.g., italic=1)
@@ -36,7 +36,7 @@ mdee - em·dee, Markdown Easy on the Eyes
 
 # VERSION
 
-Version 0.14
+Version 0.15
 
 # DESCRIPTION
 
@@ -64,6 +64,34 @@ The pipeline combines [greple(1)](https://metacpan.org/pod/App%3A%3AGreple) for 
 
 Supported elements: headers (h1-h6), bold, italic, strikethrough,
 inline code, code blocks, HTML comments, tables, and list items.
+
+## Multi-column Layout and Pagination
+
+By default, **mdee** calculates the number of display columns by
+dividing the terminal width by the pane width (default 85
+characters).  This determines how the output is laid out and
+paginated.
+
+When two or more columns fit, [nup(1)](https://metacpan.org/pod/App%3A%3Anup) arranges output
+in multi-column layout with page-by-page pagination — content is
+split into terminal-height pages viewed through a pager.
+
+When only one column fits, **mdee** still uses nup for formatting
+(borders, document layout) but disables page-by-page splitting,
+so the content scrolls continuously in the pager.  This avoids
+wasted space from page breaks on narrow terminals while
+maintaining the same visual appearance.
+
+To force page-by-page pagination even in single-column layout,
+specify `--nup` explicitly.  The `--pane-width` (`-S`) option
+adjusts the column width used for this calculation, and
+`--pane` (`-C`) sets the number of columns directly.
+
+Use `-p` (`--style=pager`) for a simpler view without nup
+formatting — highlighted output is piped directly through a
+pager.  Use `-f` (`--style=filter`) to write highlighted
+output to stdout without a pager, suitable for piping into
+other commands.
 
 <div>
     <p><img width="750" src="https://raw.githubusercontent.com/tecolicom/App-mdee/main/images/3-column.png">
@@ -169,9 +197,11 @@ Use [tecolicom/tap](https://github.com/tecolicom/homebrew-tap):
 
 - **--\[no-\]nup**
 
-    Enable or disable [nup(1)](https://metacpan.org/pod/App%3A%3Anup) for multi-column paged output.  When
-    disabled, output goes directly to stdout without formatting.
-    Default is enabled.
+    Enable or disable [nup(1)](https://metacpan.org/pod/App%3A%3Anup) for multi-column paged output.
+    When disabled, output goes directly to stdout without formatting.
+    Default is enabled.  When explicitly specified, forces nup's
+    native pagination even in single-column layout (which normally
+    uses the pager instead).
 
 - **--\[no-\]rule**
 
@@ -183,8 +213,10 @@ Use [tecolicom/tap](https://github.com/tecolicom/homebrew-tap):
 
 - **-w** _N_, **--width**=_N_
 
-    Set the fold width for text wrapping. Default is 80.
-    Only effective when `--fold` is enabled.
+    Set the fold width for text wrapping.  Default is calculated from
+    `--pane-width` minus 5 (margin for borders and padding), which
+    gives 80 when pane-width is 85.  Only effective when `--fold` is
+    enabled.
 
 ## Theme Options
 
@@ -321,7 +353,11 @@ bold text, etc.).
 
 - **-C** _N_, **--pane**=_N_
 
-    Set the number of columns (panes).
+    Set the number of columns (panes).  When not specified (or 0),
+    the number of columns is calculated from the terminal width and
+    `--pane-width`.  If only 1 column fits, nup formatting (borders
+    etc.) is preserved but pagination is handled by the pager instead.
+    Use `--nup` to force nup's native pagination even in single column.
 
 - **-R** _N_, **--row**=_N_
 
@@ -337,7 +373,9 @@ bold text, etc.).
 
 - **-S** _N_, **--pane-width**=_N_
 
-    Set the pane width in characters. Default is 85.
+    Set the pane width in characters.  Default is 85.  This value is
+    used to calculate the number of columns and the default fold
+    width.
 
 - **--bs**=_STYLE_, **--border-style**=_STYLE_
 
@@ -371,6 +409,8 @@ The `default` associative array supports the following keys:
 - `default[theme]` - Corresponds to `--theme` (e.g., `warm`, `warm,hashed`)
 - `default[style]` - Corresponds to `--style` (e.g., `pager`, `cat`)
 - `default[width]` - Corresponds to `--width` (e.g., `100`)
+- `default[pane_width]` - Corresponds to `--pane-width` (e.g., `100`)
+- `default[pane]` - Corresponds to `--pane` (e.g., `2`)
 - `default[base_color]` - Corresponds to `--base-color` (e.g., `DarkCyan`)
 
 **Overriding theme colors and patterns**
@@ -598,6 +638,9 @@ Multi-line emphasis text is not supported.
 
 Link patterns do not span multiple lines.  The link text and URL must
 be on the same line.
+
+Links inside other highlighted elements (such as headings or bold
+text) are not processed.
 
 Reference-style links (`[text][ref]` with `[ref]: url` elsewhere)
 are not supported.

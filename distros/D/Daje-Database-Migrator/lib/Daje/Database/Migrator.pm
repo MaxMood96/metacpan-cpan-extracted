@@ -42,7 +42,7 @@ use Mojo::Loader qw(load_class);
 # janeskil1525 E<lt>janeskil1525@gmail.comE<gt>
 #
 
-our $VERSION = "1.00";
+our $VERSION = "1.05";
 
 has 'pg';
 has 'migrations';
@@ -62,13 +62,15 @@ sub migrate($self) {
                 )->migrate(
                     @{$self->migrations}[$i]->{migration}
                 );
-            } catch($e) {
+            }
+            catch($e) {
                 say $e;
                 say @{$self->migrations}[$i]->{class};
                 say @{$self->migrations}[$i]->{name};
                 say @{$self->migrations}[$i]->{migration};
             }
-        } elsif (exists @{$self->migrations}[$i]->{file}) {
+        }
+        elsif (exists @{$self->migrations}[$i]->{file}) {
             $self->pg->migrations->name(
                 @{$self->migrations}[$i]->{name}
             )->from_file(

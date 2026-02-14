@@ -1,4 +1,4 @@
-package Concierge::Sessions::Session v0.8.6;
+package Concierge::Sessions::Session v0.9.0;
 use v5.36;
 
 # ABSTRACT: Individual session objects created by Concierge::Sessions
@@ -161,7 +161,7 @@ Concierge::Sessions::Session - Individual session objects for data access and pe
 
 =head1 VERSION
 
-version 0.8.5
+v0.9.0
 
 =head1 SYNOPSIS
 

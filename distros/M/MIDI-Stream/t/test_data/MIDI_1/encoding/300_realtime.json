@@ -1,0 +1,55 @@
+{
+   "description" : "Real Time messages can be sent at any time and may be inserted anywhere in a MIDI data stream",
+   "ref" : "MIDI 1.0 Detailed Specification, Details > System Real Time Messages",
+   "standard" : true,
+   "tests" : [
+      {
+         "expect" : "f8 fa fb fc fe ff",
+         "description" : "All (defined) realtime message types handled",
+         "data" : [
+            {
+               "name" : "clock"
+            },
+            {
+               "name" : "start"
+            },
+            {
+               "name" : "continue"
+            },
+            {
+               "name" : "stop"
+            },
+            {
+               "name" : "active_sensing"
+            },
+            {
+               "name" : "system_reset"
+            }
+         ]
+      },
+      {
+         "expect" : "f8 91 3e 3d f8 00 00",
+         "description" : "Realtime clock interrupts note on - running status remains valid",
+         "data" : [
+            {
+               "name" : "clock"
+            },
+            {
+               "channel" : 1,
+               "name" : "note_on",
+               "note" : 62,
+               "velocity" : 61
+            },
+            {
+               "name" : "clock"
+            },
+            {
+               "channel" : 1,
+               "name" : "note_off",
+               "note" : 0,
+               "velocity" : 0
+            }
+         ]
+      }
+   ]
+}

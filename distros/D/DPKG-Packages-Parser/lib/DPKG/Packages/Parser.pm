@@ -7,7 +7,7 @@ no warnings 'experimental::class';
 use Clone qw(clone);
 use Carp qw(croak);
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 class DPKG::Packages::Parser {
 	field $file :param :reader = 'Packages';
@@ -24,56 +24,30 @@ class DPKG::Packages::Parser {
 	}
 
 	method _parse_from_file(@fields) {
+		my %f = ();
+		my @array_fields = qw(Tag Depends Pre-Depends Replaces Provides Breaks Enhances Conflicts Recommends Suggests);
 		if(@fields) {
 			unshift @fields, 'Package' if ! grep { 'Packages' eq $_ } @fields;
+			$f{$_} = 1 foreach(@fields);
+			@array_fields = grep { $f{$_} } @array_fields; # Only keep the ones that are requested by the User
 		}
 		open(my $f, '<', $file) or die "Cannot read $file\n";
 		my %entry = ();
-		my $last_key = ''; # 'Tag' is multi-line, I don't know why...
+		my $last_key; # 'Tag' is multi-line, I don't know why this is the only field which does this... but we need to remember th^i
 		while(<$f>) {
 			chomp;
-			if(!$_) {
-				# Tags need to be parsed
-				my @array_fields = qw(Tag Depends Pre-Depends Replaces Provides Breaks Enhances Conflicts Recommends Suggests);
-				foreach(@array_fields) {
-					if(defined($entry{$_})) {
-						my @temp = split ', ', $entry{$_};
-						$entry{$_} = \@temp;
-					}
-				}
-				my @version_fields = qw(Depends Pre-Depends Replaces Provides Breaks Enhances Conflicts Recommends Suggests);
-				foreach(@version_fields) {
-					if(defined($entry{$_})) {
-						my @new_entries = ();
-						foreach(@{$entry{$_}}) {
-							if(/ \| /) {
-								my @a = ();
-								foreach(split(/ \| /, $_)) {
-									my $pkg = $self->_parse_package_str($_);
-									push @a, $pkg;
-								}
-								push @new_entries, \@a;
-							} else {
-								push @new_entries, $self->_parse_package_str($_);
-							}
-						}
-						$entry{$_} = \@new_entries;
-					}
-				}
+			if(!$_) { # Empty line == post processing of entry (we've seen all its lines)
+				# Yeah, good luck understanding this mess. We loop through the array fields to split it based on ', '. Then if we're dealing with a tag but with a list that contains package names, we have to parse each package name. There's a further edge case where there's an OR statement (signified by '|') between packages that we also deal with.
+				map { $entry{$_} = $_ eq 'Tag' ? [ split(', ', $entry{$_}) ] : [ map { index($_,'|') >= 0 ? [ map { $self->_parse_package_str($_) } split(' \| ', $_) ] : $self->_parse_package_str($_) } split(', ', $entry{$_}) ] if defined($entry{$_}) } @array_fields;
 				$entries{$entry{Package}} = clone(\%entry);
 				%entry = ();
 			} else {
-				if(!/^\s+/) {
-					my ($key, $val) = split(': ', $_, 2);
-					if((@fields && grep { $key eq $_ } @fields) || !@fields) {
-						$entry{$last_key = $key} = $val;
-					} else {
-						$last_key = $key;
-					}
-				} else {
-					if((@fields && grep { $last_key eq $_ } @fields) || !@fields) {
-						$entry{$last_key} .= $_;
-					}
+				# if statement with side-effects: the defined() condition needs to be first because we need to set $last_key every time we match a line.
+				# We check in the if-condition if we are interested in this line or not by extracting the field name of this line (and only that, not the value). We only extract the value if it's a line of interest.
+				if(index($_, ' ') != 0 && (defined($f{$last_key = substr($_, 0, index($_, ':'))}) || !@fields)) {
+					$entry{$last_key} = substr($_, index($_, ':') + 2);
+				} elsif(!@fields || $f{$last_key}) {
+					$entry{$last_key} .= $_
 				}
 			}
 		}
@@ -81,36 +55,16 @@ class DPKG::Packages::Parser {
 	}
 
 	method _parse_package_str($s) {
-		$_ = $s;
-		if(/^([\w\-\+\.\:]+) \((\S+) (\S+)\)/) {
-			my ($name, $arch) = $self->_parse_package_name($1);
-			my %e = (name => $name, op => $2, version => $3, arch => $arch);
-			return \%e;
-		} elsif(/^([\w\-\+\.\:]+):any/) {
-			my ($name, $arch) = $self->_parse_package_name($1);
-			my %e = (name => $name, op => undef, version => 'any', arch => $arch);
-			return \%e;
-		} elsif(/^([\w\-\+\.\:]+)$/) {
-			my ($name, $arch) = $self->_parse_package_name($1);
-			my %e = (name => $name, op => undef, version => undef, arch => $arch);
-			return \%e;
-		} else {
-			say "i don't know: $_";
-			my %e = (name => $_, op => undef, version => undef, arch => undef);
-			return \%e;
-		}
-	}
-
-	method _parse_package_name($name) {
-		return split(':', $name);
+		my @x = split(' ', $s);
+		my ($name, $arch) = split(':', $x[0]);
+		my $op = $x[1] ? substr($x[1], 1) : undef;
+		chop($x[2]) if $x[2];
+		my $version = $x[2] ? $x[2] : undef;
+		return {name => $name, op => $op, version => $version, arch => $arch};
 	}
 
 	method get_package($name) {
-		if(defined($entries{$name})) {
-			return $entries{$name};
-		} else {
-			return undef;
-		}
+		return defined($entries{$name}) ? $entries{$name} : undef;
 	}
 }
 

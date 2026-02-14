@@ -12,7 +12,7 @@ use constant MORNING   => '08';
 use constant AFTERNOON => '14';
 use constant EVENING   => '20';
 
-our $VERSION = '1.46';
+our $VERSION = '1.47';
 
 my $multiply_by = sub
 {
@@ -416,6 +416,18 @@ sub _variant_quarter
         unit  => $opts->{unit},
         value => 3,
     });
+}
+
+sub _begin_end_month
+{
+    my $self = shift;
+    $self->_register_trace;
+    my $opts = pop;
+    my ($day) = @_;
+    unless (defined $day) {
+        $day = $self->_Days_in_Month($self->{datetime}->year, $self->{datetime}->month);
+    }
+    $self->_set(day => $day);
 }
 
 1;

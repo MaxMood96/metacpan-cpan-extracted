@@ -1,0 +1,65 @@
+{
+   "description" : "SysEx Basics",
+   "ref" : "",
+   "standard" : true,
+   "tests" : [
+      {
+         "expect" : "f0 48 65 6c 6c 6f 2c 20 57 6f 72 6c 64 21 f7",
+         "description" : "Single complete SysEx message",
+         "data" : [
+            {
+               "msg" : [
+                  72,
+                  101,
+                  108,
+                  108,
+                  111,
+                  44,
+                  32,
+                  87,
+                  111,
+                  114,
+                  108,
+                  100,
+                  33
+               ],
+               "name" : "sysex"
+            }
+         ]
+      },
+      {
+         "expect" : "90 40 40 40 00 f0 48 65 6c 6c 6f f7 90 40 40",
+         "description" : "SysEx ends running status",
+         "data" : [
+            {
+               "channel" : 0,
+               "name" : "note_on",
+               "note" : 64,
+               "velocity" : 64
+            },
+            {
+               "channel" : 0,
+               "name" : "note_off",
+               "note" : 64,
+               "velocity" : 0
+            },
+            {
+               "msg" : [
+                  72,
+                  101,
+                  108,
+                  108,
+                  111
+               ],
+               "name" : "sysex"
+            },
+            {
+               "channel" : 0,
+               "name" : "note_on",
+               "note" : 64,
+               "velocity" : 64
+            }
+          ]
+      }
+   ]
+}

@@ -689,6 +689,8 @@ Link text matching uses `(?:` `` `[^`\n]*+` `` `|\\.|[^\]` `` ` `` `\\\n]++)+` t
 - `]` inside backtick-quoted text (e.g., `` [`init [CONFIGS...]`](#url) ``) — deviates from CommonMark spec (which terminates `]` even inside code spans) but matches GitHub rendering
 - Backslash-escaped `\]` (e.g., `[foo\]bar](#url)`) — per CommonMark spec, `\]` does not terminate link text
 
+Links inside other highlighted elements (such as headings or bold text) are not processed.
+
 Reference-style links (`[text][ref]` with `[ref]: url` elsewhere) are not supported.
 
 ### Indented Line Folding (TODO)

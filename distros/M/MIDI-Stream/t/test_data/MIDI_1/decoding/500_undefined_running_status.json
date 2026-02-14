@@ -1,0 +1,91 @@
+{
+   "description" : "Undefined messages in the realtime range should leave running status untouched",
+   "ref" : "Complete MIDI 1.0 Spec > Additional Explanations and Application Notes > Running Status",
+   "standard" : true,
+   "tests" : [
+      {
+         "data" : "b5 10 10 20 20 30 f4 30",
+         "description" : "System common undefined status resets running status",
+         "expect" : [
+            {
+               "channel" : 5,
+               "control" : 16,
+               "name" : "control_change",
+               "value" : 16
+            },
+            {
+               "channel" : 5,
+               "control" : 32,
+               "name" : "control_change",
+               "value" : 32
+            }
+         ]
+      },
+      {
+         "data" : "b5 10 10 20 20 30 f5 30",
+         "description" : "System common undefined status resets running status",
+         "expect" : [
+            {
+               "channel" : 5,
+               "control" : 16,
+               "name" : "control_change",
+               "value" : 16
+            },
+            {
+               "channel" : 5,
+               "control" : 32,
+               "name" : "control_change",
+               "value" : 32
+            }
+         ]
+      },
+      {
+         "data" : "b5 10 10 20 20 30 f9 30",
+         "description" : "Realtime undefined status retains running status",
+         "expect" : [
+            {
+               "channel" : 5,
+               "control" : 16,
+               "name" : "control_change",
+               "value" : 16
+            },
+            {
+               "channel" : 5,
+               "control" : 32,
+               "name" : "control_change",
+               "value" : 32
+            },
+            {
+               "channel" : 5,
+               "control" : 48,
+               "name" : "control_change",
+               "value" : 48
+            }
+         ]
+      },
+      {
+         "data" : "b5 10 10 20 20 30 fd 30",
+         "description" : "Realtime undefined status retains running status",
+         "expect" : [
+            {
+               "channel" : 5,
+               "control" : 16,
+               "name" : "control_change",
+               "value" : 16
+            },
+            {
+               "channel" : 5,
+               "control" : 32,
+               "name" : "control_change",
+               "value" : 32
+            },
+            {
+               "channel" : 5,
+               "control" : 48,
+               "name" : "control_change",
+               "value" : 48
+            }
+         ]
+      }
+   ]
+}

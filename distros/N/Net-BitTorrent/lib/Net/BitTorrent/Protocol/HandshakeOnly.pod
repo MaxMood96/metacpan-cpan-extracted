@@ -1,0 +1,81 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Net::BitTorrent::Protocol::HandshakeOnly - Minimal PWP Handshake Handler
+
+=head1 SYNOPSIS
+
+    use Net::BitTorrent::Protocol::HandshakeOnly;
+
+    my $proto = Net::BitTorrent::Protocol::HandshakeOnly->new(
+        on_handshake_cb => sub ( $ih, $id ) {
+            say "Received handshake for $ih from $id";
+        },
+        peer_id => $my_id
+    );
+
+=head1 DESCRIPTION
+
+C<Net::BitTorrent::Protocol::HandshakeOnly> is a specialized subclass of L<Net::BitTorrent::Protocol::BEP03> used for
+protocol autodetection. It processes the initial BitTorrent handshake and then triggers a callback, allowing the client
+to upgrade the connection to a full protocol handler once the infohash is identified.
+
+=head1 METHODS
+
+=head2 C<new( %params )>
+
+Creates a new HandshakeOnly object.
+
+Expected parameters:
+
+=over
+
+=item C<on_handshake_cb>
+
+A code reference that is called when a valid handshake is received. It receives the binary infohash and peer ID as
+arguments.
+
+=item C<peer_id>
+
+The local 20-byte binary peer ID.
+
+=back
+
+=head2 C<handshake> event
+
+Emitted when a handshake is successfully received.
+
+    $proto->on( handshake => sub ( $self, $ih, $id ) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<$infohash>
+
+The 20 or 32-byte binary infohash.
+
+=item C<$peer_id>
+
+The 20-byte binary peer ID.
+
+=back
+
+=head1 SEE ALSO
+
+L<Net::BitTorrent::Protocol::BEP03>
+
+=head1 AUTHOR
+
+Sanko Robinson E<lt>sanko@cpan.orgE<gt>
+
+=head1 COPYRIGHT
+
+Copyright (C) 2008-2026 by Sanko Robinson.
+
+This library is free software; you can redistribute it and/or modify it under the terms of the Artistic License 2.0.
+
+=cut

@@ -1,0 +1,120 @@
+{
+   "description" : "Decoding of CC MSB/LSB to 14 bit",
+   "ref" : "MIDI 1.0 Detailed Specification, Details > Control Change > Controller Numbers",
+   "standard" : true,
+   "tests" : [
+      {
+         "data" : "b7 00 7f 20 7f",
+         "description" : "Single MSB/LSB control change, max value",
+         "expect" : [
+            {
+               "channel" : 7,
+               "control" : 0,
+               "name" : "control_change",
+               "value" : 16383
+            }
+         ]
+      },
+      {
+         "data" : "20 7e",
+         "description" : "Running LSB emits new event",
+         "expect" : [
+            {
+               "channel" : 7,
+               "control" : 0,
+               "name" : "control_change",
+               "value" : 16382
+            }
+         ]
+      },
+      {
+         "data" : "20 00",
+         "description" : "Running LSB emits new event (again)",
+         "expect" : [
+            {
+               "channel" : 7,
+               "control" : 0,
+               "name" : "control_change",
+               "value" : 16256
+            }
+         ]
+      },
+      {
+         "data" : "00 7e",
+         "description" : "Running MSB, no new event",
+         "expect" : []
+      },
+      {
+         "data" : "20 22",
+         "description" : "...until new LSB has been sent",
+         "expect" : [
+            {
+               "channel" : 7,
+               "control" : 0,
+               "name" : "control_change",
+               "value" : 16162
+            }
+         ]
+      },
+      {
+         "data" : "b6 04 25 24 6f 09 33 29 33 13 7f 33 6e 1f 33 3f 6e",
+         "description" : "14-bit active for CCs up to 0x1f",
+         "expect" : [
+            {
+               "channel" : 6,
+               "control" : 4,
+               "name" : "control_change",
+               "value" : 4847
+            },
+            {
+               "channel" : 6,
+               "control" : 9,
+               "name" : "control_change",
+               "value" : 6579
+            },
+            {
+               "channel" : 6,
+               "control" : 19,
+               "name" : "control_change",
+               "value" : 16366
+            },
+            {
+               "channel" : 6,
+               "control" : 31,
+               "name" : "control_change",
+               "value" : 6638
+            }
+         ]
+      },
+      {
+         "data" : "be 40 7f 50 33 60 33 7f 01",
+         "description" : "Controllers >= 0x40 are 7-bit (MSB only)",
+         "expect" : [
+            {
+               "channel" : 14,
+               "control" : 64,
+               "name" : "control_change",
+               "value" : 127
+            },
+            {
+               "channel" : 14,
+               "control" : 80,
+               "name" : "control_change",
+               "value" : 51
+            },
+            {
+               "channel" : 14,
+               "control" : 96,
+               "name" : "control_change",
+               "value" : 51
+            },
+            {
+               "channel" : 14,
+               "control" : 127,
+               "name" : "control_change",
+               "value" : 1
+            }
+         ]
+      }
+   ]
+}

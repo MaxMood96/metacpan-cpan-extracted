@@ -60,7 +60,7 @@
          "web" : "https://github.com/adriaandens/DPKG-Packages-Parser"
       }
    },
-   "version" : "0.01",
+   "version" : "0.02",
    "x_contributors" : [
       "Adriaan Dens <adriaan.dens@gmail.com>"
    ],

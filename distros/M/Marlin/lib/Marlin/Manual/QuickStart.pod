@@ -1,0 +1,331 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Marlin::Manual::QuickStart - a Marlin quick start for Moose/Moo users
+
+=head1 DESCRIPTION
+
+This guide is for developers who already know Perl OO and have substantial
+experience with L<Moose> and/or L<Moo>. It skips OO fundamentals and focuses on
+how to map common Moose/Moo patterns to concise Marlin syntax.
+
+The examples assume Perl 5.20+ and subroutine signatures.
+
+=head2 The mental model
+
+If you're coming from Moose/Moo, a useful shortcut is:
+
+=over 4
+
+=item *
+
+C<use Marlin> loads your class framework and constructor.
+
+=item *
+
+attributes are still attributes; Marlin just optimizes for
+common defaults.
+
+=item *
+
+familiar concepts like C<extends>, C<with>, type constraints,
+defaults, builders, laziness, handles, method modifiers, and strict
+constructors are all there.
+
+=back
+
+Marlin's main difference is that it treats verbosity as optional.
+
+=head2 Defining a class with attributes
+
+A straightforward Moose/Moo class:
+
+  package Local::QuickStart::Demo::User {
+    use Moose;
+
+    has username => ( is => 'ro', required => 1 );
+    has email    => ( is => 'ro' );
+    has active   => ( is => 'ro', default => sub { 1 } );
+  }
+
+In Marlin, the same shape is typically:
+
+  package Local::QuickStart::User {
+    use Marlin qw( username! email? active? );
+  }
+
+Then use constructor key-value pairs as normal:
+
+  my $u = Local::QuickStart::User->new(
+    username => 'alice',
+    email    => 'alice@example.net',
+  );
+
+=head2 Attribute shortcuts (required, rwp, rw, etc)
+
+Marlin allows a compact attribute DSL directly in the C<use Marlin> list.
+The common suffixes are:
+
+=over 4
+
+=item *
+
+C<!> - required
+
+=item *
+
+C<?> - optional, and generates a predicate method (C<has_...>)
+
+=item *
+
+C<=> - read-mostly (public reader plus private writer)
+
+=item *
+
+C<==> - read/write (public accessor)
+
+=item *
+
+C<.> - cannot be passed to the constructor
+
+=back
+
+Example:
+
+  package Local::QuickStart::Session {
+    use Marlin
+      'token!',     # required, read-only
+      'user_id!',   # required, read-only
+      'expires?',   # optional, read-only
+      'seen_at=',   # optional, public reader + private writer
+      'note==?',    # optional, read/write + predicate
+      'cache_key.'; # not accepted by constructor
+  }
+
+You can combine symbols as needed:
+
+  # combinations are allowed
+  use Marlin qw( id!= profile==? checksum. );
+
+This gives you Moose/Moo-style control with less declaration boilerplate.
+
+=head2 Type constraints and defaults
+
+Marlin does not export a C<has> keyword. Instead, you pass attribute names
+to C<use Marlin>, optionally followed by type constraints, defaults, or full
+option hashrefs.
+
+  package Local::QuickStart::Event {
+    use Types::Common -types, -lexical;
+    use Marlin::Util qw( true false );
+    use Marlin
+      'id!'        => Int,
+      'kind!'      => Enum[qw(create update delete)],
+      'payload'    => { isa => HashRef, default => {} },
+      'created_at' => { isa => Int, default => sub { time } },
+      'tags'       => { isa => ArrayRef[Str], default => [] };
+  }
+
+That keeps Moose/Moo-like expressiveness while staying in Marlin's
+native declaration style.
+
+=head2 Inheritance and roles
+
+Use C<-extends> and C<-with> options at class declaration time:
+
+  package Local::QuickStart::Model::Admin {
+    use Marlin
+      qw( permissions! audit_log? ),
+      -extends => 'Local::QuickStart::User',
+      -with    => [
+        'Local::QuickStart::Role::CanImpersonate',
+        'Local::QuickStart::Role::Auditable',
+      ];
+  }
+
+For role packages, use L<Marlin::Role>:
+
+  package Local::QuickStart::Role::Auditable {
+    use Marlin::Role qw( created_by! updated_by? );
+  }
+
+This aligns with C<extends> / C<with> habits from Moose/Moo,
+just with less ceremony.
+
+=head2 Porting example: a moderately complex Moose class
+
+Suppose you start with this Moose class:
+
+  package Local::QuickStart::Demo::Job {
+    use Moose;
+    use Types::Common -types, -lexical;
+
+    extends 'Local::QuickStart::Demo::Entity';
+    with 'Local::QuickStart::Demo::Role::Loggable',
+      'Local::QuickStart::Demo::Role::Serializable';
+
+    has id => (
+      is       => 'ro',
+      isa      => Int,
+      required => 1,
+    );
+
+    has name => (
+      is       => 'ro',
+      isa      => Str,
+      required => 1,
+    );
+
+    has status => (
+      is      => 'rw',
+      isa     => Enum[qw(pending running done failed)],
+      default => 'pending',
+    );
+
+    has retries => (
+      is      => 'rw',
+      isa     => Int,
+      default => 0,
+    );
+
+    has max_retries => (
+      is      => 'ro',
+      isa     => Int,
+      default => 3,
+    );
+
+    has metadata => (
+      is      => 'ro',
+      isa     => HashRef,
+      default => sub { {} },
+    );
+
+    has warnings => (
+      is      => 'ro',
+      isa     => ArrayRef[Str],
+      default => sub { [] },
+      traits  => ['Array'],
+      handles => {
+        add_warning => 'push',
+      },
+    );
+
+    has finished_at => (
+      is  => 'rw',
+      isa => Maybe[Int],
+    );
+
+    before run => sub {
+      my ($self) = @_;
+      $self->log_debug('starting run');
+    };
+
+    sub run {
+      my ($self) = @_;
+      ...
+    }
+
+    around as_hashref => sub {
+      my ($orig, $self) = @_;
+      my $h = $self->$orig;
+      $h->{status} = uc $h->{status};
+      return $h;
+    };
+  }
+
+A Marlin port can stay expressive while becoming much shorter:
+
+  package Local::QuickStart::Job {
+    use Types::Common -types, -lexical;
+    use Marlin
+      'id!'          => Int,
+      'name!'        => Str,
+      'status=?'     => {
+        isa     => Enum[qw(pending running done failed)],
+        default => 'pending',
+      },
+      'retries='     => { isa => Int, default => 0 },
+      'max_retries'  => { isa => Int, default => 3 },
+      'metadata'     => { isa => HashRef, default => {} },
+      'warnings'     => {
+        isa         => ArrayRef[Str],
+        default     => [],
+        handles_via => 'Array',
+        handles     => { add_warning => 'push' },
+      },
+      'finished_at=' => { isa => Maybe[Int] },
+      -extends       => 'Local::QuickStart::Entity',
+      -with          => [
+        'Local::QuickStart::Role::Loggable',
+        'Local::QuickStart::Role::Serializable',
+      ],
+      -modifiers;
+
+    before run => sub ( $self ) {
+      $self->log_debug('starting run');
+    };
+
+    sub run ( $self ) {
+      return 'ok';
+    }
+
+    around as_hashref => sub ( $next, $self ) {
+      my $h = $self->$next;
+      $h->{status} = uc $h->{status};
+      return $h;
+    };
+  }
+
+Notes for Moose/Moo users:
+
+=over 4
+
+=item *
+
+You can still use rich type constraints and coderef defaults.
+
+=item *
+
+You can still use inheritance, roles, delegates, and method modifiers.
+
+=item *
+
+You can mix terse declarations (symbol suffixes) with explicit
+attribute option hashrefs where detail matters.
+
+=item *
+
+Most classes become noticeably smaller without losing intent.
+
+=back
+
+=head1 SEE ALSO
+
+L<Marlin::Manual::Beginning>,
+L<Marlin::Manual::BetterAttributes>,
+L<Marlin::Manual::BetterMethods>,
+L<Marlin::Manual::ClassOptions>,
+L<Marlin::Manual::Comparison>,
+L<Marlin::Manual::Principles>.
+
+=head1 AUTHOR
+
+Toby Inkster E<lt>tobyink@cpan.orgE<gt>.
+
+=head1 COPYRIGHT AND LICENCE
+
+This software is copyright (c) 2026 by Toby Inkster.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=head1 DISCLAIMER OF WARRANTIES
+
+THIS PACKAGE IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR IMPLIED
+WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
+MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+
+=cut

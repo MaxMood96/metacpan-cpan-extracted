@@ -81,7 +81,7 @@ use CPAN;
 # janeskil1525 E<lt>janeskil1525@gmail.comE<gt>
 #
 
-our $VERSION = "0.25";
+our $VERSION = "0.35";
 
 sub register ($self, $app, $config) {
 
@@ -146,8 +146,7 @@ sub register ($self, $app, $config) {
                     $app->log->fatal($e);
                 }
                 my $name = @{$loadables->{helper}}[$i]->{name};
-                $app->helper($name => sub{ state $var = $class->new()});
-                # self->helper(jwt => sub {state $jwt = Daje::Tools::JWT->new()});
+                $app->helper($name => sub {state $var = $class->new()});
             }
         }
 
@@ -198,14 +197,17 @@ sub _install_modules($self, $install) {
 
 sub _setup_database($self, $app) {
 
-    try {
-        Daje::Database::Migrator->new(
-            pg         => $app->pg,
-            migrations => $app->config('migrations'),
-        )->migrate();
-    } catch($e) {
-        $app->log->error($e);
-    };
+    if($app->config('migrations')) {
+        try {
+            Daje::Database::Migrator->new(
+                pg         => $app->pg,
+                migrations => $app->config('migrations'),
+            )->migrate();
+        }
+        catch($e) {
+            $app->log->error($e);
+        };
+    }
 }
 
 sub _plugin_options($self, $app, $name, $options) {

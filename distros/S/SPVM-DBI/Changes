@@ -1,5 +1,24 @@
 Revision history for SPVM::DBI
+  
+0.008 2026-02-14
+  [Incompatible Changes]
+    * Change timeout properties to use seconds as double, following Perl's convention of using fractional seconds for time durations.
+  
+0.007 2026-02-14
+  [Incompatible Changes]
+    * Rename SocketKeepAliveDurationNsec to TCPKeepAliveDurationNsec.
+    * Separate TCP keep-alive settings into two properties: SocketKeepAlive (toggle) and TCPKeepAliveDurationNsec (idle time).
+      (If you previously used SocketKeepAliveDurationNsec, you now need to set SocketKeepAlive to 1 as well.)
+          
+0.006 2026-02-14
+  [Incompatible Changes]
+    * Separate fetch_with_bind_columns from fetch for performance optimization and add create_count_ref/extended_count_ref to detect unintended allocations.
 
+0.005 2026-02-13
+  [Incompatible Changes]
+    * Rewirte Type Mapping Rules.
+    * Remove DBI::Data and add DBI::BindData::Blob.
+    
 0.004 2026-02-12
   [Incompatible Changes]
     * To finalize the specification, many incompatible changes have been made to DBI classes.

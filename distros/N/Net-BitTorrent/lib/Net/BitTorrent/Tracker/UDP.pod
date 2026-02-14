@@ -1,0 +1,131 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Net::BitTorrent::Tracker::UDP - UDP BitTorrent Tracker Protocol (BEP 15)
+
+=head1 SYNOPSIS
+
+    use Net::BitTorrent::Tracker::UDP;
+
+    my $tracker = Net::BitTorrent::Tracker::UDP->new(
+        url => 'udp://tracker.openbittorrent.com:80/announce'
+    );
+
+    # Announce
+    $tracker->perform_announce({
+        infohash   => $bin_ih,
+        peer_id    => $my_id,
+        port       => 6881,
+        downloaded => 0,
+        uploaded   => 0,
+        left       => 1024
+    }, sub ($res) {
+        say 'Peers: ' . join(', ', map { $_->{ip} } @{$res->{peers}});
+    });
+
+=head1 DESCRIPTION
+
+C<Net::BitTorrent::Tracker::UDP> implements the lightweight UDP Tracker Protocol (BEP 15). UDP is the preferred
+transport for BitTorrent trackers as it significantly reduces overhead on the tracker server compared to HTTP.
+
+=head2 BitTorrent v2 Support
+
+This module is BEP 52 compliant. It handles 32-byte SHA-256 infohashes by dynamically adjusting the binary structure of
+outgoing messages or by providing truncated/hashed 20-byte identifiers where necessary for legacy compatibility.
+
+=head1 METHODS
+
+=head2 C<perform_announce( \%params, [$callback] )>
+
+Sends an announce request to the UDP tracker.
+
+    $tracker->perform_announce( \%params, sub ($res) { ... } );
+
+This method handles connection ID acquisition and retransmissions automatically.
+
+Expected parameters:
+
+=over
+
+=item C<\%params>
+
+Standard announce parameters (infohash, peer_id, port, uploaded, downloaded, left, event).
+
+=item C<$callback> - optional
+
+Called with the parsed response hash containing C<interval>, C<leechers>, C<seeders>, and C<peers>.
+
+=back
+
+=head2 C<perform_scrape( \@infohashes, [$callback] )>
+
+Sends a scrape request to the UDP tracker.
+
+    $tracker->perform_scrape( \@ihs, sub ($res) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<\@infohashes>
+
+List of binary infohashes to scrape.
+
+=item C<$callback> - optional
+
+Called with the scrape results.
+
+=back
+
+=head2 C<tick( )>
+
+Performs periodic maintenance.
+
+    $tracker->tick( 0.1 );
+
+This method handles incoming packets and retransmissions for pending requests.
+
+=head2 C<receive_data( $data )>
+
+Processes an incoming UDP packet.
+
+    $tracker->receive_data( $raw_packet );
+
+Expected parameters:
+
+=over
+
+=item C<$data>
+
+The raw packet payload.
+
+=back
+
+=head2 C<url( )>
+
+Returns the tracker URL.
+
+=head1 Specifications
+
+=over
+
+=item * B<BEP 15>: UDP Tracker Protocol
+
+=item * B<BEP 52>: The BitTorrent Protocol v2 (UDP extensions)
+
+=back
+
+=head1 AUTHOR
+
+Sanko Robinson E<lt>sanko@cpan.orgE<gt>
+
+=head1 COPYRIGHT
+
+Copyright (C) 2008-2026 by Sanko Robinson.
+
+This library is free software; you can redistribute it and/or modify it under the terms of the Artistic License 2.0.
+
+=cut

@@ -2,7 +2,6 @@
 # MIT License
 
 class DBD::TestCaseMinimal::St extends DBI::St {
-  use DBI::Data;
 
   # Class Methods
   static method new : DBD::TestCaseMinimal::St () {
@@ -15,7 +14,12 @@ class DBD::TestCaseMinimal::St extends DBI::St {
     return 2147483649L;
   }
 
-  method fetch : object[] ($ctx : Go::Context, $bind_columns : object[] = undef, $ret_row : object[] = undef) {
+  method fetch : object[] ($ctx : Go::Context) {
+
+    return [(object)0, "no_input"];
+  }
+  
+  method fetch_with_bind_columns : object[] ($ctx : Go::Context, $bind_columns : object[] = undef, $ret_row : object[] = undef, $create_count_ref : int* = undef, $extended_count_ref : int* = undef) {
     if ($bind_columns && $ret_row) {
         $ret_row->[0] = $bind_columns->[0];
         $ret_row->[1] = $bind_columns->[1];

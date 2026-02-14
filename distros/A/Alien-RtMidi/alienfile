@@ -4,6 +4,9 @@ my $RTMIDI_MIN_VERSION = '4.0.0';
 my $RTMIDI_MAJOR_VERSION = 6;
 my $WIN = $^O eq 'MSWin32';
 my $CYG = $^O eq 'cygwin';
+my $MAC = $^O eq 'darwin';
+#my $CMAKE = !!($WIN);
+my $CMAKE = 0;
 
 plugin 'Gather::IsolateDynamic';
 plugin 'PkgConfig' => (
@@ -21,21 +24,23 @@ share {
 
     my @config = ( '--enable-static' );
     push @config, 'LDFLAGS="-std=gnu++11" CXXFLAGS="-std=gnu++11" --with-winmm' if $CYG;
+    push @config, 'CC=cc', 'CXX=c++' if $MAC;
 
     patch sub {
         my $build = shift;
         return unless $build->runtime_prop->{version} =~ /^6\.0/;
-        my $patch = $build->install_prop->{patch} . '/0001-Add-a-method-to-reset-the-ok-flag-and-clear-the-erro.patch';
-        my $binary = ( $WIN || $CYG ) ? '--binary' : '';
-        system( "patch $binary -p1 < $patch" );
+        my $patch = $build->install_prop->{patch} . '/358.patch';
+        Alien::Build::CommandSequence->new(
+            [join ' ', '%{patch}', (($WIN || $CYG) ? '--binary' : ()), '-p1', '<', $patch]
+        )->execute($build);
     };
 
-    plugin $WIN
+    plugin $CMAKE
         ? 'Build::CMake'
         : 'Build::Autoconf';
 
-    build $WIN
+    build $CMAKE
         ? [ [ '%{cmake3}', @{ meta->prop->{plugin_build_cmake}->{args} }, '-S', '.', '-B', 'build', '-DRTMIDI_BUILD_TESTING=0' ], '%{cmake3} --build build', '%{cmake3} --install build' ]
-        : [ '%{configure} ' . join( ' ', @config ), '%{make} librtmidi.la', '%{make} install-exec-am install-data-am' ];
+        : [ join(' ', '%{configure}', @config), '%{make} librtmidi.la', '%{make} install-exec-am install-data-am' ];
         # ^ This smells pretty bad, patches welcome
 };

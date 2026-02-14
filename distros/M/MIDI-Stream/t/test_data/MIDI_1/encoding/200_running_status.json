@@ -1,0 +1,190 @@
+{
+   "description" : "Voice and mode messages (channel messages) with running status",
+   "ref" : "MIDI 1.0 Detailed Specification, Overview > Data Types > Status Bytes > Running Status",
+   "standard" : true,
+   "tests" : [
+      {
+         "expect" : "9f 45 7f 46 7f 01 00 47 3e",
+         "description" : "Running status - note on",
+         "data" : [
+            {
+               "channel" : 15,
+               "name" : "note_on",
+               "note" : 69,
+               "velocity" : 127
+            },
+            {
+               "channel" : 15,
+               "name" : "note_on",
+               "note" : 70,
+               "velocity" : 127
+            },
+            {
+               "channel" : 15,
+               "name" : "note_off",
+               "note" : 1,
+               "velocity" : 0
+            },
+            {
+               "channel" : 15,
+               "name" : "note_on",
+               "note" : 71,
+               "velocity" : 62
+            }
+         ]
+      },
+      {
+         "expect" : "00 00 84 45 7f 46 2a 47 00 48 7e",
+         "description" : "Running status - note off with and without velocity",
+         "data" : [
+            {
+               "channel" : 15,
+               "name" : "note_off",
+               "note" : 0,
+               "velocity" : 0
+            },
+            {
+               "channel" : 4,
+               "name" : "note_off",
+               "note" : 69,
+               "velocity" : 127
+            },
+            {
+               "channel" : 4,
+               "name" : "note_off",
+               "note" : 70,
+               "velocity" : 42
+            },
+            {
+               "channel" : 4,
+               "name" : "note_off",
+               "note" : 71,
+               "velocity" : 0
+            },
+            {
+               "channel" : 4,
+               "name" : "note_off",
+               "note" : 72,
+               "velocity" : 126
+            }
+         ]
+      },
+      {
+         "expect" : "a8 7f 00 00 1d 01 00 7e 7f",
+         "description" : "Running status for polyphonic aftertouch messages",
+         "data" : [
+            {
+               "channel" : 8,
+               "name" : "polytouch",
+               "note" : 127,
+               "pressure" : 0
+            },
+            {
+               "channel" : 8,
+               "name" : "polytouch",
+               "note" : 0,
+               "pressure" : 29
+            },
+            {
+               "channel" : 8,
+               "name" : "polytouch",
+               "note" : 1,
+               "pressure" : 0
+            },
+            {
+               "channel" : 8,
+               "name" : "polytouch",
+               "note" : 126,
+               "pressure" : 127
+            }
+         ]
+      },
+      {
+         "expect" : "bc 00 7e 20 01 7f 00 4a 7f",
+         "description" : "Running status for control change messages",
+         "data" : [
+            {
+               "channel" : 12,
+               "control" : 0,
+               "name" : "control_change",
+               "value" : 126
+            },
+            {
+               "channel" : 12,
+               "control" : 32,
+               "name" : "control_change",
+               "value" : 1
+            },
+            {
+               "channel" : 12,
+               "control" : 127,
+               "name" : "control_change",
+               "value" : 0
+            },
+            {
+               "channel" : 12,
+               "control" : 74,
+               "name" : "control_change",
+               "value" : 127
+            }
+         ]
+      },
+      {
+         "expect" : "da 00 7f 2e 7e",
+         "description" : "Running status for channel aftertouch messages",
+         "data" : [
+            {
+               "channel" : 10,
+               "name" : "aftertouch",
+               "pressure" : 0
+            },
+            {
+               "channel" : 10,
+               "name" : "aftertouch",
+               "pressure" : 127
+            },
+            {
+               "channel" : 10,
+               "name" : "aftertouch",
+               "pressure" : 46
+            },
+            {
+               "channel" : 10,
+               "name" : "aftertouch",
+               "pressure" : 126
+            }
+         ]
+      },
+      {
+         "expect" : "e7 00 40 00 00 7f 7f 2e 1f 66 60",
+         "description" : "Running status for pitch bend messages",
+         "data" : [
+            {
+               "channel" : 7,
+               "name" : "pitch_bend",
+               "value" : 0
+            },
+            {
+               "channel" : 7,
+               "name" : "pitch_bend",
+               "value" : -8192
+            },
+            {
+               "channel" : 7,
+               "name" : "pitch_bend",
+               "value" : 8191
+            },
+            {
+               "channel" : 7,
+               "name" : "pitch_bend",
+               "value" : -4178
+            },
+            {
+               "channel" : 7,
+               "name" : "pitch_bend",
+               "value" : 4198
+            }
+         ]
+      }
+   ]
+}

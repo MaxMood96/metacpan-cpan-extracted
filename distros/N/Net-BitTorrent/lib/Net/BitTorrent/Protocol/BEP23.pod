@@ -1,0 +1,127 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Net::BitTorrent::Protocol::BEP23 - Compact Peer Lists (IPv4 and IPv6)
+
+=head1 SYNOPSIS
+
+    use Net::BitTorrent::Protocol::BEP23;
+
+    # Pack a list of peers for a tracker response or PEX update
+    my $packed = Net::BitTorrent::Protocol::BEP23::pack_peers_ipv4(
+        { ip => '1.2.3.4', port => 6881 },
+        { ip => '5.6.7.8', port => 6882 }
+    );
+
+    # Unpack a compact list from a tracker
+    my $peers = Net::BitTorrent::Protocol::BEP23::unpack_peers_ipv4($binary_data);
+    for my $p (@$peers) {
+        say "Found peer at $p->{ip}:$p->{port}";
+    }
+
+=head1 DESCRIPTION
+
+C<Net::BitTorrent::Protocol::BEP23> implements the compact binary representation of peer addresses used throughout the
+BitTorrent ecosystem. By avoiding bencoding for large peer lists, this format significantly reduces the bandwidth
+required for tracker announces and Peer Exchange (PEX).
+
+This module implements the compact peer list format defined in BEP 23 (IPv4) and BEP 07 (IPv6).
+
+=head1 FUNCTIONS
+
+=head2 C<pack_peers_ipv4( @peers )>
+
+Packs a list of IPv4 peers into a binary string.
+
+    my $raw = Net::BitTorrent::Protocol::BEP23::pack_peers_ipv4( @peers );
+
+This method converts a list of peer structures into a 6-byte-per-peer compact binary string.
+
+Expected parameters:
+
+=over
+
+=item C<@peers>
+
+A list of hash references, each containing C<ip> (dotted quad) and C<port> (integer).
+
+=back
+
+=head2 C<unpack_peers_ipv4( $data )>
+
+Unpacks a binary string of IPv4 peers.
+
+    my $peers = Net::BitTorrent::Protocol::BEP23::unpack_peers_ipv4( $raw );
+
+This method converts a 6-byte-per-peer binary string into an array reference of peer structures.
+
+Expected parameters:
+
+=over
+
+=item C<$data>
+
+The binary string containing packed IPv4 addresses and ports.
+
+=back
+
+=head2 C<pack_peers_ipv6( @peers )>
+
+Packs a list of IPv6 peers into a binary string.
+
+    my $raw = Net::BitTorrent::Protocol::BEP23::pack_peers_ipv6( @peers );
+
+This method converts a list of peer structures into an 18-byte-per-peer compact binary string (BEP 07).
+
+Expected parameters:
+
+=over
+
+=item C<@peers>
+
+A list of hash references with C<ip> (IPv6 string) and C<port> (integer).
+
+=back
+
+=head2 C<unpack_peers_ipv6( $data )>
+
+Unpacks a binary string of IPv6 peers.
+
+    my $peers = Net::BitTorrent::Protocol::BEP23::unpack_peers_ipv6( $raw );
+
+This method converts an 18-byte-per-peer binary string into an array reference of peer structures.
+
+Expected parameters:
+
+=over
+
+=item C<$data>
+
+The binary string of packed IPv6 addresses.
+
+=back
+
+=head1 SPECIFICATIONS
+
+=over
+
+=item * B<BEP 23>: Tracker Returns Compact Peer Lists
+
+=item * B<BEP 07>: IPv6 Support (Compact Format)
+
+=back
+
+=head1 AUTHOR
+
+Sanko Robinson E<lt>sanko@cpan.orgE<gt>
+
+=head1 COPYRIGHT
+
+Copyright (C) 2008-2026 by Sanko Robinson.
+
+This library is free software; you can redistribute it and/or modify it under the terms of the Artistic License 2.0.
+
+=cut

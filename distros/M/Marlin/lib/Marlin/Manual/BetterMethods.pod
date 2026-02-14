@@ -57,11 +57,11 @@ B<< Example: Named Signatures >>
 
   sub change_password_to ( $self, $args ) {
     
-    die "Unauthorized" if $arg->old_password ne $self->password;
-    die "Mistyped" if $arg->new_password ne $arg->confirm_password; 
-    die "Password too short" if length($arg->new_password) < 6;
+    die "Unauthorized" if $args->old_password ne $self->password;
+    die "Mistyped" if $args->new_password ne $args->confirm_password;
+    die "Password too short" if length($args->new_password) < 6;
     
-    $self->_set_password( $arg->new_password );
+    $self->_set_password( $args->new_password );
     $self->_set_updated( time() );
     
     return $self;
@@ -126,7 +126,7 @@ such as any defaults or type coercions. Layers further out of the onion
 will not be able to see them.
 
 For this reason, it's often best to declare the method's signature I<after>
-any C<before>, C<after>, and C<around> modfiers.
+any C<before>, C<after>, and C<around> modifiers.
 
 =head2 Object Lifecycle Methods
 
@@ -152,11 +152,11 @@ The default is something like this:
 
 It is usually a good idea to I<not> provide a C<BUILDARGS> method as the
 default behaviour is coded in fast C. However, you may sometimes need this
-flexibility/
+flexibility.
 
 If you define a C<BUILD> method, it will be called after your object has
 been created but before the constructor returns it. It is passed a copy
-of the hashref returned by C<BUILDARGS>. In an inheritance heirarchy,
+of the hashref returned by C<BUILDARGS>. In an inheritance hierarchy,
 the constructor will call C<BUILD> for B<all> the parent classes too,
 starting at the very base class.
 
@@ -170,7 +170,7 @@ you'd want to is beyond my comprehension. Maybe some kind of
 inflate/deflate situation?
 
 If you define a C<DEMOLISH> method, this is treated like C<BUILD>, but
-for the constructor. The inheritance heirarchy is traversed in reverse.
+for the destructor. The inheritance hierarchy is traversed in reverse.
 
 When you are inheriting from a non-Marlin, non-Class::XSConstructor class
 (a "foreign class"), Marlin will want to call the base class's constructor.
@@ -218,7 +218,7 @@ If it's a B<< difficult foreign class >>, Marlin will do this instead:
     : @_;
   my $args = $ourclass->can('BUILDARGS')
     ? $ourclass->BUILDARGS( @_ )
-    : $outclass->$default_buildargs( @_ );
+    : $ourclass->$default_buildargs( @_ );
   
   my $object = $ourclass->$foreign_constructor( @foreign_args );
   

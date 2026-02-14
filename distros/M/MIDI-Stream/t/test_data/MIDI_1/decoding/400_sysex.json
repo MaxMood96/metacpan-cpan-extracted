@@ -1,0 +1,134 @@
+{
+   "description" : "SysEx Basics",
+   "ref" : "",
+   "standard" : true,
+   "tests" : [
+      {
+         "data" : "f0 48 65 6c 6c 6f 2c 20 57 6f 72 6c 64 21 f7",
+         "description" : "Single complete SysEx message",
+         "expect" : [
+            {
+               "msg" : [
+                  72,
+                  101,
+                  108,
+                  108,
+                  111,
+                  44,
+                  32,
+                  87,
+                  111,
+                  114,
+                  108,
+                  100,
+                  33
+               ],
+               "name" : "sysex"
+            }
+         ]
+      },
+      {
+         "data" : "f0 48 65 6c 6c 6f 90 40 40 2c 20 57 6f 72 6c 64 21 f7",
+         "description" : "SysEx message interrupted by note-on (non realtime, ends sysex)",
+         "expect" : [
+            {
+               "msg" : [
+                  72,
+                  101,
+                  108,
+                  108,
+                  111
+               ],
+               "name" : "sysex"
+            },
+            {
+               "channel" : 0,
+               "name" : "note_on",
+               "note" : 64,
+               "velocity" : 64
+            },
+            {
+               "channel" : 0,
+               "name" : "note_on",
+               "note" : 44,
+               "velocity" : 32
+            },
+            {
+               "channel" : 0,
+               "name" : "note_on",
+               "note" : 87,
+               "velocity" : 111
+            },
+            {
+               "channel" : 0,
+               "name" : "note_on",
+               "note" : 114,
+               "velocity" : 108
+            },
+            {
+               "channel" : 0,
+               "name" : "note_on",
+               "note" : 100,
+               "velocity" : 33
+            }
+         ]
+      },
+      {
+         "data" : "f0 48 65 6c 6c 6f f8 40 40 2c 20 57 6f 72 6c 64 21 f7",
+         "description" : "SysEx message interrupted by clock (realtime, sysex continues after",
+         "expect" : [
+            {
+               "name" : "clock"
+            },
+            {
+               "msg" : [
+                  72,
+                  101,
+                  108,
+                  108,
+                  111,
+                  64,
+                  64,
+                  44,
+                  32,
+                  87,
+                  111,
+                  114,
+                  108,
+                  100,
+                  33
+               ],
+               "name" : "sysex"
+            }
+         ]
+      },
+      {
+         "data" : "90 40 40 40 00 f0 48 65 6c 6c 6f f7 40 40",
+         "description" : "SysEx ends running status",
+         "expect" : [
+            {
+               "channel" : 0,
+               "name" : "note_on",
+               "note" : 64,
+               "velocity" : 64
+            },
+            {
+               "channel" : 0,
+               "name" : "note_off",
+               "note" : 64,
+               "velocity" : 0
+            },
+            {
+               "msg" : [
+                  72,
+                  101,
+                  108,
+                  108,
+                  111
+               ],
+               "name" : "sysex"
+            }
+         ]
+      }
+   ]
+}

@@ -4,7 +4,7 @@
       "John Barrett <john@jbrt.org>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "Dist::Zilla version 6.033, CPAN::Meta::Converter version 2.150010",
+   "generated_by" : "Dist::Zilla version 6.036, CPAN::Meta::Converter version 2.150010",
    "license" : [
       "perl_5"
    ],
@@ -63,22 +63,22 @@
    "provides" : {
       "Alien::RtMidi" : {
          "file" : "lib/Alien/RtMidi.pm",
-         "version" : "0.09"
+         "version" : "0.12"
       }
    },
    "release_status" : "stable",
    "resources" : {
       "bugtracker" : {
-         "web" : "https://github.com/jbarrett/Alien-RtMidi/issues"
+         "web" : "https://codeberg.org/jbarrett/Alien-RtMidi/issues"
       },
-      "homepage" : "https://github.com/jbarrett/Alien-RtMidi",
+      "homepage" : "https://codeberg.org/jbarrett/Alien-RtMidi/",
       "repository" : {
          "type" : "git",
-         "url" : "https://github.com/jbarrett/Alien-RtMidi.git",
-         "web" : "https://github.com/jbarrett/Alien-RtMidi"
+         "url" : "https://codeberg.org/jbarrett/Alien-RtMidi.git",
+         "web" : "https://codeberg.org/jbarrett/Alien-RtMidi/"
       }
    },
-   "version" : "0.09",
+   "version" : "0.12",
    "x_alienfile" : {
       "generated_by" : "Dist::Zilla::Plugin::AlienBuild version 0.33",
       "requires" : {

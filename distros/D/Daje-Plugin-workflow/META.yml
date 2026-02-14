@@ -24,15 +24,14 @@ no_index:
     - author
     - builder
 provides:
-  Daje::Controller::Workflow::Workflow:
-    file: lib/Daje/Controller/Workflow/Workflow.pm
+  Daje::Controller::Workflows::Workflows:
+    file: lib/Daje/Controller/Workflows/Workflows.pm
   Daje::Plugin::Workflow:
     file: lib/Daje/Plugin/Workflow.pm
-    version: '0.20'
+    version: '0.35'
 requires:
   Daje::Workflow: '0'
   Daje::Workflow::Database: '0'
-  Daje::Workflow::Database::Model::WorkflowConnection: '0'
   Daje::Workflow::Loader: '0'
   Future::AsyncAwait: '0.52'
   Mojo::Base: '0'
@@ -42,6 +41,6 @@ resources:
   bugtracker: https://github.com/janeskil1525/Daje-Plugin-Workflow/issues
   homepage: https://github.com/janeskil1525/Daje-Plugin-Workflow
   repository: https://github.com/janeskil1525/Daje-Plugin-Workflow.git
-version: '0.20'
+version: '0.35'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'
 x_static_install: 1

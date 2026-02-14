@@ -1,0 +1,101 @@
+{
+   "description" : "Real Time messages can be sent at any time and may be inserted anywhere in a MIDI data stream",
+   "ref" : "MIDI 1.0 Detailed Specification, Details > System Real Time Messages",
+   "standard" : true,
+   "tests" : [
+      {
+         "data" : "f8 fa fb fc fe ff",
+         "description" : "All (defined) realtime message types handled",
+         "expect" : [
+            {
+               "name" : "clock"
+            },
+            {
+               "name" : "start"
+            },
+            {
+               "name" : "continue"
+            },
+            {
+               "name" : "stop"
+            },
+            {
+               "name" : "active_sensing"
+            },
+            {
+               "name" : "system_reset"
+            }
+         ]
+      },
+      {
+         "data" : "91 3e f8 3d 91 3e f8 00",
+         "description" : "Realtime clock interrupts note on",
+         "expect" : [
+            {
+               "name" : "clock"
+            },
+            {
+               "channel" : 1,
+               "name" : "note_on",
+               "note" : 62,
+               "velocity" : 61
+            },
+            {
+               "name" : "clock"
+            },
+            {
+               "channel" : 1,
+               "name" : "note_off",
+               "note" : 62,
+               "velocity" : 0
+            }
+         ]
+      },
+      {
+         "data" : "91 3e f8 3d 00 f8 00",
+         "description" : "Realtime clock interrupts note on - running status remains valid",
+         "expect" : [
+            {
+               "name" : "clock"
+            },
+            {
+               "channel" : 1,
+               "name" : "note_on",
+               "note" : 62,
+               "velocity" : 61
+            },
+            {
+               "name" : "clock"
+            },
+            {
+               "channel" : 1,
+               "name" : "note_off",
+               "note" : 0,
+               "velocity" : 0
+            }
+         ]
+      },
+      {
+         "data" : "ef 12 fc 23 34 fb  45",
+         "description" : "Realtime stop / continue interrupts pitch bend + running status",
+         "expect" : [
+            {
+               "name" : "stop"
+            },
+            {
+               "channel" : 15,
+               "name" : "pitch_bend",
+               "value" : -3694
+            },
+            {
+               "name" : "continue"
+            },
+            {
+               "channel" : 15,
+               "name" : "pitch_bend",
+               "value" : 692
+            }
+         ]
+      }
+   ]
+}

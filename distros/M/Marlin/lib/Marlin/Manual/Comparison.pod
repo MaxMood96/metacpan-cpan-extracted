@@ -412,7 +412,7 @@ hardware and environment.
 
 =head2 XSUB versus Pure Perl
 
-The following table shows which methods were accellerated via XS.
+The following table shows which methods were accelerated via XS.
 
   ========================================================================
   Method          Moo     Moose   Mouse   Tiny    Core    Plain   Marlin 

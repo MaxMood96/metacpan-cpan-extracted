@@ -48,17 +48,17 @@ my $meta = {
                                      },
                       },
   "provides"       => {
-                        "Marlin"                        => { file => "lib/Marlin.pm", version => "0.023000" },
-                        "Marlin::Attribute"             => { file => "lib/Marlin/Attribute.pm", version => "0.023000" },
+                        "Marlin"                        => { file => "lib/Marlin.pm", version => 0.023001 },
+                        "Marlin::Attribute"             => { file => "lib/Marlin/Attribute.pm", version => 0.023001 },
                         "Marlin::Attribute::NONE"       => { file => "lib/Marlin/Attribute.pm" },
-                        "Marlin::Attribute::SHVToolkit" => { file => "lib/Marlin/Attribute/SHVToolkit.pm", version => "0.023000" },
+                        "Marlin::Attribute::SHVToolkit" => { file => "lib/Marlin/Attribute/SHVToolkit.pm", version => 0.023001 },
                         "Marlin::Meta::Class"           => { file => "lib/MooseX/Marlin.pm" },
-                        "Marlin::Role"                  => { file => "lib/Marlin/Role.pm", version => "0.023000" },
-                        "Marlin::Struct"                => { file => "lib/Marlin/Struct.pm", version => "0.023000" },
-                        "Marlin::TypeConstraint"        => { file => "lib/Marlin/TypeConstraint.pm", version => "0.023000" },
-                        "Marlin::Util"                  => { file => "lib/Marlin/Util.pm", version => "0.023000" },
-                        "Marlin::X"                     => { file => "lib/Marlin/X.pm", version => "0.023000" },
-                        "MooseX::Marlin"                => { file => "lib/MooseX/Marlin.pm", version => "0.023000" },
+                        "Marlin::Role"                  => { file => "lib/Marlin/Role.pm", version => 0.023001 },
+                        "Marlin::Struct"                => { file => "lib/Marlin/Struct.pm", version => 0.023001 },
+                        "Marlin::TypeConstraint"        => { file => "lib/Marlin/TypeConstraint.pm", version => 0.023001 },
+                        "Marlin::Util"                  => { file => "lib/Marlin/Util.pm", version => 0.023001 },
+                        "Marlin::X"                     => { file => "lib/Marlin/X.pm", version => 0.023001 },
+                        "MooseX::Marlin"                => { file => "lib/MooseX/Marlin.pm", version => 0.023001 },
                       },
   "release_status" => "stable",
   "resources"      => {
@@ -72,7 +72,7 @@ my $meta = {
                                         },
                         x_identifier => "http://purl.org/NET/cpan-uri/dist/Marlin/project",
                       },
-  "version"        => "0.023000",
+  "version"        => 0.023001,
 };
 
 my %dynamic_config;
@@ -97,7 +97,7 @@ my %WriteMakefileArgs = (
 	VERSION    => $meta->{version},
 	EXE_FILES  => [ map $_->{file}, values %{ $meta->{x_provides_scripts} || {} } ],
 	NAME       => do { my $n = $meta->{name}; $n =~ s/-/::/g; $n },
-	test       => { TESTS => "t/*.t t/integration/*.t" },
+	test       => { TESTS => "t/*.t t/integration/*.t t/integration/quickstart/*.t" },
 	%dynamic_config,
 );
 

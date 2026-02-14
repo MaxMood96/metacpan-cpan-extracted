@@ -1,0 +1,11 @@
+name = "Flat-Schema"
+authority = "cpan:SDS"
+license = "perl_5"
+
+# Ensure Minilla generates README.md from the POD you control.
+readme_from   = "lib/Flat/Schema.pm"
+abstract_from = "lib/Flat/Schema.pm"
+authors_from  = "lib/Flat/Schema.pm"
+
+# Enforce your preferred tag style for Minilla-created release tags.
+tag_format = "v%v"

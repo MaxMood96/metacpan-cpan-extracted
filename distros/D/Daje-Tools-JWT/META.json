@@ -4,7 +4,7 @@
       "janeskil1525 <janeskil1525@gmail.com>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Minilla/v3.1.25",
+   "generated_by" : "Minilla/v3.1.28",
    "license" : [
       "perl_5"
    ],
@@ -42,10 +42,9 @@
       },
       "runtime" : {
          "requires" : {
-            "Data::Dumper" : "0",
             "Mojo::Base" : "0",
             "Mojo::JWT" : "0",
-            "perl" : "5.040000"
+            "perl" : "v5.42.0"
          }
       },
       "test" : {
@@ -57,7 +56,7 @@
    "provides" : {
       "Daje::Tools::JWT" : {
          "file" : "lib/Daje/Tools/JWT.pm",
-         "version" : "0.01"
+         "version" : "0.10"
       }
    },
    "release_status" : "stable",
@@ -72,7 +71,7 @@
          "web" : "https://github.com/janeskil1525/Daje-Tools-JWT"
       }
    },
-   "version" : "0.01",
+   "version" : "0.10",
    "x_serialization_backend" : "JSON::PP version 4.16",
    "x_static_install" : 1
 }

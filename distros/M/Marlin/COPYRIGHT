@@ -17,11 +17,26 @@ Files: Changes
  t/integration/extend-eg.t
  t/integration/extend-lex.t
  t/integration/foreign-inherit.t
+ t/integration/quickstart/admin.t
+ t/integration/quickstart/event.t
+ t/integration/quickstart/job.t
+ t/integration/quickstart/session.t
+ t/integration/quickstart/user.t
  t/integration/xsdelegation.t
  t/lib/Local/Mitey.pm
  t/lib/Local/Mitey.pm.mite.pm
  t/lib/Local/Mitey/MOP.pm
  t/lib/Local/Mitey/Mite.pm
+ t/lib/Local/QuickStart/Entity.pm
+ t/lib/Local/QuickStart/Event.pm
+ t/lib/Local/QuickStart/Job.pm
+ t/lib/Local/QuickStart/Model/Admin.pm
+ t/lib/Local/QuickStart/Role/Auditable.pm
+ t/lib/Local/QuickStart/Role/CanImpersonate.pm
+ t/lib/Local/QuickStart/Role/Loggable.pm
+ t/lib/Local/QuickStart/Role/Serializable.pm
+ t/lib/Local/QuickStart/Session.pm
+ t/lib/Local/QuickStart/User.pm
 Copyright: Copyright 2026 Toby Inkster.
 License: GPL-1.0+ or Artistic-1.0
 
@@ -45,6 +60,24 @@ Files: INSTALL
 Copyright: Unknown
 License: Unknown
 
+Files: lib/Marlin/Manual/Beginning.pod
+ lib/Marlin/Manual/BetterAttributes.pod
+ lib/Marlin/Manual/BetterMethods.pod
+ lib/Marlin/Manual/ClassOptions.pod
+ lib/Marlin/Manual/QuickStart.pod
+ lib/Marlin/X.pm
+ lib/MooX/Marlin.pm
+ lib/MooseX/Marlin.pm
+ t/integration/alias-moose.t
+ t/integration/chaining.t
+ t/integration/ct-inherit.t
+ t/integration/mite-inherit.t
+ t/integration/mouse-inherit.t
+ t/integration/roles2.t
+ t/integration/xscon-inherit.t
+Copyright: This software is copyright (c) 2026 by Toby Inkster.
+License: GPL-1.0+ or Artistic-1.0
+
 Files: t/00start.t
  t/01basic.t
  t/integration/comparison-example.t
@@ -60,23 +93,6 @@ Files: t/00start.t
  t/integration/struct.t
  t/integration/triggers.t
 Copyright: This software is copyright (c) 2025 by Toby Inkster.
-License: GPL-1.0+ or Artistic-1.0
-
-Files: lib/Marlin/Manual/Beginning.pod
- lib/Marlin/Manual/BetterAttributes.pod
- lib/Marlin/Manual/BetterMethods.pod
- lib/Marlin/Manual/ClassOptions.pod
- lib/Marlin/X.pm
- lib/MooX/Marlin.pm
- lib/MooseX/Marlin.pm
- t/integration/alias-moose.t
- t/integration/chaining.t
- t/integration/ct-inherit.t
- t/integration/mite-inherit.t
- t/integration/mouse-inherit.t
- t/integration/roles2.t
- t/integration/xscon-inherit.t
-Copyright: This software is copyright (c) 2026 by Toby Inkster.
 License: GPL-1.0+ or Artistic-1.0
 
 Files: README

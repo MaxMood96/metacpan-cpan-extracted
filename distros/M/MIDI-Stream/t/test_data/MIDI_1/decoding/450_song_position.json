@@ -1,0 +1,33 @@
+{
+   "description" : "Decoding of song position MSB/LSB to 14 bit",
+   "ref" : "",
+   "standard" : true,
+   "tests" : [
+      {
+         "data" : "f2 7f 7f f2 7e 7f f2 33 33 f2 7f 00 f2 00 00",
+         "description" : "A range of song position messages",
+         "expect" : [
+            {
+               "name" : "song_position",
+               "position" : 16383
+            },
+            {
+               "name" : "song_position",
+               "position" : 16382
+            },
+            {
+               "name" : "song_position",
+               "position" : 6579
+            },
+            {
+               "name" : "song_position",
+               "position" : 127
+            },
+            {
+               "name" : "song_position",
+               "position" : 0
+            }
+         ]
+      }
+   ]
+}

@@ -32,6 +32,7 @@ lib/Marlin/Manual/BetterMethods.pod
 lib/Marlin/Manual/ClassOptions.pod
 lib/Marlin/Manual/Comparison.pod
 lib/Marlin/Manual/Principles.pod
+lib/Marlin/Manual/QuickStart.pod
 lib/Marlin/Role.pm
 lib/Marlin/Struct.pm
 lib/Marlin/TypeConstraint.pm
@@ -63,6 +64,11 @@ t/integration/moose-inherit-reversed.t
 t/integration/moose-inherit.t
 t/integration/mouse-inherit.t
 t/integration/pad-inherit.skip
+t/integration/quickstart/admin.t
+t/integration/quickstart/event.t
+t/integration/quickstart/job.t
+t/integration/quickstart/session.t
+t/integration/quickstart/user.t
 t/integration/roles.t
 t/integration/roles2.t
 t/integration/storage.t
@@ -75,3 +81,13 @@ t/lib/Local/Mitey.pm
 t/lib/Local/Mitey.pm.mite.pm
 t/lib/Local/Mitey/MOP.pm
 t/lib/Local/Mitey/Mite.pm
+t/lib/Local/QuickStart/Entity.pm
+t/lib/Local/QuickStart/Event.pm
+t/lib/Local/QuickStart/Job.pm
+t/lib/Local/QuickStart/Model/Admin.pm
+t/lib/Local/QuickStart/Role/Auditable.pm
+t/lib/Local/QuickStart/Role/CanImpersonate.pm
+t/lib/Local/QuickStart/Role/Loggable.pm
+t/lib/Local/QuickStart/Role/Serializable.pm
+t/lib/Local/QuickStart/Session.pm
+t/lib/Local/QuickStart/User.pm

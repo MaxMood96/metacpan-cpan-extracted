@@ -1,0 +1,45 @@
+App::pod2gfm
+
+pod2gfm is a command-line utility based on pod2markdown for
+Pod::Markdown::Githubert, a subclass of Pod::Markdown that adds
+GitHub-specific features like fenced code blocks (```) with language
+tags for syntax highlighting.
+
+See "DESCRIPTION" in Pod::Markdown::Githubert for details.
+
+
+INSTALLATION
+
+To download and install this module, use your favorite CPAN client:
+
+    cpanm App::pod2gfm
+
+To do it manually, run the following commands (after downloading and unpacking
+the tarball):
+
+    perl Makefile.PL
+    make
+    make test
+    make install
+
+
+SUPPORT AND DOCUMENTATION
+
+After installing, you can find documentation for this module with the perldoc
+command:
+
+    perldoc App::pod2gfm
+
+You can also look for information at:
+
+    GitHub issue tracker (report bugs here)
+        https://github.com/ryoskzypu/App-pod2gfm/issues
+
+    Search CPAN
+        https://metacpan.org/dist/App-pod2gfm
+
+
+COPYRIGHT
+
+Copyright © 2026 ryoskzypu
+MIT-0 License. See LICENSE for details.

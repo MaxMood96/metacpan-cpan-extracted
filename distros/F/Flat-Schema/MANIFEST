@@ -1,0 +1,16 @@
+Changes
+LICENSE
+README.md
+cpanfile
+lib/Flat/Schema.pm
+minil.toml
+t/00-load.t
+t/01-schema-structure.t
+t/02-serialization-determinism.t
+t/03-type-inference.t
+t/04-nullability.t
+t/05-overrides.t
+META.json
+META.yml
+MANIFEST
+Build.PL

@@ -1,6 +1,6 @@
 package SPVM::DBI;
 
-our $VERSION = "0.004";
+our $VERSION = "0.008";
 
 1;
 
@@ -100,7 +100,7 @@ Transaction:
 
 =item * L<DBI::St|SPVM::DBI::St> - Statement Handle
 
-=item * L<DBI::Data|SPVM::DBI::Data> - Statement Handle
+=item * L<DBI::BindData::Blob|SPVM::DBI::BindData::Blob> - Statement Handle
 
 =item * L<DBI::Constant|SPVM::DBI::Constant> - Information and Capability Constants
 
@@ -146,35 +146,47 @@ C<has InactiveDestroy : rw byte;>
 
 The InactiveDestroy status.
 
-=head2 IdleTimeoutDurationNsec
+=head2 IdleTimeout
 
-C<has IdleTimeoutDurationNsec : rw long;>
+C<has IdleTimeout : rw double;>
 
-The maximum duration that a connection can remain idle, in nanoseconds.
+The maximum time in seconds that a connection can remain idle before being closed.
 
-=head2 ConnectTimeoutDurationNsec
+=head2 ConnectTimeout
 
-C<has ConnectTimeoutDurationNsec : rw long;>
+C<has ConnectTimeout : rw double;>
 
-The timeout value for establishing a new database connection, in nanoseconds.
+The timeout value for establishing a new database connection, in seconds.
 
-=head2 ReadTimeoutDurationNsec
+=head2 ReadTimeout
 
-C<has ReadTimeoutDurationNsec : rw long;>
+C<has ReadTimeout : rw double;>
 
-The timeout value for read operations, in nanoseconds.
+The timeout value for read operations, in seconds.
 
-=head2 WriteTimeoutDurationNsec
+=head2 WriteTimeout
 
-C<has WriteTimeoutDurationNsec : rw long;>
+C<has WriteTimeout : rw double;>
 
-The timeout value for write operations, in nanoseconds.
+The timeout value for write operations, in seconds.
 
-=head2 SocketKeepAliveDurationNsec
+=head2 SocketKeepAlive
 
-C<has SocketKeepAliveDurationNsec : rw long;>
+C<has SocketKeepAlive : rw byte;>
 
-The duration for TCP keep-alive idle time, in nanoseconds.
+A boolean value that indicates whether the TCP keep-alive is enabled. 
+If set to 1, C<SO_KEEPALIVE> is enabled on the socket.
+
+If this is not specified, the default value of the underlying L<IO::Socket|SPVM::IO::Socket> is used.
+
+=head2 TCPKeepIdle
+
+C<has TCPKeepIdle : rw int;>
+
+The time in seconds that a connection must be idle before TCP starts sending keep-alive probes.
+Note that this setting only takes effect when L</"SocketKeepAlive"> is set to 1.
+
+If this is not specified, the default value of the underlying L<IO::Socket|SPVM::IO::Socket> is used.
 
 =head2 TCPNoDelay
 
@@ -186,105 +198,89 @@ The TCP_NODELAY status (boolean 1 or 0).
 
 =head2 blob
 
-C<static method blob : L<DBI::Data|SPVM::DBI::Data> ($value : string)>
+C<static method blob : L<DBI::BindData::Blob|SPVM::DBI::BindData::Blob> ($value : string);>
 
-Creates a new L<DBI::Data|SPVM::DBI::Data> object with C<TYPE_ID_BLOB>.
+Creates a new L<DBI::BindData::Blob|SPVM::DBI::BindData::Blob> object>.
 
 This is a helper method to wrap binary data.
-
-=head2 big_int
-
-C<static method big_int : L<DBI::Data|SPVM::DBI::Data> ($value : string)>
-
-Creates a new L<DBI::Data|SPVM::DBI::Data> object with C<TYPE_ID_BIG_INT>.
-
-This is a helper method to wrap a large integer represented as a string (e.g., "170141183460469231731687303715884105727").
-
-=head2 big_float
-
-C<static method big_float : L<DBI::Data|SPVM::DBI::Data> ($value : string)>
-
-Creates a new L<DBI::Data|SPVM::DBI::Data> object with C<TYPE_ID_BIG_FLOAT>.
-
-This is a helper method to wrap a high-precision floating-point number represented as a string.
 
 =head1 Instance Methods
 
 =head2 prepare
 
-C<method prepare : L<DBI::St|SPVM::DBI::St> ($ctx : L<Go::Context|SPVM::Go::Context>, $sql : string, $options : object[] = undef)>
+C<method prepare : L<DBI::St|SPVM::DBI::St> ($ctx : L<Go::Context|SPVM::Go::Context>, $sql : string, $options : object[] = undef);>
 
 Prepares the SQL statement and returns a statement handle (L<DBI::St|SPVM::DBI::St>).
 
 =head2 begin_work
 
-C<method begin_work : void ($ctx : L<Go::Context|SPVM::Go::Context>)>
+C<method begin_work : void ($ctx : L<Go::Context|SPVM::Go::Context>);>
 
 Starts a new transaction.
 
 =head2 commit
 
-C<method commit : void ($ctx : L<Go::Context|SPVM::Go::Context>)>
+C<method commit : void ($ctx : L<Go::Context|SPVM::Go::Context>);>
 
 Commits the current transaction.
 
 =head2 rollback
 
-C<method rollback : void ($ctx : L<Go::Context|SPVM::Go::Context>)>
+C<method rollback : void ($ctx : L<Go::Context|SPVM::Go::Context>);>
 
 Rolls back the current transaction.
 
 =head2 last_insert_id
 
-C<method last_insert_id : object ($ctx : L<Go::Context|SPVM::Go::Context>, $catalog : string = undef, $schema : string = undef, $table : string = undef, $field : string = undef, $options : object[] = undef)>
+C<method last_insert_id : object ($ctx : L<Go::Context|SPVM::Go::Context>, $catalog : string = undef, $schema : string = undef, $table : string = undef, $field : string = undef, $options : object[] = undef);>
 
 Returns the ID of the last inserted row.
 
 =head2 ping
 
-C<method ping : int ($ctx : L<Go::Context|SPVM::Go::Context>)>
+C<method ping : int ($ctx : L<Go::Context|SPVM::Go::Context>);>
 
 Checks if the database connection is still alive.
 
 =head2 get_info
 
-C<method get_info : object ($ctx : L<Go::Context|SPVM::Go::Context>, $info_type : int)>
+C<method get_info : object ($ctx : L<Go::Context|SPVM::Go::Context>, $info_type : int);>
 
 Returns information about the database.
 
 =head2 table_info
 
-C<method table_info : L<DBI::St|SPVM::DBI::St> ($ctx : L<Go::Context|SPVM::Go::Context>, $catalog : string, $schema : string, $table : string, $type : string, $options : object[] = undef)>
+C<method table_info : L<DBI::St|SPVM::DBI::St> ($ctx : L<Go::Context|SPVM::Go::Context>, $catalog : string, $schema : string, $table : string, $type : string, $options : object[] = undef);>
 
 Returns a statement handle containing information about tables.
 
 =head2 column_info
 
-C<method column_info : L<DBI::St|SPVM::DBI::St> ($ctx : L<Go::Context|SPVM::Go::Context>, $catalog : string, $schema : string, $table : string, $column : string)>
+C<method column_info : L<DBI::St|SPVM::DBI::St> ($ctx : L<Go::Context|SPVM::Go::Context>, $catalog : string, $schema : string, $table : string, $column : string);>
 
 Returns a statement handle containing information about columns.
 
 =head2 quote
 
-C<method quote : string ($ctx : L<Go::Context|SPVM::Go::Context>, $str : string, $type : int = -1)>
+C<method quote : string ($ctx : L<Go::Context|SPVM::Go::Context>, $str : string, $type : int = -1);>
 
 Quotes a string for use in a SQL statement.
 
 =head2 quote_identifier
 
-C<method quote_identifier : string ($ctx : L<Go::Context|SPVM::Go::Context>, $catalog : string, $schema : string, $table : string, $options : object[] = undef)>
+C<method quote_identifier : string ($ctx : L<Go::Context|SPVM::Go::Context>, $catalog : string, $schema : string, $table : string, $options : object[] = undef);>
 
 Quotes an identifier for use in a SQL statement.
 
 =head2 disconnect
 
-C<method disconnect : void ()>
+C<method disconnect : void ();>
 
 Disconnects from the database.
 
 =head2 DESTROY
 
-C<method DESTROY : void ()>
+C<method DESTROY : void ();>
 
 The destructor. Unless L</"InactiveDestroy"> is true, it calls L</"disconnect">.
 
@@ -332,7 +328,7 @@ The following example shows how to implement a specific database driver (DBD) by
 
 When implementing C<connect> method, driver authors are responsible for the following:
 
-C<static method connect : L<DBI|SPVM::DBI> ($ctx : L<Go::Context|SPVM::Go::Context>, $user : string = undef, $password : string = undef, $options : object[] = undef)>
+C<static method connect : L<DBI|SPVM::DBI> ($ctx : L<Go::Context|SPVM::Go::Context>, $user : string = undef, $password : string = undef, $options : object[] = undef);>
 
 Establishes a connection to the database and returns a database handle (L<DBI|SPVM::DBI>).
 
@@ -340,7 +336,7 @@ The following options can be specified in C<$options>.
 
 =over 4
 
-=item * C<ConnectTimeoutDurationNsec>
+=item * C<ConnectTimeout>
 
 The maximum time to wait for the database connection to be established, specified in nanoseconds.
 
@@ -348,13 +344,13 @@ The maximum time to wait for the database connection to be established, specifie
 
 A boolean value (0 or 1) to disable Nagle's algorithm. Set to 1 to reduce latency for small packets by sending them immediately.
 
-=item * C<SocketKeepAliveDurationNsec>
+=item * C<SocketKeepAlive>
 
 The interval for TCP keep-alive probes, specified in nanoseconds. This is useful for maintaining long-lived connections through firewalls or load balancers.
 
-=item * C<IdleTimeoutDurationNsec>
+=item * C<IdleTimeout>
 
-The duration a connection can remain idle before it is considered expired and closed by the driver, specified in nanoseconds.
+The time in seconds a connection can remain idle before it is considered expired and closed by the driver.
 
 =item * C<InactiveDestroy>
 
@@ -372,7 +368,7 @@ L</"prepare">, L</"begin_work">, L</"commit">, L</"rollback">, L</"last_insert_i
 
 =head3 connect_common
 
-C<protected method connect_common : void ($ctx : L<Go::Context|SPVM::Go::Context>, $user : string = undef, $password : string = undef, $options : object[] = undef)>
+C<protected method connect_common : void ($ctx : L<Go::Context|SPVM::Go::Context>, $user : string = undef, $password : string = undef, $options : object[] = undef);>
 
 Provides common initialization logic for a database handle. This method is intended to be called by driver authors within their own C<connect> implementation.
 
@@ -406,9 +402,9 @@ Always set to 1.
 
 Set to the values of C<InactiveDestroy> and C<TCPNoDelay> from C<$options> if they exist.
 
-=item * C<IdleTimeoutDurationNsec>, C<ConnectTimeoutDurationNsec>, C<ReadTimeoutDurationNsec>, C<WriteTimeoutDurationNsec>, C<SocketKeepAliveDurationNsec>
+=item * C<IdleTimeout>, C<ConnectTimeout>, C<ReadTimeout>, C<WriteTimeout>, C<SocketKeepAlive>
 
-Set to the respective duration values (as C<long>) from C<$options> if they exist.
+Set to the seconds (as C<double>) from C<$options> if they exist.
 
 =back
 
@@ -416,7 +412,7 @@ Set to the respective duration values (as C<long>) from C<$options> if they exis
 
 =head3 prepare_common
 
-C<protected method prepare_common : void ($sth : L<DBI::St|SPVM::DBI::St>, $ctx : L<Go::Context|SPVM::Go::Context>, $sql : string, $options : object[] = undef)>
+C<protected method prepare_common : void ($sth : L<DBI::St|SPVM::DBI::St>, $ctx : L<Go::Context|SPVM::Go::Context>, $sql : string, $options : object[] = undef);>
 
 Provides common initialization logic for a statement handle. This method is intended to be called by driver authors within their own C<prepare> implementation.
 
@@ -450,9 +446,9 @@ Set the L<DBI::St#Statement|SPVM::DBI::St/"Statement"> field to the SQL string p
 
 =head3 option_names
 
-C<protected method option_names : string[] ()>
+C<protected method option_names : string[] ();>
 
-Returns an array of supported option names for the database handle. In the base class, this returns default options like C<InactiveDestroy>, C<TCPNoDelay>, and several C<*DurationNsec> options.
+Returns an array of supported option names for the database handle. In the base class, this returns default options like C<InactiveDestroy>, C<TCPNoDelay> options.
 
 Driver authors can override this method to add driver-specific options. These names are used by L</"connect_common"> or L<prepare_common|SPVM::DBI/"prepare_common"> via L<Fn#check_option_names|SPVM::Fn/"check_option_names">.
 

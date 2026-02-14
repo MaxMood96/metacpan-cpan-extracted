@@ -1,4 +1,4 @@
-package Concierge::Sessions::File v0.8.6;
+package Concierge::Sessions::File v0.9.0;
 use v5.36;
 
 use parent 'Concierge::Sessions::Base';
@@ -319,7 +319,7 @@ Concierge::Sessions::File - File backend for session storage
 
 =head1 VERSION
 
-version 0.8.5
+v0.9.0
 
 =head1 SYNOPSIS
 
@@ -360,9 +360,9 @@ directly - they use Concierge::Sessions which manages the backend.
 Each session is stored as a separate JSON file in the storage_dir:
 
     /path/to/storage_dir/
-        ├── 3a7f2b9c01e84d5f6a0b1c2d3e4f5a6b7c8d9e0f
-        ├── 9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c
-        └── ...
+        - 3a7f2b9c01e84d5f6a0b1c2d3e4f5a6b7c8d9e0f
+        - 9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c
+        - ...
 
 File names are the session_id (no extension).
 

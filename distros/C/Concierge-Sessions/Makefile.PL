@@ -12,7 +12,7 @@ WriteMakefile(
 
     PREREQ_PM => {
         'Carp'           => 0,
-        'Crypt::URandom' => 0,
+        'Crypt::PRNG'    => 0,
         'DBI'            => 0,
         'DBD::SQLite'    => 0,
         'Time::HiRes'    => 0,
@@ -44,6 +44,28 @@ WriteMakefile(
             },
             bugtracker => {
                 web => 'https://github.com/bwva/Concierge-Sessions/issues',
+            },
+        },
+        provides => {
+            'Concierge::Sessions' => {
+                file    => 'lib/Concierge/Sessions.pm',
+                version => 'v0.9.0',
+            },
+            'Concierge::Sessions::Base' => {
+                file    => 'lib/Concierge/Sessions/Base.pm',
+                version => 'v0.9.0',
+            },
+            'Concierge::Sessions::Session' => {
+                file    => 'lib/Concierge/Sessions/Session.pm',
+                version => 'v0.9.0',
+            },
+            'Concierge::Sessions::SQLite' => {
+                file    => 'lib/Concierge/Sessions/SQLite.pm',
+                version => 'v0.9.0',
+            },
+            'Concierge::Sessions::File' => {
+                file    => 'lib/Concierge/Sessions/File.pm',
+                version => 'v0.9.0',
             },
         },
     },

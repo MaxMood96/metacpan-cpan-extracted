@@ -5,6 +5,8 @@ use warnings;
 use Test2::V0;
 use lib 'lib';
 use File::Temp qw(tempdir);
+use File::Spec;
+use DBI;
 
 use Concierge::Sessions;
 
@@ -369,11 +371,9 @@ subtest 'Session expiration detection' => sub {
         storage_dir => $temp_dir,
     );
 
-    # Create session with 3 second timeout
-    # (Using wider margins to accommodate slow/debug Perl builds)
     my $session = $manager->new_session(
         user_id         => 'expire_test',
-        session_timeout => 3,
+        session_timeout => 3600,
     );
 
     my $session_id = $session->{session}->session_id();
@@ -381,8 +381,12 @@ subtest 'Session expiration detection' => sub {
     # Verify session is initially valid
     is($session->{session}->is_valid(), 1, 'Session is valid initially');
 
-    # Wait for session to expire
-    sleep(4);
+    # Force-expire via direct DB update (no sleep needed)
+    my $db_file = File::Spec->catfile($temp_dir, 'sessions.db');
+    my $dbh = DBI->connect("dbi:SQLite:dbname=$db_file", "", "", { RaiseError => 1 });
+    $dbh->do("UPDATE sessions SET expires_at = ? WHERE session_id = ?",
+        undef, time() - 3600, $session_id);
+    $dbh->disconnect;
 
     # Backend filters expired sessions - retrieval fails
     my $retrieved = $manager->get_session($session_id);
@@ -397,31 +401,36 @@ subtest 'Session extends when saved (sliding window)' => sub {
         storage_dir => $temp_dir,
     );
 
-    # Create session with 30 second timeout
-    # (Using wide margins to accommodate slow/debug Perl builds and Windows)
+    my $timeout = 3600;
     my $session = $manager->new_session(
         user_id         => 'extension_test',
-        session_timeout => 30,
+        session_timeout => $timeout,
         data            => { counter => 0 },
     );
 
     my $session_id = $session->{session}->session_id();
 
-    # Wait 15 seconds
-    sleep(15);
+    # Record the original expiration time
+    my $original_expires = $session->{session}->expires_at();
 
-    # Save session (should extend expiration)
+    # Force the DB expiration to be close to now (simulates time passing)
+    # Set expires_at to 5 seconds from now -- session would expire soon
+    my $db_file = File::Spec->catfile($temp_dir, 'sessions.db');
+    my $dbh = DBI->connect("dbi:SQLite:dbname=$db_file", "", "", { RaiseError => 1 });
+    $dbh->do("UPDATE sessions SET expires_at = ? WHERE session_id = ?",
+        undef, time() + 5, $session_id);
+    $dbh->disconnect;
+
+    # Save session (should extend expiration via sliding window)
     $session->{session}->set_data({ counter => 1 });
     $session->{session}->save();
 
-    # Wait another 20 seconds (total 35 seconds from creation)
-    # Under the old system, session would have expired at 30 seconds
-    # With sliding window, it should still be valid (extended at 15 seconds, now expires at 45)
-    sleep(20);
-
-    # Session should still be retrievable (extended) - 10 second margin
+    # Verify the expiration was extended: new expires_at should be ~now + timeout
     my $retrieved = $manager->get_session($session_id);
-    is($retrieved->{success}, 1, 'Session extended by save() - still valid after 35 seconds');
+    is($retrieved->{success}, 1, 'Session retrievable after save()');
+
+    my $new_expires = $retrieved->{session}->expires_at();
+    ok($new_expires > time() + $timeout - 10, 'save() extended expiration via sliding window');
 
     my $data_result = $retrieved->{session}->get_data();
     is($data_result->{value}{counter}, 1, 'Extended session has correct data');

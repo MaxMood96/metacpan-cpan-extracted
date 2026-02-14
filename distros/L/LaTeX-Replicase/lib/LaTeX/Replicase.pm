@@ -23,7 +23,7 @@ our %EXPORT_TAGS = ('all' => [ qw(
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT = qw( );
 
-our $VERSION = '0.590';
+our $VERSION = '0.593';
 our $DEBUG; $DEBUG = 0 unless defined $DEBUG;
 our @logs;
 our $nlo = 1; # Number Line Output, start of 1
@@ -32,7 +32,7 @@ sub tex_escape {
 	return if ! $_[0] or $_[0] =~/^[a-zA-Z0-9,=:;!\.\s\+\-\*]+$/ or $_[0] =~s/^%%%://;
 
 	for( $_[0] ) {
-		s/\\/\\textbackslash/g;
+		s/\\/\\textbackslash\{\}/g;
 		s/([%}{_&\$\#])/\\$1/g; # masking active symbols
 		s/\^/\\$&\{\}/g; # ^ --> \^{}
 
@@ -608,31 +608,29 @@ sub _chk_var {
 
 	if( ref $vk eq 'ARRAY') {
 
-		unless( @{ $vk } ) {
-push @logs, "~~> l.$. WARNING#7: empty ARRAY of %%%VAR:". $k if $DEBUG or ! $op->{ignore};
+		if( @{ $vk } ) {
+		# Check ARRAY.{ARRAY|HASH|SCALAR[.REF]}
 
-			print { $fh } $$z;
-			++$nlo;
-			return 1;
+			for my $d ( @{ $vk } ) {
+				if(ref $d eq 'ARRAY'){
+					$$chkVAR |= 0b00001;
+				}
+				elsif(ref $d eq 'HASH') {
+					$$chkVAR |= 0b00010;
+				}
+				elsif(ref \$d eq 'SCALAR') {
+					$$chkVAR |= 0b00100;
+				}
+				elsif(ref \$d eq 'REF' and ref $d eq 'SCALAR') {
+					$$chkVAR |= 0b01000;
+				}
+				else {
+					$$chkVAR |= 0b10000;
+				}
+			}
 		}
-
-	# Check ARRAY.{ARRAY|HASH|SCALAR[.REF]}
-		for my $d ( @{ $vk } ) {
-			if(ref $d eq 'ARRAY'){
-				$$chkVAR |= 0b00001;
-			}
-			elsif(ref $d eq 'HASH') {
-				$$chkVAR |= 0b00010;
-			}
-			elsif(ref \$d eq 'SCALAR') {
-				$$chkVAR |= 0b00100;
-			}
-			elsif(ref \$d eq 'REF' and ref $d eq 'SCALAR') {
-				$$chkVAR |= 0b01000;
-			}
-			else {
-				$$chkVAR |= 0b10000;
-			}
+		else {
+			$$chkVAR |= 0b00100; # by default, SCALAR
 		}
 
 		if( ! $$chkVAR or $$chkVAR > 0b01000 or ($$chkVAR & ($$chkVAR - 1)) ) {
@@ -834,6 +832,11 @@ sub _var_output {
 	}
 
 	if( ref $values eq 'ARRAY') { # key => ARRAY
+
+		unless( @$values ) {
+push @logs, "~~> l.$. WARNING#7: empty ARRAY of %%%VAR:". $key if $DEBUG or ! $op->{ignore};
+			return;
+		}
 
 		# Forming a table
 		my $row = 0;
@@ -1249,7 +1252,7 @@ C<base_file> name is extracted (same) from source C<$file>.
 Under no circumstances will source C<$file> be overwritten by new C<base_file>.
 
 If the source is an array reference and no target file name is specified by C<ofile> option,
-then 'ready.tex' file will be created in a B<random subdirectory> 
+then C<ready.tex> file will be created in a B<random subdirectory> 
 (its name is stored in C<$$> variable) of current directory.
 
 =item 2.
@@ -1552,7 +1555,7 @@ LaTeX::Replicase provides these subroutines:
 
 Creates a new output file from the specified TeX C<$source>, which is a template.
 The TeX-template C<$source> can be either a TeX-file or an array reference,
-each element of which is a TeX-string ((with line break C<\n> if necessary).
+each element of which is a TeX-string (with line break C<\n> if necessary).
 
 File name of C<$source> can be absolute,
 i.e. with a full path (include directories and subdirectories).
@@ -1562,7 +1565,7 @@ The output file name is extracted (the same) from C<$source>.
 Under no circumstances will C<$source> be overwritten by the new one.
 
 If C<$source> is an array reference and no target file name is specified by C<ofile> option,
-then 'ready.tex' file will be created in a B<random subdirectory> 
+then C<ready.tex> file will be created in a B<random subdirectory> 
 (its name is stored in C<$$> variable) of current directory.
 
 C<$info> HASH or ARRAY is used to fill template:
@@ -1615,9 +1618,10 @@ C<&> C<%> C<$> C<#> C<_> C<{> C<}> C<~> C<^> C<\>.
 
   my $msg = replication( $source, $info, esc =>1 ); # or esc =>'~'
 
-BTW: if the value starts with the C<%%%:> tag, then this tag is removed 
+BTW: if the value of C<$info> structure starts with C<%%%:> tag, then this tag is removed 
 (e.g. C<%%%:$\frac{12345}{67890}$> is converted to C<$\frac{12345}{67890}$>),
 and the value itself is not masked, it is skipped.
+
 
 =item C<def>
 

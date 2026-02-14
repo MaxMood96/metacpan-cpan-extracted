@@ -1,7 +1,7 @@
-package Concierge::Sessions::Base v0.8.6;
+package Concierge::Sessions::Base v0.9.0;
 use v5.36;
 
-use Crypt::URandom qw(urandom);
+use Crypt::PRNG qw(random_bytes);
 
 sub new {
     my ($class, %args) = @_;
@@ -18,7 +18,7 @@ sub delete_user_session { die "Subclass must implement delete_user_session" }
 
 # Utilities
 sub generate_session_id {
-    return unpack('H*', urandom(20));
+    return unpack('H*', random_bytes(20));
 }
 
 1;
@@ -31,7 +31,7 @@ Concierge::Sessions::Base - Base class for session storage backends
 
 =head1 VERSION
 
-version 0.8.5
+v0.9.0
 
 =head1 SYNOPSIS
 
@@ -182,7 +182,7 @@ Generates a cryptographically secure random session ID.
     my $id = $backend->generate_session_id();
 
 Returns: 40-character lowercase hex string (160 bits of entropy) generated
-from the operating system's CSPRNG via L<Crypt::URandom>.
+from a cryptographically secure PRNG via L<Crypt::PRNG>.
 
 =head1 SEE ALSO
 

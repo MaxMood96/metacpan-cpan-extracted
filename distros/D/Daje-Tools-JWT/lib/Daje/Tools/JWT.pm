@@ -1,6 +1,6 @@
 package Daje::Tools::JWT;
 use Mojo::Base -base,  -signatures, -async_await;
-
+use v5.42;
 
 # NAME
 # ====
@@ -32,10 +32,9 @@ use Mojo::Base -base,  -signatures, -async_await;
 #
 #
 
-use Data::Dumper;
 use Mojo::JWT;
 
-our $VERSION = "0.01";
+our $VERSION = "0.10";
 
 has 'secret' => qw { lK1leAbOxGmUKdVmuMKbJtD7ru1wd2V9Y5e58zLPlL5UI4GP1AETmd7eZ3MRZEP };
 
@@ -75,14 +74,14 @@ sub companise_pkey ($self, $token) {
 
     my $jwt_hash = $self->decode_jwt($token);
 
-    return $jwt_hash->{companies_pkey};
+    return $jwt_hash->{companies_companies_pkey};
 }
 
 sub companies_users_pkey ($self, $token) {
 
     my $jwt_hash = $self->decode_jwt($token);
 
-    return ($jwt_hash->{companies_pkey}, $jwt_hash->{users_pkey});
+    return ($jwt_hash->{companies_companies_pkey}, $jwt_hash->{users_users_pkey});
 }
 
 

@@ -11,12 +11,12 @@ Marlin::Manual::Beginning - getting started with object-oriented programming and
 The examples in this manual assume you are using Perl 5.20 or above,
 and have included C<< use v5.20; >> (or a higher version) at the top of
 your file to enable any modern Perl features that are disabled by default.
-Marlin does support older version of Perl, but this manual is written with
+Marlin does support older versions of Perl, but this manual is written with
 modern Perl in mind.
 
 Additionally, they assume you have subroutine signatures enabled.
 This is enabled by default if you have C<< use v5.36; >> (or a higher
-version) at the top of your file. If you are targetting older versions
+version) at the top of your file. If you are targeting older versions
 of Perl, you can enable it using C<< use experimental "signatures"; >>.
 In summary, make sure your file starts with one of these two prologues:
 
@@ -39,7 +39,7 @@ B<< Example 1 >>
   
   $user->change_password_to( "S3CRET" );
 
-Here C<< $user >> is an object and C<< change_password_to >> is method that
+Here C<< $user >> is an object and C<< change_password_to >> is a method that
 we are calling on the object. Presumably one of the pieces of data
 encapsulated by the C<< $user >> object is a password. It probably has
 other information associated with the user too, like their username and
@@ -170,7 +170,7 @@ B<< Example 5 >>
     use Marlin qw( username password name email created updated );
   }
 
-(The C<< qw() >> operator is a simple way to create a list or words
+(The C<< qw() >> operator is a simple way to create a list of words
 in Perl. It is not specific to Marlin. C<< qw( foo bar ) >> creates a list
 C<< ( "foo", "bar" ) >>. Expect this manual to frequently switch between
 using C<< qw() >> and more explicit lists with no further explanation.
@@ -240,7 +240,7 @@ B<< Example 6 >>
     );
   }
 
-Adding the exclmation mark indicates that an attribute is required.
+Adding the exclamation mark indicates that an attribute is required.
 It means that it is an error to create an object without providing
 those values to the constructor. The constructor will complain if
 you forget them.
@@ -352,7 +352,7 @@ not passed to the constructor the default will be used.
 =head2 Methods
 
 A method is a thing your object is capable of doing. To add methods to
-a class, we just defined subs in the class. Each method takes the object
+a class, we just define subs in the class. Each method takes the object
 as its first argument. By convention, the variable name for the object
 is C<< $self >>.
 
@@ -451,7 +451,7 @@ Sometimes we wish to allow an attribute to be updated with a lot less
 ceremony. Take, for example, Local::User's C<name> attribute. For the
 purposes of running the system, it doesn't really matter what a user's
 real name is. In this case we can provide an I<accessor> method to allow
-people to update it. Accessor methods are sometime also called I<mutators>.
+people to update it. Accessor methods are sometimes also called I<mutators>.
 
 An I<accessor> is a combined reader and writer method. To request an
 accessor, use a double-equals sign. See the C<< "name==?" >> attribute
@@ -476,7 +476,7 @@ B<< Example 11 >>
 Marlin will name the accessor what it would have named the reader, and create
 the accessor instead of the reader.
 
-When calling the accesor method without any extra arguments, it acts like
+When calling the accessor method without any extra arguments, it acts like
 a reader. But when you include an additional argument, it acts like a
 writer.
 
@@ -575,7 +575,7 @@ constructing the object.
 Note that if you forbid an attribute from being initialized like this, you
 should probably ensure there is another way to set its value, like a
 writer or a default. Otherwise there's not much point in the attribute
-exiting at all!
+existing at all!
 
 =head2 Options Hashrefs
 
@@ -620,8 +620,8 @@ The defaults introduced in Example 8 and the defaults shown in
 Example 13 actually have a subtle difference.
 
 Defaults provided by a simple coderef without an options hashref
-(like in Example 8) are I<< lazy builders >>. This means that the
-constructor actually ignores the default, and instead the reader
+(like in Example 8) are I<< lazy defaults >>. This means that the
+constructor ignores the default, and instead the reader
 method will set the attribute value to the default if it notices
 the attribute hasn't been set yet.
 
@@ -854,4 +854,3 @@ the same terms as the Perl 5 programming language system itself.
 THIS PACKAGE IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR IMPLIED
 WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
 MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
-

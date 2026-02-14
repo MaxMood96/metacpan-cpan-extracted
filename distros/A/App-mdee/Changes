@@ -1,5 +1,16 @@
 Revision history for Perl extension App-mdee
 
+0.16 2026-02-14T02:30:50Z
+
+    - Auto-adjust layout based on terminal width and column count
+    - Single column: nup formatting with continuous pager scrolling
+    - Calculate fold width from actual pane width (COLUMNS/cols - 5)
+    - --nup explicit forces native pagination even in single column
+    - Support default[pane_width] and default[pane] in config
+    - Simplify h5/h6 colors: use base color without lightness adjustment
+    - Change POD heredoc delimiter for bat/source-highlight compatibility
+    - Document Links limitation: not processed inside highlighted elements
+
 0.15 2026-02-11T10:04:47Z
 
     - Make hashed theme the default (--no-theme to clear, --theme accumulates)

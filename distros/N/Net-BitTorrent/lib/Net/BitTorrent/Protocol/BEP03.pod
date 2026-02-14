@@ -1,0 +1,233 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Net::BitTorrent::Protocol::BEP03 - Core BitTorrent Peer Wire Protocol
+
+=head1 SYNOPSIS
+
+    use Net::BitTorrent::Protocol::BEP03;
+
+    my $proto = Net::BitTorrent::Protocol::BEP03->new(
+        infohash => $ih,
+        peer_id  => $id
+    );
+
+    # Generate initial handshake
+    my $out = $proto->write_buffer( );
+
+    # Process incoming bytes from the socket
+    $proto->receive_data( $raw_bytes );
+
+    # Send a custom message
+    $proto->send_message( 4, pack('N', $piece_index) ); # HAVE
+
+=head1 DESCRIPTION
+
+C<Net::BitTorrent::Protocol::BEP03> implements the foundational B<BitTorrent Peer Wire Protocol (BEP 03)>. It is a
+stateful, loop-agnostic parser and generator for the binary messages exchanged between peers over TCP (or uTP).
+
+This module handles the initial handshake, reserved bit negotiation, and the framing of all standard messages (choke,
+unchoke, interested, have, bitfield, request, piece, etc.).
+
+=head1 METHODS
+
+=head2 C<new( %params )>
+
+Creates a new BEP03 protocol handler.
+
+Expected parameters:
+
+=over
+
+=item C<infohash>
+
+The 20 or 32-byte binary infohash.
+
+=item C<peer_id>
+
+The local 20-byte binary peer ID.
+
+=item C<reserved> - optional
+
+The 8-byte reserved bits string.
+
+=back
+
+=head2 C<send_handshake( )>
+
+Sends the initial protocol handshake.
+
+    $proto->send_handshake();
+
+=head2 C<receive_data( $data )>
+
+Feeds raw data into the protocol parser.
+
+    $proto->receive_data( $chunk );
+
+Expected parameters:
+
+=over
+
+=item C<$data>
+
+The binary data received from the transport.
+
+=back
+
+=head2 C<write_buffer( )>
+
+Returns pending messages from the output buffer.
+
+    my $out = $proto->write_buffer();
+
+=head2 C<send_message( $id, [$payload] )>
+
+Queues a protocol message.
+
+    $proto->send_message( 4, pack('N', 42) ); # HAVE piece 42
+
+Expected parameters:
+
+=over
+
+=item C<$id>
+
+The numeric message ID.
+
+=item C<$payload> - optional
+
+The raw binary payload.
+
+=back
+
+=head2 C<send_keepalive( )>
+
+Queues a keep-alive message.
+
+    $proto->send_keepalive();
+
+=head2 C<send_choke( )>
+
+Sends a CHOKE message.
+
+=head2 C<send_unchoke( )>
+
+Sends an UNCHOKE message.
+
+=head2 C<send_interested( )>
+
+Sends an INTERESTED message.
+
+=head2 C<send_not_interested( )>
+
+Sends a NOT_INTERESTED message.
+
+=head2 C<send_have( $index )>
+
+Sends a HAVE message.
+
+Expected parameters:
+
+=over
+
+=item C<$index>
+
+The piece index.
+
+=back
+
+=head2 C<send_bitfield( $data )>
+
+Sends a BITFIELD message.
+
+Expected parameters:
+
+=over
+
+=item C<$data>
+
+The binary bitfield data.
+
+=back
+
+=head2 C<set_reserved_bit( $byte, $mask )>
+
+Sets a bit in the reserved bytes of the handshake.
+
+    $proto->set_reserved_bit( 5, 0x10 );
+
+Expected parameters:
+
+=over
+
+=item C<$byte>
+
+The byte index (0-7).
+
+=item C<$mask>
+
+The bitmask to apply.
+
+=back
+
+=head2 C<handshake> event
+
+Emitted when a handshake is successfully received.
+
+    $proto->on( handshake => sub ( $self, $ih, $id ) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<$ih>
+
+The 20 or 32-byte binary infohash.
+
+=item C<$id>
+
+The 20-byte binary peer ID.
+
+=back
+
+=head2 C<peer_id( )>
+
+Returns the local peer ID.
+
+=head2 C<reserved( )>
+
+Returns or sets the reserved bytes string.
+
+Expected parameters:
+
+=over
+
+=item C<$val> - optional
+
+The new 8-byte reserved string.
+
+=back
+
+=head2 C<state( )>
+
+Returns the current protocol state ('HANDSHAKE', 'OPEN', or 'CLOSED').
+
+=head2 C<detected_ih( )>
+
+Returns the infohash detected during the handshake (useful for trackers/servers).
+
+=head1 AUTHOR
+
+Sanko Robinson E<lt>sanko@cpan.orgE<gt>
+
+=head1 COPYRIGHT
+
+Copyright (C) 2008-2026 by Sanko Robinson.
+
+This library is free software; you can redistribute it and/or modify it under the terms of the Artistic License 2.0.
+
+=cut

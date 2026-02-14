@@ -51,6 +51,10 @@ DESCRIPTION
     Marlin was created by the developer of Type::Tiny and Sub::HandlesVia and
     integrates with them.
 
+    If you are new to object-oriented Perl, start with
+    Marlin::Manual::Beginning. If you already know Perl OO and are comfortable
+    with Moose or Moo, start with Marlin::Manual::QuickStart.
+
   Using Marlin
     Marlin does all of its work at compile time, so doesn't export keywords
     like `has` into your namespace.
@@ -291,9 +295,10 @@ BUGS
 SEE ALSO
     Marlin::Role, Marlin::Struct, Marlin::Util.
 
-    Marlin::Manual::Beginning, Marlin::Manual::BetterAttributes,
-    Marlin::Manual::BetterMethods, Marlin::Manual::ClassOptions,
-    Marlin::Manual::Comparison, Marlin::Manual::Principles.
+    Marlin::Manual::Beginning, Marlin::Manual::QuickStart,
+    Marlin::Manual::BetterAttributes, Marlin::Manual::BetterMethods,
+    Marlin::Manual::ClassOptions, Marlin::Manual::Comparison,
+    Marlin::Manual::Principles.
 
     Example extensions: Marlin::X::Clone, Marlin::X::ToHash,
     Marlin::X::UndefTolerant, Marlin::XAttribute::LocalWriter,

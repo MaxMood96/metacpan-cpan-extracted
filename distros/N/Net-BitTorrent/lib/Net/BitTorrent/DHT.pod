@@ -1,0 +1,659 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Net::BitTorrent::DHT - BitTorrent Mainline DHT implementation
+
+=head1 SYNOPSIS
+
+    use Net::BitTorrent::DHT;
+    use Net::BitTorrent::DHT::Security;
+
+    # Initialize security and generate a BEP 42 compliant ID
+    my $security = Net::BitTorrent::DHT::Security->new();
+    my $node_id  = $security->generate_node_id('12.34.56.78'); # Use your external IP
+
+    # Create the DHT instance
+    my $dht = Net::BitTorrent::DHT->new(
+        node_id_bin => $node_id,
+        port        => 6881,
+        v           => 'NB01' # Client version
+    );
+
+    # Join the network
+    $dht->bootstrap();
+
+    # Main Loop
+    while (1) {
+        # Process packets with a 100ms timeout
+        my ($new_nodes, $found_peers, $data) = $dht->tick(0.1);
+
+        # Handle discovered peers
+        for my $peer (@$found_peers) {
+            printf "Discovered peer: %s\n", $peer->to_string;
+        }
+    }
+
+=head1 DESCRIPTION
+
+C<Net::BitTorrent::DHT> is a feature-complete implementation of the BitTorrent Mainline DHT protocol. It supports IPv4,
+IPv6 (BEP 32), Security Extensions (BEP 42), Scrapes (BEP 33), Arbitrary Data Storage (BEP 44), and Infohash Indexing
+(BEP 51).
+
+=head1 METHODS
+
+=head2 C<new( %params )>
+
+Creates a new DHT node instance.
+
+    my $dht = Net::BitTorrent::DHT->new(
+        port    => 6881,
+        want_v6 => 1,
+        bep44   => 1
+    );
+
+This method initializes a new DHT node with the specified configuration.
+
+Expected parameters:
+
+=over
+
+=item C<node_id_bin> - optional
+
+The 20-byte binary string representing the local node ID. Defaults to a randomly generated ID.
+
+=item C<port> - optional
+
+The UDP port to listen on. Defaults to 6881.
+
+=item C<address> - optional
+
+The local IP address to bind to.
+
+=item C<want_v4> - optional
+
+Whether to enable IPv4 support. Defaults to true.
+
+=item C<want_v6> - optional
+
+Whether to enable IPv6 support. Defaults to true.
+
+=item C<bep32> - optional
+
+Enable BEP 32 (IPv6). Defaults to true.
+
+=item C<bep42> - optional
+
+Enable BEP 42 (Security). Defaults to true.
+
+=item C<bep33> - optional
+
+Enable BEP 33 (Scrapes). Defaults to true.
+
+=item C<bep44> - optional
+
+Enable BEP 44 (Data Storage). Defaults to true.
+
+=item C<bep51> - optional
+
+Enable BEP 51 (Indexing). Defaults to true.
+
+=item C<boot_nodes> - optional
+
+An array reference of bootstrap nodes.
+
+=back
+
+=head2 C<on( $event, $callback )>
+
+Registers an event handler.
+
+    $dht->on( external_ip_detected => sub ( $ip ) { ... });
+
+This method allows reacting to DHT events like external IP detection.
+
+Expected parameters:
+
+=over
+
+=item C<$event>
+
+The name of the event to listen for.
+
+=item C<$callback>
+
+The code reference to execute.
+
+=back
+
+=head2 C<bootstrap( )>
+
+Joins the DHT network.
+
+    $dht->bootstrap( );
+
+This method queries the configured bootstrap nodes to join the DHT network.
+
+Expected parameters:
+
+=over
+
+=item None.
+
+=back
+
+=head2 C<tick( [$timeout] )>
+
+Processes DHT events.
+
+    my ( $nodes, $peers, $data ) = $dht->tick( 0.1 );
+
+This method handles incoming packets, timeouts, and periodic tasks. It returns an array containing discovered nodes,
+peers, and any received data.
+
+Expected parameters:
+
+=over
+
+=item C<$timeout> - optional
+
+The maximum time to wait for activity in seconds. Defaults to 0.
+
+=back
+
+=head2 C<ping( $addr, [$port] )>
+
+Sends a ping query.
+
+    $dht->ping( 'router.bittorrent.com', 6881 );
+
+This method sends a C<ping> query to the specified node to check for liveness.
+
+Expected parameters:
+
+=over
+
+=item C<$addr>
+
+The IP address or hostname of the target node.
+
+=item C<$port> - optional
+
+The port of the target node.
+
+=back
+
+=head2 C<find_node_remote( $target_id, $addr, [$port] )>
+
+Sends a find_node query.
+
+    $dht->find_node_remote( $target_id, '1.2.3.4', 6881 );
+
+This method queries a specific remote node for nodes close to the target ID.
+
+Expected parameters:
+
+=over
+
+=item C<$target_id>
+
+The 20-byte binary target node ID.
+
+=item C<$addr>
+
+The IP address of the remote node.
+
+=item C<$port> - optional
+
+The port of the remote node.
+
+=back
+
+=head2 C<get_peers( $info_hash, $addr, [$port] )>
+
+Sends a get_peers query.
+
+    $dht->get_peers( $info_hash, '1.2.3.4', 6881 );
+
+This method queries a specific remote node for peers associated with the infohash.
+
+Expected parameters:
+
+=over
+
+=item C<$info_hash>
+
+The 20-byte binary infohash.
+
+=item C<$addr>
+
+The IP address of the remote node.
+
+=item C<$port> - optional
+
+The port of the remote node.
+
+=back
+
+=head2 C<announce_infohash( $info_hash, $port )>
+
+Announces the local node as a peer.
+
+    $dht->announce_infohash( $info_hash, 6881 );
+
+This high-level method finds nodes closest to the given infohash and announces the local client's port.
+
+Expected parameters:
+
+=over
+
+=item C<$info_hash>
+
+The 20-byte binary infohash.
+
+=item C<$port>
+
+The TCP port where the client is listening.
+
+=back
+
+=head2 C<find_peers( $info_hash )>
+
+Queries local nodes for peers.
+
+    $dht->find_peers( $info_hash );
+
+This method queries nodes in the local routing table for peers associated with the infohash.
+
+Expected parameters:
+
+=over
+
+=item C<$info_hash>
+
+The 20-byte binary infohash.
+
+=back
+
+=head2 C<scrape( $info_hash )>
+
+Queries local nodes for swarm stats (BEP 33).
+
+    $dht->scrape( $info_hash );
+
+This method queries the local routing table for seeders/leechers counts.
+
+Expected parameters:
+
+=over
+
+=item C<$info_hash>
+
+The 20-byte binary infohash.
+
+=back
+
+=head2 C<sample( $target_id )>
+
+Queries local nodes for infohashes (BEP 51).
+
+    $dht->sample( $target_id );
+
+This method queries the local routing table for infohash samples.
+
+Expected parameters:
+
+=over
+
+=item C<$target_id>
+
+The 20-byte binary target ID to sample around.
+
+=back
+
+=head2 C<announce_peer( $info_hash, $token, $announce_port, $addr, [$port, $seed] )>
+
+Sends an announce_peer query.
+
+    $dht->announce_peer( $hash, $token, 6881, '1.2.3.4', 6881 );
+
+This method announces the local node's presence to a specific remote node.
+
+Expected parameters:
+
+=over
+
+=item C<$info_hash>
+
+The 20-byte binary infohash.
+
+=item C<$token>
+
+The token received from a previous C<get_peers> response.
+
+=item C<$announce_port>
+
+The TCP port to announce.
+
+=item C<$addr>
+
+The IP address of the remote node.
+
+=item C<$port> - optional
+
+The port of the remote node.
+
+=item C<$seed> - optional
+
+Whether the local node is a seed.
+
+=back
+
+=head2 C<get_remote( $target, $addr, [$port] )>
+
+Retrieves data from a specific node (BEP 44).
+
+    $dht->get_remote( $target_hash, '1.2.3.4', 6881 );
+
+Expected parameters:
+
+=over
+
+=item C<$target>
+
+The 20-byte SHA-1 hash of the data key.
+
+=item C<$addr>
+
+The IP address of the remote node.
+
+=item C<$port> - optional
+
+The port of the remote node.
+
+=back
+
+=head2 C<put_remote( $args, $addr, [$port] )>
+
+Stores data (BEP 44) on a specific node.
+
+    $dht->put_remote( { v => 'data', token => $t }, '1.2.3.4', 6881 );
+
+Expected parameters:
+
+=over
+
+=item C<$args>
+
+A hash reference containing the data and token.
+
+=item C<$addr>
+
+The IP address of the remote node.
+
+=item C<$port> - optional
+
+The port of the remote node.
+
+=back
+
+=head2 C<scrape_peers_remote( $info_hash, $addr, [$port] )>
+
+Directly queries a node for swarm statistics.
+
+    $dht->scrape_peers_remote( $hash, '1.2.3.4', 6881 );
+
+Expected parameters:
+
+=over
+
+=item C<$info_hash>
+
+The 20-byte binary infohash.
+
+=item C<$addr>
+
+The IP address of the remote node.
+
+=item C<$port> - optional
+
+The port of the remote node.
+
+=back
+
+=head2 C<sample_infohashes_remote( $target, $addr, [$port] )>
+
+Directly queries a node for infohash samples.
+
+    $dht->sample_infohashes_remote( $target, '1.2.3.4', 6881 );
+
+Expected parameters:
+
+=over
+
+=item C<$target>
+
+The 20-byte binary target ID.
+
+=item C<$addr>
+
+The IP address of the remote node.
+
+=item C<$port> - optional
+
+The port of the remote node.
+
+=back
+
+=head2 C<routing_table_stats( )>
+
+Returns routing table statistics.
+
+    my $stats = $dht->routing_table_stats( );
+
+Expected parameters:
+
+=over
+
+=item None.
+
+=back
+
+=head2 C<export_state( )>
+
+Returns the current DHT state.
+
+    my $state = $dht->export_state( );
+
+Expected parameters:
+
+=over
+
+=item None.
+
+=back
+
+=head2 C<import_state( $state )>
+
+Restores the DHT state.
+
+    $dht->import_state( $state );
+
+Expected parameters:
+
+=over
+
+=item C<$state>
+
+The state hash reference.
+
+=back
+
+=head2 C<set_node_id( $new_id )>
+
+Updates the local node ID.
+
+    $dht->set_node_id( $new_id );
+
+Expected parameters:
+
+=over
+
+=item C<$new_id>
+
+The new 20-byte binary node ID.
+
+=back
+
+=head2 C<external_ip( )>
+
+Returns the current external IP address.
+
+    my $ip = $dht->external_ip();
+
+Expected parameters:
+
+=over
+
+=item None.
+
+=back
+
+=head2 C<run( )>
+
+Starts a blocking event loop.
+
+    $dht->run( );
+
+Expected parameters:
+
+=over
+
+=item None.
+
+=back
+
+=head2 C<handle_incoming( [$data, $sender] )>
+
+Processes a packet.
+
+    my ( $nodes, $peers, $data ) = $dht->handle_incoming( $raw_data, $sender_sockaddr );
+
+Expected parameters:
+
+=over
+
+=item C<$data> - optional
+
+The raw packet data.
+
+=item C<$sender> - optional
+
+The sender's socket address.
+
+=back
+
+=head2 C<node_id_bin( )>
+
+Returns the local node ID.
+
+    my $id = $dht->node_id_bin();
+
+Expected parameters:
+
+=over
+
+=item None.
+
+=back
+
+=head2 C<port( )>
+
+Returns the UDP port.
+
+    my $port = $dht->port();
+
+Expected parameters:
+
+=over
+
+=item None.
+
+=back
+
+=head2 C<boot_nodes( )>
+
+Returns or sets the bootstrap nodes.
+
+    my $nodes = $dht->boot_nodes();
+    $dht->boot_nodes( $new_list );
+
+Expected parameters:
+
+=over
+
+=item C<$new_list> - optional
+
+An array reference of bootstrap nodes.
+
+=back
+
+=head1 CLASSES
+
+=head2 Net::BitTorrent::DHT::Peer
+
+Represents a peer discovered via DHT.
+
+=head3 METHODS
+
+=head4 C<to_string( )>
+
+Returns a string representation ('ip:port').
+
+    say $peer->to_string();
+
+=head4 C<ip( )>
+
+Returns the IP address.
+
+=head4 C<port( )>
+
+Returns the port number.
+
+=head4 C<family( )>
+
+Returns the address family (4 or 6).
+
+=head1 Supported BEPs
+
+=over
+
+=item * B<BEP 05>: Mainline DHT Protocol
+
+=item * B<BEP 32>: IPv6 Extensions
+
+=item * B<BEP 33>: DHT Scrapes
+
+=item * B<BEP 42>: DHT Security Extensions
+
+=item * B<BEP 43>: Read-only DHT Nodes
+
+=item * B<BEP 44>: Storing Arbitrary Data
+
+=item * B<BEP 51>: Infohash Indexing
+
+=back
+
+=head1 AUTHOR
+
+Sanko Robinson E<lt>sanko@cpan.orgE<gt>
+
+=head1 COPYRIGHT
+
+Copyright (C) 2008-2026 by Sanko Robinson.
+
+This library is free software; you can redistribute it and/or modify it under the terms of the Artistic License 2.0.
+
+=cut

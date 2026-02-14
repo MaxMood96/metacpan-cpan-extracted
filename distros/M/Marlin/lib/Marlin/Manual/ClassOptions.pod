@@ -12,7 +12,7 @@ L<Marlin::Manual::Beginning> introduced some class-wide options:
 C<< -extends >> for indicating a base class or parent class, and
 C<< -with >> for composing roles.
 
-L<Marlin::Manual::BetterMethods>> introduced C<< -modifiers >>.
+L<Marlin::Manual::BetterMethods> introduced C<< -modifiers >>.
 
 These options which don't declare a specific attribute start with
 a leading hyphen, and there are more of them! This part of the manual
@@ -23,7 +23,7 @@ the options that have already been mentioned.
 
 Sets the base class (or classes) of your class.
 
-B<< Example: Inheitance >>
+B<< Example: Inheritance >>
 
   package Employee {
     use Marlin -base => 'Person', qw( employee_id payroll_number );
@@ -32,7 +32,7 @@ B<< Example: Inheitance >>
 Note that multiple inheritance is supported, though roles may be a better
 way of structuring your code.
 
-B<< Example: Multiple Inheitance >>
+B<< Example: Multiple Inheritance >>
 
   package FlyingCar {
     use Marlin -extends => [ 'Car', 'Plane' ];
@@ -55,7 +55,7 @@ class to "upgrade itself" to a Moose class.)
 
 You can include version numbers:
 
-B<< Example: Inheitance with Version Numbers >>
+B<< Example: Inheritance with Version Numbers >>
 
   package Employee 1.0 {
     use Marlin -base => 'Person 2.000', ...;

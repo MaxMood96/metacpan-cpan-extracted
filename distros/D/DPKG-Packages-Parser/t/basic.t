@@ -46,4 +46,21 @@ ok($zeroAD->{Package} eq '0ad');
 ok($zeroAD->{Size} == 7891488);
 ok($zeroAD->{MD5sum} eq '4d471183a39a3a11d00cd35bf9f6803d');
 
+# Test the package string parser
+my $e = $parser1->_parse_package_str('0ad-data (>= 0.0.026)');
+ok($e->{name} eq '0ad-data');
+ok($e->{op} eq '>=');
+ok($e->{version} eq '0.0.026');
+
+$e = $parser1->_parse_package_str('python3:any');
+ok($e->{name} eq 'python3');
+ok(!defined($e->{version}));
+ok($e->{arch} eq 'any');
+
+$e = $parser1->_parse_package_str('lmms-vst-server:i386 (>= 1.2.2+dfsg1-6)');
+ok($e->{name} eq 'lmms-vst-server');
+ok($e->{arch} eq 'i386');
+ok($e->{op} eq '>=');
+ok($e->{version} eq '1.2.2+dfsg1-6');
+
 done_testing;

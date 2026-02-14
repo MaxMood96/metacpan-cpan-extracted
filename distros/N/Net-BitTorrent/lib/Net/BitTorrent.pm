@@ -1,1436 +1,848 @@
-#!/usr/bin/perl -w
-package Net::BitTorrent;
-{
-    use strict;
-    use warnings;
-    use Scalar::Util qw[blessed weaken refaddr];
-    use List::Util qw[max];
-    use Time::HiRes;
-    use Socket qw[/inet_/ SOCK_STREAM SOCK_DGRAM SOL_SOCKET PF_INET SOMAXCONN
-        /pack_sockaddr_in/ SO_REUSEADDR];
-    use Carp qw[carp];
-    use Digest::SHA qw[sha1_hex];
-    use POSIX qw[];
-    sub _EWOULDBLOCK { $^O eq q[MSWin32] ? 10035 : POSIX::EWOULDBLOCK() }
-    sub _EINPROGRESS { $^O eq q[MSWin32] ? 10036 : POSIX::EINPROGRESS() }
-    use lib q[../../lib];
-    use Net::BitTorrent::Util qw[:bencode :compact];
+use v5.40;
+use feature 'class', 'try';
+no warnings 'experimental::class', 'experimental::builtin', 'experimental::try';
+use Net::BitTorrent::Emitter;
+#
+class Net::BitTorrent v2.0.0 : isa(Net::BitTorrent::Emitter) {
     use Net::BitTorrent::Torrent;
-    use Net::BitTorrent::Peer;
     use Net::BitTorrent::DHT;
-    use Net::BitTorrent::Version;
-    use version qw[qv];
-    our $VERSION_BASE = 50; our $UNSTABLE_RELEASE = 0; our $VERSION = sprintf(($UNSTABLE_RELEASE ? q[%.3f_%03d] : q[%.3f]), (version->new(($VERSION_BASE))->numify / 1000), $UNSTABLE_RELEASE);
-    my (@CONTENTS) = \my (
-        %_tcp,                  %_udp,
-        %_schedule,             %_tid,
-        %_event,                %torrents,
-        %_connections,          %peerid,
-        %_max_ul_rate,          %_k_ul,
-        %_max_dl_rate,          %_k_dl,
-        %_dht,                  %_use_dht,
-        %__UDP_OBJECT_CACHE,    %_peers_per_torrent,
-        %_connections_per_host, %_half_open,
-        #############################################################
-        %_encryption_mode
-    );
-    my %REGISTRY;
-    sub _MSE_DISABLED {0}
-    sub _MSE_ENABLED  {1}
-    sub _MSE_FORCED   {2}
+    use Net::uTP::Manager;    # Standalone spin-off
+    use Digest::SHA qw[sha1];
+    use version;
+    use Time::HiRes            qw[time];
+    use Net::BitTorrent::Types qw[:encryption];
+    #
+    field %torrents;          # infohash => Torrent object
+    field %pending_peers;     # transport => Peer object
+    field $dht;
+    field $tcp_listener;
+    field $tick_debt = 0;
+    field $utp : reader = Net::uTP::Manager->new();
+    field $lpd;
+    field $node_id : reader : writer;
+    field %dht_queries;       # tid => { cb => sub, type => ... }
+    field %dht_index;         # infohash_hex => timestamp (BEP 51 crawling)
+    field $port_mapper : reader;
+    field $port       : param : reader = 49152 + int( rand(10000) );
+    field $user_agent : param : reader //= join '/', __CLASS__, our $VERSION;
+    field $debug      : param = 0;
+    field $encryption : param : reader = ENCRYPTION_REQUIRED;
 
-    sub new {
-        my ($class, $args) = @_;
-        my $self = bless \$class, $class;
-        my ($host, @ports) = (q[0.0.0.0], (0));
+    # Feature Toggles (Default to enabled)
+    field $bep05        : param = 1;    # DHT
+    field $bep06        : param = 1;    # Fast Extension
+    field $bep09        : param = 1;    # Metadata Exchange
+    field $bep10        : param = 1;    # Extension Protocol
+    field $bep11        : param = 1;    # PEX
+    field $bep52        : param = 1;    # v2
+    field $bep55        : param = 1;    # Holepunching
+    field $limit_up     : reader;
+    field $limit_down   : reader;
+    field $upnp_enabled : param = 0;
 
-        # Defaults
-        $_max_ul_rate{refaddr $self}          = 0;
-        $_k_ul{refaddr $self}                 = 0;
-        $_max_dl_rate{refaddr $self}          = 0;
-        $_k_dl{refaddr $self}                 = 0;
-        $_peers_per_torrent{refaddr $self}    = 100;
-        $_half_open{refaddr $self}            = 8;
-        $_connections_per_host{refaddr $self} = 1;
-        $torrents{refaddr $self}              = {};
-        $_tid{refaddr $self}                  = qq[\0] x 5;
-        $_use_dht{refaddr $self}              = 1;
-        $_encryption_mode{refaddr $self}      = _MSE_ENABLED;
+    # Verification Throttling
+    field @hashing_queue;                                      # Array of { torrent => $t, index => $i, data => $d }
+    field $hashing_rate_limit : writer = 1024 * 1024 * 500;    # 500MB/s limit for hashing
+    field $hashing_allowance = 0;
 
-        # Internals
-        $_connections{refaddr $self} = {};
-        $_schedule{refaddr $self}    = {};
-        $_dht{refaddr $self}   = Net::BitTorrent::DHT->new({Client => $self});
-        $peerid{refaddr $self} = Net::BitTorrent::Version::gen_peerid();
-        if (defined $args) {
-            if (ref($args) ne q[HASH]) {
-                carp q[Net::BitTorrent->new({}) requires ]
-                    . q[parameters to be passed as a hashref];
-                return;
+    method features () {
+        { bep05 => $bep05, bep06 => $bep06, bep09 => $bep09, bep10 => $bep10, bep11 => $bep11, bep52 => $bep52, bep55 => $bep55, };
+    }
+    ADJUST {
+        $node_id //= _generate_peer_id();
+
+        # Normalize encryption param
+        if ( defined $encryption && $encryption !~ /^\d+$/ ) {
+            if    ( $encryption eq 'none' )      { $encryption = ENCRYPTION_NONE }
+            elsif ( $encryption eq 'preferred' ) { $encryption = ENCRYPTION_PREFERRED }
+            elsif ( $encryption eq 'required' )  { $encryption = ENCRYPTION_REQUIRED }
+        }
+        my $weak_self = $self;
+        builtin::weaken($weak_self);
+
+        # TCP Listener
+        use IO::Socket::IP;
+        $tcp_listener = IO::Socket::IP->new( LocalPort => $port, Listen => 5, ReuseAddr => 1, Blocking => 0, );
+        if ($tcp_listener) {
+            $self->_emit( log => "    [DEBUG] TCP listener started on port $port\n", level => 'debug' ) if $debug;
+        }
+        else {
+            $self->_emit( log => "    [ERROR] Could not start TCP listener on port $port: $!\n", level => 'error' );
+        }
+        $utp->on(
+            'new_connection',
+            sub ( $utp_conn, $ip, $port ) {
+                return unless $weak_self;
+
+                #~ warn "    [uTP] Incoming connection from $ip:$port\n";
+                use Net::BitTorrent::Protocol::HandshakeOnly;
+                use Net::BitTorrent::Peer;
+                my $proto = Net::BitTorrent::Protocol::HandshakeOnly->new(
+                    infohash        => undef,                  # Dummy, will be overwritten by any incoming
+                    peer_id         => $weak_self->node_id,    # Dummy
+                    on_handshake_cb => sub ( $ih, $id ) {
+                        $weak_self->_upgrade_pending_peer( $utp_conn, $ih, $id, $ip, $port );
+                    }
+                );
+                my $peer = Net::BitTorrent::Peer->new(
+                    protocol  => $proto,
+                    torrent   => undef,                        # Not known yet
+                    transport => $utp_conn,
+                    ip        => $ip,
+                    port      => $port,
+                    debug     => $debug
+                );
+                $pending_peers{$utp_conn} = $peer;
             }
-            $host = $args->{q[LocalHost]}
-                if defined $args->{q[LocalHost]};
-            @ports
-                = defined $args->{q[LocalPort]}
-                ? (ref($args->{q[LocalPort]}) eq q[ARRAY]
-                   ? @{$args->{q[LocalPort]}}
-                   : $args->{q[LocalPort]}
-                )
-                : @ports;
-        }
+        );
+        use Algorithm::RateLimiter::TokenBucket;
+        $limit_up   = Algorithm::RateLimiter::TokenBucket->new( limit => 0 );
+        $limit_down = Algorithm::RateLimiter::TokenBucket->new( limit => 0 );
 
-        # Try opening a matching set of ports
-        for my $port (@ports) {
-            last
-                if $self->_socket_open_tcp($host, $port)
-                    && $self->_socket_open_udp($host, $port);
-        }
-
-        # Clear everything just in case
-        $self->_reset_bandwidth;
-        weaken($REGISTRY{refaddr $self} = $self);
-        $$self = $peerid{refaddr $self};
-        return $self;
-    }
-
-    # Accessors | Private
-    sub _tcp               { return $_tcp{refaddr +shift} }
-    sub _udp               { return $_udp{refaddr +shift} }
-    sub _connections       { return $_connections{refaddr +shift} }
-    sub _max_ul_rate       { return $_max_ul_rate{refaddr +shift} }
-    sub _max_dl_rate       { return $_max_dl_rate{refaddr +shift} }
-    sub _peers_per_torrent { return $_peers_per_torrent{refaddr +shift} }
-    sub _half_open         { return $_half_open{refaddr +shift} }
-
-    sub _connections_per_host {
-        return $_connections_per_host{refaddr +shift};
-    }
-    sub _dht { return $_dht{refaddr +shift} }
-
-    sub _use_dht {
-        my ($s) = @_;
-        return $_udp{refaddr $s} && $_use_dht{refaddr $s};
-    }
-
-    sub _tcp_port {
-        my ($self) = @_;
-        return if not defined $_tcp{refaddr $self};
-        my ($port, undef)
-            = unpack_sockaddr_in(getsockname($_tcp{refaddr $self}));
-        return $port;
-    }
-
-    sub _tcp_host {
-        my ($self) = @_;
-        return if not defined $_tcp{refaddr $self};
-        my (undef, $packed_ip)
-            = unpack_sockaddr_in(getsockname($_tcp{refaddr $self}));
-        return inet_ntoa($packed_ip);
-    }
-
-    sub _udp_port {
-        my ($self) = @_;
-        return if not defined $_udp{refaddr $self};
-        my ($port, undef)
-            = unpack_sockaddr_in(getsockname($_udp{refaddr $self}));
-        return $port;
-    }
-
-    sub _udp_host {
-        my ($self) = @_;
-        return if not defined $_udp{refaddr $self};
-        my (undef, $packed_ip)
-            = unpack_sockaddr_in(getsockname($_udp{refaddr $self}));
-        return inet_ntoa($packed_ip);
-    }
-
-    sub _encryption_mode {
-        my ($self) = @_;
-        return $_encryption_mode{refaddr $self};
-    }
-
-    # Setters | Private
-    sub _set_encryption_mode {
-        my ($self, $value) = @_;
-        if (not defined $value
-            or (    ($value != _MSE_DISABLED)
-                and ($value != _MSE_ENABLED)
-                and ($value != _MSE_FORCED))
-            )
-        {   carp
-                q[Net::BitTorrent->_set_encryption_mode( VALUE ) requires an integer value];
-            return;
-        }
-        return $_encryption_mode{refaddr $self} = $value;
-    }
-
-    sub _set_max_ul_rate {    # BYTES per second
-        my ($self, $value) = @_;
-        if (not defined $value or $value !~ m[^\d+$] or !$value) {
-            carp
-                q[Net::BitTorrent->_set_max_ul_rate( VALUE ) requires an integer value];
-            return;
-        }
-        return $_max_ul_rate{refaddr $self} = $value;
-    }
-
-    sub _set_max_dl_rate {    # BYTES per second
-        my ($self, $value) = @_;
-        if (not defined $value or $value !~ m[^\d+$]) {
-            carp
-                q[Net::BitTorrent->_set_max_dl_rate( VALUE ) requires an integer value];
-            return;
-        }
-        return $_max_dl_rate{refaddr $self} = $value;
-    }
-
-    sub _set_peers_per_torrent {
-        my ($self, $value) = @_;
-        if (not defined $value or $value !~ m[^\d+$] or $value < 1) {
-            carp
-                q[Net::BitTorrent->_set_peers_per_torrent( VALUE ) requires an integer value];
-            return;
-        }
-        return $_peers_per_torrent{refaddr $self} = $value;
-    }
-
-    sub _set_half_open {
-        my ($self, $value) = @_;
-        if (not defined $value or $value !~ m[^\d+$] or $value < 1) {
-            carp
-                q[Net::BitTorrent->_set_half_open( VALUE ) requires an integer value];
-            return;
-        }
-        return $_half_open{refaddr $self} = $value;
-    }
-
-    sub _set_connections_per_host {
-        my ($self, $value) = @_;
-        if (not defined $value or $value !~ m[^\d+$] or $value < 1) {
-            carp
-                q[Net::BitTorrent->_set_connections_per_host( VALUE ) requires an integer value];
-            return;
-        }
-        return $_connections_per_host{refaddr $self} = $value;
-    }
-
-    sub _set_use_dht {
-        my ($self, $value) = @_;
-        if (not defined $value or $value !~ m[^[10]$]) {
-            carp
-                q[Net::BitTorrent->_set_use_dht( VALUE ) requires a bool value];
-            return;
-        }
-        return $_use_dht{refaddr $self} = $value;
-    }
-
-    # Accessors | Public
-    sub peerid   { my ($self) = @_; return $peerid{refaddr $self} }
-    sub torrents { my ($self) = @_; return $torrents{refaddr $self} }
-
-    # Methods | Public
-    sub do_one_loop {
-        my ($self, $timeout) = @_;
-        $self->_process_schedule;
-        $timeout
-            = defined $timeout && $timeout =~ m[^(\-1|\d+)\.?\d*$]
-            ? $timeout < 0
-                ? undef
-                : $timeout
-            : 1;
-        my ($rin, $win, $ein) = (q[], q[], q[]);
-    PUSHSOCK: for my $fileno (keys %{$_connections{refaddr $self}}) {
-            vec($rin, $fileno, 1) = 1
-                if $_connections{refaddr $self}{$fileno}{q[Mode]} =~ m[r];
-            vec($win, $fileno, 1) = 1
-                if $_connections{refaddr $self}{$fileno}{q[Mode]} =~ m[w];
-            vec($ein, $fileno, 1) = 1;
-        }
-        my ($nfound, $timeleft) = select($rin, $win, $ein, $timeout);
-        $self->_process_connections(\$rin, \$win, \$ein)
-            if $nfound and $nfound != -1;
-        return 1;
-    }
-
-    # Methods | Private
-    sub _reset_bandwidth {
-        my ($self) = @_;
-        $self->_schedule({Time   => time + 1,
-                          Code   => \&_reset_bandwidth,
-                          Object => $self
-                         }
+        # Initialize LPD (BEP 14)
+        use Net::Multicast::PeerDiscovery;
+        $lpd = Net::Multicast::PeerDiscovery->new();
+        $lpd->on(
+            peer_found => sub ($p_info) {
+                return unless $weak_self;
+                if ( my $t = $torrents{ $p_info->{info_hash} } ) {
+                    $t->add_peer( { ip => $p_info->{ip}, port => $p_info->{port} } );
+                }
+            }
         );
 
-        #warn sprintf q[Speed report: Up: %5dB/s | Down: %5dB/s],
-        #    $_k_ul{refaddr $_[0]},
-        #    $_k_dl{refaddr $_[0]};
-        return $_k_dl{refaddr $_[0]} = $_k_ul{refaddr $_[0]} = 0;
-    }
-
-    sub _add_connection {
-        my ($self, $connection, $mode) = @_;
-        if (not defined $connection) {
-            carp q[Net::BitTorrent->_add_connection() requires an object];
-            return;
-        }
-        if (not blessed $connection) {
-            carp
-                q[Net::BitTorrent->_add_connection() requires a blessed object];
-            return;
-        }
-        my $_sock = $connection->_socket;
-        if ((not $_sock) or (ref($_sock) ne q[GLOB])) { return; }
-        if ((!$mode) || ($mode !~ m[^(?:ro|rw|wo)$])) {
-            carp
-                q[Net::BitTorrent->_add_connection(SOCKET, MODE) requires a mode parameter];
-            return;
-        }
-        return $_connections{refaddr $self}{fileno $_sock} = {
-                                                        Object => $connection,
-                                                        Mode   => $mode
-        };
-    }
-
-    sub _remove_connection {
-        my ($self, $connection) = @_;
-        if (not defined $connection) {
-            carp q[Net::BitTorrent->_remove_connection() requires an object];
-            return;
-        }
-        if (not blessed $connection) {
-            carp
-                q[Net::BitTorrent->_remove_connection() requires a blessed object];
-            return;
-        }
-        my $socket = $connection->_socket;
-        return if not defined $socket;
-        return delete $_connections{refaddr $self}{fileno $socket};
-    }
-
-    sub _socket_open_tcp {
-        my ($self, $host, $port) = @_;
-        if (   not $self
-            || not blessed $self
-            || not $self->isa(q[Net::BitTorrent]))
-        {   carp
-                q[Net::BitTorrent->_socket_open_tcp(HOST, PORT) requires a blessed object];
-            return;
-        }
-        if ((!$_tcp{refaddr $self}) && (!$host)) {
-            carp q[Net::BitTorrent::_socket_open_tcp( ) ]
-                . q[requires a hostname];
-            return;
-        }
-        if (defined $port and $port !~ m[^\d+$]) {
-            carp q[Net::BitTorrent::_socket_open_tcp( ) ]
-                . q[requires an integer port number];
-            return;
-        }
-        my $_packed_host = undef;
-        $host ||= q[0.0.0.0];
-        $port ||= 0;
-        $port =~ m[^(\d+)$];
-        $port = $1;
-        if (    $host
-            and $host
-            !~ m[^(?:(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.]?){4})$])
-        {   my ($name, $aliases, $addrtype, $length, @addrs)
-                = gethostbyname($host)
-                or return;
-            $_packed_host = $addrs[0];
-        }
-        else { $_packed_host = inet_aton($host) }
-        socket(my ($_tcp), PF_INET, SOCK_STREAM, getprotobyname(q[tcp]))
-            or return;
-
-       # - What is the difference between SO_REUSEADDR and SO_REUSEPORT?
-       #    [http://www.unixguide.net/network/socketfaq/4.11.shtml]
-       # - setsockopt - what are the options for ActivePerl under Windows NT?
-       #    [http://perlmonks.org/?node_id=63280]
-       #      setsockopt($_tcp, SOL_SOCKET, SO_REUSEADDR, pack(q[l], 1))
-       #         or return;
-       # SO_REUSEPORT is undefined on Win32... Boo...
-       #if ($reuse_port and defined SO_REUSEPORT) {       # XXX - undocumented
-       #   setsockopt($_udp, SOL_SOCKET, SO_REUSEPORT, pack(q[l], 1))
-       #       or return;
-       #}
-        bind($_tcp, pack_sockaddr_in($port, $_packed_host))
-            or return;
-        listen($_tcp, 1) or return;
-        $_connections{refaddr $self}{fileno $_tcp} = {Object => $self,
-                                                      Mode   => q[ro],
-            }
-            or return;
-        if (   defined $_tcp{refaddr $self}
-            && fileno $_tcp{refaddr $self}
-            && defined $_connections{refaddr $self}
-            {fileno $_tcp{refaddr $self}})
-        {   delete $_connections{refaddr $self}{fileno $_tcp{refaddr $self}};
-            close $_tcp{refaddr $self};
-        }
-        return $_tcp{refaddr $self} = $_tcp;
-    }
-
-    sub _socket_open_udp {
-        my ($self, $host, $port) = @_;
-        if (   not $self
-            || not blessed $self
-            || not $self->isa(q[Net::BitTorrent]))
-        {   carp
-                q[Net::BitTorrent->_socket_open_udp(HOST, PORT) requires a blessed object];
-            return;
-        }
-        if ((!$_tcp{refaddr $self}) && (!$host)) {
-            carp q[Net::BitTorrent::_socket_open_udp( ) ]
-                . q[requires a hostname];
-            return;
-        }
-        if (defined $port and $port !~ m[^\d+$]) {
-            carp q[Net::BitTorrent::_socket_open_udp( ) ]
-                . q[requires an integer port number];
-            return;
-        }
-        my $_packed_host = undef;
-        $host ||= q[0.0.0.0];
-
-        #$port = $port ? $port : $_udp{refaddr $self} ? $self->_udp_port : 0;
-        $port ||= 0;
-        $port =~ m[^(\d+)$];
-        $port = $1;
-        if (    $host
-            and $host
-            !~ m[^(?:(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.]?){4})$])
-        {   my ($name, $aliases, $addrtype, $length, @addrs)
-                = gethostbyname($host)
-                or return;
-            $_packed_host = $addrs[0];
-        }
-        else { $_packed_host = inet_aton($host) }
-        socket(my ($_udp), PF_INET, SOCK_DGRAM, getprotobyname(q[udp]))
-            or return;
-
-       # - What is the difference between SO_REUSEADDR and SO_REUSEPORT?
-       #    [http://www.unixguide.net/network/socketfaq/4.11.shtml]
-       # - setsockopt - what are the options for ActivePerl under Windows NT?
-       #    [http://perlmonks.org/?node_id=63280]
-       #     setsockopt($_udp, SOL_SOCKET, SO_REUSEADDR, pack(q[l], 1))
-       #        or return;
-       # SO_REUSEPORT is undefined on Win32... Boo...
-       #if ($reuse_port and defined SO_REUSEPORT) {       # XXX - undocumented
-       #   setsockopt($_udp, SOL_SOCKET, SO_REUSEPORT, pack(q[l], 1))
-       #       or return;
-       #}
-        bind($_udp, pack_sockaddr_in($port, $_packed_host))
-            or return;
-        $_connections{refaddr $self}{fileno $_udp} = {Object => $self,
-                                                      Mode   => q[ro],
-            }
-            or return;
-        if (   $_udp{refaddr $self}
-            && fileno $_udp{refaddr $self}
-            && defined $_connections{refaddr $self}
-            {fileno $_udp{refaddr $self}})
-        {   delete $_connections{refaddr $self}{fileno $_udp{refaddr $self}};
-            close $_udp{refaddr $self};
-        }
-        return $_udp{refaddr $self} = $_udp;
-    }
-
-    sub _process_connections {
-        my ($self, $rin, $win, $ein) = @_;
-        if (!(     ($rin and ref $rin and ref $rin eq q[SCALAR])
-               and ($win and ref $win and ref $win eq q[SCALAR])
-               and ($ein and ref $ein and ref $ein eq q[SCALAR])
-            )
-            )
-        {   carp
-                q[Malformed parameters to Net::BitTorrent::_process_connections(RIN, WIN, EIN)];
-            return;
-        }
-    POPSOCK: foreach my $fileno (keys %{$_connections{refaddr $self}}) {
-            next POPSOCK unless defined $_connections{refaddr $self}{$fileno};
-            if (   $_tcp{refaddr $self}
-                && $fileno == fileno $_tcp{refaddr $self})
-            {   if (vec($$rin, $fileno, 1) == 1) {
-                    vec($$rin, $fileno, 1) = 0;
-                    if (scalar(
-                            grep {
-                                $_->{q[Object]}->isa(q[Net::BitTorrent::Peer])
-                                    && !$_->{q[Object]}->torrent
-                                } values %{$_connections{refaddr $self}}
-                        ) < $_half_open{refaddr $self}
-                        )
-                    {   accept(my ($new_socket), $_tcp{refaddr $self})
-                            or next POPSOCK;
-                        Net::BitTorrent::Peer->new({Socket => $new_socket,
-                                                    Client => $self
-                                                   }
-                        );
-                    }
-                }
-            }
-            elsif (   $_udp{refaddr $self}
-                   && $fileno == fileno $_udp{refaddr $self})
-            {   if (vec($$rin, $fileno, 1) == 1) {
-                    vec($$rin, $fileno, 1) = 0;
-                    my $paddr
-                        = recv($_udp{refaddr $self}, my ($data), 1024, 0)
-                        or next POPSOCK;
-                    if ($__UDP_OBJECT_CACHE{refaddr $self}{$paddr}{q[Object]})
-                    {   $__UDP_OBJECT_CACHE{refaddr $self}{$paddr}{q[Object]}
-                            ->_on_data($paddr, $data)
-                            or
-                            delete $__UDP_OBJECT_CACHE{refaddr $self}{$paddr}
-                            {q[Object]};
-                        next POPSOCK;
-                    }
-                    else {
-                        for my $_tor (values %{$torrents{refaddr $self}}) {
-                            for my $_tier (@{$_tor->trackers}) {
-                                my ($tracker) = grep {
-                                    $_->isa(
-                                        q[Net::BitTorrent::Torrent::Tracker::UDP]
-                                        )
-                                        and $_->_packed_host eq $paddr
-                                } @{$_tier->urls};
-                                if (   $tracker
-                                    && $tracker->_on_data($paddr, $data))
-                                {   $__UDP_OBJECT_CACHE{refaddr $self}{$paddr}
-                                        = {Object => $tracker};
-                                    weaken($__UDP_OBJECT_CACHE{refaddr $self}
-                                           {$paddr}{q[Object]});
-                                    next POPSOCK;
-                                }
-                            }
-                        }
-                    }
-                    if (   $_use_dht{refaddr $self}
-                        && $_dht{refaddr $self}->_on_data($paddr, $data))
-                    {   $__UDP_OBJECT_CACHE{refaddr $self}{$paddr}
-                            = {Object => $_dht{refaddr $self}};
-                        weaken($__UDP_OBJECT_CACHE{refaddr $self}{$paddr}
-                               {q[Object]});
-                    }
-                    next POPSOCK;
-                }
+        # Initialize PortMapper if enabled and available
+        if ($upnp_enabled) {
+            builtin::load_module 'Acme::UPnP';
+            my $mapper = Acme::UPnP->new();
+            if ( $mapper->is_available() ) {
+                $port_mapper = $mapper;
             }
             else {
-                my $read = (($_max_dl_rate{refaddr $self}
-                             ? max(0,
-                                   (      $_max_dl_rate{refaddr $self}
-                                        - $_k_dl{refaddr $self}
-                                   )
-                                 )
-                             : (2**15)
-                            ) * vec($$rin, $fileno, 1)
-                );
-                my $write = (($_max_ul_rate{refaddr $self}
-                              ? max(0,
-                                    (      $_max_ul_rate{refaddr $self}
-                                         - $_k_ul{refaddr $self}
-                                    )
-                                  )
-                              : (2**15)
-                             ) * vec($$win, $fileno, 1)
-                );
-                my $error = vec($$ein, $fileno, 1)
-                    && (   $^E
-                        && ($^E != _EINPROGRESS)
-                        && ($^E != _EWOULDBLOCK));
-                if ($read || $write || $error) {
-                    my ($this_r, $this_w)
-                        = $_connections{refaddr $self}{$fileno}{q[Object]}
-                        ->_rw($read, $write, $error);
-                    $_k_dl{refaddr $self} += defined $this_r ? $this_r : 0;
-                    $_k_ul{refaddr $self} += defined $this_w ? $this_w : 0;
-                    vec($$rin, $fileno, 1) = 0;
-                    vec($$win, $fileno, 1) = 0;
-                    vec($$ein, $fileno, 1) = 0;
+                #~ warn "    [UPnP] UPnP requested but Net::UPnP::ControlPoint not available. Skipping.\n";
+                $upnp_enabled = 0;        # Disable UPnP if module not available
+                $port_mapper  = undef;    # Explicitly set to undef
+            }
+        }
+        else {
+            $port_mapper = undef;         # Ensure it's undef if UPnP is disabled
+        }
+
+        # Register PortMapper events if port_mapper is initialized
+        if ($port_mapper) {
+
+            #~ $port_mapper->on( 'device_found',     sub ($name_hash) { warn "    [UPnP] Device found: $name_hash->{name}\n"; } );
+            #~ $port_mapper->on( 'device_not_found', sub { warn "    [UPnP] No device found.\n"; } );
+            #~ $port_mapper->on( 'map_success',
+            #~ sub ($args) { warn "    [UPnP] Port mapped: $args->{ext_p}/$args->{proto} for $args->{int_p} ($args->{desc})\n"; } );
+            #~ $port_mapper->on( 'map_failed',    sub ($args) { warn "    [UPnP] Port map failed: $args->{err_c} - $args->{err_d}\n"; } );
+            #~ $port_mapper->on( 'unmap_success', sub ($args) { warn "    [UPnP] Port unmapped: $args->{ext_p}/$args->{proto}\n"; } );
+            #~ $port_mapper->on( 'unmap_failed',  sub ($args) { warn "    [UPnP] Port unmap failed: $args->{err_c} - $args->{err_d}\n"; } );
+            $self->forward_ports();
+        }
+    }
+
+    sub _generate_peer_id () {
+        my $v_id  = '200';                                                                  # Hardcoded version for stability in ID generation
+        my $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+        return pack( 'a20', sprintf( '-NB%sS-%sSanko', $v_id, join( '', map { substr( $chars, rand(66), 1 ) } 1 .. 7 ) ) );
+
+        #~ $self->_emit( log => '    [DEBUG] Generated Peer ID: ' . unpack( 'H*', $id ) . " (" . $id . ")\n", level => 'debug' ) if $self->debug;
+    }
+
+    method forward_ports () {
+        if ($port_mapper) {
+            $port_mapper->discover_device();
+        }
+    }
+
+    method shutdown () {
+        if ($port_mapper) {
+            $port_mapper->unmap_port( 6881, 'TCP' );
+            $port_mapper->unmap_port( 6881, 'UDP' );
+        }
+        for my $t ( values %torrents ) {
+            $t->stop if $t;
+        }
+    }
+
+    method DESTROY () {
+        $self->shutdown();
+    }
+
+    method handle_udp_packet ( $data, $addr ) {
+        return unless length $data;
+        my $first = substr( $data, 0, 1 );
+        if ( $first eq 'd' ) {
+
+            # Likely DHT
+            return $self->dht->handle_incoming( $data, $addr ) if $self->dht;
+        }
+        elsif ( ord($first) >> 4 == 1 ) {
+
+            # Likely uTP (version 1)
+            my $res = $utp->handle_packet( $data, $addr );
+            if ($res) {
+
+                # Send response back
+                $self->dht->socket->send( $res, 0, $addr );
+            }
+        }
+    }
+
+    method _handle_new_tcp_transport ($transport) {
+        my $weak_self = $self;
+        builtin::weaken($weak_self);
+        my $weak_transport = $transport;
+        builtin::weaken($weak_transport);
+
+        # We wait for the first chunk of data to decide if it's PWP or MSE
+        $transport->on(
+            data => sub ( $emitter, $trans, $data ) {
+                return unless $weak_self && $weak_transport;
+                my $entry = $weak_self->pending_peers_hash->{$weak_transport};
+                return unless $entry;
+                if ( $entry->{peer} ) {
+                    $entry->{peer}->on_data($data);
+                }
+                else {
+                    $weak_self->_autodetect_protocol( $weak_transport, $data );
+                }
+            }
+        );
+
+        # Store in pending_peers to keep it alive
+        $pending_peers{$transport} = { transport => $transport, timestamp => time() };
+    }
+
+    method _autodetect_protocol ( $transport, $data ) {
+        my $entry = $pending_peers{$transport};
+        return unless $entry;
+        return if $entry->{detected};
+
+        # If we already have a peer object or a filter, this data is for them.
+        if ( $entry->{peer} || $transport->filter ) {
+            return;
+        }
+        $entry->{detected} = 1;
+        my $first_byte = ord( substr( $data, 0, 1 ) );
+        if ( $first_byte == 0x13 ) {
+            if ( $encryption == ENCRYPTION_REQUIRED ) {
+                $self->_emit( log => "    [DEBUG] Rejecting plaintext connection because encryption is required\n", level => 'debug' ) if $debug;
+                $transport->socket->close();
+                delete $pending_peers{$transport};
+                return;
+            }
+            $self->_emit( log => "    [DEBUG] Autodetected PWP handshake\n", level => 'debug' ) if $debug;
+            use Net::BitTorrent::Protocol::HandshakeOnly;
+            my $proto = Net::BitTorrent::Protocol::HandshakeOnly->new(
+                infohash        => undef,
+                peer_id         => $self->node_id,
+                on_handshake_cb => sub ( $ih, $id ) {
+                    $self->_upgrade_pending_peer( $transport, $ih, $id, $transport->socket->peerhost, $transport->socket->peerport );
+                }
+            );
+            $entry->{peer} = Net::BitTorrent::Peer->new(
+                protocol  => $proto,
+                transport => $transport,
+                torrent   => undef,
+                ip        => $transport->socket->peerhost,
+                port      => $transport->socket->peerport,
+                debug     => $debug
+            );
+
+            # Feed the data we already read to the new protocol handler
+            $entry->{peer}->on_data($data);
+        }
+        else {
+            $self->_emit( log => "    [DEBUG] Autodetected potential MSE handshake\n", level => 'debug' ) if $debug;
+
+            # MSE handling will be complex because we don't know the infohash yet
+            # We need an MSE object that can try ALL our hosted infohashes?
+            # No, MSE spec says Req2 is XORed with the infohash.
+            # We must wait until we have Req2, then XOR it with each IH we have until one matches.
+            $self->_handle_incoming_mse( $transport, $data );
+        }
+    }
+
+    method _handle_incoming_mse ( $transport, $data ) {
+        use Net::BitTorrent::Protocol::MSE;
+        my $weak_self = $self;
+        builtin::weaken($weak_self);
+        my $mse = Net::BitTorrent::Protocol::MSE->new(
+            infohash          => undef,                              # Not known yet
+            is_initiator      => 0,
+            on_infohash_probe => sub ( $mse_obj, $xor_part, $s ) {
+                return undef unless $weak_self;
+                my $torrents = $weak_self->torrents();
+                for my $t (@$torrents) {
+                    my $ih1 = $t->infohash_v1;
+                    my $ih2 = $t->infohash_v2;
+                    for my $ih ( grep {defined} ( $ih1, $ih2 ) ) {
+                        my $expected_xor = $mse_obj->_xor_strings( sha1( 'req2' . $ih ), sha1( 'req3' . $s ) );
+                        if ( $xor_part eq $expected_xor ) {
+                            $weak_self->_emit( log => "    [DEBUG] MSE matched infohash: " . unpack( 'H*', $ih ) . "\n", level => 'debug' )
+                                if $weak_self->debug;
+                            return $ih;
+                        }
+                    }
+                }
+                return undef;
+            }
+        );
+        my $weak_transport = $transport;
+        builtin::weaken($weak_transport);
+        $mse->on(
+            'infohash_identified',
+            sub ( $emitter, $mse_obj, $ih ) {
+                return unless $weak_self && $weak_transport;
+                $weak_self->_upgrade_pending_peer( $weak_transport, $ih, undef, $weak_transport->socket->peerhost,
+                    $weak_transport->socket->peerport );
+            }
+        );
+        $transport->set_filter($mse);
+        $self->_emit( log => "    [DEBUG] Incoming MSE handshake started\n", level => 'debug' ) if $debug;
+
+        # Feed the data we already have
+        $mse->receive_data($data);
+        my $entry = $pending_peers{$transport};
+        $entry->{mse} = $mse;
+    }
+
+    method _upgrade_pending_peer ( $transport, $ih, $peer_id, $ip, $port ) {
+        my $entry = $pending_peers{$transport};
+        if ( !$entry ) {
+
+            # Already upgraded or timed out
+            return;
+        }
+        delete $pending_peers{$transport};
+        my $torrent = $torrents{$ih};
+        if ( !$torrent ) {
+            $self->_emit( log => "    [DEBUG] Handshake for unknown torrent " . unpack( 'H*', $ih ) . " from $ip:$port\n", level => 'debug' )
+                if $debug;
+            $transport->socket->close() if $transport->socket;
+            return;
+        }
+        use Net::BitTorrent::Protocol::PeerHandler;
+        my $p_handler = Net::BitTorrent::Protocol::PeerHandler->new(
+            infohash      => $ih,
+            peer_id       => $self->node_id,
+            features      => $torrent->features,
+            debug         => $debug,
+            metadata_size => $torrent->metadata ? length( Net::BitTorrent::Protocol::BEP03::Bencode::bencode( $torrent->metadata->{info} ) ) : 0,
+        );
+        my $peer;
+        if ( $entry->{peer} ) {
+            $peer = $entry->{peer};
+            $peer->set_protocol($p_handler);
+            $peer->set_torrent($torrent);
+        }
+        else {
+            $peer = Net::BitTorrent::Peer->new(
+                protocol   => $p_handler,
+                torrent    => $torrent,
+                transport  => $transport,
+                ip         => $ip,
+                port       => $port,
+                debug      => $debug,
+                mse        => $entry->{mse},
+                encryption => $encryption,
+            );
+        }
+        $p_handler->set_peer($peer);
+        $p_handler->set_parent_emitter($peer);
+        if ( defined $peer_id ) {
+            $p_handler->on_handshake( $ih, $peer_id );
+        }
+        $torrent->register_peer_object($peer);
+    }
+    method set_limit_down ($val) { $limit_down->set_limit($val) }
+    method hashing_queue_size () { scalar @hashing_queue }
+
+    method queue_verification ( $torrent, $index, $data ) {
+        $self->_emit( log => "\n    [LOUD] PIECE $index: Queuing for verification (" . length($data) . " bytes)\n", level => 'info' );
+        push @hashing_queue, { torrent => $torrent, index => $index, data => $data };
+    }
+
+    method _process_hashing_queue ($delta) {
+        $hashing_allowance += $hashing_rate_limit * $delta;
+        if ( @hashing_queue && $hashing_allowance < length( $hashing_queue[0]{data} ) ) {
+            $self->_emit(
+                log => sprintf( "\r    [LOUD] Hashing Throttled: %.2f%% of next piece ready",
+                    ( $hashing_allowance / length( $hashing_queue[0]{data} ) ) * 100 ),
+                level => 'info'
+            );
+        }
+        while (@hashing_queue) {
+            my $task = $hashing_queue[0];
+            my $len  = length( $task->{data} );
+            if ( $hashing_allowance >= $len ) {
+                shift @hashing_queue;
+                $hashing_allowance -= $len;
+                $self->_emit( log => "\n    [LOUD] PIECE $task->{index}: Processing hash...\n", level => 'info' );
+                $task->{torrent}->_verify_queued_piece( $task->{index}, $task->{data} );
+            }
+            else {
+                # Not enough allowance to finish this piece yet
+                last;
+            }
+        }
+    }
+
+    method dht_get ( $target, $cb ) {
+        return unless $self->dht;
+
+        # First, iterative find_node to get close to target.
+        # Then call get_remote on closest nodes
+        # Simplified: trigger iterative lookup and register callback
+        $self->dht->find_node_remote( $target, $_->[0], $_->[1] ) for @{ $self->dht->boot_nodes };
+        $dht_queries{$target} = { cb => $cb, type => 'get' };
+    }
+
+    method dht_put ( $value, $cb = undef ) {
+        return unless $self->dht;
+        my $target = Digest::SHA::sha1($value);
+
+        # Simplified: find nodes and then put
+        $self->dht->find_node_remote( $target, $_->[0], $_->[1] ) for @{ $self->dht->boot_nodes };
+        $dht_queries{$target} = { cb => $cb, type => 'put', value => $value };
+    }
+
+    method dht_scrape ( $infohash, $cb ) {
+        return unless $self->dht;
+        $self->dht->scrape($infohash);
+        $dht_queries{$infohash} = { cb => $cb, type => 'scrape' };
+    }
+
+    method dht_crawl () {
+        return unless $self->dht;
+
+        # Random sample to discover new infohashes
+        my $random_target = pack( 'H*', join( '', map { sprintf( '%02x', rand(256) ) } 1 .. 20 ) );
+        $self->dht->sample($random_target);
+    }
+    method dht_index () { return \%dht_index }
+
+    method connect_to_peer ( $ip, $port, $ih ) {
+        use IO::Socket::IP;
+        my $socket = IO::Socket::IP->new( PeerHost => $ip, PeerPort => $port, Type => SOCK_STREAM, Blocking => 0, );
+        return unless $socket;
+        $self->_emit( log => "    [DEBUG] Connecting to $ip:$port for " . unpack( 'H*', $ih ) . "\n", level => 'debug' ) if $debug;
+        use Net::BitTorrent::Transport::TCP;
+        my $transport = Net::BitTorrent::Transport::TCP->new( socket => $socket, connecting => 1 );
+
+        # Add to pending_peers immediately
+        $pending_peers{$transport} = { transport => $transport, timestamp => time() };
+        my $weak_self = $self;
+        builtin::weaken($weak_self);
+        my $weak_transport = $transport;
+        builtin::weaken($weak_transport);
+        if ( $encryption == ENCRYPTION_REQUIRED || $encryption == ENCRYPTION_PREFERRED ) {
+            use Net::BitTorrent::Protocol::MSE;
+            my $mse = Net::BitTorrent::Protocol::MSE->new( infohash => $ih, is_initiator => 1, );
+            $mse->on(
+                'infohash_identified',
+                sub ( $emitter, $mse_obj, $ih ) {
+                    return unless $weak_self && $weak_transport;
+                    $weak_self->_upgrade_pending_peer(
+                        $weak_transport, $ih, undef,
+                        $weak_transport->socket->peerhost,
+                        $weak_transport->socket->peerport
+                    );
+                }
+            );
+            $transport->set_filter($mse);
+            $pending_peers{$transport}{mse} = $mse;
+            $transport->on(
+                'filter_failed',
+                sub ( $emitter, $trans, $leftover ) {
+                    return unless $weak_self && $weak_transport;
+                    $weak_self->_emit( log => "    [DEBUG] connect_to_peer: MSE failed, falling back to plaintext\n", level => 'debug' )
+                        if $weak_self->debug;
+                    $weak_self->_upgrade_pending_peer(
+                        $weak_transport, $ih, undef,
+                        $weak_transport->socket->peerhost,
+                        $weak_transport->socket->peerport
+                    );
+                }
+            );
+        }
+        else {
+            # Plaintext outgoing: create peer immediately
+            $self->_upgrade_pending_peer( $transport, $ih, undef, $ip, $port );
+        }
+
+        # Reuse incoming data handler logic
+        $transport->on(
+            'data',
+            sub ( $emitter, $trans, $data ) {
+                return unless $weak_self && $weak_transport;
+                my $entry = $weak_self->pending_peers_hash->{$weak_transport};
+                return unless $entry;    # Might have been upgraded already
+                if ( $entry->{peer} ) {
+                    $entry->{peer}->on_data($data);
+                }
+                else {
+                    $weak_self->_autodetect_protocol( $weak_transport, $data );
+                }
+            }
+        );
+        return $transport;
+    }
+    method pending_peers_hash () { \%pending_peers }
+
+    method add ( $thing, $base_path, %args ) {
+        if ( $thing =~ /^magnet:/i ) {
+            return $self->add_magnet( $thing, $base_path, %args );
+        }
+        elsif ( length($thing) == 20 || ( length($thing) == 40 && $thing =~ /^[0-9a-f]+$/i ) ) {
+            return $self->add_infohash( $thing, $base_path, %args );
+        }
+        elsif ( length($thing) == 32 || ( length($thing) == 64 && $thing =~ /^[0-9a-f]+$/i ) ) {
+            return $self->add_infohash( $thing, $base_path, %args );
+        }
+        elsif ( -f $thing ) {
+            return $self->add_torrent( $thing, $base_path, %args );
+        }
+        $self->_emit( log => "Don't know how to add '$thing'", level => 'fatal' );
+        return undef;
+    }
+
+    method add_torrent ( $path, $base_path, %args ) {
+        my $t = Net::BitTorrent::Torrent->new( path => $path, base_path => $base_path, client => $self, debug => $debug, peer_id => $node_id, %args );
+        $torrents{ $t->infohash_v1 } = $t if $t->infohash_v1;
+        $torrents{ $t->infohash_v2 } = $t if $t->infohash_v2;
+        $self->_emit( 'torrent_added', $t );
+        return $t;
+    }
+
+    method add_infohash ( $ih, $base_path, %args ) {
+        my $t
+            = Net::BitTorrent::Torrent->new( infohash => $ih, base_path => $base_path, client => $self, debug => $debug, peer_id => $node_id, %args );
+        $torrents{ $t->infohash_v1 } = $t if $t->infohash_v1;
+        $torrents{ $t->infohash_v2 } = $t if $t->infohash_v2;
+        $self->_emit( 'torrent_added', $t );
+        return $t;
+    }
+
+    method add_magnet ( $uri, $base_path, %args ) {
+        use Net::BitTorrent::Protocol::BEP53;
+        my $m = Net::BitTorrent::Protocol::BEP53->parse($uri);
+        my $t = Net::BitTorrent::Torrent->new(
+            infohash_v1      => $m->infohash_v1,
+            infohash_v2      => $m->infohash_v2,
+            initial_trackers => $m->trackers,
+            initial_peers    => $m->nodes,         # x.pe
+            base_path        => $base_path,
+            client           => $self,
+            debug            => $debug,
+            peer_id          => $node_id,
+            %args
+        );
+        $torrents{ $t->infohash_v1 } = $t if $t->infohash_v1;
+        $torrents{ $t->infohash_v2 } = $t if $t->infohash_v2;
+        $self->_emit( 'torrent_added', $t );
+        return $t;
+    }
+
+    method torrents () {
+        return [ values %torrents ];
+    }
+
+    method dht () {
+        return undef unless $bep05;
+        if ( !$dht ) {
+            $dht = Net::BitTorrent::DHT->new(
+                node_id_bin => $node_id,
+                port        => $port,
+                want_v6     => 1,
+                bep32       => 1,
+                bep42       => 0,
+                debug       => $debug,
+                boot_nodes  => [ [ 'router.bittorrent.com', 6881 ], [ 'router.utorrent.com', 6881 ], [ 'dht.transmissionbt.com', 6881 ] ]
+            );
+            my $weak_self = $self;
+            builtin::weaken($weak_self);
+            $dht->on(
+                'external_ip_detected',
+                sub ( $emitter, $ip ) {
+                    return unless $weak_self;
+
+                    #~ warn "    [DHT] External IP detected: $ip. Rotating node_id.\n";
+                    # my $sec    = Net::BitTorrent::DHT::Security->new();
+                    # my $new_id = $sec->generate_node_id($ip);
+                    # $weak_self->set_node_id($new_id);
+                    # $dht->set_node_id($new_id);
+                }
+            );
+            $dht->bootstrap();
+        }
+        return $dht;
+    }
+
+    method tick ( $timeout //= 0.1 ) {
+        $tick_debt += $timeout;
+        $tick_debt = 5.0 if $tick_debt > 5.0;    # Max debt to avoid huge bursts
+        my $real_start = time();
+        while ( $tick_debt >= 0.01 ) {
+            my $slice = 0.1;
+            $slice = $tick_debt if $tick_debt < $slice;
+            $self->_run_one_tick($slice);
+            $tick_debt -= $slice;
+
+            # Don't block the caller's main loop for more than 200ms
+            last if ( time() - $real_start ) > 0.2;
+        }
+    }
+
+    method _run_one_tick ($timeout) {
+        $self->_emit( log => "  [DEBUG] Net::BitTorrent::_run_one_tick starting (timeout=$timeout)\n", level => 'debug' ) if $debug > 1;
+        my $start = time();
+        $limit_up->tick($timeout);
+        $limit_down->tick($timeout);
+
+        # Accept incoming TCP connections
+        if ($tcp_listener) {
+            my $sel = IO::Select->new($tcp_listener);
+            if ( $sel->can_read(0) ) {
+                while ( my $socket = $tcp_listener->accept() ) {
+                    $socket->blocking(0);
+                    $self->_emit(
+                        log   => "    [DEBUG] Accepted TCP connection from " . $socket->peerhost . ":" . $socket->peerport . "\n",
+                        level => 'debug'
+                    ) if $debug;
+                    use Net::BitTorrent::Transport::TCP;
+                    my $transport = Net::BitTorrent::Transport::TCP->new( socket => $socket, connecting => 0 );
+
+                    # Autodetect MSE vs PWP will happen in the first data received
+                    $self->_handle_new_tcp_transport($transport);
                 }
             }
         }
-        return 1;
+        else {
+            $self->_emit( log => "    [DEBUG] No TCP listener active\n", level => 'debug' ) if $debug > 1;
+        }
+
+        # Process hashing queue (throttled)
+        $self->_process_hashing_queue($timeout);
+
+        # Update LPD
+        $lpd->tick($timeout) if $lpd;
+
+        # Update torrents (including trackers and storage)
+        for my $ih ( keys %torrents ) {
+            $torrents{$ih}->tick($timeout);
+        }
+
+        # Update pending peers (ones being autodetected or in handshake)
+        for my $t_key ( keys %pending_peers ) {
+            my $entry     = $pending_peers{$t_key};
+            my $transport = $entry->{transport};
+            if ( $entry->{peer} ) {
+                $entry->{peer}->tick();
+            }
+            else {
+                # If no peer object yet, we still need to tick the transport
+                # to read the autodetection data.
+                $transport->tick();
+            }
+
+            # Timeout old pending connections (30s)
+            if ( time() - $entry->{timestamp} > 30 ) {
+                if ($debug) {
+                    my $host = 'unknown';
+                    try {
+                        if ( $transport->socket ) {
+                            $host = $transport->socket->peerhost // 'unknown';
+                        }
+                    }
+                    catch ($e) { }
+                    $self->_emit( log => "    [DEBUG] Timing out pending connection from $host\n", level => 'debug' );
+                }
+                $transport->socket->close() if $transport->socket;
+                delete $pending_peers{$t_key};
+            }
+        }
+
+        # Collect DHT events from direct packet processing
+        my ( @packet_nodes, @packet_peers, @packet_data );
+
+        # Read from UDP socket (DHT/uTP)
+        if ( $dht && $dht->socket ) {
+            my $sel = IO::Select->new( $dht->socket );
+            while ( $sel->can_read(0) ) {
+                my $remote_addr = $dht->socket->recv( my $data, 65535 );
+                if ($remote_addr) {
+                    my @res = $self->handle_udp_packet( $data, $remote_addr );
+                    if (@res) {
+                        push @packet_nodes, @{ $res[0] } if ref $res[0] eq 'ARRAY';
+                        push @packet_peers, @{ $res[1] } if ref $res[1] eq 'ARRAY';
+                        push @packet_data,  $res[2]      if $res[2];
+                    }
+                }
+            }
+        }
+
+        # Update uTP
+        my $utp_packets = $utp->tick($timeout);
+        for my $pkt (@$utp_packets) {
+
+            # Send retransmissions etc.
+            # We use the DHT socket for convenience if it exists
+            if ( $dht && $dht->socket ) {
+
+                # Need to convert ip/port to sockaddr
+                use Socket qw[pack_sockaddr_in inet_aton];
+                my $addr = pack_sockaddr_in( $pkt->{port}, inet_aton( $pkt->{ip} ) );
+                $dht->socket->send( $pkt->{data}, 0, $addr );
+            }
+        }
+
+        # Update DHT
+        if ($dht) {
+            my ( $tick_nodes, $tick_peers, $tick_data ) = $dht->tick($timeout);
+            my @all_nodes = ( @{ $tick_nodes // [] }, @packet_nodes );
+            my @all_peers = ( @{ $tick_peers // [] }, @packet_peers );
+
+            # Merge packet-derived data with tick-derived data
+            my @all_data = grep {defined} ( $tick_data, @packet_data );
+            if ( $debug && ( @all_nodes || @all_peers || @all_data ) ) {
+                $self->_emit(
+                    log => sprintf(
+                        "    [DEBUG] DHT tick+packets: nodes=%d, peers=%d, data=%d\n",
+                        scalar(@all_nodes), scalar(@all_peers), scalar(@all_data)
+                    ),
+                    level => 'debug'
+                );
+            }
+
+            # If we found new nodes, add them to the frontier of starving torrents
+            if (@all_nodes) {
+                for my $t ( values %torrents ) {
+                    next if scalar( @{ $t->peer_objects // [] } ) >= 20;
+                    $t->add_dht_nodes( \@all_nodes );
+                }
+            }
+
+            # Dispatch peers to relevant torrents
+            # Net::BitTorrent::DHT::handle_incoming returns (nodes, peers, data)
+            # The 'data' (result) hash contains 'queried_target' which is the infohash
+            # we were looking for when these peers were returned.
+            for my $d (@all_data) {
+                my $ih = $d->{queried_target};
+                if ( $ih && ( my $t = $torrents{$ih} ) ) {
+                    if ( $debug && @all_peers ) {
+                        $self->_emit(
+                            log   => "    [DEBUG] Dispatching " . scalar(@all_peers) . " peers to torrent " . unpack( "H*", $ih ) . "\n",
+                            level => 'debug'
+                        );
+                    }
+                    for my $peer (@all_peers) {
+                        $t->add_peer($peer);
+                    }
+                }
+                elsif ( $debug && $ih ) {
+                    $self->_emit( log => "    [DEBUG] DHT result for unknown infohash " . unpack( "H*", $ih ) . "\n", level => 'debug' );
+                }
+            }
+
+            # Handle BEP 33, 44, 51 data
+            for my $d (@all_data) {
+                if ( exists $d->{samples} ) {    # BEP 51
+                    for my $ih ( @{ $d->{samples} } ) {
+                        my $key = unpack( 'H*', $ih );
+                        $dht_index{$key} = time();
+                        if ( keys %dht_index > 1000 ) {
+
+                            # Remove oldest or just random?
+                            # For simplicity, remove first key (random in Perl)
+                            delete $dht_index{ ( keys %dht_index )[0] };
+                        }
+                    }
+                }
+                if ( exists $d->{v} ) {    # BEP 44
+
+                    # Calculate target (immutable) or use key (mutable)
+                    my $target = Digest::SHA::sha1( $d->{v} );
+                    if ( my $q = delete $dht_queries{$target} ) {
+                        $q->{cb}->( $d->{v}, $d ) if $q->{cb};
+                    }
+                }
+                if ( exists $d->{sn} ) {    # BEP 33
+
+                    # Scrape result - find matching torrent
+                    if ( my $ih = $d->{queried_target} ) {
+                        if ( my $t = $torrents{$ih} ) {
+                            $t->handle_dht_scrape($d);
+                        }
+                    }
+                }
+            }
+        }
+
+        # Update all torrents (evaluates choking, etc.)
+        for my $t ( values %torrents ) {
+            $t->tick($timeout);
+
+            # BEP 14: Periodically announce on local network
+            # (Simplified: every ~60s if we tracked a timer, here we just do it occasionally)
+            if ( rand() < 0.01 ) {    # Hack for now
+                if ($lpd) {
+                    $lpd->announce( $t->infohash_v2, 6881 ) if $t->infohash_v2;
+                    $lpd->announce( $t->infohash_v1, 6881 ) if $t->infohash_v1;
+                }
+            }
+        }
     }
 
-    # Methods | Private | Torrents
-    sub _locate_torrent {
-        my ($self, $infohash) = @_;
-        carp q[Bad infohash for Net::BitTorrent->_locate_torrent(INFOHASH)]
-            && return
-            if $infohash !~ m[^[\d|a-f]{40}$]i;
-        return $torrents{refaddr $self}{lc $infohash}
-            ? $torrents{refaddr $self}{lc $infohash}
-            : undef;
+    method save_state ($path) {
+        use JSON::PP   qw[encode_json];
+        use Path::Tiny qw[path];
+        my %data = ( node_id => $node_id, torrents => {}, );
+        my %seen;
+        for my $ih ( keys %torrents ) {
+            my $t = $torrents{$ih};
+            next if $seen{ builtin::refaddr($t) }++;
+            $data{torrents}{ unpack( 'H*', $ih ) } = $t->dump_state();
+        }
+        path($path)->spew_utf8( encode_json( \%data ) );
     }
 
-    # Methods | Public | Torrents
-    sub add_torrent {
-        my ($self, $args) = @_;
-        if (ref($args) ne q[HASH]) {
-            carp
-                q[Net::BitTorrent->add_torrent() requires params passed as a hash ref];
-            return;
+    method load_state ($path) {
+        use JSON::PP   qw[decode_json];
+        use Path::Tiny qw[path];
+        return unless path($path)->exists;
+        my $data = decode_json( path($path)->slurp_utf8 );
+        $node_id = $data->{node_id} if $data->{node_id};
+        for my $ih_hex ( keys %{ $data->{torrents} // {} } ) {
+            my $ih = pack( 'H*', $ih_hex );
+            if ( my $t = $torrents{$ih} ) {
+                $t->load_state( $data->{torrents}{$ih_hex} );
+            }
         }
-        $args->{q[Client]} = $self;
-        my $torrent = Net::BitTorrent::Torrent->new($args);
-        return if not defined $torrent;
-        return if $self->_locate_torrent($torrent->infohash);
-        return $torrents{refaddr $self}{$torrent->infohash} = $torrent;
     }
 
-    sub remove_torrent {
-        my ($self, $torrent) = @_;
-        if (   not blessed($torrent)
-            or not $torrent->isa(q[Net::BitTorrent::Torrent]))
-        {   carp
-                q[Net::BitTorrent->remove_torrent(TORRENT) requires a blessed Net::BitTorrent::Torrent object];
-            return;
-        }
-        for my $_peer ($torrent->peers) {
-            $_peer->_disconnect(
-                              q[Removing .torrent torrent from local client]);
-        }
-        $torrent->stop;    # XXX - Should this be here?
-        return delete $torrents{refaddr $self}{$torrent->infohash};
+    method finished () {
+        return [ grep { $_->is_finished } values %torrents ];
     }
 
-    # Methods | Public | Callback system
-    sub on_event {
-        my ($self, $type, $method) = @_;
-        carp sprintf q[Unknown callback: %s], $type
-            unless ___check_event($type);
-        $_event{refaddr $self}{$type} = $method;
-    }
-
-    # Methods | Private | Callback system
-    sub _event {
-        my ($self, $type, $args) = @_;
-        carp sprintf
-            q[Unknown event: %s. This is a bug in Net::BitTorrent; Report it.],
-            $type
-            unless ___check_event($type);
-        return $_event{refaddr $self}{$type}
-            ? $_event{refaddr $self}{$type}($self, $args)
-            : ();
-    }
-
-    # Functions | Private | Callback system
-    sub ___check_event {
-        my $type = shift;
-        return scalar grep { $_ eq $type } qw[
-            ip_filter
-            incoming_packet outgoing_packet
-            peer_connect    peer_disconnect
-            peer_read       peer_write
-            tracker_connect tracker_disconnect
-            tracker_read    tracker_write
-            tracker_success tracker_failure
-            piece_hash_pass piece_hash_fail
-            file_open       file_close
-            file_read       file_write
-            file_error
-        ];
-    }
-
-    # Methods | Private | Internal event scheduler
-    sub _schedule {
-        my ($self, $args) = @_;
-        if ((!$args) || (ref $args ne q[HASH])) {
-            carp
-                q[Net::BitTorrent->_schedule() requires params to be passed as a HashRef];
-            return;
-        }
-        if ((!$args->{q[Object]}) || (!blessed $args->{q[Object]})) {
-            carp
-                q[Net::BitTorrent->_schedule() requires a blessed 'Object' parameter];
-            return;
-        }
-        if ((!$args->{q[Time]}) || ($args->{q[Time]} !~ m[^\d+(?:\.\d+)?$])) {
-            carp
-                q[Net::BitTorrent->_schedule() requires an integer or float 'Time' parameter];
-            return;
-        }
-        if ((!$args->{q[Code]}) || (ref $args->{q[Code]} ne q[CODE])) {
-            carp q[Net::BitTorrent->_schedule() requires a 'Code' parameter];
-            return;
-        }
-        my $tid = $self->_generate_token_id();
-        $_schedule{refaddr $self}{$tid} = {Timestamp => $args->{q[Time]},
-                                           Code      => $args->{q[Code]},
-                                           Object    => $args->{q[Object]}
+    method wait ( $condition = undef, $timeout = undef ) {
+        my $start = time();
+        $condition //= sub {
+            my @t = values %torrents;
+            return 1 if !@t;
+            return ( grep { $_->is_finished } @t ) == @t;
         };
-        weaken $_schedule{refaddr $self}{$tid}{q[Object]};
-        return $tid;
-    }
-
-    sub _cancel {
-        my ($self, $tid) = @_;
-        if (!$tid) {
-            carp q[Net::BitTorrent->_cancel( TID ) requires an ID];
-            return;
-        }
-        if (!$_schedule{refaddr $self}{$tid}) {
-            carp sprintf
-                q[Net::BitTorrent->_cancel( TID ) cannot find an event with TID == %s],
-                $tid;
-            return;
-        }
-        return delete $_schedule{refaddr $self}{$tid};
-    }
-
-    sub _process_schedule {
-        my ($self) = @_;
-        for my $job (keys %{$_schedule{refaddr $self}}) {
-            if ($_schedule{refaddr $self}{$job}->{q[Timestamp]} <= time) {
-                &{$_schedule{refaddr $self}{$job}->{q[Code]}}(
-                                 $_schedule{refaddr $self}{$job}->{q[Object]})
-                    if defined $_schedule{refaddr $self}{$job}->{q[Object]};
-                delete $_schedule{refaddr $self}{$job};
+        while ( !$condition->($self) ) {
+            $self->tick(0.1);
+            if ( defined $timeout && ( time() - $start ) > $timeout ) {
+                return 0;
             }
+            select( undef, undef, undef, 0.05 );
         }
         return 1;
     }
-
-    # Methods | Private | Various
-    sub _generate_token_id {
-        return if defined $_[1];
-        my ($self) = @_;
-        $_tid{refaddr $self} ||= qq[\0] x 4;
-        my ($len) = ($_tid{refaddr $self} =~ m[^([a-z]+)]);
-        $_tid{refaddr $self} = (
-                   ($_tid{refaddr $self} =~ m[^z*(\0*)$])
-                   ? ($_tid{refaddr $self} =~ m[\0]
-                      ? pack(q[a] . (length $_tid{refaddr $self}),
-                             (q[a] x (length($len || q[]) + 1))
-                          )
-                      : (q[a] . (qq[\0] x (length($_tid{refaddr $self}) - 1)))
-                       )
-                   : ++$_tid{refaddr $self}
-        );
-        return $_tid{refaddr $self};
-    }
-
-    sub _build_reserved {
-        my ($self) = @_;
-        my @reserved = qw[0 0 0 0 0 0 0 0];
-        $reserved[5] |= 0x10;    # Ext Protocol
-        $reserved[7] |= 0x04;    # Fast Ext
-        return join q[], map {chr} @reserved;
-    }
-
-    sub as_string {
-        my ($self, $advanced) = @_;
-        my $dump
-            = !$advanced ? $peerid{refaddr $self} : sprintf <<'END',
-Net::BitTorrent
-
-Peer ID: %s
-DHT is %sabled (Node ID: %s)
-TCP Address: %s:%d
-UDP Address: %s:%d
-----------
-Torrents in queue: %d
-%s
-----------
-END
-            $peerid{refaddr $self},
-            $_use_dht{refaddr $self} ? q[En] : q[Dis],
-            unpack(q[H*], $_dht{refaddr $self}->node_id),
-            $self->_tcp_host, $self->_tcp_port, $self->_udp_host,
-            $self->_udp_port, (scalar keys %{$torrents{refaddr $self}}), join(
-            qq[\r\n],
-            map {
-                sprintf q[%40s (%d: %s)], $_->infohash, $_->status,
-                    $_->_status_as_string()
-                } values %{$torrents{refaddr $self}}
-            );
-        return defined wantarray ? $dump : print STDERR qq[$dump\n];
-    }
-
-    sub CLONE {
-        for my $_oID (keys %REGISTRY) {
-            my $_obj = $REGISTRY{$_oID};
-            my $_nID = refaddr $_obj;
-            for (@CONTENTS) {
-                $_->{$_nID} = $_->{$_oID};
-                delete $_->{$_oID};
-            }
-            delete $_schedule{$_nID};
-            weaken($REGISTRY{$_nID} = $_obj);
-            delete $REGISTRY{$_oID};
-        }
-        return 1;
-    }
-    DESTROY {
-        my ($self) = @_;
-        close($_tcp{refaddr $self}) if $_tcp{refaddr $self};
-        close($_udp{refaddr $self}) if $_udp{refaddr $self};
-        foreach my $conn (values %{$_connections{refaddr $self}}) {
-            close($conn->{q[Object]}->_socket) if $conn->{q[Object]};
-        }
-        for (@CONTENTS) { delete $_->{refaddr $self}; }
-        return delete $REGISTRY{refaddr $self};
-    }
-    1;
-}
-
-=pod
-
-=head1 NAME
-
-Net::BitTorrent - BitTorrent peer-to-peer protocol class
-
-=head1 Synopsis
-
-  use Net::BitTorrent;
-
-  my $client = Net::BitTorrent->new();
-
-  $client->on_event(
-      q[piece_hash_pass],
-      sub {
-          my ($self, $args) = @_;
-          printf(qq[pass: piece number %04d of %s\n],
-                 $args->{q[Index]}, $args->{q[Torrent]}->infohash);
-      }
-  );
-
-  my $torrent = $client->add_torrent({Path => q[a.legal.torrent]})
-      or die q[Cannot load .torrent];
-
-  $torrent->hashcheck;  # Verify any existing data
-
-  $client->do_one_loop() while 1;
-
-=head1 Description
-
-L<Net::BitTorrent|Net::BitTorrent> is a class based implementation of the
-BitTorrent Protocol for distributed data exchange.
-
-=head1 Constructor
-
-=over 4
-
-=item C<new ( { [ARGS] } )>
-
-Creates a L<Net::BitTorrent|Net::BitTorrent> object.  This constructor
-expects arguments as a hashref, using key-value pairs, all of which are
-optional.  The most common are:
-
-=over 4
-
-=item C<LocalHost>
-
-Local host bind address.  The value must be an IPv4 ("dotted quad") IP-
-address of the C<xxx.xxx.xxx.xxx> form.
-
-Default: C<0.0.0.0> (any address)
-
-=item C<LocalPort>
-
-TCP and UDP port opened to remote peers for incoming connections.  If
-handed a list of ports (ex. C<{ LocalPort =E<gt> [6952, 6881..6889] }>),
-L<Net::BitTorrent|Net::BitTorrent> will traverse the list, attempting to
-open on each of the ports until we succeed or run out of ports.
-
-Default: C<0> (any available, chosen by the OS)
-
-=back
-
-=back
-
-=head1 Methods
-
-Unless stated, all methods return either a C<true> or C<false> value,
-with C<true> meaning that the operation was a success.  When a method
-states that it returns some other specific value, failure will result in
-C<undef> or an empty list.
-
-=over 4
-
-=item C<add_torrent ( { ... } )>
-
-Loads a .torrent file and adds the
-L<Net::BitTorrent::Torrent|Net::BitTorrent::Torrent> object to the
-client's queue.
-
-Aside from the C<Client> parameter (which is filled in automatically),
-this method hands everything off to
-L<Net::BitTorrent::Torrent|Net::BitTorrent::Torrent>'s constructor, so
-see L<Net::BitTorrent::Torrent::new( )|Net::BitTorrent::Torrent/"new ( { [ARGS] } )">
-for a list of expected parameters.
-
-This method returns the new
-L<Net::BitTorrent::Torrent|Net::BitTorrent::Torrent> object on success.
-
-See also: L<torrents ( )|/"torrents ( )">,
-L<remove_torrent ( )|/"remove_torrent ( TORRENT )">,
-L<Net::BitTorrent::Torrent|Net::BitTorrent::Torrent>
-
-=item C<do_one_loop ( [TIMEOUT] )>
-
-Processes the internal schedule and handles activity of the various
-socket-containing objects (L<peers|Net::BitTorrent::Peer>,
-L<trackers|Net::BitTorrent::Torrent::Tracker>,
-L<DHT|Net::BitTorrent::DHT>).  This method should be called frequently
-to be of any use at all.
-
-The optional TIMEOUT parameter is the maximum amount of time, in seconds,
-possibly fractional, C<select()> is allowed to wait before returning.
-This TIMEOUT defaults to C<1.0> (one second).  To wait indefinitely,
-TIMEOUT should be C<-1.0> (C<...-E<gt>do_one_loop(-1)>).
-
-=item C<on_event ( TYPE, CODEREF )>
-
-Net::BitTorrent provides a convenient callback system.  To set a callback,
-use the C<on_event( )> method.  For example, to catch all attempts to read
-from a file, use C<$client-E<gt>on_event( 'file_read', \&on_read )>.
-
-See the L<Events|/Events> section for a list of events sorted by their
-related classes.
-
-=item C<peerid ( )>
-
-Returns the L<Peer ID|Net::BitTorrent::Version/"gen_peerid ( )">
-generated to identify this L<Net::BitTorrent|Net::BitTorrent> object
-internally, with remote L<peers|Net::BitTorrent::Peer>, and
-L<trackers|Net::BitTorrent::Torrent::Tracker>.
-
-See also: wiki.theory.org (http://tinyurl.com/4a9cuv),
-L<Peer ID Specification|Net::BitTorrent::Version/"Peer ID Specification">
-
-=item C<remove_torrent ( TORRENT )>
-
-Removes a L<Net::BitTorrent::Torrent|Net::BitTorrent::Torrent> object
-from the client's queue.
-
-=begin future
-
-Before the torrent torrent is closed, we announce to the tracker that we
-have 'stopped' downloading and a callback to store the current state is
-called.
-
-=end future
-
-See also: L<torrents ( )|/"torrents ( )">,
-L<add_torrent ( )|/"add_torrent ( { ... } )">,
-L<Net::BitTorrent::Torrent|Net::BitTorrent::Torrent>
-
-=item C<torrents ( )>
-
-Returns the list of queued L<torrents|Net::BitTorrent::Torrent>.
-
-See also: L<add_torrent ( )|/"add_torrent ( { ... } )">,
-L<remove_torrent ( )|/"remove_torrent ( TORRENT )">
-
-=back
-
-=head1 Events
-
-When triggered, client-wide callbacks receive two arguments: the
-C<Net::BitTorrent> object and a hashref containing pertinent information.
-For per-torrent callbacks, please see
-L<Net::BitTorrent::Torrent|Net::BitTorrent::Torrent/"Events">
-
-This is the current list of events and the information passed to
-callbacks.
-
-Note: This list is subject to change.  Unless mentioned specifically,
-return values from callbacks do not affect behavior.
-
-=head2 Net::BitTorrent::Peer
-
-=over
-
-=item C<ip_filter>
-
-This gives a client author a chance to block or accept connections with
-a peer before an initial handshake is sent.  The argument hash contains
-the following key:
-
-=over
-
-=item C<Address>
-
-IPv4:port (or, on rare occasions, hostname:port) address of the potential peer.
-
-=back
-
-Note: The return value from your C<ip_filter> callback determines how we
-proceed.  An I<explicitly false> return value (ie C<0>) means this peer
-should not be contacted and (in the case of an incoming peer) the
-connection is dropped.
-
-=item C<peer_connect>
-
-Triggered when we have both sent and received a valid handshake with
-the remote peer.  The argument hash contains the following keys:
-
-=over
-
-=item C<Peer>
-
-The remote L<peer|Net::BitTorrent::Peer> with whom we have established
-a connection.
-
-=back
-
-=item C<peer_disconnect>
-
-Triggered when a connection with a remote peer is lost or terminated.
-The argument hash contains the following keys:
-
-=over
-
-=item C<Peer>
-
-The remote L<peer|Net::BitTorrent::Peer> with whom we have established
-a connection.
-
-=item C<Reason>
-
-When possible, this is a 'user friendly' string.
-
-=back
-
-=item C<peer_read>
-
-This is triggered whenever we receive data from a remote peer via TCP.
-The argument hash contains the following keys:
-
-=over
-
-=item C<Peer>
-
-The L<peer|Net::BitTorrent::Peer> who sent the packet.
-
-=item C<Length>
-
-The amount of data, in bytes, sent by the peer.
-
-=back
-
-=item C<peer_write>
-
-This is triggered whenever we send data to a remote peer via TCP.  The
-argument hash contains the following keys:
-
-=over
-
-=item C<Peer>
-
-The L<peer|Net::BitTorrent::Peer> on the receiving end of this data.
-
-=item C<Length>
-
-The amount of data, in bytes, sent to the remote peer.
-
-=back
-
-=item C<outgoing_packet>
-
-Triggered when we send a packet to a remote peer.  The argument hash
-contains the following keys:
-
-=over
-
-=item C<Payload>
-
-The parsed data sent in the packet (when applicable) in a hashref.
-
-=item C<Peer>
-
-The remote L<peer|Net::BitTorrent::Peer> receiving this data.
-
-=item C<Type>
-
-The type of packet sent.  These values match the packet types exported
-from L<Net::BitTorrent::Protocol|Net::BitTorrent::Protocol/":types">.
-
-=back
-
-=item C<incoming_packet>
-
-Triggered when we receive a packet to a remote peer.  The argument hash
-contains the following keys:
-
-=over
-
-=item C<Payload>
-
-The parsed data sent in the packet (when applicable) in a hashref.
-
-=item C<Peer>
-
-The remote L<peer|Net::BitTorrent::Peer> sending this data.
-
-=item C<Type>
-
-The type of packet sent.  These values match the packet types exported
-from L<Net::BitTorrent::Protocol|Net::BitTorrent::Protocol/":types">.
-
-=back
-
-=back
-
-=head2 Net::BitTorrent::Torrent::File
-
-=over
-
-=item C<file_error>
-
-Triggered when we run into an error handling the file in some way. The
-argument hash contains the following keys:
-
-=over
-
-=item C<File>
-
-The L<file|Net::BitTorrent::Torrent::File> object related to this fault.
-
-=item C<Message>
-
-The error message describing what (may have) gone wrong.
-
-=back
-
-=item C<file_open>
-
-Triggered every time we open a file represented in a
-L<Net::BitTorrent::Torrent|Net::BitTorrent::Torrent> object. The argument
-hash contains the following keys:
-
-=over
-
-=item C<File>
-
-The L<file|Net::BitTorrent::Torrent::File> object.
-
-=item C<Mode>
-
-How the file is opened.  To simplify things, C<Net::BitTorrent> currently
-uses 'r' for read access and 'w' for write.
-
-=back
-
-=item C<file_close>
-
-Triggered every time we close a file.  The argument hash contains the
-following key:
-
-=over
-
-=item C<File>
-
-The L<file|Net::BitTorrent::Torrent::File> object.
-
-=back
-
-=item C<file_write>
-
-Triggered every time we write data to a file.  The argument hash contains
-the following keys:
-
-=over
-
-=item C<File>
-
-The L<file|Net::BitTorrent::Torrent::File> object.
-
-=item C<Length>
-
-The actual amount of data written to the file.
-
-=back
-
-=item C<file_read>
-
-Triggered every time we read data from a file.  The argument hash
-contains the following keys:
-
-=over
-
-=item C<File>
-
-The L<file|Net::BitTorrent::Torrent::File> object related to this fault.
-
-=item C<Length>
-
-The actual amount of data written to the file.
-
-=back
-
-=back
-
-=head2 Net::BitTorrent::Torrent::Tracker::HTTP/Net::BitTorrent::Torrent::Tracker::UDP
-
-Note: The tracker objects passed to these callbacks will either be a
-L<Net::BitTorrent::Torrent::Tracker::HTTP|Net::BitTorrent::Torrent::Tracker::HTTP>
-or a
-L<Net::BitTorrent::Torrent::Tracker::UDP|Net::BitTorrent::Torrent::Tracker::UDP>.
-
-=over
-
-=item C<tracker_connect>
-
-Triggered when we connect to a remote tracker.  The argument hash
-contains the following keys:
-
-=over
-
-=item C<Tracker>
-
-The tracker object related to this event.
-
-=item C<Event>
-
-If defined, this describes why we are contacting the tracker.  See the
-BitTorrent specification for more.
-
-=back
-
-Note: This callback is only triggered from
-L<TCP|Net::BitTorrent::Torrent::Tracker::HTTP> trackers, as
-L<UDP|Net::BitTorrent::Torrent::Tracker::UDP> is 'connection-less.'
-
-=item C<tracker_disconnect>
-
-Triggered when we disconnect from a remote tracker.  The argument hash
-contains the following key:
-
-=over
-
-=item C<Tracker>
-
-The tracker object related to this event.
-
-=back
-
-Note: This callback is only triggered from
-L<TCP|Net::BitTorrent::Torrent::Tracker::HTTP> trackers, as
-L<UDP|Net::BitTorrent::Torrent::Tracker::UDP> is 'connection-less.'
-
-=item C<tracker_success>
-
-Triggered when an announce attempt succeeds.  The argument hash contains
-the following keys:
-
-=over
-
-=item C<Tracker>
-
-The tracker object related to this event.
-
-=item C<Payload>
-
-The data returned by the tracker in a hashref.  The content of this
-payload based on what we receive from the tracker but these are the
-typical keys found therein:
-
-=over
-
-=item C<complete>
-
-The number of seeds in the swarm according to the tracker.
-
-=item C<incomplete>
-
-The number of leeches in the swarm according to the tracker.
-
-=item C<peers>
-
-A L<compact|Net::BitTorrent::Util/"compact ( LIST )"> list of peers in the swarm.
-
-=item C<min_interval>
-
-The minimum amount of time before we should contact the tracker again.
-
-=back
-
-=back
-
-=item C<tracker_failure>
-
-Triggered when an announce attempt fails.  The argument hash contains the
-following keys:
-
-=over
-
-=item C<Tracker>
-
-The tracker object related to this event.
-
-=item C<Reason>
-
-The reason given by the remote tracker (when applicable) or as defined
-by C<Net::BitTorrent> on socket errors.
-
-=back
-
-=item C<tracker_write>
-
-Triggered when we write data to a remote tracker.  The argument hash
-contains the following keys:
-
-=over
-
-=item C<Tracker>
-
-The tracker object related to this event.
-
-=item C<Length>
-
-The amount of data sent to the remote tracker.
-
-=back
-
-=item C<tracker_read>
-
-Triggered when data is read from a tracker.  The argument hash contains
-the following keys:
-
-=over
-
-=item C<Tracker>
-
-The tracker object related to this event.
-
-=item C<Length>
-
-The amount of data received from the remote tracker.
-
-=back
-
-=back
-
-=head2 Net::BitTorrent::Torrent
-
-=over
-
-=item C<piece_hash_fail>
-
-Triggered when a piece fails to validate.  The argument hash contains the
-following keys:
-
-=over
-
-=item C<Torrent>
-
-The L<Net::BitTorrent::Torrent|Net::BitTorrent::Torrent> object related to
-this event.
-
-=item C<Index>
-
-The zero-based index of the piece that failed to match the hash defined
-for it in the .torrent metadata.
-
-=back
-
-=item C<piece_hash_pass>
-
-Triggered when a previously missing piece validates.  The argument hash
-contains the following keys:
-
-=over
-
-=item C<Torrent>
-
-The L<Net::BitTorrent::Torrent|Net::BitTorrent::Torrent> object related
-to this event.
-
-=item C<Index>
-
-The zero-based index of the piece that was verified against the .torrent
-metadata.
-
-=back
-
-=item C<as_string ( [ VERBOSE ] )>
-
-Returns a 'ready to print' dump of the  object's data structure.  If
-called in void context, the structure is printed to C<STDERR>.
-C<VERBOSE> is a boolean value.
-
-=back
-
-=head1 Bugs
-
-Numerous, I'm sure.
-
-Please see the section entitled
-"L<Bug Reporting|Net::BitTorrent::Notes/"Bug Reporting">" in
-L<Net::BitTorrent::Notes|Net::BitTorrent::Notes> if you've found one.
-
-=head1 Notes
-
-=head2 Support Links
-
-Please refer to
-L<Net::BitTorrent::Notes|Net::BitTorrent::Notes/"Support and Information Links for C<Net::BitTorrent>">.
-
-=head2 Dependencies
-
-L<Net::BitTorrent|Net::BitTorrent> requires L<version|version> and
-L<Digest::SHA|Digest::SHA> to function and relies upon
-L<Module::Build|Module::Build> for installation.  As of perl 5.10, these
-are all CORE modules; they come bundled with the distribution.
-
-=head2 Examples
-
-For a demonstration of L<Net::BitTorrent|Net::BitTorrent>, see
-F<scripts/bittorrent.pl>.
-
-=head2 Installation
-
-See L<Net::BitTorrent::Notes|Net::BitTorrent::Notes/"Installation">.
-
-=head1 See Also
-
-http://bittorrent.org/beps/bep_0003.html - BitTorrent Protocol
-Specification
-
-L<Net::BitTorrent::Notes|Net::BitTorrent::Notes> - Random stuff.  More
-jibba jabba.
-
-L<Peer ID Specification|Net::BitTorrent::Notes/"Peer ID Specification"> -
-The standard used to identify L<Net::BitTorrent|Net::BitTorrent> in the
-wild.
-
-=head1 Acknowledgments
-
-Bram Cohen, for designing the base protocol and letting the community
-decide what to do with it.
-
-L Rotger
-
-C<#bittorrent> on Freenode for letting me idle.
-
-Michel Valdrighi for b2
-
-=head1 Author
-
-Sanko Robinson <sanko@cpan.org> - http://sankorobinson.com/
-
-CPAN ID: SANKO
-
-=head1 License and Legal
-
-Copyright (C) 2008-2009 by Sanko Robinson E<lt>sanko@cpan.orgE<gt>
-
-This program is free software; you can redistribute it and/or modify
-it under the terms of The Artistic License 2.0.  See the F<LICENSE>
-file included with this distribution or
-http://www.perlfoundation.org/artistic_license_2_0.  For
-clarification, see http://www.perlfoundation.org/artistic_2_0_notes.
-
-When separated from the distribution, all POD documentation is covered
-by the Creative Commons Attribution-Share Alike 3.0 License.  See
-http://creativecommons.org/licenses/by-sa/3.0/us/legalcode.  For
-clarification, see http://creativecommons.org/licenses/by-sa/3.0/us/.
-
-Neither this module nor the L<Author|/Author> is affiliated with
-BitTorrent, Inc.
-
-=for svn $Id: BitTorrent.pm d3c97de 2009-09-12 04:31:46Z sanko@cpan.org $
-
-=cut
+};
+#
+1;

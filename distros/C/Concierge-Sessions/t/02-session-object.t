@@ -304,13 +304,13 @@ subtest 'is_expired() returns true for expired session' => sub {
 
     my $result = $manager->new_session(
         user_id          => 'test_expired',
-        session_timeout  => 3,  # 3 second timeout (needs headroom for slow/debug builds)
+        session_timeout  => 3600,
     );
 
     my $session = $result->{session};
 
-    # Wait for session to expire
-    sleep(4);
+    # Force-expire by setting expires_at to the past (no sleep needed)
+    $session->{expires_at} = time() - 3600;
 
     is($session->is_expired(), 1, 'Session is expired after timeout');
 };
@@ -334,15 +334,15 @@ subtest 'is_expired() handles timeout boundary' => sub {
 
     my $result = $manager->new_session(
         user_id          => 'test_boundary',
-        session_timeout  => 3,  # 3 second timeout (needs headroom for slow/debug builds)
+        session_timeout  => 3600,
     );
 
     my $session = $result->{session};
 
     is($session->is_expired(), 0, 'Session not expired immediately after creation');
 
-    # Wait for session to expire
-    sleep(4);
+    # Force-expire by setting expires_at to the past (no sleep needed)
+    $session->{expires_at} = time() - 3600;
 
     is($session->is_expired(), 1, 'Session expires after timeout period');
 };
@@ -369,13 +369,13 @@ subtest 'is_valid() returns false for expired session' => sub {
 
     my $result = $manager->new_session(
         user_id          => 'test_invalid_expired',
-        session_timeout  => 3,  # 3 second timeout (needs headroom for slow/debug builds)
+        session_timeout  => 3600,
     );
 
     my $session = $result->{session};
 
-    # Wait for session to expire
-    sleep(4);
+    # Force-expire by setting expires_at to the past (no sleep needed)
+    $session->{expires_at} = time() - 3600;
 
     is($session->is_valid(), 0, 'Expired session not valid');
 };

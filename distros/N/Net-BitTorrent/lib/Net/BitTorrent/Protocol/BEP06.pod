@@ -1,0 +1,193 @@
+=pod
+
+=encoding utf-8
+
+=head1 NAME
+
+Net::BitTorrent::Protocol::BEP06 - Fast Extension Implementation
+
+=head1 SYNOPSIS
+
+    # Inherits from Net::BitTorrent::Protocol::BEP55 (Holepunching)
+    use Net::BitTorrent::Protocol::BEP06;
+
+    # Inform peer we have everything immediately
+    $proto->send_have_all( );
+
+    # Explicitly reject a request (instead of ignoring it)
+    $proto->send_reject( $index, $begin, $length );
+
+=head1 DESCRIPTION
+
+C<Net::BitTorrent::Protocol::BEP06> implements the Fast Extension (BEP 06). This extension improves swarm efficiency by
+adding several messages that reduce latency during startup and provide better error handling for block requests.
+
+=head1 METHODS
+
+=head2 C<send_have_all( )>
+
+Signals that the local client has all pieces.
+
+    $proto->send_have_all();
+
+This method sends a C<HAVE_ALL> message, signaling that we are a seeder.
+
+=head2 C<send_have_none( )>
+
+Signals that the local client has no pieces.
+
+    $proto->send_have_none();
+
+This method sends a C<HAVE_NONE> message, signaling that we are a leecher with no data yet.
+
+=head2 C<send_suggest( $index )>
+
+Suggests a piece to the remote peer.
+
+    $proto->send_suggest( 42 );
+
+This method sends a C<SUGGEST_PIECE> message, hinting that the specified piece is available and would be efficient to
+download.
+
+Expected parameters:
+
+=over
+
+=item C<$index>
+
+The zero-based piece index.
+
+=back
+
+=head2 C<send_reject( $index, $begin, $length )>
+
+Rejects a block request.
+
+    $proto->send_reject( 0, 0, 16384 );
+
+This method informs the peer that their request for a specific block has been rejected, allowing them to immediately
+retry other peers.
+
+Expected parameters:
+
+=over
+
+=item C<$index>
+
+The piece index.
+
+=item C<$begin>
+
+The byte offset within the piece.
+
+=item C<$length>
+
+The number of bytes requested.
+
+=back
+
+=head2 C<send_allowed_fast( $index )>
+
+Allows a piece to be requested even if choked.
+
+    $proto->send_allowed_fast( 5 );
+
+This method informs the peer that they can request the specified piece even if they are currently choked.
+
+Expected parameters:
+
+=over
+
+=item C<$index>
+
+The piece index.
+
+=back
+
+=head2 C<have_all> event
+
+Emitted when a C<HAVE_ALL> message is received.
+
+    $proto->on( have_all => sub ( $self ) { ... } );
+
+=head2 C<have_none> event
+
+Emitted when a C<HAVE_NONE> message is received.
+
+    $proto->on( have_none => sub ( $self ) { ... } );
+
+=head2 C<suggest> event
+
+Emitted when a C<SUGGEST_PIECE> message is received.
+
+    $proto->on( suggest => sub ( $self, $index ) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<$index>
+
+The suggested piece index.
+
+=back
+
+=head2 C<reject> event
+
+Emitted when a C<REJECT_REQUEST> message is received.
+
+    $proto->on( reject => sub ( $self, $index, $begin, $length ) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<$index>
+
+The piece index.
+
+=item C<$begin>
+
+The byte offset.
+
+=item C<$length>
+
+The length of the rejected block.
+
+=back
+
+=head2 C<allowed_fast> event
+
+Emitted when an C<ALLOWED_FAST> message is received.
+
+    $proto->on( allowed_fast => sub ( $self, $index ) { ... } );
+
+Expected parameters:
+
+=over
+
+=item C<$index>
+
+The allowed piece index.
+
+=back
+
+=head1 SPECIFICATIONS
+
+=over
+
+=item * BEP 06: Fast Extension
+
+=back
+
+=head1 AUTHOR
+
+Sanko Robinson E<lt>sanko@cpan.orgE<gt>
+
+=head1 COPYRIGHT
+
+Copyright (C) 2008-2026 by Sanko Robinson.
+
+This library is free software; you can redistribute it and/or modify it under the terms of the Artistic License 2.0.
+
+=cut

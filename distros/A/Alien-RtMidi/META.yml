@@ -18,7 +18,7 @@ configure_requires:
   ExtUtils::MakeMaker: '6.52'
   perl: '5.006'
 dynamic_config: 1
-generated_by: 'Dist::Zilla version 6.033, CPAN::Meta::Converter version 2.150010'
+generated_by: 'Dist::Zilla version 6.036, CPAN::Meta::Converter version 2.150010'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -32,15 +32,15 @@ no_index:
 provides:
   Alien::RtMidi:
     file: lib/Alien/RtMidi.pm
-    version: '0.09'
+    version: '0.12'
 requires:
   Alien::Base: '1.00'
   perl: '5.006'
 resources:
-  bugtracker: https://github.com/jbarrett/Alien-RtMidi/issues
-  homepage: https://github.com/jbarrett/Alien-RtMidi
-  repository: https://github.com/jbarrett/Alien-RtMidi.git
-version: '0.09'
+  bugtracker: https://codeberg.org/jbarrett/Alien-RtMidi/issues
+  homepage: https://codeberg.org/jbarrett/Alien-RtMidi/
+  repository: https://codeberg.org/jbarrett/Alien-RtMidi.git
+version: '0.12'
 x_alienfile:
   generated_by: 'Dist::Zilla::Plugin::AlienBuild version 0.33'
   requires:

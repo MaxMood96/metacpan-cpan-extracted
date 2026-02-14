@@ -1,0 +1,3 @@
+0.01 2026-02-13T11:34:22Z
+  - Development release: initial public API, deterministic schema + serialization, type inference, nullability inference, overrides, and documentation.
+

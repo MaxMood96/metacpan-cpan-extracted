@@ -6,6 +6,11 @@ Home page:    <https://metacpan.org/release/Class-XSConstructor>
 Bug tracker:  <https://github.com/tobyink/p5-class-xsconstructor/issues>
 Maintainer:   Toby Inkster (TOBYINK) <tobyink@cpan.org>
 
+0.023006	2026-02-13
+
+ [ Bug Fixes ]
+ - Adopt upstream Clone fixes and improvements.
+
 0.023005	2026-02-04
 
  [ Bug Fixes ]
