@@ -1,0 +1,26 @@
+Revision history for LTSV::LINQ
+
+1.00  2026-02-15
+    - Initial release
+    - LINQ-style query interface for LTSV files
+    - Inspired by Microsoft's LINQ (Language Integrated Query)
+    - LINQ(R) is a registered trademark of Microsoft Corporation
+    - Lazy evaluation with iterators
+    - DSL syntax for simple filtering (Where(key => value))
+    - Full method chaining support
+    - Compatible with Perl 5.005_03 and later
+    - Pure Perl implementation (no XS required)
+    
+    Methods implemented:
+    - Data source: From, FromLTSV, Range
+    - Filtering: Where (with DSL)
+    - Projection: Select, SelectMany
+    - Partitioning: Take, Skip, TakeWhile
+    - Ordering: OrderBy, OrderByDescending, Reverse
+    - Grouping: GroupBy
+    - Set operations: Distinct
+    - Quantifiers: All, Any
+    - Element access: First, FirstOrDefault, Last
+    - Aggregation: Count, Sum, Min, Max, Average
+    - Conversion: ToArray, ToList, ToLTSV
+    - Utility: ForEach

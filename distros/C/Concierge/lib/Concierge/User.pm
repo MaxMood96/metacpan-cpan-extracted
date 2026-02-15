@@ -1,11 +1,10 @@
-package Concierge::User v0.5.6;
+package Concierge::User v0.5.7;
 use v5.36;
 
-our $VERSION = 'v0.5.6';
+our $VERSION = 'v0.5.7';
 
 # ABSTRACT: User object enabled by Concierge
 
-use Carp qw<carp croak>;
 use File::Spec;
 use File::Path qw/make_path/;
 
@@ -179,7 +178,7 @@ Concierge::User - User object enabled by Concierge
 
 =head1 VERSION
 
-v0.5.6
+v0.5.7
 
 =head1 SYNOPSIS
 

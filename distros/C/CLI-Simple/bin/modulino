@@ -10,7 +10,7 @@
 #
 # To run a modulino...
 #   foo-bar-baz
-# 1.0.11
+# 1.0.12
 
 pgm=$(basename $0)
 

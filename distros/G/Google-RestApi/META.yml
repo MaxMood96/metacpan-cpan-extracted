@@ -1,5 +1,5 @@
 ---
-abstract: 'Connection to Google REST APIs (currently Drive and Sheets).'
+abstract: 'Connection to Google REST APIs (currently Drive, Sheets, and Calendar).'
 author:
   - 'Robin Murray <mvsjes@cpan.org>'
 build_requires:
@@ -60,5 +60,5 @@ requires:
   constant: '0'
 resources:
   repository: https://github.com/mvsjes2/p5-google-restapi.git
-version: v1.1.1
+version: v2.0.0
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

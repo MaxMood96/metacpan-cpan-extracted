@@ -1,0 +1,126 @@
+Artistic License 2.0
+
+Copyright (c) 2026, Bruce Van Allen <bva@cruzio.com>
+
+Everyone is permitted to copy and distribute verbatim copies of this license
+document, but changing it is not allowed.
+
+Preamble
+
+This license establishes the terms under which a given free software Package
+may be copied, modified, distributed, and/or redistributed. The intent is that
+the Copyright Holder maintains some artistic control over the development of
+that Package while still keeping the Package available as open source and
+open to community adoption, improvement, and extension.
+
+The intent of this license is to establish a freedom to share and improve the
+software regulated by this License, not to restrict your rights to use it for
+any purpose other than those that would violate the law or the rights of the
+Copyright Holder.
+
+Definitions
+
+"Copyright Holder" means the individual(s) or organization(s) that owns the
+copyright of the Package.
+
+"Contributor" means any person or entity that creates, modifies, or distributes
+any portion of the Package.
+
+"You" means any person or entity who exercises any rights granted to them in
+this License.
+
+"Package" means the original work of software, as well as any additions,
+changes, or modifications to that work, and any derivative works based on it.
+
+"Standard Version" refers to the Package if it has not been modified, or has
+been modified only in ways explicitly permitted by this License.
+
+"Modified Version" means the Package after you have modified it in any way.
+
+"Original License" means this Artistic License as distributed with the
+Standard Version of the Package, in its current form or any subsequent
+version that the Copyright Holder may release.
+
+License Grant
+
+The Copyright Holder hereby grants You a worldwide, royalty-free,
+non-exclusive license to exercise the following rights:
+
+1. To use the Standard Version in any manner that does not violate the
+   provisions of this License.
+
+2. To modify the Package and create Modified Versions.
+
+3. To distribute the Standard Version or Modified Versions, under the terms
+   of this License.
+
+4. To sublicense or distribute copies of the Modified Version to third parties.
+
+Conditions for Distribution
+
+You may distribute the Standard Version or Modified Versions of the Package
+under the following conditions:
+
+1. You must make sure that all recipients receive a copy of this License.
+
+2. You must cause any modified files to carry prominent notices stating that
+   You changed the files.
+
+3. You must retain all copyright, patent, trademark, and attribution notices
+   from the Standard Version.
+
+4. You may distribute your Modified Version as a standalone product, but if
+   you do, you must clearly distinguish it from the Standard Version and
+   rename it to avoid confusion with the original Package.
+
+5. If the Modified Version includes any files that are part of the Standard
+   Version, you must distribute them under the terms of this License.
+
+6. You may charge a fee for the physical act of transferring a copy, and you
+   may at your option offer warranty protection in exchange for a fee.
+
+Requirements for Modified Versions
+
+If you create a Modified Version, you must meet the following conditions:
+
+1. You must duplicate the notice in Exhibit A in each file of the Modified
+   Version, or prominently display it in a location where users would easily
+   find it.
+
+2. You must make the Modified Version available to the Copyright Holder,
+   and the Copyright Holder may include it in the Standard Version.
+
+3. You must cause any Modified Version to prominently display a notice
+   stating that it has been modified from the Standard Version.
+
+Inability to Comply
+
+If You cannot distribute the Modified Version while complying with all
+requirements of this License, You may still distribute it, but you must:
+(1) clearly indicate that it is a Modified Version, and (2) remove all
+references to the Copyright Holder and the original Package from the
+distribution, except that you may retain attribution notices in a manner
+that makes it clear that the Modified Version is not the Standard Version.
+
+Acceptance of Warranty
+
+Unless required by applicable law or agreed to in writing, the Copyright
+Holder provides the Package "AS IS" and WITHOUT WARRANTY OF ANY KIND,
+express or implied, including, but not limited to, the implied warranties
+of merchantability, fitness for a particular purpose, and non-infringement.
+
+Limitation of Liability
+
+In no event shall the Copyright Holder be liable for any direct, indirect,
+incidental, special, exemplary, or consequential damages arising in any way
+out of the use of the Package, even if advised of the possibility of such
+damage.
+
+Exhibit A: Copyright Notice
+
+Copyright (c) 2026, Bruce Van Allen <bva@cruzio.com>
+
+This software is Copyright (c) 2026 by Bruce Van Allen.
+
+This is free software, licensed under the Artistic License 2.0. You may
+redistribute and/or modify it under the same terms.

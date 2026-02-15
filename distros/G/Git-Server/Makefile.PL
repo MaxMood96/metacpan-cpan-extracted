@@ -10,7 +10,7 @@ WriteMakefile
         'Cwd'          => 0,
         'Getopt::Long' => 0,
         'File::Which'  => 0,
-        'IO::Trace'    => 0,
+        (`which strace 2>/dev/null` ? () : ('IO::Trace' => 0)),
     },
     dist => {
         COMPRESS => "gzip -9 -vf",

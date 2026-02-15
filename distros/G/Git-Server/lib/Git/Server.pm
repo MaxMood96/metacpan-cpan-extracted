@@ -1,6 +1,6 @@
 package Git::Server;
 
-our $VERSION = "0.036";
+our $VERSION = "0.037";
 
 1;
 
@@ -26,17 +26,18 @@ If you do not already have a git server or git repo ready, then make one:
 
 Put something like the following in its ~git/.ssh/authorized_keys:
 
-  command="git-server KEY=user1" ssh-ed25519 AAAA_OAX+blah_pub__ user1@dev
+  command="git-server REMOTE_USER=user1" ssh-ed25519 AAAA_OAX+blah_pub__ user1@dev
 
 Then the first authorized user to touch the repo should have full access:
 
   [user1@dev ~]$ git config --global user.name 'Mr Developer User1'
+  [user1@dev ~]$ git config --global user.email user1@dev.com
   [user1@dev ~]$ git clone ssh://git@git-host/projectx
   [user1@dev ~]$ cd projectx
   [user1@dev projectx]$ echo 'Hello world' >> README
   [user1@dev projectx]$ git add README
   [user1@dev projectx]$ git commit -m 'First commit' README
-  [user1@dev projectx]$ git push --set-upstream origin master
+  [user1@dev projectx]$ git push --set-upstream origin main
   [user1@dev projectx]$
 
 See INSTALL.md to setup granular read and write access and/or
@@ -61,5 +62,11 @@ Report feature requests or bugs here:
 https://github.com/hookbot/git-server/issues
 
 Pull requests welcome.
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2015-2026 by Rob Brown <bbb@cpan.org>
+
+This library is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
 
 =cut

@@ -1,6 +1,6 @@
 package IO::K8s::Api::Core::V1::Service;
 # ABSTRACT: Service is a named abstraction of software service (for example, mysql) consisting of local port (for example 3306) that the proxy listens on, and the selector that determines which pods will answer requests sent through the proxy.
-our $VERSION = '1.000';
+our $VERSION = '1.001';
 use IO::K8s::APIObject;
 with 'IO::K8s::Role::Namespaced';
 
@@ -26,7 +26,7 @@ IO::K8s::Api::Core::V1::Service - Service is a named abstraction of software ser
 
 =head1 VERSION
 
-version 1.000
+version 1.001
 
 =head1 DESCRIPTION
 
@@ -72,13 +72,13 @@ Torsten Raudssus <torsten@raudssus.de>
 
 =item *
 
-Jose Luis Martinez <jlmartinez@capside.com> (original author, inactive)
+Jose Luis Martinez <jlmartin@cpan.org> (original author, inactive)
 
 =back
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2018 by CAPSiDE.
+This software is Copyright (c) 2018 by Jose Luis Martinez.
 
 This is free software, licensed under:
 

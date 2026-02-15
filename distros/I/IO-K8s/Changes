@@ -1,5 +1,32 @@
 Revision history for IO-K8s
 
+1.001     2026-02-14 19:07:12Z
+  - Added IO::K8s::Types::Net with Net::IP-backed IP/CIDR type constraints
+  - Added convenience methods to IO::K8s::Role::APIObject: labels, annotations,
+    status conditions, and owner references for all API objects
+  - Added IO::K8s::Role::SpecBuilder for deep-path spec manipulation on CRD classes
+  - Added IO::K8s::Role::NetworkPolicy for building network policies (core K8s + Cilium)
+  - Added IO::K8s::Role::Routable for HTTP/gRPC routing (Ingress, HTTPRoute, IngressRoute)
+  - Added IO::K8s::Role::CertManaged for cert-manager Certificate/Issuer building
+  - Added IO::K8s::Role::HelmManaged for K3s HelmChart/HelmChartConfig building
+  - Added IO::K8s::Role::Loadbalanced for TraefikService traffic distribution
+  - Added IO::K8s::Role::MiddlewareBuilder for Traefik middleware configuration
+  - SpecBuilder is auto-applied to all CRD classes via IO::K8s::APIObject import
+  - Added Net::IP as dependency
+  - Added IO::K8s::Traefik with 10 Traefik CRD classes (traefik.io/v1alpha1)
+  - Added IO::K8s::K3s with 3 K3s CRD classes (helm.cattle.io/v1 and k3s.cattle.io/v1)
+  - Added IO::K8s::CertManager with 6 cert-manager CRD classes (cert-manager.io/v1 and acme.cert-manager.io/v1)
+  - Added IO::K8s::GatewayAPI with 5 Gateway API CRD classes (gateway.networking.k8s.io/v1 and v1beta1)
+  - Added IO::K8s::Cilium with 23 Cilium CRD classes (cilium.io/v2 and cilium.io/v2alpha1)
+  - Added IO::K8s::Role::ResourceMap for external resource map providers
+  - Added add() method to merge external resource maps (e.g. CRD packages)
+  - Added 'with' constructor parameter for merging resource maps at construction
+  - Added domain-qualified resource names (api_version/Kind) for collision handling
+  - expand_class(), new_object(), inflate() now support api_version disambiguation
+  - pk8s DSL functions accept optional api_version second argument
+  - resource_map default now returns a copy per instance (safe for mutation)
+  - Updated original author email and copyright holder
+
 1.000     2026-02-13 01:52:24Z
   - Major refactoring: Migrated from Moose to Moo for lighter dependencies
   - Replaced YAML::XS with YAML::PP for pure Perl implementation

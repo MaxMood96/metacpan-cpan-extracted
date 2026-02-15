@@ -1,6 +1,6 @@
 package Google::RestApi::SheetsApi4;
 
-our $VERSION = '1.1.1';
+our $VERSION = '2.0.0';
 
 use Google::RestApi::Setup;
 
@@ -129,7 +129,7 @@ sub spreadsheets_by_filter {
   my $drive = $self->drive();
   my $filter = $Spreadsheet_Filter;
   $filter .= " and ($extra_filter)" if $extra_filter;
-  return $drive->list($filter);
+  return $drive->list(filter => $filter);
 }
 
 sub spreadsheets {
@@ -1071,10 +1071,25 @@ Clear formatting in the range.
 
 =back
 
-=head1 STATUS
+=head1 SEE ALSO
 
-This api is currently in beta status. It is incomplete. There may be design flaws that need to be addressed in later releases. Later
-releases may break this release. Not all api calls have been implemented.
+=over
+
+=item * L<Google::RestApi> - The underlying REST API client
+
+=item * L<Google::RestApi::DriveApi3> - Google Drive API (related module)
+
+=item * L<Google::RestApi::CalendarApi3> - Google Calendar API (related module)
+
+=item * L<Google::RestApi::GmailApi1> - Google Gmail API (related module)
+
+=item * L<Google::RestApi::TasksApi1> - Google Tasks API (related module)
+
+=item * L<Google::RestApi::DocsApi1> - Google Docs API (related module)
+
+=item * L<https://developers.google.com/sheets/api/reference/rest> - Google Sheets API Reference
+
+=back
 
 =head1 AUTHORS
 

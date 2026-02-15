@@ -1,6 +1,6 @@
 package IO::K8s::Api::Core::V1::ConfigMapVolumeSource;
 # ABSTRACT: Adapts a ConfigMap into a volume. The contents of the target ConfigMap's Data field will be presented in a volume as files using the keys in the Data field as the file names, unless the items element is populated with specific mappings of keys to paths. ConfigMap volumes support ownership management and SELinux relabeling.
-our $VERSION = '1.000';
+our $VERSION = '1.001';
 use IO::K8s::Resource;
 
 k8s defaultMode => Int;
@@ -29,7 +29,7 @@ IO::K8s::Api::Core::V1::ConfigMapVolumeSource - Adapts a ConfigMap into a volume
 
 =head1 VERSION
 
-version 1.000
+version 1.001
 
 =head2 defaultMode
 
@@ -72,13 +72,13 @@ Torsten Raudssus <torsten@raudssus.de>
 
 =item *
 
-Jose Luis Martinez <jlmartinez@capside.com> (original author, inactive)
+Jose Luis Martinez <jlmartin@cpan.org> (original author, inactive)
 
 =back
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2018 by CAPSiDE.
+This software is Copyright (c) 2018 by Jose Luis Martinez.
 
 This is free software, licensed under:
 

@@ -9,6 +9,7 @@ lib/Concierge/Sessions/SQLite.pm
 LICENSE
 Makefile.PL
 MANIFEST
+MANIFEST.SKIP
 README.md
 SECURITY.md
 t/00-load.t

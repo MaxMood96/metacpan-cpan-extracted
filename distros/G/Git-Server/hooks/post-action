@@ -3,6 +3,8 @@
 use strict;
 use warnings;
 
+my $who = ($ENV{REMOTE_USER} || die "Auth required\n")."\@$ENV{REMOTE_ADDR}";
+
 if (!$ENV{DEBUG}) {
     pipe(my $rd_wait, my $wr_wake);
     if (fork) {
@@ -37,10 +39,6 @@ if (!$ENV{DEBUG}) {
     }
 }
 
-my $ssh = $ENV{SSH_CLIENT} or die "Only SSH allowed\n";
-my $KEY = $ENV{KEY} || "UNKNOWN";
-my $ip = $ssh =~ /^([\da-f\.:]+) /i ? $1 : "UNKNOWN";
-
 if ($ENV{IPC} and my $dir = $ENV{GIT_DIR}) {
     my $info = do {
         my $data = "";
@@ -71,7 +69,7 @@ if ($ENV{IPC} and my $dir = $ENV{GIT_DIR}) {
         $ref = $VAR1;
     }
     else {
-        die localtime().": [$KEY\@$ip] git-server: Unrecognized IPC transport: $info\n";
+        die localtime().": [$who] git-server: Unrecognized IPC transport: $info\n";
     }
     my $config = `git config --list 2>/dev/null`;
 
@@ -96,24 +94,24 @@ if ($ENV{IPC} and my $dir = $ENV{GIT_DIR}) {
         my $body = "";
         my $content_type = "";
         if ($cfg->{transport} =~ /^json$/i) {
-            die localtime().": [$KEY\@$ip] git-server: Unable to read JSON input:\n$info\n" unless $info =~ /^\s*\{/;
+            die localtime().": [$who] git-server: Unable to read JSON input:\n$info\n" unless $info =~ /^\s*\{/;
             $content_type = "application/json";
             if (eval { require JSON }) {
                 $body = JSON->new->canonical->encode($ref)."\n";
             }
             else {
-                warn localtime().": [$KEY\@$ip] git-server: Unable to load JSON.pm?\n";
+                warn localtime().": [$who] git-server: Unable to load JSON.pm?\n";
                 $body = "$info\n";
             }
         }
         else {
-            die localtime().": [$KEY\@$ip] git-server: Unimplemented transport [$cfg->{transport}]\n";
+            die localtime().": [$who] git-server: Unimplemented transport [$cfg->{transport}]\n";
         }
         if ($cfg->{method} =~ /^post$/i) {
             $method = "POST";
         }
         else {
-            die localtime().": [$KEY\@$ip] git-server: Unimplemented method [$cfg->{method}]\n";
+            die localtime().": [$who] git-server: Unimplemented method [$cfg->{method}]\n";
         }
         require IPC::Open3;
         require Symbol;
@@ -122,7 +120,7 @@ if ($ENV{IPC} and my $dir = $ENV{GIT_DIR}) {
             IPC::Open3::open3($in, $out, $err, qw(curl -k -s -w \n%{http_code} --data-binary @- -X), $method, "-HContent-type:$content_type", $url);
         };
         if (!$pid) {
-            warn localtime().": [$KEY\@$ip] webhook failed: ($@) $url\n";
+            warn localtime().": [$who] webhook failed: ($@) $url\n";
             next;
         }
         print $in $body;
@@ -136,7 +134,7 @@ if ($ENV{IPC} and my $dir = $ENV{GIT_DIR}) {
         while (<$err>) {
             $webhook_error .= $_;
             s/\s+$//;
-            warn localtime().": [$KEY\@$ip] webhook err: $_\n";
+            warn localtime().": [$who] webhook err: $_\n";
         }
         close $err;
         waitpid $pid, 0;
@@ -146,7 +144,7 @@ if ($ENV{IPC} and my $dir = $ENV{GIT_DIR}) {
             $status_code = $1;
         }
         if ($ref->{debug}) {
-            warn localtime().": [$KEY\@$ip] DEBUG webhook:\n";
+            warn localtime().": [$who] DEBUG webhook:\n";
             require Data::Dumper;
             warn Data::Dumper::Dumper({
                 WEBHOOK_ERROR_CODE => $curl_exit_status,

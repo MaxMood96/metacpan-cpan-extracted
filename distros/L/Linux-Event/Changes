@@ -1,0 +1,33 @@
+Revision history for Linux-Event
+
+0.006  2026-02-14
+  - Fix: stop() no longer falls into backend wait in the same tick after stop() is called.
+  - Fix: EPOLLONESHOT rearm is reliable even when the effective mask is unchanged.
+  - Fix: after(0) no longer disarms the timer; it arms a minimal non-zero delay for immediate scheduling.
+  - Fix: run()/run_once() derives epoll wait timeout from next timer deadline when no explicit timeout is provided.
+  - Tests: add regressions for stop/no-wait, EPOLLONESHOT rearm, oneshot watcher persistence, and after(0).
+  - Examples: add reliable oneshot+edge stress and a simple pipe throughput benchmark.
+
+0.004  2026-02-14
+  - First stable API release.
+  - Split timer queue into Linux::Event::Scheduler (Loop delegates scheduling).
+  - Add signalfd integration: $loop->signal(...) with strict 4-argument callback ABI.
+  - Add eventfd-based wakeups: $loop->waker (user watches $waker->fh).
+  - Add pidfd integration: $loop->pid(...) for process-exit notifications (one-shot, replacement semantics per PID).
+  - Freeze dispatch order for I/O watchers: error, then read, then write.
+  - Freeze callback ABIs per watcher type (I/O, timer, signal, pid).
+
+0.003_001  2026-02-12
+  - Development snapshot prior to 0.004 API freeze.
+  - Timers (after/at), I/O watchers (replacement semantics) and dispatch order tests.
+
+0.002_001  2026-02-10
+  - Introduce Linux::Event::Watcher (mutable watcher handles).
+  - IO API: watch(...) returns a watcher; masks are internal.
+  - Watchers support data (avoid closure captures) and enable/disable toggles.
+  - Simplify timer API to seconds: after($seconds) and at($seconds).
+
+0.001_001  2026-02-09
+  - First developer release of Linux::Event::Loop + Backend boundary.
+  - Epoll backend via Linux::Epoll.
+  - Deadline scheduler (ns) included.

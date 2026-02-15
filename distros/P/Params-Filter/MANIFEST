@@ -1,4 +1,5 @@
 Changes
+CONTRIBUTING.md
 dev-tools/benchmark-make_filter.pl
 dev-tools/benchmark-optimized-filter.pl
 dev-tools/benchmark-three-variants.pl
@@ -23,14 +24,17 @@ examples/oo_interface.pl
 examples/strict_construction.pl
 examples/wildcard.pl
 lib/Params/Filter.pm
+LICENSE
 Makefile.PL
 MANIFEST
-META.json
-META.yml
+MANIFEST.SKIP
 README.md
+SECURITY.md
 t/00-load.t
 t/01-functional.t
 t/02-oo-interface.t
 t/03-modifier-methods.t
 t/04-make_filter.t
 t/benchmark.t
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

@@ -2,7 +2,7 @@
 
 use warnings;
 use strict;
-use File::Which;
+use File::Which qw(which);
 
 my @run = ("git-shell", @ARGV);
 if (my $ipc = $ENV{IPC} and

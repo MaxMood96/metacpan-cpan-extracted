@@ -1,6 +1,6 @@
 # Concierge::Sessions - Session Management System
 
-**Version:** 0.8.1
+**Version:** 0.9.0
 
 Concierge::Sessions is a comprehensive session management system for Perl applications,
 providing flexible storage backends, sliding window expiration, and application-controlled data storage.
@@ -327,6 +327,41 @@ Bruce Van Allen <bva@cruzio.com>
 - [Time::HiRes](https://metacpan.org/pod/Time::HiRes) - High resolution time
 
 ## Version History
+### Version 0.9.0 2026-02-13
+    - Added META provides (resolves CPANTS meta_yml_has_provides)
+    - Added SECURITY.md with vulnerability reporting policy
+      (resolves CPANTS has_security_doc, security_doc_contains_contact)
+    - Added CONTRIBUTING.md with contribution guidelines
+      (resolves CPANTS has_contributing_doc)
+    - Added xt/pod-no-nonascii.t author test to guard against non-ASCII in POD
+    - Fixed stale POD versions in Base.pm, Session.pm, SQLite.pm, File.pm
+    - Bumped all module versions to v0.9.0
+### Version 0.8.9 2026-02-13
+    - Removed non-ASCII characters from POD in Files.pm
+### Version 0.8.8 2026-02-13
+    - Switched session ID generation from Crypt::URandom to Crypt::PRNG
+      (random_bytes), aligning with Concierge::Auth::Generators and reducing
+      overall Concierge suite dependencies
+    - CVE-2026-2439: Insecure session ID generation via uuidgen/rand fallback
+      was fixed in v0.8.5; this entry documents the assigned CVE
+### Version 0.8.7 2026-02-13
+    - Fixed CPAN tester timeout failures: session expiry in installation
+      tests now mocked via direct SQLite update (no sleep). Real-time
+      timeout tests moved to xt/ (author tests only, skipped under
+      AUTOMATED_TESTING).
+### Version 0.8.6 2026-02-12
+    - Rebuilt tarball with GNU tar (fixes PaxHeader issue on CPAN)
+### Version 0.8.5 2026-02-12
+    - Security: replaced insecure session ID generation (uuidgen/rand fallback)
+      with cryptographically secure random IDs via Crypt::URandom (160-bit entropy)
+    - Added Crypt::URandom as a dependency
+    - Further widened sliding window test timing margins for slow platforms
+### Version 0.8.4 2026-02-12
+    - Fixed integration test timing margins for slow platforms (Windows/Strawberry Perl)
+### Version 0.8.3 2026-02-11
+    - Fixed session expiration tests that were timing out too fast
+### Version 0.8.2 2026-02-11
+    - Improved documentation
 
 ### Version 0.8.1 (Current)
 

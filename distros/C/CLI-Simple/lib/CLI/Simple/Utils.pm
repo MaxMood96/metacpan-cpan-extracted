@@ -13,10 +13,10 @@ use parent qw(Exporter);
 
 our @EXPORT_OK = qw( slurp slurp_json dump_json normalize_options dmp choose);
 
-our $VERSION = '1.0.11';
+our $VERSION = '1.0.12';
 
 ########################################################################
-sub choose (&) { return $_[0]->(); }  ## no critic
+sub choose (&) { return $_[0]->(); } ## no critic
 ########################################################################
 
 ########################################################################
@@ -154,6 +154,12 @@ Returns a Perl object from a presumably JSON encoded file.
  slurp(file)
 
 Return the entire contents of a file.
+
+=head1 LICENSE AND COPYRIGHT
+
+This module is free software; you can redistribute it and/or modify it
+under the same terms as Perl itself.  See
+L<https://dev.perl.org/licenses/> for more information.
 
 =head1 AUTHOR
 

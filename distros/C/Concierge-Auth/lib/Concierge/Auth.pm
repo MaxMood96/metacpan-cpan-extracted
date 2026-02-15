@@ -1,4 +1,4 @@
-package Concierge::Auth v0.3.4;
+package Concierge::Auth v0.3.5;
 use v5.36;
 
 # ABSTRACT: Concierge authorization using Crypt::Passphrase

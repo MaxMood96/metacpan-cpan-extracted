@@ -1,6 +1,10 @@
 # Build artifacts
 IO-K8s-*/
 IO-K8s-*.tar.gz
+.build/
+
+# Test coverage
+cover_db/
 
 # Carton / local libs
 cpanfile.snapshot

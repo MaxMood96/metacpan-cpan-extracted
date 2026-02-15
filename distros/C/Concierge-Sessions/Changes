@@ -1,5 +1,8 @@
 Revision history for Concierge-Sessions
 
+v0.10.0  2026-02-14
+    - Updated test to account for timeout issues
+
 v0.9.0 2026-02-13
     - Added META provides (resolves CPANTS meta_yml_has_provides)
     - Added SECURITY.md with vulnerability reporting policy

@@ -1,6 +1,6 @@
 package IO::K8s::Api::Core::V1::Affinity;
 # ABSTRACT: Affinity is a group of affinity scheduling rules.
-our $VERSION = '1.000';
+our $VERSION = '1.001';
 use IO::K8s::Resource;
 
 k8s nodeAffinity => 'Core::V1::NodeAffinity';
@@ -26,7 +26,7 @@ IO::K8s::Api::Core::V1::Affinity - Affinity is a group of affinity scheduling ru
 
 =head1 VERSION
 
-version 1.000
+version 1.001
 
 =head2 nodeAffinity
 
@@ -65,13 +65,13 @@ Torsten Raudssus <torsten@raudssus.de>
 
 =item *
 
-Jose Luis Martinez <jlmartinez@capside.com> (original author, inactive)
+Jose Luis Martinez <jlmartin@cpan.org> (original author, inactive)
 
 =back
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2018 by CAPSiDE.
+This software is Copyright (c) 2018 by Jose Luis Martinez.
 
 This is free software, licensed under:
 

@@ -29,11 +29,11 @@ instantly after a push is triggered.
 If a <branch> is specified, then it will update to that branch.
 By default, the current branch is used.
 
-  Example: git deploy --branch master
+  Example: git deploy --branch main
 
   --OR--
 
-  Example: git deploy master
+  Example: git deploy main
 
 =head2 --chdir <dir>
 
@@ -110,7 +110,7 @@ As super user:
 
 As deploy user:
 
-  [puller@deploy-host projectz]$ git deploy --branch=master
+  [puller@deploy-host projectz]$ git deploy --branch=main
   [puller@deploy-host projectz]$ echo '0 * * * * git deploy --chdir ~/projectz </dev/null >/dev/null 2>/dev/null' | crontab -
   [puller@deploy-host projectz]$
 
@@ -120,7 +120,7 @@ Rob Brown <bbb@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2015-2025 by Rob Brown <bbb@cpan.org>
+Copyright 2015-2026 by Rob Brown <bbb@cpan.org>
 
 This library is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
 
@@ -132,7 +132,7 @@ use FindBin qw($Script $Bin);
 use Getopt::Long qw(GetOptions);
 use Fcntl qw(LOCK_EX LOCK_NB);
 
-our $VERSION = "0.036";
+our $VERSION = "0.037";
 
 my @invoked = ($0, @ARGV);
 my $cwd = getcwd();

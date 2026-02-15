@@ -1,7 +1,7 @@
-package Concierge::Setup v0.5.6;
+package Concierge::Setup v0.5.7;
 use v5.36;
 
-our $VERSION = 'v0.5.6';
+our $VERSION = 'v0.5.7';
 
 # ABSTRACT: Setup and configuration for Concierge desk initialization
 
@@ -33,7 +33,6 @@ sub build_quick_desk ($storage_dir, $app_fields=[]) {
     # Safety: Convert '.' or empty string to './desk' to avoid cluttering app root
     if (!$storage_dir || $storage_dir eq '.' || $storage_dir eq './') {
         $storage_dir = './desk';
-        carp "Storage directory set to './desk' (convention: avoid cluttering application root)";
     }
 
     # Ensure storage directory exists
@@ -124,7 +123,6 @@ sub build_desk ($config) {
     if (!$base_dir || $base_dir eq '.' || $base_dir eq './') {
         $base_dir = './desk';
         $config->{storage}{base_dir} = $base_dir;
-        carp "Storage directory set to './desk' (convention: avoid cluttering application root)";
     }
 
     # Determine storage locations (support separate dirs or single base_dir)
@@ -263,7 +261,7 @@ Concierge::Setup - One-time desk creation and configuration for Concierge
 
 =head1 VERSION
 
-v0.5.6
+v0.5.7
 
 =head1 SYNOPSIS
 
@@ -494,7 +492,7 @@ empty-string default.  The C<*> is stripped internally before
 validation -- stored values never contain it.  If no C<*> option
 exists and no explicit C<default> is set, the default is C<"">.
 
-B<Available attributes for field definition hashrefs:>
+=head3 Available attributes for field definition hashrefs
 
 =over 4
 

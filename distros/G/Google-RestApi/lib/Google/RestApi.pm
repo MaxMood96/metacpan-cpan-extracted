@@ -1,6 +1,6 @@
 package Google::RestApi;
 
-our $VERSION = '1.1.1';
+our $VERSION = '2.0.0';
 
 use Google::RestApi::Setup;
 
@@ -256,7 +256,7 @@ __END__
 
 =head1 NAME
 
-Google::RestApi - Connection to Google REST APIs (currently Drive and Sheets).
+Google::RestApi - Connection to Google REST APIs (currently Drive, Sheets, and Calendar).
 
 =head1 SYNOPSIS
 
@@ -286,7 +286,14 @@ Google::RestApi - Connection to Google REST APIs (currently Drive and Sheets).
   use Google::RestApi::DriveApi3;
   $drive = Google::RestApi::DriveApi3->new(api => $rest_api);
   $file = $drive->file(id => 'xxxx');
-  $copy = $file->copy(title => 'my-copy-of-xxx');
+  $copy = $file->copy(name => 'my-copy-of-xxx');
+  $file->update(description => 'Updated via API');
+
+  # permissions, comments, replies, revisions
+  $file->permission()->create(role => 'reader', type => 'anyone');
+  $comment = $file->comment()->create(content => 'Looks good!');
+  $comment->reply()->create(content => 'Thanks!');
+  @revisions = $file->revisions();
 
   print YAML::Any::Dump($rest_api->stats());
 
@@ -294,8 +301,9 @@ Google::RestApi - Connection to Google REST APIs (currently Drive and Sheets).
 
 =head1 DESCRIPTION
 
-Google Rest API is the foundation class used by the included Drive (L<Google::RestApi::DriveApi3>) and Sheets (L<Google::RestApi::SheetsApi4>) APIs. It is used
-to send API requests to the Google API endpoint on behalf of the underlying API classes.
+Google Rest API is the foundation class used by the included Drive (L<Google::RestApi::DriveApi3>), Sheets (L<Google::RestApi::SheetsApi4>),
+Calendar (L<Google::RestApi::CalendarApi3>), Gmail (L<Google::RestApi::GmailApi1>), Tasks (L<Google::RestApi::TasksApi1>), and Docs (L<Google::RestApi::DocsApi1>) APIs.
+It is used to send API requests to the Google API endpoint on behalf of the underlying API classes.
 
 =head1 NAVIGATION
 
@@ -304,6 +312,20 @@ to send API requests to the Google API endpoint on behalf of the underlying API 
 =item * L<Google::RestApi::DriveApi3>
 
 =item * L<Google::RestApi::DriveApi3::File>
+
+=item * L<Google::RestApi::DriveApi3::About>
+
+=item * L<Google::RestApi::DriveApi3::Changes>
+
+=item * L<Google::RestApi::DriveApi3::Drive>
+
+=item * L<Google::RestApi::DriveApi3::Permission>
+
+=item * L<Google::RestApi::DriveApi3::Comment>
+
+=item * L<Google::RestApi::DriveApi3::Reply>
+
+=item * L<Google::RestApi::DriveApi3::Revision>
 
 =item * L<Google::RestApi::SheetsApi4>
 
@@ -336,6 +358,42 @@ to send API requests to the Google API endpoint on behalf of the underlying API 
 =item * L<Google::RestApi::SheetsApi4::Request::Spreadsheet::Worksheet>
 
 =item * L<Google::RestApi::SheetsApi4::Request::Spreadsheet::Worksheet::Range>
+
+=item * L<Google::RestApi::CalendarApi3>
+
+=item * L<Google::RestApi::CalendarApi3::Calendar>
+
+=item * L<Google::RestApi::CalendarApi3::Event>
+
+=item * L<Google::RestApi::CalendarApi3::Acl>
+
+=item * L<Google::RestApi::CalendarApi3::CalendarList>
+
+=item * L<Google::RestApi::CalendarApi3::Colors>
+
+=item * L<Google::RestApi::CalendarApi3::Settings>
+
+=item * L<Google::RestApi::GmailApi1>
+
+=item * L<Google::RestApi::GmailApi1::Message>
+
+=item * L<Google::RestApi::GmailApi1::Attachment>
+
+=item * L<Google::RestApi::GmailApi1::Thread>
+
+=item * L<Google::RestApi::GmailApi1::Draft>
+
+=item * L<Google::RestApi::GmailApi1::Label>
+
+=item * L<Google::RestApi::TasksApi1>
+
+=item * L<Google::RestApi::TasksApi1::TaskList>
+
+=item * L<Google::RestApi::TasksApi1::Task>
+
+=item * L<Google::RestApi::DocsApi1>
+
+=item * L<Google::RestApi::DocsApi1::Document>
 
 =back
 
@@ -409,7 +467,7 @@ Returns the response hash from Google API.
 =back
 
 The last transaction details are passed to the callback. What you do with this information is up to you. For an example of how this is used, see the
-C<tutorial/sheets/*> scripts.
+C<tutorial/sheets/*> and C<tutorial/drive/*> scripts.
 
 Returns the previous callback, if any.
 
@@ -423,11 +481,6 @@ above, but can be accessed directly if you have no need to provide a callback.
 Returns some statistics on how many get/put/post etc calls were made. Useful for performance tuning during development.
 
 =back
-
-=head1 STATUS
-
-This api is currently in beta status. It is incomplete. There may be design flaws that need to be addressed in later releases. Later
-releases may break this release. Not all api calls have been implemented.
 
 =head1 AUTHORS
 

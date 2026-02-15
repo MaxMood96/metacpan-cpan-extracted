@@ -7,6 +7,7 @@ requires 'Scalar::Util';
 requires 'Import::Into';
 requires 'Package::Stash';
 requires 'namespace::clean';
+requires 'Net::IP';
 
 on 'test' => sub {
     requires 'Test::More';

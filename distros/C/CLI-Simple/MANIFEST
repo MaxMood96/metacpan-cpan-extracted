@@ -9,6 +9,7 @@ LICENSE
 Makefile.PL
 MANIFEST			This list of files
 README
+README.md
 share/MyScript.pm
 t/00-cli-simple-constants.t
 t/00-cli-simple-utils.t

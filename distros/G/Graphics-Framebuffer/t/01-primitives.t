@@ -9,7 +9,7 @@ use Test::More tests => 2;
 # use Data::Dumper;$Data::Dumper::Sortkeys=1; $Data::Dumper::Purity=1; $Data::Dumper::Deepcopy=1;
 
 BEGIN {
-    our $VERSION = '2.02';
+    our $VERSION = '2.03';
     use_ok('Graphics::Framebuffer');
 }
 
@@ -24,7 +24,7 @@ my $c  = "\e[36m";
 my $bk = "\e[40m";
 my $y  = "\e[33m";
 
-diag("\r ");
+diag("\n\r ");
 diag("\r$b" . q{   #####\    } . $rs);
 diag("\r$b" . q{  ##  __##\  } . $rs);
 diag("\r$b" . q{  ## /  \__| } . $rs );

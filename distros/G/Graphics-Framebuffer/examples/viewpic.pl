@@ -11,7 +11,7 @@ use Time::HiRes qw(sleep time alarm);
 use Getopt::Long;
 
 BEGIN {
-    our $VERSION = '1.04';
+    our $VERSION = '1.05';
 }
 
 # use Data::Dumper::Simple;$Data::Dumper::Sortkeys=1;
@@ -39,7 +39,7 @@ our $f = Graphics::Framebuffer->new(
     'SPLASH'           => FALSE,
     'SHOW_ERRORS'      => FALSE,
     'RESET'            => 1 - $noclear,
-    'IGNORE_X_WINDOWS' => $ignore_x,
+    'IGNORE_X_WINDOWS' => $ignore_x, # I still don't understand why anyone would want to use this
 	'DIAGNOSTICS'      => FALSE,
 );
 

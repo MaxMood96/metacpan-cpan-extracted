@@ -1,6 +1,6 @@
 # NAME
 
-Google::RestApi - API to Google Drive API V3 and Sheets API V4.
+Google::RestApi - API to Google Drive API V3, Sheets API V4, Calendar API V3, Gmail API V1, Tasks API V1, and Docs API V1.
 
 # SYNOPSIS
 
@@ -26,8 +26,29 @@ Google::RestApi - API to Google Drive API V3 and Sheets API V4.
 >
 >     use Google::RestApi::DriveApi3;
 >     $drive = Google::RestApi::DriveApi3->new(api => $rest_api);
+>
+>     # file operations
 >     $file = $drive->file(id => 'xxxx');
->     $copy = $file->copy(title => 'my-copy-of-xxx');
+>     $copy = $file->copy(name => 'my-copy-of-xxx');
+>     $file->update(name => 'new-name', description => 'new desc');
+>     $file->export(mime_type => 'application/pdf');
+>
+>     # permissions
+>     $file->permission()->create(role => 'reader', type => 'anyone');
+>     @perms = $file->permissions();
+>
+>     # comments and replies
+>     $comment = $file->comment()->create(content => 'Looks good!');
+>     $reply = $comment->reply()->create(content => 'Thanks!');
+>     @comments = $file->comments();
+>
+>     # revisions
+>     @revs = $file->revisions();
+>
+>     # drive-level operations
+>     $about = $drive->about();
+>     $changes = $drive->changes();
+>     @shared = $drive->shared_drives();
 >
 >     use Google::RestApi::SheetsApi4;
 >     $sheets_api = Google::RestApi::SheetsApi4->new(api => $rest_api);
@@ -98,7 +119,7 @@ Google::RestApi - API to Google Drive API V3 and Sheets API V4.
 
 # DESCRIPTION
 
-Google::RestApi is a framework for interfacing with Google products, currently Drive and Sheets.
+Google::RestApi is a framework for interfacing with Google products, currently Drive, Sheets, Calendar, Gmail, Tasks, and Docs.
 
 The biggest hurdle to using this library is actually setting up the authorization to access your Drive and Sheets account via a script.
 The Google development web space is huge and complex. All that's required here is an OAuth2 token to authorize your script that uses this
@@ -109,27 +130,53 @@ The synopsis above is a quick reference. For more detailed information, most of 
 
     Google::RestApi
     Google::RestApi::DriveApi3
+    Google::RestApi::DriveApi3::File
+    Google::RestApi::DriveApi3::About
+    Google::RestApi::DriveApi3::Changes
+    Google::RestApi::DriveApi3::Drive
+    Google::RestApi::DriveApi3::Permission
+    Google::RestApi::DriveApi3::Comment
+    Google::RestApi::DriveApi3::Reply
+    Google::RestApi::DriveApi3::Revision
+    Google::RestApi::CalendarApi3
+    Google::RestApi::CalendarApi3::Calendar
+    Google::RestApi::CalendarApi3::Event
+    Google::RestApi::CalendarApi3::Acl
+    Google::RestApi::CalendarApi3::CalendarList
+    Google::RestApi::CalendarApi3::Colors
+    Google::RestApi::CalendarApi3::Settings
+    Google::RestApi::GmailApi1
+    Google::RestApi::GmailApi1::Message
+    Google::RestApi::GmailApi1::Attachment
+    Google::RestApi::GmailApi1::Thread
+    Google::RestApi::GmailApi1::Draft
+    Google::RestApi::GmailApi1::Label
+    Google::RestApi::TasksApi1
+    Google::RestApi::TasksApi1::TaskList
+    Google::RestApi::TasksApi1::Task
+    Google::RestApi::DocsApi1
+    Google::RestApi::DocsApi1::Document
     Google::RestApi::SheetsApi4
     Google::RestApi::SheetsApi4::Spreadsheet
     Google::RestApi::SheetsApi4::Worksheet
     Google::RestApi::SheetsApi4::Range
 
-Once you have successfully created your OAuth2 token, you can run the integration tests to ensure everything is working correctly.
-Set the environment variable GOOGLE_RESTAPI_CONFIG = to the path to your auth config file for the integration scripts to run.
-See t/run_integration for further instructions.
-
-tutorial/sheets also has a step-by-step tutorial of creating and updating a spreadsheet, showing you the API calls and return values for each step. This will help you understand how the API interacts with Google.
+Once you have successfully created your OAuth2 token, you can run the tutorials to ensure everything is working correctly.
+Set the environment variable GOOGLE_RESTAPI_CONFIG to the path to your auth config file.
+See the tutorial/ directory for step-by-step tutorials covering Sheets, Drive, Calendar, Documents, Gmail, and Tasks.
+These will help you understand how the API interacts with Google.
 
 # STATUS
 
-This api is currently very much in beta status. It is incomplete.
-There may be design flaws that need to be addressed in later
-releases. Later releases may break this release. Not all api
-calls have been implemented. Tests are not comprehensive.
+Partial sheets and drive apis were hand-written by the author. Claude was used
+to generate the missing api calls for these, and the rest of the google apis
+were added using Claude, based on the existing patterns. If all works for you,
+it will be due to my stunning intellect. If it doesn't, or you see strange and
+wild code, it's all Claude's fault, nothing to do with the author.
 
-This is a work in progress, released at this stage in order to
-assist others, and in the hopes that others will contribute to
-its completeness.
+All mock exchanges were generated by running the unit tests and opening the
+live api to save the requests/responses for later playback. Because all the
+tests pass using this, it's a pretty good indicator that the calls work.
 
 # AUTHORS
 

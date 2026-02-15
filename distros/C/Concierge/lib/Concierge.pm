@@ -1,7 +1,7 @@
-package Concierge v0.5.6;
+package Concierge v0.5.7;
 use v5.36;
 
-our $VERSION = 'v0.5.6';
+our $VERSION = 'v0.5.7';
 
 # ABSTRACT: Service layer orchestrator for authentication, sessions, and user data
 
@@ -63,7 +63,7 @@ sub new_concierge {
 # =============================================================================
 
 sub open_desk ($class, $desk_location) {
-	croak unless -d $desk_location;
+	croak "Desk not found: *$desk_location*" unless -d $desk_location;
 	my $concierge	= Concierge->new_concierge(); 	# minimal object
 	$concierge->{desk_location} = $desk_location;
 
@@ -786,7 +786,7 @@ Concierge - Service layer orchestrator for authentication, sessions, and user da
 
 =head1 VERSION
 
-v0.5.6
+v0.5.7
 
 =head1 SYNOPSIS
 

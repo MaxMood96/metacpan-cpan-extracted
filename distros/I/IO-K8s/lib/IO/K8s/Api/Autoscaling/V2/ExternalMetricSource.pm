@@ -1,6 +1,6 @@
 package IO::K8s::Api::Autoscaling::V2::ExternalMetricSource;
 # ABSTRACT: ExternalMetricSource indicates how to scale on a metric not associated with any Kubernetes object (for example length of queue in cloud messaging service, or QPS from loadbalancer running outside of cluster).
-our $VERSION = '1.000';
+our $VERSION = '1.001';
 use IO::K8s::Resource;
 
 k8s metric => 'Autoscaling::V2::MetricIdentifier', 'required';
@@ -23,7 +23,7 @@ IO::K8s::Api::Autoscaling::V2::ExternalMetricSource - ExternalMetricSource indic
 
 =head1 VERSION
 
-version 1.000
+version 1.001
 
 =head2 metric
 
@@ -58,13 +58,13 @@ Torsten Raudssus <torsten@raudssus.de>
 
 =item *
 
-Jose Luis Martinez <jlmartinez@capside.com> (original author, inactive)
+Jose Luis Martinez <jlmartin@cpan.org> (original author, inactive)
 
 =back
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2018 by CAPSiDE.
+This software is Copyright (c) 2018 by Jose Luis Martinez.
 
 This is free software, licensed under:
 

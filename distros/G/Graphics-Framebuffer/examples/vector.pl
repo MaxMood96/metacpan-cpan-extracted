@@ -4,18 +4,33 @@
 # Virtual resolution is ALWAYS 3840 x 2160
 # it will be converted to the actual resolution when drawn
 # The commands are a subset of the actual GFB capabilites
+# Pixel sizes are depreciated
 
 use strict;
 
+use Time::HiRes 'sleep';
 use Graphics::Framebuffer;
+use Getopt::Long;
 
+use constant {
+    PI => 4 * atan2(1,1),
+};
 # use Data::Dumper::Simple;
 
 BEGIN {
-    our $VERSION = '0.02';
+    our $VERSION = '0.04';
 }
 
+my $delay = 1;
+
+GetOptions(
+    'wait=i' => \$delay,
+);
+
 my $F = Graphics::Framebuffer->new('SPLASH' => 0);
+
+$F->cls('OFF');
+$F->graphics_mode();
 
 my ($width, $height, $bpp) = $F->screen_dimensions();
 my ($xf, $yf) = ($width / 3840, $height / 2160);
@@ -25,15 +40,53 @@ chomp(my @text = <$FILE>);
 close($FILE);
 
 my $cmd = {
-    'WAIT' => sub {
-        my $wait = shift || 1;
-        sleep $wait;
+    'PLAY' => sub {
+        my $animation = $F->load_image(
+            {
+                'file'   => shift(@_),
+                'center' => CENTER_XY,
+            }
+        );
+
+		my $s = time + $delay;
+		while(time < $s) {
+			$F->play_animation($animation, 1);
+		}
+    },
+    'PLAY_MAX' => sub {
+        my $animation = $F->load_image(
+            {
+                'file'       => shift(@_),
+                'center'     => CENTER_XY,
+                'scale_type' => 'max',
+				'width'      => 3840 * $xf,
+				'height'     => 2160 * $yf,
+            }
+        );
+
+		my $s = time + $delay;
+		while(time < $s) {
+			$F->play_animation($animation, 1);
+		}
+    },
+    'GRAPHICS_MODE' => sub {
+        $F->graphics_mode();
+    },
+    'POLYGON' => sub {
+        my @coords = @_;
+        $F->polygon(
+            {
+                'coordinates' => \@coords,
+                'filled'      => 1,
+            }
+        );
     },
     'TEXT_MODE' => sub {
         $F->text_mode();
     },
-    'GRAPHICS_MODE' => sub {
-        $F->graphics_mode();
+    'WAIT' => sub {
+        my $wait = shift || 1;
+        sleep $wait;
     },
     'SPLASH' => sub {
         $F->splash();
@@ -82,7 +135,30 @@ my $cmd = {
             {
                 'x'          => shift(@_) * $xf,
                 'y'          => shift(@_) * $yf,
-                'pixel_size' => (scalar(@_)) ? shift(@_) : 1,
+            }
+        );
+    },
+    'STAR' => sub {
+        my ($X,$Y,$R) = @_;
+        my $alpha = (2 * PI) / 10;
+        my $radius = $R * $xf;
+        my @coords; # = ($X, $Y);
+
+        for (my $i = $radius; $i != 0; $i--) {
+            my $r = $radius * ($i % 2 + 1) / 2;
+            my $omega = $alpha * $i;
+            push(@coords,($r * sin($omega)) + $X, ($r * cos($omega)) + $Y);
+        }
+        $F->polygon({'coordinates' => \@coords, 'filled' => 0, 'antialiased' => 1});
+        $F->fill({'x' => $X, 'y' => $Y});
+    },
+    'DOT' => sub {
+        $F->circle(
+            {
+                'x'      => shift(@_) * $xf,
+                'y'      => shift(@_) * $yf,
+                'radius' => abs(shift(@_)),
+                'filled' => 1,
             }
         );
     },
@@ -93,7 +169,6 @@ my $cmd = {
                 'y'          => shift(@_) * $yf,
                 'xx'         => shift(@_) * $xf,
                 'yy'         => shift(@_) * $yf,
-                'pixel_size' => (scalar(@_)) ? shift(@_) : 1,
             }
         );
     },
@@ -104,7 +179,6 @@ my $cmd = {
                 'y'          => shift(@_) * $yf,
                 'radius'     => shift(@_) * (($xf + $yf) / 2),
                 'angle'      => shift(@_),
-                'pixel_size' => (scalar(@_)) ? shift(@_) : 1,
             }
         );
     },
@@ -113,7 +187,6 @@ my $cmd = {
             {
                 'x'          => shift(@_) * $xf,
                 'y'          => shift(@_) * $yf,
-                'pixel_size' => (scalar(@_)) ? shift(@_) : 1,
             }
         );
     },
@@ -170,7 +243,6 @@ my $cmd = {
                 'xradius'    => shift(@_) * $xf,
                 'yradius'    => shift(@_) * $yf,
                 'filled'     => (scalar(@_)) ? shift(@_) : 0,
-                'pixel_size' => (scalar(@_)) ? shift(@_) : 1,
             }
         );
     },
@@ -181,11 +253,10 @@ my $cmd = {
                 'y'          => shift(@_) * $yf,
                 'radius'     => shift(@_) * $yf,
                 'filled'     => (scalar(@_)) ? shift(@_) : 0,
-                'pixel_size' => (scalar(@_)) ? shift(@_) : 1,
             }
         );
     },
-    'POLYGON' => sub {
+    'POLYFRAME' => sub {
         $F->polygon(
             {
                 'coordinates' => [@_],
@@ -209,7 +280,6 @@ my $cmd = {
                 'yy'         => shift(@_) * $yf,
                 'filled'     => (scalar(@_)) ? shift(@_)       : 0,
                 'radius'     => (scalar(@_)) ? shift(@_) * $yf : 0,
-                'pixel_size' => (scalar(@_)) ? shift(@_)       : 1,
             }
         );
     },
@@ -222,7 +292,6 @@ my $cmd = {
                 'height'     => shift(@_) * $yf,
                 'filled'     => (scalar(@_)) ? shift(@_)       : 0,
                 'radius'     => (scalar(@_)) ? shift(@_) * $yf : 0,
-                'pixel_size' => (scalar(@_)) ? shift(@_)       : 1,
             }
         );
     },
@@ -313,7 +382,7 @@ my $cmd = {
             }
         );
     },
-    'CIP_RSET' => sub {
+    'CLIP_RSET' => sub {
         $F->clip_rset(
             {
                 'x'      => shift(@_) * $xf,
@@ -328,7 +397,13 @@ my $cmd = {
     },
 };
 
+foreach my $name (sort(keys %{$cmd})) {
+    print STDERR "$name\n";
+}
 parse(@text);
+sleep $delay;
+$F->cls('ON');
+$F->text_mode();
 
 sub parse {
     my @cmds = @_;
@@ -354,6 +429,7 @@ sub parse {
             warn "$c not found!";
         }
     } ## end foreach my $line (@cmds)
+    sleep $delay;
 } ## end sub parse
 
 __END__
@@ -378,135 +454,199 @@ There is also a timing delay to allow for specifically timed displays.
 
 =over 4
 
-=item B<WAIT> seconds
+=item B<ADD_MODE>
 
-Waits for the given number of seconds before showing the remaining scripted primitives.  Seconds is an integer.
-
-=item B<GRAPHICS_MODE>
-
-Set the framebuffer to graphics mode.  This shuts off all cursor and text printing functions of the terminal.  Make sure you restore text mode before exiting the vector layer.
-
-=item B<TEXT_MODE>
-
-Set the framebuffer back to text mode, after having been previous set to graphics mode with B<GRAPHICS_MODE>
-
-=item B<SPLASH>
-
-Shows the Graphics::Framebuffer splash screen.
-
-=item B<NORMAL_MODE>
-
-Sets the drawing mode to B<normal>.  This is the default mode and where pixels are completed replaced without regard to previously placed pixels.  This is the fastet drawing mode.
-
-=item B<XOR_MODE>
-
-Sets the drawing mode to B<xor> drawing mode.  Pixels will be XORed with what is already on the screen.
-
-=item B<OR_MODE>
-
-Sets the drawing mode to B<or> drawing mode.  Pixels will be ORed with what is already on the screen.
-
-=item B<AND_MODE>
-
-Sets the drawing mode to B<and> drawing mode.  Pixels will be ANDed with what is already on the screen.
+Sets the drawing mode to B<add> drawing mode.  Pixels will be ADDed with what is already on the screen.
 
 =item B<ALPHA_MODE>
 
 Sets the drawing mode to B<alpha> drawing mode.  Pixels will be overlayed on top of what is already on the screen based on the alpha (opacity) value of the FOREGROUND color.
 
-=item B<MASK_MODE>
+=item B<AND_MODE>
 
-Sets the drawing mode to B<mask> drawing mode.  Only pixels that are not the BACKGROUND color are drawn to the screen (mostly useful with blitting).
+Sets the drawing mode to B<and> drawing mode.  Pixels will be ANDed with what is already on the screen.
 
-=item B<UNMASK_MODE>
+=item B<ANGLE_LINE> x, y, radius, angle
 
-Sets the drawing mode to B<unmask> drawing mode.  Only pixels will be drawn on BACKGROUND colored pixels.
+Draws a line, in the FOREGROUND color, starting at point x,y with the length of radius at the given compass angle.
 
-=item B<ADD_MODE>
+=item B<ARC> x, y, radius, start degrees, end degrees [, granularity]
 
-Sets the drawing mode to B<add> drawing mode.  Pixels will be ADDed with what is already on the screen.
-
-=item B<SUBTRACT_MODE>
-
-Sets the drawing mode to B<subtract> drawing mode.  Pixels will be SUBTRACTEDed from what is already on the screen.
-
-=item B<MULTIPLY_MODE>
-
-Sets the drawing mode to B<multiply> drawing mode.  Pixels will be MULTIPLIEDed with what is already on the screen.
-
-=item B<DIVIDE_MODE>
-
-Sets the drawing mode to B<divide> drawing mode.  Pixels will be DIVIDEDed with what is already on the screen.
-
-=item B<CLS>
-
-The screen will be cleared with the BACKGROUND color.  Also sets the pixel location to 0,0
+Draws a circular arc at virtual center point x,y starting at start degree to end degree with the set radius, using the selected granularity
 
 =item B<ATTRIBUTE_RESET>
 
 Sets the FOREGROUND color to white, the BACKGROUND color to black, and resets clipping.
 
-=item B<PLOT> x, y [, pixel size]
+=item B<BACKGROUND> red, green, blue [, alpha]
 
-Plots a single pixel, in the FOREGROUND color, at the x,y coordinates.
-
-=item B<LINE> x, y, xx, yy [, pixel size]
-
-Draws a line, in the FOREGROUND color, from x,y to xx,yy.
-
-=item B<ANGLE_LINE> x, y, radius, angle [, pixel size]
-
-Draws a line, in the FOREGROUND color, starting at point x,y with the length of radius at the given compass angle.
-
-=item B<DRAWTO> x, y [, pixel size]
-
-Draws a line, in the FOREGROUND color, from the last plotted point to point x,y
+Sets the background color.
 
 =item B<BEZIER> points, pixel size, coordinate pairs
 
 Draws a bezier curve using the number of points, pixel size, and set number of coordinates (always in x,y pairs).
 
-=item B<ARC> x, y, radius, start degrees, end degrees, granularity
+=item B<BLIT_COPY> x, y, width, height, new x, new y
 
-=item B<FILLED_PIE> x, y, radius, start degrees, end degrees, granularity
-
-=item B<POLY_ARC> x, y, radius, start degrees, end degrees, granularity
-
-=item B<ELLIPSE> x, y, xradius, yradius [, filled] [, pixel size]
-
-=item B<CIRCLE> x, y, radius [, filled] [, pixel size]
-
-=item B<POLYGON> coordinate pairs
-
-=item B<FILLED_POLYGON> coordinate pairs
-
-=item B<BOX> x, y, xx, yy [, filled] [, corner radius] [, pixel size]
-
-=item B<RBOX> x, y, width, height [, filled] [, corner radius] [, pixel size]
-
-=item B<FOREGROUND> red, green, blue [, alpha]
-
-=item B<BACKGROUND> red, green, blue [, alpha]
-
-=item B<FILL> x, y
-
-=item B<REPLACE_COLOR> old red, old green, old blue, new red, new green, new blue
+One screen section can be copied to another location.
 
 =item B<BLIT_MOVE> x, y, width, height, new x, new y
 
-=item B<BLIT_COPY> x, y, width, height, new x, new y
+One screen section can be moved to another location.
 
-=item B<PERL>
+=item B<BOX> x, y, xx, yy [, filled] [, corner radius]
 
-=item B<SOFTWARE>
+Draws a box at point x,y to point xx,yy optionally filled and optionally with rounded corners of a specified radius.
+
+=item B<CIRCLE> x, y, radius [, filled]
+
+Draws a circle at center point x,y with the specified radius and optionally filled.
 
 =item B<CLIP_RESET>
 
-=item B<CLIP_SET> x, y, xx, yy
+Turns off clipping
 
 =item B<CLIP_RSET> x, y, width, height
 
+Sets a clipping rectangle
+
+=item B<CLIP_SET> x, y, xx, yy
+
+Sets a clipping rectangle.
+
+=item B<CLS>
+
+The screen will be cleared with the BACKGROUND color.  Also sets the pixel location to 0,0
+
+=item B<DIVIDE_MODE>
+
+Sets the drawing mode to B<divide> drawing mode.  Pixels will be DIVIDEDed with what is already on the screen.
+
+=item B<DOT> x, y, size
+
+Small solid (filled) circle in the size indicated (size = radius)
+
+=item B<DRAWTO> x, y
+
+Draws a line, in the FOREGROUND color, from the last plotted point to point x,y
+
+=item B<ELLIPSE> x, y, xradius, yradius [, filled]
+
+Draws an ellipse at x,y with xradius width and yradius height and optionally filled
+
+=item B<FILL> x, y
+
+Flood fill at starting point using the background color at that point as a mask.
+
+=item B<FILLED_PIE> x, y, radius, start degrees, end degrees [, granularity]
+
+Draws a pie wedge at virtual center point x,y starting at start degree to end degree with the set radius, using the selected granularity
+
+=item B<FILLED_POLYGON> coordinate pairs
+
+Draws a filles polygon from starting point and back to the starting point with other point pairs dictating shape.
+
+=item B<FOREGROUND> red, green, blue [, alpha]
+
+Sets the forground color.
+
+=item B<GRAPHICS_MODE>
+
+Set the framebuffer to graphics mode.  This shuts off all cursor and text printing functions of the terminal.  Make sure you restore text mode before exiting the vector layer.
+
+=item B<LINE> x, y, xx, yy
+
+Draws a line, in the FOREGROUND color, from x,y to xx,yy.
+
+=item B<MASK_MODE>
+
+Sets the drawing mode to B<mask> drawing mode.  Only pixels that are not the BACKGROUND color are drawn to the screen (mostly useful with blitting).
+
+=item B<MULTIPLY_MODE>
+
+Sets the drawing mode to B<multiply> drawing mode.  Pixels will be MULTIPLIEDed with what is already on the screen.
+
+=item B<NORMAL_MODE>
+
+Sets the drawing mode to B<normal>.  This is the default mode and where pixels are completed replaced without regard to previously placed pixels.  This is the fastet drawing mode.
+
+=item B<OR_MODE>
+
+Sets the drawing mode to B<or> drawing mode.  Pixels will be ORed with what is already on the screen.
+
+=item B<PERL>
+
+Turns off C acceleration
+
+=item B<PLAY> filename
+
+A animation (GIF) is played, centered on the screen.  "Q" must be pressed to continue
+
+=item B<PLAY_MAX> filename
+
+A animation (GIF) is played, proportionally scaled to the full screen and centered on the screen.  "Q" must be pressed to continue
+
+=item B<PLOT> x, y
+
+Plots a single pixel, in the FOREGROUND color, at the x,y coordinates.
+
+=item B<POLYFRAME> coordinate pairs
+
+Draws a polygon frame from starting point and back to the starting point with other point pairs dictating shape.  The coordinates must be in pairs (even numbers)
+
+=item B<POLYGON> coordinate pairs
+
+Draws a filled polygon from starting point and back to the starting point with other point pairs dictating shape.  The coordinates must be in pairs (even numbers)
+
+=item B<POLY_ARC> x, y, radius, start degrees, end degrees [, granularity]
+
+Draws a filled pie at virtual center point x,y starting at start degree to end degree with the set radius, using the selected granularity
+
+=item B<RBOX> x, y, width, height [, filled] [, corner radius]
+
+Draws a rounded box at point x,y with width and height, optionally filled.  Radius or corners can be optionally defined.
+
+=item B<REPLACE_COLOR> old red, old green, old blue, new red, new green, new blue
+
+Replaces the old color with the new color and clipping applies.
+
+=item B<SOFTWARE>
+
+Turns on C acceleration
+
+=item B<SPLASH>
+
+Shows the Graphics::Framebuffer splash screen.
+
+=item B<STAR> x, y, size
+
+Draw a 5 pointed star at location x,y (center point).  Use size to specify the size.
+
+=item B<SUBTRACT_MODE>
+
+Sets the drawing mode to B<subtract> drawing mode.  Pixels will be SUBTRACTEDed from what is already on the screen.
+
+=item B<TEXT_MODE>
+
+Set the framebuffer back to text mode, after having been previous set to graphics mode with B<GRAPHICS_MODE>
+
+=item B<UNMASK_MODE>
+
+Sets the drawing mode to B<unmask> drawing mode.  Only pixels will be drawn on BACKGROUND colored pixels.
+
 =item B<VSYNC>
+
+Waits for a vertical sync.
+
+Note:  Not many framebuffer drivers support this.
+
+=item B<WAIT> seconds
+
+Waits for the given number of seconds before showing the remaining scripted primitives.  Seconds is an integer.
+
+=item B<XOR_MODE>
+
+Sets the drawing mode to B<xor> drawing mode.  Pixels will be XORed with what is already on the screen.
 
 =back
 

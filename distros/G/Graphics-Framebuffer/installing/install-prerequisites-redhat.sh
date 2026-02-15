@@ -1,12 +1,23 @@
 #!/bin/bash
 
+$PKG = 'yum'
+
 # Install the prerequisites for Graphics::Framebuffer
 
-sudo yum update # Bring RedHat's module database up to date
+echo "Newer RedHat distributions have moved from YUM to DNF"
+echo "The default is YUM"
+read -p "Do you want to use DNF instead?" yn
+
+case $yn in
+    [Yy]* )
+        $PKG = "dnf"
+esac
+
+sudo $PKG update # Bring RedHat's module database up to date
 
 # Absolutely Needed
 
-sudo yum install gcc \
+sudo $PKG install gcc \
                  gcc-c++ \
                  make \
                  autoconf \
@@ -24,12 +35,12 @@ sudo yum install gcc \
 
 # Only needed if using the Yum installed Perl
 
-echo "Necessary OS prerequisites installed.  It is recommended to answer YES to the following question."
+echo "Necessary OS prerequisites installed, now to the Perl prerequisites.  It is recommended to answer YES to the following question:"
 
 read -p "Do you wish to install the packaged/system Perl module prerequisites?" yn
 case $yn in
     [Yy]* )
-        sudo yum install perl-math-gradient \
+        sudo $PKG install perl-math-gradient \
                          perl-math-bezier \
                          perl-file-map \
                          perl-imager \

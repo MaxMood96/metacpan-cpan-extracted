@@ -3,9 +3,7 @@
 use strict;
 use warnings;
 
-my $ssh = $ENV{SSH_CLIENT} or die "Only SSH allowed\n";
-my $ip = $ssh =~ /^([\da-f\.:]+) /i ? $1 : "UNKNOWN";
-my $KEY = $ENV{KEY} || "UNKNOWN";
+my $who = "$ENV{REMOTE_USER}\@$ENV{REMOTE_ADDR}";
 my $base = $ENV{GIT_DIR} or die "GIT hook ENV malfunction!\n";
 my $log = {};
 my $conf = `git config --list`;
@@ -73,7 +71,7 @@ if (my $file = $log->{logfile}) {
         close $fh;
     }
     else {
-        die localtime().": [$KEY\@$ip] git-server: SERVER ERROR! Unable to open log.logfile? [$file] $!\n";
+        die localtime().": [$who] git-server: SERVER ERROR! Unable to open log.logfile? [$file] $!\n";
     }
 }
 else {

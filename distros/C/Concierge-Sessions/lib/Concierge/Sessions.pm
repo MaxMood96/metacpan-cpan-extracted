@@ -1,4 +1,4 @@
-package Concierge::Sessions v0.9.0;
+package Concierge::Sessions v0.10.0;
 use v5.36;
 
 # ABSTRACT: Session manager with flexible session information storage

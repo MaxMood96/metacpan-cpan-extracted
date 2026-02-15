@@ -1,0 +1,47 @@
+Changes
+examples/01_timer_after.pl
+examples/02_timer_at.pl
+examples/03_watch_read_pipe.pl
+examples/04_watch_replace.pl
+examples/05_watch_oneshot.pl
+examples/06_unwatch_safe.pl
+examples/07_edge_triggered_note.pl
+examples/08_signal.pl
+examples/09_waker_thread.pl
+examples/10_waker_fork_pipe.pl
+examples/11_pid.pl
+examples/95_bench_oneshot.pl
+examples/96_stress_oneshot_edge_safe.pl
+examples/97_linux_epoll_oneshot_rearm.pl
+examples/98_regress_stop_no_backend_wait.pl
+examples/99_regress_epoll_oneshot_rearm.pl
+examples/all.pl
+lib/Linux/Event.pm
+lib/Linux/Event/Backend.pm
+lib/Linux/Event/Backend/Epoll.pm
+lib/Linux/Event/Loop.pm
+lib/Linux/Event/Pid.pm
+lib/Linux/Event/Scheduler.pm
+lib/Linux/Event/Signal.pm
+lib/Linux/Event/Wakeup.pm
+lib/Linux/Event/Watcher.pm
+LICENSE
+Makefile.PL
+MANIFEST			This list of files
+META.json			Module JSON meta-data (added by MakeMaker)
+META.yml			Module YAML meta-data (added by MakeMaker)
+README.md
+t/00-load.t
+t/01-timers.t
+t/02-io-pipe.t
+t/03-watchers.t
+t/04-dispatch-order.t
+t/05-fd-reuse-safety.t
+t/06-signal.t
+t/07-waker.t
+t/08-pid.t
+t/09-stop-no-backend-wait.t
+t/10-epoll-oneshot-rearm.t
+t/11-oneshot-stays-active.t
+t/12-after-zero.t
+t/98-no-stray-leading-bytes.t

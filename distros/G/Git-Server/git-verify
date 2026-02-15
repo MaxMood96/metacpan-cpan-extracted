@@ -1,0 +1,357 @@
+#!/usr/bin/env perl
+
+=pod
+
+=head1 NAME
+
+git-verify - Verify server configuration settings.
+
+=head1 SYNOPSIS
+
+  git-verify [ <REMOTE> ] [ /path/to/server/repo.git ... ]
+
+=head1 DESCRIPTION
+
+Command-line utility to verify git server configuration for capabilities that could be used by git-server.
+
+<REMOTE> can be any valid SCP-style Git URL, such as:
+
+  gituser@remote-git-server-host-name.com:my-repo.git
+
+Or it can be a full ssh:// Git URL, such as:
+
+  ssh://gituser@remote-git-server-host-name.com/my-repo.git
+
+Or if you don't care about any specific repo, then <REMOTE> can use simple ssh-style format, such as:
+
+  gituser@remote-git-server-host-name.com
+
+If no user@ is provided, then ssh will use your current username.
+
+If NO <REMOTE> is provided, then checks the current server where the command is run.
+
+If no repo directories are specified, then the HOME directory is scanned
+for any directory that smells like a git repo.
+
+=head1 TODO
+
+    * Only allow safe read-only operations appropriate for REMOTE_USER powers
+    * Validate scripts installation: git-server git-client git-deploy git-verify
+    * Validate core.hooksPath
+    * Validate ./hooks symlink for each repo if hooksPath not set
+    * Files and Directories chmod permissions
+    * Secured ~/.ssh/authorized_keys format, including "REMOTE_USER" settings
+    * Make sure ~/.ssh/authorized_keys has at least one ADMIN user
+    * ADMIN and ACL Management (if "ADMIN")
+    * Create / Remove repos (if "ADMIN")
+    * Validate or Configure "any-user"@server feature (if "ADMIN")
+
+=head1 SUPPORTED
+
+    * Validate git-server installation.
+    * Verify AllowAgentForwarding setting for two-way sync feature.
+    * Verify AcceptEnv setting.
+    * Check ExposeAuthInfo functionality to be able to determine key info, if desired.
+    * List accessible repos specified or scanned.
+
+=head1 AUTHOR
+
+Rob Brown <bbb@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright 2025-2026 by Rob Brown <bbb@cpan.org>
+
+This library is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
+
+=cut
+
+use strict;
+use warnings;
+use Cwd qw(abs_path);
+
+our $VERSION = "0.037";
+
+if (@ARGV and local $_ = $ARGV[0] || die "Bad arg\n" and !/^--/) {
+    s{^ssh://(|[^/:]+\@)\[([a-z0-9\-\.\:]+)\]:(\d+)(?:$|/)}{}i ||
+    s{^ssh://(|[^/:]+\@)\[?([a-z0-9\-\.]+)\]?:\[?(\d+)\]?(?:$|/)}{}i ||
+    s{^ssh://(|[^/:]+\@)\[?([a-z0-9\-\.\:]+)\]?(?:$|/)}{}i ||
+    s{^(|[^/:]+\@)\[([a-z0-9\-\.]+):(\d+)\](?:$|:)}{}i ||
+    s{^(|[^/:]+\@)\[([a-z0-9\-\.\:]+)\]()(?:$|:)}{}i ||
+    s{^(|[^/:]+\@)([a-z0-9\-\.]+)()(?:$|:)}{}i and do {
+        my $userprefix = $1;
+        my $remotehost = $2;
+        my $remoteport = $3 || 22;
+        my $resolvable = undef;
+        $resolvable = gethostbyname($remotehost) or eval {
+            require Socket;
+            my ($err, @res) = Socket::getaddrinfo($remotehost,22,{socktype=>Socket::SOCK_STREAM(),family=>Socket::AF_UNSPEC(),flags=>((eval{Socket::AI_ALL()}||0)|(eval{Socket::AI_V4MAPPED()}||0))});
+            $resolvable = @res;
+            1;
+        } or eval {
+            require File::Which; # Try "dig" as last-ditch effort:
+            my $dig = File::Which::which("dig") or die "no dig";
+            $resolvable = `$dig +short $remotehost A $remotehost AAAA 2>/dev/null`;
+            1;
+        } or $resolvable = 1; # If IPv6 resolvers are unavailable, then assume it's valid, and just blindly run ssh
+        if ($resolvable) {
+            length?$ARGV[0]=$_:shift;
+            $ENV{XMODIFIERS}="v=1";
+            exec qw[ssh
+                -o PubKeyAuthentication=yes
+                -o KbdInteractiveAuthentication=no
+                -o PasswordAuthentication=no
+                -o SendEnv=XMODIFIERS
+                -p], $remoteport,
+                "$userprefix$remotehost",abs_path($0),(
+                !(grep {/[^\w\-.\/]/} @ARGV) ? @ARGV :   # Unable to find any potentionally stank chars so it's safe to pass @ARGV as is.
+                "--escaperepos",map{unpack"H*",$_}@ARGV  # Otherwise, encode every character for all repos just to be extra safe.
+            ) or die "$0: remote verification failed.\n";
+        }
+    };
+}
+
+my @repo_dirs = @ARGV;
+if (!@repo_dirs) {
+    local $_ = $ENV{SSH_ORIGINAL_COMMAND} || "";
+    @repo_dirs = split and $repo_dirs[0] =~ m{(^|/)git-verify$} and shift @repo_dirs;
+}
+if (@repo_dirs and $repo_dirs[0] eq "--escaperepos") {
+    shift @repo_dirs;
+    foreach (@repo_dirs) {
+        $_ = pack "H*",$_;
+    }
+}
+
+sub run_how_cmd {
+    my $stderr = shift;
+    my @cmd = @_;
+    if (my $pid = open my $fh_out, "-|") {
+        # Parent process waiting for kid to say something
+        my $output = join "", <$fh_out>;
+        waitpid $pid, 0;
+        my $exit_status = $?;
+        close $fh_out;
+        $? = $exit_status;
+        return $output;
+    }
+    # Child process
+    open STDERR, $stderr;
+    exec @cmd or die "$cmd[0]: Failed to spawn? $!\n";
+}
+
+sub run_output_ignore_err {
+    return run_how_cmd ">/dev/null", @_;
+}
+
+sub run_output_include_err {
+    return run_how_cmd ">&STDOUT", @_;
+}
+
+#1. Check git-server install
+my $bin;
+if (eval { require File::Which;1 }) {
+    my $prog = "git-server";
+    $bin = File::Which::which($prog);
+    if ($bin) {
+        print "$prog found in PATH [$bin]: OK\n";
+        $bin = $prog;
+    }
+    elsif (($bin = $0) =~ s/-verify.*/-server/ and -x $bin) {
+        print "git-server outside of PATH [$bin]: FAIR\n";
+    }
+    else {
+        print "git-server program missing: BAD\n";
+        $bin = $prog;
+    }
+}
+
+#2. Verify SSH Method
+if (my $user = $ENV{REMOTE_USER}) {
+    if ($ENV{SSH_AUTH_SOCK}) {
+        if (my @pubkeys = `ssh-add -l 2>/dev/null`) {
+            print "REMOTE_USER: $user: AllowAgentForwarding is enabled: OK\n";
+        }
+        else {
+            print "REMOTE_USER: $user: AllowAgentForwarding is mostly enabled, but no pubkeys forwarded: FINE\n";
+        }
+    }
+    else {
+        print "REMOTE_USER: $user: AllowAgentForwarding is not enabled: FINE\n";
+    }
+    if ($ENV{XMODIFIERS} && $ENV{XMODIFIERS} eq "v=1") {
+        print "REMOTE_USER: $user: AcceptEnv is sufficient: OK\n";
+    }
+    else {
+        # "AcceptEnv XMODIFIERS" is required to support several git-deploy features
+        # and to support "-o" (or "-O") GIT_OPTION_* settings in "pre-" hooks
+        # and to allow enabling DEBUG if needed.
+        print "REMOTE_USER: $user: Missing [AcceptEnv XMODIFIERS] on sshd configuration: CRIPPLED SERVER!\n";
+    }
+    if ($ENV{SSH_USER_AUTH}) {
+        print "REMOTE_USER: $user: ExposeAuthInfo is enabled: OK\n";
+    }
+    else {
+        print "REMOTE_USER: $user: ExposeAuthInfo is disabled but authentication working: FINE\n";
+    }
+    if (my $count = @repo_dirs) {
+        print "REMOTE_USER: $user: Filtering $count specified repos for access: OK\n";
+    }
+    else {
+        print "REMOTE_USER: $user: Scanning remote repos with access: OK\n";
+    }
+}
+elsif (local $_ = $ENV{SSH_CONNECTION}) {
+    if ($ENV{SSH_ORIGINAL_COMMAND} and my $serv = $ENV{SERVER_ADDR}) {
+        print "REMOTE_USER: Half-burnt configuration in [ForceCommand] or [SHELL] or [command=] setting in $serv:$ENV{HOME}/.ssh/authorized_keys: POOR\n";
+    }
+    else {
+        ($ENV{REMOTE_ADDR}, $ENV{REMOTE_PORT}, $ENV{SERVER_ADDR}, $ENV{SERVER_PORT}) = split;
+    }
+    my $how;
+    if ($ENV{SSH_USER_AUTH} and open my $auth, "<", $ENV{SSH_USER_AUTH}) {
+        $how = $1 if <$auth> =~ /^publickey (.+)/;
+        close $auth;
+    }
+    my $keyfile = "$ENV{HOME}/.ssh/authorized_keys";
+    if (!$how) {
+        print "REMOTE_USER: ExposeAuthInfo is disabled: POOR! Enable it for hints on how to better configure $keyfile\n";
+    }
+    elsif (open my $keys, "<", $keyfile) {
+        my $label = "";
+        my $line = 0;
+        my @matches = ();
+        while (<$keys>) {
+            $line++;
+            my $pos = index($_, $how);
+            if ($pos >= 0) {
+                $label = $1 if substr($_,$pos+length($how)) =~ /^\s*(\S[^\r\n]*)/;
+                next if /^\s*\#/; # Ignore comments
+                push @matches, [$line, $pos, $label, $_];
+            }
+        }
+        close $keys;
+        $label ||= "$ENV{USER}\@$ENV{REMOTE_ADDR}";
+        if (@matches) {
+            foreach my $k (@matches) {
+                my $o = substr($k->[3],0,$k->[2]);
+                if ($o =~ /(?:^|,)command="[^\"]*git-server\b[^\"]*"/i and
+                    $o =~ /(?:^|,)command="[^\"]*git-server[^\"]* (KEY|REMOTE_USER)=(\w+)\b[^\"]*"/i ||
+                    $o =~ /(?:^|,)environment="(KEY|REMOTE_USER)=(\w+)\b[^\"]*"/i) {
+                    my $var = $1;
+                    my $user = $2;
+                    if ($var eq "REMOTE_USER") {
+                        print qq{REMOTE_USER: $user: Entry appears fine yet still malfunctioned somehow! $keyfile:$k->[0]:$k->[3]};
+                    }
+                    else {
+                        print "REMOTE_USER: $user: Line $k->[0] should use REMOTE_USER=$user instead of $var=$user: BAD\n";
+                    }
+                }
+                elsif ($k->[2] > 0) {
+                    print qq{REMOTE_USER: Confusing preliminary directives [$o] fail to define REMOTE_USER at Line $k->[0] of $keyfile: BAD\n};
+                }
+                else {
+                    print "REMOTE_USER: Instead of missing options, try something like this in $keyfile Line $k->[0]:\n";
+                    print qq{command="$bin REMOTE_USER=user" $k->[3]\n};
+                }
+            }
+        }
+        else {
+            print "REMOTE_USER: [$ENV{SERVER_ADDR}:$keyfile] Unrecognized format allowed key but still not found. Try something like this:\n";
+            print qq{command="$bin REMOTE_USER=user" $how $label\n\n};
+        }
+    }
+    else {
+        print "REMOTE_USER: BROKEN! Unable to read [$keyfile] [$!]\n";
+    }
+}
+else {
+    if (my $count = @repo_dirs) {
+        print "Commandline filtering $count specified repos: OK\n";
+    }
+    else {
+        print "Commandline scanning $ENV{HOME} for repos: OK\n";
+    }
+}
+
+#3. Scan repos
+-d ($ENV{HOME} ||= [getpwuid $<]->[7]) or die "HOME broken";
+if (!@repo_dirs and opendir my $fh, $ENV{HOME}) {
+    my @nodes = readdir $fh;
+    closedir $fh;
+    foreach my $node (@nodes) {
+        push @repo_dirs, "$ENV{HOME}/$node" if -f "$ENV{HOME}/$node/config" && -d "$ENV{HOME}/$node/refs" && -d "$ENV{HOME}/$node/objects" or -f "$ENV{HOME}/$node/.git/config";
+    }
+}
+my @repo_info;
+if (@repo_dirs) {
+    my %seen;
+    foreach my $repo (@repo_dirs) {
+        $repo =~ s{/+$}{}; # Remove trailing slashes.
+        next if $repo =~ /\.workingdir$/;
+        my $gitdir = undef;
+        if (-d $repo) {
+            $gitdir = $repo;
+        }
+        else {
+            $repo =~ s/\.git$//;
+            my @check = ("$repo.git/.git", "$repo.git", "$repo/.git", $repo);
+            if (0 != index $repo, $ENV{HOME}) { # Not starting with $HOME
+                push @check, map { "$ENV{HOME}/$_" } @check; # Try with prepended $HOME too
+            }
+            foreach (@check) {
+                $gitdir = $_ and next if -d;
+            }
+        }
+        next if !$gitdir;
+        $gitdir = abs_path $gitdir; # Collapse duplicate slashes. Get rid of any "/./" silly sandwiches. Also removes trailing slashes (although should already be gone by now).
+        (my $nice = $gitdir) =~ s{(?:/|\.git)+$}{};
+        $nice =~ s{^\Q$ENV{HOME}\E/}{} if $ENV{REMOTE_USER}; # Hide $HOME if REMOTE
+        next if $seen{$nice}++;
+        my $conf = run_output_include_err "git","-C",$gitdir,"config","--list","--local";
+        my $info = { nice => $nice, dir => $gitdir, config => $conf };
+        my $include = $ENV{REMOTE_USER} ? 0 : 1;
+        foreach my $setting (qw[acl.writers acl.readers acl.deploy core.bare proxy.url]) {
+            my $name = $setting =~ /^(\w+)\.(\w+)$/ ? $2 : next;
+            my $section = $1;
+            if ($conf =~ /^\Q$setting\E=(.*)/m) {
+                $info->{$name} = $1;
+                $info->{permission} ||= $include = $name if !$include and $section eq "acl" and $1 =~ /(^|,)\Q$ENV{REMOTE_USER}\E($|,)/;
+            }
+            else {
+                $info->{$name} = "";
+            }
+        }
+        push @repo_info, $info if $include;
+    }
+}
+print "Found ".scalar(@repo_info)." repos\n";
+if (@repo_info) {
+    foreach my $info (@repo_info) {
+        my $access = $info->{permission} ? " [you have $info->{permission} permission]" : "";
+        if ($info->{bare} eq "true") {
+            if (my $proxy = $info->{url}) {
+                if (-d "$info->{dir}.workingdir") {
+                    print "$info->{nice}: Found Bare Repo proxy linked [$proxy]: OK$access\n";
+                }
+                else {
+                    print "$info->{nice}: Found Bare Repo with broken proxy [$proxy]: POOR$access\n";
+                }
+            }
+            else {
+                print "$info->{nice}: Found Bare Repo: OK$access\n";
+            }
+        }
+        elsif ($info->{bare} eq "false") {
+            if ($info->{config} =~ m{^remote.*url=(.+)}m) {
+                print "$info->{nice}: Found Working Dir [$1]: FAIR\n";
+            }
+            else {
+                print "$info->{nice}: Found Non-Bare Hokey Checkout Missing Remote: POOR\n";
+            }
+        }
+        else {
+            print "$info->{nice}: Unrecognized Git Repo: BORKED!\n";
+        }
+    }
+}

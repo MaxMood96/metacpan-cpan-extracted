@@ -1,5 +1,5 @@
 package IO::K8s::Api::Storage::V1beta1::VolumeAttachmentList;
-our $VERSION = '1.000';
+our $VERSION = '1.001';
 # ABSTRACT: Deprecated - use IO::K8s::List instead
 use strict;
 use warnings;
@@ -18,7 +18,7 @@ IO::K8s::Api::Storage::V1beta1::VolumeAttachmentList - Deprecated - use IO::K8s:
 
 =head1 VERSION
 
-version 1.000
+version 1.001
 
 =head1 SUPPORT
 
@@ -45,13 +45,13 @@ Torsten Raudssus <torsten@raudssus.de>
 
 =item *
 
-Jose Luis Martinez <jlmartinez@capside.com> (original author, inactive)
+Jose Luis Martinez <jlmartin@cpan.org> (original author, inactive)
 
 =back
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2018 by CAPSiDE.
+This software is Copyright (c) 2018 by Jose Luis Martinez.
 
 This is free software, licensed under:
 

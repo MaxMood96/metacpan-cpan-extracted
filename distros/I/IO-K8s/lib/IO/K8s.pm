@@ -7,7 +7,7 @@ use Module::Runtime qw(require_module);
 use JSON::MaybeXS;
 use namespace::clean;
 
-our $VERSION = '1.000';
+our $VERSION = '1.001';
 
 # Track which classes we've auto-generated
 my %_autogen_cache;
@@ -90,16 +90,24 @@ has json => (is => 'ro', default => sub {
 });
 
 # Resource map - can be customized per instance
+# Returns a copy so add() can safely mutate without affecting other instances
 has resource_map => (
     is => 'ro',
     lazy => 1,
-    default => sub { \%DEFAULT_RESOURCE_MAP },
+    default => sub { +{ %DEFAULT_RESOURCE_MAP } },
 );
 
 # OpenAPI spec for auto-generating unknown types
 has openapi_spec => (
     is => 'ro',
     predicate => 1,
+);
+
+# External resource map providers to merge at construction time
+# e.g. with => ['IO::K8s::Cilium'] or with => [IO::K8s::Cilium->new]
+has with => (
+    is => 'ro',
+    default => sub { [] },
 );
 
 # User namespaces to search for pre-built classes (checked before IO::K8s::)
@@ -124,6 +132,70 @@ has _autogen_namespace => (
 # Class method to get default resource map
 sub default_resource_map { \%DEFAULT_RESOURCE_MAP }
 
+sub BUILD {
+    my ($self) = @_;
+    $self->add(@{$self->with}) if @{$self->with};
+}
+
+# Merge external resource maps into this instance
+# Accepts: class names, objects with resource_map(), or plain hashrefs
+sub add {
+    my ($self, @providers) = @_;
+    my $map = $self->resource_map;
+
+    for my $provider (@providers) {
+        my $ext_map;
+        if (ref $provider eq 'HASH') {
+            $ext_map = $provider;
+        } else {
+            my $obj = ref $provider ? $provider : do {
+                require_module($provider); $provider->new;
+            };
+            $ext_map = $obj->resource_map;
+        }
+
+        for my $kind (keys %$ext_map) {
+            my $class_path = $ext_map->{$kind};
+
+            # Resolve full class name for api_version lookup
+            my $full_class = $class_path =~ /^\+/
+                ? substr($class_path, 1) : "IO::K8s::$class_path";
+
+            # Try to load the class and get its api_version
+            my $api_version;
+            if (_class_exists($full_class) && $full_class->can('api_version')) {
+                $api_version = $full_class->api_version;
+            }
+
+            if (exists $map->{$kind}) {
+                # COLLISION: short name already taken
+                # Ensure the original entry also has a domain-qualified key
+                my $orig_path = $map->{$kind};
+                my $orig_class = $orig_path =~ /^\+/
+                    ? substr($orig_path, 1) : "IO::K8s::$orig_path";
+                if (_class_exists($orig_class) && $orig_class->can('api_version')) {
+                    my $orig_av = $orig_class->api_version;
+                    if ($orig_av && !exists $map->{"$orig_av/$kind"}) {
+                        $map->{"$orig_av/$kind"} = $orig_path;
+                    }
+                }
+                # New entry: domain-qualified only (no short name)
+                if ($api_version) {
+                    $map->{"$api_version/$kind"} = $class_path;
+                }
+            } else {
+                # No collision: register short name
+                $map->{$kind} = $class_path;
+                # Also register domain-qualified
+                if ($api_version) {
+                    $map->{"$api_version/$kind"} = $class_path;
+                }
+            }
+        }
+    }
+    return $self;
+}
+
 # Expand short class name to full class path
 # Supports:
 #   'Pod'                    -> lookup in resource_map -> IO::K8s::Api::Core::V1::Pod
@@ -136,7 +208,7 @@ sub default_resource_map { \%DEFAULT_RESOURCE_MAP }
 #   2. IO::K8s built-in (resource_map or relative path)
 #   3. Auto-generate from openapi_spec (if available)
 sub expand_class {
-    my ($self, $class) = @_;
+    my ($self, $class, $api_version) = @_;
 
     # +FullClassName - strip + and use as-is
     return substr($class, 1) if $class =~ /^\+/;
@@ -148,6 +220,22 @@ sub expand_class {
     return $class if _class_exists($class);
 
     my $map = ref($self) ? $self->resource_map : \%DEFAULT_RESOURCE_MAP;
+
+    # Domain-qualified string: 'cilium.io/v2/NetworkPolicy'
+    if ($class =~ m{/}) {
+        if (my $mapped = $map->{$class}) {
+            return $mapped =~ /^\+/ ? substr($mapped, 1) : "IO::K8s::$mapped";
+        }
+        return undef;
+    }
+
+    # Short name + api_version disambiguation: 'NetworkPolicy' + 'cilium.io/v2'
+    if ($api_version) {
+        my $qualified = "$api_version/$class";
+        if (my $mapped = $map->{$qualified}) {
+            return $mapped =~ /^\+/ ? substr($mapped, 1) : "IO::K8s::$mapped";
+        }
+    }
 
     # Short name like "Pod" - look up in resource_map
     if (my $mapped = $map->{$class}) {
@@ -307,8 +395,9 @@ sub inflate {
 
     my $kind = $struct->{kind}
         or die "Cannot inflate: missing 'kind' field in data";
+    my $api_version = $struct->{apiVersion};
 
-    my $class = $self->expand_class($kind);
+    my $class = $self->expand_class($kind, $api_version);
     $self->load_class($class);
     my $inflated = $self->_inflate_struct($class, $struct);
     return $class->new(%$inflated);
@@ -317,10 +406,20 @@ sub inflate {
 sub new_object {
     my ($self, $short_class, @args) = @_;
 
-    # Support both ->new_object('Pod', { ... }) and ->new_object('Pod', foo => 'bar')
-    my $params = @args == 1 && ref($args[0]) eq 'HASH' ? $args[0] : { @args };
+    # Support:
+    #   ->new_object('Pod', { ... })
+    #   ->new_object('Pod', foo => 'bar')
+    #   ->new_object('Pod', { ... }, 'cilium.io/v2')  # with api_version
+    my ($params, $api_version);
+    if (@args >= 2 && ref($args[0]) eq 'HASH' && !ref($args[1])) {
+        ($params, $api_version) = @args;
+    } elsif (@args == 1 && ref($args[0]) eq 'HASH') {
+        $params = $args[0];
+    } else {
+        $params = { @args };
+    }
 
-    my $class = $self->expand_class($short_class);
+    my $class = $self->expand_class($short_class, $api_version);
     return $self->struct_to_object($class, $params);
 }
 
@@ -449,7 +548,7 @@ IO::K8s - Objects representing things found in the Kubernetes API
 
 =head1 VERSION
 
-version 1.000
+version 1.001
 
 =head1 SYNOPSIS
 
@@ -487,6 +586,22 @@ version 1.000
   # With OpenAPI spec for Custom Resources (CRDs)
   my $k8s = IO::K8s->new(openapi_spec => $spec_from_cluster);
   my $helmchart = $k8s->inflate($helmchart_json);  # Auto-generates class!
+
+  # With external resource map providers (e.g. IO::K8s::Cilium)
+  my $k8s = IO::K8s->new(with => ['IO::K8s::Cilium']);
+
+  # Or add at runtime
+  $k8s->add('IO::K8s::Cilium');           # class name
+  $k8s->add(IO::K8s::Cilium->new);        # instance
+  $k8s->add({ MyThing => '+My::Thing' }); # raw hashref
+
+  # Disambiguate colliding kind names (e.g. both core and Cilium have NetworkPolicy)
+  $k8s->new_object('NetworkPolicy', { ... });                  # core (first-registered)
+  $k8s->new_object('NetworkPolicy', { ... }, 'cilium.io/v2');  # Cilium
+  $k8s->new_object('cilium.io/v2/NetworkPolicy', { ... });     # domain-qualified
+
+  # inflate() auto-uses apiVersion from the data for disambiguation
+  $k8s->inflate('{"kind":"NetworkPolicy","apiVersion":"cilium.io/v2",...}');
 
 =head1 DESCRIPTION
 
@@ -717,6 +832,19 @@ while falling back to auto-generation for everything else.
 
 =head1 ATTRIBUTES
 
+=head2 with
+
+Optional. ArrayRef of external resource map providers to merge at construction
+time. Each entry can be a class name (string) or an object instance. Classes
+must consume L<IO::K8s::Role::ResourceMap> or otherwise provide a
+C<resource_map()> method.
+
+    my $k8s = IO::K8s->new(with => ['IO::K8s::Cilium']);
+
+When kinds collide (e.g. both core and Cilium have C<NetworkPolicy>), the
+first-registered entry keeps the short name. All entries are always reachable
+via domain-qualified names (C<api_version/Kind>).
+
 =head2 openapi_spec
 
 Optional. The OpenAPI v2 specification from a Kubernetes cluster. When provided,
@@ -729,10 +857,29 @@ IO::K8s built-ins. Useful for providing your own implementations.
 
 =head2 resource_map
 
-HashRef mapping short names (like 'Pod') to class paths. Defaults to built-in
-mappings for standard Kubernetes resources.
+HashRef mapping short names (like C<Pod>) and domain-qualified names
+(like C<networking.k8s.io/v1/NetworkPolicy>) to class paths. Defaults to
+built-in mappings for standard Kubernetes resources. Each instance gets its
+own copy, so modifications via C<add()> do not affect other instances.
 
 =head1 METHODS
+
+=head2 add
+
+    $k8s->add('IO::K8s::Cilium');             # class name
+    $k8s->add(IO::K8s::Cilium->new);          # instance
+    $k8s->add({ MyKind => '+My::Class' });     # raw hashref
+    $k8s->add($provider1, $provider2);         # multiple at once
+
+Merge external resource maps into this instance. Accepts class names, object
+instances with a C<resource_map()> method, or plain hashrefs.
+
+When a kind name already exists in the resource map (collision), the
+first-registered entry keeps the short name. Both the existing and new
+entries are registered under domain-qualified names (C<api_version/Kind>)
+so they remain reachable.
+
+Returns C<$self> for chaining.
 
 =head2 load
 
@@ -819,9 +966,15 @@ resources and C<errors> is an ArrayRef of error messages.
 
     my $pod = $k8s->new_object('Pod', %args);
     my $pod = $k8s->new_object('Pod', \%args);
+    my $np  = $k8s->new_object('NetworkPolicy', \%args, 'cilium.io/v2');
+    my $np  = $k8s->new_object('cilium.io/v2/NetworkPolicy', \%args);
 
 Create a new Kubernetes object of the given type. The type can be a short name
-(like C<Pod>) or a full class path.
+(like C<Pod>), a domain-qualified name (like C<cilium.io/v2/NetworkPolicy>),
+or a full class path.
+
+An optional third argument specifies the C<api_version> to disambiguate when
+multiple providers register the same kind name.
 
 =head2 inflate
 
@@ -829,7 +982,9 @@ Create a new Kubernetes object of the given type. The type can be a short name
     my $obj = $k8s->inflate(\%hashref);
 
 Inflate a JSON string or hashref into a typed IO::K8s object. The class is
-auto-detected from the C<kind> field in the data.
+auto-detected from the C<kind> field in the data. When external resource maps
+have been added via C<add()>, the C<apiVersion> field is used to disambiguate
+colliding kind names.
 
 =head2 json_to_object
 
@@ -858,6 +1013,76 @@ Serialize an IO::K8s object to JSON.
     my $hashref = $k8s->object_to_struct($obj);
 
 Convert an IO::K8s object to a plain Perl hashref.
+
+=head1 CILIUM CRD SUPPORT
+
+IO::K8s includes L<IO::K8s::Cilium> with 23 Cilium CRD classes covering
+C<cilium.io/v2> (12 CRDs) and C<cilium.io/v2alpha1> (11 CRDs). These are
+not loaded by default -- opt in at construction:
+
+  my $k8s = IO::K8s->new(with => ['IO::K8s::Cilium']);
+
+  my $cnp = $k8s->new_object('CiliumNetworkPolicy',
+      metadata => { name => 'allow-dns', namespace => 'kube-system' },
+      spec => { endpointSelector => { matchLabels => { app => 'dns' } } },
+  );
+
+  print $cnp->to_yaml;
+
+All Cilium kinds are C<Cilium>-prefixed, so there are no collisions with
+core Kubernetes kind names.
+
+=head1 EXTERNAL RESOURCE MAPS
+
+IO::K8s supports merging resource maps from external packages (like
+L<IO::K8s::Cilium> for Cilium CRDs). This allows multiple packages to
+provide typed Kubernetes objects that work together.
+
+=head2 Writing a resource map provider
+
+Create a class that consumes L<IO::K8s::Role::ResourceMap>:
+
+  package My::CRD::Provider;
+  use Moo;
+  with 'IO::K8s::Role::ResourceMap';
+
+  sub resource_map {
+      return {
+          MyCustomKind => '+My::CRD::V1::MyCustomKind',
+      };
+  }
+
+See L<IO::K8s::Cilium> for a real-world example with 23 CRD classes.
+
+=head2 Collision handling
+
+When two providers register the same kind name, the first-registered entry
+keeps the short name. Both entries are always reachable via domain-qualified
+names (C<api_version/Kind>):
+
+  my $k8s = IO::K8s->new(with => ['My::Firewall::Provider']);
+
+  # Short name -> core (first-registered)
+  $k8s->expand_class('NetworkPolicy');
+  # -> IO::K8s::Api::Networking::V1::NetworkPolicy
+
+  # Domain-qualified -> specific version
+  $k8s->expand_class('firewall.example.com/v1/NetworkPolicy');
+  # -> My::Firewall::V1::NetworkPolicy
+
+  # api_version parameter for disambiguation
+  $k8s->expand_class('NetworkPolicy', 'firewall.example.com/v1');
+  # -> My::Firewall::V1::NetworkPolicy
+
+=head2 Disambiguation in pk8s DSL
+
+In C<.pk8s> manifest files, pass the api_version as a second argument:
+
+  # Core NetworkPolicy (default)
+  NetworkPolicy { name => 'deny-all', spec => { ... } };
+
+  # Firewall NetworkPolicy (disambiguated, no comma - like grep/map syntax)
+  NetworkPolicy { name => 'deny-all', spec => { ... } } 'firewall.example.com/v1';
 
 =head1 UPGRADING FROM PREVIOUS VERSIONS
 
@@ -908,7 +1133,7 @@ Please report bugs to: L<https://github.com/pplu/io-k8s-p5/issues>
 
 =head1 COPYRIGHT and LICENSE
 
-Copyright (c) 2018 by CAPSiDE
+Copyright (c) 2018 by Jose Luis Martinez
 Copyright (c) 2026 by Torsten Raudssus
 
 This code is distributed under the Apache 2 License. The full text of the
@@ -924,7 +1149,7 @@ Torsten Raudssus <torsten@raudssus.de> (current maintainer)
 
 =item *
 
-Jose Luis Martinez <jlmartinez@capside.com> (original author)
+Jose Luis Martinez <jlmartin@cpan.org> (original author)
 
 =back
 
@@ -953,13 +1178,13 @@ Torsten Raudssus <torsten@raudssus.de>
 
 =item *
 
-Jose Luis Martinez <jlmartinez@capside.com> (original author, inactive)
+Jose Luis Martinez <jlmartin@cpan.org> (original author, inactive)
 
 =back
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2018 by CAPSiDE.
+This software is Copyright (c) 2018 by Jose Luis Martinez.
 
 This is free software, licensed under:
 

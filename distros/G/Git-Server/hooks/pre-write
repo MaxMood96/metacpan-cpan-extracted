@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use FindBin qw($Script);
 
-my $ssh = $ENV{SSH_CLIENT} or die "Only SSH allowed\n";
+my $who = ($ENV{REMOTE_USER} || die "Auth required\n")."\@$ENV{REMOTE_ADDR}";
 my $base = $ENV{GIT_DIR} or die "GIT hook ENV malfunction!\n";
 my $acl = {};
 my $conf = `git config --list`;
@@ -18,26 +18,24 @@ while ($conf =~ s/^acl.(\w+)=(.*)$//m) {
 
 $SIG{PIPE} = sub { exit 1; };
 
-my $KEY = $ENV{KEY} || "UNKNOWN";
-my $ip = $ssh =~ /^([\da-f\.:]+) /i ? $1 : "UNKNOWN";
-$conf !~ /^proxy/m or 0 == system "hooks/proxy", $Script or die localtime().": [$KEY\@$ip] git-server: proxy operation failure: $?\n";
+$conf !~ /^proxy/m or 0 == system "hooks/proxy", $Script or die localtime().": [$who] git-server: proxy operation failure: $?\n";
 # Verify IP
 if (my $banned = system "hooks/restrictip") {
     exit ($banned >> 8 || 1);
 }
 # Cannot pass without writers access:
-my $allowed = $acl->{writers}->{$KEY};
-warn localtime().": [$KEY\@$ip] git-server: RUNNING PUSH ...\n" if $allowed;
+my $allowed = $acl->{writers}->{$ENV{REMOTE_USER}};
+warn localtime().": [$who] git-server: RUNNING PUSH ...\n" if $allowed;
 
 if (my $pid = open my $fh, "|-", "$base/hooks/logger", "") {
     if ($allowed) {
-        print $fh localtime().": [$KEY\@$ip]: pushed\n";
+        print $fh localtime().": [$who]: pushed\n";
     }
     else {
-        print $fh localtime().": [$KEY\@$ip]: Missing [acl.writers] permission. Blocked push attempt!\n";
+        print $fh localtime().": [$who]: Missing [acl.writers] permission. Blocked push attempt!\n";
     }
     close $fh;
-    die localtime().": [$KEY\@$ip] git-server: SERVER ERROR! log.logfile failed! $?\n" if $?;
+    die localtime().": [$who] git-server: SERVER ERROR! log.logfile failed! $?\n" if $?;
 }
 
-die localtime().": [$KEY\@$ip] git-server: You cannot push changes. Missing [writers] permissons.\n" unless $allowed;
+die localtime().": [$who] git-server: You cannot push changes. Missing [writers] permissons.\n" unless $allowed;

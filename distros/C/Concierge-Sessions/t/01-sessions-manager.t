@@ -213,13 +213,19 @@ subtest 'get_session() with expired session' => sub {
     # Create a session with 1 second timeout
     my $create_result = $manager->new_session(
         user_id          => 'test_user_expired',
-        session_timeout  => 1,
+        session_timeout  => 600,
     );
 
     my $session_id = $create_result->{session}->session_id();
 
     # Wait for session to expire
-    sleep(2);
+    # sleep(2);
+    # Force-expire via direct DB update (no sleep needed)
+    my $db_file = File::Spec->catfile($temp_dir, 'sessions.db');
+    my $dbh = DBI->connect("dbi:SQLite:dbname=$db_file", "", "", { RaiseError => 1 });
+    $dbh->do("UPDATE sessions SET expires_at = ? WHERE session_id = ?",
+        undef, time() - 3600, $session_id);
+    $dbh->disconnect;
 
     # Try to retrieve it - backend filters expired sessions
     my $get_result = $manager->get_session($session_id);

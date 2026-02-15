@@ -1,6 +1,6 @@
 package IO::K8s::Api::Core::V1::ClientIPConfig;
 # ABSTRACT: ClientIPConfig represents the configurations of Client IP based session affinity.
-our $VERSION = '1.000';
+our $VERSION = '1.001';
 use IO::K8s::Resource;
 
 k8s timeoutSeconds => Int;
@@ -20,7 +20,7 @@ IO::K8s::Api::Core::V1::ClientIPConfig - ClientIPConfig represents the configura
 
 =head1 VERSION
 
-version 1.000
+version 1.001
 
 =head2 timeoutSeconds
 
@@ -51,13 +51,13 @@ Torsten Raudssus <torsten@raudssus.de>
 
 =item *
 
-Jose Luis Martinez <jlmartinez@capside.com> (original author, inactive)
+Jose Luis Martinez <jlmartin@cpan.org> (original author, inactive)
 
 =back
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2018 by CAPSiDE.
+This software is Copyright (c) 2018 by Jose Luis Martinez.
 
 This is free software, licensed under:
 

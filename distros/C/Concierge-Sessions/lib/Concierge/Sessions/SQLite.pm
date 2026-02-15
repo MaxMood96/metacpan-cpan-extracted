@@ -1,4 +1,4 @@
-package Concierge::Sessions::SQLite v0.9.0;
+package Concierge::Sessions::SQLite v0.10.0;
 use v5.36;
 
 use parent 'Concierge::Sessions::Base';

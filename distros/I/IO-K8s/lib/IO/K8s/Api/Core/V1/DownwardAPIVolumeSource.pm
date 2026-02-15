@@ -1,6 +1,6 @@
 package IO::K8s::Api::Core::V1::DownwardAPIVolumeSource;
 # ABSTRACT: DownwardAPIVolumeSource represents a volume containing downward API info. Downward API volumes support ownership management and SELinux relabeling.
-our $VERSION = '1.000';
+our $VERSION = '1.001';
 use IO::K8s::Resource;
 
 k8s defaultMode => Int;
@@ -23,7 +23,7 @@ IO::K8s::Api::Core::V1::DownwardAPIVolumeSource - DownwardAPIVolumeSource repres
 
 =head1 VERSION
 
-version 1.000
+version 1.001
 
 =head2 defaultMode
 
@@ -58,13 +58,13 @@ Torsten Raudssus <torsten@raudssus.de>
 
 =item *
 
-Jose Luis Martinez <jlmartinez@capside.com> (original author, inactive)
+Jose Luis Martinez <jlmartin@cpan.org> (original author, inactive)
 
 =back
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2018 by CAPSiDE.
+This software is Copyright (c) 2018 by Jose Luis Martinez.
 
 This is free software, licensed under:
 

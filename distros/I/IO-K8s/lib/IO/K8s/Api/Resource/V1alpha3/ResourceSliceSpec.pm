@@ -1,6 +1,6 @@
 package IO::K8s::Api::Resource::V1alpha3::ResourceSliceSpec;
 # ABSTRACT: ResourceSliceSpec contains the information published by the driver in one ResourceSlice.
-our $VERSION = '1.000';
+our $VERSION = '1.001';
 use IO::K8s::Resource;
 
 k8s allNodes => Bool;
@@ -35,7 +35,7 @@ IO::K8s::Api::Resource::V1alpha3::ResourceSliceSpec - ResourceSliceSpec contains
 
 =head1 VERSION
 
-version 1.000
+version 1.001
 
 =head2 allNodes
 
@@ -100,13 +100,13 @@ Torsten Raudssus <torsten@raudssus.de>
 
 =item *
 
-Jose Luis Martinez <jlmartinez@capside.com> (original author, inactive)
+Jose Luis Martinez <jlmartin@cpan.org> (original author, inactive)
 
 =back
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2018 by CAPSiDE.
+This software is Copyright (c) 2018 by Jose Luis Martinez.
 
 This is free software, licensed under:
 

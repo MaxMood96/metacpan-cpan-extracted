@@ -18,7 +18,7 @@ use Data::Dumper;
 
 use Pod::Usage;
 
-our $VERSION              = '1.0.11';
+our $VERSION              = '1.0.12';
 our $GETOPT_EXIT_ON_ERROR = $TRUE;
 our $GETOPT_STATUS;
 our $GETOPT_ERROR_MESSAGE;
@@ -576,7 +576,7 @@ L<CLI::Simple::Constants>, which pairs naturally with this module.
 
 =head1 VERSION
 
-This documentation refers to version 1.0.11.
+This documentation refers to version 1.0.12.
 
 =head2 Changes from Version 1.0.8
 

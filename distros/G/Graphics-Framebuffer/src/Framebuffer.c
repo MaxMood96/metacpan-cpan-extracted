@@ -16,6 +16,11 @@
 
    Also note, portions of this code (which I initially wrote) have been
    optimized by GitHub AI for both speed and reduction of complexity.
+
+   If you want to make changes or contributions to this code, then make sure
+   the same updates you add here are also added to the Perl module code.  Remember,
+   the user has the ability to turn off use of these C routines.  So the same
+   funtionality in C must also be present in Perl, and visa-versa.
 */
 
 #include <fcntl.h>
@@ -868,9 +873,7 @@ void c_plot(char *framebuffer,
                     break;
                 case ALPHA_MODE: {
                     uint8_t invA = 255 - alpha;
-                    res8 = (uint8_t)((((uint32_t)col8 * alpha) +
-                                      ((uint32_t)fb * invA)) >>
-                                     8);
+                    res8 = (uint8_t)((((uint32_t)col8 * alpha) + ((uint32_t)fb * invA)) >> 8);
                 } break;
                 case ADD_MODE:
                     res8 = fb + col8;
@@ -2086,3 +2089,4 @@ void c_monochrome(char *pixels,
     }
 }
 
+/* END */

@@ -1,6 +1,6 @@
 package IO::K8s::Manifest;
 # ABSTRACT: Internal collector for loading .pk8s manifest files
-our $VERSION = '1.000';
+our $VERSION = '1.001';
 use v5.10;
 use strict;
 use warnings;
@@ -70,9 +70,13 @@ sub _build_dsl_code {
     my $map = $k8s->resource_map;
 
     for my $kind (keys %$map) {
+        # Skip domain-qualified names (contain /) - not valid Perl identifiers
+        next if $kind =~ m{/};
+
         $code .= qq{
-            sub $kind (&) {
+            sub $kind (&@) {
                 my \$block = shift;
+                my \$api_version = shift;
                 my \%args = \$block->();
 
                 # Convenience: move name/namespace/labels/annotations to metadata
@@ -83,7 +87,9 @@ sub _build_dsl_code {
                 }
 
                 my \$k8s = \$IO::K8s::Manifest::_k8s_instance;
-                my \$obj = \$k8s->new_object('$kind', \%args);
+                my \$obj = \$api_version
+                    ? \$k8s->new_object('$kind', \\\%args, \$api_version)
+                    : \$k8s->new_object('$kind', \\\%args);
 
                 \$IO::K8s::Manifest::_collector->add(\$obj)
                     if \$IO::K8s::Manifest::_collector;
@@ -113,7 +119,7 @@ IO::K8s::Manifest - Internal collector for loading .pk8s manifest files
 
 =head1 VERSION
 
-version 1.000
+version 1.001
 
 =head1 DESCRIPTION
 
@@ -155,13 +161,13 @@ Torsten Raudssus <torsten@raudssus.de>
 
 =item *
 
-Jose Luis Martinez <jlmartinez@capside.com> (original author, inactive)
+Jose Luis Martinez <jlmartin@cpan.org> (original author, inactive)
 
 =back
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2018 by CAPSiDE.
+This software is Copyright (c) 2018 by Jose Luis Martinez.
 
 This is free software, licensed under:
 

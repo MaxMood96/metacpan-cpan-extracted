@@ -3,7 +3,7 @@ package Acme::Hospital::Bed;
 use 5.006;
 use strict;
 use warnings;
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 sub new {
 	my ($package, %args) = @_;
@@ -57,7 +57,7 @@ sub new {
 			],
 			[
 				"Hello, I'm not fine.",
-				"Where is my mind?",
+				"Waiting every 5 minutes...?",
 			]
 		];
 	}
@@ -155,7 +155,7 @@ Acme::Hospital::Bed - The great new Acme::Hospital::Bed!
 
 =head1 VERSION
 
-Version 0.05
+Version 0.06
 
 =cut
 
@@ -178,42 +178,43 @@ Perhaps a little code snippet.
 		phrases => [
 			[
 				"Hello, I am fine.",
-				"I still have my mind after episode 1.",
+				"I still have my mind.",
 			],
 			[
 				"Hello, I am still fine.",
-				"I still have my mind after episode 2."
+				"I still have my mind."
 			],
 			[
 				"Hello, I am also fine.",
-				"I still have my mind after episode 3."
+				"I still have my mind."
 			],
 			[
 				"Hello, I think I'm still fine.",
-				"I still have my mind after watching and travelling through the world wide corruption."
+				"I still have my mind."
 			],
 			[
 				"Hello, I think you think I'm fine.",
-				"I still have my mind after visiting my truest disbelievers."
+				"I still have my mind."
 			],
 			[
 				"Hello, am I still fine.",
-				"I will then make my own judgement?",
+				"I still have my mind",
 			],
 			[
 				"Hello, do you still think I'm fine.",
-				"Good luck?",
+				"I still have my mind",
 			],
 			[
 				"Hello, I don't feel so fine.",
-				"Where is my mind?",
+				"I still have my mind",
 			],
 			[
 				"Hello, This is not fine.",
-				"Where is my mind?",
+				"I still have my mind",
 			],
 			[
-				"Are you being dishonest?",
+				"Hello, I'm not fine.",
+				"Waiting every 5 minutes...?",
 			]
 		]
 	)->start;

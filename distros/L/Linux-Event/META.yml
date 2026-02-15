@@ -1,0 +1,29 @@
+---
+abstract: 'Front door for the Linux::Event ecosystem'
+author:
+  - 'Joshua S. Day'
+build_requires:
+  ExtUtils::MakeMaker: '0'
+configure_requires:
+  ExtUtils::MakeMaker: '0'
+dynamic_config: 1
+generated_by: 'ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150012'
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: Linux-Event
+no_index:
+  directory:
+    - t
+    - inc
+requires:
+  Carp: '0'
+  Linux::Epoll: '0'
+  Linux::Event::Clock: '0.011'
+  Linux::Event::Timer: '0.01'
+  Linux::FD::Signal: '0'
+  perl: '5.036000'
+resources: {}
+version: '0.006'
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

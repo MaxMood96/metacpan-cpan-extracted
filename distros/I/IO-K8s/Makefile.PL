@@ -8,7 +8,7 @@ use ExtUtils::MakeMaker;
 
 my %WriteMakefileArgs = (
   "ABSTRACT" => "Objects representing things found in the Kubernetes API",
-  "AUTHOR" => "Torsten Raudssus <torsten\@raudssus.de>, Jose Luis Martinez <jlmartinez\@capside.com> (original author, inactive)",
+  "AUTHOR" => "Torsten Raudssus <torsten\@raudssus.de>, Jose Luis Martinez <jlmartin\@cpan.org> (original author, inactive)",
   "CONFIGURE_REQUIRES" => {
     "ExtUtils::MakeMaker" => 0
   },
@@ -19,6 +19,7 @@ my %WriteMakefileArgs = (
     "Import::Into" => 0,
     "JSON::MaybeXS" => 0,
     "Moo" => "2.000000",
+    "Net::IP" => 0,
     "Package::Stash" => 0,
     "Scalar::Util" => 0,
     "Type::Tiny" => "2.000000",
@@ -30,7 +31,7 @@ my %WriteMakefileArgs = (
     "Test::Exception" => 0,
     "Test::More" => 0
   },
-  "VERSION" => "1.000",
+  "VERSION" => "1.001",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -41,6 +42,7 @@ my %FallbackPrereqs = (
   "Import::Into" => 0,
   "JSON::MaybeXS" => 0,
   "Moo" => "2.000000",
+  "Net::IP" => 0,
   "Package::Stash" => 0,
   "Scalar::Util" => 0,
   "Test::Exception" => 0,

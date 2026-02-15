@@ -1,3 +1,7 @@
+0.12
+----
+exit code now matches what shell would show it as; signal now appears
+----
 0.11
 -----
 max string length now corresponds to max of output strings, no more truncated output

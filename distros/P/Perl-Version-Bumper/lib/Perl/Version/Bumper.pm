@@ -1,7 +1,7 @@
 use v5.10;
 
 package Perl::Version::Bumper;
-$Perl::Version::Bumper::VERSION = '0.218';
+$Perl::Version::Bumper::VERSION = '0.224';
 
 use strict;
 use warnings;
@@ -36,10 +36,11 @@ sub feature_data {
         my $disabled = substr $_, 0, 9,  '';    # %-8s
         my @compat   = split ' ';               # %s
         y/ //d for $feature, $known, $enabled, $disabled;
-        $feature{$feature}{known}    = $known;
-        $feature{$feature}{enabled}  = $enabled  if $enabled;
-        $feature{$feature}{disabled} = $disabled if $disabled;
-        $feature{$feature}{compat}   = {@compat} if @compat;
+        $feature{$feature}{known}     = $known;
+        $feature{$feature}{enabled}   = $enabled  if $enabled;
+        $feature{$feature}{disabled}  = $disabled if $disabled;
+        $feature{$feature}{compat}    = {@compat} if @compat;
+        $feature{$feature}{unfeature} = 1         if $disabled;
     }
     return \%feature;
 }
@@ -813,13 +814,17 @@ currenly running C<perl>.
 
 The constructor accepts both forms of Perl versions, regular
 (e.g. C<v5.36>) and floating-point (e.g. C<5.036>), and will
-turn it into a string suitable for C<use VERSION>.
+turn them into a string suitable for C<use VERSION>.
 
 To protect against simple mistakes (e.g. passing C<5.36> instead of
 C<v5.36>), the constructor does some sanity checking, and checks that
 the given version:
 
 =over 4
+
+=item *
+
+is parsable as a Perl version number,
 
 =item *
 
@@ -835,8 +840,10 @@ is a stable Perl version.
 
 =back
 
-The constructor will also drops any sub-version information (so C<v5.36.2>
-will be turned into C<v5.36>).
+In case any of the above checks fail, the constructor will die.
+
+The constructor will also silently drop any sub-version information
+(so C<v5.36.2> will be turned into C<v5.36>).
 
 =head1 CLASS METHODS
 
@@ -1049,7 +1056,7 @@ the B<perl> I<binary> knows about the feature starting from that version.
 
 If it's not known, passing it to C<use feature> will I<die> during
 compilation with C<Feature "XXX" is not supported by Perl 5.x.y> (where
-5.x.y is the version of the binary program).
+5.x.y is the version of the binary C<perl> program).
 
 =item enabled
 

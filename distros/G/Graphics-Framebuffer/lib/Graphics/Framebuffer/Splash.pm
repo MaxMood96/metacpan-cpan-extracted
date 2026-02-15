@@ -14,7 +14,7 @@ use List::Util qw(min max); # Helpful for returning the minimum or maximum value
 BEGIN {
     require Exporter;
     our @ISA       = qw( Exporter );
-    our $VERSION   = '1.26';
+    our $VERSION   = '1.27';
     our @EXPORT    = qw( _perl_logo _coin splash );
     our @EXPORT_OK = qw();
 } ## end BEGIN
@@ -171,11 +171,14 @@ sub splash {
     );
 
     {
+		my $color;
         my $t = 'Perl Drawing Mode';
         if ($self->{'ACCELERATED'} == 1) {
             $t = 'C Assisted Mode';
+			$color = '0101FFFF';
         } elsif ($self->{'ACCELERATED'} == 2) {
             $t = 'GPU Assisted Mode';
+			$color = 'FF0101FF';
         }
         $self->ttf_print(
             $self->ttf_print(
@@ -185,7 +188,7 @@ sub splash {
                     'y'            => (680 * $vf) + $Y,
                     'height'       => 220 * $vf,
                     'wscale'       => 1.20,
-                    'color'        => '0101FFFF',
+                    'color'        => $color,
                     'text'         => $t,
                     'bounding_box' => TRUE,
                     'center'       => 0,

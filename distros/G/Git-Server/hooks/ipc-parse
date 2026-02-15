@@ -254,9 +254,7 @@ if (open my $log_fh, "<", \$log) {
     close $log_fh;
 }
 
-my $ssh = $ENV{SSH_CONNECTION} or crash "Only SSH supported";
-my $KEY = $ENV{KEY} || "UNKNOWN";
-my ($ip, $remote_port, $local_ip, $local_port) = split /\ +/, $ssh;
+my $who = ($ENV{REMOTE_USER} || crash "Auth required\n")."\@$ENV{REMOTE_ADDR}";
 my $cmd = $ENV{SSH_ORIGINAL_COMMAND} or crash "Unable to determine SSH command";
 my $operation = "";
 if ($cmd =~ /^git-receive-pack\s/) {
@@ -308,14 +306,14 @@ if ($ENV{USER} and $ENV{HOME} and my $full = $ENV{GIT_DIR}) {
     $full =~ s{^\Q$ENV{HOME}\E/*}{};
     $full ||= ".";
     $full =~ s/\.git$//;
-    $info->{repo} = "ssh://$ENV{USER}\@[$local_ip]/$full";
+    $info->{repo} = "ssh://$ENV{USER}\@[$ENV{SERVER_ADDR}]/$full";
 }
 
-$info->{key} = $KEY;
-$info->{client_ip} = $ip;
-$info->{client_port} = $remote_port;
-$info->{server_ip} = $local_ip;
-$info->{server_port} = $local_port;
+$info->{remote_user} = $ENV{REMOTE_USER};
+$info->{client_ip}   = $ENV{REMOTE_ADDR};
+$info->{client_port} = $ENV{REMOTE_PORT};
+$info->{server_ip}   = $ENV{SERVER_ADDR};
+$info->{server_port} = $ENV{SERVER_PORT};
 
 # Guess client operation based on command they sent
 $info->{operation} = $operation;

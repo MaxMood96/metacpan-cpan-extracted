@@ -2,7 +2,7 @@
 
 -----
 
-Avoid 16 bit mode if at all possible.  16 bit processing is a hack, a kludge.  It is a slower than 24/32 bit color operations.  It also may have problems.  The best way to avoid any speed or bug issues, is to avoid 16 bit mode all together and use 24 or 32 bit mode.
+Avoid 16 bit mode if at all possible.  16 bit processing is a hack, a kludge.  It is slower than 24/32 bit color operations.  It also may have problems.  The best way to avoid any speed or bug issues, is to avoid 16 bit mode all together and use 24 or 32 bit mode.
 
 Note:  The Raspberry Pi typically defaults to 16 bit color mode.  Please change its settings to use 24/32 bit mode.
 
@@ -29,3 +29,10 @@ After more testing, it seems non-bulk read or write access is simply very slow. 
 Mouse methods are rudimentary and your user must be a member of the "input" group for them to work.  Frankly, I recommend using your own routines with threads, or better yet, if you really need a mouse, then maybe X-Windows and and SDL may be better for you.
 
 I don't really plan on developing mouse capability any further.  It was a test to see if it was possible.  Well, it was possible, but not very practical.
+
+-----
+
+As of Virtualbox 7.2.6 the framebuffer driver in the extensions sucks all of a sudden.  It's like it queues updates now.  So output is jerky instead of smooth like it used to be.  Buffer flushes don't work any longer.  What the heck did they do to it?  I
+have not been able to figure out how to get around this behavior.
+
+Note:  I do not know if this is related to recent Linux kernel changes or Virtualbox itself.  I'm betting it's the latter.

@@ -9,9 +9,14 @@ Some features we need or want, plus some neat ideas that may not be too feasible
 
  - Add [log.verbosity] 0 or 1 or 2 feature to control level of messaging spewage to the git client.
 
- - Make git-client handle "git config { --show-scope | show-origin } { --get | --get-* } <name>" to label "descent" entries better instead of saying "command" for everything.
+ - Fix hot-potatoe-grind bug where git-deploy on the same repo coming from the same IP (but running in different local directories) will infinite pummel the client and server, back and forth between the two directories.
+   * For example, running this on a single machine: "git deploy -C /usr/src/prod master & ; git deploy -C /usr/src/beta dev &"
 
  - Investigate converting get_fork_hash common fork sniffer scan to use "git merge-base --fork-point <ref> <commit>" instead of grinding through the logs.
+
+ - Right now, the git server can "choke" if there are many git-deploy clients linked to a single repo.
+   * Investigate optimization to stagger git-deploy clients with random delays or even abort, if there is already a sufficient git-deploy running locally. If git-deploy crons on all servers are configured to run at the same time, i.e., every 10 minutes, then everything gets sluggish on the server at that time while everything catches up, and thus client operations will also hang for a while.
+   * Investigate optimization to make push-notify release ONLY relevant deploy clients, i.e., those with activity within past few minutes or those pinned to the specific branch that was pushed. It's difficult to tell which branch the client is pinned to from the server side, especially prior to the pull occurring. So the git-deploy client would probably need to inform the server via ENV which specific branch to be notified about changes on.
 
  - Provide branch, old hash, and new hash (for every branch updated by the git client) to post-read hook args (Requires man-in-the-middle sniffer)
    * If nothing is updated to the client, then there will be no arguments to post-read.
@@ -23,35 +28,10 @@ Some features we need or want, plus some neat ideas that may not be too feasible
    * or for callback webhook.
    * In order to facilitate the InterProcessCommunication between the pre-write and post-write, information should be stored in $IPC/info.txt until the post-write completes.
 
- - Make a commandline configuration helper checker utility that verifies the git server configurations:
-   * XXX - Can we overload the "git-server" command to use -t STDIN to detect commandline TTY?
-   * Scripts and hooks installations
-   * Secured ~/.ssh/authorized_keys format, including "KEY" settings
-   * Files and Directories chmod permissions
-   * ADMIN and ACL Management
-   * List / Create / Remove repos
-   * SSHD Settings
-     1. "AcceptEnv XMODIFIERS" in case they want
-          to allow "--server-option" and/or "--push-option" and/or "-o" to have
-          $GIT_OPTION_COUNT and $GIT_OPTION_{NUM} to be available during pre-* hooks
-          or "git-deploy --max-delay <seconds>" for custom push notification timeout
-          or "git-client -O <name=val>"
-          or other DEBUG features
-     2. "AllowAgentForwarding yes" for proxy.url two-way auto-sync feature
-     3. "ExposeAuthInfo yes" to allow hooks to obtain public key info, if desired
-     4. Enable "any-user"@server feature, if desired.
-
- - Pull out the iotrace utility into its own perl module IO::Trace.
-
- - Convert git-client to use Getopt::Long instead of manually parsing @ARGV.
-
  - Fix git-deploy to handle split cheese case where git server uses both IPv4 and IPv6.
 
  - Add Support for HTTP protocol git read and write operations using Basic password Authorization (instead of only pubkeys over SSH protocol).
-
- - Set REMOTE_ADDR env (from SSH_CONNECTION) to make it easier for any hooks to determine Client IP regardless of protocol.
-
- - Set REMOTE_USER env (from KEY) to make it easier for any hooks to Client User regardless of protocol.
+   * Design a way to support "git-deploy" feature via HTTP (through REMOTE_USER or DeployToken or URI flag or Special HTTP Header or PAT [Personal Access Token] or maybe some other mechanism). Allow client to specify max-delay seconds (default 90) in case nothing new is ready since last pull.
 
  - Integrate or convert to be compatible with Git::Hooks::* plugins.
 

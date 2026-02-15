@@ -1,6 +1,6 @@
 package IO::K8s::Api::Core::V1::DownwardAPIProjection;
 # ABSTRACT: Represents downward API info for projecting into a projected volume. Note that this is identical to a downwardAPI volume source without the default mode.
-our $VERSION = '1.000';
+our $VERSION = '1.001';
 use IO::K8s::Resource;
 
 k8s items => ['Core::V1::DownwardAPIVolumeFile'];
@@ -20,7 +20,7 @@ IO::K8s::Api::Core::V1::DownwardAPIProjection - Represents downward API info for
 
 =head1 VERSION
 
-version 1.000
+version 1.001
 
 =head2 items
 
@@ -51,13 +51,13 @@ Torsten Raudssus <torsten@raudssus.de>
 
 =item *
 
-Jose Luis Martinez <jlmartinez@capside.com> (original author, inactive)
+Jose Luis Martinez <jlmartin@cpan.org> (original author, inactive)
 
 =back
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2018 by CAPSiDE.
+This software is Copyright (c) 2018 by Jose Luis Martinez.
 
 This is free software, licensed under:
 

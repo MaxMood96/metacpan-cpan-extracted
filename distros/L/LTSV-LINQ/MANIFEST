@@ -1,0 +1,16 @@
+lib/LTSV/LINQ.pm
+README
+Changes
+META.yml
+META.json
+Makefile.PL
+pmake.bat
+MANIFEST
+LICENSE
+CONTRIBUTING
+t/001_basic.t
+t/002_dsl.t
+t/003_ltsv_file.t
+t/004_grouping.t
+t/005_complex.t
+t/006_extended.t

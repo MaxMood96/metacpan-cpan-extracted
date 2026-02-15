@@ -1,6 +1,12 @@
 use strict;
 use warnings;
 use Test::More;
+
+BEGIN {
+    if ($] < 5.034) {
+        plan skip_all => q{delpaths tests require Perl 5.34 or newer};
+    }
+}
 use JQ::Lite;
 
 my $jq = JQ::Lite->new;
@@ -73,21 +79,16 @@ is_deeply(
     'delpaths removes boolean-keyed object entries'
 );
 
-SKIP: {
-    skip 'Perl 5.32+ required for boolean segment array index handling', 1
-        if $] <= 5.032;
+my @result_boolean_indices = $jq->run_query(
+    $json_boolean_paths,
+    '.items | delpaths([[false], [true]])'
+);
 
-    my @result_boolean_indices = $jq->run_query(
-        $json_boolean_paths,
-        '.items | delpaths([[false], [true]])'
-    );
-
-    is_deeply(
-        $result_boolean_indices[0],
-        ['two'],
-        'delpaths treats boolean segments as array indices'
-    );
-}
+is_deeply(
+    $result_boolean_indices[0],
+    ['two'],
+    'delpaths treats boolean segments as array indices'
+);
 
 # --- 3. Removing the root path yields null
 my $json_scalar = '{"keep": true}';

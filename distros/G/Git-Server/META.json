@@ -34,12 +34,11 @@
          "requires" : {
             "Cwd" : "0",
             "File::Which" : "0",
-            "Getopt::Long" : "0",
-            "IO::Trace" : "0"
+            "Getopt::Long" : "0"
          }
       }
    },
    "release_status" : "stable",
-   "version" : "0.036",
+   "version" : "0.037",
    "x_serialization_backend" : "JSON::PP version 4.06"
 }

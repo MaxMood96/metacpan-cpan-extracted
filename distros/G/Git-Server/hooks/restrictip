@@ -9,9 +9,7 @@ use warnings;
 #   Exits with non-zero and prints message to STDERR if IP is not allowed.
 
 my $restrictip = `git config --get-all acl.restrictip` or exit 0;  # No config
-my $ssh = $ENV{SSH_CLIENT} or exit 0;              # Not from SSH?
-my $ip = $ssh =~ /^([\da-f\.:]+) /i ? $1 : die "restrictip: SSH Stank!\n";
-my $KEY = $ENV{KEY} || "UNKNOWN";
+my $who = ($ENV{REMOTE_USER} || die "Auth required\n")."\@$ENV{REMOTE_ADDR}";
 $restrictip =~ s/\s+/,/g;
 $restrictip =~ s/,+/,/g;
 $restrictip =~ s/(,$|^,)//g;
@@ -22,10 +20,10 @@ foreach my $cidr (split /,/, $restrictip) {
         my $prefix = $2 || 32;
         if ($prefix >= 8 and
             $prefix <= 32 and
-            $ip =~ /^(\d+\.\d+\.\d+\.\d+)$/) {
+            $ENV{REMOTE_ADDR} =~ /^(\d+\.\d+\.\d+\.\d+)$/) {
             require Socket;
             my $should_bits = unpack "B32", Socket::inet_pton(Socket::AF_INET(), $base);
-            my $actual_bits = unpack "B32", Socket::inet_pton(Socket::AF_INET(), $ip);
+            my $actual_bits = unpack "B32", Socket::inet_pton(Socket::AF_INET(), $ENV{REMOTE_ADDR});
             if (substr($should_bits, 0, $prefix) eq
                 substr($actual_bits, 0, $prefix)) {
                 # Prefix MATCH!
@@ -42,10 +40,10 @@ foreach my $cidr (split /,/, $restrictip) {
         my $prefix = $2 || 128;
         if ($prefix >= 8 and
             $prefix <= 128 and
-            $ip =~ /^([\da-f\:]+)$/) {
+            $ENV{REMOTE_ADDR} =~ /^([\da-f\:]+)$/) {
             require Socket6;
             my $should_bits = unpack "B128", Socket6::inet_pton(Socket6::AF_INET6(), $base);
-            my $actual_bits = unpack "B128", Socket6::inet_pton(Socket6::AF_INET6(), $ip);
+            my $actual_bits = unpack "B128", Socket6::inet_pton(Socket6::AF_INET6(), $ENV{REMOTE_ADDR});
             if (substr($should_bits, 0, $prefix) eq
                 substr($actual_bits, 0, $prefix)) {
                 # Prefix MATCH!
@@ -61,4 +59,4 @@ foreach my $cidr (split /,/, $restrictip) {
     }
 }
 
-die localtime().": [$KEY\@$ip] git-server: Your IP has been blocked.\n";
+die localtime().": [$who] git-server: Your IP has been blocked.\n";

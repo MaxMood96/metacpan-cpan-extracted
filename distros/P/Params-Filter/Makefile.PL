@@ -7,9 +7,8 @@ WriteMakefile(
     VERSION_FROM     => 'lib/Params/Filter.pm',
     AUTHOR           => 'Bruce Van Allen <bva@cruzio.com>',
     ABSTRACT         => 'Field filtering for parameter construction in subroutines and methods',
-    LICENSE          => 'perl',
+    LICENSE          => 'artistic_2',
     MIN_PERL_VERSION => '5.036',
-    INSTALL_BASE     => undef,
 
     PREREQ_PM => {
         'Exporter' => 0,
@@ -25,11 +24,26 @@ WriteMakefile(
         'lib/Params/Filter.pm' => '$(INST_LIB)/Params/Filter.pm',
     },
 
-    dist  => {
-        COMPRESS => 'gzip -9f',
-        SUFFIX   => 'gz',
-        TAR      => 'gtar',
-        TARFLAGS => '--format=ustar -cvf',
+    META_MERGE => {
+        'meta-spec' => { version => 2 },
+        resources   => {
+            repository => {
+                type => 'git',
+                url  => 'https://github.com/bwva/Params-Filter.git',
+                web  => 'https://github.com/bwva/Params-Filter',
+            },
+            bugtracker => {
+                web => 'https://github.com/bwva/Params-Filter/issues',
+            },
+        },
+        provides => {
+            'Params::Filter' => {
+                file    => 'lib/Params/Filter.pm',
+                version => '0.015',
+            },
+        },
     },
+
+    dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean => { FILES => 'Params-Filter-*' },
 );

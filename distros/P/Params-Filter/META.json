@@ -6,7 +6,7 @@
    "dynamic_config" : 1,
    "generated_by" : "ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010",
    "license" : [
-      "perl_5"
+      "artistic_2"
    ],
    "meta-spec" : {
       "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
@@ -42,7 +42,23 @@
          }
       }
    },
+   "provides" : {
+      "Params::Filter" : {
+         "file" : "lib/Params/Filter.pm",
+         "version" : "0.015"
+      }
+   },
    "release_status" : "stable",
-   "version" : "0.014",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/bwva/Params-Filter/issues"
+      },
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/bwva/Params-Filter.git",
+         "web" : "https://github.com/bwva/Params-Filter"
+      }
+   },
+   "version" : "0.015",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

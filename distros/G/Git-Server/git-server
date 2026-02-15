@@ -10,7 +10,7 @@ git-server - Secure Git Server with more granular hooks capabilities than defaul
 
   Standard Method:
   With SHELL=/bin/bash, use the following format in ~/.ssh/authorized_keys:
-  command="/path/to/git-server KEY=user1" ssh-ed25519 AAAA_OAX+blah_pub__ user1@workstation
+  command="/path/to/git-server REMOTE_USER=user1" ssh-ed25519 AAAA_OAX+blah_pub__ user1@workstation
 
    -- OR --
 
@@ -19,18 +19,18 @@ git-server - Secure Git Server with more granular hooks capabilities than defaul
   Add /path/to/git-server to /etc/shells and
   Set "PermitUserEnvironment yes" (in /etc/ssh/sshd_config)
   Then use the following format in ~/.ssh/authorized_keys:
-  environment="KEY=user1" ssh-ed25519 AAAA_OAX+blah_pub__ user1@workstation
+  environment="REMOTE_USER=user1" ssh-ed25519 AAAA_OAX+blah_pub__ user1@workstation
 
 =head1 ENV
 
 You can set as many %ENV variables as you want
 within the authorized_keys configuration.
 
-=head2 KEY
+=head2 REMOTE_USER
 
-KEY has a special meaning to define a word for the associated user
-and KEY should be unique for each public key
-and this can be used for ACL rules.
+REMOTE_USER has a special meaning to define a word for the associated user.
+You may use the same REMOTE_USER for those who have multiple PubKeys.
+This REMOTE_USER will be used for ACL rules.
 
 =head1 INSTALL
 
@@ -62,7 +62,7 @@ Rob Brown <bbb@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2015-2025 by Rob Brown <bbb@cpan.org>
+Copyright 2015-2026 by Rob Brown <bbb@cpan.org>
 
 This library is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
 
@@ -73,34 +73,35 @@ use warnings;
 use Cwd qw(abs_path);
 use FindBin qw($Bin);
 
-our $VERSION = "0.036";
+our $VERSION = "0.037";
 
-my $ssh = $ENV{SSH_CLIENT} or die "Only SSH allowed\n";
 $SIG{PIPE} = sub { exit 1; };
-my $cmd = undef;
-if (@ARGV == 2 and $ARGV[0] eq "-c") {
-    # Advanced Method:
-    shift; # -c
-    $cmd = shift; # i.e., "git-upload-pack 'project'"
-}
-else {
-    # Standard Method:
-    if (my $o = delete $ENV{SSH_ORIGINAL_COMMAND}) {
-        $cmd = $o;
+my $cmd = $ENV{SSH_ORIGINAL_COMMAND} ||= # Standard Method from ~/.ssh/authorized_keys: command="git-server REMOTE_USER=user1" # i.e., "git-upload-pack 'project'"
+    @ARGV == 2 && $ARGV[0] eq "-c" && shift && shift || ""; # Advanced Method from /etc/passwd SHELL
+
+while (my $pair = shift) {
+    if ($pair =~ /^(\w+)=(.*)$/) {
+        $ENV{$1} = $2;
     }
-    foreach my $pair (@ARGV) {
-        if ($pair =~ /^(\w+)=(.*)$/) {
-            $ENV{$1} = $2;
-        }
-        else {
-            die "Invalid ENV setting [$pair]\n";
-        }
+    else {
+        die "Invalid ENV setting [$pair]\n";
     }
 }
 
-my $KEY = $ENV{KEY} || "UNKNOWN";
-my $ip = $ssh =~ /^([\da-f\.:]+) /i ? $1 : "UNKNOWN";
-die localtime().": [$KEY\@$ip] git-server: You don't have shell access!\n" unless $cmd;
+$ENV{REMOTE_USER} ||= $ENV{KEY} || "";
+$ENV{SSH_CONNECTION} ||= "";
+($ENV{REMOTE_ADDR}, $ENV{REMOTE_PORT}, $ENV{SERVER_ADDR}, $ENV{SERVER_PORT}) = split / /, $ENV{SSH_CONNECTION};
+if (!$ENV{REMOTE_PORT} || !$ENV{SERVER_ADDR} || !$ENV{SERVER_PORT}
+    || $cmd =~ m{(^|/)(git-|)verify}
+    || !$ENV{REMOTE_ADDR} || $ENV{REMOTE_ADDR} !~ /^([\da-f\.:]+)$/) {
+    (my $v = $0) =~ s{-[^/]+$}{-verify};
+    exec $v or die "Verification failed\n";
+}
+$ENV{REMOTE_ADDR} = $1; # Taint cleaner
+$ENV{REMOTE_USER} ||= "MISCONFIGURED_REMOTE_USER";
+#delete $ENV{$_} foreach (qw[KEY SSH_CLIENT SSH_CONNECTION]); # No cheating
+my $who = "$ENV{REMOTE_USER}\@$ENV{REMOTE_ADDR}";
+die localtime().": [$who] git-server: You don't have shell access!\n" unless $cmd;
 
 my $dir = undef;
 if ($cmd =~ /^(git-[\w\-]+) (.+)$/) {
@@ -131,14 +132,14 @@ if ($cmd =~ /^(git-[\w\-]+) (.+)$/) {
         }
     }
     # Make sure this looks like a real life sane enough git repo
-    die localtime().": [$KEY\@$ip] git-server: You can't access '$repo' git repository\n" unless $dir && -f "$dir/config" && -d "$dir/refs" && -d "$dir/objects";
+    die localtime().": [$who] git-server: You can't access '$repo' git repository\n" unless $dir && -f "$dir/config" && -d "$dir/refs" && -d "$dir/objects";
     my $escape_dir = $ENV{GIT_DIR};
     $escape_dir =~ s/\'/\'\\'\'/g;
     $escape_dir = "'$escape_dir'";
     $cmd = "$op $escape_dir";
 }
 else {
-    die localtime().": [$KEY\@$ip] git-server: Unable to run the command: $cmd\n";
+    die localtime().": [$who] git-server: Unable to run the command: $cmd\n";
 }
 
 # Hand off request to the best handler

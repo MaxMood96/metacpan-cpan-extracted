@@ -5,6 +5,7 @@ Changes.md
 LICENSE
 MANIFEST
 META.json
+META.yml
 README.md
 SECURITY.md
 builder/Affix/Builder.pm
@@ -29,6 +30,7 @@ infix/src/common/infix_internals.h
 infix/src/common/platform.h
 infix/src/common/utility.h
 infix/src/core/arena.c
+infix/src/core/cache.c
 infix/src/core/error.c
 infix/src/core/loader.c
 infix/src/core/platform.c
@@ -81,5 +83,6 @@ t/025_affix_wrap.t
 t/026_context.t
 t/027_thread_safety.t
 t/040_error.t
+t/050_affix_build.t
 t/900_leak.t
 t/src/std.h

@@ -1,0 +1,40 @@
+# Version control
+^\.git
+
+# macOS
+\.DS_Store
+\._
+
+# Build artifacts
+^Makefile$
+^Makefile\.old$
+^blib/
+pm_to_blib
+\.o$
+\.so$
+
+# CPAN metadata (auto-generated)
+^MYMETA\.(json|yml)
+^META\.(json|yml)
+
+# Temporary and backup files
+~$
+\.bak$
+\.backup$
+\.tmp$
+\.swp$
+\.swo$
+^\#
+
+# Test coverage
+^cover_db/
+
+# Distribution tarballs
+\.tar\.gz$
+
+# CI/CD (GitHub-only, not for CPAN)
+^\.github/
+
+# Project-specific exclusions
+^dist/
+^CLAUDE\.md$

@@ -1,6 +1,6 @@
 package IO::K8s::Api::Autoscaling::V2::MetricSpec;
 # ABSTRACT: MetricSpec specifies how to scale based on a single metric (only `type` and one other matching field should be set at once).
-our $VERSION = '1.000';
+our $VERSION = '1.001';
 use IO::K8s::Resource;
 
 k8s containerResource => 'Autoscaling::V2::ContainerResourceMetricSource';
@@ -35,7 +35,7 @@ IO::K8s::Api::Autoscaling::V2::MetricSpec - MetricSpec specifies how to scale ba
 
 =head1 VERSION
 
-version 1.000
+version 1.001
 
 =head2 containerResource
 
@@ -86,13 +86,13 @@ Torsten Raudssus <torsten@raudssus.de>
 
 =item *
 
-Jose Luis Martinez <jlmartinez@capside.com> (original author, inactive)
+Jose Luis Martinez <jlmartin@cpan.org> (original author, inactive)
 
 =back
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2018 by CAPSiDE.
+This software is Copyright (c) 2018 by Jose Luis Martinez.
 
 This is free software, licensed under:
 

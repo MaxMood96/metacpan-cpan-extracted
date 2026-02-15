@@ -1,9 +1,8 @@
-package Concierge::Auth::Generators v0.3.4;
+package Concierge::Auth::Generators v0.3.5;
 use v5.36;
 
 # ABSTRACT: Value generation utilities for Concierge::Auth
 
-use Carp qw/carp/;
 use Time::HiRes qw/gettimeofday/;
 use Crypt::PRNG qw/rand random_bytes random_string random_string_from/;
 use Exporter 'import';
@@ -142,14 +141,11 @@ sub gen_word_phrase {
         close $wfh;
     }
     else {
-        carp "gen_word_phrase: Cannot open word file ($word_file), using fallback";
-        $used_fallback = 1;
-
         # Fallback: generate random "words"
+        $used_fallback = 1;
         for (1..$num_words) {
             my $length = $min_chars + int(rand($max_chars - $min_chars + 1));
             my ($word, $msg) = gen_random_string($length);
-#             push @wordlist => ucfirst lc $word;
             push @wordlist => lc $word;
         }
     }
@@ -162,7 +158,7 @@ sub gen_word_phrase {
     my @rand;
     my %seen;
 
-    WORD: while (scalar @rand < ($num_words + 1)) {
+    WORD: while (scalar @rand < $num_words) {
         my $num = int(rand($list_size));
         next WORD if $seen{$num}++;
         my $wd = $wordlist[$num];
@@ -170,12 +166,7 @@ sub gen_word_phrase {
         push @rand => ucfirst $wd;
     }
 
-    my @words;
-    for (1..$num_words) {
-        push @words => shift @rand;
-    }
-
-    my $phrase = join $word_sep => @words;
+    my $phrase = join $word_sep => @rand;
 
     my $msg = $used_fallback
         ? "Word phrase generated (fallback mode)."
@@ -282,7 +273,7 @@ Generator functions do not throw fatal errors. On failure:
 - Scalar context returns undef
 - List context returns (undef, error_message)
 
-Functions will carp (warn) and fall back to alternative methods when
+Functions will provide a message and fall back to alternative methods when
 possible (e.g., gen_uuid falls back to random token if uuidgen unavailable).
 
 =head1 SEE ALSO

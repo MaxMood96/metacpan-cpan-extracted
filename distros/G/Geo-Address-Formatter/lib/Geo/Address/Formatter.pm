@@ -1,5 +1,5 @@
 package Geo::Address::Formatter;
-$Geo::Address::Formatter::VERSION = '1.9990';
+$Geo::Address::Formatter::VERSION = '1.9991';
 # ABSTRACT: take structured address data and format it according to the various global/country rules
 
 use strict;
@@ -24,6 +24,26 @@ my $debug         = 0;
 my $only_address  = 0;
 
 
+
+
+my $instance;
+
+sub instance {
+    my ($class, %params) = @_;    
+    
+    unless ($instance) {
+        $instance = $class->new(@_);
+    }
+
+    say STDERR "************* in Geo::Address::Formatter::instance ***" if ($debug);
+    
+    # clear these fields that change on each run
+    $instance->{final_components} = undef;
+    $instance->{set_district_alias} = {};
+
+    return $instance;
+}
+
 sub new {
     my ($class, %params) = @_;
 
@@ -43,7 +63,8 @@ sub new {
     bless($self, $class);
 
     say STDERR "************* in Geo::Address::Formatter::new ***" if ($debug);
-    
+
+    # is slow because lots of conf, and pre-compiling
     if ($self->_read_configuration($conf_path)){
         return $self;
     }
@@ -1094,7 +1115,7 @@ Geo::Address::Formatter - take structured address data and format it according t
 
 =head1 VERSION
 
-version 1.9990
+version 1.9991
 
 =head1 SYNOPSIS
 
@@ -1116,7 +1137,7 @@ version 1.9990
 
   my $GAF = Geo::Address::Formatter->new( conf_path => '/path/to/templates' );
 
-Returns one instance. The I<conf_path> is required.
+Returns new object. The I<conf_path> is required.
 
 Optional parameters are:
 
@@ -1137,6 +1158,14 @@ include POI names). Can be overridden per-call via the I<only_address>
 option to L</format_address>.
 
 =back
+
+=head2 instance
+
+  my $GAF = Geo::Address::Formatter->instance( conf_path => '/path/to/templates' );
+
+Returns new instance (potentially re-used) The I<conf_path> is required.
+
+Optional parameters are as in the B<new> method.
 
 =head2 final_components
 

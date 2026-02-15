@@ -1,6 +1,6 @@
 package IO::K8s::Api::Batch::V1::UncountedTerminatedPods;
 # ABSTRACT: UncountedTerminatedPods holds UIDs of Pods that have terminated but haven't been accounted in Job status counters.
-our $VERSION = '1.000';
+our $VERSION = '1.001';
 use IO::K8s::Resource;
 
 k8s failed => [Str];
@@ -23,7 +23,7 @@ IO::K8s::Api::Batch::V1::UncountedTerminatedPods - UncountedTerminatedPods holds
 
 =head1 VERSION
 
-version 1.000
+version 1.001
 
 =head2 failed
 
@@ -58,13 +58,13 @@ Torsten Raudssus <torsten@raudssus.de>
 
 =item *
 
-Jose Luis Martinez <jlmartinez@capside.com> (original author, inactive)
+Jose Luis Martinez <jlmartin@cpan.org> (original author, inactive)
 
 =back
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2018 by CAPSiDE.
+This software is Copyright (c) 2018 by Jose Luis Martinez.
 
 This is free software, licensed under:
 

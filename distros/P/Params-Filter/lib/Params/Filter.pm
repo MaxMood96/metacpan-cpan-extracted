@@ -1,10 +1,10 @@
 package Params::Filter;
 use v5.36;
-our $VERSION = '0.014';
+our $VERSION = '0.015';
 
 =head1 NAME
 
-Params::Filter - Secure field filtering for parameter construction
+Params::Filter - Field filtering for strict parameter construction
 
 =encoding utf-8
 
@@ -103,7 +103,7 @@ compared to manual hash lookups, especially when the incoming data is in a known
 consistent format. The value of Params::Filter shows in its capability to assure the
 security, compliance, and correctness benefits listed above.
 
-For speed with fewer features, the L</CLOSURE INTERFACE> (C<make_filter>) 
+For speed with fewer features, the closure interface (C<make_filter>) 
 provides maximum performance and can be faster than hand-written Perl filtering 
 code due to pre-computed exclusion lookups and specialized closure variants. 
 Use C<make_filter> for hot code paths or high-frequency filtering.
@@ -186,7 +186,7 @@ As much as this module attempts to be versatile in usage, there are some B<VERY 
 
 =item * No substitutions or changes to field names
 
-=item * No built-in filter lists except null C<[]> = none
+=item * No built-in filter lists except an empty arrayref C<[]> = none
 
 =item * No fields ADDED to yielded data, EXCEPT:
 

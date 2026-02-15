@@ -71,7 +71,8 @@ my @files = (
     't/bump_safely/124_class.data',
     't/fail.t',
     't/lib/TestFunctions.pm',
-    't/version.t'
+    't/version.t',
+    't/version_doc.t'
 );
 
 notabs_ok($_) foreach @files;

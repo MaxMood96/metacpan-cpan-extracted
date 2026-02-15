@@ -6,7 +6,7 @@ use DDP {output => 'STDOUT', array_max => 10, show_memsize => 1};
 use Devel::Confess 'color';
 use Cwd 'getcwd';
 package SimpleFlow;
-our $VERSION = 0.11;
+our $VERSION = 0.12;
 use Time::HiRes;
 use Term::ANSIColor;
 use Scalar::Util 'openhandle';
@@ -82,7 +82,7 @@ sub task {
 		} elsif ($ref eq '') { # scalar
 			@missing_files = grep {not -f -r $_ } ($args->{'input.files'});
 			%input_file_size = map { $_ => -s $_ } ($args->{'input.files'} );
-			@empty_filenames = grep {length $_ == 0} ($args->{'input.files'});
+			@empty_filenames = grep {(defined $_) && (length $_ == 0)} ($args->{'input.files'});
 		} else {
 			p $args;
 			die 'ref type "' . $ref . '" is not allowed for "input.files"';
@@ -170,10 +170,12 @@ sub task {
 	};
 	my $t1 = Time::HiRes::time();
 	$r{duration} = $t1-$t0;
+	$r{'exit'} = $r{'exit'} >> 8;
 	foreach my $std ('stderr', 'stdout') {
 		$r{$std} =~ s/\s+$//; # remove trailing whitespace/newline
 		$string_max = max($string_max, length $r{$std});
 	}
+	$r{signal} = $r{'exit'} & 127;# Useful to see if it was killed by signal 9 or 15
 	$r{done} = 'now';
 	$r{'will.do'} = 'done';
 	my @missing_output_files = grep {not -f -r $_} @output_files;
@@ -189,7 +191,11 @@ sub task {
 		p(@missing_output_files, output => $args->{'log.fh'}, string_max => $string_max) if defined $args->{'log.fh'};
 		p %r, string_max => $string_max;
 		p(%r, output => $args->{'log.fh'}, string_max => $string_max) if defined $args->{'log.fh'};
-		die 'those above files should have been made but are missing';
+		if ($args->{'die'}) {
+			die 'those above files should have been made but are missing';
+		} else {
+			say STDERR 'those above files should have been made but are missing';
+		}
 	}
 	%output_file_size = map {$_ => -s $_} @output_files;
 	$r{'output.file.size'} = \%output_file_size;

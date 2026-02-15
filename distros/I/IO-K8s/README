@@ -1,9 +1,9 @@
 This archive contains the distribution IO-K8s,
-version 1.000:
+version 1.001:
 
   Objects representing things found in the Kubernetes API
 
-This software is Copyright (c) 2018 by CAPSiDE.
+This software is Copyright (c) 2018 by Jose Luis Martinez.
 
 This is free software, licensed under:
 

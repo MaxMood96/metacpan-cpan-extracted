@@ -10,7 +10,7 @@ run-git-hooks - Secure Git Server with more granular hooks capabilities than def
 
   Standard Method:
   With SHELL=/bin/bash, use the following format in ~/.ssh/authorized_keys:
-  command="~/git-server/gitserver KEY=user1" ssh-ed25519 AAAA_OAX+blah_pub__ user1@workstation
+  command="~/git-server/gitserver REMOTE_USER=user1" ssh-ed25519 AAAA_OAX+blah_pub__ user1@workstation
 
    -- OR --
 
@@ -18,16 +18,16 @@ run-git-hooks - Secure Git Server with more granular hooks capabilities than def
   Set SHELL=/path/to/git-server (in /etc/passwd) and
   Set "PermitUserEnvironment yes" (in /etc/ssh/sshd_config)
   Then use the following format in ~/.ssh/authorized_keys:
-  environment="KEY=user1" ssh-ed25519 AAAA_OAX+blah_pub__ user1@workstation
+  environment="REMOTE_USER=user1" ssh-ed25519 AAAA_OAX+blah_pub__ user1@workstation
 
 =head1 ENV
 
 You can set as many %ENV variables as you want
 within the authorized_keys configuration.
 
-=head2 KEY
+=head2 REMOTE_USER
 
-KEY has a special meaning to define a word for the associated user
+REMOTE_USER has a special meaning to define a word for the associated user
 and will be used for ACL rules.
 
 =head1 INSTALL
@@ -120,7 +120,7 @@ Rob Brown <bbb@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2015-2025 by Rob Brown <bbb@cpan.org>
+Copyright 2015-2026 by Rob Brown <bbb@cpan.org>
 
 This library is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
 
@@ -130,9 +130,9 @@ use strict;
 use warnings;
 use FindBin qw($Bin);
 
-our $VERSION = "0.036";
+our $VERSION = "0.037";
 
-my $ssh = $ENV{SSH_CLIENT} or die "Only SSH allowed\n";
+my $who = ($ENV{REMOTE_USER} || die "Auth required\n")."\@$ENV{REMOTE_ADDR}";
 $ENV{GIT_CONNECTED_EPOCH} ||= time;
 
 my $git_op_hook = {
@@ -147,12 +147,10 @@ if (@ARGV == 2 and $ARGV[0] eq "-c") {
     shift; # -c
     $cmd = shift; # i.e., "git-upload-pack 'project'"
 }
-my $KEY = $ENV{KEY} || "UNKNOWN";
-my $ip = $ssh =~ /^([\da-f\.:]+) /i ? $1 : "UNKNOWN";
-die localtime().": [$KEY\@$ip] git-server: Unexpected invocation.\n" unless $cmd;
+die localtime().": [$who] git-server: Unexpected invocation.\n" unless $cmd;
 
-my $dir = $ENV{GIT_DIR} or die localtime().": [$KEY\@$ip] git-server: Unable to determine repo!\n";
-die localtime().": [$KEY\@$ip] git-server: You can't access '$1' git repository\n" if $dir =~ m{([^/]*\.workingdir)\b};
+my $dir = $ENV{GIT_DIR} or die localtime().": [$who] git-server: Unable to determine repo!\n";
+die localtime().": [$who] git-server: You can't access '$1' git repository\n" if $dir =~ m{([^/]*\.workingdir)\b};
 
 my $bare = `git config core.bare 2>/dev/null`;
 if ($bare =~ /true/) {
@@ -163,7 +161,7 @@ elsif ($bare =~ /false/) {
     my $where = $dir =~ m{^(.+)/\.git$} ? $1 : $dir;
     my $server_monkeys = `git diff 2>&1`;
     if ($? or $server_monkeys) {
-        die localtime().": [$KEY\@$ip] git-server: Illegal uncommitted changes found on Non-bare git server! Manual intervention required.\n".
+        die localtime().": [$who] git-server: Illegal uncommitted changes found on Non-bare git server! Manual intervention required.\n".
             "  Option a) Discard changes: git -C $where checkout .\n".
             "  Option b) Commit changes: git -C $where commit -a -m 'Keep modifications found on server'\n".
             "$server_monkeys\n";
@@ -174,35 +172,35 @@ elsif ($bare =~ /false/) {
         $recommendation .= "git clone --bare $where $gitless";
         $recommendation .= qq{ && (grep -q "ref: " $gitless/HEAD || grep " refs/heads/" $gitless/packed-refs | head -1 | awk '{print "ref: ", \$2}' > $gitless/HEAD)};
         $recommendation .= qq{ && mv -v $where $where-CRUSTY-PLEASE-DELETE-\$\$};
-        die localtime().": [$KEY\@$ip] git-server: Non-bare git folder ending with '.git' is too dangerous for a server repo! Manual intervention required.\n".
+        die localtime().": [$who] git-server: Non-bare git folder ending with '.git' is too dangerous for a server repo! Manual intervention required.\n".
             "  Recommendation: $recommendation\n";
     }
     # Make sure NOT to be stuck on any branch just to be safe.
     # Otherwise, if the client attempts to push any changes to that branch, it will crash with the following:
     #   remote: error: refusing to update checked out branch: refs/heads/main
-    open my $head_fh, "<", "$dir/HEAD" or die localtime().": [$KEY\@$ip] git-server: Broken non-bare repo missing $dir/HEAD?\n";
+    open my $head_fh, "<", "$dir/HEAD" or die localtime().": [$who] git-server: Broken non-bare repo missing $dir/HEAD?\n";
     my $stuck = <$head_fh> || "";
     close $head_fh;
     if ($stuck =~ /^[0-9a-f]+\s*$/) {
         # Looks like a great detached commit, so it is safe enough to proceed.
     }
     else {
-        $stuck =~ m{^ref:\s+refs/heads/(\S+)} or die localtime().": [$KEY\@$ip] git-server: Unable to determine non-bare checkout branch: $stuck\n";
+        $stuck =~ m{^ref:\s+refs/heads/(\S+)} or die localtime().": [$who] git-server: Unable to determine non-bare checkout branch: $stuck\n";
         my $current_branch = $1;
         if (`git log 2>&1` =~ /^commit\s+([0-9a-f]+)/m) {
             my $detach = $1;
-            die localtime().": [$KEY\@$ip] git-server: Non-bare git checkout linked to branch [$current_branch] is too dangerous to use server repo. Manual intervention required.\n".
+            die localtime().": [$who] git-server: Non-bare git checkout linked to branch [$current_branch] is too dangerous to use server repo. Manual intervention required.\n".
                 " Option a) Fork a copy into a safe bare git folder: git clone --bare $where $where.git\n".
                 " Option b) Detach checkout from branch to lock onto a safe commit: git -C $where checkout $detach\n";
         }
-        die localtime().": [$KEY\@$ip] git-server: Unable to determine any commit for non-bare checkout on branch $current_branch\n";
+        die localtime().": [$who] git-server: Unable to determine any commit for non-bare checkout on branch $current_branch\n";
     }
 }
 else {
-    die localtime().": [$KEY\@$ip] git-server: Broken bare for git repo configuration! $dir/config: ".`git config core.bare 2>&1`."\n";
+    die localtime().": [$who] git-server: Broken bare for git repo configuration! $dir/config: ".`git config core.bare 2>&1`."\n";
 }
 
-my $hook = $cmd =~ /^(git-[\w\-]+)/ && $git_op_hook->{$1} or die localtime().": [$KEY\@$ip] git-server: Unimplemented operation!\n";
+my $hook = $cmd =~ /^(git-[\w\-]+)/ && $git_op_hook->{$1} or die localtime().": [$who] git-server: Unimplemented operation!\n";
 
 my $xmods = $ENV{XMODIFIERS} || "";
 if ($xmods) {
@@ -220,7 +218,7 @@ if ($xmods) {
     $ENV{GIT_OPTION_COUNT} = scalar @options;
     for (my $i = 0; $i < @options; $i++) {
         $ENV{"GIT_OPTION_$i"} = $options[$i];
-        warn localtime().": [$KEY\@$ip] git-server: Transported GIT_OPTION_$i=[$options[$i]]\n";
+        warn localtime().": [$who] git-server: Transported GIT_OPTION_$i=[$options[$i]]\n";
     }
 }
 
@@ -232,19 +230,19 @@ if ($0 !~ m{^\Q$dir\E/hooks/} and    # Launched outside of repo/hooks
     !-l $Bin and                     # Spawned from real "hooks" folder, not a symlink
     !-l "$dir/hooks"                 # Repo hooks is not a symlink, (so it's probably the original "sample" stock)
     || !-d _) {                      # Or it's not even a directory (maybe non-existent or plain "hooks" file or a special mknod file or unix socket)
-    warn localtime().": [$KEY\@$ip] git-server: Automatically configuring repo [$dir] to use hooks properly...\n";
+    warn localtime().": [$who] git-server: Automatically configuring repo [$dir] to use hooks properly...\n";
     # Don't delete stock "hooks" folder in case there is something needed in there. Just move it out of the way to be safe.
     rename "$dir/hooks","$dir/hooks-CRUSTY-PLEASE-DELETE-$$" and warn "rename: $dir/hooks -> $dir/hooks-CRUSTY-PLEASE-DELETE-$$\n" if lstat "$dir/hooks";
     symlink $Bin, "$dir/hooks" and warn "symlink: $dir/hooks -> $Bin\n";
     if (-l "$dir/hooks" and -d "$dir/hooks") {
-        warn localtime().": [$KEY\@$ip] git-server: Successfully upgraded hooks to myself.\n";
+        warn localtime().": [$who] git-server: Successfully upgraded hooks to myself.\n";
         if (!`git config acl.writers`) {
-            warn localtime().": [$KEY\@$ip] git-server: No [acl.writers] found? Running: [git config acl.writer $KEY]\n";
-            system "git config acl.writers $KEY 1>&2";
+            warn localtime().": [$who] git-server: No [acl.writers] found? Running: [git config acl.writer $ENV{REMOTE_USER}]\n";
+            system "git config acl.writers $ENV{REMOTE_USER} 1>&2";
         }
     }
     else {
-        warn localtime().": [$KEY\@$ip] git-server: FAILED configuring repo [$dir/hooks]! Manual intervention required.\n";
+        warn localtime().": [$who] git-server: FAILED configuring repo [$dir/hooks]! Manual intervention required.\n";
     }
 }
 
@@ -253,7 +251,7 @@ my $tmpdir = "$dir/tmp";
 mkdir $tmpdir, 0700 unless -d $tmpdir;
 $ENV{IPC} = "$tmpdir/current-$hook-$$-io";
 mkdir $ENV{IPC}, 0700;
-die localtime().": [$KEY\@$ip] git-server: Unable to create [$ENV{IPC}] folder! $!\n" unless -d $ENV{IPC};
+die localtime().": [$who] git-server: Unable to create [$ENV{IPC}] folder! $!\n" unless -d $ENV{IPC};
 
 my $pre_failure = 0;
 if (-x "$dir/hooks/pre-$hook") {
@@ -284,7 +282,7 @@ if (-x "$dir/hooks/post-$hook") {
 
 if ($ENV{IPC}) {
     if ($ENV{DEBUG}) {
-        warn localtime().": [$KEY\@$ip] git-server: DEBUG: Leaving $ENV{IPC} intact\n";
+        warn localtime().": [$who] git-server: DEBUG: Leaving $ENV{IPC} intact\n";
     }
     else {
         # Wipe out anything in the IPC folder
@@ -296,7 +294,7 @@ if ($ENV{IPC}) {
             next if $f !~ /^current-/; # Only wipe stuff that I made
             my $crusty = "$tmpdir/$f";
             if ($ENV{DEBUG} && -M $crusty > 32) {
-                warn localtime().": [$KEY\@$ip] git-server: Wiping crusty files: [$crusty] ...\n";
+                warn localtime().": [$who] git-server: Wiping crusty files: [$crusty] ...\n";
                 system "rm", "-rf", $crusty;
             }
             elsif (-M $crusty > 62) {

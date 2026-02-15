@@ -1,5 +1,16 @@
 Revision History for Git::Server
 
+0.037  2026-02-14 19:00:00
+ - Add SCP-style support for proxy.url.
+ - Add git-verify config sanity checker.
+ - Deprecate use of $ENV{KEY}.
+ - Instead use REMOTE_USER to be more like HTTP.
+ - & REMOTE_ADDR REMOTE_PORT SERVER_ADDR SERVER_PORT
+   instead of SSH_CLIENT or SSH_CONNECTION.
+ - Change colon to newline as git-client delimiter.
+ - Don't require IO::Trace if strace is available.
+ - Use default "main" instead of "master" branch.
+
 0.036  2026-02-02 23:30:00
  - Minor typo in doc.
  - Fix path in spec for cron ENV.

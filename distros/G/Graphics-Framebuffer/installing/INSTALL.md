@@ -40,8 +40,9 @@ Debian distributions use "apt" utility to manage packages.  Debian distributions
 *  Xubuntu
 *  Mint
 *  Raspian
+*  Zorin OS
 
-RedHat distributions use the "yum" utility to manage packages.  RedHat distributions are typically:
+RedHat distributions use the "yum" or "dnf" utility to manage packages.  RedHat distributions are typically:
 
 *  RedHat
 *  Fedora
@@ -107,7 +108,9 @@ Using the EFI install means no need to fiddle with Grub.  VirtualBox already has
 install Graphics::Framebuffer
 ```
 
-*  ```git clone https://github.com/richcsst/Graphics-Framebuffer.git```
+* From the GitHub repository
+
+  ```git clone https://github.com/richcsst/Graphics-Framebuffer.git```
 
 ```
        perl Makefile.PL

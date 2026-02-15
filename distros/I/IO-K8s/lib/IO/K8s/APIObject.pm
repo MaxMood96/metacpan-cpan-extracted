@@ -1,6 +1,6 @@
 package IO::K8s::APIObject;
 # ABSTRACT: Base class for top-level Kubernetes API objects
-our $VERSION = '1.000';
+our $VERSION = '1.001';
 use v5.10;
 use IO::K8s::Resource ();
 use Import::Into;
@@ -18,17 +18,24 @@ sub import {
 
     # Install CRD overrides *before* applying the role
     # This way the role sees these methods and doesn't install its defaults
+    my $is_crd = 0;
     if (my $api_ver = $params{api_version}) {
         my $stash = Package::Stash->new($caller);
         $stash->add_symbol('&api_version', sub { $api_ver });
+        $is_crd = 1;
     }
     if (my $plural = $params{resource_plural}) {
         my $stash = Package::Stash->new($caller);
         $stash->add_symbol('&resource_plural', sub { $plural });
     }
 
-    # Then apply the APIObject role (before registering metadata)
+    # Apply the APIObject role (provides metadata, labels, conditions, owners)
     Moo::Role->apply_roles_to_package($caller, 'IO::K8s::Role::APIObject');
+
+    # CRDs get SpecBuilder automatically (deep-path spec manipulation)
+    if ($is_crd) {
+        Moo::Role->apply_roles_to_package($caller, 'IO::K8s::Role::SpecBuilder');
+    }
 
     # Register metadata attribute using the k8s DSL
     # This allows _inflate_struct to properly inflate metadata as ObjectMeta
@@ -50,7 +57,7 @@ IO::K8s::APIObject - Base class for top-level Kubernetes API objects
 
 =head1 VERSION
 
-version 1.000
+version 1.001
 
 =head1 SYNOPSIS
 
@@ -90,11 +97,16 @@ Automatically applies L<IO::K8s::Role::APIObject> which provides:
 
 =item * C<resource_plural()> method (returns undef = auto-pluralize)
 
+=item * Label, annotation, condition, and owner convenience methods
+
 =back
 
 For Custom Resource Definitions (CRDs), pass C<api_version> and
 optionally C<resource_plural> as import parameters. These are installed
 as class methods before the role is composed, avoiding redefinition warnings.
+CRD classes also get L<IO::K8s::Role::SpecBuilder> applied automatically
+for deep-path spec manipulation (C<spec_get>, C<spec_set>, C<spec_push>,
+C<spec_merge>, C<spec_delete>).
 
 Use C<IO::K8s::Resource> for embedded objects (PodSpec, Container, etc.)
 and C<IO::K8s::APIObject> for top-level resources (Pod, Deployment, Service, etc.)
@@ -124,13 +136,13 @@ Torsten Raudssus <torsten@raudssus.de>
 
 =item *
 
-Jose Luis Martinez <jlmartinez@capside.com> (original author, inactive)
+Jose Luis Martinez <jlmartin@cpan.org> (original author, inactive)
 
 =back
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2018 by CAPSiDE.
+This software is Copyright (c) 2018 by Jose Luis Martinez.
 
 This is free software, licensed under:
 

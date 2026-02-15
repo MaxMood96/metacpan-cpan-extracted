@@ -1,15 +1,3 @@
-- add complete tests for all features
-- add a test to check all features have tests
-- add bump_safely tests for all features (easiest: same as bump)
-- document the name "unfeatures"
-
-# basic format for all tests:
-
-use feature 'foo';
-no warnings 'experimental::foo'
-
-no feature 'foo';
-
-use experimental 'foo';
-
-feature compat
+t/bump/003_bundles.data
+- write the equivalent of each bundle,
+  when features where "known" and unfeatures disabled

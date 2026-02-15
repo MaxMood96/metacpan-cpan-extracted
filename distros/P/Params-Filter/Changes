@@ -1,5 +1,8 @@
 Revision history for Params-Filter
 
+0.015  2026-02-14
+    - Improved documentation.
+
 v0.014  2026-01-27 (STABLE RELEASE)
     - DISTRIBUTION: Fixed PAX headers issue permanently
     - Configured Makefile.PL to use GNU tar (gtar) with --format=ustar

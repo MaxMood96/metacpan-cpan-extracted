@@ -13,11 +13,14 @@ use Time::HiRes qw(sleep time alarm);
 use Getopt::Long;
 use Pod::Usage;
 
+use constant {
+	PI => (4 * atan2(1, 1)),
+};
 # Just for debugging and will cause a lot of overhead, hence why it is normally commented out.
 # use Data::Dumper;$Data::Dumper::Sortkeys=1; $Data::Dumper::Purity=1; $Data::Dumper::Deepcopy=1;
 
 BEGIN {
-    our $VERSION = '6.10';
+    our $VERSION = '6.11';
 }
 
 our $F;
@@ -134,7 +137,7 @@ my $DORKSMILE;
 # Pre-load the images
 
 foreach my $file (@files) {
-    next if ($file =~ /^\.+/ || $file =~ /Test/i || -d "$images_path/$file"); # Ignore the test pattern and directories
+    next if ($file =~ /^\.+/ || $file =~ /usa\.gif|Test/i || -d "$images_path/$file"); # Ignore the test pattern and directories
 	if ($file =~ /\.gif$/i) {
 		print_it($F, "Loading Animation > $file", '00FFFFFF', undef, 1);
 		my $image;
@@ -187,7 +190,6 @@ $F->cls();
 
 ##################################
 my %func = (
-	'Drop'                              => sub { drop(shift); },
     'Color Mapping'                     => sub { color_mapping(shift); },
     'Plotting'                          => sub { plotting(shift); },
     'Lines'                             => sub { lines(shift, 0); },
@@ -277,7 +279,6 @@ if (defined($show_func)) { # If the "--func" option is used, the they are run on
         'Arcs',
         'Poly Arcs',
         'Beziers',
-#		'Drop',
         'Filled Boxes',
         'Filled Rounded Boxes',
         'Filled Circles',
@@ -336,14 +337,17 @@ if (defined($show_func)) { # If the "--func" option is used, the they are run on
 # Each demo is run with and without C acceleration
 foreach my $name (@order) {
     if (exists($func{$name})) {
-#		unless ($name =~ /^(Color Mapping|ADD|SUBTRACT|Rotate TrueType Fonts|TrueType|Flipping)/) {
-#			$F->cls();
-#			$F->acceleration(PERL);
-#			$func{$name}->($name . ' -> Pure-Perl');
-#		}
-		$F->cls();
-		$F->acceleration(SOFTWARE);
-		$func{$name}->($name . ' -> C Accelerated');
+		if ($noaccel) {
+			unless ($name =~ /^(Color Mapping|ADD|SUBTRACT|Rotate TrueType Fonts|TrueType|Flipping)/) {
+				$F->cls();
+				$F->acceleration(PERL);
+				$func{$name}->($name . ' -> Pure-Perl');
+			}
+		} else {
+			$F->cls();
+			$F->acceleration(SOFTWARE);
+			$func{$name}->($name . ' -> C Accelerated');
+		}
 		sleep $delay unless($name =~ /Plot|Lines|Poly|Boxes|Circles|Ellipses|Arcs|Beziers|Pies/);
     }
 }
@@ -357,70 +361,6 @@ $F->cls('ON');         # Clear the screen and turn the cursor on
 undef($F);             # Destroy the framebuffer object
 
 exit(0);
-
-sub drop {
-	# Bases on some BASIC code I found on a Facebook group
-	my $name = shift;
-	print_it($F, $name);
-
-	my $xs = 3;
-	my $xp = $xs * 96;
-	my $xr = $xs * pi;
-	my $xf = $xr / $xp;
-	my $ys = 112;
-
-	for (my $zi=-64;$zi<=64;$zi++) {
-		my $zt = $zi * ($xp / 64);
-		my $zs = $zt * $zt;
-		my $xl = int(sqrt($xp * $xp - $zs) + 0.5);
-		for (my $xi=-($xl);$xi<=$xl;$xi++) {
-			my $xt = sqrt($xi * $xi + $zs) * $xf;
-			my $yy = (sin($xt) + sin($xt * 3) * 0.4) * $ys;
-			my $x1 = $xi + $zi + $screen_width / 2;
-			my $y1 = ($screen_height / 2) - $yy + $zi;
-			if ($F->acceleration()) {
-				$F->set_color(
-					{
-						'alpha' => 255,
-						'red'   => 255,
-						'green' => 255,
-						'blue'  => 0,
-					}
-				);
-			} else {
-				$F->set_color(
-					{
-						'alpha' => 255,
-						'red'   => 0,
-						'green' => 255,
-						'blue'  => 0,
-					}
-				);
-			}
-			$F->plot(
-				{
-					'x' => $x1,
-					'y' => $y1,
-				}
-			);
-			$F->set_color(
-				{
-					'red'   => 0,
-					'green' => 0,
-					'blue'  => 0,
-				}
-			);
-			$F->line(
-				{
-					'x'  => $x1,
-					'y'  => ($y1 + 1),
-					'xx' => $x1,
-					'yy' => (($screen_height / 2) + 205),
-				}
-			);
-		}
-	}
-}
 
 sub color_mapping { # Shows Red-Green-Blue to see if color mapping is correct (in the proper order).
 	my $name = shift;

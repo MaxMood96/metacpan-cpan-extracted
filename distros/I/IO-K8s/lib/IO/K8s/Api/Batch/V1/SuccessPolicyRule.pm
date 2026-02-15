@@ -1,6 +1,6 @@
 package IO::K8s::Api::Batch::V1::SuccessPolicyRule;
 # ABSTRACT: SuccessPolicyRule describes rule for declaring a Job as succeeded. Each rule must have at least one of the "succeededIndexes" or "succeededCount" specified.
-our $VERSION = '1.000';
+our $VERSION = '1.001';
 use IO::K8s::Resource;
 
 k8s succeededCount => Int;
@@ -23,7 +23,7 @@ IO::K8s::Api::Batch::V1::SuccessPolicyRule - SuccessPolicyRule describes rule fo
 
 =head1 VERSION
 
-version 1.000
+version 1.001
 
 =head2 succeededCount
 
@@ -58,13 +58,13 @@ Torsten Raudssus <torsten@raudssus.de>
 
 =item *
 
-Jose Luis Martinez <jlmartinez@capside.com> (original author, inactive)
+Jose Luis Martinez <jlmartin@cpan.org> (original author, inactive)
 
 =back
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2018 by CAPSiDE.
+This software is Copyright (c) 2018 by Jose Luis Martinez.
 
 This is free software, licensed under:
 
