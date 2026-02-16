@@ -1,5 +1,8 @@
 Revision history for Params-Filter
 
+0.016  2026-02-15
+    - Fixed distribution issue with MANIFEST.SKIP
+
 0.015  2026-02-14
     - Improved documentation.
 

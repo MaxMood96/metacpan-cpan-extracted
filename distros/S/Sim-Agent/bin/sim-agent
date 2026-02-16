@@ -1,0 +1,16 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+use Sim::Agent;
+
+my $plan = shift @ARGV or die "Usage: sim-agent <plan.sexpr> [--dev]\n";
+
+my $dev = grep { $_ eq '--dev' } @ARGV;
+
+my $sa = Sim::Agent->new(
+    plan => $plan,
+    dev  => $dev,
+);
+
+$sa->run;

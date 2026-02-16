@@ -49,17 +49,37 @@ no strict;
 no warnings;
 use warnings::unused;
 
+
 use Sim::OPT::Morph;
 use Sim::OPT::Sim;
 use Sim::OPT::Report;
 use Sim::OPT::Descend;
-use Sim::OPT::Interlinear;
 use Sim::OPT::Takechance;
+use Sim::OPT::Interlinear;
 use Sim::OPT::Parcoord3d;
 use Sim::OPT::Stats;
 eval { use Sim::OPTcue::OPTcue; 1 };
+eval { use Sim::OPTcue::Metabridge; 1 };
+eval { use Sim::OPTcue::Exogen::PatternSearch; 1 };
+eval { use Sim::OPTcue::Exogen::NelderMead; 1 };
+eval { use Sim::OPTcue::Exogen::Armijo; 1 };
+eval { use Sim::OPTcue::Exogen::NSGAII; 1 };
+eval { use Sim::OPTcue::Exogen::ParticleSwarm; 1 };
+eval { use Sim::OPTcue::Exogen::SimulatedAnnealing; 1 };
+eval { use Sim::OPTcue::Exogen::NSGAIII; 1 };
+eval { use Sim::OPTcue::Exogen::MOEAD; 1 };
+eval { use Sim::OPTcue::Exogen::SPEA2; 1 };
+eval { use Sim::OPTcue::Exogen::ParticleSwarm; 1 };
+eval { use Sim::OPTcue::Exogen::RadialBasis; 1 };
+eval { use Sim::OPTcue::Exogen::Kriging; 1 };
+eval { use Sim::OPTcue::Exogen::DecisionTree; 1 };
+eval { use Sim::OPTcue::Exogen::KNN; 1 };
+eval { use Sim::OPTcue::Exogen::FFNN; 1 };
+eval { use Sim::OPTcue::Exogen::GBDT; 1 };
+eval { use Sim::OPTcue::Endogen::DWGN2; 1 };
+eval { use Sim::OPTcue::Endogen::NeuralBoltzmann; 1 };
 
-$VERSION = '0.885';
+$VERSION = '0.903';
 $ABSTRACT = 'Sim::OPT is an optimization and parametric exploration program oriented toward problem decomposition. It can be used with simulation programs receiving text files as input and emitting text files as output. It allows a free mix of sequential and parallel block coordinate searches, as well of searches more complely structured in graphs.';
 
 #################################################################################
@@ -933,28 +953,43 @@ sub rotate2d
 sub genstring 
 {
   my ( $varnums_r, $blockelts_r, $from ) = @_;
-  my %varnums   = %{ $varnums_r }; #say "\%varnums: " . dump ( \%varnums );  # max levels for each parameter
-  my @blockelts = @{ $blockelts_r }; #say "\@blockelts: " . dump ( @blockelts ); # variables active in this block
-  my @frags = split( "_", $from ); #say "\$from: $from"; say "\@frags: " . dump ( @frags );
-  my ( @bowl, @bowlmax );
+  my %varnums   = %{ $varnums_r };    # max levels for each parameter
+  my @blockelts = @{ $blockelts_r };  # variables active in this block
+  my %inblock   = map { $_ => 1 } @blockelts;
 
-  foreach my $frag ( @frags ) 
+  my @frags = split( "_", $from );
+  my ( @bowl_all, @pairs_block );
+
+  foreach my $frag ( @frags )
   {
-    my @bits = split( "-", $frag ); #say "\@bits: " . dump ( @bits ); say "\$bits[0]: " . dump ( $bits[0] ); 
-    unless ( $bits[0] ~~ @blockelts )
-    {  
-      push( @bowl, "$frag" ); #say  "INSERT \$frag $frag";
-    }
-    else 
+    my ( $var, $oldlev ) = split( "-", $frag, 2 );
+
+    # keep incumbents for vars outside the block; randomise only those in the block
+    my $pair;
+    if ( !$inblock{$var} )
     {
-    	my $max = $varnums{ $bits[0] }; #say  "\$max $max";
-      my $lev = 1 + int( rand( $max ) ); #say  "\$lev $lev";
-      push( @bowl, "$bits[0]-$lev" ); #say  "CALC AND INSERT \$bits[0]-\$lev $bits[0]-$lev";
+      $pair = $frag;
     }
+    else
+    {
+      my $max = $varnums{$var};
+      $max = 1 if ( !defined $max || $max < 1 );
+      my $lev = 1 + int( rand($max) );
+      $pair = "$var-$lev";
+      push( @pairs_block, $pair );
+    }
+
+    push( @bowl_all, $pair );
   }
-  my $obtained = ( join "_", @bowl ); #say "\@obtained: " . dump ( @obtained );
-  return ( $obtained, \@bowl );
+
+  my $obtained = join "_", @bowl_all;
+
+  # IMPORTANT: return only the var-level pairs for the *current block*.
+  # This keeps countvar/countstep aligned to block coordinate descent blocks,
+  # while $obtained still encodes the full instance id (all vars).
+  return ( $obtained, \@pairs_block );
 }
+
 
 
 sub enumerate
@@ -2275,14 +2310,14 @@ sub callblock # IT CALLS THE SEARCH ON BLOCKS.
 	my %inst = %{ $d{inst} };
 	my %vehicles = %{ $d{vehicles} };
 	@varnumbers = Sim::OPT::washn( @varnumbers );
-  say  "IN CALLBLOCK EXE \$dirfiles{randompicknum} $dirfiles{randompicknum}";
+  say  "IN CALLBLOCK EXE flags: randompick=$dirfiles{randompick} randompicknum=$dirfiles{randompicknum} newrandompick=$dirfiles{newrandompick} newrandompicknum=$dirfiles{newrandompicknum}";
 
 
 	if ( $countcase > $#sweeps )   # NUMBER OF CASES OF THE CURRENT PROBLEM
   {
 		if ( ( $dirfiles{checksensitivity} eq "y" ) and ( checkOPTcue ) )
 		{
-			Sim::OPTcue::sense( $dirfiles{ordtot}, $mypath, $dirfiles{objectivecolumn} );
+			Sim::OPTcue::OPTcue::sense( $dirfiles{ordtot}, $mypath, $dirfiles{objectivecolumn} );
 		}
     elsif ( ( $dirfiles{checksensitivity} eq "y" ) and ( !checkOPTcue ) )
     {
@@ -2301,15 +2336,15 @@ sub callblock # IT CALLS THE SEARCH ON BLOCKS.
 	my @sourceblockelts = @{ getblockelts( \@sourcesweeps, $countcase, $countblock ) };
 
   
-  if ( $checkOPTcue )
+  if ( checkOPTcue() )
   {
-    my ( $sourceblockelts0_r, $dirfiles_r, $dowhat_r, $vehicles_r ) = Sim::OPTcue::direct( $sourceblockelts[0], \%dirfiles, \%dowhat, \%vehicles );
+    my ( $sourceblockelts0_r, $dirfiles_r, $dowhat_r, $vehicles_r ) = Sim::OPTcue::OPTcue::direct( $sourceblockelts[0], \%dirfiles, \%dowhat, \%vehicles );
     $sourceblockelts[0] = $sourceblockelts0_r;
     %dirfiles = %$dirfiles_r;
     %dowhat = %$dowhat_r;
     %vehicles = %$vehicles_r;
   }
-  elsif ( !$checkOPTcue )
+  else
   {
     if ( $sourceblockelts[0] =~ /ø/ )
     {
@@ -3021,7 +3056,7 @@ sub exe
 	{
     if ( checkOPTcue() )
     {
-      ( $inst_r, $instances_r ) = Sim::OPTcue::expand(
+      ( $inst_r, $instances_r ) = Sim::OPTcue::OPTcue::expand(
       {
         configfile => $configfile,
         precious   => $precious,
@@ -3217,19 +3252,18 @@ sub opt
 	}
 
 
-  sub checkOPTcue 
+  sub checkOPTcue
   {
-     if( defined( $checkOPTcue ) )
-     {
-        return( $checkOPTcue );
-     }
+    our $CHECK_OPTCUE;
+    return( $CHECK_OPTCUE ) if defined $CHECK_OPTCUE;
 
-    my $checkOPTcue = eval 
+    $CHECK_OPTCUE = eval
     {
-      use Sim::OPTcue;
+      require Sim::OPTcue::OPTcue;
       1;
     } ? 1 : 0;
-    return( $checkOPTcue );
+
+    return( $CHECK_OPTCUE );
   }
 
   our $checkoptcue = checkOPTcue();
@@ -3285,7 +3319,7 @@ sub opt
 	if ( ( $dowhat{justchecksensitivity} ne "" ) and ( checkOPTcue ) )
 	{
 		#say  "RECEIVED.";
-		Sim::OPTcue::sense( $dowhat{justchecksensitivity}, $mypath, $dowhat{objectivecolumn}, "stop" );
+		Sim::OPTcue::OPTcue::sense( $dowhat{justchecksensitivity}, $mypath, $dowhat{objectivecolumn}, "stop" );
 	}
   elsif ( ( $dowhat{justchecksensitivity} ne "" ) and ( !checkOPTcue ) )
   {

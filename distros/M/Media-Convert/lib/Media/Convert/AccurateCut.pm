@@ -68,11 +68,23 @@ sub run {
 		$last = $kf;
 	}
 	my @cleanups = ();
-	my $half_frame = $self->input->video_frame_length / 2;
-	if(($last - $half_frame < $self->start) && ($last + $half_frame > $self->start)) {
+	my $full_frame = $self->input->video_frame_length;
+	my $half_frame = $full_frame / 2;
+	if($last == $next) {
+		# edge case: desired cut point is after the last key frame in
+		# the file. Snap to that last key frame.
 		$final_source = $self->input;
 		$self->output->fragment_start($last);
-	} elsif(($next - $half_frame < $self->start) && ($next + $half_frame > $self->start)) {
+	} elsif(($last - $half_frame < $self->start) && $last + $half_frame > $self->start) {
+		# If the previous key frame is less than half a frame
+		# before the desired start point, snap the desired start
+		# point to the previous key frame instead.
+		$final_source = $self->input;
+		$self->output->fragment_start($last);
+	} elsif(($next - $full_frame < $self->start) && $next + $half_frame > $self->start) {
+		# If the next key frame is less than a full frame after
+		# the desired start point, snap the desired start point
+		# to the next key frame instead.
 		$final_source = $self->input;
 		$self->output->fragment_start($next);
 	} else {
@@ -90,13 +102,13 @@ sub run {
 		my $convert = Media::Convert::Asset->new(url => "$workdir/concat1.mkv",
 						reference => $self->profile, 
 						fragment_start => $self->start - $last,
-						audio_codec => 'copy',
+						audio_codec => $self->input->audio_codec,
 		);
 		push @cleanups, $convert->url;
 		Media::Convert::Pipe->new(inputs => [$tmp],
 						output => $convert,
 						map => [Media::Convert::Map->new(input => $tmp, type => 'allcopy')],
-						acopy => 1,
+						acopy => 0,
 		)->run();
 		my $rest = Media::Convert::Asset->new(url => "$workdir/concat2.mkv",
 						fragment_start => $next,
@@ -122,7 +134,6 @@ sub run {
 	if($self->has_duration) {
 		$self->output->duration($self->duration);
 	}
-	$self->output->audio_codec('copy');
 	Media::Convert::Pipe->new(inputs => [$final_source],
 				output => $self->output,
 				map => [Media::Convert::Map->new(input => $final_source, type => "allcopy")],

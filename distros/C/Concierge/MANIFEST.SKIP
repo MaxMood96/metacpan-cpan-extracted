@@ -1,9 +1,7 @@
-# Version control files
+# Version control
 ^\.git
-^\.gitattributes
-^\.gitignore
 
-# macOS files
+# macOS
 \.DS_Store
 \._
 
@@ -15,25 +13,26 @@ pm_to_blib
 \.o$
 \.so$
 
-# Temporary files
+# CPAN metadata (auto-generated; MYMETA only — META must ship in dist)
+^MYMETA\.(json|yml)
+
+# Temporary and backup files
 ~$
 \.bak$
+\.backup$
 \.tmp$
-\.$
-
-# Test coverage reports
-^cover_db/
-\.gcov$
-\.gcda$
-\.gcno$
-
-# Editor files
 \.swp$
 \.swo$
-^#.*
+^\#
 
-# CPAN metadata (auto-generated)
-^MYMETA\.(json|yml)
+# Test coverage
+^cover_db/
+
+# Distribution tarballs
+\.tar\.gz$
+
+# CI/CD (GitHub-only, not for CPAN)
+^\.github/
 
 # Project-specific exclusions
 ^examples/

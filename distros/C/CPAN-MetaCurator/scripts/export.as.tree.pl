@@ -1,10 +1,10 @@
 #!/usr/bin/env perl
 
-use 5.40.0;
+use 5.36.0;
+
+use CPAN::MetaCurator::Export;
 
 use Getopt::Long;
-
-use CPAN::MetaCurator::Util::Export;
 
 use Pod::Usage; # For pod2usage().
 
@@ -14,7 +14,7 @@ sub process
 {
 	my(%options) = @_;
 
-	return CPAN::MetaCurator::Util::Export
+	return CPAN::MetaCurator::Export
 			-> new(home_path => $options{home_path}, log_level => $options{log_level}, output_path => $options{output_path})
 			-> export_as_tree;
 
@@ -28,7 +28,7 @@ my(%options);
 
 $options{help}	 		= 0;
 $options{home_path}		= "$ENV{HOME}/perl.modules/CPAN-MetaCurator";
-$options{log_level}		= 'info';
+$options{log_level}		= 'debug';
 $options{output_path}	= 'html/cpan.metacurator.tree.html';
 my(%opts)				=
 (
@@ -43,6 +43,8 @@ GetOptions(%opts) || die("Error in options. Options: " . Dumper(%opts) );
 if ($options{help} == 1)
 {
 	pod2usage(1);
+
+	exit 0;
 }
 
 exit process(%options);

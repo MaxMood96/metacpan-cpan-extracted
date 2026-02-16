@@ -14,7 +14,7 @@ use_ok('Media::Convert::KeyframeFinder');
 my @testcases = (
 	{ name => 'within two key frames', start => 1, duration => 1, expected_duration => 1 },
 	{ name => 'straddling a key frame', start => 3, duration => 2, expected_duration => 2 },
-	{ name => 'less than half a frame before a key frame', start => 3.165, expected_duration => 20 - 3.16666667 },
+	{ name => 'less than a full frame before a key frame', start => 3.127, expected_duration => 20 - 3.127 },
 	{ name => 'less than half a frame after a key frame', start => 3.168, expected_duration => 20 - 3.16666667 },
 );
 
@@ -33,9 +33,9 @@ foreach my $testcase(@testcases) {
 	my $check = Media::Convert::Asset->new(url => $out->url);
 	my $kfs = Media::Convert::KeyframeFinder->new(asset => $check)->keyframes;
 
-	ok($kfs->[0] == 0, 'The first frame of the output video is a key frame when requesting a cut ' . $testcase->{name});
+	ok($kfs->[0] <= 0.01, 'The first frame of the output video is a key frame when requesting a cut ' . $testcase->{name});
 	ok($testcase->{expected_duration} - $check->video_frame_length < $check->duration
-		&& $check->duration < $testcase->{expected_duration} + $check->video_frame_length, 'The video has the expected length when requesting a cut ' . $testcase->{name});
+		&& $check->duration < $testcase->{expected_duration} + $check->video_frame_length, 'The video length ' . $check->duration . ' is the expected length ' . $testcase->{expected_duration} . ' when requesting a cut ' . $testcase->{name});
 	unlink($out->url);
 }
 

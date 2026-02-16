@@ -1,5 +1,5 @@
 ---
-abstract: 'Output progress to terminal as simple message'
+abstract: 'Add signal handler so your process can report progress when sent signal e.g. USR1'
 author:
   - 'perlancar <perlancar@cpan.org>'
 build_requires:
@@ -19,7 +19,7 @@ name: Progress-Any-SIGHandler
 provides:
   Progress::Any::SIGHandler:
     file: lib/Progress/Any/SIGHandler.pm
-    version: '0.001'
+    version: '0.002'
 requires:
   Progress::Any: '0.219'
   Progress::Any::Output: '0'
@@ -31,7 +31,7 @@ resources:
   bugtracker: https://rt.cpan.org/Public/Dist/Display.html?Name=Progress-Any-SIGHandler
   homepage: https://metacpan.org/release/Progress-Any-SIGHandler
   repository: git://github.com/perlancar/perl-Progress-Any-SIGHandler.git
-version: '0.001'
+version: '0.002'
 x_Dist_Zilla:
   perl:
     version: '5.040002'

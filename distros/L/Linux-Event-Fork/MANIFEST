@@ -1,0 +1,28 @@
+Changes
+examples/01_webpage_download.pl
+examples/12_fork_exit_object.pl
+examples/13_fork_child_callback.pl
+examples/14_fork_stdin_streaming.pl
+examples/90_stress_timeout_churn.pl
+examples/91_stress_stdin_with_timeout.pl
+examples/README.md
+examples/throwawaytreads.pl
+lib/Linux/Event/Fork.pm
+lib/Linux/Event/Fork/Child.pm
+lib/Linux/Event/Fork/Exit.pm
+LICENSE
+Makefile.PL
+MANIFEST			This list of files
+README.md
+t/00-load.t
+t/01-fork-exit-object.t
+t/02-fork-child-callback.t
+t/03-capture-overrides.t
+t/04-child-failure.t
+t/05-child-setup-options.t
+t/06-stdin-streaming.t
+t/07-tag.t
+t/08-timeout.t
+t/09-stdin-epipe.t
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

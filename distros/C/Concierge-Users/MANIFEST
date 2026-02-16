@@ -1,4 +1,5 @@
 Changes
+CONTRIBUTING.md
 examples/db-app/db-app.pl
 examples/file-app/file-app.pl
 examples/yaml-app/yaml-app.pl
@@ -10,7 +11,9 @@ lib/Concierge/Users/YAML.pm
 LICENSE
 Makefile.PL
 MANIFEST
+MANIFEST.SKIP
 README.md
+SECURITY.md
 t/01-load.t
 t/02-setup.t
 t/03-crud-database.t
@@ -19,5 +22,6 @@ t/05-crud-yaml.t
 t/06-field-metadata.t
 t/07-error-handling.t
 t/08-validation.t
+xt/scalability.t
 META.yml                                 Module YAML meta-data (added by MakeMaker)
 META.json                                Module JSON meta-data (added by MakeMaker)

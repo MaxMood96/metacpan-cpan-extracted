@@ -36,6 +36,19 @@ pioneering this elegant programming pattern.
 This module is not affiliated with, endorsed by, or sponsored by
 Microsoft Corporation.
 
+LINQ COMPATIBILITY
+
+This module aims for semantic compatibility with .NET LINQ where
+applicable. Key behavioral alignments:
+
+- Single(): Dies with "Sequence contains no elements" if empty
+           Dies with "Sequence contains more than one element" if multiple
+- SingleOrDefault(): Returns undef if empty or multiple elements
+- ElementAt(): Dies with "Index out of range" if index is invalid
+- ElementAtOrDefault(): Returns undef if index is invalid
+- All element access methods use lazy evaluation (iterator-based)
+- Exception messages follow .NET LINQ conventions
+
 WHAT IS LTSV?
 
 LTSV (Labeled Tab-Separated Values) is a format for structured logs.
@@ -65,6 +78,27 @@ Or using pmake.bat (Windows):
 COMPATIBILITY
 
 This module works with Perl 5.005_03 and later.
+
+WHY PERL 5.005_03 SPECIFICATION?
+
+This module adheres to the Perl 5.005_03 specification—not because we
+use the old interpreter, but because this specification represents the
+simple, original Perl programming model that makes programming enjoyable.
+
+Key reasons:
+
+- Simplicity: Original Perl approach keeps programming "raku" (easy/fun)
+- JPerl: Final version of JPerl (Japanese Perl)
+- Universal: Runs on ALL Perl versions (5.005_03 through 5.42+)
+- Philosophy: Programming should be enjoyable (Camel Book readers know!)
+
+Perl 5.6+ introduced character encoding complexity that made programming
+harder. By following the 5.005_03 specification, we maintain the joy of
+Perl programming.
+
+All ina CPAN modules (mb, Jacode, UTF8-R2, mb-JSON, LTSV-LINQ, etc.)
+follow this principle: Write to 5.005_03 spec, test on all versions,
+keep programming fun.
 
 COPYRIGHT AND LICENSE
 

@@ -1,5 +1,5 @@
 {
-   "abstract" : "Connection to Google REST APIs (currently Drive, Sheets, and Calendar).",
+   "abstract" : "API to Google Drive API V3, Sheets API V4, Calendar API V3, Gmail API V1, Tasks API V1, and Docs API V1.",
    "author" : [
       "Robin Murray <mvsjes@cpan.org>"
    ],
@@ -55,7 +55,7 @@
             "Tie::Hash" : "0",
             "ToolSet" : "0",
             "Try::Tiny" : "0",
-            "Type::Params" : "1.004004",
+            "Type::Params" : "2",
             "Types::Standard" : "0",
             "URI" : "0",
             "URI::QueryParam" : "0",
@@ -87,6 +87,6 @@
          "web" : "https://github.com/mvsjes2/p5-google-restapi"
       }
    },
-   "version" : "v2.0.0",
+   "version" : "v2.1.0",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

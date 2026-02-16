@@ -1,5 +1,29 @@
 Revision history for LTSV::LINQ
 
+1.01  2026-02-16
+    - Added 14 new methods to enhance LINQ compatibility
+    
+    New methods:
+    - Element access: LastOrDefault, Single, SingleOrDefault, 
+                      ElementAt, ElementAtOrDefault
+    - Quantifier: Contains
+    - Concatenation: Concat
+    - Partitioning: SkipWhile
+    - Default value: DefaultIfEmpty
+    - Aggregation: Aggregate
+    - Set operations: Union, Intersect, Except
+    - Comparison: SequenceEqual
+    
+    Improvements:
+    - Enhanced POD documentation for all new methods
+    - Added comprehensive examples for each method
+    - Updated method summary table (31 → 45 methods)
+    - Improved test coverage
+    - Optimized Single/ElementAt to use lazy evaluation (O(1) memory)
+    - Fixed Makefile.PL version inconsistency
+    - Clarified Perl 5.005_03 specification philosophy
+    - Added .NET LINQ compatibility notes
+
 1.00  2026-02-15
     - Initial release
     - LINQ-style query interface for LTSV files
@@ -21,6 +45,6 @@ Revision history for LTSV::LINQ
     - Set operations: Distinct
     - Quantifiers: All, Any
     - Element access: First, FirstOrDefault, Last
-    - Aggregation: Count, Sum, Min, Max, Average
+    - Aggregation: Count, Sum, Min, Max, Average, AverageOrDefault
     - Conversion: ToArray, ToList, ToLTSV
     - Utility: ForEach

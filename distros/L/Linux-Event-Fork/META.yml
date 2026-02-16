@@ -1,0 +1,34 @@
+---
+abstract: 'Minimal async child spawning on top of Linux::Event'
+author:
+  - 'Joshua S. Day (HAX)'
+build_requires:
+  ExtUtils::MakeMaker: '0'
+  Test2::V0: '0'
+configure_requires:
+  ExtUtils::MakeMaker: '0'
+dynamic_config: 1
+generated_by: 'ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150012'
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: Linux-Event-Fork
+no_index:
+  directory:
+    - t
+    - inc
+requires:
+  Carp: '0'
+  Errno: '0'
+  Fcntl: '0'
+  Linux::Event: '0.004'
+  Linux::FD::Pid: '0'
+  POSIX: '0'
+  perl: '5.036'
+resources:
+  bugtracker: https://github.com/haxmeister/perl-linux-event-fork/issues
+  homepage: https://github.com/haxmeister/perl-linux-event-fork
+  repository: https://github.com/haxmeister/perl-linux-event-fork.git
+version: '0.003'
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

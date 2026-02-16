@@ -1,10 +1,10 @@
 package CPAN::MetaCurator;
 
-use 5.40.0;
-use parent 'CPAN::MetaCurator::Util::Database';
+use 5.36.0;
+use parent 'CPAN::MetaCurator::Database';
 use warnings qw(FATAL utf8); # Fatalize encoding glitches.
 
-our $VERSION = '1.00';
+our $VERSION = '1.09';
 
 #-------------------------------------------------
 
@@ -14,24 +14,17 @@ our $VERSION = '1.00';
 
 =head1 How to convert a Perl.Wiki.html into a jsTree
 
-Note: My web host and I use case-sensitive file systems
-Download Perl.Wiki.html from http://savage.net.au/
-Download and unpack the distro CPAN::MetaCurator from https://metacpan.org/
-Update Perl.Wiki.html if desired
-Export its data by clicking the Tools tab on the top right:
-1: Choose 'export all'
-2: Choose 'JSON format' in the pop-up
-3: The file tiddlers.json will appear in your downloads directory (eg ~/Downloads/ under Debian)
-4: Move tiddlers.json into the distro's data/ as cpan.metacurator.tiddlers.json to replace the copy shipped with the distro
-Run scripts/build.db.sh. This runs:
-1: scripts/drop.tables.pl
-2: scripts/create.tables.pl
-3: scripts/populate.sqlite.tables.pl
-This reads data/cpan.metacurator.tiddlers.json and outputs data/cpan.metacurator.sqlite
-4: scripts/export.as.tree.pl
-This reads data/cpan.metacurator.sqlite and outputs html/cpan.metacurator.tree.html
-The code shipped can be configured to change the home_path()
-And it logs to log/development.log
+Note: My web host and I use case-sensitive file systems.
+
+Steps (2026-01-25):
+	a. cd ~/perl.modules/CPAN-MetaCurator/
+	b. cp /dev/null log/development.log
+	c. Browse Perl.Wiki.html
+	d. In the 'Tools' tab click 'export all'
+	e. In the pop-up, click 'JSON format'
+	f. cp ~/Downloads/tiddlers.json data/cpan.metacurator.tiddlers.json
+	h. build.module.sh CPAN::MetaCurator 1.03
+	i. scripts/build.db.sh
 
 =head1 Machine-Readable Change Log
 

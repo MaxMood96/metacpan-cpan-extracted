@@ -1,4 +1,4 @@
-package Concierge::Sessions::Session v0.10.0;
+package Concierge::Sessions::Session v0.11.0;
 use v5.36;
 
 # ABSTRACT: Individual session objects created by Concierge::Sessions

@@ -1,5 +1,17 @@
 Revision history for Concierge
 
+v0.6.1  2026-02-15
+    - POD version number updating issue
+
+v0.6.0  2026-02-15
+    - Update and corrections to POD
+
+v0.5.9  2026-02-15
+    - Fixed distribution issue with MANIFEST.SKIP
+
+v0.5.8  2026-02-15
+    - Fixed distribution issue with MANIFEST.SKIP
+
 v0.5.6 2026-02-13
     - Fixed CPAN testers build failure: require Params::Filter 0.014
       (earlier versions do not export make_filter)

@@ -27,5 +27,6 @@ t/00-pod-coverage.t                     POD::Coverage testing
 t/00-pod.t                              Checking all POD documents
 t/00-trailingspace.t                    Style test: TrailingSpace
 t/01-use.t                              Test script
+t/02-hints.t                            Hints
 META.yml                                 Module YAML meta-data (added by MakeMaker)
 META.json                                Module JSON meta-data (added by MakeMaker)

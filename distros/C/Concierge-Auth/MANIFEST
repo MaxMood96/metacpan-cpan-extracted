@@ -1,4 +1,5 @@
 Changes
+CONTRIBUTING.md
 examples/01-basic-authentication.pl
 examples/02-user-management.pl
 examples/03-token-generation.pl
@@ -15,11 +16,14 @@ lib/Concierge/Auth/Generators.pm
 LICENSE
 Makefile.PL
 MANIFEST
+MANIFEST.SKIP
 README.md
+SECURITY.md
 t/00-load.t
 t/01-constructor.t
 t/02-validation.t
 t/03-auth.t
 t/04-file-management.t
+t/05-generators.t
 META.yml                                 Module YAML meta-data (added by MakeMaker)
 META.json                                Module JSON meta-data (added by MakeMaker)

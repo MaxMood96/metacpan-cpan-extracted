@@ -1,15 +1,19 @@
 #!/usr/bin/env perl
 
-use 5.40.0;
+use 5.36.0;
 
 use Data::Dumper::Concise; # For Dumper().
 
-use CPAN::MetaCurator::Util::Import;
+use CPAN::MetaCurator::Import;
 
 # ---------------------------------
+
+say "read.tiddlers.pl - Read tiddlers file and report some statistics\n";
+
 binmode STDOUT, ':encoding(UTF-8)';
 
-my($importer)	= CPAN::MetaCurator::Util::Import -> new(home_path => '.');
+my($log_level)	= 'debug';
+my($importer)	= CPAN::MetaCurator::Import -> new(home_path => '.', log_level => $log_level);
 my($data)		= $importer -> read_tiddlers_file;
 my($count)		= 0;
 
@@ -23,7 +27,7 @@ for my $index (0 .. $#$data)
 	$text	= $$data[$index]{text};
 	$title	= $$data[$index]{title};
 
-	next if ($title =~ 'MainMenu'); # TiddlyWiki special case.
+	next if ($title =~ /ChangeLog|MainMenu/); # Special case para names.
 
 	$count++;
 

@@ -19,6 +19,22 @@ no_index:
   directory:
     - t
     - inc
+provides:
+  Concierge::Users:
+    file: lib/Concierge/Users.pm
+    version: v0.8.0
+  Concierge::Users::Database:
+    file: lib/Concierge/Users/Database.pm
+    version: v0.8.0
+  Concierge::Users::File:
+    file: lib/Concierge/Users/File.pm
+    version: v0.8.0
+  Concierge::Users::Meta:
+    file: lib/Concierge/Users/Meta.pm
+    version: v0.8.0
+  Concierge::Users::YAML:
+    file: lib/Concierge/Users/YAML.pm
+    version: v0.8.0
 requires:
   Carp: '0'
   DBD::SQLite: '0'
@@ -32,5 +48,5 @@ requires:
 resources:
   bugtracker: https://github.com/bwva/Concierge-Users/issues
   repository: https://github.com/bwva/Concierge-Users.git
-version: v0.7.4
+version: v0.8.0
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

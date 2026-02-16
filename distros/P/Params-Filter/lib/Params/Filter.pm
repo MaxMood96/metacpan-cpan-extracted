@@ -1,6 +1,6 @@
 package Params::Filter;
 use v5.36;
-our $VERSION = '0.015';
+our $VERSION = '0.016';
 
 =head1 NAME
 
@@ -98,7 +98,7 @@ The main advantages of using Params::Filter are:
 
 =head2 Performance Considerations
 
-B<Important>: The functional and OO interfaces include features that add overhead
+The functional and OO interfaces include features that add overhead
 compared to manual hash lookups, especially when the incoming data is in a known
 consistent format. The value of Params::Filter shows in its capability to assure the
 security, compliance, and correctness benefits listed above.
@@ -157,6 +157,32 @@ This module is useful when you have:
 =item * Multiple uses tapping incoming data
 
 =item * A distinction between missing and "false" data
+
+=back
+
+=head1 FEATURES
+
+=over 4
+
+=item * **Dual interface** - Functional or OO usage
+
+=item * **Fast-fail** - Returns immediately on missing required parameters
+
+=item * **Fast-success** - Returns immediately if all required parameters are provided and no others are provided or will be accepted
+
+=item * **Flexible input** - Accepts hashrefs, arrayrefs, or scalars
+
+=item * **Wildcard support** - Use C<'*'> in accepted list to accept all fields
+
+=item * **No value checking** - Only presence/absence of fields
+
+=item * **Debug mode** - Optional warnings about unrecognized or excluded fields
+
+=item * **Method chaining** - Modifier methods return C<$self>
+
+=item * **Perl 5.36+** - Modern Perl with signatures and post-deref
+
+=item * **No dependencies** - Only core Perl's L<Exporter>
 
 =back
 
@@ -1227,32 +1253,6 @@ B<Regardless of input format, output is always a hashref:>
     # → { _ => 'text' }
 
 This consistency makes the filtered data easy to use in downstream code without worrying about the original input format.
-
-=head1 FEATURES
-
-=over 4
-
-=item * **Dual interface** - Functional or OO usage
-
-=item * **Fast-fail** - Returns immediately on missing required parameters
-
-=item * **Fast-success** - Returns immediately if all required parameters are provided and no others are provided or will be accepted
-
-=item * **Flexible input** - Accepts hashrefs, arrayrefs, or scalars
-
-=item * **Wildcard support** - Use C<'*'> in accepted list to accept all fields
-
-=item * **No value checking** - Only presence/absence of fields
-
-=item * **Debug mode** - Optional warnings about unrecognized or excluded fields
-
-=item * **Method chaining** - Modifier methods return C<$self>
-
-=item * **Perl 5.36+** - Modern Perl with signatures and post-deref
-
-=item * **No dependencies** - Only core Perl's L<Exporter>
-
-=back
 
 =head1 DEBUG MODE
 

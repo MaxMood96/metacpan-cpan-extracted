@@ -1,0 +1,63 @@
+(system
+  (limits
+    (max_iterations 200)
+    (max_self_cycles 3)
+    (max_pingpong 4))
+
+  (entry Worker1)
+
+  (agent Worker1
+    (role worker)
+    (model "llama3.2:1b")
+    (prompt-file "examples/hooks_join/worker1_prompt.pl")
+    (self-critic-file "examples/hooks_join/selfcrit_ok.pl")
+    (revision-file "examples/hooks_join/revision_passthru.pl")
+    (send-to Critic1))
+
+  (agent Critic1
+    (role critic)
+    (parse-file "examples/hooks_join/critic_ok.pl")
+    (on-ok (Worker2 Worker3))
+    (on-fail (Worker1)))
+
+  (agent Worker2
+    (role worker)
+    (model "llama3.2:1b")
+    (prompt-file "examples/hooks_join/worker2_prompt.pl")
+    (self-critic-file "examples/hooks_join/selfcrit_ok.pl")
+    (revision-file "examples/hooks_join/revision_passthru.pl")
+    (send-to Critic2))
+
+  (agent Critic2
+    (role critic)
+    (parse-file "examples/hooks_join/critic_ok.pl")
+    (on-ok (Worker4))
+    (on-fail (Worker2)))
+
+  (agent Worker3
+    (role worker)
+    (model "llama3.2:1b")
+    (prompt-file "examples/hooks_join/worker3_prompt.pl")
+    (self-critic-file "examples/hooks_join/selfcrit_ok.pl")
+    (revision-file "examples/hooks_join/revision_passthru.pl")
+    (send-to Critic3))
+
+  (agent Critic3
+    (role critic)
+    (parse-file "examples/hooks_join/critic_ok.pl")
+    (on-ok (Worker4))
+    (on-fail (Worker3)))
+
+  (agent Worker4
+    (role worker)
+    (model "llama3.2:1b")
+    (wait-for (Worker2 Worker3))
+    (prompt-file "examples/hooks_join/worker4_prompt.pl")
+    (self-critic-file "examples/hooks_join/selfcrit_ok.pl")
+    (revision-file "examples/hooks_join/revision_passthru.pl")
+    (send-to Chief1))
+
+  (agent Chief1
+    (role chief)
+    (parse-file "examples/hooks_join/chief_stop.pl"))
+)

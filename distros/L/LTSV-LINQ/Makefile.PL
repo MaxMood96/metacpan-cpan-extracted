@@ -4,7 +4,7 @@ use ExtUtils::MakeMaker;
 
 WriteMakefile(
     'NAME'      => q{LTSV::LINQ},
-    'VERSION'   => q{1.00},
+    'VERSION'   => q{1.01},
     'ABSTRACT'  => q{LINQ-style query interface for LTSV files},
     'PREREQ_PM' => {
         'ExtUtils::MakeMaker' => '5.4302',
@@ -15,7 +15,6 @@ WriteMakefile(
         'Socket' => '0',
         'perl' => '5.00503',
         'strict' => '1.01',
-        'vars' => '0',
     },
     'AUTHOR'    => q{ina <ina@cpan.org>},
 );

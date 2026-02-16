@@ -9,8 +9,6 @@ WriteMakefile(
     ABSTRACT         => 'Password authentication and token generation using Crypt::Passphrase',
     LICENSE          => 'artistic_2',
     MIN_PERL_VERSION => '5.036',
-    INSTALL_BASE     => undef,
-
     PREREQ_PM => {
         'Carp'             => 0,
         'Fcntl'            => 0,
@@ -44,6 +42,16 @@ WriteMakefile(
             },
             bugtracker => {
                 web => 'https://github.com/bwva/Concierge-Auth/issues',
+            },
+        },
+        provides => {
+            'Concierge::Auth' => {
+                file    => 'lib/Concierge/Auth.pm',
+                version => 'v0.4.0',
+            },
+            'Concierge::Auth::Generators' => {
+                file    => 'lib/Concierge/Auth/Generators.pm',
+                version => 'v0.4.0',
             },
         },
     },

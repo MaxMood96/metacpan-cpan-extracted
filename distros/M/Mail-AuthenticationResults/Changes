@@ -1,5 +1,14 @@
 Change log for Mail::AuthenticationResults
 
+2.20260216 2026-02-16 14:47:11+11:00 Australia/Melbourne
+  - Added some helper methods which can be used to add
+    commonly used children to an object.
+     * $object->add_entry($key, $value);
+     * $object->add_sub_entry($key, $value);
+     * $object->add_comment($value);
+    each returns the new object being added which can then be
+    manipulated/added to as required.
+
 2.20250709 2025-07-10 09:33:55+10:00 Australia/Melbourne
   - Correctly parse a string beginning with a slash
 

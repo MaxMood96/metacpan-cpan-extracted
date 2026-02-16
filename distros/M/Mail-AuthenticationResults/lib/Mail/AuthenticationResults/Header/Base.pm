@@ -4,7 +4,7 @@ package Mail::AuthenticationResults::Header::Base;
 require 5.008;
 use strict;
 use warnings;
-our $VERSION = '2.20250709'; # VERSION
+our $VERSION = '2.20260216'; # VERSION
 use Scalar::Util qw{ weaken refaddr };
 use JSON;
 use Carp;
@@ -12,6 +12,11 @@ use Clone qw{ clone };
 
 use Mail::AuthenticationResults::Header::Group;
 use Mail::AuthenticationResults::FoldableHeader;
+
+use Mail::AuthenticationResults::Header::Entry;
+use Mail::AuthenticationResults::Header::SubEntry;
+use Mail::AuthenticationResults::Header::Comment;
+
 
 
 sub _HAS_KEY{ return 0; }
@@ -195,6 +200,30 @@ sub add_child {
     $child->add_parent( $self );
     push @{ $self->{ 'children' } }, $child;
 
+    return $child;
+}
+
+
+sub add_entry {
+    my ($self, $key, $value) = @_;
+    my $child = Mail::AuthenticationResults::Header::Entry->new->set_key($key)->safe_set_value($value);
+    $self->add_child($child);
+    return $child;
+}
+
+
+sub add_sub_entry {
+    my ($self, $key, $value) = @_;
+    my $child = Mail::AuthenticationResults::Header::SubEntry->new->set_key($key)->safe_set_value($value);
+    $self->add_child($child);
+    return $child;
+}
+
+
+sub add_comment {
+    my ($self, $value) = @_;
+    my $child = Mail::AuthenticationResults::Header::Comment->new->safe_set_value($value);
+    $self->add_child($child);
     return $child;
 }
 
@@ -446,7 +475,7 @@ Mail::AuthenticationResults::Header::Base - Base class for modelling parts of th
 
 =head1 VERSION
 
-version 2.20250709
+version 2.20260216
 
 =head1 DESCRIPTION
 
@@ -586,6 +615,27 @@ Croaks if the relationship between $child and $self is not valid.
 Adds $child as a child of this instance.
 
 Croaks if the relationship between $child and $self is not valid.
+
+=head2 add_entry ($key, $value)
+
+Creates a new entry with the given key and value, and then adds
+that as a child.
+
+Returns the child added.
+
+=head2 add_sub_entry ($self, $key, $value)
+
+Creates a new sub entry with the given key and value, and then adds
+that as a child.
+
+Returns the child added.
+
+=head2 add_comment ($key, $value)
+
+Creates a new comment with the given key and value, and then adds
+that as a child.
+
+Returns the child added.
 
 =head2 ancestor()
 

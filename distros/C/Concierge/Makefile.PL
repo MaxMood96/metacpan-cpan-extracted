@@ -9,8 +9,6 @@ WriteMakefile(
     ABSTRACT         => 'Service layer orchestrator for authentication, sessions, and user data',
     LICENSE          => 'artistic_2',
     MIN_PERL_VERSION => '5.036',
-    INSTALL_BASE     => undef,
-
     PREREQ_PM => {
         'Carp'               => 0,
         'JSON::PP'           => 0,
@@ -42,6 +40,20 @@ WriteMakefile(
             },
             bugtracker => {
                 web => 'https://github.com/bwva/Concierge/issues',
+            },
+        },
+        provides => {
+            'Concierge' => {
+                file    => 'lib/Concierge.pm',
+                version => 'v0.6.1',
+            },
+            'Concierge::Setup' => {
+                file    => 'lib/Concierge/Setup.pm',
+                version => 'v0.6.1',
+            },
+            'Concierge::User' => {
+                file    => 'lib/Concierge/User.pm',
+                version => 'v0.6.1',
             },
         },
     },

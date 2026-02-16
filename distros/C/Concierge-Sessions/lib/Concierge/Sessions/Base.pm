@@ -1,4 +1,4 @@
-package Concierge::Sessions::Base v0.10.0;
+package Concierge::Sessions::Base v0.11.0;
 use v5.36;
 
 use Crypt::PRNG qw(random_bytes);

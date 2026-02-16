@@ -1,5 +1,8 @@
 # Version/Revision history
 
+1.10 Mon 16 Feb 2026 08:54:38 MSK
+    * Project relicensed from the Perl 5 dual license to the Artistic License 2.0
+
 1.09 Mon 27 Oct 2025 15:31:14 MSK
     * WWW::Suffit::Util: Deprecated several functions
     * WWW::Suffit::RefUtil: Deprecated all functions of this module in favor Acrux::RefUtil

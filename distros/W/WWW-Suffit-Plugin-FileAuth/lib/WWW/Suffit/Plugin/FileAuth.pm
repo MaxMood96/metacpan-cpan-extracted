@@ -1,5 +1,6 @@
 package WWW::Suffit::Plugin::FileAuth;
 use strict;
+use warnings;
 use utf8;
 
 =encoding utf8
@@ -198,20 +199,19 @@ Serż Minus (Sergey Lepenkov) L<https://www.serzik.com> E<lt>abalama@cpan.orgE<g
 
 =head1 COPYRIGHT
 
-Copyright (C) 1998-2024 D&D Corporation. All Rights Reserved
+Copyright (C) 1998-2026 D&D Corporation
 
 =head1 LICENSE
 
-This program is free software; you can redistribute it and/or
-modify it under the same terms as Perl itself.
+This program is distributed under the terms of the Artistic License Version 2.0
 
-See C<LICENSE> file and L<https://dev.perl.org/licenses/>
+See the C<LICENSE> file or L<https://opensource.org/license/artistic-2-0> for details
 
 =cut
 
 use Mojo::Base 'Mojolicious::Plugin';
 
-our $VERSION = '1.00';
+our $VERSION = '1.01';
 
 use Digest::SHA qw/sha224_hex sha256_hex sha384_hex sha512_hex/;
 use Mojo::File qw/path/;

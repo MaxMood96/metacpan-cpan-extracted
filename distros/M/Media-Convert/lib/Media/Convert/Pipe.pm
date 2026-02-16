@@ -348,6 +348,12 @@ sub run {
 		if($self->askip) {
 			push @command, ('-an');
 		}
+		if($self->vcopy || $self->acopy) {
+			push @command, ('-fflags', '+genpts');
+		}
+		if($self->vcopy || $self->acopy || ($self->output->can('has_fragment_start') && $self->output->has_fragment_start)) {
+			push @command, ('-avoid_negative_ts', 'make_zero');
+		}
 		push @command, $self->output->writeopts($self);
 
 		print "Running: '" . join ("' '", @command) . "'\n";

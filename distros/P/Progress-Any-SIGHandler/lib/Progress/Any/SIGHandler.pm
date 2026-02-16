@@ -10,7 +10,7 @@ use Progress::Any::Output ();
 our $AUTHORITY = 'cpan:PERLANCAR'; # AUTHORITY
 our $DATE = '2025-10-30'; # DATE
 our $DIST = 'Progress-Any-SIGHandler'; # DIST
-our $VERSION = '0.001'; # VERSION
+our $VERSION = '0.002'; # VERSION
 
 our $Template  = 'Progress: %P/%T (%6.2p%%), %R';
 our $Signal    = 'USR1';
@@ -48,7 +48,7 @@ sub install_sig_handler {
 }
 
 1;
-# ABSTRACT: Output progress to terminal as simple message
+# ABSTRACT: Add signal handler so your process can report progress when sent signal e.g. USR1
 
 __END__
 
@@ -58,11 +58,11 @@ __END__
 
 =head1 NAME
 
-Progress::Any::SIGHandler - Output progress to terminal as simple message
+Progress::Any::SIGHandler - Add signal handler so your process can report progress when sent signal e.g. USR1
 
 =head1 VERSION
 
-This document describes version 0.001 of Progress::Any::SIGHandler (from Perl distribution Progress-Any-SIGHandler), released on 2025-10-30.
+This document describes version 0.002 of Progress::Any::SIGHandler (from Perl distribution Progress-Any-SIGHandler), released on 2025-10-30.
 
 =head1 SYNOPSIS
 

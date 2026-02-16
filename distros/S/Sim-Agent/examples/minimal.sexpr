@@ -1,0 +1,28 @@
+(system
+
+  (limits
+    (max_iterations 20)
+    (max_self_cycles 3))
+
+  (entry Worker1)
+
+  (agent Worker1
+    (role worker)
+    (model "llama3.2:1b")
+    (prompt-file "examples/hooks/worker_prompt.pl")
+    (self-critic-file "examples/hooks/selfcrit.pl")
+    (revision-file "examples/hooks/revision.pl")
+    (send-to Critic1))
+
+  (agent Critic1
+    (role critic)
+    (parse-file "examples/hooks/critic_parse.pl")
+    (on-ok (Chief1))
+    (on-fail (Worker1)))
+
+  (agent Chief1
+    (role chief)
+    (parse-file "examples/hooks/chief_parse.pl")
+    (on-ok ())
+    (on-fail (Worker1)))
+)

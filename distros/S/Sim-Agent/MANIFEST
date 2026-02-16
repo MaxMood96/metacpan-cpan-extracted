@@ -1,0 +1,36 @@
+Changes
+LICENSE
+Makefile.PL
+MANIFEST
+MANIFEST.SKIP
+README.md
+bin/sim-agent
+lib/Sim/Agent.pm
+lib/Sim/Agent/Compiler.pm
+lib/Sim/Agent/Engine.pm
+lib/Sim/Agent/Hook.pm
+lib/Sim/Agent/Journal.pm
+lib/Sim/Agent/Parser.pm
+lib/Sim/Agent/Runner.pm
+lib/Sim/Agent/LLM/Ollama.pm
+examples/minimal.sexpr
+examples/join.sexpr
+examples/hooks/worker_prompt.pl
+examples/hooks/selfcrit.pl
+examples/hooks/revision.pl
+examples/hooks/critic_parse.pl
+examples/hooks/chief_parse.pl
+examples/hooks_join/worker1_prompt.pl
+examples/hooks_join/worker2_prompt.pl
+examples/hooks_join/worker3_prompt.pl
+examples/hooks_join/worker4_prompt.pl
+examples/hooks_join/selfcrit_ok.pl
+examples/hooks_join/revision_passthru.pl
+examples/hooks_join/critic_ok.pl
+examples/hooks_join/chief_stop.pl
+t/00-load.t
+t/01-parser.t
+t/02-compiler.t
+t/03-run-basic.t
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

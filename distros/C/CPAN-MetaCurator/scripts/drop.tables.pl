@@ -1,12 +1,12 @@
 #!/usr/bin/env perl
 
-use 5.40.0;
+use 5.36.0;
 
 use Data::Dumper::Concise; # For Dumper.
 
 use Getopt::Long;
 
-use CPAN::MetaCurator::Util::Create;
+use CPAN::MetaCurator::Create;
 
 use Pod::Usage; # For pod2usage().
 
@@ -16,7 +16,7 @@ sub process
 {
 	my(%options) = @_;
 
-	return CPAN::MetaCurator::Util::Create
+	return CPAN::MetaCurator::Create
 			-> new(home_path => $options{home_path}, log_level => $options{log_level})
 			-> drop_all_tables;
 
@@ -43,6 +43,8 @@ GetOptions(%opts) || die("Error in options. Options: " . Dumper(%opts) );
 if ($options{help} == 1)
 {
 	pod2usage(1);
+
+	exit 0;
 }
 
 exit process(%options);

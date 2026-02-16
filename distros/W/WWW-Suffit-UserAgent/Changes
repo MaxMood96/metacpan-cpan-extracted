@@ -1,5 +1,8 @@
 # Version/Revision history
 
+1.02 Mon 16 Feb 2026 10:10:44 MSK
+    * Project relicensed from the Perl 5 dual license to the Artistic License 2.0
+
 1.01 Mon 27 Oct 2025 17:31:17 MSK
     * Switched to using functions from Acrux::Util and Acrux::RefUtil
 

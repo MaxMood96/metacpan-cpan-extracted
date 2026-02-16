@@ -1,7 +1,7 @@
-package Concierge::Setup v0.5.7;
+package Concierge::Setup v0.6.1;
 use v5.36;
 
-our $VERSION = 'v0.5.7';
+our $VERSION = 'v0.6.1';
 
 # ABSTRACT: Setup and configuration for Concierge desk initialization
 
@@ -261,7 +261,7 @@ Concierge::Setup - One-time desk creation and configuration for Concierge
 
 =head1 VERSION
 
-v0.5.7
+v0.6.1
 
 =head1 SYNOPSIS
 
@@ -333,9 +333,13 @@ B<Parameters:>
 
 =over 4
 
-=item C<$storage_dir> (required) -- directory for all data files; created if it does not exist
+=item C<$storage_dir> (required)
 
-=item C<\@app_fields> -- additional user data fields beyond the standard set
+Directory for all data files; created if it does not exist.
+
+=item C<\@app_fields>
+
+Additional user data fields beyond the standard set.
 
 =back
 
@@ -496,43 +500,64 @@ exists and no explicit C<default> is set, the default is C<"">.
 
 =over 4
 
-=item C<field_name> -- internal name (snake_case); required
+=item C<field_name>
 
-=item C<type> -- C<text>, C<email>, C<phone>, C<date>, C<timestamp>,
-C<boolean>, C<integer>, C<enum>
+Internal name (snake_case); required.
 
-=item C<validate_as> -- validator to use when different from C<type>
-(e.g., C<< validate_as => 'moniker' >> on a C<text> field applies
-alphanumeric-only validation while storing as text)
+=item C<type>
 
-=item C<label> -- human-readable display label; auto-generated from
-C<field_name> if omitted (e.g., C<badge_name> becomes "Badge Name")
+C<text>, C<email>, C<phone>, C<date>, C<timestamp>, C<boolean>,
+C<integer>, C<enum>.
 
-=item C<description> -- short explanatory text for documentation or
-UI hints
+=item C<validate_as>
 
-=item C<required> -- C<1> if the field must have a non-null value on
-creation; C<0> otherwise
+Validator to use when different from C<type> (e.g.,
+C<< validate_as => 'moniker' >> on a C<text> field applies
+alphanumeric-only validation while storing as text).
 
-=item C<must_validate> -- C<1> to reject the entire operation on
-validation failure; C<0> to silently drop the invalid value and
-append a warning (auto-enabled when C<< required => 1 >>)
+=item C<label>
 
-=item C<options> -- arrayref of allowed values for C<enum> fields;
-prefix one with C<*> to designate the default (e.g.,
+Human-readable display label; auto-generated from C<field_name> if
+omitted (e.g., C<badge_name> becomes "Badge Name").
+
+=item C<description>
+
+Short explanatory text for documentation or UI hints.
+
+=item C<required>
+
+C<1> if the field must have a non-null value on creation; C<0>
+otherwise.
+
+=item C<must_validate>
+
+C<1> to reject the entire operation on validation failure; C<0> to
+silently drop the invalid value and append a warning (auto-enabled
+when C<< required => 1 >>).
+
+=item C<options>
+
+Arrayref of allowed values for C<enum> fields; prefix one with C<*>
+to designate the default (e.g.,
 C<['*Free', 'Premium', 'Enterprise']>); a bare C<*> means an
-empty-string default
+empty-string default.
 
-=item C<default> -- value assigned on new-record creation when no
-value is supplied; for enum fields, auto-set from the C<*>-marked
-option if not specified explicitly
+=item C<default>
 
-=item C<null_value> -- sentinel representing "no data" for the field
-type (e.g., C<""> for text, C<0> for boolean, C<"0000-00-00"> for
-date); values equal to C<null_value> are treated as empty
+Value assigned on new-record creation when no value is supplied; for
+enum fields, auto-set from the C<*>-marked option if not specified
+explicitly.
 
-=item C<max_length> -- maximum character length; enforced by the
-C<text> validator and available as a UI hint
+=item C<null_value>
+
+Sentinel representing "no data" for the field type (e.g., C<""> for
+text, C<""> for boolean, C<"0000-00-00"> for date); values equal to
+C<null_value> are treated as empty.
+
+=item C<max_length>
+
+Maximum character length; enforced by the C<text> validator and
+available as a UI hint.
 
 =back
 

@@ -1,10 +1,12 @@
 #!/usr/bin/env perl
 
-use 5.40.0;
+use 5.36.0;
+
+use Data::Dumper::Concise; # For Dumper.
 
 use Getopt::Long;
 
-use CPAN::MetaCurator::Util::Import;
+use CPAN::MetaCurator::Import;
 
 use Pod::Usage; # For pod2usage().
 
@@ -14,8 +16,8 @@ sub process
 {
 	my(%options)	= @_;
 
-	return CPAN::MetaCurator::Util::Import
-			-> new(home_path => $options{home_path}, log_level => $options{log_level})
+	return CPAN::MetaCurator::Import
+			-> new(home_path => $options{home_path}, include_packages => $options{include_packages}, log_level => $options{log_level})
 			-> populate_all_tables;
 
 } # End of process.
@@ -26,14 +28,16 @@ say "populate.sqlite.tables.pl - Populate all SQLite tables\n";
 
 my(%options);
 
-$options{help}	 	= 0;
-$options{home_path}	= "$ENV{HOME}/perl.modules/CPAN-MetaCurator";
-$options{log_level}	= 'info';
-my(%opts)			=
+$options{help}	 			= 0;
+$options{home_path}			= "$ENV{HOME}/perl.modules/CPAN-MetaCurator";
+$options{include_packages}	= 0;
+$options{log_level}			= 'info';
+my(%opts)					=
 (
-	'help'			=> \$options{help},
-	'home_path'		=> \$options{home_path},
-	'log_level=s'	=> \$options{log_level},
+	'help'					=> \$options{help},
+	'home_path'				=> \$options{home_path},
+	'include_packages=i'	=> \$options{include_packages},
+	'log_level=s'			=> \$options{log_level},
 );
 
 GetOptions(%opts) || die("Error in options. Options: " . Dumper(%opts) );
@@ -41,6 +45,8 @@ GetOptions(%opts) || die("Error in options. Options: " . Dumper(%opts) );
 if ($options{help} == 1)
 {
 	pod2usage(1);
+
+	exit 0;
 }
 
 exit process(%options);
@@ -60,6 +66,7 @@ populate.sqlite.tables.pl [options]
 	Options:
 	-help
 	-home_path
+	-include_packages 0/1
 	-log_level info
 
 All switches can be reduced to a single letter, except of course -he and -ho.
@@ -79,6 +86,12 @@ Print help and exit.
 The path to the directory containing data/ and html/. Unpack distro to populate.
 
 Default: $ENV{HOME}/perl.modules/CPAN-MetaCurator.
+
+=item -include_packages 0/1
+
+Include processing of data/02packages.details.txt in the import.
+
+Default: 0 (Don't include).
 
 =item -log_level String
 

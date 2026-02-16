@@ -52,7 +52,7 @@ off otherwise.
 Normally, C<sreview-detect> migrates talks to the next state from
 C<waiting_for_files> if there is enough content available to fill all
 the scheduled time for that talk (minus 5 seconds, to account for the
-fact that sometimes the video does not not I<exactly> add up to the
+fact that sometimes the video does not I<exactly> add up to the
 correct length). This is normally what you want, when cameras record
 continuously and content is uploaded in between breaks in talks.
 
@@ -123,6 +123,7 @@ my $host = hostname();
 my $tz = DateTime::TimeZone->new(name => $config->get('file_timezone'));
 my $total = 0;
 
+FILE:
 foreach my $file(@{$collection->children}) {
 	next if ($file->is_collection);
 	print "\nfound " . $file->url if $verbose;
@@ -152,7 +153,14 @@ foreach my $file(@{$collection->children}) {
                 # We do the below bit twice, since $file->filename triggers a
                 # download and we only want to do that if we need to.
                 my $video = Media::Convert::Asset->new(url => $file->filename, %args);
-                my $length = $video->duration;
+                my $length;
+                eval {
+                        $length = $video->duration;
+                };
+                if($@) {
+                        print "... skipped, file can't be parsed" if $verbose;
+                        next FILE;
+                }
                 next unless defined($length);
 		$start = DateTime::Format::Pg->format_datetime($start);
 		$add->execute($file->relname, $room, $room, $start, $start, $length, $stream, $file->mtime->epoch);

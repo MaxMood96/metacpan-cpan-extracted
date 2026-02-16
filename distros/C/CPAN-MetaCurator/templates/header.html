@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <title>Perl Wiki Tree</title>
-    <meta http-equiv = 'Content-Type'	content = 'text/html; charset=utf-8'>
+    <meta http-equiv = 'Content-Type'	content = 'text/html; charset=utf-8' />
 	<meta name = 'language'				content = 'en-au'>
 	<meta property = 'og:url'			content = 'http://!domain_name!/misc/!page_name!'>
 	<meta property = 'og:type'			content = 'website'>
@@ -12,14 +12,18 @@
 	<link rel = 'stylesheet'			type = 'text/css' href = '/assets/css/local/default.css'>
 	<link rel = 'stylesheet'			type = 'text/css' href = '/assets/css/datatables.min.css'>
 	<link rel = 'stylesheet'			type = 'text/css' href = '/assets/css/dist/themes/default/style.min.css'>
+<!--
+	<link rel = 'stylesheet'			type = 'text/css' href = '/assets/css/hover/hover.1.css'>
+-->
 	<script src = '/assets/js/jquery-3.7.1.min.js'></script>
+	<script src = '/assets/js/jquery-ui-1.14.1.min.js'></script>
 	<script src = '/assets/js/jstree.min.js'></script>
   </head>
   <body>
 	<a id = 'top'></a>
 <div>
 	<span><img src = '!logo_path!' width = '120' height = '120' alt = 'Logo for page: index'></span>
-	<span class = 'page_title'>Perl.Wiki morphs into a jsTree...</span>
+	<span class = 'page_title'>A JSTree version of my Perl.Wiki</span>
 </div>
 <br>
 <div>
@@ -33,14 +37,14 @@
 </div>
 Notes:
 <ul>
-	<li>Nodes just under the root are called Topics. Paragraphs is the TiddlyWiki equivalent.</li>
+	<li>Nodes just under the root ('MetaCurator') are called Topics. Paragraphs is the TiddlyWiki equivalent.</li>
 	<li>Tokens like [[XS]] indicate a TiddlyWiki paragraph name, not a Perl module or topic.</li>
 	<li>Almost all leaf node are links. Use a middle-button click to open the link in another tab.</li>
-	<li>Infomation in Perl.Wiki beyond the first 3 lines per entry is not yet transferred into the jsTree;</li>
-	<li>I will probably implement a mouse-over pop-up thingy for this extra info.</li>
-	<li>Next, see 'DataTraversal (topic)' under ArayHandling: I can't get the JS right so clicking the text would focus on node 'DataTraversal'.</li>
-	<li>See line 219 etc of Export.pm for the versions of code I tried.</li>
-	<li>Lastly, the code does not yet cleanly handle special cases. Eg: &lt;pre&gt; and &lt;/pre&gt; etc.</li>
-	<li>Topic count: !topic_count!. Leaf count: !leaf_count!.</li>
+	<li>Further, this version no longer ships with 02packages.details.txt, nor with a packages table in the db.</li>
+	<li>This is because loading that file into SQLite takes 15 hours on my Lenovo M70Q 'Tiny' desktop.</li>
+	<li>So my new module, CPAN::MetaPackages, will build & ship an SQLite db containing those packages.</li>
+	<li>Lastly, the code does not yet cleanly handle special cases. Eg: See Also, & &lt;pre&gt; & &lt;/pre&gt; etc.</li>
+	<br />
+	<li>Acronyms: !acronym!. Leaves: !leaf!. Topics: !topic!. Unknowns; !unknown!</li>
 </ul>
 <hr>

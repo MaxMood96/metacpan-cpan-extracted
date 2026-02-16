@@ -33,14 +33,34 @@ use Data::Dumper;
 use Switch::Back;
 
 use Sim::OPT;
+
 use Sim::OPT::Sim;
 use Sim::OPT::Report;
 use Sim::OPT::Descend;
-use Sim::OPT::Interlinear;
 use Sim::OPT::Takechance;
+use Sim::OPT::Interlinear;
 use Sim::OPT::Parcoord3d;
 use Sim::OPT::Stats;
 eval { use Sim::OPTcue::OPTcue; 1 };
+eval { use Sim::OPTcue::Metabridge; 1 };
+eval { use Sim::OPTcue::Exogen::PatternSearch; 1 };
+eval { use Sim::OPTcue::Exogen::NelderMead; 1 };
+eval { use Sim::OPTcue::Exogen::Armijo; 1 };
+eval { use Sim::OPTcue::Exogen::NSGAII; 1 };
+eval { use Sim::OPTcue::Exogen::ParticleSwarm; 1 };
+eval { use Sim::OPTcue::Exogen::SimulatedAnnealing; 1 };
+eval { use Sim::OPTcue::Exogen::NSGAIII; 1 };
+eval { use Sim::OPTcue::Exogen::MOEAD; 1 };
+eval { use Sim::OPTcue::Exogen::SPEA2; 1 };
+eval { use Sim::OPTcue::Exogen::ParticleSwarm; 1 };
+eval { use Sim::OPTcue::Exogen::RadialBasis; 1 };
+eval { use Sim::OPTcue::Exogen::Kriging; 1 };
+eval { use Sim::OPTcue::Exogen::DecisionTree; 1 };
+eval { use Sim::OPTcue::Exogen::KNN; 1 };
+eval { use Sim::OPTcue::Exogen::FFNN; 1 };
+eval { use Sim::OPTcue::Exogen::GBDT; 1 };
+eval { use Sim::OPTcue::Endogen::DWGN2; 1 };
+eval { use Sim::OPTcue::Endogen::NeuralBoltzmann; 1 };
 
 use Data::Dump qw(dump);
 
@@ -1303,6 +1323,13 @@ sub morph
         my $countstep = $d{countstep};
         my $wascountvar = $countvar;
 
+        my @uplift = @{ $d{uplift} };
+        my @backvalues = @{ $d{backvalues} };
+        my @sweeps = @{ $d{sweeps} };
+        my @sourcesweeps = @{ $d{sourcesweeps} };
+        my @blockelts = @{ $d{blockelts} };
+        my @blocks = @{ $d{blocks} };
+
 		if ( $d{treated} eq "treated" )
 		{
 			#print  "TREATED!: $d{treated}";
@@ -1310,26 +1337,57 @@ sub morph
 		#say  "ARRIVED IN MORPH 1";
         
         say "\$opt: $opt";
+        my $countvar_vector  = $countvar;
+        my $countstep_vector = $countstep;
+
         my $laxmode = "n";
-        my ( @countvars, @countsteps );
+        my ( @countvars, @countsteps, %hashis );
+
         if ( Sim::OPT::checkOPTcue )
         {
-          my ( $countvars_r, $countsteps_r, $laxmod ) = Sim::OPTcue::relax ( $countvar, $countstep );
-          @countvars = @$countvars_r;
-          @countsteps = @$countsteps_r;
-          $laxmode = $laxmod;
+          my ( $countvars_r, $countsteps_r, $laxmod, $hashis_r )
+            = Sim::OPTcue::OPTcue::relax( $countvar_vector, $countstep_vector, \@blockelts );
+
+          $laxmode = $laxmod // "n";
+          %hashis  = ( ref($hashis_r) eq "HASH" ) ? %{$hashis_r} : ();
+
+          # In laxmode (e.g. newrandompick), always morph ONLY the variables in the current block.
+          # This prevents later (non-block) vars from overwriting the effects of the block vars.
+          if ( $laxmode eq "y" )
+          {
+            @countvars  = @blockelts;
+            @countsteps = map { $hashis{$_} } @countvars;
+          }
+          else
+          {
+            @countvars  = @$countvars_r;
+            @countsteps = @$countsteps_r;
+          }
+        }
+        else
+        {
+          @countvars  = ( $countvar );
+          @countsteps = ( $countstep );
+        }
+
+        # Keep scalar countvar/countstep in the instance for downstream stages (Sim::OPT::Sim) when in laxmode.
+        # The overloaded vectors remain available for debug/logging.
+        if ( $laxmode eq "y" )
+        {
+          $instance->{countvar_vector}  = $countvar_vector;
+          $instance->{countstep_vector} = $countstep_vector;
+
+          if ( @blockelts )
+          {
+            my $lastv = $blockelts[-1];
+            $instance->{countvar}  = $lastv;
+            $instance->{countstep} = $hashis{$lastv} if exists $hashis{$lastv};
+          }
         }        
 
 		my $countvar_after = $d_after{countvar};
 		my $countstep = $d{countstep};
 		my $countinstance = ( $d{instn} );
-
-		my @uplift = @{ $d{uplift} };
-		my @backvalues = @{ $d{backvalues} };
-		my @sweeps = @{ $d{sweeps} };
-		my @sourcesweeps = @{ $d{sourcesweeps} };
-		my @blockelts = @{ $d{blockelts} };
-		my @blocks = @{ $d{blocks} };
 
 		my $origin = $d{origin};
 		my %to = %{ $d{to} };
@@ -1347,7 +1405,6 @@ sub morph
 		my $rootname = Sim::OPT::getrootname( \@rootnames, $countcase );
 
 		my $varnumber = $countvar;
-		my $stepsvar = $varnums{$countvar};
 		my $countcaseplus1 = ( $countcase + 1 );
 		my $countblockplus1 = ( $countblock + 1 );
 
@@ -1355,25 +1412,26 @@ sub morph
 
 		my ( $orig, $target );
 
-		my $i == 0;
+		my $i = 0;
 
         my $countp = 0; #HERE I.
-        my $cntv = 0; #HERE I.
+        my $cntv = 0; #UNUSED. #HERE I.
 		foreach my $countvar ( @countvars )
 		{
-            #say  "IN MORPH FOREACH \$countvar: " . dump( $countvar ); say  " \$cntv: " . dump( $cntv );
+            say  "!!! IN MORPH FOREACH \$countvar: " . dump( $countvar ); say  " \$cntv: " . dump( $cntv );
 
-            if ( Sim::OPT::checkOPTcue() )
+            if ( ( Sim::OPT::checkOPTcue() ) and ( $laxmode eq "y" ) )
             {
-               $countstep = checkstep( $laxmode, $countstep, $cntv );
+               #$countstep = Sim::OPTcue::OPTcue::checkstep( $laxmode, $countstep, $cntv );
+               $countstep = $hashis{$countvar}; say  "!!! IN MORPH FOREACH \$countstep: " . dump( $countstep );
             }
-            else 
+            elsif ( ( !Sim::OPT::checkOPTcue() ) and ( $laxmode eq "y" ) )
             {
               say  "OPTcue is not installed and this operation is not possible without it.";
             }
 
             my $stepsvar = $varnums{$countvar};
-            $cntv++;
+            $cntv++;#UNUSED
 
             my $countmorphing = 1;
             while (  $countmorphing  <= $numberof_morphings ) ### IF NEEDED MUTE HERE!!!
@@ -1770,7 +1828,7 @@ sub morph
 										{
                                             if ( Sim::OPT::checkOPTcue() )
                                             {
-                                              ( $unsuited ) = Sim::OPT::genmodnew( $to, $stepsvar, $countop, $countstep, 
+                                              ( $unsuited ) = Sim::OPTcue::OPTcue::genmodnew( $to, $stepsvar, $countop, $countstep, 
                                                 \@applytype, \@genmodnew, $countvar, $fileconfig, $mypath, $file, $countmorphing, $launchline, \@menus, 
                                                 $countinstance, \%dirfiles, $laxmode, \@blockelts, \%varnums, \%mids, $countp, \@{ $dirfiles{rebomb} }, \@instances,  );
                                                 @instances = @$instances_r;
@@ -2165,7 +2223,7 @@ sub morph
 								}
 
 
-                                if( $laxmode eq "n" )
+                                if ( $laxmode eq "n" )
                                 {
                                   if ( ( ( $countvar == $blockelts[-1] ) ) and ( $countstep == $varnums{$countvar} ) 
                                        and ( $countop == $#applytype ) and ( $dowhat{shadeupdate} eq "y" ) )
@@ -2485,7 +2543,7 @@ sub translate
 	my %numvertmenu = %{ $menus[0] };
 	my %vertnummenu = %{ $menus[1] };
 
-	say  "Translating zones for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Translating zones for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	if ( $stepsvar > 1 )
 	{
@@ -2634,7 +2692,7 @@ YYY
 			close NEWFILE;
 		}
 
-		print  "#Translating zones for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.\" $printthis";
+		print  "#Translating zones for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.\" $printthis";
 	}
 } # end sub translate
 
@@ -2651,7 +2709,7 @@ sub translate_surface
 	my %numvertmenu = %{ $menus[0] };
 	my %vertnummenu = %{ $menus[1] };
 
-	say  "Translating surfaces for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Translating surfaces for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	my $transform_type = $$translate_surface[$countop][0];
 	my @surfs_to_transl = @{ $translate_surface->[$countop][1] };
@@ -2719,7 +2777,7 @@ YYY
 				{
 					print `$printthis`;
 				}
-				print  "#Translating surfaces for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance
+				print  "#Translating surfaces for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance
 				$printthis";
 
 				$countsurface++;
@@ -2810,7 +2868,7 @@ YYY
 					print `$printthis`;
 				}
 
-				print  "#Translating surfaces for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance
+				print  "#Translating surfaces for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance
 $printthis";
 
 				$countsurface++;
@@ -2839,7 +2897,7 @@ sub rotate_surface
 	my %numvertmenu = %{ $menus[0] };
 	my %vertnummenu = %{ $menus[1] };
 
-	say  "Rotating surfaces for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Rotating surfaces for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	my @surfs_to_rotate =  @{ $rotate_surface->[$countop][0] };
 	my @vertices_numbers =  @{ $rotate_surface->[$countop][1] };
@@ -2912,7 +2970,7 @@ YYY
 			}
 
 			print   "
-Rotating surfaces for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance
+Rotating surfaces for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance
 $printthis";
 		}
 		$countrotate++;
@@ -2932,7 +2990,7 @@ sub translate_vertices
 	my %numvertmenu = %{ $menus[0] }; #say  "IN MORPH VERTS_TO_TRANSL: \%numvertmenu" . dump( %numvertmenu );
 	my %vertnummenu = %{ $menus[1] }; #say  "IN MORPH VERTS_TO_TRANSL: \%vertnummenu" . dump( %vertnummenu );
 
-	say  "Translating vertices for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Translating vertices for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	my @v;
 	my @verts_to_transl = @{ $translate_vertices[$countop][0] }; #say  "IN MORPH VERTS_TO_TRANSL: " . dump( @verts_to_transl );
@@ -3060,7 +3118,7 @@ YYY
 			print `$printthis`;
 		}
 
-		print  "#Translating vertices for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.
+		print  "#Translating vertices for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.
 $printthis";
 		$countvertex++;
 	}
@@ -3078,7 +3136,7 @@ sub shift_vertices
 	my %numvertmenu = %{ $menus[0] };
 	my %vertnummenu = %{ $menus[1] };
 
-	say  "Shifting vertices for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Shifting vertices for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	my ( $pace, $movement );
 	my $movementtype = $$shift_vertices[$countop][0];
@@ -3147,7 +3205,7 @@ YYY
 				{
 					print `$printthis`;
 				}
-				print  "#Shifting vertices for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.
+				print  "#Shifting vertices for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.
 $printthis";
 
 				$countthis++;
@@ -3194,7 +3252,7 @@ YYY
 				{
 					print `$printthis`;
 				}
-				print  "#Shifting vertices for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.
+				print  "#Shifting vertices for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.
 $printthis";
 			}
 		}
@@ -3213,7 +3271,7 @@ sub rotate    # generic zone rotation
 	my %numvertmenu = %{ $menus[0] };
 	my %vertnummenu = %{ $menus[1] };
 
-	say  "Rotating zones for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Rotating zones for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	my ( $rotation_degrees, $pacerotate, $base );
 	my $swingrotate = $$rotate[$countop][1];
@@ -3337,7 +3395,7 @@ YYY
 
 
 
-		#print 		"#Rotating zones for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.$printthis";
+		#print 		"#Rotating zones for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.$printthis";
 	}
 } # END SUB rotate
 
@@ -3353,7 +3411,7 @@ sub rotatez # PUT THE ROTATION POINT AT POINT 0, 0, 0. I HAVE NOT YET MADE THE F
 	my %numvertmenu = %{ $menus[0] };
 	my %vertnummenu = %{ $menus[1] };
 
-	say  "Rotating zones on the vertical plane for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Rotating zones on the vertical plane for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	my @centerpoints = @{$$rotatez[0]};
 	my $centerpointsx = $centerpoints[0];
@@ -3522,7 +3580,7 @@ sub reassign_construction
 	my %numvertmenu = %{ $menus[0] };
 	my %vertnummenu = %{ $menus[1] };
 
-	say  "Reassign construction solutions for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Reassign construction solutions for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	my @surfaces_to_reassign = @{ $reassign_construction->[$countop][0] };
 	my @groups_to_choose = @{ $reassign_construction->[$countop][1] };
@@ -3566,7 +3624,7 @@ YYY
 		{
 			`$printthis`;
 		}
-		print  "#Reassign construction solutions for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.
+		print  "#Reassign construction solutions for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.
 $printthis";
 		$count++;
 	}
@@ -3582,7 +3640,7 @@ sub change_thickness
 	my %numvertmenu = %{ $menus[0] };
 	my %vertnummenu = %{ $menus[1] };
 
-	say  "Changing thicknesses in construction layer for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Changing thicknesses in construction layer for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
     
     my @grouplistings = @{ $$thickness_change[$countop][0] };
 	my @entries_to_change = @{ $$thickness_change[$countop][1] };
@@ -3708,7 +3766,7 @@ YYY
 				{
 					print `$printthis`;
 				}
-				print  "#Changing thicknesses in construction layer for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.
+				print  "#Changing thicknesses in construction layer for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.
 $printthis";
 				$countstrata++;
 			}
@@ -3792,7 +3850,7 @@ sub obs_modify
 
 	my %obsn = ( "e" => 1, "f" => 2, "g" => 3, "h" => 4, "i" => 5, "j" => 6, "k" => 7, "l" => 8, "m" => 9 , "n" => 10, "o"  => 11); # RE-CHECK
 
-	say  "Modifying obstructions for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Modifying obstructions for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 	my $case_cycle_ref = $obs_modify_ref->[$countop];
 	my $configfile = $geofile;
 	my $fullgeopath = "$to/zones/$geofile";
@@ -4051,7 +4109,7 @@ sub recalculateish
 
 	$launchline = " -file $to/cfg/$fileconfig -mode script";
 
-	say  "Updating the insolation calculations for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Updating the insolation calculations for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	my $printthis;
 	if ( ( $whatto eq "y" ) or ( $dowhat{shadeupdate} eq "y" ) )
@@ -4135,7 +4193,7 @@ YYY
       print `$printthis`;
 	}
 
-	print  "#Updating the insolation calculations for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.
+	print  "#Updating the insolation calculations for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.
 $printthis";
   return( "done" );
 } #END SUB RECALCULATEISH
@@ -4156,7 +4214,7 @@ sub rebuildconstr
 
 	$launchline = " -file $to/cfg/$fileconfig -mode script";
 
-	say  "Updating the construction solutions for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Updating the construction solutions for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	foreach my $zone_letter ( @zone_letters )
   {
@@ -4188,7 +4246,7 @@ YYY
 	}
 
 
-	print  "#Updating the construction solutions for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.
+	print  "#Updating the construction solutions for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.
 $printthis";
 } #END SUB REBUILDCONSTR
 
@@ -4213,7 +4271,7 @@ sub daylightcalc # IT WORKS ONLY IF THE "RAD" DIRECTORY IS EMPTY
 	my %numvertmenu = %{ $menus[0] };
 	my %vertnummenu = %{ $menus[1] };
 
-	say  "Performing daylight calculations through Radiance for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Performing daylight calculations through Radiance for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	my $zone = $daylightcalc[0];
 	my $surface = $daylightcalc[1];
@@ -4396,7 +4454,7 @@ cd $mypath
 		print `$printthis`;
 	}
 
-	print  "#Performing daylight calculations through Radiance for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.
+	print  "#Performing daylight calculations through Radiance for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.
 $printthis";
 
 	open( RADFILE, $pathdf) or die "Can't open $pathdf: $!\n";
@@ -4436,7 +4494,7 @@ sub change_config
 	my %numvertmenu = %{ $menus[0] };
 	my %vertnummenu = %{ $menus[1] };
 
-	say  "Substituting a configuration file for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Substituting a configuration file for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	my @change_conf = @{$change_config[ $countop ]};
 	my @original_configfiles = @{$change_conf[ 0 ]};
@@ -4493,7 +4551,7 @@ sub change_climate ### THIS SIMPLE SCRIPT HAS TO BE DEBUGGED. WHY DOES IT BLOCK 
 	my @change_climates = @{ $change_climate_ref };
 
 
-	say  "Substituting climate database for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Substituting climate database for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	my @climates = @{ $change_climates[ $countop ] };
 	my $newclimate = $climates[ $countstep - 1 ];
@@ -4538,7 +4596,7 @@ sub change_climate ### THIS SIMPLE SCRIPT HAS TO BE DEBUGGED. WHY DOES IT BLOCK 
 		#print  "cp -R -f $tempfileconfig $myfile" ;
 	}
 
-	#print  "#Substituting a configuration file with climate updated for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance. $printthis";
+	#print  "#Substituting a configuration file with climate updated for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance. $printthis";
 }
 
 
@@ -4554,7 +4612,7 @@ sub recalculatenet # THIS FUNCTION HAS BEEN OUTDATED BY THOSE FOR CONSTRAINING T
 	my %numvertmenu = %{ $menus[0] };
 	my %vertnummenu = %{ $menus[1] };
 
-	say  "Adequating the ventilation network for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Adequating the ventilation network for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	my $filenet = $recalculatenet[0];
 
@@ -4743,7 +4801,7 @@ YYY
 					print `$printthis`;
 				}
 
-				print  "#Adequating the ventilation network for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.
+				print  "#Adequating the ventilation network for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.
 $printthis";
 				$countnode++;
 			}
@@ -4790,7 +4848,7 @@ YYY
 						print `printthis`;
 					}
 
-					print  "#Adequating the ventilation network for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.
+					print  "#Adequating the ventilation network for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.
 $printthis";
 					$countnode++;
 				}
@@ -4834,7 +4892,7 @@ YYY
 				print `$printthis`;
 			}
 
-			print  "#Adequating the ventilation network for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.
+			print  "#Adequating the ventilation network for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.
 $printthis";
 
 			$countopening++;
@@ -4967,7 +5025,7 @@ sub apply_constraints
 	my %numvertmenu = %{ $menus[0] };
 	my %vertnummenu = %{ $menus[1] };
 
-	say  "Applying constraints for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Applying constraints for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	my @sourcefiles = @{ $apply_constraints[$countop][0] };
 	my @numberfiles = @{ $apply_constraints[$countop][1] };
@@ -5658,7 +5716,7 @@ YYY
 
 		### XXX
 
-		say  "#Propagating constraints " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.
+		say  "#Propagating constraints " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.
 $printthis";
 	}
 } # END SUB APPLY_CONSTRAINTS
@@ -5677,7 +5735,7 @@ sub reshape_windows # IT APPLIES CONSTRAINTS
 	my %numvertmenu = %{ $menus[0] };
 	my %vertnummenu = %{ $menus[1] };
 
-	say  "Reshaping windows for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Reshaping windows for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	my ( @work_letters, @v );
 
@@ -5819,7 +5877,7 @@ YYY
 								print `$printthis`;
 							}
 
-							say  "#Reshaping windows for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.
+							say  "#Reshaping windows for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.
 $printthis";
 						}
 					}
@@ -5844,7 +5902,7 @@ sub warp #
 	my %numvertmenu = %{ $menus[0] };
 	my %vertnummenu = %{ $menus[1] };
 
-	say  "Warping zones for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Warping zones for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ",parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	my @surfs_to_warp =  @{ $warp->[$countop][0] };
 	my @vertices_numbers =  @{ $warp->[$countop][1] };
@@ -5917,7 +5975,7 @@ YYY
 				print `$printthis`;
 			}
 			print   "
-#Warping zones for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.
+#Warping zones for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.
 $printthis";
 		}
 		$countrotate++;
@@ -6016,7 +6074,7 @@ YYY
 			{
 				print `$printthis\n`;
 			}
-			print  "#Warping zones for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.
+			print  "#Warping zones for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.
 $printthis";
 		}
 		$countthis++;
@@ -6052,7 +6110,7 @@ sub export_toenergyplus
 					$epwfile = $mypath . "\\" . $epw;
 				}
 
-				say  "Exporting to EnergyPlus for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+				say  "Exporting to EnergyPlus for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	my $file_eplus = "$to.idf";
 
@@ -6153,7 +6211,7 @@ sub use_modish
 			my @applytype = @$applytype_ref;
 			my @use_modish = @{ $use_modish_ref->[ $countop ] };
 			my $pathhere = "$to/cfg/$fileconfig";
-			say  "Executing modish.pl for calculating the effect of solar reflections on obstructions for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+			say  "Executing modish.pl for calculating the effect of solar reflections on obstructions for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 			my @menus = @$menus_ref;
 			my %dowhat = %$dowhat_ref;
@@ -6251,7 +6309,7 @@ sub genchange
 	my %numvertmenu = %{ $menus[0] };
 	my %vertnummenu = %{ $menus[1] };
 
-	say  "Executing genchange for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Executing genchange for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 	my $this_cycledata = $genchange->[$countop];
 	my @filequestions = @{ $this_cycledata->[1] };
 	my ( @plaincontents, @filecontents, @newfilecontents );
@@ -6836,7 +6894,7 @@ sub change_groundreflectance
 	my %numvertmenu = %{ $menus[0] };
 	my %vertnummenu = %{ $menus[1] };
 
-	say  "Changing ground reflectance for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Changing ground reflectance for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 	my ( $low, $high, $swing, $pace, $newvalue );
 
 	if ( $change_groundreflectance )
@@ -6894,7 +6952,7 @@ sub vary_controls
 	my %numvertmenu = %{ $menus[0] };
 	my %vertnummenu = %{ $menus[1] };
 
-	say  "Variating controls for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Variating controls for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	my ( $semaphore_zone, $semaphore_dataloop, $semaphore_massflow, $semaphore_setpoint, $doline );
 	my $count_controlmass = -1;
@@ -7130,7 +7188,7 @@ sub constrain_controls
 	my %numvertmenu = %{ $menus[0] };
 	my %vertnummenu = %{ $menus[1] };
 
-	say  "Constraining controls for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Constraining controls for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	my $zone_letter = $applytype[$countop][3];
 	my @applytype = @$applytype_ref;
@@ -7225,7 +7283,7 @@ sub read_controls
 	# NOTICE THAT CURRENTLY ONLY THE "basic control law" IS SUPPORTED.
 
 	my ( $sourceaddress, $targetaddress, $swap, $swap2, $countvar ) = @_;
-	say  "Reading controls for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Reading controls for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	my @letters = @$swap;
 	my @period_letters = @$swap2;
@@ -7356,7 +7414,7 @@ sub read_control_constraints
 	# $countvar, WHICH TELLS THE PROGRAM WHAT NUMBER OF DESIGN PARAMETER THE PROGRAM IS WORKING AT.
 
 	my ( $to, $stepsvar, $countop, $countstep, $swap, $swap2, $swap3, $swap4, $countvar, $fileconfig, $countmorphing ) = @_;
-	say  "Reading controls constraints for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Reading controls constraints for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	@loopcontrol = @$swap;
 	@flowcontrol = @$swap2;
@@ -7496,7 +7554,7 @@ sub apply_flowcontrol_changes
 {  # THIS HAS TO BE CALLED WITH: apply_flowcontrol_changes($exeonfiles, \@new_flowcontrols);
 	# # THIS APPLIES CHANGES TO NETS IN CONTROLS
 	my ( $swap, $swap2, $countvar ) = @_;
-	say  "Applying changes to flow controls for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Applying changes to flow controls for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	my $countflow = 0;
 	my @new_flowcontrols = @$swap;
@@ -7556,7 +7614,7 @@ sub vary_net
 	my $zone_letter = $applytype[$countop][3];
 	my @vary_net = @{ $vary_net_ref[ $countop ] };
 
-	say  "Executing variations on networks for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter $countvar at iteration $countstep. Instance $countinstance.";
+	say  "Executing variations on networks for case " . ($countcase + 1) . ", block " . ($countblock + 1) . ", parameter \$countvar $countvar at iteration \$countstep $countstep. Instance $countinstance.";
 
 	my $activezone = $applytype[$countop][3];
 	my ($semaphore_node, $semaphore_component, $node_letter);

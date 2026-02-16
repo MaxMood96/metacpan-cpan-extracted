@@ -14,3 +14,5 @@ t/003_ltsv_file.t
 t/004_grouping.t
 t/005_complex.t
 t/006_extended.t
+t/007_additional_methods.t
+t/008_set_and_aggregate.t

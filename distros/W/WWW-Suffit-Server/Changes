@@ -1,5 +1,8 @@
 # Version/Revision history
 
+1.13 Mon 16 Feb 2026 10:01:21 MSK
+    * Project relicensed from the Perl 5 dual license to the Artistic License 2.0
+
 1.12 Tue 21 Oct 2025 16:58:53 MSK
     * The authdbcacheexpire/authdbcacheexpiration directives are now processed only if they exist
 

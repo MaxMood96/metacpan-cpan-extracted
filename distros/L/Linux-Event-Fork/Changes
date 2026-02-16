@@ -1,0 +1,31 @@
+Revision history for Linux-Event-Fork
+
+0.003  2026-02-15
+
+    * Add full POD documentation
+    * Add README with CI badge
+    * Fix WCOREDUMP portability issue
+    * Declare proper runtime prerequisites (Linux::Event, Linux::FD::Pid)
+    * Add timeout support
+    * Add stdin streaming
+    * Add tag attribute
+    * Add stress test examples
+    * Harden CI workflow (container-based)
+
+0.002  2026-02-15
+  - Documentation pass: comprehensive POD for Fork/Child/Exit and refreshed README.md
+  - Version bump for CPAN release
+
+0.001  2026-02-15
+  - Initial release (spawn + optional stdout/stderr capture + exit object)
+  - Fix: correct initial EOF flags so drain-first cannot short-circuit before pipe EOF
+  - Add: child => sub Ellipsis advanced spawn form (runs in child after stdio plumbing; typically exec)
+  - Tests: capture overrides (capture_*), drain without callbacks, and child callback failure (exit 127)
+  - Add: child setup options cwd, umask, env overlay, and clear_env
+  - Add: stdin streaming with backpressure-aware non-blocking writes (stdin_write / close_stdin)
+  - Fix: add stdin_pipe => 1 to explicitly request a stdin pipe for post-spawn streaming
+  - Add: tag => ... and $child->tag for ergonomic identification
+  - Add: minimal timeout (timeout + on_timeout, sends TERM once)
+  - Fix: ignore SIGPIPE during stdin streaming; treat EPIPE as normal close (prevents parent death)
+  - Test: regression coverage for EPIPE/SIGPIPE case
+  - Examples: add examples/README.md and improve churn stress summary counters

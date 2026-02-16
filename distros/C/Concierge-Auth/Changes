@@ -1,5 +1,8 @@
 Revision history for Concierge-Auth
 
+v0.4.0  2026-02-15
+    - Fixed distribution issue with MANIFEST.SKIP
+
 v0.19.0 2026-02-10
     - Initial CPAN release
     - Argon2 password hashing with Bcrypt legacy validation

@@ -64,6 +64,6 @@
          "web" : "https://github.com/mrdvt92/perl-Power-Outlet.git"
       }
    },
-   "version" : "0.52",
+   "version" : "0.53",
    "x_serialization_backend" : "JSON::PP version 4.06"
 }

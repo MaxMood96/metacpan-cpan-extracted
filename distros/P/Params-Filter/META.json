@@ -45,7 +45,7 @@
    "provides" : {
       "Params::Filter" : {
          "file" : "lib/Params/Filter.pm",
-         "version" : "0.015"
+         "version" : "0.016"
       }
    },
    "release_status" : "stable",
@@ -59,6 +59,6 @@
          "web" : "https://github.com/bwva/Params-Filter"
       }
    },
-   "version" : "0.015",
+   "version" : "0.016",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-use 5.40.0;
+use 5.36.0;
 use open qw(:std :utf8);
 use strict;
 use warnings;
@@ -21,7 +21,7 @@ sub process
 {
 	my(%options)   = @_;
 	my($root)      = HTML::TreeBuilder -> new();
-	my($file_name) = path("$ENV{HOME}/Documents/wiki/$options{in_file}");
+	my($file_name) = path($options{in_file});
 	my $content    = $file_name -> slurp_utf8;
 
 	decode_entities $content;
@@ -31,7 +31,7 @@ sub process
 	my(@div)    = $store -> look_down(_tag => 'div');
 	my($count)  = 0;
 
-	open(OUT, '>', "$ENV{HOME}/Documents/wiki/$options{out_file}");
+	open(OUT, '>', $options{out_file});
 
 	my(@line);
 	my($main_menu, %main_menu);
@@ -90,30 +90,36 @@ sub process
 		}
 	}
 
+	return 0;
+
 } # End of process.
 
 # ----------------------------------------------
 
-my($option_parser) = Getopt::Long::Parser -> new();
+say "tiddly2text.pl - Converts a TiddlyWiki HTML file into a text file\n";
 
-my(%option);
+my(%options);
 
-if ($option_parser -> getoptions
+$options{help}	 	= 0;
+$options{in_file}	= 'data/in.html';
+$options{out_file}	= 'data/out.txt';
+my(%opts)			=
 (
- \%option,
- 'help',
- 'in_file=s',
- 'out_file=s',
-) )
-{
-	pod2usage(1) if ($option{'help'});
+	'help'			=> \$options{help},
+	'in_file=s'		=> \$options{in_file},
+	'out_file=s'	=> \$options{out_file},
+);
 
-	exit process(%option);
-}
-else
+GetOptions(%opts) || die("Error in options. Options: " . Dumper(%opts) );
+
+if ($options{help} == 1)
 {
-	pod2usage(2);
+	pod2usage(1);
+
+	exit 0;
 }
+
+exit process(%options);
 
 __END__
 
@@ -129,8 +135,8 @@ tiddly2text.pl [options]
 
 	Options:
 	-help
-	-in_file (/home/ron/Documents/wiki/$x)
-	-out_file (/home/ron/Documents/wiki/$y)
+	-in_file In-file-name
+	-out_file Out-file-name
 
 All switches can be reduced to a single letter.
 
@@ -144,17 +150,13 @@ Exit value: 0.
 
 Print help and exit.
 
-=item -in_file (/home/ron/Documents/wiki/$x)
+=item -in_file In-file-name
 
-Just provide $x. E.g.: Perl.html.
+Default: data/in.html.
 
-There is no default.
+=item -out_file Out-file-name
 
-=item -out_file (/home/ron/Documents/wiki/$y)
-
-Just provide $y. E.g.: Perl.txt.
-
-There is no default.
+Default:  data/out.txt.
 
 =back
 

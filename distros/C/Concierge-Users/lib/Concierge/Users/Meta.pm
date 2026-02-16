@@ -1,4 +1,4 @@
-package Concierge::Users::Meta v0.7.4;
+package Concierge::Users::Meta v0.8.0;
 use v5.36;
 use Carp qw/ croak carp /;
 use YAML::Tiny;
@@ -282,7 +282,7 @@ sub init_field_meta {
 %Concierge::Users::Meta::type_null_values = (
 	text      => '',
 	enum      => '',
-	boolean   => 0,
+	boolean   => '',
 	date      => '0000-00-00',
 	timestamp => '0000-00-00 00:00:00',
 	email     => '',
@@ -928,7 +928,7 @@ sub validate_name_field {
 		required => 0,
 		options => [],
 		default => '',
-		null_value => 0,
+		null_value => '',
 		max_length => 1,
 		validate_as => 'boolean',
 		must_validate => 0,
@@ -1244,7 +1244,7 @@ B<Contact fields:>
 
 =item B<phone> -- type C<phone>, validate_as C<phone>, max 20
 
-=item B<text_ok> -- type C<boolean>, validate_as C<boolean>, null_value 0, max 1
+=item B<text_ok> -- type C<boolean>, validate_as C<boolean>, null_value "", max 1
 
 =back
 
@@ -1314,7 +1314,7 @@ L</Enum Default Convention>).
 when no value is supplied.
 
 =item C<null_value> -- Sentinel that represents "no data" for this field
-type (e.g. C<""> for text, C<0> for boolean, C<0000-00-00> for date).
+type (e.g. C<""> for text, C<""> for boolean, C<0000-00-00> for date).
 
 =item C<max_length> -- Maximum character length enforced by the C<text>
 validator and used as a UI hint.
@@ -1364,13 +1364,13 @@ Pattern: C<YYYY-MM-DD HH:MM:SS> or C<YYYY-MM-DDTHH:MM:SS>.
 
 Strictly C<0> or C<1>.
 
-    null_value: 0
+    null_value: ""
 
 =item B<integer>
 
 Optional leading minus, digits only (C<< /^\-?\d+$/ >>).
 
-    null_value: 0
+    null_value: ""
 
 =item B<enum>
 
@@ -1860,7 +1860,7 @@ Field Definitions:
       description: "Consent for text messages (1=yes, 0=no)"
       max_length: 1
 	  validate_as: boolean
-      null_value: 0
+      null_value: ""
 
     last_login_date:
       field_name: last_login_date

@@ -1,0 +1,17 @@
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.
+
+Perl is distributed under either:
+
+  a) the GNU General Public License as published by the Free Software
+     Foundation; either version 1, or (at your option) any later version, or
+
+  b) the "Artistic License" which comes with Perl.
+
+On Debian systems, the complete text of the GNU General Public License
+can be found in /usr/share/common-licenses/GPL-1 and the Artistic License
+in /usr/share/common-licenses/Artistic.
+
+On other systems, you may obtain the full text of these licenses from:
+
+  https://www.perl.org/

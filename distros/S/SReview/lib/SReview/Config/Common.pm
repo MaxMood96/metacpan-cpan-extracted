@@ -88,7 +88,7 @@ sub setup {
 
 	# Values for encoder scripts
 	$config->define('pubdir', 'The directory on the file system where files served by the webinterface should be stored', '/srv/sreview/web/public');
-	$config->define('workdir', 'A directory where encoder jobs can create a subdirectory for temporary files', '/tmp');
+	$config->define('workdir', 'A directory where encoder jobs can create a subdirectory for temporary files', exists($ENV{TMPDIR}) ? $ENV{TMPDIR} : '/tmp' );
 	$config->define('outputdir', 'The base directory under which SReview should place the final released files', '/srv/sreview/output');
 	$config->define('output_subdirs', 'An array of fields to be used to create subdirectories under the output directory.', ['event', 'room', 'date']);
 	$config->define('script_output', 'The directory to which the output of scripts should be redirected', '/srv/sreview/script-output');
@@ -127,7 +127,7 @@ sub setup {
 	$config->define('inject_actions', 'A command that tells SReview what to do with a talk that needs to be injected', 'sreview-inject <%== $talkid %> <%== $output_dir %>/inject.<%== $talkid %>.out 2> <%== $output_dir %>/cut.<%== $talkid %>.err');
 
 	# Values for notification script
-	$config->define('notify_actions', 'An array of things to do when notifying the readyness of a preview video. Can contain one or more of: email, command.', []);
+	$config->define('notify_actions', 'An array of things to do when notifying the readiness of a preview video. Can contain one or more of: email, command.', []);
 	$config->define('announce_actions', 'An array of things to do when announcing the completion of a transcode. Can contain one or more of: email, command.', []);
 	$config->define('notify_final_actions', 'An array of things to do when notifying the readiness of a final review. Can contain one or more of: email, command', []);
 	$config->define('email_template', 'A filename of a Mojo::Template template to process, returning the email body used in notifications or announcements. Can be overridden by announce_email_template or notify_email_template.', undef);
@@ -169,6 +169,7 @@ sub setup {
 
 	# for sreview-transcode
 	$config->define("video_license", "the license of the output videos. If defined, will be set as a \"license\" tag on the media container, provided the container supports that.", undef);
+        $config->define("metadata_templates", 'A hash of SReview::Template templates to set metadata on output files. Sets the $talk and $config variables.', { title => '<%= $talk->title %>\\', event => '<%= $config->get("event") %>\\', speakers => '<%= $talk->speakers %>\\', track => '<%= $talk->track_name %>\\', 'date' => '<%= $talk->date %>\\', 'recording_location' => '<%= $talk->room %>\\', 'synopsis' => '<%= $talk->description %>\\', 'subtitle' => '<%= $talk->subtitle %>\\', 'license' => '<%= $config->get("video_license") %>\\', url => '<%= $talk->eventurl %>\\' });
 
 	# for tuning command stuff
 	$config->define('command_tune', 'Some commands change incompatibly from one version to the next. This option exists to deal with such incompatibilities', {});

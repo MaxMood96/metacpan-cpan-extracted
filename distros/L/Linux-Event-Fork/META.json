@@ -1,0 +1,64 @@
+{
+   "abstract" : "Minimal async child spawning on top of Linux::Event",
+   "author" : [
+      "Joshua S. Day (HAX)"
+   ],
+   "dynamic_config" : 1,
+   "generated_by" : "ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150012",
+   "license" : [
+      "perl_5"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "Linux-Event-Fork",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "inc"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "Carp" : "0",
+            "Errno" : "0",
+            "Fcntl" : "0",
+            "Linux::Event" : "0.004",
+            "Linux::FD::Pid" : "0",
+            "POSIX" : "0",
+            "perl" : "5.036"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "Test2::V0" : "0"
+         }
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/haxmeister/perl-linux-event-fork/issues"
+      },
+      "homepage" : "https://github.com/haxmeister/perl-linux-event-fork",
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/haxmeister/perl-linux-event-fork.git",
+         "web" : "https://github.com/haxmeister/perl-linux-event-fork"
+      }
+   },
+   "version" : "0.003",
+   "x_serialization_backend" : "JSON::PP version 4.16"
+}

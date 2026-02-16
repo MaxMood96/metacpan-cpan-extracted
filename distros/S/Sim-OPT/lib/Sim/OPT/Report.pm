@@ -21,12 +21,32 @@ use File::Copy qw( move copy );
 use Sim::OPT;
 use Sim::OPT::Morph;
 use Sim::OPT::Sim;
+
 use Sim::OPT::Descend;
-use Sim::OPT::Interlinear;
 use Sim::OPT::Takechance;
+use Sim::OPT::Interlinear;
 use Sim::OPT::Parcoord3d;
 use Sim::OPT::Stats;
 eval { use Sim::OPTcue::OPTcue; 1 };
+eval { use Sim::OPTcue::Metabridge; 1 };
+eval { use Sim::OPTcue::Exogen::PatternSearch; 1 };
+eval { use Sim::OPTcue::Exogen::NelderMead; 1 };
+eval { use Sim::OPTcue::Exogen::Armijo; 1 };
+eval { use Sim::OPTcue::Exogen::NSGAII; 1 };
+eval { use Sim::OPTcue::Exogen::ParticleSwarm; 1 };
+eval { use Sim::OPTcue::Exogen::SimulatedAnnealing; 1 };
+eval { use Sim::OPTcue::Exogen::NSGAIII; 1 };
+eval { use Sim::OPTcue::Exogen::MOEAD; 1 };
+eval { use Sim::OPTcue::Exogen::SPEA2; 1 };
+eval { use Sim::OPTcue::Exogen::ParticleSwarm; 1 };
+eval { use Sim::OPTcue::Exogen::RadialBasis; 1 };
+eval { use Sim::OPTcue::Exogen::Kriging; 1 };
+eval { use Sim::OPTcue::Exogen::DecisionTree; 1 };
+eval { use Sim::OPTcue::Exogen::KNN; 1 };
+eval { use Sim::OPTcue::Exogen::FFNN; 1 };
+eval { use Sim::OPTcue::Exogen::GBDT; 1 };
+eval { use Sim::OPTcue::Endogen::DWGN2; 1 };
+eval { use Sim::OPTcue::Endogen::NeuralBoltzmann; 1 };
 
 
 use Data::Dumper;

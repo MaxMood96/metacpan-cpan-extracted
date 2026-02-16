@@ -13,9 +13,8 @@ pm_to_blib
 \.o$
 \.so$
 
-# CPAN metadata (auto-generated)
+# CPAN metadata (auto-generated; MYMETA only — META must ship in dist)
 ^MYMETA\.(json|yml)
-^META\.(json|yml)
 
 # Temporary and backup files
 ~$

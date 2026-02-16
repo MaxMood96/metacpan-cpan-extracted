@@ -3,17 +3,18 @@
 #
 # Serż Minus (Sergey Lepenkov), <abalama@cpan.org>
 #
-# Copyright (C) 1998-2025 D&D Corporation. All Rights Reserved
+# Copyright (C) 1998-2026 D&D Corporation
 #
-# This is free software; you can redistribute it and/or modify it
-# under the same terms as Perl itself.
+# This program is distributed under the terms of the Artistic License 2.0
 #
 #########################################################################
 use Test::More tests => 1;
-use WWW::Suffit::Util qw/fdatetime/;
+use WWW::Suffit::Util qw/md5sum/;
 
-ok(WWW::Suffit::Util->VERSION, 'Version');
+is(md5sum('LICENSE'), '2babd339892857699767bda29d606988', 'LICENSE md5sum check');
 
 1;
 
 __END__
+
+prove -lv t/02-util.t

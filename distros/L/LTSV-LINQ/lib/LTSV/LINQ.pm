@@ -1,18 +1,22 @@
+package LTSV::LINQ;
 ######################################################################
 #
 # LTSV::LINQ - LINQ-style query interface for LTSV files
 #
-# Copyright (c) 2026 INABA Hitoshi <ina@cpan.org>
+# https://metacpan.org/dist/LTSV-LINQ
 #
+# Copyright (c) 2026 INABA Hitoshi <ina@cpan.org>
 ######################################################################
 
-package LTSV::LINQ;
-use 5.00503;
-use strict;
-BEGIN { $INC{'warnings.pm'} = '' if $] < 5.006 }; use warnings; $^W=1;
+use 5.00503;    # Universal Consensus 1998 for primetools
+# use 5.008001; # Lancaster Consensus 2013 for toolchains
 
-use vars qw($VERSION);
-$VERSION = '1.00';
+$VERSION = '1.01';
+$VERSION = $VERSION;
+
+BEGIN { pop @INC if $INC[-1] eq '.' } # CVE-2016-1238: Important unsafe module load path flaw
+use strict;
+BEGIN { $INC{'warnings.pm'} = '' if $] < 5.006 } use warnings; local $^W=1;
 
 #---------------------------------------------------------------------
 # Constructor and Iterator Infrastructure
@@ -165,6 +169,29 @@ sub SelectMany {
     });
 }
 
+# Concat - concatenate two sequences
+sub Concat {
+    my($self, $second) = @_;
+    my $class = ref($self);
+
+    my $first_iter = $self->iterator;
+    my $second_iter;
+    my $first_done = 0;
+
+    return $class->new(sub {
+        if (!$first_done) {
+            my $item = $first_iter->();
+            if (defined $item) {
+                return $item;
+            }
+            $first_done = 1;
+            $second_iter = $second->iterator;
+        }
+
+        return $second_iter ? $second_iter->() : undef;
+    });
+}
+
 #---------------------------------------------------------------------
 # Partitioning Methods
 #---------------------------------------------------------------------
@@ -220,6 +247,31 @@ sub TakeWhile {
         else {
             $done = 1;
             return undef;
+        }
+    });
+}
+
+# SkipWhile - skip elements while predicate is true
+sub SkipWhile {
+    my($self, $predicate) = @_;
+    my $iter = $self->iterator;
+    my $class = ref($self);
+    my $skipping = 1;
+
+    return $class->new(sub {
+        while (1) {
+            my $item = $iter->();
+            return undef unless defined $item;
+
+            if ($skipping) {
+                if (!$predicate->($item)) {
+                    $skipping = 0;
+                    return $item;
+                }
+            }
+            else {
+                return $item;
+            }
         }
     });
 }
@@ -353,6 +405,92 @@ sub Distinct {
     });
 }
 
+# Internal helper for set operations - make key from item
+sub _make_key {
+    my($item) = @_;
+    
+    return '' unless defined $item;
+    
+    if (ref($item) eq 'HASH') {
+        # Hash to stable key
+        my @pairs = ();
+        for my $k (sort keys %$item) {
+            my $v = defined($item->{$k}) ? $item->{$k} : '';
+            push @pairs, "$k\x1F$v";  # \x1F = Unit Separator
+        }
+        return join("\x1E", @pairs);  # \x1E = Record Separator
+    }
+    elsif (ref($item) eq 'ARRAY') {
+        # Array to key
+        return join("\x1E", map { defined($_) ? $_ : '' } @$item);
+    }
+    else {
+        # Scalar
+        return $item;
+    }
+}
+
+# Union - set union with distinct
+sub Union {
+    my($self, $second, $comparer) = @_;
+    
+    return $self->Concat($second)->Distinct($comparer);
+}
+
+# Intersect - set intersection
+sub Intersect {
+    my($self, $second, $comparer) = @_;
+    
+    # Build hash of second sequence
+    my %second_set = ();
+    $second->ForEach(sub {
+        my $item = shift;
+        my $key = $comparer ? $comparer->($item) : _make_key($item);
+        $second_set{$key} = $item;
+    });
+
+    my $class = ref($self);
+    my $iter = $self->iterator;
+    my %seen = ();
+
+    return $class->new(sub {
+        while (defined(my $item = $iter->())) {
+            my $key = $comparer ? $comparer->($item) : _make_key($item);
+            
+            next if $seen{$key}++;  # Skip duplicates
+            return $item if exists $second_set{$key};
+        }
+        return undef;
+    });
+}
+
+# Except - set difference
+sub Except {
+    my($self, $second, $comparer) = @_;
+    
+    # Build hash of second sequence
+    my %second_set = ();
+    $second->ForEach(sub {
+        my $item = shift;
+        my $key = $comparer ? $comparer->($item) : _make_key($item);
+        $second_set{$key} = 1;
+    });
+
+    my $class = ref($self);
+    my $iter = $self->iterator;
+    my %seen = ();
+
+    return $class->new(sub {
+        while (defined(my $item = $iter->())) {
+            my $key = $comparer ? $comparer->($item) : _make_key($item);
+            
+            next if $seen{$key}++;  # Skip duplicates
+            return $item unless exists $second_set{$key};
+        }
+        return undef;
+    });
+}
+
 #---------------------------------------------------------------------
 # Quantifier Methods
 #---------------------------------------------------------------------
@@ -382,6 +520,49 @@ sub Any {
     else {
         my $item = $iter->();
         return defined($item) ? 1 : 0;
+    }
+}
+
+# Contains - check if sequence contains element
+sub Contains {
+    my($self, $value, $comparer) = @_;
+    
+    if ($comparer) {
+        return $self->Any(sub { $comparer->($_[0], $value) });
+    }
+    else {
+        return $self->Any(sub {
+            my $item = $_[0];
+            return (!defined($item) && !defined($value)) ||
+                   (defined($item) && defined($value) && $item eq $value);
+        });
+    }
+}
+
+# SequenceEqual - compare two sequences for equality
+sub SequenceEqual {
+    my($self, $second, $comparer) = @_;
+    $comparer ||= sub { 
+        my($a, $b) = @_;
+        return (!defined($a) && !defined($b)) ||
+               (defined($a) && defined($b) && $a eq $b);
+    };
+
+    my $iter1 = $self->iterator;
+    my $iter2 = $second->iterator;
+
+    while (1) {
+        my $item1 = $iter1->();
+        my $item2 = $iter2->();
+
+        # Both ended - equal
+        return 1 if !defined($item1) && !defined($item2);
+
+        # One ended - not equal
+        return 0 if !defined($item1) || !defined($item2);
+
+        # Compare items
+        return 0 unless $comparer->($item1, $item2);
     }
 }
 
@@ -430,6 +611,95 @@ sub Last {
         die "Sequence contains no elements" unless @items;
         return $items[-1];
     }
+}
+
+# LastOrDefault - return last element or undef
+sub LastOrDefault {
+    my($self, $predicate) = @_;
+    my @items = $self->ToArray();
+
+    if ($predicate) {
+        for (my $i = $#items; $i >= 0; $i--) {
+            return $items[$i] if $predicate->($items[$i]);
+        }
+        return undef;
+    }
+    else {
+        return @items ? $items[-1] : undef;
+    }
+}
+
+# Single - return the only element
+sub Single {
+    my($self, $predicate) = @_;
+    my $iter = $self->iterator;
+    my $found;
+    my $count = 0;
+
+    while (defined(my $item = $iter->())) {
+        next if $predicate && !$predicate->($item);
+        
+        $count++;
+        if ($count > 1) {
+            die "Sequence contains more than one element";
+        }
+        $found = $item;
+    }
+
+    die "Sequence contains no elements" if $count == 0;
+    return $found;
+}
+
+# SingleOrDefault - return the only element or undef
+sub SingleOrDefault {
+    my($self, $predicate) = @_;
+    my $iter = $self->iterator;
+    my $found;
+    my $count = 0;
+
+    while (defined(my $item = $iter->())) {
+        next if $predicate && !$predicate->($item);
+        
+        $count++;
+        if ($count > 1) {
+            return undef;  # More than one element
+        }
+        $found = $item;
+    }
+
+    return $count == 1 ? $found : undef;
+}
+
+# ElementAt - return element at specified index
+sub ElementAt {
+    my($self, $index) = @_;
+    die "Index must be non-negative" if $index < 0;
+
+    my $iter = $self->iterator;
+    my $current = 0;
+
+    while (defined(my $item = $iter->())) {
+        return $item if $current == $index;
+        $current++;
+    }
+
+    die "Index out of range";
+}
+
+# ElementAtOrDefault - return element at index or undef
+sub ElementAtOrDefault {
+    my($self, $index) = @_;
+    return undef if $index < 0;
+
+    my $iter = $self->iterator;
+    my $current = 0;
+
+    while (defined(my $item = $iter->())) {
+        return $item if $current == $index;
+        $current++;
+    }
+
+    return undef;
 }
 
 #---------------------------------------------------------------------
@@ -520,6 +790,45 @@ sub AverageOrDefault {
     return $sum / $count;
 }
 
+# Aggregate - apply accumulator function over sequence
+sub Aggregate {
+    my($self, @args) = @_;
+    
+    my($seed, $func, $result_selector);
+    
+    if (@args == 1) {
+        # Aggregate($func) - use first element as seed
+        $func = $args[0];
+        my $iter = $self->iterator;
+        $seed = $iter->();
+        die "Sequence contains no elements" unless defined $seed;
+        
+        # Continue with rest of elements
+        while (defined(my $item = $iter->())) {
+            $seed = $func->($seed, $item);
+        }
+    }
+    elsif (@args == 2) {
+        # Aggregate($seed, $func)
+        ($seed, $func) = @args;
+        $self->ForEach(sub {
+            $seed = $func->($seed, shift);
+        });
+    }
+    elsif (@args == 3) {
+        # Aggregate($seed, $func, $result_selector)
+        ($seed, $func, $result_selector) = @args;
+        $self->ForEach(sub {
+            $seed = $func->($seed, shift);
+        });
+    }
+    else {
+        die "Invalid number of arguments for Aggregate";
+    }
+
+    return $result_selector ? $result_selector->($seed) : $seed;
+}
+
 #---------------------------------------------------------------------
 # Conversion Methods
 #---------------------------------------------------------------------
@@ -540,6 +849,37 @@ sub ToArray {
 sub ToList {
     my($self) = @_;
     return [$self->ToArray()];
+}
+
+# DefaultIfEmpty - return default value if empty
+sub DefaultIfEmpty {
+    my($self, $default_value) = @_;
+    # default_value のデフォルトは undef
+    my $has_default_arg = @_ > 1;
+    if (!$has_default_arg) {
+        $default_value = undef;
+    }
+
+    my $class = ref($self);
+    my $iter = $self->iterator;
+    my $has_elements = 0;
+    my $returned_default = 0;
+
+    return $class->new(sub {
+        my $item = $iter->();
+        if (defined $item) {
+            $has_elements = 1;
+            return $item;
+        }
+
+        # EOF reached
+        if (!$has_elements && !$returned_default) {
+            $returned_default = 1;
+            return $default_value;
+        }
+
+        return undef;
+    });
 }
 
 # ToLTSV - write to LTSV file
@@ -737,25 +1077,39 @@ B<Method Summary Table:>
   Where               Filtering       Yes    Query
   Select              Projection      Yes    Query
   SelectMany          Projection      Yes    Query
+  Concat              Concatenation   Yes    Query
   Take                Partitioning    Yes    Query
   Skip                Partitioning    Yes    Query
   TakeWhile           Partitioning    Yes    Query
+  SkipWhile           Partitioning    Yes    Query
   OrderBy             Ordering        No*    Query
   OrderByDescending   Ordering        No*    Query
   Reverse             Ordering        No*    Query
   GroupBy             Grouping        No*    Query
   Distinct            Set Operation   Yes    Query
+  Union               Set Operation   Yes    Query
+  Intersect           Set Operation   Yes    Query
+  Except              Set Operation   Yes    Query
   All                 Quantifier      No     Boolean
   Any                 Quantifier      No     Boolean
+  Contains            Quantifier      No     Boolean
+  SequenceEqual       Comparison      No     Boolean
   First               Element Access  No     Element
   FirstOrDefault      Element Access  No     Element
   Last                Element Access  No*    Element
+  LastOrDefault       Element Access  No*    Element or undef
+  Single              Element Access  No*    Element
+  SingleOrDefault     Element Access  No*    Element or undef
+  ElementAt           Element Access  No*    Element
+  ElementAtOrDefault  Element Access  No*    Element or undef
   Count               Aggregation     No     Integer
   Sum                 Aggregation     No     Number
   Min                 Aggregation     No     Number
   Max                 Aggregation     No     Number
   Average             Aggregation     No     Number
   AverageOrDefault    Aggregation     No     Number or undef
+  Aggregate           Aggregation     No     Any
+  DefaultIfEmpty      Default Value   Yes    Query
   ToArray             Conversion      No     Array
   ToList              Conversion      No     ArrayRef
   ToLTSV              Conversion      No     Boolean
@@ -934,6 +1288,40 @@ B<Use Cases:>
 
 =back
 
+=head2 Concatenation Methods
+
+=over 4
+
+=item B<Concat($second)>
+
+Concatenate two sequences into one.
+
+B<Parameters:>
+
+=over 4
+
+=item * C<$second> - Second sequence (LTSV::LINQ object)
+
+=back
+
+B<Returns:> New query with both sequences concatenated (lazy)
+
+B<Examples:>
+
+  # Combine two data sources
+  my $q1 = LTSV::LINQ->From([1, 2, 3]);
+  my $q2 = LTSV::LINQ->From([4, 5, 6]);
+  $q1->Concat($q2)->ToArray();  # (1, 2, 3, 4, 5, 6)
+
+  # Merge LTSV files
+  LTSV::LINQ->FromLTSV("jan.log")
+      ->Concat(LTSV::LINQ->FromLTSV("feb.log"))
+      ->Where(status => '500')
+
+B<Note:> This operation is lazy - sequences are read on-demand.
+
+=back
+
 =head2 Partitioning Methods
 
 =over 4
@@ -1035,6 +1423,36 @@ It does NOT filter - it terminates the sequence.
   ->TakeWhile(sub { $_[0] < 5 })  # 1,2,3,4 then STOP
   ->Where(sub { $_[0] < 5 })      # 1,2,3,4 (checks all)
 
+=item B<SkipWhile($predicate)>
+
+Skip elements while the predicate is true. Returns rest after first false.
+
+B<Parameters:>
+
+=over 4
+
+=item * C<$predicate> - Code reference returning boolean
+
+=back
+
+B<Returns:> New query skipping initial elements (lazy)
+
+B<Examples:>
+
+  # Skip header lines
+  ->SkipWhile(sub { $_[0]{line} =~ /^#/ })
+
+  # Skip while value is small
+  ->SkipWhile(sub { $_[0]{count} < 100 })
+
+  # Process after certain timestamp
+  ->SkipWhile(sub { $_[0]{time} lt '2026-02-01' })
+
+B<Important:> SkipWhile only skips initial elements. Once predicate is
+false, all remaining elements are included.
+
+  [1,2,3,4,5,2,1]->SkipWhile(sub { $_[0] < 4 })  # (4,5,2,1)
+
 =back
 
 =head2 Ordering Methods
@@ -1085,6 +1503,90 @@ Remove duplicate elements.
 
   ->Distinct()
 
+=item B<Union($second [, $comparer])>
+
+Produce set union of two sequences (no duplicates).
+
+B<Parameters:>
+
+=over 4
+
+=item * C<$second> - Second sequence (LTSV::LINQ object)
+
+=item * C<$comparer> - (Optional) Custom key selector for comparison
+
+=back
+
+B<Returns:> New query with elements from both sequences (lazy, distinct)
+
+B<Examples:>
+
+  # Simple union
+  my $q1 = LTSV::LINQ->From([1, 2, 3]);
+  my $q2 = LTSV::LINQ->From([3, 4, 5]);
+  $q1->Union($q2)->ToArray();  # (1, 2, 3, 4, 5)
+
+  # Union with custom comparer
+  ->Union($other, sub { lc($_[0]) })  # Case-insensitive
+
+B<Note:> Equivalent to Concat()->Distinct(). Automatically removes duplicates.
+
+=item B<Intersect($second [, $comparer])>
+
+Produce set intersection of two sequences.
+
+B<Parameters:>
+
+=over 4
+
+=item * C<$second> - Second sequence (LTSV::LINQ object)
+
+=item * C<$comparer> - (Optional) Custom key selector for comparison
+
+=back
+
+B<Returns:> New query with common elements only (lazy, distinct)
+
+B<Examples:>
+
+  # Common elements
+  LTSV::LINQ->From([1, 2, 3])
+      ->Intersect(LTSV::LINQ->From([2, 3, 4]))
+      ->ToArray();  # (2, 3)
+
+  # Find users in both lists
+  $users1->Intersect($users2, sub { $_[0]{id} })
+
+B<Note:> Only includes elements present in both sequences.
+
+=item B<Except($second [, $comparer])>
+
+Produce set difference (elements in first but not in second).
+
+B<Parameters:>
+
+=over 4
+
+=item * C<$second> - Second sequence (LTSV::LINQ object)
+
+=item * C<$comparer> - (Optional) Custom key selector for comparison
+
+=back
+
+B<Returns:> New query with elements only in first sequence (lazy, distinct)
+
+B<Examples:>
+
+  # Set difference
+  LTSV::LINQ->From([1, 2, 3])
+      ->Except(LTSV::LINQ->From([2, 3, 4]))
+      ->ToArray();  # (1)
+
+  # Find users in first list but not second
+  $all_users->Except($inactive_users, sub { $_[0]{id} })
+
+B<Note:> Returns elements from first sequence not present in second.
+
 =back
 
 =head2 Quantifier Methods
@@ -1103,6 +1605,68 @@ Test if any element satisfies condition.
 
   ->Any(sub { $_[0]{status} >= 400 })
   ->Any()  # Test if sequence is non-empty
+
+=item B<Contains($value [, $comparer])>
+
+Check if sequence contains specified element.
+
+B<Parameters:>
+
+=over 4
+
+=item * C<$value> - Value to search for
+
+=item * C<$comparer> - (Optional) Custom comparison function
+
+=back
+
+B<Returns:> Boolean (1 or 0)
+
+B<Examples:>
+
+  # Simple search
+  ->Contains(5)  # 1 if found, 0 otherwise
+
+  # Case-insensitive search
+  ->Contains('foo', sub { lc($_[0]) eq lc($_[1]) })
+
+  # Check for undef
+  ->Contains(undef)
+
+=item B<SequenceEqual($second [, $comparer])>
+
+Determine if two sequences are equal (same elements in same order).
+
+B<Parameters:>
+
+=over 4
+
+=item * C<$second> - Second sequence (LTSV::LINQ object)
+
+=item * C<$comparer> - (Optional) Comparison function ($a, $b) -> boolean
+
+=back
+
+B<Returns:> Boolean (1 if equal, 0 otherwise)
+
+B<Examples:>
+
+  # Same sequences
+  LTSV::LINQ->From([1, 2, 3])
+      ->SequenceEqual(LTSV::LINQ->From([1, 2, 3]))  # 1 (true)
+
+  # Different elements
+  LTSV::LINQ->From([1, 2, 3])
+      ->SequenceEqual(LTSV::LINQ->From([1, 2, 4]))  # 0 (false)
+
+  # Different lengths
+  LTSV::LINQ->From([1, 2])
+      ->SequenceEqual(LTSV::LINQ->From([1, 2, 3]))  # 0 (false)
+
+  # Case-insensitive comparison
+  $seq1->SequenceEqual($seq2, sub { lc($_[0]) eq lc($_[1]) })
+
+B<Note:> Order matters. Both content AND order must match.
 
 =back
 
@@ -1128,6 +1692,122 @@ Get first element or default value.
 Get last element. Dies if empty.
 
   ->Last()
+
+=item B<LastOrDefault([$predicate])>
+
+Get last element, or undef if empty. Never throws exceptions.
+
+B<Parameters:>
+
+=over 4
+
+=item * C<$predicate> - (Optional) Condition
+
+=back
+
+B<Returns:> Last element or undef
+
+B<Examples:>
+
+  # Get last element
+  ->LastOrDefault()  # 5
+
+  # Empty sequence
+  LTSV::LINQ->From([])->LastOrDefault()  # undef
+
+  # With predicate
+  ->LastOrDefault(sub { $_[0] % 2 == 0 })  # Last even number
+
+=item B<Single([$predicate])>
+
+Get the only element. Dies if sequence has zero or more than one element.
+
+B<Parameters:>
+
+=over 4
+
+=item * C<$predicate> - (Optional) Condition
+
+=back
+
+B<Returns:> Single element
+
+B<Exceptions:> 
+- Dies with "Sequence contains no elements" if empty
+- Dies with "Sequence contains more than one element" if multiple elements
+
+B<.NET LINQ Compatibility:> Exception messages match .NET LINQ behavior exactly.
+
+B<Performance:> Uses lazy evaluation. Stops iterating immediately when
+second element is found (does not load entire sequence).
+
+B<Examples:>
+
+  # Exactly one element
+  LTSV::LINQ->From([5])->Single()  # 5
+
+  # With predicate
+  ->Single(sub { $_[0] > 10 })
+  
+  # Memory-efficient: stops at 2nd element
+  LTSV::LINQ->FromLTSV("huge.log")->Single(sub { $_[0]{id} eq '999' })
+
+=item B<SingleOrDefault([$predicate])>
+
+Get the only element, or undef if zero or multiple elements.
+
+B<Returns:> Single element or undef (if 0 or 2+ elements)
+
+B<.NET LINQ Compatibility:> Returns undef (null) for both empty and
+multiple element cases, matching .NET behavior.
+
+B<Performance:> Uses lazy evaluation. Memory-efficient.
+
+B<Examples:>
+
+  LTSV::LINQ->From([5])->SingleOrDefault()  # 5
+  LTSV::LINQ->From([])->SingleOrDefault()   # undef (empty)
+  LTSV::LINQ->From([1,2])->SingleOrDefault()  # undef (multiple)
+
+=item B<ElementAt($index)>
+
+Get element at specified index. Dies if out of range.
+
+B<Parameters:>
+
+=over 4
+
+=item * C<$index> - Zero-based index
+
+=back
+
+B<Returns:> Element at index
+
+B<Exceptions:> Dies if index is negative or out of range
+
+B<Performance:> Uses lazy evaluation (iterator-based). Does NOT load
+entire sequence into memory. Stops iterating once target index is reached.
+
+B<Examples:>
+
+  ->ElementAt(0)  # First element
+  ->ElementAt(2)  # Third element
+  
+  # Memory-efficient for large files
+  LTSV::LINQ->FromLTSV("huge.log")->ElementAt(10)  # Reads only 11 lines
+
+=item B<ElementAtOrDefault($index)>
+
+Get element at index, or undef if out of range.
+
+B<Returns:> Element or undef
+
+B<Performance:> Uses lazy evaluation (iterator-based). Memory-efficient.
+
+B<Examples:>
+
+  ->ElementAtOrDefault(0)   # First element
+  ->ElementAtOrDefault(99)  # undef if out of range
 
 =back
 
@@ -1304,6 +1984,64 @@ B<Examples:>
 
 B<Note:> Unlike Average(), this method never throws an exception.
 
+=item B<Aggregate([$seed,] $func [, $result_selector])>
+
+Apply an accumulator function over a sequence.
+
+B<Signatures:>
+
+=over 4
+
+=item * C<Aggregate($func)> - Use first element as seed
+
+=item * C<Aggregate($seed, $func)> - Explicit seed value
+
+=item * C<Aggregate($seed, $func, $result_selector)> - Transform result
+
+=back
+
+B<Parameters:>
+
+=over 4
+
+=item * C<$seed> - Initial accumulator value (optional for first signature)
+
+=item * C<$func> - Code reference: ($accumulator, $element) -> $new_accumulator
+
+=item * C<$result_selector> - (Optional) Transform final result
+
+=back
+
+B<Returns:> Accumulated value
+
+B<Examples:>
+
+  # Sum (without seed)
+  LTSV::LINQ->From([1,2,3,4])->Aggregate(sub { $_[0] + $_[1] })  # 10
+
+  # Product (with seed)
+  LTSV::LINQ->From([2,3,4])->Aggregate(1, sub { $_[0] * $_[1] })  # 24
+
+  # Concatenate strings
+  LTSV::LINQ->From(['a','b','c'])
+      ->Aggregate('', sub { $_[0] ? "$_[0],$_[1]" : $_[1] })  # 'a,b,c'
+
+  # With result selector
+  LTSV::LINQ->From([1,2,3])
+      ->Aggregate(0, 
+          sub { $_[0] + $_[1] },      # accumulate
+          sub { "Sum: $_[0]" })       # transform result
+  # "Sum: 6"
+
+  # Build complex structure
+  ->Aggregate([], sub {
+      my($list, $item) = @_;
+      push @$list, uc($item);
+      return $list;
+  })
+
+B<.NET LINQ Compatibility:> Supports all three .NET signatures.
+
 =back
 
 =head2 Conversion Methods
@@ -1321,6 +2059,34 @@ Convert to array.
 Convert to array reference.
 
   my $arrayref = $query->ToList();
+
+=item B<DefaultIfEmpty([$default_value])>
+
+Return default value if sequence is empty, otherwise return the sequence.
+
+B<Parameters:>
+
+=over 4
+
+=item * C<$default_value> - (Optional) Default value, defaults to undef
+
+=back
+
+B<Returns:> New query with default value if empty (lazy)
+
+B<Examples:>
+
+  # Return 0 if empty
+  ->DefaultIfEmpty(0)->ToArray()  # (0) if empty, or original data
+
+  # With undef default
+  ->DefaultIfEmpty()->First()  # undef if empty
+
+  # Useful for left joins
+  ->Where(condition)->DefaultIfEmpty({id => 0, name => 'None'})
+
+B<Note:> This is useful for ensuring a sequence always has at least
+one element.
 
 =item B<ToLTSV($filename)>
 
@@ -1701,7 +2467,7 @@ Tested on:
 
 =item * Perl 5.8.x
 
-=item * Perl 5.10.x - 5.40.x
+=item * Perl 5.10.x - 5.42.x
 
 =back
 
@@ -1720,7 +2486,7 @@ coding practices:
 
 =item * C<our> keyword avoided (5.6+ feature)
 
-=item * Three-argument C<open> used (5.6+ but safe)
+=item * Three-argument C<open> avoided (uses Perl 5.005 compatible style)
 
 =item * No Unicode features required
 
@@ -1728,12 +2494,75 @@ coding practices:
 
 =back
 
-B<Why Perl 5.005 Support?:>
+B<Why Perl 5.005_03 Specification?:>
 
-Many production systems, especially in enterprise and embedded
-environments, still run Perl 5.005 or 5.6. This module provides
-modern query capabilities to these systems without requiring
-upgrades.
+This module adheres to the B<Perl 5.005_03 specification>, which was the
+final version of JPerl (Japanese Perl). This is not about using the old
+interpreter, but about maintaining the B<simple, original programming model>
+that made Perl enjoyable.
+
+Key reasons:
+
+=over 4
+
+=item * B<Simplicity> - The original Perl approach keeps programming fun and easy
+
+Perl 5.6 and later introduced character encoding complexity that made
+programming harder. The confusion around character handling contributed
+to Perl's decline. By staying with the 5.005_03 specification, we maintain
+the simplicity that made Perl "rakuda" (camel) → "raku" (easy/fun).
+
+=item * B<JPerl Compatibility> - Preserves the last JPerl version
+
+Perl 5.005_03 was the final version of JPerl, which handled Japanese text
+naturally. Later versions abandoned this approach for Unicode, adding
+unnecessary complexity for many use cases.
+
+=item * B<Universal Compatibility> - Runs on ANY Perl version
+
+Code written to the 5.005_03 specification runs on B<all> Perl versions
+from 5.005_03 through 5.42 and beyond. This maximizes compatibility across
+two decades of Perl releases.
+
+=item * B<Production Systems> - Real-world enterprise needs
+
+Many production systems, embedded environments, and enterprise deployments
+still run Perl 5.005, 5.6, or 5.8. This module provides modern query
+capabilities without requiring upgrades.
+
+=item * B<Philosophy> - Programming should be enjoyable
+
+As readers of the "Camel Book" (Programming Perl) know, Perl was designed
+to make programming enjoyable. The 5.005_03 specification preserves this
+original vision.
+
+=back
+
+B<The ina CPAN Philosophy:>
+
+All modules under the ina CPAN account (including mb, Jacode, UTF8-R2,
+mb-JSON, and this module) follow this principle: Write to the Perl 5.005_03
+specification, test on all versions, maintain programming joy.
+
+This is not nostalgia—it's a commitment to:
+
+=over 4
+
+=item * Simple, maintainable code
+
+=item * Maximum compatibility
+
+=item * The original Perl philosophy
+
+=item * Making programming "raku" (easy and fun)
+
+=back
+
+B<Build System:>
+
+This module uses C<pmake.bat> instead of traditional make, since Perl 5.005_03
+on Microsoft Windows lacks make. All tests pass on Perl 5.005_03 through
+modern versions.
 
 =head2 Pure Perl Implementation
 
@@ -2121,6 +2950,20 @@ after terminal operations.
 
 Workaround: Create new query object or save ToArray() result.
 
+=item * B<Undef Values in Sequences>
+
+Due to iterator-based design, undef cannot be distinguished from end-of-sequence.
+Sequences containing undef values may not work correctly with all operations.
+
+This is not a practical limitation for LTSV data (which uses hash references),
+but affects operations on plain arrays containing undef.
+
+  # Works fine (LTSV data - hash references)
+  LTSV::LINQ->FromLTSV("file.ltsv")->Contains({status => '200'})
+  
+  # Limitation (plain array with undef)
+  LTSV::LINQ->From([1, undef, 3])->Contains(undef)  # May not work
+
 =item * B<No Parallel Execution>
 
 All operations execute sequentially in a single thread.
@@ -2151,19 +2994,9 @@ The following LINQ methods are NOT implemented in this version:
 
 =item * Zip - Combine two sequences
 
-=item * Union, Intersect, Except - Additional set operations
-
 =item * OfType - Type filtering
 
 =item * Cast - Type conversion
-
-=item * DefaultIfEmpty - Default value for empty sequence
-
-=item * SequenceEqual - Sequence comparison
-
-=item * Concat - Sequence concatenation
-
-=item * Aggregate - Custom aggregation with seed
 
 =item * LongCount - 64-bit count
 
@@ -2213,7 +3046,7 @@ INABA Hitoshi E<lt>ina@cpan.orgE<gt>
 
 =head2 Contributors
 
-Contributions are welcome! Please submit pull requests on GitHub.
+Contributions are welcome! See file: CONTRIBUTING.
 
 =head1 ACKNOWLEDGEMENTS
 
