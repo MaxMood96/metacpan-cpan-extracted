@@ -1,4 +1,50 @@
-1.133.2025-12-22
+1.235 2026-02-16
+================
+
+[Quiq::Assert]
+* isDate(): Prüfmethode hinzugefügt
+
+[Quiq::KositValidator]
+* Klasse hinzugefügt
+
+[Quiq::Mustang]
+* validate(): Doku ergänzt, Logging verbessert
+
+[Quiq::Path]
+* mimeTypeByExtension(): Methode hinzugefügt
+* partonizeDir(): Methode hinzugefügt
+
+[Quiq::StreamServe::Block]
+* concat(): Berücksichtigung von Datums-Nullwert
+
+[Quiq::Web::Navigation]
+* Direktive navFocus hinzugefügt
+
+[Quiq::Xml]
+* Doku korrigiert
+
+[Quiq::Zugferd]
+* Platzhalter in EN16931-Template ergänzt
+* Business-Terms ergänzt
+* createTemplate(): Methode hinzugefügt
+* Rechtsbegründende Anlagen ergänzt
+
+[Quiq::Zugferd::Entity::Anhang]
+* Klasse hinzugefügt
+
+[Quiq::Zugferd::Entity::Kaeufer]
+* Attribut anhaenge hinzugefügt
+
+1.234 2026-01-10
+================
+
+[Quiq::Path]
+* partionizeDir(): Methode hinzugefügt
+
+[Quiq::Zugferd]
+* createTemplate(): Methode hinzugefügt
+
+1.233 2025-12-22
 ================
 
 [Quiq::Smb::Client]
@@ -48,7 +94,7 @@
 * showPaths(): Methode hinzugefügt
 * toXml(): um zusätzliche Business Terms erweitert
 
-1.132 2025-10-20
+1.232 2025-10-20
 ================
 
 [Quiq::DirHandle]
@@ -102,7 +148,7 @@
 [Quiq::Zugferd_::Entity::Verkaeufer]
 * Attribut auftragsreferenz hinzugefügt
 
-1.131 2025-09-21
+1.231 2025-09-21
 ================
 
 [Quiq::StreamServe::Block]
@@ -151,7 +197,7 @@
 [Quiq::Zugferd]
 * resolvePlaceholders(): Methode überarbeitet
 
-1.130 2025-08-30
+1.230 2025-08-30
 ================
 
 [Quiq::AnsiColor]

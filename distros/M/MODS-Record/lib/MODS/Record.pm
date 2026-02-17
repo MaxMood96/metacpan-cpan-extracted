@@ -236,7 +236,7 @@ See L<http://dev.perl.org/licenses/> for more information.
 =cut
 
 use vars qw( $VERSION );
-$VERSION = '0.13';
+$VERSION = '0.14';
 
 use Exporter;
 our @ISA = qw(Exporter);
@@ -950,6 +950,7 @@ has nameTitleGroup  => ( is => 'rw' );
 has type            => ( is => 'rw' );
 
 has namePart        => ( is => 'rw' , isa => \&_isa , default => sub { [] } );
+has nameIdentifier  => ( is => 'rw' , isa => \&_isa , default => sub { [] } );
 has displayForm     => ( is => 'rw' , isa => \&_isa , default => sub { [] } );
 has affiliation     => ( is => 'rw' , isa => \&_isa , default => sub { [] } );
 has role            => ( is => 'rw' , isa => \&_isa , default => sub { [] } );
@@ -957,6 +958,22 @@ has description     => ( is => 'rw' , isa => \&_isa , default => sub { [] } );
 has etal            => ( is => 'rw' , isa => \&_isa , default => sub { [] } );
 
 package MODS::Element::NamePart;
+
+use Moo;
+
+with('MODS::Record::Util');
+
+use overload fallback => 1 , '""' => sub { $_[0]->_body };
+
+has lang            => ( is => 'rw' );
+has xml_lang        => ( is => 'rw' );
+has script          => ( is => 'rw' );
+has transliteration => ( is => 'rw' );
+
+has type            => ( is => 'rw' );
+has _body           => ( is => 'rw' );
+
+package MODS::Element::NameIdentifier;
 
 use Moo;
 

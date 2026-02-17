@@ -97,6 +97,20 @@ sub test_copy : Test(1) {
 
 # -----------------------------------------------------------------------------
 
+sub test_mimeTypeByExtension : Test(2) {
+    my $self = shift;
+
+    my $mimeType = Quiq::Path->mimeTypeByExtension('/a/b/c.pdf');
+    $self->is($mimeType,'application/pdf');
+
+    # Unbekannte Extension
+
+    eval {Quiq::Path->mimeTypeByExtension('/a/b/c.unknown')};
+    $self->like($@,qr/Unknown/i);
+}
+
+# -----------------------------------------------------------------------------
+
 sub test_newlineStr : Test(3) {
     my $self = shift;
 

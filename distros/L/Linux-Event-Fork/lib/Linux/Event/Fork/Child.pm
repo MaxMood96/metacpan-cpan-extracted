@@ -3,10 +3,12 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.003';
+our $VERSION = '0.005';
 
 use Carp qw(croak);
 use Errno qw(EAGAIN EINTR EPIPE);
+
+use POSIX ();
 
 use Linux::Event::Fork::Exit ();
 
@@ -50,13 +52,12 @@ sub _new ($class, %args) {
     in_close_when_empty => 0,
 
     _canceled => 0,
+
+    managed_by_fork => delete $args{managed_by_fork},
   }, $class;
 
   croak "loop missing" if !$self->{loop};
   croak "pid missing"  if !$self->{pid};
-
-  croak "on_timeout must be a coderef" if defined($self->{on_timeout}) && ref($self->{on_timeout}) ne 'CODE';
-  croak "timeout_s must be numeric" if defined($self->{timeout_s}) && ref($self->{timeout_s});
 
   croak "unknown args: " . join(", ", sort keys %args) if %args;
 
@@ -129,11 +130,17 @@ sub cancel ($self) {
   return 0 if $self->{_canceled};
   $self->{_canceled} = 1;
 
-  if (defined(my $tid = delete $self->{timeout_id})) {
-    $self->{loop}->cancel($tid);
+  # If max_children is managing capacity, keep exit observation alive until we
+  # actually see the exit status. Otherwise the queue could stall forever.
+  my $keep_exit = $self->{managed_by_fork} && !$self->{saw_exit} ? 1 : 0;
+
+  if (!$keep_exit) {
+    if (defined(my $tid = delete $self->{timeout_id})) {
+      $self->{loop}->cancel($tid);
+    }
+    if (my $sub = delete $self->{sub_pid}) { $sub->cancel }
   }
 
-  if (my $sub = delete $self->{sub_pid}) { $sub->cancel }
   if (my $w = delete $self->{w_out}) { $w->cancel }
   if (my $w = delete $self->{w_err}) { $w->cancel }
   if (my $w = delete $self->{w_in})  { $w->cancel }
@@ -181,6 +188,15 @@ sub _arm ($self) {
 
   $self->{sub_pid} = $loop->pid($self->{pid}, sub ($loop, $pid2, $status, $ud) {
     $ud->_on_exit($status);
+
+  # Race hardening: if the child exits before pidfd observation is armed,
+  # pid() may never deliver a callback. Perform a non-blocking waitpid check.
+  if (!$self->{saw_exit}) {
+    my $got = POSIX::waitpid($self->{pid}, POSIX::WNOHANG());
+    if ($got == $self->{pid}) {
+      $self->_on_exit($?);
+    }
+  }
   }, data => $self);
 
   if (defined $self->{timeout_s} && $self->{timeout_s} > 0) {
@@ -268,9 +284,10 @@ sub _drain_stdin ($self) {
 }
 
 sub _on_exit ($self, $status) {
-  return if $self->{_canceled};
+  return if $self->{saw_exit};
   $self->{saw_exit} = 1;
   $self->{exit} = Linux::Event::Fork::Exit->new($status);
+
   $self->_maybe_finish;
   return;
 }
@@ -318,7 +335,6 @@ sub _drain_stream ($self, $which) {
 }
 
 sub _maybe_finish ($self) {
-  return if $self->{_canceled};
   return if !$self->{saw_exit};
   return if !$self->{eof_out};
   return if !$self->{eof_err};
@@ -327,7 +343,11 @@ sub _maybe_finish ($self) {
     $cb->($self, $self->{exit});
   }
 
+  # Now safe to fully tear down everything, even for managed children.
+  $self->{_canceled} = 0; # allow cancel() to run full teardown path
+  $self->{managed_by_fork} = undef;
   $self->cancel;
+
   return;
 }
 
@@ -339,74 +359,9 @@ __END__
 
 Linux::Event::Fork::Child - Child handle returned by Linux::Event::Fork
 
-=head1 SYNOPSIS
-
-  my $child = $loop->fork(
-    tag => "job:42",
-    cmd => [ "sleep", "10" ],
-    timeout => 2,
-    on_timeout => sub ($child) {
-      warn "timeout: " . ($child->tag // $child->pid);
-    },
-    on_exit => sub ($child, $exit) {
-      $loop->stop;
-    },
-  );
-
-  $child->stdin_write($bytes);
-  $child->close_stdin;
-
-  $child->cancel; # idempotent teardown
-
 =head1 DESCRIPTION
 
-Child handles are returned by L<Linux::Event::Fork> and represent exactly one spawned
-child plus any internal watchers/subscriptions created for it.
-
-=head1 METHODS
-
-=head2 pid
-
-Returns the child PID.
-
-=head2 tag
-
-Returns the optional label from spawn time.
-
-=head2 data
-
-Returns the opaque user data from spawn time.
-
-=head2 kill
-
-  $child->kill('TERM');
-
-Sends a signal to the child.
-
-=head2 stdin_write
-
-Queues bytes to be written to the child's stdin. Writes are non-blocking and
-backpressure-aware. SIGPIPE is ignored during writes; EPIPE is treated as a normal
-close.
-
-=head2 close_stdin
-
-Requests stdin closure after queued bytes are drained.
-
-=head2 cancel
-
-Idempotently cancels watchers/subscriptions and closes owned filehandles.
-
-=head1 SEE ALSO
-
-L<Linux::Event::Fork>, L<Linux::Event::Fork::Exit>
-
-=head1 AUTHOR
-
-Joshua S. Day (HAX)
-
-=head1 LICENSE
-
-Same terms as Perl itself.
+Child handle for a spawned process, with optional stdout/stderr capture, optional
+stdin streaming, and optional timeout.
 
 =cut

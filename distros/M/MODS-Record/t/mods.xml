@@ -11,6 +11,7 @@
         <namePart type="family">Cushman</namePart>
         <namePart type="given">Charles Weever</namePart>
         <namePart type="date">1896-1972</namePart>
+        <nameIdentifier type="pure/uuid">aea6c6f7-2fec-42ed-924e-aad5e11e9979</nameIdentifier>
         <role>
             <roleTerm type="code" authority="marcrelator">pht</roleTerm>
             <roleTerm type="text" authority="marcrelator">Photographer</roleTerm>

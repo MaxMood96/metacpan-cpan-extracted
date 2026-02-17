@@ -2,27 +2,47 @@
 
 [![CI](https://github.com/haxmeister/perl-linux-event-fork/actions/workflows/ci.yml/badge.svg)](https://github.com/haxmeister/perl-linux-event-fork/actions/workflows/ci.yml)
 
-Minimal async child spawning on top of **Linux::Event**.
+Minimal async child process management on top of Linux::Event.
+
+This module adds:
+
+- Nonblocking stdout/stderr capture
+- Streaming stdin
+- Soft timeouts
+- Tagging
+- Bounded parallelism (`max_children`)
+- Queueing
+- `drain()` callback
+- `cancel_queued()` support
+- Introspection (`running`, `queued`, `max_children`)
+
+It is intentionally small and policy-focused.
 
 ---
 
-## CI Notes
+## Quick Start
 
-If GitHub Actions fails during:
+```perl
+use v5.36;
+use Linux::Event;
+use Linux::Event::Fork;
 
-```
-Run shogo82148/actions-setup-perl@v1
-install perl
-Error: Error: failed to verify ...
-```
+my $loop = Linux::Event->new;
 
-This is an upstream attestation verification issue in the action, not a problem
-with this distribution.
+# Optional: configure bounded parallelism
+my $fork = $loop->fork_helper(max_children => 4);
 
-If it occurs, you can fix CI by either:
+$loop->fork(
+  cmd => [ $^X, '-we', 'print "hello\n"; exit 0' ],
 
-1. Pinning to a specific action release tag instead of `@v1`
-2. Disabling verification in the action config (if supported)
-3. Switching to `actions/setup-perl` alternative
+  on_stdout => sub ($child, $chunk) {
+    print $chunk;
+  },
 
-This does not affect CPAN builds.
+  on_exit => sub ($child, $exit) {
+    print "exit code: " . $exit->code . "\n";
+    $loop->stop;
+  },
+);
+
+$loop->run;

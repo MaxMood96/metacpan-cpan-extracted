@@ -51,7 +51,7 @@ END
     elsif (1 or ($^O =~ /(?:solaris|linux)/i)) {
         die <<'END';
 
-usgae:
+usage:
 
 $ ./pmake.bat
 $ ./pmake.bat test

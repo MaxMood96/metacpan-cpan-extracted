@@ -1,4 +1,4 @@
-#!/bin/env perl
+#!/usr/bin/env perl
 
 package CPAN::Maker;
 
@@ -31,7 +31,7 @@ use Scalar::Util qw( reftype );
 use YAML::Tiny;
 use version;
 
-our $VERSION = '1.6.0';  ## no critic (RequireInterpolationOfMetachars)
+our $VERSION = '1.6.2'; ## no critic (RequireInterpolationOfMetachars)
 
 caller or __PACKAGE__->main();
 
@@ -501,6 +501,14 @@ sub write_makefile {
 
   my $EXE_FILES = Dumper \@exe_file_list;
 
+  my %man3pods;
+  foreach (@exe_file_list) {
+    my ( $name, $path, $ext ) = fileparse( $_, qr/[.][^.]+\z/xsm );
+    $man3pods{$_} = sprintf 'blib/man3/%s.3', $name;
+  }
+
+  my $MAN3PODS = Dumper \%man3pods;
+
   my %provides;
 
   if ( -e 'provides' ) {
@@ -586,6 +594,7 @@ WriteMakefile(
   LICENSE          => 'perl',
   PL_FILES         => $PL_FILES,
   EXE_FILES        => $EXE_FILES,
+  MAN3PODS         => $MAN3PODS,
   PREREQ_PM        => $PRE_REQ,
   BUILD_REQUIRES   => {
     'ExtUtils::MakeMaker'     => '6.64',
@@ -1490,7 +1499,7 @@ sub main {
 
 __DATA__
 ---
-version: "1.6.0"
+version: "1.6.2"
 min_perl_version: "type:string"
 min-perl-version: "type:string"
 project:

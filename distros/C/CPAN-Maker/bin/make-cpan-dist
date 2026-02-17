@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/bash
 # -*- mode: sh; -*-
 
 ########################################################################
@@ -241,7 +241,7 @@ function get_module_versions {
 	if test -n "$ANY_VERSION"; then
 	    echo "$module 0"
 	elif test -n "$a" && ! test -n "$version"; then
-	    echo $module | /bin/env perl -I "$perl5libdir" \
+	    echo $module | /usr/bin/env perl -I "$perl5libdir" \
             -ne 'chomp; $m=$_; eval "require $m"; $v = eval "\$${m}::VERSION"; print "$m ",$v||0,"\n";' || true;
 	else
 	    echo "$module $version";
@@ -259,12 +259,12 @@ function scan() {
     requires_file="$2";
     
     if [ "$PERL_REQUIRES" = "SCANDEPS" ]; then
-        if [[ -z "/usr/local/bin/scandeps.pl" ]]; then
+        if [[ -z "" ]]; then
             FATAL_ERROR "no scandeps.pl found!"
         else
             set -o pipefail
-            INFO "Scanning (/usr/local/bin/scandeps.pl) $scan_target..."
-            if ! /usr/local/bin/scandeps.pl -R $scan_target | perl -npe "s/^\'(.*?)\'.*\$/\$1/;" | awk '{print $1}' >> $requires_file; then
+            INFO "Scanning () $scan_target..."
+            if !  -R $scan_target | perl -npe "s/^\'(.*?)\'.*\$/\$1/;" | awk '{print $1}' >> $requires_file; then
                 FATAL_ERROR "could not resolve dependencies for $scan_target"
             else
                 DEBUG $(echo "SCAN:" && cat $requires_file)

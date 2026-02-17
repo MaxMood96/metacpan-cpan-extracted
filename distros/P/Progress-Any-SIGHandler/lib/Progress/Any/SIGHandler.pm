@@ -10,7 +10,7 @@ use Progress::Any::Output ();
 our $AUTHORITY = 'cpan:PERLANCAR'; # AUTHORITY
 our $DATE = '2025-10-30'; # DATE
 our $DIST = 'Progress-Any-SIGHandler'; # DIST
-our $VERSION = '0.002'; # VERSION
+our $VERSION = '0.003'; # VERSION
 
 our $Template  = 'Progress: %P/%T (%6.2p%%), %R';
 our $Signal    = 'USR1';
@@ -62,24 +62,42 @@ Progress::Any::SIGHandler - Add signal handler so your process can report progre
 
 =head1 VERSION
 
-This document describes version 0.002 of Progress::Any::SIGHandler (from Perl distribution Progress-Any-SIGHandler), released on 2025-10-30.
+This document describes version 0.003 of Progress::Any::SIGHandler (from Perl distribution Progress-Any-SIGHandler), released on 2025-10-30.
 
 =head1 SYNOPSIS
 
-Simplest way to use:
+=head2 Simplest way to use
+
+In F<foo.pl>:
+
+ #!/usr/bin/env perl
+
+ use strict;
+ use warnings;
 
  use Progress::Any '$progress';
  use Progress::Any::SIGHandler;
 
  # do stuffs while updating progress
- $progress->target(10);
- for (1..10) {
+ $progress->target(100);
+ for (1..100) {
      # do stuffs
+     sleep(rand()*3 + 1);
      $progress->update;
  }
  $progress->finish;
 
-Customize some aspects:
+When run in bash:
+
+ % ./foo.pl &     ; # run in background
+
+ % kill -USR1 %1
+ Progress: 5/100 (  5.00%), 2m38s left
+
+ % kill -USR1 %1
+ Progress: 8/100 (  8.00%), 2m27s left
+
+=head2 Customize some aspects
 
  use Progress::Any::SIGHandler (
      template  => '...',      # default template is: "Progress: %P/%T (%6.2p%%), %R"

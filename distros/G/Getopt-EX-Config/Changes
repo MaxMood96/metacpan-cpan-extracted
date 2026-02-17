@@ -1,5 +1,15 @@
 Revision history for Perl extension Getopt-EX-Config
 
+1.0202 2026-02-17T09:19:40Z
+
+    - Fix set() bug: $c was not reset between iterations, causing
+      second and subsequent dot-notation keys to fail
+
+    - Document nested hash configuration and dot notation
+      * Dot notation access (e.g., hashed.h3=1) for nested hashes
+      * Getopt::Long hash type (%) for module private options
+      * Future extensibility with YAML-like config files
+
 1.0201 2025-12-31T05:49:11Z
 
     - Filter out internal keys in getopt() to avoid Getopt::Long errors

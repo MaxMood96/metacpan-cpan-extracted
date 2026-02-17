@@ -3,7 +3,7 @@ package Quiq;
 use strict;
 use warnings;
 
-our $VERSION = '1.234';
+our $VERSION = '1.235';
 
 =encoding utf8
 
@@ -13,7 +13,7 @@ Quiq - Class library for rapid development
 
 =head1 DESCRIPTION
 
-Diese Klassenbibliothek enthält 259 anwendungsunabhängige Klassen,
+Diese Klassenbibliothek enthält 261 anwendungsunabhängige Klassen,
 die ich in Projekten nutze. Die Klassen sind nach
 einheitlichen Prinzipien konzipiert. Die Bibliothek befindet
 sich unter kontinuierlicher Weiterentwicklung.
@@ -604,6 +604,10 @@ L<Quiq::Json::Code> - Erzeuge JSON-Code in Perl
 
 =item *
 
+L<Quiq::KositValidator> - Validator für XRechnungen
+
+=item *
+
 L<Quiq::LaTeX::Code> - Generator für LaTeX Code
 
 =item *
@@ -1020,6 +1024,10 @@ L<Quiq::Zugferd::Entity> - Basisklasse der Entitätsklassen
 
 =item *
 
+L<Quiq::Zugferd::Entity::Anhang> - Rechnungsbegründender Anhang für den Käufer
+
+=item *
+
 L<Quiq::Zugferd::Entity::Attribut> - Artikelattribut
 
 =item *
@@ -1066,7 +1074,7 @@ L<Quiq::Zugferd::Tree> - Operatonen auf ZUGFeRD-Baum
 
 =head1 VERSION
 
-1.234
+1.235
 
 =head1 AUTHOR
 

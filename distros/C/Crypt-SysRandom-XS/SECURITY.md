@@ -1,18 +1,17 @@
 # Security Policy for the Crypt-SysRandom-XS distribution.
 
-Report issues via email at: Leon Timmermans <fawaka@gmail.com>.
-
+Report security issues by email to Leon Timmermans <fawaka@gmail.com>.
 
 This is the Security Policy for Crypt-SysRandom-XS.
 
 This text is based on the CPAN Security Group's Guidelines for Adding
-a Security Policy to Perl Distributions (version 1.0.0)
+a Security Policy to Perl Distributions (version 1.3.0)
 https://security.metacpan.org/docs/guides/security-policy-for-authors.html
 
 # How to Report a Security Vulnerability
 
-Security vulnerabilities can be reported by e-mail to the current
-project maintainers at Leon Timmermans <fawaka@gmail.com>.
+Security vulnerabilities can be reported to the current Crypt-SysRandom-XS
+maintainers by email to Leon Timmermans <fawaka@gmail.com>.
 
 Please include as many details as possible, including code samples
 or test cases, so that we can reproduce the issue.  Check that your
@@ -59,13 +58,16 @@ They may also forward this issue to CPANSec.
 
 Any security vulnerabilities in Crypt-SysRandom-XS are covered by this policy.
 
+Security vulnerabilities in versions of any libraries that are
+included in Crypt-SysRandom-XS are also covered by this policy.
+
 Security vulnerabilities are considered anything that allows users
 to execute unauthorised code, access unauthorised resources, or to
 have an adverse impact on accessibility or performance of a system.
 
-Security vulnerabilities in upstream software (embedded libraries,
-prerequisite modules or system libraries, or in Perl), are not
-covered by this policy unless they affect Crypt-SysRandom-XS, or Crypt-SysRandom-XS can
+Security vulnerabilities in upstream software (prerequisite modules
+or system libraries, or in Perl), are not covered by this policy
+unless they affect Crypt-SysRandom-XS, or Crypt-SysRandom-XS can
 be used to exploit vulnerabilities in them.
 
 Security vulnerabilities in downstream software (any software that

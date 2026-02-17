@@ -146,6 +146,7 @@ lib/Quiq/JQuery/MenuBar.pm
 lib/Quiq/JQuery/Tabs.pm
 lib/Quiq/Json.pm
 lib/Quiq/Json/Code.pm
+lib/Quiq/KositValidator.pm
 lib/Quiq/LaTeX/Code.pm
 lib/Quiq/LaTeX/Document.pm
 lib/Quiq/LaTeX/Figure.pm
@@ -280,6 +281,7 @@ lib/Quiq/Zugferd/2.3.2/profile/minimum/Factur-X_1.07.2_MINIMUM_urn_un_unece_unce
 lib/Quiq/Zugferd/2.3.2/profile/minimum/Factur-X_1.07.2_MINIMUM_urn_un_unece_uncefact_data_standard_UnqualifiedDataType_100.xsd
 lib/Quiq/Zugferd/2.3.2/profile/minimum/template.xml
 lib/Quiq/Zugferd/Entity.pm
+lib/Quiq/Zugferd/Entity/Anhang.pm
 lib/Quiq/Zugferd/Entity/Attribut.pm
 lib/Quiq/Zugferd/Entity/Empfaenger.pm
 lib/Quiq/Zugferd/Entity/Freitext.pm
@@ -439,6 +441,7 @@ t/bin/Quiq/JQuery/MenuBar.t
 t/bin/Quiq/JQuery/Tabs.t
 t/bin/Quiq/Json.t
 t/bin/Quiq/Json/Code.t
+t/bin/Quiq/KositValidator.t
 t/bin/Quiq/LaTeX/Code.t
 t/bin/Quiq/LaTeX/Document.t
 t/bin/Quiq/LaTeX/Figure.t
@@ -543,6 +546,7 @@ t/bin/Quiq/Xml/LibXml.t
 t/bin/Quiq/XTerm.t
 t/bin/Quiq/Zugferd.t
 t/bin/Quiq/Zugferd/Entity.t
+t/bin/Quiq/Zugferd/Entity/Anhang.t
 t/bin/Quiq/Zugferd/Entity/Attribut.t
 t/bin/Quiq/Zugferd/Entity/Empfaenger.t
 t/bin/Quiq/Zugferd/Entity/Freitext.t

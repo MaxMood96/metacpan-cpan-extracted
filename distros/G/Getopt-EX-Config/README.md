@@ -15,7 +15,7 @@ Getopt::EX::Config - Getopt::EX module configuration interface
 
 # VERSION
 
-Version 1.0201
+Version 1.0202
 
 # DESCRIPTION
 
@@ -96,6 +96,54 @@ value is that the hash object is passed when calling the
 `Getopt::Long` library.  The above code is equivalent to the
 following code.  See ["Storing options values in a hash" in Getopt::Long](https://metacpan.org/pod/Getopt%3A%3ALong#Storing-options-values-in-a-hash)
 for detail.
+
+## Nested Hash Configuration
+
+Config values can be hash references for structured configuration:
+
+    my $config = Getopt::EX::Config->new(
+        mode   => '',
+        hashed => { h3 => 0, h4 => 0, h5 => 0, h6 => 0 },
+    );
+
+Nested values can be accessed using dot notation in the `config()`
+function:
+
+    example -Mfoo::config(hashed.h3=1,hashed.h4=1) ...
+
+    example -Mfoo --config hashed.h3=1 -- ...
+
+The dot notation navigates into nested hashes: `hashed.h3=1` sets
+`$config->{hashed}{h3}` to `1`.  The intermediate key
+(`hashed`) must exist as a hash reference, and the leaf key (`h3`)
+must already exist in that hash.
+
+Hash options can also be defined as module private options using
+[Getopt::Long](https://metacpan.org/pod/Getopt%3A%3ALong) hash type (`%`):
+
+    $config->deal_with($argv, "hashed=s%");
+
+This allows:
+
+    example -Mfoo --hashed h3=1 --hashed h4=1 -- ...
+
+Note that the `Getopt::Long` hash type auto-vivifies keys, so
+`--hashed h3=1` works even when `h3` does not pre-exist in the hash.
+
+The dot notation and nested hash support are designed with future
+extensibility in mind.  For example, a configuration file under
+`~/.config` could store module settings in YAML-like format:
+
+    # ~/.config/example/foo.yml
+    mode: dark
+    hashed:
+      h3: 1
+      h4: 1
+      h5: 1
+      h6: 1
+
+This would map naturally to the nested hash structure and dot notation
+already supported by this module.
 
     sub finalize {
         our($mod, $argv) = @_;
@@ -238,7 +286,7 @@ The following copyright notice applies to all the files provided in
 this distribution, including binary files, unless explicitly noted
 otherwise.
 
-Copyright ©︎ 2025 Kazumasa Utashiro
+Copyright ©︎ 2025-2026 Kazumasa Utashiro
 
 # LICENSE
 

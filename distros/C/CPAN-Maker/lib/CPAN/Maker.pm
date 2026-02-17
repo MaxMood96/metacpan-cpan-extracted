@@ -3,7 +3,7 @@ package CPAN::Maker;
 use strict;
 use warnings;
 
-our $VERSION = '1.6.0';
+our $VERSION = '1.6.2';
 
 1;
 
@@ -121,7 +121,7 @@ problems that might arise if you "go off script"
 
 =head1 VERSION
 
-This documentation refers to version 1.6.0
+This documentation refers to version 1.6.2
 
 =head1 USING THE BASH SCRIPT
 
@@ -318,7 +318,7 @@ main module being packaged.
 
 Example:
 
-  version: 1.6.0
+  version: 1.6.2
   project:
     git: https://github.com/rlauer6/perl-Amazon-Credentials
     description: "AWS credentials discoverer"

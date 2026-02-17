@@ -3,7 +3,7 @@ meta-spec:
   version: 1.4
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
 name: LTSV-LINQ
-version: 1.01
+version: 1.02
 abstract: LINQ-style query interface for LTSV files
 author:
   - ina <ina@cpan.org>

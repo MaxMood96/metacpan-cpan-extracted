@@ -4,7 +4,7 @@ use ExtUtils::MakeMaker;
 
 WriteMakefile(
     'NAME'      => q{LTSV::LINQ},
-    'VERSION'   => q{1.01},
+    'VERSION'   => q{1.02},
     'ABSTRACT'  => q{LINQ-style query interface for LTSV files},
     'PREREQ_PM' => {
         'ExtUtils::MakeMaker' => '5.4302',

@@ -81,9 +81,19 @@ This module works with Perl 5.005_03 and later.
 
 WHY PERL 5.005_03 SPECIFICATION?
 
-This module adheres to the Perl 5.005_03 specification—not because we
+This module adheres to the Perl 5.005_03 specification--not because we
 use the old interpreter, but because this specification represents the
 simple, original Perl programming model that makes programming enjoyable.
+
+THE STRENGTH OF MODERN TIMES:
+
+Some people think the strength of modern times is the ability to use
+modern technology. That thinking is insufficient. The strength of modern
+times is the ability to use ALL technology up to the present day.
+
+By adhering to the Perl 5.005_03 specification, we gain access to the
+entire history of Perl--from 5.005_03 to 5.42 and beyond--rather than
+limiting ourselves to only the latest versions.
 
 Key reasons:
 

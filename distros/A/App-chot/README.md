@@ -5,7 +5,7 @@ chot - Command Heuristic Omni-Tracer
 
 # VERSION
 
-Version 1.02
+Version 1.03
 
 # SYNOPSIS
 
@@ -18,9 +18,10 @@ Version 1.02
        -n   --dryrun        Show command without executing
        -h   --help          Print this message
        -l   --list          Print file path (-ll for ls -l)
+       -L   --deref         Dereference symlinks (with -ll)
        -m   --man           Show documentation
        -N   --[no-]number   Line number display (default: off)
-       -r   --raw           Don't resolve Homebrew wrappers
+       -r   --raw           Don't resolve symlinks/wrappers
        -v   --version       Print version
        -p   --pager=#       Specify pager command
        -t   --type=#        Specify handler (Command:Perl:Python:Ruby:Node)
@@ -53,8 +54,9 @@ The program searches through all file type handlers (Command, Perl, Python,
 Ruby, Node by default) and displays all matches found using a pager.
 
 For Homebrew-installed commands, both the wrapper script in `bin/` and
-the actual executable in `libexec/bin/` are displayed. This is useful
-for understanding how wrapper scripts delegate to their implementations.
+the actual executable (typically in `libexec/`) are displayed. This is
+useful for understanding how wrapper scripts delegate to their
+implementations.
 
 For [optex](https://metacpan.org/pod/App%3A%3Aoptex) commands (symlinks in `~/.optex.d/bin/`
 pointing to the `optex` binary), the actual command is resolved by
@@ -97,9 +99,10 @@ The Command handler resolves commands through the following pipeline:
 - 4. **Homebrew wrapper resolution**
 
     If the path is in a Homebrew prefix (e.g., `/opt/homebrew/bin/`),
-    checks whether it is a shell wrapper that delegates to a script in
-    `libexec/bin/`.  If so, both the wrapper and the actual script are
-    included.
+    checks whether it is a shell wrapper that delegates to another
+    script within the same Homebrew prefix (e.g., in `libexec/bin/` or
+    `libexec/venv/bin/`).  If so, both the wrapper and the actual script
+    are included.
 
 ## Python Module Tracing
 
@@ -112,6 +115,15 @@ source files:
     module lookup (e.g., `pandoc-embedz` is searched as `pandoc_embedz`).
     This follows the Python packaging convention where distribution names
     use hyphens but module names use underscores.
+
+- **Interpreter fallback**
+
+    When the default `python3` cannot import a module (e.g., packages
+    installed only in a Homebrew venv or a specific virtual environment),
+    the handler examines shebang lines of previously discovered paths to
+    find the appropriate Python interpreter and retries the import.
+    This enables tracing of Homebrew-installed Python commands whose
+    packages are isolated in `libexec/venv/`.
 
 - **Entry point resolution**
 
@@ -126,15 +138,22 @@ source files:
     If `__init__.py` is empty, only the alternative file is returned.
     If `__init__.py` has content, both files are included.
 
-## Example
+## Examples
 
-For a pyenv-installed Python command `pandoc-embedz`:
+For a Homebrew-installed Python command `pandoc-embedz`:
 
     $ chot -l pandoc-embedz
-    /Users/you/.pyenv/shims/pandoc-embedz        # pyenv shim
-    /Users/you/.pyenv/versions/.../bin/pandoc-embedz  # actual entry point
+    /opt/homebrew/bin/pandoc-embedz               # Homebrew wrapper
+    .../libexec/venv/bin/pandoc-embedz            # venv entry point
     .../pandoc_embedz/__init__.py                 # package init
     .../pandoc_embedz/main.py                     # main source
+
+For a pyenv-installed Python command:
+
+    $ chot -l gpty
+    /Users/you/.pyenv/shims/gpty                  # pyenv shim
+    /Users/you/.pyenv/versions/.../bin/gpty       # actual entry point
+    .../gpty/gpty.py                              # main source
 
 # OPTIONS
 
@@ -166,17 +185,29 @@ For a pyenv-installed Python command `pandoc-embedz`:
 
 - **-l**, **--list**
 
-    Print module path instead of displaying the file contents.
+    Print file path instead of displaying the file contents.
     Use multiple times (`-ll`) to call `ls -l` for detailed file information.
+
+- **-L**, **--deref**
+
+    Dereference symlinks when listing with `-ll`.
+    Passes `-L` to `ls` so that the target file's information is shown
+    instead of the symlink itself.
 
 - **-m**, **--man**
 
-    Display manual/documentation using the appropriate tool for each language:
-    \- Perl: `perldoc`
-    \- Python: `pydoc`
-    \- Ruby: `ri`
-    \- Node.js: `npm docs`
-    \- Command: `man`
+    Display manual/documentation using the appropriate tool for each
+    language:
+
+        Command:  man
+        Perl:     perldoc
+        Python:   pydoc
+        Ruby:     ri
+        Node.js:  npm docs
+
+    If the first handler's documentation is not available (e.g., no man
+    page exists), the next handler is tried automatically.  For example,
+    a Python command without a man page will fall back to `pydoc`.
 
 - **-N**, **--number**, **--no-number**
 
@@ -189,8 +220,8 @@ For a pyenv-installed Python command `pandoc-embedz`:
 
 - **-r**, **--raw**
 
-    Show raw paths without resolving Homebrew wrapper scripts to
-    their actual executables.
+    Show raw paths without resolving optex symlinks, pyenv shims, or
+    Homebrew wrapper scripts to their actual executables.
 
 - **-v**, **--version**
 
@@ -214,13 +245,15 @@ For a pyenv-installed Python command `pandoc-embedz`:
     Default: `Command:Perl:Python:Ruby:Node`
 
     Available handlers:
-    \- `Command`: Search for executable commands in `$PATH`
-    \- `Perl`: Search for Perl modules in `@INC`
-    \- `Python`: Search for Python libraries using Python's inspect module
-    \- `Ruby`: Search for Ruby libraries using `$LOADED_FEATURES`
-    \- `Node`: Search for Node.js modules using `require.resolve`
+
+        Command   Search for executable commands in $PATH
+        Perl      Search for Perl modules in @INC
+        Python    Search for Python libraries using inspect module
+        Ruby      Search for Ruby libraries using $LOADED_FEATURES
+        Node      Search for Node.js modules using require.resolve
 
     Examples:
+
         chot --type Perl Getopt::Long       # Only search Perl modules
         chot --type python json             # Only search Python modules
         chot --type ruby yaml               # Only search Ruby libraries
@@ -293,7 +326,9 @@ implement a `get_path($app, $name)` method.
 - **App::chot::Python**
 
     Handler for Python libraries. Executes Python's `inspect.getsourcefile()`
-    function to locate Python module files.
+    function to locate Python module files.  When the default `python3`
+    cannot find a module, falls back to interpreters discovered from
+    shebang lines of previously found paths (e.g., Homebrew venv Python).
 
 - **App::chot::Ruby**
 
@@ -342,6 +377,12 @@ implement a `get_path($app, $name)` method.
     # Display a Node.js module
     chot --nd express
 
+    # Trace a Homebrew venv Python command
+    chot -l pandoc-embedz
+
+    # Show documentation with fallback (man → pydoc)
+    chot -m speedtest-z
+
     # Use a custom pager
     chot --pager "vim -R" List::Util
 
@@ -378,6 +419,13 @@ implement a `get_path($app, $name)` method.
     Root directory for optex configuration.  Defaults to `~/.optex.d`.
     Used to locate `config.toml` and `*.rc` files for optex command
     resolution.
+
+# BUGS
+
+When inspecting itself with `chot chot`, the display order of the
+wrapper script and the actual executable may be reversed.  This is
+because the wrapper adds `libexec/bin` to `$PATH`, causing the
+raw executable to be found before the wrapper during path search.
 
 # SEE ALSO
 

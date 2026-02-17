@@ -63,15 +63,15 @@ PDL::Opt::Simplex::Simple - A simplex optimizer for the rest of us
 
 # DESCRIPTION
 
-This class uses [PDL::Opt::Simplex](https://metacpan.org/pod/PDL::Opt::Simplex) to find the values for `vars`
+This class uses [PDL::Opt::Simplex](https://metacpan.org/pod/PDL%3A%3AOpt%3A%3ASimplex) to find the values for `vars`
 that cause the `f` coderef to return the minimum value.  The difference
-between [PDL::Opt::Simplex](https://metacpan.org/pod/PDL::Opt::Simplex) and [PDL::Opt::Simplex::Simple](https://metacpan.org/pod/PDL::Opt::Simplex::Simple) is that
-[PDL::Opt::Simplex](https://metacpan.org/pod/PDL::Opt::Simplex) expects all data to be in PDL format and it is
-more complicated to manage, whereas, [PDL::Opt::Simplex:Simple](https://metacpan.org/pod/PDL::Opt::Simplex:Simple) uses
+between [PDL::Opt::Simplex](https://metacpan.org/pod/PDL%3A%3AOpt%3A%3ASimplex) and [PDL::Opt::Simplex::Simple](https://metacpan.org/pod/PDL%3A%3AOpt%3A%3ASimplex%3A%3ASimple) is that
+[PDL::Opt::Simplex](https://metacpan.org/pod/PDL%3A%3AOpt%3A%3ASimplex) expects all data to be in PDL format and it is
+more complicated to manage, whereas, [PDL::Opt::Simplex:Simple](https://metacpan.org/pod/PDL%3A%3AOpt%3A%3ASimplex%3ASimple) uses
 all scalar Perl values. (PDL values are supported, too, see the PDL use case
 note below.)
 
-With the original [PDL::Opt::Simplex](https://metacpan.org/pod/PDL::Opt::Simplex) module, a single vector array
+With the original [PDL::Opt::Simplex](https://metacpan.org/pod/PDL%3A%3AOpt%3A%3ASimplex) module, a single vector array
 had to be sliced into the different variables represented by the array.
 This was non-intuitive and error-prone.  This class attempts to improve
 on that by defining data structure of variables, values, and whether or
@@ -113,7 +113,7 @@ callback function.
 
     This is for debugging:
 
-    Builds a tree from `$vars` that is suitable for passing to [Data::Dumper](https://metacpan.org/pod/Data::Dumper).  This is
+    Builds a tree from `$vars` that is suitable for passing to [Data::Dumper](https://metacpan.org/pod/Data%3A%3ADumper).  This is
     necessary because PDL's need to be stringified since Dumper() will dump at the
     object itself.
 
@@ -179,7 +179,7 @@ Expanded format:
     is complete.  Setting round\_result will round after optimization finishes, but leave 
     full precision while iterating.  See also: `round_each`.
 
-    This function uses [Math::Round](https://metacpan.org/pod/Math::Round)'s `nearest` function:
+    This function uses [Math::Round](https://metacpan.org/pod/Math%3A%3ARound)'s `nearest` function:
 
             nearest(10, 44)    yields  40
             nearest(10, 46)            50
@@ -288,7 +288,7 @@ values are available in the `$state` hashref:
         'cache_misses' => 1000,         # Number of times simplex asked to try unique vars
     }
 
-## \* `ssize` - Initial simplex size, see [PDL::Opt::Simplex](https://metacpan.org/pod/PDL::Opt::Simplex)
+## \* `ssize` - Initial simplex size, see [PDL::Opt::Simplex](https://metacpan.org/pod/PDL%3A%3AOpt%3A%3ASimplex)
 
 Think of this as "step size" but not really, a bigger value makes larger
 jumps but the value doesn't translate to a unit.  (It actually stands
@@ -331,7 +331,7 @@ Default: undef (cache enabled)
 ## \* `workers` - Fork a number of workers to parallelize the computation
 
 Some computations may benefit from parallization.  Internally we use
-[Parallel::Pipes](https://metacpan.org/pod/Parallel::Pipes) to serialize `vars` and send them to a worker process.
+[Parallel::Pipes](https://metacpan.org/pod/Parallel%3A%3APipes) to serialize `vars` and send them to a worker process.
 
 Example:
 
@@ -563,7 +563,7 @@ but this will not:
         }, ...)
 
 If you need PDL vectors in your `f()` call then this could work because
-[PDL::Opt::Simplex::Simple](https://metacpan.org/pod/PDL::Opt::Simplex::Simple) can optimize perl ARRAY ref's:
+[PDL::Opt::Simplex::Simple](https://metacpan.org/pod/PDL%3A%3AOpt%3A%3ASimplex%3A%3ASimple) can optimize perl ARRAY ref's:
 
         ->new({
                 vars => { x => [1,2,3] }
@@ -599,7 +599,7 @@ Patches welcome ;)
 
 ## Upstream modules:
 
-- PDL Implementation of Simplex: [PDL::Opt::Simplex](https://metacpan.org/pod/PDL::Opt::Simplex), [http://pdl.perl.org/](http://pdl.perl.org/)
+- PDL Implementation of Simplex: [PDL::Opt::Simplex](https://metacpan.org/pod/PDL%3A%3AOpt%3A%3ASimplex), [http://pdl.perl.org/](http://pdl.perl.org/)
 - This modules github repository: [https://github.com/KJ7LNW/perl-PDL-Opt-Simplex-Simple](https://github.com/KJ7LNW/perl-PDL-Opt-Simplex-Simple)
 
 ## References:
@@ -614,8 +614,8 @@ Patches welcome ;)
 
 ## Other Optimization Implementations:
 
-- [PDL::Opt::ParticleSwarm](https://metacpan.org/pod/PDL::Opt::ParticleSwarm) - A PDL implementation of Particle Swarm
-- [PDL::Opt::ParticleSwarm::Simple](https://metacpan.org/pod/PDL::Opt::ParticleSwarm::Simple) - Use names for Particle Swarm-optimized values
+- [PDL::Opt::ParticleSwarm](https://metacpan.org/pod/PDL%3A%3AOpt%3A%3AParticleSwarm) - A PDL implementation of Particle Swarm
+- [PDL::Opt::ParticleSwarm::Simple](https://metacpan.org/pod/PDL%3A%3AOpt%3A%3AParticleSwarm%3A%3ASimple) - Use names for Particle Swarm-optimized values
 
 # AUTHOR
 

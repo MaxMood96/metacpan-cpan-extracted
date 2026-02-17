@@ -5,10 +5,11 @@ author:
 build_requires:
   ExtUtils::MakeMaker: '0'
   Test::More: '0'
+  Test::Number::Delta: '0'
 configure_requires:
   ExtUtils::MakeMaker: '0'
 dynamic_config: 1
-generated_by: 'ExtUtils::MakeMaker version 7.34, CPAN::Meta::Converter version 2.150010'
+generated_by: 'ExtUtils::MakeMaker version 7.60, CPAN::Meta::Converter version 2.150010'
 license: gpl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -28,5 +29,5 @@ resources:
   bugtracker: https://github.com/KJ7LNW/perl-PDL-Opt-Simplex-Simple/issues
   homepage: https://github.com/KJ7LNW/perl-PDL-Opt-Simplex-Simple
   repository: git://github.com/KJ7LNW/perl-PDL-Opt-Simplex-Simple.git
-version: '2.004'
+version: '2.006'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

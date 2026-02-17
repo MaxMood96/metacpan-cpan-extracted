@@ -16,3 +16,5 @@ t/005_complex.t
 t/006_extended.t
 t/007_additional_methods.t
 t/008_set_and_aggregate.t
+t/009_v102_methods.t
+t/010_ascii_only.t

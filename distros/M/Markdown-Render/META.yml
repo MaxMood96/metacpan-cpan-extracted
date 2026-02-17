@@ -22,7 +22,7 @@ no_index:
 provides:
   Markdown::Render:
     file: lib/Markdown/Render.pm
-    version: v2.0.2
+    version: v2.0.3
 requires:
   CLI::Simple: '0'
   CLI::Simple::Constants: '0'
@@ -35,5 +35,5 @@ requires:
   LWP::UserAgent: '0'
   Readonly: '0'
   perl: '5.016'
-version: v2.0.2
+version: v2.0.3
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

@@ -1,5 +1,21 @@
 Revision history for LTSV::LINQ
 
+1.02  2026-02-17
+    - Added 6 new methods for relational operations and utilities
+    
+    New methods:
+    - Data sources: Empty, Repeat
+    - Concatenation: Zip
+    - Join operations: Join
+    - Conversion: ToDictionary, ToLookup
+    
+    Improvements:
+    - Enhanced POD documentation with detailed examples
+    - Updated method summary table (45 -> 49 methods)
+    - Ensured all source code is US-ASCII only (no multibyte characters)
+    - Added test for ASCII-only verification
+    - Method count: 49 methods across 15 categories
+
 1.01  2026-02-16
     - Added 14 new methods to enhance LINQ compatibility
     
@@ -17,7 +33,7 @@ Revision history for LTSV::LINQ
     Improvements:
     - Enhanced POD documentation for all new methods
     - Added comprehensive examples for each method
-    - Updated method summary table (31 → 45 methods)
+    - Updated method summary table (31 -> 45 methods)
     - Improved test coverage
     - Optimized Single/ElementAt to use lazy evaluation (O(1) memory)
     - Fixed Makefile.PL version inconsistency

@@ -1,4 +1,4 @@
-package MIME::Lite 3.037;
+package MIME::Lite 3.038;
 # ABSTRACT: low-calorie MIME generator
 use v5.12.0;
 use warnings;
@@ -3121,7 +3121,7 @@ sub quiet {
 
 #============================================================
 
-package MIME::Lite::SMTP 3.037;
+package MIME::Lite::SMTP 3.038;
 
 #============================================================
 # This class just adds a print() method to Net::SMTP.
@@ -3164,7 +3164,7 @@ sub print {
 
 #============================================================
 
-package MIME::Lite::IO_Handle 3.037;
+package MIME::Lite::IO_Handle 3.038;
 
 #============================================================
 
@@ -3194,7 +3194,7 @@ sub print {
 
 #============================================================
 
-package MIME::Lite::IO_Scalar 3.037;
+package MIME::Lite::IO_Scalar 3.038;
 
 #============================================================
 
@@ -3214,7 +3214,7 @@ sub print {
 
 #============================================================
 
-package MIME::Lite::IO_ScalarArray 3.037;
+package MIME::Lite::IO_ScalarArray 3.038;
 
 #============================================================
 
@@ -3244,7 +3244,7 @@ MIME::Lite - low-calorie MIME generator
 
 =head1 VERSION
 
-version 3.037
+version 3.038
 
 =head1 WAIT!
 
@@ -4923,34 +4923,6 @@ non-ASCII characters (e.g., Latin-1, Latin-2, or any other 8-bit alphabet).
 
 =back
 
-=begin FOR_README_ONLY
-
-=head1 INSTALLATION
-
-Install using
-
-  perl makefile.pl
-  make test
-  make install
-
-Adjust the make command as is appropriate for your OS.
-'nmake' is the usual name under Win32
-
-In order to read the docmentation please use
-
-  perldoc MIME::Lite
-
-from the command line or visit
-
-  http://search.cpan.org/search?query=MIME%3A%3ALite&mode=all
-
-for a list of all MIME::Lite related materials including the
-documentation in HTML of all of the released versions of
-MIME::Lite.
-
-
-=end FOR_README_ONLY
-
 =head1 HELPER MODULES
 
 MIME::Lite works nicely with other certain other modules if they are present.
@@ -4998,32 +4970,6 @@ them unless they also have an associated test. This means that if I don't have
 the time to write the test the patch won't get applied, so please, include tests
 for any patches you provide.
 
-=head1 VERSION
-
-Version: 3.033
-
-=head1 CHANGE LOG
-
-Moved to ./changes.pod
-
-NOTE: Users of the "advanced features" of 3.01_0x smtp sending
-should take care: These features have been REMOVED as they never
-really fit the purpose of the module. Redundant SMTP delivery is
-a task that should be handled by another module.
-
-=head1 TERMS AND CONDITIONS
-
-  Copyright (c) 1997 by Eryq.
-  Copyright (c) 1998 by ZeeGee Software Inc.
-  Copyright (c) 2003,2005 Yves Orton. (demerphq)
-
-All rights reserved.  This program is free software; you can
-redistribute it and/or modify it under the same terms as Perl
-itself.
-
-This software comes with B<NO WARRANTY> of any kind.
-See the COPYING file in the distribution for details.
-
 =head1 NUTRITIONAL INFORMATION
 
 For some reason, the US FDA says that this is now required by law
@@ -5041,17 +4987,6 @@ Version 3.0 is now new and improved! The distribution is now 30% smaller!
 
 Warning: for consumption by hardware only!  May produce
 indigestion in humans if taken internally.
-
-=head1 AUTHOR
-
-Eryq (F<eryq@zeegee.com>).
-President, ZeeGee Software Inc. (F<http://www.zeegee.com>).
-
-Go to F<http://www.cpan.org> for the latest downloads
-and on-line documentation for this module.  Enjoy.
-
-Patches And Maintenance by Yves Orton and many others.
-Consult ./changes.pod
 
 =head1 AUTHORS
 
@@ -5137,7 +5072,7 @@ Tom Hukins <tom@eborcom.com>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 1997 by the MIME-Lite Consortium.
+This software is copyright (c) 1997 by Eryq, ZeeGee Software, and Yves Orton.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.
@@ -5580,40 +5515,6 @@ __END__
 #pod
 #pod =cut
 
-
-#pod =begin FOR_README_ONLY
-#pod
-#pod =head1 INSTALLATION
-#pod
-#pod Install using
-#pod
-#pod   perl makefile.pl
-#pod   make test
-#pod   make install
-#pod
-#pod Adjust the make command as is appropriate for your OS.
-#pod 'nmake' is the usual name under Win32
-#pod
-#pod In order to read the docmentation please use
-#pod
-#pod   perldoc MIME::Lite
-#pod
-#pod from the command line or visit
-#pod
-#pod   http://search.cpan.org/search?query=MIME%3A%3ALite&mode=all
-#pod
-#pod for a list of all MIME::Lite related materials including the
-#pod documentation in HTML of all of the released versions of
-#pod MIME::Lite.
-#pod
-#pod =cut
-
-
-#pod =end FOR_README_ONLY
-#pod
-#pod =cut
-
-
 #pod =head1 HELPER MODULES
 #pod
 #pod MIME::Lite works nicely with other certain other modules if they are present.
@@ -5661,32 +5562,6 @@ __END__
 #pod the time to write the test the patch won't get applied, so please, include tests
 #pod for any patches you provide.
 #pod
-#pod =head1 VERSION
-#pod
-#pod Version: 3.033
-#pod
-#pod =head1 CHANGE LOG
-#pod
-#pod Moved to ./changes.pod
-#pod
-#pod NOTE: Users of the "advanced features" of 3.01_0x smtp sending
-#pod should take care: These features have been REMOVED as they never
-#pod really fit the purpose of the module. Redundant SMTP delivery is
-#pod a task that should be handled by another module.
-#pod
-#pod =head1 TERMS AND CONDITIONS
-#pod
-#pod   Copyright (c) 1997 by Eryq.
-#pod   Copyright (c) 1998 by ZeeGee Software Inc.
-#pod   Copyright (c) 2003,2005 Yves Orton. (demerphq)
-#pod
-#pod All rights reserved.  This program is free software; you can
-#pod redistribute it and/or modify it under the same terms as Perl
-#pod itself.
-#pod
-#pod This software comes with B<NO WARRANTY> of any kind.
-#pod See the COPYING file in the distribution for details.
-#pod
 #pod =head1 NUTRITIONAL INFORMATION
 #pod
 #pod For some reason, the US FDA says that this is now required by law
@@ -5704,16 +5579,5 @@ __END__
 #pod
 #pod Warning: for consumption by hardware only!  May produce
 #pod indigestion in humans if taken internally.
-#pod
-#pod =head1 AUTHOR
-#pod
-#pod Eryq (F<eryq@zeegee.com>).
-#pod President, ZeeGee Software Inc. (F<http://www.zeegee.com>).
-#pod
-#pod Go to F<http://www.cpan.org> for the latest downloads
-#pod and on-line documentation for this module.  Enjoy.
-#pod
-#pod Patches And Maintenance by Yves Orton and many others.
-#pod Consult ./changes.pod
 #pod
 #pod =cut

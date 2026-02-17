@@ -1,5 +1,8 @@
 Revision history for perl module MODS::Record
 
+0.14  2026-02-16 15:19:28 CET
+    - Adding support for nameIdentifier (obs: herreio)
+    
 0.13  2018-11-22 15:59:34 CET
     - Fixing name element has missing type attribute #4
     - Fixing empty MODS::Element::Affiliation #5

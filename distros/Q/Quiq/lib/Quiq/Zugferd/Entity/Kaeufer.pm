@@ -25,7 +25,7 @@ use v5.10;
 use strict;
 use warnings;
 
-our $VERSION = '1.234';
+our $VERSION = '1.235';
 
 # -----------------------------------------------------------------------------
 
@@ -62,6 +62,8 @@ sub new {
         land => undef,             # BT-55
         auftragsreferenz => undef, # BT-13 (Bestellnummer des Käufers)
         umsatzsteuerId => undef,   # BT-48
+        # Zugeordnete Objekte
+        anhaenge => [],
     );
     $self->set(@_);
 
@@ -72,7 +74,7 @@ sub new {
 
 =head1 VERSION
 
-1.234
+1.235
 
 =head1 AUTHOR
 

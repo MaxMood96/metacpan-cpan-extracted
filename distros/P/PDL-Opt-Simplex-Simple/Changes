@@ -1,5 +1,15 @@
 Revision history for PDL-Opt-Simplex-Simple
 
+2.006	2026-02-16T17:19:42-08:00
+	- ParticleSwarm: fix: random factor regression in velocity update
+	  * Generate independent random factors per particle (D,P) instead of
+	    shared factors (D,1) to match Kennedy & Eberhart (1995) formulation
+	  * Fixes correlated swarm movement that reduced exploration diversity
+	- Add velocity update test
+
+2.005	2024-12-10T12:17:49-08:00
+    - Improved random velocity initialization in ParticleSwarm
+
 2.004	2024-12-10T10:20:47-08:00
 	- Updated ParticleSwarm.pm:
 	  * Modified _initParticles to scale random velocity

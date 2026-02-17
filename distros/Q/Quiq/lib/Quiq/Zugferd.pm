@@ -42,7 +42,7 @@ use strict;
 use warnings;
 use utf8;
 
-our $VERSION = '1.234';
+our $VERSION = '1.235';
 
 use Quiq::PerlModule;
 use Quiq::Path;
@@ -57,6 +57,7 @@ use Quiq::AnsiColor;
 use Quiq::FileHandle;
 use Quiq::Xml;
 use Quiq::Tree;
+use MIME::Base64 ();
 use Quiq::Hash;
 
 # -----------------------------------------------------------------------------
@@ -184,6 +185,9 @@ sub new {
          'IncludedSupplyChainTradeLineItem.[0].SpecifiedLineTradeSettlement.'.
          'SpecifiedTradeAllowanceCharge.[0].ChargeIndicator.Indicator',
          'BG-27-1_BG-28-1');
+    $tree->setDeep('SupplyChainTradeTransaction.'.
+         'ApplicableHeaderTradeAgreement.AdditionalReferencedDocument.[0].'.
+         'AttachmentBinaryObject._','BT-125');
 
     # say Quiq::Dumper->dump($tree);
 
@@ -797,6 +801,28 @@ sub toXml {
         return $t;
     });
 
+    # Rechnungsbegründende Anlagen
+    
+    my $bg24 = $self->processSubTree('BG-24',$rch->kaeufer->anhaenge,sub {
+        my ($zug,$t,$anh,$i) = @_;
+        # die Quiq::Dumper->dump($t);    
+
+        $zug->resolvePlaceholders(
+           -subTree => $t,
+           -showPlaceholders => $debug,
+           -label => 'Anhänge',
+           '--',
+           'BT-122' => $anh->id,
+           'BT-122-0' => 916,
+           'BT-123' => $anh->name,
+           'BT-125-1' => $anh->mimeType,
+           'BT-125-2' => $anh->filename,
+           'BT-125' => MIME::Base64::encode_base64($anh->data,''),
+       );
+    
+       return $t;
+    });
+
     # Positionen
 
     my $bg25 = $self->processSubTree('BG-25',$rch->positionen,sub {
@@ -957,6 +983,8 @@ sub toXml {
         'BG-25' => $bg25,
         # Umsatzsteuern
         'BG-23' => $bg23,
+        # Rechnungsbegründende Unterlagen
+        'BG-24' => $bg24,
     );
     $debugText .= $text;
     # $debugText .= $self->checkAttributes($rch);
@@ -1425,7 +1453,7 @@ Klassen:
 
 =head1 VERSION
 
-1.234
+1.235
 
 =head1 AUTHOR
 

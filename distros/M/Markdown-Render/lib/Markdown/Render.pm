@@ -12,7 +12,7 @@ use JSON;
 use LWP::UserAgent;
 use List::Util qw(none);
 
-our $VERSION = '2.0.2';
+our $VERSION = '2.0.3';
 
 use parent qw(Class::Accessor::Fast);
 
@@ -239,11 +239,11 @@ sub _fix_header {
 
   return $line if $line !~ /^\s*<h(\d+)>(.*?)<\/h\d>$/xsm;
 
-  my ( $hn, $anchor, $header ) = ( $1, $2, $2 );  ## no critic (ProhibitCaptureWithoutTest)
+  my ( $hn, $anchor, $header ) = ( $1, $2, $2 ); ## no critic (ProhibitCaptureWithoutTest)
 
   $anchor = lc $anchor;
-  $anchor =~ s/\s+/-/gxsm;                        # spaces become '-'
-  $anchor =~ s/[.:\?_.\@'(),\`\*]//xsmg;          # known weird characters, but expect more
+  $anchor =~ s/\s+/-/gxsm;  # spaces become '-'
+  $anchor =~ s/[.:\?_.\@'(),\`\*]//xsmg;  # known weird characters, but expect more
   $anchor =~ s/\///xsmg;
 
   $line
@@ -433,7 +433,7 @@ sub print_html {
 
   my @head = grep { $_ ? $_ : () } ( $title_section, $css_section );
 
-  my $head_section;
+  my $head_section = q{};
 
   if (@head) {
     unshift @head, '<head>';

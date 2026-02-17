@@ -341,8 +341,8 @@
         <ram:URIID schemeID=""></ram:URIID>
         <ram:LineID schemeID=""></ram:LineID>
         <ram:TypeCode>BT-122-0</ram:TypeCode>
-        <ram:Name></ram:Name>
-        <ram:AttachmentBinaryObject mimeCode="" filename=""></ram:AttachmentBinaryObject>
+        <ram:Name>BT-123</ram:Name>
+        <ram:AttachmentBinaryObject mimeCode="BT-125-1" filename="BT-125-2">BT-125</ram:AttachmentBinaryObject>
         <ram:ReferenceTypeCode></ram:ReferenceTypeCode>
         <ram:FormattedIssueDateTime>
           <qdt:DateTimeString format=""></qdt:DateTimeString>

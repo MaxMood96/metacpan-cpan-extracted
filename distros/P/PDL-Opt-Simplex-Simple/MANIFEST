@@ -23,6 +23,7 @@ t/05-simplex-array.t
 t/06-simplex-array-pdl.t
 t/10-pdl-opt-particleswarm-2var.t
 t/10-pdl-opt-particleswarm.t
+t/11-pdl-opt-particleswarm-velocity.t
 t/20-pdl-opt-particleswarm-simple-2var.t
 t/manifest.t
 t/pod-coverage.t

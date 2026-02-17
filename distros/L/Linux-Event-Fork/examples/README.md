@@ -1,61 +1,80 @@
-# Linux::Event::Fork examples
+# Linux::Event::Fork Examples
 
-This directory contains both **usage examples** and **stress tests**.
+These scripts are small, focused demos of `Linux::Event::Fork` features.
 
-The stress tests are intentionally small and self-contained so you can run them
-under `strace`, `perf`, `valgrind`, or with different loop backends.
+## Quick start
 
-## Stress tests
-
-### 90_stress_timeout_churn.pl
-
-**What it stresses**
-
-- fork/exit churn (many short-lived children)
-- timer scheduling + cancellation (`timeout`)
-- drain-first teardown stability under load
-
-**Controls**
-
-- `N` (default 200): number of children
-- `TIMEOUT` (default 0.02): timeout seconds
-
-**Expected**
-
-- The loop stops cleanly after all children complete.
-- Some jobs are marked `timedout` (timeout callback fired).
-- Because the child installs a TERM handler that exits 0, a timed-out job can
-  still count as `exit_ok`.
-
-Run:
+From the distribution root:
 
 ```bash
-perl -Ilib examples/90_stress_timeout_churn.pl
-N=1000 TIMEOUT=0.01 perl -Ilib examples/90_stress_timeout_churn.pl
+perl -Ilib examples/12_fork_exit_object.pl
 ```
 
-### 91_stress_stdin_with_timeout.pl
+Most examples use `Linux::Event` + `Linux::Event::Fork` like this:
 
-**What it stresses**
+```perl
+use Linux::Event;
+use Linux::Event::Fork;
 
-- backpressure-aware stdin streaming (`stdin_write` / write watcher)
-- timeout firing while stdin is still being written
-- teardown stability after EPIPE (child exit closes stdin pipe)
+my $loop = Linux::Event->new;
 
-**Controls**
+# Optional: configure bounded parallelism at runtime
+my $fork = $loop->fork_helper(max_children => 4);
 
-- `TIMEOUT` (default 0.05): timeout seconds
-- `MB` (default 5): payload size in MiB written to stdin
-
-**Expected**
-
-- Prints `START`, then `[timeout]`, then `DONE` summary.
-- Does not hang, and does not die from SIGPIPE.
-
-Run:
-
-```bash
-perl -Ilib examples/91_stress_stdin_with_timeout.pl
-TIMEOUT=0.03 perl -Ilib examples/91_stress_stdin_with_timeout.pl
-MB=20 TIMEOUT=0.05 perl -Ilib examples/91_stress_stdin_with_timeout.pl
+$loop->fork(cmd => [ ... ]);
+$loop->run;
 ```
+
+## Canonical configuration style
+
+This distribution intentionally uses **runtime configuration**:
+
+```perl
+my $fork = $loop->fork_helper(max_children => 4);
+```
+
+A previous compile-time idiom (`use Linux::Event::Fork max_children => ...;`) is removed.
+
+## Example index
+
+### Core concepts
+
+- **12_fork_exit_object.pl**  
+  Demonstrates the `Exit` object and streaming stdout/stderr capture.
+
+- **13_fork_child_callback.pl**  
+  Demonstrates `child => sub { ... }` (run code in the child) and why `exec` is recommended.
+
+- **14_fork_stdin_streaming.pl**  
+  Demonstrates streaming to the child’s stdin (nonblocking writes) and reading responses.
+
+- **22_timeout_kill.pl**  
+  Demonstrates soft timeouts (timeout callback + SIGTERM cleanup).
+
+### Pool / queue policy
+
+- **20_bounded_parallelism_with_drain.pl**  
+  Shows `max_children` bounded parallelism, queueing, and `drain()`.
+
+- **23_cancel_queued_by_tag.pl**  
+  Shows `cancel_queued()` (only queued requests) and `drain()` to stop when fully idle.
+
+### Practical “real world” demos
+
+- **21_web_fetch_pool.pl**  
+  A pool that runs many independent fetch tasks concurrently (using `cmd => [...]`).
+  This demonstrates how to build a tiny work-queue without a framework.
+
+### Notes
+
+- **25_chunking_notes.pl**  
+  Notes about streaming callbacks: you receive *chunks*, not “lines”, and should buffer if you need framing.
+
+## Tips for users
+
+- `cmd => [...]` is the simplest and fastest form: it forks, wires FDs, then execs.
+- Use `tag => ...` to label work (for logs and for canceling queued requests).
+- `cancel_queued()` does **not** affect running children.
+- `drain(on_done => sub { ... })` fires when both:
+  - no children are running, and
+  - the queue is empty.

@@ -28,6 +28,7 @@ my %WriteMakefileArgs = (
     },
     TEST_REQUIRES => {
         'Test::More' => '0',
+	'Test::Number::Delta' => '0',
     },
     PREREQ_PM => {
 	'Math::Round' => 0,

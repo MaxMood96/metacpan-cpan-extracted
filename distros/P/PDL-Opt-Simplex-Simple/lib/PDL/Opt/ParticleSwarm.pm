@@ -197,8 +197,6 @@ sub init
 	$self->{bestBestByIter} = undef;
 	$self->{bestsMean}      = 0;
 
-	$self->{deltaMax} = ($self->{posMax} - $self->{posMin}) / 100.0;
-
 	$self->{iterCount} = 0;
 
 	# Normalise weights.
@@ -322,22 +320,13 @@ sub _initParticles
 
 	if ($self->{randStartVelocity})
 	{
-		# I think this is off by the Nth-root of the number of particles?
-		#
-		# ... but I would need some review help from someone who is
-		# good with spacial math. Basically we want the velocity to be
-		# a maximum of 1/100th of the size of space, and scaled by
-		# randStartVelocity (see deltaMax, above).  Thus if
-		# randStartVelocity is 10, then it should take at least 10
-		# iterations to cross the entire space given some "corner-
-		# point" and the velocity vector.  For now this is close enough
-		# for our purpose because all we need to do is give some
-		# reasonably-sized initial random direction.
-
-		$prtcls->{velocity} .= $self->{randStartVelocity} * $self->_randInRangePDL(
-			-$self->{deltaMax},  $self->{deltaMax},
-			$self->{dimensions}, $numParticles
-			);
+		# Best-case when random()==1 or -1, velocity will cross the entire space 
+		# in 100/$self->{randStartVelocity} iterations
+		$prtcls->{velocity} .= 
+			$self->{randStartVelocity} * ($self->{posMax} - $self->{posMin}) / 100 
+				* $self->_randInRangePDL(
+					-1, 1, $self->{dimensions}, $numParticles
+				);
 	}
 	else
 	{
@@ -503,11 +492,10 @@ sub _updateVelocities
 		$bestNeighbors->slice(':', $i) .= $prtcls->{bestPos}->slice(':', $bestNeighIdx);
 	}
 
-	# meFactor/themFactor need to be (N,1) piddles because they are scaled
-	# against each particle:
-	my $meFactor = $self->_randInRangePDL(-$self->{meWeight}, $self->{meWeight}, $self->{dimensions}, 1);
+	# Per-particle random factors per Kennedy & Eberhart (1995):
+	my $meFactor = $self->_randInRangePDL(-$self->{meWeight}, $self->{meWeight}, $self->{dimensions}, $self->{numParticles});
 
-	my $themFactor = $self->_randInRangePDL(-$self->{themWeight}, $self->{themWeight}, $self->{dimensions}, 1);
+	my $themFactor = $self->_randInRangePDL(-$self->{themWeight}, $self->{themWeight}, $self->{dimensions}, $self->{numParticles});
 
 	my $meDelta   = $prtcls->{bestPos} - $prtcls->{currPos};
 	my $themDelta = $bestNeighbors - $prtcls->{currPos};
@@ -864,8 +852,8 @@ particle velocity is set to 0 on initalization.
 A range based on 1/100th of -I<-posMax> - I<-posMin> is used for the initial
 speed in each dimension of the velocity vector if a random start velocity is
 used. Velocity is multiplied by the random result, so this value can be used to
-scale the initial velocity of the particles. Thus, a value of 10 will take at
-least 10 iterations to traverse the space, because the velocity can be no more
+scale the initial velocity of the particles. Thus, a value of 10 will take _at
+least_ 10 iterations to traverse the space, because the velocity can be no more
 than one-tenth of the space. (This velocity will then be modified each
 iteration based on the result of the evaluation function.)
 

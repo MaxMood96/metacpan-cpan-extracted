@@ -35,6 +35,21 @@ sub test_check : Test(4) {
 
 # -----------------------------------------------------------------------------
 
+sub test_isDate : Test(3) {
+    my $self = shift;
+
+    eval {Quiq::Assert->isDate(undef)};
+    $self->is($@,'');
+
+    eval {Quiq::Assert->isDate('')};
+    $self->is($@,'');
+
+    eval {Quiq::Assert->isDate('x')};
+    $self->like($@,qr/Invalid date/);
+}
+
+# -----------------------------------------------------------------------------
+
 sub test_isEnumValue : Test(4) {
     my $self = shift;
 

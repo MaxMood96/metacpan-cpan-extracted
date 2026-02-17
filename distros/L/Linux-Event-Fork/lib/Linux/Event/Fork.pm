@@ -3,22 +3,54 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.003';
+our $VERSION = '0.005';
 
 use Carp qw(croak);
 use POSIX ();
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 
 use Linux::Event::Fork::Child ();
+use Linux::Event::Fork::Request ();
 
-sub import ($class, @args) {
+sub import ($class, %import) {
+  my $loop_pkg = 'Linux::Event::Loop';
+
   no strict 'refs';
-  no warnings 'redefine';
 
-  *{"Linux::Event::Loop::fork"} = sub ($loop, %spawn) {
-    my $helper = $loop->{_linux_event_fork} //= $class->new(loop => $loop);
-    return $helper->spawn(%spawn);
-  };
+  # If called again with no options, don't clobber existing installed methods.
+  if (!%import && defined &{"${loop_pkg}::fork"}) {
+    # Still ensure fork_helper exists below.
+  } else {
+    *{"${loop_pkg}::fork"} = sub ($loop, %args) {
+      my $fork = $loop->{_linux_event_fork} ||= $class->new(loop => $loop, %import);
+      return $fork->_spawn(%args) if $fork->can('_spawn');
+      return $fork->spawn(%args);
+    };
+  }
+
+  *{"${loop_pkg}::fork_helper"} = sub ($loop, %args) {
+  # Return the per-loop helper (create on first use).
+  my $fork = $loop->{_linux_event_fork};
+
+  if (!$fork) {
+    $fork = $loop->{_linux_event_fork} = $class->new(loop => $loop, %import, %args);
+    return $fork;
+  }
+
+  # Allow runtime reconfiguration (currently only max_children).
+  if (%args) {
+    my $max_children = delete $args{max_children};
+    if (defined $max_children) {
+      $max_children = 0 if !defined $max_children;
+      croak "max_children must be a non-negative integer" if $max_children !~ /^\\d+$/;
+      $fork->{max_children} = 0 + $max_children;
+    }
+    croak "unknown args: " . join(", ", sort keys %args) if %args;
+  }
+
+  return $fork;
+};
+
 
   return;
 }
@@ -26,14 +58,41 @@ sub import ($class, @args) {
 sub new ($class, %args) {
   my $loop = delete $args{loop};
   croak "loop is required" if !$loop;
+
+  my $max_children = delete $args{max_children};
+  $max_children = 0 if !defined $max_children;
+  croak "max_children must be a non-negative integer" if $max_children !~ /^\d+$/;
+
   croak "unknown args: " . join(", ", sort keys %args) if %args;
 
-  return bless { loop => $loop }, $class;
+  return bless {
+    loop => $loop,
+    max_children => 0 + $max_children,
+    running => 0,
+    queue => [],
+  }, $class;
 }
 
 sub loop ($self) { return $self->{loop} }
+sub max_children ($self) { return $self->{max_children} }
+sub running ($self) { return $self->{running} }
+sub queued ($self) { return scalar @{ $self->{queue} } }
 
 sub spawn ($self, %spec) {
+  # Controlled parallelism: if max_children is set and we are at capacity,
+  # enqueue the request and return a Request handle.
+  if ($self->{max_children} && $self->{running} >= $self->{max_children}) {
+    my $req = Linux::Event::Fork::Request->_new(fork => $self, spec => \%spec);
+    push @{ $self->{queue} }, $req;
+    return $req;
+  }
+
+  return $self->_spawn_now(\%spec);
+}
+
+sub _spawn_now ($self, $spec) {
+  my %spec = %$spec;
+
   my $cmd   = delete $spec{cmd};
   my $child = delete $spec{child};
 
@@ -55,6 +114,7 @@ sub spawn ($self, %spec) {
   my $on_exit    = delete $spec{on_exit};
   my $on_timeout = delete $spec{on_timeout};
   my $timeout    = delete $spec{timeout};
+  my $on_start   = delete $spec{on_start};
 
   my $tag  = delete $spec{tag};
   my $data = delete $spec{data};
@@ -63,6 +123,7 @@ sub spawn ($self, %spec) {
   croak "on_stderr must be a coderef"  if defined($on_stderr)  && ref($on_stderr)  ne 'CODE';
   croak "on_exit must be a coderef"    if defined($on_exit)    && ref($on_exit)    ne 'CODE';
   croak "on_timeout must be a coderef" if defined($on_timeout) && ref($on_timeout) ne 'CODE';
+  croak "on_start must be a coderef"   if defined($on_start)   && ref($on_start)   ne 'CODE';
   croak "timeout must be numeric seconds" if defined($timeout) && ref($timeout);
 
   my $capture_stdout = delete $spec{capture_stdout};
@@ -162,6 +223,18 @@ sub spawn ($self, %spec) {
   close($err_w) if $capture_stderr;
   close($in_r)  if $want_stdin;
 
+  # Wrap on_exit so we always release capacity and start the next queued job,
+  # even if user code throws.
+  my $user_on_exit = $on_exit;
+  my $managed = $self->{max_children} ? 1 : 0;
+
+  $on_exit = sub ($child_obj, $exit_obj) {
+    if ($user_on_exit) {
+      eval { $user_on_exit->($child_obj, $exit_obj); 1 };
+    }
+    $self->_on_child_finished($child_obj) if $managed;
+  };
+
   my $handle = Linux::Event::Fork::Child->_new(
     loop => $self->{loop},
     pid  => $pid,
@@ -182,7 +255,15 @@ sub spawn ($self, %spec) {
 
     capture_stdout => $capture_stdout,
     capture_stderr => $capture_stderr,
+
+    managed_by_fork => ($managed ? $self : undef),
   );
+
+  $self->{running}++ if $managed;
+
+  if ($on_start) {
+    eval { $on_start->($handle); 1 };
+  }
 
   if (defined $stdin && $stdin ne '') {
     $handle->stdin_write($stdin);
@@ -195,6 +276,73 @@ sub spawn ($self, %spec) {
   return $handle;
 }
 
+sub _on_child_finished ($self, $child) {
+  # Idempotent: a child should only finish once, but guard anyway.
+  return if !$self->{running};
+  $self->{running}--;
+
+  # Start queued work, if any.
+  while ($self->{max_children} && $self->{running} < $self->{max_children}) {
+    my $req = shift @{ $self->{queue} } or last;
+    next if $req->_canceled;
+    $req->_start;
+  }
+  $self->_maybe_fire_drain;
+
+  return;
+}
+
+sub drain ($self, %args) {
+  my $on_done = delete $args{on_done};
+  croak "on_done is required" if !defined $on_done;
+  croak "on_done must be a coderef" if ref($on_done) ne 'CODE';
+  croak "unknown args: " . join(", ", sort keys %args) if %args;
+
+  $self->{_drain_on_done} = $on_done;
+
+  $self->_maybe_fire_drain;
+
+  return 1;
+}
+
+sub _maybe_fire_drain ($self) {
+  my $cb = $self->{_drain_on_done} or return;
+
+  return if $self->{running};
+  return if @{ $self->{queue} };
+
+  delete $self->{_drain_on_done};
+
+  eval { $cb->($self); 1 };
+  return;
+}
+
+
+sub cancel_queued ($self, $pred = undef) {
+  croak "cancel_queued predicate must be a coderef" if defined($pred) && ref($pred) ne 'CODE';
+
+  my $n = 0;
+  my @keep;
+
+  for my $req (@{ $self->{queue} }) {
+    next if !defined $req;
+    if (!$req->_canceled && (!defined($pred) || $pred->($req))) {
+      $req->cancel;
+      $n++;
+      next;
+    }
+    push @keep, $req;
+  }
+
+  $self->{queue} = \@keep;
+
+  $self->_maybe_fire_drain;
+
+  return $n;
+}
+
+
+
 sub _set_nonblock ($fh) {
   my $flags = fcntl($fh, F_GETFL, 0);
   croak "fcntl(F_GETFL): $!" if !defined $flags;
@@ -205,31 +353,33 @@ sub _set_nonblock ($fh) {
 
 1;
 
+
 __END__
 
 =head1 NAME
 
-Linux::Event::Fork - Minimal async child spawning on top of Linux::Event
+Linux::Event::Fork - Async child process management for Linux::Event
 
 =head1 SYNOPSIS
 
   use v5.36;
   use Linux::Event;
-  use Linux::Event::Fork;   # installs $loop->fork
+  use Linux::Event::Fork;
 
   my $loop = Linux::Event->new;
 
-  $loop->fork(
-    tag => "job:42",
+  # Optional: configure bounded parallelism
+  my $fork = $loop->fork_helper(max_children => 4);
 
+  $loop->fork(
     cmd => [ $^X, '-we', 'print "hello\n"; exit 0' ],
 
     on_stdout => sub ($child, $chunk) {
-      print "[stdout] $chunk";
+      print $chunk;
     },
 
     on_exit => sub ($child, $exit) {
-      say "pid=" . $child->pid . " code=" . ($exit->exited ? $exit->code : 'n/a');
+      print "exit code: " . $exit->code . "\n";
       $loop->stop;
     },
   );
@@ -238,145 +388,127 @@ Linux::Event::Fork - Minimal async child spawning on top of Linux::Event
 
 =head1 DESCRIPTION
 
-B<Linux::Event::Fork> is a small policy-layer helper built on top of
-L<Linux::Event>. It installs an opt-in method C<< $loop->fork(...) >> into
-C<Linux::Event::Loop>.
+B<Linux::Event::Fork> is a small policy layer built on top of
+L<Linux::Event>. It provides nonblocking child process management
+integrated directly into the event loop.
 
-It uses only public primitives:
-
-=over 4
-
-=item * C<< $loop->watch(...) >> for pipes
-
-=item * C<< $loop->pid(...) >> for exit observation
-
-=item * C<< $loop->after(...) >> for timeouts
-
-=back
-
-=head2 Constraints
+Features include:
 
 =over 4
 
-=item * No restarts/backoff.
+=item * Nonblocking stdout/stderr capture
 
-=item * No hidden ownership of user resources.
+=item * Streaming stdin
 
-=item * Explicit, idempotent teardown.
+=item * Soft timeouts
 
-=item * Drain-first: C<on_exit> fires only after exit is observed and captured pipes reach EOF.
+=item * Tagging
+
+=item * Bounded parallelism (C<max_children>)
+
+=item * Internal queueing
+
+=item * C<drain()> callback
+
+=item * C<cancel_queued()> support
+
+=item * Introspection methods
 
 =back
 
-=head1 SPAWN ARGUMENTS
+This module is intentionally minimal. It wires file descriptors,
+tracks lifecycle, and optionally enforces concurrency limits.
 
-Exactly one of C<cmd> or C<child> is required.
+=head1 CONFIGURATION
 
-=head2 cmd
+Configuration is performed at runtime:
 
-  cmd => [ $program, @argv ]
+  my $fork = $loop->fork_helper(max_children => 4);
 
-Uses C<exec>. If exec fails, the child exits 127 and writes a short diagnostic to STDERR.
+The older compile-time idiom:
 
-=head2 child
+  use Linux::Event::Fork max_children => 4;
 
-  child => sub { ... }
+is intentionally removed.
 
-Runs a Perl callback in the child after stdio plumbing and setup options are applied.
-Typically you call C<exec> from inside the callback.
+=head1 SPAWNING CHILDREN
 
-If the callback throws an exception or returns normally, the child exits 127 and writes
-a best-effort diagnostic to STDERR.
+=head2 cmd => [ ... ]
 
-=head2 Output capture
+The simplest form. Forks, wires FDs, then execs immediately.
 
-  on_stdout => sub ($child, $chunk) { ... }
-  on_stderr => sub ($child, $chunk) { ... }
+  $loop->fork(cmd => [ 'ls', '-l' ]);
 
-C<$chunk> is raw bytes from C<sysread()>; it is B<not> line-oriented and may split
-arbitrarily. Buffer in user code if you want line/message framing.
+=head2 child => sub { ... }
 
-By default, stdout/stderr pipes are only created if their callback is provided.
+Runs Perl code in the child after stdio plumbing.
 
-Override with:
+  $loop->fork(
+    child => sub {
+      exec 'sh', '-c', 'echo hello';
+      exit 127;
+    },
+  );
 
-  capture_stdout => 1|0
-  capture_stderr => 1|0
+Returning from the callback is treated as failure.
 
-Enabling capture without a callback drains and discards output so the child cannot
-block on a full pipe.
+=head1 BOUNDED PARALLELISM
 
-=head2 Exit
+  my $fork = $loop->fork_helper(max_children => 4);
 
-  on_exit => sub ($child, $exit) { ... }
+When the pool is full, C<fork()> returns a
+C<Linux::Event::Fork::Request> object instead of a running child.
+Queued requests start automatically when capacity becomes available.
 
-C<$exit> is a L<Linux::Event::Fork::Exit> object.
+=head1 DRAIN
 
-=head2 Stdin
+  $fork->drain(on_done => sub ($fork) {
+    $loop->stop;
+  });
 
-=head3 One-shot stdin bytes
-
-  stdin => $bytes
-
-Creates a pipe, writes the bytes, and closes stdin.
-
-=head3 Streaming stdin with backpressure
-
-  stdin_pipe => 1
-
-Creates a pipe and keeps it open. Stream with:
-
-  $child->stdin_write($bytes);
-  $child->close_stdin;
-
-Writes are non-blocking and backpressure-aware.
-
-SIGPIPE is ignored during writes and EPIPE is treated as a normal close condition.
-
-=head2 Minimal timeout
-
-  timeout    => $seconds,
-  on_timeout => sub ($child) { ... },   # optional
-
-When the timer fires and the child has not yet exited:
+The callback fires once when:
 
 =over 4
 
-=item 1. Calls C<on_timeout> (if provided)
+=item * No children are running
 
-=item 2. Sends TERM to the child once
+=item * The queue is empty
 
 =back
 
-No escalation and no restart policy.
+=head1 CANCEL QUEUED
 
-=head2 Child setup options
+  $fork->cancel_queued(sub ($req) {
+    $req->tag eq 'low-priority';
+  });
 
-Applied in the child after stdio plumbing and before exec/callback:
+Only queued requests are affected. Running children are not modified.
 
-  cwd       => "/path"
-  umask     => 027
-  env       => { KEY => "value", ... }   # overlays onto inherited %ENV
-  clear_env => 1                         # start with empty %ENV before overlay
+=head1 INTROSPECTION
 
-=head2 Metadata
+  $fork->running;
+  $fork->queued;
+  $fork->max_children;
 
-  tag  => $label
-  data => $opaque
+=head1 WHAT THIS MODULE IS NOT
 
-Both are stored on the returned handle.
+This is not:
 
-=head1 RETURN VALUE
+=over 4
 
-Returns a L<Linux::Event::Fork::Child> handle.
+=item * A supervisor
 
-=head1 SEE ALSO
+=item * A job scheduler
 
-L<Linux::Event>, L<Linux::Event::Fork::Child>, L<Linux::Event::Fork::Exit>
+=item * A framework
+
+=back
+
+It extends L<Linux::Event>; it does not replace it.
 
 =head1 AUTHOR
 
-Joshua S. Day (HAX)
+Joshua S. Day
 
 =head1 LICENSE
 

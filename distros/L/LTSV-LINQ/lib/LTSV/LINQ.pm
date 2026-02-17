@@ -11,7 +11,7 @@ package LTSV::LINQ;
 use 5.00503;    # Universal Consensus 1998 for primetools
 # use 5.008001; # Lancaster Consensus 2013 for toolchains
 
-$VERSION = '1.01';
+$VERSION = '1.02';
 $VERSION = $VERSION;
 
 BEGIN { pop @INC if $INC[-1] eq '.' } # CVE-2016-1238: Important unsafe module load path flaw
@@ -84,6 +84,28 @@ sub Range {
         return undef if $remaining <= 0;
         $remaining--;
         return $current++;
+    });
+}
+
+# Empty - return empty sequence
+sub Empty {
+    my($class) = @_;
+
+    return $class->new(sub {
+        return undef;
+    });
+}
+
+# Repeat - repeat element specified number of times
+sub Repeat {
+    my($class, $element, $count) = @_;
+
+    my $remaining = $count;
+
+    return $class->new(sub {
+        return undef if $remaining <= 0;
+        $remaining--;
+        return $element;
     });
 }
 
@@ -192,6 +214,25 @@ sub Concat {
     });
 }
 
+# Zip - combine two sequences element-wise
+sub Zip {
+    my($self, $second, $result_selector) = @_;
+
+    my $iter1 = $self->iterator;
+    my $iter2 = $second->iterator;
+    my $class = ref($self);
+
+    return $class->new(sub {
+        my $item1 = $iter1->();
+        my $item2 = $iter2->();
+
+        # Return undef if either sequence ends
+        return undef unless defined($item1) && defined($item2);
+
+        return $result_selector->($item1, $item2);
+    });
+}
+
 #---------------------------------------------------------------------
 # Partitioning Methods
 #---------------------------------------------------------------------
@@ -297,7 +338,7 @@ sub OrderBy {
         my $kb_trimmed = $kb;
         $ka_trimmed =~ s/^\s+|\s+$//g;
         $kb_trimmed =~ s/^\s+|\s+$//g;
-        
+
         if ($ka_trimmed =~ /^[+-]?(?:\d+\.?\d*|\d*\.\d+)(?:[eE][+-]?\d+)?$/ && 
             $kb_trimmed =~ /^[+-]?(?:\d+\.?\d*|\d*\.\d+)(?:[eE][+-]?\d+)?$/) {
             return $ka_trimmed <=> $kb_trimmed;
@@ -328,7 +369,7 @@ sub OrderByDescending {
         my $kb_trimmed = $kb;
         $ka_trimmed =~ s/^\s+|\s+$//g;
         $kb_trimmed =~ s/^\s+|\s+$//g;
-        
+
         if ($ka_trimmed =~ /^[+-]?(?:\d+\.?\d*|\d*\.\d+)(?:[eE][+-]?\d+)?$/ && 
             $kb_trimmed =~ /^[+-]?(?:\d+\.?\d*|\d*\.\d+)(?:[eE][+-]?\d+)?$/) {
             return $kb_trimmed <=> $ka_trimmed;
@@ -408,9 +449,9 @@ sub Distinct {
 # Internal helper for set operations - make key from item
 sub _make_key {
     my($item) = @_;
-    
+
     return '' unless defined $item;
-    
+
     if (ref($item) eq 'HASH') {
         # Hash to stable key
         my @pairs = ();
@@ -433,14 +474,14 @@ sub _make_key {
 # Union - set union with distinct
 sub Union {
     my($self, $second, $comparer) = @_;
-    
+
     return $self->Concat($second)->Distinct($comparer);
 }
 
 # Intersect - set intersection
 sub Intersect {
     my($self, $second, $comparer) = @_;
-    
+
     # Build hash of second sequence
     my %second_set = ();
     $second->ForEach(sub {
@@ -456,7 +497,7 @@ sub Intersect {
     return $class->new(sub {
         while (defined(my $item = $iter->())) {
             my $key = $comparer ? $comparer->($item) : _make_key($item);
-            
+
             next if $seen{$key}++;  # Skip duplicates
             return $item if exists $second_set{$key};
         }
@@ -467,7 +508,7 @@ sub Intersect {
 # Except - set difference
 sub Except {
     my($self, $second, $comparer) = @_;
-    
+
     # Build hash of second sequence
     my %second_set = ();
     $second->ForEach(sub {
@@ -483,11 +524,52 @@ sub Except {
     return $class->new(sub {
         while (defined(my $item = $iter->())) {
             my $key = $comparer ? $comparer->($item) : _make_key($item);
-            
+
             next if $seen{$key}++;  # Skip duplicates
             return $item unless exists $second_set{$key};
         }
         return undef;
+    });
+}
+
+# Join - correlates elements of two sequences
+sub Join {
+    my($self, $inner, $outer_key_selector, $inner_key_selector, $result_selector) = @_;
+
+    # Build hash table from inner sequence
+    my %inner_hash = ();
+    $inner->ForEach(sub {
+        my $item = shift;
+        my $key = $inner_key_selector->($item);
+        $key = _make_key($key) if ref($key);
+        push @{$inner_hash{$key}}, $item;
+    });
+
+    # Process outer sequence with lazy evaluation
+    my $class = ref($self);
+    my $iter = $self->iterator;
+    my @buffer = ();
+
+    return $class->new(sub {
+        while (1) {
+            # Return from buffer if available
+            return shift @buffer if @buffer;
+
+            # Get next outer element
+            my $outer_item = $iter->();
+            return undef unless defined $outer_item;
+
+            # Find matching inner elements
+            my $key = $outer_key_selector->($outer_item);
+            $key = _make_key($key) if ref($key);
+
+            if (exists $inner_hash{$key}) {
+                for my $inner_item (@{$inner_hash{$key}}) {
+                    push @buffer, $result_selector->($outer_item, $inner_item);
+                }
+            }
+            # If no match, continue to next outer element
+        }
     });
 }
 
@@ -526,7 +608,7 @@ sub Any {
 # Contains - check if sequence contains element
 sub Contains {
     my($self, $value, $comparer) = @_;
-    
+
     if ($comparer) {
         return $self->Any(sub { $comparer->($_[0], $value) });
     }
@@ -638,7 +720,7 @@ sub Single {
 
     while (defined(my $item = $iter->())) {
         next if $predicate && !$predicate->($item);
-        
+
         $count++;
         if ($count > 1) {
             die "Sequence contains more than one element";
@@ -659,7 +741,7 @@ sub SingleOrDefault {
 
     while (defined(my $item = $iter->())) {
         next if $predicate && !$predicate->($item);
-        
+
         $count++;
         if ($count > 1) {
             return undef;  # More than one element
@@ -793,16 +875,16 @@ sub AverageOrDefault {
 # Aggregate - apply accumulator function over sequence
 sub Aggregate {
     my($self, @args) = @_;
-    
+
     my($seed, $func, $result_selector);
-    
+
     if (@args == 1) {
         # Aggregate($func) - use first element as seed
         $func = $args[0];
         my $iter = $self->iterator;
         $seed = $iter->();
         die "Sequence contains no elements" unless defined $seed;
-        
+
         # Continue with rest of elements
         while (defined(my $item = $iter->())) {
             $seed = $func->($seed, $item);
@@ -851,10 +933,57 @@ sub ToList {
     return [$self->ToArray()];
 }
 
+# ToDictionary - convert sequence to hash reference
+sub ToDictionary {
+    my($self, $key_selector, $value_selector) = @_;
+
+    # Default value selector returns the element itself
+    $value_selector ||= sub { $_[0] };
+
+    my %dictionary = ();
+
+    $self->ForEach(sub {
+        my $item = shift;
+        my $key = $key_selector->($item);
+        my $value = $value_selector->($item);
+
+        # Convert undef key to empty string
+        $key = '' unless defined $key;
+
+        # Later values overwrite earlier ones (Perl hash behavior)
+        $dictionary{$key} = $value;
+    });
+
+    return \%dictionary;
+}
+
+# ToLookup - convert sequence to hash of arrays
+sub ToLookup {
+    my($self, $key_selector, $value_selector) = @_;
+
+    # Default value selector returns the element itself
+    $value_selector ||= sub { $_[0] };
+
+    my %lookup = ();
+
+    $self->ForEach(sub {
+        my $item = shift;
+        my $key = $key_selector->($item);
+        my $value = $value_selector->($item);
+
+        # Convert undef key to empty string
+        $key = '' unless defined $key;
+
+        push @{$lookup{$key}}, $value;
+    });
+
+    return \%lookup;
+}
+
 # DefaultIfEmpty - return default value if empty
 sub DefaultIfEmpty {
     my($self, $default_value) = @_;
-    # default_value のデフォルトは undef
+    # default_value defaults to undef
     my $has_default_arg = @_ > 1;
     if (!$has_default_arg) {
         $default_value = undef;
@@ -926,7 +1055,7 @@ LTSV::LINQ - LINQ-style query interface for LTSV files
 
 =head1 VERSION
 
-Version 1.00
+Version 1.02
 
 =head1 SYNOPSIS
 
@@ -963,7 +1092,7 @@ Version 1.00
 
 =item * L</DESCRIPTION>
 
-=item * L</METHODS> - Complete method reference (30 methods)
+=item * L</METHODS> - Complete method reference (49 methods)
 
 =item * L</EXAMPLES> - 8 practical examples
 
@@ -1005,7 +1134,7 @@ Key features:
 
 =item * B<DSL syntax> - Simple key-value filtering
 
-=item * B<30+ LINQ methods> - Comprehensive query capabilities
+=item * B<49 LINQ methods> - Comprehensive query capabilities
 
 =item * B<Pure Perl> - No XS dependencies
 
@@ -1037,31 +1166,37 @@ For more information:
 
 =head2 Complete Method Reference
 
-This module implements 30 LINQ-style methods organized into 12 categories:
+This module implements 49 LINQ-style methods organized into 15 categories:
 
 =over 4
 
-=item * B<Data Sources (3)>: From, FromLTSV, Range
+=item * B<Data Sources (5)>: From, FromLTSV, Range, Empty, Repeat
 
 =item * B<Filtering (1)>: Where (with DSL)
 
 =item * B<Projection (2)>: Select, SelectMany
 
-=item * B<Partitioning (3)>: Take, Skip, TakeWhile
+=item * B<Concatenation (2)>: Concat, Zip
+
+=item * B<Partitioning (4)>: Take, Skip, TakeWhile, SkipWhile
 
 =item * B<Ordering (3)>: OrderBy, OrderByDescending, Reverse
 
 =item * B<Grouping (1)>: GroupBy
 
-=item * B<Set Operations (1)>: Distinct
+=item * B<Set Operations (4)>: Distinct, Union, Intersect, Except
 
-=item * B<Quantifiers (2)>: All, Any
+=item * B<Join (1)>: Join
 
-=item * B<Element Access (3)>: First, FirstOrDefault, Last
+=item * B<Quantifiers (3)>: All, Any, Contains
 
-=item * B<Aggregation (5)>: Count, Sum, Min, Max, Average
+=item * B<Comparison (1)>: SequenceEqual
 
-=item * B<Conversion (3)>: ToArray, ToList, ToLTSV
+=item * B<Element Access (8)>: First, FirstOrDefault, Last, LastOrDefault, Single, SingleOrDefault, ElementAt, ElementAtOrDefault
+
+=item * B<Aggregation (7)>: Count, Sum, Min, Max, Average, AverageOrDefault, Aggregate
+
+=item * B<Conversion (6)>: ToArray, ToList, ToDictionary, ToLookup, ToLTSV, DefaultIfEmpty
 
 =item * B<Utility (1)>: ForEach
 
@@ -1074,10 +1209,13 @@ B<Method Summary Table:>
   From                Data Source     Yes    Query
   FromLTSV            Data Source     Yes    Query
   Range               Data Source     Yes    Query
+  Empty               Data Source     Yes    Query
+  Repeat              Data Source     Yes    Query
   Where               Filtering       Yes    Query
   Select              Projection      Yes    Query
   SelectMany          Projection      Yes    Query
   Concat              Concatenation   Yes    Query
+  Zip                 Concatenation   Yes    Query
   Take                Partitioning    Yes    Query
   Skip                Partitioning    Yes    Query
   TakeWhile           Partitioning    Yes    Query
@@ -1090,6 +1228,7 @@ B<Method Summary Table:>
   Union               Set Operation   Yes    Query
   Intersect           Set Operation   Yes    Query
   Except              Set Operation   Yes    Query
+  Join                Join            No*    Query
   All                 Quantifier      No     Boolean
   Any                 Quantifier      No     Boolean
   Contains            Quantifier      No     Boolean
@@ -1109,9 +1248,11 @@ B<Method Summary Table:>
   Average             Aggregation     No     Number
   AverageOrDefault    Aggregation     No     Number or undef
   Aggregate           Aggregation     No     Any
-  DefaultIfEmpty      Default Value   Yes    Query
+  DefaultIfEmpty      Conversion      Yes    Query
   ToArray             Conversion      No     Array
   ToList              Conversion      No     ArrayRef
+  ToDictionary        Conversion      No     HashRef
+  ToLookup            Conversion      No     HashRef
   ToLTSV              Conversion      No     Boolean
   ForEach             Utility         No     Void
 
@@ -1138,6 +1279,52 @@ Create a query from an LTSV file.
 Generate a sequence of integers.
 
   my $query = LTSV::LINQ->Range(1, 10);  # 1, 2, ..., 10
+
+=item B<Empty()>
+
+Create an empty sequence.
+
+B<Returns:> Empty LTSV::LINQ query
+
+B<Examples:>
+
+  my $empty = LTSV::LINQ->Empty();
+  $empty->Count();  # 0
+
+  # Conditional empty sequence
+  my $result = $condition ? $query : LTSV::LINQ->Empty();
+
+B<Note:> Equivalent to C<From([])> but more explicit.
+
+=item B<Repeat($element, $count)>
+
+Repeat the same element a specified number of times.
+
+B<Parameters:>
+
+=over 4
+
+=item * C<$element> - Element to repeat
+
+=item * C<$count> - Number of times to repeat
+
+=back
+
+B<Returns:> LTSV::LINQ query with repeated elements
+
+B<Examples:>
+
+  # Repeat scalar
+  LTSV::LINQ->Repeat('x', 5)->ToArray();  # ('x', 'x', 'x', 'x', 'x')
+
+  # Repeat reference (same reference repeated)
+  my $item = {id => 1};
+  LTSV::LINQ->Repeat($item, 3)->ToArray();  # ($item, $item, $item)
+
+  # Generate default values
+  LTSV::LINQ->Repeat(0, 10)->ToArray();  # (0, 0, 0, ..., 0)
+
+B<Note:> The element reference is repeated, not cloned.
 
 =back
 
@@ -1319,6 +1506,46 @@ B<Examples:>
       ->Where(status => '500')
 
 B<Note:> This operation is lazy - sequences are read on-demand.
+
+=item B<Zip($second, $result_selector)>
+
+Combine two sequences element-wise using a result selector function.
+
+B<Parameters:>
+
+=over 4
+
+=item * C<$second> - Second sequence (LTSV::LINQ object)
+
+=item * C<$result_selector> - Function to combine elements: ($first, $second) -> $result
+
+=back
+
+B<Returns:> New query with combined elements (lazy)
+
+B<Examples:>
+
+  # Combine numbers
+  my $numbers = LTSV::LINQ->From([1, 2, 3]);
+  my $letters = LTSV::LINQ->From(['a', 'b', 'c']);
+  $numbers->Zip($letters, sub {
+      my($num, $letter) = @_;
+      return "$num-$letter";
+  })->ToArray();  # ('1-a', '2-b', '3-c')
+
+  # Create key-value pairs
+  my $keys = LTSV::LINQ->From(['name', 'age', 'city']);
+  my $values = LTSV::LINQ->From(['Alice', 30, 'NYC']);
+  $keys->Zip($values, sub {
+      return {$_[0] => $_[1]};
+  })->ToArray();
+
+  # Stops at shorter sequence
+  LTSV::LINQ->From([1, 2, 3, 4])
+      ->Zip(LTSV::LINQ->From(['a', 'b']), sub { [$_[0], $_[1]] })
+      ->ToArray();  # ([1, 'a'], [2, 'b'])
+
+B<Note:> Iteration stops when either sequence ends.
 
 =back
 
@@ -1589,6 +1816,79 @@ B<Note:> Returns elements from first sequence not present in second.
 
 =back
 
+=head2 Join Operations
+
+=over 4
+
+=item B<Join($inner, $outer_key_selector, $inner_key_selector, $result_selector)>
+
+Correlate elements of two sequences based on matching keys (inner join).
+
+B<Parameters:>
+
+=over 4
+
+=item * C<$inner> - Inner sequence (LTSV::LINQ object)
+
+=item * C<$outer_key_selector> - Function to extract key from outer element
+
+=item * C<$inner_key_selector> - Function to extract key from inner element
+
+=item * C<$result_selector> - Function to create result: ($outer, $inner) -> $result
+
+=back
+
+B<Returns:> Query with joined results
+
+B<Examples:>
+
+  # Join users with their orders
+  my $users = LTSV::LINQ->From([
+      {id => 1, name => 'Alice'},
+      {id => 2, name => 'Bob'}
+  ]);
+
+  my $orders = LTSV::LINQ->From([
+      {user_id => 1, product => 'Book'},
+      {user_id => 1, product => 'Pen'},
+      {user_id => 2, product => 'Notebook'}
+  ]);
+
+  $users->Join(
+      $orders,
+      sub { $_[0]{id} },          # outer key
+      sub { $_[0]{user_id} },     # inner key
+      sub {
+          my($user, $order) = @_;
+          return {
+              name => $user->{name},
+              product => $order->{product}
+          };
+      }
+  )->ToArray();
+  # [{name => 'Alice', product => 'Book'},
+  #  {name => 'Alice', product => 'Pen'},
+  #  {name => 'Bob', product => 'Notebook'}]
+
+  # Join LTSV files by request ID
+  LTSV::LINQ->FromLTSV('access.log')->Join(
+      LTSV::LINQ->FromLTSV('error.log'),
+      sub { $_[0]{request_id} },
+      sub { $_[0]{request_id} },
+      sub {
+          my($access, $error) = @_;
+          return {
+              url => $access->{url},
+              error => $error->{message}
+          };
+      }
+  )
+
+B<Note:> This is an inner join - only matching elements are returned.
+The inner sequence is fully loaded into memory.
+
+=back
+
 =head2 Quantifier Methods
 
 =over 4
@@ -1748,7 +2048,7 @@ B<Examples:>
 
   # With predicate
   ->Single(sub { $_[0] > 10 })
-  
+
   # Memory-efficient: stops at 2nd element
   LTSV::LINQ->FromLTSV("huge.log")->Single(sub { $_[0]{id} eq '999' })
 
@@ -1792,7 +2092,7 @@ B<Examples:>
 
   ->ElementAt(0)  # First element
   ->ElementAt(2)  # Third element
-  
+
   # Memory-efficient for large files
   LTSV::LINQ->FromLTSV("huge.log")->ElementAt(10)  # Reads only 11 lines
 
@@ -2059,6 +2359,93 @@ Convert to array.
 Convert to array reference.
 
   my $arrayref = $query->ToList();
+
+=item B<ToDictionary($key_selector [, $value_selector])>
+
+Convert sequence to hash reference with unique keys.
+
+B<Parameters:>
+
+=over 4
+
+=item * C<$key_selector> - Function to extract key from element
+
+=item * C<$value_selector> - (Optional) Function to extract value, defaults to element itself
+
+=back
+
+B<Returns:> Hash reference
+
+B<Examples:>
+
+  # ID to name mapping
+  my $users = LTSV::LINQ->From([
+      {id => 1, name => 'Alice'},
+      {id => 2, name => 'Bob'}
+  ]);
+
+  my $dict = $users->ToDictionary(
+      sub { $_[0]{id} },
+      sub { $_[0]{name} }
+  );
+  # {1 => 'Alice', 2 => 'Bob'}
+
+  # Without value selector (stores entire element)
+  my $dict = $users->ToDictionary(sub { $_[0]{id} });
+  # {1 => {id => 1, name => 'Alice'}, 2 => {id => 2, name => 'Bob'}}
+
+  # Quick lookup table
+  my $status_codes = LTSV::LINQ->FromLTSV('access.log')
+      ->Select(sub { $_[0]{status} })
+      ->Distinct()
+      ->ToDictionary(sub { $_ }, sub { 1 });
+
+B<Note:> If duplicate keys exist, later values overwrite earlier ones.
+
+=item B<ToLookup($key_selector [, $value_selector])>
+
+Convert sequence to hash reference with grouped values (multi-value dictionary).
+
+B<Parameters:>
+
+=over 4
+
+=item * C<$key_selector> - Function to extract key from element
+
+=item * C<$value_selector> - (Optional) Function to extract value, defaults to element itself
+
+=back
+
+B<Returns:> Hash reference where values are array references
+
+B<Examples:>
+
+  # Group orders by user ID
+  my $orders = LTSV::LINQ->From([
+      {user_id => 1, product => 'Book'},
+      {user_id => 1, product => 'Pen'},
+      {user_id => 2, product => 'Notebook'}
+  ]);
+
+  my $lookup = $orders->ToLookup(
+      sub { $_[0]{user_id} },
+      sub { $_[0]{product} }
+  );
+  # {
+  #   1 => ['Book', 'Pen'],
+  #   2 => ['Notebook']
+  # }
+
+  # Group LTSV by status code
+  my $by_status = LTSV::LINQ->FromLTSV('access.log')
+      ->ToLookup(sub { $_[0]{status} });
+  # {
+  #   '200' => [{...}, {...}, ...],
+  #   '404' => [{...}, ...],
+  #   '500' => [{...}]
+  # }
+
+B<Note:> Unlike ToDictionary, this preserves all values for each key.
 
 =item B<DefaultIfEmpty([$default_value])>
 
@@ -2501,6 +2888,16 @@ final version of JPerl (Japanese Perl). This is not about using the old
 interpreter, but about maintaining the B<simple, original programming model>
 that made Perl enjoyable.
 
+B<The Strength of Modern Times:>
+
+Some people think the strength of modern times is the ability to use
+modern technology. That thinking is insufficient. The strength of modern
+times is the ability to use B<all> technology up to the present day.
+
+By adhering to the Perl 5.005_03 specification, we gain access to the
+entire history of Perl--from 5.005_03 to 5.42 and beyond--rather than
+limiting ourselves to only the latest versions.
+
 Key reasons:
 
 =over 4
@@ -2510,7 +2907,7 @@ Key reasons:
 Perl 5.6 and later introduced character encoding complexity that made
 programming harder. The confusion around character handling contributed
 to Perl's decline. By staying with the 5.005_03 specification, we maintain
-the simplicity that made Perl "rakuda" (camel) → "raku" (easy/fun).
+the simplicity that made Perl "rakuda" (camel) -> "raku" (easy/fun).
 
 =item * B<JPerl Compatibility> - Preserves the last JPerl version
 
@@ -2544,7 +2941,7 @@ All modules under the ina CPAN account (including mb, Jacode, UTF8-R2,
 mb-JSON, and this module) follow this principle: Write to the Perl 5.005_03
 specification, test on all versions, maintain programming joy.
 
-This is not nostalgia—it's a commitment to:
+This is not nostalgia--it's a commitment to:
 
 =over 4
 
@@ -2710,9 +3107,9 @@ Safe alternative: AverageOrDefault()
 
 For methods that may throw exceptions, use the OrDefault variants:
 
-  First()   → FirstOrDefault()   (returns undef)
-  Last()    → LastOrDefault()    (returns undef)
-  Average() → AverageOrDefault() (returns undef)
+  First()   -> FirstOrDefault()   (returns undef)
+  Last()    -> LastOrDefault()    (returns undef)
+  Average() -> AverageOrDefault() (returns undef)
 
 Example:
 
@@ -2960,7 +3357,7 @@ but affects operations on plain arrays containing undef.
 
   # Works fine (LTSV data - hash references)
   LTSV::LINQ->FromLTSV("file.ltsv")->Contains({status => '200'})
-  
+
   # Limitation (plain array with undef)
   LTSV::LINQ->From([1, undef, 3])->Contains(undef)  # May not work
 
@@ -2990,9 +3387,7 @@ The following LINQ methods are NOT implemented in this version:
 
 =over 4
 
-=item * Join, GroupJoin - Relational operations
-
-=item * Zip - Combine two sequences
+=item * GroupJoin - Group join operations
 
 =item * OfType - Type filtering
 

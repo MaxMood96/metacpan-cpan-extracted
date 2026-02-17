@@ -45,7 +45,7 @@ use v5.10;
 use strict;
 use warnings;
 
-our $VERSION = '1.234';
+our $VERSION = '1.235';
 
 use Quiq::Path;
 use Quiq::PerlModule;
@@ -149,7 +149,7 @@ sub new {
 
 =head4 Synopsis
 
-  $status = $mus->validate($file);
+  $status = $mus->validate($file,%options);
 
 =head4 Arguments
 
@@ -228,7 +228,7 @@ sub validate {
         " -jar $self->{'jarFile'} --action validate".
         " --source $file --log-as-pdf$noticeOpt >$resultFile 2>$logFile";
     if ($log) {
-        $log->info("Validiere XML: $cmd");
+        $log->info("Validiere ZUGFeRD-XML: $cmd");
     }
     my $exitCode = $sh->exec($cmd,-log=>$verbose);
     if ($exitCode == 130) {
@@ -673,7 +673,7 @@ sub mustangDir {
 
 =head1 VERSION
 
-1.234
+1.235
 
 =head1 AUTHOR
 

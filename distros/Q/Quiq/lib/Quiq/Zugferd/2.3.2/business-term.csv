@@ -86,6 +86,10 @@ BT-119;2;;Kategoriespezifischer Umsatzsteuersatz
 BT-120;0;;Umsatzsteuerbefreiungsgrund
 BT-122;0;;Kennung der rechnungsbegründenden Unterlage
 BT-122-0;0;;Typ des referenzierten Dokuments
+BT-123;0;;Beschreibung der rechnungsbegründenden Unterlage
+BT-125;0;;Anhangsdokument
+BT-125-1;0;;MIME-Code des Anhangsdokuments
+BT-125-2;0;;Dateiname des Anhangsdokuments
 BT-126;1;;Kennung der Rechnungsposition
 BT-127;0;;Freitext zur Rechnungsposition
 BT-128-1;0;;Kennung des Schemas

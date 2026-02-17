@@ -1,5 +1,14 @@
 Revision history for Crypt-SysRandom-XS
 
+0.011     2026-02-17 00:58:43+01:00 Europe/Brussels
+          - Update data pointer on resize for rdrand
+          - Clean up string length handling
+
+0.010     2026-02-16 21:42:29+01:00 Europe/Brussels
+          - Disallow requesting strings with negative lengths CVE-2026-2597
+          - Try arc4random in stdlib.h first
+          - Correct value of PROTOTYPES keyword in XS
+
 0.009     2025-04-11 18:46:31+02:00 Europe/Brussels
           - Handle exceptions in signal handler during getrandom correctly
           - Add BACKENDS section to documentation

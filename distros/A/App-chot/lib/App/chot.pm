@@ -1,6 +1,6 @@
 package App::chot;
 
-our $VERSION = "1.02";
+our $VERSION = "1.03";
 
 use v5.14;
 use warnings;
@@ -25,6 +25,7 @@ use Getopt::EX::Hashed; {
 	pod2usage(-verbose => 99, -sections => [qw(SYNOPSIS)])
     } ;
     has list    => ' l +   ' ;
+    has deref   => ' L     ' ;
     has man     => ' m     ' ;
     has number  => ' N !   ' , default => 0 ;
     has version => ' v     ' , action => sub { say "Version: $VERSION"; exit } ;
@@ -77,7 +78,7 @@ sub run {
     }
 
     my @found;
-    my $found_type;
+    my @found_types;
     for my $type (split /:+/, $app->type) {
 	$type = _normalize_type($type);
 	my $handler = __PACKAGE__ . '::' . $type;
@@ -88,7 +89,8 @@ sub run {
 	    if (@paths) {
 		warn "Found by $type: @paths\n" if $app->debug;
 		push @found, @paths;
-		$found_type //= $type;
+		$App::chot::_found_paths = [@found];
+		push @found_types, $type;
 		last if $app->one;
 	    } else {
 		warn "Not found by $type\n" if $app->debug;
@@ -105,7 +107,7 @@ sub run {
 
     if (my $level = $app->list) {
 	if ($level > 1) {
-	    system 'ls', '-l', @found;
+	    system 'ls', ($app->deref ? '-lL' : '-l'), @found;
 	} else {
 	    say for @found;
 	}
@@ -113,15 +115,22 @@ sub run {
     }
 
     if ($app->man) {
-	my $handler = __PACKAGE__ . '::' . $found_type;
 	no strict 'refs';
-	my @cmd = &{"$handler\::man_cmd"}($app, $name, $found[0]);
-	if ($app->dryrun) {
-	    say "@cmd";
-	    return 0;
+	my $tried;
+	for my $type (@found_types) {
+	    my $handler = __PACKAGE__ . '::' . $type;
+	    next unless defined &{"$handler\::man_cmd"};
+	    my @cmd = &{"$handler\::man_cmd"}($app, $name, $found[0])
+		or next;
+	    if ($app->dryrun) {
+		say "@cmd";
+		$tried++;
+		next;
+	    }
+	    exec @cmd;
+	    die "$type man: $!\n";
 	}
-	exec @cmd;
-	die "$found_type man: $!\n";
+	return $tried ? 0 : 1;
     }
 
     @found = grep { !detect_optex($_) } @found;

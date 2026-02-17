@@ -19,7 +19,7 @@ name: Progress-Any-SIGHandler
 provides:
   Progress::Any::SIGHandler:
     file: lib/Progress/Any/SIGHandler.pm
-    version: '0.002'
+    version: '0.003'
 requires:
   Progress::Any: '0.219'
   Progress::Any::Output: '0'
@@ -31,7 +31,7 @@ resources:
   bugtracker: https://rt.cpan.org/Public/Dist/Display.html?Name=Progress-Any-SIGHandler
   homepage: https://metacpan.org/release/Progress-Any-SIGHandler
   repository: git://github.com/perlancar/perl-Progress-Any-SIGHandler.git
-version: '0.002'
+version: '0.003'
 x_Dist_Zilla:
   perl:
     version: '5.040002'
