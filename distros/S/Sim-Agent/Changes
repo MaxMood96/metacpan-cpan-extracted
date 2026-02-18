@@ -1,0 +1,4 @@
+0.006  2026-02-17
+  - Fix join example hooks and schema enforcement to avoid critic ping-pong.
+  - Add demo input CSV under examples/data.
+  - Add parser/compiler tests and packaging fixes.

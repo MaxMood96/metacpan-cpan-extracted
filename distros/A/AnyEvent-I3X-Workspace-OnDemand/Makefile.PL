@@ -10,11 +10,14 @@ my %WriteMakefileArgs = (
   "ABSTRACT" => "An I3 workspace loader",
   "AUTHOR" => "Wesley Schwengle <waterkip\@cpan.org>",
   "CONFIGURE_REQUIRES" => {
-    "ExtUtils::MakeMaker" => 0
+    "CPAN::Meta::Requirements" => "2.120620",
+    "ExtUtils::MakeMaker" => 0,
+    "Module::Metadata" => 0
   },
   "DISTNAME" => "AnyEvent-I3X-Workspace-OnDemand",
   "EXE_FILES" => [
     "bin/i3-ipc",
+    "bin/i3-status",
     "bin/i3-wod"
   ],
   "LICENSE" => "bsd",
@@ -28,10 +31,12 @@ my %WriteMakefileArgs = (
     "EV" => 0,
     "File::Spec::Functions" => 0,
     "Getopt::Long" => 0,
+    "JSON::XS" => 0,
     "List::Util" => 0,
     "Object::Pad" => 0,
     "Pod::Usage" => 0,
     "Proc::Find" => 0,
+    "Proc::ProcessTable" => 0,
     "X11::Protocol" => 0,
     "YAML::XS" => 0
   },
@@ -41,7 +46,7 @@ my %WriteMakefileArgs = (
     "IPC::Open3" => 0,
     "Test::More" => "0.96"
   },
-  "VERSION" => "0.006",
+  "VERSION" => "0.008",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -59,14 +64,19 @@ my %FallbackPrereqs = (
   "Getopt::Long" => 0,
   "IO::Handle" => 0,
   "IPC::Open3" => 0,
+  "JSON::XS" => 0,
   "List::Util" => 0,
   "Object::Pad" => 0,
   "Pod::Usage" => 0,
   "Proc::Find" => 0,
+  "Proc::ProcessTable" => 0,
   "Test::More" => "0.96",
   "X11::Protocol" => 0,
   "YAML::XS" => 0
 );
+
+# inserted by Dist::Zilla::Plugin::DynamicPrereqs 0.040
+requires('JSON::XS', '4.02') if has_module('JSON::XS', '4.01') or !defined has_module('JSON::XS', '4.01');
 
 
 unless ( eval { ExtUtils::MakeMaker->VERSION(6.63_03) } ) {
@@ -79,3 +89,39 @@ delete $WriteMakefileArgs{CONFIGURE_REQUIRES}
   unless eval { ExtUtils::MakeMaker->VERSION(6.52) };
 
 WriteMakefile(%WriteMakefileArgs);
+
+# inserted by Dist::Zilla::Plugin::DynamicPrereqs 0.040
+sub _add_prereq {
+  my ($mm_key, $module, $version_or_range) = @_;
+  $version_or_range ||= 0;
+  warn "$module already exists in $mm_key (at version $WriteMakefileArgs{$mm_key}{$module}) -- need to do a sane metamerge!"
+    if exists $WriteMakefileArgs{$mm_key}{$module}
+      and $WriteMakefileArgs{$mm_key}{$module} ne '0'
+      and $WriteMakefileArgs{$mm_key}{$module} ne $version_or_range;
+  warn "$module already exists in FallbackPrereqs (at version $FallbackPrereqs{$module}) -- need to do a sane metamerge!"
+    if exists $FallbackPrereqs{$module} and $FallbackPrereqs{$module} ne '0'
+        and $FallbackPrereqs{$module} ne $version_or_range;
+  $WriteMakefileArgs{$mm_key}{$module} = $FallbackPrereqs{$module} = $version_or_range;
+  return;
+}
+
+sub has_module {
+  my ($module, $version_or_range) = @_;
+  require Module::Metadata;
+  my $mmd = Module::Metadata->new_from_module($module);
+  return undef if not $mmd;
+  return $mmd->version($module) if not defined $version_or_range;
+
+  require CPAN::Meta::Requirements;
+  my $req = CPAN::Meta::Requirements->new;
+  $req->add_string_requirement($module => $version_or_range);
+  return 1 if $req->accepts_module($module => $mmd->version($module));
+  return 0;
+}
+
+sub requires { goto &runtime_requires }
+
+sub runtime_requires {
+  my ($module, $version_or_range) = @_;
+  _add_prereq(PREREQ_PM => $module, $version_or_range);
+}

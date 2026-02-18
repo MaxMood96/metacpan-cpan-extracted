@@ -1,6 +1,6 @@
 package App::chot;
 
-our $VERSION = "1.03";
+our $VERSION = "1.04";
 
 use v5.14;
 use warnings;
@@ -12,6 +12,7 @@ use Pod::Usage;
 use List::Util qw(any first);
 use App::chot::Util;
 use App::chot::Optex qw(detect_optex);
+use App::chot::Found;
 use Text::ParseWords qw(shellwords);
 
 use Getopt::EX::Hashed; {
@@ -30,6 +31,7 @@ use Getopt::EX::Hashed; {
     has number  => ' N !   ' , default => 0 ;
     has version => ' v     ' , action => sub { say "Version: $VERSION"; exit } ;
     has pager   => ' p =s  ' ;
+    has column  => ' C :i  ' ;
     has suffix  => '   =s  ' , default => [ qw( .pm ) ] ;
     has type    => ' t =s  ' , default => 'Command:Perl:Python:Ruby:Node' ;
     has py      => '       ' , action => sub { $_->type('Python') } ;
@@ -64,39 +66,49 @@ sub run {
     my @option = splice @ARGV;
     my $pager = $app->pager || $ENV{'CHOT_PAGER'} || _default_pager($app);
 
+    #
+    # Load and instantiate all finder objects once.
+    # Each finder gets the same $app, $name, and shared $found,
+    # and is reused across -i, main, and -m dispatch below.
+    #
+    my $found = App::chot::Found->new;
+    my @finders;  # [ [$type, $finder_obj], ... ]
+    for my $type (split /:+/, $app->type) {
+	$type = _normalize_type($type);
+	my $class = __PACKAGE__ . '::' . $type;
+	eval "require $class" or do { warn $@ if $app->debug; next };
+	push @finders, [
+	    $type,
+	    $class->new(app => $app, name => $name, found => $found),
+	];
+    }
+
+    # -i mode: print trace/resolution info and exit
     if ($app->info) {
-	for my $type (split /:+/, $app->type) {
-	    $type = _normalize_type($type);
-	    my $handler = __PACKAGE__ . '::' . $type;
-	    no strict 'refs';
-	    eval "require $handler" or next;
-	    if (defined &{"$handler\::get_info"}) {
-		&{"$handler\::get_info"}($app, $name);
-	    }
+	for my $pair (@finders) {
+	    my($type, $h) = @$pair;
+	    $h->get_info if $h->can('get_info');
 	}
 	return 0;
     }
 
+    #
+    # Main discovery loop: try each finder in order.
+    # Results are accumulated in $found so that later finders
+    # (e.g., Python) can use paths found by earlier ones (e.g., Command).
+    #
     my @found;
-    my @found_types;
-    for my $type (split /:+/, $app->type) {
-	$type = _normalize_type($type);
-	my $handler = __PACKAGE__ . '::' . $type;
-	warn "Trying handler: $type\n" if $app->debug;
-	no strict 'refs';
-	if (eval "require $handler") {
-	    my @paths = grep { defined } &{"$handler\::get_path"}($app, $name);
-	    if (@paths) {
-		warn "Found by $type: @paths\n" if $app->debug;
-		push @found, @paths;
-		$App::chot::_found_paths = [@found];
-		push @found_types, $type;
-		last if $app->one;
-	    } else {
-		warn "Not found by $type\n" if $app->debug;
-	    }
+    for my $pair (@finders) {
+	my($type, $h) = @$pair;
+	warn "Trying finder: $type\n" if $app->debug;
+	my @paths = grep { defined } $h->get_path;
+	if (@paths) {
+	    warn "Found by $type: @paths\n" if $app->debug;
+	    push @found, @paths;
+	    $found->add($type, @paths);
+	    last if $app->one;
 	} else {
-	    warn $@;
+	    warn "Not found by $type\n" if $app->debug;
 	}
     }
 
@@ -114,14 +126,18 @@ sub run {
 	return 0;
     }
 
+    #
+    # -m mode: try each finder's man_cmd in the order results were found.
+    # Finders return empty list to skip, allowing fallback to the next.
+    # Uses exec (not system) to preserve terminal/signal handling.
+    #
     if ($app->man) {
-	no strict 'refs';
+	my %finder_by_type = map { @$_ } @finders;
 	my $tried;
-	for my $type (@found_types) {
-	    my $handler = __PACKAGE__ . '::' . $type;
-	    next unless defined &{"$handler\::man_cmd"};
-	    my @cmd = &{"$handler\::man_cmd"}($app, $name, $found[0])
-		or next;
+	for my $type (@{$found->types}) {
+	    my $h = $finder_by_type{$type} or next;
+	    next unless $h->can('man_cmd');
+	    my @cmd = $h->man_cmd or next;
 	    if ($app->dryrun) {
 		say "@cmd";
 		$tried++;
@@ -152,6 +168,10 @@ sub run {
 	}
     }
     my @cmd = (shellwords($pager), @pager_opts, @option, @found);
+    if (defined(my $col = $app->column)) {
+	@cmd = grep { $_ ne '--force-colorization' } @cmd;
+	unshift @cmd, 'nup', '-e', ($col ? ("-C$col") : ());
+    }
     if ($app->dryrun) {
 	say "@cmd";
 	return 0;

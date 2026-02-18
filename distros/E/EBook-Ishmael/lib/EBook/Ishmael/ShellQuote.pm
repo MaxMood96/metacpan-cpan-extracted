@@ -1,19 +1,51 @@
 package EBook::Ishmael::ShellQuote;
 use 5.016;
-our $VERSION = '1.09';
+our $VERSION = '2.00';
 use strict;
 use warnings;
 
 use Exporter 'import';
-our @EXPORT_OK = qw(shell_quote);
+our @EXPORT_OK = qw(shell_quote command_quote safe_qx);
+
+my $IS_WIN = $^O eq 'MSWin32';
 
 sub shell_quote {
 
     my ($str) = @_;
 
-    $str =~ s/([\$`"\\\n])/\\$1/g;
+    if ($IS_WIN) {
+        $str =~ s/(\\*)(?="|\z)/$1$1/g;
+        $str =~ s/"/\\"/g;
+        return $str;
+    } else {
+        $str =~ s/([\$`"\\\n])/\\$1/g;
+        return qq{"$str"};
+    }
 
-    return qq{"$str"};
+}
+
+sub command_quote {
+
+    my ($str) = @_;
+
+    if ($IS_WIN) {
+        return shell_quote($str);
+    } else {
+        return shell_quote($str);
+    }
+
+}
+
+sub safe_qx {
+
+    my ($program, @args) = @_;
+
+    open my $fh, '-|', $program, @args
+        or do { $? = -1; return undef };
+    my $output = do { local $/; <$fh> };
+    close $fh;
+
+    return $output;
 
 }
 
@@ -47,6 +79,16 @@ Returns the double-quote-quotted version of the given string. Characters like
 C<$>, C<`>, and C<"> will be escaped via a backslash, and the string will be
 wrapped in double quotes.
 
+=item $quoted = command_quote($string)
+
+Returns quoted version of the given string suitable for using as shell command.
+
+=item $output = safe_qx($program, [ @args ])
+
+Runs the given C<$program> with arguments C<@args> using the C<qx//> operator
+and returns the output. The program name and arguments are quoted to prevent
+unexpected word-splitting.
+
 =back
 
 =head1 AUTHOR
@@ -59,7 +101,7 @@ requests are welcome!
 
 =head1 COPYRIGHT
 
-Copyright (C) 2025 Samuel Young
+Copyright (C) 2025-2026 Samuel Young
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

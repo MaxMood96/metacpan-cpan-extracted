@@ -5,12 +5,13 @@ LICENSE
 META.json
 README.md
 cpanfile
+docs/plans/2026-02-16-greple-md-implementation.md
+docs/plans/2026-02-16-greple-md-module-design.md
 images/3-column.png
 images/manual.png
 lib/App/mdee.pm
 minil.toml
 script/mdee
-share/theme/default.sh
 share/theme/hashed.sh
 share/theme/warm.sh
 t/00_compile.t

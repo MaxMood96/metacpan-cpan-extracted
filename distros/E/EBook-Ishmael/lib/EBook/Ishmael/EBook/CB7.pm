@@ -1,6 +1,6 @@
 package EBook::Ishmael::EBook::CB7;
 use 5.016;
-our $VERSION = '1.09';
+our $VERSION = '2.00';
 use strict;
 use warnings;
 
@@ -8,11 +8,17 @@ use parent 'EBook::Ishmael::EBook::CB';
 
 use File::Which;
 
-use EBook::Ishmael::ShellQuote qw(shell_quote);
+use EBook::Ishmael::ShellQuote qw(safe_qx);
 
 my $MAGIC = pack "C*", 0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c;
 
-my $SZIP = which('7z') // which('7za');
+my $SZIP;
+for my $b (qw(7z 7za)) {
+    if (defined which($b)) {
+        $SZIP = $b;
+        last;
+    }
+}
 
 our $CAN_TEST = defined $SZIP;
 
@@ -39,10 +45,7 @@ sub _un7zip {
         die "Cannot un-7zip $zip; 7z not installed\n";
     }
 
-    my $qout = shell_quote("-o$out");
-    my $qzip = shell_quote($zip);
-    qx/$SZIP x $qout $qzip/;
-
+    safe_qx($SZIP, 'x', "-o$out", $zip);
     unless ($? >> 8 == 0) {
         die "Failed to run '$SZIP' on $zip\n";
     }

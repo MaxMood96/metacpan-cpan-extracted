@@ -1,6 +1,6 @@
 package EBook::Ishmael::EBook::HTML;
 use 5.016;
-our $VERSION = '1.09';
+our $VERSION = '2.00';
 use strict;
 use warnings;
 
@@ -12,17 +12,6 @@ use XML::LibXML;
 use EBook::Ishmael::EBook::Metadata;
 
 my $XHTML_NS = 'http://www.w3.org/1999/xhtml';
-
-my %META_ITEMS = (
-    'dc.title'         => 'title',
-    'dc.language'      => 'language',
-    'dcterms.modified' => 'modified',
-    'dc.creator'       => 'author',
-    'dc.subject'       => 'genre',
-    'dcterms.created'  => 'created',
-    'generator'        => 'software',
-    'description'      => 'description',
-);
 
 sub heuristic {
 
@@ -48,9 +37,9 @@ sub _read_metadata {
     my ($ns) = $self->{_dom}->findnodes('/html/@xmlns');
 
     if (defined $ns and $ns->value eq $XHTML_NS) {
-        $self->{Metadata}->format([ 'XHTML' ]);
+        $self->{Metadata}->set_format('XHTML');
     } else {
-        $self->{Metadata}->format([ 'HTML' ]);
+        $self->{Metadata}->set_format('HTML');
     }
     my ($head) = $self->{_dom}->findnodes('/html/head');
 
@@ -62,25 +51,47 @@ sub _read_metadata {
 
     if (defined $title) {
         my $str = $title->textContent =~ s/\s+/ /gr;
-        $self->{Metadata}->title([ $str ]);
+        $self->{Metadata}->set_title($str);
     }
 
     for my $n ($head->findnodes('./meta')) {
-
-        my $name = $n->getAttribute('name') // '';
-        next unless exists $META_ITEMS{ $name };
-        my $cont = $n->getAttribute('content') or next;
-
-        my $method = $META_ITEMS{ $name };
-
-        push @{ $self->{Metadata}->$method }, $cont;
-
+        my $name = $n->getAttribute('name');
+        if (not defined $name) {
+            next;
+        }
+        my $content = $n->getAttribute('content');
+        if (not defined $content) {
+            next;
+        }
+        if ($name eq 'dc.title') {
+            $self->{Metadata}->set_title($content);
+        } elsif ($name eq 'dc.language') {
+            $self->{Metadata}->add_language($content);
+        } elsif ($name eq 'dcterms.modified') {
+            my $t = guess_time($content);
+            if (defined $t) {
+                $self->{Metadata}->set_modified($t);
+            }
+        } elsif ($name eq 'dc.creator') {
+            $self->{Metadata}->add_author($content);
+        } elsif ($name eq 'dc.subject') {
+            $self->{Metadata}->add_genre($content);
+        } elsif ($name eq 'dcterms.created') {
+            my $t = guess_time($content);
+            if (defined $t) {
+                $self->{Metadata}->set_created($t);
+            }
+        } elsif ($name eq 'generator') {
+            $self->{Metadata}->set_software($content);
+        } elsif ($name eq 'description') {
+            $self->{Metadata}->set_description($content);
+        }
     }
 
     my ($lang) = $self->{_dom}->findnodes('/html/@lang');
 
-    if (defined $lang and !@{ $self->{Metadata}->language }) {
-        $self->{Metadata}->language([ $lang->value ]);
+    if (defined $lang and not defined $self->{Metadata}->language) {
+        $self->{Metadata}->add_language($lang->value);
     }
 
 
@@ -116,8 +127,8 @@ sub new {
 
     $self->_read_metadata;
 
-    unless (@{ $self->{Metadata}->title }) {
-        $self->{Metadata}->title([ (fileparse($file, qr/\.[^.]*/))[0] ]);
+    if (not defined $self->{Metadata}->title) {
+        $self->{Metadata}->set_title((fileparse($file, qr/\.[^.]*/))[0]);
     }
 
     return $self;
@@ -176,7 +187,7 @@ sub metadata {
 
     my $self = shift;
 
-    return $self->{Metadata}->hash;
+    return $self->{Metadata};
 
 }
 

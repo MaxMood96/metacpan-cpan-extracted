@@ -1,6 +1,6 @@
 package EBook::Ishmael::EBook::Mobi;
 use 5.016;
-our $VERSION = '1.09';
+our $VERSION = '2.00';
 use strict;
 use warnings;
 
@@ -12,6 +12,7 @@ use EBook::Ishmael::Decode qw(palmdoc_decode);
 use EBook::Ishmael::ImageID;
 use EBook::Ishmael::PDB;
 use EBook::Ishmael::MobiHuff;
+use EBook::Ishmael::Time qw(guess_time);
 
 # Many thanks to Tommy Persson, the original author of mobi2html, a script
 # which much of this code is based off of.
@@ -25,18 +26,6 @@ my $CREATOR = 'MOBI';
 my $RECSIZE = 4096;
 
 my $NULL_INDEX = 0xffffffff;
-
-my %EXTH_RECORDS = (
-    100 => sub { author      => shift },
-    101 => sub { contributor => shift },
-    103 => sub { description => shift },
-    104 => sub { id          => shift },
-    105 => sub { genre       => shift },
-    106 => sub { created     => shift },
-    108 => sub { contributor => shift },
-    114 => sub { format      => "MOBI " . shift },
-    524 => sub { language    => shift },
-);
 
 sub heuristic {
 
@@ -555,13 +544,21 @@ sub _read_exth {
     my $self = shift;
     my $exth = shift;
 
-    # Special exth handlers that do not handle normal metadata.
-    my %special = (
+    my %exth_records = (
+        100 => sub { $self->{Metadata}->add_author(shift) },
+        101 => sub { $self->{Metadata}->add_contributor(shift) },
+        103 => sub { $self->{Metadata}->set_description(shift) },
+        104 => sub { $self->{Metadata}->set_id(shift) },
+        105 => sub { $self->{Metadata}->add_genre(shift) },
+        106 => sub { $self->{Metadata}->set_created(guess_time(shift)) },
+        108 => sub { $self->{Metadata}->add_contributor(shift) },
+        114 => sub { $self->{Metadata}->set_format('MOBI ' . shift) },
         201 => sub {
-            defined $self->{_imgrec}
-                ? $self->{_coverrec} = $self->{_imgrec} + unpack "N", $_[0]
-                : undef
+            if (defined $self->{_imgrec}) {
+                $self->{_coverrec} = $self->{_imgrec} + unpack "N", shift;
+            }
         },
+        524 => sub { $self->{Metadata}->add_language(shift) },
     );
 
     my ($doctype, $len, $items) = unpack "a4 N N", $exth;
@@ -574,11 +571,8 @@ sub _read_exth {
         my $contlen = $size - 8;
         my ($id, undef, $content) = unpack "N N a$contlen", substr $exth, $pos;
 
-        if (exists $EXTH_RECORDS{ $id }) {
-            my ($k, $v) = $EXTH_RECORDS{ $id }->($content);
-            push @{ $self->{Metadata}->$k }, $v;
-        } elsif (exists $special{ $id }) {
-            $special{ $id }->($content);
+        if (exists $exth_records{ $id }) {
+            $exth_records{ $id }->($content);
         }
 
         $pos += $size;
@@ -740,20 +734,20 @@ sub new {
         undef $self->{_coverrec};
     }
 
-    $self->{Metadata}->title([ substr $hdr, $toff, $tlen ]);
+    $self->{Metadata}->set_title(substr $hdr, $toff, $tlen);
 
-    unless (@{ $self->{Metadata}->created }) {
-        $self->{Metadata}->created([ scalar gmtime $self->{_pdb}->cdate ]);
+    if (not defined $self->{Metadata}->created) {
+        $self->{Metadata}->set_created($self->{_pdb}->cdate);
     }
 
     if ($self->{_pdb}->mdate) {
-        $self->{Metadata}->modified([ scalar gmtime $self->{_pdb}->mdate ]);
+        $self->{Metadata}->set_modified($self->{_pdb}->mdate);
     }
 
     if ($self->{_version} == 8) {
-        $self->{Metadata}->format([ 'KF8' ]);
-    } elsif (!@{ $self->{Metadata}->format }) {
-        $self->{Metadata}->format([ 'MOBI' ]);
+        $self->{Metadata}->set_format('KF8');
+    } elsif (not defined $self->{Metadata}->format) {
+        $self->{Metadata}->set_format('MOBI');
     }
 
     return $self;
@@ -884,7 +878,7 @@ sub metadata {
 
     my $self = shift;
 
-    return $self->{Metadata}->hash;
+    return $self->{Metadata};
 
 }
 

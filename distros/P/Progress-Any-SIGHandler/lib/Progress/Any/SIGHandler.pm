@@ -10,7 +10,7 @@ use Progress::Any::Output ();
 our $AUTHORITY = 'cpan:PERLANCAR'; # AUTHORITY
 our $DATE = '2025-10-30'; # DATE
 our $DIST = 'Progress-Any-SIGHandler'; # DIST
-our $VERSION = '0.003'; # VERSION
+our $VERSION = '0.004'; # VERSION
 
 our $Template  = 'Progress: %P/%T (%6.2p%%), %R';
 our $Signal    = 'USR1';
@@ -23,6 +23,9 @@ sub import {
     #}
     if (defined(my $val = delete $args{template})) {
         $Template = $val;
+    }
+    if (defined(my $val = delete $args{signal})) {
+        $Signal = $val;
     }
 
     die "Unknown import argument(s): " . join(", ", sort keys %args)
@@ -62,7 +65,7 @@ Progress::Any::SIGHandler - Add signal handler so your process can report progre
 
 =head1 VERSION
 
-This document describes version 0.003 of Progress::Any::SIGHandler (from Perl distribution Progress-Any-SIGHandler), released on 2025-10-30.
+This document describes version 0.004 of Progress::Any::SIGHandler (from Perl distribution Progress-Any-SIGHandler), released on 2025-10-30.
 
 =head1 SYNOPSIS
 

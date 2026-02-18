@@ -65,12 +65,12 @@ is(
 );
 
 is_deeply(
-    $ebook->metadata,
+    $ebook->metadata->hash,
     {
-        Title => [ 'GNU General Public License' ],
-        Created => [ scalar gmtime $ebook->{_pdb}->cdate ],
-        Modified => [ scalar gmtime $ebook->{_pdb}->mdate ],
-        Format => [ 'zTXT 1.42' ],
+        Title => 'GNU General Public License',
+        Created => $ebook->{_pdb}->cdate,
+        Modified => $ebook->{_pdb}->mdate,
+        Format => 'zTXT 1.42',
     },
     "metadata ok"
 );

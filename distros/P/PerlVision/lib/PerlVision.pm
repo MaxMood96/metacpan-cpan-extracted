@@ -1,20 +1,18 @@
 # -*-cperl-*-
 #
 # PerlVision -  Text-mode User Interface Widgets.
-# Copyright (c) 1995-2000 Ashish Gulhati <hash@netropolis.org>
+# Copyright (c) Ashish Gulhati <perlvision at hash.neo.email>
 #
-# All rights reserved. This code is free software; you can
-# redistribute it and/or modify it under the same terms as Perl
-# itself.
-#
-# $Id: PV.pm,v 1.5 2000/10/31 08:06:08 cvs Exp $
+# $Id: lib/PerlVision.pm v1.508 Tue Feb 17 13:55:44 EST 2026 $
 
 use 5.000;
-package PV;
+
+package PerlVision;
+
 use Curses;
 use vars qw ( $VERSION );
 
-( $VERSION ) = '$Revision: 1.5 $' =~ /\s+([\d\.]+)/;
+our ( $VERSION ) = '$Revision: 1.508 $' =~ /\s+([\d\.]+)/;
 
 sub init {			# Sets things up
   initscr();
@@ -36,45 +34,6 @@ sub init {			# Sets things up
 
 sub done {
   endwin();
-}
-
-sub mybox {			# Draws your basic 3D box.
-  my ($x1,$y1,$x2,$y2,$style,$color,$window)=@_;
-  my $lines=$x2-$x1;
-  my $j;
-  my ($TOPL,$BOTR);
-  if ($style) {$TOPL=1; $BOTR=0}
-  else {$TOPL=0; $BOTR=1}
-  move ($window,$y1,$x1); 
-  attron ($window,COLOR_PAIR(1+$TOPL+$color*2));
-  $TOPL ? attron ($window,A_BOLD) : attroff ($window,A_BOLD);
-  addch ($window,ACS_ULCORNER); hline ($window,ACS_HLINE, $lines-1); 
-  attron ($window,COLOR_PAIR(1+$BOTR+$color*2));
-  $BOTR ? attron ($window,A_BOLD) : attroff ($window,A_BOLD);
-  move ($window,$y1,$x1+$lines); 
-  addch ($window,ACS_URCORNER); 
-  move ($window,$y1+1,$x1);
-  attron ($window,COLOR_PAIR(1+$TOPL+$color*2));
-  $TOPL ? attron ($window,A_BOLD) : attroff ($window,A_BOLD);
-  vline ($window,ACS_VLINE, $y2-$y1-1);
-  move ($window,$y1+1,$x1+$lines);
-  attron ($window,COLOR_PAIR(1+$BOTR+$color*2));
-  $BOTR ? attron ($window,A_BOLD) : attroff ($window,A_BOLD);
-  vline ($window,ACS_VLINE, $y2-$y1-1);
-  move ($window,$y2,$x1); 
-  attron ($window,COLOR_PAIR(1+$TOPL+$color*2));
-  $TOPL ? attron ($window,A_BOLD) : attroff ($window,A_BOLD);
-  addch ($window,ACS_LLCORNER); 
-  attron ($window,COLOR_PAIR(1+$BOTR+$color*2));
-  $BOTR ? attron ($window,A_BOLD) : attroff ($window,A_BOLD);
-  hline ($window,ACS_HLINE, $lines-1);
-  move ($window,$y2,$x1+$lines); 
-  addch ($window,ACS_LRCORNER); 
-  for ($j=$y1+1; $j<$y2; $j++) {
-    move ($window,$j,$x1+1);
-    addstr ($window," " x ($lines-1));
-  }
-  attroff ($window,A_BOLD);
 }
 
 sub getkey {			# Gets a keystroke and returns a code
@@ -115,7 +74,7 @@ sub getkey {			# Gets a keystroke and returns a code
   }
   elsif ($key eq "\e") {
     $key = getch();
-    if ($key =~ /[WwBbFfIiQqVv<>DdXxHh]/) { # Meta keys
+    if ($key =~ /[ WwBbFfIiQqVv<>DdXxHh]/) { # Meta keys
       ($key =~ /[Qq]/) && ($keycode = 12);   # M-q
       ($key =~ /[Bb]/) && ($keycode = 13);   # M-b
       ($key =~ /[Dd]/) && ($keycode = 14);   # M-d
@@ -127,6 +86,7 @@ sub getkey {			# Gets a keystroke and returns a code
       ($key =~ /[Ff]/) && ($keycode = 20);   # M-f
       ($key =~ /[Ii]/) && ($keycode = 21);   # M-i
       ($key =~ /[Ww]/) && ($keycode = 22);   # M-w
+      ($key =~ / /) && ($keycode = 23);      # M-space
     }
     else {
       $keycode = 100;
@@ -138,7 +98,46 @@ sub getkey {			# Gets a keystroke and returns a code
   return ($key, $keycode);
 }
 
-package PV::Static;		# Trivial static text class for dialog boxes
+sub _mybox {			# Draws a basic box.
+  my ($x1,$y1,$x2,$y2,$style,$color,$window)=@_;
+  my $lines=$x2-$x1;
+  my $j;
+  my ($TOPL,$BOTR);
+  if ($style) {$TOPL=1; $BOTR=0}
+  else {$TOPL=0; $BOTR=1}
+  move ($window,$y1,$x1); 
+  attron ($window,COLOR_PAIR(1+$TOPL+$color*2));
+  $TOPL ? attron ($window,A_BOLD) : attroff ($window,A_BOLD);
+  addch ($window,ACS_ULCORNER); hline ($window,ACS_HLINE, $lines-1); 
+  attron ($window,COLOR_PAIR(1+$BOTR+$color*2));
+  $BOTR ? attron ($window,A_BOLD) : attroff ($window,A_BOLD);
+  move ($window,$y1,$x1+$lines); 
+  addch ($window,ACS_URCORNER); 
+  move ($window,$y1+1,$x1);
+  attron ($window,COLOR_PAIR(1+$TOPL+$color*2));
+  $TOPL ? attron ($window,A_BOLD) : attroff ($window,A_BOLD);
+  vline ($window,ACS_VLINE, $y2-$y1-1);
+  move ($window,$y1+1,$x1+$lines);
+  attron ($window,COLOR_PAIR(1+$BOTR+$color*2));
+  $BOTR ? attron ($window,A_BOLD) : attroff ($window,A_BOLD);
+  vline ($window,ACS_VLINE, $y2-$y1-1);
+  move ($window,$y2,$x1); 
+  attron ($window,COLOR_PAIR(1+$TOPL+$color*2));
+  $TOPL ? attron ($window,A_BOLD) : attroff ($window,A_BOLD);
+  addch ($window,ACS_LLCORNER); 
+  attron ($window,COLOR_PAIR(1+$BOTR+$color*2));
+  $BOTR ? attron ($window,A_BOLD) : attroff ($window,A_BOLD);
+  hline ($window,ACS_HLINE, $lines-1);
+  move ($window,$y2,$x1+$lines); 
+  addch ($window,ACS_LRCORNER); 
+  for ($j=$y1+1; $j<$y2; $j++) {
+    move ($window,$j,$x1+1);
+    addstr ($window," " x ($lines-1));
+  }
+  attroff ($window,A_BOLD);
+}
+
+package PerlVision::Static;		# Static text class for dialog boxes
 use Curses;
 
 sub new {
@@ -150,15 +149,16 @@ sub new {
 
 sub place {
   my $self=shift;
-  my ($message,$x1,$y1,$x2,$y2)=@$self[1..5];
+  my @params = @{$self};
+  my ($message,$x1,$y1,$x2,$y2)=@params[1..5];
   my @message=split("\n",$message);
   my $width=$x2-$x1;
   my $depth=$y2-$y1;
   my $i=$y1;
-  attron ($$self[0],COLOR_PAIR(3));
+  attron ($params[0],COLOR_PAIR(3));
   foreach (@message[0..$depth]) {
-    move ($$self[0],$i,$x1);
-    addstr ($$self[0],substr ($_,0,$width));
+    move ($params[0],$i,$x1);
+    addstr ($params[0],substr ($_,0,$width));
     $i++;
   }
 }
@@ -169,11 +169,11 @@ sub display {
   refresh ($$self[0]);
 }
 
-package PV::Checkbox;
+package PerlVision::Checkbox;
 use Curses;
 
-sub new {			# Creates your basic check box
-  my $type = shift;		# $foo = new PV::Checkbox (Label,x,y,stat);
+sub new {			# Creates a check box
+  my $type = shift;		# $foo = new PerlVision::Checkbox (Label,x,y,stat);
   my @params = (stdscr,@_);		
   my $self = \@params;
   bless $self;
@@ -204,7 +204,7 @@ sub display {
   refresh ($$self[0]);
 }
 
-sub rfsh {			# Refreshes display of your check box
+sub rfsh {			# Refreshes display of check box
   my $self = shift;
   move ($$self[0],$$self[3],$$self[2]+1); 
   attron ($$self[0],COLOR_PAIR(3));
@@ -220,9 +220,9 @@ sub activate {			# Makes checkbox active
   $self->rfsh;
   # refresh_cursor();
   
-  while (@key = PV::getkey()) {
+  while (@key = PerlVision::getkey()) {
     
-    if ($key[1]==7) {	# UpArrow
+    if ($key[1]==7) {	        # UpArrow
       return 1;
     }
     elsif ($key[1]==8) {	# DnArrow
@@ -263,12 +263,12 @@ sub stat {			# Returns status of checkbox
   return $$self[4];
 }
 
-package PV::Radio;
+package PerlVision::Radio;
 use Curses;
-@ISA = (PV::Checkbox);
+@ISA = (PerlVision::Checkbox);
 
-sub new {			# Creates your basic radio button
-  my $type = shift;		# $foo = new PV::Radio (Label,x,y,stat);
+sub new {			# Creates a radio button
+  my $type = shift;		# $foo = new PerlVision::Radio (Label,x,y,stat);
   my @params = (stdscr,@_,0);
   my $self = \@params;
   bless $self;
@@ -299,7 +299,7 @@ sub display {
   refresh ($$self[0]);
 }
 
-sub rfsh {			# Refreshes display of your check box
+sub rfsh {			# Refreshes display of radio button
   my $self = shift;
   move ($$self[0],$$self[3],$$self[2]+1); 
   attron ($$self[0],COLOR_PAIR(3));
@@ -328,12 +328,12 @@ sub unselect {			# Turn radio button off
   $$self[4] = 0;
 }
 
-package PV::RadioG;
+package PerlVision::RadioG;
 use Curses;
 	    
-sub new {			# Creates your basic radio button group
-  my $type = shift;		# $foo = new PV::RadioG (rb1, rb2, rb3...)
-  my @params = @_;		# where rbn is of class PV::Radio
+sub new {			# Creates a radio button group
+  my $type = shift;		# $foo = new PerlVision::RadioG (rb1, rb2, rb3...)
+  my @params = @_;		# where each rbn is of class PerlVision::Radio
   my $self = \@params;
   my $i;
   bless $self;
@@ -381,11 +381,11 @@ sub stat {			# Returns label of selected radio button
   return undef;
 }
 
-package PV::Pushbutton;
+package PerlVision::Pushbutton;
 use Curses;
 
 sub new {			# Creates a basic pushbutton
-  my $type = shift;		# PV::Pushbutton ("Label",x1,y1);
+  my $type = shift;		# PerlVision::Pushbutton ("Label",x1,y1);
   my @params= (stdscr,@_);
   my $self = \@params;
   bless $self;
@@ -393,7 +393,7 @@ sub new {			# Creates a basic pushbutton
 
 sub place {
   my $self=shift;
-  PV::mybox(@$self[2..3],$$self[2]+length($$self[1])+3,$$self[3]+2,1,0,$$self[0]);
+  PerlVision::_mybox(@$self[2..3],$$self[2]+length($$self[1])+3,$$self[3]+2,1,0,$$self[0]);
   attron ($$self[0],COLOR_PAIR(1));
   move ($$self[0],$$self[3]+1,$$self[2]+2);
   addstr ($$self[0],$$self[1]);
@@ -407,7 +407,7 @@ sub display {
 
 sub press {
   my $self=shift;
-  PV::mybox(@$self[2..3],$$self[2]+length($$self[1])+3,$$self[3]+2,0,0,$$self[0]);
+  PerlVision::_mybox(@$self[2..3],$$self[2]+length($$self[1])+3,$$self[3]+2,0,0,$$self[0]);
   attron ($$self[0],COLOR_PAIR(1));
   move ($$self[0],$$self[3]+1,$$self[2]+2);
   addstr ($$self[0],$$self[1]);
@@ -427,9 +427,9 @@ sub active {
 sub activate {
   my $self=shift;
   $self->active;
-  while (@key = PV::getkey()) {
+  while (@key = PerlVision::getkey()) {
     
-    if ($key[1]==7) {	# UpArrow
+    if ($key[1]==7) {	        # UpArrow
       $self->display;
       return 1;
     }
@@ -465,29 +465,33 @@ sub activate {
   }
 }
 
-package PV::Cutebutton;
+package PerlVision::Cutebutton;
 use Curses;
-@ISA = (PV::Pushbutton);
+@ISA = (PerlVision::Pushbutton);
 
 sub new {			# A smaller, cuter pushbutton
-  my $type = shift;		# PV::Pushbutton ("Label",x1,y1);
+  my $type = shift;		# PerlVision::Pushbutton ("Label",x1,y1);
   my @params= (stdscr,@_);
   my $self = \@params;
   bless $self;
 }
 
 sub place {
-  my $self=shift;
-  attron ($$self[0],COLOR_PAIR(7));
+  my $self=shift;  
+  attron ($$self[0],COLOR_PAIR(5));
   addstr ($$self[0],$$self[3],$$self[2],"  ".$$self[1]." ");
-  attron ($$self[0],COLOR_PAIR(3));
+  attron ($$self[0],COLOR_PAIR(1));
   addch ($$self[0],ACS_VLINE);
-  attron ($$self[0],COLOR_PAIR(4));
+  attron ($$self[0],COLOR_PAIR(2));
   attron ($$self[0],A_BOLD);
+  move ($$self[0],$$self[3],$$self[2]);
+  attron ($$self[0],COLOR_PAIR(2));
+  attron ($$self[0],A_BOLD);
+  addch ($$self[0],ACS_VLINE);
   move ($$self[0],$$self[3]+1,$$self[2]);
   addch ($$self[0],ACS_LLCORNER);
   attroff ($$self[0],A_BOLD);
-  attron ($$self[0],COLOR_PAIR(3));
+  attron ($$self[0],COLOR_PAIR(1));
   hline ($$self[0],ACS_HLINE, length($$self[1])+2);
   addch ($$self[0],$$self[3]+1,$$self[2]+length($$self[1])+3,ACS_LRCORNER);
 }    
@@ -500,18 +504,22 @@ sub display {
 
 sub press {
   my $self=shift;
-  attron ($$self[0],COLOR_PAIR(3));
+  attron ($$self[0],COLOR_PAIR(1));
   addch ($$self[0],$$self[3],$$self[2],ACS_ULCORNER);
   hline ($$self[0],ACS_HLINE,length($$self[1])+2);
-  attron ($$self[0],COLOR_PAIR(4));
+  attron ($$self[0],COLOR_PAIR(2));
   attron ($$self[0],A_BOLD);
   addch ($$self[0],$$self[3],$$self[2]+length($$self[1])+3,ACS_URCORNER);
   move ($$self[0],$$self[3]+1,$$self[2]); 
-  attron ($$self[0],COLOR_PAIR(3));
+  attron ($$self[0],COLOR_PAIR(1));
   attroff ($$self[0],A_BOLD);
   addch ($$self[0],ACS_VLINE);
-  attron ($$self[0],COLOR_PAIR(7));
+  attron ($$self[0],COLOR_PAIR(5));
   addstr ($$self[0]," ".$$self[1]."  ");
+  move ($$self[0],$$self[3]+1,$$self[2]+length($$self[1])+3);
+  attron ($$self[0],COLOR_PAIR(2));
+  attron ($$self[0],A_BOLD);
+  addch ($$self[0],ACS_VLINE);
   refresh ($$self[0]);
 }
 
@@ -527,12 +535,12 @@ sub active {
   refresh ($$self[0]);
 }
 
-package PV::Plainbutton;
+package PerlVision::Plainbutton;
 use Curses;
-@ISA = (PV::Pushbutton);
+@ISA = (PerlVision::Pushbutton);
 
 sub new {			# A minimal pushbutton
-  my $type = shift;		# PV::Pushbutton ("Label",x1,y1);
+  my $type = shift;		# PerlVision::Pushbutton ("Label",x1,y1);
   my @params= (stdscr,@_);
   my $self = \@params;
   bless $self;
@@ -568,13 +576,13 @@ sub active {
   attroff ($$self[0],A_REVERSE);
 }
 
-package PV::_::SListbox;
+package PerlVision::_::SListbox;
 use Curses;
 
 sub new {			# Creates a superclass list box
-  my $type = shift;		# PV::_::SListbox (Head,top,x1,y1,x2,y2,list)
-  my $head = shift;
-  my @params = (stdscr,$head,0,@_);	# where list is (l1,s1,l2,s2,...)
+  my $type = shift;		# PerlVision::_::SListbox (Head,top,x1,y1,x2,y2,list)
+  my $head = shift;             # where list is (l1,s1,l2,s2,...)
+  my @params = (stdscr,$head,0, @_);	
   my $self = \@params;	        # Do not use from outside
   bless $self;
 }
@@ -705,7 +713,7 @@ sub activate {
   my $ypos=$y1;
   $self->rfsh($i);
   $self->highlight($y1,$i*2);
-  while (@key = PV::getkey()) {
+  while (@key = PerlVision::getkey()) {
     
     if ($key[1]==18) {	# Help
       $self->unhighlight($ypos,$i*2);
@@ -758,7 +766,7 @@ sub activate {
 
 sub draw_border {
   my $self = shift;
-  PV::mybox(@$self[3..6],0,1,$$self[0]);
+  PerlVision::_mybox(@$self[3..6],0,1,$$self[0]);
   attron ($$self[0],COLOR_PAIR(4));
   attron ($$self[0],A_BOLD);
   move ($$self[0],$$self[4],$$self[3]);
@@ -769,25 +777,25 @@ sub draw_border {
 sub select {
 }
 
-package PV::Listbox;
+package PerlVision::Listbox;
 use Curses;
-@ISA = (PV::_::SListbox);
+@ISA = (PerlVision::_::SListbox);
 
 sub new {			# Basic single selection listbox
-  my $type = shift;		# PV::Listbox (Head,x1,y1,x2,y2,list)
+  my $type = shift;		# PerlVision::Listbox (Head,x1,y1,x2,y2,list)
   my @params = @_;		# where list is (l1,s1,l2,s2,...)
-  my $self = new PV::_::SListbox(@params);
+  my $self = new PerlVision::_::SListbox(@params);
   bless $self;
 }
 
-package PV::Mlistbox;
+package PerlVision::Mlistbox;
 use Curses;
-@ISA = (PV::_::SListbox);
+@ISA = (PerlVision::_::SListbox);
 
 sub new {			# A multiple selection listbox
-  my $type = shift;		# PV::Mlistbox (Head,x1,y1,x2,y2,list)
+  my $type = shift;		# PerlVision::Mlistbox (Head,x1,y1,x2,y2,list)
   my @params = @_;		# where list is (l1,s1,l2,s2,...)
-  my $self = new PV::_::SListbox(@params);
+  my $self = new PerlVision::_::SListbox(@params);
   bless $self;
 }
 
@@ -845,20 +853,20 @@ sub done {
   $self->rfsh();
 }
 
-package PV::_::Pulldown;
+package PerlVision::_::Pulldown;
 use Curses;
-@ISA = (PV::_::SListbox);
+@ISA = (PerlVision::_::SListbox);
 
-sub new {			# A pulldown menu box. Used by PV::Menubar
+sub new {			# A pulldown menu box. Used by PerlVision::Menubar
   my $type = shift;		# Don't use from outside
   my @params = (@_);
-  my $self = new PV::_::SListbox(@params);
+  my $self = new PerlVision::_::SListbox(@params);
   bless $self;
 }
 
 sub draw_border {
   my $self = shift;
-  PV::mybox(@$self[3..6],1,0,$$self[0]);
+  PerlVision::_mybox(@$self[3..6],1,0,$$self[0]);
   move ($$self[0],$$self[4],$$self[3]);
   attron ($$self[0],COLOR_PAIR(2));
   attron ($$self[0],A_BOLD);
@@ -887,19 +895,19 @@ sub activate {
   my $self=shift;
   touchwin ($$self[0]);
   $self->display();
-  my $ret=$self->PV::_::SListbox::activate();
+  my $ret=$self->PerlVision::_::SListbox::activate();
   touchwin (stdscr);
   refresh(stdscr);
   return ($ret,$self->stat());
 }
 
-package PV::Menubar;		
+package PerlVision::Menubar;		
 use Curses;
 
 sub new {			# A menu bar with pulldowns
-  my $type=shift;		# new PV::Menubar(Head,width,depth,l,0,l,0,l,0,l,0,l);
+  my $type=shift;		# new PerlVision::Menubar(Head,width,depth,l,0,l,0,l,0,l,0,l);
   my @params=@_;
-  my $pulldown = new PV::_::Pulldown ($params[0],0,0,$params[1],$params[2],
+  my $pulldown = new PerlVision::_::Pulldown ($params[0],0,0,$params[1],$params[2],
 				      @params[3..$#params],1);
   my $panel = newwin ($params[2]+1,$params[1]+1,2,1);
   $$pulldown[0] = $panel;
@@ -910,7 +918,7 @@ sub new {			# A menu bar with pulldowns
 sub add {			# Add a pulldown to the menubar
   my $self=shift;		# $foo->add(Head,width,depth,l,0,l,0,l,0,l,0,l);
   my @params=@_;
-  my $pulldown = new PV::_::Pulldown ($params[0],0,0,$params[1],$params[2],
+  my $pulldown = new PerlVision::_::Pulldown ($params[0],0,0,$params[1],$params[2],
 				      @params[3..$#params],0);
   my $startoff = $$self[$#$self] + length ($$self[$#$self-1][1]) + 4;
   my $panel = newwin ($params[2]+1,$params[1]+1,2,$startoff-2);
@@ -947,7 +955,7 @@ sub activate {
   my @key;
   my @ret;
   $self->highlight($i);
-  while (@key = PV::getkey()) {
+  while (@key = PerlVision::getkey()) {
     
     if ($key[1]==18) {	# Help
       $self->unhighlight($i);
@@ -1003,7 +1011,8 @@ sub activate {
 sub place {
   my $self=shift;
   my ($i);
-  PV::mybox (1,0,78,2,1,0,stdscr);
+  my ($height,$width); getmaxyx($height, $width);
+  PerlVision::_mybox (1,0,$width-2,2,1,0,stdscr);
   for ($i=0; $i <= ($#$self-1)/2; $i++) {
     move (1,$$self[$i*2+1]);
     addstr ($$self[$i*2][1]);
@@ -1016,11 +1025,11 @@ sub display {
   refresh();
 }
 
-package PV::Entryfield;
+package PerlVision::Entryfield;
 use Curses;
 
-sub new {			# Creates your basic text entry field
-  my $type = shift;		# new PV::Entryfield(x,y,len,start,label,value);
+sub new {			# Creates a text entry field
+  my $type = shift;		# new PerlVision::Entryfield(x,y,len,start,label,value);
   my @params = (stdscr,@_);
   my $self = \@params;
   bless $self;
@@ -1031,9 +1040,9 @@ sub place {
   my $start = shift;
   my ($x,$y,$len,$max,$label,$value)=@$self[1..6];
   move ($$self[0],$y,$x); 
-  attron ($$self[0],COLOR_PAIR(3));
+  attron ($$self[0],COLOR_PAIR(1));
   addstr ($$self[0],$label." "); 
-  attron ($$self[0],COLOR_PAIR(6));
+  attron ($$self[0],COLOR_PAIR(4));
   attron ($$self[0],A_BOLD);
   addstr ($$self[0]," ");
   addstr ($$self[0],substr($value,$start,$len)); 
@@ -1055,7 +1064,7 @@ sub rfsh {
   my ($x,$y,$len,$oldstart,$label,$value)=@$self[1..6];
   if ($oldstart == $start) {
     move ($$self[0],$y,$x+length($label)+2+$i-$start); 
-    attron ($$self[0],COLOR_PAIR(6));
+    attron ($$self[0],COLOR_PAIR(4));
     attron ($$self[0],A_BOLD);
     addstr ($$self[0],substr($value,$i,$len-($i-$start))); 
     addstr ($$self[0],"." x ($len-($i-$start)-length(substr($value,$i,$len)))); 
@@ -1064,7 +1073,7 @@ sub rfsh {
   else {
     $$self[4]=$start;
     move ($$self[0],$y,$x+length($label)+2); 
-    attron ($$self[0],COLOR_PAIR(6));
+    attron ($$self[0],COLOR_PAIR(4));
     attron ($$self[0],A_BOLD);
     addstr ($$self[0],substr($value,$start,$len)); 
     addstr ($$self[0],"." x ($len - length(substr($value,$start,$len)))); 
@@ -1083,9 +1092,9 @@ sub activate {			# Makes entryfield active
   $self->rfsh($start,$i);
   move ($$self[0],$y,$x);
   refresh ($$self[0]);
-  while (@key = PV::getkey()) {
+  while (@key = PerlVision::getkey()) {
     
-    if ($key[1]==7) {	# UpArrow
+    if ($key[1]==7) {	        # UpArrow
       $self->rfsh(0,0);
       refresh ($$self[0]);
       return 1;
@@ -1197,12 +1206,12 @@ sub stat {
   return $$self[6];
 }
 
-package PV::Password;
+package PerlVision::Password;
 use Curses;
-@ISA = (PV::Entryfield);
+@ISA = (PerlVision::Entryfield);
 
-sub new {			# Creates your basic hidden text entry field
-  my $type = shift;		# new PV::Entryfield(x,y,len,max,label,value);
+sub new {			# Creates a password entry field
+  my $type = shift;		# new PerlVision::Entryfield(x,y,len,max,label,value);
   my @params = (stdscr,@_);
   my $self = \@params;
   bless $self;
@@ -1255,17 +1264,11 @@ sub rfsh {
   refresh ($$self[0]);
 }
 
-package PV::Combobox;
-use Curses;
-
-sub new {			# A basic combo-box
-}
-
-package PV::Viewbox;		
+package PerlVision::Viewbox;		
 use Curses;
 
 sub new {			# A readonly text viewer
-  my $type=shift;		# PV::Viewbox (x1,y1,x2,y2,text,top);
+  my $type=shift;		# PerlVision::Viewbox (x1,y1,x2,y2,text,top);
   my @params=(stdscr,@_,[],[]);
   my $self=\@params;
   $$self[5]=~s/[\r\0]//g;	# Strip nulls & DOShit.
@@ -1284,7 +1287,7 @@ sub place {
   my $lines=$y2-$y1-2;
   my $i=0;
   $y1++;
-  PV::mybox(@$self[1..4],0,1,$$self[0]);
+  PerlVision::_mybox(@$self[1..4],0,0,$$self[0]);
   $self->rfsh(1);
 }
 
@@ -1305,7 +1308,7 @@ sub rfsh {
   my $l;
   my $i=0;
   $y1++; my $len=0;
-  attron ($$self[0],COLOR_PAIR(3));
+  attron ($$self[0],COLOR_PAIR(1));
   foreach (@{$$self[7]}[$start..$start+$lines]) {
     unless ($$self[8][$i] eq $_) {
       move ($$self[0],$y1+$i,$x1+2);
@@ -1334,9 +1337,9 @@ sub activate {			# Makes viewer active
   $self->rfsh;
   move ($$self[0],$y2-1,$x2-1);
   refresh ($$self[0]);
-  while (@key = PV::getkey()) {
+  while (@key = PerlVision::getkey()) {
     
-    if ($key[1]==18) {	# Help
+    if ($key[1]==18) {	        # Help
       $self->rfsh;
       return 5;
     }
@@ -1380,11 +1383,11 @@ sub activate {			# Makes viewer active
   }
 }
 
-package PV::Editbox;
+package PerlVision::Editbox;
 use Curses;
 
-sub new {			# More or less a complete editor
-  my $type=shift;		# PV::Editbox (x1,y1,x2,y2,m,text,index,top);
+sub new {			# A multi-line text edit box
+  my $type=shift;		# PerlVision::Editbox (x1,y1,x2,y2,m,text,index,top);
   my @params=(stdscr,@_,[],[],0);
   my $self=\@params;
   $$self[6]=~s/[\r\0]//g;	# Strip nulls & DOShit.
@@ -1401,7 +1404,7 @@ sub place {
   my $lines=$y2-$y1-2;
   my $i=0;
   $y1++;
-  PV::mybox(@$self[1..4],0,1,$$self[0]);
+  PerlVision::_mybox(@$self[1..4],0,1,$$self[0]);
   $self->rfsh(1);
 }
 
@@ -1646,9 +1649,9 @@ sub activate {			# Makes editbox active
   my ($col, $line, $len) = $self->cursor;
   refresh ($$self[0]);
   
-  while (@key = PV::getkey()) {
+  while (@key = PerlVision::getkey()) {
     
-    if ($key[1]==18) {	# Help
+    if ($key[1]==18) {	        # Help
       $self->rfsh;
       return 5;
     }
@@ -1664,7 +1667,7 @@ sub activate {			# Makes editbox active
       }
       elsif ($exitcode[0] == 2) {
       }
-      else {		# Now defaults for the editbox.
+      else {		        # Now defaults for the editbox.
 	if ($exitcode[0] == 3) {
 	  @key = @exitcode[1..2];
 	}
@@ -1682,7 +1685,7 @@ sub activate {			# Makes editbox active
 	(($key[1]==4) || (($key[0] eq "") && (!$key[1]))) && do {	# End
 	  $$self[7]+=(($self->cursor)[2] - (($self->cursor)[0]-1));
 	};
-	(($key[1]==5) || ($key[1]==15)) && do {	# PgUp
+	(($key[1]==5) || ($key[1]==15)) && do {	                        # PgUp
 	  $self->linemove (0,$y2-$y1-2);
 	};
 	(($key[1]==6) || (($key[0] eq "") && (!$key[1]))) && do {	# PgDown
@@ -1713,11 +1716,11 @@ sub activate {			# Makes editbox active
   }
 }
 
-package PV::Dialog;
+package PerlVision::Dialog;
 use Curses;
 
 sub new {			# The dialog box object
-  my $type=shift;		# PV::Dialog ("Label",x1,y1,x2,y2,style,color,
+  my $type=shift;		# PerlVision::Dialog ("Label",x1,y1,x2,y2,style,color,
   my @params=(0,@_);		#            Control1,1,2,3,4,5,6,7,8,
   my $self=\@params;		#            Control2,1,2,3,4,5,6,7,8,...)
   $$self[0] = newwin($$self[5]-$$self[3]+1,$$self[4]-$$self[2]+1,$$self[3]-1,$$self[2]-1);
@@ -1726,25 +1729,26 @@ sub new {			# The dialog box object
 
 sub display {
   my $self=shift;
-  PV::mybox (0,0,$$self[4]-$$self[2],$$self[5]-$$self[3],1,1,$$self[0]);
+  PerlVision::_mybox (0,0,$$self[4]-$$self[2],$$self[5]-$$self[3],1,0,$$self[0]);
   my $i=8;
   while ($i+7 < $#$self) {
     $$self[$i][0]=$$self[0];
     ($$self[$i])->place;
     $i+=9;
   }
-  refresh($$self[0]);
+  refresh();
 }
 
 sub activate {
   my $self=shift;
+  my $nohide = shift;
   $self->display;
   my $i=1; my @last=();
   while ($i) {
     @last=($i,($$self[8+(($i-1)*9)]->activate));
     $i=$$self[8+(($i-1)*9)+$last[1]];
   }
-  $self->hide;
+  $self->hide unless $nohide;
   refresh($$self[0]);
   return (@last);
 }
@@ -1755,19 +1759,21 @@ sub hide {
   refresh(stdscr);
 }
 
-package PV::PVD;		# Two commonly needed dialog box types
+package PerlVision::PVD;		# Three commonly needed dialog box types
+use Curses;
 
 sub message {
   my ($message,$width,$depth)=@_;
   ($width<11) && ($width=11);
   $depth+=4;
-  my $x1=int ((80-$width)/2);
-  my $y1=4 + int ((19-$depth)/2);
+  my ($maxheight,$maxwidth); getmaxyx($maxheight, $maxwidth);
+  my $x1=int (($maxwidth-$width)/2);
+  my $y1=4 + int (($maxheight - $depth)/2);
   my $x2=$x1+$width;
   my $y2=$y1+$depth;
-  my $static=new PV::Static($message,2,1,$x2-$x1,$y2-$y1-4);
-  my $ok = new PV::Cutebutton(" OK ",int($width/2)-3,$y2-$y1-2);
-  my $dialog = new PV::Dialog ("",$x1,$y1,$x2,$y2,1,1,
+  my $static=new PerlVision::Static($message,2,1,$x2-$x1,$y2-$y1-4);
+  my $ok = new PerlVision::Cutebutton(" OK ",int($width/2)-3,$y2-$y1-2);
+  my $dialog = new PerlVision::Dialog ("",$x1,$y1,$x2,$y2,1,1,
 			       $ok,1,1,1,1,1,1,1,0,
 			       $static,0,0,0,0,0,0,0,0);
   $dialog->activate;
@@ -1775,22 +1781,49 @@ sub message {
 
 sub yesno {
   my ($message,$width,$depth)=@_;
+  my ($maxheight,$maxwidth); getmaxyx($maxheight, $maxwidth);
   my @message=split("\n",$message);
   ($width<21) && ($width=21);
   $depth+=4;
-  my $x1=int ((80-$width)/2);
-  my $y1=4 + int ((19-$depth)/2);
+  my $x1=int (($maxwidth-$width)/2);
+  my $y1=int (($maxheight-$depth)/2);
   my $x2=$x1+$width;
-  my $y2=$y1+$depth;
-  my $static=new PV::Static($message,2,1,$x2-$x1,$y2-$y1-4);
-  my $yes = new PV::Cutebutton (" YES ",int($width/2)-9,$y2-$y1-2);
-  my $no = new PV::Cutebutton (" NO ",int($width/2)+2,$y2-$y1-2);
-  my $dialog = new PV::Dialog ("",$x1,$y1,$x2,$y2,1,1,
+  my $y2=$y1+$depth+2;
+  my $viewbox = new PerlVision::Viewbox(2,1,$width-2,$depth-2,$message,0);
+  my $static=new PerlVision::Static($message,2,1,$x2-$x1,$y2-$y1-4);
+  my $yes = new PerlVision::Cutebutton (" YES ",int($width/2)-9,$y2-$y1-2);
+  my $no = new PerlVision::Cutebutton (" NO ",int($width/2)+2,$y2-$y1-2);
+  my $dialog = new PerlVision::Dialog ("",$x1,$y1,$x2,$y2,1,1,
 			       $yes,1,1,2,1,1,1,2,0,
-			       $no,2,3,2,1,2,2,1,0,
-			       $static,0,0,0,0,0,0,0,0);
+			       $no,2,2,2,1,2,2,1,0,
+			       $viewbox,0,0,0,0,0,0,0,0);
   my $stat=($dialog->activate)[0];
   ($stat==2) && ($stat=0);
+  return $stat;
+}
+
+sub entry {
+  my ($message,$width,$depth,$entrysize,$nohide)=@_;
+  my ($maxheight,$maxwidth); getmaxyx($maxheight, $maxwidth);
+  my @message=split("\n",$message);
+  ($width<21) && ($width=21);
+  $depth+=5;
+  my $x1=int (($maxwidth-$width)/2+1);
+  my $y1=int (($maxheight-$depth)/2);
+  my $x2=$x1+$width;
+  my $y2=$y1+$depth+1;
+  my $viewbox = new PerlVision::Viewbox(2,1,$width-2,3,$message,0);
+  my $static=new PerlVision::Static($message,2,1,$x2-$x1,$y2-$y1-4);
+  my $entry = new PerlVision::Entryfield (($width-$entrysize)/2-2, 5, $entrysize, 256, " ", "");
+  my $yes = new PerlVision::Cutebutton ("  OK   ",int($width/2)-13,$y2-$y1-2);
+  my $no = new PerlVision::Cutebutton (" CANCEL ",int($width/2)+3,$y2-$y1-2);
+  my $dialog = new PerlVision::Dialog ("",$x1,$y1,$x2,$y2,1,1,
+			       $entry,1,2,1,1,1,1,2,2,
+			       $yes,1,2,3,1,2,2,3,0,
+			       $no,1,3,3,2,3,3,1,0,
+			       $viewbox,0,0,0,0,0,0,0,0);
+  my $stat=($dialog->activate($nohide))[0];
+  if ($stat==3) { $stat=0 } else { $stat = $entry->stat }
   return $stat;
 }
 
@@ -1804,262 +1837,316 @@ PerlVision - Text-mode User Interface Widgets.
 
 =head1 SYNOPSIS
 
-  use PV;
+  use PerlVision;
 
-  init PV;
+  init PerlVision;
 
-  my $foo = new PV::Static ("Text", $x1, $y1, $x2, $y2);
-  $foo->display;
+  my ($width, $height) = (50,1);
+  my $dialog = new PerlVision::PVD::yesno ("Yes or no?", $width, $height);
+  my $answer = $dialog->activate;
+
+  PerlVision::done;
 
 =head1 DESCRIPTION
 
-Once upon a time I needed a basic text-mode GUI framework to implement
-some nice-looking interfaces for the Linux console. Didn't find any
-around, so necessity became the mother of PerlVision, which kept
-growing as I kept adding more goodies, so now it's far from basic...
-
-PV provides 90% of the features you'd want for a user interface,
-including checkboxes, radiobuttons, three different styles (!) of
-pushbuttons, single and multiple selection listboxes, an extensible
-editbox, a scrollable viewbox, single line text entry fields, a
-menubar with pulldown menus, and full popup dialog boxes with multiple
-controls.
+PerlVision provides various text-mode user interface widgets,
+including checkboxes, radiobuttons, pushbuttons, single and multiple
+selection listboxes, an extensible editbox, a scrollable viewbox,
+single line text entry fields, a menubar with pulldown menus, and
+popup dialog boxes with multiple controls.
 
 =head1 CLASSES
 
-The following object classes are defined within PV:
+The following object classes are defined within PerlVision:
 
 =over 2
 
-=item B<PV::Static>
+=item L</PerlVision>
 
-A static text region, trivial class.
+Not a widget. Provides a few important class methods.
 
-=item B<PV::Checkbox>
+=item L</PerlVision::Static>
+
+A static text control.
+
+=item L</PerlVision::Checkbox>
 
 A single 2-state checkbox.
 
-=item B<PV::Radio>
+=item L</PerlVision::Radio>
 
 A single 2-state radiobutton.
 
-=item B<PV::RadioG>
+=item L</PerlVision::RadioG>
 
 A group of connected radiobuttons.
 
-=item B<PV::Listbox>
+=item L</PerlVision::Listbox>
 
 A single selection list box.
 
-=item B<PV::Mlistbox>
+=item L</PerlVision::Mlistbox>
 
 A multiple selection list box.
 
-=item B<PV::Entryfield>
+=item L</PerlVision::Entryfield>
 
 A single line text entry field.
 
-=item B<PV::Password>
+=item L</PerlVision::Password>
 
-A single line text entry field that *'s out what's typed.
+A single line text entry field that echoes '*' to conceal the input.
 
-=item B<PV::Menubar>
+=item L</PerlVision::Menubar>
 
 A top line menu bar with single-level pulldown submenus.
 
-=item B<PV::Combobox>
+=item L</PerlVision::Editbox>
 
-A combo box.
+A multi-line edit box.
 
-=item B<PV::Editbox>
-
-A multi line edit box.
-
-=item B<PV::Viewbox>
+=item L</PerlVision::Viewbox>
 
 A readonly viewer/pager for text files.
 
-=item B<PV::Pushbutton>
+=item L</PerlVision::Pushbutton>
 
-A push button that takes 3 lines of screen real estate.
+A push button that uses 3 lines of screen real estate.
 
-=item B<PV::Cutebutton>
+=item L</PerlVision::Cutebutton>
 
-A push button that takes 2 lines of screen real estate.
+A push button that uses 2 lines of screen real estate.
 
-=item B<PV::Plainbutton>
+=item L</PerlVision::Plainbutton>
 
 A no-frills button that fits on a single line.
 
-=item B<PV::Dialog>
+=item L</PerlVision::Dialog>
 
-A full dialog box with as many controls as you like.
+A dialog box with multiple controls.
 
 =back
 
-=over 2
+=head1 NOTES
 
-=item *
+=over
+
+=item Internal Classes
 
 Other classes are defined for internal use by PerlVision and should
-not be used from outside. Also, see below why use of the PV::Radio
+not be used from outside. Also, see below why use of the C<PerlVision::Radio>
 control is limited from outside.
 
-=item * 
+=item Constructors
 
-Constructors for all the classes are called new().
+Constructors for all the classes are called C<new>.
 
-=item * 
+=item Instance Data
 
-All classes expect that you will not fiddle with the object's data
+All classes expect that you will not access the object's data
 yourself.
 
-=item * 
+=item The C<activate> method
 
-All nontrivial controls (except PV::RadioG, see below) have an
-activate() method. It makes the control active, and returns when any
-traditional shift focus key is pressed - see the section on PV::Dialog
-for more details.
+Most controls (except C<PerlVision::Static> and C<PerlVision::RadioG>, see below) have
+an C<activate> method. It makes the control active, and returns when
+any traditional shift focus key is pressed. See the section on
+C<PerlVision::Dialog> for more details.
 
-=item * 
+=item The C<stat> method
 
-All nontrivial controls have a stat() method, which returns the status
-of the control (checked, unchecked, text, whatever).
+All controls other than C<PerlVision::Static> have a C<stat> method, which
+returns the status of the control (checked, unchecked, text,
+whatever).
+
+=item Widget positioning
+
+The C<$x> and C<$y> arguments for all widgets are the X and Y
+co-ordinates to place the control, relative to the origin (top left)
+of the dialog box that contains the control.
 
 =back
 
-=head1 PV::Static
+=head1 CLASS INTERFACES
 
-  my $foo = new PV::Static ("Text", $x1, $y1, $x2, $y2);
+=over
 
-This is the trivial text region control. It's there mainly so you can
-put static text in dialog boxes. It doesn't have an activate() or
-stat() method.
+=item B<PerlVision>
 
-  $foo->display;      # Displays the widget.  
+Provides some helper methods
+
+=over
+
+=item B<init>
+
+Initializes PerlVision. Call this before creating any widgets.
+
+  init PerlVision;
+
+=item B<done>
+
+Call this before exiting.
+
+  PerlVision::done;
+
+=item B<getkey>
+
+Wait for a keypress and return the key and a keycode.
+
+  my ($key, $keycode) = PerlVision::getkey;
+
+C<$key> will contain the actual key pressed, whereas C<$keycode> will
+contain a key code if the key is a special key recognized by
+PerlVision. A list of keycodes can be found in the source of the
+C<getkey> method.
+
+=back
+
+=item B<PerlVision::Static>
+
+A static text control.
+
+  my $static = new PerlVision::Static ("Text", $x1, $y1, $x2, $y2);
+
+This control displays static text in dialog boxes. It doesn't have an
+C<activate> or C<stat> method.
+
+  $static->display;      # Displays the widget.  
 
 If your text doesn't fit in the space you allocate, it'll be
 truncated. It's also your responsibility to provide line breaks if you
 don't want all the text to be thought of as a single line.
 
-=head1 PV::Checkbox
+=item B<PerlVision::Checkbox>
 
-  my $foo = new PV::Checkbox ("Label", $x, $y, $stat);
+A single 2-state checkbox.
 
-Arguments $x and $y are the X and Y co-ordinates to place the control.
-$stat is 1 if the Checkbox is checked, 0 if not. "Label" is printed on
-the left of the checkbox.
+  my $checkbox = new PerlVision::Checkbox ("Label", $x, $y, $stat);
 
-  $foo->display;      # Displays checkbox.
-  $foo->activate;     # Gives it focus. Exits on 1,2,3,4,5,6,7 codes.
-  $foo->select;	      # Toggles status.
-  $foo->stat;	      # Returns status. (1 checked, 0 unchecked)
+Set C<$stat> to 1 if the Checkbox should be checked by default, 0 if
+not. C<"Label"> is printed to the right of the checkbox.
 
-=head1 PV::Radio
+  $checkbox->display;    # Displays checkbox.
+  $checkbox->activate;   # Gives it focus. Exits on 1,2,3,4,5,6,7 codes.
+  $checkbox->select;     # Toggles status.
+  $checkbox->stat;       # Returns status. (1 checked, 0 unchecked)
 
-  my $foo = new PV::Radio ("Label", $x, $y, $stat);
+=item B<PerlVision::Radio>
 
-PV::Radio is a direct descendant of PV::Checkbox that just looks a bit
-different. All the methods defined for PV::Checkbox are defined for
-PV::Radio as well, But don't try to use PV::Radio as a different
-looking PV::Checkbox.
+A single 2-state radiobutton.
 
-Because radio buttons are generally meant to be grouped and to affect
-the state of all other buttons in the group. So unless you include a
-radio button in a group with PV::RadioG (see below), you're liable to
-hurt something. Once it's in a group you can use all the methods
-outlined above for PV::Checkbox.
+  my $radio = new PerlVision::Radio ("Label", $x, $y, $stat);
 
-=head1 PV::RadioG
+C<PerlVision::Radio> is a direct descendant of C<PerlVision::Checkbox> that looks a
+bit different. All the methods defined for C<PerlVision::Checkbox> are defined
+for C<PerlVision::Radio> as well, but C<PerlVision::Radio> is not just a different
+looking C<PerlVision::Checkbox>.
 
-  my $foo = new PV::RadioG ($radio_1, $radio_2, $radio_3...);
+Radio buttons are meant to be grouped and to affect the state of all
+other buttons in the group. So to use a radio button, it needs to be
+put in a group with C<PerlVision::RadioG> (see below). Once it's in a group you
+can use all the methods outlined above for C<PerlVision::Checkbox>.
 
-Where $radio_* are PV::Radio objects. See? You take your PV::Radio
-objects, and feed them to the constructor for PV::RadioG, and out pops
-a radio button group.
+=item B<PerlVision::RadioG>
 
-  $foo->display;      #	Displays all radio buttons in group.
-  $foo->stat;         # To figure out which button is the one that's
-                      # selected. This returns the Label of the selected
-                      # button.
+A group of connected radiobuttons.
 
-PV::RadioG has no 'activate' method. You activate the PV::Radio
-objects directly. This is much more flexible for use in dialog boxes.
+  my $radiog = new PerlVision::RadioG ($radio_1, $radio_2, $radio_3...);
 
-=head1 PV::Listbox
+Where C<$radio_*> are PerlVision::Radio objects.
 
-  my $foo = new PV::Listbox ("Head", $x1, $y1, $x2, $y2, 
-                             "Label1", 0, "Label2", 0...);
+  $radiog->display;      # Displays all radio buttons in group.
+  $radiog->stat;         # To figure out which button is the one that's
+                         # selected. This returns the Label of the selected
+                         # button.
 
-Yes, the element following each "Labeln" should be 0 for this to work
-right.
+C<PerlVision::RadioG> has no C<activate> method. You activate the C<PerlVision::Radio>
+objects directly. This is more flexible for use in dialog boxes.
 
-"Label*" are the strings that will be shown in the listbox. "Head"
-will be printed across above the top of the listbox.
+=item B<PerlVision::Listbox>
 
-  $foo->activate;     #	Gives it focus. Exits on 5,6,7,8 exit codes.
-  $foo->stat;	      # Returns the label of the selected entry.
+A single selection list box.
 
-=head1 PV::Mlistbox
+  my $listbox = new PerlVision::Listbox ($heading, $x1, $y1, $x2, $y2, 
+                                 "Label1", 0, "Label2", 0...);
 
-  my $foo = new PV::Mlistbox ("Head", $x1, $y1, $x2, $y2, 
-                              "Label1", 0, "Label2", 0...);
+Yes, the element following each C<LabelN> should be 0.
 
-Yes, the element following each "Labeln" should be 0 for this to work
-right.
+C<Label*> are the strings that will be shown in the
+listbox. C<$heading> will be printed across above the top of the
+listbox.
 
-"Label*" are the strings that will be shown in the listbox. "Head"
-will be printed across above the top of the listbox.
+  $listbox->activate;    # Gives it focus. Exits on 5,6,7,8 exit codes.
+  $listbox->stat;        # Returns the label of the selected entry.
 
-  $foo->activate;     #	Gives it focus. Exits on 5,6,7,8 exit codes.
-  $foo->stat;	      # Returns a list of all selected labels.
+=item B<PerlVision::Mlistbox>
 
-=head1 PV::Entryfield
+A multiple selection list box.
 
-  my $foo = new PV::Entryfield ($x, $y, $length, $max,
-                                "Label", "Initial Value");
+  my $mlistbox = new PerlVision::Mlistbox ($heading, $x1, $y1, $x2, $y2, 
+                                   "Label1", 0, "Label2", 0...);
 
-$length is the length of the text entry area. $max is the maximum
-length of the input. actually this is ignored. ;-) "Label" is printed
-to the left of the entry field. Can be "".  The entryfield is
+Yes, the element following each C<LabelN> should be 0.
+
+C<Label*> are the strings that will be shown in the
+listbox. C<$heading> will be printed across above the top of the
+listbox.
+
+  $mlistbox->activate;   # Gives it focus. Exits on 5,6,7,8 exit codes.
+  $mlistbox->stat;       # Returns a list of all selected labels.
+
+=item B<PerlVision::Entryfield>
+
+A single line text entry field.
+
+  my $entry = new PerlVision::Entryfield ($x, $y, $length, $max,
+                                  "Label", "Initial Value");
+
+C<$length> is the length of the text entry area. C<$max> is the
+maximum length of the input. This is currently ignored. C<"Label"> is
+printed to the left of the entry field. Can be "".  The entryfield is
 pre-initialized to "Initial Value". Can be "".
 
-  $foo->activate;     #	Gives it focus. Exits on 1,2,5,6,7,8 exit codes.
-		      # Changed text is always saved, regardless of
-		      # how the loop exited.
-  $foo->stat;	      # Returns the text value of the entryfield.
+  $entry->activate;      # Gives it focus. Exits on 1,2,5,6,7,8 exit codes.
+                         # Changed text is always saved, regardless of
+    		         # how the loop exited.
+  $entry->stat;	         # Returns the text value of the entryfield.
 
-=head1 PV::Password
+=item B<PerlVision::Password>
 
-Identical to PV::Entryfield except that it displays '*'s instead of
-what the user types.
+A single line text entry field that echoes '*' to conceal the input.
 
-=head1 PV::Menubar
+Identical to C<PerlVision::Entryfield> except that it displays '*' instead of
+each character that the user types.
+
+=item B<PerlVision::Menubar>
+
+A top line menu bar with single-level pulldown submenus.
 
 The menu bar is a bit odd. The way you do it is set it up with just
 one pulldown, then add pulldowns to it till you have enough. Don't add
 too many (i.e. that there's not enough space for their heads on the
-menubar) or things will definitely get broken.
+menubar).
 
-  my $foo = new PV::Menubar ("Head", $width, $depth, 
-                             "label1", 0, "label2", 0...);
+  my $menubar = new PerlVision::Menubar ("Head", $width, $depth, 
+                                 "label1", 0, "label2", 0...);
 
 Just like with the listboxes, each list element is followed by a
 0. This list becomes your first pulldown. Now to add more pulldowns,
 do:
 
-  $foo->add("Head", $width, $depth, "label1", 0, "label2", 0...);
+  $menubar->add("Head", $width, $depth, "label1", 0, "label2", 0...);
 
 That's the second pulldown, and so on. Because of this step by step
 method of building up the menubar, you need to display it once you're
 finished adding pulldowns, it doesn't automatically display itself. Do
 a:
 
-  $foo->display();
+  $menubar->display();
 
 To activate:
 
-  $foo->activate();
+  $menubar->activate();
 
 It'll exit on 5, 7, and 8. On 8, it'll give you a second element in
 the return list of the form "Pulldown:Selection". The "Pulldown" is
@@ -2068,89 +2155,89 @@ selection.
 
 Help context does not come through on the 5 exit code. i.e. you can't
 tell which pulldown was active when help was requested, or which
-selection in which pulldown. C'est la vie.
+selection in which pulldown.
 
-=head1 PV::Combobox
+=item B<PerlVision::Editbox>
 
-Not implemented yet. I'll get around to it when I need it I guess.
-Actually it's a pretty trivial offspring of a listbox and an
-entryfield.
+A multi-line edit box.
 
-=head1 PV::Editbox
+  my $editbox = new PerlVision::Editbox ($x1, $y1, $x2, $y2, $margin, 
+                                 "Text", $index, $start);
 
-  my $foo = new PV::Editbox ($x1, $y1, $x2, $y2, $margin, 
-                             "Text", $index, $start);
+C<$margin> is the word-wrap boundary. If it's bigger than the size of
+the box, that's your headache.
 
-$margin is the word-wrap boundary. If it's bigger than the size of the
-box, that's your headache.
+C<$text> is a text string to be pre-loaded into the editbox. it will
+be stripped of CRs (not LFs), TABs, and nulls, and justified the way
+the editbox does it (see below).
 
-$text is a text string to be dumped into the editbox. it will be
-stripped of CRs (not LFs), TABs, and nulls, and justified the way the
-editbox does it (see below).
-
-$index is the start position within the text to initially place the
+C<$index> is the start position within the text to initially place the
 cursor at. First char is 0.
 
-$start is the line number to position at the top of the editbox, if
+C<$start> is the line number to position at the top of the editbox, if
 possible. First line is 0.
 
-  $foo->activate;     #	Gives it focus. Exits on 5,6,7 exit codes.
-		      # Changed text is always saved, regardless of
-		      # how the loop exited.
-  $foo->stat;	      # Returns the text value of the editbox.
+  $editbox->activate;  # Gives it focus. Exits on 5,6,7 exit codes.
+                       # Changed text is always saved, regardless of
+  		       # how the loop exited.
+  $editbox->stat;      # Returns the text value of the editbox.
 
-There are some hooks in there to let you subclass it and do
-things. One is an empty 'sub statusbar' that's called every-time the
-display is refreshed. Another is an empty 'sub process_key' which is
-used extensively in rap to build a full editor out of the editbox
-control.
+There are some hooks to enable extending the edit box by creating a
+subclass. One is an empty C<sub statusbar> that's called every-time
+the display is refreshed. Another is an empty C<sub process_key> which
+is used extensively in C<rap> to build a full editor out of the
+editbox control.
 
-The editbox does automatic word-wrapping and reverse word-wrapping and
-other fancy stuff. The style of auto-wrapping I chose is what
-personally irritates me the least (all auto-wraps irritate me). Trying
-to change the wrap style is likely to be very hairy, and will probably
-break the editbox. It took a lot of tweaking of plenty of regexps to
-get it to work the way it does.
+The editbox does automatic word-wrapping and reverse
+word-wrapping. The style of auto-wrapping I chose is what personally
+irritates me the least (all auto-wraps irritate me). Trying to change
+the wrap style is likely to be very hairy, and will probably break the
+editbox.
 
-=head1 PV::Viewbox
+=item B<PerlVision::Viewbox>
 
-  my $foo = new PV::Viewbox ($x1, $y1, $x2, $y2, $text, $start);
+A readonly viewer/pager for text files.
 
-Much like PV::Editbox but it's readonly and the arrow keys have
-different bindings. I will eventually implement hardware scrolling in
-viewboxes that extend the length of the display so that it's a fast
-browser.
+  my $viewbox = new PerlVision::Viewbox ($x1, $y1, $x2, $y2, $text, $start);
 
-=head1 PV::Pushbutton, PV::Cutebutton, PV::Plainbutton
+Much like C<PerlVision::Editbox> but it's readonly and the arrow keys have
+different bindings.
 
-  my $foo = new PV::Pushbutton ("Label", $x1, $y1);
+=item B<PerlVision::Pushbutton>, B<PerlVision::Cutebutton>, B<PerlVision::Plainbutton>
 
-Makes a simple push button.
+Three styles of pushbuttons.
 
-  $foo->display();    # Displays it.
-  $foo->activate();   # Activates it.
+  my $button1 = new PerlVision::Pushbutton ("Label", $x1, $y1);
+  my $button2 = new PerlVision::Cutebutton ("Label", $x1, $y1);
+  my $button3 = new PerlVision::Plainbutton ("Label", $x1, $y1);
+
+Makes a push button of the specified type.
+
+  $button1->display();    # Displays it.
+  $button1->activate();   # Activates it.
 
 Exits on codes 1,2,3,4,5,6,7,8. On 8, it 'depresses' and it's up to
-you to 'undepress' it by calling the display method.
+you to 'undepress' it by calling the C<display> method.
 
-PV::Pushbutton is BIG. It takes 3 lines on the screen. PV::Cutebutton is
-my favorite - it takes only two lines, and actually pushes and pops
-around so it's fun to watch ;) PV::Plainbutton is a basic one-line
-button which does absolutely nothing fancy but is very useful in some
-situations (e.g. for hyper-text).
+C<PerlVision::Pushbutton> is BIG. It uses 3 lines on the
+screen. C<PerlVision::Cutebutton> is smaller - it uses only two lines, and
+'depresses' when clicked. C<PerlVision::Plainbutton> is a basic one-line
+button which does nothing fancy but is useful in some situations
+(e.g. for hypertext links).
 
-=head1 PV::Dialog
+=item B<PerlVision::Dialog>
 
-This is the guy that puts it all together and does all the work of
-managing how focus switches between multiple controls in a dialog
-box. Once you've created all the controls you need, you can feed them
-to PV::Dialog and out pops an object that you can trust to handle
-everything. Above you would have noticed that the activate loops for
-all controls return en exit code when focus is released. This is what
-these codes mean:
+A dialog box with multiple controls.
 
-When an activate loop exits, it returns a code telling you the reason
-for exiting:
+This is the widget that brings other controls together, and manages
+focus switching between multiple controls. Once you've created all the
+controls you need, you can add them to a C<PerlVision::Dialog> object to
+create a functional UI panel.
+
+C<PerlVision::Dialog> uses the return code from each control's activate method
+do decide how to switch focus between controls. The activate method
+for all controls returns an exit code when focus is released. This is
+what these codes mean:
 
 1 = Up Arrow            (Traditional shift-focus key)
 
@@ -2168,187 +2255,154 @@ for exiting:
 
 8 = Enter               (Traditional 'Done here' key)
 
-These codes are used by the PV::Dialog control to figure out how to
+These codes are used by the C<PerlVision::Dialog> control to figure out how to
 switch focus between controls, and when to exit. Here's how to create
-a PV::Dialog object:
+a C<PerlVision::Dialog> object:
 
-  $foo = new PV::Dialog ("Title", $x1, $y1, $x2, $y2, $style, $color,
-                         $control1, 1, 2, 2, 1, 1, 1, 2, 0,
-                         $control2, 1, 3, 3, 1, 2, 2, 3, 0,
-                         ...);
+  $dialog = new PerlVision::Dialog ("Title", $x1, $y1, $x2, $y2, $style, $color,
+                            $control1, 1, 2, 2, 1, 1, 1, 2, 0,
+                            $control2, 1, 3, 3, 1, 2, 2, 3, 0,
+                            ...);
 
-"Title" is currently ignored.
+C<"Title"> is currently ignored.
 
-$style: if 1, creates a popup that is 'raised'.
-        if 0, creates a popup that is 'depressed'
+C<$style>: if 1, creates a popup that is 'raised'. if 0, creates a
+popup that is 'depressed'
 
-$color is the background color for the dialog. I'd recommend 6 (cyan)
-because of the overall hardcoded buddha-nature of colors at present.
+C<$color> is the background color for the dialog. I'd recommend 6
+(cyan) because of the overall hardcoded nature of colors at present.
 
-$control* are PV::* objects that you created beforehand (I think they
-can even be PV::Dialog types, though I haven't tested it. They can't
-be PV::Menubar types). Note that the controls must be positioned
-relative to the origin of the dialog box, not relative to the screen
-origin (dialog boxes are actually curses windows, and that's how
-curses likes it).
+C<$control*> are C<PerlVision::*> objects that you created beforehand They
+can't be C<PerlVision::Menubar> objects. Note that the controls must be
+positioned relative to the origin (top left) of the dialog box, not
+relative to the screen origin.
 
 How the dialog box works is that the control+exitcode matrix tells
-PV::Dialog which control to switch focus to on each of the 8 exit
+C<PerlVision::Dialog> which control to switch focus to on each of the 8 exit
 codes listed above. So when you do a:
 
-  $foo->activate;
+  $dialog->activate;
 
-PV::Dialog starts off by displaying itself and giving focus to
-$control1. When $control1 exits, $foo looks in the list that follows
-$control1 in the constructor syntax above to figure out which control
-to give focus to next. The list is simply numbers that say which
-control. So 1 represents $control1, 2 represents $control2, and so on,
-strictly based on the order in which the controls appear in the
-constructor invocation.
+C<PerlVision::Dialog> starts off by displaying itself and giving focus to
+C<$control1>. When C<$control1> exits, C<$dialog> looks in the list
+that follows C<$control1> in the constructor syntax above to figure
+out which control to give focus to next. The list is simply numbers
+that say which control. So 1 represents C<$control1>, 2 represents
+C<$control2>, and so on, based on the order in which the controls
+appear in the constructor invocation.
 
-The special value 0 is reserved to tell PV::Dialog that it's time to
-exit and hide the dialog box. I also use it as a place-holder for
-those exit-codes that a certain control never returns, for example of
-$control1 above was a PV::Editbox, I'd put 0's in the list following
-$control1 at positions 1,2,3 and 4 because the edit box object never
-exits on those codes (those keys have meaning within the editbox)
+The special value 0 is reserved to tell C<PerlVision::Dialog> to exit and hide
+the dialog box. I also use it as a place-holder for those exit-codes
+that a certain control never returns, for example of C<$control1>
+above was a C<PerlVision::Editbox>, I'd put 0's in the list following
+C<$control1> at positions 1,2,3 and 4 because the edit box object
+never exits on those codes (those keys have meaning within the
+editbox)
 
 If you don't want focus to switch off a control when a certain
 exitcode is returned, simply put that control's own number in the
 corresponding position in the list.
 
-Look in the rap code for an example of PV::Dialog use, the $options
-object. It's generally very easy and powerful.
+Look in the C<rap> code for an example of C<PerlVision::Dialog> use, the
+C<$options> object.
 
-When PV::Dialog's activate exits, it returns a two-element list. First
-element tells you which was the last control to be active (again
-numbered as they appear in the constructor invocation), and the second
-element tells you what exitcode that control returned.
+When C<PerlVision::Dialog>'s C<activate> method exits, it returns a
+two-element list. The first element tells you which was the last
+control to be active (again numbered as they appear in the constructor
+invocation), and the second element tells you what exitcode that
+control returned.
 
-After the dialog box has exited, you can call 'stat' on each control
-to find out what's up. Remember, don't put PV::RadioG controls in a
-dialog box, they don't have an activate method. Put the corresponding
-PV::Radio controls in. When you 'stat', you'll be 'stat'ing the
-PV::RadioG.
+After the dialog box has exited, you can call C<stat> on each control
+to determine its status. Remember, don't put C<PerlVision::RadioG> controls in
+a dialog box; they don't have an activate method. Put the
+corresponding C<PerlVision::Radio> controls in. When you call C<stat>, call it on
+the C<PerlVision::RadioG> object.
 
-Also, don't ever put a PV::Static as the first control in a
-PV::Dialog. It doesn't have an activate method. If you just want a
-pop-up box with text and no other controls, either consider using a
-PV::Viewbox control, or write the text onto the popup box yourself with
-pv::pvprint.
+Also, don't put a C<PerlVision::Static> as the first control in a
+C<PerlVision::Dialog>. It doesn't have an activate method. If you just want a
+pop-up box with text and no other controls, you could use a
+C<PerlVision::Viewbox control>.
 
-=head1 Goodies: PV::PVD
+=item B<PerlVision::PVD>
 
-PerlVision also defines two often needed dialog box styles:
+PerlVision also defines three often needed dialog box styles:
 
-  PV::PVD::message	(A simple message box with OK button)
-  PV::PVD::yesno	(An option box with Yes/No buttons)
+=over
 
-Both self-center, and make sure the box is big enough to hold the
-buttons. They don't bother to check if the screen will hold the dialog
-box, or the dialog box will hold your text. Both use the following
-syntax:
+=item B<PerlVision::PVD::message>
 
-  $foo = new PV::PVD::message ("Text", $width, $depth);
+A simple message box with OK button
 
-PV::PVD::yesno returns 1 for yes and 0 for no.
+=item B<PerlVision::PVD::yesno>
 
-Width and depth are how big you want the text part of the box to be
-(the buttons are separate).
+An option box with Yes/No buttons
 
-=head1 BUGS
+=item B<PerlVision::PVD::entry>
 
-=over 2
-
-=item * 
-
-$max in PV::Entryfield is a misnomer. It's actually used internally
-and should be set to 0 when you create a new entryfield object.
-
-=item * 
-
-Colors are still more-or-less hardcoded.
-
-=item * 
-
-Some vestigal crufts from v0.1 remain, as the rewrite to use curses
-was accomplished by blatant abuse of emacs's M-x replace-regexp.  In
-particular, all controls still expect X co-ordinates before Y
-co-ordinates, which is the reverse of how curses likes it. In a future
-version I'll do away with positional arguments and use hash arguments.
-
-=item * 
-
-PV.pm should check if the terminal can support the minimum
-capabilities required, as well as eval uncertain curses calls.
-
-=item *
-
-Error checking needs work. 
-
-=item *
-
-PV languished for many (4) years without any updates but I am hoping
-to get a chance to clean it up soon. A lot needs to be worked on - too
-much to list here.
+A text entry box with OK/Cancel buttons
 
 =back
 
-=head1 HISTORY
+All three self-center on the screen, and make sure the box is big
+enough to hold the buttons. They don't check if the screen is big
+enough to hold the dialog box, or if the dialog box will hold your
+text. A dialog box can be created as below:
 
-=item B<v0.1> 
+  my $dialog = new PerlVision::PVD::message ("Text", $width, $height);
 
-March 1995. First release. Didn't use curses, did its own screen
-optimization, which was in Perl and very slow.
+  my $dialog = new PerlVision::PVD::yesno ("Text", $width, $height);
 
-=item B<v0.2>
+C<PerlVision::PVD::yesno> returns 1 for Yes and 0 for No.
 
-April 1995. Found Will Setzer's Curses interface for Perl and did a
-rewrite using curses/ncurses. Tremendously speeded up and much more
-portable. Turned into a real Perl 5 module. Many thanx to Tim Bunce
-for helping clear up my confusion about modules.
+C<PerlVision::PVD::entry> returns 0 if Cancel was clicked, or the text from
+the text entry box if OK was clicked.
 
-=item B<v1.x>
+C<$width> and C<$height> are how big you want the text part of the box
+to be (the buttons are separate).
 
-July 2000. Moved docs to pod format and put PV in CVS. Brought PV
-packaging up to date with a 2 digit version number and a
-Makefile.PL. Hopefully this means I am going to finally do some work
-on PV soon!
+C<PerlVision::PVD::entry> expects an additional argument, the max size of the
+entry field.
+
+  my $dialog = new PerlVision::PVD::entry ("Text", $width, $height, $entrysize);
 
 =back
-
-=head1 SEE ALSO 
-
-Curses(3), perl(1).
 
 =head1 AUTHOR
 
-PerlVision is Copyright (c) 2000 Ashish Gulhati
-<hash@netropolis.org>. All Rights Reserved.
+Ashish Gulhati C<< <perlvision at hash.neo.email> >>
 
-=head1 CONTRIBUTORS
+=head1 BUGS
 
-Nick Cabatoff <ncc@cs.mcgill.ca>
+C<$max> in C<PerlVision::Entryfield> is a misnomer. It's actually used
+internally and should be set to 0 when you create a new entryfield
+object.
 
-=head1 ACKNOWLEDGEMENTS
+Colors are more-or-less hardcoded.
 
-Thanks to Barkha for inspiration and lots of good times; to Raj for
-the good old days when we hacked Unix and consumed insane quantities
-of alcohol; to Emily Saliers, Eddie Van Halen and Neil Peart for
-fantastic music; to William Setzer for Perl Curses, Larry Wall for
-Perl, and RMS for Emacs.
+We should check if the terminal can support the minimum capabilities
+required, as well as C<eval> uncertain curses calls.
 
-=head1 LICENSE
+Error checking needs work.
 
-This code is free software; you can redistribute it and/or modify it
-under the same terms as Perl itself.
+Text justification in the editbox control should be optional.
 
-It would be nice if you would mail your patches to me, and I would
-love to hear about projects that make use of this module.
+Please report any bugs or feature requests to C<bug-perlvision at rt.cpan.org>,
+or through the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=PerlVision>.
+I will be notified, and then you'll automatically be notified of progress
+on your bug as I make changes.
 
-=head1 DISCLAIMER
+=head1 COPYRIGHT AND LICENSE
 
-This is free software. If it breaks, you own both parts.
+Copyright (c) Ashish Gulhati. All Rights Reserved.
+
+This software package is Open Software; you can use, redistribute,
+and/or modify it under the terms of the Open Artistic License 4.0.
+
+Please see the LICENSE file included with this package, or visit
+L<http://www.opensoftware.ca/oal40.txt>, for the full license terms,
+and ensure that the license grant applies to you before using or
+modifying this software. By using or modifying this software, you
+indicate your agreement with the license terms.
 
 =cut
 

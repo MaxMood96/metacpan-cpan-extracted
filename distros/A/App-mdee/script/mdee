@@ -36,7 +36,6 @@ mdee - em·dee, Markdown Easy on the Eyes
      -m  --mode=#           light or dark (default: light)
      -B  --base-color=#     override base color of theme
                             (e.g., Ivory, #780043, (120,0,67))
-         --list-themes      list available themes
          --show=#           set field visibility (e.g., italic=1)
      -C  --pane=#           number of columns
      -R  --row=#            number of rows
@@ -48,7 +47,7 @@ mdee - em·dee, Markdown Easy on the Eyes
 
 =head1 VERSION
 
-Version 0.16
+Version 0.18
 
 =cut
 
@@ -155,7 +154,6 @@ declare -A OPTS=(
     [         mode | m  :          # light or dark         ]=
     [   base-color | B  :          # base color            ]=
     [       adjust |    %          # color adjustment      ]=
-    [  list-themes |     !         # list available themes ]=
     [         show |    %!         # field visibility      ]=
     [        pager |    ?!         # pager command         ]=
     [         pane | C  :=i        # number of columns     ]=0
@@ -167,80 +165,25 @@ declare -A OPTS=(
 )
 
 ##############################################################################
-# Built-in themes
+# Theme base colors
 ##############################################################################
 
-# Common color functions
-  osc8_prologue='sub{ use URI::Escape; sub osc8 { sprintf "\e]8;;%s\e\\%s\e]8;;\e\\", uri_escape_utf8($_[0], "^\\x20-\\x7e"), $_[1] } }'
-      link_func='sub{ s/   \[(?<txt>.+?)\]\((?<url>.+?)\)/osc8($+{url},  "[$+{txt}]")/xer }'
-     image_func='sub{ s/  !\[(?<alt>.+?)\]\((?<url>.+?)\)/osc8($+{url}, "![$+{alt}]")/xer }'
-image_link_func='sub{ s/\[!\[(?<alt>.+?)\]\((?<img>.+?)\)\]\((?<url>.+?)\)/osc8($+{img}, "!") . osc8($+{url}, "[$+{alt}]")/xer }'
-
-declare -A theme_light=(
-           [base]='<RoyalBlue>=y25'
-        [comment]='${base}+r60'
-           [bold]='${base}D'
-         [strike]='X'
-         [italic]='I'
-           [link]="$link_func"
-          [image]="$image_func"
-     [image_link]="$image_link_func"
-             [h1]='L25DE/${base}'
-             [h2]='L25DE/${base}+y20'
-             [h3]='L25DN/${base}+y30'
-             [h4]='${base}UD'
-             [h5]='${base}U'
-             [h6]='${base}'
-    [inline_code]='L15/L23,/L23,L15/L23'
-     [code_block]='L20 , L18 , /L23;E , L20'
+declare -A theme_light=([base]='<RoyalBlue>=y25')
+declare -A theme_dark=([base]='<RoyalBlue>=y80')
+declare -a md_config=()
+declare -a show_fields=(
+    comment bold strike italic link image image_link
+    h1 h2 h3 h4 h5 h6 blockquote horizontal_rule
+    code_mark code_info code_block code_inline
 )
-declare -a show_fields=()
-for k in "${!theme_light[@]}"; do
-    [[ $k != base ]] && show_fields+=("$k")
-done
-
-declare -A theme_dark=(
-           [base]='<RoyalBlue>=y80'
-             [h1]='L00DE/${base}'
-             [h2]='L00DE/${base}-y15'
-             [h3]='L00DN/${base}-y25'
-             [h4]='${base}UD'
-             [h5]='${base}U'
-             [h6]='${base}'
-    [inline_code]='L12/L05,/L05,L12/L05'
-     [code_block]='L10 , L12 , /L05;E , L10'
-)
-# Dark theme inherits undefined keys from light theme
-# (done here so config.sh can safely += to any key in either theme)
-for _k in "${!theme_light[@]}"; do
-    [[ -v theme_dark[$_k] ]] || theme_dark[$_k]=${theme_light[$_k]}
-done
-
-# Link text pattern: backtick spans, backslash escapes, and normal chars
-_link_text='(?:`[^`\n]*+`|\\.|[^`\\\n\]]++)+' # [...] inner match
 
 # Patterns (name-pattern pairs)
+# Highlighting patterns are handled by App::Greple::md module.
+# These are used by the run_fold() pipeline stage and table exclusion.
 declare -a patterns_default=(
-    # Highlighting patterns (used with colors)
     comment      '^<!--(?![->])(?s:.+?)-->'
-    bold         '(?<![\\`])\*\*.*?(?<!\\)\*\*'
-    bold         '(?<![\\`\w])__.*?(?<!\\)__(?!\w)'
-    italic       '(?<![\\`\w])_(?:(?!_).)+(?<!\\)_(?!\w)'
-    italic       '(?<![\\`\*])\*(?:(?!\*).)+(?<!\\)\*(?!\*)'
-    strike       '(?<![\\`])~~.+?(?<!\\)~~'
-    h1           '^#\h+.*'
-    h2           '^##\h+.*'
-    h3           '^###\h+.*'
-    h4           '^####\h+.*'
-    h5           '^#####\h+.*'
-    h6           '^######+\h+.*'
-    inline_code  '(?<bt>`++)((?:(?!\g{bt}).)++)(\g{bt})'
     code_block   '^ {0,3}(?<bt>`{3,}+|~{3,}+)(.*)\n((?s:.*?))^ {0,3}(\g{bt})'
-    image_link   "\[!\[${_link_text}\]\([^)\n]+\)\]\(<?[^>)\s\n]+>?\)"
-    image        "!\[${_link_text}\]\(<?[^>)\s\n]+>?\)"
-    link         "(?<!!)\[${_link_text}\]\(<?[^>)\s\n]+>?\)"
-    table        '^ {0,3}(\|.+\|\n){3,}'
-    # Folding patterns (used without colors)
+    table        '^ {0,3}([│|├].+[│|┤]\n){3,}'
     item_prefix  '^\h*(?:[*-]|(?:\d+|#)[.)])\h+'
     def_pattern  '(?:\A|\G\n|\n\n).+\n\n?(:\h+.*\n)'
     autoindent   '^\h*(?:[*-]|(?:\d+|#)[.)]|:)\h+|^\h+'
@@ -255,21 +198,6 @@ for ((_i=0; _i<${#patterns_default[@]}; _i+=2)); do
     pattern[$_name]+=${patterns_default[_i+1]}
 done
 
-# Active color scheme
-declare -A colors
-
-##############################################################################
-# Theme functions
-##############################################################################
-
-# Load theme_light or theme_dark into the colors array
-load_theme() {
-    local -n theme_ref="theme_$1"
-    for key in "${!theme_ref[@]}"; do
-        colors[$key]="${theme_ref[$key]}"
-    done
-}
-
 # User config file path
 config_file="${XDG_CONFIG_HOME:-$HOME/.config}/mdee/config.sh"
 
@@ -281,14 +209,6 @@ detect_terminal_mode() {
     lum=$(perl -MGetopt::EX::termcolor=luminance -e luminance 2>/dev/null) || return
     [[ $lum ]] || return
     (( lum < 50 )) && echo dark || echo light
-}
-
-# Expand ${base} references in color values
-expand_theme() {
-    local base="${colors[base]}"
-    for key in "${!colors[@]}"; do
-        [[ $key != base ]] && colors[$key]="${colors[$key]//\$\{base\}/$base}" || :
-    done
 }
 
 ##############################################################################
@@ -342,93 +262,6 @@ show() {
         done
     fi
     # Individual key=value is handled by getoptlong.sh
-}
-
-show_theme_sample() {
-    local display_name=$1 theme_mode=$2
-    local -n theme_ref="theme_${theme_mode}"
-    local -A sample_colors
-    for key in "${!theme_ref[@]}"; do
-        sample_colors[$key]="${theme_ref[$key]}"
-    done
-
-    # Expand ${base} and strip ;sub{...} (not renderable by ansiecho)
-    local base="${sample_colors[base]:-<RoyalBlue>${adjust[$theme_mode]}}"
-    for key in "${!sample_colors[@]}"; do
-        [[ $key != base ]] && sample_colors[$key]="${sample_colors[$key]//\$\{base\}/$base}"
-        sample_colors[$key]="${sample_colors[$key]%;sub\{*}"
-    done
-
-    # Extract middle part of inline_code (format: before,match,after)
-    local code_color="${sample_colors[inline_code]}"
-    code_color="${code_color#*,}"; code_color="${code_color%,*}"
-
-    # Background/foreground for sample display
-    local bg; [[ $theme_mode == dark ]] && bg=555/000 || bg=000/555
-
-    ansiecho -i "${bg}E" -f "  %-16s" "${display_name}/${theme_mode}" \
-             -i "${sample_colors[h1]//E/}" "# H1" -a "$bg" \
-             -i "${sample_colors[h2]//E/}" "## H2" -a "$bg" \
-             -i "${sample_colors[h3]//E/}" "### H3" -a "$bg" \
-             -i "${sample_colors[h4]}" "#### H4" -a "$bg" \
-             -i "${sample_colors[h5]}" "##### H5" -a "$bg" \
-             -i "${sample_colors[bold]}" "**bold**" -a "$bg" \
-             -i "${code_color}" '`code`' -a Z
-}
-
-# Collect available theme names into sorted array
-# Sets: _theme_names (array)
-collect_theme_names() {
-    local -A _found=([default]=1)
-
-    # From theme directories
-    local dir f base
-    for dir in "$share_theme_dir" "$user_theme_dir"; do
-        [[ $dir && -d $dir ]] || continue
-        for f in "$dir"/*.sh "$dir"/*.bash; do
-            [[ -f "$f" ]] || continue
-            base="${f##*/}"; base="${base%.sh}"; base="${base%.bash}"
-            _found[$base]=1
-        done
-    done
-
-    IFS=$'\n' _theme_names=($(printf '%s\n' "${!_found[@]}" | sort))
-    unset IFS
-}
-
-list_theme_names() {
-    collect_theme_names
-    printf '%s\n' "${_theme_names[@]}"
-    exit 0
-}
-
-list_themes() {
-    collect_theme_names
-
-    # Save original defaults
-    local -A _save_light=() _save_dark=()
-    local _k
-    for _k in "${!theme_light[@]}"; do _save_light[$_k]="${theme_light[$_k]}"; done
-    for _k in "${!theme_dark[@]}"; do _save_dark[$_k]="${theme_dark[$_k]}"; done
-
-    echo "Available themes:"
-    for name in "${_theme_names[@]}"; do
-        # Restore defaults before each theme
-        for _k in "${!_save_light[@]}"; do theme_light[$_k]="${_save_light[$_k]}"; done
-        for _k in "${!_save_dark[@]}"; do theme_dark[$_k]="${_save_dark[$_k]}"; done
-        # Source theme file (modifies theme_light/theme_dark)
-        [[ $name != default ]] && load_theme_file "$name" 2>/dev/null || :
-        show_theme_sample "$name" light
-        show_theme_sample "$name" dark
-    done
-
-    echo ""
-    echo "Usage: mdee --theme=<name> --mode=<light|dark> [--base-color=<color>]"
-    echo ""
-    echo "Theme file locations:"
-    echo "  User:   \${XDG_CONFIG_HOME:-~/.config}/mdee/theme/NAME.sh"
-    [[ $share_theme_dir ]] && echo "  System: $share_theme_dir/NAME.sh"
-    exit 0
 }
 
 ##############################################################################
@@ -506,7 +339,7 @@ esac
 [[ $rule  == _ ]] && rule=${style_defaults[rule]}
 [[ ${rule:-} ]] && rule='│'
 
-# Load theme files: each modifies theme_light/theme_dark arrays
+# Load theme files: each modifies theme_light/theme_dark/theme_cm arrays
 while IFS= read -r _t; do
     if [[ -f "$_t" ]]; then
         . "$_t"
@@ -514,21 +347,9 @@ while IFS= read -r _t; do
         load_theme_file "$_t" || die "theme not found: $_t"
     fi
 done < <(uniq_array "${theme[@]}")
-load_theme "$mode"
 
 # Override base color if specified via --base-color or default[base_color]
 : ${base_color:=${default[base_color]:-}}
-if [[ $base_color ]]; then
-    # Color names (e.g., Red, NavyBlue) get automatic adjustment
-    if [[ $base_color =~ ^[A-Za-z][A-Za-z0-9_]*$ ]]; then
-        colors[base]="<${base_color}>${adjust[$mode]}"
-    else
-        colors[base]="$base_color"
-    fi
-fi
-
-# Expand ${base} references in color values
-expand_theme
 
 # Validate --show field names
 is_show_field() {
@@ -547,34 +368,15 @@ done
             printf "theme_%s[%s]='%s'\n" "$_mode" "$key" "${_ref[$key]//\'/\'\\\'\'}"
         done | sort >&2
     done
+    for _e in "${md_config[@]}"; do
+        printf "md_config: '%s'\n" "$_e" >&2
+    done
     (( debug > 1 )) && {
-        for key in "${!colors[@]}"; do
-            printf "colors[%s]='%s'\n" "$key" "${colors[$key]//\'/\'\\\'\'}"
-        done | sort >&2
         for key in "${!pattern[@]}"; do
             printf "pattern[%s]='%s'\n" "$key" "${pattern[$key]//\'/\'\\\'\'}"
         done | sort >&2
     }
 }
-
-##############################################################################
-# Markdown highlighting with greple
-##############################################################################
-
-declare -a greple_opts=(-G --ci=G --all --need=0 --filestyle=once --color=always --prologue "$osc8_prologue")
-
-add_pattern() {
-    local name=$1 pattern=$2
-    # Check show hash: unset=default(on), empty or 0=off, non-empty=on
-    local val=${show[$name]-1}
-    [[ $val && $val != 0 ]] && greple_opts+=(--cm "${colors[$name]}" -E "(?|$pattern)") || :
-}
-
-# Add patterns with colors to greple options
-# (use pattern[] so theme modifications are reflected)
-for _name in "${!pattern[@]}"; do
-    [[ ${colors[$_name]:-} ]] && add_pattern "$_name" "${pattern[$_name]}"
-done
 
 ##############################################################################
 # Build command pipeline
@@ -593,7 +395,52 @@ invoke() {
     "$@"
 }
 
-run_greple()    { invoke greple "${greple_opts[@]}" "$@"; }
+run_greple() {
+    local -a md_opts=()
+
+    # Pass mode and base_color via config
+    local -a config_params=("mode=${mode}")
+
+    # Determine effective base color
+    # Priority: --base-color > theme's base > md module default
+    if [[ $base_color ]]; then
+        # Apply adjust for simple color names (md module handles full specs as-is)
+        if [[ $base_color =~ ^[A-Za-z][A-Za-z0-9_]*$ ]]; then
+            config_params+=("base_color=<${base_color}>${adjust[$mode]}")
+        else
+            config_params+=("base_color=${base_color}")
+        fi
+    else
+        local -n _theme_ref="theme_${mode}"
+        local _default_base
+        [[ $mode == dark ]] && _default_base='<RoyalBlue>=y80' || _default_base='<RoyalBlue>=y25'
+        if [[ ${_theme_ref[base]} != "$_default_base" ]]; then
+            config_params+=("base_color=${_theme_ref[base]}")
+        fi
+    fi
+
+    # Add table/rule params
+    [[ $table ]] && config_params+=("table=1") || config_params+=("table=0")
+    [[ $rule  ]] && config_params+=("rule=1")  || config_params+=("rule=0")
+
+    # Add md_config entries from themes
+    config_params+=("${md_config[@]}")
+
+    local IFS=','
+    md_opts+=("-Mmd::config(${config_params[*]})")
+    unset IFS
+
+    # Pass show visibility
+    local name
+    for name in "${!show[@]}"; do
+        [[ $name == all ]] && continue
+        md_opts+=(--show "${name}=${show[$name]}")
+    done
+
+    invoke greple "${md_opts[@]}" -- \
+        --filestyle=once --color=always \
+        "$@"
+}
 
 run_fold() {
     invoke greple \
@@ -604,29 +451,6 @@ run_fold() {
         -G -E "${pattern[item_prefix]}.*\\n" -E "${pattern[def_pattern]}" \
         --crmode --all --need=0 --no-color
 }
-
-run_table() {
-    invoke greple \
-        -Mtee::config=discrete,bulkmode "&ansicolumn" -s '|' -o "${rule:-|}" -t --cu=1 -- \
-        -E "${pattern[table]}" --all --need=0 --no-color
-}
-
-define fix_table_script <<'EOS'
-    use utf8;
-    my $rule = shift @ARGV;
-    my $sep = $rule || '\|';
-    local $_ = do { local $/; <> };
-    s{ ^ ($sep ( ( (?:(?!$sep).)*  $sep )+ \n){3,} ) }{
-        $1 =~ s{^$sep((?:\h* -+ \h* $sep)*\h* -+ \h*)$sep$}{
-            $rule
-            ? "├" . ($1 =~ tr[│ -][┼──]r) . "┤"
-            : "|" . ($1 =~ tr[ ][-]r) . "|"
-        }xmegr;
-    }xmepg;
-    print;
-EOS
-
-run_table_fix() { invoke perl -CSA -E "$fix_table_script" "${rule:-}"; }
 
 run_nup()    { invoke nup "${nup_opts[@]}"; }
 run_column() { invoke nup "${nup_opts[@]}" --no-pager --fold --pane=1; }
@@ -643,7 +467,6 @@ export LESSANSIENDCHARS="${LESSANSIENDCHARS:-mK}"
 # Collect pipeline stages
 declare -a stages=(run_greple)
 [[ $fold  ]] && stages+=(run_fold)
-[[ $table ]] && stages+=(run_table run_table_fix)
 if [[ $nup ]]; then
     if (( _cols == 1 )) && [[ ! ${_nup_explicit:-} ]]; then
         stages+=(run_column run_pager)
@@ -772,14 +595,13 @@ Set debug level.  Can be repeated for increasing verbosity.
 
 =item C<-d>
 
-Show theme values (C<theme_light[]>/C<theme_dark[]>) and pipeline
-stage names.  Output is in sourceable format that can be used in
-theme files or config.sh.
+Show theme values (C<theme_light[]>/C<theme_dark[]>, C<md_config[]>)
+and pipeline stage names.
 
 =item C<-dd>
 
-Above, plus expanded color values (C<colors[]>), pattern definitions
-(C<pattern[]>), and full command lines for each pipeline stage.
+Above, plus pattern definitions (C<pattern[]>) and full command lines
+for each pipeline stage.
 
 =back
 
@@ -914,19 +736,15 @@ Theme files are searched in the following order:
 
 =back
 
-Theme files are Bash scripts that modify C<theme_light>,
-C<theme_dark>, and/or C<pattern[]> arrays directly:
+Theme files are Bash scripts that can modify C<theme_light[base]>,
+C<theme_dark[base]>, C<md_config[]>, and/or C<pattern[]>:
 
     # theme/warm.sh — change base color
     theme_light[base]='<Coral>=y25'
     theme_dark[base]='<Coral>=y80'
 
-    # theme/hashed.sh — append closing hashes to h3-h6
-    for _mode in light dark; do
-        declare -n _theme="theme_${_mode}"
-        _theme[h3]+=';sub{s/(?<!#)$/ ###/r}'
-        ...
-    done
+    # theme/hashed.sh — enable closing hashes on h3-h6
+    md_config+=(hashed.h3=1 hashed.h4=1 hashed.h5=1 hashed.h6=1)
 
     # modify matching pattern
     pattern[link]='...'
@@ -996,10 +814,6 @@ B<Note>: Basic ANSI color codes (C<R>, C<G>, C<B>, etc.) cannot be used
 because heading variations require luminance adjustment, which only works
 with full color specifications (X11 names, RGB hex, or RGB decimal).
 
-=item B<--list-themes>
-
-List available themes with color samples and exit.
-
 =back
 
 =head2 Highlight Options
@@ -1020,8 +834,8 @@ Multiple fields can be specified with commas or by repeating the option.
 The special field C<all> affects all fields and is processed first.
 
 Available fields: C<comment>, C<bold>, C<italic>, C<strike>, C<h1>,
-C<h2>, C<h3>, C<h4>, C<h5>, C<h6>, C<inline_code>, C<code_block>,
-C<link>, C<image>, C<image_link>.
+C<h2>, C<h3>, C<h4>, C<h5>, C<h6>, C<code_mark>, C<code_info>, C<code_block>,
+C<code_inline>, C<link>, C<image>, C<image_link>.
 
 All fields are enabled by default.
 
@@ -1111,24 +925,22 @@ The C<default> associative array supports the following keys:
 
 B<Overriding theme colors and patterns>
 
-Config.sh can modify theme arrays and patterns directly, using the
+Config.sh can modify theme variables and patterns directly, using the
 same mechanism as theme files:
 
     # Change base color for both modes
     theme_light[base]='<DarkCyan>=y25'
     theme_dark[base]='<DarkCyan>=y80'
 
-    # Append to both light and dark using declare -n
-    for _array in theme_light theme_dark; do
-        declare -n _theme=$_array
-        _theme[h3]+=';sub{s/(?<!#)$/ ###/r}'
-    done
+    # Enable md module features
+    md_config+=(hashed.h3=1 hashed.h4=1 hashed.h5=1 hashed.h6=1)
 
     # Modify matching patterns
     pattern[link]='...'
 
-Since C<${base}> references are expanded after loading, changing the
-base color automatically affects all derived colors (h1, h2, bold, etc.).
+Changing the base color automatically affects all derived colors
+(h1, h2, bold, etc.) because the md module expands C<${base}>
+references.
 
 Use C<-d> to dump current theme and pattern values in sourceable format.
 
@@ -1136,7 +948,7 @@ B<Color specification format>
 
 Color specifications use L<Term::ANSIColor::Concise> format.
 The C<FG/BG> notation specifies foreground and background colors
-(e.g., C<L25DE/${base}> means gray foreground on base-colored background).
+(e.g., C<L25D/${base};E> means gray foreground on base-colored background).
 The C<${base}> string is expanded to the base color value after loading.
 
 =head1 EXAMPLES
@@ -1172,7 +984,6 @@ The C<${base}> string is expanded to the base color value after loading.
     mdee --mode=dark -B '#780043' file.md  # dark mode with burgundy
     mdee --theme=warm file.md              # warm (Coral) base color
     mdee --theme=warm,hashed file.md      # warm + closing hashes
-    mdee --list-themes                     # list available themes
 
 =head1 DEPENDENCIES
 
@@ -1210,13 +1021,10 @@ The overall data flow is:
     Input File
         |
         v
-    [greple] --- Syntax Highlighting
+    [greple -Mmd] --- Syntax Highlighting + Table Formatting
         |
         v
     [ansifold] --- Text Folding (optional)
-        |
-        v
-    [ansicolumn] --- Table Formatting (optional)
         |
         v
     [nup] --- Paged Output (nup style)
@@ -1235,7 +1043,7 @@ pipeline without execution.
 
 =head3 Processing Stages
 
-The pipeline consists of four configurable stages.  Each stage can be
+The pipeline consists of configurable stages.  Each stage can be
 enabled or disabled independently using C<--[no-]fold>, C<--[no-]table>,
 and C<--[no-]nup> options.
 
@@ -1288,9 +1096,13 @@ The folding width is controlled by C<--width> option (default: 80).
 
 =head4 Table Formatting
 
-The third stage formats Markdown tables using L<ansicolumn(1)|App::ansicolumn>.
-Tables are detected by the pattern C<^(\|.+\|\n){3,}> and formatted
-with aligned columns while preserving ANSI colors.
+Table formatting is handled within the L<App::Greple::md> module
+(after syntax highlighting, before output).  Markdown tables are
+detected by the pattern C<^ {0,3}(\|.+\|\n){3,}> and formatted with
+aligned columns using L<ansicolumn(1)|App::ansicolumn> while
+preserving ANSI colors.  When C<--rule> is enabled (default),
+ASCII pipe characters are replaced with Unicode box-drawing
+characters (C<│>, C<├>, C<┤>, C<┼>, C<─>).
 
 =head3 Output Stage
 
@@ -1306,30 +1118,36 @@ chained via C<--theme=NAME1,NAME2,...>.
 
 =head3 Theme Structure
 
-The built-in default theme is defined as C<theme_light> and
-C<theme_dark> associative arrays.  Dark inherits undefined
-keys from light immediately after declaration.  Theme files can
-modify these arrays and the C<pattern[]> array directly:
+Color definitions are managed by the L<App::Greple::md> module.
+The C<theme_light> and C<theme_dark> arrays contain only the base
+color.  Theme files can modify the base color, pass configuration
+to the md module via C<md_config[]>, and modify C<pattern[]>:
 
-    # theme/warm.sh — change colors
+    # theme/warm.sh — change base color
     theme_light[base]='<Coral>=y25'
     theme_dark[base]='<Coral>=y80'
+
+    # theme/hashed.sh — enable closing hashes
+    md_config+=(hashed.h3=1 hashed.h4=1 hashed.h5=1 hashed.h6=1)
 
     # modify matching patterns
     pattern[link]='...'
 
+The C<md_config[]> entries are passed as config parameters to the
+L<App::Greple::md> module.
+
 =head4 Base Color Expansion
 
-The C<${base}> placeholder is expanded to the effective base color
-after theme loading.  The base color is determined by the
-C<--base-color> option (default: RoyalBlue) with automatic luminance
-adjustment based on mode (C<=y25> for light, C<=y80> for dark).
+The C<${base}> placeholder in color values is expanded by the md
+module.  The base color is determined by C<--base-color> option
+(default: RoyalBlue) with automatic luminance adjustment based on
+mode (C<=y25> for light, C<=y80> for dark).
 
 =head3 Color Specifications
 
 Colors are specified using L<Term::ANSIColor::Concise> format.
 The C<--cm> option maps colors to captured groups.  For example,
-C<L00DE/${base}> specifies gray foreground on base-colored background.
+C<L00D/${base};E> specifies gray foreground on base-colored background.
 
 The color specification supports modifiers:
 

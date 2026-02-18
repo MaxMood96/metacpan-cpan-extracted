@@ -79,45 +79,62 @@ subtest 'no-fold option' => sub {
 
 # Test: no-table option
 subtest 'no-table option' => sub {
-    my $out = `$mdee --dryrun --no-table $test_md 2>&1`;
-    unlike($out, qr/run_table/, '--no-table excludes table from pipeline');
+    my $ddn = `$mdee -ddn --no-table $test_md 2>&1`;
+    unlike($ddn, qr/table=1/, '--no-table excludes table=1 from config');
+    like($ddn, qr/table=0/, '--no-table sends table=0 to config');
+
+    # Verify actual behavior: table should NOT be formatted
+    use Encode 'decode_utf8';
+    my $out = decode_utf8(`$mdee --no-nup --no-fold --no-table $test_md 2>&1`);
+    unlike($out, qr/\x{2502}/, '--no-table does not produce box-drawing chars');
 };
 
 # Test: filter option
 subtest 'filter option' => sub {
     my $out = `$mdee --dryrun -f $test_md 2>&1`;
     unlike($out, qr/run_fold/, '-f disables fold');
-    like($out, qr/run_table/, '-f keeps table enabled');
     unlike($out, qr/run_nup/, '-f disables nup');
+
+    my $ddn = `$mdee -ddn -f $test_md 2>&1`;
+    like($ddn, qr/table=1/, '-f keeps table enabled');
 };
 
 # Test: style option
 subtest 'style option' => sub {
     my $nup = `COLUMNS=200 $mdee --dryrun --style=nup $test_md 2>&1`;
     like($nup, qr/run_fold/, '--style=nup includes fold');
-    like($nup, qr/run_table/, '--style=nup includes table');
     like($nup, qr/run_nup/, '--style=nup includes nup');
+
+    my $nup_ddn = `COLUMNS=200 $mdee -ddn --style=nup $test_md 2>&1`;
+    like($nup_ddn, qr/table=1/, '--style=nup includes table');
 
     my $pager = `$mdee --dryrun --style=pager $test_md 2>&1`;
     like($pager, qr/run_fold/, '--style=pager includes fold');
-    like($pager, qr/run_table/, '--style=pager includes table');
     unlike($pager, qr/run_nup/, '--style=pager excludes nup');
     like($pager, qr/run_pager/, '--style=pager includes pager');
 
+    my $pager_ddn = `$mdee -ddn --style=pager $test_md 2>&1`;
+    like($pager_ddn, qr/table=1/, '--style=pager includes table');
+
     my $cat = `$mdee --dryrun --style=cat $test_md 2>&1`;
     like($cat, qr/run_fold/, '--style=cat includes fold');
-    like($cat, qr/run_table/, '--style=cat includes table');
     unlike($cat, qr/run_nup/, '--style=cat excludes nup');
+
+    my $cat_ddn = `$mdee -ddn --style=cat $test_md 2>&1`;
+    like($cat_ddn, qr/table=1/, '--style=cat includes table');
 
     my $filter = `$mdee --dryrun --style=filter $test_md 2>&1`;
     unlike($filter, qr/run_fold/, '--style=filter excludes fold');
-    like($filter, qr/run_table/, '--style=filter includes table');
     unlike($filter, qr/run_nup/, '--style=filter excludes nup');
 
-    my $raw = `$mdee --dryrun --style=raw $test_md 2>&1`;
-    unlike($raw, qr/run_fold/, '--style=raw excludes fold');
-    unlike($raw, qr/run_table/, '--style=raw excludes table');
-    unlike($raw, qr/run_nup/, '--style=raw excludes nup');
+    my $filter_ddn = `$mdee -ddn --style=filter $test_md 2>&1`;
+    like($filter_ddn, qr/table=1/, '--style=filter includes table');
+
+    my $raw_ddn = `$mdee -ddn --style=raw $test_md 2>&1`;
+    unlike($raw_ddn, qr/run_fold/, '--style=raw excludes fold');
+    unlike($raw_ddn, qr/table=1/, '--style=raw excludes table');
+    like($raw_ddn, qr/table=0/, '--style=raw sends table=0');
+    unlike($raw_ddn, qr/run_nup/, '--style=raw excludes nup');
 
     my $bogus = `$mdee --dryrun --style=bogus $test_md 2>&1`;
     like($bogus, qr/unknown style/, '--style=bogus produces error');
@@ -127,9 +144,11 @@ subtest 'style option' => sub {
 subtest 'plain option' => sub {
     my $out = `$mdee --dryrun -p $test_md 2>&1`;
     like($out, qr/run_fold/, '-p includes fold');
-    like($out, qr/run_table/, '-p includes table');
     unlike($out, qr/run_nup/, '-p excludes nup');
     like($out, qr/run_pager/, '-p includes pager');
+
+    my $ddn = `$mdee -ddn -p $test_md 2>&1`;
+    like($ddn, qr/table=1/, '-p includes table');
 };
 
 # Test: style override
@@ -141,20 +160,6 @@ subtest 'style override' => sub {
     my $out2 = `$mdee --dryrun -p --no-fold $test_md 2>&1`;
     unlike($out2, qr/run_fold/, '-p --no-fold disables fold');
     like($out2, qr/run_pager/, '-p --no-fold keeps pager');
-};
-
-# Test: list-themes option
-subtest 'list-themes option' => sub {
-    my $out = `$mdee --list-themes 2>&1`;
-    like($out, qr/Available themes/i, '--list-themes shows themes');
-    like($out, qr/default/, '--list-themes shows default theme');
-};
-
-# Test: theme name listing (--list-themes)
-subtest 'theme name listing' => sub {
-    my $out = `$mdee --list-themes 2>&1`;
-    is($?, 0, '--list-themes exits successfully');
-    like($out, qr/default/, '--list-themes lists default theme');
 };
 
 # Test: width option
@@ -208,21 +213,27 @@ subtest 'list marker patterns' => sub {
     ok($fold_lines->("    #) $long\n") > 1, '#) list item is folded');
 };
 
-# Test: tee module with table (actual execution)
-subtest 'tee table execution' => sub {
+# Test: md module table formatting (actual execution)
+subtest 'md module table execution' => sub {
     # Run with table formatting enabled
     my $out = `$mdee --no-nup --no-fold --table $test_md 2>&1`;
     is($?, 0, 'mdee with table exits successfully');
     # Table should be formatted with aligned columns
     # The separator line |---|---|---| should have consistent dashes
     use Encode 'decode_utf8';
-    like(decode_utf8($out), qr/├─+┼─+┼─+┤/, 'table separator is formatted');
+    like(decode_utf8($out), qr/├─+┼─+┼─+┤/, 'table separator is formatted with box-drawing');
     # Check that ANSI sequences are present
     like($out, qr/\e\[/, 'output contains ANSI escape sequences');
+
+    # --no-rule: ASCII separators instead of box-drawing
+    my $norule = decode_utf8(`$mdee --no-nup --no-fold --table --no-rule $test_md 2>&1`);
+    is($?, 0, 'mdee with --no-rule exits successfully');
+    like($norule, qr/\|[-]+\|/, '--no-rule produces ASCII separator');
+    unlike($norule, qr/[├┼┤─│]/, '--no-rule does not produce box-drawing chars');
 };
 
-# Test: tee module combined (fold + table)
-subtest 'tee combined execution' => sub {
+# Test: combined execution (fold + table)
+subtest 'combined execution' => sub {
     my $out = `$mdee --no-nup --fold --table --width=60 $test_md 2>&1`;
     is($?, 0, 'mdee with fold+table exits successfully');
     like($out, qr/\e\[/, 'output contains ANSI escape sequences');
@@ -230,39 +241,34 @@ subtest 'tee combined execution' => sub {
     like($out, qr/greple.*Pattern matching/s, 'table content is present');
 };
 
-# Test: show option
+# Test: show option (verify actual output behavior)
 subtest 'show option' => sub {
-    # Count -E options in run_greple debug line (identified by --ci=G)
-    sub count_patterns {
-        my $out = shift;
-        my ($line) = $out =~ /^(debug: greple\h.*--ci=G\h.*)/m;
-        return 0 unless $line;
-        return () = $line =~ /\h-E\h/g;
+    # Helper: check if text has ANSI color directly applied
+    sub has_ansi_around {
+        my ($out, $text) = @_;
+        return $out =~ /\e\[[0-9;]*m\Q$text\E/;
     }
 
-    # all fields enabled by default (15 patterns: bold and italic combined with |)
-    my $default = `$mdee -ddn $test_md 2>&1`;
-    is(count_patterns($default), 15, 'default has 15 patterns');
+    # Default: bold should be colored
+    my $default = `$mdee -f $test_md 2>&1`;
+    ok(has_ansi_around($default, '**bold text**'), 'default has bold formatting');
 
-    # --show italic=0 disables italic (14 patterns: 15 - 1)
-    my $no_italic = `$mdee -ddn --show italic=0 $test_md 2>&1`;
-    is(count_patterns($no_italic), 14, '--show italic=0 removes 1 pattern');
+    # --show bold=0: bold should NOT be colored
+    my $no_bold = `$mdee -f --show bold=0 $test_md 2>&1`;
+    ok(!has_ansi_around($no_bold, '**bold text**'), '--show bold=0 disables bold');
 
-    # --show bold=0 disables bold (14 patterns: 15 - 1)
-    my $no_bold = `$mdee -ddn --show bold=0 $test_md 2>&1`;
-    is(count_patterns($no_bold), 14, '--show bold=0 removes 1 pattern');
+    # --show italic=0: italic should NOT be colored
+    my $no_italic = `$mdee -f --show italic=0 $test_md 2>&1`;
+    ok(!has_ansi_around($no_italic, '_italic text_'), '--show italic=0 disables italic');
 
-    # --show all enables all fields (15 patterns)
-    my $all = `$mdee -ddn --show all $test_md 2>&1`;
-    is(count_patterns($all), 15, '--show all has 15 patterns');
+    # --show all= disables all formatting
+    my $all_off = `$mdee -f '--show=all=' $test_md 2>&1`;
+    ok(!has_ansi_around($all_off, '**bold text**'), '--show all= disables bold');
 
-    # --show h6=0 disables h6 (14 patterns: 15 - 1)
-    my $no_h6 = `$mdee -ddn --show h6=0 $test_md 2>&1`;
-    is(count_patterns($no_h6), 14, '--show h6=0 removes 1 pattern');
-
-    # --show all= --show bold enables only bold (1 pattern)
-    my $only_bold = `$mdee -ddn '--show=all=' --show=bold $test_md 2>&1`;
-    is(count_patterns($only_bold), 1, '--show all= --show bold has 1 pattern');
+    # --show all= --show bold: only bold colored
+    my $only_bold = `$mdee -f '--show=all=' --show=bold $test_md 2>&1`;
+    ok(has_ansi_around($only_bold, '**bold text**'), '--show all= --show bold enables bold');
+    ok(!has_ansi_around($only_bold, '_italic text_'), '--show all= --show bold disables italic');
 
     # unknown field should error
     my $unknown = `$mdee --dryrun --show unknown $test_md 2>&1`;
@@ -301,7 +307,7 @@ subtest 'config file defaults' => sub {
         print $fh "default[base_color]='Crimson'\n";
         close $fh;
         my $out = `XDG_CONFIG_HOME=$tmpdir $mdee -dd --dryrun --mode=light $test_md 2>&1`;
-        like($out, qr/colors\[base\].*Crimson/, 'default[base_color]=Crimson is applied');
+        like($out, qr/base_color=.*Crimson/, 'default[base_color]=Crimson is passed via config');
     }
 
     # Test command-line overrides config defaults
@@ -352,7 +358,7 @@ CONF
         my $out = `XDG_CONFIG_HOME=$tmpdir $mdee -d --dryrun --mode=light $test_md 2>&1`;
         is($?, 0, 'default[theme]=warm,hashed loads successfully');
         like($out, qr/Coral/, 'default[theme]=warm,hashed applies warm');
-        like($out, qr/sub\{/, 'default[theme]=warm,hashed applies hashed');
+        like($out, qr/hashed\.h3=1/, 'default[theme]=warm,hashed applies hashed');
     }
 
     # Test --theme skips default[theme] (flag set by callback)
@@ -371,8 +377,8 @@ CONF
         print $fh "theme_light[base]='<Crimson>=y25'\n";
         close $fh;
         my $out = `XDG_CONFIG_HOME=$tmpdir $mdee -dd --dryrun --mode=light -B Ivory $test_md 2>&1`;
-        like($out, qr/colors\[base\].*Ivory/, '--base-color overrides config theme override');
-        unlike($out, qr/colors\[base\].*Crimson/, '--base-color takes priority over config');
+        like($out, qr/base_color=.*Ivory/, '--base-color overrides config theme override');
+        unlike($out, qr/base_color=.*Crimson/, '--base-color takes priority over config');
     }
 };
 
@@ -400,10 +406,6 @@ THEME
     my $dark = `XDG_CONFIG_HOME=$tmpdir $mdee -d --dryrun --mode=dark --theme=testtheme $test_md 2>&1`;
     is($?, 0, 'external dark theme loads successfully');
     like($dark, qr/Crimson/, 'external dark theme has base color');
-
-    # Test --list-themes shows external theme name
-    my $list = `XDG_CONFIG_HOME=$tmpdir $mdee --list-themes 2>&1`;
-    like($list, qr/testtheme/, '--list-themes shows external theme');
 
     # Test --theme=FILE (file path direct loading)
     my $out_file = `XDG_CONFIG_HOME=$tmpdir $mdee -d --dryrun --mode=light --theme=$theme_dir/testtheme.sh $test_md 2>&1`;

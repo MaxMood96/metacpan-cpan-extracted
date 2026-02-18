@@ -3,7 +3,7 @@
    "author" : [
       "Wesley Schwengle <waterkip@cpan.org>"
    ],
-   "dynamic_config" : 0,
+   "dynamic_config" : 1,
    "generated_by" : "Dist::Zilla version 6.033, CPAN::Meta::Converter version 2.150010",
    "license" : [
       "bsd"
@@ -16,7 +16,9 @@
    "prereqs" : {
       "configure" : {
          "requires" : {
+            "CPAN::Meta::Requirements" : "2.120620",
             "ExtUtils::MakeMaker" : "0",
+            "Module::Metadata" : "0",
             "perl" : "v5.26.0"
          }
       },
@@ -26,6 +28,7 @@
          },
          "requires" : {
             "Dist::Zilla" : "5",
+            "Dist::Zilla::Plugin::DynamicPrereqs" : "0",
             "Dist::Zilla::Plugin::Prereqs" : "0",
             "Dist::Zilla::PluginBundle::Author::WATERKIP" : "0",
             "Pod::Coverage::TrustPod" : "0",
@@ -57,10 +60,12 @@
             "EV" : "0",
             "File::Spec::Functions" : "0",
             "Getopt::Long" : "0",
+            "JSON::XS" : "0",
             "List::Util" : "0",
             "Object::Pad" : "0",
             "Pod::Usage" : "0",
             "Proc::Find" : "0",
+            "Proc::ProcessTable" : "0",
             "X11::Protocol" : "0",
             "YAML::XS" : "0",
             "perl" : "v5.26.0"
@@ -79,7 +84,7 @@
    "provides" : {
       "AnyEvent::I3X::Workspace::OnDemand" : {
          "file" : "lib/AnyEvent/I3X/Workspace/OnDemand.pm",
-         "version" : "0.006"
+         "version" : "0.008"
       }
    },
    "release_status" : "stable",
@@ -90,7 +95,7 @@
          "web" : "https://gitlab.com/waterkip/anyevent-i3x-workspace-ondemand"
       }
    },
-   "version" : "0.006",
+   "version" : "0.008",
    "x_contributors" : [
       "Wesley Schwengle <waterkip@cpan.org>"
    ],

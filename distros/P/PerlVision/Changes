@@ -1,0 +1,13 @@
+Revision history for PerlVision
+
+1.508   Tue Feb 17 13:55:44 EST 2026
+        Fix bugs, update documentation
+
+1.5     Tue Oct 31 08:06:08 2000
+        Update docs to pod format
+
+0.2     Tue Apr 4 14:33:48 1995
+        Rewrite using curses. Faster and more portable.
+
+0.1     Fri Mar 17 14:29:46 1995
+        Initial release

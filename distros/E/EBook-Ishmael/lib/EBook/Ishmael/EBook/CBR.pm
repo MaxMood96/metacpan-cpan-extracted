@@ -1,6 +1,6 @@
 package EBook::Ishmael::EBook::CBR;
 use 5.016;
-our $VERSION = '1.09';
+our $VERSION = '2.00';
 use strict;
 use warnings;
 
@@ -8,14 +8,20 @@ use parent 'EBook::Ishmael::EBook::CB';
 
 use File::Which;
 
-use EBook::Ishmael::ShellQuote qw(shell_quote);
+use EBook::Ishmael::ShellQuote qw(safe_qx);
 
 # TODO: Create new CBR test file that uses older RAR version, so that tests
 # on systems with older unrar's can pass.
 
 my $MAGIC = pack "C*", 0x52, 0x61, 0x72, 0x21, 0x1a, 0x07;
 
-my $UNRAR = which('unrar') // which('UnRAR');
+my $UNRAR;
+for my $b (qw(unrar UnRAR)) {
+    if (defined which($b)) {
+        $UNRAR = $b;
+        last;
+    }
+}
 
 our $CAN_TEST = defined $UNRAR;
 
@@ -42,10 +48,7 @@ sub _unrar {
         die "Cannot unrar $rar; unrar not installed\n";
     }
 
-    my $qrar = shell_quote($rar);
-    my $qout = shell_quote($out);
-    qx/$UNRAR x $qrar $qout/;
-
+    safe_qx($UNRAR, 'x', $rar, $out);
     unless ($? >> 8 == 0) {
         die "Failed to run '$UNRAR' on $rar\n";
     }

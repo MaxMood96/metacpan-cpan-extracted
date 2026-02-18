@@ -1,5 +1,21 @@
 Revision history for AnyEvent-I3X-Workspace-OnDemand
 
+0.008     2026-02-18 02:06:09Z
+
+  * The previous helper script didn't really work. So we used an example found
+    in the i3status contrib section:
+
+      https://github.com/i3/i3status/blob/main/contrib/wrapper.pl
+
+    This is now called i3-status and show the group name in the i3bar.
+
+
+0.007     2026-02-18 01:23:30Z
+
+  * Fix build/CI
+  * Ensude i3status gets kill -USR1'ed to restart to ensure helper scripts can
+    show group information.
+
 0.006     2026-01-23 16:47:27Z
 
   * Allow restart of daemon with workspace/group preservation

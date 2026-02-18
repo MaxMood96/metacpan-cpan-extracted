@@ -17,11 +17,11 @@ isa_ok($ebook, 'EBook::Ishmael::EBook::Zip');
 like($ebook->{Source}, qr/\Q$ZIP\E$/, "source ok");
 
 is_deeply(
-    $ebook->metadata,
+    $ebook->metadata->hash,
     {
-        Title => [ 'gpl3' ],
-        Format => [ 'Zip' ],
-        Modified => [ scalar gmtime((stat($ebook->{Source}))[9]) ],
+        Title => 'gpl3',
+        Format => 'Zip',
+        Modified => (stat($ebook->{Source}))[9],
     },
     "metadata ok"
 );

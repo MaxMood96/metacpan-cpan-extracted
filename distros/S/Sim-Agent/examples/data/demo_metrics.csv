@@ -1,0 +1,17 @@
+timestamp,service,region,latency_ms,error_rate
+2026-02-14T10:00Z,auth,eu-west,120,0.01
+2026-02-14T10:05Z,auth,eu-west,118,0.00
+2026-02-14T10:10Z,auth,eu-west,450,0.08
+2026-02-14T10:15Z,checkout,eu-west,210,0.02
+2026-02-14T10:20Z,checkout,eu-west,980,0.15
+2026-02-14T10:25Z,search,eu-west,160,0.01
+2026-02-14T10:30Z,search,eu-west,155,0.01
+2026-02-14T10:35Z,auth,us-east,140,0.01
+2026-02-14T10:40Z,auth,us-east,-5,0.00
+2026-02-14T10:45Z,checkout,us-east,240,0.02
+2026-02-14T10:50Z,search,us-east,170,0.50
+2026-02-14T10:55Z,auth,,130,0.01
+2026-02-14T11:00Z,checkout,eu-west,205,0.02
+2026-02-14T11:05Z,checkout,eu-west,208,0.02
+2026-02-14T11:10Z,search,eu-west,158,0.01
+2026-02-14T11:15Z,auth,eu-west,119,0.00

@@ -1,0 +1,95 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+# PODNAME: i3-status
+# ABSTRACT: i3 status - plugin on demand
+
+use JSON::XS;
+use AnyEvent::I3X::Workspace::OnDemand;
+use Pod::Usage;
+use Getopt::Long;
+
+my %options = ();
+
+GetOptions(\%options, qw(help man));
+
+if ($options{help}) {
+    pod2usage(-verbose => 1);
+}
+if ($options{man}) {
+    pod2usage(-verbose => 2);
+}
+
+
+$| = 1;
+
+my $x11 = X11::Protocol->new();
+my $xroot = $x11->root;
+
+# Skip the first 2 lines
+print scalar <STDIN>;
+print scalar <STDIN>;
+
+# Read lines forever, ignore a comma at the beginning if it exists.
+while (my ($statusline) = (<STDIN> =~ /^,?(.*)/)) {
+  # Decode the JSON-encoded line.
+  my @blocks = @{decode_json($statusline)};
+
+  my $prop = $x11->atom('_I3_WOD_GROUP');
+  my $utf8 = $x11->atom('UTF8_STRING');
+
+  my ($value, $type, $format, $bytes_after)
+      = $x11->GetProperty($xroot, $prop, $utf8, 0, 1024);
+
+  @blocks = ({
+    full_text => $value,
+    name => 'i3-wod'
+  }, @blocks);
+
+  # Output the line as JSON.
+  print encode_json(\@blocks) . ",\n";
+}
+
+__END__
+
+=pod
+
+=encoding UTF-8
+
+=head1 NAME
+
+i3-status - i3 status - plugin on demand
+
+=head1 VERSION
+
+version 0.008
+
+=head1 SYNOPSIS
+
+i3-status OPTIONS
+
+=head1 DESCRIPTION
+
+An i3status extension. This is just a "wrapper" around i3status to show the
+workgroup in the bar
+
+=head1 OPTIONS
+
+=head2 --help
+
+This help
+
+=head1 AUTHOR
+
+Wesley Schwengle <waterkip@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is Copyright (c) 2024 by Wesley Schwengle.
+
+This is free software, licensed under:
+
+  The (three-clause) BSD License
+
+=cut

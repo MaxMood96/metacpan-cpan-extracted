@@ -1,19 +1,29 @@
 Revision history for Concierge-Auth
 
+v0.4.3  2026-02-17
+    - Version Bump for CPAN
+
+v0.4.2  2026-02-17
+    - Further deprecation steps for gen_token and gen_crypt_token
+
+v0.4.3  2026-02-17
+    - Removed gen_crypt_token and gen_token from exports, tests, and documentation
+    - Removed unused Time::HiRes import from Generators.pm
+    - Deprecated subs remain as internal aliases (will be removed in a future release)
+
+v0.4.2  2026-02-17
+    - Fixed documentation referring to gen_crypt_token deprecation
+
+v0.4.1  2026-02-17
+    - Deprecated gen_crypt_token (now aliases gen_random_token)
+    - crypt() is non-portable; returned undef on some CPAN tester platforms
+
 v0.4.0  2026-02-15
     - Fixed distribution issue with MANIFEST.SKIP
 
-v0.19.0 2026-02-10
-    - Initial CPAN release
-    - Argon2 password hashing with Bcrypt legacy validation
-    - File-based password storage with file locking
-    - Token and random value generation (Concierge::Auth::Generators)
-v0.3.1 2026-02-11
-    - Documentation improvements
-v0.3.2 2026-02-11
-    - Corrected dependency list in distro
 v0.3.5 2026-02-14
     - Fix infinite loop in gen_word_phrase when dictionary file unavailable (CI hang)
+
 v0.3.4 2026-02-12
     - Rebuilt tarball with GNU tar (fixes PaxHeader issue on CPAN)
 
@@ -21,3 +31,15 @@ v0.3.3 2026-02-12
     - gen_uuid now generates v4 UUIDs using Crypt::PRNG (no longer shells out to uuidgen)
     - Added gen_random_id for hex-encoded cryptographic random IDs
     - Added generator test suite (t/05-generators.t)
+
+v0.3.2 2026-02-11
+    - Corrected dependency list in distro
+
+v0.3.1 2026-02-11
+    - Documentation improvements
+
+v0.19.0 2026-02-10
+    - Initial CPAN release
+    - Argon2 password hashing with Bcrypt legacy validation
+    - File-based password storage with file locking
+    - Token and random value generation (Concierge::Auth::Generators)

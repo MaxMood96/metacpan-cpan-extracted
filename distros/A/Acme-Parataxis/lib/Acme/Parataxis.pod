@@ -132,22 +132,27 @@ C<$ms> milliseconds.
     Acme::Parataxis->await_sleep(500);
     say 'Woke up!';
 
-=head2 C<await_read( $fh )>
+=head2 C<await_read( $fh, $timeout = 5000 )>
 
-Suspends the current fiber until the given filehandle is ready for reading. Works best with non-blocking sockets.
-
-    $socket->blocking( 0 );
-    Acme::Parataxis->await_read( $socket );
-    my $data = <$socket>;
-
-=head2 C<await_write( $fh )>
-
-Suspends the current fiber until the given filehandle is ready for writing. Useful for non-blocking network
-communication.
+Suspends the current fiber until the given filehandle is ready for reading, or until C<$timeout> milliseconds have
+elapsed. Works best with non-blocking sockets.
 
     $socket->blocking( 0 );
-    Acme::Parataxis->await_write( $socket );
-    $socket->print( "Hello World\n" );
+    my $res = Acme::Parataxis->await_read( $socket, 1000 );
+    if ($res > 0) {
+        my $data = <$socket>;
+    }
+
+=head2 C<await_write( $fh, $timeout = 5000 )>
+
+Suspends the current fiber until the given filehandle is ready for writing, or until C<$timeout> milliseconds have
+elapsed. Useful for non-blocking network communication.
+
+    $socket->blocking( 0 );
+    my $res = Acme::Parataxis->await_write( $socket, 1000 );
+    if ($res > 0) {
+        $socket->print( 'Hello World\n' );
+    }
 
 =head2 C<await_core_id( )>
 

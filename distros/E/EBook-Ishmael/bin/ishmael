@@ -85,6 +85,8 @@ options, as long they're installed on your system:
 
 =item chawan
 
+=item pandoc
+
 =item queequeg
 
 =back
@@ -271,13 +273,6 @@ Name of character encoding to use for outputted text by default.
 
 =back
 
-=head1 CAVEATS
-
-When dumping ebook metadata, the format of a given field can differ between
-different ebook formats. For example, the C<Created> field could potentially be
-in the C<YYYY-MM-DD> format, C<DD.MM.YYYY> format, etc. Special care should be
-taken if you intend to process these fields across different formats.
-
 =head1 RESTRICTIONS
 
 PDF processing is inefficient and the output is ugly.
@@ -308,7 +303,7 @@ in Perl so it should (hopefully) be less buggy and more maintainable.
 
 =head1 COPYRIGHT
 
-Copyright (C) 2025 Samuel Young
+Copyright (C) 2025-2026 Samuel Young
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -318,6 +313,6 @@ the Free Software Foundation, either version 3 of the License, or
 =head1 SEE ALSO
 
 L<queequeg(1)>, L<elinks(1)>, L<links(1)>, L<lynx(1)>, L<w3m(1)>, L<cha(1)>,
-L<Encode::Supported>
+L<pandoc(1)>, L<Encode::Supported>
 
 =cut

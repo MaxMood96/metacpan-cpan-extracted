@@ -1,6 +1,6 @@
 package EBook::Ishmael::ImageID;
 use 5.016;
-our $VERSION = '1.09';
+our $VERSION = '2.00';
 use strict;
 use warnings;
 
@@ -11,25 +11,8 @@ use List::Util qw(max);
 
 use XML::LibXML;
 
-my %MAGIC = (
-    pack("C*", 0xff, 0xd8, 0xff)                               => 'jpg',
-    pack("C*", 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a) => 'png',
-    pack("C*", 0x47, 0x49, 0x46, 0x38)                         => 'gif',
-    pack("C*", 0x52, 0x49, 0x46, 0x46)                         => 'webp',
-    pack("C*", 0x42, 0x4d)                                     => 'bmp',
-    pack("C*", 0x49, 0x49)                                     => 'tif',
-    pack("C*", 0x4d, 0x4d)                                     => 'tif',
-);
-
-# File formats that do not have magic bytes, use a subroutine instead.
-my %NONMAGIC = (
-    'svg' => sub {
-        substr(${ $_[0] }, 0, 1024) =~ /<\s*svg[^<>]*>/
-    },
-);
-
 my $IMGRX = sprintf "(%s)", join '|', qw(
-    png jpg jpeg tif tiff gif bmp webp svg
+    png jpg jpeg tif tiff gif bmp webp svg jxl avif
 );
 
 # This function may not support many image formats as it was designed for
@@ -122,12 +105,8 @@ my %SIZE = (
 
         my $ref = shift;
 
-        my $dom;
-
-        eval {
-            $dom = XML::LibXML->load_xml(string => $ref);
-            1;
-        } or return undef;
+        my $dom = eval { XML::LibXML->load_xml(string => $ref) }
+            or return undef;
 
         my $svg = $dom->documentElement;
 
@@ -143,19 +122,27 @@ sub image_id {
 
     my $ref = shift;
 
-    my $sublen = max map { length } keys %MAGIC;
-
-    my $mag = substr $$ref, 0, $sublen;
-
-    for my $m (keys %MAGIC) {
-        return $MAGIC{ $m } if $mag =~ /^\Q$m\E/;
+    if ($$ref =~ /^\xff\xd8\xff/) {
+        return 'jpg';
+    } elsif ($$ref =~ /^\x89\x50\x4e\x47\x0d\x0a\x1a\x0a/) {
+        return 'png';
+    } elsif ($$ref =~ /^GIF8[79]a/) {
+        return 'gif';
+    } elsif ($$ref =~ /^\x52\x49\x46\x46....\x57\x45\x42\x50\x56\x50\x38/) {
+        return 'webp';
+    } elsif ($$ref =~ /^BM/) {
+        return 'bmp';
+    } elsif ($$ref =~ /^(\x49\x49\x2a\x00|\x4d\x4d\x00\x2a)/) {
+        return 'tif';
+    } elsif ($$ref =~ /\A....ftypavif/s) {
+        return 'avif';
+    } elsif ($$ref =~ /^(\xff\x0a|\x00{3}\x0c\x4a\x58\x4c\x20\x0d\x0a\x87\x0a)/) {
+        return 'jxl';
+    } elsif (substr($$ref, 0, 1024) =~ /<\s*svg[^<>]*>/) {
+        return 'svg';
+    } else {
+        return undef;
     }
-
-    for my $nm (keys %NONMAGIC) {
-        return $nm if $NONMAGIC{ $nm }->($ref);
-    }
-
-    return undef;
 
 }
 
@@ -221,6 +208,10 @@ Currently, the following formats are supported:
 
 =item svg
 
+=item avif
+
+=item jxl
+
 =back
 
 =head1 SUBROUTINES
@@ -242,17 +233,21 @@ could not be determined, returns C<undef>.
 
 This subroutine does not support the following formats (yet):
 
-=item $bool = is_image_path($path)
-
-Returns true if C<$path> looks like an image path name.
-
 =over 4
 
 =item webp
 
 =item tif
 
+=item avif
+
+=item jxl
+
 =back
+
+=item $bool = is_image_path($path)
+
+Returns true if C<$path> looks like an image path name.
 
 =back
 
@@ -266,7 +261,7 @@ requests are welcome!
 
 =head1 COPYRIGHT
 
-Copyright (C) 2025 Samuel Young
+Copyright (C) 2025-2026 Samuel Young
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

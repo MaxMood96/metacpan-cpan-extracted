@@ -1,4 +1,4 @@
-package Term::ANSIEncode 1.88;
+package Term::ANSIEncode 1.90;
 
 #######################################################################
 #            _   _  _____ _____   ______                     _        #
@@ -59,7 +59,7 @@ BEGIN {
     our @EXPORT_OK = qw(ansi_colors);
 } ## end BEGIN
 
-our $VERSION = '1.88';
+our $VERSION = '1.90';
 
 # Package-level caches so large tables are built only once per process.
 our $GLOBAL_ANSI_META = _global_ansi_meta();
@@ -176,6 +176,9 @@ TOKENS
             my $name = shift(@names);
             $to .= $self->_add_row($bar, $name, $self->ansi_description('cursor', $name));
         }
+        $to .= $self->_add_row($bar, 'SPACES count', 'outputs "count" number of spaces');
+        $to .= $self->_add_row($bar, 'TABS count', 'outputs "count" number of tabs');
+        $to .= $self->_add_row($bar, 'CHAR character,count', 'character repeated "count" times');
         $to .= $self->_add_row($bar, 'LOCATE column,row', 'Sets the cursor location');
         $to .= $self->_add_row($bar, 'SCROLL UP count',   'Scrolls the screen up by "count" lines');
         $to .= $self->_add_row($bar, 'SCROLL DOWN count', 'Scrolls the screen down by "count" lines');
@@ -582,6 +585,9 @@ sub ansi_decode {
     $text =~ s/\[\%\s*LOCATE\s+(\d+)\s*,\s*(\d+)\s*\%\]/ $csi . "$2;$1" . 'H' /eigs;
     $text =~ s/\[\%\s*SCROLL\s+UP\s+(\d+)\s*\%\]/     $csi . $1 . 'S'           /eigs;
     $text =~ s/\[\%\s*SCROLL\s+DOWN\s+(\d+)\s*\%\]/   $csi . $1 . 'T'           /eigs;
+    $text =~ s/\[\%\s*SPACES\s+(\d+)\s*\%\]/   ' ' x $1           /eigs;
+    $text =~ s/\[\%\s*TABSS\s+(\d+)\s*\%\]/   "\t" x $1           /eigs;
+    $text =~ s/\[\%\s*CHAR\s+(\S),(\d+)\s*\%\]/   "$1" x $2           /eigs;
 
     # HORIZONTAL RULE expands into a sequence of meta-tokens (resolved later).
     $text =~ s/\[\%\s*HORIZONTAL\s+RULE\s+(.*?)\s*\%\]/

@@ -1,6 +1,6 @@
 package EBook::Ishmael::EBook::Epub;
 use 5.016;
-our $VERSION = '1.09';
+our $VERSION = '2.00';
 use strict;
 use warnings;
 
@@ -11,6 +11,7 @@ use File::Spec;
 use XML::LibXML;
 
 use EBook::Ishmael::EBook::Metadata;
+use EBook::Ishmael::Time qw(guess_time);
 use EBook::Ishmael::Unzip qw(unzip safe_tmp_unzip);
 
 my $MAGIC = pack 'C4', ( 0x50, 0x4b, 0x03, 0x04 );
@@ -72,20 +73,6 @@ sub _read_rootfile {
 
     my $self = shift;
 
-    # Hash of epub metadata items and their corresponding Metadata method
-    # accessors.
-    my %dcmeta = (
-        'contributor' => 'contributor',
-        'creator'     => 'author',
-        'date',       => 'created',
-        'description' => 'description',
-        'identifier'  => 'id',
-        'language'    => 'language',
-        'publisher'   => 'contributor',
-        'subject'     => 'genre',
-        'title',      => 'title',
-    );
-
     $self->{_contdir} = dirname($self->{_rootfile});
 
     my $dom = XML::LibXML-> load_xml(
@@ -97,6 +84,13 @@ sub _read_rootfile {
     my $xpc = XML::LibXML::XPathContext->new($dom);
     $xpc->registerNs('package', $ns);
     $xpc->registerNs('dc', $DCNS);
+
+    my ($vernode) = $xpc->findnodes(
+        '/package:package/@version'
+    );
+    if (defined $vernode) {
+        $self->{_version} = $vernode->getValue;
+    }
 
     my ($meta) = $xpc->findnodes(
         '/package:package/package:metadata'
@@ -127,13 +121,30 @@ sub _read_rootfile {
         my $name = $dc->nodeName =~ s/^dc://r;
         my $text = $dc->textContent();
 
-        next unless exists $dcmeta{ $name };
-
         $text =~ s/\s+/ /g;
 
-        my $method = $dcmeta{ $name };
-
-        push @{ $self->{Metadata}->$method }, $text;
+        if ($name eq 'contributor') {
+            $self->{Metadata}->add_contributor($text);
+        } elsif ($name eq 'creator') {
+            $self->{Metadata}->add_author($text);
+        } elsif ($name eq 'date') {
+            my $t = guess_time($text);
+            if (defined $t) {
+                $self->{Metadata}->set_created($t);
+            }
+        } elsif ($name eq 'description') {
+            $self->{Metadata}->set_description($text);
+        } elsif ($name eq 'identifier') {
+            $self->{Metadata}->set_id($text);
+        } elsif ($name eq 'language') {
+            $self->{Metadata}->set_language($text);
+        } elsif ($name eq 'publisher') {
+            $self->{Metadata}->add_contributor($text);
+        } elsif ($name eq 'subject') {
+            $self->{Metadata}->add_genre($text);
+        } elsif ($name eq 'title') {
+            $self->{Metadata}->set_title($text);
+        }
 
     }
 
@@ -216,17 +227,22 @@ sub new {
         _spine     => [],
         _cover     => undef,
         _images    => [],
+        _version   => undef,
     };
 
     bless $self, $class;
 
     $self->read($file);
 
-    unless (@{ $self->{Metadata}->title }) {
-        $self->{Metadata}->title([ (fileparse($file, qr/\.[^.]*/))[0] ]);
+    if (not defined $self->{Metadata}->title) {
+        $self->{Metadata}->set_title((fileparse($file, qr/\.[^.]*/))[0]);
     }
 
-    $self->{Metadata}->format([ 'EPUB' ]);
+    if (defined $self->{_version}) {
+        $self->{Metadata}->set_format('EPUB ' . $self->{_version});
+    } else {
+        $self->{Metadata}->set_format('EPUB');
+    }
 
     return $self;
 
@@ -333,7 +349,7 @@ sub metadata {
 
     my $self = shift;
 
-    return $self->{Metadata}->hash;
+    return $self->{Metadata};
 
 }
 

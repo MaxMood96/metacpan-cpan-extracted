@@ -15,11 +15,11 @@ isa_ok($ebook, 'EBook::Ishmael::EBook::Text');
 
 like($ebook->{Source}, qr/\Q$TXT\E$/, "source ok");
 
-is($ebook->metadata->{Format}[0], 'Text', 'metadata format ok');
-is($ebook->metadata->{Title}[0],  'gpl3.txt', 'metadata title ok');
+is($ebook->metadata->format, 'Text', 'metadata format ok');
+is($ebook->metadata->title,  'gpl3.txt', 'metadata title ok');
 
 # Modification time will probably differ, just check to make sure it exists.
-ok($ebook->metadata->{Modified}[0], 'metadata modified ok');
+ok($ebook->metadata->modified, 'metadata modified ok');
 
 ok($ebook->html, "html ok");
 

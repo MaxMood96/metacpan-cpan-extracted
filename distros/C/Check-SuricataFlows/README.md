@@ -21,11 +21,17 @@ than zero and the other is zero.
 If all entries found are uni-directional then it is safe to assume the monitored span
 is misconfigured.
 
+If more than one Suricata instance is appending to the file, you will likely want to use
+-s to specify each sensor name to check for.
+
 ## FLAGS
 
 ```
 check_suricataflows [-f <flows.json>] [-a <alert count>] [-w <warn
     count>] [-t <seconds>] [<-m> <max lines>]
+
+check_suricataflows [B<-f> <flows.json>] [B<-a> <alert count>] [B<-w> <warn count>]
+    [B<-t> <seconds>] [<-m> <max lines>] B<-s> <sensor> [B<-s> <sensor>]
 
 check_suricataflows -h/--help
 
@@ -59,6 +65,17 @@ Default: 300
 ### -m max_lines
 
 Max number of lines to read in.
+
+### -s sensor
+
+Sensor names to check for. May used more than once.
+
+If used then each of the specified sensors is checked for. It is
+checked from .host in the JSON and the variable for setting that
+in the Suricata config is .sensor-name .
+
+If more than once Suricata instance is appending to the file, then
+you will most likely want to use this.
 
 # INSTALLATION
 

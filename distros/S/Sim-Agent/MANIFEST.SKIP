@@ -1,0 +1,11 @@
+^blib/
+^Makefile$
+^Makefile\.old$
+^MYMETA\.(json|yml)$
+^pm_to_blib$
+^run_\d{8}_\d{6}/
+^run_\d{8}_\d{6}\.zip$
+^Sim-Agent-\d+\.\d+\.tar\.gz$
+\.swp$
+~$
+^\.

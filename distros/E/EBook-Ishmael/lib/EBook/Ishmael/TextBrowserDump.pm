@@ -1,6 +1,6 @@
 package EBook::Ishmael::TextBrowserDump;
 use 5.016;
-our $VERSION = '1.09';
+our $VERSION = '2.00';
 use strict;
 use warnings;
 
@@ -12,7 +12,7 @@ use List::Util qw(first);
 
 use File::Which;
 
-use EBook::Ishmael::ShellQuote qw(shell_quote);
+use EBook::Ishmael::ShellQuote qw(safe_qx);
 
 our $CAN_DUMP = 0;
 
@@ -26,6 +26,7 @@ my @ORDER = qw(
     elinks
     w3m
     chawan
+    pandoc
     queequeg
 );
 
@@ -66,6 +67,13 @@ my %Browsers = (
         Width => "-o 'display.columns=%d'",
         Xhtml => [],
     },
+    'pandoc' => {
+        Bins  => [ qw(pandoc) ],
+        Bin   => undef,
+        Opts  => [ qw(-f html -t plain -o -) ],
+        Width => "--columns %d",
+        Xhtml => [],
+    },
     'queequeg' => {
         Bins  => [ qw(queequeg) ],
         Bin   => undef,
@@ -76,17 +84,11 @@ my %Browsers = (
 );
 
 my $Default = undef;
-
 for my $k (@ORDER) {
-
     my $bin = first { which $_ } @{ $Browsers{ $k }->{Bins} };
-
     next unless defined $bin;
-
     $Browsers{ $k }->{Bin} = $bin;
-
     $Default //= $k;
-
 }
 
 $CAN_DUMP = defined $Default;
@@ -99,7 +101,7 @@ unless ($CAN_DUMP) {
 sub browser_dump {
 
     unless (defined $Default) {
-        die "Cannot use browser to dump HTML; no valid browser was found on your system\n";
+        die "Cannot format HTML; no valid program was found on your system\n";
     }
 
     my $file  = shift;
@@ -111,12 +113,13 @@ sub browser_dump {
 
     unless (exists $Browsers{ $browser }) {
         die <<"HERE";
-'$browser' is not a valid browser; the following is a list of valid browsers:
+'$browser' is not a valid program; the following is a list of valid programs:
     lynx
     links
     elinks
     w3m
     chawan
+    pandoc
     queequeg
 HERE
     }
@@ -129,16 +132,13 @@ HERE
         die "Width cannot be greater than $WIDTH_MAX or less than $WIDTH_MIN\n";
     }
 
-    my $cmd = sprintf
-        "%s %s %s %s %s",
+    my $dump = safe_qx(
         $Browsers{ $browser }->{Bin},
         sprintf($Browsers{ $browser }->{Width}, $width),
-        join(" ", @{ $Browsers{ $browser }->{Opts} }),
-        ($xhtml ? join(" ", @{ $Browsers{ $browser }->{Xhtml} }) : ''),
-        shell_quote($file);
-
-    my $dump = qx/$cmd/;
-
+        @{ $Browsers{ $browser }->{Opts} },
+        ($xhtml ? join(" ", @{ $Browsers{ $browser }->{Xhtml} }) : ()),
+        $file
+    );
     unless ($? >> 8 == 0) {
         die "Failed to dump $file with $Browsers{ $browser }->{Bin}\n";
     }
@@ -153,7 +153,7 @@ HERE
 
 =head1 NAME
 
-EBook::Ishmael::TextBrowserDump - Format HTML via text web browsers
+EBook::Ishmael::TextBrowserDump - Format HTML through different installed programs
 
 =head1 SYNOPSIS
 
@@ -164,7 +164,7 @@ EBook::Ishmael::TextBrowserDump - Format HTML via text web browsers
 =head1 DESCRIPTION
 
 B<EBook::Ishmael::TextBrowserDump> is a module for dumping the contents of
-HTML files to formatted text, via text web browsers like L<lynx(1)>. For
+HTML files to formatted text, via programs like L<lynx(1)>. For
 L<ishmael> user documentation, you should consult its manual (this is
 developer documentation).
 
@@ -182,6 +182,8 @@ programs to be installed:
 =item L<w3m(1)>
 
 =item chawan
+
+=item L<pandoc(1)>
 
 =item L<queequeg(1)>
 
@@ -231,7 +233,7 @@ requests are welcome!
 
 =head1 COPYRIGHT
 
-Copyright (C) 2025 Samuel Young
+Copyright (C) 2025-2026 Samuel Young
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -240,6 +242,7 @@ the Free Software Foundation, either version 3 of the License, or
 
 =head1 SEE ALSO
 
-L<queequeg(1)>, L<elinks(1)>, L<links(1)>, L<lynx(1)>, L<w3m(1)>, L<cha(1)>
+L<queequeg(1)>, L<elinks(1)>, L<links(1)>, L<lynx(1)>, L<w3m(1)>, L<cha(1)>,
+L<pandoc(1)>,
 
 =cut

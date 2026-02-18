@@ -7,6 +7,16 @@ META.yml
 README.md
 builder/Acme/Parataxis/Builder.pm
 cpanfile
+eg/affinity.pl
+eg/basic.pl
+eg/modern.pl
+eg/port_scanner.pl
+eg/preempt.pl
+eg/socket.pl
+eg/symmetric.pl
+eg/synopsis.pl
+eg/thread_pool.pl
+eg/worker_pool.pl
 lib/Acme/Parataxis.c
 lib/Acme/Parataxis.pm
 lib/Acme/Parataxis.pod
@@ -16,3 +26,4 @@ t/003_signals.t
 t/004_synopsis.t
 t/005_symmetric.t
 t/006_parallel.t
+t/007_data_types.t

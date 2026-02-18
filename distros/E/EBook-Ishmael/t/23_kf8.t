@@ -71,15 +71,15 @@ is(
 );
 
 is_deeply(
-    $ebook->metadata,
+    $ebook->metadata->hash,
     {
         Contributor => [ 'calibre (7.16.0) [https://calibre-ebook.com]' ],
         Author => [ 'Unknown' ],
-        Created => [ '0101-01-01T00:00:00+00:00' ],
         Language => [ 'en' ],
-        Title => [ 'gpl3' ],
-        Format => [ 'KF8' ],
-        Modified => [ scalar gmtime $ebook->{_pdb}->mdate ],
+        Title => 'gpl3',
+        Format => 'KF8',
+        Created => $ebook->{_pdb}->cdate,
+        Modified => $ebook->{_pdb}->mdate,
     },
     "metadata ok"
 );

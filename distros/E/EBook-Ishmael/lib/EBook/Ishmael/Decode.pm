@@ -14,7 +14,7 @@ my $CAN_XS = 0;
 my $decode_sub;
 
 BEGIN {
-    $VERSION = '1.09';
+    $VERSION = '2.00';
     $CAN_XS = eval { XSLoader::load('EBook::Ishmael', $VERSION) };
     $decode_sub = $CAN_XS ? \&xs_palmdoc_decode : \&pp_palmdoc_decode;
 }
@@ -100,7 +100,7 @@ requests are welcome!
 
 =head1 COPYRIGHT
 
-Copyright (C) 2025 Samuel Young
+Copyright (C) 2025-2026 Samuel Young
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

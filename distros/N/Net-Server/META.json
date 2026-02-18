@@ -53,6 +53,6 @@
          "web" : "https://github.com/rhandom/perl-net-server"
       }
    },
-   "version" : "2.017",
+   "version" : "2.018",
    "x_serialization_backend" : "JSON::PP version 4.06"
 }

@@ -16,11 +16,11 @@ isa_ok($ebook, 'EBook::Ishmael::EBook::XHTML');
 like($ebook->{Source}, qr/\Q$HTML\E$/, "source ok");
 
 is_deeply(
-    $ebook->metadata,
+    $ebook->metadata->hash,
     {
         Language => [ 'en' ],
-        Title => [ 'GNU General Public License v3.0 - GNU Project - Free Software Foundation (FSF)' ],
-        Format => [ 'XHTML' ],
+        Title => 'GNU General Public License v3.0 - GNU Project - Free Software Foundation (FSF)',
+        Format => 'XHTML',
     },
     "metadata ok"
 );

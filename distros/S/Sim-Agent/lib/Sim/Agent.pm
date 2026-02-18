@@ -3,7 +3,7 @@ package Sim::Agent;
 use strict;
 use warnings;
 
-our $VERSION = '0.01';
+our $VERSION = '0.009';
 
 use Sim::Agent::Parser;
 use Sim::Agent::Compiler;
@@ -67,185 +67,264 @@ sub run
 
 =head1 NAME
 
-Sim::Agent - Deterministic, file-backed orchestration of LLM workers and critics via a small S-expression DSL
+Sim::Agent - Deterministic Orchestration Framework for Structured LLM Agent Experiments
 
 =head1 SYNOPSIS
 
   use Sim::Agent;
 
-  my $sa = Sim::Agent->new(
-    plan => 'examples/join.sexpr',
-    dev  => 0,
-  );
+  my $sim = Sim::Agent->new(plan => 'plan.sexpr');
+  $sim->run;
 
-  $sa->run;
+=head1 ABSTRACT
 
-CLI:
+Sim::Agent is a deterministic, single-threaded orchestration framework for
+Large Language Model (LLM) agents defined through a strict S-expression DSL.
+It is designed for controlled experimentation, auditability, and explicit
+coordination semantics rather than autonomous or emergent behavior.
 
-  perl -Ilib bin/sim-agent examples/join.sexpr
+The system enforces explicit topology, bounded self-reflection, critic gating,
+and reproducible journaling. It is particularly suited for research scenarios
+where repeatability, traceability, and architectural clarity are required.
 
-=head1 DESCRIPTION
+=head1 MOTIVATION
 
-Sim::Agent runs a directed control-flow graph of named agents. Agents are defined in a small S-expression DSL and executed deterministically in a single-thread FIFO scheduler.
+Contemporary LLM agent frameworks often prioritize flexibility and autonomy
+over determinism and inspectability. This introduces:
 
-The design targets local-first operation and minimal platform dependence. Prompts and model outputs are written to files under a per-run directory, and model execution is performed via shell calls (Ollama by default).
+=over 4
 
-Agents typically come in pairs: a B<worker> produces an artifact, reflects recursively about it, then a B<critic> validates it. Critics can branch control flow on success/failure, and critical review loops can be bounded so the system progresses with the best available partial result (tainted) instead of looping forever.
+=item *
 
-=head1 RATIONALE
+Implicit control flow
 
-This distribution is a reaction to the risk of surrendering to "vibe coding" that chained-reasoning LLMs can encourage. When interaction with agents becomes purely conversational, it is easy to drift into a passivizing relationship where the system architecture is accidental rather than designed.
+=item *
 
-Agent orchestration instead aims to (1) make LLM contributions composable inside explicit, inspectable information flows, and (2) keep the human programmer in the creative role of orchestrator—similar to traditional programming, where one composes explicit functions into systems, except that the composed units here are agent capabilities and their textual interfaces.
+Non-reproducible behavior
 
-=head1 PLAN DSL
+=item *
 
-The plan is an S-expression file. Comments start with a semicolon C<;> and extend to end of line.
+Unbounded reflection loops
 
-Root form:
+=item *
+
+Opaque state transitions
+
+=item *
+
+Hidden concurrency
+
+=back
+
+Sim::Agent is intentionally designed in opposition to these tendencies.
+It treats agent orchestration as a formally structured computational graph
+with explicit routing, bounded cycles, and file-backed journaling.
+
+The framework is not intended to simulate cognition; it is intended to
+simulate coordination.
+
+=head1 DESIGN PRINCIPLES
+
+=head2 1. Determinism
+
+Scheduling is FIFO and single-threaded. There is no concurrency,
+no asynchronous dispatch, and no hidden background processes.
+
+=head2 2. Explicit Topology
+
+All control flow is declared in a strict S-expression DSL. There are
+no implicit retries, no emergent routing rules, and no hidden dependencies.
+
+=head2 3. Bounded Self-Reflection
+
+Workers may self-criticize and revise their outputs, but cycles are
+explicitly bounded via C<max_self_cycles>.
+
+=head2 4. Critic Gating
+
+Critics determine whether outputs propagate forward in the graph.
+Critics return structured status:
+
+  { status => 'ok' }
+  { status => 'fail', critique => '...' }
+
+=head2 5. Ping-Pong Protection
+
+Repeated critic-worker failure loops are bounded by C<max_pingpong>.
+Upon exhaustion, flow proceeds with taint annotation.
+
+=head2 6. Auditability
+
+Every run produces a time-stamped journal directory containing:
+
+=over 4
+
+=item *
+
+Archived plan
+
+=item *
+
+Prompts and outputs per agent
+
+=item *
+
+Execution log
+
+=back
+
+The journal provides full replay-level transparency.
+
+=head2 7. No Hidden State
+
+State is owned by the Runner and passed explicitly between agents.
+There is no shared mutable global context.
+
+=head1 ARCHITECTURE
+
+The system is composed of:
+
+=over 4
+
+=item Parser
+
+Tokenizes and parses the S-expression DSL into an AST.
+
+=item Compiler
+
+Validates references, resolves routing, injects default limits,
+and constructs the executable graph.
+
+=item Runner
+
+Owns execution state, performs scheduling, invokes hooks,
+handles LLM calls, and manages routing.
+
+=item Engine
+
+Pure helper logic for guard checks and dependency resolution.
+
+=item Hook System
+
+Loads dynamic hook files returning coderefs for prompts,
+self-critique, revision, and critic parsing.
+
+=item Journal
+
+Creates and manages run directories and structured logging.
+
+=item LLM Adapter
+
+Current implementation uses shell-based Ollama invocation.
+Adapters are intentionally isolated from orchestration logic.
+
+=back
+
+=head1 DSL OVERVIEW
+
+Plans are defined as S-expressions:
 
   (system
     (limits ...)
-    (entry AgentName)
-    (agent ...)
-    ...)
+    (entry Worker1)
+    (agent Worker1 ...)
+    (agent Critic1 ...)
+  )
 
-=head2 limits
+The DSL is declarative. The graph is compiled before execution.
+Invalid references are rejected at compile time.
 
-  (limits
-    (max_iterations 200)
-    (max_self_cycles 3)
-    (max_pingpong 4))
+=head1 RESEARCH APPLICATIONS
 
-=over 4
-
-=item * max_iterations
-
-Hard cap on total activations (global guard).
-
-=item * max_self_cycles
-
-Cap on self-reflection cycles inside a worker (self-critic + revision loop). When reached, the worker proceeds with its current output and sets C<tainted>.
-
-=item * max_pingpong
-
-Cap on critic<->worker ping-pong loops for a given (Worker -> Critic) pair. When exceeded, the critic is forced to accept (status becomes OK), the payload is marked tainted, and execution proceeds.
-
-=back
-
-=head2 agent
-
-Workers:
-
-  (agent Worker1
-    (role worker)
-    (model "llama3.2:1b")
-    (prompt-file "examples/hooks/worker_prompt.pl")
-    (self-critic-file "examples/hooks/selfcrit.pl")
-    (revision-file "examples/hooks/revision.pl")
-    (send-to Critic1))
-
-Critics:
-
-  (agent Critic1
-    (role critic)
-    (parse-file "examples/hooks/critic_parse.pl")
-    (on-ok (NextA NextB))
-    (on-fail (Worker1)))
-
-Chief:
-
-  (agent Chief1
-    (role chief)
-    (parse-file "examples/hooks/chief_parse.pl))
-
-Joins:
-
-  (agent Worker4
-    (role worker)
-    (wait-for (Worker2 Worker3))
-    ...)
-
-=head1 EXECUTION MODEL
-
-Execution is single-threaded and deterministic:
+Sim::Agent is appropriate for:
 
 =over 4
 
-=item * FIFO queue: activations occur in the order they are enqueued.
+=item *
 
-=item * wait-for: an agent activates only when all listed dependencies exist in C<completed> with status OK.
+Structured evaluation of agent topologies
 
-=item * fan-out: critics can enqueue multiple targets via C<on-ok> or C<on-fail>.
+=item *
 
-=item * join: a worker may C<wait-for> multiple upstream workers; critic pass-through preserves original worker keys so joins remain meaningful through critic gates.
+Controlled experiments in critic-based validation
+
+=item *
+
+Deterministic comparison of orchestration strategies
+
+=item *
+
+Exploration of bounded self-improvement cycles
+
+=item *
+
+Reproducible LLM workflow research
 
 =back
 
-=head1 HOOKS
+It is not intended as a production automation system.
+It is a research instrument.
 
-Hooks are Perl files that must return a coderef. Hooks are reloaded on each invocation (useful for development).
-
-Signature:
-
-  sub {
-    my ($context, $agent, $runner) = @_;
-    ...
-  }
-
-=head2 Worker hooks
+=head1 LIMITATIONS
 
 =over 4
 
-=item * prompt-file
+=item *
 
-Must return a prompt string. The runner sends it to the LLM adapter.
+No concurrency
 
-=item * self-critic-file
+=item *
 
-Returns either:
+No distributed execution
 
-  { status => 'ok' }
+=item *
 
-or:
+No web browsing or tool autonomy
 
-  { status => 'revise', critique => '...' }
+=item *
 
-=item * revision-file
-
-Given current output and critique, returns a revised output string.
+LLM-dependent variability in content (though structure is enforced)
 
 =back
 
-=head2 Critic / Chief hooks
+These constraints are deliberate.
 
-=parse-file
+=head1 PHILOSOPHY
 
-Must return:
+Sim::Agent rejects "vibe coding" and emergent orchestration.
+Every transition is declared. Every loop is bounded.
+Every output is journaled.
 
-  { status => 'ok' }   or
-  { status => 'fail' } or
-  { status => 'stop' }  (chief only)
+The framework assumes that coordination, not creativity,
+is the primary engineering challenge in multi-agent systems.
 
-=head1 ARTIFACTS ON DISK
+=head1 FUTURE DIRECTIONS
 
-Each run creates a directory:
+Potential research extensions include:
 
-  run_YYYYMMDD_HHMMSS/
-    journal.log
-    plan.sexpr
-    agents/<AgentName>/
-      001_prompt.txt
-      001_output.txt
-      ...
+=over 4
 
-=head1 SECURITY NOTES
+=item *
 
-Hook files are arbitrary Perl code and run with the privileges of the current user. Plans and hooks should be treated as trusted inputs.
+Deterministic replay mode
 
-=head1 SEE ALSO
+=item *
 
-L<Sim::Agent::Runner>, L<Sim::Agent::Compiler>, L<Sim::Agent::Parser>, L<Sim::Agent::LLM::Ollama>
+Formal schema declaration in DSL
+
+=item *
+
+Structured journal export (e.g., JSON traces)
+
+=item *
+
+Model-agnostic adapter abstraction
+
+=item *
+
+Patch-based self-improvement experiments under controlled conditions
+
+=back
 
 =head1 AUTHOR
 
@@ -255,7 +334,6 @@ AI tools were used to accelerate drafting and refactoring. No changes were merge
 
 =head1 LICENSE
 
-The GNU General Public License v3.0
+GNU General Public License, Version 3.
 
 =cut
-

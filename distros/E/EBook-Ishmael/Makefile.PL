@@ -66,6 +66,7 @@ my %WriteMakefileArgs = (
         'JSON::PP' => '0',
         'List::Util' => '0',
         'MIME::Base64' => '0',
+        'Time::Piece' => '1.16',
         'XML::LibXML' => '1.70',
         'XSLoader' => '0',
     },

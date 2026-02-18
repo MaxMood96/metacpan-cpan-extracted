@@ -19,12 +19,12 @@ package Net::Server::Proto::SSL;
 
 use strict;
 use warnings;
-use Net::Server::Proto qw(SOMAXCONN);
+use Net::Server::Proto qw(SOMAXCONN AF_INET AF_INET6 AF_UNSPEC);
 
 BEGIN {
     # IO::Socket::SSL will automatically become IO::Socket::IP if it is available.
     # This is different from Net::Server::Proto::SSLEAY that only does it if IPv6 is requested.
-    if (! eval { local $^W=0; require IO::Socket::SSL }) { # Quiet "redefined" warnings in case IO::Socket::INET6 <= 2.66
+    if (! eval { local $^W=0; require IO::Socket::SSL; 1 }) { # Quiet "redefined" warnings in case IO::Socket::INET6 <= 2.66
         die "Module IO::Socket::SSL is required for SSL - you may alternately try SSLEAY. $@";
     }
 }
@@ -62,27 +62,25 @@ sub object {
         \%temp;
     };
 
-    my @sock = $class->SUPER::new();
-    foreach my $sock (@sock) {
-        $sock->NS_host($info->{'host'});
-        $sock->NS_port($info->{'port'});
-        $sock->NS_ipv( $info->{'ipv'} );
-        $sock->NS_listen(defined($info->{'listen'}) ? $info->{'listen'}
-                        : defined($server->{'server'}->{'listen'}) ? $server->{'server'}->{'listen'}
-                        : SOMAXCONN);
-        ${*$sock}{'NS_orig_port'} = $info->{'orig_port'} if defined $info->{'orig_port'};
+    my $sock = $class->new;
+    $sock->NS_host($info->{'host'});
+    $sock->NS_port($info->{'port'});
+    $sock->NS_ipv( $info->{'ipv'} );
+    $sock->NS_listen(defined($info->{'listen'}) ? $info->{'listen'}
+                    : defined($server->{'server'}->{'listen'}) ? $server->{'server'}->{'listen'}
+                    : SOMAXCONN);
+    ${*$sock}{'NS_orig_port'} = $info->{'orig_port'} if defined $info->{'orig_port'};
 
-        my %seen;
-        for my $key (grep {!$seen{$_}++} (@ssl_args, sort grep {/^SSL_/} keys %$info)) { # allow for any SSL_ arg to get passed in via 
-            my $val = defined($info->{$key}) ? $info->{$key}
-                    : defined($ssl->{$key})  ? $ssl->{$key}
-                    : $server->can($key) ? $server->$key($info->{'host'}, $info->{'port'}, 'SSL')
-                    : undef;
-            next if ! defined $val;
-            $sock->$key($val) if defined $val;
-        }
+    my %seen;
+    for my $key (grep {!$seen{$_}++} (@ssl_args, sort grep {/^SSL_/} keys %$info)) { # allow for any SSL_ arg to get passed in via server configurations
+        my $val = defined($info->{$key}) ? $info->{$key}
+                : defined($ssl->{$key})  ? $ssl->{$key}
+                : $server->can($key) ? $server->$key($info->{'host'}, $info->{'port'}, 'SSL')
+                : undef;
+        next if ! defined $val;
+        $sock->$key($val) if defined $val;
     }
-    return wantarray ? @sock : $sock[0];
+    return $sock;
 }
 
 sub log_connect {
@@ -103,9 +101,8 @@ sub connect {
         Listen    => $lstn,
         ReuseAddr => 1,
         Reuse     => 1,
+        Family    => ($ipv eq '6' ? AF_INET6 : $ipv eq '4' ? AF_INET : AF_UNSPEC),
         (($host ne '*') ? (LocalAddr => $host) : ()), # * is all
-        (($sock->isa('IO::Socket::IP') || $sock->isa('IO::Socket::INET6'))
-            ? (Domain => ($ipv eq '6') ? Net::Server::Proto::AF_INET6() : ($ipv eq '4') ? Net::Server::Proto::AF_INET() : Net::Server::Proto::AF_UNSPEC()) : ()),
         (map {$_ => $sock->$_();} grep {/^SSL_/} keys %{*$sock}),
         SSL_server => 1,
         SSL_startHandshake => 0,
@@ -133,10 +130,8 @@ sub reconnect { # after a sig HUP
     });
     $sock->IO::Socket::INET::fdopen($fd, 'w') or $server->fatal("Error opening to file descriptor ($fd) [$!]");
 
-    if ($sock->isa("IO::Socket::IP") || $sock->isa("IO::Socket::INET6")) {
-        my $ipv = $sock->NS_ipv;
-        ${*$sock}{'io_socket_domain'} = ($ipv eq '6') ? Net::Server::Proto::AF_INET6() : ($ipv eq '4') ? Net::Server::Proto::AF_INET() : Net::Server::Proto::AF_UNSPEC();
-    }
+    my $ipv = $sock->NS_ipv;
+    ${*$sock}{'io_socket_domain'} = $ipv eq '6' ? AF_INET6 : $ipv eq '4' ? AF_INET : AF_UNSPEC;
 
     if ($port ne $sock->NS_port) {
         $server->log(2, "  Re-bound to previously assigned port $port");

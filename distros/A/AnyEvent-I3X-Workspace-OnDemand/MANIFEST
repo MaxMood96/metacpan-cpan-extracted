@@ -9,6 +9,7 @@ META.yml
 Makefile.PL
 README.md
 bin/i3-ipc
+bin/i3-status
 bin/i3-wod
 cpanfile
 lib/AnyEvent/I3X/Workspace/OnDemand.pm

@@ -1,6 +1,6 @@
 package EBook::Ishmael;
 use 5.016;
-our $VERSION = '1.09';
+our $VERSION = '2.00';
 use strict;
 use warnings;
 
@@ -17,6 +17,7 @@ use XML::LibXML;
 use EBook::Ishmael::EBook;
 use EBook::Ishmael::ImageID;
 use EBook::Ishmael::TextBrowserDump;
+use EBook::Ishmael::Time qw(format_locale_time format_rfc3339_time);
 
 use constant {
     MODE_TEXT      => 0,
@@ -33,6 +34,8 @@ use constant {
 
 # TODO: It would be nice if we had a way to automatically determine an ebook's
 # encoding...
+
+# TODO: Fix executing programs with spaces in their names
 
 $0 =~ s!^.*[/\\]!!;
 
@@ -52,7 +55,7 @@ Options:
   -f|--format=<format>      Specify ebook format
   -w|--width=<width>        Specify output line width
   -N|--no-network           Disable fetching remove resources
-  -t|--text                 Dump formatted ebook text
+  -t|--text                 Dump formatted ebook text (default)
   -H|--html                 Dump ebook HTML
   -c|--cover                Dump ebook cover image
   -g|--image                Dump ebook images
@@ -67,7 +70,7 @@ HERE
 my $VERSION_MSG = <<"HERE";
 $PRGNAM - $PRGVER
 
-Copyright (C) 2025 Samuel Young
+Copyright (C) 2025-2026 Samuel Young
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -291,14 +294,25 @@ sub meta_ishmael {
         $self->{Network},
     );
 
-    my %meta = %{ $ebook->metadata };
+    my %meta = %{ $ebook->metadata->hash };
+    if (defined $meta{Created}) {
+        $meta{ Created } = format_locale_time($meta{Created});
+    }
+    if (defined $meta{Modified}) {
+        $meta{Modified} = format_locale_time($meta{Modified});
+    }
 
     my $oh = _get_out($self->{Output});
     binmode $oh, ':utf8';
 
     my $klen = max(map { length } keys %meta) + 1;
     for my $k (sort keys %meta) {
-        printf { $oh } "%-*s %s\n", $klen, "$k:", join ", ", @{ $meta{ $k } };
+        next if not defined $meta{$k};
+        if (ref $meta{ $k } eq 'ARRAY') {
+            printf { $oh } "%-*s %s\n", $klen, "$k:", join ", ", @{ $meta{$k} };
+        } else {
+            printf { $oh } "%-*s %s\n", $klen, "$k:", $meta{$k};
+        }
     }
 
     close $oh unless $self->{Output} eq $STDOUT;
@@ -318,16 +332,15 @@ sub meta_json {
         $self->{Network},
     );
 
-    my $meta = $ebook->metadata;
+    my $meta = $ebook->metadata->hash;
+    if (defined $meta->{ Created }) {
+        $meta->{ Created } = format_rfc3339_time($meta->{ Created });
+    }
+    if (defined $meta->{ Modified }) {
+        $meta->{ Modified } = format_rfc3339_time($meta->{ Modified });
+    }
 
     my $oh = _get_out($self->{Output});
-
-    for my $k (keys %{ $meta }) {
-        # Flatten arrays that contain a single item
-        if (@{ $meta->{ $k } } == 1) {
-            $meta->{ $k } = $meta->{ $k }->[0];
-        }
-    }
 
     my $json = JSON::PP->new->utf8->pretty->canonical;
     print { $oh } $json->encode($meta);
@@ -349,7 +362,13 @@ sub meta_xml {
         $self->{Network},
     );
 
-    my $meta = $ebook->metadata;
+    my $meta = $ebook->metadata->hash;
+    if (defined $meta->{Created}) {
+        $meta->{Created} = format_rfc3339_time($meta->{Created});
+    }
+    if (defined $meta->{ Modified }) {
+        $meta->{ Modified } = format_rfc3339_time($meta->{Modified});
+    }
 
     my $oh = _get_out($self->{Output});
 
@@ -362,23 +381,24 @@ sub meta_xml {
     );
 
     for my $k (sort keys %$meta) {
-
+        next if not defined $meta->{$k};
         my $n = $metan->appendChild(
             XML::LibXML::Element->new(lc $k)
         );
-
-        for my $i (@{ $meta->{ $k } }) {
-
-            my $in = $n->appendChild(
-                XML::LibXML::Element->new('item')
+        if (ref $meta->{ $k } eq 'ARRAY') {
+            for my $i (@{ $meta->{$k} }) {
+                my $in = $n->appendChild(
+                    XML::LibXML::Element->new('item')
+                );
+                $in->appendChild(
+                    XML::LibXML::Text->new($i)
+                );
+            }
+        } else {
+            $n->appendChild(
+                XML::LibXML::Text->new($meta->{ $k })
             );
-
-            $in->appendChild(
-                XML::LibXML::Text->new($i)
-            );
-
         }
-
     }
 
     $dom->toFH($oh, 1);
@@ -689,7 +709,7 @@ requests are welcome!
 
 =head1 COPYRIGHT
 
-Copyright (C) 2025 Samuel Young
+Copyright (C) 2025-2026 Samuel Young
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

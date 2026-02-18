@@ -1,3 +1,4 @@
+use utf8;
 
 #PODNAME: AnyEvent::I3X::Workspace::OnDemand::UserGuide
 #
@@ -15,7 +16,7 @@ AnyEvent::I3X::Workspace::OnDemand::UserGuide - User document for AnyEvent::I3X:
 
 =head1 VERSION
 
-version 0.006
+version 0.008
 
 =head2 Getting Started
 
@@ -216,6 +217,24 @@ previous state:
 
 This allows us to pick up where we left of and you don't need to worry about
 mismatching groups or workspaces.
+
+=head3 i3status
+
+Because we keep state you can use i3status to display the group in your status
+bar. To do that you can use the C<i3-status> script of shipped with this
+module:
+
+   # ~/.config/i3/config
+   status_command i3status | i3-status
+
+   # ~/.config/i3status/config
+   general { output_format = "i3bar" }
+
+We than trigger an update on i3status to get the new group.
+
+If you don't use i3 status, or aren't interested in the group you can set
+C<i3status = 0> in your wod.conf. We won't inspect the process tables in that
+case.
 
 =head1 AUTHOR
 

@@ -47,9 +47,9 @@ system:
 * Xpdf's `pdftopng` or ImageMagick's `convert`: (optional; for PDF cover dumping)
 * `unrar` (optional; for CBR support)
 * `7z` (optional; for CB7 support)
-* `chmlib` (optional; for CHM support)
+* `extract_chmLib` (optional; for CHM support)
 
-The following text web browsers can be installed for **ishmael** to use for
+The following programs can be installed for **ishmael** to use for
 formatting HTML. If none are installed, **ishmael** will use its own HTML
 formatting script called **queequeg**.
 * `elinks`
@@ -57,6 +57,7 @@ formatting script called **queequeg**.
 * `lynx`
 * `w3m`
 * `chawan`
+* `pandoc`
 
 Once the aforementioned dependencies are installed, **ishmael** can then be
 installed via the following commands:
@@ -118,7 +119,7 @@ name. This iteration supports multiple different ebook formats, but is written
 in Perl so it should (hopefully) be less buggy and more maintainable.
 
 ## Copyright
-Copyright (C) 2025 Samuel Young
+Copyright (C) 2025-2026 Samuel Young
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

@@ -9,7 +9,7 @@ use Test2::V0;
 use Concierge::Auth;
 use Concierge::Auth::Generators qw(
     gen_uuid gen_random_id gen_random_token
-    gen_crypt_token gen_random_string gen_word_phrase
+    gen_random_string gen_word_phrase
 );
 
 ## Functional interface tests (Generators.pm)
@@ -69,13 +69,6 @@ subtest 'gen_random_token - functional' => sub {
     isnt(gen_random_token(), gen_random_token(), 'successive tokens differ');
 };
 
-subtest 'gen_crypt_token - functional' => sub {
-    my ($token, $msg) = gen_crypt_token();
-    ok(defined $token, 'returns a value');
-    ok(length($token) > 0, 'non-empty token');
-    like($msg, qr/Crypt token/, 'message mentions crypt token');
-};
-
 subtest 'gen_random_string - functional' => sub {
     my ($str, $msg) = gen_random_string(20);
     ok(defined $str, 'returns a value');
@@ -127,11 +120,6 @@ subtest 'gen_random_token - OO' => sub {
     my ($ok, $msg) = $auth->gen_random_token(24);
     ok($ok, 'returns truthy');
     is(length($ok), 24, 'length matches request');
-};
-
-subtest 'gen_crypt_token - OO' => sub {
-    my ($ok, $msg) = $auth->gen_crypt_token();
-    ok($ok, 'returns truthy');
 };
 
 subtest 'gen_random_string - OO' => sub {

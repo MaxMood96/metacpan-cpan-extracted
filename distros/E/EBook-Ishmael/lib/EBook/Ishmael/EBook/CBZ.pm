@@ -1,6 +1,6 @@
 package EBook::Ishmael::EBook::CBZ;
 use 5.016;
-our $VERSION = '1.09';
+our $VERSION = '2.00';
 use strict;
 use warnings;
 

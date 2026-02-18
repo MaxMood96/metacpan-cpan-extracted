@@ -1,0 +1,12 @@
+name           = "App-Greple-md"
+badges         = [ "github-actions/test", "metacpan" ]
+module_maker   = "ModuleBuildTiny"
+static_install = "auto"
+
+[release]
+branch = "main"
+
+[unsupported]
+os = [
+    "MSWin32",
+]

@@ -1,5 +1,21 @@
 Revision history for Perl module EBook::Ishmael.
 
+2.00  Feb 17 2026
+  - Overhauled how ishmael handles metadata. The main update this overhaul
+    brings is that ishmael no longer allows multiple values for fields that
+    would not make sense for having multiple different values.
+    - The following fields are now treated as single item fields: title,
+      software, format, created, modified, id, and description.
+    - List fields are now always treated as arrays in -m json.
+    - Singular fields are not treated as a list of <item> nodes in -m xml.
+  - ishmael now tries to convert timestamps into a consistent format for the
+    -m option.
+  - Add support for using pandoc for formatting.
+  - Fix executing programs with spaces in their path names.
+  - ishmael can now identify EPUB version.
+  - Improve image format identification.
+    - Add support for identifying AVIF and JXL image files.
+
 1.09  Sep 16 2025
   - Ported PalmDoc/Mobi decoding code to XS (C), vastly improving performance
     for reading some PalmDoc and Mobi ebooks.

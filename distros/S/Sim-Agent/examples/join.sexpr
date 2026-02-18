@@ -24,8 +24,8 @@
     (role worker)
     (model "llama3.2:1b")
     (prompt-file "examples/hooks_join/worker2_prompt.pl")
-    (self-critic-file "examples/hooks_join/selfcrit_ok.pl")
-    (revision-file "examples/hooks_join/revision_passthru.pl")
+    (self-critic-file "examples/hooks_join/selfcrit_schema.pl")
+    (revision-file "examples/hooks_join/revision_schema.pl")
     (send-to Critic2))
 
   (agent Critic2
@@ -38,8 +38,8 @@
     (role worker)
     (model "llama3.2:1b")
     (prompt-file "examples/hooks_join/worker3_prompt.pl")
-    (self-critic-file "examples/hooks_join/selfcrit_ok.pl")
-    (revision-file "examples/hooks_join/revision_passthru.pl")
+    (self-critic-file "examples/hooks_join/selfcrit_schema.pl")
+    (revision-file "examples/hooks_join/revision_schema.pl")
     (send-to Critic3))
 
   (agent Critic3
@@ -53,8 +53,8 @@
     (model "llama3.2:1b")
     (wait-for (Worker2 Worker3))
     (prompt-file "examples/hooks_join/worker4_prompt.pl")
-    (self-critic-file "examples/hooks_join/selfcrit_ok.pl")
-    (revision-file "examples/hooks_join/revision_passthru.pl")
+    (self-critic-file "examples/hooks_join/selfcrit_schema.pl")
+    (revision-file "examples/hooks_join/revision_schema.pl")
     (send-to Chief1))
 
   (agent Chief1

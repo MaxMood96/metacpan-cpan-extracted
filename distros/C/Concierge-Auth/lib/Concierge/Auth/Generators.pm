@@ -1,9 +1,8 @@
-package Concierge::Auth::Generators v0.4.0;
+package Concierge::Auth::Generators v0.4.3;
 use v5.36;
 
 # ABSTRACT: Value generation utilities for Concierge::Auth
 
-use Time::HiRes qw/gettimeofday/;
 use Crypt::PRNG qw/rand random_bytes random_string random_string_from/;
 use Exporter 'import';
 
@@ -11,7 +10,6 @@ our @EXPORT_OK = qw(
     gen_uuid
     gen_random_id
     gen_random_token
-    gen_crypt_token
     gen_random_string
     gen_word_phrase
 );
@@ -19,8 +17,8 @@ our @EXPORT_OK = qw(
 our %EXPORT_TAGS	= (
 	str 	=> [qw/gen_random_string gen_word_phrase/],
 	rand	=> [qw/gen_random_id gen_random_token gen_random_string/],
-	tok		=> [qw/gen_random_id gen_random_token gen_crypt_token gen_uuid/],
-	all		=> [qw/gen_uuid gen_random_id gen_random_token gen_crypt_token gen_random_string gen_word_phrase/],
+	tok		=> [qw/gen_random_id gen_random_token gen_uuid/],
+	all		=> [qw/gen_uuid gen_random_id gen_random_token gen_random_string gen_word_phrase/],
 );
 
 ## Generator response methods
@@ -75,6 +73,7 @@ sub gen_token {
 }
 
 ## gen_random_token: generate random alphanumeric token
+## use random_string() from Crypt::PRNG
 ## Parameters: length (optional, default 13)
 ## Returns: random string of specified length
 sub gen_random_token {
@@ -85,19 +84,13 @@ sub gen_random_token {
     return g_success($token, "Random token generated ($length chars).");
 }
 
-## gen_crypt_token: generate a crypt-based token
-## Returns: 11-character token string
+## gen_crypt_token: deprecated, now an alias for gen_random_token
 sub gen_crypt_token {
-    my @chars = ('a'..'z', 'A'..'Z', '0'..'9');
-    my $token = crypt(
-        substr(gettimeofday(), -8),
-         join('', => @chars[rand 62, rand 62])
-    );
-    $token =~ tr{./:-}{ZAjQ};
-    return g_success($token, "Crypt token generated.");
+    goto &gen_random_token;
 }
 
 ## gen_random_string: generate random string from optional charset
+## uses random_string() and random_string_from() from Crypt::PRNG
 ## Parameters: length, charset (optional)
 ## If charset provided and not empty, uses random_string_from
 ## Otherwise uses alphanumeric charset
@@ -256,16 +249,6 @@ Parameters:
 
     my $phrase = gen_word_phrase();           # "Word1Word2Word3Word4"
     my $phrase = gen_word_phrase(5, 4, 7, '-'); # "Word1-Word2-Word3-Word4-Word5"
-
-=head2 gen_crypt_token()
-
-Generates an 11-character token using crypt().
-
-    my $token = gen_crypt_token();  # e.g., "ZAjQ3xY2zA9b"
-
-=head2 gen_token()
-
-Deprecated alias for gen_random_token().
 
 =head1 ERROR HANDLING
 

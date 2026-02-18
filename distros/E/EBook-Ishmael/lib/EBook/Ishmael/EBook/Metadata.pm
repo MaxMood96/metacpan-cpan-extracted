@@ -1,32 +1,25 @@
 package EBook::Ishmael::EBook::Metadata;
 use 5.016;
-our $VERSION = '1.09';
+our $VERSION = '2.00';
 use strict;
 use warnings;
 
 sub new {
 
     my $class = shift;
-    my $data  = shift // {};
-
-    for my $k (keys %{ $data }) {
-        unless (ref $data->{ $k } eq 'ARRAY') {
-            die "'$k' is not an array ref";
-        }
-    }
 
     my $self = {
-        Author      => $data->{Author}      // [],
-        Software    => $data->{Software}    // [],
-        Created     => $data->{Created}     // [],
-        Modified    => $data->{Modified}    // [],
-        Format      => $data->{Format}      // [],
-        Title       => $data->{Title}       // [],
-        Language    => $data->{Language}    // [],
-        Genre       => $data->{Genre}       // [],
-        ID          => $data->{ID}          // [],
-        Description => $data->{Description} // [],
-        Contributor => $data->{Contributor} // [],
+        Author      => undef,
+        Software    => undef,
+        Created     => undef,
+        Modified    => undef,
+        Format      => undef,
+        Title       => undef,
+        Language    => undef,
+        Genre       => undef,
+        ID          => undef,
+        Description => undef,
+        Contributor => undef,
     };
 
     return bless $self, $class;
@@ -37,11 +30,16 @@ sub hash {
 
     my $self = shift;
 
-    my $hash = { %{ $self } };
+    my $hash;
 
-    for my $k (keys %{ $hash }) {
-        unless (@{ $hash->{ $k } }) {
-            delete $hash->{ $k };
+    for my $k (keys %$self) {
+        if (not defined $self->{$k}) {
+            next;
+        }
+        if (ref $self->{$k} eq 'ARRAY') {
+            $hash->{$k} = [ @{ $self->{$k} } ];
+        } else {
+            $hash->{$k} = $self->{$k};
         }
     }
 
@@ -52,51 +50,74 @@ sub hash {
 sub author {
 
     my $self = shift;
-    my $set  = shift;
 
-    unless (defined $set) {
-        return $self->{Author};
+    return defined $self->{Author} ? @{ $self->{Author} } : ();
+
+}
+
+sub set_author {
+
+    my $self = shift;
+    my @set  = grep { defined } @_;
+
+    if (@set) {
+        $self->{Author} = \@set;
+    } else {
+        $self->{Author} = undef;
     }
 
-    unless (ref $set eq 'ARRAY') {
-        die "Setter requires array ref as argument";
-    }
+}
 
-    $self->{Author} = $set;
+sub add_author {
+
+    my $self = shift;
+    my @add  = grep { defined } @_;
+
+    push @{ $self->{Author} }, @add;
 
 }
 
 sub software {
 
     my $self = shift;
+
+    return $self->{Software};
+
+}
+
+sub set_software {
+
+    my $self = shift;
     my $set  = shift;
 
-    unless (defined $set) {
-        return $self->{Software};
+    if (not defined $set) {
+        $self->{Software} = undef;
+    } else {
+        $self->{Software} = $set;
     }
-
-    unless (ref $set eq 'ARRAY') {
-        die "Setter requires array ref as argument";
-    }
-
-    $self->{Software} = $set;
 
 }
 
 sub created {
 
     my $self = shift;
+
+    return $self->{Created};
+
+}
+
+sub set_created {
+
+    my $self = shift;
     my $set  = shift;
 
-    unless (defined $set) {
-        return $self->{Created};
+    if (not defined $set) {
+        $self->{Created} = undef;
+    } elsif ($set =~ /^-?\d+$/) {
+        $self->{Created} = $set;
+    } else {
+        die "created must be either undef or an integar";
     }
-
-    unless (ref $set eq 'ARRAY') {
-        die "Setter requires array ref as argument";
-    }
-
-    $self->{Created} = $set;
 
 }
 
@@ -105,134 +126,196 @@ sub modified {
     my $self = shift;
     my $set  = shift;
 
-    unless (defined $set) {
-        return $self->{Modified};
-    }
+    return $self->{Modified};
 
-    unless (ref $set eq 'ARRAY') {
-        die "Setter requires array ref as argument";
-    }
+}
 
-    $self->{Modified} = $set;
+sub set_modified {
+
+    my $self = shift;
+    my $set  = shift;
+
+    if (not defined $set) {
+        $self->{Modified} = undef;
+    } elsif ($set =~ /^-?\d+$/) {
+        $self->{Modified} = $set;
+    } else {
+        die "modified must be either an integar or undef";
+    }
 
 }
 
 sub format {
 
     my $self = shift;
+
+    return $self->{Format};
+
+}
+
+sub set_format {
+
+    my $self = shift;
     my $set  = shift;
 
-    unless (defined $set) {
-        return $self->{Format};
+    if (not defined $set) {
+        $self->{Format} = undef;
+    } else {
+        $self->{Format} = $set;
     }
-
-    unless (ref $set eq 'ARRAY') {
-        die "Setter requires array ref as argument";
-    }
-
-    $self->{Format} = $set;
 
 }
 
 sub title {
 
     my $self = shift;
+
+    return $self->{Title};
+
+}
+
+sub set_title {
+
+    my $self = shift;
     my $set  = shift;
 
-    unless (defined $set) {
-        return $self->{Title};
+    if (not defined $set) {
+        $self->{Title} = $set;
+    } else {
+        $self->{Title} = $set;
     }
-
-    unless (ref $set eq 'ARRAY') {
-        die "Setter requires array ref as argument";
-    }
-
-    $self->{Title} = $set;
 
 }
 
 sub language {
 
     my $self = shift;
-    my $set  = shift;
 
-    unless (defined $set) {
-        return $self->{Language};
+    return defined $self->{Language} ? @{ $self->{Language} } : ();
+
+}
+
+sub set_language {
+
+    my $self = shift;
+    my @set  = grep { defined } @_;
+
+    if (@set) {
+        $self->{Language} = \@set;
+    } else {
+        $self->{Language} = undef;
     }
 
-    unless (ref $set eq 'ARRAY') {
-        die "Setter requires array ref as argument";
-    }
+}
 
-    $self->{Language} = $set;
+sub add_language {
+
+    my $self = shift;
+    my @add  = grep { defined } @_;
+
+    push @{ $self->{Language} }, @add;
 
 }
 
 sub genre {
 
     my $self = shift;
-    my $set  = shift;
 
-    unless (defined $set) {
-        return $self->{Genre};
+    return defined $self->{Genre} ? @{ $self->{Genre} } : ();
+
+}
+
+sub set_genre {
+
+    my $self = shift;
+    my @set  = grep { defined } @_;
+
+    if (@set) {
+        $self->{Genre} = \@set;
+    } else {
+        $self->{Genre} = undef;
     }
 
-    unless (ref $set eq 'ARRAY') {
-        die "Setter requires array ref as argument";
-    }
+}
 
-    $self->{Genre} = $set;
+sub add_genre {
+
+    my $self = shift;
+    my @add  = grep { defined } @_;
+
+    push @{ $self->{Genre} }, @add;
 
 }
 
 sub id {
 
     my $self = shift;
+
+    return $self->{ID};
+
+}
+
+sub set_id {
+
+    my $self = shift;
     my $set  = shift;
 
-    unless (defined $set) {
-        return $self->{ID};
+    if (not defined $set) {
+        $self->{ID} = undef;
+    } else {
+        $self->{ID} = $set;
     }
-
-    unless (ref $set eq 'ARRAY') {
-        die "Setter requires array ref as argument";
-    }
-
-    $self->{ID} = $set;
 
 }
 
 sub description {
 
     my $self = shift;
+
+    return $self->{Description};
+
+}
+
+sub set_description {
+
+    my $self = shift;
     my $set  = shift;
 
-    unless (defined $set) {
-        return $self->{Description};
+    if (not defined $set) {
+        $self->{Description} = undef;
+    } else {
+        $self->{Description} = $set;
     }
-
-    unless (ref $set eq 'ARRAY') {
-        die "Setter requires array ref as argument";
-    }
-
-    $self->{Description} = $set;
 
 }
 
 sub contributor {
 
     my $self = shift;
-    my $set  = shift;
 
-    unless (defined $set) {
-        return $self->{Contributor};
+    return defined $self->{Contributor} ? @{ $self->{Contributor} } : ();
+
+}
+
+sub set_contributor {
+
+    my $self = shift;
+    my @set  = grep { defined } @_;
+
+    if (@set) {
+        $self->{Contributor} = \@set;
+    } else {
+        $self->{Contributor} = undef;
     }
 
-    unless (ref $set eq 'ARRAY') {
-        die "Setter requires array ref as argument";
-    }
+}
 
-    $self->{Contributor} = $set;
+sub add_contributor {
+
+    my $self = shift;
+    my @add  = grep { defined } @_;
+
+    push @{ $self->{Contributor} }, @add;
 
 }
 
@@ -258,37 +341,9 @@ for user documentation please consult the L<ishmael> manual.
 
 =head1 METHODS
 
-=head2 $m = EBook::Ishmael::EBook::Metadata->new([ $meta ])
+=head2 $m = EBook::Ishmael::EBook::Metadata->new()
 
-Returns a blessed C<EBook::Ishmael::EBook::Metadata> object. Can optionally be
-given a C<$meta> hash ref of metadata fields and their array ref of values.
-The following are valid fields:
-
-=over 4
-
-=item Author
-
-=item Software
-
-=item Created
-
-=item Modified
-
-=item Format
-
-=item Title
-
-=item Language
-
-=item Genre
-
-=item ID
-
-=item Description
-
-=item Contributor
-
-=back
+Returns a blessed C<EBook::Ishmael::EBook::Metadata> object.
 
 =head2 $h = $m->hash
 
@@ -296,51 +351,77 @@ Returns a plain hash ref of the object's metadata.
 
 =head2 Accessors
 
-Each accessor method is both a setter and getter. When ran with no arguments,
-returns the array ref currently in the field. When ran with an array ref as
-argument, sets that field to the given array ref.
+=head3 @a = $m->author()
 
-=head3 $a = $m->author([ $set ])
+=head3 $m->set_author(@a)
+
+=head3 $m->add_author(@a)
 
 Set/get the author(s) of the ebook.
 
-=head3 $s = $m->software([ $set ])
+=head3 $s = $m->software()
+
+=head3 $m->set_software($s)
 
 Set/get the software used to create the ebook.
 
-=head3 $c = $m->created([ $set ])
+=head3 $c = $m->created()
 
-Set/get the creation date(s) of the ebook.
+=head3 $m->set_created($c)
 
-=head3 $o = $m->modified([ $set ])
+Set/get the creation date of the ebook.
 
-Set/get the modification date(s) of the ebook.
+=head3 $o = $m->modified()
 
-=head3 $f = $m->format([ $set ])
+=head3 $m->set_modified($o)
 
-Set/get the format(s) of the ebook.
+Set/get the modification date of the ebook.
 
-=head3 $t = $m->title([ $set ])
+=head3 $f = $m->format()
 
-Set/get the title(s) of the ebook.
+=head3 $m->set_format($f)
 
-=head3 $l = $m->language([ $set ])
+Set/get the format of the ebook.
+
+=head3 $t = $m->title()
+
+=head3 $m->set_title($t)
+
+Set/get the title of the ebook.
+
+=head3 @l = $m->language()
+
+=head3 $m->set_language(@l)
+
+=head3 $m->add_language(@l)
 
 Set/get the language(s) of the ebook.
 
-=head3 $g = $m->genre([ $set ])
+=head3 @g = $m->genre()
+
+=head3 $m->set_genre(@g)
+
+=head3 $m->add_genre(@a)
 
 Set/get the genre(s) of the ebook.
 
-=head3 $i = $m->id([ $set ])
+=head3 $i = $m->id()
 
-Set/get the identifier(s) of the ebook.
+=head3 $m->set_id($i)
 
-=head3 $d = $m->description([ $set ])
+Set/get the identifier of the ebook.
 
-Set/get the text description(s) of the ebook.
+=head3 $d = $m->description()
 
-=head3 $c = $m->contributor([ $set ])
+=head3 $m->set_description($d)
+
+Set/get the text description of the ebook.
+
+=head3 @c = $m->contributor()
+
+=head3 $m->set_contributor(@c)
+
+=head3 $m->add_contributor(@c)
 
 Set/get the contributor(s) of the ebook.
 
@@ -354,7 +435,7 @@ requests are welcome!
 
 =head1 COPYRIGHT
 
-Copyright (C) 2025 Samuel Young
+Copyright (C) 2025-2026 Samuel Young
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

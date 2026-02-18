@@ -5,4 +5,6 @@ WriteMakefile(
     VERSION_FROM => 'lib/Sim/Agent.pm',
     PREREQ_PM    => {},
     EXE_FILES    => ['bin/sim-agent'],
+    AUTHOR    => 'Gian Luca Brunetti <gianluca.brunetti@gmail.com>',
+    LICENSE => 'gpl_3',
 );

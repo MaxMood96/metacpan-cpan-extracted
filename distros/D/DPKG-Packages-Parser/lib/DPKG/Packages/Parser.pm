@@ -7,23 +7,28 @@ no warnings 'experimental::class';
 use Clone qw(clone);
 use Carp qw(croak);
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 class DPKG::Packages::Parser {
 	field $file :param :reader = 'Packages';
+	field $fh :param :reader = undef;
 
 	field %entries = ();
 
 	method parse(@fields) {
 		if(-r $file) {
-			$self->_parse_from_file(@fields);
+			open(my $f, '<', $file) or die "Cannot read $file\n";
+			$self->_parse_from_filehandle($f, @fields);
+			return 1;
+		} elsif(defined($fh)) {
+			$self->_parse_from_filehandle($fh, @fields);
 			return 1;
 		} else {
 			croak("DPKG::Packages::Parser - $file is not a readable file");
 		}
 	}
 
-	method _parse_from_file(@fields) {
+	method _parse_from_filehandle($fh, @fields) {
 		my %f = ();
 		my @array_fields = qw(Tag Depends Pre-Depends Replaces Provides Breaks Enhances Conflicts Recommends Suggests);
 		if(@fields) {
@@ -31,10 +36,9 @@ class DPKG::Packages::Parser {
 			$f{$_} = 1 foreach(@fields);
 			@array_fields = grep { $f{$_} } @array_fields; # Only keep the ones that are requested by the User
 		}
-		open(my $f, '<', $file) or die "Cannot read $file\n";
 		my %entry = ();
 		my $last_key; # 'Tag' is multi-line, I don't know why this is the only field which does this... but we need to remember th^i
-		while(<$f>) {
+		while(<$fh>) {
 			chomp;
 			if(!$_) { # Empty line == post processing of entry (we've seen all its lines)
 				# Yeah, good luck understanding this mess. We loop through the array fields to split it based on ', '. Then if we're dealing with a tag but with a list that contains package names, we have to parse each package name. There's a further edge case where there's an OR statement (signified by '|') between packages that we also deal with.
@@ -51,7 +55,7 @@ class DPKG::Packages::Parser {
 				}
 			}
 		}
-		close($f);
+		close($fh);
 	}
 
 	method _parse_package_str($s) {
@@ -104,6 +108,10 @@ DPKG::Packages::Parser is parser for the Debian 'Packages' file. It aims to prov
 =item new(file => 'Packages')
 
 Creates a new DPKG::Packages::Parser object. Creating the object does not parse the file automatically. For this call the C<parse()> method.
+
+=item new(fh => $filehandle)
+
+Creates a new DPKG::Packages::Parser object. Creating the object does not read the filehandle automatically. For this call the C<parse()> method.
 
 =item parse([@fields])
 

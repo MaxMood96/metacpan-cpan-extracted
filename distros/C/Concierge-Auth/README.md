@@ -70,7 +70,7 @@ my ($ok, $msg) = $auth->checkPwd($user_id, $password);
 ($ok, $msg) = $auth->deleteID($user_id);
 
 # Generate a token
-my ($token, $msg) = $auth->gen_crypt_token();
+my ($token, $msg) = $auth->gen_random_token();
 
 # Generate a random string
 my ($random, $msg) = $auth->gen_random_string(16);

@@ -1,6 +1,6 @@
 package EBook::Ishmael::EBook::CB;
 use 5.016;
-our $VERSION = '1.09';
+our $VERSION = '2.00';
 use strict;
 use warnings;
 
@@ -64,9 +64,9 @@ sub new {
         die "$self->{Source}: Found no images in comic book archive\n";
     }
 
-    $self->{Metadata}->title([ $title ]);
-    $self->{Metadata}->modified([ scalar gmtime((stat $self->{Source})[9]) ]);
-    $self->{Metadata}->format([ $self->format ]);
+    $self->{Metadata}->set_title($title);
+    $self->{Metadata}->set_modified((stat $self->{Source})[9]);
+    $self->{Metadata}->set_format($self->format);
 
     return $self;
 
@@ -120,7 +120,7 @@ sub metadata {
 
     my $self = shift;
 
-    return $self->{Metadata}->hash;
+    return $self->{Metadata};
 
 }
 

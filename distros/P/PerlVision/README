@@ -1,0 +1,39 @@
+PerlVision is Copyright (c) Ashish Gulhati.
+
+Text-mode User Interface Widgets
+
+INSTALLATION
+
+To install this module, run the following commands:
+
+	perl Makefile.PL
+	make
+	make test
+	make install
+
+SUPPORT AND DOCUMENTATION
+
+After installing, you can find documentation for this module with the
+perldoc command.
+
+    perldoc PerlVision
+
+You can also look for information at:
+
+    RT, CPAN's request tracker
+        http://rt.cpan.org/NoAuth/Bugs.html?Dist=PerlVision
+
+COPYRIGHT
+
+Copyright (c) Ashish Gulhati.
+
+LICENSE INFORMATION
+
+This software package is Open Software; you can use, redistribute,
+and/or modify it under the terms of the Open Artistic License 4.0.
+
+Please see the LICENSE file included with this package, or visit
+L<http://www.opensoftware.ca/oal40.txt>, for the full license terms,
+and ensure that the license grant applies to you before using or
+modifying this software. By using or modifying this software, you
+indicate your agreement with the license terms.

@@ -26,9 +26,13 @@ no_index:
 provides:
   App::chot:
     file: lib/App/chot.pm
-    version: '1.03'
+    version: '1.04'
   App::chot::Command:
     file: lib/App/chot/Command.pm
+  App::chot::Finder:
+    file: lib/App/chot/Finder.pm
+  App::chot::Found:
+    file: lib/App/chot/Found.pm
   App::chot::Node:
     file: lib/App/chot/Node.pm
   App::chot::Optex:
@@ -42,6 +46,7 @@ provides:
   App::chot::default:
     file: lib/App/chot/default.pm
 requires:
+  App::nup: '0'
   Command::Run: '0'
   Encode: '0'
   Getopt::EX::Hashed: '1.05'
@@ -54,7 +59,7 @@ resources:
   bugtracker: https://github.com/tecolicom/App-chot/issues
   homepage: https://github.com/tecolicom/App-chot
   repository: https://github.com/tecolicom/App-chot.git
-version: '1.03'
+version: '1.04'
 x_authority: cpan:UTASHIRO
 x_contributors:
   - 'Kazumasa Utashiro <kaz@utashiro.com>'

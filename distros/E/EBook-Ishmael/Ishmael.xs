@@ -7,7 +7,7 @@
 
 #define DECODE_BUF_SIZE 8192
 
-// https://wiki.mobileread.com/wiki/PalmDOC#PalmDoc_byte_pair_compression
+/* https://wiki.mobileread.com/wiki/PalmDOC#PalmDoc_byte_pair_compression */
 int
 c_palmdoc_decode(
     const unsigned char* input, STRLEN inlen,
@@ -24,7 +24,7 @@ c_palmdoc_decode(
 
     for (STRLEN i = 0; i < inlen;) {
         b = input[i++];
-        // space + xor byte with 0x80
+        /* space + xor byte with 0x80 */
         if (b >= 0xc0) {
             if (outp >= outlen) {
                 return -1;
@@ -34,8 +34,8 @@ c_palmdoc_decode(
                 return -1;
             }
             output[outp++] = b ^ 0x80;
-        // length-distance pair: get next byte, strip 2 leading bits, split
-        // byte into 11 bits of distance and 3 bits of length + 3
+        /* length-distance pair: get next byte, strip 2 leading bits, split
+           byte into 11 bits of distance and 3 bits of length + 3 */
         } else if (b >= 0x80) {
             if (i + 1 >= inlen) {
                 return -1;
@@ -54,13 +54,13 @@ c_palmdoc_decode(
                 outp++;
                 l--;
             }
-        // literal copy
+        /* literal copy */
         } else if (b >= 0x09) {
             if (outp >= outlen) {
                 return -1;
             }
             output[outp++] = b;
-        // copy next 1-8 bytes
+        /* copy next 1-8 bytes */
         } else if (b >= 0x01) {
             if (i + b > inlen) {
                 return -1;
@@ -72,7 +72,7 @@ c_palmdoc_decode(
                 output[outp++] = input[i++];
                 b--;
             }
-        // copy null byte
+        /* copy null byte */
         } else {
             if (outp >= outlen) {
                 return -1;

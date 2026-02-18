@@ -1,4 +1,4 @@
-package Concierge::Auth v0.4.0;
+package Concierge::Auth v0.4.3;
 use v5.36;
 
 # ABSTRACT: Concierge authorization using Crypt::Passphrase
@@ -26,9 +26,8 @@ my $FIELD_SEPARATOR		= "\t";
 ## no_file => 1 is provided, but still instantiates
 ## the auth object; without a passwd file, the auth object
 ## can only provide the utility methods:
-## encryptPwd(), gen_crypt_token(), gen_random_string(),
-## gen_word_phrase(), gen_random_string(), gen_uuid,
-## gen_token()<- deprecated
+## encryptPwd(), gen_random_token(), gen_random_string(),
+## gen_word_phrase(), gen_uuid()
 ## A file may be designated after instantiation with
 ## the method setFile().
 ## Dies if it can't open/create a designated file.
@@ -450,12 +449,7 @@ sub gen_token {
 }
 
 sub gen_crypt_token {
-	my $self = shift;
-	my ($token, $msg) = Concierge::Auth::Generators::gen_crypt_token(@_);
-
-	return defined $token
-		? reply($token, $msg)
-		: reject("gen_crypt_token: Failed to generate crypt token");
+	goto &gen_random_token;
 }
 
 sub gen_random_token {
@@ -495,7 +489,7 @@ Concierge::Auth - Password authentication and token generation using Crypt::Pass
 
 =head1 VERSION
 
-v0.19.0
+v0.4.3
 
 =head1 SYNOPSIS
 
@@ -730,12 +724,6 @@ required.
 Generates a cryptographically secure alphanumeric token. Default length
 is 13.
 
-=head3 gen_crypt_token
-
-    my ($token, $msg) = $auth->gen_crypt_token();
-
-Generates an 11-character token using C<crypt()>.
-
 =head3 gen_random_string
 
     my ($string, $msg) = $auth->gen_random_string($length, $charset);
@@ -750,10 +738,6 @@ Uses alphanumeric characters if C<$charset> is omitted.
 Generates a multi-word passphrase from dictionary words (or random
 fallback strings). Defaults: 4 words, 4-7 characters each, no
 separator.
-
-=head3 gen_token
-
-Deprecated alias for C<gen_random_token>.
 
 =head1 SEE ALSO
 

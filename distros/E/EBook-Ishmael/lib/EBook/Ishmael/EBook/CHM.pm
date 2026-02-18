@@ -1,6 +1,6 @@
 package EBook::Ishmael::EBook::CHM;
 use 5.016;
-our $VERSION = '1.09';
+our $VERSION = '2.00';
 use strict;
 use warnings;
 
@@ -14,16 +14,15 @@ use XML::LibXML;
 use EBook::Ishmael::Dir;
 use EBook::Ishmael::EBook::Metadata;
 use EBook::Ishmael::ImageID;
-use EBook::Ishmael::ShellQuote qw(shell_quote);
+use EBook::Ishmael::ShellQuote qw(safe_qx);
 
 # TODO: Make more of an effort to find metadata
 # TODO: Add support for Windows via hh.exe
 # I have tried to add hh support before, and it didn't work out well because
 # hh doesn't know how to handle quoted arguments for some reason.
 
-my $CHMLIB = which 'extract_chmLib';
-
-our $CAN_TEST = defined $CHMLIB;
+my $HAS_CHMLIB = defined which('extract_chmLib');
+our $CAN_TEST = $HAS_CHMLIB;
 
 my $MAGIC = 'ITSF';
 
@@ -43,16 +42,13 @@ sub _extract {
 
     my $self = shift;
 
-    unless (defined $CHMLIB) {
-        die "Cannot extract CHM $self->{Source}; chmlib not installed\n";
+    if (!$HAS_CHMLIB) {
+        die "Cannot extract CHM $self->{Source}; extract_chmLib not installed\n";
     }
 
-    my $qsrc = shell_quote($self->{Source});
-    my $qext = shell_quote($self->{_extract});
-    qx/$CHMLIB $qsrc $qext/;
-
+    safe_qx('extract_chmLib', $self->{Source}, $self->{_extract});
     unless ($? >> 8 == 0) {
-        die "Failed to run '$CHMLIB' on $self->{Source}\n";
+        die "Failed to run 'extract_chmLib' on $self->{Source}\n";
     }
 
     return 1;
@@ -222,9 +218,9 @@ sub new {
     $self->_hhc;
     $self->_images;
 
-    $self->{Metadata}->title([ (fileparse($self->{Source}, qr/\.[^.]*/))[0] ]);
-    $self->{Metadata}->modified([ scalar gmtime((stat $self->{Source})[9]) ]);
-    $self->{Metadata}->format([ 'CHM' ]);
+    $self->{Metadata}->set_title((fileparse($self->{Source}, qr/\.[^.]*/))[0]);
+    $self->{Metadata}->set_modified((stat $self->{Source})[9]);
+    $self->{Metadata}->set_format('CHM');
 
     return $self;
 
@@ -302,7 +298,7 @@ sub metadata {
 
     my $self = shift;
 
-    return $self->{Metadata}->hash;
+    return $self->{Metadata};
 
 }
 

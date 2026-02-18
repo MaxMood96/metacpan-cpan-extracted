@@ -45,8 +45,10 @@ typedef CRITICAL_SECTION para_mutex_t;
 #else
 #include <pthread.h>
 #include <sched.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/syscall.h>
+#include <sys/time.h>
 #include <ucontext.h>
 #include <unistd.h>
 #if defined(__APPLE__) || defined(__FreeBSD__)
@@ -63,6 +65,7 @@ typedef pthread_mutex_t para_mutex_t;
 #endif
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -70,6 +73,7 @@ typedef pthread_mutex_t para_mutex_t;
 // Forward declarations
 DLLEXPORT SV * coro_yield(SV * ret_val);
 DLLEXPORT SV * coro_transfer(int id, SV * args);
+DLLEXPORT void destroy_coro(int id);
 
 // Identity and affinity Helpers
 /**
@@ -166,7 +170,8 @@ typedef struct {
     coro_handle_t context; /**< OS-specific context handle */
 
 #ifndef _WIN32
-    char stack[2 * 1024 * 1024]; /**< Dedicated 2MB C-stack for POSIX (Perl needs deep stacks) */
+    void * stack_p;  /**< Dynamically allocated stack */
+    size_t stack_sz; /**< Size of the stack */
 #endif
 
     /*
@@ -200,6 +205,7 @@ typedef struct {
     OP * op;          /**< Current Operation */
     PAD * comppad;    /**< Pad (Lexicals) */
     SV ** curpad;     /**< Current Pad Array */
+    PMOP * curpm;     /**< Current Pattern Match */
 
     // Fiber metadata
     SV * user_cv;  /**< The user's code SV (CV*) */
@@ -244,6 +250,7 @@ typedef struct {
     int type;          /**< Type of task (TASK_SLEEP, etc.) */
     value_t input;     /**< Input Data */
     value_t output;    /**< Output Data (Populated by worker) */
+    int timeout_ms;    /**< Timeout for the task in milliseconds */
     int status;        /**< Current status (JOB_NEW -> JOB_DONE) */
 } job_t;
 
@@ -320,50 +327,43 @@ void * worker_thread(void * arg) {
 #ifdef _WIN32
                 SOCKET s = (SOCKET)job->input.i;
                 FD_SET(s, &fds);
-                struct timeval tv = {0, 10000};  // 10ms timeout for responsiveness
-                int res;
-                if (job->type == TASK_READ)
-                    res = select(0, &fds, NULL, NULL, &tv);
-                else
-                    res = select(0, NULL, &fds, NULL, &tv);
-
-                if (res > 0)
-                    job->output.i = 1;
-                else if (res == 0) {
-                    // Timeout, we should probably loop or just mark as BUSY again?
-                    // For now, I'll just loop inside here until it's ready or threads_keep_running is false... works
-                    // but not very effecient.
-                    while (threads_keep_running) {
-                        FD_ZERO(&fds);
-                        FD_SET(s, &fds);
-                        if (job->type == TASK_READ)
-                            res = select(0, &fds, NULL, NULL, &tv);
-                        else
-                            res = select(0, NULL, &fds, NULL, &tv);
-                        if (res != 0)
-                            break;
-                    }
-                    job->output.i = (res > 0) ? 1 : -1;
-                }
-                else
-                    job->output.i = -1;  // Error
 #else
                 int fd = (int)job->input.i;
                 FD_SET(fd, &fds);
-                struct timeval tv = {0, 10000};
+#endif
+                // Reset tv inside the loop because select updates it on Linux
+                struct timeval tv;
                 int res;
+
+                int elapsed_ms = 0;
+                int timeout = job->timeout_ms > 0 ? job->timeout_ms : 5000;  // Default 5s
+
                 while (threads_keep_running) {
-                    FD_ZERO(&fds);
-                    FD_SET(fd, &fds);
+                    tv.tv_sec = 0;
+                    tv.tv_usec = 10000;  // 10ms poll
+
+                    fd_set work_fds = fds;  // Use a copy of the FD set
                     if (job->type == TASK_READ)
-                        res = select(fd + 1, &fds, NULL, NULL, &tv);
+#ifdef _WIN32
+                        res = select(0, &work_fds, NULL, NULL, &tv);
+#else
+                        res = select(fd + 1, &work_fds, NULL, NULL, &tv);
+#endif
                     else
-                        res = select(fd + 1, NULL, &fds, NULL, &tv);
+#ifdef _WIN32
+                        res = select(0, NULL, &work_fds, NULL, &tv);
+#else
+                        res = select(fd + 1, NULL, &work_fds, NULL, &tv);
+#endif
+
                     if (res != 0)
+                        break;
+
+                    elapsed_ms += 10;
+                    if (elapsed_ms >= timeout)
                         break;
                 }
                 job->output.i = (res > 0) ? 1 : -1;
-#endif
             }
 
             LOCK(queue_lock);
@@ -406,7 +406,7 @@ DLLEXPORT void init_threads() {
  * @brief Submits a task to the background queue.
  * @return int Job index or -1 if queue full.
  */
-DLLEXPORT int submit_c_job(int type, int64_t arg) {
+DLLEXPORT int submit_c_job(int type, int64_t arg, int timeout_ms) {
     static int next_thread = 0;
     int idx = -1;
     LOCK(queue_lock);
@@ -422,6 +422,7 @@ DLLEXPORT int submit_c_job(int type, int64_t arg) {
         next_thread = (next_thread + 1) % thread_pool_size;
         job_slots[idx].type = type;
         job_slots[idx].input.i = arg;
+        job_slots[idx].timeout_ms = timeout_ms;
         job_slots[idx].status = JOB_NEW;
     }
     UNLOCK(queue_lock);
@@ -457,8 +458,10 @@ DLLEXPORT SV * get_job_result(int idx) {
     LOCK(queue_lock);
     if (job_slots[idx].status == JOB_DONE || job_slots[idx].status == JOB_BUSY) {
         if (job_slots[idx].type == TASK_SLEEP || job_slots[idx].type == TASK_GET_CPU ||
-            job_slots[idx].type == TASK_READ || job_slots[idx].type == TASK_WRITE)
+            job_slots[idx].type == TASK_READ || job_slots[idx].type == TASK_WRITE) {
             res = newSViv(job_slots[idx].output.i);
+            sv_2mortal(res);
+        }
     }
     UNLOCK(queue_lock);
     return res;
@@ -556,6 +559,7 @@ void swap_perl_state(my_coro_t * from, my_coro_t * to) {
     from->op = PL_op;
     from->comppad = PL_comppad;
     from->curpad = PL_curpad;
+    from->curpm = PL_curpm;
 
     // Load target stack
     PL_curstackinfo = to->si;
@@ -587,7 +591,12 @@ void swap_perl_state(my_coro_t * from, my_coro_t * to) {
     PL_curcop = to->curcop;
     PL_op = to->op;
     PL_comppad = to->comppad;
-    PL_curpad = to->curpad;
+    PL_curpm = to->curpm;
+
+    if (PL_comppad)
+        PL_curpad = AvARRAY(PL_comppad);
+    else
+        PL_curpad = to->curpad;
 }
 
 /**
@@ -645,6 +654,7 @@ void init_perl_stacks(my_coro_t * c) {
     c->curcop = PL_curcop;
     c->op = PL_op;
     c->top_env = PL_top_env;
+    c->curpm = PL_curpm;
 
     // Start with fresh pads to avoid interfering with caller.
     c->comppad = NULL;
@@ -701,13 +711,13 @@ DLLEXPORT SV * coro_yield(SV * ret_val) {
     my_coro_t * self = coroutines[current_coro_index];
     int parent = self->parent_id;
 
-    // Fallback logic: if parent is finished, missing, or destroyed, try the last sender
+    // If parent is finished, missing, or destroyed, try the last sender. Fallback mode
     if (parent != -1 && (!coroutines[parent] || coroutines[parent]->finished))
         parent = self->last_sender;
     else if (parent == -1)
         parent = self->last_sender;
 
-    // Final safety: if the fallback is ALSO finished or destroyed, go back to main
+    // If the fallback is *also* finished or destroyed, go back to main
     if (parent >= 0 && (!coroutines[parent] || coroutines[parent]->finished))
         parent = -1;
 
@@ -723,7 +733,13 @@ DLLEXPORT SV * coro_yield(SV * ret_val) {
 
     perform_switch(parent);
 
-    return self->transfer_data;
+    SV * res = self->transfer_data;
+    self->transfer_data = &PL_sv_undef;
+    // Mortalize result before returning to Perl to avoid leaking the reference
+    // created by the transfer mechanism.
+    if (res && res != &PL_sv_undef)
+        sv_2mortal(res);
+    return res;
 }
 
 static void entry_point(my_coro_t * c) {
@@ -746,17 +762,32 @@ static void entry_point(my_coro_t * c) {
     }
     PUTBACK;
 
-    // Call the user's code directly
+    // Catch exceptions so the sky doesn't fall on our heads
     int count = call_sv(c->user_cv, G_SCALAR | G_EVAL);
 
     SPAGAIN;
 
     SV * ret_val = &PL_sv_undef;
-    if (count == 1) {
+    if (count == 1)
         ret_val = POPs;
-        SvREFCNT_inc(ret_val);
-    }
     PUTBACK;
+
+    // Immediately set finished to true so is_done() will call destroy_coro() even if subsequent operations fail.
+    // It's working as I imagine it but this is probably wrong...
+    c->finished = true;
+
+    // Clear the old transfer_data (arguments passed in)
+    if (c->transfer_data && c->transfer_data != &PL_sv_undef) {
+        SvREFCNT_dec(c->transfer_data);
+        c->transfer_data = &PL_sv_undef;
+    }
+
+    // Store result for fiber in transfer_data and inc refcnt so it survives FREETMPS and can be cleaned up by
+    // destroy_coro
+    if (ret_val && ret_val != &PL_sv_undef) {
+        SvREFCNT_inc(ret_val);
+        c->transfer_data = ret_val;
+    }
 
     // Report result/error to the Perl object
     if (c->self_ref && SvROK(c->self_ref)) {
@@ -781,11 +812,11 @@ static void entry_point(my_coro_t * c) {
 
     FREETMPS;
     LEAVE;
-    c->finished = true;
 
-    coro_yield(ret_val);
-    if (ret_val && ret_val != &PL_sv_undef)
-        SvREFCNT_dec(ret_val);
+    // Yield the result stored in transfer_data
+    // coro_yield will inc it again for the caller.
+    coro_yield(c->transfer_data ? c->transfer_data : &PL_sv_undef);
+
     while (1)
         coro_yield(&PL_sv_undef);
 }
@@ -820,27 +851,33 @@ DLLEXPORT int create_coro_ptr(SV * user_code, SV * self_ref) {
     c->self_ref = self_ref;
     if (self_ref && self_ref != &PL_sv_undef)
         SvREFCNT_inc(self_ref);
-
     c->id = idx;
     c->parent_id = -1;
     c->last_sender = -1;
     c->transfer_data = &PL_sv_undef;
-
+    coroutines[idx] = c;
     init_perl_stacks(c);
-
 #ifdef _WIN32
     c->context = CreateFiber(0, fiber_entry, c);
 #else
+    c->stack_sz = 2 * 1024 * 1024;
+    // posix_memalign ensures 16-byte alignment
+    if (posix_memalign(&c->stack_p, 16, c->stack_sz) != 0) {
+        destroy_coro(idx);  // Clean up partially created coro
+        return -3;
+    }
+
     getcontext(&c->context);
-    c->context.uc_stack.ss_sp = c->stack;
-    c->context.uc_stack.ss_size = sizeof(c->stack);
+    c->context.uc_stack.ss_sp = c->stack_p;
+    c->context.uc_stack.ss_size = c->stack_sz;
     c->context.uc_link = &main_context.context;
     makecontext(&c->context, (void (*)())posix_entry, 1, c->id);
 #endif
 
-    coroutines[idx] = c;
+
     return idx;
 }
+
 
 DLLEXPORT SV * coro_call(int id, SV * args) {
     dTHX;
@@ -858,7 +895,12 @@ DLLEXPORT SV * coro_call(int id, SV * args) {
     coroutines[id]->parent_id = current_coro_index;
     perform_switch(id);
     my_coro_t * me = (current_coro_index == -1) ? &main_context : coroutines[current_coro_index];
-    return me->transfer_data;
+    SV * res = me->transfer_data;
+    me->transfer_data = &PL_sv_undef;
+    // Mortalize result before returning to Perl
+    if (res && res != &PL_sv_undef)
+        sv_2mortal(res);
+    return res;
 }
 
 DLLEXPORT SV * coro_transfer(int id, SV * args) {
@@ -879,7 +921,12 @@ DLLEXPORT SV * coro_transfer(int id, SV * args) {
 
     perform_switch(id);
     my_coro_t * me = (current_coro_index == -1) ? &main_context : coroutines[current_coro_index];
-    return me->transfer_data;
+    SV * res = me->transfer_data;
+    me->transfer_data = &PL_sv_undef;
+    // Mortalize result before returning to Perl
+    if (res && res != &PL_sv_undef)
+        sv_2mortal(res);
+    return res;
 }
 
 DLLEXPORT int is_finished(int id) {
@@ -893,9 +940,6 @@ static void recursive_depth_reset(pTHX_ CV * cv) {
         return;
     if (CvDEPTH(cv) > 0)
         CvDEPTH(cv) = 0;
-    // Only recurse if we are not in global destruction to avoid loops/invalid pointers
-    if (!PL_dirty && CvOUTSIDE(cv))
-        recursive_depth_reset(aTHX_ CvOUTSIDE(cv));
 }
 
 DLLEXPORT void destroy_coro(int id) {
@@ -946,6 +990,10 @@ DLLEXPORT void destroy_coro(int id) {
     }
 
     if (PL_dirty) {
+#ifndef _WIN32
+        if (c->stack_p)
+            free(c->stack_p);
+#endif
         free(c);
         return;
     }
@@ -953,6 +1001,9 @@ DLLEXPORT void destroy_coro(int id) {
 #ifdef _WIN32
     if (c->context)
         DeleteFiber(c->context);
+#else
+    if (c->stack_p)
+        free(c->stack_p);
 #endif
 
     // Now, it should be safe for cleanup
@@ -974,8 +1025,14 @@ DLLEXPORT void destroy_coro(int id) {
         Safefree(c->scopestack);
     if (c->savestack)
         Safefree(c->savestack);
-    if (c->tmps_stack)
+    if (c->tmps_stack) {
+        for (I32 i = 0; i <= c->tmps_ix; i++) {
+            SV * sv = c->tmps_stack[i];
+            if (sv && sv != &PL_sv_undef)
+                SvREFCNT_dec(sv);
+        }
         Safefree(c->tmps_stack);
+    }
 
     if (c->user_cv && c->user_cv != &PL_sv_undef) {
         SvREFCNT_dec(c->user_cv);
@@ -1015,7 +1072,4 @@ DLLEXPORT void cleanup() {
         SvREFCNT_dec(main_context.transfer_data);
         main_context.transfer_data = &PL_sv_undef;
     }
-
-    if (PL_main_cv && SvTYPE((SV *)PL_main_cv) == SVt_PVCV)
-        ((XPVCV *)MUTABLE_PTR(SvANY(PL_main_cv)))->xcv_depth = 0;
 }

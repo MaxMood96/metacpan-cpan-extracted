@@ -4,7 +4,7 @@ package App::mdee;
 # POD documentation is appended from script/mdee at release time.
 # See minil.toml for details.
 
-our $VERSION = "0.16";
+our $VERSION = "0.18";
 
 1;
 =encoding utf-8
@@ -34,7 +34,6 @@ mdee - em·dee, Markdown Easy on the Eyes
      -m  --mode=#           light or dark (default: light)
      -B  --base-color=#     override base color of theme
                             (e.g., Ivory, #780043, (120,0,67))
-         --list-themes      list available themes
          --show=#           set field visibility (e.g., italic=1)
      -C  --pane=#           number of columns
      -R  --row=#            number of rows
@@ -46,7 +45,7 @@ mdee - em·dee, Markdown Easy on the Eyes
 
 =head1 VERSION
 
-Version 0.16
+Version 0.18
 
 =cut
 =head1 DESCRIPTION
@@ -145,14 +144,13 @@ Set debug level.  Can be repeated for increasing verbosity.
 
 =item C<-d>
 
-Show theme values (C<theme_light[]>/C<theme_dark[]>) and pipeline
-stage names.  Output is in sourceable format that can be used in
-theme files or config.sh.
+Show theme values (C<theme_light[]>/C<theme_dark[]>, C<md_config[]>)
+and pipeline stage names.
 
 =item C<-dd>
 
-Above, plus expanded color values (C<colors[]>), pattern definitions
-(C<pattern[]>), and full command lines for each pipeline stage.
+Above, plus pattern definitions (C<pattern[]>) and full command lines
+for each pipeline stage.
 
 =back
 
@@ -287,19 +285,15 @@ Theme files are searched in the following order:
 
 =back
 
-Theme files are Bash scripts that modify C<theme_light>,
-C<theme_dark>, and/or C<pattern[]> arrays directly:
+Theme files are Bash scripts that can modify C<theme_light[base]>,
+C<theme_dark[base]>, C<md_config[]>, and/or C<pattern[]>:
 
     # theme/warm.sh — change base color
     theme_light[base]='<Coral>=y25'
     theme_dark[base]='<Coral>=y80'
 
-    # theme/hashed.sh — append closing hashes to h3-h6
-    for _mode in light dark; do
-        declare -n _theme="theme_${_mode}"
-        _theme[h3]+=';sub{s/(?<!#)$/ ###/r}'
-        ...
-    done
+    # theme/hashed.sh — enable closing hashes on h3-h6
+    md_config+=(hashed.h3=1 hashed.h4=1 hashed.h5=1 hashed.h6=1)
 
     # modify matching pattern
     pattern[link]='...'
@@ -369,10 +363,6 @@ B<Note>: Basic ANSI color codes (C<R>, C<G>, C<B>, etc.) cannot be used
 because heading variations require luminance adjustment, which only works
 with full color specifications (X11 names, RGB hex, or RGB decimal).
 
-=item B<--list-themes>
-
-List available themes with color samples and exit.
-
 =back
 
 =head2 Highlight Options
@@ -393,8 +383,8 @@ Multiple fields can be specified with commas or by repeating the option.
 The special field C<all> affects all fields and is processed first.
 
 Available fields: C<comment>, C<bold>, C<italic>, C<strike>, C<h1>,
-C<h2>, C<h3>, C<h4>, C<h5>, C<h6>, C<inline_code>, C<code_block>,
-C<link>, C<image>, C<image_link>.
+C<h2>, C<h3>, C<h4>, C<h5>, C<h6>, C<code_mark>, C<code_info>, C<code_block>,
+C<code_inline>, C<link>, C<image>, C<image_link>.
 
 All fields are enabled by default.
 
@@ -484,24 +474,22 @@ The C<default> associative array supports the following keys:
 
 B<Overriding theme colors and patterns>
 
-Config.sh can modify theme arrays and patterns directly, using the
+Config.sh can modify theme variables and patterns directly, using the
 same mechanism as theme files:
 
     # Change base color for both modes
     theme_light[base]='<DarkCyan>=y25'
     theme_dark[base]='<DarkCyan>=y80'
 
-    # Append to both light and dark using declare -n
-    for _array in theme_light theme_dark; do
-        declare -n _theme=$_array
-        _theme[h3]+=';sub{s/(?<!#)$/ ###/r}'
-    done
+    # Enable md module features
+    md_config+=(hashed.h3=1 hashed.h4=1 hashed.h5=1 hashed.h6=1)
 
     # Modify matching patterns
     pattern[link]='...'
 
-Since C<${base}> references are expanded after loading, changing the
-base color automatically affects all derived colors (h1, h2, bold, etc.).
+Changing the base color automatically affects all derived colors
+(h1, h2, bold, etc.) because the md module expands C<${base}>
+references.
 
 Use C<-d> to dump current theme and pattern values in sourceable format.
 
@@ -509,7 +497,7 @@ B<Color specification format>
 
 Color specifications use L<Term::ANSIColor::Concise> format.
 The C<FG/BG> notation specifies foreground and background colors
-(e.g., C<L25DE/${base}> means gray foreground on base-colored background).
+(e.g., C<L25D/${base};E> means gray foreground on base-colored background).
 The C<${base}> string is expanded to the base color value after loading.
 
 =head1 EXAMPLES
@@ -545,7 +533,6 @@ The C<${base}> string is expanded to the base color value after loading.
     mdee --mode=dark -B '#780043' file.md  # dark mode with burgundy
     mdee --theme=warm file.md              # warm (Coral) base color
     mdee --theme=warm,hashed file.md      # warm + closing hashes
-    mdee --list-themes                     # list available themes
 
 =head1 DEPENDENCIES
 
@@ -583,13 +570,10 @@ The overall data flow is:
     Input File
         |
         v
-    [greple] --- Syntax Highlighting
+    [greple -Mmd] --- Syntax Highlighting + Table Formatting
         |
         v
     [ansifold] --- Text Folding (optional)
-        |
-        v
-    [ansicolumn] --- Table Formatting (optional)
         |
         v
     [nup] --- Paged Output (nup style)
@@ -608,7 +592,7 @@ pipeline without execution.
 
 =head3 Processing Stages
 
-The pipeline consists of four configurable stages.  Each stage can be
+The pipeline consists of configurable stages.  Each stage can be
 enabled or disabled independently using C<--[no-]fold>, C<--[no-]table>,
 and C<--[no-]nup> options.
 
@@ -661,9 +645,13 @@ The folding width is controlled by C<--width> option (default: 80).
 
 =head4 Table Formatting
 
-The third stage formats Markdown tables using L<ansicolumn(1)|App::ansicolumn>.
-Tables are detected by the pattern C<^(\|.+\|\n){3,}> and formatted
-with aligned columns while preserving ANSI colors.
+Table formatting is handled within the L<App::Greple::md> module
+(after syntax highlighting, before output).  Markdown tables are
+detected by the pattern C<^ {0,3}(\|.+\|\n){3,}> and formatted with
+aligned columns using L<ansicolumn(1)|App::ansicolumn> while
+preserving ANSI colors.  When C<--rule> is enabled (default),
+ASCII pipe characters are replaced with Unicode box-drawing
+characters (C<│>, C<├>, C<┤>, C<┼>, C<─>).
 
 =head3 Output Stage
 
@@ -679,30 +667,36 @@ chained via C<--theme=NAME1,NAME2,...>.
 
 =head3 Theme Structure
 
-The built-in default theme is defined as C<theme_light> and
-C<theme_dark> associative arrays.  Dark inherits undefined
-keys from light immediately after declaration.  Theme files can
-modify these arrays and the C<pattern[]> array directly:
+Color definitions are managed by the L<App::Greple::md> module.
+The C<theme_light> and C<theme_dark> arrays contain only the base
+color.  Theme files can modify the base color, pass configuration
+to the md module via C<md_config[]>, and modify C<pattern[]>:
 
-    # theme/warm.sh — change colors
+    # theme/warm.sh — change base color
     theme_light[base]='<Coral>=y25'
     theme_dark[base]='<Coral>=y80'
+
+    # theme/hashed.sh — enable closing hashes
+    md_config+=(hashed.h3=1 hashed.h4=1 hashed.h5=1 hashed.h6=1)
 
     # modify matching patterns
     pattern[link]='...'
 
+The C<md_config[]> entries are passed as config parameters to the
+L<App::Greple::md> module.
+
 =head4 Base Color Expansion
 
-The C<${base}> placeholder is expanded to the effective base color
-after theme loading.  The base color is determined by the
-C<--base-color> option (default: RoyalBlue) with automatic luminance
-adjustment based on mode (C<=y25> for light, C<=y80> for dark).
+The C<${base}> placeholder in color values is expanded by the md
+module.  The base color is determined by C<--base-color> option
+(default: RoyalBlue) with automatic luminance adjustment based on
+mode (C<=y25> for light, C<=y80> for dark).
 
 =head3 Color Specifications
 
 Colors are specified using L<Term::ANSIColor::Concise> format.
 The C<--cm> option maps colors to captured groups.  For example,
-C<L00DE/${base}> specifies gray foreground on base-colored background.
+C<L00D/${base};E> specifies gray foreground on base-colored background.
 
 The color specification supports modifiers:
 

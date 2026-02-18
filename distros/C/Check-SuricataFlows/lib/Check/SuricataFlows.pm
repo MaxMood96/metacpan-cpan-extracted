@@ -14,11 +14,11 @@ Check::SuricataFlows - Make sure Suricata is seeing data via reading the Suricat
 
 =head1 VERSION
 
-Version 0.0.1
+Version 0.1.0
 
 =cut
 
-our $VERSION = '0.0.1';
+our $VERSION = '0.1.0';
 
 =head1 SYNOPSIS
 
@@ -42,6 +42,10 @@ than zero and the other is zero.
 
 If all entries found are uni-directional then it is safe to assume the monitored span
 is misconfigured.
+
+If sensor_names is used, then each of the specified sensors is checked for. It is
+checked from .host in the JSON and the variable for setting that in the Suricata config
+is .sensor-name .
 
 Example...
 
@@ -95,6 +99,10 @@ Initiates the object.
 
     - flow_file :: The location json file containing the flow data.
           default :: /var/log/suricata/flows/current/flow.json
+
+    - sensor_names :: A array of sensor names to check for. If specified each of these need to be above
+              warn/alert count. If empty or undef, only no checking is done for sensor names, just totals.
+          default :: []
 
 Example...
 
@@ -160,12 +168,31 @@ sub new {
 		die( '$opts{flow_file} of ref type "' . ref( $opts{flow_file} ) . '" and not ""' );
 	}
 
+	if ( !defined( $opts{sensor_names} ) ) {
+		$opts{sensor_names} = [];
+	} elsif ( ref( $opts{sensor_names} ) ne 'ARRAY' ) {
+		die( '$opts{sensor_names} of ref type "' . ref( $opts{sensor_names} ) . '" and not "ARRAY"' );
+	} else {
+		my $sensor_names_int = 0;
+		while ( defined( $opts{sensor_names}[$sensor_names_int] ) ) {
+			if ( ref( $opts{sensor_names}[$sensor_names_int] ) ne '' ) {
+				die(      '$opts{flow_file}['
+						. $sensor_names_int
+						. '] of ref type "'
+						. ref( $opts{sensor_names}[$sensor_names_int] )
+						. '" and not ""' );
+			}
+			$sensor_names_int++;
+		} ## end while ( defined( $opts{sensor_names}[$sensor_names_int...]))
+	} ## end else [ if ( !defined( $opts{sensor_names} ) ) ]
+
 	my $self = {
 		flow_file      => $opts{flow_file},
 		alert_count    => $opts{alert_count},
 		warn_count     => $opts{warn_count},
 		read_back_time => $opts{read_back_time},
 		max_lines      => $opts{max_lines},
+		sensor_names   => $opts{sensor_names},
 	};
 	bless $self;
 
@@ -223,6 +250,7 @@ sub run {
 		bi_directional_count  => 0,
 		uni_directional_count => 0,
 		lines_get_errors      => [],
+		by_sensor             => {},
 	};
 
 	# can't go any further if we can't read the file
@@ -309,12 +337,21 @@ sub run {
 					&& ( ref( $parsed_line->{'flow'}{'pkts_toserver'} ) eq '' )
 					&& looks_like_number( $parsed_line->{'flow'}{'pkts_toserver'} ) )
 				{
+					my $sensor = $parsed_line->{'host'};
+					if ( !defined( $to_return->{by_sensor}{$sensor} ) ) {
+						$to_return->{by_sensor}{$sensor} = {
+							bi_directional_count  => 0,
+							uni_directional_count => 0,
+						};
+					}
 					if (   ( $parsed_line->{'flow'}{'pkts_toserver'} > 0 )
 						&& ( $parsed_line->{'flow'}{'pkts_toclient'} > 0 ) )
 					{
 						$to_return->{bi_directional_count}++;
+						$to_return->{by_sensor}{$sensor}{bi_directional_count}++;
 					} else {
 						$to_return->{uni_directional_count}++;
+						$to_return->{by_sensor}{$sensor}{uni_directional_count}++;
 					}
 				} ## end if ( $time_good && defined( $parsed_line->...))
 			} ## end elsif ($process_line)
@@ -336,11 +373,62 @@ sub run {
 			. $self->{warn_count} . "\n";
 		$to_return->{status_code} = 1;
 	} else {
-		$to_return->{status}      = 'OK: bi directional count of ' . $to_return->{bi_directional_count} . "\n";
-		$to_return->{status_code} = 0;
+		$to_return->{status} = 'OK: bi directional count of ' . $to_return->{bi_directional_count} . "\n";
 	}
 
+	if ( defined( $self->{sensor_names}[0] ) ) {
+		foreach my $sensor ( @{ $self->{sensor_names} } ) {
+			if ( defined( $to_return->{by_sensor}{$sensor} ) ) {
+				if ( $to_return->{by_sensor}{$sensor}{bi_directional_count} <= $self->{alert_count} ) {
+					$to_return->{status}
+						= $to_return->{status}
+						. 'ALERT, '
+						. $sensor
+						. ': bi directional count of '
+						. $to_return->{by_sensor}{$sensor}{bi_directional_count}
+						. ' is less than '
+						. $self->{alert_count} . "\n";
+					$to_return->{status_code} = 2;
+				} elsif ( $to_return->{by_sensor}{$sensor}{bi_directional_count} <= $self->{warn_count} ) {
+					$to_return->{status}
+						= $to_return->{status}
+						. 'WARN, '
+						. $sensor
+						. ': bi directional count of '
+						. $to_return->{by_sensor}{$sensor}{bi_directional_count}
+						. ' is less than '
+						. $self->{warn_count} . "\n";
+					if ( $to_return->{status_code} < 1 ) {
+						$to_return->{status_code} = 1;
+					}
+				} else {
+					$to_return->{status}
+						= $to_return->{status} . 'OK, '
+						. $sensor
+						. ': bi directional count of '
+						. $to_return->{by_sensor}{$sensor}{bi_directional_count} . "\n";
+				}
+			} else {
+				$to_return->{status}      = $to_return->{status} . 'ALERT, ' . $sensor . ": sensor never seen\n";
+				$to_return->{status_code} = 2;
+			}
+		} ## end foreach my $sensor ( @{ $self->{sensor_names} })
+	} ## end if ( defined( $self->{sensor_names}[0] ) )
+
 	$to_return->{status} = $to_return->{status} . 'uni directional: ' . $to_return->{uni_directional_count} . "\n";
+	foreach my $sensor ( @{ $self->{sensor_names} } ) {
+		if ( defined( $to_return->{by_sensor}{$sensor} ) ) {
+			$to_return->{status}
+				= $to_return->{status}
+				. 'uni directional, '
+				. $sensor . ': '
+				. $to_return->{by_sensor}{$sensor}{uni_directional_count} . "\n";
+		} else {
+			$to_return->{status} = $to_return->{status} . 'uni directional, ' . $sensor . ": 0\n";
+		}
+	} ## end foreach my $sensor ( @{ $self->{sensor_names} })
+	$to_return->{status}
+		= $to_return->{status} . 'seen sensors: ' . join( ', ', keys( %{ $to_return->{by_sensor} } ) ) . "\n";
 	$to_return->{status} = $to_return->{status} . 'max lines to read: ' . $self->{max_lines} . "\n";
 	$to_return->{status} = $to_return->{status} . 'lines read: ' . $to_return->{lines_read} . "\n";
 	$to_return->{status} = $to_return->{status} . 'lines parsed: ' . $to_return->{lines_parsed} . "\n";

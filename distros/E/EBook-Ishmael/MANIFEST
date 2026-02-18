@@ -32,6 +32,7 @@ lib/EBook/Ishmael/PDB/Record.pm
 lib/EBook/Ishmael/ShellQuote.pm
 lib/EBook/Ishmael/TextBrowserDump.pm
 lib/EBook/Ishmael/TextToHtml.pm
+lib/EBook/Ishmael/Time.pm
 lib/EBook/Ishmael/Unzip.pm
 LICENSE
 Makefile.PL
@@ -39,6 +40,7 @@ MANIFEST			This list of files
 ppport.h
 README.md
 t/01_init.t
+t/05_time.t
 t/10_epub.t
 t/11_html.t
 t/12_xhtml.t

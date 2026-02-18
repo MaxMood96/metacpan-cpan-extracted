@@ -1,3 +1,8 @@
+0.004   2025-10-30  Released-By: PERLANCAR; Urgency: medium
+
+        - [bugfix] Forgot to handle import argument 'signal'.
+
+
 0.003   2025-10-30  Released-By: PERLANCAR; Urgency: low
 
         - No functional changes.

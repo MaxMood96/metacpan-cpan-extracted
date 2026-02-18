@@ -1,6 +1,6 @@
 package EBook::Ishmael::EBook::Text;
 use 5.016;
-our $VERSION = '1.09';
+our $VERSION = '2.00';
 use strict;
 use warnings;
 
@@ -39,9 +39,9 @@ sub new {
 
     $self->{Source} = File::Spec->rel2abs($file);
 
-    $self->{Metadata}->title([ basename($self->{Source}) ]);
-    $self->{Metadata}->modified([ scalar gmtime((stat $self->{Source})[9]) ]);
-    $self->{Metadata}->format([ 'Text' ]);
+    $self->{Metadata}->set_title(basename($self->{Source}));
+    $self->{Metadata}->set_modified((stat $self->{Source})[9]);
+    $self->{Metadata}->set_format('Text');
 
     return $self;
 
@@ -105,7 +105,7 @@ sub metadata {
 
     my $self = shift;
 
-    return $self->{Metadata}->hash;
+    return $self->{Metadata};
 
 }
 

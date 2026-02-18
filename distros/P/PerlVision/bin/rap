@@ -1,36 +1,27 @@
-#!/usr/local/bin/perl
-
-# PerlVision - A class library for text-mode user interface widgets.
-# By Ashish Gulhati (hash@netropolis.org)
-# V.0.2.0
+#!/usr/bin/perl
+# -*-cperl-*-
 #
-# Copyright (c) Ashish Gulhati, 1995. All Rights Reserved.
+# rap - Minimal text editor made using PerlVision
+# Copyright (c) Ashish Gulhati <perlvision at hash.neo.email>
 #
-# You may use and distribute this code under the same terms as Perl itself.
-
-
-# RAP (Rap Ain't Pico) is a small text editor provided as an example
-# of how to code using PerlVision and what PerlVision programs look
-# like. If you'd like to provide rap as an editor on your system for
-# inexperienced users, just great! They'll get used to emacs keybindings
-# for basic stuff and won't find it intimidating to move to the mother
-# of all editors later. ;-) I use rap as a pico replacement on my
-# system.
+# $Id: bin/rap v1.508 Tue Feb 17 13:55:44 EST 2026 $
 
 require 5.000;
 use Curses;
-use PV;
+use PerlVision;
 
 package MY_Editor;
 use Curses;
-use PV;
-@ISA = (PV::Editbox);
+use PerlVision;
 
-sub new {			# A better mousetrap
+@ISA = (PerlVision::Editbox);
+
+sub new {
     my $type=shift;		# MY_Editor (margin,text,index,filename);
     my @params=(@_);
-    my $self=new PV::Editbox (1,3,78,22,@params[0..2],0);
-    move (23,0);
+    my ($maxheight,$maxwidth); getmaxyx($maxheight, $maxwidth);
+    my $self=new PerlVision::Editbox (1,3,$maxwidth-2,$maxheight-2,@params[0..2],0);
+    move ($maxheight-1,0);
     attron (COLOR_PAIR(7));
     addstr("  <Esc>-H for Help             <Esc>-X for Menu");
     $$self[12]=0;		# Mark position
@@ -45,9 +36,10 @@ sub new {			# A better mousetrap
 
 sub statusbar {
     my $self=shift;
+    my ($maxheight,$maxwidth); getmaxyx($maxheight, $maxwidth);
     substr ($$self[13],0,3) = ($$self[11] ? "OVT" : "INS");
     if ($$self[13] ne $$self[14]) {
-	move (23,70);
+	move ($maxheight-1,$maxwidth-12);
 	addstr($$self[13]);
 	refresh();
 	$$self[14]=$$self[13];
@@ -57,7 +49,7 @@ sub statusbar {
 sub cursor {
     my $self=shift;
     my $total = $#{$$self[9]};
-    my @ret=$self->PV::Editbox::cursor();
+    my @ret=$self->PerlVision::Editbox::cursor();
     if ($$self[8]==0) {
 	if ($total < 18) {
 	    substr ($$self[13],5) = "ALL";
@@ -66,22 +58,20 @@ sub cursor {
 	    substr ($$self[13],5) = "TOP";
 	}
     }
-    elsif (($$self[8]+18) > $total) {
-	substr ($$self[13],5) = "BOT";
-    }
     else {
 	my $percent = $ret[1]/$total*100;
-	substr ($$self[13],5)=sprintf("%2d%",$percent);
+	if ($percent == 100) {
+	  substr ($$self[13],5) = "BOT";
+	}
+	else {
+	  substr ($$self[13],5)=sprintf("%2d%",$percent);
+	}
     }
     return @ret;
 }
 
 sub help {
-    my $helptext="Help for RAP? You want help for RAP???
-
-Just kidding. RAP is a very basic editor that uses
-emacs-like keystrokes for most things. Here's a
-summary:
+    my $helptext="RAP is a very basic editor with emacs-like keybindings.
 
 Keystroke sequences are presented in the Emacs format: 
 C-<key> means hold down 'CONTROL' and type <key>. 
@@ -148,7 +138,7 @@ This doesn't clear the cut buffer, and you can paste
 as many times as you like. Other commands that operate
 on blocks:
 
-C-<space>   Sets 'mark' at current cursor position.
+M-<space>   Sets 'mark' at current cursor position.
 
 C-w         Kills all text between 'mark' and current
             cursor position.
@@ -163,8 +153,7 @@ use C-w or M-w to either kill the region or copy it to
 the cut buffer without killing it. Now it's ready to be
 pasted back into your text wherever you like.
 
-RAP doesn't, and never will, support a kill-ring like 
-Emacs.
+RAP doesn't support a kill-ring like Emacs.
 
 
 File Commands:
@@ -180,40 +169,16 @@ C-x C-c     Quits the editor
 Miscellaneous Commands:
 
 M-x         Gets you to the menu
-M-h         Does something very dangerous. DO NOT USE!
+M-h         Shows this help panel
 
 
 The menu bar:
 
 A number of the things mentioned above can also be done
-from the menu bar, but that's really just there because
-it looks pretty. Everything can be accomplished much
-faster using the right keystrokes.
+from the menu bar.
 
 Two things that can be accessed only from the menu bar
-are the RAP 'About Box' and the Preferences dialog
-(which has a lot of useful options you can set to
-customize your RAP editing environment just like with
-Emacs lisp ;-)
-
-
-Shareware Terms & Emacs:
-
-If after 10 days of using RAP you find it useful you
-must either switch to Emacs and delete RAP from your
-disk, or send me \$1,000,000 at:
-
-140 Sunder Nagar,
-New Delhi - 110003,
-India.
-
-Please send only A/C payee checks made out to 'Ashish
-Gulhati' and write your name and email address at the
-back of the check.
-
-Shareware only works if authors have the support of
-users like yourself. Please don't ignore these shareware
-terms.  Thank you!
+are the RAP 'About Box' and the Preferences dialog.
 
 
 
@@ -226,21 +191,22 @@ terms.  Thank you!
                      _/
      
                      RAP Ain't Pico
-                (C) 1995, Ashish Gulhati";
+              Copyright (c) Ashish Gulhati";
 
-    my $help1 = new PV::Viewbox (2,1,62,12,$helptext,0);
-    my $help2 = new PV::Pushbutton (" OK ",28,13);
-    my $help = new PV::Dialog ("",8,5,72,21,1,1,
+    my $help1 = new PerlVision::Viewbox (2,1,62,12,$helptext,0);
+    my $help2 = new PerlVision::Pushbutton (" OK ",28,13);
+    my ($maxheight,$maxwidth); getmaxyx($maxheight, $maxwidth);
+    my $help = new PerlVision::Dialog ("",int($maxwidth/2)-32,int($maxheight/2)-8,int($maxwidth/2)+32,int($maxheight/2)+8,1,1,
 			  $help1,0,0,0,0,1,1,2,0,
 			  $help2,1,2,2,1,2,3,1,0);
     $help->activate;
 }
 
 sub options {
-    my $fun0 = new PV::Static ("On Startup:",2,1,40,9);
-    my $fun1 = new PV::Checkbox ("Mail president\@whitehouse.gov",2,3,0,1);
-    my $fun2 = new PV::Checkbox ("Play a Rush song:",2,4,0,1);
-    my $fun3 = new PV::Listbox ("Song",4,6,22,11,
+    my $fun0 = new PerlVision::Static ("On Startup:",2,1,40,9);
+    my $fun1 = new PerlVision::Checkbox ("Mail president\@whitehouse.gov",2,3,0,1);
+    my $fun2 = new PerlVision::Checkbox ("Play a Rush song:",2,4,0,1);
+    my $fun3 = new PerlVision::Listbox ("Song",4,6,22,11,
 			       "Force Ten",0,
 			       "The Trees",0,
 			       "Kid Gloves",0,
@@ -250,11 +216,12 @@ sub options {
 			       "Red Sector A",0,
 			       "Freewill",0,
 			       "Anthem",0);
-    my $fun4 = new PV::Radio ("Lo Volume",24,6,0,1);
-    my $fun5 = new PV::Radio ("Hi Volume",24,7,1,1);
-    my $fun6 = new PV::RadioG ($fun4, $fun5);
-    my $fun7 = new PV::Pushbutton ("Yes",27,9);
-    my $options = new PV::Dialog ("",20,8,59,20,1,1,
+    my $fun4 = new PerlVision::Radio ("Lo Volume",24,6,0,1);
+    my $fun5 = new PerlVision::Radio ("Hi Volume",24,7,1,1);
+    my $fun6 = new PerlVision::RadioG ($fun4, $fun5);
+    my $fun7 = new PerlVision::Pushbutton ("Yes",27,9);
+    my ($maxheight,$maxwidth); getmaxyx($maxheight, $maxwidth);
+    my $options = new PerlVision::Dialog ("",int($maxwidth/2)-20,int($maxheight/2)-6,int($maxwidth/2)+20,int($maxheight/2)+6,1,1,
 				 $fun1,1,2,2,1,1,1,2,0,
 				 $fun2,1,3,3,1,2,2,3,0,
 				 $fun3,0,0,4,2,3,3,4,4,
@@ -293,13 +260,14 @@ sub dirty {
 sub findfile {
     my $self=shift;
     if ($self->dirty) {
-	return 0 unless (PV::PVD::yesno ("Sure you want to abandon this file?",40,1));
+	return 0 unless PerlVision::PVD::yesno("Sure you want to abandon this file?",42,1);
     }
-    my $newfile = new PV::Entryfield (2,23,50,0,"Find File:","");
+    my ($maxheight,$maxwidth); getmaxyx($maxheight, $maxwidth);
+    my $newfile = new PerlVision::Entryfield (2,$maxheight-1,50,0,"Find File:","");
     $newfile->display; $newfile->activate;
     my $filename = ($newfile->stat);
     undef $newfile;
-    move (23,0);
+    move ($maxheight-1,0);
     attron (COLOR_PAIR(7));
     addstr("  <Esc>-H for Help             <Esc>-X for Menu                  ");
     refresh();
@@ -314,7 +282,7 @@ sub findfile {
 	    $self->rfsh();
 	}
 	else {
-	    PV::PVD::message ("Error: Couldn't open file.",30,1);
+	    PerlVision::PVD::message ("Error: Couldn't open file.",30,1);
 	}
     }
     $self->cursor;
@@ -323,11 +291,12 @@ sub findfile {
 
 sub insertfile {
     my $self=shift;
-    my $newfile = new PV::Entryfield (2,23,48,0,"Insert File:","");
+    my ($maxheight,$maxwidth); getmaxyx($maxheight, $maxwidth);
+    my $newfile = new PerlVision::Entryfield (2,$maxheight-1,50,0,"Insert File:","");
     $newfile->display; $newfile->activate;
     my $filename = ($newfile->stat);
     undef $newfile;
-    move (23,0);
+    move ($maxheight-1,0);
     attron (COLOR_PAIR(7));
     addstr("  <Esc>-H for Help             <Esc>-X for Menu                  ");
     refresh();
@@ -339,7 +308,7 @@ sub insertfile {
 	    $self->rfsh();
 	}
 	else {
-	    PV::PVD::message ("Error: Couldn't open file.",30,1);
+	    PerlVision::PVD::message ("Error: Couldn't open file.",30,1);
 	}
     }
     $self->cursor;
@@ -348,18 +317,19 @@ sub insertfile {
 
 sub saveas {
     my $self=shift;
-    my $savefile = new PV::Entryfield (2,23,52,0,"Save As:",$$self[15]);
+    my ($maxheight,$maxwidth); getmaxyx($maxheight, $maxwidth);
+    my $savefile = new PerlVision::Entryfield (2,$maxheight-1,52,0,"Save As:",$$self[15]);
     $savefile->display; $savefile->activate;
     my $filename = ($savefile->stat);
     ($filename =~/^~/) && (substr ($filename,0,1)=(getpwuid ($<))[7]);
     undef $savefile;
-    move (23,0);
+    move ($maxheight-1,0);
     attron (COLOR_PAIR(7));
     addstr("  <Esc>-H for Help             <Esc>-X for Menu                  ");
     refresh();
     if ($filename) {
 	if (-e $filename) {
-	    return unless (PV::PVD::yesno ("File exists. Overwrite?",30,1));
+	    return unless (PerlVision::PVD::yesno ("File exists. Overwrite?",30,1));
 	}
 	$$self[15]=$filename;
 	$self->savefile;
@@ -373,7 +343,7 @@ sub savefile {
     if ($$self[15]) {
 	if ($self->dirty) {
 	    open (SAVE, ">$$self[15]") || do {
-		PV::PVD::message ("Error: Couldn't open file.",40,12);
+		PerlVision::PVD::message ("Error: Couldn't open file.",40,12);
 		return;
 	    };
 	    chop $$self[6];
@@ -390,7 +360,7 @@ sub savefile {
 sub killfile {
     my $self=shift;
     if ($self->dirty) {
-	return 0 unless (PV::PVD::yesno ("Sure you want to abandon this file?",40,1));
+	return 0 unless (PerlVision::PVD::yesno ("Sure you want to abandon this file?",42,1));
     }
     $$self[6]="\n";
     $$self[7]=0;
@@ -467,13 +437,14 @@ sub linekill {
 
 sub setmark {
     my $self=shift;
-    $$self[12]=$$self[7];
-    move (23,0);
+    $self->[12]=$self->[7];
+    my ($maxheight,$maxwidth); getmaxyx($maxheight, $maxwidth);
+    move ($maxheight-1,0);
     attron (COLOR_PAIR(3));
     addstr("  Mark Set                                     ");
     refresh();
     sleep (1);
-    move (23,0);
+    move ($maxheight-1,0);
     attron (COLOR_PAIR(7));
     addstr("  <Esc>-H for Help             <Esc>-X for Menu");
     $self->cursor;
@@ -543,12 +514,12 @@ sub process_key {
     }
     $$self[17]=0;
     (($key[1]==200) && ($key[0] eq "\t")) && (return (2)); # Override TAB
-    if ((!$key[1]) && ($key[0] eq " ")) {
+    if ($key[1] == 23) {
 	$self->setmark;
 	return(2);
     }
     if ((!$key[1]) && ($key[0] eq "")) { # ^X begins most commands
-	@key=PV::getkey();
+	@key=PerlVision::getkey;
 	((!$key[1]) && ($key[0] eq "")) && (return (1)); # Quit
 	((!$key[1]) && ($key[0] eq "")) && do {          # Find file
 	    $self->findfile();
@@ -613,6 +584,8 @@ sub process_key {
 
 package main;
 
+use PerlVision;
+
 sub readfile {
     my $filename=shift;
     my $text="";
@@ -654,18 +627,19 @@ if ($#ARGV == 0) {
     undef $ret;
 }    
 
-PV::init();
+init PerlVision;
 
+my ($height,$width); getmaxyx($height, $width);
 attron (COLOR_PAIR(1));
-move (0,0); hline(" ",80);
-move (1,0); hline(" ",80);
-move (2,0); hline(" ",80);
+move (0,0); hline(" ",$width);
+move (1,0); hline(" ",$width);
+move (2,0); hline(" ",$width);
 attron (COLOR_PAIR(3));
-move (3,0); vline(" ",20);
-move (3,79); vline(" ",20);
-move (23,0); hline(" ",80);
+move (3,0); vline(" ",$height-2);
+move (3,$width-1); vline(" ",$height-2);
+move ($height-1,0); hline(" ",$width);
 
-$menu = new PV::Menubar("File",18,9,
+$menu = new PerlVision::Menubar("File",18,9,
 		       "Open    C-x C-f",0,
 		       "Insert    C-x i",0,
 		       "Save      C-x s",0,
@@ -675,7 +649,7 @@ $menu = new PV::Menubar("File",18,9,
 		       "Help        M-h",0,
 		       "About          ",0);
 $menu->add("Edit",20,8,
-	   "Set Mark  C-<Spc>",0,
+	   "Set Mark  M-<Spc>",0,
 	   "Cut Region    C-w",0,
 	   "Copy Region   M-w",0,
 	   "Paste         C-y",0,
@@ -683,7 +657,7 @@ $menu->add("Edit",20,8,
 	   "Del Line      C-k",0,
 	   "Preferences      ",0);
 
-$editor = new MY_Editor(60,$initial,0,$ARGV[0]);
+$editor = new MY_Editor($width-10,$initial,0,$ARGV[0]);
 $editor->display;
 $menu->display;
 
@@ -715,12 +689,12 @@ while (true) {
 	($menuselect[1] eq "File:Abandon   C-x k") && ($editor->killfile);
 	($menuselect[1] eq "File:Quit    C-x C-c") && ($editor->killfile && last);
 	($menuselect[1] eq "File:Help        M-h") && ($editor->help);
-	($menuselect[1] eq "File:About          ") && (PV::PVD::message ($ABOUT,40,11));
+	($menuselect[1] eq "File:About          ") && (PerlVision::PVD::message ($ABOUT,40,11));
 
-	($menuselect[1] eq "Edit:Set Mark  C-<Spc>") && ($editor->setmark);
+	($menuselect[1] eq "Edit:Set Mark  M-<Spc>") && ($editor->setmark);
 	($menuselect[1] eq "Edit:Preferences      ") && ($editor->options);
 	($menuselect[1] eq "Edit:Paste         C-y") && ($editor->yank);
     }
 }
 
-endwin();
+PerlVision::done;

@@ -22,9 +22,15 @@
       "package" : []
    },
    "prereqs" : {
+      "build" : {
+         "requires" : {
+            "Test2::V1" : "0"
+         }
+      },
       "configure" : {
          "requires" : {
             "Affix" : "0",
+            "Affix::Build" : "0",
             "CPAN::Meta" : "2.150012",
             "Exporter" : "5.57",
             "ExtUtils::Helpers" : "0.028",
@@ -37,6 +43,7 @@
             "Getopt::Long" : "2.36",
             "JSON::PP" : "2",
             "Path::Tiny" : "0",
+            "Test2::V1" : "0",
             "perl" : "v5.40.0"
          }
       },
@@ -56,7 +63,7 @@
    "provides" : {
       "Acme::Parataxis" : {
          "file" : "lib/Acme/Parataxis.pm",
-         "version" : "v0.0.2"
+         "version" : "v0.0.5"
       }
    },
    "release_status" : "stable",
@@ -74,7 +81,7 @@
          "web" : "https://github.com/sanko/Acme-Parataxis.pm"
       }
    },
-   "version" : "v0.0.2",
+   "version" : "v0.0.5",
    "x_ignore" : [
       ".tidyallrc",
       ".gitignore",

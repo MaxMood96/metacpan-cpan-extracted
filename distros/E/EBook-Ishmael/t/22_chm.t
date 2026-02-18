@@ -25,11 +25,11 @@ isa_ok($ebook, 'EBook::Ishmael::EBook::CHM');
 
 like($ebook->{Source}, qr/\Q$CHM\E$/, "source ok");
 
-is($ebook->metadata->{Format}[0], 'CHM', 'metadata format ok');
-is($ebook->metadata->{Title}[0],  'web2help', 'metadata title ok');
+is($ebook->metadata->format, 'CHM', 'metadata format ok');
+is($ebook->metadata->title,  'web2help', 'metadata title ok');
 
 # Modification time will probably differ, just check to make sure it exists.
-ok($ebook->metadata->{Modified}[0], 'metadata modified ok');
+ok($ebook->metadata->modified, 'metadata modified ok');
 
 ok($ebook->html, "html ok");
 ok($ebook->raw,  "raw ok");

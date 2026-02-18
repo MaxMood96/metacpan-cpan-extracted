@@ -30,6 +30,12 @@ METHODS
       Creates a new DPKG::Packages::Parser object. Creating the object does
       not parse the file automatically. For this call the parse() method.
 
+    new(fh => $filehandle)
+
+      Creates a new DPKG::Packages::Parser object. Creating the object does
+      not read the filehandle automatically. For this call the parse()
+      method.
+
     parse([@fields])
 
       Reads the file from disk and parses the entire file. You can

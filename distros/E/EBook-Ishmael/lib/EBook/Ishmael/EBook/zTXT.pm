@@ -1,6 +1,6 @@
 package EBook::Ishmael::EBook::zTXT;
 use 5.016;
-our $VERSION = '1.09';
+our $VERSION = '2.00';
 use strict;
 use warnings;
 
@@ -136,21 +136,21 @@ sub new {
         die "$self->{Source} zTXT uses unsupported compression method\n";
     }
 
-    $self->{Metadata}->title([ $self->{_pdb}->name ]);
+    $self->{Metadata}->set_title($self->{_pdb}->name);
 
     if ($self->{_pdb}->cdate) {
-        $self->{Metadata}->created([ scalar gmtime $self->{_pdb}->cdate ]);
+        $self->{Metadata}->set_created($self->{_pdb}->cdate);
     }
     if ($self->{_pdb}->mdate) {
-        $self->{Metadata}->modified([ scalar gmtime $self->{_pdb}->mdate ]);
+        $self->{Metadata}->set_modified($self->{_pdb}->mdate);
     }
 
-    $self->{Metadata}->format([
+    $self->{Metadata}->set_format(
         sprintf
             "zTXT %s.%s",
             ($self->{_version} >> 8) & 0xff,
             $self->{_version}        & 0xff
-    ]);
+    );
 
     return $self;
 
@@ -200,7 +200,7 @@ sub metadata {
 
     my $self = shift;
 
-    return $self->{Metadata}->hash;
+    return $self->{Metadata};
 
 }
 

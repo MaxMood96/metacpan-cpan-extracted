@@ -1,5 +1,5 @@
 package AnyEvent::I3X::Workspace::OnDemand;
-our $VERSION = '0.006';
+our $VERSION = '0.008';
 use v5.26;
 use Object::Pad;
 
@@ -14,6 +14,7 @@ use File::Spec::Functions qw(catfile);
 use Data::Compare;
 use Data::Dumper;
 use X11::Protocol;
+use Proc::ProcessTable;
 
 field $i3;
 field $layout_path : param = catfile($ENV{HOME}, qw(.config i3));
@@ -26,6 +27,7 @@ field $debug :param          = 0;
 field $log_all_events :param = undef;
 
 field $socket :param = undef;
+field $i3status :param = 1;
 
 field %workspace;
 field %output;
@@ -115,6 +117,13 @@ method _set_property_on_root_window($key, $value) {
 
 method set_group_on_root_window($name) {
   $self->_set_property_on_root_window('_I3_WOD_GROUP', $name);
+
+  return unless $i3status;
+
+  # If we do this we should send a sigusr1 to i3status
+  my $pt = Proc::ProcessTable->new(enable_ttys => 0);
+  my @pids = grep { $_->exec eq '/usr/bin/i3status' } @{ $pt->table };
+  kill('USR1', $_->pid) foreach @pids;
 }
 
 method get_group_from_root_window() {
@@ -515,7 +524,7 @@ AnyEvent::I3X::Workspace::OnDemand - An I3 workspace loader
 
 =head1 VERSION
 
-version 0.006
+version 0.008
 
 =head1 SYNOPSIS
 

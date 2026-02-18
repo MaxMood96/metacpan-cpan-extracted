@@ -6,7 +6,7 @@ use warnings;
 
 use Test::More;
 
-plan tests => 3 + ($ENV{AUTHOR_TESTING} ? 1 : 0);
+plan tests => 4 + ($ENV{AUTHOR_TESTING} ? 1 : 0);
 
 my @module_files = (
     'AnyEvent/I3X/Workspace/OnDemand.pm'
@@ -14,6 +14,7 @@ my @module_files = (
 
 my @scripts = (
     'bin/i3-ipc',
+    'bin/i3-status',
     'bin/i3-wod'
 );
 

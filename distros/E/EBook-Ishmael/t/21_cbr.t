@@ -23,11 +23,11 @@ isa_ok($ebook, 'EBook::Ishmael::EBook::CBR');
 
 like($ebook->{Source}, qr/\Q$CBR\E$/, "source ok");
 
-is($ebook->metadata->{Format}[0], 'CBR', 'metadata format ok');
-is($ebook->metadata->{Title}[0],  'gpl3', 'metadata title ok');
+is($ebook->metadata->format, 'CBR', 'metadata format ok');
+is($ebook->metadata->title,  'gpl3', 'metadata title ok');
 
 # Modification time will probably differ, just check to make sure it exists.
-ok($ebook->metadata->{Modified}[0], 'metadata modified ok');
+ok($ebook->metadata->modified, 'metadata modified ok');
 
 ok(!$ebook->html, "html ok");
 ok(!$ebook->raw,  "raw ok");

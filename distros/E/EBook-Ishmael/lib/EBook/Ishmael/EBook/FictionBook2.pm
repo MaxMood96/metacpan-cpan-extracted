@@ -1,6 +1,6 @@
 package EBook::Ishmael::EBook::FictionBook2;
 use 5.016;
-our $VERSION = '1.09';
+our $VERSION = '2.00';
 use strict;
 use warnings;
 
@@ -10,144 +10,9 @@ use MIME::Base64;
 use XML::LibXML;
 
 use EBook::Ishmael::EBook::Metadata;
+use EBook::Ishmael::Time qw(guess_time);
 
 my $NS = "http://www.gribuser.ru/xml/fictionbook/2.0";
-
-# The following 3 hashes each correspond to an entry in a FictionBook's
-# description node, which contains all of the metadata of a FictionBook
-# document. Each pair represents a recognized entry and a handler for
-# retrieving a value from that node.
-
-my %TITLE = (
-    'genre' => sub {
-
-        my $node = shift;
-
-        return genre => $node->textContent;
-
-    },
-    'author' => sub {
-
-        my $node = shift;
-
-        my $name = join(' ',
-            grep { /\S/ } map { $_->textContent } $node->childNodes
-        );
-
-        return author => $name;
-
-    },
-    'book-title' => sub {
-
-        my $node = shift;
-
-        return title => $node->textContent;
-
-    },
-    'lang' => sub {
-
-        my $node = shift;
-
-        return language => $node->textContent;
-
-    },
-    'src-lang' => sub {
-
-        my $node = shift;
-
-        return language => $node->textContent;
-
-    },
-    'translator' => sub {
-
-        my $node = shift;
-
-        my $name = join(' ',
-            grep { /\S/ } map { $_->textContent } $node->childNodes
-        );
-
-        return contributor => $name;
-
-    },
-);
-
-my %DOCUMENT = (
-    'author' => sub {
-
-        my $node = shift;
-
-        my $name = join(' ',
-            grep { /\S/ } map { $_->textContent } $node->childNodes
-        );
-
-        return contributor => $name;
-
-    },
-    'program-used' => sub {
-
-        my $node = shift;
-
-        return software => $node->textContent;
-
-    },
-    'date' => sub {
-
-        my $node = shift;
-
-        return created => $node->textContent;
-
-    },
-    'id' => sub {
-
-        my $node = shift;
-
-        return id => $node->textContent;
-
-    },
-    'version' => sub {
-
-        my $node = shift;
-
-        return format => "FictionBook2 " . $node->textContent;
-
-    },
-    'src-ocr' => sub {
-
-        my $node = shift;
-
-        return author => $node->textContent
-
-    },
-
-);
-
-my %PUBLISH = (
-    'year' => sub {
-
-        my $node = shift;
-
-        return created => $node->textContent;
-
-    },
-    'publisher' => sub {
-
-        my $node = shift;
-
-        my $name = join(' ',
-            grep { /\S/ } map { $_->textContent } $node->childNodes
-        );
-
-        return contributor => $name;
-
-    },
-    'book-name' => sub {
-
-        my $node = shift;
-
-        return title => $node->textContent;
-
-    },
-);
 
 sub heuristic {
 
@@ -184,25 +49,60 @@ sub _read_metadata {
 
     if (defined $title) {
         for my $n ($title->childNodes) {
-            next unless exists $TITLE{ $n->nodeName };
-            my ($k, $v) = $TITLE{ $n->nodeName }->($n);
-            push @{ $self->{Metadata}->$k }, $v;
+            my $name = $n->nodeName;
+            if ($name eq 'genre') {
+                $self->{Metadata}->add_genre($n->textContent);
+            } elsif ($name eq 'author') {
+                $self->{Metadata}->add_author(
+                    join(' ', grep { /\S/ } map { $_->textContent } $n->childNodes)
+                );
+            } elsif ($name eq 'book-title') {
+                $self->{Metadata}->set_title($n->textContent);
+            } elsif ($name eq 'lang' or $name eq 'src-lang') {
+                $self->{Metadata}->add_language($n->textContent);
+            } elsif ($name eq 'translator') {
+                $self->{Metadata}->add_contributor($n->textContent);
+            }
         }
     }
 
     if (defined $doc) {
         for my $n ($doc->childNodes) {
-            next unless exists $DOCUMENT{ $n->nodeName };
-            my ($k, $v) = $DOCUMENT{ $n->nodeName }->($n);
-            push @{ $self->{Metadata}->$k }, $v;
+            my $name = $n->nodeName;
+            if ($name eq 'author') {
+                $self->{Metadata}->add_contributor(
+                    join(' ', grep { /\S/ } map { $_->textContent } $n->childNodes)
+                );
+            } elsif ($name eq 'program-used') {
+                $self->{Metadata}->set_software($n->textContent);
+            } elsif ($name eq 'date') {
+                my $t = guess_time($n->textContent);
+                if (defined $t) {
+                    $self->{Metadata}->set_created($t);
+                }
+            } elsif ($name eq 'id') {
+                $self->{Metadata}->set_id($n->textContent);
+            } elsif ($name eq 'version') {
+                $self->{Metadata}->set_format("FictionBook2 " . $n->textContent);
+            } elsif ($name eq 'src-ocr') {
+                $self->{Metadata}->add_author($n->textContent);
+            }
         }
     }
 
     if (defined $publish) {
         for my $n ($publish->childNodes) {
-            next unless exists $PUBLISH{ $n->nodeName };
-            my ($k, $v) = $PUBLISH{ $n->nodeName }->($n);
-            push @{ $self->{Metadata}->$k }, $v;
+            my $name = $n->nodeName;
+            if ($name eq 'year' and not defined $self->{Metadata}->created) {
+                my $t = guess_time($n->textContent);
+                if (defined $t) {
+                    $self->{Metadata}->set_created($t);
+                }
+            } elsif ($name eq 'publisher') {
+                $self->{Metadata}->add_contributor($n->textContent);
+            } elsif ($name eq 'book-name') {
+                $self->{Metadata}->set_title($n->textContent);
+            }
         }
     }
 
@@ -259,8 +159,8 @@ sub new {
 
     $self->_read_metadata;
 
-    unless (@{ $self->{Metadata}->format }) {
-        $self->{Metadata}->format([ 'FictionBook2' ]);
+    if (not defined $self->{Metadata}->format) {
+        $self->{Metadata}->set_format('FictionBook2');
     }
 
     return $self;
@@ -334,7 +234,7 @@ sub metadata {
 
     my $self = shift;
 
-    return $self->{Metadata}->hash;
+    return $self->{Metadata};
 
 }
 

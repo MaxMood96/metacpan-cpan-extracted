@@ -29,7 +29,7 @@ resources:
   bugtracker: https://github.com/adriaandens/DPKG-Packages-Parser/issues
   homepage: https://github.com/adriaandens/DPKG-Packages-Parser
   repository: https://github.com/adriaandens/DPKG-Packages-Parser.git
-version: '0.02'
+version: '0.03'
 x_contributors:
   - 'Adriaan Dens <adriaan.dens@gmail.com>'
 x_generated_by_perl: v5.40.2

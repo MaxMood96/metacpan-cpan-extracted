@@ -1,0 +1,83 @@
+{
+   "abstract" : "Greple module for Markdown syntax highlighting",
+   "author" : [
+      "Kazumasa Utashiro"
+   ],
+   "dynamic_config" : 0,
+   "generated_by" : "Minilla/v3.1.29",
+   "license" : [
+      "perl_5"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : "2"
+   },
+   "name" : "App-Greple-md",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "xt",
+         "inc",
+         "share",
+         "eg",
+         "examples",
+         "author",
+         "builder"
+      ]
+   },
+   "prereqs" : {
+      "configure" : {
+         "requires" : {
+            "Module::Build::Tiny" : "0.035"
+         }
+      },
+      "develop" : {
+         "requires" : {
+            "Test::CPAN::Meta" : "0",
+            "Test::MinimumVersion::Fast" : "0.04",
+            "Test::PAUSE::Permissions" : "0.07",
+            "Test::Pod" : "1.41",
+            "Test::Spellunker" : "v0.2.7"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "App::Greple" : "10.03",
+            "App::ansicolumn" : "0",
+            "Command::Run" : "0",
+            "Getopt::EX::Config" : "1.0202",
+            "URI::Escape" : "0",
+            "perl" : "5.024"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "Test::More" : "0.98"
+         }
+      }
+   },
+   "provides" : {
+      "App::Greple::md" : {
+         "file" : "lib/App/Greple/md.pm",
+         "version" : "0.9901"
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/kaz-utashiro/greple-md/issues"
+      },
+      "homepage" : "https://github.com/kaz-utashiro/greple-md",
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/kaz-utashiro/greple-md.git",
+         "web" : "https://github.com/kaz-utashiro/greple-md"
+      }
+   },
+   "version" : "0.9901",
+   "x_contributors" : [
+      "Kazumasa Utashiro <kaz@utashiro.com>"
+   ],
+   "x_serialization_backend" : "JSON::PP version 4.16",
+   "x_static_install" : 0
+}

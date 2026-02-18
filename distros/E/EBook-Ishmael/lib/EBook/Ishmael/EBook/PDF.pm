@@ -1,6 +1,6 @@
 package EBook::Ishmael::EBook::PDF;
 use 5.016;
-our $VERSION = '1.09';
+our $VERSION = '2.00';
 use strict;
 use warnings;
 
@@ -11,23 +11,24 @@ use XML::LibXML;
 
 use EBook::Ishmael::Dir;
 use EBook::Ishmael::EBook::Metadata;
-use EBook::Ishmael::ShellQuote qw(shell_quote);
+use EBook::Ishmael::ShellQuote qw(safe_qx);
+use EBook::Ishmael::Time qw(guess_time);
 
 # This module basically delegates the task of processing PDFs to some of
 # Poppler's utilities. The processing is quite inefficient, and the output is
 # ugly; PDF isn't really a format suited for plain text rendering.
 
-my $PDFTOHTML = which 'pdftohtml';
-my $PDFINFO   = which 'pdfinfo';
-my $PDFTOPNG  = which 'pdftopng';
-my $CONVERT   = which 'convert';
-my $PDFIMAGES = which 'pdfimages';
+my $HAS_PDFTOHTML = defined which('pdftohtml');
+my $HAS_PDFINFO   = defined which('pdfinfo');
+my $HAS_PDFTOPNG  = defined which('pdftopng');
+my $HAS_CONVERT   = defined which('convert');
+my $HAS_PDFIMAGES = defined which('pdfimages');
 
 our $CAN_TEST = (
-    defined $PDFTOHTML              and
-    defined $PDFINFO                and
-    (defined $PDFTOPNG or $CONVERT) and
-    defined $PDFIMAGES
+    $HAS_PDFTOHTML                  and
+    $HAS_PDFINFO                    and
+    ($HAS_PDFTOPNG or $HAS_CONVERT) and
+    $HAS_PDFIMAGES
 );
 
 my $MAGIC = '%PDF';
@@ -49,38 +50,30 @@ sub _get_metadata {
     my $self = shift;
 
     my %meta = (
-        'Author'       => sub { author      => shift },
-        'CreationDate' => sub { created     => shift },
-        'Creator'      => sub { contributor => shift },
-        'ModDate'      => sub { modified    => shift },
-        'PDF version'  => sub { format      => 'PDF ' . shift },
-        'Producer'     => sub { contributor => shift },
-        'Title'        => sub { title       => shift },
+        'Author'       => sub { $self->{Metadata}->add_author(shift) },
+        'CreationDate' => sub { $self->{Metadata}->set_created(guess_time(shift)) },
+        'Creator'      => sub { $self->{Metadata}->add_contributor(shift) },
+        'ModDate'      => sub { $self->{Metadata}->set_modified(guess_time(shift)) },
+        'PDF version'  => sub { $self->{Metadata}->set_format('PDF ' . shift) },
+        'Producer'     => sub { $self->{Metadata}->add_contributor(shift) },
+        'Title'        => sub { $self->{Metadata}->set_title(shift) },
     );
 
-    unless (defined $PDFINFO) {
+    if (!$HAS_PDFINFO) {
         die "Cannot read PDF $self->{Source}: pdfinfo not installed\n";
     }
 
-    my $qsrc = shell_quote($self->{Source});
-    my $info = qx/$PDFINFO $qsrc/;
-
+    my $info = safe_qx('pdfinfo', $self->{Source});
     unless ($? >> 8 == 0) {
-        die "Failed to run '$PDFINFO' on $self->{Source}\n";
+        die "Failed to run 'pdfinfo' on $self->{Source}\n";
     }
 
     for my $l (split /\n/, $info) {
-
         my ($field, $content) = split /:\s*/, $l, 2;
-
         unless (exists $meta{ $field } and $content) {
             next;
         }
-
-        my ($k, $v) = $meta{ $field }->($content);
-
-        push @{ $self->{Metadata}->$k }, $v;
-
+        $meta{$field}->($content);
     }
 
     return 1;
@@ -95,12 +88,10 @@ sub _images {
 
     my $root = File::Spec->catfile($self->{_imgdir}, 'ishmael');
 
-    my $qsrc = shell_quote($self->{Source});
-    my $qroot = shell_quote($root);
-    qx/$PDFIMAGES -png $qsrc $qroot/; # TODO: Couldn't we just use system?
-
+    # TODO: Couldn't we just use system?
+    safe_qx('pdfimages', '-png', $self->{Source}, $root);
     unless ($? >> 8 == 0) {
-        die "Failed to run '$PDFIMAGES' on $self->{Source}\n";
+        die "Failed to run 'pdfimages' on $self->{Source}\n";
     }
 
     @{ $self->{_images} } = dir($self->{_imgdir});
@@ -130,8 +121,8 @@ sub new {
 
     $self->_get_metadata();
 
-    unless (@{ $self->{Metadata}->format }) {
-        $self->{Metadata}->format([ 'PDF' ]);
+    if (not defined $self->{Metadata}->format) {
+        $self->{Metadata}->set_format('PDF');
     }
 
     return $self;
@@ -143,15 +134,13 @@ sub html {
     my $self = shift;
     my $out  = shift;
 
-    unless (defined $PDFTOHTML) {
+    if (!$HAS_PDFTOHTML) {
         die "Cannot read PDF $self->{Source}: pdftohtml not installed\n";
     }
 
-    my $qsrc = shell_quote($self->{Source});
-    my $raw = qx/$PDFTOHTML -i -s -stdout $qsrc/;
-
+    my $raw = safe_qx('pdftohtml', '-i', '-s', '-stdout', $self->{Source});
     unless ($? >> 8 == 0) {
-        die "Failed to run '$PDFTOHTML' on $self->{Source}\n";
+        die "Failed to run 'pdftohtml' on $self->{Source}\n";
     }
 
     my $dom = XML::LibXML->load_html(
@@ -181,15 +170,13 @@ sub raw {
     my $self = shift;
     my $out  = shift;
 
-    unless (defined $PDFTOHTML) {
+    if (!$HAS_PDFTOHTML) {
         die "Cannot read PDF $self->{Source}: pdftohtml not installed\n";
     }
 
-    my $qsrc = shell_quote($self->{Source});
-    my $rawml = qx/$PDFTOHTML -i -s -stdout $qsrc/;
-
+    my $rawml = safe_qx('pdftohtml', '-i', '-s', '-stdout', $self->{Source});
     unless ($? >> 8 == 0) {
-        die "Failed to run '$PDFTOHTML' on $self->{Source}\n";
+        die "Failed to run 'pdftohtml' on $self->{Source}\n";
     }
 
     my $dom = XML::LibXML->load_html(
@@ -218,7 +205,7 @@ sub metadata {
 
     my $self = shift;
 
-    return $self->{Metadata}->hash;
+    return $self->{Metadata};
 
 }
 
@@ -231,29 +218,27 @@ sub cover {
     my $self = shift;
     my $out  = shift;
 
-    unless (defined $PDFTOPNG or defined $CONVERT) {
+    unless ($HAS_PDFTOPNG or $HAS_CONVERT) {
         die "Cannot dump PDF $self->{Source} cover: pdftopng or convert not installed\n";
     }
 
     my $png;
 
-    if (defined $PDFTOPNG) {
+    if ($HAS_PDFTOPNG) {
         my $tmpdir = tempdir(CLEANUP => 1);
         my $tmproot = File::Spec->catfile($tmpdir, 'tmp');
 
-        my $qsrc = shell_quote($self->{Source});
-        my $qtmp = shell_quote($tmproot);
-        qx/$PDFTOPNG -f 1 -l 1 $qsrc $qtmp/;
+        safe_qx('pdftopng', '-f', 1, '-l', 1, $self->{Source}, $tmproot);
         unless ($? >> 8 == 0) {
-            die "Failed to run '$PDFTOPNG' on $self->{Source}\n";
+            die "Failed to run 'pdftopng' on $self->{Source}\n";
         }
 
         $png = (dir($tmpdir))[0];
         unless (defined $png) {
-            die "'$PDFTOPNG' could not produce a cover image from $self->{Source}\n";
+            die "'pdftopng' could not produce a cover image from $self->{Source}\n";
         }
 
-    } elsif (defined $CONVERT) {
+    } elsif ($HAS_CONVERT) {
         my $tmppath = do {
             my ($h, $p) = tempfile(UNLINK => 1);
             close $h;
@@ -261,12 +246,9 @@ sub cover {
         };
 
         # The '[0]' means the first page only
-        my $qsrc = shell_quote("$self->{Source}\[0\]");
-        my $qtmp = shell_quote("png:$tmppath");
-        qx/$CONVERT $qsrc -alpha deactivate $qtmp/;
-
+        safe_qx('convert', "$self->{Source}\[0\]", '-alpha', 'deactivate', "png:$tmppath");
         if (not -f $tmppath) {
-            die "'$CONVERT' could not produce a cover image from $self->{Source}\n";
+            die "'convert' could not produce a cover image from $self->{Source}\n";
         }
         $png = $tmppath;
 

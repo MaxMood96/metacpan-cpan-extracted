@@ -27,7 +27,6 @@ use Exporter ();
 use constant NIx_NOHOST => 1; # The getNameInfo Xtended flags are too difficult to obtain on some older systems,
 use constant NIx_NOSERV => 2; # So just hard-code the constant numbers.
 
-my $requires_ipv6 = 0;
 my $ipv6_package;
 my $can_disable_v6only;
 my $exported = {};
@@ -230,7 +229,6 @@ sub parse_info {
         foreach my $row (@rows) {
             my ($host, $port, $ipv, $warn) = @$row;
             push @_info, {host => $host, port => $port, ipv => $ipv, proto => $info->{'proto'}, $warn ? (warn => $warn) : ()};
-            $requires_ipv6++ if $ipv ne '4' && $proto ne 'ssl'; # we need to know if Proto::TCP needs to reparent as a child of an IPv6 compatible socket library
         }
         if (@rows > 1 && $rows[0]->[1] == 0) {
             $server->log(2, "Determining auto-assigned port (0) for host $info->{'host'} (prebind)");
@@ -245,7 +243,6 @@ sub parse_info {
         }
     } elsif ($ipv =~ /6/ || $info->{'host'} =~ /:/) {
         push @_info, {%$info, ipv => '6'};
-        $requires_ipv6++ if $proto ne 'ssl'; # IO::Socket::SSL does its own determination
         push @_info, {%$info, ipv => '4'} if $ipv =~ /4/ && $info->{'host'} !~ /:/;
     } else {
         push @_info, {%$info, ipv => '4'};
@@ -268,7 +265,7 @@ sub get_addr_info {
     if ($host =~ /^\d+(?:\.\d+){3}$/) {
         my $addr = inet_aton($host) or croak "Unresolveable host [$host]:$port: invalid ip";
         push @info, [inet_ntoa($addr), $port, 4];
-    } elsif (eval { ipv6_package()->new(LocalAddr=>"::", Listen=>1) }) { # PreTest to ensure we can even handle a simple IPv6 Addr
+    } elsif (eval { AI_PASSIVE }) { # PreTest to ensure AddressInfo AI_* operations can even try on this platform.
         my $proto_id = getprotobyname(lc($proto) eq 'udp' ? 'udp' : 'tcp');
         my $socktype = lc($proto) eq 'udp' ? SOCK_DGRAM : SOCK_STREAM;
         my @res = safe_addr_info($host eq '*' ? '' : $host, $port, { family=>AF_UNSPEC, socktype=>$socktype, protocol=>$proto_id, flags=>AI_PASSIVE });
@@ -283,8 +280,8 @@ sub get_addr_info {
         if (keys %ipv6mapped and grep {$ipv6mapped{$_->[0]}} @info) {
             for my $i4 (@info) {
                 my $i6 = $ipv6mapped{$i4->[0]} or next;
-                if (!eval{$ipv6_package->new(LocalAddr=>$i6->[0],Type=>$socktype)}) {
-                    $i4->[3] = "Host [$host] resolved to IPv6 address [$i6->[0]] but $ipv6_package->new fails: $@";
+                if (!eval{ipv6_package($server)->new(LocalAddr=>$i6->[0],Type=>$socktype)}) {
+                    $i4->[3] = "Host [$host] resolved to IPv6 address [$i6->[0]] but ipv6_package->new fails: $@";
                     $i6->[0] = '';
                 } elsif ($i6->[2] eq '6' and eval {CAN_DISABLE_V6ONLY}) { # If IPv* can bind to both, upgrade '6' to '*', and disable the corresponding '4' entry
                     $i6->[3] = "Not including resolved host [$i4->[0]] IPv4 because it will be handled by [$i6->[0]] IPv6";
@@ -319,19 +316,20 @@ sub object {
         $proto_class = "Net::Server::Proto::" .uc($proto_class);
     }
     (my $file = "${proto_class}.pm") =~ s|::|/|g;
-    $server->fatal("Unable to load module for proto \"$proto_class\": $@") if ! eval { require $file };
-    if (my $pkg = $server->{'server'}->{'ipv6_package'} and !$Net::Server::IP::ipv6_package) {
-        eval {require Net::Server::IP;$Net::Server::IP::ipv6_package=$pkg};
-    }
+    $server->fatal("Unable to load module for proto \"$proto_class\": $@") if ! eval { require $file;1 };
+    ipv6_package($server) if $server->{'server'}->{'ipv6_package'};
     return $proto_class->object($info, $server);
 }
-
-sub requires_ipv6 { $requires_ipv6 ? 1 : undef }
 
 sub ipv6_package {
     return $ipv6_package if $ipv6_package;
     return undef if $ENV{'NO_IPV6'};
+    my $class = @_ && $_[0] eq __PACKAGE__ ? shift : __PACKAGE__;
+    my $server = shift || {};
     eval {require Net::Server::IP;1} or !warn "ipv6_package: Failure! [$!] [$@]" or die "ipv6_package: Failure! [$!] [$@]";
+    if (!$Net::Server::IP::ipv6_package and my $pkg = $server->{'server'} && $server->{'server'}->{'ipv6_package'}) {
+        $Net::Server::IP::ipv6_package = $pkg;
+    }
     return $ipv6_package = "Net::Server::IP";
 }
 
