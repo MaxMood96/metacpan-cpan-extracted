@@ -829,5 +829,14 @@ Revision history for StreamFinder
         - StreamFinder::Podchaser - Make work again on podcast pages (fetching 
         latest episode and episode playlists.
         - Tweak handling and conversion of various hex character formats, 
-        misc. doc. tweets, etc. to several others (it seems a cpl. source 
+        misc. doc. tweaks, etc. to several others (it seems a cpl. source 
         files somehow did not make it over into the last release.
+2.62    2026/02/18
+        - StreamFinder::Youtube, ::Anystream - Transfer handling of iframes 
+        containing non-Youtube webpage urls in non-Youtube pages to Anystream 
+        and only allow ::Youtube to handle only Youtube page-urls in iframes 
+        for consistancy and efficiency.  ::Anystream will only check the first 
+        iframe for time's sake whereas ::Youtube can now check all iframes for 
+        Youtube urls, increasing the liklyhood of finding videos.
+        - StreamFinder::PodcastAddict - remove depreciated-warning from the 
+        module's POD docs.

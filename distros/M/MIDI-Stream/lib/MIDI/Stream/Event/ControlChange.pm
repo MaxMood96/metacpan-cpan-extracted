@@ -8,7 +8,7 @@ use Feature::Compat::Class;
 package MIDI::Stream::Event::ControlChange;
 class MIDI::Stream::Event::ControlChange :isa( MIDI::Stream::Event::Channel );
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use MIDI::Stream::Tables qw/ combine_bytes /;
 
@@ -35,7 +35,7 @@ MIDI::Stream::Event::ControlChange - Control Change event class
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 DESCRIPTION
 

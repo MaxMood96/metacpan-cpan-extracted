@@ -1,10 +1,10 @@
 package Future::Uring;
-$Future::Uring::VERSION = '0.001';
+$Future::Uring::VERSION = '0.002';
 use 5.020;
 use warnings;
 use experimental 'signatures';
 
-use IO::Uring
+use IO::Uring 0.011
 	qw/IOSQE_ASYNC IOSQE_IO_LINK IOSQE_IO_HARDLINK IOSQE_IO_DRAIN/,
 	qw/IORING_TIMEOUT_ABS IORING_TIMEOUT_BOOTTIME IORING_TIMEOUT_REALTIME IORING_TIMEOUT_ETIME_SUCCESS/,
 	qw/AT_SYMLINK_FOLLOW RENAME_EXCHANGE RENAME_NOREPLACE AT_REMOVEDIR/,
@@ -21,7 +21,9 @@ use Time::Spec;
 use Future::Uring::Handle;
 use Future::Uring::Exception;
 
-our $ring = IO::Uring->new(our $ring_size //= 128);
+sub ring() {
+	state $ring = IO::Uring->new(our $ring_size //= 128);
+}
 
 my sub to_sflags($args) {
 	my $result = 0;
@@ -52,6 +54,7 @@ sub to_handle($fh) {
 }
 
 sub run_once($timeout = undef) {
+	my $ring = ring();
 	if (defined $timeout) {
 		if ($timeout == 0) {
 			$ring->run_once(0);
@@ -65,11 +68,11 @@ sub run_once($timeout = undef) {
 }
 
 sub submit() {
-	return $ring->submit;
+	return ring->submit;
 }
 
 sub submissions_available() {
-	return $ring->sq_space_left;
+	return ring->sq_space_left;
 }
 
 sub link($old_path, $new_path, %args) {
@@ -77,6 +80,7 @@ sub link($old_path, $new_path, %args) {
 	my (undef, $sourcename, $line) = caller;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
 	my $flags = $args{follow_symlink} ? AT_SYMLINK_FOLLOW : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->link($old_path, $new_path, $flags, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -95,6 +99,7 @@ sub linkat($old_dir, $old_path, $new_dir, $new_path, %args) {
 	my (undef, $sourcename, $line) = caller;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
 	my $flags = $args{follow_symlink} ? AT_SYMLINK_FOLLOW : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->linkat($old_dir, $old_path, $new_dir, $new_path, $flags, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -112,6 +117,7 @@ sub mkdir($path, $mode, %args) {
 	my $future = Future::Uring::_Future->new;
 	my (undef, $sourcename, $line) = caller;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->mkdir($path, $mode, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -129,10 +135,29 @@ sub mkdirat($dir, $path, $mode, %args) {
 	my $future = Future::Uring::_Future->new;
 	my (undef, $sourcename, $line) = caller;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->mkdirat($dir, $path, $mode, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
 			$future->fail(Future::Uring::Exception->new('mkdirat', $res, $sourcename, $line));
+		} else {
+			$future->done;
+		}
+	});
+	$future->on_cancel(sub { $ring->cancel($id, 0, 0) }) if $args{mutable};
+	add_timeout($ring, \%args) if $args{timeout};
+	return $future;
+}
+
+sub nop(%args) {
+	my $future = Future::Uring::_Future->new;
+	my (undef, $sourcename, $line) = caller;
+	my $s_flags = to_sflags(\%args);
+	my $ring = ring;
+	$ring->ensure_sqes(2) if $args{timeout};
+	my $id = $ring->nop($s_flags, sub($res, $flags) {
+		if ($res < 0) {
+			$future->fail(Future::Uring::Exception->new('nop', $res, $sourcename, $line));
 		} else {
 			$future->done;
 		}
@@ -170,6 +195,7 @@ sub open($filename, $open_mode = '<', %args) {
 		$flags |= $extra_flags{$key} if $args{$key};
 	}
 	my $mode = $args{mode} || 0777;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->open($filename, $flags, $mode, $s_flags, sub($res, $flags) {
 		if ($res >= 0) {
@@ -193,6 +219,7 @@ sub openat($base_dir, $filename, $open_mode = '<', %args) {
 		$flags |= $extra_flags{$key} if $args{$key};
 	}
 	my $mode = $args{mode} || 0777;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->openat($base_dir, $filename, $flags, $mode, $s_flags, sub($res, $flags) {
 		if ($res >= 0) {
@@ -214,6 +241,7 @@ sub rename($old_path, $new_path, %args) {
 	my $flags = 0;
 	$flags |= RENAME_EXCHANGE if $args{exchange};
 	$flags |= RENAME_NOREPLACE if $args{no_replace};
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->rename($old_path, $new_path, $flags, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -232,6 +260,7 @@ sub renameat($old_dir, $old_path, $new_dir, $new_path, %args) {
 	my (undef, $sourcename, $line) = caller;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
 	my $flags = $args{follow_symlink} ? AT_SYMLINK_FOLLOW : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->renameat($old_dir, $old_path, $new_dir, $new_path, $flags, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -248,6 +277,7 @@ sub renameat($old_dir, $old_path, $new_dir, $new_path, %args) {
 sub rmdir($path, %args) {
 	my $future = Future::Uring::_Future->new;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->unlink($path, AT_REMOVEDIR, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -264,6 +294,7 @@ sub rmdir($path, %args) {
 sub rmdirat($dir, $path, %args) {
 	my $future = Future::Uring::_Future->new;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->unlinkat($dir, $path, AT_REMOVEDIR, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -297,6 +328,7 @@ sub socket($family_name, %args) {
 	my $type = defined $args{type} ? $type_for{$args{type}} : SOCK_STREAM;
 	my $protocol = defined $args{protocol} ? getprotobyname($args{protocol}) : 0;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $class = $args{class} // 'IO::Socket';
 	my $id = $ring->socket($domain, $type, $protocol, $s_flags, sub($res, $flags) {
@@ -320,6 +352,7 @@ sub timeout_for($seconds, %args) {
 	my $flags = $clock_id | IORING_TIMEOUT_ETIME_SUCCESS;
 	my $counter = $args{counter} // 0;
 	my $s_flags = to_sflags(\%args);
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->timeout($time_spec, $counter, $flags, $s_flags, sub($res, $flags) {
 		if ($res != -ETIME) {
@@ -327,7 +360,6 @@ sub timeout_for($seconds, %args) {
 		} else {
 			$future->done;
 		}
-		$time_spec;
 	});
 	if ($args{mutable}) {
 		bless $future, 'Future::Uring::_TimeoutFuture';
@@ -346,6 +378,7 @@ sub timeout_until($seconds, %args) {
 	my $flags = $clock_id | IORING_TIMEOUT_ETIME_SUCCESS | IORING_TIMEOUT_ABS;
 	my $counter = $args{counter} // 0;
 	my $s_flags = to_sflags(\%args);
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->timeout($time_spec, $counter, $flags, $s_flags, sub($res, $flags) {
 		if ($res != -ETIME) {
@@ -353,7 +386,6 @@ sub timeout_until($seconds, %args) {
 		} else {
 			$future->done;
 		}
-		$time_spec;
 	});
 	if ($args{mutable}) {
 		bless $future, 'Future::Uring::_TimeoutFuture';
@@ -368,6 +400,7 @@ sub unlink($path, %args) {
 	my $future = Future::Uring::_Future->new;
 	my (undef, $sourcename, $line) = caller;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->unlink($path, 0, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -385,6 +418,7 @@ sub unlinkat($dir, $path, %args) {
 	my $future = Future::Uring::_Future->new;
 	my (undef, $sourcename, $line) = caller;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->unlinkat($dir, $path, 0, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -420,6 +454,7 @@ sub waitid($type_name, $id, %args) {
 	my $event = defined $args{event} ? $events{$args{event}} // croak("No such event $args{event}") : WEXITED;
 	$event |= WNOWAIT if $args{nowait};
 	$id = $id->fileno if $type_name eq 'pidfd' && Scalar::Util::blessed($id) && $id->isa('Linux::FD::Pid');
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 
 	my $ident = $ring->waitid($type, $id, $info, $event, 0, $s_flags, sub($res, $flags) {
@@ -453,6 +488,7 @@ package
 use parent 'Future';
 
 sub await($self) {
+	my $ring = Future::Uring::ring;
 	$ring->run_once until $self->is_ready;
 	return $self;
 }
@@ -470,6 +506,7 @@ sub update($original, $seconds, %args) {
 	my $time_spec = ref $seconds ? $seconds : Time::Spec->new($seconds);
 	my $flags = $args{flags} // 0;
 	my $s_flags = to_sflags(\%args);
+	my $ring = Future::Uring::ring();
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	$ring->timeout_update($time_spec, $id, $flags, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -501,7 +538,7 @@ Future::Uring - Future-returning io_uring functions
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 
@@ -579,6 +616,12 @@ Check the number of available submission queue events. One may need to submit pe
 
 This takes a Perl handle and turns it into a L<Future::Uring::Handle>.
 
+=head2 ring
+
+ my $ring = Future::Uring::ring();
+
+This returns the IO::Uring instance used by this module.
+
 =head2 link / linkat
 
  await Future::Uring::link($old_path, $new_path, %options)
@@ -594,6 +637,12 @@ This takes one additional named argument: C<follow_symlink>, if true and C<$oldp
  await Future::Uring::mkdirat($dirh, $dirname, %options)
 
 Make directory C<$dirname>.
+
+=head2 nop
+
+ await Future::Uring::nop(%options);
+
+This will do absolutely nothing. This can be useful though if you want to run some code after submissions have been made or need to keep something alive until that point.
 
 =head2 open / openat
 

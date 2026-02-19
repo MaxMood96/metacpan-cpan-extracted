@@ -91,7 +91,7 @@ configuration_file_info - How to make your configuration file for NBI::Slurm too
 
 =head1 VERSION
 
-version 0.15.0
+version 0.16.1
 
 =head1 SYNOPSIS
 
@@ -123,7 +123,7 @@ The value can contain spaces and even equal signs, as long as the key doesn't.
 
 =item * C<tmpdir>
 
-Where to store temporary files for jobs. It's is recommended to customize this to store jobs and their logs 
+Where to store temporary files for jobs. It is recommended to customize this to store jobs and their logs 
 in a convenient location by default.
 
 =item * C<queue>
@@ -185,7 +185,6 @@ A string of parameters to be used for interactive sessions when C<--special> is 
   # Other custom defaults you can set:
   # queue=
   # time=
-  # gpuqueue=
 
   # INTERACTIVE SESSION
 

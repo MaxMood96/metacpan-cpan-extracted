@@ -1,4 +1,9 @@
 Revision history for Future-Uring
 
+0.002     2026-02-18 23:50:22+01:00 Europe/Brussels
+          - Adapt to better memory management in IO::Uring
+          - Postpone ring instantiation until first use
+          - Add nop function
+
 0.001     2026-01-18 23:25:12+01:00 Europe/Brussels
           Initial release to an unsuspecting world

@@ -177,7 +177,7 @@ make_package - Install a "package" in the NBI HPC using a singularity image
 
 =head1 VERSION
 
-version 0.15.0
+version 0.16.1
 
 =head1 SYNOPSIS
 
@@ -186,10 +186,6 @@ version 0.15.0
 =head1 DESCRIPTION
 
 This script creates a package for running Singularity containers with specified commands. It creates a binary script that sets the necessary environment variables and launches Singularity with the provided container image.
-
-=head1 NAME
-
-make_package - Create package for installing Singularity containers as HPC packages
 
 =head1 OPTIONS
 

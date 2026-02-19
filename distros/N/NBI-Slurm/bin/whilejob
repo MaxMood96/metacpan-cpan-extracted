@@ -202,7 +202,7 @@ whilejobs - Repeat a command while a job is running
 
 =head1 VERSION
 
-version 0.15.0
+version 0.16.1
 
 =head1 SYNOPSIS
 
@@ -237,6 +237,10 @@ Examples: "10s", "5m", "2h", "1d"
 =item B<-u, --user <username>>
 
 Specify the username to check jobs for. By default, uses the current user.
+
+=item B<--stderr>
+
+Redirect stderr to stdout (default is to suppress stderr).
 
 =item B<--verbose>
 

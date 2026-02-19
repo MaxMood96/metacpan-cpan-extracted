@@ -5,7 +5,7 @@ use English;
 use Error::Pure::Utils qw(clean err_msg_hr);
 use Mo::utils::Number qw(check_natural);
 use Readonly;
-use Test::More 'tests' => 11;
+use Test::More 'tests' => 14;
 use Test::NoWarnings;
 
 Readonly::Array our @BAD_NUMBERS => qw(
@@ -16,6 +16,9 @@ Readonly::Array our @BAD_NUMBERS => qw(
 Readonly::Array our @RIGHT_NUMBERS => qw(
 	0
 	2
+	4294967295
+	18446744073709551615
+	340282366920938463463374607431768211455
 );
 
 # Test.

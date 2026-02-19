@@ -2,7 +2,7 @@ package Bored;
 
 use 5.008003;
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 use base 'Import::Export';
 
@@ -26,6 +26,10 @@ sub tortured {
 	return 'souls';
 }
 
+sub waiting {
+	return 'patiently';
+}
+
 1;
 
 __END__
@@ -36,7 +40,7 @@ Bored - news!
 
 =head1 VERSION
 
-Version 0.03
+Version 0.04
 
 =cut
 
@@ -48,6 +52,7 @@ Version 0.03
 
     my $you = Bored->new();
     $you->pointless();
+    $you->waiting();
     $you->tortured();
     ...
 
@@ -82,9 +87,7 @@ L<https://metacpan.org/release/Bored>
 
 =back
 
-
 =head1 ACKNOWLEDGEMENTS
-
 
 =head1 LICENSE AND COPYRIGHT
 
@@ -93,7 +96,6 @@ This software is Copyright (c) 2026 by LNATION <email@lnation.org>.
 This is free software, licensed under:
 
   The Artistic License 2.0 (GPL Compatible)
-
 
 =cut
 

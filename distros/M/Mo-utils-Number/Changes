@@ -1,3 +1,8 @@
+0.09 2026-02-19T09:58:18+01:00
+ - Add aliases (check_int8, ..., check_uint8, ...).
+ - Add some tests for int/uint ranges.
+ - Update copyright years.
+
 0.08 2025-11-11T10:39:44+01:00
  - Add scientific notation to check_positive_decimal() subroutine.
 

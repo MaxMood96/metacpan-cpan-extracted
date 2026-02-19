@@ -10,7 +10,7 @@ use File::Basename;
 use App::LinkSite;
 
 my %opt;
-GetOptions(\%opt, 'help', 'version');
+GetOptions(\%opt, 'help', 'version', 'file=s');
 
 if (keys %opt) {
   my $me = basename $0;
@@ -20,23 +20,44 @@ if (keys %opt) {
   }
 
   if ($opt{help}) {
-    say "Usage: $me";
+    say "Usage: $me [--file <filename>]";
     say "\nCreate a link site from a simple input file. See 'man $me' for details";
   }
 
   exit;
 }
 
-
-App::LinkSite->new->run;
+App::LinkSite->new($opt{file} ? (file => $opt{file}) : ())->run;
 
 =head1 linksite
 
 Create a link site from a simple input file.
 
-This program parses a JSON file (called C<links.json>) and turns the data
+This program parses a JSON file (called C<links.json> by default) and turns the data
 into a link site (a bit like LinkTree).
 
-For more information see https://linksite.davecross.co.uk/.
+=head1 SYNOPSIS
+
+  linksite [--file <filename>] [--help] [--version]
+
+=head1 OPTIONS
+
+=over 4
+
+=item --file <filename>
+
+Specify the path to the JSON file containing link data. Defaults to C<links.json>.
+
+=item --help
+
+Display usage information.
+
+=item --version
+
+Display the version number.
+
+=back
+
+For more information see L<https://linksite.davecross.co.uk/>.
 
 =cut

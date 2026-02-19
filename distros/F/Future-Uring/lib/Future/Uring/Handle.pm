@@ -1,5 +1,5 @@
 package Future::Uring::Handle;
-$Future::Uring::Handle::VERSION = '0.001';
+$Future::Uring::Handle::VERSION = '0.002';
 use 5.020;
 use warnings;
 use experimental 'signatures';
@@ -7,7 +7,7 @@ use experimental 'signatures';
 require Future::Uring;
 
 *ring = *Future::Uring::ring;
-our $ring;
+sub ring;
 
 use IO::Uring qw/
 	IORING_FSYNC_DATASYNC IOSQE_ASYNC IOSQE_IO_LINK IOSQE_IO_HARDLINK IOSQE_IO_DRAIN IORING_RECVSEND_POLL_FIRST
@@ -51,6 +51,7 @@ sub accept($self, %args) {
 	my $future = Future::Uring::_Future->new;
 	my (undef, $sourcename, $line) = caller;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $class = $args{class} // ref $self->{fh};
 	my $id = $ring->accept($self->{fh}, $s_flags, sub($res, $flags) {
@@ -70,6 +71,7 @@ sub allocate($self, $offset, $length, %args) {
 	my $future = Future::Uring::_Future->new;
 	my (undef, $sourcename, $line) = caller;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->fallocate($self->{fh}, $offset, $length, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -87,6 +89,7 @@ sub bind($self, $name, %args) {
 	my $future = Future::Uring::_Future->new;
 	my (undef, $sourcename, $line) = caller;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->bind($self->{fh}, $name, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -104,6 +107,7 @@ sub close($self, %args) {
 	my $future = Future::Uring::_Future->new;
 	my (undef, $sourcename, $line) = caller;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->close($self->{fh}, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -121,6 +125,7 @@ sub connect($self, $name, %args) {
 	my $future = Future::Uring::_Future->new;
 	my (undef, $sourcename, $line) = caller;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->connect($self->{fh}, $name, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -138,6 +143,7 @@ sub listen($self, $size, %args) {
 	my $future = Future::Uring::_Future->new;
 	my (undef, $sourcename, $line) = caller;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->listen($self->{fh}, $size, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -158,6 +164,7 @@ sub poll($self, %args) {
 	my $mask = $args{mask} // 0;
 	$mask |= POLLIN if $args{read};
 	$mask |= POLLOUT if $args{write};
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->poll($self->{fh}, $mask, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -182,6 +189,7 @@ sub recv($self, $length, %args) {
 	my $flags = $args{flags} // 0;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
 	my $p_flags = $args{poll_first} ? IORING_RECVSEND_POLL_FIRST : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->recv($self->{fh}, $buffer, $flags, $p_flags, $s_flags, sub($res, $flags) {
 		if ($res > 0) {
@@ -203,6 +211,7 @@ sub read($self, $length, %args) {
 	my $buffer = "\0" x $length;
 	my $offset = $args{offset} // -1;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->read($self->{fh}, $buffer, $offset, $s_flags, sub($res, $flags) {
 		if ($res > 0) {
@@ -224,6 +233,7 @@ sub send($self, $buffer, %args) {
 	my $flags = $args{flags} // 0;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
 	my $p_flags = $args{poll_first} ? IORING_RECVSEND_POLL_FIRST : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->send($self->{fh}, $buffer, $flags, $p_flags, $s_flags, sub($res, $flags) {
 		if ($res >= 0) {
@@ -243,6 +253,7 @@ sub sendto($self, $buffer, $name, %args) {
 	my $flags = $args{flags} // 0;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
 	my $p_flags = $args{poll_first} ? IORING_RECVSEND_POLL_FIRST : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->sendto($self->{fh}, $buffer, $flags, $name, $p_flags, $s_flags, sub($res, $flags) {
 		if ($res >= 0) {
@@ -250,7 +261,6 @@ sub sendto($self, $buffer, $name, %args) {
 		} else {
 			$future->fail(Future::Uring::Exception->new('sendto', $res, $sourcename, $line));
 		}
-		($buffer, $name);
 	});
 	$future->on_cancel(sub { $ring->cancel($id, 0, 0) }) if $args{mutable};
 	add_timeout($ring, \%args) if $args{timeout};
@@ -261,6 +271,7 @@ sub shutdown($self, $how, %args) {
 	my $future = Future::Uring::_Future->new;
 	my (undef, $sourcename, $line) = caller;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->shutdown($self->{fh}, $how, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -281,6 +292,7 @@ sub splice($self, $out, $nbytes, %args) {
 	my $fh = $out->isa('Future::Uring::Handle') ? $out->inner : $out;
 	my $off_out = $args{off_out} // -1;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->splice($self->{fh}, $off_in, $fh, $off_out, 0, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -299,6 +311,7 @@ sub sync($self, %args) {
 	my (undef, $sourcename, $line) = caller;
 	my $flags = $args{datasync} ? IORING_FSYNC_DATASYNC : 0;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->fsync($self->{fh}, $flags, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -317,6 +330,7 @@ sub tee($self, $out, $nbytes, %args) {
 	my (undef, $sourcename, $line) = caller;
 	my $fh = $out->isa('Future::Uring::Handle') ? $out->inner : $out;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->tee($self->{fh}, $fh, $nbytes, 0, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -334,6 +348,7 @@ sub truncate($self, $length, %args) {
 	my $future = Future::Uring::_Future->new;
 	my (undef, $sourcename, $line) = caller;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->ftruncate($self->{fh}, $length, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -352,6 +367,7 @@ sub write($self, $buffer, %args) {
 	my (undef, $sourcename, $line) = caller;
 	my $offset = $args{offset} // -1;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->write($self->{fh}, $buffer, $offset, $s_flags, sub($res, $flags) {
 		if ($res >= 0) {
@@ -359,7 +375,6 @@ sub write($self, $buffer, %args) {
 		} else {
 			$future->fail(Future::Uring::Exception->new('write', $res, $sourcename, $line));
 		}
-		$buffer;
 	});
 	$future->on_cancel(sub { $ring->cancel($id, 0, 0) }) if $args{mutable};
 	add_timeout($ring, \%args) if $args{timeout};
@@ -382,6 +397,7 @@ sub update($original, %args) {
 	my $mask = $args{mask} // 0;
 	$mask |= POLLIN if $args{read};
 	$mask |= POLLOUT if $args{write};
+	my $ring = Future::Uring::ring();
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
 	my $id = $ring->poll_update($old_id, undef, $mask, IORING_POLL_UPDATE_EVENTS, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
@@ -411,7 +427,7 @@ Future::Uring::Handle - A Uring filehandle
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 
@@ -593,7 +609,7 @@ This writes C<$data> to C<$handle>.
 
 It takes one additional named parameter, C<offset>, for the optional offset in the file.
 
-=for Pod::Coverage close
+=for Pod::Coverage close ring
 
 =head1 AUTHOR
 

@@ -13,10 +13,10 @@ check_sureicataflows - A Nagios style check to see if a Suricata flows EVE JSON 
 =head1 SYNOPSIS
 
 check_suricataflows [B<-f> <flows.json>] [B<-a> <alert count>] [B<-w> <warn count>]
-[B<-t> <seconds>] [<-m> <max lines>] [B<-s> <sensor>]
+[B<-t> <seconds>] [<-m> <max lines>] [B<-i> <IP>]
 
 check_suricataflows [B<-f> <flows.json>] [B<-a> <alert count>] [B<-w> <warn count>]
-[B<-t> <seconds>] [<-m> <max lines>] B<-s> <sensor> [B<-s> <sensor>]
+[B<-t> <seconds>] [<-m> <max lines>] [B<-i> <IP>] B<-s> <sensor> [B<-s> <sensor>]
 
 check_suricataflows -h/--help
 
@@ -89,6 +89,12 @@ in the Suricata config is .sensor-name .
 If more than once Suricata instance is appending to the file, then
 you will most likely want to use this.
 
+=head2 -i <IP>
+
+An IP to ignore.
+
+May be specified more than once.
+
 =cut
 
 sub version {
@@ -107,6 +113,7 @@ my $warn_count;
 my $read_back_time;
 my $max_lines;
 my @sensor_names;
+my @ignore_IPs;
 GetOptions(
 	'version' => \$version,
 	'v'       => \$version,
@@ -118,6 +125,7 @@ GetOptions(
 	't=i'     => \$read_back_time,
 	'm=i'     => \$max_lines,
 	's=s'     => \@sensor_names,
+	'i=s'     => \@ignore_IPs,
 );
 
 if ($help) {
@@ -138,6 +146,7 @@ eval {
 		alert_count    => $alert_count,
 		flow_file      => $flow_file,
 		sensor_names   => \@sensor_names,
+		ignore_IPs     => \@ignore_IPs,
 	);
 };
 if ($@) {

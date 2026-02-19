@@ -27,11 +27,12 @@ resources 'homepage' => 'https://github.com/michal-josef-spacek/Mo-utils-Number'
 resources 'repository' => 'git://github.com/michal-josef-spacek/Mo-utils-Number';
 test_requires 'English' => 0;
 test_requires 'Error::Pure::Utils' => 0;
+test_requires 'Math::BigInt' => 0;
 test_requires 'Readonly' => 0;
 test_requires 'Test::More' => 0;
 test_requires 'Test::NoWarnings' => 0;
 tests_recursive;
-version '0.08';
+version '0.09';
 
 # Run.
 WriteAll();

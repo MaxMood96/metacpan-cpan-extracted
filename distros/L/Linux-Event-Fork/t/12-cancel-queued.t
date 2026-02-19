@@ -6,10 +6,10 @@ use warnings;
 use Test2::V0;
 
 use Linux::Event;
-use Linux::Event::Fork max_children => 1;
-
+use Linux::Event::Fork;
 my $loop = Linux::Event->new;
 
+$loop->fork_helper(max_children => 1);
 # Ensure helper exists
 my $fork = $loop->fork_helper;
 

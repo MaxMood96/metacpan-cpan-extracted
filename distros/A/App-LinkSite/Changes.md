@@ -1,5 +1,22 @@
 # Change Log
 
+## Unreleased
+
+## [0.1.1] - 2026-02-19
+
+### Added
+
+- Missing module
+
+## [0.1.0] - 2026-02-18
+
+### Updated
+
+- Allow configuration of text colour and background colour
+- Add support for sections in list of links
+- Simply example workflow
+- Accept filename as command-line argument
+
 ## [0.0.17] - 2025-08-04
 
 ### Updated

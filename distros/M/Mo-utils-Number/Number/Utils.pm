@@ -9,7 +9,7 @@ use Readonly;
 
 Readonly::Array our @EXPORT_OK => qw(sub_check_percent);
 
-our $VERSION = 0.08;
+our $VERSION = 0.09;
 
 sub sub_check_percent {
 	my ($value, $key, $func, $error_value) = @_;
@@ -126,12 +126,12 @@ L<http://skim.cz>
 
 =head1 LICENSE AND COPYRIGHT
 
-© 2024-2025 Michal Josef Špaček
+© 2024-2026 Michal Josef Špaček
 
 BSD 2-Clause License
 
 =head1 VERSION
 
-0.08
+0.09
 
 =cut

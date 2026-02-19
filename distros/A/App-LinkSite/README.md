@@ -88,6 +88,41 @@ This is a list of links that will be displayed below the social media icons.
 * **link:** The link itself
 * **new:** An optional flag to mark a link as new (`"new": 1`). This will display the link with a red "New" next to it
 
+## Sections
+
+You can optionally organize your links into sections with headers. This is useful for grouping related links together.
+
+* **sections:** An optional array of section objects, where each section has:
+  * **title:** The heading for this section
+  * **links:** An array of link objects (same format as the links above)
+
+When using sections:
+* Empty sections (sections with no links) are automatically ignored
+* Any links in the top-level `links` array will be displayed in a separate "Other links" section after all other sections
+* If you don't use sections, links will be displayed as a flat list (the original behavior)
+* If you only have sections and no top-level links, the "Other links" section won't appear
+
+Example with sections:
+
+    "sections": [{
+      "title": "Books",
+      "links": [{
+        "title": "My Book Title",
+        "subtitle": "A great book",
+        "link": "https://example.com/book"
+      }]
+    }, {
+      "title": "Projects",
+      "links": [{
+        "title": "My Project",
+        "link": "https://example.com/project"
+      }]
+    }],
+    "links": [{
+      "title": "Contact",
+      "link": "mailto:me@example.com"
+    }]
+
 ## Demo
 
-My links - https://links.davecross.co.uk/
+My links - [links.davecross.co.uk](https://links.davecross.co.uk/)

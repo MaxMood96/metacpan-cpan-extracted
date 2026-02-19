@@ -1,5 +1,8 @@
 Revision history for Check-SuricataFlows
 
+0.2.0   2026-02-18/10:00
+        - Add IP based ignore capabilities.
+
 0.1.0   2026-02-17/12:45
         - Fix the read back switch so it is actually -t and not -s
         - Add the ability to check for specific sensors in the EVE flow JSON.

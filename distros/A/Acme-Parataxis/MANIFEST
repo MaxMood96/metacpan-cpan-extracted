@@ -27,3 +27,4 @@ t/004_synopsis.t
 t/005_symmetric.t
 t/006_parallel.t
 t/007_data_types.t
+t/008_preemption.t

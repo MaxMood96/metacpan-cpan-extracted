@@ -5,7 +5,7 @@ use English;
 use Error::Pure::Utils qw(clean err_msg_hr);
 use Mo::utils::Number qw(check_int);
 use Readonly;
-use Test::More 'tests' => 10;
+use Test::More 'tests' => 16;
 use Test::NoWarnings;
 
 Readonly::Array our @BAD_NUMBERS => qw(
@@ -16,7 +16,14 @@ Readonly::Array our @RIGHT_NUMBERS => qw(
 	-2
 	0
 	2
+	-4294967295
+	4294967295
+	-18446744073709551615
+	18446744073709551615
+	-340282366920938463463374607431768211455
+	340282366920938463463374607431768211455
 );
+
 
 # Test.
 my ($self, $ret);

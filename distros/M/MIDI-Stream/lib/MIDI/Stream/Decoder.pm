@@ -8,14 +8,13 @@ package MIDI::Stream::Decoder;
 class MIDI::Stream::Decoder :isa( MIDI::Stream );
 
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Time::HiRes qw/ gettimeofday tv_interval /;
 use Carp qw/ carp croak /;
 use MIDI::Stream::Tables qw/ is_cc is_realtime message_length combine_bytes /;
 use MIDI::Stream::FIFO;
 use MIDI::Stream::EventFactory;
-use namespace::autoclean;
 
 
 field $retain_events :param = 1;
@@ -178,7 +177,7 @@ method attach_callback( $event, $callback ) {
 
 
 method cancel_event_callback( $event ) {
-    if ( reftype $event eq 'ARRAY' ) {
+    if ( ref $event eq 'ARRAY' ) {
         $self->cancel_event_callbacks( $_ ) for $event->@*;
         return;
     }
@@ -223,7 +222,7 @@ MIDI::Stream::Decoder - MIDI bytestream decoder
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 

@@ -15,7 +15,7 @@ The main driver class for App::LinkSite.
 use Feature::Compat::Class;
 
 class App::LinkSite {
-  our $VERSION = '0.0.17';
+  our $VERSION = '0.1.1';
   use strict;
   use warnings;
   use feature qw[say signatures];
@@ -32,6 +32,7 @@ class App::LinkSite {
   use App::LinkSite::Site;
   use App::LinkSite::Link;
   use App::LinkSite::Social;
+  use App::LinkSite::Section;
 
   field $file :reader :param = 'links.json';
   # Where to look for the templates.
@@ -58,7 +59,8 @@ class App::LinkSite {
       # Output in the data directory
       OUTPUT_PATH  => $out,
       VARIABLES    => {
-        ga4              => $ga4,
+        ga4        => $ga4,
+        version    => $VERSION,
       }
     });
 
@@ -69,6 +71,17 @@ class App::LinkSite {
 
     my $links = [ map { App::LinkSite::Link->new(%$_) } $data->{links}->@* ];
 
+    my $sections = [];
+    if ($data->{sections}) {
+      $sections = [ map {
+        my $section_links = [ map { App::LinkSite::Link->new(%$_) } $_->{links}->@* ];
+        App::LinkSite::Section->new(
+          title => $_->{title},
+          links => $section_links,
+        )
+      } $data->{sections}->@* ];
+    }
+
     $site = App::LinkSite::Site->new(
       name    => $data->{name},
       handle  => $data->{handle},
@@ -78,6 +91,9 @@ class App::LinkSite {
       site_url => $data->{site_url},
       socials => $socials,
       links   => $links,
+      sections => $sections,
+      $data->{text_color}       ? (text_color => $data->{text_color}) : (),
+      $data->{background_color} ? (background_color => $data->{background_color} ) : (),
     );
   }
 

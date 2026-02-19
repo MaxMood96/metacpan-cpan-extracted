@@ -38,11 +38,23 @@
 
     <title>[% site.name %] / @[% site.handle %]</title>
     <link rel="stylesheet" href="/css/style.css">
+[% IF site.text_color || site.background_color -%]
+    <style>
+      :root {
+[% IF site.background_color -%]
+        --bg-color: [% site.background_color %];
+[% END;
+   IF site.text_color -%]
+        --text-color: [% site.text_color %];
+[% END -%]
+      }
+    </style>
+[% END -%]
     <script type="application/ld+json">
 [% site.json_ld %]
     </script>
   </head>
-  <body>
+  <body style="background: [% site.background_color %]; color: [% site.text_color %];">
     <div class="d-flex flex-column min-vh-100">
       <div class="container-fluid text-center flex-grow-1">
         <header>
@@ -64,11 +76,32 @@
         </div>
         <div id="links">
           <h2>Links</h2>
+[% IF site.has_sections -%]
+[% FOR section IN site.sections;
+     IF section.has_links -%]
+          <h3>[% section.title %]</h3>
+          <ul class="list-group">
+[% FOR link IN section.links;
+         link.mk_link;
+       END -%]
+          </ul>
+[% END;
+   END;
+   IF site.links.size > 0 -%]
+          <h3>Other links</h3>
+          <ul class="list-group">
+[% FOR link IN site.links;
+         link.mk_link;
+       END -%]
+          </ul>
+[% END -%]
+[% ELSE -%]
           <ul class="list-group">
 [% FOR link IN site.links;
      link.mk_link;
    END -%]
           </ul>
+[% END -%]
         </div>
       </div>
       <footer class="mt-auto">
@@ -83,5 +116,6 @@
             crossorigin="anonymous"></script>
 [% USE date -%]
     <!-- Built at: [% date.format %] -->
+    <!-- Made by App::LinkSite, version [% version %] -->
   </body>
 </html>

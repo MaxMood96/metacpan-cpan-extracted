@@ -8,7 +8,7 @@ use Feature::Compat::Class;
 package MIDI::Stream::Event::AfterTouch;
 class MIDI::Stream::Event::AfterTouch :isa( MIDI::Stream::Event::Channel );
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use MIDI::Stream::Tables qw/ combine_bytes /;
 
@@ -33,7 +33,7 @@ MIDI::Stream::Event::AfterTouch - Channel After Touch event class
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 DESCRIPTION
 

@@ -24,6 +24,8 @@ mdee - em·dee, Markdown Easy on the Eyes
      -m  --mode=#           light or dark (default: light)
      -B  --base-color=#     override base color of theme
                             (e.g., Ivory, #780043, (120,0,67))
+    --cm --colormap=L=SPEC  override color for element (e.g., h1=RD)
+    --hm --heading-markup=#  enable markup in headings (all/bold/...)
          --show=#           set field visibility (e.g., italic=1)
      -C  --pane=#           number of columns
      -R  --row=#            number of rows
@@ -35,7 +37,7 @@ mdee - em·dee, Markdown Easy on the Eyes
 
 # VERSION
 
-Version 0.17
+Version 0.18
 
 # DESCRIPTION
 
@@ -320,6 +322,53 @@ bold text, etc.).
 
 ## Highlight Options
 
+- **--colormap**=_LABEL_=_SPEC_, **--cm**=_LABEL_=_SPEC_
+
+    Override the color for a specific element.  _LABEL_ is one of the
+    color labels listed below.  _SPEC_ follows
+    [Term::ANSIColor::Concise](https://metacpan.org/pod/Term%3A%3AANSIColor%3A%3AConcise) format.
+
+        --colormap h1=RD               # red bold headings
+        --colormap code_block=/L20;E   # dark background for code blocks
+        --colormap bold='${base}D'     # base color bold
+
+    Available labels:
+
+        h1 - h6           Heading levels 1 through 6
+        bold              Bold (**text** or __text__)
+        italic            Italic (*text* or _text_)
+        strike            Strikethrough (~~text~~)
+        link              Inline links [text](url)
+        image             Images ![alt](url)
+        image_link        Image links [![alt](img)](url)
+        blockquote        Blockquote marker (>)
+        horizontal_rule   Horizontal rules (---, ***, ___)
+        comment           HTML comments (<!-- ... -->)
+        code_mark         Code delimiters (fences and backticks)
+        code_info         Fenced code block info string
+        code_block        Fenced code block body
+        code_inline       Inline code body
+
+    This option can be specified multiple times.
+
+- **--heading-markup**=_STEPS_, **--hm** _STEPS_
+
+    Control inline markup processing inside headings.  By default,
+    headings are rendered with uniform heading color without processing
+    bold, italic, strikethrough, or inline code inside them.  Links
+    are always processed as OSC 8 hyperlinks regardless of this option.
+
+    Use `all` or `1` to enable all inline formatting within headings
+    using cumulative coloring.  To select specific steps, list them
+    separated by colons.
+
+    Available steps: `inline_code`, `horizontal_rules`, `bold`,
+    `italic`, `strike`.
+
+        mdee --hm all file.md              # all markup
+        mdee --hm bold file.md             # bold only
+        mdee --hm bold:italic file.md      # bold and italic
+
 - **--show**=_FIELD_\[=_VALUE_\],...
 
     Control field visibility for highlighting.  Empty value or `0` disables
@@ -518,9 +567,10 @@ and `--[no-]nup` options.
 
 #### Syntax Highlighting
 
-The first stage uses [greple(1)](https://metacpan.org/pod/App%3A%3AGreple) with the `-G` (grep mode) and
-`--ci=G` (capture index) options to apply different colors to each
-captured group in regular expressions.
+The first stage uses [greple(1)](https://metacpan.org/pod/App%3A%3AGreple) with the `--filter`
+option, which sets `--all --need=0 --exit=0` to run as a filter
+without requiring pattern arguments.  Syntax highlighting is handled
+entirely by the `-Mmd` module.
 
 Supported Markdown elements:
 
@@ -600,7 +650,7 @@ mode (`=y25` for light, `=y80` for dark).
 ### Color Specifications
 
 Colors are specified using [Term::ANSIColor::Concise](https://metacpan.org/pod/Term%3A%3AANSIColor%3A%3AConcise) format.
-The `--cm` option maps colors to captured groups.  For example,
+The `--colormap` (`--cm`) option maps colors to captured groups.  For example,
 `L00D/${base};E` specifies gray foreground on base-colored background.
 
 The color specification supports modifiers:

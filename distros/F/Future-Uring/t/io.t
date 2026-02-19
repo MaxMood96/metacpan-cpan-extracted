@@ -325,7 +325,7 @@ subtest read_timeout => sub {
 		like $failure, qr/read: Operation canceled at t\/io\.t line \d+\n/;
 	}
 	{
-		my $ring = $Future::Uring::ring;
+		my $ring = Future::Uring::ring();
 		$ring->nop(0) while $ring->sq_space_left > 1;
 
 		pipe my ($rd, $wr) or die "cannot pipe() - $!";

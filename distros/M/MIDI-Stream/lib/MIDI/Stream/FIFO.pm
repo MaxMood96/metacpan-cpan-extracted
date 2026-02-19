@@ -7,25 +7,24 @@ use Feature::Compat::Class;
 package MIDI::Stream::FIFO;
 class MIDI::Stream::FIFO;
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use List::Util qw/ reduce /;
-use namespace::autoclean;
 
 field $length :param = 24;
-field $members = [];
+field @members;
 
 field $average;
 
 method add( $member ) {
     undef $average;
-    unshift $members->@*, $member;
-    splice $members->@*, $length if $members->@* > $length;
+    unshift @members, $member;
+    splice @members, $length if @members > $length;
 }
 
 method average {
-    return 0 unless $members->@*;
-    $average //= ( reduce { $a + $b } $members->@* ) / $members->@*;
+    return 0 unless @members;
+    $average //= ( reduce { $a + $b } @members ) / @members;
 }
 
 1;
@@ -42,7 +41,7 @@ MIDI::Stream::FIFO - Fixed Size FIFO/Queue for rolling averages
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 AUTHOR
 

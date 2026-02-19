@@ -71,6 +71,24 @@ subtest multi_event_type => sub {
     $decoder->decode( $midi );
 };
 
+# Callback for cancelled event type
+subtest multi_event_type => sub {
+    my @tests = (
+        [ control_change => 0xf, 0x3f, 0x7f ],
+        [ control_change => 0xf, 0x3e, 0x20 ],
+    );
+
+    plan scalar @tests;
+    my $decoder = MIDI::Stream::Decoder->new;
+    $decoder->attach_callback(
+        [ qw/ control_change pitch_bend / ] => sub( $event ) {
+            is( $event->as_arrayref, shift @tests );
+        }
+    );
+    $decoder->cancel_event_callback('pitch_bend');
+    $decoder->decode( $midi );
+};
+
 # ->stop stops callbacks for one event type,
 # global callback also called
 subtest stop_and_type_global => sub {

@@ -1,5 +1,5 @@
 package Geo::Address::Formatter;
-$Geo::Address::Formatter::VERSION = '1.9991';
+$Geo::Address::Formatter::VERSION = '1.9992';
 # ABSTRACT: take structured address data and format it according to the various global/country rules
 
 use strict;
@@ -29,10 +29,10 @@ my $only_address  = 0;
 my $instance;
 
 sub instance {
-    my ($class, %params) = @_;    
+    my ($class, %params) = @_;
     
     unless ($instance) {
-        $instance = $class->new(@_);
+        $instance = $class->new(%params);
     }
 
     say STDERR "************* in Geo::Address::Formatter::instance ***" if ($debug);
@@ -1115,7 +1115,7 @@ Geo::Address::Formatter - take structured address data and format it according t
 
 =head1 VERSION
 
-version 1.9991
+version 1.9992
 
 =head1 SYNOPSIS
 

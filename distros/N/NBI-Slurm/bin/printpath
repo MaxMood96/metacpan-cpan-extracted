@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 #ABSTRACT: check for binary in your $PATH variable an nicely print the results
-#PODNAME:printpah
+#PODNAME:printpath
 use v5.12;
 use warnings;
 use Term::ANSIColor;
@@ -130,11 +130,11 @@ __END__
 
 =head1 NAME
 
-printpah - check for binary in your $PATH variable an nicely print the results
+printpath - check for binary in your $PATH variable an nicely print the results
 
 =head1 VERSION
 
-version 0.15.0
+version 0.16.1
 
 =head1 SYNOPSIS
 

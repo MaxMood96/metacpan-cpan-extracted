@@ -5,7 +5,7 @@ use English;
 use Error::Pure::Utils qw(clean err_msg_hr);
 use Mo::utils::Number::Range qw(check_natural_range);
 use Readonly;
-use Test::More 'tests' => 16;
+use Test::More 'tests' => 18;
 use Test::NoWarnings;
 
 Readonly::Array our @BAD_RANGES => (
@@ -22,6 +22,8 @@ Readonly::Array our @RIGHT_RANGES => (
 	[0, 0, 2],
 	[1, 0, 2],
 	[2, 0, 2],
+	[100, 0, 4294967295], # 2^32
+	[100, 0, 18446744073709551615], # 2^64
 );
 
 # Test.

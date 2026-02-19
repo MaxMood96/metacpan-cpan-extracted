@@ -4,7 +4,7 @@ package App::mdee;
 # POD documentation is appended from script/mdee at release time.
 # See minil.toml for details.
 
-our $VERSION = "0.18";
+our $VERSION = "0.19";
 
 1;
 =encoding utf-8
@@ -34,6 +34,8 @@ mdee - em·dee, Markdown Easy on the Eyes
      -m  --mode=#           light or dark (default: light)
      -B  --base-color=#     override base color of theme
                             (e.g., Ivory, #780043, (120,0,67))
+    --cm --colormap=L=SPEC  override color for element (e.g., h1=RD)
+    --hm --heading-markup=#  enable markup in headings (all/bold/...)
          --show=#           set field visibility (e.g., italic=1)
      -C  --pane=#           number of columns
      -R  --row=#            number of rows
@@ -45,7 +47,7 @@ mdee - em·dee, Markdown Easy on the Eyes
 
 =head1 VERSION
 
-Version 0.18
+Version 0.19
 
 =cut
 =head1 DESCRIPTION
@@ -369,6 +371,53 @@ with full color specifications (X11 names, RGB hex, or RGB decimal).
 
 =over 4
 
+=item B<--colormap>=I<LABEL>=I<SPEC>, B<--cm>=I<LABEL>=I<SPEC>
+
+Override the color for a specific element.  I<LABEL> is one of the
+color labels listed below.  I<SPEC> follows
+L<Term::ANSIColor::Concise> format.
+
+    --colormap h1=RD               # red bold headings
+    --colormap code_block=/L20;E   # dark background for code blocks
+    --colormap bold='${base}D'     # base color bold
+
+Available labels:
+
+    h1 - h6           Heading levels 1 through 6
+    bold              Bold (**text** or __text__)
+    italic            Italic (*text* or _text_)
+    strike            Strikethrough (~~text~~)
+    link              Inline links [text](url)
+    image             Images ![alt](url)
+    image_link        Image links [![alt](img)](url)
+    blockquote        Blockquote marker (>)
+    horizontal_rule   Horizontal rules (---, ***, ___)
+    comment           HTML comments (<!-- ... -->)
+    code_mark         Code delimiters (fences and backticks)
+    code_info         Fenced code block info string
+    code_block        Fenced code block body
+    code_inline       Inline code body
+
+This option can be specified multiple times.
+
+=item B<--heading-markup>=I<STEPS>, B<--hm> I<STEPS>
+
+Control inline markup processing inside headings.  By default,
+headings are rendered with uniform heading color without processing
+bold, italic, strikethrough, or inline code inside them.  Links
+are always processed as OSC 8 hyperlinks regardless of this option.
+
+Use C<all> or C<1> to enable all inline formatting within headings
+using cumulative coloring.  To select specific steps, list them
+separated by colons.
+
+Available steps: C<inline_code>, C<horizontal_rules>, C<bold>,
+C<italic>, C<strike>.
+
+    mdee --hm all file.md              # all markup
+    mdee --hm bold file.md             # bold only
+    mdee --hm bold:italic file.md      # bold and italic
+
 =item B<--show>=I<FIELD>[=I<VALUE>],...
 
 Control field visibility for highlighting.  Empty value or C<0> disables
@@ -598,9 +647,10 @@ and C<--[no-]nup> options.
 
 =head4 Syntax Highlighting
 
-The first stage uses L<greple(1)|App::Greple> with the C<-G> (grep mode) and
-C<--ci=G> (capture index) options to apply different colors to each
-captured group in regular expressions.
+The first stage uses L<greple(1)|App::Greple> with the C<--filter>
+option, which sets C<--all --need=0 --exit=0> to run as a filter
+without requiring pattern arguments.  Syntax highlighting is handled
+entirely by the C<-Mmd> module.
 
 Supported Markdown elements:
 
@@ -695,7 +745,7 @@ mode (C<=y25> for light, C<=y80> for dark).
 =head3 Color Specifications
 
 Colors are specified using L<Term::ANSIColor::Concise> format.
-The C<--cm> option maps colors to captured groups.  For example,
+The C<--colormap> (C<--cm>) option maps colors to captured groups.  For example,
 C<L00D/${base};E> specifies gray foreground on base-colored background.
 
 The color specification supports modifiers:

@@ -13,7 +13,7 @@ Readonly::Array our @EXPORT_OK => qw(check_int_range check_natural_range
 	check_number_range check_percent_range check_positive_decimal_range
 	check_positive_natural_range);
 
-our $VERSION = 0.08;
+our $VERSION = 0.09;
 
 # ... -2, -1, 0, 1, 2, ...
 sub check_int_range {
@@ -509,12 +509,12 @@ L<http://skim.cz>
 
 =head1 LICENSE AND COPYRIGHT
 
-© 2024-2025 Michal Josef Špaček
+© 2024-2026 Michal Josef Špaček
 
 BSD 2-Clause License
 
 =head1 VERSION
 
-0.08
+0.09
 
 =cut

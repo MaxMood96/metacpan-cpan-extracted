@@ -77,6 +77,10 @@ in the Suricata config is .sensor-name .
 If more than once Suricata instance is appending to the file, then
 you will most likely want to use this.
 
+### -i IP
+
+An IP to ignore.
+
 # INSTALLATION
 
 ## FreeBSD

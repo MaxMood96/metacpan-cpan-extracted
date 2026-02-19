@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.005';
+our $VERSION = '0.006';
 
 use Carp qw(croak);
 use Errno qw(EAGAIN EINTR EPIPE);
@@ -29,8 +29,10 @@ sub _new ($class, %args) {
     on_exit   => delete $args{on_exit},
 
     timeout_id  => undef,
+    timeout_kill_id => undef,
     on_timeout  => delete $args{on_timeout},
-    timeout_s   => delete $args{timeout_s},
+    timeout      => delete $args{timeout},
+    timeout_kill => delete $args{timeout_kill},
     timed_out   => 0,
 
     capture_stdout => delete $args{capture_stdout},
@@ -126,7 +128,7 @@ sub _close_stdin_now ($self) {
   return;
 }
 
-sub cancel ($self) {
+sub _cancel($self) {
   return 0 if $self->{_canceled};
   $self->{_canceled} = 1;
 
@@ -136,6 +138,9 @@ sub cancel ($self) {
 
   if (!$keep_exit) {
     if (defined(my $tid = delete $self->{timeout_id})) {
+      $self->{loop}->cancel($tid);
+    }
+    if (defined(my $tid = delete $self->{timeout_kill_id})) {
       $self->{loop}->cancel($tid);
     }
     if (my $sub = delete $self->{sub_pid}) { $sub->cancel }
@@ -199,8 +204,8 @@ sub _arm ($self) {
   }
   }, data => $self);
 
-  if (defined $self->{timeout_s} && $self->{timeout_s} > 0) {
-    my $secs = 0 + $self->{timeout_s};
+  if (defined $self->{timeout} && $self->{timeout} > 0) {
+    my $secs = 0 + $self->{timeout};
     $self->{timeout_id} = $loop->after($secs, sub ($loop) { $self->_on_timeout });
   }
 
@@ -219,6 +224,21 @@ sub _on_timeout ($self) {
   }
 
   $self->kill('TERM');
+
+  if (defined $self->{timeout_kill} && $self->{timeout_kill} > 0) {
+    my $secs = 0 + $self->{timeout_kill};
+    my $loop = $self->{loop};
+    $self->{timeout_kill_id} = $loop->after($secs, sub ($loop) { $self->_on_timeout_kill });
+  }
+  return;
+}
+
+sub _on_timeout_kill ($self) {
+  return if $self->{_canceled};
+  return if $self->{saw_exit};
+
+  # Hard stop: the child ignored/handled TERM.
+  $self->kill('KILL');
   return;
 }
 
@@ -346,7 +366,7 @@ sub _maybe_finish ($self) {
   # Now safe to fully tear down everything, even for managed children.
   $self->{_canceled} = 0; # allow cancel() to run full teardown path
   $self->{managed_by_fork} = undef;
-  $self->cancel;
+  $self->_cancel;
 
   return;
 }
@@ -357,11 +377,166 @@ __END__
 
 =head1 NAME
 
-Linux::Event::Fork::Child - Child handle returned by Linux::Event::Fork
+Linux::Event::Fork::Child - Handle for a running child process
 
 =head1 DESCRIPTION
 
-Child handle for a spawned process, with optional stdout/stderr capture, optional
-stdin streaming, and optional timeout.
+A C<Linux::Event::Fork::Child> object represents a child process
+that has started running.
+
+It provides:
+
+=over 4
+
+=item *
+Access to metadata (pid, tag, data)
+
+=item *
+Streaming writes to child stdin
+
+=item *
+Signal delivery (kill)
+
+=item *
+Lifecycle tracking
+
+=back
+
+Child objects are returned by:
+
+  $loop->fork(...)
+  $fork->fork(...)
+
+when the child starts immediately.
+
+If the process is queued instead of started,
+a L<Linux::Event::Fork::Request> is returned.
+
+=head1 EXECUTION MODEL
+
+All methods on this object are called from the B<parent process>.
+
+The only code that runs in the child process is:
+
+  child => sub { ... }
+
+Callbacks such as C<on_stdout>, C<on_stderr>,
+C<on_exit>, and C<on_timeout> run in the parent,
+inside the Linux::Event event loop.
+
+=head1 METHODS
+
+=head2 pid
+
+  my $pid = $child->pid;
+
+Returns the process ID of the running child.
+
+=head2 tag
+
+  my $tag = $child->tag;
+
+Returns the tag associated with the fork request, if any.
+
+=head2 data
+
+  my $data = $child->data;
+
+Returns the arbitrary data payload associated with the request.
+
+=head2 stdin_write
+
+  $child->stdin_write($bytes);
+
+Writes bytes to the child's stdin.
+
+Direction:
+
+    parent ---> child
+
+This is nonblocking.
+Actual transmission occurs via the event loop.
+
+If the child has already closed stdin,
+writes may fail or trigger an EPIPE event.
+
+=head2 close_stdin
+
+  $child->close_stdin;
+
+Closes the write end of the child's stdin.
+
+After calling this, no further stdin writes are possible.
+
+=head2 kill
+
+  $child->kill($signal);
+
+Sends a signal to the child process.
+
+Example:
+
+  $child->kill('TERM');
+  $child->kill('KILL');
+
+=head2 is_running
+
+  if ($child->is_running) { ... }
+
+Returns true if the child has not yet exited.
+
+=head2 exit
+
+  my $exit = $child->exit;
+
+Returns a L<Linux::Event::Fork::Exit> object
+after the process has exited.
+
+Undefined until exit occurs.
+
+=head1 LIFECYCLE
+
+State progression:
+
+    created
+        |
+        +--> running
+                |
+                +--> exited
+                        |
+                        +--> on_exit callback fired
+
+After exit:
+
+- stdout/stderr watchers are removed
+- stdin is closed
+- C<is_running> returns false
+- C<exit> returns a valid Exit object
+
+=head1 SAFETY NOTES
+
+=over 4
+
+=item *
+Do not call blocking operations inside callbacks.
+
+=item *
+Do not assume ordering between stdout and stderr.
+
+=item *
+Do not write to stdin after close_stdin.
+
+=item *
+After on_exit fires, the process is fully reaped.
+
+=back
+
+=head1 AUTHOR
+
+Joshua S. Day
+
+=head1 LICENSE
+
+Same terms as Perl itself.
 
 =cut

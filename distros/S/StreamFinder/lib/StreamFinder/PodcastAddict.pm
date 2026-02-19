@@ -94,12 +94,6 @@ file.
 
 =head1 DESCRIPTION
 
-NOTE:  StreamFinder::Podcastaddict is now considered depreciated and may be 
-removed in a later StreamFinder release as it now requires a specific valid 
-episode page to fetch streams from, as Podcastaddict.com has javascripted up 
-their podcast pages now to the point that it is no longer possible to obtain 
-a playlist or first episode from them via our scripts.  
-
 StreamFinder::PodcastAddict accepts a valid podcast ID or URL on 
 PodcastAddict.com and returns the actual stream URL(s), title, and cover art 
 icon.  The purpose is that one needs one of these URLs in order to have the 
@@ -117,7 +111,7 @@ One or more stream URLs can be returned for each podcast.
 
 =over 4
 
-=item B<new>(I<ID>|I<url> [, I<-secure> [ => 0|1 ]] [, I<-debug> [ => 0|1|2 ]])
+=item B<new>(I<ID> | I<url> [, I<-secure> [ => 0|1 ]] [, I<-debug> [ => 0|1|2 ]])
 
 Accepts a podcastaddict.com podcast ID or URL and creates and returns a 
 a new podcast object, or I<undef> if the URL is not a valid podcast, or no streams 

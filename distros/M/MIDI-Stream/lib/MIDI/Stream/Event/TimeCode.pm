@@ -8,7 +8,7 @@ use Feature::Compat::Class;
 package MIDI::Stream::Event::TimeCode;
 class MIDI::Stream::Event::TimeCode :isa( MIDI::Stream::Event );
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 
 field $byte :reader;
@@ -41,7 +41,7 @@ MIDI::Stream::Event::TimeCode - Time Code Qtr. Frame event class
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 DESCRIPTION
 

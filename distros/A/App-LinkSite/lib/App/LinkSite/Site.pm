@@ -15,7 +15,7 @@ A class to model a link site (part of App::LinkSite).
 use Feature::Compat::Class;
 
 class App::LinkSite::Site {
-  our $VERSION = '0.0.17';
+  our $VERSION = '0.1.1';
   use strict;
   use warnings;
   no if $] >= 5.038, 'warnings', 'experimental::class';
@@ -28,11 +28,38 @@ class App::LinkSite::Site {
   field $desc :reader :param;
   field $og_image :reader :param;
   field $site_url :reader :param;
+  field $text_color :reader :param = undef;
+  field $background_color :reader :param = undef;
 
   field $socials :reader :param = [];
   field $links :reader :param = [];
+  field $sections :reader :param = [];
 
 =head1 METHODS
+
+=head2 has_sections
+
+Returns true if the site has any non-empty sections.
+
+=cut
+
+  method has_sections {
+    return scalar(grep { $_->has_links } $self->sections->@*) > 0;
+  }
+
+=head2 all_links
+
+Returns all links from both the links array and all sections.
+
+=cut
+
+  method all_links {
+    my @all_links = $self->links->@*;
+    for my $section ($self->sections->@*) {
+      push @all_links, $section->links->@*;
+    }
+    return @all_links;
+  }
 
 =head2 json_ld
 
@@ -45,15 +72,15 @@ Returns a JSON/LD fragment for this web site.
       '@context' => 'https://schema.org',
       '@type' => 'WebPage',
       name => "Links page for $name ($handle)",
-      mainEntity => {
+  mainEntity => {
         '@context' => 'https://schema.org',
         '@type' => 'Person',
         name => $self->name,
-        image => $self->image,
+  image => $self->image,
         sameAs => [ map { $_->mk_social_link } $self->socials->@* ],
-      },
-      relatedLink => [ map { $_->link } $self->links->@* ],
-    };
+  },
+  relatedLink => [ map { $_->link } $self->all_links ],
+  };
 
     return JSON->new->pretty->encode($json);
   }

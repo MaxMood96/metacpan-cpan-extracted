@@ -297,9 +297,10 @@ run_greple() {
     local -a md_opts=()
     local -a config_params=("mode=${mode}")
 
-    # base_color, table, rule params
+    # base_color, table, rule, heading_markup params
     [[ $table ]] && config_params+=("table=1") || config_params+=("table=0")
     [[ $rule  ]] && config_params+=("rule=1")  || config_params+=("rule=0")
+    [[ $heading_markup ]] && config_params+=("heading_markup=$heading_markup")
     config_params+=("${md_config[@]}")
 
     local IFS=','
@@ -311,13 +312,14 @@ run_greple() {
         md_opts+=(--show "${name}=${show[$name]}")
     done
 
-    invoke greple "${md_opts[@]}" -- \
+    invoke greple "${md_opts[@]}" "${pass_md[@]}" -- \
         --filestyle=once --color=always "$@"
 }
 ```
 
-- `-Mmd::config(...)`: Module config parameters (mode, base_color, table, rule, hashed.*)
+- `-Mmd::config(...)`: Module config parameters (mode, base_color, table, rule, heading_markup, hashed.*)
 - `--show LABEL=VALUE`: Field visibility control
+- `pass_md[]`: Passthrough options for md module (e.g., `--colormap` via `:>pass_md`)
 - Options before `--` are module-specific; after `--` are greple options
 
 ### Protection Mechanism (protect/restore)
@@ -340,7 +342,7 @@ sub protect {
 
 sub restore {
     my $s = shift;
-    $s =~ s{$PR}{$protected[$1] // die "restore failed: index $1"}ge;
+    1 while $s =~ s{$PR}{$protected[$1] // die "restore failed: index $1"}ge;
     $s;
 }
 ```
@@ -363,22 +365,40 @@ reset and re-inserts the outer color after it. This enables **cumulative colorin
 The heading color resumes after the link, including background color for
 text that follows the link on the same heading line.
 
-Processing order in `colorize()`:
-1. Fenced code blocks → protect
-2. Inline code → protect
-3. HTML comments → protect
-4. Image links, images, links → protect (with OSC 8)
-5. Horizontal rules → protect
-6. Bold, italic, strikethrough
-7. Headings (h6→h1, with `restore` for cumulative coloring)
-8. Blockquotes
-9. Restore all protected regions
+Each processing step is a code ref in the `%colorize` hash. The pipeline
+order is determined by `build_pipeline()` based on `heading_markup`.
+The `active()` checks and step execution are controlled in `colorize()`.
 
-Headings are processed after emphasis so that `apply_color` can see all
-internal resets (from bold/italic/strike and restored inline code/links)
-and properly re-insert heading colors after each reset. The heading step
-calls `restore($line)` before applying heading color, revealing protected
-regions for correct cumulative coloring.
+#### Pipeline Architecture
+
+Steps are organized into three groups:
+
+```perl
+my @protect_steps = qw(code_blocks comments image_links images links);
+my @inline_steps  = qw(inline_code horizontal_rules bold italic strike);
+my @final_steps   = qw(blockquotes);
+```
+
+The `headings` step always calls `restore()` → color → `protect()`,
+enabling cumulative coloring regardless of position. Its position
+in the pipeline is controlled by `heading_markup`:
+
+**`build_pipeline()` logic:**
+- `heading_markup=0` (default): `@protect_steps`, **headings**, `@inline_steps`, `@final_steps`
+- `heading_markup=1` or `all`: `@protect_steps`, `@inline_steps`, **headings**, `@final_steps`
+- `heading_markup=bold:italic`: `@protect_steps`, bold, italic, **headings**, inline_code, horizontal_rules, strike, `@final_steps`
+
+When `heading_markup` is a colon-separated step list, specified steps
+are moved before headings while remaining inline steps stay after.
+This allows selective markup inside headings (e.g., bold but not code).
+
+Links are always processed before headings (in `@protect_steps`), so
+OSC 8 hyperlinks in headings remain clickable regardless of
+`heading_markup`.
+
+The `%step_label` hash maps step names to `active()` label names
+(e.g., `headings` → `header`, `horizontal_rules` → `horizontal_rule`).
+Steps without a label mapping are always active.
 
 ### Code Color Labels
 
@@ -669,13 +689,15 @@ Key format: `option_name | short_opt  spec  # comment`
 
 |Spec|Type|Description|
 |-|-|-|
-|(empty)|Boolean|Flag, sets variable to 1|
-|`!`|Negatable|Supports `--no-option`|
+|(empty)|Boolean|Flag, sets variable to 1. `--no-` prefix supported.|
+|`!`|Callback|Calls function with same name as option|
 |`+`|Incremental|Counter, increases with each use|
 |`:`|Required arg|Requires argument value|
 |`:=i`|Integer|Requires integer argument|
-|`?!`|Optional+Negatable|Optional argument, negatable|
-|`:>array`|Array append|Appends `--option=value` to array|
+|`?!`|Optional+Callback|Optional argument with callback|
+|`%`|Hash|Hash variable, `--opt key=value`|
+|`%!`|Hash+Callback|Hash variable with callback|
+|`:>array`|Array append|Appends `--option=value` to named array|
 |`@`|Array|Array variable, supports comma-separated values|
 
 #### Special Keys
@@ -730,7 +752,12 @@ Link text matching uses `(?:` `` `[^`\n]*+` `` `|\\.|[^\]` `` ` `` `\\\n]++)+` t
 - `]` inside backtick-quoted text (e.g., `` [`init [CONFIGS...]`](#url) ``) — deviates from CommonMark spec (which terminates `]` even inside code spans) but matches GitHub rendering
 - Backslash-escaped `\]` (e.g., `[foo\]bar](#url)`) — per CommonMark spec, `\]` does not terminate link text
 
-Links and inline code inside headings are supported via cumulative coloring. The heading step restores protected regions before applying heading color, so `apply_color` can re-insert heading colors after each internal reset.
+By default, inline code and emphasis inside headings are not processed
+(headings get uniform color). Links are always processed as OSC 8
+hyperlinks. With `--heading-markup` (`--hm`), all inline formatting
+is visible within headings via cumulative coloring. Specific steps
+can be selected: `--hm=bold:italic` processes only bold and italic
+inside headings.
 
 Reference-style links (`[text][ref]` with `[ref]: url` elsewhere) are not supported.
 

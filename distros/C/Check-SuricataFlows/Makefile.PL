@@ -21,6 +21,9 @@ my %WriteMakefileArgs = (
 	PREREQ_PM => {
 		'JSON'                => 0,
 		'File::ReadBackwards' => 0,
+		'Regexp::IPv6'        => 0,
+		'Regexp::IPv4'        => 0,
+		'NetAddr::IP'         => 0,
 	},
 	dist       => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
 	clean      => { FILES    => 'Check-SuricataFlows-*' },

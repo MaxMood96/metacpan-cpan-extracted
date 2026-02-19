@@ -26,10 +26,11 @@ no_index:
 provides:
   App::Greple::md:
     file: lib/App/Greple/md.pm
-    version: '0.9901'
+    version: '0.9903'
 requires:
-  App::Greple: '10.03'
+  App::Greple: '10.04'
   App::ansicolumn: '0'
+  App::ansifold: '1.35'
   Command::Run: '0'
   Getopt::EX::Config: '1.0202'
   URI::Escape: '0'
@@ -38,7 +39,7 @@ resources:
   bugtracker: https://github.com/kaz-utashiro/greple-md/issues
   homepage: https://github.com/kaz-utashiro/greple-md
   repository: https://github.com/kaz-utashiro/greple-md.git
-version: '0.9901'
+version: '0.9903'
 x_contributors:
   - 'Kazumasa Utashiro <kaz@utashiro.com>'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

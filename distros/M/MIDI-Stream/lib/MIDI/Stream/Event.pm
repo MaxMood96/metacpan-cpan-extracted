@@ -10,11 +10,10 @@ use experimental qw/ signatures /;
 package MIDI::Stream::Event;
 class MIDI::Stream::Event;
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Carp qw/ croak /;
 use MIDI::Stream::Tables qw/ status_name keys_for /;
-use namespace::autoclean;
 
 
 field $name :reader;
@@ -68,7 +67,7 @@ MIDI::Stream::Event - MIDI event base class
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 DESCRIPTION
 

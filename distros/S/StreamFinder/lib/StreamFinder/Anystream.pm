@@ -568,6 +568,32 @@ sub new
 		}
 	}
 	$self->{'cnt'} = scalar @{$self->{'streams'}};
+	unless ($self->{'cnt'} > 0) {
+		#SEE IF WE HAVE ANYTHING IN AN IFRAME THAT STREAMFINDER'S OTHER* MODULES MIGHT RECOGNIZE
+		#   (* MODULES OTHER THAN THIS ONE OR YOUTUBE (WHICH IF HERE, WE'VE ALREADY CHECKED!)
+		#   FOR TIME'S SAKE, WE ONLY LOOK AT THE 1ST IFRAME CONTAINING A URL:
+		my $embedded_video;
+		while ($html && $html =~ s#\<iframe([^\>]+)\>##so) {
+			my $one = $1;
+			my $embeddedURL = ($one =~ m#\"(https?\:\/\/[^\"]+)#s) ? $1 : '';
+			if ($embeddedURL) {
+				$embeddedURL =~ s/[\?\&].*$//  unless ($self->{'notrim'});
+				print STDERR "--embedded IFRAME url=$embeddedURL=\n"  if ($DEBUG);
+				my $haveStreamFinder = 0;
+				eval { require 'StreamFinder.pm'; $haveStreamFinder = 1; };
+				if ($haveStreamFinder) {
+					my %globalArgs = (-omit => 'Youtube,Anystream', -noiframes => 1,
+							-debug => $DEBUG);
+					foreach my $arg (qw(log logfmt)) {
+						$globalArgs{$arg} = $self->{$arg}  if (defined($self->{$arg}) && $self->{$arg});
+					}
+					$embedded_video = new StreamFinder($embeddedURL, %globalArgs);
+				}
+				last;
+			}
+		}
+		return $embedded_video  if (defined($embedded_video) && $embedded_video->count() > 0);
+	}
 	$self->{'total'} = $self->{'cnt'};
 	$self->{'title'} = HTML::Entities::decode_entities($self->{'title'});
 	$self->{'title'} = uri_unescape($self->{'title'});

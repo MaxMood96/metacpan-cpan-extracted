@@ -7,6 +7,9 @@ use File::ReadBackwards ();
 use JSON                qw(decode_json);
 use Scalar::Util        qw(looks_like_number);
 use Time::Piece         qw( localtime );
+use Regexp::IPv6        qw($IPv6_re);
+use Regexp::IPv4        qw($IPv4_re);
+use NetAddr::IP         ();
 
 =head1 NAME
 
@@ -14,11 +17,11 @@ Check::SuricataFlows - Make sure Suricata is seeing data via reading the Suricat
 
 =head1 VERSION
 
-Version 0.1.0
+Version 0.2.0
 
 =cut
 
-our $VERSION = '0.1.0';
+our $VERSION = '0.2.0';
 
 =head1 SYNOPSIS
 
@@ -104,6 +107,9 @@ Initiates the object.
               warn/alert count. If empty or undef, only no checking is done for sensor names, just totals.
           default :: []
 
+    - ignore_IPs :: A array of IPs to ignore.
+          default :: []
+
 Example...
 
     my $flow_checker;
@@ -186,13 +192,60 @@ sub new {
 		} ## end while ( defined( $opts{sensor_names}[$sensor_names_int...]))
 	} ## end else [ if ( !defined( $opts{sensor_names} ) ) ]
 
+	my @ignore_IPs;
+	my $ignore_IPs_lookup = {};
+	if ( defined( $opts{ignore_IPs} ) ) {
+		if ( ref( $opts{ignore_IPs} ) ne 'ARRAY' ) {
+			die( '$opts{ignore_IPs} of ref type "' . ref( $opts{ignore_IPs} ) . '" and not "ARRAY"' );
+		}
+
+		my $ignore_IPs_int = 0;
+		while ( defined( $opts{ignore_IPs}[$ignore_IPs_int] ) ) {
+			if ( ref( $opts{ignore_IPs}[$ignore_IPs_int] ) ne '' ) {
+				die(      '$opts{ignore_IPs}['
+						. $ignore_IPs_int
+						. '] of ref type "'
+						. ref( $opts{ignore_IPs}[$ignore_IPs_int] )
+						. '" and not ""' );
+			}
+
+			if (   ( $opts{ignore_IPs}[$ignore_IPs_int] !~ /^$IPv6_re$/ )
+				&& ( $opts{ignore_IPs}[$ignore_IPs_int] !~ /^$IPv4_re$/ ) )
+			{
+				die(      '$opts{ignore_IPs}['
+						. $ignore_IPs_int . '], "'
+						. $opts{ignore_IPs}[$ignore_IPs_int]
+						. '", does not appear to be IPv4 or IPv6' );
+			}
+			eval {
+				my $ip = NetAddr::IP->new( $opts{ignore_IPs}[$ignore_IPs_int] );
+				push( @ignore_IPs, $ip->addr );
+			};
+			if ($@) {
+				die(      '$opts{ignore_IPs}['
+						. $ignore_IPs_int . '], "'
+						. $opts{ignore_IPs}[$ignore_IPs_int]
+						. '", could not be parsed... '
+						. $@ );
+			}
+
+			$ignore_IPs_int++;
+		} ## end while ( defined( $opts{ignore_IPs}[$ignore_IPs_int...]))
+
+		foreach my $ip (@ignore_IPs) {
+			$ignore_IPs_lookup->{$ip} = 1;
+		}
+	} ## end if ( defined( $opts{ignore_IPs} ) )
+
 	my $self = {
-		flow_file      => $opts{flow_file},
-		alert_count    => $opts{alert_count},
-		warn_count     => $opts{warn_count},
-		read_back_time => $opts{read_back_time},
-		max_lines      => $opts{max_lines},
-		sensor_names   => $opts{sensor_names},
+		flow_file         => $opts{flow_file},
+		alert_count       => $opts{alert_count},
+		warn_count        => $opts{warn_count},
+		read_back_time    => $opts{read_back_time},
+		max_lines         => $opts{max_lines},
+		sensor_names      => $opts{sensor_names},
+		ignore_IPs        => \@ignore_IPs,
+		ignore_IPs_lookup => $ignore_IPs_lookup,
 	};
 	bless $self;
 
@@ -224,6 +277,12 @@ This returns a hash ref. The keys are as below.
 
     - uni_directional_count :: Count of uni-directional flows.
 
+    - ip_ignored_lines :: Lines ignored thanks to src/dest IP.
+
+    - ip_parse_errored :: Lines in which the src/dest IP could not be parsed.
+
+    - ip_parse_errors :: Array containing error info on src/dest IP c parsing issues.
+
 Example...
 
     my $results;
@@ -251,6 +310,9 @@ sub run {
 		uni_directional_count => 0,
 		lines_get_errors      => [],
 		by_sensor             => {},
+		ip_ignored_lines      => 0,
+		ip_parse_errored      => 0,
+		ip_parse_errors       => [],
 	};
 
 	# can't go any further if we can't read the file
@@ -337,21 +399,44 @@ sub run {
 					&& ( ref( $parsed_line->{'flow'}{'pkts_toserver'} ) eq '' )
 					&& looks_like_number( $parsed_line->{'flow'}{'pkts_toserver'} ) )
 				{
-					my $sensor = $parsed_line->{'host'};
-					if ( !defined( $to_return->{by_sensor}{$sensor} ) ) {
-						$to_return->{by_sensor}{$sensor} = {
-							bi_directional_count  => 0,
-							uni_directional_count => 0,
-						};
+					my $IP_ignore = 0;
+
+					eval {
+						my $src_ip = NetAddr::IP->new( $parsed_line->{'src_ip'} );
+						if ( $self->{ignore_IPs_lookup}{ $src_ip->addr } ) {
+							$IP_ignore = 1;
+						}
+						if ( !$IP_ignore ) {
+							my $dest_ip = NetAddr::IP->new( $parsed_line->{'dest_ip'} );
+							if ( $self->{ignore_IPs_lookup}{ $dest_ip->addr } ) {
+								$IP_ignore = 1;
+							}
+						}
+					};
+					if ($@) {
+						push( @{ $to_return->{ip_parse_errors} }, $@ );
+						$to_return->{ip_parse_errored}++;
 					}
-					if (   ( $parsed_line->{'flow'}{'pkts_toserver'} > 0 )
-						&& ( $parsed_line->{'flow'}{'pkts_toclient'} > 0 ) )
-					{
-						$to_return->{bi_directional_count}++;
-						$to_return->{by_sensor}{$sensor}{bi_directional_count}++;
+
+					if ( !$IP_ignore ) {
+						my $sensor = $parsed_line->{'host'};
+						if ( !defined( $to_return->{by_sensor}{$sensor} ) ) {
+							$to_return->{by_sensor}{$sensor} = {
+								bi_directional_count  => 0,
+								uni_directional_count => 0,
+							};
+						}
+						if (   ( $parsed_line->{'flow'}{'pkts_toserver'} > 0 )
+							&& ( $parsed_line->{'flow'}{'pkts_toclient'} > 0 ) )
+						{
+							$to_return->{bi_directional_count}++;
+							$to_return->{by_sensor}{$sensor}{bi_directional_count}++;
+						} else {
+							$to_return->{uni_directional_count}++;
+							$to_return->{by_sensor}{$sensor}{uni_directional_count}++;
+						}
 					} else {
-						$to_return->{uni_directional_count}++;
-						$to_return->{by_sensor}{$sensor}{uni_directional_count}++;
+						$to_return->{ip_ignored_lines}++;
 					}
 				} ## end if ( $time_good && defined( $parsed_line->...))
 			} ## end elsif ($process_line)
@@ -429,10 +514,13 @@ sub run {
 	} ## end foreach my $sensor ( @{ $self->{sensor_names} })
 	$to_return->{status}
 		= $to_return->{status} . 'seen sensors: ' . join( ', ', keys( %{ $to_return->{by_sensor} } ) ) . "\n";
+	$to_return->{status}
+		= $to_return->{status} . 'ignored IPs: ' . join( ', ', @{ $self->{ignore_IPs} } ) . "\n";
 	$to_return->{status} = $to_return->{status} . 'max lines to read: ' . $self->{max_lines} . "\n";
 	$to_return->{status} = $to_return->{status} . 'lines read: ' . $to_return->{lines_read} . "\n";
 	$to_return->{status} = $to_return->{status} . 'lines parsed: ' . $to_return->{lines_parsed} . "\n";
 	$to_return->{status} = $to_return->{status} . 'line gets errored: ' . $to_return->{lines_get_errored} . "\n";
+	$to_return->{status} = $to_return->{status} . 'IP parse errored: ' . $to_return->{ip_parse_errored} . "\n";
 
 	return $to_return;
 } ## end sub run

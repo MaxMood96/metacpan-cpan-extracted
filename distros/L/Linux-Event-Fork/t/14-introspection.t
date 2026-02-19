@@ -7,9 +7,9 @@ use Test2::V0;
 
 use Linux::Event;
 use Linux::Event::Fork;
-
 my $loop = Linux::Event->new;
-my $fork = $loop->fork_helper(max_children => 1);
+$loop->fork_helper(max_children => 1);
+my $fork = $loop->fork_helper;
 
 is($fork->max_children, 1, 'max_children accessor');
 is($fork->running, 0, 'running starts at 0');

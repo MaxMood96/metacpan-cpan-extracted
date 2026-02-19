@@ -42,8 +42,9 @@
       },
       "runtime" : {
          "requires" : {
-            "App::Greple" : "10.03",
+            "App::Greple" : "10.04",
             "App::ansicolumn" : "0",
+            "App::ansifold" : "1.35",
             "Command::Run" : "0",
             "Getopt::EX::Config" : "1.0202",
             "URI::Escape" : "0",
@@ -59,7 +60,7 @@
    "provides" : {
       "App::Greple::md" : {
          "file" : "lib/App/Greple/md.pm",
-         "version" : "0.9901"
+         "version" : "0.9903"
       }
    },
    "release_status" : "stable",
@@ -74,7 +75,7 @@
          "web" : "https://github.com/kaz-utashiro/greple-md"
       }
    },
-   "version" : "0.9901",
+   "version" : "0.9903",
    "x_contributors" : [
       "Kazumasa Utashiro <kaz@utashiro.com>"
    ],

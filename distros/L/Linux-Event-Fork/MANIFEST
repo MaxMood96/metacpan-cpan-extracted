@@ -1,4 +1,5 @@
 Changes
+examples/01_webpage_download.pl
 examples/12_fork_exit_object.pl
 examples/13_fork_child_callback.pl
 examples/14_fork_stdin_streaming.pl
@@ -6,7 +7,10 @@ examples/20_bounded_parallelism_with_drain.pl
 examples/21_web_fetch_pool.pl
 examples/22_timeout_kill.pl
 examples/23_cancel_queued_by_tag.pl
+examples/24_child_callback_exec.pl
 examples/25_chunking_notes.pl
+examples/90_stress_timeout_churn.pl
+examples/91_stress_stdin_with_timeout.pl
 examples/README.md
 lib/Linux/Event/Fork.pm
 lib/Linux/Event/Fork/Child.pm

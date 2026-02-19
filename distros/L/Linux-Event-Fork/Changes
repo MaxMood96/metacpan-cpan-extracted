@@ -1,14 +1,17 @@
 Revision history for Linux-Event-Fork
 
-0.004  2026-02-15
-  - Add controlled parallelism with max_children and FIFO queue
-  - Add on_start callback
-  - Add Linux::Event::Fork::Request handle for queued spawns
-  - Ensure managed children keep exit observation even if IO is canceled
+0.006  2026-02-18
+  - Timeout escalation: on timeout, send SIGTERM, then optionally escalate to SIGKILL
+    after timeout_kill seconds if the child is still running.
+  - Canonicalized timeout options: timeout and timeout_kill are the only supported
+    keys (removed internal/accidental *_s variants).
+  - Bounded parallelism and queueing: improved runtime configuration via
+    $loop->fork_helper(max_children => ...); tests updated accordingly.
+  - Public API introspection: standardized on running() / queued() / max_children().
+  - Internal cleanup: tightened watcher/timer cancellation to prevent stalls or
+    leaked timers when children exit or are detached.
+  - Documentation: clarified execution model (callbacks run in parent; child runs
+    exec/callback only) and expanded SYNOPSIS/options coverage.
 
-
-0.005  2026-02-17
-    - Canonicalized introspection API (running, queued)
-    - Removed compile-time max_children idiom
-    - Cleaned and consolidated examples
-    - Tightened POD to match README and stabilized API surface
+0.005  (previous release)
+  - (see prior entries)

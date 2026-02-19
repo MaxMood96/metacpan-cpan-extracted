@@ -8,7 +8,7 @@ package MIDI::Stream::Encoder;
 class MIDI::Stream::Encoder :isa( MIDI::Stream );
 
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 use Time::HiRes qw/ gettimeofday tv_interval /;
 use Carp qw/ carp croak /;
@@ -16,7 +16,6 @@ use MIDI::Stream::Tables qw/
     has_channel keys_for is_single_byte
     status_byte split_bytes is_realtime
 /;
-use namespace::autoclean;
 
 
 field $enable_14bit_cc :param = 0;
@@ -160,7 +159,7 @@ MIDI::Stream::Encoder - MIDI event to bytestream encoder
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 

@@ -21,7 +21,6 @@ my %WriteMakefileArgs = (
     "List::Util" => 0,
     "Time::HiRes" => 0,
     "experimental" => 0,
-    "namespace::autoclean" => 0,
     "parent" => 0
   },
   "TEST_REQUIRES" => {
@@ -32,7 +31,7 @@ my %WriteMakefileArgs = (
     "Test::Lib" => 0,
     "Test::Time::HiRes" => 0
   },
-  "VERSION" => "0.002",
+  "VERSION" => "0.003",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -50,7 +49,6 @@ my %FallbackPrereqs = (
   "Test::Time::HiRes" => 0,
   "Time::HiRes" => 0,
   "experimental" => 0,
-  "namespace::autoclean" => 0,
   "parent" => 0
 );
 

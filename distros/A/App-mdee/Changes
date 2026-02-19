@@ -1,5 +1,12 @@
 Revision history for Perl extension App-mdee
 
+0.19 2026-02-19T04:49:23Z
+
+    - Add --colormap option to pass colormap specs to md module
+    - Extend --heading-markup to accept step names (e.g., bold:italic)
+    - Use greple --filter option, require App::Greple 10.04
+    - Require App::Greple::md 0.9902
+
 0.18 2026-02-18T09:02:05Z
 
     - Update deps: App::Greple::md 0.9901, App::Greple 10.03

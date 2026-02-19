@@ -1,0 +1,100 @@
+NAME
+    Mo::utils::Binary - Mo utilities for binary data.
+
+SYNOPSIS
+     use Mo::utils::Binary qw(check_bytes_len);
+
+     check_bytes_len($self, $key, $length);
+
+DESCRIPTION
+    Mo utilities for checking of binary data.
+
+SUBROUTINES
+  "check_bytes_len"
+     check_bytes_len($self, $key, $count);
+
+    Check parameter defined by $key which is in bytes length.
+
+    Put error if check isn't ok.
+
+    Returns undef.
+
+ERRORS
+     check_bytes_len():
+             Parameter '%s' has bad bytes length.
+                     Value: %s
+                     Expected bytes length: %s
+                     Real bytes length: %s
+
+EXAMPLE1
+     use strict;
+     use warnings;
+
+     use Mo::utils::Binary qw(check_bytes_len);
+
+     my $self = {
+             'key' => 'foo',
+     };
+     check_bytes_len($self, 'key', 3);
+
+     # Print out.
+     print "ok\n";
+
+     # Output:
+     # ok
+
+EXAMPLE2
+     use strict;
+     use utf8;
+     use warnings;
+
+     use Error::Pure;
+     use Mo::utils::Binary qw(check_bytes_len);
+
+     $Error::Pure::TYPE = 'Error';
+
+     my $self = {
+             'key' => '森林',
+     };
+     check_bytes_len($self, 'key', 3);
+
+     # Print out.
+     print "ok\n";
+
+     # Output like:
+     # #Error [..Binary.pm:?] Parameter 'key' has bad bytes length.
+
+DEPENDENCIES
+    Exporter, Error::Pure, Readonly.
+
+SEE ALSO
+    Mo  Micro Objects. Mo is less.
+
+    Mo::utils::Array
+        Mo array utilities.
+
+    Mo::utils::Language
+        Mo language utilities.
+
+    Mo::utils::CSS
+        Mo CSS utilities.
+
+    Wikibase::Datatype::Utils
+        Wikibase datatype utilities.
+
+REPOSITORY
+    <https://github.com/michal-josef-spacek/Mo-utils-Binary>
+
+AUTHOR
+    Michal Josef Špaček <mailto:skim@cpan.org>
+
+    <http://skim.cz>
+
+LICENSE AND COPYRIGHT
+    © 2026 Michal Josef Špaček
+
+    BSD 2-Clause License
+
+VERSION
+    0.01
+

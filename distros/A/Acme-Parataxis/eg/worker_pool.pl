@@ -18,7 +18,7 @@ Acme::Parataxis::run(
             { id => 3, task => 'Send Email',       delay => 500 },
             { id => 4, task => 'Update Inventory', delay => 1500 },
             { id => 5, task => 'Generate Report',  delay => 900 },
-            { id => 6, task => 'Sync Analytics',   delay => 1100 },
+            { id => 6, task => 'Sync Analytics',   delay => 1100 }
         );
         say 'Main: Starting worker pool with 3 fibers...';
         my $start_time = time;

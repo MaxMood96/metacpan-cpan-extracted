@@ -309,7 +309,7 @@ rm_package - Remove a "package" in the NBI HPC that was installed using make_pac
 
 =head1 VERSION
 
-version 0.15.0
+version 0.16.1
 
 =head1 SYNOPSIS
 
@@ -326,10 +326,6 @@ without performing any deletion. Use the --remove option to actually delete the 
 
 The script will check that all files to be deleted belong to the current user and will
 not delete files owned by other users, even with --force.
-
-=head1 NAME
-
-rm_package - Remove packages installed with make_package
 
 =head1 OPTIONS
 

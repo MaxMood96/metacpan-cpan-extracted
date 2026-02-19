@@ -1,3 +1,8 @@
+body {
+  background: var(--bg-color, #fff);
+  color: var(--text-color, #000);
+  font-family: Arial, sans-serif;
+}
 header {
   padding-top: 5%;
 }
@@ -17,7 +22,7 @@ header {
 }
 
 #links {
-  border
+  border: none;
   width: 50%;
   margin-left: auto;
   margin-right: auto;
@@ -41,3 +46,12 @@ li.new-link::before {
   font-variant: small-caps;
   font-weight: bold;
 }
+
+#links h3 {
+  font-style: italic;
+}
+
+#links h3:not(:first-of-type) {
+  padding-top: 15px;
+}
+

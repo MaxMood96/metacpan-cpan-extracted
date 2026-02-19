@@ -34,6 +34,9 @@
          "requires" : {
             "File::ReadBackwards" : "0",
             "JSON" : "0",
+            "NetAddr::IP" : "0",
+            "Regexp::IPv4" : "0",
+            "Regexp::IPv6" : "0",
             "perl" : "5.006"
          }
       },
@@ -50,6 +53,6 @@
          "web" : "https://github.com/VVelox/Check-SuricataFlows"
       }
    },
-   "version" : "v0.1.0",
+   "version" : "v0.2.0",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

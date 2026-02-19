@@ -8,7 +8,7 @@ use Feature::Compat::Class;
 package MIDI::Stream::Event::Channel;
 class MIDI::Stream::Event::Channel :isa( MIDI::Stream::Event );
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 
 field $channel :reader;
@@ -31,7 +31,7 @@ MIDI::Stream::Event::Channel - MIDI channel event base class
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 DESCRIPTION
 

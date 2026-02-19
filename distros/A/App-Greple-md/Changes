@@ -1,5 +1,22 @@
 Revision history for Perl extension App-Greple-md
 
+0.9903 2026-02-19T08:47:05Z
+
+    - Add --fold option for text folding via ansifold (-Mtee)
+    - Add colorize/foldlist config flags for stage control
+    - Add code_tick label for independent inline code backtick coloring
+    - Simplify h5/h6 colors to use same base color as h4
+    - Change dark code_info color to L10 (gray, matching code_mark)
+    - Use define directives for fold exclude/match patterns
+
+0.9902 2026-02-19T04:39:29Z
+
+    - Refactor colorize into pipeline architecture with build_pipeline()
+    - Extend --heading-markup to accept step names (e.g., bold:italic)
+    - Use greple --filter option, require App::Greple 10.04
+    - Fix deal_with option spec: use underscore for correct Config key matching
+    - Fix test failure on CPAN Testers: use Runner submodule to find greple
+
 0.9901 2026-02-18T08:16:52Z
 
     - Fix heading color preservation with cumulative coloring
