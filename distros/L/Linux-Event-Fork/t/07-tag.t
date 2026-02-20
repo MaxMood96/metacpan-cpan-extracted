@@ -5,11 +5,12 @@ use Linux::Event;
 use Linux::Event::Fork;
 
 my $loop = Linux::Event->new;
+my $forker = Linux::Event::Fork->new($loop);
 
 my $seen_tag;
 my $exit;
 
-$loop->fork(
+$forker->spawn(
   tag => "job-123",
 
   cmd => [ $^X, '-we', 'print "ok\n"; exit 0' ],

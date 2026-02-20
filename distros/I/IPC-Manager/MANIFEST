@@ -8,6 +8,7 @@ Makefile.PL
 README
 README.md
 TEMPLATE.pod
+TODO
 cpanfile
 data/aria_log.00000001
 data/aria_log_control
@@ -217,6 +218,7 @@ dist.ini
 lib/IPC/Manager.pm
 lib/IPC/Manager/Base/DBI.pm
 lib/IPC/Manager/Base/FS.pm
+lib/IPC/Manager/Base/FS/Handle.pm
 lib/IPC/Manager/Client.pm
 lib/IPC/Manager/Client/AtomicPipe.pm
 lib/IPC/Manager/Client/MariaDB.pm

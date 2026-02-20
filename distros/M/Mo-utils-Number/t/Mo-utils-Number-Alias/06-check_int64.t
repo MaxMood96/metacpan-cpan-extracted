@@ -15,8 +15,8 @@ Readonly::Array our @BAD_VALUES => (
 	['foo', "Parameter 'key' must be a integer."],
 
 	# Right values, but in bad range.
-	[Math::BigInt->new(-9223372036854775809), "Parameter 'key' must be a integer between -9223372036854775808 and 9223372036854775807."],
-	[9223372036854775808, "Parameter 'key' must be a integer between -9223372036854775808 and 9223372036854775807."],
+	[Math::BigInt->new("-9223372036854775809"), "Parameter 'key' must be a integer between -9223372036854775808 and 9223372036854775807."],
+	[Math::BigInt->new("9223372036854775808"), "Parameter 'key' must be a integer between -9223372036854775808 and 9223372036854775807."],
 );
 Readonly::Array our @RIGHT_VALUES => qw(-2 0 2);
 

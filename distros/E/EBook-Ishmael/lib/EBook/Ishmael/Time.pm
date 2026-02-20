@@ -1,6 +1,6 @@
 package EBook::Ishmael::Time;
 use 5.016;
-our $VERSION = '2.00';
+our $VERSION = '2.01';
 use strict;
 use warnings;
 
@@ -9,58 +9,112 @@ our @EXPORT = qw(guess_time format_locale_time format_rfc3339_time);
 
 use Time::Piece;
 
-# Format strings should be order from most specificity to least.
-my @STRPTIME_FMTS = (
-    # Date/time representation in current locale
-    "%c",
-    # '%c' + %Z
-    "%a %b %d %T %Y %Z",
-    # '%c' on my system (en_US.UTF-8)
-    "%a %b %d %T %Y",
+my $WEEKDAY_RX = qr/(?<a>
+    (Sun | Mon | Tue | Wed | Thu | Fri | Sat) |
+    (Sunday | Monday | Tuesday | Wednesday | Thursday | Friday | Saturday)
+)/x;
+my $MONTH_NAME_RX = qr/(?<b>
+    (
+        Jan | Feb | Mar | Apr | May | Jun | Jul | Aug | Sep | Oct | Nov | Dec
+    ) |
+    (
+        January | Febuary | March | April | May | June | July | August |
+        September | October | November | December
+    )
+)/x;
+my $CENTURY_NUM_RX  = qr/(?<C>[0-9]?[0-9])/;
+my $MONTH_DAY_RX    = qr/(?<d>0?[1-9]|[12][0-9]|3[01])/;
+my $HOUR_24_RX      = qr/(?<H>[01]?[0-9]|2[0-3])/;
+my $HOUR_12_RX      = qr/(?<I>0?[1-9]|1[0-2])/;
+my $YEAR_DAY_RX     = qr/(?<j>0?(0?[1-9]|[1-9]{2})|[1-2][1-9]{2}|3[0-6]{2})/;
+my $MONTH_NUM_RX    = qr/(?<m>0?[1-9]|1[0-2])/;
+my $MINUTE_RX       = qr/(?<M>[0-5]?[0-9])/;
+my $AM_PM_RX        = qr/(?<p>AM|PM>)/i;
+my $SECONDS_RX      = qr/(?<S>[0-5]?[0-9]|6[01])/;
+my $WEEK_NUM_RX     = qr/(?<U>[0-4]?[0-9]|5[0-3])/;
+my $ORD_WEEK_DAY_RX = qr/(?<w>[0-6])/;
+my $CENTURY_YEAR_RX = qr/(?<y>[0-9]?[0-9])/;
+my $YEAR_RX         = qr/(?<Y>[0-9]{1,4})/;
+my $TZ_SPEC_RX      = qr/(?<z>Z|[+\-][0-9]{2}:?[0-9]{2})/;
+my $TZ_NAME_RX      = qr/(?<Z>[A-Z]{3})/;
+my $EPOCH_RX        = qr/(?<s>-?[0-9]+)/;
+my $HHMMSS_RX       = qr/$HOUR_24_RX:$MINUTE_RX:$SECONDS_RX/;
+
+my @DATE_RXS = (
+    # strftime '%c' + '%Z'
+    qr/$WEEKDAY_RX\s+$MONTH_NAME_RX\s+$MONTH_DAY_RX\s+$HHMMSS_RX\s+$YEAR_RX\s+$TZ_NAME_RX/,
+    # strftime '%c' on my system (en_US.UTF-8)
+    qr/$WEEKDAY_RX\s+$MONTH_NAME_RX\s+$MONTH_DAY_RX\s+$HHMMSS_RX\s+$YEAR_RX/,
     # RFC3339
-    "%Y-%m-%dT%T%z",
+    qr/$YEAR_RX-$MONTH_NUM_RX-$MONTH_DAY_RX\x54$HHMMSS_RX$TZ_SPEC_RX/,
     # RFC822
-    "%d %b %y %H:%M %Z",
-    "%d %b %y %H:%M %z",
+    qr/$MONTH_DAY_RX\s+$MONTH_NAME_RX\s+$CENTURY_YEAR_RX\s+$HOUR_24_RX:$MINUTE_RX\s+$TZ_NAME_RX/,
+    qr/$MONTH_DAY_RX\s+$MONTH_NAME_RX\s+$CENTURY_YEAR_RX\s+$HOUR_24_RX:$MINUTE_RX\s+$TZ_SPEC_RX/,
     # RFC1123
-    "%a %d %b %Y %T %Z",
-    "%a %d %b %Y %T %z",
+    qr/$WEEKDAY_RX,\s+$MONTH_DAY_RX\s+$MONTH_NAME_RX\s+$YEAR_RX\s+$HHMMSS_RX\s+$TZ_NAME_RX/,
+    qr/$WEEKDAY_RX,\s+$MONTH_DAY_RX\s+$MONTH_NAME_RX\s+$YEAR_RX\s+$HHMMSS_RX\s+$TZ_SPEC_RX/,
     # RFC850
-    "%a %d-%b-%y %T %Z",
+    qr/$WEEKDAY_RX,\s+$MONTH_DAY_RX-$MONTH_NAME_RX-$CENTURY_YEAR_RX\s+$HHMMSS_RX\s+$TZ_NAME_RX/,
     # output of my date(1)
-    "%a %b %e %T %p %Z %Y",
+    qr/$WEEKDAY_RX\s+$MONTH_NAME_RX\s+$MONTH_DAY_RX\s+$HHMMSS_RX\s+$AM_PM_RX\s+$TZ_NAME_RX\s+$YEAR_RX/,
+    # pdfinfo time format
+    qr/$WEEKDAY_RX\s+$MONTH_NAME_RX\s+$MONTH_DAY_RX\s+$HHMMSS_RX\s+$YEAR_RX\s+$TZ_NAME_RX/,
+    # Ruby date
+    qr/$WEEKDAY_RX\s+$MONTH_NAME_RX\s+$MONTH_DAY_RX\s+$HHMMSS_RX\s+$TZ_SPEC_RX\s+$YEAR_RX/,
     # misc. date formats
-    "%d.%m.%Y",
-    "%m.%d.%Y",
-    "%d.%m.%y",
-    "%m.%d.%y",
-    "%d/%m/%Y",
-    "%m/%d/%Y",
-    "%d/%m/%y",
-    "%m/%d/%y",
-    "%Y",
+    qr/$MONTH_DAY_RX\.$MONTH_NUM_RX\.$CENTURY_YEAR_RX/,
+    qr/$MONTH_NUM_RX\.$MONTH_DAY_RX\.$CENTURY_YEAR_RX/,
+    qr/$MONTH_DAY_RX\/$MONTH_NUM_RX\/$CENTURY_YEAR_RX/,
+    qr/$MONTH_NUM_RX\/$MONTH_DAY_RX\/$CENTURY_YEAR_RX/,
+    qr/$MONTH_DAY_RX\.$MONTH_NUM_RX\.$YEAR_RX/,
+    qr/$MONTH_NUM_RX\.$MONTH_DAY_RX\.$YEAR_RX/,
+    qr/$MONTH_DAY_RX\/$MONTH_NUM_RX\/$YEAR_RX/,
+    qr/$MONTH_NUM_RX\/$MONTH_DAY_RX\/$YEAR_RX/,
+    qr/$YEAR_RX-$MONTH_NUM_RX-$MONTH_DAY_RX/,
+    qr/$YEAR_RX/,
+    qr/$EPOCH_RX/,
+);
+
+my @FULL_MATCH_DATE_RXS = map { qr/^\s*$_\s*$/ } @DATE_RXS;
+
+my %POST_PROCS = (
+    # Some versions of Time::Piece can't handle colons in time zone specs
+    'z' => sub { $_[0] eq 'Z' ? '+0000' : $_[0] =~ s/://r },
 );
 
 sub guess_time {
 
     my ($str) = @_;
 
-    $str =~ s/^\s+|\s+$//g;
-    $str =~ s/,/ /g;
-    $str =~ s/\s+/ /g;
+    my %matches;
+    my $found_match = 0;
+    for my $rx (@FULL_MATCH_DATE_RXS) {
+        if ($str =~ $rx) {
+            $found_match = 1;
+            %matches = %+;
+            last;
+        }
+    }
+    if (!$found_match) {
+        die "'$str' does not match any recognized date layout\n";
+    }
 
-    for my $f (@STRPTIME_FMTS) {
-        my $tp = eval {
-            # Silence "garbage at end of string" warning message
-            local $SIG{__WARN__} = sub {};
-            Time::Piece->strptime($str, $f);
-        };
-        if (defined $tp) {
-            return $tp->epoch;
+    my @codes;
+    my @parts;
+    for my $k (keys %matches) {
+        push @codes, "%$k";
+        if (exists $POST_PROCS{ $k }) {
+            push @parts, $POST_PROCS{ $k }->($matches{ $k });
+        } else {
+            push @parts, $matches{ $k };
         }
     }
 
-    return undef;
+    my $tp = eval { Time::Piece->strptime(join(' ', @parts), join(' ', @codes)) };
+    if ($@ ne '') {
+        die "Failed to parse '$str'\n";
+    }
+    return $tp->epoch;
 
 }
 

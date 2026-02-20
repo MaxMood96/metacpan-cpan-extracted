@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.006';
+our $VERSION = '0.007';
 
 use Carp qw(croak);
 use Errno qw(EAGAIN EINTR EPIPE);
@@ -69,10 +69,12 @@ sub _new ($class, %args) {
   return $self;
 }
 
+sub exit ($self) { return $self->{exit} }
 sub pid  ($self) { return $self->{pid} }
 sub loop ($self) { return $self->{loop} }
 sub tag  ($self) { return $self->{tag} }
 sub data ($self) { return $self->{data} }
+sub is_running ($self) { return $self->{saw_exit} ? 0 : 1 }
 
 sub kill ($self, $sig = 'TERM') {
   return 0 if !$self->{pid};
@@ -306,7 +308,7 @@ sub _drain_stdin ($self) {
 sub _on_exit ($self, $status) {
   return if $self->{saw_exit};
   $self->{saw_exit} = 1;
-  $self->{exit} = Linux::Event::Fork::Exit->new($status);
+  $self->{exit} = Linux::Event::Fork::Exit->new($self->{pid}, $status);
 
   $self->_maybe_finish;
   return;
@@ -377,52 +379,27 @@ __END__
 
 =head1 NAME
 
-Linux::Event::Fork::Child - Handle for a running child process
+Linux::Event::Fork::Child - Handle for a running (or exited) child process
+
+=head1 SYNOPSIS
+
+  my $child = $forker->spawn(
+    cmd => [ ... ],
+    stdin_pipe => 1,
+    on_stdout => sub ($child, $chunk) { ... },
+    on_exit   => sub ($child, $exit)  { ... },
+  );
+
+  $child->stdin_write("hello\n");
+  $child->close_stdin;
 
 =head1 DESCRIPTION
 
-A C<Linux::Event::Fork::Child> object represents a child process
-that has started running.
+A Child object represents a spawned child process whose stdout/stderr/stdin
+may be connected to the parent and integrated with the event loop.
 
-It provides:
-
-=over 4
-
-=item *
-Access to metadata (pid, tag, data)
-
-=item *
-Streaming writes to child stdin
-
-=item *
-Signal delivery (kill)
-
-=item *
-Lifecycle tracking
-
-=back
-
-Child objects are returned by:
-
-  $loop->fork(...)
-  $fork->fork(...)
-
-when the child starts immediately.
-
-If the process is queued instead of started,
-a L<Linux::Event::Fork::Request> is returned.
-
-=head1 EXECUTION MODEL
-
-All methods on this object are called from the B<parent process>.
-
-The only code that runs in the child process is:
-
-  child => sub { ... }
-
-Callbacks such as C<on_stdout>, C<on_stderr>,
-C<on_exit>, and C<on_timeout> run in the parent,
-inside the Linux::Event event loop.
+Objects of this class are returned by L<Linux::Event::Fork/spawn> when the child
+starts immediately.
 
 =head1 METHODS
 
@@ -430,73 +407,68 @@ inside the Linux::Event event loop.
 
   my $pid = $child->pid;
 
-Returns the process ID of the running child.
+Process ID.
+
+=head2 loop
+
+  my $loop = $child->loop;
+
+Returns the L<Linux::Event> loop used to watch this child.
 
 =head2 tag
 
   my $tag = $child->tag;
 
-Returns the tag associated with the fork request, if any.
+Returns the tag provided to C<spawn> (or undef).
 
 =head2 data
 
   my $data = $child->data;
 
-Returns the arbitrary data payload associated with the request.
-
-=head2 stdin_write
-
-  $child->stdin_write($bytes);
-
-Writes bytes to the child's stdin.
-
-Direction:
-
-    parent ---> child
-
-This is nonblocking.
-Actual transmission occurs via the event loop.
-
-If the child has already closed stdin,
-writes may fail or trigger an EPIPE event.
-
-=head2 close_stdin
-
-  $child->close_stdin;
-
-Closes the write end of the child's stdin.
-
-After calling this, no further stdin writes are possible.
-
-=head2 kill
-
-  $child->kill($signal);
-
-Sends a signal to the child process.
-
-Example:
-
-  $child->kill('TERM');
-  $child->kill('KILL');
+Returns the data payload provided to C<spawn> (or undef).
 
 =head2 is_running
 
   if ($child->is_running) { ... }
 
-Returns true if the child has not yet exited.
+True until the child exit status has been observed.
 
 =head2 exit
 
   my $exit = $child->exit;
 
-Returns a L<Linux::Event::Fork::Exit> object
-after the process has exited.
+Returns a L<Linux::Event::Fork::Exit> after the child has exited.
 
-Undefined until exit occurs.
+Returns undef until exit occurs.
+
+=head2 kill($signal)
+
+  $child->kill('TERM');
+  $child->kill('KILL');
+
+Sends a signal to the child process. Returns a boolean success value.
+
+=head2 stdin_write($bytes)
+
+  $child->stdin_write($bytes);
+
+Writes bytes to the child's stdin.
+
+This only works if stdin was created (C<stdin> or C<stdin_pipe> was used).
+
+If C<stdin_pipe> was not enabled, stdin may be closed automatically after the
+initial C<stdin> write.
+
+=head2 close_stdin
+
+  $child->close_stdin;
+
+Closes the child's stdin (immediately if no buffered bytes remain, otherwise once
+buffered bytes have been written).
 
 =head1 LIFECYCLE
 
-State progression:
+Typical progression:
 
     created
         |
@@ -508,10 +480,21 @@ State progression:
 
 After exit:
 
-- stdout/stderr watchers are removed
-- stdin is closed
-- C<is_running> returns false
-- C<exit> returns a valid Exit object
+=over 4
+
+=item *
+stdout/stderr watchers are removed
+
+=item *
+stdin is closed
+
+=item *
+C<is_running> becomes false
+
+=item *
+C<exit> returns a valid Exit object
+
+=back
 
 =head1 SAFETY NOTES
 
@@ -524,10 +507,7 @@ Do not call blocking operations inside callbacks.
 Do not assume ordering between stdout and stderr.
 
 =item *
-Do not write to stdin after close_stdin.
-
-=item *
-After on_exit fires, the process is fully reaped.
+Do not write to stdin after C<close_stdin>.
 
 =back
 

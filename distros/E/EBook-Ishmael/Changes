@@ -1,5 +1,8 @@
 Revision history for Perl module EBook::Ishmael.
 
+2.01  Feb 19 2026
+  - Fix time parsing for different versions of Time::Piece.
+
 2.00  Feb 17 2026
   - Overhauled how ishmael handles metadata. The main update this overhaul
     brings is that ishmael no longer allows multiple values for fields that

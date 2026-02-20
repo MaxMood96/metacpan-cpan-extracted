@@ -24,6 +24,7 @@ suggests "DBI" => "1.644";
 suggests "DBIx::QuickDB" => "0.000038";
 suggests "IO::Select" => "1.55";
 suggests "IO::Socket::UNIX" => "1.55";
+suggests "Linux::Inotify2" => "2.3";
 
 on 'test' => sub {
   requires "Test2::API" => "1.302219";

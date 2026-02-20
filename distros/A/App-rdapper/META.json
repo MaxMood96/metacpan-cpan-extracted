@@ -54,6 +54,7 @@
       },
       "test" : {
          "requires" : {
+            "LWP::Online" : "0",
             "Test::More" : "0",
             "common::sense" : "0"
          }
@@ -70,6 +71,6 @@
          "web" : "https://github.com/gbxyz/rdapper"
       }
    },
-   "version" : "1.23",
+   "version" : "1.24",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

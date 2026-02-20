@@ -1,5 +1,5 @@
 package WWW::Bund::API::NINA;
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 # ABSTRACT: Adapter for NINA API (disaster warnings)
 
 use Moo;
@@ -74,7 +74,7 @@ WWW::Bund::API::NINA - Adapter for NINA API (disaster warnings)
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 

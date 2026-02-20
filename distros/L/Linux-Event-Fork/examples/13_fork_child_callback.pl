@@ -7,8 +7,9 @@ use Linux::Event;
 use Linux::Event::Fork;
 
 my $loop = Linux::Event->new;
+my $forker = Linux::Event::Fork->new($loop);
 
-$loop->fork(
+$forker->spawn(
   child => sub {
     # In the child after stdio plumbing is set up.
     # Typically you exec; if you return, Fork exits 127.

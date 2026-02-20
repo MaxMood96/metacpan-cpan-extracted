@@ -5,7 +5,7 @@ use warnings;
 
 # WHAT THIS EXAMPLE SHOWS
 # -----------------------
-# * Controlled parallelism via: $loop->fork_helper(max_children => N)
+# * Controlled parallelism via: Linux::Event::Fork->new($loop, max_children => N)
 # * A simple "worker pool" pattern where each child handles one unit of work (one URL)
 # * Using cmd=>[...] so the child execs immediately (clean + fast)
 # * Using drain() so the loop stops when all work is finished
@@ -17,12 +17,12 @@ use warnings;
 # * This uses HTTP::Tiny (core Perl) inside the child process.
 
 use Linux::Event;
-use Linux::Event::Fork;   # installs $loop->fork and $loop->fork_helper
+use Linux::Event::Fork;
 
 my $loop = Linux::Event->new;
 
-# Create (or fetch) the per-loop helper and configure bounded parallelism.
-my $fork = $loop->fork_helper(max_children => ($ENV{MAX} // 4));
+# Create the helper and configure bounded parallelism.
+my $fork = Linux::Event::Fork->new($loop, max_children => ($ENV{MAX} // 4));
 
 my @urls = @ARGV ? @ARGV : (
   'https://example.com',
@@ -50,7 +50,7 @@ exit 1;
 PERL
 
 for my $url (@urls) {
-  $loop->fork(
+  $fork->spawn(
     tag => $url,
 
     # One child per URL:

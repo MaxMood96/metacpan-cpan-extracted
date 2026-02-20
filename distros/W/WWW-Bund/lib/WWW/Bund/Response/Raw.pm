@@ -1,5 +1,5 @@
 package WWW::Bund::Response::Raw;
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 # ABSTRACT: Raw response — returns content as-is
 
 use Moo;
@@ -25,7 +25,7 @@ WWW::Bund::Response::Raw - Raw response — returns content as-is
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 

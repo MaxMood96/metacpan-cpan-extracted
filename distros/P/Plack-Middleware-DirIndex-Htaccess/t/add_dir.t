@@ -1,92 +1,104 @@
+#!/usr/bin/env perl
+
 use strict;
 use warnings;
 
 use lib "lib";
 
 use Test2::V0;
-use Plack::Builder;
 use Plack::Test;
+use HTTP::Request::Common;
 use File::Spec;
 
 use Plack::App::Directory;
+use Plack::App::File;
 use Plack::Middleware::DirIndex::Htaccess;
 use Plack::Middleware::ErrorDocument;
 
-BEGIN {
-    use lib "t";
-    require "app_tests.pl";
-}
-
 my $root = File::Spec->catdir( "t", "root" );
 
-#
-# Note: I couldn't get dzil build to copy the .htaccess file, so we'll
-# create it here.
-#
-open( my $htaccess, '>', File::Spec->catdir( 't', 'root', 'apache', '.htaccess' ) );
-print $htaccess "DirectoryIndex test.html\n";
-close $htaccess;
+# Setup .htaccess for testing
+my $htaccess_path = File::Spec->catfile( $root, 'apache', '.htaccess' );
+open( my $fh, '>', $htaccess_path ) or die "Can't create .htaccess: $!";
+print $fh "DirectoryIndex test.html\n";
+close $fh;
 
-my $app = Plack::App::Directory->new( { root => $root } )->to_app;
-$app = Plack::Middleware::DirIndex::Htaccess->wrap( $app, root => $root );
+# --- Test Set 1: Plack::App::Directory ---
+subtest 'Plack::App::Directory with Defaults' => sub {
+    my $app = Plack::App::Directory->new( { root => $root } )->to_app;
+    $app = Plack::Middleware::DirIndex::Htaccess->wrap( $app, root => $root );
 
-app_tests
-    app   => $app,
-    tests => [
-    {   name    => 'Basic request',
-        request => [ GET => '/index.html' ],
-        content => 'Index',
-        headers => { 'Content-Type' => 'text/html; charset=utf-8', },
-    },
-    {   name    => 'Index request',
-        request => [ GET => '/' ],
-        content => 'Index',
-        headers => { 'Content-Type' => 'text/html; charset=utf-8', },
-    },
-    {   name    => 'Dir with no index file',
-        request => [ GET => '/other/' ],
-        content => qr[<title>Index of /other/</title>],
-        headers => { 'Content-Type' => 'text/html; charset=utf-8', },
-    },
-    {   name    => 'Dir with .htaccess',
-        request => [ GET => '/apache/' ],
-        content => qr[Test],
-        headers => { 'Content-Type' => 'text/html; charset=utf-8', },
-    },
-    {   name    => 'Bad 404 request',
-        request => [ GET => '/missing.html' ],
-        code => 404,
-        content => qr[Not Found]i,
-        headers => { 'Content-Type' => 'text/plain', },
-    },
-    ];
+    test_psgi $app, sub {
+        my $cb = shift;
 
-# Now test setting up alternative index (alt.html) file, not default
-my $app2 = Plack::App::File->new( { root => $root } )->to_app;
-$app2 = Plack::Middleware::DirIndex::Htaccess->wrap( $app2, dir_index => 'alt.html', root => $root );
-$app2 = Plack::Middleware::ErrorDocument->wrap( $app2,
-    404 => "$root/404.html");
+        subtest 'Basic request' => sub {
+            my $res = $cb->( GET '/index.html' );
+            is $res->code, 200;
+            is $res->content, 'Index';
+            is $res->header('Content-Type'), 'text/html; charset=utf-8';
+        };
 
-app_tests
-    app   => $app2,
-    tests => [
-    {   name    => 'Dir with no matching index file (now)',
-        request => [ GET => '/' ],
-        code => 404,
-        content => qr[404 page]i,
-        headers => { 'Content-Type' => 'text/html', },
-    },
-    {   name    => 'Basic request for alternative index file',
-        request => [ GET => '/other/' ],
-        content => 'Alt Index',
-        headers => { 'Content-Type' => 'text/html; charset=utf-8', },
-    },
-    {   name    => 'Bad 404 request',
-        request => [ GET => '/missing.html' ],
-        code => 404,
-        content => qr[404 page]i,
-        headers => { 'Content-Type' => 'text/html', },
-    },
-    ];
+        subtest 'Index request' => sub {
+            my $res = $cb->( GET '/' );
+            is $res->code, 200;
+            is $res->content, 'Index';
+            is $res->header('Content-Type'), 'text/html; charset=utf-8';
+        };
+
+        subtest 'Dir with no index file (Directory Listing)' => sub {
+            my $res = $cb->( GET '/other/' );
+            is $res->code, 200;
+            like $res->content, qr[<title>Index of /other/</title>];
+            is $res->header('Content-Type'), 'text/html; charset=utf-8';
+        };
+
+        subtest 'Dir with .htaccess' => sub {
+            my $res = $cb->( GET '/apache/' );
+            is $res->code, 200;
+            like $res->content, qr[Test];
+            is $res->header('Content-Type'), 'text/html; charset=utf-8';
+        };
+
+        subtest 'Bad 404 request' => sub {
+            my $res = $cb->( GET '/missing.html' );
+            is $res->code, 404;
+            like $res->content, qr[Not Found]i;
+            is $res->header('Content-Type'), 'text/plain';
+        };
+    };
+};
+
+# --- Test Set 2: Plack::App::File with Alt Index ---
+subtest 'Plack::App::File with Alternative Index' => sub {
+    # Note: Switching to Plack::App::File here as per original test logic
+    my $app = Plack::App::File->new( { root => $root } )->to_app;
+    $app = Plack::Middleware::DirIndex::Htaccess->wrap( $app, dir_index => 'alt.html', root => $root );
+    $app = Plack::Middleware::ErrorDocument->wrap( $app, 404 => "$root/404.html" );
+
+    test_psgi $app, sub {
+        my $cb = shift;
+
+        subtest 'Dir with no matching index file (now)' => sub {
+            my $res = $cb->( GET '/' );
+            is $res->code, 404;
+            like $res->content, qr[404 page]i;
+            is $res->header('Content-Type'), 'text/html';
+        };
+
+        subtest 'Basic request for alternative index file' => sub {
+            my $res = $cb->( GET '/other/' );
+            is $res->code, 200;
+            is $res->content, 'Alt Index';
+            is $res->header('Content-Type'), 'text/html; charset=utf-8';
+        };
+
+        subtest 'Bad 404 request' => sub {
+            my $res = $cb->( GET '/missing.html' );
+            is $res->code, 404;
+            like $res->content, qr[404 page]i;
+            is $res->header('Content-Type'), 'text/html';
+        };
+    };
+};
 
 done_testing;

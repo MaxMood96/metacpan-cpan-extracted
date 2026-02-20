@@ -1,5 +1,5 @@
 package WWW::Bund::Role::IO;
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 # ABSTRACT: Interface role for pluggable HTTP backends
 
 use Moo::Role;
@@ -21,7 +21,7 @@ WWW::Bund::Role::IO - Interface role for pluggable HTTP backends
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 

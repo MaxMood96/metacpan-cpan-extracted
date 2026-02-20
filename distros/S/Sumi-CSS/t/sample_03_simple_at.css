@@ -1,0 +1,30 @@
+/* General CSS */
+body {
+    margin: 0;
+    font-family: sans-serif;
+}
+
+h1, h2 {
+    color: teal;
+    font-weight: bold;
+}
+
+p {
+    line-height: 1.5;
+    color: #333;
+}
+
+/* One media query */
+@media (max-width: 600px) {
+    body {
+        font-size: 14px;
+    }
+
+    h1, h2 {
+        color: darkcyan;
+    }
+
+    .container {
+        padding: 10px;
+    }
+}

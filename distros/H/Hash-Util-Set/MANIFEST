@@ -1,6 +1,6 @@
 .gitattributes
 Changes
-eg/dir_compare.pl
+eg/compare_directories.pl
 inc/Module/Install.pm
 inc/Module/Install/Base.pm
 inc/Module/Install/Can.pm
@@ -25,3 +25,4 @@ t/12-set-fuzz.t
 t/20-join-import.t
 t/21-join-basic.t
 t/22-join-fuzz.t
+t/23-join-partition.t

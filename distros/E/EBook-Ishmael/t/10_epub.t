@@ -5,6 +5,7 @@ use strict;
 use Test::More;
 
 use File::Spec;
+use Time::Piece;
 
 use EBook::Ishmael::EBook;
 use EBook::Ishmael::ImageID;
@@ -32,18 +33,20 @@ subtest "spine ok" => sub {
 
 };
 
-is_deeply(
-    $ebook->metadata->hash,
-    {
-        Title => 'gpl3',
-        Language => [ 'en' ],
-        Author => [ 'Unknown' ],
-        ID => 'e3f35c22-0889-4539-9f97-eebf0d391b18',
-        Contributor => [ 'calibre (7.16.0) [https://calibre-ebook.com]' ],
-        Format => 'EPUB 2.0',
-    },
-    "metadata ok"
-);
+is($ebook->metadata->title, 'gpl3', 'title ok');
+is($ebook->metadata->id, 'e3f35c22-0889-4539-9f97-eebf0d391b18', 'id ok');
+is($ebook->metadata->format, 'EPUB 2.0', 'format ok');
+is_deeply([ $ebook->metadata->language ], [ 'en' ], 'language ok');
+is_deeply([ $ebook->metadata->author ], [ 'Unknown' ], 'author ok');
+is_deeply([ $ebook->metadata->contributor ],
+          [ 'calibre (7.16.0) [https://calibre-ebook.com]' ],
+          'contributor ok');
+SKIP: {
+    unless ($Time::Piece::VERSION ge '1.38') {
+        skip "Time::Piece $Time::Piece::VERSION cannot parse timezones correctly", 1;
+    }
+    is($ebook->metadata->created, 978307200, 'created ok');
+}
 
 ok($ebook->html, "html ok");
 

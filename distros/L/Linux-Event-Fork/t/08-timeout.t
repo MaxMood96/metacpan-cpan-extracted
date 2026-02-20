@@ -6,12 +6,13 @@ use Linux::Event::Fork;
 
 # 1) Timeout fires and sends TERM.
 {
-  my $loop = Linux::Event->new;
+  my $loop   = Linux::Event->new;
+  my $forker = Linux::Event::Fork->new($loop);
 
   my $timed = 0;
   my $exit;
 
-  $loop->fork(
+  $forker->spawn(
     timeout => 0.05,
     on_timeout => sub ($child) { $timed++ },
 
@@ -36,12 +37,13 @@ use Linux::Event::Fork;
 
 # 2) Timeout does not fire for fast child.
 {
-  my $loop = Linux::Event->new;
+  my $loop   = Linux::Event->new;
+  my $forker = Linux::Event::Fork->new($loop);
 
   my $timed = 0;
   my $exit;
 
-  $loop->fork(
+  $forker->spawn(
     timeout => 1,
     on_timeout => sub ($child) { $timed++ },
 

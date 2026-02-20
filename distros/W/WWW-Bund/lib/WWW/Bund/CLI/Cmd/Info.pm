@@ -1,5 +1,5 @@
 package WWW::Bund::CLI::Cmd::Info;
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 # ABSTRACT: Show detailed API information
 
 use Moo;
@@ -35,7 +35,7 @@ WWW::Bund::CLI::Cmd::Info - Show detailed API information
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 

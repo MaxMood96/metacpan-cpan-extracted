@@ -1,5 +1,5 @@
 package WWW::Bund::Response::JSON;
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 # ABSTRACT: JSON response — parses content to Perl data structure
 
 use Moo;
@@ -32,7 +32,7 @@ WWW::Bund::Response::JSON - JSON response — parses content to Perl data struct
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 

@@ -1,5 +1,5 @@
 package WWW::Bund::RateLimit;
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 # ABSTRACT: Per-API rate limiting with sliding window
 
 use Moo;
@@ -60,7 +60,7 @@ WWW::Bund::RateLimit - Per-API rate limiting with sliding window
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 

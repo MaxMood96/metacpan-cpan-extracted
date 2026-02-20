@@ -21,6 +21,7 @@ use Linux::Event::Fork;
 $| = 1; # autoflush
 
 my $loop = Linux::Event->new;
+my $forker = Linux::Event::Fork->new($loop);
 
 my $TIMEOUT = $ENV{TIMEOUT} // 0.05;
 my $PAYLOAD_MB = $ENV{MB} // 5;
@@ -32,7 +33,7 @@ print "  payload   = ${PAYLOAD_MB}MiB\n";
 my $timed = 0;
 my $exit;
 
-my $child = $loop->fork(
+my $child = $forker->spawn(
   tag => "stdin-timeout",
 
   stdin_pipe => 1,

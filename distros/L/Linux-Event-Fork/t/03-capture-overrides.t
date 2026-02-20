@@ -6,18 +6,18 @@ use Linux::Event::Fork;
 
 # 1) capture_stderr => 1 without on_stderr should still drain and complete.
 {
-  my $loop = Linux::Event->new;
+  my $loop   = Linux::Event->new;
+  my $forker = Linux::Event::Fork->new($loop);
 
   my $exit;
   my $out = '';
 
-  $loop->fork(
+  $forker->spawn(
     cmd => [
       $^X, '-we',
       q{
         print STDERR ("E" x 20000);
-        print STDOUT "ok
-";
+        print STDOUT "ok\n";
         exit 0;
       },
     ],
@@ -36,22 +36,21 @@ use Linux::Event::Fork;
   ok($exit, 'got exit');
   ok($exit->exited, 'exited');
   is($exit->code, 0, 'exit code 0');
-  is($out, "ok
-", 'stdout captured');
+  is($out, "ok\n", 'stdout captured');
 }
 
 # 2) capture_stdout => 0 should disable capture even if on_stdout is provided.
 {
-  my $loop = Linux::Event->new;
+  my $loop   = Linux::Event->new;
+  my $forker = Linux::Event::Fork->new($loop);
 
   my $exit;
   my $called = 0;
 
-  $loop->fork(
+  $forker->spawn(
     cmd => [
       $^X, '-we',
-      q{ print STDOUT "SHOULD_NOT_BE_CAPTURED
-"; exit 0; },
+      q{ print STDOUT "SHOULD_NOT_BE_CAPTURED\n"; exit 0; },
     ],
 
     capture_stdout => 0,

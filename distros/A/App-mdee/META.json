@@ -43,13 +43,14 @@
       "runtime" : {
          "requires" : {
             "App::Greple" : "10.04",
-            "App::Greple::md" : "0.9902",
             "App::Greple::tee" : "1.04",
             "App::ansicolumn" : "1.51",
             "App::ansiecho" : "0",
             "App::ansifold" : "1.35",
             "App::nup" : "0.9906",
+            "Command::Run" : "0",
             "File::Share" : "0",
+            "Getopt::EX::Config" : "1.0202",
             "Getopt::EX::termcolor" : "0",
             "Getopt::Long::Bash" : "v0.7.2",
             "Term::ANSIColor::Concise" : "3.02",
@@ -65,9 +66,16 @@
       }
    },
    "provides" : {
+      "App::Greple::md" : {
+         "file" : "lib/App/Greple/md.pm",
+         "version" : "1.00"
+      },
+      "App::Greple::md::Step" : {
+         "file" : "lib/App/Greple/md.pm"
+      },
       "App::mdee" : {
          "file" : "lib/App/mdee.pm",
-         "version" : "0.19"
+         "version" : "1.00"
       }
    },
    "release_status" : "stable",
@@ -82,7 +90,7 @@
          "web" : "https://github.com/tecolicom/App-mdee"
       }
    },
-   "version" : "0.19",
+   "version" : "1.00",
    "x_contributors" : [
       "Kazumasa Utashiro <kaz@utashiro.com>"
    ],

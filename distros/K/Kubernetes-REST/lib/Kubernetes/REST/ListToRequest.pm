@@ -1,88 +1,68 @@
 package Kubernetes::REST::ListToRequest;
-  use Moo;
-  use HTTP::Tiny;
-  use JSON::MaybeXS;
-  use Kubernetes::REST::Error;
-  use Kubernetes::REST::HTTPRequest;
-  use Module::Runtime qw/require_module/;
+our $VERSION = '1.001';
+# ABSTRACT: DEPRECATED - v0 compatibility stub
+use strict;
+use warnings;
+warn __PACKAGE__ . " is deprecated, use the new Kubernetes::REST API instead";
 
-  has _json => (is => 'ro', default => sub { JSON::MaybeXS->new });
-
-  sub callinfo_class {
-    my ($self, $call) = @_;
-    my $class = "Kubernetes::REST::Call::$call";
-    require_module($class);
-    return $class;
-  }
-
-  sub params2request {
-    my ($self, $call_ctx) = @_;
-
-    my $call = $call_ctx->method;
-
-    my $call_object = eval { $self->callinfo_class($call)->new(@{ $call_ctx->params }) };
-    if ($@) {
-      my $msg = $@;
-      Kubernetes::REST::Error->throw(
-        type => 'InvalidParameters',
-        message => "Error in parameters to method $call",
-        detail => $msg,
-      );
-    }
-
-    my $body_struct;
-    if ($call_object->can('_body_params')) {
-      foreach my $param (@{ $call_object->_body_params }) {
-        my $key = $param->{ name };
-        my $value = $call_object->$key;
-        next if (not defined $value);
-
-        $body_struct = $value;
-      }
-    }
-
-    my $params;
-    if ($call_object->can('_query_params')) {
-      $params = {};
-      foreach my $param (@{ $call_object->_query_params }) {
-        my $key = $param->{ name };
-        my $value = $call_object->$key;
-        next if (not defined $value);
-  
-        my $location = defined $param->{ location } ? $param->{ location } : $key;
-        $params->{ $location } = $value;
-      }
-    }
-
-    my $url = $call_object->_url;
-    my $url_params;
-    if ($call_object->can('_url_params')) {
-      $url_params = {};
-      foreach my $param (@{ $call_object->_url_params }) {
-        my $key = $param->{ name };
-        my $value = $call_object->$key;
-        next if (not defined $value);
-  
-        my $location = defined $param->{ location } ? $param->{ location } : $key;
-        $url_params->{ $location } = $value;
-      }
-      $url =~ s/\{([a-z0-9_-]+)\}/$url_params->{ $1 }/ge;
-    }
-    my $qstring = HTTP::Tiny->www_form_urlencode($params) if (defined $params);
-
-    my $req = Kubernetes::REST::HTTPRequest->new(
-      server => $call_ctx->server,
-      credentials => $call_ctx->credentials,
-    );
-    $req->method($call_object->_method);
-    $req->uri((defined $qstring) ? "${url}?$qstring" : "${url}");
-    $req->headers({
-      (defined $body_struct) ? ('Content-Type' => 'application/json') : (),
-      Accept => 'application/json',
-    });
-    $req->content($self->_json->encode($body_struct)) if (defined $body_struct);
-
-    return $req;
-  }
 
 1;
+
+__END__
+
+=pod
+
+=encoding UTF-8
+
+=head1 NAME
+
+Kubernetes::REST::ListToRequest - DEPRECATED - v0 compatibility stub
+
+=head1 VERSION
+
+version 1.001
+
+=head1 DESCRIPTION
+
+B<This module is DEPRECATED>. Use L<Kubernetes::REST> directly instead.
+
+See L<Kubernetes::REST/"UPGRADING FROM 0.02"> for migration guide.
+
+=head1 SUPPORT
+
+=head2 Issues
+
+Please report bugs and feature requests on GitHub at
+L<https://github.com/pplu/kubernetes-rest/issues>.
+
+=head2 IRC
+
+Join C<#kubernetes> on C<irc.perl.org> or message Getty directly.
+
+=head1 CONTRIBUTING
+
+Contributions are welcome! Please fork the repository and submit a pull request.
+
+=head1 AUTHORS
+
+=over 4
+
+=item *
+
+Torsten Raudssus <torsten@raudssus.de>
+
+=item *
+
+Jose Luis Martinez Torres <jlmartin@cpan.org> (JLMARTIN, original author, inactive)
+
+=back
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is Copyright (c) 2019 by Jose Luis Martinez.
+
+This is free software, licensed under:
+
+  The Apache License, Version 2.0, January 2004
+
+=cut

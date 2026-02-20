@@ -4,11 +4,12 @@ use strict;
 use warnings;
 
 use Linux::Event;
-use Linux::Event::Fork;   # installs $loop->fork
+use Linux::Event::Fork;
 
 my $loop = Linux::Event->new;
+my $forker = Linux::Event::Fork->new($loop);
 
-$loop->fork(
+$forker->spawn(
   cmd => [
     $^X, '-we',
     q{

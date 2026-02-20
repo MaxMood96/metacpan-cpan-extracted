@@ -1,309 +1,55 @@
-==================================================
-Changes from 1751-07-14 00:00:00 +0000 to present.
-==================================================
-
-------------------------------------------
-version 0.008 at 2025-04-27 01:04:03 +0000
-------------------------------------------
-
-  Change: 845501356fd53e6aa9eb4235c812ec2b1681a8ae
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2025-03-30 04:55:38 +0000
-
-    Adapt Mistral OpenAPI spec to actually be able to be used with our
-    parser. 
-
-  Change: 0702350504470ef922c3ab442cf9cd5e9b2092f8
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2025-03-29 18:22:05 +0000
-
-    Starting for adding Mistral integration, still WIP 
-
-------------------------------------------
-version 0.007 at 2025-01-25 18:29:51 +0000
-------------------------------------------
-
-  Change: e458a79c69f5b4dd38fb59676e01898c94decfa3
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2025-01-25 19:29:51 +0000
-
-    Adding DeepSeek API 
-
-------------------------------------------
-version 0.006 at 2024-09-30 12:07:25 +0000
-------------------------------------------
-
-  Change: 5004555b6f69a68cb43bf3d5b88efae2289094d9
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-09-30 14:07:25 +0000
-
-    More structured examples 
-
-  Change: 84b2e1d7102c64b6f06431bd8c3efe2ea10153cf
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-09-07 04:55:15 +0000
-
-    Added TEST_WITHOUT_STRUCTURED_OUTPUT 
-
-  Change: afc42ad6d1a7e430e47377980d87c92a62923647
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-09-07 04:14:27 +0000
-
-    Adding Structured Output support with sample script 
-
-  Change: e6092c6861053778c6aa347e792e1f10af5cc022
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-08-24 00:14:16 +0000
-
-    Ok, GitHub prefers 4 tab width 
-
-  Change: 8e2c0647b745ba062d3242fa686659634ad65c91
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-08-24 00:13:07 +0000
-
-    Reformatting README.md and adding Groq to it 
-
-  Change: 60e17e9c5ba222c15937a8f54fd2c3aafc9974b6
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-08-23 23:49:14 +0000
-
-    Adding Groq support to langertha_whisper 
-
-  Change: 354de1214fccb4042e2ceacbe9b3ebd40c72e83d
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-08-23 23:34:58 +0000
-
-    Adding Groq Engine 
-
-------------------------------------------
-version 0.005 at 2024-08-22 11:43:31 +0000
-------------------------------------------
-
-  Change: a02bd16589444b93b13e3cd52bbe9659f21efb4e
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-08-22 13:43:31 +0000
-
-    Fixing data type on keep_alive and removing POSIX round usage. 
-
-------------------------------------------
-version 0.004 at 2024-08-13 21:10:57 +0000
-------------------------------------------
-
-  Change: ae525aa4b1af0b6379ad15ec603b05b06540cd55
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-08-13 23:10:57 +0000
-
-    Fixing interpretation of max_tokens on Anthropic (thought its
-    context, but its response size), adapted code and tests 
-
-------------------------------------------
-version 0.003 at 2024-08-10 22:21:01 +0000
-------------------------------------------
-
-  Change: b12b1eaecd2a565a4b58caafe7293ff494bae03f
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-08-11 00:21:01 +0000
-
-    Adding context size and temperature 
-
-------------------------------------------
-version 0.002 at 2024-08-10 00:22:12 +0000
-------------------------------------------
-
-  Change: b3db34a5a0f982ca073ca709aa333980001d83f8
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-08-10 02:22:12 +0000
-
-    Little adapting for encoding 
-
-  Change: 884f2991e8ff644030132ea59de6aac09f5d700c
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-08-10 01:33:02 +0000
-
-    More engines, Transcription API 
-
-  Change: 302f9b4152a9bdd723f789c3f42392366e0cb1a0
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-08-08 19:36:53 +0000
-
-    JSON Grammar example, more emoji! 
-
-------------------------------------------
-version 0.001 at 2024-08-03 20:47:33 +0000
-------------------------------------------
-
-  Change: 33c8e6d4b10c8a4b7574d4b607753280fcdb1136
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-08-03 22:47:33 +0000
-
-    Removed unnecessary requirement 
-
-  Change: 8e2ce727d529eeab0e1db8a777ea04e1188a4e9c
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-08-03 22:44:38 +0000
-
-    Added missing abstract 
-
-  Change: e46f87b56835d05e65fefaf4a43e8a1f00e1b321
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-08-03 22:39:47 +0000
-
-    Fixed names of testfiles 
-
-  Change: 3a3f08165e617072f939e6587a2499da89c905ba
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-08-03 22:37:05 +0000
-
-    Adding README and adapting dist.ini for making first quick releaes 
-
-  Change: 4b9715d255fba770f3e091ad21967433ce8afd29
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-08-01 14:35:52 +0000
-
-    Removing unused Moose class 
-
-  Change: d911fd39e278c5107de6a9149d4989f168b6b653
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-08-01 06:47:55 +0000
-
-    Fixing constructor for Request HTTP, tests for ollama special
-    requests 
-
-  Change: 2cb7fa95aeef21e9555b3a82a954e44655179ab2
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-08-01 06:09:34 +0000
-
-    Adding OpenAI compatibility for Ollama 
-
-  Change: 268b03c8ec6c3b4addbdc006b9bbb4a3aa114f5f
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-07-31 01:14:25 +0000
-
-    Fixing some more refactoring related bugs 
-
-  Change: 0802c83b8263648282c574061aed1ae8a873eca3
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-07-31 00:11:20 +0000
-
-    Better examples 
-
-  Change: c79c9999918f7ed872a9a510b2e873f20db80463
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-07-30 23:57:39 +0000
-
-    Cleanup of WIP files and adapting details for proper UTF8 output on
-    simple chat tools. 
-
-  Change: 990170fb540cb7a96377fa1d3107b052d0e7c4df
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-07-26 06:46:42 +0000
-
-    Trying to integrate the tags call to Ollama for getting model list,
-    WIP 
-
-  Change: a6da8b8e2671d4214de258a5ec658128bef2baed
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-07-26 06:21:49 +0000
-
-    bin tools for easy access 
-
-  Change: 09121777e9ee002bc8cd4f5022483ce04ddd360b
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-07-26 06:04:29 +0000
-
-    Turn ex/embedding into a speed test 
-
-  Change: a0148779afb019d61874fdc9f7b5a9c1674cc9b7
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-07-26 05:49:24 +0000
-
-    Implementing Embedding proper with request testing 
-
-  Change: ebe320bfa28ad2af7a930cc5cab26dd0c0ac72a0
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-07-26 05:16:47 +0000
-
-    Adding tests for base requests 
-
-  Change: 151f5e2a3e263e939006880635200fd3ac83686d
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-07-26 04:44:49 +0000
-
-    Remove legacy test examples 
-
-  Change: cfdf95dd5e65296c2f0ab1e4083b4bb8cd68ff63
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-07-26 04:43:41 +0000
-
-    Restructuring and simplification to get to a v0.001, no mercy! 
-
-  Change: bc407be547d726fb78a06992b957120451bff4ab
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-07-04 04:43:49 +0000
-
-    Ollama with tools synopsis example, still WIP 
-
-  Change: c3426d2f5bb50efaaea7d9b3a0dab98f8ab2bee1
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-07-03 05:59:32 +0000
-
-    Updated Synopsis of Langertha::OpenAI 
-
-  Change: f8d7e391e3327659b1ff94a1c953fa7ef19fbea9
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-07-03 05:55:53 +0000
-
-    Implementing tools on OpenAI, some minor adaptions. Examples with
-    results. 
-
-  Change: 9db6a225f0b7e9f0783c24b676cb4330124dbd98
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-07-03 03:01:34 +0000
-
-    Basic chat implementation made for Ollama and OpenAI 
-
-  Change: d329fa9fd30644e10b6b22e4111a6e3c74a51bea
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-07-02 06:08:57 +0000
-
-    Next structural steps, introducing usage of WWW::Chain classes 
-
-  Change: 1356e3c160386d988c3d123eb939dd1d2465c4a6
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-06-21 05:34:06 +0000
-
-    Next steps for the API evolution, still WIP 
-
-  Change: 2f94304db23b31bfdd673d9ae5e83bb2556939eb
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-06-17 00:56:53 +0000
-
-    More structure 
-
-  Change: 959375d1ac36845dbae98b445306ba250f48bcbd
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-06-16 07:08:51 +0000
-
-    Fixing tests, small details 
-
-  Change: bbc84c27d5198b5b1bfdd06c0477e5064f087224
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-06-16 06:45:03 +0000
-
-    More classes, more roles, more samples and more OpenAPI definitions 
-
-  Change: 8ceaa30cfbe024cae5227d82fb2fb92ba23b62e2
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-06-15 19:26:53 +0000
-
-    More Langertha, more requirements, more testing, more OpenAPI 
-
-  Change: 53c058d40f14f9c6dcc5c6a8c84ff1131e626c92
-  Author: Torsten Raudssus <torsten@raudss.us>
-  Date : 2024-06-14 17:51:38 +0000
-
-    initial commit 
-
-================
-End of releases.
-================
+Revision history for Langertha
+
+0.100     2026-02-20 05:33:44Z
+    - Add MCP (Model Context Protocol) tool calling support
+      - New Langertha::Role::Tools for engine-agnostic tool calling
+      - Anthropic engine: full tool calling support (format_tools,
+        response_tool_calls, format_tool_results, response_text_content)
+      - Async chat_with_tools_f() method for automatic multi-round
+        tool-calling loop with configurable max iterations
+      - Requires Net::Async::MCP for MCP server communication
+    - Add Future::AsyncAwait support for async/await syntax
+      - All _f methods (simple_chat_f, simple_chat_stream_f, etc.)
+      - Streaming with real-time async callbacks
+    - Add streaming support
+      - Synchronous callback, iterator, and Future-based APIs
+      - SSE parsing for OpenAI/Anthropic/Groq/Mistral/DeepSeek
+      - NDJSON parsing for Ollama
+    - Add Gemini engine (Google AI Studio)
+    - Add dynamic model listing via provider APIs with caching
+    - Add Anthropic extended parameters (effort, inference_geo)
+    - Improve POD documentation across all modules
+
+0.008     2025-03-30 04:55:38Z
+    - Add Mistral engine integration
+    - Adapt Mistral OpenAPI spec for our parser
+
+0.007     2025-01-25 19:29:51Z
+    - Add DeepSeek engine
+
+0.006     2024-09-30 14:07:25Z
+    - Add Structured Output support
+    - Add Groq engine and Groq Whisper support
+    - Add TEST_WITHOUT_STRUCTURED_OUTPUT env variable
+
+0.005     2024-08-22 13:43:31Z
+    - Fix data type on keep_alive and remove POSIX round usage
+
+0.004     2024-08-13 23:10:57Z
+    - Fix interpretation of max_tokens on Anthropic (response size, not context)
+
+0.003     2024-08-11 00:21:01Z
+    - Add context size and temperature controls
+
+0.002     2024-08-10 02:22:12Z
+    - Add Whisper Transcription API
+    - Add more engines
+    - Fix encoding issues
+
+0.001     2024-08-03 22:47:33Z
+    - Initial release
+    - Unified Perl interface for LLM APIs
+    - Engines: OpenAI, Anthropic, Ollama
+    - Role-based architecture (Chat, HTTP, Models, JSON, Embedding)
+    - OpenAPI spec-driven request generation
+    - Embedding support

@@ -1,6 +1,8 @@
 Array.pm
 Changes
 examples/check_array_fail.pl
+examples/check_array_items_fail.pl
+examples/check_array_items_ok.pl
 examples/check_array_object_fail.pl
 examples/check_array_object_ok.pl
 examples/check_array_ok.pl
@@ -28,8 +30,9 @@ SIGNATURE
 t/Mo-utils-Array/01-use.t
 t/Mo-utils-Array/02-version.t
 t/Mo-utils-Array/03-check_array.t
-t/Mo-utils-Array/04-check_array_object.t
-t/Mo-utils-Array/05-check_array_required.t
-t/Mo-utils-Array/06-check_array_strings.t
+t/Mo-utils-Array/04-check_array_items.t
+t/Mo-utils-Array/05-check_array_object.t
+t/Mo-utils-Array/06-check_array_required.t
+t/Mo-utils-Array/07-check_array_strings.t
 xt/Mo-utils-Array/01-pod_coverage.t
 xt/Mo-utils-Array/02-pod.t

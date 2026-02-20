@@ -2,22 +2,23 @@ package IPC::Manager::Client::AtomicPipe;
 use strict;
 use warnings;
 
-our $VERSION = '0.000001';
+our $VERSION = '0.000003';
 
 use File::Spec;
 use Atomic::Pipe;
 use Carp qw/croak/;
 use POSIX qw/mkfifo/;
 
-use parent 'IPC::Manager::Base::FS';
+use parent 'IPC::Manager::Base::FS::Handle';
 use Object::HashBase qw{
     permissions
     +pipe
-    +buffer
 };
 
 sub check_path { -p $_[1] }
 sub path_type  { 'FIFO' }
+
+sub handles_for_select { $_[0]->{+PIPE}->rh }
 
 sub make_path {
     my $self  = shift;
@@ -64,38 +65,10 @@ sub pre_suspend_hook {
     $self->SUPER::pre_suspend_hook(@_);
 }
 
-sub pending_messages {
+sub fill_buffer {
     my $self = shift;
-
-    $self->pid_check;
-
-    return 1 if $self->have_resume_file;
-
-    my $p = $self->{+PIPE};
-
-    $p->fill_buffer;
-
-    if ($p->{$p->IN_BUFFER_SIZE}) {
-        push @{$self->{+BUFFER}} => $self->{+PIPE}->read_message;
-        return 1;
-    }
-
-    return 0;
-}
-
-sub ready_messages {
-    my $self = shift;
-
-    $self->pid_check;
-
-    return 1 if $self->have_resume_file;
-
-    return 1 if @{$self->{+BUFFER}};
-
     push @{$self->{+BUFFER}} => $self->{+PIPE}->read_message;
-
-    return 1 if @{$self->{+BUFFER}};
-    return 0;
+    return @{$self->{+BUFFER}} ? 1 : 0;
 }
 
 sub _process_msg {

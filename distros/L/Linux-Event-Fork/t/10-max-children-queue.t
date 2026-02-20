@@ -10,7 +10,7 @@ use Linux::Event::Fork;
 
 my $loop = Linux::Event->new;
 
-my $fork = $loop->fork_helper(max_children => 2);
+my $fork = Linux::Event::Fork->new($loop, max_children => 2);
 
 my $N = $ENV{N} // 10;
 
@@ -21,7 +21,7 @@ my $running = 0;
 my $max_seen = 0;
 
 for my $i (1..$N) {
-  my $h = $loop->fork(
+  my $h = $fork->spawn(
     tag => "job:$i",
     cmd => [ $^X, '-we', 'select(undef,undef,undef,0.05); print "x\n"; exit 0' ],
 

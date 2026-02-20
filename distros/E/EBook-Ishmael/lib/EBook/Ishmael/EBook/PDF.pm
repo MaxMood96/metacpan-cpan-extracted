@@ -1,6 +1,6 @@
 package EBook::Ishmael::EBook::PDF;
 use 5.016;
-our $VERSION = '2.00';
+our $VERSION = '2.01';
 use strict;
 use warnings;
 
@@ -51,9 +51,9 @@ sub _get_metadata {
 
     my %meta = (
         'Author'       => sub { $self->{Metadata}->add_author(shift) },
-        'CreationDate' => sub { $self->{Metadata}->set_created(guess_time(shift)) },
+        'CreationDate' => sub { $self->{Metadata}->set_created(eval { guess_time(shift) }) },
         'Creator'      => sub { $self->{Metadata}->add_contributor(shift) },
-        'ModDate'      => sub { $self->{Metadata}->set_modified(guess_time(shift)) },
+        'ModDate'      => sub { $self->{Metadata}->set_modified(eval { guess_time(shift) }) },
         'PDF version'  => sub { $self->{Metadata}->set_format('PDF ' . shift) },
         'Producer'     => sub { $self->{Metadata}->add_contributor(shift) },
         'Title'        => sub { $self->{Metadata}->set_title(shift) },

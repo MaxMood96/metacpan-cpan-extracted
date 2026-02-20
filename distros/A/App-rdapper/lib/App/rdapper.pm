@@ -32,7 +32,7 @@ use locale;
 use vars qw($VERSION $LH);
 use strict;
 
-$VERSION = '1.23';
+$VERSION = '1.24';
 
 $LH = App::rdapper::l10n->get_handle;
 
@@ -722,7 +722,10 @@ sub print_jcard_property {
             $value = $VCARD_KIND_DISPLAY_NAME{$value} || $value;
 
         } elsif ('TEL' eq uc($property->type)) {
-            if (any { 'fax' eq lc($_) } @{$property->param('type')}) {
+            my $types = $property->param('type');
+            $types = [ $types ] if (q{ARRAY} ne ref($types));
+
+            if (any { 'fax' eq lc($_) } @{$types}) {
                 $label = _('Fax');
 
             } else {

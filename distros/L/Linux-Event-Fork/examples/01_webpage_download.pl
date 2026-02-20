@@ -7,6 +7,7 @@ use Linux::Event;
 use Linux::Event::Fork;
 
 my $loop = Linux::Event->new;
+my $forker = Linux::Event::Fork->new($loop);
 
 my @urls = (
 "https://www.wikipedia.org",
@@ -24,7 +25,7 @@ my @urls = (
 my $pending = @urls;
 
 for my $url (@urls) {
-  $loop->fork(
+  $forker->spawn(
     data => $url,
 
     child => sub {

@@ -1,6 +1,6 @@
 package EBook::Ishmael::EBook::Mobi;
 use 5.016;
-our $VERSION = '2.00';
+our $VERSION = '2.01';
 use strict;
 use warnings;
 
@@ -550,7 +550,7 @@ sub _read_exth {
         103 => sub { $self->{Metadata}->set_description(shift) },
         104 => sub { $self->{Metadata}->set_id(shift) },
         105 => sub { $self->{Metadata}->add_genre(shift) },
-        106 => sub { $self->{Metadata}->set_created(guess_time(shift)) },
+        106 => sub { $self->{Metadata}->set_created(eval { guess_time(shift) }) },
         108 => sub { $self->{Metadata}->add_contributor(shift) },
         114 => sub { $self->{Metadata}->set_format('MOBI ' . shift) },
         201 => sub {
@@ -736,7 +736,12 @@ sub new {
 
     $self->{Metadata}->set_title(substr $hdr, $toff, $tlen);
 
-    if (not defined $self->{Metadata}->created) {
+    if (
+        not defined $self->{Metadata}->created or
+        # If the PDB's created date is greater than the MOBI's EXTH one,
+        # probably means a corrupted EXTH date.
+        $self->{_pdb}->cdate > $self->{Metadata}->created
+    ) {
         $self->{Metadata}->set_created($self->{_pdb}->cdate);
     }
 

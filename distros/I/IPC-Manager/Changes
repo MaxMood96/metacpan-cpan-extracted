@@ -1,3 +1,12 @@
+0.000003  2026-02-19 20:41:21-08:00 America/Los_Angeles
+
+    - Add IO::Select and handle capabilities where possible
+    - Possibly fix UnixSocket
+
+0.000002  2026-02-19 18:57:37-08:00 America/Los_Angeles
+
+    - Attempt to add debugging for UnixSocket issues
+
 0.000001  2025-12-31 20:40:44-08:00 America/Los_Angeles
 
     - Initial Release

@@ -621,3 +621,379 @@
   path: /Nachweisschema/{id}
   method: get
   cache_ttl: 86400
+
+# --- Luftqualitaet API (Umweltbundesamt) ---
+- name: luftqualitaet_airquality
+  api: luftqualitaet
+  base_url: https://www.umweltbundesamt.de/api/air_data/v2
+  path: /airquality/json
+  method: get
+  cache_ttl: 300
+  query_params:
+    - date_from
+    - time_from
+    - date_to
+    - time_to
+    - station
+
+- name: luftqualitaet_airquality_limits
+  api: luftqualitaet
+  base_url: https://www.umweltbundesamt.de/api/air_data/v2
+  path: /airquality/limits
+  method: get
+  cache_ttl: 86400
+
+- name: luftqualitaet_annualbalances
+  api: luftqualitaet
+  base_url: https://www.umweltbundesamt.de/api/air_data/v2
+  path: /annualbalances/json
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - component
+    - year
+    - lang
+
+- name: luftqualitaet_components
+  api: luftqualitaet
+  base_url: https://www.umweltbundesamt.de/api/air_data/v2
+  path: /components/json
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - lang
+    - index
+
+- name: luftqualitaet_measures
+  api: luftqualitaet
+  base_url: https://www.umweltbundesamt.de/api/air_data/v2
+  path: /measures/json
+  method: get
+  cache_ttl: 300
+  query_params:
+    - date_from
+    - time_from
+    - date_to
+    - time_to
+    - station
+    - component
+    - scope
+
+- name: luftqualitaet_measures_limits
+  api: luftqualitaet
+  base_url: https://www.umweltbundesamt.de/api/air_data/v2
+  path: /measures/limits
+  method: get
+  cache_ttl: 86400
+
+- name: luftqualitaet_networks
+  api: luftqualitaet
+  base_url: https://www.umweltbundesamt.de/api/air_data/v2
+  path: /networks/json
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - lang
+    - index
+
+- name: luftqualitaet_scopes
+  api: luftqualitaet
+  base_url: https://www.umweltbundesamt.de/api/air_data/v2
+  path: /scopes/json
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - lang
+    - index
+
+- name: luftqualitaet_stationsettings
+  api: luftqualitaet
+  base_url: https://www.umweltbundesamt.de/api/air_data/v2
+  path: /stationsettings/json
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - lang
+
+- name: luftqualitaet_stationtypes
+  api: luftqualitaet
+  base_url: https://www.umweltbundesamt.de/api/air_data/v2
+  path: /stationtypes/json
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - lang
+
+- name: luftqualitaet_thresholds
+  api: luftqualitaet
+  base_url: https://www.umweltbundesamt.de/api/air_data/v2
+  path: /thresholds/json
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - use
+    - lang
+    - component
+    - scope
+
+- name: luftqualitaet_transgressions
+  api: luftqualitaet
+  base_url: https://www.umweltbundesamt.de/api/air_data/v2
+  path: /transgressions/json
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - component
+    - year
+    - lang
+    - index
+
+- name: luftqualitaet_meta
+  api: luftqualitaet
+  base_url: https://www.umweltbundesamt.de/api/air_data/v2
+  path: /meta/json
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - use
+    - lang
+    - date_from
+    - date_to
+    - time_from
+    - time_to
+
+# --- Abfallnavi API ---
+- name: abfallnavi_orte
+  api: abfallnavi
+  base_url: https://{region}-abfallapp.regioit.de/abfall-app-{region}/rest
+  path: /orte
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - region
+
+- name: abfallnavi_ort
+  api: abfallnavi
+  base_url: https://{region}-abfallapp.regioit.de/abfall-app-{region}/rest
+  path: /orte/{ortId}
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - region
+
+- name: abfallnavi_strassen
+  api: abfallnavi
+  base_url: https://{region}-abfallapp.regioit.de/abfall-app-{region}/rest
+  path: /orte/{ortId}/strassen
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - region
+
+- name: abfallnavi_hausnummern
+  api: abfallnavi
+  base_url: https://{region}-abfallapp.regioit.de/abfall-app-{region}/rest
+  path: /strassen/{strassenId}
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - region
+
+- name: abfallnavi_fraktionen
+  api: abfallnavi
+  base_url: https://{region}-abfallapp.regioit.de/abfall-app-{region}/rest
+  path: /fraktionen
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - region
+
+- name: abfallnavi_fraktionen_hausnummer
+  api: abfallnavi
+  base_url: https://{region}-abfallapp.regioit.de/abfall-app-{region}/rest
+  path: /hausnummern/{hausnummernId}/fraktionen
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - region
+
+- name: abfallnavi_fraktionen_strasse
+  api: abfallnavi
+  base_url: https://{region}-abfallapp.regioit.de/abfall-app-{region}/rest
+  path: /strassen/{strassenId}/fraktionen
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - region
+
+- name: abfallnavi_termine_strasse
+  api: abfallnavi
+  base_url: https://{region}-abfallapp.regioit.de/abfall-app-{region}/rest
+  path: /strassen/{strassenId}/termine
+  method: get
+  cache_ttl: 300
+  query_params:
+    - region
+    - fraktion
+
+- name: abfallnavi_termine_hausnummer
+  api: abfallnavi
+  base_url: https://{region}-abfallapp.regioit.de/abfall-app-{region}/rest
+  path: /hausnummern/{hausnummernId}/termine
+  method: get
+  cache_ttl: 300
+  query_params:
+    - region
+    - fraktion
+
+- name: abfallnavi_kalender_download
+  api: abfallnavi
+  base_url: https://abfallkalender.regioit.de
+  path: /kalender-{region}/downloadfile.jsp
+  method: get
+  cache_ttl: 1800
+  query_params:
+    - region
+    - format
+    - jahr
+    - ort
+    - strasse
+    - hnr
+    - fraktion
+
+# --- Handelsregister API ---
+# --- Marktstammdaten API ---
+- name: marktstammdaten_filter_strom_erzeugung
+  api: marktstammdaten
+  base_url: https://www.marktstammdatenregister.de/MaStR
+  path: /Einheit/EinheitJson/GetFilterColumnsErweiterteOeffentlicheEinheitStromerzeugung
+  method: get
+  cache_ttl: 86400
+
+- name: marktstammdaten_filter_strom_verbrauch
+  api: marktstammdaten
+  base_url: https://www.marktstammdatenregister.de/MaStR
+  path: /Einheit/EinheitJson/GetFilterColumnsErweiterteOeffentlicheEinheitStromverbrauch
+  method: get
+  cache_ttl: 86400
+
+- name: marktstammdaten_filter_gas_erzeugung
+  api: marktstammdaten
+  base_url: https://www.marktstammdatenregister.de/MaStR
+  path: /Einheit/EinheitJson/GetFilterColumnsErweiterteOeffentlicheEinheitGaserzeugung
+  method: get
+  cache_ttl: 86400
+
+- name: marktstammdaten_filter_gas_verbrauch
+  api: marktstammdaten
+  base_url: https://www.marktstammdatenregister.de/MaStR
+  path: /Einheit/EinheitJson/GetFilterColumnsErweiterteOeffentlicheEinheitGasverbrauch
+  method: get
+  cache_ttl: 86400
+
+- name: marktstammdaten_strom_erzeugung
+  api: marktstammdaten
+  base_url: https://www.marktstammdatenregister.de/MaStR
+  path: /Einheit/EinheitJson/GetErweiterteOeffentlicheEinheitStromerzeugung
+  method: get
+  cache_ttl: 1800
+  query_params:
+    - sort
+    - page
+    - pageSize
+    - filter
+
+- name: marktstammdaten_strom_verbrauch
+  api: marktstammdaten
+  base_url: https://www.marktstammdatenregister.de/MaStR
+  path: /Einheit/EinheitJson/GetErweiterteOeffentlicheEinheitStromverbrauch
+  method: get
+  cache_ttl: 1800
+  query_params:
+    - sort
+    - page
+    - pageSize
+    - filter
+
+- name: marktstammdaten_gas_erzeugung
+  api: marktstammdaten
+  base_url: https://www.marktstammdatenregister.de/MaStR
+  path: /Einheit/EinheitJson/GetErweiterteOeffentlicheEinheitGaserzeugung
+  method: get
+  cache_ttl: 1800
+  query_params:
+    - sort
+    - page
+    - pageSize
+    - filter
+
+- name: marktstammdaten_gas_verbrauch
+  api: marktstammdaten
+  base_url: https://www.marktstammdatenregister.de/MaStR
+  path: /Einheit/EinheitJson/GetErweiterteOeffentlicheEinheitGasverbrauch
+  method: get
+  cache_ttl: 1800
+  query_params:
+    - sort
+    - page
+    - pageSize
+    - filter
+
+# --- Pflanzenschutzmittelzulassung API ---
+- name: pflanzenschutzmittelzulassung_mittel
+  api: pflanzenschutzmittelzulassung
+  base_url: https://psm-api.bvl.bund.de/ords/psm/api-v1
+  path: /mittel/
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - kennr
+
+- name: pflanzenschutzmittelzulassung_wirkstoff
+  api: pflanzenschutzmittelzulassung
+  base_url: https://psm-api.bvl.bund.de/ords/psm/api-v1
+  path: /wirkstoff/
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - wirknr
+
+- name: pflanzenschutzmittelzulassung_awg
+  api: pflanzenschutzmittelzulassung
+  base_url: https://psm-api.bvl.bund.de/ords/psm/api-v1
+  path: /awg/
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - awg_id
+    - kennr
+
+- name: pflanzenschutzmittelzulassung_antrag
+  api: pflanzenschutzmittelzulassung
+  base_url: https://psm-api.bvl.bund.de/ords/psm/api-v1
+  path: /antrag/
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - antragnr
+    - antragsteller_nr
+    - kennr
+
+- name: pflanzenschutzmittelzulassung_kode
+  api: pflanzenschutzmittelzulassung
+  base_url: https://psm-api.bvl.bund.de/ords/psm/api-v1
+  path: /kode/
+  method: get
+  cache_ttl: 86400
+  query_params:
+    - kode
+    - kodeliste
+    - sprache
+
+- name: pflanzenschutzmittelzulassung_stand
+  api: pflanzenschutzmittelzulassung
+  base_url: https://psm-api.bvl.bund.de/ords/psm/api-v1
+  path: /stand/
+  method: get
+  cache_ttl: 86400
+

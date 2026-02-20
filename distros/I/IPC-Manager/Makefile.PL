@@ -37,7 +37,7 @@ my %WriteMakefileArgs = (
     "Test2::Tools::QuickDB" => "0.000038",
     "Test2::V1" => "1.302219"
   },
-  "VERSION" => "0.000001",
+  "VERSION" => "0.000003",
   "test" => {
     "TESTS" => "t/*.t"
   }

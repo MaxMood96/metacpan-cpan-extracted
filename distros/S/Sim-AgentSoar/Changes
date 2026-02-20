@@ -1,0 +1,7 @@
+Revision history for Sim-AgentSoar
+
+0.06  2026-02-19
+    - Add missing top-level Sim::AgentSoar module (fixes PAUSE indexing)
+    - Align VERSION_FROM to Sim::AgentSoar
+    - Add module versions for Engine/Node/Worker
+    - Fix POD marker typo in AgentSoar.pm

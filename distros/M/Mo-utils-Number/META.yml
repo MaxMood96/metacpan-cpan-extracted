@@ -6,6 +6,7 @@ build_requires:
   English: 0
   Error::Pure::Utils: 0
   ExtUtils::MakeMaker: 6.59
+  Math::BigInt: 0
   Readonly: 0
   Test::More: 0
   Test::NoWarnings: 0
@@ -36,4 +37,4 @@ resources:
   homepage: https://github.com/michal-josef-spacek/Mo-utils-Number
   license: http://opensource.org/licenses/bsd-license.php
   repository: git://github.com/michal-josef-spacek/Mo-utils-Number
-version: '0.09'
+version: '0.10'

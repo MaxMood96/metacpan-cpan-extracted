@@ -5,6 +5,7 @@ use strict;
 use Test::More;
 
 use File::Spec;
+use Time::Piece;
 
 use EBook::Ishmael::EBook;
 use EBook::Ishmael::EBook::PDF;
@@ -34,10 +35,13 @@ is_deeply(
 
 is($ebook->metadata->title, 'gpl3', 'metadata title ok');
 
-# The dates can differ between pdfinfo versions, so just check to make sure
-# they are present.
-ok($ebook->metadata->created, 'metadata creation date ok');
-ok($ebook->metadata->modified, 'metadata modification date ok');
+SKIP: {
+    unless ($Time::Piece::VERSION ge '1.38') {
+        skip "Time::Piece $Time::Piece::VERSION cannot parse timezones correctly", 2;
+    }
+    is($ebook->metadata->created, 1738943234, 'metadata creation date ok');
+    is($ebook->metadata->modified, 1738943234, 'metadata modification date ok');
+}
 
 ok($ebook->html, "html ok");
 

@@ -30,8 +30,6 @@ my @All = ( @Operations,
             @Membership,
             @Aliases );
 
-my %Api; @Api{@All} = (1) x @All;
-
 {
   package Foo::Operations;
   Test::More::note q[Tag :operations];
@@ -75,7 +73,7 @@ my %Api; @Api{@All} = (1) x @All;
 }
 
 my @exported =
-  grep { $Api{$_} }
+  grep { /^keys_/ }
   grep {; no strict 'refs'; *{"main::$_"}{CODE} }
   sort keys %main::;
 

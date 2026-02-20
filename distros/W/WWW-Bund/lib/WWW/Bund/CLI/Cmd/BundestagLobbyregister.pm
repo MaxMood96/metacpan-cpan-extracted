@@ -1,5 +1,5 @@
 package WWW::Bund::CLI::Cmd::BundestagLobbyregister;
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 # ABSTRACT: Bundestag Lobbyregister API command
 
 use Moo;
@@ -25,7 +25,7 @@ WWW::Bund::CLI::Cmd::BundestagLobbyregister - Bundestag Lobbyregister API comman
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 

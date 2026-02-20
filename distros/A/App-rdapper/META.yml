@@ -4,6 +4,7 @@ author:
   - 'Gavin Brown <gavin.brown@fastmail.uk>'
 build_requires:
   ExtUtils::MakeMaker: '0'
+  LWP::Online: '0'
   Test::More: '0'
   common::sense: '0'
 configure_requires:
@@ -41,5 +42,5 @@ requires:
 resources:
   bugtracker: https://github.com/gbxyz/rdapper/issues
   repository: https://github.com/gbxyz/rdapper.git
-version: '1.23'
+version: '1.24'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

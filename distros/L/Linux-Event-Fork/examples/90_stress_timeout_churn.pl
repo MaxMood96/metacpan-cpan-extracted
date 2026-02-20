@@ -18,6 +18,7 @@ use Linux::Event::Fork;
 #   - child installs a TERM handler that exits 0, so a timed-out child may still be exit_ok
 
 my $loop = Linux::Event->new;
+my $forker = Linux::Event::Fork->new($loop);
 
 my $N = $ENV{N} // 200;
 my $TIMEOUT = 0.02;
@@ -32,7 +33,7 @@ my $exit_ok_normal = 0;         # exit_ok where no timeout fired
 my %timed_by_pid;
 
 for my $i (1..$N) {
-  $loop->fork(
+  $forker->spawn(
     tag => "job:$i",
 
     timeout => $TIMEOUT,

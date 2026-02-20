@@ -14,8 +14,6 @@ my @All = qw[ hash_inner_join
               hash_right_anti_join
               hash_full_anti_join ];
 
-my %Api; @Api{@All} = (1) x @All;
-
 {
   package Foo::All;
   Test::More::note q[Tag :all];
@@ -31,7 +29,7 @@ my %Api; @Api{@All} = (1) x @All;
 }
 
 my @exported =
-  grep { $Api{$_} }
+  grep { /^hash_/ }
   grep {; no strict 'refs'; *{"main::$_"}{CODE} }
   sort keys %main::;
 

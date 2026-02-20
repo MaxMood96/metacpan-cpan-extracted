@@ -1,0 +1,11 @@
+@charset "UTF-8";
+
+@import url("other.css");
+
+@namespace svg url("http://www.w3.org/2000/svg");
+
+@font-face { font-family: X; src: url(x.woff); }
+
+@counter-style fancy { system: fixed; symbols: A B C; }
+
+@property --main-color { syntax: "<color>"; initial-value: red; inherits: false; }

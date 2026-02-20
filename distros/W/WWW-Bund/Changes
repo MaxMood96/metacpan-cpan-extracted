@@ -1,3 +1,33 @@
+0.002     2026-02-19 22:57:28Z
+
+  - Added 4 new working public APIs with 37 endpoints
+    * luftqualitaet (Air Quality) - 13 endpoints - fully functional
+    * marktstammdaten (Market Master Data) - 8 endpoints - fully functional
+    * pflanzenschutzmittelzulassung (Plant Protection Products) - 6 endpoints - fully functional
+    * abfallnavi (Waste Management) - 10 endpoints - fully functional with region parameter
+
+  - Removed 6 non-functional APIs after testing
+    * destatis (API unstable/overloaded, returns inconsistent responses)
+    * handelsregister (HTML form, not REST API)
+    * ddb (requires authentication)
+    * deutschlandatlas (configuration unclear)
+    * mudab (needs JSON POST body support)
+    * regionalatlas (XML parsing errors)
+
+  - Core improvements
+    * Caller: Added POST body support (form-encoded for destatis-like APIs)
+    * Caller: Added base_url parameter substitution (e.g., {region} for abfallnavi)
+    * Luftqualitaet: Corrected all endpoint names and created proper templates
+    * Pflanzenschutzmittelzulassung: Fixed naming mismatch (pflanzenschutzmittel_* → pflanzenschutzmittelzulassung_*)
+
+  - Updated test suite
+    * 46 modules (was 42), all tests passing
+    * 114 total endpoints (was 78, +36 net new)
+
+  - API coverage
+    * 19/26 public APIs now working (15 previous + 4 new)
+    * 5 APIs require authentication (not planned)
+
 0.001     2026-02-13 06:21:13Z
 
   - Initial release with comprehensive German Federal Government API support

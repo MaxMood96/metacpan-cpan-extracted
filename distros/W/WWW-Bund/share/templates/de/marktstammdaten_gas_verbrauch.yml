@@ -1,0 +1,4 @@
+extract: data
+type: list
+columns: 2
+empty: "Keine Einheiten gefunden."

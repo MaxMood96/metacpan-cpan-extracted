@@ -41,17 +41,16 @@ sub MAX_KEY () {   64 }
 sub ROUNDS  () { 1000 }
 
 sub rand_hash {
-  my ($use_tied_hash) = @_;
+  my ($h, $use_tied_hash) = @_;
 
-  my %h;
   if ($use_tied_hash) {
-    tie %h, 'MyTiedHash';
+    tie %$h, 'MyTiedHash';
   }
 
   for my $k (0..MAX_KEY - 1) {
-    $h{$k} = 1 if rand() < 0.5;
+    $h->{$k} = 1 if rand() < 0.5;
   }
-  return %h;
+  return $h;
 }
 
 sub hash_to_vec {
@@ -98,8 +97,9 @@ sub vec_none {
 
 foreach my $round (1..ROUNDS) {
   my $use_tied_hash = ($round >= (ROUNDS - 100));
-  my %x = rand_hash($use_tied_hash);
-  my %y = rand_hash($use_tied_hash);
+
+  my %x; rand_hash(\%x, $use_tied_hash);
+  my %y; rand_hash(\%y, $use_tied_hash);
 
   my $vx = hash_to_vec(\%x);
   my $vy = hash_to_vec(\%y);

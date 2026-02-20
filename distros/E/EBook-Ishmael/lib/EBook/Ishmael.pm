@@ -1,6 +1,6 @@
 package EBook::Ishmael;
 use 5.016;
-our $VERSION = '2.00';
+our $VERSION = '2.01';
 use strict;
 use warnings;
 
@@ -34,8 +34,6 @@ use constant {
 
 # TODO: It would be nice if we had a way to automatically determine an ebook's
 # encoding...
-
-# TODO: Fix executing programs with spaces in their names
 
 $0 =~ s!^.*[/\\]!!;
 

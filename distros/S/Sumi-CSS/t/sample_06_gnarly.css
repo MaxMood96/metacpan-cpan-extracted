@@ -1,0 +1,91 @@
+/* General styles */
+body, html {
+    margin: 0; padding: 0; font-family: "Fira Code", monospace;
+    background: linear-gradient(to right, #f06, #4a90e2);
+}
+
+h1, h2, h3 {
+    color: teal; font-weight: bold;
+}
+
+/* Weird strings and comment inside content */
+p::before {
+    content: "/* not a comment */"; color: #333;
+}
+
+/* Single-line at-rules */
+@charset "UTF-8";
+@import url("theme.css");
+@namespace svg url("http://www.w3.org/2000/svg");
+
+/* Block at-rules */
+@font-face {
+    font-family: "GnarlyFont";
+    src: url("gnarly.woff2") format("woff2");
+}
+
+@counter-style funky-counter {
+    system: cyclic;
+    symbols: "✿" "❀" "✾";
+    suffix: " ";
+}
+
+@property --main-color {
+    syntax: "<color>";
+    initial-value: #ff00ff;
+    inherits: true;
+}
+
+/* Media queries */
+@media (max-width: 1200px), (orientation: portrait) {
+    body { font-size: 16px; }
+
+    @supports (display: grid) {
+        .grid-container, .wrapper {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;
+        }
+    }
+
+    @layer components {
+        .card, .panel { border-radius: 0.5rem; padding: 1rem; }
+    }
+
+    @scope (.dialog) {
+        .header, .footer { background: rgba(0,0,0,0.05); }
+    }
+}
+
+/* Layer and scope outside media */
+@layer utilities {
+    .clearfix::after { content: ""; display: table; clear: both; }
+}
+
+@scope (.modal) {
+    .close-button { cursor: pointer; }
+}
+
+/* Nested weirdness */
+@media (min-width: 800px) {
+    @supports (display: flex) {
+        .flex-container {
+            display: flex; flex-wrap: wrap;
+        }
+    }
+
+    @layer layout {
+        .sidebar, .content { float: left; width: 50%; }
+    }
+}
+
+/* Crazy selector combos */
+ul#menu li:first-child > a:hover,
+ul#menu li:last-child > a:active,
+#footer, .footer p:nth-of-type(2) { color: hotpink !important; }
+
+/* Weird whitespace and comments */
+div
+   , span
+   ,  a
+{ 
+    margin:0 /* inline comment */ ; padding:0;
+}

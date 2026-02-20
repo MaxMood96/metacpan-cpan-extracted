@@ -1,0 +1,4 @@
+0.001     2026-02-20 03:25:51Z
+  - Initial release
+  - InProcess transport for direct MCP::Server interaction
+  - Stdio transport for external MCP server subprocesses

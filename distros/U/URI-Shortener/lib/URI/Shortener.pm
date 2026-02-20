@@ -1,4 +1,4 @@
-package URI::Shortener 1.005;
+package URI::Shortener 1.006;
 
 #ABSTRACT: Shorten URIs so that you don't have to rely on external services
 
@@ -261,6 +261,37 @@ sub _my_dbh {
     return $db;
 }
 
+
+sub migrate {
+    my ($self, $new) = @_;
+    my $from_dbh = $self->_dbh();
+    my $to_dbh   = $new->_dbh();
+
+    my $prefixes = $from_dbh->selectall_arrayref(qq|SELECT * FROM $self->{prefix_tablename}|);
+    _batch_insert($to_dbh, $new->{prefix_tablename}, @$prefixes) if @$prefixes;
+
+    my $uris = $from_dbh->selectall_arrayref(qq|SELECT * FROM $self->{uri_tablename}|);
+    _batch_insert($to_dbh, $new->{uri_tablename}, @$uris) if @$uris;
+}
+
+# Gotta batch stuff cuz sqlite has a 10k param limit
+sub _batch_insert {
+    my ($dbh, $tbl, @data) = @_;
+    my $ncols = @{$data[0]};
+    die "No columns in table $tbl" unless $ncols;
+
+    while (my @batch = splice(@data, 0,int(10_000 / $ncols)) ) {
+        my $param = join(',', map { '?' } @{$batch[0]});
+        my $bind = join(',', map { "($param)" } @batch);
+
+        my $query = "INSERT INTO $tbl VALUES $bind";
+
+        print "Migrating ".scalar(@batch)." rows (".scalar(@data)." left) to $tbl...";
+        $dbh->do($query, undef, map { @$_ } @batch);
+        print "Done.\n"
+    }
+}
+
 1;
 
 __END__
@@ -275,7 +306,7 @@ URI::Shortener - Shorten URIs so that you don't have to rely on external service
 
 =head1 VERSION
 
-version 1.005
+version 1.006
 
 =head1 SYNOPSIS
 
@@ -475,6 +506,15 @@ Transform shortened URI into it's original.
 =head2 prune_before(TIME_T $when)
 
 Remove entries older than UNIX timestamp $when.
+
+=head2 migrate(URI::Shortener $to)
+
+Migrate data in one shortener to another.
+
+Useful when going from sqlite to pg, etc.
+
+Only supports importing into an empty DB.
+To support this would require re-ID/indexing everything which is nontrivial work, but doable.
 
 =head1 BUGS
 

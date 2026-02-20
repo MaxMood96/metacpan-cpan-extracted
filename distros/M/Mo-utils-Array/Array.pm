@@ -9,10 +9,10 @@ use List::Util 1.33 qw(none);
 use Readonly;
 use Scalar::Util qw(blessed);
 
-Readonly::Array our @EXPORT_OK => qw(check_array check_array_object
+Readonly::Array our @EXPORT_OK => qw(check_array check_array_items check_array_object
 	check_array_required check_array_strings);
 
-our $VERSION = 0.02;
+our $VERSION = 0.03;
 
 sub check_array {
 	my ($self, $key) = @_;
@@ -26,6 +26,25 @@ sub check_array {
 		err "Parameter '".$key."' must be a array.",
 			'Value', $self->{$key},
 			'Reference', ($ref eq '' ? 'SCALAR' : $ref),
+		;
+	}
+
+	return;
+}
+
+sub check_array_items {
+	my ($self, $key, $max_items) = @_;
+
+	if (! exists $self->{$key}) {
+		return;
+	}
+
+	check_array($self, $key);
+
+	if (@{$self->{$key}} > $max_items) {
+		err "Parameter '".$key."' has more items than expected.",
+			'Maximum items', $max_items,
+			'Number of items', (scalar @{$self->{$key}}),
 		;
 	}
 
@@ -145,9 +164,10 @@ Mo::utils::Array - Mo array utilities.
 
 =head1 SYNOPSIS
 
- use Mo::utils::Array qw(check_array check_array_object check_array_required check_array_strings);
+ use Mo::utils::Array qw(check_array check_array_items check_array_object check_array_required check_array_strings);
 
  check_array($self, $key);
+ check_array_items($self, $key, $max_items);
  check_array_object($self, $key, $class);
  check_array_required($self, $key);
  check_array_strings($self, $key, $strings_ar);
@@ -165,6 +185,19 @@ Mo array utilities for checking of data objects.
 I<Since version 0.01.>
 
 Check parameter defined by C<$key> which is reference to array.
+
+Put error if check isn't ok.
+
+Returns undef.
+
+=head2 C<check_array_items>
+
+ check_array_items($self, $key, $max_items);
+
+I<Since version 0.03.>
+
+Check parameter defined by C<$key> which is reference to array for number of
+items inside.
 
 Put error if check isn't ok.
 
@@ -215,6 +248,14 @@ Returns undef.
          Parameter '%s' must be a array.
                  Value: %s
                  Reference: %s
+
+ check_array_items():
+         Parameter '%s' must be a array.
+                 Value: %s
+                 Reference: %s
+         Parameter '%s' has more items than expected.
+                 Maximum items: %s
+                 Number of items: %s
 
  check_array_object():
          Parameter '%s' must be a array.
@@ -289,6 +330,49 @@ Returns undef.
 
 =head1 EXAMPLE3
 
+=for comment filename=check_array_items_ok.pl
+
+ use strict;
+ use warnings;
+
+ use Mo::utils::Array qw(check_array_items);
+
+ my $self = {
+         'key' => ['foo'],
+ };
+ check_array_items($self, 'key', 3);
+
+ # Print out.
+ print "ok\n";
+
+ # Output:
+ # ok
+
+=head1 EXAMPLE4
+
+=for comment filename=check_array_items_fail.pl
+
+ use strict;
+ use warnings;
+
+ use Error::Pure;
+ use Mo::utils::Array qw(check_array_items);
+
+ $Error::Pure::TYPE = 'Error';
+
+ my $self = {
+         'key' => ['foo', 'bar', 'baz'],
+ };
+ check_array_items($self, 'key', 2);
+
+ # Print out.
+ print "ok\n";
+
+ # Output like:
+ # #Error [..Array.pm:?] Parameter 'key' has more items than expected.
+
+=head1 EXAMPLE5
+
 =for comment filename=check_array_object_ok.pl
 
  use strict;
@@ -310,7 +394,7 @@ Returns undef.
  # Output:
  # ok
 
-=head1 EXAMPLE4
+=head1 EXAMPLE6
 
 =for comment filename=check_array_object_fail.pl
 
@@ -335,7 +419,7 @@ Returns undef.
  # Output like:
  # #Error [..Array.pm:?] Parameter 'key' with array must contain 'Test::MockObject' objects.
 
-=head1 EXAMPLE5
+=head1 EXAMPLE7
 
 =for comment filename=check_array_required_ok.pl
 
@@ -355,7 +439,7 @@ Returns undef.
  # Output:
  # ok
 
-=head1 EXAMPLE6
+=head1 EXAMPLE8
 
 =for comment filename=check_array_required_fail.pl
 
@@ -378,7 +462,7 @@ Returns undef.
  # Output like:
  # #Error [..Array.pm:?] Parameter 'key' with array must have at least one item.
 
-=head1 EXAMPLE7
+=head1 EXAMPLE9
 
 =for comment filename=check_array_strings_ok.pl
 
@@ -398,7 +482,7 @@ Returns undef.
  # Output:
  # ok
 
-=head1 EXAMPLE8
+=head1 EXAMPLE10
 
 =for comment filename=check_array_strings_fail.pl
 
@@ -471,12 +555,12 @@ L<http://skim.cz>
 
 =head1 LICENSE AND COPYRIGHT
 
-© 2025 Michal Josef Špaček
+© 2025-2026 Michal Josef Špaček
 
 BSD 2-Clause License
 
 =head1 VERSION
 
-0.02
+0.03
 
 =cut

@@ -1,106 +1,94 @@
 package Kubernetes::REST::Networking;
-  use Moo;
-  use Kubernetes::REST::CallContext;
+our $VERSION = '1.001';
+# ABSTRACT: DEPRECATED - v0 API group for Networking resources
+use Moo;
+extends 'Kubernetes::REST::V0Group';
+has '+group' => (default => sub { 'Networking' });
 
-  has param_converter => (is => 'ro', required => 1);
-  has io => (is => 'ro', required => 1);
-  has result_parser => (is => 'ro', required => 1);
-  has server => (is => 'ro', required => 1);
-  has credentials => (is => 'ro', required => 1);
-  has api_version => (is => 'ro', required => 1);
 
-  sub _invoke_unversioned {
-    my ($self, $method, $params) = @_;
-
-    my $call = Kubernetes::REST::CallContext->new(
-      method => $method,
-      params => $params,
-      server => $self->server,
-      credentials => $self->credentials,
-    );
-    my $req = $self->param_converter->params2request($call);
-    my $result = $self->io->call($call, $req);
-    return $self->result_parser->result2return($call, $req, $result);
-  }
-
-  sub _invoke_versioned {
-    my ($self, $method, $params) = @_;
-
-    my $call = Kubernetes::REST::CallContext->new(
-      method => $self->api_version . '::Networking::' . $method,
-      params => $params,
-      server => $self->server,
-      credentials => $self->credentials,
-    );
-    my $req = $self->param_converter->params2request($call);
-    my $result = $self->io->call($call, $req);
-    return $self->result_parser->result2return($call, $req, $result);
-  }
-
-  
-  sub CreateNamespacedNetworkPolicy {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('CreateNamespacedNetworkPolicy', \@params);
-  }
-  
-  sub DeleteCollectionNamespacedNetworkPolicy {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('DeleteCollectionNamespacedNetworkPolicy', \@params);
-  }
-  
-  sub DeleteNamespacedNetworkPolicy {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('DeleteNamespacedNetworkPolicy', \@params);
-  }
-  
-  sub GetAPIResources {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('GetAPIResources', \@params);
-  }
-  
-  sub GetNetworkingAPIGroup {
-    my ($self, @params) = @_;
-    $self->_invoke_unversioned('GetNetworkingAPIGroup', \@params);
-  }
-  
-  sub ListNamespacedNetworkPolicy {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('ListNamespacedNetworkPolicy', \@params);
-  }
-  
-  sub ListNetworkPolicyForAllNamespaces {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('ListNetworkPolicyForAllNamespaces', \@params);
-  }
-  
-  sub PatchNamespacedNetworkPolicy {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('PatchNamespacedNetworkPolicy', \@params);
-  }
-  
-  sub ReadNamespacedNetworkPolicy {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('ReadNamespacedNetworkPolicy', \@params);
-  }
-  
-  sub ReplaceNamespacedNetworkPolicy {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('ReplaceNamespacedNetworkPolicy', \@params);
-  }
-  
-  sub WatchNamespacedNetworkPolicy {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('WatchNamespacedNetworkPolicy', \@params);
-  }
-  
-  sub WatchNamespacedNetworkPolicyList {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('WatchNamespacedNetworkPolicyList', \@params);
-  }
-  
-  sub WatchNetworkPolicyListForAllNamespaces {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('WatchNetworkPolicyListForAllNamespaces', \@params);
-  }
-  
 1;
+
+__END__
+
+=pod
+
+=encoding UTF-8
+
+=head1 NAME
+
+Kubernetes::REST::Networking - DEPRECATED - v0 API group for Networking resources
+
+=head1 VERSION
+
+version 1.001
+
+=head1 SYNOPSIS
+
+    # DEPRECATED API - use the new v1 API instead
+
+    # Old way (deprecated):
+    my $ingresses = $api->Networking->ListNamespacedIngress(namespace => 'default');
+
+    # New way:
+    my $ingresses = $api->list('Ingress', namespace => 'default');
+
+=head1 DESCRIPTION
+
+B<This module is DEPRECATED>. It provides backwards compatibility for the v0 API (Kubernetes::REST 0.01/0.02 by JLMARTIN) which used method names like C<< $api->Networking->ListNamespacedIngress(...) >>.
+
+The new v1 API uses simple methods directly on the main L<Kubernetes::REST> object:
+
+    $api->list('Ingress', ...)
+    $api->list('NetworkPolicy', ...)
+    $api->create($ingress)
+
+See L<Kubernetes::REST/"UPGRADING FROM 0.02"> for migration guide.
+
+=head1 SEE ALSO
+
+=over
+
+=item * L<Kubernetes::REST> - Main module with v1 API
+
+=item * L<Kubernetes::REST::V0Group> - Base class for v0 compatibility layer
+
+=back
+
+=head1 SUPPORT
+
+=head2 Issues
+
+Please report bugs and feature requests on GitHub at
+L<https://github.com/pplu/kubernetes-rest/issues>.
+
+=head2 IRC
+
+Join C<#kubernetes> on C<irc.perl.org> or message Getty directly.
+
+=head1 CONTRIBUTING
+
+Contributions are welcome! Please fork the repository and submit a pull request.
+
+=head1 AUTHORS
+
+=over 4
+
+=item *
+
+Torsten Raudssus <torsten@raudssus.de>
+
+=item *
+
+Jose Luis Martinez Torres <jlmartin@cpan.org> (JLMARTIN, original author, inactive)
+
+=back
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is Copyright (c) 2019 by Jose Luis Martinez.
+
+This is free software, licensed under:
+
+  The Apache License, Version 2.0, January 2004
+
+=cut

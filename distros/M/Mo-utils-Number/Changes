@@ -1,3 +1,6 @@
+0.10 2026-02-19T20:53:19+01:00
+ - Fix test for big numbers. Parentheses help by not rounding.
+
 0.09 2026-02-19T09:58:18+01:00
  - Add aliases (check_int8, ..., check_uint8, ...).
  - Add some tests for int/uint ranges.

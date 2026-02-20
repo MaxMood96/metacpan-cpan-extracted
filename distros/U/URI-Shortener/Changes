@@ -1,5 +1,9 @@
 Revision history for URI-Shorten
 
+1.006 2026-02-19 TEODESIAN
+    - Add needed test dep
+    - Add limited db migration routine.
+
 1.005 2026-02-05 TEODESIAN
     - Remove unneeded deps from BEGIN
     - Add note about GRANTS

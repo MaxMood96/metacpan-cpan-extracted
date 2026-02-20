@@ -1,5 +1,5 @@
 package WWW::Bund::CLI;
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 # ABSTRACT: CLI client for German Federal Government APIs
 
 use Moo;
@@ -440,7 +440,7 @@ WWW::Bund::CLI - CLI client for German Federal Government APIs
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 

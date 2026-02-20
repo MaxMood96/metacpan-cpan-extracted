@@ -15,15 +15,15 @@ use warnings;
 #   you need your own policy (signals/kill/etc) to stop it.
 
 use Linux::Event;
-use Linux::Event::Fork;   # installs $loop->fork and $loop->fork_helper
+use Linux::Event::Fork;
 
 my $loop = Linux::Event->new;
-my $fork = $loop->fork_helper(max_children => 1);
+my $fork = Linux::Event::Fork->new($loop, max_children => 1);
 
 my $jobs = $ENV{JOBS} // 10;
 
 for my $i (1 .. $jobs) {
-  $loop->fork(
+  $fork->spawn(
     tag => "job:$i",
     cmd => [ $^X, '-we', 'select(undef,undef,undef,0.05); print "done\n"; exit 0' ],
 

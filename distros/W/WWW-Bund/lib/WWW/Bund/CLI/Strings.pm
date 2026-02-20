@@ -1,5 +1,5 @@
 package WWW::Bund::CLI::Strings;
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 # ABSTRACT: Localized string provider for bund CLI
 
 use Moo;
@@ -46,7 +46,7 @@ WWW::Bund::CLI::Strings - Localized string provider for bund CLI
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 

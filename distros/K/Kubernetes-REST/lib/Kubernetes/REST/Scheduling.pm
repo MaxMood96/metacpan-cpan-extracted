@@ -1,96 +1,93 @@
 package Kubernetes::REST::Scheduling;
-  use Moo;
-  use Kubernetes::REST::CallContext;
+our $VERSION = '1.001';
+# ABSTRACT: DEPRECATED - v0 API group for Scheduling resources
+use Moo;
+extends 'Kubernetes::REST::V0Group';
+has '+group' => (default => sub { 'Scheduling' });
 
-  has param_converter => (is => 'ro', required => 1);
-  has io => (is => 'ro', required => 1);
-  has result_parser => (is => 'ro', required => 1);
-  has server => (is => 'ro', required => 1);
-  has credentials => (is => 'ro', required => 1);
-  has api_version => (is => 'ro', required => 1);
 
-  sub _invoke_unversioned {
-    my ($self, $method, $params) = @_;
-
-    my $call = Kubernetes::REST::CallContext->new(
-      method => $method,
-      params => $params,
-      server => $self->server,
-      credentials => $self->credentials,
-    );
-    my $req = $self->param_converter->params2request($call);
-    my $result = $self->io->call($call, $req);
-    return $self->result_parser->result2return($call, $req, $result);
-  }
-
-  sub _invoke_versioned {
-    my ($self, $method, $params) = @_;
-
-    my $call = Kubernetes::REST::CallContext->new(
-      method => $self->api_version . '::Scheduling::' . $method,
-      params => $params,
-      server => $self->server,
-      credentials => $self->credentials,
-    );
-    my $req = $self->param_converter->params2request($call);
-    my $result = $self->io->call($call, $req);
-    return $self->result_parser->result2return($call, $req, $result);
-  }
-
-  
-  sub CreatePriorityClass {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('CreatePriorityClass', \@params);
-  }
-  
-  sub DeleteCollectionPriorityClass {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('DeleteCollectionPriorityClass', \@params);
-  }
-  
-  sub DeletePriorityClass {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('DeletePriorityClass', \@params);
-  }
-  
-  sub GetAPIResources {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('GetAPIResources', \@params);
-  }
-  
-  sub GetSchedulingAPIGroup {
-    my ($self, @params) = @_;
-    $self->_invoke_unversioned('GetSchedulingAPIGroup', \@params);
-  }
-  
-  sub ListPriorityClass {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('ListPriorityClass', \@params);
-  }
-  
-  sub PatchPriorityClass {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('PatchPriorityClass', \@params);
-  }
-  
-  sub ReadPriorityClass {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('ReadPriorityClass', \@params);
-  }
-  
-  sub ReplacePriorityClass {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('ReplacePriorityClass', \@params);
-  }
-  
-  sub WatchPriorityClass {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('WatchPriorityClass', \@params);
-  }
-  
-  sub WatchPriorityClassList {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('WatchPriorityClassList', \@params);
-  }
-  
 1;
+
+__END__
+
+=pod
+
+=encoding UTF-8
+
+=head1 NAME
+
+Kubernetes::REST::Scheduling - DEPRECATED - v0 API group for Scheduling resources
+
+=head1 VERSION
+
+version 1.001
+
+=head1 SYNOPSIS
+
+    # DEPRECATED API - use the new v1 API instead
+
+    # Old way (deprecated):
+    my $pcs = $api->Scheduling->ListPriorityClass();
+
+    # New way:
+    my $pcs = $api->list('PriorityClass');
+
+=head1 DESCRIPTION
+
+B<This module is DEPRECATED>. It provides backwards compatibility for the v0 API (Kubernetes::REST 0.01/0.02 by JLMARTIN) which used method names like C<< $api->Scheduling->ListPriorityClass(...) >>.
+
+The new v1 API uses simple methods directly on the main L<Kubernetes::REST> object:
+
+    $api->list('PriorityClass')
+    $api->create($priorityclass)
+
+See L<Kubernetes::REST/"UPGRADING FROM 0.02"> for migration guide.
+
+=head1 SEE ALSO
+
+=over
+
+=item * L<Kubernetes::REST> - Main module with v1 API
+
+=item * L<Kubernetes::REST::V0Group> - Base class for v0 compatibility layer
+
+=back
+
+=head1 SUPPORT
+
+=head2 Issues
+
+Please report bugs and feature requests on GitHub at
+L<https://github.com/pplu/kubernetes-rest/issues>.
+
+=head2 IRC
+
+Join C<#kubernetes> on C<irc.perl.org> or message Getty directly.
+
+=head1 CONTRIBUTING
+
+Contributions are welcome! Please fork the repository and submit a pull request.
+
+=head1 AUTHORS
+
+=over 4
+
+=item *
+
+Torsten Raudssus <torsten@raudssus.de>
+
+=item *
+
+Jose Luis Martinez Torres <jlmartin@cpan.org> (JLMARTIN, original author, inactive)
+
+=back
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is Copyright (c) 2019 by Jose Luis Martinez.
+
+This is free software, licensed under:
+
+  The Apache License, Version 2.0, January 2004
+
+=cut

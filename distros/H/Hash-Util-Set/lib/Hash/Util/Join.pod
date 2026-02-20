@@ -4,28 +4,33 @@
 
 =head1 NAME
 
-Hash::Util::Join - SQL-like join operations on hashes
+Hash::Util::Join - SQL-inspired operations for hash manipulation
 
 =head1 SYNOPSIS
 
-    %result = hash_inner_join %x, %y;       # Keys in both hashes
-    %result = hash_left_join %x, %y;        # All keys from left hash
-    %result = hash_right_join %x, %y;       # All keys from right hash
-    %result = hash_outer_join %x, %y;       # All keys from both hashes
+    %result = hash_inner_join %x, %y;            # Keys in both hashes
+    %result = hash_left_join %x, %y;             # All keys from left hash
+    %result = hash_right_join %x, %y;            # All keys from right hash
+    %result = hash_outer_join %x, %y;            # All keys from both hashes
     
-    %result = hash_left_anti_join %x, %y;   # Keys only in left hash
-    %result = hash_right_anti_join %x, %y;  # Keys only in right hash
-    %result = hash_full_anti_join %x, %y;   # Keys in either but not both
+    %result = hash_left_anti_join %x, %y;        # Keys only in left hash
+    %result = hash_right_anti_join %x, %y;       # Keys only in right hash
+    %result = hash_full_anti_join %x, %y;        # Keys in either but not both
+ 
+    @result = hash_partition %h, sub { ... }     # Partitions a hash into two
+    %result = hash_partition_by %h, sub { ... }  # Partitions hash entries into buckets
 
 =head1 DESCRIPTION
 
-C<Hash::Util::Join> provides SQL-like join operations on Perl hashes.
-Each join function combines two hashes based on their keys, similar to
-database join operations.
+C<Hash::Util::Join> provides SQL-inspired operations for hash manipulation,
+including joins (combining two hashes) and partitioning operations (organizing
+a single hash).
 
 =head1 FUNCTIONS
 
-=head2 hash_inner_join
+=head2 Join Operations
+
+=head3 hash_inner_join
 
    %result = hash_inner_join %x, %y;
    %result = hash_inner_join %x, %y, sub { ... };
@@ -38,7 +43,7 @@ Default: C<sub { $_[2] }> (right value)
 
 Returns key-value pairs in list context, hash reference in scalar context.
 
-=head2 hash_left_join
+=head3 hash_left_join
 
    %result = hash_left_join %x, %y;
    %result = hash_left_join %x, %y, sub { ... };
@@ -52,7 +57,7 @@ Default: C<sub { $_[2] // $_[1] }> (right // left)
 
 Returns key-value pairs in list context, hash reference in scalar context.
 
-=head2 hash_right_join
+=head3 hash_right_join
 
    %result = hash_right_join %x, %y;
    %result = hash_right_join %x, %y, sub { ... };
@@ -66,7 +71,7 @@ Default: C<sub { $_[2] // $_[1] }> (right // left)
 
 Returns key-value pairs in list context, hash reference in scalar context.
 
-=head2 hash_outer_join
+=head3 hash_outer_join
 
    %result = hash_outer_join %x, %y;
    %result = hash_outer_join %x, %y, sub { ... };
@@ -80,7 +85,7 @@ Default: C<sub { $_[2] // $_[1] }> (right // left)
 
 Returns key-value pairs in list context, hash reference in scalar context.
 
-=head2 hash_left_anti_join
+=head3 hash_left_anti_join
 
    %result = hash_left_anti_join %x, %y;
    $result = hash_left_anti_join %x, %y;
@@ -90,7 +95,7 @@ No merge function - values come directly from the left hash.
 
 Returns key-value pairs in list context, hash reference in scalar context.
 
-=head2 hash_right_anti_join
+=head3 hash_right_anti_join
 
    %result = hash_right_anti_join %x, %y;
    $result = hash_right_anti_join %x, %y;
@@ -100,7 +105,7 @@ No merge function - values come directly from the right hash.
 
 Returns key-value pairs in list context, hash reference in scalar context.
 
-=head2 hash_full_anti_join
+=head3 hash_full_anti_join
 
    %result = hash_full_anti_join %x, %y;
    $result = hash_full_anti_join %x, %y;
@@ -109,6 +114,66 @@ Returns keys present in either hash but not in both (symmetric difference).
 No merge function - values come from whichever hash contains the key.
 
 Returns key-value pairs in list context, hash reference in scalar context.
+
+=head2 Partition Operations
+
+=head3 hash_partition
+
+    ($true_hash, $false_hash) = hash_partition %hash, sub { ... };
+
+Partitions a hash into two hashes based on a predicate function. The predicate
+receives C<($key, $value)> for each entry and returns a boolean.
+
+Returns a list of two hash references: entries where the predicate returned 
+true, and entries where it returned false.
+
+    %users = (
+      1 => { name => 'Alice', active => 1 },
+      2 => { name => 'Bob',   active => 0 },
+      3 => { name => 'Carol', active => 1 },
+    );
+    
+    ($active, $inactive) = hash_partition %users, sub {
+      my ($id, $user) = @_;
+      return $user->{active};
+    };
+    
+    # $active:   { 1 => {...}, 3 => {...} }
+    # $inactive: { 2 => {...} }
+
+=head3 hash_partition_by
+
+    %result = hash_partition_by %hash, sub { ... };
+    $result = hash_partition_by %hash, sub { ... };
+
+Partitions hash entries into buckets based on a classification function.
+The classifier receives C<($key, $value)> and returns a bucket name.
+Entries with undefined bucket names are skipped.
+
+Returns key-value pairs in list context, hash reference in scalar context.
+
+    %employees = (
+      1 => { name => 'Alice', dept => 'Eng',   salary => 100000 },
+      2 => { name => 'Bob',   dept => 'Sales', salary =>  90000 },
+      3 => { name => 'Carol', dept => 'Eng',   salary => 110000 },
+    );
+    
+    # Partition by department
+    %by_dept = hash_partition_by %employees, sub {
+      my ($id, $emp) = @_;
+      return $emp->{dept};
+    };
+    
+    # Result:
+    # {
+    #   Eng => {
+    #     1 => { name => 'Alice', dept => 'Eng',   salary => 100000 },
+    #     3 => { name => 'Carol', dept => 'Eng',   salary => 110000 },
+    #   },
+    #   Sales => {
+    #     2 => { name => 'Bob',   dept => 'Sales', salary =>  90000 },
+    #   }
+    # }
 
 =head1 EXAMPLES
 
@@ -129,7 +194,8 @@ Returns key-value pairs in list context, hash reference in scalar context.
     # Left join - all users, with scores if available
     %result = hash_left_join %users, %scores, sub {
       my ($key, $name, $score) = @_;
-      return defined $score ? "$name: $score" : "$name: no score";
+      return "$name: $score"    if defined $score;
+      return "$name: no score";
     };
     # Result: 
     #   (1 => 'Alice: no score', 
@@ -197,15 +263,22 @@ Returns key-value pairs in list context, hash reference in scalar context.
     );
     
     %config = hash_outer_join %system_defaults, %user_config, \&deep_merge;
+    
     # Result:
     #   database => {
-    #     host => 'prod.example.com',
-    #     port => 5432,
-    #     pool => { min => 10, max => 20 }
+    #     host => 'prod.example.com',      # overridden
+    #     port => 5432,                    # from defaults
+    #     pool => {
+    #       min => 10,                     # deeply merged and overridden
+    #       max => 20,                     # deeply merged from defaults
+    #     }
     #   }
     #   logging => {
-    #     level => 'info',
-    #     output => { file => '/var/log/app.log', console => 0 }
+    #     level => 'info',                  # from defaults
+    #     output => { 
+    #       file    => '/var/log/app.log',  # deeply merged from defaults
+    #       console => 0,                   # deeply merged and overridden
+    #     }
     #   }
 
 =head2 Chaining Joins
@@ -236,17 +309,8 @@ Returns key-value pairs in list context, hash reference in scalar context.
 
 =head2 Numeric Operations
 
-    %q1_sales = (
-      alice => 15000,
-      bob   => 22000,
-      carol => 18000,
-    );
-    
-    %q2_sales = (
-      bob   => 25000,
-      carol => 19000,
-      dave  => 21000,
-    );
+    %q1_sales = (alice => 15000, bob => 22000, carol => 18000                );
+    %q2_sales = (                bob => 25000, carol => 19000, dave  => 21000);
     
     # Total sales for employees in both quarters
     %both_quarters = hash_inner_join %q1_sales, %q2_sales, sub {
@@ -280,24 +344,24 @@ B<Incorrect:>
 
     %result = hash_inner_join %x, %y, sub {
       my ($k, $left, $right) = @_;
-      { %$left, %$right }  # ERROR: This is a BLOCK, not a hashref!
+      { %$left, %$right }          # This is a BLOCK, not a hashref!
     };
 
 B<Correct - using return:>
 
     %result = hash_inner_join %x, %y, sub {
       my ($k, $left, $right) = @_;
-      return { %$left, %$right };  # Explicit return
+      return { %$left, %$right };   # Explicit return
     };
 
 B<Correct - using unary plus:>
 
     %result = hash_inner_join %x, %y, sub {
       my ($k, $left, $right) = @_;
-      +{ %$left, %$right }  # Unary + forces hashref context
+      +{ %$left, %$right }          # Unary + forces hashref context
     };
 
-=head2 Distinguishing undef values from missing keys
+=head2 Distinguishing C<undef> values from missing keys
 
 In cases where it is necessary to distinguish C<undef> values from 
 missing keys, the merge function can access the original hashes 
@@ -349,10 +413,32 @@ This guarantee holds for both the Pure Perl (PP) and XS implementations.
 
 =head1 EXPORTS
 
-Nothing is exported by default. Import functions individually or use C<:all>:
+Nothing is exported by default. Functions can be imported individually or by category:
 
-    use Hash::Util::Join qw(hash_inner_join hash_left_join);
-    use Hash::Util::Join qw(:all);
+    use Hash::Util::Join qw(hash_inner_join hash_left_join); # individual functions
+    use Hash::Util::Join qw(:all);                           # all functions
+    use Hash::Util::Join qw(:joins);                         # join operations
+    use Hash::Util::Join qw(:partition);                     # partitioning operations
+
+=head2 Export Tags
+
+=over 4
+
+=item C<:all>
+
+All functions including join and partition operations.
+
+=item C<:joins>
+
+Join operations: C<hash_inner_join>, C<hash_left_join>, C<hash_right_join>
+C<hash_outer_join>, C<hash_left_anti_join>, C<hash_right_anti_join>, 
+C<hash_full_anti_join>.
+
+=item C<:partition>
+
+Partition operations: C<hash_partition>, C<hash_partition_by>.
+
+=back
 
 =head1 SEE ALSO
 

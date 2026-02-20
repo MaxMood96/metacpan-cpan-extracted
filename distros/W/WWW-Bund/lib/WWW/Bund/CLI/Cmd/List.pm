@@ -1,5 +1,5 @@
 package WWW::Bund::CLI::Cmd::List;
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 # ABSTRACT: List all available APIs
 
 use Moo;
@@ -28,7 +28,7 @@ WWW::Bund::CLI::Cmd::List - List all available APIs
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 

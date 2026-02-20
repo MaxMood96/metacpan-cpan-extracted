@@ -1,5 +1,5 @@
 package WWW::Bund::API::DWD;
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 # ABSTRACT: Adapter for DWD API (weather data)
 
 use Moo;
@@ -55,7 +55,7 @@ WWW::Bund::API::DWD - Adapter for DWD API (weather data)
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 

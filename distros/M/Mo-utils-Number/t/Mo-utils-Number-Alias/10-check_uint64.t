@@ -16,7 +16,7 @@ Readonly::Array our @BAD_VALUES => (
 	[-300, "Parameter 'key' must be a natural number."],
 
 	# Right values, but in bad range.
-	[Math::BigInt->new(18446744073709551616), "Parameter 'key' must be a natural number between 0 and 18446744073709551615."],
+	[Math::BigInt->new("18446744073709551616"), "Parameter 'key' must be a natural number between 0 and 18446744073709551615."],
 );
 Readonly::Array our @RIGHT_VALUES => qw(0 2 18446744073709551615);
 

@@ -1,6 +1,6 @@
 package EBook::Ishmael::EBook::Epub;
 use 5.016;
-our $VERSION = '2.00';
+our $VERSION = '2.01';
 use strict;
 use warnings;
 
@@ -128,7 +128,7 @@ sub _read_rootfile {
         } elsif ($name eq 'creator') {
             $self->{Metadata}->add_author($text);
         } elsif ($name eq 'date') {
-            my $t = guess_time($text);
+            my $t = eval { guess_time($text) };
             if (defined $t) {
                 $self->{Metadata}->set_created($t);
             }

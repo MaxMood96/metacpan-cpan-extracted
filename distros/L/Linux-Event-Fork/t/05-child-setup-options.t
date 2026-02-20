@@ -12,11 +12,12 @@ use Linux::Event::Fork;
 #   umask=<...>
 sub run_child (%spawn) {
   my $loop = Linux::Event->new;
+my $forker = Linux::Event::Fork->new($loop);
 
   my $out = '';
   my $exit;
 
-  $loop->fork(
+  $forker->spawn(
     %spawn,
 
     on_stdout => sub ($child, $chunk) { $out .= $chunk },

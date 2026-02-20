@@ -73,8 +73,9 @@ subtest 'no-nup option' => sub {
 
 # Test: no-fold option
 subtest 'no-fold option' => sub {
-    my $out = `$mdee --dryrun --no-fold $test_md 2>&1`;
-    unlike($out, qr/run_fold/, '--no-fold excludes fold from pipeline');
+    my $out = `$mdee -ddn --no-fold $test_md 2>&1`;
+    my ($greple_line) = $out =~ /^(debug: greple .*)$/m;
+    unlike($greple_line // '', qr/foldlist=1\b/, '--no-fold excludes fold from greple');
 };
 
 # Test: no-table option
@@ -91,47 +92,47 @@ subtest 'no-table option' => sub {
 
 # Test: filter option
 subtest 'filter option' => sub {
-    my $out = `$mdee --dryrun -f $test_md 2>&1`;
-    unlike($out, qr/run_fold/, '-f disables fold');
-    unlike($out, qr/run_nup/, '-f disables nup');
-
     my $ddn = `$mdee -ddn -f $test_md 2>&1`;
+    unlike($ddn, qr/foldlist=1\b/, '-f disables fold');
+    unlike($ddn, qr/run_nup/, '-f disables nup');
     like($ddn, qr/table=1/, '-f keeps table enabled');
 };
 
 # Test: style option
 subtest 'style option' => sub {
     my $nup = `COLUMNS=200 $mdee --dryrun --style=nup $test_md 2>&1`;
-    like($nup, qr/run_fold/, '--style=nup includes fold');
     like($nup, qr/run_nup/, '--style=nup includes nup');
+
+    my $nup_ddn2 = `COLUMNS=200 $mdee -ddn --style=nup $test_md 2>&1`;
+    like($nup_ddn2, qr/foldlist=1\b/, '--style=nup includes fold');
 
     my $nup_ddn = `COLUMNS=200 $mdee -ddn --style=nup $test_md 2>&1`;
     like($nup_ddn, qr/table=1/, '--style=nup includes table');
 
     my $pager = `$mdee --dryrun --style=pager $test_md 2>&1`;
-    like($pager, qr/run_fold/, '--style=pager includes fold');
     unlike($pager, qr/run_nup/, '--style=pager excludes nup');
     like($pager, qr/run_pager/, '--style=pager includes pager');
+
+    my $pager_ddn2 = `$mdee -ddn --style=pager $test_md 2>&1`;
+    like($pager_ddn2, qr/foldlist=1\b/, '--style=pager includes fold');
 
     my $pager_ddn = `$mdee -ddn --style=pager $test_md 2>&1`;
     like($pager_ddn, qr/table=1/, '--style=pager includes table');
 
     my $cat = `$mdee --dryrun --style=cat $test_md 2>&1`;
-    like($cat, qr/run_fold/, '--style=cat includes fold');
     unlike($cat, qr/run_nup/, '--style=cat excludes nup');
 
     my $cat_ddn = `$mdee -ddn --style=cat $test_md 2>&1`;
+    like($cat_ddn, qr/foldlist=1\b/, '--style=cat includes fold');
     like($cat_ddn, qr/table=1/, '--style=cat includes table');
 
-    my $filter = `$mdee --dryrun --style=filter $test_md 2>&1`;
-    unlike($filter, qr/run_fold/, '--style=filter excludes fold');
-    unlike($filter, qr/run_nup/, '--style=filter excludes nup');
-
     my $filter_ddn = `$mdee -ddn --style=filter $test_md 2>&1`;
+    unlike($filter_ddn, qr/foldlist=1\b/, '--style=filter excludes fold');
+    unlike($filter_ddn, qr/run_nup/, '--style=filter excludes nup');
     like($filter_ddn, qr/table=1/, '--style=filter includes table');
 
     my $raw_ddn = `$mdee -ddn --style=raw $test_md 2>&1`;
-    unlike($raw_ddn, qr/run_fold/, '--style=raw excludes fold');
+    unlike($raw_ddn, qr/foldlist=1\b/, '--style=raw excludes fold');
     unlike($raw_ddn, qr/table=1/, '--style=raw excludes table');
     like($raw_ddn, qr/table=0/, '--style=raw sends table=0');
     unlike($raw_ddn, qr/run_nup/, '--style=raw excludes nup');
@@ -143,23 +144,24 @@ subtest 'style option' => sub {
 # Test: plain option
 subtest 'plain option' => sub {
     my $out = `$mdee --dryrun -p $test_md 2>&1`;
-    like($out, qr/run_fold/, '-p includes fold');
     unlike($out, qr/run_nup/, '-p excludes nup');
     like($out, qr/run_pager/, '-p includes pager');
 
     my $ddn = `$mdee -ddn -p $test_md 2>&1`;
+    like($ddn, qr/foldlist=1\b/, '-p includes fold');
     like($ddn, qr/table=1/, '-p includes table');
 };
 
 # Test: style override
 subtest 'style override' => sub {
-    my $out = `$mdee --dryrun -f --fold $test_md 2>&1`;
-    like($out, qr/run_fold/, '-f --fold enables fold');
-    unlike($out, qr/run_nup/, '-f --fold keeps nup disabled');
+    my $ddn = `$mdee -ddn -f --fold $test_md 2>&1`;
+    like($ddn, qr/foldlist=1\b/, '-f --fold enables fold');
+    unlike($ddn, qr/run_nup/, '-f --fold keeps nup disabled');
 
     my $out2 = `$mdee --dryrun -p --no-fold $test_md 2>&1`;
-    unlike($out2, qr/run_fold/, '-p --no-fold disables fold');
     like($out2, qr/run_pager/, '-p --no-fold keeps pager');
+    my $ddn2 = `$mdee -ddn -p --no-fold $test_md 2>&1`;
+    unlike($ddn2, qr/foldlist=1\b/, '-p --no-fold disables fold');
 };
 
 # Test: width option
@@ -298,7 +300,7 @@ subtest 'config file defaults' => sub {
         print $fh "default[width]=40\n";
         close $fh;
         my $out = `XDG_CONFIG_HOME=$tmpdir $mdee -ddn --mode=light $test_md 2>&1`;
-        like($out, qr/-sw40\b/, 'default[width]=40 sets fold width');
+        like($out, qr/foldwidth=40\b/, 'default[width]=40 sets fold width');
     }
 
     # Test default[base_color]

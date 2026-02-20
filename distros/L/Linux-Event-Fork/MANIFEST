@@ -33,7 +33,8 @@ t/09-stdin-epipe.t
 t/10-max-children-queue.t
 t/11-drain.t
 t/12-cancel-queued.t
-t/13-loop-methods.t
+t/13-object-api.t
 t/14-introspection.t
+t/15-max-children-runtime.t
 META.yml                                 Module YAML meta-data (added by MakeMaker)
 META.json                                Module JSON meta-data (added by MakeMaker)

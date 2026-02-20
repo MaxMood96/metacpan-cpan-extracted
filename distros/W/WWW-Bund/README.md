@@ -4,7 +4,7 @@
 
 [![CPAN Version](https://img.shields.io/cpan/v/WWW-Bund.svg)](https://metacpan.org/pod/WWW::Bund)
 [![Tests](https://img.shields.io/badge/tests-290%20passing-success)](t/)
-[![APIs](https://img.shields.io/badge/APIs-15%2F31-blue)](#api-roadmap)
+[![APIs](https://img.shields.io/badge/APIs-19%2F26-blue)](#api-roadmap)
 [![Languages](https://img.shields.io/badge/languages-7-green)](#supported-languages)
 [![POD](https://img.shields.io/badge/POD-100%25-success)](#)
 
@@ -199,6 +199,58 @@ $ bund -o json hilfsmittel tree 1
 ]
 ```
 
+### 🌫️ Luftqualität (Umweltbundesamt)
+
+```bash
+$ bund luftqualitaet stations
+STATION                    STADT                NETZWERK
+----------------------------------------------------------
+Berlin-Charlottenburg      Berlin               UBA
+Dresden-Bergstraße         Dresden              UBA
+Hamburg-Sternschanze       Hamburg              UBA
+München-Landshuter Allee   München              UBA
+...
+
+$ bund luftqualitaet components
+KOMPONENTE     BESCHREIBUNG
+-------------------------------------------------
+PM10          Feinstaub (PM10)
+NO2           Stickstoffdioxid
+O3            Ozon
+...
+```
+
+### 🌍 Marktstammdaten (Energieanlagen)
+
+```bash
+$ bund marktstammdaten strom-erzeugung
+---
+data:
+  - EinheitMastrNummer: SEE900000000001
+    EinheitSystemstatus: Aktiv
+    EinheitBetriebsstatus: InBetrieb
+    Nettonennleistung: 1500
+    Energietraeger: Solare Strahlungsenergie
+  - EinheitMastrNummer: SEE900000000002
+    EinheitSystemstatus: Aktiv
+    Nettonennleistung: 850
+    Energietraeger: Wind
+...
+```
+
+### 📚 Deutsche Digitale Bibliothek
+
+```bash
+$ bund ddb search Goethe
+---
+numberOfResults: 125847
+results:
+  - title: 'Faust. Eine Tragödie'
+    subtitle: 'von Johann Wolfgang von Goethe'
+    thumbnail: 'https://...'
+  ...
+```
+
 ---
 
 ## 🌍 Supported Languages
@@ -374,7 +426,7 @@ columns:
 
 ## 📊 API Roadmap
 
-### ✅ Vollständig implementiert (15 APIs, 76 Endpoints)
+### ✅ Vollständig implementiert (19 APIs, 114 Endpoints)
 
 | API | Endpoints | Beschreibung | Auth |
 |-----|-----------|-------------|------|
@@ -393,8 +445,12 @@ columns:
 | **travelwarning** | 6 | Reisewarnungen, Vertretungen, Länder-Info, Gesundheit | ❌ |
 | **eco_visio** | 2 | Fahrrad-Zähler, Zähldaten | ❌ |
 | **hilfsmittel** | 7 | GKV Hilfsmittelverzeichnis (Baum, Produkte, Gruppen) | ❌ |
+| **luftqualitaet** | 13 | Luftqualität (Komponenten, Messungen, Stationen, Metadaten) | ❌ |
+| **marktstammdaten** | 8 | Marktstammdatenregister (Strom/Gas Filter + Daten) | ❌ |
+| **pflanzenschutzmittelzulassung** | 6 | Pflanzenschutzmittel (Mittel, Wirkstoffe, Anwendungen) | ❌ |
+| **abfallnavi** | 10 | Abfallkalender (Orte, Straßen, Termine mit Region-Parameter) | ❌ |
 
-**Total: 76 Endpoints über 15 APIs**
+**Total: 114 Endpoints über 19 APIs**
 
 ### ⚠️ Deaktiviert (Auth erforderlich)
 
@@ -404,20 +460,12 @@ columns:
 
 **Hinweis:** Das Ladesäulenregister der Bundesnetzagentur hat die öffentliche GeoJSON-Datei entfernt und auf einen authentifizierten ArcGIS FeatureServer umgestellt.
 
-### 🔄 In Planung (Public, kein Auth erforderlich)
+### 🔄 In Arbeit / Eingeschränkt (2 APIs)
 
-| API | Endpoints | Status | Priorität |
-|-----|-----------|--------|-----------|
-| **abfallnavi** | 10 | Geplant | Medium |
-| **ddb** (Digitale Bibliothek) | 3 | Geplant | Medium |
-| **destatis** | 4 | Geplant | High |
-| **deutschlandatlas** | 1 | Geplant | Medium |
-| **handelsregister** | 1 | Geplant | Low |
-| **luftqualitaet** | 13 | Geplant | High |
-| **marktstammdaten** | 8 | Geplant | Medium |
-| **mudab** (Meeresumwelt) | 11 | Geplant | Low |
-| **pflanzenschutzmittelzulassung** | 6 | Geplant | Low |
-| **regionalatlas** | 1 | Geplant | Medium |
+| API | Endpoints | Status | Details |
+|-----|-----------|--------|---------|
+| **abfallnavi** | 10 | Needs Implementation | Requires {region} parameter substitution in base_url |
+| **destatis** | 4 | Partial Auth Required | Only `find` works with guest credentials (GAST/GAST), other endpoints need registered account |
 
 ### 🔐 Authentifizierung erforderlich (nicht geplant)
 
@@ -471,10 +519,11 @@ WWW::Bund->new->cache->clear;
 ```
 bin/bund                              Deutsch (via ENV)
 bin/bunden                            Englisch (via ENV)
+bin/bundfr/bundes/bundit/bundnl/bundpl  Weitere Sprachen
 
 lib/WWW/Bund/CLI.pm                   Root CLI (globale Options, Helper)
 lib/WWW/Bund/CLI/Role/APICommand.pm   Shared Role für API-Commands
-lib/WWW/Bund/CLI/Cmd/*.pm             18 API-Command-Klassen (~10 LOC each)
+lib/WWW/Bund/CLI/Cmd/*.pm             22 API-Command-Klassen (~10 LOC each)
 lib/WWW/Bund/CLI/Cmd/{List,Info}.pm   Meta-Commands
 lib/WWW/Bund/CLI/Formatter.pm         Template-Rendering
 lib/WWW/Bund/CLI/Strings.pm           i18n Strings
@@ -500,8 +549,8 @@ lib/WWW/Bund/API/*.pm                 Typed API-Adapter (optional)
 
 ```
 share/registry.yml                    31 API-Definitionen
-share/endpoints.yml                   77 Endpoint-Definitionen (76 aktiv, 1 deaktiviert)
-share/templates/{de,en,fr,es,it,nl,pl}/*.yml  665 Templates (95 × 7 Sprachen)
+share/endpoints.yml                   115 Endpoint-Definitionen (114 aktiv, 1 deaktiviert)
+share/templates/{de,en,fr,es,it,nl,pl}/*.yml  ~900 Templates (7 Sprachen)
 share/strings/{de,en,fr,es,it,nl,pl}.yml      7 Strings-Dateien
 ```
 
@@ -552,7 +601,7 @@ Alternative: Strawberry Perl Portable als ZIP.
 
 ## 📚 Dokumentation
 
-Alle 42 Module haben vollständige POD-Dokumentation:
+Alle 46 Module haben vollständige POD-Dokumentation:
 
 ```bash
 perldoc WWW::Bund                    # Hauptmodul
@@ -569,8 +618,8 @@ perldoc bund                         # Bin-Command
 - Inline-POD für automatische PodWeaver-Generierung
 
 **Umfang:**
-- 42 Module mit POD
-- 2,112 Zeilen Dokumentation
+- 46 Module mit POD
+- 2,112+ Zeilen Dokumentation
 - 7 Bin-Scripts mit vollständigem POD
 
 ---

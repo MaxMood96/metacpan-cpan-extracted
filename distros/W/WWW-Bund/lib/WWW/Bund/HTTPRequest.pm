@@ -1,5 +1,5 @@
 package WWW::Bund::HTTPRequest;
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 # ABSTRACT: Transport-independent HTTP request object
 
 use Moo;
@@ -32,7 +32,7 @@ WWW::Bund::HTTPRequest - Transport-independent HTTP request object
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 

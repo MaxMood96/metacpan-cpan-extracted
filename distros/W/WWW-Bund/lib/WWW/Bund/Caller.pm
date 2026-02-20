@@ -1,5 +1,5 @@
 package WWW::Bund::Caller;
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 # ABSTRACT: Generic API call engine
 
 use Moo;
@@ -42,8 +42,17 @@ sub call {
 
     croak "No base_url for endpoint '$endpoint_name'" unless $base_url;
 
-    # Substitute path parameters
+    # Substitute base_url parameters (e.g., {region} for abfallnavi)
     my %remaining_params = %$params;
+    while ($base_url =~ /\{([^}]+)\}/g) {
+        my $param = $1;
+        croak "Missing base_url parameter '$param' for endpoint '$endpoint_name'"
+            unless exists $remaining_params{$param};
+        my $value = uri_escape(delete $remaining_params{$param});
+        $base_url =~ s/\{\Q$param\E\}/$value/g;  # Replace all occurrences
+    }
+
+    # Substitute path parameters
     while ($path =~ /\{([^}]+)\}/g) {
         my $param = $1;
         croak "Missing path parameter '$param' for endpoint '$endpoint_name'"
@@ -57,15 +66,22 @@ sub call {
     $path =~ s{^/}{};
     my $url = "$base_url/$path";
 
-    # Append query params for GET
-    if ($method eq 'GET' && %remaining_params) {
-        my @pairs;
+    # Prepare body content for POST/PUT
+    my $body_content;
+    my @param_pairs;
+    if (%remaining_params) {
         for my $k (sort keys %remaining_params) {
             my $v = $remaining_params{$k};
             next unless defined $v;
-            push @pairs, uri_escape($k) . '=' . uri_escape($v);
+            push @param_pairs, uri_escape($k) . '=' . uri_escape($v);
         }
-        $url .= '?' . join('&', @pairs) if @pairs;
+    }
+
+    # Append query params for GET, use body for POST/PUT
+    if ($method eq 'GET' && @param_pairs) {
+        $url .= '?' . join('&', @param_pairs);
+    } elsif (($method eq 'POST' || $method eq 'PUT') && @param_pairs) {
+        $body_content = join('&', @param_pairs);
     }
 
     # Rate limiting
@@ -82,10 +98,13 @@ sub call {
         }
     }
 
-    $log->debug("$method $url");
+    $log->debug("$method $url" . ($body_content ? " (body: " . length($body_content) . " bytes)" : ""));
 
     # Build headers
     my %headers = ('Accept' => 'application/json, application/xml, */*');
+    if ($body_content) {
+        $headers{'Content-Type'} = 'application/x-www-form-urlencoded';
+    }
     my $auth_headers = $self->auth->headers_for($api);
     @headers{keys %$auth_headers} = values %$auth_headers;
 
@@ -94,6 +113,7 @@ sub call {
         method  => $method,
         url     => $url,
         headers => \%headers,
+        ($body_content ? (content => $body_content) : ()),
     );
 
     my $response = $self->io->call($req);
@@ -147,7 +167,7 @@ WWW::Bund::Caller - Generic API call engine
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 
@@ -233,7 +253,15 @@ Options:
 =back
 
 Path parameters (C<{roadId}> in path) are substituted first. Remaining
-parameters are added as query params for GET requests.
+parameters are:
+
+=over
+
+=item * Added as query params for GET requests
+
+=item * Sent as form-encoded body for POST/PUT requests (Content-Type: application/x-www-form-urlencoded)
+
+=back
 
 Throws exception on HTTP errors (non-2xx status codes) or missing endpoints.
 

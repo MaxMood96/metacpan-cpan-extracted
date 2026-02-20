@@ -2,7 +2,7 @@ package IPC::Manager::Client::UnixSocket;
 use strict;
 use warnings;
 
-our $VERSION = '0.000001';
+our $VERSION = '0.000003';
 
 use File::Spec;
 use Carp qw/croak/;
@@ -10,15 +10,16 @@ use POSIX qw/mkfifo/;
 use IO::Socket::UNIX qw/SOCK_DGRAM/;
 use IO::Select;
 
-use parent 'IPC::Manager::Base::FS';
+use parent 'IPC::Manager::Base::FS::Handle';
 use Object::HashBase qw{
     +buffer
     +socket
-    +select
 };
 
 sub check_path { -S $_[1] }
 sub path_type  { 'UNIX Socket' }
+
+sub handles_for_select { $_[0]->{+SOCKET} }
 
 sub suspend { croak "suspend is not supported by the UnixSocket driver" }
 
@@ -48,48 +49,15 @@ sub init {
     $self->SUPER::init();
 }
 
-sub select {
+sub fill_buffer {
     my $self = shift;
-
-    return $self->{+SELECT} if $self->{+SELECT};
-
-    my $sel = IO::Select->new;
-    $sel->add($self->{+SOCKET});
-
-    return $self->{+SELECT} = $sel;
-}
-
-sub pending_messages {
-    my $self = shift;
-
-    $self->pid_check;
-
-    return 1 if $self->have_resume_file;
-    return 1 if @{$self->{+BUFFER}};
-
-    my $sel = $self->select;
-
-    return 1 if $sel->can_read(0);
-    return 0;
-}
-
-sub ready_messages {
-    my $self = shift;
-
-    $self->pid_check;
-
-    return 1 if $self->have_resume_file;
-
-    return 1 if @{$self->{+BUFFER}};
-
-    return 0 unless $self->pending_messages;
 
     my $s = $self->{+SOCKET};
     while (my $msg = <$s>) {
         push @{$self->{+BUFFER}} => $msg;
     }
 
-    return 0;
+    return @{$self->{+BUFFER}} ? 1 : 0;
 }
 
 sub get_messages {
@@ -127,6 +95,9 @@ sub send_message {
     ) or die "Cannot connect to socket: $!";
 
     $s->send($self->{+SERIALIZER}->serialize($msg) . "\n") or die "Cannot send message: $!";
+
+    $s->flush // warn "Flush error: $!";
+    close($s) or warn "Could not close socket: $!";
 
     $self->{+STATS}->{sent}->{$msg->{to}}++;
 }

@@ -1,3 +1,6 @@
+0.07 2026-02-20
+  - Added two new partition functions to Hash::Util::Join.
+
 0.06 2026-01-30
   - Included examples in the documentation for Hash::Util::Join
   - Added test cases for tied hashes in XS

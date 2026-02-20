@@ -45,6 +45,10 @@ my @modules = qw(
     WWW::Bund::CLI::Cmd::Ladestationen
     WWW::Bund::CLI::Cmd::EcoVisio
     WWW::Bund::CLI::Cmd::Hilfsmittel
+    WWW::Bund::CLI::Cmd::Luftqualitaet
+    WWW::Bund::CLI::Cmd::Abfallnavi
+    WWW::Bund::CLI::Cmd::Marktstammdaten
+    WWW::Bund::CLI::Cmd::Pflanzenschutzmittelzulassung
 );
 
 plan tests => scalar @modules;

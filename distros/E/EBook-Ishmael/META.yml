@@ -8,6 +8,7 @@ build_requires:
   File::Spec: '0'
   File::Temp: '0.10'
   Test::More: '0'
+  Time::Piece: '0'
 configure_requires:
   ExtUtils::MakeMaker: '0'
 dynamic_config: 1
@@ -41,5 +42,5 @@ requires:
 resources:
   bugtracker: https://codeberg.org/1-1sam/ishmael/issues
   repository: https://codeberg.org/1-1sam/ishmael.git
-version: '2.00'
+version: '2.01'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

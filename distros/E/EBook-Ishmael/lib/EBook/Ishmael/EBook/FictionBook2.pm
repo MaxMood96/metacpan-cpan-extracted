@@ -1,6 +1,6 @@
 package EBook::Ishmael::EBook::FictionBook2;
 use 5.016;
-our $VERSION = '2.00';
+our $VERSION = '2.01';
 use strict;
 use warnings;
 
@@ -76,7 +76,7 @@ sub _read_metadata {
             } elsif ($name eq 'program-used') {
                 $self->{Metadata}->set_software($n->textContent);
             } elsif ($name eq 'date') {
-                my $t = guess_time($n->textContent);
+                my $t = eval { guess_time($n->textContent) };
                 if (defined $t) {
                     $self->{Metadata}->set_created($t);
                 }
@@ -94,7 +94,7 @@ sub _read_metadata {
         for my $n ($publish->childNodes) {
             my $name = $n->nodeName;
             if ($name eq 'year' and not defined $self->{Metadata}->created) {
-                my $t = guess_time($n->textContent);
+                my $t = eval { guess_time($n->textContent) };
                 if (defined $t) {
                     $self->{Metadata}->set_created($t);
                 }

@@ -1,106 +1,68 @@
 package Kubernetes::REST::Settings;
-  use Moo;
-  use Kubernetes::REST::CallContext;
+our $VERSION = '1.001';
+# ABSTRACT: DEPRECATED - v0 compatibility stub
+use strict;
+use warnings;
+warn __PACKAGE__ . " is deprecated, use the new Kubernetes::REST API instead";
 
-  has param_converter => (is => 'ro', required => 1);
-  has io => (is => 'ro', required => 1);
-  has result_parser => (is => 'ro', required => 1);
-  has server => (is => 'ro', required => 1);
-  has credentials => (is => 'ro', required => 1);
-  has api_version => (is => 'ro', required => 1);
 
-  sub _invoke_unversioned {
-    my ($self, $method, $params) = @_;
-
-    my $call = Kubernetes::REST::CallContext->new(
-      method => $method,
-      params => $params,
-      server => $self->server,
-      credentials => $self->credentials,
-    );
-    my $req = $self->param_converter->params2request($call);
-    my $result = $self->io->call($call, $req);
-    return $self->result_parser->result2return($call, $req, $result);
-  }
-
-  sub _invoke_versioned {
-    my ($self, $method, $params) = @_;
-
-    my $call = Kubernetes::REST::CallContext->new(
-      method => $self->api_version . '::Settings::' . $method,
-      params => $params,
-      server => $self->server,
-      credentials => $self->credentials,
-    );
-    my $req = $self->param_converter->params2request($call);
-    my $result = $self->io->call($call, $req);
-    return $self->result_parser->result2return($call, $req, $result);
-  }
-
-  
-  sub CreateNamespacedPodPreset {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('CreateNamespacedPodPreset', \@params);
-  }
-  
-  sub DeleteCollectionNamespacedPodPreset {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('DeleteCollectionNamespacedPodPreset', \@params);
-  }
-  
-  sub DeleteNamespacedPodPreset {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('DeleteNamespacedPodPreset', \@params);
-  }
-  
-  sub GetAPIResources {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('GetAPIResources', \@params);
-  }
-  
-  sub GetSettingsAPIGroup {
-    my ($self, @params) = @_;
-    $self->_invoke_unversioned('GetSettingsAPIGroup', \@params);
-  }
-  
-  sub ListNamespacedPodPreset {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('ListNamespacedPodPreset', \@params);
-  }
-  
-  sub ListPodPresetForAllNamespaces {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('ListPodPresetForAllNamespaces', \@params);
-  }
-  
-  sub PatchNamespacedPodPreset {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('PatchNamespacedPodPreset', \@params);
-  }
-  
-  sub ReadNamespacedPodPreset {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('ReadNamespacedPodPreset', \@params);
-  }
-  
-  sub ReplaceNamespacedPodPreset {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('ReplaceNamespacedPodPreset', \@params);
-  }
-  
-  sub WatchNamespacedPodPreset {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('WatchNamespacedPodPreset', \@params);
-  }
-  
-  sub WatchNamespacedPodPresetList {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('WatchNamespacedPodPresetList', \@params);
-  }
-  
-  sub WatchPodPresetListForAllNamespaces {
-    my ($self, @params) = @_;
-    $self->_invoke_versioned('WatchPodPresetListForAllNamespaces', \@params);
-  }
-  
 1;
+
+__END__
+
+=pod
+
+=encoding UTF-8
+
+=head1 NAME
+
+Kubernetes::REST::Settings - DEPRECATED - v0 compatibility stub
+
+=head1 VERSION
+
+version 1.001
+
+=head1 DESCRIPTION
+
+B<This module is DEPRECATED>. Use L<Kubernetes::REST> directly instead.
+
+See L<Kubernetes::REST/"UPGRADING FROM 0.02"> for migration guide.
+
+=head1 SUPPORT
+
+=head2 Issues
+
+Please report bugs and feature requests on GitHub at
+L<https://github.com/pplu/kubernetes-rest/issues>.
+
+=head2 IRC
+
+Join C<#kubernetes> on C<irc.perl.org> or message Getty directly.
+
+=head1 CONTRIBUTING
+
+Contributions are welcome! Please fork the repository and submit a pull request.
+
+=head1 AUTHORS
+
+=over 4
+
+=item *
+
+Torsten Raudssus <torsten@raudssus.de>
+
+=item *
+
+Jose Luis Martinez Torres <jlmartin@cpan.org> (JLMARTIN, original author, inactive)
+
+=back
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is Copyright (c) 2019 by Jose Luis Martinez.
+
+This is free software, licensed under:
+
+  The Apache License, Version 2.0, January 2004
+
+=cut

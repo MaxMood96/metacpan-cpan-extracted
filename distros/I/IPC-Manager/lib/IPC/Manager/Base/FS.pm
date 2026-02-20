@@ -2,9 +2,10 @@ package IPC::Manager::Base::FS;
 use strict;
 use warnings;
 
-our $VERSION = '0.000001';
+our $VERSION = '0.000003';
 
 use File::Spec;
+use IO::Select;
 
 use Carp qw/croak/;
 use File::Temp qw/tempdir/;
@@ -15,6 +16,7 @@ use Object::HashBase qw{
     +path
     +pidfile
     +resume_file
+    +select
 };
 
 sub pending_messages { 0 }
@@ -27,6 +29,17 @@ sub make_path      { croak "Not Implemented" }
 sub path_type      { croak "Not Implemented" }
 
 sub have_resume_file { -e $_[0]->resume_file }
+
+sub select {
+    my $self = shift;
+
+    return $self->{+SELECT} if $self->{+SELECT};
+
+    my $sel = IO::Select->new;
+    $sel->add($self->handles_for_select);
+
+    return $self->{+SELECT} = $sel;
+}
 
 sub all_stats {
     my $self = shift;

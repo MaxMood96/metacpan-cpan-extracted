@@ -37,7 +37,7 @@ mdee - em·dee, Markdown Easy on the Eyes
 
 # VERSION
 
-Version 0.18
+Version 0.20
 
 # DESCRIPTION
 
@@ -63,8 +63,23 @@ available.  Combine them with [nup(1)](https://metacpan.org/pod/App%3A%3Anup) fo
 The pipeline combines [greple(1)](https://metacpan.org/pod/App%3A%3AGreple) for colorization and
 [nup(1)](https://metacpan.org/pod/App%3A%3Anup) for multi-column paged output.
 
-Supported elements: headers (h1-h6), bold, italic, strikethrough,
-inline code, code blocks, HTML comments, tables, and list items.
+The following elements are highlighted.  Elements marked with
+`--show` can be individually disabled via the `--show` option.
+Others are always processed for structural integrity.
+
+    --show    bold (**bold**, __bold__)
+    --show    italic (*italic*, _italic_)
+    --show    strike (~~strike~~)
+    --show    code_inline (`code`)
+    --show    header, h1-h6 (# heading)
+    --show    horizontal_rule (---, ***, ___)
+    --show    blockquote (> quote)
+    always    code_block (``` or ~~~), code_mark, code_info
+    always    comment (<!-- ... -->)
+    always    link, image, image_link ([text](url))
+
+Tables and list item folding are controlled by `--table` and
+`--fold` options, not by `--show`.
 
 ## Multi-column Layout and Pagination
 
@@ -95,7 +110,7 @@ output to stdout without a pager, suitable for piping into
 other commands.
 
 <div>
-    <p><img width="750" src="https://raw.githubusercontent.com/tecolicom/App-mdee/main/images/3-column.png">
+    <p><img width="1000" src="https://raw.githubusercontent.com/tecolicom/App-mdee/main/images/3-column.png">
 </div>
 
 # INSTALLATION
@@ -134,8 +149,7 @@ Use [tecolicom/tap](https://github.com/tecolicom/homebrew-tap):
 
     - `-dd`
 
-        Above, plus pattern definitions (`pattern[]`) and full command lines
-        for each pipeline stage.
+        Above, plus full command lines for each pipeline stage.
 
 - **-x**, **--trace**, **--no-trace**
 
@@ -248,7 +262,7 @@ bold text, etc.).
     - 2. Share theme directory: installed with the distribution under `auto/share/dist/App-mdee/theme/`
 
     Theme files are Bash scripts that can modify `theme_light[base]`,
-    `theme_dark[base]`, `md_config[]`, and/or `pattern[]`:
+    `theme_dark[base]`, and/or `md_config[]`:
 
         # theme/warm.sh — change base color
         theme_light[base]='<Coral>=y25'
@@ -256,9 +270,6 @@ bold text, etc.).
 
         # theme/hashed.sh — enable closing hashes on h3-h6
         md_config+=(hashed.h3=1 hashed.h4=1 hashed.h5=1 hashed.h6=1)
-
-        # modify matching pattern
-        pattern[link]='...'
 
     Use `-d` to dump current theme values in sourceable format.
 
@@ -382,11 +393,9 @@ bold text, etc.).
     Multiple fields can be specified with commas or by repeating the option.
     The special field `all` affects all fields and is processed first.
 
-    Available fields: `comment`, `bold`, `italic`, `strike`, `h1`,
-    `h2`, `h3`, `h4`, `h5`, `h6`, `code_mark`, `code_info`, `code_block`,
-    `code_inline`, `link`, `image`, `image_link`.
-
-    All fields are enabled by default.
+    See ["DESCRIPTION"](#description) for the list of available fields and
+    elements that are always active.
+    All controllable fields are enabled by default.
 
 ## Layout Options (passed to nup)
 
@@ -452,10 +461,10 @@ The `default` associative array supports the following keys:
 - `default[pane]` - Corresponds to `--pane` (e.g., `2`)
 - `default[base_color]` - Corresponds to `--base-color` (e.g., `DarkCyan`)
 
-**Overriding theme colors and patterns**
+**Overriding theme colors**
 
-Config.sh can modify theme variables and patterns directly, using the
-same mechanism as theme files:
+Config.sh can modify theme variables directly, using the same
+mechanism as theme files:
 
     # Change base color for both modes
     theme_light[base]='<DarkCyan>=y25'
@@ -464,14 +473,11 @@ same mechanism as theme files:
     # Enable md module features
     md_config+=(hashed.h3=1 hashed.h4=1 hashed.h5=1 hashed.h6=1)
 
-    # Modify matching patterns
-    pattern[link]='...'
-
 Changing the base color automatically affects all derived colors
 (h1, h2, bold, etc.) because the md module expands `${base}`
 references.
 
-Use `-d` to dump current theme and pattern values in sourceable format.
+Use `-d` to dump current theme values in sourceable format.
 
 **Color specification format**
 
@@ -539,10 +545,7 @@ The overall data flow is:
     Input File
         |
         v
-    [greple -Mmd] --- Syntax Highlighting + Table Formatting
-        |
-        v
-    [ansifold] --- Text Folding (optional)
+    [greple -Mmd] --- Syntax Highlighting + Table Formatting + Text Folding
         |
         v
     [nup] --- Paged Output (nup style)
@@ -556,14 +559,14 @@ The overall data flow is:
 
 **em·dee** dynamically constructs a pipeline based on enabled options.
 Each stage is defined as a Bash function (e.g., `run_greple`,
-`run_fold`).  The `--dryrun` option displays the function-based
+`run_nup`).  The `--dryrun` option displays the function-based
 pipeline without execution.
 
 ### Processing Stages
 
-The pipeline consists of configurable stages.  Each stage can be
-enabled or disabled independently using `--[no-]fold`, `--[no-]table`,
-and `--[no-]nup` options.
+The pipeline consists of configurable stages.  Processing options
+can be enabled or disabled independently using `--[no-]fold`,
+`--[no-]table`, and `--[no-]nup` options.
 
 #### Syntax Highlighting
 
@@ -589,9 +592,11 @@ Code block detection follows the CommonMark specification:
 
 #### Text Folding
 
-The second stage wraps long lines in list items using [ansifold(1)](https://metacpan.org/pod/App%3A%3Aansifold)
-via [Greple::tee](https://metacpan.org/pod/Greple%3A%3Atee).  It preserves ANSI escape sequences and maintains
-proper indentation for nested lists.
+Text folding is handled within the [App::Greple::md](https://metacpan.org/pod/App%3A%3AGreple%3A%3Amd) module
+using [Greple::tee](https://metacpan.org/pod/Greple%3A%3Atee) to pipe matched regions through
+[ansifold(1)](https://metacpan.org/pod/App%3A%3Aansifold).  It preserves ANSI escape sequences
+and maintains proper indentation for nested lists.  Code blocks,
+HTML comments, and tables are excluded from folding.
 
 Recognized list markers include `*`, `-`, `1.`, `1)`, `#.`,
 and `#)`.  The `#` marker is Pandoc's auto-numbered list syntax.
@@ -624,8 +629,8 @@ chained via `--theme=NAME1,NAME2,...`.
 
 Color definitions are managed by the [App::Greple::md](https://metacpan.org/pod/App%3A%3AGreple%3A%3Amd) module.
 The `theme_light` and `theme_dark` arrays contain only the base
-color.  Theme files can modify the base color, pass configuration
-to the md module via `md_config[]`, and modify `pattern[]`:
+color.  Theme files can modify the base color and pass configuration
+to the md module via `md_config[]`:
 
     # theme/warm.sh — change base color
     theme_light[base]='<Coral>=y25'
@@ -633,9 +638,6 @@ to the md module via `md_config[]`, and modify `pattern[]`:
 
     # theme/hashed.sh — enable closing hashes
     md_config+=(hashed.h3=1 hashed.h4=1 hashed.h5=1 hashed.h6=1)
-
-    # modify matching patterns
-    pattern[link]='...'
 
 The `md_config[]` entries are passed as config parameters to the
 [App::Greple::md](https://metacpan.org/pod/App%3A%3AGreple%3A%3Amd) module.

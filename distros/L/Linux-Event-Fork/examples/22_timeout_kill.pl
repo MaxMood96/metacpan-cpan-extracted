@@ -17,10 +17,11 @@ use Linux::Event;
 use Linux::Event::Fork;
 
 my $loop = Linux::Event->new;
+my $forker = Linux::Event::Fork->new($loop);
 
 my $timeout = $ENV{TIMEOUT} // 0.25;
 
-$loop->fork(
+$forker->spawn(
   tag     => 'timeout-demo',
   timeout => $timeout,
 

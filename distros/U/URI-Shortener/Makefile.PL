@@ -28,11 +28,12 @@ my %WriteMakefileArgs = (
     "warnings" => 0
   },
   "TEST_REQUIRES" => {
+    "DBD::SQLite" => 0,
     "FindBin::libs" => 0,
     "Test::Fatal" => 0,
     "Test::More" => 0
   },
-  "VERSION" => "1.005",
+  "VERSION" => "1.006",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -43,6 +44,7 @@ my %FallbackPrereqs = (
   "Capture::Tiny" => 0,
   "Carp::Always" => 0,
   "Crypt::PRNG" => 0,
+  "DBD::SQLite" => 0,
   "DBI" => 0,
   "File::Touch" => 0,
   "FindBin::libs" => 0,

@@ -37,6 +37,7 @@ t/990-retransmit.t
 t/991-tempo.t
 t/992-chain-notes.t
 t/993-callback.t
+t/994-fetch-one.t
 t/author-critic.t
 t/author-pod-syntax.t
 t/lib/MIDI/Stream/Test.pm

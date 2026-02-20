@@ -7,11 +7,12 @@ use Linux::Event::Fork;
 # Regression: writing to child stdin after the child exits (pipe closed) must not kill the parent (SIGPIPE),
 # and should be handled as EPIPE with clean teardown.
 my $loop = Linux::Event->new;
+my $forker = Linux::Event::Fork->new($loop);
 
 my $timed = 0;
 my $exit;
 
-my $child = $loop->fork(
+my $child = $forker->spawn(
   tag => "epipe",
 
   stdin_pipe => 1,

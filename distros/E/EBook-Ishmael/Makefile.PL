@@ -52,6 +52,7 @@ my %WriteMakefileArgs = (
         'File::Path' => '0',
         'File::Temp' => '0.10',
         'File::Spec' => '0',
+        'Time::Piece' => '0',
     },
     PREREQ_PM => {
         'Archive::Zip' => '0',

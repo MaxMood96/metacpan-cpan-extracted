@@ -1,6 +1,60 @@
 Revision history for Linux-Event-Fork
 
+0.007  2026-02-19
+
+  [ API ]
+
+  - Removed all backward compatibility paths.
+    - Constructor now strictly requires:
+        Linux::Event::Fork->new($loop, %args)
+      The legacy `loop => $loop` form has been removed.
+    - Removed internal `_spawn` alias.
+
+  - spawn() continues to return either:
+        Linux::Event::Fork::Child   (started immediately)
+        Linux::Event::Fork::Request (queued due to max_children)
+
+  [ New Features ]
+
+  - max_children() is now a runtime getter/setter.
+      $fork->max_children($n)
+    Increasing the limit may immediately start queued requests.
+    Decreasing the limit does not affect running children.
+
+  - Linux::Event::Fork::Child:
+      Added:
+        - is_running()
+        - exit()
+    exit() returns a Linux::Event::Fork::Exit object once available.
+
+  - Linux::Event::Fork::Exit:
+      Now stores and exposes pid().
+      Constructor updated to:
+        Exit->new($pid, $status)
+
+  [ Documentation ]
+
+  - Fully rewritten POD for:
+        Linux::Event::Fork
+        Linux::Event::Fork::Child
+        Linux::Event::Fork::Request
+        Linux::Event::Fork::Exit
+  - Removed all references to old injection-based API.
+  - Clarified execution model and capacity/queue semantics.
+
+  [ Tests ]
+
+  - Added t/15-max-children-runtime.t
+      Verifies runtime increase of max_children drains queue correctly.
+  - Removed reliance on deprecated constructor forms.
+
+  [ Internal ]
+
+  - Removed experimental signature warning (no @_ usage in signatured subs).
+  - Cleaned capacity bookkeeping during runtime limit changes.
+
 0.006  2026-02-18
+
   - Timeout escalation: on timeout, send SIGTERM, then optionally escalate to SIGKILL
     after timeout_kill seconds if the child is still running.
   - Canonicalized timeout options: timeout and timeout_kill are the only supported
@@ -12,6 +66,3 @@ Revision history for Linux-Event-Fork
     leaked timers when children exit or are detached.
   - Documentation: clarified execution model (callbacks run in parent; child runs
     exec/callback only) and expanded SYNOPSIS/options coverage.
-
-0.005  (previous release)
-  - (see prior entries)

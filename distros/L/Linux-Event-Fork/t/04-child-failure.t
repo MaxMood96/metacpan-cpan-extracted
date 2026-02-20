@@ -5,11 +5,12 @@ use Linux::Event;
 use Linux::Event::Fork;
 
 my $loop = Linux::Event->new;
+my $forker = Linux::Event::Fork->new($loop);
 
 my $stderr = '';
 my $exit;
 
-$loop->fork(
+$forker->spawn(
   capture_stderr => 1,
 
   child => sub {

@@ -5,12 +5,13 @@ use Linux::Event;
 use Linux::Event::Fork;
 
 my $loop = Linux::Event->new;
+my $forker = Linux::Event::Fork->new($loop);
 
 my $got_out = '';
 my $got_err = '';
 my $got_exit;
 
-$loop->fork(
+$forker->spawn(
   cmd => [
     $^X, '-we',
     q{

@@ -2,7 +2,7 @@ package PAGI::Server;
 use strict;
 use warnings;
 
-our $VERSION = '0.001010';
+our $VERSION = '0.001011';
 
 # Future::XS support - opt-in via PAGI_FUTURE_XS=1 environment variable
 # Must be loaded before Future to take effect, so we check env var in BEGIN
@@ -123,7 +123,7 @@ B<Currently supported:>
 
 =item * WebSocket (RFC 6455, including over HTTP/2 via RFC 8441)
 
-=item * Server-Sent Events (SSE)
+=item * Server-Sent Events (SSE, including over HTTP/2)
 
 =back
 
@@ -786,6 +786,10 @@ B<CLI:> C<--sse-idle-timeout 120>
 B<Note:> For SSE connections that may be legitimately idle, use
 C<< $sse->keepalive($interval) >> to send periodic comment keepalives.
 
+B<HTTP/2 caveat:> Over HTTP/2 this timeout applies at the connection level,
+not per-stream. See L<PAGI::Server::Connection/SSE Idle Timeout over HTTP/2>
+for details and recommendations.
+
 =item heartbeat_timeout => $seconds
 
 Worker liveness timeout in seconds. Only active in multi-worker mode
@@ -1329,10 +1333,15 @@ to ensure proper lifespan.shutdown handling.
     kill -INT <pid>
     # or press Ctrl-C in terminal
 
-=item B<SIGHUP> - Graceful restart (multi-worker only)
+=item B<SIGHUP> - Graceful worker restart (multi-worker only)
 
-Performs a zero-downtime restart by spawning new workers before terminating
-old ones. Useful for deploying new code without dropping connections.
+Performs a zero-downtime worker restart by spawning new workers before
+terminating old ones. Useful for recycling workers to reclaim leaked memory
+or reset per-worker state without dropping active connections.
+
+B<Note:> This does NOT reload application code. New workers fork from the
+existing parent process and inherit the same loaded code. For code deploys,
+perform a full server restart (SIGTERM + start).
 
     kill -HUP <pid>
 

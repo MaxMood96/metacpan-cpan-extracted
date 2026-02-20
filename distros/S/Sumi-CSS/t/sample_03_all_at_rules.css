@@ -1,0 +1,124 @@
+/* ===========================================
+   CSS Sample with All Possible @rules
+   =========================================== */
+
+/* 1. @charset */
+@charset "UTF-8";
+
+/* 2. @import */
+@import url("theme.css") screen and (min-width: 900px);
+
+/* 3. @namespace */
+@namespace svg url(http://www.w3.org/2000/svg);
+
+/* 4. @font-face */
+@font-face {
+    font-family: "OpenSans";
+    src: url("OpenSans-Regular.woff2") format("woff2"),
+         url("OpenSans-Regular.woff") format("woff");
+    font-weight: 400;
+    font-style: normal;
+}
+
+/* 5. @keyframes */
+@keyframes slidein {
+    from {
+        transform: translateX(-100%);
+    }
+    to {
+        transform: translateX(0%);
+    }
+}
+
+/* 6. @media */
+@media screen and (max-width: 768px) {
+    body {
+        font-size: 14px;
+    }
+}
+
+/* 7. @supports */
+@supports (display: grid) {
+    .grid-container {
+        display: grid;
+        grid-template-columns: 1fr 2fr;
+    }
+}
+
+/* 8. @layer */
+@layer utilities {
+    .text-center {
+        text-align: center;
+    }
+}
+
+/* 9. @scope */
+@scope (.card) {
+    p {
+        color: #555;
+    }
+}
+
+/* 10. @counter-style */
+@counter-style fancy-counter {
+    system: cyclic;
+    symbols: "☀" "☁" "☂" "☃";
+    suffix: " ";
+}
+
+/* 11. @property */
+@property --main-color {
+    syntax: "<color>";
+    inherits: true;
+    initial-value: black;
+}
+
+/* 12. @viewport (deprecated, some browsers) */
+@viewport {
+    width: device-width;
+    zoom: 1.0;
+}
+
+/* 13. @supports with feature query (nested example) */
+@supports (display: grid) and (color: var(--main-color)) {
+    body {
+        color: var(--main-color);
+    }
+}
+
+/* 14. @document (deprecated, Firefox only) */
+@document url("https://example.com/") {
+    body {
+        background: yellow;
+    }
+}
+
+/* 15. @import with layer (CSS Cascade Layers) */
+@import url("utilities.css") layer(utilities);
+
+/* 16. @media with supports (combined queries) */
+@media (min-width: 600px) and (max-width: 1200px) {
+    @supports (display: flex) {
+        .container {
+            display: flex;
+        }
+    }
+}
+
+/* Example usage in regular CSS rules */
+body {
+    font-family: "OpenSans", sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+h1 {
+    color: teal;
+    animation: slidein 2s ease-in-out;
+}
+
+.card {
+    padding: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 0.5rem;
+}

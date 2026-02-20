@@ -1,5 +1,5 @@
 package WWW::Bund::CLI::Cmd::Ladestationen;
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 # ABSTRACT: Ladestationen (Ladesaeulenregister) API command
 
 use Moo;
@@ -25,7 +25,7 @@ WWW::Bund::CLI::Cmd::Ladestationen - Ladestationen (Ladesaeulenregister) API com
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 

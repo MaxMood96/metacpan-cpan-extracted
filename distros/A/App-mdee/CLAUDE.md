@@ -9,20 +9,26 @@ em·dee (mdee: Markdown, Easy on the Eyes) is a Markdown viewer command implemen
 | Tool | Package | Role |
 |------|---------|------|
 | greple | App::Greple | Regex-based syntax highlighting |
-| greple -Mmd | App::Greple::md | Markdown syntax highlighting module |
-| ansifold | App::ansifold | ANSI-aware line folding |
+| ansifold | App::ansifold | ANSI-aware line folding (via md module) |
 | ansicolumn | App::ansicolumn | Table column alignment (via md module) |
 | nup | App::nup | Multi-column paged output |
 | ansiecho | App::ansiecho | Color output utility |
 | getoptlong.sh | Getopt::Long::Bash | Bash option parsing |
 | termcolor | Getopt::EX::termcolor | Terminal luminance detection |
+| - | Getopt::EX::Config | Module option handling |
+| - | Command::Run | Function call wrapper for ansicolumn |
 
 ## Project Structure
 
 - `script/mdee` - Main script (Bash) with POD documentation
 - `lib/App/mdee.pm` - Perl module (version info only, generated from script/mdee)
-- `t/` - Test files
-- `t/test.md` - Color test file
+- `lib/App/Greple/md.pm` - Greple module for Markdown syntax highlighting (bundled)
+- `t/00_compile.t` - Compile tests for both App::mdee and App::Greple::md
+- `t/01_mdee.t` - mdee command integration tests
+- `t/02_colorize.t` - md module colorize tests (uses t/runner)
+- `t/Util.pm` - Test helper for greple-based tests
+- `t/runner/` - Submodule (p5-script-runner) for finding greple path
+- `t/test.md` - Test Markdown file
 
 **Important:** Documentation (POD) must be written in `script/mdee`. At release time, `minil release` hooks append the POD from `script/mdee` to `lib/App/mdee.pm` (see `minil.toml`).
 
@@ -48,7 +54,7 @@ Dark theme inherits undefined keys from light immediately after declaration (bef
 
 #### Theme as Transformation
 
-Themes are not independent definitions — they are **transformations applied to `theme_light`/`theme_dark` and optionally `pattern[]`**. Each theme file is a Bash script that modifies these arrays directly:
+Themes are not independent definitions — they are **transformations applied to `theme_light`/`theme_dark` and optionally `md_config[]`**. Each theme file is a Bash script that modifies these arrays directly:
 
 ```bash
 # share/theme/warm.sh — change base color
@@ -57,14 +63,8 @@ theme_dark[base]='<Coral>=y80'
 ```
 
 ```bash
-# share/theme/hashed.sh — append closing hashes to h3-h6
-for _mode in light dark; do
-    declare -n _theme="theme_${_mode}"
-    _theme[h3]+=';sub{s/(?<!#)$/ ###/r}'
-    _theme[h4]+=';sub{s/(?<!#)$/ ####/r}'
-    _theme[h5]+=';sub{s/(?<!#)$/ #####/r}'
-    _theme[h6]+=';sub{s/(?<!#)$/ ######/r}'
-done
+# share/theme/hashed.sh — enable closing hashes on h3-h6 via md module config
+md_config+=(hashed.h3=1 hashed.h4=1 hashed.h5=1 hashed.h6=1)
 ```
 
 #### Chaining Themes
@@ -79,13 +79,9 @@ mdee --no-theme --theme=warm        # warm only (clear default first)
 ```
 
 Processing flow:
-1. `patterns_default` → `pattern[]` associative array is built (same-name entries joined with `|`)
-2. Each theme file is sourced in order (modifies `theme_light`/`theme_dark` and optionally `pattern[]`)
-3. `load_theme "$mode"` copies the final result to `colors[]`
-4. `expand_theme` expands `${base}` references
-5. `pattern[]` entries with corresponding `colors[]` are passed to greple via `add_pattern`
-
-**Note:** Same-name patterns in `patterns_default` are combined with `|` in `pattern[]`. When passed to greple, `add_pattern` wraps each pattern with `(?|...)` (branch reset group) to preserve capture group numbering across alternatives.
+1. Each theme file is sourced in order (modifies `theme_light`/`theme_dark` and/or `md_config[]`)
+2. `load_theme "$mode"` copies the final result to `colors[]`
+3. `expand_theme` expands `${base}` references
 
 #### Theme File Locations
 
@@ -98,17 +94,15 @@ The `find_share_dir()` function discovers the installed share directory via `@IN
 
 #### User Configuration as Theme
 
-Config.sh and theme files can also modify patterns directly:
+Config.sh and theme files can also modify colors and md module config:
 
 ```bash
-# config.sh or theme file: modify colors
-for _array in theme_light theme_dark; do
-    declare -n _theme=$_array
-    _theme[h3]+=';sub{s/(?<!#)$/ ###/r}'
-done
+# config.sh or theme file: change base color
+theme_light[base]='<DarkCyan>=y25'
+theme_dark[base]='<DarkCyan>=y80'
 
-# config.sh or theme file: modify patterns
-pattern[link]='(?<!!)\[.+?\]\(<?[^>)\s\n]+>?\)'
+# config.sh or theme file: enable hashed headings via md module config
+md_config+=(hashed.h3=1 hashed.h4=1 hashed.h5=1 hashed.h6=1)
 ```
 
 #### Theme Listing
@@ -166,21 +160,15 @@ mdee constructs a pipeline dynamically:
 ```mermaid
 flowchart LR
     A[Input File] --> B[greple -Mmd]
-    B --> C{fold?}
-    C -->|yes| D[ansifold]
-    C -->|no| G{style?}
-    D --> G
+    B --> G{style?}
     G -->|nup| H[nup]
     G -->|pager| J[pager]
     G -->|cat/filter/raw| I[stdout]
     H --> I
     J --> I
 
-    subgraph "Syntax Highlighting + Table Formatting"
+    subgraph "Syntax Highlighting + Table Formatting + Text Folding"
         B
-    end
-    subgraph "Text Processing"
-        D
     end
     subgraph "Output"
         H
@@ -188,7 +176,7 @@ flowchart LR
     end
 ```
 
-Each stage is controlled by `--style` and individual `--[no-]fold`, `--[no-]table`, `--[no-]rule`, `--[no-]nup` options.
+Each stage is controlled by `--style` and individual `--[no-]fold`, `--[no-]table`, `--[no-]rule`, `--[no-]nup` options. Fold and table processing are handled within the greple `-Mmd` module (not as separate pipeline stages).
 
 ### Style System
 
@@ -282,22 +270,23 @@ invoke() {
 
 Debug levels:
 - `-d` (`debug > 0`): `theme_light[]`/`theme_dark[]` values (sourceable format), pipeline stage names
-- `-dd` (`debug > 1`): above + `colors[]` (expanded), `pattern[]`, full command lines for each pipeline stage
+- `-dd` (`debug > 1`): above + full command lines for each pipeline stage
 
 Dryrun combinations:
-- `-dn`: show pipeline as function names (e.g., `run_greple "$@" | run_fold | ...`)
+- `-dn`: show pipeline as function names (e.g., `run_greple "$@" | run_nup`)
 - `-ddn`: show expanded command lines for each stage without executing
 
 ### App::Greple::md Module
 
-Syntax highlighting and table formatting are handled by the `App::Greple::md` Perl module. mdee invokes greple with the module and passes config/visibility options as module options (before `--`):
+Syntax highlighting, table formatting, and text folding are handled by the `App::Greple::md` Perl module. mdee invokes greple with the module and passes config/visibility options as module options (before `--`):
 
 ```bash
 run_greple() {
     local -a md_opts=()
     local -a config_params=("mode=${mode}")
 
-    # base_color, table, rule, heading_markup params
+    # fold/table/rule/heading_markup params
+    [[ $fold  ]] && config_params+=("foldlist=1,foldwidth=$width")
     [[ $table ]] && config_params+=("table=1") || config_params+=("table=0")
     [[ $rule  ]] && config_params+=("rule=1")  || config_params+=("rule=0")
     [[ $heading_markup ]] && config_params+=("heading_markup=$heading_markup")
@@ -313,14 +302,16 @@ run_greple() {
     done
 
     invoke greple "${md_opts[@]}" "${pass_md[@]}" -- \
-        --filestyle=once --color=always "$@"
+        --filter --filestyle=once --color=always \
+        "$@"
 }
 ```
 
-- `-Mmd::config(...)`: Module config parameters (mode, base_color, table, rule, heading_markup, hashed.*)
+- `-Mmd::config(...)`: Module config parameters (mode, base_color, foldlist, foldwidth, table, rule, heading_markup, hashed.*)
 - `--show LABEL=VALUE`: Field visibility control
 - `pass_md[]`: Passthrough options for md module (e.g., `--colormap` via `:>pass_md`)
 - Options before `--` are module-specific; after `--` are greple options
+- Fold is controlled via `foldlist=1` in config; the md module adds `--fold-by $foldwidth` to its default option
 
 ### Protection Mechanism (protect/restore)
 
@@ -365,9 +356,32 @@ reset and re-inserts the outer color after it. This enables **cumulative colorin
 The heading color resumes after the link, including background color for
 text that follows the link on the same heading line.
 
-Each processing step is a code ref in the `%colorize` hash. The pipeline
-order is determined by `build_pipeline()` based on `heading_markup`.
-The `active()` checks and step execution are controlled in `colorize()`.
+Each processing step is a `Step` object in the `%colorize` hash, created
+by `Step(sub{})` (always active) or `Step(label => sub{})` (controllable
+via `--show`). The pipeline order is determined by `build_pipeline()`
+based on `heading_markup`.
+
+```perl
+package App::Greple::md::Step {
+    sub new    { my($class, %args) = @_; bless \%args, $class }
+    sub label  { $_[0]->{label} }
+    sub active { !$_[0]->{label} || App::Greple::md::active($_[0]->{label}) }
+    sub run    { $_[0]->{code}->() }
+}
+
+sub Step {
+    my $code = pop;
+    my $label = shift;
+    App::Greple::md::Step->new(label => $label, code => $code);
+}
+
+# Always active (no label):
+code_blocks => Step(sub { ... }),
+
+# Controllable via --show (with label):
+bold => Step(bold => sub { ... }),
+headings => Step(header => sub { ... }),
+```
 
 #### Pipeline Architecture
 
@@ -396,9 +410,14 @@ Links are always processed before headings (in `@protect_steps`), so
 OSC 8 hyperlinks in headings remain clickable regardless of
 `heading_markup`.
 
-The `%step_label` hash maps step names to `active()` label names
-(e.g., `headings` → `header`, `horizontal_rules` → `horizontal_rule`).
-Steps without a label mapping are always active.
+The `colorize()` loop calls `$step->active` and `$step->run`:
+
+```perl
+for my $name (build_pipeline()) {
+    my $step = $colorize{$name};
+    $step->run if $step->active;
+}
+```
 
 ### Code Color Labels
 
@@ -406,7 +425,8 @@ Code-related theme keys map directly to module labels:
 
 | Theme Key | Module Label | Description |
 |-----------|-------------|-------------|
-| `code_mark` | `code_mark` | Delimiters (fences and backticks) |
+| `code_mark` | `code_mark` | Fenced code block delimiters (``` ``` ```, `~~~`) |
+| `code_tick` | `code_tick` | Inline code backticks (`` ` ``) |
 | `code_info` | `code_info` | Fenced code block info string |
 | `code_block` | `code_block` | Fenced code block body (with `;E`) |
 | `code_inline` | `code_inline` | Inline code body (without `;E`) |
@@ -414,30 +434,31 @@ Code-related theme keys map directly to module labels:
 ```bash
 # Light mode
 [code_mark]='L20'
+[code_tick]='L15/L23'
 [code_info]='${base_name}=y70'
 [code_block]='/L23;E'
 [code_inline]='L00/L23'
 
 # Dark mode
 [code_mark]='L10'
-[code_info]='${base_name}=y20'
+[code_tick]='L15/L05'
+[code_info]='L10'
 [code_block]='/L05;E'
 [code_inline]='L25/L05'
 ```
 
-The `code_block` label includes `;E` (erase line) for full-width background on fenced code blocks. `code_inline` has explicit foreground (`L00`/`L25`) to prevent heading foreground from bleeding through in cumulative coloring.
+The `code_block` label includes `;E` (erase line) for full-width background on fenced code blocks. `code_tick` has background color matching `code_inline` for visual continuity, with dimmer foreground. `code_inline` has explicit foreground (`L00`/`L25`) to prevent heading foreground from bleeding through in cumulative coloring.
 
-Regex patterns (in `patterns_default`, used for `--exclude` in the fold stage):
+Inline code backticks are displayed as `` `content´ `` using `code_tick` color for the markers. Multi-backtick delimiters (`` `` ``, ` ``` `, etc.) are collapsed to a single pair, with optional surrounding spaces stripped per CommonMark. The open/close markers are configurable via `tick_open`/`tick_close` config parameters (default: `` ` `` / `´`).
+
+Regex patterns used by the md module:
 
 Fenced code blocks ([CommonMark](https://spec.commonmark.org/0.31.2/#fenced-code-blocks)):
 ```
 ^ {0,3}(?<bt>`{3,}+|~{3,}+)(.*)\n((?s:.*?))^ {0,3}(\g{bt})
 ```
 
-Inline code ([CommonMark Code Spans](https://spec.commonmark.org/0.31.2/#code-spans)):
-```
-(?<bt>`++)((?:(?!\g{bt}).)++)(\g{bt})
-```
+Inline code ([CommonMark Code Spans](https://spec.commonmark.org/0.31.2/#code-spans)) uses the `$CODE` pattern, which matches both single and multi-backtick spans. For multi-backtick (2+), optional leading/trailing spaces are stripped per CommonMark spec.
 
 ### Header Colors
 
@@ -447,8 +468,8 @@ Light mode uses light background with dark text (h1-h3), base color text (h4-h6)
 [h2]='L25D/${base}+y20;E'  # Lighter background
 [h3]='L25DN/${base}+y30'   # Normal weight, even lighter
 [h4]='${base}UD'           # Base color, underline, bold
-[h5]='${base}+y20;U'       # Lighter base, underline
-[h6]='${base}+y20'         # Lighter base
+[h5]='${base}U'            # Base color, underline
+[h6]='${base}'             # Base color
 ```
 
 Dark mode uses dark background with light text (h1-h3), base color text (h4-h6):
@@ -457,48 +478,28 @@ Dark mode uses dark background with light text (h1-h3), base color text (h4-h6):
 [h2]='L00D/${base}-y15;E'  # Darker background
 [h3]='L00DN/${base}-y25'   # Normal weight, even darker
 [h4]='${base}UD'           # Base color, underline, bold
-[h5]='${base}-y20;U'       # Darker base, underline
-[h6]='${base}-y20'         # Darker base
+[h5]='${base}U'            # Base color, underline
+[h6]='${base}'             # Base color
 ```
 
 Pattern: light uses `+y` to lighten (reduce emphasis), dark uses `-y` to darken (reduce emphasis).
 
-### Greple::tee Module
+### Text Folding (md module)
 
-The `-Mtee` module allows greple to pipe matched regions through external commands.
+Text folding is handled within the `App::Greple::md` module using `-Mtee` to pipe matched regions through `ansifold`. The md module defines `--fold-by` as a greple option in its `__DATA__` section, and `--fold` is dynamically defined in `finalize()` via `$mod->setopt()` as a command option alias. The module option `--foldlist` enables folding via config.
 
-#### Text Folding with ansifold
+#### Fold Architecture
 
-```bash
-# Patterns defined in patterns_default array:
-#   item_prefix  '^\h*(?:[*-]|(?:\d+|#)[.)])\h+'
-#   def_pattern  '(?:\A|\G\n|\n\n).+\n\n?(:\h+.*\n)'
-#   autoindent   '^\h*(?:[*-]|(?:\d+|#)[.)]|:)\h+|^\h+'
+- `foldlist` config parameter (default: 0) enables/disables folding
+- `foldwidth` config parameter (default: 80) controls the fold width
+- `finalize()` defines `--fold` as `--fold-by $foldwidth` via `$mod->setopt()` (for direct command-line use)
+- When `foldlist=1` in config, `finalize()` adds `--fold-by $foldwidth` to the module's default option
+- mdee passes `foldlist=1,foldwidth=$width` in config when fold is enabled
+- The `--fold-by` option in `__DATA__` uses `-Mtee "&ansifold"` with `--exclude` patterns for code blocks, HTML comments, and tables
 
-greple \
-    -Mtee "&ansifold" --crmode --autoindent="${pattern[autoindent]}" -sw${width} -- \
-    --exclude "${pattern[code_block]}" \
-    --exclude "${pattern[comment]}" \
-    --exclude "${pattern[table]}" \
-    -G -E "${pattern[item_prefix]}.*\\n" -E "${pattern[def_pattern]}" \
-    --crmode --all --need=0 --no-color
-```
+#### Definition List Pattern
 
-- `--exclude`: Exclude code blocks, comments, and tables from fold processing
-- `pattern` associative array: Built from `patterns_default`, joins multiple patterns with same name using `|`
-
-- `-Mtee`: Load tee module
-- `"&ansifold"`: Call ansifold as function (not subprocess)
-- `--crmode`: Handle carriage returns
-- `--autoindent="..."`: Auto-indent pattern for list items and definitions
-- `-sw${width}`: Silent mode with width
-- `--`: Separator between tee args and greple args
-- `-GE "..."`: Pattern to match list items
-- `-E "..."`: Pattern to match definition lists
-
-##### Definition List Pattern
-
-`def_pattern: '(?:\A|\G\n|\n\n).+\n\n?(:\h+.*\n)'`
+`(?:\A|\G\n|\n\n).+\n\n?(:\h+.*\n)`
 
 - `(?:\A|\G\n|\n\n)`: Start of file, or after previous match, or after blank line
 - `.+\n`: Term line
@@ -511,10 +512,12 @@ Table formatting is handled within the `App::Greple::md` module's `begin()` func
 
 ```perl
 sub begin {
-    colorize();        # Stage 1: syntax highlighting
-    format_table();    # Stage 2: table formatting
+    colorize()    if $config->{colorize};
+    format_table() if $config->{table};
 }
 ```
+
+Stage execution is controlled by config flags: `colorize` (default: 1), `table` (default: 1). Fold is not controlled in `begin()` because it operates via greple's pattern matching pipeline (`-Mtee`), not text transformation in the `begin` hook.
 
 `format_table()` detects table blocks via `^ {0,3}\|.+\|\n){3,}` and processes each block:
 
@@ -529,6 +532,8 @@ sub begin {
    - Non-rule mode: `tr[ ][-]` replaces spaces with dashes, wrapped with `|`
 
 Config parameters from mdee:
+- `foldlist=1`: Enable text folding (default disabled in md module)
+- `foldwidth=$width`: Fold width in columns
 - `table=1`: Enable table formatting (default enabled in md module)
 - `rule=1`: Enable box-drawing characters (default enabled in md module)
 
@@ -577,28 +582,30 @@ The md module's `active()` function checks show flags and skips regex substituti
 
 ### Emphasis Patterns (CommonMark)
 
-Bold and italic patterns follow [CommonMark emphasis rules](https://spec.commonmark.org/0.31.2/#emphasis-and-strong-emphasis). These are processed in the md module's `colorize()`, before headings:
+Bold and italic patterns follow [CommonMark emphasis rules](https://spec.commonmark.org/0.31.2/#emphasis-and-strong-emphasis). These are processed in the md module's `colorize()`, before headings. Each pattern uses `$SKIP_CODE` as first alternative to skip code spans:
 
 ```perl
 # Bold: ** and __  (color: D = bold weight only)
-s/(?<![\\`])\*\*.*?(?<!\\)\*\*/md_color('bold', $&)/ge;
-s/(?<![\\`\w])__.*?(?<!\\)__(?!\w)/md_color('bold', $&)/ge;
+s{$SKIP_CODE|(?<!\\)\*\*.*?(?<!\\)\*\*}{md_color('bold', ${^MATCH})}gep;
+s{$SKIP_CODE|(?<![\\w])__.*?(?<!\\)__(?!\w)}{md_color('bold', ${^MATCH})}gep;
 
 # Italic: * and _  (color: I = italic only)
-s/(?<![\\`\w])_(?:(?!_).)+(?<!\\)_(?!\w)/md_color('italic', $&)/ge;
-s/(?<![\\`\*])\*(?:(?!\*).)+(?<!\\)\*(?!\*)/md_color('italic', $&)/ge;
+s{$SKIP_CODE|(?<![\\w])_(?:(?!_).)+(?<!\\)_(?!\w)}{md_color('italic', ${^MATCH})}gep;
+s{$SKIP_CODE|(?<![\\*])\*(?:(?!\*).)+(?<!\\)\*(?!\*)}{md_color('italic', ${^MATCH})}gep;
 
 # Strikethrough  (color: X = strikethrough)
-s/(?<![\\`])~~.+?(?<!\\)~~/md_color('strike', $&)/ge;
+s{$SKIP_CODE|(?<!\\)~~.+?(?<!\\)~~}{md_color('strike', ${^MATCH})}gep;
 ```
 
 Key rules:
-- `(?<!\\)` / `` (?<![\\`]) ``: Not preceded by backslash or backtick (escape handling and inline code protection)
-- `` (?<![\\`\w]) `` / `(?!\w)`: Word boundaries for `_`/`__` (prevents `foo_bar_baz` matching and avoids matching inside inline code)
+- `$SKIP_CODE` as first alternative: code spans are matched and skipped via `(*SKIP)(*FAIL)`, preventing emphasis from matching inside code
+- `(?<!\\)`: Not preceded by backslash (escape handling)
+- `(?<![\\w])` / `(?!\w)`: Word boundaries for `_`/`__` (prevents `foo_bar_baz` matching)
 - `(?<!\*)` / `(?!\*)`: Not adjacent to `*` (distinguishes `*italic*` from `**bold**`)
 - `(?:(?!\*).)+`: Match any character except `*`, and `.` excludes newlines (single-line only)
 - `__` requires word boundaries (same as `_`)
 - `**` doesn't require word boundaries (can be used mid-word)
+- `/p` flag with `${^MATCH}`: safe alternative to `$&` for accessing matched text
 
 ### OSC 8 Hyperlinks
 
@@ -627,7 +634,42 @@ Three link types (processed in order to handle nesting):
 
 OSC 8 format: `\e]8;;URL\e\TEXT\e]8;;\e\`
 
-Each link is colored with the `link`/`image`/`image_link` label (`I` = italic), wrapped in OSC 8, and protected to prevent later patterns from matching inside. The link pattern uses `(?<![!\e])` lookbehind to prevent both image link prefix `!` and protect placeholder `\e[` from being matched as link start.
+Each link is colored with the `link`/`image`/`image_link` label (`I` = italic), wrapped in OSC 8, and protected to prevent later patterns from matching inside.
+
+#### Code Span Pattern and `(*SKIP)(*FAIL)` Protection
+
+Per CommonMark, code spans have higher priority than links and emphasis. The md module defines `$CODE` as the base pattern for code spans, and derives `$SKIP_CODE` from it:
+
+```perl
+# Code span pattern (both single and multi-backtick).
+# Captures: _bt (backtick delimiter), _content (code body).
+my $CODE = qr{(?x)
+    (?<_bt> `++ )               # opening backtick(s)
+    (?<_content>
+        (?: (?! \g{_bt} ) . )+? # content (not containing same-length backticks)
+    )
+    \g{_bt}                     # closing backtick(s) matching opener
+};
+
+# Skip code spans — used as first alternative in substitutions
+my $SKIP_CODE = qr{$CODE (*SKIP)(*FAIL)}x;
+```
+
+`$CODE` is used directly in the `inline_code` step for code span processing. `$SKIP_CODE` is used as the first alternative in link/image/bold/italic/strike substitutions:
+
+```perl
+s{$SKIP_CODE|(?<![!\e])\[(?<text>$LT)\]\(<?(?<url>[^>)\s\n]+)>?\)}{
+    protect(osc8($+{url}, md_color('link', "[$+{text}]")))
+}ge;
+```
+
+How `(*SKIP)(*FAIL)` works:
+1. `$CODE` matches a code span (e.g., `` `code` ``)
+2. `(*SKIP)` marks this position — the regex engine won't retry earlier positions
+3. `(*FAIL)` forces a match failure — the substitution skips this region
+4. The engine resumes after the code span, so the second alternative can only match outside code spans
+
+This replaces per-pattern backtick lookbehinds (which only checked the immediately preceding character and couldn't handle cases like `` `` `code` `` `` where a space separates the backtick from `[`). The link pattern retains `(?<![!\e])` lookbehind for image link prefix `!` and protect placeholder `\e[`.
 
 #### Link Text Matching Pattern
 
@@ -711,7 +753,7 @@ If a function with the same name as an option exists, it's called after parsing:
 
 ```bash
 pager() {
-    [[ $pager ]] && nup_opts+=("--pager=$pager") || nup_opts+=("--no-pager")
+    [[ $pager ]] && pass_nup+=("--pager=$pager") || pass_nup+=("--no-pager")
 }
 ```
 
@@ -726,13 +768,15 @@ Sources the library with OPTS array name and arguments.
 ### Dependencies
 
 - App::Greple - Pattern matching and highlighting tool with extensive regex support
-- App::Greple::md - Greple module for Markdown syntax highlighting and table formatting (handles colorization via `colorize()` and table formatting via `format_table()`)
-- App::ansifold - ANSI-aware text folding utility that wraps long lines while preserving escape sequences and maintaining proper indentation for nested list items
+- App::Greple::md - Greple module for Markdown syntax highlighting, table formatting, and text folding (**bundled in this repo** at `lib/App/Greple/md.pm`)
+- App::ansifold - ANSI-aware text folding utility that wraps long lines while preserving escape sequences and maintaining proper indentation for nested list items (called from md module via Greple::tee)
 - App::ansicolumn - Column formatting tool with ANSI support that aligns table columns while preserving color codes (called from md module via Command::Run)
 - App::nup - Paged output
 - App::ansiecho - Color output
 - Getopt::Long::Bash - Option parsing
 - Getopt::EX::termcolor - Terminal detection
+- Getopt::EX::Config - Module option handling for md module
+- Command::Run - Function call wrapper used by md module for ansicolumn
 
 ## Limitations
 
@@ -769,7 +813,7 @@ Lines starting with whitespace are not currently folded. Adding `^\h+.*\n` to th
 
 2. **List continuation lines**: Indented continuation lines (without list markers) may be intentionally formatted across multiple lines. Folding them would merge separate items.
 
-The `autoindent` pattern in `patterns_default` already includes `|^\h+` in preparation. The `--exclude` mechanism (using `pattern` associative array) is in place for code blocks, comments, and tables.
+The `autoindent` pattern in the md module's `--fold-by` option already includes `|^\h+` in preparation. The `--exclude` mechanism in the option definition handles code blocks, comments, and tables.
 
 ### OSC 8 Hyperlinks
 

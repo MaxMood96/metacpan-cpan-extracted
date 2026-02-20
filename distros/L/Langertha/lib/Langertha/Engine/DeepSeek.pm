@@ -1,7 +1,6 @@
 package Langertha::Engine::DeepSeek;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: DeepSeek API
-$Langertha::Engine::DeepSeek::VERSION = '0.008';
+our $VERSION = '0.100';
 use Moose;
 extends 'Langertha::Engine::OpenAI';
 use Carp qw( croak );
@@ -13,6 +12,7 @@ sub _build_supported_operations {[qw(
 sub all_models {qw(
   deepseek-chat
   deepseek-reasoner
+  deepseek-v3.2
 )}
 
 has '+url' => (
@@ -51,7 +51,7 @@ Langertha::Engine::DeepSeek - DeepSeek API
 
 =head1 VERSION
 
-version 0.008
+version 0.100
 
 =head1 SYNOPSIS
 
@@ -59,6 +59,7 @@ version 0.008
 
   my $deepseek = Langertha::Engine::DeepSeek->new(
     api_key => $ENV{DEEPSEEK_API_KEY},
+    model => 'deepseek-chat',
     system_prompt => 'You are a helpful assistant',
     temperature => 0.5,
   );
@@ -67,25 +68,54 @@ version 0.008
 
 =head1 DESCRIPTION
 
+This module provides access to DeepSeek's models via their API.
+
+B<Available Models (February 2026):>
+
+=over 4
+
+=item * B<deepseek-chat> - Fast, general-purpose chat model (default). Excellent for most tasks with strong multilingual support.
+
+=item * B<deepseek-reasoner> - Advanced reasoning model with chain-of-thought capabilities. Best for complex problem-solving and logic tasks.
+
+=item * B<deepseek-v3.2> - Latest version with integrated thinking directly into tool-use. Supports tool-use in both thinking and non-thinking modes. Features updated chat template and "thinking with tools" capability.
+
+=back
+
+B<Note:> DeepSeek V4 is expected to launch mid-February 2026 with context windows exceeding 1 million tokens and enhanced codebase processing capabilities.
+
+B<Dynamic Model Listing:> DeepSeek inherits from L<Langertha::Engine::OpenAI>,
+so it supports C<list_models()> for dynamic model discovery. See
+L<Langertha::Engine::OpenAI> for documentation on model listing and caching.
+
 B<THIS API IS WORK IN PROGRESS>
 
 =head1 HOW TO GET DEEPSEEK API KEY
 
 L<https://platform.deepseek.com/>
 
-=for :stopwords cpan testmatrix url bugtracker rt cpants kwalitee diff irc mailto metadata placeholders metacpan
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<https://api-docs.deepseek.com/> - Official DeepSeek API documentation
+
+=item * L<Langertha::Engine::OpenAI> - Parent class
+
+=item * L<Langertha> - Main Langertha documentation
+
+=back
 
 =head1 SUPPORT
 
-=head2 Source Code
+=head2 Issues
 
-The code is open to the world, and available for you to hack on. Please feel free to browse it and play
-with it, or whatever. If you want to contribute patches, please send me a diff or prod me to pull
-from your repository :)
+Please report bugs and feature requests on GitHub at
+L<https://github.com/Getty/langertha/issues>.
 
-L<https://github.com/Getty/langertha>
+=head1 CONTRIBUTING
 
-  git clone https://github.com/Getty/langertha.git
+Contributions are welcome! Please fork the repository and submit a pull request.
 
 =head1 AUTHOR
 
@@ -93,7 +123,7 @@ Torsten Raudssus <torsten@raudssus.de> L<https://raudss.us/>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2024 by Torsten Raudssus.
+This software is copyright (c) 2026 by Torsten Raudssus.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.006';
+our $VERSION = '0.007';
 
 use POSIX qw(WIFEXITED WEXITSTATUS WIFSIGNALED WTERMSIG);
 
@@ -11,7 +11,11 @@ use POSIX qw(WIFEXITED WEXITSTATUS WIFSIGNALED WTERMSIG);
 # Detect it at compile time and gracefully return 0 when unavailable.
 my $HAS_WCOREDUMP = defined &POSIX::WCOREDUMP ? 1 : 0;
 
-sub new ($class, $status) { return bless { status => $status }, $class }
+sub new ($class, $pid, $status) {
+  return bless { pid => $pid, status => $status }, $class;
+}
+
+sub pid      ($self) { return $self->{pid} }
 sub status   ($self) { return $self->{status} }
 
 sub exited   ($self) { return WIFEXITED($self->{status}) ? 1 : 0 }
@@ -35,13 +39,15 @@ Linux::Event::Fork::Exit - Value object describing how a child process ended
 
 =head1 SYNOPSIS
 
-  $loop->fork(
+  my $forker = Linux::Event::Fork->new($loop);
+
+  $forker->spawn(
     cmd => [ ... ],
     on_exit => sub ($child, $exit) {
       if ($exit->exited) {
-        say "exit code = " . $exit->code;
+        say "pid=" . $exit->pid . " exit code=" . $exit->code;
       } else {
-        say "signal    = " . $exit->signal;
+        say "pid=" . $exit->pid . " signal=" . $exit->signal;
       }
     },
   );
@@ -51,7 +57,7 @@ Linux::Event::Fork::Exit - Value object describing how a child process ended
 A C<Linux::Event::Fork::Exit> object describes the termination state of a child
 process. It is passed to the C<on_exit> callback in the parent process.
 
-It provides a stable, explicit interface over the raw C<waitpid> status.
+It provides a stable interface over the raw C<waitpid> status.
 
 =head1 EXECUTION MODEL
 
@@ -86,8 +92,6 @@ True if the child exited normally (via C<exit()> or returning from C<main>).
 
 Exit code (0..255) if C<exited> is true.
 
-Undefined if the child died due to a signal.
-
 =head2 signaled
 
   if ($exit->signaled) { ... }
@@ -99,8 +103,6 @@ True if the child terminated due to a signal.
   my $sig = $exit->signal;
 
 Signal number if C<signaled> is true.
-
-Undefined if the child exited normally.
 
 =head2 coredump
 

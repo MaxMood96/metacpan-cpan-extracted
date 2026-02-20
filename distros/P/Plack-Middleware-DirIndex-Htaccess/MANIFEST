@@ -11,7 +11,6 @@ t/00-report-prereqs.dd
 t/00-report-prereqs.t
 t/add_dir.t
 t/app.t
-t/app_tests.pl
 t/root/404.html
 t/root/apache/index.html
 t/root/apache/test.html

@@ -4,6 +4,8 @@ use strict;
 
 use Test::More;
 
+use Time::Piece;
+
 use EBook::Ishmael::Time qw(guess_time format_rfc3339_time format_locale_time);
 
 my $TARGET = 1767225600;
@@ -16,12 +18,16 @@ my @TEST_TIMES = (
     "01.01.2026",
     "1/1/2026",
     "1/1/26",
-    "Thu, 01 Jan 2026 00:00:00 GMT",
-    "Thu, 01 Jan 2026 00:00:00 -0000",
-    "Thu Jan  1 00:00:00 AM GMT 2026",
+    "Thu, 01 Jan 2026 00:00:00 +0000",
+    $TARGET,
+    "Thu Jan 01 00:00:00 +0000 2026",
 );
 
-my @TODOS = (
+# Times that only work with Time::Piece's 1.38 timezone fix
+my @POST_138 = (
+    "Thu Jan  1 00:00:00 2026 GMT",
+    "Thu Jan  1 00:00:00 AM GMT 2026",
+    "Thu, 01 Jan 2026 00:00:00 GMT",
     "Thursday, 01-Jan-26 00:00:00 GMT",
 );
 
@@ -29,9 +35,11 @@ for my $tt (@TEST_TIMES) {
     is(guess_time($tt), $TARGET, "guess_time('$tt') == $TARGET");
 }
 
-for my $tt (@TODOS) {
-    TODO: {
-        local $TODO = 'guess_time() cannot yet parse';
+SKIP: {
+    unless ($Time::Piece::VERSION ge '1.38') {
+        skip '$Time::Piece::VERSION < 1.38', scalar @POST_138;
+    }
+    for my $tt (@POST_138) {
         is(guess_time($tt), $TARGET, "guess_time('$tt') == $TARGET");
     }
 }

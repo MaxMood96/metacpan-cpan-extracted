@@ -7,8 +7,9 @@ use Linux::Event;
 use Linux::Event::Fork;
 
 my $loop = Linux::Event->new;
+my $forker = Linux::Event::Fork->new($loop);
 
-my $child = $loop->fork(
+my $child = $forker->spawn(
   stdin_pipe => 1,
 
   child => sub {

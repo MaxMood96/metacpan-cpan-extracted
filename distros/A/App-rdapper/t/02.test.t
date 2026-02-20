@@ -1,5 +1,6 @@
 #!/usr/bin/env perl
 use Test::More;
+use LWP::Online qw(:skip_all);
 use common::sense;
 use constant PACKAGE => q{App::rdapper};
 
@@ -18,8 +19,6 @@ my @tests = (
 );
 
 foreach my $args (@tests) {
-    say STDERR q{testing command: }.join(q{ }, @{$args});
-
     eval {
         PACKAGE->main(@{$args});
     };

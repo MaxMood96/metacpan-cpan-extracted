@@ -187,6 +187,7 @@ lib/PAGI/Test/SSE.pm
 lib/PAGI/Test/WebSocket.pm
 lib/PAGI/Tutorial.pod
 lib/PAGI/Utils.pm
+lib/PAGI/Utils/Random.pm
 lib/PAGI/WebSocket.pm
 t/00-load.t
 t/01-hello-http.t
@@ -235,6 +236,7 @@ t/44-access-log-format.t
 t/46-multiworker-bugs.t
 t/47-worker-heartbeat.t
 t/app-file.t
+t/app-router-group.t
 t/app-router.t
 t/app/01-static-files.t
 t/app/02-routing.t
@@ -261,6 +263,7 @@ t/endpoint/07-websocket-to-app.t
 t/endpoint/08-sse-constructor.t
 t/endpoint/09-sse-lifecycle.t
 t/endpoint/10-integration.t
+t/http2-path-decoding.t
 t/http2/01-protocol.t
 t/http2/02-server-config.t
 t/http2/03-detection.t
@@ -274,8 +277,14 @@ t/http2/09-multiworker.t
 t/http2/10-h2c.t
 t/http2/11-streaming.t
 t/http2/12-error-handling.t
+t/http2/13-sse-detection.t
+t/http2/14-sse-events.t
+t/http2/15-sse-keepalive.t
+t/http2/16-sse-cleanup.t
 t/integration-endpoint-router-demo.t
 t/lib/Test/PAGI/Server.pm
+t/lib/TestRoutes/Admin.pm
+t/lib/TestRoutes/Users.pm
 t/lifespan.t
 t/lifespan/02-worker-fields.t
 t/middleware-builder-resolution.t
@@ -295,6 +304,10 @@ t/middleware/12-protocol-specific.t
 t/middleware/13-development.t
 t/middleware/14-websocket-advanced.t
 t/middleware/15-xsendfile.t
+t/middleware/cors-warning.t
+t/middleware/debug-xss.t
+t/middleware/rate-limit.t
+t/middleware/request-id.t
 t/multipart-limits.t
 t/request-body-stream.t
 t/request-negotiate.t
@@ -337,6 +350,7 @@ t/sse/08-keepalive.t
 t/sse/09-iteration.t
 t/sse/10-integration.t
 t/sse/11-wire-format.t
+t/sse/12-format-helpers.t
 t/static_test_files/app.js
 t/static_test_files/hello.txt
 t/static_test_files/index.html
@@ -355,6 +369,7 @@ t/tls-optional.t
 t/tutorial.t
 t/utf8/01-raw-utf8.t
 t/utils-lifespan.t
+t/utils/random.t
 t/websocket-heartbeat.t
 t/websocket-query-params.t
 t/websocket-state.t

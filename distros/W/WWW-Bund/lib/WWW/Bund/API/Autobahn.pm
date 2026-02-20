@@ -1,5 +1,5 @@
 package WWW::Bund::API::Autobahn;
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 # ABSTRACT: Adapter for Autobahn API (roadworks, webcams, closures, charging stations)
 
 use Moo;
@@ -65,7 +65,7 @@ WWW::Bund::API::Autobahn - Adapter for Autobahn API (roadworks, webcams, closure
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 

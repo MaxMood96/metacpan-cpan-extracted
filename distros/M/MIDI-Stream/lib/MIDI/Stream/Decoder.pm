@@ -8,7 +8,7 @@ package MIDI::Stream::Decoder;
 class MIDI::Stream::Decoder :isa( MIDI::Stream );
 
 
-our $VERSION = '0.003';
+our $VERSION = '0.004';
 
 use Time::HiRes qw/ gettimeofday tv_interval /;
 use Carp qw/ carp croak /;
@@ -196,7 +196,7 @@ method events {
 
 
 method fetch_one_event {
-    pop @events;
+    shift @events;
 }
 
 
@@ -222,7 +222,7 @@ MIDI::Stream::Decoder - MIDI bytestream decoder
 
 =head1 VERSION
 
-version 0.003
+version 0.004
 
 =head1 SYNOPSIS
 

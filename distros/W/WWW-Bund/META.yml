@@ -34,7 +34,7 @@ resources:
   bugtracker: https://github.com/Getty/p5-www-bund/issues
   homepage: https://github.com/Getty/p5-www-bund
   repository: https://github.com/Getty/p5-www-bund.git
-version: '0.001'
+version: '0.002'
 x_Dist_Zilla:
   perl:
     version: '5.036000'
@@ -242,17 +242,7 @@ x_Dist_Zilla:
             - ':InstallModules'
           global: 0
           skip_version_provider: 0
-        Dist::Zilla::Plugin::RewriteVersion::Transitional:
-          _fallback_version_provider_args: {}
-          fallback_version_provider: Git::NextVersion
-        Git::NextVersion:
-          Dist::Zilla::Plugin::Git::NextVersion:
-            first_version: '0.001'
-            version_by_branch: 0
-            version_regexp: (?^:^v(.+)$)
-          Dist::Zilla::Role::Git::Repo:
-            git_version: 2.39.5
-            repo_root: .
+        Dist::Zilla::Plugin::RewriteVersion::Transitional: {}
       name: '@Author::GETTY/@Git::VersionManager/RewriteVersion::Transitional'
       version: '0.009'
     -
@@ -294,7 +284,7 @@ x_Dist_Zilla:
           branch: ~
           changelog: Changes
           signed: 0
-          tag: '0.001'
+          tag: '0.002'
           tag_format: '%v'
           tag_message: v%V
         Dist::Zilla::Role::Git::Repo:

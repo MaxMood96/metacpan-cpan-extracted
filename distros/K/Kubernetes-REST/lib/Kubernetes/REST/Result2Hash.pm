@@ -1,56 +1,70 @@
 package Kubernetes::REST::Result2Hash;
-  use Moo;
-  use JSON::MaybeXS;
-  use Kubernetes::REST::Error;
+our $VERSION = '1.001';
+# ABSTRACT: DEPRECATED - v0 compatibility stub
+use strict;
+use warnings;
+warn __PACKAGE__ . " is deprecated, use the new Kubernetes::REST API instead";
 
-  has parser => (is => 'ro', default => sub { JSON::MaybeXS->new });
-
-  sub result2return {
-    my ($self, $call, $req, $response) = @_;
-
-    if ($response->status >= 400) {
-      return $self->process_error($response);
-    } else {
-      return 1 if (not defined $response->content);
-      return $self->process_response($response);
-    } 
-  }
-
-  sub process_response {
-    my ($self, $response) = @_;
-    
-    my $struct = eval {
-      $self->parser->decode($response->content);
-    };
-    Kubernetes::REST::Error->throw(
-      type => 'UnparseableResponse',
-      message => 'Can\'t parse response ' . $response->content . ' with error ' . $@
-    ) if ($@);
-
-    return $struct;
-  }
-
-  sub process_error {
-    my ($self, $response) = @_;
-
-    my $struct = eval {
-      $self->parser->decode($response->content);
-    };
-
-    Kubernetes::REST::Error->throw(
-      type => 'UnparseableResponse',
-      message => 'Can\'t parse JSON content',
-      detail => $response->content,
-    ) if ($@);
-
-    # Throw a Kubernetes::REST::RemoteError exception from
-    # the info in $struct
-    # {"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","message":"Unauthorized","reason":"Unauthorized","code":401}
-    Kubernetes::REST::RemoteError->throw(
-      status => $response->status,
-      type => 'RemoteError',
-      message => "$struct->{ message }: $struct->{ reason }",
-    );
-  }
 
 1;
+
+__END__
+
+=pod
+
+=encoding UTF-8
+
+=head1 NAME
+
+Kubernetes::REST::Result2Hash - DEPRECATED - v0 compatibility stub
+
+=head1 VERSION
+
+version 1.001
+
+=head1 DESCRIPTION
+
+B<This module is DEPRECATED>. Use L<Kubernetes::REST> directly instead.
+
+The new API returns typed L<IO::K8s> objects. Use C<< $object->TO_JSON >> to convert to hashref.
+
+See L<Kubernetes::REST/"UPGRADING FROM 0.02"> for migration guide.
+
+=head1 SUPPORT
+
+=head2 Issues
+
+Please report bugs and feature requests on GitHub at
+L<https://github.com/pplu/kubernetes-rest/issues>.
+
+=head2 IRC
+
+Join C<#kubernetes> on C<irc.perl.org> or message Getty directly.
+
+=head1 CONTRIBUTING
+
+Contributions are welcome! Please fork the repository and submit a pull request.
+
+=head1 AUTHORS
+
+=over 4
+
+=item *
+
+Torsten Raudssus <torsten@raudssus.de>
+
+=item *
+
+Jose Luis Martinez Torres <jlmartin@cpan.org> (JLMARTIN, original author, inactive)
+
+=back
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is Copyright (c) 2019 by Jose Luis Martinez.
+
+This is free software, licensed under:
+
+  The Apache License, Version 2.0, January 2004
+
+=cut

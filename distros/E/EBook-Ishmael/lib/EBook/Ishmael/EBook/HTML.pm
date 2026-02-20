@@ -1,6 +1,6 @@
 package EBook::Ishmael::EBook::HTML;
 use 5.016;
-our $VERSION = '2.00';
+our $VERSION = '2.01';
 use strict;
 use warnings;
 
@@ -68,7 +68,7 @@ sub _read_metadata {
         } elsif ($name eq 'dc.language') {
             $self->{Metadata}->add_language($content);
         } elsif ($name eq 'dcterms.modified') {
-            my $t = guess_time($content);
+            my $t = eval { guess_time($content) };
             if (defined $t) {
                 $self->{Metadata}->set_modified($t);
             }
@@ -77,7 +77,7 @@ sub _read_metadata {
         } elsif ($name eq 'dc.subject') {
             $self->{Metadata}->add_genre($content);
         } elsif ($name eq 'dcterms.created') {
-            my $t = guess_time($content);
+            my $t = eval { guess_time($content) };
             if (defined $t) {
                 $self->{Metadata}->set_created($t);
             }

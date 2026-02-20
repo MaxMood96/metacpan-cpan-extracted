@@ -7,7 +7,7 @@ use Feature::Compat::Class;
 package MIDI::Stream::FIFO;
 class MIDI::Stream::FIFO;
 
-our $VERSION = '0.003';
+our $VERSION = '0.004';
 
 use List::Util qw/ reduce /;
 
@@ -41,7 +41,7 @@ MIDI::Stream::FIFO - Fixed Size FIFO/Queue for rolling averages
 
 =head1 VERSION
 
-version 0.003
+version 0.004
 
 =head1 AUTHOR
 

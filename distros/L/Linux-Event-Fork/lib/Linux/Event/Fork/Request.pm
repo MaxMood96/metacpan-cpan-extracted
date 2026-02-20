@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.006';
+our $VERSION = '0.007';
 
 use Carp qw(croak);
 
@@ -64,21 +64,19 @@ Linux::Event::Fork::Request - A queued spawn request when max_children is reache
 
 =head1 SYNOPSIS
 
-  my $h = $loop->fork(
-    max_children => 2,   # typically configured via $loop->fork_helper(...)
-    cmd => [ ... ],
-  );
+  my $forker = Linux::Event::Fork->new($loop, max_children => 2);
+
+  my $h = $forker->spawn(cmd => [ ... ]);
 
   if ($h->isa('Linux::Event::Fork::Request')) {
-    # Not started yet; currently queued.
-    $h->cancel;     # prevent it from ever starting
+    $h->cancel;   # prevent it from ever starting
   }
 
 =head1 DESCRIPTION
 
 When bounded parallelism is enabled (C<max_children>) and the limit has been
-reached, L<Linux::Event::Fork> enqueues the spawn request and returns a
-Request object.
+reached, L<Linux::Event::Fork> enqueues the spawn request and returns a Request
+object.
 
 Requests are started FIFO as capacity frees.
 
@@ -89,43 +87,15 @@ L<Linux::Event::Fork::Child>.
 
 All methods on this object are called from the B<parent process>.
 
-Starting of queued requests happens in the parent, driven by the event loop.
-
-=head1 LIFECYCLE
-
-Queued request lifecycle:
-
-    fork() called
-        |
-        +--> queue full
-              |
-              +--> returns Request
-              |
-              +--> (later) capacity frees
-                      |
-                      +--> Request starts
-                      |       |
-                      |       +--> child() becomes defined
-                      |
-                      +--> Request is now "started"
-
-Cancel:
-
-    Request queued
-        |
-        +--> cancel()
-              |
-              +--> request will never start
-              +--> no effect on running children
+Starting of queued requests happens in the parent, driven by the event loop
+when capacity becomes available.
 
 =head1 IMPORTANT BEHAVIOR
 
 =head2 Spec is copied at enqueue time
 
-The original spawn spec is copied when the Request is created.
-Later mutation by the caller cannot affect queued work.
-
-(That is intentional and prevents hard-to-debug aliasing.)
+The original spawn spec is copied when the Request is created. Later mutation by
+the caller cannot affect queued work.
 
 =head1 METHODS
 
@@ -135,15 +105,7 @@ Later mutation by the caller cannot affect queued work.
 
 Cancels a queued request (only if it has not yet started).
 
-Returns:
-
-=over 4
-
-=item * true on the first successful cancel
-
-=item * false if it was already canceled
-
-=back
+Returns true on the first successful cancel, false if it was already canceled.
 
 If the request has already started, cancel has no effect on the child.
 
@@ -158,6 +120,7 @@ True once the request has started and a child has been spawned.
   my $child = $req->child;
 
 Returns the L<Linux::Event::Fork::Child> handle once the request starts.
+
 Returns undef while still queued (or if canceled before start).
 
 =head2 tag
@@ -174,8 +137,8 @@ Returns the data payload copied from the original spawn request.
 
 =head1 RELATIONSHIP TO cancel_queued
 
-L<Linux::Event::Fork> also provides C<cancel_queued(...)> on the helper object.
-That API cancels queued requests in bulk (typically by tag or predicate).
+L<Linux::Event::Fork> provides C<cancel_queued(...)> on the forker object to cancel
+queued requests in bulk (typically by predicate, tag, or data).
 
 This object-level C<cancel()> cancels exactly one specific request handle.
 

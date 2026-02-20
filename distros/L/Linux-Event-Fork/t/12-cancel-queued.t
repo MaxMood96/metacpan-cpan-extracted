@@ -9,9 +9,7 @@ use Linux::Event;
 use Linux::Event::Fork;
 my $loop = Linux::Event->new;
 
-$loop->fork_helper(max_children => 1);
-# Ensure helper exists
-my $fork = $loop->fork_helper;
+my $fork = Linux::Event::Fork->new($loop, max_children => 1);
 
 my @tags = map { "job:$_" } 1..5;
 
@@ -19,7 +17,7 @@ my %started;
 my %exited;
 
 for my $tag (@tags) {
-  $loop->fork(
+  $fork->spawn(
     tag => $tag,
     cmd => [ $^X, '-we', 'select(undef,undef,undef,0.05); print "x\n"; exit 0' ],
 

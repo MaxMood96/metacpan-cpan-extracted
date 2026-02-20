@@ -1,5 +1,5 @@
 package WWW::Bund;
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 # ABSTRACT: Perl client for German Federal Government APIs (bund.dev)
 
 use Moo;
@@ -154,7 +154,7 @@ WWW::Bund - Perl client for German Federal Government APIs (bund.dev)
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 

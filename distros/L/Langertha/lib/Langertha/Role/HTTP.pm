@@ -1,7 +1,6 @@
 package Langertha::Role::HTTP;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Role for HTTP APIs
-$Langertha::Role::HTTP::VERSION = '0.008';
+our $VERSION = '0.100';
 use Moose::Role;
 
 use Carp qw( croak );
@@ -104,6 +103,20 @@ sub _build_user_agent {
   );
 }
 
+sub execute_streaming_request {
+  my ($self, $request, $chunk_callback) = @_;
+
+  croak "execute_streaming_request requires Langertha::Role::Streaming"
+    unless $self->does('Langertha::Role::Streaming');
+
+  my $response = $self->user_agent->request($request);
+
+  croak "".(ref $self)." streaming request failed: ".($response->status_line)
+    unless $response->is_success;
+
+  return $self->process_stream_data($response->decoded_content, $chunk_callback);
+}
+
 1;
 
 __END__
@@ -118,21 +131,18 @@ Langertha::Role::HTTP - Role for HTTP APIs
 
 =head1 VERSION
 
-version 0.008
-
-=for :stopwords cpan testmatrix url bugtracker rt cpants kwalitee diff irc mailto metadata placeholders metacpan
+version 0.100
 
 =head1 SUPPORT
 
-=head2 Source Code
+=head2 Issues
 
-The code is open to the world, and available for you to hack on. Please feel free to browse it and play
-with it, or whatever. If you want to contribute patches, please send me a diff or prod me to pull
-from your repository :)
+Please report bugs and feature requests on GitHub at
+L<https://github.com/Getty/langertha/issues>.
 
-L<https://github.com/Getty/langertha>
+=head1 CONTRIBUTING
 
-  git clone https://github.com/Getty/langertha.git
+Contributions are welcome! Please fork the repository and submit a pull request.
 
 =head1 AUTHOR
 
@@ -140,7 +150,7 @@ Torsten Raudssus <torsten@raudssus.de> L<https://raudss.us/>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2024 by Torsten Raudssus.
+This software is copyright (c) 2026 by Torsten Raudssus.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

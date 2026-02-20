@@ -9,14 +9,14 @@ use Linux::Event;
 use Linux::Event::Fork;
 my $loop = Linux::Event->new;
 
-$loop->fork_helper(max_children => 2);
+my $fork = Linux::Event::Fork->new($loop, max_children => 2);
 my $N = $ENV{N} // 12;
 
 my $started  = 0;
 my $finished = 0;
 
 for my $i (1..$N) {
-  $loop->fork(
+  $fork->spawn(
     tag => "job:$i",
     cmd => [ $^X, '-we', 'select(undef,undef,undef,0.02); print "x\n"; exit 0' ],
 
@@ -27,8 +27,6 @@ for my $i (1..$N) {
     },
   );
 }
-
-my $fork = $loop->fork_helper;
 
 my $drain_fired = 0;
 $fork->drain(on_done => sub ($fork_obj) {
@@ -51,7 +49,7 @@ is($drain_fired, 1, 'drain fired exactly once');
 
 # Immediate drain when already idle.
 my $loop2 = Linux::Event->new;
-my $f2 = $loop2->fork_helper;
+my $f2 = Linux::Event::Fork->new($loop2);
 my $immediate = 0;
 $f2->drain(on_done => sub { $immediate++ });
 is($immediate, 1, 'drain fires immediately when idle');

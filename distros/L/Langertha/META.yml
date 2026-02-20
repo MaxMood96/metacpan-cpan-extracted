@@ -15,25 +15,32 @@ meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
   version: '1.4'
 name: Langertha
+recommends:
+  IO::Async::SSL: '0'
 requires:
   File::ShareDir::ProjectDistDir: '0'
+  Future: '0'
+  Future::AsyncAwait: '0.66'
   JSON::MaybeXS: '0'
   JSON::PP: '0'
+  JSON::Schema::Modern: '0.617'
   LWP::Protocol::https: '0'
   MIME::Base64: '0'
   Module::Runtime: '0'
   Moose: '0'
   MooseX::NonMoose: '0'
-  OpenAPI::Modern: '0'
+  Net::Async::MCP: '0'
+  OpenAPI::Modern: '0.089'
   Path::Tiny: '0'
   Time::HiRes: '0'
   URI: '0'
   YAML::PP: '0'
   YAML::XS: '0'
 resources:
+  bugtracker: https://github.com/Getty/langertha/issues
   homepage: https://github.com/Getty/langertha
   repository: https://github.com/Getty/langertha.git
-version: '0.008'
+version: '0.100'
 x_Dist_Zilla:
   perl:
     version: '5.036000'
@@ -44,7 +51,6 @@ x_Dist_Zilla:
         Dist::Zilla::Plugin::GatherDir:
           exclude_filename: []
           exclude_match: []
-          follow_symlinks: 0
           include_dotfiles: 1
           prefix: ''
           prune_directory: []
@@ -52,7 +58,7 @@ x_Dist_Zilla:
         Dist::Zilla::Plugin::Git::GatherDir:
           include_untracked: 0
       name: '@Author::GETTY/Git::GatherDir'
-      version: '2.048'
+      version: '2.052'
     -
       class: Dist::Zilla::Plugin::ManifestSkip
       name: '@Author::GETTY/@Filter/ManifestSkip'
@@ -105,22 +111,6 @@ x_Dist_Zilla:
       name: '@Author::GETTY/@Filter/UploadToCPAN'
       version: '6.032'
     -
-      class: Dist::Zilla::Plugin::Git::NextVersion
-      config:
-        Dist::Zilla::Plugin::Git::NextVersion:
-          first_version: '0.001'
-          version_by_branch: 0
-          version_regexp: (?^:^([0-9]+\.[0-9]+)$)
-        Dist::Zilla::Role::Git::Repo:
-          git_version: 2.39.5
-          repo_root: .
-      name: '@Author::GETTY/Git::NextVersion'
-      version: '2.048'
-    -
-      class: Dist::Zilla::Plugin::PkgVersion
-      name: '@Author::GETTY/PkgVersion'
-      version: '6.032'
-    -
       class: Dist::Zilla::Plugin::MetaConfig
       name: '@Author::GETTY/MetaConfig'
       version: '6.032'
@@ -156,10 +146,6 @@ x_Dist_Zilla:
       class: Dist::Zilla::Plugin::Prereqs::FromCPANfile
       name: '@Author::GETTY/Prereqs::FromCPANfile'
       version: '0.08'
-    -
-      class: Dist::Zilla::Plugin::ChangelogFromGit
-      name: '@Author::GETTY/ChangelogFromGit'
-      version: '0.017'
     -
       class: Dist::Zilla::Plugin::PodWeaver
       config:
@@ -211,18 +197,6 @@ x_Dist_Zilla:
               name: '@GETTY/Stability'
               version: '4.020'
             -
-              class: Pod::Weaver::Section::Collect
-              name: Attributes
-              version: '4.020'
-            -
-              class: Pod::Weaver::Section::Collect
-              name: Methods
-              version: '4.020'
-            -
-              class: Pod::Weaver::Section::Collect
-              name: Functions
-              version: '4.020'
-            -
               class: Pod::Weaver::Section::Leftovers
               name: '@GETTY/Leftovers'
               version: '4.020'
@@ -231,12 +205,12 @@ x_Dist_Zilla:
               name: '@GETTY/postlude'
               version: '4.020'
             -
-              class: Pod::Weaver::Section::Support
+              class: Pod::Weaver::Section::GenerateSection
               name: '@GETTY/Support'
-              version: '1.014'
+              version: '4.020'
             -
-              class: Pod::Weaver::Section::Bugs
-              name: '@GETTY/Bugs'
+              class: Pod::Weaver::Section::GenerateSection
+              name: '@GETTY/Contributing'
               version: '4.020'
             -
               class: Pod::Weaver::Section::Authors
@@ -250,24 +224,46 @@ x_Dist_Zilla:
               class: Pod::Weaver::Plugin::Transformer
               name: '@GETTY/List'
               version: '4.020'
+            -
+              class: Pod::Weaver::Plugin::Transformer
+              name: '@GETTY/GETTY'
+              version: '4.020'
       name: '@Author::GETTY/PodWeaver'
       version: '4.010'
     -
-      class: Dist::Zilla::Plugin::Git::Check
+      class: Dist::Zilla::Plugin::Prereqs
       config:
-        Dist::Zilla::Plugin::Git::Check:
-          untracked_files: die
-        Dist::Zilla::Role::Git::DirtyFiles:
-          allow_dirty:
+        Dist::Zilla::Plugin::Prereqs:
+          phase: develop
+          type: recommends
+      name: '@Author::GETTY/@Git::VersionManager/pluginbundle version'
+      version: '6.032'
+    -
+      class: Dist::Zilla::Plugin::RewriteVersion::Transitional
+      config:
+        Dist::Zilla::Plugin::RewriteVersion:
+          add_tarball_name: 0
+          finders:
+            - ':ExecFiles'
+            - ':InstallModules'
+          global: 0
+          skip_version_provider: 0
+        Dist::Zilla::Plugin::RewriteVersion::Transitional: {}
+      name: '@Author::GETTY/@Git::VersionManager/RewriteVersion::Transitional'
+      version: '0.009'
+    -
+      class: Dist::Zilla::Plugin::MetaProvides::Update
+      name: '@Author::GETTY/@Git::VersionManager/MetaProvides::Update'
+      version: '0.007'
+    -
+      class: Dist::Zilla::Plugin::CopyFilesFromRelease
+      config:
+        Dist::Zilla::Plugin::CopyFilesFromRelease:
+          filename:
             - Changes
-            - dist.ini
-          allow_dirty_match: []
-          changelog: Changes
-        Dist::Zilla::Role::Git::Repo:
-          git_version: 2.39.5
-          repo_root: .
-      name: '@Author::GETTY/@Git/Check'
-      version: '2.048'
+          match: []
+      name: '@Author::GETTY/@Git::VersionManager/CopyFilesFromRelease'
+      version: '0.007'
     -
       class: Dist::Zilla::Plugin::Git::Commit
       config:
@@ -278,7 +274,6 @@ x_Dist_Zilla:
         Dist::Zilla::Role::Git::DirtyFiles:
           allow_dirty:
             - Changes
-            - dist.ini
           allow_dirty_match: []
           changelog: Changes
         Dist::Zilla::Role::Git::Repo:
@@ -286,8 +281,8 @@ x_Dist_Zilla:
           repo_root: .
         Dist::Zilla::Role::Git::StringFormatter:
           time_zone: local
-      name: '@Author::GETTY/@Git/Commit'
-      version: '2.048'
+      name: '@Author::GETTY/@Git::VersionManager/release snapshot'
+      version: '2.052'
     -
       class: Dist::Zilla::Plugin::Git::Tag
       config:
@@ -295,7 +290,7 @@ x_Dist_Zilla:
           branch: ~
           changelog: Changes
           signed: 0
-          tag: '0.008'
+          tag: '0.100'
           tag_format: '%v'
           tag_message: v%V
         Dist::Zilla::Role::Git::Repo:
@@ -303,8 +298,46 @@ x_Dist_Zilla:
           repo_root: .
         Dist::Zilla::Role::Git::StringFormatter:
           time_zone: local
-      name: '@Author::GETTY/@Git/Tag'
-      version: '2.048'
+      name: '@Author::GETTY/@Git::VersionManager/Git::Tag'
+      version: '2.052'
+    -
+      class: Dist::Zilla::Plugin::BumpVersionAfterRelease::Transitional
+      config:
+        Dist::Zilla::Plugin::BumpVersionAfterRelease:
+          finders:
+            - ':ExecFiles'
+            - ':InstallModules'
+          global: 0
+          munge_makefile_pl: 1
+        Dist::Zilla::Plugin::BumpVersionAfterRelease::Transitional: {}
+      name: '@Author::GETTY/@Git::VersionManager/BumpVersionAfterRelease::Transitional'
+      version: '0.009'
+    -
+      class: Dist::Zilla::Plugin::NextRelease
+      name: '@Author::GETTY/@Git::VersionManager/NextRelease'
+      version: '6.032'
+    -
+      class: Dist::Zilla::Plugin::Git::Commit
+      config:
+        Dist::Zilla::Plugin::Git::Commit:
+          add_files_in: []
+          commit_msg: 'increment $VERSION after %v release'
+          signoff: 0
+        Dist::Zilla::Role::Git::DirtyFiles:
+          allow_dirty:
+            - Build.PL
+            - Changes
+            - Makefile.PL
+          allow_dirty_match:
+            - (?^:^lib/.*\.pm$)
+          changelog: Changes
+        Dist::Zilla::Role::Git::Repo:
+          git_version: 2.39.5
+          repo_root: .
+        Dist::Zilla::Role::Git::StringFormatter:
+          time_zone: local
+      name: '@Author::GETTY/@Git::VersionManager/post-release commit'
+      version: '2.052'
     -
       class: Dist::Zilla::Plugin::Git::Push
       config:
@@ -315,8 +348,8 @@ x_Dist_Zilla:
         Dist::Zilla::Role::Git::Repo:
           git_version: 2.39.5
           repo_root: .
-      name: '@Author::GETTY/@Git/Push'
-      version: '2.048'
+      name: '@Author::GETTY/Git::Push'
+      version: '2.052'
     -
       class: Dist::Zilla::Plugin::FinderCode
       name: ':InstallModules'

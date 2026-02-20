@@ -2,19 +2,57 @@ package IPC::Manager::Client::MessageFiles;
 use strict;
 use warnings;
 
-our $VERSION = '0.000001';
+our $VERSION = '0.000003';
 
 use Carp qw/croak confess/;
 use File::Spec;
 
+BEGIN {
+    if (eval { require Linux::Inotify2; require IO::Select; 1 }) {
+        *USE_INOTIFY = sub() { 1 };
+    }
+    else {
+        *USE_INOTIFY = sub() { 0 };
+    }
+}
+
 use parent 'IPC::Manager::Base::FS';
 use Object::HashBase qw{
     +dir_handle
+    +inotify
+
+    +pend_count
+    +ready_count
 };
 
 sub check_path { -d $_[1] }
 sub make_path  { mkdir($_[1]) or die "Could not make dir '$_[1]': $!" }
 sub path_type  { 'subdir' }
+
+sub init {
+    my $self = shift;
+
+    $self->SUPER::init();
+
+    $self->{+PEND_COUNT}  = 0;
+    $self->{+READY_COUNT} = 0;
+
+    return unless USE_INOTIFY;
+}
+
+sub handles_for_select { $_[0]->inotify->fh }
+
+sub inotify {
+    my $self = shift;
+    croak "Not Implemented (Or you are missing one of: Linux::Inotify2, IO::Select)" unless USE_INOTIFY();
+
+    return $self->{+INOTIFY} if $self->{+INOTIFY};
+
+    my $i = Linux::Inotify2->new;
+    $i->watch($self->path, Linux::Inotify2::IN_CREATE());
+
+    return $self->{+INOTIFY} = $i;
+}
 
 sub pre_disconnect_hook {
     my $self = shift;
@@ -39,11 +77,13 @@ sub dir_handle {
 
 sub pending_messages {
     my $self = shift;
+    return 1 if $self->{+PEND_COUNT};
     return $self->message_files('pend') ? 1 : 0;
 }
 
 sub ready_messages {
     my $self = shift;
+    return 1 if $self->{+READY_COUNT};
     return 1 if $self->have_resume_file;
     return $self->message_files('ready') ? 1 : 0;
 }
@@ -52,8 +92,26 @@ sub message_files {
     my $self = shift;
     $self->pid_check;
     my ($ext) = @_;
-    my @out = grep { m/\.\Q$ext\E$/ } readdir($self->dir_handle);
-    return @out ? [@out] : undef;
+
+    return undef if USE_INOTIFY && !$self->select->can_read(0);
+
+    my (@pend, @ready);
+    for my $file (readdir($self->dir_handle)) {
+        if ($file =~ m/\.ready$/) {
+            push @ready => $file;
+        }
+        elsif ($file =~ m/\.pend$/) {
+            push @pend => $file;
+        }
+    }
+
+    $self->{+READY_COUNT} = @ready;
+    $self->{+PEND_COUNT}  = @pend;
+
+    return @ready ? \@ready : undef if $ext eq 'ready';
+    return @pend  ? \@pend  : undef if $ext eq 'pend';
+
+    return undef;
 }
 
 sub get_messages {

@@ -1,5 +1,5 @@
 ---
-abstract: 'Asynchronous child process management for Linux::Event'
+abstract: 'Child process management integrated with Linux::Event'
 author:
   - 'Joshua S. Day (HAX)'
 build_requires:
@@ -30,5 +30,5 @@ resources:
   bugtracker: https://github.com/haxmeister/perl-linux-event-fork/issues
   homepage: https://github.com/haxmeister/perl-linux-event-fork
   repository: https://github.com/haxmeister/perl-linux-event-fork.git
-version: '0.006'
+version: '0.007'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

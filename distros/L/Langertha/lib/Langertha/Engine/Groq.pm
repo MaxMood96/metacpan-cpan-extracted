@@ -1,7 +1,6 @@
 package Langertha::Engine::Groq;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: GroqCloud API
-$Langertha::Engine::Groq::VERSION = '0.008';
+our $VERSION = '0.100';
 use Moose;
 use Carp qw( croak );
 
@@ -20,9 +19,12 @@ sub all_models {qw(
   llama-3.2-90b-vision-preview
   llama-3.3-70b-specdec
   llama-3.3-70b-versatile
+  llama-3-groq-70b-tool-use
+  llama-3-groq-8b-tool-use
   llama-guard-3-8b
   llama3-70b-8192
   llama3-8b-8192
+  llama-4-scout-17b-16e-instruct
   mistral-saba-24b
   playai-tts
   playai-tts-arabic
@@ -67,7 +69,7 @@ Langertha::Engine::Groq - GroqCloud API
 
 =head1 VERSION
 
-version 0.008
+version 0.100
 
 =head1 SYNOPSIS
 
@@ -75,13 +77,63 @@ version 0.008
 
   my $groq = Langertha::Engine::Groq->new(
     api_key => $ENV{GROQ_API_KEY},
-    model => $ENV{GROQ_MODEL},
+    model => 'llama-3.3-70b-versatile',
     system_prompt => 'You are a helpful assistant',
   );
 
   print($groq->simple_chat('Say something nice'));
 
+  # Audio transcription
+  my $text = $groq->transcription('/path/to/audio.mp3');
+
 =head1 DESCRIPTION
+
+This module provides access to Groq's ultra-fast LLM inference via their API.
+Groq's LPU (Language Processing Unit) provides extremely fast inference speeds.
+
+B<Popular Models (February 2026):>
+
+=over 4
+
+=item * B<llama-3.3-70b-versatile> - Meta's Llama 3.3 70B model. Excellent general-purpose model with strong reasoning capabilities.
+
+=item * B<llama-3-groq-70b-tool-use> - Llama 3 optimized for tool use and function calling.
+
+=item * B<deepseek-r1-distill-llama-70b> - DeepSeek R1 reasoning model distilled into Llama architecture. Best for complex reasoning tasks.
+
+=item * B<qwen-2.5-coder-32b> - Qwen 2.5 specialized for coding tasks.
+
+=item * B<llama-4-scout-17b-16e-instruct> - Meta's Llama 4 Scout vision model for image understanding.
+
+=item * B<whisper-large-v3> - OpenAI Whisper for audio transcription (default transcription model).
+
+=item * B<whisper-large-v3-turbo> - Faster Whisper variant for audio transcription.
+
+=back
+
+B<Features:>
+
+=over 4
+
+=item * Ultra-fast inference with Groq's LPU technology
+
+=item * Chat completions
+
+=item * Audio transcription (Whisper models)
+
+=item * Tool use and function calling
+
+=item * Vision models for image understanding
+
+=item * Reasoning models with chain-of-thought
+
+=item * Dynamic model discovery via API (inherited from OpenAI)
+
+=back
+
+B<Note:> Groq inherits from L<Langertha::Engine::OpenAI>, so it supports
+C<list_models()> for dynamic model discovery. See L<Langertha::Engine::OpenAI>
+for documentation on model listing, caching, and other features.
 
 B<THIS API IS WORK IN PROGRESS>
 
@@ -89,19 +141,28 @@ B<THIS API IS WORK IN PROGRESS>
 
 L<https://console.groq.com/keys>
 
-=for :stopwords cpan testmatrix url bugtracker rt cpants kwalitee diff irc mailto metadata placeholders metacpan
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<https://console.groq.com/docs/models> - Official Groq models documentation
+
+=item * L<Langertha::Engine::OpenAI> - Parent class
+
+=item * L<Langertha> - Main Langertha documentation
+
+=back
 
 =head1 SUPPORT
 
-=head2 Source Code
+=head2 Issues
 
-The code is open to the world, and available for you to hack on. Please feel free to browse it and play
-with it, or whatever. If you want to contribute patches, please send me a diff or prod me to pull
-from your repository :)
+Please report bugs and feature requests on GitHub at
+L<https://github.com/Getty/langertha/issues>.
 
-L<https://github.com/Getty/langertha>
+=head1 CONTRIBUTING
 
-  git clone https://github.com/Getty/langertha.git
+Contributions are welcome! Please fork the repository and submit a pull request.
 
 =head1 AUTHOR
 
@@ -109,7 +170,7 @@ Torsten Raudssus <torsten@raudssus.de> L<https://raudss.us/>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2024 by Torsten Raudssus.
+This software is copyright (c) 2026 by Torsten Raudssus.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

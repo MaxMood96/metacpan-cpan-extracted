@@ -5,11 +5,12 @@ use Linux::Event;
 use Linux::Event::Fork;
 
 my $loop = Linux::Event->new;
+my $forker = Linux::Event::Fork->new($loop);
 
 my $out = '';
 my $exit;
 
-$loop->fork(
+$forker->spawn(
   child => sub {
     # no shell; exec list
     exec $^X, '-we', 'print "cb-ok\n"; exit 9';

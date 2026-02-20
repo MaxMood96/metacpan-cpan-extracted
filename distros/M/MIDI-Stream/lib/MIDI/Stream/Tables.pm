@@ -5,7 +5,7 @@ package MIDI::Stream::Tables;
 # ABSTRACT: MIDI 1.0 look up tables and utility functions
 
 
-our $VERSION = '0.003';
+our $VERSION = '0.004';
 
 use parent 'Exporter';
 
@@ -154,7 +154,7 @@ MIDI::Stream::Tables - MIDI 1.0 look up tables and utility functions
 
 =head1 VERSION
 
-version 0.003
+version 0.004
 
 =head1 SYNOPSIS
 

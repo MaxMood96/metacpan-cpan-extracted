@@ -1,45 +1,31 @@
-# H1: mdee Test Document
+# Heading 1
 
-This is a test file for checking **bold text**, __also bold__, _italic text_, *also italic*, and `inline code` styles.
+## Heading 2 with [link](https://example.com)
 
-## H2: Pipeline Architecture
+### Heading 3
 
-The `mdee` command constructs a **pipeline** of commands.
+#### Heading 4
 
-### H3: Processing Stages
+##### Heading 5
 
-Each stage can be enabled using `--fold`, `--table`, and `--nup` options.
+###### Heading 6
 
-#### H4: Syntax Highlighting
+Normal text with **bold** and *italic* and ~~strikethrough~~.
 
-Uses `greple` with `-G` and `--ci=G` options.
+Underscore bold: __double underscore__ and italic: _single underscore_.
 
-##### H5: Color Specifications
+`inline code with **not bold**`
 
-Colors like `L00DE/${base}` use **Term::ANSIColor::Concise** format.
+More text with `code` inside.
 
-## H2: Code Block Examples
-
-Here is a code block:
+Multi-backtick: `` `**` `` and ``` ``code`` ```.
 
 ```bash
-greple -G --ci=G --all --need=0 \
-    --cm 'L00DE/${base}' -E '^#\h+.*' \
-    file.md
+echo "code block"
 ```
-
-Another example:
-
-```perl
-my $color = '#CCCDFF';
-print "Base color: $color\n";
-```
-
-Tilde fence example:
 
 ~~~python
-def hello():
-    print("Hello, world!")
+print("tilde code block")
 ~~~
 
 Nested code block (tilde wrapping backticks):
@@ -62,7 +48,33 @@ Four-space indented fence becomes content (CommonMark rule):
     ```
 ```
 
-## H2: Table Example
+> blockquote with **bold** text
+
+> nested > quote
+
+---
+
+***
+
+[simple link](https://example.com)
+
+![image alt](https://example.com/img.png)
+
+[![linked image](https://example.com/img.png)](https://example.com)
+
+<!-- HTML comment -->
+
+<!--
+multi-line comment
+-->
+
+## Heading with [link](https://example.com) inside
+
+**bold with `code` inside**
+
+Escaped: \**not bold\** and \`not code\`
+
+## Table Example
 
 |Name|Description|Status|
 |-|-|-|
@@ -70,13 +82,13 @@ Four-space indented fence becomes content (CommonMark rule):
 |ansifold|ANSI-aware text folding|active|
 |ansicolumn|Column formatting with ANSI support|active|
 
-## H2: List Example
+## List Example
 
 - First item with `inline code`
 - Second item with **bold text** and _italic_
 - Third item with a longer description that might wrap to multiple lines when displayed in a narrow terminal window
 
-## H2: Definition List Example
+## Definition List Example
 
 greple
 : Pattern matching and highlighting tool with extensive regex support for syntax highlighting
@@ -87,17 +99,3 @@ ansifold
 Term with blank line
 
 : Definition after a blank line with `inline code` and **bold text** that might wrap to multiple lines
-
-<!-- This is an HTML comment that should be dimmed -->
-
-### H3: Nested Content
-
-Some text with `multiple` inline `code` segments, **bold** words, and _italic_ text.
-
-#### H4: More Details
-
-Final section with `code` and **emphasis**.
-
-##### H5: Deep Nesting
-
-The deepest level with `L00DE/${base}` color specification.

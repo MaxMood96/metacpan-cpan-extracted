@@ -1,5 +1,5 @@
 package WWW::Bund::API::Bundestag;
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 # ABSTRACT: Adapter for Bundestag API (parliament data)
 
 use Moo;
@@ -77,7 +77,7 @@ WWW::Bund::API::Bundestag - Adapter for Bundestag API (parliament data)
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 

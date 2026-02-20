@@ -1,0 +1,3 @@
+type: list
+columns: 2
+empty: "Aucune option de filtre trouvée."

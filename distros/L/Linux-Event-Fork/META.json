@@ -1,5 +1,5 @@
 {
-   "abstract" : "Asynchronous child process management for Linux::Event",
+   "abstract" : "Child process management integrated with Linux::Event",
    "author" : [
       "Joshua S. Day (HAX)"
    ],
@@ -59,6 +59,6 @@
          "web" : "https://github.com/haxmeister/perl-linux-event-fork"
       }
    },
-   "version" : "0.006",
+   "version" : "0.007",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

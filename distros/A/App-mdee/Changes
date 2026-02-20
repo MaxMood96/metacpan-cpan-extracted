@@ -1,5 +1,18 @@
 Revision history for Perl extension App-mdee
 
+1.00 2026-02-20T06:08:50Z
+
+    - Integrate App::Greple::md module into this repository (previously separate)
+    - Bundle md module commit history via filtered merge
+    - Add Getopt::EX::Config and Command::Run to dependencies
+    - Add submodules checkout to CI workflow for t/runner
+
+0.20 2026-02-19T11:57:33Z
+
+    - Migrate text folding to md module (foldlist config parameter)
+    - Rename nup_opts to pass_nup for consistency with pass_md
+    - Require App::Greple::md 0.9904
+
 0.19 2026-02-19T04:49:23Z
 
     - Add --colormap option to pass colormap specs to md module
@@ -148,3 +161,66 @@ Revision history for Perl extension App-mdee
     - Filter mode (-f) for highlight-only output
     - --enable/--disable options for field control
     - CommonMark-compliant code block detection (``` and ~~~)
+
+Revision history for Perl extension App-Greple-md
+
+0.9905 2026-02-20T05:32:13Z
+
+    - Introduce Step class for OO pipeline architecture
+    - Extract $CODE pattern as shared base for inline_code and $SKIP_CODE
+    - Use $SKIP_CODE with (*SKIP)(*FAIL) for emphasis code span protection
+    - Use /p flag with ${^MATCH} instead of $& in bold/italic/strike
+    - Add inline_code controllability via --show code_inline=
+    - Document --show controllable vs always-active elements
+    - Add tests for multi-backtick space stripping and code span protection
+
+0.9904 2026-02-19T11:43:43Z
+
+    - Display inline code as `content´ with configurable tick markers
+    - Collapse multi-backtick delimiters to single pair, strip spaces
+    - Add tick_open/tick_close config parameters
+    - Prevent link/image patterns from matching inside code spans
+
+0.9903 2026-02-19T08:47:05Z
+
+    - Add --fold option for text folding via ansifold (-Mtee)
+    - Add colorize/foldlist config flags for stage control
+    - Add code_tick label for independent inline code backtick coloring
+    - Simplify h5/h6 colors to use same base color as h4
+    - Change dark code_info color to L10 (gray, matching code_mark)
+    - Use define directives for fold exclude/match patterns
+
+0.9902 2026-02-19T04:39:29Z
+
+    - Refactor colorize into pipeline architecture with build_pipeline()
+    - Extend --heading-markup to accept step names (e.g., bold:italic)
+    - Use greple --filter option, require App::Greple 10.04
+    - Fix deal_with option spec: use underscore for correct Config key matching
+    - Fix test failure on CPAN Testers: use Runner submodule to find greple
+
+0.9901 2026-02-18T08:16:52Z
+
+    - Fix heading color preservation with cumulative coloring
+      - Restore protected regions before applying heading colors
+      - Reorder processing: emphasis before headings
+    - Prevent placeholder ESC+[ from matching as markdown link
+    - Improve color scheme for better heading compatibility
+      - bold: D (weight only), link/image: I (italic only)
+      - code_inline: add explicit foreground (L00/L23, L25/L05)
+      - code_info: use base color without hue rotation
+      - h1/h2: move E to end of spec for correct EL position
+    - Manage protect/restore and OSC 8 markers via variables
+    - Rewrite POD with categorized labels and module options
+    - Add short options: -m (mode), -B (base_color)
+
+0.99 2026-02-17T14:44:56Z
+
+    - Initial release
+    - Markdown syntax highlighting with cumulative coloring
+    - SGR 256 protect/restore mechanism for nested elements
+    - OSC 8 terminal hyperlinks for links and images
+    - Table formatting with ansicolumn and box-drawing separators
+    - Configurable field visibility (--show option)
+    - Hashed heading style (closing hashes on h3-h6)
+    - Base color system with ${base} placeholder expansion
+    - ;sub{...} text transformation in color specs

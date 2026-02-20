@@ -12,7 +12,7 @@ Readonly::Array our @EXPORT_OK => qw(
 	check_uint8 check_uint16 check_uint32 check_uint64
 );
 
-our $VERSION = 0.09;
+our $VERSION = 0.10;
 
 sub check_int8 {
 	my ($self, $key) = @_;
@@ -630,6 +630,6 @@ BSD 2-Clause License
 
 =head1 VERSION
 
-0.09
+0.10
 
 =cut
