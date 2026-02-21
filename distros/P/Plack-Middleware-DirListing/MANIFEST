@@ -10,5 +10,6 @@ lib/Plack/Middleware/DirListing.pm
 t/00-report-prereqs.dd
 t/00-report-prereqs.t
 t/01_basic.t
+t/02_trailingslash.t
 xt/author/00-compile.t
 xt/author/pod-syntax.t

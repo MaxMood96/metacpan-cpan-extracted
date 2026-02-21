@@ -1,0 +1,16 @@
+Revision history for Yote-Spiderpup
+
+0.02  2026-02-20
+    - Single-file component (.pup) format support
+    - New module Yote::Spiderpup::SFC with parse_sfc() parser
+    - Pages and recipes can be authored as .pup files alongside .yaml
+    - .pup uses <script>, <style>, and <template> blocks
+    - Server, compiler, and watcher all handle .pup files transparently
+
+0.01  2026-02-20
+    - Initial CPAN release
+    - YAML-to-JavaScript/HTML recipe compiler
+    - Reactive component system with state management
+    - Built-in development server (pupserver)
+    - Watch mode for automatic recompilation
+    - CSS/LESS support in recipes

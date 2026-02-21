@@ -261,12 +261,12 @@ for my $target (@ARGV) {
         # write Makefile.PL
         open(FH_MAKEFILEPL,'>Makefile.PL') || die "Can't open file: Makefile.PL.\n";
         binmode FH_MAKEFILEPL;
-        printf FH_MAKEFILEPL (<<'END', $package, $version, $abstract, $requires_as_makefile_pl, $author);
+        printf FH_MAKEFILEPL (<<'END', $package, $version, $abstract, $requires_as_makefile_pl, $author, $name_as_dist_on_url, $name_as_dist_on_url, $name_as_dist_on_url, $package, $version);
 use strict;
 BEGIN { $INC{'warnings.pm'} = '' if $] < 5.006 }; use warnings; local $^W=1;
 use ExtUtils::MakeMaker;
 
-WriteMakefile(
+my %%args = (
     'NAME'      => q{%s},
     'VERSION'   => q{%s},
     'ABSTRACT'  => q{%s},
@@ -275,6 +275,42 @@ WriteMakefile(
     },
     'AUTHOR'    => q{%s},
 );
+
+# LICENSE was introduced in ExtUtils::MakeMaker 6.31 (2006).
+# Passing it to older versions produces an "is not a known parameter" warning
+# without failing, but we suppress the noise by checking the version.
+if ($ExtUtils::MakeMaker::VERSION >= 6.31) {
+    $args{LICENSE} = q{perl};
+}
+
+# MIN_PERL_VERSION (6.48) and META_MERGE (6.46) arrived together in the
+# same EUMM release cycle; guard them under the higher threshold (6.48)
+# so both are always either present or absent.
+if ($ExtUtils::MakeMaker::VERSION >= 6.48) {
+    $args{MIN_PERL_VERSION} = q{5.00503};
+    $args{META_MERGE} = {
+        'meta-spec' => { version => 2 },
+        'resources' => {
+            'license'    => [ 'http://dev.perl.org/licenses/' ],
+            'bugtracker' => {
+                'web' => 'https://github.com/ina-cpan/%s/issues',
+            },
+            'repository' => {
+                'url'  => 'https://github.com/ina-cpan/%s',
+                'web'  => 'https://github.com/ina-cpan/%s',
+                'type' => 'git',
+            },
+        },
+        'provides' => {
+            '%s' => {
+                'file'    => 'lib/LTSV/LINQ.pm',
+                'version' => '%s',
+            },
+        },
+    };
+}
+
+WriteMakefile(%%args);
 
 __END__
 END
@@ -300,13 +336,13 @@ END
         #     url: http://module-build.sourceforge.net/META-spec-v1.4.html
 
         #                                      12     1234
-        my $provides_as_yml = join "\n", map {"  $_:\n    file: $provides{$_}"} sort keys %provides;
-        my $requires_as_yml = join "\n", map {"  $_: $requires{$_}"}            sort keys %requires;
+        my $provides_as_yml = join "\n", map {"  $_:\n    file: $provides{$_}\n    version: $version"} sort keys %provides;
+        my $requires_as_yml = join "\n", map {"  $_: $requires{$_}"}                                   sort keys %requires;
         #                                      12
 
         open(FH_METAYML,'>META.yml') || die "Can't open file: META.yml.\n";
         binmode FH_METAYML;
-        printf FH_METAYML (<<'END', $name_as_dist_on_url, $version, $abstract, $author, $requires_as_yml, $name_as_dist_on_url);
+        printf FH_METAYML (<<'END', $name_as_dist_on_url, $version, $abstract, $author, $requires_as_yml, $provides_as_yml, $name_as_dist_on_url, $name_as_dist_on_url);
 --- #YAML:1.0
 meta-spec:
   version: 1.4
@@ -322,8 +358,12 @@ requires:
 %s
 build_requires:
   Test: 1.122
+minimum_perl_version: 5.00503
+provides:
+%s
 resources:
   license: http://dev.perl.org/licenses/
+  bugtracker: https://github.com/ina-cpan/%s/issues
   repository: https://github.com/ina-cpan/%s
 END
         close(FH_METAYML);
@@ -350,12 +390,12 @@ END
 
         #                                          1234567890123456
         my $requires_as_json = join ",\n", map {qq{                "$_" : "$requires{$_}"}}                            sort keys %requires;
-        my $provides_as_json = join ",\n", map {qq{        "$_" : {\n            "file" : "$provides{$_}"\n        }}} sort keys %provides;
+        my $provides_as_json = join ",\n", map {qq{        "$_" : {\n            "file" : "$provides{$_}",\n            "version" : "$version"\n        }}} sort keys %provides;
         #                                          12345678          123456789012                          12345678
 
         open(FH_METAJSON,'>META.json') || die "Can't open file: META.json.\n";
         binmode FH_METAJSON;
-        printf FH_METAJSON (<<'END', $name_as_dist_on_url, $version, $abstract, $author, $name_as_dist_on_url, $requires_as_json, $requires_as_json, $requires_as_json);
+        printf FH_METAJSON (<<'END', $name_as_dist_on_url, $version, $abstract, $author, $name_as_dist_on_url, $name_as_dist_on_url, $name_as_dist_on_url, $requires_as_json, $requires_as_json, $requires_as_json, $requires_as_json, $provides_as_json);
 {
     "name" : "%s",
     "version" : "%s",
@@ -373,12 +413,18 @@ END
         "version" : 2
     },
     "release_status" : "stable",
+    "minimum_perl_version" : "5.00503",
     "resources" : {
         "license" : [
             "http://dev.perl.org/licenses/"
         ],
+        "bugtracker" : {
+            "web" : "https://github.com/ina-cpan/%s/issues"
+        },
         "repository" : {
-            "url" : "https://github.com/ina-cpan/%s"
+            "url"  : "https://github.com/ina-cpan/%s",
+            "web"  : "https://github.com/ina-cpan/%s",
+            "type" : "git"
         }
     },
     "prereqs" : {
@@ -396,7 +442,15 @@ END
             "requires" : {
 %s
             }
+        },
+        "test" : {
+            "requires" : {
+%s
+            }
         }
+    },
+    "provides" : {
+%s
     }
 }
 END

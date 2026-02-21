@@ -1,0 +1,90 @@
+NAME
+    Mo::utils::Perl - Mo Perl utilities.
+
+SYNOPSIS
+     use Mo::utils::Perl qw(check_version);
+
+     check_version($self, $key);
+
+DESCRIPTION
+    Utilities for checking of Perl related values.
+
+SUBROUTINES
+  "check_version"
+     check_version($self, $key);
+
+    *Since version 0.01.*
+
+    Check parameter defined by $key which is right Perl version defined in
+    version.
+
+    Put error if check isn't ok.
+
+    Returns undef.
+
+ERRORS
+     check_version():
+             Parameter '%s' isn't right Perl version.
+                     Error: %s
+                     Value: %s
+
+EXAMPLE1
+     use strict;
+     use warnings;
+
+     use Mo::utils::Perl qw(check_version);
+
+     my $self = {
+             'key' => '0.01',
+     };
+     check_version($self, 'key');
+
+     # Print out.
+     print "ok\n";
+
+     # Output:
+     # ok
+
+EXAMPLE2
+     use strict;
+     use warnings;
+
+     use Error::Pure;
+     use Mo::utils::Perl qw(check_version);
+
+     $Error::Pure::TYPE = 'Error';
+
+     my $self = {
+             'key' => 'bad',
+     };
+     check_version($self, 'key');
+
+     # Print out.
+     print "ok\n";
+
+     # Output like:
+     # #Error [..Perl.pm:?] Parameter 'key' isn't right Perl version.
+
+DEPENDENCIES
+    English, Exporter, Error::Pure, Readonly, version.
+
+SEE ALSO
+    Mo::utils
+        Mo utilities.
+
+REPOSITORY
+    <https://github.com/michal-josef-spacek/Mo-utils-Perl>
+
+AUTHOR
+    Michal Josef Špaček <mailto:skim@cpan.org>
+
+    <http://skim.cz>
+
+LICENSE AND COPYRIGHT
+    © 2026 Michal Josef Špaček
+
+    BSD 2-Clause License
+
+VERSION
+    0.01
+

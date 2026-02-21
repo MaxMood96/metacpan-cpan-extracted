@@ -7,27 +7,29 @@
     # Basic usage with the integrated scheduler
     Acme::Parataxis::run(
         sub {
-            say 'Main task started';
+            say 'Main fiber started (TID: ' . Acme::Parataxis->tid . ')';
 
             # Spawn background workers
             my $f1 = Acme::Parataxis->spawn(
                 sub {
-                    say '  Task 1: Sleeping in a native thread pool...';
+                    say '  Task 1: Sleeping (non-blocking for others)...';
                     Acme::Parataxis->await_sleep(1000);
-                    say '  Task 1: Ah! What a nice nap...';
-                    return 42;
+                    return 'Coffee is ready!';
                 }
             );
             my $f2 = Acme::Parataxis->spawn(
                 sub {
-                    say '  Task 2: Performing I/O...';
-
-                    # await_read/write for non-blocking socket handling
-                    return 'I/O Done';
+                    say '  Task 2: Calculating... (simulated CPU work)';
+                    my $sum = 0;
+                    for ( 1 .. 100 ) {
+                        $sum += $_;
+                        Acme::Parataxis->maybe_yield();    # Be a good neighbor
+                    }
+                    return $sum;
                 }
             );
 
-            # Block current fiber until results are ready (without blocking the thread)
+            # Await results without blocking the main OS thread
             say 'Result 1: ' . $f1->await();
             say 'Result 2: ' . $f2->await();
         }

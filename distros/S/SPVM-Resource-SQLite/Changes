@@ -1,0 +1,8 @@
+0.002 2026-02-21
+  [Changes]
+    * Use C99 in all places.
+  
+0.001 2026-02-21
+  [Changes]
+    * First release.
+  

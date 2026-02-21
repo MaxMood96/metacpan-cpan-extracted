@@ -24,7 +24,7 @@ Acme::Parataxis::run(
             push @futures, Acme::Parataxis->spawn(
                 sub {
                     my $id = $i;    # Closure capture
-                    diag "Fiber $id started (FID: " . Acme::Parataxis->fid . ')';
+                    diag "Fiber $id started (FID: " . Acme::Parataxis->current_fid . ')';
                     diag "Fiber $id: Sleeping for 1000ms...";
                     Acme::Parataxis->await_sleep(1000);
                     diag "Fiber $id: Woke up!";

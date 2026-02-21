@@ -6,7 +6,7 @@ use Acme::Parataxis;
 my ( $producer, $consumer );
 $producer = Acme::Parataxis->new(
     code => sub {
-        for my $item (qw(Apple Banana Cherry)) {
+        for my $item (qw[Apple Banana Cherry]) {
             say "Producer: Created $item. Transferring to Consumer...";
             $consumer->transfer($item);
             say 'Producer: Consumer gave control back. Moving to next item.';

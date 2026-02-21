@@ -1,0 +1,42 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+
+use File::Basename;
+use File::Spec;
+use Getopt::Long;
+
+use Yote::Spiderpup;
+
+my $base_url_path  = '';
+my $compile_mode   = 0;
+my $watch_mode     = 0;
+my $watch_interval = 5;
+my $port           = 5000;
+my $webroot        = '';
+my $www_dir        = '';
+
+GetOptions(
+    'base-url-path=s' => \$base_url_path,
+    'compile'         => \$compile_mode,
+    'watch:i'         => sub { $watch_mode = 1; $watch_interval = $_[1] || 5 },
+    'port=i'          => \$port,
+    'webroot=s'       => \$webroot,
+    'www-dir=s'       => \$www_dir,
+) or die "Usage: $0 [--base-url-path PATH] [--compile] [--watch [SECONDS]] [--port PORT] [--webroot DIR] [--www-dir DIR]\n";
+
+$www_dir ||= File::Spec->catdir('.', 'www');
+my $sp = Yote::Spiderpup->new(
+    www_dir       => $www_dir,
+    base_url_path => $base_url_path,
+    ($webroot ? (webroot_dir => $webroot) : ()),
+);
+
+if ($watch_mode) {
+    $sp->watch_and_compile($watch_interval);
+} elsif ($compile_mode) {
+    $sp->compile_all;
+} else {
+    $sp->run_server($port);
+}

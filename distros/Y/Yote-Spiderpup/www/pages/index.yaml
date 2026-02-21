@@ -1,0 +1,18 @@
+title: Spiderpup Demo
+css: |
+  nav { padding: 10px; background: #f5f5f5; }
+  nav a { margin-right: 15px; }
+import:
+  zippy: /recipes/zippy.yaml
+  home: /home.yaml
+  about: /about.yaml
+routes:
+  /: home
+  /about: about
+html: |
+  <nav>
+    <link to="/">Home</link> |
+    <link to="/about">About</link>
+  </nav>
+  <hr/>
+  <router-view/>

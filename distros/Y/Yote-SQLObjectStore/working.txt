@@ -1,0 +1,36 @@
+needs doing:
+  * print out table creation SQL rather than execute it
+  
+  * paths: update paths so that we have
+     a hash off the root
+
+     /myhash{*HASH<256>_TYPE}/key{VALUE_OR_REF}
+     /myarry{*ARRAY_TYPE}/index{VALUE_OR_REF}
+     /myobj{TYPE}/key{VALUE_OR_REF}
+     /myval{VALUE}
+
+     what  about arrays?
+      /myarray/12{*value} 
+
+  * have a create path (ensure_path)?
+      /foo<ref type>/bar<ref type>/baz<(array) ref type>[index]/obj
+    in a transaction if availble
+
+
+how it is:
+  starting on mariadb branch. sqlite is passing tests with good code coverage
+
+  needs locking
+    - locking associated with sqlite is file based, with mariadb is db based
+
+  column definitions
+    - should be simplified, really. two kinds, reference and value fields 
+      but with some type checking
+
+  have hash/array/object table structures
+     * need column_defs for obj however
+     * extract table creation sql from it
+     * extract column_defs for the packages/objects when they are loaded
+       and use those for type checking
+
+  warnings/errors if data would be truncated

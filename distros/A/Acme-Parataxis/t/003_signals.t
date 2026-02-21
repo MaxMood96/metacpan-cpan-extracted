@@ -14,7 +14,7 @@ subtest 'Signal handled inside coroutine' => sub {
         diag 'Parent SIGINT handler reached';
         $signaled++;
     };
-    my $coro = Acme::Parataxis->new(
+    my $fiber = Acme::Parataxis->new(
         code => sub {
             diag "Inside fiber: About to kill 'INT' self ($$)...";
             kill 'INT', $$;
@@ -23,7 +23,7 @@ subtest 'Signal handled inside coroutine' => sub {
         }
     );
     diag 'Calling fiber...';
-    $coro->call();
+    $fiber->call();
     is $signaled, 1, 'Signal was caught and handled by Perl';
     diag 'Signal count: ' . $signaled;
 };
@@ -34,7 +34,7 @@ subtest 'Signal during yield/resume' => sub {
         diag 'Parent SIGINT handler reached during suspension';
         $signaled++;
     };
-    my $coro = Acme::Parataxis->new(
+    my $fiber = Acme::Parataxis->new(
         code => sub {
             diag 'Inside fiber: Yielding READY...';
             Acme::Parataxis->yield('READY');
@@ -43,13 +43,13 @@ subtest 'Signal during yield/resume' => sub {
         }
     );
     diag 'Calling fiber (First step)...';
-    my $y = $coro->call();
+    my $y = $fiber->call();
     is $y, 'READY', 'Fiber suspended at yield';
     diag 'Sending signal to parent process...';
     kill 'INT', $$;
     diag 'Signal count before resume: ' . $signaled;
     diag 'Resuming fiber...';
-    $coro->call();
+    $fiber->call();
     is $signaled, 1, 'Signal handled between yield and resume';
     diag "Signal count final: $signaled";
 };

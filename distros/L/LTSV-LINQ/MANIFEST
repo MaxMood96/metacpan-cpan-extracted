@@ -18,3 +18,5 @@ t/007_additional_methods.t
 t/008_set_and_aggregate.t
 t/009_v102_methods.t
 t/010_ascii_only.t
+t/011_groupjoin.t
+t/012_v103_ordering.t

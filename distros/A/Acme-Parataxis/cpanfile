@@ -24,4 +24,7 @@ on build => sub {
 };
 on test => sub {
     requires 'Test2::V1';
+    recommends 'IO::Socket::IP',  '0.32';
+    recommends 'IO::Socket::SSL', '1.968';
+    recommends 'Net::SSLeay',     '1.49';
 };

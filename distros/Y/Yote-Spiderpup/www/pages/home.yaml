@@ -1,0 +1,62 @@
+title: Home
+
+css: |
+  button { background-color: skyblue; }
+
+vars:
+  count: 0
+  version: 0.01
+  colors: ["red","green","blue"]
+
+import:
+  myzippy: /recipes/zippy.yaml
+  bar: /recipes/bar.yaml
+
+computed:
+  facto: $version + $count
+
+methods:
+  rando: $version = Math.round(Math.random()*100)
+
+lifecycle:
+  onMount: |
+    () => { this.receive('clicker',n => alert(`clicker ${n} (zippy ${this.instances.zip.get_color()})`)); }
+
+
+html: |
+  <h1>Home Page BINGO</h1>
+  <p>Welcome to the Perl web server, version $version</p>
+  <myzippy.clicker />]
+  <button type="button" @click="rando()" value="click">clicky</button>
+  <if condition="$version < 20">
+    <div>version ${version} is SMALL</div>
+  </if>
+  <elseif condition="$version < 80">
+    <div>version ${version} is MEDIUM</div>
+  </elseif>
+  <else>
+    <div>version ${version} is LARGE</div>
+  </else>
+  <ul for="[2,12,4,9]">
+    <if condition="(item,idx) => idx === 0">
+      <li>(item,idx) => `The ZERO ${idx} ${item}`</li>
+    </if>
+    <li textContent="(item,idx) => `${idx} is ${item}`"></li>
+  </ul>
+  <ul for="$colors">
+    <li textContent="(item,idx) => `color ${idx} is ${item}`"></li>
+  </ul>
+  Should be nothing in the next loop
+  <ul for="[]">
+    <li textContent="(item,idx) => `color ${idx} is ${item}`"></li>
+  </ul>
+  <myzippy color="blue" !name="zip">
+     <h2>CHOWHOUND $color</h2>
+  </myzippy>
+  <bar>
+    <myzippy!smol color="green">
+      <bar><div>BAR IN ZIPPY IN BAR</div></bar>
+    </myzippy!smol>
+    MORE BAR TEXT
+  </bar>
+  <myzippy !name="zip"></myzippy>

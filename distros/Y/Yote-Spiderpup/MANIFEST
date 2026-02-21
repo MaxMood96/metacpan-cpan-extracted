@@ -1,0 +1,38 @@
+API.md
+bin/pupserver
+Changes
+FEATURES.md
+HOWTO.md
+lib/Yote/Spiderpup.pm
+lib/Yote/Spiderpup/SFC.pm
+lib/Yote/Spiderpup/Transform.pm
+LICENSE
+Makefile.PL
+MANIFEST			This list of files
+README.md
+t/options.t
+t/sfc.t
+t/transforms.t
+www/pages/about.yaml
+www/pages/home.yaml
+www/pages/index.yaml
+www/recipes/bar.yaml
+www/recipes/card-advanced.yaml
+www/recipes/card.yaml
+www/recipes/clicker.pup
+www/recipes/clicker.yaml
+www/recipes/event-child.yaml
+www/recipes/event-parent.yaml
+www/recipes/fred.yaml
+www/recipes/layout.yaml
+www/recipes/test-advanced.yaml
+www/recipes/test-events.yaml
+www/recipes/test-features.yaml
+www/recipes/test-routing.yaml
+www/recipes/test-shorthand.yaml
+www/recipes/test-slots.yaml
+www/recipes/user.yaml
+www/recipes/zippy.yaml
+www/webroot/js/spiderpup.js
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

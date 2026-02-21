@@ -1,15 +1,28 @@
 /**
  * @file Parataxis.c
- * @brief Low-level Green Threads and Hybrid Thread Pool for Perl.
+ * @brief Low-level Green Threads (Fibers) and Hybrid Thread Pool for Perl.
  *
- * Goals:
- * - Cooperative Multitasking (Fibers): User-mode stack switching
- *   - Implemented via Windows Fibers API or POSIX ucontext
- *   - Manually swap Perl's interpreter internals (stacks, scopes, pads, etc.)
+ * @section Overview
+ * This file implements a cooperative multitasking system (Fibers) integrated
+ * with a preemptive native thread pool. It allows Perl to run thousands of
+ * user-mode fibers that can offload blocking C-level tasks to background
+ * OS threads without stalling the main interpreter.
  *
- * - Preemptive Multitasking (Thread Pool): Kernel-mode background tasks
- *   - A fixed pool of native OS threads (pthread/CreateThread)
- *   - Used for blocking C operations (Sleep, Math, IO) to keep the main Perl interpreter responsive
+ * @section Architecture
+ * - **Fibers**: The primitive unit of execution. Each fiber has its own OS context
+ *   and a complete set of Perl interpreter stacks (Argument, Mark, Scope, Save, Mortal).
+ * - **Coroutines**: The execution pattern (yield/call/transfer) used by fibers to
+ *   pass control.
+ * - **Thread Pool**: A fixed pool of worker threads that poll a job queue for
+ *   blocking operations like sleep, I/O, or heavy computation.
+ * - **Context Switching**: The `swap_perl_state` function manually saves and restores
+ *   the global state of the Perl interpreter (`PL_*` variables) to allow disjoint
+ *   execution flows.
+ *
+ * @section Caveats
+ * Shared subroutines (CVs) with re-entrant yielding calls are handled by a
+ * specialized pad-clearing mechanism in `_activate_current_depths` to satisfy
+ * Perl's internal `AvFILLp` assertions in debug builds.
  */
 
 #ifdef _WIN32
@@ -35,9 +48,13 @@
 #include "perl.h"
 
 #ifdef _WIN32
+/** @brief Export macro for Windows DLLs */
 #define DLLEXPORT __declspec(dllexport)
+/** @brief Handle for the underlying OS fiber context */
 typedef LPVOID coro_handle_t;
+/** @brief Handle for a native OS thread */
 typedef HANDLE para_thread_t;
+/** @brief Mutex type for queue synchronization */
 typedef CRITICAL_SECTION para_mutex_t;
 #define LOCK(m) EnterCriticalSection(&m)
 #define UNLOCK(m) LeaveCriticalSection(&m)
@@ -55,9 +72,13 @@ typedef CRITICAL_SECTION para_mutex_t;
 #include <sys/sysctl.h>
 #include <sys/types.h>
 #endif
+/** @brief Export macro for Unix systems */
 #define DLLEXPORT __attribute__((visibility("default")))
+/** @brief Handle for the underlying OS fiber context (ucontext_t) */
 typedef ucontext_t coro_handle_t;
+/** @brief Handle for a native OS thread (pthread_t) */
 typedef pthread_t para_thread_t;
+/** @brief Mutex type for queue synchronization (pthread_mutex_t) */
 typedef pthread_mutex_t para_mutex_t;
 #define LOCK(m) pthread_mutex_lock(&m)
 #define UNLOCK(m) pthread_mutex_unlock(&m)
@@ -72,17 +93,16 @@ typedef pthread_mutex_t para_mutex_t;
 
 // Forward declarations
 DLLEXPORT SV * coro_yield(SV * ret_val);
-DLLEXPORT SV * coro_transfer(int id, SV * args);
-DLLEXPORT void destroy_coro(int id);
+DLLEXPORT SV * coro_transfer(int fiber_id, SV * args);
+DLLEXPORT void destroy_coro(int fiber_id);
 
-// Identity and affinity Helpers
 /**
  * @brief Get the Operating System's unique Thread ID.
  *
  * Useful for debugging to prove that background tasks are running on
  * different OS threads than the main Perl interpreter.
  *
- * @return int The TID (Windows) or LWP ID (Linux).
+ * @return int The TID (Windows) or LWP ID (Linux/BSD/macOS).
  */
 int get_os_thread_id() {
 #ifdef _WIN32
@@ -122,6 +142,7 @@ void pin_to_core(int core_id) {
 
 /**
  * @brief Get the index of the CPU core currently executing this thread.
+ *
  * @return int Core ID (0..N) or -1 if unsupported.
  */
 int get_current_cpu() {
@@ -135,7 +156,9 @@ int get_current_cpu() {
 }
 
 /**
- * @brief Detects the number of logical cores available.
+ * @brief Detects the number of logical cores available on the system.
+ *
+ * @return int CPU count (minimum 1).
  */
 int get_cpu_count() {
 #ifdef _WIN32
@@ -158,131 +181,160 @@ int get_cpu_count() {
 }
 
 /**
- * @struct my_coro_t
- * @brief The complete context of a Perl Fiber.
+ * @struct para_fiber_t
+ * @brief The complete execution context of a Perl Fiber.
  *
- * This structure holds both the OS-level machine state (registers/stack)
- * AND the Perl interpreter's internal state pointers. We must swap both
- * to allow Perl code to pause and resume transparently.
+ * This structure encapsulates both the OS-level register state (via context)
+ * and the entire internal state of the Perl interpreter required to pause
+ * and resume execution of Perl code.
  */
 typedef struct {
-    // OS state
     coro_handle_t context; /**< OS-specific context handle */
 
 #ifndef _WIN32
-    void * stack_p;  /**< Dynamically allocated stack */
-    size_t stack_sz; /**< Size of the stack */
+    void * stack_p;  /**< Pointer to dynamically allocated fiber stack (Unix only) */
+    size_t stack_sz; /**< Size of the allocated stack (Unix only) */
 #endif
 
     /*
-     * These pointers track the current scope, stack depth, and eval context.
-     * Swapping these essentially "pages out" the current Perl execution
-     * and "pages in" the target fiber's execution state.
+     * Perl Interpreter State Pointers.
+     * These must be saved and restored during every context switch.
      */
-    PERL_SI * si;   /**< Stack Info (recursion frames) */
-    AV * curstack;  /**< The Argument Stack (AV*) */
-    SV ** stack_sp; /**< The Stack Pointer */
+    PERL_SI * si;            /**< Current Stack Info (tracks recursion and eval frames) */
+    AV * curstack;           /**< The active Argument Stack (AV*) */
+    SSize_t stack_sp_offset; /**< Stack Pointer offset from stack base */
 
-    I32 * markstack;     /**< Mark Stack Base */
-    I32 * markstack_ptr; /**< Mark Stack Pointer */
-    I32 * markstack_max; /**< Mark Stack Limit */
+    I32 * markstack;     /**< Base of the Mark Stack (tracks list start points) */
+    I32 * markstack_ptr; /**< Current pointer into the Mark Stack */
+    I32 * markstack_max; /**< Limit of the Mark Stack */
 
-    I32 * scopestack;   /**< Scope Stack Base */
-    I32 scopestack_ix;  /**< Scope Stack Index */
-    I32 scopestack_max; /**< Scope Stack Limit */
+    I32 * scopestack;   /**< Base of the Scope Stack (tracks block nesting) */
+    I32 scopestack_ix;  /**< Current index in the Scope Stack */
+    I32 scopestack_max; /**< Limit of the Scope Stack */
 
-    ANY * savestack;   /**< Save Stack Base (local/my) */
-    I32 savestack_ix;  /**< Save Stack Index */
-    I32 savestack_max; /**< Save Stack Limit */
+    ANY * savestack;   /**< Base of the Save Stack (tracks local/my variables for cleanup) */
+    I32 savestack_ix;  /**< Current index in the Save Stack */
+    I32 savestack_max; /**< Limit of the Save Stack */
 
-    SV ** tmps_stack; /**< Mortal Stack Base */
-    I32 tmps_ix;      /**< Mortal Index */
-    I32 tmps_floor;   /**< Mortal Floor */
-    I32 tmps_max;     /**< Mortal Limit */
+    SV ** tmps_stack; /**< Base of the Mortal Stack (tracks SVs needing refcnt decrement) */
+    I32 tmps_ix;      /**< Current index in the Mortal Stack */
+    I32 tmps_floor;   /**< Current floor of the Mortal Stack */
+    I32 tmps_max;     /**< Limit of the Mortal Stack */
 
-    JMPENV * top_env; /**< Exception Environment (eval/die) */
-    COP * curcop;     /**< Current Op Pointer */
-    OP * op;          /**< Current Operation */
-    PAD * comppad;    /**< Pad (Lexicals) */
-    SV ** curpad;     /**< Current Pad Array */
-    PMOP * curpm;     /**< Current Pattern Match */
+    JMPENV * top_env;   /**< Pointer to the top exception environment (eval/die buffers) */
+    COP * curcop;       /**< Current Op Pointer (location in the source/bytecode) */
+    OP * op;            /**< Current Operation being executed */
+    PAD * comppad;      /**< Current lexical Pad (variable storage) */
+    SV ** curpad;       /**< Array pointer to the current lexical Pad */
+    PMOP * curpm;       /**< Current pattern match state */
+    PMOP * curpm_under; /**< Current pattern match state under */
+    PMOP * reg_curpm;   /**< Current regex match state */
 
-    // Fiber metadata
-    SV * user_cv;  /**< The user's code SV (CV*) */
-    SV * self_ref; /**< The Acme::Parataxis Perl object */
+    GV * defgv;      /**< The $_ global */
+    GV * last_in_gv; /**< GV used in last <FH> */
+    SV * rs;         /**< The $/ global */
+    GV * ofsgv;      /**< The $, global */
+    SV * ors_sv;     /**< The $\ global */
+    GV * defoutgv;   /**< The default output filehandle */
+    HV * curstash;   /**< Current package stash */
+    HV * defstash;   /**< Default package stash */
+    SV * errors;     /**< Outstanding queued errors */
 
-    SV * transfer_data; /**< Arguments passed during yield/transfer/call */
+    SV * user_cv;  /**< The Perl sub/coderef this fiber is running */
+    SV * self_ref; /**< The Acme::Parataxis Perl object wrapper */
 
-    int id;          /**< Unique numeric Fiber ID */
-    int finished;    /**< Flag: 1 if returned, 0 if running */
-    int parent_id;   /**< ID of the caller (for asymmetric yield) */
-    int last_sender; /**< ID of the fiber that last transferred control here */
-} my_coro_t;
+    SV * transfer_data; /**< Arguments or return values passed during yield/transfer */
 
-// Thread pool definitions
-#define JOB_FREE 0
-#define JOB_NEW 1
-#define JOB_BUSY 2
-#define JOB_DONE 3
+    int id;          /**< Numeric ID of this fiber */
+    int finished;    /**< Flag: 1 if the fiber has completed its entry_point */
+    int parent_id;   /**< ID of the fiber that 'called' this one (asymmetric) */
+    int last_sender; /**< ID of the fiber that last switched control to this one */
+} para_fiber_t;
 
-#define TASK_SLEEP 0
-#define TASK_GET_CPU 1
-#define TASK_READ 2
-#define TASK_WRITE 3
+/** @name Job Status Constants */
+///@{
+#define JOB_FREE 0 /**< Slot is available for new tasks */
+#define JOB_NEW 1  /**< Task is submitted but not yet picked up by a worker */
+#define JOB_BUSY 2 /**< Task is currently being processed by a worker thread */
+#define JOB_DONE 3 /**< Task has completed and results are ready */
+///@}
+
+/** @name Task Type Constants */
+///@{
+#define TASK_SLEEP 0   /**< Sleep for N milliseconds */
+#define TASK_GET_CPU 1 /**< Retrieve current core ID */
+#define TASK_READ 2    /**< Wait for read-readiness on a file descriptor */
+#define TASK_WRITE 3   /**< Wait for write-readiness on a file descriptor */
+///@}
 
 /**
  * @union value_t
- * @brief Generic container for C-level job arguments/results.
+ * @brief Generic container for task input/output data.
  */
 typedef union {
-    int64_t i;
-    double d;
-    char * s;
+    int64_t i; /**< Integer/Pointer storage */
+    double d;  /**< Floating point storage */
+    char * s;  /**< String storage */
 } value_t;
 
 /**
  * @struct job_t
- * @brief Represents a task submitted to the background thread pool.
+ * @brief Represents a task in the background thread pool queue.
  */
 typedef struct {
-    int fiber_id;      /**< ID of the Fiber waiting for this job */
-    int target_thread; /**< Which worker thread should handle this? */
-    int type;          /**< Type of task (TASK_SLEEP, etc.) */
-    value_t input;     /**< Input Data */
-    value_t output;    /**< Output Data (Populated by worker) */
-    int timeout_ms;    /**< Timeout for the task in milliseconds */
-    int status;        /**< Current status (JOB_NEW -> JOB_DONE) */
+    int fiber_id;      /**< ID of the Fiber that submitted this task */
+    int target_thread; /**< Index of the assigned worker thread */
+    int type;          /**< Type of task to perform (TASK_*) */
+    value_t input;     /**< Input data for the task */
+    value_t output;    /**< Result data populated by the worker */
+    int timeout_ms;    /**< Timeout duration for I/O tasks */
+    int status;        /**< Current lifecycle state (JOB_*) */
 } job_t;
 
-// Global state
+// Global Registry and State
 
-#define MAX_COROS 128
-static my_coro_t * coroutines[MAX_COROS]; /**< Registry of active fibers */
-static int coroutine_count = 0;           /**< High-water mark for IDs (unused now) */
-static my_coro_t main_context;            /**< Storage for the Main Thread context */
-static int current_coro_index = -1;       /**< Currently running Fiber (-1 = Main) */
+/** @brief Maximum number of concurrent fibers allowed */
+#define MAX_FIBERS 128
+/** @brief Array of active fiber structures */
+static para_fiber_t * fibers[MAX_FIBERS];
+/** @brief The context representing the main Perl thread */
+static para_fiber_t main_context;
+/** @brief ID of the currently executing fiber (-1 for Main) */
+static int current_fiber_id = -1;
 
+/** @brief Size of the background job queue */
 #define MAX_JOBS 1024
-static job_t job_slots[MAX_JOBS]; /**< Fixed-size Job Queue */
-static para_mutex_t queue_lock;   /**< Queue protection */
+/** @brief Fixed-size array for background tasks */
+static job_t job_slots[MAX_JOBS];
+/** @brief Mutex protecting access to the job queue */
+static para_mutex_t queue_lock;
 
-/* Preemption state */
+/** @brief Threshold for automatic preemption (0 to disable) */
 static long long preempt_threshold = 0;
+/** @brief Count of operations since last preemption yield */
 static long long preempt_count = 0;
 
-/* Dynamic Thread Pool State */
+/** @brief Maximum worker threads allowed in the pool */
 #define MAX_THREADS 64
+/** @brief Native OS handles for pool threads */
 static para_thread_t thread_handles[MAX_THREADS];
+/** @brief Current size of the thread pool */
 static int thread_pool_size = 0;
+/** @brief Flag to signal worker threads to terminate */
 static volatile int threads_keep_running = 1;
 
 #ifdef _WIN32
-static void * main_fiber = NULL;
+/** @brief Windows-only handle for the main thread converted to fiber */
+static void * main_fiber_handle = NULL;
 #endif
 
 /**
  * @brief Background Worker Thread Loop.
- * Pins to a core, polls job_slots, executes C tasks.
+ *
+ * Each thread pins itself to a core and continuously polls the job queue for
+ * tasks assigned to it.
+ *
+ * @param arg Integer thread ID passed as a pointer.
  */
 #ifdef _WIN32
 DWORD WINAPI worker_thread(LPVOID arg) {
@@ -331,18 +383,16 @@ void * worker_thread(void * arg) {
                 int fd = (int)job->input.i;
                 FD_SET(fd, &fds);
 #endif
-                // Reset tv inside the loop because select updates it on Linux
                 struct timeval tv;
                 int res;
-
                 int elapsed_ms = 0;
-                int timeout = job->timeout_ms > 0 ? job->timeout_ms : 5000;  // Default 5s
+                int timeout = job->timeout_ms > 0 ? job->timeout_ms : 5000;
 
                 while (threads_keep_running) {
                     tv.tv_sec = 0;
-                    tv.tv_usec = 10000;  // 10ms poll
+                    tv.tv_usec = 10000;
 
-                    fd_set work_fds = fds;  // Use a copy of the FD set
+                    fd_set work_fds = fds;
                     if (job->type == TASK_READ)
 #ifdef _WIN32
                         res = select(0, &work_fds, NULL, NULL, &tv);
@@ -381,13 +431,17 @@ void * worker_thread(void * arg) {
     return 0;
 }
 
+/**
+ * @brief Initializes the background thread pool.
+ *
+ * Automatically detects the CPU count and spawns worker threads.
+ */
 DLLEXPORT void init_threads() {
     dTHX;
     LOCK_INIT(queue_lock);
     for (int i = 0; i < MAX_JOBS; i++)
         job_slots[i].status = JOB_FREE;
 
-    // Detect hardware count
     thread_pool_size = get_cpu_count();
     if (thread_pool_size > MAX_THREADS)
         thread_pool_size = MAX_THREADS;
@@ -403,8 +457,12 @@ DLLEXPORT void init_threads() {
 }
 
 /**
- * @brief Submits a task to the background queue.
- * @return int Job index or -1 if queue full.
+ * @brief Submits a C-level task to the background pool.
+ *
+ * @param type The task type constant (TASK_*).
+ * @param arg Input integer or pointer data.
+ * @param timeout_ms Timeout for I/O operations.
+ * @return int The index of the submitted job, or -1 if the queue is full.
  */
 DLLEXPORT int submit_c_job(int type, int64_t arg, int timeout_ms) {
     static int next_thread = 0;
@@ -417,7 +475,7 @@ DLLEXPORT int submit_c_job(int type, int64_t arg, int timeout_ms) {
         }
     }
     if (idx != -1) {
-        job_slots[idx].fiber_id = current_coro_index;
+        job_slots[idx].fiber_id = current_fiber_id;
         job_slots[idx].target_thread = next_thread;
         next_thread = (next_thread + 1) % thread_pool_size;
         job_slots[idx].type = type;
@@ -430,8 +488,9 @@ DLLEXPORT int submit_c_job(int type, int64_t arg, int timeout_ms) {
 }
 
 /**
- * @brief Checks if any background jobs have finished.
- * @return int The Job Index that finished, or -1.
+ * @brief Polls the queue for any completed background jobs.
+ *
+ * @return int Index of a finished job, or -1 if none are ready.
  */
 DLLEXPORT int check_for_completion() {
     int job_idx = -1;
@@ -447,8 +506,10 @@ DLLEXPORT int check_for_completion() {
 }
 
 /**
- * @brief Retrieves the result SV from a specific job.
- * @return SV* The result.
+ * @brief Retrieves the result of a completed job as a Perl SV.
+ *
+ * @param idx The job index in the queue.
+ * @return SV* A mortalized Perl SV containing the result (IV).
  */
 DLLEXPORT SV * get_job_result(int idx) {
     dTHX;
@@ -467,12 +528,23 @@ DLLEXPORT SV * get_job_result(int idx) {
     return res;
 }
 
+/**
+ * @brief Gets the ID of the Fiber that submitted a specific job.
+ *
+ * @param idx Job index.
+ * @return int Fiber ID.
+ */
 DLLEXPORT int get_job_coro_id(int idx) {
     if (idx < 0 || idx >= MAX_JOBS)
         return -1;
     return job_slots[idx].fiber_id;
 }
 
+/**
+ * @brief Frees a job slot in the queue after the result has been retrieved.
+ *
+ * @param idx Job index.
+ */
 DLLEXPORT void free_job_slot(int idx) {
     if (idx < 0 || idx >= MAX_JOBS)
         return;
@@ -481,6 +553,14 @@ DLLEXPORT void free_job_slot(int idx) {
     UNLOCK(queue_lock);
 }
 
+/**
+ * @brief Resets the call depth of a Perl CV to zero.
+ *
+ * Used to ensure that a newly created fiber starts its coderef with a
+ * clean execution state.
+ *
+ * @param cv_ref SV reference to the coderef.
+ */
 DLLEXPORT void force_depth_zero(SV * cv_ref) {
     dTHX;
     CV * cv = NULL;
@@ -492,14 +572,26 @@ DLLEXPORT void force_depth_zero(SV * cv_ref) {
         ((XPVCV *)MUTABLE_PTR(SvANY(cv)))->xcv_depth = 0;
 }
 
-DLLEXPORT int get_current_parataxis_id() { return current_coro_index; }
+/** @brief Returns the ID of the currently executing fiber. */
+DLLEXPORT int get_current_parataxis_id() { return current_fiber_id; }
+/** @brief Returns the OS-level thread ID of the main interpreter thread. */
 DLLEXPORT int get_os_thread_id_export() { return get_os_thread_id(); }
+/** @brief Returns the number of worker threads in the pool. */
 DLLEXPORT int get_thread_pool_size() { return thread_pool_size; }
 
+/** @brief Sets the threshold for automatic yield-based preemption. */
 DLLEXPORT void set_preempt_threshold(int64_t threshold) { preempt_threshold = threshold; }
-
+/** @brief Returns the current count towards the preemption threshold. */
 DLLEXPORT int64_t get_preempt_count() { return preempt_count; }
 
+/**
+ * @brief Checks if automatic preemption should occur.
+ *
+ * Increments the internal counter and triggers a `coro_yield` if the
+ * threshold is reached.
+ *
+ * @return SV* Result of the yield, or undef if no yield occurred.
+ */
 DLLEXPORT SV * maybe_yield() {
     dTHX;
     preempt_count++;
@@ -511,49 +603,75 @@ DLLEXPORT SV * maybe_yield() {
 }
 
 /**
- * @brief Activates subroutines in the current context stack by restoring their depths.
+ * @brief Restores subroutine call depths and cleans argument pads.
  *
- * Each fiber needs its own view of the call depth for subroutines it is currently
- * executing. This *should* prevent assertion failures in Perl's pad management (see
- * https://www.cpantesters.org/cpan/report/6b3fa766-0c98-11f1-83fe-bd6d137c6e88) and ensures
- * that recursive calls or multiple fibers running the same sub use distinct pads.
+ * This function iterates the context stack and restores CvDEPTH for
+ * active subroutines in two passes to safely handle recursive calls.
+ *
+ * Pass 1: Restores CvDEPTH for all active frames.
+ * Pass 2: Surgicaly cleans Slot 0 of the *next* pad depth for each CV.
+ *
+ * @param to The fiber being resumed.
  */
-static void _activate_current_depths(pTHX) {
-    PERL_SI * si = PL_curstackinfo;
+static void _activate_current_depths(pTHX_ para_fiber_t * to) {
+    PERL_SI * si = to->si;
     if (!si || !si->si_cxstack)
         return;
+
+    /* Pass 1: Restore CvDEPTH for all active frames */
     for (I32 i = 0; i <= si->si_cxix; i++) {
         PERL_CONTEXT * cx = &(si->si_cxstack[i]);
-        if (CxTYPE(cx) == CXt_SUB) {
+        if (CxTYPE(cx) == CXt_SUB || CxTYPE(cx) == CXt_FORMAT) {
+            CV * cv = cx->blk_sub.cv;
+            if (cv && SvTYPE((SV *)cv) == SVt_PVCV)
+                CvDEPTH(cv) = cx->blk_sub.olddepth + 1;
+        }
+    }
+
+    /* Pass 2: Clean the landing pads for the NEXT call in each CV */
+    for (I32 i = 0; i <= si->si_cxix; i++) {
+        PERL_CONTEXT * cx = &(si->si_cxstack[i]);
+        if (CxTYPE(cx) == CXt_SUB || CxTYPE(cx) == CXt_FORMAT) {
             CV * cv = cx->blk_sub.cv;
             if (cv && SvTYPE((SV *)cv) == SVt_PVCV) {
-                // Restore CvDEPTH to the depth this context expects.
-                // The current depth is exactly olddepth + 1
-                CvDEPTH(cv) = cx->blk_sub.olddepth + 1;
+                PADLIST * pl = CvPADLIST(cv);
+                I32 next_depth = CvDEPTH(cv) + 1;
+                if (pl && next_depth <= PadlistMAX(pl)) {
+                    AV * next_pad = (AV *)PadlistARRAY(pl)[next_depth];
+                    if (next_pad && SvTYPE(next_pad) == SVt_PVAV) {
+                        SV ** array = AvARRAY(next_pad);
+                        if (array && AvMAX(next_pad) >= 0) {
+                            SV * args = array[0];
+                            if (args && SvTYPE(args) == SVt_PVAV) {
+                                AvFILLp((AV *)args) = -1;
+                                AvREAL_off((AV *)args);
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 /**
- * @brief Swaps the complete Perl Interpreter state between two contexts.
+ * @brief Swaps the internal Perl Interpreter state pointers.
  *
- * This function manually saves and restores the global pointers that the
- * Perl interpreter uses to track execution state. This allows us to
- * pause execution in one fiber and resume in another seamlessly.
+ * This is the core of the fiber implementation. It manually saves all
+ * global pointers that define the "state" of the Perl virtual machine for
+ * the current context and restores them for the target context.
  *
- * @param from The context we are leaving (save state here).
- * @param to     The context we are entering (restore state from here).
+ * @param from Context being paused.
+ * @param to Context being resumed.
  */
-void swap_perl_state(my_coro_t * from, my_coro_t * to) {
-    dTHX; /* Access to the current interpreter */
-
-    // Stack Info (Recursion info, stack bounds)
+void swap_perl_state(para_fiber_t * from, para_fiber_t * to) {
+    dTHX;
+    /* Save current state into 'from' context */
     from->si = PL_curstackinfo;
 
     // The Argument Stack (Main Perl stack)
     from->curstack = PL_curstack;
-    from->stack_sp = PL_stack_sp;
+    from->stack_sp_offset = PL_stack_sp - PL_stack_base;
 
     // The Mark Stack (Tracks where lists begin on the argument stack)
     from->markstack = PL_markstack;
@@ -585,15 +703,27 @@ void swap_perl_state(my_coro_t * from, my_coro_t * to) {
     from->comppad = PL_comppad;
     from->curpad = PL_curpad;
     from->curpm = PL_curpm;
+    from->curpm_under = PL_curpm_under;
+    from->reg_curpm = PL_reg_curpm;
+    from->defgv = PL_defgv;
+    from->last_in_gv = PL_last_in_gv;
+    from->rs = PL_rs;
+    from->ofsgv = PL_ofsgv;
+    from->ors_sv = PL_ors_sv;
+    from->defoutgv = PL_defoutgv;
+    from->curstash = PL_curstash;
+    from->defstash = PL_defstash;
+    from->errors = PL_errors;
 
-    // Load target stack
+    /* Load target state from 'to' context */
     PL_curstackinfo = to->si;
     PL_curstack = to->curstack;
 
     // Re-calculate stack bounds based on the new array (AV)
     PL_stack_base = AvARRAY(PL_curstack);
     PL_stack_max = PL_stack_base + AvMAX(PL_curstack);
-    PL_stack_sp = to->stack_sp;
+    PL_stack_sp = PL_stack_base + to->stack_sp_offset;
+    AvFILLp(PL_curstack) = to->stack_sp_offset;  // Keep stack AV metadata synced
 
     PL_markstack = to->markstack;
     PL_markstack_ptr = to->markstack_ptr;
@@ -617,26 +747,36 @@ void swap_perl_state(my_coro_t * from, my_coro_t * to) {
     PL_op = to->op;
     PL_comppad = to->comppad;
     PL_curpm = to->curpm;
+    PL_curpm_under = to->curpm_under;
+    PL_reg_curpm = to->reg_curpm;
+    PL_defgv = to->defgv;
+    PL_last_in_gv = to->last_in_gv;
+    PL_rs = to->rs;
+    PL_ofsgv = to->ofsgv;
+    PL_ors_sv = to->ors_sv;
+    PL_defoutgv = to->defoutgv;
+    PL_curstash = to->curstash;
+    PL_defstash = to->defstash;
+    PL_errors = to->errors;
 
     if (PL_comppad)
         PL_curpad = AvARRAY(PL_comppad);
     else
         PL_curpad = to->curpad;
 
-    // Restore depths for the newly loaded SI.
-    _activate_current_depths(aTHX);
+    // Restore CvDEPTH and clean landing pads
+    _activate_current_depths(aTHX_ to);
 }
 
 /**
- * @brief Allocates and initializes new Perl stacks for a fresh fiber.
+ * @brief Allocates and initializes new Perl stacks for a fiber.
  *
- * Each fiber needs its own set of control stacks to operate independently.
- * We allocate them using Perl's internal allocators (Newx) to ensure
- * compatibility with the interpreter's memory management.
+ * Each fiber needs a complete set of independent stacks (Argument, Mark,
+ * Scope, Save, Mortal) to function as a separate execution thread.
  *
  * @param c The fiber context to initialize.
  */
-void init_perl_stacks(my_coro_t * c) {
+void init_perl_stacks(para_fiber_t * c) {
     dTHX;
 
     // Allocate Stack Info (SI)
@@ -650,15 +790,19 @@ void init_perl_stacks(my_coro_t * c) {
 
     // Allocate Argument Stack (AV)
     c->curstack = newAV();
-    AvREAL_off(c->curstack);
+    AvREAL_off(c->curstack);  // Stacks do not 'own' their elements in the refcnt sense
     av_extend(c->curstack, 128);
-    c->stack_sp = AvARRAY(c->curstack) - 1;
 
-    // Link the SI to the AV. Perl uses this linkage during stack unwinding/garbage collection.
+    // Initialize stack with a dummy undef at index 0, matching Perl's main stack
+    AvARRAY(c->curstack)[0] = &PL_sv_undef;
+    AvFILLp(c->curstack) = 0;
+    c->stack_sp_offset = 0;
+
+    // Link the SI to the AV. Perl uses this linkage during stack unwinding.
     c->si->si_stack = c->curstack;
 
     // Allocate Control Stacks
-    I32 sz = 2048;  // Depth of 2048 to support Test2::Vx and, well, unknown depth recursions in general
+    I32 sz = 2048; /* Recursion depth support */
 
     Newx(c->markstack, sz, I32);
     c->markstack_ptr = c->markstack;
@@ -678,17 +822,36 @@ void init_perl_stacks(my_coro_t * c) {
     c->tmps_floor = -1;
     c->tmps_max = sz;
 
-    // Inherit Initial Environment
+    // Inherit initial globals from current interpreter state
     c->curcop = PL_curcop;
     c->op = PL_op;
     c->top_env = PL_top_env;
     c->curpm = PL_curpm;
+    c->curpm_under = PL_curpm_under;
+    c->reg_curpm = NULL;
+    c->defgv = PL_defgv;
+    c->last_in_gv = PL_last_in_gv;
+    c->rs = PL_rs;
+    c->ofsgv = PL_ofsgv;
+    c->ors_sv = PL_ors_sv;
+    c->defoutgv = PL_defoutgv;
+    c->curstash = PL_curstash;
+    c->defstash = PL_defstash;
+    c->errors = PL_errors;
 
     // Start with fresh pads to avoid interfering with caller.
     c->comppad = NULL;
     c->curpad = NULL;
 }
 
+/**
+ * @brief Initializes the fiber system and converts the main thread.
+ *
+ * This function must be called once before any other fiber operations.
+ * It captures the state of the main Perl interpreter thread.
+ *
+ * @return int 0 on success.
+ */
 DLLEXPORT int init_system() {
     dTHX;
     main_context.si = PL_curstackinfo;
@@ -696,12 +859,25 @@ DLLEXPORT int init_system() {
     main_context.id = -1;
     main_context.finished = 0;
     main_context.last_sender = -1;
+    main_context.curpm = PL_curpm;
+    main_context.curpm_under = PL_curpm_under;
+    main_context.reg_curpm = PL_reg_curpm;
+    main_context.defgv = PL_defgv;
+    main_context.last_in_gv = PL_last_in_gv;
+    main_context.rs = PL_rs;
+    main_context.ofsgv = PL_ofsgv;
+    main_context.ors_sv = PL_ors_sv;
+    main_context.defoutgv = PL_defoutgv;
+    main_context.curstash = PL_curstash;
+    main_context.defstash = PL_defstash;
+    main_context.errors = PL_errors;
 #ifdef _WIN32
-    if (!main_fiber) {
-        main_fiber = ConvertThreadToFiber(NULL);
-        if (!main_fiber) {
+    /* Convert the main thread into a fiber so it can be switched out */
+    if (!main_fiber_handle) {
+        main_fiber_handle = ConvertThreadToFiber(NULL);
+        if (!main_fiber_handle) {
             if (GetLastError() == ERROR_ALREADY_FIBER)
-                main_fiber = GetCurrentFiber();
+                main_fiber_handle = GetCurrentFiber();
         }
     }
 #endif
@@ -709,21 +885,26 @@ DLLEXPORT int init_system() {
     return 0;
 }
 
-void perform_switch(int to_id) {
+/**
+ * @brief Performs the low-level OS context switch.
+ *
+ * Saves the Perl state and then uses OS primitives (SwitchToFiber or
+ * swapcontext) to change execution flow.
+ *
+ * @param target_id ID of the target fiber (-1 for Main).
+ */
+void perform_switch(int target_id) {
     dTHX;
-    if (to_id == current_coro_index)
+    if (target_id == current_fiber_id)
         return;
-    my_coro_t * from = (current_coro_index == -1) ? &main_context : coroutines[current_coro_index];
-    my_coro_t * to = (to_id == -1) ? &main_context : coroutines[to_id];
-
-    // Track where we are coming from so the target can return here if needed
-    to->last_sender = current_coro_index;
-
-    current_coro_index = to_id;
+    para_fiber_t * from = (current_fiber_id == -1) ? &main_context : fibers[current_fiber_id];
+    para_fiber_t * to = (target_id == -1) ? &main_context : fibers[target_id];
+    to->last_sender = current_fiber_id;
+    current_fiber_id = target_id;
     swap_perl_state(from, to);
 #ifdef _WIN32
-    if (to_id == -1)
-        SwitchToFiber(main_fiber);
+    if (target_id == -1)
+        SwitchToFiber(main_fiber_handle);
     else
         SwitchToFiber(to->context);
 #else
@@ -731,27 +912,30 @@ void perform_switch(int to_id) {
 #endif
 }
 
+/**
+ * @brief Yields execution back to the caller or the main thread.
+ *
+ * Suspends the current fiber and returns a value to the context that
+ * last resumed or called this fiber.
+ *
+ * @param ret_val The Perl SV to "return" to the caller.
+ * @return SV* The value passed in when this fiber is eventually resumed.
+ */
 DLLEXPORT SV * coro_yield(SV * ret_val) {
     dTHX;
-
-    if (current_coro_index == -1)
+    if (current_fiber_id == -1)
         return &PL_sv_undef;
-
-    my_coro_t * self = coroutines[current_coro_index];
+    para_fiber_t * self = fibers[current_fiber_id];
     int parent = self->parent_id;
-
-    // If parent is finished, missing, or destroyed, try the last sender. Fallback mode
-    if (parent != -1 && (!coroutines[parent] || coroutines[parent]->finished))
+    if (parent != -1 && (!fibers[parent] || fibers[parent]->finished))
         parent = self->last_sender;
     else if (parent == -1)
         parent = self->last_sender;
-
-    // If the fallback is *also* finished or destroyed, go back to main
-    if (parent >= 0 && (!coroutines[parent] || coroutines[parent]->finished))
+    if (parent >= 0 && (!fibers[parent] || fibers[parent]->finished))
         parent = -1;
+    para_fiber_t * caller = (parent == -1) ? &main_context : fibers[parent];
 
-    my_coro_t * caller = (parent == -1) ? &main_context : coroutines[parent];
-
+    /* Pass return value to caller */
     if (caller->transfer_data != ret_val) {
         if (caller->transfer_data && caller->transfer_data != &PL_sv_undef)
             SvREFCNT_dec(caller->transfer_data);
@@ -762,24 +946,31 @@ DLLEXPORT SV * coro_yield(SV * ret_val) {
 
     perform_switch(parent);
 
+    /* Retrieve value passed back during resume */
     SV * res = self->transfer_data;
     self->transfer_data = &PL_sv_undef;
-    // Mortalize result before returning to Perl to avoid leaking the reference
-    // created by the transfer mechanism.
     if (res && res != &PL_sv_undef)
         sv_2mortal(res);
     return res;
 }
 
-static void entry_point(my_coro_t * c) {
+/**
+ * @brief Entry point function for all new fibers.
+ *
+ * Sets up the Perl environment (ENTER/SAVETMPS), unpacks arguments,
+ * calls the user coderef, handles results/errors, and manages the
+ * fiber's completion lifecycle.
+ *
+ * @param c Pointer to the fiber context being started.
+ */
+static void entry_point(para_fiber_t * c) {
     dTHX;
-
     ENTER;
     SAVETMPS;
-
     dSP;
     PUSHMARK(SP);
-    // Unpack arguments if transfer_data is an array ref
+
+    /* Unpack arguments passed during coro_call */
     if (c->transfer_data && SvROK(c->transfer_data) && SvTYPE(SvRV(c->transfer_data)) == SVt_PVAV) {
         AV * args = (AV *)SvRV(c->transfer_data);
         I32 len = av_top_index(args) + 1;
@@ -791,34 +982,28 @@ static void entry_point(my_coro_t * c) {
     }
     PUTBACK;
 
-    // Catch exceptions so the sky doesn't fall on our heads
+    /* Execute the Perl sub */
     int count = call_sv(c->user_cv, G_SCALAR | G_EVAL);
 
     SPAGAIN;
-
     SV * ret_val = &PL_sv_undef;
     if (count == 1)
         ret_val = POPs;
     PUTBACK;
 
-    // Immediately set finished to true so is_done() will call destroy_coro() even if subsequent operations fail.
-    // It's working as I imagine it but this is probably wrong...
     c->finished = true;
 
-    // Clear the old transfer_data (arguments passed in)
+    /* Cleanup transfer data and store result */
     if (c->transfer_data && c->transfer_data != &PL_sv_undef) {
         SvREFCNT_dec(c->transfer_data);
         c->transfer_data = &PL_sv_undef;
     }
-
-    // Store result for fiber in transfer_data and inc refcnt so it survives FREETMPS and can be cleaned up by
-    // destroy_coro
     if (ret_val && ret_val != &PL_sv_undef) {
         SvREFCNT_inc(ret_val);
         c->transfer_data = ret_val;
     }
 
-    // Report result/error to the Perl object
+    /* Update the Perl-level Acme::Parataxis object */
     if (c->self_ref && SvROK(c->self_ref)) {
         dSP;
         ENTER;
@@ -838,45 +1023,50 @@ static void entry_point(my_coro_t * c) {
         FREETMPS;
         LEAVE;
     }
-
     FREETMPS;
     LEAVE;
 
-    // Yield the result stored in transfer_data
-    // coro_yield will inc it again for the caller.
+    /* Final yield back to caller */
     coro_yield(c->transfer_data ? c->transfer_data : &PL_sv_undef);
 
+    /* Loop indefinitely if resumed after finish */
     while (1)
         coro_yield(&PL_sv_undef);
 }
 
 #ifdef _WIN32
-static void WINAPI fiber_entry(void * param) { entry_point((my_coro_t *)param); }
+/** @brief Windows fiber callback wrapper. */
+static void WINAPI fiber_entry(void * param) { entry_point((para_fiber_t *)param); }
 #else
-static void posix_entry(int id) { entry_point(coroutines[id]); }
+/** @brief POSIX makecontext callback wrapper. */
+static void posix_entry(int fiber_id) { entry_point(fibers[fiber_id]); }
 #endif
 
-DLLEXPORT int create_coro_ptr(SV * user_code, SV * self_ref) {
+/**
+ * @brief Allocates and prepares a new Fiber context.
+ *
+ * @param user_code Coderef to execute in the fiber.
+ * @param self_ref Acme::Parataxis object to notify on completion.
+ * @return int Unique ID of the new fiber, or negative on error.
+ */
+DLLEXPORT int create_fiber(SV * user_code, SV * self_ref) {
     dTHX;
     int idx = -1;
-    for (int i = 0; i < MAX_COROS; i++) {
-        if (coroutines[i] == NULL) {
+    for (int i = 0; i < MAX_FIBERS; i++) {
+        if (fibers[i] == NULL) {
             idx = i;
             break;
         }
     }
     if (idx == -1)
         return -2;
-
-    my_coro_t * c = (my_coro_t *)malloc(sizeof(my_coro_t));
+    para_fiber_t * c = (para_fiber_t *)malloc(sizeof(para_fiber_t));
     if (!c)
         return -3;
-    memset(c, 0, sizeof(my_coro_t));
-
+    memset(c, 0, sizeof(para_fiber_t));
     c->user_cv = user_code;
     if (user_code && user_code != &PL_sv_undef)
         SvREFCNT_inc(user_code);
-
     c->self_ref = self_ref;
     if (self_ref && self_ref != &PL_sv_undef)
         SvREFCNT_inc(self_ref);
@@ -884,18 +1074,19 @@ DLLEXPORT int create_coro_ptr(SV * user_code, SV * self_ref) {
     c->parent_id = -1;
     c->last_sender = -1;
     c->transfer_data = &PL_sv_undef;
-    coroutines[idx] = c;
+    fibers[idx] = c;
+
+    /* Initialize Perl stacks */
     init_perl_stacks(c);
+
 #ifdef _WIN32
     c->context = CreateFiber(0, fiber_entry, c);
 #else
-    c->stack_sz = 2 * 1024 * 1024;
-    // posix_memalign ensures 16-byte alignment
+    c->stack_sz = 4 * 1024 * 1024;
     if (posix_memalign(&c->stack_p, 16, c->stack_sz) != 0) {
-        destroy_coro(idx);  // Clean up partially created coro
+        destroy_coro(idx);
         return -3;
     }
-
     getcontext(&c->context);
     c->context.uc_stack.ss_sp = c->stack_p;
     c->context.uc_stack.ss_size = c->stack_sz;
@@ -905,48 +1096,60 @@ DLLEXPORT int create_coro_ptr(SV * user_code, SV * self_ref) {
     return idx;
 }
 
-DLLEXPORT SV * coro_call(int id, SV * args) {
+/**
+ * @brief Resumes a fiber (asymmetric call).
+ *
+ * Suspends the caller and switches execution to the specified fiber.
+ * Sets the caller as the 'parent' for future yields.
+ *
+ * @param fiber_id Fiber ID to call.
+ * @param args Perl SV (usually arrayref) to pass as arguments to the fiber.
+ * @return SV* Result yielded by the fiber.
+ */
+DLLEXPORT SV * coro_call(int fiber_id, SV * args) {
     dTHX;
-    if (id < 0 || id >= MAX_COROS || !coroutines[id] || coroutines[id]->finished)
+    if (fiber_id < 0 || fiber_id >= MAX_FIBERS || !fibers[fiber_id] || fibers[fiber_id]->finished)
         return &PL_sv_undef;
-
-    if (coroutines[id]->transfer_data != args) {
-        if (coroutines[id]->transfer_data && coroutines[id]->transfer_data != &PL_sv_undef)
-            SvREFCNT_dec(coroutines[id]->transfer_data);
-        coroutines[id]->transfer_data = args;
+    if (fibers[fiber_id]->transfer_data != args) {
+        if (fibers[fiber_id]->transfer_data && fibers[fiber_id]->transfer_data != &PL_sv_undef)
+            SvREFCNT_dec(fibers[fiber_id]->transfer_data);
+        fibers[fiber_id]->transfer_data = args;
         if (args && args != &PL_sv_undef)
             SvREFCNT_inc(args);
     }
-
-    coroutines[id]->parent_id = current_coro_index;
-    perform_switch(id);
-
-    // If the fiber finished during this call, ensure we release the arguments
-    // we passed to it. The results are in our own transfer_data.
-    if (coroutines[id] && coroutines[id]->finished) {
-        if (coroutines[id]->transfer_data && coroutines[id]->transfer_data != &PL_sv_undef) {
-            SvREFCNT_dec(coroutines[id]->transfer_data);
-            coroutines[id]->transfer_data = &PL_sv_undef;
+    fibers[fiber_id]->parent_id = current_fiber_id;
+    perform_switch(fiber_id);
+    if (fibers[fiber_id] && fibers[fiber_id]->finished) {
+        if (fibers[fiber_id]->transfer_data && fibers[fiber_id]->transfer_data != &PL_sv_undef) {
+            SvREFCNT_dec(fibers[fiber_id]->transfer_data);
+            fibers[fiber_id]->transfer_data = &PL_sv_undef;
         }
     }
-
-    my_coro_t * me = (current_coro_index == -1) ? &main_context : coroutines[current_coro_index];
+    para_fiber_t * me = (current_fiber_id == -1) ? &main_context : fibers[current_fiber_id];
     SV * res = me->transfer_data;
     me->transfer_data = &PL_sv_undef;
-    // Mortalize result before returning to Perl
     if (res && res != &PL_sv_undef)
         sv_2mortal(res);
     return res;
 }
 
-DLLEXPORT SV * coro_transfer(int id, SV * args) {
+/**
+ * @brief Transfers control directly to another fiber (symmetric).
+ *
+ * Suspends the current fiber and switches directly to the target. No
+ * parent/child relationship is established.
+ *
+ * @param target_id Fiber ID to transfer to.
+ * @param args Arguments to pass to the target.
+ * @return SV* Data eventually transferred back to this fiber.
+ */
+DLLEXPORT SV * coro_transfer(int target_id, SV * args) {
     dTHX;
-    if (id < -1 || (id >= 0 && (id >= MAX_COROS || !coroutines[id])))
+    if (target_id < -1 || (target_id >= 0 && (target_id >= MAX_FIBERS || !fibers[target_id])))
         return &PL_sv_undef;
-    if (id >= 0 && coroutines[id]->finished)
+    if (target_id >= 0 && fibers[target_id]->finished)
         return &PL_sv_undef;
-    my_coro_t * target = (id == -1) ? &main_context : coroutines[id];
-
+    para_fiber_t * target = (target_id == -1) ? &main_context : fibers[target_id];
     if (target->transfer_data != args) {
         if (target->transfer_data && target->transfer_data != &PL_sv_undef)
             SvREFCNT_dec(target->transfer_data);
@@ -954,33 +1157,29 @@ DLLEXPORT SV * coro_transfer(int id, SV * args) {
         if (args && args != &PL_sv_undef)
             SvREFCNT_inc(args);
     }
-
-    perform_switch(id);
-
-    // If the target fiber was a real fiber (not main) and it finished during this transfer,
-    // ensure we release the arguments we passed to it.
-    if (id >= 0 && coroutines[id] && coroutines[id]->finished) {
-        if (coroutines[id]->transfer_data && coroutines[id]->transfer_data != &PL_sv_undef) {
-            SvREFCNT_dec(coroutines[id]->transfer_data);
-            coroutines[id]->transfer_data = &PL_sv_undef;
+    perform_switch(target_id);
+    if (target_id >= 0 && fibers[target_id] && fibers[target_id]->finished) {
+        if (fibers[target_id]->transfer_data && fibers[target_id]->transfer_data != &PL_sv_undef) {
+            SvREFCNT_dec(fibers[target_id]->transfer_data);
+            fibers[target_id]->transfer_data = &PL_sv_undef;
         }
     }
-
-    my_coro_t * me = (current_coro_index == -1) ? &main_context : coroutines[current_coro_index];
+    para_fiber_t * me = (current_fiber_id == -1) ? &main_context : fibers[current_fiber_id];
     SV * res = me->transfer_data;
     me->transfer_data = &PL_sv_undef;
-    // Mortalize result before returning to Perl
     if (res && res != &PL_sv_undef)
         sv_2mortal(res);
     return res;
 }
 
-DLLEXPORT int is_finished(int id) {
-    if (id < 0)
+/** @brief Returns 1 if the fiber has finished execution. */
+DLLEXPORT int is_finished(int fiber_id) {
+    if (fiber_id < 0)
         return 0;
-    return (coroutines[id] && coroutines[id]->finished) ? 1 : 0;
+    return (fibers[fiber_id] && fibers[fiber_id]->finished) ? 1 : 0;
 }
 
+/** @brief Internal helper to reset subroutine depth for cleanup. */
 static void recursive_depth_reset(pTHX_ CV * cv) {
     if (!cv || SvTYPE((SV *)cv) != SVt_PVCV)
         return;
@@ -988,53 +1187,74 @@ static void recursive_depth_reset(pTHX_ CV * cv) {
         CvDEPTH(cv) = 0;
 }
 
-DLLEXPORT void destroy_coro(int id) {
-    dTHX;
-    if (id < 0 || id >= MAX_COROS)
+/**
+ * @brief Clears active pads in the fiber stack.
+ *
+ * Internal helper used during fiber destruction to ensure all active lexical
+ * scopes are unwound and their variables freed.
+ *
+ * @param si The Stack Info structure of the fiber.
+ */
+static void _clear_pads_in_stack(pTHX_ PERL_SI * si) {
+    if (!si || !si->si_cxstack)
         return;
-    my_coro_t * c = coroutines[id];
+    for (I32 i = si->si_cxix; i >= 0; i--) {
+        PERL_CONTEXT * cx = &(si->si_cxstack[i]);
+        if (CxTYPE(cx) == CXt_SUB || CxTYPE(cx) == CXt_FORMAT) {
+            CV * cv = cx->blk_sub.cv;
+            if (cv && SvTYPE((SV *)cv) == SVt_PVCV) {
+                PADLIST * padlist = CvPADLIST(cv);
+                if (padlist) {
+                    I32 depth = cx->blk_sub.olddepth + 1;
+                    if (depth > 0 && depth <= PadlistMAX(padlist)) {
+                        AV * pad = (AV *)PadlistARRAY(padlist)[depth];
+                        if (pad && SvTYPE((SV *)pad) == SVt_PVAV)
+                            av_clear(pad);
+                    }
+                }
+                if (CvDEPTH(cv) > 0)
+                    CvDEPTH(cv)--;
+            }
+        }
+    }
+}
+
+/**
+ * @brief Destroys a fiber and releases all associated memory.
+ *
+ * This includes freeing OS-level stacks and context, but also carefully
+ * decrementing refcounts of Perl SVs stored within the fiber.
+ *
+ * @param fiber_id Fiber ID to destroy.
+ */
+DLLEXPORT void destroy_coro(int fiber_id) {
+    dTHX;
+    if (fiber_id < 0 || fiber_id >= MAX_FIBERS)
+        return;
+    para_fiber_t * c = fibers[fiber_id];
     if (!c)
         return;
+    fibers[fiber_id] = NULL;
 
-    coroutines[id] = NULL;  // Prevent re-entry
-    // Depth reset is kinda the most difficult part... First, we gotta deal with...
-    // User CV*
+    /* Unwind pads */
+    if (c->si)
+        _clear_pads_in_stack(aTHX_ c->si);
+
+    /* Release Perl references */
     if (c->user_cv && c->user_cv != &PL_sv_undef) {
-        CV * cv = NULL;
-        if (SvROK(c->user_cv))
-            cv = (CV *)SvRV(c->user_cv);
-        else if (SvTYPE(c->user_cv) == SVt_PVCV)
-            cv = (CV *)c->user_cv;
-        if (cv)
-            recursive_depth_reset(aTHX_ cv);
+        SvREFCNT_dec(c->user_cv);
+        c->user_cv = NULL;
+    }
+    if (c->self_ref && c->self_ref != &PL_sv_undef) {
+        SvREFCNT_dec(c->self_ref);
+        c->self_ref = NULL;
+    }
+    if (c->transfer_data && c->transfer_data != &PL_sv_undef) {
+        SvREFCNT_dec(c->transfer_data);
+        c->transfer_data = NULL;
     }
 
-    // The context stack
-    if (c->si && c->si->si_cxstack) {
-        for (I32 i = 0; i <= c->si->si_cxix; i++) {
-            PERL_CONTEXT * cx = &(c->si->si_cxstack[i]);
-            if (CxTYPE(cx) == CXt_SUB || CxTYPE(cx) == CXt_FORMAT)
-                recursive_depth_reset(aTHX_ cx->blk_sub.cv);
-        }
-    }
-
-    // Scan the argument stack for ANY other CVs
-    if (c->curstack) {
-        SSize_t fill = av_top_index(c->curstack);
-        SV ** ary = AvARRAY(c->curstack);
-        for (SSize_t i = 0; i <= fill; i++) {
-            SV * sv = ary[i];
-            if (sv && SvROK(sv)) {
-                SV * rv = SvRV(sv);
-                if (rv && SvTYPE(rv) == SVt_PVCV)
-                    recursive_depth_reset(aTHX_(CV *) rv);
-            }
-            else if (sv && SvTYPE(sv) == SVt_PVCV) {
-                recursive_depth_reset(aTHX_(CV *) sv);
-            }
-        }
-    }
-
+    /* Early exit if Perl is already shutting down */
     if (PL_dirty) {
 #ifndef _WIN32
         if (c->stack_p)
@@ -1052,19 +1272,17 @@ DLLEXPORT void destroy_coro(int id) {
         free(c->stack_p);
 #endif
 
-    // Now, it should be safe for cleanup
+    /* Safely free Perl-allocated stacks */
     if (c->si) {
         if (c->si->si_cxstack)
             Safefree(c->si->si_cxstack);
         Safefree(c->si);
     }
-
     if (c->curstack) {
         av_clear(c->curstack);
         SvREFCNT_dec((SV *)c->curstack);
         c->curstack = NULL;
     }
-
     if (c->markstack)
         Safefree(c->markstack);
     if (c->scopestack)
@@ -1079,25 +1297,15 @@ DLLEXPORT void destroy_coro(int id) {
         }
         Safefree(c->tmps_stack);
     }
-
-    if (c->user_cv && c->user_cv != &PL_sv_undef) {
-        SvREFCNT_dec(c->user_cv);
-        c->user_cv = NULL;
-    }
-
-    if (c->self_ref && c->self_ref != &PL_sv_undef) {
-        SvREFCNT_dec(c->self_ref);
-        c->self_ref = NULL;
-    }
-
-    if (c->transfer_data && c->transfer_data != &PL_sv_undef) {
-        SvREFCNT_dec(c->transfer_data);
-        c->transfer_data = NULL;
-    }
-
     free(c);
 }
 
+/**
+ * @brief Global cleanup function for the fiber and thread pool system.
+ *
+ * Signals all worker threads to terminate and destroys all remaining
+ * fibers. Should be called during global destruction or system shutdown.
+ */
 DLLEXPORT void cleanup() {
     dTHX;
     threads_keep_running = 0;
@@ -1106,14 +1314,13 @@ DLLEXPORT void cleanup() {
 #else
     usleep(10000);
 #endif
-    if (current_coro_index != -1) {
-        swap_perl_state(coroutines[current_coro_index], &main_context);
-        current_coro_index = -1;
+    if (current_fiber_id != -1) {
+        swap_perl_state(fibers[current_fiber_id], &main_context);
+        current_fiber_id = -1;
     }
-    for (int i = 0; i < MAX_COROS; i++)
-        if (coroutines[i])
+    for (int i = 0; i < MAX_FIBERS; i++)
+        if (fibers[i])
             destroy_coro(i);
-
     if (main_context.transfer_data && main_context.transfer_data != &PL_sv_undef) {
         SvREFCNT_dec(main_context.transfer_data);
         main_context.transfer_data = &PL_sv_undef;

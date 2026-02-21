@@ -1,5 +1,14 @@
 Revision history for Perl extension Command-Run
 
+0.9903 2026-02-21T10:10:36Z
+
+    - Add nofork option for fork-free code reference execution
+    - Add raw option to avoid PerlIO :encoding(utf8) overhead and leak
+    - Optimize nofork tmpfile reuse (truncate+seek instead of recreate)
+    - Protect caller's $_ with local $_ in nofork execution
+    - Add STDOUT binmode in nofork mode (symmetry with STDIN)
+    - Add comprehensive NOFORK AND RAW MODE documentation
+
 0.9902 2026-01-16T11:24:17Z
 
     - Remove new(@command) style; use command => [...] or ->command() instead

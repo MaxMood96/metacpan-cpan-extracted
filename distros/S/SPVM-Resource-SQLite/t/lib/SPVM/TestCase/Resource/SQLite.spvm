@@ -1,0 +1,4 @@
+class TestCase::Resource::SQLite {
+  use Resource::SQLite;
+  native static method test : int ();
+}

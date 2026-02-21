@@ -7,7 +7,7 @@
 BEGIN {
     unshift @INC, 'lib';
     $| = 1;
-    print "1..44\n";
+    print "1..50\n";
 }
 
 use LTSV::LINQ;
@@ -249,4 +249,36 @@ ok($die_iter->() == 99, 'DefaultIfEmpty lazy - returns default');
 
 # Test 44: DefaultIfEmpty lazy - then undef
 ok(!defined($die_iter->()), 'DefaultIfEmpty lazy - then undef');
+
+#---------------------------------------------------------------------
+# LastOrDefault with $default argument (v1.03 symmetry with FirstOrDefault)
+#---------------------------------------------------------------------
+
+# Test 45: LastOrDefault with explicit default on empty sequence
+my $ld1 = LTSV::LINQ->From([])->LastOrDefault(undef, 'DEFAULT');
+ok($ld1 eq 'DEFAULT', 'LastOrDefault: explicit default returned on empty');
+
+# Test 46: LastOrDefault with predicate no-match returns explicit default
+my $ld2 = LTSV::LINQ->From([1,3,5])->LastOrDefault(sub { $_[0] % 2 == 0 }, -1);
+ok($ld2 == -1, 'LastOrDefault: explicit default returned when predicate unmatched');
+
+# Test 47: LastOrDefault without default still returns undef (backwards compat)
+my $ld3 = LTSV::LINQ->From([])->LastOrDefault();
+ok(!defined($ld3), 'LastOrDefault: undef when no default given (backwards compat)');
+
+#---------------------------------------------------------------------
+# FirstOrDefault/LastOrDefault: 1-arg scalar (non-CODE) as default
+#---------------------------------------------------------------------
+
+# Test 48: FirstOrDefault with 1-arg scalar on empty -> returns that scalar
+my $fd1 = LTSV::LINQ->From([])->FirstOrDefault(42);
+ok($fd1 == 42, 'FirstOrDefault(42) on empty -> 42');
+
+# Test 49: FirstOrDefault with 1-arg scalar on non-empty -> returns first element
+my $fd2 = LTSV::LINQ->From([10,20])->FirstOrDefault(42);
+ok($fd2 == 10, 'FirstOrDefault(42) on [10,20] -> 10 (not 42)');
+
+# Test 50: LastOrDefault with 1-arg scalar on empty -> returns that scalar
+my $ld4 = LTSV::LINQ->From([])->LastOrDefault(99);
+ok($ld4 == 99, 'LastOrDefault(99) on empty -> 99');
 

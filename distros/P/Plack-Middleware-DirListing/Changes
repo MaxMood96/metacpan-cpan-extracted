@@ -1,4 +1,7 @@
 Revision history for Perl module Plack::Middleware::DirListing
 
+1.01 Fri 20 Feb 2026 20:23:00 GMT
+  - Updated tests and implemented trailing slash
+
 1.00 Wed 11 Feb 2026 16:07:00 GMT
   - Initial version

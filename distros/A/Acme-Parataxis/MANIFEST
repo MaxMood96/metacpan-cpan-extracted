@@ -28,3 +28,10 @@ t/005_symmetric.t
 t/006_parallel.t
 t/007_data_types.t
 t/008_preemption.t
+t/009_http_tiny.t
+t/010_regex.t
+t/011_socket.t
+t/012_manual_http.t
+t/013_real_http.t
+t/014_http_pool.t
+t/015_http_mock_pool.t

@@ -4,7 +4,7 @@
       "brian d foy <briandfoy@pobox.com>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010",
+   "generated_by" : "ExtUtils::MakeMaker version 7.70, CPAN::Meta::Converter version 2.150010",
    "license" : [
       "artistic_2"
    ],
@@ -56,6 +56,6 @@
          "web" : "https://github.com/briandfoy/business-isbn-data"
       }
    },
-   "version" : "20260214.001",
+   "version" : "20260218.001",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

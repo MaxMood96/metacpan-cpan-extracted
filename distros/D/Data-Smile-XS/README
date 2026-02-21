@@ -1,0 +1,143 @@
+NAME
+    Data::Smile::XS - XS encoder/decoder for Smile data
+
+SYNOPSIS
+      use Data::Smile::XS qw(
+        encode_smile decode_smile dump_smile load_smile
+      );
+
+      my $bytes = encode_smile( { hello => 'world' } );
+      my $data  = decode_smile( $bytes );
+
+      dump_smile( 'example.smile', { answer => 42 } );
+      my $round_trip = load_smile( 'example.smile' );
+
+DESCRIPTION
+    This module provides a fast XS implementation of Smile serialisation. It
+    exports four optional functions:
+
+    *   `encode_smile`
+
+    *   `decode_smile`
+
+    *   `dump_smile`
+
+    *   `load_smile`
+
+    All option arguments are optional hashrefs. Passing any other kind of
+    reference for options throws an exception.
+
+FUNCTIONS
+  encode_smile( $data, \%options )
+    Encodes a Perl data structure into Smile bytes and returns a byte string.
+
+    Recognised options:
+
+    *   `write_header` (boolean, default true)
+
+        Include the 4-byte Smile header (`:)` `\n` and flags byte) before the
+        payload.
+
+    *   `shared_names` (boolean, default true)
+
+        Enable shared key-name back references while encoding object/hash
+        keys.
+
+    *   `shared_values` (boolean, default true when `write_header` is true;
+        default false when `write_header` is false and `shared_values` is not
+        explicitly set)
+
+        Enable shared short-string value back references while encoding.
+
+    *   `canonical` (boolean, default false)
+
+        If true, encode hashes/objects with keys sorted lexically.
+
+        This is slower, but should (in theory) result in byte-identical output
+        every time, given the same input.
+
+    Unknown option keys throw an exception.
+
+  decode_smile( $bytes, \%options )
+    Decodes Smile bytes into Perl data and returns the resulting structure.
+
+    Recognised options:
+
+    *   `use_bigint` (boolean, default true)
+
+        Decode integer values outside native integer range as `Math::BigInt`
+        objects (when available).
+
+    *   `require_header` (boolean, default false)
+
+        Require the Smile document header to be present. If true and no header
+        is found, decoding throws an exception.
+
+    *   `json_bool` (boolean, default true)
+
+        If true, decode booleans as `JSON::PP` booleans (`JSON::PP::true` and
+        `JSON::PP::false`) when available. If false, decode booleans as native
+        Perl booleans.
+
+    Unknown option keys throw an exception.
+
+  dump_smile( $file, $data, \%options )
+    Encodes $data using `encode_smile` and writes the bytes to $file. Returns
+    true on success and false on write/close failure.
+
+    $file may be:
+
+    *   a filename string
+
+    *   an open writable filehandle
+
+    *   a `Path::Tiny` object
+
+    *   a `Path::Class::File` object
+
+    The `\%options` hashref is passed through to `encode_smile`, so it accepts
+    the same options and defaults: `write_header`, `shared_names`,
+    `shared_values`, and `canonical`.
+
+  load_smile( $file, \%options )
+    Reads Smile bytes from $file, decodes them with `decode_smile`, and
+    returns the resulting data structure.
+
+    $file may be:
+
+    *   a filename string
+
+    *   an open readable filehandle
+
+    *   a `Path::Tiny` object
+
+    *   a `Path::Class::File` object
+
+    The `\%options` hashref is passed through to `decode_smile`, so it accepts
+    the same options and defaults: `use_bigint`, `require_header`, and
+    `json_bool`.
+
+BUGS
+    Please report any bugs to
+    <https://github.com/tobyink/p5-data-smile-xs/issues>.
+
+SEE ALSO
+    Data::Smile, Data::Smile::PP,
+    <https://github.com/FasterXML/smile-format-specification/blob/master/smile
+    -specification.md> (Smile format specification),
+    <https://en.wikipedia.org/wiki/Smile_(data_interchange_format)>.
+
+AUTHOR
+    Toby Inkster <tobyink@cpan.org>.
+
+COPYRIGHT AND LICENCE
+    This software is copyright (c) 2026 by Toby Inkster.
+
+    This is free software; you can redistribute it and/or modify it under the
+    same terms as the Perl 5 programming language system itself.
+
+DISCLAIMER OF WARRANTIES
+    THIS PACKAGE IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR IMPLIED
+    WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
+    MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+

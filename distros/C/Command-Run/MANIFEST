@@ -7,10 +7,14 @@ cpanfile
 lib/Command/Run.pm
 lib/Command/Run/Tmpfile.pm
 minil.toml
+nofork-tmpfile-reuse.md
 t/00_compile.t
 t/01_tmpfile.t
 t/02_run.t
 t/03_coderef.t
 t/04_with.t
+t/05_nofork.t
+t/bench.pl
+xt/nofork_ansicolumn.t
 META.yml
 MANIFEST

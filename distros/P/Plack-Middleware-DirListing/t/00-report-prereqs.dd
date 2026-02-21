@@ -16,8 +16,10 @@ do { my $x = {
        'runtime' => {
                       'requires' => {
                                       'DirHandle' => '0',
+                                      'HTML::Entities' => '0',
                                       'Plack::MIME' => '0',
                                       'Plack::Middleware' => '0',
+                                      'Plack::Request' => '0',
                                       'Plack::Util::Accessor' => '0',
                                       'Time::Piece' => '0',
                                       'URI::Escape' => '0',
@@ -38,8 +40,11 @@ do { my $x = {
                                    'Path::Tiny' => '0',
                                    'Plack::Builder' => '0',
                                    'Plack::Test' => '0',
+                                   'Test2::V0' => '0',
                                    'Test::More' => '0',
-                                   'lib' => '0'
+                                   'feature' => '0',
+                                   'lib' => '0',
+                                   'utf8' => '0'
                                  }
                  }
      };

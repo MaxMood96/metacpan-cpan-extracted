@@ -1,0 +1,95 @@
+title: Layout
+vars:
+  pageTitle: "Exquisite Corpse"
+
+less: |
+  @bg: #1a1a2e;
+  @surface: #16213e;
+  @primary: #e94560;
+  @secondary: #0f3460;
+  @text: #eee;
+  @muted: #888;
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: @bg;
+    color: @text;
+    min-height: 100vh;
+  }
+
+  .layout {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 0;
+    border-bottom: 1px solid @secondary;
+    margin-bottom: 30px;
+
+    h1 {
+      margin: 0;
+      font-size: 1.8em;
+      color: @primary;
+
+      span {
+        color: @text;
+        font-weight: 300;
+      }
+    }
+
+    nav {
+      display: flex;
+      gap: 15px;
+
+      a, button {
+        background: @secondary;
+        color: @text;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+        text-decoration: none;
+        font-size: 0.9em;
+
+        &:hover {
+          background: lighten(@secondary, 10%);
+        }
+
+        &.primary {
+          background: @primary;
+        }
+      }
+    }
+  }
+
+  .user-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: @muted;
+
+    strong {
+      color: @text;
+    }
+  }
+
+html: |
+  <div class="layout">
+    <header>
+      <h1>Exquisite <span>Corpse</span></h1>
+      <slot name="nav"/>
+    </header>
+    <main>
+      <slot/>
+    </main>
+  </div>

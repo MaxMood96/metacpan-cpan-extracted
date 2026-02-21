@@ -1,0 +1,122 @@
+{
+   "abstract" : "Yote",
+   "author" : [
+      "unknown"
+   ],
+   "dynamic_config" : 1,
+   "generated_by" : "Module::Build version 0.4234",
+   "license" : [
+      "perl_5"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "Yote-SQLObjectStore",
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "Module::Build" : "0.4",
+            "Test::Exception" : "0",
+            "Test::More" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "Module::Build" : "0.42"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "DBD::MariaDB" : "1.023000",
+            "DBD::Pg" : "0",
+            "DBD::SQLite" : "1.074000",
+            "DBI" : "0",
+            "File::Grep" : "0",
+            "Set::Scalar" : "0",
+            "perl" : "v5.16.0"
+         }
+      }
+   },
+   "provides" : {
+      "Yote::Locker" : {
+         "file" : "lib/Yote/Locker.pm",
+         "version" : "0.01"
+      },
+      "Yote::ObjectStore::Cache" : {
+         "file" : "lib/Yote/SQLObjectStore/Cache.pm"
+      },
+      "Yote::SQLObjectStore" : {
+         "file" : "lib/Yote/SQLObjectStore.pm"
+      },
+      "Yote::SQLObjectStore::BaseObj" : {
+         "file" : "lib/Yote/SQLObjectStore/BaseObj.pm"
+      },
+      "Yote::SQLObjectStore::BaseStorable" : {
+         "file" : "lib/Yote/SQLObjectStore/BaseStorable.pm"
+      },
+      "Yote::SQLObjectStore::MariaDB" : {
+         "file" : "lib/Yote/SQLObjectStore/MariaDB.pm"
+      },
+      "Yote::SQLObjectStore::MariaDB::Obj" : {
+         "file" : "lib/Yote/SQLObjectStore/MariaDB/Obj.pm"
+      },
+      "Yote::SQLObjectStore::MariaDB::Root" : {
+         "file" : "lib/Yote/SQLObjectStore/MariaDB/Root.pm"
+      },
+      "Yote::SQLObjectStore::MariaDB::TableManagement" : {
+         "file" : "lib/Yote/SQLObjectStore/MariaDB/TableManagement.pm"
+      },
+      "Yote::SQLObjectStore::MariaDB::TableManager" : {
+         "file" : "lib/Yote/SQLObjectStore/MariaDB/TableManager.pm"
+      },
+      "Yote::SQLObjectStore::Postgres" : {
+         "file" : "lib/Yote/SQLObjectStore/Postgres.pm"
+      },
+      "Yote::SQLObjectStore::Postgres::Obj" : {
+         "file" : "lib/Yote/SQLObjectStore/Postgres/Obj.pm"
+      },
+      "Yote::SQLObjectStore::Postgres::Root" : {
+         "file" : "lib/Yote/SQLObjectStore/Postgres/Root.pm"
+      },
+      "Yote::SQLObjectStore::Postgres::TableManager" : {
+         "file" : "lib/Yote/SQLObjectStore/Postgres/TableManager.pm"
+      },
+      "Yote::SQLObjectStore::SQLite" : {
+         "file" : "lib/Yote/SQLObjectStore/SQLite.pm"
+      },
+      "Yote::SQLObjectStore::SQLite::Obj" : {
+         "file" : "lib/Yote/SQLObjectStore/SQLite/Obj.pm"
+      },
+      "Yote::SQLObjectStore::SQLite::Root" : {
+         "file" : "lib/Yote/SQLObjectStore/SQLite/Root.pm"
+      },
+      "Yote::SQLObjectStore::SQLite::TableManagement" : {
+         "file" : "lib/Yote/SQLObjectStore/SQLite/TableManagement.pm"
+      },
+      "Yote::SQLObjectStore::SQLite::TableManager" : {
+         "file" : "lib/Yote/SQLObjectStore/SQLite/TableManager.pm"
+      },
+      "Yote::SQLObjectStore::StoreBase" : {
+         "file" : "lib/Yote/SQLObjectStore/StoreBase.pm",
+         "version" : "2.06"
+      },
+      "Yote::SQLObjectStore::TableManager" : {
+         "file" : "lib/Yote/SQLObjectStore/TableManager.pm"
+      },
+      "Yote::SQLObjectStore::TiedArray" : {
+         "file" : "lib/Yote/SQLObjectStore/TiedArray.pm"
+      },
+      "Yote::SQLObjectStore::TiedHash" : {
+         "file" : "lib/Yote/SQLObjectStore/TiedHash.pm"
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "license" : [
+         "http://dev.perl.org/licenses/"
+      ]
+   },
+   "version" : 0,
+   "x_serialization_backend" : "JSON::PP version 4.16"
+}

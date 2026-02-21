@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use 5.010;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 sub new {
     my ($class, %args) = @_;
@@ -17,44 +17,42 @@ sub new {
 }
 
 sub is_tip_node {
-    my ($self) = @_;
-    !!$self->{tip};
+    !!$_[0]{tip};
 }
 
 sub is_inner_node {
-    my ($self) = @_;
-    !!$self->{children};
+    !!$_[0]{children};
 }
 
 sub children {
-    my ($self) = @_;
-    $self->{children} // [];
+    $_[0]{children} // [];
 }
 
 sub tip {
-    my ($self) = @_;
-    $self->{tip};
+    $_[0]{tip};
 }
 
 sub tips {
     my ($self) = @_;
-    return $self if $self->is_tip_node;
+
+    return $self->{_tip_array} if $self->{_tip_array};
+
+    return [$self->tip] if $self->is_tip_node;
     my @tips;
     my @children = @{$self->children};
     while (my $child = shift @children) {
         if ($child->is_tip_node) {
-            push @tips, $child;
+            push @tips, $child->tip;
         }
         else {
             push @children, @{$child->children};
         }
     }
-    return \@tips;
+    return $self->{_tip_array} = \@tips;
 }
 
 sub bbox {
-    my ($self) = @_;
-    $self->{bbox};
+    $_[0]{bbox};
 }
 
 sub query_point {

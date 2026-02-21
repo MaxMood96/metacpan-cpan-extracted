@@ -1,0 +1,12 @@
+<script>
+{
+  vars: { count: 0, title: 'clicked' },
+  methods: {
+    inc: () => { $count = $count + 1; this.broadcast("clicker", $count ); this.emit("bloop", $count ) }
+  }
+}
+</script>
+
+<template>
+<button type="button" @click="inc()" value="click">${title} ${count} times</button>
+</template>

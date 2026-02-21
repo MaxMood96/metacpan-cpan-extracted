@@ -1,17 +1,21 @@
 Revision history for Tree-STR
 
+0.05  20260221
+    - Linearise the query methods (no more recursion).
+    - Some micro-optimisations.
+
 0.04  20260127
-    Fix URLs in Makefile.PL metadata
+    - Fix URLs in Makefile.PL metadata
 
 0.03  20260124
-    Fix manifest issues.
+    - Fix manifest issues.
 
 0.02  20260123
-    Fix some egregious bugs in v0.01.
-    More tests.
+    - Fix some egregious bugs in v0.01.
+    - More tests.
 
 0.01  20260123
-    First version, released on an unsuspecting world.
-    Probably has bugs.
+    - First version, released on an unsuspecting world.
+    - Probably has bugs.
 
 

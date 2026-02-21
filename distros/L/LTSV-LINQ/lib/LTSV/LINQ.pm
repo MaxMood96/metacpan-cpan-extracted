@@ -9,14 +9,18 @@ package LTSV::LINQ;
 ######################################################################
 
 use 5.00503;    # Universal Consensus 1998 for primetools
+                # Perl 5.005_03 compatibility for historical toolchains
 # use 5.008001; # Lancaster Consensus 2013 for toolchains
 
-$VERSION = '1.02';
+$VERSION = '1.03';
 $VERSION = $VERSION;
+# VERSION policy: avoid `our` for 5.005_03 compatibility.
+# Self-assignment prevents "used only once" warning under `use strict`.
 
 BEGIN { pop @INC if $INC[-1] eq '.' } # CVE-2016-1238: Important unsafe module load path flaw
 use strict;
 BEGIN { $INC{'warnings.pm'} = '' if $] < 5.006 } use warnings; local $^W=1;
+# warnings.pm compatibility: stub for Perl < 5.6
 
 #---------------------------------------------------------------------
 # Constructor and Iterator Infrastructure
@@ -28,7 +32,13 @@ sub new {
 }
 
 sub iterator {
-    return $_[0]->{iterator};
+    my $self = $_[0];
+    # If this object was created by _from_snapshot, _factory provides
+    # a fresh iterator closure each time iterator() is called.
+    if (exists $self->{_factory}) {
+        return $self->{_factory}->();
+    }
+    return $self->{iterator};
 }
 
 #---------------------------------------------------------------------
@@ -55,11 +65,19 @@ sub FromLTSV {
     my($class, $file) = @_;
 
     my $fh = do { local *FH; *FH };
-    open($fh, "< $file") or die "Cannot open '$file': $!";
+    if ($] >= 5.006) {
+        open($fh, '<', $file) or die "Cannot open '$file': $!";
+    }
+    else {
+        open($fh, "< $file") or die "Cannot open '$file': $!";
+    }
+    binmode $fh;    # Treat as raw bytes; handles all multibyte encodings
+                    # and prevents \r\n -> \n translation on Windows
 
     return $class->new(sub {
         while (my $line = <$fh>) {
             chomp $line;
+            $line =~ s/\r\z//;  # Remove CR for CRLF files on any platform
             next unless length $line;
 
             my %record = map {
@@ -181,12 +199,10 @@ sub SelectMany {
             return undef unless defined $item;
 
             my $result = $selector->($item);
-            if (ref($result) eq 'ARRAY') {
-                @buffer = @$result;
+            unless (ref($result) eq 'ARRAY') {
+                die "SelectMany: selector must return an ARRAY reference";
             }
-            else {
-                return $result;
-            }
+            @buffer = @$result;
         }
     });
 }
@@ -383,6 +399,70 @@ sub OrderByDescending {
     return $class->From(\@sorted);
 }
 
+# OrderByStr - sort ascending by string comparison
+sub OrderByStr {
+    my($self, $key_selector) = @_;
+    my @items = $self->ToArray();
+    my @sorted = sort {
+        my $ka = $key_selector->($a);
+        my $kb = $key_selector->($b);
+        $ka = '' unless defined $ka;
+        $kb = '' unless defined $kb;
+        $ka cmp $kb;
+    } @items;
+
+    my $class = ref($self);
+    return $class->From(\@sorted);
+}
+
+# OrderByStrDescending - sort descending by string comparison
+sub OrderByStrDescending {
+    my($self, $key_selector) = @_;
+    my @items = $self->ToArray();
+    my @sorted = sort {
+        my $ka = $key_selector->($a);
+        my $kb = $key_selector->($b);
+        $ka = '' unless defined $ka;
+        $kb = '' unless defined $kb;
+        $kb cmp $ka;
+    } @items;
+
+    my $class = ref($self);
+    return $class->From(\@sorted);
+}
+
+# OrderByNum - sort ascending by numeric comparison
+sub OrderByNum {
+    my($self, $key_selector) = @_;
+    my @items = $self->ToArray();
+    my @sorted = sort {
+        my $ka = $key_selector->($a);
+        my $kb = $key_selector->($b);
+        $ka = 0 unless defined $ka;
+        $kb = 0 unless defined $kb;
+        $ka <=> $kb;
+    } @items;
+
+    my $class = ref($self);
+    return $class->From(\@sorted);
+}
+
+# OrderByNumDescending - sort descending by numeric comparison
+sub OrderByNumDescending {
+    my($self, $key_selector) = @_;
+    my @items = $self->ToArray();
+    my @sorted = sort {
+        my $ka = $key_selector->($a);
+        my $kb = $key_selector->($b);
+        $ka = 0 unless defined $ka;
+        $kb = 0 unless defined $kb;
+        $kb <=> $ka;
+    } @items;
+
+    my $class = ref($self);
+    return $class->From(\@sorted);
+}
+
 # Reverse - reverse order
 sub Reverse {
     my($self) = @_;
@@ -401,15 +481,20 @@ sub GroupBy {
     $element_selector ||= sub { $_[0] };
 
     my %groups;
+    my @key_order;
+
     $self->ForEach(sub {
         my $item = shift;
         my $key = $key_selector->($item);
         $key = '' unless defined $key;
+        unless (exists $groups{$key}) {
+            push @key_order, $key;
+        }
         push @{$groups{$key}}, $element_selector->($item);
     });
 
     my @result;
-    for my $key (sort keys %groups) {
+    for my $key (@key_order) {
         push @result, {
             Key => $key,
             Elements => $groups{$key},
@@ -426,7 +511,7 @@ sub GroupBy {
 
 # Distinct - remove duplicates
 sub Distinct {
-    my($self, $comparer) = @_;
+    my($self, $key_selector) = @_;
     my $iter = $self->iterator;
     my $class = ref($self);
     my %seen;
@@ -436,7 +521,7 @@ sub Distinct {
             my $item = $iter->();
             return undef unless defined $item;
 
-            my $key = $comparer ? $comparer->($item) : $item;
+            my $key = $key_selector ? $key_selector->($item) : _make_key($item);
             $key = '' unless defined $key;
 
             unless ($seen{$key}++) {
@@ -471,22 +556,54 @@ sub _make_key {
     }
 }
 
+# _from_snapshot - internal helper for GroupJoin.
+# Returns a LTSV::LINQ object backed by a plain array that can be iterated
+# multiple times within a single result_selector call.
+# Each LINQ terminal method (Count, Sum, ToArray, etc.) calls iterator()
+# to get a fresh iterator.  We achieve re-iterability by overriding the
+# iterator() method so it always creates a new closure over the same array.
+sub _from_snapshot {
+    my($class_or_self, $aref) = @_;
+
+    my $class = ref($class_or_self) || $class_or_self;
+
+    # Build a sentinel sub that, when called, returns a brand-new
+    # index-based iterator every time.
+    my $iter_factory = sub {
+        my $i = 0;
+        return sub {
+            return undef if $i >= scalar(@$aref);
+            return $aref->[$i++];
+        };
+    };
+
+    # The object stores the factory in place of a plain iterator.
+    # The iterator() accessor returns the result of calling the factory,
+    # so every consumer gets its own fresh iterator starting at index 0.
+    my $obj = bless {
+        iterator => $iter_factory->(),
+        _factory => $iter_factory,
+    }, $class;
+
+    return $obj;
+}
+
 # Union - set union with distinct
 sub Union {
-    my($self, $second, $comparer) = @_;
+    my($self, $second, $key_selector) = @_;
 
-    return $self->Concat($second)->Distinct($comparer);
+    return $self->Concat($second)->Distinct($key_selector);
 }
 
 # Intersect - set intersection
 sub Intersect {
-    my($self, $second, $comparer) = @_;
+    my($self, $second, $key_selector) = @_;
 
     # Build hash of second sequence
     my %second_set = ();
     $second->ForEach(sub {
         my $item = shift;
-        my $key = $comparer ? $comparer->($item) : _make_key($item);
+        my $key = $key_selector ? $key_selector->($item) : _make_key($item);
         $second_set{$key} = $item;
     });
 
@@ -496,7 +613,7 @@ sub Intersect {
 
     return $class->new(sub {
         while (defined(my $item = $iter->())) {
-            my $key = $comparer ? $comparer->($item) : _make_key($item);
+            my $key = $key_selector ? $key_selector->($item) : _make_key($item);
 
             next if $seen{$key}++;  # Skip duplicates
             return $item if exists $second_set{$key};
@@ -507,13 +624,13 @@ sub Intersect {
 
 # Except - set difference
 sub Except {
-    my($self, $second, $comparer) = @_;
+    my($self, $second, $key_selector) = @_;
 
     # Build hash of second sequence
     my %second_set = ();
     $second->ForEach(sub {
         my $item = shift;
-        my $key = $comparer ? $comparer->($item) : _make_key($item);
+        my $key = $key_selector ? $key_selector->($item) : _make_key($item);
         $second_set{$key} = 1;
     });
 
@@ -523,7 +640,7 @@ sub Except {
 
     return $class->new(sub {
         while (defined(my $item = $iter->())) {
-            my $key = $comparer ? $comparer->($item) : _make_key($item);
+            my $key = $key_selector ? $key_selector->($item) : _make_key($item);
 
             next if $seen{$key}++;  # Skip duplicates
             return $item unless exists $second_set{$key};
@@ -570,6 +687,48 @@ sub Join {
             }
             # If no match, continue to next outer element
         }
+    });
+}
+
+# GroupJoin - group join (LEFT OUTER JOIN-like operation)
+sub GroupJoin {
+    my($self, $inner, $outer_key_selector, $inner_key_selector, $result_selector) = @_;
+    my $class = ref($self);
+    my $outer_iter = $self->iterator;
+
+    # 1. Build lookup table from inner sequence.
+    #    Group all inner items by their keys for efficient lookup.
+    #    The inner sequence is fully materialized into memory here.
+    my %inner_lookup = ();
+    $inner->ForEach(sub {
+        my $item = shift;
+        my $key = $inner_key_selector->($item);
+        $key = _make_key($key) if ref($key);
+        $key = '' unless defined $key;
+        push @{$inner_lookup{$key}}, $item;
+    });
+
+    # 2. Return lazy iterator over outer sequence
+    return $class->new(sub {
+        my $outer_item = $outer_iter->();
+        return undef unless defined $outer_item;
+
+        # Get key from outer item
+        my $key = $outer_key_selector->($outer_item);
+        $key = _make_key($key) if ref($key);
+        $key = '' unless defined $key;
+
+        # Get matching inner items (empty array ref if no matches)
+        my $matched_inners = exists $inner_lookup{$key} ? $inner_lookup{$key} : [];
+
+        # Snapshot the matched items into a plain array.
+        # We create a LTSV::LINQ object whose iterator sub always reads
+        # from a fresh index variable, so the group can be traversed
+        # multiple times inside result_selector (e.g. Count() then Sum()).
+        my @snapshot = @$matched_inners;
+        my $inner_group = $class->_from_snapshot(\@snapshot);
+
+        return $result_selector->($outer_item, $inner_group);
     });
 }
 
@@ -672,7 +831,22 @@ sub First {
 
 # FirstOrDefault - get first element or default
 sub FirstOrDefault {
-    my($self, $predicate, $default) = @_;
+    my $self = shift;
+    my($predicate, $default);
+
+    if (@_ >= 2) {
+        # Two arguments: ($predicate, $default)
+        ($predicate, $default) = @_;
+    }
+    elsif (@_ == 1) {
+        # One argument: distinguish CODE (predicate) vs non-CODE (default)
+        if (ref($_[0]) eq 'CODE') {
+            $predicate = $_[0];
+        }
+        else {
+            $default = $_[0];
+        }
+    }
 
     my $result = eval { $self->First($predicate) };
     return $@ ? $default : $result;
@@ -695,19 +869,35 @@ sub Last {
     }
 }
 
-# LastOrDefault - return last element or undef
+# LastOrDefault - return last element or default
 sub LastOrDefault {
-    my($self, $predicate) = @_;
+    my $self = shift;
+    my($predicate, $default);
+
+    if (@_ >= 2) {
+        # Two arguments: ($predicate, $default)
+        ($predicate, $default) = @_;
+    }
+    elsif (@_ == 1) {
+        # One argument: distinguish CODE (predicate) vs non-CODE (default)
+        if (ref($_[0]) eq 'CODE') {
+            $predicate = $_[0];
+        }
+        else {
+            $default = $_[0];
+        }
+    }
+
     my @items = $self->ToArray();
 
     if ($predicate) {
         for (my $i = $#items; $i >= 0; $i--) {
             return $items[$i] if $predicate->($items[$i]);
         }
-        return undef;
+        return $default;
     }
     else {
-        return @items ? $items[-1] : undef;
+        return @items ? $items[-1] : $default;
     }
 }
 
@@ -1016,7 +1206,13 @@ sub ToLTSV {
     my($self, $filename) = @_;
 
     my $fh = do { local *FH; *FH };
-    open($fh, "> $filename") or die "Cannot open '$filename': $!";
+    if ($] >= 5.006) {
+        open($fh, '>', $filename) or die "Cannot open '$filename': $!";
+    }
+    else {
+        open($fh, "> $filename") or die "Cannot open '$filename': $!";
+    }
+    binmode $fh;    # Write raw bytes; consistent with FromLTSV
 
     $self->ForEach(sub {
         my $record = shift;
@@ -1055,7 +1251,7 @@ LTSV::LINQ - LINQ-style query interface for LTSV files
 
 =head1 VERSION
 
-Version 1.02
+Version 1.03
 
 =head1 SYNOPSIS
 
@@ -1092,7 +1288,7 @@ Version 1.02
 
 =item * L</DESCRIPTION>
 
-=item * L</METHODS> - Complete method reference (49 methods)
+=item * L</METHODS> - Complete method reference (54 methods)
 
 =item * L</EXAMPLES> - 8 practical examples
 
@@ -1134,7 +1330,7 @@ Key features:
 
 =item * B<DSL syntax> - Simple key-value filtering
 
-=item * B<49 LINQ methods> - Comprehensive query capabilities
+=item * B<54 LINQ methods> - Comprehensive query capabilities
 
 =item * B<Pure Perl> - No XS dependencies
 
@@ -1144,29 +1340,268 @@ Key features:
 
 =head2 What is LTSV?
 
-LTSV (Labeled Tab-Separated Values) is a format for structured logs.
-Each line contains tab-separated key:value pairs.
+LTSV (Labeled Tab-Separated Values) is a text format for structured logs and
+data records. Each line consists of tab-separated fields, where each field is
+a C<label:value> pair. A single LTSV record occupies exactly one line.
 
-Example:
+B<Format example:>
 
-  time:2026-02-13T10:00:00	status:200	url:/index.html	bytes:1024
+  time:2026-02-13T10:00:00	host:192.0.2.1	status:200	url:/index.html	bytes:1024
 
-For more information:
-  http://ltsv.org/
+=head3 LTSV Characteristics
+
+=over 4
+
+=item * B<One record per line>
+
+A complete record is always a single newline-terminated line. This makes
+streaming processing trivial: read a line, parse it, process it, discard it.
+There is no multi-line quoting problem, no block parser required.
+
+=item * B<Tab as field delimiter>
+
+Fields are separated by a single horizontal tab character (C<0x09>).
+The tab is a C0 control character in the ASCII range (C<0x00>-C<0x7F>),
+which has an important consequence for multibyte character encodings.
+
+=item * B<Colon as label-value separator>
+
+Within each field, the label and value are separated by a single colon
+(C<0x3A>, US-ASCII C<:>). This is also a plain ASCII character with the same
+multibyte-safety guarantees as the tab.
+
+=back
+
+=head3 LTSV Advantages
+
+=over 4
+
+=item * B<Multibyte-safe delimiters (Tab and Colon)>
+
+This is perhaps the most important technical advantage of LTSV over formats
+such as CSV (comma-delimited) or TSV without labels.
+
+In many multibyte character encodings used across Asia and beyond, a
+single logical character is represented by a sequence of two or more bytes.
+The danger in older encodings is that a byte within a multibyte sequence can
+coincidentally equal the byte value of an ASCII delimiter, causing a naive
+byte-level parser to split the field in the wrong place.
+
+The following table shows well-known encodings and their byte ranges:
+
+  --------------------------------------------------------------------
+  Encoding     First byte range       Following byte range
+  --------------------------------------------------------------------
+  Big5         0x81-0xFE              0x40-0x7E, 0xA1-0xFE
+  Big5-HKSCS   0x81-0xFE              0x40-0x7E, 0xA1-0xFE
+  CP932X       0x81-0x9F, 0xE0-0xFC   0x40-0x7E, 0x80-0xFC
+  EUC-JP       0x8E-0x8F, 0xA1-0xFE   0xA1-0xFE
+  GB 18030     0x81-0xFE              0x30-0x39, 0x40-0x7E, 0x80-0xFE
+  GBK          0x81-0xFE              0x40-0x7E, 0x80-0xFE
+  Shift_JIS    0x81-0x9F, 0xE0-0xFC   0x40-0x7E, 0x80-0xFC
+  RFC 2279     0xC2-0xF4              0x80-0xBF
+  UHC          0x81-0xFE              0x41-0x5A, 0x61-0x7A, 0x81-0xFE
+  UTF-8        0xC2-0xF4              0x80-0xBF
+  WTF-8        0xC2-0xF4              0x80-0xBF
+  --------------------------------------------------------------------
+
+The tab character is C<0x09>.  The colon is C<0x3A>.  Both values are
+strictly below C<0x40>, the lower bound of any following byte in the encodings
+listed above.  Neither C<0x09> nor C<0x3A> appears anywhere as a first byte
+either.  Therefore:
+
+  TAB  (0x09) never appears as a byte within any multibyte character
+              in Big5, Big5-HKSCS, CP932X, EUC-JP, GB 18030, GBK, Shift_JIS,
+              RFC 2279, UHC, UTF-8, or WTF-8.
+  ':'  (0x3A) never appears as a byte within any multibyte character
+              in the same set of encodings.
+
+This means that LTSV files containing values in B<any> of those encodings
+can be parsed correctly by a B<simple byte-level split> on tab and colon,
+with no knowledge of the encoding whatsoever. There is no need to decode
+the text before parsing, and no risk of a misidentified delimiter.
+
+By contrast, CSV has encoding problems of a different kind.
+The comma (C<0x2C>) and the double-quote (C<0x22>) do B<not> appear as
+following bytes in Shift_JIS or Big5, so they are not directly confused with
+multibyte character content.  However, the backslash (C<0x5C>) B<does>
+appear as a valid following byte in both Shift_JIS (following byte range
+C<0x40>-C<0x7E> includes C<0x5C>) and Big5 (same range).  Many CSV
+parsers and the C runtime on Windows use backslash or backslash-like
+sequences for escaping, so a naive byte-level search for the escape
+character can be misled by a multibyte character whose second byte is
+C<0x5C>.  Beyond this, CSV's quoting rules are underspecified (RFC 4180
+vs. Excel vs. custom dialects differ), which makes writing a correct,
+encoding-aware CSV parser considerably harder than parsing LTSV.
+LTSV sidesteps all of these issues by choosing delimiters (tab and colon)
+that fall below C<0x40>, outside every following-byte range of every traditional
+multibyte encoding.
+
+UTF-8 is safe for all ASCII delimiters because continuation bytes are
+always in the range C<0x80>-C<0xBF>, never overlapping ASCII.  But LTSV's
+choice of tab and colon also makes it safe for the traditional multibyte
+encodings that predate Unicode, which is critical for systems that still
+operate on traditional-encoded data.
+
+=item * B<Self-describing fields>
+
+Every field carries its own label. A record is human-readable without a
+separate schema or header line. Fields can appear in any order, and
+optional fields can simply be omitted. Adding a new field to some records
+does not break parsers that do not know about it.
+
+=item * B<Streaming-friendly>
+
+Because each record is one line, LTSV files can be processed with line-by-line
+streaming. Memory usage is proportional to the longest single record, not
+the total file size. This is why C<FromLTSV> in this module uses a lazy
+iterator rather than loading the whole file.
+
+=item * B<Grep- and awk-friendly>
+
+Standard Unix text tools (C<grep>, C<awk>, C<sed>, C<sort>, C<cut>) work
+naturally on LTSV files. A field can be located with a pattern like
+C<status:5[0-9][0-9]> without any special parser. This makes ad-hoc
+analysis and shell scripting straightforward.
+
+=item * B<No quoting rules>
+
+CSV requires quoting fields that contain commas or newlines, and the quoting
+rules differ between implementations (RFC 4180 vs. Microsoft Excel vs. others).
+LTSV has no quoting: the tab delimiter and the colon separator do not appear
+inside values in any of the supported encodings (by the multibyte-safety
+argument above), so no escaping mechanism is needed.
+
+=item * B<Wide adoption in server logging>
+
+LTSV originated in the Japanese web industry as a structured log format for
+HTTP access logs. Many web servers (Apache, Nginx) and log aggregation tools
+support LTSV output or parsing. The format is particularly popular for
+application and infrastructure logging where grep-ability and streaming
+analysis matter.
+
+=back
+
+For the formal LTSV specification, see L<http://ltsv.org/>.
 
 =head2 What is LINQ?
 
-LINQ (Language Integrated Query) is a query syntax in C# and .NET.
-This module brings LINQ-style querying to Perl for LTSV data.
+LINQ (Language Integrated Query) is a set of query capabilities introduced
+in the .NET Framework 3.5 (C# 3.0, 2007) by Microsoft. It defines a
+unified model for querying and transforming data from diverse sources --
+in-memory collections, relational databases (LINQ to SQL), XML documents
+(LINQ to XML), and more -- using a single, consistent API.
 
-For more information:
-  https://learn.microsoft.com/en-us/dotnet/csharp/linq/
+This module brings LINQ-style querying to Perl, applied specifically to
+LTSV data sources.
+
+=head3 LINQ Characteristics
+
+=over 4
+
+=item * B<Unified query model>
+
+LINQ provides a single set of operators that works uniformly across
+data sources. Whether the source is an array, a file, or a database,
+the same C<Where>, C<Select>, C<OrderBy>, C<GroupBy> methods apply.
+LTSV::LINQ follows this principle: the same methods work on in-memory
+arrays (C<From>) and LTSV files (C<FromLTSV>) alike.
+
+=item * B<Declarative style>
+
+LINQ queries express I<what> to retrieve, not I<how> to retrieve it.
+A query like C<-E<gt>Where(sub { $_[0]{status} >= 400 })-E<gt>Select(...)>
+describes the intent clearly, without explicit loop management.
+This reduces cognitive overhead and makes queries easier to read and verify.
+
+=item * B<Composability>
+
+Each LINQ operator takes a sequence and returns a new sequence (or a
+scalar result for terminal operators). Because operators are ordinary
+method calls that return objects, they compose naturally:
+
+  $query->Where(...)->Select(...)->OrderBy(...)->GroupBy(...)->ToArray()
+
+Any intermediate result is itself a valid query object, ready for
+further transformation or immediate consumption.
+
+=item * B<Lazy evaluation (deferred execution)>
+
+Intermediate operators (C<Where>, C<Select>, C<Take>, etc.) do not
+execute immediately. They construct a chain of iterator closures.
+Evaluation is deferred until a terminal operator (C<ToArray>, C<Count>,
+C<First>, C<Sum>, C<ForEach>, etc.) pulls items through the chain.
+This means:
+
+=over 4
+
+=item - Memory usage is bounded by the window of data in flight, not by the
+total data size. A C<Where-E<gt>Select-E<gt>Take(10)> over a million-line
+file reads at most 10 records past the first matching one.
+
+=item - Short-circuiting is free. C<First> stops at the first match.
+C<Any> stops as soon as one match is found.
+
+=item - Pipelines can be built without executing them, and executed
+multiple times by wrapping in a factory (see C<_from_snapshot>).
+
+=back
+
+=item * B<Method chaining (fluent interface)>
+
+LINQ's design makes chaining natural. In C# this is supported by
+extension methods; in Perl it is supported by returning C<$self>-class
+objects from every intermediate operator. The result is readable,
+left-to-right query expressions.
+
+=item * B<Separation of query definition from execution>
+
+A LINQ query object is a description of a computation, not its result.
+You can pass query objects around, inspect them, extend them, and decide
+later when to execute them. This separation is valuable in library and
+framework code.
+
+=back
+
+=head3 LINQ Advantages for LTSV Processing
+
+=over 4
+
+=item * B<Readable log analysis>
+
+LTSV log analysis often involves the same logical steps: filter records
+by a condition, extract a field, aggregate. LINQ methods map directly
+onto these steps, making the code read like a description of the analysis.
+
+=item * B<Memory-efficient processing of large log files>
+
+Web server access logs can be gigabytes in size. LTSV::LINQ's lazy
+C<FromLTSV> iterator reads one line at a time. Combined with C<Where>
+and C<Take>, only the needed records are ever in memory simultaneously.
+
+=item * B<No new language syntax required>
+
+Unlike C# LINQ (which has query comprehension syntax C<from x in xs where ...
+select ...>), LTSV::LINQ works with ordinary Perl method calls and
+anonymous subroutines. There is no source filter, no parser extension,
+and no dependency on modern Perl features. The same code runs on Perl
+5.005_03 and Perl 5.40.
+
+=item * B<Composable, reusable query fragments>
+
+A C<Where> clause stored in a variable can be applied to multiple
+data sources. Query logic can be parameterized and reused across scripts.
+
+=back
+
+For the original LINQ documentation, see
+L<https://learn.microsoft.com/en-us/dotnet/csharp/linq/>.
 
 =head1 METHODS
 
 =head2 Complete Method Reference
 
-This module implements 49 LINQ-style methods organized into 15 categories:
+This module implements 54 LINQ-style methods organized into 15 categories:
 
 =over 4
 
@@ -1180,13 +1615,13 @@ This module implements 49 LINQ-style methods organized into 15 categories:
 
 =item * B<Partitioning (4)>: Take, Skip, TakeWhile, SkipWhile
 
-=item * B<Ordering (3)>: OrderBy, OrderByDescending, Reverse
+=item * B<Ordering (7)>: OrderBy, OrderByDescending, OrderByStr, OrderByStrDescending, OrderByNum, OrderByNumDescending, Reverse
 
 =item * B<Grouping (1)>: GroupBy
 
 =item * B<Set Operations (4)>: Distinct, Union, Intersect, Except
 
-=item * B<Join (1)>: Join
+=item * B<Join (2)>: Join, GroupJoin
 
 =item * B<Quantifiers (3)>: All, Any, Contains
 
@@ -1204,57 +1639,62 @@ This module implements 49 LINQ-style methods organized into 15 categories:
 
 B<Method Summary Table:>
 
-  Method              Category        Lazy?  Returns
-  ==================  ==============  =====  ================
-  From                Data Source     Yes    Query
-  FromLTSV            Data Source     Yes    Query
-  Range               Data Source     Yes    Query
-  Empty               Data Source     Yes    Query
-  Repeat              Data Source     Yes    Query
-  Where               Filtering       Yes    Query
-  Select              Projection      Yes    Query
-  SelectMany          Projection      Yes    Query
-  Concat              Concatenation   Yes    Query
-  Zip                 Concatenation   Yes    Query
-  Take                Partitioning    Yes    Query
-  Skip                Partitioning    Yes    Query
-  TakeWhile           Partitioning    Yes    Query
-  SkipWhile           Partitioning    Yes    Query
-  OrderBy             Ordering        No*    Query
-  OrderByDescending   Ordering        No*    Query
-  Reverse             Ordering        No*    Query
-  GroupBy             Grouping        No*    Query
-  Distinct            Set Operation   Yes    Query
-  Union               Set Operation   Yes    Query
-  Intersect           Set Operation   Yes    Query
-  Except              Set Operation   Yes    Query
-  Join                Join            No*    Query
-  All                 Quantifier      No     Boolean
-  Any                 Quantifier      No     Boolean
-  Contains            Quantifier      No     Boolean
-  SequenceEqual       Comparison      No     Boolean
-  First               Element Access  No     Element
-  FirstOrDefault      Element Access  No     Element
-  Last                Element Access  No*    Element
-  LastOrDefault       Element Access  No*    Element or undef
-  Single              Element Access  No*    Element
-  SingleOrDefault     Element Access  No*    Element or undef
-  ElementAt           Element Access  No*    Element
-  ElementAtOrDefault  Element Access  No*    Element or undef
-  Count               Aggregation     No     Integer
-  Sum                 Aggregation     No     Number
-  Min                 Aggregation     No     Number
-  Max                 Aggregation     No     Number
-  Average             Aggregation     No     Number
-  AverageOrDefault    Aggregation     No     Number or undef
-  Aggregate           Aggregation     No     Any
-  DefaultIfEmpty      Conversion      Yes    Query
-  ToArray             Conversion      No     Array
-  ToList              Conversion      No     ArrayRef
-  ToDictionary        Conversion      No     HashRef
-  ToLookup            Conversion      No     HashRef
-  ToLTSV              Conversion      No     Boolean
-  ForEach             Utility         No     Void
+  Method                 Category        Lazy?  Returns
+  =====================  ==============  =====  ================
+  From                   Data Source     Yes    Query
+  FromLTSV               Data Source     Yes    Query
+  Range                  Data Source     Yes    Query
+  Empty                  Data Source     Yes    Query
+  Repeat                 Data Source     Yes    Query
+  Where                  Filtering       Yes    Query
+  Select                 Projection      Yes    Query
+  SelectMany             Projection      Yes    Query
+  Concat                 Concatenation   Yes    Query
+  Zip                    Concatenation   Yes    Query
+  Take                   Partitioning    Yes    Query
+  Skip                   Partitioning    Yes    Query
+  TakeWhile              Partitioning    Yes    Query
+  SkipWhile              Partitioning    Yes    Query
+  OrderBy                Ordering        No*    Query
+  OrderByDescending      Ordering        No*    Query
+  OrderByStr             Ordering        No*    Query
+  OrderByStrDescending   Ordering        No*    Query
+  OrderByNum             Ordering        No*    Query
+  OrderByNumDescending   Ordering        No*    Query
+  Reverse                Ordering        No*    Query
+  GroupBy                Grouping        No*    Query
+  Distinct               Set Operation   Yes    Query
+  Union                  Set Operation   No*    Query
+  Intersect              Set Operation   No*    Query
+  Except                 Set Operation   No*    Query
+  Join                   Join            No*    Query
+  GroupJoin              Join            No*    Query
+  All                    Quantifier      No     Boolean
+  Any                    Quantifier      No     Boolean
+  Contains               Quantifier      No     Boolean
+  SequenceEqual          Comparison      No     Boolean
+  First                  Element Access  No     Element
+  FirstOrDefault         Element Access  No     Element
+  Last                   Element Access  No*    Element
+  LastOrDefault          Element Access  No*    Element or undef
+  Single                 Element Access  No*    Element
+  SingleOrDefault        Element Access  No*    Element or undef
+  ElementAt              Element Access  No*    Element
+  ElementAtOrDefault     Element Access  No*    Element or undef
+  Count                  Aggregation     No     Integer
+  Sum                    Aggregation     No     Number
+  Min                    Aggregation     No     Number
+  Max                    Aggregation     No     Number
+  Average                Aggregation     No     Number
+  AverageOrDefault       Aggregation     No     Number or undef
+  Aggregate              Aggregation     No     Any
+  DefaultIfEmpty         Conversion      Yes    Query
+  ToArray                Conversion      No     Array
+  ToList                 Conversion      No     ArrayRef
+  ToDictionary           Conversion      No     HashRef
+  ToLookup               Conversion      No     HashRef
+  ToLTSV                 Conversion      No     Boolean
+  ForEach                Utility         No     Void
 
   * Materializing operation (loads all data into memory)
 
@@ -1273,6 +1713,21 @@ Create a query from an array.
 Create a query from an LTSV file.
 
   my $query = LTSV::LINQ->FromLTSV("access.log");
+
+B<File handle management:> C<FromLTSV> opens the file immediately and
+holds the file handle open until the iterator reaches end-of-file.
+If the query is not fully consumed (e.g. you call C<First> or C<Take>
+and stop early), the file handle remains open until the query object
+is garbage collected.
+
+This is harmless for a small number of files, but if you open many
+LTSV files concurrently without consuming them fully, you may exhaust
+the OS file descriptor limit. In such cases, consume the query fully
+or use C<ToArray()> to materialise the data and close the file
+immediately:
+
+  # File closed as soon as all records are loaded
+  my @records = LTSV::LINQ->FromLTSV("access.log")->ToArray();
 
 =item B<Range($start, $count)>
 
@@ -1365,6 +1820,18 @@ simple equality comparisons. All conditions are combined with AND logic.
 B<DSL Specification:>
 
 =over 4
+
+=item * Arguments must be an even number of C<key =E<gt> value> pairs
+
+The DSL form interprets its arguments as a flat list of key-value pairs.
+Passing an odd number of arguments produces a Perl warning
+(C<Odd number of elements in hash assignment>) and the unpaired key
+receives C<undef> as its value, which will never match. Always use
+complete pairs:
+
+  ->Where(status => '200')              # correct: 1 pair
+  ->Where(status => '200', method => 'GET')  # correct: 2 pairs
+  ->Where(status => '200', 'method')    # wrong: 3 args, Perl warning
 
 =item * All comparisons are string equality (C<eq>)
 
@@ -1472,6 +1939,17 @@ B<Use Cases:>
 =item * Generating multiple outputs per input
 
 =back
+
+B<Important:> The selector B<must> return an ARRAY reference. If it returns
+any other value (e.g. a hashref or scalar), this method throws an exception:
+
+  die "SelectMany: selector must return an ARRAY reference"
+
+This matches the behaviour of .NET LINQ's C<SelectMany>, which requires
+the selector to return an C<IEnumerable>. Always wrap results in C<[...]>:
+
+  ->SelectMany(sub { [ $_[0]{items} ] })   # correct: arrayref
+  ->SelectMany(sub {   $_[0]{items}   })   # wrong: dies at runtime
 
 =back
 
@@ -1684,19 +2162,90 @@ false, all remaining elements are included.
 
 =head2 Ordering Methods
 
+B<Sort stability:> All ordering methods use Perl's built-in C<sort>, which
+is guaranteed to be stable from Perl 5.8 onwards (equal elements retain
+their original relative order). On Perl 5.005_03 and 5.6, stability is
+implementation-specific; if stability matters on those versions, append a
+tie-breaking key that is unique per element.
+
+B<Comparison type:> LTSV::LINQ provides three families:
+
+=over 4
+
+=item * C<OrderBy> / C<OrderByDescending>
+
+Smart comparison: numeric (C<E<lt>=E<gt>>) when both keys look numeric,
+string (C<cmp>) otherwise. Convenient for LTSV data where field values
+are always strings but commonly hold numbers.
+
+=item * C<OrderByStr> / C<OrderByStrDescending>
+
+Unconditional string comparison (C<cmp>). Use when keys must sort
+lexicographically regardless of content (e.g. version strings, codes).
+
+=item * C<OrderByNum> / C<OrderByNumDescending>
+
+Unconditional numeric comparison (C<E<lt>=E<gt>>). Use when keys are
+always numeric. Undefined values are treated as C<0>.
+
+=back
+
 =over 4
 
 =item B<OrderBy($key_selector)>
 
-Sort in ascending order.
+Sort in ascending order using smart comparison: if both keys look like
+numbers (integers, decimals, negative, or exponential notation), numeric
+comparison (C<E<lt>=E<gt>>) is used; otherwise string comparison (C<cmp>)
+is used. This mirrors the natural Perl idiom of letting the data drive
+the comparison.
 
-  ->OrderBy(sub { $_[0]{timestamp} })
+  ->OrderBy(sub { $_[0]{timestamp} })   # string keys: lexicographic
+  ->OrderBy(sub { $_[0]{bytes} })       # "1024", "256" -> numeric (256, 1024)
+
+B<Note:> When you need explicit control over the comparison type, use
+C<OrderByStr> (always C<cmp>) or C<OrderByNum> (always C<E<lt>=E<gt>>).
 
 =item B<OrderByDescending($key_selector)>
 
-Sort in descending order.
+Sort in descending order using the same smart comparison as C<OrderBy>.
 
   ->OrderByDescending(sub { $_[0]{count} })
+
+B<Note:> For explicit control use C<OrderByStrDescending> or
+C<OrderByNumDescending>.
+
+=item B<OrderByStr($key_selector)>
+
+Sort in ascending order using string comparison (C<cmp>) unconditionally.
+Use this when the keys must always be compared as strings, regardless of
+whether they happen to look like numbers.
+
+  ->OrderByStr(sub { $_[0]{code} })    # "10" lt "9" (lexicographic)
+  ->OrderByStr(sub { $_[0]{name} })
+
+=item B<OrderByStrDescending($key_selector)>
+
+Sort in descending order using string comparison (C<cmp>) unconditionally.
+
+  ->OrderByStrDescending(sub { $_[0]{name} })
+
+=item B<OrderByNum($key_selector)>
+
+Sort in ascending order using numeric comparison (C<E<lt>=E<gt>>)
+unconditionally. Use this when the keys are always numeric.
+
+  ->OrderByNum(sub { $_[0]{bytes} })   # 9 < 10 (numeric)
+  ->OrderByNum(sub { $_[0]{score} })
+
+B<Note:> Undefined values are treated as C<0>.
+
+=item B<OrderByNumDescending($key_selector)>
+
+Sort in descending order using numeric comparison (C<E<lt>=E<gt>>)
+unconditionally.
+
+  ->OrderByNumDescending(sub { $_[0]{response_time} })
 
 =item B<Reverse()>
 
@@ -1714,23 +2263,84 @@ Reverse the order.
 
 Group elements by key.
 
-  ->GroupBy(sub { $_[0]{status} })
+B<Returns:> New query where each element is a hashref with two fields:
 
-Returns array of hashrefs with 'Key' and 'Elements' fields.
+=over 4
+
+=item * C<Key> - The group key (string)
+
+=item * C<Elements> - Array reference of elements in the group
+
+=back
+
+B<Note:> This operation is eager - the entire sequence is loaded into memory
+immediately. Groups are returned in the order their keys first appear in
+the source sequence, matching the behaviour of .NET LINQ's C<GroupBy>.
+
+B<Examples:>
+
+  # Group access log by status code
+  my @groups = LTSV::LINQ->FromLTSV('access.log')
+      ->GroupBy(sub { $_[0]{status} })
+      ->ToArray();
+
+  for my $g (@groups) {
+      printf "status=%s count=%d\n", $g->{Key}, scalar @{$g->{Elements}};
+  }
+
+  # With element selector
+  ->GroupBy(sub { $_[0]{status} }, sub { $_[0]{path} })
+
+B<Note:> C<Elements> is a plain array reference, not a LTSV::LINQ object.
+To apply further LINQ operations on a group, wrap it with C<From>:
+
+  for my $g (@groups) {
+      my $total = LTSV::LINQ->From($g->{Elements})
+          ->Sum(sub { $_[0]{bytes} });
+      printf "status=%s total_bytes=%d\n", $g->{Key}, $total;
+  }
 
 =back
 
 =head2 Set Operations
 
+B<Evaluation model:>
+
 =over 4
 
-=item B<Distinct([$comparer])>
+=item * C<Distinct> is fully lazy: elements are tested one by one as the
+output sequence is consumed.
+
+=item * C<Union>, C<Intersect>, C<Except> are B<partially eager>: when
+the method is called, the B<second> sequence is consumed in full and
+stored in an in-memory hash for O(1) lookup. The B<first> sequence is
+then iterated lazily. This matches the behaviour of .NET LINQ, which
+also buffers the second (hash-side) sequence up front.
+
+=back
+
+=over 4
+
+=item B<Distinct([$key_selector])>
 
 Remove duplicate elements.
 
-  ->Distinct()
+B<Parameters:>
 
-=item B<Union($second [, $comparer])>
+=over 4
+
+=item * C<$key_selector> - (Optional) Code ref: C<($element) -E<gt> $key>.
+Extracts a comparison key from each element. This is a single-argument
+function (unlike Perl's C<sort> comparator), and is I<not> a two-argument
+comparison function.
+
+=back
+
+  ->Distinct()
+  ->Distinct(sub { lc($_[0]) })          # case-insensitive strings
+  ->Distinct(sub { $_[0]{id} })          # hashref: dedupe by field
+
+=item B<Union($second [, $key_selector])>
 
 Produce set union of two sequences (no duplicates).
 
@@ -1740,11 +2350,15 @@ B<Parameters:>
 
 =item * C<$second> - Second sequence (LTSV::LINQ object)
 
-=item * C<$comparer> - (Optional) Custom key selector for comparison
+=item * C<$key_selector> - (Optional) Code ref: C<($element) -E<gt> $key>.
+Single-argument key extraction function (not a two-argument sort comparator).
 
 =back
 
-B<Returns:> New query with elements from both sequences (lazy, distinct)
+B<Returns:> New query with elements from both sequences (distinct)
+
+B<Evaluation:> B<Partially eager.> The first sequence is iterated lazily;
+the second is fully consumed at call time and stored in memory.
 
 B<Examples:>
 
@@ -1753,12 +2367,12 @@ B<Examples:>
   my $q2 = LTSV::LINQ->From([3, 4, 5]);
   $q1->Union($q2)->ToArray();  # (1, 2, 3, 4, 5)
 
-  # Union with custom comparer
-  ->Union($other, sub { lc($_[0]) })  # Case-insensitive
+  # Case-insensitive union
+  ->Union($other, sub { lc($_[0]) })
 
 B<Note:> Equivalent to Concat()->Distinct(). Automatically removes duplicates.
 
-=item B<Intersect($second [, $comparer])>
+=item B<Intersect($second [, $key_selector])>
 
 Produce set intersection of two sequences.
 
@@ -1768,11 +2382,15 @@ B<Parameters:>
 
 =item * C<$second> - Second sequence (LTSV::LINQ object)
 
-=item * C<$comparer> - (Optional) Custom key selector for comparison
+=item * C<$key_selector> - (Optional) Code ref: C<($element) -E<gt> $key>.
+Single-argument key extraction function (not a two-argument sort comparator).
 
 =back
 
-B<Returns:> New query with common elements only (lazy, distinct)
+B<Returns:> New query with common elements only (distinct)
+
+B<Evaluation:> B<Partially eager.> The second sequence is fully consumed
+at call time and stored in a hash; the first is iterated lazily.
 
 B<Examples:>
 
@@ -1786,7 +2404,7 @@ B<Examples:>
 
 B<Note:> Only includes elements present in both sequences.
 
-=item B<Except($second [, $comparer])>
+=item B<Except($second [, $key_selector])>
 
 Produce set difference (elements in first but not in second).
 
@@ -1796,11 +2414,15 @@ B<Parameters:>
 
 =item * C<$second> - Second sequence (LTSV::LINQ object)
 
-=item * C<$comparer> - (Optional) Custom key selector for comparison
+=item * C<$key_selector> - (Optional) Code ref: C<($element) -E<gt> $key>.
+Single-argument key extraction function (not a two-argument sort comparator).
 
 =back
 
-B<Returns:> New query with elements only in first sequence (lazy, distinct)
+B<Returns:> New query with elements only in first sequence (distinct)
+
+B<Evaluation:> B<Partially eager.> The second sequence is fully consumed
+at call time and stored in a hash; the first is iterated lazily.
 
 B<Examples:>
 
@@ -1818,6 +2440,15 @@ B<Note:> Returns elements from first sequence not present in second.
 
 =head2 Join Operations
 
+B<Evaluation model:> Both C<Join> and C<GroupJoin> are B<partially eager>:
+when the method is called, the B<inner> sequence is consumed in full and
+stored in an in-memory lookup table (hash of arrays, keyed by inner key).
+The B<outer> sequence is then iterated lazily, producing results on demand.
+
+This matches the behaviour of .NET LINQ's hash-join implementation.
+The memory cost is O(inner size); for very large inner sequences, consider
+reversing the join or pre-filtering the inner sequence before passing it.
+
 =over 4
 
 =item B<Join($inner, $outer_key_selector, $inner_key_selector, $result_selector)>
@@ -1834,7 +2465,7 @@ B<Parameters:>
 
 =item * C<$inner_key_selector> - Function to extract key from inner element
 
-=item * C<$result_selector> - Function to create result: ($outer, $inner) -> $result
+=item * C<$result_selector> - Function to create result: ($outer_item, $inner_item) -> $result
 
 =back
 
@@ -1886,6 +2517,87 @@ B<Examples:>
 
 B<Note:> This is an inner join - only matching elements are returned.
 The inner sequence is fully loaded into memory.
+
+=item B<GroupJoin($inner, $outer_key_selector, $inner_key_selector, $result_selector)>
+
+Correlates elements of two sequences with group join (LEFT OUTER JOIN-like).
+Each outer element is matched with a group of inner elements (possibly empty).
+
+B<Parameters:>
+
+=over 4
+
+=item * C<$inner> - Inner sequence (LTSV::LINQ object)
+
+=item * C<$outer_key_selector> - Function to extract key from outer element
+
+=item * C<$inner_key_selector> - Function to extract key from inner element
+
+=item * C<$result_selector> - Function: ($outer_item, $inner_group) -> $result.
+The C<$inner_group> is a LTSV::LINQ object containing matched inner elements
+(empty sequence if no matches).
+
+=back
+
+B<Returns:> New query with one result per outer element (lazy)
+
+B<Examples:>
+
+  # Order count per user (including users with no orders)
+  my $users = LTSV::LINQ->From([
+      {id => 1, name => 'Alice'},
+      {id => 2, name => 'Bob'},
+      {id => 3, name => 'Carol'}
+  ]);
+
+  my $orders = LTSV::LINQ->From([
+      {user_id => 1, product => 'Book', amount => 10},
+      {user_id => 1, product => 'Pen', amount => 5},
+      {user_id => 2, product => 'Notebook', amount => 15}
+  ]);
+
+  $users->GroupJoin(
+      $orders,
+      sub { $_[0]{id} },
+      sub { $_[0]{user_id} },
+      sub {
+          my($user, $orders) = @_;
+          return {
+              name  => $user->{name},
+              count => $orders->Count(),
+              total => $orders->Sum(sub { $_[0]{amount} })
+          };
+      }
+  )->ToArray();
+  # [
+  #   {name => 'Alice', count => 2, total => 15},
+  #   {name => 'Bob', count => 1, total => 15},
+  #   {name => 'Carol', count => 0, total => 0},  # no orders
+  # ]
+
+  # Flat list with no-match rows included (LEFT OUTER JOIN, cf. Join for inner join)
+  $users->GroupJoin(
+      $orders,
+      sub { $_[0]{id} },
+      sub { $_[0]{user_id} },
+      sub {
+          my($user, $user_orders) = @_;
+          my @rows = $user_orders->ToArray();
+          return @rows
+              ? [ map { {name => $user->{name}, product => $_->{product}} } @rows ]
+              : [ {name => $user->{name}, product => 'none'} ];
+      }
+  )->SelectMany(sub { $_[0] }) # Flatten the array references
+   ->ToArray();
+
+B<Note:> Unlike Join, every outer element appears in the result even when
+there are no matching inner elements (LEFT OUTER JOIN semantics).
+The inner sequence is fully loaded into memory.
+
+B<Important:> The C<$inner_group> LTSV::LINQ object is highly flexible.
+It is specifically designed to be iterated multiple times within the
+result selector (e.g., calling C<Count()> followed by C<Sum()>) because
+it generates a fresh iterator for every terminal operation.
 
 =back
 
@@ -1993,9 +2705,9 @@ Get last element. Dies if empty.
 
   ->Last()
 
-=item B<LastOrDefault([$predicate])>
+=item B<LastOrDefault([$predicate,] $default)>
 
-Get last element, or undef if empty. Never throws exceptions.
+Get last element or default value. Never throws exceptions.
 
 B<Parameters:>
 
@@ -2003,20 +2715,23 @@ B<Parameters:>
 
 =item * C<$predicate> - (Optional) Condition
 
+=item * C<$default> - (Optional) Value to return when no element is found.
+Defaults to C<undef> when omitted.
+
 =back
 
-B<Returns:> Last element or undef
+B<Returns:> Last element or C<$default>
 
 B<Examples:>
 
-  # Get last element
-  ->LastOrDefault()  # 5
+  # Get last element (undef if empty)
+  ->LastOrDefault()
 
-  # Empty sequence
-  LTSV::LINQ->From([])->LastOrDefault()  # undef
+  # Specify a default value
+  LTSV::LINQ->From([])->LastOrDefault(undef, 0)  # 0
 
-  # With predicate
-  ->LastOrDefault(sub { $_[0] % 2 == 0 })  # Last even number
+  # With predicate and default
+  ->LastOrDefault(sub { $_[0] % 2 == 0 }, -1)  # Last even, or -1
 
 =item B<Single([$predicate])>
 
@@ -2058,8 +2773,12 @@ Get the only element, or undef if zero or multiple elements.
 
 B<Returns:> Single element or undef (if 0 or 2+ elements)
 
-B<.NET LINQ Compatibility:> Returns undef (null) for both empty and
-multiple element cases, matching .NET behavior.
+B<.NET LINQ Compatibility:> B<Note:> .NET's C<SingleOrDefault> throws
+C<InvalidOperationException> when the sequence contains more than one
+element. LTSV::LINQ returns C<undef> in that case instead of throwing,
+which makes it more convenient for Perl code that checks return values.
+If you require the strict .NET behaviour (exception on multiple elements),
+use C<Single()> wrapped in C<eval>.
 
 B<Performance:> Uses lazy evaluation. Memory-efficient.
 
@@ -2173,6 +2892,8 @@ B<Examples:>
 
 B<Note:> Non-numeric values may produce warnings. Use numeric context.
 
+B<Empty sequence:> Returns C<0>.
+
 =item B<Min([$selector])>
 
 Find minimum value.
@@ -2185,7 +2906,7 @@ B<Parameters:>
 
 =back
 
-B<Returns:> Minimum value (numeric comparison)
+B<Returns:> Minimum value, or C<undef> if sequence is empty.
 
 B<Examples:>
 
@@ -2197,8 +2918,6 @@ B<Examples:>
 
   # Oldest timestamp
   ->Min(sub { $_[0]{timestamp} })
-
-B<Returns:> C<undef> if sequence is empty
 
 =item B<Max([$selector])>
 
@@ -2212,7 +2931,7 @@ B<Parameters:>
 
 =back
 
-B<Returns:> Maximum value (numeric comparison)
+B<Returns:> Maximum value, or C<undef> if sequence is empty.
 
 B<Examples:>
 
@@ -2224,8 +2943,6 @@ B<Examples:>
 
   # Latest timestamp
   ->Max(sub { $_[0]{timestamp} })
-
-B<Returns:> C<undef> if sequence is empty
 
 =item B<Average([$selector])>
 
@@ -2252,7 +2969,9 @@ B<Examples:>
   # Average response time
   ->Average(sub { $_[0]{response_time} })
 
-B<Throws:> Dies with "Sequence contains no elements" if empty
+B<Empty sequence:> Dies with "Sequence contains no elements".
+Unlike C<Sum> (returns 0) and C<Min>/C<Max> (return C<undef>), C<Average>
+throws on an empty sequence. Use C<AverageOrDefault> to avoid the exception.
 
 B<Note:> Returns floating point. Use C<int()> for integer result.
 
@@ -2401,6 +3120,11 @@ B<Examples:>
       ->ToDictionary(sub { $_ }, sub { 1 });
 
 B<Note:> If duplicate keys exist, later values overwrite earlier ones.
+
+B<.NET LINQ Compatibility:> .NET's C<ToDictionary> throws C<ArgumentException>
+on duplicate keys. This module silently overwrites with the later value,
+following Perl hash semantics. Use C<ToLookup> if you need to preserve all
+values for each key.
 
 =item B<ToLookup($key_selector [, $value_selector])>
 
@@ -2679,49 +3403,96 @@ B<Benefits:>
 
 =head2 Method Categories
 
-B<Lazy Operations> (return new query):
+The table below shows, for every method, whether it is lazy or eager,
+and what it returns.  Knowing this prevents surprises about memory use
+and iterator consumption.
 
-These operations return immediately, creating a new query object.
-No data processing occurs until a terminal operation is called.
+  Method                Category        Evaluation         Returns
+  ------                --------        ----------         -------
+  From                  Source          Lazy (factory)     Query
+  FromLTSV              Source          Lazy (factory)     Query
+  Range                 Source          Lazy               Query
+  Empty                 Source          Lazy               Query
+  Repeat                Source          Lazy               Query
+  Where                 Filter          Lazy               Query
+  Select                Projection      Lazy               Query
+  SelectMany            Projection      Lazy               Query
+  Concat                Concatenation   Lazy               Query
+  Zip                   Concatenation   Lazy               Query
+  Take                  Partitioning    Lazy               Query
+  Skip                  Partitioning    Lazy               Query
+  TakeWhile             Partitioning    Lazy               Query
+  SkipWhile             Partitioning    Lazy               Query
+  Distinct              Set Operation   Lazy (1st seq)     Query
+  DefaultIfEmpty        Conversion      Lazy               Query
+  OrderBy               Ordering        Eager (full)       Query
+  OrderByDescending     Ordering        Eager (full)       Query
+  OrderByStr            Ordering        Eager (full)       Query
+  OrderByStrDescending  Ordering        Eager (full)       Query
+  OrderByNum            Ordering        Eager (full)       Query
+  OrderByNumDescending  Ordering        Eager (full)       Query
+  Reverse               Ordering        Eager (full)       Query
+  GroupBy               Grouping        Eager (full)       Query
+  Union                 Set Operation   Eager (2nd seq)    Query
+  Intersect             Set Operation   Eager (2nd seq)    Query
+  Except                Set Operation   Eager (2nd seq)    Query
+  Join                  Join            Eager (inner seq)  Query
+  GroupJoin             Join            Eager (inner seq)  Query
+  All                   Quantifier      Lazy (early exit)  Boolean
+  Any                   Quantifier      Lazy (early exit)  Boolean
+  Contains              Quantifier      Lazy (early exit)  Boolean
+  SequenceEqual         Comparison      Lazy (early exit)  Boolean
+  First                 Element Access  Lazy (early exit)  Element
+  FirstOrDefault        Element Access  Lazy (early exit)  Element
+  Last                  Element Access  Eager (full)       Element
+  LastOrDefault         Element Access  Eager (full)       Element
+  Single                Element Access  Lazy (stops at 2)  Element
+  SingleOrDefault       Element Access  Lazy (stops at 2)  Element
+  ElementAt             Element Access  Lazy (early exit)  Element
+  ElementAtOrDefault    Element Access  Lazy (early exit)  Element
+  Count                 Aggregation     Eager (full)       Integer
+  Sum                   Aggregation     Eager (full)       Number
+  Min                   Aggregation     Eager (full)       Number
+  Max                   Aggregation     Eager (full)       Number
+  Average               Aggregation     Eager (full)       Number
+  AverageOrDefault      Aggregation     Eager (full)       Number or undef
+  Aggregate             Aggregation     Eager (full)       Scalar
+  ToArray               Conversion      Eager (full)       Array
+  ToList                Conversion      Eager (full)       ArrayRef
+  ToDictionary          Conversion      Eager (full)       HashRef
+  ToLookup              Conversion      Eager (full)       HashRef
+  ToLTSV                Conversion      Eager (full)       (file written)
+  ForEach               Utility         Eager (full)       (void)
+
+B<Legend:>
 
 =over 4
 
-=item * Where, Select, SelectMany
+=item * B<Lazy> - returns a new Query immediately; no data is read yet.
 
-=item * Take, Skip, TakeWhile
+=item * B<Lazy (early exit)> - reads only as many elements as needed, then stops.
 
-=item * Distinct
+=item * B<Lazy (stops at 2)> - reads until it finds a second match, then stops.
+
+=item * B<Eager (full)> - must read the entire input sequence before returning.
+
+=item * B<Eager (2nd seq) / Eager (inner seq)> - the indicated sequence is read
+in full up front; the other sequence remains lazy.
 
 =back
 
-B<Terminal Operations> (return value):
-
-These operations consume the iterator and return a result.
-All lazy operations are executed at this point.
+B<Practical guidance:>
 
 =over 4
 
-=item * ToArray, ToList, ToLTSV
+=item * Chain lazy operations freely - no cost until a terminal is called.
 
-=item * Count, Sum, Min, Max, Average
+=item * Each terminal operation exhausts the iterator; to reuse data, call
+C<ToArray()> first and rebuild with C<From(\@array)>.
 
-=item * First, FirstOrDefault, Last
-
-=item * All, Any
-
-=item * ForEach
-
-=back
-
-B<Materializing Operations> (return new query, but eager):
-
-These operations must consume the entire input before proceeding.
-
-=over 4
-
-=item * OrderBy, OrderByDescending, Reverse
-
-=item * GroupBy
+=item * For very large files, avoid eager operations (C<OrderBy>, C<GroupBy>,
+C<Join>, etc.) unless the data fits in memory, or pre-filter with C<Where>
+to reduce the working set first.
 
 =back
 
@@ -2749,33 +3520,60 @@ is read.
 
 =head2 Memory Characteristics
 
-B<Constant Memory Operations:>
+B<O(1) / Streaming Operations:>
+
+These hold at most one element in memory at a time:
 
 =over 4
 
-=item * Where, Select, SelectMany
+=item * Where, Select, SelectMany, Concat, Zip
 
-=item * Take, Skip, TakeWhile
+=item * Take, Skip, TakeWhile, SkipWhile
 
-=item * Distinct (with hash, O(unique elements))
+=item * DefaultIfEmpty
 
-=item * ForEach, Count, Sum, Min, Max, Average
+=item * ForEach, Count, Sum, Min, Max, Average, AverageOrDefault
 
-=item * First, FirstOrDefault, Any, All
+=item * First, FirstOrDefault, Any, All, Contains
+
+=item * Single, SingleOrDefault, ElementAt, ElementAtOrDefault
 
 =back
 
-B<Linear Memory Operations:>
+B<O(unique) Operations:>
 
 =over 4
 
-=item * ToArray, ToList (O(n))
+=item * Distinct - hash grows with the number of distinct keys seen
 
-=item * OrderBy, OrderByDescending, Reverse (O(n))
+=back
+
+B<O(second/inner sequence) Operations:>
+
+The following are partially eager: one sequence is buffered in full,
+the other is streamed:
+
+=over 4
+
+=item * Union, Intersect, Except - second sequence is fully loaded
+
+=item * Join, GroupJoin - inner sequence is fully loaded
+
+=back
+
+B<O(n) / Full-materialisation Operations:>
+
+=over 4
+
+=item * ToArray, ToList, ToDictionary, ToLookup, ToLTSV (O(n))
+
+=item * OrderBy, OrderByDescending and Str/Num variants, Reverse (O(n))
 
 =item * GroupBy (O(n))
 
 =item * Last, LastOrDefault (O(n))
+
+=item * Aggregate (O(n), O(1) intermediate accumulator)
 
 =back
 
@@ -2873,7 +3671,7 @@ coding practices:
 
 =item * C<our> keyword avoided (5.6+ feature)
 
-=item * Three-argument C<open> avoided (uses Perl 5.005 compatible style)
+=item * Three-argument C<open> used on Perl 5.6 and later (two-argument form retained for 5.005_03)
 
 =item * No Unicode features required
 
@@ -2961,6 +3759,96 @@ This module uses C<pmake.bat> instead of traditional make, since Perl 5.005_03
 on Microsoft Windows lacks make. All tests pass on Perl 5.005_03 through
 modern versions.
 
+=head2 .NET LINQ Compatibility
+
+This section documents where LTSV::LINQ's behaviour matches .NET LINQ
+exactly, where it intentionally differs, and where it cannot differ due
+to Perl's type system.
+
+B<Exact matches with .NET LINQ:>
+
+=over 4
+
+=item * C<Single> - throws when sequence is empty or has more than one element
+
+=item * C<First>, C<Last> - throw when sequence is empty or no element matches
+
+=item * C<Aggregate(seed, func)> and C<Aggregate(seed, func, result_selector)>
+- matching 2- and 3-argument forms
+
+=item * C<GroupBy> - groups are returned in insertion order (first-seen key order)
+
+=item * C<GroupJoin> - every outer element appears even with zero inner matches
+
+=item * C<Join> - inner join semantics; unmatched outer elements are dropped
+
+=item * C<Union> / C<Intersect> / C<Except> - partially eager (second/inner
+sequence buffered up front), matching .NET's hash-join approach
+
+=item * C<Take>, C<Skip>, C<TakeWhile>, C<SkipWhile> - identical semantics
+
+=item * C<All> / C<Any> with early exit
+
+=back
+
+B<Intentional differences from .NET LINQ:>
+
+=over 4
+
+=item * C<SingleOrDefault>
+
+.NET throws C<InvalidOperationException> when the sequence contains more
+than one element. LTSV::LINQ returns C<undef> instead. This makes it
+more natural in Perl code that checks return values with C<defined>.
+
+If you require strict .NET behaviour (exception on multiple elements),
+use C<Single()> inside an C<eval>:
+
+  my $val = eval { $query->Single() };
+  # $val is undef and $@ is set if empty or multiple
+
+=item * C<DefaultIfEmpty(undef)>
+
+.NET's C<DefaultIfEmpty> can return a sequence containing C<null>
+(the reference-type default). LTSV::LINQ cannot: the iterator protocol
+uses C<undef> to signal end-of-sequence, so a default value of C<undef>
+is indistinguishable from EOF and is silently lost.
+
+  # .NET: seq.DefaultIfEmpty() produces one null element
+  # Perl:
+  LTSV::LINQ->From([])->DefaultIfEmpty(undef)->ToArray()  # () - empty!
+  LTSV::LINQ->From([])->DefaultIfEmpty(0)->ToArray()      # (0) - works
+
+Use a sentinel value (C<0>, C<''>, C<{}>) and handle it explicitly.
+
+=item * C<OrderBy> smart comparison
+
+.NET's C<OrderBy> is strongly typed: the key type determines the
+comparison. In Perl there is no static type, so LTSV::LINQ's C<OrderBy>
+uses a heuristic: if both keys look like numbers, C<E<lt>=E<gt>> is used;
+otherwise C<cmp>. For explicit control, use C<OrderByStr> (always C<cmp>)
+or C<OrderByNum> (always C<E<lt>=E<gt>>).
+
+=item * EqualityComparer / IComparer
+
+.NET LINQ accepts C<IEqualityComparer> and C<IComparer> interface objects
+for custom equality and ordering. LTSV::LINQ uses code references (C<sub>)
+that extract a I<key> from each element. This is equivalent in power but
+different in calling convention: the sub receives one element and returns a
+key, rather than receiving two elements and returning a comparison result.
+
+=item * C<Concat> on typed sequences
+
+.NET's C<Concat> is type-checked. LTSV::LINQ accepts any two sequences
+regardless of element type.
+
+=item * No query expression syntax
+
+.NET's C<from x in ... where ... select ...> syntax compiles to LINQ
+method calls. Perl has no equivalent; use method chaining directly.
+
+=back
+
 =head2 Pure Perl Implementation
 
 B<No XS Dependencies:>
@@ -3004,6 +3892,20 @@ Example:
 
   LTSV::LINQ->From("string");  # Dies
   LTSV::LINQ->From([1, 2, 3]); # OK
+
+=item C<SelectMany: selector must return an ARRAY reference>
+
+Thrown by SelectMany() when the selector function returns anything
+other than an ARRAY reference. Wrap the return value in C<[...]>:
+
+  # Wrong - hashref causes die
+  ->SelectMany(sub { {key => 'val'} })
+
+  # Correct - arrayref
+  ->SelectMany(sub { [{key => 'val'}] })
+
+  # Correct - empty array for "no results" case
+  ->SelectMany(sub { [] })
 
 =item C<Sequence contains no elements>
 
@@ -3082,6 +3984,10 @@ Dies if argument is not an array reference.
 =item B<FromLTSV($filename)>
 
 Dies if file cannot be opened.
+
+B<Note:> The file handle is held open until the iterator is fully
+consumed. Partially consumed queries keep their file handles open.
+See C<FromLTSV> in L</Data Source Methods> for details.
 
 =item B<First([$predicate])>
 
@@ -3324,13 +4230,179 @@ modern query capabilities without requiring upgrades.
 
 =item B<Conditional aggregation>
 
-  my $success_avg = $query
+Note: A query object can only be consumed once. To compute multiple
+aggregations over the same source, materialise it first with C<ToArray()>.
+
+  my @all = LTSV::LINQ->FromLTSV("access.log")->ToArray();
+
+  my $success_avg = LTSV::LINQ->From(\@all)
       ->Where(status => '200')
       ->Average(sub { $_[0]{response_time} });
 
-  my $error_avg = $query
+  my $error_avg = LTSV::LINQ->From(\@all)
       ->Where(sub { $_[0]{status} >= 400 })
       ->Average(sub { $_[0]{response_time} });
+
+=item B<Iterator consumption: when to snapshot with ToArray()>
+
+A query object wraps a single-pass iterator.  Once consumed, it is
+exhausted and subsequent terminal operations return empty results or die.
+
+  # WRONG - $q is exhausted after the first Count()
+  my $q = LTSV::LINQ->FromLTSV("access.log")->Where(status => '200');
+  my $n     = $q->Count();          # OK
+  my $first = $q->First();          # WRONG: iterator already at EOF
+
+  # RIGHT - snapshot into array, then query as many times as needed
+  my @rows  = LTSV::LINQ->FromLTSV("access.log")->Where(status => '200')->ToArray();
+  my $n     = LTSV::LINQ->From(\@rows)->Count();
+  my $first = LTSV::LINQ->From(\@rows)->First();
+
+The snapshot approach is also the correct pattern for any multi-pass
+computation such as computing both average and standard deviation,
+comparing the same sequence against two different filters, or iterating
+once to validate and once to transform.
+
+=item B<Efficient large-file pattern>
+
+For files too large to fit in memory, keep the chain fully lazy by
+ensuring only one terminal operation is performed per pass:
+
+  # One pass - pick only what you need
+  my @slow = LTSV::LINQ->FromLTSV("access.log")
+      ->Where(sub { $_[0]{response_time} > 1000 })
+      ->OrderByNum(sub { $_[0]{response_time} })
+      ->Take(20)
+      ->ToArray();
+
+  # Never do two passes on the same FromLTSV object -
+  # open the file again for a second pass:
+  my $count = LTSV::LINQ->FromLTSV("access.log")->Count();
+  my $sum   = LTSV::LINQ->FromLTSV("access.log")
+                  ->Sum(sub { $_[0]{bytes} });
+
+=back
+
+=head1 DESIGN PHILOSOPHY
+
+=head2 Historical Compatibility: Perl 5.005_03
+
+This module maintains compatibility with Perl 5.005_03 (released 1999-03-28),
+following the B<Universal Consensus 1998 for primetools>.
+
+B<Why maintain such old compatibility?>
+
+=over 4
+
+=item * B<Long-term stability>
+
+Code written in 1998-era Perl should still run in 2026 and beyond.
+This demonstrates Perl's commitment to backwards compatibility.
+
+=item * B<Embedded systems and traditional environments>
+
+Some production systems, embedded devices, and enterprise environments
+cannot easily upgrade Perl. Maintaining compatibility ensures this module
+remains useful in those contexts.
+
+=item * B<Minimal dependencies>
+
+By avoiding modern Perl features, this module has zero non-core dependencies.
+It works with only the Perl core that has existed since 1999.
+
+=back
+
+B<Technical implications:>
+
+=over 4
+
+=item * No C<our> keyword - uses package variables
+
+=item * No C<warnings> pragma - uses C<local $^W=1>
+
+=item * No C<use strict 'subs'> improvements from 5.6+
+
+=item * All features implemented with Perl 5.005-era constructs
+
+=back
+
+The code comment C<# use 5.008001; # Lancaster Consensus 2013 for toolchains>
+marks where modern code would typically start. We intentionally stay below
+this line.
+
+=head2 US-ASCII Only Policy
+
+All source code is strictly US-ASCII (bytes 0x00-0x7F). No UTF-8, no
+extended characters.
+
+B<Rationale:>
+
+=over 4
+
+=item * B<Universal portability>
+
+US-ASCII works everywhere - ancient terminals, modern IDEs, web browsers,
+email systems. No encoding issues, ever.
+
+=item * B<No locale dependencies>
+
+The code behaves identically regardless of system locale settings.
+
+=item * B<Clear separation of concerns>
+
+Source code (ASCII) vs. data (any encoding). The module processes LTSV
+data in any encoding, but its own code remains pure ASCII.
+
+=back
+
+This policy is verified by C<t/010_ascii_only.t>.
+
+=head2 The C<$VERSION = $VERSION> Idiom
+
+You may notice:
+
+  $VERSION = '1.03';
+  $VERSION = $VERSION;
+
+This is B<intentional>, not a typo. Under C<use strict>, a variable used
+only once triggers a warning. The self-assignment ensures C<$VERSION>
+appears twice, silencing the warning without requiring C<our> (which
+doesn't exist in Perl 5.005).
+
+This is a well-known idiom from the pre-C<our> era.
+
+=head2 Design Principles
+
+=over 4
+
+=item * B<Lazy evaluation by default>
+
+Operations return query objects, not arrays. Data is processed on-demand
+when terminal operations (C<ToArray>, C<Count>, etc.) are called.
+
+=item * B<Method chaining>
+
+All query operations return new query objects, enabling fluent syntax:
+
+  $query->Where(...)->Select(...)->OrderBy(...)->ToArray()
+
+=item * B<No side effects>
+
+Query operations never modify the source data. They create new lazy
+iterators.
+
+=item * B<Perl idioms, LINQ semantics>
+
+We follow LINQ's method names and semantics, but use Perl idioms for
+implementation (closures for iterators, hash refs for records).
+
+=item * B<Zero dependencies>
+
+This module has zero non-core dependencies. It works with only the Perl
+core that has existed since 1999. Even C<warnings.pm> is optional (stubbed
+for Perl E<lt> 5.6). This ensures installation succeeds on minimal Perl
+installations, avoids dependency chain vulnerabilities, and provides
+permanence - the code will work decades into the future.
 
 =back
 
@@ -3369,35 +4441,226 @@ All operations execute sequentially in a single thread.
 
 All filtering requires full scan. No index optimization.
 
-=item * B<GroupBy Sorts Keys>
-
-GroupBy returns groups in sorted key order. Original order is not
-preserved.
-
 =item * B<Distinct Uses String Keys>
 
 Distinct with custom comparer uses stringified keys. May not work
 correctly for complex objects.
 
+=item * B<DefaultIfEmpty(undef) Cannot Be Distinguished from End-of-Sequence>
+
+Because the iterator protocol uses C<undef> to signal end-of-sequence,
+C<DefaultIfEmpty(undef)> cannot reliably deliver its C<undef> default
+to downstream operations.
+
+  # Works correctly (non-undef default)
+  LTSV::LINQ->From([])->DefaultIfEmpty(0)->ToArray()    # (0)
+  LTSV::LINQ->From([])->DefaultIfEmpty({})->ToArray()   # ({})
+
+  # Does NOT work (undef default is indistinguishable from EOF)
+  LTSV::LINQ->From([])->DefaultIfEmpty(undef)->ToArray() # () - empty!
+
+Workaround: Use a sentinel value such as C<0>, C<''>, or C<{}> instead
+of C<undef>, and treat it as "no element" after the fact.
+
 =back
 
 =head2 Not Implemented
 
-The following LINQ methods are NOT implemented in this version:
+The following LINQ methods from the .NET standard library are intentionally
+not implemented in LTSV::LINQ. This section explains the design rationale
+for each omission.
+
+=head3 Parallel LINQ (PLINQ) Methods
+
+The following methods belong to B<Parallel LINQ (PLINQ)>, the .NET
+parallel-execution extension to LINQ introduced in .NET 4.0. They exist
+to distribute query execution across multiple CPU cores using the .NET
+Thread Pool and Task Parallel Library.
+
+Perl does not have native shared-memory multithreading that maps onto
+this execution model. Perl threads (C<threads.pm>) copy the interpreter
+state and communicate through shared variables, making them unsuitable
+for the fine-grained, automatic work-stealing parallelism that PLINQ
+provides. LTSV::LINQ's iterator-based design assumes a single sequential
+execution context; introducing PLINQ semantics would require a completely
+different architecture and would add heavy dependencies.
+
+Furthermore, the primary use case for LTSV::LINQ -- parsing and querying
+LTSV log files -- is typically I/O-bound rather than CPU-bound.
+Parallelizing I/O over a single file provides little benefit and
+considerable complexity.
+
+For these reasons, the entire PLINQ surface is omitted:
 
 =over 4
 
-=item * GroupJoin - Group join operations
+=item * B<AsParallel>
 
-=item * OfType - Type filtering
+Entry point for PLINQ. Converts an C<IEnumerable<T>> into a
+C<ParallelQuery<T>> that the .NET runtime executes in parallel using
+multiple threads. Not applicable: Perl lacks the runtime infrastructure.
 
-=item * Cast - Type conversion
+=item * B<AsSequential>
 
-=item * LongCount - 64-bit count
+Converts a C<ParallelQuery<T>> back to a sequential C<IEnumerable<T>>,
+forcing subsequent operators to run on a single thread. Since
+C<AsParallel> is not implemented, C<AsSequential> has no counterpart
+to convert from.
+
+=item * B<AsOrdered>
+
+Instructs PLINQ to preserve the source order in the output even during
+parallel execution. This is a hint to the PLINQ scheduler; it does not
+exist outside of PLINQ. Not applicable.
+
+=item * B<AsUnordered>
+
+Instructs PLINQ that output order does not need to match source order,
+potentially allowing more efficient parallel execution. Not applicable.
+
+=item * B<ForAll>
+
+PLINQ terminal operator that applies an action to each element in
+parallel, without collecting results. It is the parallel equivalent of
+C<ForEach>. LTSV::LINQ provides C<ForEach> for sequential iteration.
+A parallel C<ForAll> is not applicable.
+
+=item * B<WithCancellation>
+
+Attaches a .NET C<CancellationToken> to a C<ParallelQuery<T>>, allowing
+cooperative cancellation of a running parallel query. Cancellation tokens
+are a .NET threading primitive. Not applicable.
+
+=item * B<WithDegreeOfParallelism>
+
+Sets the maximum number of concurrent tasks that PLINQ may use. A
+tuning knob for the PLINQ scheduler. Not applicable.
+
+=item * B<WithExecutionMode>
+
+Controls whether PLINQ may choose sequential execution for efficiency
+(C<Default>) or is forced to parallelize (C<ForceParallelism>). Not
+applicable.
+
+=item * B<WithMergeOptions>
+
+Controls how PLINQ merges results from parallel partitions back into the
+output stream (buffered, auto-buffered, or not-buffered). Not applicable.
 
 =back
 
-These may be added in future versions if there is demand.
+=head3 .NET Type System Methods
+
+The following methods are specific to .NET's static type system. They
+exist to work with .NET generics and interface hierarchies, which have
+no Perl equivalent.
+
+=over 4
+
+=item * B<Cast>
+
+Casts each element of a non-generic C<IEnumerable> to a specified type
+C<T>, returning C<IEnumerable<T>>. In .NET, C<Cast<T>> is needed when
+working with legacy APIs that return C<IEnumerable> (without a type
+parameter) and you need to treat the elements as a specific type.
+
+Perl is dynamically typed. Every Perl value already holds type
+information at runtime (scalar, reference, blessed object), and Perl
+does not have a concept of a "non-generic enumerable" that needs to be
+explicitly cast before it can be queried. There is no meaningful
+operation to implement.
+
+=item * B<OfType>
+
+Filters elements of a non-generic C<IEnumerable>, returning only those
+that can be successfully cast to a specified type C<T>. Like C<Cast>,
+it exists to bridge generic and non-generic .NET APIs.
+
+In LTSV::LINQ, all records from C<FromLTSV> are hash references.
+Records from C<From> are whatever the caller puts in the array.
+Perl's C<ref()>, C<UNIVERSAL::isa()>, or a C<Where> predicate can
+perform any type-based filtering the caller needs. A dedicated
+C<OfType> adds no expressiveness.
+
+  # Perl equivalent of OfType for blessed objects of class "Foo":
+  $query->Where(sub { ref($_[0]) && $_[0]->isa('Foo') })
+
+=back
+
+=head3 64-bit and Large-Count Methods
+
+=over 4
+
+=item * B<LongCount>
+
+Returns the number of elements as a 64-bit integer (C<Int64> in .NET).
+On 32-bit .NET platforms, a sequence can theoretically contain more than
+C<2**31 - 1> (~2 billion) elements, which would overflow C<int>; hence
+the need for C<LongCount>.
+
+In Perl, integers are represented as native signed integers or floating-
+point doubles (C<NV>). On 64-bit Perl (which is universal in practice
+today), the native integer type is 64 bits, so C<Count> already handles
+any realistic sequence length. On 32-bit Perl, the floating-point C<NV>
+provides 53 bits of integer precision (~9 quadrillion), far exceeding
+any in-memory sequence. There is no semantic gap between C<Count> and
+C<LongCount> in Perl.
+
+=back
+
+=head3 Compound Ordering Methods
+
+=over 4
+
+=item * B<ThenBy>
+
+In .NET LINQ, C<OrderBy> returns an C<IOrderedEnumerable<T>>, a special
+interface that exposes C<ThenBy> and C<ThenByDescending> for adding
+secondary sort keys. C<ThenBy> applies a secondary ascending sort key
+to an already-ordered sequence.
+
+LTSV::LINQ's C<OrderBy> materializes the sequence into a Perl array and
+sorts it immediately. There is no C<IOrderedEnumerable> intermediate
+type. Multi-key sorting can be achieved by passing a compound comparator
+to C<OrderBy>:
+
+  # Sort by status descending (numeric), then by url ascending (string):
+  $query->OrderBy(sub {
+      sprintf('%04d|%s', 9999 - ($_[0]{status} + 0), $_[0]{url})
+  })
+
+Or for purely string keys, use string comparison directly:
+
+  # Sort by method ascending, then by url ascending:
+  $query->OrderBy(sub { "$_[0]{method}|$_[0]{url}" })
+
+Or by chaining C<OrderBy> calls (though this re-sorts the full array each
+time, which is less efficient than a single compound sort). Future versions
+may introduce a C<ThenBy> method if demand arises.
+
+=item * B<ThenByDescending>
+
+Secondary descending sort key, analogous to C<ThenBy>. Same rationale
+as C<ThenBy> above.
+
+=back
+
+=head3 IEnumerable Conversion Method
+
+=over 4
+
+=item * B<AsEnumerable>
+
+In .NET, C<AsEnumerable<T>> is used to force evaluation of a query as
+C<IEnumerable<T>> rather than, for example, C<IQueryable<T>> (which
+might be translated to SQL). It is a type-cast at the interface level,
+not a data transformation.
+
+LTSV::LINQ has only one query type: C<LTSV::LINQ>. There is no
+C<IQueryable> counterpart that would benefit from being downgraded to
+C<IEnumerable>. The method has no meaningful semantics to implement.
+
+=back
 
 =head1 BUGS
 

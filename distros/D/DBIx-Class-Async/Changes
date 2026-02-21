@@ -1,5 +1,43 @@
 Revision history for DBIx::Class::Async
 
+0.59 2026-02-21
+     [Bug Fixes]
+     - Fixed issue silent drop of relationship 'where' conditions.
+       Relationships defined with a 'where' containing raw SQL scalar refs
+       (e.g. datetime functions) were silently ignored when traversing via
+       a row accessor or prefetch, returning all related rows instead of
+       the filtered subset.
+       Fixed in _ensure_accessors(), _fetch_relationship_async(), and
+       related_resultset() in DBIx::Class::Async::Row.
+       Relationships with raw SQL in their 'where' are now excluded from
+       the '_related' cache, ensuring dynamic expressions are evaluated
+       fresh on every call.
+     [TESTS]
+     - t/151-has-many-datetime-filter.t: to cover the bug fix.
+     - t/150-multi-column-relationship.t: new test covering multi-column
+       relationships spanning two tables, demonstrating both the DBIC
+       coderef relationship approach (join/prefetch) and the async-safe
+       helper method pattern for cases where join conditions depend on
+       columns from related tables rather than self.
+
+0.58 2026-02-20
+     [BUG FIX]
+     - ResultSet::create() now detects scalar-ref values targeting primary
+       key columns and croaks immediately with a descriptive error message.
+       Previously, scalar refs used to embed inline SQL expressions
+       (e.g. \'UUID()') were silently stringified during IPC serialisation
+       to the worker process, causing DBIC to fall back to last_insert_id()
+       on a non-autoincrement char column and return a wrong value ('1' on
+       SQLite, undef on MySQL). Callers should generate PK values in Perl
+       before calling create(), e.g. Data::UUID->new->create_str.
+     [TEST SUITE]
+     - t/149-scalar-ref-char-pk.t: new test covering the scalar-ref char PK
+       guard and confirming that Perl-side UUID generation works correctly
+       as the fix.
+     - t/lib/TestSchema/Result/Event.pm: new test fixture.
+     - t/003-basic.t, t/004-simple-get.t: updated source count from 3 to 4
+       to reflect the addition of the Event fixture to TestSchema.
+
 0.57 2026-02-10
      - [FEATURE] Changed caching to be disabled by default (TTL set to 0).
      - [FEATURE] Added automatic detection of non-deterministic SQL functions

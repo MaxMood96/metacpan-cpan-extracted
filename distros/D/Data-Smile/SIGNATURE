@@ -1,0 +1,81 @@
+This file contains message digests of all files listed in MANIFEST,
+signed via the Module::Signature module, version 0.88.
+
+To verify the content in this distribution, first make sure you have
+Module::Signature installed, then type:
+
+    % cpansign -v
+
+It will check each file's integrity, as well as the signature's
+validity.  If "==> Signature verified OK! <==" is not displayed,
+the distribution may already have been compromised, and you should
+not run its Makefile.PL or Build.PL.
+
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: RIPEMD160
+
+SHA256 e1280fb9bacdab97bd2183bb2bcb6fd7b60c339e3aecc243e08d767d44db0578 COPYRIGHT
+SHA256 7977c02e031153dc91d6db9d2e803671d586e59bca2c5c3dc6211f29c04d92d6 CREDITS
+SHA256 ecd2b6573529bb9b8f67f5154333631b752410403bd4a7ae0b79e94e1791b997 Changes
+SHA256 1d1893ce117ae6f0b6e432ab621478170b7cd34af556fb3cd2bd933939cede6c INSTALL
+SHA256 ca1cc40b3da7bebb1b0368764650ad38ac603b31a25fbc5b6f9fb217cc6fa1e8 LICENSE
+SHA256 d30ed1a9de4a1420aa5a128e44bbabecc362ba50c567fdab40e1a615f9bed91c MANIFEST
+SHA256 8677cae271df18aab3c4413513f68fd8cb4d0f581b17a3235080cdd651ef92cd META.json
+SHA256 40f40123f7d4bcb8389ab3ab0871d1af896abc9fafe0d23add4b17b9f6e8749f META.yml
+SHA256 a78c1d813b94dfe2dd6f978e5965e04e95bdd9e12ace3735d2afe008a0a263fb Makefile.PL
+SHA256 6530b421395d3970f57241e6545af43c513abc413daf62fca138b15f5a9061c9 README
+SHA256 6ca9e2fbd9d578e845708a971de12b85a50a6a612f7064fe31366d37b44230ab README.md
+SHA256 9f01d65a8f5987d5b82769858e420765d09034c309422f1729d9c4b057cc80de dist.ini
+SHA256 86a22601e0b64d0f5c59ad45f62a2f750e3d4aef3355ad157da535f75eb16920 doap.ttl
+SHA256 a5ee1cbf5bfc9aa0d1206759e2087a4acc1028245004bcb6ed5def6269289314 examples/bench.pl
+SHA256 ec7ffa5a9056a55c80de3046dfefd96d4c3e29d83c304e3e2d1d9f4c1f128f2e lib/Data/Smile.pm
+SHA256 200b23648636345bbf8bf80de57ca90bff72bd69e8031afb6d8e89ff891dfbf5 lib/Data/Smile/PP.pm
+SHA256 ff45e8d54ee7338edf43d7eca0623b465ad240667154182dac8b224fc59771fa t/00start.t
+SHA256 c228428f54606c255d21d822baaf8c93f904c4422566555569d71ee1a70c70ae t/01basic.t
+SHA256 92cd1f3f8cb2494bb51c2aeea16cf5b6c7b4898902761584c05ab2112cdc5cd2 t/data/json/db100.xml.jsn
+SHA256 9fcee3b2c6568f62095eafbf4da1bbbfce4027d0a7e5fbea348e7e9cc6ff374a t/data/json/json-org-sample1.jsn
+SHA256 5265d1234dcac9bcafa43e47a36152f41287035390f0edf934c88e49e5f5d659 t/data/json/json-org-sample2.jsn
+SHA256 cfbbdc7c4f5366e802502de202266ff4eef9c28c287b1437ed578c15193534b8 t/data/json/json-org-sample3.jsn
+SHA256 9fd6eb21112a7f454e73d039b9ffb151aa9bfe6a5ef7a14f9ef4d05a9cadd99b t/data/json/json-org-sample4.jsn
+SHA256 d07dcb7980bea9d6ca98f0ec47c004169da161f7d086fd46d60c816d9a60fba4 t/data/json/json-org-sample5.jsn
+SHA256 31bdf78acf8205d58c4f7574431731c8f314cd7b815283d29cd7419bd1472174 t/data/json/map-spain.xml.jsn
+SHA256 e6ed40596340fb4c412ca66dbdd5a91cbbe23d0cc13be7c2ec4dd2ee24bb0a88 t/data/json/ns-invoice100.xml.jsn
+SHA256 0aed5dcc8370675696d698a3cf94ac9c5aec2feb8f05bce3acd29c6d309982a3 t/data/json/ns-soap.xml.jsn
+SHA256 b00ded73da1fe9049b3e9e64cb14173a38a1cdca9fd61ce20c666fa3a2940331 t/data/json/numbers-fp-4k.jsn
+SHA256 044804fe4502ab61621aaee5191b48502a9d8edad40c72e948a453a9a2c52f0e t/data/json/numbers-fp-64k.jsn
+SHA256 bd01fefa62d88b2fae0e6ebeab62ffd5878c4a6c2bb27042699caf90058d5d25 t/data/json/numbers-int-4k.jsn
+SHA256 c2f3626af90da33db161f49348c45b810838d1eeb7a83a8de40b25c63f69ec76 t/data/json/numbers-int-64k.jsn
+SHA256 e4cad544febf099d09d7e1b4c460abfbd0226551e5bcf241c89b78e23c5af264 t/data/json/test1.jsn
+SHA256 f18b43b05118611fe771526e41b1b6217c2cf24dbc83998a57f25af29ae7fd64 t/data/json/test2.jsn
+SHA256 2bea42c08b182cdb91027fd1a58aaf5a20fb06448973eff64c294e92434761aa t/data/json/test3.jsn
+SHA256 b65463cce1046667bfdb0f1ed2859bf2a14fdb8aa6db866ecb6f058bdff65c0a t/data/smile/db100.xml.smile
+SHA256 514d1a87f62efd27a4b7181957c00187fa99b46ae7d3878ed4fbb5018f67b9ea t/data/smile/json-org-sample1.smile
+SHA256 d8ebbf210db5d13c1339b5235122b9e5b3a179de0d389609fde33fc80f219d43 t/data/smile/json-org-sample2.smile
+SHA256 e5a51e35030009750104ccbf340391d4b104b7f7019307708c57fac590a8feab t/data/smile/json-org-sample3.smile
+SHA256 aa04e7166918b044914929cc0f05e32a4f642ed40e2353909cecb6fa73a470ec t/data/smile/json-org-sample4.smile
+SHA256 bf6a8b1f64b91d81cd32d45d1b8c89c42a504146146916f5f6dcd9f46a35d560 t/data/smile/json-org-sample5.smile
+SHA256 8098c6b4944139692942dcad2a883511c63cf8634f45d4fccd9c45635992066f t/data/smile/map-spain.xml.smile
+SHA256 d930eda570fea16171b8e3d1333b021f86d977fe4351a0e68f98e28d411d8ad4 t/data/smile/ns-invoice100.xml.smile
+SHA256 ed3dce0c48d881b6f8fb66e4f905367b1b44ac0c396aa7eb2639c38c2a8665a8 t/data/smile/ns-soap.xml.smile
+SHA256 7131e57318b4ac0628bb07abd1dd53e2b3143e1ceef81fecdb75a7df0b53fc0e t/data/smile/numbers-fp-4k.smile
+SHA256 d9acf7f26aa9f87d59c5ef73b74bf6bc07a2c3aa8a08fce727695ce7ac51ea79 t/data/smile/numbers-fp-64k.smile
+SHA256 2b352387ac3fe5f39ee1027ee2efaae224d7103947aadfdcf75d440bc37c625c t/data/smile/numbers-int-4k.smile
+SHA256 8ebbf49f524747851a7a90f3843b452fdec93678da67a4291d891684c372b675 t/data/smile/numbers-int-64k.smile
+SHA256 003bfc87d0ba98cfbf812ca9296bdd944e664d089b9a6f3c4ed9508032e7616e t/data/smile/test1.smile
+SHA256 08a9699f2ca01359a8182428c123d279dde085ae0adb42d1feacd0ee2fb4e3ed t/data/smile/test2.smile
+SHA256 c1f1099d65bd89997f230c41079a47bd150e331f972cb7c5f222061ac8a7d128 t/data/smile/test3.smile
+SHA256 e66370a76512cc6319bcae9e278fc7c975628220bd29317eada9c4ac12534077 t/integration/00_wrapper.t
+SHA256 6177a8f85abda20b869f57530d9e2d4a34dc0bd70dac42b0e61906bb01b473ae t/integration/01_round_trip.t
+SHA256 00088613444dcccc5eb624f68bd08d113a4177a207c40e36052679f2d339a139 t/integration/02_shared_names.t
+SHA256 c3f04bdcd7afd43076033f153b41bcb36b1644d8692795d2e8d5016db59d1e18 t/integration/03_shared_values.t
+SHA256 f0b36997be546a39e5940fb813f63b661bd50652dc5df5327d4f57d036f9fe72 t/integration/04_to_json.t
+SHA256 d04788470e17598b34f9839012dfc2ede3721c1552365975742c4f734ddcefcd t/integration/05_file_io.t
+SHA256 1924ac81e6f2d3193e0264e528f019b0e0401a38c901fe2a2ac125e9390586b5 t/integration/06_options.t
+SHA256 c98a02446a143a6f4b6673b442592d184783e30912ed056901315c503207914a t/integration/07_canonical.t
+SHA256 486f83cd47d9830e2147693ed859e25ba6fee111f2d796d7791f4a2525a666ca t/integration/99_libsmile.t
+-----BEGIN PGP SIGNATURE-----
+
+iF0EAREDAB0WIQRVJKj/4+s6z4WzNujOv4Eoaip9OQUCaZiXSAAKCRDOv4Eoaip9
+OZO4AJ9wigLKX5PX/w+oPS7td0yOLp93nACfWtUPbcvuMVBBkcUqPKOlpA/Xrjs=
+=6Wm/
+-----END PGP SIGNATURE-----

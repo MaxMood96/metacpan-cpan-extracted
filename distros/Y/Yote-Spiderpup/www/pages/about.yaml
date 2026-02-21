@@ -1,0 +1,21 @@
+title: About
+
+lifecycle:
+  onMount: () => console.log('About mounted')
+  onDestroy: () => console.log('About destroyed')
+
+less: |
+  .about-page {
+    border: solid 3px black;
+    background: #e3f2fd;
+    padding: 20px;
+    border: 2px solid #2196f3;
+    border-radius: 8px;
+  }
+
+html: |
+  <div class="about-page">
+    <h2>About Page</h2>
+    <p>This is the about page with information about Spiderpup.</p>
+    <p><link to="/">Back to Home</link></p>
+  </div>

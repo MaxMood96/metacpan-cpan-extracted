@@ -1,14 +1,93 @@
 Revision history for LTSV::LINQ
 
+1.03  2026-02-20
+
+    New methods (6):
+    - Join($inner, $outer_key, $inner_key, $result)
+          Inner join; inner sequence is fully buffered at call time.
+    - GroupJoin($inner, $outer_key, $inner_key, $result)
+          Left outer join; inner sequence fully buffered.
+          Inner group passed to result_selector as a re-iterable
+          LTSV::LINQ object (supports Count, Sum, Any, Where, etc.
+          called multiple times on the same group).
+    - OrderByStr($key_selector)
+          Sort ascending using string comparison (cmp) unconditionally.
+    - OrderByStrDescending($key_selector)
+          Sort descending using string comparison (cmp) unconditionally.
+    - OrderByNum($key_selector)
+          Sort ascending using numeric comparison (<=>) unconditionally.
+          Undefined keys treated as 0.
+    - OrderByNumDescending($key_selector)
+          Sort descending using numeric comparison (<=>) unconditionally.
+
+    Behavioural changes:
+    - GroupBy: groups are now returned in insertion order (first-seen key),
+          matching .NET LINQ behaviour.  Previously sorted alphabetically.
+    - SelectMany: selector must now return an ARRAY reference; returning any
+          other type dies with "SelectMany: selector must return an ARRAY
+          reference".  Previously non-ARRAY values were passed through
+          silently (behaving like Select).
+    - Distinct: without a key_selector, hash references and array references
+          are now compared by content (via internal _make_key), consistent
+          with Intersect and Except.  Previously compared by reference
+          address (stringification), so structurally equal hashrefs were
+          not deduplicated.
+    - iterator(): enhanced to support _factory-based re-iteration, enabling
+          GroupJoin inner groups to be iterated multiple times.
+    - FirstOrDefault / LastOrDefault: fixed critical bug where a single
+          non-CODE argument was treated as a predicate, causing a crash.
+          A scalar argument is now correctly used as the default value.
+    - LastOrDefault: added optional $default argument to match the
+          FirstOrDefault([$predicate,] $default) signature.
+
+    Documentation:
+    - ARCHITECTURE: Method Categories replaced by a 54-row
+          Lazy/Materialising table (Evaluation + Returns columns).
+    - ARCHITECTURE: Memory Characteristics updated to match the table.
+    - COMPATIBILITY: new ".NET LINQ Compatibility" section listing exact
+          matches and intentional differences (SingleOrDefault, DefaultIfEmpty,
+          OrderBy smart comparison, EqualityComparer, query syntax).
+    - Ordering Methods: section header added explaining stable sort
+          (Perl 5.8+ guarantee) and the three comparison families.
+    - Set Operations: section header documenting partially-eager evaluation
+          (second sequence buffered at call time).
+    - Join Operations: section header documenting partially-eager evaluation
+          (inner sequence buffered at call time).
+    - GroupBy: note updated: "insertion order" replacing "sorted key order".
+    - LIMITATIONS: "GroupBy Sorts Keys" entry removed (no longer true).
+    - FromLTSV: file-handle management note added.
+    - Where DSL: explicit note that arguments must be even-count key=>value pairs.
+    - COOKBOOK: two new patterns: "Iterator consumption / snapshot" and
+          "Efficient large-file pattern".
+    - SelectMany: Important note updated to reflect die behaviour.
+    - DIAGNOSTICS: new entry "SelectMany: selector must return an ARRAY
+          reference"; FromLTSV entry expanded with file-handle note.
+    - DESIGN PHILOSOPHY: new section (Perl 5.005_03 compatibility rationale,
+          US-ASCII only policy, $VERSION idiom, design principles).
+    - Method count: 50 -> 54.
+
+    Tests:
+    - t/004_grouping.t: 8 tests -> 16 tests.
+          Added: GroupBy insertion order (3 tests),
+                 Distinct content-equality for hashrefs/arrayrefs (5 tests).
+    - t/005_complex.t: 10 tests -> 14 tests.
+          Added: SelectMany dies on non-ARRAY return (2 tests),
+                 SelectMany empty/mixed arrayref (2 tests).
+    - t/012_v103_ordering.t: new file, 40 tests.
+          Covers OrderByStr, OrderByStrDescending, OrderByNum,
+          OrderByNumDescending; stable sort; smart vs Str vs Num contrast;
+          LTSV realistic scenarios; edge cases.
+    - Total: 246 -> 258 tests across 12 files.
+
 1.02  2026-02-17
     - Added 6 new methods for relational operations and utilities
-    
+
     New methods:
     - Data sources: Empty, Repeat
     - Concatenation: Zip
     - Join operations: Join
     - Conversion: ToDictionary, ToLookup
-    
+
     Improvements:
     - Enhanced POD documentation with detailed examples
     - Updated method summary table (45 -> 49 methods)
@@ -18,9 +97,9 @@ Revision history for LTSV::LINQ
 
 1.01  2026-02-16
     - Added 14 new methods to enhance LINQ compatibility
-    
+
     New methods:
-    - Element access: LastOrDefault, Single, SingleOrDefault, 
+    - Element access: LastOrDefault, Single, SingleOrDefault,
                       ElementAt, ElementAtOrDefault
     - Quantifier: Contains
     - Concatenation: Concat
@@ -29,7 +108,7 @@ Revision history for LTSV::LINQ
     - Aggregation: Aggregate
     - Set operations: Union, Intersect, Except
     - Comparison: SequenceEqual
-    
+
     Improvements:
     - Enhanced POD documentation for all new methods
     - Added comprehensive examples for each method
@@ -50,7 +129,7 @@ Revision history for LTSV::LINQ
     - Full method chaining support
     - Compatible with Perl 5.005_03 and later
     - Pure Perl implementation (no XS required)
-    
+
     Methods implemented:
     - Data source: From, FromLTSV, Range
     - Filtering: Where (with DSL)

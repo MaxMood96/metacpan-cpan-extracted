@@ -30,9 +30,10 @@ subtest 'Basic schema connection' => sub {
     isa_ok($schema, 'DBIx::Class::Async::Schema');
 
     my @sources = $schema->sources;
-    is(scalar @sources, 3, 'Has 3 sources');
-    ok(grep(/^User$/, @sources), 'Has User source');
-    ok(grep(/^Order$/, @sources), 'Has Order source');
+    cmp_ok(scalar @sources, '>=', 3, 'Has at least 3 sources');
+    ok(grep(/^User$/,    @sources), 'Has User source');
+    ok(grep(/^Order$/,   @sources), 'Has Order source');
+    ok(grep(/^Product$/, @sources), 'Has Product source');
 };
 
 subtest 'Simple user CRUD' => sub {

@@ -1,6 +1,8 @@
+#!/usr/bin/env perl
 use strict;
 use warnings;
-use Test::More;
+
+use Test2::V0;
 use Plack::Test;
 use Plack::Builder;
 use HTTP::Request::Common;
@@ -17,6 +19,8 @@ my $temp_dir = Path::Tiny->tempdir;
 $temp_dir->child('alpha.txt')->spew("content");
 $temp_dir->child('charlie.txt')->spew("content");
 $temp_dir->child('bravo.txt')->spew("content");
+$temp_dir->child('20_small.txt')->spew("x" x 20);
+$temp_dir->child('100_large.txt')->spew("x" x 100);
 
 # 2. Define App
 my $app = builder {
@@ -48,7 +52,7 @@ test_psgi $app, sub {
         my $files = extract_filenames($res->content);
 
         # Expected: alpha, bravo, charlie
-        is_deeply $files, ['alpha.txt', 'bravo.txt', 'charlie.txt'],
+        is $files, ['100_large.txt', '20_small.txt', 'alpha.txt', 'bravo.txt', 'charlie.txt'],
             "Default sort order is correct";
     };
 
@@ -59,7 +63,7 @@ test_psgi $app, sub {
 
         my $files = extract_filenames($res->content);
 
-        is_deeply $files, ['alpha.txt', 'bravo.txt', 'charlie.txt'],
+        is $files, ['100_large.txt', '20_small.txt', 'alpha.txt', 'bravo.txt', 'charlie.txt'],
             "Explicit Name Ascending sort is correct";
     };
 
@@ -71,37 +75,23 @@ test_psgi $app, sub {
         my $files = extract_filenames($res->content);
 
         # Expected: charlie, bravo, alpha
-        is_deeply $files, ['charlie.txt', 'bravo.txt', 'alpha.txt'],
+        is $files, ['charlie.txt', 'bravo.txt', 'alpha.txt', '20_small.txt', '100_large.txt'],
             "Name Descending sort is correct";
     };
 
-    # Note: Based on your provided code, the 'Size' (D) and 'Date' (S) sorting
-    # logic in %col_sort might behave unexpectedly because:
-    # 1. 'SA' sorts on index 3 (Formatted Date String) using <=> (Numeric comparison).
-    # 2. 'DA' sorts on index 4 (Size) using cmp (String comparison).
-    #
-    # The test below checks Size sorting based on how your code is currently written
-    # (String comparison of size), not necessarily mathematical correctness.
-
-    subtest 'Sort by Size (DA - String Comparison)' => sub {
+    subtest 'Sort by Size' => sub {
         # Create files with sizes that differ in string vs numeric sort
         # "100" comes before "20" in string sort, but after in numeric.
-        $temp_dir->child('small_20.txt')->spew("x" x 20);
-        $temp_dir->child('large_100.txt')->spew("x" x 100);
 
-        # C=D (Size/Description column?), O=A (Ascending)
-        # Your code maps 'DA' to index 4 (Size) using 'cmp'
-        my $res = $cb->(GET '/?C=D;O=A');
+        my $res = $cb->(GET '/?C=S;O=D');
 
         my $files = extract_filenames($res->content);
 
         # Filter to just our size test files
-        my @size_files = grep { /small|large/ } @$files;
+        my $size_files = [ grep { /small|large/ } @$files ];
 
-        # Since your code uses 'cmp' (string compare) for size:
-        # "100" lt "20" is TRUE. So large_100 should come first.
-        is_deeply \@size_files, ['large_100.txt', 'small_20.txt'],
-            "Size sorts as string (based on current implementation)";
+        is $size_files, ['100_large.txt', '20_small.txt'],
+            "Check sorting by size";
     };
 };
 

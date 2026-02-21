@@ -1,0 +1,89 @@
+Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Data-Smile-XS
+Upstream-Contact: Toby Inkster (TOBYINK) <tobyink@cpan.org>
+Source: https://metacpan.org/release/Data-Smile-XS
+
+Files: INSTALL
+ LICENSE
+ Makefile.PL
+ README.md
+ XS.xs
+ ppport.h
+ t/data/json/db100.xml.jsn
+ t/data/json/json-org-sample1.jsn
+ t/data/json/json-org-sample2.jsn
+ t/data/json/json-org-sample3.jsn
+ t/data/json/json-org-sample4.jsn
+ t/data/json/json-org-sample5.jsn
+ t/data/json/map-spain.xml.jsn
+ t/data/json/ns-invoice100.xml.jsn
+ t/data/json/ns-soap.xml.jsn
+ t/data/json/numbers-fp-4k.jsn
+ t/data/json/numbers-fp-64k.jsn
+ t/data/json/numbers-int-4k.jsn
+ t/data/json/numbers-int-64k.jsn
+ t/data/json/test1.jsn
+ t/data/json/test2.jsn
+ t/data/json/test3.jsn
+ t/data/smile/db100.xml.smile
+ t/data/smile/json-org-sample1.smile
+ t/data/smile/json-org-sample2.smile
+ t/data/smile/json-org-sample3.smile
+ t/data/smile/json-org-sample4.smile
+ t/data/smile/json-org-sample5.smile
+ t/data/smile/map-spain.xml.smile
+ t/data/smile/ns-invoice100.xml.smile
+ t/data/smile/ns-soap.xml.smile
+ t/data/smile/numbers-fp-4k.smile
+ t/data/smile/numbers-fp-64k.smile
+ t/data/smile/numbers-int-4k.smile
+ t/data/smile/numbers-int-64k.smile
+ t/data/smile/test1.smile
+ t/data/smile/test2.smile
+ t/data/smile/test3.smile
+Copyright: Unknown
+License: Unknown
+
+Files: Changes
+ META.json
+ META.yml
+ dist.ini
+ doap.ttl
+ t/integration/01_round_trip.t
+ t/integration/02_shared_names.t
+ t/integration/03_shared_values.t
+ t/integration/04_to_json.t
+ t/integration/05_file_io.t
+ t/integration/06_options.t
+ t/integration/07_canonical.t
+ t/integration/80_sv_optimization.t
+ t/integration/99_libsmile.t
+Copyright: Copyright 2026 Toby Inkster.
+License: GPL-1.0+ or Artistic-1.0
+
+Files: README
+ lib/Data/Smile/XS.pm
+ t/00start.t
+ t/01basic.t
+Copyright: This software is copyright (c) 2026 by Toby Inkster.
+License: GPL-1.0+ or Artistic-1.0
+
+Files: COPYRIGHT
+ CREDITS
+ SIGNATURE
+Copyright: None
+License: public-domain
+
+License: Artistic-1.0
+ This software is Copyright (c) 2026 by the copyright holder(s).
+ 
+ This is free software, licensed under:
+ 
+   The Artistic License 1.0
+
+License: GPL-1.0
+ This software is Copyright (c) 2026 by the copyright holder(s).
+ 
+ This is free software, licensed under:
+ 
+   The GNU General Public License, Version 1, February 1989

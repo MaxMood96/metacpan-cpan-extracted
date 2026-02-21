@@ -3,6 +3,8 @@ package Plack::Middleware::DirListing;
 
 use parent qw( Plack::Middleware );
 use DirHandle;
+use HTML::Entities;
+use Plack::Request;
 use Plack::MIME;
 use Plack::Util::Accessor qw( root );
 use URI::Escape;
@@ -144,10 +146,30 @@ sub serve_path {
 
 sub call {
     my ( $self, $env ) = @_;
+    my $req = Plack::Request->new( $env );
 
-    my $dir = $self->root . $env->{PATH_INFO};
+    my $dir = $self->root . $req->path_info();
     if (-d $dir) {
-        return $self->serve_path( $env, $dir );
+        if (substr( $dir, -1 ) eq '/') {
+          return $self->serve_path( $env, $dir );
+         }
+        else {
+          my $uri = $req->uri();
+          $uri->path( $uri->path . '/' );
+          my $res = $req->new_response(301); # new Plack::Response
+          $res->headers([
+			'Location' => $uri,
+			'Content-Type' => 'text/html; charset=UTF-8',
+			'Cache-Control' => 'must-revalidate, max-age=3600'
+			]);
+
+          my $uhe = encode_entities($uri);
+          $res->body( <<REDIRECT_BODY );
+<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML 2.0//EN"><html><head><title>301 Moved Permanently</title></head><body><h1>Moved Permanently</h1><p>The document has moved <a href="$uhe">here</a>.</p></body></html>
+REDIRECT_BODY
+
+          return $res->finalize;
+         }
     }
 
     return $self->app->($env);

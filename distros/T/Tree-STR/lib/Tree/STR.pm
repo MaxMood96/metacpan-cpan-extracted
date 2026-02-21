@@ -21,7 +21,7 @@ Version 0.02
 
 =cut
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 
 =head1 SYNOPSIS
@@ -145,17 +145,61 @@ sub _get_bbox_from_centred_recs {
 =cut
 
 sub query_point {
-    my $self = shift;
-    return $self->{root}->query_point(@_);
+    my ($self, $x, $y) = @_;
+
+    my @tips;
+    my @children = ($self->{root});
+    CHILD:
+    while (my $child = shift @children ) {
+        my $bbox = $child->bbox;
+        next CHILD
+            if $x < $bbox->[0] || $x > $bbox->[2] || $y < $bbox->[1] || $y > $bbox->[3];
+
+        if ($child->is_tip_node) {
+            push @tips, $child->{tip}
+        }
+        else {
+            #  add to search stack
+            push @children, @{$child->children};
+        }
+    }
+
+    return \@tips;
 }
 
 =head2 query_partly_within_rect
 
 =cut
 
+#  non-recursive algorithm
 sub query_partly_within_rect {
-    my $self = shift;
-    return $self->{root}->query_partly_within_rect(@_);
+    my ($self, $x1, $y1, $x2, $y2) = @_;
+
+    my @tips;
+    my @children = ($self->{root});
+    CHILD:
+    while (my $child = shift @children ) {
+        my $bbox = $child->bbox;
+        #  no overlap
+        next CHILD
+            if $x2 < $bbox->[0] || $x1 > $bbox->[2]
+            || $y2 < $bbox->[1] || $y1 > $bbox->[3];
+
+        if ($child->is_tip_node) {
+            push @tips, $child->{tip}
+        }
+        elsif (   $x1 < $bbox->[0] && $x2 > $bbox->[2]
+               && $y1 < $bbox->[1] && $y2 > $bbox->[3]) {
+            #  bbox completely within search box, grab all tips
+            push @tips, @{$child->tips};
+        }
+        else {
+            #  add to search stack
+            push @children, @{$child->children};
+        }
+    }
+
+    return \@tips;
 }
 
 =head2 query_completely_within_rect
@@ -163,8 +207,33 @@ sub query_partly_within_rect {
 =cut
 
 sub query_completely_within_rect {
-    my $self = shift;
-    return $self->{root}->query_completely_within_rect(@_);
+    my ($self, $x1, $y1, $x2, $y2) = @_;
+
+    my @tips;
+    my @children = ($self->{root});
+
+    CHILD:
+    while (my $child = shift @children ) {
+        my $bbox = $child->bbox;
+
+        #  next if no overlap
+        next CHILD
+            if $x2 < $bbox->[0] || $x1 > $bbox->[2]
+                || $y2 < $bbox->[1] || $y1 > $bbox->[3];
+
+        #  user box contains bbox, get all the subtending tips
+        if (   $x1 < $bbox->[0] && $x2 > $bbox->[2]
+            && $y1 < $bbox->[1] && $y2 > $bbox->[3]) {
+                push @tips, @{$child->tips};
+        }
+        else {
+            #  add to search stack
+            push @children, @{$child->children};
+        }
+
+    }
+
+    return \@tips;
 }
 
 =head1 AUTHOR
@@ -173,7 +242,7 @@ Shawn Laffan <shawnlaffan@gmail.com>
 
 =head1 BUGS
 
-L<https://github.com/biogeospatial/Tree-STR/issues>
+L<https://github.com/biogeospatial/Perl-Tree-STR/issues>
 
 
 =head1 SEE ALSO

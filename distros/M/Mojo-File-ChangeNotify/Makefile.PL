@@ -54,12 +54,19 @@ my %module = (
         'File::ChangeNotify'       => '0',
         'Mojo::Base'               => '0',
         'Mojo::EventEmitter'       => '0',
-        'Mojo::IOLoop::Subprocess' => '0'
+        'Mojo::IOLoop::Subprocess' => '0',
+        'Scalar::Util'             => '0'
     },
     TEST_REQUIRES =>     {
-        'File::Temp'   => '0',
-        'Test2::V0'    => '0',
-        'Test::More'   => '0'
+        'experimental'  => '0',
+        'File::Copy'    => '0',
+        'File::Path'    => '0',
+        'File::Spec'    => '0',
+        'File::Temp'    => '0',
+        'Mojo::Promise' => '0',
+        'Scalar::Util'  => '0',
+        'Test2::V0'     => '0',
+        'Test::More'    => '0'
     },
 
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },

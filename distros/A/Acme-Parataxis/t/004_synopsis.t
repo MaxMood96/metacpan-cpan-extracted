@@ -7,13 +7,13 @@ $|++;
 # This is the synopsis for Acme::Parataxis but verbose
 Acme::Parataxis::run(
     sub {
-        diag 'Main fiber started (FID: ' . Acme::Parataxis->fid . ')';
+        diag 'Main fiber started (FID: ' . Acme::Parataxis->current_fid . ')';
 
         # Spawn background workers
         diag 'Spawning Task 1 (Sleep)...';
         my $f1 = Acme::Parataxis->spawn(
             sub {
-                diag 'Task 1 started (FID: ' . Acme::Parataxis->fid . ')';
+                diag 'Task 1 started (FID: ' . Acme::Parataxis->current_fid . ')';
                 diag 'Task 1: Sleeping in a native thread pool (1000ms)...';
                 Acme::Parataxis->await_sleep(1000);
                 diag 'Task 1: Ah! What a nice nap...';
@@ -23,7 +23,7 @@ Acme::Parataxis::run(
         diag 'Spawning Task 2 (I/O dummy)...';
         my $f2 = Acme::Parataxis->spawn(
             sub {
-                diag 'Task 2 started (FID: ' . Acme::Parataxis->fid . ')';
+                diag 'Task 2 started (FID: ' . Acme::Parataxis->current_fid . ')';
                 diag 'Task 2: Performing I/O simulation...';
 
                 # await_read/write for non-blocking socket handling

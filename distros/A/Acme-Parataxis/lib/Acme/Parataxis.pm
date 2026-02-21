@@ -1,4 +1,4 @@
-package Acme::Parataxis v0.0.8 {
+package Acme::Parataxis v0.0.9 {
     use v5.40;
     use experimental qw[class try];
     use Affix;
@@ -11,7 +11,7 @@ package Acme::Parataxis v0.0.8 {
 
     sub _bind_functions ($l) {
         affix $l, 'init_system',                       [],                             Int;
-        affix $l, 'create_coro_ptr',                   [ Pointer [SV], Pointer [SV] ], Int;
+        affix $l, 'create_fiber',                      [ Pointer [SV], Pointer [SV] ], Int;
         affix $l, 'coro_call',                         [ Int, Pointer [SV] ],          Pointer [SV];
         affix $l, 'coro_transfer',                     [ Int, Pointer [SV] ],          Pointer [SV];
         affix $l, 'coro_yield',                        [ Pointer [SV] ],               Pointer [SV];
@@ -72,7 +72,7 @@ package Acme::Parataxis v0.0.8 {
         field $is_done = 0;
         field $error  : reader;
         field $result : reader;
-        field $id     : reader;
+        field $fid    : reader;
         field $future : param = undef;
 
         method set_result ($val) {
@@ -90,48 +90,49 @@ package Acme::Parataxis v0.0.8 {
             $error  = undef;
         }
 
-        # Registry to track active coroutines
+        # Registry to track active fibers
         our %REGISTRY;
         our $SEQ = 0;
         ADJUST {
             Acme::Parataxis::force_depth_zero($code);
-            $id = Acme::Parataxis::create_coro_ptr( $code, $self );
-            $REGISTRY{$id} = $self;
-            builtin::weaken $REGISTRY{$id};
+            $fid = Acme::Parataxis::create_fiber( $code, $self );
+            $REGISTRY{$fid} = $self;
+            builtin::weaken $REGISTRY{$fid};
         }
 
         method call (@args) {
-            croak 'Cannot call a finished parataxis' if $is_done;
-            my $rv = Acme::Parataxis::coro_call( $id, \@args );
+            croak 'Cannot call a finished fiber' if $is_done;
+            my $rv = Acme::Parataxis::coro_call( $fid, \@args );
+            return unless defined $self;
             if ( $self->is_done ) {
                 my $err = $error;
                 $self->_clear_result();
                 die $err if defined $err;
             }
             return unless defined $rv;
-            return ( ref $rv eq 'ARRAY' ) ? $rv->[-1] : $rv;
+            return ( ref $rv eq 'ARRAY' ) ? ( wantarray ? @$rv : $rv->[-1] ) : $rv;
         }
 
         method transfer (@args) {
-            croak 'Cannot transfer to a finished parataxis' if $self->is_done;
-            my $rv = Acme::Parataxis::coro_transfer( $id, \@args );
+            croak 'Cannot transfer to a finished fiber' if $self->is_done;
+            my $rv = Acme::Parataxis::coro_transfer( $fid, \@args );
             if ( $self->is_done ) {
                 my $err = $error;
                 $self->_clear_result();
                 die $err if defined $err;
             }
             return unless defined $rv;
-            return ( ref $rv eq 'ARRAY' ) ? $rv->[-1] : $rv;
+            return ( ref $rv eq 'ARRAY' ) ? ( wantarray ? @$rv : $rv->[-1] ) : $rv;
         }
 
         method is_done () {
             return 1 if $is_done;
-            if ( defined $id && $id >= 0 && Acme::Parataxis::is_finished($id) ) {
+            if ( defined $fid && $fid >= 0 && Acme::Parataxis::is_finished($fid) ) {
                 $is_done = 1;
-                my $old_id = $id;
-                $id = -1;
-                delete $REGISTRY{$old_id};
-                Acme::Parataxis::destroy_coro($old_id);
+                my $old_fid = $fid;
+                $fid = -1;
+                delete $REGISTRY{$old_fid};
+                Acme::Parataxis::destroy_coro($old_fid);
                 return 1;
             }
             return 0;
@@ -146,31 +147,37 @@ package Acme::Parataxis v0.0.8 {
 
         method DESTROY {
             return if ${^GLOBAL_PHASE} eq 'DESTRUCT';
-            if ( defined $id && $id >= 0 ) {
-                delete $REGISTRY{$id};
-                Acme::Parataxis::destroy_coro($id);
-                $id = -1;
+            if ( defined $fid && $fid >= 0 ) {
+                delete $REGISTRY{$fid};
+                Acme::Parataxis::destroy_coro($fid);
+                $fid = -1;
             }
             $self->_clear_result();
         }
-        sub by_id ( $class, $id ) { $REGISTRY{$id} }
+        sub by_id ( $class, $fid ) { $REGISTRY{$fid} }
     }
     class    #
         Acme::Parataxis::Root {
 
         method transfer (@args) {
-            my $rv  = Acme::Parataxis::coro_transfer( -1, \@args );
-            my @ret = @$rv;
-            return wantarray ? @ret : $ret[-1];
+            my $rv = Acme::Parataxis::coro_transfer( -1, \@args );
+            return unless defined $rv;
+            return ( ref $rv eq 'ARRAY' ) ? ( wantarray ? @$rv : $rv->[-1] ) : $rv;
         }
-        method id () {-1}
+        method fid () {-1}
     }
     class    #
         Acme::Parataxis::Future {
+        use Carp qw[croak];
         field $is_ready : reader = 0;
-        field $result : reader;
+        field $result;
         field $error;
         field @callbacks;
+
+        method result () {
+            croak 'Future not ready' unless $is_ready;
+            return $result;
+        }
 
         method set_result ($val) {
             die 'Future already ready' if $is_ready;
@@ -198,7 +205,7 @@ package Acme::Parataxis v0.0.8 {
 
         method await () {
             return $self->result if $is_ready;
-            my $fid = Acme::Parataxis->fid;
+            my $fid = Acme::Parataxis->current_fid;
             $self->on_ready(
                 sub ($f) {
                     Acme::Parataxis::_scheduler_enqueue_by_id($fid);
@@ -218,7 +225,7 @@ package Acme::Parataxis v0.0.8 {
         sub yield ( $self, @args ) {
             my $result = coro_yield( \@args );
             return unless defined $result;
-            return wantarray ? @$result : $result->[-1];
+            return ( ref $result eq 'ARRAY' ) ? ( wantarray ? @$result : $result->[-1] ) : $result;
         }
 
         sub maybe_yield ($class) {
@@ -227,7 +234,7 @@ package Acme::Parataxis v0.0.8 {
             return wantarray ? @$result : $result->[-1];
         }
         sub tid { get_os_thread_id_export() }
-        sub fid { get_current_parataxis_id() }
+        sub current_fid { get_current_parataxis_id() }
         sub await_sleep   ( $class, $ms ) { submit_c_job( 0, $ms, 0 ) < 0 ? 'Queue Full' : $class->yield('WAITING') }
         sub await_core_id ($class)        { submit_c_job( 1, 0,   0 ) < 0 ? 'Queue Full' : $class->yield('WAITING') }
 
@@ -250,9 +257,9 @@ package Acme::Parataxis v0.0.8 {
             while (1) {
                 my $job_idx = check_for_completion();
                 last if $job_idx == -1;
-                my $id  = get_job_coro_id($job_idx);
+                my $fid = get_job_coro_id($job_idx);
                 my $res = get_job_result($job_idx);
-                push @ready, [ $id, $res ];
+                push @ready, [ $fid, $res ];
                 free_job_slot($job_idx);
             }
             return @ready;
@@ -260,30 +267,30 @@ package Acme::Parataxis v0.0.8 {
 
         sub spawn ( $class, $code ) {
             my $future = Acme::Parataxis::Future->new();
-            my $coro   = Acme::Parataxis->new( code => $code, future => $future );
-            push @SCHEDULER_QUEUE, $coro;
+            my $fiber  = Acme::Parataxis->new( code => $code, future => $future );
+            push @SCHEDULER_QUEUE, $fiber;
             return $future;
         }
 
-        sub _scheduler_enqueue_by_id ($id) {
-            if ( my $coro = Acme::Parataxis->by_id($id) ) {
-                push @SCHEDULER_QUEUE, $coro;
+        sub _scheduler_enqueue_by_id ($fid) {
+            if ( my $fiber = Acme::Parataxis->by_id($fid) ) {
+                push @SCHEDULER_QUEUE, $fiber;
             }
         }
 
         sub run ($code) {
             @SCHEDULER_QUEUE = ();
             $IS_RUNNING      = 1;
-            my $main_coro = Acme::Parataxis->new( code => $code );
-            push @SCHEDULER_QUEUE, $main_coro;
+            my $main_fiber = Acme::Parataxis->new( code => $code );
+            push @SCHEDULER_QUEUE, $main_fiber;
             while ($IS_RUNNING) {
                 my @ready = poll_io();
                 for my $ready (@ready) {
-                    my ( $id, $res ) = @$ready;
-                    my $coro = Acme::Parataxis->by_id( $id );
-                    if ($coro) {
-                        my $yield_val = $coro->call($res);
-                        if ( !$coro->is_done ) {
+                    my ( $fid, $res ) = @$ready;
+                    my $fiber = Acme::Parataxis->by_id( $fid );
+                    if ($fiber) {
+                        my $yield_val = $fiber->call($res);
+                        if ( defined $fiber && !$fiber->is_done ) {
 
                             # If it yields WAITING, it might be starting another job immediately
                             # or waiting on another future.
@@ -292,16 +299,17 @@ package Acme::Parataxis v0.0.8 {
                                 # Waiting
                             }
                             else {
-                                push @SCHEDULER_QUEUE, $coro;
+                                push @SCHEDULER_QUEUE, $fiber;
                             }
                         }
                     }
                 }
                 if (@SCHEDULER_QUEUE) {
                     my $current = shift @SCHEDULER_QUEUE;
+                    next unless $current;
                     next if $current->is_done;
                     my $res = $current->call();
-                    if ( !$current->is_done ) {
+                    if ( defined $current && !$current->is_done ) {
                         if ( defined $res && $res eq 'WAITING' ) {
 
                             # Waiting
@@ -312,7 +320,7 @@ package Acme::Parataxis v0.0.8 {
                     }
                 }
                 my $active_count = scalar keys %Acme::Parataxis::REGISTRY;
-                if ( $main_coro->is_done && $active_count == 0 && !@SCHEDULER_QUEUE ) {
+                if ( defined $main_fiber && $main_fiber->is_done && $active_count == 0 && !@SCHEDULER_QUEUE ) {
                     $IS_RUNNING = 0;
                 }
 

@@ -1,2 +1,6 @@
+0.02 2026-02-20
+    * Fix memory leaks
+    * Expanded test suite for child cleanup
+
 0.01 2026-02-15
     * Released on an unsuspecting world

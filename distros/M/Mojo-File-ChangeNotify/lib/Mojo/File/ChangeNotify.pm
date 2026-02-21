@@ -1,8 +1,9 @@
-package Mojo::File::ChangeNotify 0.01;
+package Mojo::File::ChangeNotify 0.02;
 use 5.020;
 use Mojo::Base 'Mojo::EventEmitter', -signatures;
 use Mojo::File::ChangeNotify::WatcherProcess 'watch';
 use Mojo::IOLoop::Subprocess;
+use Scalar::Util 'weaken';
 
 =head1 NAME
 
@@ -42,22 +43,40 @@ L<File::ChangeNotify> - the file watching implementation
 =cut
 
 has 'watcher';
+has 'watcher_pid';  # Store the PID so we can access it in DESTROY
+
+our %PIDs;
 
 sub _spawn_watcher( $self, $args ) {
     my $subprocess = Mojo::IOLoop::Subprocess->new();
+
+    {
+        weaken( my $weak_self = $self );
+        $subprocess->on('spawn' => sub( $w ) {
+            my $pid = $w->pid;
+            $PIDs{ $pid } = 1;
+            $weak_self->watcher_pid($pid) if $weak_self;  # Store PID for DESTROY access
+        });
+
+        $subprocess->on('progress' => sub( $w, $events ) {
+            $weak_self->emit('change' => $events ) if $weak_self;
+        });
+    }
     #use Data::Dumper; warn Dumper( File::ChangeNotify->usable_classes );
     $subprocess->run( sub( $subprocess ) {
         watch( $subprocess, $args );
         return () # return an empty list here to not return anything after the process ends
     }, sub ($subprocess, $err, @results ) {
-        say "Subprocess error: $err" and return if $err;
+        if( $err
+            and $err !~ /malformed JSON string/  # caused by us terminating the child
+            and $err !~ /Missing or empty input/ # caused by us terminating the child
+        ) {
+            warn "Subprocess error: $err" and return;
+        }
         say "Surprising results: @results"
             if @results;
-    }
-    );
+    });
 }
-
-our %PIDs;
 
 sub instantiate_watcher( $class, %args ) {
     my $handler = delete $args{ on_change };
@@ -67,27 +86,19 @@ sub instantiate_watcher( $class, %args ) {
     }
 
     $self->watcher( $self->_spawn_watcher( \%args ));
-    $self->watcher->on('spawn' => sub( $w ) {
-        $PIDs{ $w->pid } = 1;
-    });
-    $self->watcher->on('progress' => sub( $w, $events ) {
-        $self->emit('change' => $events )
-    });
-    #$self->watcher->on('cleanup' => sub( $w, $events ) {
-    #    warn "Child gone (in child?)";
-    #});
+
+    # Use weaken to avoid circular reference that prevents DESTROY
+
 
     return $self;
 }
 
 # Cleanup watchers when we are removed
 sub DESTROY( $self ) {
-    if( my $w = $self->watcher ) {
-        my $pid = $w->pid;
-        if( $pid ) {
-            delete $PIDs{ $pid };
-            kill KILL => $w->pid;
-        }
+    my $pid = $self->watcher_pid;
+    if( $pid ) {
+        delete $PIDs{ $pid };
+        kill KILL => $pid;
     }
 }
 

@@ -7,7 +7,7 @@
 BEGIN {
     unshift @INC, 'lib';
     $| = 1;
-    print "1..10\n";
+    print "1..14\n";
 }
 
 use LTSV::LINQ;
@@ -67,7 +67,7 @@ ok($not_found == 99, 'FirstOrDefault returns default when not found');
 my $last = LTSV::LINQ->From([1, 2, 3, 4, 5])->Last();
 ok($last == 5, 'Last returns last element');
 
-# Test 10: SelectMany
+# Test 10: SelectMany - normal arrayref return
 my @flattened = LTSV::LINQ->From([
     [1, 2],
     [3, 4],
@@ -75,3 +75,40 @@ my @flattened = LTSV::LINQ->From([
 ])->SelectMany(sub { $_[0] })->ToArray();
 ok(@flattened == 5 && $flattened[0] == 1 && $flattened[4] == 5,
    'SelectMany flattens correctly');
+
+#---------------------------------------------------------------------
+# SelectMany strict ARRAY return (v1.03: non-arrayref now dies,
+# previously passed through silently like Select)
+#---------------------------------------------------------------------
+
+# Test 11: SelectMany dies when selector returns a scalar
+eval {
+    LTSV::LINQ->From([1, 2, 3])
+        ->SelectMany(sub { $_[0] * 2 })
+        ->ToArray();
+};
+ok($@ =~ /must return an ARRAY/,
+   'SelectMany dies on scalar return');
+
+# Test 12: SelectMany dies when selector returns a hashref
+eval {
+    LTSV::LINQ->From([{a => 1}])
+        ->SelectMany(sub { $_[0] })
+        ->ToArray();
+};
+ok($@ =~ /must return an ARRAY/,
+   'SelectMany dies on hashref return');
+
+# Test 13: SelectMany empty arrayref is valid (produces no elements)
+my @empty_flat = LTSV::LINQ->From([1, 2, 3])
+    ->SelectMany(sub { [] })
+    ->ToArray();
+ok(@empty_flat == 0,
+   'SelectMany empty arrayref is valid');
+
+# Test 14: SelectMany mixed empty and non-empty
+my @mixed_flat = LTSV::LINQ->From([1, 2, 3])
+    ->SelectMany(sub { $_[0] % 2 ? [$_[0]] : [] })
+    ->ToArray();
+ok(@mixed_flat == 2 && $mixed_flat[0] == 1 && $mixed_flat[1] == 3,
+   'SelectMany mixed empty/non-empty arrayrefs');

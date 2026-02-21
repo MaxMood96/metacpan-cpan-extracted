@@ -1,0 +1,83 @@
+{
+   "abstract" : "support for the Smile data interchange format (binary JSON serialization)",
+   "author" : [
+      "Toby Inkster (TOBYINK) <tobyink@cpan.org>"
+   ],
+   "dynamic_config" : 1,
+   "generated_by" : "Dist::Inkt::Profile::TOBYINK version 0.024, CPAN::Meta::Converter version 2.150010",
+   "keywords" : [],
+   "license" : [
+      "perl_5"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "Data-Smile-XS",
+   "no_index" : {
+      "directory" : [
+         "eg",
+         "examples",
+         "inc",
+         "t",
+         "xt"
+      ]
+   },
+   "optional_features" : {},
+   "prereqs" : {
+      "configure" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "6.17"
+         }
+      },
+      "develop" : {
+         "recommends" : {
+            "Dist::Inkt" : "0.001"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "Exporter::Tiny" : "0",
+            "Math::BigInt" : "1.999822",
+            "perl" : "5.008008"
+         }
+      },
+      "test" : {
+         "recommends" : {
+            "Path::Tiny" : "0"
+         },
+         "requires" : {
+            "JSON::PP" : "0",
+            "Test2::Plugin::BailOnFail" : "0",
+            "Test2::Require::AuthorTesting" : "0",
+            "Test2::Require::Module" : "0",
+            "Test2::Tools::Spec" : "0",
+            "Test2::V0" : "0"
+         }
+      }
+   },
+   "provides" : {
+      "Data::Smile::XS" : {
+         "file" : "lib/Data/Smile/XS.pm",
+         "version" : "0.001000"
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/tobyink/p5-data-smile/issues"
+      },
+      "homepage" : "https://metacpan.org/release/Data-Smile-XS",
+      "license" : [
+         "http://dev.perl.org/licenses/"
+      ],
+      "repository" : {
+         "type" : "git",
+         "url" : "git://github.com/tobyink/p5-data-smile.git",
+         "web" : "https://github.com/tobyink/p5-data-smile"
+      },
+      "x_identifier" : "http://purl.org/NET/cpan-uri/dist/Data-Smile-XS/project"
+   },
+   "version" : "0.001000",
+   "x_serialization_backend" : "JSON::PP version 4.16"
+}

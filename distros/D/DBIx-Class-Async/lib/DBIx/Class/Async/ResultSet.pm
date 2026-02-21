@@ -1,6 +1,6 @@
 package DBIx::Class::Async::ResultSet;
 
-$DBIx::Class::Async::ResultSet::VERSION   = '0.57';
+$DBIx::Class::Async::ResultSet::VERSION   = '0.59';
 $DBIx::Class::Async::ResultSet::AUTHORITY = 'cpan:MANWAR';
 
 =head1 NAME
@@ -9,7 +9,7 @@ DBIx::Class::Async::ResultSet - Non-blocking resultset proxy with Future-based e
 
 =head1 VERSION
 
-Version 0.57
+Version 0.59
 
 =head1 SYNOPSIS
 
@@ -778,10 +778,34 @@ Example: Handling a New User Signup
 
 sub create {
     my ($self, $raw_data) = @_;
+
     my $db          = $self->{_async_db};
     my $source_name = $self->{_source_name};
 
     $self->clear_cache;
+
+    # Guard against scalar-ref values on primary key columns.
+    # Scalar refs are used to embed raw SQL expressions (e.g. \'UUID()'),
+    # but these cannot cross the async worker IPC boundary -- they are
+    # stringified during serialisation and the SQL expression is lost.
+    # DBIC then falls back to last_insert_id() on a non-autoincrement
+    # char column, returning a wrong value ('1' on SQLite, undef on MySQL).
+    # Generate the PK value in Perl instead:
+    #   e.g. Data::UUID->new->create_str instead of \'UUID()'
+
+    my @pk_cols = $self->result_source->primary_columns;
+    for my $pk (@pk_cols) {
+        if (exists $raw_data->{$pk} && ref($raw_data->{$pk}) eq 'SCALAR') {
+            Carp::croak(
+                "DBIx::Class::Async: Cannot use a scalar-ref (inline SQL) "
+              . "for primary key column '$pk' on source '$source_name'. "
+              . "Scalar references cannot be serialised across the async "
+              . "worker IPC boundary. "
+              . "Generate the value in Perl before calling create() -- "
+              . "e.g. use Data::UUID->new->create_str instead of \\'UUID()'."
+            );
+        }
+    }
 
     # 1. Fetch inflators
     my $inflators = $db->{_custom_inflators}{$source_name} || {};
@@ -791,7 +815,6 @@ sub create {
     while (my ($k, $v) = each %$raw_data) {
         my $clean_key = $k;
         $clean_key =~ s/^(?:foreign|self|me)\.//;
-
         if ($inflators->{$clean_key} && $inflators->{$clean_key}{deflate}) {
             $v = $inflators->{$clean_key}{deflate}->($v);
         }
@@ -823,7 +846,6 @@ sub create {
 
         # 6. Use new_result to create new row
         my $obj = $self->new_result($db_row, { in_storage => 1 });
-
         return Future->done($obj);
     });
 }
@@ -3530,7 +3552,7 @@ sub _inflate_row {
     return $row;
 }
 
-=head2 Automatic Cache Safety
+=head1 AUTOMATIC CACHE SAFETY
 
 L<DBIx::Class::Async> automatically analyses your queries for non-deterministic
 SQL functions (e.g., B<NOW()>, B<CURTIME()>, B<RAND()>, B<UUID()>).

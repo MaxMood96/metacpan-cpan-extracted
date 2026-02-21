@@ -1,0 +1,198 @@
+NAME
+    Data::Smile - encoder/decoder for Smile data
+
+SYNOPSIS
+            use Data::Smile qw( encode_smile decode_smile dump_smile load_smile );
+
+            my $bytes = encode_smile( { hello => 'world' } );
+            my $data  = decode_smile( $bytes );
+
+            dump_smile( 'example.smile', { answer => 42 } );
+            my $round_trip = load_smile( 'example.smile' );
+
+DESCRIPTION
+    This module is a wrapper for Data::Smile::PP and Data::Smile::XS. It
+    exports four optional functions:
+
+    *   `encode_smile`
+
+    *   `decode_smile`
+
+    *   `dump_smile`
+
+    *   `load_smile`
+
+    All option arguments are optional hashrefs. Passing any other kind of
+    reference for options throws an exception.
+
+FUNCTIONS
+  encode_smile( $data, \%options )
+    Encodes a Perl data structure into Smile bytes and returns a byte string.
+
+    Recognised options:
+
+    *   `write_header` (boolean, default true)
+
+        Include the module's Smile transport header before the payload.
+
+    *   `shared_names` (boolean, default true)
+
+        Enable the shared-name marker flag when repeated object/hash key names
+        are observed.
+
+    *   `shared_values` (boolean, default true)
+
+        Enable the shared short-string-value marker flag when repeated short,
+        non-UTF-8 scalar values are observed.
+
+    *   `canonical` (boolean, default false)
+
+        If true, encode hashes/objects with keys sorted lexically.
+
+        This is slower, but should (in theory) result in byte-identical output
+        every time, given the same input.
+
+    Unknown option keys throw an exception.
+
+  decode_smile( $bytes, \%options )
+    Decodes Smile bytes into Perl data and returns the resulting structure.
+
+    Recognised options:
+
+    *   `use_bigint` (boolean, default true)
+
+        For Smile big-integer and big-decimal values, return big-number
+        objects (`Math::BigInt`/`Math::BigFloat`) instead of native numeric
+        scalars.
+
+    *   `require_header` (boolean, default false)
+
+        Require the Smile header to be present. If true and no header is
+        found, decoding throws an exception.
+
+    *   `json_bool` (boolean, default true)
+
+        If true, decode booleans as `JSON::PP` booleans (`JSON::PP::true` and
+        `JSON::PP::false`) when available. If false, decode booleans as native
+        Perl booleans.
+
+    Unknown option keys throw an exception.
+
+  dump_smile( $file, $data, \%options )
+    Encodes $data using `encode_smile` and writes the bytes to $file. Returns
+    true on success and false on write/close failure.
+
+    $file may be:
+
+    *   a filename string
+
+    *   an open writable filehandle
+
+    *   a `Path::Tiny` object
+
+    *   a `Path::Class::File` object
+
+    The `\%options` hashref is passed through to `encode_smile`, so it accepts
+    the same options and defaults: `write_header`, `shared_names`,
+    `shared_values`, and `canonical`.
+
+  load_smile( $file, \%options )
+    Reads Smile bytes from $file, decodes them with `decode_smile`, and
+    returns the resulting data structure.
+
+    $file may be:
+
+    *   a filename string
+
+    *   an open readable filehandle
+
+    *   a `Path::Tiny` object
+
+    *   a `Path::Class::File` object
+
+    The `\%options` hashref is passed through to `decode_smile`, so it accepts
+    the same options and defaults: `use_bigint`, `require_header`, and
+    `json_bool`.
+
+PERL AND XS IMPLEMENTATIONS
+    Data::Smile will attempt to load and use Data::Smile::XS to encode and
+    decode Smile data. If that module is not loadable, then it will fall back
+    to a pure Perl implementation in Data::Smile::PP.
+
+    There is currently no environment variable or other option that can be
+    used to manually select an implementation, but loading and using those
+    modules directly is supported.
+
+    Both modules are believed to fully implement version 1.0.7 of the Smile
+    specification.
+
+COMPARISON WITH JSON
+    Smile is a binary data format which allows you to encode and decode
+    JSON-like data structures. That is, collections of key-value pairs (hashes
+    in Perl terminology, objects in JSON terminology), arrays, strings,
+    numbers, booleans, and null (undef in Perl terminology).
+
+    Depending on the complexity of the input data, Data::Smile may produce
+    output half the size (in bytes) or even less than comparable JSON data.
+
+    Data::Smile::XS runs at about 25% the speed of JSON::XS when encoding, and
+    roughly the same speed when decoding.
+
+    Data::Smile::PP runs at roughly the same speed as JSON::PP when encoding,
+    and almost three times faster when decoding.
+
+    Of course, raw encoding/decoding of JSON-like data is probably only a
+    small part of what your application will do. If it also needs to POST the
+    data over HTTPS or write it to a database over a TCP socket, then the
+    speed gains of having much smaller payloads can start to add up.
+
+BLESSED OBJECTS
+    Like JSON::PP and JSON::XS, Data::Smile will call the `TO_JSON` method on
+    any blessed objects it gets passed. If you pass it a blessed object
+    without a `TO_JSON` method, then the behaviour is currently unspecified,
+    and the behaviour may differ between the PP and XS versions.
+
+THE SMILE HEADER
+    The `encode_smile` option allows you to save four whole bytes by omiting
+    the usual Smile header. The Smile header consists of ":)\n" followed by a
+    single byte advertising which Smile features are used in the file.
+
+    The `decode_smile` function supports all official Smile features, so
+    doesn't need the header and can happily parse headless Smile data.
+
+    Most decoders require the header to be present, including go-smile (Go),
+    libsmile (C), PySmile (Python), smile-js (Javascript), and serde_smile
+    (Rust). For this reason `encode_smile` *will* include the header in its
+    output by default.
+
+    If you are encoding mostly very small pieces of data, and storing them
+    somewhere you know is always going to be Smile data (like a particular
+    column in a database which is dedicated to storing Smile data), and you
+    know that only Data::Smile will ever be used to parse the data, then it
+    may be safe to store Smile without the header. Otherwise, it's only four
+    bytes, so you should probably just include it.
+
+BUGS
+    Please report any bugs to
+    <https://github.com/tobyink/p5-data-smile/issues>.
+
+SEE ALSO
+    Data::Smile::PP, Data::Smile::XS,
+    <https://github.com/FasterXML/smile-format-specification/blob/master/smile
+    -specification.md> (Smile format specification),
+    <https://en.wikipedia.org/wiki/Smile_(data_interchange_format)>.
+
+AUTHOR
+    Toby Inkster <tobyink@cpan.org>.
+
+COPYRIGHT AND LICENCE
+    This software is copyright (c) 2026 by Toby Inkster.
+
+    This is free software; you can redistribute it and/or modify it under the
+    same terms as the Perl 5 programming language system itself.
+
+DISCLAIMER OF WARRANTIES
+    THIS PACKAGE IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR IMPLIED
+    WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
+    MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+

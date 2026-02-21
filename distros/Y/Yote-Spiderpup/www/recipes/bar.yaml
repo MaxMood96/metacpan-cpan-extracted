@@ -1,0 +1,7 @@
+title: Bar Page
+css: |
+  h1 { color: red; }
+import:
+  fred: /recipes/fred.yaml
+html: |
+  <h1>WELCOME BAR</h1>

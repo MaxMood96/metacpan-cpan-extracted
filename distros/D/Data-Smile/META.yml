@@ -1,0 +1,50 @@
+---
+abstract: 'support for the Smile data interchange format (binary JSON serialization)'
+author:
+  - 'Toby Inkster (TOBYINK) <tobyink@cpan.org>'
+build_requires:
+  JSON::PP: '0'
+  Test2::Plugin::BailOnFail: '0'
+  Test2::Require::AuthorTesting: '0'
+  Test2::Require::Module: '0'
+  Test2::Tools::Spec: '0'
+  Test2::V0: '0'
+configure_requires:
+  ExtUtils::MakeMaker: '6.17'
+dynamic_config: 1
+generated_by: 'Dist::Inkt::Profile::TOBYINK version 0.024, CPAN::Meta::Converter version 2.150010'
+keywords: []
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: Data-Smile
+no_index:
+  directory:
+    - eg
+    - examples
+    - inc
+    - t
+    - xt
+optional_features: {}
+provides:
+  Data::Smile:
+    file: lib/Data/Smile.pm
+    version: '0.001000'
+  Data::Smile::PP:
+    file: lib/Data/Smile/PP.pm
+    version: '0.001000'
+recommends:
+  Data::Smile::XS: '0'
+requires:
+  Exporter::Tiny: '0'
+  Math::BigInt: '1.999822'
+  perl: '5.008008'
+resources:
+  Identifier: http://purl.org/NET/cpan-uri/dist/Data-Smile/project
+  bugtracker: https://github.com/tobyink/p5-data-smile/issues
+  homepage: https://metacpan.org/release/Data-Smile
+  license: http://dev.perl.org/licenses/
+  repository: git://github.com/tobyink/p5-data-smile.git
+version: '0.001000'
+x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

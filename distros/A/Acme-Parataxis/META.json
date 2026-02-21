@@ -55,6 +55,11 @@
          }
       },
       "test" : {
+         "recommends" : {
+            "IO::Socket::IP" : "0.32",
+            "IO::Socket::SSL" : "1.968",
+            "Net::SSLeay" : "1.49"
+         },
          "requires" : {
             "Test2::V1" : "0"
          }
@@ -63,7 +68,7 @@
    "provides" : {
       "Acme::Parataxis" : {
          "file" : "lib/Acme/Parataxis.pm",
-         "version" : "v0.0.8"
+         "version" : "v0.0.9"
       }
    },
    "release_status" : "stable",
@@ -81,7 +86,7 @@
          "web" : "https://github.com/sanko/Acme-Parataxis.pm"
       }
    },
-   "version" : "v0.0.8",
+   "version" : "v0.0.9",
    "x_ignore" : [
       ".tidyallrc",
       ".gitignore",

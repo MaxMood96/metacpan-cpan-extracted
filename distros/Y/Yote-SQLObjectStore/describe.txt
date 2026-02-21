@@ -1,0 +1,122 @@
+
+imagine a great craigslist data tree, for storing useful things.
+it is discoverable and does not need a secret handshake uuid.
+
+   my $staff = $store->fetch_path("/cl/staff/jim");
+
+   my $flag_report_prefs = $staff->fetch_path( "preferences/tools/flag_report" );
+
+   my $name = $staff->get_name;
+   my $columns = $flag_report_prefs->get_extra_columns;
+   $staff->set_quote( 'i love the list' );
+   $staff->rate_tool( 'flag_report', 4 );
+
+   $store->save; # saves all updates using a transaction
+
+the getters and setters are automatically created. get_ and set_ are explicitly used
+to reduce cognitive load and confusion. they are not mistaken for other methods.
+
+
+it is easily defined
+
+   package cl::tree::staff;
+
+   use base 'cl::tree::obj';
+
+   our %cols = (
+       name  => 'varchar(256)',
+       quote => 'varchar(1026)',
+       favorite_tools => '*ARRAY_*cl::tree:tool',
+       preferences => '*HASH<256>_*',
+   );
+
+   sub rate_tool {
+       my ($self, $tool, $rating) = @_;
+       my $tool = $self->store->fetch_path( "/cl/tools/$tool" );
+       $tool->apply_rating( $self, $rating );
+   }
+
+   1;
+
+   package cl::tree::tool;
+
+   our %cols = (
+      name   => 'varchar(256)',
+      url    => 'varchar(1026)',
+      about  => 'text',
+      average_user_rating => 'float',
+      user_to_rating => '*HASH<256>_float',
+   );
+
+   sub apply_rating {
+      my ($self, $user, $rating) = @_;
+      my $userratings = $self->get_user_to_rating->tied_hash;
+      $userratings->{$user->get_name} = $rating;
+      my $total = 0;
+      my @vals = values %$userratings;
+      for my $rating (@vals) {
+         $total += $rating;
+      }
+      $self->set_average_user_rating( $total / @vals );
+   }
+
+
+it is stored in sql, with versioned tables, and a script 
+automatically builds new versions of the tables and updates
+old versions to the new. run the script, review the output
+and then apply the output to update tables.
+
+   $ cl-tree-table-builder
+
+    CREATE TABLE IF NOT EXISTS ObjectIndex ( 
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        tablehandle TEXT,
+        live        BOOLEAN
+    );
+
+
+    CREATE TABLE IF NOT EXISTS TableDefs ( 
+        id      INTEGER PRIMARY KEY AUTOINCREMENT,
+        name    TEXT,
+        version FLOAT,
+        UNIQUE (name)
+    );
+
+
+    CREATE TABLE IF NOT EXISTS TableVersions (
+        name         TEXT,
+        version      INT,
+        create_table TEXT,
+        UNIQUE (name, version)
+    );
+
+       
+    CREATE TABLE IF NOT EXISTS ARRAY_REF (id BIGINT UNSIGNED,idx INT UNSIGNED,val BIGINT UNSIGNED,UNIQUE (id,idx))
+
+    INSERT INTO TableVersions (name,version,create_table) VALUES ('ARRAY_REF','1','CREATE TABLE IF NOT EXISTS ARRAY_REF (id BIGINT UNSIGNED,idx INT UNSIGNED,val BIGINT UNSIGNED,UNIQUE (id,idx))')
+
+    INSERT OR IGNORE INTO TableDefs (name,version) VALUES ('ARRAY_REF','1')
+
+    CREATE TABLE IF NOT EXISTS HASH_256_REF (id BIGINT UNSIGNED,key VARCHAR(256),val BIGINT UNSIGNED,UNIQUE (id,key))
+
+    INSERT INTO TableVersions (name,version,create_table) VALUES ('HASH_256_REF','1','CREATE TABLE IF NOT EXISTS HASH_256_REF (id BIGINT UNSIGNED,key VARCHAR(256),val BIGINT UNSIGNED,UNIQUE (id,key))')
+
+    INSERT OR IGNORE INTO TableDefs (name,version) VALUES ('HASH_256_REF','1')
+
+    CREATE TABLE IF NOT EXISTS Root_SQLite_SQLObjectStore_Yote (id BIGINT PRIMARY KEY,val_hash BIGINT UNSIGNED,ref_hash BIGINT UNSIGNED)
+
+    INSERT INTO TableVersions (name,version,create_table) VALUES ('Root_SQLite_SQLObjectStore_Yote','1','CREATE TABLE IF NOT EXISTS Root_SQLite_SQLObjectStore_Yote (id BIGINT PRIMARY KEY,val_hash BIGINT UNSIGNED,ref_hash BIGINT UNSIGNED)')
+
+    INSERT OR IGNORE INTO TableDefs (name,version) VALUES ('Root_SQLite_SQLObjectStore_Yote','1')
+
+    CREATE TABLE IF NOT EXISTS Tool_SQLite (id BIGINT PRIMARY KEY,about text,average_user_rating float,url varchar(1026),name varchar(256))
+
+    INSERT INTO TableVersions (name,version,create_table) VALUES ('Tool_SQLite','1','CREATE TABLE IF NOT EXISTS Tool_SQLite (id BIGINT PRIMARY KEY,about text,average_user_rating float,url varchar(1026),name varchar(256))')
+
+    INSERT OR IGNORE INTO TableDefs (name,version) VALUES ('Tool_SQLite','1')
+
+    CREATE TABLE IF NOT EXISTS Team_SQLite (id BIGINT PRIMARY KEY,favorite_tools BIGINT UNSIGNED,preferences BIGINT UNSIGNED,quote varchar(1026),name varchar(256))
+
+    INSERT INTO TableVersions (name,version,create_table) VALUES ('Team_SQLite','1','CREATE TABLE IF NOT EXISTS Team_SQLite (id BIGINT PRIMARY KEY,favorite_tools BIGINT UNSIGNED,preferences BIGINT UNSIGNED,quote varchar(1026),name varchar(256))')
+
+    INSERT OR IGNORE INTO TableDefs (name,version) VALUES ('Team_SQLite','1')

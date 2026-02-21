@@ -41,8 +41,10 @@
       "runtime" : {
          "requires" : {
             "DirHandle" : "0",
+            "HTML::Entities" : "0",
             "Plack::MIME" : "0",
             "Plack::Middleware" : "0",
+            "Plack::Request" : "0",
             "Plack::Util::Accessor" : "0",
             "Time::Piece" : "0",
             "URI::Escape" : "0",
@@ -63,15 +65,18 @@
             "Path::Tiny" : "0",
             "Plack::Builder" : "0",
             "Plack::Test" : "0",
+            "Test2::V0" : "0",
             "Test::More" : "0",
-            "lib" : "0"
+            "feature" : "0",
+            "lib" : "0",
+            "utf8" : "0"
          }
       }
    },
    "provides" : {
       "Plack::Middleware::DirListing" : {
          "file" : "lib/Plack/Middleware/DirListing.pm",
-         "version" : "1.0"
+         "version" : "1.01"
       }
    },
    "release_status" : "stable",
@@ -85,7 +90,7 @@
          "web" : "https://github.com/kcaran/plack-middleware-dirlisting"
       }
    },
-   "version" : "1.0",
+   "version" : "1.01",
    "x_Dist_Zilla" : {
       "perl" : {
          "version" : "5.036001"
@@ -263,7 +268,7 @@
                   "branch" : null,
                   "changelog" : "Changes",
                   "signed" : 0,
-                  "tag" : "1.0",
+                  "tag" : "1.01",
                   "tag_format" : "%v",
                   "tag_message" : "%v"
                },

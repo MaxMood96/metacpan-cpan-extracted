@@ -1,6 +1,6 @@
 package DBIx::Class::Async::Row;
 
-$DBIx::Class::Async::Row::VERSION   = '0.57';
+$DBIx::Class::Async::Row::VERSION   = '0.59';
 $DBIx::Class::Async::Row::AUTHORITY = 'cpan:MANWAR';
 
 =head1 NAME
@@ -9,7 +9,7 @@ DBIx::Class::Async::Row - Asynchronous Row object representing a single database
 
 =head1 VERSION
 
-Version 0.57
+Version 0.59
 
 =head1 SYNOPSIS
 
@@ -542,6 +542,21 @@ sub related_resultset {
 
     # 3. Finalise condition and source name
     my $final_cond = { %$join_cond, %{ $cond || {} } };
+
+    # Carry forward the relationship where condition.
+    # rel_info->{attrs}{where} was previously silently discarded here,
+    # meaning datetime filters (or any where on the relationship definition)
+    # were never applied when traversing via the row accessor.
+    my $final_attrs = { %{ $attrs || {} } };
+    if (my $rel_where = $rel_info->{attrs}{where}) {
+        if (exists $final_attrs->{where}) {
+            $final_attrs->{where} = { -and => [ $final_attrs->{where}, $rel_where ] };
+        }
+        else {
+            $final_attrs->{where} = $rel_where;
+        }
+    }
+
     my $foreign_source_name = $rel_info->{source};
     my $target_result_class = $rel_info->{class} || $foreign_source_name;
 
@@ -553,9 +568,9 @@ sub related_resultset {
              schema_instance => $self->{_schema_instance},
              async_db        => $self->{_async_db},
              source_name     => $foreign_source_name,
-             cond            => $final_cond,    # Crucial for create_related
+             cond            => $final_cond,
              result_class    => $target_result_class,
-             attrs           => $attrs || {},
+             attrs           => $final_attrs,
         );
 
         $rs->{_is_prefetched} = 1;
@@ -570,7 +585,7 @@ sub related_resultset {
          source_name     => $foreign_source_name,
          result_class    => $target_result_class,
          cond            => $final_cond,
-         attrs           => $attrs || {},
+         attrs           => $final_attrs,
     );
 }
 
@@ -1202,16 +1217,37 @@ sub _ensure_accessors {
             *{"${class}::$rel_name"} = sub {
                 my ($inner, @args) = @_;
 
-                # PRIORITY: If we have a prefetched object, return it.
-                # This prevents calling _fetch_relationship_async on raw data.
-                return $inner->{_related}{$rel_name}
-                    if exists $inner->{_related}{$rel_name};
+                # PRIORITY: If we have a prefetched object, return it —
+                # UNLESS the relationship has a where condition containing
+                # raw SQL refs (e.g. \'datetime("now")'). Such conditions
+                # cannot be evaluated in Perl, so we must skip the cache
+                # and let the DB apply the filter via a fresh async fetch.
+                # This fixes the RT#63709-style silent drop where datetime
+                # filters on has_many relationships were ignored entirely.
+                if (exists $inner->{_related}{$rel_name}) {
+                    my $rel_where = $rel_info->{attrs}{where};
+                    return $inner->{_related}{$rel_name}
+                        unless $rel_where && _where_has_sql_refs($rel_where);
+                }
 
-                # FALLBACK: Perform async fetch if not prefetched
+                # FALLBACK: Perform async fetch if not prefetched,
+                # or if the relationship where contains raw SQL refs.
                 return $inner->_fetch_relationship_async($rel_name, $rel_info, @args);
             };
         }
     }
+}
+
+# Returns true if a where hashref contains any raw SQL scalar refs
+# such as \'datetime("now")' that cannot be evaluated in Perl.
+sub _where_has_sql_refs {
+    my ($where) = @_;
+    return 0 unless ref $where eq 'HASH';
+    for my $val (values %$where) {
+        return 1 if ref $val eq 'SCALAR' || ref $val eq 'REF';
+        return 1 if ref $val eq 'HASH' && _where_has_sql_refs($val);
+    }
+    return 0;
 }
 
 sub _install_prefetch_accessors {
@@ -1269,7 +1305,13 @@ sub _fetch_relationship_async {
     my $is_single = ($acc_type eq 'single' || $acc_type eq 'filter');
 
     # 2. Cache Hit Logic
-    if (exists $self->{_related}{$rel_name}) {
+    # Skip cache if relationship has raw SQL refs in where condition
+    # (e.g. \'datetime("now")') — these cannot be evaluated in Perl
+    # and must go to the DB to be applied correctly every time.
+    my $rel_where     = $rel_info->{attrs}{where};
+    my $has_sql_where = $rel_where && _where_has_sql_refs($rel_where);
+
+    if (!$has_sql_where && exists $self->{_related}{$rel_name}) {
         my $cached = $self->{_related}{$rel_name};
         # ONLY wrap in Future if it's a single row
         return $is_single ? Future->done($cached) : $cached;
@@ -1285,22 +1327,44 @@ sub _fetch_relationship_async {
         $search_params{$f_col} = $self->get_column($s_col);
     }
 
+    # 4. Merge relationship where into search attrs
+    # Previously rel_info->{attrs}{where} was never passed to search(),
+    # so datetime filters and any other where on the relationship definition
+    # were silently dropped on every async fetch.
+    # Only build %search_attrs if we actually have a rel_where to merge —
+    # passing an empty hashref instead of undef can interfere with other
+    # attrs-based mechanisms such as _has_dynamic_sql cache detection.
+    my %search_attrs = %{ $attrs // {} };
+    if ($rel_where) {
+        if (exists $search_attrs{where}) {
+            $search_attrs{where} = { -and => [ $search_attrs{where}, $rel_where ] };
+        }
+        else {
+            $search_attrs{where} = $rel_where;
+        }
+    }
+
     if ($is_single) {
         return $self->{_schema_instance}->resultset($target_source)
-            ->search(\%search_params, { %{$attrs // {}}, rows => 1 })
+            ->search(\%search_params, { %search_attrs, rows => 1 })
             ->next
             ->then(sub {
                 my $row = shift;
-                $self->{_related}{$rel_name} = $row;
+                $self->{_related}{$rel_name} = $row unless $has_sql_where;
                 return Future->done($row);
             });
     }
     else {
-        # Multi returns the RS directly (synchronously)
+        # Multi returns the RS directly (synchronously).
+        # Only pass \%search_attrs if it contains something — passing an
+        # empty hashref instead of the original $attrs risks discarding
+        # caller-provided attrs such as +select with dynamic SQL, which
+        # would break _has_dynamic_sql cache detection in ResultSet.pm.
+        my $effective_attrs = %search_attrs ? \%search_attrs : $attrs;
         my $rs = $self->{_schema_instance}->resultset($target_source)
-                                          ->search(\%search_params, $attrs);
+                                          ->search(\%search_params, $effective_attrs);
 
-        $self->{_related}{$rel_name} = $rs;
+        $self->{_related}{$rel_name} = $rs unless $has_sql_where;
         return $rs;
     }
 }

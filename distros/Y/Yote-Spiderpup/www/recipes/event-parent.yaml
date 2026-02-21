@@ -1,0 +1,44 @@
+title: Event Parent
+
+import:
+  child: /recipes/event-child.yaml
+
+vars:
+  log: (waiting for events...)
+  stopDeletion: false
+
+lifecycle:
+  onMount: () => { console.log('[Parent] Mounted'); this.on('item-selected', (event) => { console.log('[Parent] item-selected:', event.data); $log = 'Parent saw: item-selected (id=' + event.data.id + ')'; this.refresh(); }); this.on('item-deleted', (event) => { console.log('[Parent] item-deleted:', event.data); if ($stopDeletion) { $log = 'Parent STOPPED: item-deleted'; this.refresh(); event.stopPropagation(); } else { $log = 'Parent saw: item-deleted (bubbling...)'; this.refresh(); } }); }
+
+methods:
+  toggleStop: () => { $stopDeletion = !$stopDeletion }
+
+css: |
+  .parent-box {
+    border: 2px solid blue;
+    padding: 15px;
+    margin: 10px;
+  }
+  .toggle-btn {
+    background: #e74c3c;
+    color: white;
+    padding: 5px 10px;
+    border: none;
+    cursor: pointer;
+  }
+  .toggle-btn.active {
+    background: #27ae60;
+  }
+
+html: |
+  <div class="parent-box">
+    <h2>Parent Component</h2>
+    <p>*Event log: {log}</p>
+    <p>
+      <button class="toggle-btn" class:active="() => $stopDeletion" @click="toggleStop()">
+        *Stop deletion events: {stopDeletion}
+      </button>
+    </p>
+    <child id="1" name="First Item"/>
+    <child id="2" name="Second Item"/>
+  </div>

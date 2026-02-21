@@ -26,7 +26,7 @@ our
     ($VERSION, %FUNCS, %GLOBALS, %MIBS, %MUNGE, $AUTOLOAD, $INIT, $DEBUG, %SPEED_MAP,
      $NOSUCH, $BIGINT, $REPEATERS);
 
-$VERSION = '3.974000';
+$VERSION = '3.975000';
 
 =head1 NAME
 
@@ -34,7 +34,7 @@ SNMP::Info - OO Interface to Network devices and MIBs through SNMP
 
 =head1 VERSION
 
-SNMP::Info - Version 3.974000
+SNMP::Info - Version 3.975000
 
 =head1 AUTHOR
 
@@ -829,6 +829,12 @@ Catalyst 2960, 2970, 3750 and 3850 series, including blade switches
 CBS30x0 and CBS31x0 series, all running IOS.
 
 See documentation in L<SNMP::Info::Layer3::C6500> for details.
+
+=item SNMP::Info::Layer3::Cambium
+
+Subclass for Cambium devices (ePMP/cnPilot).
+
+See documentation in L<SNMP::Info::Layer3::Cambium> for details.
 
 =item SNMP::Info::Layer3::CheckPoint
 
@@ -1842,6 +1848,7 @@ sub device_type {
         14823 => 'SNMP::Info::Layer3::Aruba',
         14988 => 'SNMP::Info::Layer3::Mikrotik',
         17163 => 'SNMP::Info::Layer3::Steelhead',
+        17713 => 'SNMP::Info::Layer3::Cambium',
         19046 => 'SNMP::Info::Layer3::Lenovo',
         21091 => 'SNMP::Info::Layer2::Exinda',
         23867 => 'SNMP::Info::Layer3::SilverPeak',
@@ -1894,6 +1901,7 @@ sub device_type {
         14525 => 'SNMP::Info::Layer2::Trapeze',
         14823 => 'SNMP::Info::Layer3::Aruba',
         17163 => 'SNMP::Info::Layer3::Steelhead',
+        17713 => 'SNMP::Info::Layer3::Cambium',
         20540 => 'SNMP::Info::Layer2::Sixnet',
         21091 => 'SNMP::Info::Layer2::Exinda',
         26543 => 'SNMP::Info::Layer3::IBMGbTor',

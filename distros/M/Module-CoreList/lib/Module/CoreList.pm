@@ -4,7 +4,7 @@ use strict;
 our ( %released, %version, %families, %upstream, %bug_tracker, %deprecated, %delta );
 
 use version;
-our $VERSION = '5.20260119';
+our $VERSION = '5.20260220';
 
 sub PKG_PATTERN () { q#\A[a-zA-Z_][0-9a-zA-Z_]*(?:(::|')[0-9a-zA-Z_]+)*\z# }
 sub _looks_like_invocant ($) { local $@; !!eval { $_[0]->isa(__PACKAGE__) } }
@@ -452,6 +452,7 @@ sub changes_between {
     5.043005 => '2025-11-20',
     5.043006 => '2025-12-20',
     5.043007 => '2026-01-19',
+    5.043008 => '2026-02-20',
   );
 
 for my $version ( sort { $a <=> $b } keys %released ) {
@@ -24409,6 +24410,78 @@ for my $version ( sort { $a <=> $b } keys %released ) {
         removed => {
         }
     },
+    5.043008 => {
+        delta_from => 5.043007,
+        changed => {
+            'B::Concise'            => '1.011',
+            'B::Deparse'            => '1.89',
+            'B::Op_private'         => '5.043008',
+            'CPAN::Meta'            => '2.150012',
+            'CPAN::Meta::Converter' => '2.150012',
+            'CPAN::Meta::Feature'   => '2.150012',
+            'CPAN::Meta::History'   => '2.150012',
+            'CPAN::Meta::Merge'     => '2.150012',
+            'CPAN::Meta::Prereqs'   => '2.150012',
+            'CPAN::Meta::Spec'      => '2.150012',
+            'CPAN::Meta::Validator' => '2.150012',
+            'Compress::Raw::Bzip2'  => '2.217',
+            'Compress::Raw::Zlib'   => '2.218',
+            'Compress::Zlib'        => '2.217',
+            'Config'                => '5.043008',
+            'Config::Perl::V'       => '0.39',
+            'DB_File'               => '1.860',
+            'English'               => '1.12',
+            'ExtUtils::ParseXS'     => '3.63',
+            'ExtUtils::ParseXS::Constants'=> '3.63',
+            'ExtUtils::ParseXS::CountLines'=> '3.63',
+            'ExtUtils::ParseXS::Eval'=> '3.63',
+            'ExtUtils::ParseXS::Node'=> '3.63',
+            'ExtUtils::ParseXS::Utilities'=> '3.63',
+            'ExtUtils::Typemaps'    => '3.63',
+            'ExtUtils::Typemaps::Cmd'=> '3.63',
+            'ExtUtils::Typemaps::InputMap'=> '3.63',
+            'ExtUtils::Typemaps::OutputMap'=> '3.63',
+            'ExtUtils::Typemaps::Type'=> '3.63',
+            'IO::Compress'          => '2.217',
+            'IO::Compress::Adapter::Bzip2'=> '2.217',
+            'IO::Compress::Adapter::Deflate'=> '2.217',
+            'IO::Compress::Adapter::Identity'=> '2.217',
+            'IO::Compress::Base'    => '2.217',
+            'IO::Compress::Base::Common'=> '2.217',
+            'IO::Compress::Bzip2'   => '2.217',
+            'IO::Compress::Deflate' => '2.217',
+            'IO::Compress::Gzip'    => '2.217',
+            'IO::Compress::Gzip::Constants'=> '2.217',
+            'IO::Compress::RawDeflate'=> '2.217',
+            'IO::Compress::Zip'     => '2.217',
+            'IO::Compress::Zip::Constants'=> '2.217',
+            'IO::Compress::Zlib::Constants'=> '2.217',
+            'IO::Compress::Zlib::Extra'=> '2.217',
+            'IO::Uncompress::Adapter::Bunzip2'=> '2.217',
+            'IO::Uncompress::Adapter::Identity'=> '2.217',
+            'IO::Uncompress::Adapter::Inflate'=> '2.217',
+            'IO::Uncompress::AnyInflate'=> '2.217',
+            'IO::Uncompress::AnyUncompress'=> '2.217',
+            'IO::Uncompress::Base'  => '2.217',
+            'IO::Uncompress::Bunzip2'=> '2.217',
+            'IO::Uncompress::Gunzip'=> '2.217',
+            'IO::Uncompress::Inflate'=> '2.217',
+            'IO::Uncompress::RawInflate'=> '2.217',
+            'IO::Uncompress::Unzip' => '2.217',
+            'Module::CoreList'      => '5.20260220',
+            'Module::CoreList::Utils'=> '5.20260220',
+            'Parse::CPAN::Meta'     => '2.150012',
+            'Time::HiRes'           => '1.9780',
+            'XS::APItest'           => '1.49',
+            'XS::Typemap'           => '0.21',
+            'feature'               => '2.01',
+            'threads'               => '2.44',
+            'threads::shared'       => '1.72',
+            'warnings'              => '1.77',
+        },
+        removed => {
+        }
+    },
 );
 
 sub is_core
@@ -26120,6 +26193,13 @@ sub is_core
     },
     5.043007 => {
         delta_from => 5.043006,
+        changed => {
+        },
+        removed => {
+        }
+    },
+    5.043008 => {
+        delta_from => 5.043007,
         changed => {
         },
         removed => {

@@ -1,6 +1,6 @@
 {
     "name" : "LTSV-LINQ",
-    "version" : "1.02",
+    "version" : "1.03",
     "abstract" : "LINQ-style query interface for LTSV files",
     "author" : [
         "ina <ina@cpan.org>"
@@ -15,12 +15,18 @@
         "version" : 2
     },
     "release_status" : "stable",
+    "minimum_perl_version" : "5.00503",
     "resources" : {
         "license" : [
             "http://dev.perl.org/licenses/"
         ],
+        "bugtracker" : {
+            "web" : "https://github.com/ina-cpan/LTSV-LINQ/issues"
+        },
         "repository" : {
-            "url" : "https://github.com/ina-cpan/LTSV-LINQ"
+            "url"  : "https://github.com/ina-cpan/LTSV-LINQ",
+            "web"  : "https://github.com/ina-cpan/LTSV-LINQ",
+            "type" : "git"
         }
     },
     "prereqs" : {
@@ -59,6 +65,24 @@
                 "perl" : "5.00503",
                 "strict" : "1.01"
             }
+        },
+        "test" : {
+            "requires" : {
+                "ExtUtils::MakeMaker" : "5.4302",
+                "File::Basename" : "2.6",
+                "File::Copy" : "2.02",
+                "File::Path" : "1.0401",
+                "FindBin" : "1.42",
+                "Socket" : "0",
+                "perl" : "5.00503",
+                "strict" : "1.01"
+            }
+        }
+    },
+    "provides" : {
+        "LTSV::LINQ" : {
+            "file" : "lib/LTSV/LINQ.pm",
+            "version" : "1.03"
         }
     }
 }

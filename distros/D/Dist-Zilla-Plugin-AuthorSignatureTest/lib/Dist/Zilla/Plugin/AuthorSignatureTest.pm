@@ -7,7 +7,7 @@
 # the same terms as the Perl 5 programming language system itself.
 #
 package Dist::Zilla::Plugin::AuthorSignatureTest;
-$Dist::Zilla::Plugin::AuthorSignatureTest::VERSION = '0.03';
+$Dist::Zilla::Plugin::AuthorSignatureTest::VERSION = '0.04';
 # ABSTRACT: An Author Distribution C<SIGNATURE> Test for L<Dist::Zilla>
 
 use strict;
@@ -40,7 +40,13 @@ sub munge_file {
     my $self = shift;
     my ($file) = @_;
 
-    return unless $file->name eq 'xt/author/signature.t';
+    # depending on if ExtraTests ran first, the file might
+    # be named xt/author/signature.t, or might be named t/author-signature.t
+    return unless (
+      $file->name eq 'xt/author/signature.t' ||
+      $file->name eq 't/author-signature.t'
+    );
+
     $file->content(
         $self->fill_in_string(
             $file->content,
@@ -63,7 +69,7 @@ Dist::Zilla::Plugin::AuthorSignatureTest - An Author Distribution C<SIGNATURE> T
 
 =head1 VERSION
 
-version 0.03
+version 0.04
 
 =head1 SYNOPSIS
 
