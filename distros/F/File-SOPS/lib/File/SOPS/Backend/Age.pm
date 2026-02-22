@@ -1,8 +1,6 @@
 package File::SOPS::Backend::Age;
-our $VERSION = '0.001';
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: age encryption backend for SOPS
-
+our $VERSION = '0.002';
 use Moo;
 use Carp qw(croak);
 use Crypt::Age;
@@ -132,7 +130,7 @@ File::SOPS::Backend::Age - age encryption backend for SOPS
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 
@@ -243,9 +241,10 @@ This is a non-throwing version of L</decrypt_data_key>.
 
 =head1 SUPPORT
 
-=head2 IRC
+=head2 Issues
 
-You can reach Getty on C<irc.perl.org> for questions and support.
+Please report bugs and feature requests on GitHub at
+L<https://github.com/Getty/p5-file-sops/issues>.
 
 =head1 CONTRIBUTING
 

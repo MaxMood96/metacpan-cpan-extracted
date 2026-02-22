@@ -1,6 +1,6 @@
 {
     "name" : "LTSV-LINQ",
-    "version" : "1.03",
+    "version" : "1.04",
     "abstract" : "LINQ-style query interface for LTSV files",
     "author" : [
         "ina <ina@cpan.org>"
@@ -15,7 +15,6 @@
         "version" : 2
     },
     "release_status" : "stable",
-    "minimum_perl_version" : "5.00503",
     "resources" : {
         "license" : [
             "http://dev.perl.org/licenses/"
@@ -82,7 +81,11 @@
     "provides" : {
         "LTSV::LINQ" : {
             "file" : "lib/LTSV/LINQ.pm",
-            "version" : "1.03"
+            "version" : "1.04"
+        },
+        "LTSV::LINQ::Ordered" : {
+            "file" : "lib/LTSV/LINQ.pm",
+            "version" : "1.04"
         }
     }
 }

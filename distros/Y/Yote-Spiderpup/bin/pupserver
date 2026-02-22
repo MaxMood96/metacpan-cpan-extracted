@@ -16,6 +16,8 @@ my $watch_interval = 5;
 my $port           = 5000;
 my $webroot        = '';
 my $www_dir        = '';
+my $ssl_cert       = '';
+my $ssl_key        = '';
 
 GetOptions(
     'base-url-path=s' => \$base_url_path,
@@ -24,7 +26,13 @@ GetOptions(
     'port=i'          => \$port,
     'webroot=s'       => \$webroot,
     'www-dir=s'       => \$www_dir,
-) or die "Usage: $0 [--base-url-path PATH] [--compile] [--watch [SECONDS]] [--port PORT] [--webroot DIR] [--www-dir DIR]\n";
+    'ssl-cert=s'      => \$ssl_cert,
+    'ssl-key=s'       => \$ssl_key,
+) or die "Usage: $0 [--base-url-path PATH] [--compile] [--watch [SECONDS]] [--port PORT] [--webroot DIR] [--www-dir DIR] [--ssl-cert FILE --ssl-key FILE]\n";
+
+if ($ssl_cert xor $ssl_key) {
+    die "Both --ssl-cert and --ssl-key must be specified together\n";
+}
 
 $www_dir ||= File::Spec->catdir('.', 'www');
 my $sp = Yote::Spiderpup->new(
@@ -38,5 +46,7 @@ if ($watch_mode) {
 } elsif ($compile_mode) {
     $sp->compile_all;
 } else {
-    $sp->run_server($port);
+    $sp->run_server($port,
+        ($ssl_cert ? (ssl_cert => $ssl_cert, ssl_key => $ssl_key) : ()),
+    );
 }

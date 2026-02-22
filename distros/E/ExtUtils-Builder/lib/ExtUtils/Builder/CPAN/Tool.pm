@@ -1,5 +1,5 @@
 package ExtUtils::Builder::CPAN::Tool;
-$ExtUtils::Builder::CPAN::Tool::VERSION = '0.019';
+$ExtUtils::Builder::CPAN::Tool::VERSION = '0.020';
 use 5.010;
 use strict;
 use warnings;
@@ -21,9 +21,6 @@ sub add_methods {
 
 	$planner->add_delegate('distribution', sub {
 		return $_[0]->meta->name;
-	});
-	$planner->add_delegate('release_status', sub {
-		return $_[0]->meta->release_status;
 	});
 	$planner->add_delegate('version', sub {
 		return version->new($_[0]->meta->version);
@@ -82,7 +79,7 @@ ExtUtils::Builder::CPAN::Tool - A base implementation for CPAN build scripts.
 
 =head1 VERSION
 
-version 0.019
+version 0.020
 
 =head1 SYNOPSIS
 
@@ -119,10 +116,6 @@ The version of the distribution (as a version object).
 =head2 main_module
 
 The main module of the distribution.
-
-=head2 release_status
-
-The release status of the distribution (e.g. C<'stable'>).
 
 =head2 perl_path
 

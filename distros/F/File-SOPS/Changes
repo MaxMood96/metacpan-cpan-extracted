@@ -1,5 +1,9 @@
 Revision history for File-SOPS
 
+0.002     2026-02-22 02:10:34Z
+  - Fix bool deserialization: return JSON::PP::Boolean instead of plain 1/0
+    (YAML::XS with $Boolean='JSON::PP' now correctly serializes true/false)
+
 0.001     2026-01-11 04:00:35Z
   - Initial release
   - Pure Perl implementation of Mozilla SOPS encrypted file format

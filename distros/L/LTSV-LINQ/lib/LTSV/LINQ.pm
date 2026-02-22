@@ -12,7 +12,7 @@ use 5.00503;    # Universal Consensus 1998 for primetools
                 # Perl 5.005_03 compatibility for historical toolchains
 # use 5.008001; # Lancaster Consensus 2013 for toolchains
 
-$VERSION = '1.03';
+$VERSION = '1.04';
 $VERSION = $VERSION;
 # VERSION policy: avoid `our` for 5.005_03 compatibility.
 # Self-assignment prevents "used only once" warning under `use strict`.
@@ -337,130 +337,64 @@ sub SkipWhile {
 # Ordering Methods
 #---------------------------------------------------------------------
 
-# OrderBy - sort ascending
+# OrderBy - sort ascending (smart: numeric when both keys look numeric)
 sub OrderBy {
     my($self, $key_selector) = @_;
     my @items = $self->ToArray();
-    my @sorted = sort {
-        my $ka = $key_selector->($a);
-        my $kb = $key_selector->($b);
-        $ka = '' unless defined $ka;
-        $kb = '' unless defined $kb;
-
-        # Smart numeric/string comparison
-        # Supports: integers, decimals, negative numbers, exponential notation
-        # Handles leading/trailing whitespace
-        my $ka_trimmed = $ka;
-        my $kb_trimmed = $kb;
-        $ka_trimmed =~ s/^\s+|\s+$//g;
-        $kb_trimmed =~ s/^\s+|\s+$//g;
-
-        if ($ka_trimmed =~ /^[+-]?(?:\d+\.?\d*|\d*\.\d+)(?:[eE][+-]?\d+)?$/ && 
-            $kb_trimmed =~ /^[+-]?(?:\d+\.?\d*|\d*\.\d+)(?:[eE][+-]?\d+)?$/) {
-            return $ka_trimmed <=> $kb_trimmed;
-        }
-        else {
-            return $ka cmp $kb;
-        }
-    } @items;
-
-    my $class = ref($self);
-    return $class->From(\@sorted);
+    return LTSV::LINQ::Ordered->_new_ordered(
+        \@items,
+        [{ sel => $key_selector, dir => 1, type => 'smart' }]
+    );
 }
 
-# OrderByDescending - sort descending
+# OrderByDescending - sort descending (smart comparison)
 sub OrderByDescending {
     my($self, $key_selector) = @_;
     my @items = $self->ToArray();
-    my @sorted = sort {
-        my $ka = $key_selector->($a);
-        my $kb = $key_selector->($b);
-        $ka = '' unless defined $ka;
-        $kb = '' unless defined $kb;
-
-        # Smart numeric/string comparison
-        # Supports: integers, decimals, negative numbers, exponential notation
-        # Handles leading/trailing whitespace
-        my $ka_trimmed = $ka;
-        my $kb_trimmed = $kb;
-        $ka_trimmed =~ s/^\s+|\s+$//g;
-        $kb_trimmed =~ s/^\s+|\s+$//g;
-
-        if ($ka_trimmed =~ /^[+-]?(?:\d+\.?\d*|\d*\.\d+)(?:[eE][+-]?\d+)?$/ && 
-            $kb_trimmed =~ /^[+-]?(?:\d+\.?\d*|\d*\.\d+)(?:[eE][+-]?\d+)?$/) {
-            return $kb_trimmed <=> $ka_trimmed;
-        }
-        else {
-            return $kb cmp $ka;
-        }
-    } @items;
-
-    my $class = ref($self);
-    return $class->From(\@sorted);
+    return LTSV::LINQ::Ordered->_new_ordered(
+        \@items,
+        [{ sel => $key_selector, dir => -1, type => 'smart' }]
+    );
 }
 
 # OrderByStr - sort ascending by string comparison
 sub OrderByStr {
     my($self, $key_selector) = @_;
     my @items = $self->ToArray();
-    my @sorted = sort {
-        my $ka = $key_selector->($a);
-        my $kb = $key_selector->($b);
-        $ka = '' unless defined $ka;
-        $kb = '' unless defined $kb;
-        $ka cmp $kb;
-    } @items;
-
-    my $class = ref($self);
-    return $class->From(\@sorted);
+    return LTSV::LINQ::Ordered->_new_ordered(
+        \@items,
+        [{ sel => $key_selector, dir => 1, type => 'str' }]
+    );
 }
 
 # OrderByStrDescending - sort descending by string comparison
 sub OrderByStrDescending {
     my($self, $key_selector) = @_;
     my @items = $self->ToArray();
-    my @sorted = sort {
-        my $ka = $key_selector->($a);
-        my $kb = $key_selector->($b);
-        $ka = '' unless defined $ka;
-        $kb = '' unless defined $kb;
-        $kb cmp $ka;
-    } @items;
-
-    my $class = ref($self);
-    return $class->From(\@sorted);
+    return LTSV::LINQ::Ordered->_new_ordered(
+        \@items,
+        [{ sel => $key_selector, dir => -1, type => 'str' }]
+    );
 }
 
 # OrderByNum - sort ascending by numeric comparison
 sub OrderByNum {
     my($self, $key_selector) = @_;
     my @items = $self->ToArray();
-    my @sorted = sort {
-        my $ka = $key_selector->($a);
-        my $kb = $key_selector->($b);
-        $ka = 0 unless defined $ka;
-        $kb = 0 unless defined $kb;
-        $ka <=> $kb;
-    } @items;
-
-    my $class = ref($self);
-    return $class->From(\@sorted);
+    return LTSV::LINQ::Ordered->_new_ordered(
+        \@items,
+        [{ sel => $key_selector, dir => 1, type => 'num' }]
+    );
 }
 
 # OrderByNumDescending - sort descending by numeric comparison
 sub OrderByNumDescending {
     my($self, $key_selector) = @_;
     my @items = $self->ToArray();
-    my @sorted = sort {
-        my $ka = $key_selector->($a);
-        my $kb = $key_selector->($b);
-        $ka = 0 unless defined $ka;
-        $kb = 0 unless defined $kb;
-        $kb <=> $ka;
-    } @items;
-
-    my $class = ref($self);
-    return $class->From(\@sorted);
+    return LTSV::LINQ::Ordered->_new_ordered(
+        \@items,
+        [{ sel => $key_selector, dir => -1, type => 'num' }]
+    );
 }
 
 # Reverse - reverse order
@@ -1241,7 +1175,175 @@ sub ForEach {
 
 1;
 
-__END__
+######################################################################
+#
+# LTSV::LINQ::Ordered - Ordered query supporting ThenBy/ThenByDescending
+#
+# Returned by OrderBy* methods.  Inherits all LTSV::LINQ methods via @ISA.
+# ThenBy* methods are only available on this class, mirroring the way
+# .NET LINQ's IOrderedEnumerable<T> exposes ThenBy/ThenByDescending while
+# plain IEnumerable<T> does not.
+#
+# Stability guarantee: every sort uses a Schwartzian-Transform-style
+# decorated array that appends the original element index as a final
+# tie-breaker.  This makes the multi-key sort completely stable on all
+# Perl versions including 5.005_03, where built-in sort stability is not
+# guaranteed.
+######################################################################
+
+package LTSV::LINQ::Ordered;
+
+# 5.005_03-compatible inheritance (no 'use parent', no 'our')
+@LTSV::LINQ::Ordered::ISA = ('LTSV::LINQ');
+
+# _new_ordered($items_aref, $specs_aref) - internal constructor
+#
+# $specs_aref is an arrayref of sort-spec hashrefs:
+#   { sel  => $code_ref,          # key selector: ($item) -> $key
+#     dir  => 1 or -1,            # 1 = ascending, -1 = descending
+#     type => 'smart'|'str'|'num' # comparison family
+#   }
+sub _new_ordered {
+    my($class, $items, $specs) = @_;
+    # Use _factory so that iterator() returns a fresh sorted iterator on
+    # each call (enables re-iteration, e.g. in GroupJoin result selectors).
+    # Methods like Take/Where/Select that call ref($self)->new(sub{...})
+    # will create a plain object with an {iterator} field (no _factory),
+    # so they are unaffected by this override.
+    return bless {
+        _items   => $items,
+        _specs   => $specs,
+        _factory => sub {
+            my @sorted = _perform_sort($items, $specs);
+            my $i = 0;
+            return sub { $i < scalar(@sorted) ? $sorted[$i++] : undef };
+        },
+    }, $class;
+}
+
+# _perform_sort($items_aref, $specs_aref) - core stable multi-key sort
+#
+# Decorated-array (Schwartzian Transform) technique:
+#   1. Build [ orig_index, [key1, key2, ..., keyN], item ] per element
+#   2. Sort by key1..keyN in sequence; original index as final tie-breaker
+#   3. Strip decoration and return plain item list
+#
+# The original-index tie-breaker guarantees stability on every Perl version.
+sub _perform_sort {
+    my($items, $specs) = @_;
+
+    # Step 1: decorate
+    my @decorated = map {
+        my $idx  = $_;
+        my $item = $items->[$idx];
+        my @keys = map { _extract_key($_->{sel}->($item), $_->{type}) } @{$specs};
+        [$idx, \@keys, $item]
+    } 0 .. $#{$items};
+
+    # Step 2: sort
+    my @sorted_dec = sort {
+        my $r = 0;
+        for my $i (0 .. $#{$specs}) {
+            my $cmp = _compare_keys($a->[1][$i], $b->[1][$i], $specs->[$i]{type});
+            if ($specs->[$i]{dir} < 0) { $cmp = -$cmp }
+            if ($cmp != 0) { $r = $cmp; last }
+        }
+        $r != 0 ? $r : ($a->[0] <=> $b->[0]);
+    } @decorated;
+
+    # Step 3: undecorate
+    return map { $_->[2] } @sorted_dec;
+}
+
+# _extract_key($raw_value, $type) - normalise one sort key
+#
+# Returns a scalar (num/str) or a two-element arrayref [flag, value]
+# for 'smart' type:
+#   [0, $numeric_val]  - key is numeric
+#   [1, $string_val ]  - key is string
+sub _extract_key {
+    my($val, $type) = @_;
+    $val = '' unless defined $val;
+    if ($type eq 'num') {
+        # Force numeric; undef/empty/non-numeric treated as 0
+        return defined($val) && length($val) ? $val + 0 : 0;
+    }
+    elsif ($type eq 'str') {
+        return "$val";
+    }
+    else {
+        # smart: detect whether value looks like a number
+        my $t = $val;
+        $t =~ s/^\s+|\s+$//g;
+        if ($t =~ /^[+-]?(?:\d+\.?\d*|\d*\.\d+)(?:[eE][+-]?\d+)?$/) {
+            return [0, $t + 0];
+        }
+        else {
+            return [1, "$val"];
+        }
+    }
+}
+
+# _compare_keys($ka, $kb, $type) - compare two extracted keys
+sub _compare_keys {
+    my($ka, $kb, $type) = @_;
+    if ($type eq 'num') {
+        return $ka <=> $kb;
+    }
+    elsif ($type eq 'str') {
+        return $ka cmp $kb;
+    }
+    else {
+        # smart: both are [flag, value] arrayrefs
+        my $fa = $ka->[0];  my $va = $ka->[1];
+        my $fb = $kb->[0];  my $vb = $kb->[1];
+        if    ($fa == 0 && $fb == 0) { return $va <=> $vb }  # both numeric
+        elsif ($fa == 1 && $fb == 1) { return $va cmp $vb }  # both string
+        else                         { return $fa <=> $fb  }  # mixed: numeric before string
+    }
+}
+
+# (No iterator() override needed: _factory in {_items,_specs,_factory} objects
+# is handled by LTSV::LINQ::iterator(), which calls _factory->() each time.
+# Objects produced by Take/Where/Select etc. via ref($self)->new(sub{...})
+# store their closure in {iterator} and do not have _factory, so they use
+# the normal non-re-entrant path.)
+
+# _thenby($key_selector, $dir, $type) - shared implementation for all ThenBy*
+#
+# Non-destructive: builds a new spec list and returns a new
+# LTSV::LINQ::Ordered object.  The original object is unchanged, so
+# branching sort chains work correctly:
+#
+#   my $by_dept = From(\@data)->OrderBy(sub { $_[0]{dept} });
+#   my $by_dept_name   = $by_dept->ThenBy(sub { $_[0]{name} });
+#   my $by_dept_salary = $by_dept->ThenByNum(sub { $_[0]{salary} });
+#   # $by_dept_name and $by_dept_salary are independent queries
+sub _thenby {
+    my($self, $key_selector, $dir, $type) = @_;
+    my @new_specs = (@{$self->{_specs}}, { sel => $key_selector, dir => $dir, type => $type });
+    return LTSV::LINQ::Ordered->_new_ordered($self->{_items}, \@new_specs);
+}
+
+# ThenBy - ascending secondary key, smart comparison
+sub ThenBy            { my($s,$k)=@_; $s->_thenby($k,  1, 'smart') }
+
+# ThenByDescending - descending secondary key, smart comparison
+sub ThenByDescending  { my($s,$k)=@_; $s->_thenby($k, -1, 'smart') }
+
+# ThenByStr - ascending secondary key, string comparison
+sub ThenByStr         { my($s,$k)=@_; $s->_thenby($k,  1, 'str')   }
+
+# ThenByStrDescending - descending secondary key, string comparison
+sub ThenByStrDescending { my($s,$k)=@_; $s->_thenby($k, -1, 'str') }
+
+# ThenByNum - ascending secondary key, numeric comparison
+sub ThenByNum         { my($s,$k)=@_; $s->_thenby($k,  1, 'num')   }
+
+# ThenByNumDescending - descending secondary key, numeric comparison
+sub ThenByNumDescending { my($s,$k)=@_; $s->_thenby($k, -1, 'num') }
+
+1;
 
 =encoding utf8
 
@@ -1251,7 +1353,7 @@ LTSV::LINQ - LINQ-style query interface for LTSV files
 
 =head1 VERSION
 
-Version 1.03
+Version 1.04
 
 =head1 SYNOPSIS
 
@@ -1288,7 +1390,7 @@ Version 1.03
 
 =item * L</DESCRIPTION>
 
-=item * L</METHODS> - Complete method reference (54 methods)
+=item * L</METHODS> - Complete method reference (60 methods)
 
 =item * L</EXAMPLES> - 8 practical examples
 
@@ -1330,11 +1432,11 @@ Key features:
 
 =item * B<DSL syntax> - Simple key-value filtering
 
-=item * B<54 LINQ methods> - Comprehensive query capabilities
+=item * B<60 LINQ methods> - Comprehensive query capabilities
 
 =item * B<Pure Perl> - No XS dependencies
 
-=item * B<Perl 5.5.3+> - Works on ancient and modern Perl
+=item * B<Perl 5.005_03+> - Works on ancient and modern Perl
 
 =back
 
@@ -1601,7 +1703,7 @@ L<https://learn.microsoft.com/en-us/dotnet/csharp/linq/>.
 
 =head2 Complete Method Reference
 
-This module implements 54 LINQ-style methods organized into 15 categories:
+This module implements 60 LINQ-style methods organized into 15 categories:
 
 =over 4
 
@@ -1615,7 +1717,7 @@ This module implements 54 LINQ-style methods organized into 15 categories:
 
 =item * B<Partitioning (4)>: Take, Skip, TakeWhile, SkipWhile
 
-=item * B<Ordering (7)>: OrderBy, OrderByDescending, OrderByStr, OrderByStrDescending, OrderByNum, OrderByNumDescending, Reverse
+=item * B<Ordering (13)>: OrderBy, OrderByDescending, OrderByStr, OrderByStrDescending, OrderByNum, OrderByNumDescending, Reverse, ThenBy, ThenByDescending, ThenByStr, ThenByStrDescending, ThenByNum, ThenByNumDescending
 
 =item * B<Grouping (1)>: GroupBy
 
@@ -1655,13 +1757,19 @@ B<Method Summary Table:>
   Skip                   Partitioning    Yes    Query
   TakeWhile              Partitioning    Yes    Query
   SkipWhile              Partitioning    Yes    Query
-  OrderBy                Ordering        No*    Query
-  OrderByDescending      Ordering        No*    Query
-  OrderByStr             Ordering        No*    Query
-  OrderByStrDescending   Ordering        No*    Query
-  OrderByNum             Ordering        No*    Query
-  OrderByNumDescending   Ordering        No*    Query
+  OrderBy                Ordering        No*    OrderedQuery
+  OrderByDescending      Ordering        No*    OrderedQuery
+  OrderByStr             Ordering        No*    OrderedQuery
+  OrderByStrDescending   Ordering        No*    OrderedQuery
+  OrderByNum             Ordering        No*    OrderedQuery
+  OrderByNumDescending   Ordering        No*    OrderedQuery
   Reverse                Ordering        No*    Query
+  ThenBy                 Ordering        No*    OrderedQuery
+  ThenByDescending       Ordering        No*    OrderedQuery
+  ThenByStr              Ordering        No*    OrderedQuery
+  ThenByStrDescending    Ordering        No*    OrderedQuery
+  ThenByNum              Ordering        No*    OrderedQuery
+  ThenByNumDescending    Ordering        No*    OrderedQuery
   GroupBy                Grouping        No*    Query
   Distinct               Set Operation   Yes    Query
   Union                  Set Operation   No*    Query
@@ -1697,6 +1805,8 @@ B<Method Summary Table:>
   ForEach                Utility         No     Void
 
   * Materializing operation (loads all data into memory)
+  OrderedQuery = LTSV::LINQ::Ordered (subclass of LTSV::LINQ;
+                 all LTSV::LINQ methods available plus ThenBy* methods)
 
 =head2 Data Source Methods
 
@@ -2162,33 +2272,49 @@ false, all remaining elements are included.
 
 =head2 Ordering Methods
 
-B<Sort stability:> All ordering methods use Perl's built-in C<sort>, which
-is guaranteed to be stable from Perl 5.8 onwards (equal elements retain
-their original relative order). On Perl 5.005_03 and 5.6, stability is
-implementation-specific; if stability matters on those versions, append a
-tie-breaking key that is unique per element.
+B<Sort stability:> C<OrderBy*> and C<ThenBy*> use a Schwartzian-Transform
+decorated-array technique that appends the original element index as a
+final tie-breaker.  This guarantees completely stable multi-key sorting on
+B<every Perl version including 5.005_03>, where built-in C<sort> stability
+is not guaranteed.
 
 B<Comparison type:> LTSV::LINQ provides three families:
 
 =over 4
 
-=item * C<OrderBy> / C<OrderByDescending>
+=item * C<OrderBy> / C<OrderByDescending> / C<ThenBy> / C<ThenByDescending>
 
 Smart comparison: numeric (C<E<lt>=E<gt>>) when both keys look numeric,
 string (C<cmp>) otherwise. Convenient for LTSV data where field values
 are always strings but commonly hold numbers.
 
-=item * C<OrderByStr> / C<OrderByStrDescending>
+=item * C<OrderByStr> / C<OrderByStrDescending> / C<ThenByStr> / C<ThenByStrDescending>
 
 Unconditional string comparison (C<cmp>). Use when keys must sort
 lexicographically regardless of content (e.g. version strings, codes).
 
-=item * C<OrderByNum> / C<OrderByNumDescending>
+=item * C<OrderByNum> / C<OrderByNumDescending> / C<ThenByNum> / C<ThenByNumDescending>
 
 Unconditional numeric comparison (C<E<lt>=E<gt>>). Use when keys are
-always numeric. Undefined values are treated as C<0>.
+always numeric. Undefined or empty values are treated as C<0>.
 
 =back
+
+B<IOrderedEnumerable:> C<OrderBy*> methods return a C<LTSV::LINQ::Ordered>
+object (a subclass of C<LTSV::LINQ>).  This mirrors the way .NET LINQ's
+C<OrderBy> returns C<IOrderedEnumerable<T>>, which exposes C<ThenBy> and
+C<ThenByDescending>.  All C<LTSV::LINQ> methods (C<Where>, C<Select>,
+C<Take>, etc.) are available on the returned object through inheritance.
+C<ThenBy*> methods are B<only> available on C<LTSV::LINQ::Ordered> objects,
+not on plain C<LTSV::LINQ> objects.
+
+B<Non-destructive:> C<ThenBy*> always returns a B<new> C<LTSV::LINQ::Ordered>
+object; the original is unchanged.  Branching sort chains work correctly:
+
+  my $by_dept = LTSV::LINQ->From(\@data)->OrderBy(sub { $_[0]{dept} });
+  my $asc  = $by_dept->ThenBy(sub    { $_[0]{name}   });
+  my $desc = $by_dept->ThenByNum(sub { $_[0]{salary} });
+  # $asc and $desc are completely independent queries
 
 =over 4
 
@@ -2197,8 +2323,7 @@ always numeric. Undefined values are treated as C<0>.
 Sort in ascending order using smart comparison: if both keys look like
 numbers (integers, decimals, negative, or exponential notation), numeric
 comparison (C<E<lt>=E<gt>>) is used; otherwise string comparison (C<cmp>)
-is used. This mirrors the natural Perl idiom of letting the data drive
-the comparison.
+is used. Returns a C<LTSV::LINQ::Ordered> object.
 
   ->OrderBy(sub { $_[0]{timestamp} })   # string keys: lexicographic
   ->OrderBy(sub { $_[0]{bytes} })       # "1024", "256" -> numeric (256, 1024)
@@ -2209,41 +2334,37 @@ C<OrderByStr> (always C<cmp>) or C<OrderByNum> (always C<E<lt>=E<gt>>).
 =item B<OrderByDescending($key_selector)>
 
 Sort in descending order using the same smart comparison as C<OrderBy>.
+Returns a C<LTSV::LINQ::Ordered> object.
 
   ->OrderByDescending(sub { $_[0]{count} })
-
-B<Note:> For explicit control use C<OrderByStrDescending> or
-C<OrderByNumDescending>.
 
 =item B<OrderByStr($key_selector)>
 
 Sort in ascending order using string comparison (C<cmp>) unconditionally.
-Use this when the keys must always be compared as strings, regardless of
-whether they happen to look like numbers.
+Returns a C<LTSV::LINQ::Ordered> object.
 
   ->OrderByStr(sub { $_[0]{code} })    # "10" lt "9" (lexicographic)
-  ->OrderByStr(sub { $_[0]{name} })
 
 =item B<OrderByStrDescending($key_selector)>
 
 Sort in descending order using string comparison (C<cmp>) unconditionally.
+Returns a C<LTSV::LINQ::Ordered> object.
 
   ->OrderByStrDescending(sub { $_[0]{name} })
 
 =item B<OrderByNum($key_selector)>
 
 Sort in ascending order using numeric comparison (C<E<lt>=E<gt>>)
-unconditionally. Use this when the keys are always numeric.
+unconditionally. Returns a C<LTSV::LINQ::Ordered> object.
 
   ->OrderByNum(sub { $_[0]{bytes} })   # 9 < 10 (numeric)
-  ->OrderByNum(sub { $_[0]{score} })
 
-B<Note:> Undefined values are treated as C<0>.
+B<Note:> Undefined or empty values are treated as C<0>.
 
 =item B<OrderByNumDescending($key_selector)>
 
 Sort in descending order using numeric comparison (C<E<lt>=E<gt>>)
-unconditionally.
+unconditionally. Returns a C<LTSV::LINQ::Ordered> object.
 
   ->OrderByNumDescending(sub { $_[0]{response_time} })
 
@@ -2252,6 +2373,45 @@ unconditionally.
 Reverse the order.
 
   ->Reverse()
+
+=item B<ThenBy($key_selector)>
+
+Add an ascending secondary sort key using smart comparison.  Must be
+called on a C<LTSV::LINQ::Ordered> object (i.e., after C<OrderBy*>).
+Returns a new C<LTSV::LINQ::Ordered> object; the original is unchanged.
+
+  ->OrderBy(sub { $_[0]{dept} })->ThenBy(sub { $_[0]{name} })
+
+=item B<ThenByDescending($key_selector)>
+
+Add a descending secondary sort key using smart comparison.
+
+  ->OrderBy(sub { $_[0]{dept} })->ThenByDescending(sub { $_[0]{salary} })
+
+=item B<ThenByStr($key_selector)>
+
+Add an ascending secondary sort key using string comparison (C<cmp>).
+
+  ->OrderByStr(sub { $_[0]{dept} })->ThenByStr(sub { $_[0]{code} })
+
+=item B<ThenByStrDescending($key_selector)>
+
+Add a descending secondary sort key using string comparison (C<cmp>).
+
+  ->OrderByStr(sub { $_[0]{dept} })->ThenByStrDescending(sub { $_[0]{name} })
+
+=item B<ThenByNum($key_selector)>
+
+Add an ascending secondary sort key using numeric comparison (C<E<lt>=E<gt>>).
+
+  ->OrderByStr(sub { $_[0]{dept} })->ThenByNum(sub { $_[0]{salary} })
+
+=item B<ThenByNumDescending($key_selector)>
+
+Add a descending secondary sort key using numeric comparison (C<E<lt>=E<gt>>).
+Undefined or empty values are treated as C<0>.
+
+  ->OrderByStr(sub { $_[0]{host} })->ThenByNumDescending(sub { $_[0]{bytes} })
 
 =back
 
@@ -4361,7 +4521,7 @@ This policy is verified by C<t/010_ascii_only.t>.
 
 You may notice:
 
-  $VERSION = '1.03';
+  $VERSION = '1.04';
   $VERSION = $VERSION;
 
 This is B<intentional>, not a typo. Under C<use strict>, a variable used
@@ -4605,43 +4765,6 @@ any realistic sequence length. On 32-bit Perl, the floating-point C<NV>
 provides 53 bits of integer precision (~9 quadrillion), far exceeding
 any in-memory sequence. There is no semantic gap between C<Count> and
 C<LongCount> in Perl.
-
-=back
-
-=head3 Compound Ordering Methods
-
-=over 4
-
-=item * B<ThenBy>
-
-In .NET LINQ, C<OrderBy> returns an C<IOrderedEnumerable<T>>, a special
-interface that exposes C<ThenBy> and C<ThenByDescending> for adding
-secondary sort keys. C<ThenBy> applies a secondary ascending sort key
-to an already-ordered sequence.
-
-LTSV::LINQ's C<OrderBy> materializes the sequence into a Perl array and
-sorts it immediately. There is no C<IOrderedEnumerable> intermediate
-type. Multi-key sorting can be achieved by passing a compound comparator
-to C<OrderBy>:
-
-  # Sort by status descending (numeric), then by url ascending (string):
-  $query->OrderBy(sub {
-      sprintf('%04d|%s', 9999 - ($_[0]{status} + 0), $_[0]{url})
-  })
-
-Or for purely string keys, use string comparison directly:
-
-  # Sort by method ascending, then by url ascending:
-  $query->OrderBy(sub { "$_[0]{method}|$_[0]{url}" })
-
-Or by chaining C<OrderBy> calls (though this re-sorts the full array each
-time, which is less efficient than a single compound sort). Future versions
-may introduce a C<ThenBy> method if demand arises.
-
-=item * B<ThenByDescending>
-
-Secondary descending sort key, analogous to C<ThenBy>. Same rationale
-as C<ThenBy> above.
 
 =back
 

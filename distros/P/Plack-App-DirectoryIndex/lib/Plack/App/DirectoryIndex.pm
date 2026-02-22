@@ -6,139 +6,9 @@ use strict;
 use warnings;
 
 use Plack::Util::Accessor qw[dir_index pretty];
-use URI::Escape;
+use WebServer::DirIndex;
 
-our $VERSION = '0.0.4';
-
-sub standard_css {
-  return <<CSS;
-table {
-  width: 100%;
-}
-.name {
-  text-align:l eft;
-}
-.size, .mtime {
-  text-align: right;
-}
-.type {
-  width: 11em;
-}
-.mtime {
-  width: 15em;
-}
-CSS
-}
-
-sub pretty_css {
-  return <<CSS;
-body {
-  color: #000;
-  background-color: #fff; 
-  font-family: Calibri, Candara, Segoe, Segoe UI, Helvetica Neue, Helvetica, Optima, Arial, sans-serif;
-  font-size: normal 1em sans-serif;
-  text-align: center;
-  padding: 0;
-  margin: 0;
-}
-
-h2 {
- font-size: 2.000em;
- font-weight: 700;
-}
-
-table {
-  width: 90%;
-  margin: 3em;
-  border: 1px solid #aaa;
-  border-collapse: collapse;
-  background-color: #eee;
-}
-
-thead {
-  background-color: #bbb;
-  font-weight: 700;
-  font-size: 1.300em;
-}
-
-td, th {
-  padding: 1em;
-  text-align: left;
-  border-bottom: 1px solid #999999;
-  color: #000;
-}
-
-tr:nth-child(even) {
-  background: #ccc;
-}
-
-.size {
-  text-align: right;
-  padding-right: 1.700em;
-}
-
-a:link {
-  font-size: 1.200em;
-  font-weight: 500;
-  color: #000;
-  text-decoration: none;
-}
-
-a:link:hover {
-  text-decoration: underline;
-}
-
-a:visited {
-  font-size: 1.200em;
-  font-weight: 500;
-  color: #301934;
-  text-decoration: none;
-}
-CSS
-}
-
-sub file_html {
-  return <<FILE;
-  <tr>
-    <td class='name'><a href='%s'>%s</a></td>
-    <td class='size'>%s</td>
-    <td class='type'>%s</td>
-    <td class='mtime'>%s</td>
-  </tr>
-FILE
-}
-
-sub dir_html {
-  return <<DIR;
-<html>
-  <head>
-    <title>%s</title>
-    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
-    <style type='text/css'>
-%s
-    </style>
-  </head>
-  <body>
-    <h1>%s</h1>
-    <hr />
-    <table>
-      <thead>
-        <tr>
-          <th class='name'>Name</th>
-          <th class='size'>Size</th>
-          <th class='type'>Type</th>
-          <th class='mtime'>Last Modified</th>
-        </tr>
-      </thead>
-      <tbody>
-%s
-      </tbody>
-    </table>
-    <hr />
-  </body>
-</html>
-DIR
-}
+our $VERSION = '0.1.0';
 
 # NOTE: Copied from Plack::App::Directory as that module makes it
 # impossible to override the HTML.
@@ -163,42 +33,9 @@ sub serve_path {
     return $self->return_dir_redirect($env);
   }
  
-  my @files = ([ "../", "Parent Directory", '', '', '' ]);
- 
-  my $dh = DirHandle->new($dir);
-  my @children;
-  while (defined(my $ent = $dh->read)) {
-    next if $ent eq '.' or $ent eq '..';
-    push @children, $ent;
-  }
- 
-  for my $basename (sort { $a cmp $b } @children) {
-    my $file = "$dir/$basename";
-    my $url = $dir_url . $basename;
- 
-    my $is_dir = -d $file;
-    my @stat = stat _;
- 
-    $url = join '/', map {uri_escape($_)} split m{/}, $url;
- 
-    if ($is_dir) {
-      $basename .= "/";
-      $url      .= "/";
-    }
- 
-    my $mime_type = $is_dir ? 'directory' : ( Plack::MIME->mime_type($file) || 'text/plain' );
-    push @files, [ $url, $basename, $stat[7], $mime_type, HTTP::Date::time2str($stat[9]) ];
-  }
- 
-  my $path  = Plack::Util::encode_html("Index of $env->{PATH_INFO}");
-  my $files = join "\n", map {
-    my $f = $_;
-    sprintf $self->file_html, map Plack::Util::encode_html($_), @$f;
-  } @files;
-  my $page  = sprintf $self->dir_html, $path,
-                      ($self->pretty ? $self->pretty_css : $self->standard_css),
-                      $path, $files;
- 
+  my $di   = WebServer::DirIndex->new(dir => $dir, dir_url => $dir_url);
+  my $page = $di->to_html($env->{PATH_INFO}, $self->pretty);
+
   return [ 200, ['Content-Type' => 'text/html; charset=utf-8'], [ $page ] ];
 }
 
@@ -232,7 +69,13 @@ Plack::App::DirectoryIndex - Serve static files from document root with an index
     root      => '/path/to/htdocs',
     dir_index => '',
   })->to_app;
-  
+
+  # Use the prettier CSS for directory listings
+  my $app = Plack::App::DirectoryIndex->new({
+    root   => '/path/to/htdocs',
+    pretty => 1,
+  })->to_app;
+
 
 =head1 DESCRIPTION
  
@@ -255,6 +98,12 @@ The name of the directory index file that you want to use. This will
 default to using C<index.html>. You can turn it off by setting this
 value to an empty string (but if you don't want a default index file,
 then you should probably use L<Plack::App::Directory> instead).
+
+=item pretty
+
+If set to a true value, the directory listing page will be rendered
+using an enhanced CSS stylesheet for a more attractive appearance.
+Defaults to false (i.e. the standard minimal CSS is used).
 
 =back
  

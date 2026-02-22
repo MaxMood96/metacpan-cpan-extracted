@@ -75,7 +75,7 @@ sub do_test
 		},
 		opts => {
 		},
-		max_iter => 1000,
+		max_iter => 2000,
 		f => sub {
 				my $v = shift;
 				$count++;

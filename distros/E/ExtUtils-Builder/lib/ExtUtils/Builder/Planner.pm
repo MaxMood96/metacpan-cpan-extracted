@@ -1,5 +1,5 @@
 package ExtUtils::Builder::Planner;
-$ExtUtils::Builder::Planner::VERSION = '0.019';
+$ExtUtils::Builder::Planner::VERSION = '0.020';
 use strict;
 use warnings;
 
@@ -118,7 +118,7 @@ sub _make_pattern {
 			return sub {
 				my ($input) = @_;
 				my $filename = ExtUtils::Builder::Util::native_to_unix_path($input);
-				return if substr($filename, 0, length $options{dir}) ne $dir;
+				return if substr($filename, 0, length $dir) ne $dir;
 				return File::Basename::basename($filename) =~ $file;
 			};
 		} else {
@@ -133,7 +133,7 @@ sub _make_pattern {
 		return sub {
 			my ($input) = @_;
 			my $filename = ExtUtils::Builder::Util::native_to_unix_path($input);
-			return substr($filename, 0, length $options{dir}) eq $options{dir};
+			return substr($filename, 0, length $dir) eq $dir;
 		};
 	} else {
 		Carp::croak("Unknown pattern type");
@@ -255,7 +255,7 @@ ExtUtils::Builder::Planner - An ExtUtils::Builder Plan builder
 
 =head1 VERSION
 
-version 0.019
+version 0.020
 
 =head1 SYNOPSIS
 

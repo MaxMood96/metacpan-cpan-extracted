@@ -58,7 +58,7 @@ resque-queue - CLI to examine and delete queues
 
 =head1 VERSION
 
-version 0.42
+version 0.44
 
 =head1 SYNOPSIS
 

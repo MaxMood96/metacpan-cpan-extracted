@@ -1,4 +1,4 @@
-# Yote-SQLObjectStore HOWTO
+# Yote-SQLObjectStore HOWTO (v0.03)
 
 A practical guide to getting started with Yote-SQLObjectStore.
 
@@ -34,7 +34,7 @@ use base 'Yote::SQLObjectStore::Postgres::Obj';
 
 our %cols = (
     users    => '*HASH<256>_*MyApp::User',
-    settings => '*HASH<256>_VARCHAR(2000)',
+    settings => '*HASH<256>_TEXT',
 );
 1;
 
@@ -64,7 +64,7 @@ our %cols = (
 1;
 ```
 
-Replace `Postgres` with `MariaDB` or `SQLite` depending on your backend. The `%cols` definitions stay the same.
+Replace `Postgres` with `MariaDB` or `SQLite` depending on your backend. The `%cols` definitions stay the same — column types use ANSI SQL standard names that each backend translates to native types automatically.
 
 ### 4. Connect and Create Tables
 
@@ -334,30 +334,70 @@ if ($@) {
 
 ### Scalar Types
 
-Any SQL column type works:
+Scalar types use ANSI SQL standard names. Each backend translates
+them to native types automatically, so the same `%cols` works on
+any backend.
 
-| Type | Example |
-|------|---------|
-| `VARCHAR(N)` | `'VARCHAR(256)'` |
-| `TEXT` | `'TEXT'` |
-| `INT` | `'INT'` |
-| `BIGINT` | `'BIGINT'` |
-| `FLOAT` | `'FLOAT'` |
-| `BOOLEAN` | `'BOOLEAN'` |
-| `DECIMAL(M,N)` | `'DECIMAL(10,2)'` |
+#### Text
+
+| Type | Description |
+|------|-------------|
+| `TEXT` | Variable-length text, no length limit |
+| `VARCHAR(N)` | Variable-length text, max N characters |
+
+`TEXT` is the general-purpose string type. Use `VARCHAR(N)` when you
+want to express a maximum length. MariaDB and PostgreSQL enforce the
+limit; SQLite preserves the declaration but treats it as TEXT affinity.
+
+#### Numeric
+
+| Type | Description |
+|------|-------------|
+| `INTEGER` | Standard integer (4 bytes on most backends) |
+| `BIGINT` | Large integer (8 bytes) |
+| `SMALLINT` | Small integer (2 bytes) |
+| `FLOAT` | Single-precision floating point |
+| `DOUBLE` | Double-precision floating point |
+| `DECIMAL(M,D)` | Exact decimal, M total digits, D after decimal |
+
+#### Other
+
+| Type | Description |
+|------|-------------|
+| `BOOLEAN` | True/false value |
+| `BLOB` | Binary data |
+| `TIMESTAMP` | Date and time |
+| `DATE` | Date only |
+
+#### Backend Type Mapping
+
+| Standard | SQLite | MariaDB | PostgreSQL |
+|----------|--------|---------|------------|
+| `TEXT` | TEXT | TEXT | TEXT |
+| `VARCHAR(N)` | VARCHAR(N) | VARCHAR(N) | VARCHAR(N) |
+| `INTEGER` | INTEGER | INT | INTEGER |
+| `BIGINT` | INTEGER | BIGINT | BIGINT |
+| `SMALLINT` | INTEGER | SMALLINT | SMALLINT |
+| `FLOAT` | REAL | FLOAT | REAL |
+| `DOUBLE` | REAL | DOUBLE | DOUBLE PRECISION |
+| `DECIMAL(M,D)` | NUMERIC | DECIMAL(M,D) | DECIMAL(M,D) |
+| `BOOLEAN` | INTEGER | TINYINT(1) | BOOLEAN |
+| `BLOB` | BLOB | BLOB | BYTEA |
+| `TIMESTAMP` | TEXT | TIMESTAMP | TIMESTAMP |
+| `DATE` | TEXT | DATE | DATE |
 
 ### Reference Types
 
-All reference types start with `*`:
+All reference types start with `*` and store object IDs internally:
 
 | Syntax | Meaning | Example |
 |--------|---------|---------|
 | `*PkgName` | Typed object reference | `'*MyApp::User'` |
 | `*` | Any object reference | `'*'` |
-| `*ARRAY_TYPE` | Array of values or refs | `'*ARRAY_VARCHAR(100)'` |
+| `*ARRAY_<type>` | Array of values or refs | `'*ARRAY_VARCHAR(100)'` |
 | `*ARRAY_*PkgName` | Array of typed objects | `'*ARRAY_*MyApp::Post'` |
 | `*ARRAY_*` | Array of any reference | `'*ARRAY_*'` |
-| `*HASH<N>_TYPE` | Hash with max key size N | `'*HASH<256>_VARCHAR(100)'` |
+| `*HASH<N>_<type>` | Hash with max key size N | `'*HASH<256>_VARCHAR(100)'` |
 | `*HASH<N>_*PkgName` | Hash of typed objects | `'*HASH<256>_*MyApp::User'` |
 | `*HASH<N>_*` | Hash of any reference | `'*HASH<256>_*'` |
 
@@ -395,4 +435,4 @@ To switch backends, change two things:
 1. The flavor string passed to `Yote::SQLObjectStore->new`
 2. The base class in your object packages
 
-The `%cols` definitions, path operations, and all store API calls remain identical across backends.
+The `%cols` definitions, path operations, and all store API calls remain identical across backends. Column types use ANSI SQL standard names and are automatically translated to native types for each backend (see [Column Type Reference](#column-type-reference)).

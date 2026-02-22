@@ -72,6 +72,19 @@ subtest 'path parameters' => sub {
       ],
     },
     {
+      name => 'non-ascii characters in path captures must be percent-encoded',
+      param_obj => { name => 'color', content => { 'application/json' => { schema => {} } } },
+      input => 'cølör',
+      errors => [
+        {
+          instanceLocation => '/request/uri/path/color',
+          keywordLocation => $keyword_path,
+          absoluteKeywordLocation => $openapi->openapi_uri.'#'.$keyword_path,
+          error => 'non-ascii character detected in parameter value: not deserializable',
+        },
+      ],
+    },
+    {
       name => 'numeric string',
       param_obj => { name => 'json_content', content => { 'application/json' => { schema => {} } } },
       input => '3',
@@ -80,46 +93,84 @@ subtest 'path parameters' => sub {
 
     # style=simple
 
-    # style, explode, deserialized data, serialized string
-    [ 'simple', true,  undef, '' ],
-    [ 'simple', true,  0, '0' ],
-    [ 'simple', true,  1, '1' ],
-    [ 'simple', true,  false, '' ],
-    [ 'simple', true,  false, '0' ],
-    [ 'simple', true,  true, '1' ],
-    [ 'simple', true,  false, 'false' ],
-    [ 'simple', true,  true, 'true' ],
-    [ 'simple', true,  0, '0' ],
-    [ 'simple', true,  1, '1' ],
-    [ 'simple', true,  3, '3' ],
-    [ 'simple', true,  -42, '-42' ],
-    [ 'simple', true,  '', '' ],
-    [ 'simple', true,  'red', 'red' ],
-    [ 'simple', true,  'red,green', 'red%2Cgreen' ],
-    [ 'simple', true,  " i have spaces  \t ", " i have spaces  \t " ],
-    [ 'simple', true,  ' red,  green ', ' red,  green ' ],
-    [ 'simple', true,  'red﹠green', uri_encode('red﹠green') ],
-    [ 'simple', false, [], '' ],
-    [ 'simple', true,  [], '' ],
-    [ 'simple', false, {}, '' ],
-    [ 'simple', true,  {}, '' ],
-    [ 'simple', false, [ '', '', '' ], ',,' ],
-    [ 'simple', true,  [ '', '', '' ], ',,' ],
-    [ 'simple', false, [ 'red' ], 'red' ],
-    [ 'simple', true,  [ 'red' ], 'red' ],
-    [ 'simple', false, [ 'red,green', 'blue' ], 'red%2Cgreen,blue' ],
-    [ 'simple', true,  [ 'red,green', 'blue' ], 'red%2Cgreen,blue' ],
-    [ 'simple', false, [ qw(blue black brown) ], 'blue,black,brown' ],
-    [ 'simple', true,  [ qw(blue black brown) ], 'blue,black,brown' ],
-    [ 'simple', false, { R => '', G => '', B => '' }, 'R,,G,,B,' ],
-    [ 'simple', true,  { R => '', G => '', B => '' }, 'R,G,B' ],
-    [ 'simple', false, { R => '100', G => '200', B => '' }, 'R,100,G,200,B,' ],
-    [ 'simple', true,  { R => '100', G => '200', B => '' }, 'R=100,G=200,B' ],
-    [ 'simple', false, { qw(R 100 G 200 B 150) }, 'R,100,G,200,B,150' ],
-    [ 'simple', true,  { qw(R 100 G 200 B 150) }, 'R=100,G=200,B=150' ],
-    [ 'simple', false, { 'R,X' => '100', G => '200', 'B,Y' => '150' }, 'R%2CX,100,G,200,B%2CY,150' ],
-    [ 'simple', true,  { 'R,X' => '100', G => '200', 'B=Y' => '150' }, 'R%2CX=100,G=200,B%3DY=150' ],
+    [
+      [ qw(style content input) ],
+      [ 'simple', undef, '' ],        # not reversible
+      [ 'simple', 0, '0' ],
+      [ 'simple', 1, '1' ],
+      [ 'simple', false, '' ],        # not reversible
+      [ 'simple', false, '0' ],
+      [ 'simple', true, '1' ],
+      [ 'simple', false, 'false' ],   # not reversible
+      [ 'simple', true, 'true' ],     # not reversible
+      [ 'simple', 0, '0' ],
+      [ 'simple', 1, '1' ],
+      [ 'simple', 3, '3' ],
+      [ 'simple', -42, '-42' ],
+      [ 'simple', '', '' ],
+      [ 'simple', 'red', 'red' ],
+      [ 'simple', 'red,green', 'red%2Cgreen' ],
+      [ 'simple', 'red+green', 'red+green' ],
+      [ 'simple', 'red+green', 'red%2Bgreen' ],
+      # ? and # must be escaped as they signal the end of the path section of the URI
+      [ 'simple', 'red?green', 'red%3Fgreen' ],
+      [ 'simple', 'red#green', 'red%23green' ],
+      [ 'simple', 'red?green&blue', 'red%3Fgreen&blue' ],
+      [ 'simple', 'red?green&blue', 'red%3Fgreen%26blue' ],
+      [ 'simple', 'red?green&blue#black', 'red%3Fgreen&blue%23black' ],
+      [ 'simple', 'red%green', 'red%25green' ],
+      [ 'simple', " i have spaces  \t ", " i have spaces  \t " ],
+      [ 'simple', ' red,  green ', ' red,  green ' ],
+      [ 'simple', 'red﹠green', "red%EF%B9%A0green" ],
+    ],
+    [
+      [ qw(style explode content input) ],
+      [ 'simple', false, [], '' ],
+      [ 'simple', true,  [], '' ],
+      [ 'simple', false, {}, '' ],
+      [ 'simple', true,  {}, '' ],
+      [ 'simple', false, [ '', '', '' ], ',,' ],
+      [ 'simple', true,  [ '', '', '' ], ',,' ],
+      [ 'simple', false, [ 'red' ], 'red' ],
+      [ 'simple', true,  [ 'red' ], 'red' ],
+      # , must be escaped to not be treated as a delimiter
+      [ 'simple', false, [ 'red,green', 'blue' ], 'red%2Cgreen,blue' ],
+      [ 'simple', true,  [ 'red,green', 'blue' ], 'red%2Cgreen,blue' ],
+      [ 'simple', false, [ qw(blue black brown) ], 'blue,black,brown' ],
+      [ 'simple', true,  [ qw(blue black brown) ], 'blue,black,brown' ],
+      [ 'simple', false, { R => '', G => '', B => '' }, 'R,,G,,B,' ],
+      [ 'simple', true,  { R => '', G => '', B => '' }, 'R,G,B' ],
 
+      [ 'simple', false, { foo => 'bar', baz => '' }, 'foo,bar,baz,' ],
+      [ 'simple', true,  { foo => 'bar', baz => '' }, 'foo=bar,baz' ],
+      [ 'simple', false, { 'foo=bar' => 'baz', bloop => '' },                'foo=bar,baz,bloop,' ],
+      [ 'simple', true,  { foo => 'bar', baz => '', bloop => '', '' => '' }, 'foo=bar,baz,bloop,' ],
+      [ 'simple', false, { foo => 'bar=baz', bloop => '' },                  'foo,bar=baz,bloop,' ],
+      [ 'simple', true,  { foo => '', bar => 'baz', bloop => '', '' => '' }, 'foo,bar=baz,bloop,' ],
+      [ 'simple', false, { 'foo=bar=baz' => 'bloop' },                       'foo=bar=baz,bloop' ],
+      [ 'simple', true,  { foo => 'bar=baz' => bloop => '' },                'foo=bar=baz,bloop' ],
+
+      [ 'simple', false, { R => '100', G => '200', B => '' }, 'R,100,G,200,B,' ],
+      [ 'simple', true,  { R => '100', G => '200', B => '' }, 'R=100,G=200,B' ],
+      [ 'simple', false, { qw(R 100 G 200 B 150) }, 'R,100,G,200,B,150' ],
+      [ 'simple', true,  { qw(R 100 G 200 B 150) }, 'R=100,G=200,B=150' ],
+      [ 'simple', false, { 'R,X' => '100', G => '200', 'B,Y' => '150' }, 'R%2CX,100,G,200,B%2CY,150' ],
+      [ 'simple', true,  { 'R,X' => '100', G => '200', 'B=Y' => '150' }, 'R%2CX=100,G=200,B%3DY=150' ],
+    ],
+
+    {
+      name => 'non-ascii characters in path captures must be percent-encoded',
+      param_obj => { name => 'color' },
+      input => 'cølör',
+      errors => [
+        {
+          instanceLocation => '/request/uri/path/color',
+          keywordLocation => $keyword_path,
+          absoluteKeywordLocation => $openapi->openapi_uri.'#'.$keyword_path,
+          error => 'non-ascii character detected in parameter value: not deserializable',
+        },
+      ],
+    },
     {
       name => 'any type is permitted, default to string',
       param_obj => { name => 'color', schema => {} },
@@ -153,23 +204,10 @@ subtest 'path parameters' => sub {
       ],
     },
     {
-      name => 'string with spaces',
-      param_obj => { name => 'spaces' },
-      input => " i have spaces  \t ",
-      content => " i have spaces  \t ",
-    },
-    {
       name => 'number or string prefers number',
       param_obj => { name => 'color', schema => { type => [ qw(string number) ] } },
       input => '3',
       content => 3,
-    },
-    {
-      # we do not normalize whitespace in path parameters
-      name => 'comma-separated string',
-      param_obj => { name => 'color' },
-      input => ' red,  green ',
-      content => ' red,  green ',
     },
     {
       name => 'explode=false, array with non-string items',
@@ -188,8 +226,8 @@ subtest 'path parameters' => sub {
     {
       name => 'explode=false, array with non-ascii name and values',
       param_obj => { name => 'cølör', schema => { type => 'array' } },
-      input => 'blue%E2%88%92black,blackish%2Cgreen,100%F0%9D%91%A5brown',
-      content => [ 'blue−black', 'blackish,green', '100𝑥brown' ],
+      input => 'blue%E2%88%92black,blackish%2Cgreen,100%F0%9D%91%A5brown=fl%C2%A1p',
+      content => [ 'blue−black', 'blackish,green', '100𝑥brown=fl¡p' ],
     },
     {
       name => 'explode=true, array with non-string items',
@@ -208,8 +246,8 @@ subtest 'path parameters' => sub {
     {
       name => 'explode=true, array with non-ascii name and values',
       param_obj => { name => 'cølör', explode => true, schema => { type => 'array' } },
-      input => 'blue%E2%88%92black,blackish%2Cgreen,100%F0%9D%91%A5brown',
-      content => [ 'blue−black', 'blackish,green', '100𝑥brown' ],
+      input => 'blue%E2%88%92black,blackish%2Cgreen,100%F0%9D%91%A5brown=fl%C2%A1p',
+      content => [ 'blue−black', 'blackish,green', '100𝑥brown=fl¡p' ],
     },
     {
       name => 'string or object prefers object',
@@ -322,42 +360,47 @@ subtest 'path parameters' => sub {
 
     # style=matrix
 
-    # style, explode, deserialized data, serialized string
-    [ 'matrix', true,  undef, '' ],
-    [ 'matrix', true,  0, ';color=0' ],
-    [ 'matrix', true,  1, ';color=1' ],
-    [ 'matrix', true,  false, ';color' ],
-    [ 'matrix', true,  false, ';color=0' ],
-    [ 'matrix', true,  true, ';color=1' ],
-    [ 'matrix', true,  false, ';color=false' ],
-    [ 'matrix', true,  true, ';color=true' ],
-    [ 'matrix', true,  3, ';color=3' ],
-    [ 'matrix', true,  '', ';color' ],
-    [ 'matrix', true,  'red', ';color=red' ],
-    [ 'matrix', true,  'red;green=blue', ';color=red%3Bgreen%3Dblue' ],
-    [ 'matrix', false, [], '' ],
-    [ 'matrix', true,  [], '' ],
-    [ 'matrix', false, {}, '' ],
-    [ 'matrix', true,  {}, '' ],
-    [ 'matrix', false, [], ';color' ],  # not reversible
-    [ 'matrix', true,  [''], ';color' ],
-    [ 'matrix', false, {}, ';color' ],  # not reversible
-    [ 'matrix', true,  {}, ';' ],        # ""
-    [ 'matrix', false, [ '', '', '' ], ';color=,,' ],
-    [ 'matrix', true,  [ '', '', '' ], ';color;color;color' ],
-    [ 'matrix', false, [ qw(blue black brown) ], ';color=blue,black,brown' ],
-    [ 'matrix', true,  [ qw(blue black brown) ], ';color=blue;color=black;color=brown' ],
-    [ 'matrix', false, [ 'red,green;black', 'blue' ], ';color=red%2Cgreen%3Bblack,blue' ],
-    [ 'matrix', true,  [ 'red,green;black', 'blue' ], ';color=red%2Cgreen%3Bblack;color=blue' ],
-    [ 'matrix', false, { R => '', G => '', B => '' }, ';color=R,,G,,B,' ],
-    [ 'matrix', true,  { R => '', G => '', B => '' }, ';R;G;B' ],
-    [ 'matrix', false, { R => '100', G => '200', B => '' }, ';color=R,100,G,200,B,' ],
-    [ 'matrix', true,  { R => '100', G => '200', B => '' }, ';R=100;G=200;B' ],
-    [ 'matrix', false, { qw(R 100 G 200 B 150) }, ';color=R,100,G,200,B,150' ],
-    [ 'matrix', true,  { qw(R 100 G 200 B 150) }, ';R=100;G=200;B=150' ],
-    [ 'matrix', false, { 'R,X' => '100', G => '200', 'B,Y' => '150' }, ';color=R%2CX,100,G,200,B%2CY,150' ],
-    [ 'matrix', true,  { 'R,X' => '100', G => '200', 'B=Y' => '150' }, ';R%2CX=100;G=200;B%3DY=150' ],
-    [ 'matrix', true,  { color => 'brown' }, ';color=blue;color=black;color=brown' ],
+    [
+      [ qw(style content input) ],
+      [ 'matrix', undef, '' ],
+      [ 'matrix', 0, ';color=0' ],
+      [ 'matrix', 1, ';color=1' ],
+      [ 'matrix', false, ';color' ],         # not reversible
+      [ 'matrix', false, ';color=0' ],
+      [ 'matrix', true, ';color=1' ],
+      [ 'matrix', false, ';color=false' ],   # not reversible
+      [ 'matrix', true, ';color=true' ],     # not reversible
+      [ 'matrix', 3, ';color=3' ],
+      [ 'matrix', '', ';color' ],
+      [ 'matrix', 'red', ';color=red' ],
+      [ 'matrix', 'red;green=blue', ';color=red%3Bgreen%3Dblue' ],
+    ],
+    [
+      [ qw(style explode content input) ],
+      [ 'matrix', false, [], '' ],
+      [ 'matrix', true,  [], '' ],
+      [ 'matrix', false, {}, '' ],
+      [ 'matrix', true,  {}, '' ],
+      [ 'matrix', false, [], ';color' ],    # not reversible
+      [ 'matrix', true,  [''], ';color' ],
+      [ 'matrix', false, {}, ';color' ],    # not reversible
+      [ 'matrix', true,  {}, ';' ],         # not reversible
+      [ 'matrix', false, [ '', '', '' ], ';color=,,' ],
+      [ 'matrix', true,  [ '', '', '' ], ';color;color;color' ],
+      [ 'matrix', false, [ qw(blue black brown) ], ';color=blue,black,brown' ],
+      [ 'matrix', true,  [ qw(blue black brown) ], ';color=blue;color=black;color=brown' ],
+      [ 'matrix', false, [ 'red,green;black', 'blue' ], ';color=red%2Cgreen%3Bblack,blue' ],
+      [ 'matrix', true,  [ 'red,green;black', 'blue' ], ';color=red%2Cgreen%3Bblack;color=blue' ],
+      [ 'matrix', false, { R => '', G => '', B => '' }, ';color=R,,G,,B,' ],
+      [ 'matrix', true,  { R => '', G => '', B => '' }, ';R;G;B' ],
+      [ 'matrix', false, { R => '100', G => '200', B => '' }, ';color=R,100,G,200,B,' ],
+      [ 'matrix', true,  { R => '100', G => '200', B => '' }, ';R=100;G=200;B' ],
+      [ 'matrix', false, { qw(R 100 G 200 B 150) }, ';color=R,100,G,200,B,150' ],
+      [ 'matrix', true,  { qw(R 100 G 200 B 150) }, ';R=100;G=200;B=150' ],
+      [ 'matrix', false, { 'R,X' => '100', G => '200', 'B,Y' => '150' }, ';color=R%2CX,100,G,200,B%2CY,150' ],
+      [ 'matrix', true,  { 'R,X' => '100', G => '200', 'B=Y' => '150' }, ';R%2CX=100;G=200;B%3DY=150' ],
+      [ 'matrix', true,  { color => 'brown' }, ';color=blue;color=black;color=brown' ],
+    ],
 
     {
       name => 'any type is permitted, default to string',
@@ -407,7 +450,7 @@ subtest 'path parameters' => sub {
     {
       name => 'string with non-ascii name and value',
       param_obj => { name => 'cølör', style => 'matrix' },
-      input => uri_encode(';cølör=red﹠green'), # ; and = are not encoded
+      input => uri_encode(';cølör=red﹠green'),     # ; and = are in the reserved set and not encoded
       content => 'red﹠green',
     },
     {
@@ -479,7 +522,7 @@ subtest 'path parameters' => sub {
     {
       name => 'explode=true, array with non-ascii name and values',
       param_obj => { name => 'cølör', style => 'matrix', explode => true, schema => { type => 'array' } },
-      input => ';c%C3%B8l%C3%B6r=blue%E2%88%92black;c%C3%B8l%C3%B6r=blackish%2Cgreen;c%C3%B8l%C3%B6r=100%F0%9D%91%A5brown=fl%C2%A1p',
+      input => ';c%C3%B8l%C3%B6r=blue%E2%88%92black;c%C3%B8l%C3%B6r=blackish%2Cgreen;c%C3%B8l%C3%B6r=100%F0%9D%91%A5brown',
       content => [ 'blue−black', 'blackish,green', '100𝑥brown' ],
     },
     {
@@ -597,40 +640,46 @@ subtest 'path parameters' => sub {
     # style=label
 
     # style, explode, deserialized data, serialized string
-    [ 'label', true,  undef, '' ],
-    [ 'label', true,  0, '.0' ],
-    [ 'label', true,  1, '.1' ],
-    [ 'label', true,  false, '.' ],
-    [ 'label', true,  false, '.0' ],
-    [ 'label', true,  true, '.1' ],
-    [ 'label', true,  false, '.false' ],
-    [ 'label', true,  true, '.true' ],
-    [ 'label', true,  3, '.3' ],
-    [ 'label', true,  '', '.' ],
-    [ 'label', true,  'red', '.red' ],
-    [ 'label', true,  'red﹠gr.e.en', '.red%EF%B9%A0gr%2Ee%2Een' ], # . is in "unreserved" - must be manually encoded
-    [ 'label', false, [], '' ],
-    [ 'label', true,  [], '' ],
-    [ 'label', false, {}, '' ],
-    [ 'label', true,  {}, '' ],
-    [ 'label', false, [], '.' ],    # not reversible
-    [ 'label', true,  [], '.' ],     # ""
-    [ 'label', false, {}, '.' ],    # ""
-    [ 'label', true,  {}, '.' ],     # ""
-    [ 'label', false, [ '', '', '' ], '.,,' ],
-    [ 'label', true,  [ '', '', '' ], '...' ],
-    [ 'label', false, { R => '', G => '', B => '' }, '.R,,G,,B,' ],
-    [ 'label', true,  { R => '', G => '', B => '' }, '.R.G.B' ],
-    [ 'label', false, { R => '100', G => '200', B => '' }, '.R,100,G,200,B,' ],
-    [ 'label', true,  { R => '100', G => '200', B => '' }, '.R=100.G=200.B' ],
-    [ 'label', false, [ qw(blue black brown) ], '.blue,black,brown' ],
-    [ 'label', true,  [ qw(blue black brown) ], '.blue.black.brown' ],
-    [ 'label', false, [ 'red.green', 'blue' ], '.red%2Egreen,blue' ],
-    [ 'label', true,  [ 'red.green', 'blue' ], '.red%2Egreen.blue' ],
-    [ 'label', false, { qw(R 100 G 200 B 150) }, '.R,100,G,200,B,150' ],
-    [ 'label', true,  { qw(R 100 G 200 B 150) }, '.R=100.G=200.B=150' ],
-    [ 'label', false, { 'R.X' => '100', G => '200', 'B,Y' => '150' }, '.R%2EX,100,G,200,B%2CY,150' ],
-    [ 'label', true,  { 'R.X' => '100', G => '200', 'B=Y' => '150' }, '.R%2EX=100.G=200.B%3DY=150' ],
+    [
+      [ qw(style content input) ],
+      [ 'label',  undef, '' ],
+      [ 'label',  0, '.0' ],
+      [ 'label',  1, '.1' ],
+      [ 'label',  false, '.' ],
+      [ 'label',  false, '.0' ],
+      [ 'label',  true, '.1' ],
+      [ 'label',  false, '.false' ],
+      [ 'label',  true, '.true' ],
+      [ 'label',  3, '.3' ],
+      [ 'label',  '', '.' ],
+      [ 'label',  'red', '.red' ],
+      [ 'label',  'red﹠gr.e.en', '.red%EF%B9%A0gr%2Ee%2Een' ], # . is in "unreserved" - must be manually encoded
+    ],
+    [
+      [ qw(style explode content input) ],
+      [ 'label', false, [], '' ],
+      [ 'label', true,  [], '' ],
+      [ 'label', false, {}, '' ],
+      [ 'label', true,  {}, '' ],
+      [ 'label', false, [], '.' ],    # not reversible
+      [ 'label', true,  [], '.' ],    # not reversible
+      [ 'label', false, {}, '.' ],    # not reversible
+      [ 'label', true,  {}, '.' ],    # not reversible
+      [ 'label', false, [ '', '', '' ], '.,,' ],
+      [ 'label', true,  [ '', '', '' ], '...' ],
+      [ 'label', false, { R => '', G => '', B => '' }, '.R,,G,,B,' ],
+      [ 'label', true,  { R => '', G => '', B => '' }, '.R.G.B' ],
+      [ 'label', false, { R => '100', G => '200', B => '' }, '.R,100,G,200,B,' ],
+      [ 'label', true,  { R => '100', G => '200', B => '' }, '.R=100.G=200.B' ],
+      [ 'label', false, [ qw(blue black brown) ], '.blue,black,brown' ],
+      [ 'label', true,  [ qw(blue black brown) ], '.blue.black.brown' ],
+      [ 'label', false, [ 'red.green', 'blue' ], '.red%2Egreen,blue' ],
+      [ 'label', true,  [ 'red.green', 'blue' ], '.red%2Egreen.blue' ],
+      [ 'label', false, { qw(R 100 G 200 B 150) }, '.R,100,G,200,B,150' ],
+      [ 'label', true,  { qw(R 100 G 200 B 150) }, '.R=100.G=200.B=150' ],
+      [ 'label', false, { 'R.X' => '100', G => '200', 'B,Y' => '150' }, '.R%2EX,100,G,200,B%2CY,150' ],
+      [ 'label', true,  { 'R.X' => '100', G => '200', 'B=Y' => '150' }, '.R%2EX=100.G=200.B%3DY=150' ],
+    ],
 
     {
       name => 'any type is permitted, default to string',
@@ -808,23 +857,28 @@ subtest 'path parameters' => sub {
     },
   );
 
-  foreach my $test (@tests) {
-    $test = +{
-      name => 'explode='.($test->[1]?'true':'false').': '.$::dumper->encode($test->[2]),
-      param_obj => {
-        name => 'color',
-        style => $test->[0],
-        explode => $test->[1],
-        schema => { type => get_type($test->[2]) },
-      },
-      input => $test->[3],
-      content => $test->[2],
-    } if ref $test eq 'ARRAY';
+  @tests = map +(
+    ref eq 'ARRAY'
+      ? map +{
+          name => defined $_->{explode} ? 'explode='.($_->{explode}?'true':'false') : '',
+          param_obj => {
+            name => 'color',
+            style => $_->{style},
+            defined $_->{explode} ? (explode => $_->{explode}) : (),
+            schema => { type => get_type($_->{content}) },
+          },
+          $_->%{qw(input content)},
+        }, arrays_to_hashes($_)->@*
+      : $_
+  ), @tests;
 
+  foreach my $test (@tests) {
     subtest 'path '
         .($test->{param_obj}{content} ? 'encoded with media-type' : 'style='.($test->{param_obj}{style}//'simple'))
-        .', '.$test->{name}.': '
-        .(defined $test->{input} ? '"'.$test->{input}.'"' : '<missing>') => sub {
+        .(length $test->{name} ? ', '.$test->{name} : '').': '
+        .(defined $test->{input} ? '"'.$test->{input}.'"' : '<missing>')
+        .' -> '.$::dumper->encode($test->{content}) => sub {
+
       my $param_obj = +{
         # default to type=string in the absence of an override
         exists $test->{param_obj}{content} ? () : (schema => { type => 'string' }),
@@ -859,6 +913,12 @@ subtest 'path parameters' => sub {
       my $todo;
       $todo = todo $test->{todo} if $test->{todo};
 
+      cmp_result(
+        [ map $_->TO_JSON, $state->{errors}->@* ],
+        $test->{errors}//[],
+        'path '.$test->{name}.': '.(($test->{errors}//[])->@* ? 'the correct error was returned' : 'no errors occurred'),
+      );
+
       if (not exists $test->{content}) {
         is($call_count, $previous_call_count, 'no content was extracted')
           or note("extracted content:\n", $::encoder->encode($parameter_content));
@@ -871,12 +931,6 @@ subtest 'path parameters' => sub {
           'path '.$test->{name}.': '.(defined $test->{content} ? 'the correct content was extracted' : 'no content was extracted'),
         );
       }
-
-      cmp_result(
-        [ map $_->TO_JSON, $state->{errors}->@* ],
-        $test->{errors}//[],
-        'path '.$test->{name}.': '.(($test->{errors}//[])->@* ? 'the correct error was returned' : 'no errors occurred'),
-      );
     };
   }
 };
@@ -1048,57 +1102,103 @@ subtest 'query parameters' => sub {
 
 subtest 'header parameters' => sub {
   my @tests = (
-    # name (header name, and test name)
+    # name (test name)
     # header_obj (from OAD)
     # raw header values (as an arrayref; one item per header line)
     # content => expected data to be passed to _evaluate_subschema
     # errors => compared to what is collected from $state, defaults to []
     # todo
     {
-      name => 'Accept',
-      header_obj => {},
+      header_obj => { name => 'Accept' },
       values => [ 'application/json' ],
     },
     {
-      name => 'Content-Type',
-      header_obj => {},
+      header_obj => { name => 'Content-Type' },
       values => [ 'application/json' ],
     },
     {
-      name => 'Authorization',
-      header_obj => {},
+      header_obj => { name => 'Authorization' },
       values => [ 'Basic whargarbl' ],
     },
     {
-      name => 'Encoded-Number',
+      name => 'encoded number',
       header_obj => { content => { 'application/json' => { schema => { type => 'integer' } } } },
       values => [ '3' ],
       content => 3, # number, not string!
     },
+    {
+      header_obj => { name => 'Cølör', content => { 'application/json' => { schema => { type => 'string' } } } },
+      values => [ "\"red\xef\xb9\xa0green\"" ],
+      content => 'red﹠green',
+    },
+    {
+      header_obj => { name => 'Cølör', content => { 'application/json' => { schema => { type => 'string' } } } },
+      values => [ 'ಠ_ಠ' ],
+      errors => [
+        {
+          instanceLocation => '/response/header/Cølör',
+          keywordLocation => $keyword_path,
+          absoluteKeywordLocation => $openapi->openapi_uri.'#'.$keyword_path,
+          error => 'wide character detected in header value: not deserializable',
+        },
+      ],
+    },
 
     # style=simple
 
-    # explode, deserialized data, list of header strings
-    [ false, undef, [''] ],
-    [ false, false, [''] ],
-    [ false, false, ['0'] ],
-    [ false, true, ['1'] ],
-    [ false, '', [''] ],
-    [ false, 'i have spaces', [" i have spaces  \t "] ],
-    [ false, 'foo', ['foo'] ],
-    [ false, ['foo'], ['foo'] ],  # a single header is passed as an array iff when array is requested
-    [ false, 'foo,bar', [' foo ', ' bar '] ],
-    [ false, 'foo,  bar', [' foo,  bar '] ],      # internal comma-separated values are not altered
-    [ false, ['foo', 'bar'], [' foo,  bar '] ],   # split individual values on comma when type=array
-    [ false, ['foo', 'bar', 'baz'], [' foo,  bar ', ' baz '] ],
-    [ false, { qw(R 100 G 200 B 150) }, [' R, 100 ', ' G, 200,  B , 150 '] ],
-    [ true,  { qw(R 100 G 200 B 150) }, [' R=100  , G=200 ', '  B=150 '] ],
-    [ false, { foo => 'bar', baz => '' }, [ 'foo, bar, baz' ] ],
-    [ true,  { foo => 'bar', baz => '' }, [ 'foo=bar, baz=' ] ],
+    [
+      # deserialized data, list of header strings
+      [ qw(content values) ],
+      [ undef, [''] ],
+      [ false, [''] ],
+      [ false, ['0'] ],
+      [ true, ['1'] ],
+      [ '', [''] ],
+      [ 'i have spaces', [" i have spaces  \t "] ],
+      [ 'foo,bar', [' foo ', ' bar '] ],         # leading/trailing whitespace is removed
+      [ 'foo,  bar', [' foo,  bar '] ],          # for strings, internal ws is not not altered
+      [ 'red﹠green', ["red\xef\xb9\xa0green"] ],
+    ],
+    [
+      # explode, deserialized data, list of header strings
+      [ qw(explode content values) ],
+      [ false, ['foo'], ['foo'] ],  # a single header is passed as an array iff when array is requested
+      [ true,  ['foo'], ['foo'] ],
+      [ false, [ qw(foo bar) ], [' foo, bar '] ],   # split individual values on comma when type=array
+      [ true,  [ qw(foo bar) ], [' foo, bar '] ],
+      [ false, [ qw(foo bar baz) ], [' foo, bar ', ' baz '] ],
+      [ true,  [ qw(foo bar baz) ], [' foo, bar ', ' baz '] ],
+      [ false, [ qw(foo bar) ], [ ' foo ', ' bar ' ] ],  # ""
+      [ false, [ qw(foo bar) ], [ ' foo, bar ' ] ],      # internal OWS is stripped for arrays
+      [ false, [ 'blue−black', 'blackish﹠green', '100𝑥brown' ],
+        [ "blue\xe2\x88\x92black,blackish\xef\xb9\xa0green,100\xf0\x9d\x91\xa5brown" ] ],
+      [ true,  [ 'blue−black', 'blackish﹠green', '100𝑥brown' ],
+        [ "blue\xe2\x88\x92black,blackish\xef\xb9\xa0green,100\xf0\x9d\x91\xa5brown" ] ],
+      [ false, { qw(R 100 G 200 B 150) }, [' R, 100 ', ' G, 200, B, 150 '] ],
+      [ true,  { qw(R 100 G 200 B 150) }, [' R=100, G=200 ', '  B=150 '] ],
+
+      [ false, { 'foo=bar' => 'baz', bloop => '' },                [ 'foo=bar,baz,bloop,' ] ],
+      [ true,  { foo => 'bar', baz => '', bloop => '', '' => '' }, [ 'foo=bar,baz,bloop,' ] ],
+      [ false, { foo => 'bar=baz', bloop => '' },                  [ 'foo, bar=baz, bloop, ' ] ],
+      [ false, { 'foo=bar' => 'baz', bloop => '' },                [ 'foo=bar, baz, bloop, ' ] ],
+      [ true,  { foo => 'bar', baz => '', bloop => '', '' => '' }, [ 'foo=bar,baz,bloop, ' ] ],
+      [ false, { foo => 'bar=baz', bloop => '' },                  [ 'foo,bar=baz,bloop,' ] ],
+      [ true,  { foo => '', bar => 'baz', bloop => '', '' => '' }, [ 'foo,bar=baz,bloop,' ] ],
+      [ false, { 'foo=bar=baz' => 'bloop' },                       [ 'foo=bar=baz, bloop' ] ],
+      [ true,  { foo => 'bar=baz' => bloop => '' },                [ 'foo=bar=baz, bloop' ] ],
+      [ false, { foo => 'bar', baz => '' },                        [ 'foo, bar, baz, ' ] ],
+      [ true,  { foo => 'bar', baz => '' },                        [ 'foo=bar, baz' ] ],
+      [ false, { foo => 'bar' },                                   [ ' foo ', ' bar ' ] ],
+      [ false, { foo => 'bar' }, [ ' foo, bar ' ] ],     # internal OWS ws is stripped for objects
+
+      [ false, { 'blue−black', 'yes!', 'blackish﹠green', '¿no?', '100𝑥brown', 'fl¡p' },
+        [ "blue\xe2\x88\x92black,yes!,blackish\xef\xb9\xa0green,\xc2\xbfno?,100\xf0\x9d\x91\xa5brown,fl\xc2\xa1p" ] ],
+      [ true,  { 'blue−black', 'yes!', 'blackish﹠green', '¿no?', '100𝑥brown', 'fl¡p' },
+        [ "blue\xe2\x88\x92black=yes!,blackish\xef\xb9\xa0green=\xc2\xbfno?,100\xf0\x9d\x91\xa5brown=fl\xc2\xa1p" ] ],
+    ],
 
     {
-      name => 'Missing',
-      header_obj => { required => true },
+      header_obj => { name => 'Missing', required => true },
       values => undef,
       errors => [
         {
@@ -1110,45 +1210,106 @@ subtest 'header parameters' => sub {
       ],
     },
     {
-      name => 'Array-with-numeric-values',
+      header_obj => { name => 'Mîssiñg', required => true },
+      values => undef,
+      errors => [
+        {
+          instanceLocation => '/response/header',
+          keywordLocation => $keyword_path.'/required',
+          absoluteKeywordLocation => $openapi->openapi_uri.'#'.$keyword_path.'/required',
+          error => 'missing header: Mîssiñg',
+        },
+      ],
+    },
+    {
+      header_obj => { name => 'Cølör' },
+      values => [ 'ಠ_ಠ' ],
+      errors => [
+        {
+          instanceLocation => '/response/header/Cølör',
+          keywordLocation => $keyword_path,
+          absoluteKeywordLocation => $openapi->openapi_uri.'#'.$keyword_path,
+          error => 'wide character detected in header value: not deserializable',
+        },
+      ],
+    },
+    {
+      name => 'array with numeric values',
       header_obj => { schema => { type => 'array', items => { type => 'number' } } },
       values => [ 'R,100,G,200,B,150' ],
       content => [ R => 100, G => 200, B => 150 ],
     },
     {
-      name => 'Object-with-numeric-values-explode-false',
+      name => 'object with numeric values, explode false',
       header_obj => { schema => { type => 'object', additionalProperties => { type => 'number' } } },
       values => [ 'R,100,G,200,B,150' ],
       content => { R => 100, G => 200, B => 150 },
     },
     {
-      name => 'Object-with-numeric-values-explode-true',
+      name => 'Object with numeric values, explode true',
       header_obj => { explode => true, schema => { type => 'object', additionalProperties => { type => 'number' } } },
       values => [ 'R=100,G=200,B=150' ],
       content => { R => 100, G => 200, B => 150 },
     },
+    {
+      name => 'object with missing , delimiter',
+      header_obj => { explode => false, schema => { type => 'object' } },
+      values => [ 'foo, bar, baz' ],
+      errors => [
+        {
+          instanceLocation => '/response/header/My-Header',
+          keywordLocation => $keyword_path,
+          absoluteKeywordLocation => $openapi->openapi_uri.'#'.$keyword_path,
+          error => 'cannot deserialize to requested type',
+        },
+      ],
+    },
+    {
+      name => 'object with bad = delimiter',
+      header_obj => { explode => true, schema => { type => 'object' } },
+      values => [ 'foo=bar, baz=' ],
+      errors => [
+        {
+          instanceLocation => '/response/header/My-Header',
+          keywordLocation => $keyword_path.'/style',
+          absoluteKeywordLocation => $openapi->openapi_uri.'#'.$keyword_path.'/style',
+          error => 'data does not match indicated style "simple" for object (invalid separator at key "baz")',
+        },
+      ],
+    },
+    {
+      header_obj => { name => 'Cølör' },
+      values => [ "red\xef\xb9\xa0green" ],
+      content => 'red﹠green',
+    },
   );
 
-  foreach my $test (@tests) {
-    $test = +{
-      name => "style=simple, explode=".($test->[0]?'true':'false').': '.$::dumper->encode($test->[1]),
-      header_obj => {
-        style => 'simple',
-        explode => $test->[0],
-        schema => { type => get_type($test->[1]) },
-      },
-      values => $test->[2],
-      content => $test->[1],
-    } if ref $test eq 'ARRAY';
+  @tests = map +(
+    ref eq 'ARRAY'
+      ? map +{
+          name => defined $_->{explode} ? 'explode='.($_->{explode}?'true':'false') : '',
+          header_obj => {
+            defined $_->{explode} ? (explode => $_->{explode}) : (),
+            schema => { type => get_type($_->{content}) },
+          },
+          $_->%{qw(values content)},
+        }, arrays_to_hashes($_)->@*
+      : $_
+  ), @tests;
 
+  foreach my $test (@tests) {
     subtest 'header '
         .($test->{header_obj}{content} ? 'encoded with media-type' : 'style=simple')
-        .', '.$test->{name}.': '
-        .(defined $test->{values} ? $::dumper->encode($test->{values}) : '<missing>') => sub {
+        .(length $test->{name} ? ', '.$test->{name}.': '
+          : length $test->{header_obj}{name} ? ', '.$test->{header_obj}{name}.': '
+          : ' ')
+        .(defined $test->{values} ? $::dumper->encode($test->{values}) : '<missing>')
+        .' -> '.$::dumper->encode($test->{content}) => sub {
+
       my $param_obj = +{
-        exists $test->{header_obj}{content} ? () : (schema => { type => 'string' }),
-        $test->{header_obj}->%*,
         name => 'My-Header',
+        exists $test->{header_obj}{content} ? () : (style => 'simple', schema => { type => 'string' }),
+        $test->{header_obj}->%*,
         in => 'header',
       };
 
@@ -1180,15 +1341,21 @@ subtest 'header parameters' => sub {
         depth => 0,
       };
 
-      my $header_name = $test->{name} =~ /^[A-Z]/ ? $test->{name} : 'My-Header';
       my $headers = Mojo::Headers->new;
-      $headers->add($header_name, $test->{values}->@*) if defined $test->{values};
+      $headers->add(Encode::encode('UTF-8', $param_obj->{name}, Encode::DIE_ON_ERR | Encode::LEAVE_SRC), $test->{values}->@*)
+        if defined $test->{values};
 
-      my $valid = $openapi->_validate_header_parameter($state, $header_name, $header_obj, $headers);
+      my $valid = $openapi->_validate_header_parameter($state, $param_obj->{name}, $header_obj, $headers);
       die 'validity inconsistent with error count' if $valid xor !$state->{errors}->@*;
 
       my $todo;
       $todo = todo $test->{todo} if $test->{todo};
+
+      cmp_result(
+        [ map $_->TO_JSON, $state->{errors}->@* ],
+        $test->{errors}//[],
+        'header '.$param_obj->{name}.': '.(($test->{errors}//[])->@* ? 'the correct error was returned' : 'no errors occurred'),
+      );
 
       if (not exists $test->{content}) {
         is($call_count, $previous_call_count, 'no content was extracted')
@@ -1199,15 +1366,9 @@ subtest 'header parameters' => sub {
         is_equal(
           $parameter_content,
           $test->{content},
-          'header '.$test->{name}.': '.(defined $test->{content} ? 'the correct content was extracted' : 'no content was extracted'),
+          'header '.$param_obj->{name}.': '.(defined $test->{content} ? 'the correct content was extracted' : 'no content was extracted'),
         );
       }
-
-      cmp_result(
-        [ map $_->TO_JSON, $state->{errors}->@* ],
-        $test->{errors}//[],
-        'header '.$test->{name}.': '.(($test->{errors}//[])->@* ? 'the correct error was returned' : 'no errors occurred'),
-      );
     };
   }
 };
@@ -1563,16 +1724,16 @@ YAML
         $openapi->_coerce_object_elements($data, $schema, { %$state, data_path => $state->{data_path}.'/'.$idx });
 
         is_equal(
-          $data,
-          $expected_data,
-          'got expected mutated data',
-        ) if not (($errors//[])->@*);
-
-        is_equal(
           [ map $_->TO_JSON, $state->{errors}->@* ],
           $errors//[],
           ($errors//[])->@* ? 'the correct error was returned' : 'no errors occurred',
         );
+
+        is_equal(
+          $data,
+          $expected_data,
+          'got expected mutated data',
+        ) if not (($errors//[])->@*);
       };
     }
 
@@ -1601,16 +1762,16 @@ YAML
         $openapi->_coerce_array_elements($data, $schema, { %$state, data_path => $state->{data_path}.'/'.$idx });
 
         is_equal(
-          $data,
-          $expected_data,
-          'got expected mutated data',
-        ) if not (($errors//[])->@*);
-
-        is_equal(
           [ map $_->TO_JSON, $state->{errors}->@* ],
           $errors//[],
           ($errors//[])->@* ? 'the correct error was returned' : 'no errors occurred',
         );
+
+        is_equal(
+          $data,
+          $expected_data,
+          'got expected mutated data',
+        ) if not (($errors//[])->@*);
       };
     }
   };

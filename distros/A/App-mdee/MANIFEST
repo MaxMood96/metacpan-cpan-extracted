@@ -19,8 +19,10 @@ share/theme/warm.sh
 t/00_compile.t
 t/01_mdee.t
 t/02_colorize.t
+t/03_nofork.t
 t/Util.pm
 t/test.md
+xt/nofork.t
 t/runner/README.md
 t/runner/Runner.pm
 META.yml

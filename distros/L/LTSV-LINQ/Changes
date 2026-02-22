@@ -1,6 +1,68 @@
 Revision history for LTSV::LINQ
 
-1.03  2026-02-20
+1.04  2026-02-21 JST (Japan Standard Time)
+
+    New methods (6):
+    - ThenBy($key_selector)
+          Add ascending secondary sort key (smart comparison) to an
+          LTSV::LINQ::Ordered sequence.  Returns a new Ordered object.
+    - ThenByDescending($key_selector)
+          Add descending secondary sort key (smart comparison).
+    - ThenByStr($key_selector)
+          Add ascending secondary sort key (string/cmp comparison).
+    - ThenByStrDescending($key_selector)
+          Add descending secondary sort key (string/cmp comparison).
+    - ThenByNum($key_selector)
+          Add ascending secondary sort key (numeric/<=>) comparison).
+          Undefined or empty values treated as 0.
+    - ThenByNumDescending($key_selector)
+          Add descending secondary sort key (numeric/<=>) comparison).
+
+    Architecture:
+    - OrderBy* methods now return LTSV::LINQ::Ordered (subclass of
+      LTSV::LINQ via @ISA), mirroring .NET LINQ's IOrderedEnumerable<T>.
+      All existing LTSV::LINQ methods (Where, Select, Take, ...) are
+      available through inheritance.  ThenBy* are only on Ordered objects.
+    - Sorting uses Schwartzian-Transform decorated-array with original-
+      element index as a final tie-breaker, guaranteeing completely stable
+      multi-key sorting on all Perl versions including 5.005_03.
+    - ThenBy* is non-destructive: each call returns a new Ordered object;
+      the original is unchanged, so branching sort chains are safe.
+    - Ordered objects are re-iterable (use _factory internally).
+
+    Documentation:
+    - Ordering Methods: section rewritten to cover ThenBy* family,
+      IOrderedEnumerable analogy, stability guarantee, non-destructive
+      semantics, and comparison-type families extended to include ThenBy*.
+    - Method Summary Table: OrderBy* Returns column updated to OrderedQuery;
+      ThenBy* rows added; footnote added explaining OrderedQuery.
+    - Not Implemented / Compound Ordering: ThenBy* entry updated from
+      "not implemented / workaround" to "implemented in v1.04".
+    - Method count: 54 -> 60.
+
+    Kwalitee fixes (for v1.03 issues reported by CPANTS):
+    - META.json: removed top-level 'minimum_perl_version' key (not valid in
+          CPAN::Meta::Spec v2; custom keys must begin with 'x_' or 'X_').
+          Perl version requirement is already expressed correctly via
+          prereqs.runtime.requires.perl.  META.yml retains the key (valid
+          in META.yml spec v1.4).
+    - SECURITY.md: new file added (satisfies has_security_doc and
+          security_doc_contains_contact Kwalitee indicators).
+          Contains vulnerability reporting address ina@cpan.org.
+    - pmake.bat: updated to generate SECURITY.md and to omit
+          minimum_perl_version from the META.json template.
+
+    Tests:
+    - t/013_v104_thenby.t: new file, 42 tests.
+          Covers: return type (LTSV::LINQ::Ordered), ThenBy/ThenByDescending,
+          three-key sort, stability, non-destructive branching,
+          OrderByDescending + ThenBy, smart vs Str vs Num for ThenBy,
+          ThenByNum undef, ThenByNumDescending, ThenByStrDescending,
+          chaining with Where/Select/Count/First/Last/Take/Skip,
+          empty/single-element sequences, re-iterability, LTSV scenario.
+    - Total: 258 -> 300 tests across 13 files.
+
+1.03  2026-02-20 JST (Japan Standard Time)
 
     New methods (6):
     - Join($inner, $outer_key, $inner_key, $result)
@@ -79,7 +141,8 @@ Revision history for LTSV::LINQ
           LTSV realistic scenarios; edge cases.
     - Total: 246 -> 258 tests across 12 files.
 
-1.02  2026-02-17
+1.02  2026-02-17 JST (Japan Standard Time)
+
     - Added 6 new methods for relational operations and utilities
 
     New methods:
@@ -95,7 +158,8 @@ Revision history for LTSV::LINQ
     - Added test for ASCII-only verification
     - Method count: 49 methods across 15 categories
 
-1.01  2026-02-16
+1.01  2026-02-16 JST (Japan Standard Time)
+
     - Added 14 new methods to enhance LINQ compatibility
 
     New methods:
@@ -119,7 +183,8 @@ Revision history for LTSV::LINQ
     - Clarified Perl 5.005_03 specification philosophy
     - Added .NET LINQ compatibility notes
 
-1.00  2026-02-15
+1.00  2026-02-15 JST (Japan Standard Time)
+
     - Initial release
     - LINQ-style query interface for LTSV files
     - Inspired by Microsoft's LINQ (Language Integrated Query)

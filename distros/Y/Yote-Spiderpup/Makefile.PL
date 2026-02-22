@@ -9,9 +9,10 @@ WriteMakefile(
     MIN_PERL_VERSION => '5.010',
     EXE_FILES        => ['bin/pupserver'],
     PREREQ_PM        => {
-        'CSS::LESSp' => 0,
-        'YAML'       => 0,
-        'JSON::PP'   => 0,
+        'CSS::LESSp'      => 0,
+        'YAML'            => 0,
+        'JSON::PP'        => 0,
+        'IO::Socket::SSL' => 0,
     },
     TEST_REQUIRES => {
         'Test::More' => 0,

@@ -168,9 +168,9 @@ sub setParams
 	$self->{exitPlateauBurnin} ||= $self->{iterations} * 0.5;
 	$self->{posMax} = 100 unless defined $self->{posMax};
 	$self->{posMin} = -$self->{posMax} unless defined $self->{posMin};
-	$self->{meWeight}   ||= 0.5;
-	$self->{themWeight} ||= 0.5;
-	$self->{inertia}    ||= 0.9;
+	$self->{meWeight}   ||= 1.5;
+	$self->{themWeight} ||= 1.5;
+	$self->{inertia}    ||= 0.7;
 	$self->{verbose}    ||= 0;
 	$self->{stallSpeed} ||= 1e-9;
 	$self->{stallSearchScale} ||= 1;
@@ -198,14 +198,6 @@ sub init
 	$self->{bestsMean}      = 0;
 
 	$self->{iterCount} = 0;
-
-	# Normalise weights.
-	my $totalWeight =
-		$self->{inertia} + $self->{themWeight} + $self->{meWeight};
-
-	$self->{inertia}    /= $totalWeight;
-	$self->{meWeight}   /= $totalWeight;
-	$self->{themWeight} /= $totalWeight;
 
 	die "-posMax must be greater than -posMin"
 		unless all($self->{posMax} > $self->{posMin});
@@ -277,15 +269,20 @@ sub _initParticles
 		die;
 	}
 
-	if (defined($self->{initialGuess}))
+	# Only set bestPos on first initialization; stalled particles retain
+	# their personal best so the swarm preserves memory of good regions.
+	if ($self->{iterCount} == 0)
 	{
-		$prtcls->{bestPos} .= $self->{initialGuess};
-	}
-	else
-	{
-		$prtcls->{bestPos} .=
-			$self->_randInRangePDL($self->{posMin}, $self->{posMax},
-				$self->{dimensions}, $numParticles);
+		if (defined($self->{initialGuess}))
+		{
+			$prtcls->{bestPos} .= $self->{initialGuess};
+		}
+		else
+		{
+			$prtcls->{bestPos} .=
+				$self->_randInRangePDL($self->{posMin}, $self->{posMax},
+					$self->{dimensions}, $numParticles);
+		}
 	}
 
 	# This function is called on init or on stall, so always increment stalls:
@@ -304,6 +301,10 @@ sub _initParticles
 		}
 
 		my $searchSize = $self->{searchSize} * ($self->{stallSearchScale}**$prtcls->{stalls});
+
+		# Clamp to 1.0 to prevent searching beyond posMin/posMax range:
+		$searchSize = $searchSize->clip(0, 1) if ref($searchSize) =~ /^PDL(:|$)/;
+		$searchSize = 1.0 if !ref($searchSize) && $searchSize > 1.0;
 
 		# Search $guess +/- (searchSize% of the search range from posMin to posMax:
 		$prtcls->{currPos} .= $guess +
@@ -493,9 +494,9 @@ sub _updateVelocities
 	}
 
 	# Per-particle random factors per Kennedy & Eberhart (1995):
-	my $meFactor = $self->_randInRangePDL(-$self->{meWeight}, $self->{meWeight}, $self->{dimensions}, $self->{numParticles});
+	my $meFactor = $self->_randInRangePDL(0, $self->{meWeight}, $self->{dimensions}, $self->{numParticles});
 
-	my $themFactor = $self->_randInRangePDL(-$self->{themWeight}, $self->{themWeight}, $self->{dimensions}, $self->{numParticles});
+	my $themFactor = $self->_randInRangePDL(0, $self->{themWeight}, $self->{dimensions}, $self->{numParticles});
 
 	my $meDelta   = $prtcls->{bestPos} - $prtcls->{currPos};
 	my $themDelta = $bestNeighbors - $prtcls->{currPos};
@@ -506,7 +507,11 @@ sub _updateVelocities
 		$themFactor * $themDelta;
 
 	my $vel     = sqrt(sumover($prtcls->{velocity}**2));
-	my $stalled = ($vel < $self->{stallSpeed});
+
+	# Scale stallSpeed by sqrt(dimensions) to normalize L2 magnitude
+	# comparison across dimensionality:
+	my $scaledStallSpeed = $self->{stallSpeed} * sqrt($self->{dimensions});
+	my $stalled = ($vel < $scaledStallSpeed);
 
 	if (any $stalled)
 	{
@@ -543,7 +548,7 @@ sub _calcNextPos
 
 	# Set velocity to 0 if nextPos is out of bounds:
 	my $velocity_mask =
-		!($prtcls->{nextPos} < $self->{posMin}) | ($prtcls->{nextPos} > $self->{posMax});
+		!(($prtcls->{nextPos} < $self->{posMin}) | ($prtcls->{nextPos} > $self->{posMax}));
 	$prtcls->{velocity} *= $velocity_mask;
 
 	# Clip nextPos to its bounds:
@@ -777,7 +782,7 @@ Determines what proportion of the previous velocity is carried forward to the
 next iteration.  This can be a PDL object, so it should work in any dimension
 so long as it works in the broadcast sense.
 
-Defaults to 0.9
+Defaults to 0.7
 
 See also I<-meWeight> and I<-themWeight>.
 
@@ -791,7 +796,7 @@ Coefficient determining the influence of the current local best position on the
 next iterations velocity.  This can be a PDL object, so it should work in any dimension
 so long as it works in the broadcast sense.
 
-Defaults to 0.5.
+Defaults to 1.5
 
 See also I<-inertia> and I<-themWeight>.
 
@@ -900,7 +905,7 @@ Coefficient determining the influence of the neighbourhod best position on the
 next iterations velocity. This can be a PDL object, so it should work in any dimension
 so long as it works in the broadcast sense.
 
-Defaults to 0.5.
+Defaults to 1.5
 
 See also I<-inertia> and I<-meWeight>.
 

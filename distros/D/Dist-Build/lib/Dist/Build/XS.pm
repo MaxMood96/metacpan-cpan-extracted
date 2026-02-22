@@ -1,12 +1,12 @@
 package Dist::Build::XS;
-$Dist::Build::XS::VERSION = '0.025';
+$Dist::Build::XS::VERSION = '0.026';
 use strict;
 use warnings;
 
 use parent 'ExtUtils::Builder::Planner::Extension';
 
 use File::Basename qw/basename dirname/;
-use File::Spec::Functions qw/catfile curdir/;
+use File::Spec::Functions qw/abs2rel catfile catdir curdir splitpath splitdir/;
 use Text::ParseWords 'shellwords';
 
 sub get_flags {
@@ -26,10 +26,8 @@ sub add_methods {
 
 		$planner = $planner->new_scope;
 
-		my $config = $args{config} // $planner->config;
-
-		$planner->load_extension('ExtUtils::Builder::ParseXS',              0.034, config => $config) unless $planner->can('parse_xs');
-		$planner->load_extension('ExtUtils::Builder::BuildTools::FromPerl', 0.034, config => $config) unless $planner->can('compile');
+		$planner->load_extension('ExtUtils::Builder::ParseXS',              0.034) unless $planner->can('parse_xs');
+		$planner->load_extension('ExtUtils::Builder::BuildTools::FromPerl', 0.034, config => $args{config}) unless $planner->can('compile');
 
 		my $xs_base = $args{xs_base} // 'lib';
 		my ($module_name, $xs_file);
@@ -38,7 +36,8 @@ sub add_methods {
 			$xs_file = $args{file} // catfile($xs_base, split /::/, $module_name) . '.xs';
 		} elsif (defined $args{file}) {
 			$xs_file = $args{file};
-			$module_name = $planner->module_for_xs($xs_file, $xs_base);
+			my (undef, $dirs, $file) = splitpath(abs2rel($xs_file, $xs_base));
+			$module_name = join '::', splitdir($dirs), basename($file, '.xs', '.c');
 		} else {
 			$module_name = $planner->main_module;
 			$xs_file = catfile($xs_base, split /::/, $module_name) . '.xs';
@@ -52,7 +51,8 @@ sub add_methods {
 		if ($xs_file =~ /\.c$/) {
 			$c_file = $xs_file;
 		} else {
-			$c_file = $planner->c_file_for_xs($xs_file, $source_dir);
+			my $file_base = basename($xs_file, '.xs');
+			$c_file = catfile($source_dir, "$file_base.c");
 
 			if (my $typemap = $args{typemap}) {
 				my @typemaps = ref $args{typemap} ? @{ $typemap } : $typemap;
@@ -115,7 +115,11 @@ sub add_methods {
 
 		push @objects, @{ $args{extra_objects} } if $args{extra_objects};
 
-		my $lib_file = $planner->extension_filename($module_name);
+		my @module_parts = split '::', $module_name;
+		my $archdir = catdir(qw/blib arch auto/, @module_parts);
+		my $basename = defined &DynaLoader::mod2fname ? DynaLoader::mod2fname(\@module_parts) : $module_parts[-1];
+		my $lib_file = $planner->loadable_file($basename, $archdir);
+
 		$planner->link(\@objects, $lib_file,
 			type         => 'loadable-object',
 			profiles     => ['@Perl'],
@@ -172,7 +176,7 @@ Dist::Build::XS - An XS implementation for Dist::Build
 
 =head1 VERSION
 
-version 0.025
+version 0.026
 
 =head1 SYNOPSIS
 

@@ -5,12 +5,17 @@ All notable changes to Alien::SDL3 will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v3.4.2] - 2026-02-22
+
+### Changed
+
+- Updated to SDL3 3.4.2
+
 ## [v2.28.0] - 2025-12-12
 
 ### Changed
 
   - Updated to SDL3 3.2.28
-  - New versioning scheme to better match upstream while giving me room to fix my own mistakes
 
 ## [0.05] - 2025-10-17
 
@@ -48,7 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Installs from the tip of main
   - Note: Does not pull prebuilt binaries for Windows
 
-[Unreleased]: https://github.com/Perl-SDL3/Alien-SDL3.pm/compare/v2.28.0...HEAD
+[Unreleased]: https://github.com/Perl-SDL3/Alien-SDL3.pm/compare/v3.4.2...HEAD
+[v3.4.2]: https://github.com/Perl-SDL3/Alien-SDL3.pm/compare/v2.28.0...v3.4.2
 [v2.28.0]: https://github.com/Perl-SDL3/Alien-SDL3.pm/compare/0.05...v2.28.0
 [0.05]: https://github.com/Perl-SDL3/Alien-SDL3.pm/compare/0.04...0.05
 [0.04]: https://github.com/Perl-SDL3/Alien-SDL3.pm/compare/0.03...0.04

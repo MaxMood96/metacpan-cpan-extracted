@@ -47,7 +47,8 @@
          "file" : "lib/Yote/SQLObjectStore/Cache.pm"
       },
       "Yote::SQLObjectStore" : {
-         "file" : "lib/Yote/SQLObjectStore.pm"
+         "file" : "lib/Yote/SQLObjectStore.pm",
+         "version" : "0.04"
       },
       "Yote::SQLObjectStore::BaseObj" : {
          "file" : "lib/Yote/SQLObjectStore/BaseObj.pm"
@@ -117,6 +118,6 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : 0,
+   "version" : "0.04",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

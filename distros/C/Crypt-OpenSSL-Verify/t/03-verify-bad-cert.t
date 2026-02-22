@@ -1,12 +1,16 @@
 use strict;
 use warnings;
 use Test::More;
+use File::Temp qw/ tempfile /;
+use File::Slurper qw/ write_text /;;
 use Crypt::OpenSSL::Verify;
 use Crypt::OpenSSL::X509;
 
+# t/cacert.pem is set as the CAfile to verify against
 my $v = Crypt::OpenSSL::Verify->new('t/cacert.pem');
 isa_ok($v, 'Crypt::OpenSSL::Verify');
 
+# certificate below does not match the CAfile
 my $text =<<CERT;
 -----BEGIN CERTIFICATE-----
 MIIEwjCCAqoCCQDUW/qSgnKE7jANBgkqhkiG9w0BAQsFADAjMQswCQYDVQQGEwJV
@@ -43,9 +47,13 @@ isa_ok($cert, 'Crypt::OpenSSL::X509');
 
 my $ret;
 eval {
+        # This should croak and produce an error message
         $ret = $v->verify($cert);
 };
+ok(!$ret, "Self Signed Certificate failed to verify");
+like($@, qr/verify:/, "Self Signed Certificate does not validate");
 
+# The module will test against the CAfile and CApath
 $v = Crypt::OpenSSL::Verify->new(
     't/cacert.pem',
     {
@@ -57,10 +65,30 @@ isa_ok($v, 'Crypt::OpenSSL::Verify');
 
 $ret = undef;
 eval {
+        # This should croak and produce an error message
         $ret = $v->verify($cert);
 };
 
-ok($@ =~ /verify: /);
-ok(!$ret);
+like($@, qr/verify: /, "Unable to verify Self Signed Certificate with CAfile and CApath");
+ok(!$ret, "Self Signed Certificate failed to verify");
+
+my ($fh, $filename) = tempfile();
+
+write_text($filename, $text);
+
+$ret = undef;
+$v = Crypt::OpenSSL::Verify->new(
+    $filename,
+    {
+        CApath => '/etc/ssl/certs',
+        noCAfile => 0,
+    }
+);
+isa_ok($v, 'Crypt::OpenSSL::Verify');
+
+$ret = $v->verify($cert);
+ok($ret, "Self Signed Certificate can verify itself as CAfile");
+
+unlink($filename);
 
 done_testing;

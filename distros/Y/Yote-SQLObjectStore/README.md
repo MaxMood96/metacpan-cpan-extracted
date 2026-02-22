@@ -1,4 +1,4 @@
-# Yote-SQLObjectStore
+# Yote-SQLObjectStore v0.03
 
 A schema-enforced object persistence layer backed by SQL databases (SQLite, MariaDB, or Postgres).
 
@@ -66,7 +66,7 @@ use base 'Yote::SQLObjectStore::SQLite::Obj';
 our %cols = (
     name     => 'VARCHAR(128)',
     email    => 'VARCHAR(256)',
-    age      => 'INT',
+    age      => 'INTEGER',
     active   => 'BOOLEAN',
 );
 
@@ -77,31 +77,69 @@ our %cols = (
 
 ### Scalar Types
 
-Use standard SQL column definitions:
+Scalar types use ANSI SQL standard names. Each backend automatically
+translates these to native database types, so the same `%cols`
+definition works across SQLite, MariaDB, and PostgreSQL.
+
+| Standard Type | Description |
+|---------------|-------------|
+| `TEXT` | Variable-length text, no length limit |
+| `VARCHAR(N)` | Variable-length text, max N characters |
+| `INTEGER` | Standard integer |
+| `BIGINT` | Large integer |
+| `SMALLINT` | Small integer |
+| `FLOAT` | Single-precision floating point |
+| `DOUBLE` | Double-precision floating point |
+| `DECIMAL(M,D)` | Exact decimal, M total digits, D after decimal |
+| `BOOLEAN` | True/false value |
+| `BLOB` | Binary data |
+| `TIMESTAMP` | Date and time |
+| `DATE` | Date only |
 
 ```perl
 our %cols = (
     name    => 'VARCHAR(256)',
-    count   => 'INT',
+    count   => 'INTEGER',
     amount  => 'DECIMAL(10,2)',
     notes   => 'TEXT',
+    active  => 'BOOLEAN',
 );
 ```
 
+#### Backend Type Mapping
+
+Each backend maps these standard types to native equivalents:
+
+| Standard | SQLite | MariaDB | PostgreSQL |
+|----------|--------|---------|------------|
+| `TEXT` | TEXT | TEXT | TEXT |
+| `VARCHAR(N)` | VARCHAR(N) | VARCHAR(N) | VARCHAR(N) |
+| `INTEGER` | INTEGER | INT | INTEGER |
+| `BIGINT` | INTEGER | BIGINT | BIGINT |
+| `SMALLINT` | INTEGER | SMALLINT | SMALLINT |
+| `FLOAT` | REAL | FLOAT | REAL |
+| `DOUBLE` | REAL | DOUBLE | DOUBLE PRECISION |
+| `DECIMAL(M,D)` | NUMERIC | DECIMAL(M,D) | DECIMAL(M,D) |
+| `BOOLEAN` | INTEGER | TINYINT(1) | BOOLEAN |
+| `BLOB` | BLOB | BLOB | BYTEA |
+| `TIMESTAMP` | TEXT | TIMESTAMP | TIMESTAMP |
+| `DATE` | TEXT | DATE | DATE |
+
 ### Reference Types
 
-Reference types begin with `*`:
+Reference types begin with `*` and store object IDs internally:
 
 | Syntax | Meaning |
 |--------|---------|
 | `*PackageName` | Reference to object of that type |
 | `*` | Reference to any object |
-| `*ARRAY_TYPE` | Array of TYPE values |
-| `*HASH<N>_TYPE` | Hash with max key size N, TYPE values |
+| `*ARRAY_<type>` | Array of values or references |
+| `*HASH<N>_<type>` | Hash with max key size N |
 
-TYPE can be:
-- A SQL type (e.g., `VARCHAR(100)`, `INT`)
-- A reference type (e.g., `*MyApp::User`, `*`)
+`<type>` can be:
+- A scalar type (e.g., `VARCHAR(100)`, `INTEGER`)
+- `*` (any object reference)
+- `*Package::Name` (typed object reference)
 
 ### Examples
 
@@ -114,7 +152,7 @@ our %cols = (
     attachment => '*',
 
     # Array of integers
-    scores => '*ARRAY_INT',
+    scores => '*ARRAY_INTEGER',
 
     # Array of User objects
     friends => '*ARRAY_*MyApp::User',
@@ -174,8 +212,8 @@ Tables are created for:
 ### Storage Model
 
 - **Objects**: Stored in tables named after their package (e.g., `MyApp_User`)
-- **Arrays**: Stored in tables like `ARRAY_INT` or `ARRAY_REF` with (id, idx, val)
-- **Hashes**: Stored in tables like `HASH_256_VARCHAR_100` with (id, hashkey, val)
+- **Arrays**: Stored in tables like `ARRAY_INTEGER` or `ARRAY_REF` with (id, idx, val)
+- **Hashes**: Stored in tables like `HASH_256_VARCHAR_100_` with (id, hashkey, val)
 
 ## Backend Notes
 

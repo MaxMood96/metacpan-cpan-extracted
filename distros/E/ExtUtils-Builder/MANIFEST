@@ -28,6 +28,7 @@ lib/ExtUtils/Builder/Planner.pm
 lib/ExtUtils/Builder/Planner/Extension.pm
 lib/ExtUtils/Builder/Serializer.pm
 lib/ExtUtils/Builder/Util.pm
+prereqs.yml
 t/00-compile.t
 t/10-action-code.t
 t/10-action-command.t

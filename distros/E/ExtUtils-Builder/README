@@ -1,7 +1,7 @@
 This archive contains the distribution ExtUtils-Builder,
-version 0.019:
+version 0.020:
 
-  An overview of the foundations of the ExtUtils::Builder Plan framework
+  An abstract representation of build processes
 
 This software is copyright (c) 2013 by Leon Timmermans.
 

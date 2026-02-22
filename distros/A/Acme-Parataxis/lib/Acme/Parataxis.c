@@ -294,7 +294,7 @@ typedef struct {
 // Global Registry and State
 
 /** @brief Maximum number of concurrent fibers allowed */
-#define MAX_FIBERS 128
+#define MAX_FIBERS 1024
 /** @brief Array of active fiber structures */
 static para_fiber_t * fibers[MAX_FIBERS];
 /** @brief The context representing the main Perl thread */
@@ -309,6 +309,28 @@ static job_t job_slots[MAX_JOBS];
 /** @brief Mutex protecting access to the job queue */
 static para_mutex_t queue_lock;
 
+#ifdef _WIN32
+static CONDITION_VARIABLE queue_cond;
+#else
+static pthread_cond_t queue_cond;
+#endif
+
+static int threads_initialized = 0;
+static int system_initialized = 0;
+
+// Forward declarations for thread safety wrappers
+#ifdef _WIN32
+#define PARA_COND_WAIT(c, m) SleepConditionVariableCS(&c, &m, INFINITE)
+#define PARA_COND_SIGNAL(c) WakeConditionVariable(&c)
+#define PARA_COND_BROADCAST(c) WakeAllConditionVariable(&c)
+#define PARA_COND_INIT(c) InitializeConditionVariable(&c)
+#else
+#define PARA_COND_WAIT(c, m) pthread_cond_wait(&c, &m)
+#define PARA_COND_SIGNAL(c) pthread_cond_signal(&c)
+#define PARA_COND_BROADCAST(c) pthread_cond_broadcast(&c)
+#define PARA_COND_INIT(c) pthread_cond_init(&c, NULL)
+#endif
+
 /** @brief Threshold for automatic preemption (0 to disable) */
 static long long preempt_threshold = 0;
 /** @brief Count of operations since last preemption yield */
@@ -318,8 +340,10 @@ static long long preempt_count = 0;
 #define MAX_THREADS 64
 /** @brief Native OS handles for pool threads */
 static para_thread_t thread_handles[MAX_THREADS];
-/** @brief Current size of the thread pool */
-static int thread_pool_size = 0;
+/** @brief Maximum allowed threads in the pool */
+static int max_thread_pool_size = 0;
+/** @brief Number of currently running worker threads */
+static int current_thread_count = 0;
 /** @brief Flag to signal worker threads to terminate */
 static volatile int threads_keep_running = 1;
 
@@ -328,11 +352,40 @@ static volatile int threads_keep_running = 1;
 static void * main_fiber_handle = NULL;
 #endif
 
+/** @brief Sets the maximum number of worker threads allowed in the pool. */
+DLLEXPORT void set_max_threads(int max) {
+    if (max > 0 && max <= MAX_THREADS)
+        max_thread_pool_size = max;
+}
+
+/** @brief Forward declaration of worker_thread */
+#ifdef _WIN32
+DWORD WINAPI worker_thread(LPVOID arg);
+#else
+void * worker_thread(void * arg);
+#endif
+
+/** @brief Internal helper to spawn N threads into the pool */
+static void _spawn_workers(int count) {
+    for (int i = 0; i < count; i++) {
+        if (current_thread_count >= max_thread_pool_size || current_thread_count >= MAX_THREADS)
+            break;
+
+        int tid = current_thread_count;
+#ifdef _WIN32
+        thread_handles[tid] = CreateThread(NULL, 0, worker_thread, (LPVOID)(intptr_t)tid, 0, NULL);
+#else
+        pthread_create(&thread_handles[tid], NULL, worker_thread, (void *)(intptr_t)tid);
+        pthread_detach(thread_handles[tid]);
+#endif
+        current_thread_count++;
+    }
+}
+
 /**
  * @brief Background Worker Thread Loop.
  *
- * Each thread pins itself to a core and continuously polls the job queue for
- * tasks assigned to it.
+ * Each thread pins itself to a core and continuously waits for jobs.
  *
  * @param arg Integer thread ID passed as a pointer.
  */
@@ -342,23 +395,30 @@ DWORD WINAPI worker_thread(LPVOID arg) {
 void * worker_thread(void * arg) {
 #endif
     int thread_id = (int)(intptr_t)arg;
-    pin_to_core(thread_id);
+    int cpu_count = get_cpu_count();
+    pin_to_core(thread_id % cpu_count);
 
     while (threads_keep_running) {
         int found_idx = -1;
 
         LOCK(queue_lock);
-        for (int i = 0; i < MAX_JOBS; i++) {
-            if (job_slots[i].status == JOB_NEW && job_slots[i].target_thread == thread_id) {
-                job_slots[i].status = JOB_BUSY;
-                found_idx = i;
-                break;
+        while (threads_keep_running) {
+            for (int i = 0; i < MAX_JOBS; i++) {
+                if (job_slots[i].status == JOB_NEW) {
+                    job_slots[i].status = JOB_BUSY;
+                    found_idx = i;
+                    break;
+                }
             }
+            if (found_idx != -1 || !threads_keep_running)
+                break;
+            PARA_COND_WAIT(queue_cond, queue_lock);
         }
         UNLOCK(queue_lock);
 
-        if (found_idx != -1) {
+        if (found_idx != -1 && threads_keep_running) {
             job_t * job = &job_slots[found_idx];
+            // ... processing ...
 
             if (job->type == TASK_SLEEP) {
                 int ms = (int)job->input.i;
@@ -434,26 +494,28 @@ void * worker_thread(void * arg) {
 /**
  * @brief Initializes the background thread pool.
  *
- * Automatically detects the CPU count and spawns worker threads.
+ * Automatically detects the CPU count and spawns worker threads. This function
+ * is called automatically by `init_system` and `submit_c_job`.
  */
 DLLEXPORT void init_threads() {
     dTHX;
+    if (threads_initialized)
+        return;
     LOCK_INIT(queue_lock);
+    PARA_COND_INIT(queue_cond);
     for (int i = 0; i < MAX_JOBS; i++)
         job_slots[i].status = JOB_FREE;
 
-    thread_pool_size = get_cpu_count();
-    if (thread_pool_size > MAX_THREADS)
-        thread_pool_size = MAX_THREADS;
-
-    for (int i = 0; i < thread_pool_size; i++) {
-#ifdef _WIN32
-        thread_handles[i] = CreateThread(NULL, 0, worker_thread, (LPVOID)(intptr_t)i, 0, NULL);
-#else
-        pthread_create(&thread_handles[i], NULL, worker_thread, (void *)(intptr_t)i);
-        pthread_detach(thread_handles[i]);
-#endif
+    if (max_thread_pool_size == 0) {
+        max_thread_pool_size = get_cpu_count();
+        if (max_thread_pool_size > MAX_THREADS)
+            max_thread_pool_size = MAX_THREADS;
     }
+
+    /* Start with a small "seed" pool of 2 threads */
+    _spawn_workers(2);
+
+    threads_initialized = 1;
 }
 
 /**
@@ -465,9 +527,19 @@ DLLEXPORT void init_threads() {
  * @return int The index of the submitted job, or -1 if the queue is full.
  */
 DLLEXPORT int submit_c_job(int type, int64_t arg, int timeout_ms) {
-    static int next_thread = 0;
+    if (!threads_initialized)
+        init_threads();
     int idx = -1;
     LOCK(queue_lock);
+
+    /* Dynamic Scaling: If we have pending jobs and space in the pool, grow! */
+    int pending_count = 0;
+    for (int i = 0; i < MAX_JOBS; i++)
+        if (job_slots[i].status == JOB_NEW)
+            pending_count++;
+    if (pending_count > 0 && current_thread_count < max_thread_pool_size)
+        _spawn_workers(1); /* Grow by 1 on demand */
+
     for (int i = 0; i < MAX_JOBS; i++) {
         if (job_slots[i].status == JOB_FREE) {
             idx = i;
@@ -476,12 +548,11 @@ DLLEXPORT int submit_c_job(int type, int64_t arg, int timeout_ms) {
     }
     if (idx != -1) {
         job_slots[idx].fiber_id = current_fiber_id;
-        job_slots[idx].target_thread = next_thread;
-        next_thread = (next_thread + 1) % thread_pool_size;
         job_slots[idx].type = type;
         job_slots[idx].input.i = arg;
         job_slots[idx].timeout_ms = timeout_ms;
         job_slots[idx].status = JOB_NEW;
+        PARA_COND_SIGNAL(queue_cond);
     }
     UNLOCK(queue_lock);
     return idx;
@@ -493,6 +564,8 @@ DLLEXPORT int submit_c_job(int type, int64_t arg, int timeout_ms) {
  * @return int Index of a finished job, or -1 if none are ready.
  */
 DLLEXPORT int check_for_completion() {
+    if (!threads_initialized)
+        init_threads();
     int job_idx = -1;
     LOCK(queue_lock);
     for (int i = 0; i < MAX_JOBS; i++) {
@@ -576,8 +649,10 @@ DLLEXPORT void force_depth_zero(SV * cv_ref) {
 DLLEXPORT int get_current_parataxis_id() { return current_fiber_id; }
 /** @brief Returns the OS-level thread ID of the main interpreter thread. */
 DLLEXPORT int get_os_thread_id_export() { return get_os_thread_id(); }
-/** @brief Returns the number of worker threads in the pool. */
-DLLEXPORT int get_thread_pool_size() { return thread_pool_size; }
+/** @brief Returns the number of worker threads currently running in the pool. */
+DLLEXPORT int get_thread_pool_size() { return current_thread_count; }
+/** @brief Returns the maximum number of worker threads allowed in the pool. */
+DLLEXPORT int get_max_thread_pool_size() { return max_thread_pool_size; }
 
 /** @brief Sets the threshold for automatic yield-based preemption. */
 DLLEXPORT void set_preempt_threshold(int64_t threshold) { preempt_threshold = threshold; }
@@ -854,6 +929,13 @@ void init_perl_stacks(para_fiber_t * c) {
  */
 DLLEXPORT int init_system() {
     dTHX;
+    if (system_initialized)
+        return 0;
+    if (max_thread_pool_size == 0) {
+        max_thread_pool_size = get_cpu_count();
+        if (max_thread_pool_size > MAX_THREADS)
+            max_thread_pool_size = MAX_THREADS;
+    }
     main_context.si = PL_curstackinfo;
     main_context.transfer_data = &PL_sv_undef;
     main_context.id = -1;
@@ -871,6 +953,7 @@ DLLEXPORT int init_system() {
     main_context.curstash = PL_curstash;
     main_context.defstash = PL_defstash;
     main_context.errors = PL_errors;
+    system_initialized = 1;
 #ifdef _WIN32
     /* Convert the main thread into a fiber so it can be switched out */
     if (!main_fiber_handle) {
@@ -1082,7 +1165,7 @@ DLLEXPORT int create_fiber(SV * user_code, SV * self_ref) {
 #ifdef _WIN32
     c->context = CreateFiber(0, fiber_entry, c);
 #else
-    c->stack_sz = 4 * 1024 * 1024;
+    c->stack_sz = 512 * 1024;  // 512KB is plenty for Perl fibers
     if (posix_memalign(&c->stack_p, 16, c->stack_sz) != 0) {
         destroy_coro(idx);
         return -3;
@@ -1308,12 +1391,27 @@ DLLEXPORT void destroy_coro(int fiber_id) {
  */
 DLLEXPORT void cleanup() {
     dTHX;
-    threads_keep_running = 0;
+    if (threads_initialized) {
+        LOCK(queue_lock);
+        threads_keep_running = 0;
+        PARA_COND_BROADCAST(queue_cond);
+        UNLOCK(queue_lock);
+
 #ifdef _WIN32
-    Sleep(10);
+        /* Wait for threads to finish and close handles */
+        for (int i = 0; i < current_thread_count; i++) {
+            if (thread_handles[i]) {
+                WaitForSingleObject(thread_handles[i], 100);
+                CloseHandle(thread_handles[i]);
+                thread_handles[i] = NULL;
+            }
+        }
 #else
-    usleep(10000);
+        /* Give threads a moment to notice threads_keep_running = 0 */
+        usleep(10000);
 #endif
+    }
+
     if (current_fiber_id != -1) {
         swap_perl_state(fibers[current_fiber_id], &main_context);
         current_fiber_id = -1;

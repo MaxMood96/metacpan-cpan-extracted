@@ -4,7 +4,7 @@ package JSON::Schema::Modern::Document::OpenAPI;
 # ABSTRACT: One OpenAPI v3.0, v3.1 or v3.2 document
 # KEYWORDS: JSON Schema data validation request response OpenAPI
 
-our $VERSION = '0.127';
+our $VERSION = '0.128';
 
 use 5.020;
 use utf8;
@@ -757,7 +757,7 @@ JSON::Schema::Modern::Document::OpenAPI - One OpenAPI v3.0, v3.1 or v3.2 documen
 
 =head1 VERSION
 
-version 0.127
+version 0.128
 
 =head1 SYNOPSIS
 
@@ -798,11 +798,11 @@ one of:
 
 =item *
 
-for v3.2 documents: L<https://spec.openapis.org/oas/3.2/schema-base/2025-09-17> (which is a wrapper around L<https://spec.openapis.org/oas/3.2/schema/2025-09-17>), and the L<OpenAPI v3.2.x specification|https://spec.openapis.org/oas/v3.2>
+for v3.2 documents: L<https://spec.openapis.org/oas/3.2/schema-base/2025-11-23> (which is a wrapper around L<https://spec.openapis.org/oas/3.2/schema/2025-11-23>), and the L<OpenAPI v3.2.x specification|https://spec.openapis.org/oas/v3.2>
 
 =item *
 
-for v3.1 documents: L<https://spec.openapis.org/oas/3.1/schema-base/2025-09-15> (which is a wrapper around L<https://spec.openapis.org/oas/3.1/schema/2025-09-15>), and the L<OpenAPI v3.1.x specification|https://spec.openapis.org/oas/v3.1>
+for v3.1 documents: L<https://spec.openapis.org/oas/3.1/schema-base/2025-11-23> (which is a wrapper around L<https://spec.openapis.org/oas/3.1/schema/2025-11-23>), and the L<OpenAPI v3.1.x specification|https://spec.openapis.org/oas/v3.1>
 
 =back
 
@@ -849,7 +849,7 @@ See also L</retrieval_uri>.
 =head2 metaschema_uri
 
 The URI of the schema that describes the OpenAPI document itself. Defaults to
-C<https://spec.openapis.org/oas/3.2/schema/2025-09-17> (or the equivalent for the
+C<https://spec.openapis.org/oas/3.2/schema/2025-11-23> (or the equivalent for the
 L<OpenAPI version|https://spec.openapis.org/oas/latest#fixed-fields> you specify in the document),
 which permits the customization of
 L<C<jsonSchemaDialect>|https://spec.openapis.org/oas/latest#openapi-object>, which defines the

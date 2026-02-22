@@ -4,7 +4,7 @@
       "Karen Etheridge <ether@cpan.org>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Dist::Zilla version 6.037, CPAN::Meta::Converter version 2.150012",
+   "generated_by" : "Dist::Zilla version 6.037, CPAN::Meta::Converter version 2.150013",
    "keywords" : [
       "validation",
       "evaluation",
@@ -243,23 +243,23 @@
    "provides" : {
       "JSON::Schema::Modern::Document::OpenAPI" : {
          "file" : "lib/JSON/Schema/Modern/Document/OpenAPI.pm",
-         "version" : "0.127"
+         "version" : "0.128"
       },
       "JSON::Schema::Modern::Vocabulary::OpenAPI" : {
          "file" : "lib/JSON/Schema/Modern/Vocabulary/OpenAPI.pm",
-         "version" : "0.127"
+         "version" : "0.128"
       },
       "JSON::Schema::Modern::Vocabulary::OpenAPI_3_0" : {
          "file" : "lib/JSON/Schema/Modern/Vocabulary/OpenAPI_3_0.pm",
-         "version" : "0.127"
+         "version" : "0.128"
       },
       "OpenAPI::Modern" : {
          "file" : "lib/OpenAPI/Modern.pm",
-         "version" : "0.127"
+         "version" : "0.128"
       },
       "OpenAPI::Modern::Utilities" : {
          "file" : "lib/OpenAPI/Modern/Utilities.pm",
-         "version" : "0.127"
+         "version" : "0.128"
       }
    },
    "release_status" : "stable",
@@ -274,10 +274,10 @@
          "web" : "https://github.com/karenetheridge/OpenAPI-Modern"
       }
    },
-   "version" : "0.127",
+   "version" : "0.128",
    "x_Dist_Zilla" : {
       "perl" : {
-         "version" : "5.043007"
+         "version" : "5.043008"
       },
       "plugins" : [
          {
@@ -957,7 +957,7 @@
             "class" : "Dist::Zilla::Plugin::EnsureLatestPerl",
             "config" : {
                "Dist::Zilla::Plugin::EnsureLatestPerl" : {
-                  "Module::CoreList" : "5.20260119"
+                  "Module::CoreList" : "5.20260220"
                }
             },
             "name" : "@Author::ETHER/EnsureLatestPerl",
@@ -1175,7 +1175,7 @@
                   "branch" : null,
                   "changelog" : "Changes",
                   "signed" : 0,
-                  "tag" : "v0.127",
+                  "tag" : "v0.128",
                   "tag_format" : "v%V",
                   "tag_message" : "v%v%t"
                },
@@ -1450,7 +1450,7 @@
    "x_breaks" : {
       "Test::Mojo::Role::OpenAPI::Modern" : "< 0.007"
    },
-   "x_generated_by_perl" : "v5.43.7",
+   "x_generated_by_perl" : "v5.43.8",
    "x_serialization_backend" : "Cpanel::JSON::XS version 4.40",
    "x_spdx_expression" : "Artistic-1.0-Perl OR GPL-1.0-or-later",
    "x_static_install" : 1,

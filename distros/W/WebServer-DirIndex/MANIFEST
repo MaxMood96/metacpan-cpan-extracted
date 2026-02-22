@@ -1,0 +1,14 @@
+Changes.md
+lib/WebServer/DirIndex.pm
+lib/WebServer/DirIndex/CSS.pm
+lib/WebServer/DirIndex/HTML.pm
+LICENSE
+Makefile.PL
+MANIFEST			This list of files
+MANIFEST.SKIP
+README.md
+t/webserver_dirindex.t
+t/webserver_dirindex_css.t
+t/webserver_dirindex_html.t
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

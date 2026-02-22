@@ -3,6 +3,8 @@ package Yote::SQLObjectStore;
 use 5.16.0;
 use warnings;
 
+our $VERSION = '0.04';
+
 sub new {
     my ($pkg, $flavor, %args) = @_;
 

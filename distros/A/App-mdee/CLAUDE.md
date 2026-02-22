@@ -425,7 +425,7 @@ Code-related theme keys map directly to module labels:
 
 | Theme Key | Module Label | Description |
 |-----------|-------------|-------------|
-| `code_mark` | `code_mark` | Fenced code block delimiters (``` ``` ```, `~~~`) |
+| `code_mark` | `code_mark` | Fenced code block delimiters (```` ``` ````, `~~~`) |
 | `code_tick` | `code_tick` | Inline code backticks (`` ` ``) |
 | `code_info` | `code_info` | Fenced code block info string |
 | `code_block` | `code_block` | Fenced code block body (with `;E`) |
@@ -449,7 +449,7 @@ Code-related theme keys map directly to module labels:
 
 The `code_block` label includes `;E` (erase line) for full-width background on fenced code blocks. `code_tick` has background color matching `code_inline` for visual continuity, with dimmer foreground. `code_inline` has explicit foreground (`L00`/`L25`) to prevent heading foreground from bleeding through in cumulative coloring.
 
-Inline code backticks are displayed as `` `content´ `` using `code_tick` color for the markers. Multi-backtick delimiters (`` `` ``, ` ``` `, etc.) are collapsed to a single pair, with optional surrounding spaces stripped per CommonMark. The open/close markers are configurable via `tick_open`/`tick_close` config parameters (default: `` ` `` / `´`).
+Inline code backticks are displayed as `` `content´ `` using `code_tick` color for the markers. Multi-backtick delimiters (``` `` ```, ```` ``` ````, etc.) are collapsed to a single pair, with optional surrounding spaces stripped per CommonMark. The open/close markers are configurable via `tick_open`/`tick_close` config parameters (default: `` ` `` / `´`).
 
 Regex patterns used by the md module:
 
@@ -669,7 +669,7 @@ How `(*SKIP)(*FAIL)` works:
 3. `(*FAIL)` forces a match failure — the substitution skips this region
 4. The engine resumes after the code span, so the second alternative can only match outside code spans
 
-This replaces per-pattern backtick lookbehinds (which only checked the immediately preceding character and couldn't handle cases like `` `` `code` `` `` where a space separates the backtick from `[`). The link pattern retains `(?<![!\e])` lookbehind for image link prefix `!` and protect placeholder `\e[`.
+This replaces per-pattern backtick lookbehinds (which only checked the immediately preceding character and couldn't handle cases like ``` `` `code` `` ``` where a space separates the backtick from `[`). The link pattern retains `(?<![!\e])` lookbehind for image link prefix `!` and protect placeholder `\e[`.
 
 #### Link Text Matching Pattern
 
@@ -792,7 +792,7 @@ Emphasis patterns do not span multiple lines. Multi-line bold or italic text is 
 
 Link patterns do not span multiple lines. The link text and URL must be on the same line.
 
-Link text matching uses `(?:` `` `[^`\n]*+` `` `|\\.|[^\]` `` ` `` `\\\n]++)+` to handle:
+Link text matching uses `` (?:`[^`\n]*+`|\\.|[^`\\\n\]]++)+  `` to handle:
 - `]` inside backtick-quoted text (e.g., `` [`init [CONFIGS...]`](#url) ``) — deviates from CommonMark spec (which terminates `]` even inside code spans) but matches GitHub rendering
 - Backslash-escaped `\]` (e.g., `[foo\]bar](#url)`) — per CommonMark spec, `\]` does not terminate link text
 

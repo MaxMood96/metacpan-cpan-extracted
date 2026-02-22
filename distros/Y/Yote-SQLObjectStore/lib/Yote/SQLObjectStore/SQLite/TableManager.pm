@@ -7,6 +7,16 @@ use File::Grep qw(fgrep fmap fdo);
 use Module::Load::Conditional qw(requires can_load);
 use base 'Yote::SQLObjectStore::TableManager';
 
+sub map_type {
+    my ($self, $type) = @_;
+    return 'INTEGER' if $type =~ /^(INTEGER|BIGINT|SMALLINT)$/i;
+    return 'REAL'    if $type =~ /^(FLOAT|DOUBLE|REAL)$/i;
+    return 'NUMERIC' if $type =~ /^(DECIMAL|NUMERIC)\(\d+[,\s]*\d*\)$/i;
+    return 'INTEGER' if $type =~ /^BOOLEAN$/i;
+    return 'TEXT'    if $type =~ /^(TIMESTAMP|DATE)$/i;
+    return $type;
+}
+
 sub new_column {
     my ($self, $table_name, $column_name, $column_def) = @_;
     "ALTER TABLE $table_name ADD COLUMN $column_name $column_def";

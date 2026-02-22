@@ -255,6 +255,12 @@ YAML
     'parameters are decoded using the indicated media type and then validated against the content schema',
   );
 
+  cmp_result(
+    $openapi->validate_request(request('GET', 'http://example.com/foo/%7B%22key%22:1%7D'))->TO_JSON,
+    { valid => true },
+    'path parameter is uri-decoded first before evaluating',
+  );
+
 
   $openapi = OpenAPI::Modern->new(
     openapi_uri => $doc_uri,
@@ -1042,6 +1048,7 @@ YAML
     openapi_schema => $yamlpp->load_string(OPENAPI_PREAMBLE.<<'YAML'));
 paths:
   /foo/{username}:
+    get: {}
     parameters:
       - name: username
         in: path
@@ -1060,7 +1067,6 @@ paths:
           Al-Khwarizmi:
             dataValue: "الخوارزميّ"
             serializedValue: "%D8%A7%D9%84%D8%AE%D9%88%D8%A7%D8%B1%D8%B2%D9%85%D9%8A%D9%91"
-    get: {}
 YAML
 
   foreach my $username (qw(diṅnāga الخوارزميّ)) {
@@ -1068,7 +1074,7 @@ YAML
     cmp_result(
       $openapi->validate_request($request)->TO_JSON,
       { valid => true },
-      'all path parameters are deserialized correctly',
+      'all path parameters are validated',
     );
   }
 
@@ -1096,13 +1102,30 @@ paths:
               - 12345678
               - 90099
             serializedValue: "12345678,90099"
+      - name: X-Token
+        in: header
+        description: token to be passed as a header
+        required: true
+        schema:
+          type: array
+          items:
+            type: integer
+            format: int64
+          const: [ 12345678, 90099 ]
+        style: simple
+        examples:
+          Tokens:
+            dataValue:
+              - 12345678
+              - 90099
+            serializedValue: "12345678,90099"
 YAML
 
-  $request = request('GET', 'http://example.com/foo/12345678,90099');
+  $request = request('GET', 'http://example.com/foo/12345678,90099', [ 'X-Token' => '12345678,90099' ]);
   cmp_result(
     $openapi->validate_request($request)->TO_JSON,
     { valid => true },
-    'all path parameters are deserialized correctly',
+    'all path and header parameters are validated',
   );
 
 
@@ -1119,33 +1142,34 @@ servers:
       subdir:
         default: blah
 paths:
-  /{simple−string}/{simple−array−false}/{simple−array−true}/{simple−object−false}/{simple−object−true}/{cølör0}/{cølör1}/{cølör2}/{cølör3}/{cølör4}/{label−string}/{label−array−false}/{label−array−true}/{label−object−false}/{label−object−true}:
+  /{path−simple−string}/{path−simple−array−false}/{path−simple−array−true}/{path−simple−object−false}/{path−simple−object−true}/{cølör0}/{cølör1}/{cølör2}/{cølör3}/{cølör4}/{path−label−string}/{path−label−array−false}/{path−label−array−true}/{path−label−object−false}/{path−label−object−true}:
+    get: {}
     parameters:
-      - name: simple−string
+      - name: path−simple−string
         in: path
         required: true
         schema:
           const: red﹠green
-      - name: simple−array−false
+      - name: path−simple−array−false
         in: path
         required: true
         schema:
           type: array
           const: [ blue−black, blackish﹠green, 100𝑥brown ]
-      - name: simple−array−true
+      - name: path−simple−array−true
         in: path
         required: true
         explode: true
         schema:
           type: array
           const: [ blue−black, blackish﹠green, 100𝑥brown ]
-      - name: simple−object−false
+      - name: path−simple−object−false
         in: path
         required: true
         schema:
           type: object
           const: { blue−black: yes!, blackish﹠green: ¿no?, 100𝑥brown: fl¡p }
-      - name: simple−object−true
+      - name: path−simple−object−true
         in: path
         required: true
         explode: true
@@ -1188,20 +1212,20 @@ paths:
         schema:
           type: object
           const: { blue−black: yes!, blackish﹠green: ¿no?, 100𝑥brown: fl¡p }
-      - name: label−string
+      - name: path−label−string
         in: path
         required: true
         style: label
         schema:
           const: red﹠gr.e.en
-      - name: label−array−false
+      - name: path−label−array−false
         in: path
         required: true
         style: label
         schema:
           type: array
           const: [ blue−black, blackish﹠green, 100𝑥brown ]
-      - name: label−array−true
+      - name: path−label−array−true
         in: path
         required: true
         style: label
@@ -1209,14 +1233,14 @@ paths:
         schema:
           type: array
           const: [ blue−black, blackish﹠green, 100𝑥brown ]
-      - name: label−object−false
+      - name: path−label−object−false
         in: path
         required: true
         style: label
         schema:
           type: object
           const: { blue−black: yes!, blackish﹠green: ¿no?, 100𝑥brown: fl¡p }
-      - name: label−object−true
+      - name: path−label−object−true
         in: path
         required: true
         style: label
@@ -1224,7 +1248,37 @@ paths:
         schema:
           type: object
           const: { blue−black: yes!, blackish﹠green: ¿no?, 100𝑥brown: fl¡p }
-    get: {}
+      - name: header−simple−string
+        in: header
+        required: true
+        schema:
+          const: red﹠green
+      - name: header−simple−array−false
+        in: header
+        required: true
+        schema:
+          type: array
+          const: [ blue−black, blackish﹠green, 100𝑥brown ]
+      - name: header−simple−array−true
+        in: header
+        required: true
+        explode: true
+        schema:
+          type: array
+          const: [ blue−black, blackish﹠green, 100𝑥brown ]
+      - name: header−simple−object−false
+        in: header
+        required: true
+        schema:
+          type: object
+          const: { blue−black: yes!, blackish﹠green: ¿no?, 100𝑥brown: fl¡p }
+      - name: header−simple−object−true
+        in: header
+        required: true
+        explode: true
+        schema:
+          type: object
+          const: { blue−black: yes!, blackish﹠green: ¿no?, 100𝑥brown: fl¡p }
 YAML
 
   $request = request('GET', 'http://st💩g.example.com/'.join('/', map uri_encode($_), '🐙',
@@ -1242,12 +1296,20 @@ YAML
     '.blue−black.blackish﹠green.100𝑥brown',
     '.blue−black,yes!,blackish﹠green,¿no?,100𝑥brown,fl¡p',
     '.blue−black=yes!.blackish﹠green=¿no?.100𝑥brown=fl¡p',
-  ));
+  ),
+    [
+      "header\xe2\x88\x92simple\xe2\x88\x92string" => "red\xef\xb9\xa0green",
+      "header\xe2\x88\x92simple\xe2\x88\x92array\xe2\x88\x92false" => "blue\xe2\x88\x92black,blackish\xef\xb9\xa0green,100\xf0\x9d\x91\xa5brown",
+      "header\xe2\x88\x92simple\xe2\x88\x92array\xe2\x88\x92true" => "blue\xe2\x88\x92black,blackish\xef\xb9\xa0green,100\xf0\x9d\x91\xa5brown",
+      "header\xe2\x88\x92simple\xe2\x88\x92object\xe2\x88\x92false" => "blue\xe2\x88\x92black,yes!,blackish\xef\xb9\xa0green,\xc2\xbfno?,100\xf0\x9d\x91\xa5brown,fl\xc2\xa1p",
+      "header\xe2\x88\x92simple\xe2\x88\x92object\xe2\x88\x92true" => "blue\xe2\x88\x92black=yes!,blackish\xef\xb9\xa0green=\xc2\xbfno?,100\xf0\x9d\x91\xa5brown=fl\xc2\xa1p",
+    ],
+  );
 
   cmp_result(
     $openapi->validate_request($request)->TO_JSON,
     { valid => true },
-    'all path parameters are deserialized correctly',
+    'all path and header parameters are validated',
   );
 
 
@@ -1803,6 +1865,7 @@ paths:
             schema:
               minLength: 10
 YAML
+
   $request = request('POST', 'http://example.com/foo', [ 'Content-Type' => 'unsupported/unsupported' ], '!!!');
   cmp_result(
     $openapi->validate_request($request)->TO_JSON,
@@ -2456,6 +2519,9 @@ YAML
     'headers can be parsed into an array in order to test multiple values without sorting',
   );
 
+  {
+  my $todo = todo 'HTTP::Message::to_psgi fetches all headers as a single concatenated string'
+    if $::TYPE eq 'plack' or $::TYPE eq 'catalyst' or $::TYPE eq 'dancer2';
   $request = request('GET', 'http://example.com/foo', [
     MultipleValuesAsArray => '  one',
     MultipleValuesAsArray => ' one ',
@@ -2476,8 +2542,12 @@ YAML
     },
     'headers that appear more than once are parsed into an array',
   );
+  }
 
 
+  {
+  my $todo = todo 'HTTP::Message::to_psgi fetches all headers as a single concatenated string'
+    if $::TYPE eq 'plack' or $::TYPE eq 'catalyst' or $::TYPE eq 'dancer2';
   $request = request('GET', 'http://example.com/foo', [
       MultipleValuesAsObjectExplodeFalse => ' R, 100 ',
       MultipleValuesAsObjectExplodeFalse => ' B, 150,  G , 200 ',
@@ -2517,6 +2587,7 @@ YAML
     },
     'headers can be parsed into an object, represented in two ways depending on explode value',
   );
+  }
 
   $request = request('GET', 'http://example.com/foo', [
       ArrayWithRef => 'one, one, three',
@@ -2798,7 +2869,7 @@ subtest $::TYPE.': custom error messages for false schemas' => sub {
     openapi_uri => $doc_uri,
     openapi_schema => $yamlpp->load_string(OPENAPI_PREAMBLE.<<'YAML'));
 paths:
-  /foo/{foo_id}:
+  /foo/{foo_id}/{bar_id}:
     post:
       parameters:
       - name: foo_id
@@ -2807,10 +2878,33 @@ paths:
         schema: false
       - name: Foo
         in: header
+        required: true
         schema: false
       - name: foo
         in: query
+        required: true
         schema: false
+      - name: bar_id
+        in: path
+        required: true
+        content:
+          text/plain:
+            schema:
+              false
+      - name: Bar
+        in: header
+        required: true
+        content:
+          text/plain:
+            schema:
+              false
+      - name: bar
+        in: query
+        required: true
+        content:
+          text/plain:
+            schema:
+              false
       requestBody:
         content:
           '*/*':
@@ -2818,8 +2912,9 @@ paths:
   /bar:
     post:
       parameters:
-      - name: foo
+      - name: bar
         in: querystring
+        required: true
         content:
           text/plain:
             schema:
@@ -2827,34 +2922,51 @@ paths:
 YAML
 
   cmp_result(
-    $openapi->validate_request(request('POST', 'http://example.com/foo/1?foo=1',
-          [ Foo => 1, 'Content-Type' => 'text/plain' ], 'hi'))->TO_JSON,
+    $openapi->validate_request(request('POST', 'http://example.com/foo/1/2?foo=1&bar=2',
+      [ Foo => 1, Bar => 2, 'Content-Type' => 'text/plain' ], 'hi'))->TO_JSON,
     {
       valid => false,
       errors => [
-        # this is paradoxical, but we'll test it anyway
         {
           instanceLocation => '/request/uri/path/foo_id',
-          keywordLocation => jsonp(qw(/paths /foo/{foo_id} post parameters 0 schema)),
-          absoluteKeywordLocation => $doc_uri->clone->fragment(jsonp(qw(/paths /foo/{foo_id} post parameters 0 schema)))->to_string,
+          keywordLocation => jsonp(qw(/paths /foo/{foo_id}/{bar_id} post parameters 0 schema)),
+          absoluteKeywordLocation => $doc_uri->clone->fragment(jsonp(qw(/paths /foo/{foo_id}/{bar_id} post parameters 0 schema)))->to_string,
           error => 'path parameter not permitted',
         },
         {
           instanceLocation => '/request/header/Foo',
-          keywordLocation => jsonp(qw(/paths /foo/{foo_id} post parameters 1 schema)),
-          absoluteKeywordLocation => $doc_uri->clone->fragment(jsonp(qw(/paths /foo/{foo_id} post parameters 1 schema)))->to_string,
+          keywordLocation => jsonp(qw(/paths /foo/{foo_id}/{bar_id} post parameters 1 schema)),
+          absoluteKeywordLocation => $doc_uri->clone->fragment(jsonp(qw(/paths /foo/{foo_id}/{bar_id} post parameters 1 schema)))->to_string,
           error => 'request header not permitted',
         },
         {
           instanceLocation => '/request/uri/query/foo',
-          keywordLocation => jsonp(qw(/paths /foo/{foo_id} post parameters 2 schema)),
-          absoluteKeywordLocation => $doc_uri->clone->fragment(jsonp(qw(/paths /foo/{foo_id} post parameters 2 schema)))->to_string,
+          keywordLocation => jsonp(qw(/paths /foo/{foo_id}/{bar_id} post parameters 2 schema)),
+          absoluteKeywordLocation => $doc_uri->clone->fragment(jsonp(qw(/paths /foo/{foo_id}/{bar_id} post parameters 2 schema)))->to_string,
+          error => 'query parameter not permitted',
+        },
+        {
+          instanceLocation => '/request/uri/path/bar_id',
+          keywordLocation => jsonp(qw(/paths /foo/{foo_id}/{bar_id} post parameters 3 content text/plain schema)),
+          absoluteKeywordLocation => $doc_uri->clone->fragment(jsonp(qw(/paths /foo/{foo_id}/{bar_id} post parameters 3 content text/plain schema)))->to_string,
+          error => 'path parameter not permitted',
+        },
+        {
+          instanceLocation => '/request/header/Bar',
+          keywordLocation => jsonp(qw(/paths /foo/{foo_id}/{bar_id} post parameters 4 content text/plain schema)),
+          absoluteKeywordLocation => $doc_uri->clone->fragment(jsonp(qw(/paths /foo/{foo_id}/{bar_id} post parameters 4 content text/plain schema)))->to_string,
+          error => 'request header not permitted',
+        },
+        {
+          instanceLocation => '/request/uri/query/bar',
+          keywordLocation => jsonp(qw(/paths /foo/{foo_id}/{bar_id} post parameters 5 content text/plain schema)),
+          absoluteKeywordLocation => $doc_uri->clone->fragment(jsonp(qw(/paths /foo/{foo_id}/{bar_id} post parameters 5 content text/plain schema)))->to_string,
           error => 'query parameter not permitted',
         },
         {
           instanceLocation => '/request/body',
-          keywordLocation => jsonp(qw(/paths /foo/{foo_id} post requestBody content */* schema)),
-          absoluteKeywordLocation => $doc_uri->clone->fragment(jsonp(qw(/paths /foo/{foo_id} post requestBody content */* schema)))->to_string,
+          keywordLocation => jsonp(qw(/paths /foo/{foo_id}/{bar_id} post requestBody content */* schema)),
+          absoluteKeywordLocation => $doc_uri->clone->fragment(jsonp(qw(/paths /foo/{foo_id}/{bar_id} post requestBody content */* schema)))->to_string,
           error => 'request body not permitted',
         },
       ],
@@ -2863,7 +2975,7 @@ YAML
   );
 
   cmp_result(
-    $openapi->validate_request(request('POST', 'http://example.com/bar?foo=1'))->TO_JSON,
+    $openapi->validate_request(request('POST', 'http://example.com/bar?bar=1'))->TO_JSON,
     {
       valid => false,
       errors => [

@@ -6,7 +6,7 @@ use warnings;
 use base 'Yote::SQLObjectStore::SQLite::Obj';
 
 our %cols = (
-    sneak  => 'VALUE'
+    sneak  => 'TEXT'
 );
 
 1;

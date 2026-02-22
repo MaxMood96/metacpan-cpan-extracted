@@ -11,6 +11,14 @@ sub bigint_type    { 'BIGINT' }
 sub int_type       { 'INTEGER' }
 sub bigint_pk_type { 'BIGINT PRIMARY KEY' }
 
+sub map_type {
+    my ($self, $type) = @_;
+    return 'REAL'             if $type =~ /^FLOAT$/i;
+    return 'DOUBLE PRECISION' if $type =~ /^DOUBLE$/i;
+    return 'BYTEA'            if $type =~ /^BLOB$/i;
+    return $type;
+}
+
 sub new_column {
     my ($self, $table_name, $column_name, $column_def) = @_;
     $table_name = lc $table_name;

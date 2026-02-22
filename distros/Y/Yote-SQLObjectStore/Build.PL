@@ -17,6 +17,9 @@ my $builder = Module::Build->new(
     test_files         => [ 't/object_store_sqlite.t',
                             't/object_store_mariadb.t',
                             't/object_store_postgres.t',
+                            't/map_type.t',
+                            't/locker.t',
+                            't/finder_methods.t',
                         ],
     requires => {
         'perl'            => 'v5.16',

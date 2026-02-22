@@ -71,6 +71,7 @@ repos:
         args: [ --number ]
         additional_dependencies:
           - mdformat-gfm
+          - mdformat-frontmatter
 
   - repo: https://github.com/golangci/misspell
     rev: v0.7.0
@@ -88,7 +89,7 @@ repos:
         name: perlcritic
         description: Ensure perl files adhere to standards
         language: perl
-        entry: perlcritic lib t dev
+        entry: perl -Ilib -S perlcritic lib t dev
         pass_filenames: false
       - id: jscpd
         name: Check for duplicated code

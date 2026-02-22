@@ -68,7 +68,7 @@
    "provides" : {
       "Acme::Parataxis" : {
          "file" : "lib/Acme/Parataxis.pm",
-         "version" : "v0.0.9"
+         "version" : "v0.0.10"
       }
    },
    "release_status" : "stable",
@@ -86,7 +86,7 @@
          "web" : "https://github.com/sanko/Acme-Parataxis.pm"
       }
    },
-   "version" : "v0.0.9",
+   "version" : "v0.0.10",
    "x_ignore" : [
       ".tidyallrc",
       ".gitignore",

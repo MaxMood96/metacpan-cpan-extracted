@@ -413,7 +413,6 @@ END
         "version" : 2
     },
     "release_status" : "stable",
-    "minimum_perl_version" : "5.00503",
     "resources" : {
         "license" : [
             "http://dev.perl.org/licenses/"
@@ -888,6 +887,31 @@ to license your work under the same license as that used by the project.
 TO_CONTRIBUTE
         close FH_CONTRIBUTING;
         check_usascii('CONTRIBUTING');
+
+        # write SECURITY.md
+        open(FH_SECURITY,'>SECURITY.md') || die "Can't open file: SECURITY.md\n";
+        binmode FH_SECURITY;
+        print FH_SECURITY <<'TO_SECURITY';
+# Security Policy
+
+## Reporting a Vulnerability
+
+If you discover a security vulnerability in this distribution, please report
+it by e-mail to the author at ina@cpan.org.
+
+Do NOT open a public GitHub issue for security vulnerabilities.  Please use
+private e-mail so that a fix can be prepared before public disclosure.
+
+You can expect an acknowledgement within a few days.  If you do not receive
+a response within one week, please follow up.
+
+## Supported Versions
+
+Only the most recent release on CPAN is actively maintained.  Please
+upgrade to the latest version before reporting security issues.
+TO_SECURITY
+        close FH_SECURITY;
+        check_usascii('SECURITY.md');
 
         # make work directory
         my $dirname = (dirname($file[0]) eq 'bin') ? 'App' : dirname($file[0]);

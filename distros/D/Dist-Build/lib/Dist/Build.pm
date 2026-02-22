@@ -1,5 +1,5 @@
 package Dist::Build;
-$Dist::Build::VERSION = '0.025';
+$Dist::Build::VERSION = '0.026';
 use strict;
 use warnings;
 
@@ -39,7 +39,9 @@ sub save_json {
 	return;
 }
 
-my @options = qw/install_base=s install_path=s% installdirs=s destdir=s prefix=s config=s% uninst:1 verbose:1 dry_run:1 pureperl_only|pureperl-only:1 create_packlist=i jobs=i allow_mb_mismatch:1/;
+my @options = qw/install_base=s install_path=s% installdirs=s destdir=s prefix=s
+   config=s% uninst:1 verbose:1 dry_run:1 pureperl_only|pureperl-only:1 create_packlist=i
+   jobs=i allow_mb_mismatch:1/;
 
 sub get_config {
 	my ($meta_name, @arguments) = @_;
@@ -47,9 +49,7 @@ sub get_config {
 	GetOptionsFromArray($_, \%options, @options) or die "Could not parse arguments" for @arguments;
 
 	$options{$_} = detildefy($options{$_}) for grep { exists $options{$_} } qw/install_base destdir prefix/;
-	if ($options{install_path}) {
-		$_ = detildefy($_) for values %{ $options{install_path} };
-	}
+	$_ = detildefy($_) for values %{ $options{install_path} // {} };
 	$options{config} = ExtUtils::Config->new($options{config});
 	$options{install_paths} = ExtUtils::InstallPaths->new(%options, dist_name => $meta_name);
 
@@ -76,7 +76,7 @@ sub Build_PL {
 	$planner->add_delegate('meta', sub { $meta });
 
 	for my $variable (qw/config install_paths verbose uninst jobs pureperl_only/) {
-		$planner->add_delegate($variable, sub { $options{$variable} });
+		$planner->add_delegate($variable, sub { $options{$variable} }) if exists $options{$variable};
 	}
 
 	my @meta_fragments;
@@ -158,7 +158,7 @@ Dist::Build - A modern module builder, author tools not included!
 
 =head1 VERSION
 
-version 0.025
+version 0.026
 
 =head1 DESCRIPTION
 
@@ -245,10 +245,6 @@ The version of the distribution
 =item * main_module
 
 The main module of the distribution.
-
-=item * release_status
-
-The release status of the distribution (e.g. C<'stable'>).
 
 =item * perl_path
 

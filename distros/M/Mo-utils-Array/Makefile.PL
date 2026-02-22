@@ -21,6 +21,7 @@ recursive_author_tests('xt');
 requires 'Error::Pure' => 0.15;
 requires 'Exporter' => 0;
 requires 'List::Util' => 1.33;
+requires 'Mo::utils::common' => 0;
 requires 'Readonly' => 0;
 requires 'Scalar::Util' => 0;
 resources 'bugtracker' => 'https://github.com/michal-josef-spacek/Mo-utils-Array/issues',
@@ -33,7 +34,7 @@ test_requires 'Test::MockObject' => 0;
 test_requires 'Test::More' => 0;
 test_requires 'Test::NoWarnings' => 0;
 tests_recursive;
-version '0.03';
+version '0.04';
 
 # Run.
 WriteAll();

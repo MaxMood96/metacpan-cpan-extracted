@@ -55,6 +55,6 @@
          "web" : "https://github.com/rawleyfowler/perl-Plack-Handler-H2"
       }
    },
-   "version" : "v0.0.3",
+   "version" : "v0.0.5",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

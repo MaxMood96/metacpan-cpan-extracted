@@ -1,5 +1,4 @@
 package File::SOPS;
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Perl implementation of Mozilla SOPS encrypted file format
 
 use Moo;
@@ -12,7 +11,7 @@ use File::SOPS::Format::YAML;
 use File::SOPS::Format::JSON;
 use namespace::clean;
 
-our $VERSION = '0.001';
+our $VERSION = '0.002';
 
 
 my %FORMATS = (
@@ -427,7 +426,7 @@ sub _value_to_bytes_for_type {
 
     my $str;
     if ($type eq 'bool') {
-        # Already deserialized to 1/0 by decrypt_value
+        # Deserialized to JSON::PP::Boolean by decrypt_value
         $str = $value ? 'True' : 'False';
     } else {
         $str = "$value";
@@ -572,7 +571,7 @@ File::SOPS - Perl implementation of Mozilla SOPS encrypted file format
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 
@@ -851,9 +850,10 @@ Returns true on success.
 
 =head1 SUPPORT
 
-=head2 IRC
+=head2 Issues
 
-You can reach Getty on C<irc.perl.org> for questions and support.
+Please report bugs and feature requests on GitHub at
+L<https://github.com/Getty/p5-file-sops/issues>.
 
 =head1 CONTRIBUTING
 

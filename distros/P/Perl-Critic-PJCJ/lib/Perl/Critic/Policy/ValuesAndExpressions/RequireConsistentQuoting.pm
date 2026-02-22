@@ -1,4 +1,4 @@
-package Perl::Critic::Policy::ValuesAndExpressions::RequireConsistentQuoting v0.1.4;
+package Perl::Critic::Policy::ValuesAndExpressions::RequireConsistentQuoting v0.2.2;
 
 use v5.26.0;
 use strict;
@@ -208,8 +208,6 @@ sub check_single_quoted ($self, $elem) {
     # Keep single quotes if double would introduce interpolation
     $self->would_interpolate_from_single_quotes($string);
 
-  my $would_interpolate = $self->would_interpolate_from_single_quotes($string);
-
   $self->violation($Desc, $Expl_double, $elem)
 }
 
@@ -228,6 +226,15 @@ sub check_double_quoted ($self, $elem) {
     if $content =~ /\\[\$\@\"]/
     && !$self->_has_quote_sensitive_escapes($string)
     && !$self->would_interpolate($string);
+
+  # If has escaped double quotes, suggest qq() — by this point, the ''
+  # suggestion was ruled out (escape sequences or interpolation present),
+  # so qq() eliminates the quote escaping while preserving both
+  if ($content =~ /\\"/) {
+    my ($optimal) = $self->find_optimal_delimiter($string, "qq", '"', '"');
+    return $self->violation($Desc, sprintf($Expl_optimal, $optimal->{display}),
+      $elem);
+  }
 
   return
 }
@@ -464,9 +471,7 @@ sub _extract_list_arguments ($self, $list) {
       # Handle other statements and structures (like hash constructors)
       push @args, $child;
     } else {
-      # Handle direct tokens
       next if $child->isa("PPI::Token::Whitespace");
-      next if $child->isa("PPI::Token::Structure");  # Skip ( ) { } etc.
       push @args, $child;
     }
   }
@@ -552,7 +557,7 @@ sub _what_would_double_quotes_suggest ($self, $string) {
 
   if ($has_double_quotes) {
     return "qq()" if $would_interpolate || $has_single_quotes;
-    return "''"   if !$has_single_quotes; # Only double quotes, no interpolation
+    return "''";  # Only double quotes, no interpolation
   }
 
   # Rules 1,2: Otherwise double quotes are fine
@@ -603,7 +608,7 @@ consistent and optimal quoting
 
 =head1 VERSION
 
-version v0.1.4
+version v0.2.2
 
 =head1 SYNOPSIS
 
@@ -745,6 +750,27 @@ few very special cases, strings with literal newlines are not a good idea.
     line 1
     line 2
   );
+
+=head2 Scope
+
+This policy covers string literals (C<"">, C<''>), quote operators (C<q()>,
+C<qq()>), word lists (C<qw()>), command execution (C<qx()>), and use/no
+statement import lists.
+
+The following quote-like constructs are B<not> checked, as they have
+fundamentally different quoting semantics:
+
+=over 4
+
+=item * Regular expressions: C<m//>, C<qr//>
+
+=item * Substitutions: C<s///>
+
+=item * Transliterations: C<tr///>, C<y///>
+
+=item * Heredocs: C<< <<EOF >>
+
+=back
 
 =head2 RATIONALE
 

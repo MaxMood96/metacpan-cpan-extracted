@@ -4,8 +4,8 @@ use base 'Yote::SQLObjectStore::SQLite::Obj';
 
 # simply has a reference hash and a value hash
 our %cols = (
-    name => 'VALUE',
-    tagline => 'VALUE',
+    name => 'TEXT',
+    tagline => 'TEXT',
     brother => 'REF',
     sister => 'REF',
     something => 'SomeThing',
@@ -13,7 +13,7 @@ our %cols = (
     some_val_array => 'ARRAY_VALUE',
     some_ref_hash => 'HASH_REF',
     some_val_hash => 'HASH_VALUE',
-    
+
 );
 
 1;

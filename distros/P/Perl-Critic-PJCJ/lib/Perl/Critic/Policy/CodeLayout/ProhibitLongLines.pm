@@ -1,4 +1,4 @@
-package Perl::Critic::Policy::CodeLayout::ProhibitLongLines v0.1.4;
+package Perl::Critic::Policy::CodeLayout::ProhibitLongLines v0.2.2;
 
 use v5.26.0;
 use strict;
@@ -6,6 +6,7 @@ use warnings;
 use feature      qw( signatures );
 use experimental qw( signatures );
 
+use List::Util                          qw( any );
 use Perl::Critic::Utils                 qw( $SEVERITY_MEDIUM );
 use parent                              qw( Perl::Critic::Policy );
 use Perl::Critic::Utils::SourceLocation ();
@@ -13,13 +14,20 @@ use Perl::Critic::Utils::SourceLocation ();
 my $Desc = "Line exceeds maximum length";
 my $Expl = "Keep lines under the configured maximum for readability";
 
-sub supported_parameters { {
-  name            => "max_line_length",
-  description     => "Maximum allowed line length in characters",
-  default_string  => "80",
-  behavior        => "integer",
-  integer_minimum => 1,
-} }
+sub supported_parameters {
+  {
+    name            => "max_line_length",
+    description     => "Maximum allowed line length in characters",
+    default_string  => "80",
+    behavior        => "integer",
+    integer_minimum => 1,
+  }, {
+      name           => "allow_lines_matching",
+      description    => "Regex patterns for lines exempt from length check",
+      default_string => "",
+      behavior       => "string list",
+    },
+}
 
 sub default_severity { $SEVERITY_MEDIUM }
 sub default_themes   { qw( cosmetic formatting ) }
@@ -27,14 +35,18 @@ sub default_themes   { qw( cosmetic formatting ) }
 sub applies_to { "PPI::Document" }
 
 sub violates ($self, $elem, $doc) {
+
   my $max_length = $self->{_max_line_length};
+  my @patterns   = keys $self->{_allow_lines_matching}->%*;
   my $source     = $doc->serialize;
   my @lines      = split /\n/, $source;
 
   my @violations;
+
   for my $line_num (0 .. $#lines) {
     my $length = length $lines[$line_num];
     if ($length > $max_length) {
+      next if any { $lines[$line_num] =~ /$_/ } @patterns;
       my $violation_desc
         = "Line is $length characters long (exceeds $max_length)";
 
@@ -92,7 +104,7 @@ Perl::Critic::Policy::CodeLayout::ProhibitLongLines - Prohibit long lines
 
 =head1 VERSION
 
-version v0.1.4
+version v0.2.2
 
 =head1 SYNOPSIS
 
@@ -127,6 +139,20 @@ The maximum allowed line length in characters. Defaults to 80.
 
   [CodeLayout::ProhibitLongLines]
   max_line_length = 72
+
+=head2 allow_lines_matching
+
+A space-separated list of regex patterns. Lines matching any pattern are
+exempt from the length check. This is useful for lines that cannot
+reasonably be shortened, such as long package declarations or URLs.
+
+  [CodeLayout::ProhibitLongLines]
+  allow_lines_matching = ^\s*package\s+
+
+Multiple patterns (space-separated):
+
+  [CodeLayout::ProhibitLongLines]
+  allow_lines_matching = ^\s*package\s+ https?://
 
 =head1 EXAMPLES
 

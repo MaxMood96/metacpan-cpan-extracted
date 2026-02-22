@@ -31,12 +31,15 @@
    "prereqs" : {
       "configure" : {
          "requires" : {
+            "Alien::Build" : "0",
+            "Alien::Build::MM" : "0",
             "Alien::cmake3" : "0",
             "Archive::Extract" : "0.88",
             "Archive::Tar" : "3.02",
             "Archive::Zip" : "0",
             "CPAN::Meta" : "0",
             "CPAN::Requirements::Dynamic" : "0",
+            "Capture::Tiny" : "0",
             "Compress::Zlib" : "2.204",
             "Config" : "0",
             "Devel::CheckBin" : "0",
@@ -52,7 +55,8 @@
             "IO::Zlib" : "1.14",
             "JSON::PP" : "2",
             "Net::SSLeay" : "1.49",
-            "Path::Tiny" : "0"
+            "Path::Tiny" : "0",
+            "PkgConfig" : "0"
          }
       },
       "develop" : {
@@ -98,7 +102,7 @@
    "provides" : {
       "Alien::SDL3" : {
          "file" : "lib/Alien/SDL3.pm",
-         "version" : "v2.28.0"
+         "version" : "v3.4.2"
       }
    },
    "release_status" : "stable",
@@ -116,14 +120,16 @@
          "web" : "https://github.com/Perl-SDL3/Alien-SDL3.pm"
       }
    },
-   "version" : "v2.28.0",
+   "version" : "v3.4.2",
    "x_authority" : "cpan:SANKO",
    "x_ignore" : [
       ".github/FUNDING.yml",
       ".github/workflows/ci.yml",
       ".github/workflows/delete_cache.yml",
       ".gitignore",
-      ".tidyallrc"
+      ".tidyallrc",
+      ".clang-format",
+      ".github/**"
    ],
    "x_serialization_backend" : "JSON::PP version 4.16",
    "x_static_install" : 0

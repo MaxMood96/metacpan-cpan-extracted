@@ -1,0 +1,7 @@
+# Dist::Zilla build artifacts
+/File-SOPS-*/
+/File-SOPS-*.tar.gz
+/.build/
+
+# Carton
+/local/

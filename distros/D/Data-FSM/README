@@ -1,0 +1,154 @@
+NAME
+    Data::FSM - Data object for Finite State Machine.
+
+SYNOPSIS
+     use Data::FSM;
+
+     my $obj = Data::FSM->new(%params);
+     my $id = $obj->id;
+     my $states_ar = $obj->states;
+     my $transitions_ar = $obj->transitions;
+
+METHODS
+  "new"
+     my $obj = Data::FSM->new(%params);
+
+    Constructor.
+
+    *       "id"
+
+            FSM id.
+
+            It's optional.
+
+            Default value is undef.
+
+    *       "states"
+
+            Reference to array with Data::FSM::State instances.
+
+            Default value is [].
+
+    *       "transitions"
+
+            Reference to array with Data::FSM::Transition instances. The
+            used states in transition must be a in "states" values.
+
+            Default value is [].
+
+    Returns instance of object.
+
+  "id"
+     my $id = $obj->id;
+
+    Get FSM id.
+
+    Returns number.
+
+  "states"
+     my $states_ar = $obj->states;
+
+    Get list of FSM states.
+
+    Returns reference to array with Data::FSM::State instances.
+
+  "transition"
+     my $transitions_ar = $obj->transitions;
+
+    Get list of FSM transitions.
+
+    Returns reference to array with Data::FSM::Transition instances.
+
+ERRORS
+     new():
+             From Data::FSM::Utils::check_transition_objects():
+                     Parameter 'transitions' check hasn't defined state objects.
+                     Parameter 'transitions' contains object which has 'from' object which isn't in defined objects.
+                             Reference: %s
+                     Parameter 'transitions' contains object which has 'to' object which isn't in defined objects.
+                             Reference: %s
+
+             From Mo::utils::Array::check_array_object():
+                     Parameter 'states' must be a array.
+                             Value: %s
+                             Reference: %s
+                     Parameter 'states' with array must contain 'Data::FSM::State' objects.
+                             Value: %s
+                             Reference: %s
+                     Parameter 'transitions' must be a array.
+                             Value: %s
+                             Reference: %s
+                     Parameter 'transitions' with array must contain 'Data::FSM::Transition' objects.
+                             Value: %s
+                             Reference: %s
+
+             From Mo::utils::Number::check_positive_natural():
+                     Parameter 'id' must be a positive natural number.
+                             Value: %s
+
+EXAMPLE
+     use strict;
+     use warnings;
+
+     use Data::FSM;
+     use Data::FSM::State;
+     use Data::FSM::Transition;
+
+     my $state1 = Data::FSM::State->new(
+             'name' => 'From',
+     );
+     my $state2 = Data::FSM::State->new(
+             'name' => 'To',
+     );
+     my $fsm = Data::FSM->new(
+             'id' => 7,
+             'states' => [
+                     $state1,
+                     $state2,
+             ],
+             'transitions' => [
+                     Data::FSM::Transition->new(
+                             'from' => $state1,
+                             'to' => $state2,
+                     ),
+             ],
+     );
+
+     # Print out.
+     print 'Id: '.$fsm->id."\n";
+     print "States:\n";
+     foreach my $state (@{$fsm->states}) {
+             print '- '.$state->name."\n";
+     }
+     print "Transitions:\n";
+     foreach my $transition (@{$fsm->transitions}) {
+             print '- '.$transition->from->name.' -> '.$transition->to->name."\n";
+     }
+
+     # Output:
+     # Id: 7
+     # States:
+     # - From
+     # - To
+     # Transitions:
+     # - From -> To
+
+DEPENDENCIES
+    Data::FSM::Utils, Mo, Mo::utils::Array, Mo::utils::Number.
+
+REPOSITORY
+    <https://github.com/michal-josef-spacek/Data-FSM>
+
+AUTHOR
+    Michal Josef Špaček <mailto:skim@cpan.org>
+
+    <http://skim.cz>
+
+LICENSE AND COPYRIGHT
+    © 2025-2026 Michal Josef Špaček
+
+    BSD 2-Clause License
+
+VERSION
+    0.01
+

@@ -1,5 +1,5 @@
 package Dist::Build::Core;
-$Dist::Build::Core::VERSION = '0.025';
+$Dist::Build::Core::VERSION = '0.026';
 use strict;
 use warnings;
 
@@ -18,12 +18,11 @@ use File::Path qw/make_path remove_tree/;
 use File::Spec::Functions qw/catdir catfile abs2rel rel2abs/;
 use Parse::CPAN::Meta;
 
-use ExtUtils::Builder::Node;
-use ExtUtils::Builder::Action::Function;
+use ExtUtils::Builder::Util qw/get_perl command function/;
 
 sub new_action {
 	my ($name, @args) = @_;
-	return ExtUtils::Builder::Action::Function->new(
+	return function(
 		function  => $name,
 		module    => __PACKAGE__,
 		arguments => \@args,
@@ -86,7 +85,7 @@ sub add_methods {
 
 	$planner->add_delegate('mkdir', sub {
 		my ($planner, $target, %options) = @_;
-		my $action = ExtUtils::Builder::Action::Function->new(
+		my $action = function(
 			function  => 'make_path',
 			module    => 'File::Path',
 			arguments => [ $target, %options ],
@@ -262,11 +261,31 @@ sub add_methods {
 		}
 	});
 
+	$planner->add_delegate('auto_PL' => sub {
+		my ($planner, $dir, %args) = @_;
+		$dir //= 'lib';
+		my $pattern = $planner->create_pattern(dir => $dir, file => '*.PL');
+		$planner->create_subst(
+			on    => $pattern,
+			subst => sub {
+				my ($source) = @_;
+				my $target = $source =~ s/\.PL\z//r;
+				$planner->create_node(
+					target       => $target,
+					dependencies => [ $source ],
+					actions      => [
+						command(get_perl(%args), $source, $target),
+					],
+				);
+			},
+		);
+	});
+
 	$planner->add_delegate('autoclean', sub {
 		my ($planner) = @_;
 		my @targets = grep { !/^blib\b/ } map { $_->target } grep { ! $_->phony } $planner->materialize->nodes;
 
-		my $clean_action = ExtUtils::Builder::Action::Function->new(
+		my $clean_action = function(
 			function  => 'remove_tree',
 			module    => 'File::Path',
 			arguments => [ 'blib', @targets ],
@@ -280,7 +299,7 @@ sub add_methods {
 		);
 
 		my @real_targets = qw/Build _build MYMETA.json MYMETA.yml/;
-		my $realclean_action = ExtUtils::Builder::Action::Function->new(
+		my $realclean_action = function(
 			function  => 'remove_tree',
 			module    => 'File::Path',
 			arguments => \@real_targets,
@@ -384,7 +403,7 @@ Dist::Build::Core - core functions for Dist::Build
 
 =head1 VERSION
 
-version 0.025
+version 0.026
 
 =head1 DESCRIPTION
 
@@ -449,6 +468,10 @@ This enables verbose mode.
 This uninstalls files before installing the new ones.
 
 =back
+
+=item * auto_PL($dir)
+
+This will find any C<foo.PL> file and run them to generate the matching C<foo> file. It takes one optional argument: C<$dir>, the directory that will be searched. It defaults to C<'lib'>.
 
 =item * dump_binary($filename, $content, %named_arguments)
 

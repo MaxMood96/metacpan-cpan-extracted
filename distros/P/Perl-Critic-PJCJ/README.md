@@ -27,7 +27,7 @@ simple rules:
 
 **Special Cases:**
 
-- **Use statements** - Import lists require `qw()` for multiple arguments
+- **Use statements** - Import lists require `qw()` for simple string arguments
 - **Newlines** - Multi-line strings may use any quoting style
 
 #### Rationale
@@ -52,7 +52,7 @@ simple rules:
 ```perl
 my $greeting = 'hello';                     # use double quotes (Rule 2)
 my @words    = qw{word(with)parens};        # use qw[] (Rule 3)
-my $file     = q!path/to/file!;             # use "" (Rule 3)
+my $file     = q!path/to/file!;             # use "" (Rule 1)
 my $text     = qq(simple);                  # use "" instead of qq() (Rule 1)
 my $literal  = q(contains$literal);         # use '' instead of q() (Rule 1)
 ```
@@ -76,10 +76,9 @@ my $cmd   = qx( command[with}brackets );    # () handles unbalanced brackets
 my @list  = qw( one two );                  # bracket delimiters only
 
 # Special Case: Use statements
-use Foo;                                    # no arguments allowed
+use Foo;                                    # no arguments is fine
 use Bar ();                                 # empty parentheses allowed
-use Baz "single_arg";                       # single arg with double quotes
-use Qux qw( single_arg );                   # single arg with qw()
+use Baz qw( single_arg );                   # single arg with qw()
 use Quux qw( arg1 arg2 arg3 );              # multiple args with qw() only
 
 # Special Case: Strings with newlines
@@ -189,24 +188,14 @@ Add individual policies to your `.perlcriticrc` file:
 max_line_length = 72
 ```
 
-Or include the entire distribution:
-
-```ini
-include = Perl::Critic::PJCJ
-```
-
 Then run perlcritic on your code:
 
 ```bash
-# Run individual policies
 perlcritic --single-policy \
   ValuesAndExpressions::RequireConsistentQuoting MyScript.pl
 
 perlcritic --single-policy \
   CodeLayout::ProhibitLongLines MyScript.pl
-
-# Or run all policies from the distribution
-perlcritic --include Perl::Critic::PJCJ MyScript.pl
 ```
 
 ## Development

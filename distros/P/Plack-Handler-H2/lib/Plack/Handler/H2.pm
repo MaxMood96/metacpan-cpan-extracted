@@ -37,7 +37,7 @@ use File::Temp;
 use Plack::Handler::H2::Writer;
 
 require XSLoader;
-our $VERSION = '0.0.3';
+our $VERSION = '0.0.5';
 XSLoader::load( __PACKAGE__, $VERSION );
 
 sub new {

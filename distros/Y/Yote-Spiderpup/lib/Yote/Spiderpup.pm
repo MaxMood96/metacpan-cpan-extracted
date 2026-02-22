@@ -3,7 +3,7 @@ package Yote::Spiderpup;
 use strict;
 use warnings;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 use CSS::LESSp;
 use Data::Dumper;
@@ -1265,20 +1265,37 @@ ERRORHTML
 #----------------------------------------------------------------------
 
 sub run_server {
-    my ($self, $port) = @_;
+    my ($self, $port, %opts) = @_;
     $port //= 5000;
 
     $SIG{CHLD} = 'IGNORE';
 
-    my $listener = IO::Socket::INET->new(
-        LocalAddr => '0.0.0.0',
-        LocalPort => $port,
-        Proto     => 'tcp',
-        Listen    => SOMAXCONN,
-        Reuse     => 1,
-    ) or die "Cannot create socket: $!";
+    my $listener;
+    my $is_ssl = $opts{ssl_cert} && $opts{ssl_key};
 
-    print "Server running on http://localhost:$port\n";
+    if ($is_ssl) {
+        require IO::Socket::SSL;
+        $listener = IO::Socket::SSL->new(
+            LocalAddr     => '0.0.0.0',
+            LocalPort     => $port,
+            Proto         => 'tcp',
+            Listen        => SOMAXCONN,
+            Reuse         => 1,
+            SSL_cert_file => $opts{ssl_cert},
+            SSL_key_file  => $opts{ssl_key},
+        ) or die "Cannot create SSL socket: $! ($IO::Socket::SSL::SSL_ERROR)";
+    } else {
+        $listener = IO::Socket::INET->new(
+            LocalAddr => '0.0.0.0',
+            LocalPort => $port,
+            Proto     => 'tcp',
+            Listen    => SOMAXCONN,
+            Reuse     => 1,
+        ) or die "Cannot create socket: $!";
+    }
+
+    my $scheme = $is_ssl ? 'https' : 'http';
+    print "Server running on $scheme://localhost:$port\n";
     print "Press Ctrl+C to stop.\n";
 
     my $base_url_path = $self->{base_url_path};

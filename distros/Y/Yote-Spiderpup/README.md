@@ -1404,6 +1404,12 @@ pupserver --webroot /var/www/mysite
 # With base URL path for reverse proxy (e.g., Apache ProxyPass /myapp)
 pupserver --base-url-path /myapp
 
+# HTTPS with SSL certificate
+pupserver --ssl-cert cert.pem --ssl-key key.pem
+
+# HTTPS on custom port
+pupserver --port 8443 --ssl-cert cert.pem --ssl-key key.pem
+
 # Disable HTML caching (recompile on every request)
 SPIDERPUP_NO_CACHE=1 pupserver
 ```
@@ -1414,6 +1420,7 @@ SPIDERPUP_NO_CACHE=1 pupserver
 - `YAML` - YAML parsing
 - `JSON::PP` - JSON encoding
 - `IO::Socket::INET` - HTTP server
+- `IO::Socket::SSL` - HTTPS support (optional, required for `--ssl-cert`/`--ssl-key`)
 
 ## Caching
 

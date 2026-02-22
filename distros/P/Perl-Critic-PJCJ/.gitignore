@@ -9,6 +9,9 @@ tags*
 tmp/
 cover_db/
 
+# llm development
+llm/
+
 # Perl temporary files
 *.bak
 *.old

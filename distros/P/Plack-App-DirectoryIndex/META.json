@@ -4,7 +4,7 @@
       "Dave Cross <dave@perlhacks.com>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "ExtUtils::MakeMaker version 7.64, CPAN::Meta::Converter version 2.150010",
+   "generated_by" : "ExtUtils::MakeMaker version 7.70, CPAN::Meta::Converter version 2.150010",
    "license" : [
       "perl_5"
    ],
@@ -33,21 +33,22 @@
       "runtime" : {
          "requires" : {
             "Plack" : "0",
-            "perl" : "5.010000"
+            "WebServer::DirIndex" : "0",
+            "perl" : "5.038000"
          }
       }
    },
    "release_status" : "stable",
    "resources" : {
       "bugtracker" : {
-         "web" : "https://github.com/davorg/plack-app-directoryindex/issues"
+         "web" : "https://github.com/davorg-cpan/plack-app-directoryindex/issues"
       },
       "repository" : {
          "type" : "git",
-         "url" : "git://github.com/davorg/plack-app-directoryindex.git",
-         "web" : "https://github.com/davorg/plack-app-directoryindex"
+         "url" : "git://github.com/davorg-cpan/plack-app-directoryindex.git",
+         "web" : "https://github.com/davorg-cpan/plack-app-directoryindex"
       }
    },
-   "version" : "v0.0.4",
-   "x_serialization_backend" : "JSON::PP version 4.07"
+   "version" : "v0.1.0",
+   "x_serialization_backend" : "JSON::PP version 4.16"
 }

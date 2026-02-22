@@ -34,14 +34,18 @@ subtest "Escaped special characters" => sub {
     "Escaped at-signs should use single quotes";
   bad $Policy, 'my $quote = "\""', "use ''",
     "Escaped double quotes should use single quotes";
+  bad $Policy, 'my $csv = "val1,\"unclosed quote,val3\n"', "use qq()",
+    "Escaped double quotes with escape sequences should use qq()";
 };
 
 subtest "Interpolation with quotes" => sub {
-  # Strings that interpolate and have quotes
-  good $Policy, 'my $text = "contains $var and \"quotes\""',
-    "Double quotes with interpolation and quotes";
-  good $Policy, 'my $x = "string with $var and \"quotes\""',
-    "Double quotes appropriate when string interpolates and has quotes";
+  # Strings that interpolate and have escaped quotes should use qq()
+  bad $Policy, 'my $x = "$var \""', "use qq()",
+    "Escaped double quotes with interpolation should use qq()";
+  bad $Policy, 'my $text = "contains $var and \"quotes\""', "use qq()",
+    "Double quotes with interpolation and escaped quotes should use qq()";
+  bad $Policy, 'my $x = "string with $var and \"quotes\""', "use qq()",
+    "Double quotes with interpolation and escaped quotes should use qq()";
 
   # Contains both single and double quotes
   good $Policy, q(my $text = "contains 'single' quotes"),

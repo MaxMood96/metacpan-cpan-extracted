@@ -9,7 +9,7 @@ use base 'Yote::SQLObjectStore::SQLite::Obj';
 # simply has a reference hash and a value hash
 our %cols = (
     ref_hash => '*HASH<256>_*',
-    val_hash => '*HASH<256>_VALUE',
+    val_hash => '*HASH<256>_TEXT',
 );
 
 1;

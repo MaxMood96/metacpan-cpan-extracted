@@ -1,10 +1,9 @@
-# File: lib/Power/Outlet.pm
 
-## NAME
+# NAME
 
 Power::Outlet - Control and query network attached power outlets
 
-## SYNOPSIS
+# SYNOPSIS
 
 Command Line
 
@@ -26,15 +25,15 @@ Perl Object API
     print $outlet->on, "\n";
     print $outlet->off, "\n";
 
-## DESCRIPTION
+# DESCRIPTION
 
 Power::Outlet is a package for controlling and querying network attached power outlets.  Individual hardware drivers in this name space must provide a common object interface for the controlling and querying of an outlet.  Common methods that every network attached power outlet must know are on, off, query, switch and cycle.  Optional methods might be implemented in some drivers like amps and volts.
 
-### SCOPE
+## SCOPE
 
 The current scope of these packages is network attached power outlets. I started with iBoot and iBootBar since I had the hardware.  Hardware configuration is beyond the scope of this group of packages as most power outlets have functional web based or command line configuration tools.
 
-### Home Assistant
+## Home Assistant
 
 Integration with Home Assistant [https://home-assistant.io/](https://home-assistant.io/) can be accomplished by configuring a Command Line Switch. 
 
@@ -49,13 +48,13 @@ Integration with Home Assistant [https://home-assistant.io/](https://home-assist
 
 See [https://home-assistant.io/components/switch.command\_line/](https://home-assistant.io/components/switch.command_line/)
 
-### Node Red
+## Node Red
 
 Integration with Node Red [https://nodered.org/](https://nodered.org/) can be accomplished with the included JSON web API power-outlet-json.cgi.  The power-outlet-json.cgi script is a layer on top of [Power::Outlet::Config](https://metacpan.org/pod/Power%3A%3AOutlet%3A%3AConfig) where the "name" parameter maps to the section in the /etc/power-outlet.ini INI file.
 
 To access all of these devices use an http request node with a URL https://127.0.0.1/cgi-bin/power-outlet-json.cgi?name={{topic}};action={{payload}} then simply set the topic to the INI section and the action to either ON or OFF.
 
-## USAGE
+# USAGE
 
 The Perl one liner
 
@@ -65,54 +64,51 @@ The included command line script
 
     power-outlet Shelly ON host myshelly
 
-## CONSTRUCTOR
+# CONSTRUCTOR
 
-### new
+## new
 
     my $outlet = Power::Outlet->new(type=>"WeMo",     host=>"mywemo");
 
-## BUGS
+# BUGS
 
 Please open an issue on github
 
-## SUPPORT
+# SUPPORT
 
 DavisNetworks.com supports all Perl applications including this package.
 
-## AUTHOR
+# AUTHOR
 
     Michael R. Davis
     CPAN ID: MRDVT
     DavisNetworks.com
 
-## COPYRIGHT
+# COPYRIGHT
 
 This program is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
 
 The full text of the license can be found in the LICENSE file included with this module.
 
-## SEE ALSO
+# SEE ALSO
 
 [Power::Outlet::iBoot](https://metacpan.org/pod/Power%3A%3AOutlet%3A%3AiBoot), [Power::Outlet::iBootBar](https://metacpan.org/pod/Power%3A%3AOutlet%3A%3AiBootBar), [Power::Outlet::WeMo](https://metacpan.org/pod/Power%3A%3AOutlet%3A%3AWeMo), [Power::Outlet::Hue](https://metacpan.org/pod/Power%3A%3AOutlet%3A%3AHue)
-
-# File: lib/Power/Outlet/Config.pm
-
-## NAME
+# NAME
 
 Power::Outlet::Config - Control and query a Power::Outlet device from Configuration file
 
-## SYNOPSIS
+# SYNOPSIS
 
     my $outlet = Power::Outlet::Config->new(section=>"My Section");
     print $outlet->query, "\n";
     print $outlet->on, "\n";
     print $outlet->off, "\n";
 
-## DESCRIPTION
+# DESCRIPTION
 
 Power::Outlet::Config is a package for controlling and querying Power::Outlet devices registered in an INI file.
 
-## USAGE
+# USAGE
 
 Configuration
 
@@ -137,48 +133,48 @@ Command Line
     /usr/bin/power-outlet Config ON section "My Tasmota"
     /usr/bin/power-outlet Config ON section "My Section" ini_file ./my.ini
 
-## CONSTRUCTOR
+# CONSTRUCTOR
 
-### new
+## new
 
     my $outlet = Power::Outlet->new(type=>"Config", section=>"My Section");
     my $outlet = Power::Outlet::Config->new(section=>"My Section");
 
-## PROPERTIES
+# PROPERTIES
 
-### section
+## section
 
-### hash
+## hash
 
-## OBJECT ACCESSORS
+# OBJECT ACCESSORS
 
-### ini
+## ini
 
 Returns a [Config::IniFiles](https://metacpan.org/pod/Config%3A%3AIniFiles) for the power-outlet.ini file.
 
-### ini\_file
+## ini\_file
 
 Default: /etc/power-outlet.ini or C:\\Windows\\power-outlet.ini
 
-### ini\_file\_default
+## ini\_file\_default
 
 Default: power-outlet.ini
 
-## BUGS
+# BUGS
 
 Please log on RT and send an email to the author.
 
-## SUPPORT
+# SUPPORT
 
 DavisNetworks.com supports all Perl applications including this package.
 
-## AUTHOR
+# AUTHOR
 
     Michael R. Davis
     CPAN ID: MRDVT
     DavisNetworks.com
 
-## COPYRIGHT
+# COPYRIGHT
 
 Copyright (c) 2020 Michael R. Davis
 
@@ -186,22 +182,19 @@ This program is free software; you can redistribute it and/or modify it under th
 
 The full text of the license can be found in the LICENSE file included with this module.
 
-## SEE ALSO
-
-# File: lib/Power/Outlet/Dingtian.pm
-
-## NAME
+# SEE ALSO
+# NAME
 
 Power::Outlet::Dingtian - Control and query Dingtian Relay Boards via the HTTP API
 
-## SYNOPSIS
+# SYNOPSIS
 
     my $outlet = Power::Outlet::Dingtian->new(host => "my_host", relay => "1");
     print $outlet->query, "\n";
     print $outlet->on, "\n";
     print $outlet->off, "\n";
 
-## DESCRIPTION
+# DESCRIPTION
 
 Power::Outlet::Dingtian is a package for controlling and querying a relay on Dingtian hardware via the HTTP API.
 
@@ -225,22 +218,22 @@ Relay 2 cycle off-on-off example (note: time in 100ms increments)
 
 I have tested this package against the Dingtian DT-R002 V3.6A with V3.1.276A firmware configured for both HTTP and HTTPS.
 
-## USAGE
+# USAGE
 
     use Power::Outlet::Dingtian;
     my $relay = Power::Outlet::Dingtian->new(host=>"my_host", relay=>"1");
     print $relay->on, "\n";
 
-## CONSTRUCTOR
+# CONSTRUCTOR
 
-### new
+## new
 
     my $outlet = Power::Outlet->new(type=>"Dingtian", host=>"my_host", relay=>"1");
     my $outlet = Power::Outlet::Dingtian->new(host=>"my_host", relay=>"1");
 
-## PROPERTIES
+# PROPERTIES
 
-### relay
+## relay
 
 Dingtian API supports up to 32 relays numbered 1 to 32.
 
@@ -248,7 +241,7 @@ Default: 1
 
 Note: The relays are numbered 1-32 but the api uses a zero based index.
 
-### pwd
+## pwd
 
 Sets and returns the ID token used for authentication with the Dingtian hardware
 
@@ -256,13 +249,13 @@ Default: "0"
 
 Can be set in the Relay Password property in the Other section on the Relay Connect screen.
 
-### host
+## host
 
 Sets and returns the hostname or IP address.
 
 Default: 192.168.1.100
 
-### port
+## port
 
 Sets and returns the port number.
 
@@ -270,7 +263,7 @@ Default: 80
 
 Can be set in the HTTP Server Port property on the Setting screen.
 
-### http\_scheme
+## http\_scheme
 
 Sets and returns the http scheme (i.e. protocol) (e.g. http or https).
 
@@ -278,42 +271,42 @@ Default: http
 
 Can be set in the HTTP or HTTPS property on the Setting screen
 
-## METHODS
+# METHODS
 
-### name
+## name
 
 Sets and returns the friendly name for this relay.
 
-### query
+## query
 
 Sends an HTTP message to the device to query the current state
 
-### on
+## on
 
 Sends a message to the device to Turn Power ON
 
-### off
+## off
 
 Sends a message to the device to Turn Power OFF
 
-### switch
+## switch
 
 Sends a message to the device to toggle the power
 
-### cycle
+## cycle
 
 Sends messages to the device to Cycle Power (ON-OFF-ON or OFF-ON-OFF).
 
-## BUGS
+# BUGS
 
 Please open an issue on GitHub.
 
-## AUTHOR
+# AUTHOR
 
     Michael R. Davis
     CPAN ID: MRDVT
 
-## COPYRIGHT
+# COPYRIGHT
 
 Copyright (c) 2020 Michael R. Davis
 
@@ -321,49 +314,159 @@ This program is free software; you can redistribute it and/or modify it under th
 
 The full text of the license can be found in the LICENSE file included with this module.
 
-## SEE ALSO
+# SEE ALSO
 
 [https://www.dingtian-tech.com/sdk/relay\_sdk.zip](https://www.dingtian-tech.com/sdk/relay_sdk.zip) => programming\_manual\_en.pdf page 12 "Protocol: HTTP GET CGI"
+# NAME
 
-# File: lib/Power/Outlet/Hue.pm
+Power::Outlet::HomeAssistantAPI - Control and query a switch via the Home Assistant API
 
-## NAME
+# SYNOPSIS
+
+    my $outlet = Power::Outlet::HomeAssistantAPI->new(host=>"my_ha_hostname", token=>"my_token", entity_id=>"my.entity_id");
+    print $outlet->query, "\n";
+    print $outlet->on, "\n";
+    print $outlet->off, "\n";
+
+# DESCRIPTION
+
+Power::Outlet::HomeAssistantAPI is a package for controlling and querying a switch via the Home Assistant API.
+
+From: [https://developers.home-assistant.io/docs/api/rest/](https://developers.home-assistant.io/docs/api/rest/)
+
+Examples:
+
+Query switch entity
+
+    $ curl -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" http://127.0.0.1:8123/api/states/switch.my_switch
+    { "entity_id":"switch.my_switch", "state":"off", "attributes":{"friendly_name":"My Switch Name"}, ... }
+
+Toggle switch entity
+
+    $ curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"entity_id": "switch.my_switch"}' http://127.0.0.1:8123/api/services/switch/toggle
+
+Turn ON switch entity
+
+    $ curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"entity_id": "switch.my_switch"}' http://127.0.0.1:8123/api/services/switch/turn_on
+
+Turn OFF switch entity
+
+    $ curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"entity_id": "switch.my_switch"}' http://127.0.0.1:8123/api/services/switch/turn_off
+
+# USAGE
+
+    use Power::Outlet::HomeAssistantAPI;
+    my $outlet = Power::Outlet::HomeAssistantAPI->new(host=>"hostname", token=>$token, entity_id=>"POWER2");
+    print $outlet->on, "\n";
+
+# CONSTRUCTOR
+
+## new
+
+    my $outlet = Power::Outlet->new(type=>"HomeAssistantAPI", host=>"hostname", token=>$token, entity_id=>"POWER2");
+    my $outlet = Power::Outlet::HomeAssistantAPI->new(host=>"hostname", token=>$token, entity_id=>"my.entity_id");
+
+# PROPERTIES
+
+## token
+
+A Home Assistant Long-lived access token is required to access the API.
+
+## entity\_id
+
+Home Assistant entity\_id is required and is noramlly formatted string such as switch.short\_name.
+
+## host
+
+Sets and returns the hostname or IP address.
+
+Default: 127.0.0.1
+
+## port
+
+Sets and returns the port number.
+
+Default: 8123
+
+# METHODS
+
+## name
+
+Returns the FriendlyName from the HomeAssistantAPI hardware.
+
+Note: The FriendlyName is cached for the life of the object.
+
+## query
+
+Sends an HTTP message to the device to query the current state
+
+## on
+
+Sends a message to the device to Turn Power ON
+
+## off
+
+Sends a message to the device to Turn Power OFF
+
+## switch
+
+Sends a message to the device to toggle the power
+
+## cycle
+
+Sends messages to the device to Cycle Power (ON-OFF-ON or OFF-ON-OFF).
+
+# AUTHOR
+
+    Michael R. Davis
+    CPAN ID: MRDVT
+
+# COPYRIGHT
+
+Copyright (c) 2026 Michael R. Davis
+
+This program is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
+
+The full text of the license can be found in the LICENSE file included with this module.
+
+# SEE ALSO
+# NAME
 
 Power::Outlet::Hue - Control and query a Philips Hue light
 
-## SYNOPSIS
+# SYNOPSIS
 
     my $outlet=Power::Outlet::Hue->new(host => "mybridge", id=>1, username=>"myuser");
     print $outlet->query, "\n";
     print $outlet->on, "\n";
     print $outlet->off, "\n";
 
-## DESCRIPTION
+# DESCRIPTION
 
 Power::Outlet::Hue is a package for controlling and querying a light on a Philips Hue network attached bridge.
 
-## USAGE
+# USAGE
 
     use Power::Outlet::Hue;
     my $lamp=Power::Outlet::Hue->new(host=>"mybridge", id=>1, username=>"myuser");
     print $lamp->on, "\n";
 
-## CONSTRUCTOR
+# CONSTRUCTOR
 
-### new
+## new
 
     my $outlet=Power::Outlet->new(type=>"Hue", host=>"mybridge", id=>1);
     my $outlet=Power::Outlet::Hue->new(host=>"mybridge", id=>1);
 
-## PROPERTIES
+# PROPERTIES
 
-### id
+## id
 
 ID for the particular light as configured in the Philips Hue Bridge
 
 Default: 1
 
-### resource
+## resource
 
 Resource for the particular object as presented on the Philips Hue Bridge
 
@@ -379,59 +482,59 @@ Currently supported Resources from [https://developers.meethue.com/documentation
     sensors   - which contains all the sensors
     rules     - which contains all the rules
 
-### host
+## host
 
 Sets and returns the hostname or IP address.
 
 Default: mybridge
 
-### port
+## port
 
 Sets and returns the port number.
 
 Default: 80
 
-### username
+## username
 
 Sets and returns the username used for authentication with the Hue Bridge
 
 Default: newdeveloper (Hue Emulator default)
 
-### name
+## name
 
 Returns the configured friendly name for the device
 
-## METHODS
+# METHODS
 
-### query
+## query
 
 Sends an HTTP message to the device to query the current state
 
-### on
+## on
 
 Sends a message to the device to Turn Power ON
 
-### off
+## off
 
 Sends a message to the device to Turn Power OFF
 
-### switch
+## switch
 
 Queries the device for the current status and then requests the opposite.
 
-### cycle
+## cycle
 
 Sends messages to the device to Cycle Power (ON-OFF-ON or OFF-ON-OFF).
 
-## BUGS
+# BUGS
 
 Please log on RT and send an email to the author.
 
-## SUPPORT
+# SUPPORT
 
 DavisNetworks.com supports all Perl applications including this package.
 
-## AUTHOR
+# AUTHOR
 
     Michael R. Davis
     CPAN ID: MRDVT
@@ -439,7 +542,7 @@ DavisNetworks.com supports all Perl applications including this package.
 
 Thanks to Mathias Neerup manee12 at student.sdu.dk - [https://rt.cpan.org/Ticket/Display.html?id=123965](https://rt.cpan.org/Ticket/Display.html?id=123965)
 
-## COPYRIGHT
+# COPYRIGHT
 
 Copyright (c) 2018 Michael R. Davis
 
@@ -447,17 +550,375 @@ This program is free software; you can redistribute it and/or modify it under th
 
 The full text of the license can be found in the LICENSE file included with this module.
 
-## SEE ALSO
+# SEE ALSO
 
 [http://www.developers.meethue.com/philips-hue-api](http://www.developers.meethue.com/philips-hue-api), [http://steveyo.github.io/Hue-Emulator/](http://steveyo.github.io/Hue-Emulator/), [https://home-assistant.io/components/emulated\_hue/](https://home-assistant.io/components/emulated_hue/)
+# NAME
 
-# File: lib/Power/Outlet/Kauf.pm
+Power::Outlet::iBoot - Control and query a Dataprobe iBoot power outlet
 
-## NAME
+# SYNOPSIS
+
+    my $outlet=Power::Outlet::iBoot->new(
+                                         host => "mylamp",
+                                         port => 80,        #sane default from manufacture spec
+                                         auth => "PASS",    #sane default from manufacture spec
+                                        );
+    print $outlet->query, "\n";
+    print $outlet->on, "\n";
+    print $outlet->off, "\n";
+
+# DESCRIPTION
+
+Power::Outlet::iBoot is a package for controlling and querying a Dataprobe iBoot network attached power outlet.
+
+iBoot Protocol: The iBoot uses the TCP (Transport Communication Protocol) to communicate with the client system. To communicate with iBoot, establish a TCP connection using the Port as assigned in iBoot Setup.  Once connected use the Send() function to send the commands to the iBoot and the Recv() function to receive the response. After sending a response iBoot will close the connection.  The following outlines the commands and their responses.
+
+Source: http://dataprobe.com/files/power/iboot\_tcp.pdf
+
+# USAGE
+
+    use Power::Outlet::iBoot;
+    use DateTime;
+    my $lamp=Power::Outlet::iBoot->new(host=>"lamp");
+    my $hour=DateTime->now->hour;
+    my $night=$hour > 20 ? 1 : $hour < 06 ? 1 : 0;
+    if ($night) {
+      print $lamp->on, "\n";
+    } else {
+      print $lamp->off, "\n";
+    }
+
+# CONSTRUCTOR
+
+## new
+
+    my $outlet=Power::Outlet->new(type=>"iBoot", "host=>"mylamp");
+    my $outlet=Power::Outlet::iBoot->new(host=>"mylamp");
+
+# PROPERTIES
+
+## host
+
+Sets and returns the hostname or IP address.
+
+Manufacturer Default: 192.168.1.254
+
+## port
+
+Sets and returns the TCP port
+
+Manufacturer Default: 80
+
+## pass
+
+Sets and returns the case sensitive password
+
+Manufacturer Default: PASS
+
+## name
+
+# METHODS
+
+## query
+
+Sends a TCP/IP message to the iBoot device to query the current state
+
+## on
+
+Sends a TCP/IP message to the iBoot device to Turn Power ON
+
+## off
+
+Sends a TCP/IP message to the iBoot device to Turn Power OFF
+
+## switch
+
+Queries the device for the current status and then requests the opposite.  
+
+## cycle
+
+Sends a TCP/IP message to the iBoot device to Cycle Power (ON-OFF-ON or OFF-ON-OFF). Cycle time is determined by Setup.
+
+Manufacturer Default Cycle Period: 10 seconds
+
+# BUGS
+
+Please log on RT and send an email to the author.
+
+# SUPPORT
+
+DavisNetworks.com supports all Perl applications including this package.
+
+# AUTHOR
+
+    Michael R. Davis
+    CPAN ID: MRDVT
+    DavisNetworks.com
+
+# COPYRIGHT
+
+This program is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
+
+The full text of the license can be found in the LICENSE file included with this module.
+
+# SEE ALSO
+# NAME
+
+Power::Outlet::iBootBar - Control and query a Dataprobe iBootBar power outlet
+
+# SYNOPSIS
+
+    my $outlet=Power::Outlet::iBootBar->new(
+                                            host      => "mybar",
+                                            outlet    => 1,
+                                            community => "private",
+                                           );
+    print $outlet->query, "\n";
+    print $outlet->on, "\n";
+    print $outlet->off, "\n";
+
+# DESCRIPTION
+
+Power::Outlet::iBootBar is a package for controlling and querying an outlet on a Dataprobe iBootBar network attached power outlet.
+
+# USAGE
+
+    use Power::Outlet::iBootBar;
+    use DateTime;
+    my $lamp=Power::Outlet::iBootBar->new(host=>"mybar", outlet=>1);
+    my $hour=DateTime->now->hour;
+    my $night=$hour > 20 ? 1 : $hour < 06 ? 1 : 0;
+    if ($night) {
+      print $lamp->on, "\n";
+    } else {
+      print $lamp->off, "\n";
+    }
+
+# CONSTRUCTOR
+
+## new
+
+    my $outlet=Power::Outlet->new(type=>"iBootBar", "host=>"mylamp");
+    my $outlet=Power::Outlet::iBootBar->new(host=>"mylamp");
+
+# PROPERTIES
+
+## host
+
+Sets and returns the hostname or IP address.
+
+Manufacturer Default: 192.168.0.254
+
+Note: Set IP address via telnet User Name: admin, Password: admin then "help network"
+
+    set ipmode dhcp
+
+OR
+
+    set ipmode static
+    set ipaddress 192.168.0.254
+    set subnet 255.255.255.0
+    set gateway 192.168.0.1
+
+## community
+
+Sets and returns the SNMP community.
+
+    my $community=$outlet->community("private"); #read/write
+    my $community=$outlet->community("public");  #read only features
+
+Note: Set SNMP community via telnet User Name: admin, Password: admin then "help snmp"
+
+    set snmp writecommunity private
+    set snmp readcommunity public
+    set snmp 1 enable yes
+
+## outlet
+
+Sets and returns the outlet number as labeled on the back of the device.
+
+Default: 1
+
+## name
+
+Returns the name from the iBootBar outletName via SNMP
+
+    $ telnet iBootBar
+
+    iBootBar Rev 1.5d.275
+
+    User Name:  admin
+    Password:  *****
+
+    iBootBar > help outlet
+    ...
+    set outlet <1-8> name <name>
+    ...
+
+    iBootBar > set outlet 1 name "Bar 1"
+
+# METHODS
+
+## query
+
+Sends a TCP/IP message to the iBootBar device to query the current state
+
+## on
+
+Sends a TCP/IP message to the iBoot device to Turn Power ON
+
+## off
+
+Sends a TCP/IP message to the iBoot device to Turn Power OFF
+
+## switch
+
+Queries the device for the current status and then requests the opposite.  
+
+## cycle
+
+Sends a TCP/IP message to the iBoot device to Cycle Power (ON-OFF-ON or OFF-ON-OFF). Cycle time is determined by Setup.
+
+Manufacturer Default Cycle Period: 10 seconds
+
+# BUGS
+
+Please log on RT and send an email to the author.
+
+# SUPPORT
+
+DavisNetworks.com supports all Perl applications including this package.
+
+# AUTHOR
+
+    Michael R. Davis
+    CPAN ID: MRDVT
+    DavisNetworks.com
+
+# COPYRIGHT
+
+This program is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
+
+The full text of the license can be found in the LICENSE file included with this module.
+
+# SEE ALSO
+# NAME
+
+Power::Outlet::iBootBarGroup - Control and query multiple Dataprobe iBootBar power outlets together
+
+# SYNOPSIS
+
+    my $outlet=Power::Outlet::iBootBarGroup->new(
+                                                 host      => "mybar",
+                                                 outlets   => "1,2,3,4"
+                                                 community => "private",
+                                                );
+    print $outlet->query, "\n"; #any on
+    print $outlet->on   , "\n"; #all on
+    print $outlet->off  , "\n"; #all off
+
+# DESCRIPTION
+
+Power::Outlet::iBootBar is a package for controlling and querying multiple outlets together on a Dataprobe iBootBar network attached power outlet.
+
+# USAGE
+
+# CONSTRUCTOR
+
+## new
+
+    my $outlet=Power::Outlet->new(type=>"iBootBarGroup", "host=>"mylamp", outlets=>"1,2,3,4");
+    my $outlet=Power::Outlet::iBootBarGroup->new(host=>"mylamp", outlets=>"1,2,3,4");
+
+# PROPERTIES
+
+## host
+
+Sets and returns the hostname or IP address.
+
+Manufacturer Default: 192.168.0.254
+
+Note: Set IP address via telnet User Name: admin, Password: admin then "help network"
+
+    set ipmode dhcp
+
+OR
+
+    set ipmode static
+    set ipaddress 192.168.0.254
+    set subnet 255.255.255.0
+    set gateway 192.168.0.1
+
+## community
+
+Sets and returns the SNMP community.
+
+    my $community = $outlet->community("private"); #read/write
+    my $community = $outlet->community("public");  #read only features
+
+Note: Set SNMP community via telnet User Name: admin, Password: admin then "help snmp"
+
+    set snmp writecommunity private
+    set snmp readcommunity public
+    set snmp 1 enable yes
+
+## outlets
+
+Sets and returns the outlets CSV list as labeled on the back of the device.
+
+Default: "1,2,3,4,5,6,7,8"
+
+# METHODS
+
+## query
+
+Sends a TCP/IP message to the iBootBar device to query the current state
+
+## on
+
+Sends a TCP/IP message to the iBoot device to Turn Power ON
+
+## off
+
+Sends a TCP/IP message to the iBoot device to Turn Power OFF
+
+## switch
+
+Queries the device for the current status and then requests the opposite.  
+
+## cycle
+
+Sends a TCP/IP message to the iBoot device to Cycle Power (ON-OFF-ON or OFF-ON-OFF). Cycle time is determined by Setup.
+
+Manufacturer Default Cycle Period: 10 seconds
+
+# BUGS
+
+Please log on RT and send an email to the author.
+
+# SUPPORT
+
+DavisNetworks.com supports all Perl applications including this package.
+
+# AUTHOR
+
+    Michael R. Davis
+    CPAN ID: MRDVT
+    DavisNetworks.com
+
+# COPYRIGHT
+
+This program is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
+
+The full text of the license can be found in the LICENSE file included with this module.
+
+# SEE ALSO
+# NAME
 
 Power::Outlet::Kauf - Control and query a Kauf Plug with HTTP REST API
 
-## SYNOPSIS
+# SYNOPSIS
 
     my $outlet = Power::Outlet::Kauf->new(host=>"my_kauf_plug");
     print $outlet->query, "\n";
@@ -466,7 +927,7 @@ Power::Outlet::Kauf - Control and query a Kauf Plug with HTTP REST API
     print $outlet->switch, "\n";
     print $outlet->cycle, "\n";
 
-## DESCRIPTION
+# DESCRIPTION
 
 Power::Outlet::Kauf is a package for controlling and querying a Kauf Plug.
 
@@ -478,7 +939,7 @@ Commands can be executed via web (HTTP) requests, for example:
     POST http://10.10.10.39/switch/kauf_plug/turn_on   => status 200
     GET  http://10.10.10.39/switch/kauf_plug           => {"id":"plug name","value":true,"state":"ON"}
 
-## USAGE
+# USAGE
 
     use Power::Outlet::Kauf;
     my $outlet = Power::Outlet::Kauf->new(host=>"sw-kitchen");
@@ -502,54 +963,54 @@ Command Line (from settings)
     $ power-outlet Config ON section Kitchen
     $ curl http://127.0.0.1/cgi-bin/power-outlet-json.cgi?name=Kitchen;action=ON
 
-## CONSTRUCTOR
+# CONSTRUCTOR
 
-### new
+## new
 
     my $outlet = Power::Outlet->new(type=>"Kauf", host=>"my_kauf_plug");
     my $outlet = Power::Outlet::Kauf->new(host=>"my_kauf_plug");
 
-## PROPERTIES
+# PROPERTIES
 
-### host
+## host
 
 Sets and returns the hostname or IP address.
 
-### port
+## port
 
 Sets and returns the port number.
 
 Default: 80
 
-## METHODS
+# METHODS
 
-### name
+## name
 
-### query
+## query
 
 Sends an HTTP message to the device to query the current state
 
-### on
+## on
 
 Sends a message to the device to Turn Power ON
 
-### off
+## off
 
 Sends a message to the device to Turn Power OFF
 
-### switch
+## switch
 
 Sends a message to the device to toggle the power
 
-### cycle
+## cycle
 
 Sends messages to the device to Cycle Power (ON-OFF-ON or OFF-ON-OFF).
 
-### cycle\_duration
+## cycle\_duration
 
 Default; 10 seconds (floating point number)
 
-## COPYRIGHT & LICENSE
+# COPYRIGHT & LICENSE
 
 Copyright (c) 2025 Michael R. Davis
 
@@ -557,15 +1018,12 @@ This program is free software; you can redistribute it and/or modify it under th
 
 The full text of the license can be found in the LICENSE file included with this module.
 
-## SEE ALSO
-
-# File: lib/Power/Outlet/MQTT.pm
-
-## NAME
+# SEE ALSO
+# NAME
 
 Power::Outlet::MQTT - Control and query an outlet or relay via MQTT
 
-## SYNOPSIS
+# SYNOPSIS
 
 Tasmota defaults
 
@@ -599,7 +1057,7 @@ or explicit definitions with no defaults
     print $outlet->on, "\n";
     print $outlet->off, "\n";
 
-## DESCRIPTION
+# DESCRIPTION
 
 Power::Outlet::MQTT is a package for controlling and querying an outlet or relay via MQTT
 
@@ -609,148 +1067,148 @@ Examples:
     $ mosquitto_pub -h mqtt -t "cmnd/my_device/POWER1" -m OFF
     $ mosquitto_sub -h mqtt -t "stat/my_device/POWER1" -v
 
-## USAGE
+# USAGE
 
     use Power::Outlet::MQTT;
     my $outlet = Power::Outlet::MQTT->new(host=>"mqtt", device=>"my_device");
     print $outlet->on, "\n";
 
-## CONSTRUCTOR
+# CONSTRUCTOR
 
-### new
+## new
 
     my $outlet = Power::Outlet->new(type=>"MQTT", host=>"mqtt");
     my $outlet = Power::Outlet::MQTT->new(host=>"mqtt");
 
-## PROPERTIES
+# PROPERTIES
 
-### host
+## host
 
 Sets and returns the host name of the MQTT broker.
 
 Default: mqtt
 
-### port
+## port
 
 Sets and returns the port number of the MQTT broker.
 
 Default: 1883
 
-### secure
+## secure
 
 Sets and returns a boolean property to use secure MQTT protocol or not.
 
 Default: if port=8883 then 1 else 0
 
-### device
+## device
 
 Sets and returns the device name of the MQTT topic.
 
 Note: Only used when topics are autogenerated for devices that support the Tasmota MQTT topic conventions.
 
-### relay
+## relay
 
 Sets and returns the relay of the device.  Only used when name is used to define default publish and subscribe topics.
 
 Default: POWER1
 
-### publish\_topic
+## publish\_topic
 
 MQTT topic to publish to control the relay
 
 Default: "cmnd/$device/$relay"
 
-### publish\_on
+## publish\_on
 
 MQTT topic and message payload to publish to turn the relay on (plus sign delimited)
 
 Default: "cmnd/$device/$relay+ON"
 
-### publish\_off
+## publish\_off
 
 MQTT topic and message payload to turn the relay off (plus sign delimited)
 
 Default: "cmnd/$device/$relay+OFF"
 
-### publish\_switch
+## publish\_switch
 
 MQTT topic and message payload to toggle the relay (plus sign delimited)
 
 Default: "cmnd/$device/$relay+TOGGLE"
 
-### publish\_query
+## publish\_query
 
 MQTT topic and message payload to request the turn the current state of the relay (plus sign delimited)
 
 Default: "cmnd/$device/$relay+"
 
-### subscribe\_topic
+## subscribe\_topic
 
 MQTT topic which indicates the current state of the relay
 
 Default: "stat/$device/$relay+"
 
-### subscribe\_value\_on
+## subscribe\_value\_on
 
 MQTT message payload to indicate the current state of the relay as on
 
 Default: "ON" or 1
 
-### subscribe\_value\_off
+## subscribe\_value\_off
 
 MQTT message payload to indicate the current state of the relay as off
 
 Default: "OFF" or 0
 
-### user
+## user
 
 Sets and returns the authentication user for the MQTT broker.
 
 Default: undef
 
-### password
+## password
 
 Sets and returns the password used for authentication with the MQTT broker
 
 Default: ""
 
-## METHODS
+# METHODS
 
-### name
+## name
 
 Sets and returns a user friendly name of this device relay.
 
-### query
+## query
 
 Sends an HTTP message to the device to query the current state
 
-### on
+## on
 
 Sends a message to the device to Turn Power ON
 
-### off
+## off
 
 Sends a message to the device to Turn Power OFF
 
-### switch
+## switch
 
-### cycle
+## cycle
 
-## ACCESSORS
+# ACCESSORS
 
-### mqtt
+## mqtt
 
 Returns a cached connected [Net::MQTT::Simple](https://metacpan.org/pod/Net%3A%3AMQTT%3A%3ASimple) or [Net::MQTT::Simple::SSL](https://metacpan.org/pod/Net%3A%3AMQTT%3A%3ASimple%3A%3ASSL) object.
 
-## BUGS
+# BUGS
 
 Please log on GitHub
 
-## AUTHOR
+# AUTHOR
 
     Michael R. Davis
 
-## COPYRIGHT
+# COPYRIGHT
 
 Copyright (c) 2023 Michael R. Davis
 
@@ -758,22 +1216,19 @@ This program is free software; you can redistribute it and/or modify it under th
 
 The full text of the license can be found in the LICENSE file included with this module.
 
-## SEE ALSO
-
-# File: lib/Power/Outlet/OpenBeken.pm
-
-## NAME
+# SEE ALSO
+# NAME
 
 Power::Outlet::OpenBeken - Control and query an OpenBeken configured device
 
-## SYNOPSIS
+# SYNOPSIS
 
     my $outlet = Power::Outlet::OpenBeken->new(host => "myhost", relay => "POWER1");
     print $outlet->query, "\n";
     print $outlet->on, "\n";
     print $outlet->off, "\n";
 
-## DESCRIPTION
+# DESCRIPTION
 
 Power::Outlet::OpenBeken is a package for controlling and querying OpenBeken flashed hardware over the exposed HTTP interface. OpenBeken supports multiple chipsets, including ESWIN, Transa Semi, Lightning Semi, Espressif, Beken, WinnerMicro, Xradiotech/Allwinner, Realtek, and Bouffalo Lab.
 
@@ -803,46 +1258,46 @@ Turn ON relay 2
     $ curl http://myhost/cm?user=foo;password=bar;cmnd=POWER2+ON
     {"POWER2":"ON"}
 
-## USAGE
+# USAGE
 
     use Power::Outlet::OpenBeken;
     my $relay = Power::Outlet::OpenBeken->new(host=>"myhost", relay=>"POWER1");
     print $relay->on, "\n";
 
-## CONSTRUCTOR
+# CONSTRUCTOR
 
-### new
+## new
 
     my $outlet = Power::Outlet->new(type=>"OpenBeken", host=>"myhost", relay=>"POWER2");
     my $outlet = Power::Outlet::OpenBeken->new(host=>"myhost", relay=>"POWER2");
 
-## PROPERTIES
+# PROPERTIES
 
-### relay
+## relay
 
 Relays map to the relay tokens "POWER1", "POWER2", ... "POWER8". With "POWER" being the default relay name for the first relay defined in the configuration.
 
 Default: POWER1
 
-### host
+## host
 
 Sets and returns the hostname or IP address.
 
 Default: openbeken
 
-### port
+## port
 
 Sets and returns the port number.
 
 Default: 80
 
-### http\_path
+## http\_path
 
 Sets and returns the http\_path.
 
 Default: /cm
 
-### user
+## user
 
 Sets and returns the user used for authentication with the OpenBeken hardware
 
@@ -851,50 +1306,50 @@ Sets and returns the user used for authentication with the OpenBeken hardware
 
 Default: undef() #which is only passed on the url when defined
 
-### password
+## password
 
 Sets and returns the password used for authentication with the OpenBeken hardware
 
 Default: "" #which is only passed on the url when user property is defined
 
-## METHODS
+# METHODS
 
-### name
+## name
 
 Returns the FriendlyName from the OpenBeken hardware.
 
 Note: The FriendlyName is cached for the life of the object.
 
-### query
+## query
 
 Sends an HTTP message to the device to query the current state
 
-### on
+## on
 
 Sends a message to the device to Turn Power ON
 
-### off
+## off
 
 Sends a message to the device to Turn Power OFF
 
-### switch
+## switch
 
 Sends a message to the device to toggle the power
 
-### cycle
+## cycle
 
 Sends messages to the device to Cycle Power (ON-OFF-ON or OFF-ON-OFF).
 
-## BUGS and SUPPORT
+# BUGS and SUPPORT
 
 Please use GitHub
 
-## AUTHOR
+# AUTHOR
 
     Michael R. Davis
     CPAN ID: MRDVT
 
-## COPYRIGHT
+# COPYRIGHT
 
 Copyright (c) 2025 Michael R. Davis
 
@@ -902,18 +1357,15 @@ This program is free software; you can redistribute it and/or modify it under th
 
 The full text of the license can be found in the LICENSE file included with this module.
 
-## SEE ALSO
+# SEE ALSO
 
 [https://github.com/openshwprojects/OpenBK7231T\_App](https://github.com/openshwprojects/OpenBK7231T_App)
 [https://tasmota.github.io/docs/#/Commands](https://tasmota.github.io/docs/#/Commands)
-
-# File: lib/Power/Outlet/Shelly.pm
-
-## NAME
+# NAME
 
 Power::Outlet::Shelly - Control and query a Shelly GIPO Relay with HTTP REST API
 
-## SYNOPSIS
+# SYNOPSIS
 
     my $outlet = Power::Outlet::Shelly->new(host=>"shelly", index=>0);
     print $outlet->query, "\n";
@@ -922,7 +1374,7 @@ Power::Outlet::Shelly - Control and query a Shelly GIPO Relay with HTTP REST API
     print $outlet->switch, "\n";
     print $outlet->cycle, "\n";
 
-## DESCRIPTION
+# DESCRIPTION
 
 Power::Outlet::Shelly is a package for controlling and querying a relay index on Shelly hardware.
 
@@ -935,7 +1387,7 @@ Commands can be executed via web (HTTP) requests, for example:
     http://<ip>/relay/0?turn=toggle
     http://<ip>/relay/0?timer=5
 
-## USAGE
+# USAGE
 
     use Power::Outlet::Shelly;
     my $outlet = Power::Outlet::Shelly->new(host=>"sw-kitchen", style=>"relay", index=>0);
@@ -962,16 +1414,16 @@ Command Line (from settings)
     $ power-outlet Config ON section Kitchen
     $ curl http://127.0.0.1/cgi-bin/power-outlet-json.cgi?name=Kitchen;action=ON
 
-## CONSTRUCTOR
+# CONSTRUCTOR
 
-### new
+## new
 
     my $outlet = Power::Outlet->new(type=>"Shelly", host=>"shelly", index=>0);
     my $outlet = Power::Outlet::Shelly->new(host=>"shelly", index=>0);
 
-## PROPERTIES
+# PROPERTIES
 
-### style
+## style
 
 Set the style to support "relay" (1, 1L, 2.5, 4, Plug, Uni, EM, 3EM), "light" (Dimmer, Bulb, Vintage, Duo), "color" (RGB Color), or "white" (RGB White)
 
@@ -980,67 +1432,67 @@ Set the style to support "relay" (1, 1L, 2.5, 4, Plug, Uni, EM, 3EM), "light" (D
 
 default: relay
 
-### index
+## index
 
 Shelly hardware supports zero or more relay indexes starting at 0.
 
 Default: 0
 
-### host
+## host
 
 Sets and returns the hostname or IP address.
 
 Default: shelly
 
-### port
+## port
 
 Sets and returns the port number.
 
 Default: 80
 
-## METHODS
+# METHODS
 
-### name
+## name
 
-### query
+## query
 
 Sends an HTTP message to the device to query the current state
 
-### on
+## on
 
 Sends a message to the device to Turn Power ON
 
-### off
+## off
 
 Sends a message to the device to Turn Power OFF
 
-### switch
+## switch
 
 Sends a message to the device to toggle the power
 
-### cycle
+## cycle
 
 Sends messages to the device to Cycle Power (ON-OFF-ON or OFF-ON-OFF).
 
-### cycle\_duration
+## cycle\_duration
 
 Default; 10 seconds (floating point number)
 
-## BUGS
+# BUGS
 
 Please log on RT and send an email to the author.
 
-## SUPPORT
+# SUPPORT
 
 DavisNetworks.com supports all Perl applications including this package.
 
-## AUTHOR
+# AUTHOR
 
     Michael R. Davis
     CPAN ID: MRDVT
     DavisNetworks.com
 
-## COPYRIGHT
+# COPYRIGHT
 
 Copyright (c) 2020 Michael R. Davis
 
@@ -1048,24 +1500,21 @@ This program is free software; you can redistribute it and/or modify it under th
 
 The full text of the license can be found in the LICENSE file included with this module.
 
-## SEE ALSO
+# SEE ALSO
 
 [https://shelly-api-docs.shelly.cloud/](https://shelly-api-docs.shelly.cloud/)
-
-# File: lib/Power/Outlet/SonoffDiy.pm
-
-## NAME
+# NAME
 
 Power::Outlet::SonoffDiy - Control and query a Sonoff DIY device
 
-## SYNOPSIS
+# SYNOPSIS
 
     my $outlet = Power::Outlet::SonoffDiy->new(host => "SonoffDiy");
     print $outlet->query, "\n";
     print $outlet->on, "\n";
     print $outlet->off, "\n";
 
-## DESCRIPTION
+# DESCRIPTION
 
 Power::Outlet::SonoffDiy is a package for controlling and querying Sonoff ESP8266 hardware running Sonoff firmware in DIY mode.  This package supports and has been tested on both the version 1.4 (firmware 3.3.0) and version 2.0 (firmware 3.6.0) of the API.
 
@@ -1114,82 +1563,82 @@ Commands can be executed via HTTP POST requests, for example:
      "error" : 0
     }
 
-## USAGE
+# USAGE
 
     use Power::Outlet::SonoffDiy;
     my $outlet = Power::Outlet::SonoffDiy->new(host=>"SonoffDiy");
     print $outlet->on, "\n";
 
-## CONSTRUCTOR
+# CONSTRUCTOR
 
-### new
+## new
 
     my $outlet = Power::Outlet->new(type=>"SonoffDiy", host=>"SonoffDiy");
     my $outlet = Power::Outlet::SonoffDiy->new(host=>"SonoffDiy");
 
-## PROPERTIES
+# PROPERTIES
 
-### host
+## host
 
 Sets and returns the hostname or IP address.
 
 Default: SonoffDiy
 
-### port
+## port
 
 Sets and returns the port number.
 
 Default: 8081
 
-### http\_path
+## http\_path
 
 Sets and returns the http\_path.
 
 Default: /
 
-## METHODS
+# METHODS
 
-### name
+## name
 
 Returns the name as configured.
 
 Note: The Sonoff DIY firmware does not support setting a hostname or friendly name.
 
-### query
+## query
 
 Sends an HTTP message to the device to query the current state
 
-### on
+## on
 
 Sends a message to the device to Turn Power ON
 
-### off
+## off
 
 Sends a message to the device to Turn Power OFF
 
-### switch
+## switch
 
 Sends a message to the device to toggle the power
 
-### cycle
+## cycle
 
 Sends messages to the device to Cycle Power (ON-OFF-ON or OFF-ON-OFF).
 
-## BUGS
+# BUGS
 
 Please log on RT and send an email to the author.
 
-## SUPPORT
+# SUPPORT
 
 DavisNetworks.com supports all Perl applications including this package.
 
-## AUTHOR
+# AUTHOR
 
     Michael R. Davis
     CPAN ID: MRDVT
     DavisNetworks.com
 
-## COPYRIGHT
+# COPYRIGHT
 
 Copyright (c) 2020 Michael R. Davis
 
@@ -1197,24 +1646,21 @@ This program is free software; you can redistribute it and/or modify it under th
 
 The full text of the license can be found in the LICENSE file included with this module.
 
-## SEE ALSO
+# SEE ALSO
 
 [https://github.com/itead/Sonoff\_Devices\_DIY\_Tools](https://github.com/itead/Sonoff_Devices_DIY_Tools)
-
-# File: lib/Power/Outlet/Tasmota.pm
-
-## NAME
+# NAME
 
 Power::Outlet::Tasmota - Control and query a Tasmota GIPO configured as a Relay (Switch or Button)
 
-## SYNOPSIS
+# SYNOPSIS
 
     my $outlet = Power::Outlet::Tasmota->new(host => "tasmota", relay => "POWER1");
     print $outlet->query, "\n";
     print $outlet->on, "\n";
     print $outlet->off, "\n";
 
-## DESCRIPTION
+# DESCRIPTION
 
 Power::Outlet::Tasmota is a package for controlling and querying a relay on Tasmota ESP8266 hardware.
 
@@ -1244,46 +1690,46 @@ Turn ON relay 2
     $ curl http://tasmota/cm?user=foo;password=bar;cmnd=POWER2+ON
     {"POWER2":"ON"}
 
-## USAGE
+# USAGE
 
     use Power::Outlet::Tasmota;
     my $relay = Power::Outlet::Tasmota->new(host=>"tasmota", relay=>"POWER2");
     print $relay->on, "\n";
 
-## CONSTRUCTOR
+# CONSTRUCTOR
 
-### new
+## new
 
     my $outlet = Power::Outlet->new(type=>"Tasmota", host=>"tasmota", relay=>"POWER2");
     my $outlet = Power::Outlet::Tasmota->new(host=>"tasmota", relay=>"POWER2");
 
-## PROPERTIES
+# PROPERTIES
 
-### relay
+## relay
 
 Tasmota version 8.1.0 supports up to 8 relays.  These 8 relays map to the relay tokens "POWER1", "POWER2", ... "POWER8". With "POWER" being the default relay name for the first relay defined in the configuration.
 
 Default: POWER1
 
-### host
+## host
 
 Sets and returns the hostname or IP address.
 
 Default: tasmota
 
-### port
+## port
 
 Sets and returns the port number.
 
 Default: 80
 
-### http\_path
+## http\_path
 
 Sets and returns the http\_path.
 
 Default: /cm
 
-### user
+## user
 
 Sets and returns the user used for authentication with the Tasmota hardware
 
@@ -1292,55 +1738,55 @@ Sets and returns the user used for authentication with the Tasmota hardware
 
 Default: undef() #which is only passed on the url when defined
 
-### password
+## password
 
 Sets and returns the password used for authentication with the Tasmota hardware
 
 Default: "" #which is only passed on the url when user property is defined
 
-## METHODS
+# METHODS
 
-### name
+## name
 
 Returns the FriendlyName from the Tasmota hardware.
 
 Note: The FriendlyName is cached for the life of the object.
 
-### query
+## query
 
 Sends an HTTP message to the device to query the current state
 
-### on
+## on
 
 Sends a message to the device to Turn Power ON
 
-### off
+## off
 
 Sends a message to the device to Turn Power OFF
 
-### switch
+## switch
 
 Sends a message to the device to toggle the power
 
-### cycle
+## cycle
 
 Sends messages to the device to Cycle Power (ON-OFF-ON or OFF-ON-OFF).
 
-## BUGS
+# BUGS
 
 Please log on RT and send an email to the author.
 
-## SUPPORT
+# SUPPORT
 
 DavisNetworks.com supports all Perl applications including this package.
 
-## AUTHOR
+# AUTHOR
 
     Michael R. Davis
     CPAN ID: MRDVT
     DavisNetworks.com
 
-## COPYRIGHT
+# COPYRIGHT
 
 Copyright (c) 2020 Michael R. Davis
 
@@ -1348,109 +1794,106 @@ This program is free software; you can redistribute it and/or modify it under th
 
 The full text of the license can be found in the LICENSE file included with this module.
 
-## SEE ALSO
+# SEE ALSO
 
 [https://tasmota.github.io/docs/#/Commands](https://tasmota.github.io/docs/#/Commands)
-
-# File: lib/Power/Outlet/TuyaAPI.pm
-
-## NAME
+# NAME
 
 Power::Outlet::TuyaAPI - Control and query an outlet via the TuyaAPI.
 
-## SYNOPSIS
+# SYNOPSIS
 
     my $outlet = Power::Outlet::TuyaAPI->new(client_id=>"abc123", client_secret=>"cde234", deviceid=>"def345", switch=>"switch_1");
     print $outlet->query, "\n";
     print $outlet->on, "\n";
     print $outlet->off, "\n";
 
-## DESCRIPTION
+# DESCRIPTION
 
 Power::Outlet::TuyaAPI is a package for controlling and querying an outlet via the TuyaAPI.
 
 This package is a wrapper around [WebService::Tuya::IoT::API](https://metacpan.org/pod/WebService%3A%3ATuya%3A%3AIoT%3A%3AAPI) please see that documentation for device configuration.
 
-## USAGE
+# USAGE
 
     use Power::Outlet::TuyaAPI;
     my $relay = Power::Outlet::TuyaAPI->new(client_id=>"abc123", client_secret=>"cde234", deviceid=>"def345", switch=>"switch_1");
     print $relay->on, "\n";
 
-## CONSTRUCTOR
+# CONSTRUCTOR
 
-### new
+## new
 
     my $outlet = Power::Outlet->new(type=>"TuyaAPI", client_id=>"abc123", client_secret=>"cde234", deviceid=>"def345", switch=>"switch_1");
     my $outlet = Power::Outlet::TuyaAPI->new(client_id=>"abc123", client_secret=>"cde234", deviceid=>"def345", switch=>"switch_1");
 
-## PROPERTIES
+# PROPERTIES
 
-### host 
+## host 
 
 default: openapi.tuyaus.com
 
-### client\_id
+## client\_id
 
 The Client ID found on https://iot.tuya.com/ project overview page.
 
-### client\_secret
+## client\_secret
 
 The Client Secret found on https://iot.tuya.com/ project overview page.
 
-### deviceid
+## deviceid
 
 The Device ID found on https://iot.tuya.com/ project devices page.
 
-### relay
+## relay
 
 The relay name or "code" for a particular relay on the device.  Devices with a single relay this value will most likely be switch\_1 but, for devices with multiple relays the first relay is normally switch\_1 and subsequent relays should be labeled switch\_2, etc.
 
 default: switch\_1
 
-## METHODS
+# METHODS
 
-### name
+## name
 
 Returns the name from the device information API
 
 Note: The name is cached for the life of the object.
 
-### query
+## query
 
 Sends an HTTP message to the API to query the current state of the device relay
 
-### on
+## on
 
 Sends a message to the API to turn the device relay ON
 
-### off
+## off
 
 Sends a message to the API to turn the device relay OFF
 
-### switch
+## switch
 
 Sends a message to the API to toggle the device relay state
 
-### cycle
+## cycle
 
 Sends messages to the device to cycle the device relay state
 
-## BUGS
+# BUGS
 
 Please log on RT and send an email to the author.
 
-## SUPPORT
+# SUPPORT
 
 DavisNetworks.com supports all Perl applications including this package.
 
-## AUTHOR
+# AUTHOR
 
     Michael R. Davis
     CPAN ID: MRDVT
     DavisNetworks.com
 
-## COPYRIGHT
+# COPYRIGHT
 
 Copyright (c) 2020 Michael R. Davis
 
@@ -1458,28 +1901,25 @@ This program is free software; you can redistribute it and/or modify it under th
 
 The full text of the license can be found in the LICENSE file included with this module.
 
-## SEE ALSO
+# SEE ALSO
 
 [https://tasmota.github.io/docs/#/Commands](https://tasmota.github.io/docs/#/Commands)
-
-# File: lib/Power/Outlet/WeMo.pm
-
-## NAME
+# NAME
 
 Power::Outlet::WeMo - Control and query a Belkin WeMo power outlet
 
-## SYNOPSIS
+# SYNOPSIS
 
     my $outlet=Power::Outlet::WeMo->new(host => "mywemo");
     print $outlet->query, "\n";
     print $outlet->on, "\n";
     print $outlet->off, "\n";
 
-## DESCRIPTION
+# DESCRIPTION
 
 Power::Outlet::WeMo is a package for controlling and querying an outlet on a Belkin WeMo network attached power outlet.
 
-## USAGE
+# USAGE
 
     use Power::Outlet::WeMo;
     use DateTime;
@@ -1492,66 +1932,66 @@ Power::Outlet::WeMo is a package for controlling and querying an outlet on a Bel
       print $lamp->off, "\n";
     }
 
-## CONSTRUCTOR
+# CONSTRUCTOR
 
-### new
+## new
 
     my $outlet=Power::Outlet->new(type=>"WeMo", "host=>"mywemo");
     my $outlet=Power::Outlet::WeMo->new(host=>"mywemo");
 
-## PROPERTIES
+# PROPERTIES
 
-### host
+## host
 
 Sets and returns the hostname or IP address.
 
 Note: Set IP address via DHCP static mapping
 
-### port
+## port
 
 Sets and returns the port number.
 
-### name
+## name
 
 Returns the configured FriendlyName from the WeMo device
 
-## METHODS
+# METHODS
 
-### query
+## query
 
 Sends a UPnP message to the WeMo device to query the current state
 
-### on
+## on
 
 Sends a UPnP message to the WeMo device to Turn Power ON
 
-### off
+## off
 
 Sends a UPnP message to the WeMo device to Turn Power OFF
 
-### switch
+## switch
 
 Queries the device for the current status and then requests the opposite.
 
-### cycle
+## cycle
 
 Sends UPnP messages to the WeMo device to Cycle Power (ON-OFF-ON or OFF-ON-OFF).
 
-## BUGS
+# BUGS
 
 Please log on RT and send an email to the author.
 
-## SUPPORT
+# SUPPORT
 
 DavisNetworks.com supports all Perl applications including this package.
 
-## AUTHOR
+# AUTHOR
 
     Michael R. Davis
     CPAN ID: MRDVT
     DavisNetworks.com
 
-## COPYRIGHT
+# COPYRIGHT
 
 Copyright (c) 2013 Michael R. Davis
 
@@ -1563,17 +2003,89 @@ Portions of the WeMo Implementation Copyright (c) 2013 Eric Blue
 
 This program is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
 
-## SEE ALSO
+# SEE ALSO
 
 [WebService::Belkin::Wemo::Device](https://metacpan.org/pod/WebService%3A%3ABelkin%3A%3AWemo%3A%3ADevice), [https://gist.github.com/jscrane/7257511](https://gist.github.com/jscrane/7257511)
+# NAME
 
-# File: scripts/power-outlet
+Power::Outlet::Virtual - Control and query a Virtual Outlet
 
-## NAME
+# SYNOPSIS
+
+    my $outlet = Power::Outlet::iBootBar->new(id => 1);
+    print $outlet->query, "\n";
+    print $outlet->on, "\n";
+    print $outlet->off, "\n";
+
+# DESCRIPTION
+
+Power::Outlet::Virtual is a package for controlling and querying a virtual outlet where the state is stored in a temp file.
+
+# USAGE
+
+# CONSTRUCTOR
+
+## new
+
+    my $outlet = Power::Outlet->new(type=>"Virtual", id=>1);
+    my $outlet = Power::Outlet::Virtual->new;
+
+# PROPERTIES
+
+## id
+
+Sets and returns the outlet unique id.
+
+Default: 1
+
+# METHODS
+
+## query
+
+Returns current state of the virtual outlet
+
+## on
+
+Sends a TCP/IP message to the iBoot device to Turn Power ON
+
+## off
+
+Sends a TCP/IP message to the iBoot device to Turn Power OFF
+
+## switch
+
+Queries the device for the current status and then requests the opposite.  
+
+## cycle
+
+Cycle Power (ON-OFF-ON or OFF-ON-OFF).
+
+# BUGS
+
+Please log on RT and send an email to the author.
+
+# SUPPORT
+
+DavisNetworks.com supports all Perl applications including this package.
+
+# AUTHOR
+
+    Michael R. Davis
+    CPAN ID: MRDVT
+    DavisNetworks.com
+
+# COPYRIGHT
+
+This program is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
+
+The full text of the license can be found in the LICENSE file included with this module.
+
+# SEE ALSO
+# NAME
 
 power-outlet - Control and query a Power::Outlet device from command line
 
-## SYNOPSIS
+# SYNOPSIS
 
     power-outlet -v
     power-outlet WeMo          ON   host mywemo
@@ -1585,29 +2097,26 @@ power-outlet - Control and query a Power::Outlet device from command line
     power-outlet iBootBarGroup ON   host mybar   outlets 1,2,3,4
     power-outlet iBootBarGroup OFF  host mybar   outlets 1,2,3,4
 
-## DESCRIPTION
+# DESCRIPTION
 
 This script provide a command line interface for Power::Outlet devices
 
-## COPYRIGHT
+# COPYRIGHT
 
 Copyright (c) 2013 Michael R. Davis &lt;mrdvt92>
 
-## LICENSE
+# LICENSE
 
 This program is free software; you can redistribute it and/or modify it under the same terms as Perl itself. 
-
-# File: scripts/power-outlet.cgi
-
-## NAME
+# NAME
 
 power-outlet.cgi - Control multiple Power::Outlet devices from web browser
 
-## DESCRIPTION
+# DESCRIPTION
 
 power-outlet.cgi is a CGI application to control multiple Power::Outlet devices.  It was written to work on iPhone and look ok in most browsers.
 
-## CONFIGURATION
+# CONFIGURATION
 
 To add an outlet for the CGI application, add a new INI section to the power-outlet.ini file.
 
@@ -1638,27 +2147,24 @@ WeMo device
 
 Default Location: /usr/share/power-outlet/conf/power-outlet.ini
 
-## BUILD
+# BUILD
 
     rpmbuild -ta Power-Outlet-*.tar.gz
 
-## INSTALLATION
+# INSTALLATION
 
 I recommend installation with the provided RPM package perl-Power-Outlet-application-cgi which installs to /usr/share/power-outlet and configures Apache with /etc/httpd/conf.d/power-outlet.conf.
 
     sudo yum install perl-Power-Outlet-application-cgi
-
-# File: scripts/power-outlet-json.cgi
-
-## NAME
+# NAME
 
 power-outlet-json.cgi - Control Power::Outlet device with JSON web service (e.g. Node-Red)
 
-## DESCRIPTION
+# DESCRIPTION
 
 power-outlet-json.cgi is a CGI application to control a Power::Outlet device with a web service.
 
-## API
+# API
 
 The script is called over HTTP with name and action parameters.  The name is the Section Name from the INI file and the action is one of on, off, query, or switch.
 
@@ -1671,7 +2177,7 @@ Return is a JSON hash with keys status and state.  status is OK if there are no 
 
     {"status":"OK","state":"ON"}
 
-## Node-Red Integration
+# Node-Red Integration
 
 Use three nodes: inject, http request, and debug.
 
@@ -1685,11 +2191,11 @@ Use three nodes: inject, http request, and debug.
 - In the debug node
     - Set the "Output" to msg.payload.state which returns "ON" or "OFF"
 
-### Node Red Example
+## Node Red Example
 
     [{"id":"736cc2df.cc616c","type":"inject","z":"bbbcee28.8891c","name":"","topic":"Christmas Tree","payload":"On","payloadType":"str","repeat":"","crontab":"","once":false,"onceDelay":0.1,"x":330,"y":1480,"wires":[["6f024760.ea5058"]]},{"id":"6f024760.ea5058","type":"http request","z":"bbbcee28.8891c","name":"power-outlet-json.cgi","method":"GET","ret":"obj","paytoqs":false,"url":"https://127.0.0.1/power-outlet/power-outlet-json.cgi?name={{topic}};action={{payload}}","tls":"","persist":false,"proxy":"","authType":"","x":560,"y":1480,"wires":[["2673faca.21f8d6"]],"inputLabels":["Topic=>name, Payload=>action"]},{"id":"2673faca.21f8d6","type":"debug","z":"bbbcee28.8891c","name":"","active":true,"tosidebar":true,"console":false,"tostatus":false,"complete":"payload.state","targetType":"msg","x":790,"y":1480,"wires":[]}]
 
-## CONFIGURATION
+# CONFIGURATION
 
 To add an outlet for the web service, add a new INI section to the power-outlet.ini file.
 
@@ -1718,31 +2224,28 @@ WeMo device
 
 Default Location: /etc/power-outlet.ini
 
-### BUILD
+## BUILD
 
     rpmbuild -ta Power-Outlet-*.tar.gz
 
-## INSTALLATION
+# INSTALLATION
 
 I recommend installation with the provided RPM package perl-Power-Outlet-application-cgi which installs to /usr/share/power-outlet.
 
     sudo yum install perl-Power-Outlet-application-cgi
-
-# File: scripts/power-outlet-mqtt-listener.pl
-
-## NAME
+# NAME
 
 power-outlet-mqtt-listener.pl - MQTT listener to control Power::Outlet devices
 
-## SYNOPSIS
+# SYNOPSIS
 
     power-outlet-mqtt-listener.pl [-c /etc/power-outlet-mqtt-listener.yml]
 
-## DESCRIPTION
+# DESCRIPTION
 
 This script provides an MQTT listener to control Power::Outlet devices
 
-## CONFIGURATION
+# CONFIGURATION
 
 The YAML formatted file /etc/power-outlet-mqtt-listener.yml is a key-value hash.  
 
@@ -1781,26 +2284,25 @@ Example:
           outlets: '1,2,6,7'
           host: bar
 
-## SYSTEMD
+# SYSTEMD
 
 The included rpm spec file installs a systemd service file so you can run this process from systemd.
 
     systemctl power-outlet-mqtt-listener.service enable
     systemctl power-outlet-mqtt-listener.service start
 
-## BUILD
+# BUILD
 
     rpmbuild -ta Power-Outlet-*.tar.gz
 
-## INSTALL
+# INSTALL
 
     sudo yum install perl-Power-Outlet-mqtt-listener 
 
-## COPYRIGHT
+# COPYRIGHT
 
 Copyright (c) 2020 Michael R. Davis &lt;mrdvt92>
 
-## LICENSE
+# LICENSE
 
 This program is free software; you can redistribute it and/or modify it under the same terms as Perl itself.
-

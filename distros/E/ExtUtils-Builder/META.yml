@@ -1,17 +1,12 @@
 ---
-abstract: 'An overview of the foundations of the ExtUtils::Builder Plan framework'
+abstract: 'An abstract representation of build processes'
 author:
   - 'Leon Timmermans <fawaka@gmail.com>'
 build_requires:
-  Cwd: '0'
   File::Spec: '0'
-  File::Spec::Functions: '0'
-  File::Temp: '0'
   IO::Handle: '0'
   IPC::Open3: '0'
-  Test::Builder: '0'
   Test::More: '0.89'
-  lib: '0'
 configure_requires:
   ExtUtils::MakeMaker: '0'
 dynamic_config: 1
@@ -24,92 +19,79 @@ name: ExtUtils-Builder
 provides:
   ExtUtils::Builder:
     file: lib/ExtUtils/Builder.pm
-    version: '0.019'
+    version: '0.020'
   ExtUtils::Builder::Action:
     file: lib/ExtUtils/Builder/Action.pm
-    version: '0.019'
+    version: '0.020'
   ExtUtils::Builder::Action::Code:
     file: lib/ExtUtils/Builder/Action/Code.pm
-    version: '0.019'
+    version: '0.020'
   ExtUtils::Builder::Action::Command:
     file: lib/ExtUtils/Builder/Action/Command.pm
-    version: '0.019'
+    version: '0.020'
   ExtUtils::Builder::Action::Composite:
     file: lib/ExtUtils/Builder/Action/Composite.pm
-    version: '0.019'
+    version: '0.020'
   ExtUtils::Builder::Action::Function:
     file: lib/ExtUtils/Builder/Action/Function.pm
-    version: '0.019'
+    version: '0.020'
   ExtUtils::Builder::Action::Perl:
     file: lib/ExtUtils/Builder/Action/Perl.pm
-    version: '0.019'
+    version: '0.020'
   ExtUtils::Builder::Action::Primitive:
     file: lib/ExtUtils/Builder/Action/Primitive.pm
-    version: '0.019'
+    version: '0.020'
   ExtUtils::Builder::CPAN::Tool:
     file: lib/ExtUtils/Builder/CPAN/Tool.pm
-    version: '0.019'
+    version: '0.020'
   ExtUtils::Builder::FileSet:
     file: lib/ExtUtils/Builder/FileSet.pm
-    version: '0.019'
+    version: '0.020'
   ExtUtils::Builder::FileSet::Filter:
     file: lib/ExtUtils/Builder/FileSet/Filter.pm
-    version: '0.019'
+    version: '0.020'
   ExtUtils::Builder::FileSet::Free:
     file: lib/ExtUtils/Builder/FileSet/Free.pm
-    version: '0.019'
+    version: '0.020'
   ExtUtils::Builder::FileSet::Subst:
     file: lib/ExtUtils/Builder/FileSet/Subst.pm
-    version: '0.019'
+    version: '0.020'
   ExtUtils::Builder::MakeMaker:
     file: lib/ExtUtils/Builder/MakeMaker.pm
-    version: '0.019'
+    version: '0.020'
   ExtUtils::Builder::Node:
     file: lib/ExtUtils/Builder/Node.pm
-    version: '0.019'
+    version: '0.020'
   ExtUtils::Builder::Plan:
     file: lib/ExtUtils/Builder/Plan.pm
-    version: '0.019'
+    version: '0.020'
   ExtUtils::Builder::Planner:
     file: lib/ExtUtils/Builder/Planner.pm
-    version: '0.019'
+    version: '0.020'
   ExtUtils::Builder::Planner::Extension:
     file: lib/ExtUtils/Builder/Planner/Extension.pm
-    version: '0.019'
+    version: '0.020'
   ExtUtils::Builder::Serializer:
     file: lib/ExtUtils/Builder/Serializer.pm
-    version: '0.019'
+    version: '0.020'
   ExtUtils::Builder::Util:
     file: lib/ExtUtils/Builder/Util.pm
-    version: '0.019'
+    version: '0.020'
 recommends:
   Sub::Util: '1.40'
 requires:
   CPAN::Meta: '0'
-  Carp: '0'
-  Data::Dumper: '0'
-  Exporter: '5.57'
-  ExtUtils::Config: '0'
-  ExtUtils::Config::MakeMaker: '0'
+  ExtUtils::Config: '0.009'
   ExtUtils::Helpers: '0.027'
   ExtUtils::MakeMaker: '6.68'
-  ExtUtils::Manifest: '0'
-  File::Basename: '0'
-  File::Spec: '0'
-  File::Spec::Unix: '0'
   List::Util: '1.45'
   Perl::OSType: '0'
-  Scalar::Util: '0'
-  base: '0'
   parent: '0'
   perl: '5.010'
-  strict: '0'
-  version: '0'
-  warnings: '0'
 resources:
   bugtracker: https://github.com/Leont/extutils-builder-plan/issues
   repository: git://github.com/Leont/extutils-builder-plan.git
-version: '0.019'
+version: '0.020'
 x_generated_by_perl: v5.42.0
 x_serialization_backend: 'YAML::Tiny version 1.76'
 x_spdx_expression: 'Artistic-1.0-Perl OR GPL-1.0-or-later'

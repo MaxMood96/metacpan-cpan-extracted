@@ -1,10 +1,10 @@
 use strictures 2;
-package OpenAPI::Modern; # git description: v0.126-4-gfb0df051
+package OpenAPI::Modern; # git description: v0.127-14-gd0c9ccf8
 # vim: set ts=8 sts=2 sw=2 tw=100 et :
 # ABSTRACT: Validate HTTP requests and responses against an OpenAPI v3.0, v3.1 or v3.2 document
 # KEYWORDS: validation evaluation JSON Schema OpenAPI v3.0 v3.1 v3.2 Swagger HTTP request response
 
-our $VERSION = '0.127';
+our $VERSION = '0.128';
 
 use 5.020;
 use utf8;
@@ -29,7 +29,7 @@ use Feature::Compat::Try;
 use Encode 2.89 ();
 use JSON::Schema::Modern;
 use JSON::Schema::Modern::Utilities qw(jsonp unjsonp canonical_uri E abort is_equal true false get_type);
-use OpenAPI::Modern::Utilities qw(add_vocab_and_default_schemas uri_decode intersect_types coerce_primitive);
+use OpenAPI::Modern::Utilities qw(add_vocab_and_default_schemas uri_decode intersect_types coerce_primitive uri_encode);
 use JSON::Schema::Modern::Document::OpenAPI;
 use MooX::TypeTiny 0.002002;
 use Types::Standard qw(InstanceOf Bool);
@@ -787,6 +787,11 @@ sub _validate_path_parameter ($self, $state, $param_obj, $path_captures) {
 
   my $data = $path_captures->{$param_obj->{name}};
 
+  # path parameters are always percent-encoded
+  return E({ %$state, data_path => jsonp($state->{data_path}, $param_obj->{name}) },
+      'non-ascii character detected in parameter value: not deserializable')
+    if ($data//'') =~ /[^\x00-\x7F]/;
+
   if (exists $param_obj->{content}) {
     $data = uri_decode($data);
     return $self->_validate_parameter_content({ %$state, depth => $state->{depth}+1,
@@ -865,19 +870,24 @@ sub _validate_header_parameter ($self, $state, $header_name, $header_obj, $heade
 
   return 1 if grep fc $header_name eq fc $_, qw(Accept Content-Type Authorization);
 
-  if (not $headers->every_header($header_name)->@*) {
+  # header names and values must be utf8-encoded for transmission
+  my $encoded_header_name = Encode::encode('UTF-8', $header_name, Encode::DIE_ON_ERR | Encode::LEAVE_SRC);
+
+  if (not $headers->every_header($encoded_header_name)->@*) {
     return E({ %$state, keyword => 'required' }, 'missing header: %s', $header_name)
       if $header_obj->{required};
     return 1;
   }
 
-  $state->{data_path} = jsonp($state->{data_path}, $header_name);
+  return E({ %$state, data_path => jsonp($state->{data_path}, $header_name) },
+      'wide character detected in header value: not deserializable')
+    if any { /[^\x00-\xFF]/ } $headers->every_header($encoded_header_name)->@*;
 
   # validate as a single comma-concatenated string, presumably to be decoded
-  return $self->_validate_parameter_content({ %$state, depth => $state->{depth}+1 }, $header_obj, \ $headers->header($header_name))
+  return $self->_validate_parameter_content({ %$state, depth => $state->{depth}+1,
+        data_path => jsonp($state->{data_path}, $header_name) },
+      $header_obj, \ $headers->header($encoded_header_name))
     if exists $header_obj->{content};
-
-  my @types = $self->_type_in_schema($header_obj->{schema}, { %$state, keyword_path => $state->{keyword_path}.'/schema' });
 
   # RFC9112 §5.1-3: "The field line value does not include that leading or trailing whitespace: OWS
   # occurring before the first non-whitespace octet of the field line value, or after the last
@@ -890,39 +900,33 @@ sub _validate_header_parameter ($self, $state, $header_name, $header_obj, $heade
   # by a comma (",") and optional whitespace (OWS, defined in Section 5.6.3). For consistency, use
   # comma SP."
 
-  my @values = map s/^\s*//r =~ s/\s*\z//r, $headers->every_header($header_name)->@*;
-  my $data;
+  # Headers must be UTF-8-encoded, so we decode here first before parsing the string
+  # (style delimiters are all ascii so are unaffected)
+  # In order to deserialize from a single string using the "simple" style, we concatenate all header
+  # lines together, after removing leading and trailing whitespace and then pct-encoding the result
+  # (as it is decoded again after splitting on delimiters). OWS after commas are parsed out later.
 
-  if (@types != 6 and any { $_ eq 'array' || $_ eq 'object' } @types) {
-    @values = map +(s/^\s*//r =~ s/\s*\z//r), map +(split /,/), @values;
-    if (any { $_ eq 'object' } @types) {
-      if ($header_obj->{explode}//false) {
-        # style=simple, explode=true: "R=100,G=200,B=150" -> { "R": 100, "G": 200, "B": 150 }
-        $data = +{ map split(/=/, $_, -1), @values };
-      }
-      else {
-        # style=simple, explode=false: "R,100,G,200,B,150" -> { "R": 100, "G": 200, "B": 150 }
-        $data = +{ @values, (@values % 2 ? '' : ()) };
-      }
-      $self->_coerce_object_elements($data, $header_obj->{schema}, { %$state, keyword_path => $state->{keyword_path}.'/schema' });
-    }
-    else {
-      # array, style=simple, explode=false or true: "blue,black,brown" -> ["blue","black","brown"]
-      $data = \@values;
-      $self->_coerce_array_elements($data, $header_obj->{schema}, { %$state, keyword_path => $state->{keyword_path}.'/schema' });
-    }
-  }
-  elsif (any { $_ eq 'string' || $_ eq 'number' || $_ eq 'boolean' || $_ eq 'null' } @types) {
-    return E($state, 'cannot deserialize to %s type%s', 'requested', @types > 1 ? 's' : '')
-      if not coerce_primitive(\($data = join(',', @values)), \@types);
-  }
+  my $data = $self->_deserialize_style(
+    # , and = delimiters are not percent-encoded
+    Mojo::Util::url_escape(join(',',
+        map s/^\s*//r =~ s/\s*\z//r, $headers->every_header($encoded_header_name)->@*),
+      '^A-Za-z0-9\-._~:/?#[\]@!$&\'()*+,;='),  # unreserved and reserved
+    my $s = { %$state, errors => [] },
+    style => $header_obj->{style}//'simple',
+    explode => $header_obj->{explode}//false,
+    name => $header_name,
+    schema => $header_obj->{schema},
+    strip_internal_ws => 1,
+  );
 
-  else {
-    return E($state, 'cannot deserialize to %s type%s', !@types ? 'any' : 'requested', @types > 1 ? 's' : '');
+  if ($s->{errors}->@*) {
+    push $state->{errors}->@*, $s->{errors}->@*;
+    return;
   }
 
   $self->_evaluate_subschema(\$data, $header_obj->{schema},
-    { %$state, keyword_path => $state->{keyword_path}.'/schema', depth => $state->{depth}+1 });
+    { %$state, data_path => jsonp($state->{data_path}, $header_name),
+      keyword_path => $state->{keyword_path}.'/schema', depth => $state->{depth}+1 });
 }
 
 sub _validate_cookie_parameter ($self, $state, $param_obj, @args) {
@@ -935,11 +939,17 @@ sub _validate_querystring_parameter ($self, $state, $param_obj, $uri) {
   return E({ %$state, keyword => 'required' }, 'missing querystring')
     if $param_obj->{required} and not length $uri->query->{string};
 
+  my $content = $uri->query->{string};
+
+  # query parameters are always percent-encoded
+  return E($state, 'non-ascii character detected in parameter value: not deserializable')
+    if $content =~ /[^\x00-\x7F]/;
+
   # Replace "+" with whitespace, unescape and decode as in Mojo::Parameters::pairs
   # We do not UTF-8-decode the content: this is the responsibility of the media-type decoder.
-  my $content = url_unescape($uri->query->{string} =~ s/\+/ /gr);
 
-  $self->_validate_parameter_content({ %$state, depth => $state->{depth}+1 }, $param_obj, \$content)
+  $self->_validate_parameter_content({ %$state, depth => $state->{depth}+1 },
+    $param_obj, \ url_unescape($content =~ s/\+/ /gr));
 }
 
 # data comes in as a string
@@ -949,11 +959,15 @@ sub _validate_querystring_parameter ($self, $state, $param_obj, $uri) {
 # This method is not appropriate for header parameters, which should never be percent-decoded.
 # %opt is (:$style, :$explode, :$name, :$schema)
 sub _deserialize_style ($self, $data, $state, %opt) {
-  # numbers and builtin bools can be treated as strings, but reject undef and references
-  croak 'only strings can be deserialized' if not defined $data or ref $data;
+  # numbers and builtin bools can be treated as strings, but reject references
+  croak 'only strings can be deserialized' if ref $data;
 
-  my ($style, $explode, $name, $schema) = @opt{qw(style explode name schema)};
-  my @types = $self->_type_in_schema($schema, { %$state, keyword_path => $state->{keyword_path}.'/schema' });
+  my ($style, $explode, $name, $schema, $strip_internal_ws) =
+    @opt{qw(style explode name schema strip_internal_ws)};
+
+  my @types = $self->_type_in_schema($schema, { %$state,
+      data_path => jsonp($state->{data_path}, $name),
+      keyword_path => $state->{keyword_path}.'/schema' });
 
   if ($style eq 'simple' or $style eq 'matrix' or $style eq 'label') {
     my $state = +{ %$state, data_path => jsonp($state->{data_path}, $name) };
@@ -961,7 +975,7 @@ sub _deserialize_style ($self, $data, $state, %opt) {
     # RFC6570 §3.2.1: "A variable that is undefined (Section 2.3) has no value and is ignored by the
     # expansion process. If all of the variables in an expression are undefined, then the
     # expression's expansion is the empty string."
-    if ($data eq '') {
+    if (($data//'') eq '') {
       if (any { $_ eq 'null' } @types) {
         return undef;
       }
@@ -989,7 +1003,8 @@ sub _deserialize_style ($self, $data, $state, %opt) {
       if length $prefix and $data !~ s/^$prefix//;
 
     my $delimiter =
-        !$explode ? ','
+        $style eq 'simple' && $strip_internal_ws ? ',(?:%20)?'
+      : !$explode ? ','
       : $style eq 'simple' ? ','
       : $style eq 'matrix' ? ';'
       : $style eq 'label' ? '\.'
@@ -1023,12 +1038,13 @@ sub _deserialize_style ($self, $data, $state, %opt) {
         map {
           ++$idx;
           # RFC6570 §3.2.1-6: empty value does not use '='
-          my ($key, $val) = split(/=/, $_, -1);
+          my ($key, $val) = split(/=/, $_, 2);
+
           ()= E({ %$state, keyword => 'style', errors => \@errors },
               'data does not match indicated style "%s" for %s (invalid separator at %s)',
               $style, $type, $type eq 'object' ? 'key "'.$key.'"' : 'index '.$idx)
             if defined $val and not length $val;
-          ($key, $val//'');
+          ($key//'', $val//'');
         }
         @values;
 
@@ -1290,7 +1306,7 @@ sub _type_in_schema ($self, $schema, $state) {
     return $types[0]->@* if $state->{specification_version} =~ /^draft[467]\z/;
   }
 
-  if (defined(my $ref = $schema->{'$dynamicRef'}) and $state->{specification_version} !~ /^draft(?:[467]|2019-09)$/) {
+  if (defined(my $ref = $schema->{'$dynamicRef'}) and $state->{specification_version} !~ /^draft(?:[467]|2019-09)\z/) {
     my $schema = $self->_resolve_dynamicRef($ref, my $state = { %$state });
     push @types, [ $self->_type_in_schema($schema, $state) ];
   }
@@ -1359,7 +1375,7 @@ sub _coerce_object_elements ($self, $data, $schema, $state) {
     return $object_coercions[0] if $state->{specification_version} =~ /^draft[467]\z/;
   }
 
-  if (defined(my $ref = $schema->{'$dynamicRef'}) and $state->{specification_version} !~ /^draft(?:[467]|2019-09)$/) {
+  if (defined(my $ref = $schema->{'$dynamicRef'}) and $state->{specification_version} !~ /^draft(?:[467]|2019-09)\z/) {
     my $schema = $self->_resolve_dynamicRef($ref, my $state = { %$state });
     push @object_coercions, $self->_coerce_object_elements($data, $schema, { %$state, _level => $state->{_level}+1 });
   }
@@ -1441,7 +1457,7 @@ sub _coerce_array_elements ($self, $data, $schema, $state) {
     return $array_coercions[0] if $state->{specification_version} =~ /^draft[467]\z/;
   }
 
-  if (defined(my $ref = $schema->{'$dynamicRef'}) and $state->{specification_version} !~ /^draft(?:[467]|2019-09)$/) {
+  if (defined(my $ref = $schema->{'$dynamicRef'}) and $state->{specification_version} !~ /^draft(?:[467]|2019-09)\z/) {
     my $schema = $self->_resolve_dynamicRef($ref, my $state = { %$state });
     push @array_coercions, $self->_coerce_array_elements($data, $schema, { %$state, _level => $state->{_level}+1 });
   }
@@ -1651,7 +1667,7 @@ OpenAPI::Modern - Validate HTTP requests and responses against an OpenAPI v3.0, 
 
 =head1 VERSION
 
-version 0.127
+version 0.128
 
 =head1 SYNOPSIS
 
@@ -2129,6 +2145,13 @@ best-effort basis, but since different implementations have different levels of 
 specs, some validation errors may occur e.g. if a certain required header is missing on the
 original. For best results in validating real messages from the network, parse them directly into
 Mojolicious messages (see L<Mojo::Message/parse>).
+
+Parameter deserialization is performed with the assumption that the request URI has been correctly
+percent-encoded. Failing to encode certain characters that are also used as delimiters for the
+specific L<parameter style|https://spec.openapis.org/oas/latest#style-values> being used, or
+encoding characters that are not canonically required to be encoded according to
+L<RFC3986 §2.1|https://www.rfc-editor.org/rfc/rfc3986#section-2.1>, may result in the message not
+being correctly deserialized nor parameter values correctly extracted.
 
 Only certain permutations of OpenAPI documents are supported at this time:
 

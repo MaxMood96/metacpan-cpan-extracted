@@ -1,6 +1,6 @@
 package Resque::Stat;
 # ABSTRACT: The stat subsystem. Used to keep track of integer counts.
-$Resque::Stat::VERSION = '0.42';
+$Resque::Stat::VERSION = '0.44';
 use Moose;
 
 has resque => (
@@ -50,7 +50,7 @@ Resque::Stat - The stat subsystem. Used to keep track of integer counts.
 
 =head1 VERSION
 
-version 0.42
+version 0.44
 
 =head1 ATTRIBUTES
 

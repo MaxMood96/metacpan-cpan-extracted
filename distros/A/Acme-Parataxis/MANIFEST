@@ -9,10 +9,14 @@ builder/Acme/Parataxis/Builder.pm
 cpanfile
 eg/affinity.pl
 eg/basic.pl
+eg/http_tiny.pl
 eg/modern.pl
 eg/port_scanner.pl
 eg/preempt.pl
 eg/socket.pl
+eg/stress_fibers.pl
+eg/stress_io.pl
+eg/stress_preempt.pl
 eg/symmetric.pl
 eg/synopsis.pl
 eg/thread_pool.pl

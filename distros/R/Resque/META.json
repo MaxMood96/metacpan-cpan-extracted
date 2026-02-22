@@ -81,7 +81,7 @@
          "web" : "https://github.com/diegok/resque-perl"
       }
    },
-   "version" : "0.42",
+   "version" : "0.44",
    "x_Dist_Zilla" : {
       "perl" : {
          "version" : "5.032000"
@@ -188,7 +188,7 @@
                   "changelog" : "Changes"
                },
                "Dist::Zilla::Role::Git::Repo" : {
-                  "git_version" : "2.31.1",
+                  "git_version" : "2.53.0",
                   "repo_root" : "."
                }
             },
@@ -212,7 +212,7 @@
                   "changelog" : "Changes"
                },
                "Dist::Zilla::Role::Git::Repo" : {
-                  "git_version" : "2.31.1",
+                  "git_version" : "2.53.0",
                   "repo_root" : "."
                },
                "Dist::Zilla::Role::Git::StringFormatter" : {
@@ -229,12 +229,12 @@
                   "branch" : null,
                   "changelog" : "Changes",
                   "signed" : 0,
-                  "tag" : "v0.42",
+                  "tag" : "v0.44",
                   "tag_format" : "v%V",
                   "tag_message" : "v%V"
                },
                "Dist::Zilla::Role::Git::Repo" : {
-                  "git_version" : "2.31.1",
+                  "git_version" : "2.53.0",
                   "repo_root" : "."
                },
                "Dist::Zilla::Role::Git::StringFormatter" : {
@@ -254,7 +254,7 @@
                   "remotes_must_exist" : 1
                },
                "Dist::Zilla::Role::Git::Repo" : {
-                  "git_version" : "2.31.1",
+                  "git_version" : "2.53.0",
                   "repo_root" : "."
                }
             },
@@ -297,7 +297,7 @@
                   "version_regexp" : "(?^:^v(.+)$)"
                },
                "Dist::Zilla::Role::Git::Repo" : {
-                  "git_version" : "2.31.1",
+                  "git_version" : "2.53.0",
                   "repo_root" : "."
                }
             },
@@ -499,7 +499,7 @@
       }
    },
    "x_generated_by_perl" : "v5.32.0",
-   "x_serialization_backend" : "Cpanel::JSON::XS version 4.24",
+   "x_serialization_backend" : "Cpanel::JSON::XS version 4.26",
    "x_spdx_expression" : "Artistic-1.0-Perl OR GPL-1.0-or-later"
 }
 

@@ -7,7 +7,7 @@ use 5.010;
 use ExtUtils::MakeMaker;
 
 my %WriteMakefileArgs = (
-  "ABSTRACT" => "An overview of the foundations of the ExtUtils::Builder Plan framework",
+  "ABSTRACT" => "An abstract representation of build processes",
   "AUTHOR" => "Leon Timmermans <fawaka\@gmail.com>",
   "CONFIGURE_REQUIRES" => {
     "ExtUtils::MakeMaker" => 0
@@ -18,38 +18,20 @@ my %WriteMakefileArgs = (
   "NAME" => "ExtUtils::Builder",
   "PREREQ_PM" => {
     "CPAN::Meta" => 0,
-    "Carp" => 0,
-    "Data::Dumper" => 0,
-    "Exporter" => "5.57",
-    "ExtUtils::Config" => 0,
-    "ExtUtils::Config::MakeMaker" => 0,
+    "ExtUtils::Config" => "0.009",
     "ExtUtils::Helpers" => "0.027",
     "ExtUtils::MakeMaker" => "6.68",
-    "ExtUtils::Manifest" => 0,
-    "File::Basename" => 0,
-    "File::Spec" => 0,
-    "File::Spec::Unix" => 0,
     "List::Util" => "1.45",
     "Perl::OSType" => 0,
-    "Scalar::Util" => 0,
-    "base" => 0,
-    "parent" => 0,
-    "strict" => 0,
-    "version" => 0,
-    "warnings" => 0
+    "parent" => 0
   },
   "TEST_REQUIRES" => {
-    "Cwd" => 0,
     "File::Spec" => 0,
-    "File::Spec::Functions" => 0,
-    "File::Temp" => 0,
     "IO::Handle" => 0,
     "IPC::Open3" => 0,
-    "Test::Builder" => 0,
-    "Test::More" => "0.89",
-    "lib" => 0
+    "Test::More" => "0.89"
   },
-  "VERSION" => "0.019",
+  "VERSION" => "0.020",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -58,33 +40,16 @@ my %WriteMakefileArgs = (
 
 my %FallbackPrereqs = (
   "CPAN::Meta" => 0,
-  "Carp" => 0,
-  "Cwd" => 0,
-  "Data::Dumper" => 0,
-  "Exporter" => "5.57",
-  "ExtUtils::Config" => 0,
-  "ExtUtils::Config::MakeMaker" => 0,
+  "ExtUtils::Config" => "0.009",
   "ExtUtils::Helpers" => "0.027",
   "ExtUtils::MakeMaker" => "6.68",
-  "ExtUtils::Manifest" => 0,
-  "File::Basename" => 0,
   "File::Spec" => 0,
-  "File::Spec::Functions" => 0,
-  "File::Spec::Unix" => 0,
-  "File::Temp" => 0,
   "IO::Handle" => 0,
   "IPC::Open3" => 0,
   "List::Util" => "1.45",
   "Perl::OSType" => 0,
-  "Scalar::Util" => 0,
-  "Test::Builder" => 0,
   "Test::More" => "0.89",
-  "base" => 0,
-  "lib" => 0,
-  "parent" => 0,
-  "strict" => 0,
-  "version" => 0,
-  "warnings" => 0
+  "parent" => 0
 );
 
 # inserted by Dist::Zilla::Plugin::DynamicPrereqs 0.040

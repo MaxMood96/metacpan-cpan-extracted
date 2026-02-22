@@ -78,7 +78,7 @@ Acme::Parataxis::run(
         my $listener = IO::Socket::INET->new(
             Listen    => 10,
             LocalAddr => '127.0.0.1',    # Force IPv4
-            LocalPort => 0,
+            LocalPort => 0,              # Auto-assign port
             Proto     => 'tcp',
             ReuseAddr => 1,
             Blocking  => 0

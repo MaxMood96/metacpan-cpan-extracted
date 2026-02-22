@@ -1,40 +1,36 @@
 use v5.40;
-use lib 'lib';
 use blib;
-use Acme::Parataxis;
+use Acme::Parataxis qw[:all];
 $|++;
 
-# Demonstrate Thread Affinity / Core ID
-Acme::Parataxis::run(
-    sub {
-        say 'Main thread (TID: ' . Acme::Parataxis->tid . ')';
-        my @futures;
-        for ( 1 .. 20 ) {
-            push @futures, Acme::Parataxis->spawn(
-                sub {
-                    my $core_id = Acme::Parataxis->await_core_id();
+# Demonstrate Thread Affinity / Core ID using modern API
+async {
+    say 'Main thread (TID: ' . tid() . ')';
+    my @futures;
+    for ( 1 .. 20 ) {
+        push @futures, fiber {
 
-                    #~ warn 'In core ' . $core_id;
-                    return $core_id;
-                }
-            );
-        }
-        say 'Main: Tasks spawned, waiting for results...';
-        my %distribution;
-        for my $f (@futures) {
-            my $core = $f->await();
-            if ( defined $core ) {
-                $distribution{$core}++;
-            }
-            else {
-                warn "Failed to get core ID for a task.\n";
-            }
-        }
-        say 'Background Task Distribution across CPU Cores:';
-        for my $core ( sort { $a <=> $b } keys %distribution ) {
-            say "  Core $core: " . $distribution{$core} . ' tasks';
-        }
-        @futures = ();
-        Acme::Parataxis::stop();
+            # await_core_id() offloads to the pool and returns the core ID
+            return await_core_id();
+        };
     }
-);
+    say 'Main: Tasks spawned, waiting for results...';
+    my %distribution;
+    for my $f (@futures) {
+        my $core = await $f;
+        if ( defined $core ) {
+            $distribution{$core}++;
+        }
+        else {
+            warn "Failed to get core ID for a task.\n";
+        }
+    }
+    say 'Background Task Distribution across CPU Cores:';
+    for my $core ( sort { $a <=> $b } keys %distribution ) {
+        say "  Core $core: " . $distribution{$core} . ' tasks';
+    }
+
+    # Explicitly clear futures to break any potentially clobbered references
+    # during teardown in some Perl builds
+    @futures = ();
+};

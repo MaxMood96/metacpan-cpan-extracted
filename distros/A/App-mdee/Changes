@@ -1,5 +1,11 @@
 Revision history for Perl extension App-mdee
 
+1.01 2026-02-21T12:11:29Z
+
+    - Use nofork+raw mode for ansicolumn call (configurable via nofork option)
+    - Add t/03_nofork.t correctness tests and xt/nofork.t benchmark
+    - Require Command::Run 0.9903
+
 1.00 2026-02-20T06:08:50Z
 
     - Integrate App::Greple::md module into this repository (previously separate)

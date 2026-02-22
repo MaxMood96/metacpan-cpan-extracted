@@ -1,8 +1,6 @@
 package File::SOPS::Format::JSON;
-our $VERSION = '0.001';
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: JSON format handler for SOPS
-
+our $VERSION = '0.002';
 use Moo;
 use Carp qw(croak);
 use JSON::MaybeXS qw(decode_json);
@@ -72,7 +70,7 @@ File::SOPS::Format::JSON - JSON format handler for SOPS
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 
@@ -165,9 +163,10 @@ Returns true if filename ends with C<.json> (case-insensitive).
 
 =head1 SUPPORT
 
-=head2 IRC
+=head2 Issues
 
-You can reach Getty on C<irc.perl.org> for questions and support.
+Please report bugs and feature requests on GitHub at
+L<https://github.com/Getty/p5-file-sops/issues>.
 
 =head1 CONTRIBUTING
 

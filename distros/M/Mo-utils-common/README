@@ -1,0 +1,87 @@
+NAME
+    Mo::utils::common - Common subroutines for Mo::utils framework.
+
+SYNOPSIS
+     use Mo::utils::common qw(check_object);
+
+     check_object($value, $class, $message, $message_params_ar);
+
+SUBROUTINES
+  "check_object"
+     check_object($value, $class, $message, $message_params_ar);
+
+    Check $value which is instance of $class or not.
+
+    Put error (defined by $message and $message_params_ar) if check isn't
+    ok.
+
+    Returns undef.
+
+ERRORS
+     check_object():
+             I<Create own errors from C<sprintf $message, @{$message_params_ar}>.>
+             Bad definition of $message_params_ar.
+                     Message params array reference: %s
+
+EXAMPLE1
+     use strict;
+     use warnings;
+
+     use Error::Pure;
+     use Mo::utils::common qw(check_object);
+
+     $Error::Pure::TYPE = 'AllError';
+
+     # Value to check.
+     my $value = 'Foo';
+
+     # Check.
+     check_object($value, 'Foo', 'Error: This is not a instance of %s.', ['Foo']);
+
+     # Output:
+     # ERROR: Error: This is not a instance of Foo.
+     # Value: Foo
+     # Mo::utils::common  err                              ../common.pm               20
+     # main               Mo::utils::common::check_object  ../check_object_scalar.pl  12
+
+EXAMPLE2
+     use strict;
+     use warnings;
+
+     use Error::Pure;
+     use Mo::utils::common qw(check_object);
+     use Test::MockObject;
+
+     $Error::Pure::TYPE = 'AllError';
+
+     # Value to check.
+     my $value = Test::MockObject->new;
+
+     # Check.
+     check_object($value, 'Foo', 'Error: This is not a instance of %s.', ['Foo']);
+
+     # Output:
+     # ERROR: Error: This is not a instance of Foo.
+     # Reference: Reference: Test::MockObject
+     # Mo::utils::common  err                              ../common.pm               35
+     # main               Mo::utils::common::check_object  ../check_object_scalar.pl  13
+
+DEPENDENCIES
+    Error::Pure, Exporter, Readonly, Scalar::Util.
+
+REPOSITORY
+    <https://github.com/michal-josef-spacek/Mo-utils-common>
+
+AUTHOR
+    Michal Josef Špaček <mailto:skim@cpan.org>
+
+    <http://skim.cz>
+
+LICENSE AND COPYRIGHT
+    © 2025-2026 Michal Josef Špaček
+
+    BSD 2-Clause License
+
+VERSION
+    0.01
+

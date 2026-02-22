@@ -22,7 +22,7 @@ use constant REGEX_HOTFIX  => '^(hotfix)/(.+)$';
 use constant REGEX_DEVELOP => '^(dev|develop)$';
 use constant REGEX_MASTER  => '^(master|main)$';
 use constant REGEX_RELEASE => '^(release)/(.+)$';
-use constant REGEX_FEATURE => '^((feature)/(.+)|(\d{1,6}(-.+)+))$';
+use constant REGEX_FEATURE => '^((feature)/(.+)|(\d{1,6}(-.+)+)|(dependabot)/(.+))$';
 
 App::GitKtti::showVersion();
 

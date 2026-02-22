@@ -1,5 +1,47 @@
 Version History
 
+0.38 -- Sat Feb 21 15:05:16 AST 2026
+
+    [Changes since 0.36]
+    - Fix a minor memory leak and potential double frees
+    - Add some additional test cases
+    - Fix a couple of issues causing failures on the smokers
+    - Replace the github actions for Linux and Windows (8e7ff45)
+
+    [Detailed Change Log]
+     - 14bd046 The module actually supports 5.008
+     - 03c58de diag the openssl_version in first test
+     - b2fbf7b Increment version number
+     - 27e55aa Avoid potential double frees
+     - aa8950b Clarify store - rename to store_sv
+     - a96d3ee Require latest version of Crypt::OpenSSL::X509
+     - 642a3b9 Bump actions/checkout from 2 to 6
+     - 5d1f712 Add a dependabot for github actions
+     - eab6e70 v0.37
+
+0.37 -- Sun Feb 01 14:08:32 AST 2026
+
+    [Changes since 0.36]
+    - Fix a minor memory leak
+    - Add some additional test cases
+    - Fix a couple of issues causing failures on the smokers
+    - Replace the github actions for Linux and Windows (8e7ff45)
+
+    [Detailed Change Log]
+    - b254195 Improve 03-verify-bad-cert.t and sort Prereqs
+    - 8e7ff45 Add a more thorough test suite
+    - 7bdd4e3 Increase minimum version of Test::Spelling
+    - 23d3174 Verify.xs white space change
+    - a2800b7 Update to LICENSE text - no license impact
+    - 3acc4bf Change Windows testers make to gmake
+    - 23b14be Increment repo version
+    - bb265f9 use libeay32 with Strawberry Perl <= 24
+    - 1ba3225 Fix openSSL version differences
+    - 71ff68f Add parameter tests
+    - 3a83eb9 Improve code - fix memory leak
+    - 92168a2 Fix case for PERL_VERSION
+    - 99b0e6c v0.36
+
 0.36 -- Mon Jul 03 13:15:06 ADT 2023
 
     [Minor Packaging Improvements]

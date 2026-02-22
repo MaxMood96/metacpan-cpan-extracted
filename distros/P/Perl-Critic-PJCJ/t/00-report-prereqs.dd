@@ -21,12 +21,14 @@ do { my $x = {
                                       'Test::EOL' => '0',
                                       'Test::Kwalitee' => '1.21',
                                       'Test::More' => '0.88',
+                                      'Test::Perl::Critic' => '0',
                                       'Test::Pod::Coverage::TrustMe' => '0.002001',
                                       'Test::Version' => '1'
                                     }
                     },
        'runtime' => {
                       'requires' => {
+                                      'List::Util' => '1.33',
                                       'PPI' => '0',
                                       'Perl::Critic' => '0',
                                       'perl' => 'v5.26.0'

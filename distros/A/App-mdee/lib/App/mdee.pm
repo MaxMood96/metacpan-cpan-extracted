@@ -4,7 +4,7 @@ package App::mdee;
 # POD documentation is appended from script/mdee at release time.
 # See minil.toml for details.
 
-our $VERSION = "1.00";
+our $VERSION = "1.01";
 
 1;
 =encoding utf-8
@@ -47,7 +47,7 @@ mdee - em·dee, Markdown Easy on the Eyes
 
 =head1 VERSION
 
-Version 1.00
+Version 1.01
 
 =cut
 =head1 DESCRIPTION

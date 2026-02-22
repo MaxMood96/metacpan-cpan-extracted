@@ -3,7 +3,7 @@ package JSON::Schema::Modern::Vocabulary::OpenAPI;
 # vim: set ts=8 sts=2 sw=2 tw=100 et :
 # ABSTRACT: Implementation of the JSON Schema OpenAPI vocabulary
 
-our $VERSION = '0.127';
+our $VERSION = '0.128';
 
 use 5.020;
 use utf8;
@@ -123,7 +123,7 @@ JSON::Schema::Modern::Vocabulary::OpenAPI - Implementation of the JSON Schema Op
 
 =head1 VERSION
 
-version 0.127
+version 0.128
 
 =head1 DESCRIPTION
 
@@ -137,8 +137,8 @@ or C<https://spec.openapis.org/oas/3.2/vocab/base>
 and formally specified in L<https://spec.openapis.org/oas/latest#schema-object>.
 
 This vocabulary is normally made available by using the default OpenAPI metaschema
-(currently L<https://spec.openapis.org/oas/3.1/schema/2025-09-15> and
-L<https://spec.openapis.org/oas/3.2/schema/2025-09-17>).
+(currently L<https://spec.openapis.org/oas/3.1/schema/2025-11-23> and
+L<https://spec.openapis.org/oas/3.2/schema/2025-11-23>).
 
 =head1 SEE ALSO
 

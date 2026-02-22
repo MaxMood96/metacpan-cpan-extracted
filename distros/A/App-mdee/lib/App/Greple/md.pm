@@ -5,7 +5,7 @@ package App::Greple::md;
 use 5.024;
 use warnings;
 
-our $VERSION = "1.00";
+our $VERSION = "1.01";
 
 =encoding utf-8
 
@@ -209,6 +209,7 @@ Available parameters:
                     0=off, 1/all=all, or colon-separated steps
     tick_open       inline code open marker (default: `)
     tick_close      inline code close marker (default: ´)
+    nofork          nofork+raw mode for code ref calls (default: 1)
     hashed.h1-h6    closing hashes per level (default: 0)
 
 =head2 OSC 8 Hyperlinks
@@ -326,6 +327,7 @@ my $config = Getopt::EX::Config->new(
     foldwidth  => 80,  # fold width
     table      => 1,   # table formatting
     rule       => 1,   # box-drawing characters for tables
+    nofork     => 1,   # use nofork+raw for code ref calls
     heading_markup => 0,  # inline formatting in headings
     tick_open  => '`',       # inline code open marker
     tick_close => "\x{b4}",  # inline code close marker (´)
@@ -404,7 +406,7 @@ sub finalize {
     my($mod, $argv) = @_;
     $config->deal_with($argv,
                        "mode|m=s", "base_color|B=s",
-                       "colorize!", "foldlist!", "foldwidth=i", "table!", "rule!",
+                       "colorize!", "nofork!", "foldlist!", "foldwidth=i", "table!", "rule!",
                        "heading_markup|hm:s", "tick_open=s", "tick_close=s",
                        "hashed=s%",
                        "colormap|cm=s" => \@opt_cm,
@@ -738,7 +740,8 @@ sub call_ansicolumn {
     require App::ansicolumn;
     Command::Run->new
         ->command(\&App::ansicolumn::ansicolumn, @args)
-        ->with(stdin => $text)
+        ->with(stdin => $text,
+               $config->{nofork} ? (nofork => 1, raw => 1) : ())
         ->update
         ->data // '';
 }

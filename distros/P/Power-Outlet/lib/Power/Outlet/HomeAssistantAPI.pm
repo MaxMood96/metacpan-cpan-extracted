@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use base qw{Power::Outlet::Common::IP::HTTP::JSON};
 
-our $VERSION = '0.53';
+our $VERSION = '0.54';
 
 =head1 NAME
 
@@ -11,7 +11,7 @@ Power::Outlet::HomeAssistantAPI - Control and query a switch via the Home Assist
 
 =head1 SYNOPSIS
 
-  my $outlet = Power::Outlet::HomeAssistantAPI->new(host => "my_ha_hostname", entity_id => "my_entity_id");
+  my $outlet = Power::Outlet::HomeAssistantAPI->new(host=>"my_ha_hostname", token=>"my_token", entity_id=>"my.entity_id");
   print $outlet->query, "\n";
   print $outlet->on, "\n";
   print $outlet->off, "\n";
@@ -52,7 +52,7 @@ Turn OFF switch entity
 =head2 new
 
   my $outlet = Power::Outlet->new(type=>"HomeAssistantAPI", host=>"hostname", token=>$token, entity_id=>"POWER2");
-  my $outlet = Power::Outlet::HomeAssistantAPI->new(host=>"hostname", token=>$token, entity_id=>"POWER2");
+  my $outlet = Power::Outlet::HomeAssistantAPI->new(host=>"hostname", token=>$token, entity_id=>"my.entity_id");
 
 =head1 PROPERTIES
 
@@ -71,7 +71,7 @@ sub token {
 
 =head2 entity_id
 
-Home Assistant entity_id is required and is noramlly formatted string such as switch.short_name.
+Home Assistant entity_id is required and is normally formatted string such as switch.short_name.
 
 =cut
 

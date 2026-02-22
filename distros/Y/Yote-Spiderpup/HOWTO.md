@@ -103,6 +103,10 @@ pupserver --compile
 # Watch for file changes and auto-recompile
 pupserver --watch        # checks every 5 seconds
 pupserver --watch 2      # checks every 2 seconds
+
+# HTTPS with SSL certificate
+pupserver --ssl-cert cert.pem --ssl-key key.pem
+pupserver --port 8443 --ssl-cert /path/to/cert.pem --ssl-key /path/to/key.pem
 ```
 
 ---

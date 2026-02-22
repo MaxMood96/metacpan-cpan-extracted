@@ -1,5 +1,16 @@
 Revision history for PDL-Opt-Simplex-Simple
 
+2.007	2026-02-21T20:25:12-08:00
+	- ParticleSwarm: align with standard PSO algorithm (Kennedy & Eberhart 1995)
+	  * Remove weight normalization; use parameters directly per standard PSO
+	  * Change random velocity factors from symmetric to non-negative [0, weight]
+	  * Scale stallSpeed threshold by sqrt(dimensions) for consistent detection
+	  * Preserve personal best on stall reinit to retain swarm memory
+	  * Clamp searchSize to 1.0 to prevent unbounded search radius expansion
+	  * Fix inverted boundary violation velocity masking
+	  * Update defaults: meWeight 1.5, themWeight 1.5, inertia 0.7
+	- Add PSO conformance test suite (t/12-pdl-opt-particleswarm-pso-conformance.t)
+
 2.006	2026-02-16T17:19:42-08:00
 	- ParticleSwarm: fix: random factor regression in velocity update
 	  * Generate independent random factors per particle (D,P) instead of

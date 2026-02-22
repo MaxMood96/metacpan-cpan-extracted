@@ -47,10 +47,17 @@
    },
    "release_status" : "stable",
    "resources" : {
-      "bugtracker" : {},
-      "repository" : {}
+      "bugtracker" : {
+         "web" : "https://github.com/Getty/p5-file-sops/issues"
+      },
+      "homepage" : "https://github.com/Getty/p5-file-sops",
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/Getty/p5-file-sops.git",
+         "web" : "https://github.com/Getty/p5-file-sops"
+      }
    },
-   "version" : "0.001",
+   "version" : "0.002",
    "x_Dist_Zilla" : {
       "perl" : {
          "version" : "5.036000"
@@ -62,7 +69,6 @@
                "Dist::Zilla::Plugin::GatherDir" : {
                   "exclude_filename" : [],
                   "exclude_match" : [],
-                  "follow_symlinks" : 0,
                   "include_dotfiles" : 1,
                   "prefix" : "",
                   "prune_directory" : [],
@@ -73,7 +79,7 @@
                }
             },
             "name" : "@Author::GETTY/Git::GatherDir",
-            "version" : "2.048"
+            "version" : "2.052"
          },
          {
             "class" : "Dist::Zilla::Plugin::ManifestSkip",
@@ -364,7 +370,7 @@
                }
             },
             "name" : "@Author::GETTY/@Git::VersionManager/release snapshot",
-            "version" : "2.048"
+            "version" : "2.052"
          },
          {
             "class" : "Dist::Zilla::Plugin::Git::Tag",
@@ -373,7 +379,7 @@
                   "branch" : null,
                   "changelog" : "Changes",
                   "signed" : 0,
-                  "tag" : "0.001",
+                  "tag" : "0.002",
                   "tag_format" : "%v",
                   "tag_message" : "v%V"
                },
@@ -386,7 +392,7 @@
                }
             },
             "name" : "@Author::GETTY/@Git::VersionManager/Git::Tag",
-            "version" : "2.048"
+            "version" : "2.052"
          },
          {
             "class" : "Dist::Zilla::Plugin::BumpVersionAfterRelease::Transitional",
@@ -437,7 +443,24 @@
                }
             },
             "name" : "@Author::GETTY/@Git::VersionManager/post-release commit",
-            "version" : "2.048"
+            "version" : "2.052"
+         },
+         {
+            "class" : "Dist::Zilla::Plugin::Git::Push",
+            "config" : {
+               "Dist::Zilla::Plugin::Git::Push" : {
+                  "push_to" : [
+                     "origin"
+                  ],
+                  "remotes_must_exist" : 1
+               },
+               "Dist::Zilla::Role::Git::Repo" : {
+                  "git_version" : "2.39.5",
+                  "repo_root" : "."
+               }
+            },
+            "name" : "@Author::GETTY/Git::Push",
+            "version" : "2.052"
          },
          {
             "class" : "Dist::Zilla::Plugin::FinderCode",

@@ -1,8 +1,6 @@
 package File::SOPS::Metadata;
-our $VERSION = '0.001';
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: SOPS metadata section handling
-
+our $VERSION = '0.002';
 use Moo;
 use Carp qw(croak);
 use POSIX qw(strftime);
@@ -168,7 +166,7 @@ File::SOPS::Metadata - SOPS metadata section handling
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 
@@ -370,9 +368,10 @@ Returns true if the key should be encrypted, false otherwise.
 
 =head1 SUPPORT
 
-=head2 IRC
+=head2 Issues
 
-You can reach Getty on C<irc.perl.org> for questions and support.
+Please report bugs and feature requests on GitHub at
+L<https://github.com/Getty/p5-file-sops/issues>.
 
 =head1 CONTRIBUTING
 

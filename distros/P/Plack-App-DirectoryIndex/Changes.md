@@ -5,6 +5,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.1.0] - 2026-02-21
+
+### Changed
+
+- Move web page production into a separate WebServer::DirIndex CPAN distribution
+
+## [0.0.5] - 2026-02-21
+
+### Added
+
+- Documentation for the `pretty` option
+
 ## [0.0.4] - 2023-06-05
 
 ### Added

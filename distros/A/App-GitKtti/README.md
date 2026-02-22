@@ -44,6 +44,7 @@ The `gitktti` scripts are provided to help developers safely use git flow. So po
       - [What Happens Next](#what-happens-next)
       - [Complete Example](#complete-example)
   - [📋 Recent Releases](#-recent-releases)
+    - [Release `2.0.2` - 22/02/2026](#release-202---22022026)
     - [Release `2.0.1` - 01/02/2026](#release-201---01022026)
     - [Release `2.0.0` - 10/09/2025](#release-200---10092025)
     - [Release `1.3.3` - 27/08/2025](#release-133---27082025)
@@ -561,6 +562,10 @@ cpan-upload App-GitKtti-2.0.0.tar.gz
 ***
 
 ## 📋 Recent Releases
+
+### Release `2.0.2` - 22/02/2026
+
+- **kfixend**: GitHub dependabot branches compatibility
 
 ### Release `2.0.1` - 01/02/2026
 

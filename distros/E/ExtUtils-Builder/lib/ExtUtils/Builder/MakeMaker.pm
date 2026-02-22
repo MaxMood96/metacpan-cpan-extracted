@@ -1,5 +1,5 @@
 package ExtUtils::Builder::MakeMaker;
-$ExtUtils::Builder::MakeMaker::VERSION = '0.019';
+$ExtUtils::Builder::MakeMaker::VERSION = '0.020';
 use strict;
 use warnings;
 
@@ -86,7 +86,7 @@ ExtUtils::Builder::MakeMaker - A MakeMaker consumer for ExtUtils::Builder Plan o
 
 =head1 VERSION
 
-version 0.019
+version 0.020
 
 =head1 SYNOPSIS
 
@@ -129,10 +129,6 @@ The version of the distribution
 =item * main_module
 
 The main module of the distribution.
-
-=item * release_status
-
-The release status of the distribution (e.g. C<'stable'>).
 
 =item * perl_path
 

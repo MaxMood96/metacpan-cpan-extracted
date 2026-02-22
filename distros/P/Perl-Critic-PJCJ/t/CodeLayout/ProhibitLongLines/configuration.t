@@ -11,7 +11,7 @@ use experimental qw( signatures );
 # Test the policy with custom configuration
 use lib                                                 qw( lib t/lib );
 use Perl::Critic::Policy::CodeLayout::ProhibitLongLines ();
-use ViolationFinder                                     qw( bad good );
+use ViolationFinder qw( bad count_violations good );
 
 subtest "Custom max_line_length = 40" => sub {
   my $policy = Perl::Critic::Policy::CodeLayout::ProhibitLongLines->new;
@@ -83,6 +83,66 @@ subtest "Default behavior when no configuration set" => sub {
   my $over_80 = 'my $var = "' . ("x" x 68) . '";';
   bad $policy, $over_80, "Line is 81 characters long (exceeds 80)",
     "81-char line violates default";
+};
+
+subtest "allow_lines_matching - single pattern exempts matching lines" => sub {
+  my $policy = Perl::Critic::Policy::CodeLayout::ProhibitLongLines->new;
+  $policy->{_max_line_length}      = 40;
+  $policy->{_allow_lines_matching} = { "^\\s*package\\s+" => 1 };
+
+  my $pkg_line
+    = "package Very::Long::Package::Name::That::Exceeds::The::Limit v1.0;";
+  good $policy, $pkg_line, "Package line matching pattern is exempt";
+};
+
+subtest "allow_lines_matching - non-matching lines still violate" => sub {
+  my $policy = Perl::Critic::Policy::CodeLayout::ProhibitLongLines->new;
+  $policy->{_max_line_length}      = 40;
+  $policy->{_allow_lines_matching} = { "^\\s*package\\s+" => 1 };
+
+  my $long_line = 'my $var = "' . ("x" x 28) . '";';
+  bad $policy, $long_line, "Line is 41 characters long (exceeds 40)",
+    "Non-matching long line still violates";
+};
+
+subtest "allow_lines_matching - multiple patterns" => sub {
+  my $policy = Perl::Critic::Policy::CodeLayout::ProhibitLongLines->new;
+  $policy->{_max_line_length} = 40;
+  $policy->{_allow_lines_matching}
+    = { "^\\s*package\\s+" => 1, "https?://" => 1 };
+
+  my $pkg_line
+    = "package Very::Long::Package::Name::That::Exceeds::The::Limit v1.0;";
+  good $policy, $pkg_line, "Package line exempt by first pattern";
+
+  my $url_line = "# See https://example.com/very/long/path/to/documentation";
+  good $policy, $url_line, "URL line exempt by second pattern";
+
+  my $long_line = 'my $var = "' . ("x" x 28) . '";';
+  bad $policy, $long_line, "Line is 41 characters long (exceeds 40)",
+    "Line matching neither pattern still violates";
+};
+
+subtest "allow_lines_matching - empty patterns means no exemptions" => sub {
+  my $policy = Perl::Critic::Policy::CodeLayout::ProhibitLongLines->new;
+  $policy->{_max_line_length}      = 40;
+  $policy->{_allow_lines_matching} = {};
+
+  my $long_line = 'my $var = "' . ("x" x 28) . '";';
+  bad $policy, $long_line, "Line is 41 characters long (exceeds 40)",
+    "No exemptions with empty patterns";
+};
+
+subtest "allow_lines_matching - exempt line among non-exempt lines" => sub {
+  my $policy = Perl::Critic::Policy::CodeLayout::ProhibitLongLines->new;
+  $policy->{_max_line_length}      = 40;
+  $policy->{_allow_lines_matching} = { "^\\s*package\\s+" => 1 };
+
+  # Multi-line code: package line is long but exempt, other long line is not
+  my $code = join "\n",
+    "package Very::Long::Package::Name::That::Exceeds::Limit v1.0;",
+    'my $var = "' . ("x" x 28) . '";';
+  count_violations $policy, $code, 1, "Only non-exempt long line violates";
 };
 
 done_testing;

@@ -70,6 +70,13 @@ sub bigint_type    { 'BIGINT UNSIGNED' }
 sub int_type       { 'INT UNSIGNED' }
 sub bigint_pk_type { 'BIGINT UNSIGNED PRIMARY KEY' }
 
+# Maps an ANSI SQL standard type to the native type for this backend.
+# Subclasses override to provide backend-specific translations.
+sub map_type {
+    my ($self, $type) = @_;
+    return $type;
+}
+
 sub label_to_table {
     my ($self, $label) = @_;
 
@@ -78,7 +85,7 @@ sub label_to_table {
     }
     if ($label =~ /^\*HASH<(\d+)>_(.*)/) {
         my ($key_size, $val_type) = ($1, $2);
-        $val_type =~ s/[()<>]/_/g;
+        $val_type =~ s/[()<>,]/_/g;
         return "HASH_${key_size}_$val_type";
     }
     elsif ($label =~ /^\*ARRAY_\*/) {
@@ -86,7 +93,7 @@ sub label_to_table {
     }
     elsif ($label =~ /^\*ARRAY_(.*)/) {
         my $array_type = $1;
-        $array_type =~ s/[<>()]/_/g;
+        $array_type =~ s/[<>(),]/_/g;
         return "ARRAY_$array_type";
     }
     return $label;
@@ -125,7 +132,7 @@ sub generate_hash_table {
         push @column_sql, "val ".$self->bigint_type;
     } else {
         # scalar field
-        push @column_sql, "val $field_type";
+        push @column_sql, "val ".$self->map_type($field_type);
     }
 
     push @column_sql, "UNIQUE (id,hashkey)";
@@ -170,7 +177,7 @@ sub generate_array_table {
         push @column_sql, "val ".$self->bigint_type;
     }
     else {
-        push @column_sql, "val $field_value";
+        push @column_sql, "val ".$self->map_type($field_value);
     }
 
     push @column_sql, "UNIQUE (id,idx)";
@@ -230,8 +237,8 @@ sub generate_table_from_module {
             push @ref_types, $col_type;
             push @column_sql, "$col_name ".$self->bigint_type;
         } else {
-            # a scalar
-            push @column_sql, "$col_name $col_type";
+            # a scalar - map abstract type to native SQL type
+            push @column_sql, "$col_name ".$self->map_type($col_type);
         }
     }
 

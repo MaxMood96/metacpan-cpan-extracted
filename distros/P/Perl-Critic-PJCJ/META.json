@@ -36,12 +36,14 @@
             "Test::EOL" : "0",
             "Test::Kwalitee" : "1.21",
             "Test::More" : "0.88",
+            "Test::Perl::Critic" : "0",
             "Test::Pod::Coverage::TrustMe" : "0.002001",
             "Test::Version" : "1"
          }
       },
       "runtime" : {
          "requires" : {
+            "List::Util" : "1.33",
             "PPI" : "0",
             "Perl::Critic" : "0",
             "perl" : "v5.26.0"
@@ -73,7 +75,7 @@
          "web" : "https://github.com/pjcj/Perl-Critic-PJCJ"
       }
    },
-   "version" : "v0.1.4",
+   "version" : "v0.2.2",
    "x_Dist_Zilla" : {
       "perl" : {
          "version" : "5.042000"
@@ -118,6 +120,11 @@
             "class" : "Dist::Zilla::Plugin::Test::ReportPrereqs",
             "name" : "Test::ReportPrereqs",
             "version" : "0.029"
+         },
+         {
+            "class" : "Dist::Zilla::Plugin::Test::Perl::Critic",
+            "name" : "Test::Perl::Critic",
+            "version" : "3.004"
          },
          {
             "class" : "Dist::Zilla::Plugin::Test::EOL",
@@ -236,7 +243,8 @@
                   "fatal_errors" : 1,
                   "quiet" : 0,
                   "run" : [
-                     "perl dev/append_postamble %d/Makefile.PL && (cd %d && perl Makefile.PL)"
+                     "perl dev/append_postamble %d/Makefile.PL && (cd %d && perl Makefile.PL)",
+                     "perl -e \"exit(system('utils/run', 'setup') >> 8) unless $ENV{CI}\""
                   ],
                   "version" : "0.050"
                }
@@ -259,7 +267,7 @@
                   "changelog" : "Changes"
                },
                "Dist::Zilla::Role::Git::Repo" : {
-                  "git_version" : "2.51.0",
+                  "git_version" : "2.53.0",
                   "repo_root" : "."
                }
             },
@@ -276,7 +284,7 @@
             "config" : {
                "Dist::Zilla::Plugin::Git::Commit" : {
                   "add_files_in" : [],
-                  "commit_msg" : "v%V%n%n%c",
+                  "commit_msg" : "Release %V",
                   "signoff" : 0
                },
                "Dist::Zilla::Role::Git::DirtyFiles" : {
@@ -288,7 +296,7 @@
                   "changelog" : "Changes.md"
                },
                "Dist::Zilla::Role::Git::Repo" : {
-                  "git_version" : "2.51.0",
+                  "git_version" : "2.53.0",
                   "repo_root" : "."
                },
                "Dist::Zilla::Role::Git::StringFormatter" : {
@@ -305,12 +313,12 @@
                   "branch" : null,
                   "changelog" : "Changes",
                   "signed" : 0,
-                  "tag" : "v0.1.4",
+                  "tag" : "v0.2.2",
                   "tag_format" : "v%V",
                   "tag_message" : "v%V"
                },
                "Dist::Zilla::Role::Git::Repo" : {
-                  "git_version" : "2.51.0",
+                  "git_version" : "2.53.0",
                   "repo_root" : "."
                },
                "Dist::Zilla::Role::Git::StringFormatter" : {
@@ -330,7 +338,7 @@
                   "remotes_must_exist" : 1
                },
                "Dist::Zilla::Role::Git::Repo" : {
-                  "git_version" : "2.51.0",
+                  "git_version" : "2.53.0",
                   "repo_root" : "."
                }
             },

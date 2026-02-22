@@ -18,9 +18,9 @@
 #     DISTNAME => q[Perl-Critic-PJCJ]
 #     LICENSE => q[perl]
 #     NAME => q[Perl::Critic::PJCJ]
-#     PREREQ_PM => { ExtUtils::MakeMaker=>q[0], File::Spec=>q[0], IO::Handle=>q[0], IPC::Open3=>q[0], PPI=>q[0], Perl::Critic=>q[0], Test2::V0=>q[0], Test::More=>q[0] }
+#     PREREQ_PM => { ExtUtils::MakeMaker=>q[0], File::Spec=>q[0], IO::Handle=>q[0], IPC::Open3=>q[0], List::Util=>q[1.33], PPI=>q[0], Perl::Critic=>q[0], Test2::V0=>q[0], Test::More=>q[0] }
 #     TEST_REQUIRES => { ExtUtils::MakeMaker=>q[0], File::Spec=>q[0], IO::Handle=>q[0], IPC::Open3=>q[0], Test2::V0=>q[0], Test::More=>q[0] }
-#     VERSION => q[v0.1.4]
+#     VERSION => q[v0.2.2]
 #     test => { TESTS=>q[t/*.t t/CodeLayout/ProhibitLongLines/*.t t/Utils/SourceLocation/*.t t/ValuesAndExpressions/RequireConsistentQuoting/*.t] }
 
 # --- MakeMaker post_initialize section:
@@ -61,11 +61,11 @@ DIRFILESEP = /
 DFSEP = $(DIRFILESEP)
 NAME = Perl::Critic::PJCJ
 NAME_SYM = Perl_Critic_PJCJ
-VERSION = v0.1.4
+VERSION = v0.2.2
 VERSION_MACRO = VERSION
-VERSION_SYM = v0_1_4
+VERSION_SYM = v0_2_2
 DEFINE_VERSION = -D$(VERSION_MACRO)=\"$(VERSION)\"
-XS_VERSION = v0.1.4
+XS_VERSION = v0.2.2
 XS_VERSION_MACRO = XS_VERSION
 XS_DEFINE_VERSION = -D$(XS_VERSION_MACRO)=\"$(XS_VERSION)\"
 INST_ARCHLIB = blib/arch
@@ -268,7 +268,7 @@ RCS_LABEL = rcs -Nv$(VERSION_SYM): -q
 DIST_CP = best
 DIST_DEFAULT = tardist
 DISTNAME = Perl-Critic-PJCJ
-DISTVNAME = Perl-Critic-PJCJ-v0.1.4
+DISTVNAME = Perl-Critic-PJCJ-v0.2.2
 
 
 # --- MakeMaker macro section:
@@ -514,9 +514,10 @@ metafile : create_distdir
 	$(NOECHO) $(ECHO) '    - t' >> META_new.yml
 	$(NOECHO) $(ECHO) '    - inc' >> META_new.yml
 	$(NOECHO) $(ECHO) 'requires:' >> META_new.yml
+	$(NOECHO) $(ECHO) '  List::Util: '\''1.33'\''' >> META_new.yml
 	$(NOECHO) $(ECHO) '  PPI: '\''0'\''' >> META_new.yml
 	$(NOECHO) $(ECHO) '  Perl::Critic: '\''0'\''' >> META_new.yml
-	$(NOECHO) $(ECHO) 'version: v0.1.4' >> META_new.yml
+	$(NOECHO) $(ECHO) 'version: v0.2.2' >> META_new.yml
 	$(NOECHO) $(ECHO) 'x_serialization_backend: '\''CPAN::Meta::YAML version 0.020'\''' >> META_new.yml
 	-$(NOECHO) $(MV) META_new.yml $(DISTVNAME)/META.yml
 	$(NOECHO) $(ECHO) Generating META.json
@@ -554,6 +555,7 @@ metafile : create_distdir
 	$(NOECHO) $(ECHO) '      },' >> META_new.json
 	$(NOECHO) $(ECHO) '      "runtime" : {' >> META_new.json
 	$(NOECHO) $(ECHO) '         "requires" : {' >> META_new.json
+	$(NOECHO) $(ECHO) '            "List::Util" : "1.33",' >> META_new.json
 	$(NOECHO) $(ECHO) '            "PPI" : "0",' >> META_new.json
 	$(NOECHO) $(ECHO) '            "Perl::Critic" : "0"' >> META_new.json
 	$(NOECHO) $(ECHO) '         }' >> META_new.json
@@ -570,7 +572,7 @@ metafile : create_distdir
 	$(NOECHO) $(ECHO) '      }' >> META_new.json
 	$(NOECHO) $(ECHO) '   },' >> META_new.json
 	$(NOECHO) $(ECHO) '   "release_status" : "stable",' >> META_new.json
-	$(NOECHO) $(ECHO) '   "version" : "v0.1.4",' >> META_new.json
+	$(NOECHO) $(ECHO) '   "version" : "v0.2.2",' >> META_new.json
 	$(NOECHO) $(ECHO) '   "x_serialization_backend" : "JSON::PP version 4.16"' >> META_new.json
 	$(NOECHO) $(ECHO) '}' >> META_new.json
 	-$(NOECHO) $(MV) META_new.json $(DISTVNAME)/META.json
@@ -880,10 +882,11 @@ testdb_static :: static pure_all
 # --- MakeMaker ppd section:
 # Creates a PPD (Perl Package Description) for a binary distribution.
 ppd :
-	$(NOECHO) $(ECHO) '<SOFTPKG NAME="Perl-Critic-PJCJ" VERSION="v0.1.4">' > Perl-Critic-PJCJ.ppd
+	$(NOECHO) $(ECHO) '<SOFTPKG NAME="Perl-Critic-PJCJ" VERSION="v0.2.2">' > Perl-Critic-PJCJ.ppd
 	$(NOECHO) $(ECHO) '    <ABSTRACT>Perl::Critic policies for code style consistency</ABSTRACT>' >> Perl-Critic-PJCJ.ppd
 	$(NOECHO) $(ECHO) '    <AUTHOR>Paul Johnson &lt;paul@pjcj.net&gt;</AUTHOR>' >> Perl-Critic-PJCJ.ppd
 	$(NOECHO) $(ECHO) '    <IMPLEMENTATION>' >> Perl-Critic-PJCJ.ppd
+	$(NOECHO) $(ECHO) '        <REQUIRE NAME="List::Util" VERSION="1.33" />' >> Perl-Critic-PJCJ.ppd
 	$(NOECHO) $(ECHO) '        <REQUIRE NAME="PPI::" />' >> Perl-Critic-PJCJ.ppd
 	$(NOECHO) $(ECHO) '        <REQUIRE NAME="Perl::Critic" />' >> Perl-Critic-PJCJ.ppd
 	$(NOECHO) $(ECHO) '        <ARCHITECTURE NAME="darwin-2level-5.42" />' >> Perl-Critic-PJCJ.ppd
@@ -930,10 +933,14 @@ config ::
 
 # --- MakeMaker postamble section:
 
+.PHONY: setup
 .PHONY: show-authordeps install-authordeps reinstall-authordeps
 .PHONY: show-deps install-deps reinstall-deps
-.PHONY: t tv zt format lint build 
+.PHONY: t tv zt format lint build release
 .PHONY: cover cover-html cover-compilation cover-nvim cover-all
+
+setup:
+	utils/run setup
 
 show-authordeps:
 	@dzil authordeps
@@ -947,7 +954,7 @@ reinstall-authordeps:
 show-deps:
 	@dzil listdeps --develop
 
-install-deps:
+install-deps: setup
 	dzil listdeps --develop --missing | cpm install -g -
 
 reinstall-deps:
@@ -983,6 +990,9 @@ lint:
 build: clean
 	dzil build
 
+
+release:
+	utils/run release
 
 cover: build
 	cover --delete

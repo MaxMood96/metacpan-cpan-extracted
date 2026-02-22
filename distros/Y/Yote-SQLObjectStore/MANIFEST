@@ -1,6 +1,7 @@
 bin/db_refresh.pl
 Build.PL
 describe.txt
+HOWTO.md
 lib/Yote/Locker.pm
 lib/Yote/SQLObjectStore.pm
 lib/Yote/SQLObjectStore/BaseObj.pm
@@ -24,9 +25,11 @@ lib/Yote/SQLObjectStore/StoreBase.pm
 lib/Yote/SQLObjectStore/TableManager.pm
 lib/Yote/SQLObjectStore/TiedArray.pm
 lib/Yote/SQLObjectStore/TiedHash.pm
-HOWTO.md
 LICENSE
+Makefile.PL
 MANIFEST			This list of files
+META.json
+META.yml
 README.md
 t/finder_methods.t
 t/lib/forker.pm
@@ -34,12 +37,12 @@ t/lib/GetInLoad.pm
 t/lib/MariaDB/NotAThing.pm
 t/lib/MariaDB/SomeThing.pm
 t/lib/MariaDB/SomeThingElse.pm
-t/lib/Postgres/NotAThing.pm
-t/lib/Postgres/SomeThing.pm
-t/lib/Postgres/SomeThingElse.pm
 t/lib/NotApp.pm
 t/lib/NotAThing.pm
 t/lib/OtherThing.pm
+t/lib/Postgres/NotAThing.pm
+t/lib/Postgres/SomeThing.pm
+t/lib/Postgres/SomeThingElse.pm
 t/lib/SomeThing.pm
 t/lib/SomeThingElse.pm
 t/lib/SQLite/NotAThing.pm
@@ -49,10 +52,8 @@ t/lib/Tainer.pm
 t/lib/TestWebServer.pm
 t/lib/Widget.pm
 t/locker.t
+t/map_type.t
 t/object_store_mariadb.t
 t/object_store_postgres.t
 t/object_store_sqlite.t
 working.txt
-Makefile.PL
-META.yml
-META.json

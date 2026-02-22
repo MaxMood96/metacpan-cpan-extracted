@@ -215,4 +215,7 @@ sub _slurp { do { local (@ARGV,$/)=$_[0]; <> } }
   my $output = do { local $/; <$in> };
   like($output, qr{lib[\\/]Foo[\\/]Bar.c}, 'clean also cleans source file');
 }
+
+$dist->chdir_original;
+
 done_testing;

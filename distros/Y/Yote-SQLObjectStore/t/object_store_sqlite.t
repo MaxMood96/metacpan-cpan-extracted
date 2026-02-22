@@ -107,7 +107,7 @@ subtest 'reference and reopen test' => sub {
 
 
         # make some data structures to put in root ref hash
-        my $val_arry = $object_store->new_array( '*ARRAY_VALUE', 1,2,3 );
+        my $val_arry = $object_store->new_array( '*ARRAY_TEXT', 1,2,3 );
         is (ref $val_arry, 'ARRAY', 'get array ref for tied array');
         is (ref tied @$val_arry, 'Yote::SQLObjectStore::TiedArray', 'tied array reference for val array' );
         is_deeply( $val_arry, [1,2,3], 'val array values' );
@@ -118,7 +118,7 @@ subtest 'reference and reopen test' => sub {
         $root_refs->{ref_array} = $ref_arry;
 
         my $val_hash =
-            $object_store->new_hash( '*HASH<256>_VALUE', a => 1, b => 2, c => 3 );
+            $object_store->new_hash( '*HASH<256>_TEXT', a => 1, b => 2, c => 3 );
         $root_refs->{val_hash} = $val_hash;
 
         my $ref_hash =
@@ -135,7 +135,7 @@ subtest 'reference and reopen test' => sub {
 
 
         my $mty =
-            $object_store->new_hash( '*HASH<256>_VALUE' );
+            $object_store->new_hash( '*HASH<256>_TEXT' );
         $root_refs->{empty_hash} = $mty;
 
         $mty->{fooz} = 'barz';
@@ -254,11 +254,11 @@ subtest 'reference and reopen test' => sub {
 
         # give bad a "sister" that is an array ref and "brother" that is array vals
         $bad->set_sister( $object_store->new_array('*ARRAY_*') );
-        $bad->set_brother( $object_store->new_array('*ARRAY_VALUE') );
+        $bad->set_brother( $object_store->new_array('*ARRAY_TEXT') );
         $bad->set_some_ref_array( $bad->get_sister );
         $bad->set_some_val_array( $bad->get_brother );
         my $bad_ref_hash = $bad->set_some_ref_hash( $object_store->new_hash('*HASH<256>_*') );
-        my $bad_val_hash_obj = $bad->set_some_val_hash( $object_store->new_hash('*HASH<256>_VALUE') );
+        my $bad_val_hash_obj = $bad->set_some_val_hash( $object_store->new_hash('*HASH<256>_TEXT') );
         my $bad_val_hash = $bad_val_hash_obj;
         $bad_val_hash->{LEEROY} = 'brown';
         is( $bad->get_tagline( "TAGGY" ), "TAGGY", 'set via default get' );
@@ -376,11 +376,11 @@ subtest 'reference and reopen test' => sub {
         my $bad_val_array = $bad->get_some_val_array;
         throws_ok { $bad->set_some_ref_array( $bad->get_some_ref_hash ) } qr/incorrect type '\*HASH<256>_\*' for '\*ARRAY_\*'/, 'cannot set a ref hash to a ref array';
         throws_ok { $bad->set_some_ref_hash( $bad->get_some_ref_array ) } qr/incorrect type '\*ARRAY_\*' for '\*HASH<256>_\*'/, 'cannot set a ref hash to a ref array';
-        throws_ok { $bad->set_some_val_hash( $bad_val_array ) } qr/incorrect type '\*ARRAY_VALUE' for '\*HASH<256>_VALUE'/, 'cannot set a val array to a val array';
+        throws_ok { $bad->set_some_val_hash( $bad_val_array ) } qr/incorrect type '\*ARRAY_TEXT' for '\*HASH<256>_TEXT'/, 'cannot set a val array to a val array';
         throws_ok { $bad->PLUGH } qr/unknown function 'SQLite::SomeThing::PLUGH'/, 'object autoload does not know PLUGH';
-        throws_ok { $bad->set_some_val_hash( "SPOOKEY" ) } qr/incorrect type 'scalar value' for '\*HASH<256>_VALUE'/, 'cannot set a val array to a val array';
+        throws_ok { $bad->set_some_val_hash( "SPOOKEY" ) } qr/incorrect type 'scalar value' for '\*HASH<256>_TEXT'/, 'cannot set a val array to a val array';
 
-        throws_ok { $bad->set_some_val_hash( $bad->get_some_ref_hash ) } qr/incorrect type '\*HASH<256>_\*' for '\*HASH<256>_VALUE'/, 'cannot set a val array to a val array';
+        throws_ok { $bad->set_some_val_hash( $bad->get_some_ref_hash ) } qr/incorrect type '\*HASH<256>_\*' for '\*HASH<256>_TEXT'/, 'cannot set a val array to a val array';
 
         my $root_val_array = $root_refs->{val_array};
 
@@ -475,11 +475,11 @@ subtest 'reference and reopen test' => sub {
         $object_store->open;
         my ($sql) = $object_store->query_line( "SELECT sql FROM sqlite_schema WHERE name='SomeThing_SQLite'" );
 
-        is ($sql,'CREATE TABLE SomeThing_SQLite (id BIGINT UNSIGNED PRIMARY KEY,brother BIGINT UNSIGNED,lolov BIGINT UNSIGNED,name VALUE,sister BIGINT UNSIGNED,sisters BIGINT UNSIGNED,sisters_hash BIGINT UNSIGNED,some_ref_array BIGINT UNSIGNED,some_ref_hash BIGINT UNSIGNED,some_val_array BIGINT UNSIGNED,some_val_hash BIGINT UNSIGNED,something BIGINT UNSIGNED,tagline VALUE)', 'initial something table' );
+        is ($sql,'CREATE TABLE SomeThing_SQLite (id BIGINT UNSIGNED PRIMARY KEY,brother BIGINT UNSIGNED,lolov BIGINT UNSIGNED,name TEXT,sister BIGINT UNSIGNED,sisters BIGINT UNSIGNED,sisters_hash BIGINT UNSIGNED,some_ref_array BIGINT UNSIGNED,some_ref_hash BIGINT UNSIGNED,some_val_array BIGINT UNSIGNED,some_val_hash BIGINT UNSIGNED,something BIGINT UNSIGNED,tagline TEXT)', 'initial something table' );
     }
     {
 
-        $SQLite::SomeThing::cols{newname} = 'VALUE';
+        $SQLite::SomeThing::cols{newname} = 'TEXT';
         delete $SQLite::SomeThing::cols{brother};
         my $object_store = Yote::SQLObjectStore->new( 'SQLite',
             BASE_DIRECTORY => $dir,
@@ -488,7 +488,7 @@ subtest 'reference and reopen test' => sub {
 
         $object_store->open;
         my ($sql) = $object_store->query_line( "SELECT sql FROM sqlite_schema WHERE name='SomeThing_SQLite'" );
-        like ($sql, qr/CREATE TABLE SomeThing_SQLite \(id BIGINT UNSIGNED PRIMARY KEY,brother_DELETED BIGINT UNSIGNED,lolov BIGINT UNSIGNED,name VALUE,sister BIGINT UNSIGNED,sisters BIGINT UNSIGNED,sisters_hash BIGINT UNSIGNED,some_ref_array BIGINT UNSIGNED,some_ref_hash BIGINT UNSIGNED,some_val_array BIGINT UNSIGNED,some_val_hash BIGINT UNSIGNED,something BIGINT UNSIGNED,tagline VALUE, newname VALUE\)/i, 'something table after columns changed' );
+        like ($sql, qr/CREATE TABLE SomeThing_SQLite \(id BIGINT UNSIGNED PRIMARY KEY,brother_DELETED BIGINT UNSIGNED,lolov BIGINT UNSIGNED,name TEXT,sister BIGINT UNSIGNED,sisters BIGINT UNSIGNED,sisters_hash BIGINT UNSIGNED,some_ref_array BIGINT UNSIGNED,some_ref_hash BIGINT UNSIGNED,some_val_array BIGINT UNSIGNED,some_val_hash BIGINT UNSIGNED,something BIGINT UNSIGNED,tagline TEXT, newname TEXT\)/i, 'something table after columns changed' );
 
         ok (! $object_store->dirty( "ima string" ), 'strings cannot be made dirty' );
         ok (! $object_store->is_dirty( "not a thing here" ), 'strings are never dirty' );
@@ -576,7 +576,7 @@ subtest 'paths test' => sub {
         is ($object_store->ensure_path( '/val_hash/word' ), 'bird', 'ensure returns last value as long as its present');
         is ($object_store->ensure_path( '/val_hash/word|bird' ), 'bird', 'ensure returns last value if last value exists');
 
-        my $val_array = $object_store->ensure_path( '/ref_hash/array|*ARRAY_VALUE' );
+        my $val_array = $object_store->ensure_path( '/ref_hash/array|*ARRAY_TEXT' );
         ok (ref $val_array eq 'ARRAY', 'created value array' );
 
         throws_ok
@@ -593,7 +593,7 @@ subtest 'paths test' => sub {
             'should throw when given a wildcard type to instantiate';
         
 
-        my $tiny_hash = $object_store->ensure_path( '/ref_hash/tinyhash|*HASH<3>_VALUE' );
+        my $tiny_hash = $object_store->ensure_path( '/ref_hash/tinyhash|*HASH<3>_TEXT' );
 
         is (ref $tiny_hash, 'HASH', 'made a tiny hash' );
         
@@ -606,7 +606,7 @@ subtest 'paths test' => sub {
             'should throw when key length exceeds max';
 
         throws_ok
-        { $object_store->ensure_path( '/ref_hash/tinyhash2|*HASH<3>_VALUE/fooLonger|STILLNOWAY' ); }
+        { $object_store->ensure_path( '/ref_hash/tinyhash2|*HASH<3>_TEXT/fooLonger|STILLNOWAY' ); }
         qr/key is too large/,
             'should throw when key length exceeds max';
 

@@ -30,6 +30,7 @@ requires:
   Error::Pure: 0.15
   Exporter: 0
   List::Util: 1.33
+  Mo::utils::common: 0
   Readonly: 0
   Scalar::Util: 0
   perl: 5.6.2
@@ -38,4 +39,4 @@ resources:
   homepage: https://github.com/michal-josef-spacek/Mo-utils-Array
   license: http://opensource.org/licenses/bsd-license.php
   repository: git://github.com/michal-josef-spacek/Mo-utils-Array
-version: '0.03'
+version: '0.04'

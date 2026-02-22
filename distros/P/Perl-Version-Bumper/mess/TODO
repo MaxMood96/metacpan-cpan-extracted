@@ -1,3 +1,20 @@
 t/bump/003_bundles.data
 - write the equivalent of each bundle,
   when features where "known" and unfeatures disabled
+
+what about "use strict"
+
+- if use strict, drop it after 5.12
+- if no strict, keep it
+- if nothing and no use v5.12, add no strict?
+
+add specific test scripts for strict and warnings
+
+double check what to do for unfeatures
+
+use v5.10 implies:
+switch*
+indirect
+multidimensional
+bareword_filehandles
+smartmatch

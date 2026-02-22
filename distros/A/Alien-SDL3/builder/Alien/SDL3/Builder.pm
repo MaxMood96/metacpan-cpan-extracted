@@ -34,7 +34,7 @@ class    #
     #~ dnf install SDL2-devel SDL2_image-devel SDL2_mixer-devel SDL2_ttf-devel
     #~ https://github.com/libsdl-org/setup-sdl/issues/20
     # TODO: Write a GH action to test with libs preinstalled
-    field $version  : param //= '3.2.28';
+    field $version  : param //= '3.4.2';
     field $prebuilt : param //= 1;
     field $archive  : param //= sprintf 'https://github.com/libsdl-org/SDL/releases/download/release-%s/SDL3-' . (
         $^O eq 'MSWin32' ?
@@ -206,7 +206,7 @@ class    #
 
                                 #, '--config Release', '--parallel'
                             );
-                            die "Failed to build SDL3! %s\n", $archive // '' if system( Alien::cmake3->exe, '--install', $build->canonpath );
+                            die sprintf "Failed to build SDL3! %s\n", $archive // '' if system( Alien::cmake3->exe, '--install', $build->canonpath );
                             $config{okay}    = 1;
                             $config{version} = $version;
                         }

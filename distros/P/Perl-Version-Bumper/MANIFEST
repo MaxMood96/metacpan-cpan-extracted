@@ -30,6 +30,11 @@ t/bump/003_bundles.data
 t/bump/004_non_existent_features.data
 t/bump/005_misc.data
 t/bump/006_advent.data
+t/bump/007_enable_known.data
+t/bump/008_disable_known.data
+t/bump/009_strict.data
+t/bump/010_warnings.data
+t/bump/011_whtp7.data
 t/bump/101_say.data
 t/bump/102_state.data
 t/bump/103_switch.data

@@ -379,8 +379,6 @@ static inline int32_t handle_av_response(nghttp2_session *ng_session,
     return error_reply(session, data);
   }
 
-  sv_dump(*body_sv);
-
   if (body_sv && SvROK(*body_sv)) {
     switch (SvTYPE(SvRV(*body_sv))) {
     case SVt_PVGV: {
@@ -531,10 +529,6 @@ static inline int32_t handle_cv_response(nghttp2_session *ng_session, SV *env,
 
 static inline int32_t on_request(nghttp2_session *ng_session,
                                  H2Session *session, H2Data *data) {
-
-  warn("Received request: method=%s, path=%s",
-       data->method ? data->method->c_str() : "(null)",
-       data->path ? data->path->c_str() : "(null)");
   if (!data->path) {
     if (error_reply(session, data) != 0) {
       return NGHTTP2_ERR_CALLBACK_FAILURE;

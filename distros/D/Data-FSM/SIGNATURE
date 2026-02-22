@@ -1,0 +1,86 @@
+This file contains message digests of all files listed in MANIFEST,
+signed via the Module::Signature module, version 0.88.
+
+To verify the content in this distribution, first make sure you have
+Module::Signature installed, then type:
+
+    % cpansign -v
+
+It will check each file's integrity, as well as the signature's
+validity.  If "==> Signature verified OK! <==" is not displayed,
+the distribution may already have been compromised, and you should
+not run its Makefile.PL or Build.PL.
+
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: RIPEMD160
+
+SHA256 47f3dbe9ce920334ad5aecca808b339e4a96d63a1050ba3cab1fcbe6828a3bee CONCEPT
+SHA256 f14a227a771f7821a10bf6e71669a3331e50bd7987833beab0bc3c87ea4a67d6 Changes
+SHA256 136741054ca3d2da48b73e421e051e9fa296db99a888b0804829dd3da7d3350c FSM.pm
+SHA256 ad099157ff53eadeda8725a20452509f3f0fb4e6a163be99cbdd118d07772b4c FSM/State.pm
+SHA256 42be5adda67757e2ceb31b50eb8e1f5a8be1496fbed59c4df09eca0c24e4b597 FSM/Transition.pm
+SHA256 8c35b318fe26a333d52494e9e5a40e5f2713c4e4b9cd0337cab0a36af07673cb FSM/Utils.pm
+SHA256 f41ca75591a4efed31ac3636bc9c73b6df01e611e26a9d91a61deee01101f6fe LICENSE
+SHA256 c87991324eb71187a6562320cf453b516fd4a7490f329f1f7f49402066638972 MANIFEST
+SHA256 fa32da21ffaedfac08ae6e53e03ce0e253a236cc60cc182055586702bdbe0e13 META.yml
+SHA256 36bb24334ba8fb5cf22fe0cc1418fd8f3305765de69977a4ac2201862c50eebc Makefile.PL
+SHA256 6cbaa5c310112722adf8a6308c6e2f5bc5cc64dddc09cc12bbb06950f733f42a README
+SHA256 a2e1fcd65ec7d9c044858cb7ded3063c3377bd06c04437ef7498ce98bbd29648 examples/create_and_print_fsm.pl
+SHA256 edf40affaba25646fbaf136fdfc566a31c76365365efbc02a79b194d6e3cd5cf examples/create_and_print_fsm_state.pl
+SHA256 0b47db3dc1f3ce4ac1291287d2415761d29029012227f8b5ba2880d4f5b94e50 examples/create_and_print_fsm_transition.pl
+SHA256 cd5397bbe618f5bbd4e12a33b0cf5d21114e771c2dbd0ce28e2135beb52c35a8 inc/Module/Install.pm
+SHA256 8bd506c33fb78f10f6451413e931ca23541fcc4eebe05fcb7c7c9577341223c4 inc/Module/Install/AuthorRequires.pm
+SHA256 1b5430a46a35142ef8914d8c745196fca825defc9dfa7e389299bf294613825e inc/Module/Install/AuthorTests.pm
+SHA256 798836f9ccb8d204b1be31fc3835631f57e9d818b21a8f0d14bfcfb82ff4a72a inc/Module/Install/Base.pm
+SHA256 d64cd4c16f83c5baf11f64a44bea3a0abc060a49da5aba040f0eb01394bf75ab inc/Module/Install/Can.pm
+SHA256 65d7a6098bf3f829e8c1c2865476d3537aa6f0ad0ffc9149e10812c856529043 inc/Module/Install/Fetch.pm
+SHA256 70c4b77acab3ff51dfb318110369607cb109e1c319459249623b787cf3859750 inc/Module/Install/Makefile.pm
+SHA256 14556386168007ce913e669fc08a332ccdb6140246fd55a90c879b5190c1b57a inc/Module/Install/Metadata.pm
+SHA256 53825bc78e4c910b888160bc148c8bc211be58e02b99c8edcbf4854f95faa049 inc/Module/Install/ReadmeFromPod.pm
+SHA256 4c746c02c5cc19bed4c352e76205b4adff4c45ce8310d71294e1b83c059659c2 inc/Module/Install/Win32.pm
+SHA256 d3d9b4583243c470ae895defa4c44564485b53693cba1c50ab0320768f443e97 inc/Module/Install/WriteAll.pm
+SHA256 e2ee2a0eac33710e9cbce1be1eb9a2bcaff424e5697339a4f0ac813f2b325dbb t/Data-FSM-State/01-use.t
+SHA256 4f63f985ce6b076d544d4969c028ddc694a89366973d36147a6d3d23388df531 t/Data-FSM-State/02-version.t
+SHA256 9a7e4b9d364119ba17b32d6b4975d42842c60c5917f3355f1662cd9a9e271d13 t/Data-FSM-State/03-new.t
+SHA256 e2c2e9a157be56dc1e7d1e2a0fe462813e68f91fd7f0144b0b3441f1ed355ecd t/Data-FSM-State/04-id.t
+SHA256 bbb4fa2eaa6373d03faf78c84776769492cdbd45aa781bf785c562aabf18a5ee t/Data-FSM-State/05-initial.t
+SHA256 c69e6103435716a13624582fdfb73b811fbc3957ae79d115a04e5380be99e2f1 t/Data-FSM-State/06-name.t
+SHA256 cbb0af18eb3dd6d0f31773299de7af3005da2fe66b4ac739806b209fa380bb95 t/Data-FSM-Transition/01-use.t
+SHA256 a758728885ec92a550b710ed5bafb021e81fd8b172dc23157606319f25e9a09a t/Data-FSM-Transition/02-version.t
+SHA256 f178a76d4479d45c1d0683bbf36c9d38b7bd42f4f4a5a3ba025563f13cea1d1e t/Data-FSM-Transition/03-new.t
+SHA256 92cf5b1b8b6b605c1b52af4fc4a3afd01c7e1d77f3b7ef7c93c5e88370393337 t/Data-FSM-Transition/04-callback.t
+SHA256 b930032ced2d02915678000603e5117cd690a70bc62b4955ec2b59f17245dd5a t/Data-FSM-Transition/05-from.t
+SHA256 8c8d9fe8293ee34293900b50b38b600eab4e21efeaee614729e3e7b910c1e22d t/Data-FSM-Transition/06-id.t
+SHA256 d370284f6d680379c5394520ac07caac06066ec22f192e2191e277c07d0f4a6d t/Data-FSM-Transition/07-name.t
+SHA256 4be3eea6cf4f630d4d1433b463573e9090eb198284451d6ba3fef96fd944e3b6 t/Data-FSM-Transition/08-to.t
+SHA256 e83e1f5f37f4762d13fc684106f6e990e442d31e48482340f25d95ecdf8c6cbe t/Data-FSM-Utils/01-use.t
+SHA256 834fa13f4e7b8fe32a02f4037d543097c733df888f723198795a0ff20990c403 t/Data-FSM-Utils/02-version.t
+SHA256 e94688a9a9c6eddf793472a57fc1e952b6bf29c95a136fbd068c359bc73a5b7e t/Data-FSM-Utils/03-check_transition_objects.t
+SHA256 e95fae40428acfaeb9e3f9a934df50541c958f666306442239f4ab358711abe4 t/Data-FSM/01-use.t
+SHA256 e48d2396728ed43adca03ce467be100550d3dfafe9d8c00baa59afe98e1ccbf8 t/Data-FSM/02-version.t
+SHA256 279aa0a94ef37d235a19f1a820914198819a855f6ddc8bda2ee134a17551fd3b t/Data-FSM/03-new.t
+SHA256 b171b6458fd1dadc062cab031a486c4efb1578066bb4a7b5b128f9695a65d775 t/Data-FSM/04-id.t
+SHA256 b4b12a94a22d2017e87c2b63ad1d82e391f5787c85e0e51e45d1e948e53b29ae t/Data-FSM/05-states.t
+SHA256 b9064beb30e976ab9a41a2a785b075c92fc86537148884a6d39f891882593c36 t/Data-FSM/06-transitions.t
+SHA256 8bccb3431c67f8ea608993bd83b17c5fd1e74ed1db04e2e49b60fc1d814bf284 xt/Data-FSM-State/01-pod_coverage.t
+SHA256 415a4ce02d350896cbf4e438a4d330a2ff30e438c74e487421560e4ad0bb53d1 xt/Data-FSM-State/02-pod.t
+SHA256 d842ff8879c4ba642ccf2605e334779c2d63654f061475eb2a27ae1f0775b212 xt/Data-FSM-Transition/01-pod_coverage.t
+SHA256 5e51152eabb6c8eb2156b1d086d5e9d411a7ef46701fa82f3581ccf16a75c014 xt/Data-FSM-Transition/02-pod.t
+SHA256 6bc4ce83d6c0096ee40bbc5bf682e3c3e0a597b169c32dda0d19f4c70051b448 xt/Data-FSM-Utils/01-pod_coverage.t
+SHA256 4f13e2f6eeae33e33db11e24d478e5263bc8014aef70786a859dfb4a746142cd xt/Data-FSM-Utils/02-pod.t
+SHA256 56edd6dc25a018a5902d743c00f9ad9a146be36288bd0bbbbd160c7eb76b0e71 xt/Data-FSM/01-pod_coverage.t
+SHA256 ffc5cfb08dd3bc56b263a2a21afb8f14cd604ca688ada0ebea28ae73627036c8 xt/Data-FSM/02-pod.t
+-----BEGIN PGP SIGNATURE-----
+
+iQGzBAEBAwAdFiEECAMiMrHl7JYa0rZPZ58rGyDXs5UFAmmZ1zEACgkQZ58rGyDX
+s5VTxQv/Q/dXJNIoeLc0ERPCt14WYkWHdcXz2No/3nc4uqUCilpLGPdfR/Wbik5O
+f/QAlQxlPgZ3QSEdmesDBvJQKhq8y1Vaep5YAuSSw7gfGrblkXnrvcUJM5nwWaW6
+1OPndL0HfMh6IoBdF19S64GCBHPugfOUN27SilNPEhU6+z5PsinM6m4pNOyQ/owB
+ZhtraebC2ZPvgACMEVaG/XkRt2xMiRlTjDKS2kA/YTv7ownOROkXau7NZscMPs0y
+4djOw0FwLY3CGgG878BWR6NUjaqndZP2r2D79tKB/C/mfm2IMw0PqnQoTEzgRkZb
+fTzlzr9gC8NJr7pfd0woIXLzZfyVO6sHszyrPSy8UZI5s64cPULqZuVqZW+n2qPC
+Pnc+74vfZRlq0jX1IwJkFvZwJQqMZUbymyxNs8NHb94k67DBplqhpSG4k4LkNopu
+Bec7NTBNPYLq0icN/fmNka2WYh6BJLoKpGbMmZbkrM5d23rAktQewKsvbY+tAURN
+/JsRxIc4
+=za7M
+-----END PGP SIGNATURE-----

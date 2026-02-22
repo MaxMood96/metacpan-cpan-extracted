@@ -17,6 +17,7 @@ my %WriteMakefileArgs = (
   "LICENSE" => "perl",
   "NAME" => "Perl::Critic::PJCJ",
   "PREREQ_PM" => {
+    "List::Util" => "1.33",
     "PPI" => 0,
     "Perl::Critic" => 0
   },
@@ -28,7 +29,7 @@ my %WriteMakefileArgs = (
     "Test2::V0" => 0,
     "Test::More" => 0
   },
-  "VERSION" => "v0.1.4",
+  "VERSION" => "v0.2.2",
   "test" => {
     "TESTS" => "t/*.t t/CodeLayout/ProhibitLongLines/*.t t/Utils/SourceLocation/*.t t/ValuesAndExpressions/RequireConsistentQuoting/*.t"
   }
@@ -39,6 +40,7 @@ my %FallbackPrereqs = (
   "File::Spec" => 0,
   "IO::Handle" => 0,
   "IPC::Open3" => 0,
+  "List::Util" => "1.33",
   "PPI" => 0,
   "Perl::Critic" => 0,
   "Test2::V0" => 0,
@@ -58,10 +60,14 @@ delete $WriteMakefileArgs{CONFIGURE_REQUIRES}
 sub MY::postamble {
     return <<'END_MAKEFILE';
 
+.PHONY: setup
 .PHONY: show-authordeps install-authordeps reinstall-authordeps
 .PHONY: show-deps install-deps reinstall-deps
-.PHONY: t tv zt format lint build 
+.PHONY: t tv zt format lint build release
 .PHONY: cover cover-html cover-compilation cover-nvim cover-all
+
+setup:
+	utils/run setup
 
 show-authordeps:
 	@dzil authordeps
@@ -75,7 +81,7 @@ reinstall-authordeps:
 show-deps:
 	@dzil listdeps --develop
 
-install-deps:
+install-deps: setup
 	dzil listdeps --develop --missing | cpm install -g -
 
 reinstall-deps:
@@ -111,6 +117,9 @@ lint:
 build: clean
 	dzil build
 
+
+release:
+	utils/run release
 
 cover: build
 	cover --delete

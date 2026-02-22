@@ -7,7 +7,7 @@ say 'Main thread (TID: ' . Acme::Parataxis->tid . ')';
 # Create a worker parataxis
 my $worker = Acme::Parataxis->new(
     code => sub ($name) {
-        say "---> Worker '$name' started (FID: " . Acme::Parataxis->fid . ")";
+        say "---> Worker '$name' started (FID: " . Acme::Parataxis->current_fid . ")";
         for my $i ( 1 .. 3 ) {
             say "---> Worker '$name' processing step $i";
             my $input = Acme::Parataxis->yield( 'Result from step ' . $i );

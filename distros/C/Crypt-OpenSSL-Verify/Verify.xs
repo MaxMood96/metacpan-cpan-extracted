@@ -18,6 +18,7 @@
 #include <openssl/x509_vfy.h>
 
 typedef X509 *Crypt__OpenSSL__X509;
+typedef struct Verify *Crypt__OpenSSL__Verify;
 
 struct OPTIONS {
    bool  trust_expired;
@@ -117,10 +118,7 @@ and returns it to OpenSSL
 
 static SV *callback = (SV *) NULL;
 
-static int cb1(ok, ctx)
-    int ok;
-    IV *ctx;
-{
+static int cb1(int ok, X509_STORE_CTX *ctx) {
     dSP;
     int count;
     int i;
@@ -176,7 +174,7 @@ static const char *ctx_error(X509_STORE_CTX * ctx)
 // Taken from p5-Git-Raw
 STATIC HV *ensure_hv(SV *sv, const char *identifier) {
     if (!SvROK(sv) || SvTYPE(SvRV(sv)) != SVt_PVHV)
-    croak("Invalid type for '%s', expected a hash", identifier);
+        croak("Invalid type for '%s', expected a hash", identifier);
 
     return (HV *) SvRV(sv);
 }
@@ -192,13 +190,18 @@ static int ssl_store_destroy(pTHX_ SV* var, MAGIC* magic) {
     return 1;
 }
 
+#ifdef PERL_GLOBAL_STRUCT_PRIVATE
 static const MGVTBL store_magic = { NULL, NULL, NULL, NULL, ssl_store_destroy };
+#else
+static MGVTBL store_magic = { NULL, NULL, NULL, NULL, ssl_store_destroy };
+#endif
+
 
 MODULE = Crypt::OpenSSL::Verify    PACKAGE = Crypt::OpenSSL::Verify
 
 PROTOTYPES: DISABLE
 
-#if OPENSSL_API_COMPAT >= 10100
+#if OPENSSL_VERSION_NUMBER >= 10100
 #undef ERR_load_crypto_strings
 #define ERR_load_crypto_strings()    /* nothing */
 #undef OpenSSL_add_all_algorithms
@@ -206,7 +209,7 @@ PROTOTYPES: DISABLE
 #endif
 BOOT:
     ERR_load_crypto_strings();
-#if OPENSSL_API_COMPAT < 10100
+#if OPENSSL_VERSION_NUMBER < 10100
     ERR_load_ERR_strings();
 #endif
     OpenSSL_add_all_algorithms();
@@ -259,7 +262,7 @@ SV * new(class, ...)
 
         SV * CAfile = NULL;
 
-        HV * options = newHV();
+        HV * options = NULL;
 
         X509_LOOKUP * cafile_lookup = NULL;
         X509_LOOKUP * cadir_lookup = NULL;
@@ -269,14 +272,13 @@ SV * new(class, ...)
         int noCApath = 0;
         int noCAfile = 0;
         int strict_certs = 1; // Default is strict openSSL verify
-        SV * store = newSV(0);
+        SV * store_sv = newSV(0);
 
     CODE:
 
 
         if (items > 1) {
-            if (ST(1) != NULL) {
-                // TODO: ensure_string_sv
+            if (ST(1) != NULL && SvOK(ST(1))) {
                 CAfile = ST(1);
                 if (strlen(SvPV_nolen(CAfile)) == 0) {
                     CAfile = NULL;
@@ -285,41 +287,47 @@ SV * new(class, ...)
 
             if (items > 2)
                 options = ensure_hv(ST(2), "options");
-
         }
 
-        if (hv_exists(options, "noCAfile", strlen("noCAfile"))) {
-            svp = hv_fetch(options, "noCAfile", strlen("noCAfile"), 0);
-            if (SvIOKp(*svp)) {
-                noCAfile = SvIV(*svp);
+        if (options) {
+            svp = hv_fetch(options, "noCAfile", 8, 0); // 8 is strlen("noCAfile")
+            if (svp && *svp) {
+                if (SvIOKp(*svp)) {
+                    noCAfile = SvIV(*svp);
+                }
             }
-        }
 
-        if (hv_exists(options, "CApath", strlen("CApath"))) {
-            svp = hv_fetch(options, "CApath", strlen("CApath"), 0);
-            CApath = *svp;
-        }
-
-        if (hv_exists(options, "noCApath", strlen("noCApath"))) {
-            svp = hv_fetch(options, "noCApath", strlen("noCApath"), 0);
-            if (SvIOKp(*svp)) {
-                noCApath = SvIV(*svp);
+            svp = hv_fetch(options, "CApath", 6, 0);
+            if (svp && *svp) {
+                if (SvIOKp(*svp)) {
+                    CApath = *svp;
+                }
             }
-        }
 
-        if (hv_exists(options, "strict_certs", strlen("strict_certs"))) {
-            svp = hv_fetch(options, "strict_certs", strlen("strict_certs"), 0);
-            if (SvIOKp(*svp)) {
-                strict_certs = SvIV(*svp);
+            svp = hv_fetch(options, "noCApath", 8, 0);
+            if (svp && *svp) {
+                if (SvIOKp(*svp)) {
+                    noCApath = SvIV(*svp);
+                }
+            }
+
+            svp = hv_fetch(options, "strict_certs", 12, 0);
+            if (svp && *svp) {
+                if (SvIOKp(*svp)) {
+                    strict_certs = SvIV(*svp);
+                }
             }
         }
 
         x509_store = X509_STORE_new();
 
         if (x509_store == NULL) {
-            X509_STORE_free(x509_store);
             croak("failure to allocate x509 store: %s", ssl_error());
         }
+
+        // IMMEDIATELY attach magic so that if we croak later,
+        // ssl_store_destroy handles the cleanup automatically.
+        sv_magicext(store_sv, NULL, PERL_MAGIC_ext, &store_magic, (const char *)x509_store, 0);
 
         if (!strict_certs)
             X509_STORE_set_verify_cb_func(x509_store, cb1);
@@ -327,12 +335,10 @@ SV * new(class, ...)
         if (CAfile != NULL || !noCAfile) {
             cafile_lookup = X509_STORE_add_lookup(x509_store, X509_LOOKUP_file());
             if (cafile_lookup == NULL) {
-                X509_STORE_free(x509_store);
                 croak("failure to add lookup to store: %s", ssl_error());
             }
             if (CAfile != NULL) {
                 if (!X509_LOOKUP_load_file(cafile_lookup, SvPV_nolen(CAfile), X509_FILETYPE_PEM)) {
-                    X509_STORE_free(x509_store);
                     croak("Error loading file %s: %s\n", SvPV_nolen(CAfile),
                         ssl_error());
                 }
@@ -344,12 +350,10 @@ SV * new(class, ...)
         if (CApath != NULL || !noCApath) {
             cadir_lookup = X509_STORE_add_lookup(x509_store, X509_LOOKUP_hash_dir());
             if (cadir_lookup == NULL) {
-                X509_STORE_free(x509_store);
                 croak("failure to add lookup to store: %s", ssl_error());
             }
             if (CApath != NULL) {
                 if (!X509_LOOKUP_add_dir(cadir_lookup, SvPV_nolen(CApath), X509_FILETYPE_PEM)) {
-                    X509_STORE_free(x509_store);
                     croak("Error loading directory %s\n", SvPV_nolen(CApath));
                 }
             } else {
@@ -361,11 +365,8 @@ SV * new(class, ...)
 
         SV *const self = newRV_noinc( (SV *)attributes );
 
-        sv_magicext(store, NULL, PERL_MAGIC_ext,
-            &store_magic, (const char *)x509_store, 0);
-
-        if((hv_store(attributes, "STORE", 5, store, 0)) == NULL)
-            croak("unable to init store");
+        if((hv_store(attributes, "STORE", 5, store_sv, 0)) == NULL)
+            croak("unable to init store_sv");
 
         RETVAL = sv_bless( self, gv_stashpv( class, 0 ) );
 
@@ -396,7 +397,7 @@ int ctx_error_code(ctx)
         /* printf("ctx_error_code - int holding pointer: %lu\n", (unsigned long) ctx); */
         /* printf("ctx_error_code - Pointer to ctx: %p\n", (void *) INT2PTR(SV * , ctx)); */
 
-        RETVAL = X509_STORE_CTX_get_error((X509_STORE_CTX *) INT2PTR(SV *, ctx));
+        RETVAL = X509_STORE_CTX_get_error(INT2PTR(X509_STORE_CTX *, ctx));
 
     OUTPUT:
 
@@ -449,13 +450,17 @@ int verify(self, x509)
         if (csc == NULL)
             croak("X.509 store context allocation failed: %s", ssl_error());
 
-        if (!hv_exists(self, "STORE", strlen("STORE")))
+        if (!hv_exists(self, "STORE", strlen("STORE"))) {
+            X509_STORE_CTX_free(csc);
             croak("STORE not found in self!\n");
+        }
 
         svp = hv_fetch(self, "STORE", strlen("STORE"), 0);
 
-        if (!SvMAGICAL(*svp) || (mg = mg_findext(*svp, PERL_MAGIC_ext, &store_magic)) == NULL)
+        if (!SvMAGICAL(*svp) || (mg = mg_findext(*svp, PERL_MAGIC_ext, &store_magic)) == NULL) {
+            X509_STORE_CTX_free(csc);
             croak("STORE is invalid");
+        }
 
         store = (X509_STORE *) mg->mg_ptr;
 
@@ -502,8 +507,11 @@ int verify(self, x509)
         //    RETVAL = cb;
         //}
 
-        if (!RETVAL)
-            croak("verify: %s", ctx_error(csc));
+        if (!RETVAL) {
+            char *err_str = savepv(ctx_error(csc)); // Save error before freeing csc
+            X509_STORE_CTX_free(csc);
+            croak("verify: %s", err_str);
+        }
 
         X509_STORE_CTX_free(csc);
 
@@ -511,7 +519,7 @@ int verify(self, x509)
 
         RETVAL
 
-#if OPENSSL_API_COMPAT >= 10100
+#if OPENSSL_VERSION_NUMBER >= 10100
 void __X509_cleanup(void)
 
     PPCODE:

@@ -19,6 +19,7 @@ meta-spec:
   version: '1.4'
 name: Perl-Critic-PJCJ
 requires:
+  List::Util: '1.33'
   PPI: '0'
   Perl::Critic: '0'
   perl: v5.26.0
@@ -26,7 +27,7 @@ resources:
   bugtracker: https://github.com/pjcj/Perl-Critic-PJCJ/issues
   homepage: https://pjcj.net/perl.html
   repository: git://github.com/pjcj/Perl-Critic-PJCJ.git
-version: v0.1.4
+version: v0.2.2
 x_Dist_Zilla:
   perl:
     version: '5.042000'
@@ -61,6 +62,10 @@ x_Dist_Zilla:
       class: Dist::Zilla::Plugin::Test::ReportPrereqs
       name: Test::ReportPrereqs
       version: '0.029'
+    -
+      class: Dist::Zilla::Plugin::Test::Perl::Critic
+      name: Test::Perl::Critic
+      version: '3.004'
     -
       class: Dist::Zilla::Plugin::Test::EOL
       config:
@@ -154,6 +159,7 @@ x_Dist_Zilla:
           quiet: 0
           run:
             - 'perl dev/append_postamble %d/Makefile.PL && (cd %d && perl Makefile.PL)'
+            - "perl -e \"exit(system('utils/run', 'setup') >> 8) unless $ENV{CI}\""
           version: '0.050'
       name: Run::AfterBuild
       version: '0.050'
@@ -169,7 +175,7 @@ x_Dist_Zilla:
           allow_dirty_match: []
           changelog: Changes
         Dist::Zilla::Role::Git::Repo:
-          git_version: 2.51.0
+          git_version: 2.53.0
           repo_root: .
       name: Git::Check
       version: '2.051'
@@ -182,7 +188,7 @@ x_Dist_Zilla:
       config:
         Dist::Zilla::Plugin::Git::Commit:
           add_files_in: []
-          commit_msg: v%V%n%n%c
+          commit_msg: 'Release %V'
           signoff: 0
         Dist::Zilla::Role::Git::DirtyFiles:
           allow_dirty:
@@ -191,7 +197,7 @@ x_Dist_Zilla:
           allow_dirty_match: []
           changelog: Changes.md
         Dist::Zilla::Role::Git::Repo:
-          git_version: 2.51.0
+          git_version: 2.53.0
           repo_root: .
         Dist::Zilla::Role::Git::StringFormatter:
           time_zone: local
@@ -204,11 +210,11 @@ x_Dist_Zilla:
           branch: ~
           changelog: Changes
           signed: 0
-          tag: v0.1.4
+          tag: v0.2.2
           tag_format: v%V
           tag_message: v%V
         Dist::Zilla::Role::Git::Repo:
-          git_version: 2.51.0
+          git_version: 2.53.0
           repo_root: .
         Dist::Zilla::Role::Git::StringFormatter:
           time_zone: local
@@ -222,7 +228,7 @@ x_Dist_Zilla:
             - origin
           remotes_must_exist: 1
         Dist::Zilla::Role::Git::Repo:
-          git_version: 2.51.0
+          git_version: 2.53.0
           repo_root: .
       name: Git::Push
       version: '2.051'

@@ -1,7 +1,7 @@
 use v5.10;
 
 package Perl::Version::Bumper;
-$Perl::Version::Bumper::VERSION = '0.224';
+$Perl::Version::Bumper::VERSION = '0.235';
 
 use strict;
 use warnings;
@@ -34,11 +34,13 @@ sub feature_data {
         my $known    = substr $_, 0, 9,  '';    # %-8s
         my $enabled  = substr $_, 0, 9,  '';    # %-8s
         my $disabled = substr $_, 0, 9,  '';    # %-8s
+        my $removed  = substr $_, 0, 9,  '';    # %-8s
         my @compat   = split ' ';               # %s
         y/ //d for $feature, $known, $enabled, $disabled;
         $feature{$feature}{known}     = $known;
         $feature{$feature}{enabled}   = $enabled  if $enabled;
         $feature{$feature}{disabled}  = $disabled if $disabled;
+        $feature{$feature}{removed}   = $removed  if $removed;
         $feature{$feature}{compat}    = {@compat} if @compat;
         $feature{$feature}{unfeature} = 1         if $disabled;
     }
@@ -451,27 +453,31 @@ sub _handle_compat_modules {
 
                 # handle `use $compat;`
                 if ( $include_compat->type eq 'use' ) {
+                    my $drop_stmt;    # should we drop the old statement?
 
-                    # if the feature is known and neither enabled nor disabled
+                    # if the feature is known and not enabled or an unfeature
                     # and the compat module has an import() sub
                     if (   exists $feature_in_bundle->{known}{$feature}
                         && (  !exists $feature_in_bundle->{enabled}{$feature}
-                            || exists $feature_in_bundle->{disabled}{$feature} )
+                            || exists $feature{$feature}{unfeature} )
                         && $feature{$feature}{compat}{$compat} >= 0 )
                     {
                         my $use_feature =
                           PPI::Document->new( \"use feature '$feature';\n" );
                         $include_compat->insert_after( $_->remove )
                           for $use_feature->elements;
+                        $drop_stmt++;    # it's been replaced
                     }
 
                     # backward compatibility features, like 'indirect',
                     # can be enabled before being known
                     # (also handle the unlikely case where there's no import())
-                    _drop_statement($include_compat)
-                      if exists $feature_in_bundle->{enabled}{$feature}
-                      || exists $feature_in_bundle->{known}{$feature}
-                      || $feature{$feature}{compat}{$compat} < 0;
+                    $drop_stmt++
+                      if !exists $feature{$feature}{unfeature}
+                      && ( exists $feature_in_bundle->{enabled}{$feature}
+                        || $feature{$feature}{compat}{$compat} < 0 );
+
+                    _drop_statement($include_compat) if $drop_stmt;
                 }
             }
         }
@@ -490,9 +496,10 @@ sub _cleanup_bundled_features {
         for my $use_line ( _find_include( $module => $doc, 'use' ) ) {
             my @old_args = _ppi_list_to_perl_list( $use_line->arguments );
             $enabled_in_code{$_}++ for @old_args;
-            my @new_args =                # keep enabling features
-              grep exists $feature{$_}    # that actually exist and are
-              && !exists $feature_in_bundle->{enabled}{$_},    # not enabled yet
+            my @new_args =    # keep enabling features that
+              grep !exists $feature_in_bundle->{enabled}{$_}    # are not enabled yet
+                 || exists $feature{$_}{unfeature},             # or are unfeatures
+              grep exists $feature{$_},                         # and actually exist
               @old_args;
             next if @new_args == @old_args;    # nothing to change
             if (@new_args) {    # replace old statement with a smaller one
@@ -1072,6 +1079,12 @@ This is the case for so-called "unfeatures", i.e. constructs that were
 deemed undesirable and removed from the language (e.g. C<indirect>,
 C<bareword_filehandles>, etc.).
 
+=item removed
+
+the feature was removed starting from the given version.
+
+The only feature that was removed so far is C<array_base> (in Perl v5.30).
+
 =back
 
 If there is more than one C<use VERSION> line in the file, the algorithm
@@ -1083,15 +1096,24 @@ C<VERSION> feature bundle will be removed from the corresponding C<use
 feature> or C<use experimental> lines. The disabling of the corresponding
 C<experimental> warnings will be removed.
 
-The features that were disabled via C<no feature> and are disabled as part
-of the C<VERSION> feature bundle will be removed from the corresponding
-C<use feature> or C<use experimental> lines.
+"Unfeatures" are treated differently. Unfeatures are features that were
+created to represent historical Perl behaviour, and are considered enabled
+by default in all bundles until they are disabled at a later stage. If an
+unfeature is enabled, it is considered to be for documentation purposes
+(to indicate that the undesirable historical feature was used), and
+therefore not removed, even if the specified C<VERSION> enables it.
+
+The (un)features that were disabled via C<no feature> and are disabled
+as part of the C<VERSION> feature bundle will be removed from the
+corresponding C<use feature> or C<use experimental> lines.
 
 If compatibility modules (CPAN modules that provide support for the
 feature in older Perls) were loaded, they will removed if the feature
 is enabled in the feature bundle for C<VERSION>, or replaced by the
 corresponding C<use feature> if the feature is known by the corresponding
-C<perl> binary but not yet enabled by the feature bundle.
+C<perl> binary but not yet enabled by the feature bundle. (In the context
+of compatibility modules for unfeatures, the same consideration for
+documentation purposes apply.)
 
 When a feature is enabled (or disabled) in the context of a feature
 version bundle that's less than the version when the feature was known
@@ -1245,12 +1267,12 @@ BEGIN {
 
 =pod
 
-                  5.040 features known    enabled  disabled compat
-                             say   5.010    5.010           Perl6::Say 1 Say::Compat 1
+                  5.040 features known    enabled  disabled removed  compat
+                             say   5.010    5.010                    Perl6::Say 1 Say::Compat 1
                            state   5.010    5.010
                           switch   5.010    5.010    5.036
                  unicode_strings   5.012    5.012
-                      array_base   5.016    5.010    5.016
+                      array_base   5.016    5.010    5.016    5.030
                      current_sub   5.016    5.016
                        evalbytes   5.016    5.016
                               fc   5.016    5.016
@@ -1262,14 +1284,14 @@ BEGIN {
                      refaliasing   5.022
                          bitwise   5.022    5.028
                    declared_refs   5.026
-                        indirect   5.032    5.010    5.036  indirect 0
+                        indirect   5.032    5.010    5.036           indirect 0
                              isa   5.032    5.036
-                multidimensional   5.034    5.010    5.036  multidimensional 0
-            bareword_filehandles   5.034    5.010    5.038  bareword::filehandles 0
-                             try   5.034    5.040           Feature::Compat::Try 1 Syntax::Feature::Try 0 Syntax::Keyword::Try 0
-                           defer   5.036                    Feature::Compat::Defer 1 Syntax::Keyword::Defer 0
+            bareword_filehandles   5.034    5.010    5.038           bareword::filehandles 0
+                multidimensional   5.034    5.010    5.036           multidimensional 0
+                             try   5.034    5.040                    Feature::Compat::Try 1 Syntax::Feature::Try 0 Syntax::Keyword::Try 0
+                           defer   5.036                             Feature::Compat::Defer 1 Syntax::Keyword::Defer 0
          extra_paired_delimiters   5.036
-                           class   5.038                    Feature::Compat::Class 1
+                           class   5.038                             Feature::Compat::Class 1
                      module_true   5.038    5.038
 
 =cut

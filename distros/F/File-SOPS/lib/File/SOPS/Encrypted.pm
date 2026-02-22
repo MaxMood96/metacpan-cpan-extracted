@@ -1,8 +1,6 @@
 package File::SOPS::Encrypted;
-our $VERSION = '0.001';
-our $AUTHORITY = 'cpan:GETTY';
 # ABSTRACT: Parse and generate SOPS encrypted values
-
+our $VERSION = '0.002';
 use Moo;
 use Carp qw(croak);
 use MIME::Base64 qw(encode_base64 decode_base64);
@@ -142,8 +140,9 @@ sub _deserialize_value {
     return $data + 0.0 if $type eq 'float';
     if ($type eq 'bool') {
         # SOPS uses "True"/"False" (titlecase)
-        return 1 if lc($data) eq 'true' || $data eq '1';
-        return 0;
+        # Return JSON::PP::Boolean to preserve bool type through YAML/JSON serialization
+        require JSON::PP;
+        return (lc($data) eq 'true' || $data eq '1') ? JSON::PP::true : JSON::PP::false;
     }
     return $data;
 }
@@ -182,7 +181,7 @@ File::SOPS::Encrypted - Parse and generate SOPS encrypted values
 
 =head1 VERSION
 
-version 0.001
+version 0.002
 
 =head1 SYNOPSIS
 
@@ -330,9 +329,10 @@ Dies if authentication fails (wrong key, corrupted data, or mismatched AAD).
 
 =head1 SUPPORT
 
-=head2 IRC
+=head2 Issues
 
-You can reach Getty on C<irc.perl.org> for questions and support.
+Please report bugs and feature requests on GitHub at
+L<https://github.com/Getty/p5-file-sops/issues>.
 
 =head1 CONTRIBUTING
 

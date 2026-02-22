@@ -29,9 +29,8 @@ if ( !$http_check->get('http://www.google.com')->{success} && !$http_check->get(
     }
 
     sub request {
-        my ( $self, $method, $url, $args ) = @_;
-        no warnings 'uninitialized';
-        $method //= 'GET';
+        my ( $self, $method_in, $url, $args ) = @_;
+        my $method   = "$method_in";               # Local copy
         my %new_args = %{ $args // {} };
         my $orig_cb  = $new_args{data_callback};
         my $content  = '';
@@ -43,6 +42,7 @@ if ( !$http_check->get('http://www.google.com')->{success} && !$http_check->get(
             $content .= $data;
             return 1;
         };
+        no warnings 'uninitialized';
         my $res = $self->SUPER::request( $method, $url, \%new_args );
         $res->{content} = $content unless $orig_cb;
         return $res;
@@ -126,7 +126,7 @@ Acme::Parataxis::run(
                 ok( $res, "Result exists for $url" );
                 if ($res) {
                     is( $res->{status}, 200, "Fetched $url successfully" ) or
-                        diag "Failed to fetch $url: $res->{status} $res->{reason}\nContent: " . ( $res->{content} // '' );
+                        diag "Failed to fetch $url: $res->{status} " . ( $res->{reason} // 'No Reason' ) . "\nContent: " . ( $res->{content} // '' );
                     if ( $res->{status} == 200 ) {
                         like( $res->{content}, qr/<html/i, "$url content looks like HTML" );
                     }

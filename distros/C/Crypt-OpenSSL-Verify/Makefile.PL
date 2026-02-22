@@ -19,7 +19,7 @@ print "Installed OpenSSL: $major.$minor.$patch\n";
 $args{INC} =  openssl_inc_paths();
 $args{LIBS} = [openssl_lib_paths() . ' -lssl -lcrypto'];
 
-my $cc_option_flags = $major ge 3 ? ' -DOPENSSL_API_COMPAT=30000' : ' -DOPENSSL_API_COMPAT=10100';
+my $cc_option_flags;
 
 if ($Config::Config{cc} =~ /gcc/i) {
   $cc_option_flags .= $ENV{AUTHOR_TESTING} ? ' -Wall -Werror' : ' -Wall';
@@ -41,13 +41,17 @@ if ($Config{gccversion} =~ /llvm/i) {
       $cc_option_flags .= ' -Wno-compound-token-split-by-macro';
   }
 
-  if ($Config{perl_version} <= 20) {
+  if ($Config{PERL_VERSION} <= 20) {
     $cc_option_flags .= ' -Wno-error=pointer-bool-conversion';
   }
 }
 
 if ($Config{myuname} =~ /sunos|solaris/i) {
   $args{OPTIMIZE} = $cc_option_flags;
+} elsif ($Config{myuname} =~ /strawberry-perl/i) {
+  if ($Config{PERL_VERSION} <= 24) {
+    $args{LIBS} = [openssl_lib_paths() . ' -leay32'];
+  }
 } else {
   $args{OPTIMIZE} = $cc_option_flags;
 }
@@ -64,13 +68,15 @@ my %WriteMakefileArgs = (
   "MIN_PERL_VERSION" => "5.008",
   "NAME" => "Crypt::OpenSSL::Verify",
   "PREREQ_PM" => {
-    "Crypt::OpenSSL::X509" => 0
+    "Crypt::OpenSSL::X509" => "v2.0.1"
   },
   "TEST_REQUIRES" => {
     "File::Slurper" => "0.012",
-    "Test::Exception" => 0
+    "File::Temp" => 0,
+    "Test::Exception" => 0,
+    "Test::More" => "0.88"
   },
-  "VERSION" => "0.36",
+  "VERSION" => "0.38",
   "test" => {
     "TESTS" => "t/*.t t/author/*.t"
   }
@@ -82,9 +88,11 @@ my %WriteMakefileArgs = (
 );
 
 my %FallbackPrereqs = (
-  "Crypt::OpenSSL::X509" => 0,
+  "Crypt::OpenSSL::X509" => "2.0.1",
   "File::Slurper" => "0.012",
-  "Test::Exception" => 0
+  "File::Temp" => 0,
+  "Test::Exception" => 0,
+  "Test::More" => "0.88"
 );
 
 unless ( eval { ExtUtils::MakeMaker->VERSION('6.63_03') } ) {

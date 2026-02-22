@@ -411,16 +411,16 @@ subtest "Strings with conflicting quoting requirements" => sub {
 
   # Double quotes with escape sequences should stay double quotes even if
   # they contain content that would normally suggest single quotes
-  good $Policy, 'my $mixed = "\"\n"',
-    "Double quotes with quote and newline should stay double quotes";
+  bad $Policy, 'my $mixed = "\"\n"', "use qq()",
+    "Double quotes with escaped quote and newline should use qq()";
   good $Policy, q(my $mixed = "Don't\t"),
     "Double quotes with apostrophe and tab should stay double quotes";
   good $Policy, q(my $mixed = "Can't\r"),
     "Double quotes with apostrophe and CR should stay double quotes";
 
   # Test with various single character escapes mixed with quote content
-  good $Policy, 'my $mixed = "Quote: \"Hello\"\n"',
-    "Double quotes with quotes and newline should stay double quotes";
+  bad $Policy, 'my $mixed = "Quote: \"Hello\"\n"', "use qq()",
+    "Double quotes with escaped quotes and newline should use qq()";
   good $Policy, q(my $mixed = "Path: 'C:\\Program Files'\t"),
     "Double quotes with single quotes and tab should stay double quotes";
   good $Policy, 'my $mixed = "Alert!\aEnd"',
@@ -458,8 +458,8 @@ subtest "Strings with conflicting quoting requirements" => sub {
   # Test edge case: only quote and escape sequence
   good $Policy, q(my $minimal = "'\n"),
     "Double quotes with only quote and newline should stay double quotes";
-  good $Policy, 'my $minimal = "\"\t"',
-    "Double quotes with only escaped quote and tab should stay double quotes";
+  bad $Policy, 'my $minimal = "\"\t"', "use qq()",
+    "Double quotes with escaped quote and tab should use qq()";
 };
 
 done_testing;

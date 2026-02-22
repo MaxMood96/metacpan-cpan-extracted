@@ -3,9 +3,10 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
   NAME              => 'Plack::App::DirectoryIndex',
   VERSION_FROM      => 'lib/Plack/App/DirectoryIndex.pm',
-  MIN_PERL_VERSION  => '5.10.0',
+  MIN_PERL_VERSION  => '5.38.0',
   PREREQ_PM         => {
-    Plack => 0,
+    Plack                => 0,
+    'WebServer::DirIndex' => 0,
   },
   BUILD_REQUIRES    => {
     Test::More    => 0,
@@ -18,11 +19,11 @@ WriteMakefile(
     resources => {
       repository => {
       type => 'git',
-      url => 'git://github.com/davorg/plack-app-directoryindex.git',
-      web => 'https://github.com/davorg/plack-app-directoryindex',
+      url => 'git://github.com/davorg-cpan/plack-app-directoryindex.git',
+      web => 'https://github.com/davorg-cpan/plack-app-directoryindex',
     },
       bugtracker => {
-        "web" => "https://github.com/davorg/plack-app-directoryindex/issues"
+        "web" => "https://github.com/davorg-cpan/plack-app-directoryindex/issues"
       }
     },
   },

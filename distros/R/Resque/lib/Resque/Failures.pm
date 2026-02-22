@@ -1,6 +1,6 @@
 package Resque::Failures;
 # ABSTRACT: Class for managing Resque failures
-$Resque::Failures::VERSION = '0.42';
+$Resque::Failures::VERSION = '0.44';
 use Moose;
 with 'Resque::Encoder';
 use Class::Load qw(load_class);
@@ -75,8 +75,10 @@ sub remove {
     my ( $self, $index ) = @_;
     my $id = rand(0xffffff);
     my $key = $self->key('failed');
+    $self->redis->multi;
     $self->redis->lset( $key, $index, $id);
     $self->redis->lrem( $key, 1, $id );
+    $self->redis->exec;
 }
 
 sub mass_remove {
@@ -123,7 +125,7 @@ Resque::Failures - Class for managing Resque failures
 
 =head1 VERSION
 
-version 0.42
+version 0.44
 
 =head1 ATTRIBUTES
 
