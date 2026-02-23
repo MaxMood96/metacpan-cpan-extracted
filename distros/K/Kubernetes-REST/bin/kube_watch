@@ -22,7 +22,7 @@ kube_watch - Watch Kubernetes resources for changes
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head1 SYNOPSIS
 

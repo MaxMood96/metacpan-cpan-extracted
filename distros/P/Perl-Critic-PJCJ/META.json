@@ -75,7 +75,7 @@
          "web" : "https://github.com/pjcj/Perl-Critic-PJCJ"
       }
    },
-   "version" : "v0.2.2",
+   "version" : "v0.2.3",
    "x_Dist_Zilla" : {
       "perl" : {
          "version" : "5.042000"
@@ -313,7 +313,7 @@
                   "branch" : null,
                   "changelog" : "Changes",
                   "signed" : 0,
-                  "tag" : "v0.2.2",
+                  "tag" : "v0.2.3",
                   "tag_format" : "v%V",
                   "tag_message" : "v%V"
                },

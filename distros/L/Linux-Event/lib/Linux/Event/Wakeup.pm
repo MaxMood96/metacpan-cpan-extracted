@@ -3,7 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.006';
+our $VERSION = '0.007';
 
 use Carp qw(croak);
 use Scalar::Util qw(weaken);
@@ -15,7 +15,8 @@ use Fcntl qw(F_GETFD F_SETFD FD_CLOEXEC);
 # - Exactly one waker per loop (cached by Loop).
 # - Lazily created on first use.
 # - Never destroyed during loop lifetime.
-# - No implicit watcher; user may watch($waker->fh, read => ...).
+# - The Loop installs an internal read watcher that drains the fd.
+# - User code MUST NOT watch($waker->fh, ...) directly.
 # - signal() is safe from any thread.
 # - drain() is non-blocking and returns the coalesced count.
 
@@ -115,17 +116,11 @@ Linux::Event::Wakeup - eventfd-backed wakeups for Linux::Event
   use Linux::Event;
 
   my $loop  = Linux::Event->new;
+
+  # Create once during initialization:
   my $waker = $loop->waker;
 
-  # Watch it like any other readable fd:
-  $loop->watch($waker->fh,
-    read => sub ($loop, $fh, $watcher) {
-      my $count = $waker->drain;
-      ... drain your own queue ...
-    },
-  );
-
-  # From another thread (or a forked child), poke the loop:
+  # From another thread (or a forked child), wake the loop:
   $waker->signal;
 
 =head1 DESCRIPTION
@@ -135,8 +130,16 @@ L<Linux::Event> based on C<eventfd(2)>. It is intended to be used as a
 building block for thread and process integration without adding policy to
 the core loop.
 
-The wakeup is expressed as a normal readable filehandle so it can be used
-with C<< $loop->watch(...) >> like any other fd.
+The wakeup is implemented internally using C<eventfd(2)> and exposed to the
+loop as a readable filehandle.
+
+When created via C<< $loop->waker >>, the loop installs an internal watcher
+that drains the wakeup fd automatically. This guarantees that
+C<< $waker->signal >> (and C<< $loop->stop >> after waker creation) can
+reliably wake a blocking backend wait.
+
+The wakeup fd is reserved for loop wakeups and must not be watched directly
+by user code.
 
 =head1 SEMANTICS
 
@@ -148,7 +151,10 @@ The semantics contract for the single-waker model is:
 
 =item * Created lazily on first use; never destroyed during loop lifetime.
 
-=item * No implicit watcher is installed.
+=item * The loop installs an internal read watcher that drains the wakeup fd.
+
+=item * User code must not call C<< $loop->watch($waker->fh, ...) >>,
+        as this would replace the loop's internal watcher and break wakeup semantics.
 
 =item * C<signal()> is safe from any thread.
 
@@ -194,6 +200,6 @@ Same terms as Perl itself.
 
 =head1 VERSION
 
-This document describes Linux::Event::Wakeup version 0.006.
+This document describes Linux::Event::Wakeup version 0.007.
 
 =cut

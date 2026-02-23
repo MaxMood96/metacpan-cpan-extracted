@@ -1,37 +1,33 @@
 ---
 abstract: 'This distribution generates fixtures for DBD-Mock-Session module'
 author:
-  - 'Dragos Trif <drd.trif@gmail.com>'
+  - 'Dragos Trif <your.email@example.com>'
 build_requires:
   DBD::SQLite: '1.74'
-  DBD::mysql: '5.012'
   DBI: '1.643'
   Exporter::NoWork: '0.03'
-  ExtUtils::MakeMaker: 6.36
+  ExtUtils::MakeMaker: '0'
   Rose::DB: '0.786'
-  Rose::DB::MySQL: '0.774'
   Rose::DB::Object: '0.822'
   Rose::DB::Object::Loader: '0.799'
   Rose::DB::Object::Manager: '0.813'
   Sub::Override: '0.12'
   Test2::V0: '0.000145'
-  Test::mysqld: '1.0030'
   Try::Tiny: '0.32'
   autodie: '2.37'
 configure_requires:
-  ExtUtils::MakeMaker: 6.36
-distribution_type: module
+  ExtUtils::MakeMaker: '0'
 dynamic_config: 1
-generated_by: 'Module::Install version 1.21'
+generated_by: 'ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
-  version: 1.4
+  version: '1.4'
 name: DBD-Mock-Session-GenerateFixtures
 no_index:
   directory:
-    - inc
     - t
+    - inc
 requires:
   Carp: '1.50'
   Cpanel::JSON::XS: '4.37'
@@ -43,7 +39,9 @@ requires:
   File::Spec: '3.75'
   Readonly: '2.05'
   Sub::Override: '0.12'
+  Try::Tiny: '0.32'
+  perl: '5.014004'
 resources:
-  license: http://dev.perl.org/licenses/
   repository: https://github.com/DragosTrif/DBD-Fixtures
-version: '0.11'
+version: 1.01
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

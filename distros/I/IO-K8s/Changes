@@ -1,5 +1,12 @@
 Revision history for IO-K8s
 
+1.002     2026-02-23 02:37:32Z
+  - Added Authorization API types to default resource map
+    (SelfSubjectRulesReview, SelfSubjectAccessReview, SubjectAccessReview,
+    LocalSubjectAccessReview)
+  - Added Authentication API types to default resource map
+    (TokenReview, TokenRequest, SelfSubjectReview)
+
 1.001     2026-02-14 19:07:12Z
   - Added IO::K8s::Types::Net with Net::IP-backed IP/CIDR type constraints
   - Added convenience methods to IO::K8s::Role::APIObject: labels, annotations,

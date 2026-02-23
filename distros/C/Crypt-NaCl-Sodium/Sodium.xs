@@ -2116,9 +2116,16 @@ encrypt(self, msg, adata, nonce, key)
         enc_len = msg_len + adlen_size;
         bl = InitDataBytesLocker(aTHX_ enc_len);
 
-        (*encrypt_function)( bl->bytes, (unsigned long long *)&enc_len, msg_buf, msg_len,
+        unsigned long long sodium_enc_len;
+
+        (*encrypt_function)( bl->bytes, &sodium_enc_len, msg_buf, msg_len,
             adata_buf, adata_len, NULL, nonce_buf, key_buf);
 
+        if (sodium_enc_len > (unsigned long long)SIZE_MAX) {
+            croak("Encrypted length exceeds system memory limit (size_t overflow)");
+        }
+
+        enc_len = (STRLEN)sodium_enc_len;
         bl->bytes[enc_len] = '\0';
         bl->length = enc_len;
 
@@ -2206,7 +2213,14 @@ decrypt(self, msg, adata, nonce, key)
         enc_len = msg_len;
         bl = InitDataBytesLocker(aTHX_ enc_len);
 
-        if ( (*decrypt_function)( bl->bytes, (unsigned long long *)&enc_len, NULL, msg_buf, msg_len, adata_buf, adata_len, nonce_buf, key_buf) == 0 ) {
+        unsigned long long sodium_enc_len;
+
+        if ( (*decrypt_function)( bl->bytes, &sodium_enc_len, NULL, msg_buf, msg_len, adata_buf, adata_len, nonce_buf, key_buf) == 0 ) {
+            if (sodium_enc_len > (unsigned long long)SIZE_MAX) {
+                croak("Encrypted length exceeds system memory limit (size_t overflow)");
+            }
+
+            enc_len = (STRLEN) sodium_enc_len;
             bl->bytes[enc_len] = '\0';
             bl->length = enc_len;
             mXPUSHs( DataBytesLocker2SV(aTHX_ bl) );
@@ -2296,9 +2310,15 @@ aes256gcm_encrypt_afternm(self, msg, adata, nonce, precalculated_key)
         enc_len = msg_len + crypto_aead_aes256gcm_ABYTES;
         bl = InitDataBytesLocker(aTHX_ enc_len);
 
-        crypto_aead_aes256gcm_encrypt_afternm( bl->bytes, (unsigned long long *)&enc_len, msg_buf, msg_len,
+        unsigned long long sodium_enc_len;
+        crypto_aead_aes256gcm_encrypt_afternm( bl->bytes, &sodium_enc_len, msg_buf, msg_len,
             adata_buf, adata_len, NULL, nonce_buf, (const crypto_aead_aes256gcm_state *)precal_key->ctx);
 
+        if (sodium_enc_len > (unsigned long long)SIZE_MAX) {
+            croak("Encrypted length exceeds system memory limit (size_t overflow)");
+        }
+
+        enc_len = (STRLEN) sodium_enc_len;
         bl->bytes[enc_len] = '\0';
         bl->length = enc_len;
 
@@ -2361,7 +2381,13 @@ aes256gcm_decrypt_afternm(self, msg, adata, nonce, precalculated_key)
         enc_len = msg_len;
         bl = InitDataBytesLocker(aTHX_ enc_len);
 
-        if ( crypto_aead_aes256gcm_decrypt_afternm( bl->bytes, (unsigned long long *)&enc_len, NULL, msg_buf, msg_len, adata_buf, adata_len, nonce_buf, (const crypto_aead_aes256gcm_state *) precal_key->ctx) == 0 ) {
+        unsigned long long sodium_enc_len;
+        if ( crypto_aead_aes256gcm_decrypt_afternm( bl->bytes, &sodium_enc_len, NULL, msg_buf, msg_len, adata_buf, adata_len, nonce_buf, (const crypto_aead_aes256gcm_state *) precal_key->ctx) == 0 ) {
+            if (sodium_enc_len > (unsigned long long)SIZE_MAX) {
+                croak("Encrypted length exceeds system memory limit (size_t overflow)");
+            }
+
+            enc_len = (STRLEN) sodium_enc_len;
             bl->bytes[enc_len] = '\0';
             bl->length = enc_len;
             mXPUSHs( DataBytesLocker2SV(aTHX_ bl) );
@@ -3277,7 +3303,14 @@ seal(self, msg, seckey)
 
         enc_len = crypto_sign_BYTES + msg_len;
         bl = InitDataBytesLocker(aTHX_ enc_len);
-        crypto_sign( bl->bytes, (unsigned long long *)&enc_len, msg_buf, msg_len, skey_buf);
+        unsigned long long sodium_enc_len;
+        crypto_sign( bl->bytes, &sodium_enc_len, msg_buf, msg_len, skey_buf);
+
+        if (sodium_enc_len > (unsigned long long)SIZE_MAX) {
+            croak("Encrypted length exceeds system memory limit (size_t overflow)");
+        }
+
+        enc_len = (STRLEN) sodium_enc_len;
         /* set actual length */
         bl->bytes[enc_len] = '\0';
         bl->length = enc_len;
@@ -3400,7 +3433,13 @@ open(self, smsg, pubkey)
         enc_len = msg_len - crypto_sign_BYTES;
 
         bl = InitDataBytesLocker(aTHX_ enc_len);
-        if ( crypto_sign_open( bl->bytes, (unsigned long long *)&enc_len, msg_buf, msg_len, pkey_buf) == 0 ) {
+        unsigned long long sodium_enc_len;
+        if ( crypto_sign_open( bl->bytes, &sodium_enc_len, msg_buf, msg_len, pkey_buf) == 0 ) {
+            if (sodium_enc_len > (unsigned long long)SIZE_MAX) {
+                croak("Encrypted length exceeds system memory limit (size_t overflow)");
+            }
+
+            enc_len = (STRLEN) sodium_enc_len;
             /* update actual length */
             bl->bytes[enc_len] = '\0';
             bl->length = enc_len;
@@ -4793,9 +4832,13 @@ bytes(self, length, nonce, key)
                 bytes_function = &crypto_stream_salsa2012;
                 break;
             case 5:
+#ifdef INCLUDE_DEPRECATED
                 nonce_size = crypto_stream_salsa20_NONCEBYTES;
                 key_size = crypto_stream_salsa20_KEYBYTES;
                 bytes_function = &crypto_stream_salsa208;
+#else
+                croak("crypto_stream_salsa208 was deprecated in v1.0.18 define INCLUDE_DEPRECATED to use");
+#endif
                 break;
             case 6:
                 nonce_size = crypto_stream_chacha20_IETF_NONCEBYTES;
@@ -4887,9 +4930,13 @@ xor(self, msg, nonce, key)
                 xor_function = &crypto_stream_salsa2012_xor;
                 break;
             case 5:
+#ifdef INCLUDE_DEPRECATED
                 nonce_size = crypto_stream_salsa20_NONCEBYTES;
                 key_size = crypto_stream_salsa20_KEYBYTES;
                 xor_function = &crypto_stream_salsa208_xor;
+#else
+                croak("crypto_stream_salsa208_xor was deprecated in v1.0.18 define INCLUDE_DEPRECATED to use");
+#endif
                 break;
             case 6:
                 nonce_size = crypto_stream_chacha20_IETF_NONCEBYTES;

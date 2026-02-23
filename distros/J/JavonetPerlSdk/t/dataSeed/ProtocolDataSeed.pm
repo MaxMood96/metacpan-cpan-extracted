@@ -15,6 +15,7 @@ our @double_serialized = (8, 8, 184, 86, 14, 60, 221, 154, 239, 63);
 our @ullong_serialized = (9, 8, 255, 255, 255, 255, 255, 255, 255, 255);
 our @uint_serialized = (10, 4, 254, 255, 255, 255);
 our @undef_serialized = (11, 1, 0);
+our @undefined_serialized = (12, 1, 0);
 
 our $JAVONET_string_deserialized = "JAVONET";
 our $NonAscii_string_deserialized = "Ť¿ϻÐßĦŁ";
@@ -29,5 +30,6 @@ our $double_deserialized = 0.987654321;
 our $ullong_deserialized = 18446744073709551615;
 our $uint_deserialized = 2 ** 32 - 2;
 our $undef_deserialized = undef;
+our $undefined_deserialized = undef;
 
 1;

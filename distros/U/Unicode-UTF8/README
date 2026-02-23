@@ -86,13 +86,6 @@ DIAGNOSTICS
         contains a hexadecimal representation of the maximal subpart of the
         ill-formed subsequence.
 
-    Can't interchange noncharacter code point U+%X in position %u
-        (W utf8, nonchar) Noncharacters are code points that are permanently
-        reserved in the Unicode Standard for internal use. They are
-        forbidden for use in open interchange of Unicode text data.
-        Noncharacters consist of the values U+nFFFE and U+nFFFF (where n is
-        from 0 to 10^16) and the values U+FDD0..U+FDEF.
-
     Can't represent surrogate code point U+%X in position %u
         (W utf8, surrogate) Surrogate code points are designated only for
         surrogate code units in the UTF-16 character encoding form.
@@ -115,8 +108,6 @@ COMPARISON
     implementation:
 
     *   Simple API which makes use of Perl's standard warning categories.
-
-    *   Recognizes all noncharacters regardless of Perl version
 
     *   Implements Unicode's recommended practice for using U+FFFD.
 

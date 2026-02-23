@@ -1,6 +1,9 @@
 # Mock logger for testing
 package TestLogger;
 
+use strict;
+use warnings;
+
 sub new { bless { messages => [] }, shift }
 sub error { push @{shift->{messages}}, 'ERROR: ' . join('', @_); }
 sub warn { push @{shift->{messages}}, 'WARN: ' . join('', @_); }

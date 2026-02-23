@@ -1,0 +1,152 @@
+NAME
+    Data::MARC::Validator::Report - Data object for MARC validator report.
+
+SYNOPSIS
+     use Data::MARC::Validator::Report;
+
+     my $obj = Data::MARC::Validator::Report->new(%params);
+     my $datetime = $obj->datetime;
+     my $plugins_ar = $obj->plugins;
+
+METHODS
+  "new"
+     my $obj = Data::MARC::Validator::Report->new(%params);
+
+    Constructor.
+
+    *       "datetime"
+
+            Datetime of report. Must be a DataTime instance.
+
+            Parameter is required.
+
+    *       "plugins"
+
+            List of plugins data objects. Each one must be a
+            Data::MARC::Validator::Report::Plugin instance.
+
+            Default value is [].
+
+    Returns instance of object.
+
+  "datetime"
+     my $datetime = $obj->datetime;
+
+    Get datetime of report.
+
+    Returns DateTime object.
+
+  "plugins"
+     my $plugins_ar = $obj->plugins;
+
+    Get plugin reports.
+
+    Return reference to array with Data::MARC::Validator::Report::Plugin
+    objects.
+
+ERRORS
+     new():
+             From Mo::utils:
+                     Parameter 'datetime' is required.
+                     Parameter 'datetime' must be a 'DateTime' object.
+                             Value: %s
+                             Reference: %s
+
+             From Mo::utils::Array:
+                     Parameter 'plugins' must be a array.
+                             Value: %s
+                             Reference: %s
+                     Parameter 'plugins' with array must contain 'Data::MARC::Validator::Report::Plugin' objects.
+                             Value: %s
+                             Reference: %s
+
+EXAMPLE
+     use strict;
+     use warnings;
+
+     use Data::Printer;
+     use Data::MARC::Validator::Report;
+     use Data::MARC::Validator::Report::Error;
+     use Data::MARC::Validator::Report::Errors;
+     use Data::MARC::Validator::Report::Plugin;
+     use DateTime;
+
+     # Create data object for validator report.
+     my $report = Data::MARC::Validator::Report->new(
+             'datetime' => DateTime->now,
+             'plugins' => [
+                     Data::MARC::Validator::Report::Plugin->new(
+                            'errors' => [
+                                    Data::MARC::Validator::Report::Errors->new(
+                                            'errors' => [
+                                                    Data::MARC::Validator::Report::Error->new(
+                                                            'error' => 'Error #1',
+                                                            'params' => {
+                                                                    'key' => 'value',
+                                                            },
+                                                    ),
+                                                    Data::MARC::Validator::Report::Error->new(
+                                                            'error' => 'Error #2',
+                                                            'params' => {
+                                                                    'key' => 'value',
+                                                            },
+                                                    ),
+                                            ],
+                                            'filters' => ['filter1', 'filter2'],
+                                            'record_id' => 'id1',
+                                    ),
+                            ],
+                            'module_name' => 'MARC::Validator::Plugin::Foo',
+                            'name' => 'foo',
+                            'version' => '0.01',
+                     ),
+             ],
+     );
+
+     # Dump out.
+     p $report;
+
+     # Output:
+     # Data::MARC::Validator::Report  {
+     #     parents: Mo::Object
+     #     public methods (4):
+     #         BUILD
+     #         Mo::utils:
+     #             check_isa, check_required
+     #         Mo::utils::Array:
+     #             check_array_object
+     #     private methods (0)
+     #     internals: {
+     #         datetime   2026-02-22T11:16:24 (DateTime),
+     #         plugins    [
+     #             [0] Data::MARC::Validator::Report::Plugin
+     #         ]
+     #     }
+     # }
+
+DEPENDENCIES
+    Mo, Mo::utils, Mo::utils::Array.
+
+REPOSITORY
+    <https://github.com/michal-josef-spacek/Data-MARC-Validator-Report>
+
+AUTHOR
+    Michal Josef Špaček <mailto:skim@cpan.org>
+
+    <http://skim.cz>
+
+LICENSE AND COPYRIGHT
+    © 2025-2025 Michal Josef Špaček
+
+    BSD 2-Clause License
+
+ACKNOWLEDGEMENTS
+    Development of this software has been made possible by institutional
+    support for the long-term strategic development of the National Library
+    of the Czech Republic as a research organization provided by the
+    Ministry of Culture of the Czech Republic (DKRVO 2024–2028), Area 11:
+    Linked Open Data.
+
+VERSION
+    0.02
+

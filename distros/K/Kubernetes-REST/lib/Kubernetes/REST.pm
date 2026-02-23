@@ -1,5 +1,5 @@
 package Kubernetes::REST;
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 # ABSTRACT: A Perl REST Client for the Kubernetes API
 use Moo;
 use Carp qw(croak carp);
@@ -336,14 +336,22 @@ sub _prepare_request {
         }
     }
 
+    my %headers = (
+        'Content-Type' => $content_type,
+        'Accept' => 'application/json',
+    );
+
+    # Only add Authorization header when a token is available
+    # (client-certificate auth doesn't need a Bearer token)
+    my $token = $self->credentials->token;
+    if (defined $token && length $token) {
+        $headers{'Authorization'} = 'Bearer ' . $token;
+    }
+
     return Kubernetes::REST::HTTPRequest->new(
         method => $method,
         url => $url,
-        headers => {
-            'Authorization' => 'Bearer ' . $self->credentials->token,
-            'Content-Type' => $content_type,
-            'Accept' => 'application/json',
-        },
+        headers => \%headers,
         ($body ? (content => $self->_json->encode($body)) : ()),
     );
 }
@@ -666,7 +674,7 @@ Kubernetes::REST - A Perl REST Client for the Kubernetes API
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head1 SYNOPSIS
 

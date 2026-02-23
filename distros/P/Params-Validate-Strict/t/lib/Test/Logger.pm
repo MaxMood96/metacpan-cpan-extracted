@@ -1,5 +1,8 @@
 package Test::Logger;
 
+use strict;
+use warnings;
+
 # Mock logger for testing
 sub new { bless { messages => [] }, shift }
 sub error { push @{$_[0]->{messages}}, ['error', @_[1..$#_]] }

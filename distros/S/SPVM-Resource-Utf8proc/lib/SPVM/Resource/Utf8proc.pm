@@ -1,6 +1,6 @@
 package SPVM::Resource::Utf8proc;
 
-our $VERSION = "0.003";
+our $VERSION = "0.004";
 
 1;
 
@@ -16,7 +16,7 @@ Resource::Utf8proc class in L<SPVM> is a L<resouce|SPVM::Document::Resource> cla
 
 MyClass.config:
   
-  my $config = SPVM::Builder::Config->new_gnu99(file => __FILE__);
+  my $config = SPVM::Builder::Config->new_c99;
   
   $config->use_resource('Resource::Utf8proc');
   
@@ -54,9 +54,9 @@ v2.9.0
 
 The C language
 
-=head1 Language Specification
+=head1 Language Standard
 
-GNU C99
+C99
 
 =head1 Required Compiler Flags
 

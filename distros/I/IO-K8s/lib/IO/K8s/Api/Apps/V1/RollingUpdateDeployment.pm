@@ -1,6 +1,6 @@
 package IO::K8s::Api::Apps::V1::RollingUpdateDeployment;
 # ABSTRACT: Spec to control the desired behavior of rolling update.
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 use IO::K8s::Resource;
 
 k8s maxSurge => Str;
@@ -23,7 +23,7 @@ IO::K8s::Api::Apps::V1::RollingUpdateDeployment - Spec to control the desired be
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head2 maxSurge
 

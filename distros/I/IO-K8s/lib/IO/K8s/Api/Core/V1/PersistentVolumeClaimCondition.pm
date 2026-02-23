@@ -1,6 +1,6 @@
 package IO::K8s::Api::Core::V1::PersistentVolumeClaimCondition;
 # ABSTRACT: PersistentVolumeClaimCondition contains details about state of pvc
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 use IO::K8s::Resource;
 
 k8s lastProbeTime => Str;
@@ -33,7 +33,7 @@ IO::K8s::Api::Core::V1::PersistentVolumeClaimCondition - PersistentVolumeClaimCo
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head2 lastProbeTime
 

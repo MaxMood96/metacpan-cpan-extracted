@@ -4,12 +4,11 @@ use strict;
 use warnings;
 
 use Class::Utils qw(set_params);
-use DateTime;
+use Data::MARC::Validator::Report::Plugin 0.02;
 use Error::Pure qw(err);
 use Mo::utils 0.06 qw(check_bool check_required);
-use Mo::utils::Hash qw(check_hash);
 
-our $VERSION = 0.09;
+our $VERSION = 0.10;
 
 # Constructor.
 sub new {
@@ -21,11 +20,14 @@ sub new {
 	# Debug mode.
 	$self->{'debug'} = 0;
 
-	# Error id definition.
-	$self->{'error_id_def'} = '001';
+	# Errors.
+	$self->{'errors'} = [];
 
-	# Structure.
-	$self->{'struct'} = {};
+	# Filters.
+	$self->{'filters'} = [];
+
+	# Record id definition.
+	$self->{'record_id_def'} = '001';
 
 	# Verbose mode.
 	$self->{'verbose'} = 0;
@@ -36,11 +38,8 @@ sub new {
 	# Check 'debug'.
 	check_bool($self, 'debug');
 
-	# Check 'error_id_def'.
-	check_required($self, 'error_id_def');
-
-	# Check 'struct'.
-	check_hash($self, 'struct');
+	# Check 'record_id_def'.
+	check_required($self, 'record_id_def');
 
 	# Check 'verbose'.
 	check_bool($self, 'verbose');
@@ -52,35 +51,38 @@ sub new {
 sub init {
 	my $self = shift;
 
-	# Common initialization.
-	$self->{'struct'}->{'name'} = $self->name;
-	$self->{'struct'}->{'datetime'} = DateTime->now->iso8601;
-
-	$self->{'cb_error_id'} = sub {
+	$self->{'cb_record_id'} = sub {
 		my $marc_record = shift;
 
-		my $error_id;
-		my ($field, $subfield) = $self->{'error_id_def'} =~ m/^(\d+)(.*)$/ms;
+		my $record_id;
+		my ($field, $subfield) = $self->{'record_id_def'} =~ m/^(\d+)(.*)$/ms;
 		my $field_obj = $marc_record->field($field);
 		if (defined $field_obj) {
 			if ($subfield) {
-				$error_id = $field_obj->subfield($subfield);
+				$record_id = $field_obj->subfield($subfield);
 			} else {
-				$error_id = $field_obj->as_string;
+				$record_id = $field_obj->as_string;
 			}
 		} else {
 			err 'Record id is not defined.',
-				'Error ID definition', $self->{'error_id_def'},
+				'Record id definition', $self->{'record_id_def'},
 			;
 		}
 
-		return $error_id;
+		return $record_id;
 	};
 
 	# Plugin initialization.
 	$self->_init;
 
 	return;
+}
+
+# Module name.
+sub module_name {
+	my $self = shift;
+
+	err __PACKAGE__.' is abstract class.';
 }
 
 # Name of plugin.
@@ -106,13 +108,27 @@ sub process {
 sub struct {
 	my $self = shift;
 
-	return $self->{'struct'};
+	my $plugin_report = Data::MARC::Validator::Report::Plugin->new(
+		'module_name' => $self->module_name,
+		'name' => $self->name,
+		'plugin_errors' => $self->{'errors'},
+		'version' => $self->version,
+	);
+
+	return $plugin_report;
+}
+
+# Version of plugin.
+sub version {
+	my $self = shift;
+
+	err __PACKAGE__.' is abstract class,';
 }
 
 sub _init {
 	my $self = shift;
 
-	err __PACKAGE__.' is abstract class.';
+	return;
 }
 
 1;
@@ -131,10 +147,12 @@ MARC::Validator::Abstract - Abstract class for MARC::Validator plugins.
 
  my $obj = MARC::Validator::Abstract->new;
  $obj->init;
+ my $module_name = $obj->module_name;
  my $name = $obj->name;
  my $process = $obj->process($marc_record);
  $obj->postprocess;
  my $struct_hr = $obj->struct;
+ my $version = $obj->version;
 
 =head1 DESCRIPTION
 
@@ -157,9 +175,9 @@ Debug mode.
 
 Default value is 0.
 
-=item * C<error_id_def>
+=item * C<record_id_def>
 
-Error ID definition in MARC field/subfield hierarchy.
+Record id definition in MARC field/subfield hierarchy.
 For control fields is simple number, for field/subfield is something like '015a'.
 
 Default value is '001' = control field 001.
@@ -187,6 +205,14 @@ Returns instance of object.
 Initialize plugin.
 
 Returns undef.
+
+=head2 C<module_name>
+
+ my $module_name = $obj->module_name;
+
+Get module name of plugin.
+
+Returns string.
 
 =head2 C<name>
 
@@ -220,6 +246,14 @@ Get output structure.
 
 Returns reference to hash.
 
+=head2 C<version>
+
+ my $version = $obj->version;
+
+Get version of plugin.
+
+Returns string.
+
 =head1 ERRORS
 
  new():
@@ -231,7 +265,7 @@ Returns reference to hash.
                  Parameter 'verbose' must be a bool (0/1).
                          Value: %s
          Record id is not defined.
-                 Error ID definition: %s
+                 Record id definition: %s
 
          (only in this abstract class)
          MARC::Validator::Abstract is abstract class.
@@ -247,6 +281,12 @@ Returns reference to hash.
  use base qw(MARC::Validator::Abstract);
 
  our $VERSION = 1.01;
+
+ sub module_name {
+         my $self = shift;
+
+         return __PACKAGE__;
+ }
 
  sub name {
          my $self = shift;
@@ -269,6 +309,12 @@ Returns reference to hash.
          $self->{'struct'}->{'stats'}->{'foo_stat'}++;
  
          return;
+ }
+
+ sub version {
+         my $self = shift;
+
+         return $VERSION;
  }
  
  sub _init {
@@ -434,33 +480,40 @@ Returns reference to hash.
  my $name = $obj->name;
  print "Name: $name\n";
 
- my $struct_hr = $obj->struct;
- print "Output structure:\n";
- p $struct_hr;
+ my $report = $obj->struct;
+ print "Output report data object:\n";
+ p $report;
 
  unlink $temp_file;
 
  # Output:
  # Name: foo
- # Output structure:
- # {
- #     datetime         "2025-06-20T17:13:25" (dualvar: 2025),
- #     module_name      "MARC::Validator::Plugin::Foo",
- #     module_version   1.01,
- #     name             "foo",
- #     stats            {
- #         bar_stat   2,
- #         foo_stat   1
+ # Output report data object:
+ # Data::MARC::Validator::Report::Plugin  {
+ #     parents: Mo::Object
+ #     public methods (6):
+ #         BUILD
+ #         Mo::utils:
+ #             check_isa, check_length, check_required
+ #         Mo::utils::Array:
+ #             check_array_object
+ #         Mo::utils::Perl:
+ #             check_version
+ #     private methods (0)
+ #     internals: {
+ #         module_name     "MARC::Validator::Plugin::Foo",
+ #         name            "foo",
+ #         plugin_errors   [],
+ #         version         1.01
  #     }
  # }
 
 =head1 DEPENDENCIES
 
 L<Class::Utils>,
-L<DateTime>,
+L<Data::MARC::Validator::Report::Plugin>,
 L<Error::Pure>,
-L<Mo::utils>,
-L<Mo::utils::Hash>.
+L<Mo::utils>.
 
 =head1 REPOSITORY
 
@@ -487,6 +540,6 @@ the Czech Republic (DKRVO 2024–2028), Area 11: Linked Open Data.
 
 =head1 VERSION
 
-0.09
+0.10
 
 =cut

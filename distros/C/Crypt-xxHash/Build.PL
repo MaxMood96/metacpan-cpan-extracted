@@ -46,7 +46,7 @@ my $build = Module::Build->new(
         'IPC::Run'           => undef,
         'ExtUtils::CBuilder' => undef,
         'Test::More'         => undef,
-        'Math::Int64'        => undef # 32bit perl without int64 :\
+        'Math::Int64'        => undef # 32bit perl without int64
     },
     requires       => {
 	},
@@ -70,5 +70,3 @@ $build->create_build_script;
 
 1;
 __END__
-
-${EXTLIB_PROJECT}-${version}.tar.gz

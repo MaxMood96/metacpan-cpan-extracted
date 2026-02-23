@@ -1,8 +1,12 @@
 package Dist::Zilla::Plugin::PPPort;
-$Dist::Zilla::Plugin::PPPort::VERSION = '0.010';
-# vi:noet:sts=2:sw=2:ts=2
+$Dist::Zilla::Plugin::PPPort::VERSION = '0.011';
+# vi:noet:sts=4:sw=4:ts=4
 use Moose;
 with qw/Dist::Zilla::Role::FileGatherer Dist::Zilla::Role::PrereqSource Dist::Zilla::Role::AfterBuild Dist::Zilla::Role::FilePruner/;
+use namespace::autoclean;
+
+use experimental 'signatures';
+
 use Moose::Util::TypeConstraints 'enum';
 use MooseX::Types::Moose 'Int';
 use MooseX::Types::Perl qw(StrictVersionStr);
@@ -10,6 +14,7 @@ use MooseX::Types::Stringlike 'Stringlike';
 use Devel::PPPort 3.23;
 use File::Spec::Functions 'catdir';
 use File::pushd 'pushd';
+use List::Util 'any';
 
 has style => (
 	is  => 'ro',
@@ -22,8 +27,7 @@ has filename => (
 	isa     => Stringlike,
 	lazy    => 1,
 	coerce  => 1,
-	default => sub {
-		my $self = shift;
+	default => sub($self) {
 		if ($self->style eq 'MakeMaker') {
 			return 'ppport.h';
 		}
@@ -49,8 +53,7 @@ has override => (
 	default => 0,
 );
 
-sub gather_files {
-	my $self = shift;
+sub gather_files($self) {
 	Devel::PPPort->VERSION($self->version);
 	require Dist::Zilla::File::InMemory;
 	$self->add_file(Dist::Zilla::File::InMemory->new(
@@ -61,8 +64,15 @@ sub gather_files {
 	return;
 }
 
-sub after_build {
-	my ($self, $args) = @_;
+sub after_build($self, $args) {
+	my @all_files = map {$_->name } @{ $self->zilla->files };
+	my @files;
+	my $main_module_xs = $self->zilla->main_module =~ s/.*:://r . ".xs";
+	push @files, $main_module_xs if any { $_ eq $main_module_xs } @all_files;
+	push @files, grep { $_ =~ m{ ^ lib/ .* \.xs $ }x } @all_files;
+
+	return unless @files;
+
 	my $build_root = $args->{build_root};
 
 	my $wd = pushd $build_root;
@@ -74,23 +84,21 @@ sub after_build {
 		->requirements_for_module('perl') || '5.006';
 
 	if ($self->logger->get_debug) {
-		chomp(my $out = `$^X $filename --compat-version=$perl_prereq`);
+		chomp(my $out = `$^X $filename --compat-version=$perl_prereq @files`);
 		$self->log_debug($out) if $out;
 	}
 	else {
-		chomp(my $out = `$^X $filename --compat-version=$perl_prereq --quiet`);
-		$self->log_debug($out) if $out;
+		chomp(my $out = `$^X $filename --compat-version=$perl_prereq --quiet @files`);
+		$self->log($out) if $out;
 	}
 }
 
-sub register_prereqs {
-	my $self = shift;
+sub register_prereqs($self) {
 	$self->zilla->register_prereqs({ phase => 'develop' }, 'Devel::PPPort' => $self->version);
 	return;
 }
 
-sub prune_files {
-	my $self = shift;
+sub prune_files($self) {
 	return unless $self->override;
 
 	my @files = @{ $self->zilla->files };
@@ -101,8 +109,6 @@ sub prune_files {
 }
 
 __PACKAGE__->meta->make_immutable;
-
-no Moose;
 
 1;
 
@@ -120,7 +126,7 @@ Dist::Zilla::Plugin::PPPort - PPPort for Dist::Zilla
 
 =head1 VERSION
 
-version 0.010
+version 0.011
 
 =head1 SYNOPSIS
 

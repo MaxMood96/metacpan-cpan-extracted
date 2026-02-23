@@ -1,0 +1,57 @@
+Revision history for Linux-Event-Listen
+
+0.014  2026-02-22
+  - Restore GitHub CI badge in README.
+
+0.013  2026-02-22
+  - Documentation: remove all prior references to loop method modification; refresh README and POD for clarity.
+
+0.012  2026-02-22
+
+0.011  2026-02-22
+
+0.010  2026-02-22
+  - First CPAN release.
+  - Add GitHub Actions CI workflow and README badge.
+  - Documentation review and minor clarifications (TCP + UNIX).
+
+0.009  2026-02-22
+  - Docs: clarify edge-triggered semantics and max_accept_per_tick interaction.
+  - Add: family/is_unix/is_tcp convenience methods.
+  - Errors: include host/port or path in setup error hashref.
+  - Tests: add cancel idempotence and UNIX wrap-no-unlink coverage.
+  - Repo hygiene: add .gitignore and a UNIX example.
+
+0.008  2026-02-22
+  - Add: UNIX domain socket support via path => ...
+  - Add: unlink and unlink_on_cancel options for UNIX sockets.
+  - Peer: report { family => 'unix', path => ... } for UNIX clients.
+  - Tests: add UNIX socket coverage.
+
+0.007  2026-02-22
+  - Fix: repair is_paused() declaration (was corrupted in generated tar).
+  - Packaging: source-only tarballs (no blib/MANIFEST/MYMETA/Makefile).
+
+0.006  2026-02-22
+  - Setup: validate provided fh is a listening socket (SO_ACCEPTCONN).
+  - Add: on_emfile callback for EMFILE/ENFILE accept failures.
+  - Add: is_running, sockhost, sockport convenience methods.
+  - Tests: add wrap-existing-fh and on_accept die coverage.
+
+0.005  2026-02-22
+  - Semantics: if max_accept_per_tick is explicitly set and edge_triggered is not,
+    default to level-triggered readiness to prevent EPOLLET stalls.
+
+0.004  2026-02-22
+  - Tests: stop the loop explicitly and add alarms to prevent hangs.
+
+0.003  2026-02-22
+  - Fix: correct syntax regression in 0.002 (extra brace in watcher callback).
+
+0.002  2026-02-22
+  - Fix: cancel() is now safe when called inside on_accept.
+    Prevents accept() on closed socket (EBADF) during read callback.
+    Listener close is deferred until after read callback returns.
+
+0.001  2026-02-22
+  - Initial release.

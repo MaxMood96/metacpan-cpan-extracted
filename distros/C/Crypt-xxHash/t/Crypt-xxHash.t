@@ -15,6 +15,10 @@ use Crypt::xxHash qw/
 	xxhash64 xxhash64_hex
 	xxhash3_64bits xxhash3_64bits_hex
 	xxhash3_128bits_hex
+        xxhash3_64bits_stream
+        xxhash3_64bits_stream_update
+        xxhash3_64bits_stream_digest
+        xxhash3_64bits_stream_digest_hex
 /;
 
 sub testSequence;
@@ -69,6 +73,24 @@ testSequence64($sanityBuffer, $SANITY_BUFFER_SIZE, $prime,        'CAA65939306F1
 
 is( xxhash64_hex("b" x 100000, 890272), 'df8fee94dbf20a9d', 'uint64' );
 is( xxhash64_hex("b" x 100000, 89), '01aae2582443bbf0', 'expect leading zeros' );
+
+{
+    my $stream = xxhash3_64bits_stream(1123);
+    xxhash3_64bits_stream_update($stream, 'te');
+    xxhash3_64bits_stream_update($stream, 'st');
+    xxhash3_64bits_stream_update($stream, '64');
+    is( xxhash3_64bits_stream_digest($stream), uint64('18300740539230391133'), 'uint64 streaming' );
+}
+{
+    my $stream = xxhash3_64bits_stream(890272);
+    xxhash3_64bits_stream_update($stream, "b" x 1000) for(1..100);
+    is( xxhash3_64bits_stream_digest_hex($stream), 'df8fee94dbf20a9d', 'uint64 streaming hex' );
+}
+{
+    my $stream = xxhash3_64bits_stream(89);
+    xxhash3_64bits_stream_update($stream, "b" x 1000) for(1..100);
+    is( xxhash3_64bits_stream_digest_hex($stream), '01aae2582443bbf0', 'uint64 streaming hex leading zeros' );
+}
 
 # 128 bits
 is( xxhash3_128bits_hex('test64', 5813), '2675a6f40fe52f19601fc692c37d6e4d', 'xxhash3_128bits_hex' );

@@ -20,13 +20,15 @@ readme_from 'Validator.pm';
 recursive_author_tests('xt');
 requires 'Class::Utils' => 0.03;
 requires 'Business::ISBN' => 0;
+requires 'Data::MARC::Validator::Report::Error' => 0.02;
+requires 'Data::MARC::Validator::Report::Plugin' => 0.02;
+requires 'Data::MARC::Validator::Report::Plugin::Errors' => 0.02;
 requires 'DateTime' => 0;
 requires 'English' => 0;
 requires 'Error::Pure' => 0;
 requires 'MARC::Field008' => 0;
 requires 'MARC::Leader' => 0.08;
 requires 'Mo::utils' => 0.06;
-requires 'Mo::utils::Hash' => 0;
 requires 'Module::Pluggable' => 0;
 resources 'bugtracker' => 'https://github.com/michal-josef-spacek/MARC-Validator/issues',
 resources 'homepage' => 'https://github.com/michal-josef-spacek/MARC-Validator';
@@ -38,7 +40,7 @@ test_requires 'MARC::File::XML' => 0;
 test_requires 'Test::More' => 0;
 test_requires 'Test::NoWarnings' => 0;
 tests_recursive;
-version '0.09';
+version '0.10';
 
 # Run.
 WriteAll();

@@ -47,7 +47,7 @@ BEGIN {
           sub { return $_[0] }
         ],
         [ "\xEF\xB7\x90 Foo \xEF\xB7\xA0 \xE0\x80\x80",
-          "! Foo ! \x{FFFD}\x{FFFD}\x{FFFD}",
+          "\x{FDD0} Foo \x{FDE0} \x{FFFD}\x{FFFD}\x{FFFD}",
           sub { return $_[1] ? '!' : "\x{FFFD}" }
         ],
     );
@@ -83,7 +83,7 @@ BEGIN {
           sub { return '' }
         ],
         [ "\x{FDD0} Foo \x{263A} \x{FDE0}",
-          "! Foo \xE2\x98\xBA !",
+          "\xEF\xB7\x90 Foo \xE2\x98\xBA \xEF\xB7\xA0",
           sub { return $_[1] ? '!' : "\x{FFFD}" }
         ],
     );

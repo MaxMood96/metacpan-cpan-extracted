@@ -1,6 +1,6 @@
 package IO::K8s::Types;
 # ABSTRACT: Type::Tiny type library for Kubernetes resources
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 use Type::Library -base;
 use Type::Utils -all;
 use Types::Standard -types;
@@ -83,7 +83,7 @@ IO::K8s::Types - Type::Tiny type library for Kubernetes resources
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head1 SYNOPSIS
 

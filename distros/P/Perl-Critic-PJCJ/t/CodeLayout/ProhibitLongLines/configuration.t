@@ -69,7 +69,7 @@ subtest "Very short custom limit" => sub {
   is $policy->{_max_line_length}, 10, "Custom max_line_length is 10";
 };
 
-subtest "Default behavior when no configuration set" => sub {
+subtest "Default behaviour when no configuration set" => sub {
   my $policy = Perl::Critic::Policy::CodeLayout::ProhibitLongLines->new;
 
   # Should use default of 80

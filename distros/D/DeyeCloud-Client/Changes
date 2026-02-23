@@ -1,0 +1,9 @@
+Revision history for perl module DeyeCloud::Client
+
+0.0.2 Mon Feb 23 11:16:00 EET 2026
+    - added readable and predictable aliases to device
+      parameters names;
+    - minor documentation updates.
+
+0.0.1 Thu Feb 19 18:18:38 EET 2026
+    - initial release.

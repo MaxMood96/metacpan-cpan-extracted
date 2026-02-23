@@ -25,5 +25,5 @@ requires:
   Linux::FD::Signal: '0'
   perl: '5.036000'
 resources: {}
-version: '0.006'
+version: '0.007'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

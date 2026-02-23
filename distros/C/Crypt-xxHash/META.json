@@ -4,7 +4,7 @@
       "Chernenko Dmitiry cdn@cpan.org"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "Module::Build version 0.4231",
+   "generated_by" : "Module::Build version 0.4234",
    "license" : [
       "bsd"
    ],
@@ -32,7 +32,7 @@
    "provides" : {
       "Crypt::xxHash" : {
          "file" : "lib/Crypt/xxHash.pm",
-         "version" : "0.08"
+         "version" : "0.09"
       }
    },
    "release_status" : "stable",
@@ -47,6 +47,6 @@
          "url" : "https://github.com/KalessinD/perl_crypt_xxhash"
       }
    },
-   "version" : "0.08",
-   "x_serialization_backend" : "JSON::PP version 4.06"
+   "version" : "0.09",
+   "x_serialization_backend" : "JSON::PP version 4.16"
 }

@@ -16,6 +16,7 @@ my @files = (
     't/02_import.t',
     't/exporter-all.t',
     't/exporter.t',
+    't/fh-ref-leak.t',
     't/issue-0001.t',
     't/mock-all-file-checks.t',
     't/mock-all-from-stat.t',

@@ -1,5 +1,176 @@
 Revision history for Langertha
 
+0.201     2026-02-23 03:50:17Z
+    - Add Response.thinking attribute for chain-of-thought reasoning:
+      - Native extraction: DeepSeek/OpenAI-compatible reasoning_content,
+        Anthropic thinking blocks, Gemini thought parts — automatically
+        populated on Response.thinking, no configuration needed
+      - Think tag filter: <think> tag stripping enabled by default on
+        all engines. Handles both closed (<think>...</think>) and
+        unclosed (<think>...) tags. Configurable tag name via
+        think_tag (default: 'think'). Disable with
+        think_tag_filter => 0. Filtering applied across all text
+        paths: simple_chat, streaming, tool calling, and Raider.
+    - Add NousResearch reasoning attribute — enables chain-of-thought
+      reasoning for Hermes 4 and DeepHermes 3 models by prepending
+      the standard Nous reasoning system prompt
+    - Langfuse cascading traces — Raider now creates proper hierarchical
+      Trace → Span (iteration) → Generation (llm-call) / Span (tool)
+      structure instead of flat trace → generation. Iteration spans group
+      the LLM call and its tool calls. Tool spans capture per-tool timing,
+      input, and output. Trace is updated with final output at raid end.
+    - Langfuse: add langfuse_span() for creating span events
+    - Langfuse: add langfuse_update_trace(), langfuse_update_span(),
+      langfuse_update_generation() for updating observations after creation
+    - Langfuse: langfuse_trace() now supports tags, user_id, session_id,
+      release, version, public, and environment fields
+    - Langfuse: langfuse_generation() now supports parent_observation_id,
+      model_parameters, level, status_message, and version fields
+    - Langfuse: Raider generations now include token usage data and
+      model parameters (temperature, max_tokens) when available
+    - Raider: add langfuse_trace_name, langfuse_user_id, langfuse_session_id,
+      langfuse_tags, langfuse_release, langfuse_version, langfuse_metadata
+      attributes for customizing Langfuse trace creation
+    - Refactor all OpenAI-compatible engines to compose
+      Langertha::Role::OpenAICompatible directly instead of extending
+      Langertha::Engine::OpenAI. Each engine now only includes the roles
+      it actually supports (e.g. DeepSeek gets Chat but not Embedding).
+      Removes all "doesn't support X" croak overrides. Affected engines:
+      DeepSeek, Groq, Mistral, MiniMax, NousResearch, Perplexity, vLLM,
+      AKIOpenAI, OllamaOpenAI.
+    - Add Raider context compression — when prompt token usage exceeds
+      a configurable threshold (max_context_tokens * context_compress_threshold),
+      history is automatically summarized via LLM before the next raid.
+      Supports separate compression_engine for using cheaper models.
+      Manual compression via compress_history/compress_history_f.
+    - Add Raider session_history — full chronological archive of ALL
+      messages including tool calls and results, persisted across
+      clear_history and reset. Queryable by the LLM via MCP tool
+      registered with register_session_history_tool().
+    - Add MiniMax to live tool calling test (t/80_live_tool_calling.t)
+      and live raider test (t/82_live_raider.t)
+    - Add t/83_live_minimax.t: dedicated MiniMax live test covering
+      simple_chat, list_models, and Raider with Coding Plan web search
+    - Add Raider inject() method for mid-raid context injection —
+      queue messages from async callbacks, timers, or other tasks
+      that get picked up at the next iteration naturally
+    - Add Raider on_iteration callback — called before each LLM call
+      (iterations 2+) with ($raider, $iteration), returns messages
+      to inject. Injected messages are persisted in history.
+    - Add Langertha::Engine::MiniMax for MiniMax AI API
+      (chat, streaming, tool calling via OpenAI-compatible API)
+    - Rewrite all POD to inline style across all modules —
+      =attr directly after has, =method directly after sub.
+      Add POD to all previously undocumented modules.
+    - Improve =seealso cross-links: remove redundant main module
+      links, add meaningful related module references
+
+0.200     2026-02-22 21:53:36Z
+    - Add Langertha::Response: metadata container wrapping LLM text content
+      with id, model, finish_reason, usage (token counts), timing, and created
+      fields. Uses overload stringification for backward compatibility —
+      existing code treating responses as strings continues to work.
+    - All chat_response methods now return Langertha::Response objects:
+      - Role::OpenAICompatible: extracts id, model, created, finish_reason, usage
+      - Engine::Anthropic: extracts id, model, stop_reason, input/output_tokens
+      - Engine::Gemini: extracts modelVersion, finishReason, usageMetadata
+        (normalized to prompt_tokens/completion_tokens/total_tokens)
+      - Engine::Ollama: extracts model, done_reason, eval counts, timing fields
+      - Engine::AKI: extracts model_name, total_duration
+    - Add Langertha::Raider: autonomous agent with conversation history and
+      MCP tool calling. Features mission (system prompt), persistent history
+      across raids, cumulative metrics (raids, iterations, tool_calls, time_ms),
+      clear_history and reset methods. Supports Hermes tool calling.
+      Auto-instruments raids with Langfuse traces and per-iteration
+      generation events when Langfuse is enabled on the engine.
+    - Add Langertha::Role::Langfuse: observability integration with Langfuse
+      REST API. Composed into Role::Chat — every engine has Langfuse support
+      built in. Auto-instruments simple_chat with trace and generation events.
+      Batched ingestion via POST /api/public/ingestion with Basic Auth.
+      Disabled by default — active when langfuse_public_key and
+      langfuse_secret_key are set (via constructor or LANGFUSE_PUBLIC_KEY /
+      LANGFUSE_SECRET_KEY / LANGFUSE_URL env vars).
+    - Add ex/response.pl: Response metadata showcase (tokens, model, timing)
+    - Add ex/raider.pl: autonomous file explorer agent example
+    - Add ex/langfuse.pl: Langfuse observability example
+    - Add ex/langfuse-k8s.yaml: Kubernetes manifest for self-hosted Langfuse
+      with pre-configured project and API keys (zero setup)
+    - Add t/70_response.t: Response unit tests across all engine formats
+    - Add t/72_langfuse.t: Langfuse integration tests with mock HTTP
+    - Add t/82_live_raider.t: live Raider integration test
+    - Add Langertha::Role::OpenAICompatible: extracted OpenAI API format
+      methods into a reusable role. Engines that use the OpenAI-compatible
+      API format now compose this role instead of duplicating methods.
+      Engine::OpenAI and all subclasses continue to work unchanged.
+    - Add Langertha::Engine::OllamaOpenAI: first-class engine for Ollama's
+      OpenAI-compatible /v1 endpoint. Ollama's openai() method now returns
+      this engine instead of a raw Engine::OpenAI instance.
+    - Add Langertha::Engine::AKI for AKI.IO native API
+      (chat completions with key-in-body auth, synchronous mode,
+      dynamic endpoint listing via list_models and endpoint_details)
+    - Add Langertha::Engine::AKIOpenAI for AKI.IO via OpenAI-compatible API
+      (chat, streaming, tool calling via Role::OpenAICompatible)
+    - Add Langertha::Engine::NousResearch for Nous Research Inference API
+      with Hermes-native tool calling via <tool_call> XML tags
+    - Add Langertha::Engine::Perplexity for Perplexity Sonar API
+      (chat and streaming only, no tool calling)
+    - Add hermes_tools feature flag to Langertha::Role::Tools for
+      Hermes-native tool calling via <tool_call>/<tool_response> XML tags;
+      enables MCP tool calling on any model that supports the Hermes
+      prompt format, even without API-level tool support
+    - Add hermes_call_tag, hermes_response_tag attributes for custom
+      XML tag names (default: tool_call, tool_response)
+    - Add hermes_tool_instructions attribute for customizing the
+      instruction text without changing the structural XML template
+    - Add hermes_tool_prompt attribute for full system prompt override
+    - Add hermes_extract_content() method for engines to override
+      response content extraction in Hermes mode
+    - MCP tool calling now supported on ALL engines:
+      - OpenAI (inherited by Groq, vLLM, Mistral, DeepSeek)
+      - Anthropic (with Anthropic-native tool format)
+      - Gemini (with Gemini-native functionDeclarations format)
+      - Ollama (OpenAI-compatible tool format)
+      - NousResearch (Hermes-native via <tool_call> XML tags)
+    - Add extract_tool_call() to Role::Tools for engine-agnostic
+      tool call parsing across all provider formats
+    - Fix Gemini tool calling: pass-through native message formats,
+      convert MCP tool results to Gemini's functionResponse object
+    - Fix Gemini chat_request to preserve native parts in messages
+      from tool result round-trips
+    - Remove hardcoded all_models() lists from all engines; model
+      discovery is now exclusively dynamic via list_models()
+    - Update default models:
+      - Anthropic: claude-sonnet-4-6 (short alias)
+      - Gemini: gemini-2.5-flash (2.0-flash deprecated for new users)
+    - Add Hermes tool calling unit test with mock round-trip
+      (t/66_tool_calling_hermes.t)
+    - Add vLLM tool calling unit test (t/65_tool_calling_vllm.t)
+    - Add live integration test for all engines including Ollama, vLLM,
+      and NousResearch (t/80_live_tool_calling.t) with multi-model support
+    - Add mock round-trip test for Ollama tool calling
+      (t/64_tool_calling_ollama_mock.t) using fixture data
+    - Add shared Test::MockAsyncHTTP test helper (t/lib/)
+      for mocking async HTTP in engine tests
+    - Normalize test API key env vars to TEST_LANGERTHA_*_API_KEY
+      prefix to prevent accidental use of production keys
+    - Add TEST_LANGERTHA_OLLAMA_URL and TEST_LANGERTHA_OLLAMA_MODELS
+      env vars for Ollama live testing
+    - Add TEST_LANGERTHA_VLLM_URL, TEST_LANGERTHA_VLLM_MODEL, and
+      TEST_LANGERTHA_VLLM_TOOL_CALL_PARSER env vars for vLLM live testing
+    - Add AKI.IO native API unit test (t/25_aki_requests.t) with mock
+      response parsing for chat, list_models, and endpoint_details
+    - Add AKI.IO live integration test (t/81_live_aki.t) for
+      list_models, endpoint_details, and simple_chat
+    - Add AKI.IO to live tool calling test (t/80_live_tool_calling.t)
+      via OpenAI-compatible API
+    - Add TEST_LANGERTHA_AKI_API_KEY and TEST_LANGERTHA_AKI_MODEL
+      env vars for AKI.IO live testing
+    - Use RFC 2606 test.invalid domain for dummy URLs in unit tests
+    - Add ex/hermes_tools.pl example for Hermes-native tool calling
+    - Rewrite all POD to inline style across all 37 modules —
+      =attr directly after has, =method directly after sub.
+      Add POD to 18 previously undocumented modules.
+
 0.100     2026-02-20 05:33:44Z
     - Add MCP (Model Context Protocol) tool calling support
       - New Langertha::Role::Tools for engine-agnostic tool calling

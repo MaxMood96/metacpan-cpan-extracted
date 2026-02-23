@@ -1,6 +1,6 @@
 package Langertha::Role::Seed;
 # ABSTRACT: Role for an engine that can set a seed
-our $VERSION = '0.100';
+our $VERSION = '0.201';
 use Moose::Role;
 use Carp qw( croak );
 
@@ -10,14 +10,18 @@ has randomize_seed => (
 );
 sub _build_randomize_seed { 0 }
 
+
 has seed => (
   is => 'ro',
   predicate => 'has_seed',
 );
 
+
 sub random_seed {
   return sprintf("%u",rand(100_000_000));
 }
+
+
 
 1;
 
@@ -33,7 +37,34 @@ Langertha::Role::Seed - Role for an engine that can set a seed
 
 =head1 VERSION
 
-version 0.100
+version 0.201
+
+=head2 randomize_seed
+
+When true, a random seed is generated for each request. Defaults to C<0>
+(disabled). Useful when you want varied outputs without setting a fixed seed.
+
+=head2 seed
+
+Fixed integer seed for reproducible outputs. Optional. When set, the engine
+passes it to the API to make sampling deterministic. Use C<randomize_seed>
+instead when you want a different random seed on each call.
+
+=head2 random_seed
+
+    my $seed = $engine->random_seed;
+
+Returns a random unsigned integer suitable for use as a seed value.
+
+=head1 SEE ALSO
+
+=over
+
+=item * L<Langertha::Role::Temperature> - Sampling temperature
+
+=item * L<Langertha::Engine::Ollama> - Engine that composes this role
+
+=back
 
 =head1 SUPPORT
 

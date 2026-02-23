@@ -28,6 +28,8 @@ simple rules:
 **Special Cases:**
 
 - **Use statements** - Import lists require `qw()` for simple string arguments
+- **Pragmas** - Pragmas (all-lowercase module names) with a single argument
+  also allow quoted strings, with normal quoting rules applied
 - **Newlines** - Multi-line strings may use any quoting style
 
 #### Rationale
@@ -80,6 +82,8 @@ use Foo;                                    # no arguments is fine
 use Bar ();                                 # empty parentheses allowed
 use Baz qw( single_arg );                   # single arg with qw()
 use Quux qw( arg1 arg2 arg3 );              # multiple args with qw() only
+use feature "class";                        # pragma: single arg allows quotes
+use warnings qw( experimental all );        # pragma: multiple args use qw()
 
 # Special Case: Strings with newlines
 my $text = qq(                              # Any quoting style is allowed

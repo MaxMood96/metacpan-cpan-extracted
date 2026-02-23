@@ -1,6 +1,6 @@
 package Langertha::Role::Transcription;
 # ABSTRACT: Role for APIs with transcription functionality
-our $VERSION = '0.100';
+our $VERSION = '0.201';
 use Moose::Role;
 use Carp qw( croak );
 
@@ -21,10 +21,12 @@ sub _build_transcription_model {
   return $self->model;
 }
 
+
 sub transcription {
   my ( $self, $file_or_content, %extra ) = @_;
   return $self->transcription_request($file_or_content, %extra);
 }
+
 
 sub simple_transcription {
   my ( $self, $file_or_content, %extra ) = @_;
@@ -32,6 +34,8 @@ sub simple_transcription {
   my $response = $self->user_agent->request($request);
   return $request->response_call->($response);
 }
+
+
 
 1;
 
@@ -47,7 +51,45 @@ Langertha::Role::Transcription - Role for APIs with transcription functionality
 
 =head1 VERSION
 
-version 0.100
+version 0.201
+
+=head2 transcription_model
+
+The model name to use for transcription requests. Lazily defaults to
+C<default_transcription_model> if the engine provides it, otherwise falls back
+to the general C<model> attribute from L<Langertha::Role::Models>.
+
+=head2 transcription
+
+    my $request = $engine->transcription($file_or_content, %extra);
+
+Builds and returns a transcription HTTP request object for the given audio
+file path or content. Use L</simple_transcription> to execute the request
+and get the transcript directly.
+
+=head2 simple_transcription
+
+    my $text = $engine->simple_transcription($file_or_content, %extra);
+    my $text = $engine->simple_transcription('/path/to/audio.mp3');
+    my $text = $engine->simple_transcription($audio_bytes, language => 'en');
+
+Sends a transcription request for the audio file or content and returns the
+transcript text. Blocks until the request completes. Additional options such as
+C<language> can be passed as C<%extra> key/value pairs.
+
+=head1 SEE ALSO
+
+=over
+
+=item * L<Langertha::Role::HTTP> - HTTP transport layer
+
+=item * L<Langertha::Role::Models> - Model selection (provides C<transcription_model>)
+
+=item * L<Langertha::Engine::Whisper> - Whisper-compatible transcription server
+
+=item * L<Langertha::Engine::Groq> - Groq's hosted Whisper transcription
+
+=back
 
 =head1 SUPPORT
 

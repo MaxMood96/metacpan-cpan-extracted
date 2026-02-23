@@ -29,7 +29,6 @@ t/080_super.t
 t/090_non_shortest_form.t
 t/100_incomplete.t
 t/120_fallback.t
-t/150_subwarnings.t
 t/170_steal.t
 t/200_leaks.t
 t/210_tainted.t

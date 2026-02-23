@@ -1,5 +1,5 @@
 package Kubernetes::REST::Call::v1beta2::Apps::ReplaceNamespacedReplicaSetStatus;
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 # ABSTRACT: Deprecated - use the new Kubernetes::REST API instead
 use strict;
 use warnings;
@@ -18,7 +18,7 @@ Kubernetes::REST::Call::v1beta2::Apps::ReplaceNamespacedReplicaSetStatus - Depre
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head1 SUPPORT
 

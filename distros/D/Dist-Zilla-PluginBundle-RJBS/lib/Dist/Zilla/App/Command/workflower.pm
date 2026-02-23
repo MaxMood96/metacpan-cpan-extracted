@@ -1,4 +1,4 @@
-package Dist::Zilla::App::Command::workflower 5.035;
+package Dist::Zilla::App::Command::workflower 5.036;
 # ABSTRACT: install rjbs's usual GitHub Actions workflow
 
 use v5.34.0;
@@ -80,7 +80,7 @@ Dist::Zilla::App::Command::workflower - install rjbs's usual GitHub Actions work
 
 =head1 VERSION
 
-version 5.035
+version 5.036
 
 =head1 SYNOPSIS
 
@@ -109,7 +109,7 @@ Ricardo Signes <cpan@semiotic.systems>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2025 by Ricardo Signes.
+This software is copyright (c) 2026 by Ricardo Signes.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

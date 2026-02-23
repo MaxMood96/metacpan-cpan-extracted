@@ -1,6 +1,6 @@
 package Langertha::Role::ContextSize;
 # ABSTRACT: Role for an engine where you can specify the context size (in tokens)
-our $VERSION = '0.100';
+our $VERSION = '0.201';
 use Moose::Role;
 
 has context_size => (
@@ -9,12 +9,15 @@ has context_size => (
   predicate => 'has_context_size',
 );
 
+
 sub get_context_size {
   my ( $self ) = @_;
   return $self->context_size if $self->has_context_size;
   return $self->default_context_size if $self->can('default_context_size');
   return;
 }
+
+
 
 1;
 
@@ -30,7 +33,30 @@ Langertha::Role::ContextSize - Role for an engine where you can specify the cont
 
 =head1 VERSION
 
-version 0.100
+version 0.201
+
+=head2 context_size
+
+The maximum context size in tokens to use for requests. Optional. When not set,
+the engine uses its own C<default_context_size> if available, or omits the
+parameter from the request.
+
+=head2 get_context_size
+
+    my $size = $engine->get_context_size;
+
+Returns the effective context size: the explicit C<context_size> if set,
+otherwise the engine's C<default_context_size>, otherwise C<undef>.
+
+=head1 SEE ALSO
+
+=over
+
+=item * L<Langertha::Role::ResponseSize> - Limit response token count
+
+=item * L<Langertha::Engine::Ollama> - Engine that composes this role
+
+=back
 
 =head1 SUPPORT
 

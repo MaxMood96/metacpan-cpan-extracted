@@ -23,15 +23,24 @@ sub parse_sfc {
     my ($content) = @_;
     my $result = {};
 
+    # Strip HTML comments before parsing to avoid false matches
+    $content =~ s/<!--.*?-->//gs;
+
     # Extract <style> blocks
     while ($content =~ /<style([^>]*)>(.*?)<\/style>/gs) {
         my ($attrs, $body) = ($1, $2);
         $body =~ s/^\n//;
         $body =~ s/\n$//;
-        if ($attrs =~ /lang\s*=\s*["']less["']/) {
-            $result->{less} = ($result->{less} // '') . $body;
+        my $is_less = ($attrs =~ /lang\s*=\s*["']less["']/);
+        my $style_key = $is_less ? 'less' : 'css';
+        if ($attrs =~ /recipe\s*=\s*["']([^"']+)["']/) {
+            my $recipe_name = $1;
+            $result->{recipes} //= {};
+            $result->{recipes}{$recipe_name} //= {};
+            $result->{recipes}{$recipe_name}{$style_key} =
+                ($result->{recipes}{$recipe_name}{$style_key} // '') . $body;
         } else {
-            $result->{css} = ($result->{css} // '') . $body;
+            $result->{$style_key} = ($result->{$style_key} // '') . $body;
         }
     }
 
@@ -67,7 +76,17 @@ sub parse_sfc {
         } else {
             my $parsed = _parse_top_object($body);
             for my $key (keys %$parsed) {
-                $result->{$key} = $parsed->{$key};
+                if ($key eq 'recipes' && ref($result->{$key}) eq 'HASH' && ref($parsed->{$key}) eq 'HASH') {
+                    # Deep merge: script recipes into existing recipe data (from template blocks)
+                    for my $rname (keys %{$parsed->{$key}}) {
+                        $result->{$key}{$rname} //= {};
+                        for my $rkey (keys %{$parsed->{$key}{$rname}}) {
+                            $result->{$key}{$rname}{$rkey} = $parsed->{$key}{$rname}{$rkey};
+                        }
+                    }
+                } else {
+                    $result->{$key} = $parsed->{$key};
+                }
             }
         }
     }

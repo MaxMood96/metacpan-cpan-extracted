@@ -1,6 +1,6 @@
 use v5.12.0;
 use warnings;
-package Sub::Exporter::Lexical 1.000;
+package Sub::Exporter::Lexical 1.001;
 # ABSTRACT: to export lexically-available subs with Sub::Exporter
 
 # I know about if.pm!  But we can't use it here because "use Lexical::Sub" will
@@ -123,10 +123,6 @@ sub lexical_installer {
 
     my $into = $arg->{into};
 
-    my @names =
-      map { $to_export->[ $_ ] }
-      grep { not($_ % 2) and ! ref $to_export->[$_] } (0 .. $#$to_export);
-
     my @pairs = @$to_export;
     while (my ($name, $code) = splice @pairs, 0, 2) {
       if (ref $name) {
@@ -155,7 +151,7 @@ Sub::Exporter::Lexical - to export lexically-available subs with Sub::Exporter
 
 =head1 VERSION
 
-version 1.000
+version 1.001
 
 =head1 SYNOPSIS
 
@@ -223,8 +219,8 @@ For the second:
 This module is shipped with no promise about what version of perl it will
 require in the future.  In practice, this tends to mean "you need a perl from
 the last three years," but you can't rely on that.  If a new version of perl
-ship, this software B<may> begin to require it for any reason, and there is no
-promise that patches will be accepted to lower the minimum required perl.
+ship, this software B<may> begin to require it for any reason, and there is
+no promise that patches will be accepted to lower the minimum required perl.
 
 =head1 EXPORTS
 
@@ -285,7 +281,7 @@ Ricardo Signes <rjbs@semiotic.systems>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2023 by Ricardo Signes.
+This software is copyright (c) 2026 by Ricardo Signes.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

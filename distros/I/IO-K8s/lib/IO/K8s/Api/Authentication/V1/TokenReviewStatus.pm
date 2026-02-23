@@ -1,6 +1,6 @@
 package IO::K8s::Api::Authentication::V1::TokenReviewStatus;
 # ABSTRACT: TokenReviewStatus is the result of the token authentication request.
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 use IO::K8s::Resource;
 
 k8s audiences => [Str];
@@ -29,7 +29,7 @@ IO::K8s::Api::Authentication::V1::TokenReviewStatus - TokenReviewStatus is the r
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head2 audiences
 

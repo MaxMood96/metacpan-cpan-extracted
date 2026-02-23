@@ -21,24 +21,6 @@ WriteMakefile(
 		: ()),
 	CONFIGURE_REQUIRES => {
 		'ExtUtils::MakeMaker' => 6.64,	# Minimum version for TEST_REQUIRES
-	}, META_MERGE => {	# https://perldoc.perl.org/CPAN::Meta::Spec
-		'meta-spec' => { version => 2 },
-		resources => {
-			homepage => 'https://metacpan.org/pod/Params::Validate::Strict',
-			repository => {
-				repository => 'https://github.com/nigelhorne/Params-Validate-Strict',
-				type => 'git',
-				url => 'git://github.com/nigelhorne/Params-Validate-Strict.git',
-				web => 'https://github.com/nigelhorne/Params-Validate-Strict',
-				# license    => 'http://dev.perl.org/licenses/',
-			}, bugtracker => {
-				mailto => 'bug-Params-Validate-Strict@rt.cpan.org',
-				# url => 'https://github.com/nigelhorne/Params-Validate-Strict/issues',
-				url => 'https://rt.cpan.org/Public/Dist/Display.html?Name=Params-Validate-Strict',
-				# web => 'https://github.com/nigelhorne/Params-Validate-Strict/issues'
-				web => 'https://rt.cpan.org/Public/Dist/Display.html?Name=Params-Validate-Strict',
-			}
-		}
 	}, PREREQ_PM => {
 		'Carp' => 0,
 		'Encode' => 0,
@@ -63,8 +45,27 @@ WriteMakefile(
 		'Test::DescribeMe' => 0,
 		'Test::Most' => 0,
 		'Test::Needs' => 0,
-		'Test::Warnings' => 0
+		'Test::Warnings' => 0,
 	}, dist => $dist,
 	clean => { FILES => 'Params-Validate-Strict-*' },	# Clean up distribution files
+	META_MERGE => {	# https://perldoc.perl.org/CPAN::Meta::Spec
+		'meta-spec' => { version => 2 },
+		resources => {
+			homepage => 'https://metacpan.org/pod/Params::Validate::Strict',
+			repository => {
+				repository => 'https://github.com/nigelhorne/Params-Validate-Strict',
+				type => 'git',
+				url => 'git://github.com/nigelhorne/Params-Validate-Strict.git',
+				web => 'https://github.com/nigelhorne/Params-Validate-Strict',
+				# license    => 'http://dev.perl.org/licenses/',
+			}, bugtracker => {
+				mailto => 'bug-Params-Validate-Strict@rt.cpan.org',
+				# url => 'https://github.com/nigelhorne/Params-Validate-Strict/issues',
+				url => 'https://rt.cpan.org/Public/Dist/Display.html?Name=Params-Validate-Strict',
+				# web => 'https://github.com/nigelhorne/Params-Validate-Strict/issues'
+				web => 'https://rt.cpan.org/Public/Dist/Display.html?Name=Params-Validate-Strict',
+			}
+		}
+	},
 	MIN_PERL_VERSION	=> '5.008'
 );

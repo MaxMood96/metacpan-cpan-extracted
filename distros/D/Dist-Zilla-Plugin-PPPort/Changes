@@ -1,5 +1,9 @@
 Revision history for Dist-Zilla-Plugin-PPPort
 
+0.011     2026-02-22 13:22:14+01:00 Europe/Brussels
+          - Pass XS files to post-build check
+          - Use signatures and autoclean
+
 0.010     2022-08-29 16:27:59+02:00 Europe/Amsterdam
           - Never remove own ppport.h file on override
 

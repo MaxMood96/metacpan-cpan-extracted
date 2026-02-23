@@ -1,5 +1,5 @@
 package IO::K8s::Apimachinery::Pkg::Apis::Meta::V1::APIResourceList;
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 # ABSTRACT: Deprecated - use IO::K8s::List instead
 use strict;
 use warnings;
@@ -18,7 +18,7 @@ IO::K8s::Apimachinery::Pkg::Apis::Meta::V1::APIResourceList - Deprecated - use I
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head1 SUPPORT
 

@@ -642,11 +642,7 @@ subtest 'Input validation and error handling' => sub {
 		);
 	} qr/Unknown type 'invalid_type'/, 'Invalid type in schema rejected';
 
-	# Test parameter parsing errors
-	throws_ok {
-		# This should cause Params::Get to fail
-		validate_strict();
-	} qr/schema must be a hash reference/, 'Parameter parsing errors handled';
+	lives_ok { ok(!defined(validate_strict())); } 'Empty schema is allowed';
 
 	# Test complex nested validation errors
 	throws_ok {

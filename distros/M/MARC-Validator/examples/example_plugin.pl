@@ -8,6 +8,12 @@ use base qw(MARC::Validator::Abstract);
 
 our $VERSION = 1.01;
 
+sub module_name {
+        my $self = shift;
+
+        return __PACKAGE__;
+}
+
 sub name {
         my $self = shift;
 
@@ -29,6 +35,12 @@ sub process {
         $self->{'struct'}->{'stats'}->{'foo_stat'}++;
 
         return;
+}
+
+sub version {
+        my $self = shift;
+
+        return $VERSION;
 }
 
 sub _init {
@@ -194,22 +206,30 @@ $obj->postprocess;
 my $name = $obj->name;
 print "Name: $name\n";
 
-my $struct_hr = $obj->struct;
-print "Output structure:\n";
-p $struct_hr;
+my $report = $obj->struct;
+print "Output report data object:\n";
+p $report;
 
 unlink $temp_file;
 
 # Output:
 # Name: foo
-# Output structure:
-# {
-#     datetime         "2025-06-20T17:13:25" (dualvar: 2025),
-#     module_name      "MARC::Validator::Plugin::Foo",
-#     module_version   1.01,
-#     name             "foo",
-#     stats            {
-#         bar_stat   2,
-#         foo_stat   1
+# Output report data object:
+# Data::MARC::Validator::Report::Plugin  {
+#     parents: Mo::Object
+#     public methods (6):
+#         BUILD
+#         Mo::utils:
+#             check_isa, check_length, check_required
+#         Mo::utils::Array:
+#             check_array_object
+#         Mo::utils::Perl:
+#             check_version
+#     private methods (0)
+#     internals: {
+#         module_name     "MARC::Validator::Plugin::Foo",
+#         name            "foo",
+#         plugin_errors   [],
+#         version         1.01
 #     }
 # }

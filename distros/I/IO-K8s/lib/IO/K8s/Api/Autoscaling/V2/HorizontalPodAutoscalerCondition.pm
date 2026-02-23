@@ -1,6 +1,6 @@
 package IO::K8s::Api::Autoscaling::V2::HorizontalPodAutoscalerCondition;
 # ABSTRACT: HorizontalPodAutoscalerCondition describes the state of a HorizontalPodAutoscaler at a certain point.
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 use IO::K8s::Resource;
 
 k8s lastTransitionTime => Str;
@@ -32,7 +32,7 @@ IO::K8s::Api::Autoscaling::V2::HorizontalPodAutoscalerCondition - HorizontalPodA
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head2 lastTransitionTime
 

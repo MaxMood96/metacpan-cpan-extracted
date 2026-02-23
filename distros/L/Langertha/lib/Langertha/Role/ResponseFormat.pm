@@ -1,6 +1,6 @@
 package Langertha::Role::ResponseFormat;
 # ABSTRACT: Role for an engine where you can specify structured output
-our $VERSION = '0.100';
+our $VERSION = '0.201';
 use Moose::Role;
 
 has response_format => (
@@ -8,6 +8,8 @@ has response_format => (
   is => 'ro',
   predicate => 'has_response_format',
 );
+
+
 
 1;
 
@@ -23,7 +25,23 @@ Langertha::Role::ResponseFormat - Role for an engine where you can specify struc
 
 =head1 VERSION
 
-version 0.100
+version 0.201
+
+=head2 response_format
+
+A HashRef specifying the structured output format for the response. The exact
+structure depends on the engine. For OpenAI-compatible engines this is typically
+C<{ type => 'json_object' }> or a JSON Schema definition. Optional.
+
+=head1 SEE ALSO
+
+=over
+
+=item * L<Langertha::Role::Chat> - Chat functionality that uses response format
+
+=item * L<Langertha::Role::OpenAICompatible> - OpenAI-compatible engines that support this role
+
+=back
 
 =head1 SUPPORT
 

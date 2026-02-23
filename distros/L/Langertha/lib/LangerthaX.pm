@@ -1,8 +1,9 @@
 package LangerthaX;
 # ABSTRACT: Bring your own viking!
-our $VERSION = '0.100';
+our $VERSION = '0.201';
 use strict;
 use warnings;
+
 
 1;
 
@@ -18,11 +19,22 @@ LangerthaX - Bring your own viking!
 
 =head1 VERSION
 
-version 0.100
+version 0.201
 
 =head1 DESCRIPTION
 
-The eXtension namespace for Langertha.
+The C<LangerthaX> namespace is the conventional home for third-party
+extensions to L<Langertha>. If you are building a module that extends or
+integrates with Langertha but does not belong in the core distribution,
+publish it under C<LangerthaX::>.
+
+=head1 SEE ALSO
+
+=over
+
+=item * L<Langertha> - The core Langertha distribution
+
+=back
 
 =head1 SUPPORT
 

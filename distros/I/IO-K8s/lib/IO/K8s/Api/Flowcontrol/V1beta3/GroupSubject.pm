@@ -1,6 +1,6 @@
 package IO::K8s::Api::Flowcontrol::V1beta3::GroupSubject;
 # ABSTRACT: GroupSubject holds detailed information for group-kind subject.
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 use IO::K8s::Resource;
 
 k8s name => Str, 'required';
@@ -20,7 +20,7 @@ IO::K8s::Api::Flowcontrol::V1beta3::GroupSubject - GroupSubject holds detailed i
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head2 name
 

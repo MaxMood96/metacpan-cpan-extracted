@@ -1,6 +1,6 @@
 {
     "name" : "LTSV-LINQ",
-    "version" : "1.04",
+    "version" : "1.05",
     "abstract" : "LINQ-style query interface for LTSV files",
     "author" : [
         "ina <ina@cpan.org>"
@@ -35,6 +35,7 @@
                 "File::Basename" : "2.6",
                 "File::Copy" : "2.02",
                 "File::Path" : "1.0401",
+                "File::Spec" : "0",
                 "FindBin" : "1.42",
                 "Socket" : "0",
                 "perl" : "5.00503",
@@ -47,6 +48,7 @@
                 "File::Basename" : "2.6",
                 "File::Copy" : "2.02",
                 "File::Path" : "1.0401",
+                "File::Spec" : "0",
                 "FindBin" : "1.42",
                 "Socket" : "0",
                 "perl" : "5.00503",
@@ -59,6 +61,7 @@
                 "File::Basename" : "2.6",
                 "File::Copy" : "2.02",
                 "File::Path" : "1.0401",
+                "File::Spec" : "0",
                 "FindBin" : "1.42",
                 "Socket" : "0",
                 "perl" : "5.00503",
@@ -71,6 +74,7 @@
                 "File::Basename" : "2.6",
                 "File::Copy" : "2.02",
                 "File::Path" : "1.0401",
+                "File::Spec" : "0",
                 "FindBin" : "1.42",
                 "Socket" : "0",
                 "perl" : "5.00503",
@@ -81,11 +85,11 @@
     "provides" : {
         "LTSV::LINQ" : {
             "file" : "lib/LTSV/LINQ.pm",
-            "version" : "1.04"
+            "version" : "1.05"
         },
         "LTSV::LINQ::Ordered" : {
             "file" : "lib/LTSV/LINQ.pm",
-            "version" : "1.04"
+            "version" : "1.05"
         }
     }
 }

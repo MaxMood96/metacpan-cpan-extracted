@@ -4,12 +4,19 @@ use base qw(MARC::Validator::Abstract);
 use strict;
 use warnings;
 
+use Data::MARC::Validator::Report::Error 0.02;
+use Data::MARC::Validator::Report::Plugin::Errors 0.02;
 use English;
 use Error::Pure::Utils qw(err_get);
 use MARC::Leader 0.08;
-use MARC::Validator::Utils qw(add_error);
 
-our $VERSION = 0.09;
+our $VERSION = 0.10;
+
+sub module_name {
+	my $self = shift;
+
+	return __PACKAGE__;
+}
 
 sub name {
 	my $self = shift;
@@ -20,9 +27,8 @@ sub name {
 sub process {
 	my ($self, $marc_record) = @_;
 
-	my $struct_hr = $self->{'struct'}->{'checks'};
-
-	my $error_id = $self->{'cb_error_id'}->($marc_record);
+	my $record_id = $self->{'cb_record_id'}->($marc_record);
+	my @record_errors;
 
 	my $leader_string = $marc_record->leader;
 	my $leader = eval {
@@ -32,29 +38,30 @@ sub process {
 	};
 	if ($EVAL_ERROR) {
 		my @errors = err_get(1);
-		$struct_hr->{'not_valid'}->{$error_id} = [];
 		foreach my $error (@errors) {
 			my %err_params = @{$error->{'msg'}}[1 .. $#{$error->{'msg'}}];
-			push @{$struct_hr->{'not_valid'}->{$error_id}}, {
+			push @record_errors, Data::MARC::Validator::Report::Error->new(
 				'error' => $error->{'msg'}->[0],
 				'params' => \%err_params,
-			};
+			);
 		}
+		$self->_process_errors($record_id, @record_errors);
 		return;
 	}
 
 	my $field_040 = $marc_record->field('040');
 	if (! defined $field_040) {
-		add_error($error_id, $struct_hr, {
+		push @record_errors, Data::MARC::Validator::Report::Error->new(
 			'error' => "Field 040 isn't present.",
-		});
+		);
+		$self->_process_errors($record_id, @record_errors);
 		return;
 	}
 
 	if (! $field_040->subfield('a')) {
-		add_error($error_id, $struct_hr, {
+		push @record_errors, Data::MARC::Validator::Report::Error->new(
 			'error' => "Subfield 040a doesn't exists.",
-		});
+		);
 	}
 
 	my $desc_conventions = $field_040->subfield('e');
@@ -62,21 +69,33 @@ sub process {
 		&& defined $desc_conventions
 		&& $desc_conventions eq 'rda') {
 
-		add_error($error_id, $struct_hr, {
+		push @record_errors, Data::MARC::Validator::Report::Error->new(
 			'error' => 'Leader descriptive cataloging form (a) is inconsistent with field 040e description conventions (rda).',
-		});
+		);
 	}
+
+	$self->_process_errors($record_id, @record_errors);
 
 	return;
 }
 
-sub _init {
+sub version {
 	my $self = shift;
 
-	$self->{'struct'}->{'module_name'} = __PACKAGE__;
-	$self->{'struct'}->{'module_version'} = $VERSION;
+	return $VERSION;
+}
 
-	$self->{'struct'}->{'checks'}->{'not_valid'} = {};
+sub _process_errors {
+	my ($self, $record_id, @record_errors) = @_;
+
+	if (@record_errors) {
+		push @{$self->{'errors'}}, Data::MARC::Validator::Report::Plugin::Errors->new(
+			'errors' => \@record_errors,
+			# TODO process
+			'filters' => [],
+			'record_id' => $record_id,
+		);
+	}
 
 	return;
 }

@@ -1,3 +1,12 @@
+0.64 2026-02-23
+ - Unicode::UTF8 now allows noncharacters; they receive no special handling 
+   and are processed like any other code point.
+
+   According to Corrigendum #9, noncharacters (the values U+nFFFE and U+nFFFF 
+   (where n is from 0 to 10^16) and the values U+FDD0..U+FDEF) are permanently 
+   reserved but should be allowed in interchange.
+   <https://www.unicode.org/versions/corrigendum9.html>
+
 0.63 2025-12-21
  - Remove the non-portable tests for Perl's "super" code points, testing 
    values beyond 0x7FFF_FFFF isn’t necessary.

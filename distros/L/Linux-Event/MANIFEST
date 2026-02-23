@@ -28,8 +28,6 @@ lib/Linux/Event/Watcher.pm
 LICENSE
 Makefile.PL
 MANIFEST			This list of files
-META.json			Module JSON meta-data (added by MakeMaker)
-META.yml			Module YAML meta-data (added by MakeMaker)
 README.md
 t/00-load.t
 t/01-timers.t
@@ -45,3 +43,5 @@ t/10-epoll-oneshot-rearm.t
 t/11-oneshot-stays-active.t
 t/12-after-zero.t
 t/98-no-stray-leading-bytes.t
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

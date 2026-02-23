@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-package CPAN::Uploader 0.103018;
+package CPAN::Uploader 0.103019;
 # ABSTRACT: upload things to the CPAN
 
 #pod =head1 ORIGIN
@@ -40,8 +40,8 @@ my $UPLOAD_URI = $ENV{CPAN_UPLOADER_UPLOAD_URI}
 #pod   retry_delay - number of seconds to wait between retries
 #pod
 #pod This method attempts to actually upload the named file to the CPAN.  It will
-#pod raise an exception on error. c<upload_uri> can also be set through the ENV
-#pod variable c<CPAN_UPLOADER_UPLOAD_URI>.
+#pod raise an exception on error. C<upload_uri> can also be set through the ENV
+#pod variable C<CPAN_UPLOADER_UPLOAD_URI>.
 #pod
 #pod =cut
 
@@ -320,17 +320,17 @@ CPAN::Uploader - upload things to the CPAN
 
 =head1 VERSION
 
-version 0.103018
+version 0.103019
 
 =head1 PERL VERSION
 
-This library should run on perls released even a long time ago.  It should work
-on any version of perl released in the last five years.
+This library should run on perls released even a long time ago.  It should
+work on any version of perl released in the last five years.
 
 Although it may work on older versions of perl, no guarantee is made that the
 minimum required version will not be increased.  The version may be increased
-for any reason, and there is no promise that patches will be accepted to lower
-the minimum required perl.
+for any reason, and there is no promise that patches will be accepted to
+lower the minimum required perl.
 
 =head1 METHODS
 
@@ -352,8 +352,8 @@ Valid arguments are:
   retry_delay - number of seconds to wait between retries
 
 This method attempts to actually upload the named file to the CPAN.  It will
-raise an exception on error. c<upload_uri> can also be set through the ENV
-variable c<CPAN_UPLOADER_UPLOAD_URI>.
+raise an exception on error. C<upload_uri> can also be set through the ENV
+variable C<CPAN_UPLOADER_UPLOAD_URI>.
 
 =head2 new
 
@@ -490,7 +490,7 @@ Vincent Pit <perl@profvince.com>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2023 by Ricardo SIGNES.
+This software is copyright (c) 2026 by Ricardo SIGNES.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

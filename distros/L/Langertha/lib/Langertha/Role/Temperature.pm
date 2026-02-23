@@ -1,6 +1,6 @@
 package Langertha::Role::Temperature;
 # ABSTRACT: Role for an engine that can have a temperature setting
-our $VERSION = '0.100';
+our $VERSION = '0.201';
 use Moose::Role;
 
 has temperature => (
@@ -8,6 +8,8 @@ has temperature => (
   is => 'ro',
   predicate => 'has_temperature',
 );
+
+
 
 1;
 
@@ -23,7 +25,23 @@ Langertha::Role::Temperature - Role for an engine that can have a temperature se
 
 =head1 VERSION
 
-version 0.100
+version 0.201
+
+=head2 temperature
+
+Sampling temperature as a number. Higher values (e.g. C<0.9>) make output more
+random; lower values (e.g. C<0.1>) make it more focused and deterministic. When
+not set, the engine's API default is used.
+
+=head1 SEE ALSO
+
+=over
+
+=item * L<Langertha::Role::Seed> - Seed for reproducible outputs
+
+=item * L<Langertha::Role::ResponseSize> - Limit response token count
+
+=back
 
 =head1 SUPPORT
 

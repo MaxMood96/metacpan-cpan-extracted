@@ -22,11 +22,11 @@ Params::Validate::Strict - Validates a set of parameters against a schema
 
 =head1 VERSION
 
-Version 0.29
+Version 0.30
 
 =cut
 
-our $VERSION = '0.29';
+our $VERSION = '0.30';
 
 =head1 SYNOPSIS
 
@@ -126,7 +126,9 @@ Overrides the default message when something doesn't validate.
 =item * C<unknown_parameter_handler>
 
 This parameter describes what to do when a parameter is given that is not in the schema of valid parameters.
-It must be one of C<die> (the default), C<warn>, or C<ignore>.
+It must be one of C<die>, C<warn>, or C<ignore>.
+
+It defaults to C<die> unless C<carp_on_warn> is given, in which case it defaults to C<warn>.
 
 =item * C<logger>
 
@@ -384,7 +386,30 @@ The description of the rule
 =item * C<callback>
 
 A code reference to a subroutine that performs custom validation logic.
-The subroutine should accept the parameter value as an argument and return true if the value is valid, false otherwise.
+The subroutine should accept the parameter value, the argument list and the schema as arguments and return true if the value is valid, false otherwise.
+
+Use this to test more complex examples:
+
+  my $schema = {
+    even_number => {
+      type => 'integer',
+      callback => sub { $_[0] % 2 == 0 }
+  };
+
+  # Specify the arguments for a routine which has a second, optional argument, which, if given, must be less than or equal to the first
+  my $schema = {
+    first => {
+      type => 'integer'
+    }, second => {
+      type => 'integer',
+      optional => 1,
+      callback => sub {
+        my($value, $args) = @_;
+	# The 'defined' is needed in case 'second' is evaluated before 'first'
+	return (defined($args->{first}) && $value <= $args->{first}) ? 1 : 0
+      }
+    }
+  };
 
 =item * C<optional>
 
@@ -930,9 +955,18 @@ sub validate_strict
 
 	my $schema = $params->{'schema'} || $params->{'members'};
 	my $args = $params->{'args'} || $params->{'input'};
-	my $unknown_parameter_handler = $params->{'unknown_parameter_handler'} || 'die';
 	my $logger = $params->{'logger'};
 	my $custom_types = $params->{'custom_types'};
+	my $unknown_parameter_handler = $params->{'unknown_parameter_handler'};
+	if(!defined($unknown_parameter_handler)) {
+		if($params->{'carp_on_warn'}) {
+			$unknown_parameter_handler = 'warn';
+		} else {
+			$unknown_parameter_handler = 'die';
+		}
+	}
+
+	return $args if(!defined($schema));	# No schema, allow all arguments
 
 	# Check if schema and args are references to hashes
 	if(ref($schema) ne 'HASH') {
@@ -952,7 +986,7 @@ sub validate_strict
 	if(exists($params->{'args'}) && (!defined($args))) {
 		$args = {};
 	} elsif((ref($args) ne 'HASH') && (ref($args) ne 'ARRAY')) {
-		_error($logger, "$schema_description: args must be a hash or array reference");
+		_error($logger, $error_msg || "$schema_description: args must be a hash or array reference");
 	}
 
 	if(ref($args) eq 'HASH') {
@@ -1003,7 +1037,15 @@ sub validate_strict
 	my %invalid_args;
 	foreach my $key (keys %{$schema}) {
 		my $rules = $schema->{$key};
-		my $value = ($are_positional_args == 1) ? @{$args}[$rules->{'position'}] : $args->{$key};
+		my $value;
+		if($are_positional_args == 1) {
+			if(ref($args) ne 'ARRAY') {
+				_error($logger, "::validate_strict: position $rules->{position} given for '$key', but args isn't an array");
+			}
+			$value = @{$args}[$rules->{'position'}];
+		} else {
+			$value = $args->{$key};
+		}
 
 		if(!defined($rules)) {	# Allow anything
 			$validated_args{$key} = $value;
@@ -1102,6 +1144,11 @@ sub validate_strict
 
 				if((ref($rule_value) eq 'CODE') && ($rule_name ne 'validate') && ($rule_name ne 'callback') && ($rule_name ne 'validator')) {
 					$rule_value = &{$rule_value}($value, $args);
+				}
+
+				# Better OOP, the routine has been given an object rather than a scalar
+				if(Scalar::Util::blessed($rule_value) && $rule_value->can('as_string')) {
+					$rule_value = $rule_value->as_string();
 				}
 
 				if($rule_name eq 'type') {
@@ -1500,7 +1547,7 @@ sub validate_strict
 					}
 					if($rules->{'type'} eq 'object') {
 						if(!$value->isa($rule_value)) {
-							_error($logger, "$rule_description: Parameter '$key' must be a '$rule_value' object");
+							_error($logger, "$rule_description: Parameter '$key' must be a '$rule_value' object got a " . (ref($value) ? ref($value) : $value) . ' object instead');
 							$invalid_args{$key} = 1;
 						}
 					} else {
@@ -1528,7 +1575,7 @@ sub validate_strict
 							_error($logger, "$rule_description: 'can' rule for Parameter '$key must be either a scalar or an arrayref");
 						}
 					} else {
-						_error($logger, "$rule_description: Parameter '$key' has meaningless can value $rule_value");
+						_error($logger, "$rule_description: Parameter '$key' has meaningless can value '$rule_value' for parameter type $rules->{type}");
 					}
 				} elsif($rule_name eq 'element_type') {
 					if(($rules->{'type'} eq 'arrayref') || ($rules->{'type'} eq 'ArrayRef')) {
@@ -1646,7 +1693,7 @@ sub validate_strict
 					unless (defined &$rule_value) {
 						_error($logger, "$rule_description: callback for '$key' must be a code reference");
 					}
-					my $res = $rule_value->($value);
+					my $res = $rule_value->($value, $args, $schema);
 					unless ($res) {
 						if($rules->{'error_msg'}) {
 							_error($logger, $rules->{'error_msg'});
@@ -2051,7 +2098,7 @@ Nigel Horne, C<< <njh at nigelhorne.com> >>
 
 =over 4
 
-=item * Test coverage report: L<https://nigelhorne.github.io/Params-Validate-Strict/coverage/>
+=item * L<Test Dashboard|https://nigelhorne.github.io/Params-Validate-Strict/coverage/>
 
 =item * L<Data::Processor>
 

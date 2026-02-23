@@ -1,5 +1,5 @@
 package Kubernetes::REST::Core;
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 # ABSTRACT: DEPRECATED - v0 API group for Core resources
 use Moo;
 extends 'Kubernetes::REST::V0Group';
@@ -20,7 +20,7 @@ Kubernetes::REST::Core - DEPRECATED - v0 API group for Core resources
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head1 SYNOPSIS
 

@@ -1,6 +1,6 @@
 package IO::K8s::Api::Core::V1::PhotonPersistentDiskVolumeSource;
 # ABSTRACT: Represents a Photon Controller persistent disk resource.
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 use IO::K8s::Resource;
 
 k8s fsType => Str;
@@ -23,7 +23,7 @@ IO::K8s::Api::Core::V1::PhotonPersistentDiskVolumeSource - Represents a Photon C
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head2 fsType
 

@@ -73,6 +73,11 @@ sub test_typeDeserializer_undef {
     is($value, $ProtocolDataSeed::undef_deserialized, 'TypeDeserializer deserializeUndef test');
 }
 
+sub test_typeDeserializer_undefined {
+    my $value = TypeDeserializer->deserializeUndefined();
+    is($value, $ProtocolDataSeed::undefined_deserialized, 'TypeDeserializer deserializeUndefined test');
+}
+
 # Run tests
 test_typeDeserializer_string_JAVONET();
 test_typeDeserializer_string_nonAsciiString();
@@ -87,5 +92,6 @@ test_typeDeserializer_double();
 test_typeDeserializer_ullong();
 test_typeDeserializer_uint();
 test_typeDeserializer_undef();
+test_typeDeserializer_undefined();
 
 done_testing();

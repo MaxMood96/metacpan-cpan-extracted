@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use lib 't';
 
-use Test::More tests => 463;
+use Test::More tests => 199;
 use Util       qw[throws_ok warns_ok pack_utf8];
 
 BEGIN {
@@ -26,21 +26,10 @@ foreach my $cp (@NONCHARACTERS) {
     my $name = sprintf 'decode_utf8(<%s>) noncharacter U+%.4X',
       join(' ', map { sprintf '%.2X', ord $_ } split //, $octets), $cp;
 
-    my $match = qr/Can't interchange noncharacter code point/;
-
-    throws_ok {
-        use warnings FATAL => 'utf8';
-        decode_utf8($octets);
-    } $match, "$name throws an exception";
-
-    my $got;
-
-    warns_ok {
-        use warnings 'utf8';
-        $got = decode_utf8($octets);
-    } $match, "$name issues a warning";
-
-    is($got, "\x{FFFD}", "$name returned U+FFFD");
+    my $exp = do { no warnings 'utf8'; pack('U', $cp) };
+    my $got = decode_utf8($octets);
+    
+    is($got, $exp, "$name returned decoded non-character");
 }
 
 foreach my $cp (@NONCHARACTERS) {
@@ -48,22 +37,10 @@ foreach my $cp (@NONCHARACTERS) {
       $cp, $cp;
 
     my $string = do { no warnings 'utf8'; pack('U', $cp) };
-    my $match  = qr/Can't interchange noncharacter code point/;
-    my $exp    = do { utf8::encode(my $s = "\x{FFFD}"); $s };
+    my $exp    = do { utf8::encode(my $s = $string); $s };
+    my $got    = encode_utf8($string);
 
-    throws_ok {
-        use warnings FATAL => 'utf8';
-        encode_utf8($string)
-    } $match, "$name throws an exception";
-
-    my $got;
-
-    warns_ok {
-        use warnings 'utf8';
-        $got = encode_utf8($string)
-    } $match, "$name issues a warning";
-
-    is($got, $exp, "$name returned encoded U+FFFD");
+    is($got, $exp, "$name returned encoded non-character");
 }
 
 foreach my $cp (@NONCHARACTERS) {
@@ -72,6 +49,6 @@ foreach my $cp (@NONCHARACTERS) {
     my $name = sprintf 'valid_utf8(<%s>) noncharacter U+%.4X',
       join(' ', map { sprintf '%.2X', ord $_ } split //, $octets), $cp;
 
-    ok(!valid_utf8($octets), $name);
+    ok(valid_utf8($octets), $name);
 }
 

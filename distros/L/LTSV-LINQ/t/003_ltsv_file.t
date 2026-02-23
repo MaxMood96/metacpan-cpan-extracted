@@ -7,7 +7,7 @@
 BEGIN {
     unshift @INC, 'lib';
     $| = 1;
-    print "1..8\n";
+    print "1..14\n";
 }
 
 use LTSV::LINQ;
@@ -39,7 +39,7 @@ my @all = $query->ToArray();
 ok(@all == 4, 'FromLTSV reads correct number of records');
 
 # Test 3: Parse fields correctly
-ok($all[0]{status} eq '200' && $all[0]{url} eq '/home', 
+ok($all[0]{status} eq '200' && $all[0]{url} eq '/home',
    'FromLTSV parses fields correctly');
 
 # Test 4: Handle empty lines
@@ -76,6 +76,62 @@ my @roundtrip = LTSV::LINQ->FromLTSV($outfile)->ToArray();
 ok($roundtrip[0]{status} eq '200' && $roundtrip[1]{status} eq '404',
    'Round-trip preserves data');
 
+# -----------------------------------------------------------------------
+# Tests 9-13: ToLTSV value sanitization (added in v1.05)
+# -----------------------------------------------------------------------
+
+my $sanfile = 't/test_sanitize.ltsv';
+
+# Test 9: Tab in value is replaced with space
+LTSV::LINQ->From([
+    { key => "val\tue" },
+])->ToLTSV($sanfile);
+open(FH, "< $sanfile") or die;
+my $san_line = <FH>;
+close FH;
+chomp $san_line;
+ok($san_line eq 'key:val ue', 'ToLTSV replaces tab in value with space');
+
+# Test 10-11: Newline in value is replaced with space
+LTSV::LINQ->From([
+    { key => "line1\nline2" },
+])->ToLTSV($sanfile);
+open(FH, "< $sanfile") or die;
+my @san_lines = <FH>;
+close FH;
+ok(@san_lines == 1, 'ToLTSV newline in value does not create extra line');
+chomp $san_lines[0];
+ok($san_lines[0] eq 'key:line1 line2', 'ToLTSV replaces newline in value with space');
+
+# Test 12: CR in value is replaced with space
+LTSV::LINQ->From([
+    { key => "val\rue" },
+])->ToLTSV($sanfile);
+open(FH, "< $sanfile") or die;
+my $cr_line = <FH>;
+close FH;
+$cr_line =~ s/\r?\n$//;
+ok($cr_line eq 'key:val ue', 'ToLTSV replaces CR in value with space');
+
+# Test 13: undef value is written as empty string
+LTSV::LINQ->From([
+    { key => undef },
+])->ToLTSV($sanfile);
+open(FH, "< $sanfile") or die;
+my $undef_line = <FH>;
+close FH;
+chomp $undef_line;
+ok($undef_line eq 'key:', 'ToLTSV writes undef value as empty string');
+
+# Test 14: Sanitized file round-trips correctly via FromLTSV
+LTSV::LINQ->From([
+    { msg => "hello\tworld", code => "200" },
+])->ToLTSV($sanfile);
+my @rt = LTSV::LINQ->FromLTSV($sanfile)->ToArray();
+ok($rt[0]{msg} eq 'hello world' && $rt[0]{code} eq '200',
+   'ToLTSV sanitized output round-trips correctly via FromLTSV');
+
 # Clean up
 unlink $testfile;
 unlink $outfile;
+unlink $sanfile;

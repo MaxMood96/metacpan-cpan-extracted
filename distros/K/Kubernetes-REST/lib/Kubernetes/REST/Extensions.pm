@@ -1,5 +1,5 @@
 package Kubernetes::REST::Extensions;
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 # ABSTRACT: DEPRECATED - v0 compatibility stub
 use strict;
 use warnings;
@@ -20,7 +20,7 @@ Kubernetes::REST::Extensions - DEPRECATED - v0 compatibility stub
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head1 DESCRIPTION
 

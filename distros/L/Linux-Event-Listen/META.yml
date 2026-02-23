@@ -1,0 +1,32 @@
+---
+abstract: 'Listening sockets for Linux::Event'
+author:
+  - 'Joshua S. Day <hax@cpan.org>'
+build_requires:
+  ExtUtils::MakeMaker: '0'
+  File::Temp: '0'
+  Test::More: '0'
+configure_requires:
+  ExtUtils::MakeMaker: '0'
+dynamic_config: 1
+generated_by: 'ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150012'
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: Linux-Event-Listen
+no_index:
+  directory:
+    - t
+    - inc
+requires:
+  IO::Socket::IP: '0'
+  IO::Socket::UNIX: '0'
+  Linux::Event: '0'
+  perl: '5.036000'
+resources:
+  bugtracker: https://github.com/haxmeister/perl-linux-event-listen/issues
+  license: http://dev.perl.org/licenses/
+  repository: https://github.com/haxmeister/perl-linux-event-listen.git
+version: '0.014'
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

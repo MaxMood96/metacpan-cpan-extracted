@@ -1,5 +1,5 @@
 package IO::K8s::Api::Scheduling::V1beta1::PriorityClassList;
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 # ABSTRACT: Deprecated - use IO::K8s::List instead
 use strict;
 use warnings;
@@ -18,7 +18,7 @@ IO::K8s::Api::Scheduling::V1beta1::PriorityClassList - Deprecated - use IO::K8s:
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head1 SUPPORT
 

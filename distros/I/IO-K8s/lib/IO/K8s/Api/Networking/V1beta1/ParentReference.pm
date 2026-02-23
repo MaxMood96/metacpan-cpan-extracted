@@ -1,6 +1,6 @@
 package IO::K8s::Api::Networking::V1beta1::ParentReference;
 # ABSTRACT: ParentReference describes a reference to a parent object.
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 use IO::K8s::Resource;
 
 k8s group => Str;
@@ -29,7 +29,7 @@ IO::K8s::Api::Networking::V1beta1::ParentReference - ParentReference describes a
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head2 group
 

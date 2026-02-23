@@ -1,5 +1,24 @@
 Revision history for LTSV::LINQ
 
+1.05  2026-02-23 JST (Japan Standard Time)
+
+    Perl 5.005_03 compatibility fixes:
+    - warnings stub: added "package warnings; sub import {}" to the BEGIN
+          block so that "use warnings" does not fail with
+          "Can't locate object method 'import'" on Perl 5.005_03.
+          Previously only $INC{'warnings.pm'} was set, which suppresses
+          the file-load but not the method call.
+
+    Correctness fix:
+    - ToLTSV: sanitize record values before writing.  Values containing
+          tab (\t), carriage return (\r), or newline (\n) are now mapped
+          to a single space, preventing structural corruption of the LTSV
+          output.  FromLTSV round-trips are now safe for any record value.
+          Also handles undef values (written as empty string).
+
+    Code quality:
+    - Removed trailing whitespace from 24 lines (code and POD).
+
 1.04  2026-02-21 JST (Japan Standard Time)
 
     New methods (6):

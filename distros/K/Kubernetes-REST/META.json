@@ -69,7 +69,7 @@
       "x_IRC" : "irc://irc.perl.org/#kubernetes",
       "x_IRC_user" : "Getty"
    },
-   "version" : "1.001",
+   "version" : "1.002",
    "x_Dist_Zilla" : {
       "perl" : {
          "version" : "5.036000"
@@ -396,7 +396,7 @@
                   "branch" : null,
                   "changelog" : "Changes",
                   "signed" : 0,
-                  "tag" : "1.001",
+                  "tag" : "1.002",
                   "tag_format" : "%v",
                   "tag_message" : "v%V"
                },

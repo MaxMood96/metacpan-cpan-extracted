@@ -1,6 +1,6 @@
 package SPVM::Resource::Zlib;
 
-our $VERSION = "1.006";
+our $VERSION = "1.007";
 
 1;
 
@@ -16,7 +16,7 @@ SPVM::Resource::Zlib class in L<SPVM> is a L<resource|SPVM::Document::Resource> 
 
 MyClass.config:
   
-  my $config = SPVM::Builder::Config->new_gnu99;
+  my $config = SPVM::Builder::Config->new_c99;
   
   $config->use_resource('Resource::Zlib');
   
@@ -42,9 +42,9 @@ L<zlib v1.3.1|https://github.com/madler/zlib/releases/tag/v1.3.1>
 
 The C language
 
-=head1 Language Specification
+=head1 Language Standard
 
-GNU C99
+C99
 
 =head1 Header Files
 

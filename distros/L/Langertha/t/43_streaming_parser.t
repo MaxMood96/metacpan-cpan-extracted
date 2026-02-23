@@ -1,4 +1,5 @@
 #!/usr/bin/env perl
+# ABSTRACT: Test SSE and NDJSON stream chunk parsing per engine
 use strict;
 use warnings;
 use Test2::Bundle::More;
@@ -39,7 +40,7 @@ is($openai_chunks->[2]->finish_reason, 'stop', 'OpenAI: finish reason correct');
 
 # Test Ollama NDJSON parsing
 my $ollama = Langertha::Engine::Ollama->new(
-  url => 'http://localhost:11434',
+  url => 'http://test.invalid:11434',
   model => 'llama3.1',
 );
 

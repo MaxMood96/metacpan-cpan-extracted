@@ -18,7 +18,7 @@ unless ($meta) {
 
 }
 
-my %configure_and_runtime_requires = ('SPVM' => '0.990038');
+my %configure_and_runtime_requires = ('SPVM' => '0.990042');
 WriteMakefile(
   NAME              => 'SPVM::Resource::SocketUtil',
   VERSION_FROM      => 'lib/SPVM/Resource/SocketUtil.pm',
@@ -33,8 +33,8 @@ WriteMakefile(
     resources => {
       repository => {
         type => 'git',
-        url  => '',
-        web  => '',
+        url  => 'https://github.com/yuki-kimoto/SPVM-Resource-SocketUtil.git',
+        web  => 'https://github.com/yuki-kimoto/SPVM-Resource-SocketUtil',
       },
     },
     no_index => {

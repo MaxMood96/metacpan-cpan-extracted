@@ -5,7 +5,7 @@ use warnings;
 
 use Linux::Event::Scheduler;
 
-our $VERSION = '0.006';
+our $VERSION = '0.007';
 
 use Carp qw(croak);
 
@@ -106,7 +106,21 @@ sub signal ($self, @args) {
 # -- Wakeups --------------------------------------------------------------
 
 sub waker ($self) {
-  return ($self->{_waker} ||= Linux::Event::Wakeup->new(loop => $self));
+  if (!$self->{_waker}) {
+    my $w = Linux::Event::Wakeup->new(loop => $self);
+    $self->{_waker} = $w;
+
+    # Internal watcher: drain wakeups.
+    $self->watch(
+      $w->fh,
+      read => sub ($loop, $fh, $watcher) {
+        $w->drain;
+      },
+      data => undef,
+    );
+  }
+
+  return $self->{_waker};
 }
 
 # -- Pidfds ---------------------------------------------------------------
@@ -450,14 +464,14 @@ Linux::Event::Loop - Linux-native event loop (epoll + timerfd + signalfd + event
     $loop->stop;
   });
 
-  # Wakeups (eventfd): watch like a normal fd
+  # Wakeups (eventfd): create once, then use to wake a blocking run()
   my $waker = $loop->waker;
-  $loop->watch($waker->fh,
-    read => sub ($loop, $fh, $watcher) {
-      my $n = $waker->drain;
-      ... handle non-fd work ...
-    },
-  );
+
+  # In another thread/process (or any place you need to wake the loop):
+  #   $waker->signal;
+  #
+  # After calling $loop->waker, the loop installs an internal watcher that drains
+  # the wakeup fd automatically. The wakeup fd is reserved for loop wakeups.
 
   # Pidfds (pidfd): one-shot exit notification
   my $pid = fork() // die "fork: $!";
@@ -534,6 +548,10 @@ C<run()> enters the dispatch loop and continues until C<stop()> is called.
 
 C<run_once($timeout_seconds)> runs at most one backend wait/dispatch cycle. The
 timeout is in seconds; fractions are allowed.
+
+If you need C<stop()> to reliably wake a blocking backend wait, call
+C<< $loop->waker >> once during initialization. When present, C<stop()> signals
+the waker to return promptly from a blocking wait.
 
 =head1 WATCHERS
 
@@ -633,9 +651,14 @@ wake the loop from another thread or process.
 The waker is created lazily on first use and is never destroyed for the lifetime
 of the loop.
 
-The waker exposes a readable filehandle (C<< $waker->fh >>) suitable for
-C<< $loop->watch(...) >>, and provides C<< $waker->signal >> and
-C<< $waker->drain >> methods. No watcher is installed automatically.
+B<Important:> when the waker is created via C<< $loop->waker >>, the loop also
+installs an internal read watcher that drains the wakeup fd. This guarantees that
+C<< $waker->signal >> (and C<< $loop->stop >> after waker creation) can reliably
+wake a blocking backend wait (for example, C<epoll_wait>).
+
+Because watchers are keyed by file descriptor and calling C<watch()> replaces the
+existing watcher for that fd, user code MUST NOT call C<< $loop->watch($waker->fh, ...) >>.
+The wakeup fd is reserved for loop wakeups and is managed internally.
 
 See L<Linux::Event::Wakeup>.
 
@@ -693,7 +716,7 @@ C<pid>) that make such helpers straightforward to implement in user code.
 
 =head1 VERSION
 
-This document describes Linux::Event::Loop version 0.006.
+This document describes Linux::Event::Loop version 0.007.
 
 =head1 AUTHOR
 
@@ -705,7 +728,7 @@ Same terms as Perl itself.
 
 =head1 STABILITY
 
-As of version 0.006, the public API and the following contracts are frozen:
+As of version 0.007, the public API and the following contracts are frozen:
 
 =over 4
 
@@ -715,7 +738,7 @@ As of version 0.006, the public API and the following contracts are frozen:
 
 =item * Signal callback ABI (C<< ($loop, $sig, $count, $data) >>) and replacement semantics per signal
 
-=item * Wakeup (waker) single-instance contract
+=item * Wakeup (waker) single-instance contract and reliable stop() wake guarantee
 
 =item * Pid subscription callback ABI (C<< ($loop, $pid, $status, $data) >>) and replacement semantics per PID
 

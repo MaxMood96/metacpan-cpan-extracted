@@ -23,5 +23,7 @@ SIGNATURE
 Stats.pm
 t/App-MARC-Record-Stats/01-use.t
 t/App-MARC-Record-Stats/02-version.t
+t/App-MARC-Record-Stats/03-new.t
+t/App-MARC-Record-Stats/04-run.t
 xt/App-MARC-Record-Stats/01-pod_coverage.t
 xt/App-MARC-Record-Stats/02-pod.t

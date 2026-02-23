@@ -96,13 +96,6 @@ None by default. All functions can be exported using the C<:all> tag or individu
 (W utf8) Encountered an ill-formed UTF-8 octet sequence. <%s> contains a 
 hexadecimal representation of the maximal subpart of the ill-formed subsequence.
 
-=item Can't interchange noncharacter code point U+%X in position %u
-
-(W utf8, nonchar) Noncharacters are code points that are permanently reserved 
-in the Unicode Standard for internal use. They are forbidden for use in open 
-interchange of Unicode text data. Noncharacters consist of the values U+nFFFE 
-and U+nFFFF (where n is from 0 to 10^16) and the values U+FDD0..U+FDEF.
-
 =item Can't represent surrogate code point U+%X in position %u
 
 (W utf8, surrogate) Surrogate code points are designated only for surrogate code 
@@ -132,10 +125,6 @@ Here is a summary of features for comparison with L<Encode>'s UTF-8 implementati
 =item *
 
 Simple API which makes use of Perl's standard warning categories.
-
-=item *
-
-Recognizes all noncharacters regardless of Perl version
 
 =item *
 

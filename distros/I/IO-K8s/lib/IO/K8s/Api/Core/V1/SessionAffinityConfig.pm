@@ -1,6 +1,6 @@
 package IO::K8s::Api::Core::V1::SessionAffinityConfig;
 # ABSTRACT: SessionAffinityConfig represents the configurations of session affinity.
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 use IO::K8s::Resource;
 
 k8s clientIP => 'Core::V1::ClientIPConfig';
@@ -20,7 +20,7 @@ IO::K8s::Api::Core::V1::SessionAffinityConfig - SessionAffinityConfig represents
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head2 clientIP
 

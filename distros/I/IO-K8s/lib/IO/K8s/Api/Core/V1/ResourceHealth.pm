@@ -1,6 +1,6 @@
 package IO::K8s::Api::Core::V1::ResourceHealth;
 # ABSTRACT: ResourceHealth represents the health of a resource. It has the latest device health information. This is a part of KEP https://kep.k8s.io/4680 and historical health changes are planned to be added in future iterations of a KEP.
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 use IO::K8s::Resource;
 
 k8s health => Str;
@@ -23,7 +23,7 @@ IO::K8s::Api::Core::V1::ResourceHealth - ResourceHealth represents the health of
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head2 health
 

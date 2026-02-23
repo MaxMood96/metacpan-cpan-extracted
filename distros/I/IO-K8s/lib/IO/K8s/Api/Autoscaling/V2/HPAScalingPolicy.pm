@@ -1,6 +1,6 @@
 package IO::K8s::Api::Autoscaling::V2::HPAScalingPolicy;
 # ABSTRACT: HPAScalingPolicy is a single policy which must hold true for a specified past interval.
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 use IO::K8s::Resource;
 
 k8s periodSeconds => Int, 'required';
@@ -26,7 +26,7 @@ IO::K8s::Api::Autoscaling::V2::HPAScalingPolicy - HPAScalingPolicy is a single p
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head2 periodSeconds
 

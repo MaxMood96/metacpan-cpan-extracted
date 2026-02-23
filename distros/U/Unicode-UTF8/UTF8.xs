@@ -5,148 +5,111 @@
 #define NEED_sv_2pv_flags
 #include "ppport.h"
 
-static const U8 xs_utf8_sequence_len[0x100] = {
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* 0x00-0x0F */
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* 0x10-0x1F */
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* 0x20-0x2F */
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* 0x30-0x3F */
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* 0x40-0x4F */
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* 0x50-0x5F */
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* 0x60-0x6F */
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, /* 0x70-0x7F */
-    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 0x80-0x8F */
-    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 0x90-0x9F */
-    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 0xA0-0xAF */
-    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, /* 0xB0-0xBF */
-    0,0,2,2,2,2,2,2,2,2,2,2,2,2,2,2, /* 0xC0-0xCF */
-    2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, /* 0xD0-0xDF */
-    3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3, /* 0xE0-0xEF */
-    4,4,4,4,4,0,0,0,0,0,0,0,0,0,0,0, /* 0xF0-0xFF */
-};
+static size_t
+xs_utf8_check_sequence_units(const U8 *p) {
+  U32 v;
 
-static STRLEN
-xs_utf8_check(const U8 *s, const STRLEN len) {
-    const U8 *p = s;
-    const U8 *e = s + len;
-    const U8 *e4 = e - 4;
-    U32 v;
+  memcpy(&v, p, 4);
+#if defined(BYTEORDER) && (BYTEORDER == 0x4321 || BYTEORDER == 0x87654321)
+  v = ((v & 0xFF000000) >> 24) |
+      ((v & 0x00FF0000) >>  8) |
+      ((v & 0x0000FF00) <<  8) |
+      ((v & 0x000000FF) << 24);
+#elif !defined(BYTEORDER) || !(BYTEORDER == 0x1234 || BYTEORDER == 0x12345678)
+  #error "Unknown byte order"
+#endif
 
-    while (p < e4) {
-        while (p < e4 && *p < 0x80)
-            p++;
+  if ((v & 0x80808080) == 0)
+    return 4;
 
-      check:
-        switch (xs_utf8_sequence_len[*p]) {
-            case 0:
-                goto done;
-            case 1:
-                p += 1;
-                break;
-            case 2:
-                /* 110xxxxx 10xxxxxx */
-                if ((p[1] & 0xC0) != 0x80)
-                    goto done;
-                p += 2;
-                break;
-            case 3:
-                v = ((U32)p[0] << 16)
-                  | ((U32)p[1] <<  8)
-                  | ((U32)p[2]);
-                /* 1110xxxx 10xxxxxx 10xxxxxx */
-                if ((v & 0x00F0C0C0) != 0x00E08080 ||
-                    /* Non-shortest form */
-                    v < 0x00E0A080 ||
-                    /* Surrogates U+D800..U+DFFF */
-                    (v & 0x00EFA080) == 0x00EDA080 ||
-                    /* Non-characters U+FDD0..U+FDEF, U+FFFE..U+FFFF */
-                    (v >= 0x00EFB790 && (v <= 0x00EFB7AF || v >= 0x00EFBFBE)))
-                    goto done;
-                p += 3;
-                break;
-            case 4:
-                v = ((U32)p[0] << 24)
-                  | ((U32)p[1] << 16)
-                  | ((U32)p[2] <<  8)
-                  | ((U32)p[3]);
-                /* 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx */
-                if ((v & 0xF8C0C0C0) != 0xF0808080 ||
-                    /* Non-shortest form */
-                    v < 0xF0908080 ||
-                    /* Greater than U+10FFFF */
-                    v > 0xF48FBFBF ||
-                    /* Non-characters U+nFFFE..U+nFFFF on plane 1-16 */
-                    (v & 0x000FBFBE) == 0x000FBFBE)
-                    goto done;
-                p += 4;
-                break;
-        }
-    }
-    if (p < e && p + xs_utf8_sequence_len[*p] <= e)
-        goto check;
-  done:
-    return p - s;
+  if ((v & 0x80) == 0)
+    return 1;
+
+  if ((v & 0xC0E0) == 0x80C0) {
+    if ((v & 0x1E) == 0)
+      return 0;
+    return 2;
+  }
+
+  if ((v & 0xC0C0F0) == 0x8080E0) {
+    v = v & 0x00200F;
+    if (v == 0 || v == 0x00200D)
+      return 0;
+    return 3;
+  }
+
+  if ((v & 0xC0C0C0F8) == 0x808080F0) {
+    v = ((v & 0x07) << 4) | ((v & 0x3000) >> 12);
+    if (v == 0 || v > 0x40)
+      return 0;
+    return 4;
+  }
+
+  return 0;
 }
 
 static STRLEN
-xs_utf8_unpack(const U8 *s, const STRLEN len, UV *usv) {
-    const STRLEN n = xs_utf8_sequence_len[*s];
-    STRLEN i;
+xs_utf8_check(const U8 *src, const STRLEN len) {
+  const U8 *cur = src;
+  const U8 *end = cur + len;
+  size_t count;
+  U8 buf[4];
 
-    if (n > len)
-        return 0;
-
-    for (i = 1; i < n; i++)
-        if ((s[i] & 0xC0) != 0x80)
-            return 0;
-
-    switch (n) {
-        case 1:
-            *usv = (UV)s[0];
-            break;
-        case 2:
-            *usv = ((UV)(s[0] & 0x1F) << 6)
-                 | ((UV)(s[1] & 0x3F));
-            break;
-        case 3:
-            *usv = ((UV)(s[0] & 0x0F) << 12)
-                 | ((UV)(s[1] & 0x3F) <<  6)
-                 | ((UV)(s[2] & 0x3F));
-            if (*usv < 0x800 || (*usv & 0xF800) == 0xD800)
-                return 0;
-            break;
-        case 4:
-            *usv = ((UV)(s[0] & 0x07) << 18)
-                 | ((UV)(s[1] & 0x3F) << 12)
-                 | ((UV)(s[2] & 0x3F) <<  6)
-                 | ((UV)(s[3] & 0x3F));
-            if (*usv < 0x10000 || *usv > 0x10FFFF)
-                return 0;
-            break;
+  while (cur < end) {
+    const U8 *p = cur;
+    if (cur > end - 4) {
+      memset(buf, 0xFF, 4);
+      memcpy(buf, cur, end - cur);
+      p = buf;
     }
-    return n;
+    count = xs_utf8_check_sequence_units(p);
+    if (!count)
+      break;
+    cur += count;
+  }
+
+  return cur - src;
 }
 
 static STRLEN
-xs_utf8_skip(const U8 *s, const STRLEN len) {
-    STRLEN i, n = xs_utf8_sequence_len[*s];
+xs_utf8_skip(const U8 *src, const STRLEN len) {
+  U32 v;
 
-    if (n < 1 || len < 2)
-        return 1;
+  if (len < 2)
+    return len;
 
-    switch (s[0]) {
-        case 0xE0: if ((s[1] & 0xE0) != 0xA0) return 1; break;
-        case 0xED: if ((s[1] & 0xE0) != 0x80) return 1; break;
-        case 0xF4: if ((s[1] & 0xF0) != 0x80) return 1; break;
-        case 0xF0: if ((s[1] & 0xF0) == 0x80) return 1; /* FALLTROUGH */
-        default:   if ((s[1] & 0xC0) != 0x80) return 1; break;
-    }
+  v = (src[0] << 8) | src[1];
+  if ((v & 0xC0C0) != 0xC080)
+    return 1;
 
-    if (n > len)
-        n = len;
-    for (i = 2; i < n; i++)
-        if ((s[i] & 0xC0) != 0x80)
-            break;
-    return i;
+  if ((v & 0x2000) == 0) {
+    v = v & 0x1E00;
+    if (v == 0)
+      return 1;
+    return 2;
+  }
+
+  if ((v & 0x1000) == 0) {
+    v = v & 0x0F20;
+    if (v == 0 || v == 0x0D20)
+      return 1;
+    if (len < 3 || (src[2] & 0xC0) != 0x80)
+      return 2;
+    return 3;
+  }
+
+  if ((v & 0x0800) == 0) {
+    v = v & 0x0730;
+    if (v == 0 || v > 0x0400)
+      return 1;
+    if (len < 3 || (src[2] & 0xC0) != 0x80)
+      return 2;
+    if (len < 4 || (src[3] & 0xC0) != 0x80)
+      return 3;
+    return 4;
+  }
+
+  return 1;
 }
 
 #ifndef WARN_NON_UNICODE
@@ -163,10 +126,6 @@ xs_report_unmappable(pTHX_ const UV cp, const STRLEN pos) {
     if (cp > 0x10FFFF) {
         fmt = "Can't represent super code point \\x{%"UVXf"} in position %"UVuf;
         cat = WARN_NON_UNICODE;
-    }
-    else if (cp >= 0xFDD0 && (cp <= 0xFDEF || (cp & 0xFFFE) == 0xFFFE)) {
-        fmt = "Can't interchange noncharacter code point U+%"UVXf" in position %"UVuf;
-        cat = WARN_NONCHAR;
     }
     else if ((cp & 0xF800) == 0xD800) {
         fmt = "Can't represent surrogate code point U+%"UVXf" in position %"UVuf;
@@ -253,14 +212,10 @@ xs_handle_fallback(pTHX_ SV *dsv, CV *fallback, SV *val, UV usv, STRLEN pos) {
 
 static void
 xs_utf8_decode_replace(pTHX_ SV *dsv, const U8 *src, STRLEN len, STRLEN off, CV *fallback) {
-#if PERL_REVISION == 5 && PERL_VERSION >= 14
-    const bool do_warn = ckWARN2_d(WARN_UTF8, WARN_NONCHAR);
-#else
     const bool do_warn = ckWARN_d(WARN_UTF8);
-#endif
+
     STRLEN pos = 0;
     STRLEN skip;
-    UV usv;
 
     (void)SvUPGRADE(dsv, SVt_PV);
     (void)SvGROW(dsv, off + 1);
@@ -274,21 +229,15 @@ xs_utf8_decode_replace(pTHX_ SV *dsv, const U8 *src, STRLEN len, STRLEN off, CV 
 
         skip = xs_utf8_skip(src, len);
 
-        if ((do_warn || fallback) && !xs_utf8_unpack(src, skip, &usv))
-            usv = 0;
-
         if (do_warn) {
-            if (usv)
-                xs_report_unmappable(aTHX_ usv, pos);
-            else
-                xs_report_illformed(aTHX_ src, skip, "UTF-8", pos, FALSE);
+            xs_report_illformed(aTHX_ src, skip, "UTF-8", pos, FALSE);
         }
 
         sv_catpvn_nomg(dsv, (const char *)src - off, off);
 
         if (fallback) {
             SV *octets = newSVpvn((const char *)src, skip);
-            xs_handle_fallback(aTHX_ dsv, fallback, octets, usv, pos);
+            xs_handle_fallback(aTHX_ dsv, fallback, octets, 0, pos);
         }
         else
             sv_catpvn_nomg(dsv, "\xEF\xBF\xBD", 3);

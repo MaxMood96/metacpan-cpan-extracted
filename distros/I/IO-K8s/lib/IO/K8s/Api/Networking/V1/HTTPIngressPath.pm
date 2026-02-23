@@ -1,6 +1,6 @@
 package IO::K8s::Api::Networking::V1::HTTPIngressPath;
 # ABSTRACT: HTTPIngressPath associates a path with a backend. Incoming urls matching the path are forwarded to the backend.
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 use IO::K8s::Resource;
 
 k8s backend => 'Networking::V1::IngressBackend', 'required';
@@ -26,7 +26,7 @@ IO::K8s::Api::Networking::V1::HTTPIngressPath - HTTPIngressPath associates a pat
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head2 backend
 

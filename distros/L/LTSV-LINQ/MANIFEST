@@ -22,3 +22,4 @@ t/010_ascii_only.t
 t/011_groupjoin.t
 t/012_v103_ordering.t
 t/013_v104_thenby.t
+t/014-style.t

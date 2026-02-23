@@ -1,5 +1,9 @@
 Revision history for Dist-Zilla-PluginBundle-RJBS
 
+5.036     2026-02-22 18:57:41-05:00 America/New_York
+        - remove Claude from the list of contributors even when present
+          in commits
+
 5.035     2025-12-19 09:31:53+11:00 Australia/Melbourne
         - move the compile test into "xt mode"
 

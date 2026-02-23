@@ -5,7 +5,7 @@ use Config ();
 use XSLoader;
 
 BEGIN {
-    our $VERSION = '0.08';
+    our $VERSION = '0.09';
     XSLoader::load __PACKAGE__, $VERSION;
 }
 
@@ -14,6 +14,10 @@ our @EXPORT_OK = qw[
     xxhash64       xxhash64_hex
     xxhash3_64bits xxhash3_64bits_hex
                    xxhash3_128bits_hex
+    xxhash3_64bits_stream
+    xxhash3_64bits_stream_update
+    xxhash3_64bits_stream_digest
+    xxhash3_64bits_stream_digest_hex
 ];
 
 1;
@@ -83,6 +87,24 @@ This hash is converted into hex string.
 
 Returns a 128 bit hash which calculated by using xxHash3 algorithm.
 This hash is converted into hex string.
+
+=head2 $stream = xxhash3_64bits_stream($seed)
+=head2 xxhash3_64bits_stream_update($stream, $more_data)
+=head2 $h = xxhash3_64bits_stream_digest($stream)
+=head2 $h = xxhash3_64bits_stream_digest_hex($stream)
+
+Get a 64 bit hash from segmented data by calling xxhash3_64bits_stream_update multiple times.
+
+    sub hash_a_file {
+        my($fh) = @_;
+        my $stream = xxhash3_64bits_stream(12345);
+        my $buf;
+        while( read $fh, $buf, 1024 ) {
+            xxhash3_64bits_stream_update($stream, $buf);
+        }
+        return xxhash3_64bits_stream_digest($stream);
+        # return xxhash3_64bits_stream_digest_hex($stream); # hex version
+    } # the resources $stream occupied will be released here.
 
 =head1 SPEED
 

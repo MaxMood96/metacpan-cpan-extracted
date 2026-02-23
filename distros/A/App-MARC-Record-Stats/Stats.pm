@@ -15,7 +15,7 @@ use Unicode::UTF8 qw(encode_utf8);
 
 Readonly::Array our @INPUT_FORMATS => qw(xml);
 
-our $VERSION = 0.01;
+our $VERSION = 0.02;
 
 # Constructor.
 sub new {
@@ -394,12 +394,12 @@ L<http://skim.cz>
 
 =head1 LICENSE AND COPYRIGHT
 
-© 2024 Michal Josef Špaček
+© 2024-2026 Michal Josef Špaček
 
 BSD 2-Clause License
 
 =head1 VERSION
 
-0.01
+0.02
 
 =cut

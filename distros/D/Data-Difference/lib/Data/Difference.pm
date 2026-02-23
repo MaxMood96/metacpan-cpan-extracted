@@ -1,55 +1,61 @@
-package Data::Difference 0.113001;
+package Data::Difference 0.113002;
 # ABSTRACT: Compare simple hierarchical data
 
 use strict;
 use warnings;
 use base 'Exporter';
 
+use Scalar::Util ();
+
 our @EXPORT_OK = qw(data_diff);
 
 sub data_diff {
-  my ($a, $b) = @_;
+  my ($left, $right) = @_;
 
-  if (ref($a)) {
-    if (my $sub = __PACKAGE__->can("_diff_" . ref($a))) {
-      return $sub->($a, $b);
+  if (ref($left)) {
+    if (my $sub = __PACKAGE__->can("_diff_" . ref($left))) {
+      return $sub->($left, $right, {});
     }
     else {
-      return {path => [], a => $a, b => $b};
+      return {path => [], a => $left, b => $right};
     }
   }
-  elsif (defined $a ? defined $b ? $a ne $b : 1 : 0) {
-    return {path => [], a => $a, b => $b};
+  elsif (defined $left ? defined $right ? $left ne $right : 1 : defined $right) {
+    return {path => [], a => $left, b => $right};
   }
 
   return;
 }
 
 sub _diff_HASH {
-  my ($a, $b, @path) = @_;
+  my ($left, $right, $seen, @path) = @_;
 
-  return {path => \@path, a => $a, b => $b} unless ref($a) eq ref($b);
+  return {path => \@path, a => $left, b => $right} unless ref($left) eq ref($right);
+
+  my $seen_key = Scalar::Util::refaddr($left) . ':' . Scalar::Util::refaddr($right);
+  return if $seen->{$seen_key};
+  local $seen->{$seen_key} = 1;
 
   my @diff;
   my %k;
-  @k{keys %$a, keys %$b} = ();
+  @k{keys %$left, keys %$right} = ();
   foreach my $k (sort keys %k) {
-    if (!exists $a->{$k}) {
-      push @diff, {path => [@path, $k], b => $b->{$k}};
+    if (!exists $left->{$k}) {
+      push @diff, {path => [@path, $k], b => $right->{$k}};
     }
-    elsif (!exists $b->{$k}) {
-      push @diff, {path => [@path, $k], a => $a->{$k}};
+    elsif (!exists $right->{$k}) {
+      push @diff, {path => [@path, $k], a => $left->{$k}};
     }
-    elsif (ref($a->{$k})) {
-      if (my $sub = __PACKAGE__->can("_diff_" . ref($a->{$k}))) {
-        push @diff, $sub->($a->{$k}, $b->{$k}, @path, $k);
+    elsif (ref($left->{$k})) {
+      if (my $sub = __PACKAGE__->can("_diff_" . ref($left->{$k}))) {
+        push @diff, $sub->($left->{$k}, $right->{$k}, $seen, @path, $k);
       }
       else {
-        push @diff, {path => [@path, $k], a => $a->{$k}, b => $b->{$k}};
+        push @diff, {path => [@path, $k], a => $left->{$k}, b => $right->{$k}};
       }
     }
-    elsif (defined $a->{$k} ? defined $b->{$k} ? $b->{$k} ne $a->{$k} : 1 : defined $b->{$k}) {
-      push @diff, {path => [@path, $k], a => $a->{$k}, b => $b->{$k}};
+    elsif (defined $left->{$k} ? defined $right->{$k} ? $right->{$k} ne $left->{$k} : 1 : defined $right->{$k}) {
+      push @diff, {path => [@path, $k], a => $left->{$k}, b => $right->{$k}};
     }
   }
 
@@ -57,29 +63,33 @@ sub _diff_HASH {
 }
 
 sub _diff_ARRAY {
-  my ($a, $b, @path) = @_;
-  return {path => \@path, a => $a, b => $b} unless ref($a) eq ref($b);
+  my ($left, $right, $seen, @path) = @_;
+  return {path => \@path, a => $left, b => $right} unless ref($left) eq ref($right);
+
+  my $seen_key = Scalar::Util::refaddr($left) . ':' . Scalar::Util::refaddr($right);
+  return if $seen->{$seen_key};
+  local $seen->{$seen_key} = 1;
 
   my @diff;
-  my $n = $#$a > $#$b ? $#$a : $#$b;
+  my $n = $#$left > $#$right ? $#$left : $#$right;
 
   foreach my $i (0 .. $n) {
-    if ($i > $#$a) {
-      push @diff, {path => [@path, $i], b => $b->[$i]};
+    if ($i > $#$left) {
+      push @diff, {path => [@path, $i], b => $right->[$i]};
     }
-    elsif ($i > $#$b) {
-      push @diff, {path => [@path, $i], a => $a->[$i]};
+    elsif ($i > $#$right) {
+      push @diff, {path => [@path, $i], a => $left->[$i]};
     }
-    elsif (ref($a->[$i])) {
-      if (my $sub = __PACKAGE__->can("_diff_" . ref($a->[$i]))) {
-        push @diff, $sub->($a->[$i], $b->[$i], @path, $i);
+    elsif (ref($left->[$i])) {
+      if (my $sub = __PACKAGE__->can("_diff_" . ref($left->[$i]))) {
+        push @diff, $sub->($left->[$i], $right->[$i], $seen, @path, $i);
       }
       else {
-        push @diff, {path => [@path, $i], a => $a->[$i], b => $b->[$i]};
+        push @diff, {path => [@path, $i], a => $left->[$i], b => $right->[$i]};
       }
     }
-    elsif (defined $a->[$i] ? defined $b->[$i] ? $b->[$i] ne $a->[$i] : 1 : defined $b->[$i]) {
-      push @diff, {path => [@path, $i], a => $a->[$i], b => $b->[$i]};
+    elsif (defined $left->[$i] ? defined $right->[$i] ? $right->[$i] ne $left->[$i] : 1 : defined $right->[$i]) {
+      push @diff, {path => [@path, $i], a => $left->[$i], b => $right->[$i]};
     }
   }
 
@@ -98,7 +108,7 @@ Data::Difference - Compare simple hierarchical data
 
 =head1 VERSION
 
-version 0.113001
+version 0.113002
 
 =head1 DESCRIPTION
 
@@ -197,7 +207,7 @@ Ricardo Signes <rjbs@semiotic.systems>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2025 by Graham Barr.
+This software is copyright (c) 2026 by Graham Barr.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

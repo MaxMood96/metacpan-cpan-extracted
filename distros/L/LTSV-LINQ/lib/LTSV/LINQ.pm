@@ -12,15 +12,15 @@ use 5.00503;    # Universal Consensus 1998 for primetools
                 # Perl 5.005_03 compatibility for historical toolchains
 # use 5.008001; # Lancaster Consensus 2013 for toolchains
 
-$VERSION = '1.04';
+$VERSION = '1.05';
 $VERSION = $VERSION;
 # VERSION policy: avoid `our` for 5.005_03 compatibility.
 # Self-assignment prevents "used only once" warning under `use strict`.
 
 BEGIN { pop @INC if $INC[-1] eq '.' } # CVE-2016-1238: Important unsafe module load path flaw
 use strict;
-BEGIN { $INC{'warnings.pm'} = '' if $] < 5.006 } use warnings; local $^W=1;
-# warnings.pm compatibility: stub for Perl < 5.6
+BEGIN { if ($] < 5.006) { $INC{'warnings.pm'} = 'stub'; eval 'package warnings; sub import {}' } } use warnings; local $^W=1;
+# warnings.pm compatibility: stub with import() for Perl < 5.6
 
 #---------------------------------------------------------------------
 # Constructor and Iterator Infrastructure
@@ -64,11 +64,13 @@ sub From {
 sub FromLTSV {
     my($class, $file) = @_;
 
-    my $fh = do { local *FH; *FH };
+    my $fh;
     if ($] >= 5.006) {
-        open($fh, '<', $file) or die "Cannot open '$file': $!";
+        # Avoid "Too many arguments for open at" error when running with Perl 5.005_03
+        eval q{ open($fh, '<', $file) } or die "Cannot open '$file': $!";
     }
     else {
+        $fh = \do { local *_ };
         open($fh, "< $file") or die "Cannot open '$file': $!";
     }
     binmode $fh;    # Treat as raw bytes; handles all multibyte encodings
@@ -717,7 +719,7 @@ sub Contains {
 # SequenceEqual - compare two sequences for equality
 sub SequenceEqual {
     my($self, $second, $comparer) = @_;
-    $comparer ||= sub { 
+    $comparer ||= sub {
         my($a, $b) = @_;
         return (!defined($a) && !defined($b)) ||
                (defined($a) && defined($b) && $a eq $b);
@@ -1139,18 +1141,27 @@ sub DefaultIfEmpty {
 sub ToLTSV {
     my($self, $filename) = @_;
 
-    my $fh = do { local *FH; *FH };
+    my $fh;
     if ($] >= 5.006) {
-        open($fh, '>', $filename) or die "Cannot open '$filename': $!";
+        # Avoid "Too many arguments for open at" error when running with Perl 5.005_03
+        eval q{ open($fh, '>', $filename) } or die "Cannot open '$filename': $!";
     }
     else {
+        $fh = \do { local *_ };
         open($fh, "> $filename") or die "Cannot open '$filename': $!";
     }
-    binmode $fh;    # Write raw bytes; consistent with FromLTSV
+    binmode $fh;    # Write raw bytes; prevents \r\n translation on Windows
+                    # and is consistent with FromLTSV
 
     $self->ForEach(sub {
         my $record = shift;
-        my $line = join("\t", map { "$_:$record->{$_}" } sort keys %$record);
+        # LTSV spec: tab is the field separator; newline terminates the record.
+        # Sanitize values to prevent structural corruption of the output file.
+        my $line = join("\t", map {
+            my $v = defined($record->{$_}) ? $record->{$_} : '';
+            $v =~ s/[\t\n\r]/ /g;
+            "$_:$v"
+        } sort keys %$record);
         print $fh $line, "\n";
     });
 
@@ -1353,7 +1364,7 @@ LTSV::LINQ - LINQ-style query interface for LTSV files
 
 =head1 VERSION
 
-Version 1.04
+Version 1.05
 
 =head1 SYNOPSIS
 
@@ -1418,8 +1429,8 @@ Version 1.04
 
 =head1 DESCRIPTION
 
-LTSV::LINQ provides a LINQ-style query interface for LTSV (Labeled 
-Tab-Separated Values) files. It offers a fluent, chainable API for 
+LTSV::LINQ provides a LINQ-style query interface for LTSV (Labeled
+Tab-Separated Values) files. It offers a fluent, chainable API for
 filtering, transforming, and aggregating LTSV data.
 
 Key features:
@@ -1491,9 +1502,8 @@ byte-level parser to split the field in the wrong place.
 
 The following table shows well-known encodings and their byte ranges:
 
-  --------------------------------------------------------------------
   Encoding     First byte range       Following byte range
-  --------------------------------------------------------------------
+  ----------   --------------------   -------------------------------
   Big5         0x81-0xFE              0x40-0x7E, 0xA1-0xFE
   Big5-HKSCS   0x81-0xFE              0x40-0x7E, 0xA1-0xFE
   CP932X       0x81-0x9F, 0xE0-0xFC   0x40-0x7E, 0x80-0xFC
@@ -1505,7 +1515,6 @@ The following table shows well-known encodings and their byte ranges:
   UHC          0x81-0xFE              0x41-0x5A, 0x61-0x7A, 0x81-0xFE
   UTF-8        0xC2-0xF4              0x80-0xBF
   WTF-8        0xC2-0xF4              0x80-0xBF
-  --------------------------------------------------------------------
 
 The tab character is C<0x09>.  The colon is C<0x3A>.  Both values are
 strictly below C<0x40>, the lower bound of any following byte in the encodings
@@ -1923,8 +1932,8 @@ simple equality comparisons. All conditions are combined with AND logic.
   ->Where(status => '200', method => 'GET')
 
   # Equivalent to:
-  ->Where(sub { 
-      $_[0]{status} eq '200' && $_[0]{method} eq 'GET' 
+  ->Where(sub {
+      $_[0]{status} eq '200' && $_[0]{method} eq 'GET'
   })
 
 B<DSL Specification:>
@@ -1992,11 +2001,11 @@ B<Examples:>
   ->Select(sub { $_[0]{url} })
 
   # Transform to new structure
-  ->Select(sub { 
-      { 
-          path => $_[0]{url}, 
-          code => $_[0]{status} 
-      } 
+  ->Select(sub {
+      {
+          path => $_[0]{url},
+          code => $_[0]{status}
+      }
   })
 
   # Calculate derived values
@@ -2033,8 +2042,8 @@ B<Examples:>
   # Expand related records
   ->SelectMany(sub {
       my $user = shift;
-      return [ map { 
-          { user => $user->{name}, role => $_ } 
+      return [ map {
+          { user => $user->{name}, role => $_ }
       } @{$user->{roles}} ];
   })
 
@@ -2907,7 +2916,7 @@ B<Parameters:>
 
 B<Returns:> Single element
 
-B<Exceptions:> 
+B<Exceptions:>
 - Dies with "Sequence contains no elements" if empty
 - Dies with "Sequence contains more than one element" if multiple elements
 
@@ -3207,7 +3216,7 @@ B<Examples:>
 
   # With result selector
   LTSV::LINQ->From([1,2,3])
-      ->Aggregate(0, 
+      ->Aggregate(0,
           sub { $_[0] + $_[1] },      # accumulate
           sub { "Sum: $_[0]" })       # transform result
   # "Sum: 6"
@@ -3503,7 +3512,7 @@ Execute action for each element.
 
 =head2 Lazy Evaluation
 
-All query operations use lazy evaluation via iterators. Data is 
+All query operations use lazy evaluation via iterators. Data is
 processed on-demand, not all at once.
 
   # Only reads 10 records from file
@@ -4188,6 +4197,32 @@ Example:
       # Process $first
   }
 
+=head2 Exception Format and Stack Traces
+
+All exceptions thrown by this module are plain strings produced by
+C<die "message">. Because no trailing newline is appended, Perl
+automatically appends the source location:
+
+  Sequence contains no elements at lib/LTSV/LINQ.pm line 764.
+
+This is intentional: the location helps when diagnosing unexpected
+failures during development.
+
+When catching exceptions with C<eval>, the full string including the
+location suffix is available in C<$@>. Use a prefix match if you want
+to test only the message text:
+
+  eval { LTSV::LINQ->From([])->First() };
+  if ($@ =~ /^Sequence contains no elements/) {
+      # handle empty sequence
+  }
+
+If you prefer exceptions without the location suffix, wrap the call
+in a thin eval and re-die with a newline:
+
+  eval { $result = $query->First() };
+  die "$@\n" if $@;   # strip " at ... line N" from the message
+
 =head1 FAQ
 
 =head2 General Questions
@@ -4231,8 +4266,8 @@ A: No. Query objects use iterators that can only be consumed once.
 A: Use code reference form with C<||>:
 
   # OR condition requires code reference
-  ->Where(sub { 
-      $_[0]{status} == 200 || $_[0]{status} == 304 
+  ->Where(sub {
+      $_[0]{status} == 200 || $_[0]{status} == 304
   })
 
   # DSL only supports AND
@@ -4362,7 +4397,7 @@ modern query capabilities without requiring upgrades.
 
   ->GroupBy(sub { $_[0]{category} })
     ->Select(sub {
-        { 
+        {
             Category => $_[0]{Key},
             Count => scalar(@{$_[0]{Elements}})
         }
@@ -4521,7 +4556,7 @@ This policy is verified by C<t/010_ascii_only.t>.
 
 You may notice:
 
-  $VERSION = '1.04';
+  $VERSION = '1.05';
   $VERSION = $VERSION;
 
 This is B<intentional>, not a typo. Under C<use strict>, a variable used
@@ -4833,18 +4868,18 @@ Contributions are welcome! See file: CONTRIBUTING.
 
 =head2 LINQ Technology
 
-This module is inspired by LINQ (Language Integrated Query), which was 
+This module is inspired by LINQ (Language Integrated Query), which was
 developed by Microsoft Corporation for the .NET Framework.
 
 LINQ(R) is a registered trademark of Microsoft Corporation.
 
-We are grateful to Microsoft for pioneering the LINQ technology and 
-making it a widely recognized programming pattern. The elegance and 
-power of LINQ has influenced query interfaces across many programming 
-languages, and this module brings that same capability to LTSV data 
+We are grateful to Microsoft for pioneering the LINQ technology and
+making it a widely recognized programming pattern. The elegance and
+power of LINQ has influenced query interfaces across many programming
+languages, and this module brings that same capability to LTSV data
 processing in Perl.
 
-This module is not affiliated with, endorsed by, or sponsored by 
+This module is not affiliated with, endorsed by, or sponsored by
 Microsoft Corporation.
 
 =head2 References

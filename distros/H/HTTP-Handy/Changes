@@ -1,0 +1,24 @@
+Revision history for HTTP-Handy
+
+1.00  2026-02-23 JST (Japan Standard Time)
+
+    - First release on CPAN.
+    - HTTP/1.0 server with GET and POST support.
+    - PSGI subset compatible interface ($env / response arrayref).
+    - HTTP::Handy::Input: in-memory psgi.input object compatible with
+      Perl 5.5.3 (no open-on-scalar-ref dependency).
+    - serve_static: static file serving with MIME type detection,
+      index.html fallback, path traversal protection, and
+      cache_max_age option for Cache-Control header.
+    - url_decode, parse_query: URL utility functions.
+    - is_htmx: detect htmx requests via HX-Request header.
+    - response_html, response_text, response_json, response_redirect:
+      convenience response builders.
+    - Access log to STDERR in LTSV format (time, method, path, status,
+      size, ua, referer).
+    - max_post_size option to run() for configurable POST body limit
+      (default 10 MB).
+    - App exceptions caught via eval and returned as 500 responses.
+    - Built-in demo application (run directly: perl Handy.pm).
+    - Zero dependencies beyond Perl core modules.
+    - Runs on Perl 5.5.3 and all later versions on all operating systems.

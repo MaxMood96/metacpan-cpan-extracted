@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use Exporter 'import';
 
-our $VERSION = '0.01';
+our $VERSION = '0.04';
 
 our @EXPORT_OK = qw(
     transform_dollar_vars
@@ -160,6 +160,16 @@ sub extract_arrow_params {
         $params{$1} = 1;
     }
 
+    # Match regular function params: function(param1, param2)
+    while ($expr =~ /\bfunction\s*\(([^)]*)\)/g) {
+        my $param_str = $1;
+        for my $param (split /,/, $param_str) {
+            $param =~ s/^\s+|\s+$//g;
+            $param =~ s/\s*=.*//;  # Remove default values
+            $params{$param} = 1 if $param =~ /^\w+$/;
+        }
+    }
+
     return \%params;
 }
 
@@ -236,16 +246,20 @@ sub transform_expression {
     my ($expr, $known_methods) = @_;
     return $expr unless defined $expr && $expr =~ /\S/;
 
-    # add () => if the function is missing it
-    if ($expr !~ /^\(/) {
+    # Wrap as regular function so .call(scope) can rebind 'this' for slot scoping
+    # Don't wrap expressions that are already complete (async, function)
+    if ($expr =~ /^async\s/ || $expr =~ /^function[\s(]/) {
+        # Already a complete expression, just apply transforms below
+    }
+    elsif ($expr !~ /^\(/) {
         $expr = "function(){return $expr}";
     }
     elsif($expr =~ /^\s*\(\s*([^)]+)\s*\)\s*=>\s*([{].*)/s) {
-        # assume this has a return
+        # Arrow with block body — convert to regular function
         $expr = "function($1)$2";
-
     }
     elsif($expr =~ /^\s*\(\s*([^)]+)\s*\)\s*=>\s*(.*)/s) {
+        # Arrow with expression body — convert to regular function
         $expr = "function($1){return $2}";
     }
 
@@ -302,7 +316,7 @@ sub parse_html {
                 }
                 elsif ($attr eq 'for') {
                     if ($value =~ /^\[/) {
-                        $value = "()=>$value";
+                        $value = "function(){return $value}";
                     }
                     $attrs{"*for"} = transform_expression($value, $known_methods);
                 }
@@ -315,8 +329,7 @@ sub parse_html {
                     $attrs{"*".lc($attr)} = $value;
                 }
                 elsif ($value =~ /\$/) {
-                    $value =~ s/\$\{([\w]+)\}/\${this.get_$1()}/g;
-                    $value =~ s/\$([\w]+)/\${this.get_$1()}/g;
+                    $value = _transform_dollar_interpolation($value);
                     $attrs{"*".lc($attr)} = "function(){return `$value`}";
                 }
                 else {
@@ -353,9 +366,8 @@ sub parse_html {
                 if ($text =~ /^\s*(\([^)]*\)\s*=>)(.*)/) {
                     $text_node->{'*content'} = transform_expression($text, $known_methods);
                 } elsif ($text =~ /\$/) {
-                    $text =~ s/\$\{([\w]+)\}/\${this.get_$1()}/g;
-                    $text =~ s/\$([\w]+)/\${this.get_$1()}/g;
-                    $text_node->{'*content'} = "function(){return`$text`}";
+                    $text = _transform_dollar_interpolation($text);
+                    $text_node->{'*content'} = "function(){return `$text`}";
                 } else {
                     $text_node->{content} = $text;
                 }
@@ -367,6 +379,29 @@ sub parse_html {
     }
 
     return \%result;
+}
+
+# Transform $var references in template text/attributes.
+# Handles ${$var.prop}, ${$var}, and bare $var patterns.
+# Inside ${...} blocks, $var is replaced without adding another ${} wrapper.
+sub _transform_dollar_interpolation {
+    my ($text) = @_;
+
+    # First: transform ${...} blocks that contain $var references
+    $text =~ s/\$\{([^}]*)\}/"\${" . _transform_inner_dollars($1) . "}"/ge;
+
+    # Then: transform bare $var (not inside ${})
+    $text =~ s/\$([\w]+)/\${this.get_$1()}/g;
+
+    return $text;
+}
+
+# Transform $var references inside a ${...} expression.
+# $var becomes this.get_var(), no extra ${} wrapping.
+sub _transform_inner_dollars {
+    my ($expr) = @_;
+    $expr =~ s/\$(\w+)/this.get_$1()/g;
+    return $expr;
 }
 
 1;

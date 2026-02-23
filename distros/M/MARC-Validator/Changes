@@ -1,3 +1,7 @@
+0.10 2026-02-22T13:19:59+01:00
+ - API change: Rewrite to new data model.
+ - Regen EXAMPLE in doc.
+
 0.09 2026-01-07T17:29:03+01:00
  - Add check for 008 field with continuing resource currently published.
  - Add check for 040a field.

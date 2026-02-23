@@ -318,8 +318,6 @@ function advancePastWhitespace(cursor) {
   }
 }
 
-console.log('TODO: make sure event handlers are cleaned up when recipe is removed');
-
 // HTML boolean attributes that should be present/absent, not set to "true"/"false"
 const booleanAttrs = new Set([
   'selected', 'disabled', 'checked', 'readonly', 'required', 'hidden',
@@ -483,6 +481,8 @@ class Recipe {
       if (this.watchers && this.watchers[name]) {
         this.watchers[name].call(this.me(), value, oldValue);
       }
+      // Refresh all modules so conditionals/loops re-evaluate
+      store._notifyAll();
     }
   }
 
@@ -536,11 +536,12 @@ class Recipe {
   }
 
   // Adopt existing DOM nodes via cursor, attaching event listeners and reactivity
-  hydrate(cursor, structure_nodes, structure_idx, loop_item, loop_idx) {
+  hydrate(cursor, structure_nodes, structure_idx, loop_item, loop_idx, scope) {
     const structureNode = structure_nodes[structure_idx];
     const tag = structureNode.tag;
     const attrs = structureNode.attributes;
     const children = structureNode.children;
+    const me = scope || this.me();
 
     // Skip whitespace-only text nodes before adopting
     advancePastWhitespace(cursor);
@@ -551,13 +552,13 @@ class Recipe {
       if (!domNode || domNode.nodeType !== 3) {
         // Mismatch: fall back to render
         cursor.childIdx--;
-        this.render(cursor.parent, structure_nodes, structure_idx, loop_item, loop_idx);
+        this.render(cursor.parent, structure_nodes, structure_idx, loop_item, loop_idx, scope);
         cursor.childIdx++;
         return;
       }
       if (typeof structureNode.content === 'function') {
-        domNode.textContent = structureNode.content.call(this.me(), loop_item, loop_idx);
-        this.updatableElements.push([structureNode, domNode]);
+        domNode.textContent = structureNode.content.call(me, loop_item, loop_idx);
+        this.updatableElements.push([structureNode, domNode, scope]);
       }
       return;
     }
@@ -567,7 +568,7 @@ class Recipe {
       const el = cursor.parent.childNodes[cursor.childIdx++];
       if (!el || !el.hasAttribute || !el.hasAttribute('data-sp-if')) {
         cursor.childIdx--;
-        this.render(cursor.parent, structure_nodes, structure_idx, loop_item, loop_idx);
+        this.render(cursor.parent, structure_nodes, structure_idx, loop_item, loop_idx, scope);
         cursor.childIdx++;
         // Mark elseif/else as seen
         let c_idx = structure_idx + 1;
@@ -585,6 +586,7 @@ class Recipe {
 
       const ifnode = new RecipeConditional(el);
       ifnode.parentModule = this;
+      ifnode.scope = scope;
       ifnode.addBranch(structureNode);
       this.updatableRecipes.push(ifnode);
 
@@ -659,7 +661,7 @@ class Recipe {
         for (const [attr, val] of Object.entries(attrs)) {
           if (attr.startsWith('!')) continue;
           if (attr in componentInstance.vars) {
-            componentInstance.vars[attr] = typeof val === 'function' ? val.call(this.me(), loop_item, loop_idx) : val;
+            componentInstance.vars[attr] = typeof val === 'function' ? val.call(me, loop_item, loop_idx) : val;
           }
         }
         this.updatableRecipes.push(componentInstance);
@@ -678,10 +680,10 @@ class Recipe {
             });
             componentInstance.renderSlots(cursor.parent, loop_item, loop_idx);
           } else {
-            // No explicit slots: hydrate children using the component's context
-            // (import chain walking resolves parent imports for tags)
+            // No explicit slots: hydrate children using parent scope
+            // 'this' is the parent where the component tag was written
             for (let idx = 0; idx < children.length; idx++) {
-              componentInstance.hydrate(cursor, children, idx, loop_item, loop_idx);
+              componentInstance.hydrate(cursor, children, idx, loop_item, loop_idx, this);
             }
           }
         }
@@ -698,7 +700,7 @@ class Recipe {
       const el = cursor.parent.childNodes[cursor.childIdx++];
       if (!el || el.nodeType !== 1) {
         cursor.childIdx--;
-        this.render(cursor.parent, structure_nodes, structure_idx, loop_item, loop_idx);
+        this.render(cursor.parent, structure_nodes, structure_idx, loop_item, loop_idx, scope);
         cursor.childIdx++;
         return;
       }
@@ -715,7 +717,7 @@ class Recipe {
       // Hydrate children within the <a>
       const childCursor = { parent: el, childIdx: 0 };
       for (let idx = 0; idx < children.length; idx++) {
-        this.hydrate(childCursor, children, idx, loop_item, loop_idx);
+        this.hydrate(childCursor, children, idx, loop_item, loop_idx, scope);
       }
       return;
     }
@@ -725,7 +727,7 @@ class Recipe {
       const el = cursor.parent.childNodes[cursor.childIdx++];
       if (!el || el.nodeType !== 1) {
         cursor.childIdx--;
-        this.render(cursor.parent, structure_nodes, structure_idx, loop_item, loop_idx);
+        this.render(cursor.parent, structure_nodes, structure_idx, loop_item, loop_idx, scope);
         cursor.childIdx++;
         return;
       }
@@ -738,7 +740,7 @@ class Recipe {
     if (!el || el.nodeType !== 1) {
       // Mismatch: fall back
       cursor.childIdx--;
-      this.render(cursor.parent, structure_nodes, structure_idx, loop_item, loop_idx);
+      this.render(cursor.parent, structure_nodes, structure_idx, loop_item, loop_idx, scope);
       cursor.childIdx++;
       return;
     }
@@ -751,12 +753,12 @@ class Recipe {
         if (typeof val === 'function') {
           if (attr.startsWith('on')) {
             const eventName = attr.substring(2).toLowerCase();
-            const handler = (e) => { val.call(this.me(), e, loop_item, loop_idx); this.refresh(); };
+            const handler = (e) => { val.call(me, e, loop_item, loop_idx); this.refresh(); };
             el.addEventListener(eventName, handler);
             this.eventHandlers.push({ node: el, eventName, handler });
           } else {
-            setAttribute(el, attr, val.call(this.me(), loop_item, loop_idx));
-            this.updatableElements.push([structureNode, el]);
+            setAttribute(el, attr, val.call(me, loop_item, loop_idx));
+            this.updatableElements.push([structureNode, el, scope]);
           }
         }
       }
@@ -766,9 +768,10 @@ class Recipe {
       // For loop: SSR left it empty, adopt container and render normally
       const looper = new RecipeLoop(el, structureNode);
       looper.parentModule = this;
+      looper.scope = scope;
       looper.renderLoop(loop_item, loop_idx);
       this.updatableRecipes.push(looper);
-    } else if (attrs.slot) {
+    } else if (tag === 'slot') {
       let recipeInstance = new RecipeSlot(el);
       recipeInstance.parentModule = this;
       if (attrs.name) {
@@ -780,13 +783,14 @@ class Recipe {
       // Recurse into children with a new child cursor
       const childCursor = { parent: el, childIdx: 0 };
       for (let idx = 0; idx < children.length; idx++) {
-        this.hydrate(childCursor, children, idx, loop_item, loop_idx);
+        this.hydrate(childCursor, children, idx, loop_item, loop_idx, scope);
       }
     }
   }
 
   // builds the UI
-  render(attach_to, structure_nodes, structure_idx, loop_item, loop_idx) {
+  // scope: optional override for variable resolution (used by slot content)
+  render(attach_to, structure_nodes, structure_idx, loop_item, loop_idx, scope) {
 
     this.rootEl = attach_to;
 
@@ -795,6 +799,7 @@ class Recipe {
 
     const attrs = structureNode.attributes;
     const children = structureNode.children;
+    const me = scope || this.me();
     let el;
 
     // check if text node. these have no children
@@ -802,9 +807,9 @@ class Recipe {
       const con = structureNode.content;
       let text;
       if (typeof con === 'function') {
-        el = document.createTextNode(con.call(this.me(),loop_item,loop_idx));
+        el = document.createTextNode(con.call(me,loop_item,loop_idx));
         // a pair - the second refreshes the first
-        this.updatableElements.push( [structureNode, el ]);
+        this.updatableElements.push( [structureNode, el, scope ]);
       } else {
         el = document.createTextNode(con);
       }
@@ -822,7 +827,8 @@ class Recipe {
       el = document.createElement('div');
       const ifnode = new RecipeConditional(el);
       ifnode.parentModule = this;
-      ifnode.addBranch( ifstruct ); 
+      ifnode.scope = scope;
+      ifnode.addBranch( ifstruct );
       this.updatableRecipes.push( ifnode );
       //check for elseif, else and slurp those in
       let done = false;
@@ -881,14 +887,24 @@ class Recipe {
           for (let idx = 0; idx < inst_children.length; idx++) {
             componentInstance.render(attach_to, inst_children, idx, loop_item, loop_idx);
           }
-          // Re-render existing slot content at new location
+          // Re-plug slot content into newly created slot elements
+          if (children.length) {
+            children.forEach( slotNode => {
+              componentInstance.plugin( slotNode );
+            });
+          }
           componentInstance.renderSlots(attach_to, loop_item, loop_idx);
           // NO: new instance, moduleRegistry, updatableRecipes push, onMount
         } else {
           // FIRST TIME — create new instance
           const componentInstance = new ImportedClass(el);
           componentInstance._injectCss();
-          componentInstance.parentModule = this;
+          // Walk past RecipeConditional/RecipeLoop helpers to find the actual recipe
+          let parent = this;
+          while (parent instanceof RecipeConditional || parent instanceof RecipeLoop) {
+            parent = parent.parentModule;
+          }
+          componentInstance.parentModule = parent;
           componentInstance.moduleId = moduleRegistry.length;
           moduleRegistry.push( componentInstance );
 
@@ -909,7 +925,7 @@ class Recipe {
           for (const [attr,val] of Object.entries(attrs)) {
             if (attr.startsWith('!')) continue;  // Skip special attributes like !name
             if (attr in componentInstance.vars) {
-              componentInstance.vars[attr] = typeof val === 'function' ? val.call(this.me(),loop_item,loop_idx) : val;
+              componentInstance.vars[attr] = typeof val === 'function' ? val.call(me,loop_item,loop_idx) : val;
             }
           }
           this.updatableRecipes.push( componentInstance );
@@ -951,7 +967,7 @@ class Recipe {
         });
         attach_to.append(el);
         for (let idx = 0; idx < children.length; idx++) {
-          this.render(el, children, idx, loop_item, loop_idx);
+          this.render(el, children, idx, loop_item, loop_idx, scope);
         }
       }
       else if (tag === 'router') {
@@ -960,6 +976,18 @@ class Recipe {
         el.setAttribute('data-router-view', '');
         attach_to.append(el);
         this._routerViewEl = el;
+      }
+      else if (tag === 'slot') {
+        // Slot definition: register as target for projected content
+        el = document.createElement('slot');
+        attach_to.append(el);
+        const recipeInstance = new RecipeSlot(el);
+        recipeInstance.parentModule = this;
+        if (attrs.name) {
+          this.namedSlots[attrs.name] = recipeInstance;
+        } else {
+          this.defaultSlot = recipeInstance;
+        }
       }
       else { // normal tag. apply attributes
         el = document.createElement(tag);
@@ -970,12 +998,12 @@ class Recipe {
               if (attr.startsWith('on') ) {
                 // Store handler info for cleanup in destroy() - addEventListener returns undefined
                 const eventName = attr.substring(2).toLowerCase();
-                const handler = (e) => { val.call(this.me(),e, loop_item, loop_idx); this.refresh() };
+                const handler = (e) => { val.call(me,e, loop_item, loop_idx); this.refresh() };
                 el.addEventListener(eventName, handler);
                 this.eventHandlers.push({ node: el, eventName, handler });
               } else {
-                setAttribute( el, attr, val.call(this.me(),loop_item,loop_idx) );
-                this.updatableElements.push( [structureNode, el ] );
+                setAttribute( el, attr, val.call(me,loop_item,loop_idx) );
+                this.updatableElements.push( [structureNode, el, scope ] );
               }
             } else {
               setAttribute( el, attr, val );
@@ -986,21 +1014,13 @@ class Recipe {
           // needs to be its own thingy for updatable purposes
           const looper = new RecipeLoop(el,structureNode);
           looper.parentModule = this;
+          looper.scope = scope;
           looper.renderLoop( el, loop_item, loop_idx);
           this.updatableRecipes.push( looper );
         }
-        else if (attrs.slot) {
-          let recipeInstance = new RecipeSlot(el);
-          recipeInstance.parentModule = this;
-          if (attrs.name) {
-            this.namedSlots[attrs.name] = recipeInstance;
-          } else {
-            this.defaultSlot = recipeInstance;
-          }
-        }
         else { //normal children
           for (let idx = 0; idx < children.length; idx++) {
-            this.render( el, children, idx, loop_item, loop_idx );
+            this.render( el, children, idx, loop_item, loop_idx, scope );
           }
         }
       }
@@ -1012,17 +1032,18 @@ class Recipe {
     // refresh updatable elements in this recipe
     if (this.dirty) {
       for (const pair of this.updatableElements) {
-        const [node,el] = pair;
+        const [node, el, scope] = pair;
+        const me = scope || this.me();
         if (node.content) {
-          el.textContent = node.content.call(this.me(),loop_item, loop_idx);
+          el.textContent = node.content.call(me,loop_item, loop_idx);
         } else {
           const attrs = node.attributes;
           for (const [attr,val] of Object.entries(attrs)) {
-            if (attr !== 'for'  && 
-                attr !== 'slot' && 
-                !attr.startsWith('on') 
+            if (attr !== 'for'  &&
+                attr !== 'slot' &&
+                !attr.startsWith('on')
                 && typeof val === 'function') {
-              setAttribute( el, attr, val.call(this.me(),loop_item, loop_idx));
+              setAttribute( el, attr, val.call(me,loop_item, loop_idx));
             }
           }
         }
@@ -1084,9 +1105,13 @@ class RecipeSlot extends Recipe {
   }
 
   renderSlot(attach_to, loop_item, loop_idx) {
+    const target = this.rootEl || attach_to;
     const children = this.contents;
+    // Slot content resolves variables from the scope where the component was used,
+    // i.e., the slot-owning component's parent (one level up)
+    const scope = this.parentModule.parentModule || this.parentModule;
     for (let idx = 0; idx < children.length; idx++) {
-      this.parentModule.render( attach_to, children, idx, loop_item, loop_idx );
+      this.parentModule.render( target, children, idx, loop_item, loop_idx, scope );
     }
   }
 } //class RecipeSlot
@@ -1094,22 +1119,23 @@ class RecipeSlot extends Recipe {
 class RecipeLoop extends Recipe {
   constructor(el, node) {
     super(el);
+    this._containerEl = el;
     this.loopNode = node;
   }
-  me() { return this.parentModule; }
+  me() { return this.scope || this.parentModule; }
   renderLoop( loop_item, loop_idx ) {
     // the attributes are already adjusted for attach_to before this is called
     const forItems = this.loopNode.attributes.for.call(this.me(), loop_item, loop_idx);
     const loopKids = this.loopNode.children;
     forItems.forEach( (l_item,l_idx) => {
       for (let idx=0; idx < loopKids.length; idx++) {
-        this.render( this.rootEl, loopKids, idx, l_item, l_idx );
+        this.render( this._containerEl, loopKids, idx, l_item, l_idx, this.scope );
       }
     } );
   }
 
   refresh(loop_item, loop_idx ) {
-    empty(this.rootEl);
+    empty(this._containerEl);
     this.renderLoop( loop_item, loop_idx );
   }
 } //class RecipeLoop
@@ -1117,7 +1143,12 @@ class RecipeLoop extends Recipe {
 class RecipeConditional extends Recipe {
   branches = [];
   lastBranchIdx = undefined;
-  me() { return this.parentModule; }
+  _containerEl = null;
+  constructor(el) {
+    super(el);
+    this._containerEl = el;
+  }
+  me() { return this.scope || this.parentModule; }
   addBranch( ifstruct ) {
     this.branches.push( ifstruct );
   }
@@ -1130,7 +1161,7 @@ class RecipeConditional extends Recipe {
         return idx;
       }
     }
-    
+
   }
 
   renderIf( loop_item, loop_idx ) {
@@ -1139,14 +1170,13 @@ class RecipeConditional extends Recipe {
     if (idx !== undefined) {
       const branch = this.branches[idx];
       for (let idx = 0; idx < branch.children.length; idx++ ) {
-        this.render( this.rootEl, branch.children, idx, loop_item, loop_idx );
+        this.render( this._containerEl, branch.children, idx, loop_item, loop_idx, this.scope );
       }
       this.lastBranchIdx = idx;
     }
   } //renderIf
 
   refresh(loop_item, loop_idx ) {
-//    console.log( "refresh if");
     const idx = this.pickBranchIdx( loop_item, loop_idx );
     if (idx === this.lastBranchIdx) {
       if (this.lastBranchIdx !== undefined) {
@@ -1154,7 +1184,9 @@ class RecipeConditional extends Recipe {
         super.refresh(loop_item, loop_idx);
       }
     } else {
-      empty( this.rootEl );
+      empty( this._containerEl );
+      this.updatableElements = [];
+      this.updatableRecipes = [];
       this.renderIf( loop_item, loop_idx );
     }
   }

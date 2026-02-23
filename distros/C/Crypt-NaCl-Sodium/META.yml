@@ -22,7 +22,7 @@ configure_requires:
   Devel::CheckLib: '0'
   ExtUtils::MakeMaker: '6.52'
 dynamic_config: 0
-generated_by: 'Dist::Zilla version 6.037, CPAN::Meta::Converter version 2.150010'
+generated_by: 'Dist::Zilla version 6.033, CPAN::Meta::Converter version 2.150010'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -39,7 +39,7 @@ no_index:
 provides:
   Crypt::NaCl::Sodium:
     file: lib/Crypt/NaCl/Sodium.pm
-    version: '2.001'
+    version: '2.002'
 requires:
   Carp: '0'
   Sub::Exporter: '0'
@@ -51,7 +51,7 @@ resources:
   bugtracker: https://github.com/cpan-authors/crypt-nacl-sodium/issues
   homepage: https://github.com/cpan-authors/crypt-nacl-sodium
   repository: https://github.com/cpan-authors/crypt-nacl-sodium.git
-version: '2.001'
+version: '2.002'
 x_contributors:
   - 'Chase Whitener <capoeirab@cpan.org>'
   - 'Timothy Legge <timlegge@gmail.com>'

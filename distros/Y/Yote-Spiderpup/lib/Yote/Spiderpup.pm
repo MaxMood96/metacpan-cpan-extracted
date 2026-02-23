@@ -3,7 +3,7 @@ package Yote::Spiderpup;
 use strict;
 use warnings;
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 use CSS::LESSp;
 use Data::Dumper;
@@ -349,8 +349,10 @@ sub generate_single_class {
 
     my $structure_json = encode_json($structure);
 
-    # remove quotes around the functions so they are interpreted as javascript functions
-    $structure_json =~ s/"\*([a-z]+":)"(function\([^"]+)"/"$1$2/g;
+    # remove quotes around functions so they are interpreted as javascript functions
+    # handles both function() and arrow function () => styles
+    $structure_json =~ s/"\*([a-z_]+":)"(function\([^"]+)"/"$1$2/g;
+    $structure_json =~ s/"\*([a-z_]+":)"(\([^"]*\)\s*=>[^"]*)"/"$1$2/g;
 
     # Build alternate structures for html_* variant keys
     my @variant_entries;
@@ -360,7 +362,8 @@ sub generate_single_class {
             my $variant_html_raw = $page->{$key};
             my $variant_structure = parse_html($variant_html_raw, $known_methods);
             my $variant_json = encode_json($variant_structure);
-            $variant_json =~ s/"\*([a-z]+":)"(function\([^"]+)"/"$1$2/g;
+            $variant_json =~ s/"\*([a-z_]+":)"(function\([^"]+)"/"$1$2/g;
+            $variant_json =~ s/"\*([a-z_]+":)"(\([^"]*\)\s*=>[^"]*)"/"$1$2/g;
             push @variant_entries, "$variant_name: $variant_json";
         }
     }
@@ -417,7 +420,7 @@ sub generate_single_class {
         my $has_onmount = 0;
         my $existing_onmount_code = '';
         for my $i (0 .. $#lifecycle_methods) {
-            if ($lifecycle_methods[$i] =~ /^\s*onMount\s*=\s*(.+);$/) {
+            if ($lifecycle_methods[$i] =~ /^\s*onMount\s*=\s*(.+);$/s) {
                 $has_onmount = 1;
                 $existing_onmount_code = $1;
                 splice(@lifecycle_methods, $i, 1);
@@ -774,7 +777,7 @@ sub compile_page_js_if_stale {
 sub ssr_substitute_vars {
     my ($self, $func_str, $vars) = @_;
     my $text = $func_str;
-    $text =~ s/^function\(\)\{return`(.*)`\}$/$1/s;
+    $text =~ s/^function\(\)\{return\s*`(.*)`\}$/$1/s;
     $text =~ s/\$\{this\.get_(\w+)\(\)\}/defined $vars->{$1} ? $self->_html_escape($vars->{$1}) : ''/ge;
     return $text;
 }
@@ -790,17 +793,19 @@ sub _html_escape {
 }
 
 sub render_ssr_body {
-    my ($self, $structure, $vars, $recipes_map) = @_;
+    my ($self, $structure, $vars, $recipes_map, $slot_children, $slot_vars, $slot_recipes_map) = @_;
     my $html = '';
     my $children = $structure->{children} // [];
     for my $i (0 .. $#$children) {
-        $html .= $self->render_ssr_node($children, $i, $vars, $recipes_map, undef, {});
+        $html .= $self->render_ssr_node($children, $i, $vars, $recipes_map, $slot_children, $slot_vars, $slot_recipes_map, {}, undef);
     }
     return $html;
 }
 
 sub render_ssr_node {
-    my ($self, $siblings, $idx, $vars, $recipes_map, $slot_children, $seen) = @_;
+    # $parent_component_vars: vars of the component that is doing the current rendering
+    # Used so nested components in slot content know their parent component's vars
+    my ($self, $siblings, $idx, $vars, $recipes_map, $slot_children, $slot_vars, $slot_recipes_map, $seen, $parent_component_vars) = @_;
     $seen //= {};
     return '' if $seen->{$idx};
 
@@ -831,6 +836,27 @@ sub render_ssr_node {
 
     return '' if $tag eq 'elseif' || $tag eq 'else';
 
+    # <slot/> tag: render the slot children with the parent's vars
+    # Pass $vars (component's own vars) as parent_component_vars so nested
+    # components in slot content know their "parent component" for scoping
+    if ($tag eq 'slot') {
+        if ($slot_children && @$slot_children) {
+            my $slot_html = '';
+            my $child_seen = {};
+            for my $i (0 .. $#$slot_children) {
+                $slot_html .= $self->render_ssr_node(
+                    $slot_children, $i,
+                    $slot_vars // $vars,
+                    $slot_recipes_map // $recipes_map,
+                    undef, undef, undef, $child_seen,
+                    $vars  # parent_component_vars = slot-owning component's vars
+                );
+            }
+            return "<slot>$slot_html</slot>";
+        }
+        return '<slot></slot>';
+    }
+
     if ($recipes_map && $recipes_map->{$tag}) {
         my $mod_info = $recipes_map->{$tag};
         my $mod_data = $mod_info->{data};
@@ -858,15 +884,25 @@ sub render_ssr_node {
 
         my $sub_modules_map = $self->_build_recipes_map($mod_data);
 
-        my $component_html = $self->render_ssr_body($mod_structure, $mod_vars, $sub_modules_map);
+        # Slot content scopes to the parent of the slot-owning component.
+        # $parent_component_vars reflects the component that created this component
+        # (like parentModule in the JS runtime). Falls back to $vars (current context).
+        my $parent_vars = $parent_component_vars // $vars;
 
-        # Render slot children if component has no explicit slots
-        # Uses component's vars (for $var substitution) but parent's modules_map (for tag resolution)
+        # Pass slot children and parent vars so <slot/> tags can render them with correct scoping
+        my $component_html = $self->render_ssr_body(
+            $mod_structure, $mod_vars, $sub_modules_map,
+            $children, $parent_vars, $recipes_map
+        );
+
+        # Render slot children after template if component has no explicit <slot/> tag
+        # parent_component_vars = mod_vars (this component's vars) so nested components
+        # know their parent component for slot scoping
         if ($children && @$children && !$self->_has_slot_tag($mod_structure)) {
             my $child_seen = {};
             for my $i (0 .. $#$children) {
                 $component_html .= $self->render_ssr_node(
-                    $children, $i, $mod_vars, $recipes_map, undef, $child_seen
+                    $children, $i, $parent_vars, $recipes_map, undef, undef, undef, $child_seen, $mod_vars
                 );
             }
         }
@@ -882,7 +918,7 @@ sub render_ssr_node {
         my $inner = '';
         my $child_seen = {};
         for my $i (0 .. $#$children) {
-            $inner .= $self->render_ssr_node($children, $i, $vars, $recipes_map, $slot_children, $child_seen);
+            $inner .= $self->render_ssr_node($children, $i, $vars, $recipes_map, $slot_children, $slot_vars, $slot_recipes_map, $child_seen, $parent_component_vars);
         }
         return "<a href=\"$href\">$inner</a>";
     }
@@ -896,11 +932,6 @@ sub render_ssr_node {
         return "<$tag$static_attrs data-sp-for></$tag>";
     }
 
-    if ($attrs->{slot}) {
-        my $static_attrs = $self->_render_static_attrs($attrs);
-        return "<$tag$static_attrs></$tag>";
-    }
-
     my $static_attrs = $self->_render_static_attrs($attrs);
 
     if ($VOID_TAGS{$tag}) {
@@ -910,7 +941,7 @@ sub render_ssr_node {
     my $inner = '';
     my $child_seen = {};
     for my $i (0 .. $#$children) {
-        $inner .= $self->render_ssr_node($children, $i, $vars, $recipes_map, $slot_children, $child_seen);
+        $inner .= $self->render_ssr_node($children, $i, $vars, $recipes_map, $slot_children, $slot_vars, $slot_recipes_map, $child_seen, $parent_component_vars);
     }
     return "<$tag$static_attrs>$inner</$tag>";
 }
@@ -933,7 +964,7 @@ sub _has_slot_tag {
     my ($self, $structure) = @_;
     my $children = $structure->{children} // [];
     for my $child (@$children) {
-        return 1 if $child->{attributes} && $child->{attributes}{slot};
+        return 1 if ($child->{tag} // '') eq 'slot';
         return 1 if $self->_has_slot_tag($child);
     }
     return 0;
@@ -1075,6 +1106,12 @@ sub build_html {
     my $page_vars = $page_data->{vars} // {};
     my $ssr_body = $self->render_ssr_body($page_structure, $page_vars, $recipes_map);
 
+    # Skip SSR hydration if body has no meaningful content (only empty placeholders)
+    my $ssr_test = $ssr_body;
+    $ssr_test =~ s/<div data-sp-if><\/div>//g;
+    $ssr_test =~ s/\s//g;
+    my $ssr_attr = $ssr_test ne '' ? ' data-sp-ssr' : '';
+
     return <<"HTML";
 <!DOCTYPE html>
 <html lang="en">
@@ -1102,7 +1139,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
     </script>
 </head>
-<body data-sp-ssr>$ssr_body</body>
+<body$ssr_attr>$ssr_body</body>
 </html>
 HTML
 }

@@ -1,6 +1,6 @@
 package IO::K8s::Api::Core::V1::ObjectFieldSelector;
 # ABSTRACT: ObjectFieldSelector selects an APIVersioned field of an object.
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 use IO::K8s::Resource;
 
 k8s apiVersion => Str;
@@ -23,7 +23,7 @@ IO::K8s::Api::Core::V1::ObjectFieldSelector - ObjectFieldSelector selects an API
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head2 apiVersion
 

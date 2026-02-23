@@ -1,5 +1,11 @@
 Revision history for Linux-Event
 
+0.007  2026-02-22
+  - Fix: $loop->waker now installs an internal read watcher that drains the wakeup fd.
+    This makes $waker->signal (and $loop->stop after waker creation) reliably wake a
+    blocking backend wait (e.g. epoll_wait).
+  - Docs: waker fd is reserved for loop wakeups; user code must not watch/unwatch it.
+
 0.006  2026-02-14
   - Fix: stop() no longer falls into backend wait in the same tick after stop() is called.
   - Fix: EPOLLONESHOT rearm is reliable even when the effective mask is unchanged.

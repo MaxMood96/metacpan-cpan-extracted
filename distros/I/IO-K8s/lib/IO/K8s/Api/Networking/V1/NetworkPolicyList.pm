@@ -1,5 +1,5 @@
 package IO::K8s::Api::Networking::V1::NetworkPolicyList;
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 # ABSTRACT: Deprecated - use IO::K8s::List instead
 use strict;
 use warnings;
@@ -18,7 +18,7 @@ IO::K8s::Api::Networking::V1::NetworkPolicyList - Deprecated - use IO::K8s::List
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head1 SUPPORT
 

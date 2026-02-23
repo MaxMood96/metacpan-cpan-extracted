@@ -1,6 +1,6 @@
 package IO::K8s::Api::Authorization::V1::NonResourceAttributes;
 # ABSTRACT: NonResourceAttributes includes the authorization attributes available for non-resource requests to the Authorizer interface
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 use IO::K8s::Resource;
 
 k8s path => Str;
@@ -23,7 +23,7 @@ IO::K8s::Api::Authorization::V1::NonResourceAttributes - NonResourceAttributes i
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head2 path
 

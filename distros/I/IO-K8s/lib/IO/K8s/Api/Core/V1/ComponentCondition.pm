@@ -1,6 +1,6 @@
 package IO::K8s::Api::Core::V1::ComponentCondition;
 # ABSTRACT: Information about the condition of a component.
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 use IO::K8s::Resource;
 
 k8s error => Str;
@@ -29,7 +29,7 @@ IO::K8s::Api::Core::V1::ComponentCondition - Information about the condition of 
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head2 error
 

@@ -1,6 +1,6 @@
 package IO::K8s::Api::Apps::V1::ReplicaSetCondition;
 # ABSTRACT: ReplicaSetCondition describes the state of a replica set at a certain point.
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 use IO::K8s::Resource;
 
 k8s lastTransitionTime => Str;
@@ -32,7 +32,7 @@ IO::K8s::Api::Apps::V1::ReplicaSetCondition - ReplicaSetCondition describes the 
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head2 lastTransitionTime
 

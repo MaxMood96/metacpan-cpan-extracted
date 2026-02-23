@@ -1,5 +1,5 @@
 package IO::K8s::Api::Core::V1::NamespaceList;
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 # ABSTRACT: Deprecated - use IO::K8s::List instead
 use strict;
 use warnings;
@@ -18,7 +18,7 @@ IO::K8s::Api::Core::V1::NamespaceList - Deprecated - use IO::K8s::List instead
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head1 SUPPORT
 

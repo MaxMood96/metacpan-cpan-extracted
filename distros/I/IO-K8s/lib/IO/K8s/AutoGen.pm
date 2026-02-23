@@ -1,6 +1,6 @@
 package IO::K8s::AutoGen;
 # ABSTRACT: Dynamically generate IO::K8s classes from OpenAPI schema
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 use v5.10;
 use strict;
 use warnings;
@@ -278,7 +278,7 @@ IO::K8s::AutoGen - Dynamically generate IO::K8s classes from OpenAPI schema
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head1 SYNOPSIS
 

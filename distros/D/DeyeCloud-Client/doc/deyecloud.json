@@ -1,0 +1,6 @@
+{
+	"email":	"nobody@nowhere.no",
+	"appSecret":	"app_secret",
+	"__comment":	"echo -n app_password | sha256sum",
+	"password":	"password_as_generated_is__comment"
+}

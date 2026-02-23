@@ -1,4 +1,5 @@
 #!/usr/bin/env perl
+# ABSTRACT: Test Gemini engine request generation and model list
 
 use strict;
 use warnings;
@@ -61,8 +62,7 @@ is_deeply($gemini_stream_data, {
   },
 }, 'Gemini streaming request body is correct');
 
-# Test model list
-my @models = $gemini->all_models;
-is(scalar(@models), 3, 'Gemini has 3 models defined');
+# Test default model
+is($gemini->default_model, 'gemini-2.5-flash', 'Gemini default model is gemini-2.5-flash');
 
 done_testing;

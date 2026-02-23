@@ -2,17 +2,9 @@ use strict;
 use warnings;
 use Feature::Compat::Class;
 
-class WebServer::DirIndex::HTML v0.0.1 {
+class WebServer::DirIndex::HTML v0.0.2 {
 
-  use Plack::Util;
-  use WebServer::DirIndex::CSS;
-
-  field $path_info :param;
-  field $files     :param;
-  field $pretty    :param = 0;
-
-  method file_html {
-    return <<'FILE';
+  field $file_html :reader = <<'FILE';
   <tr>
     <td class='name'><a href='%s'>%s</a></td>
     <td class='size'>%s</td>
@@ -20,10 +12,8 @@ class WebServer::DirIndex::HTML v0.0.1 {
     <td class='mtime'>%s</td>
   </tr>
 FILE
-  }
 
-  method dir_html {
-    return <<'DIR';
+  field $dir_html :reader = <<'DIR';
 <html>
   <head>
     <title>%s</title>
@@ -52,17 +42,6 @@ FILE
   </body>
 </html>
 DIR
-  }
-
-  method render {
-    my $path = Plack::Util::encode_html("Index of $path_info");
-    my $files_html = join "\n", map {
-      my $f = $_;
-      sprintf $self->file_html, map { Plack::Util::encode_html($_) } @$f;
-    } @$files;
-    my $css = WebServer::DirIndex::CSS->new(pretty => $pretty)->css;
-    return sprintf $self->dir_html, $path, $css, $path, $files_html;
-  }
 }
 
 1;
@@ -77,47 +56,14 @@ WebServer::DirIndex::HTML - HTML rendering for directory index pages
 
   use WebServer::DirIndex::HTML;
 
-  my $html = WebServer::DirIndex::HTML->new(
-    path_info => '/some/dir/',
-    files     => \@files,
-    pretty    => 0,
-  );
-
-  my $page = $html->render;
+  my $html      = WebServer::DirIndex::HTML->new;
+  my $file_tmpl = $html->file_html;
+  my $dir_tmpl  = $html->dir_html;
 
 =head1 DESCRIPTION
 
-This module renders an HTML directory index page from a list of file
-entries. It provides the HTML templates used to generate the page.
-
-=head1 CONSTRUCTOR
-
-=over 4
-
-=item new(%args)
-
-Creates a new C<WebServer::DirIndex::HTML> object. Accepts the following
-named parameters:
-
-=over 4
-
-=item path_info
-
-The request path info (e.g. C</some/dir/>). Used as the page title and heading.
-
-=item files
-
-An arrayref of file entries. Each entry is an arrayref of
-C<[$url, $name, $size, $type, $mtime]>.
-
-=item pretty
-
-If true, uses an enhanced CSS stylesheet for a more attractive appearance.
-Defaults to false.
-
-=back
-
-=back
+This module provides HTML template strings used to render a directory
+index page. The actual rendering is performed by L<WebServer::DirIndex>.
 
 =head1 METHODS
 
@@ -132,11 +78,31 @@ Returns a C<sprintf> format string used to render a single file row.
 Returns a C<sprintf> format string used to render the full directory
 index page.
 
-=item render
+=back
 
-Generates and returns the complete HTML directory index page.
+=head1 SUBCLASSING
+
+You can subclass this module to provide custom HTML templates. Override
+C<file_html> and/or C<dir_html> in your subclass by declaring new fields
+with the C<:reader> attribute.
+
+Both templates are C<sprintf> format strings. The placeholders (C<%s>) are
+positional and must be preserved in the correct order:
+
+=over 4
+
+=item file_html placeholders (5 total, in order)
+
+C<url>, C<name>, C<size>, C<mime_type>, C<mtime>.
+
+=item dir_html placeholders (4 total, in order)
+
+Page C<title>, inline C<css>, page C<heading>, C<file rows>.
 
 =back
+
+Pass your subclass name as the C<html_class> parameter when constructing
+L<WebServer::DirIndex> or L<WebServer::DirIndex::File>.
 
 =head1 AUTHOR
 

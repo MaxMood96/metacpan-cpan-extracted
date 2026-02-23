@@ -1,2 +1,8 @@
+0.02 2026-02-22T16:31:23+01:00
+ - Add basic run() tests.
+ - Add constructor tests.
+ - Regen example file.
+ - Update copyright years.
+
 0.01 2024-02-21T12:19:03+01:00
  - First version.

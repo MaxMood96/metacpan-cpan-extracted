@@ -7,7 +7,7 @@ use Module::Runtime qw(require_module);
 use JSON::MaybeXS;
 use namespace::clean;
 
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 
 # Track which classes we've auto-generated
 my %_autogen_cache;
@@ -51,6 +51,15 @@ my %DEFAULT_RESOURCE_MAP = (
     CSIStorageCapacity => 'Api::Storage::V1::CSIStorageCapacity',
     StorageClass => 'Api::Storage::V1::StorageClass',
     VolumeAttachment => 'Api::Storage::V1::VolumeAttachment',
+    # Authorization
+    LocalSubjectAccessReview => 'Api::Authorization::V1::LocalSubjectAccessReview',
+    SelfSubjectAccessReview => 'Api::Authorization::V1::SelfSubjectAccessReview',
+    SelfSubjectRulesReview => 'Api::Authorization::V1::SelfSubjectRulesReview',
+    SubjectAccessReview => 'Api::Authorization::V1::SubjectAccessReview',
+    # Authentication
+    SelfSubjectReview => 'Api::Authentication::V1::SelfSubjectReview',
+    TokenRequest => 'Api::Authentication::V1::TokenRequest',
+    TokenReview => 'Api::Authentication::V1::TokenReview',
     # RBAC
     ClusterRole => 'Api::Rbac::V1::ClusterRole',
     ClusterRoleBinding => 'Api::Rbac::V1::ClusterRoleBinding',
@@ -548,7 +557,7 @@ IO::K8s - Objects representing things found in the Kubernetes API
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head1 SYNOPSIS
 

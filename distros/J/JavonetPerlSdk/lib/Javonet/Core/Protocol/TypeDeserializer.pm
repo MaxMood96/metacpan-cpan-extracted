@@ -17,6 +17,7 @@ our @EXPORT = qw(
     deserializeULongLong
     deserializeUInt
     deserializeUndef
+    deserializeUndefined
 );
 
 sub deserializeString {
@@ -89,6 +90,11 @@ sub deserializeUInt {
 }
 
 sub deserializeUndef {
+    my ($class) = @_;
+    return undef;
+}
+
+sub deserializeUndefined {
     my ($class) = @_;
     return undef;
 }

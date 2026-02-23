@@ -75,6 +75,9 @@ sub ReadObject {
     elsif ($type == Type->get_type('JavonetNull')) {
         return ReadNull($buffer_ref, $position_ref);
     }
+    elsif ($type == Type->get_type('JavonetUndefined')) {
+        return ReadUndefined($buffer_ref, $position_ref);
+    }
     else {
         die "NotImplementedException: Type not supported: $type";
     }
@@ -261,6 +264,19 @@ sub ReadNull {
     
     # Note: deserializeUndef doesn't use the buffer, but we match C# structure
     return TypeDeserializer->deserializeUndef();
+}
+
+# ReadUndefined
+sub ReadUndefined {
+    my ($buffer_ref, $position_ref) = @_;
+    my @buffer = @$buffer_ref;
+    my $size = 1;
+    
+    $$position_ref += 2;
+    my $p = $$position_ref;
+    $$position_ref += $size;
+    
+    return TypeDeserializer->deserializeUndefined();
 }
 
 1;

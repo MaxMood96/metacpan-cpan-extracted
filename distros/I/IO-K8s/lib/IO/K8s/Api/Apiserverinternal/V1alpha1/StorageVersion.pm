@@ -1,6 +1,6 @@
 package IO::K8s::Api::Apiserverinternal::V1alpha1::StorageVersion;
 # ABSTRACT: Storage version of a specific resource.
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 use IO::K8s::APIObject;
 
 
@@ -23,7 +23,7 @@ IO::K8s::Api::Apiserverinternal::V1alpha1::StorageVersion - Storage version of a
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head1 DESCRIPTION
 

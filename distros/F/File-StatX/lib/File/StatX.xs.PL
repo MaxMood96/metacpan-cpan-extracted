@@ -121,22 +121,22 @@ END
 }
 
 my %maybe_methods = (
-	mnt_id                    => 'MNT_ID',
-	subvol                    => 'SUBVOL',
-	atomic_write_unit_min     => 'WRITE_ATOMIC',
-	atomic_write_unit_max     => 'WRITE_ATOMIC',
-	atomic_write_segments_max => 'WRITE_ATOMIC',
-	atomic_write_unit_max_opt => 'WRITE_ATOMIC',
-	dio_mem_align             => 'DIO_ALIGN',
-	dio_offset_align          => 'DIO_ALIGN',
-	dio_read_offset_align     => 'DIO_READ_ALIGN',
+	mnt_id                    => 'STATX_MNT_ID',
+	subvol                    => 'STATX_SUBVOL',
+	atomic_write_unit_min     => 'STATX_WRITE_ATOMIC',
+	atomic_write_unit_max     => 'STATX_WRITE_ATOMIC',
+	atomic_write_segments_max => 'STATX_WRITE_ATOMIC',
+	atomic_write_unit_max_opt => 'HAS_WRITE_UNIX_MAX_OPT',
+	dio_mem_align             => 'STATX_DIO_ALIGN',
+	dio_offset_align          => 'STATX_DIO_ALIGN',
+	dio_read_offset_align     => 'STATX_DIO_READ_ALIGN',
 );
 for my $key (sort keys %maybe_methods) {
 	print $fh <<"END";
 SV* $key(File::StatX self)
 CODE:
 #ifdef STATX_$maybe_methods{$key}
-	if (self->stx_mask & STATX_$maybe_methods{$key})
+	if (self->stx_mask & $maybe_methods{$key})
 		RETVAL = newSVuv(self->stx_$key);
 	else
 #endif

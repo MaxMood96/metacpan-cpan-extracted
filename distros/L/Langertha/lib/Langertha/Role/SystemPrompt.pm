@@ -1,6 +1,6 @@
 package Langertha::Role::SystemPrompt;
 # ABSTRACT: Role for APIs with system prompt
-our $VERSION = '0.100';
+our $VERSION = '0.201';
 use Moose::Role;
 
 has system_prompt => (
@@ -8,6 +8,8 @@ has system_prompt => (
   isa => 'Str',
   predicate => 'has_system_prompt',
 );
+
+
 
 1;
 
@@ -23,7 +25,22 @@ Langertha::Role::SystemPrompt - Role for APIs with system prompt
 
 =head1 VERSION
 
-version 0.100
+version 0.201
+
+=head2 system_prompt
+
+An optional system prompt string. When set, it is automatically prepended to
+the conversation as a C<system> role message by L<Langertha::Role::Chat/chat_messages>.
+
+=head1 SEE ALSO
+
+=over
+
+=item * L<Langertha::Role::Chat> - Chat role that injects the system prompt into messages
+
+=item * L<Langertha::Raider> - Autonomous agent with its own C<mission> prompt
+
+=back
 
 =head1 SUPPORT
 

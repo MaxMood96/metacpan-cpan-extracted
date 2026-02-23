@@ -1,6 +1,6 @@
 package Kubernetes::REST::Kubeconfig;
 # ABSTRACT: Parse kubeconfig files and create Kubernetes::REST instances
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 use Moo;
 use Carp qw(croak);
 use YAML::XS ();
@@ -177,7 +177,7 @@ Kubernetes::REST::Kubeconfig - Parse kubeconfig files and create Kubernetes::RES
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head1 SYNOPSIS
 

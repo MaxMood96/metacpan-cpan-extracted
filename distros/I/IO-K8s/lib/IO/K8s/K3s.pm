@@ -1,6 +1,6 @@
 package IO::K8s::K3s;
 # ABSTRACT: K3s CRD resource map provider for IO::K8s
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 use Moo;
 with 'IO::K8s::Role::ResourceMap';
 
@@ -26,7 +26,7 @@ IO::K8s::K3s - K3s CRD resource map provider for IO::K8s
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head1 SYNOPSIS
 

@@ -1,6 +1,6 @@
 package Langertha::Role::Embedding;
 # ABSTRACT: Role for APIs with embedding functionality
-our $VERSION = '0.100';
+our $VERSION = '0.201';
 use Moose::Role;
 use Carp qw( croak );
 
@@ -21,10 +21,12 @@ sub _build_embedding_model {
   return $self->model;
 }
 
+
 sub embedding {
   my ( $self, $text ) = @_;
   return $self->embedding_request($text);
 }
+
 
 sub simple_embedding {
   my ( $self, $text ) = @_;
@@ -32,6 +34,8 @@ sub simple_embedding {
   my $response = $self->user_agent->request($request);
   return $request->response_call->($response);
 }
+
+
 
 1;
 
@@ -47,7 +51,37 @@ Langertha::Role::Embedding - Role for APIs with embedding functionality
 
 =head1 VERSION
 
-version 0.100
+version 0.201
+
+=head2 embedding_model
+
+The model name to use for embedding requests. Lazily defaults to
+C<default_embedding_model> if the engine provides it, otherwise falls back
+to the general C<model> attribute from L<Langertha::Role::Models>.
+
+=head2 embedding
+
+    my $request = $engine->embedding($text);
+
+Builds and returns an embedding HTTP request object for the given C<$text>.
+Use L</simple_embedding> to execute the request and get the result directly.
+
+=head2 simple_embedding
+
+    my $vector = $engine->simple_embedding($text);
+
+Sends an embedding request for C<$text> and returns the embedding vector.
+Blocks until the request completes.
+
+=head1 SEE ALSO
+
+=over
+
+=item * L<Langertha::Role::HTTP> - HTTP transport layer
+
+=item * L<Langertha::Role::Models> - Model selection (provides C<embedding_model>)
+
+=back
 
 =head1 SUPPORT
 

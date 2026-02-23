@@ -1,6 +1,6 @@
 package SPVM::Resource::Libpng;
 
-our $VERSION = "0.013";
+our $VERSION = "0.014";
 
 1;
 
@@ -16,7 +16,7 @@ SPVM::Resource::Libpng class in L<SPVM> is a L<resource|SPVM::Document::Resource
 
 MyClass.config:
 
-  my $config = SPVM::Builder::Config->new_c99(file => __FILE__);
+  my $config = SPVM::Builder::Config->new_c99;
   
   $config->use_resource('Resource::Zlib');
   $config->use_resource('Resource::Libpng');
@@ -46,7 +46,7 @@ L<libpng v1.6.45|https://github.com/glennrp/libpng/releases/tag/v1.6.45>
 
 The C language
 
-=head1 Language Specification
+=head1 Language Standard
 
 C99
 

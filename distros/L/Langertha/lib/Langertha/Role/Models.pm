@@ -1,6 +1,6 @@
 package Langertha::Role::Models;
 # ABSTRACT: Role for APIs with several models
-our $VERSION = '0.100';
+our $VERSION = '0.201';
 use Moose::Role;
 
 requires qw(
@@ -14,14 +14,10 @@ has models => (
 );
 sub _build_models {
   my ( $self ) = @_;
-  # Prefer dynamic list_models() over static all_models()
   return $self->list_models() if $self->can('list_models');
-  return [
-    $self->can('all_models')
-      ? $self->all_models
-      : $self->model
-  ];
+  return [ $self->model ];
 }
+
 
 has model => (
   is => 'ro',
@@ -33,12 +29,14 @@ sub _build_model {
   return $self->default_model;
 }
 
+
 # Cache configuration
 has models_cache_ttl => (
   is => 'ro',
   isa => 'Int',
   default => sub { 3600 }, # 1 hour default
 );
+
 
 has _models_cache => (
   is => 'rw',
@@ -57,6 +55,8 @@ sub clear_models_cache {
   return;
 }
 
+
+
 1;
 
 __END__
@@ -71,7 +71,43 @@ Langertha::Role::Models - Role for APIs with several models
 
 =head1 VERSION
 
-version 0.100
+version 0.201
+
+=head2 models
+
+ArrayRef of available model name strings. Lazily populated by calling
+C<list_models> if the engine supports it, otherwise contains only the
+currently selected C<model>.
+
+=head2 model
+
+The model name to use for requests. Defaults to the engine's C<default_model>.
+Engines that require this role must implement C<default_model>.
+
+=head2 models_cache_ttl
+
+Time-to-live in seconds for the models list cache. Defaults to C<3600> (one hour).
+
+=head2 clear_models_cache
+
+    $engine->clear_models_cache;
+
+Clears the internal models list cache, forcing a fresh fetch on the next
+access to C<models>.
+
+=head1 SEE ALSO
+
+=over
+
+=item * L<Langertha::Role::OpenAPI> - Typically composed alongside this role
+
+=item * L<Langertha::Role::Chat> - Uses C<model> via C<chat_model>
+
+=item * L<Langertha::Role::Embedding> - Uses C<model> via C<embedding_model>
+
+=item * L<Langertha::Role::Transcription> - Uses C<model> via C<transcription_model>
+
+=back
 
 =head1 SUPPORT
 

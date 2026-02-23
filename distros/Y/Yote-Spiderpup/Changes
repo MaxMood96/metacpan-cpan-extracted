@@ -1,5 +1,18 @@
 Revision history for Yote-Spiderpup
 
+0.03  2026-02-22
+    - Slot scoping: slot content now resolves variables from the parent scope
+      where the component is used, not the slot-owning component's scope
+    - Compiler generates regular functions instead of arrow functions, enabling
+      proper scope rebinding via .call()
+    - Fixed SSR rendering of slot content with correct parent variable scoping
+    - Fixed hydrate() to support scope parameter, matching render() behavior
+    - Fixed component parentModule to walk past RecipeConditional/RecipeLoop
+      helpers, preventing TypeError when slot content is inside conditionals
+    - Added store._notifyAll() for reactive update propagation
+    - Added _containerEl to RecipeLoop and RecipeConditional
+    - Cleanup of updatableElements/updatableRecipes in RecipeConditional.refresh()
+
 0.02  2026-02-20
     - Single-file component (.pup) format support
     - New module Yote::Spiderpup::SFC with parse_sfc() parser

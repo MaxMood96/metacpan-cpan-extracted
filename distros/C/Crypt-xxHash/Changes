@@ -1,6 +1,10 @@
 Changes
 =======
 
+0.09 - 2026 Feb 22
+    - updating xxHash C++ library up to v0.8.3
+    - @CindyLinz added 64 strem methods
+
 0.08 0 2025 Nov 20
     - ignore versions of required packages
 

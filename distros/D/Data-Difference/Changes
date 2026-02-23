@@ -1,3 +1,9 @@
+0.113002  2026-02-22 19:07:33-05:00 America/New_York
+        - cyclical data structures no longer recurse infinitely
+        - no longer ignores top level undef values in the left hand
+          side; this is very much like the previously-fixed
+          https://rt.cpan.org/Ticket/Display.html?id=109262
+
 0.113001  2025-01-06 10:13:27-05:00 America/New_York
         - nothing new since the trial release
 

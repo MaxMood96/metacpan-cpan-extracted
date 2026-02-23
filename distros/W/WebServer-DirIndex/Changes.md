@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-02-22
+
+### Changed
+
+- Replaced `Plack::MIME` with `MIME::Types` for MIME type lookups.
+- Replaced `Plack::Util::encode_html` with `HTML::Escape::escape_html` from the
+  `HTML::Escape` module, removing the dependency on `Plack` entirely.
+- Converted `sub file_html` and `sub dir_html` in `WebServer::DirIndex::HTML` from class
+  methods (subs) to fields with `:reader`, making them instance-level read accessors.
+- Converted `sub standard_css` and `sub pretty_css` in `WebServer::DirIndex::CSS` from
+  plain subs to fields with `:reader`, making them instance-level read accessors.
+- Updated callers in `WebServer::DirIndex`, `WebServer::DirIndex::File`, and tests to
+  use `->new->method` instead of `->method` for `WebServer::DirIndex::HTML`.
+- Moved `render()` method from `WebServer::DirIndex::HTML` to `WebServer::DirIndex::to_html`.
+- Added `to_html()` method to `WebServer::DirIndex::File` that renders a single
+  file entry as an HTML table row (with all fields HTML-escaped). The `render()`
+  method in `WebServer::DirIndex` now delegates to this method per file.
+
+### Added
+
+- New `WebServer::DirIndex::File` class to encapsulate directory entry data (url, name, size, mime_type, mtime).
+
+### Fixed
+
+- Correct copyright date.
+
 ## [0.0.1] - 2026-02-21
 
 ### Added

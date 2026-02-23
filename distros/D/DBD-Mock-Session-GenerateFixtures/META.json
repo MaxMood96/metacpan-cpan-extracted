@@ -1,0 +1,73 @@
+{
+   "abstract" : "This distribution generates fixtures for DBD-Mock-Session module",
+   "author" : [
+      "Dragos Trif <your.email@example.com>"
+   ],
+   "dynamic_config" : 1,
+   "generated_by" : "ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010",
+   "license" : [
+      "perl_5"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "DBD-Mock-Session-GenerateFixtures",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "inc"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "Carp" : "1.50",
+            "Cpanel::JSON::XS" : "4.37",
+            "DBD::Mock" : "1.59",
+            "Data::Walk" : "2.01",
+            "English" : "1.11",
+            "File::Path" : "2.18",
+            "File::Slurper" : "0.014",
+            "File::Spec" : "3.75",
+            "Readonly" : "2.05",
+            "Sub::Override" : "0.12",
+            "Try::Tiny" : "0.32",
+            "perl" : "5.014004"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "DBD::SQLite" : "1.74",
+            "DBI" : "1.643",
+            "Exporter::NoWork" : "0.03",
+            "Rose::DB" : "0.786",
+            "Rose::DB::Object" : "0.822",
+            "Rose::DB::Object::Loader" : "0.799",
+            "Rose::DB::Object::Manager" : "0.813",
+            "Sub::Override" : "0.12",
+            "Test2::V0" : "0.000145",
+            "Try::Tiny" : "0.32",
+            "autodie" : "2.37"
+         }
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "repository" : {
+         "url" : "https://github.com/DragosTrif/DBD-Fixtures"
+      }
+   },
+   "version" : 1.01,
+   "x_serialization_backend" : "JSON::PP version 4.16"
+}

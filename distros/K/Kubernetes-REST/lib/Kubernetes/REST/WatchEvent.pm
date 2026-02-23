@@ -1,5 +1,5 @@
 package Kubernetes::REST::WatchEvent;
-our $VERSION = '1.001';
+our $VERSION = '1.002';
 # ABSTRACT: A single event from the Kubernetes Watch API
 use Moo;
 use Types::Standard qw(Str);
@@ -28,7 +28,7 @@ Kubernetes::REST::WatchEvent - A single event from the Kubernetes Watch API
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head1 SYNOPSIS
 
