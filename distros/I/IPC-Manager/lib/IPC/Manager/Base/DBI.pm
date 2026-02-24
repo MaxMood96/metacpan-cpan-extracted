@@ -2,7 +2,7 @@ package IPC::Manager::Base::DBI;
 use strict;
 use warnings;
 
-our $VERSION = '0.000003';
+our $VERSION = '0.000005';
 
 use Carp qw/croak/;
 use Scalar::Util qw/blessed/;

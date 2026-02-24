@@ -1,3 +1,11 @@
+v0.06  2026-02-24Z
+    - Added support to import PSF 1 and 2 files
+    - Improved HTML rendering in sf-to-html
+    - Updated list of SIRTX characters
+    - Added experimental support to generate glyphs
+    - Added experimental support to analyse the font
+    - Added experimental support for additional metadata
+
 v0.05  2025-12-25Z
     - Updated list of important code points
 

@@ -26,7 +26,7 @@ no_index:
 provides:
   Zabbix7::API:
     file: lib/Zabbix7/API.pm
-    version: '1.1'
+    version: '1.2'
   Zabbix7::API::Action:
     file: lib/Zabbix7/API/Action.pm
   Zabbix7::API::Application:
@@ -51,6 +51,8 @@ provides:
     file: lib/Zabbix7/API/Map.pm
   Zabbix7::API::MediaType:
     file: lib/Zabbix7/API/MediaType.pm
+  Zabbix7::API::Problem:
+    file: lib/Zabbix7/API/Problem.pm
   Zabbix7::API::Proxy:
     file: lib/Zabbix7/API/Proxy.pm
   Zabbix7::API::Script:
@@ -69,8 +71,8 @@ resources:
   bugtracker: https://github.com/scotticles/perl-zabbix7-api/issues
   homepage: https://github.com/scotticles/perl-zabbix7-api
   repository: https://github.com/scotticles/perl-zabbix7-api.git
-version: '1.1'
+version: '1.2'
 x_contributors:
-  - 'Scotth <scotth@cpan.org>'
+  - 'scotth <scotth@cpan.org>'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'
 x_static_install: 1

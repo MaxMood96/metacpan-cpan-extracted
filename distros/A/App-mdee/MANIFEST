@@ -15,12 +15,15 @@ lib/App/mdee.pm
 minil.toml
 script/mdee
 share/theme/hashed.sh
+share/theme/nomark.sh
 share/theme/warm.sh
 t/00_compile.t
 t/01_mdee.t
 t/02_colorize.t
 t/03_nofork.t
+t/04_table_align.t
 t/Util.pm
+t/demo.md
 t/test.md
 xt/nofork.t
 t/runner/README.md

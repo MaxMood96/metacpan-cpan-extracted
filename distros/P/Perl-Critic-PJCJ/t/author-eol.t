@@ -24,6 +24,7 @@ my @files = (
     't/00-report-prereqs.t',
     't/CodeLayout/ProhibitLongLines/basic.t',
     't/CodeLayout/ProhibitLongLines/configuration.t',
+    't/CodeLayout/ProhibitLongLines/gitattributes.t',
     't/CodeLayout/ProhibitLongLines/line_number_reporting.t',
     't/Utils/SourceLocation/basic.t',
     't/ValuesAndExpressions/RequireConsistentQuoting/basic.t',

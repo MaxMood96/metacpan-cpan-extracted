@@ -2,13 +2,17 @@ use strict;
 use warnings;
 use Feature::Compat::Class;
 
-class WebServer::DirIndex::CSS v0.0.2 {
+class WebServer::DirIndex::CSS v0.0.3 {
 
   field $pretty :param = 0;
 
   field $standard_css :reader = <<CSS;
 table {
   width: 100%;
+}
+.icon {
+  width: 1.5em;
+  text-align: center;
 }
 .name {
   text-align: left;
@@ -63,6 +67,11 @@ td, th {
 
 tr:nth-child(even) {
   background: #ccc;
+}
+
+.icon {
+  width: 1.5em;
+  text-align: center;
 }
 
 .size {

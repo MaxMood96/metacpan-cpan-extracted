@@ -1,3 +1,10 @@
+0.65 2026-02-23
+ - C99-compliant compiler is now required for Unicode::UTF8.
+ - Scan 16 bytes at a time to detect non-ASCII bytes, falling back to sequence 
+   validation for non-ASCII input. This approach resulted in a 900% throughput 
+   improvement on English text and a 200% improvement on Swedish text compared 
+   to Encode.pm. Benchmark in git repository.
+
 0.64 2026-02-23
  - Unicode::UTF8 now allows noncharacters; they receive no special handling 
    and are processed like any other code point.

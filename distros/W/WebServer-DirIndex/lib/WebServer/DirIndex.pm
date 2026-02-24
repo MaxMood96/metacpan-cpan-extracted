@@ -3,7 +3,7 @@ use warnings;
 use Feature::Compat::Class;
 use WebServer::DirIndex::HTML;
 
-class WebServer::DirIndex v0.0.2 {
+class WebServer::DirIndex v0.0.3 {
 
   use Path::Tiny;
   use HTTP::Date;
@@ -17,13 +17,17 @@ class WebServer::DirIndex v0.0.2 {
 
   field $dir        :param;
   field $dir_url    :param;
+  field $icons      :param = 1;
   field $html_class :param = 'WebServer::DirIndex::HTML';
   field $css_class  :param = 'WebServer::DirIndex::CSS';
   field $_html_obj = $html_class->new;
   field @files;
 
   ADJUST {
-    @files = ( WebServer::DirIndex::File->parent_dir(html_class => $html_class) );
+    @files = ( WebServer::DirIndex::File->parent_dir(
+      html_class => $html_class,
+      icons      => $icons,
+    ) );
 
     my @children = map { $_->basename } path($dir)->children;
 
@@ -53,6 +57,7 @@ class WebServer::DirIndex v0.0.2 {
         mime_type  => $mime_type,
         mtime      => HTTP::Date::time2str($stat[9]),
         html_class => $html_class,
+        icons      => $icons,
       );
     }
   }
@@ -63,8 +68,10 @@ class WebServer::DirIndex v0.0.2 {
     my $path = escape_html("Index of $path_info");
     my $files_html = join "\n", map { $_->to_html } @files;
     my $css = $css_class->new(pretty => $pretty)->css;
-    return sprintf $_html_obj->dir_html,
-      $path, $css, $path, $files_html;
+    my $tmpl = ($icons && $_html_obj->can('dir_html_icons'))
+      ? $_html_obj->dir_html_icons
+      : $_html_obj->dir_html;
+    return sprintf $tmpl, $path, $css, $path, $files_html;
   }
 }
 
@@ -83,6 +90,7 @@ WebServer::DirIndex - Directory index data for web server listings
   my $di = WebServer::DirIndex->new(
     dir     => '/path/to/dir',
     dir_url => '/some/dir/',
+    icons   => 1,          # optional, defaults to 1 (enabled)
   );
 
   # Get the list of file entries
@@ -118,6 +126,12 @@ The filesystem path to the directory to index.
 The URL path corresponding to the directory (e.g. C</some/dir/>).
 Used to construct file URLs.
 
+=item icons
+
+Optional. When true (the default), each file row includes a Font Awesome icon
+chosen based on the file's MIME type, and the rendered page links to the Font
+Awesome CDN stylesheet. Set to a false value to disable icons entirely.
+
 =item html_class
 
 Optional. The class name to use for HTML templates. Defaults to
@@ -127,7 +141,7 @@ methods that return C<sprintf> format strings.
 =item css_class
 
 Optional. The class name to use for CSS stylesheets. Defaults to
-C<WebServer::DirIndex::CSS>. Must provide a C<new(pretty => $bool)>
+C<WebServer::DirIndex::CSS>. Must provide a C<new(pretty =E<gt> $bool)>
 constructor and a C<css> method that returns a stylesheet string.
 
 =back

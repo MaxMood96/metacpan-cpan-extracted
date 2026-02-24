@@ -1,3 +1,6 @@
+0.115 2025-02-24
+  [Changes]
+    * Change the C language standard from GNU99 to C99 to improve portability.
 0.114 2026-01-30
   [Requirement Changes]
     * Require SPVM 0.990120.

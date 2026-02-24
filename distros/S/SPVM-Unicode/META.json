@@ -47,6 +47,6 @@
          "web" : "https://github.com/yuki-kimoto/SPVM-Unicode"
       }
    },
-   "version" : "0.054",
+   "version" : "0.055",
    "x_serialization_backend" : "JSON::PP version 4.07"
 }

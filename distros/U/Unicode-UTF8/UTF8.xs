@@ -5,118 +5,36 @@
 #define NEED_sv_2pv_flags
 #include "ppport.h"
 
-static size_t
-xs_utf8_check_sequence_units(const U8 *p) {
-  U32 v;
-
-  memcpy(&v, p, 4);
 #if defined(BYTEORDER) && (BYTEORDER == 0x4321 || BYTEORDER == 0x87654321)
-  v = ((v & 0xFF000000) >> 24) |
-      ((v & 0x00FF0000) >>  8) |
-      ((v & 0x0000FF00) <<  8) |
-      ((v & 0x000000FF) << 24);
-#elif !defined(BYTEORDER) || !(BYTEORDER == 0x1234 || BYTEORDER == 0x12345678)
-  #error "Unknown byte order"
+#  define UTF8_VALID_ENDIAN_BIG 1
+#elif defined(BYTEORDER) && (BYTEORDER == 0x1234 || BYTEORDER == 0x12345678)
+#  define UTF8_VALID_ENDIAN_BIG 0
+#else
+#  error "Unknown byte order"
 #endif
 
-  if ((v & 0x80808080) == 0)
-    return 4;
+#ifndef UTF8_VALID_FAST_PATH16
+#  define UTF8_VALID_FAST_PATH16 1
+#endif
 
-  if ((v & 0x80) == 0)
-    return 1;
+#ifndef UTF8_VALID_FAST_PATH4
+#  define UTF8_VALID_FAST_PATH4 1
+#endif
 
-  if ((v & 0xC0E0) == 0x80C0) {
-    if ((v & 0x1E) == 0)
-      return 0;
-    return 2;
-  }
-
-  if ((v & 0xC0C0F0) == 0x8080E0) {
-    v = v & 0x00200F;
-    if (v == 0 || v == 0x00200D)
-      return 0;
-    return 3;
-  }
-
-  if ((v & 0xC0C0C0F8) == 0x808080F0) {
-    v = ((v & 0x07) << 4) | ((v & 0x3000) >> 12);
-    if (v == 0 || v > 0x40)
-      return 0;
-    return 4;
-  }
-
-  return 0;
-}
-
-static STRLEN
-xs_utf8_check(const U8 *src, const STRLEN len) {
-  const U8 *cur = src;
-  const U8 *end = cur + len;
-  size_t count;
-  U8 buf[4];
-
-  while (cur < end) {
-    const U8 *p = cur;
-    if (cur > end - 4) {
-      memset(buf, 0xFF, 4);
-      memcpy(buf, cur, end - cur);
-      p = buf;
-    }
-    count = xs_utf8_check_sequence_units(p);
-    if (!count)
-      break;
-    cur += count;
-  }
-
-  return cur - src;
-}
-
-static STRLEN
-xs_utf8_skip(const U8 *src, const STRLEN len) {
-  U32 v;
-
-  if (len < 2)
-    return len;
-
-  v = (src[0] << 8) | src[1];
-  if ((v & 0xC0C0) != 0xC080)
-    return 1;
-
-  if ((v & 0x2000) == 0) {
-    v = v & 0x1E00;
-    if (v == 0)
-      return 1;
-    return 2;
-  }
-
-  if ((v & 0x1000) == 0) {
-    v = v & 0x0F20;
-    if (v == 0 || v == 0x0D20)
-      return 1;
-    if (len < 3 || (src[2] & 0xC0) != 0x80)
-      return 2;
-    return 3;
-  }
-
-  if ((v & 0x0800) == 0) {
-    v = v & 0x0730;
-    if (v == 0 || v > 0x0400)
-      return 1;
-    if (len < 3 || (src[2] & 0xC0) != 0x80)
-      return 2;
-    if (len < 4 || (src[3] & 0xC0) != 0x80)
-      return 3;
-    return 4;
-  }
-
-  return 1;
-}
+#include "utf8_valid.h"
 
 #ifndef WARN_NON_UNICODE
 # define WARN_NON_UNICODE WARN_UTF8
 # define WARN_NONCHAR WARN_UTF8
 # define WARN_SURROGATE WARN_UTF8
 #endif
+
+static inline STRLEN
+xs_utf8_check(const U8 *src, STRLEN len) {
+  STRLEN off;
+  utf8_check((const char *)src, len, &off);
+  return off;
+};
 
 static void
 xs_report_unmappable(pTHX_ const UV cp, const STRLEN pos) {
@@ -227,7 +145,7 @@ xs_utf8_decode_replace(pTHX_ SV *dsv, const U8 *src, STRLEN len, STRLEN off, CV 
         len -= off;
         pos += off;
 
-        skip = xs_utf8_skip(src, len);
+        skip = utf8_maximal_subpart((const char *)src, len);
 
         if (do_warn) {
             xs_report_illformed(aTHX_ src, skip, "UTF-8", pos, FALSE);
@@ -446,8 +364,7 @@ decode_utf8(octets, fallback=NULL)
         }
         src = (const U8 *)SvPV_const(octets, len);
     }
-    off = xs_utf8_check(src, len);
-    if (off == len) {
+    if (utf8_check((const char *)src, len, &off)) {
         if (reuse_sv) {
             ST(0) = octets;
             SvUTF8_on(octets);
@@ -492,8 +409,8 @@ encode_utf8(string, fallback=NULL)
         }
     }
     else {
-        STRLEN off = xs_utf8_check(src, len);
-        if (off == len) {
+        STRLEN off;
+        if (utf8_check((const char *)src, len, &off)) {
             if (reuse_sv) {
                 ST(0) = string;
                 SvUTF8_off(string);
@@ -517,16 +434,16 @@ void
 valid_utf8(octets)
     SV *octets
   PREINIT:
-    const U8 *src;
+    const char *src;
     STRLEN len;
   PPCODE:
-    src = (const U8 *)SvPV_const(octets, len);
+    src = SvPV_const(octets, len);
     if (SvUTF8(octets)) {
         octets = sv_mortalcopy(octets);
         if (!sv_utf8_downgrade(octets, TRUE))
             croak("Can't validate a wide character string");
-        src = (const U8 *)SvPV_const(octets, len);
+        src = SvPV_const(octets, len);
     }
-    ST(0) = boolSV(xs_utf8_check(src, len) == len);
+    ST(0) = boolSV(utf8_valid(src, len));
     XSRETURN(1);
 

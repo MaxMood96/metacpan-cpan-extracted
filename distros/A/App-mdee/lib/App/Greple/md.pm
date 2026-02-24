@@ -5,7 +5,7 @@ package App::Greple::md;
 use 5.024;
 use warnings;
 
-our $VERSION = "1.01";
+our $VERSION = "1.02";
 
 =encoding utf-8
 
@@ -239,10 +239,22 @@ Colors follow L<Term::ANSIColor::Concise> format.
 
 =head2 Inline Formatting
 
-    LABEL   LIGHT / DARK
-    bold    D
-    italic  I
-    strike  X
+    LABEL           LIGHT   DARK
+    bold            D
+    italic          I
+    strike          X
+    emphasis_mark   L18     L10
+    bold_mark       -       -
+    italic_mark     -       -
+    strike_mark     -       -
+
+Emphasis markers (C<**>, C<*>, C<__>, C<_>, C<~~>) are colored with
+C<emphasis_mark>, separately from the content text.  C<bold_mark>,
+C<italic_mark>, C<strike_mark> are undefined by default and fall back
+to C<emphasis_mark>.  Define them via C<--cm> to override per type:
+
+    greple -Mmd --cm emphasis_mark=R -- file.md    # all markers red
+    greple -Mmd --cm bold_mark=G -- file.md        # bold markers green
 
 =head2 Code
 
@@ -272,6 +284,13 @@ config parameters.
     link         I
     image        I
     image_link   I
+    link_mark    -       -
+
+C<link_mark> colors the brackets (C<[>, C<]>) around link and image
+text.  Undefined by default, falls back to C<emphasis_mark>.
+The C<!> prefix for images uses the C<image> or C<image_link>
+color.  Hide brackets with C<--cm 'link_mark=sub{""}'> (used by
+the C<nomark> theme).
 
 =head1 SEE ALSO
 
@@ -362,6 +381,7 @@ my %default_colors = (
     bold            => 'D',
     italic          => 'I',
     strike          => 'X',
+    emphasis_mark   => 'L18',
     blockquote      => '${base}D',
     horizontal_rule => 'L15',
 );
@@ -378,6 +398,7 @@ my %dark_overrides = (
     h4              => '${base}UD',
     h5              => '${base}U',
     h6              => '${base}',
+    emphasis_mark   => 'L10',
 );
 
 sub default_theme {
@@ -483,6 +504,14 @@ sub active {
 sub md_color {
     my($label, $text) = @_;
     $cm->color($label, $text);
+}
+
+sub mark_color {
+    my($type, $text) = @_;
+    my $label = "${type}_mark";
+    $label = 'emphasis_mark' unless exists $cm->{HASH}{$label}
+                                 && $cm->{HASH}{$label} ne '';
+    md_color($label, $text);
 }
 
 #
@@ -599,20 +628,20 @@ my %colorize = (
         s{$SKIP_CODE|\[!\[(?<text>$LT)\]\((?<img>[^)\n]+)\)\]\(<?(?<url>[^>)\s\n]+)>?\)}{
             protect(
                 osc8($+{img}, md_color('image_link', "!"))
-                . osc8($+{url}, md_color('image_link', "[$+{text}]"))
+                . osc8($+{url}, mark_color('link', "[") . md_color('image_link', $+{text}) . mark_color('link', "]"))
             )
         }ge;
     }),
 
     images => Step(sub {
         s{$SKIP_CODE|!\[(?<text>$LT)\]\(<?(?<url>[^>)\s\n]+)>?\)}{
-            protect(osc8($+{url}, md_color('image', "![$+{text}]")))
+            protect(osc8($+{url}, md_color('image', "!") . mark_color('link', "[") . md_color('image', $+{text}) . mark_color('link', "]")))
         }ge;
     }),
 
     links => Step(sub {
         s{$SKIP_CODE|(?<![!\e])\[(?<text>$LT)\]\(<?(?<url>[^>)\s\n]+)>?\)}{
-            protect(osc8($+{url}, md_color('link', "[$+{text}]")))
+            protect(osc8($+{url}, mark_color('link', "[") . md_color('link', $+{text}) . mark_color('link', "]")))
         }ge;
     }),
 
@@ -645,18 +674,37 @@ my %colorize = (
         s/^([ ]{0,3}(?:[-*_][ ]*){3,})$/protect(md_color('horizontal_rule', $1))/mge;
     }),
 
+    bold_italic => Step(bold => sub {
+        s{$SKIP_CODE|(?<!\\)(?<m>\*\*\*)(?<t>.*?)(?<!\\)\g{m}}{
+            protect(mark_color('bold', $+{m}) . md_color('bold', md_color('italic', $+{t})) . mark_color('bold', $+{m}))
+        }gep;
+        s{$SKIP_CODE|(?<![\\\w])(?<m>___)(?<t>.*?)(?<!\\)\g{m}(?!\w)}{
+            protect(mark_color('bold', $+{m}) . md_color('bold', md_color('italic', $+{t})) . mark_color('bold', $+{m}))
+        }gep;
+    }),
+
     bold => Step(bold => sub {
-        s{$SKIP_CODE|(?<!\\)\*\*.*?(?<!\\)\*\*}{md_color('bold', ${^MATCH})}gep;
-        s{$SKIP_CODE|(?<![\\w])__.*?(?<!\\)__(?!\w)}{md_color('bold', ${^MATCH})}gep;
+        s{$SKIP_CODE|(?<!\\)(?<m>\*\*)(?<t>.*?)(?<!\\)\g{m}}{
+            mark_color('bold', $+{m}) . md_color('bold', $+{t}) . mark_color('bold', $+{m})
+        }gep;
+        s{$SKIP_CODE|(?<![\\\w])(?<m>__)(?<t>.*?)(?<!\\)\g{m}(?!\w)}{
+            mark_color('bold', $+{m}) . md_color('bold', $+{t}) . mark_color('bold', $+{m})
+        }gep;
     }),
 
     italic => Step(italic => sub {
-        s{$SKIP_CODE|(?<![\\w])_(?:(?!_).)+(?<!\\)_(?!\w)}{md_color('italic', ${^MATCH})}gep;
-        s{$SKIP_CODE|(?<![\\*])\*(?:(?!\*).)+(?<!\\)\*(?!\*)}{md_color('italic', ${^MATCH})}gep;
+        s{$SKIP_CODE|(?<![\\\w])(?<m>_)(?<t>(?:(?!_).)+)(?<!\\)\g{m}(?!\w)}{
+            mark_color('italic', $+{m}) . md_color('italic', $+{t}) . mark_color('italic', $+{m})
+        }gep;
+        s{$SKIP_CODE|(?<![\\*])(?<m>\*)(?<t>(?:(?!\*).)+)(?<!\\)\g{m}(?!\*)}{
+            mark_color('italic', $+{m}) . md_color('italic', $+{t}) . mark_color('italic', $+{m})
+        }gep;
     }),
 
     strike => Step(strike => sub {
-        s{$SKIP_CODE|(?<!\\)~~.+?(?<!\\)~~}{md_color('strike', ${^MATCH})}gep;
+        s{$SKIP_CODE|(?<!\\)(?<m>~~)(?<t>.+?)(?<!\\)\g{m}}{
+            mark_color('strike', $+{m}) . md_color('strike', $+{t}) . mark_color('strike', $+{m})
+        }gep;
     }),
 
     blockquotes => Step(blockquote => sub {
@@ -672,7 +720,7 @@ my %colorize = (
 my @protect_steps = qw(code_blocks comments image_links images links);
 
 # Inline steps controlled by heading_markup
-my @inline_steps  = qw(inline_code horizontal_rules bold italic strike);
+my @inline_steps  = qw(inline_code horizontal_rules bold_italic bold italic strike);
 
 # Always last
 my @final_steps   = qw(blockquotes);
@@ -728,10 +776,31 @@ sub format_table {
 
     s{(^ {0,3}\|.+\|\n){3,}}{
         my $block = $&;
+        my @align = parse_separator(\$block);
         my $formatted = call_ansicolumn($block,
-            '-s', '|', '-o', $sep, '-t', '--cu=1');
+            '-s', '|', '-o', $sep, '-t', '--cu=1', @align);
         fix_separator($formatted, $sep);
     }mge;
+}
+
+sub parse_separator {
+    my $blockref = shift;
+    my $SEP = qr/^\h*\|(?:\h*:?-+:?\h*\|)+\h*$/m;
+    my ($sep_line) = $$blockref =~ /($SEP)/;  # capture full line
+    return unless defined $sep_line;
+    my @cells = split /\|/, $sep_line, -1;
+    shift @cells; pop @cells;
+    s/^\h+|\h+$//g for @cells;
+    my @right  = grep { $cells[$_-1] =~ /^-+:$/  } 1..@cells;
+    my @center = grep { $cells[$_-1] =~ /^:-+:$/ } 1..@cells;
+    # +1 offset: leading | creates empty column 1 in ansicolumn
+    @right  = map { $_ + 1 } @right;
+    @center = map { $_ + 1 } @center;
+    $$blockref =~ s{$SEP}{ ${^MATCH} =~ tr/:/-/r }mpe;
+    my @opts;
+    push @opts, '--table-right='  . join(',', @right)  if @right;
+    push @opts, '--table-center=' . join(',', @center) if @center;
+    @opts;
 }
 
 sub call_ansicolumn {

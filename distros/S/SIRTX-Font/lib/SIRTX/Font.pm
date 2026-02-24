@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Philipp Schafft
+# Copyright (c) 2025-2026 Philipp Schafft
 
 # licensed under Artistic License 2.0 (see LICENSE file)
 
@@ -9,14 +9,51 @@ package SIRTX::Font;
 use v5.20;
 use strict;
 use warnings;
+use feature 'bitwise';
 
 use Carp;
+use List::Util qw(none);
 #use parent 'Data::Identifier::Interface::Userdata';
 
 use constant {
     MAGIC               => pack('CCCCCCCC', 0x00, 0x07, ord('S'), ord('F'), 0x0d, 0x0a, 0xc0, 0x0a),
     DATA_START_MARKER   => 0x0600,
 };
+
+my %_metadata_types = (
+    (map {$_ => 'uint'}
+        qw(width height bits),
+        qw(baseline vmiddleline hmiddleline),
+        qw(version_major version_minor),
+    ),
+    version_type => ['devel', 'beta', 'rc', 'stable'],
+);
+
+my %_metadata_constrains = (
+    (
+        # base values:
+        map {$_ => [
+            ['>',   0],
+            ['<', 256],
+        ]}
+        qw(width height bits),
+    ),
+    baseline => [
+        ['>',   0],
+        ['>', 'vmiddleline'],
+        ['<', 'height'],
+    ],
+    vmiddleline => [
+        ['>',   0],
+        ['<', 'height'],
+    ],
+    hmiddleline => [
+        ['>',   0],
+        ['<', 'width'],
+    ],
+    version_major => [['<', 256]],
+    version_minor => [['<',  64]],
+);
 
 my %_char_lists = (
     'ascii'     => [0x20 .. 0x7E],
@@ -49,6 +86,7 @@ my %_char_lists = (
     'sirtx-characters' => [
         0x20AC, 0x2191, 0x2193, 0x2190,  0x2192,  0x221E, 0x2261, 0x25C4, 0x25BA, 0x2642, 0x2640, 0x263A, 0x263B, 0x2665, 0x2660, 0x2663,
         0x266A, 0x23A1, 0x23A6, 0x1F431, 0x1FBB0, 0x2026, 0x03A9, 0x231B, 0x00A4,
+        0xFFFD, 0xFFFC, 0x25B2, 0x25BC,
     ],
     'cp-850' => [
         0x0020, 0x0021, 0x0022, 0x0023, 0x0024, 0x0025, 0x0026, 0x0027, 0x0028, 0x0029, 0x002A, 0x002B, 0x002C, 0x002D, 0x002E, 0x002F,
@@ -91,7 +129,7 @@ my %_char_lists = (
 $_char_lists{'cp-858'} = [map {$_ == 0x0131 ? 0x20AC : $_} @{$_char_lists{'cp-850'}}];
 
 {
-    my %important = map {$_ => undef} (0x25B2, 0x25BC, 0xFFFC, 0xFFFD); # initial values
+    my %important = map {$_ => undef} (); # initial values
 
     foreach my $list (qw(ascii dec-mcs dec-sg sirtx-characters)) {
         $important{$_} = undef foreach @{$_char_lists{$list}};
@@ -176,7 +214,7 @@ $_default_alias_lists{'common-all'} = {
     0x00A0 => 0x0020, # NO-BREAK SPACE      -> SPACE
 };
 
-our $VERSION = v0.05;
+our $VERSION = v0.06;
 
 
 
@@ -230,15 +268,71 @@ sub gc {
     return $self;
 }
 
+sub _check_constrains {
+    my ($self) = @_;
+
+    foreach my $key (keys %_metadata_constrains) {
+        my $v = $self->{$key} // next;
+        foreach my $constraint (@{$_metadata_constrains{$key}}) {
+            my ($cmp, $ref) = @{$constraint};
+            my $res;
+
+            if ($ref =~ /^[0-9]+$/) {
+                $ref = int($ref);
+            } else {
+                $ref = $self->{$ref} // next;
+            }
+
+            if ($cmp eq '<') {
+                $res = $v < $ref;
+            } elsif ($cmp eq '<=') {
+                $res = $v <= $ref;
+            } elsif ($cmp eq '>') {
+                $res = $v > $ref;
+            } elsif ($cmp eq '>=') {
+                $res = $v >= $ref;
+            } elsif ($cmp eq '==') {
+                $res = $v == $ref;
+            }
+
+            unless ($res) {
+                croak sprintf('Constraint failed: %s %s %s is false', $key, @{$constraint});
+            }
+        }
+    }
+
+    return 1;
+}
+
+sub _set_value {
+    my ($self, $key, $value) = @_;
+    my $type = $_metadata_types{$key // croak 'No key given'};
+    my $old = $self->{$key};
+
+    croak 'Not a valid key: '.$key unless defined $type;
+    croak 'No value given' unless defined $value;
+
+    if ($type eq 'uint') {
+        croak 'Not a valid value for key: '.$key.': '.$value unless $value =~ /^(?:0|[1-9][0-9]*)\z/;
+        $value = int($value);
+    } elsif (ref $type) {
+        croak 'Value not part of enum: '.$key.': '.$value if none {$_ eq $value} @{$type};
+    } else {
+        croak 'BUG';
+    }
+
+    $self->{$key} = $value;
+    unless (eval {$self->_check_constrains}) {
+        $self->{$key} = $old;
+        die $@;
+    }
+}
+
 
 sub width {
     my ($self, $n) = @_;
 
-    if (defined $n) {
-        $n = int $n;
-        croak 'Invalid width: '.$n if $n < 1 || $n > 255;
-        $self->{width} = $n;
-    }
+    $self->_set_value(width => $n) if defined $n;
 
     return $self->{width} // croak 'No width set';
 }
@@ -247,11 +341,7 @@ sub width {
 sub height {
     my ($self, $n) = @_;
 
-    if (defined $n) {
-        $n = int $n;
-        croak 'Invalid height: '.$n if $n < 1 || $n > 255;
-        $self->{height} = $n;
-    }
+    $self->_set_value(height => $n) if defined $n;
 
     return $self->{height} // croak 'No height set';
 }
@@ -260,13 +350,39 @@ sub height {
 sub bits {
     my ($self, $n) = @_;
 
-    if (defined $n) {
-        $n = int $n;
-        croak 'Invalid width: '.$n if $n < 1 || $n > 255;
-        $self->{bits} = $n;
-    }
+    $self->_set_value(bits => $n) if defined $n;
 
     return $self->{bits} // croak 'No bits set';
+}
+
+
+sub list_attributes {
+    my ($self, @opts) = @_;
+
+    croak 'Stray options passed' if scalar @opts;
+
+    return keys %_metadata_types;
+}
+
+
+sub get_attribute {
+    my ($self, $key, @opts) = @_;
+
+    croak 'Stray options passed' if scalar @opts;
+
+    croak 'No key given' unless defined $key;
+    croak 'No such key' unless defined $_metadata_types{$key};
+
+    return $self->{$key} // croak 'No value set';
+}
+
+
+sub set_attribute {
+    my ($self, $key, $value, @opts) = @_;
+
+    croak 'Stray options passed' if scalar @opts;
+
+    $self->_set_value($key, $value);
 }
 
 
@@ -589,6 +705,106 @@ sub import_alias_map {
 }
 
 
+sub import_psf {
+    my ($self, $in, %opts) = @_;
+    my $first = scalar(@{$self->{glyphs}});
+    my $chars = $self->{chars};
+    my $data;
+
+    if (!ref $in) {
+        my $gz = $in =~ s/\.gz$//;
+        my $fh;
+
+        open($fh, '<', $in) or croak $!;
+        $fh->binmode;
+        $fh->binmode('gzip') if $gz;
+        $in = $fh;
+    }
+
+    croak 'Cannot read magic' if $in->read($data, 2) != 2;
+
+    if ($data eq pack('v', 0x0436)) {
+        my ($mode, $height);
+        my $glyphs;
+
+        croak 'Cannot read header' if $in->read($data, 2) != 2;
+        ($mode, $height) = unpack('CC', $data);
+
+        $self->bits(1);
+        $self->width(8);
+        $self->height($height);
+
+        $glyphs = $mode & 0x01 ? 512 : 256;
+
+        for (my $i = 0; $i < $glyphs; $i++) {
+            croak 'Cannot read glyph' if $in->read($data, $height) != $height;
+            push(@{$self->{glyphs}}, ~. $data);
+        }
+
+        if ($mode & 0x06) {
+            # we have a unicode table...
+            my $cc = 0;
+
+            while ($in->read($data, 2) == 2) {
+                $data = unpack('v', $data);
+
+                if ($data == 0xFFFF) {
+                    $cc++ if $cc < $glyphs;
+                } else {
+                    #printf("0x%04x\n", $data) if $data > 0xFF00;
+                    $chars->{$data} = $first + $cc;
+                }
+            }
+        } else {
+            carp 'No Unicode mapping table found. Gylphs will likely end up at wrong code points';
+
+            for (my $i = 0; $i < $glyphs; $i++) {
+                $chars->{$i} = $first + $i;
+            }
+        }
+    } elsif ($data eq pack('v', 0xb572)) {
+        my ($magic2, $version, $headersize, $flags, $numglyph, $bytesperglyph, $height, $width);
+
+        croak 'Cannot read magic part two' if $in->read($data, 2 + 7*4) != (2 + 7*4);
+        ($magic2, $version, $headersize, $flags, $numglyph, $bytesperglyph, $height, $width) = unpack('vVVVVVVV', $data);
+
+        croak 'Bad magic part two'  if $magic2      != 0x864a;
+        croak 'Bad version'         if $version     != 0;
+        croak 'Bad headersize'      if $headersize  != 32;
+
+        $self->bits(1);
+        $self->width($width);
+        $self->height($height);
+
+        for (my $i = 0; $i < $numglyph; $i++) {
+            croak 'Cannot read glyph' if $in->read($data, $bytesperglyph) != $bytesperglyph;
+            push(@{$self->{glyphs}}, ~. $data);
+        }
+
+        if ($flags) {
+            require Encode;
+            state $UTF_8 = Encode::find_encoding('UTF-8');
+            my $cc = 0;
+            local $/ = chr(0xFF);
+
+            while (defined(my $entry = <$in>)) {
+                substr($entry, -1, 1, '');
+                $chars->{ord($_)} = $first + $cc for split //, $UTF_8->decode($entry);
+                $cc++;
+            }
+        } else {
+            carp 'No Unicode mapping table found. Gylphs will likely end up at wrong code points';
+
+            for (my $i = 0; $i < $numglyph; $i++) {
+                $chars->{$i} = $first + $i;
+            }
+        }
+    } else {
+        croak 'Bad magic';
+    }
+}
+
+
 sub import_directory {
     my ($self, $directory, %opts) = @_;
     my $chars = $self->{chars};
@@ -660,6 +876,258 @@ sub export_alias_map {
 }
 
 
+sub make_up_glyphs {
+    my ($self) = @_;
+    my $w  = $self->width;
+    my $h  = $self->height;
+    my $h8 = $h/8;
+    my $w8 = $w/8;
+    my $wb = int($w8) + (($w % 8) ? 1 : 0);
+
+    $self->bits(1);
+
+    # U+0020 SPACE
+    $self->_make_up_glyphs_add_one(0x0020 => [map {chr(0xFF) x $wb} 1..$h]);
+    # U+2588 FULL BLOCK
+    $self->_make_up_glyphs_add_one(0x2588 => [map {chr(0x00) x $wb} 1..$h]);
+
+    # U+2581 LOWER ONE EIGHTH BLOCK .. U+2587 LOWER SEVEN EIGHTHS BLOCK
+    for (my $i = 1; $i < 8; $i++) {
+        $self->_make_up_glyphs_add_one((0x2580 + $i) => [map {chr(($h - $_) < ($i*$h8) ? 0x00 : 0xFF) x $wb} 1..$h]);
+    }
+
+    # U+2594 UPPER ONE EIGHTH BLOCK
+    $self->_make_up_glyphs_add_one(0x2594 => [map {chr(($h - $_) > (7*$h8) || $_ == 1 ? 0x00 : 0xFF) x $wb} 1..$h]);
+    # U+2580 UPPER HALF BLOCK
+    $self->_make_up_glyphs_add_one(0x2580 => [map {chr($_ > (4*$h8) ? 0xFF : 0x00) x $wb} 1..$h]);
+
+    # Dear reader, have fun figuring out this!
+    # The basic idea is that we generate a pattern that is 8 or 16 bit wide and use that for the blocks.
+    # The pattern is created using bit shifts in units of 1/8ths.
+    # We also ensure that at least a one pixel bar is present, even if we would shift it all out (e.g. 1/8ths of 4 pixels is still one pixel).
+    if ($wb == 1) {
+        my $pattern;
+
+        # U+2589 LEFT SEVEN EIGHTHS BLOCK .. U+258F LEFT ONE EIGHTH BLOCK
+        for (my $i = 7; $i > 0; $i--) {
+            $pattern = chr((0xFF >> ($i*$w8)) & 0x7F);
+            $self->_make_up_glyphs_add_one((0x258F - $i + 1) => [map {$pattern} 1..$h]);
+        }
+
+        # U+2590 RIGHT HALF BLOCK
+        $pattern = chr((~(0xFF >> ($w/2))) & 0xFF);
+        $self->_make_up_glyphs_add_one(0x2590 => [map {$pattern} 1..$h]);
+
+        # U+2595 RIGHT ONE EIGHTH BLOCK
+        $pattern = chr(((~(0xFF >> (8-$w8))) & (0xFE << (8 - $w)) & 0xFF));
+        $self->_make_up_glyphs_add_one(0x2595 => [map {$pattern} 1..$h]);
+    } elsif ($wb == 2) {
+        my $pattern;
+
+        # U+2589 LEFT SEVEN EIGHTHS BLOCK .. U+258F LEFT ONE EIGHTH BLOCK
+        for (my $i = 7; $i > 0; $i--) {
+            $pattern = pack('n', (0xFFFF >> ($i*$w8)) & 0x7FFF);
+            $self->_make_up_glyphs_add_one((0x258F - $i + 1) => [map {$pattern} 1..$h]);
+        }
+
+        # U+2590 RIGHT HALF BLOCK
+        $pattern = pack('n', (~(0xFFFF >> ($w/2))) & 0xFFFF);
+        $self->_make_up_glyphs_add_one(0x2590 => [map {$pattern} 1..$h]);
+
+        # U+2595 RIGHT ONE EIGHTH BLOCK
+        $pattern = pack('n', ((~(0xFFFF >> (16-$w8))) & (0xFFFE << (16 - $w)) & 0xFFFF));
+        $self->_make_up_glyphs_add_one(0x2595 => [map {$pattern} 1..$h]);
+    }
+}
+
+sub _make_up_glyphs_add_one {
+    my ($self, $cp, $lines) = @_;
+    my $w = $self->width;
+    my $res = '';
+    my $glyph;
+
+    $w = int($w/8) + (($w % 8) ? 1 : 0);
+
+    $self->height(scalar(@{$lines}));
+
+    foreach my $line (@{$lines}) {
+        if (ref $line) {
+            $line = pack('C*', @{$line});
+        }
+        croak 'BUG!' unless length($line) == $w;
+        $res .= $line;
+    }
+
+    push(@{$self->{glyphs}}, $res);
+
+    $glyph = scalar(@{$self->{glyphs}}) - 1;
+
+    $self->default_glyph_for($cp => $glyph);
+
+    return $glyph;
+}
+
+
+sub analyse {
+    my ($self) = @_;
+    my $w  = $self->width;
+    my $msb;
+    my $lsb;
+    my $empty;
+    my $mask;
+
+    if ($w <= 8) {
+        $msb = 0x80;
+        $empty = 0xFF;
+    } elsif ($w <= 16) {
+        $msb = 0x8000;
+        $empty = 0xFFFF;
+    } else {
+        croak 'Unsupported glyph width';
+    }
+    $mask = $empty >> $w;
+    $lsb = $msb >> ($w - 1);
+
+    #warn sprintf('MSB: 0x%04X, LSB: 0x%04X', $msb, $lsb);
+
+    {
+        my $baseline;
+        my $matches = 0;
+        foreach my $char (qw(A B C D E F)) { # All those characters should sit on the baseline
+            eval {
+                my @lines = $self->_analyse_read_char(ord($char));
+
+                for (my $i = scalar(@lines) - 1; $i >= 0; $i--) {
+                    my $d = $lines[$i] | $mask;
+                    next if $d == $empty;
+                    if (defined $baseline) {
+                        last if $baseline != $i;
+                    } else {
+                        $baseline = $i;
+                    }
+                    $matches++;
+                    last;
+                    #printf("U+%04X %2u 0x%04X empty: 0x%04X\n", ord($char), $i, $d, $empty);
+                }
+                #say '---';
+            };
+        }
+
+        # We require at least 4 matches.
+        if ($matches >= 4) {
+            eval { $self->_set_value(baseline => $baseline); }
+        }
+        #warn sprintf('Baseline: %u, matches: %u', $baseline, $matches);
+    }
+
+    {
+        my $vmiddleline;
+        my $hmiddleline;
+        my $vmatches = 0;
+        my $hmatches = 0;
+
+        # We try to find rows and columns with only one pixel set. They must be the first or last.
+        foreach my $cp (0x2500, 0x2502, 0x250C, 0x2510, 0x2514, 0x2518, 0x253C) {
+            eval {
+                my @lines = $self->_analyse_read_char($cp);
+                my $vpixel;
+                my $hpixel;
+
+                mid:
+                foreach my $l (@lines[0, -1]) {
+                    my $d = ($l | $mask) ^ $empty; # only set pixels are now set in $d
+
+                    for (my $i = 0; $i < $w; $i++) {
+                        if ($d & (1 << $i)) {
+                            if (defined($vpixel) && $vpixel != $i) {
+                                $vpixel = undef;
+                                last mid;
+                            } else {
+                                $vpixel = $i;
+                            }
+                        }
+                    }
+                }
+
+                mid:
+                for (my $i = scalar(@lines) - 1; $i >= 0; $i--) {
+                    my $d = ($lines[$i] | $mask) ^ $empty; # only set pixels are now set in $d
+
+                    #warn sprintf('%2u 0x%04X', $i, $d);
+                    foreach my $k ($d & $msb, $d & $lsb) {
+                        next unless $k;
+                        if (defined($hpixel) && $hpixel != $i) {
+                            $hpixel = undef;
+                            last mid;
+                        } else {
+                            $hpixel = $i;
+                        }
+                    }
+                }
+
+
+                if (defined $vpixel) {
+                    $vpixel = $w - $vpixel;
+                    if (defined $vmiddleline) {
+                        $vmatches++ if $vmiddleline == $vpixel;
+                    } else {
+                        $vmiddleline = $vpixel;
+                        $vmatches++;
+                    }
+                }
+                if (defined $hpixel) {
+                    if (defined $hmiddleline) {
+                        $hmatches++ if $hmiddleline == $hpixel;
+                    } else {
+                        $hmiddleline = $hpixel;
+                        $hmatches++;
+                    }
+                }
+
+                #printf("U+%04X %2u 0x%04X empty: 0x%04X, vpixel: %s\n", $cp, 0, $lines[0], $empty, $vpixel // '<undef>');
+            }
+        }
+
+        # We require at least 4 matches.
+        if ($vmatches >= 4) {
+            eval { $self->_set_value(vmiddleline => $vmiddleline); }
+        }
+        if ($hmatches >= 4) {
+            eval { $self->_set_value(hmiddleline => $hmiddleline); }
+        }
+        #warn sprintf('vmiddleline: %u, matches: %u', $vmiddleline, $vmatches);
+        #warn sprintf('hmiddleline: %u, matches: %u', $hmiddleline, $hmatches);
+    }
+
+    #use Data::Dumper;
+    #warn Dumper([map {sprintf('0x%02x', $_)} $self->_analyse_read_char(ord('A'))]);
+}
+
+sub _analyse_read_char {
+    my ($self, $cp) = @_;
+    my $glyph = $self->glyph_for($cp);
+    my $w  = $self->width;
+    my $p;
+
+    $glyph = int($glyph) if defined $glyph;
+    croak 'No valid glyph given' unless defined($glyph) && $glyph >= 0;
+    $glyph = $self->{glyphs}[$glyph];
+    croak 'No valid glyph given' unless defined($glyph);
+
+    if ($self->bits != 1) {
+        croak 'Unsupported glyph size';
+    }
+
+    if ($w <= 8) {
+        return unpack('C*', $glyph);
+    } elsif ($w <= 16) {
+        return unpack('n*', $glyph);
+    } else {
+        croak 'Unsupported glyph width';
+    }
+}
+
+
 sub render {
     require List::Util;
     require Image::Magick;
@@ -703,7 +1171,7 @@ SIRTX::Font - module for working with SIRTX font files
 
 =head1 VERSION
 
-version v0.05
+version v0.06
 
 =head1 SYNOPSIS
 
@@ -785,7 +1253,7 @@ Creates a new font object. No parameters are supported.
 
     $font->gc;
 
-(experimental)
+(experimental, since v0.01)
 
 Takes the trash out. This will remove unused glyphs and deduplicate glyphs that are still in use.
 
@@ -815,6 +1283,36 @@ Sets or gets the height of character cells.
     my $bits = $font->bits;
 
 Sets or gets the bits per pixel of character cells.
+
+=head2 list_attributes
+
+    my @attributes = $font->list_attributes;
+
+(experimental, since v0.06)
+
+Lists known attribute keys.
+The returned list may depend on the currently loaded font.
+Keys may be returned for attributes that are currently unset.
+Keys are returned for attributes that are currently set.
+
+B<Note:>
+This method will most likely be removed soon.
+
+=head2 get_attribute
+
+    my $value = $font->get_attribute($key);
+
+(experimental, since v0.06)
+
+Returns an attribute value or dies if it is unset.
+
+=head2 set_attribute
+
+    $font->set_attribute($key => $value);
+
+(experimental, since v0.06)
+
+Sets an attribute. Will die if the value does not validate.
 
 =head2 codepoints
 
@@ -923,7 +1421,7 @@ Aliases the glyph for code point C<$from> to the same as code point C<$to> if C<
     # or:
     $font->add_default_aliases($level);
 
-(experimental)
+(experimental, since v0.02)
 
 Adds aliases as per L</default_alias_glyph> for known homoglyphs.
 
@@ -980,7 +1478,7 @@ See also L<Image::Magick>.
 
     $font->import_alias_map($filename);
 
-(experimental)
+(experimental, since v0.04)
 
 Imports an alias map from the given file.
 
@@ -995,11 +1493,23 @@ Each part is a list of codepoints in C<U+NNNN> format, seperated by space, comma
 
 This method will ignore if a mapped glyph does not exists alike L</default_glyph_for>.
 
+=head2 import_psf
+
+    $font->import_psf($filename);
+
+(experimental since v0.06)
+
+Imports a PC Screen Font (PSF) file into the font.
+
+Supports PSF1, and PSF2 files at this point.
+
+Note that files without a Unicode table might import incorrectly.
+
 =head2 import_directory
 
     $font->import_directory($filename [, %opts ]);
 
-(experimental)
+(experimental, since v0.02)
 
 Imports a directory into the font.
 The directory contains of files with a name of the code point plus the extention png or wbmp (e.g. C<U+1F981.png>).
@@ -1020,15 +1530,15 @@ In order to deduplicate entries a call to L</gc> might be considered.
 
     my Image::Magick $image = $font->export_glyph_as_image_magick($glyph);
 
-(experimental)
+(experimental, since v0.01)
 
 Exports a single glyph as a image object.
 
 =head2 export_alias_map
 
-    $self->export_alias_map($filename);
+    $font->export_alias_map($filename);
 
-(experimental)
+(experimental, since v0.04)
 
 Exports the map of all aliases found in the font.
 This is the inverse of L</import_alias_map>.
@@ -1039,6 +1549,39 @@ This information is not included in the binary format.
 Therefore this method exports all aliases as both way aliases.
 This is the same behaviour as known from hardlinks.
 
+=head2 make_up_glyphs
+
+    $font->make_up_glyphs;
+
+(experimental since v0.06)
+
+Makes up glyphs for the font.
+This will create glyphs that can be easily calculated, such as the space character (all blank).
+
+The exact list of characters that can be made up depend on the version of this module and the available font data.
+Therefore this should be called late in processing a font, so that as much data is available to the algorithm as possible.
+
+L</add_default_aliases> should be called after this step if called at all.
+L</gc> should be called after this step, as this step might generate glyphs that are in fact unused.
+
+B<Note:>
+This step can not easily be undone. It should be used with care on font files that a meant to be edited.
+
+B<Note:>
+Code points are added as per L</default_glyph_for>.
+
+=head2 analyse
+
+    $font->analyse;
+
+(experimental, since v0.06)
+
+Analyses the font to find additional attributes automatically.
+
+This can be useful specifically when importing pre-existing fonts.
+
+However the result should be manually checked as the values might not reflect reality.
+
 =head2 render
 
     my Image::Magick $image = $font->render($string);
@@ -1047,7 +1590,7 @@ This is the same behaviour as known from hardlinks.
     $image->Transparent(color => 'white'); # transparent background
     $image->Write('hello.png');
 
-(experimental)
+(experimental, since v0.03)
 
 Renders a text using the loaded font.
 
@@ -1057,7 +1600,7 @@ Philipp Schafft <lion@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2025 by Philipp Schafft <lion@cpan.org>.
+This software is Copyright (c) 2025-2026 by Philipp Schafft <lion@cpan.org>.
 
 This is free software, licensed under:
 

@@ -1,6 +1,6 @@
 package DBIx::Class::Async::Storage::DBI;
 
-$DBIx::Class::Async::Storage::DBI::VERSION   = '0.59';
+$DBIx::Class::Async::Storage::DBI::VERSION   = '0.60';
 $DBIx::Class::Async::Storage::DBI::AUTHORITY = 'cpan:MANWAR';
 
 use strict;
@@ -14,12 +14,25 @@ DBIx::Class::Async::Storage::DBI - DBI-based async storage backend for DBIx::Cla
 
 =head1 VERSION
 
-Version 0.59
+Version 0.60
 
 =head1 SYNOPSIS
 
     # Typically obtained via the storage of an async schema
     my $storage = $schema->storage;
+
+    # Enable SQL debugging
+    $storage->debug(1);
+
+    # Or use a custom debug object
+    my $stats = DBIx::Class::Storage::Statistics->new;
+    $storage->debugobj($stats);
+    $storage->debug(1);
+
+    # Or send debug output to a specific filehandle
+    open my $log_fh, '>>', 'sql.log';
+    $storage->debugfh($log_fh);
+    $storage->debug(1);
 
     # Async Cursor / Streaming Support
 
@@ -210,8 +223,9 @@ The current or newly set debug level.
   # Disable debugging
   $storage->debug(0);
 
-B<Note>: The actual debug output behavior may vary depending on the storage
-implementation and connected database driver.
+When debugging is enabled, SQL statements will be sent to the L</debugobj>
+for output. By default, this prints to C<STDERR>, but you can customise the
+output destination using L</debugobj> or L</debugfh>.
 
 =cut
 
@@ -219,6 +233,129 @@ sub debug {
     my ($self, $level) = @_;
     return $self->{debug} = $level if defined $level;
     return $self->{debug} || 0;
+}
+
+=head2 debugobj
+
+  # Get current debug object
+  my $obj = $storage->debugobj;
+
+  # Set a custom debug object
+  $storage->debugobj($custom_debug_object);
+
+Gets or sets the debug object used for SQL statement logging.
+
+When called without arguments, returns the current debug object. If no debug
+object has been set, creates and returns a default L<DBIx::Class::Storage::Statistics>
+object.
+
+When called with an argument, sets the debug object to the provided value.
+The debug object must implement a C<print> method that will be called with
+SQL statements and bind values when L</debug> is enabled.
+
+B<Arguments>
+
+=over 4
+
+=item * C<$debug_object> (optional) - An object implementing a C<print> method
+
+=back
+
+B<Returns>
+
+The current or newly set debug object.
+
+  # Use default debug object (prints to STDERR)
+  my $stats = $storage->debugobj;
+  $storage->debug(1);
+
+  # Use a custom debug object
+  package MyDebugger;
+  sub new { bless {}, shift }
+  sub print { my ($self, $msg) = @_; warn "SQL: $msg" }
+
+  package main;
+  $storage->debugobj(MyDebugger->new);
+  $storage->debug(1);
+
+This method provides API compatibility with L<DBIx::Class::Storage::DBI>.
+
+=cut
+
+sub debugobj {
+    my $self = shift;
+
+    if (@_) {
+        $self->{debugobj} = shift;
+        return $self;
+    }
+
+    return $self->{debugobj} ||= do {
+        require DBIx::Class::Storage::Statistics;
+        DBIx::Class::Storage::Statistics->new;
+    };
+}
+
+=head2 debugfh
+
+  # Get current debug filehandle
+  my $fh = $storage->debugfh;
+
+  # Set debug output to a filehandle
+  $storage->debugfh(\*STDERR);
+
+  # Log to a file
+  open my $log_fh, '>>', 'sql.log';
+  $storage->debugfh($log_fh);
+
+Gets or sets the filehandle used for debug output.
+
+This is a convenience method that creates a L<DBIx::Class::Storage::Statistics>
+object configured to print to the specified filehandle, and sets it as the
+L</debugobj>.
+
+B<Arguments>
+
+=over 4
+
+=item * C<$filehandle> (optional) - A filehandle glob or reference
+
+=back
+
+B<Returns>
+
+When called without arguments, returns the filehandle from the current L</debugobj>
+if available, or C<undef> if no debug object is set.
+
+When called with an argument, sets the debug filehandle and returns C<$self>
+for method chaining.
+
+  # Send debug output to a log file
+  open my $log, '>>', 'queries.log' or die $!;
+  $storage->debugfh($log);
+  $storage->debug(1);
+
+  # Send to STDOUT instead of STDERR
+  $storage->debugfh(\*STDOUT);
+
+This method provides API compatibility with L<DBIx::Class::Storage::DBI>.
+
+=cut
+
+sub debugfh {
+    my $self = shift;
+
+    if (@_) {
+        my $fh = shift;
+        require DBIx::Class::Storage::Statistics;
+        my $stats = DBIx::Class::Storage::Statistics->new;
+        $stats->debugfh($fh);
+        $self->debugobj($stats);
+        return $self;
+    }
+
+    return $self->debugobj->debugfh if $self->{debugobj};
+    return undef;
 }
 
 =head1 ARCHITECTURE
@@ -256,6 +393,32 @@ Advanced features like C<prefetch>, C<collapse>, and complex transactions
 reconstructs object graphs across process boundaries.
 
 =back
+
+=head1 DEBUGGING
+
+L<DBIx::Class::Async::Storage::DBI> provides debugging capabilities compatible
+with standard L<DBIx::Class::Storage::DBI>:
+
+  # Enable basic debugging (output to STDERR)
+  $storage->debug(1);
+
+  # Customise debug output
+  open my $log, '>>', 'sql.log';
+  $storage->debugfh($log);
+  $storage->debug(1);
+
+  # Use a custom debug object
+  my $custom_debugger = MyDebugger->new;
+  $storage->debugobj($custom_debugger);
+  $storage->debug(1);
+
+When debugging is enabled, SQL statements generated by the storage layer
+will be sent to the debug object's C<print> method. This allows you to
+inspect the actual SQL being executed by your async queries.
+
+B<Note>: Debug output occurs in the parent process before queries are sent
+to workers, so you'll see the SQL as it's generated, not necessarily in
+the exact order it's executed by the worker pool.
 
 =cut
 
@@ -308,6 +471,8 @@ database directly.
 =item * L<DBIx::Class::Async::ResultSet> - Async ResultSet class
 
 =item * L<DBIx::Class::Storage::DBI> - Traditional synchronous DBI storage
+
+=item * L<DBIx::Class::Storage::Statistics> - Debug object for SQL logging
 
 =item * L<Future> - Asynchronous result objects
 

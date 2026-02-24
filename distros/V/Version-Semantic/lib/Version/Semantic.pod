@@ -21,12 +21,15 @@ Version::Semantic - Immutable SemVer scheme based version class
 This class defines immutable version objects that support the L<Semantic
 Versioning (SemVer) Scheme|https://semver.org/spec/v2.0.0.html>.
 
-The class has a C<parse( $version )> factory method (a class method)
-to create objects from their semantic version strings. The method accepts
-semantic version strings that have a C<v> prefix (L<Is "v1.2.3" a semantic
+The class has a C<parse()> factory method (a class method) to create
+objects from their semantic version strings. The method accepts semantic
+version strings that have a C<v> prefix (L<Is "v1.2.3" a semantic
 version?|https://semver.org/spec/v2.0.0.html#is-v123-a-semantic-version>).
 
-Each object has the mandatory attributes C<major>, C<minor>,
+The class has a usual C<new()> constructor method (class method) to create
+objects from their named attributes.
+
+Each object has the required attributes C<major>, C<minor>,
 and C<patch>.  Optional object attributes are C<pre_release> and
 C<build>. C<has_pre_release()> and C<has_build()> predicate methods exist too.
 
@@ -49,13 +52,32 @@ Perl recognizes two version styles: decimal versions and dotted decimal
 versions. The dotted decimal version style is the newer one. It matches the
 SemVer scheme but doesn't allow pre-release and build extensions.
 
-If the archive file of a Perl distribution has a name ending in C<TRIAL\d*>
-(before the file extension), indicates that the distribution is a
-pre-release. C<TRIAL\d*> is a valid SemVer pre-release extension. For
+If the archive file of a Perl distribution has a name ending in C<TRIAL[0-9]*>
+(before the file extension), it indicates that the distribution is a
+pre-release. C<TRIAL[0-9]*> is a valid SemVer pre-release extension. For
 obvious reasons such kind of pre-releases are also named "trial releases".
 If L<ExtUtils::MakeMaker> (EUMM) is your installer, the DISTVNAME EUMM
 attribute can be used to mark a distribution as a trial release (example value
 "Foo-Bar-v1.0.1-TRIAL5").
+
+=head1 INCREMENT
+
+The C<increment()> object method increments a version object and returns the
+new one. The method has two optional parameters. The first one specifies the
+incrementation strategy. The following strategies are implemented: C<patch>
+(the default), C<minor>, C<major>, and C<trial>. The second parameter
+allows you to set or overwrite the C<pre_release> attribute for non-C<trial>
+strategies. Example:
+
+  # Leads to "v1.0.1-TRIAL5"
+  my $v_trial = Version::Semantic->parse( 'v1.0.0' )->increment( 'patch', 'TRIAL5' );
+
+The C<trial> strategy can be applied to trial releases only. It increments
+the trial release number ignoring any kind of formatting (leading zeros for
+example). This strategy should be considered experimental.
+
+Other Perl CPAN distributions that provide version object incrementation
+implementations are L<Version::Next> and L<Perl::Version>.
 
 =head1 SEE ALSO
 

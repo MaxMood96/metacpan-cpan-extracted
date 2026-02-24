@@ -1,5 +1,58 @@
 Revision history for DBIx::Class::Async
 
+0.60 2026-02-24
+     [ENHANCEMENTS]
+     - Added debugobj() and debugfh() methods to DBIx::Class::Async::Storage::DBI
+       for full API compatibility with DBIx::Class::Storage::DBI. These
+       methods enable SQL debugging and logging with custom debug objects
+       or filehandles.
+
+     - Enhanced worker processes to respect debug flag from parent process.
+       When storage->debug(1) is called, SQL statements are now logged to
+       STDERR in worker processes, enabling comprehensive query debugging
+       in async mode.
+
+     - Improved SQL generation consistency in DBIx::Class::Async::ResultSet.
+       Column ordering and attribute merging are now fully deterministic
+       across multiple invocations of the same query, improving query cache
+       effectiveness and debugging reliability.
+
+     - Added attribute deduplication in ResultSet->search() chaining.
+       Accumulating attributes (join, prefetch, columns, select, as,
+       order_by, group_by, having) are now automatically deduplicated using
+       stable serialization, preventing duplicate JOINs and maintaining
+       consistent SQL structure.
+
+     [TESTS]
+     - Added t/152-sql-consistency.t to verify deterministic SQL generation
+       across multiple query invocations, including tests for column order
+       stability, attribute merging, and deduplication behaviour.
+
+     - Added t/spelling.t to perform British spell check for AUTHOR_TESTING.
+
+     [DOCUMENTATION]
+     - Added comprehensive DEBUGGING section to DBIx::Class::Async::Storage::DBI
+       documenting debug(), debugobj(), and debugfh() methods with usage
+       examples.
+
+     - Enhanced debug() method documentation to clarify integration with
+       debugobj and worker process behavior.
+
+     - Added detailed POD for SQL generation consistency guarantees and their
+       benefits for query caching, performance analysis, and testing.
+
+     [INTERNAL]
+     - Refactored _merge_attrs() in ResultSet.pm with clearer logic and
+       improved deduplication using Data::Dumper for nested structure
+       comparison.
+
+     - Extracted _merge_cond(), _is_empty_cond(), and _dedup_key() helper
+       methods for better code organization and reusability.
+
+     - Modified _call_worker() in Async.pm to pass debug flag to worker
+       processes, enabling consistent debug behavior across process
+       boundaries.
+
 0.59 2026-02-21
      [Bug Fixes]
      - Fixed issue silent drop of relationship 'where' conditions.

@@ -109,7 +109,7 @@ subtest "Edge cases" => sub {
 subtest "Configuration parameter handling" => sub {
   # Test supported_parameters method
   my @params = $Policy->supported_parameters;
-  is @params, 2, "Two supported parameters";
+  is @params, 3, "Three supported parameters";
 
   my $param = $params[0];
   is $param->{name}, "max_line_length",    "Parameter name is max_line_length";

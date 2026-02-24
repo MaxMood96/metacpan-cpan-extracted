@@ -34,7 +34,7 @@ subtest '11.3' => sub {
 };
 
 subtest '11.4' => sub {
-  plan tests => 18;
+  plan tests => 19;
 
   my @versions = qw(
     0.9.0
@@ -61,5 +61,7 @@ subtest '11.4' => sub {
   ok $class->parse( '1.0.0-beta' ) > $class->parse( '1.0.0-alpha' ),         '1.0.0-beta > 1.0.0-alpha';
   ok $class->parse( '1.0.0-alpha' ) == $class->parse( '1.0.0-alpha' ),
     '1.0.0-alpha == 1.0.0-alpha (same pre-release lists)';
-  ok $class->parse( '1.0.0-5' ) == $class->parse( '1.0.0-5' ), '1.0.0-5 == 1.0.0-5 (same pre-release lists)'
+  ok $class->parse( '1.0.0-5' ) == $class->parse( '1.0.0-5' ), '1.0.0-5 == 1.0.0-5 (same pre-release lists)';
+  ok $class->parse( '1.0.8-20260216170758-TRIAL' ) < $class->parse( '1.0.8-20260223134407-TRIAL' ),
+'1.0.8-20260216170758-TRIAL < 1.0.8-20260223134407-TRIAL; lexical order matches chronological order if the date format is numeric %Y%m%d%H%M%S'
 }

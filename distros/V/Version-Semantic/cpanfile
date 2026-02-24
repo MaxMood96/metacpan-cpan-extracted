@@ -2,22 +2,28 @@ use strict;
 use warnings;
 
 on configure => sub {
+  requires 'CPAN::Meta'                    => '0';
   requires 'ExtUtils::MakeMaker'           => '6.76';    # Offers the RECURSIVE_TEST_FILES, NO_PERLLOCAL features
   requires 'ExtUtils::MakeMaker::CPANfile' => '0';       # Needs at least ExtUtils::MakeMaker 6.52
   requires 'File::Spec::Functions'         => '0';
   requires 'strict'                        => '0';
-  requires 'warnings'                      => '0';
+  requires 'warnings'                      => '0'
 };
 
 on runtime => sub {
-  requires 'Carp'     => '1.32';                         # Don't vivify @CARP_NOT and @ISA in caller's namespace
-  requires 'overload' => '0';
-  requires 'strict'   => '0';
-  requires 'warnings' => '0';
+  requires 'Carp'         => '1.32';                     # Don't vivify @CARP_NOT and @ISA in caller's namespace
+  requires 'PerlX::Maybe' => '0';
+  requires 'overload'     => '0';
+  requires 'perl'         => '5.010000';
+  requires 'strict'       => '0';
+  requires 'warnings'     => '0'
 };
 
 on test => sub {
-  requires 'Test::API'   => '0';
-  requires 'Test::Fatal' => '0';
-  requires 'Test::More' => '1.001005'                    # Subtests accept args
+  requires 'Test::API' => '0';
+  # https://github.com/charsbar/ExtUtils-MakeMaker-CPANfile/issues/1
+  # Tricked by "# TODO: better range handling"
+  requires 'Test::Fatal' => ( $] < 5.012000 ? '== 0.017' : '0' );
+  requires 'Test::More'  => '1.001005';                             # Subtests accept args
+  requires 'Test::Needs' => '0'
 }

@@ -1,5 +1,14 @@
 # Revision history for Perl::Critic::PJCJ
 
+## v0.2.4 - 2026-02-23
+
+- Add per-file line length overrides via `.gitattributes` for ProhibitLongLines
+  - New `gitattributes_line_length` parameter (default: `custom-line-length`)
+  - Set attribute to `ignore` to skip a file, or an integer to override the
+    limit
+  - Falls back to the configured default when git is unavailable or attribute is
+    unspecified
+
 ## v0.2.3 - 2026-02-22
 
 - Allow quoted strings for single-argument pragmas in use/no statements

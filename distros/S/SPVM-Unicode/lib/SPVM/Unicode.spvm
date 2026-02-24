@@ -2,7 +2,7 @@
 # MIT License
 
 class Unicode : precompile {
-  version "0.054";
+  version "0.055";
   
   use IntList;
   

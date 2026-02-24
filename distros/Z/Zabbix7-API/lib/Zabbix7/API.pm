@@ -15,7 +15,7 @@ use JSON;
 use LWP::UserAgent;
 use Log::Any;
 
-our $VERSION = '1.1';
+our $VERSION = '1.2';
 
 has 'server' => (is => 'ro', required => 1);
 has 'ua' => (is => 'ro', lazy => 1, builder => '_build_ua');
@@ -139,6 +139,7 @@ sub _raw_query {
     }
 
     my $json_payload = encode_json(\%args);
+    
     Log::Any->get_logger->debug("Sending JSON payload: $json_payload");
     Log::Any->get_logger->debug("Headers: " . join(", ", map { "$_ => $headers{$_}" } keys %headers));
     my $response = eval {

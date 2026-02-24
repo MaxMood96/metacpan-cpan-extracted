@@ -10,6 +10,7 @@ inc/Module/Install/Metadata.pm
 inc/Module/Install/ReadmeFromPod.pm
 inc/Module/Install/Win32.pm
 inc/Module/Install/WriteAll.pm
+inc/Module/Install/XSUtil.pm
 lib/Unicode/UTF8.pm
 lib/Unicode/UTF8.pod
 Makefile.PL
@@ -37,3 +38,4 @@ t/999_pod.t
 t/quickbrown.txt
 t/Util.pm
 UTF8.xs
+utf8_valid.h

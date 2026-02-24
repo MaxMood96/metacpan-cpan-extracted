@@ -1,5 +1,13 @@
 Revision history for Perl extension App-mdee
 
+1.02 2026-02-24T04:15:14Z
+
+    - Support table column alignment from separator line markers
+      (:--- left, :---: center, ---: right)
+    - Add parse_separator() for alignment detection and colon stripping
+    - Add t/04_table_align.t (unit + integration tests)
+    - Require App::ansicolumn 1.53 for --table-right/--table-center
+
 1.01 2026-02-21T12:11:29Z
 
     - Use nofork+raw mode for ansicolumn call (configurable via nofork option)

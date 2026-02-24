@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 3;
+use Test::More tests => 4;
 
 use SVG;
 
@@ -39,6 +39,21 @@ subtest circle => sub {
     );
     my $xml = $svg->xmlify;
     like $xml, qr{<circle cx="100" cy="100" id="circle_in_group_y" r="50" />};
+
+    #diag $xml;
+};
+
+subtest circle_without_id => sub {
+    plan tests => 1;
+
+    my $svg = SVG->new;
+    my $tag = $svg->circle(
+        cx => 100,
+        cy => 100,
+        r  => 50,
+    );
+    my $xml = $svg->xmlify;
+    like $xml, qr{<circle cx="100" cy="100" r="50" />};
 
     #diag $xml;
 };

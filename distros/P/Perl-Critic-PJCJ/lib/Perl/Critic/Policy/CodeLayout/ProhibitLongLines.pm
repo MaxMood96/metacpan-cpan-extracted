@@ -1,20 +1,22 @@
-package Perl::Critic::Policy::CodeLayout::ProhibitLongLines v0.2.3;
+package Perl::Critic::Policy::CodeLayout::ProhibitLongLines v0.2.4;
 
 use v5.26.0;
 use strict;
 use warnings;
-use feature      qw( signatures );
-use experimental qw( signatures );
+use feature "signatures";
+use experimental "signatures";
 
+use parent qw( Perl::Critic::Policy );
+
+use File::Basename                      qw( dirname );
 use List::Util                          qw( any );
 use Perl::Critic::Utils                 qw( $SEVERITY_MEDIUM );
-use parent                              qw( Perl::Critic::Policy );
 use Perl::Critic::Utils::SourceLocation ();
 
 my $Desc = "Line exceeds maximum length";
 my $Expl = "Keep lines under the configured maximum for readability";
 
-sub supported_parameters {
+sub supported_parameters { (
   {
     name            => "max_line_length",
     description     => "Maximum allowed line length in characters",
@@ -22,12 +24,17 @@ sub supported_parameters {
     behavior        => "integer",
     integer_minimum => 1,
   }, {
-      name           => "allow_lines_matching",
-      description    => "Regex patterns for lines exempt from length check",
-      default_string => "",
-      behavior       => "string list",
-    },
-}
+    name           => "allow_lines_matching",
+    description    => "Regex patterns for lines exempt from length check",
+    default_string => "",
+    behavior       => "string list",
+  }, {
+    name           => "gitattributes_line_length",
+    description    => "Git attribute name for per-file line length override",
+    default_string => "custom-line-length",
+    behavior       => "string",
+  },
+) }
 
 sub default_severity { $SEVERITY_MEDIUM }
 sub default_themes   { qw( cosmetic formatting ) }
@@ -35,8 +42,10 @@ sub default_themes   { qw( cosmetic formatting ) }
 sub applies_to { "PPI::Document" }
 
 sub violates ($self, $elem, $doc) {
+  my $override = $self->_get_gitattr_line_length($doc->filename);
+  return if defined $override && $override eq "ignore";
 
-  my $max_length = $self->{_max_line_length};
+  my $max_length = $override // $self->{_max_line_length};
   my @patterns   = keys $self->{_allow_lines_matching}->%*;
   my $source     = $doc->serialize;
   my @lines      = split /\n/, $source;
@@ -68,6 +77,27 @@ sub violates ($self, $elem, $doc) {
   }
 
   @violations
+}
+
+sub _get_gitattr_line_length ($self, $filename) {
+  return unless defined $filename && length $filename;
+  my $attr = $self->{_gitattributes_line_length};
+  return unless defined $attr && length $attr;
+
+  my $output = eval {
+    my $dir = dirname($filename);
+    open my $fh, "-|", "git", "-C", $dir, "check-attr", $attr, "--", $filename
+      or return;
+    my $result = do { local $/ = undef; <$fh> };
+    close $fh or return;
+    $result
+  };
+  return unless defined $output && $output =~ /: \Q$attr\E: (.+)$/m;
+
+  my $value = $1;
+  return "ignore" if $value eq "ignore";
+  return $value   if $value =~ /^\d+$/;
+  return
 }
 
 sub _find_token_on_line ($self, $doc, $target_line) {
@@ -104,7 +134,7 @@ Perl::Critic::Policy::CodeLayout::ProhibitLongLines - Prohibit long lines
 
 =head1 VERSION
 
-version v0.2.3
+version v0.2.4
 
 =head1 SYNOPSIS
 
@@ -153,6 +183,30 @@ Multiple patterns (space-separated):
 
   [CodeLayout::ProhibitLongLines]
   allow_lines_matching = ^\s*package\s+ https?://
+
+=head2 gitattributes_line_length
+
+The name of a git attribute to look up for per-file line length overrides.
+Defaults to C<custom-line-length>. Set to an empty string to disable.
+
+The attribute value may be an integer (overriding C<max_line_length> for
+that file) or the literal string C<ignore> (suppressing all violations for
+that file).
+
+Configure in C<.gitattributes>:
+
+  t/legacy/messy.t        custom-line-length=ignore
+  t/generated/*.t         custom-line-length=200
+
+Then in C<.perlcriticrc> (the default attribute name is shown; you only
+need this line if you want a different name):
+
+  [CodeLayout::ProhibitLongLines]
+  gitattributes_line_length = custom-line-length
+
+Requires C<git> on C<$PATH>. Falls back to the configured
+C<max_line_length> when git is unavailable, the file is outside a
+repository, or the attribute is unspecified.
 
 =head1 EXAMPLES
 

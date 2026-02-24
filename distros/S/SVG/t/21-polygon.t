@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 4;
+use Test::More tests => 8;
 
 use SVG;
 
@@ -20,6 +20,9 @@ my $points = $svg->get_path(
     -type => 'polygon'
 );
 
+# diag explain  $points;
+is_deeply $points, { 'points' => '0,0 2,0 4,2 5,7 1,5 ' };
+
 my $c = $svg->polygon(
     %$points,
     id    => 'pgon1',
@@ -31,10 +34,17 @@ my $c = $svg->polygon(
 );
 
 ok( $c, "polygon 1: define" );
+isa_ok $c, 'SVG::Element';
 
 my $out = $svg->xmlify();
 
-like( $out, qr/polygon/, "polygon 2: serialize" );
-like( $out, qr/style/,   "inline css style 1" );
-like( $out, qr/opacity/, "inline css style 2" );
+#diag $out;
+
+like( $out, qr/polygon/,  "polygon 2: serialize" );
+like( $out, qr/style/,    "inline css style 1" );
+like( $out, qr/opacity/,  "inline css style 2" );
+like( $out, qr{<defs />}, "defs section" );
+like( $out,
+    qr{<polygon id="pgon1" opacity="0.6" points="0,0 2,0 4,2 5,7 1,5 " style="fill: red; stroke: green" />}
+);
 

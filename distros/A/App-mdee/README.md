@@ -37,7 +37,7 @@ mdee - em·dee, Markdown Easy on the Eyes
 
 # VERSION
 
-Version 1.00
+Version 1.01
 
 # DESCRIPTION
 
@@ -207,6 +207,8 @@ Use [tecolicom/tap](https://github.com/tecolicom/homebrew-tap):
 
     Enable or disable table formatting.  When enabled, Markdown tables
     are formatted using [ansicolumn(1)](https://metacpan.org/pod/App%3A%3Aansicolumn) for aligned column display.
+    Column alignment specified in the separator line (`:---` for left,
+    `:---:` for center, `---:` for right) is respected.
     Default is enabled.
 
 - **--\[no-\]nup**
@@ -270,6 +272,29 @@ bold text, etc.).
 
         # theme/hashed.sh — enable closing hashes on h3-h6
         md_config+=(hashed.h3=1 hashed.h4=1 hashed.h5=1 hashed.h6=1)
+
+        # theme/nomark.sh — hide markers and brackets
+        pass_md+=(--cm 'emphasis_mark=sub{""}')
+        pass_md+=(--cm 'code_tick=sub{""}')
+        pass_md+=(--cm 'link_mark=sub{""}')
+
+    Built-in themes:
+
+    - `hashed` (default)
+
+        Append closing hashes to h3-h6 headers.
+
+    - `warm`
+
+        Change base color to Coral.
+
+    - `nomark`
+
+        Hide emphasis markers (`**`, `*`, `__`, `_`, `~~`),
+        inline code backticks, and link brackets (`[`, `]`).
+        Content text keeps its formatting (bold, italic,
+        strikethrough, code, clickable links) but the surrounding
+        markers are not displayed.
 
     Use `-d` to dump current theme values in sourceable format.
 
@@ -349,9 +374,14 @@ bold text, etc.).
         bold              Bold (**text** or __text__)
         italic            Italic (*text* or _text_)
         strike            Strikethrough (~~text~~)
+        emphasis_mark     Emphasis markers (**, *, __, _, ~~)
+        bold_mark         Bold markers only (overrides emphasis_mark)
+        italic_mark       Italic markers only (overrides emphasis_mark)
+        strike_mark       Strike markers only (overrides emphasis_mark)
         link              Inline links [text](url)
         image             Images ![alt](url)
         image_link        Image links [![alt](img)](url)
+        link_mark         Link/image brackets (overrides emphasis_mark)
         blockquote        Blockquote marker (>)
         horizontal_rule   Horizontal rules (---, ***, ___)
         comment           HTML comments (<!-- ... -->)
@@ -609,9 +639,17 @@ Table formatting is handled within the [App::Greple::md](https://metacpan.org/po
 (after syntax highlighting, before output).  Markdown tables are
 detected by the pattern `^ {0,3}(\|.+\|\n){3,}` and formatted with
 aligned columns using [ansicolumn(1)](https://metacpan.org/pod/App%3A%3Aansicolumn) while
-preserving ANSI colors.  When `--rule` is enabled (default),
-ASCII pipe characters are replaced with Unicode box-drawing
-characters (`│`, `├`, `┤`, `┼`, `─`).
+preserving ANSI colors.
+
+Column alignment is parsed from the separator line: `:---` (left,
+default), `:---:` (center), `---:` (right).  The `parse_separator()`
+function extracts alignment markers and passes `--table-right` and
+`--table-center` options to [ansicolumn(1)](https://metacpan.org/pod/App%3A%3Aansicolumn) (requires
+version 1.53 or later).  Colons are stripped from the separator line
+before further processing.
+
+When `--rule` is enabled (default), ASCII pipe characters are replaced
+with Unicode box-drawing characters (`│`, `├`, `┤`, `┼`, `─`).
 
 ### Output Stage
 
@@ -679,6 +717,9 @@ containing comment-like text (e.g., `` `<!-->` ``).
 
 Emphasis patterns (bold and italic) do not span multiple lines.
 Multi-line emphasis text is not supported.
+
+`***bold italic***` and `___bold italic___` are supported.
+Other nested forms (e.g., `**bold _italic_**`) are not.
 
 ## Links
 

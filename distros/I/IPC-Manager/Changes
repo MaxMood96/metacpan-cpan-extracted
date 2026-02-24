@@ -1,3 +1,12 @@
+0.000005  2026-02-23 19:54:20-08:00 America/Los_Angeles
+
+    - Fix Linux::Inotify dep in test
+    - Fix SQLite dep in test
+
+0.000004  2026-02-23 10:49:55-08:00 America/Los_Angeles
+
+    - Fix UnixSocket issues usually seen on BSD
+
 0.000003  2026-02-19 20:41:21-08:00 America/Los_Angeles
 
     - Add IO::Select and handle capabilities where possible

@@ -28,10 +28,15 @@ my ($file) = grep { $_->name eq 'file.txt' } @files;
 ok defined $file, 'files() includes file.txt';
 like $file->url, qr{file\.txt}, 'file.txt has correct URL';
 is $file->mime_type, 'text/plain', 'file.txt has correct MIME type';
+like $file->icon, qr{fa-solid fa-file}, 'file.txt has an icon when icons enabled (default)';
 
 my ($subdir) = grep { $_->name eq 'subdir/' } @files;
 ok defined $subdir, 'files() includes subdir/';
 is $subdir->mime_type, 'directory', 'subdir has correct MIME type';
+like $subdir->icon, qr{fa-solid fa-folder}, 'subdir has folder icon';
+
+my ($parent_entry) = grep { $_->name eq 'Parent Directory' } @files;
+like $parent_entry->icon, qr{fa-solid fa-arrow-up}, 'parent dir has arrow-up icon';
 
 my $html = $di->to_html('/test/', 0);
 ok defined $html, 'to_html() returns a value';
@@ -39,6 +44,8 @@ like $html, qr{Index of /test/}, 'to_html() contains correct heading';
 like $html, qr{file\.txt},       'to_html() contains file.txt';
 like $html, qr{subdir/},         'to_html() contains subdir/';
 unlike $html, qr{a:link},        'to_html() without pretty uses standard CSS';
+like $html, qr{font-awesome},    'to_html() with icons links to Font Awesome';
+like $html, qr{fa-solid},        'to_html() with icons includes icon classes';
 
 my $html_pretty = $di->to_html('/test/', 1);
 ok defined $html_pretty, 'to_html(pretty) returns a value';
@@ -80,5 +87,22 @@ my $html_custom = $di_custom->to_html('/test/', 0);
 like $html_custom, qr{^DIR:},        'to_html() uses custom html_class dir_html';
 like $html_custom, qr{CUSTOM_CSS},   'to_html() uses custom css_class';
 like $html_custom, qr{^FILE:}m,      'to_html() uses custom html_class file_html for rows';
+
+# icons => 0 disables icon column and Font Awesome
+my $di_no_icons = WebServer::DirIndex->new(
+  dir     => $dir,
+  dir_url => '/test/',
+  icons   => 0,
+);
+ok defined $di_no_icons, 'WebServer::DirIndex->new accepts icons => 0';
+
+my @files_no_icons = $di_no_icons->files;
+my ($file_no_icon) = grep { $_->name eq 'file.txt' } @files_no_icons;
+is $file_no_icon->icon, undef, 'file.icon is undef when icons => 0';
+
+my $html_no_icons = $di_no_icons->to_html('/test/', 0);
+unlike $html_no_icons, qr{font-awesome}, 'to_html() without icons omits Font Awesome link';
+unlike $html_no_icons, qr{fa-solid},     'to_html() without icons omits icon classes';
+like $html_no_icons,   qr{file\.txt},    'to_html() without icons still lists files';
 
 done_testing;

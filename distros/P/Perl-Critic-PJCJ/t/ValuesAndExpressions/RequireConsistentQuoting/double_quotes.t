@@ -3,13 +3,12 @@
 use v5.26.0;
 use strict;
 use warnings;
-
-use Test2::V0    qw( done_testing subtest );
-use feature      qw( signatures );
-use experimental qw( signatures );
-
-# Test the policy directly without using Perl::Critic framework
+use feature "signatures";
+use experimental "signatures";
 use lib qw( lib t/lib );
+
+use Test2::V0 qw( done_testing subtest );
+
 use Perl::Critic::Policy::ValuesAndExpressions::RequireConsistentQuoting ();
 use ViolationFinder qw( bad good );
 

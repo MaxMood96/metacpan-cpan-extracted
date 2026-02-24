@@ -37,7 +37,9 @@ Single test file: `yath test -j20 --qvf -T t/path/to/test.t`
   to `check_single_quoted`, `check_double_quoted`, `check_q_literal`,
   `check_qq_interpolate`, `check_quote_operators`, and `check_use_statement`.
 - `lib/Perl/Critic/Policy/CodeLayout/ProhibitLongLines.pm` — configurable
-  maximum line length enforcement.
+  maximum line length enforcement. Supports per-file overrides via
+  `.gitattributes` (attribute `custom-line-length`; value `ignore` or an
+  integer).
 - `lib/Perl/Critic/Utils/SourceLocation.pm` — helper for ProhibitLongLines
   to create synthetic PPI elements with line/column info for violations.
 

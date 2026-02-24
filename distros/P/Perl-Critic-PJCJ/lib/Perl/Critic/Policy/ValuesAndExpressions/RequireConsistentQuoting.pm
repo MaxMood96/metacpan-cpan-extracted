@@ -1,14 +1,15 @@
-package Perl::Critic::Policy::ValuesAndExpressions::RequireConsistentQuoting v0.2.3;
+package Perl::Critic::Policy::ValuesAndExpressions::RequireConsistentQuoting v0.2.4;
 
 use v5.26.0;
 use strict;
 use warnings;
-use feature      qw( signatures );
-use experimental qw( signatures );
+use feature "signatures";
+use experimental "signatures";
+
+use parent qw( Perl::Critic::Policy );
 
 use List::Util          qw( any );
 use Perl::Critic::Utils qw( $SEVERITY_MEDIUM );
-use parent              qw( Perl::Critic::Policy );
 
 my $Desc         = "Quoting";
 my $Expl_double  = 'use ""';
@@ -620,7 +621,7 @@ consistent and optimal quoting
 
 =head1 VERSION
 
-version v0.2.3
+version v0.2.4
 
 =head1 SYNOPSIS
 

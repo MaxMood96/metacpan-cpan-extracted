@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-# Copyright (c) 2024-2025 Philipp Schafft
+# Copyright (c) 2024-2026 Philipp Schafft
 
 # licensed under Artistic License 2.0 (see LICENSE file)
 
@@ -22,6 +22,7 @@ my %config = (
     bits            => undef,
     update          => undef,
     incremental     => undef,
+    make_up_glyphs  => undef,
     gc              => undef,
     default_aliases => undef,
     alias_map       => [],
@@ -37,6 +38,7 @@ my %config = (
     $opts{'bits=i'}             = \$config{bits};
     $opts{'update!'}            = \$config{update};
     $opts{'incremental!'}       = \$config{incremental};
+    $opts{'make-up-glyphs!'}    = \$config{make_up_glyphs};
     $opts{'gc!'}                = \$config{gc};
     $opts{'default-aliases=s'}  = \$config{default_aliases};
     $opts{'alias-map=s@'}       = \$config{alias_map};
@@ -82,6 +84,9 @@ foreach my $input (@ARGV) {
             my $codepoint = hex $1;
             my $glyph = $font->import_glyph($input);
             $font->glyph_for($codepoint => $glyph);
+        } elsif ($input =~ m#\.psf((?:\.gz)?)$#) {
+            $in->binmode('gzip') if length($1 // '');
+            $font->import_psf($in);
         } else {
             warn 'Strange input, trying to read as font file: '.$input;
             $font->read($in);
@@ -111,6 +116,7 @@ foreach my $map (@{$config{alias_map}}) {
     $font->import_alias_map($map);
 }
 
+$font->make_up_glyphs if $config{make_up_glyphs};
 $font->add_default_aliases($config{default_aliases}) if defined $config{default_aliases};
 $font->gc if $config{gc};
 

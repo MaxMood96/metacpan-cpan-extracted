@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-# Copyright (c) 2024-2025 Philipp Schafft
+# Copyright (c) 2024-2026 Philipp Schafft
 
 # licensed under Artistic License 2.0 (see LICENSE file)
 
@@ -19,11 +19,15 @@ use URI;
 use Encode ();
 use charnames ();
 
+my %_attribute_names = (
+);
+
 my %config = (
     output          => undef,
     font            => undef,
     default_aliases => undef,
     gc              => undef,
+    analyse         => undef,
     show_found      => 1,
     show_missing    => [],
     also_missing    => [],
@@ -36,6 +40,7 @@ my %config = (
     $opts{'font=s'}             = \$config{font};
     $opts{'default-aliases=s'}  = \$config{default_aliases};
     $opts{'gc!'}                = \$config{gc};
+    $opts{'analyse!'}           = \$config{analyse};
     $opts{'show-found!'}        = \$config{show_found};
     $opts{'show-missing=s@'}    = \$config{show_missing};
     $opts{'also-missing=s@'}    = \$config{also_missing};
@@ -61,11 +66,13 @@ if (defined($config{font})) {
 
 $font->add_default_aliases($config{default_aliases}) if defined $config{default_aliases};
 $font->gc if $config{gc};
+$font->analyse if $config{analyse};
 
 if (defined $config{output}) {
     my $tt = Template->new;
     my %rows;
     my %missing_counts;
+    my %extra_attributes;
 
     if ($config{show_found}) {
         foreach my $codepoint (keys %{$font->{chars}}) { # TODO: FIXME! Internal API!
@@ -112,6 +119,13 @@ if (defined $config{output}) {
         }
     }
 
+    foreach my $key ($font->list_attributes) {
+        my $v = eval {$font->get_attribute($key)} // next;
+
+        next if $key eq 'height' || $key eq 'width' || $key eq 'bits'; # handled specifically
+
+        $extra_attributes{$key} = $v;
+    }
 
     open(my $out, '>:utf8', $config{output}) or croak 'Cannot open output: '.$config{output};
 
@@ -122,10 +136,14 @@ if (defined $config{output}) {
                 bits => $font->bits,
                 codepoints => scalar($font->codepoints),
                 glyphs => scalar($font->glyphs),
+                scale => $font->height <= 16 ? 2 : undef,
             },
             missing_counts => \%missing_counts,
             missing_counts_keys => [sort keys %missing_counts],
             rows => [sort {$a->{first} <=> $b->{first}} values %rows],
+            extra_attributes => \%extra_attributes,
+            extra_attributes_keys => [sort keys %extra_attributes],
+            attribute_names => \%_attribute_names,
     }, $out);
 }
 
@@ -175,13 +193,19 @@ table, tr, td, th {
 td, th {
     padding: 5px;
 }
+td, th:not([colspan]) {
+    text-align: left;
+}
+
 td:hover {
     scale: 2;
     outline: 1px solid black;
 }
 
 .sf img {
-    scale: 2;
+[% IF info.scale %]
+    scale: [% info.scale | html %];
+[% END %]
     image-rendering: crisp-edges;
     border: 1px solid black;
     padding: 1px;
@@ -245,6 +269,17 @@ td:hover {
                 <th>Glyphs</th>
                 <td>[% info.glyphs | html %]</td>
             </tr>
+            [% IF extra_attributes_keys.0 %]
+            <tr>
+                <th colspan="2">Extra attributes</th>
+            </tr>
+            [% FOREACH key IN extra_attributes_keys %]
+            <tr>
+                <th>[% IF attribute_names.$key %][% attribute_names.$key | html %][% ELSE %]<code>[% key | html %]</code>[% END %]</th>
+                <td>[% extra_attributes.$key | html %]</td>
+            </tr>
+            [% END %]
+            [% END %]
         </table>
         [% IF missing_counts_keys.0 %]
         <h2>Missing counts</h2>

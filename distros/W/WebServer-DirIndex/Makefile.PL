@@ -5,7 +5,7 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
     NAME             => 'WebServer::DirIndex',
     AUTHOR           => 'Dave Cross <dave@perlhacks.com>',
-    VERSION          => '0.0.2',
+    VERSION          => '0.0.3',
     ABSTRACT_FROM    => 'lib/WebServer/DirIndex.pm',
     LICENSE          => 'perl_5',
     MIN_PERL_VERSION => '5.014',

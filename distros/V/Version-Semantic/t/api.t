@@ -1,8 +1,9 @@
 use strict;
 use warnings;
 
-use Test::More import => [ qw( BAIL_OUT require_ok ) ], tests => 2;
+use Test::More import => [ qw( BAIL_OUT like require_ok ) ], tests => 2;
 use Test::API import => [ qw( public_ok ) ];
+use Test::Fatal qw( exception );
 
 my $class;
 
@@ -12,4 +13,4 @@ BEGIN {
 }
 
 public_ok $class,
-  qw( parse major minor patch pre_release build version_core has_pre_release has_build to_string compare_to )
+  qw( new parse major minor patch pre_release build version_core has_pre_release has_build increment compare_to to_string )

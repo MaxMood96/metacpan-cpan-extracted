@@ -2,13 +2,13 @@ package IPC::Manager::Client::MessageFiles;
 use strict;
 use warnings;
 
-our $VERSION = '0.000003';
+our $VERSION = '0.000005';
 
 use Carp qw/croak confess/;
 use File::Spec;
 
 BEGIN {
-    if (eval { require Linux::Inotify2; require IO::Select; 1 }) {
+    if (eval { require Linux::Inotify2; require IO::Select; Linux::Inotify2->can('fh') ? 1 : 0 }) {
         *USE_INOTIFY = sub() { 1 };
     }
     else {

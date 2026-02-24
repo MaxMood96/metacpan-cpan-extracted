@@ -110,9 +110,11 @@ t/148-caching.t
 t/149-scalar-ref-char-pk.t
 t/150-multi-column-relationship.t
 t/151-has-many-datetime-filter.t
+t/152-sql-consistency.t
 t/benchmark.pl
 t/manifest.t
 t/pod.t
+t/spelling.t
 t/lib/TestSchema.pm
 t/lib/TestSchema/Result/User.pm
 t/lib/TestSchema/Result/Order.pm

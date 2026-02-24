@@ -26,6 +26,8 @@ em·dee (mdee: Markdown, Easy on the Eyes) is a Markdown viewer command implemen
 - `t/00_compile.t` - Compile tests for both App::mdee and App::Greple::md
 - `t/01_mdee.t` - mdee command integration tests
 - `t/02_colorize.t` - md module colorize tests (uses t/runner)
+- `t/03_nofork.t` - nofork vs fork table formatting tests
+- `t/04_table_align.t` - Table alignment tests (parse_separator unit + integration)
 - `t/Util.pm` - Test helper for greple-based tests
 - `t/runner/` - Submodule (p5-script-runner) for finding greple path
 - `t/test.md` - Test Markdown file
@@ -389,7 +391,7 @@ Steps are organized into three groups:
 
 ```perl
 my @protect_steps = qw(code_blocks comments image_links images links);
-my @inline_steps  = qw(inline_code horizontal_rules bold italic strike);
+my @inline_steps  = qw(inline_code horizontal_rules bold_italic bold italic strike);
 my @final_steps   = qw(blockquotes);
 ```
 
@@ -419,9 +421,9 @@ for my $name (build_pipeline()) {
 }
 ```
 
-### Code Color Labels
+### Code & Emphasis Color Labels
 
-Code-related theme keys map directly to module labels:
+Code-related and emphasis-related theme keys map directly to module labels:
 
 | Theme Key | Module Label | Description |
 |-----------|-------------|-------------|
@@ -430,6 +432,11 @@ Code-related theme keys map directly to module labels:
 | `code_info` | `code_info` | Fenced code block info string |
 | `code_block` | `code_block` | Fenced code block body (with `;E`) |
 | `code_inline` | `code_inline` | Inline code body (without `;E`) |
+| `emphasis_mark` | `emphasis_mark` | Emphasis markers (`**`, `*`, `__`, `_`, `~~`) |
+
+`emphasis_mark` is the default color for all emphasis markers. Per-type overrides
+(`bold_mark`, `italic_mark`, `strike_mark`) can be defined via `--cm` and take
+priority when present. This follows the same pattern as `code_tick` / `code_inline`.
 
 ```bash
 # Light mode
@@ -438,6 +445,7 @@ Code-related theme keys map directly to module labels:
 [code_info]='${base_name}=y70'
 [code_block]='/L23;E'
 [code_inline]='L00/L23'
+[emphasis_mark]='L18'
 
 # Dark mode
 [code_mark]='L10'
@@ -445,6 +453,7 @@ Code-related theme keys map directly to module labels:
 [code_info]='L10'
 [code_block]='/L05;E'
 [code_inline]='L25/L05'
+[emphasis_mark]='L10'
 ```
 
 The `code_block` label includes `;E` (erase line) for full-width background on fenced code blocks. `code_tick` has background color matching `code_inline` for visual continuity, with dimmer foreground. `code_inline` has explicit foreground (`L00`/`L25`) to prevent heading foreground from bleeding through in cumulative coloring.
@@ -521,13 +530,23 @@ Stage execution is controlled by config flags: `colorize` (default: 1), `table` 
 
 `format_table()` detects table blocks via `^ {0,3}\|.+\|\n){3,}` and processes each block:
 
-1. **Column alignment** — `call_ansicolumn()` invokes `App::ansicolumn::ansicolumn()` via `Command::Run` (same pattern as the tee module's `call()` function):
+1. **Alignment parsing** — `parse_separator()` analyzes the separator line (e.g., `|:---|:---:|---:|---|`):
+   - Finds separator line via `/^\h*\|(?:\h*:?-+:?\h*\|)+\h*$/m` (each cell requires at least one `-`)
+   - Splits cells with `split /\|/, $sep_line, -1` (the `-1` limit preserves trailing empty fields from the final `|`)
+   - Detects `:---:` (center) and `---:` (right) patterns; `:---` and `---` are left-aligned (default, no option needed)
+   - Adds `+1` offset to column numbers because the leading `|` creates an empty column 1 in ansicolumn's split
+   - Strips colons from separator line (`tr/:/-/`) so `fix_separator()` works unchanged
+   - Returns `--table-right=N[,N...]` and/or `--table-center=N[,N...]` options (requires App::ansicolumn >= 1.53)
+
+2. **Column alignment** — `call_ansicolumn()` invokes `App::ansicolumn::ansicolumn()` via `Command::Run` (same pattern as the tee module's `call()` function):
    - `-s '|'`: Input separator
    - `-o $sep`: Output separator (`│` when rule is enabled, `|` otherwise)
    - `-t`: Table mode (auto-determine column widths)
    - `--cu=1`: Column unit (minimum column width)
+   - `--table-right=N`: Right-align specified columns (from `parse_separator`)
+   - `--table-center=N`: Center-align specified columns (from `parse_separator`)
 
-2. **Separator fix** — `fix_separator()` converts separator lines to box-drawing characters:
+3. **Separator fix** — `fix_separator()` converts separator lines to box-drawing characters:
    - Rule mode: `tr[│ -][┼──]` converts middle part, wrapped with `├`/`┤`
    - Non-rule mode: `tr[ ][-]` replaces spaces with dashes, wrapped with `|`
 
@@ -585,27 +604,43 @@ The md module's `active()` function checks show flags and skips regex substituti
 Bold and italic patterns follow [CommonMark emphasis rules](https://spec.commonmark.org/0.31.2/#emphasis-and-strong-emphasis). These are processed in the md module's `colorize()`, before headings. Each pattern uses `$SKIP_CODE` as first alternative to skip code spans:
 
 ```perl
-# Bold: ** and __  (color: D = bold weight only)
-s{$SKIP_CODE|(?<!\\)\*\*.*?(?<!\\)\*\*}{md_color('bold', ${^MATCH})}gep;
-s{$SKIP_CODE|(?<![\\w])__.*?(?<!\\)__(?!\w)}{md_color('bold', ${^MATCH})}gep;
+# Bold: ** and __  (markers colored separately via mark_color)
+s{$SKIP_CODE|(?<!\\)(?<m>\*\*)(?<t>.*?)(?<!\\)\g{m}}{
+    mark_color('bold', $+{m}) . md_color('bold', $+{t}) . mark_color('bold', $+{m})
+}gep;
+s{$SKIP_CODE|(?<![\\\w])(?<m>__)(?<t>.*?)(?<!\\)\g{m}(?!\w)}{
+    mark_color('bold', $+{m}) . md_color('bold', $+{t}) . mark_color('bold', $+{m})
+}gep;
 
-# Italic: * and _  (color: I = italic only)
-s{$SKIP_CODE|(?<![\\w])_(?:(?!_).)+(?<!\\)_(?!\w)}{md_color('italic', ${^MATCH})}gep;
-s{$SKIP_CODE|(?<![\\*])\*(?:(?!\*).)+(?<!\\)\*(?!\*)}{md_color('italic', ${^MATCH})}gep;
+# Italic: * and _
+s{$SKIP_CODE|(?<![\\\w])(?<m>_)(?<t>(?:(?!_).)+)(?<!\\)\g{m}(?!\w)}{
+    mark_color('italic', $+{m}) . md_color('italic', $+{t}) . mark_color('italic', $+{m})
+}gep;
+s{$SKIP_CODE|(?<![\\*])(?<m>\*)(?<t>(?:(?!\*).)+)(?<!\\)\g{m}(?!\*)}{
+    mark_color('italic', $+{m}) . md_color('italic', $+{t}) . mark_color('italic', $+{m})
+}gep;
 
-# Strikethrough  (color: X = strikethrough)
-s{$SKIP_CODE|(?<!\\)~~.+?(?<!\\)~~}{md_color('strike', ${^MATCH})}gep;
+# Strikethrough
+s{$SKIP_CODE|(?<!\\)(?<m>~~)(?<t>.+?)(?<!\\)\g{m}}{
+    mark_color('strike', $+{m}) . md_color('strike', $+{t}) . mark_color('strike', $+{m})
+}gep;
 ```
 
+`mark_color($type, $text)` checks if `${type}_mark` (e.g., `bold_mark`) exists
+in the colormap; if not, falls back to `emphasis_mark`. This allows per-type
+overrides via `--cm bold_mark=G` while defaulting to the shared `emphasis_mark`.
+
 Key rules:
+- Named captures `(?<m>...)` and `(?<t>...)` separate markers from content
+- `\g{m}` backreference ensures opening and closing markers match (prevents `**...__` mixing)
 - `$SKIP_CODE` as first alternative: code spans are matched and skipped via `(*SKIP)(*FAIL)`, preventing emphasis from matching inside code
 - `(?<!\\)`: Not preceded by backslash (escape handling)
-- `(?<![\\w])` / `(?!\w)`: Word boundaries for `_`/`__` (prevents `foo_bar_baz` matching)
+- `(?<![\\\w])` / `(?!\w)`: Word boundaries for `_`/`__`/`___` (prevents `foo_bar_baz` matching)
 - `(?<!\*)` / `(?!\*)`: Not adjacent to `*` (distinguishes `*italic*` from `**bold**`)
 - `(?:(?!\*).)+`: Match any character except `*`, and `.` excludes newlines (single-line only)
 - `__` requires word boundaries (same as `_`)
 - `**` doesn't require word boundaries (can be used mid-word)
-- `/p` flag with `${^MATCH}`: safe alternative to `$&` for accessing matched text
+- `/p` flag with `${^MATCH}`: safe alternative to `$&` for accessing matched text (used by `$SKIP_CODE`)
 
 ### OSC 8 Hyperlinks
 
@@ -787,6 +822,8 @@ Only HTML comments starting at the beginning of a line are highlighted. Inline c
 ### Emphasis (Bold/Italic)
 
 Emphasis patterns do not span multiple lines. Multi-line bold or italic text is not supported.
+
+`***bold italic***` and `___bold italic___` are supported as a combined pattern (processed before bold and italic, result is `protect()`ed). Other nested forms (e.g., `**bold _italic_**`) are not supported.
 
 ### Links
 

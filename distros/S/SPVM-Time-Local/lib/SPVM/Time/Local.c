@@ -1,6 +1,9 @@
 // Copyright (c) 2023 Yuki Kimoto
 // MIT License
 
+/* Enable GNU and POSIX extensions for Linux (glibc) to use timegm */
+#define _GNU_SOURCE
+
 #include "spvm_native.h"
 
 #include <time.h>

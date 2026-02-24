@@ -18,4 +18,23 @@ like $dir_tmpl, qr{<html>},       'dir_html() contains html tag';
 like $dir_tmpl, qr{<table>},      'dir_html() contains table tag';
 like $dir_tmpl, qr{Last Modified},'dir_html() contains Last Modified header';
 
+my $file_icons_tmpl = $html->file_html_icons;
+ok defined $file_icons_tmpl,                   'file_html_icons() returns a value';
+like $file_icons_tmpl, qr{%s},                 'file_html_icons() contains sprintf placeholders';
+like $file_icons_tmpl, qr{<tr>},               'file_html_icons() contains a table row';
+like $file_icons_tmpl, qr{class='icon'},        'file_html_icons() contains icon cell';
+like $file_icons_tmpl, qr{class='name'},        'file_html_icons() contains name cell';
+
+my $icon_count = () = $file_icons_tmpl =~ /%s/g;
+is $icon_count, 6, 'file_html_icons() has 6 sprintf placeholders';
+
+my $dir_icons_tmpl = $html->dir_html_icons;
+ok defined $dir_icons_tmpl,                     'dir_html_icons() returns a value';
+like $dir_icons_tmpl, qr{%s},                   'dir_html_icons() contains sprintf placeholders';
+like $dir_icons_tmpl, qr{<html>},               'dir_html_icons() contains html tag';
+like $dir_icons_tmpl, qr{<table>},              'dir_html_icons() contains table tag';
+like $dir_icons_tmpl, qr{Last Modified},        'dir_html_icons() contains Last Modified header';
+like $dir_icons_tmpl, qr{font-awesome},         'dir_html_icons() links to Font Awesome';
+like $dir_icons_tmpl, qr{class='icon'},         'dir_html_icons() contains icon column header';
+
 done_testing;

@@ -4,7 +4,7 @@
       "Ronan Oger <ronan@cpan.com>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "ExtUtils::MakeMaker version 7.34, CPAN::Meta::Converter version 2.150010",
+   "generated_by" : "ExtUtils::MakeMaker version 7.70, CPAN::Meta::Converter version 2.150010",
    "license" : [
       "perl_5"
    ],
@@ -52,23 +52,23 @@
    "provides" : {
       "SVG" : {
          "file" : "lib/SVG.pm",
-         "version" : "2.87"
+         "version" : "2.88"
       },
       "SVG::DOM" : {
          "file" : "lib/SVG/DOM.pm",
-         "version" : "2.87"
+         "version" : "2.88"
       },
       "SVG::Element" : {
          "file" : "lib/SVG/Element.pm",
-         "version" : "2.87"
+         "version" : "2.88"
       },
       "SVG::Extension" : {
          "file" : "lib/SVG/Extension.pm",
-         "version" : "2.87"
+         "version" : "2.88"
       },
       "SVG::XML" : {
          "file" : "lib/SVG/XML.pm",
-         "version" : "2.87"
+         "version" : "2.88"
       }
    },
    "release_status" : "stable",
@@ -79,7 +79,7 @@
          "web" : "https://github.com/manwar/SVG"
       }
    },
-   "version" : "2.87",
+   "version" : "2.88",
    "x_contributors" : [
       "Peter Wainwright",
       "Ian Hickson",
@@ -87,7 +87,7 @@
       "Steve Lihn",
       "Allen Day",
       "Gabor Szabo",
-      "Mohammad S Anwar"
+      "Mohammad Sajid Anwar"
    ],
-   "x_serialization_backend" : "JSON::PP version 4.02"
+   "x_serialization_backend" : "JSON::PP version 4.16"
 }

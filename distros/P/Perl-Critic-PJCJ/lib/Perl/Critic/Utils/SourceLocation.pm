@@ -1,10 +1,10 @@
-package Perl::Critic::Utils::SourceLocation v0.2.3;
+package Perl::Critic::Utils::SourceLocation v0.2.4;
 
 use v5.26.0;
 use strict;
 use warnings;
-use feature      qw( signatures );
-use experimental qw( signatures );
+use feature "signatures";
+use experimental "signatures";
 
 use parent qw( PPI::Element );
 
@@ -56,7 +56,7 @@ Perl::Critic::Utils::SourceLocation - Synthetic PPI element
 
 =head1 VERSION
 
-version v0.2.3
+version v0.2.4
 
 =head1 SYNOPSIS
 

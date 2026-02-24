@@ -2,7 +2,7 @@ package IPC::Manager::Client::AtomicPipe;
 use strict;
 use warnings;
 
-our $VERSION = '0.000003';
+our $VERSION = '0.000005';
 
 use File::Spec;
 use Atomic::Pipe;
@@ -13,6 +13,7 @@ use parent 'IPC::Manager::Base::FS::Handle';
 use Object::HashBase qw{
     permissions
     +pipe
+    +pipe_cache
 };
 
 sub check_path { -p $_[1] }
@@ -109,7 +110,7 @@ sub send_message {
     $self->pid_check;
     my $fifo = $self->peer_exists($peer_id) or die "'$peer_id' is not a valid message recipient";
 
-    my $p = Atomic::Pipe->write_fifo($fifo);
+    my $p = $self->{+PIPE_CACHE}->{$fifo} //= Atomic::Pipe->write_fifo($fifo);
     $p->write_message($self->{+SERIALIZER}->serialize($msg));
 
     $self->{+STATS}->{sent}->{$msg->{to}}++;

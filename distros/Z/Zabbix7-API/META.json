@@ -54,7 +54,7 @@
    "provides" : {
       "Zabbix7::API" : {
          "file" : "lib/Zabbix7/API.pm",
-         "version" : "1.1"
+         "version" : "1.2"
       },
       "Zabbix7::API::Action" : {
          "file" : "lib/Zabbix7/API/Action.pm"
@@ -92,6 +92,9 @@
       "Zabbix7::API::MediaType" : {
          "file" : "lib/Zabbix7/API/MediaType.pm"
       },
+      "Zabbix7::API::Problem" : {
+         "file" : "lib/Zabbix7/API/Problem.pm"
+      },
       "Zabbix7::API::Proxy" : {
          "file" : "lib/Zabbix7/API/Proxy.pm"
       },
@@ -123,9 +126,9 @@
          "web" : "https://github.com/scotticles/perl-zabbix7-api"
       }
    },
-   "version" : "1.1",
+   "version" : "1.2",
    "x_contributors" : [
-      "Scotth <scotth@cpan.org>"
+      "scotth <scotth@cpan.org>"
    ],
    "x_serialization_backend" : "JSON::PP version 4.16",
    "x_static_install" : 1

@@ -16,6 +16,7 @@ lib/Zabbix7/API/Item.pm
 lib/Zabbix7/API/Macro.pm
 lib/Zabbix7/API/Map.pm
 lib/Zabbix7/API/MediaType.pm
+lib/Zabbix7/API/Problem.pm
 lib/Zabbix7/API/Proxy.pm
 lib/Zabbix7/API/Script.pm
 lib/Zabbix7/API/Template.pm

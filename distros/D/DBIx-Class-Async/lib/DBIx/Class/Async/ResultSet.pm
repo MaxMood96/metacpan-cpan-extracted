@@ -1,6 +1,6 @@
 package DBIx::Class::Async::ResultSet;
 
-$DBIx::Class::Async::ResultSet::VERSION   = '0.59';
+$DBIx::Class::Async::ResultSet::VERSION   = '0.60';
 $DBIx::Class::Async::ResultSet::AUTHORITY = 'cpan:MANWAR';
 
 =head1 NAME
@@ -9,7 +9,7 @@ DBIx::Class::Async::ResultSet - Non-blocking resultset proxy with Future-based e
 
 =head1 VERSION
 
-Version 0.59
+Version 0.60
 
 =head1 SYNOPSIS
 
@@ -48,6 +48,18 @@ use DBIx::Class::Async::Row;
 use DBIx::Class::Async::ResultSetColumn;
 
 use constant ASYNC_TRACE => $ENV{ASYNC_TRACE} || 0;
+
+my %ACCUMULATING_ATTRS = map { $_ => 1 } qw(
+    join
+    prefetch
+    columns
+    +columns
+    select
+    as
+    order_by
+    group_by
+    having
+);
 
 =head1 METHODS
 
@@ -2302,37 +2314,65 @@ sub source_name {
 
 =head2 search
 
-    my $new_rs = $rs->search(
-        { age      => { '>' => 21 } },
-        { order_by => 'name'        }
-    );
+    my $new_rs = $rs->search(\%cond);
+    my $new_rs = $rs->search(\%cond, \%attrs);
+    my $new_rs = $rs->search(\'literal sql');
+    my $new_rs = $rs->search(\['sql with ?', @bind]);
 
-Returns a new ResultSet object with the added conditions and attributes. This
-is a synchronous, non-I/O operation that clones the current state.
+Returns a new L<DBIx::Class::Async::ResultSet> with the given conditions
+and attributes merged onto the existing ones.
+
+Conditions are merged with C<-and> semantics. Empty or undef conditions
+on either side are treated as no-ops and not included in the merge.
+
+Attributes are deep-merged: scalar keys are overwritten by the new value,
+while accumulating keys (C<join>, C<prefetch>, C<columns>, C<select>,
+C<as>, C<order_by>, C<group_by>, C<having>) are concatenated and
+deduplicated.
+
+This is a synchronous, non-I/O operation that clones the current state.
 
 =cut
 
 sub search {
     my ($self, $cond, $attrs) = @_;
 
+    my $existing = $self->{_cond};
     my $new_cond;
 
-    if (ref $cond eq 'REF' || ref $cond eq 'SCALAR') {
-        $new_cond = $cond;
+    if (!defined $cond) {
+        # No new condition — preserve existing as-is
+        $new_cond = $existing;
+    }
+    elsif (ref $cond eq 'SCALAR') {
+        # Literal SQL: \'SELECT ...'
+        $new_cond = _merge_cond($existing, $cond);
+    }
+    elsif (ref $cond eq 'REF' && ref $$cond eq 'ARRAY') {
+        # Literal SQL with bind: \['sql ?', @bind]
+        $new_cond = _merge_cond($existing, $cond);
     }
     elsif (ref $cond eq 'HASH') {
-        if (ref $self->{_cond} eq 'HASH' && keys %{$self->{_cond}}) {
-            $new_cond = { -and => [ $self->{_cond}, $cond ] };
-        }
-        else {
-            $new_cond = $cond;
-        }
+        $new_cond = _merge_cond($existing, $cond);
+    }
+    elsif (ref $cond) {
+        # Blessed object or unrecognised ref type — warn and treat as no-op
+        Carp::carp(
+            "search() received unrecognised condition type: "
+            . ref($cond)
+            . " — ignoring"
+        );
+        $new_cond = $existing;
     }
     else {
-        $new_cond = $cond || $self->{_cond};
+        # Plain scalar — not valid as a DBIx::Class condition
+        Carp::croak(
+            "search() received a plain scalar as condition: '$cond' "
+            . "— did you mean \\\"$cond\" for literal SQL?"
+        );
     }
 
-    my $merged_attrs = { %{$self->{_attrs} || {}}, %{$attrs || {}} };
+    my $merged_attrs = $self->_merge_attrs($self->{_attrs}, $attrs);
 
     return $self->new_result_set({
         cond          => $new_cond,
@@ -3550,6 +3590,92 @@ sub _inflate_row {
     }
 
     return $row;
+}
+
+# _merge_attrs
+#
+#    my $merged = $self->_merge_attrs(\%base, \%extra);
+#
+# Internal method. Deep-merges two attribute hashes.
+#
+# Accumulating keys (C<join>, C<prefetch>, C<columns>, C<+columns>,
+# C<select>, C<as>, C<order_by>, C<group_by>, C<having>) are concatenated
+# and deduplicated by string value. All other keys are overwritten by the
+# extra value.
+
+sub _merge_attrs {
+    my ($self, $base, $extra) = @_;
+
+    $base  //= {};
+    $extra //= {};
+
+    my %merged = %$base;
+
+    for my $key (keys %$extra) {
+        if ($ACCUMULATING_ATTRS{$key} && exists $merged{$key}) {
+            # Normalise both sides to flat arrayrefs
+            my $base_val  = ref $merged{$key}  eq 'ARRAY'
+                                ? $merged{$key}
+                                : [ $merged{$key} ];
+            my $extra_val = ref $extra->{$key} eq 'ARRAY'
+                                ? $extra->{$key}
+                                : [ $extra->{$key} ];
+
+            # Concatenate and deduplicate by string value.
+            # We preserve order (first occurrence wins) to keep
+            # join/prefetch ordering stable and avoid surprising
+            # SQL changes on re-runs.
+            my %seen;
+            $merged{$key} = [
+                grep { !$seen{ _dedup_key($_) }++ }
+                     @$base_val, @$extra_val
+            ];
+        }
+        else {
+            # Scalar or non-accumulating key: extra wins
+            $merged{$key} = $extra->{$key};
+        }
+    }
+
+    return \%merged;
+}
+
+# Produce a stable string key for deduplication.
+# Handles plain strings, hashrefs (e.g. { rel => 'sub_rel' }),
+# and arrayrefs (nested join specs).
+
+sub _dedup_key {
+    my $val = shift;
+    return 'undef' unless defined $val;
+    return $val     unless ref $val;
+    # Lean on Data::Dumper for a cheap stable serialisation of
+    # nested join/prefetch specs like { orders => 'items' }.
+    # Sorted keys ensures { a=>1, b=>1 } eq { b=>1, a=>1 }.
+    require Data::Dumper;
+    local $Data::Dumper::Sortkeys = 1;
+    local $Data::Dumper::Indent   = 0;
+    local $Data::Dumper::Terse    = 1;
+    return Data::Dumper::Dumper($val);
+}
+
+sub _is_empty_cond {
+    my $c = shift;
+    return 1 unless defined $c;
+    return 1 if ref $c eq 'HASH'  && !keys %$c;
+    return 1 if ref $c eq 'ARRAY' && !@$c;
+    return 0;
+}
+
+sub _merge_cond {
+    my ($existing, $new) = @_;
+
+    my $existing_empty = _is_empty_cond($existing);
+    my $new_empty      = _is_empty_cond($new);
+
+    return {}          if  $existing_empty &&  $new_empty;
+    return $new        if  $existing_empty && !$new_empty;
+    return $existing   if !$existing_empty &&  $new_empty;
+    return { -and => [ $existing, $new ] };
 }
 
 =head1 AUTOMATIC CACHE SAFETY

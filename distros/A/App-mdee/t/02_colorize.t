@@ -12,7 +12,7 @@ use_ok('App::Greple::md');
 my $test_md = 't/test.md';
 
 SKIP: {
-    skip "$test_md not found", 9 unless -f $test_md;
+    skip "$test_md not found", 12 unless -f $test_md;
 
     # Basic output test
     my $r = run("-Mmd $test_md");
@@ -55,6 +55,12 @@ SKIP: {
     # Code span protection: bold/strike not processed inside code spans
     my ($code_prot) = grep { /inline code with/ } split /\n/, $out;
     unlike($code_prot, qr/\e\[1m/, "bold not applied inside inline code");
+
+    # Word boundary: underscore emphasis not applied inside words (CommonMark)
+    my ($wb_line) = map { $strip->($_) } grep { /Word boundaries/ } split /\n/, $out;
+    like($wb_line, qr/abc_def_ghi/, "_ not applied inside word abc_def_ghi");
+    like($wb_line, qr/foo__bar__baz/, "__ not applied inside word foo__bar__baz");
+    like($wb_line, qr/x___y___z/, "___ not applied inside word x___y___z");
 }
 
 done_testing;

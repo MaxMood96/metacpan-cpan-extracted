@@ -2,7 +2,7 @@ package IPC::Manager::Client::UnixSocket;
 use strict;
 use warnings;
 
-our $VERSION = '0.000003';
+our $VERSION = '0.000005';
 
 use File::Spec;
 use Carp qw/croak/;
@@ -14,6 +14,7 @@ use parent 'IPC::Manager::Base::FS::Handle';
 use Object::HashBase qw{
     +buffer
     +socket
+    +socket_cache
 };
 
 sub check_path { -S $_[1] }
@@ -89,15 +90,12 @@ sub send_message {
     $self->pid_check;
     my $sock = $self->peer_exists($peer_id) or die "'$peer_id' is not a valid message recipient";
 
-    my $s = IO::Socket::UNIX->new(
+    my $s = $self->{+SOCKET_CACHE}->{$sock} //= IO::Socket::UNIX->new(
         Type => SOCK_DGRAM,
         Peer => $sock,
     ) or die "Cannot connect to socket: $!";
 
     $s->send($self->{+SERIALIZER}->serialize($msg) . "\n") or die "Cannot send message: $!";
-
-    $s->flush // warn "Flush error: $!";
-    close($s) or warn "Could not close socket: $!";
 
     $self->{+STATS}->{sent}->{$msg->{to}}++;
 }

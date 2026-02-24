@@ -1,6 +1,6 @@
 package DBIx::Class::Async::Row;
 
-$DBIx::Class::Async::Row::VERSION   = '0.59';
+$DBIx::Class::Async::Row::VERSION   = '0.60';
 $DBIx::Class::Async::Row::AUTHORITY = 'cpan:MANWAR';
 
 =head1 NAME
@@ -9,7 +9,7 @@ DBIx::Class::Async::Row - Asynchronous Row object representing a single database
 
 =head1 VERSION
 
-Version 0.59
+Version 0.60
 
 =head1 SYNOPSIS
 

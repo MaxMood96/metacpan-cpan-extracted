@@ -20,7 +20,7 @@ use Travel::Status::DE::DBRIS;
 use Travel::Routing::DE::DBRIS::Connection;
 use Travel::Routing::DE::DBRIS::Offer;
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 
 Travel::Routing::DE::DBRIS->mk_ro_accessors(qw(earlier later));
 
@@ -38,7 +38,7 @@ sub new {
 	my $ua = $conf{user_agent};
 
 	if ( not $ua ) {
-		my %lwp_options = %{ $conf{lwp_options} // { timeout => 10 } };
+		my %lwp_options = %{ $conf{lwp_options} // { timeout => 20 } };
 		$ua = LWP::UserAgent->new(%lwp_options);
 		$ua->env_proxy;
 	}
@@ -440,7 +440,7 @@ Travel::Routing::DE::DBRIS - Interface to the bahn.de itinerary service
 
 =head1 VERSION
 
-version 0.08
+version 0.09
 
 =head1 DESCRIPTION
 
@@ -514,7 +514,7 @@ of ten seconds.
 =item B<lwp_options> => I<hashref>
 
 Pass I<hashref> to C<< LWP::UserAgent->new >>.
-Default: C<< { timeout => 10 } >>.
+Default: C<< { timeout => 20 } >>.
 
 =back
 

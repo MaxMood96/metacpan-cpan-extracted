@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 
-use Test::More import => [ qw( BAIL_OUT is isa_ok like ok plan require_ok subtest ) ], tests => 9;
+use Test::More import => [ qw( BAIL_OUT is isa_ok like ok plan require_ok subtest ) ], tests => 14;
 use Test::Fatal qw( dies_ok exception lives_ok );
 my $class;
 
@@ -9,6 +9,19 @@ BEGIN {
   $class = 'Version::Semantic';
   require_ok $class or BAIL_OUT "Cannot load class '$class'!"
 }
+
+like exception { $class->new( major => 0, 'minor' ) }, qr/\AOdd number of elements in hash assignment at/,
+  'Odd number of arguments';
+
+## no critic ( ProhibitComplexRegexes )
+like exception { $class->new( undef, 0 ) }, qr/\AUse of uninitialized value within \@_ in list assignment at/,
+  'Attribute name cannot be undefined';
+
+like exception { $class->new( trial => 'TRIAL1' ) }, qr/\AUnknown attribute name/, 'Unknown attribute name';
+
+like exception { $class->new( major => '01' ) }, qr/\AAttribute .* has invalid value/, 'Invalid attribute value';
+
+like exception { $class->new( major => 0 ) }, qr/Required attribute .* not set/, 'Missing required attribute';
 
 like exception { $class->parse( '1.0.0-alpha_beta' ) }, qr/is not a semantic version/, 'Invalid semantic version';
 like exception { $class->parse( '1.0.0_01' ) }, qr/is not a semantic version/,
@@ -62,7 +75,7 @@ subtest 'Invalid semantic version' => sub {
 };
 
 subtest 'Valid semantic versions' => sub {
-  plan tests => 31;
+  plan tests => 32;
 
   my @versions = qw(
     0.0.4
@@ -96,6 +109,7 @@ subtest 'Valid semantic versions' => sub {
     1.0.0+0.build.1-rc.10000aaa-kk-0.1
     99999999999999999999999.999999999999999999.99999999999999999
     1.0.0-0A.is.legal
+    1.0.8-20260216170758-TRIAL
   );
   lives_ok { $class->parse( $_ ) } "$_" for @versions
 };
@@ -142,7 +156,7 @@ subtest 'Test named capture group accessors: "v" prefixed semantic version' => s
   is "$self", 'v0.0.4', 'Stringification'
 };
 
-subtest 'Test named capture group accessors: "-TRIAL\d*" pre-releases' => sub {
+subtest 'Test named capture group accessors: "-TRIAL[0-9]*" pre-releases' => sub {
   plan tests => 23;
 
   my $expected_pre_release = 'TRIAL';

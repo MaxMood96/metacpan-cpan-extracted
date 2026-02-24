@@ -1,6 +1,6 @@
 package DBIx::Class::Async;
 
-$DBIx::Class::Async::VERSION   = '0.59';
+$DBIx::Class::Async::VERSION   = '0.60';
 $DBIx::Class::Async::AUTHORITY = 'cpan:MANWAR';
 
 =encoding utf8
@@ -11,7 +11,7 @@ DBIx::Class::Async - Non-blocking, multi-worker asynchronous wrapper for DBIx::C
 
 =head1 VERSION
 
-Version 0.59
+Version 0.60
 
 =head1 DISCLAIMER
 
@@ -270,6 +270,7 @@ sub create_async_db {
             _deadlocks     => 0,
             _retries       => 0,
         },
+        _debug             => $args{debug} || 0,
     };
 
     _init_metrics($async_db) if $async_db->{_enable_metrics};
@@ -335,6 +336,7 @@ sub _call_worker {
             $db->{_workers_config},
             $operation,
             @args,
+            $db->{_debug} || 0,
         ],
     );
 
@@ -399,13 +401,16 @@ sub _init_workers {
                 use feature 'state';
 
 
-                my ($schema_class, $connect_info, $worker_config, $operation, $payload) = @_;
+                my ($schema_class, $connect_info, $worker_config, $operation, $payload, $debug_flag) = @_;
+
+                $debug_flag ||= 0;
 
                 if (ASYNC_TRACE) {
                     warn "[PID $$] Worker CODE block started";
                     warn "[PID $$] Worker received " . scalar(@_) . " arguments";
                     warn "[PID $$] Schema class: $schema_class";
                     warn "[PID $$] Operation: $operation";
+                    warn "[PID $$] Debug flag: $debug_flag";
                     warn "[PID $$] STAGE 4 (Worker): Received operation: $operation";
                 }
 
@@ -431,6 +436,18 @@ sub _init_workers {
                     }
 
                     return $data;
+                };
+
+                my $log_sql = sub {
+                    my ($debug_enabled, $sql, $bind) = @_;
+                    return unless $debug_enabled;
+
+                    # Log to STDERR in the worker process
+                    # The parent's debugobj won't be accessible in the worker
+                    warn "SQL: $sql\n";
+                    if ($bind && @$bind) {
+                        warn "BIND: " . join(", ", map { defined $_ ? "'$_'" : "NULL" } @$bind) . "\n";
+                    }
                 };
 
                 # Create or reuse schema connection
@@ -478,6 +495,12 @@ sub _init_workers {
                         warn "[PID $$] Schema connection returned undef!"
                             if ASYNC_TRACE;
                         die "Schema connection returned undef";
+                    }
+
+                    if ($debug_flag && $schema->storage) {
+                        $schema->storage->debug($debug_flag);
+                        warn "[PID $$] Worker storage debug enabled at level $debug_flag"
+                            if ASYNC_TRACE;
                     }
 
                     # https://github.com/manwar/DBIx-Class-Async/issues/9
@@ -1181,6 +1204,86 @@ Each worker maintains a persistent connection to the database. This eliminates t
 The C<query_timeout> (default 30s) is your safety net. In the new design, a hung query only blocks B<one> worker; the others stay active. Without a timeout, a single "zombie" query could permanently reduce your pool size.
 
 =back
+
+=head1 SQL GENERATION CONSISTENCY
+
+L<DBIx::Class::Async> ensures deterministic SQL generation across multiple
+invocations of the same query. This is critical for query caching, performance
+analysis, and debugging.
+
+B<Deterministic Column Ordering>
+
+When you call C<search()> multiple times on the same ResultSet, the generated
+SQL will be identical, including column order:
+
+    my $rs = $schema->resultset('User');
+
+    # These produce identical SQL every time
+    my $query1 = $rs->search({})->as_query;
+    my $query2 = $rs->search({})->as_query;
+
+    # SELECT me.id, me.name, me.email, ... FROM users me
+    # (same order on every call)
+
+This consistency is maintained even with complex attribute merging:
+
+    my $rs = $schema->resultset('User')
+                    ->search({}, { join => 'orders' })
+                    ->search({}, { join => 'profile' });
+
+    # Joins are deduplicated and ordered consistently
+
+B<Attribute Deduplication>
+
+When chaining C<search()> calls, accumulating attributes (C<join>, C<prefetch>,
+C<columns>, C<select>, C<as>, C<order_by>, C<group_by>, C<having>) are
+automatically deduplicated:
+
+    my $rs = $schema->resultset('User')
+                    ->search({}, { join => 'orders' })
+                    ->search({}, { join => 'orders' })  # Deduplicated
+                    ->search({}, { join => 'profile' });
+
+    # Results in: JOIN orders, JOIN profile (not duplicate orders)
+
+Deduplication uses a stable serialisation of nested structures, so these
+are correctly recognised as duplicates:
+
+    { orders => 'items' }  # Same as:
+    { orders => 'items' }  # This duplicate
+
+B<Benefits>
+
+=over 4
+
+=item * B<Query Caching> - Identical SQL enables effective query caching
+
+=item * B<Performance Analysis> - Consistent SQL makes it easier to identify
+slow queries in logs
+
+=item * B<Testing> - Predictable SQL generation makes testing more reliable
+
+=item * B<Debugging> - Easier to trace and compare queries
+
+=back
+
+B<Debugging SQL>
+
+You can inspect generated SQL using the C<as_query> method or by enabling
+debug mode:
+
+    # Using as_query
+    my $rs = $schema->resultset('User')->search({ active => 1 });
+    my $query = $rs->as_query;
+    # Extract SQL from the returned structure
+
+    # Using debug mode
+    $schema->storage->debug(1);
+    $rs->all;  # SQL printed to STDERR in worker processes
+
+See L<debugobj|DBIx::Class::Async::Storage::DBI/debugobj> and
+L<debug|DBIx::Class::Async::Storage::DBI/debug> for more information on SQL
+debugging.
 
 =head1 ERROR HANDLING
 

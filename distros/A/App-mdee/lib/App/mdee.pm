@@ -4,7 +4,7 @@ package App::mdee;
 # POD documentation is appended from script/mdee at release time.
 # See minil.toml for details.
 
-our $VERSION = "1.01";
+our $VERSION = "1.02";
 
 1;
 =encoding utf-8
@@ -47,7 +47,7 @@ mdee - em·dee, Markdown Easy on the Eyes
 
 =head1 VERSION
 
-Version 1.01
+Version 1.02
 
 =cut
 =head1 DESCRIPTION
@@ -238,6 +238,8 @@ The C<#.> and C<#)> forms are Pandoc's auto-numbered list syntax.
 
 Enable or disable table formatting.  When enabled, Markdown tables
 are formatted using L<ansicolumn(1)|App::ansicolumn> for aligned column display.
+Column alignment specified in the separator line (C<:---> for left,
+C<:---:> for center, C<---:> for right) is respected.
 Default is enabled.
 
 =item B<--[no-]nup>
@@ -310,6 +312,33 @@ C<theme_dark[base]>, and/or C<md_config[]>:
 
     # theme/hashed.sh — enable closing hashes on h3-h6
     md_config+=(hashed.h3=1 hashed.h4=1 hashed.h5=1 hashed.h6=1)
+
+    # theme/nomark.sh — hide markers and brackets
+    pass_md+=(--cm 'emphasis_mark=sub{""}')
+    pass_md+=(--cm 'code_tick=sub{""}')
+    pass_md+=(--cm 'link_mark=sub{""}')
+
+Built-in themes:
+
+=over 4
+
+=item C<hashed> (default)
+
+Append closing hashes to h3-h6 headers.
+
+=item C<warm>
+
+Change base color to Coral.
+
+=item C<nomark>
+
+Hide emphasis markers (C<**>, C<*>, C<__>, C<_>, C<~~>),
+inline code backticks, and link brackets (C<[>, C<]>).
+Content text keeps its formatting (bold, italic,
+strikethrough, code, clickable links) but the surrounding
+markers are not displayed.
+
+=back
 
 Use C<-d> to dump current theme values in sourceable format.
 
@@ -398,9 +427,14 @@ Available labels:
     bold              Bold (**text** or __text__)
     italic            Italic (*text* or _text_)
     strike            Strikethrough (~~text~~)
+    emphasis_mark     Emphasis markers (**, *, __, _, ~~)
+    bold_mark         Bold markers only (overrides emphasis_mark)
+    italic_mark       Italic markers only (overrides emphasis_mark)
+    strike_mark       Strike markers only (overrides emphasis_mark)
     link              Inline links [text](url)
     image             Images ![alt](url)
     image_link        Image links [![alt](img)](url)
+    link_mark         Link/image brackets (overrides emphasis_mark)
     blockquote        Blockquote marker (>)
     horizontal_rule   Horizontal rules (---, ***, ___)
     comment           HTML comments (<!-- ... -->)
@@ -704,9 +738,17 @@ Table formatting is handled within the L<App::Greple::md> module
 (after syntax highlighting, before output).  Markdown tables are
 detected by the pattern C<^ {0,3}(\|.+\|\n){3,}> and formatted with
 aligned columns using L<ansicolumn(1)|App::ansicolumn> while
-preserving ANSI colors.  When C<--rule> is enabled (default),
-ASCII pipe characters are replaced with Unicode box-drawing
-characters (C<│>, C<├>, C<┤>, C<┼>, C<─>).
+preserving ANSI colors.
+
+Column alignment is parsed from the separator line: C<:---> (left,
+default), C<:---:> (center), C<---:> (right).  The C<parse_separator()>
+function extracts alignment markers and passes C<--table-right> and
+C<--table-center> options to L<ansicolumn(1)|App::ansicolumn> (requires
+version 1.53 or later).  Colons are stripped from the separator line
+before further processing.
+
+When C<--rule> is enabled (default), ASCII pipe characters are replaced
+with Unicode box-drawing characters (C<│>, C<├>, C<┤>, C<┼>, C<─>).
 
 =head3 Output Stage
 
@@ -780,6 +822,9 @@ containing comment-like text (e.g., C<< `<!-->` >>).
 
 Emphasis patterns (bold and italic) do not span multiple lines.
 Multi-line emphasis text is not supported.
+
+C<***bold italic***> and C<___bold italic___> are supported.
+Other nested forms (e.g., C<< **bold _italic_** >>) are not.
 
 =head2 Links
 
