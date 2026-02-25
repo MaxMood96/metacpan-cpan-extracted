@@ -1,1 +1,5 @@
+module_maker = "ModuleBuild"
 c_source = ["unqlite"]
+
+[Metadata]
+x_deprecated = 1

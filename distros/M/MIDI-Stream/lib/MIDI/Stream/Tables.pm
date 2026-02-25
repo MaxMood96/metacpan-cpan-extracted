@@ -5,7 +5,7 @@ package MIDI::Stream::Tables;
 # ABSTRACT: MIDI 1.0 look up tables and utility functions
 
 
-our $VERSION = '0.004';
+our $VERSION = '0.005';
 
 use parent 'Exporter';
 
@@ -82,6 +82,8 @@ sub is_single_byte { $_[0] > 0xf5 }
 sub message_length {
     my ( $status ) = @_;
 
+    $status = status_byte( $status ) if ( length $status // 0 ) > 3;
+
     return 0 unless $status;
 
     return 0 if $status < 0x80;
@@ -101,7 +103,7 @@ sub message_length {
 sub is_status_byte { $_[0] & 0x80 }
 
 
-sub has_channel { $_[0] < 0xf0 }
+sub has_channel { ( length $_[0] > 3 ? status_byte( $_[0] ) : $_[0] ) < 0xf0 }
 
 
 sub is_cc {
@@ -154,7 +156,7 @@ MIDI::Stream::Tables - MIDI 1.0 look up tables and utility functions
 
 =head1 VERSION
 
-version 0.004
+version 0.005
 
 =head1 SYNOPSIS
 
@@ -204,8 +206,9 @@ Returns whether the given byte represents a single-byte message, e.g. 'clock',
 =head2 message_length
 
     my $len = message_length( 0x9f );
+    my $len = message_length( 'note_on' );
 
-Returns the expected message length for the given status byte.
+Returns the expected message length for the given status.
 
 =head2 is_status_byte
 
@@ -216,8 +219,9 @@ Returns whether the given byte is a status byte.
 =head2 has_channel
 
     new_channel_status( $byte ) if has_channel( $byte );
+    my $has_channel = has_channel('clock');
 
-Returns whether the given byte represents a channel status.
+Returns whether the passed status is a channel status.
 
 =head2 is_cc
 

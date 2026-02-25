@@ -4,7 +4,7 @@ package App::mdee;
 # POD documentation is appended from script/mdee at release time.
 # See minil.toml for details.
 
-our $VERSION = "1.02";
+our $VERSION = "1.03";
 
 1;
 =encoding utf-8
@@ -27,6 +27,7 @@ mdee - em·dee, Markdown Easy on the Eyes
      -p  --plain            shortcut for --style=pager
          --[no-]fold        line folding (default: on)
          --[no-]table       table formatting (default: on)
+         --[no-]trim        trim cell spaces (default: on)
          --[no-]nup         nup paged output (default: on)
          --[no-]rule        use Unicode rules for tables (default: on)
      -w  --width=#          fold width (default: 80)
@@ -35,7 +36,7 @@ mdee - em·dee, Markdown Easy on the Eyes
      -B  --base-color=#     override base color of theme
                             (e.g., Ivory, #780043, (120,0,67))
     --cm --colormap=L=SPEC  override color for element (e.g., h1=RD)
-    --hm --heading-markup=#  enable markup in headings (all/bold/...)
+    --hm --heading-markup=# enable markup in headings (all/bold/...)
          --show=#           set field visibility (e.g., italic=1)
      -C  --pane=#           number of columns
      -R  --row=#            number of rows
@@ -47,7 +48,7 @@ mdee - em·dee, Markdown Easy on the Eyes
 
 =head1 VERSION
 
-Version 1.02
+Version 1.03
 
 =cut
 =head1 DESCRIPTION
@@ -241,6 +242,13 @@ are formatted using L<ansicolumn(1)|App::ansicolumn> for aligned column display.
 Column alignment specified in the separator line (C<:---> for left,
 C<:---:> for center, C<---:> for right) is respected.
 Default is enabled.
+
+=item B<--[no-]trim>
+
+Trim whitespace from table cell content before formatting.
+This is useful when the source table is pre-formatted with
+aligned spacing, which would otherwise prevent column alignment
+directives from working correctly.  Default is enabled.
 
 =item B<--[no-]nup>
 
@@ -836,6 +844,15 @@ text) are not processed.
 
 Reference-style links (C<[text][ref]> with C<[ref]: url> elsewhere)
 are not supported.
+
+=head2 Table Alignment
+
+Column alignment assumes that cell content in the source is not
+pre-padded.  If the source table is already formatted with aligned
+spacing (e.g., C<| c     |>), the embedded spaces become part of
+the cell content and alignment directives in the separator line
+will not produce the expected result.  This is by design: pre-formatted
+tables are assumed to be correctly aligned as-is.
 
 =head2 OSC 8 Hyperlinks
 

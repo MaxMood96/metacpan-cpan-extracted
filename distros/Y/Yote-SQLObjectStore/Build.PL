@@ -20,6 +20,7 @@ my $builder = Module::Build->new(
                             't/map_type.t',
                             't/locker.t',
                             't/finder_methods.t',
+                            't/table_generation.t',
                         ],
     requires => {
         'perl'            => 'v5.16',

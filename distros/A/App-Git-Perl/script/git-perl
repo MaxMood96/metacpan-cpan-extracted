@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 
-our $VERSION = "0.1.15";
+our $VERSION = "0.1.18";
 
 # 0.1.14 - 2022-07-21 15:25
 #        - further changelogs will be listed in ChangeLog file
@@ -142,6 +142,12 @@ sub config {
     qx{ mkdir -p "$ENV{HOME}/.config/" };
     qx{ cat "$configfile" 2>/dev/null | grep -v "^$name=" > "$configfile" };
     qx{ echo "$name=$value" >> "$configfile" } if ( not $unset );
+
+    # If final file is empty, remove it from disk.
+    if ( -z "$configfile" ) {
+      unlink "$configfile";
+    }
+
     return "";
   }
 
@@ -151,67 +157,36 @@ sub clone {
   my $module = shift;
   return if ( not $module );
 
-  my $url;
   if ( $module =~ /::/ ) {
-    $url = "https://metacpan.org/pod/$module";
+      # That's ok, we will keep this for query.
+      # Example: App::Git::Perl
   } else {
-    logger("Getting https://metacpan.org endpoint for '$module'...");
 
-    # First, try to find it within recent distributions (the point of this script)
-
-    my $test = httpget("https://metacpan.org/recent");
-    my $urlpart = "";
-    my @records = split("<tr", $test);
-    foreach my $record (@records) {
-      if ( $record =~ /a href="([^"]*)".*${module}/s ) {
-        $urlpart = $1;
-        last;
-      }
-    }
-
-    # If not recent distribution, search metacpan for it
-
-    if ( not $urlpart ) {
-      my $query = $module;
-
-      $query =~ s#.*/##;      # keep only last part without any '/'
-      $query =~ s/-[0-9].*//; # remove any part after '-number' from distribution
-      $query =~ s/-/::/g;     # convert '-' into '::'
+      $module =~ s#.*/##;      # keep only last part without any '/'
+      $module =~ s/-[0-9].*//; # remove any part after '-number' from distribution
+      $module =~ s/-/::/g;     # convert '-' into '::'
 
       # NHRNJICA/App-Git-Perl-0.1.12
       # App-Git-Perl-0.1.12
       # App-Git-Perl
       # App::Git::Perl
-
-      my $search = httpget("https://metacpan.org/pod/$query");
-
-      if ( $search =~ /$query/s ) {
-        $urlpart = "/pod/$query";
-      }
-    }
-
-    if ( $urlpart ) {
-      $url = "https://metacpan.org${urlpart}";
-    }
   }
 
-  if ( not $url ) {
-    logger("ERROR: I cannot find module '$module' on metacpan!");
-    return;
-  }
+  # https://fastapi.metacpan.org/release/_search?sort=date:desc&q=main_module:%22App::Git::Perl%22%20AND%20status:latest&_source=main_module,resources.repository.url
+
+  my $url = join("", 'https://fastapi.metacpan.org/release/_search?sort=date:desc&q=main_module:%22',$module,'%22%20AND%20status:latest&_source=main_module,resources.repository.url');
 
   logger("Getting repository details from '$url'...");
 
-  my $test = httpget( $url );
+  my $content = httpget( $url );
+
   my $repository = "";
-  foreach my $record ( split("<a", $test) ) {
-    if ( $record =~ / href="([^"]*)".*>Repository</s ) {
-      $repository = $1;
-      last;
-    }
+  if ( $content =~ /"resources".* "repository".* "url" : "([^"]*)"/s ) {
+    $repository = $1;
   }
 
   logger("REPOSITORY: [$repository]");
+
   if ( not $repository ) {
     logger("ERROR: Respository for module '$module' does not exist!");
     return;
@@ -221,6 +196,7 @@ sub clone {
   qx{ mkdir -p "${gitdirs}" };
   my $clonetext = qx{ cd ${gitdirs}; git clone "$repository" 2>&1 };
   my ($subdir) = $clonetext =~ /Cloning into '(.*)'/;
+  chomp($clonetext);
   logger("CLONED: [$clonetext]");
   $subdir = "" if ( $subdir and not -d "$gitdirs/$subdir" );
   if ( $subdir ) {
@@ -312,34 +288,48 @@ sub main {
   if ( $command eq "recent" ) {
 
     # get a list of recent repositories
+    my $content = httpget("https://fastapi.metacpan.org/release/_search?_source=name,author,date&sort=date:desc&size=100");
 
-    my $test = httpget("https://metacpan.org/recent");
     my @repositories;
-    my @records = split("<tr", $test);
+    my @records = split(/^ *{/m, $content);
     foreach my $record (@records) {
-      if ( $record =~ /title="([^"]*)".* sort="([^"]*)"/s ) {
-        push( @repositories, "$2 $1" );
+      if ( $record =~ /"author" : "([^"]*)".* "date" : "([^"]*)".* "name" : "([^"]*)"/s ) {
+        my $author = $1;
+        my $date = $2;
+        my $name = $3;
+        $date =~ s/T/ /g;
+        push( @repositories, "$date $author/$name" );
       }
     }
     @repositories = reverse @repositories;
     print join("\n", @repositories, "");
 
     exit;
+
   }
 
   if ( $command eq "clone" ) {
     my $module = shift;
     exit if ( not $module );
 
-    # Clone repostiory locally, or get '$subdir' where it is cloned already
+    # If user asked to remove subdirectory directly, do it immediately
+
+    my ($subcommand) = shift;
+    if ( $subcommand and $subcommand eq "remove" and -d "$module" ) {
+      remove( $module );
+      exit;
+    }
+
+    # Clone repository locally, or get '$subdir' where it is cloned already
+
     my $subdir = clone($module);
     return if ( not $subdir );
 
     print "Cloned into: $subdir\n";
 
-    my ($subcommand) = shift;
     if ( $subcommand and $subcommand eq "remove" ) {
       remove( $subdir );
+      exit;
     }
 
     exit;

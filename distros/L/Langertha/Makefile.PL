@@ -49,10 +49,11 @@ my %WriteMakefileArgs = (
     "YAML::XS" => 0
   },
   "TEST_REQUIRES" => {
+    "Math::Vector::Similarity" => 0,
     "Module::Runtime" => 0,
     "Test2::Suite" => 0
   },
-  "VERSION" => "0.201",
+  "VERSION" => "0.202",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -68,6 +69,7 @@ my %FallbackPrereqs = (
   "JSON::Schema::Modern" => "0.617",
   "LWP::Protocol::https" => 0,
   "MIME::Base64" => 0,
+  "Math::Vector::Similarity" => 0,
   "Module::Runtime" => 0,
   "Moose" => 0,
   "MooseX::NonMoose" => 0,

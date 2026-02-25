@@ -7,6 +7,12 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-02-24
+
+### Added
+
+- `icons` attribute to control whether Font Awesome icons are shown in directory listings
+
 ## [0.1.0] - 2026-02-21
 
 ### Changed

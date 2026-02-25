@@ -1,21 +1,13 @@
 package Langertha::Engine::Groq;
 # ABSTRACT: GroqCloud API
-our $VERSION = '0.201';
+our $VERSION = '0.202';
 use Moose;
 use Carp qw( croak );
 
+extends 'Langertha::Engine::OpenAIBase';
+
 with 'Langertha::Role::'.$_ for (qw(
-  JSON
-  HTTP
-  OpenAICompatible
-  OpenAPI
-  Models
-  Temperature
-  ResponseSize
   ResponseFormat
-  SystemPrompt
-  Streaming
-  Chat
   Transcription
 ));
 
@@ -59,7 +51,7 @@ Langertha::Engine::Groq - GroqCloud API
 
 =head1 VERSION
 
-version 0.201
+version 0.202
 
 =head1 SYNOPSIS
 
@@ -95,6 +87,8 @@ B<THIS API IS WORK IN PROGRESS>
 =head1 SEE ALSO
 
 =over
+
+=item * L<https://groqstatus.com/> - Groq service status
 
 =item * L<https://console.groq.com/docs/models> - Official Groq models documentation
 

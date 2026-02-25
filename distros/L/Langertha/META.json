@@ -55,6 +55,7 @@
       },
       "test" : {
          "requires" : {
+            "Math::Vector::Similarity" : "0",
             "Module::Runtime" : "0",
             "Test2::Suite" : "0"
          }
@@ -72,7 +73,7 @@
          "web" : "https://github.com/Getty/langertha"
       }
    },
-   "version" : "0.201",
+   "version" : "0.202",
    "x_Dist_Zilla" : {
       "perl" : {
          "version" : "5.036000"
@@ -394,7 +395,7 @@
                   "branch" : null,
                   "changelog" : "Changes",
                   "signed" : 0,
-                  "tag" : "0.201",
+                  "tag" : "0.202",
                   "tag_format" : "%v",
                   "tag_message" : "v%V"
                },

@@ -7,6 +7,7 @@ lib/Zabbix7/API.pm
 lib/Zabbix7/API/Action.pm
 lib/Zabbix7/API/Application.pm
 lib/Zabbix7/API/CRUDE.pm
+lib/Zabbix7/API/Event.pm
 lib/Zabbix7/API/Graph.pm
 lib/Zabbix7/API/GraphItem.pm
 lib/Zabbix7/API/Host.pm

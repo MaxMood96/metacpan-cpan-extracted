@@ -107,4 +107,25 @@ $handler = Plack::App::DirectoryIndex->new({
 );
 
 test_psgi %test;
+$handler = Plack::App::DirectoryIndex->new({
+  root      => catdir(qw[t share]),
+  dir_index => '',
+  icons     => 0,
+});
+
+%test = (
+  client => sub {
+    my $cb  = shift;
+
+    my $desc = 'Icons disabled';
+
+    my $res = $cb->(GET "/");
+    is $res->code, 200, "$desc - response code is 200";
+    unlike $res->content, qr/font-awesome/, "$desc - no font-awesome in content";
+  },
+  app => $handler,
+);
+
+test_psgi %test;
+
 done_testing;

@@ -115,9 +115,10 @@ subtest 'Valid semantic versions' => sub {
 };
 
 subtest 'Test named capture group accessors' => sub {
-  plan tests => 10;
+  plan tests => 11;
 
   isa_ok my $self = $class->parse( '1.2.3-alpha-a.b-c-somethinglong+build.1-aef.1-its-okay' ), $class;
+  ok not( $self->has_prefix ), 'prefix is not defined';
   is $self->major,        1,                           'major';
   is $self->minor,        2,                           'minor';
   is $self->patch,        3,                           'patch';
@@ -130,9 +131,10 @@ subtest 'Test named capture group accessors' => sub {
 };
 
 subtest 'Test named capture group accessors: no pre-release but build information' => sub {
-  plan tests => 9;
+  plan tests => 10;
 
   isa_ok my $self = $class->parse( '2.0.0+build.1848' ), $class;
+  ok not( $self->has_prefix ), 'prefix is not defined';
   is $self->major,        2,       'major';
   is $self->minor,        0,       'minor';
   is $self->patch,        0,       'patch';
@@ -144,9 +146,11 @@ subtest 'Test named capture group accessors: no pre-release but build informatio
 };
 
 subtest 'Test named capture group accessors: "v" prefixed semantic version' => sub {
-  plan tests => 8;
+  plan tests => 10;
 
   isa_ok my $self = $class->parse( 'v0.0.4' ), $class;
+  ok $self->has_prefix, 'prefix is defined';
+  is $self->prefix,       'v',      'prefix';
   is $self->major,        0,        'major';
   is $self->minor,        0,        'minor';
   is $self->patch,        4,        'patch';
@@ -157,10 +161,11 @@ subtest 'Test named capture group accessors: "v" prefixed semantic version' => s
 };
 
 subtest 'Test named capture group accessors: "-TRIAL[0-9]*" pre-releases' => sub {
-  plan tests => 23;
+  plan tests => 24;
 
   my $expected_pre_release = 'TRIAL';
   isa_ok my $self = $class->parse( "1.0.5-$expected_pre_release" ), $class;
+  ok not( $self->has_prefix ), 'prefix is not defined';
   is $self->major,        1,                     'major';
   is $self->minor,        0,                     'minor';
   is $self->patch,        5,                     'patch';

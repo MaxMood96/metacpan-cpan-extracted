@@ -5,7 +5,7 @@ package App::Greple::md;
 use 5.024;
 use warnings;
 
-our $VERSION = "1.02";
+our $VERSION = "1.03";
 
 =encoding utf-8
 
@@ -345,6 +345,7 @@ my $config = Getopt::EX::Config->new(
     foldlist   => 0,   # text folding
     foldwidth  => 80,  # fold width
     table      => 1,   # table formatting
+    table_trim => 1,   # trim cell content whitespace
     rule       => 1,   # box-drawing characters for tables
     nofork     => 1,   # use nofork+raw for code ref calls
     heading_markup => 0,  # inline formatting in headings
@@ -427,7 +428,7 @@ sub finalize {
     my($mod, $argv) = @_;
     $config->deal_with($argv,
                        "mode|m=s", "base_color|B=s",
-                       "colorize!", "nofork!", "foldlist!", "foldwidth=i", "table!", "rule!",
+                       "colorize!", "nofork!", "foldlist!", "foldwidth=i", "table!", "table_trim!", "rule!",
                        "heading_markup|hm:s", "tick_open=s", "tick_close=s",
                        "hashed=s%",
                        "colormap|cm=s" => \@opt_cm,
@@ -776,9 +777,19 @@ sub format_table {
 
     s{(^ {0,3}\|.+\|\n){3,}}{
         my $block = $&;
-        my @align = parse_separator(\$block);
-        my $formatted = call_ansicolumn($block,
-            '-s', '|', '-o', $sep, '-t', '--cu=1', @align);
+        my($right, $center) = parse_separator(\$block);
+        my @sep_opt;
+        if ($config->{table_trim}) {
+            @sep_opt = ('-rs', '\s*\|\s*', '--item-format= %s ', '--table-remove=1,-0', '--padding');
+        } else {
+            $_++ for @$right, @$center;
+            @sep_opt = ('-s', '|');
+        }
+        my @align = (
+            @$right  ? ('--table-right='  . join(',', @$right))  : (),
+            @$center ? ('--table-center=' . join(',', @$center)) : (),
+        );
+        my $formatted = call_ansicolumn($block, @sep_opt, '-o', $sep, '-t', '--cu=1', @align);
         fix_separator($formatted, $sep);
     }mge;
 }
@@ -786,21 +797,15 @@ sub format_table {
 sub parse_separator {
     my $blockref = shift;
     my $SEP = qr/^\h*\|(?:\h*:?-+:?\h*\|)+\h*$/m;
-    my ($sep_line) = $$blockref =~ /($SEP)/;  # capture full line
-    return unless defined $sep_line;
+    my ($sep_line) = $$blockref =~ /($SEP)/;
+    return ([], []) unless defined $sep_line;
     my @cells = split /\|/, $sep_line, -1;
     shift @cells; pop @cells;
     s/^\h+|\h+$//g for @cells;
     my @right  = grep { $cells[$_-1] =~ /^-+:$/  } 1..@cells;
     my @center = grep { $cells[$_-1] =~ /^:-+:$/ } 1..@cells;
-    # +1 offset: leading | creates empty column 1 in ansicolumn
-    @right  = map { $_ + 1 } @right;
-    @center = map { $_ + 1 } @center;
     $$blockref =~ s{$SEP}{ ${^MATCH} =~ tr/:/-/r }mpe;
-    my @opts;
-    push @opts, '--table-right='  . join(',', @right)  if @right;
-    push @opts, '--table-center=' . join(',', @center) if @center;
-    @opts;
+    (\@right, \@center);
 }
 
 sub call_ansicolumn {
@@ -818,10 +823,21 @@ sub call_ansicolumn {
 sub fix_separator {
     my ($text, $sep) = @_;
     my $sep_re = $sep eq "\x{2502}" ? "\x{2502}" : '\\|';
-    $text =~ s{^$sep_re((?:\h* -+ \h* $sep_re)*\h* -+ \h*)$sep_re$}{
-        $sep eq "\x{2502}"
-        ? "\x{251C}" . ($1 =~ tr[\x{2502} -][\x{253C}\x{2500}\x{2500}]r) . "\x{2524}"
-        : "|" . ($1 =~ tr[ ][-]r) . "|"
+    $text =~ s{^(\h*?)($sep_re)?((?:\h*-+\h*$sep_re)*\h*-+\h*)($sep_re)?(\h*?)$}{
+        my($pre, $left, $mid, $right, $post) = ($1, $2, $3, $4, $5);
+        if ($sep eq "\x{2502}") {
+            ($pre  =~ tr[ ][\x{2500}]r)
+            . (defined $left  ? "\x{251C}" : '')
+            . ($mid =~ tr[\x{2502} -][\x{253C}\x{2500}\x{2500}]r)
+            . (defined $right ? "\x{2524}" : '')
+            . ($post =~ tr[ ][\x{2500}]r)
+        } else {
+            ($pre  =~ tr[ ][-]r)
+            . (defined $left  ? '|' : '')
+            . ($mid =~ tr[ ][-]r)
+            . (defined $right ? '|' : '')
+            . ($post =~ tr[ ][-]r)
+        }
     }xmeg;
     $text;
 }

@@ -28,13 +28,13 @@ ok( $test =~ /git perl config/, "Script is working properly." ) or BAIL_OUT "Scr
 # Testing 'git perl recent' / getting data from remote site
 
 $test = qx{ $script recent };
-ok( $test =~ / UTC /, "Able to get data from remote site / git perl recent." );
+ok( $test =~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] /, "I can get data from remote site / git perl recent." );
 
 #----------------------------------------------------------------------------
 # Testing 'git perl log nonexistedmodule'
 
 $test = qx{ $script log abc123 };
-ok( $test =~ /Respository for module 'abc123' does not exist/, "Able to get remote non-existing repository." );
+ok( $test =~ /Respository for module 'abc123' does not exist/, "I can get remote non-existing repository." );
 
 #----------------------------------------------------------------------------
 # Testing 'git perl log "NHRNJICA/App-Git-Perl"'
@@ -51,13 +51,13 @@ if ( $test =~ /Cloned into: (.*)/s ) {
   $test=$1;
   chomp($test);
 }
-ok( $test =~ /App-Git-Perl/, "Able to get remote repository." );
+ok( $test =~ /App-Git-Perl/, "I can get remote repository." );
 
 $test = ( -d "$gitdir/App-Git-Perl" );
 ok( $test, "Local repository created." );
 
 $test = qx{ $script log App-Git-Perl remove };
-ok( $test =~ /Removed repository/, "Able to remove local repository." );
+ok( $test =~ /Removed repository/, "I can remove local repository." );
 
 $test = ( ! -d "$gitdir/App-Git-Perl" );
 ok( $test, "Local repository successfully removed." );
@@ -77,13 +77,13 @@ if ( $test =~ /Cloned into: (.*)/ ) {
   $test=$1;
   chomp($test);
 }
-ok( $test =~ /App-Git-Perl/, "Able to get remote repository." );
+ok( $test =~ /App-Git-Perl/, "I can get remote repository." );
 
 $test = ( -d "$gitdir/App-Git-Perl" );
 ok( $test, "Local repository created." );
 
 $test = qx{ $script log App::Git::Perl remove };
-ok( $test =~ /Removed repository/, "Able to remove local repository." );
+ok( $test =~ /Removed repository/, "I can remove local repository." );
 
 $test = ( ! -d "$gitdir/App-Git-Perl" );
 ok( $test, "Local repository successfully removed." );
@@ -96,13 +96,13 @@ if ( $test =~ /Cloned into: (.*)/ ) {
   $test=$1;
   chomp($test);
 }
-ok( $test =~ /App-Git-Perl/, "Able to get remote repository." );
+ok( $test =~ /App-Git-Perl/, "I can get remote repository." );
 
 $test = ( -d "$gitdir/App-Git-Perl" );
 ok( $test, "Local repository created." );
 
 $test = qx{ $script clone App-Git-Perl remove };
-ok( $test =~ /Removed repository/, "Able to remove local repository." );
+ok( $test =~ /Removed repository/, "I can remove local repository." );
 
 $test = ( ! -d "$gitdir/App-Git-Perl" );
 ok( $test, "Local repository successfully removed." );
@@ -115,13 +115,13 @@ if ( $test =~ /Cloned into: (.*)/ ) {
   $test=$1;
   chomp($test);
 }
-ok( $test =~ /App-Git-Perl/, "Able to get remote repository." );
+ok( $test =~ /App-Git-Perl/, "I can get remote repository." );
 
 $test = ( -d "$gitdir/App-Git-Perl" );
 ok( $test, "Local repository created." );
 
 $test = qx{ $script clone App-Git-Perl remove };
-ok( $test =~ /Removed repository/, "Able to remove local repository." );
+ok( $test =~ /Removed repository/, "I can remove local repository." );
 
 $test = ( ! -d "$gitdir/App-Git-Perl" );
 ok( $test, "Local repository successfully removed." );
@@ -135,7 +135,7 @@ if ( $test =~ /Cloned into: (.*)/ ) {
   $test=$1;
   chomp($test);
 }
-ok( $test =~ /App-Git-Perl/, "Able to get remote repository." );
+ok( $test =~ /App-Git-Perl/, "I can get remote repository." );
 
 $test = ( -d "$gitdir/App-Git-Perl" );
 ok( $test, "Local repository created." );
@@ -143,13 +143,13 @@ ok( $test, "Local repository created." );
 ## Now, real test goes.
 
 $test = qx{ $script local };
-ok( $test =~ /^App-Git-Perl/, "Able to read list of local repositories." );
+ok( $test =~ /^App-Git-Perl/, "I can read list of local repositories." );
 
 $test = qx{ $script local abc123 };
 ok( $test !~ /abc123 /, "If the local repository does not exist, it will be not listed out." );
 
 $test = qx{ $script local App-Git-Perl };
-ok( $test =~ /^App-Git-Perl /, "Able to list repository." );
+ok( $test =~ /^App-Git-Perl /, "I can list repository." );
 
 $test = qx{ $script local App-Git-Perl log };
 if ( $test =~ /Author: / ) {
@@ -159,7 +159,7 @@ if ( $test =~ /Author: / ) {
 }
 
 $test = qx{ $script local App-Git-Perl remove };
-ok( $test =~ /Removed repository/, "Able to remove local repository." );
+ok( $test =~ /Removed repository/, "I can remove local repository." );
 
 $test = ( ! -d "$gitdir/App-Git-Perl" );
 ok( $test, "Local repository successfully removed." );
@@ -170,13 +170,13 @@ if ( $test =~ /Cloned into: (.*)/ ) {
   $test=$1;
   chomp($test);
 }
-ok( $test =~ /App-Git-Perl/, "Able to get remote repository." );
+ok( $test =~ /App-Git-Perl/, "I can get remote repository." );
 
 $test = ( -d "$gitdir/App-Git-Perl" );
 ok( $test, "Local repository created." );
 
 $test = qx{ $script local App::Git::Perl remove };
-ok( $test =~ /Removed repository/, "Able to remove local repository." );
+ok( $test =~ /Removed repository/, "I can remove local repository." );
 
 $test = ( ! -d "$gitdir/App-Git-Perl" );
 ok( $test, "Local repository successfully removed." );

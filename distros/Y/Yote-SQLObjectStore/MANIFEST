@@ -1,5 +1,6 @@
 bin/db_refresh.pl
 Build.PL
+Changes
 describe.txt
 HOWTO.md
 lib/Yote/Locker.pm
@@ -46,6 +47,9 @@ t/lib/Postgres/SomeThingElse.pm
 t/lib/SomeThing.pm
 t/lib/SomeThingElse.pm
 t/lib/SQLite/NotAThing.pm
+t/lib/SQLite/Library.pm
+t/lib/SQLite/Library/Author.pm
+t/lib/SQLite/Library/Book.pm
 t/lib/SQLite/SomeThing.pm
 t/lib/SQLite/SomeThingElse.pm
 t/lib/Tainer.pm
@@ -56,4 +60,5 @@ t/map_type.t
 t/object_store_mariadb.t
 t/object_store_postgres.t
 t/object_store_sqlite.t
+t/table_generation.t
 working.txt

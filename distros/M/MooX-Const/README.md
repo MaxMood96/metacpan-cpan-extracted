@@ -75,10 +75,12 @@ If omitted, `strict` is assumed to be true.
 
 # RECENT CHANGES
 
-Changes for version v0.7.1 (2025-09-11)
+Changes for version v0.7.2 (2026-02-24)
 
-- Bugs
-    - Fixed warnings about using @\_ in signatured subroutines.
+- Documentation
+    - Updating broken link in CONTRIBUTING.md.
+    - Fixed broken links in SOURCE.
+    - Update copyright year.
 - Tests
     - Added more author tests.
 
@@ -156,8 +158,8 @@ then see `SECURITY.md` for instructions how to report security vulnerabilities.
 
 # SOURCE
 
-The development version is on github at ["robrwo/MooX-Const" in github.com](https://metacpan.org/pod/github.com#robrwo-MooX-Const)
-and may be cloned from ["robrwo/MooX-Const.git" in github.com](https://metacpan.org/pod/github.com#robrwo-MooX-Const.git)
+The development version is on github at [https://github.com/robrwo/MooX-Const](https://github.com/robrwo/MooX-Const)
+and may be cloned from [git://github.com/robrwo/MooX-Const.git](git://github.com/robrwo/MooX-Const.git)
 
 See `CONTRIBUTING.md` for more information.
 
@@ -174,7 +176,7 @@ Kang-min Liu 劉康民 <gugod@gugod.org>
 
 # COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2018-2025 by Robert Rothenberg.
+This software is Copyright (c) 2018-2026 by Robert Rothenberg.
 
 This is free software, licensed under:
 

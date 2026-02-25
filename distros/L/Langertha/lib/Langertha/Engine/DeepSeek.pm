@@ -1,23 +1,12 @@
 package Langertha::Engine::DeepSeek;
 # ABSTRACT: DeepSeek API
-our $VERSION = '0.201';
+our $VERSION = '0.202';
 use Moose;
 use Carp qw( croak );
 
-with 'Langertha::Role::'.$_ for (qw(
-  JSON
-  HTTP
-  OpenAICompatible
-  OpenAPI
-  Models
-  Temperature
-  ResponseSize
-  ResponseFormat
-  SystemPrompt
-  Streaming
-  Chat
-));
+extends 'Langertha::Engine::OpenAIBase';
 
+with 'Langertha::Role::ResponseFormat';
 with 'Langertha::Role::Tools';
 
 
@@ -29,7 +18,6 @@ has '+url' => (
   lazy => 1,
   default => sub { 'https://api.deepseek.com' },
 );
-around has_url => sub { 1 };
 
 sub _build_api_key {
   my ( $self ) = @_;
@@ -56,7 +44,7 @@ Langertha::Engine::DeepSeek - DeepSeek API
 
 =head1 VERSION
 
-version 0.201
+version 0.202
 
 =head1 SYNOPSIS
 
@@ -90,6 +78,8 @@ B<THIS API IS WORK IN PROGRESS>
 =head1 SEE ALSO
 
 =over
+
+=item * L<https://status.deepseek.com/> - DeepSeek service status
 
 =item * L<https://api-docs.deepseek.com/> - Official DeepSeek API documentation
 

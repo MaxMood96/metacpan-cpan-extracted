@@ -1,29 +1,18 @@
 package Langertha::Engine::OllamaOpenAI;
 # ABSTRACT: Ollama via OpenAI-compatible API
-our $VERSION = '0.201';
+our $VERSION = '0.202';
 use Moose;
 use Carp qw( croak );
 
-with 'Langertha::Role::'.$_ for (qw(
-  JSON
-  HTTP
-  OpenAICompatible
-  OpenAPI
-  Models
-  Temperature
-  ResponseSize
-  SystemPrompt
-  Streaming
-  Chat
-  Embedding
-));
+extends 'Langertha::Engine::OpenAIBase';
 
+with 'Langertha::Role::Embedding';
 with 'Langertha::Role::Tools';
 
 
-has '+url' => ( required => 1 );
-
-sub _build_api_key { 'ollama' }
+has '+url' => (
+  required => 1,
+);
 
 sub default_model { croak "".(ref $_[0])." requires model to be set" }
 sub default_embedding_model { 'mxbai-embed-large' }
@@ -47,7 +36,7 @@ Langertha::Engine::OllamaOpenAI - Ollama via OpenAI-compatible API
 
 =head1 VERSION
 
-version 0.201
+version 0.202
 
 =head1 SYNOPSIS
 

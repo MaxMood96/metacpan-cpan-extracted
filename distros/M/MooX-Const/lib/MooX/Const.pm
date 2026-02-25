@@ -22,7 +22,7 @@ use experimental qw( signatures );
 
 use namespace::autoclean;
 
-our $VERSION = 'v0.7.1';
+our $VERSION = 'v0.7.2';
 
 
 sub import(@) {
@@ -146,7 +146,7 @@ MooX::Const - Syntactic sugar for constant and write-once Moo(se) attributes
 
 =head1 VERSION
 
-version v0.7.1
+version v0.7.2
 
 =for stopwords backported const isa ro wo
 
@@ -254,8 +254,8 @@ L<Type::Tiny>
 
 =head1 SOURCE
 
-The development version is on github at L<github.com/robrwo/MooX-Const>
-and may be cloned from L<github.com/robrwo/MooX-Const.git>
+The development version is on github at L<https://github.com/robrwo/MooX-Const>
+and may be cloned from L<git://github.com/robrwo/MooX-Const.git>
 
 See F<CONTRIBUTING.md> for more information.
 
@@ -293,7 +293,7 @@ Kang-min Liu 劉康民 <gugod@gugod.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2018-2025 by Robert Rothenberg.
+This software is Copyright (c) 2018-2026 by Robert Rothenberg.
 
 This is free software, licensed under:
 

@@ -1,0 +1,50 @@
+use alienfile;
+
+probe sub { 'share' };
+
+share {
+  start_url 'https://github.com/asg017/sqlite-vec/releases/download/v0.1.6/sqlite-vec-0.1.6-amalgamation.tar.gz';
+  plugin 'Download';
+  plugin 'Extract' => 'tar.gz';
+
+  build sub {
+    my ($build) = @_;
+    require Config;
+    require File::Path;
+
+    my $cc    = $Config::Config{cc};
+    my $dlext = $Config::Config{dlext};
+    my $shared_flag = $^O eq 'darwin' ? '-dynamiclib' : '-shared';
+
+    # Find sqlite3ext.h — bundled by DBD::SQLite in its share dir
+    my $sqlite_inc = '';
+    eval {
+      require DBD::SQLite;
+      require File::ShareDir;
+      my $share = File::ShareDir::dist_dir('DBD-SQLite');
+      if (-f "$share/sqlite3ext.h") {
+        $sqlite_inc = "-I$share";
+      }
+    };
+    if (!$sqlite_inc) {
+      for my $dir ('/usr/include', '/usr/local/include') {
+        if (-f "$dir/sqlite3ext.h") {
+          $sqlite_inc = "-I$dir";
+          last;
+        }
+      }
+    }
+
+    my $stage  = $build->install_prop->{stage};
+    my $dyndir = "$stage/dynamic";
+    File::Path::mkpath($dyndir);
+
+    my @cmd = ($cc, '-O2', '-fPIC', $shared_flag);
+    push @cmd, $sqlite_inc if $sqlite_inc;
+    push @cmd, ('sqlite-vec.c', '-o', "$dyndir/libvec.$dlext");
+    $build->log("Compiling: @cmd");
+    system(@cmd) == 0 or die "Compilation of sqlite-vec failed";
+
+    $build->runtime_prop->{ffi_name} = 'vec';
+  };
+};

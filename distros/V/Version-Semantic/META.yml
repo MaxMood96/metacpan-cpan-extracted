@@ -29,7 +29,7 @@ no_index:
 provides:
   Version::Semantic:
     file: lib/Version/Semantic.pm
-    version: v1.1.1
+    version: v1.2.0
 requires:
   Carp: '1.32'
   PerlX::Maybe: '0'
@@ -40,5 +40,5 @@ requires:
 resources:
   bugtracker: https://codeberg.org/XSven/Version-Semantic/issues
   repository: https://codeberg.org/XSven/Version-Semantic.git
-version: v1.1.1
+version: v1.2.0
 x_serialization_backend: 'CPAN::Meta::YAML version 0.011'

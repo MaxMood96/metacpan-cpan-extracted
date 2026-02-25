@@ -21,10 +21,10 @@ no_index:
     - inc
 requires:
   Carp: '0'
-  perl: '5.020'
+  perl: '5.022'
 resources:
   bugtracker: https://github.com/briandfoy/cpan-security-advisory/issues
   homepage: https://github.com/briandfoy/cpan-security-advisory
   repository: https://github.com/briandfoy/cpan-security-advisory
-version: '20260223.001'
+version: '20260225.001'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

@@ -15,7 +15,7 @@ my @events = (
     { name => 'tune_request' },
 );
 
-my $midi = MIDI::Stream::Encoder->new->encode_events( @events );
+my @midi = MIDI::Stream::Encoder->new->encode_events( @events );
 
 # Simple callback passed in constructor
 subtest instance_callback => sub {
@@ -35,7 +35,7 @@ subtest instance_callback => sub {
         callback => sub( $event ) {
             is( $event->as_arrayref, shift @tests );
         }
-    )->decode( $midi );
+    )->decode( @midi );
 };
 
 # Callback for a single event type
@@ -50,7 +50,7 @@ subtest single_event_type => sub {
             is( $event->as_arrayref, shift @tests );
         }
     );
-    $decoder->decode( $midi );
+    $decoder->decode( @midi );
 };
 
 # Callback for multiple event types
@@ -68,7 +68,7 @@ subtest multi_event_type => sub {
             is( $event->as_arrayref, shift @tests );
         }
     );
-    $decoder->decode( $midi );
+    $decoder->decode( @midi );
 };
 
 # Callback for cancelled event type
@@ -86,7 +86,7 @@ subtest multi_event_type => sub {
         }
     );
     $decoder->cancel_event_callback('pitch_bend');
-    $decoder->decode( $midi );
+    $decoder->decode( @midi );
 };
 
 # ->stop stops callbacks for one event type,
@@ -134,7 +134,7 @@ subtest stop_and_type_global => sub {
         }
      );
 
-    $decoder->decode( $midi );
+    $decoder->decode( @midi );
 };
 
 

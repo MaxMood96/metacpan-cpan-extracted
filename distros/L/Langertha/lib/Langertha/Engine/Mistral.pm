@@ -1,23 +1,15 @@
 package Langertha::Engine::Mistral;
 # ABSTRACT: Mistral API
-our $VERSION = '0.201';
+our $VERSION = '0.202';
 use Moose;
 use Carp qw( croak );
 
 use File::ShareDir::ProjectDistDir qw( :all );
 
+extends 'Langertha::Engine::OpenAIBase';
+
 with 'Langertha::Role::'.$_ for (qw(
-  JSON
-  HTTP
-  OpenAICompatible
-  OpenAPI
-  Models
-  Temperature
-  ResponseSize
   ResponseFormat
-  SystemPrompt
-  Streaming
-  Chat
   Embedding
 ));
 
@@ -28,7 +20,6 @@ has '+url' => (
   lazy => 1,
   default => sub { 'https://api.mistral.ai' },
 );
-around has_url => sub { 1 };
 
 sub _build_api_key {
   my ( $self ) = @_;
@@ -61,7 +52,7 @@ Langertha::Engine::Mistral - Mistral API
 
 =head1 VERSION
 
-version 0.201
+version 0.202
 
 =head1 SYNOPSIS
 
@@ -98,6 +89,8 @@ B<THIS API IS WORK IN PROGRESS>
 =head1 SEE ALSO
 
 =over
+
+=item * L<https://status.mistral.ai/> - Mistral service status
 
 =item * L<https://mistral.ai/models> - Official Mistral models documentation
 

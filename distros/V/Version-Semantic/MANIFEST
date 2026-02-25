@@ -10,6 +10,7 @@ t/api.t
 t/basic.t
 t/critic.t
 t/increment.t
+t/load.t
 t/precedence.t
 META.yml                                 Module YAML meta-data (added by MakeMaker)
 META.json                                Module JSON meta-data (added by MakeMaker)

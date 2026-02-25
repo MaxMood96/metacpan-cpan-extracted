@@ -1,5 +1,16 @@
 Revision history for MooX-Const:
 
+v0.7.2    2026-02-24 18:19:03+00:00 Europe/London
+  [Documentation]
+  - Updating broken link in CONTRIBUTING.md.
+
+  - Fixed broken links in SOURCE.
+
+  - Update copyright year.
+
+  [Tests]
+  - Added more author tests.
+
 v0.7.1    2025-09-11 16:42:32+01:00 Europe/London
   [Bugs]
   - Fixed warnings about using @_ in signatured subroutines.

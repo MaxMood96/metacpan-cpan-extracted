@@ -54,6 +54,7 @@ like $special_row, qr{&lt;},   'to_html() HTML-escapes < in name';
   use warnings;
   use Feature::Compat::Class;
   class My::HTML v0.0.1 {
+    field $icons     :param = 0;
     field $file_html :reader = "CUSTOM:%s|%s|%s|%s|%s\n";
   }
 }

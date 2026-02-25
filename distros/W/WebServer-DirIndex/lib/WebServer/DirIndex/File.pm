@@ -3,7 +3,7 @@ use warnings;
 use Feature::Compat::Class;
 use WebServer::DirIndex::HTML;
 
-class WebServer::DirIndex::File v0.0.3 {
+class WebServer::DirIndex::File v0.1.0 {
 
   use HTML::Escape qw(escape_html);
 
@@ -56,7 +56,7 @@ class WebServer::DirIndex::File v0.0.3 {
   field $icon       :param :reader = undef;
   field $icons      :param = 0;
   field $html_class :param = 'WebServer::DirIndex::HTML';
-  field $_html_obj = $html_class->new;
+  field $_html_obj = $html_class->new(icons => $icons);
 
   ADJUST {
     if ($icons && !defined $icon) {
@@ -65,7 +65,7 @@ class WebServer::DirIndex::File v0.0.3 {
   }
 
   method to_html {
-    if (defined $icon && $_html_obj->can('file_html_icons')) {
+    if (defined $icon) {
       return sprintf $_html_obj->file_html_icons,
         map { escape_html($_) }
           ($icon, $url, $name, $size, $mime_type, $mtime);

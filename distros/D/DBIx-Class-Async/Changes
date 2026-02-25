@@ -1,5 +1,19 @@
 Revision history for DBIx::Class::Async
 
+0.61 2026-02-24
+     [NEW FEATURES]
+     - Added update_query() method to DBIx::Class::Async::ResultSet for
+       previewing UPDATE SQL without execution. Useful for debugging,
+       audit logging, and testing. (GH#XXX)
+
+     - Added delete_query() method to DBIx::Class::Async::ResultSet for
+       previewing DELETE SQL without execution. Enables safe validation
+       of destructive operations before execution.
+
+     - Added insert_query() method to DBIx::Class::Async::Row for
+       previewing INSERT SQL without execution. Allows inspection of
+       insert operations for testing and validation.
+
 0.60 2026-02-24
      [ENHANCEMENTS]
      - Added debugobj() and debugfh() methods to DBIx::Class::Async::Storage::DBI

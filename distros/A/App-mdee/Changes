@@ -1,5 +1,10 @@
 Revision history for Perl extension App-mdee
 
+1.03 2026-02-24T16:19:41Z
+
+    - Add --[no-]trim option for table cell whitespace trimming (default: on)
+    - Require App::ansicolumn 1.55 for --table-remove, --item-format, --padding
+
 1.02 2026-02-24T04:15:14Z
 
     - Support table column alignment from separator line markers

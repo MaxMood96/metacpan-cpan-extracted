@@ -1,21 +1,10 @@
 package Langertha::Engine::AKIOpenAI;
 # ABSTRACT: AKI.IO via OpenAI-compatible API
-our $VERSION = '0.201';
+our $VERSION = '0.202';
 use Moose;
 use Carp qw( croak );
 
-with 'Langertha::Role::'.$_ for (qw(
-  JSON
-  HTTP
-  OpenAICompatible
-  OpenAPI
-  Models
-  Temperature
-  ResponseSize
-  SystemPrompt
-  Streaming
-  Chat
-));
+extends 'Langertha::Engine::OpenAIBase';
 
 with 'Langertha::Role::Tools';
 
@@ -24,7 +13,6 @@ has '+url' => (
   lazy => 1,
   default => sub { 'https://aki.io/v1' },
 );
-around has_url => sub { 1 };
 
 sub _build_api_key {
   my ( $self ) = @_;
@@ -33,7 +21,7 @@ sub _build_api_key {
 }
 
 
-sub default_model { 'llama3_8b_chat' }
+sub default_model { 'llama3-chat-8b' }
 
 sub _build_supported_operations {[qw( createChatCompletion )]}
 
@@ -54,16 +42,16 @@ Langertha::Engine::AKIOpenAI - AKI.IO via OpenAI-compatible API
 
 =head1 VERSION
 
-version 0.201
+version 0.202
 
 =head1 SYNOPSIS
 
     use Langertha::Engine::AKIOpenAI;
 
-    # Direct construction
+    # Direct construction (use /v1 model names, NOT native AKI names)
     my $aki = Langertha::Engine::AKIOpenAI->new(
         api_key => $ENV{AKI_API_KEY},
-        model   => 'llama3_8b_chat',
+        model   => 'llama3-chat-8b',
     );
 
     print $aki->simple_chat('Hello!');
@@ -73,14 +61,14 @@ version 0.201
         print shift->content;
     }, 'Tell me about Perl');
 
-    # Preferred: create via AKI's openai() method
+    # Via AKI's openai() method (uses default model)
     use Langertha::Engine::AKI;
 
     my $aki_native = Langertha::Engine::AKI->new(
         api_key => $ENV{AKI_API_KEY},
         model   => 'llama3_8b_chat',
     );
-    my $oai = $aki_native->openai;
+    my $oai = $aki_native->openai;  # warns: model not mapped, uses default
     print $oai->simple_chat('Hello via OpenAI format!');
 
 =head1 DESCRIPTION

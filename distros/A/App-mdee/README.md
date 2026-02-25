@@ -17,6 +17,7 @@ mdee - em·dee, Markdown Easy on the Eyes
      -p  --plain            shortcut for --style=pager
          --[no-]fold        line folding (default: on)
          --[no-]table       table formatting (default: on)
+         --[no-]trim        trim cell spaces (default: on)
          --[no-]nup         nup paged output (default: on)
          --[no-]rule        use Unicode rules for tables (default: on)
      -w  --width=#          fold width (default: 80)
@@ -25,7 +26,7 @@ mdee - em·dee, Markdown Easy on the Eyes
      -B  --base-color=#     override base color of theme
                             (e.g., Ivory, #780043, (120,0,67))
     --cm --colormap=L=SPEC  override color for element (e.g., h1=RD)
-    --hm --heading-markup=#  enable markup in headings (all/bold/...)
+    --hm --heading-markup=# enable markup in headings (all/bold/...)
          --show=#           set field visibility (e.g., italic=1)
      -C  --pane=#           number of columns
      -R  --row=#            number of rows
@@ -37,7 +38,7 @@ mdee - em·dee, Markdown Easy on the Eyes
 
 # VERSION
 
-Version 1.01
+Version 1.02
 
 # DESCRIPTION
 
@@ -210,6 +211,13 @@ Use [tecolicom/tap](https://github.com/tecolicom/homebrew-tap):
     Column alignment specified in the separator line (`:---` for left,
     `:---:` for center, `---:` for right) is respected.
     Default is enabled.
+
+- **--\[no-\]trim**
+
+    Trim whitespace from table cell content before formatting.
+    This is useful when the source table is pre-formatted with
+    aligned spacing, which would otherwise prevent column alignment
+    directives from working correctly.  Default is enabled.
 
 - **--\[no-\]nup**
 
@@ -731,6 +739,15 @@ text) are not processed.
 
 Reference-style links (`[text][ref]` with `[ref]: url` elsewhere)
 are not supported.
+
+## Table Alignment
+
+Column alignment assumes that cell content in the source is not
+pre-padded.  If the source table is already formatted with aligned
+spacing (e.g., `| c     |`), the embedded spaces become part of
+the cell content and alignment directives in the separator line
+will not produce the expected result.  This is by design: pre-formatted
+tables are assumed to be correctly aligned as-is.
 
 ## OSC 8 Hyperlinks
 

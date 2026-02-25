@@ -1,13 +1,13 @@
 package Langertha::Engine::Gemini;
 # ABSTRACT: Google Gemini API
-our $VERSION = '0.201';
+our $VERSION = '0.202';
 use Moose;
 use Carp qw( croak );
 use JSON::MaybeXS;
 
+extends 'Langertha::Engine::Remote';
+
 with 'Langertha::Role::'.$_ for (qw(
-  JSON
-  HTTP
   Models
   Chat
   Temperature
@@ -34,7 +34,6 @@ has '+url' => (
   lazy => 1,
   default => sub { 'https://generativelanguage.googleapis.com' },
 );
-sub has_url { 1 }
 
 sub default_model { 'gemini-2.5-flash' }
 
@@ -386,7 +385,7 @@ Langertha::Engine::Gemini - Google Gemini API
 
 =head1 VERSION
 
-version 0.201
+version 0.202
 
 =head1 SYNOPSIS
 
@@ -452,6 +451,8 @@ for C<models_cache_ttl> seconds (default: 3600).
 =head1 SEE ALSO
 
 =over
+
+=item * L<https://aistudio.google.com/status> - Google AI Studio service status
 
 =item * L<https://ai.google.dev/gemini-api/docs> - Official Gemini API documentation
 

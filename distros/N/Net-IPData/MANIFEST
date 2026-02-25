@@ -1,0 +1,12 @@
+Changes
+lib/Net/IPData.pm
+Makefile.PL
+MANIFEST
+README.md
+t/01-constructor.t
+t/02-validation.t
+t/03-mock-responses.t
+t/04-live.t
+examples/basic.pl
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

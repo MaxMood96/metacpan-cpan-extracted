@@ -80,7 +80,6 @@ sub extract_columns {
 }
 
 subtest 'SQL consistency with default columns' => sub {
-
     my %seen_sqls;
     my $iterations = 10;
 
@@ -104,7 +103,6 @@ subtest 'SQL consistency with default columns' => sub {
 };
 
 subtest 'SQL consistency with explicit columns' => sub {
-
     my %seen_sqls;
     my $iterations = 10;
     my @explicit_cols = qw/id name email age active settings balance/;
@@ -132,7 +130,6 @@ subtest 'SQL consistency with explicit columns' => sub {
 };
 
 subtest 'Column order remains stable' => sub {
-
     my @column_orders;
 
     for my $i (1..5) {
@@ -158,7 +155,6 @@ subtest 'Column order remains stable' => sub {
 };
 
 subtest 'Chained search generates consistent SQL' => sub {
-
     my %seen_sqls;
 
     for my $i (1..5) {
@@ -179,7 +175,6 @@ subtest 'Chained search generates consistent SQL' => sub {
 };
 
 subtest 'Attribute merging is deterministic' => sub {
-
     my %seen_sqls;
 
     for my $i (1..5) {
@@ -195,13 +190,10 @@ subtest 'Attribute merging is deterministic' => sub {
         'Attribute merging generates consistent SQL');
 
     my ($sql) = keys %seen_sqls;
-    like($sql, qr/ORDER BY/i,
-        'SQL contains ORDER BY clause');
-
+    like($sql, qr/ORDER BY/i, 'SQL contains ORDER BY clause');
 };
 
 subtest 'Empty search conditions handled consistently' => sub {
-
     my %seen_sqls;
 
     for my $i (1..5) {
@@ -217,11 +209,9 @@ subtest 'Empty search conditions handled consistently' => sub {
     my ($sql) = keys %seen_sqls;
     unlike($sql, qr/WHERE/i,
         'SQL does not contain WHERE clause for empty conditions');
-
 };
 
 subtest 'as_query returns valid structure' => sub {
-
     my $rs = $schema->resultset('User')->search({ id => 1 });
     my $query = $rs->as_query;
 
@@ -230,11 +220,9 @@ subtest 'as_query returns valid structure' => sub {
 
     my $sql = extract_sql($query);
     ok(length($sql) > 0, 'Extracted SQL is non-empty');
-
 };
 
 subtest 'SQL changes appropriately for different queries' => sub {
-
     my $rs1 = $schema->resultset('User')->search({ id => 1 });
     my $rs2 = $schema->resultset('User')->search({ name => 'Alice' });
 
@@ -245,15 +233,13 @@ subtest 'SQL changes appropriately for different queries' => sub {
         'Different search conditions produce different SQL');
 
     like($sql1, qr/\bid\b/i, 'First query contains id condition');
-
 };
 
 subtest 'Columns are deduplicated in chained searches' => sub {
-
     my $rs = $schema->resultset('User')
                     ->search({}, { columns => ['id', 'name'] })
                     ->search({}, { '+columns' => ['email'] })
-                    ->search({}, { '+columns' => ['id'] });  # Duplicate
+                    ->search({}, { '+columns' => ['id'] });
 
     my $sql = normalise_sql(extract_sql($rs->as_query));
 
@@ -265,11 +251,9 @@ subtest 'Columns are deduplicated in chained searches' => sub {
 
     is(scalar @id_matches, 1,
         'Duplicate column appears only once in SQL');
-
 };
 
 subtest 'Complex attributes accumulate correctly' => sub {
-
     my %seen_sqls;
 
     for my $i (1..3) {
@@ -292,7 +276,55 @@ subtest 'Complex attributes accumulate correctly' => sub {
     my ($sql) = keys %seen_sqls;
     like($sql, qr/ORDER BY.*GROUP BY|GROUP BY.*ORDER BY/si,
         'SQL contains both ORDER BY and GROUP BY');
+};
 
+subtest 'update_query generates preview SQL' => sub {
+    my $rs = $schema->resultset('User')->search({ id => 1 });
+    my ($sql, @bind) = $rs->update_query({ name => 'Updated' });
+
+    ok(defined $sql, 'update_query returns SQL');
+    ok(ref $sql eq 'SCALAR', 'SQL is a scalar reference');
+
+    my $sql_str = $$sql;
+    like($sql_str, qr/UPDATE/i, 'SQL contains UPDATE');
+    like($sql_str, qr/SET/i, 'SQL contains SET');
+};
+
+subtest 'delete_query generates preview SQL' => sub {
+    my $rs = $schema->resultset('User')->search({ active => 0 });
+    my ($sql, @bind) = $rs->delete_query;
+
+    ok(defined $sql, 'delete_query returns SQL');
+    ok(ref $sql eq 'SCALAR', 'SQL is a scalar reference');
+
+    my $sql_str = $$sql;
+    like($sql_str, qr/DELETE/i, 'SQL contains DELETE');
+    like($sql_str, qr/FROM/i, 'SQL contains FROM');
+};
+
+subtest 'Query preview methods do not execute' => sub {
+    # Create a test row
+    my $row = $schema->resultset('User')->create({
+        name => 'Test User',
+        email => 'test@example.com',
+    })->get;
+
+    my $original_name = $row->{name};
+
+    # Preview update
+    my $rs = $schema->resultset('User')->search({ id => $row->{id} });
+    my ($sql, @bind) = $rs->update_query({ name => 'Changed' });
+
+    # Verify row wasn't actually updated
+    my $check = $schema->resultset('User')->find({ id => $row->{id} })->get;
+    is($check->{name}, $original_name, 'update_query did not modify database');
+
+    # Preview delete
+    ($sql, @bind) = $rs->delete_query;
+
+    # Verify row still exists
+    $check = $schema->resultset('User')->find({ id => $row->{id} })->get;
+    ok(defined $check, 'delete_query did not remove row from database');
 };
 
 $schema->disconnect;

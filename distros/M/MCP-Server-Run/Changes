@@ -1,0 +1,8 @@
+0.001     2026-02-24 20:29:49Z
+
+  - Initial release
+  - MCP::Server::Run base class with configurable run tool
+  - MCP::Server::Run::Bash implementation using IPC::Open3
+  - Command whitelist via allowed_commands
+  - Per-command working_directory and timeout
+  - Timeout enforcement with alarm/SIGTERM (exit code 124)

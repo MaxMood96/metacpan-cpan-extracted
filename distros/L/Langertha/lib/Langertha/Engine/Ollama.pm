@@ -1,6 +1,6 @@
 package Langertha::Engine::Ollama;
 # ABSTRACT: Ollama API
-our $VERSION = '0.201';
+our $VERSION = '0.202';
 use Moose;
 use File::ShareDir::ProjectDistDir qw( :all );
 use Carp qw( croak );
@@ -8,9 +8,9 @@ use JSON::MaybeXS;
 
 use Langertha::Engine::OllamaOpenAI;
 
+extends 'Langertha::Engine::Remote';
+
 with 'Langertha::Role::'.$_ for (qw(
-  JSON
-  HTTP
   OpenAPI
   Models
   Seed
@@ -310,7 +310,7 @@ Langertha::Engine::Ollama - Ollama API
 
 =head1 VERSION
 
-version 0.201
+version 0.202
 
 =head1 SYNOPSIS
 

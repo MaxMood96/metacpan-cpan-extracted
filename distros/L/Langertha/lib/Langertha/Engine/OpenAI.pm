@@ -1,21 +1,13 @@
 package Langertha::Engine::OpenAI;
 # ABSTRACT: OpenAI API
-our $VERSION = '0.201';
+our $VERSION = '0.202';
 use Moose;
 use Carp qw( croak );
 
+extends 'Langertha::Engine::OpenAIBase';
+
 with 'Langertha::Role::'.$_ for (qw(
-  JSON
-  HTTP
-  OpenAICompatible
-  OpenAPI
-  Models
-  Temperature
-  ResponseSize
   ResponseFormat
-  SystemPrompt
-  Streaming
-  Chat
   Embedding
   Transcription
 ));
@@ -28,6 +20,11 @@ has compatibility_for_engine => (
   predicate => 'has_compatibility_for_engine',
 );
 
+
+has '+url' => (
+  lazy => 1,
+  default => sub { 'https://api.openai.com/v1' },
+);
 
 sub _build_api_key {
   my ( $self ) = @_;
@@ -54,7 +51,7 @@ Langertha::Engine::OpenAI - OpenAI API
 
 =head1 VERSION
 
-version 0.201
+version 0.202
 
 =head1 SYNOPSIS
 
@@ -111,6 +108,8 @@ endpoint.
 =head1 SEE ALSO
 
 =over
+
+=item * L<https://status.openai.com/> - OpenAI service status
 
 =item * L<https://platform.openai.com/docs> - Official OpenAI documentation
 

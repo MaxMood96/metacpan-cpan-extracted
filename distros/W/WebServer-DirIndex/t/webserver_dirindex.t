@@ -38,7 +38,7 @@ like $subdir->icon, qr{fa-solid fa-folder}, 'subdir has folder icon';
 my ($parent_entry) = grep { $_->name eq 'Parent Directory' } @files;
 like $parent_entry->icon, qr{fa-solid fa-arrow-up}, 'parent dir has arrow-up icon';
 
-my $html = $di->to_html('/test/', 0);
+my $html = $di->to_html('/test/');
 ok defined $html, 'to_html() returns a value';
 like $html, qr{Index of /test/}, 'to_html() contains correct heading';
 like $html, qr{file\.txt},       'to_html() contains file.txt';
@@ -47,10 +47,23 @@ unlike $html, qr{a:link},        'to_html() without pretty uses standard CSS';
 like $html, qr{font-awesome},    'to_html() with icons links to Font Awesome';
 like $html, qr{fa-solid},        'to_html() with icons includes icon classes';
 
-my $html_pretty = $di->to_html('/test/', 1);
+my $di_pretty = WebServer::DirIndex->new(dir => $dir, dir_url => '/test/', pretty => 1);
+my $html_pretty = $di_pretty->to_html('/test/');
 ok defined $html_pretty, 'to_html(pretty) returns a value';
-like $html_pretty, qr{a:link}, 'to_html(pretty) uses pretty CSS';
+like $html_pretty, qr{a:link},      'to_html(pretty) uses pretty CSS';
+like $html_pretty, qr{font-awesome},'to_html(pretty) enables icons by default';
 isnt $html, $html_pretty, 'pretty and non-pretty HTML differ';
+
+# pretty => 1 with icons explicitly disabled stays icon-free
+my $di_pretty_no_icons = WebServer::DirIndex->new(
+  dir     => $dir,
+  dir_url => '/test/',
+  pretty  => 1,
+  icons   => 0,
+);
+my $html_pretty_no_icons = $di_pretty_no_icons->to_html('/test/');
+like   $html_pretty_no_icons, qr{a:link},       'pretty => 1, icons => 0 uses pretty CSS';
+unlike $html_pretty_no_icons, qr{font-awesome}, 'pretty => 1, icons => 0 omits Font Awesome';
 
 # Custom html_class and css_class
 {
@@ -59,6 +72,7 @@ isnt $html, $html_pretty, 'pretty and non-pretty HTML differ';
   use warnings;
   use Feature::Compat::Class;
   class My::DirHTML v0.0.1 {
+    field $icons     :param = 0;
     field $file_html :reader = "FILE:%s|%s|%s|%s|%s\n";
     field $dir_html  :reader = "DIR:%s|%s|%s|%s\n";
   }
@@ -78,12 +92,13 @@ isnt $html, $html_pretty, 'pretty and non-pretty HTML differ';
 my $di_custom = WebServer::DirIndex->new(
   dir        => $dir,
   dir_url    => '/test/',
+  icons      => 0,
   html_class => 'My::DirHTML',
   css_class  => 'My::DirCSS',
 );
 ok defined $di_custom, 'WebServer::DirIndex->new accepts html_class and css_class';
 
-my $html_custom = $di_custom->to_html('/test/', 0);
+my $html_custom = $di_custom->to_html('/test/');
 like $html_custom, qr{^DIR:},        'to_html() uses custom html_class dir_html';
 like $html_custom, qr{CUSTOM_CSS},   'to_html() uses custom css_class';
 like $html_custom, qr{^FILE:}m,      'to_html() uses custom html_class file_html for rows';
@@ -100,7 +115,7 @@ my @files_no_icons = $di_no_icons->files;
 my ($file_no_icon) = grep { $_->name eq 'file.txt' } @files_no_icons;
 is $file_no_icon->icon, undef, 'file.icon is undef when icons => 0';
 
-my $html_no_icons = $di_no_icons->to_html('/test/', 0);
+my $html_no_icons = $di_no_icons->to_html('/test/');
 unlike $html_no_icons, qr{font-awesome}, 'to_html() without icons omits Font Awesome link';
 unlike $html_no_icons, qr{fa-solid},     'to_html() without icons omits icon classes';
 like $html_no_icons,   qr{file\.txt},    'to_html() without icons still lists files';

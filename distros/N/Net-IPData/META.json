@@ -1,0 +1,66 @@
+{
+   "abstract" : "Perl client for the ipdata.co IP geolocation and threat intelligence API",
+   "author" : [
+      "Net::IPData contributors"
+   ],
+   "dynamic_config" : 1,
+   "generated_by" : "ExtUtils::MakeMaker version 7.70, CPAN::Meta::Converter version 2.150010",
+   "license" : [
+      "perl_5"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "Net-IPData",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "inc"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "runtime" : {
+         "recommends" : {
+            "IO::Socket::SSL" : "1.56",
+            "Net::SSLeay" : "1.49"
+         },
+         "requires" : {
+            "Carp" : "0",
+            "HTTP::Tiny" : "0.034",
+            "JSON::PP" : "2.27",
+            "Scalar::Util" : "0",
+            "perl" : "5.010001"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "Test::More" : "0.96"
+         }
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/ipdata/perl/issues"
+      },
+      "homepage" : "https://ipdata.co/",
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/ipdata/perl.git",
+         "web" : "https://github.com/ipdata/perl"
+      }
+   },
+   "version" : "v1.0.0",
+   "x_serialization_backend" : "JSON::PP version 4.16"
+}

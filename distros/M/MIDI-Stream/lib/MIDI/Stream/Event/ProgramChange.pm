@@ -8,7 +8,7 @@ use Feature::Compat::Class;
 package MIDI::Stream::Event::ProgramChange;
 class MIDI::Stream::Event::ProgramChange :isa( MIDI::Stream::Event::Channel );
 
-our $VERSION = '0.004';
+our $VERSION = '0.005';
 
 
 field $program :reader;
@@ -31,7 +31,7 @@ MIDI::Stream::Event::ProgramChange - Program Change event class
 
 =head1 VERSION
 
-version 0.004
+version 0.005
 
 =head1 DESCRIPTION
 

@@ -27,7 +27,6 @@ use experimental qw/ signatures /;
 
 use parent 'Exporter';
 
-
 sub test_data( $file ) {
     decode_json do {
         open my $fh, '<', $file or die "Can't open $file: $!";
@@ -62,9 +61,12 @@ sub random_chunks {
 }
 
 sub run_encoding_tests( $data, $params = {} ) {
+    $params->{ concat } //= rand() < 0.5;
     my $encoder = MIDI::Stream::Encoder->new( $params->%* );
     for my $test ( $data->{ tests }->@* ) {
-        my $midi = $encoder->encode_events( $test->{ data }->@* );
+        my $midi = $params->{ concat }
+            ? $encoder->encode_events( $test->{ data }->@* )
+            : join '', $encoder->encode_events( $test->{ data }->@* );
         is( encode_hex( $midi ), $test->{expect}, "$test->{description}" );
     }
 }

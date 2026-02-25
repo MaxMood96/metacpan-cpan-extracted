@@ -1,6 +1,6 @@
 package Langertha::Role::Models;
 # ABSTRACT: Role for APIs with several models
-our $VERSION = '0.201';
+our $VERSION = '0.202';
 use Moose::Role;
 
 requires qw(
@@ -21,7 +21,7 @@ sub _build_models {
 
 has model => (
   is => 'ro',
-  isa => 'Str',
+  isa => 'Maybe[Str]',
   lazy_build => 1,
 );
 sub _build_model {
@@ -71,7 +71,7 @@ Langertha::Role::Models - Role for APIs with several models
 
 =head1 VERSION
 
-version 0.201
+version 0.202
 
 =head2 models
 

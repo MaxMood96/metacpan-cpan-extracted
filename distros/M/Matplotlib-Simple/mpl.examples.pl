@@ -1593,7 +1593,94 @@ plt({
 		},
 	],
 	ncols         => 2,
-	'output.file' => '/tmp/key.colors.bar.png',
+	'output.file' => '/tmp/key.colors.bar.svg',
+});
+bar({
+	execute => 0,
+	fh      => $fh,
+	data => {
+		A => 1, B => 2,
+	},
+	'output.file' => '/tmp/bar.sub.svg'
+});
+bar({
+	data => {
+		C => 3, D => 4
+	},
+	'output.file' => '/tmp/bar.sub.self.svg'
+});
+barh({
+	execute => 0,
+	fh      => $fh,
+	data => {
+		A => 1, B => 2,
+	},
+	'output.file' => '/tmp/barh.sub.svg'
+});
+boxplot({
+	execute => 0,
+	fh      => $fh,
+	data => {
+		A => [0..9]
+	},
+	'output.file' => '/tmp/boxplot.sub.svg'
+});
+hexbin({
+	execute => 0,
+	fh      => $fh,
+	data => {
+		A => [0..9],
+		B => [0..9]
+	},
+	'output.file' => '/tmp/hexbin.sub.svg'
+});
+hist({
+	execute => 0,
+	fh      => $fh,
+	data => {
+		A => [0..9]
+	},
+	'output.file' => '/tmp/hist.sub.svg'
+});
+hist2d({
+	execute => 0,
+	fh      => $fh,
+	data => {
+		A => [0..9],
+		B => [0..9]
+	},
+	'output.file' => '/tmp/hist2d.sub.svg'
+});
+plot({
+	execute => 0,
+	fh      => $fh,
+	data => [
+		[
+			[0,1],
+			[2,3]
+		]
+	],
+	'output.file' => '/tmp/plot.sub.svg'
+});
+bar({
+	'output.file' => '/tmp/newline_fail.svg',
+	execute       => 0,
+	fh            => $fh,
+	data          => {
+		'P A'  => 10,
+		"P\nB" => 20, # <--- This newline breaks the Python script
+	},
+});
+plt({
+	data          => {
+		A => [1..9],
+		B => [1..9]
+	},
+	execute       => 0,
+	fh            => $fh,
+	logscale      => ['x'],
+	'output.file' => '/tmp/hist2d.logscale.svg',
+	'plot.type'   => 'hist2d',
 });
 plt({
 	fh                => $fh,

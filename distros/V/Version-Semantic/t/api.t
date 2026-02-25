@@ -13,4 +13,4 @@ BEGIN {
 }
 
 public_ok $class,
-  qw( new parse major minor patch pre_release build version_core has_pre_release has_build increment compare_to to_string )
+  qw( new parse prefix major minor patch pre_release build version_core has_prefix has_pre_release has_build increment compare_to to_string )

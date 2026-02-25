@@ -1,0 +1,6 @@
+Math-Vector-Similarity-*
+.build
+*.html
+*.tar.gz
+.bash_history
+.env

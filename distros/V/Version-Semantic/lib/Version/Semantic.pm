@@ -5,13 +5,15 @@ use warnings;
 
 package Version::Semantic;
 
-$Version::Semantic::VERSION = 'v1.1.1';
+$Version::Semantic::VERSION = 'v1.2.0';
 
 use overload '<=>' => 'compare_to', '""' => 'to_string';
 
 use PerlX::Maybe ();
 
 sub _croakf ( $@ );
+
+my $prefix_re = qr/v/;
 
 # <identifier characters>
 my $id_re = qr/(?: [0-9] | [a-zA-Z-] )+/x;
@@ -36,6 +38,7 @@ my $pre_release_re = qr/$pre_release_id_re (?: \. $pre_release_id_re )*/x;
 
 # Use BNF terminology
 # https://semver.org/spec/v2.0.0.html#backusnaur-form-grammar-for-valid-semver-versions
+sub prefix       { shift->{ prefix } }
 sub major        { shift->{ major } }
 sub minor        { shift->{ minor } }
 sub patch        { shift->{ patch } }
@@ -43,6 +46,7 @@ sub version_core { shift->{ version_core } }
 sub pre_release  { shift->{ pre_release } }
 sub build        { shift->{ build } }
 
+sub has_prefix      { defined shift->{ prefix } }
 sub has_pre_release { defined shift->{ pre_release } }
 sub has_build       { defined shift->{ build } }
 
@@ -53,7 +57,7 @@ sub has_build       { defined shift->{ build } }
   # <valid semver> (ok)
   my $semver = qr/
   \A
-  (?<prefix> v)?
+  (?<prefix> $prefix_re)?
   (?<major> $num_id_re) \. (?<minor> $num_id_re) \. (?<patch> $num_id_re)
   (?: -  (?<pre_release> $pre_release_re) )?
   (?: \+ (?<build> $build_re) )?
@@ -73,7 +77,7 @@ sub has_build       { defined shift->{ build } }
 
 {
   my %attrs = (
-    prefix      => '[v]',
+    prefix      => $prefix_re,
     major       => $num_id_re,
     minor       => $num_id_re,
     patch       => $num_id_re,

@@ -8,19 +8,21 @@ package MIDI::Stream::Encoder;
 class MIDI::Stream::Encoder :isa( MIDI::Stream );
 
 
-our $VERSION = '0.004';
+our $VERSION = '0.005';
 
 use Time::HiRes qw/ gettimeofday tv_interval /;
 use Carp qw/ carp croak /;
 use MIDI::Stream::Tables qw/
     has_channel keys_for is_single_byte
     status_byte split_bytes is_realtime
+    message_length
 /;
 
 
 field $enable_14bit_cc :param = 0;
 field $enable_running_status :param = 0;
 field $running_status_retransmit :param = 10;
+field $concat :param = 0;
 
 field @msb;
 field $running_status = 0;
@@ -62,42 +64,8 @@ my $_running_status = method( $status ) {
 };
 
 
-method encode( $event ) {
-    $event = $self->$_flatten( $event )
-        if ref $event eq 'HASH';
-    $event = $event->as_arrayref
-        if eval{ $event->isa('MIDI::Stream::Event') };
+my $encode_one = method( $event ) {
     my @event = $event->@*;
-
-    if ( $event[0] eq 'sysex' ) {
-        if ( ref $event[1] eq 'ARRAY' ) {
-            @event = ( $event[0], $event[1]->@* );
-            push @event, 0xf7 unless $event[-1] == 0xf7;
-        }
-        else {
-            my $msg = chr( 0xf0 ) . $event[1];
-            $msg .= substr( $event[1], -1 ) ne chr( 0xf7 )
-                ? chr( 0xf7 )
-                : '';
-            return $msg;
-        }
-    }
-
-    if ( $enable_14bit_cc && $event[0] eq 'control_change' && $event[2] < 0x20 ) {
-        my ( $lsb, $msb ) = split_bytes( $event [3] );
-        # Comparing new MSB against last-sent MSB for this CC
-        if ( ( $msb[ $event[2] ] // -1 ) == $msb ) {
-            # MSB already sent, just send LSB on CC + 32
-            $event[2] |= 0x20;
-            $event[3] = $lsb;
-        }
-        else {
-            # Re-send MSB, concatenate LSB running status
-            $msb[ $event[2] ] = $msb;
-            $event[3] = $msb;
-            push @event, $event[2] | 0x20, $lsb;
-        }
-    }
 
     my $event_name = shift @event;
     my $status = status_byte( $event_name );
@@ -131,11 +99,75 @@ method encode( $event ) {
     join '', map { chr } $status
         ? ( $status, @event )
         : @event
+};
+
+method encode( $event ) {
+    $event = $self->$_flatten( $event )
+        if ref $event eq 'HASH';
+    $event = $event->as_arrayref
+        if eval{ $event->isa('MIDI::Stream::Event') };
+    my @event = $event->@*;
+    my @events;
+
+    if ( $event[0] eq 'sysex' ) {
+        if ( ref $event[1] eq 'ARRAY' ) {
+            @event = ( $event[0], $event[1]->@* );
+            push @event, 0xf7 unless $event[-1] == 0xf7;
+        }
+        else {
+            my $msg = chr( 0xf0 ) . $event[1];
+            $msg .= substr( $event[1], -1 ) ne chr( 0xf7 )
+                ? chr( 0xf7 )
+                : '';
+            return $msg;
+        }
+    }
+
+    if ( $enable_14bit_cc && $event[0] eq 'control_change' && $event[2] < 0x20 ) {
+        my ( $lsb, $msb ) = split_bytes( $event [3] );
+        # Comparing new MSB against last-sent MSB for this CC
+        if ( ( $msb[ $event[2] ] // -1 ) == $msb ) {
+            # MSB already sent, just send LSB on CC + 32
+            $event[2] |= 0x20;
+            $event[3] = $lsb;
+        }
+        else {
+            # Re-send MSB, concatenate LSB running status
+            $msb[ $event[2] ] = $msb;
+            $event[3] = $msb;
+            if ( $concat ) {
+                push @event, $event[2] | 0x20, $lsb;
+            }
+            else {
+                push @events, ( [ @event ], [ @event[ 0, 1 ], $event[2] | 0x20, $lsb ] );
+            }
+        }
+    }
+    elsif ( ! $concat && has_channel( $event[0] ) ) {
+        my $length = message_length( $event[0] );
+
+        if ( @event > $length + 1 ) {
+            my @status = @event[ 0, 1 ];
+            my $i = 2;
+            my $l = $length - 1;
+            while ( $event[ $i ] ) {
+                push @events, [ @status, @event[ $i, $i + $l - 1 ] ];
+                $i += $l;
+            }
+        }
+    }
+
+    @events
+        ? map { $self->$encode_one( $_ ) } @events
+        : $self->$encode_one( \@event );
+
 }
 
 
 method encode_events( @events ) {
-    join '', map { $self->encode( $_ ) } @events;
+    $concat
+        ? join '', map { $self->encode( $_ ) } @events
+        : map { $self->encode( $_ ) } @events;
 }
 
 
@@ -159,7 +191,7 @@ MIDI::Stream::Encoder - MIDI event to bytestream encoder
 
 =head1 VERSION
 
-version 0.004
+version 0.005
 
 =head1 SYNOPSIS
 
@@ -208,6 +240,9 @@ You might also use this to encode multiple note messages for block chords:
                                         0x40, 0x46,
                                         0x43, 0x3f ] );
 
+Depending on whether the L</concat> option is set, this will return a single
+byte string, or a list of discrete strings each representing one note on event.
+
 =head1 METHODS
 
 =head2 new
@@ -248,6 +283,17 @@ change for Channel 7, CC 34 = 126 (the LSB).
 
 This is disabled by default.
 
+=head3 concat
+
+Enables concatenation of multiple events passed to L</encode> and
+L</encode_events> to a single byte string. Some subsystems' MIDI send
+routines, e.g.
+L<WinMM midiOutShortMsg|https://learn.microsoft.com/en-us/windows/win32/api/mmeapi/nf-mmeapi-midioutshortmsg>
+cannot accept MIDI strings which are too long to be packed into a 32-bit word,
+so a list of smaller strings will be returned from encode functions.
+
+This is disabled by default.
+
 =head2 encode
 
     my $midi_bytes = $encoder->encode( $arrayref );
@@ -264,15 +310,19 @@ encode multiple different events in a single call). For example, to encode a
 block chord:
 
     # C-Minor
-    my $midi = $encoder->encode( [ note_on => 0x2, 0x3c, 0x60,
+    my @msgs = $encoder->encode( [ note_on => 0x2, 0x3c, 0x60,
                                                    0x3f, 0x46,
                                                    0x43, 0x3f ] );
 
+This is only supported for channel messages. See L</concat> for options on how
+these events will be encoded.
+
 =head2 encode_events
 
-    $encoder->encode_events( $arrayref, $hashref, $midi_stream_event );
+    my $message = $encoder->encode_events( $arrayref, $hashref, $midi_stream_event );
 
-Encode multiple events. Returns a single MIDI byte string.
+Encode multiple events. Returns a single MIDI byte string if L</concat> is
+enabled, or a list of strings, one per-event, otherwise.
 
 =head2 clear_running_status
 

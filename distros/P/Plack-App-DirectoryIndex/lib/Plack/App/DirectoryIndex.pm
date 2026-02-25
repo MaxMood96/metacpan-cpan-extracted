@@ -5,10 +5,10 @@ use parent qw[Plack::App::Directory];
 use strict;
 use warnings;
 
-use Plack::Util::Accessor qw[dir_index pretty];
+use Plack::Util::Accessor qw[dir_index icons pretty];
 use WebServer::DirIndex;
 
-our $VERSION = '0.1.0';
+our $VERSION = '0.2.0';
 
 # NOTE: Copied from Plack::App::Directory as that module makes it
 # impossible to override the HTML.
@@ -32,9 +32,17 @@ sub serve_path {
   if ($dir_url !~ m{/$}) {
     return $self->return_dir_redirect($env);
   }
+
+  my %dir_index_args = (
+    dir     => $dir,
+    dir_url => $dir_url,
+  );
+
+  $dir_index_args{pretty} = $self->pretty if defined $self->pretty;
+  $dir_index_args{icons}  = $self->icons  if defined $self->icons;
  
-  my $di   = WebServer::DirIndex->new(dir => $dir, dir_url => $dir_url);
-  my $page = $di->to_html($env->{PATH_INFO}, $self->pretty);
+  my $di   = WebServer::DirIndex->new(%dir_index_args);
+  my $page = $di->to_html($env->{PATH_INFO});
 
   return [ 200, ['Content-Type' => 'text/html; charset=utf-8'], [ $page ] ];
 }
@@ -76,6 +84,12 @@ Plack::App::DirectoryIndex - Serve static files from document root with an index
     pretty => 1,
   })->to_app;
 
+  # Disable icons in directory listings
+  my $app = Plack::App::DirectoryIndex->new({
+    root  => '/path/to/htdocs',
+    icons => 0,
+  })->to_app;
+
 
 =head1 DESCRIPTION
  
@@ -98,6 +112,12 @@ The name of the directory index file that you want to use. This will
 default to using C<index.html>. You can turn it off by setting this
 value to an empty string (but if you don't want a default index file,
 then you should probably use L<Plack::App::Directory> instead).
+
+=item icons
+
+If set to a true value, the directory listing page will include Font
+Awesome icons for popular file types. Defaults to true (i.e. icons
+are shown). Set to a false value to disable icons entirely.
 
 =item pretty
 

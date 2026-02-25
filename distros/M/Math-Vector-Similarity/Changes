@@ -1,0 +1,3 @@
+0.001     2026-02-24 21:06:57Z
+  - Initial release
+  - cosine_similarity, cosine_distance, euclidean_distance, dot_product, normalize

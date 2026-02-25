@@ -14,58 +14,57 @@ sub parse_separator { App::Greple::md::parse_separator(@_) }
 # Right-aligned column
 {
     my $block = "| A | B |\n|---|---:|\n| a | b |\n";
-    my @opts = parse_separator(\$block);
-    is_deeply(\@opts, ['--table-right=3'],
-              "right-aligned column");
+    my($right, $center) = parse_separator(\$block);
+    is_deeply($right, [2], "right-aligned column");
+    is_deeply($center, [], "no center-aligned column");
     unlike($block, qr/:/, "colons stripped from separator");
 }
 
 # Center-aligned column
 {
     my $block = "| A | B |\n|---|:---:|\n| a | b |\n";
-    my @opts = parse_separator(\$block);
-    is_deeply(\@opts, ['--table-center=3'],
-              "center-aligned column");
+    my($right, $center) = parse_separator(\$block);
+    is_deeply($right, [], "no right-aligned column");
+    is_deeply($center, [2], "center-aligned column");
 }
 
 # Left-aligned (explicit) — no option generated
 {
     my $block = "| A | B |\n|:---|:---|\n| a | b |\n";
-    my @opts = parse_separator(\$block);
-    is_deeply(\@opts, [],
-              "left-aligned generates no options");
+    my($right, $center) = parse_separator(\$block);
+    is_deeply($right, [], "left-aligned: no right");
+    is_deeply($center, [], "left-aligned: no center");
 }
 
 # Mixed alignment
 {
     my $block = "| L | C | R | D |\n|:---|:---:|---:|---|\n| a | b | c | d |\n";
-    my @opts = parse_separator(\$block);
-    is_deeply(\@opts, ['--table-right=4', '--table-center=3'],
-              "mixed alignment: right and center");
+    my($right, $center) = parse_separator(\$block);
+    is_deeply($right, [3], "mixed: right column");
+    is_deeply($center, [2], "mixed: center column");
 }
 
 # No separator line
 {
     my $block = "| A | B |\n| a | b |\n| c | d |\n";
-    my @opts = parse_separator(\$block);
-    is_deeply(\@opts, [],
-              "no separator line returns empty");
+    my($right, $center) = parse_separator(\$block);
+    is_deeply($right, [], "no separator: no right");
+    is_deeply($center, [], "no separator: no center");
 }
 
 # Multiple right-aligned columns
 {
     my $block = "| A | B | C |\n|---:|---:|---:|\n| a | b | c |\n";
-    my @opts = parse_separator(\$block);
-    is_deeply(\@opts, ['--table-right=2,3,4'],
-              "multiple right-aligned columns");
+    my($right, $center) = parse_separator(\$block);
+    is_deeply($right, [1,2,3], "multiple right-aligned columns");
 }
 
 # Default (no colon) generates no options
 {
     my $block = "| A | B | C |\n|---|---|---|\n| a | b | c |\n";
-    my @opts = parse_separator(\$block);
-    is_deeply(\@opts, [],
-              "default alignment generates no options");
+    my($right, $center) = parse_separator(\$block);
+    is_deeply($right, [], "default: no right");
+    is_deeply($center, [], "default: no center");
 }
 
 # Integration test: aligned table via greple

@@ -4,7 +4,7 @@ use MIDI::Stream::Test 'encode_hex';
 
 use MIDI::Stream::Encoder;
 
-my $encoder = MIDI::Stream::Encoder->new();
+my $encoder = MIDI::Stream::Encoder->new( concat => 1 );
 
 my $msg = $encoder->encode([ note_on => 0xe, 0x44, 0x55,
                                              0x66, 0x77,

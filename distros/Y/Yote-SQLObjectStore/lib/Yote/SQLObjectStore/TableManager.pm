@@ -121,25 +121,27 @@ sub generate_hash_table {
     my $table_label = join '_', "*HASH<$hash_key_size>", $field_type;
     my $table_name = $self->label_to_table( $table_label );
 
-    return if $name2table->{$table_name};
-
-    my @column_sql = (
-        "id ".$self->bigint_type,
-        "hashkey VARCHAR($hash_key_size)",
+    unless ($name2table->{$table_name}) {
+        my @column_sql = (
+            "id ".$self->bigint_type,
+            "hashkey VARCHAR($hash_key_size)",
         );
 
-    if ($is_ref) {
-        push @column_sql, "val ".$self->bigint_type;
-    } else {
-        # scalar field
-        push @column_sql, "val ".$self->map_type($field_type);
+        if ($is_ref) {
+            push @column_sql, "val ".$self->bigint_type;
+        } else {
+            # scalar field
+            push @column_sql, "val ".$self->map_type($field_type);
+        }
+
+        push @column_sql, "UNIQUE (id,hashkey)";
+        $name2table->{$table_name} = "CREATE TABLE IF NOT EXISTS $table_name (" .
+            join( ',', @column_sql ) .')';
     }
 
-    push @column_sql, "UNIQUE (id,hashkey)";
-    $name2table->{$table_name} = "CREATE TABLE IF NOT EXISTS $table_name (" .
-        join( ',', @column_sql ) .')';
-
-    $self->generate_reference_table($name2table,$field_value) if $is_ref;
+    # Always follow references even if the shared table already exists,
+    # so that the referenced module's own table gets created
+    $self->generate_reference_table($name2table,"*$field_value") if $is_ref;
 }
 
 sub generate_array_table {
@@ -166,26 +168,28 @@ sub generate_array_table {
     my $table_label = join '_', "*ARRAY", $field_type;
     my $table_name = $self->label_to_table( $table_label );
 
-    return if $name2table->{$table_name};
-
-    my @column_sql = (
-        "id ".$self->bigint_type,
-        "idx ".$self->int_type,
+    unless ($name2table->{$table_name}) {
+        my @column_sql = (
+            "id ".$self->bigint_type,
+            "idx ".$self->int_type,
         );
 
-    if ($is_ref) {
-        push @column_sql, "val ".$self->bigint_type;
+        if ($is_ref) {
+            push @column_sql, "val ".$self->bigint_type;
+        }
+        else {
+            push @column_sql, "val ".$self->map_type($field_value);
+        }
+
+        push @column_sql, "UNIQUE (id,idx)";
+
+        $name2table->{$table_name} = "CREATE TABLE IF NOT EXISTS $table_name (" .
+            join( ',', @column_sql ) .')';
     }
-    else {
-        push @column_sql, "val ".$self->map_type($field_value);
-    }
 
-    push @column_sql, "UNIQUE (id,idx)";
-
-    $name2table->{$table_name} = "CREATE TABLE IF NOT EXISTS $table_name (" .
-        join( ',', @column_sql ) .')';
-
-    $self->generate_reference_table($name2table,$field_value) if $is_ref;
+    # Always follow references even if the shared table already exists,
+    # so that the referenced module's own table gets created
+    $self->generate_reference_table($name2table,"*$field_value") if $is_ref;
 }
 
 sub generate_reference_table {

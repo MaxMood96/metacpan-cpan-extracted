@@ -1,21 +1,10 @@
 package Langertha::Engine::MiniMax;
 # ABSTRACT: MiniMax API
-our $VERSION = '0.201';
+our $VERSION = '0.202';
 use Moose;
 use Carp qw( croak );
 
-with 'Langertha::Role::'.$_ for (qw(
-  JSON
-  HTTP
-  OpenAICompatible
-  OpenAPI
-  Models
-  Temperature
-  ResponseSize
-  SystemPrompt
-  Streaming
-  Chat
-));
+extends 'Langertha::Engine::OpenAIBase';
 
 with 'Langertha::Role::Tools';
 
@@ -28,7 +17,6 @@ has '+url' => (
   lazy => 1,
   default => sub { 'https://api.minimax.io/v1' },
 );
-around has_url => sub { 1 };
 
 sub _build_api_key {
   my ( $self ) = @_;
@@ -55,7 +43,7 @@ Langertha::Engine::MiniMax - MiniMax API
 
 =head1 VERSION
 
-version 0.201
+version 0.202
 
 =head1 SYNOPSIS
 

@@ -24,12 +24,14 @@ my %WriteMakefileArgs = (
     "Digest::SHA" => 0,
     "File::Path" => 0,
     "IPC::System::Simple" => 0,
+    "JSON::MaybeXS" => 0,
+    "MIME::Base64" => 0,
     "Term::ANSIColor" => 0,
     "Test::Exception" => 0,
     "Test::More" => 0,
     "autodie" => 0
   },
-  "VERSION" => "0.23",
+  "VERSION" => "0.24",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -44,6 +46,8 @@ my %FallbackPrereqs = (
   "Digest::SHA" => 0,
   "File::Path" => 0,
   "IPC::System::Simple" => 0,
+  "JSON::MaybeXS" => 0,
+  "MIME::Base64" => 0,
   "Term::ANSIColor" => 0,
   "Test::Exception" => 0,
   "Test::More" => 0,

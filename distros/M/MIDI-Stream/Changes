@@ -1,3 +1,7 @@
+0.005 2026-02-24
+
+  - Incompatible change: New option in encoder 'concat' - concatenate multiple messages or return as array
+
 0.004 2026-02-19
 
   - Fix order of message retrieval in fetch_one_event

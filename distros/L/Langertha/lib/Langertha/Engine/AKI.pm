@@ -1,13 +1,13 @@
 package Langertha::Engine::AKI;
 # ABSTRACT: AKI.IO native API
-our $VERSION = '0.201';
+our $VERSION = '0.202';
 use Moose;
-use Carp qw( croak );
+use Carp qw( croak carp );
 use JSON::MaybeXS;
 
+extends 'Langertha::Engine::Remote';
+
 with 'Langertha::Role::'.$_ for (qw(
-  JSON
-  HTTP
   Models
   Temperature
   SystemPrompt
@@ -30,7 +30,6 @@ has '+url' => (
   lazy => 1,
   default => sub { 'https://aki.io' },
 );
-sub has_url { 1 }
 
 sub default_model { 'llama3_8b_chat' }
 
@@ -157,8 +156,10 @@ sub chat_response {
 sub openai {
   my ( $self, %args ) = @_;
   require Langertha::Engine::AKIOpenAI;
+  unless (exists $args{model}) {
+    carp "".(ref $self)."->openai: native model name cannot be mapped to /v1 model name automatically, using AKIOpenAI default model";
+  }
   return Langertha::Engine::AKIOpenAI->new(
-    model => $self->model,
     api_key => $self->api_key,
     $self->has_system_prompt ? ( system_prompt => $self->system_prompt ) : (),
     $self->has_temperature ? ( temperature => $self->temperature ) : (),
@@ -184,7 +185,7 @@ Langertha::Engine::AKI - AKI.IO native API
 
 =head1 VERSION
 
-version 0.201
+version 0.202
 
 =head1 SYNOPSIS
 
@@ -282,11 +283,17 @@ C<model>, C<timing>, and C<raw>.
 =head2 openai
 
     my $oai = $aki->openai;
-    my $oai = $aki->openai(model => 'different_model');
+    my $oai = $aki->openai(model => 'llama3-chat-8b');
 
 Returns a L<Langertha::Engine::AKIOpenAI> instance configured with the same
-API key, model, system prompt, and temperature. Supports streaming and MCP
-tool calling.
+API key, system prompt, and temperature. Supports streaming and MCP tool
+calling.
+
+B<Note:> The native AKI model name is B<not> carried over automatically
+because the C</v1> endpoint uses different model identifiers. If no C<model>
+is passed, the AKIOpenAI default model is used and a warning is emitted.
+Pass C<< model => '...' >> explicitly with a valid C</v1> model name to
+suppress the warning.
 
 =head1 SEE ALSO
 

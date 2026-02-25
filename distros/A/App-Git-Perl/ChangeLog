@@ -1,15 +1,31 @@
 Revision history for App::Git::Perl
 
-0.1.15    2022-07-21 22:37
+0.1.18    2026-02-24 23:53
+
+- show all recent versions, not only the latest ones
+
+0.1.17    2026-02-24 23:30
+
+- updated to version 0.1.17
+- remove config file when the file is empty/not needed anymore
+- Ignoring temporary development notes within MANIFEST.SKIP file
+- updated wording in test script - "Able to" -> "I can"
+- updated test script validation of initial getting data from remote site/metacpan.org
+- updated distribution to 0.1.16
+- updated version to 0.1.16 - changed endpoints to get repository details, caused by protecting metacpan.org by  FastApi CDN on metacpan.org 0.1.15: - fixed script test when running on Windows
+
+0.1.15    2022-07-21 22:40
 
 - fixed disabling testing for Windows platform
 
-0.1.14    2022-07-21 15:25
+0.1.14    2022-07-21 15:28
 
-- added IO::Socket::SSL as requirement
+- Added IO::Socket::SSL as requirement for installation/testing
 
-0.1.13    2022-07-21 14:12
+0.1.13    2022-07-21 14:17
 
+- updated version to 0.1.13
+- updated ChangeLog
 - fixed finding module listed on cli between recent and real repositories
 - fixed tests - checking is repository cloned and where it is clone
 - skip testing for Windows OS / not supported / linux only

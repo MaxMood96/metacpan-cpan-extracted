@@ -14,4 +14,4 @@ use Test::Needs qw( Test::Perl::Critic );
 
 use File::Spec::Functions qw( catfile );
 
-Test::Perl::Critic::all_critic_ok( 't', 'lib', grep { -d } qw( xt bin script ) )
+Test::Perl::Critic::all_critic_ok( 'Makefile.PL', 't', 'lib', grep { -d } qw( xt bin script ) )

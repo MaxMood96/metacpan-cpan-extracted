@@ -1,0 +1,6 @@
+SQLite-VecDB-*
+.build
+*.html
+*.tar.gz
+.bash_history
+.env

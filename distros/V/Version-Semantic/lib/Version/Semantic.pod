@@ -29,9 +29,10 @@ version?|https://semver.org/spec/v2.0.0.html#is-v123-a-semantic-version>).
 The class has a usual C<new()> constructor method (class method) to create
 objects from their named attributes.
 
-Each object has the required attributes C<major>, C<minor>,
-and C<patch>.  Optional object attributes are C<pre_release> and
-C<build>. C<has_pre_release()> and C<has_build()> predicate methods exist too.
+Each object has the required attributes C<major>, C<minor>, and
+C<patch>.  Optional object attributes are C<prefix>, C<pre_release> and
+C<build>. C<has_prefix()>, C<has_pre_release()> and C<has_build()> predicate
+methods exist too.
 
 The C<version_core()> object method returns the semantic version string of an
 object with the C<v> prefix (if originally set) but without the pre-release
@@ -70,7 +71,12 @@ allows you to set or overwrite the C<pre_release> attribute for non-C<trial>
 strategies. Example:
 
   # Leads to "v1.0.1-TRIAL5"
-  my $v_trial = Version::Semantic->parse( 'v1.0.0' )->increment( 'patch', 'TRIAL5' );
+  my $v_trial = Version::Semantic->new(
+    prefix => 'v',
+    major  => 1,
+    minor  => 0,
+    patch  => 0
+  )->increment( 'patch', 'TRIAL5' );
 
 The C<trial> strategy can be applied to trial releases only. It increments
 the trial release number ignoring any kind of formatting (leading zeros for

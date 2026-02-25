@@ -1,0 +1,36 @@
+Revision history for Yote-SQLObjectStore
+
+0.05  2026-02-23
+    - Fixed table creation for modules referenced through *ARRAY_* and
+      *HASH_* column types. generate_array_table and generate_hash_table
+      were stripping the '*' prefix before calling generate_reference_table,
+      preventing recursive table creation for referenced modules.
+    - Fixed early return in generate_array_table and generate_hash_table
+      when the shared table (ARRAY_REF, HASH_*_REF) already existed.
+      The early return was skipping reference following, so only the first
+      module referenced through a shared container table would get its
+      table created.
+    - Added t/table_generation.t with tests for recursive table creation
+      through array and hash references.
+
+0.04  2025-12-01
+    - Added Yote::Locker for multi-process file locking
+    - Wired Locker into SQLite store for transaction safety
+    - Added finder methods (find_by, find_all_by, find_where, etc.)
+    - Added t/locker.t and t/finder_methods.t
+
+0.03  2025-10-01
+    - Added Postgres backend support
+    - Added map_type for backend-specific SQL type translation
+    - Added t/map_type.t
+
+0.02  2025-08-01
+    - Added MariaDB backend support
+    - Table versioning and schema migration (column add/change/archive)
+    - Path-based queries (fetch_string_path, ensure_path)
+
+0.01  2025-06-01
+    - Initial release
+    - SQLite backend with rooted object tree
+    - Typed arrays, hashes, and object references
+    - Dirty tracking and transactional saves

@@ -8,7 +8,7 @@ package MIDI::Stream::Decoder;
 class MIDI::Stream::Decoder :isa( MIDI::Stream );
 
 
-our $VERSION = '0.004';
+our $VERSION = '0.005';
 
 use Time::HiRes qw/ gettimeofday tv_interval /;
 use Carp qw/ carp croak /;
@@ -95,7 +95,8 @@ my $_reset_pending_event = method( $status = undef ) {
 };
 
 
-method decode( $bytestring ) {
+method decode( @bytestrings ) {
+    my $bytestring = join '', @bytestrings;
     my @bytes = unpack 'C*', $bytestring;
     my $status;
 
@@ -222,7 +223,7 @@ MIDI::Stream::Decoder - MIDI bytestream decoder
 
 =head1 VERSION
 
-version 0.004
+version 0.005
 
 =head1 SYNOPSIS
 
@@ -323,7 +324,7 @@ The default value is 24.
 =head2 decode
 
     my $pending_count = $decoder->decode( $midi_bytes );
-    $decoder->decode( $midi_bytes );
+    $decoder->decode( $midi_bytes, $more_midi_bytes );
 
 Decodes any MIDI messages in the passed string. Returns the number of
 pending events if retain_events is enabled. Any callbacks associated with

@@ -65,6 +65,9 @@ sub abridged_columns_from_create_string {
     for my $col (split ',', lc($new_columns_defs)) {
         my ($name, $def) = split /\s+/, $col, 2;
         next if $name eq 'id';
+        # Strip DEFAULT clause to match PRAGMA table_info output
+        # (PRAGMA returns the default value separately, not in the type)
+        $def =~ s/\s+default\s+.*//i if $def;
         $def = $self->undecorate_column( $def );
         push @col_pairs, [$name, $def];
     }

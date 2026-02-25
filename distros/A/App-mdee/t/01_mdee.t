@@ -223,14 +223,14 @@ subtest 'md module table execution' => sub {
     # Table should be formatted with aligned columns
     # The separator line |---|---|---| should have consistent dashes
     use Encode 'decode_utf8';
-    like(decode_utf8($out), qr/├─+┼─+┼─+┤/, 'table separator is formatted with box-drawing');
+    like(decode_utf8($out), qr/─+┼─+┼─+/, 'table separator is formatted with box-drawing');
     # Check that ANSI sequences are present
     like($out, qr/\e\[/, 'output contains ANSI escape sequences');
 
     # --no-rule: ASCII separators instead of box-drawing
     my $norule = decode_utf8(`$mdee --no-nup --no-fold --table --no-rule $test_md 2>&1`);
     is($?, 0, 'mdee with --no-rule exits successfully');
-    like($norule, qr/\|[-]+\|/, '--no-rule produces ASCII separator');
+    like($norule, qr/[-]+\|[-]+/, '--no-rule produces ASCII separator');
     unlike($norule, qr/[├┼┤─│]/, '--no-rule does not produce box-drawing chars');
 };
 

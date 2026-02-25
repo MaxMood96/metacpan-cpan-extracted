@@ -1,0 +1,9 @@
+Revision history for Net-IPData
+
+1.0.0  2026-02-23
+    - Initial release
+    - Full ipdata.co API support: lookup, bulk, field filtering, single field
+    - Convenience methods for common fields (asn, threat, carrier, etc.)
+    - EU endpoint support
+    - Zero non-core dependencies (HTTP::Tiny, JSON::PP)
+    - Comprehensive test suite with mocked HTTP responses

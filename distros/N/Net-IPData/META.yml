@@ -1,0 +1,35 @@
+---
+abstract: 'Perl client for the ipdata.co IP geolocation and threat intelligence API'
+author:
+  - 'Net::IPData contributors'
+build_requires:
+  ExtUtils::MakeMaker: '0'
+  Test::More: '0.96'
+configure_requires:
+  ExtUtils::MakeMaker: '0'
+dynamic_config: 1
+generated_by: 'ExtUtils::MakeMaker version 7.70, CPAN::Meta::Converter version 2.150010'
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: Net-IPData
+no_index:
+  directory:
+    - t
+    - inc
+recommends:
+  IO::Socket::SSL: '1.56'
+  Net::SSLeay: '1.49'
+requires:
+  Carp: '0'
+  HTTP::Tiny: '0.034'
+  JSON::PP: '2.27'
+  Scalar::Util: '0'
+  perl: '5.010001'
+resources:
+  bugtracker: https://github.com/ipdata/perl/issues
+  homepage: https://ipdata.co/
+  repository: https://github.com/ipdata/perl.git
+version: v1.0.0
+x_serialization_backend: 'CPAN::Meta::YAML version 0.018'
