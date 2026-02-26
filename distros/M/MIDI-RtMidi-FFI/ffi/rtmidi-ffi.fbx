@@ -1,0 +1,19 @@
+use strict;
+use warnings;
+
+our $DIR;
+
+my $WINDOWS = $^O eq 'MSWin32' || $^O eq 'cygwin';
+my $MACOS = $^O eq 'darwin';
+
+my $libs = '';
+
+$libs = '-lrtmidi -lwinmm -lws2_32' if $WINDOWS;
+$libs = '-framework CoreFoundation -framework CoreMidi' if $MACOS;
+
+{
+    alien  => ['Alien::RtMidi'],
+    source => ["$DIR/*.cpp"],
+    libs   => $libs,
+    verbose => 2,
+};

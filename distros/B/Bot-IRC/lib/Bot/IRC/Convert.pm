@@ -6,7 +6,7 @@ use exact -noutf8;
 
 use Math::Units 'convert';
 
-our $VERSION = '1.46'; # VERSION
+our $VERSION = '1.47'; # VERSION
 
 sub init {
     my ($bot) = @_;
@@ -44,7 +44,7 @@ Bot::IRC::Convert - Bot::IRC convert units of amounts
 
 =head1 VERSION
 
-version 1.46
+version 1.47
 
 =head1 SYNOPSIS
 

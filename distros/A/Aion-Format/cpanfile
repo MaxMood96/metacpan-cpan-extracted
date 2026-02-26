@@ -28,7 +28,7 @@ on 'test' => sub {
 };
 
 # Для DDP
-requires 'Devel::Size';
+recommends 'Devel::Size';
 
 requires 'DDP';
 requires 'Encode';

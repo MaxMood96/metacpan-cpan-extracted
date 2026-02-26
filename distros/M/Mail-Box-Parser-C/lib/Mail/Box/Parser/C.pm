@@ -1,8 +1,8 @@
-# This code is part of Perl distribution Mail-Box-Parser-C version 4.00.
-# The POD got stripped from this file by OODoc version 3.05.
+# This code is part of Perl distribution Mail-Box-Parser-C version 4.01.
+# The POD got stripped from this file by OODoc version 3.06.
 # For contributors see file ChangeLog.
 
-# This software is copyright (c) 2002-2025 by Mark Overmeer.
+# This software is copyright (c) 2002-2026 by Mark Overmeer.
 
 # This is free software; you can redistribute it and/or modify it under
 # the same terms as the Perl 5 programming language system itself.
@@ -10,12 +10,12 @@
 
 
 package Mail::Box::Parser::C;{
-our $VERSION = '4.00';
+our $VERSION = '4.01';
 }
 
 use parent qw/Mail::Box::Parser DynaLoader/;
 
-our $VERSION = '4.00';
+our $VERSION = '4.01';
 
 use strict;
 use warnings;
@@ -28,7 +28,7 @@ use Mail::Message::Field ();
 
 bootstrap Mail::Box::Parser::C $VERSION;
 
-## Defined in the library
+## Defined in the XS library
 sub open_filename($$$);
 sub open_filehandle($$$);
 sub get_filehandle($);
@@ -52,7 +52,44 @@ sub body_delayed($$$);
 
 #--------------------
 
-sub boxnr() { $_[0]->{MBPC_boxnr} }
+sub init(@)
+{	my ($self, $args) = @_;
+	$self->SUPER::init($args);
+
+	$self->{MBPC_file}     = my $fh = $args->{file};
+	$self->{MBPC_mode}     = $args->{mode}     || 'r';
+	$self->{MBPC_filename} = $args->{filename} || ref $fh
+		or error __x"filename or handle required to create a parser.";
+
+	$self->start;
+	$self;
+}
+
+#--------------------
+
+sub filename() { $_[0]->{MBPC_filename} }
+sub openMode() { $_[0]->{MBPC_mode} }
+sub file()     { $_[0]->{MBPC_file} }
+
+
+sub boxnr()    { $_[0]->{MBPC_boxnr} }
+
+#--------------------
+
+sub start(@)
+{	my ($self, %args) = @_;
+	$self->openFile(%args) or return;
+
+	trace "opened folder ".$self->filename." to be parsed";
+	$self;
+}
+
+
+sub stop()
+{	my $self = shift;
+	trace "close parser for file " . $self->filename;
+	$self->closeFile;
+}
 
 sub pushSeparator($)
 {	my ($self, $sep) = @_;
@@ -90,17 +127,20 @@ sub bodyDelayed(;$$)
 	body_delayed $self->boxnr, $exp_chars // -1, $exp_lines // -1;
 }
 
-sub openFile($)
-{	my ($self, $args) = @_;
-	my $trace = $args->{trace} || 0;
+sub openFile(%)
+{	my ($self, %args) = @_;
+	my $trace    = $args{trace} || 0;
+
+	my $filename = $args{filename} || $self->filename;
+	my $mode     = $args{mode}     || $self->openMode;
+	my $fh       = $args{file}     || $self->file;
 
 	my $boxnr;
-	if(my $file = $args->{file})
-	{	my $name = $args->{filename} || "$file";
-		$boxnr   = open_filehandle($file, $name, $trace);
+	if(defined $fh)
+	{	$boxnr = open_filehandle($fh, $filename // "$fh", $trace);
 	}
 	else
-	{	$boxnr   = open_filename($args->{filename}, $args->{mode}, $trace);
+	{	$boxnr = open_filename($filename, $mode, $trace);
 	}
 
 	$self->{MBPC_boxnr} = $boxnr;

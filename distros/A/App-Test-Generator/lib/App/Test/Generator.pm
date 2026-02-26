@@ -26,6 +26,7 @@ use File::Spec;
 use Module::Load::Conditional qw(check_install can_load);
 use Params::Get;
 use Params::Validate::Strict;
+use Readonly::Values::Boolean;
 use Scalar::Util qw(looks_like_number);
 use re 'regexp_pattern';
 use Template;
@@ -35,7 +36,7 @@ use Exporter 'import';
 
 our @EXPORT_OK = qw(generate);
 
-our $VERSION = '0.28';
+our $VERSION = '0.29';
 
 use constant {
 	DEFAULT_ITERATIONS => 50,
@@ -50,7 +51,7 @@ App::Test::Generator - Generate fuzz and corpus-driven test harnesses from test 
 
 =head1 VERSION
 
-Version 0.28
+Version 0.29
 
 =head1 SYNOPSIS
 
@@ -1503,14 +1504,14 @@ sub generate
 		my $type = $accessor{type};
 
 		if(!defined($new)) {
-			croak("$property: accessor $type can only work on an object");
+			croak("BUG: $property: accessor $type can only work on an object, incorrectly tagged as $type");
 		}
 		if($type eq 'getset') {
 			if(scalar(keys %input) != 1) {
-				croak("$property: getset must take one input argument");
+				croak("BUG: $property: getset must take one input argument, incorrectly tagged as getset");
 			}
 			if(scalar(keys %output) == 0) {
-				croak("$property: getset must give one output");
+				croak("BUG: $property: getset must give one output, incorrectly tagged as getset");
 			}
 		}
 	}
@@ -1531,6 +1532,9 @@ sub generate
 		if($has_positions) {
 			$position_code = "\$result = (scalar(\@alist) == 1) ? \$obj->$function(\$alist[0]) : (scalar(\@alist) == 0) ? \$obj->$function() : \$obj->$function(\@alist);";
 			if(defined($accessor{type})) {
+				if($accessor{type} eq 'getter') {
+					$position_code .= "my \$prev_value = \$obj->{$accessor{property}};";
+				}
 				if($accessor{type} eq 'getset') {
 					$position_code .= 'if(scalar(@alist) == 1) { ';
 					$position_code .= "cmp_ok(\$result, 'eq', \$alist[0], 'getset function returns what was put in'); ok(\$obj->$function() eq \$result, 'test getset accessor');";
@@ -1539,17 +1543,27 @@ sub generate
 				if(($accessor{type} eq 'getset') || ($accessor{type} eq 'getter')) {
 					# Since Perl doesn't support data encapsulation, we can test the getter returns the correct item
 					$position_code .= 'if(scalar(@alist) == 1) { ';
-					$position_code .= "cmp_ok(\$result, 'eq', \$obj->{$function}, 'getset function returns correct item');";
+					$position_code .= "cmp_ok(\$result, 'eq', \$obj->{$accessor{property}}, 'getset function returns correct item');";
+					if($accessor{type} eq 'getter') {
+						$position_code .= "if(defined(\$prev_value)) { cmp_ok(\$result, 'eq', \$prev_value, 'getter does not change value'); } ";
+					}
 					$position_code .= '}';
+				}
+				if($output{'_returns_self'}) {
+					croak("$accessor{type} for $accessor{property} cannot return \$self");
 				}
 			}
 		} else {
 			$call_code = "\$result = \$obj->$function(\$input);";
 			if($output{'_returns_self'}) {
 				$call_code .= "ok(defined(\$result)); ok(\$result eq \$obj, '$function returns self')";
-			}
-			if(defined($accessor{type}) && ($accessor{type} eq 'getset')) {
+			} elsif(defined($accessor{type}) && ($accessor{type} eq 'getset')) {
 				$call_code .= "ok(\$obj->$function() eq \$result, 'test getset accessor');"
+			}
+			if(scalar(keys %input) == 0) {
+				if(defined($accessor{type}) && ($accessor{type} eq 'getter')) {
+					$call_code .= "cmp_ok(\$result, 'eq', \$obj->{$accessor{property}}, 'getter function returns correct item');";
+				}
 			}
 		}
 	} elsif(defined($module) && length($module)) {
@@ -1786,7 +1800,7 @@ sub _validate_config {
 
 	if((!defined($config->{'input'})) && (!defined($config->{'output'}))) {
 		# Routine takes no input and no output, so there's nothing that would be gained using this software
-		croak('You must specify at least one of input and output');
+		carp('Neither input nor output is defined, only a few tests will be generated');
 	}
 	if(($config->{'input'}) && (ref($config->{input}) ne 'HASH')) {
 		if($config->{'input'} eq 'undef') {
@@ -1927,10 +1941,8 @@ sub _normalize_config
 	foreach my $field (CONFIG_TYPES) {
 		next if($field eq 'properties');	# Not a boolean
 		if(exists($config->{$field})) {
-			if(($config->{$field} eq 'false') || ($config->{$field} eq 'off') || ($config->{$field} eq 'no')) {
-				$config->{$field} = 0;
-			} elsif(($config->{$field} eq 'true') || ($config->{$field} eq 'on') || ($config->{$field} eq 'yes')) {
-				$config->{$field} = 1;
+			if(defined(my $b = $Readonly::Values::Boolean::booleans{$config->{$field}})) {
+				$config->{$field} = $b;
 			}
 		} else {
 			$config->{$field} = 1;
@@ -2472,13 +2484,8 @@ sub _get_semantic_generators {
 		uuid => {
 			code => q{
 				Gen {
-					sprintf('%08x-%04x-%04x-%04x-%012x',
-						int(rand(0xffffffff)),
-						int(rand(0xffff)),
-						(int(rand(0xffff)) & 0x0fff) | 0x4000,
-						(int(rand(0xffff)) & 0x3fff) | 0x8000,
-						int(rand(0x1000000000000))
-					);
+					require UUID::Tiny;
+					UUID::Tiny::create_uuid_as_string(UUID::Tiny::UUID_V4());
 				}
 			},
 			description => 'Valid UUIDv4 identifiers',

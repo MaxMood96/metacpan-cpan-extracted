@@ -1,0 +1,30 @@
+Revision history for Container-Builder
+
+0.07  2026-02-26 00:09:03 CET
+	- Documentation update.
+
+0.06  2026-02-25 23:09:44 CET
+	- Prepare for first CPAN release.
+	- Implemented rudimentary copy() function.
+	- Bugfixes galore.
+	- Created some working (working as in: works on my machine) examples in the examples/ folder.
+
+0.05 2026-02-16 22:58:40 GMT
+	- Remove all print statements from the module.
+	- If no argument is given to build(), then return the archive itself as a scalar
+	- Created a hello world example
+	- Implemented get_digest() to retrieve the digest of the config file
+	- Made writing deb files to a cache folder optional, and turned off by default (this is expected for the example). Parametrized the cache folder with a new constructor argument.
+
+0.04 2026-02-15 18:58:40 GMT
+	- Added documentation to each Perl module.
+
+0.03 2026-02-14 18:58:40 GMT
+	- Add comment field to Container::Builder::Layer so that tools like dive can have an idea what's in the layer.
+
+0.02 2026-02-13 18:58:40 GMT
+	- Scrub timestamps from GZIP files so the digest/archive stays the same and can be efficiently reused across containers in podman.
+
+0.01 2026-02-12 18:58:40 GMT
+	- Move every class in its own file/package.
+	- Initial release

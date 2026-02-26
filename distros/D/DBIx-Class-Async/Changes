@@ -1,5 +1,64 @@
 Revision history for DBIx::Class::Async
 
+0.62 2026-02-25
+     [NEW FEATURES]
+     - Added as_subselect_rs() method for wrapping queries as subselects.
+       Correctly preserves column lists from the original ResultSet.
+       When you select a subset of columns, the subselect will only include
+       those columns, not all columns from the table. This enables complex
+       query patterns with derived tables, limited subqueries, and
+       multi-stage aggregations.
+
+     - Added support for empty SELECT lists (select => []). Generates
+       database-appropriate SQL: "SELECT FROM table" for PostgreSQL,
+       "SELECT 1 FROM table" for other databases. This addresses
+       compatibility with PostgreSQL's column-less SELECT syntax and
+       resolves the limitation inherited from DBIx::Class core.
+
+     - Added DBIx::Class::Async::Exception, a structured exception class
+       hierarchy consistent with the DBIx::Class::Exception interface.
+       Exceptions stringify to their message, support boolean overload,
+       and provide throw/rethrow.
+
+     - Added DBIx::Class::Async::Exception::Factory to translate raw
+       DBIx::Class error strings into typed exception objects automatically,
+       including improved diagnostics (relationship name passed as undef
+       column value). Loading Factory is sufficient for all internal
+       use -- it loads the base class and all subclasses as part of its own
+       initialisation.
+
+     - Each exception subclass lives in its own file, individually loadable
+       via use/require and properly indexed on MetaCPAN:
+       - DBIx::Class::Async::Exception::RelationshipAsColumn
+       - DBIx::Class::Async::Exception::NotInStorage
+       - DBIx::Class::Async::Exception::MissingColumn
+       - DBIx::Class::Async::Exception::NoSuchRelationship
+       - DBIx::Class::Async::Exception::AmbiguousColumn
+
+     [ENHANCEMENTS]
+     - Enhanced as_query() to detect and handle empty column selection,
+       generating optimal SQL for each database backend.
+
+     - _call_worker now derives result_class from the payload's source_name
+       at the top of the method, making it available to both the pre-flight
+       validation and all three post-worker error paths without any change
+       to the call signature. Pre-flight validation in _call_worker catches
+       (undef relationship key in create/update hashref) before the request
+       reaches the worker pool, returning a typed Future->fail immediately.
+
+     [TESTS]
+     - Added comprehensive tests for empty select list SQL generation,
+       condition handling, and execution in t/152-sql-consistency.t.
+
+     - Added t/exception.t covering throw/rethrow/overload behaviour for the
+       base class and all subclasses, Factory pattern matching, and passthrough
+       of unrecognised errors. Tests use mock schema/source objects and
+       require no live database connection.
+
+     [DOCUMENTATION]
+     - Documented empty SELECT list support with usage examples and
+       database-specific behavior in search() method POD.
+
 0.61 2026-02-24
      [NEW FEATURES]
      - Added update_query() method to DBIx::Class::Async::ResultSet for

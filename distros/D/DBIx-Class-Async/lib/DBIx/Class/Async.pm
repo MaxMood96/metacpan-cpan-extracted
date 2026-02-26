@@ -1,6 +1,6 @@
 package DBIx::Class::Async;
 
-$DBIx::Class::Async::VERSION   = '0.61';
+$DBIx::Class::Async::VERSION   = '0.62';
 $DBIx::Class::Async::AUTHORITY = 'cpan:MANWAR';
 
 =encoding utf8
@@ -11,7 +11,7 @@ DBIx::Class::Async - Non-blocking, multi-worker asynchronous wrapper for DBIx::C
 
 =head1 VERSION
 
-Version 0.61
+Version 0.62
 
 =head1 DISCLAIMER
 
@@ -167,6 +167,8 @@ use Type::Params qw(compile);
 use Scalar::Util qw(blessed);
 use DBIx::Class::Async::Row;
 use Types::Standard qw(Str ScalarRef HashRef ArrayRef Maybe Int CodeRef);
+
+use DBIx::Class::Async::Exception::Factory;
 
 use constant ASYNC_TRACE => $ENV{ASYNC_TRACE} || 0;
 our $METRICS;
@@ -327,9 +329,48 @@ sub _call_worker {
 
     warn "[PID $$] Bridge - sending '$operation' to worker." if ASYNC_TRACE;
 
+    # ------------------------------------------------------------------
+    # Derive result_class from the payload so it is available throughout
+    # this method without changing the call signature at 13 call sites.
+    #
+    # Every call site passes a payload hashref as $args[0] containing a
+    # source_name key.  We resolve that to a fully-qualified result class
+    # via the schema, which is exactly what the Factory needs for its
+    # relationship-detection logic.
+    # ------------------------------------------------------------------
+    my $result_class;
+    if ( ref($args[0]) eq 'HASH' && $args[0]->{source_name} ) {
+        $result_class = eval {
+            $db->{_schema_class}->source( $args[0]->{source_name} )
+                                ->result_class
+        };
+        # eval failure (unknown source, not yet loaded) leaves $result_class
+        # undef -- both the pre-flight and the Factory handle undef gracefully.
+    }
+
+    # ------------------------------------------------------------------
+    # Pre-flight: catch undef relationship keys before hitting the worker.
+    # Returns a failed Future immediately so the caller's ->then/->catch
+    # chain handles it the same way as any other async error.
+    # ------------------------------------------------------------------
+    if ( $result_class && ref($args[0]) eq 'HASH' ) {
+        my $data_hashref = $args[0]->{data}          # create / populate
+                        // $args[0]->{updates};      # update
+
+        if ( ref($data_hashref) eq 'HASH' ) {
+            my $exception = DBIx::Class::Async::Exception::Factory->validate_or_fail(
+                args         => $data_hashref,
+                schema       => $db->{_schema_class},
+                result_class => $result_class,
+                operation    => $operation,
+            );
+            return Future->fail($exception) if $exception;
+        }
+    }
+
     my $worker = _next_worker($db);
 
-    my $future = $worker->call(
+    my $worker_future = $worker->call(
         args => [
             $db->{_schema_class},
             $db->{_connect_info},
@@ -340,35 +381,53 @@ sub _call_worker {
         ],
     );
 
-    # Use followed_by which handles both nested and non-nested Futures
-    return $future->followed_by(sub {
+    # ------------------------------------------------------------------
+    # Shared helper: translate any raw error (string, DBIC exception, or
+    # already-typed exception) into a DBIx::Class::Async::Exception.
+    # If the error is already one of ours, pass it through untouched.
+    # ------------------------------------------------------------------
+    my $make_exception = sub {
+        my ($raw) = @_;
+        return $raw
+            if ref $raw && $raw->isa('DBIx::Class::Async::Exception');
+        return DBIx::Class::Async::Exception::Factory->make_from_dbic_error(
+            error        => $raw,
+            schema       => $db->{_schema_class},
+            result_class => $result_class,
+            operation    => $operation,
+        );
+    };
+
+    return $worker_future->followed_by(sub {
         my ($f) = @_;
 
-        # Handle failure
-        if ($f->is_failed) {
+        # ------------------------------------------------------------------
+        # Worker future failed outright
+        # ------------------------------------------------------------------
+        if ( $f->is_failed ) {
             $db->{_stats}->{_errors}++;
-            return Future->fail($f->failure);
+            return Future->fail( $make_exception->( $f->failure ) );
         }
 
-        # Get the result
         my $result = ($f->get)[0];
 
-        # If result is itself a Future, flatten it
-        if (Scalar::Util::blessed($result) && $result->isa('Future')) {
+        # ------------------------------------------------------------------
+        # Result is itself a Future -- unwrap it
+        # ------------------------------------------------------------------
+        if ( Scalar::Util::blessed($result) && $result->isa('Future') ) {
             return $result->followed_by(sub {
                 my ($inner_f) = @_;
 
-                if ($inner_f->is_failed) {
+                if ( $inner_f->is_failed ) {
                     $db->{_stats}->{_errors}++;
-                    return Future->fail($inner_f->failure);
+                    return Future->fail( $make_exception->( $inner_f->failure ) );
                 }
 
                 my $inner_result = ($inner_f->get)[0];
 
-                # Check for worker errors
-                if (ref($inner_result) eq 'HASH' && exists $inner_result->{error}) {
+                if ( ref($inner_result) eq 'HASH' && exists $inner_result->{error} ) {
                     $db->{_stats}->{_errors}++;
-                    return Future->fail($inner_result->{error});
+                    return Future->fail( $make_exception->( $inner_result->{error} ) );
                 }
 
                 $db->{_stats}->{_queries}++
@@ -377,11 +436,12 @@ sub _call_worker {
             });
         }
 
-        # Not a nested Future - handle normally
-        # Check for worker errors
-        if (ref($result) eq 'HASH' && exists $result->{error}) {
+        # ------------------------------------------------------------------
+        # Non-Future result -- check for worker error hashref
+        # ------------------------------------------------------------------
+        if ( ref($result) eq 'HASH' && exists $result->{error} ) {
             $db->{_stats}->{_errors}++;
-            return Future->fail($result->{error});
+            return Future->fail( $make_exception->( $result->{error} ) );
         }
 
         $db->{_stats}->{_queries}++

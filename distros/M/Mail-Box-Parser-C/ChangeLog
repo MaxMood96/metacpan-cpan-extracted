@@ -6,7 +6,12 @@
 #!!! number 3.  Use (at least) version 4 for new developments.
 #!!! Convert? See https://github.com/markov2/perl5-Mail-Box/wiki/
 
-version 4.00:
+version 4.01: Wed 25 Feb 12:41:06 CET 2026
+
+	Fixes:
+	- reading did not work at all. [Edoardo Geraci]
+
+version 4.00: Thu 11 Dec 13:39:06 CET 2025
 
 	Changes:
 	- use Mail::Box 4 exception model: use Log::Report.

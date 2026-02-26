@@ -1,0 +1,55 @@
+---
+abstract: 'Build Container archives.'
+author:
+  - 'Adriaan Dens <adri@cpan.org>'
+build_requires:
+  Archive::Tar: '0'
+  Crypt::Digest::SHA256: '0'
+  JSON: '0'
+  Test::More: '0.96'
+configure_requires:
+  Module::Build::Tiny: '0.034'
+dynamic_config: 0
+generated_by: 'Dist::Milla version v1.0.22, Dist::Zilla version 6.037, CPAN::Meta::Converter version 2.150010'
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: Container-Builder
+no_index:
+  directory:
+    - eg
+    - examples
+    - inc
+    - share
+    - t
+    - xt
+requires:
+  Archive::Ar: '0'
+  Archive::Tar: '0'
+  Crypt::Digest::SHA256: '0'
+  Cwd: '0'
+  DPKG::Packages::Parser: '0.03'
+  DateTime: '0'
+  File::Basename: '0'
+  File::Copy: '0'
+  IO::Compress::Gzip: '0'
+  IO::Uncompress::Gunzip: '0'
+  IO::Uncompress::UnXz: '0'
+  JSON: '0'
+  LWP::Protocol::https: '0'
+  LWP::Simple: '0'
+  LWP::UserAgent: '0'
+  Path::Class::Iterator: '0'
+  perl: '5.040'
+resources:
+  bugtracker: https://github.com/adriaandens/Container-Builder/issues
+  homepage: https://github.com/adriaandens/Container-Builder
+  repository: https://github.com/adriaandens/Container-Builder.git
+version: '0.07'
+x_contributors:
+  - 'Adriaan Dens <adriaan.dens@gmail.com>'
+x_generated_by_perl: v5.40.1
+x_serialization_backend: 'YAML::Tiny version 1.76'
+x_spdx_expression: 'Artistic-1.0-Perl OR GPL-1.0-or-later'
+x_static_install: 1

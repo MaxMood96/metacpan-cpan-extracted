@@ -27,6 +27,7 @@ t/deprecated/event_listeners.t
 t/deprecated/method_call.t
 t/events.t
 t/exception.t
+t/lib/My/Actor.pm
 t/lib/My/ArgsListRole.pm
 t/lib/My/ArgsTest.pm
 t/lib/My/AttrRole.pm
@@ -41,6 +42,7 @@ t/method/create_service.t
 t/method/is_meta.t
 t/regression/60_unprefixed_meta.t
 t/service/attributes.t
+t/service/bare.t
 t/service/class_args.t
 t/service/class_version.t
 t/service/config.t

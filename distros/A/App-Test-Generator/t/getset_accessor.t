@@ -53,6 +53,12 @@ sub setter_only {
     return $self;
 }
 
+sub mutator {
+	my $self = shift;
+	$self->{bar} = shift;
+	return $self->{bar};
+}
+
 =head2 agent
 
 Returns UserAgent object
@@ -76,6 +82,29 @@ sub ua2 {
         $self->{ua2} = $p->{ua};
     }
     return $self->{ua2};
+}
+
+=head2 is_tablet
+
+Returns a boolean if the website is being viewed on a tablet such as an iPad.
+
+=cut
+
+sub is_tablet {
+	my $self = shift;
+
+	if(defined($self->{is_tablet})) {
+		return $self->{is_tablet};
+	}
+
+	if($ENV{'HTTP_USER_AGENT'} && ($ENV{'HTTP_USER_AGENT'} =~ /.+(iPad|TabletPC).+/)) {
+		# TODO: add others when I see some nice user_agents
+		$self->{is_tablet} = 1;
+	} else {
+		$self->{is_tablet} = 0;
+	}
+
+	return $self->{is_tablet};
 }
 
 1;
@@ -163,10 +192,9 @@ is(
     'Detected getter-only accessor'
 );
 
-ok(
-    defined($schemas->{getter_only}{output}{type}),
-    'Getter-only returns something'
-);
+# Getter-only should NOT have input at all
+ok((!defined($schemas->{getter_only}{input})), 'Getter takes no input');
+ok(defined($schemas->{getter_only}{output}{type}), 'Getter-only returns something');
 
 is(
     $schemas->{setter_only}{accessor}{type},
@@ -198,4 +226,78 @@ is(
     'Object type propagated from validator'
 );
 
-done_testing;
+# Getter-only should not have phantom parameters
+ok(
+    !exists $schemas->{getter_only}{parameters},
+    'Pure getter does not generate parameter list'
+);
+
+# Getter-only should have medium output confidence
+is(
+    $schemas->{getter_only}{_confidence}{output}{level},
+    'medium',
+    'Pure getter marked medium confidence'
+);
+
+# Setter-only should instantiate object
+is(
+	$schemas->{setter_only}{new},
+	'Weather::Meteo',
+	'Setter requires object instantiation'
+);
+
+# ua (getset) should not contain phantom parameters
+ok(
+	!exists $schemas->{ua}{parameters},
+	'Get/set accessor does not expose synthetic positional parameters'
+);
+
+# ua property name must match method name
+is(
+	$schemas->{ua}{accessor}{property},
+	'ua',
+	'Get/set property name matches method'
+);
+
+# agent should be detected as getter
+is(
+	$schemas->{agent}{accessor}{type},
+	'getter',
+	'Agent method detected as getter'
+);
+
+# agent should not have input
+ok(
+	!exists $schemas->{agent}{input},
+	'Agent getter has no input'
+);
+
+# agent should preserve POD-derived isa
+is(
+	$schemas->{agent}{output}{isa},
+	'LWP::UserAgent',
+	'Agent retains POD-derived isa'
+);
+
+# ua2 should not regress to unknown typing
+isnt(
+	$schemas->{ua2}{output}{type},
+	'unknown',
+	'Validator-backed accessor does not downgrade to unknown type'
+);
+
+# ua2 setter input must be object
+is(
+	$schemas->{ua2}{input}{ua}{type},
+	'object',
+	'ua2 setter input preserved as object'
+);
+
+# Ensure mutator isn't flagged as a getter
+ok(exists $schemas->{mutator});
+ok(!exists $schemas->{mutator}{accessor});
+
+# is_tablet should be detected as getter
+is($schemas->{is_tablet}{accessor}{type}, 'getter', 'is_tablet method detected as getter');
+
+done_testing();

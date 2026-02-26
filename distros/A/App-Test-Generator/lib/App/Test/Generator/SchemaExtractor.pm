@@ -4,6 +4,12 @@ use strict;
 use warnings;
 use autodie qw(:all);
 
+use App::Test::Generator::Model::Method;
+use App::Test::Generator::Analyzer::Complexity;
+use App::Test::Generator::Analyzer::Return;
+use App::Test::Generator::Analyzer::ReturnMeta;
+use App::Test::Generator::Analyzer::SideEffect;
+
 use Carp qw(carp croak);
 use Data::Dumper;	# For debugging
 use PPI;
@@ -14,8 +20,11 @@ use Params::Get;
 use Safe;
 use Scalar::Util qw(looks_like_number);
 use YAML::XS;
+use IPC::Open3;
+use JSON::MaybeXS qw(encode_json decode_json);
+use Symbol qw(gensym);
 
-our $VERSION = '0.28';
+our $VERSION = '0.29';
 
 =head1 NAME
 
@@ -23,7 +32,7 @@ App::Test::Generator::SchemaExtractor - Extract test schemas from Perl modules
 
 =head1 VERSION
 
-Version 0.28
+Version 0.29
 
 =head1 SYNOPSIS
 
@@ -540,7 +549,7 @@ including context sensitivity, error handling conventions, and method chaining p
 Automatically detects methods that return different values based on calling context:
 
     sub get_items {
-        my ($self) = @_;
+        my $self = $_[0];
         return wantarray ? @items : scalar(@items);
     }
 
@@ -548,11 +557,11 @@ Detection captures:
 
 =over 4
 
-=item * C<context_aware> flag - Method uses wantarray
+=item * C<_context_aware> flag - Method uses wantarray
 
-=item * C<list_context> - Type returned in list context (e.g., 'array')
+=item * C<_list_context> - Type returned in list context (e.g., 'array')
 
-=item * C<scalar_context> - Type returned in scalar context (e.g., 'integer')
+=item * C<_scalar_context> - Type returned in scalar context (e.g., 'integer')
 
 =back
 
@@ -582,7 +591,7 @@ Example:
         return;  # Void context
     }
 
-Sets C<void_context> flag and C<type =E<gt> 'void'>.
+Sets C<_void_context> flag and C<type =E<gt> 'void'>.
 
 =head3 Method Chaining Detection
 
@@ -641,7 +650,7 @@ B<Example Analysis:>
 Results in:
 
     _error_return: 'undef'
-    success_failure_pattern: 1
+    _success_failure_pattern: 1
     _error_handling: {
         undef_on_error: ['$id', '$id < 0']
     }
@@ -649,7 +658,7 @@ Results in:
 B<Success/Failure Pattern:>
 
 Methods that return different types for success vs. failure are flagged with
-C<success_failure_pattern>. Common patterns:
+C<_success_failure_pattern>. Common patterns:
 
 =over 4
 
@@ -679,16 +688,16 @@ Enhanced return analysis adds these fields to method schemas:
 
     output:
       type: boolean              # Inferred return type
-      context_aware: 1           # Uses wantarray
-      list_context:
+      _context_aware: 1           # Uses wantarray
+      _list_context:
         type: array
-      scalar_context:
+      _scalar_context:
         type: integer
       _returns_self: 1               # Returns $self
-      void_context: 1            # No meaningful return
+      _void_context: 1            # No meaningful return
       _success_indicator: 1       # Always returns true
       _error_return: undef        # How errors are signaled
-      success_failure_pattern: 1 # Mixed return types
+      _success_failure_pattern: 1 # Mixed return types
       _error_handling:            # Detailed error patterns
         undef_on_error: [...]
         exception_handling: 1
@@ -1093,7 +1102,7 @@ After running:
     my $extractor = App::Test::Generator::SchemaExtractor->new(
         input_file => 'TestHints.pm',
         output_dir => '/tmp',
-        quiet      => 1,
+        quiet    => 1,
     );
 
     my $schemas = $extractor->extract_all;
@@ -1170,7 +1179,7 @@ sub new {
 		confidence_threshold => $params->{confidence_threshold} // 0.5,
 		include_private => $params->{include_private} // 0,	# include _private methods
 		max_parameters => $params->{max_parameters} // 20,	# safety limit
-		strict_pod => _validate_strictness_level($params->{strict_pod}),  # Enable strict POD checking
+		strict_pod => _validate_strictness_level($params->{strict_pod}),	# Enable strict POD checking
 	};
 
 	# Validate input file exists
@@ -1249,6 +1258,7 @@ sub extract_all {
 	$self->{_document} = $document;
 
 	my $package_name = $self->_extract_package_name($document);
+	$self->{_package_name} //= $package_name;
 	$self->_log("Package: $package_name");
 
 	my $methods = $self->_find_methods($document);
@@ -1287,6 +1297,7 @@ sub _extract_package_name {
 		return $package_stmt ? $package_stmt->namespace() : '';
 	}
 	croak('More than one package declaration found') if @$pkgs > 1;
+	$self->{_package_name} //= $pkgs->[0]->namespace();
 	return $pkgs->[0]->namespace();
 }
 
@@ -1401,7 +1412,7 @@ sub _extract_class_methods {
 			$class_end++;
 		}
 
-		next if $depth != 0;  # unbalanced braces, skip class
+		next if $depth != 0;	# unbalanced braces, skip class
 
 		my $class_body = substr($content, $start_pos, $class_end - $start_pos - 1);
 
@@ -1519,7 +1530,7 @@ sub _analyze_method {
 
 	# Analyze different sources
 	my $pod_params = $self->_analyze_pod($pod);
-	my $code_params = $self->_analyze_code($code);
+	my $code_params = $self->_analyze_code($code, $method);
 
 	# Validate POD/code agreement if strict mode is enabled
 	if ($self->{strict_pod}) {
@@ -1541,11 +1552,11 @@ sub _analyze_method {
 			$schema->{_pod_validation_errors} = \@validation_errors;
 
 			# Either croak immediately or log based on configuration
-			if ($self->{strict_pod} == 2) {  # 2 = fatal errors
+			if($self->{strict_pod} == 2) {	# 2 = fatal errors
 				croak("[POD STRICT] $error_msg");
-			} else {  # 1 = warnings
+			} else {	# 1 = warnings
 				carp("[POD STRICT] $error_msg");
-				# Continue with analysis but mark as problematic
+				# Continue with analysis, but mark as problematic
 				$schema->{_pod_disagreement} = 1;
 			}
 		}
@@ -1574,8 +1585,16 @@ sub _analyze_method {
 		);
 	}
 
-	# Analyze output/return values
-	$schema->{output} = $self->_analyze_output($method->{pod}, $method->{body}, $method->{name});
+# ----------------------------------------
+# Legacy Output Analysis (unchanged)
+# ----------------------------------------
+
+$schema->{output} = $self->_analyze_output(
+    $method->{pod},
+    $method->{body},
+    $method->{name}
+);
+
 
 	# Detect accessor methods
 	$self->_detect_accessor_methods($method, $schema);
@@ -1698,6 +1717,63 @@ sub _analyze_method {
 		$schema->{_low_confidence} = 1
 	}
 
+	# ----------------------------------------
+	# Non-invasive reasoning layer
+	# ----------------------------------------
+
+	my $method_model = App::Test::Generator::Model::Method->new(
+		name => $method->{name},
+		source => $method->{body},
+	);
+
+	my $return_analyzer = App::Test::Generator::Analyzer::Return->new();
+	$return_analyzer->analyze($method_model);
+
+	# Let model learn from finalized schema
+	if ($schema->{output}) {
+		$method_model->absorb_legacy_output($schema->{output});
+	}
+
+	$method_model->resolve_return_type();
+	$method_model->resolve_classification();
+	$method_model->resolve_confidence();
+
+	# Attach only metadata
+	$schema->{_model} = {
+		classification => $method_model->classification,
+		confidence => $method_model->confidence,
+	};
+
+	# ----------------------------------------
+	# Return Meta Analysis (Non-invasive)
+	# ----------------------------------------
+
+	my $meta = App::Test::Generator::Analyzer::ReturnMeta->new();
+	my $analysis = $meta->analyze($schema);
+
+	$schema->{_analysis}{stability_score} = $analysis->{stability_score};
+	$schema->{_analysis}{consistency_score} = $analysis->{consistency_score};
+	$schema->{_analysis}{risk_flags} = $analysis->{risk_flags};
+
+	# ----------------------------------------
+	# Side Effect Analysis (Non-invasive)
+	# ----------------------------------------
+
+	my $se = App::Test::Generator::Analyzer::SideEffect->new();
+
+	my $effects = $se->analyze($method);
+
+	$schema->{_analysis}{side_effects} = $effects;
+
+	# ----------------------------------------
+	# Complexity Analysis (Non-invasive)
+	# ----------------------------------------
+
+	my $cx = App::Test::Generator::Analyzer::Complexity->new();
+	my $complexity = $cx->analyze($method);
+
+	$schema->{_analysis}{complexity} = $complexity;
+
 	return $schema;
 }
 
@@ -1729,13 +1805,24 @@ sub _detect_accessor_methods {
 	my $code = $body;
 	$code =~ s/\s+/ /g;
 
+	# If a method touches more than one $self->{...}, it’s not an accessor.
+	my %fields_seen;
+	while ($code =~ /\$self\s*->\s*\{\s*['"]?([^}'"]+)['"]?\s*\}/g) {
+		$fields_seen{$1}++;
+	}
+	if (keys(%fields_seen) > 1) {
+		$self->_log("  Skipping accessor detection: multiple fields accessed");
+		return;
+	}
+
 	# -------------------------------
 	# Getter/Setter combo
 	# -------------------------------
 	if (
+		# Require get/set of the same property
 		$code =~ /\$self\s*->\s*\{\s*['"]?([^}'"]+)['"]?\s*\}\s*=\s*shift\s*;/ &&
-		$code =~ /return\s+\$self\s*->\s*\{/ &&
-		$code =~ /if\s*\(\s*\@_\s*(?:>\s*1)?\s*\)/
+		$code =~ /return\s+\$self\s*->\s*\{\s*['"]?\Q$1\E['"]?\s*\}\s*;/ &&
+		$code =~ /if\s*\(\s*\@_/
 	) {
 		my $property = $1;
 
@@ -1752,9 +1839,8 @@ sub _detect_accessor_methods {
 
 		$self->_log("  Detected getter/setter accessor for property: $property");
 
-		$schema->{input} = {
-			value => { type => 'string', optional => 1 },
-		};
+		$schema->{input} ||= { value => { type => 'string', optional => 1 } };
+
 		$schema->{input_style} = 'hash';
 
 		$schema->{_confidence}{input} = {
@@ -1780,10 +1866,9 @@ sub _detect_accessor_methods {
 				};
 			}
 		}
-	} elsif (
-		$code =~ /if\s*\(\s*\@_\s*\)/ &&
-		$code =~ /\$self\s*->\s*\{\s*['"]?([^}'"]+)['"]?\s*\}\s*=/ &&
-		$code =~ /return\s+\$self\s*->\s*\{/
+	} elsif($code =~ /if\s*\(\s*(?:\@_|[\$]\w+)/ &&
+	    $code =~ /\$self\s*->\s*\{\s*['"]?([^}'"]+)['"]?\s*\}\s*=\s*(?:shift|\@_|\$_\[\d+\]|\$\w+)\b/x &&
+	    $code =~ /return\b/
 	) {
 		# -------------------------------
 		# Getter/Setter (validated input)
@@ -1797,7 +1882,33 @@ sub _detect_accessor_methods {
 		}
 		if ($code =~ /validate_strict/) {
 			push @{ $schema->{_confidence}{input}{factors} }, 'Setter uses Params::Validate::Strict';
-		}
+		} else {
+			# ---------------------------------------
+			# Detect object input via blessed($arg)
+			# ---------------------------------------
+			if ($code =~ /blessed\s*\(\s*\$(\w+)\s*\)/) {
+				my $param = $1;
+
+				$self->_log("  Detected object input via blessed(\$$param)");
+
+				$schema->{input} = {
+					$param => {
+						type => 'object',
+						optional => 1,
+					}
+				};
+
+				$schema->{_confidence}{input} = {
+					level   => 'high',
+					factors => ['Input validated by Scalar::Util::blessed'],
+				};
+			} else {
+				# fallback ONLY if nothing known
+				$schema->{input} ||= {
+					value => { type => 'string', optional => 1 },
+				};
+			}
+		};
 		$schema->{accessor} = {
 			type => 'getset',
 			property => $property,
@@ -1823,35 +1934,45 @@ sub _detect_accessor_methods {
 				};
 			}
 		}
-		my %input = $schema->{input};
-		if(scalar keys(%input) > 1) {
-			croak(__PACKAGE__, ': A getset accessor function can have at most one argument');
+		if(ref($schema->{input}) eq 'HASH') {
+			if(scalar keys(%{$schema->{input}}) > 1) {
+				croak(__PACKAGE__, ': A getset accessor function can have at most one argument');
+			}
 		}
-		$schema->{input}{$property}->{position} = 0;
-	} elsif($code =~ /(?:return\s+)?\$self\s*->\s*\{\s*['"]?([^}'"]+)['"]?\s*\}\s*;/) {
+		$schema->{input}->{$property}->{position} = 0;
+	} elsif ($code =~ /return\s+\$self\s*->\s*\{\s*['"]?([^}'"]+)['"]?\s*\}\s*;/) {
 		# -------------------------------
 		# Getter
 		# -------------------------------
 		my $property = $1;
 
-		$schema->{accessor} = {
-			type => 'getter',
-			property => $property,
-		};
+		# Don't flag mutators like
+		# sub foo {
+		    # my $self = shift;
+		    # $self->{bar} = shift;
+		    # return $self->{bar};
+		# }
+		# Only exclude if the property is being set FROM EXTERNAL INPUT
+		if($code !~ /\$self\s*->\s*\{\s*['"]?\Q$property\E['"]?\s*\}\s*=\s*(?:shift|\$\w+\s*=\s*shift|\@_|\$_\[\d+\])/) {
+			my @returns = $code =~ /return\b/g;
+			my @self_returns = $code =~ /return\s+\$self\s*->\s*\{\s*['"]?\Q$property\E['"]?\s*\}/g;
+			# it's a getter
+			if (scalar(@returns) == scalar(@self_returns)) {
+				# all returns are returning $self->{$property}, so it's a getter
+				$schema->{accessor} = {
+					type => 'getter',
+					property => $property,
+				};
 
-		$self->_log("  Detected getter accessor for property: $property");
+				$self->_log("  Detected getter accessor for property: $property");
 
-		$schema->{input} = {};
-		$schema->{input_style} = 'none';
-		$schema->{_confidence}{input} = {
-			level => 'high',
-			factors => ['Detected getter method'],
-		};
-		my %input = $schema->{input};
-		if(scalar keys(%input) > 1) {
-			croak(__PACKAGE__, ': A getter accessor function can have at most one argument');
+				$schema->{_confidence}{output} = {
+					level => 'high',
+					factors => ['Detected getter method'],
+				};
+				delete $schema->{input};
+			}
 		}
-		$schema->{input}{$property}->{position} = 0;
 	} elsif (
 		$code =~ /return\s+\$self\b/ &&
 		$code =~ /\$self\s*->\s*\{\s*['"]?([^}'"]+)['"]?\s*\}\s*=\s*\$(\w+)\s*;/
@@ -1878,47 +1999,79 @@ sub _detect_accessor_methods {
 			level => 'high',
 			factors => ['Detected setter/accessor method'],
 		};
-	}
-
-	if($schema->{accessor}{type} && $schema->{accessor}{type} =~ /setter|getset/ && $schema->{input}) {
-		for my $param (keys %{ $schema->{input} }) {
-			my $in = $schema->{input}{$param};
-
-			if ($in->{type} && ($in->{type} eq 'object')) {
-				$schema->{output} = {
-					type => 'object',
-					($in->{isa} ? (isa => $in->{isa}) : ()),
-				};
-
-				$schema->{_confidence}{output} = {
-					level => 'high',
-					factors => ['Output type propagated from setter input'],
-				};
+		if($schema->{output}{_returns_self}) {
+			if($schema->{output}{type} ne 'object') {
+				croak 'Setter can not return data other than $self';
 			}
+			if($schema->{output}{isa} ne $self->{_package_name}) {
+				croak 'Setter can not return data other than $self';
+			}
+		} elsif(scalar(keys %{$schema->{output}}) != 0) {
+			$self->_analysis_error(
+				method  => $method->{name},
+				message => "Setter cannot return data",
+			);
 		}
 	}
 
-	if($schema->{accessor}{type} && ($schema->{accessor}{type} =~ /getter|getset/) &&
-	   ((!defined($schema->{output}{type})) || ($schema->{output}{type} eq 'string'))) {
-		if (my $pod = $method->{pod}) {
-			# POD says "UserAgent object"
-			if ($pod =~ /\bUser[- ]?Agent\b.*\bobject\b/i) {
-				$schema->{output}{type} = 'object';
-				$schema->{output}{isa} = 'LWP::UserAgent';
+	if(exists($schema->{accessor})) {
+		if($schema->{accessor}{type} && $schema->{accessor}{type} =~ /setter|getset/ && $schema->{input}) {
+			for my $param (keys %{ $schema->{input} }) {
+				my $in = $schema->{input}{$param};
 
-				push @{ $schema->{_confidence}{output}{factors} }, 'POD indicates UserAgent object';
+				if ($in->{type} && ($in->{type} eq 'object')) {
+					$schema->{output} = {
+						type => 'object',
+						($in->{isa} ? (isa => $in->{isa}) : ()),
+					};
 
-				$schema->{_confidence}{output}{level} = 'high';
+					$schema->{_confidence}{output} = {
+						level => 'high',
+						factors => ['Output type propagated from setter input'],
+					};
+				}
+			}
+		}
+
+		if($schema->{accessor}{type} && $schema->{accessor}{property} && ($schema->{accessor}{type} =~ /getter|getset/) &&
+		   ((!defined($schema->{output}{type})) || ($schema->{output}{type} eq 'string'))) {
+			if (my $pod = $method->{pod}) {
+				# POD says "UserAgent object"
+				if ($pod =~ /\bUser[- ]?Agent\b.*\bobject\b/i) {
+					$schema->{output}{type} = 'object';
+					$schema->{output}{isa} = 'LWP::UserAgent';
+
+					push @{ $schema->{_confidence}{output}{factors} }, 'POD indicates UserAgent object';
+
+					$schema->{_confidence}{output}{level} = 'high';
+				}
 			}
 		}
 	}
+}
+
+sub _analysis_error {
+	my ($self, %args) = @_;
+
+	my $method = $args{method} // 'UNKNOWN';
+	my $msg    = $args{message} // 'Analysis error';
+
+	my $module = $self->{_package_name} // 'UNKNOWN';
+	my $file   = $self->{input_file} // 'UNKNOWN';
+
+	croak join "\n",
+		$msg,
+		"  Module: $module",
+		"  Method: $method",
+		"  File:   $file",
+	'';
 }
 
 # Look at the parameter validation that may exist in the code, and infer the input schema from that
 sub _extract_validator_schema {
 	my ($self, $code) = @_;
 
-	for my $extractor ('_extract_pvs_schema', '_extract_pv_schema', '_extract_moosex_params_schema') {
+	for my $extractor ('_extract_pvs_schema', '_extract_pv_schema', '_extract_moosex_params_schema', '_extract_type_params_schema') {
 		my $res = $self->$extractor($code);
 		return $res if ($res && ref($res) eq 'HASH' && keys %{ $res->{input} || {} });
 	}
@@ -2021,9 +2174,9 @@ sub _extract_pvs_schema {
 	}) or return;
 
 	for my $call (@$calls) {
-		my $list = $call->parent;
+		my $list = $call->parent();
 		while ($list && !$list->isa('PPI::Structure::List')) {
-			$list = $list->parent;
+			$list = $list->parent();
 		}
 		if(!defined($list)) {
 			my $next = $call->next_sibling();
@@ -2183,25 +2336,6 @@ sub _parse_pv_call {
 	return ($first_arg, $hash_str);
 }
 
-# TODO: Type::Params this may not be doable
-# sub _extract_type_params_schema {
-	# my ($self, $code) = @_;
-#
-	# my $doc = $self->_ppi($code) or return;
-#
-	# my $calls = $doc->find(sub {
-		# $_[1]->isa('PPI::Token::Word') && $_[1]->content eq 'compile'
-	# }) or return;
-#
-	# # Conservative: treat Dict[...] as hash input
-	# return {
-		# input_style => 'hash',
-		# input => {},
-		# _notes => ['Type::Params detected (schema opaque)'],
-		# _confidence => { input => 'medium' },
-	# };
-# }
-
 sub _extract_moosex_params_schema
 {
 	my ($self, $code) = @_;
@@ -2215,7 +2349,7 @@ sub _extract_moosex_params_schema
 	}) or return;
 
 	for my $call (@$calls) {
-		my $list = $call->parent;
+		my $list = $call->parent();
 		while ($list && !$list->isa('PPI::Structure::List')) {
 			$list = $list->parent;
 		}
@@ -2310,6 +2444,237 @@ sub _normalize_validator_schema {
 	return {
 		input_style => 'hash',
 		input => \%input,
+	};
+}
+
+# Type::Param support
+# The declaration isn't in $code, it's in a 'signature_for' declaration elsewhere in the file
+# So need to parse $self->{_document} to find the 'signature_for $method =>'
+sub _extract_type_params_schema {
+	my ($self, $code) = @_;
+
+	my $function = $self->_extract_function_name($code) or return;
+
+	my $doc = $self->{_document} or return;
+	my $stmt = $self->_find_signature_statement($doc, $function) or return;
+
+	my $signature_expr = $self->_extract_signature_expression($stmt, $function) or return;
+
+	my $meta = $self->_compile_signature_isolated($function, $signature_expr) or return;
+
+	return $self->_build_schema_from_meta($meta);
+}
+
+sub _extract_function_name {
+	my ($self, $code) = @_;
+	return $1 if $code =~ /^\s*sub\s+([a-zA-Z0-9_]+)/;
+	return;
+}
+
+sub _find_signature_statement {
+	my ($self, $doc, $function) = @_;
+
+	my $statements = $doc->find(
+		sub {
+			$_[1]->isa('PPI::Statement') && $_[1]->content =~ /^\s*signature_for\b/
+		}
+	) or return;
+
+	foreach my $stmt (@$statements) {
+		my $content = $stmt->content;
+		if ($content =~ /^\s*signature_for\s+\Q$function\E\b/) {
+			return $stmt;
+		}
+	}
+
+	return;
+}
+
+sub _extract_signature_expression {
+	my ($self, $stmt, $function) = @_;
+
+	my $content = $stmt->content;
+
+	if ($content =~ /^\s*signature_for\s+\Q$function\E\s*=>\s*(.+?);?\s*$/s) {
+		return $1;
+	}
+
+	return;
+}
+
+# Build a payload to run in a clean Perl process
+sub _compile_signature_isolated {
+	my ($self, $function, $signature_expr) = @_;
+
+	# Remove comments
+	$signature_expr =~ s/#.*$//mg;
+
+	# Reject obviously dangerous constructs
+	if ($signature_expr =~ /\b(?:system|exec|open|fork|require|do|eval|qx)\b/) {
+		die 'Unsafe signature expression';
+	}
+
+	if ($signature_expr =~ /[`{};]/) {
+		die "Unsafe signature expression";
+	}
+
+	my $payload = <<'PERL';
+use strict;
+use warnings;
+use Type::Params -sigs;
+use Types::Common -types;
+use JSON::MaybeXS;
+
+# Stub sub so Perl can parse it
+sub FUNCTION_NAME {}
+
+# Create the Type::Params signature object
+my $sig = signature_for FUNCTION_NAME => SIGNATURE_EXPR;
+
+# Extract parameters
+my @sig_params = @{ $sig->parameters || [] };
+my $pos = 0;
+my @params;
+
+# if ($sig->method) {
+    # The $self value
+    # push @params, {
+        # name     => 'arg0',
+        # optional => 0,
+        # position => $pos++,
+    # };
+# }
+
+for my $p (@sig_params) {
+	push @params, {
+		name     => "arg$pos",
+		optional => $p->optional ? 1 : 0,
+		position => $pos,
+		type => $p->type->name
+	};
+	$pos++;
+}
+
+# Extract return type
+my $returns;
+if (my $r = $sig->returns_scalar) {
+	$returns = {
+		context => 'scalar',
+		type    => $r ? $r->name : 'unknown',
+	};
+} elsif ($r = $sig->returns_list) {
+	$returns = {
+		context => 'list',
+		type    => $r ? $r->name : 'unknown',
+	};
+}
+
+print encode_json({
+	parameters => \@params,
+	returns    => $returns,
+});
+PERL
+
+	# Substitute function name and signature expression
+	$payload =~ s/FUNCTION_NAME/$function/g;
+	$payload =~ s/SIGNATURE_EXPR/$signature_expr/;
+
+	my $compartment = Safe->new();
+	$compartment->permit_only(qw(:base_core :base_mem :base_orig :load));
+	if(my $sig = $compartment->reval($payload)) {
+		return $sig;
+	}
+
+	# Run in an isolated Perl process
+	my ($wtr, $rdr, $err) = (undef, undef, gensym);
+	local %ENV;
+	eval {
+		use BSD::Resource;
+		setrlimit(RLIMIT_AS, 50_000_000, 50_000_000);
+	};
+
+	my $pid = open3($wtr, $rdr, $err, $^X, '-T');
+
+	print $wtr $payload;
+	close $wtr;
+
+	local $SIG{ALRM} = sub { croak 'Signature compile timeout' };
+	alarm 3;	# 3 second limit
+
+	my $stdout = do { local $/; <$rdr> };
+	my $stderr = do { local $/; <$err> };
+
+	alarm 0;
+
+	waitpid($pid, 0);
+
+	if ($stderr && length $stderr) {
+		croak "Error compiling signature:\n$stderr";
+	}
+
+	return decode_json($stdout);
+}
+
+sub _build_schema_from_meta {
+	my ($self, $meta) = @_;
+
+	my %type_map = (
+		Num => 'number',
+		Int => 'integer',
+		Str => 'string',
+		Bool => 'boolean',
+		Object  => 'object',
+		ArrayRef => 'array',
+		HashRef  => 'object',
+	);
+
+	my $input;
+	my $position = 0;
+	my $confidence = 'high';
+	my @notes = ('Type::Params detected');
+
+	foreach my $p (@{ $meta->{parameters} || [] }) {
+		my $type = $type_map{ $p->{type} } // 'string';
+
+		if (!exists $type_map{$p->{type}}) {
+			push @notes, "Unknown type $p->{type}, defaulting to string";
+			$confidence = 'medium';
+		}
+
+		$input->{"arg$position"} = {
+			type => $type,
+			position => $position,
+			optional => $p->{optional} ? 1 : 0,
+		};
+
+		$position++;
+	}
+
+	my $output;
+
+	if (my $ret = $meta->{returns}) {
+		my $type = $type_map{ $ret->{type} } // 'string';
+
+		if (!exists $type_map{$ret->{type}}) {
+			push @notes, "Unknown return type $ret->{type}, defaulting to string";
+			$confidence = 'medium';
+		}
+
+		$output = {
+			type => $type,
+			"_$ret->{context}_context" => { type => $type },
+		};
+	}
+
+	return {
+		input  => $input,
+		output => $output,
+		style  => 'hash',
+		source => 'validator',
+		_notes => \@notes,
+		_confidence => {
+			input => $confidence,
+		},
 	};
 }
 
@@ -2802,6 +3167,7 @@ sub _analyze_output_from_code
 				# If we found the new() method, the object we're returning should be a sensible one
 				if($self->{_document} && (my $package_stmt = $self->{_document}->find_first('PPI::Statement::Package'))) {
 					$output->{isa} = $package_stmt->namespace();
+					$self->{_package_name} //= $output->{isa};
 				}
 			} else {
 				$output->{isa} = $1;
@@ -2827,6 +3193,7 @@ sub _analyze_output_from_code
 				my $pkg = $self->{_document}->find_first('PPI::Statement::Package');
 				$output->{isa} = $pkg ? $pkg->namespace : 'UNKNOWN';
 				$self->_log('  OUTPUT: Object blessed into __PACKAGE__: ' . ($output->{isa} || 'UNKNOWN'));
+				$self->{_package_name} //= $output->{isa};
 			}
 		} elsif ($code =~ /return\s*\(([^)]+)\)/) {
 			my $content = $1;
@@ -2840,6 +3207,7 @@ sub _analyze_output_from_code
 				my $pkg = $self->{_document}->find_first('PPI::Statement::Package');
 				$output->{isa} = $pkg ? $pkg->namespace : 'UNKNOWN';
 				$self->_log('  OUTPUT: Object chained into __PACKAGE__: ' . ($output->{isa} || 'UNKNOWN'));
+				$self->{_package_name} //= $output->{isa};
 			}
 		}
 
@@ -3058,7 +3426,7 @@ sub _detect_list_context {
 
 	# Check for wantarray usage
 	if ($code =~ /wantarray/) {
-		$output->{context_aware} = 1;
+		$output->{_context_aware} = 1;
 		$self->_log('  OUTPUT: Method uses wantarray - context sensitive');
 
 		# Debug: show what we're matching against
@@ -3071,8 +3439,8 @@ sub _detect_list_context {
 			my ($list_return, $scalar_return) = ($1, $2);
 			$self->_log("  DEBUG list (with parens): [$list_return], scalar: [$scalar_return]");
 
-			$output->{list_context} = $self->_infer_type_from_expression($list_return);
-			$output->{scalar_context} = $self->_infer_type_from_expression($scalar_return);
+			$output->{_list_context} = $self->_infer_type_from_expression($list_return);
+			$output->{_scalar_context} = $self->_infer_type_from_expression($scalar_return);
 			$self->_log('  OUTPUT: Detected context-dependent returns (parenthesized)');
 		} elsif ($code =~ /wantarray\s*\?\s*([^:]+?)\s*:\s*([^;]+)/s) {
 			# Pattern 2: wantarray ? @array : scalar (no parens around list)
@@ -3083,15 +3451,15 @@ sub _detect_list_context {
 
 			$self->_log("  DEBUG list (no parens): [$list_return], scalar: [$scalar_return]");
 
-			$output->{list_context} = $self->_infer_type_from_expression($list_return);
-			$output->{scalar_context} = $self->_infer_type_from_expression($scalar_return);
+			$output->{_list_context} = $self->_infer_type_from_expression($list_return);
+			$output->{_scalar_context} = $self->_infer_type_from_expression($scalar_return);
 			$self->_log('  OUTPUT: Detected context-dependent returns (non-parenthesized)');
 		} elsif ($code =~ /return[^;]*unless\s+wantarray.*?return\s*\(([^)]+)\)/s) {
 			# Pattern 3: return unless wantarray; return (list);
-			$output->{list_context} = { type => 'array' };
+			$output->{_list_context} = { type => 'array' };
 			$self->_log('  OUTPUT: Detected list context return after wantarray check');
-			}
 		}
+	}
 
 	# Detect explicit list returns (multiple values in parentheses)
 	# Avoid false positives from function calls
@@ -3110,7 +3478,7 @@ sub _detect_list_context {
 			# Multiple values returned
 			unless ($output->{type} && $output->{type} eq 'boolean') {
 				$output->{type} = 'array';
-				$output->{list_return} = $comma_count + 1;
+				$output->{_list_return} = $comma_count + 1;
 				$self->_log('  OUTPUT: Returns list of ' . ($comma_count + 1) . ' values');
 			}
 		}
@@ -3171,7 +3539,7 @@ sub _detect_void_context {
 
 	# Void context indicators
 	if ($no_value_returns > 0 && $no_value_returns == $total_returns) {
-		$output->{void_context} = 1;
+		$output->{_void_context} = 1;
 		$output->{type} = 'void';  # This should override any previous type
 		$self->_log('  OUTPUT: All returns are empty - void context method');
 	} elsif ($true_returns > 0 && $true_returns == $total_returns && $total_returns >= 1) {
@@ -3213,6 +3581,7 @@ sub _detect_chaining_pattern {
 			if ($self->{_document}) {
 				my $pkg = $self->{_document}->find_first('PPI::Statement::Package');
 				$output->{isa} = $pkg ? $pkg->namespace : 'UNKNOWN';
+				$self->{_package_name} //= $output->{isa};
 			}
 
 			$self->_log("  OUTPUT: Chainable method - returns \$self ($self_returns/$total_returns returns)");
@@ -3280,12 +3649,12 @@ sub _detect_error_conventions {
 	my $has_value = grep { !/^\s*undef\s*$/ && !/^\s*$/ } @all_returns;
 
 	if ($has_undef && $has_value && scalar(@all_returns) >= 2) {
-		$output->{success_failure_pattern} = 1;
+		$output->{_success_failure_pattern} = 1;
 		$self->_log("  OUTPUT: Uses success/failure return pattern");
 	}
 
 	# Store error conventions in output
-	if (keys %error_patterns) {
+	if(scalar(keys %error_patterns)) {
 		$output->{_error_handling} = \%error_patterns;
 
 		# Determine primary error convention
@@ -3306,6 +3675,8 @@ sub _detect_error_conventions {
 		if ($error_patterns{exception_handling}) {
 			$self->_log("  OUTPUT: Has exception handling");
 		}
+	} else {
+		delete $output->{_error_handling};
 	}
 }
 
@@ -3496,7 +3867,7 @@ Looks for common validation patterns:
 
 # Enhanced _analyze_code with more pattern detection
 sub _analyze_code {
-	my ($self, $code) = @_;
+	my ($self, $code, $method) = @_;
 
 	my %params;
 
@@ -3506,7 +3877,7 @@ sub _analyze_code {
 	# Extract parameter names from various signature styles
 	$self->_extract_parameters_from_signature(\%params, $code);
 
-	$self->_extract_defaults_from_code(\%params, $code);
+	$self->_extract_defaults_from_code(\%params, $code, $method);
 
 	# Infer types from defaults
 	foreach my $param (keys %params) {
@@ -4531,7 +4902,7 @@ sub _merge_field_declarations {
 }
 
 sub _extract_defaults_from_code {
-	my ($self, $params, $code) = @_;
+	my ($self, $params, $code, $method) = @_;
 
 	# Pattern 1: my $param = value;
 	while ($code =~ /my\s+\$(\w+)\s*=\s*([^;]+);/g) {
@@ -4540,7 +4911,7 @@ sub _extract_defaults_from_code {
 
 		$params->{$param}{_default} = $self->_clean_default_value($value, 1);
 		$params->{$param}{optional} = 1;
-	$self->_log("  CODE: $param has default: " . $self->_format_default($params->{$param}{_default}));
+		$self->_log("  CODE: $param has default: " . $self->_format_default($params->{$param}{_default}));
 	}
 
 	# Pattern 2: $param = value unless defined $param;
@@ -4627,6 +4998,54 @@ sub _extract_defaults_from_code {
 		$params->{$param}{_default} = {};
 		$params->{$param}{optional} = 1;
 		$self->_log("  CODE: $param has hashref default (||=)");
+	}
+
+	# Fallback: extract parameters from classic Perl body styles
+	# Only run if signature extraction found nothing
+	# TODO:  On constructors, use $class to help to determine the output type
+	if (!keys %{$params}) {
+		my $position = 0;
+
+		# Style 1: my ($a, $b) = @_;
+		while ($code =~ /my\s*\(\s*([^)]+)\s*\)\s*=\s*\@_/g) {
+			my @vars = $1 =~ /\$(\w+)/g;
+			foreach my $var (@vars) {
+				if(($var eq 'class') && ($position == 0) && ($method->{name} eq 'new')) {
+					# Don't include "class" in the variable names of the constructor
+					delete $params->{'class'};
+				} elsif(($var eq 'self') && ($position == 0) && ($method->{name} ne 'new')) {
+					# Don't include "self" in the variable names
+					delete $params->{'self'};
+				} else {
+					$params->{$var} ||= { position => $position++ };
+					$self->_log("  CODE: $var extracted from \@_ list assignment");
+				}
+			}
+		}
+
+		# Style 2: my $x = shift;
+		while ($code =~ /my\s+\$(\w+)\s*=\s*shift\b/g) {
+			my $var = $1;
+			if(($var eq 'class') && ($position == 0) && ($method->{name} eq 'new')) {
+				# Don't include "class" in the variable names of the constructor
+				delete $params->{'class'};
+			} elsif(($var eq 'self') && ($position == 0) && ($method->{name} ne 'new')) {
+				# Don't include "self" in the variable names
+				delete $params->{'self'};
+			} else {
+				$params->{$var} ||= { position => $position++ };
+				$self->_log("  CODE: $var is extracted from shift");
+			}
+		}
+
+		# Style 3: my $x = $_[0];
+		while ($code =~ /my\s+\$(\w+)\s*=\s*\$_\[(\d+)\]/g) {
+			my ($var, $index) = ($1, $2);
+			if(($var ne 'class') || ($position > 0) || ($method->{name} ne 'new')) {
+				$params->{$var} ||= { position => $index };
+				$self->_log("  CODE: $var is extracted from \$_\[$index\]");
+			}
+		}
 	}
 }
 
@@ -5031,15 +5450,15 @@ sub _calculate_output_confidence {
 	}
 
 	# Context-aware returns
-	if ($output->{context_aware}) {
+	if ($output->{_context_aware}) {
 		$score += 20;
 		push @factors, "Context-aware return (wantarray) (+20)";
 
-		if ($output->{list_context}) {
-			push @factors, "  List context: $output->{list_context}{type}";
+		if ($output->{_list_context}) {
+			push @factors, "  List context: $output->{_list_context}{type}";
 		}
-		if ($output->{scalar_context}) {
-			push @factors, "  Scalar context: $output->{scalar_context}{type}";
+		if ($output->{_scalar_context}) {
+			push @factors, "  Scalar context: $output->{_scalar_context}{type}";
 		}
 	}
 
@@ -5050,7 +5469,7 @@ sub _calculate_output_confidence {
 	}
 
 	# Success/failure pattern
-	if ($output->{success_failure_pattern}) {
+	if ($output->{_success_failure_pattern}) {
 		$score += 10;
 		push @factors, 'Success/failure pattern detected (+10)';
 	}
@@ -5062,7 +5481,7 @@ sub _calculate_output_confidence {
 	}
 
 	# Void context
-	if ($output->{void_context}) {
+	if ($output->{_void_context}) {
 		$score += 20;
 		push @factors, "Void context method (no meaningful return) (+20)";
 	}
@@ -5628,9 +6047,10 @@ sub _write_schema {
 	if ($self->{_document}) {
 		my $package_stmt = $self->{_document}->find_first('PPI::Statement::Package');
 		$package_name = $package_stmt ? $package_stmt->namespace : '';
+		$self->{_package_name} //= $package_name;
 	}
 
-	# Clean up schema for output - use the format expected by test generator
+	# Clean up schema for output - use the format expected by App::Test::Generator::Template
 	my $output = {
 		function => $method_name,
 		module => $package_name,
@@ -5644,18 +6064,32 @@ sub _write_schema {
 	};
 
 	# Process input parameters with advanced type handling
-	if($schema->{'input'} && (scalar(keys %{$schema->{'input'}}))) {
-		$output->{'input'} = {};
+	if($schema->{'input'}) {
+		if(scalar(keys %{$schema->{'input'}})) {
+			$output->{'input'} = {};
 
-		foreach my $param_name (keys %{$schema->{'input'}}) {
-			my $param = $schema->{'input'}{$param_name};
-			my $cleaned_param = $self->_serialize_parameter_for_yaml($param);
-			$output->{'input'}{$param_name} = $cleaned_param;
+			foreach my $param_name (keys %{$schema->{'input'}}) {
+				my $param = $schema->{'input'}{$param_name};
+				if($param->{name}) {
+					my $name = delete $param->{name};
+					if($name ne $param_name) {
+						# Sanity check
+						croak("BUG: Parameter name - expected $param_name, got $name");
+					}
+				}
+				my $cleaned_param = $self->_serialize_parameter_for_yaml($param);
+				$output->{'input'}{$param_name} = $cleaned_param;
+			}
+		} else {
+			delete $output->{input};
 		}
 	}
 
 	# Process output
 	if($schema->{'output'} && (scalar(keys %{$schema->{'output'}}))) {
+		if((ref($schema->{output}{_error_handling}) eq 'HASH') && (scalar(keys %{$schema->{output}{_error_handling}}) == 0)) {
+			delete $schema->{output}{_error_handling};
+		}
 		$output->{'output'} = $schema->{'output'};
 	}
 
@@ -5688,7 +6122,7 @@ sub _write_schema {
 		$output->{relationships} = $schema->{relationships};
 	}
 
-	if($schema->{accessor}) {
+	if($schema->{accessor} && scalar(keys %{$schema->{accessor}})) {
 		$output->{accessor} = $schema->{accessor};
 	}
 
@@ -5838,20 +6272,16 @@ sub _serialize_parameter_for_yaml {
 	}
 
 	# Handle advanced type mappings
-	my $semantic = $param->{semantic};
-
-	if ($semantic) {
+	if(my $semantic = $param->{semantic}) {
 		if ($semantic eq 'datetime_object') {
 			# DateTime objects: test generator needs to know how to create them
 			$cleaned{type} = 'object';
 			$cleaned{isa} = $param->{isa} || 'DateTime';
 			$cleaned{_note} = 'Requires DateTime object';
-
 		} elsif ($semantic eq 'timepiece_object') {
 			$cleaned{type} = 'object';
 			$cleaned{isa} = $param->{isa} || 'Time::Piece';
 			$cleaned{_note} = 'Requires Time::Piece object';
-
 		} elsif ($semantic eq 'date_string') {
 			# Date strings: provide regex pattern
 			$cleaned{type} = 'string';
@@ -5965,6 +6395,7 @@ sub _needs_object_instantiation {
 	# Get the current package name
 	my $package_stmt = $doc->find_first('PPI::Statement::Package');
 	my $current_package = $package_stmt ? $package_stmt->namespace : 'UNKNOWN';
+	$self->{_package_name} //= $current_package;
 
 	# Initialize result structure
 	my $result = {
@@ -6571,6 +7002,7 @@ sub _get_class_for_instance_method {
 	my $package_stmt = $doc->find_first('PPI::Statement::Package');
 	return 'UNKNOWN_PACKAGE' unless $package_stmt;
 	my $package_name = $package_stmt->namespace;
+	$self->{_package_name} //= $package_name;
 
 	# Check if the current package has a 'new' method
 	my $has_new = $doc->find(sub {
@@ -6957,7 +7389,15 @@ sub _validate_pod_code_agreement {
 			next;
 		}
 
-		if (!exists $pod_params->{$param} && exists $code_params->{$param}) {
+		if(!exists $pod_params->{$param} && exists $code_params->{$param}) {
+			if(($method_name eq 'new') && ($param eq 'class')) {
+				# $class is usually not documented in new()
+				next;
+			}
+			if(($method_name ne 'new') && ($param eq 'self')) {
+				# $self is usually not documented in a method
+				next;
+			}
 			push @errors, "Parameter '\$$param' found in code but not documented in POD";
 			next;
 		}
@@ -7008,7 +7448,7 @@ sub _validate_strictness_level {
 	return 1 if $val =~ /^(1|warn|warning)$/i;
 	return 2 if $val =~ /^(2|fatal|die|error)$/i;
 
-	croak "Invalid value for --strict-pod: '$val' (use off|warn|fatal)";
+	croak("Invalid value for --strict-pod: '$val' (use off|warn|fatal)");
 }
 
 sub _types_are_compatible {
@@ -7020,11 +7460,11 @@ sub _types_are_compatible {
 	# Define compatibility matrix
 	my %compatible_types = (
 		'integer' => ['number', 'scalar'],
-		'number'  => ['scalar'],
-		'string'  => ['scalar'],
-		'scalar'  => ['string', 'integer', 'number'],
+		'number' => ['scalar'],
+		'string' => ['scalar'],
+		'scalar' => ['string', 'integer', 'number'],
 		'arrayref' => ['array'],
-		'hashref'  => ['hash'],
+		'hashref' => ['hash'],
 	);
 
 	# Check if code_type is compatible with pod_type
@@ -7037,7 +7477,7 @@ sub _types_are_compatible {
 		return grep { $_ eq $pod_type } @$allowed;
 	}
 
-	return 0;  # Not compatible
+	return 0;	# Not compatible
 }
 
 sub generate_pod_validation_report {
@@ -7103,3 +7543,4 @@ assistance of AI.
 =cut
 
 1;
+

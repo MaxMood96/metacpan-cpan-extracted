@@ -5,11 +5,11 @@ use 5.006;
 use strict;
 use warnings;
 
-use Crypt::SysRandom ();
+use Crypt::SysRandom 0.007 ();
 
-# RECOMMEND PREREQ:  Crypt::SysRandom::XS
+# RECOMMEND PREREQ:  Crypt::SysRandom::XS 0.010
 
-our $VERSION = '0.001000';
+our $VERSION = '0.002001';
 
 # ABSTRACT: use system randomness for generating session ids
 
@@ -42,7 +42,7 @@ Apache::Session::Generate::Random - use system randomness for generating session
 
 =head1 VERSION
 
-version 0.001000
+version 0.002001
 
 =head1 SYNOPSIS
 

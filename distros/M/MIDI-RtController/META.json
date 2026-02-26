@@ -39,7 +39,7 @@
             "IO::Async::Loop" : "0",
             "IO::Async::Routine" : "0",
             "IO::Async::Timer::Countdown" : "0",
-            "MIDI::RtMidi::FFI::Device" : "0",
+            "MIDI::RtMidi::FFI::Device" : "0.10",
             "Moo" : "2",
             "namespace::clean" : "0",
             "perl" : "v5.36.0",
@@ -51,6 +51,7 @@
             "File::Spec" : "0",
             "IO::Handle" : "0",
             "IPC::Open3" : "0",
+            "MIDI::RtMidi::FFI::Device" : "0.10",
             "Test::More" : "0.88",
             "perl" : "v5.36.0",
             "strict" : "0",
@@ -67,7 +68,7 @@
          "web" : "https://github.com/ology/MIDI-RtController"
       }
    },
-   "version" : "0.0802",
+   "version" : "0.0803",
    "x_Dist_Zilla" : {
       "perl" : {
          "version" : "5.040000"

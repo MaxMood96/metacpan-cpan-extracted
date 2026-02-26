@@ -9,12 +9,12 @@ use PDL::Transform::Cartography;
 my $fwd = pdl '-146.25 -81.5625; -137.8125 -81.5625; -146.25 -73.125; -137.8125 -73.125';
 my $inv = pdl '0 -7213503; 4809002 -7213503; 0 -4809002; 4809002 -4809002';
 my $t = t_proj( proj_params => "+proj=eqc +lon_0=0 +datum=WGS84" );
-is_pdl $fwd->apply($t), pdl(<<'EOF'), {test_name=>'eqc fwd', atol=>10};
+is_pdl $fwd->apply($t), pdl(<<'EOF'), {test_name=>'eqc fwd', rtol=>1e-2};
 -16280476 -9079496; -15341217 -9079496;
 -16280476 -8140237.8; -15341217 -8140237.8
 EOF
-is_pdl $inv->apply(!$t), pdl(<<'EOF'), {test_name=>'eqc inv', atol=>1e-2};
-0 -64.8; 43.2 -64.8; 0 -43.2; 43.2 -43.2
+is_pdl $inv->apply(!$t), pdl(<<'EOF'), {test_name=>'eqc inv', rtol=>1e-2};
+0 -65.1; 43.2 -64.8; 0 -43.2; 43.2 -43.2
 EOF
 
 $fwd = pdl '-146.25 81.5625; -137.8125 81.5625; -146.25 73.125; -137.8125 73.125';

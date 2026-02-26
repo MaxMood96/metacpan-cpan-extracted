@@ -1,5 +1,19 @@
 Revision history for App-Test-Generator
 
+0.29
+	Added mutation testing
+	Added guided testing to extract-schemas
+	Some routines were incorrectly labelled as getter routines
+	Added more edge cases
+	Added fallback to extract parameters from classic Perl body styles
+	Added Type::Param support (https://github.com/nigelhorne/App-Test-Generator/issues/4)
+	Getter routines take no arguments
+	Fixed string testing when both min and max are given
+	Don't give $class or $self as parameters
+	No input/output no longer croaks, because there are now a few tests that can be run
+	Add a basic hashref to mandatory args
+	Use UUID::Tiny and Readonly::Values::Boolean
+
 0.28	Mon Feb  9 19:54:59 EST 2026
 	Latest test dashboard
 	Some getter/setter routines were missed

@@ -3,7 +3,7 @@ use 5.008005;
 use strict;
 use warnings;
 
-our $VERSION = "1.10";
+our $VERSION = "1.11";
 
 1;
 __END__
@@ -15,6 +15,11 @@ __END__
 =head1 NAME
 
 HTTP::Session2 - HTTP session management
+
+=head1 DEPRECATION NOTICE
+
+This module is B<DEPRECATED> and no longer maintained.
+Please do not use this module for new projects.
 
 =head1 SYNOPSIS
 

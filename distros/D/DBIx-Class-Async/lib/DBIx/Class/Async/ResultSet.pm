@@ -1,6 +1,6 @@
 package DBIx::Class::Async::ResultSet;
 
-$DBIx::Class::Async::ResultSet::VERSION   = '0.61';
+$DBIx::Class::Async::ResultSet::VERSION   = '0.62';
 $DBIx::Class::Async::ResultSet::AUTHORITY = 'cpan:MANWAR';
 
 =head1 NAME
@@ -9,7 +9,7 @@ DBIx::Class::Async::ResultSet - Non-blocking resultset proxy with Future-based e
 
 =head1 VERSION
 
-Version 0.61
+Version 0.62
 
 =head1 SYNOPSIS
 
@@ -651,12 +651,90 @@ sub as_query {
         $bridge->{_metadata_schema} = $schema_class->connect('dbi:NullP:');
     }
 
+    # Handle empty select => [] by generating SQL manually
+    if (exists $self->{_attrs}{select} &&
+        ref $self->{_attrs}{select} eq 'ARRAY' &&
+        @{$self->{_attrs}{select}} == 0) {
+
+        return $self->_generate_empty_select_query();
+    }
+
     # SQL is generated lazily; warnings often trigger here or at as_query()
     my $real_rs = $bridge->{_metadata_schema}
                          ->resultset($self->{_source_name})
                          ->search($self->{_cond}, $self->{_attrs});
 
     return $real_rs->as_query;
+}
+
+=head2 as_subselect_rs
+
+    my $subquery_rs = $rs->as_subselect_rs;
+
+Returns a new ResultSet with the current query wrapped as a subselect in
+the FROM clause. This is useful for applying further operations on top of
+an already-filtered or aggregated result set.
+
+    # Get active users, then find those over 18 in the subquery
+    my $active_users = $schema->resultset('User')->search({ active => 1 });
+    my $adult_active = $active_users->as_subselect_rs->search({ age => { '>' => 18 }});
+
+B<Note:> Unlike upstream L<DBIx::Class::ResultSet>, this implementation
+correctly preserves the column list from the original ResultSet.
+When you select a subset of columns, the subselect will only include those
+columns, not all columns from the table.
+
+    # This works correctly - subselect only has id and name
+    my $rs = $schema->resultset('User')
+                    ->search({}, { columns => ['id', 'name'] })
+                    ->as_subselect_rs;
+
+    # Further searches on the subselect can only reference id and name
+    my $filtered = $rs->search({ name => { -like => 'A%' }});
+
+This is particularly useful for:
+
+=over 4
+
+=item * Creating derived tables for complex queries
+
+=item * Applying LIMIT in a subquery before joining
+
+=item * Building multi-stage aggregations
+
+=item * Optimising queries with window functions
+
+=back
+
+=cut
+
+sub as_subselect_rs {
+    my $self = shift;
+
+    my $subquery = $self->as_query;
+    my $columns  = $self->{_attrs}{columns} || $self->{_attrs}{select};
+
+    my %new_attrs = (
+        alias => 'me',
+        from  => { me => $subquery },    # Key: alias the subquery
+    );
+
+    if ($columns) {
+        $new_attrs{columns} = $columns;  # Key: preserve columns
+    }
+
+    return bless({
+        _schema_instance => $self->{_schema_instance},
+        _async_db        => $self->{_async_db},
+        _source_name     => $self->{_source_name},
+        _result_class    => $self->{_result_class},
+        _cond            => {},
+        _attrs           => \%new_attrs,
+        _rows            => undef,
+        _pos             => 0,
+        _is_prefetched   => 0,
+        _pager           => undef,
+    }, ref($self));
 }
 
 =head2 clear_cache
@@ -2405,6 +2483,35 @@ deduplicated.
 
 This is a synchronous, non-I/O operation that clones the current state.
 
+B<Empty SELECT Lists>
+
+As of version 0.62, empty column selection is supported via C<select =E<gt> []>.
+This generates database-appropriate SQL for checking row existence without
+fetching column data:
+
+    my $rs = $schema->resultset('User')->search(
+        { active => 1  },
+        { select => [] },
+    );
+
+    my ($sql, @bind) = $rs->as_query;
+    # PostgreSQL: SELECT FROM users WHERE active = ?
+    # Others:     SELECT 1 FROM users WHERE active = ?
+
+This is useful for existence checks with minimal overhead, though L</count>
+is typically more appropriate for simple counting operations:
+
+    # Check if any matching rows exist (minimal data fetch)
+    my $result   = $rs->search({}, { select => [] })->all->get;
+    my $has_rows = @$result > 0;
+
+    # More efficient for simple counting
+    my $count = $rs->count->get;
+
+B<Note:> The PostgreSQL C<SELECT FROM> syntax is a PostgreSQL-specific
+optimisation. Other databases use C<SELECT 1 FROM> which is portable
+and equally efficient.
+
 =cut
 
 sub search {
@@ -2430,7 +2537,7 @@ sub search {
     }
     elsif (ref $cond) {
         # Blessed object or unrecognised ref type — warn and treat as no-op
-        Carp::carp(
+        carp(
             "search() received unrecognised condition type: "
             . ref($cond)
             . " — ignoring"
@@ -2439,7 +2546,7 @@ sub search {
     }
     else {
         # Plain scalar — not valid as a DBIx::Class condition
-        Carp::croak(
+        croak(
             "search() received a plain scalar as condition: '$cond' "
             . "— did you mean \\\"$cond\" for literal SQL?"
         );
@@ -3836,6 +3943,38 @@ sub _merge_cond {
     return $new        if  $existing_empty && !$new_empty;
     return $existing   if !$existing_empty &&  $new_empty;
     return { -and => [ $existing, $new ] };
+}
+
+sub _generate_empty_select_query {
+    my $self = shift;
+
+    my $bridge  = $self->{_async_db};
+    my $storage = $bridge->{_metadata_schema}->storage;
+    my $source  = $bridge->{_metadata_schema}->source($self->{_source_name});
+
+    # Build WHERE clause if conditions exist
+    my $cond = $self->{_cond} || {};
+    my ($where_sql, @bind) = $storage->sql_maker->where($cond);
+
+    # Get table name (handles joins, subqueries, etc.)
+    my $table = $source->from;
+
+    # Detect database type for optimal SQL generation
+    my $driver = eval { $storage->sqlt_type } || '';
+
+    my $sql;
+    if ($driver =~ /^(PostgreSQL|Pg)$/i) {
+        # PostgreSQL natively supports column-less SELECT
+        $sql = \"SELECT FROM $table$where_sql";
+    }
+    else {
+        # For other databases, use SELECT 1 as minimal portable query
+        # SQLite, MySQL, Oracle, etc. all support this
+        $sql = \"SELECT 1 FROM $table$where_sql";
+    }
+
+    # Return in same format as real as_query
+    return wantarray ? ($sql, @bind) : \[$sql, @bind];
 }
 
 =head1 AUTOMATIC CACHE SAFETY

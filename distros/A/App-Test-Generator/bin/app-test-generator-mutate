@@ -1,0 +1,477 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+
+use Getopt::Long;
+use JSON::MaybeXS;
+use File::Find;
+use Time::HiRes qw(time);
+use Pod::Usage;
+
+use App::Test::Generator::Mutator;
+
+=pod
+
+=head1 NAME
+
+app-test-generator-mutate - Run mutation testing against a Perl test suite
+
+=head1 SYNOPSIS
+
+    app-test-generator-mutate [options]
+
+    app-test-generator-mutate --lib lib --tests t
+    app-test-generator-mutate --file lib/My/Module.pm
+    app-test-generator-mutate --json mutation.json
+    app-test-generator-mutate --min-score 75
+
+=head1 QUICK START
+
+    app-test-generator-mutate --lib lib --min-score 85 --json mutation.json --html mutation_html
+    open mutation_html/index.html
+
+=head2 Numeric Boundary Mutants
+
+Kill Numeric Boundary Mutants first,
+these are the easiest wins.
+For example,
+C<NUM_BOUNDARY_1295>
+means something like C<if ($x > 10)> became C<if ($x >= 10)> or C<if ($x > 9)>.
+If that survived, it means, there is a missing edge value.
+Numeric mutations are important because they reveal missing edge coverage.
+This example means line 1295.
+
+So if that line contains something like this:
+
+  if(((scalar keys %input) == 1) && exists($input{'type'}) && !ref($input{'type'})) {
+
+You need to add a test where
+
+=over 4
+
+=item * %input contains more than one key
+
+=item * One of them is type
+
+=item * And behavior must be different
+
+=back
+
+For example, if you have a test with
+
+  %input = ( type => 'string' )
+
+add a test which sets
+
+  %input = (
+    type => 'string',
+    something_else => 'value'
+  )
+
+=head2 Conditional Inversions
+
+Then kill Conditional Inversions, for example, C<COND_INV_1186>,
+where C<unless (-f $file)> became C<if (-f $file)>.
+If that survives,
+test did not assert the negative case.
+
+Focus by file,
+if one file contributes 200 survivors, that's the weakest module.
+
+Frequently re-run.
+The loop should be: add 5-10 targeted tests, re-run mutation tool, watch score climb, repeat.
+
+=head1 DESCRIPTION
+
+This command-line tool performs mutation testing on a Perl codebase.
+
+It scans one or more C<.pm> files, generates code mutations using
+L<App::Test::Generator::Mutator>, and runs the project's test suite
+against each mutated version inside an isolated workspace.
+
+For each generated mutant:
+
+=over 4
+
+=item *
+
+The mutant is applied in a temporary workspace.
+
+=item *
+
+The mutated file is syntax-checked.
+
+=item *
+
+The test suite is executed using C<prove>.
+
+=item *
+
+If the tests fail, the mutant is considered I<killed>.
+
+=item *
+
+If the tests pass, the mutant is considered I<survived>.
+
+=back
+
+A mutation score is then calculated:
+
+    (killed / total) * 100
+
+Mutation testing measures the effectiveness of a test suite. A higher
+mutation score indicates that the tests are better at detecting behavioral
+changes in the code.
+
+=head1 OPTIONS
+
+=head2 --lib <dir>
+
+Directory containing Perl modules to mutate.
+
+Defaults to C<lib>.
+
+=head2 --file <file>
+
+Mutate a single file instead of scanning the entire C<--lib> directory.
+
+=head2 --tests <dir>
+
+Directory containing test files.
+
+Defaults to C<t>.
+
+=head2 --min-score <int>
+
+Minimum acceptable mutation score (percentage).
+
+If the final score is below this value, the program exits with a
+non-zero status.
+
+=head2 --json <file>
+
+Write mutation results to the specified JSON file.
+
+The output structure:
+
+    {
+        score    => "85.32",
+        total    => 120,
+        killed   => 102,
+        survived => [ ... mutant IDs ... ]
+    }
+
+=head2 --fail-fast
+
+(Reserved for future use.)
+
+=head2 --timeout <seconds>
+
+(Reserved for future use.)
+
+=head2 --verbose
+
+Print progress information.
+
+=head2 --quiet
+
+Suppress final summary output.
+
+=head1 EXIT CODES
+
+=over 4
+
+=item = 0
+
+Success and mutation score meets minimum threshold.
+
+=item = 1
+
+Mutation score below C<--min-score>.
+
+=item = 2
+
+Baseline test suite failed before mutation testing began.
+
+=item = 3
+
+Invalid command-line options.
+
+=back
+
+=head1 WORKFLOW
+
+The tool performs the following steps:
+
+=over 4
+
+=item 1.
+
+Collect target files (either a single file or all C<.pm> files under C<--lib>).
+
+=item 2.
+
+Run baseline tests to ensure the suite passes before mutation.
+
+=item 3.
+
+Generate mutants for each file.
+
+=item 4.
+
+Apply each mutant in isolation and re-run the test suite.
+
+=item 5.
+
+Calculate and report mutation statistics.
+
+=back
+
+=encoding utf-8
+
+=head1 WORKFLOW DIAGRAM
+
+The mutation testing process follows this execution flow:
+
+    ┌───────────────────────────────┐
+    │ Start                         │
+    └───────────────┬───────────────┘
+                    │
+                    ▼
+    ┌───────────────────────────────┐
+    │ Collect Target Files          │
+    │  --file OR scan --lib/*.pm    │
+    └───────────────┬───────────────┘
+                    │
+                    ▼
+    ┌───────────────────────────────┐
+    │ Run Baseline Tests            │
+    │ prove -l t                    │
+    └───────────────┬───────────────┘
+                    │
+         Baseline OK? ── No ──► Exit (code 2)
+                    │
+                   Yes
+                    │
+                    ▼
+    ┌───────────────────────────────┐
+    │ For Each File                │
+    └───────────────┬───────────────┘
+                    │
+                    ▼
+    ┌───────────────────────────────┐
+    │ Generate Mutants             │
+    │ (conditional flips, etc.)    │
+    └───────────────┬───────────────┘
+                    │
+                    ▼
+        ┌───────────────────────────────┐
+        │ For Each Mutant              │
+        └───────────────┬───────────────┘
+                        │
+                        ▼
+        ┌───────────────────────────────┐
+        │ Prepare Workspace            │
+        │ (isolated temp directory)    │
+        └───────────────┬───────────────┘
+                        │
+                        ▼
+        ┌───────────────────────────────┐
+        │ Apply Mutant                 │
+        └───────────────┬───────────────┘
+                        │
+                        ▼
+        ┌───────────────────────────────┐
+        │ Syntax Check                 │
+        │ perl -c mutated_file.pm      │
+        └───────────────┬───────────────┘
+                        │
+              Compiles? ── No ──► Skip Mutant
+                        │
+                       Yes
+                        │
+                        ▼
+        ┌───────────────────────────────┐
+        │ Run Test Suite               │
+        │ prove t                      │
+        └───────────────┬───────────────┘
+                        │
+          Tests Fail? ── Yes ──► Killed++
+                        │
+                       No
+                        │
+                        ▼
+                   Survived++
+                        │
+                        ▼
+        ┌───────────────────────────────┐
+        │ Repeat for Next Mutant       │
+        └───────────────┬───────────────┘
+                        │
+                        ▼
+    ┌───────────────────────────────┐
+    │ Calculate Mutation Score      │
+    │ (killed / total) * 100        │
+    └───────────────┬───────────────┘
+                    │
+                    ▼
+    ┌───────────────────────────────┐
+    │ Print Report / Write JSON     │
+    └───────────────┬───────────────┘
+                    │
+                    ▼
+                 Finish
+
+=cut
+
+my %opt = (
+	lib        => 'lib',
+	tests      => 't',
+	min_score  => 0,
+	fail_fast  => 0,
+	verbose    => 0,
+	quiet      => 0,
+	man	=> 0,
+	help	=> 0,
+	html => 0,
+);
+
+GetOptions(
+	'lib=s'        => \$opt{lib},
+	'file=s'       => \$opt{file},
+	'tests=s'      => \$opt{tests},
+	'min-score=i'  => \$opt{min_score},
+	'json=s'       => \$opt{json},
+	'fail-fast'    => \$opt{fail_fast},
+	'timeout=i'    => \$opt{timeout},
+	'verbose'      => \$opt{verbose},
+	'quiet'        => \$opt{quiet},
+	'help|h'          => \$opt{help},
+	'html=s'	=> \$opt{html},
+	'man|m'           => \$opt{man},
+) or pod2usage(3);
+
+pod2usage(-exitval => 0, -verbose => 1) if $opt{help};
+pod2usage(-exitval => 0, -verbose => 2) if $opt{man};
+
+# -------------------------
+# Collect Files
+# -------------------------
+
+my @files;
+
+if ($opt{file}) {
+	push @files, $opt{file};
+} else {
+    find(
+        sub {
+            push @files, $File::Find::name if /\.pm$/;
+        },
+        $opt{lib}
+    );
+}
+
+# -------------------------
+# Verify baseline tests
+# -------------------------
+
+print "Running baseline tests...\n" if $opt{verbose};
+
+if (system("prove -l $opt{tests}") != 0) {
+	print STDERR "Baseline tests failed.\n";
+	exit 2;
+}
+
+# -------------------------
+# Run Mutation Testing
+# -------------------------
+
+my $total = 0;
+my $killed = 0;
+my @survivors;
+my @killed_mutants;
+
+for my $file (@files) {
+	my $mutator = App::Test::Generator::Mutator->new(
+		file => $file,
+		lib_dir => $opt{lib},
+	);
+
+	my @mutants = $mutator->generate_mutants();
+
+	for my $mutant (@mutants) {
+		my $workspace = $mutator->prepare_workspace();
+
+		$mutator->apply_mutant($mutant);
+
+		local $ENV{PERL5LIB} = "$workspace:$workspace/lib" . ($ENV{PERL5LIB} ? ":$ENV{PERL5LIB}" : '');
+
+		my $compile = system($^X, '-c', File::Spec->catfile($workspace, $file));
+		next if $compile != 0;	# skip invalid mutants
+
+		my $survived = (system('prove', $opt{tests}) == 0);
+
+		$total++;
+
+		if ($survived) {
+			push @survivors, {
+				id => $mutant->id(),
+				line => $mutant->line(),
+				file => $file,
+				description => $mutant->description(),
+				status => 'Survived'
+			};
+		} else {
+			$killed++;
+			push @killed_mutants, {
+				id => $mutant->id(),
+				line => $mutant->line(),
+				file => $file,
+				description => $mutant->description(),
+				status => 'Killed'
+			}
+		}
+
+		# workspace auto-destroyed when scope ends
+	}
+}
+
+# -------------------------
+# Report
+# -------------------------
+
+my $score = $total ? sprintf('%.2f', ($killed / $total) * 100) : 100;
+
+unless ($opt{quiet}) {
+	print "\nMutation Score: $score%\n";
+	print "Total: $total\n";
+	print "Killed: $killed\n";
+	print "Survived: ", scalar(@survivors), "\n";
+}
+
+if ($opt{json}) {
+    open my $fh, '>', $opt{json} or die $!;
+    print $fh encode_json({
+        score      => $score,
+        total      => $total,
+        killed     => $killed,
+        survived   => \@survivors,
+	killed => \@killed_mutants,
+    });
+    close $fh;
+}
+
+if ($opt{html}) {
+	require App::Test::Generator::Report::HTML;
+	App::Test::Generator::Report::HTML->generate($opt{json}, $opt{html});
+}
+
+exit 1 if $score < $opt{min_score};
+exit 0;
+
+=head1 AUTHOR
+
+Nigel Horne
+
+=cut

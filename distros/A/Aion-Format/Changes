@@ -1,5 +1,9 @@
 Revision history for Perl extension Aion::Str::Util
 
+0.1.1 2026-02-25T19:22:33Z
+
+    - Devel::Size to recommends. It on perl3.8 not installed
+
 0.1.0 2025-11-29T19:06:17Z
 
     - p and np added with simple options

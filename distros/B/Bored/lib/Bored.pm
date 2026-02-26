@@ -2,7 +2,7 @@ package Bored;
 
 use 5.008003;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 use base 'Import::Export';
 
@@ -28,6 +28,10 @@ sub tortured {
 
 sub waiting {
 	return 'patiently';
+}
+
+sub topdown {
+	return 'bottom up';
 }
 
 1;

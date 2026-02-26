@@ -21,7 +21,7 @@ my %WriteMakefileArgs = (
   "MIN_PERL_VERSION" => "5.006",
   "NAME" => "Apache::Session::Generate::Random",
   "PREREQ_PM" => {
-    "Crypt::SysRandom" => 0,
+    "Crypt::SysRandom" => "0.007",
     "strict" => 0,
     "warnings" => 0
   },
@@ -30,7 +30,7 @@ my %WriteMakefileArgs = (
     "Module::Metadata" => "1.000015",
     "Test::More" => 0
   },
-  "VERSION" => "0.001000",
+  "VERSION" => "0.002001",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -38,7 +38,7 @@ my %WriteMakefileArgs = (
 
 
 my %FallbackPrereqs = (
-  "Crypt::SysRandom" => 0,
+  "Crypt::SysRandom" => "0.007",
   "ExtUtils::MakeMaker" => "7.22",
   "File::Spec" => 0,
   "Module::Metadata" => "1.000015",

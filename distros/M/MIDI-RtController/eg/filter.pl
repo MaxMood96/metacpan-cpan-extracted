@@ -1,6 +1,7 @@
 #!/usr/bin/env perl
 
 # Iterate up and down through the modwheel (CC#01) range.
+# nb: This assumes the output synth is already playing.
 
 use strict;
 use warnings;

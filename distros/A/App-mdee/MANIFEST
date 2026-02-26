@@ -14,6 +14,7 @@ lib/App/Greple/md.pm
 lib/App/mdee.pm
 minil.toml
 script/mdee
+share/theme/fatchap.sh
 share/theme/hashed.sh
 share/theme/nomark.sh
 share/theme/warm.sh

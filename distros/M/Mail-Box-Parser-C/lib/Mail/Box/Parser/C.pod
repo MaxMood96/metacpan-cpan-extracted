@@ -26,7 +26,7 @@ the message is supplied as file-handle.  In all other cases,
 MailBox will use L<Mail::Box::Parser::Perl>.
 
 B<Be aware:>
-This module versions 4.0 and up is not fully compatible with older releases:
+This module versions 4.00 and up is not fully compatible with older releases:
 mainly the exception handling has changed.  When you need to upgrade, please
 read F<https://github.com/markov2/perl5-Mail-Box/wiki/>
 B<Version 3 is still maintained> and may see new releases as well.
@@ -47,6 +47,37 @@ Extends L<"Constructors" in Mail::Box::Parser|Mail::Box::Parser/"Constructors">.
 
 Inherited, see L<Mail::Box::Parser/"METHODS">
 
+ -Option           --Defined in       --Default
+  file                                  undef
+  filename                              <required>
+  fix_header_errors  Mail::Box::Parser  false
+  mode                                  'r'
+  trusted            Mail::Box::Parser  false
+
+=over 2
+
+=item file => $filehandle
+
+Any IO::File or C<GLOB> C<$filehandle> which can be used to read
+the data from.  In case this option is specified, the C<filename> is
+informational only.
+
+=item filename => FILENAME
+
+The name of the file to be read.
+
+=item fix_header_errors => BOOLEAN
+
+=item mode => $mode
+
+File open C<$mode>, which defaults to C<'r'>, which means `read-only'.
+See C<perldoc -f open> for possible modes.  Only applicable
+when no C<file> is specified.
+
+=item trusted => BOOLEAN
+
+=back
+
 =back
 
 =head2 Attributes
@@ -64,9 +95,23 @@ single mail folder access.
 
 Inherited, see L<Mail::Box::Parser/"Attributes">
 
+=item $obj-E<gt>B<file>()
+
+Only returns a value when passed as instantiation parameter.  Otherwise,
+the used file-handle stays in 'C-space'.  The connection between C and
+Perl is via the L<boxnr()|Mail::Box::Parser::C/"Attributes">.
+
+=item $obj-E<gt>B<filename>()
+
+Returns the name of the file this parser is working on.
+
 =item $obj-E<gt>B<fixHeaderErrors>( [BOOLEAN] )
 
 Inherited, see L<Mail::Box::Parser/"Attributes">
+
+=item $obj-E<gt>B<openMode>()
+
+Z<>
 
 =item $obj-E<gt>B<trusted>()
 
@@ -104,9 +149,27 @@ Inherited, see L<Mail::Box::Parser/"Parsing">
 
 Inherited, see L<Mail::Box::Parser/"Parsing">
 
+=item $obj-E<gt>B<start>(%options)
+
+Start the parser by opening a file.
+
+ -Option--Default
+  file    undef
+
+=over 2
+
+=item file => FILEHANDLE|undef
+
+The file is already open, for instance because the data must be read
+from STDIN.
+
+=back
+
 =item $obj-E<gt>B<stop>()
 
-Inherited, see L<Mail::Box::Parser/"Parsing">
+Stop the parser, which will include a close of the file.  The lock on the
+folder will not be removed (is not the responsibility of the parser).
+Improves base, see L<Mail::Box::Parser/"Parsing">
 
 =back
 
@@ -151,6 +214,10 @@ not.  Probably you should investigate this and probably inform the author
 of the package.
 Cast by C<notImplemented()>
 
+=item Error: filename or handle required to create a parser.
+
+Cast by C<new()>
+
 =item Error: parser $type does not extend $pkg.
 
 Cast by C<defaultParserType()>
@@ -173,14 +240,14 @@ Cast by C<readHeader()>
 
 =head1 SEE ALSO
 
-This module is part of Mail-Box-Parser-C version 4.00,
-built on December 11, 2025. Website: F<http://perl.overmeer.net/CPAN/>
+This module is part of Mail-Box-Parser-C version 4.01,
+built on February 25, 2026. Website: F<http://perl.overmeer.net/CPAN/>
 
 =head1 LICENSE
 
 For contributors see file ChangeLog.
 
-This software is copyright (c) 2002-2025 by Mark Overmeer.
+This software is copyright (c) 2002-2026 by Mark Overmeer.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

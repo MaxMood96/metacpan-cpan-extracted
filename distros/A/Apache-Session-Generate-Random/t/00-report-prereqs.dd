@@ -21,7 +21,6 @@ do { my $x = {
                                       'Test2::V0' => '0',
                                       'Test::CPAN::Changes' => '0.19',
                                       'Test::CVE' => '0.11',
-                                      'Test::CleanNamespaces' => '0.15',
                                       'Test::DistManifest' => '0',
                                       'Test::EOF' => '0',
                                       'Test::EOL' => '0',
@@ -45,10 +44,10 @@ do { my $x = {
                     },
        'runtime' => {
                       'recommends' => {
-                                        'Crypt::SysRandom::XS' => '0'
+                                        'Crypt::SysRandom::XS' => '0.010'
                                       },
                       'requires' => {
-                                      'Crypt::SysRandom' => '0',
+                                      'Crypt::SysRandom' => '0.007',
                                       'perl' => '5.006',
                                       'strict' => '0',
                                       'warnings' => '0'

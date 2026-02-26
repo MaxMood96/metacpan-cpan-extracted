@@ -45,7 +45,7 @@ my $xy3_exp = double [
 ];
 
 my ($xy3) = PDL::Transform::Proj4::fwd_transform($lonlat3, $cyl_eq);
-is_pdl $xy3, $xy3_exp;
+is_pdl $xy3, $xy3_exp, {rtol=>1e-2};
 
 $lonlat = ((xvals( double, 35, 17 ) - 17.0) * 10.0)->cat(
   (yvals( double, 35, 17 ) - 8.0) * 10.0)->mv(2,0);

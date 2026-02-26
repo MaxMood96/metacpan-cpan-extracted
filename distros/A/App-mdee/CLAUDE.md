@@ -153,6 +153,28 @@ The `--base-color` option default is empty (no override). Base color is determin
 2. `default[base_color]` in config.sh
 3. Theme's `[base]` key (e.g., `<RoyalBlue>=y25` for light)
 
+### The `--config` Option
+
+The `--config` option sets config parameters via `Getopt::EX::Config`. It uses `%!` (hash with callback) to preserve spaces in values, accumulating entries in `_config[]`.
+
+Routing logic:
+- Keys existing in `theme_light` (`base`, `file`, `file_format`) → consumed by bash, applied to both theme arrays
+- Everything else → appended to `md_config[]`, forwarded to md module as config params
+
+```bash
+for _entry in "${_config[@]}"; do
+    _key=${_entry%%=*} _val=${_entry#*=}
+    if [[ -v theme_light[$_key] ]]; then
+        theme_light[$_key]="$_val"
+        theme_dark[$_key]="$_val"
+    else
+        md_config+=("$_entry")
+    fi
+done
+```
+
+Color labels (h1, bold, etc.) go to md_config and are handled by the md module's `Getopt::EX::Config` (pre-declared with `undef` default). Priority: default colors → config params → `--cm`.
+
 ## Implementation Notes
 
 ### Pipeline Architecture
@@ -178,7 +200,7 @@ flowchart LR
     end
 ```
 
-Each stage is controlled by `--style` and individual `--[no-]fold`, `--[no-]table`, `--[no-]rule`, `--[no-]nup` options. Fold and table processing are handled within the greple `-Mmd` module (not as separate pipeline stages).
+Each stage is controlled by `--style` and individual `--[no-]fold`, `--[no-]table`, `--[no-]trim`, `--[no-]rule`, `--[no-]nup` options. Fold and table processing are handled within the greple `-Mmd` module (not as separate pipeline stages).
 
 ### Style System
 
@@ -206,16 +228,18 @@ mdee -f --fold file.md      # filter + fold override
 Style defaults are applied after option parsing using a sentinel value:
 
 ```bash
-[        style | s  :          # output style      ]=nup
-[       filter | f   !         # filter mode       ]=
-[        plain | p   !         # plain mode        ]=
-[         fold |               # line folding      ]=_
-[        table |               # table formatting  ]=_
-[          nup |               # use nup           ]=_
-[         rule |               # table rule lines  ]=_
+[        style | s  :       # output style      ]=nup
+[       filter | f   !      # filter mode       ]=
+[        plain | p   !      # plain mode        ]=
+[         fold |            # line folding      ]=_
+[        table |            # table formatting  ]=_
+[         trim |            # trim table cell spaces]=1
+[          nup |            # use nup           ]=_
+[         rule |            # table rule lines  ]=_
 ```
 
 - `fold`/`table`/`nup`/`rule` default to sentinel `_` (not user-set)
+- `trim` defaults to `1` (always on unless explicitly `--no-trim`), not style-dependent
 - After getoptlong.sh, style defaults are applied only to sentinel values
 - Explicit `--fold`/`--no-fold` sets the value to `1`/empty, overriding style
 - `filter()` and `plain()` callbacks set `$style` during option parsing
@@ -287,9 +311,10 @@ run_greple() {
     local -a md_opts=()
     local -a config_params=("mode=${mode}")
 
-    # fold/table/rule/heading_markup params
+    # fold/table/trim/rule/heading_markup params
     [[ $fold  ]] && config_params+=("foldlist=1,foldwidth=$width")
     [[ $table ]] && config_params+=("table=1") || config_params+=("table=0")
+    [[ $trim  ]] && config_params+=("table_trim=1") || config_params+=("table_trim=0")
     [[ $rule  ]] && config_params+=("rule=1")  || config_params+=("rule=0")
     [[ $heading_markup ]] && config_params+=("heading_markup=$heading_markup")
     config_params+=("${md_config[@]}")
@@ -309,7 +334,7 @@ run_greple() {
 }
 ```
 
-- `-Mmd::config(...)`: Module config parameters (mode, base_color, foldlist, foldwidth, table, rule, heading_markup, hashed.*)
+- `-Mmd::config(...)`: Module config parameters (mode, base_color, foldlist, foldwidth, table, table_trim, rule, heading_markup, hashed.*, color labels)
 - `--show LABEL=VALUE`: Field visibility control
 - `pass_md[]`: Passthrough options for md module (e.g., `--colormap` via `:>pass_md`)
 - Options before `--` are module-specific; after `--` are greple options
@@ -528,33 +553,100 @@ sub begin {
 
 Stage execution is controlled by config flags: `colorize` (default: 1), `table` (default: 1). Fold is not controlled in `begin()` because it operates via greple's pattern matching pipeline (`-Mtee`), not text transformation in the `begin` hook.
 
-`format_table()` detects table blocks via `^ {0,3}\|.+\|\n){3,}` and processes each block:
+`format_table()` detects table blocks via `(^ {0,3}\|.+\|\n){3,}` and processes each block:
 
-1. **Alignment parsing** — `parse_separator()` analyzes the separator line (e.g., `|:---|:---:|---:|---|`):
-   - Finds separator line via `/^\h*\|(?:\h*:?-+:?\h*\|)+\h*$/m` (each cell requires at least one `-`)
+```perl
+s{(^ {0,3}\|.+\|\n){3,}}{
+    my $block = $&;
+    my($right, $center) = parse_separator(\$block);
+    my @sep_opt;
+    if ($config->{table_trim}) {
+        @sep_opt = ('-rs', '\s*\|\s*', '--item-format= %s ', '--table-remove=1,-0', '--padding');
+    } else {
+        $_++ for @$right, @$center;
+        @sep_opt = ('-s', '|');
+    }
+    my @align = (
+        @$right  ? ('--table-right='  . join(',', @$right))  : (),
+        @$center ? ('--table-center=' . join(',', @$center)) : (),
+    );
+    my $formatted = call_ansicolumn($block, @sep_opt, '-o', $sep, '-t', '--cu=1', @align);
+    fix_separator($formatted, $sep);
+}mge;
+```
+
+**Trim mode** (`table_trim=1`, default): Strips cell whitespace with `-rs '\s*\|\s*'`, adds padding with `--item-format=' %s '`, removes the leading/trailing empty columns created by `|` delimiters with `--table-remove=1,-0`, and uses `--padding` to pad the last column to full width.
+
+**Non-trim mode** (`table_trim=0`): Uses `-s '|'` as simple separator. Column numbers from `parse_separator` need `+1` offset because the leading `|` creates an empty column 1 in ansicolumn's split.
+
+1. **Alignment parsing** — `parse_separator()` analyzes the separator line and returns raw column number arrays:
+
+```perl
+sub parse_separator {
+    my $blockref = shift;
+    my $SEP = qr/^\h*\|(?:\h*:?-+:?\h*\|)+\h*$/m;
+    my ($sep_line) = $$blockref =~ /($SEP)/;
+    return ([], []) unless defined $sep_line;
+    my @cells = split /\|/, $sep_line, -1;
+    shift @cells; pop @cells;
+    s/^\h+|\h+$//g for @cells;
+    my @right  = grep { $cells[$_-1] =~ /^-+:$/  } 1..@cells;
+    my @center = grep { $cells[$_-1] =~ /^:-+:$/ } 1..@cells;
+    $$blockref =~ s{$SEP}{ ${^MATCH} =~ tr/:/-/r }mpe;
+    (\@right, \@center);
+}
+```
+
+   - Finds separator line via `$SEP` pattern (each cell requires at least one `-`)
    - Splits cells with `split /\|/, $sep_line, -1` (the `-1` limit preserves trailing empty fields from the final `|`)
    - Detects `:---:` (center) and `---:` (right) patterns; `:---` and `---` are left-aligned (default, no option needed)
-   - Adds `+1` offset to column numbers because the leading `|` creates an empty column 1 in ansicolumn's split
+   - Returns raw 1-based column numbers as `(\@right, \@center)` — caller applies offset and builds option strings
    - Strips colons from separator line (`tr/:/-/`) so `fix_separator()` works unchanged
-   - Returns `--table-right=N[,N...]` and/or `--table-center=N[,N...]` options (requires App::ansicolumn >= 1.53)
+   - Requires App::ansicolumn >= 1.55 (for `--table-right`, `--table-center`, `--table-remove`, `--item-format`, `--padding`)
 
 2. **Column alignment** — `call_ansicolumn()` invokes `App::ansicolumn::ansicolumn()` via `Command::Run` (same pattern as the tee module's `call()` function):
-   - `-s '|'`: Input separator
+   - `-rs '\s*\|\s*'` (trim) or `-s '|'` (non-trim): Input separator
+   - `--item-format=' %s '` (trim only): Add padding to each cell
+   - `--table-remove=1,-0` (trim only): Remove leading/trailing empty columns
+   - `--padding` (trim only): Pad last column to full width
    - `-o $sep`: Output separator (`│` when rule is enabled, `|` otherwise)
    - `-t`: Table mode (auto-determine column widths)
    - `--cu=1`: Column unit (minimum column width)
-   - `--table-right=N`: Right-align specified columns (from `parse_separator`)
-   - `--table-center=N`: Center-align specified columns (from `parse_separator`)
+   - `--table-right=N`: Right-align specified columns
+   - `--table-center=N`: Center-align specified columns
 
-3. **Separator fix** — `fix_separator()` converts separator lines to box-drawing characters:
-   - Rule mode: `tr[│ -][┼──]` converts middle part, wrapped with `├`/`┤`
-   - Non-rule mode: `tr[ ][-]` replaces spaces with dashes, wrapped with `|`
+3. **Separator fix** — `fix_separator()` converts separator lines to box-drawing characters, handling optional leading/trailing border separators:
+
+```perl
+sub fix_separator {
+    my ($text, $sep) = @_;
+    my $sep_re = $sep eq "\x{2502}" ? "\x{2502}" : '\\|';
+    $text =~ s{^(\h*?)($sep_re)?((?:\h*-+\h*$sep_re)*\h*-+\h*)($sep_re)?(\h*?)$}{
+        my($pre, $left, $mid, $right, $post) = ($1, $2, $3, $4, $5);
+        if ($sep eq "\x{2502}") {
+            ($pre  =~ tr[ ][\x{2500}]r)
+            . (defined $left  ? "\x{251C}" : '')
+            . ($mid =~ tr[\x{2502} -][\x{253C}\x{2500}\x{2500}]r)
+            . (defined $right ? "\x{2524}" : '')
+            . ($post =~ tr[ ][\x{2500}]r)
+        } else { ... }
+    }xmeg;
+    $text;
+}
+```
+
+   - Leading/trailing `$sep_re` are optional (`?`) — trim mode removes border columns, so separators may not have leading/trailing `│`
+   - `$pre`/`$post` capture surrounding whitespace (from `--padding`), converted to `─` in rule mode
+   - Rule mode: `│` → `┼`, spaces/dashes → `─`, borders `├`/`┤` only when present
+   - Non-rule mode: spaces → `-`, borders `|` only when present
 
 Config parameters from mdee:
 - `foldlist=1`: Enable text folding (default disabled in md module)
 - `foldwidth=$width`: Fold width in columns
 - `table=1`: Enable table formatting (default enabled in md module)
+- `table_trim=1`: Enable cell whitespace trimming (default enabled in md module)
 - `rule=1`: Enable box-drawing characters (default enabled in md module)
+- Color labels (e.g., `h1=RD`): Override default colors (pre-declared in `Config->new()` with `undef`, applied in `setup_colors()` before `${base}` expansion)
 
 ### Field Visibility with --show Option
 

@@ -3,17 +3,20 @@ abstract: 'Bindings for librtmidi - Realtime MIDI library'
 author:
   - 'John Barrett <john@jbrt.org>'
 build_requires:
-  List::Util: '0'
+  Future::AsyncAwait: '0'
+  Future::IO: '0'
   Proc::Find: '0'
+  Test2::Require::Module: '0'
   Test2::V0: '0'
   Test::Lib: '0'
   ok: '0'
-  perl: '5.010'
+  perl: v5.26.0
 configure_requires:
   ExtUtils::MakeMaker: '0'
-  perl: '5.010'
-dynamic_config: 0
-generated_by: 'Dist::Zilla version 6.032, CPAN::Meta::Converter version 2.150010'
+  FFI::Build::MM: '0.83'
+  perl: v5.26.0
+dynamic_config: 1
+generated_by: 'Dist::Zilla version 6.036, CPAN::Meta::Converter version 2.150010'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -29,31 +32,47 @@ no_index:
 provides:
   MIDI::RtMidi::FFI:
     file: lib/MIDI/RtMidi/FFI.pm
-    version: '0.08'
+    version: '0.10'
+  MIDI::RtMidi::FFI::AbstractDevice:
+    file: lib/MIDI/RtMidi/FFI/AbstractDevice.pm
+    version: '0.10'
   MIDI::RtMidi::FFI::Device:
     file: lib/MIDI/RtMidi/FFI/Device.pm
-    version: '0.08'
+    version: '0.10'
+  MIDI::RtMidi::FFI::Device::In:
+    file: lib/MIDI/RtMidi/FFI/Device/In.pm
+    version: '0.10'
+  MIDI::RtMidi::FFI::Device::Out:
+    file: lib/MIDI/RtMidi/FFI/Device/Out.pm
+    version: '0.10'
   RtMidiIn:
     file: lib/MIDI/RtMidi/FFI/Device.pm
-    version: '0.08'
+    version: '0.10'
   RtMidiOut:
     file: lib/MIDI/RtMidi/FFI/Device.pm
-    version: '0.08'
+    version: '0.10'
 requires:
-  Alien::RtMidi: '0.08'
+  Alien::RtMidi: '0.12'
   FFI::CheckLib: '0.25'
   FFI::Platypus: '2.00'
   FFI::Platypus::Buffer: '0'
   FFI::Platypus::Memory: '0'
   FFI::Platypus::Record: '0'
-  MIDI::Event: '0'
+  Feature::Compat::Class: '0'
+  IO::Handle: '0'
+  IO::Socket: '0'
+  MIDI::Stream: '0.005'
+  MIDI::Stream::Decoder: '0'
+  MIDI::Stream::Encoder: '0'
+  MIDI::Stream::Tables: '0'
   Time::HiRes: '0'
-  perl: '5.010'
+  experimental: '0'
+  perl: v5.26.0
 resources:
   bugtracker: https://github.com/jbarrett/MIDI-RtMidi-FFI/issues
   homepage: https://github.com/jbarrett/MIDI-RtMidi-FFI
   repository: https://github.com/jbarrett/MIDI-RtMidi-FFI.git
-version: '0.08'
-x_generated_by_perl: v5.40.0
-x_serialization_backend: 'YAML::Tiny version 1.74'
+version: '0.10'
+x_generated_by_perl: v5.42.0
+x_serialization_backend: 'YAML::Tiny version 1.76'
 x_spdx_expression: 'Artistic-1.0-Perl OR GPL-1.0-or-later'

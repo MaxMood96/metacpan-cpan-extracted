@@ -11,10 +11,11 @@ use PDL::Exporter;
 use DynaLoader;
 
 
-   our $VERSION = '2.098';
+   our $VERSION = '2.099';
    our @ISA = ( 'PDL::Exporter','DynaLoader','PDL::Transform' );
    push @PDL::Core::PP, __PACKAGE__;
    bootstrap PDL::Transform::Proj4 $VERSION;
+
 
 
 
@@ -318,7 +319,7 @@ sub new {
 }
 EOF
 }
-#line 322 "lib/PDL/Transform/Proj4.pm"
+#line 323 "lib/PDL/Transform/Proj4.pm"
 
 *fwd_transform = \&PDL::fwd_transform;
 
@@ -5780,7 +5781,7 @@ Judd Taylor, Orbital Systems, Ltd.
 judd dot t at orbitalsystems dot com
 
 =cut
-#line 5784 "lib/PDL/Transform/Proj4.pm"
+#line 5785 "lib/PDL/Transform/Proj4.pm"
 
 # Exit with OK status
 

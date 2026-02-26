@@ -5,7 +5,7 @@ package App::Greple::md;
 use 5.024;
 use warnings;
 
-our $VERSION = "1.03";
+our $VERSION = "1.04";
 
 =encoding utf-8
 
@@ -337,6 +337,15 @@ use URI::Escape;
 use Getopt::EX::Config;
 use Getopt::EX::Colormap;
 
+my @color_labels = qw(
+    code_mark code_tick code_info code_block code_inline
+    comment link image image_link
+    h1 h2 h3 h4 h5 h6
+    bold italic strike emphasis_mark
+    bold_mark italic_mark strike_mark link_mark
+    blockquote horizontal_rule
+);
+
 my $config = Getopt::EX::Config->new(
     mode       => '',  # light / dark
     osc8       => 1,   # OSC 8 hyperlinks
@@ -352,6 +361,7 @@ my $config = Getopt::EX::Config->new(
     tick_open  => '`',       # inline code open marker
     tick_close => "\x{b4}",  # inline code close marker (´)
     hashed     => { h1 => 0, h2 => 0, h3 => 0, h4 => 0, h5 => 0, h6 => 0 },
+    (map { $_ => undef } @color_labels),  # color labels (undef = not set)
 );
 
 #
@@ -461,6 +471,13 @@ sub setup_colors {
             if $base =~ /^[A-Za-z]\w*$/;
     } else {
         $base = $base_color{$mode} || $base_color{light};
+    }
+    # Override with config params (e.g., config(h1=RD))
+    for my $key (@color_labels) {
+        my $val = $config->{$key};
+        if (defined $val) {
+            $colors{$key} = $val;
+        }
     }
     # ${base_name}: color without luminance (e.g., '<RoyalBlue>')
     (my $base_name = $base) =~ s/=y\d+$//;

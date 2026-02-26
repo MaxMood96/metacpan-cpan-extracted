@@ -1,4 +1,15 @@
 Revision history for Apache-Session-Generate-Random:
 
+0.002001  2026-02-25 17:16:47+00:00 Europe/London
+  [Bug Fixes]
+  - Specify minimum versions of prerequisites.
+
+0.002000  2026-02-25 17:08:49+00:00 Europe/London
+  [Enhancements]
+  - Added Apache::SessionX::Generate::Random for use with Apache::SessionX.
+
+  [Tests]
+  - Removed author clean namespace test.
+
 0.001000  2026-02-14 00:03:12+00:00 Europe/London
   - Initial release.

@@ -1,4 +1,4 @@
-use strict;
+use v5.26;
 use warnings;
 package MIDI::RtMidi::FFI;
 use base qw/ Exporter /;
@@ -7,11 +7,15 @@ use FFI::Platypus 2.00;
 use FFI::Platypus::Memory qw/ malloc free /;
 use FFI::Platypus::Buffer qw/ scalar_to_buffer buffer_to_scalar /;
 use FFI::CheckLib 0.25 qw/ find_lib_or_exit /;
+use IO::Handle;
+use IO::Socket qw/ AF_UNIX SOCK_STREAM PF_UNSPEC /;
 use Carp;
 
-our $VERSION = '0.08';
+our $VERSION = '0.10';
 
 # ABSTRACT: Bindings for librtmidi - Realtime MIDI library
+
+my $WINDOWS = $^O eq 'MSWin32';
 
 {
     package RtMidiWrapper;
@@ -41,6 +45,7 @@ sub _load_rtmidi {
                 )
         ]
     );
+    $ffi->bundle;
     return 1;
 }
 
@@ -127,6 +132,8 @@ BEGIN {
     };
 
     my %binds_4 = (
+        callback_fd                 => [ ['RtMidiInPtr*', 'int'] => 'int', \&_callback_fd ],
+        _free_userdata              => [ ['RtMidiInPtr*' ] => 'void' ],
         rtmidi_api_display_name     => [ ['enum'] => 'string' ],
         rtmidi_api_name             => [ ['enum'] => 'string' ],
         rtmidi_compiled_api_by_name => [ ['string'] => 'enum' ],
@@ -163,6 +170,7 @@ BEGIN {
 
 use constant $enum_RtMidiApi;
 use constant $enum_RtMidiErrorType;
+use constant { BUFFER_SIZE => 4096 };
 
 sub _sorted_enum_keys {
     my ( $enum ) = @_;
@@ -171,6 +179,7 @@ sub _sorted_enum_keys {
 
 sub _exports {
     (
+        'callback_fh',
         'rtmidi_get_version',
         sort( keys %binds ),
         _sorted_enum_keys( $enum_RtMidiApi ),
@@ -179,15 +188,16 @@ sub _exports {
 }
 
 sub _get_compiled_api {
-    my ( $sub, $get ) = @_;
+    my ( $sub ) = @_;
+    state $api_arr;
+    return $api_arr if $api_arr;
     my $num_apis = $sub->();
     return unless $num_apis;
-    return $num_apis unless $get;
     my $apis = malloc RTMIDI_API_NUM * $ffi->sizeof('enum');
     $sub->( $apis, RTMIDI_API_NUM );
-    my $api_arr = $ffi->cast( 'opaque' => "enum[$num_apis]", $apis );
+    $api_arr = $ffi->cast( 'opaque' => "enum[$num_apis]", $apis );
     free $apis;
-    return $api_arr;
+    $api_arr;
 }
 
 sub _get_port_name_5 {
@@ -203,7 +213,7 @@ sub _get_port_name_5 {
 
 sub _in_get_message {
     my ( $sub, $dev, $size ) = @_;
-    $size //= 1024;
+    $size //= BUFFER_SIZE;
     my $str = malloc $size;
     $sub->( $dev, $str, \$size );
     my $msg = buffer_to_scalar( $str, $size );
@@ -218,16 +228,52 @@ sub _out_send_message {
 }
 
 sub _in_set_callback {
-    my ( $sub, $dev, $cb, $data ) = @_;
+    my ( $sub, $dev, $cb ) = @_;
     my $callback = sub {
         my ( $timestamp, $inmsg, $size ) = @_;
         return if !$size;
         my $msg = buffer_to_scalar( $inmsg, $size );
-        $cb->( $timestamp, $msg, $data );
+        $cb->( $timestamp, $msg );
     };
     my $closure = $ffi->closure( $callback );
     $sub->( $dev, $closure );
     return $closure;
+}
+
+sub _callback_fd {
+    my ( $sub, $dev, $fd ) = @_;
+    $fd //= 0;
+    return $sub->( $dev, $fd );
+}
+
+my $retain;
+sub callback_fh {
+    my ( $dev ) = @_;
+    goto WINDOWS if $WINDOWS;
+
+    my $fh = IO::Handle->new->fdopen( callback_fd( $dev ), 'r' );
+    $fh->blocking(0);
+    return $fh;
+
+WINDOWS:
+
+    my ( $rd, $wr ) = IO::Socket->socketpair( AF_UNIX, SOCK_STREAM, PF_UNSPEC );
+    if ( callback_fd( $dev, $wr->fileno ) < 0 ) {
+        croak("Error creating Win32 socket pair");
+    }
+    $rd->blocking(0);
+    $retain->{ $dev }->{ cb_writer } = $wr;
+    return $rd;
+}
+
+sub _cleanup {
+    my ( $dev ) = @_;
+    return unless $dev;
+    if ( $retain->{ $dev }->{ cb_writer } ) {
+        $retain->{ $dev }->{ cb_writer }->close;
+        delete $retain->{ $dev }->{ cb_writer };
+        _free_userdata( $dev );
+    }
 }
 
 _init_api();
@@ -246,33 +292,34 @@ MIDI::RtMidi::FFI - Bindings for librtmidi - Realtime MIDI library
 
 =head1 VERSION
 
-version 0.08
+version 0.10
 
 =head1 SYNOPSIS
 
     use MIDI::RtMidi::FFI ':all';
-    use MIDI::Event;
-    
+    use MIDI::Stream::Encoder;
+
     my $device = rtmidi_out_create( RTMIDI_API_UNIX_JACK, 'perl-jack' );
+    my $encoder = MIDI::Stream::Encoder->new;
     my $port_count = rtmidi_get_port_count( $device );
     my $synth_port = grep {
         rtmidi_get_port_name( $device, $_ ) =~ /synth/i
     } 0..($port_count-1);
-    
+
     rtmidi_open_port( $device, $synth_port, 'my synth' );
     rtmidi_out_send_message(
         $device,
-        ${ MIDI::Event::encode([[ note_on => 0, 0, 0x40, 0x5a ]], { never_add_eot => 1 }) }
+        $encoder->encode( [ note_on => 0, 0x40, 0x5a ] )
     );
 
 =head1 DESCRIPTION
 
-L<RtMidi|https://www.music.mcgill.ca/~gary/rtmidi/> provides a common API for
+L<RtMidi|https://caml.music.mcgill.ca/~gary/rtmidi/> provides a common API for
 realtime MIDI input/output supporting ALSA, JACK, CoreMIDI and Windows
 Multimedia.
 
 MIDI::RtMidi::FFI provides a more-or-less direct binding to
-L<RtMidi's C Interface|https://www.music.mcgill.ca/~gary/rtmidi/group__C-interface.html>.
+L<RtMidi's C Interface|https://caml.music.mcgill.ca/~gary/rtmidi/group__C-interface.html>.
 MIDI::RtMidi::FFI requires librtmidi v4.0.0 or later, should work with v5.0.0, and perhaps work with later versions.
 
 This is alpha software. Expect crashes, memory issues and possible API changes.
@@ -306,13 +353,9 @@ Returns the best-guess of the version number of the RtMidi library in use.
 
 =head2 rtmidi_get_compiled_api
 
-    rtmidi_get_compiled_api( $return_apis );
-    rtmidi_get_compiled_api( 1 );
+    rtmidi_get_compiled_api();
 
-Returns available APIs.
-
-Pass a true value to return an array ref of available APIs as RT_API constants,
-otherwise a count of available APIs is returned.
+Returns an arrayref of available APIs.
 
 =head2 rtmidi_api_display_name
 
@@ -390,7 +433,7 @@ Return the RTMIDI_API constant for the given device.
 
 =head2 rtmidi_in_set_callback
 
-    rtmidi_in_set_callback( $device, $coderef, $data );
+    rtmidi_in_set_callback( $device, $coderef );
 
 Set a callback function to be invoked for incoming MIDI messages.
 
@@ -445,7 +488,7 @@ Send a single message out an open MIDI output port.
 
 =head1 SEE ALSO
 
-L<RtMidi|https://www.music.mcgill.ca/~gary/rtmidi/>
+L<RtMidi|https://caml.music.mcgill.ca/~gary/rtmidi/>
 
 L<Alien::RtMidi>
 
@@ -477,7 +520,7 @@ John Barrett <john@jbrt.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2025 by John Barrett.
+This software is copyright (c) 2026 by John Barrett.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

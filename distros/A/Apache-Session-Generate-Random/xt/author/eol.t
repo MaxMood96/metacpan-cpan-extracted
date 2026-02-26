@@ -8,9 +8,11 @@ use Test::EOL;
 
 my @files = (
     'lib/Apache/Session/Generate/Random.pm',
+    'lib/Apache/SessionX/Generate/Random.pm',
     't/00-report-prereqs.dd',
     't/00-report-prereqs.t',
-    't/01-simple.t'
+    't/01-simple.t',
+    't/02-sessionx.t'
 );
 
 eol_unix_ok($_, { trailing_whitespace => 1 }) foreach @files;

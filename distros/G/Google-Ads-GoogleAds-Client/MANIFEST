@@ -6162,12 +6162,14 @@ lib/Google/Ads/GoogleAds/V23/Enums/AudienceStatusEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/BatchJobStatusEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/BenchmarksMarketingObjectiveEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/BenchmarksSourceTypeEnum.pm
+lib/Google/Ads/GoogleAds/V23/Enums/BenchmarksTimeGranularityEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/BiddingSourceEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/BiddingStrategyStatusEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/BiddingStrategySystemStatusEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/BiddingStrategyTypeEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/BidModifierSourceEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/BillingSetupStatusEnum.pm
+lib/Google/Ads/GoogleAds/V23/Enums/BookingStatusEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/BrandRequestRejectionReasonEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/BrandSafetySuitabilityEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/BrandStateEnum.pm
@@ -6366,6 +6368,7 @@ lib/Google/Ads/GoogleAds/V23/Enums/MatchTypeEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/MediaTypeEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/MerchantCenterLinkStatusEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/MessagePlaceholderFieldEnum.pm
+lib/Google/Ads/GoogleAds/V23/Enums/MessagingRestrictionTypeEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/MimeTypeEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/MinuteOfHourEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/MobileAppVendorEnum.pm
@@ -6498,7 +6501,9 @@ lib/Google/Ads/GoogleAds/V23/Enums/VideoAdSequenceMinimumDurationEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/VideoThumbnailEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/WebpageConditionOperandEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/WebpageConditionOperatorEnum.pm
+lib/Google/Ads/GoogleAds/V23/Enums/YouTubeVideoPrivacyEnum.pm
 lib/Google/Ads/GoogleAds/V23/Enums/YouTubeVideoPropertyEnum.pm
+lib/Google/Ads/GoogleAds/V23/Enums/YouTubeVideoUploadStateEnum.pm
 lib/Google/Ads/GoogleAds/V23/Errors/BudgetPerDayMinimumErrorDetails.pm
 lib/Google/Ads/GoogleAds/V23/Errors/ErrorCode.pm
 lib/Google/Ads/GoogleAds/V23/Errors/ErrorDetails.pm
@@ -6545,6 +6550,8 @@ lib/Google/Ads/GoogleAds/V23/Resources/AdScheduleView.pm
 lib/Google/Ads/GoogleAds/V23/Resources/AdStrengthActionItem.pm
 lib/Google/Ads/GoogleAds/V23/Resources/AdvertisingPartnerIdentifier.pm
 lib/Google/Ads/GoogleAds/V23/Resources/AdvertisingPartnerLinkInvitationIdentifier.pm
+lib/Google/Ads/GoogleAds/V23/Resources/AdvertisingPartnerLinkInvitationProperties.pm
+lib/Google/Ads/GoogleAds/V23/Resources/AdvertisingPartnerProperties.pm
 lib/Google/Ads/GoogleAds/V23/Resources/AgeRangeView.pm
 lib/Google/Ads/GoogleAds/V23/Resources/AiMaxAdGroupSetting.pm
 lib/Google/Ads/GoogleAds/V23/Resources/AiMaxSearchTermAdCombinationView.pm
@@ -6581,6 +6588,7 @@ lib/Google/Ads/GoogleAds/V23/Resources/BiddingSeasonalityAdjustment.pm
 lib/Google/Ads/GoogleAds/V23/Resources/BiddingStrategy.pm
 lib/Google/Ads/GoogleAds/V23/Resources/BiddingStrategySimulation.pm
 lib/Google/Ads/GoogleAds/V23/Resources/BillingSetup.pm
+lib/Google/Ads/GoogleAds/V23/Resources/BookingDetails.pm
 lib/Google/Ads/GoogleAds/V23/Resources/BrandGuidelines.pm
 lib/Google/Ads/GoogleAds/V23/Resources/BrandTargetingOverrides.pm
 lib/Google/Ads/GoogleAds/V23/Resources/BusinessRegistrationCheckVerificationArtifact.pm
@@ -6762,6 +6770,7 @@ lib/Google/Ads/GoogleAds/V23/Resources/MerchantCenterLink.pm
 lib/Google/Ads/GoogleAds/V23/Resources/MerchantCenterLinkInvitationIdentifier.pm
 lib/Google/Ads/GoogleAds/V23/Resources/MerchantInfo.pm
 lib/Google/Ads/GoogleAds/V23/Resources/MessageDetails.pm
+lib/Google/Ads/GoogleAds/V23/Resources/MessagingRestriction.pm
 lib/Google/Ads/GoogleAds/V23/Resources/MigrateDynamicSearchAdsCampaignToPerformanceMaxRecommendation.pm
 lib/Google/Ads/GoogleAds/V23/Resources/MobileAppCategoryConstant.pm
 lib/Google/Ads/GoogleAds/V23/Resources/MobileDeviceConstant.pm
@@ -6823,6 +6832,7 @@ lib/Google/Ads/GoogleAds/V23/Resources/RefreshCustomerMatchListRecommendation.pm
 lib/Google/Ads/GoogleAds/V23/Resources/RegulatoryCostSummary.pm
 lib/Google/Ads/GoogleAds/V23/Resources/RemarketingAction.pm
 lib/Google/Ads/GoogleAds/V23/Resources/RemarketingSetting.pm
+lib/Google/Ads/GoogleAds/V23/Resources/ReservationAdCategorySelfDisclosure.pm
 lib/Google/Ads/GoogleAds/V23/Resources/Residency.pm
 lib/Google/Ads/GoogleAds/V23/Resources/ResponsiveSearchAdAssetRecommendation.pm
 lib/Google/Ads/GoogleAds/V23/Resources/ResponsiveSearchAdImproveAdStrengthRecommendation.pm
@@ -6857,6 +6867,7 @@ lib/Google/Ads/GoogleAds/V23/Resources/TargetRoas.pm
 lib/Google/Ads/GoogleAds/V23/Resources/TargetRoasOptInRecommendation.pm
 lib/Google/Ads/GoogleAds/V23/Resources/TargetSpend.pm
 lib/Google/Ads/GoogleAds/V23/Resources/TextAdRecommendation.pm
+lib/Google/Ads/GoogleAds/V23/Resources/TextGuidelines.pm
 lib/Google/Ads/GoogleAds/V23/Resources/ThirdPartyAppAnalyticsLink.pm
 lib/Google/Ads/GoogleAds/V23/Resources/ThirdPartyAppAnalyticsLinkIdentifier.pm
 lib/Google/Ads/GoogleAds/V23/Resources/ThirdPartyAppAnalyticsSettings.pm
@@ -6898,6 +6909,7 @@ lib/Google/Ads/GoogleAds/V23/Resources/Webpage.pm
 lib/Google/Ads/GoogleAds/V23/Resources/WebpageCondition.pm
 lib/Google/Ads/GoogleAds/V23/Resources/WebpageView.pm
 lib/Google/Ads/GoogleAds/V23/Resources/YoutubeVideoIdentifier.pm
+lib/Google/Ads/GoogleAds/V23/Resources/YouTubeVideoUpload.pm
 lib/Google/Ads/GoogleAds/V23/Services/AccountBudgetProposalService.pm
 lib/Google/Ads/GoogleAds/V23/Services/AccountBudgetProposalService/AccountBudgetProposalOperation.pm
 lib/Google/Ads/GoogleAds/V23/Services/AccountBudgetProposalService/MutateAccountBudgetProposalRequest.pm
@@ -7079,6 +7091,9 @@ lib/Google/Ads/GoogleAds/V23/Services/BenchmarksService/BenchmarksLocation.pm
 lib/Google/Ads/GoogleAds/V23/Services/BenchmarksService/BenchmarksProductMetadata.pm
 lib/Google/Ads/GoogleAds/V23/Services/BenchmarksService/BenchmarksSource.pm
 lib/Google/Ads/GoogleAds/V23/Services/BenchmarksService/BenchmarksSourceMetadata.pm
+lib/Google/Ads/GoogleAds/V23/Services/BenchmarksService/BreakdownDefinition.pm
+lib/Google/Ads/GoogleAds/V23/Services/BenchmarksService/BreakdownKey.pm
+lib/Google/Ads/GoogleAds/V23/Services/BenchmarksService/BreakdownMetrics.pm
 lib/Google/Ads/GoogleAds/V23/Services/BenchmarksService/GenerateBenchmarksMetricsRequest.pm
 lib/Google/Ads/GoogleAds/V23/Services/BenchmarksService/GenerateBenchmarksMetricsResponse.pm
 lib/Google/Ads/GoogleAds/V23/Services/BenchmarksService/IndustryVerticalInfo.pm
@@ -7208,6 +7223,7 @@ lib/Google/Ads/GoogleAds/V23/Services/ContentCreatorInsightsService/SearchAudien
 lib/Google/Ads/GoogleAds/V23/Services/ContentCreatorInsightsService/SearchBrand.pm
 lib/Google/Ads/GoogleAds/V23/Services/ContentCreatorInsightsService/SearchTopics.pm
 lib/Google/Ads/GoogleAds/V23/Services/ContentCreatorInsightsService/TrendInsight.pm
+lib/Google/Ads/GoogleAds/V23/Services/ContentCreatorInsightsService/TrendInsightDataPoint.pm
 lib/Google/Ads/GoogleAds/V23/Services/ContentCreatorInsightsService/TrendInsightMetrics.pm
 lib/Google/Ads/GoogleAds/V23/Services/ContentCreatorInsightsService/YouTubeChannelInsights.pm
 lib/Google/Ads/GoogleAds/V23/Services/ContentCreatorInsightsService/YouTubeChannels.pm
@@ -7670,6 +7686,13 @@ lib/Google/Ads/GoogleAds/V23/Services/UserListService/MutateUserListResult.pm
 lib/Google/Ads/GoogleAds/V23/Services/UserListService/MutateUserListsRequest.pm
 lib/Google/Ads/GoogleAds/V23/Services/UserListService/MutateUserListsResponse.pm
 lib/Google/Ads/GoogleAds/V23/Services/UserListService/UserListOperation.pm
+lib/Google/Ads/GoogleAds/V23/Services/YouTubeVideoUploadService.pm
+lib/Google/Ads/GoogleAds/V23/Services/YouTubeVideoUploadService/CreateYouTubeVideoUploadRequest.pm
+lib/Google/Ads/GoogleAds/V23/Services/YouTubeVideoUploadService/CreateYouTubeVideoUploadResponse.pm
+lib/Google/Ads/GoogleAds/V23/Services/YouTubeVideoUploadService/RemoveYouTubeVideoUploadRequest.pm
+lib/Google/Ads/GoogleAds/V23/Services/YouTubeVideoUploadService/RemoveYouTubeVideoUploadResponse.pm
+lib/Google/Ads/GoogleAds/V23/Services/YouTubeVideoUploadService/UpdateYouTubeVideoUploadRequest.pm
+lib/Google/Ads/GoogleAds/V23/Services/YouTubeVideoUploadService/UpdateYouTubeVideoUploadResponse.pm
 lib/Google/Ads/GoogleAds/V23/Utils/ResourceNames.pm
 LICENSE
 log4perl.conf

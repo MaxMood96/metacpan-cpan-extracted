@@ -11,11 +11,12 @@ SIGNATURE
 cpanfile
 dist.ini
 lib/Apache/Session/Generate/Random.pm
+lib/Apache/SessionX/Generate/Random.pm
 t/00-report-prereqs.dd
 t/00-report-prereqs.t
 t/01-simple.t
+t/02-sessionx.t
 weaver.ini
-xt/author/clean-namespaces.t
 xt/author/critic.t
 xt/author/cve.t
 xt/author/eof.t

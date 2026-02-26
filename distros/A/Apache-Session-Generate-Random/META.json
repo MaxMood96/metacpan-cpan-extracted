@@ -4,7 +4,7 @@
       "Robert Rothenberg <rrwo@cpan.org>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Dist::Zilla version 6.037, CPAN::Meta::Converter version 2.150011",
+   "generated_by" : "Dist::Zilla version 6.037, CPAN::Meta::Converter version 2.150013",
    "keywords" : [
       "apache",
       "session",
@@ -41,7 +41,6 @@
             "Test2::V0" : "0",
             "Test::CPAN::Changes" : "0.19",
             "Test::CVE" : "0.11",
-            "Test::CleanNamespaces" : "0.15",
             "Test::DistManifest" : "0",
             "Test::EOF" : "0",
             "Test::EOL" : "0",
@@ -65,10 +64,10 @@
       },
       "runtime" : {
          "recommends" : {
-            "Crypt::SysRandom::XS" : "0"
+            "Crypt::SysRandom::XS" : "0.010"
          },
          "requires" : {
-            "Crypt::SysRandom" : "0",
+            "Crypt::SysRandom" : "0.007",
             "perl" : "5.006",
             "strict" : "0",
             "warnings" : "0"
@@ -88,7 +87,11 @@
    "provides" : {
       "Apache::Session::Generate::Random" : {
          "file" : "lib/Apache/Session/Generate/Random.pm",
-         "version" : "0.001000"
+         "version" : "0.002001"
+      },
+      "Apache::SessionX::Generate::Random" : {
+         "file" : "lib/Apache/SessionX/Generate/Random.pm",
+         "version" : "0.002001"
       }
    },
    "release_status" : "stable",
@@ -102,10 +105,10 @@
          "web" : "https://github.com/robrwo/perl-Apache-Session-Generate-Random"
       }
    },
-   "version" : "0.001000",
+   "version" : "0.002001",
    "x_authority" : "cpan:RRWO",
-   "x_generated_by_perl" : "v5.40.2",
-   "x_serialization_backend" : "Cpanel::JSON::XS version 4.40",
+   "x_generated_by_perl" : "v5.42.0",
+   "x_serialization_backend" : "Cpanel::JSON::XS version 4.39",
    "x_spdx_expression" : "Artistic-2.0"
 }
 

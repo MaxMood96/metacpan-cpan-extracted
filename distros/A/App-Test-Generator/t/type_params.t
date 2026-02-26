@@ -14,9 +14,6 @@ BEGIN {
 }
 
 TODO: {
-    local $TODO = 'Type::Params extraction not yet implemented';
-
-
 	# Helper to create a temporary Perl module file
 	sub create_test_module {
 		my ($content) = @_;
@@ -40,7 +37,9 @@ TODO: {
 	}
 
 	# Basic default value patterns
-	subtest 'Extact schema from Type::Params' => sub {
+	subtest 'Extact schema from Type::Params - using compiles' => sub {
+		local $TODO = 'compile type of Types::Params not yet implemented';
+
 		my $module = <<'END_MODULE';
 use Types::Standard qw(Str ArrayRef Bool);
 use Type::Params qw(compile);
@@ -96,6 +95,105 @@ END_MODULE
 			}
 		});
 
+		done_testing();
+	};
+
+	subtest 'Extact schema from Type::Params - using signature_for' => sub {
+		my $module = <<'END_MODULE';
+use Types::Standard qw(Num);
+use Type::Params qw(-sigs);
+
+signature_for add_numbers => (
+  method      => 1,
+  positional  => [ Num, Num ],
+  returns     => Num
+);
+
+sub add_numbers ( $self, $first, $second ) {
+	return $first + $second;
+}
+
+END_MODULE
+
+		my $extractor = create_extractor($module);
+
+		# Extract all schemas
+		my $schemas = $extractor->extract_all();
+
+		ok(defined($schemas));
+
+		my $schema = $schemas->{add_numbers};
+		ok($schema, 'Found add_numbers method schema');
+
+		my $input = $schema->{input};
+		ok($input, 'Found input method schema');
+
+		cmp_deeply($input, {
+			'arg0' => {
+				'type' => 'number',
+				'optional' => 0,
+				'position' => 0,
+			}, 'arg1' => {
+				'type' => 'number',
+				'optional' => 0,
+				'position' => 1,
+			}
+		});
+
+		cmp_ok($schema->{output}->{type}, 'eq', 'number', 'add_numbers returns a number');
+
+		done_testing();
+	};
+
+	subtest 'Extact schema from Type::Params - using documented example' => sub {
+		my $module = <<'END_MODULE';
+use v5.36;
+use builtin qw( true false );
+package Horse {
+  use Moo;
+  use Types::Standard qw( Object );
+  use Type::Params -sigs;
+  use namespace::autoclean;
+   
+  # ...;   # define attributes, etc
+   
+  signature_for add_child => (
+    # method     => true,
+    method     => 1,
+    positional => [ Object ],
+  );
+   
+  sub add_child ( $self, $child ) {
+    push $self->children->@*, $child;
+    return $self;
+  }
+}
+# package main;
+# my $boldruler = Horse->new;
+# $boldruler->add_child( Horse->new );
+# $boldruler->add_child( 123 );   # dies (123 is not an Object
+END_MODULE
+
+		my $extractor = create_extractor($module);
+
+		# Extract all schemas
+		my $schemas = $extractor->extract_all();
+
+		ok(defined($schemas));
+
+		my $schema = $schemas->{add_child};
+		ok($schema, 'Found add_child method schema');
+
+		my $input = $schema->{input};
+		ok($input, 'Found input method schema');
+
+		cmp_deeply($input, {
+			'arg0' => {
+				'type' => 'object',
+				'optional' => 0,
+				'position' => 0,
+			}
+		});
 		done_testing();
 	};
 }

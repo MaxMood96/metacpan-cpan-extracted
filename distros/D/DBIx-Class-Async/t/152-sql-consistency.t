@@ -13,7 +13,7 @@ use IO::Async::Loop;
 use DBIx::Class::Async::Schema;
 
 my $loop = IO::Async::Loop->new;
-my ($fh, $db_file) = File::Temp::tempfile(SUFFIX => '.db', UNLINK => 1);
+my ($fh, $db_file) = File::Temp::tempfile(UNLINK => 1);
 
 my $schema = DBIx::Class::Async::Schema->connect(
     "dbi:SQLite:dbname=$db_file", undef, undef, {},
@@ -28,56 +28,6 @@ my $schema = DBIx::Class::Async::Schema->connect(
 ok($schema, 'Schema created successfully');
 
 $schema->await($schema->deploy({ add_drop_table => 1 }));
-
-# Helper function to extract SQL from as_query result
-sub extract_sql {
-    my ($query_result) = @_;
-
-    my $data = $query_result;
-
-    # Dereference until we get to the actual data
-    while (ref $data eq 'REF') {
-        $data = $$data;
-    }
-
-    # Handle ARRAY ref format: [ $sql, @bind ]
-    if (ref $data eq 'ARRAY') {
-        my $sql = $data->[0];
-        # SQL might still be a reference
-        while (ref $sql) {
-            if (ref $sql eq 'SCALAR') {
-                $sql = $$sql;
-                last;
-            } elsif (ref $sql eq 'REF') {
-                $sql = $$sql;
-            } else {
-                last;
-            }
-        }
-        return $sql;
-    } elsif (ref $data eq 'SCALAR') {
-        return $$data;
-    } else {
-        return "$data";
-    }
-}
-
-# Helper to normalize SQL for comparison
-sub normalise_sql {
-    my $sql = shift;
-    $sql =~ s/\s+/ /g;      # Normalise whitespace
-    $sql =~ s/^\s+|\s+$//g; # Trim
-    return $sql;
-}
-
-# Helper to extract column list from SQL
-sub extract_columns {
-    my $sql = shift;
-    if ($sql =~ /SELECT\s+(.+?)\s+FROM/si) {
-        return $1;
-    }
-    return '';
-}
 
 subtest 'SQL consistency with default columns' => sub {
     my %seen_sqls;
@@ -98,8 +48,7 @@ subtest 'SQL consistency with default columns' => sub {
         'SQL contains expected SELECT FROM structure');
 
     my $columns = extract_columns($sql);
-    ok(length($columns) > 0,
-        'SQL contains column list');
+    ok(length($columns) > 0, 'SQL contains column list');
 };
 
 subtest 'SQL consistency with explicit columns' => sub {
@@ -287,7 +236,7 @@ subtest 'update_query generates preview SQL' => sub {
 
     my $sql_str = $$sql;
     like($sql_str, qr/UPDATE/i, 'SQL contains UPDATE');
-    like($sql_str, qr/SET/i, 'SQL contains SET');
+    like($sql_str, qr/SET/i,    'SQL contains SET');
 };
 
 subtest 'delete_query generates preview SQL' => sub {
@@ -299,13 +248,13 @@ subtest 'delete_query generates preview SQL' => sub {
 
     my $sql_str = $$sql;
     like($sql_str, qr/DELETE/i, 'SQL contains DELETE');
-    like($sql_str, qr/FROM/i, 'SQL contains FROM');
+    like($sql_str, qr/FROM/i,   'SQL contains FROM');
 };
 
 subtest 'Query preview methods do not execute' => sub {
-    # Create a test row
+    # Create a row
     my $row = $schema->resultset('User')->create({
-        name => 'Test User',
+        name  => 'Test User',
         email => 'test@example.com',
     })->get;
 
@@ -327,6 +276,221 @@ subtest 'Query preview methods do not execute' => sub {
     ok(defined $check, 'delete_query did not remove row from database');
 };
 
+subtest 'Empty select list generates appropriate SQL' => sub {
+    my $rs = $schema->resultset('User')->search(
+        { active => 1  },
+        { select => [] },
+    );
+
+    my ($sql, @bind) = $rs->as_query;
+
+    ok(defined $sql, 'empty select returns SQL');
+    ok(ref $sql eq 'SCALAR', 'SQL is scalar reference');
+
+    my $sql_str = $$sql;
+    like($sql_str, qr/SELECT/i, 'Contains SELECT keyword');
+    like($sql_str, qr/FROM/i,   'Contains FROM keyword');
+
+    # Should NOT select all columns
+    unlike($sql_str, qr/me\.id.*me\.name/i,
+        'Does not expand to all columns');
+
+    # Should be minimal: either "SELECT FROM" (PG) or "SELECT 1 FROM" (others)
+    my $is_minimal = ($sql_str =~ /SELECT\s+FROM/i ||
+                      $sql_str =~ /SELECT\s+1\s+FROM/i);
+    ok($is_minimal, 'Uses minimal column selection');
+};
+
+subtest 'Empty select with conditions' => sub {
+    my $rs = $schema->resultset('User')->search(
+        { active => 1, age => { '>' => 18 } },
+        { select => [] }
+    );
+
+    my ($sql, @bind) = $rs->as_query;
+    my $sql_str = $$sql;
+
+    like($sql_str, qr/WHERE/i,  'Contains WHERE clause');
+    like($sql_str, qr/active/i, 'Contains active condition');
+    ok(@bind > 0, 'Has bind values');
+};
+
+subtest 'Empty select execution works' => sub {
+    # Ensure we have at least one row by creating with unique data
+    my $test_email = 'empty-select-test-' . $$ . '-' . time . '@example.com';
+
+    my $test_user = eval {
+        $schema->resultset('User')->create({
+            name   => 'Empty Select Test',
+            email  => $test_email,
+            active => 1,
+        })->get;
+    };
+
+    SKIP: {
+        skip "Could not create test user: $@", 2 if $@;
+
+        my $rs = $schema->resultset('User')->search(
+            { email  => $test_email },
+            { select => [] },
+        );
+
+        # Should execute without error
+        my $result = eval { $rs->all->get };
+        ok(!$@, 'Empty select executes without error') or diag("Error: $@");
+        ok(defined $result && ref $result eq 'ARRAY', 'Returns array reference');
+
+        eval {
+            $schema->resultset('User')->search({ email => $test_email })->delete->get;
+        };
+    }
+};
+
+subtest 'as_subselect_rs basic functionality' => sub {
+    my $rs = $schema->resultset('User')->search({ active => 1 });
+
+    ok($rs->can('as_subselect_rs'), 'as_subselect_rs method exists');
+
+    my $subselect_rs = eval { $rs->as_subselect_rs };
+    ok(!$@, 'as_subselect_rs executes without error') or diag("Error: $@");
+
+    isa_ok($subselect_rs, 'DBIx::Class::Async::ResultSet',
+        'Returns a ResultSet object');
+
+    my ($sql, @bind) = $subselect_rs->as_query;
+    my $sql_str      = extract_sql($sql);
+
+    like($sql_str, qr/SELECT.*FROM\s*\(/i,
+        'SQL contains subquery in FROM clause');
+};
+
+subtest 'as_subselect_rs preserves column list' => sub {
+    # Create RS with limited columns
+    my $rs = $schema->resultset('User')->search(
+        { active  => 1 },
+        { columns => ['id', 'name'] },
+    );
+
+    my ($sql1)   = $rs->as_query;
+    my $sql1_str = extract_sql($sql1);
+
+    # Verify original RS has limited columns
+    like($sql1_str,   qr/\bid\b/i,    'Original RS includes id');
+    like($sql1_str,   qr/\bname\b/i,  'Original RS includes name');
+    unlike($sql1_str, qr/\bemail\b/i, 'Original RS excludes email');
+
+    # Convert to subselect
+    my $subselect_rs = $rs->as_subselect_rs;
+    my ($sql2)       = $subselect_rs->as_query;
+    my $sql2_str     = extract_sql($sql2);
+
+    # The outer query should also only reference id and name
+    # NOT try to select email, age, etc.
+    unlike($sql2_str, qr/me\.email|me\.age|me\.balance/i,
+        'Subselect does not expand to all table columns');
+
+    # Should still have the subquery structure
+    like($sql2_str, qr/FROM\s*\(/i, 'Still has subquery structure');
+};
+
+subtest 'as_subselect_rs with further filtering' => sub {
+    # Create a subselect, then apply additional conditions
+    my $base_rs = $schema->resultset('User')->search(
+        { active  => 1 },
+        { columns => ['id', 'name'] },
+    );
+
+    my $subselect_rs = $base_rs->as_subselect_rs;
+    my $filtered_rs  = $subselect_rs->search({ name => { -like => 'A%' }});
+
+    ok($filtered_rs, 'Can chain search after as_subselect_rs');
+
+    my ($sql)   = $filtered_rs->as_query;
+    my $sql_str = extract_sql($sql);
+
+    like($sql_str, qr/FROM\s*\(/i, 'Has subquery');
+    like($sql_str, qr/name.*LIKE|LIKE.*name/i, 'Has outer WHERE condition');
+};
+
+subtest 'as_subselect_rs execution' => sub {
+    my $test_email = 'subselect-test-' . time . '@example.com';
+    eval {
+        $schema->resultset('User')->create({
+            name   => 'Alice Subselect',
+            email  => $test_email,
+            active => 1,
+            age    => 25,
+        })->get;
+    };
+
+    SKIP: {
+        skip "Could not create test data: $@", 2 if $@;
+
+        # Use subselect
+        my $rs = $schema->resultset('User')
+                        ->search({ active => 1 }, { columns => ['id', 'name'] })
+                        ->as_subselect_rs;
+
+        my $result = eval { $rs->all->get };
+        ok(!$@, 'Subselect query executes without error') or diag("Error: $@");
+        ok(ref $result eq 'ARRAY', 'Returns array reference');
+
+        eval {
+            $schema->resultset('User')->search({ email => $test_email })->delete->get;
+        };
+    }
+};
+
 $schema->disconnect;
 
 done_testing;
+
+# Helper function to extract SQL from as_query result
+sub extract_sql {
+    my ($query_result) = @_;
+
+    my $data = $query_result;
+
+    # Dereference until we get to the actual data
+    while (ref $data eq 'REF') {
+        $data = $$data;
+    }
+
+    # Handle ARRAY ref format: [ $sql, @bind ]
+    if (ref $data eq 'ARRAY') {
+        my $sql = $data->[0];
+        # SQL might still be a reference
+        while (ref $sql) {
+            if (ref $sql eq 'SCALAR') {
+                $sql = $$sql;
+                last;
+            } elsif (ref $sql eq 'REF') {
+                $sql = $$sql;
+            } else {
+                last;
+            }
+        }
+        return $sql;
+    } elsif (ref $data eq 'SCALAR') {
+        return $$data;
+    } else {
+        return "$data";
+    }
+}
+
+# Helper to normalize SQL for comparison
+sub normalise_sql {
+    my $sql = shift;
+    $sql =~ s/\s+/ /g;      # Normalise whitespace
+    $sql =~ s/^\s+|\s+$//g; # Trim
+    return $sql;
+}
+
+# Helper to extract column list from SQL
+sub extract_columns {
+    my $sql = shift;
+    if ($sql =~ /SELECT\s+(.+?)\s+FROM/si) {
+        return $1;
+    }
+    return '';
+}

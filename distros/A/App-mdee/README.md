@@ -25,6 +25,7 @@ mdee - em·dee, Markdown Easy on the Eyes
      -m  --mode=#           light or dark (default: light)
      -B  --base-color=#     override base color of theme
                             (e.g., Ivory, #780043, (120,0,67))
+         --config=KEY=VALUE  set config parameter (e.g., h1=RD, file=...)
     --cm --colormap=L=SPEC  override color for element (e.g., h1=RD)
     --hm --heading-markup=# enable markup in headings (all/bold/...)
          --show=#           set field visibility (e.g., italic=1)
@@ -38,7 +39,7 @@ mdee - em·dee, Markdown Easy on the Eyes
 
 # VERSION
 
-Version 1.02
+Version 1.04
 
 # DESCRIPTION
 
@@ -68,16 +69,20 @@ The following elements are highlighted.  Elements marked with
 `--show` can be individually disabled via the `--show` option.
 Others are always processed for structural integrity.
 
-    --show    bold (**bold**, __bold__)
-    --show    italic (*italic*, _italic_)
-    --show    strike (~~strike~~)
-    --show    code_inline (`code`)
-    --show    header, h1-h6 (# heading)
-    --show    horizontal_rule (---, ***, ___)
-    --show    blockquote (> quote)
-    always    code_block (``` or ~~~), code_mark, code_info
-    always    comment (<!-- ... -->)
-    always    link, image, image_link ([text](url))
+    --show    bold             (**bold**, __bold__)
+    --show    italic           (*italic*, _italic_)
+    --show    strike           (~~strike~~)
+    --show    code_inline      (`code`)
+    --show    header, h1-h6    (# heading)
+    --show    horizontal_rule  (---, ***, ___)
+    --show    blockquote       (> quote)
+    always    code_mark        (``` or ~~~)
+              code_block
+              code_info
+    always    comment          (<!-- ... -->)
+    always    link             ([text](url))
+              image            (![text])
+              image_link       (![text](url))
 
 Tables and list item folding are controlled by `--table` and
 `--fold` options, not by `--show`.
@@ -271,8 +276,8 @@ bold text, etc.).
     - 1. User theme directory: `${XDG_CONFIG_HOME:-~/.config}/mdee/theme/NAME.sh`
     - 2. Share theme directory: installed with the distribution under `auto/share/dist/App-mdee/theme/`
 
-    Theme files are Bash scripts that can modify `theme_light[base]`,
-    `theme_dark[base]`, and/or `md_config[]`:
+    Theme files are Bash scripts that can modify `theme_light[]`,
+    `theme_dark[]`, `md_config[]`, and/or `pass_md[]`:
 
         # theme/warm.sh — change base color
         theme_light[base]='<Coral>=y25'
@@ -303,6 +308,12 @@ bold text, etc.).
         Content text keeps its formatting (bold, italic,
         strikethrough, code, clickable links) but the surrounding
         markers are not displayed.
+
+    - `fatchap`
+
+        Add decorative border lines (`#`) above and below h1 headings,
+        using `=+` to append a text transformation while preserving the
+        original heading color.
 
     Use `-d` to dump current theme values in sourceable format.
 
@@ -364,6 +375,37 @@ bold text, etc.).
     because heading variations require luminance adjustment, which only works
     with full color specifications (X11 names, RGB hex, or RGB decimal).
 
+- **--config**=_KEY_=_VALUE_
+
+    Set config parameters from the command line.  Parameters are
+    passed to the [App::Greple::md](https://metacpan.org/pod/App%3A%3AGreple%3A%3Amd) module via
+    [Getopt::EX::Config](https://metacpan.org/pod/Getopt%3A%3AEX%3A%3AConfig).  Theme keys recognized by mdee (`base`,
+    `file`, `file_format`) are consumed locally and applied to both
+    light and dark themes; all other parameters are forwarded to the
+    md module.
+
+    Color labels (`h1`, `bold`, `italic`, etc.) are accepted as
+    config parameters and override default colors.  The `${base}`
+    placeholder can be used and will be expanded at runtime.
+
+        mdee --config h1=RD                       # red h1
+        mdee --config bold=GD --config italic=YI  # green bold, yellow italic
+        mdee --config h1='L25D/R;E'               # custom h1 with background
+        mdee --config file='L25D/R;E'             # red file label
+        mdee --config file_format=%s:             # simple format
+        mdee --config hashed.h3=1                 # enable h3 closing hashes
+
+    Theme keys consumed by mdee:
+
+    - `base` - Base color (equivalent to `--base-color`)
+    - `file` - Color spec for file label (default: `L25D/${base};E` for light, `L00D/${base};E` for dark)
+    - `file_format` - Format string for file label passed to greple's `--format FILE=` (default: `\n  %s\n\n`)
+
+    All other keys are passed to the md module as config parameters.
+    See ["Highlight Options"](#highlight-options) for the list of available color labels.
+    The md module also accepts operational parameters such as
+    `table_trim`, `rule`, `osc8`, `tick_open`, `tick_close`, etc.
+
 ## Highlight Options
 
 - **--colormap**=_LABEL_=_SPEC_, **--cm**=_LABEL_=_SPEC_
@@ -393,12 +435,15 @@ bold text, etc.).
         blockquote        Blockquote marker (>)
         horizontal_rule   Horizontal rules (---, ***, ___)
         comment           HTML comments (<!-- ... -->)
-        code_mark         Code delimiters (fences and backticks)
+        code_mark         Code block delimiters (``` and ~~~)
+        code_tick         Inline code backtick markers
         code_info         Fenced code block info string
         code_block        Fenced code block body
         code_inline       Inline code body
 
-    This option can be specified multiple times.
+    This option can be specified multiple times.  Color labels can
+    also be set via `--config`.  When both are
+    specified, `--cm` takes priority over `--config`.
 
 - **--heading-markup**=_STEPS_, **--hm** _STEPS_
 
@@ -556,7 +601,7 @@ The `${base}` string is expanded to the base color value after loading.
     mdee -B Ivory file.md                  # override base color
     mdee --mode=dark -B '#780043' file.md  # dark mode with burgundy
     mdee --theme=warm file.md              # warm (Coral) base color
-    mdee --theme=warm,hashed file.md      # warm + closing hashes
+    mdee --theme=warm,hashed file.md       # warm + closing hashes
 
 # DEPENDENCIES
 
@@ -686,7 +731,11 @@ to the md module via `md_config[]`:
     md_config+=(hashed.h3=1 hashed.h4=1 hashed.h5=1 hashed.h6=1)
 
 The `md_config[]` entries are passed as config parameters to the
-[App::Greple::md](https://metacpan.org/pod/App%3A%3AGreple%3A%3Amd) module.
+[App::Greple::md](https://metacpan.org/pod/App%3A%3AGreple%3A%3Amd) module.  Color labels (`h1`, `bold`, etc.)
+can also be set as config parameters:
+
+    # theme file or config.sh — override color label
+    md_config+=(h1='L25D/R;E' bold=RD)
 
 #### Base Color Expansion
 
@@ -789,7 +838,30 @@ does not override them.
 
 # SEE ALSO
 
-[nup(1)](https://metacpan.org/pod/App%3A%3Anup), [greple(1)](https://metacpan.org/pod/App%3A%3AGreple), [ansifold(1)](https://metacpan.org/pod/App%3A%3Aansifold), [ansicolumn(1)](https://metacpan.org/pod/App%3A%3Aansicolumn)
+- [App::Greple::md](https://metacpan.org/pod/App%3A%3AGreple%3A%3Amd)
+
+    Greple module for Markdown syntax highlighting, table formatting,
+    and text folding.  Bundled with this distribution.
+
+- [greple](https://metacpan.org/pod/greple)
+
+    General-purpose extensible grep tool used for pattern matching.
+
+- [nup](https://metacpan.org/pod/nup)
+
+    Multi-column paged output formatter.
+
+- [ansifold](https://metacpan.org/dist/App-ansifold/view/script/ansifold)
+
+    ANSI-aware text folding for line wrapping.
+
+- [ansicolumn](https://metacpan.org/pod/ansicolumn)
+
+    ANSI-aware column formatting for table alignment.
+
+- [https://github.com/tecolicom/App-mdee](https://github.com/tecolicom/App-mdee)
+
+    Repository and bug tracker.
 
 # AUTHOR
 

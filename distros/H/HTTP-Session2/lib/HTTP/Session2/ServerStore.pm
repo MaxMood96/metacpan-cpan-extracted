@@ -4,7 +4,7 @@ use warnings;
 use utf8;
 use 5.008_001;
 
-our $VERSION = "1.10";
+our $VERSION = "1.11";
 
 use Carp ();
 use Digest::HMAC;
@@ -172,6 +172,12 @@ __END__
 =head1 NAME
 
 HTTP::Session2::ServerStore - Session store
+
+=head1 DEPRECATION NOTICE
+
+This module is B<DEPRECATED> and no longer maintained.
+Please do not use this module for new projects.
+See L<HTTP::Session2> for details.
 
 =head1 DESCRIPTION
 

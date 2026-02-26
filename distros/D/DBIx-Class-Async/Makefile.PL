@@ -55,6 +55,34 @@ WriteMakefile(
                 file    => 'lib/DBIx/Class/Async.pm',
                 version => MM->parse_version('lib/DBIx/Class/Async.pm')
             },
+            'DBIx::Class::Async::Exception' => {
+                file    => 'lib/DBIx/Class/Async/Exception.pm',
+                version => MM->parse_version('lib/DBIx/Class/Async/Exception.pm')
+            },
+            'DBIx::Class::Async::Exception::AmbiguousColumn' => {
+                file    => 'lib/DBIx/Class/Async/Exception/AmbiguousColumn.pm',
+                version => MM->parse_version('lib/DBIx/Class/Async/Exception/AmbiguousColumn.pm')
+            },
+            'DBIx::Class::Async::Exception::Factory' => {
+                file    => 'lib/DBIx/Class/Async/Exception/Factory.pm',
+                version => MM->parse_version('lib/DBIx/Class/Async/Exception/Factory.pm')
+            },
+            'DBIx::Class::Async::Exception::MissingColumn' => {
+                file    => 'lib/DBIx/Class/Async/Exception/MissingColumn.pm',
+                version => MM->parse_version('lib/DBIx/Class/Async/Exception/MissingColumn.pm')
+            },
+            'DBIx::Class::Async::Exception::NoSuchRelationship' => {
+                file    => 'lib/DBIx/Class/Async/Exception/NoSuchRelationship.pm',
+                version => MM->parse_version('lib/DBIx/Class/Async/Exception/NoSuchRelationship.pm')
+            },
+            'DBIx::Class::Async::Exception::NotInStorage' => {
+                file    => 'lib/DBIx/Class/Async/Exception/NotInStorage.pm',
+                version => MM->parse_version('lib/DBIx/Class/Async/Exception/NotInStorage.pm')
+            },
+            'DBIx::Class::Async::Exception::RelationshipAsColumn' => {
+                file    => 'lib/DBIx/Class/Async/Exception/RelationshipAsColumn.pm',
+                version => MM->parse_version('lib/DBIx/Class/Async/Exception/RelationshipAsColumn.pm')
+            },
             'DBIx::Class::Async::ResultSet' => {
                 file    => 'lib/DBIx/Class/Async/ResultSet.pm',
                 version => MM->parse_version('lib/DBIx/Class/Async/ResultSet.pm')

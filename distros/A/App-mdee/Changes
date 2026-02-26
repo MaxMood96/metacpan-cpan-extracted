@@ -1,5 +1,13 @@
 Revision history for Perl extension App-mdee
 
+1.04 2026-02-26T02:55:15Z
+
+    - Add --config option for setting config parameters from command line
+    - Support color labels (h1, bold, etc.) as config params in md module
+    - Add file label theming (file, file_format theme keys)
+    - Add fatchap theme for decorative h1 heading borders
+    - Require App::ansicolumn 1.56
+
 1.03 2026-02-24T16:19:41Z
 
     - Add --[no-]trim option for table cell whitespace trimming (default: on)

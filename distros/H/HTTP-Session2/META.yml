@@ -11,7 +11,7 @@ build_requires:
 configure_requires:
   Module::Build::Tiny: '0.035'
 dynamic_config: 0
-generated_by: 'Minilla/v3.0.9, CPAN::Meta::Converter version 2.150010'
+generated_by: 'Minilla/v3.1.29, CPAN::Meta::Converter version 2.150010'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -30,7 +30,7 @@ no_index:
 provides:
   HTTP::Session2:
     file: lib/HTTP/Session2.pm
-    version: '1.10'
+    version: '1.11'
   HTTP::Session2::Base:
     file: lib/HTTP/Session2/Base.pm
   HTTP::Session2::ClientStore:
@@ -43,7 +43,7 @@ provides:
     file: lib/HTTP/Session2/Random.pm
   HTTP::Session2::ServerStore:
     file: lib/HTTP/Session2/ServerStore.pm
-    version: '1.10'
+    version: '1.11'
 requires:
   Cookie::Baker: '0'
   Crypt::CBC: '0'
@@ -59,9 +59,11 @@ requires:
 resources:
   bugtracker: https://github.com/tokuhirom/HTTP-Session2/issues
   homepage: https://github.com/tokuhirom/HTTP-Session2
-  repository: git://github.com/tokuhirom/HTTP-Session2.git
-version: '1.10'
+  repository: https://github.com/tokuhirom/HTTP-Session2.git
+version: '1.11'
 x_contributors:
-  - 'magai <xxmagai@gmail.com>'
   - 'Songmu <y.songmu@gmail.com>'
-x_serialization_backend: 'CPAN::Meta::YAML version 0.018'
+  - 'magai <xxmagai@gmail.com>'
+x_deprecated: 1
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'
+x_static_install: 1

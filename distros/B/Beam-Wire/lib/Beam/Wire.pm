@@ -1,5 +1,5 @@
 package Beam::Wire;
-our $VERSION = '1.030';
+our $VERSION = '1.031';
 # ABSTRACT: Lightweight Dependency Injection Container
 
 #pod =head1 SYNOPSIS
@@ -164,7 +164,7 @@ sub _build_services {
 #pod =attr meta_prefix
 #pod
 #pod The character that begins a meta-property inside of a service's C<args>. This
-#pod includes C<$ref>, C<$path>, C<$method>, and etc...
+#pod includes C<$ref>, C<$class>, C<$method>, and etc...
 #pod
 #pod The default value is C<$>. The empty string is allowed.
 #pod
@@ -223,29 +223,21 @@ sub get {
 
     ; print STDERR "Get service: $name\n" if DEBUG;
 
-    if ( $name =~ q{/} ) {
+    if ( index( $name, q{/} ) != -1 ) {
         my ( $container_name, $service_name ) = split m{/}, $name, 2;
         my $container = $self->get( $container_name );
-        my $unsub_config = $container->on( configure_service => sub {
-            my ( $event ) = @_;
-            $self->emit( configure_service =>
-                class => 'Beam::Wire::Event::ConfigService',
-                service_name => join( '/', $container_name, $event->service_name ),
-                config => $event->config,
-            );
-        } );
-        my $unsub_build = $container->on( build_service => sub {
-            my ( $event ) = @_;
-            $self->emit( build_service =>
-                class => 'Beam::Wire::Event::BuildService',
-                service_name => join( '/', $container_name, $event->service_name ),
-                service => $event->service,
-            );
-        } );
-        my $service = $container->get( $service_name, %override );
-        $unsub_config->();
-        $unsub_build->();
-        return $service;
+
+        # This could be a Beam::Wire container, or it could be a plain hashref.
+        # If it's a hashref, we can automatically create a container and then use it.
+        if (ref $container eq 'HASH' && !(blessed $container and $container->isa('Beam::Wire'))) {
+          my $inner_container = Beam::Wire->new(
+            config => $container,
+          );
+          # Do not cache the inner container for later use, in case someone
+          # also tries to use the parent as a bare hashref.
+          $container = $inner_container;
+        }
+        return $self->_get_from_inner_container($container, $container_name, $service_name, %override);
     }
 
     if ( keys %override ) {
@@ -285,6 +277,35 @@ sub get {
     ; print STDERR "Returning service: " . Dumper( $service ) if DEBUG;
 
     return $service;
+}
+
+sub _get_from_inner_container {
+  my ($self, $container, $container_name, $service_name, %override) = @_;
+
+  # Bubble up the events from the inner container
+  my $unsub_config = $container->on( configure_service => sub {
+      my ( $event ) = @_;
+      $self->emit( configure_service =>
+          class => 'Beam::Wire::Event::ConfigService',
+          service_name => join( '/', $container_name, $event->service_name ),
+          config => $event->config,
+      );
+  } );
+  my $unsub_build = $container->on( build_service => sub {
+      my ( $event ) = @_;
+      $self->emit( build_service =>
+          class => 'Beam::Wire::Event::BuildService',
+          service_name => join( '/', $container_name, $event->service_name ),
+          service => $event->service,
+      );
+  } );
+
+  my $service = $container->get( $service_name, %override );
+
+  $unsub_config->();
+  $unsub_build->();
+
+  return $service;
 }
 
 #pod =method set
@@ -919,7 +940,11 @@ sub get_meta_names {
 #pod
 #pod The name of a service in the container. Required.
 #pod
-#pod =item $path
+#pod =item $path (deprecated)
+#pod
+#pod B<Deprecated>: Bare hashrefs can be treated as child containers with C<$ref>
+#pod now. If there are other uses of C<$path> that cannot be updated to C<$ref>,
+#pod please L<open a GitHub issue to discuss it|https://github.com/preaction/Beam-Wire/issues>.
 #pod
 #pod A data path to pick some data out of the reference. Useful with C<value>
 #pod and C<config> services.
@@ -974,6 +999,9 @@ sub resolve_ref {
     my $service = $self->get( $name );
     # resolve service ref w/path
     if ( my $path = $arg->{ $meta{path} } ) {
+        # This was not nearly as useful as I had hoped... It would be better,
+        # much better, to have $ref handle these kind of things instead.
+        _deprecated('warning: (deprecated) Using $path is deprecated to remove the dependency on Data::DPath in service "' . $for . '"' );
         # locate foreign service data
         use_module( 'Data::DPath' )->import('dpath');
         @ref = dpath( $path )->match($service);
@@ -1414,7 +1442,7 @@ Beam::Wire - Lightweight Dependency Injection Container
 
 =head1 VERSION
 
-version 1.030
+version 1.031
 
 =head1 SYNOPSIS
 
@@ -1494,7 +1522,7 @@ add it here.
 =head2 meta_prefix
 
 The character that begins a meta-property inside of a service's C<args>. This
-includes C<$ref>, C<$path>, C<$method>, and etc...
+includes C<$ref>, C<$class>, C<$method>, and etc...
 
 The default value is C<$>. The empty string is allowed.
 
@@ -1795,7 +1823,11 @@ following keys:
 
 The name of a service in the container. Required.
 
-=item $path
+=item $path (deprecated)
+
+B<Deprecated>: Bare hashrefs can be treated as child containers with C<$ref>
+now. If there are other uses of C<$path> that cannot be updated to C<$ref>,
+please L<open a GitHub issue to discuss it|https://github.com/preaction/Beam-Wire/issues>.
 
 A data path to pick some data out of the reference. Useful with C<value>
 and C<config> services.

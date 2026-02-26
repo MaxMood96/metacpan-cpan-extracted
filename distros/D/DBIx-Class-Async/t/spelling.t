@@ -214,6 +214,15 @@ my @STOPWORDS = qw(
     Row
     Storage
     Function
+    subselect
+    subquery
+    sprintf
+    rethrow
+    stacktrace
+    elsif
+    stringify
+    stringifies
+    opdate
 );
 
 add_stopwords(@STOPWORDS);

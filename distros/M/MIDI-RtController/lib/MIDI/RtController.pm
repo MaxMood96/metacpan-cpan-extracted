@@ -5,7 +5,7 @@ our $AUTHORITY = 'cpan:GENE';
 
 use v5.36;
 
-our $VERSION = '0.0802';
+our $VERSION = '0.0803';
 
 use Moo;
 use strictures 2;
@@ -92,11 +92,13 @@ sub BUILD {
 
     unless ($args->{midi_out}) {
         $self->midi_out->open_virtual_port('RtController');
+        # use Data::Dumper::Compact 'ddc';
+        # print ddc $self->midi_out;
 
-        _log(sprintf 'Opening %s port %s...', $self->midi_out->{type}, $self->output)
+        _log(sprintf 'Opening out port %s...', $self->output)
             if $self->verbose;
         _open_port($self->midi_out, $self->output);
-        _log(sprintf 'Opened %s port %s', $self->midi_out->{type}, $self->output)
+        _log(sprintf 'Opened out port %s', $self->output)
             if $self->verbose;
     }
 }
@@ -203,7 +205,7 @@ MIDI::RtController - Control your MIDI controller
 
 =head1 VERSION
 
-version 0.0802
+version 0.0803
 
 =head1 SYNOPSIS
 
