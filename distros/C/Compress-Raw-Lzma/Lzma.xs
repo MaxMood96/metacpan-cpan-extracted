@@ -201,7 +201,7 @@ static const char my_l_errmsg[][34] = {
 #ifdef NO_WRITEABLE_DATA
 #  define trace TRACE_DEFAULT
 #else
-  static int trace = TRACE_DEFAULT ;
+  PERL_UNUSED_DECL static int trace = TRACE_DEFAULT ;
 #endif
 
 /* Dodge PerlIO hiding of these functions. */
@@ -969,14 +969,12 @@ code (s, buf, output)
         if (RETVAL != LZMA_OK)
             break;
 
-        /* if (RETVAL == LZMA_BUF_ERROR) { */
-
-            if (s->stream.avail_out == 0)
-                continue ;
-            if (s->stream.avail_in == 0) {
-                RETVAL = LZMA_OK ;
-                break ;
-            }
+        if (s->stream.avail_out == 0)
+            continue ;
+        if (s->stream.avail_in == 0) {
+            RETVAL = LZMA_OK ;
+            break ;
+        }
 
 
         if (RETVAL != LZMA_OK)

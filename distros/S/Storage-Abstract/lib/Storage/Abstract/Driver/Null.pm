@@ -1,12 +1,9 @@
 package Storage::Abstract::Driver::Null;
-$Storage::Abstract::Driver::Null::VERSION = '0.007';
+$Storage::Abstract::Driver::Null::VERSION = '0.008';
 use v5.14;
 use warnings;
 
-use Moo;
-use Mooish::AttributeBuilder -standard;
-use Types::Common -types;
-use namespace::autoclean;
+use Mooish::Base -standard;
 
 extends 'Storage::Abstract::Driver';
 

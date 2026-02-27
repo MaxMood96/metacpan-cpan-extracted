@@ -1,5 +1,8 @@
 Revision history for RRD-Fetch
 
+0.1.0   2026-02-26/13:00
+        - add RRD::Fetch::Helper and librenms_logsize_daily_stats as a example for it
+
 0.0.1   2025-11-23/15:30
         - Initial release.
 

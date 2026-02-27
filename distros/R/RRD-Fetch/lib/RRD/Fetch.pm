@@ -14,11 +14,11 @@ RRD::Fetch - Fetch information from a RRD file.
 
 =head1 VERSION
 
-Version 0.0.1
+Version 0.1.0
 
 =cut
 
-our $VERSION = '0.0.1';
+our $VERSION = '0.1.0';
 
 =head1 SYNOPSIS
 
@@ -580,12 +580,27 @@ sub daily_stats {
 					push( @values, $current_value );
 				}
 			}
-			$to_return->{'max'}{$current_day}{$column}    = sprintf( '%.12f', max(@values) );
-			$to_return->{'min'}{$current_day}{$column}    = sprintf( '%.12f', min(@values) );
-			$to_return->{'sum'}{$current_day}{$column}    = sprintf( '%.12f', sum(@values) );
-			$to_return->{'mean'}{$current_day}{$column}   = sprintf( '%.12f', mean(@values) );
-			$to_return->{'mode'}{$current_day}{$column}   = sprintf( '%.12f', mode(@values) );
-			$to_return->{'median'}{$current_day}{$column} = sprintf( '%.12f', median(@values) );
+			if (defined($values[0])){
+				$to_return->{'max'}{$current_day}{$column}    = sprintf( '%.12f', max(@values) );
+				$to_return->{'max'}{$current_day}{$column}=~s/\.*0+$//;
+				$to_return->{'min'}{$current_day}{$column}    = sprintf( '%.12f', min(@values) );
+				$to_return->{'min'}{$current_day}{$column}=~s/\.*0+$//;
+				$to_return->{'sum'}{$current_day}{$column}    = sprintf( '%.12f', sum(@values) );
+				$to_return->{'sum'}{$current_day}{$column}=~s/\.*0+$//;
+				$to_return->{'mean'}{$current_day}{$column}   = sprintf( '%.12f', mean(@values) );
+				$to_return->{'mean'}{$current_day}{$column}=~s/\.*0+$//;
+				$to_return->{'mode'}{$current_day}{$column}   = sprintf( '%.12f', mode(@values) );
+				$to_return->{'mode'}{$current_day}{$column}=~s/\.*0+$//;
+				$to_return->{'median'}{$current_day}{$column} = sprintf( '%.12f', median(@values) );
+				$to_return->{'median'}{$current_day}{$column}=~s/\.*0+$//;
+			}else{
+				$to_return->{'max'}{$current_day}{$column}    = 0;
+				$to_return->{'min'}{$current_day}{$column}    = 0;
+				$to_return->{'sum'}{$current_day}{$column}    = 0;
+				$to_return->{'mean'}{$current_day}{$column}   = 0;
+				$to_return->{'mode'}{$current_day}{$column}   = 0;
+				$to_return->{'median'}{$current_day}{$column} = 0;
+			}
 		} ## end foreach my $column ( @{ $to_return->{'columns'}...})
 
 		$t += 86400;

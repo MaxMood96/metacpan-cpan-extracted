@@ -4,7 +4,7 @@
       "Paul Marquess <pmqs@cpan.org>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "ExtUtils::MakeMaker version 7.34, CPAN::Meta::Converter version 2.150010",
+   "generated_by" : "ExtUtils::MakeMaker version 7.70, CPAN::Meta::Converter version 2.150010",
    "license" : [
       "perl_5"
    ],
@@ -24,8 +24,7 @@
    "prereqs" : {
       "build" : {
          "requires" : {
-            "ExtUtils::MakeMaker" : "0",
-            "Pod::Markdown" : "0"
+            "ExtUtils::MakeMaker" : "0"
          }
       },
       "configure" : {
@@ -46,6 +45,6 @@
          "web" : "https://github.com/pmqs/Compress-Raw-Lzma"
       }
    },
-   "version" : "2.217",
-   "x_serialization_backend" : "JSON::PP version 4.02"
+   "version" : "2.219",
+   "x_serialization_backend" : "JSON::PP version 4.16"
 }

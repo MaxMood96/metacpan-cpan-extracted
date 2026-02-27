@@ -3,7 +3,7 @@
 #
 package PDL::Fit::Levmar;
 
-our @EXPORT_OK = qw(levmar levmar_report levmar_chkjac levmar_der_lb_ub levmar_der_lb levmar_der_ levmar_der_ub levmar_diff_lb_ub levmar_diff_lb levmar_diff_ levmar_diff_ub _levmar_chkjac _levmar_chkjac_no_t );
+our @EXPORT_OK = qw(levmar levmar_report levmar_chkjac levmar_der_lb_ub levmar_der_ levmar_der_ub levmar_der_lb levmar_diff_lb_ub levmar_diff_ levmar_diff_ub levmar_diff_lb _levmar_chkjac _levmar_chkjac_no_t );
 our %EXPORT_TAGS = (Func=>\@EXPORT_OK);
 
 use PDL::Core;
@@ -11,10 +11,11 @@ use PDL::Exporter;
 use DynaLoader;
 
 
-   our $VERSION = '0.0107';
+   our $VERSION = '0.0108';
    our @ISA = ( 'PDL::Exporter','DynaLoader' );
    push @PDL::Core::PP, __PACKAGE__;
    bootstrap PDL::Fit::Levmar $VERSION;
+
 
 
 
@@ -1645,14 +1646,9 @@ sub levmar_chkjac {
     DFP_free($DFP);
     return $err;
 }
-#line 1649 "Levmar.pm"
+#line 1650 "Levmar.pm"
 
 *levmar_der_lb_ub = \&PDL::levmar_der_lb_ub;
-
-
-
-
-*levmar_der_lb = \&PDL::levmar_der_lb;
 
 
 
@@ -1667,12 +1663,12 @@ sub levmar_chkjac {
 
 
 
+*levmar_der_lb = \&PDL::levmar_der_lb;
+
+
+
+
 *levmar_diff_lb_ub = \&PDL::levmar_diff_lb_ub;
-
-
-
-
-*levmar_diff_lb = \&PDL::levmar_diff_lb;
 
 
 
@@ -1683,6 +1679,11 @@ sub levmar_chkjac {
 
 
 *levmar_diff_ub = \&PDL::levmar_diff_ub;
+
+
+
+
+*levmar_diff_lb = \&PDL::levmar_diff_lb;
 
 
 
@@ -1716,7 +1717,7 @@ distribution, the copyright notice should be included in the
 file.
 
 =cut
-#line 1720 "Levmar.pm"
+#line 1721 "Levmar.pm"
 
 # Exit with OK status
 

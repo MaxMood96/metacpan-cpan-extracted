@@ -1,5 +1,49 @@
 Revision history for DBIx::Class::Async
 
+0.63 2026-02-27
+     [BUG FIXES]
+     - delete() on a ResultSet with group_by and/or having
+       would cause DBIx::Class to generate a DELETE subquery with
+       GROUP BY silently stripped, producing invalid SQL that most
+       databases reject. Fixed by detecting group_by/having,
+       building a clean copy of the attrs with those keys removed,
+       and re-fetching matching PKs via a plain WHERE search before
+       issuing delete_all().
+
+     - Fixed delete() attribute routing: the previous guard
+       triggered the two-query delete_all() path whenever the
+       ResultSet had any attribute at all, including harmless ones
+       such as result_class, order_by, and prefetch, causing
+       unnecessary extra queries. The check is now restricted to
+       the six attributes that genuinely make a direct DELETE unsafe:
+       rows, offset, and page (LIMIT/OFFSET), join (multi-table DELETE),
+       and group_by/having (see above). ResultSets carrying only
+       ordering or prefetch attributes now issue a direct single-query
+       DELETE.
+
+     [ENHANCEMENTS]
+     - SelectNormaliser is now applied automatically inside search()
+       after attribute merging and before the new ResultSet is constructed.
+       Any { -ident => $col, -as => $alias } items in the select list
+       are rewritten to bare column strings at this point, so every
+       downstream operation flowing through search() -- all, count,
+       count_total, update, and so on -- receives clean attributes without
+       requiring individual normalisation calls at each call site.
+
+     [TESTS]
+     - Added t/154-grouped-delete.t covering delete() on ResultSets with
+       group_by, having, rows (LIMIT), and join, plus a regression guard
+       for plain ungrouped delete.  Tests use a live SQLite database via
+       the standard TestSchema fixture.
+
+     - Added t/155-select-normaliser.t covering _is_ident_hashref
+       classification, all normalise() input forms (bare strings, -ident
+       with and without -as, function hashrefs, literal SQL refs, mixed
+       lists, scalar and hashref non-array inputs), as/select length
+       mismatches, normalise_attrs() key preservation and no-mutation
+       guarantee, and a structural proof that the normalised output
+       contains no -ident hashrefs. No live database required.
+
 0.62 2026-02-25
      [NEW FEATURES]
      - Added as_subselect_rs() method for wrapping queries as subselects.
@@ -34,6 +78,23 @@ Revision history for DBIx::Class::Async
        - DBIx::Class::Async::Exception::MissingColumn
        - DBIx::Class::Async::Exception::NoSuchRelationship
        - DBIx::Class::Async::Exception::AmbiguousColumn
+
+     - Added DBIx::Class::Async::SelectNormaliser, a pre-processing module
+       that allows { -ident => $col, -as => $alias } clauses in the ResultSet
+       select attribute. DBIx::Class passes select attrs directly to
+       SQL::Abstract's _select_field path, which does not recognise -ident
+       as a special sigil and instead renders it as a function call
+       (-IDENT($col)), producing invalid SQL. SelectNormaliser rewrites
+       -ident hashrefs to bare column strings before they reach
+       SQL::Abstract, requiring no upstream changes.  Function hashrefs
+       ({ count => 'me.id', -as => 'total' }), bare strings, and literal
+       SQL refs (\[]) are left untouched.  The as[] array is populated from
+       inline -as values where not already specified by the caller, with
+       caller-supplied as[] entries taking priority. Called automatically
+       from ResultSet::search(); search_rs() benefits transitively as it
+       delegates to search().  All downstream operations that build on a
+       searched ResultSet (all, count, update, delete, as_query, etc.)
+       see clean attrs without any change to call sites.
 
      [ENHANCEMENTS]
      - Enhanced as_query() to detect and handle empty column selection,

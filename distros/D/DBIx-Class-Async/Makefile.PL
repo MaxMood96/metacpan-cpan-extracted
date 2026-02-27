@@ -83,6 +83,10 @@ WriteMakefile(
                 file    => 'lib/DBIx/Class/Async/Exception/RelationshipAsColumn.pm',
                 version => MM->parse_version('lib/DBIx/Class/Async/Exception/RelationshipAsColumn.pm')
             },
+            'DBIx::Class::Async::SelectNormaliser' => {
+                file    => 'lib/DBIx/Class/Async/SelectNormaliser.pm',
+                version => MM->parse_version('lib/DBIx/Class/Async/SelectNormaliser.pm')
+            },
             'DBIx::Class::Async::ResultSet' => {
                 file    => 'lib/DBIx/Class/Async/ResultSet.pm',
                 version => MM->parse_version('lib/DBIx/Class/Async/ResultSet.pm')

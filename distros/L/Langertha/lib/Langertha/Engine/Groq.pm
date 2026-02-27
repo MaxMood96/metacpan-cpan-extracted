@@ -1,6 +1,6 @@
 package Langertha::Engine::Groq;
 # ABSTRACT: GroqCloud API
-our $VERSION = '0.202';
+our $VERSION = '0.302';
 use Moose;
 use Carp qw( croak );
 
@@ -9,9 +9,8 @@ extends 'Langertha::Engine::OpenAIBase';
 with 'Langertha::Role::'.$_ for (qw(
   ResponseFormat
   Transcription
+  Tools
 ));
-
-with 'Langertha::Role::Tools';
 
 
 sub _build_api_key {
@@ -51,7 +50,7 @@ Langertha::Engine::Groq - GroqCloud API
 
 =head1 VERSION
 
-version 0.202
+version 0.302
 
 =head1 SYNOPSIS
 

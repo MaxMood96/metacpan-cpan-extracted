@@ -2,7 +2,7 @@ package Mail::DMARC;
 use strict;
 use warnings;
 
-our $VERSION = '1.20250805';
+our $VERSION = '1.20260226';
 
 use Carp;
 our $psl_loads = 0;
@@ -237,7 +237,6 @@ sub get_report_window {
     return ( $begin, $end );
 }
 
-
 sub get_start_of_zulu_day {
     my ( $self, $t ) = @_;
     my $start_of_zulu_day = $t - ( $t % 86400 );
@@ -309,7 +308,7 @@ Mail::DMARC - Perl implementation of DMARC
 
 =head1 VERSION
 
-version 1.20250805
+version 1.20260226
 
 =head1 SYNOPSIS
 
@@ -328,13 +327,13 @@ DMARC: Domain-based Message Authentication, Reporting and Conformance
 
   # any result that did not pass is a fail. Now for disposition
 
-  if ( $result->evalated->disposition eq 'reject' ) {
+  if ( $result->disposition eq 'reject' ) {
      ...treat the sender to a 550 ...
   };
-  if ( $result->evalated->disposition eq 'quarantine' ) {
+  if ( $result->disposition eq 'quarantine' ) {
      ...assign a bunch of spam points...
   };
-  if ( $result->evalated->disposition eq 'none' ) {
+  if ( $result->disposition eq 'none' ) {
      ...continue normal processing...
   };
 
@@ -655,7 +654,7 @@ Ricardo Signes <rjbs@cpan.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2025 by Matt Simerson.
+This software is copyright (c) 2026 by Matt Simerson.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

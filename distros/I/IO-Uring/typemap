@@ -1,7 +1,5 @@
 TYPEMAP
 sigset_t*	T_SIGSET
-signo_t	T_SIGNO
-struct timespec	T_TIMESPEC
 
 INPUT
 T_MAGICEXT
@@ -46,16 +44,6 @@ T_SIGSET
 	} else {
 		$var = NULL;
 	}
-T_SIGNO
-	$var = (SvIOK($arg) || looks_like_number($arg)) && SvIV($arg) ? SvIV($arg) : whichsig(SvPV_nolen($arg));
-T_TIMESPEC
-	if (SvROK($arg) && sv_derived_from($arg, \"Time::Spec\")) {
-		$var = *(struct timespec*)SvPV_nolen(SvRV($arg));
-	} else {
-		NV input = SvNV($arg);
-		$var.tv_sec  = (time_t) floor(input);
-		$var.tv_nsec = (long) ((input - $var.tv_sec) * 1000000000);
-	}
 T_OPAQUEOBJ
     {
 		SV * sv = $arg;
@@ -85,8 +73,6 @@ T_MAGICEXT
 	magic->mg_flags |= MGf_COPY|MGf_DUP;
 	}
 
-T_TIMESPEC
-	sv_setnv($arg, $var.tv_sec + $var.tv_nsec / 1000000000.0);
 T_OPAQUEOBJ
 	{
 		sv_usepvn(newSVrv($arg, \"$ntype\"), (char*)$var, sizeof(*$var));

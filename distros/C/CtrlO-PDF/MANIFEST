@@ -9,7 +9,16 @@ META.yml
 README.md
 sample/ctrlo.pl
 sample/logo.png
+sample/3.026/002_basic.pdf
+sample/3.026/004_image.pdf
+sample/3.027/002_basic.pdf
+sample/3.027/004_image.pdf
+sample/3.028/002_basic.pdf
+sample/3.028/004_image.pdf
 t/001_base.t
 t/002_basic.t
+t/003_table.t
+t/004_image.t
+t/lib/Tools.pm
 truetype/liberation/LiberationSans-Bold.ttf
 truetype/liberation/LiberationSans-Regular.ttf

@@ -1,6 +1,6 @@
 package DBIx::Class::Async::Exception::AmbiguousColumn;
 
-$DBIx::Class::Async::Exception::AmbiguousColumn::VERSION   = '0.62';
+$DBIx::Class::Async::Exception::AmbiguousColumn::VERSION   = '0.63';
 $DBIx::Class::Async::Exception::AmbiguousColumn::AUTHORITY = 'cpan:MANWAR';
 
 use strict;
@@ -15,7 +15,7 @@ that are ambiguous across joined tables
 
 =head1 VERSION
 
-Version 0.62
+Version 0.63
 
 =head1 SYNOPSIS
 

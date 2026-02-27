@@ -1,6 +1,6 @@
 package Langertha::Role::OpenAICompatible;
 # ABSTRACT: Role for OpenAI-compatible API format
-our $VERSION = '0.202';
+our $VERSION = '0.302';
 use Moose::Role;
 use File::ShareDir::ProjectDistDir qw( :all );
 use Carp qw( croak );
@@ -24,15 +24,25 @@ sub update_request {
 sub openapi_file { yaml => dist_file('Langertha','openai.yaml') };
 
 
+sub _build_openapi_operations {
+  require Langertha::Spec::OpenAI;
+  return Langertha::Spec::OpenAI::data();
+}
+
+
 sub default_embedding_model { 'text-embedding-3-large' }
 sub default_transcription_model { 'whisper-1' }
+sub default_image_model { 'gpt-image-1' }
 
 # Dynamic model listing
+
+sub list_models_path { '/models' }
+
 
 sub list_models_request {
   my ($self) = @_;
   return $self->generate_http_request(
-    GET => $self->url.'/v1/models',
+    GET => $self->url.$self->list_models_path,
     sub { $self->list_models_response(shift) },
   );
 }
@@ -254,6 +264,63 @@ sub format_tool_results {
 }
 
 
+# Image generation
+
+sub image_operation_id { 'createImage' }
+
+sub image_request {
+  my ( $self, $prompt, %extra ) = @_;
+  return $self->generate_request( $self->image_operation_id, sub { $self->image_response(shift) },
+    model  => $self->image_model,
+    prompt => $prompt,
+    %extra,
+  );
+}
+
+
+sub image_response {
+  my ( $self, $response ) = @_;
+  my $data = $self->parse_response($response);
+  return $data->{data};
+}
+
+
+sub simple_image {
+  my ( $self, $prompt, %extra ) = @_;
+  my $request = $self->image_request($prompt, %extra);
+  my $response = $self->user_agent->request($request);
+  return $request->response_call->($response);
+}
+
+
+sub _parse_rate_limit_headers {
+  my ( $self, $http_response ) = @_;
+  my %raw;
+  for my $name (qw(
+    x-ratelimit-limit-requests
+    x-ratelimit-remaining-requests
+    x-ratelimit-reset-requests
+    x-ratelimit-limit-tokens
+    x-ratelimit-remaining-tokens
+    x-ratelimit-reset-tokens
+  )) {
+    my $val = $http_response->header($name);
+    $raw{$name} = $val if defined $val;
+  }
+  return undef unless %raw;
+  require Langertha::RateLimit;
+  return Langertha::RateLimit->new(
+    ( defined $raw{'x-ratelimit-limit-requests'}     ? ( requests_limit     => $raw{'x-ratelimit-limit-requests'} + 0 )     : () ),
+    ( defined $raw{'x-ratelimit-remaining-requests'} ? ( requests_remaining => $raw{'x-ratelimit-remaining-requests'} + 0 ) : () ),
+    ( defined $raw{'x-ratelimit-reset-requests'}     ? ( requests_reset     => $raw{'x-ratelimit-reset-requests'} )         : () ),
+    ( defined $raw{'x-ratelimit-limit-tokens'}       ? ( tokens_limit       => $raw{'x-ratelimit-limit-tokens'} + 0 )       : () ),
+    ( defined $raw{'x-ratelimit-remaining-tokens'}   ? ( tokens_remaining   => $raw{'x-ratelimit-remaining-tokens'} + 0 )   : () ),
+    ( defined $raw{'x-ratelimit-reset-tokens'}       ? ( tokens_reset       => $raw{'x-ratelimit-reset-tokens'} )           : () ),
+    raw => \%raw,
+  );
+}
+
+
 
 1;
 
@@ -269,7 +336,7 @@ Langertha::Role::OpenAICompatible - Role for OpenAI-compatible API format
 
 =head1 VERSION
 
-version 0.202
+version 0.302
 
 =head1 SYNOPSIS
 
@@ -319,7 +386,8 @@ B<Engines should also compose these roles:>
 B<Engines using this role:> L<Langertha::Engine::OpenAI>, L<Langertha::Engine::DeepSeek>,
 L<Langertha::Engine::Groq>, L<Langertha::Engine::Mistral>, L<Langertha::Engine::vLLM>,
 L<Langertha::Engine::NousResearch>, L<Langertha::Engine::Perplexity>,
-L<Langertha::Engine::OllamaOpenAI>, L<Langertha::Engine::AKIOpenAI>.
+L<Langertha::Engine::HuggingFace>, L<Langertha::Engine::OllamaOpenAI>,
+L<Langertha::Engine::AKIOpenAI>.
 
 =head2 api_key
 
@@ -343,12 +411,21 @@ when an API key is configured. Skipped when C<api_key> is C<undef>
 Returns the OpenAI OpenAPI spec file path used for request generation.
 Override in an engine to use a provider-specific spec (e.g., Mistral).
 
+=head2 list_models_path
+
+    my $path = $engine->list_models_path;
+
+Returns the path appended to C<url> for the models endpoint.
+Default: C</models>. Override in engines whose API spec uses a
+different path (e.g. Mistral uses C</v1/models> because its base URL
+does not include C</v1>).
+
 =head2 list_models_request
 
     my $request = $engine->list_models_request;
 
-Generates an HTTP GET request for the C</v1/models> endpoint.
-Returns an HTTP request object.
+Generates an HTTP GET request for the models endpoint using
+C<list_models_path>. Returns an HTTP request object.
 
 =head2 list_models_response
 
@@ -477,9 +554,41 @@ Converts tool execution results into OpenAI-format messages to append
 to the conversation. Returns a list: first the assistant message (with
 tool calls), then one C<role =E<gt> 'tool'> message per result.
 
+=head2 image_request
+
+    my $request = $engine->image_request($prompt, %extra);
+
+Generates an OpenAI-format image generation request for the given
+C<$prompt>. Uses C<image_model> (default: C<gpt-image-1>). Accepts
+optional C<size>, C<quality>, C<n>, C<response_format> via C<%extra>.
+Returns an HTTP request object.
+
+=head2 image_response
+
+    my $images = $engine->image_response($http_response);
+
+Parses an OpenAI-format image generation response. Returns an ArrayRef
+of image objects, each with C<url> or C<b64_json> and optionally
+C<revised_prompt>.
+
+=head2 simple_image
+
+    my $images = $engine->simple_image('A cat in space');
+
+Sends an image generation request and returns the result. Blocks until
+the request completes. Returns an ArrayRef of image objects.
+
+=head2 _parse_rate_limit_headers
+
+Parses C<x-ratelimit-*> headers from the HTTP response into a
+L<Langertha::RateLimit> object. Covers OpenAI, Groq, Cerebras, OpenRouter,
+Replicate, and all other OpenAI-compatible engines.
+
 =head1 SEE ALSO
 
 =over
+
+=item * L<Langertha::RateLimit> - Normalized rate limit data
 
 =item * L<Langertha::Engine::OpenAI> - OpenAI engine
 

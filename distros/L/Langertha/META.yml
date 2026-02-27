@@ -26,6 +26,7 @@ requires:
   JSON::PP: '0'
   JSON::Schema::Modern: '0.617'
   LWP::Protocol::https: '0'
+  Log::Any: '0'
   MIME::Base64: '0'
   Module::Runtime: '0'
   Moose: '0'
@@ -41,7 +42,7 @@ resources:
   bugtracker: https://github.com/Getty/langertha/issues
   homepage: https://github.com/Getty/langertha
   repository: https://github.com/Getty/langertha.git
-version: '0.202'
+version: '0.302'
 x_Dist_Zilla:
   perl:
     version: '5.036000'
@@ -291,7 +292,7 @@ x_Dist_Zilla:
           branch: ~
           changelog: Changes
           signed: 0
-          tag: '0.202'
+          tag: '0.302'
           tag_format: '%v'
           tag_message: v%V
         Dist::Zilla::Role::Git::Repo:

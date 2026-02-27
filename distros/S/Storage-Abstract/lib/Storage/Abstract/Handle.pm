@@ -1,5 +1,5 @@
 package Storage::Abstract::Handle;
-$Storage::Abstract::Handle::VERSION = '0.007';
+$Storage::Abstract::Handle::VERSION = '0.008';
 use v5.14;
 use warnings;
 

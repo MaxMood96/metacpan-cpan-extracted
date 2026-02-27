@@ -44,6 +44,9 @@ sub count_future_dependents
 
 my ( $controller, $puppet ) = Test::ExpectAndCheck->create;
 
+$controller->whenever( fileno => )
+   ->will_return( 10 );
+
 # ->read does not build long future chains on EAGAIN
 {
    my $read_f;

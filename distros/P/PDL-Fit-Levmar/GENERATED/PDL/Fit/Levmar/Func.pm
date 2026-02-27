@@ -22,6 +22,7 @@ use DynaLoader;
 
 
 
+
 #line 9 "func.pd"
 
 =head1 NAME
@@ -953,7 +954,7 @@ sub jac_of_t1 {
     _callj1($p,$t,$jac, $self->{JPOINTER});
     return($jac);
 }
-#line 957 "Func.pm"
+#line 958 "Func.pm"
 
 *_callf = \&PDL::Fit::Levmar::Func::_callf;
 
@@ -985,7 +986,7 @@ distribution. If this file is separated from the PDL distribution,
 the copyright notice should be included in the file.
 
 =cut
-#line 989 "Func.pm"
+#line 990 "Func.pm"
 
 # Exit with OK status
 

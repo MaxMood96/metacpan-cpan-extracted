@@ -1,6 +1,6 @@
 package Getopt::EX::Hashed;
 
-our $VERSION = '1.0602';
+our $VERSION = '1.0701';
 
 =encoding utf-8
 
@@ -10,7 +10,7 @@ Getopt::EX::Hashed - Hash object automation for Getopt::Long
 
 =head1 VERSION
 
-Version 1.0602
+Version 1.0701
 
 =head1 SYNOPSIS
 
@@ -45,18 +45,38 @@ Version 1.0602
 use v5.14;
 use warnings;
 use Hash::Util qw(lock_keys lock_keys_plus unlock_keys);
+use Scalar::Util qw(refaddr);
 use Carp;
 use Data::Dumper;
 use List::Util qw(first);
 
-# store metadata in caller context
+#
+# Store metadata in caller context
+#
 my  %__DB__;
+
+#
+# Track objects created by new() to distinguish from Clone copies.
+# Only "master" objects (created by new) are allowed to remove accessors
+# on destruction, preventing clone objects from destroying shared class-level
+# accessors that the original object still needs.
+#
+my %_masters;
+
+#
+# Get or create package-specific metadata storage namespace
+# Returns a hash reference for storing member and config data
+#
 sub  __DB__ {
     my $caller = shift;
     state $pkg = __PACKAGE__ =~ s/::/_/gr;
     no strict 'refs';
     $__DB__{$caller} //= \%{"$caller\::$pkg\::__DB__"};
 }
+
+#
+# Get or create member/configuration metadata array for a package
+#
 sub __Member__ { __DB__($_[0])->{Member} //= [] }
 sub __Config__ { __DB__($_[0])->{Config} //= {} }
 
@@ -69,6 +89,7 @@ my %DefaultConfig = (
     GETOPT_FROM_ARRAY  => 'GetOptionsFromArray',
     ACCESSOR_PREFIX    => '',
     ACCESSOR_LVALUE    => 1,
+    REMOVE_ACCESSOR    => 1,
     DEFAULT            => [],
     INVALID_MSG        => \&_invalid_msg,
     );
@@ -76,6 +97,9 @@ lock_keys %DefaultConfig;
 
 our @EXPORT = qw(has);
 
+#
+# Module import: set up inheritance, export functions, and initialize config
+#
 sub import {
     my $pkg = shift;
     my $caller = caller;
@@ -90,12 +114,19 @@ sub import {
     }
 }
 
+#
+# Remove exported functions from caller's namespace
+#
 sub unimport {
     my $caller = caller;
     no strict 'refs';
     delete ${"$caller\::"}{$_} for @EXPORT;
 }
 
+#
+# Configure package or object settings
+# Can be called as class method or instance method
+#
 sub configure {
     my $class = shift;
     my $config = do {
@@ -116,6 +147,9 @@ sub configure {
     return $class;
 }
 
+#
+# Reset class to original state, clearing all members and config
+#
 sub reset {
     my $caller = caller;
     my $member = __Member__($caller);
@@ -125,11 +159,19 @@ sub reset {
     return $_[0];
 }
 
+#
+# Declare option parameters using DSL syntax
+# Supports single or multiple option names and incremental updates with '+'
+#
 sub has {
     my($key, @param) = @_;
     if (@param % 2) {
 	my $default = ref $param[0] eq 'CODE' ? 'action' : 'spec';
 	unshift @param, $default;
+    }
+    my %param = @param;
+    if (defined $param{spec} and $param{spec} =~ s/\s*#\s*(.*)//) {
+	push @param, help => $1;
     }
     my @name = ref $key eq 'ARRAY' ? @$key : $key;
     my $caller = caller;
@@ -148,6 +190,9 @@ sub has {
     }
 }
 
+#
+# Constructor: create hash object with initialized members and accessors
+#
 sub new {
     my $class = shift;
     my $obj = bless {}, $class;
@@ -177,11 +222,17 @@ sub new {
 	};
     }
     lock_keys %$obj if $config->{LOCK_KEYS};
+    $_masters{refaddr($obj)} = 1;
     $obj;
 }
 
+#
+# Destructor: remove accessor methods from package namespace
+#
 sub DESTROY {
     my $obj = shift;
+    return unless delete $_masters{refaddr($obj)};
+    return unless $obj->_conf->{REMOVE_ACCESSOR};
     my $pkg = ref $obj;
     my $hash = do { no strict 'refs'; \%{"$pkg\::"} };
     my $prefix = $obj->_conf->{ACCESSOR_PREFIX};
@@ -192,11 +243,17 @@ sub DESTROY {
     }
 }
 
+#
+# Generate option specification list for Getopt::Long
+#
 sub optspec {
     my $obj = shift;
     map $obj->_opt_pair($_), @{$obj->_member};
 }
 
+#
+# Call GetOptions or GetOptionsFromArray with generated option specs
+#
 sub getopt {
     my $obj = shift;
     if (@_ == 0) {
@@ -214,16 +271,28 @@ sub getopt {
     }
 }
 
+#
+# Add new keys to locked hash object
+#
 sub use_keys {
     my $obj = shift;
     unlock_keys %$obj;
     lock_keys_plus %$obj, @_;
 }
 
+#
+# Get object's configuration hash
+#
 sub _conf   { $_[0]->{__Config__} }
 
+#
+# Get object's member metadata array
+#
 sub _member { $_[0]->{__Member__} }
 
+#
+# Generate accessor method based on type (ro/rw/lv)
+#
 sub _accessor {
     my($is, $name) = @_;
     {
@@ -242,6 +311,9 @@ sub _accessor {
     }->{$is} or die "$name has invalid 'is' parameter.\n";
 }
 
+#
+# Generate option spec and destination pair for a member
+#
 sub _opt_pair {
     my $obj = shift;
     my $member = shift;
@@ -249,6 +321,9 @@ sub _opt_pair {
     ( $spec_str => $obj->_opt_dest($member) );
 }
 
+#
+# Generate option spec string from member definition
+#
 sub _opt_str {
     my $obj = shift;
     my($name, $m) = @{+shift};
@@ -261,6 +336,10 @@ sub _opt_str {
     $obj->_compile($name, $spec);
 }
 
+#
+# Compile option spec into Getopt::Long format
+# Handles aliases and underscore conversion
+#
 sub _compile {
     my $obj = shift;
     my($name, $args) = @_;
@@ -282,6 +361,9 @@ sub _compile {
     join('|', @names) . $spec;
 }
 
+#
+# Generate option destination (reference or coderef) with optional validation
+#
 sub _opt_dest {
     my $obj = shift;
     my($name, $m) = @{+shift};
@@ -307,8 +389,11 @@ sub _opt_dest {
 	    \$obj->{$name};
 	}
     }
-} 
+}
 
+#
+# Validation test functions for min, max, must, and any parameters
+#
 my %tester = (
     min  => sub { $_[-1] >= $_->{min} },
     max  => sub { $_[-1] <= $_->{max} },
@@ -334,11 +419,17 @@ my %tester = (
     },
     );
 
+#
+# Get applicable tester functions for a member
+#
 sub _tester {
     my $m = shift;
     map $tester{$_}, grep { defined $m->{$_} } keys %tester;
 }
 
+#
+# Create validator coderef that combines multiple test functions
+#
 sub _validator {
     my $m = shift;
     my @test = _tester($m) or return undef;
@@ -351,6 +442,9 @@ sub _validator {
     }
 }
 
+#
+# Generic setter for array, hash, and scalar values
+#
 sub _generic_setter {
     my $dest = $_->{$_[0]};
     (ref $dest eq 'ARRAY') ? do { push @$dest, $_[1] } :
@@ -358,6 +452,9 @@ sub _generic_setter {
                            : do { $_->{$_[0]} = $_[1] };
 }
 
+#
+# Generate error message for option validation failures
+#
 sub _invalid_msg {
     my $opt = do {
 	$_[0] = $_[0] =~ tr[_][-]r;
@@ -388,8 +485,17 @@ validation interface.
 
 Accessor methods are automatically generated when C<is> parameter is
 given.  If the same function is already defined, the program causes
-fatal error.  Accessors are removed when the object is destroyed.
-Problems may occur when multiple objects are present at the same time.
+fatal error.  By default, accessors are removed from the package
+namespace when the object is destroyed.  This allows the same class
+to be used more than once within a single script — for example, when
+a module using Hashed-based objects is called from multiple places.
+
+Objects created by copying (e.g. via L<Clone>) are not considered
+owners of the accessors.  Only the object originally created by
+C<new> removes the accessors on destruction, so cloned objects can
+be safely destroyed without affecting the original object or its
+class.  To keep accessors after destruction, set C<REMOVE_ACCESSOR>
+to false.
 
 =head1 FUNCTION
 
@@ -687,6 +793,21 @@ accessor for member C<file> will be C<opt_file>.
 If true, read-write accessors have the lvalue attribute.  Set to zero
 if you don't like that behavior.
 
+=item B<REMOVE_ACCESSOR> (default: 1)
+
+If true, accessor methods are removed from the package namespace when
+the object is destroyed.  This allows the same class to be used
+multiple times within a single script without causing conflicts.
+
+Only the object originally created by C<new> is considered the owner
+of the accessors.  Objects created by copying (e.g. via L<Clone>)
+are not owners, so destroying a clone does not remove the accessors
+even when C<REMOVE_ACCESSOR> is true.
+
+Set to false if you want accessors to persist beyond the lifetime of
+the object, for example when the accessor methods are intended to be
+part of the class's permanent public interface.
+
 =item B<DEFAULT>
 
 Set default parameters.  When C<has> is called, DEFAULT parameters are
@@ -740,7 +861,7 @@ The following copyright notice applies to all the files provided in
 this distribution, including binary files, unless explicitly noted
 otherwise.
 
-Copyright 2021-2025 Kazumasa Utashiro
+Copyright 2021-2026 Kazumasa Utashiro
 
 =head1 LICENSE
 

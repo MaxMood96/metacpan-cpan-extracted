@@ -16,6 +16,7 @@ my @files = (
     't/basic-obj.t',
     't/basic.t',
     't/ip-nb.t',
+    't/lookup-class.t',
     't/pod.t',
     't/pod_coverage.t',
     't/use.t'

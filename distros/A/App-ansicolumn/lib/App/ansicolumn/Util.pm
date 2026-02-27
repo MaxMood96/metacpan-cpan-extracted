@@ -70,6 +70,7 @@ sub foldobj {
     use Text::ANSI::Fold;
     my $fold = Text::ANSI::Fold->new(
 	width     => $width,
+	margin    => $obj->runin_margin,
 	boundary  => $obj->boundary,
 	linebreak => $obj->lb_flag,
 	runin     => $obj->runin,
@@ -100,8 +101,7 @@ sub foldsub {
 sub set_layout {
     my $obj = shift;
     my $dp = shift;
-    $obj->do_pagebreak($dp)
-        ->do_space_layout($dp)
+    $obj->do_space_layout($dp)
         ->do_fillup($dp);
     return $obj;
 }
@@ -111,11 +111,27 @@ sub do_space_layout {
     my($dp) = @_;
     my $height = $obj->effective_height || die;
     return if $height <= 0;
+    my $pagebreak = $obj->pagebreak;
     for (my $page = 0; (my $top = $page * $height) < @$dp; $page++) {
+	# Handle formfeed within the current page
+	if ($pagebreak) {
+	    use List::Util qw(first);
+	    my $end = $top + $height;
+	    $end = @$dp if $end > @$dp;
+	    if (defined(my $i = first { $dp->[$_] =~ /\f/ } $top .. $end - 1)) {
+		$dp->[$i] =~ s/^([^\f]*)\f// or die;
+		splice @$dp, $i, ($dp->[$i] eq '' ? 1 : 0), ($1 ne '' ? $1 : ());
+		my $lines = ($i - $top) + ($1 ne '' ? 1 : 0);
+		if ($lines > 0) {
+		    my $fill = $height - $lines;
+		    splice @$dp, $top + $lines, 0, ($obj->fillup_str) x $fill if $fill > 0;
+		}
+		next;
+	    }
+	}
 	if ($height >= 4 and $top > 2 and !$obj->isolation) {
 	    if ($dp->[$top - 2] !~ /\S/ and
-		$dp->[$top - 1] =~ /\S/ and
-		$dp->[$top    ] =~ /\S/
+		$dp->[$top - 1] =~ /\S/
 		) {
 		splice @$dp, $top - 1, 0, '';
 		next;
@@ -146,23 +162,6 @@ sub do_fillup {
     $obj->{fillup} ||= 'pane';
     $line *= $obj->panes if $obj->fillup eq 'page';
     _fillup $dp, $line, $obj->fillup_str;
-    return $obj;
-}
-
-sub do_pagebreak {
-    my $obj = shift;
-    $obj->pagebreak or return;
-    my $dp = shift;
-    my $height = $obj->effective_height || die;
-    my @up;
-    use List::Util qw(first);
-    while (defined(my $i = first { $dp->[$_] =~ /\f/ } keys @$dp)) {
-	push @up, splice @$dp, 0, $i;
-	$dp->[0] =~ s/^([^\f]*)\f// or die;
-	push @up, $1, if $1 ne '';
-	_fillup \@up, $height, $obj->fillup_str;
-    }
-    unshift @$dp, @up if @up;
     return $obj;
 }
 

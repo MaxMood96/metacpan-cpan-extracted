@@ -2,7 +2,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 16;
+use Test::More tests => 17;
 
 BEGIN {
     use_ok('DBIx::Class::Async')
@@ -22,6 +22,8 @@ BEGIN {
     use_ok('DBIx::Class::Async::Exception::RelationshipAsColumn')
         || print "Bail out!\n";
     use_ok('DBIx::Class::Async::Schema')
+        || print "Bail out!\n";
+    use_ok('DBIx::Class::Async::SelectNormaliser')
         || print "Bail out!\n";
     use_ok('DBIx::Class::Async::ResultSet')
         || print "Bail out!\n";

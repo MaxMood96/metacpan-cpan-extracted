@@ -1,6 +1,6 @@
 package Langertha::Response;
 # ABSTRACT: LLM response with metadata
-our $VERSION = '0.202';
+our $VERSION = '0.302';
 use Moose;
 
 use overload
@@ -70,11 +70,18 @@ has thinking => (
   predicate => 'has_thinking',
 );
 
+has rate_limit => (
+  is => 'ro',
+  isa => 'Maybe[Langertha::RateLimit]',
+  predicate => 'has_rate_limit',
+);
+
+
 
 sub clone_with {
   my ( $self, %overrides ) = @_;
   my %args = (content => $self->content);
-  for my $attr (qw( raw id model finish_reason usage timing created thinking )) {
+  for my $attr (qw( raw id model finish_reason usage timing created thinking rate_limit )) {
     my $pred = "has_$attr";
     $args{$attr} = $self->$attr if $self->$pred;
   }
@@ -107,6 +114,20 @@ sub total_tokens {
 }
 
 
+sub requests_remaining {
+  my ( $self ) = @_;
+  my $rl = $self->rate_limit or return undef;
+  return $rl->requests_remaining;
+}
+
+
+sub tokens_remaining {
+  my ( $self ) = @_;
+  my $rl = $self->rate_limit or return undef;
+  return $rl->tokens_remaining;
+}
+
+
 
 __PACKAGE__->meta->make_immutable;
 
@@ -124,7 +145,7 @@ Langertha::Response - LLM response with metadata
 
 =head1 VERSION
 
-version 0.202
+version 0.302
 
 =head1 SYNOPSIS
 
@@ -188,6 +209,11 @@ Timing information as a HashRef. Currently only populated by Ollama.
 
 Unix timestamp of when the response was created.
 
+=head2 rate_limit
+
+Optional L<Langertha::RateLimit> object with rate limit information from the
+API response headers. Only present when the provider returns rate limit headers.
+
 =head2 thinking
 
 Chain-of-thought reasoning content. Populated automatically from native API
@@ -218,9 +244,19 @@ and C<output_tokens> keys in usage.
 Returns the total token count. Uses C<total_tokens> from usage if available,
 otherwise sums prompt and completion tokens.
 
+=head2 requests_remaining
+
+Returns the number of requests remaining from rate limit headers, or C<undef>.
+
+=head2 tokens_remaining
+
+Returns the number of tokens remaining from rate limit headers, or C<undef>.
+
 =head1 SEE ALSO
 
 =over
+
+=item * L<Langertha::RateLimit> - Rate limit data from response headers
 
 =item * L<Langertha::Stream::Chunk> - Single chunk from a streaming response
 

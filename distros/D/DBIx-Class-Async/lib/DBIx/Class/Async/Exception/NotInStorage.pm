@@ -1,6 +1,6 @@
 package DBIx::Class::Async::Exception::NotInStorage;
 
-$DBIx::Class::Async::Exception::NotInStorage::VERSION   = '0.62';
+$DBIx::Class::Async::Exception::NotInStorage::VERSION   = '0.63';
 $DBIx::Class::Async::Exception::NotInStorage::AUTHORITY = 'cpan:MANWAR';
 
 use strict;
@@ -15,7 +15,7 @@ un-inserted row objects
 
 =head1 VERSION
 
-Version 0.62
+Version 0.63
 
 =head1 SYNOPSIS
 

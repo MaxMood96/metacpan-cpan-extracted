@@ -1,6 +1,6 @@
 package Langertha::Engine::OpenAI;
 # ABSTRACT: OpenAI API
-our $VERSION = '0.202';
+our $VERSION = '0.302';
 use Moose;
 use Carp qw( croak );
 
@@ -10,9 +10,9 @@ with 'Langertha::Role::'.$_ for (qw(
   ResponseFormat
   Embedding
   Transcription
+  ImageGeneration
+  Tools
 ));
-
-with 'Langertha::Role::Tools';
 
 
 has compatibility_for_engine => (
@@ -51,7 +51,7 @@ Langertha::Engine::OpenAI - OpenAI API
 
 =head1 VERSION
 
-version 0.202
+version 0.302
 
 =head1 SYNOPSIS
 

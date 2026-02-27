@@ -8,7 +8,7 @@ use Carp qw();
 require Exporter;
 our @ISA = qw(Exporter);
 
-our $VERSION = '1.160000';    # VERSION
+our $VERSION = '1.160001';    # VERSION
 
 # ABSTRACT: Geo::IPfree - Look up the country of an IPv4 address
 
@@ -141,15 +141,16 @@ sub LookUp {
 
     return unless length $ip;
 
-    ## Since the last class is always from the same country, will try 0 and cache 0:
-    my $ip_class = $ip;
-    $ip_class =~ s/\.\d+$/\.0/;
+    ## Cache key uses /25 granularity: .0 for last octet 0-127, .128 for 128-255.
+    ## This fixes lookups in split /24 blocks while keeping cache compact.
+    my $ip_cache = $ip;
+    $ip_cache =~ s/\.(\d+)$/ '.' . ($1 < 128 ? '0' : '128') /e;
 
-    if ( $this->{cache} && $this->{CACHE}{$ip_class} ) {
-        return ( @{ $this->{CACHE}{$ip_class} }, $ip_class );
+    if ( $this->{cache} && $this->{CACHE}{$ip_cache} ) {
+        return ( @{ $this->{CACHE}{$ip_cache} }, $ip );
     }
 
-    my $ipnb = ip2nb($ip_class);
+    my $ipnb = ip2nb($ip);
 
     my $buf_pos = 0;
 
@@ -193,10 +194,10 @@ sub LookUp {
         else {
             $this->{CACHE_COUNT}++;
         }
-        $this->{CACHE}{$ip_class} = [ $country, $countrys{$country} ];
+        $this->{CACHE}{$ip_cache} = [ $country, $countrys{$country} ];
     }
 
-    return ( $country, $countrys{$country}, $ip_class );
+    return ( $country, $countrys{$country}, $ip );
 }
 
 sub Faster {
@@ -291,7 +292,7 @@ Geo::IPfree - Geo::IPfree - Look up the country of an IPv4 address
 
 =head1 VERSION
 
-version 1.160000
+version 1.160001
 
 =head1 AUTHOR
 

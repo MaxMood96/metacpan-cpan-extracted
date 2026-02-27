@@ -1,11 +1,14 @@
 package Langertha::Raider;
 # ABSTRACT: Autonomous agent with conversation history and MCP tools
-our $VERSION = '0.202';
+our $VERSION = '0.302';
 use Moose;
 use Future::AsyncAwait;
 use Time::HiRes qw( gettimeofday tv_interval );
 use Carp qw( croak );
+use Module::Runtime qw( use_module );
 use Langertha::Raider::Result;
+
+with 'Langertha::Role::PluginHost';
 
 
 has engine => (
@@ -304,10 +307,11 @@ sub switch_engine {
   croak "Engine '$name' not found in engine_catalog"
     unless exists $self->engine_catalog->{$name};
   my $entry = $self->engine_catalog->{$name};
-  $self->_active_engine($entry->{engine});
+  my $engine = $entry->{engine} // $self->engine;
+  $self->_active_engine($engine);
   $self->_active_engine_name($name);
   $self->_tools_dirty(1);
-  return $entry->{engine};
+  return $engine;
 }
 
 
@@ -341,7 +345,7 @@ sub list_engines {
   for my $name (keys %{$self->engine_catalog}) {
     my $entry = $self->engine_catalog->{$name};
     $list{$name} = {
-      engine      => $entry->{engine},
+      engine      => $entry->{engine} // $self->engine,
       description => $entry->{description},
       active      => (defined $self->_active_engine_name && $self->_active_engine_name eq $name),
     };
@@ -352,7 +356,6 @@ sub list_engines {
 
 sub add_engine {
   my ( $self, $name, %opts ) = @_;
-  croak "Engine object required" unless $opts{engine};
   $self->engine_catalog->{$name} = \%opts;
   $self->_tools_dirty(1);
   return;
@@ -858,23 +861,37 @@ async sub _gather_tools_f {
     push @all_tools, @{$self->_self_tool_definitions};
   }
 
+  # Plugin self-tools
+  for my $plugin (@{$self->_plugin_instances}) {
+    my $tools = $plugin->self_tools;
+    push @all_tools, @$tools if $tools && @$tools;
+  }
+
   return ( \@all_tools, \%tool_server_map );
 }
 
 async sub _initialize_inline_mcp_f {
   my ( $self ) = @_;
   return if $self->has_inline_mcp;
-  return unless @{$self->tools};
+
+  # Collect inline tools + plugin tools
+  my @all_inline;
+  push @all_inline, @{$self->tools};
+  for my $plugin (@{$self->_plugin_instances}) {
+    my $tools = $plugin->self_tools;
+    push @all_inline, @$tools if $tools && @$tools;
+  }
+  return unless @all_inline;
 
   require MCP::Server;
   require Net::Async::MCP;
 
   my $server = MCP::Server->new(name => 'raider-inline', version => '1.0');
-  for my $tdef (@{$self->tools}) {
+  for my $tdef (@all_inline) {
     $server->tool(
       name         => $tdef->{name},
       description  => $tdef->{description},
-      input_schema => $tdef->{input_schema},
+      input_schema => $tdef->{input_schema} // $tdef->{inputSchema},
       code         => $tdef->{code},
     );
   }
@@ -918,6 +935,11 @@ async sub raid_f {
     await $self->compress_history_f();
   }
 
+  # Plugin hook: transform input messages before raid
+  for my $plugin (@{$self->_plugin_instances}) {
+    @messages = @{await $plugin->plugin_before_raid(\@messages)};
+  }
+
   # Initialize inline MCP if tools defined
   await $self->_initialize_inline_mcp_f;
 
@@ -944,6 +966,11 @@ async sub raid_f {
     if $self->has_mission;
   push @conversation, @{$self->history};
   push @conversation, @user_msgs;
+
+  # Plugin hook: transform assembled conversation
+  for my $plugin (@{$self->_plugin_instances}) {
+    @conversation = @{await $plugin->plugin_build_conversation(\@conversation)};
+  }
 
   # Hermes mode setup
   my $hermes = $engine->can('hermes_tools') && $engine->hermes_tools;
@@ -1044,6 +1071,11 @@ async sub _run_raid_loop {
       }
     }
 
+    # Plugin hook: transform conversation before each LLM call
+    for my $plugin (@{$self->_plugin_instances}) {
+      $conversation = await $plugin->plugin_before_llm_call($conversation, $iteration);
+    }
+
     my $iter_t0 = $langfuse ? $engine->_langfuse_timestamp : undef;
 
     # Langfuse: create iteration span
@@ -1072,6 +1104,11 @@ async sub _run_raid_loop {
     }
 
     my $data = $engine->parse_response($response);
+
+    # Plugin hook: inspect/transform LLM response
+    for my $plugin (@{$self->_plugin_instances}) {
+      $data = await $plugin->plugin_after_llm_response($data, $iteration);
+    }
 
     # Track prompt tokens for auto-compression
     my $pt = $self->_extract_prompt_tokens($data);
@@ -1147,7 +1184,14 @@ async sub _run_raid_loop {
       $m->{tool_calls}  += $$raid_tool_calls;
       $m->{time_ms}     += $elapsed;
 
-      return Langertha::Raider::Result->new(type => 'final', text => $text);
+      my $result = Langertha::Raider::Result->new(type => 'final', text => $text);
+
+      # Plugin hook: transform final result before return
+      for my $plugin (@{$self->_plugin_instances}) {
+        $result = await $plugin->plugin_after_raid($result);
+      }
+
+      return $result;
     }
 
     # Langfuse: generation for the LLM call that produced tool calls
@@ -1178,6 +1222,19 @@ async sub _run_raid_loop {
       } else {
         ( $name, $input ) = $engine->extract_tool_call($tc);
       }
+
+      # Plugin hook: inspect/transform before tool execution
+      my @plugin_tc = await $self->_plugin_pipeline_tool_call($name, $input);
+      unless (@plugin_tc) {
+        # Plugin returned empty list — skip this tool call
+        my $skip_result = {
+          content => [{ type => 'text', text => "Tool call '$name' was skipped by plugin." }],
+        };
+        push @results, { tool_call => $tc, result => $skip_result };
+        $$raid_tool_calls++;
+        next;
+      }
+      ( $name, $input ) = @plugin_tc;
 
       my $tool_t0 = $langfuse ? $engine->_langfuse_timestamp : undef;
 
@@ -1253,6 +1310,11 @@ async sub _run_raid_loop {
         # type eq 'result' — normal self-tool result
         my $result = $self_result;
 
+        # Plugin hook: transform tool result
+        for my $plugin (@{$self->_plugin_instances}) {
+          $result = await $plugin->plugin_after_tool_call($name, $input, $result);
+        }
+
         if ($langfuse) {
           my $tool_output = join('', map { $_->{text} // '' } @{$result->{content} // []});
           $engine->langfuse_span(
@@ -1282,6 +1344,11 @@ async sub _run_raid_loop {
           isError => JSON::MaybeXS->true,
         });
       });
+
+      # Plugin hook: transform tool result
+      for my $plugin (@{$self->_plugin_instances}) {
+        $result = await $plugin->plugin_after_tool_call($name, $input, $result);
+      }
 
       # Langfuse: span for each tool call, nested under iteration span
       if ($langfuse) {
@@ -1432,7 +1499,7 @@ Langertha::Raider - Autonomous agent with conversation history and MCP tools
 
 =head1 VERSION
 
-version 0.202
+version 0.302
 
 =head1 SYNOPSIS
 
@@ -1694,6 +1761,19 @@ HashRef of named engines available for runtime switching via C<switch_engine>.
         code  => { engine => $deepseek,   description => 'Code generation' },
     }
 
+Entries without an C<engine> key refer to the default engine (the one passed
+as C<engine> at construction). This lets you give the default engine a named
+catalog entry with a description:
+
+    engine_catalog => {
+        sonnet => { description => 'Balanced model for everyday tasks' },
+        fast   => { engine => $groq,  description => 'Fast inference' },
+        smart  => { engine => $opus,  description => 'Complex reasoning' },
+    }
+
+The LLM always sees a C<default> entry (reset to original) plus all catalog
+keys in the C<raider_switch_engine> tool enum.
+
 Use C<switch_engine>, C<reset_engine>, C<active_engine>, and C<engine_info>
 to control which engine is used during raids.
 
@@ -1768,8 +1848,10 @@ each with C<engine>, C<description> (if from catalog), and C<active> flag.
 =head2 add_engine
 
     $raider->add_engine('vision', engine => $vision_engine, description => 'Vision model');
+    $raider->add_engine('main', description => 'Default model for general tasks');
 
-Adds a new engine to the catalog at runtime. The LLM will see it in the
+Adds a new engine to the catalog at runtime. If C<engine> is omitted, the
+entry refers to the default engine. The LLM will see it in the
 C<raider_switch_engine> tool after the next tool re-gather.
 
 =head2 remove_engine
@@ -1834,6 +1916,21 @@ L<Langertha::Raider::Result>.
 
 Synchronous wrapper around C<respond_f>.
 
+=head2 plugins
+
+    my $raider = Langertha::Raider->new(
+        plugins => ['Langfuse', 'MyApp::CustomPlugin'],
+        engine  => $engine,
+    );
+
+Arrayref of plugin names or L<Langertha::Plugin> instances. Short names
+are resolved first to C<Langertha::Plugin::$name>, then to
+C<LangerthaX::Plugin::$name>. Fully qualified names (with C<::>) are
+used as-is.
+
+Plugin instances are created automatically with C<< raider => $self >>.
+Extra constructor arguments can be passed via C<_plugin_args>.
+
 =head1 SEE ALSO
 
 =over
@@ -1843,6 +1940,8 @@ Synchronous wrapper around C<respond_f>.
 =item * L<Langertha::Role::Langfuse> - Observability integration (used by Raider)
 
 =item * L<Langertha::Role::SystemPrompt> - Engine-level system prompt (Raider uses C<mission> instead)
+
+=item * L<Langertha::Plugin> - Base role and documentation for Raider plugins
 
 =back
 

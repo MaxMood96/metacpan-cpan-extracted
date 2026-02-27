@@ -21,7 +21,7 @@ Version 0.02
 
 =cut
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 
 =head1 SYNOPSIS
@@ -32,6 +32,11 @@ our $VERSION = '0.05';
     my $tree = Tree::STR->new($data);
     my $intersects_point = $tree->query_point(50,50); # ['item 2']
     my $intersects_poly  = $tree->query_partly_within_rect(20,20,200,200); # ['item 2']
+
+    #  Or if you need the Tree:R interface you can pass an array ref after
+    #  the bounding coords.  It will be populated with the results.
+    my $intersects_poly = [];
+    $tree->query_partly_within_rect(20,20,200,200, $intersects_poly); # ['item 2']
     ...
 
 =head1 DESCRIPTION
@@ -145,7 +150,7 @@ sub _get_bbox_from_centred_recs {
 =cut
 
 sub query_point {
-    my ($self, $x, $y) = @_;
+    my ($self, $x, $y, $aref) = @_;
 
     my @tips;
     my @children = ($self->{root});
@@ -164,7 +169,11 @@ sub query_point {
         }
     }
 
-    return \@tips;
+    return \@tips if !$aref;
+
+    #  Tree::R compat
+    push @$aref, @tips;
+    return;
 }
 
 =head2 query_partly_within_rect
@@ -173,7 +182,7 @@ sub query_point {
 
 #  non-recursive algorithm
 sub query_partly_within_rect {
-    my ($self, $x1, $y1, $x2, $y2) = @_;
+    my ($self, $x1, $y1, $x2, $y2, $aref) = @_;
 
     my @tips;
     my @children = ($self->{root});
@@ -199,7 +208,11 @@ sub query_partly_within_rect {
         }
     }
 
-    return \@tips;
+    return \@tips if !$aref;
+
+    #  Tree::R compat
+    push @$aref, @tips;
+    return;
 }
 
 =head2 query_completely_within_rect
@@ -207,7 +220,7 @@ sub query_partly_within_rect {
 =cut
 
 sub query_completely_within_rect {
-    my ($self, $x1, $y1, $x2, $y2) = @_;
+    my ($self, $x1, $y1, $x2, $y2, $aref) = @_;
 
     my @tips;
     my @children = ($self->{root});
@@ -233,7 +246,11 @@ sub query_completely_within_rect {
 
     }
 
-    return \@tips;
+    return \@tips if !$aref;
+
+    #  Tree::R compat
+    push @$aref, @tips;
+    return;
 }
 
 =head1 AUTHOR

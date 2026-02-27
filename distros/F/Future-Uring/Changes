@@ -1,5 +1,10 @@
 Revision history for Future-Uring
 
+0.003     2026-02-26 18:47:48+01:00 Europe/Brussels
+          - Remove *at functions
+          - Add statx function and method
+          - Fix rmdir exception generation
+
 0.002     2026-02-18 23:50:22+01:00 Europe/Brussels
           - Adapt to better memory management in IO::Uring
           - Postpone ring instantiation until first use

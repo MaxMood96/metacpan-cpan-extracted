@@ -1,11 +1,11 @@
 use strict;
 use warnings;
-package Dist::Zilla::Plugin::Git::Contributors; # git description: v0.037-3-g853910f
+package Dist::Zilla::Plugin::Git::Contributors; # git description: v0.038-2-g4b309b0
 # vim: set ts=8 sts=2 sw=2 tw=100 et :
 # ABSTRACT: Add contributor names from git to your distribution
 # KEYWORDS: plugin distribution metadata git contributors authors commits
 
-our $VERSION = '0.038';
+our $VERSION = '0.039';
 
 use Moose;
 with 'Dist::Zilla::Role::MetaProvider',
@@ -220,7 +220,7 @@ sub _build_contributors
     if ($self->remove)
     {
         @contributors = grep {
-            my $contributor = $_; none { $contributor =~ /\Q$_\E/ } $self->remove
+            my $contributor = $_; none { $contributor =~ /$_/u } $self->remove
         } @contributors;
     }
 
@@ -296,7 +296,7 @@ Dist::Zilla::Plugin::Git::Contributors - Add contributor names from git to your 
 
 =head1 VERSION
 
-version 0.038
+version 0.039
 
 =head1 SYNOPSIS
 
@@ -360,8 +360,8 @@ Available since version 0.011.
 
 =for stopwords unanchored
 
-Any contributor entry matching this (unanchored, case-sensitive) regular expression is removed
-from inclusion.
+Any contributor entry matching this (unanchored, case-sensitive, unicode semantics) regular
+expression is removed from inclusion.
 Can be used more than once.
 
 =for stopwords canonicalizing
@@ -427,6 +427,14 @@ L<Dist::Zilla::Plugin::ContributorsFile> - adds CONTRIBUTORS file, containing na
 =back
 
 =for Pod::Coverage mvp_multivalue_args mvp_aliases metadata register_prereqs
+
+=head1 GIVING THANKS
+
+=for stopwords MetaCPAN GitHub
+
+If you found this module to be useful, please show your appreciation by
+adding a +1 in L<MetaCPAN|https://metacpan.org/dist/Dist-Zilla-Plugin-Git-Contributors>
+and a star in L<GitHub|https://github.com/karenetheridge/Dist-Zilla-Plugin-Git-Contributors>.
 
 =head1 SUPPORT
 

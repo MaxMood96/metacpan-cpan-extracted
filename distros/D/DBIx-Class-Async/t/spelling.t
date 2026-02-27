@@ -223,6 +223,9 @@ my @STOPWORDS = qw(
     stringify
     stringifies
     opdate
+    sigil
+    cnt
+    ident
 );
 
 add_stopwords(@STOPWORDS);

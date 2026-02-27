@@ -13,8 +13,6 @@ mess/TODO
 mess/foo
 mess/mk_test_for.pl
 mess/mk_test_for2.pl
-mess/patch-build_feature_data
-mess/stash
 mess/testing
 t/00-compile.t
 t/00-report-prereqs.dd
@@ -48,8 +46,8 @@ t/bump/110_lexical_subs.data
 t/bump/111_postderef.data
 t/bump/112_postderef_qq.data
 t/bump/113_signatures.data
-t/bump/114_refaliasing.data
-t/bump/115_bitwise.data
+t/bump/114_bitwise.data
+t/bump/115_refaliasing.data
 t/bump/116_declared_refs.data
 t/bump/117_indirect.data
 t/bump/118_isa.data
@@ -58,8 +56,12 @@ t/bump/120_bareword_filehandles.data
 t/bump/121_try.data
 t/bump/122_defer.data
 t/bump/123_extra_paired_delimiters.data
-t/bump/124_class.data
-t/bump/125_module_true.data
+t/bump/124_module_true.data
+t/bump/125_class.data
+t/bump/126_apostrophe_as_package_separator.data
+t/bump/127_smartmatch.data
+t/bump/128_keyword_all.data
+t/bump/129_keyword_any.data
 t/bump_safely.t
 t/bump_safely/001_die.data
 t/bump_safely/002_v585.data
@@ -72,7 +74,7 @@ t/bump_safely/119_multidimensional.data
 t/bump_safely/120_bareword_filehandles.data
 t/bump_safely/121_try.data
 t/bump_safely/122_defer.data
-t/bump_safely/124_class.data
+t/bump_safely/125_class.data
 t/fail.t
 t/lib/TestFunctions.pm
 t/version.t

@@ -1,5 +1,16 @@
 Revision history for CtrlO::PDF
 
+0.35 Thu Feb 26 2026 15:00
+
+    * Update tests to also pass with PDF::Builder 3.026 and 3.028
+
+0.34 Thu Feb 26 2026 11:00
+
+    * Support for PDF::Builder 3.028 (changes in formatting configuration
+      including spacing and fonts, as well as support for its state
+      functionality used for internal links)
+    * Additional tests - thanks Gabor Szabo
+
 0.33 Tue Jul 8 2025
 
     * Widow support for tables - thanks Sam Kington

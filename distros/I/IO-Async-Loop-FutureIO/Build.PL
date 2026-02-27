@@ -13,6 +13,9 @@ my $build = Module::Build->new(
       'IO::Async::Loop' => '0.49',
    },
    test_requires => {
+      # We need to have *a* working impl to test with; this one is the most
+      # portable
+      'Future::IO::Impl::Ppoll' => 0,
       'IO::Async::LoopTests' => '0.76',
       'Test2::V0' => 0,
    },

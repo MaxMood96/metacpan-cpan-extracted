@@ -1,5 +1,5 @@
 package Future::Uring;
-$Future::Uring::VERSION = '0.002';
+$Future::Uring::VERSION = '0.003';
 use 5.020;
 use warnings;
 use experimental 'signatures';
@@ -15,6 +15,7 @@ use Fcntl qw/O_RDONLY O_RDWR O_WRONLY O_APPEND O_CREAT O_DIRECT O_DSYNC O_EXCL O
 use Socket qw/AF_INET AF_INET6 AF_UNIX SOCK_STREAM SOCK_DGRAM SOCK_SEQPACKET SOCK_RAW/;
 use IO::File;
 use IO::Socket;
+use File::StatX qw/STATX_BASIC_STATS STATX_BTIME/;
 use Signal::Info qw/CLD_EXITED CLD_DUMPED/;
 use Time::Spec;
 
@@ -82,28 +83,9 @@ sub link($old_path, $new_path, %args) {
 	my $flags = $args{follow_symlink} ? AT_SYMLINK_FOLLOW : 0;
 	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
-	my $id = $ring->link($old_path, $new_path, $flags, $s_flags, sub($res, $flags) {
+	my $id = $ring->linkat($args{old_base}, $old_path, $args{new_base}, $new_path, $flags, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
 			$future->fail(Future::Uring::Exception->new('link', $res, $sourcename, $line));
-		} else {
-			$future->done;
-		}
-	});
-	$future->on_cancel(sub { $ring->cancel($id, 0, 0) }) if $args{mutable};
-	add_timeout($ring, \%args) if $args{timeout};
-	return $future;
-}
-
-sub linkat($old_dir, $old_path, $new_dir, $new_path, %args) {
-	my $future = Future::Uring::_Future->new;
-	my (undef, $sourcename, $line) = caller;
-	my $s_flags = %args ? to_sflags(\%args) : 0;
-	my $flags = $args{follow_symlink} ? AT_SYMLINK_FOLLOW : 0;
-	my $ring = ring;
-	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
-	my $id = $ring->linkat($old_dir, $old_path, $new_dir, $new_path, $flags, $s_flags, sub($res, $flags) {
-		if ($res < 0) {
-			$future->fail(Future::Uring::Exception->new('linkat', $res, $sourcename, $line));
 		} else {
 			$future->done;
 		}
@@ -119,27 +101,9 @@ sub mkdir($path, $mode, %args) {
 	my $s_flags = %args ? to_sflags(\%args) : 0;
 	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
-	my $id = $ring->mkdir($path, $mode, $s_flags, sub($res, $flags) {
+	my $id = $ring->mkdirat($args{base}, $path, $mode, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
 			$future->fail(Future::Uring::Exception->new('mkdir', $res, $sourcename, $line));
-		} else {
-			$future->done;
-		}
-	});
-	$future->on_cancel(sub { $ring->cancel($id, 0, 0) }) if $args{mutable};
-	add_timeout($ring, \%args) if $args{timeout};
-	return $future;
-}
-
-sub mkdirat($dir, $path, $mode, %args) {
-	my $future = Future::Uring::_Future->new;
-	my (undef, $sourcename, $line) = caller;
-	my $s_flags = %args ? to_sflags(\%args) : 0;
-	my $ring = ring;
-	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
-	my $id = $ring->mkdirat($dir, $path, $mode, $s_flags, sub($res, $flags) {
-		if ($res < 0) {
-			$future->fail(Future::Uring::Exception->new('mkdirat', $res, $sourcename, $line));
 		} else {
 			$future->done;
 		}
@@ -197,36 +161,12 @@ sub open($filename, $open_mode = '<', %args) {
 	my $mode = $args{mode} || 0777;
 	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
-	my $id = $ring->open($filename, $flags, $mode, $s_flags, sub($res, $flags) {
+	my $id = $ring->openat($args{base}, $filename, $flags, $mode, $s_flags, sub($res, $flags) {
 		if ($res >= 0) {
 			open my $fh, "$open_mode&=", $res;
 			$future->done(Future::Uring::Handle->new($fh));
 		} else {
 			$future->fail(Future::Uring::Exception->new('open', $res, $sourcename, $line));
-		}
-	});
-	$future->on_cancel(sub { $ring->cancel($id, 0, 0) }) if $args{mutable};
-	add_timeout($ring, \%args) if $args{timeout};
-	return $future;
-}
-
-sub openat($base_dir, $filename, $open_mode = '<', %args) {
-	my $future = Future::Uring::_Future->new;
-	my (undef, $sourcename, $line) = caller;
-	my $s_flags = to_sflags(\%args);
-	my $flags = $main_flags{$open_mode} // croak("Unknown mode '$open_mode'");
-	for my $key (keys %extra_flags) {
-		$flags |= $extra_flags{$key} if $args{$key};
-	}
-	my $mode = $args{mode} || 0777;
-	my $ring = ring;
-	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
-	my $id = $ring->openat($base_dir, $filename, $flags, $mode, $s_flags, sub($res, $flags) {
-		if ($res >= 0) {
-			open my $fh, "$open_mode&=", $res;
-			$future->done(Future::Uring::Handle->new($fh));
-		} else {
-			$future->fail(Future::Uring::Exception->new('openat', $res, $sourcename, $line));
 		}
 	});
 	$future->on_cancel(sub { $ring->cancel($id, 0, 0) }) if $args{mutable};
@@ -243,7 +183,7 @@ sub rename($old_path, $new_path, %args) {
 	$flags |= RENAME_NOREPLACE if $args{no_replace};
 	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
-	my $id = $ring->rename($old_path, $new_path, $flags, $s_flags, sub($res, $flags) {
+	my $id = $ring->renameat($args{old_base}, $old_path, $args{new_base}, $new_path, $flags, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
 			$future->fail(Future::Uring::Exception->new('rename', $res, $sourcename, $line));
 		} else {
@@ -255,50 +195,15 @@ sub rename($old_path, $new_path, %args) {
 	return $future;
 }
 
-sub renameat($old_dir, $old_path, $new_dir, $new_path, %args) {
+sub rmdir($path, %args) {
 	my $future = Future::Uring::_Future->new;
 	my (undef, $sourcename, $line) = caller;
 	my $s_flags = %args ? to_sflags(\%args) : 0;
-	my $flags = $args{follow_symlink} ? AT_SYMLINK_FOLLOW : 0;
 	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
-	my $id = $ring->renameat($old_dir, $old_path, $new_dir, $new_path, $flags, $s_flags, sub($res, $flags) {
+	my $id = $ring->unlinkat($args{base}, $path, AT_REMOVEDIR, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
-			$future->fail(Future::Uring::Exception->new('renameat', $res, $sourcename, $line));
-		} else {
-			$future->done;
-		}
-	});
-	$future->on_cancel(sub { $ring->cancel($id, 0, 0) }) if $args{mutable};
-	add_timeout($ring, \%args) if $args{timeout};
-	return $future;
-}
-
-sub rmdir($path, %args) {
-	my $future = Future::Uring::_Future->new;
-	my $s_flags = %args ? to_sflags(\%args) : 0;
-	my $ring = ring;
-	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
-	my $id = $ring->unlink($path, AT_REMOVEDIR, $s_flags, sub($res, $flags) {
-		if ($res < 0) {
-			$future->fail(exception('rmdir', $res));
-		} else {
-			$future->done;
-		}
-	});
-	$future->on_cancel(sub { $ring->cancel($id, 0, 0) }) if $args{mutable};
-	add_timeout($ring, \%args) if $args{timeout};
-	return $future;
-}
-
-sub rmdirat($dir, $path, %args) {
-	my $future = Future::Uring::_Future->new;
-	my $s_flags = %args ? to_sflags(\%args) : 0;
-	my $ring = ring;
-	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
-	my $id = $ring->unlinkat($dir, $path, AT_REMOVEDIR, $s_flags, sub($res, $flags) {
-		if ($res < 0) {
-			$future->fail(exception('rmdirat', $res));
+			$future->fail(Future::Uring::Exception->new('rmdir', $res, $sourcename, $line));
 		} else {
 			$future->done;
 		}
@@ -337,6 +242,27 @@ sub socket($family_name, %args) {
 			$future->done(Future::Uring::Handle->new($fh));
 		} else {
 			$future->fail(Future::Uring::Exception->new('socket', $res, $sourcename, $line));
+		}
+	});
+	$future->on_cancel(sub { $ring->cancel($id, 0, 0) }) if $args{mutable};
+	add_timeout($ring, \%args) if $args{timeout};
+	return $future;
+}
+
+sub statx($path, %args) {
+	my $future = Future::Uring::_Future->new;
+	my (undef, $sourcename, $line) = caller;
+	my $flags = $args{flags} // 0;
+	my $mask = $args{mask} // STATX_BASIC_STATS | STATX_BTIME;
+	my $stat = File::StatX->new;
+	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
+	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
+	my $id = $ring->statx($args{base}, $path, $flags, $mask, $stat, $s_flags, sub($res, $flags) {
+		if ($res >= 0) {
+			$future->done($stat);
+		} else {
+			$future->fail(Future::Uring::Exception->new('statx', $res, $sourcename, $line));
 		}
 	});
 	$future->on_cancel(sub { $ring->cancel($id, 0, 0) }) if $args{mutable};
@@ -402,27 +328,9 @@ sub unlink($path, %args) {
 	my $s_flags = %args ? to_sflags(\%args) : 0;
 	my $ring = ring;
 	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
-	my $id = $ring->unlink($path, 0, $s_flags, sub($res, $flags) {
+	my $id = $ring->unlinkat($args{base}, $path, 0, $s_flags, sub($res, $flags) {
 		if ($res < 0) {
 			$future->fail(Future::Uring::Exception->new('unlink', $res, $sourcename, $line));
-		} else {
-			$future->done;
-		}
-	});
-	$future->on_cancel(sub { $ring->cancel($id, 0, 0) }) if $args{mutable};
-	add_timeout($ring, \%args) if $args{timeout};
-	return $future;
-}
-
-sub unlinkat($dir, $path, %args) {
-	my $future = Future::Uring::_Future->new;
-	my (undef, $sourcename, $line) = caller;
-	my $s_flags = %args ? to_sflags(\%args) : 0;
-	my $ring = ring;
-	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
-	my $id = $ring->unlinkat($dir, $path, 0, $s_flags, sub($res, $flags) {
-		if ($res < 0) {
-			$future->fail(Future::Uring::Exception->new('unlinkat', $res, $sourcename, $line));
 		} else {
 			$future->done;
 		}
@@ -538,7 +446,7 @@ Future::Uring - Future-returning io_uring functions
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -622,21 +530,43 @@ This takes a Perl handle and turns it into a L<Future::Uring::Handle>.
 
 This returns the IO::Uring instance used by this module.
 
-=head2 link / linkat
+=head2 link
 
  await Future::Uring::link($old_path, $new_path, %options)
- await Future::Uring::linkat($old_dirh, $old_path, $new_dir, $new_path, %options)
 
 This creates a hard link from C<$new_path> to C<$old_path>.
 
-This takes one additional named argument: C<follow_symlink>, if true and C<$oldpath> is a symlink, it will be followed before the operation.
+This takes two additional named arguments:
 
-=head2 mkdir / mkdirat
+=over 4
+
+=item * follow_symlink
+
+if true and C<$oldpath> is a symlink, it will be followed before the operation.
+
+=item * old_base
+
+A dirhandle that acts as the base of any relative C<$oldpath>. Defaults to the current working directory (represented by undef).
+
+=item * new_base
+
+A dirhandle that acts as the base of any relative C<$newpath>. Defaults to the current working directory (represented by undef).
+
+=back
+
+=head2 mkdir
 
  await Future::Uring::mkdir($dirname, %options)
- await Future::Uring::mkdirat($dirh, $dirname, %options)
 
-Make directory C<$dirname>.
+Make directory C<$dirname>. It takes one additional named argument.
+
+=over 4
+
+=item * base
+
+A dirhandle that acts as the base of any relative C<$path>. Defaults to the current working directory (represented by undef).
+
+=back
 
 =head2 nop
 
@@ -644,10 +574,9 @@ Make directory C<$dirname>.
 
 This will do absolutely nothing. This can be useful though if you want to run some code after submissions have been made or need to keep something alive until that point.
 
-=head2 open / openat
+=head2 open
 
  my $handle = await Future::Uring::open($filename, $mode = '<', %options);
- my $handle = await Future::Uring::openat($dirh, $filename, $mode = '<', %options);
 
 This opens a file, and returns it as a new L<handle|Future::Uring::Handle>.
 
@@ -658,6 +587,10 @@ This takes several additional options:
 =item * mode
 
 The permission mode that will be used if the file is newly created (e.g. C<0644>).
+
+=item * base
+
+A dirhandle that acts as the base of any relative C<$path>. Defaults to the current working directory (represented by undef).
 
 =item * d_sync
 
@@ -681,10 +614,9 @@ Create an unnamed temporary regular file. The path argument specifies a director
 
 =back
 
-=head2 rename / renameat
+=head2 rename
 
  await Future::Uring::rename($old_path, $new_path, %options)
- await Future::Uring::renameat($old_dirh, $old_path, $new_dirh, $new_path, %options)
 
 Rename the file at C<$old_path> to C<$new_path>.
 
@@ -698,18 +630,57 @@ Atomically exchange oldpath and newpath. Both pathnames must exist but may be of
 
 Don't overwrite newpath of the rename. Return an error if newpath already exists.
 
+=item * old_base
+
+A dirhandle that acts as the base of any relative C<$oldpath>. Defaults to the current working directory (represented by undef).
+
+=item * new_base
+
+A dirhandle that acts as the base of any relative C<$newpath>. Defaults to the current working directory (represented by undef).
+
 =back
 
-=head2 rmdir / rmdirat
+=head2 rmdir
 
  await Future::Uring::rmdir($dir, %options)
- await Future::Uring::rmdirat($dirh, $dir, %options)
+
+It takes one additional named argument.
+
+=over 4
+
+=item * base
+
+A dirhandle that acts as the base of any relative C<$path>. Defaults to the current working directory (represented by undef).
+
+=back
 
 =head2 socket
 
  my $handle = await Future::Uring::socket($socket, $domain, $type = STREAM_SOCKET, $protocol = 0);
 
 This creates a new L<handle|Future::Uring::Handle>, taking the same arguments as perl's built-in C<socket>.
+
+=head2 statx
+
+ my $stat = await Future::Uring::statx($path, %options)
+
+This states a file, producing a L<File::StatX> object.
+
+=over 4
+
+=item * mask
+
+The mask used when stating, defaulting to C<STATX_BASIC_STATS | STATX_BTIME>.
+
+=item * flags
+
+The flags used when stating, defaulting to C<0>.
+
+=item * base
+
+A dirhandle that acts as the base of any relative C<$path>. Defaults to the current working directory (represented by undef).
+
+=back
 
 =head2 timeout_for
 
@@ -727,12 +698,21 @@ This creates an absolute timeout for C<$moment>. C<$moment> must either be a num
 
 It takes one additional named argument: C<clock>, with allowed values are C<'monotonic'>, C<'boottime'> and C<'realtime'> (default).
 
-=head2 unlink / unlinkat
+=head2 unlink
 
  await Future::Uring::unlink($filename, %options)
- await Future::Uring::unlinkat($dirh, $filename, %options)
 
 This will unlink the file at C<$filename>.
+
+It takes one additional named argument.
+
+=over 4
+
+=item * base
+
+A dirhandle that acts as the base of any relative C<$path>. Defaults to the current working directory (represented by undef).
+
+=back
 
 =head2 waitid
 

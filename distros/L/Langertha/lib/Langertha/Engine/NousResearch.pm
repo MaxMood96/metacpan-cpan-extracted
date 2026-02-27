@@ -1,6 +1,6 @@
 package Langertha::Engine::NousResearch;
 # ABSTRACT: Nous Research Inference API
-our $VERSION = '0.202';
+our $VERSION = '0.302';
 use Moose;
 use Carp qw( croak );
 
@@ -36,19 +36,29 @@ has reasoning => (
 );
 
 
-my $_reasoning_prompt = 'You are a deep thinking AI, you may use extremely '
-  . 'long chains of thought to deeply consider the problem and deliberate '
-  . 'with yourself via systematic reasoning processes to help come to a '
-  . 'correct solution prior to answering. You should enclose your thoughts '
-  . 'and internal monologue inside <think> </think> tags, and then provide '
-  . 'your solution or response to the problem.';
+my $_default_reasoning_prompt = <<'END_REASONING_PROMPT';
+You are a deep thinking AI, you may use extremely long chains of thought to
+deeply consider the problem and deliberate with yourself via systematic
+reasoning processes to help come to a correct solution prior to answering.
+You should enclose your thoughts and internal monologue inside <think> </think>
+tags, and then provide your solution or response to the problem.
+END_REASONING_PROMPT
+chomp $_default_reasoning_prompt;
+
+has reasoning_prompt => (
+  is => 'ro',
+  isa => 'Str',
+  lazy => 1,
+  default => sub { $_default_reasoning_prompt },
+);
+
 
 around chat_messages => sub {
   my ( $orig, $self, @messages ) = @_;
   my $msgs = $self->$orig(@messages);
   return $msgs unless $self->reasoning;
   # Prepend reasoning prompt as first system message
-  unshift @$msgs, { role => 'system', content => $_reasoning_prompt };
+  unshift @$msgs, { role => 'system', content => $self->reasoning_prompt };
   return $msgs;
 };
 
@@ -69,7 +79,7 @@ Langertha::Engine::NousResearch - Nous Research Inference API
 
 =head1 VERSION
 
-version 0.202
+version 0.302
 
 =head1 SYNOPSIS
 
@@ -137,6 +147,13 @@ reasoning appears in the C<reasoning_content> response field (handled by
 native extraction).
 
 Defaults to C<0> (disabled).
+
+=head2 reasoning_prompt
+
+The system prompt prepended when C<reasoning> is enabled. Defaults to the
+standard Nous Research reasoning prompt from the Hermes model documentation.
+Unless you have a specific technical reason (e.g. a different model requires
+a different trigger format), it is strongly recommended to keep the default.
 
 =head1 SEE ALSO
 

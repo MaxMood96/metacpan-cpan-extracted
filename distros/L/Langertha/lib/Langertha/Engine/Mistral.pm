@@ -1,6 +1,6 @@
 package Langertha::Engine::Mistral;
 # ABSTRACT: Mistral API
-our $VERSION = '0.202';
+our $VERSION = '0.302';
 use Moose;
 use Carp qw( croak );
 
@@ -11,9 +11,8 @@ extends 'Langertha::Engine::OpenAIBase';
 with 'Langertha::Role::'.$_ for (qw(
   ResponseFormat
   Embedding
+  Tools
 ));
-
-with 'Langertha::Role::Tools';
 
 
 has '+url' => (
@@ -29,9 +28,16 @@ sub _build_api_key {
 
 sub openapi_file { yaml => dist_file('Langertha','mistral.yaml') };
 
+sub _build_openapi_operations {
+  require Langertha::Spec::Mistral;
+  return Langertha::Spec::Mistral::data();
+}
+
 sub default_model { 'mistral-small-latest' }
 
 sub chat_operation_id { 'chat_completion_v1_chat_completions_post' }
+
+sub list_models_path { '/v1/models' }
 
 sub embedding_operation_id { 'embeddings_v1_embeddings_post' }
 
@@ -52,7 +58,7 @@ Langertha::Engine::Mistral - Mistral API
 
 =head1 VERSION
 
-version 0.202
+version 0.302
 
 =head1 SYNOPSIS
 

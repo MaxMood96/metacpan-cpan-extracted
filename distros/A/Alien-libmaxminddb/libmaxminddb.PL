@@ -3,7 +3,7 @@ use warnings;
 use utf8;
 
 my $DIST_NAME       = 'Alien-libmaxminddb';
-my $BUNDLED_VERSION = '1.12.2';
+my $BUNDLED_VERSION = '1.13.2';
 
 package PgkConf;
 
@@ -280,7 +280,7 @@ sub check_libm {
 
 int main(void) {
     (void) fabs(0.0);
-    (void) fabsf(0.0);
+    (void) fabsf(0.0f);
     return 0;
 }
 CODE

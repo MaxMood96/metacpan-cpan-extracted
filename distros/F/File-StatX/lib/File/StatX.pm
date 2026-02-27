@@ -1,5 +1,5 @@
 package File::StatX;
-$File::StatX::VERSION = '0.002';
+$File::StatX::VERSION = '0.003';
 use strict;
 use warnings;
 
@@ -56,7 +56,7 @@ File::StatX - StatX for Perl
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -66,6 +66,8 @@ version 0.002
  say "File size is ", $stat->size;
 
 =head1 DESCRIPTION
+
+This module exposes C<statx> to Perl. This allows XXX
 
 =head1 FUNCTIONS
 
@@ -178,6 +180,8 @@ Subvolume number of the current file.
 Subvolumes are fancy directories, i.e., they form a tree structure that may be walked recursively. Support varies by filesystem; it is supported by bcachefs and btrfs since Linux 6.10. 
 
 =head3 atomic_write_segments_max
+
+The maximum number of elements in an array of vectors for a write with torn-write protection enabled.
 
 =head3 atomic_write_unit_max
 
@@ -313,27 +317,27 @@ It is deprecated and should not be used.
 
 =head3 STATX_MNT_ID
 
-Want C<mnt_id> (since Linux 5.8)
+Want C<mnt_id>. This will be C<0> if not supported on your system.
 
 =head3 STATX_DIOALIGN
 
-Want C<dio_mem_align> and C<dio_offset_align>.
+Want C<dio_mem_align> and C<dio_offset_align>. This will be C<0> if not supported on your system.
 
 =head3 STATX_MNT_ID_UNIQUE
 
-Want unique C<mnt_id>
+Want unique C<mnt_id>. This will be C<0> if not supported on your system.
 
 =head3 STATX_SUBVOL
 
-Want C<subvol>
+Want C<subvol>. This will be C<0> if not supported on your system.
 
 =head3 STATX_WRITE_ATOMIC
 
-Want C<atomic_write_unit_min>, C<atomic_write_unit_max>, C<atomic_write_segments_max>, and C<atomic_write_unit_max_opt>.
+Want C<atomic_write_unit_min>, C<atomic_write_unit_max>, C<atomic_write_segments_max>, and C<atomic_write_unit_max_opt>. This will be C<0> if not supported on your system.
 
 =head3 STATX_DIO_READ_ALIGN
 
-Want C<dio_read_offset_align>.
+Want C<dio_read_offset_align>. This will be C<0> if not supported on your system.
 
 =head2 Flags
 

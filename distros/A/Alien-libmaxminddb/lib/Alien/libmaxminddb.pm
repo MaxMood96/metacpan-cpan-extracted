@@ -6,26 +6,10 @@ use 5.014;
 use warnings;
 use utf8;
 
-our $VERSION = 2.001;
+our $VERSION = 2.002;
 
 use File::Spec qw();
 use JSON::PP   qw();
-
-sub dist_dir {
-    my $class = shift;
-
-    my $dist = $class;
-    $dist =~ s/::/-/g;
-
-    my $sub_dir = File::Spec->catdir(qw(auto share dist), $dist);
-    for my $inc (@INC) {
-        my $dir = File::Spec->catdir($inc, $sub_dir);
-        if (-d $dir) {
-            return $dir;
-        }
-    }
-    die "unable to find dist share directory for $dist";
-}
 
 sub cflags {
     my $class = shift;
@@ -70,12 +54,28 @@ sub bin_dir {
     return;
 }
 
+sub _dist_dir_with_subdir {
+    my ($class, $subdir) = @_;
+
+    my $dist = $class;
+    $dist =~ s/::/-/g;
+
+    my $search_dir = File::Spec->catdir(qw(auto share dist), $dist, $subdir);
+    for my $inc (@INC) {
+        my $dir = File::Spec->catdir($inc, $search_dir);
+        if (-d $dir) {
+            return $dir;
+        }
+    }
+    die "unable to find dist share directory for $dist";
+}
+
 sub _config {
     my $class = shift;
 
-    my $dist_dir = $class->dist_dir;
+    my $alien_dir = $class->_dist_dir_with_subdir('_alien');
 
-    my $json_file = File::Spec->catfile($dist_dir, '_alien', 'alien.json');
+    my $json_file = File::Spec->catfile($alien_dir, 'alien.json');
     open my $in, '<', $json_file
         or die "Cannot read $json_file";
     my $json = do { local $/; <$in> };
@@ -83,17 +83,11 @@ sub _config {
 
     my $config = JSON::PP::decode_json($json);
 
-    $config->{distdir} = $dist_dir;
-
     if ($config->{install_type} eq 'share') {
-        my $inc_dir = File::Spec->catdir($dist_dir, 'include');
-        if (-d $inc_dir) {
-            $config->{cflags} = join ' ', "-I$inc_dir", $config->{cflags};
-        }
-        my $lib_dir = File::Spec->catdir($dist_dir, 'lib');
-        if (-d $lib_dir) {
-            $config->{libs} = join ' ', "-L$lib_dir", $config->{libs};
-        }
+        my $inc_dir = $class->_dist_dir_with_subdir('include');
+        $config->{cflags} = join ' ', "-I$inc_dir", $config->{cflags};
+        my $lib_dir = $class->_dist_dir_with_subdir('lib');
+        $config->{libs} = join ' ', "-L$lib_dir", $config->{libs};
     }
 
     return $config;
@@ -110,7 +104,7 @@ Alien::libmaxminddb - Find or install libmaxminddb
 
 =head1 VERSION
 
-version 2.001
+version 2.002
 
 =head1 SYNOPSIS
 
@@ -121,6 +115,9 @@ Add the library to your F<dist.ini> if you use Dist::Zilla.
   -remove = MakeMaker
 
   [Prereqs / ConfigureRequires]
+  Alien::libmaxminddb = 0
+
+  [Prereqs / BuildRequires]
   Alien::libmaxminddb = 0
 
   [MakeMaker::Awesome]
@@ -168,7 +165,7 @@ Returns the libmaxminddb version.
 Returns "system" if the library is provided by the operating system or "share"
 if the bundled library is used.
 
-=for Pod::Coverage dist_dir config dynamic_libs bin_dir
+=for Pod::Coverage config dynamic_libs bin_dir
 
 =head1 DIAGNOSTICS
 
@@ -213,7 +210,7 @@ Andreas Vögele E<lt>voegelas@cpan.orgE<gt>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (C) 2025 Andreas Vögele
+Copyright (C) 2026 Andreas Vögele
 
 This module is free software; you can redistribute it and/or modify it under
 the same terms as Perl itself.

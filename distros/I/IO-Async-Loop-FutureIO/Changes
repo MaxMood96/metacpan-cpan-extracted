@@ -1,4 +1,9 @@
 Revision history for IO-Async-Loop-FutureIO
 
+0.02    2026-02-26
+        [CHANGES]
+         * Add a working Future::IO implementation module to `test_requires`
+           so that the tests actually have something to use
+
 0.01    2026-02-07
         First version, released on an unsuspecting world.

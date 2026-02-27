@@ -3,12 +3,12 @@
 #
 #  (C) Paul Evans, 2019-2026 -- leonerd@leonerd.org.uk
 
-package Future::IO::ImplBase 0.20;
+package Future::IO::ImplBase 0.21;
 
 use v5.14;
 use warnings;
 
-use Future::IO qw( POLLIN POLLOUT );
+use Future::IO qw( POLLIN POLLOUT POLLPRI );
 
 use Errno qw( EAGAIN EWOULDBLOCK EINPROGRESS );
 use Socket qw( SOL_SOCKET SO_ERROR );
@@ -62,7 +62,7 @@ implementing class should provide.
 
 =head2 accept
 
-Implemented by wrapping C<ready_for_read>, as L</sysread> uses.
+Implemented by wrapping C<poll(POLLIN)>, as L</sysread> uses.
 
 =cut
 
@@ -71,7 +71,7 @@ sub accept
    my $self = shift;
    my ( $fh ) = @_;
 
-   return $self->ready_for_read( $fh )->then( sub {
+   return $self->poll( $fh, POLLIN )->then( sub {
       my $accepted = $fh->accept;
       if( $accepted ) {
          return Future->done( $accepted );
@@ -98,7 +98,7 @@ sub alarm
 
 =head2 connect
 
-Implemented by wrapping C<ready_for_write>, as L</syswrite> uses.
+Implemented by wrapping C<poll(POLLOUT)>, as L</syswrite> uses.
 
 =cut
 
@@ -113,16 +113,16 @@ sub connect
    my $ret = CORE::connect( $fh, $name );
    my $errno = $!;
 
-   if( $ret ) {
-      return Future->done;
-   }
-   elsif( $errno != EINPROGRESS and !CONNECT_EWOULDBLOCK || $errno != EWOULDBLOCK ) {
+   return Future->done if $ret;
+
+   unless( $errno == EINPROGRESS or
+         ( CONNECT_EWOULDBLOCK and $errno == EWOULDBLOCK ) ) {
       return Future->fail( "connect: $errno\n", connect => $fh, $errno );
    }
 
    # not synchronous result
 
-   return $self->ready_for_write( $fh )->then( sub {
+   return $self->poll( $fh, POLLOUT|POLLPRI )->then( sub {
       $errno = $fh->getsockopt( SOL_SOCKET, SO_ERROR );
 
       if( $errno ) {
@@ -138,7 +138,7 @@ sub connect
 
 =head2 recvfrom
 
-Implemented by wrapping C<ready_for_read>, as L</sysread> uses.
+Implemented by wrapping C<poll(POLLIN)>, as L</sysread> uses.
 
 =cut
 
@@ -147,7 +147,7 @@ sub _recv1
    my $self = shift;
    my ( $f, $with_fromaddr, $fh, $length, $flags ) = @_;
 
-   my $waitf = $self->ready_for_read( $fh )->on_done( sub {
+   my $waitf = $self->poll( $fh, POLLIN )->on_done( sub {
       my $fromaddr = $fh->recv( my $buf, $length, $flags );
       if( defined $fromaddr and length $buf ) {
          $f->done( $buf, $with_fromaddr ? ( $fromaddr ) : () );
@@ -186,7 +186,7 @@ sub recvfrom
 
 =head2 send
 
-Implemented by wrapping C<ready_for_write>, as L</syswrite> uses.
+Implemented by wrapping C<poll(POLLOUT)>, as L</syswrite> uses.
 
 =cut
 
@@ -195,7 +195,7 @@ sub _send1
    my $self = shift;
    my ( $f, $fh, $data, $flags, $to ) = @_;
 
-   my $waitf = $self->ready_for_write( $fh )->on_done( sub {
+   my $waitf = $self->poll( $fh, POLLOUT )->on_done( sub {
       my $len;
       # IO::Socket->send itself might die
       my $e = eval { $len = $fh->send( $data, $flags, $to ); 1 } ? undef : $@;
@@ -232,7 +232,7 @@ sub send
 
 Requires a lower-level method
 
-   $f = $class->ready_for_read( $fh );
+   $f = $class->poll( $fh, POLLIN );
 
 which should return a Future that completes when the given filehandle may be
 ready for reading.
@@ -244,7 +244,7 @@ sub _sysread1
    my $self = shift;
    my ( $f, $fh, $length ) = @_;
 
-   my $waitf = $self->ready_for_read( $fh )->on_done( sub {
+   my $waitf = $self->poll( $fh, POLLIN )->on_done( sub {
       my $ret = $fh->sysread( my $buf, $length );
       if( $ret ) {
          $f->done( $buf );
@@ -279,7 +279,7 @@ sub sysread
 
 Requires a lower-level method
 
-   $f = $class->ready_for_write( $fh );
+   $f = $class->poll( $fh, POLLOUT );
 
 which should return a Future that completes when the given filehandle may be
 ready for writing.
@@ -291,7 +291,7 @@ sub _syswrite1
    my $self = shift;
    my ( $f, $fh, $data ) = @_;
 
-   my $waitf = $self->ready_for_write( $fh )->on_done( sub {
+   my $waitf = $self->poll( $fh, POLLOUT )->on_done( sub {
       my $len = $fh->syswrite( $data );
       if( defined $len ) {
          $f->done( $len );
@@ -324,6 +324,9 @@ The following methods are not considered part of the official C<Future::IO>
 implementation API, and should not be relied upon when writing new code.
 However, existing code may still exist that uses them so for now they are
 provided as wrappers.
+
+Later versions of this module may start printing deprecation warnings on these
+methods, so existing code ought to be updated to use the newer forms now.
 
 =cut
 

@@ -21,7 +21,14 @@ no_index:
 requires:
   File::Slurp: '0'
   JSON: '0'
+  Pod::Find: '0'
+  Pod::Usage: '0'
+  Scalar::Util: '0'
+  Statistics::Lite: '0'
   String::ShellQuote: '0'
+  Time::Piece: '0'
   perl: '5.006'
-version: v0.0.1
+resources:
+  repository: https://github.com/VVelox/RRD-Fetch
+version: v0.1.0
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

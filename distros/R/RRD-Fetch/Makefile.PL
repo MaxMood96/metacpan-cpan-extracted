@@ -1,7 +1,7 @@
 use 5.006;
 use strict;
 use warnings;
-use ExtUtils::MakeMaker;
+use ExtUtils::MakeMaker qw( WriteMakefile );
 
 my %WriteMakefileArgs = (
 	NAME               => 'RRD::Fetch',
@@ -11,7 +11,7 @@ my %WriteMakefileArgs = (
 	LICENSE            => 'gpl_2',
 	MIN_PERL_VERSION   => '5.006',
 	INST_SCRIPT        => 'bin',
-	EXE_FILES          => [ 'src_bin/rrd_fetch', ],
+	EXE_FILES          => [ 'src_bin/rrd_fetch', 'src_bin/rrd_fetch_helper' ],
 	CONFIGURE_REQUIRES => {
 		'ExtUtils::MakeMaker' => '0',
 	},
@@ -22,9 +22,26 @@ my %WriteMakefileArgs = (
 		'String::ShellQuote' => '0',
 		'JSON'               => '0',
 		'File::Slurp'        => '0',
+		'Time::Piece'        => '0',
+		'Statistics::Lite'   => '0',
+		'Pod::Find'          => '0',
+		'Statistics::Lite'   => '0',
+		'Time::Piece'        => '0',
+		'Pod::Usage'         => '0',
+		'Scalar::Util'       => '0',
 	},
 	dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
 	clean => { FILES    => 'RRD-Fetch-*' },
+	META_MERGE => {
+		"meta-spec" => { version => 2 },
+			resources   => {
+				repository => {
+					type => 'git',
+					url  => 'git@github.com:VVelox/RRD-Fetch.git',
+					web  => 'https://github.com/VVelox/RRD-Fetch',
+				},
+		},
+	}
 );
 
 # Compatibility with old versions of ExtUtils::MakeMaker

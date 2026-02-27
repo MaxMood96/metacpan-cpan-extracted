@@ -1,5 +1,5 @@
 package Mail::DMARC::Report::Store::SQL::Grammars::PostgreSQL;
-our $VERSION = '1.20250805';
+our $VERSION = '1.20260226';
 use strict;
 use warnings;
 
@@ -202,6 +202,17 @@ EO_REPORTS
     ;
 }
 
+sub count_filtered_report_query {
+    return <<'EO_SQL'
+SELECT COUNT(*)
+FROM "report" "r"
+LEFT JOIN "author" "a"  ON "r"."author_id"="a"."id"
+LEFT JOIN "domain" "fd" ON "r"."from_domain_id"="fd"."id"
+WHERE 1=1
+EO_SQL
+    ;
+}
+
 sub insert_error {
     my ( $self, $which ) = @_;
     if ( $which == 0 ) {
@@ -309,7 +320,7 @@ Mail::DMARC::Report::Store::SQL::Grammars::PostgreSQL - Grammar for working with
 
 =head1 VERSION
 
-version 1.20250805
+version 1.20260226
 
 =head1 SYPNOSIS
 
@@ -338,7 +349,7 @@ Marc Bradshaw <marc@marcbradshaw.net>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2025 by Matt Simerson.
+This software is copyright (c) 2026 by Matt Simerson.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

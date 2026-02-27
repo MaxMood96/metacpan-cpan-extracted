@@ -1,12 +1,13 @@
 package Langertha::Engine::MiniMax;
 # ABSTRACT: MiniMax API
-our $VERSION = '0.202';
+our $VERSION = '0.302';
 use Moose;
 use Carp qw( croak );
 
 extends 'Langertha::Engine::OpenAIBase';
 
 with 'Langertha::Role::Tools';
+with 'Langertha::Role::StaticModels';
 
 
 sub _build_supported_operations {[qw(
@@ -26,6 +27,14 @@ sub _build_api_key {
 
 sub default_model { 'MiniMax-M2.5' }
 
+sub _build_static_models {[
+  { id => 'MiniMax-M2.5' },
+  { id => 'MiniMax-M2.5-highspeed' },
+  { id => 'MiniMax-M2.1' },
+  { id => 'MiniMax-M2.1-highspeed' },
+  { id => 'MiniMax-M2' },
+]}
+
 __PACKAGE__->meta->make_immutable;
 
 
@@ -43,7 +52,7 @@ Langertha::Engine::MiniMax - MiniMax API
 
 =head1 VERSION
 
-version 0.202
+version 0.302
 
 =head1 SYNOPSIS
 

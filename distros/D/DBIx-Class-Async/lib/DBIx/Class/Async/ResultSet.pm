@@ -1,6 +1,6 @@
 package DBIx::Class::Async::ResultSet;
 
-$DBIx::Class::Async::ResultSet::VERSION   = '0.62';
+$DBIx::Class::Async::ResultSet::VERSION   = '0.63';
 $DBIx::Class::Async::ResultSet::AUTHORITY = 'cpan:MANWAR';
 
 =head1 NAME
@@ -9,7 +9,7 @@ DBIx::Class::Async::ResultSet - Non-blocking resultset proxy with Future-based e
 
 =head1 VERSION
 
-Version 0.62
+Version 0.63
 
 =head1 SYNOPSIS
 
@@ -46,6 +46,7 @@ use Scalar::Util 'blessed';
 use DBIx::Class::Async;
 use DBIx::Class::Async::Row;
 use DBIx::Class::Async::ResultSetColumn;
+use DBIx::Class::Async::SelectNormaliser;
 
 use constant ASYNC_TRACE => $ENV{ASYNC_TRACE} || 0;
 
@@ -1288,25 +1289,62 @@ sub delete {
 
     $self->clear_cache;
 
-    # If we have complex attributes (LIMIT, OFFSET, JOINs),
-    # we MUST use the safe path.
-    if ( keys %{$self->{_attrs} || {}} ) {
+    my $attrs = $self->{_attrs} || {};
+    my $cond  = $self->{_cond};
+
+    # Attributes that make a direct single-query DELETE unsafe.
+    # For each of these we must take the two-step path: fetch matching PKs
+    # via a clean search, then DELETE WHERE pk IN (...).
+    #
+    # - rows / offset / page : LIMIT on DELETE is non-standard SQL
+    # - join                 : multi-table DELETE syntax varies by database
+    # - group_by / having    : DBIC drops GROUP BY when generating the DELETE
+    #                          subquery, producing invalid SQL. Additionally,
+    #                          a grouped search does not return individual
+    #                          rows -- it returns aggregate results -- so we
+    #                          must re-fetch the actual rows using only the
+    #                          WHERE condition (stripping group_by/having)
+    #                          before deleting.
+
+    my $has_limit   = exists $attrs->{rows}
+                   || exists $attrs->{offset}
+                   || exists $attrs->{page};
+    my $has_join    = exists $attrs->{join};
+    my $has_grouped = exists $attrs->{group_by}
+                   || exists $attrs->{having};
+
+    if ( $has_grouped ) {
+        # Strip group_by and having entirely -- we only want the WHERE
+        # condition to identify which rows to delete.  Keeping them would
+        # cause all() to return aggregate results with no usable PKs.
+        my %safe_attrs = %$attrs;
+        delete @safe_attrs{qw(group_by having)};
+
+        return $self->new_result_set({
+            cond  => $cond,
+            attrs => \%safe_attrs,
+        })->delete_all;
+    }
+
+    if ( $has_limit || $has_join ) {
         return $self->delete_all;
     }
 
-    # Path A: Simple, direct DELETE if condition is a clean HASH
-    if ( ref($self->{_cond}) eq 'HASH' && keys %{$self->{_cond}} ) {
+    # Simple condition with no dangerous attrs: single-query direct DELETE.
+    if ( ref($cond) eq 'HASH' && keys %$cond ) {
         return DBIx::Class::Async::_call_worker(
             $self->{_async_db},
             'delete',
             {
                 source_name => $self->{_source_name},
-                cond        => $self->{_cond}
+                cond        => $cond,
             }
         );
     }
 
-    # Default to the safe path for everything else
+    # No condition, or non-HASH condition (literal SQL): use delete_all for
+    # safety to avoid accidental full-table wipe on malformed input and to
+    # handle literal SQL conditions correctly.
     return $self->delete_all;
 }
 
@@ -2553,6 +2591,14 @@ sub search {
     }
 
     my $merged_attrs = $self->_merge_attrs($self->{_attrs}, $attrs);
+
+    # Rewrite any { -ident => $col, -as => $alias } items in the select list
+    # to bare column strings before the attrs are stored on the new ResultSet.
+    # This must happen after _merge_attrs (so the full merged select/as arrays
+    # are available) and before new_result_set (so the stored _attrs are clean
+    # and every downstream method -- all_future, count, count_total, etc. --
+    # sees correct attrs without needing their own normalisation call).
+    $merged_attrs = DBIx::Class::Async::SelectNormaliser->normalise_attrs($merged_attrs);
 
     return $self->new_result_set({
         cond          => $new_cond,

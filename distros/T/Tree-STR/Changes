@@ -1,5 +1,9 @@
 Revision history for Tree-STR
 
+0.06  20260227
+    - The query methods are now compatible with Tree::R,
+      i.e. they accept an array ref and add to that if passed.
+
 0.05  20260221
     - Linearise the query methods (no more recursion).
     - Some micro-optimisations.

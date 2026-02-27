@@ -6,6 +6,7 @@ README.md
 cpanfile
 lib/App/ansicolumn.pm
 lib/App/ansicolumn/Border.pm
+lib/App/ansicolumn/Command.pm
 lib/App/ansicolumn/Util.pm
 lib/App/ansicolumn/default.pm
 minil.toml

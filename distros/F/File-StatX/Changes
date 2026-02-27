@@ -1,5 +1,8 @@
 Revision history for File-StatX
 
+0.003     2026-02-26 18:47:02+01:00 Europe/Brussels
+          - Various documentation fixes
+
 0.002     2026-02-22 14:10:58+01:00 Europe/Brussels
           - Add an explicit test for stx_atomic_write_unit_max_opt
 

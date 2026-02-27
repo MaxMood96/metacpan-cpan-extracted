@@ -8,9 +8,11 @@ use Carp qw/croak carp/;
 use Image::Info qw(image_info image_type);
 use Moo;
 use MooX::Types::MooseLike::Base qw(:all);
+use PDF::Builder;
 use PDF::Table;
+use version;
 
-our $VERSION = '0.33';
+our $VERSION = '0.35';
 
 =head1 NAME
 
@@ -79,6 +81,16 @@ CtrlO::PDF - high level PDF creator
   print $pdf_out $file;
   close $pdf_out;
 
+  # From version 0.34 (and PDF::Builder 3.028) it is possible to produce
+  # internal links in PDFs. For example:
+  $pdf->text(<<'__MARKDOWN', format => 'md1');
+  Go to an [internal link](link-elsewhere) somewhere else in this PDF.
+
+  ---
+
+  # System2 Configuration - Overview {#link-elsewhere}
+  __MARKDOWN
+
 =head1 DESCRIPTION
 
 This module tries to make it easy to create PDFs by providing a high level
@@ -107,9 +119,16 @@ latter contains many updates and powerful new features to create feature-rich
 PDF documents and means that PDF::TextBlock is no longer required for this
 module, which uses PDF::Builder's new column() method instead.
 
-=head1 METHODS
+=head1 CONSTRUCTOR
 
-=cut
+=head2 new
+
+The constructor is called C<new>, and accepts a optional hash of options.
+Valid options are mainly the same as all the methods described below, for those
+that get and set options. Some methods are read-only and must be set as options
+to the constructor, others can be set later.
+
+=head1 METHODS
 
 =head2 pdf
 
@@ -137,6 +156,9 @@ sub _build_pdf
 
     my $pdf = PDF::Builder->new;
 
+    $pdf->pass_start_state(1, 1, $self->state)
+        if $self->has_state;
+
     $pdf->add_font_path('/usr/share/fonts');
     # Retained for backwards compatibility and moved from being built in the
     # font() and fontbold() properties
@@ -152,6 +174,7 @@ sub _build_pdf
             'bold-italic' => 'truetype/liberation/LiberationSans-BoldItalic.ttf'
         },
     );
+    $pdf->font_settings(font => 'liberation-sans');
 
     $pdf;
 }
@@ -179,6 +202,11 @@ that method for more details.
 
 =cut
 
+has page_count => (
+    is      => 'rw',
+    default => 0,
+);
+
 sub add_page
 {   my $self = shift;
     my $page = $self->pdf->page;
@@ -189,6 +217,7 @@ sub add_page
     # its bottom-left corner, we will need to move the cursor down further to
     # account for the font size of the text, but we don't know that yet.
     $self->_set_is_new_page(1);
+    $self->page_count($self->page_count + 1);
     return $page;
 }
 
@@ -350,7 +379,8 @@ has margin_bottom => (
 
 sub _build_margin_bottom
 {   my $self = shift;
-    return $self->margin + $self->_line_height($self->font_size);
+    # Allow room for the footer as well as space for the text to print
+    return $self->margin + 2 * $self->_line_height($self->font_size);
 };
 
 =head2 top_padding
@@ -688,9 +718,16 @@ sub text
 
     $text->font($self->font, 10); # Any size, overridden below
 
+    # Whether this version has relative padding using percentage. If it does
+    # not then fallback to previous behaviour and do not set any styling,
+    # otherwise set the relative padding and the spacing between blocks of text
+    # to be consistent
+    my $has_advanced_style = version->parse($PDF::Builder::VERSION) >= 3.028;
+
     my $top_padding = defined $options{top_padding}
         ? $options{top_padding}
-        : $self->_line_height($size) - $size;
+        # Default to a whole line height preceeding
+        : $self->_line_height($size, $has_advanced_style && 2) - $size;
 
     # Only create spacing if below other content
     if ($self->is_new_page)
@@ -701,11 +738,30 @@ sub text
         $self->_down($top_padding);
     }
 
+    # As of PDF::Builder 3.028 there is a bug which prevents setting the margin
+    # on "li" elements. Instead, the margin needs to be set on the associated
+    # marker instead (_marker). There is also a separate bug which means that
+    # if the line spacing of the font of the marker is greater than that of the
+    # item text itself, then the spacing of the bullet lines will be too large.
+    # However, with the use of the liberation-sans font, the line spacing is
+    # actually smaller for the marker, hence it has no effect.
+    my $style = $has_advanced_style && '
+        ol { margin-top: 100%; margin-bottom: 100% }
+        ul { margin-top: 100%; margin-bottom: 100% }
+        _marker { margin-top: 50%; margin-bottom: 0% }
+        p { margin-top: 100%; margin-bottom: 100% }
+    ';
+
     my ($rc, $next_y, $unused) = $text->column(
         $page, $text, $grfx, $format, $string,
-        rect => [$x, $self->_y, $self->_width_print, $height],
-        para => [0, $top_padding],
+        rect      => [$x, $self->_y, $self->_width_print, $height],
+        para      => [0, $top_padding],
+        state     => $self->state,
+        # page is: $pass_count, $max_passes, $ppn, $extfilepath, $fpn, $LR, $bind
+        page      => [ 1, 1, $self->page_count, undef, $self->page_count, undef, undef ],
         font_size => $size,
+        font_info =>'-fm-',
+        style     => $style,
         %options
     );
 
@@ -718,9 +774,11 @@ sub text
         $grfx   = $page->gfx;
 
         ($rc, $next_y, $unused) = $text->column($page, $text, $grfx, 'pre', $unused,
-            rect => [$x, $self->_y, $self->_width_print, $height],
-            para => [0, $top_padding],
-            font_size => $size,
+            rect  => [$x, $self->_y, $self->_width_print, $height],
+            para  => [0, $top_padding],
+            state => $self->state,
+            page  => [ 1, 1, $self->page_count, undef, $self->page_count, undef, undef ],
+            style => $style,
             %options,
         );
         $self->_set_is_new_page(0);
@@ -868,6 +926,47 @@ sub image
     $self->clear_new_page;
 }
 
+=head2 has_state
+
+A boolean dictating whether the version of PDF::Builder in use supports state
+functionality, to retain information across multiple pages.
+
+=cut
+
+has has_state => (
+    is => 'lazy',
+);
+
+sub _build_has_state
+{   my $self = shift;
+    version->parse($PDF::Builder::VERSION) >= 3.028;
+}
+
+=head2 state
+
+A hashref to configure and store the PDF::Builder state information. By default
+this is built automatically using C<< PDF::Builder->init_state() >> and includes
+configuration for the use of id parameters in header tags (enabling internal
+linking). See the L<PDF::Builder|PDF::Builder::Content::Column_docs/init_state>
+documentation for more information.
+
+=cut
+
+has state => (
+    is => 'lazy',
+);
+
+sub _build_state
+{   my $self = shift;
+    $self->has_state or return undef;
+    +{
+        PDF::Builder->init_state({
+            # Allow these headings to have an id tag for internal hyperlinking
+            '_reft' => [ 'h1', 'h2', 'h3', 'h4', 'h5', 'h6' ],
+        })
+    }
+}
+
 =head2 content
 
 Return the PDF content.
@@ -911,6 +1010,9 @@ sub content
             $text->text($footer);
         }
     }
+
+    $self->page->text->pass_end_state(1, 1, $self->pdf, $self->state)
+        if $self->has_state;
 
     $self->pdf->stringify;
 }

@@ -1,5 +1,10 @@
 Revision history for Perl extension HTTP-Session2
 
+1.12 2026-02-26T14:46:34Z
+
+    - Removed HTTP::Session2::ClientStore(deprecated at 2014)
+    - Use Crypt::SysRandom to generate the session_id
+
 1.11 2026-02-24T22:44:48Z
 
     - Deprecate the module

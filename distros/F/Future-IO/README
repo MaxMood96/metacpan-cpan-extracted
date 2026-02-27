@@ -389,8 +389,9 @@ METHODS
     Since version 0.11.
 
     Returns true if the underlying IO implementation actually supports
-    multiple filehandles. Most real support modules will return true here,
-    but this returns false for the internal minimal implementation.
+    multiple filehandles. The default minimal internal implementation used
+    not to support this, but since version 0.21 it now does; so this method
+    always returns true.
 
  await
 
@@ -425,6 +426,11 @@ THE $IMPL VARIABLE
           ( $Future::IO::IMPL //= __PACKAGE__ ) eq __PACKAGE__ or
              warn "Unable to set Future::IO implementation to " . __PACKAGE__ .
                 " as it is already $Future::IO::IMPL\n";
+       }
+    
+       sub poll
+       {
+          ...
        }
     
        sub sleep

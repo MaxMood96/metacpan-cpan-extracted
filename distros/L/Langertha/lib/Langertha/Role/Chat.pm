@@ -1,9 +1,10 @@
 package Langertha::Role::Chat;
 # ABSTRACT: Role for APIs with normal chat functionality
-our $VERSION = '0.202';
+our $VERSION = '0.302';
 use Moose::Role;
 use Future::AsyncAwait;
 use Carp qw( croak );
+use Log::Any qw( $log );
 
 requires qw(
   chat_request
@@ -46,9 +47,15 @@ sub chat_messages {
 
 sub simple_chat {
   my ( $self, @messages ) = @_;
+  $log->debugf("[%s] simple_chat with %d message(s), model=%s",
+    ref $self, scalar @messages, $self->chat_model // 'default');
   my $request = $self->chat(@messages);
   my $response = $self->user_agent->request($request);
-  return $request->response_call->($response);
+  my $result = $request->response_call->($response);
+  if ($self->can('has_rate_limit') && $self->has_rate_limit && ref $result && $result->isa('Langertha::Response')) {
+    $result = $result->clone_with(rate_limit => $self->rate_limit);
+  }
+  return $result;
 }
 
 
@@ -64,8 +71,10 @@ sub simple_chat_stream {
   my ( $self, $callback, @messages ) = @_;
   croak "simple_chat_stream requires a callback as first argument"
     unless ref $callback eq 'CODE';
+  $log->debugf("[%s] simple_chat_stream (%s format)", ref $self, $self->stream_format);
   my $request = $self->chat_stream(@messages);
   my $chunks = $self->execute_streaming_request($request, $callback);
+  $log->debugf("[%s] Stream completed: %d chunks", ref $self, scalar @$chunks);
   return join('', map { $_->content } @$chunks);
 }
 
@@ -106,6 +115,7 @@ sub _build__async_http {
 
 async sub simple_chat_f {
   my ( $self, @messages ) = @_;
+  $log->debugf("[%s] simple_chat_f with %d message(s)", ref $self, scalar @messages);
   my $request = $self->chat(@messages);
 
   my $response = await $self->_async_http->do_request(
@@ -116,7 +126,11 @@ async sub simple_chat_f {
     die "".(ref $self)." request failed: ".$response->status_line;
   }
 
-  return $request->response_call->($response);
+  my $result = $request->response_call->($response);
+  if ($self->can('has_rate_limit') && $self->has_rate_limit && ref $result && $result->isa('Langertha::Response')) {
+    $result = $result->clone_with(rate_limit => $self->rate_limit);
+  }
+  return $result;
 }
 
 
@@ -227,7 +241,7 @@ Langertha::Role::Chat - Role for APIs with normal chat functionality
 
 =head1 VERSION
 
-version 0.202
+version 0.302
 
 =head1 SYNOPSIS
 

@@ -1,8 +1,9 @@
 package Langertha::Role::Embedding;
 # ABSTRACT: Role for APIs with embedding functionality
-our $VERSION = '0.202';
+our $VERSION = '0.302';
 use Moose::Role;
 use Carp qw( croak );
+use Log::Any qw( $log );
 
 requires qw(
   embedding_request
@@ -30,6 +31,8 @@ sub embedding {
 
 sub simple_embedding {
   my ( $self, $text ) = @_;
+  $log->debugf("[%s] simple_embedding, model=%s, input_length=%d",
+    ref $self, $self->embedding_model // 'default', length($text // ''));
   my $request = $self->embedding($text);
   my $response = $self->user_agent->request($request);
   return $request->response_call->($response);
@@ -51,7 +54,7 @@ Langertha::Role::Embedding - Role for APIs with embedding functionality
 
 =head1 VERSION
 
-version 0.202
+version 0.302
 
 =head2 embedding_model
 

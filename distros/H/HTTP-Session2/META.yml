@@ -3,7 +3,6 @@ abstract: 'HTTP session management'
 author:
   - 'tokuhirom <tokuhirom@gmail.com>'
 build_requires:
-  Crypt::Rijndael: '0'
   Plack::Request: '0'
   Plack::Response: '0'
   Test::More: '0.98'
@@ -30,11 +29,9 @@ no_index:
 provides:
   HTTP::Session2:
     file: lib/HTTP/Session2.pm
-    version: '1.11'
+    version: '1.12'
   HTTP::Session2::Base:
     file: lib/HTTP/Session2/Base.pm
-  HTTP::Session2::ClientStore:
-    file: lib/HTTP/Session2/ClientStore.pm
   HTTP::Session2::ClientStore2:
     file: lib/HTTP/Session2/ClientStore2.pm
   HTTP::Session2::Expired:
@@ -43,24 +40,22 @@ provides:
     file: lib/HTTP/Session2/Random.pm
   HTTP::Session2::ServerStore:
     file: lib/HTTP/Session2/ServerStore.pm
-    version: '1.11'
+    version: '1.12'
 requires:
   Cookie::Baker: '0'
-  Crypt::CBC: '0'
-  Data::MessagePack: '0'
+  Crypt::SysRandom: '0'
   Digest::HMAC: '0'
   Digest::SHA: '0'
   Digest::SHA1: '0'
   MIME::Base64: '3.11'
   Mouse: '0'
-  Time::HiRes: '0'
   parent: '0'
   perl: '5.008005'
 resources:
   bugtracker: https://github.com/tokuhirom/HTTP-Session2/issues
   homepage: https://github.com/tokuhirom/HTTP-Session2
   repository: https://github.com/tokuhirom/HTTP-Session2.git
-version: '1.11'
+version: '1.12'
 x_contributors:
   - 'Songmu <y.songmu@gmail.com>'
   - 'magai <xxmagai@gmail.com>'

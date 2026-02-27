@@ -1,5 +1,17 @@
 Revision history for Perl module Amon2
 
+6.17 2026-02-27T01:13:57Z
+
+    - Remove jshint test from generated projects
+    - Remove unused Try::Tiny dependency
+    - Drop Amon2::Plugin::Web::MobileAgent references and Extended example app
+    - Replace random_string implementation with Crypt::SysRandom
+    - Bump minimum Perl version to 5.14 (IO::Socket::IP requires 5.14+)
+    - Remove bundled JS libraries (jQuery, Bootstrap, etc.) from setup script
+    - Rewrite XSRFTokenJS to vanilla JavaScript (no jQuery dependency)
+    - Replace Bootstrap markup in templates with semantic HTML
+    - Fix Crypt::CBC deprecation warning by specifying pbkdf => 'pbkdf2'
+
 6.16 2022-11-01T19:17:29Z
 
     - Drop ES5Shim in amon2-setup.pl

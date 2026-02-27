@@ -1,6 +1,6 @@
 package DBIx::Class::Async::Exception::Factory;
 
-$DBIx::Class::Async::Exception::Factory::VERSION   = '0.62';
+$DBIx::Class::Async::Exception::Factory::VERSION   = '0.63';
 $DBIx::Class::Async::Exception::Factory::AUTHORITY = 'cpan:MANWAR';
 
 use strict;
@@ -19,7 +19,7 @@ DBIx::Class::Async::Exception::Factory - Translate raw DBIx::Class errors into t
 
 =head1 VERSION
 
-Version 0.62
+Version 0.63
 
 =head1 SYNOPSIS
 
@@ -52,7 +52,7 @@ receive a structured object rather than a plain string.
 
 #
 #
-# Pattern table
+# Pattern Table
 # Each entry: match regex, exception class, builder sub
 
 my @PATTERNS = (
@@ -167,6 +167,34 @@ my @PATTERNS = (
                 source_class   => $p{result_class},
                 operation      => $p{operation},
                 hint           => "Qualify the column: use 'me.$col' for the primary table or 'relname.$col' for a join.",
+                original_error => $p{error},
+            );
+        },
+    },
+
+    # HAVING clause without GROUP BY, produced when DBIC generates
+    # a DELETE subquery from a ResultSet that has group_by/having attributes
+    # and silently drops the GROUP BY. DBIx::Class::Async routes such
+    # deletes through delete_all (fetch PKs first, then DELETE by PK) so
+    # this error should not occur in normal use, but may still arrive from
+    # raw worker errors or from callers constructing queries outside the
+    # standard ResultSet API.
+    {
+        class => 'DBIx::Class::Async::Exception',
+        match => qr/HAVING clause(?: is)? (?:used )?without (?:a )?GROUP BY/i,
+        build => sub {
+            my (%p) = @_;
+            return (
+                message        => _fmt_message(
+                    "HAVING clause used without GROUP BY -- this is usually caused by "
+                    . "deleting from a ResultSet that has group_by/having attributes "
+                ),
+                source_class   => $p{result_class},
+                operation      => $p{operation},
+                hint           => "Use delete_all() instead of delete() when your ResultSet "
+                               . "has group_by or having attributes, or call search() with "
+                               . "only group_by/having before counting/aggregating rather "
+                               . "than deleting.",
                 original_error => $p{error},
             );
         },

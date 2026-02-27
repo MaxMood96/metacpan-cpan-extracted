@@ -28,6 +28,7 @@
       },
       "test" : {
          "requires" : {
+            "Future::IO::Impl::Ppoll" : "0",
             "IO::Async::LoopTests" : "0.76",
             "Test2::V0" : "0"
          }
@@ -36,7 +37,7 @@
    "provides" : {
       "IO::Async::Loop::FutureIO" : {
          "file" : "lib/IO/Async/Loop/FutureIO.pm",
-         "version" : "0.01"
+         "version" : "0.02"
       }
    },
    "release_status" : "stable",
@@ -45,6 +46,6 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.01",
+   "version" : "0.02",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

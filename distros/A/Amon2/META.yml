@@ -8,7 +8,7 @@ build_requires:
 configure_requires:
   Module::Build::Tiny: '0.035'
 dynamic_config: 0
-generated_by: 'Minilla/v3.1.19, CPAN::Meta::Converter version 2.150010'
+generated_by: 'Minilla/v3.1.29, CPAN::Meta::Converter version 2.150010'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -27,7 +27,7 @@ no_index:
 provides:
   Amon2:
     file: lib/Amon2.pm
-    version: '6.16'
+    version: '6.17'
   Amon2::Config::Simple:
     file: lib/Amon2/Config/Simple.pm
   Amon2::ContextGuard:
@@ -50,33 +50,19 @@ provides:
     file: lib/Amon2/Plugin/Web/WebSocket.pm
   Amon2::Setup::Asset::Blueprint:
     file: lib/Amon2/Setup/Asset/Blueprint.pm
-  Amon2::Setup::Asset::Bootstrap:
-    file: lib/Amon2/Setup/Asset/Bootstrap.pm
-  Amon2::Setup::Asset::MicroDispatcherJS:
-    file: lib/Amon2/Setup/Asset/MicroDispatcherJS.pm
-  Amon2::Setup::Asset::MicroLocationJS:
-    file: lib/Amon2/Setup/Asset/MicroLocationJS.pm
-  Amon2::Setup::Asset::MicroTemplateJS:
-    file: lib/Amon2/Setup/Asset/MicroTemplateJS.pm
-  Amon2::Setup::Asset::SprintfJS:
-    file: lib/Amon2/Setup/Asset/SprintfJS.pm
-  Amon2::Setup::Asset::StrftimeJS:
-    file: lib/Amon2/Setup/Asset/StrftimeJS.pm
   Amon2::Setup::Asset::XSRFTokenJS:
     file: lib/Amon2/Setup/Asset/XSRFTokenJS.pm
-  Amon2::Setup::Asset::jQuery:
-    file: lib/Amon2/Setup/Asset/jQuery.pm
   Amon2::Setup::Flavor:
     file: lib/Amon2/Setup/Flavor.pm
   Amon2::Setup::Flavor::Basic:
     file: lib/Amon2/Setup/Flavor/Basic.pm
-    version: '6.16'
+    version: '6.17'
   Amon2::Setup::Flavor::Large:
     file: lib/Amon2/Setup/Flavor/Large.pm
-    version: '6.16'
+    version: '6.17'
   Amon2::Setup::Flavor::Minimum:
     file: lib/Amon2/Setup/Flavor/Minimum.pm
-    version: '6.16'
+    version: '6.17'
   Amon2::Setup::VC::Git:
     file: lib/Amon2/Setup/VC/Git.pm
   Amon2::Trigger:
@@ -100,9 +86,10 @@ provides:
   Amon2::Web::WebSocket:
     file: lib/Amon2/Web/WebSocket.pm
 recommends:
+  Crypt::SysRandom::XS: '0'
   Teng: '0.18'
 requires:
-  Digest::SHA: '0'
+  Crypt::SysRandom: '0'
   Encode: '0'
   Exporter: '0'
   File::Copy::Recursive: '0'
@@ -125,19 +112,17 @@ requires:
   Router::Boom: '0.07'
   Scalar::Util: '0'
   Text::Xslate: '2.0010'
-  Time::HiRes: '0'
-  Try::Tiny: '0.06'
   URI: '1.54'
   URI::Escape: '0'
   URI::QueryParam: '0'
   mro: '0'
   parent: '0.223'
-  perl: '5.010000'
+  perl: '5.014000'
 resources:
   bugtracker: https://github.com/tokuhirom/Amon/issues
   homepage: https://github.com/tokuhirom/Amon
   repository: https://github.com/tokuhirom/Amon.git
-version: '6.16'
+version: '6.17'
 x_contributors:
   - 'Adrian <adrian@investometrica.com>'
   - 'Fuji, Goro <g.psy.va@gmail.com>'
@@ -176,5 +161,5 @@ x_contributors:
   - 's-aska <s.aska.org@gmail.com>'
   - 'tokubass <tokubass@cpan.org>'
   - 'wata <w.nagasawa@gmail.com>'
-x_serialization_backend: 'CPAN::Meta::YAML version 0.018'
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'
 x_static_install: 1

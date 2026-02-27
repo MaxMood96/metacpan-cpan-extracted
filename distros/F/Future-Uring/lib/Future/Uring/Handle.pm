@@ -1,10 +1,12 @@
 package Future::Uring::Handle;
-$Future::Uring::Handle::VERSION = '0.002';
+$Future::Uring::Handle::VERSION = '0.003';
 use 5.020;
 use warnings;
 use experimental 'signatures';
 
 require Future::Uring;
+
+use File::StatX qw/STATX_BASIC_STATS STATX_BTIME/;
 
 *ring = *Future::Uring::ring;
 sub ring;
@@ -306,6 +308,27 @@ sub splice($self, $out, $nbytes, %args) {
 	return $future;
 }
 
+sub statx($self, %args) {
+	my $future = Future::Uring::_Future->new;
+	my (undef, $sourcename, $line) = caller;
+	my $flags = $args{flags} // 0;
+	my $mask = $args{mask} // STATX_BASIC_STATS | STATX_BTIME;
+	my $stat = File::StatX->new;
+	my $s_flags = %args ? to_sflags(\%args) : 0;
+	my $ring = ring;
+	$ring->submit if $args{timeout} && $ring->sq_space_left < 2;
+	my $id = $ring->fstatx($self->{fh}, $flags, $mask, $stat, $s_flags, sub($res, $flags) {
+		if ($res >= 0) {
+			$future->done($stat);
+		} else {
+			$future->fail(Future::Uring::Exception->new('statx', $res, $sourcename, $line));
+		}
+	});
+	$future->on_cancel(sub { $ring->cancel($id, 0, 0) }) if $args{mutable};
+	add_timeout($ring, \%args) if $args{timeout};
+	return $future;
+}
+
 sub sync($self, %args) {
 	my $future = Future::Uring::_Future->new;
 	my (undef, $sourcename, $line) = caller;
@@ -427,7 +450,7 @@ Future::Uring::Handle - A Uring filehandle
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -608,6 +631,26 @@ This truncates a file to C<$length> bytes.
 This writes C<$data> to C<$handle>.
 
 It takes one additional named parameter, C<offset>, for the optional offset in the file.
+
+=head1 FUNCTIONS
+
+=head2 statx
+
+ my $stat = await $handle->statx(%options)
+
+This states a filehandle, producing a L<File::StatX> object.
+
+=over 4
+
+=item * mask
+
+The mask used when stating, defaulting to C<STATX_BASIC_STATS | STATX_BTIME>.
+
+=item * flags
+
+The flags used when stating, defaulting to C<0>.
+
+=back
 
 =for Pod::Coverage close ring
 

@@ -1,8 +1,12 @@
 Changes
+lib/Google/GeoCoder/Smart.pm
+LICENSE
 Makefile.PL
-MANIFEST
+MANIFEST			This list of files
 ppport.h
-README
+README.md
 Smart.xs
 t/Google-GeoCoder-Smart.t
-lib/Google/GeoCoder/Smart.pm
+test.pl
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

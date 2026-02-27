@@ -1,6 +1,6 @@
 package DBIx::Class::Async::Exception;
 
-$DBIx::Class::Async::Exception::VERSION   = '0.62';
+$DBIx::Class::Async::Exception::VERSION   = '0.63';
 $DBIx::Class::Async::Exception::AUTHORITY = 'cpan:MANWAR';
 
 use strict;
@@ -17,7 +17,7 @@ DBIx::Class::Async::Exception - Base class for DBIx::Class::Async exceptions
 
 =head1 VERSION
 
-Version 0.62
+Version 0.63
 
 =head1 SYNOPSIS
 

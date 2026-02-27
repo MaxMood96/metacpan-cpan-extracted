@@ -1,252 +1,269 @@
-
-
 package Google::GeoCoder::Smart;
 
-require Exporter;
+use strict;
+use warnings;
 
-use LWP::Simple qw(!head);
+use parent qw(Exporter);
 
-use JSON;
-
-our @ISA = qw(Exporter);
+use HTTP::Tiny ();
+use JSON::PP qw(decode_json);
+use URI::Escape qw(uri_escape_utf8);
 
 our @EXPORT = qw(geocode parse);
 
-our $VERSION = 1.18;
+our $VERSION = "v2.6.0";
 
 =head1 NAME
 
-Smart - Google Maps Api HTTP geocoder
+Google::GeoCoder::Smart - Simple Google Geocoding API client
 
 =head1 SYNOPSIS
 
- use Google::GeoCoder::Smart;
-  
- $geo = Google::GeoCoder::Smart->new();
+  use Google::GeoCoder::Smart;
 
- my ($resultnum, $error, @results, $returncontent) = $geo->geocode("address" => "your address here");
+  my $geo = Google::GeoCoder::Smart->new(
+    key => $ENV{GOOGLE_MAPS_API_KEY},
+  );
 
- $resultnum--;
+  my $response = $geo->geocode_addr({
+    address => '1600 Amphitheatre Parkway',
+    city    => 'Mountain View',
+    state   => 'CA',
+    zip     => '94043',
+  });
 
- for $num(0 .. $resultnum) {
+  die "Error: $response->{status}" if $response->{status} ne 'OK';
 
- $lat = $results[$num]{geometry}{location}{lat};
-
- $lng = $results[$num]{geometry}{location}{lng};
-
- };
+  my $best_match = $response->{results}[0];
+  my $lat = $best_match->{geometry}{location}{lat};
+  my $lng = $best_match->{geometry}{location}{lng};
 
 =head1 DESCRIPTION
 
-This module provides a simple and "Smart" interface to the Google Maps geocoding API. 
+This module provides a lightweight wrapper around the Google Geocoding API
+v3 endpoint:
 
-It is compatible with the google maps http geocoder v3.
+  https://maps.googleapis.com/maps/api/geocode/json
 
-If Google changes their format, it might stop working. 
+It supports both structured addresses and place IDs, and returns decoded API
+payloads with C<rawJSON> attached for debugging.
 
-This module only depends on LWP::Simple and JSON. 
+=head1 WHAT THIS MODULE DOES
 
-This version removes the depriciated homemade xml parsing and goes completely with the JSON format. 
+=over 4
 
-If you need the old xml version, the older module versions still have it, but it does have a few problems. 
+=item * Sends geocoding requests to C<https://maps.googleapis.com/maps/api/geocode/json>.
 
-#################################################
+=item * Supports structured address parts, C<place_id>, and optional C<language>, C<region>, C<bounds>, and C<components>.
 
-MAKE SURE TO READ GOOGLE's TERMS OF USE
+=item * Returns decoded API payloads with C<rawJSON> attached for debugging.
 
-they can be found at http://code.google.com/apis/maps/terms.html#section_10_12
+=back
 
-#################################################
+=head1 INSTALLATION
 
-If you find any bugs, please let me know. 
+  perl Makefile.PL
+  make
+  make test
+  make install
+
+=head1 DEPENDENCIES
+
+Runtime dependencies are declared in C<Makefile.PL>:
+
+=over 4
+
+=item * C<HTTP::Tiny>
+
+=item * C<JSON::PP>
+
+=item * C<URI::Escape>
+
+=back
+
+=head1 TESTING
+
+Run tests with:
+
+  make test
 
 =head1 METHODS
 
 =head2 new
 
-	$geo = Google::GeoCoder::Smart->new("key" => "your api key here", "host" => "host here");
+  my $geo = Google::GeoCoder::Smart->new(
+    key    => 'your-api-key',
+    host   => 'maps.googleapis.com', # optional
+    scheme => 'https',               # optional
+    timeout => 10,                   # optional
+  );
 
-the new function normally is called with no parameters.
+=head2 C<geocode_addr>
 
-however, If you would like to, you can pass it your Google Maps api key and a host name.
+  my $response = $geo->geocode_addr({
+    address   => '1600 Amphitheatre Parkway',
+    city      => 'Mountain View',
+    state     => 'CA',
+    zip       => '94043',
+    language  => 'en',
+    region    => 'us',
+    place_id  => 'ChIJ2eUgeAK6j4ARbn5u_wAGqWA',
+    components => {
+      country => 'US',
+    },
+  });
 
-the api key parameter is useful for the api premium service.
-
-the host paramater is only necessary if you use a different google host than googleapis.com, 
-
-such as google.com.eu or something like that.http://code.google.com/apis/maps/terms.html#section_10_12
+Returns a hashref mirroring Google API JSON.
 
 =head2 geocode
 
-	my ($num, $error, @results, $returntext) = $geo->geocode(
+Deprecated compatibility wrapper for legacy return shape:
 
-	"address" => "address *or street number and name* here", 
-
-	"city" => "city here", 
-
-	"state" => "state here", 
-
-	"zip" => "zipcode here"
-
-	);
-
-This function brings back the number of results found for the address and 
-
-the results in an array. This is the case because Google will sometimes return
-
-many different results for one address.
-
-It also returns the result text for debugging purposes.
-
-The geocode method will work if you pass the whole address as the "address" tag.
- 
-However, it also supports breaking it down into parts.
-
-It will return one of the following error messages if an error is encountered
-
-	connection         #something went wrong with the download
-
-	OVER_QUERY_LIMIT   #the google query limit has been exceeded. Try again 24 hours from when you started geocoding
-
-	ZERO_RESULTS       #no results were found for the address entered
-
-If no errors were encountered it returns the value "OK"
-
-You can get the returned parameters easily through refferences. 
-
-	$lat = $results[0]{geometry}{location}{lat};
-
-	$lng = $results[0]{geometry}{location}{lng};
-
-It is helpful to know the format of the json returns of the api. 
-
-A good example can be found at http://www.googleapis.com/maps/apis/geocode/json?address=1600+Amphitheatre+Parkway+Mountain+View,+CA+94043&sensor=false
+  my ($count, $status, @results_and_raw) = $geo->geocode(...);
 
 =head1 AUTHOR
 
-TTG, ttg@cpan.org
+TTG, C<ttg@cpan.org>
 
-=head1 COPYRIGHT AND LICENSE
+=head1 LICENSE
 
-Copyright (C) 2014 by TTG
-
-This library is free software; you can redistribute it and/or modify
-
-it under the same terms as Perl itself, either Perl version 5.10.0 or,
-
-at your option, any later version of Perl 5 you may have available.
-
+This library is free software; you can redistribute it and/or modify it under
+the same terms as Perl itself, either Perl version 5.10.0 or, at your option,
+any later version of Perl 5 you may have available.
 
 =cut
 
 sub new {
+  my ($class, %params) = @_;
 
-my ($junk, %params) = @_;
+  my $self = {
+    key     => $params{key},
+    host    => $params{host}   || 'maps.googleapis.com',
+    scheme  => $params{scheme} || $params{http} || 'https',
+    timeout => $params{timeout} || 10,
+  };
 
-my $host = delete $params{host} || "maps.googleapis.com";
+  return bless $self, $class;
+}
 
-my $key = delete $params{key};
+sub geocode_addr {
+  my ($self, $params) = @_;
+  $params ||= {};
 
-bless {"key" => $key, "host" => $host};
+  my %query;
 
+  if (defined $params->{place_id} && $params->{place_id} ne q{}) {
+    $query{place_id} = $params->{place_id};
+  } else {
+    my @parts;
+    for my $field (qw(address city state zip)) {
+      next if !defined $params->{$field} || $params->{$field} eq q{};
+      push @parts, $params->{$field};
+    }
+
+    my $address = join(', ', @parts);
+    if ($address eq q{}) {
+      return {
+        status        => 'INVALID_REQUEST',
+        error_message => 'address or place_id is required',
+        results       => [],
+      };
+    }
+    $query{address} = $address;
+  }
+
+  for my $field (qw(language region bounds)) {
+    next if !defined $params->{$field} || $params->{$field} eq q{};
+    $query{$field} = $params->{$field};
+  }
+
+  if (ref $params->{components} eq 'HASH') {
+    my @components = map { "$_:$params->{components}{$_}" } sort keys %{ $params->{components} };
+    $query{components} = join('|', @components) if @components;
+  }
+
+  $query{key} = $self->{key} if defined $self->{key} && $self->{key} ne q{};
+
+  my $url = $self->_build_geocode_url(\%query);
+  my ($content, $fetch_error) = $self->_fetch_content($url);
+
+  if (!defined $content) {
+    return {
+      status        => 'CONNECTION_ERROR',
+      error_message => $fetch_error || 'connection',
+      results       => [],
+    };
+  }
+
+  if ($content eq q{}) {
+    return {
+      status        => 'ERROR_GETTING_PAGE',
+      error_message => 'empty response body',
+      results       => [],
+    };
+  }
+
+  my $decoded = eval { decode_json($content) };
+  if ($@) {
+    return {
+      status        => 'INVALID_RESPONSE',
+      error_message => "$@",
+      results       => [],
+      rawJSON       => $content,
+    };
+  }
+
+  $decoded->{status}  ||= 'UNKNOWN_ERROR';
+  $decoded->{results} ||= [];
+  $decoded->{rawJSON} = $content;
+
+  return $decoded;
 }
 
 sub geocode {
+  my ($self, %params) = @_;
 
-my ($self, %params) = @_;
+  my $addr_info = $self->geocode_addr({
+    address => $params{address},
+    city    => $params{city},
+    state   => $params{state},
+    zip     => $params{zip},
+  });
 
-$addr = delete $params{'address'};
+  my $results_ref = $addr_info->{results} || [];
+  my $count       = scalar @{$results_ref};
 
-$CITY = delete $params{'city'};
-
-$STATE = delete $params{'state'};
-
-$ZIP = delete $params{'zip'};
-
-my $keyVar = "";
-
-if($self->{key}) {
-
-	$keyVar = "&key=$self->{key}";
-
+  return $count, $addr_info->{status}, @{$results_ref}, $addr_info->{rawJSON};
 }
 
-my $content = get("http://$self->{host}/maps/api/geocode/json?address=$addr $CITY $STATE $ZIP&sensor=false");
-
-undef $err;
-
-undef $error;
-
-unless($content) {
-
-	$error = "ERROR_GETTING_PAGE";
-
+sub parse {
+  my ($json_text) = @_;
+  return decode_json($json_text);
 }
 
-if($content =~ m/ZERO_RESULTS/) {
+sub _build_geocode_url {
+  my ($self, $query_ref) = @_;
 
-$error = "ZERO_RESULTS";
+  my @pairs;
+  for my $key (sort keys %{$query_ref}) {
+    my $value = defined $query_ref->{$key} ? $query_ref->{$key} : q{};
+    push @pairs, uri_escape_utf8($key) . q{=} . uri_escape_utf8($value);
+  }
 
-};
-
-if($content =~ m/OVER_QUERY_LIMIT/) {
-
-$error = "OVER_QUERY_LIMIT";
-
-};
-
-unless(defined $content) {
-
-$error = "connection";
-
-};
-
-unless(defined $error) {
-
-$error = "OK";
-
-};
-
-undef @results;
-
-unless($error eq "OK") {
-
-	@results = [];
-	$length = 0;
-	return $length, $error, @results, $content;
-
+  return sprintf '%s://%s/maps/api/geocode/json?%s',
+    $self->{scheme},
+    $self->{host},
+    join('&', @pairs);
 }
 
-$results_json  = decode_json $content;
+sub _fetch_content {
+  my ($self, $url) = @_;
 
-#$error = $results_json->{results}[0];
+  my $http = HTTP::Tiny->new(timeout => $self->{timeout});
+  my $res  = $http->get($url);
 
-#@results = \$results_json->{results};
-
-$error = $results_json->{status};
-
-foreach $res($results_json->{results}[0]) {
-
-@push = ($res);
-
-
-
-push @results, @push;
-
-
-};
-
-
-
-my $length = @results;
-
-return $length, $error, @results, $content;
-
+  return ($res->{content}, undef) if $res->{success};
+  return (undef, join(' ', grep { defined && $_ ne q{} } $res->{status}, $res->{reason}));
 }
-
-
-
 
 1;
-
-

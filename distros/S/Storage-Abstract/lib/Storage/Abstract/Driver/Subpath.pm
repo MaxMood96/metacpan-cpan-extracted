@@ -1,12 +1,9 @@
 package Storage::Abstract::Driver::Subpath;
-$Storage::Abstract::Driver::Subpath::VERSION = '0.007';
+$Storage::Abstract::Driver::Subpath::VERSION = '0.008';
 use v5.14;
 use warnings;
 
-use Moo;
-use Mooish::AttributeBuilder -standard;
-use Types::Common -types;
-use namespace::autoclean;
+use Mooish::Base -standard;
 
 # need this in BEGIN block because we use constants from this package
 BEGIN { extends 'Storage::Abstract::Driver' }
@@ -32,8 +29,8 @@ sub source_is_array
 
 sub resolve_path
 {
-	my ($self, $name) = @_;
-	$name = $self->SUPER::resolve_path($name);
+	my ($self, $name, %opts) = @_;
+	$name = $self->SUPER::resolve_path($name, %opts);
 
 	# first resolve, then join path. If the order was reversed, leaving new
 	# root would be possible.

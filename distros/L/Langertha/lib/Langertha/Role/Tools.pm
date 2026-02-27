@@ -1,10 +1,11 @@
 package Langertha::Role::Tools;
 # ABSTRACT: Role for MCP tool calling support
-our $VERSION = '0.202';
+our $VERSION = '0.302';
 use Moose::Role;
 use Future::AsyncAwait;
 use Carp qw( croak );
 use JSON::MaybeXS;
+use Log::Any qw( $log );
 
 requires qw(
   format_tools
@@ -130,7 +131,12 @@ async sub chat_with_tools_f {
     $hermes_system_msg = { role => 'system', content => $tool_prompt };
   }
 
+  $log->debugf("[%s] chat_with_tools_f: %d tools from %d MCP servers, max_iterations=%d",
+    ref $self, scalar @all_tools, scalar @{$self->mcp_servers}, $self->tool_max_iterations);
+
   for my $iteration (1..$self->tool_max_iterations) {
+    $log->debugf("[%s] Tool loop iteration %d/%d",
+      ref $self, $iteration, $self->tool_max_iterations);
 
     # Build and send the request
     my $request;
@@ -179,6 +185,8 @@ async sub chat_with_tools_f {
       } else {
         ( $name, $input ) = $self->extract_tool_call($tc);
       }
+
+      $log->debugf("[%s] Calling tool: %s", ref $self, $name);
 
       my $mcp = $tool_server_map{$name}
         or die "Tool '$name' not found on any MCP server";
@@ -270,7 +278,7 @@ Langertha::Role::Tools - Role for MCP tool calling support
 
 =head1 VERSION
 
-version 0.202
+version 0.302
 
 =head1 SYNOPSIS
 

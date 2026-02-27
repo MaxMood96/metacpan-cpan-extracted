@@ -1,12 +1,9 @@
 package Storage::Abstract::X;
-$Storage::Abstract::X::VERSION = '0.007';
+$Storage::Abstract::X::VERSION = '0.008';
 use v5.14;
 use warnings;
 
-use Moo;
-use Mooish::AttributeBuilder -standard;
-use Types::Common -types;
-use namespace::autoclean;
+use Mooish::Base -standard;
 
 use overload
 	q{""} => "as_string",
@@ -70,27 +67,27 @@ sub as_string
 ## SUBCLASSES
 
 package Storage::Abstract::X::NotFound {
-$Storage::Abstract::X::NotFound::VERSION = '0.007';
+$Storage::Abstract::X::NotFound::VERSION = '0.008';
 use parent -norequire, 'Storage::Abstract::X';
 }
 
 package Storage::Abstract::X::Readonly {
-$Storage::Abstract::X::Readonly::VERSION = '0.007';
+$Storage::Abstract::X::Readonly::VERSION = '0.008';
 use parent -norequire, 'Storage::Abstract::X';
 }
 
 package Storage::Abstract::X::PathError {
-$Storage::Abstract::X::PathError::VERSION = '0.007';
+$Storage::Abstract::X::PathError::VERSION = '0.008';
 use parent -norequire, 'Storage::Abstract::X';
 }
 
 package Storage::Abstract::X::HandleError {
-$Storage::Abstract::X::HandleError::VERSION = '0.007';
+$Storage::Abstract::X::HandleError::VERSION = '0.008';
 use parent -norequire, 'Storage::Abstract::X';
 }
 
 package Storage::Abstract::X::StorageError {
-$Storage::Abstract::X::StorageError::VERSION = '0.007';
+$Storage::Abstract::X::StorageError::VERSION = '0.008';
 use parent -norequire, 'Storage::Abstract::X';
 }
 
@@ -134,7 +131,8 @@ method call or created from data passed to a method call.
 
 =head3 StorageError
 
-This exception is raised when a problem occurs with the underlying file storage.
+This exception is raised when a problem occurs with the underlying file storage
+or when the storage cannot provide a result to a bad method call.
 
 =head1 INTERFACE
 

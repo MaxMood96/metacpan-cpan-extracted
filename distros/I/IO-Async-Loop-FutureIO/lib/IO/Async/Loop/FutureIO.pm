@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2026 -- leonerd@leonerd.org.uk
 
-package IO::Async::Loop::FutureIO 0.01;
+package IO::Async::Loop::FutureIO 0.02;
 
 use v5.14;
 use warnings;

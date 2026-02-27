@@ -66,4 +66,19 @@ diag( "Testing Tree::STR $Tree::STR::VERSION, Perl $], $^X" );
     is ($intersects_poly2, ['item 1'], 'intersects poly completely');
 }
 
+{
+    #  Tree::R interface compatibility
+    my $data = [ [ 1, 1, 2, 2, 'item 1' ], [ 10, 20, 100, 200, 'item 2' ] ];
+    my $tree = Tree::STR->new($data);
+    my $intersects_point = [];
+    $tree->query_point(50, 50, $intersects_point);
+    is ($intersects_point, ['item 2'], 'intersects point, Tree::R style');
+    my $intersects_poly = [];
+    $tree->query_partly_within_rect(20, 20, 200, 200, $intersects_poly);
+    is ($intersects_poly, ['item 2'], 'intersects poly, Tree::R style');
+    my $intersects_poly2 = [];
+    $tree->query_completely_within_rect(0, 0, 4, 4, $intersects_poly2);
+    is ($intersects_poly2, ['item 1'], 'intersects poly completely, Tree::R style');
+}
+
 done_testing;

@@ -1,12 +1,9 @@
 package Storage::Abstract::Driver::Composite;
-$Storage::Abstract::Driver::Composite::VERSION = '0.007';
+$Storage::Abstract::Driver::Composite::VERSION = '0.008';
 use v5.14;
 use warnings;
 
-use Moo;
-use Mooish::AttributeBuilder -standard;
-use Types::Common -types;
-use namespace::autoclean;
+use Mooish::Base -standard;
 
 use Scalar::Util qw(blessed);
 
@@ -79,14 +76,14 @@ sub store_impl
 
 sub is_stored_impl
 {
-	my ($self, $name) = @_;
+	my ($self, $name, %opts) = @_;
 
 	my $stored = $self->_run_on_sources(
 		$name,
 		sub {
 			my $source = shift;
 
-			return $source->is_stored($name);
+			return $source->is_stored($name, %opts);
 		}
 	);
 
@@ -152,7 +149,7 @@ sub dispose_impl
 
 sub list_impl
 {
-	my ($self) = @_;
+	my ($self, @args) = @_;
 
 	my %all_files;
 	$self->_run_on_sources(
@@ -160,7 +157,7 @@ sub list_impl
 		sub {
 			my $source = shift;
 
-			foreach my $filename (@{$source->list}) {
+			foreach my $filename (@{$source->list(@args)}) {
 				$all_files{$filename} = 1;
 			}
 

@@ -1,12 +1,11 @@
 package Storage::Abstract::Role::Driver::Meta;
-$Storage::Abstract::Role::Driver::Meta::VERSION = '0.007';
+$Storage::Abstract::Role::Driver::Meta::VERSION = '0.008';
 use v5.14;
 use warnings;
 
-use Mooish::AttributeBuilder -standard;
-use Types::Common -types;
+use Mooish::Base -standard, -role;
+
 use List::Util qw(all);
-use Moo::Role;
 
 requires qw(
 	source_is_array

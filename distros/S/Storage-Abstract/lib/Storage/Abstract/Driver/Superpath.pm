@@ -1,12 +1,9 @@
 package Storage::Abstract::Driver::Superpath;
-$Storage::Abstract::Driver::Superpath::VERSION = '0.007';
+$Storage::Abstract::Driver::Superpath::VERSION = '0.008';
 use v5.14;
 use warnings;
 
-use Moo;
-use Mooish::AttributeBuilder -standard;
-use Types::Common -types;
-use namespace::autoclean;
+use Mooish::Base -standard;
 
 # need this in BEGIN block because we use constants from this package
 BEGIN { extends 'Storage::Abstract::Driver' }
@@ -22,7 +19,12 @@ sub BUILD
 {
 	my ($self) = @_;
 
-	$self->_set_superpath($self->SUPER::resolve_path($self->superpath));
+	$self->_set_superpath(
+		$self->SUPER::resolve_path(
+			$self->superpath,
+			allow_directory => !!1,
+		)
+	);
 }
 
 sub source_is_array
@@ -56,11 +58,24 @@ sub store_impl
 
 sub is_stored_impl
 {
-	my ($self, $path) = @_;
-	$path = $self->_adjust_path($path);
+	my ($self, $path, %opts) = @_;
+	my $adjusted_path = $self->_adjust_path($path);
 
-	return !!0 unless defined $path;
-	return $self->source->is_stored($path);
+	if ($opts{directory} && !defined $adjusted_path) {
+		my @parts_path = $self->split_path($path);
+		my @parts_superpath = $self->split_path($self->superpath);
+
+		for my $i (0 .. $#parts_path) {
+			return !!0 if $i > $#parts_superpath;
+			return !!0 if $parts_path[$i] ne $parts_superpath[$i];
+		}
+
+		# path prefix matches
+		return !!1;
+	}
+
+	return !!0 unless defined $adjusted_path;
+	return $self->source->is_stored($adjusted_path, %opts);
 }
 
 sub retrieve_impl

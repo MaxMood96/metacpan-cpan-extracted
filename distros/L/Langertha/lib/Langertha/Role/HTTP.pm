@@ -1,9 +1,10 @@
 package Langertha::Role::HTTP;
 # ABSTRACT: Role for HTTP APIs
-our $VERSION = '0.202';
+our $VERSION = '0.302';
 use Moose::Role;
 
 use Carp qw( croak );
+use Log::Any qw( $log );
 use URI;
 use LWP::UserAgent;
 
@@ -74,7 +75,12 @@ sub generate_http_request {
 
 sub parse_response {
   my ( $self, $response ) = @_;
-  croak "".(ref $self)." request failed: ".($response->status_line) unless $response->is_success;
+  unless ($response->is_success) {
+    $log->errorf("[%s] HTTP %s", ref $self, $response->status_line);
+    croak "".(ref $self)." request failed: ".($response->status_line);
+  }
+  $self->_update_rate_limit($response) if $self->can('_update_rate_limit');
+  $log->tracef("[%s] Response: %s", ref $self, $response->decoded_content);
   return $self->json->decode($response->decoded_content);
 }
 
@@ -141,7 +147,7 @@ Langertha::Role::HTTP - Role for HTTP APIs
 
 =head1 VERSION
 
-version 0.202
+version 0.302
 
 =head2 url
 
@@ -181,7 +187,9 @@ Basic authentication is set automatically.
     my $data = $engine->parse_response($http_response);
 
 Decodes a successful L<HTTP::Response> body as JSON and returns the data
-structure. Croaks with the HTTP status line on failure.
+structure. Croaks with the HTTP status line on failure. If the engine
+supports rate limiting, extracts rate limit headers via
+C<_update_rate_limit> before decoding the body.
 
 =head2 user_agent_timeout
 

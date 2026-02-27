@@ -5,7 +5,7 @@ Getopt::EX::Hashed - Hash object automation for Getopt::Long
 
 # VERSION
 
-Version 1.0602
+Version 1.0701
 
 # SYNOPSIS
 
@@ -49,8 +49,17 @@ validation interface.
 
 Accessor methods are automatically generated when `is` parameter is
 given.  If the same function is already defined, the program causes
-fatal error.  Accessors are removed when the object is destroyed.
-Problems may occur when multiple objects are present at the same time.
+fatal error.  By default, accessors are removed from the package
+namespace when the object is destroyed.  This allows the same class
+to be used more than once within a single script — for example, when
+a module using Hashed-based objects is called from multiple places.
+
+Objects created by copying (e.g. via [Clone](https://metacpan.org/pod/Clone)) are not considered
+owners of the accessors.  Only the object originally created by
+`new` removes the accessors on destruction, so cloned objects can
+be safely destroyed without affecting the original object or its
+class.  To keep accessors after destruction, set `REMOVE_ACCESSOR`
+to false.
 
 # FUNCTION
 
@@ -336,6 +345,21 @@ The following configuration parameters are available.
     If true, read-write accessors have the lvalue attribute.  Set to zero
     if you don't like that behavior.
 
+- **REMOVE\_ACCESSOR** (default: 1)
+
+    If true, accessor methods are removed from the package namespace when
+    the object is destroyed.  This allows the same class to be used
+    multiple times within a single script without causing conflicts.
+
+    Only the object originally created by `new` is considered the owner
+    of the accessors.  Objects created by copying (e.g. via [Clone](https://metacpan.org/pod/Clone))
+    are not owners, so destroying a clone does not remove the accessors
+    even when `REMOVE_ACCESSOR` is true.
+
+    Set to false if you want accessors to persist beyond the lifetime of
+    the object, for example when the accessor methods are intended to be
+    part of the class's permanent public interface.
+
 - **DEFAULT**
 
     Set default parameters.  When `has` is called, DEFAULT parameters are
@@ -368,7 +392,7 @@ The following copyright notice applies to all the files provided in
 this distribution, including binary files, unless explicitly noted
 otherwise.
 
-Copyright 2021-2025 Kazumasa Utashiro
+Copyright 2021-2026 Kazumasa Utashiro
 
 # LICENSE
 

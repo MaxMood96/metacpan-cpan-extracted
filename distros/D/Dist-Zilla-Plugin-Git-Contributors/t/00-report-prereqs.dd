@@ -2,12 +2,12 @@ do { my $x = {
        'configure' => {
                         'requires' => {
                                         'Module::Build::Tiny' => '0.034',
-                                        'perl' => '5.006'
+                                        'perl' => '5.013010'
                                       }
                       },
        'develop' => {
                       'recommends' => {
-                                        'Dist::Zilla::PluginBundle::Author::ETHER' => '0.166',
+                                        'Dist::Zilla::PluginBundle::Author::ETHER' => '0.171',
                                         'Dist::Zilla::PluginBundle::Git::VersionManager' => '0.007'
                                       },
                       'requires' => {
@@ -26,12 +26,11 @@ do { my $x = {
                                       'Test::More' => '0.96',
                                       'Test::NoTabs' => '0',
                                       'Test::Pod' => '1.41',
-                                      'Test::Pod::Coverage::TrustMe' => '0',
+                                      'Test::Pod::Coverage::TrustMe' => '0.002001',
                                       'Test::Pod::No404s' => '0',
                                       'Test::Portability::Files' => '0',
                                       'Test::Spelling' => '0.17',
-                                      'Test::Warnings' => '0',
-                                      'perl' => '5.006'
+                                      'Test::Warnings' => '0'
                                     }
                     },
        'runtime' => {
@@ -50,7 +49,7 @@ do { my $x = {
                                       'Unicode::Collate' => '0.53',
                                       'Unicode::Normalize' => '0',
                                       'namespace::autoclean' => '0',
-                                      'perl' => '5.008',
+                                      'perl' => '5.013010',
                                       'strict' => '0',
                                       'version' => '0',
                                       'warnings' => '0'
@@ -76,7 +75,7 @@ do { my $x = {
                                    'lib' => '0',
                                    'open' => '0',
                                    'parent' => '0',
-                                   'perl' => '5.008',
+                                   'perl' => '5.013010',
                                    'utf8' => '0'
                                  },
                    'suggests' => {

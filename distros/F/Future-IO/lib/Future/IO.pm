@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2019-2026 -- leonerd@leonerd.org.uk
 
-package Future::IO 0.20;
+package Future::IO 0.21;
 
 use v5.14;
 use warnings;
@@ -11,9 +11,8 @@ use warnings;
 use Carp;
 
 # These need to be visible to sub override_impl
+my @pollers;
 my @alarms;
-my @readers;
-my @writers;
 
 our $IMPL;
 
@@ -560,7 +559,7 @@ sub override_impl
    shift;
    croak "Future::IO implementation is already overridden" if defined $IMPL;
    croak "Future::IO implementation cannot be set once default is already in use"
-      if @alarms or @readers;
+      if @pollers or @alarms;
 
    ( $IMPL ) = @_;
 }
@@ -745,8 +744,9 @@ sub load_best_impl
 I<Since version 0.11.>
 
 Returns true if the underlying IO implementation actually supports multiple
-filehandles. Most real support modules will return true here, but this returns
-false for the internal minimal implementation.
+filehandles. The default minimal internal implementation used not to support
+this, but I<since version 0.21> it now does; so this method always returns
+true.
 
 =cut
 
@@ -760,16 +760,14 @@ package
 use base qw( Future::IO::ImplBase );
 use Carp;
 
-use IO::Poll qw( POLLIN POLLOUT );
+use IO::Poll qw( POLLIN POLLOUT POLLPRI );
 use Struct::Dumb qw( readonly_struct );
 use Time::HiRes qw( time );
 
+readonly_struct Poller => [qw( fh events f )];
 readonly_struct Alarm => [qw( time f )];
 
-readonly_struct Reader => [qw( fh f )];
-readonly_struct Writer => [qw( fh f )];
-
-use constant HAVE_MULTIPLE_FILEHANDLES => 0;
+use constant HAVE_MULTIPLE_FILEHANDLES => 1;
 
 sub alarm
 {
@@ -788,44 +786,18 @@ sub poll
    my $class = shift;
    my ( $fh, $events ) = @_;
 
-   my $want_reader = $events & POLLIN;  $events &= ~POLLIN;
-   my $want_writer = $events & POLLOUT; $events &= ~POLLOUT;
-
-   croak "This implementation can only recognise the POLLIN or POLLOUT flags"
-      if $events;
-   croak "This implementation cannot ->poll for POLLIN and POLLOUT at the same time"
-      if $want_reader and $want_writer;
-
-   croak "This implementation can only cope with a single pending filehandle in ->poll"
-      if @readers and $readers[-1]->fh != $fh or
-         @writers and $writers[-1]->fh != $fh;
-
    my $f = Future::IO::_DefaultImpl::F->new;
 
-   if( $want_reader ) {
-      push @readers, Reader( $fh, $f );
+   push @pollers, Poller( $fh, $events, $f );
 
-      $f->on_cancel( sub {
-         my $f = shift;
+   $f->on_cancel( sub {
+      my $f = shift;
 
-         my $idx = 0;
-         $idx++ while $idx < @readers and $readers[$idx]->f != $f;
+      my $idx = 0;
+      $idx++ while $idx < @pollers and $pollers[$idx]->f != $f;
 
-         splice @readers, $idx, 1, ();
-      });
-   }
-   if( $want_writer ) {
-      push @writers, Writer( $fh, $f );
-
-      $f->on_cancel( sub {
-         my $f = shift;
-
-         my $idx = 0;
-         $idx++ while $idx < @writers and $writers[$idx]->f != $f;
-
-         splice @writers, $idx, 1, ();
-      });
-   }
+      splice @pollers, $idx, 1, ();
+   });
 
    return $f;
 }
@@ -863,64 +835,64 @@ sub _done_at
 package # hide
    Future::IO::_DefaultImpl::F;
 use base qw( Future );
-use IO::Poll qw( POLLIN POLLOUT );
+use IO::Poll qw( POLLIN POLLOUT POLLPRI );
 use Time::HiRes qw( time );
 
 sub _await_once
 {
-   die "Cowardly refusing to sit idle and do nothing" unless @alarms || @readers || @writers;
+   die "Cowardly refusing to sit idle and do nothing" unless @pollers || @alarms;
+
+   my $rvec = '';
+   my $wvec = '';
+   my $evec = '';
+
+   foreach my $p ( @pollers ) {
+      my $fileno = $p->fh->fileno;
+
+      vec( $rvec, $fileno, 1 ) = 1 if $p->events & POLLIN;
+      vec( $wvec, $fileno, 1 ) = 1 if $p->events & POLLOUT;
+      vec( $evec, $fileno, 1 ) = 1 if $p->events & POLLPRI;
+   }
 
    # If we always select() then problematic platforms like MSWin32 would
-   # always break. Instead, we'll only select() if we're waiting on more than
-   # one of alarm, reader, writer. If not we'll just presume the one operation
-   # we're waiting for is definitely ready right now.
-   my $do_select = @alarms || ( @readers && @writers );
+   # always break. Instead, we'll only select() if we're waiting on alarms, or
+   # both POLLIN and POLLOUT, or POLLPRI. If not we'll just presume the one
+   # operation we're waiting for is definitely ready right now.
+   my $do_select = @alarms ||
+      ( $rvec ne '' and $wvec ne '' ) ||
+      ( $evec ne '' );
 
-   my $rready;
-   my $wready;
-
-redo_select:
    if( $do_select ) {
-      my $rvec = '';
-      vec( $rvec, $readers[0]->fh->fileno, 1 ) = 1 if @readers;
-
-      my $wvec = '';
-      vec( $wvec, $writers[0]->fh->fileno, 1 ) = 1 if @writers;
-
-      my $evec = $wvec;
-
       my $maxwait;
       $maxwait = $alarms[0]->time - time() if @alarms;
 
       my $ret = select( $rvec, $wvec, $evec, $maxwait );
-
-      # distribute evec to both r and w
-      $rvec |= $evec;
-      $wvec |= $evec;
-
-      $rready = $ret && @readers && vec( $rvec, $readers[0]->fh->fileno, 1 );
-      $wready = $ret && @writers && vec( $wvec, $writers[0]->fh->fileno, 1 );
    }
-   else {
-      $rready = !!@readers;
-      $wready = !!@writers;
-   }
+   # else just presume it's ready
 
-   my $was_blocking;
+   # Perl doesn't have an easy construction for iterating an array possibly
+   # splicing as you go...
+   for ( my $idx = 0; $idx < @pollers; ) {
+      my $p = $pollers[$idx];
 
-   if( $rready ) {
-      my $rd = shift @readers;
+      my $fh = $p->fh;
+      my $fileno = $fh->fileno;
 
-      $was_blocking = $rd->fh->blocking(1) if !$do_select;
-      $rd->f->done( POLLIN );
-      $rd->fh->blocking(0) if !$do_select and !$was_blocking;
-   }
-   if( $wready ) {
-      my $wr = shift @writers;
+      my $was_blocking;
+      $was_blocking = $fh->blocking(1) if !$do_select;
 
-      $was_blocking = $wr->fh->blocking(1) if !$do_select;
-      $wr->f->done( POLLOUT );
-      $wr->fh->blocking(0) if !$do_select and !$was_blocking;
+      my $revents = 0;
+      $revents |= POLLIN  if vec( $rvec, $fileno, 1 );
+      $revents |= POLLOUT if vec( $wvec, $fileno, 1 );
+      $revents |= POLLPRI if vec( $evec, $fileno, 1 );
+      $revents &= $p->events;
+
+      $revents or $idx++, next;
+
+      splice @pollers, $idx, 1, ();
+      $p->f->done( $revents );
+
+      $fh->blocking(0) if !$do_select and !$was_blocking;
    }
 
    my $now = time();
@@ -969,6 +941,11 @@ For example, something like the following code arrangement is recommended.
       ( $Future::IO::IMPL //= __PACKAGE__ ) eq __PACKAGE__ or
          warn "Unable to set Future::IO implementation to " . __PACKAGE__ .
             " as it is already $Future::IO::IMPL\n";
+   }
+
+   sub poll
+   {
+      ...
    }
 
    sub sleep

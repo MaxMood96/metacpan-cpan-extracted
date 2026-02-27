@@ -1,5 +1,9 @@
 Revision history for Dist-Zilla-Plugin-Git-Contributors
 
+0.039     2026-02-27 01:49:00Z
+          - fixed "remove" option to actually behave like a regex, as
+            documented (RT#173385)
+
 0.038     2025-03-22 02:43:40Z
           - fix an incorrect use of Path::Tiny in a test
 

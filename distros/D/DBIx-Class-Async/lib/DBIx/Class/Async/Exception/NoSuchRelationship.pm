@@ -1,6 +1,6 @@
 package DBIx::Class::Async::Exception::NoSuchRelationship;
 
-$DBIx::Class::Async::Exception::NoSuchRelationship::VERSION   = '0.62';
+$DBIx::Class::Async::Exception::NoSuchRelationship::VERSION   = '0.63';
 $DBIx::Class::Async::Exception::NoSuchRelationship::AUTHORITY = 'cpan:MANWAR';
 
 use strict;
@@ -15,7 +15,7 @@ relationship names used in queries
 
 =head1 VERSION
 
-Version 0.62
+Version 0.63
 
 =head1 SYNOPSIS
 

@@ -3,6 +3,7 @@ abstract: 'use C<IO::Async> with C<Future::IO>'
 author:
   - 'Paul Evans <leonerd@leonerd.org.uk>'
 build_requires:
+  Future::IO::Impl::Ppoll: '0'
   IO::Async::LoopTests: '0.76'
   Test2::V0: '0'
 configure_requires:
@@ -17,12 +18,12 @@ name: IO-Async-Loop-FutureIO
 provides:
   IO::Async::Loop::FutureIO:
     file: lib/IO/Async/Loop/FutureIO.pm
-    version: '0.01'
+    version: '0.02'
 requires:
   Future::IO: '0.19'
   IO::Async::Loop: '0.49'
   perl: '5.014'
 resources:
   license: http://dev.perl.org/licenses/
-version: '0.01'
+version: '0.02'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

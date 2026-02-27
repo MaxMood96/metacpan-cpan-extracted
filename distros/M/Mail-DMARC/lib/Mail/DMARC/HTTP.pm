@@ -1,5 +1,5 @@
 package Mail::DMARC::HTTP;
-our $VERSION = '1.20250805';
+our $VERSION = '1.20260226';
 use strict;
 use warnings;
 
@@ -52,15 +52,16 @@ sub dmarc_httpd {
 sub dmarc_dispatch {
     my $self = shift;
 
-#   warn Dumper( { CGI->new->Vars } );
-
     my $path = $self->{request_info}{request_path};
     if ($path) {
         warn "path: $path\n";
-        return report_json_report()  if $path eq '/dmarc/json/report';
-        return report_json_rr()      if $path eq '/dmarc/json/row';
-        return serve_validator()     if $path eq '/dmarc/json/validate';
-        return serve_file($path)     if $path =~ /\.(?:js|css|html|gz)$/x;
+        # Parse QUERY_STRING once here via URI (not CGI->new->Vars) to avoid
+        # CGI.pm state issues in persistent Net::Server::HTTP processes.
+        my %vars = URI->new('http://x/?' . ($ENV{QUERY_STRING} // ''))->query_form;
+        return report_json_report(\%vars) if $path eq '/dmarc/json/report';
+        return report_json_rr(\%vars)     if $path eq '/dmarc/json/row';
+        return serve_validator()          if $path eq '/dmarc/json/validate';
+        return serve_file($path)          if $path =~ /\.(?:js|css|html|gz)$/x;
     };
 
     return serve_file('/dmarc/index.html');
@@ -187,17 +188,18 @@ EO_UNGZ
 }
 
 sub report_json_report {
+    my ($vars) = @_;
     print "Content-type: application/json\n\n";
-    my $reports = $report->store->backend->get_report( CGI->new->Vars );
+    my $reports = $report->store->backend->get_report( %$vars );
     print encode_json $reports;
     return;
 }
 
 sub report_json_rr {
+    my ($vars) = @_;
     print "Content-type: application/json\n\n";
-    my $row = $report->store->backend->get_rr( CGI->new->Vars );
+    my $row = $report->store->backend->get_rr( rid => $vars->{rid} );
     print encode_json $row;
-    # warn Dumper($row);
     return;
 }
 
@@ -213,7 +215,7 @@ Mail::DMARC::HTTP - view stored reports via HTTP
 
 =head1 VERSION
 
-version 1.20250805
+version 1.20260226
 
 =head1 SYNOPSIS
 
@@ -239,7 +241,7 @@ Marc Bradshaw <marc@marcbradshaw.net>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2025 by Matt Simerson.
+This software is copyright (c) 2026 by Matt Simerson.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

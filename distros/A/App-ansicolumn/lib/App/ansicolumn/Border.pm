@@ -144,7 +144,7 @@ my %template = (
 	right  => [ "╴"    ,
 		    "╵"    ,
 		    "╵"   ],
-	bottom =>     "╶",
+	bottom =>   "╶",
     },
     round_box => {
 	top    =>     "─",
@@ -184,6 +184,19 @@ my %template = (
 		    "▐" ,
 		    "▟" ],
 	bottom =>   "▄",
+    },
+    ladder => {
+	top    =>    "─",
+	bottom =>    "─",
+	left   => [ ""  ,
+		    ""  ,
+		    "" ],
+	center => [ "┬─"  ,
+		    "│ "  ,
+		    "┴─" ],
+	right  => [ ""   ,
+		    ""   ,
+		    ""  ],
     },
     frame => {
 	top    =>    "─",
@@ -338,7 +351,7 @@ my %template = (
     fat_dash_frame => {
 	top    => "▘",
 	left   => [ "▘", "▘", "▚" ],
-	center => [ "▚ ", "▗ ", "▗ " ],
+	center => [ "▚▘", "▗ ", "▗▗" ],
 	right  => [ "▚", "▗", "▗" ],
 	bottom => "▗",
     },
@@ -439,11 +452,51 @@ my %template = (
 	right  => [ "◱", " ", "◰" ],
 	bottom => " ",
     },
+    crop => {
+	top    => " ",
+	left   => [ "⌏", " ", "⌍" ],
+	center => [ "⌎ ⌏", "   ", "⌌ ⌍" ],
+	right  => [ "⌎", " " , "⌌" ],
+	bottom => " ",
+    },
+    bracket => {
+	top    => "",
+	left   => [ "┌ ", "│ ", "└ " ],
+	center => [ " ┐ ┌ ", " │ │ ", " ┘ └ " ],
+	right  => [ " ┐", " │" , " ┘" ],
+	bottom => "",
+    },
+    side_bracket => {
+	top    => "",
+	left   => [ "┌ ", "│ ", "└ " ],
+	center => [ " ╷ ", " │ ", " ╵ " ],
+	right  => [ " ┐", " │" , " ┘" ],
+	bottom => "",
+    },
+    left_bracket => {
+	top    => "",
+	left   => [ "┌ ", "│ ", "└ " ],
+	center  => [ "┌ ", "│ ", "└ " ],
+	bottom => "",
+    },
+    right_bracket => {
+	top    => "",
+	center => [ " ┐ ", " │ " , " ┘ " ],
+	right  => [ " ┐", " │" , " ┘ " ],
+	bottom => "",
+    },
+    paren => {
+	top    => "",
+	left   => [ "⎛ ", "⎜ ", "⎝ " ],
+	center => [ " ⎞ ⎛ ", " ⎟ ⎜ ", " ⎠ ⎝ " ],
+	right  => [ " ⎞", " ⎟" , " ⎠" ],
+	bottom => "",
+    },
     );
 
 use Clone qw(clone);
 
-for my $style (qw(line vbar hline bottom_line box dash_box shadow_box frame dash_frame page_frame comb rake mesh
+for my $style (qw(line vbar hline bottom_line box dash_box shadow_box ladder frame dash_frame page_frame comb rake mesh bracket side_bracket left_bracket right_bracket
 		  dumbbell ribbon)) {
     $template{$style} // next;
     my $new = $template{"heavy_$style"} = clone $template{$style};

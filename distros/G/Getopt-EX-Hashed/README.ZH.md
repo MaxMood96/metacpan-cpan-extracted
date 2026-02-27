@@ -4,7 +4,7 @@ Getopt::EX::Hashed - 为 Getopt::Long 提供哈希对象自动化
 
 # VERSION
 
-Version 1.0602
+Version 1.0701
 
 # SYNOPSIS
 
@@ -40,7 +40,9 @@ Version 1.0602
 
 本模块的主要目标是将初始化与规范定义整合在同一处。它还提供了一个简单的校验接口。
 
-当提供 `is` 参数时，会自动生成访问器方法。如果同名函数已存在，程序将发生致命错误。对象销毁时，访问器将被移除。当同时存在多个对象时可能出现问题。
+当提供 `is` 参数时，会自动生成存取器方法。如果同名函数已被定义，程序将导致致命错误。默认情况下，当对象被销毁时，存取器会从包的命名空间中移除。这允许在单个脚本中多次使用同一个类——例如，当一个使用基于哈希对象的模块被多个位置调用时。
+
+通过拷贝创建的对象（例如通过 [Clone](https://metacpan.org/pod/Clone)）不被视为存取器的拥有者。只有最初由 `new` 创建的对象会在销毁时移除存取器，因此克隆的对象可以安全销毁，而不会影响原始对象或其类。若要在销毁后保留存取器，请将 `REMOVE_ACCESSOR` 设为 false。
 
 # FUNCTION
 
@@ -260,6 +262,14 @@ Version 1.0602
 
     如果为真，读写访问器具有 lvalue 属性。如果你不喜欢这种行为，请设为零。
 
+- **REMOVE\_ACCESSOR** (default: 1)
+
+    如果为 true，当对象被销毁时，存取器方法会从包的命名空间中移除。这允许在单个脚本中多次使用同一个类而不产生冲突。
+
+    只有最初由 `new` 创建的对象被视为存取器的拥有者。通过拷贝创建的对象（例如通过 [Clone](https://metacpan.org/pod/Clone)）不是拥有者，因此即使 `REMOVE_ACCESSOR` 为 true，销毁克隆也不会移除存取器。
+
+    如果希望存取器在对象生命周期之后仍然存在（例如当存取器方法旨在作为类的永久公共接口的一部分时），请设为 false。
+
 - **DEFAULT**
 
     设置默认参数。当调用 `has` 时，DEFAULT 参数会插入到显式参数之前。若两者都有同一参数，则以显式参数为准。带有 `+` 的增量调用不受影响。
@@ -288,7 +298,7 @@ The following copyright notice applies to all the files provided in
 this distribution, including binary files, unless explicitly noted
 otherwise.
 
-Copyright 2021-2025 Kazumasa Utashiro
+Copyright 2021-2026 Kazumasa Utashiro
 
 # LICENSE
 

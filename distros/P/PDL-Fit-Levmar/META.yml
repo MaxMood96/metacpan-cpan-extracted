@@ -9,7 +9,7 @@ configure_requires:
   ExtUtils::MakeMaker: '0'
   PDL: '2.074'
 dynamic_config: 1
-generated_by: 'ExtUtils::MakeMaker version 7.44, CPAN::Meta::Converter version 2.150010'
+generated_by: 'ExtUtils::MakeMaker version 7.72, CPAN::Meta::Converter version 2.150010'
 license: unknown
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -26,5 +26,5 @@ resources:
   IRC: irc://irc.perl.org/#pdl
   bugtracker: https://github.com/jlapeyre/PDL-Fit-Levmar/issues
   repository: git://github.com/jlapeyre/PDL-Fit-Levmar.git
-version: '0.0107'
+version: '0.0108'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

@@ -1,5 +1,92 @@
 Revision history for Perl extension App-ansicolumn
 
+1.5702 2026-02-27T07:26:19Z
+
+    - Require Getopt::EX::Hashed 1.0701
+
+1.5701 2026-02-27T04:54:36Z
+
+    - Fix pane numbering in parallel mode for --label %n
+
+1.57 2026-02-27T03:35:42Z
+
+    - Add --label and --page-label options for border labels
+    - Support %f (basename) and %F (path) placeholders in labels
+    - Refactor column_out into _column_out factory pattern
+    - Require Getopt::EX::Hashed 1.07
+
+1.56 2026-02-25T06:20:54Z
+
+    - Integrate formfeed handling into do_space_layout to fix page
+      alignment with -D option
+    - Fix expand_tab to preserve and re-expand text after formfeed
+
+1.55 2026-02-24T15:54:35Z
+
+    - Add --padding option to pad last column to full width
+
+1.54 2026-02-24T13:36:22Z
+
+    - Add --item-format option to apply sprintf format to table cells
+    - Add --table-squeeze option to remove all-empty columns
+    - Add --table-remove (-K) option to discard specified columns
+
+1.53 2026-02-23T15:12:40Z
+
+    - Add --table-center option.
+
+1.52 2026-02-08T04:37:38Z
+
+    - make --no-isolation prevent any isolated line at page bottom,
+      including single-line paragraphs such as titles
+
+1.51 2026-02-03T05:24:33Z
+
+    - require Text::ANSI::Fold 2.3303
+
+1.50 2026-01-15T13:45:14Z
+
+    - add ansicolumn() function export for App::Greple::tee support
+    - add Command.pm for App::cdif::Command compatible interface
+
+1.49 2026-01-11T04:00:50Z
+
+    - pass margin parameter to Text::ANSI::Fold
+    - require Text::ANSI::Fold 2.31
+    - disable auto_abbrev and ignore_case to support --no-D style options
+
+1.48 2025-12-30T09:13:11Z
+
+    - make --document option negatable (--no-document)
+
+1.47 2025-12-20T08:28:57Z
+
+    - add --no-page option to disable page mode
+    - add bracket border styles (bracket, side_bracket, left_bracket, right_bracket)
+
+1.46 2025-10-22T09:48:39Z
+
+    - change table_columns_limit default from 0 to -1
+    - fix whitespace regex to work around possible Perl issue
+
+1.45 2025-02-12T13:27:29Z
+
+    - handle data end with CRNL
+
+1.44 2024-11-17T08:28:24Z
+
+    - introduce "ladder" border style
+
+1.43 2024-11-11T00:54:59Z
+
+    - introduce -I (--ignore-empty) option
+    - introduce --no-border option
+    - introduce "crop" and "paren" border style
+
+1.42 2024-04-24T08:31:16Z
+
+    - introduce -TT option to set tabs as input separator
+
 1.4101 2024-03-21T07:50:10Z
 
     - make man page accurate
