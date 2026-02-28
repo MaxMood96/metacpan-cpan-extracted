@@ -1,12 +1,12 @@
 package IO::K8s::Api::Policy::V1::PodDisruptionBudgetSpec;
 # ABSTRACT: PodDisruptionBudgetSpec is a description of a PodDisruptionBudget.
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 use IO::K8s::Resource;
 
-k8s maxUnavailable => Str;
+k8s maxUnavailable => IntOrStr;
 
 
-k8s minAvailable => Str;
+k8s minAvailable => IntOrStr;
 
 
 k8s selector => 'Meta::V1::LabelSelector';
@@ -29,7 +29,7 @@ IO::K8s::Api::Policy::V1::PodDisruptionBudgetSpec - PodDisruptionBudgetSpec is a
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head2 maxUnavailable
 

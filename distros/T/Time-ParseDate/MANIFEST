@@ -1,15 +1,26 @@
-MANIFEST
 Changes
-Makefile.PL
-README
+inc/Module/Install.pm
+inc/Module/Install/Base.pm
+inc/Module/Install/Can.pm
+inc/Module/Install/Fetch.pm
+inc/Module/Install/Makefile.pm
+inc/Module/Install/Metadata.pm
+inc/Module/Install/ReadmeFromPod.pm
+inc/Module/Install/Win32.pm
+inc/Module/Install/WriteAll.pm
 lib/Time/CTime.pm
 lib/Time/DaysInMonth.pm
 lib/Time/JulianDay.pm
 lib/Time/ParseDate.pm
 lib/Time/Timezone.pm
+Makefile.PL
+MANIFEST
+MANIFEST.SKIP
+META.yml			Module meta-data (added by MakeMaker)
+README
 t/datetime.t
+t/dst.t
 t/metdate.t
 t/order1.t
 t/order2.t
-META.yml                                 Module meta-data (added by MakeMaker)
-META.json                                Module JSON meta-data (added by MakeMaker)
+t/rt96453.t

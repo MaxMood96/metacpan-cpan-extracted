@@ -1,6 +1,6 @@
 package IO::K8s::Traefik::V1alpha1::ServersTransport;
 # ABSTRACT: Traefik servers transport configuration
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 use IO::K8s::APIObject
     api_version     => 'traefik.io/v1alpha1',
     resource_plural => 'serverstransports';
@@ -23,7 +23,7 @@ IO::K8s::Traefik::V1alpha1::ServersTransport - Traefik servers transport configu
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head1 DESCRIPTION
 

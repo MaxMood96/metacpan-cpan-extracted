@@ -599,6 +599,7 @@ lib/IO/K8s/ApiextensionsApiserver/Pkg/Apis/Apiextensions/V1/CustomResourceDefini
 lib/IO/K8s/ApiextensionsApiserver/Pkg/Apis/Apiextensions/V1/CustomResourceDefinitionStatus.pm
 lib/IO/K8s/ApiextensionsApiserver/Pkg/Apis/Apiextensions/V1/CustomResourceDefinitionVersion.pm
 lib/IO/K8s/ApiextensionsApiserver/Pkg/Apis/Apiextensions/V1/CustomResourceSubresourceScale.pm
+lib/IO/K8s/ApiextensionsApiserver/Pkg/Apis/Apiextensions/V1/CustomResourceSubresourceStatus.pm
 lib/IO/K8s/ApiextensionsApiserver/Pkg/Apis/Apiextensions/V1/CustomResourceSubresources.pm
 lib/IO/K8s/ApiextensionsApiserver/Pkg/Apis/Apiextensions/V1/CustomResourceValidation.pm
 lib/IO/K8s/ApiextensionsApiserver/Pkg/Apis/Apiextensions/V1/ExternalDocumentation.pm
@@ -689,6 +690,7 @@ lib/IO/K8s/Role/Loadbalanced.pm
 lib/IO/K8s/Role/MiddlewareBuilder.pm
 lib/IO/K8s/Role/Namespaced.pm
 lib/IO/K8s/Role/NetworkPolicy.pm
+lib/IO/K8s/Role/Resource.pm
 lib/IO/K8s/Role/ResourceMap.pm
 lib/IO/K8s/Role/Routable.pm
 lib/IO/K8s/Role/SpecBuilder.pm
@@ -706,6 +708,7 @@ lib/IO/K8s/Traefik/V1alpha1/TraefikService.pm
 lib/IO/K8s/Types.pm
 lib/IO/K8s/Types/Net.pm
 t/01_load.t
+t/02_compile_all.t
 t/02_serialize_to_json.t
 t/03_struct_to_object.t
 t/04_autogen.t
@@ -724,6 +727,9 @@ t/16_role_netpol.t
 t/17_role_routable.t
 t/18_role_certmanaged.t
 t/19_role_helm.t
+t/20_int_or_string.t
+t/21_quantity_time.t
+t/22_types.t
 t/author-pod-syntax.t
 t/manifest.t
 t/to_yaml.t

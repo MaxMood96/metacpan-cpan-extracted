@@ -5,7 +5,7 @@ package App::Greple::md;
 use 5.024;
 use warnings;
 
-our $VERSION = "1.04";
+our $VERSION = "1.06";
 
 =encoding utf-8
 
@@ -813,7 +813,7 @@ sub format_table {
 
 sub parse_separator {
     my $blockref = shift;
-    my $SEP = qr/^\h*\|(?:\h*:?-+:?\h*\|)+\h*$/m;
+    my $SEP = qr/^\h*+\|(\h*+:?+-++:?+\h*+\|)++\h*+$/mn;
     my ($sep_line) = $$blockref =~ /($SEP)/;
     return ([], []) unless defined $sep_line;
     my @cells = split /\|/, $sep_line, -1;
@@ -821,7 +821,8 @@ sub parse_separator {
     s/^\h+|\h+$//g for @cells;
     my @right  = grep { $cells[$_-1] =~ /^-+:$/  } 1..@cells;
     my @center = grep { $cells[$_-1] =~ /^:-+:$/ } 1..@cells;
-    $$blockref =~ s{$SEP}{ ${^MATCH} =~ tr/:/-/r }mpe;
+    # Minimize dashes so separator width doesn't inflate column widths
+    $$blockref =~ s{$SEP}{ ${^MATCH} =~ s/:?-+:?/-/gr }mpe;
     (\@right, \@center);
 }
 

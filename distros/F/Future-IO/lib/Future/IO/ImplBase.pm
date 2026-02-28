@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2019-2026 -- leonerd@leonerd.org.uk
 
-package Future::IO::ImplBase 0.21;
+package Future::IO::ImplBase 0.22;
 
 use v5.14;
 use warnings;
@@ -12,6 +12,8 @@ use Future::IO qw( POLLIN POLLOUT POLLPRI );
 
 use Errno qw( EAGAIN EWOULDBLOCK EINPROGRESS );
 use Socket qw( SOL_SOCKET SO_ERROR );
+use Struct::Dumb qw( readonly_struct );
+use Time::HiRes qw( time );
 
 # connect() yields EWOULDBLOCK on MSWin32
 use constant CONNECT_EWOULDBLOCK => ( $^O eq "MSWin32" );
@@ -93,7 +95,7 @@ sub alarm
    my $self = shift;
    my ( $time ) = @_;
 
-   return $self->sleep( $time - Time::HiRes::time() );
+   return $self->sleep( $time - time() );
 }
 
 =head2 connect
@@ -316,6 +318,92 @@ sub syswrite
 {
    my $self = shift;
    return $self->_syswrite1( undef, @_ );
+}
+
+=head1 OPTIONAL METHODS
+
+The following methods may be directly provided by an implementation, or they
+may be emulated by this base class by other means. It is usually better to
+provide these methods in an implementation if it can do so more efficiently or
+better in those modules; these emulations are provided as a worst-case
+fallback and may not be ideal.
+
+These methods will require a helper method provided by the implementation
+class to construct new C<Future> instances of its chosen type.
+
+   $f = $class->_new_future;
+
+=cut
+
+=head2 sleep
+
+I<Since version 0.22.>
+
+Emulated by maintaining a queue of C<sleep> and C<alarm> timers. Two helper
+methods are provided for the implementation to manage this queue.
+
+   $timeout = $class->_timeout;
+
+   $class->_manage_timers;
+
+The C<_timeout> method returns a value in seconds to the delay until when the
+next timer will expire. This may be C<undef> if there are none waiting. The
+C<_manage_timers> method may be called at any time to invoke any of the timers
+that have now expired.
+
+=cut
+
+readonly_struct Alarm => [qw( time f )];
+my @alarms;
+
+sub _timeout
+{
+   shift;
+
+   my $timeout;
+   if( @alarms ) {
+      # These are sorted by time order, so head is soonest
+      $timeout = $alarms[0]->time - time();
+      $timeout = 0 if $timeout < 0;
+   }
+
+   return $timeout;
+}
+
+sub _manage_timers
+{
+   shift;
+   my $now = time();
+
+   while( @alarms and $alarms[0]->time <= $now ) {
+      ( shift @alarms )->f->done;
+   }
+}
+
+sub sleep
+{
+   my $class = shift;
+   my ( $secs ) = @_;
+
+   my $time = time() + $secs;
+
+   my $f = $class->_new_future;
+
+   # TODO: Binary search
+   my $idx = 0;
+   $idx++ while $idx < @alarms and $alarms[$idx]->time < $time;
+
+   splice @alarms, $idx, 0, Alarm( $time, $f );
+
+   $f->on_cancel( sub {
+      my $self = shift;
+      my $idx = 0;
+      $idx++ while $idx < @alarms and $alarms[$idx]->f != $self;
+
+      splice @alarms, $idx, 1, ();
+   } );
+
+   return $f;
 }
 
 =head1 LEGACY METHODS

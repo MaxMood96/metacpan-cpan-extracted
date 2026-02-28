@@ -1,6 +1,6 @@
 package IO::K8s::AutoGen;
 # ABSTRACT: Dynamically generate IO::K8s classes from OpenAPI schema
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 use v5.10;
 use strict;
 use warnings;
@@ -66,41 +66,14 @@ sub _generate_class {
     # Ensure parent packages exist
     _ensure_package_exists($class);
 
-    # Import IO::K8s::Resource into the new class
-    # This sets up Moo, extends IO::K8s::Resource, and exports k8s()
+    # Set up the class using IO::K8s::Resource's shared setup method
     {
         no strict 'refs';
-        # First, create the package
         @{"${class}::ISA"} = ();
     }
 
     require IO::K8s::Resource;
-    {
-        # Temporarily switch caller context to the new class
-        no strict 'refs';
-        no warnings 'redefine';
-        local *IO::K8s::Resource::import = sub {
-            my $resource_class = shift;
-            my $target = $class;
-
-            # Install Moo into target
-            require Moo;
-            require Import::Into;
-            Moo->import::into($target);
-
-            # Import Types::Standard
-            require Types::Standard;
-            Types::Standard->import::into($target, qw(Str Int Bool));
-
-            # Set up inheritance
-            $target->can('extends')->('IO::K8s::Resource');
-
-            # Export k8s function
-            my $stash = Package::Stash->new($target);
-            $stash->add_symbol('&k8s', sub { IO::K8s::Resource::_k8s($target, @_) });
-        };
-        IO::K8s::Resource->import();
-    }
+    IO::K8s::Resource->_setup_class($class);
 
     # Get the k8s function for this class
     my $k8s = $class->can('k8s')
@@ -109,6 +82,9 @@ sub _generate_class {
     my $properties = $schema->{properties} // {};
 
     # Generate attributes using k8s DSL
+    # Property names with special characters ($ref, x-kubernetes-*) are
+    # automatically sanitized to valid Perl identifiers by _k8s(), with
+    # init_arg mapping so constructors still accept the original JSON keys.
     for my $prop (sort keys %$properties) {
         my $prop_schema = $properties->{$prop};
         my $type_spec = _schema_to_type_spec($prop_schema, $all_defs, $namespace, $prop);
@@ -175,6 +151,17 @@ sub _schema_to_type_spec {
     if (my $ref = $schema->{'$ref'}) {
         $ref =~ s{^#/definitions/}{};
 
+        # Special apimachinery types - not object references
+        if ($ref =~ /intstr\.IntOrString$/) {
+            return 'IntOrStr';
+        }
+        if ($ref =~ /resource\.Quantity$/) {
+            return 'Quantity';
+        }
+        if ($ref =~ /meta\.v1\.(Micro)?Time$/) {
+            return 'Time';
+        }
+
         # Opaque types should be HashRef, not object references
         if ($OPAQUE_TYPES{$ref}) {
             return { Str => 1 };  # HashRef
@@ -191,6 +178,9 @@ sub _schema_to_type_spec {
     my $type = $schema->{type} // '';
 
     if ($type eq 'string') {
+        my $format = $schema->{format} // '';
+        return 'IntOrStr' if $format eq 'int-or-string';
+        return 'Time'     if $format eq 'date-time';
         return 'Str';
     }
     elsif ($type eq 'integer') {
@@ -278,7 +268,7 @@ IO::K8s::AutoGen - Dynamically generate IO::K8s classes from OpenAPI schema
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head1 SYNOPSIS
 

@@ -1,5 +1,9 @@
 Revision history for Future-IO-Impl-Tickit
 
+0.04    2026-02-27
+        [BUGFIXES]
+         * Improved logic for handling multiple `->poll` event flags
+
 0.03    2026-02-12
         [CHANGES]
          * Pull in latest Future::IO (for POLLPRI constant)

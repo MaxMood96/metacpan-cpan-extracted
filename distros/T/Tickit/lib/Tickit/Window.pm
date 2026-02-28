@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2009-2019 -- leonerd@leonerd.org.uk
 
-package Tickit::Window 0.74;
+package Tickit::Window 0.75;
 
 use v5.14;
 use warnings;
@@ -29,30 +29,30 @@ C<Tickit::Window> - a window for drawing operations
 
 =head1 SYNOPSIS
 
- use Tickit;
- use Tickit::Pen;
+   use Tickit;
+   use Tickit::Pen;
 
- my $tickit = Tickit->new;
+   my $tickit = Tickit->new;
 
- my $rootwin = $tickit->rootwin;
+   my $rootwin = $tickit->rootwin;
 
- $rootwin->bind_event( expose => sub {
-    my ( $win, undef, $info ) = @_;
+   $rootwin->bind_event( expose => sub {
+      my ( $win, undef, $info ) = @_;
 
-    my $rb = $info->rb;
+      my $rb = $info->rb;
 
-    $rb->clear;
+      $rb->clear;
 
-    $rb->text_at(
-       int( $win->lines / 2 ), int( ($win->cols - 12) / 2 ),
-       "Hello, world"
-    );
- });
- $rootwin->bind_event( geomchange => sub { shift->expose } );
- $rootwin->set_pen( Tickit::Pen->new( fg => "white" ) );
+      $rb->text_at(
+         int( $win->lines / 2 ), int( ($win->cols - 12) / 2 ),
+         "Hello, world"
+      );
+   });
+   $rootwin->bind_event( geomchange => sub { shift->expose } );
+   $rootwin->set_pen( Tickit::Pen->new( fg => "white" ) );
 
- $rootwin->expose;
- $tickit->run;
+   $rootwin->expose;
+   $tickit->run;
 
 =head1 DESCRIPTION
 
@@ -107,7 +107,7 @@ sub new
 
 =head2 close
 
-   $win->close
+   $win->close;
 
 Removes the window from its parent and clears any event handlers set using
 L<bind_event>. Also recursively closes any child windows.
@@ -121,7 +121,7 @@ future version.
 
 =head2 make_sub
 
-   $sub = $win->make_sub( $top, $left, $lines, $cols )
+   $sub = $win->make_sub( $top, $left, $lines, $cols );
 
 Constructs a new sub-window of the given geometry, and places it at the end of
 the child window list; below any other siblings.
@@ -136,7 +136,7 @@ sub make_sub
 
 =head2 make_hidden_sub
 
-   $sub = $win->make_hidden_sub( $top, $left, $lines, $cols )
+   $sub = $win->make_hidden_sub( $top, $left, $lines, $cols );
 
 Constructs a new sub-window like C<make_sub>, but the window starts initially
 hidden. This avoids having to call C<hide> separately afterwards.
@@ -151,7 +151,7 @@ sub make_hidden_sub
 
 =head2 make_float
 
-   $float = $win->make_float( $top, $left, $lines, $cols )
+   $float = $win->make_float( $top, $left, $lines, $cols );
 
 Constructs a new sub-window of the given geometry, and places it at the start
 of the child window list; above any other siblings.
@@ -166,7 +166,7 @@ sub make_float
 
 =head2 make_popup
 
-   $popup = $win->make_popup( $top, $left, $lines, $cols )
+   $popup = $win->make_popup( $top, $left, $lines, $cols );
 
 Constructs a new floating popup window starting at the given coordinates
 relative to this window. It will be sized to the given limits.
@@ -187,7 +187,7 @@ sub make_popup
 
 =head2 bind_event
 
-   $id = $win->bind_event( $ev, $code, $data )
+   $id = $win->bind_event( $ev, $code, $data );
 
 Installs a new event handler to watch for the event specified by C<$ev>,
 invoking the C<$code> reference when it occurs. C<$code> will be invoked with
@@ -195,7 +195,7 @@ the given window, the event name, an event information object, and the
 C<$data> value it was installed with. C<bind_event> returns an ID value that
 may be used to remove the handler by calling C<unbind_event_id>.
 
- $ret = $code->( $win, $ev, $info, $data )
+   $ret = $code->( $win, $ev, $info, $data );
 
 The type of C<$info> will depend on the kind of event that was received, as
 indicated by C<$ev>. The information structure types are documented in
@@ -203,7 +203,7 @@ L<Tickit::Event>.
 
 =head2 bind_event (with flags)
 
-   $id = $win->bind_event( $ev, $flags, $code, $data )
+   $id = $win->bind_event( $ev, $flags, $code, $data );
 
 The C<$code> argument may optionally be preceded by an integer of flag
 values. This should be zero to apply default semantics, or a bitmask of
@@ -223,7 +223,7 @@ sub bind_event
 
 =head2 unbind_event_id
 
-   $win->unbind_event_id( $id )
+   $win->unbind_event_id( $id );
 
 Removes an event handler that returned the given C<$id> value.
 
@@ -231,11 +231,11 @@ Removes an event handler that returned the given C<$id> value.
 
 =head2 raise
 
-   $win->raise
+   $win->raise;
 
 =head2 lower
 
-   $win->lower
+   $win->lower;
 
 Moves the order of the window in its parent one higher or lower relative to
 its siblings.
@@ -244,7 +244,7 @@ its siblings.
 
 =head2 raise_to_front
 
-   $win->raise_to_front
+   $win->raise_to_front;
 
 Moves the order of the window in its parent to be the front-most among its
 siblings.
@@ -253,7 +253,7 @@ siblings.
 
 =head2 lower_to_back
 
-   $win->lower_to_back
+   $win->lower_to_back;
 
 Moves the order of the window in its parent to be the back-most among its
 siblings.
@@ -262,7 +262,7 @@ siblings.
 
 =head2 parent
 
-   $parentwin = $win->parent
+   $parentwin = $win->parent;
 
 Returns the parent window; i.e. the window on which C<make_sub> or
 C<make_float> was called to create this one
@@ -271,7 +271,7 @@ C<make_float> was called to create this one
 
 =head2 subwindows
 
-   @windows = $win->subwindows
+   @windows = $win->subwindows;
 
 Returns a list of the subwindows of this one. They are returned in order,
 highest first.
@@ -280,7 +280,7 @@ highest first.
 
 =head2 root
 
-   $rootwin = $win->root
+   $rootwin = $win->root;
 
 Returns the root window
 
@@ -288,7 +288,7 @@ Returns the root window
 
 =head2 term
 
-   $term = $win->term
+   $term = $win->term;
 
 Returns the L<Tickit::Term> instance of the terminal on which this window
 lives.
@@ -305,7 +305,7 @@ may get forgotten.
 
 =head2 tickit
 
-   $tickit = $win->tickit
+   $tickit = $win->tickit;
 
 Returns the L<Tickit> instance with which this window is associated.
 
@@ -318,7 +318,7 @@ sub tickit
 
 =head2 show
 
-   $win->show
+   $win->show;
 
 Makes the window visible. Allows drawing methods to output to the terminal.
 Calling this method also exposes the window, invoking the C<on_expose>
@@ -328,7 +328,7 @@ handler. Shows the cursor if this window currently has focus.
 
 =head2 hide
 
-   $win->hide
+   $win->hide;
 
 Makes the window invisible. Prevents drawing methods outputting to the
 terminal. Hides the cursor if this window currently has focus.
@@ -337,7 +337,7 @@ terminal. Hides the cursor if this window currently has focus.
 
 =head2 is_visible
 
-   $visible = $win->is_visible
+   $visible = $win->is_visible;
 
 Returns true if the window is currently visible.
 
@@ -345,7 +345,7 @@ Returns true if the window is currently visible.
 
 =head2 resize
 
-   $win->resize( $lines, $cols )
+   $win->resize( $lines, $cols );
 
 Change the size of the window.
 
@@ -353,7 +353,7 @@ Change the size of the window.
 
 =head2 reposition
 
-   $win->reposition( $top, $left )
+   $win->reposition( $top, $left );
 
 Move the window relative to its parent.
 
@@ -361,7 +361,7 @@ Move the window relative to its parent.
 
 =head2 change_geometry
 
-   $win->change_geometry( $top, $left, $lines, $cols )
+   $win->change_geometry( $top, $left, $lines, $cols );
 
 A combination of C<resize> and C<reposition>, to atomically change all the
 coordinates of the window. Will only invoke C<on_geom_changed> once, rather
@@ -405,7 +405,7 @@ sub _do_expose
 
 =head2 expose
 
-   $win->expose( $rect )
+   $win->expose( $rect );
 
 Marks the given region of the window as having been exposed, to invoke the
 C<on_expose> event handler on itself, and all its child windows. The window's
@@ -427,9 +427,9 @@ window.
 
 =head2 setctl
 
-   $value = $win->getctl( $ctl )
+   $value = $win->getctl( $ctl );
 
-   $success = $win->setctl( $ctl, $value )
+   $success = $win->setctl( $ctl, $value );
 
 Accessor and mutator for window control options. C<$ctl> should be one of the
 following options:
@@ -459,7 +459,7 @@ Whether the window is currently stealing input from its siblings.
 
 =head2 set_focus_child_notify
 
-   $win->set_focus_child_notify( $notify )
+   $win->set_focus_child_notify( $notify );
 
 If set to a true value, the C<on_focus> event handler will also be invoked
 when descendent windows gain or lose focus, in addition to when it gains or
@@ -484,13 +484,13 @@ sub set_focus_child_notify
 
 =head2 right
 
-   $top    = $win->top
+   $top    = $win->top;
 
-   $bottom = $win->bottom
+   $bottom = $win->bottom;
 
-   $left   = $win->left
+   $left   = $win->left;
 
-   $right  = $win->right
+   $right  = $win->right;
 
 Returns the coordinates of the start of the window, relative to the parent
 window.
@@ -513,9 +513,9 @@ sub right
 
 =head2 abs_left
 
-   $top  = $win->abs_top
+   $top  = $win->abs_top;
 
-   $left = $win->abs_left
+   $left = $win->abs_left;
 
 Returns the coordinates of the start of the window, relative to the root
 window.
@@ -526,9 +526,9 @@ window.
 
 =head2 lines
 
-   $cols  = $win->cols
+   $cols  = $win->cols;
 
-   $lines = $win->lines
+   $lines = $win->lines;
 
 Obtain the size of the window
 
@@ -536,7 +536,7 @@ Obtain the size of the window
 
 =head2 selfrect
 
-   $rect = $win->selfrect
+   $rect = $win->selfrect;
 
 Returns a L<Tickit::Rect> containing representing the window's extent within
 itself. This will have C<top> and C<left> equal to 0.
@@ -557,7 +557,7 @@ sub selfrect
 
 =head2 rect
 
-   $rect = $win->rect
+   $rect = $win->rect;
 
 Returns a L<Tickit::Rect> containing representing the window's extent relative
 to its parent
@@ -578,7 +578,7 @@ sub rect
 
 =head2 pen
 
-   $pen = $win->pen
+   $pen = $win->pen;
 
 Returns the current L<Tickit::Pen> object associated with this window
 
@@ -586,7 +586,7 @@ Returns the current L<Tickit::Pen> object associated with this window
 
 =head2 set_pen
 
-   $win->set_pen( $pen )
+   $win->set_pen( $pen );
 
 Replace the current L<Tickit::Pen> object for this window with a new one. The
 object reference will be stored, allowing it to be shared with other objects.
@@ -596,7 +596,7 @@ If C<undef> is set, then a new, blank pen will be constructed.
 
 =head2 getpenattr
 
-   $val = $win->getpenattr( $attr )
+   $val = $win->getpenattr( $attr );
 
 Returns a single attribue from the current pen
 
@@ -612,7 +612,7 @@ sub getpenattr
 
 =head2 get_effective_pen
 
-   $pen = $win->get_effective_pen
+   $pen = $win->get_effective_pen;
 
 Returns a new L<Tickit::Pen> containing the effective pen attributes for the
 window, combined by those of all its parents.
@@ -633,7 +633,7 @@ sub get_effective_pen
 
 =head2 get_effective_penattr
 
-   $val = $win->get_effective_penattr( $attr )
+   $val = $win->get_effective_penattr( $attr );
 
 Returns the effective value of a pen attribute. This will be the value of this
 window's attribute if set, or the effective value of the attribute from its
@@ -656,13 +656,13 @@ sub get_effective_penattr
 
 =head2 scrollrect
 
-   $success = $win->scrollrect( $rect, $downward, $rightward )
+   $success = $win->scrollrect( $rect, $downward, $rightward );
 
-   $success = $win->scrollrect( $top, $left, $lines, $cols, $downward, $rightward )
+   $success = $win->scrollrect( $top, $left, $lines, $cols, $downward, $rightward );
 
-   $success = $win->scrollrect( ..., $pen )
+   $success = $win->scrollrect( ..., $pen );
 
-   $success = $win->scrollrect( ..., %attrs )
+   $success = $win->scrollrect( ..., %attrs );
 
 Attempt to scroll the rectangle of the window (either given by a
 C<Tickit::Rect> or defined by the first four parameters) by an amount given
@@ -713,7 +713,7 @@ sub scrollrect
 
 =head2 scroll
 
-   $success = $win->scroll( $downward, $rightward )
+   $success = $win->scroll( $downward, $rightward );
 
 A shortcut for calling C<scrollrect> on the entire region of the window.
 
@@ -732,7 +732,7 @@ sub scroll
 
 =head2 scroll_with_children
 
-   $win->scroll_with_children( $downward, $rightward )
+   $win->scroll_with_children( $downward, $rightward );
 
 Similar to C<scroll> but ignores child windows of this one, moving all of
 the terminal content paying attention only to obscuring by newer siblings of
@@ -760,7 +760,7 @@ sub scroll_with_children
 
 =head2 cursor_at
 
-   $win->cursor_at( $line, $col )
+   $win->cursor_at( $line, $col );
 
 Sets the position in the window at which the terminal cursor will be placed if
 this window has focus. This method does I<not> force the window to take the
@@ -776,7 +776,7 @@ sub cursor_at
 
 =head2 cursor_visible
 
-   $win->cursor_visible( $visible )
+   $win->cursor_visible( $visible );
 
 Sets whether the terminal cursor is visible on the window when it has focus.
 Normally it is, but passing a false value will make the cursor hidden even
@@ -796,7 +796,7 @@ sub set_cursor_visible
 
 =head2 cursor_shape
 
-   $win->cursor_shape( $shape )
+   $win->cursor_shape( $shape );
 
 Sets the shape that the terminal cursor will have if this window has focus.
 This method does I<not> force the window to take the focus though; for that
@@ -817,7 +817,7 @@ sub set_cursor_shape
 
 =head2 take_focus
 
-   $win->take_focus
+   $win->take_focus;
 
 Causes this window to take the input focus, and updates the cursor position to
 the stored active position given by C<cursor_at>.
@@ -826,7 +826,7 @@ the stored active position given by C<cursor_at>.
 
 =head2 focus
 
-   $win->focus( $line, $col )
+   $win->focus( $line, $col );
 
 A convenient shortcut combining C<cursor_at> with C<take_focus>; setting the
 focus cursor position and taking the input focus.
@@ -842,7 +842,7 @@ sub focus
 
 =head2 is_focused
 
-   $focused = $win->is_focused
+   $focused = $win->is_focused;
 
 Returns true if this window currently has the input focus
 
@@ -850,7 +850,7 @@ Returns true if this window currently has the input focus
 
 =head2 is_steal_input
 
-   $steal = $win->is_steal_input
+   $steal = $win->is_steal_input;
 
 Returns true if this window is currently stealing input from its siblings
 
@@ -865,7 +865,7 @@ sub is_steal_input
 
 =head2 set_steal_input
 
-   $win->set_steal_input( $steal )
+   $win->set_steal_input( $steal );
 
 Controls whether this window is currently stealing input from its siblings
 

@@ -109,24 +109,8 @@ md_config+=(hashed.h3=1 hashed.h4=1 hashed.h5=1 hashed.h6=1)
 
 #### Theme Listing
 
-- `--list-themes`: Shows preview samples for all available themes. Each theme is previewed by temporarily applying it to a copy of the default, then restoring.
-
-Field names are derived from theme keys (excluding `base`):
-
-```bash
-declare -a show_fields=()
-for k in "${!theme_light[@]}"; do
-    [[ $k != base ]] && show_fields+=("$k")
-done
-```
-
-Color specifications use [Term::ANSIColor::Concise](https://metacpan.org/pod/Term::ANSIColor::Concise) format:
-- `L00` - `L25`: Gray scale (L00=black, L25=white)
-- `${base}`: Base color placeholder (expanded after loading)
-- `+l10` / `-l10`: Adjust lightness
-- `=l50`: Set absolute lightness
-- `D`: Bold, `I`: Italic, `U`: Underline, `E`: Erase line
-- `FG/BG`: Foreground/Background
+- `--list-themes`: Shows preview samples for all available themes. Field names are theme keys excluding `base`.
+- Color specs use [Term::ANSIColor::Concise](https://metacpan.org/pod/Term::ANSIColor::Concise): `L00`-`L25` (gray scale), `${base}` (placeholder), `+l10`/`-l10` (lightness adjust), `D`/`I`/`U`/`E` (bold/italic/underline/erase), `FG/BG`.
 
 ### User Configuration
 
@@ -158,7 +142,7 @@ The `--base-color` option default is empty (no override). Base color is determin
 The `--config` option sets config parameters via `Getopt::EX::Config`. It uses `%!` (hash with callback) to preserve spaces in values, accumulating entries in `_config[]`.
 
 Routing logic:
-- Keys existing in `theme_light` (`base`, `file`, `file_format`) → consumed by bash, applied to both theme arrays
+- Keys existing in `theme_light` (`base`, `FILE`, `FILE_FORMAT`) → consumed by bash, applied to both theme arrays
 - Everything else → appended to `md_config[]`, forwarded to md module as config params
 
 ```bash
@@ -304,111 +288,22 @@ Dryrun combinations:
 
 ### App::Greple::md Module
 
-Syntax highlighting, table formatting, and text folding are handled by the `App::Greple::md` Perl module. mdee invokes greple with the module and passes config/visibility options as module options (before `--`):
+Syntax highlighting, table formatting, and text folding are handled by the `App::Greple::md` Perl module. mdee invokes `greple -Mmd::config(mode,foldlist,foldwidth,table,table_trim,rule,heading_markup,...) -- --filter --filestyle=once --color=always`.
 
-```bash
-run_greple() {
-    local -a md_opts=()
-    local -a config_params=("mode=${mode}")
-
-    # fold/table/trim/rule/heading_markup params
-    [[ $fold  ]] && config_params+=("foldlist=1,foldwidth=$width")
-    [[ $table ]] && config_params+=("table=1") || config_params+=("table=0")
-    [[ $trim  ]] && config_params+=("table_trim=1") || config_params+=("table_trim=0")
-    [[ $rule  ]] && config_params+=("rule=1")  || config_params+=("rule=0")
-    [[ $heading_markup ]] && config_params+=("heading_markup=$heading_markup")
-    config_params+=("${md_config[@]}")
-
-    local IFS=','
-    md_opts+=("-Mmd::config(${config_params[*]})")
-    unset IFS
-
-    for name in "${!show[@]}"; do
-        [[ $name == all ]] && continue
-        md_opts+=(--show "${name}=${show[$name]}")
-    done
-
-    invoke greple "${md_opts[@]}" "${pass_md[@]}" -- \
-        --filter --filestyle=once --color=always \
-        "$@"
-}
-```
-
-- `-Mmd::config(...)`: Module config parameters (mode, base_color, foldlist, foldwidth, table, table_trim, rule, heading_markup, hashed.*, color labels)
-- `--show LABEL=VALUE`: Field visibility control
+- `-Mmd::config(...)`: Module config params (mode, foldlist, foldwidth, table, table_trim, rule, heading_markup, hashed.*, color labels)
+- `--show LABEL=VALUE`: Field visibility control; passed from `show[]` array
 - `pass_md[]`: Passthrough options for md module (e.g., `--colormap` via `:>pass_md`)
 - Options before `--` are module-specific; after `--` are greple options
-- Fold is controlled via `foldlist=1` in config; the md module adds `--fold-by $foldwidth` to its default option
+- Fold controlled via `foldlist=1`; md module adds `--fold-by $foldwidth` to its default option
 
 ### Protection Mechanism (protect/restore)
 
-The `colorize()` function processes patterns in priority order. Early-processed
-regions (code blocks, inline code, comments, links) must be protected from
-later patterns (headings, emphasis, strikethrough). The protect/restore
-mechanism replaces processed text with ANSI-based placeholders:
+Early-processed regions (code blocks, inline code, comments, links) are replaced with ANSI-based placeholders `\e[256mN\e[m` to protect them from later patterns.
 
-```perl
-my($PS, $PE) = ("\e[256m", "\e[m");     # protect start/end markers
-my $PR = qr/\e\[256m(\d+)\e\[m/;       # protect restore pattern
-my($OS, $OE) = ("\e]8;;", "\e\\");      # OSC 8 start/end markers
-
-sub protect {
-    my $text = shift;
-    push @protected, $text;
-    $PS . $#protected . $PE;
-}
-
-sub restore {
-    my $s = shift;
-    1 while $s =~ s{$PR}{$protected[$1] // die "restore failed: index $1"}ge;
-    $s;
-}
-```
-
-Placeholder format: `\e[256mN\e[m]` where:
-- `\e[256m` — SGR parameter 256 ("color not found": the 256-color palette
-  uses indices 0-255, so 256 is an impossible color that terminals ignore)
-- `N` — index into `@protected` array
-- `\e[m` — standard SGR reset
-
-The `\e[m` end marker is key: when `apply_color` (from `Term::ANSIColor::Concise`)
-wraps the placeholder with an outer color (e.g., heading), it detects the `\e[m`
-reset and re-inserts the outer color after it. This enables **cumulative coloring**
-— for example, a link inside a heading:
-
-1. Link is colored and protected: `[text](url)` → `\e[256m0\e[m`
-2. Heading wraps the line: `\e[h2]## Title \e[256m0\e[m\e[h2] after\e[m`
-3. Restore replaces placeholder: `\e[h2]## Title \e[link][text]\e[m\e[h2] after\e[m`
-
-The heading color resumes after the link, including background color for
-text that follows the link on the same heading line.
-
-Each processing step is a `Step` object in the `%colorize` hash, created
-by `Step(sub{})` (always active) or `Step(label => sub{})` (controllable
-via `--show`). The pipeline order is determined by `build_pipeline()`
-based on `heading_markup`.
-
-```perl
-package App::Greple::md::Step {
-    sub new    { my($class, %args) = @_; bless \%args, $class }
-    sub label  { $_[0]->{label} }
-    sub active { !$_[0]->{label} || App::Greple::md::active($_[0]->{label}) }
-    sub run    { $_[0]->{code}->() }
-}
-
-sub Step {
-    my $code = pop;
-    my $label = shift;
-    App::Greple::md::Step->new(label => $label, code => $code);
-}
-
-# Always active (no label):
-code_blocks => Step(sub { ... }),
-
-# Controllable via --show (with label):
-bold => Step(bold => sub { ... }),
-headings => Step(header => sub { ... }),
-```
+- Placeholder uses SGR 256 (impossible color, terminals ignore) + index into `@protected` array
+- The `\e[m` reset at end enables **cumulative coloring**: when `apply_color` wraps placeholder with outer color (e.g., heading), it re-inserts the outer color after the reset
+- Each step is a `Step` object: `Step(sub{})` (always active) or `Step(label => sub{})` (controllable via `--show`)
+- Pipeline order determined by `build_pipeline()` based on `heading_markup`
 
 #### Pipeline Architecture
 
@@ -493,30 +388,6 @@ Fenced code blocks ([CommonMark](https://spec.commonmark.org/0.31.2/#fenced-code
 ```
 
 Inline code ([CommonMark Code Spans](https://spec.commonmark.org/0.31.2/#code-spans)) uses the `$CODE` pattern, which matches both single and multi-backtick spans. For multi-backtick (2+), optional leading/trailing spaces are stripped per CommonMark spec.
-
-### Header Colors
-
-Light mode uses light background with dark text (h1-h3), base color text (h4-h6):
-```bash
-[h1]='L25D/${base};E'      # Gray text on base background
-[h2]='L25D/${base}+y20;E'  # Lighter background
-[h3]='L25DN/${base}+y30'   # Normal weight, even lighter
-[h4]='${base}UD'           # Base color, underline, bold
-[h5]='${base}U'            # Base color, underline
-[h6]='${base}'             # Base color
-```
-
-Dark mode uses dark background with light text (h1-h3), base color text (h4-h6):
-```bash
-[h1]='L00D/${base};E'      # Black text on base background
-[h2]='L00D/${base}-y15;E'  # Darker background
-[h3]='L00DN/${base}-y25'   # Normal weight, even darker
-[h4]='${base}UD'           # Base color, underline, bold
-[h5]='${base}U'            # Base color, underline
-[h6]='${base}'             # Base color
-```
-
-Pattern: light uses `+y` to lighten (reduce emphasis), dark uses `-y` to darken (reduce emphasis).
 
 ### Text Folding (md module)
 
@@ -693,146 +564,30 @@ The md module's `active()` function checks show flags and skips regex substituti
 
 ### Emphasis Patterns (CommonMark)
 
-Bold and italic patterns follow [CommonMark emphasis rules](https://spec.commonmark.org/0.31.2/#emphasis-and-strong-emphasis). These are processed in the md module's `colorize()`, before headings. Each pattern uses `$SKIP_CODE` as first alternative to skip code spans:
+Bold/italic/strike patterns use `$SKIP_CODE` as first alternative to skip code spans. Named captures `(?<m>...)` (markers) and `(?<t>...)` (content) with `\g{m}` backreference prevent mixing (`**...__`).
 
-```perl
-# Bold: ** and __  (markers colored separately via mark_color)
-s{$SKIP_CODE|(?<!\\)(?<m>\*\*)(?<t>.*?)(?<!\\)\g{m}}{
-    mark_color('bold', $+{m}) . md_color('bold', $+{t}) . mark_color('bold', $+{m})
-}gep;
-s{$SKIP_CODE|(?<![\\\w])(?<m>__)(?<t>.*?)(?<!\\)\g{m}(?!\w)}{
-    mark_color('bold', $+{m}) . md_color('bold', $+{t}) . mark_color('bold', $+{m})
-}gep;
-
-# Italic: * and _
-s{$SKIP_CODE|(?<![\\\w])(?<m>_)(?<t>(?:(?!_).)+)(?<!\\)\g{m}(?!\w)}{
-    mark_color('italic', $+{m}) . md_color('italic', $+{t}) . mark_color('italic', $+{m})
-}gep;
-s{$SKIP_CODE|(?<![\\*])(?<m>\*)(?<t>(?:(?!\*).)+)(?<!\\)\g{m}(?!\*)}{
-    mark_color('italic', $+{m}) . md_color('italic', $+{t}) . mark_color('italic', $+{m})
-}gep;
-
-# Strikethrough
-s{$SKIP_CODE|(?<!\\)(?<m>~~)(?<t>.+?)(?<!\\)\g{m}}{
-    mark_color('strike', $+{m}) . md_color('strike', $+{t}) . mark_color('strike', $+{m})
-}gep;
-```
-
-`mark_color($type, $text)` checks if `${type}_mark` (e.g., `bold_mark`) exists
-in the colormap; if not, falls back to `emphasis_mark`. This allows per-type
-overrides via `--cm bold_mark=G` while defaulting to the shared `emphasis_mark`.
-
-Key rules:
-- Named captures `(?<m>...)` and `(?<t>...)` separate markers from content
-- `\g{m}` backreference ensures opening and closing markers match (prevents `**...__` mixing)
-- `$SKIP_CODE` as first alternative: code spans are matched and skipped via `(*SKIP)(*FAIL)`, preventing emphasis from matching inside code
-- `(?<!\\)`: Not preceded by backslash (escape handling)
-- `(?<![\\\w])` / `(?!\w)`: Word boundaries for `_`/`__`/`___` (prevents `foo_bar_baz` matching)
-- `(?<!\*)` / `(?!\*)`: Not adjacent to `*` (distinguishes `*italic*` from `**bold**`)
-- `(?:(?!\*).)+`: Match any character except `*`, and `.` excludes newlines (single-line only)
-- `__` requires word boundaries (same as `_`)
-- `**` doesn't require word boundaries (can be used mid-word)
-- `/p` flag with `${^MATCH}`: safe alternative to `$&` for accessing matched text (used by `$SKIP_CODE`)
+- `(?<![\\\w])` / `(?!\w)`: Word boundaries for `_`/`__` (prevents `foo_bar_baz`)
+- `(?<!\*)` / `(?!\*)`: Distinguishes `*italic*` from `**bold**`
+- `mark_color($type, $text)`: Uses `${type}_mark` if in colormap, falls back to `emphasis_mark`
+- `/p` flag with `${^MATCH}`: Safe alternative to `$&` (used by `$SKIP_CODE`)
 
 ### OSC 8 Hyperlinks
 
-Links are converted to [OSC 8 terminal hyperlinks](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda) for clickable URLs. This is handled entirely in the `App::Greple::md` module's `colorize()` function:
+Links are converted to OSC 8 terminal hyperlinks. Three types (in processing order): `image_link` (`[![alt](img)](url)`), `image` (`![alt](img)`), `link` (`[text](url)`). Each is colored, wrapped in OSC 8, and protected. Disable with `config(osc8=0)`.
 
-```perl
-sub osc8 {
-    return $_[1] unless $config->{osc8};
-    my($url, $text) = @_;
-    my $escaped = uri_escape_utf8($url, "^\\x20-\\x7e");
-    "${OS}${escaped}${OE}${text}${OS}${OE}";
-}
-```
-
-Disable with `greple -Mmd::config(osc8=0)` or mdee's config.sh.
-
-**URL Encoding**: OSC 8 specification requires URLs to contain only bytes in the 32-126 range. `uri_escape_utf8($url, "^\\x20-\\x7e")` escapes only non-ASCII characters (e.g., Japanese filenames), preserving `:`, `/`, etc.
-
-Three link types (processed in order to handle nesting):
-
-| Step | Pattern | Input | OSC 8 Links |
-|------|---------|-------|-------------|
-| 4 | image_link | `[![alt](img)](url)` | `!` → img, `[alt]` → url |
-| 5 | image | `![alt](img)` | `![alt]` → img |
-| 6 | link | `[text](url)` | `[text]` → url |
-
-OSC 8 format: `\e]8;;URL\e\TEXT\e]8;;\e\`
-
-Each link is colored with the `link`/`image`/`image_link` label (`I` = italic), wrapped in OSC 8, and protected to prevent later patterns from matching inside.
+URL encoding: `uri_escape_utf8($url, "^\\x20-\\x7e")` — escapes only non-ASCII, preserving `:`, `/`, etc.
 
 #### Code Span Pattern and `(*SKIP)(*FAIL)` Protection
 
-Per CommonMark, code spans have higher priority than links and emphasis. The md module defines `$CODE` as the base pattern for code spans, and derives `$SKIP_CODE` from it:
-
-```perl
-# Code span pattern (both single and multi-backtick).
-# Captures: _bt (backtick delimiter), _content (code body).
-my $CODE = qr{(?x)
-    (?<_bt> `++ )               # opening backtick(s)
-    (?<_content>
-        (?: (?! \g{_bt} ) . )+? # content (not containing same-length backticks)
-    )
-    \g{_bt}                     # closing backtick(s) matching opener
-};
-
-# Skip code spans — used as first alternative in substitutions
-my $SKIP_CODE = qr{$CODE (*SKIP)(*FAIL)}x;
-```
-
-`$CODE` is used directly in the `inline_code` step for code span processing. `$SKIP_CODE` is used as the first alternative in link/image/bold/italic/strike substitutions:
-
-```perl
-s{$SKIP_CODE|(?<![!\e])\[(?<text>$LT)\]\(<?(?<url>[^>)\s\n]+)>?\)}{
-    protect(osc8($+{url}, md_color('link', "[$+{text}]")))
-}ge;
-```
-
-How `(*SKIP)(*FAIL)` works:
-1. `$CODE` matches a code span (e.g., `` `code` ``)
-2. `(*SKIP)` marks this position — the regex engine won't retry earlier positions
-3. `(*FAIL)` forces a match failure — the substitution skips this region
-4. The engine resumes after the code span, so the second alternative can only match outside code spans
-
-This replaces per-pattern backtick lookbehinds (which only checked the immediately preceding character and couldn't handle cases like ``` `` `code` `` ``` where a space separates the backtick from `[`). The link pattern retains `(?<![!\e])` lookbehind for image link prefix `!` and protect placeholder `\e[`.
+`$CODE` matches code spans (named captures `_bt`, `_content`). `$SKIP_CODE = qr{$CODE (*SKIP)(*FAIL)}` is used as first alternative in link/emphasis substitutions to skip code spans. Named captures required — `$SKIP_CODE` consumes `$1`. Link pattern retains `(?<![!\e])` for image prefix and protect placeholder.
 
 #### Link Text Matching Pattern
 
-The md module uses `$LT` to match link text inside `[...]`:
-
-```perl
-my $LT = qr/(?:`[^`\n]*+`|\\.|[^`\\\n\]]++)+/;
-```
-
-This alternation:
-- Branch 1: `` `[^`\n]*+` `` — backtick-enclosed span (allows `]` inside)
-- Branch 2: `\\.` — backslash escape (allows `\]` etc.)
-- Branch 3: `` [^`\\\n\]]++ `` — any char except `` ` ``, `\`, newline, `]`
-
-Backtick and backslash must be excluded from branch 3 so branches 1 and 2 can fire at the correct positions. Inner quantifiers use possessive form (`*+`, `++`) since no backtracking is needed within each branch.
+`$LT = qr/(?:`[^`\n]*+`|\\.|[^`\\\n\]]++)+/` — three branches: backtick-span (allows `]` inside), backslash-escape (`\]`), any other char. Possessive quantifiers prevent backtracking.
 
 ### Mode Detection with [Getopt::EX::termcolor](https://metacpan.org/pod/Getopt::EX::termcolor)
 
-Terminal background luminance is detected via Getopt::EX::termcolor module.
-
-```bash
-detect_terminal_mode() {
-    local lum
-    lum=$(perl -MGetopt::EX::termcolor=luminance -e luminance 2>/dev/null) || return
-    [[ $lum ]] || return
-    (( lum < 50 )) && echo dark || echo light
-}
-```
-
-- `perl -MGetopt::EX::termcolor=luminance`: Import `luminance` function
-- `-e luminance`: Execute the function (prints 0-100)
-- Returns empty if terminal doesn't support background query
-- Luminance < 50: dark mode
-- Luminance >= 50: light mode
-
-The module sends OSC 11 query to terminal and parses the response to calculate luminance from RGB values.
+Terminal background luminance (0-100) is detected via OSC 11 query. Luminance < 50 → dark mode, ≥ 50 → light mode.
 
 ### [Getopt::Long::Bash](https://metacpan.org/pod/Getopt::Long::Bash) (getoptlong.sh)
 
@@ -873,37 +628,8 @@ Key format: `option_name | short_opt  spec  # comment`
 
 - `[&REQUIRE]=version`: Minimum getoptlong.sh version
 - `[&USAGE]="..."`: Usage message for --help
-
-#### Callback Functions
-
-If a function with the same name as an option exists, it's called after parsing:
-
-```bash
-pager() {
-    [[ $pager ]] && pass_nup+=("--pager=$pager") || pass_nup+=("--no-pager")
-}
-```
-
-#### Invocation
-
-```bash
-. getoptlong.sh OPTS "$@"
-```
-
-Sources the library with OPTS array name and arguments.
-
-### Dependencies
-
-- App::Greple - Pattern matching and highlighting tool with extensive regex support
-- App::Greple::md - Greple module for Markdown syntax highlighting, table formatting, and text folding (**bundled in this repo** at `lib/App/Greple/md.pm`)
-- App::ansifold - ANSI-aware text folding utility that wraps long lines while preserving escape sequences and maintaining proper indentation for nested list items (called from md module via Greple::tee)
-- App::ansicolumn - Column formatting tool with ANSI support that aligns table columns while preserving color codes (called from md module via Command::Run)
-- App::nup - Paged output
-- App::ansiecho - Color output
-- Getopt::Long::Bash - Option parsing
-- Getopt::EX::termcolor - Terminal detection
-- Getopt::EX::Config - Module option handling for md module
-- Command::Run - Function call wrapper used by md module for ansicolumn
+- If a function with the same name as an option exists, it's called after parsing (callback)
+- Invocation: `. getoptlong.sh OPTS "$@"`
 
 ## Limitations
 
@@ -960,81 +686,3 @@ minil test     # Run tests
 minil release  # Release (interactive)
 ```
 
-## Markdown Syntax Reference
-
-This section demonstrates various Markdown syntax for testing mdee rendering.
-
-### Blockquotes
-
-> This is a blockquote.
-> It can span multiple lines.
-
-> Nested blockquote:
-> > Inner quote with **bold** and `code`.
-
-### Numbered Lists
-
-1. First item
-2. Second item with `inline code`
-3. Third item with **bold text**
-
-### Nested Lists
-
-- Top level item
-  - Second level with a longer description that should wrap when displayed in narrow width
-    - Third level item
-  - Another second level
-- Back to top level
-
-1. Numbered top level
-   1. Nested numbered
-   2. Another nested
-2. Back to top
-
-### Task Lists
-
-- [x] Completed task
-- [ ] Incomplete task with `code`
-- [ ] Another todo item
-
-### Horizontal Rules
-
-Above the line.
-
----
-
-Below the line.
-
-### Links
-
-- Inline link: [Greple documentation](https://metacpan.org/pod/App::Greple)
-- Reference link: [Term::ANSIColor::Concise][tac]
-
-[tac]: https://metacpan.org/pod/Term::ANSIColor::Concise
-
-### Strikethrough
-
-This is ~~deleted text~~ with strikethrough.
-
-### Italic Text
-
-Both syntaxes are supported:
-- *Single asterisks* for italic
-- _Single underscores_ for italic
-
-Underscores require word boundaries: `foo_bar_baz` is not italic.
-
-### Mixed Formatting
-
-> **Important:** Use `--mode=dark` for dark terminals.
->
-> ~~Old syntax~~ is deprecated. Use the new **`--theme`** option instead.
-> Also supports *italic* and _emphasis_.
-
-### Definition-style Content
-
-**Term 1**
-: Definition of the first term with `code` example.
-
-**Term 2**
-: Definition of the second term spanning a longer line that might need to be wrapped when displayed.

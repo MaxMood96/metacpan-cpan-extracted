@@ -1,5 +1,5 @@
 package IO::K8s::Api::Apps::V1::DaemonSetList;
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 # ABSTRACT: Deprecated - use IO::K8s::List instead
 use strict;
 use warnings;
@@ -18,7 +18,7 @@ IO::K8s::Api::Apps::V1::DaemonSetList - Deprecated - use IO::K8s::List instead
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head1 SUPPORT
 

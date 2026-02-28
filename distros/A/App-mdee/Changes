@@ -1,5 +1,22 @@
 Revision history for Perl extension App-mdee
 
+1.06 2026-02-28T03:37:45Z
+
+    - Rename theme keys file/file_format to FILE/FILE_FORMAT
+    - Fix table separator dashes inflating column widths
+    - Add development lib path setup for ./script/mdee
+
+1.0501 2026-02-27T14:54:43Z
+
+    - Require App::nup 0.9907 for --page-number support
+
+1.05 2026-02-27T12:34:03Z
+
+    - Add --[no-]page-number option to show page number on border
+    - Update theme colors for light/dark themes
+    - Fix formfeed fillup in single-column mode with multiple files
+    - Require App::ansicolumn 1.5702
+
 1.04 2026-02-26T02:55:15Z
 
     - Add --config option for setting config parameters from command line

@@ -332,4 +332,124 @@ subtest 'autogen CRD with explicit options' => sub {
     is($obj->spec->{schedule}, '0 2 * * *', 'spec.schedule');
 };
 
+# Test 8: AutoGen recognizes IntOrString types
+subtest 'autogen IntOrString support' => sub {
+    IO::K8s::AutoGen::clear_cache();
+
+    my $schema = {
+        type => 'object',
+        properties => {
+            name => { type => 'string' },
+            port => {
+                '$ref' => '#/definitions/io.k8s.apimachinery.pkg.util.intstr.IntOrString',
+            },
+            targetPort => {
+                type   => 'string',
+                format => 'int-or-string',
+            },
+            replicas => { type => 'integer' },
+        },
+    };
+
+    my $class = IO::K8s::AutoGen::get_or_generate(
+        'test.intorstr.v1.TestService',
+        $schema,
+        {},
+        'IO::K8s::_AUTOGEN_intorstr_test',
+    );
+
+    ok($class, 'IntOrString class generated');
+
+    # Check attr registry
+    my $info = $class->_k8s_attr_info;
+    ok($info->{port}{is_int_or_string}, 'port via $ref has is_int_or_string');
+    ok($info->{targetPort}{is_int_or_string}, 'targetPort via format has is_int_or_string');
+    ok($info->{replicas}{is_int}, 'replicas is still plain Int');
+    ok($info->{name}{is_str}, 'name is still plain Str');
+
+    # Serialization: numeric -> integer, string -> string
+    my $obj = $class->new(
+        name       => 'web',
+        port       => '8080',
+        targetPort => 'http',
+        replicas   => 3,
+    );
+    my $data = $obj->TO_JSON;
+    is($data->{port}, 8080, 'IntOrStr $ref: numeric becomes integer');
+    is($data->{targetPort}, 'http', 'IntOrStr format: named port stays string');
+    is($data->{replicas}, 3, 'Int stays integer');
+
+    # JSON encoding check
+    require JSON::MaybeXS;
+    my $json_str = JSON::MaybeXS->new(utf8 => 0, canonical => 1)->encode($data);
+    like($json_str, qr/"port":8080\b/, 'JSON: port as integer');
+    like($json_str, qr/"targetPort":"http"/, 'JSON: targetPort as string');
+};
+
+# Test 9: AutoGen recognizes Quantity and Time types
+subtest 'autogen Quantity and Time support' => sub {
+    IO::K8s::AutoGen::clear_cache();
+
+    my $schema = {
+        type => 'object',
+        properties => {
+            name => { type => 'string' },
+            capacity => {
+                '$ref' => '#/definitions/io.k8s.apimachinery.pkg.api.resource.Quantity',
+            },
+            creationTimestamp => {
+                '$ref' => '#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.Time',
+            },
+            eventTime => {
+                '$ref' => '#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.MicroTime',
+            },
+            lastUpdate => {
+                type   => 'string',
+                format => 'date-time',
+            },
+            replicas => { type => 'integer' },
+        },
+    };
+
+    my $class = IO::K8s::AutoGen::get_or_generate(
+        'test.qttime.v1.TestResource',
+        $schema,
+        {},
+        'IO::K8s::_AUTOGEN_qttime_test',
+    );
+
+    ok($class, 'Quantity/Time class generated');
+
+    my $info = $class->_k8s_attr_info;
+    ok($info->{capacity}{is_quantity}, 'capacity via $ref has is_quantity');
+    ok($info->{creationTimestamp}{is_time}, 'creationTimestamp via Time $ref has is_time');
+    ok($info->{eventTime}{is_time}, 'eventTime via MicroTime $ref has is_time');
+    ok($info->{lastUpdate}{is_time}, 'lastUpdate via format: date-time has is_time');
+    ok($info->{replicas}{is_int}, 'replicas still plain Int');
+    ok($info->{name}{is_str}, 'name still plain Str');
+
+    # Serialization: all stay as strings
+    my $obj = $class->new(
+        name              => 'test',
+        capacity          => '100Gi',
+        creationTimestamp  => '2024-01-15T10:30:45Z',
+        eventTime          => '2024-01-15T10:30:45.123456Z',
+        lastUpdate         => '2026-02-28T00:00:00Z',
+        replicas           => 3,
+    );
+    my $data = $obj->TO_JSON;
+    is($data->{capacity}, '100Gi', 'Quantity stays string');
+    is($data->{creationTimestamp}, '2024-01-15T10:30:45Z', 'Time stays string');
+    is($data->{eventTime}, '2024-01-15T10:30:45.123456Z', 'MicroTime stays string');
+    is($data->{lastUpdate}, '2026-02-28T00:00:00Z', 'date-time format stays string');
+    is($data->{replicas}, 3, 'Int stays integer');
+
+    # JSON encoding: all are quoted strings
+    require JSON::MaybeXS;
+    my $json_str = JSON::MaybeXS->new(utf8 => 0, canonical => 1)->encode($data);
+    like($json_str, qr/"capacity":"100Gi"/, 'JSON: Quantity as string');
+    like($json_str, qr/"creationTimestamp":"2024-01-15T10:30:45Z"/, 'JSON: Time as string');
+    like($json_str, qr/"replicas":3\b/, 'JSON: replicas as integer');
+};
+
 done_testing;

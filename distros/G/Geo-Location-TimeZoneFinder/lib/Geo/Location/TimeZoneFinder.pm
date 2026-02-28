@@ -6,7 +6,7 @@ use 5.016;
 use warnings;
 use utf8;
 
-our $VERSION = 1.001;
+our $VERSION = 1.002;
 
 require XSLoader;
 XSLoader::load(__PACKAGE__, $VERSION);
@@ -22,14 +22,14 @@ Geo::Location::TimeZoneFinder - Map geographic coordinates to time zone names
 
 =head1 VERSION
 
-version 1.001
+version 1.002
 
 =head1 SYNOPSIS
 
   use Geo::Location::TimeZoneFinder;
 
   my $finder = Geo::Location::TimeZoneFinder->new(
-    file_base => 'combined-shapefile');
+    file_base => '/path/to/combined-shapefile');
   my @time_zones = $finder->time_zones_at(lat => $lat, lon => $lon);
 
 =head1 DESCRIPTION
@@ -43,7 +43,7 @@ Timezone Boundary Builder project.
 =head2 new
 
   my $finder = Geo::Location::TimeZoneFinder->new(
-    file_base => 'combined-shapefile');
+    file_base => '/path/to/combined-shapefile');
 
 The "file_base" parameter is the base path name for your database files.  The
 extensions F<.dbf> and F<.shp> will be added to the base path name.
@@ -106,6 +106,14 @@ No "latitude" parameter was given.
 
 No "longitude" parameter was given.
 
+=item B<< The "latitude" parameter "Y" is not numeric >>
+
+The latitude must be a number.
+
+=item B<< The "longitude" parameter "X" is not numeric >>
+
+The longitude must be a number.
+
 =item B<< The "latitude" parameter N is not a number between -90 and 90 >>
 
 The latitude must be a number between -90 and 90.
@@ -140,8 +148,9 @@ None.
 =head1 DEPENDENCIES
 
 Requires the file F<timezones.shapefile.zip> from
-L<https://github.com/evansiroky/timezone-boundary-builder>.  The zip archive
-must be extracted to a directory.
+L<https://github.com/evansiroky/timezone-boundary-builder>.  Get the zip
+archive from the latest release's assets.  The archive must be extracted to a
+directory.
 
 =head1 INCOMPATIBILITIES
 
@@ -154,7 +163,7 @@ Most Unix systems accept time zone names in the environment variable C<TZ>.
   use Geo::Location::TimeZoneFinder;
 
   my $finder = Geo::Location::TimeZoneFinder->new(
-    file_base => 'combined-shapefile');
+    file_base => '/path/to/combined-shapefile');
 
   my $tz   = $finder->time_zone_at(lat => 39.916, lon => 116.383);
   my @time = do { local $ENV{TZ} = ":$tz"; localtime };
@@ -166,7 +175,7 @@ Speed up repeated lookups by using a cache.
 
   my $cache  = Mojo::Cache->new;
   my $finder = Geo::Location::TimeZoneFinder->new(
-    file_base => 'combined-shapefile');
+    file_base => '/path/to/combined-shapefile');
 
   sub time_zone_at {
     my %args = @_;
@@ -192,13 +201,23 @@ from the comparison operations of floating-point numbers".
 Reliable Point-in-Polygon Test and Differential Coding Boolean Operations on
 Polygons". Symmetry, 10, 2018.
 
+=head1 ACKNOWLEDGEMENTS
+
+Thanks to all who have contributed patches and reported bugs:
+
+=over
+
+=item * brian d foy
+
+=back
+
 =head1 AUTHOR
 
 Andreas Vögele E<lt>voegelas@cpan.orgE<gt>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (C) 2023 Andreas Vögele
+Copyright (C) 2026 Andreas Vögele
 
 This module is free software; you can redistribute it and/or modify it under
 the same terms as Perl itself.

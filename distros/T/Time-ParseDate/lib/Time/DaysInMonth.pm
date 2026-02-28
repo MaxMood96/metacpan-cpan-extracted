@@ -2,7 +2,7 @@ package Time::DaysInMonth;
 
 use Carp;
 
-require 5.000;
+require 5.008001;
 
 @ISA = qw(Exporter);
 @EXPORT = qw(days_in is_leap);
@@ -12,7 +12,7 @@ use strict;
 
 use vars qw($VERSION %mltable);
 
-$VERSION = 99.1117;
+$VERSION = 2026.0219;
 
 CONFIG:	{
 	%mltable = qw(
@@ -68,16 +68,22 @@ a month.  That's all it does.  Really!
 
 =head1 AUTHOR
 
-David Muir Sharnoff <muir@idiom.org>
+Best Practical Solutions, LLC E<lt>modules@bestpractical.comE<gt>
+
+=head1 ORIGINAL AUTHOR
+
+David Muir Sharnoff
 
 =head1 BUGS
 
-This only deals with the "modern" calendar.  Look elsewhere for 
+This only deals with the "modern" calendar.  Look elsewhere for
 historical time and date support.
 
-=head1 LICENSE
+=head1 LICENSE AND COPYRIGHT
 
-Copyright (C) 1996-1999 David Muir Sharnoff.  License hereby
-granted for anyone to use, modify or redistribute this module at
-their own risk.  Please feed useful changes back to muir@idiom.org.
+Copyright (C) 1996-1999 David Muir Sharnoff.
+Copyright (C) 2026 Best Practical Solutions, LLC.
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.
 

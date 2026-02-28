@@ -1,5 +1,33 @@
 Revision history for Perl extension Google::GeoCoder::Smart.
 
+2.6.2  Fri Feb 27 00:00:00 2026
+  - Added `t/fixtures/geocode-ok.json` to MANIFEST so packaged tarballs include
+    the fixture required by module tests
+
+2.6.1  Fri Feb 27 00:00:00 2026
+  - Moved mocked geocode success payload from inline test heredoc into
+    `t/fixtures/geocode-ok.json` and loaded it from `t/Google-GeoCoder-Smart.t`
+  - Expanded fixture payload to include required geocode response fields used by
+    contract-style validation while preserving module test behavior
+
+2.6.0  Sun Feb 22 00:00:00 2026
+  - No material Perl module or module-test changes in this release
+
+2.5.0  Sun Feb 22 00:00:00 2026
+  - No material Perl module or module-test changes in this release
+
+2.4.0  Sun Feb 22 00:00:00 2026
+  - No material Perl module or module-test changes in this release
+
+2.3.0  Wed Feb 18 00:00:00 2026
+  - No material Perl module or module-test changes in this release
+
+2.2.1  Wed Feb 18 00:00:00 2026
+  - No material Perl module or module-test changes in this release
+
+2.2.0  Tue Feb 17 00:00:00 2026
+  - No material Perl module or module-test changes in this release
+
 2.1.0  Sun Feb 16 00:00:00 2026
   - Updated geocoding request handling for current Google Geocoding API usage
   - Removed deprecated `sensor` query parameter

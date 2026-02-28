@@ -4,7 +4,7 @@ package App::mdee;
 # POD documentation is appended from script/mdee at release time.
 # See minil.toml for details.
 
-our $VERSION = "1.04";
+our $VERSION = "1.06";
 
 1;
 =encoding utf-8
@@ -35,7 +35,7 @@ mdee - em·dee, Markdown Easy on the Eyes
      -m  --mode=#           light or dark (default: light)
      -B  --base-color=#     override base color of theme
                             (e.g., Ivory, #780043, (120,0,67))
-         --config=KEY=VALUE  set config parameter (e.g., h1=RD, file=...)
+         --config=KEY=VALUE  set config parameter (e.g., h1=RD, FILE=...)
     --cm --colormap=L=SPEC  override color for element (e.g., h1=RD)
     --hm --heading-markup=# enable markup in headings (all/bold/...)
          --show=#           set field visibility (e.g., italic=1)
@@ -45,11 +45,12 @@ mdee - em·dee, Markdown Easy on the Eyes
      -P  --page=#           page height in lines
      -S  --pane-width=#     pane width (default: 85)
     --bs --border-style=#   border style
+         --[no-]page-number page number on border (default: on)
          --[no-]pager[=#]   pager command
 
 =head1 VERSION
 
-Version 1.04
+Version 1.06
 
 =cut
 =head1 DESCRIPTION
@@ -429,7 +430,7 @@ with full color specifications (X11 names, RGB hex, or RGB decimal).
 Set config parameters from the command line.  Parameters are
 passed to the L<App::Greple::md> module via
 L<Getopt::EX::Config>.  Theme keys recognized by mdee (C<base>,
-C<file>, C<file_format>) are consumed locally and applied to both
+C<FILE>, C<FILE_FORMAT>) are consumed locally and applied to both
 light and dark themes; all other parameters are forwarded to the
 md module.
 
@@ -440,8 +441,8 @@ placeholder can be used and will be expanded at runtime.
     mdee --config h1=RD                       # red h1
     mdee --config bold=GD --config italic=YI  # green bold, yellow italic
     mdee --config h1='L25D/R;E'               # custom h1 with background
-    mdee --config file='L25D/R;E'             # red file label
-    mdee --config file_format=%s:             # simple format
+    mdee --config FILE='L25D/R;E'             # red file label
+    mdee --config FILE_FORMAT=%s:             # simple format
     mdee --config hashed.h3=1                 # enable h3 closing hashes
 
 Theme keys consumed by mdee:
@@ -450,9 +451,9 @@ Theme keys consumed by mdee:
 
 =item C<base> - Base color (equivalent to C<--base-color>)
 
-=item C<file> - Color spec for file label (default: C<L25D/${base};E> for light, C<L00D/${base};E> for dark)
+=item C<FILE> - Color spec for file label (default: C<L25D/${base};E> for light, C<L00D/${base};E> for dark).  This is passed to greple's C<FILE> label and cannot be set via C<--cm>.
 
-=item C<file_format> - Format string for file label passed to greple's C<--format FILE=> (default: C<\n  %s\n\n>)
+=item C<FILE_FORMAT> - Format string for file label passed to greple's C<--format FILE=> (default: C<\n  %s\n\n>).  Cannot be set via C<--cm>.
 
 =back
 
@@ -574,6 +575,11 @@ width.
 =item B<--bs>=I<STYLE>, B<--border-style>=I<STYLE>
 
 Set the border style.
+
+=item B<-->[B<no->]B<page-number>
+
+Show page number on the bottom border of each column.  Enabled by
+default.  Use C<--no-page-number> to disable.
 
 =back
 

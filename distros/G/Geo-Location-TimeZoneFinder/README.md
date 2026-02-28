@@ -5,14 +5,16 @@ A Perl module that maps geographic coordinates to time zone names such as
 Timezone Boundary Builder project.
 
     use Geo::Location::TimeZoneFinder;
-    my $finder = Geo::Location::TimeZoneFinder->new(file_base => 'shapefile');
+    my $finder = Geo::Location::TimeZoneFinder->new(
+      file_base => '/path/to/combined-shapefile');
     my @time_zones = $finder->time_zones_at(lat => $lat, lon => $lon);
 
 ## DEPENDENCIES
 
 Requires the file "timezones.shapefile.zip" from the [Timezone Boundary
-Builder](https://github.com/evansiroky/timezone-boundary-builder) project.
-The zip archive must be extracted to a directory.
+Builder](https://github.com/evansiroky/timezone-boundary-builder) project.  Get
+the zip archive from the latest release's assets.  The archive must be
+extracted to a directory.
 
 ## INSTALLATION
 
@@ -29,7 +31,7 @@ Type the following command to see the module usage information:
 
 ## LICENSE AND COPYRIGHT
 
-Copyright (C) 2023 Andreas Vögele
+Copyright (C) 2026 Andreas Vögele
 
 This module is free software; you can redistribute it and/or modify it under
 the same terms as Perl itself.

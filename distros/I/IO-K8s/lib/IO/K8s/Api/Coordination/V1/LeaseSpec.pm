@@ -1,9 +1,9 @@
 package IO::K8s::Api::Coordination::V1::LeaseSpec;
 # ABSTRACT: LeaseSpec is a specification of a Lease.
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 use IO::K8s::Resource;
 
-k8s acquireTime => Str;
+k8s acquireTime => Time;
 
 
 k8s holderIdentity => Str;
@@ -18,7 +18,7 @@ k8s leaseTransitions => Int;
 k8s preferredHolder => Str;
 
 
-k8s renewTime => Str;
+k8s renewTime => Time;
 
 
 k8s strategy => Str;
@@ -38,7 +38,7 @@ IO::K8s::Api::Coordination::V1::LeaseSpec - LeaseSpec is a specification of a Le
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head2 acquireTime
 

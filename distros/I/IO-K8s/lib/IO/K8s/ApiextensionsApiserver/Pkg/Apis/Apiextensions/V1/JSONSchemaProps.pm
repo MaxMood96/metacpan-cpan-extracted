@@ -1,11 +1,11 @@
 package IO::K8s::ApiextensionsApiserver::Pkg::Apis::Apiextensions::V1::JSONSchemaProps;
 # ABSTRACT: JSONSchemaProps is a JSON-Schema following Specification Draft 4 (http://json-schema.org/).
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 use IO::K8s::Resource;
 
-k8s $ref => Str;
+k8s '$ref' => Str;
 
-k8s $schema => Str;
+k8s '$schema' => Str;
 
 k8s additionalItems => 'Apiextensions::V1::JSONSchemaPropsOrBool';
 
@@ -79,25 +79,25 @@ k8s type => Str;
 
 k8s uniqueItems => Bool;
 
-k8s x-kubernetes-embedded-resource => Bool;
+k8s 'x-kubernetes-embedded-resource' => Bool;
 
 
-k8s x-kubernetes-int-or-string => Bool;
+k8s 'x-kubernetes-int-or-string' => Bool;
 
 
-k8s x-kubernetes-list-map-keys => [Str];
+k8s 'x-kubernetes-list-map-keys' => [Str];
 
 
-k8s x-kubernetes-list-type => Str;
+k8s 'x-kubernetes-list-type' => Str;
 
 
-k8s x-kubernetes-map-type => Str;
+k8s 'x-kubernetes-map-type' => Str;
 
 
-k8s x-kubernetes-preserve-unknown-fields => Bool;
+k8s 'x-kubernetes-preserve-unknown-fields' => Bool;
 
 
-k8s x-kubernetes-validations => ['Apiextensions::V1::ValidationRule'];
+k8s 'x-kubernetes-validations' => ['Apiextensions::V1::ValidationRule'];
 
 
 1;
@@ -114,7 +114,7 @@ IO::K8s::ApiextensionsApiserver::Pkg::Apis::Apiextensions::V1::JSONSchemaProps -
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head2 default
 

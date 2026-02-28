@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2014-2016 -- leonerd@leonerd.org.uk
 
-package Tickit::Debug 0.74;
+package Tickit::Debug 0.75;
 
 use v5.14;
 use warnings;
@@ -114,7 +114,7 @@ Typically this is most useful to start a C<Tickit>-based application in a new
 terminal but have its debug logging printed to STDERR of the original terminal
 the new one was launched from. For example
 
- $ TICKIT_DEBUG_FD=3 TICKIT_DEBUG_FLAGS=... $TERM perl my-tickit-app.pl 3>&2
+   $ TICKIT_DEBUG_FD=3 TICKIT_DEBUG_FLAGS=... $TERM perl my-tickit-app.pl 3>&2
 
 This requests that C<Tickit::Debug> log to file descriptor 3, which has been
 created by copying the original shell's standard error output, and so logging
@@ -126,7 +126,7 @@ Gives the name of a file to open and write logging to, if C<TICKIT_DEBUG_FD>
 is not set. If this is not set either, a filename will be generated using the
 PID of the process, named as
 
- tickit-PID.log
+   tickit-PID.log
 
 =cut
 
@@ -136,7 +136,7 @@ PID of the process, named as
 
 =head2 log
 
-   Tickit::Debug->log( $flag => $format, @args )
+   Tickit::Debug->log( $flag => $format, @args );
 
 Prints a line to the debug log if the specified C<$flag> is present in the set
 of enabled flags.

@@ -5,7 +5,7 @@ use warnings;
 
 package Version::Semantic;
 
-$Version::Semantic::VERSION = 'v1.2.0';
+$Version::Semantic::VERSION = 'v1.3.0';
 
 use overload '<=>' => 'compare_to', '""' => 'to_string';
 
@@ -55,20 +55,20 @@ sub has_build       { defined shift->{ build } }
   # On purpose use "build" (the BNF symbol name) instead of "buildmetadata" as
   # the name of the last named capture group
   # <valid semver> (ok)
-  my $semver = qr/
-  \A
-  (?<prefix> $prefix_re)?
-  (?<major> $num_id_re) \. (?<minor> $num_id_re) \. (?<patch> $num_id_re)
-  (?: -  (?<pre_release> $pre_release_re) )?
-  (?: \+ (?<build> $build_re) )?
-  \z
+  my $semver_re = qr/
+    (?<prefix> $prefix_re)?
+    (?<major> $num_id_re) \. (?<minor> $num_id_re) \. (?<patch> $num_id_re)
+    (?: -  (?<pre_release> $pre_release_re) )?
+    (?: \+ (?<build> $build_re) )?
   /x;
+  sub semver_re { $semver_re }
 
   # Constructor as factory method
   sub parse {
     my ( $class, $version ) = @_;
+    $version //= '';
 
-    $version =~ $semver
+    $version =~ m/\A$semver_re\z/
       or _croakf "Version '%s' is not a semantic version", $version;
 
     $class->new( %+ )

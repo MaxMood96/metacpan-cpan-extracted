@@ -43,6 +43,7 @@
             "MooX::Cmd" : "0",
             "MooX::Options" : "0",
             "Path::Tiny" : "0",
+            "Throwable" : "0",
             "Types::Standard" : "0",
             "YAML::XS" : "0",
             "namespace::clean" : "0"
@@ -69,7 +70,7 @@
       "x_IRC" : "irc://irc.perl.org/#kubernetes",
       "x_IRC_user" : "Getty"
    },
-   "version" : "1.002",
+   "version" : "1.003",
    "x_Dist_Zilla" : {
       "perl" : {
          "version" : "5.036000"
@@ -396,7 +397,7 @@
                   "branch" : null,
                   "changelog" : "Changes",
                   "signed" : 0,
-                  "tag" : "1.002",
+                  "tag" : "1.003",
                   "tag_format" : "%v",
                   "tag_message" : "v%V"
                },

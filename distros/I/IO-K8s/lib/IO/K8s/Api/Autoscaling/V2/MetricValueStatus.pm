@@ -1,15 +1,15 @@
 package IO::K8s::Api::Autoscaling::V2::MetricValueStatus;
 # ABSTRACT: MetricValueStatus holds the current value for a metric
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 use IO::K8s::Resource;
 
 k8s averageUtilization => Int;
 
 
-k8s averageValue => Str;
+k8s averageValue => Quantity;
 
 
-k8s value => Str;
+k8s value => Quantity;
 
 
 1;
@@ -26,7 +26,7 @@ IO::K8s::Api::Autoscaling::V2::MetricValueStatus - MetricValueStatus holds the c
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head2 averageUtilization
 

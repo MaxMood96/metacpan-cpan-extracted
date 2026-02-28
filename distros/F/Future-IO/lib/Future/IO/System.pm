@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2023-2026 -- leonerd@leonerd.org.uk
 
-package Future::IO::System 0.21;
+package Future::IO::System 0.22;
 
 use v5.14;
 use warnings;
@@ -112,6 +112,8 @@ sub run
 {
    shift;
    my %params = @_;
+
+   require POSIX;
 
    my $argv     = $params{argv};
    my $want_in  = defined $params{in};

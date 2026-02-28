@@ -1,13 +1,13 @@
 package App::nup;
 
-our $VERSION = "0.9906";
+our $VERSION = "0.9908";
 
 1;
 =encoding utf-8
 
 =head1 NAME
 
-nup - N-up multi-column paged output for commands and files
+nup - n-up, multi-column paged output for commands and files
 
 =head1 SYNOPSIS
 
@@ -32,6 +32,8 @@ nup - N-up multi-column paged output for commands and files
     --bs --border-style=#   border style (default: heavy-box)
     --ls --line-style=#     line style (none/truncate/wrap/wordwrap)
     --cm --colormap=#       color mapping (LABEL=COLOR)
+         --[no-]page-number page number on border (default: on)
+         --textconv[=EXT]   textconv for non-text files
          --pager=#          pager command (empty to disable)
          --no-pager         disable pager
          --white-board      black on white board
@@ -41,14 +43,14 @@ nup - N-up multi-column paged output for commands and files
 
 =head1 VERSION
 
-Version 0.9906
+Version 0.9908
 
 =cut
 =head1 DESCRIPTION
 
-B<nup> is a simple wrapper script for C<optex -Mup>.  It provides a
-convenient way to view files or run commands with N-up output
-formatting using the L<App::optex::up> module.
+B<N-up> (command: C<nup>) is a multi-column paged output tool.
+It provides a convenient way to view files or run commands in
+n-up layout using the L<App::optex::up> module through C<optex>.
 
 =begin html
 
@@ -56,9 +58,9 @@ formatting using the L<App::optex::up> module.
 
 =end html
 
-B<nup> automatically detects the mode based on the first argument:
-if it is an existing file, file view mode is used; if it is an
-executable command, command mode is used.  Use C<-e> option to
+C<nup> automatically detects the mode based on the first argument:
+if it is an existing file, n-up file view mode is used; if it is an
+executable command, n-up command mode is used.  Use C<-e> option to
 force command mode when needed.
 
 =head1 OPTIONS
@@ -117,7 +119,7 @@ output.
 =item B<-D>, B<--document>
 
 Enable document mode for ansicolumn.  This mode is optimized for
-viewing documents with page-based layout.  Enabled by default.
+viewing documents with n-up page-based layout.  Enabled by default.
 Use C<--no-document> to disable.
 
 =item B<-F>, B<--fold>
@@ -176,9 +178,32 @@ Set the line style. Available: C<none>, C<truncate>, C<wrap>, C<wordwrap>.
 Set color mapping. Specify as C<LABEL=COLOR> (e.g., C<--cm=BORDER=R>).
 Available labels: C<TEXT>, C<BORDER>.
 
+=item B<-->[B<no->]B<page-number>
+
+Show page number on the bottom border of each column.  Enabled by
+default.  Use C<--no-page-number> to disable.
+
 =item B<--white-board>, B<--black-board>, B<--green-board>, B<--slate-board>
 
 Predefined color schemes for board-style display.
+
+=back
+
+=head2 Text Conversion
+
+=over 4
+
+=item B<--textconv>[=I<EXT,...>]
+
+Enable text conversion for non-text files using
+L<App::optex::textconv>.  When any of the specified file extensions
+are found in the arguments, the C<textconv> module is loaded to
+convert them to text before display.
+
+Default extensions:
+C<pdf,docx,docm,pptx,pptm,xlsx,xlsm,jpg,jpeg>.
+
+Use C<--textconv=none> to disable.
 
 =back
 
@@ -199,11 +224,31 @@ Disable pager.
 
 =back
 
+=head2 Less Environment Variables
+
+C<nup> sets the following environment variables when they are not
+already defined, to ensure proper display with C<less>:
+
+=over 4
+
+=item C<LESS>
+
+Default: C<-R>.  Required for ANSI color sequences.
+
+=item C<LESSANSIENDCHARS>
+
+Default: C<mK>.  Recognizes SGR (C<m>) and erase line (C<K>)
+sequences.
+
+=back
+
 =head1 EXAMPLES
 
-    nup man nup                # view manual in multi-column
+Typical n-up usage:
+
+    nup man nup                # view manual in n-up layout
     nup -C2 man perl           # 2 columns
-    nup -G2x2 man perl         # 2x2 grid (4-up)
+    nup -G2x2 man perl         # 2x2 grid (4-up layout)
     nup -F man perl            # fold mode (no pagination)
     nup file1.txt file2.txt    # view files side by side
     nup -e ./script.sh         # force command mode for a file
@@ -217,7 +262,7 @@ Using L<cpanminus|https://metacpan.org/pod/App::cpanminus>:
 =head1 DIAGNOSTICS
 
 Both stdout and stderr of the command are merged and passed through
-the output filter.  Error messages will appear in the paged output.
+the n-up output filter.  Error messages will appear in the paged output.
 
 =head1 EXIT STATUS
 
@@ -234,7 +279,7 @@ Kazumasa Utashiro
 
 =head1 LICENSE
 
-Copyright 2025 Kazumasa Utashiro.
+Copyright 2025-2026 Kazumasa Utashiro.
 
 This software is released under the MIT License.
 L<https://opensource.org/licenses/MIT>

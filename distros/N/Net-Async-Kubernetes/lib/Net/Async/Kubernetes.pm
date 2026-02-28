@@ -1,6 +1,6 @@
 package Net::Async::Kubernetes;
 # ABSTRACT: Async Kubernetes client for IO::Async
-our $VERSION = '0.002';
+our $VERSION = '0.004';
 use strict;
 use warnings;
 use parent 'IO::Async::Notifier';
@@ -49,16 +49,24 @@ sub configure {
         $self->{resource_map_from_cluster} = delete $params{resource_map_from_cluster};
     }
 
-    # Resolve kubeconfig to server/credentials if needed
-    if ($self->{kubeconfig} && !$self->{server}) {
+    # Resolve server/credentials via Kubeconfig (handles kubeconfig files
+    # and in-cluster service account auto-detection)
+    if (!$self->{server}) {
         require Kubernetes::REST::Kubeconfig;
         my $kc = Kubernetes::REST::Kubeconfig->new(
-            kubeconfig_path => $self->{kubeconfig},
-            ($self->{context} ? (context_name => $self->{context}) : ()),
+            ($self->{kubeconfig} ? (kubeconfig_path => $self->{kubeconfig}) : ()),
+            ($self->{context}    ? (context_name    => $self->{context})    : ()),
         );
-        my $api = $kc->api;
-        $self->{server}      = $api->server;
-        $self->{credentials} = $api->credentials;
+        if ($self->{kubeconfig}) {
+            # Explicit kubeconfig — must resolve or croak
+            my $api = $kc->api;
+            $self->{server}      = $api->server;
+            $self->{credentials} = $api->credentials;
+        } elsif (my $api = eval { $kc->api }) {
+            # Auto-detect: kubeconfig default path or in-cluster
+            $self->{server}      = $api->server;
+            $self->{credentials} = $api->credentials;
+        }
     }
 
     $self->SUPER::configure(%params);
@@ -419,7 +427,7 @@ Net::Async::Kubernetes - Async Kubernetes client for IO::Async
 
 =head1 VERSION
 
-version 0.002
+version 0.004
 
 =head1 SYNOPSIS
 
@@ -432,6 +440,10 @@ version 0.002
     my $kube = Net::Async::Kubernetes->new(
         kubeconfig => "$ENV{HOME}/.kube/config",
     );
+    $loop->add($kube);
+
+    # In-cluster: auto-detects service account token (no config needed)
+    my $kube = Net::Async::Kubernetes->new;
     $loop->add($kube);
 
     # Or with explicit server/credentials
@@ -477,6 +489,20 @@ Request preparation and response processing are delegated to
 L<Kubernetes::REST>, so the same IO::K8s object inflation, short class
 names, and CRD support are available.
 
+Authentication is automatically resolved in the following order:
+
+=over 4
+
+=item 1. Explicit C<server> and C<credentials> parameters
+
+=item 2. C<kubeconfig> file (via L<Kubernetes::REST::Kubeconfig>)
+
+=item 3. In-cluster service account token at
+C</var/run/secrets/kubernetes.io/serviceaccount/token> (automatic when
+running inside a Kubernetes pod)
+
+=back
+
 =head2 configure
 
 Internal L<IO::Async::Notifier> configuration method. Handles initialization
@@ -485,6 +511,11 @@ and C<resource_map_from_cluster> parameters.
 
 If C<kubeconfig> is provided without explicit C<server> or C<credentials>,
 they are loaded automatically via L<Kubernetes::REST::Kubeconfig>.
+
+When running inside a Kubernetes pod (no C<kubeconfig> or C<server> set),
+the service account token at
+C</var/run/secrets/kubernetes.io/serviceaccount/token> is used
+automatically for in-cluster authentication.
 
 =head2 kubeconfig
 

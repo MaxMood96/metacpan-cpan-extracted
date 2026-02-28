@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2009-2021 -- leonerd@leonerd.org.uk
 
-package Tickit::Test::MockTerm 0.74;
+package Tickit::Test::MockTerm 0.75;
 
 use v5.14;
 use warnings;

@@ -1,9 +1,9 @@
 package IO::K8s::Api::Apiserverinternal::V1alpha1::StorageVersionCondition;
 # ABSTRACT: Describes the state of the storageVersion at a certain point.
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 use IO::K8s::Resource;
 
-k8s lastTransitionTime => Str;
+k8s lastTransitionTime => Time;
 
 
 k8s message => Str, 'required';
@@ -35,7 +35,7 @@ IO::K8s::Api::Apiserverinternal::V1alpha1::StorageVersionCondition - Describes t
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head2 lastTransitionTime
 

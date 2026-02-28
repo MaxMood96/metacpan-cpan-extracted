@@ -1,5 +1,13 @@
 Revision history for Perl module Time::ParseDate
 
+2026.0219 2026-02-19
+ - Add support for trailing Z/z as UTC in ISO 8601 timestamps.
+   From Kai Storbeck. https://github.com/muir/Time-modules/pull/10
+ - Update minimum perl version to 5.8.1 for all modules.
+ - Update new AUTHOR, keeping credit for previous authors (thanks to all!)
+ - Update the custom license to "same as Perl" for all
+ - README is now generated from the POD
+
 2015.1030 2015-10-30
         - Not requirement for Time::Piece for tests.
 2015.0925 2015-09-25

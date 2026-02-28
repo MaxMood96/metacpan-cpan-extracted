@@ -1,5 +1,5 @@
 package Kubernetes::REST::Call::v2beta1::Autoscaling::WatchNamespacedHorizontalPodAutoscaler;
-our $VERSION = '1.002';
+our $VERSION = '1.003';
 # ABSTRACT: Deprecated - use the new Kubernetes::REST API instead
 use strict;
 use warnings;
@@ -18,7 +18,7 @@ Kubernetes::REST::Call::v2beta1::Autoscaling::WatchNamespacedHorizontalPodAutosc
 
 =head1 VERSION
 
-version 1.002
+version 1.003
 
 =head1 SUPPORT
 

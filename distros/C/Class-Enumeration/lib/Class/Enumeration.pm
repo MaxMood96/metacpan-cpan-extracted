@@ -1,11 +1,11 @@
 # Prefer numeric version for backwards compatibility
-BEGIN { require 5.010_001 }; ## no critic ( RequireUseStrict, RequireUseWarnings )
+BEGIN { require 5.010001 }; ## no critic ( RequireUseStrict, RequireUseWarnings )
 use strict;
 use warnings;
 
 package Class::Enumeration;
 
-$Class::Enumeration::VERSION = 'v1.3.0';
+$Class::Enumeration::VERSION = 'v1.3.1';
 
 use overload
   '""'     => 'to_string',

@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2021-2026 -- leonerd@leonerd.org.uk
 
-package Test::Future::IO::Impl 0.19;
+package Test::Future::IO::Impl 0.20;
 
 use v5.14;
 use warnings;
@@ -318,9 +318,10 @@ sub run_poll_test
       pipe my ( $rd, $wr ) or die "Cannot pipe() - $!";
       close $wr;
 
-      my $f = Future::IO->poll( $rd, POLLHUP );
+      my $f = Future::IO->poll( $rd, POLLIN|POLLHUP );
 
-      is( scalar $f->get, POLLHUP, "Future::IO->poll(POLLHUP) yields POLLHUP on hangup-in filehandle" );
+      is( ( scalar $f->get ) & POLLHUP, POLLHUP,
+         "Future::IO->poll(POLLIN) yields at least POLLHUP on hangup-in filehandle" );
    }
 
    # POLLERR
@@ -329,7 +330,7 @@ sub run_poll_test
       pipe my ( $rd, $wr ) or die "Cannot pipe() - $!";
       close $rd;
 
-      my $f = Future::IO->poll( $wr, POLLOUT );
+      my $f = Future::IO->poll( $wr, POLLOUT|POLLHUP );
 
       # We expect at least one of POLLERR or POLLHUP, we might also see POLLOUT
       # well but lets not care about that

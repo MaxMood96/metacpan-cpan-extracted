@@ -1,6 +1,6 @@
 package Kubernetes::REST::Kubeconfig;
 # ABSTRACT: Parse kubeconfig files and create Kubernetes::REST instances
-our $VERSION = '1.002';
+our $VERSION = '1.003';
 use Moo;
 use Carp qw(croak);
 use YAML::XS ();
@@ -29,7 +29,7 @@ has _config => (
     builder => sub {
         my $self = shift;
         my $path = $self->kubeconfig_path;
-        croak "Kubeconfig not found: $path" unless -f $path;
+        return undef unless -f $path;
         return YAML::XS::LoadFile($path);
     },
 );
@@ -43,7 +43,9 @@ sub current_context_name {
 
 sub contexts {
     my $self = shift;
-    return [ map { $_->{name} } @{$self->_config->{contexts} // []} ];
+    my $config = $self->_config
+        or croak "Kubeconfig not found: " . $self->kubeconfig_path;
+    return [ map { $_->{name} } @{$config->{contexts} // []} ];
 }
 
 
@@ -94,9 +96,16 @@ sub _resolve_cert {
 
 sub api {
     my ($self, $context_name) = @_;
+
+
+    # If no kubeconfig, try in-cluster
+    unless ($self->_config) {
+        return $self->_in_cluster_api
+            // croak "Kubeconfig not found: " . $self->kubeconfig_path
+                   . " and not running in-cluster";
+    }
+
     $context_name //= $self->current_context_name;
-
-
     my $ctx = $self->context($context_name);
     my $cluster = $self->cluster($ctx->{cluster});
     my $user = $self->user($ctx->{user});
@@ -163,6 +172,29 @@ sub _exec_credential {
     return Kubernetes::REST::AuthToken->new(token => $token);
 }
 
+my $SA_TOKEN = '/var/run/secrets/kubernetes.io/serviceaccount/token';
+my $SA_CA    = '/var/run/secrets/kubernetes.io/serviceaccount/ca.crt';
+
+sub _in_cluster_api {
+    my ($self) = @_;
+    return undef unless -f $SA_TOKEN;
+
+    my $host = $ENV{KUBERNETES_SERVICE_HOST} // 'kubernetes.default.svc';
+    my $port = $ENV{KUBERNETES_SERVICE_PORT} // '443';
+    open my $fh, '<', $SA_TOKEN or croak "Cannot read $SA_TOKEN: $!";
+    my $token = do { local $/; <$fh> };
+    chomp $token;
+
+    return Kubernetes::REST->new(
+        server => Kubernetes::REST::Server->new(
+            endpoint          => "https://$host:$port",
+            ssl_ca_file       => $SA_CA,
+            ssl_verify_server => 1,
+        ),
+        credentials => Kubernetes::REST::AuthToken->new(token => $token),
+    );
+}
+
 1;
 
 __END__
@@ -177,7 +209,7 @@ Kubernetes::REST::Kubeconfig - Parse kubeconfig files and create Kubernetes::RES
 
 =head1 VERSION
 
-version 1.002
+version 1.003
 
 =head1 SYNOPSIS
 
@@ -199,9 +231,15 @@ version 1.002
     # Get API for specific context
     my $api = $kc->api('production');
 
+    # Inside a Kubernetes pod: no kubeconfig needed, auto-detects service account
+    my $api = Kubernetes::REST::Kubeconfig->new->api;
+
 =head1 DESCRIPTION
 
 Parses Kubernetes kubeconfig files (typically C<~/.kube/config>) and creates configured L<Kubernetes::REST> instances.
+
+When no kubeconfig file is found, automatically falls back to in-cluster
+authentication using the pod's service account token.
 
 Supports:
 
@@ -218,6 +256,8 @@ Supports:
 =item * External certificate files
 
 =item * Exec-based credential plugins
+
+=item * In-cluster service account auto-detection
 
 =back
 
@@ -248,19 +288,9 @@ Returns an arrayref of all available context names from the kubeconfig.
 
 Create a L<Kubernetes::REST> instance configured from the kubeconfig. If C<$context_name> is provided, uses that context; otherwise uses the current context.
 
-Automatically resolves:
-
-=over 4
-
-=item * Server endpoint and SSL settings
-
-=item * Authentication credentials (token or exec plugin)
-
-=item * Client certificates (from files or inline base64 data)
-
-=item * CA certificate for server verification
-
-=back
+Falls back to in-cluster service account authentication when no kubeconfig
+file is found and the pod has a mounted token at
+C</var/run/secrets/kubernetes.io/serviceaccount/token>.
 
 =head1 SEE ALSO
 

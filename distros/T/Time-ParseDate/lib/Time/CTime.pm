@@ -1,7 +1,7 @@
 package Time::CTime;
 
 
-require 5.000;
+require 5.008001;
 
 use Time::Timezone;
 use Time::CTime;
@@ -16,7 +16,7 @@ use strict;
 use vars qw(@DoW @DayOfWeek @MoY @MonthOfYear %strftime_conversion $VERSION);
 use vars qw($template $sec $min $hour $mday $mon $year $wday $yday $isdst);
 
-$VERSION = 2011.0505;
+$VERSION = 2026.0219;
 
 CONFIG: {
     @DoW = 	   qw(Sun Mon Tue Wed Thu Fri Sat);
@@ -188,18 +188,25 @@ The POSIX module has very similar functionality.  You should consider
 using it instead if you do not have allergic reactions to system 
 libraries.
 
+=head1 AUTHOR
+
+Best Practical Solutions, LLC E<lt>modules@bestpractical.comE<gt>
+
+=head1 ORIGINAL AUTHOR
+
+David Muir Sharnoff
+
 =head1 GENESIS
 
-Written by David Muir Sharnoff <muir@idiom.org>.
+The starting point for this package was a posting by
+Paul Foley.
 
-The starting point for this package was a posting by 
-Paul Foley <paul@ascent.com> 
+=head1 LICENSE AND COPYRIGHT
 
-=head1 LICENSE
+Copyright (C) 1996-2010 David Muir Sharnoff.
+Copyright (C) 2011 Google, Inc.
+Copyright (C) 2026 Best Practical Solutions, LLC.
 
-Copyright (C) 1996-2010 David Muir Sharnoff.  
-Copyright (C) 2011 Google, Inc.  
-License hereby
-granted for anyone to use, modify or redistribute this module at
-their own risk.  Please feed useful changes back to cpan@dave.sharnoff.org.
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.
 

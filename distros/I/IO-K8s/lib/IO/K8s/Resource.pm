@@ -1,13 +1,15 @@
 package IO::K8s::Resource;
 # ABSTRACT: Base class for all Kubernetes resources
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 use v5.10;
 use Moo;
 use Import::Into;
 use Package::Stash;
 use Types::Standard qw( ArrayRef Bool HashRef InstanceOf Int Maybe Str );
-use JSON::MaybeXS ();
+use IO::K8s::Types qw( IntOrStr Quantity Time );
 use Scalar::Util qw(blessed);
+
+with 'IO::K8s::Role::Resource';
 
 # Registry: class -> attr -> { type, class, is_array, is_hash, is_bool, is_int }
 # Use 'our' to make it a proper package variable accessible via symbol table
@@ -40,36 +42,41 @@ my %_class_prefix = (
     'KubeAggregator' => 'IO::K8s::KubeAggregator::Pkg::Apis::Apiregistration',
 );
 
-# JSON encoder for serialization
-has json => (
-    is      => 'ro',
-    lazy    => 1,
-    builder => '_build_json',
+# Type flag lookup table
+my %TYPE_FLAGS = (
+    Str      => { is_str => 1 },
+    Int      => { is_int => 1 },
+    Bool     => { is_bool => 1 },
+    IntOrStr => { is_int_or_string => 1 },
+    Quantity => { is_quantity => 1 },
+    Time     => { is_time => 1 },
 );
 
-sub _build_json {
-    return JSON::MaybeXS->new(utf8 => 1, canonical => 1);
-}
+# For string path: map type name to base Type::Tiny constraint
+# Custom K8s types (IntOrStr, Quantity, Time) fall back to Str
+my %STR_ISA_MAP = (
+    Str  => Str,
+    Int  => Int,
+    Bool => Bool,
+);
 
 sub import {
     my $class = shift;
     my $caller = caller;
-
-    # Install Moo into caller (using mst's Import::Into)
-    Moo->import::into($caller);
-
-    # Import Types::Standard into caller so they can use Str, Int, Bool directly
-    Types::Standard->import::into($caller, qw( Str Int Bool ));
-
-    # Set up inheritance via Moo's extends
-    $caller->can('extends')->(__PACKAGE__);
-
-    # Export k8s function via Package::Stash
-    my $stash = Package::Stash->new($caller);
-    my $captured_caller = $caller;  # Capture in own lexical
-    $stash->add_symbol('&k8s', sub { IO::K8s::Resource::_k8s($captured_caller, @_) });
+    $class->_setup_class($caller);
 }
 
+sub _setup_class {
+    my ($class, $target) = @_;
+    require Moo;
+    require Import::Into;
+    Moo->import::into($target);
+    Types::Standard->import::into($target, qw( Str Int Bool ));
+    IO::K8s::Types->import::into($target, qw( IntOrStr Quantity Time ));
+    $target->can('extends')->(__PACKAGE__);
+    my $stash = Package::Stash->new($target);
+    $stash->add_symbol('&k8s', sub { IO::K8s::Resource::_k8s($target, @_) });
+}
 
 sub _expand_class {
     my ($short) = @_;
@@ -98,8 +105,21 @@ sub _is_type_tiny {
     return blessed($obj) && $obj->isa('Type::Tiny');
 }
 
+# Sanitize JSON field names into valid Perl identifiers for Moo attributes
+# $ref -> _ref, $schema -> _schema, x-kubernetes-foo -> x_kubernetes_foo
+sub _sanitize_attr_name {
+    my ($name) = @_;
+    return $name unless $name =~ /[^a-zA-Z0-9_]/;
+    (my $safe = $name) =~ s/^\$/_/;
+    $safe =~ s/-/_/g;
+    return $safe;
+}
+
 sub _k8s {
     my ($caller, $name, $type_spec, $required_marker) = @_;
+
+    my $json_key = $name;
+    my $attr_name = _sanitize_attr_name($name);
 
     # Ensure the registry entry exists
     $_attr_registry{$caller} = {} unless exists $_attr_registry{$caller};
@@ -115,27 +135,18 @@ sub _k8s {
         $required = 1;
     }
 
-    # Handle Type::Tiny objects directly (Str, Int, Bool)
+    # Handle Type::Tiny objects directly (Str, Int, Bool, IntOrStr, Quantity, Time)
     if (_is_type_tiny($type_spec)) {
-        my $type_name = $type_spec->name;
-        if ($type_name eq 'Str') {
-            $info{is_str} = 1;
-        } elsif ($type_name eq 'Int') {
-            $info{is_int} = 1;
-        } elsif ($type_name eq 'Bool') {
-            $info{is_bool} = 1;
+        my $flags = $TYPE_FLAGS{$type_spec->name};
+        if ($flags) {
+            %info = %$flags;
+            $isa = $required ? $type_spec : Maybe[$type_spec];
         }
-        $isa = $required ? $type_spec : Maybe[$type_spec];
     } elsif (!ref $type_spec) {
-        if ($type_spec eq 'Str') {
-            $info{is_str} = 1;
-            $isa = $required ? Str : Maybe[Str];
-        } elsif ($type_spec eq 'Int') {
-            $info{is_int} = 1;
-            $isa = $required ? Int : Maybe[Int];
-        } elsif ($type_spec eq 'Bool') {
-            $info{is_bool} = 1;
-            $isa = $required ? Bool : Maybe[Bool];
+        if (my $flags = $TYPE_FLAGS{$type_spec}) {
+            %info = %$flags;
+            my $base = $STR_ISA_MAP{$type_spec} // Str;
+            $isa = $required ? $base : Maybe[$base];
         } else {
             my $full_class = _expand_class($type_spec);
             $info{is_object} = 1;
@@ -181,189 +192,23 @@ sub _k8s {
     }
 
 
+    # Store json_key when it differs from the Perl attribute name
+    $info{json_key} = $json_key if $attr_name ne $json_key;
+
     # Register - use hash slice to copy values, not reference
-    $_attr_registry{$caller}{$name} = { %info };
+    $_attr_registry{$caller}{$attr_name} = { %info };
     no strict 'refs';
-    push @{"${caller}::_k8s_attributes"}, $name;
+    push @{"${caller}::_k8s_attributes"}, $attr_name;
 
     # Only create the attribute if it doesn't already exist (e.g., from a role)
-    return if $caller->can($name);
+    return if $caller->can($attr_name);
 
-    # Call Moo's has
+    # Call Moo's has — use init_arg to map JSON key to Perl-safe attribute name
     my $has = $caller->can('has');
-    $has->($name, is => 'rw', isa => $isa, ($required ? (required => 1) : ()));
-}
-
-# Get attribute info
-sub _k8s_attr_info {
-    my ($class) = @_;
-    $class = ref($class) if ref($class);
-    return $_attr_registry{$class} // {};
-}
-
-# Get attribute list
-sub _k8s_attributes {
-    my ($self) = @_;
-    my $class = ref($self) || $self;
-    no strict 'refs';
-    return \@{"${class}::_k8s_attributes"};
-}
-
-sub TO_JSON {
-    my $self = shift;
-    my %data;
-    my $attrs = $self->_k8s_attributes;
-    my $info = _k8s_attr_info($self);
-
-    # Add apiVersion, kind, and metadata for APIObjects (those with the role)
-    if ($self->can('_is_resource') && $self->_is_resource) {
-        $data{apiVersion} = $self->api_version if $self->api_version;
-        $data{kind} = $self->kind if $self->kind;
-        # metadata comes from the Role, not from k8s DSL
-        if ($self->can('metadata') && $self->metadata) {
-            $data{metadata} = $self->metadata->TO_JSON;
-        }
-    }
-
-    for my $attr (@$attrs) {
-        my $value = $self->$attr;
-        next unless defined $value;
-
-        my $attr_info = $info->{$attr} // {};
-
-        if ($attr_info->{is_bool}) {
-            $data{$attr} = $value ? JSON::MaybeXS::true : JSON::MaybeXS::false;
-        } elsif ($attr_info->{is_int}) {
-            $data{$attr} = int($value);
-        } elsif ($attr_info->{is_object} && blessed($value) && $value->can('TO_JSON')) {
-            $data{$attr} = $value->TO_JSON;
-        } elsif ($attr_info->{is_array_of_objects}) {
-            $data{$attr} = [ map { $_->TO_JSON } @$value ];
-        } elsif ($attr_info->{is_hash_of_objects}) {
-            $data{$attr} = { map { $_ => $value->{$_}->TO_JSON } keys %$value };
-        } elsif (ref $value eq 'ARRAY') {
-            $data{$attr} = $value;
-        } elsif (ref $value eq 'HASH') {
-            $data{$attr} = $value;
-        } else {
-            $data{$attr} = $value;
-        }
-    }
-    return \%data;
-}
-
-sub to_json {
-    my $self = shift;
-    return $self->json->encode($self->TO_JSON);
-}
-
-sub TO_YAML {
-    my $self = shift;
-    require YAML::PP;
-    return YAML::PP::Dump($self->TO_JSON);
-}
-
-sub to_yaml {
-    my $self = shift;
-    return $self->TO_YAML;
-}
-
-sub FROM_HASH {
-    my ($class, $hash) = @_;
-    return $class->new(%$hash);
-}
-
-sub from_json {
-    my ($class, $json_str) = @_;
-    state $json = JSON::MaybeXS->new;
-    return $class->FROM_HASH($json->decode($json_str));
-}
-
-# Compare local class attributes against OpenAPI schema
-# Returns hashref with differences:
-#   missing_locally  => [ attrs in schema but not in class ]
-#   missing_in_schema => [ attrs in class but not in schema ]
-#   type_mismatch    => [ { attr => $name, local => $type, schema => $type } ]
-sub compare_to_schema {
-    my ($class, $schema) = @_;
-    $class = ref($class) if ref($class);
-
-    my $local_attrs = $_attr_registry{$class} // {};
-    my $schema_props = $schema->{properties} // {};
-
-    my %result = (
-        missing_locally   => [],
-        missing_in_schema => [],
-        type_mismatch     => [],
+    $has->($attr_name, is => 'rw', isa => $isa,
+        ($required ? (required => 1) : ()),
+        ($attr_name ne $json_key ? (init_arg => $json_key) : ()),
     );
-
-    # Check schema properties against local attributes
-    for my $prop (keys %$schema_props) {
-        if (!exists $local_attrs->{$prop}) {
-            # Special case: metadata comes from Role, not k8s DSL
-            next if $prop eq 'metadata' && $class->can('metadata');
-            # apiVersion and kind also come from Role
-            next if ($prop eq 'apiVersion' || $prop eq 'kind') && $class->can('_is_resource');
-            push @{$result{missing_locally}}, $prop;
-        } else {
-            # Compare types
-            my $local_type = _describe_local_type($local_attrs->{$prop});
-            my $schema_type = _describe_schema_type($schema_props->{$prop});
-            if ($local_type ne $schema_type) {
-                push @{$result{type_mismatch}}, {
-                    attr   => $prop,
-                    local  => $local_type,
-                    schema => $schema_type,
-                };
-            }
-        }
-    }
-
-    # Check local attributes not in schema
-    for my $attr (keys %$local_attrs) {
-        if (!exists $schema_props->{$attr}) {
-            push @{$result{missing_in_schema}}, $attr;
-        }
-    }
-
-    return \%result;
-}
-
-sub _describe_local_type {
-    my ($info) = @_;
-    return 'string'  if $info->{is_str};
-    return 'integer' if $info->{is_int};
-    return 'boolean' if $info->{is_bool};
-    return 'array<string>'  if $info->{is_array_of_str};
-    return 'array<integer>' if $info->{is_array_of_int};
-    return 'array<object>'  if $info->{is_array_of_objects};
-    return 'hash<string>'   if $info->{is_hash_of_str};
-    return 'hash<object>'   if $info->{is_hash_of_objects};
-    return 'object'         if $info->{is_object};
-    return 'unknown';
-}
-
-sub _describe_schema_type {
-    my ($prop) = @_;
-    return 'object' if $prop->{'$ref'};
-    my $type = $prop->{type} // 'unknown';
-    if ($type eq 'array') {
-        my $items = $prop->{items} // {};
-        if ($items->{'$ref'}) {
-            return 'array<object>';
-        }
-        my $item_type = $items->{type} // 'unknown';
-        return "array<$item_type>";
-    }
-    if ($type eq 'object' && $prop->{additionalProperties}) {
-        my $add = $prop->{additionalProperties};
-        if ($add->{'$ref'}) {
-            return 'hash<object>';
-        }
-        my $val_type = $add->{type} // 'unknown';
-        return "hash<$val_type>";
-    }
-    return $type;
 }
 
 1;
@@ -380,7 +225,7 @@ IO::K8s::Resource - Base class for all Kubernetes resources
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head1 SYNOPSIS
 
@@ -418,6 +263,16 @@ Short class names are auto-expanded:
 
     Core::V1::Pod      -> IO::K8s::Api::Core::V1::Pod
     Meta::V1::ObjectMeta -> IO::K8s::Apimachinery::Pkg::Apis::Meta::V1::ObjectMeta
+
+Field names that are not valid Perl identifiers are automatically sanitized:
+C<$ref> becomes C<_ref>, C<$schema> becomes C<_schema>, and hyphens are
+replaced with underscores (C<x-kubernetes-foo> becomes C<x_kubernetes_foo>).
+The original JSON key is preserved via C<init_arg> so constructors and
+C<FROM_HASH> still accept the original names, and C<TO_JSON> outputs the
+original keys.
+
+    k8s '$ref' => Str;                          # Moo attr: _ref
+    k8s 'x-kubernetes-list-type' => Str;        # Moo attr: x_kubernetes_list_type
 
 =head1 SUPPORT
 

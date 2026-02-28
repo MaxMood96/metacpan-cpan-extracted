@@ -1,7 +1,7 @@
 #! /usr/bin/perl 
 
 use Date::Holidays::AU qw( is_holiday holidays );
-use Test::More(tests => 178 );
+use Test::More(tests => 181 );
 use strict;
 use warnings;
 
@@ -85,10 +85,13 @@ ok(is_holiday(2004, 4, 25, 'WA'), "ANZAC Day 2004");
 ok(is_holiday(2025, 4, 25, 'NSW'), "ANZAC Day 2025");
 ok(is_holiday(2026, 4, 25, 'NSW'), "ANZAC Day 2026");
 ok(is_holiday(2026, 4, 27, 'NSW'), "ANZAC Day Holiday 2026");
+ok(is_holiday(2026, 4, 27, 'ACT'), "ANZAC Day Holiday 2026");
 ok(is_holiday(2026, 4, 27, 'WA'), "ANZAC Day Holiday 2026");
-ok(is_holiday(2026, 4, 27, 'SA'), "ANZAC Day Holiday 2026");
+ok(!is_holiday(2026, 4, 27, 'SA'), "ANZAC Day Holiday 2026");
 ok(!is_holiday(2026, 4, 27, 'TAS'), "ANZAC Day Holiday 2026");
 ok(!is_holiday(2026, 4, 27, 'VIC'), "ANZAC Day Holiday 2026");
+ok(!is_holiday(2026, 4, 27, 'QLD'), "ANZAC Day Holiday 2026");
+ok(!is_holiday(2026, 4, 27, 'NT'), "ANZAC Day Holiday 2026");
 ok(not(is_holiday(2004, 4, 26, 'VIC')), "No extra holiday for ANZAC Day 2004 in VIC");
 ok(not(is_holiday(2004, 4, 26, 'TAS')), "No extra holiday for ANZAC Day 2004 in TAS");
 ok(is_holiday(2004, 4, 26, 'WA'), "Extra holiday for ANZAC Day 2004 everywhere else");
@@ -214,3 +217,4 @@ ok(is_holiday(2025, 9, 26, 'VIC'), "Grand Final Eve 2025");
 ok(is_holiday(2026, 9, 25, 'VIC'), "Grand Final Eve 2026");
 eval { is_holiday($year + 2, 1, 1, 'VIC'); };
 ok($@ =~ /^Don't know how to calculate Grand Final Eve Day/, "Attempting to calculate Grand Final Eve too far in the future throws exception");
+done_testing();

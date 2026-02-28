@@ -1,5 +1,19 @@
 Revision history for Perl extension App-nup
 
+0.9908 2026-02-28T06:11:37Z
+
+    - Add --textconv option for automatic non-text file conversion
+    - Require App::optex::textconv 1.07
+
+0.9907 2026-02-27T14:10:54Z
+
+    - Add --page-number option to show page number on border (default on)
+    - Update display name to n-up, distinguish from command name nup
+    - Set LESS and LESSANSIENDCHARS defaults for pager support
+    - Require App::ansicolumn 1.5701
+    - Require Getopt::Long::Bash 0.7.0
+    - Update copyright year to 2025-2026
+
 0.9906 2025-12-30T11:41:27Z
 
     - Allow command substitution in --alias option

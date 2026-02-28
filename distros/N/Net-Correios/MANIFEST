@@ -21,5 +21,6 @@ t/03-preco.t
 t/04-prazo.t
 t/06-cep.t
 t/07-sro.t
+t/08-prepostagens.t
 META.yml                                 Module YAML meta-data (added by MakeMaker)
 META.json                                Module JSON meta-data (added by MakeMaker)

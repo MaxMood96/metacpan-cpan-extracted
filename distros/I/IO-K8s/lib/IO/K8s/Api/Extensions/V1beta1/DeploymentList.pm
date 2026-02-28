@@ -1,5 +1,5 @@
 package IO::K8s::Api::Extensions::V1beta1::DeploymentList;
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 # ABSTRACT: Deprecated - use IO::K8s::List instead
 use strict;
 use warnings;
@@ -18,7 +18,7 @@ IO::K8s::Api::Extensions::V1beta1::DeploymentList - Deprecated - use IO::K8s::Li
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head1 SUPPORT
 

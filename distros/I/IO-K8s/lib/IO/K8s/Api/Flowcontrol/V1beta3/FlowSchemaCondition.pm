@@ -1,9 +1,9 @@
 package IO::K8s::Api::Flowcontrol::V1beta3::FlowSchemaCondition;
 # ABSTRACT: FlowSchemaCondition describes conditions for a FlowSchema.
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 use IO::K8s::Resource;
 
-k8s lastTransitionTime => Str;
+k8s lastTransitionTime => Time;
 
 
 k8s message => Str;
@@ -32,7 +32,7 @@ IO::K8s::Api::Flowcontrol::V1beta3::FlowSchemaCondition - FlowSchemaCondition de
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head2 lastTransitionTime
 

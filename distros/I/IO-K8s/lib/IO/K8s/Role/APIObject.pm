@@ -1,6 +1,6 @@
 package IO::K8s::Role::APIObject;
 # ABSTRACT: Role for top-level Kubernetes API objects
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 use Moo::Role;
 use Types::Standard qw( InstanceOf Maybe );
 use Scalar::Util qw(blessed);
@@ -32,10 +32,13 @@ my %API_GROUP_MAP = (
 # IO::K8s::Api::Core::V1::Pod -> v1
 # IO::K8s::Api::Apps::V1::Deployment -> apps/v1
 # IO::K8s::Api::Rbac::V1::Role -> rbac.authorization.k8s.io/v1
+# IO::K8s::ApiextensionsApiserver::...::V1::CustomResourceDefinition -> apiextensions.k8s.io/v1
+# IO::K8s::KubeAggregator::...::V1::APIService -> apiregistration.k8s.io/v1
 sub api_version {
     my ($self) = @_;
     my $class = ref($self) || $self;
 
+    # Standard API: IO::K8s::Api::Group::Version::Kind
     if ($class =~ /^IO::K8s::Api::(\w+)::(\w+)::/) {
         my ($group, $version) = ($1, $2);
         $version = lc($version);
@@ -43,6 +46,17 @@ sub api_version {
         my $group_lc = lc($group);
         return ($API_GROUP_MAP{$group_lc} // $group_lc) . '/' . $version;
     }
+
+    # Apiextensions: IO::K8s::ApiextensionsApiserver::Pkg::Apis::Apiextensions::Version::Kind
+    if ($class =~ /^IO::K8s::ApiextensionsApiserver::Pkg::Apis::Apiextensions::(\w+)::/) {
+        return 'apiextensions.k8s.io/' . lc($1);
+    }
+
+    # KubeAggregator: IO::K8s::KubeAggregator::Pkg::Apis::Apiregistration::Version::Kind
+    if ($class =~ /^IO::K8s::KubeAggregator::Pkg::Apis::Apiregistration::(\w+)::/) {
+        return 'apiregistration.k8s.io/' . lc($1);
+    }
+
     return undef;
 }
 
@@ -330,7 +344,7 @@ IO::K8s::Role::APIObject - Role for top-level Kubernetes API objects
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head2 metadata
 

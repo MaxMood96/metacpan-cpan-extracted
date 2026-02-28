@@ -114,7 +114,44 @@ sub consulta {
     return $parent->parse_response($res);
 }
 
+sub declaracao_conteudo {
+    my ($self, $id, $papel) = @_;
+    die 'declaracao_conteudo() espera um id de prepostagem' unless $id;
+    $papel = 'A4' if !defined $papel;
+    die 'tamanho da folha deve ser "A4" ou "100_150"' if $papel ne 'A4' && $papel ne '100_150';
 
+
+    my $parent = $self->{parent};
+
+    # fazemos o pedido do token antes para garantirmos que temos
+    # os dados de contrato e DR dentro do objeto. É no-op se já fez.
+    $parent->access_token('cartao');
+
+    my $res = $parent->make_request(
+        'cartao',
+        'GET',
+        'prepostagem/v1/prepostagens/declaracaoconteudo/' . $id . '?tamFolhaImpressao=' . $papel
+    );
+    return $parent->parse_response($res);
+}
+
+sub aviso_recebimento {
+    my ($self, $id) = @_;
+    die 'aviso_recebimento() espera um id de prepostagem' unless $id;
+
+    my $parent = $self->{parent};
+
+    # fazemos o pedido do token antes para garantirmos que temos
+    # os dados de contrato e DR dentro do objeto. É no-op se já fez.
+    $parent->access_token('cartao');
+
+    my $res = $parent->make_request(
+        'cartao',
+        'GET',
+        'prepostagem/v1/prepostagens/avisorecebimento/' . $id
+    );
+    return $parent->parse_response($res);
+}
 
 
 1;

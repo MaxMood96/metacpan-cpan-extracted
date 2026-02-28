@@ -11,11 +11,11 @@ use URI::Escape qw(uri_escape_utf8);
 
 our @EXPORT = qw(geocode parse);
 
-our $VERSION = "v2.6.0";
+our $VERSION = "v2.6.3";
 
 =head1 NAME
 
-Google::GeoCoder::Smart - Simple Google Geocoding API client
+L<Google::GeoCoder::Smart|https://metacpan.org/pod/Google::GeoCoder::Smart> - Simple Google Geocoding API client
 
 =head1 SYNOPSIS
 

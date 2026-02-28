@@ -40,7 +40,7 @@ CONSTRUCTOR
 
  new
 
-       $tickit = Tickit->new( %args )
+       $tickit = Tickit->new( %args );
 
     Constructs a new Tickit framework container object.
 
@@ -75,14 +75,15 @@ METHODS
 
  watch_io
 
-       $id = $tickit->watch_io( $fh, $cond, $code )
+       $id = $tickit->watch_io( $fh, $cond, $code );
 
     Since version 0.71.
 
     Runs the given CODE reference at some point in the future, when IO
     operations are possible on the given filehandle. $cond should be a
-    bitmask of at least one of the IO_IN, IO_OUT or IO_HUP constants
-    describing which kinds of IO operation the callback is interested in.
+    bitmask of at least one of the IO_IN, IO_OUT, IO_PRI or IO_HUP
+    constants describing which kinds of IO operation the callback is
+    interested in.
 
     Returns an opaque integer value that may be passed to "watch_cancel".
     This value is safe to ignore if not required.
@@ -91,7 +92,7 @@ METHODS
     be an instances of a type with a field called cond. This will contain
     the kinds of IO operation that are currently possible.
 
-       $code->( $info )
+       $code->( $info );
     
        $current_cond = $info->cond;
 
@@ -112,7 +113,7 @@ METHODS
 
  watch_later
 
-       $id = $tickit->watch_later( $code )
+       $id = $tickit->watch_later( $code );
 
     Since version 0.70.
 
@@ -125,13 +126,13 @@ METHODS
 
  later
 
-       $tickit->later( $code )
+       $tickit->later( $code );
 
     For back-compatibility this method is a synonym for "watch_later".
 
  watch_timer_at
 
-       $id = $tickit->watch_timer_at( $epoch, $code )
+       $id = $tickit->watch_timer_at( $epoch, $code );
 
     Since version 0.70.
 
@@ -144,7 +145,7 @@ METHODS
 
  watch_timer_after
 
-       $id = $tickit->watch_timer_after( $delay, $code )
+       $id = $tickit->watch_timer_after( $delay, $code );
 
     Since version 0.70.
 
@@ -157,9 +158,9 @@ METHODS
 
  timer
 
-       $id = $tickit->timer( at => $epoch, $code )
+       $id = $tickit->timer( at => $epoch, $code );
     
-       $id = $tickit->timer( after => $delay, $code )
+       $id = $tickit->timer( after => $delay, $code );
 
     For back-compatibility this method is a wrapper for either
     "watch_timer_at" or "watch_timer_after" depending on the first
@@ -170,7 +171,7 @@ METHODS
 
  watch_signal
 
-       $id = $tickit->watch_signal( $signum, $code )
+       $id = $tickit->watch_signal( $signum, $code );
 
     Since version 0.72.
 
@@ -182,7 +183,7 @@ METHODS
 
  watch_process
 
-       $id = $tickit->watch_process( $pid, $code )
+       $id = $tickit->watch_process( $pid, $code );
 
     Since version 0.72.
 
@@ -195,14 +196,14 @@ METHODS
     be an instance of a type with a field called wstatus. This will contain
     the exit status of the terminated child process.
 
-       $code->( $info )
+       $code->( $info );
     
        $pid    = $info->pid;
        $status = $info->wstatus;
 
  watch_cancel
 
-       $tickit->watch_cancel( $id )
+       $tickit->watch_cancel( $id );
 
     Since version 0.70.
 
@@ -211,13 +212,13 @@ METHODS
 
  cancel_timer
 
-       $tickit->cancel_timer( $id )
+       $tickit->cancel_timer( $id );
 
     For back-compatibility this method is a synonym for "watch_cancel".
 
  term
 
-       $term = $tickit->term
+       $term = $tickit->term;
 
     Returns the underlying Tickit::Term object.
 
@@ -225,16 +226,16 @@ METHODS
 
  lines
 
-       $cols = $tickit->cols
+       $cols = $tickit->cols;
     
-       $lines = $tickit->lines
+       $lines = $tickit->lines;
 
     Query the current size of the terminal. Will be cached and updated on
     receipt of SIGWINCH signals.
 
  bind_key
 
-       $tickit->bind_key( $key, $code )
+       $tickit->bind_key( $key, $code );
 
     Installs a callback to invoke if the given key is pressed, overwriting
     any previous callback for the same key. The code block is invoked as
@@ -252,22 +253,30 @@ METHODS
     To remove this binding, simply bind another callback, or remove the
     binding entirely by setting undef.
 
+ bind_keys
+
+       $tickit->bind_keys( $key, $code, $key, $code, ... );
+
+    Since version 0.75.
+
+    A convenient shortcut for binding multiple keys at once.
+
  rootwin
 
-       $tickit->rootwin
+       $tickit->rootwin;
 
     Returns the root Tickit::Window.
 
  set_root_widget
 
-       $tickit->set_root_widget( $widget )
+       $tickit->set_root_widget( $widget );
 
     Sets the root widget for the application's display. This must be a
     subclass of Tickit::Widget.
 
  tick
 
-       $tickit->tick( $flags )
+       $tickit->tick( $flags );
 
     Run a single round of IO events. Does not call setup_term or
     teardown_term.
@@ -285,7 +294,7 @@ METHODS
 
  run
 
-       $tickit->run
+       $tickit->run;
 
     Calls the setup_term method, then processes IO events until stopped, by
     the stop method, SIGINT, SIGTERM or the Ctrl-C key. Then runs the
@@ -293,7 +302,7 @@ METHODS
 
  stop
 
-       $tickit->stop
+       $tickit->stop;
 
     Causes a currently-running run method to stop processing events and
     return.
@@ -306,9 +315,9 @@ MISCELLANEOUS FUNCTIONS
 
  version_patch
 
-       $major = Tickit::version_major()
-       $minor = Tickit::version_minor()
-       $patch = Tickit::version_patch()
+       $major = Tickit::version_major();
+       $minor = Tickit::version_minor();
+       $patch = Tickit::version_patch();
 
     These non-exported functions query the version of the libtickit library
     that the module is linked to.

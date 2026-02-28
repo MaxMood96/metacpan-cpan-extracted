@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2009-2022 -- leonerd@leonerd.org.uk
 
-package Tickit 0.74;
+package Tickit 0.75;
 
 use v5.14;
 use warnings;
@@ -73,7 +73,7 @@ control.
 
 =head2 new
 
-   $tickit = Tickit->new( %args )
+   $tickit = Tickit->new( %args );
 
 Constructs a new C<Tickit> framework container object.
 
@@ -179,14 +179,14 @@ sub _make_tickit
 
 =head2 watch_io
 
-   $id = $tickit->watch_io( $fh, $cond, $code )
+   $id = $tickit->watch_io( $fh, $cond, $code );
 
 I<Since version 0.71.>
 
 Runs the given CODE reference at some point in the future, when IO operations
 are possible on the given filehandle. C<$cond> should be a bitmask of at least
-one of the C<IO_IN>, C<IO_OUT> or C<IO_HUP> constants describing which kinds
-of IO operation the callback is interested in.
+one of the C<IO_IN>, C<IO_OUT>, C<IO_PRI> or C<IO_HUP> constants describing
+which kinds of IO operation the callback is interested in.
 
 Returns an opaque integer value that may be passed to L</watch_cancel>. This
 value is safe to ignore if not required.
@@ -195,7 +195,7 @@ When invoked, the callback will receive an event parameter which will be an
 instances of a type with a field called C<cond>. This will contain the kinds
 of IO operation that are currently possible.
 
-   $code->( $info )
+   $code->( $info );
 
    $current_cond = $info->cond;
 
@@ -226,7 +226,7 @@ sub watch_io
 
 =head2 watch_later
 
-   $id = $tickit->watch_later( $code )
+   $id = $tickit->watch_later( $code );
 
 I<Since version 0.70.>
 
@@ -239,7 +239,7 @@ value is safe to ignore if not required.
 
 =head2 later
 
-   $tickit->later( $code )
+   $tickit->later( $code );
 
 For back-compatibility this method is a synonym for L</watch_later>.
 
@@ -257,7 +257,7 @@ sub later { shift->watch_later( @_ ); return }
 
 =head2 watch_timer_at
 
-   $id = $tickit->watch_timer_at( $epoch, $code )
+   $id = $tickit->watch_timer_at( $epoch, $code );
 
 I<Since version 0.70.>
 
@@ -279,7 +279,7 @@ sub watch_timer_at
 
 =head2 watch_timer_after
 
-   $id = $tickit->watch_timer_after( $delay, $code )
+   $id = $tickit->watch_timer_after( $delay, $code );
 
 I<Since version 0.70.>
 
@@ -301,9 +301,9 @@ sub watch_timer_after
 
 =head2 timer
 
-   $id = $tickit->timer( at => $epoch, $code )
+   $id = $tickit->timer( at => $epoch, $code );
 
-   $id = $tickit->timer( after => $delay, $code )
+   $id = $tickit->timer( after => $delay, $code );
 
 For back-compatibility this method is a wrapper for either L</watch_timer_at>
 or L</watch_timer_after> depending on the first argument.
@@ -325,7 +325,7 @@ sub timer
 
 =head2 watch_signal
 
-   $id = $tickit->watch_signal( $signum, $code )
+   $id = $tickit->watch_signal( $signum, $code );
 
 I<Since version 0.72.>
 
@@ -347,7 +347,7 @@ sub watch_signal
 
 =head2 watch_process
 
-   $id = $tickit->watch_process( $pid, $code )
+   $id = $tickit->watch_process( $pid, $code );
 
 I<Since version 0.72.>
 
@@ -360,7 +360,7 @@ When invoked, the callback will receive an event parameter which will be an
 instance of a type with a field called C<wstatus>. This will contain the exit
 status of the terminated child process.
 
-   $code->( $info )
+   $code->( $info );
 
    $pid    = $info->pid;
    $status = $info->wstatus;
@@ -377,7 +377,7 @@ sub watch_process
 
 =head2 watch_cancel
 
-   $tickit->watch_cancel( $id )
+   $tickit->watch_cancel( $id );
 
 I<Since version 0.70.>
 
@@ -386,7 +386,7 @@ C<watch_*> methods. After doing so the code will no longer be invoked.
 
 =head2 cancel_timer
 
-   $tickit->cancel_timer( $id )
+   $tickit->cancel_timer( $id );
 
 For back-compatibility this method is a synonym for L</watch_cancel>.
 
@@ -404,7 +404,7 @@ sub cancel_timer { shift->watch_cancel( @_ ) }
 
 =head2 term
 
-   $term = $tickit->term
+   $term = $tickit->term;
 
 Returns the underlying L<Tickit::Term> object.
 
@@ -416,9 +416,9 @@ sub term { shift->_tickit->term }
 
 =head2 lines
 
-   $cols = $tickit->cols
+   $cols = $tickit->cols;
 
-   $lines = $tickit->lines
+   $lines = $tickit->lines;
 
 Query the current size of the terminal. Will be cached and updated on receipt
 of C<SIGWINCH> signals.
@@ -430,7 +430,7 @@ sub cols  { shift->term->cols  }
 
 =head2 bind_key
 
-   $tickit->bind_key( $key, $code )
+   $tickit->bind_key( $key, $code );
 
 Installs a callback to invoke if the given key is pressed, overwriting any
 previous callback for the same key. The code block is invoked as
@@ -490,9 +490,27 @@ sub bind_key
    }
 }
 
+=head2 bind_keys
+
+   $tickit->bind_keys( $key, $code, $key, $code, ... );
+
+I<Since version 0.75.>
+
+A convenient shortcut for binding multiple keys at once.
+
+=cut
+
+sub bind_keys
+{
+   my $self = shift;
+   while( @_ ) {
+      $self->bind_key( shift, shift );
+   }
+}
+
 =head2 rootwin
 
-   $tickit->rootwin
+   $tickit->rootwin;
 
 Returns the root L<Tickit::Window>.
 
@@ -503,7 +521,7 @@ sub rootwin { $_[0]->_tickit->rootwin( $_[0] ) }
 
 =head2 set_root_widget
 
-   $tickit->set_root_widget( $widget )
+   $tickit->set_root_widget( $widget );
 
 Sets the root widget for the application's display. This must be a subclass of
 L<Tickit::Widget>.
@@ -518,7 +536,7 @@ sub set_root_widget
 
 =head2 tick
 
-   $tickit->tick( $flags )
+   $tickit->tick( $flags );
 
 Run a single round of IO events. Does not call C<setup_term> or
 C<teardown_term>.
@@ -551,7 +569,7 @@ sub tick
 
 =head2 run
 
-   $tickit->run
+   $tickit->run;
 
 Calls the C<setup_term> method, then processes IO events until stopped, by the
 C<stop> method, C<SIGINT>, C<SIGTERM> or the C<Ctrl-C> key. Then runs the
@@ -587,7 +605,7 @@ sub run
 
 =head2 stop
 
-   $tickit->stop
+   $tickit->stop;
 
 Causes a currently-running C<run> method to stop processing events and return.
 
@@ -603,9 +621,9 @@ sub stop { shift->_tickit->stop( @_ ) }
 
 =head2 version_patch
 
-   $major = Tickit::version_major()
-   $minor = Tickit::version_minor()
-   $patch = Tickit::version_patch()
+   $major = Tickit::version_major();
+   $minor = Tickit::version_minor();
+   $patch = Tickit::version_patch();
 
 These non-exported functions query the version of the F<libtickit> library
 that the module is linked to.

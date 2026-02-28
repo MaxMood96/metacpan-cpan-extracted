@@ -1,12 +1,24 @@
 package IO::K8s::Types;
 # ABSTRACT: Type::Tiny type library for Kubernetes resources
-our $VERSION = '1.002';
-use Type::Library -base;
+our $VERSION = '1.005';
+use Type::Library -base, -declare => qw( IntOrStr Quantity Time );
 use Type::Utils -all;
 use Types::Standard -types;
 
 # Re-export common Types::Standard types
 BEGIN { extends 'Types::Standard' }
+
+# Kubernetes scalar types
+
+declare IntOrStr, as Str;
+
+declare Quantity, as Str,
+    where { /\A[+-]?(\d+\.?\d*|\d*\.\d+)([eE][+-]?\d+|Ki|Mi|Gi|Ti|Pi|Ei|[mkMGTPE])?\z/ },
+    message { "Value '$_' is not a valid Kubernetes Quantity" };
+
+declare Time, as Str,
+    where { /\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})\z/ },
+    message { "Value '$_' is not a valid RFC3339 timestamp" };
 
 # Core V1 Types
 class_type 'Pod', { class => 'IO::K8s::Api::Core::V1::Pod' };
@@ -57,6 +69,7 @@ class_type 'CustomResourceDefinition', { class => 'IO::K8s::ApiextensionsApiserv
 
 # Export tags
 our %EXPORT_TAGS = (
+    k8s_scalars => [qw( IntOrStr Quantity Time )],
     core => [qw( Pod PodSpec PodStatus Container Service ServiceSpec
                  ConfigMap Secret Namespace Node
                  PersistentVolume PersistentVolumeClaim )],
@@ -83,7 +96,7 @@ IO::K8s::Types - Type::Tiny type library for Kubernetes resources
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head1 SYNOPSIS
 

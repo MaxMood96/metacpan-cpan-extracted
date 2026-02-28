@@ -1,0 +1,39 @@
+---
+abstract: 'A modern, isolated PostgreSQL executable runner for tests'
+author:
+  - 'Mohammad Sajid Anwar <mohammad.anwar@yahoo.com>'
+build_requires:
+  ExtUtils::MakeMaker: '0'
+configure_requires:
+  ExtUtils::MakeMaker: '0'
+dynamic_config: 1
+generated_by: 'ExtUtils::MakeMaker version 7.70, CPAN::Meta::Converter version 2.150010'
+license: artistic_2
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: Test-PostgreSQL-v2
+no_index:
+  directory:
+    - t
+    - inc
+provides:
+  Test::DBIx::Class::SchemaManager::Trait::Testpostgresqlv2:
+    file: lib/Test/DBIx/Class/SchemaManager/Trait/Testpostgresqlv2.pm
+    version: '2.03'
+  Test::PostgreSQL::v2:
+    file: lib/Test/PostgreSQL/v2.pm
+    version: '2.03'
+requires:
+  File::Spec: '0'
+  File::Temp: '0'
+  File::Which: '0'
+  IO::Socket::INET: '0'
+  POSIX: '0'
+  Time::HiRes: '0'
+  perl: '5.014'
+resources:
+  bugtracker: https://github.com/manwar/Test-PostgreSQL-v2/issues
+  repository: https://github.com/manwar/Test-PostgreSQL-v2.git
+version: '2.03'
+x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

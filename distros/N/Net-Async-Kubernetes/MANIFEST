@@ -28,4 +28,5 @@ t/10-dual-crud.t
 t/11-dual-watcher.t
 t/author-pod-syntax.t
 t/lib/MockTransport.pm
+t/lib/My/StaticWebSite.pm
 t/lib/TestKube.pm

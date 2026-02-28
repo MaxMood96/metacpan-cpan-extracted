@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 
-use Test::More import => [ qw( BAIL_OUT is isa_ok like ok plan require_ok subtest ) ], tests => 14;
+use Test::More import => [ qw( BAIL_OUT is isa_ok like ok plan require_ok subtest ) ], tests => 15;
 use Test::Fatal qw( dies_ok exception lives_ok );
 my $class;
 
@@ -22,6 +22,9 @@ like exception { $class->new( trial => 'TRIAL1' ) }, qr/\AUnknown attribute name
 like exception { $class->new( major => '01' ) }, qr/\AAttribute .* has invalid value/, 'Invalid attribute value';
 
 like exception { $class->new( major => 0 ) }, qr/Required attribute .* not set/, 'Missing required attribute';
+
+like exception { $class->parse( undef ) }, qr/is not a semantic version/,
+  'The undef value is an invalid semantic version';
 
 like exception { $class->parse( '1.0.0-alpha_beta' ) }, qr/is not a semantic version/, 'Invalid semantic version';
 like exception { $class->parse( '1.0.0_01' ) }, qr/is not a semantic version/,

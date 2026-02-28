@@ -1,5 +1,14 @@
 Revision history for Changes
 
+0.75    2026-02-27
+        [CHANGES]
+         * Use libtickit 0.4.6:
+            + Added Tickit::IO_PRI constant
+         * Added `$t->bind_keys`
+
+        [BUGFIXES]
+         * Fix bad use of string eq test in Tickit/Test.pm
+
 0.74    2023-04-09
         [CHANGES]
          * Use libtickit 0.4.4:

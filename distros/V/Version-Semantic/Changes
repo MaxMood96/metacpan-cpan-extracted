@@ -1,5 +1,9 @@
 Release history for Version-Semantic
 
+v1.3.0    2026-02-27T10:52:58Z
+          - Add semver_re() class method
+          - Harden the parse() factory method
+
 v1.2.0    2026-02-25T08:43:42Z
           - Make prefix a public object attribute
           - Use UTC-normalized W3CDTF time stamp in Changes file

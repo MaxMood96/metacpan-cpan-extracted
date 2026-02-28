@@ -1,5 +1,17 @@
 Revision history for Future-IO
 
+0.22    2026-02-27
+        [CHANGES]
+         * Document that you should always `poll` for at least one of the
+           `POLLIN`, `POLLOUT` or `POLLPRI` flags
+         * Provide optional base implementation methods for handling an
+           alarm+sleep timer queue, to reduce code duplication
+         * Probe for `Future::IO::Impl::KQueue` on FreeBSD
+
+        [BUGFIXES]
+         * Make sure to actually load the `POSIX` module to get its constants
+         * Skip over probed impl modules that do not support the `poll` method
+
 0.21    2026-02-26
         [CHANGES]
          * Much improved default internal implementation:

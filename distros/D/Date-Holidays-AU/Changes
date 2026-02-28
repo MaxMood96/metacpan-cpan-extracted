@@ -1,6 +1,10 @@
 CHANGES
 -------
 
+  0.38 - 28 Feb 2026
+  
+      * ANZAC Day Holiday is not observed in VIC, TAS, QLD, SA, NT.  Thanks to Eddy for GH#5 and GH#6.
+	  
   0.37 - 17 Feb 2026
 
       * Adding ANZAC Day Holiday for NSW.  Thanks to Eddy for GH#4.

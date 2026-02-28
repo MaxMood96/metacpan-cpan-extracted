@@ -1,6 +1,6 @@
 package IO::K8s::Api::Events::V1::Event;
 # ABSTRACT: Event is a report of an event somewhere in the cluster. It generally denotes some state change in the system. Events have a limited retention time and triggers and messages may evolve with time.  Event consumers should not rely on the timing of an event with a given Reason reflecting a consistent underlying trigger, or the continued existence of events with that Reason.  Events should be treated as informative, best-effort, supplemental data.
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 use IO::K8s::APIObject;
 with 'IO::K8s::Role::Namespaced';
 
@@ -11,16 +11,16 @@ k8s action => Str;
 k8s deprecatedCount => Int;
 
 
-k8s deprecatedFirstTimestamp => Str;
+k8s deprecatedFirstTimestamp => Time;
 
 
-k8s deprecatedLastTimestamp => Str;
+k8s deprecatedLastTimestamp => Time;
 
 
 k8s deprecatedSource => 'Core::V1::EventSource';
 
 
-k8s eventTime => Str, 'required';
+k8s eventTime => Time, 'required';
 
 
 k8s note => Str;
@@ -60,7 +60,7 @@ IO::K8s::Api::Events::V1::Event - Event is a report of an event somewhere in the
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head1 DESCRIPTION
 

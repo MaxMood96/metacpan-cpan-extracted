@@ -1,0 +1,45 @@
+Revision history for Test::PostgreSQL::v2
+
+2.03 2026-02-27
+     [POD CHANGES]
+     - Tidied up pod document in general.
+
+2.02 2026-02-27
+     [IMPROVEMENT]
+     - Added package method errstr() to expose $errstr.
+
+2.01 2026-02-27
+     - Forgot to add: Test::DBIx::Class::SchemaManager::Trait::Testpostgresqlv2
+
+2.00 2026-02-27
+     [Incompatible Changes]
+     - Complete rewrite. Not a drop-in replacement for Test::PostgreSQL.
+       See Test::DBIx::Class::SchemaManager::Trait::Testpostgresqlv2 for
+       the migration path from the legacy Testpostgresql trait.
+
+     [New Features]
+     - New Test::DBIx::Class::SchemaManager::Trait::Testpostgresqlv2 trait
+       for seamless integration with Test::DBIx::Class (replaces the legacy
+       Testpostgresql trait with a one-line change).
+     - Added $errstr package variable so callers can use the idiomatic
+       my $pg = Test::PostgreSQL::v2->new() or die $errstr pattern instead
+       of catching exceptions.
+     - Modern PostgreSQL binary discovery (postgres, postmaster) with
+       POSTGRES_HOME environment variable support.
+     - Socket directories isolated in tempdir to avoid permission conflicts
+       with system directories such as /var/run/postgresql.
+     - Socket path length protection for deeply nested temp directories
+       (Unix socket path limit ~100 chars).
+     - Automatic port selection with fallback to 54321.
+     - Constructor accepts host, port, and user arguments.
+     - Cluster initialised with --nosync for faster test startup.
+     - SIGTERM with 5-second graceful shutdown window before SIGKILL fallback.
+     - DESTROY guards against double-kill in forked processes (owner check).
+     - Destruction order fix in trait (disconnect DBIx::Class storage before
+       killing the PostgreSQL process) to prevent "Can't call method FETCH
+       on an undefined value" warnings during global destruction.
+
+     [Bug Fixes]
+     - initdb error now reports exit code instead of unreliable $! value.
+     - DESTROY now sets local $@ to prevent clobbering caller's exception
+       during stack unwinding.

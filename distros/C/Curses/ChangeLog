@@ -4,6 +4,12 @@ information, see the file 'HISTORY'.
 Note that the filename "ChangeLog" is recognized by the CPAN machinery as the
 name of a change log.
 
+New in 1.46 (Released February 27, 2026)
+
+  Add BUTTON5 constants: BUTTON5_RELEASED, BUTTON5_PRESSED, BUTTON5_CLICKED,
+  BUTTON5_DOUBLE_CLICKED, and BUTTON5_TRIPLE_CLICKED.  Thanks
+  Peder Stray <peder.stray@gmail.com>
+
 New in 1.45 (Released April 27, 2023)
 
   Correct wide character data types to fix compile failure.

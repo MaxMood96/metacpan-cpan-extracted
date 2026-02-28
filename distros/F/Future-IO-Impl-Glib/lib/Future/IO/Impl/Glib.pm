@@ -3,13 +3,14 @@
 #
 #  (C) Paul Evans, 2020-2026 -- leonerd@leonerd.org.uk
 
-package Future::IO::Impl::Glib 0.04;
+package Future::IO::Impl::Glib 0.05;
 
 use v5.14;
 use warnings;
 use base qw( Future::IO::ImplBase );
 
 use Future::IO 0.20 qw( POLLIN POLLOUT POLLPRI POLLHUP POLLERR );
+use Struct::Dumb qw( readonly_struct );
 
 use Glib;
 
@@ -54,10 +55,8 @@ sub sleep
    return $f;
 }
 
-my %read_futures_by_fileno;  # {fileno} => [@futures]
-my %write_futures_by_fileno; # {fileno} => [@futures]
-my %prio_futures_by_fileno;  # {fileno} => [@futures]
-my %hup_futures_by_fileno;   # {fileno} => [@futures]
+readonly_struct Poller => [qw( events f )];
+my %pollers_by_fileno;
 
 my %revents_map = (
    in  => POLLIN,
@@ -74,99 +73,67 @@ sub poll
 
    my $f = Future::IO::Impl::Glib::_Future->new;
 
-   if( $events & POLLIN ) {
-      my $futures = $read_futures_by_fileno{ $fh->fileno } //= [];
+   push $pollers_by_fileno{$fh->fileno}->@*, Poller( $events, $f );
 
-      my $was = scalar @$futures;
-      push @$futures, $f;
-
-      Glib::IO->add_watch( $fh->fileno,
-         ['in', 'hup', 'err'],
-         sub {
-            my ( $id, $ev ) = @_;
-
-            my $revents = 0;
-            $revents |= $revents_map{$_} for @$ev;
-
-            $futures->[0]->done( $revents );
-            shift @$futures;
-
-            return 1 if scalar @$futures;
-            return 0;
-         }
-      ) if !$was;
-   }
-
-   if( $events & POLLOUT ) {
-      my $futures = $write_futures_by_fileno{ $fh->fileno } //= [];
-
-      my $was = scalar @$futures;
-      push @$futures, $f;
-
-      Glib::IO->add_watch( $fh->fileno,
-         ['out', 'hup', 'err'],
-         sub {
-            my ( $id, $ev ) = @_;
-
-            my $revents = 0;
-            $revents |= $revents_map{$_} for @$ev;
-
-            $futures->[0]->done( $revents );
-            shift @$futures;
-
-            return 1 if scalar @$futures;
-            return 0;
-         }
-      ) if !$was;
-   }
-
-   if( $events & POLLPRI ) {
-      my $futures = $prio_futures_by_fileno{ $fh->fileno } //= [];
-
-      my $was = scalar @$futures;
-      push @$futures, $f;
-
-      Glib::IO->add_watch( $fh->fileno,
-         ['pri', 'hup', 'err'],
-         sub {
-            my ( $id, $ev ) = @_;
-
-            my $revents = 0;
-            $revents |= $revents_map{$_} for @$ev;
-
-            $futures->[0]->done( $revents );
-            shift @$futures;
-
-            return 1 if scalar @$futures;
-            return 0;
-         }
-      ) if !$was;
-   }
-
-   if( $events & POLLHUP ) {
-      my $futures = $hup_futures_by_fileno{ $fh->fileno } //= [];
-
-      my $was = scalar @$futures;
-      push @$futures, $f;
-
-      Glib::IO->add_watch( $fh->fileno,
-         ['hup', 'err'],
-         sub {
-            my ( $id, $ev ) = @_;
-
-            my $revents = 0;
-            $revents |= $revents_map{$_} for @$ev;
-
-            $futures->[0]->done( $revents );
-            shift @$futures;
-
-            return 1 if scalar @$futures;
-            return 0;
-         }
-      ) if !$was;
-   }
+   _update_io( $fh->fileno );
 
    return $f;
+}
+
+my %sources_by_fileno; # {$fileno} => [ $sourceid, $got_mask ]
+
+sub _update_io
+{
+   my ( $fileno ) = @_;
+
+   my $want_mask = 0;
+   $want_mask |= $_->events for ( my $pollers = $pollers_by_fileno{$fileno} )->@*;
+
+   return if $sources_by_fileno{$fileno} and $sources_by_fileno{$fileno}[1] == $want_mask;
+
+   if( my $id = $sources_by_fileno{$fileno}[0] ) {
+      Glib::Source->remove( $id );
+   }
+
+   my @want_events;
+   $want_mask & $revents_map{$_} and push @want_events, $_
+      for sort keys %revents_map;
+
+   unless( $want_mask ) {
+      delete $sources_by_fileno{$fileno};
+      return;
+   }
+
+   my $id = Glib::IO->add_watch( $fileno,
+      [ @want_events, 'hup', 'err' ],
+      sub {
+         my ( undef, $ev ) = @_;
+
+         my $revents = 0;
+         $revents |= $revents_map{$_} for @$ev;
+
+         # Find the next poller which cares about at least one of these events
+         foreach my $idx ( 0 .. $#$pollers ) {
+            my $want_revents = $revents & ( $pollers->[$idx]->events | POLLHUP|POLLERR )
+               or next;
+
+            my ( $poller ) = splice @$pollers, $idx, 1, ();
+
+            $poller and $poller->f and $poller->f->done( $want_revents );
+            last;
+         }
+
+         if( !@$pollers ) {
+            delete $sources_by_fileno{$fileno};
+            return 0;
+         }
+
+         _update_io( $fileno );
+         return 1;
+      }
+   );
+
+   $sources_by_fileno{$fileno} = [ $id, $want_mask ];
 }
 
 sub waitpid

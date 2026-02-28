@@ -1,0 +1,53 @@
+{
+   "abstract" : "implement C<Future::IO> using C<kqueue(2)>",
+   "author" : [
+      "Paul Evans <leonerd@leonerd.org.uk>"
+   ],
+   "dynamic_config" : 1,
+   "generated_by" : "Module::Build version 0.4234",
+   "license" : [
+      "perl_5"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "Future-IO-Impl-KQueue",
+   "prereqs" : {
+      "configure" : {
+         "requires" : {
+            "Module::Build" : "0.4004"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "Future" : "0",
+            "Future::IO" : "0.20",
+            "Future::IO::ImplBase" : "0",
+            "IO::KQueue" : "0.39",
+            "Struct::Dumb" : "0",
+            "perl" : "5.020"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "Test2::V0" : "0",
+            "Test::Future::IO::Impl" : "0.19"
+         }
+      }
+   },
+   "provides" : {
+      "Future::IO::Impl::KQueue" : {
+         "file" : "lib/Future/IO/Impl/KQueue.pm",
+         "version" : "0.01"
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "license" : [
+         "http://dev.perl.org/licenses/"
+      ]
+   },
+   "version" : "0.01",
+   "x_serialization_backend" : "JSON::PP version 4.16"
+}

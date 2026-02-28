@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2012-2016 -- leonerd@leonerd.org.uk
 
-package Tickit::StringPos 0.74;
+package Tickit::StringPos 0.75;
 
 use v5.14;
 use warnings;
@@ -17,13 +17,13 @@ C<Tickit::StringPos> - store string position counters
 
 =head1 SYNOPSIS
 
- use Tickit::StringPos;
- use Tickit::Utils qw( string_count );
+   use Tickit::StringPos;
+   use Tickit::Utils qw( string_count );
 
- my $pos = Tickit::StringPos->zero;
- string_count( "Here is a message", $pos );
+   my $pos = Tickit::StringPos->zero;
+   string_count( "Here is a message", $pos );
 
- print "The message consumes ", $pos->columns, " columns\n";
+   print "The message consumes ", $pos->columns, " columns\n";
 
 =head1 DESCRIPTION
 
@@ -55,7 +55,7 @@ to -1 to indicate no limit in that counter.
 
 =head2 zero
 
-   $pos = Tickit::StringPos->zero
+   $pos = Tickit::StringPos->zero;
 
 Returns a new instance with all counters set to zero.
 
@@ -67,13 +67,13 @@ Returns a new instance with all counters set to zero.
 
 =head2 limit_columns
 
-   $pos = Tickit::StringPos->limit_bytes( $bytes )
+   $pos = Tickit::StringPos->limit_bytes( $bytes );
 
-   $pos = Tickit::StringPos->limit_codepoints( $codepoints )
+   $pos = Tickit::StringPos->limit_codepoints( $codepoints );
 
-   $pos = Tickit::StringPos->limit_graphemes( $graphemes )
+   $pos = Tickit::StringPos->limit_graphemes( $graphemes );
 
-   $pos = Tickit::StringPos->limit_columns( $columns )
+   $pos = Tickit::StringPos->limit_columns( $columns );
 
 Return a new instance with one counter set to the given limit and the other
 three counters set to -1.
@@ -90,13 +90,13 @@ three counters set to -1.
 
 =head2 columns
 
-   $bytes = $pos->bytes
+   $bytes = $pos->bytes;
 
-   $codepoints = $pos->codepoints
+   $codepoints = $pos->codepoints;
 
-   $graphemes = $pos->graphemes
+   $graphemes = $pos->graphemes;
 
-   $columns = $pos->columns
+   $columns = $pos->columns;
 
 Return the current value the counters.
 

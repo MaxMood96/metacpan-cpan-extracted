@@ -25,9 +25,9 @@ my $build = Module::Build::Using::PkgConfig->new(
 );
 
 $build->use_pkgconfig( "tickit",
-   atleast_version => "0.4.4",
+   atleast_version => "0.4.6",
    alien         => "Alien::libtickit",
-   alien_version => "0.14",
+   alien_version => "0.16",
 );
 
 $build->create_build_script;

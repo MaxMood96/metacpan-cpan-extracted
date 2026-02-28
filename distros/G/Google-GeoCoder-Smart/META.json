@@ -1,5 +1,5 @@
 {
-   "abstract" : "Simple Google Geocoding API client",
+   "abstract" : "unknown",
    "author" : [
       "TTG <ttg@cpan.org>"
    ],
@@ -39,6 +39,6 @@
       }
    },
    "release_status" : "stable",
-   "version" : "v2.6.0",
+   "version" : "v2.6.3",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

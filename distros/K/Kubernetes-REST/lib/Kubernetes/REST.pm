@@ -1,5 +1,5 @@
 package Kubernetes::REST;
-our $VERSION = '1.002';
+our $VERSION = '1.003';
 # ABSTRACT: A Perl REST Client for the Kubernetes API
 use Moo;
 use Carp qw(croak carp);
@@ -674,7 +674,7 @@ Kubernetes::REST - A Perl REST Client for the Kubernetes API
 
 =head1 VERSION
 
-version 1.002
+version 1.003
 
 =head1 SYNOPSIS
 

@@ -25,7 +25,7 @@ mdee - em·dee, Markdown Easy on the Eyes
      -m  --mode=#           light or dark (default: light)
      -B  --base-color=#     override base color of theme
                             (e.g., Ivory, #780043, (120,0,67))
-         --config=KEY=VALUE  set config parameter (e.g., h1=RD, file=...)
+         --config=KEY=VALUE  set config parameter (e.g., h1=RD, FILE=...)
     --cm --colormap=L=SPEC  override color for element (e.g., h1=RD)
     --hm --heading-markup=# enable markup in headings (all/bold/...)
          --show=#           set field visibility (e.g., italic=1)
@@ -35,11 +35,12 @@ mdee - em·dee, Markdown Easy on the Eyes
      -P  --page=#           page height in lines
      -S  --pane-width=#     pane width (default: 85)
     --bs --border-style=#   border style
+         --[no-]page-number page number on border (default: on)
          --[no-]pager[=#]   pager command
 
 # VERSION
 
-Version 1.04
+Version 1.0501
 
 # DESCRIPTION
 
@@ -380,7 +381,7 @@ bold text, etc.).
     Set config parameters from the command line.  Parameters are
     passed to the [App::Greple::md](https://metacpan.org/pod/App%3A%3AGreple%3A%3Amd) module via
     [Getopt::EX::Config](https://metacpan.org/pod/Getopt%3A%3AEX%3A%3AConfig).  Theme keys recognized by mdee (`base`,
-    `file`, `file_format`) are consumed locally and applied to both
+    `FILE`, `FILE_FORMAT`) are consumed locally and applied to both
     light and dark themes; all other parameters are forwarded to the
     md module.
 
@@ -391,15 +392,15 @@ bold text, etc.).
         mdee --config h1=RD                       # red h1
         mdee --config bold=GD --config italic=YI  # green bold, yellow italic
         mdee --config h1='L25D/R;E'               # custom h1 with background
-        mdee --config file='L25D/R;E'             # red file label
-        mdee --config file_format=%s:             # simple format
+        mdee --config FILE='L25D/R;E'             # red file label
+        mdee --config FILE_FORMAT=%s:             # simple format
         mdee --config hashed.h3=1                 # enable h3 closing hashes
 
     Theme keys consumed by mdee:
 
     - `base` - Base color (equivalent to `--base-color`)
-    - `file` - Color spec for file label (default: `L25D/${base};E` for light, `L00D/${base};E` for dark)
-    - `file_format` - Format string for file label passed to greple's `--format FILE=` (default: `\n  %s\n\n`)
+    - `FILE` - Color spec for file label (default: `L25D/${base};E` for light, `L00D/${base};E` for dark).  This is passed to greple's `FILE` label and cannot be set via `--cm`.
+    - `FILE_FORMAT` - Format string for file label passed to greple's `--format FILE=` (default: `\n  %s\n\n`).  Cannot be set via `--cm`.
 
     All other keys are passed to the md module as config parameters.
     See ["Highlight Options"](#highlight-options) for the list of available color labels.
@@ -511,6 +512,11 @@ bold text, etc.).
 - **--bs**=_STYLE_, **--border-style**=_STYLE_
 
     Set the border style.
+
+- **--**\[**no-**\]**page-number**
+
+    Show page number on the bottom border of each column.  Enabled by
+    default.  Use `--no-page-number` to disable.
 
 ## Pager Options
 

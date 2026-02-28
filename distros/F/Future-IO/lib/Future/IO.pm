@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2019-2026 -- leonerd@leonerd.org.uk
 
-package Future::IO 0.21;
+package Future::IO 0.22;
 
 use v5.14;
 use warnings;
@@ -200,7 +200,9 @@ one or more of the POSIX C<POLL*> constants, such as C<POLLIN>, C<POLLOUT> or
 C<POLLPRI>. The result of the future will be a similar bitfield, indicating
 which operations may now take place. If the C<POLLHUP>, C<POLLERR> or
 C<POLLNVAL> events happen, they will always be reported; you do not need to
-request these specifically.
+request these specifically. You should always request at least one of
+C<POLLIN>, C<POLLOUT> or C<POLLPRI>. Older versions of some implementation
+modules did accept just C<POLLHUP>, but that is not supported any more.
 
 Multiple outstanding futures may be enqueued for the same filehandle. When an
 event happens, only the first outstanding future that is interested in it is
@@ -573,6 +575,9 @@ sub try_load_impl
    my $module = "$name.pm" =~ s{::}{/}gr;
 
    eval { require $module } or return 0;
+   $name->can( "poll" ) or return 0;
+   # TODO: Consider some sort of API version check
+
    return 1;
 }
 
@@ -592,7 +597,7 @@ C<Future::IO::Impl::*> prefix). If any name does not contain a C<::>
 separator, it will have that prefix applied to it. This allows a conveniently
 short list; e.g.
 
-   Future::IO->load_impl( qw( UV Glib IOAsync ) );
+   Future::IO->load_impl( qw( UV Glib Ppoll ) );
 
 This method is intended to be called once, at startup, by the main containing
 program. Since it sets the implementation, it would generally be considered
@@ -682,7 +687,8 @@ my @IMPLS_WRAPPER = (
 );
 
 my %IMPLS_FOR_OS = (
-   linux => [qw( Uring )],
+   freebsd => [qw( KQueue )], # TODO and probably other BSDs
+   linux   => [qw( Uring )],
    # TODO: other OSes?
 );
 

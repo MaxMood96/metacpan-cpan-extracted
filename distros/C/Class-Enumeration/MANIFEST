@@ -11,6 +11,7 @@ README
 t/api.t
 t/Builder.t
 t/CoffeeSize.t
+t/critic.t
 t/lib/CoffeeSize.pm
 t/lib/LockFlag.pm
 t/lib/PowerState.pm
@@ -19,6 +20,7 @@ t/lib/TrafficLight.pm
 t/lib/TurnstileState.pm
 t/lib/TurnstileStateMachine.pm
 t/lib/VitalStatus.pm
+t/load.t
 t/LockFlag.t
 t/PowerState.t
 t/ToastStatus.t

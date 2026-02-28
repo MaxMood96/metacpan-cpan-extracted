@@ -3,18 +3,22 @@
 #
 #  (C) Paul Evans, 2021-2026 -- leonerd@leonerd.org.uk
 
-package Future::IO::Impl::Tickit 0.03;
+package Future::IO::Impl::Tickit 0.04;
 
-use v5.14;
+use v5.20;
 use warnings;
 use base qw( Future::IO::ImplBase );
+
+use feature qw( postderef signatures );
+no warnings qw( experimental::postderef experimental::signatures );
 
 use Carp;
 
 __PACKAGE__->APPLY;
 
 use Future::IO 0.20 qw( POLLIN POLLOUT POLLPRI POLLHUP POLLERR );
-use Tickit;
+use Struct::Dumb qw( readonly_struct );
+use Tickit 0.75;  # Tickit::IO_PRI
 my $tickit;
 
 =head1 NAME
@@ -58,46 +62,38 @@ implement this module.
 
 =cut
 
-sub set_tickit
+sub set_tickit ( $, $new_tickit )
 {
-   shift;
-
-   $tickit and $tickit != $_[0] and
+   $tickit and $tickit != $new_tickit and
       croak "A Tickit instance was alraedy set by ->set_tickit; cannot set another";
 
-   $tickit = $_[0];
+   $tickit = $new_tickit;
+
+   # We don't have a constructor method so now's about the best time
+   $SIG{PIPE} = 'IGNORE';
 }
 
-sub sleep
+sub sleep ( $, $secs )
 {
-   shift;
-   my ( $secs ) = @_;
-
    $tickit or
       croak "Need a Tickit instance with ->set_tickit before calling Future::IO->sleep";
 
    my $f = Future::IO::Impl::Tickit::_Future->new;
 
-   my $id = $tickit->watch_timer_after( $secs, sub {
+   my $id = $tickit->watch_timer_after( $secs, sub () {
       $f->done;
    } );
-   $f->on_cancel( sub { $tickit->watch_cancel( $id ) } );
+   $f->on_cancel( sub ( $ ) { $tickit->watch_cancel( $id ) } );
 
    return $f;
 }
 
-# for POLLIN or POLLHUP
-my %read_watch_by_fileno;   # {fileno} => $watch
-my %read_futures_by_fileno; # {fileno} => [@futures]
+readonly_struct Poller => [qw( events f )];
+my %pollers_by_fileno;
+my %watches_by_fileno; # {fileno} => [$watch, $events]
 
-# for POLLOUT
-my %write_watch_by_fileno;   # {fileno} => $watch
-my %write_futures_by_fileno; # {fileno} => [@futures]
-
-sub poll
+sub poll ( $, $fh, $events )
 {
-   shift;
-   my ( $fh, $events ) = @_;
    my $fd = $fh->fileno;
 
    $tickit or
@@ -105,82 +101,76 @@ sub poll
 
    my $f = Future::IO::Impl::Tickit::_Future->new;
 
-   if( $events & POLLPRI ) {
-      croak "Tickit cannot currently handle POLLPRI IO watches";
-   }
+   push $pollers_by_fileno{$fh->fileno}->@*, Poller( $events, $f );
 
-   if( $events & (POLLIN|POLLHUP) ) {
-      my $futures = $read_futures_by_fileno{ $fd } //= [];
-
-      my $was = scalar @$futures;
-      push @$futures, $f;
-
-      my $cond = 0;
-      $cond |= Tickit::IO_IN  if $events & POLLIN;
-      $cond |= Tickit::IO_HUP if $events & POLLHUP;
-
-      $read_watch_by_fileno{ $fd } = $tickit->watch_io( $fh, $cond,
-         sub {
-            my ( $info ) = @_;
-
-            my $revents = 0;
-            $revents |= POLLIN  if $info->cond & Tickit::IO_IN;
-            $revents |= POLLHUP if $info->cond & Tickit::IO_HUP;
-            $revents |= POLLERR if $info->cond & Tickit::IO_ERR;
-            $futures->[0]->done( $revents );
-            shift @$futures;
-
-            return 1 if scalar @$futures;
-
-            $tickit->watch_cancel( delete $read_watch_by_fileno{ $fd } );
-            return 0;
-         }
-      ) if !$was;
-   }
-
-   if( $events & POLLOUT ) {
-      my $futures = $write_futures_by_fileno{ $fd } //= [];
-
-      my $was = scalar @$futures;
-      push @$futures, $f;
-
-      $write_watch_by_fileno{ $fd } = $tickit->watch_io( $fh, Tickit::IO_OUT|Tickit::IO_HUP,
-         sub {
-            my ( $info ) = @_;
-
-            my $revents = 0;
-            $revents |= POLLOUT if $info->cond & Tickit::IO_OUT;
-            $revents |= POLLHUP if $info->cond & Tickit::IO_HUP;
-            $revents |= POLLERR if $info->cond & Tickit::IO_ERR;
-            $futures->[0]->done( $revents );
-            shift @$futures;
-
-            return 1 if scalar @$futures;
-
-            $tickit->watch_cancel( delete $write_watch_by_fileno{ $fd } );
-            return 0;
-         }
-      ) if !$was;
-   }
+   _update_io( $fh );
 
    return $f;
 }
 
-sub waitpid
+sub _update_io ( $fh )
 {
-   shift;
-   my ( $pid ) = @_;
+   my $fileno = $fh->fileno;
 
+   my $want_events = 0;
+   $want_events |= $_->events for ( my $pollers = $pollers_by_fileno{$fileno} )->@*;
+
+   return if $watches_by_fileno{$fileno} and $watches_by_fileno{$fileno}[1] == $want_events;
+
+   my $cond = 0;
+   $cond |= Tickit::IO_IN  if $want_events & POLLIN;
+   $cond |= Tickit::IO_OUT if $want_events & POLLOUT;
+   $cond |= Tickit::IO_PRI if $want_events & POLLPRI;
+
+   unless( $cond ) {
+      delete $watches_by_fileno{$fileno};
+      return;
+   }
+
+   my $watch = $tickit->watch_io( $fh, $cond,
+      sub ( $info ) {
+         my $revents = 0;
+         $revents |= POLLIN  if $info->cond & Tickit::IO_IN;
+         $revents |= POLLOUT if $info->cond & Tickit::IO_OUT;
+         $revents |= POLLPRI if $info->cond & Tickit::IO_PRI;
+         $revents |= POLLHUP if $info->cond & Tickit::IO_HUP;
+         $revents |= POLLERR if $info->cond & Tickit::IO_ERR;
+
+         # Find the next poller which cares about at least one of these events
+         foreach my $idx ( 0 .. $#$pollers ) {
+            my $want_revents = $revents & ( $pollers->[$idx]->events | POLLHUP|POLLERR )
+               or next;
+
+            my ( $poller ) = splice @$pollers, $idx, 1, ();
+
+            $poller and $poller->f and $poller->f->done( $want_revents );
+            last;
+         }
+
+         if( !@$pollers ) {
+            delete $watches_by_fileno{$fileno};
+            return 0;
+         }
+
+         _update_io( $fh );
+         return 1;
+      }
+   );
+
+   $watches_by_fileno{$fileno} = [ $watch, $want_events ];
+}
+
+sub waitpid ( $, $pid )
+{
    $tickit or
       croak "Need a Tickit instance with ->set_tickit before calling Future::IO->waitpid";
 
    my $f = Future::IO::Impl::Tickit::_Future->new;
 
-   my $id = $tickit->watch_process( $pid, sub {
-      my ( $info ) = @_;
+   my $id = $tickit->watch_process( $pid, sub ( $info ) {
       $f->done( $info->wstatus );
    } );
-   $f->on_cancel( sub { $tickit->watch_cancel( $id ) } );
+   $f->on_cancel( sub ( $ ) { $tickit->watch_cancel( $id ) } );
 
    return $f;
 }
@@ -188,9 +178,8 @@ sub waitpid
 package Future::IO::Impl::Tickit::_Future {
    use base qw( Future );
 
-   sub await
+   sub await ( $self )
    {
-      my $self = shift;
       $tickit->tick until $self->is_ready;
       return $self;
    }

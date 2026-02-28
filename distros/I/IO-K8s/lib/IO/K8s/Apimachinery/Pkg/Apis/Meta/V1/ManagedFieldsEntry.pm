@@ -1,6 +1,6 @@
 package IO::K8s::Apimachinery::Pkg::Apis::Meta::V1::ManagedFieldsEntry;
 # ABSTRACT: ManagedFieldsEntry is a workflow-id, a FieldSet and the group version of the resource that the fieldset applies to.
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 use IO::K8s::Resource;
 
 k8s apiVersion => Str;
@@ -21,7 +21,7 @@ k8s operation => Str;
 k8s subresource => Str;
 
 
-k8s time => Str;
+k8s time => Time;
 
 
 1;
@@ -38,7 +38,7 @@ IO::K8s::Apimachinery::Pkg::Apis::Meta::V1::ManagedFieldsEntry - ManagedFieldsEn
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head2 apiVersion
 

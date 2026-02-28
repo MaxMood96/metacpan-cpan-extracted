@@ -27,7 +27,7 @@ no_index:
 provides:
   Amon2:
     file: lib/Amon2.pm
-    version: '6.17'
+    version: '6.18'
   Amon2::Config::Simple:
     file: lib/Amon2/Config/Simple.pm
   Amon2::ContextGuard:
@@ -56,13 +56,13 @@ provides:
     file: lib/Amon2/Setup/Flavor.pm
   Amon2::Setup::Flavor::Basic:
     file: lib/Amon2/Setup/Flavor/Basic.pm
-    version: '6.17'
+    version: '6.18'
   Amon2::Setup::Flavor::Large:
     file: lib/Amon2/Setup/Flavor/Large.pm
-    version: '6.17'
+    version: '6.18'
   Amon2::Setup::Flavor::Minimum:
     file: lib/Amon2/Setup/Flavor/Minimum.pm
-    version: '6.17'
+    version: '6.18'
   Amon2::Setup::VC::Git:
     file: lib/Amon2/Setup/VC/Git.pm
   Amon2::Trigger:
@@ -98,7 +98,6 @@ requires:
   Getopt::Long: '0'
   HTML::FillInForm::Lite: '0'
   HTTP::Headers: '0'
-  HTTP::Session2: '0'
   Hash::MultiValue: '0'
   JSON: '2'
   MIME::Base64: '0'
@@ -122,7 +121,7 @@ resources:
   bugtracker: https://github.com/tokuhirom/Amon/issues
   homepage: https://github.com/tokuhirom/Amon
   repository: https://github.com/tokuhirom/Amon.git
-version: '6.17'
+version: '6.18'
 x_contributors:
   - 'Adrian <adrian@investometrica.com>'
   - 'Fuji, Goro <g.psy.va@gmail.com>'

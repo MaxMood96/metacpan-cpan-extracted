@@ -7,15 +7,15 @@ use Module::Build;
 my $build = Module::Build->new(
    module_name => 'Future::IO::Impl::Tickit',
    requires => {
-      'perl' => '5.014',
+      'perl' => '5.020',
 
       'Future' => 0,
       'Future::IO' => '0.20',
       'Future::IO::ImplBase' => 0,
-      'Tickit' => '0.72',
+      'Tickit' => '0.75',
    },
    test_requires => {
-      'Test::Future::IO::Impl' => '0.19', # latest
+      'Test::Future::IO::Impl' => '0.20', # latest
       'Test2::V0' => 0,
    },
    configure_requires => {

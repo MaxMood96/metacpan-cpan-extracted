@@ -1,23 +1,27 @@
 ---
-abstract: 'Parse and format time values'
+abstract: 'date parsing both relative and absolute'
 author:
-  - 'David Muir Sharnoff <cpan@dave.sharnoff.org>'
+  - 'Best Practical Solutions, LLC <modules@bestpractical.com>'
 build_requires:
+  ExtUtils::MakeMaker: 6.59
   Time::Piece: 0
 configure_requires:
-  ExtUtils::MakeMaker: 0
+  ExtUtils::MakeMaker: 6.59
+distribution_type: module
 dynamic_config: 1
-generated_by: 'ExtUtils::MakeMaker version 6.62, CPAN::Meta::Converter version 2.112150'
-license: unknown
+generated_by: 'Module::Install version 1.21'
+license: perl_5
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
   version: 1.4
 name: Time-ParseDate
 no_index:
   directory:
-    - t
     - inc
-requires: {}
+    - t
+requires:
+  perl: 5.8.1
 resources:
-  repository: http://github.com/muir/Time-modules
-version: 2015.103
+  license: http://dev.perl.org/licenses/
+  repository: https://github.com/bestpractical/time-parsedate
+version: 2026.0219

@@ -1,12 +1,12 @@
 # Prefer numeric version for backwards compatibility
-BEGIN { require 5.010_001 }; ## no critic ( RequireUseStrict, RequireUseWarnings )
+BEGIN { require 5.010001 }; ## no critic ( RequireUseStrict, RequireUseWarnings )
 use strict;
 use warnings;
 use feature 'state';
 
 package Class::Enumeration::Builder;
 
-$Class::Enumeration::Builder::VERSION = 'v1.3.0';
+$Class::Enumeration::Builder::VERSION = 'v1.3.1';
 
 use subs qw( _create_enum_object _is_equal );
 

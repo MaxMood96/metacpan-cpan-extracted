@@ -1,6 +1,6 @@
 package IO::K8s::Role::NetworkPolicy;
 # ABSTRACT: Role for building network policies (core K8s and Cilium)
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 use Moo::Role;
 use IO::K8s::Types::Net qw( cidr_contains );
 use Carp qw(croak);
@@ -354,7 +354,7 @@ IO::K8s::Role::NetworkPolicy - Role for building network policies (core K8s and 
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head1 SUPPORT
 

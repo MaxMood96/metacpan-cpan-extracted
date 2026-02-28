@@ -1,6 +1,6 @@
 package Time::ParseDate;
 
-require 5.000;
+require 5.008001;
 
 use Carp;
 use Time::Timezone;
@@ -16,7 +16,7 @@ use strict;
 # constants
 use vars qw(%mtable %umult %wdays $VERSION);
 
-$VERSION = 2015.1030;
+$VERSION = 2026.0219;
 
 # globals
 use vars qw($debug); 
@@ -656,7 +656,7 @@ sub parse_time_only
 
 	$$tr =~ s#^\s+##;
 
-	if ($$tr =~ s!^(?x)
+	if ($$tr =~ s/^(?x)
 			(?:
 				(?:
 					([012]\d)		(?# $1)
@@ -666,8 +666,7 @@ sub parse_time_only
 						    ([0-5]\d)	(?# $3)
 						)?
 					)
-					\s*
-					([apAP][mM])?  		(?# $4)
+					(?:\s*([apAP][mM]))?	(?# $4)
 				) | (?:
 					(\d{1,2}) 		(?# $5)
 					(?:
@@ -683,24 +682,27 @@ sub parse_time_only
 								)?	(?# $8)
 						)?
 					)
-					\s*
-					([apAP][mM])?		(?# $9)
+					(?:\s*([apAP][mM]))?	(?# $9)
 				) | (?:
 					(\d{1,2})		(?# $10)
 					([apAP][mM])		(?# ${11})
 				)
 			)
 			(?:
-				\s+
-				"?
-				(				(?# ${12})
-					(?: [A-Z]{1,4}[TCW56] )
-					|
-					IDLE
-				)	
+				(?:
+					\s+
+					"?
+					(			(?# ${12})
+						(?: [A-Z]{1,4}[TCW56](?!(?:\+\d+|\s+DST)) )
+						|
+						IDLE
+					)
+				)
+				|
+				([Zz])				(?# ${13})
 			)?
 			$break
-			!!) { #"emacs
+			//) { #"emacs
 		# HH[[:]MM[:SS]]meridian [zone] 
 		my $ampm;
 		$$hr = $1 || $5 || $10 || 0; # 10 is undef, but 5 is defined..
@@ -713,7 +715,9 @@ sub parse_time_only
 		}
 		print "S = $$sr\n" if $debug;
 		$ampm = $4 || $9 || $11 || '';
+		printf "ampm at %d: %s %s %s\n", __LINE__, $4||'(no)', $9||'(no)', $11||'(no)' if $debug;
 		$$tzr = $12;
+		$$tzr = 'UTC' if defined $13;
 		$$hr += 12 if $ampm and "\U$ampm" eq "PM" && $$hr != 12;
 		$$hr = 0 if $$hr == 12 && "\U$ampm" eq "AM";
 		printf "matched at %d, rem = %s.\n", __LINE__, $$tr if $debug;
@@ -1248,11 +1252,30 @@ C<undef> and an error string.
 	($seconds, $remaining) = parsedate("today is the day");
 	($seconds, $error) = parsedate("today is", WHOLE=>1);
 
-=head1 LICENSE
+=head1 AUTHOR
 
-Copyright (C) 1996-2010 David Muir Sharnoff.  
-Copyright (C) 2011 Google, Inc.  
-License hereby
-granted for anyone to use, modify or redistribute this module at
-their own risk.  Please feed useful changes back to cpan@dave.sharnoff.org.
+Best Practical Solutions, LLC E<lt>modules@bestpractical.comE<gt>
+
+=head1 ORIGINAL AUTHOR
+
+David Muir Sharnoff
+
+=head1 BUGS
+
+All bugs should be reported via email to
+
+    L<bug-Time-ParseDate@rt.cpan.org|mailto:bug-Time-ParseDate@rt.cpan.org>
+
+or via the web at
+
+    L<rt.cpan.org|http://rt.cpan.org/Public/Dist/Display.html?Name=Time-ParseDate>.
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright (C) 1996-2010 David Muir Sharnoff.
+Copyright (C) 2011 Google, Inc.
+Copyright (C) 2026 Best Practical Solutions, LLC.
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.
 

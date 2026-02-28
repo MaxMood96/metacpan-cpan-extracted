@@ -11,7 +11,7 @@ $Carp::Internal{ 'Net::Correios' }++;
 
 package Net::Correios;
 
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 
 my %libs = (
   token        => 'Token',

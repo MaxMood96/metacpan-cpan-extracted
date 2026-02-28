@@ -24,21 +24,21 @@
             "Future" : "0",
             "Future::IO" : "0.20",
             "Future::IO::ImplBase" : "0",
-            "Tickit" : "0.72",
-            "perl" : "5.014"
+            "Tickit" : "0.75",
+            "perl" : "5.020"
          }
       },
       "test" : {
          "requires" : {
             "Test2::V0" : "0",
-            "Test::Future::IO::Impl" : "0.19"
+            "Test::Future::IO::Impl" : "0.20"
          }
       }
    },
    "provides" : {
       "Future::IO::Impl::Tickit" : {
          "file" : "lib/Future/IO/Impl/Tickit.pm",
-         "version" : "0.03"
+         "version" : "0.04"
       }
    },
    "release_status" : "stable",
@@ -47,6 +47,6 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.03",
+   "version" : "0.04",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

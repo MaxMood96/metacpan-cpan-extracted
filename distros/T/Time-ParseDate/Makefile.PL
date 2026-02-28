@@ -1,24 +1,13 @@
+use lib '.';
+use inc::Module::Install;
 
-use ExtUtils::MakeMaker;
+name('Time-ParseDate');
+all_from('lib/Time/ParseDate.pm');
+readme_from('lib/Time/ParseDate.pm');
+repository('https://github.com/bestpractical/time-parsedate');
+license('perl_5');
 
-WriteMakefile( 
-	VERSION_FROM =>	'lib/Time/ParseDate.pm',
-	NAME =>		'Time::ParseDate',
-	($] >= 5.005 
-		?	
-			(
-				ABSTRACT	=> 'Parse and format time values',
-				AUTHOR		=> 'David Muir Sharnoff <cpan@dave.sharnoff.org>',
-				META_MERGE     => {
-					resources  => {
-						repository => 'http://github.com/muir/Time-modules',
-					},
-				},
-			) 
-		: ()
-	),
-	BUILD_REQUIRES => {
-		'Time::Piece'	=> 0,
-	},
-	dist => { 	COMPRESS=>"gzip", SUFFIX=>"gz" },
-);
+build_requires('Time::Piece');
+
+sign;
+WriteAll;

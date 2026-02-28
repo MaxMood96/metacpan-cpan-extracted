@@ -1,7 +1,7 @@
 [![Actions Status](https://github.com/tecolicom/App-nup/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/tecolicom/App-nup/actions?workflow=test) [![MetaCPAN Release](https://badge.fury.io/pl/App-nup.svg)](https://metacpan.org/release/App-nup)
 # NAME
 
-nup - N-up multi-column paged output for commands and files
+nup - n-up, multi-column paged output for commands and files
 
 # SYNOPSIS
 
@@ -26,6 +26,8 @@ nup - N-up multi-column paged output for commands and files
     --bs --border-style=#   border style (default: heavy-box)
     --ls --line-style=#     line style (none/truncate/wrap/wordwrap)
     --cm --colormap=#       color mapping (LABEL=COLOR)
+         --[no-]page-number page number on border (default: on)
+         --textconv[=EXT]   textconv for non-text files
          --pager=#          pager command (empty to disable)
          --no-pager         disable pager
          --white-board      black on white board
@@ -35,21 +37,21 @@ nup - N-up multi-column paged output for commands and files
 
 # VERSION
 
-Version 0.9905
+Version 0.9907
 
 # DESCRIPTION
 
-**nup** is a simple wrapper script for `optex -Mup`.  It provides a
-convenient way to view files or run commands with N-up output
-formatting using the [App::optex::up](https://metacpan.org/pod/App%3A%3Aoptex%3A%3Aup) module.
+**N-up** (command: `nup`) is a multi-column paged output tool.
+It provides a convenient way to view files or run commands in
+n-up layout using the [App::optex::up](https://metacpan.org/pod/App%3A%3Aoptex%3A%3Aup) module through `optex`.
 
 <div>
     <p><img width="750" src="https://raw.githubusercontent.com/tecolicom/App-nup/main/images/nup.png"></p>
 </div>
 
-**nup** automatically detects the mode based on the first argument:
-if it is an existing file, file view mode is used; if it is an
-executable command, command mode is used.  Use `-e` option to
+`nup` automatically detects the mode based on the first argument:
+if it is an existing file, n-up file view mode is used; if it is an
+executable command, n-up command mode is used.  Use `-e` option to
 force command mode when needed.
 
 # OPTIONS
@@ -106,7 +108,7 @@ force command mode when needed.
 - **-D**, **--document**
 
     Enable document mode for ansicolumn.  This mode is optimized for
-    viewing documents with page-based layout.  Enabled by default.
+    viewing documents with n-up page-based layout.  Enabled by default.
     Use `--no-document` to disable.
 
 - **-F**, **--fold**
@@ -157,9 +159,28 @@ force command mode when needed.
     Set color mapping. Specify as `LABEL=COLOR` (e.g., `--cm=BORDER=R`).
     Available labels: `TEXT`, `BORDER`.
 
+- **--**\[**no-**\]**page-number**
+
+    Show page number on the bottom border of each column.  Enabled by
+    default.  Use `--no-page-number` to disable.
+
 - **--white-board**, **--black-board**, **--green-board**, **--slate-board**
 
     Predefined color schemes for board-style display.
+
+## Text Conversion
+
+- **--textconv**\[=_EXT,..._\]
+
+    Enable text conversion for non-text files using
+    [App::optex::textconv](https://metacpan.org/pod/App%3A%3Aoptex%3A%3Atextconv).  When any of the specified file extensions
+    are found in the arguments, the `textconv` module is loaded to
+    convert them to text before display.
+
+    Default extensions:
+    `pdf,docx,docm,pptx,pptm,xlsx,xlsm,jpg,jpeg`.
+
+    Use `--textconv=none` to disable.
 
 ## Pager Options
 
@@ -174,11 +195,27 @@ force command mode when needed.
 
     Disable pager.
 
+## Less Environment Variables
+
+`nup` sets the following environment variables when they are not
+already defined, to ensure proper display with `less`:
+
+- `LESS`
+
+    Default: `-R`.  Required for ANSI color sequences.
+
+- `LESSANSIENDCHARS`
+
+    Default: `mK`.  Recognizes SGR (`m`) and erase line (`K`)
+    sequences.
+
 # EXAMPLES
 
-    nup man nup                # view manual in multi-column
+Typical n-up usage:
+
+    nup man nup                # view manual in n-up layout
     nup -C2 man perl           # 2 columns
-    nup -G2x2 man perl         # 2x2 grid (4-up)
+    nup -G2x2 man perl         # 2x2 grid (4-up layout)
     nup -F man perl            # fold mode (no pagination)
     nup file1.txt file2.txt    # view files side by side
     nup -e ./script.sh         # force command mode for a file
@@ -192,7 +229,7 @@ Using [cpanminus](https://metacpan.org/pod/App::cpanminus):
 # DIAGNOSTICS
 
 Both stdout and stderr of the command are merged and passed through
-the output filter.  Error messages will appear in the paged output.
+the n-up output filter.  Error messages will appear in the paged output.
 
 # EXIT STATUS
 
@@ -209,7 +246,7 @@ Kazumasa Utashiro
 
 # LICENSE
 
-Copyright 2025 Kazumasa Utashiro.
+Copyright 2025-2026 Kazumasa Utashiro.
 
 This software is released under the MIT License.
 [https://opensource.org/licenses/MIT](https://opensource.org/licenses/MIT)

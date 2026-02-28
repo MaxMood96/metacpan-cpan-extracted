@@ -1,6 +1,6 @@
 package Time::Timezone;
 
-require 5.002;
+require 5.008001;
 
 require Exporter;
 @ISA = qw(Exporter);
@@ -14,7 +14,7 @@ use strict;
 
 use vars qw($VERSION);
 
-$VERSION = 2015.0925;
+$VERSION = 2026.0219;
 
 sub tz2zone
 {
@@ -316,14 +316,18 @@ timezone.
 
 C<tz_name()> determines the name of the timezone based on its offset
 
-=head1 AUTHORS
+=head1 AUTHOR
 
-Graham Barr <bodg@tiuk.ti.com>
-David Muir Sharnoff <muir@idiom.org>
-Paul Foley <paul@ascent.com>
+Best Practical Solutions, LLC E<lt>modules@bestpractical.comE<gt>
 
-=head1 LICENSE
+=head1 ORIGINAL AUTHORS
 
-David Muir Sharnoff disclaims any copyright and puts his contribution
-to this module in the public domain.
+Graham Barr, David Muir Sharnoff, Paul Foley
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright (C) 2026 Best Practical Solutions, LLC.
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.
 

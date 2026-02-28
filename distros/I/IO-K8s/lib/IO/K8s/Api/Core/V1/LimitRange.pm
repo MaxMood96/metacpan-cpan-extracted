@@ -1,6 +1,6 @@
 package IO::K8s::Api::Core::V1::LimitRange;
 # ABSTRACT: LimitRange sets resource usage limits for each kind of resource in a Namespace.
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 use IO::K8s::APIObject;
 with 'IO::K8s::Role::Namespaced';
 
@@ -21,7 +21,7 @@ IO::K8s::Api::Core::V1::LimitRange - LimitRange sets resource usage limits for e
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head1 DESCRIPTION
 

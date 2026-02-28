@@ -1,0 +1,17 @@
+Changes
+lib/Test/PostgreSQL/v2.pm
+lib/Test/DBIx/Class/SchemaManager/Trait/Testpostgresqlv2.pm
+Makefile.PL
+LICENSE
+MANIFEST
+MANIFEST.SKIP
+README.md
+t/00-load.t
+t/01-basic.t
+t/02-dbic.t
+t/03-integration.t
+t/04-datetime.t
+t/lib/MySchema.pm
+t/lib/MySchema/Result/Item.pm
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

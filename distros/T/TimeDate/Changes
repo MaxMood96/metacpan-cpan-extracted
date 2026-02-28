@@ -1,3 +1,21 @@
+Revision history for TimeDate distribution.
+
+2.34      2026-02-27 17:00:48-07:00 America/Denver
+
+  * doc: Increase POD coverage
+  * refactor: extract _build_lookups helper, remove hash-building duplication
+  * fix: correct language data bugs and minor code review fixes
+  * Fixup utf8 and add tests
+  * Use Dist::Zilla for the distro
+  * rebase: apply review feedback on #52
+  * fix: uncomment Indian Standard timezone (IST)
+  * feat: support boost C++ timestamp format (%Y-%b-%d %H:%M:%S.%f)
+  * fix: correct typos across documentation and comments
+  * stop using use vars
+  * rebase: apply review feedback on #49
+  * Remove limitation from Date::Parse
+  * Create Arabic.pm
+
 2.33 -- Wed May 19 11:34:00 MT 2020
 
   * Remove PAX Headers in tarball using GNU tar
@@ -37,7 +55,7 @@
 1.17 -- Sat Sep 19 10:56:12 CDT 2009
 
 Bugfixes
-  * RT#45067: Date::Format with %z gives wrong results for half-hour timezones (Ernesto Hernández-Novich)
+  * RT#45067: Date::Format with %z gives wrong results for half-hour timezones (Ernesto Hern?dez-Novich)
   * RT#48164: Date::Parse unable to set seconds correctly
   * RT#17396: Parse error for french date with 'mars' (march) as month
 
@@ -140,7 +158,7 @@ Change 744 on 2002/09/16 by <gbarr@pobox.com> (Graham Barr)
 Change 743 on 2002/09/16 by <gbarr@pobox.com> (Graham Barr)
 
 	Add Date::Language::Brazilian from Christian Tosta
-	Add Date::Language::Danish from Lars Skjærlund
+	Add Date::Language::Danish from Lars Skj?lund
 
 Change 742 on 2002/09/16 by <gbarr@pobox.com> (Graham Barr)
 
@@ -266,7 +284,7 @@ Change 579 on 2000/09/04 by <gbarr@pobox.com> (Graham Barr)
 
 	Date::Parse
 	- Support for more date formats
-	
+
 	Time::Zone
 	- Added more zones
 
@@ -340,7 +358,7 @@ Change 180 on 1998/08/05 by <gbarr@pobox.com> (Graham Barr)
 	- Added Date::Language::French contributed by
 	  Emmanuel Bataille (bem@residents.frmug.org)
 	- Split out the languages into .pm's
-	
+
 	Date::Parse
 	- Added patch from Alan Burlison to Date::Parse to allow zone
 	  offests +7, +10 and +700
@@ -352,7 +370,7 @@ Fri Jan  2 1998 <gbarr@pobox.com> (Graham Barr)
 
 	Date::Format, Time::Zone
 	- Fix for formatting %z and %Z
-	
+
 	all
 	- Update Email address and year
 

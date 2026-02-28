@@ -1,6 +1,6 @@
 # NAME
 
-Google::GeoCoder::Smart - Simple Google Geocoding API client
+[Google::GeoCoder::Smart](https://metacpan.org/pod/Google::GeoCoder::Smart) - Simple Google Geocoding API client
 
 # SYNOPSIS
 

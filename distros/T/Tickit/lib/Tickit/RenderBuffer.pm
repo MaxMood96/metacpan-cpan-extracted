@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2013-2017 -- leonerd@leonerd.org.uk
 
-package Tickit::RenderBuffer 0.74;
+package Tickit::RenderBuffer 0.75;
 
 use v5.14;
 use warnings;
@@ -44,26 +44,26 @@ C<Tickit::RenderBuffer> - efficiently render text and line-drawing
 
 =head1 SYNOPSIS
 
- package Tickit::Widget::Something;
- ...
+   package Tickit::Widget::Something;
+   ...
 
- sub render_to_rb
- {
-    my $self = shift;
-    my ( $rb, $rect ) = @_;
+   sub render_to_rb
+   {
+      my $self = shift;
+      my ( $rb, $rect ) = @_;
 
-    $rb->eraserect( $rect );
-    $rb->text_at( 2, 2, "Hello, world!", $self->pen );
- }
+      $rb->eraserect( $rect );
+      $rb->text_at( 2, 2, "Hello, world!", $self->pen );
+   }
 
 Z<>
 
- $win->set_on_expose( sub {
-    my ( $win, $rb, $rect ) = @_;
+   $win->set_on_expose( sub {
+      my ( $win, $rb, $rect ) = @_;
 
-    $rb->eraserect( $rect );
-    $rb->text_at( 2, 2, "Hello, world!" );
- });
+      $rb->eraserect( $rect );
+      $rb->text_at( 2, 2, "Hello, world!" );
+   });
 
 =head1 DESCRIPTION
 
@@ -167,7 +167,7 @@ saving state and modifying it, to later restore it again afterwards.
 
 =head2 new
 
-   $rb = Tickit::RenderBuffer->new( %args )
+   $rb = Tickit::RenderBuffer->new( %args );
 
 Returns a new instance of a C<Tickit::RenderBuffer>.
 
@@ -204,9 +204,9 @@ sub new
 
 =head2 cols
 
-   $lines = $rb->lines
+   $lines = $rb->lines;
 
-   $cols = $rb->cols
+   $cols = $rb->cols;
 
 Returns the size of the buffer area
 
@@ -216,9 +216,9 @@ Returns the size of the buffer area
 
 =head2 col
 
-   $line = $rb->line
+   $line = $rb->line;
 
-   $col = $rb->col
+   $col = $rb->col;
 
 Returns the current position of the virtual cursor, or C<undef> if it is not
 set.
@@ -227,7 +227,7 @@ set.
 
 =head2 save
 
-   $rb->save
+   $rb->save;
 
 Pushes a new state-saving context to the stack, which can later be returned to
 by the C<restore> method.
@@ -236,7 +236,7 @@ by the C<restore> method.
 
 =head2 savepen
 
-   $rb->savepen
+   $rb->savepen;
 
 Pushes a new state-saving context to the stack that only stores the pen. This
 can later be returned to by the C<restore> method, but will only restore the
@@ -250,7 +250,7 @@ is better just to pass a different pen directly.
 
 =head2 restore
 
-   $rb->restore
+   $rb->restore;
 
 Pops and restores a saved state previously created with C<save>.
 
@@ -258,7 +258,7 @@ Pops and restores a saved state previously created with C<save>.
 
 =head2 clip
 
-   $rb->clip( $rect )
+   $rb->clip( $rect );
 
 Restricts the clipping rectangle of drawing operations to be no further than
 the limits of the given rectangle. This will apply to subsequent rendering
@@ -273,7 +273,7 @@ C<restore> stack.
 
 =head2 mask
 
-   $rb->mask( $rect )
+   $rb->mask( $rect );
 
 Masks off the given area against any further changes. This will apply to
 subsequent rendering operations but does not affect the existing content, nor
@@ -285,7 +285,7 @@ invoked, any masks applied since its corresponding C<save> will be removed.
 
 =head2 translate
 
-   $rb->translate( $downward, $rightward )
+   $rb->translate( $downward, $rightward );
 
 Applies a translation to the coordinate system used by C<goto> and the
 absolute-position methods C<*_at>. After this call, all positions used will be
@@ -295,7 +295,7 @@ offset by the given amount.
 
 =head2 reset
 
-   $rb->reset
+   $rb->reset;
 
 Removes any pending changes and reverts the C<RenderBuffer> to its default
 empty state. Undefines the virtual cursor position, resets the clipping
@@ -305,7 +305,7 @@ rectangle, and clears the stack of saved state.
 
 =head2 clear
 
-   $rb->clear( $pen )
+   $rb->clear( $pen );
 
 Resets every cell in the buffer to an erased state. 
 A shortcut to calling C<erase_at> for every line.
@@ -314,7 +314,7 @@ A shortcut to calling C<erase_at> for every line.
 
 =head2 goto
 
-   $rb->goto( $line, $col )
+   $rb->goto( $line, $col );
 
 Sets the position of the virtual cursor.
 
@@ -322,7 +322,7 @@ Sets the position of the virtual cursor.
 
 =head2 setpen
 
-   $rb->setpen( $pen )
+   $rb->setpen( $pen );
 
 Sets the rendering pen to use for drawing operations. If a pen is set then a
 C<$pen> argument is optional to any of the drawing methods. If a pen argument
@@ -342,7 +342,7 @@ C<restore> pair may be useful.
 
 =head2 skip_at
 
-   $rb->skip_at( $line, $col, $len )
+   $rb->skip_at( $line, $col, $len );
 
 Sets the range of cells given to a skipped state. No content will be drawn
 here, nor will any content existing on the terminal be erased.
@@ -353,7 +353,7 @@ Initially, or after calling C<reset>, all cells are set to this state.
 
 =head2 skip
 
-   $rb->skip( $len )
+   $rb->skip( $len );
 
 Sets the range of cells at the virtual cursor position to a skipped state, and
 updates the position.
@@ -362,7 +362,7 @@ updates the position.
 
 =head2 skip_to
 
-   $rb->skip_to( $col )
+   $rb->skip_to( $col );
 
 Sets the range of cells from the virtual cursor position until before the
 given column to a skipped state, and updates the position to the column.
@@ -374,7 +374,7 @@ and no buffer changes are made.
 
 =head2 skiprect
 
-   $rb->skiprect( $rect )
+   $rb->skiprect( $rect );
 
 Sets the range of cells given by the rectangle to skipped state.
 
@@ -382,7 +382,7 @@ Sets the range of cells given by the rectangle to skipped state.
 
 =head2 text_at
 
-   $cols = $rb->text_at( $line, $col, $text, $pen )
+   $cols = $rb->text_at( $line, $col, $text, $pen );
 
 Sets the range of cells starting at the given position, to render the given
 text in the given pen.
@@ -394,7 +394,7 @@ than was actually printed).
 
 =head2 text
 
-   $cols = $rb->text( $text, $pen )
+   $cols = $rb->text( $text, $pen );
 
 Sets the range of cells at the virtual cursor position to render the given
 text in the given pen, and updates the position.
@@ -406,7 +406,7 @@ than was actually printed).
 
 =head2 erase_at
 
-   $rb->erase_at( $line, $col, $len, $pen )
+   $rb->erase_at( $line, $col, $len, $pen );
 
 Sets the range of cells given to erase with the given pen.
 
@@ -414,7 +414,7 @@ Sets the range of cells given to erase with the given pen.
 
 =head2 erase
 
-   $rb->erase( $len, $pen )
+   $rb->erase( $len, $pen );
 
 Sets the range of cells at the virtual cursor position to erase with the given
 pen, and updates the position.
@@ -423,7 +423,7 @@ pen, and updates the position.
 
 =head2 erase_to
 
-   $rb->erase_to( $col, $pen )
+   $rb->erase_to( $col, $pen );
 
 Sets the range of cells from the virtual cursor position until before the
 given column to erase with the given pen, and updates the position to the
@@ -436,7 +436,7 @@ and no buffer changes are made.
 
 =head2 eraserect
 
-   $rb->eraserect( $rect, $pen )
+   $rb->eraserect( $rect, $pen );
 
 Sets the range of cells given by the rectangle to erase with the given pen.
 
@@ -516,16 +516,16 @@ is a convenient shortcut specifying both behaviours.
 A rectangle may be formed by combining two C<hline_at> and two C<vline_at>
 calls, without end caps:
 
- $rb->hline_at( $top,    $left, $right, $style, $pen );
- $rb->hline_at( $bottom, $left, $right, $style, $pen );
- $rb->vline_at( $top, $bottom, $left,  $style, $pen );
- $rb->vline_at( $top, $bottom, $right, $style, $pen );
+   $rb->hline_at( $top,    $left, $right, $style, $pen );
+   $rb->hline_at( $bottom, $left, $right, $style, $pen );
+   $rb->vline_at( $top, $bottom, $left,  $style, $pen );
+   $rb->vline_at( $top, $bottom, $right, $style, $pen );
 
 =cut
 
 =head2 hline_at
 
-   $rb->hline_at( $line, $startcol, $endcol, $style, $pen, $caps )
+   $rb->hline_at( $line, $startcol, $endcol, $style, $pen, $caps );
 
 Draws a horizontal line between the given columns (both are inclusive), in the
 given line style, with the given pen.
@@ -534,7 +534,7 @@ given line style, with the given pen.
 
 =head2 vline_at
 
-   $rb->vline_at( $startline, $endline, $col, $style, $pen, $caps )
+   $rb->vline_at( $startline, $endline, $col, $style, $pen, $caps );
 
 Draws a vertical line between the centres of the given lines (both are
 inclusive), in the given line style, with the given pen.
@@ -564,7 +564,7 @@ sub linebox_at
 
 =head2 char_at
 
-   $rb->char_at( $line, $col, $codepoint, $pen )
+   $rb->char_at( $line, $col, $codepoint, $pen );
 
 Sets the given cell to render the given Unicode character (as given by
 codepoint number, not character string) in the given pen.
@@ -573,7 +573,7 @@ codepoint number, not character string) in the given pen.
 
 =head2 char
 
-   $rb->char( $codepoint, $pen )
+   $rb->char( $codepoint, $pen );
 
 Sets the cell at the virtual cursor position to render the given Unicode
 character (as given by codepoint number, not character string) in the given
@@ -589,9 +589,9 @@ efficient than many single-column wide C<text_at> calls.
 
 =head2 moverect
 
-   $rb->copyrect( $dest, $src )
+   $rb->copyrect( $dest, $src );
 
-   $rb->moverect( $dest, $src )
+   $rb->moverect( $dest, $src );
 
 Copies (or moves) buffered content from one rectangular region to another.
 The two regions may overlap.
@@ -604,7 +604,7 @@ skipping state.
 
 =head2 get_cell
 
-   $cell = $rb->get_cell( $line, $col )
+   $cell = $rb->get_cell( $line, $col );
 
 Returns a structure containing the content stored in the given cell. The
 C<$cell> structure responds to the following methods:
@@ -664,7 +664,7 @@ sub get_cell
 
 =head2 flush_to_term
 
-   $rb->flush_to_term( $term )
+   $rb->flush_to_term( $term );
 
 Renders the stored content to the given L<Tickit::Term>. After this, the
 buffer will be cleared and reset back to initial state.

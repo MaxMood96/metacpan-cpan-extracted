@@ -1,0 +1,31 @@
+---
+abstract: 'implement C<Future::IO> using C<kqueue(2)>'
+author:
+  - 'Paul Evans <leonerd@leonerd.org.uk>'
+build_requires:
+  Test2::V0: '0'
+  Test::Future::IO::Impl: '0.19'
+configure_requires:
+  Module::Build: '0.4004'
+dynamic_config: 1
+generated_by: 'Module::Build version 0.4234, CPAN::Meta::Converter version 2.150010'
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: Future-IO-Impl-KQueue
+provides:
+  Future::IO::Impl::KQueue:
+    file: lib/Future/IO/Impl/KQueue.pm
+    version: '0.01'
+requires:
+  Future: '0'
+  Future::IO: '0.20'
+  Future::IO::ImplBase: '0'
+  IO::KQueue: '0.39'
+  Struct::Dumb: '0'
+  perl: '5.020'
+resources:
+  license: http://dev.perl.org/licenses/
+version: '0.01'
+x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

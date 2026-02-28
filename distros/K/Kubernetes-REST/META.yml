@@ -28,6 +28,7 @@ requires:
   MooX::Cmd: '0'
   MooX::Options: '0'
   Path::Tiny: '0'
+  Throwable: '0'
   Types::Standard: '0'
   YAML::XS: '0'
   namespace::clean: '0'
@@ -37,7 +38,7 @@ resources:
   bugtracker: https://github.com/pplu/kubernetes-rest/issues
   homepage: https://github.com/pplu/kubernetes-rest
   repository: https://github.com/pplu/kubernetes-rest.git
-version: '1.002'
+version: '1.003'
 x_Dist_Zilla:
   perl:
     version: '5.036000'
@@ -291,7 +292,7 @@ x_Dist_Zilla:
           branch: ~
           changelog: Changes
           signed: 0
-          tag: '1.002'
+          tag: '1.003'
           tag_format: '%v'
           tag_message: v%V
         Dist::Zilla::Role::Git::Repo:

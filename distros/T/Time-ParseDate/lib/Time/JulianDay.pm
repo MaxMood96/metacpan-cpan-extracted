@@ -1,6 +1,6 @@
 package Time::JulianDay;
 
-require 5.000;
+require 5.008001;
 
 use Carp;
 use Time::Timezone;
@@ -19,7 +19,7 @@ use integer;
 # constants
 use vars qw($brit_jd $jd_epoch $jd_epoch_remainder $VERSION);
 
-$VERSION = 2011.0505;
+$VERSION = 2026.0219;
 
 # calculate the julian day, given $year, $month and $day
 sub julian_day
@@ -206,19 +206,25 @@ with more accurate behavior.
 
 There is another implementation in Astro::Time that may be more accurate.
 
+=head1 AUTHOR
+
+Best Practical Solutions, LLC E<lt>modules@bestpractical.comE<gt>
+
+=head1 ORIGINAL AUTHOR
+
+David Muir Sharnoff
+
 =head1 GENESIS
 
-Written by David Muir Sharnoff <cpan@dave.sharnoff.org> with help from
-previous work by 
-Kurt Jaeger aka PI <zrzr0111@helpdesk.rus.uni-stuttgart.de>
- 	based on postings from: Ian Miller <ian_m@cix.compulink.co.uk>;
-Gary Puckering <garyp%cognos.uucp@uunet.uu.net>
-	based on Collected Algorithms of the ACM ?;
-and the unknown-to-me author of Time::Local.
+Based on previous work by
+Kurt Jaeger, Ian Miller, Gary Puckering (based on Collected Algorithms
+of the ACM), and the author of Time::Local.
 
-=head1 LICENSE
+=head1 LICENSE AND COPYRIGHT
 
-Copyright (C) 1996-1999 David Muir Sharnoff.  License hereby
-granted for anyone to use, modify or redistribute this module at
-their own risk.  Please feed useful changes back to cpan@dave.sharnoff.org.
+Copyright (C) 1996-1999 David Muir Sharnoff.
+Copyright (C) 2026 Best Practical Solutions, LLC.
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.
 

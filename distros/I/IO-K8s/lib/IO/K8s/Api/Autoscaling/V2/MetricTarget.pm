@@ -1,18 +1,18 @@
 package IO::K8s::Api::Autoscaling::V2::MetricTarget;
 # ABSTRACT: MetricTarget defines the target value, average value, or average utilization of a specific metric
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 use IO::K8s::Resource;
 
 k8s averageUtilization => Int;
 
 
-k8s averageValue => Str;
+k8s averageValue => Quantity;
 
 
 k8s type => Str, 'required';
 
 
-k8s value => Str;
+k8s value => Quantity;
 
 
 1;
@@ -29,7 +29,7 @@ IO::K8s::Api::Autoscaling::V2::MetricTarget - MetricTarget defines the target va
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head2 averageUtilization
 

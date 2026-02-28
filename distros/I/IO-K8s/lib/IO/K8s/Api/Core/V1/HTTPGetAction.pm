@@ -1,6 +1,6 @@
 package IO::K8s::Api::Core::V1::HTTPGetAction;
 # ABSTRACT: HTTPGetAction describes an action based on HTTP Get requests.
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 use IO::K8s::Resource;
 
 k8s host => Str;
@@ -12,7 +12,7 @@ k8s httpHeaders => ['Core::V1::HTTPHeader'];
 k8s path => Str;
 
 
-k8s port => Str, 'required';
+k8s port => IntOrStr, 'required';
 
 
 k8s scheme => Str;
@@ -32,7 +32,7 @@ IO::K8s::Api::Core::V1::HTTPGetAction - HTTPGetAction describes an action based 
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head2 host
 

@@ -1,6 +1,6 @@
 package IO::K8s::Api::Core::V1::ObjectReference;
 # ABSTRACT: ObjectReference contains enough information to let you inspect or modify the referred object.
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 use IO::K8s::Resource;
 
 k8s apiVersion => Str;
@@ -38,7 +38,7 @@ IO::K8s::Api::Core::V1::ObjectReference - ObjectReference contains enough inform
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head2 apiVersion
 

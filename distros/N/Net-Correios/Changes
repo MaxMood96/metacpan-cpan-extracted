@@ -1,5 +1,8 @@
 Revision history for Net-Correios
 
+0.003   2026-02-27
+    - add DCe endpoints;
+
 0.002	2024-07-05
     - add manifestacao endpoints;
     - improve "empresas" api support;

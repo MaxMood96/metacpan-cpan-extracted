@@ -1,6 +1,6 @@
 package IO::K8s::Api::Core::V1::ReplicationControllerStatus;
 # ABSTRACT: ReplicationControllerStatus represents the current status of a replication controller.
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 use IO::K8s::Resource;
 
 k8s availableReplicas => Int;
@@ -35,7 +35,7 @@ IO::K8s::Api::Core::V1::ReplicationControllerStatus - ReplicationControllerStatu
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head2 availableReplicas
 

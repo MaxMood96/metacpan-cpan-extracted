@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2009-2020 -- leonerd@leonerd.org.uk
 
-package Tickit::Term 0.74;
+package Tickit::Term 0.75;
 
 use v5.14;
 use warnings;
@@ -67,7 +67,7 @@ use overload
 
 =head2 new
 
-   $term = Tickit::Term->new( %params )
+   $term = Tickit::Term->new( %params );
 
 Constructs a new C<Tickit::Term> object.
 
@@ -87,7 +87,7 @@ An object delegated to for sending strings of terminal control bytes to the
 terminal itself. This object must support a single method, C<write>, taking
 a string of bytes.
 
- $writer->write( $data )
+   $writer->write( $data );
 
 Such an interface is supported by an C<IO::Handle> object.
 
@@ -118,7 +118,7 @@ sub new
 
 =head2 open_stdio
 
-   $term = Tickit::Term->open_stdio
+   $term = Tickit::Term->open_stdio;
 
 Convenient shortcut for obtaining a L<Tickit::Term> instance bound to the
 STDIN and STDOUT streams of the process.
@@ -131,7 +131,7 @@ STDIN and STDOUT streams of the process.
 
 =head2 get_input_handle
 
-   $fh = $term->get_input_handle
+   $fh = $term->get_input_handle;
 
 Returns the input handle set by the C<input_handle> constructor arg.
 
@@ -151,7 +151,7 @@ sub get_input_handle
 
 =head2 get_output_handle
 
-   $fh = $term->get_output_handle
+   $fh = $term->get_output_handle;
 
 Returns the output handle set by the C<output_handle> constructor arg.
 
@@ -171,7 +171,7 @@ sub get_output_handle
 
 =head2 set_output_buffer
 
-   $term->set_output_buffer( $len )
+   $term->set_output_buffer( $len );
 
 Sets the size of the output buffer
 
@@ -179,7 +179,7 @@ Sets the size of the output buffer
 
 =head2 await_started
 
-   $term->await_started( $timeout )
+   $term->await_started( $timeout );
 
 Waits for the terminal startup process to complete, up to the timeout given in
 seconds.
@@ -188,7 +188,7 @@ seconds.
 
 =head2 pause
 
-   $term->pause
+   $term->pause;
 
 Suspends operation of the terminal by resetting it to its default state.
 
@@ -196,7 +196,7 @@ Suspends operation of the terminal by resetting it to its default state.
 
 =head2 resume
 
-   $term->resume
+   $term->resume;
 
 Resumes operation of the terminal after a L</pause>.
 
@@ -215,7 +215,7 @@ around a C<SIGSTOP>.
 
 =head2 teardown
 
-   $term->teardown
+   $term->teardown;
 
 Shuts down operation of the terminal entirely, in preparation for terminating
 the process.
@@ -224,7 +224,7 @@ the process.
 
 =head2 flush
 
-   $term->flush
+   $term->flush;
 
 Flushes the output buffer to the terminal
 
@@ -232,7 +232,7 @@ Flushes the output buffer to the terminal
 
 =head2 bind_event
 
-   $id = $term->bind_event( $ev, $code, $data )
+   $id = $term->bind_event( $ev, $code, $data );
 
 Installs a new event handler to watch for the event specified by C<$ev>,
 invoking the C<$code> reference when it occurs. C<$code> will be invoked with
@@ -240,7 +240,7 @@ the given terminal, the event name, an event information object, and the
 C<$data> value it was installed with. C<bind_event> returns an ID value that
 may be used to remove the handler by calling C<unbind_event_id>.
 
- $ret = $code->( $term, $ev, $info, $data )
+   $ret = $code->( $term, $ev, $info, $data )
 
 The type of C<$info> will depend on the kind of event that was received, as
 indicated by C<$ev>. The information structure types are documented in
@@ -248,7 +248,7 @@ L<Tickit::Event>.
 
 =head2 bind_event (with flags)
 
-   $id = $term->bind_event( $ev, $flags, $code, $data )
+   $id = $term->bind_event( $ev, $flags, $code, $data );
 
 The C<$code> argument may optionally be preceded by an integer of flag
 values. This should be zero to apply default semantics, or a bitmask of one or
@@ -268,7 +268,7 @@ Remove the event handler after it has been invoked the first time.
 
 =head2 unbind_event_id
 
-   $term->unbind_event_id( $id )
+   $term->unbind_event_id( $id );
 
 Removes an event handler that returned the given C<$id> value.
 
@@ -285,7 +285,7 @@ sub bind_event
 
 =head2 refresh_size
 
-   $term->refresh_size
+   $term->refresh_size;
 
 If a filehandle was supplied to the constructor, fetch the size of the
 terminal and update the cached sizes in the object. May invoke C<on_resize> if
@@ -295,7 +295,7 @@ the new size is different.
 
 =head2 set_size
 
-   $term->set_size( $lines, $cols )
+   $term->set_size( $lines, $cols );
 
 Defines the size of the terminal. Invoke C<on_resize> if the new size is
 different.
@@ -306,9 +306,9 @@ different.
 
 =head2 cols
 
-   $lines = $term->lines
+   $lines = $term->lines;
 
-   $cols = $term->cols
+   $cols = $term->cols;
 
 Query the size of the terminal, as set by the most recent C<refresh_size> or
 C<set_size> operation.
@@ -320,7 +320,7 @@ sub cols  { ( shift->get_size )[1]  }
 
 =head2 goto
 
-   $success = $term->goto( $line, $col )
+   $success = $term->goto( $line, $col );
 
 Move the cursor to the given position on the screen. If only one parameter is
 defined, does not alter the other. Both C<$line> and C<$col> are 0-based.
@@ -333,7 +333,7 @@ move it will need to be retried using a fully-specified call.
 
 =head2 move
 
-   $term->move( $downward, $rightward )
+   $term->move( $downward, $rightward );
 
 Move the cursor relative to where it currently is.
 
@@ -341,7 +341,7 @@ Move the cursor relative to where it currently is.
 
 =head2 scrollrect
 
-   $success = $term->scrollrect( $top, $left, $lines, $cols, $downward, $rightward )
+   $success = $term->scrollrect( $top, $left, $lines, $cols, $downward, $rightward );
 
 Attempt to scroll the rectangle of the screen defined by the first four
 parameters by an amount given by the latter two. Since most terminals cannot
@@ -356,9 +356,9 @@ undefined if this method returns successful.
 
 =head2 chpen
 
-   $term->chpen( $pen )
+   $term->chpen( $pen );
 
-   $term->chpen( %attrs )
+   $term->chpen( %attrs );
 
 Changes the current pen attributes to those given. Any attribute whose value
 is given as C<undef> is reset. Any attributes not named are unchanged.
@@ -369,9 +369,9 @@ For details of the supported pen attributes, see L<Tickit::Pen>.
 
 =head2 setpen
 
-   $term->setpen( $pen )
+   $term->setpen( $pen );
 
-   $term->setpen( %attrs )
+   $term->setpen( %attrs );
 
 Similar to C<chpen>, but completely defines the state of the terminal pen. Any
 attribute not given will be reset to its default value.
@@ -380,7 +380,7 @@ attribute not given will be reset to its default value.
 
 =head2 print
 
-   $term->print( $text, [ $pen ] )
+   $term->print( $text, [ $pen ] );
 
 Print the given text to the terminal at the current cursor position.
 
@@ -391,7 +391,7 @@ given to C<setpen> first.
 
 =head2 clear
 
-   $term->clear( [ $pen ] )
+   $term->clear( [ $pen ] );
 
 Erase the entire screen.
 
@@ -402,7 +402,7 @@ given to C<setpen> first.
 
 =head2 erasech
 
-   $term->erasech( $count, $moveend, [ $pen ] )
+   $term->erasech( $count, $moveend, [ $pen ] );
 
 Erase C<$count> characters forwards. If C<$moveend> is true, the cursor is
 moved to the end of the erased region. If defined but false, the cursor will
@@ -423,9 +423,9 @@ given to C<setpen> first.
 
 =head2 setctl_int
 
-   $value = $term->getctl_int( $ctl )
+   $value = $term->getctl_int( $ctl );
 
-   $success = $term->setctl_int( $ctl, $value )
+   $success = $term->setctl_int( $ctl, $value );
 
 Gets or sets the value of an integer terminal control option. C<$ctl> should
 be one of the following options. They can be specified either as integers,
@@ -467,7 +467,7 @@ C<TERM_MOUSEMODE_OFF>.
 
 =head2 setctl_str
 
-   $success = $term->setctl_str( $ctl, $value )
+   $success = $term->setctl_str( $ctl, $value );
 
 Sets the value of a string terminal control option. C<$ctrl> should be one of
 the following options. They can be specified either as integers or strings, as
@@ -489,9 +489,9 @@ Sets the terminal window icon text, title, or both.
 
 =head2 setctl
 
-   $value = $term->getctl( $ctl )
+   $value = $term->getctl( $ctl );
 
-   $success = $term->setctl( $ctl, $value )
+   $success = $term->setctl( $ctl, $value );
 
 A newer form of the various typed get and set methods above. This version
 will interpret the given value as appropriate, depending on the control type.
@@ -500,7 +500,7 @@ will interpret the given value as appropriate, depending on the control type.
 
 =head2 input_push_bytes
 
-   $term->input_push_bytes( $bytes )
+   $term->input_push_bytes( $bytes );
 
 Feeds more bytes of input. May result in C<key> or C<mouse> events.
 
@@ -508,7 +508,7 @@ Feeds more bytes of input. May result in C<key> or C<mouse> events.
 
 =head2 input_readable
 
-   $term->input_readable
+   $term->input_readable;
 
 Informs the term that the input handle may be readable. Attempts to read more
 bytes of input. May result in C<key> or C<mouse> events.
@@ -517,7 +517,7 @@ bytes of input. May result in C<key> or C<mouse> events.
 
 =head2 input_wait
 
-   $term->input_wait( $timeout )
+   $term->input_wait( $timeout );
 
 Block until some input is available, and process it. Returns after one round
 of input has been processed. May result in C<key> or C<mouse> events. If
@@ -528,7 +528,7 @@ before returning, even if no input events were received.
 
 =head2 check_timeout
 
-   $timeout = $term->check_timeout
+   $timeout = $term->check_timeout;
 
 Returns a number in seconds to represent when the next timeout should occur on
 the terminal, or C<undef> if nothing is waiting. May invoke expired timeouts,
@@ -540,7 +540,7 @@ and cause a C<key> event to occur.
 
    $term->emit_key(
       type => $type, str => $str, [ mod => $mod ]
-   )
+   );
 
 Invokes the key event handlers as if an event with the given info had just
 been received. The C<mod> argument is optional, a default of 0 will apply if
@@ -563,7 +563,7 @@ sub emit_key
    $term->emit_mouse(
       type => $type, button => $button, line => $line, col => $col,
       [ mod => $mod ]
-   )
+   );
 
 Invokes the mouse event handlers as if an event with the given info had just
 been received. The C<mod> argument is optional, a default of 0 will apply if

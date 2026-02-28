@@ -1,6 +1,6 @@
 package IO::K8s::Api::Core::V1::ContainerStateTerminated;
 # ABSTRACT: ContainerStateTerminated is a terminated state of a container.
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 use IO::K8s::Resource;
 
 k8s containerID => Str;
@@ -9,7 +9,7 @@ k8s containerID => Str;
 k8s exitCode => Int, 'required';
 
 
-k8s finishedAt => Str;
+k8s finishedAt => Time;
 
 
 k8s message => Str;
@@ -21,7 +21,7 @@ k8s reason => Str;
 k8s signal => Int;
 
 
-k8s startedAt => Str;
+k8s startedAt => Time;
 
 
 1;
@@ -38,7 +38,7 @@ IO::K8s::Api::Core::V1::ContainerStateTerminated - ContainerStateTerminated is a
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head2 containerID
 

@@ -1,7 +1,7 @@
 /*
  * Map geographic coordinates to time zone names
  *
- * Copyright (C) 2023 Andreas Vögele
+ * Copyright (C) 2026 Andreas Vögele
  *
  * This module is free software; you can redistribute it and/or modify it
  * under the same terms as Perl itself.
@@ -527,14 +527,14 @@ time_zones_at(self, ...)
         croak("The \"longitude\" parameter is mandatory");
     }
 
-    if (!SvNIOK(latitude)) {
-        croak("The \"latitude\" parameter %" SVf " is not a number between "
-              "-90 and 90", SVfARG(latitude));
+    if (!looks_like_number(latitude)) {
+        croak("The \"latitude\" parameter \"%" SVf "\" is not numeric",
+              SVfARG(latitude));
     }
 
-    if (!SvNIOK(longitude)) {
-        croak("The \"longitude\" parameter %" SVf " is not a number between "
-              "-180 and 180", SVfARG(longitude));
+    if (!looks_like_number(longitude)) {
+        croak("The \"longitude\" parameter \"%" SVf "\" is not numeric",
+              SVfARG(longitude));
     }
 
     lat = SvNV(latitude);

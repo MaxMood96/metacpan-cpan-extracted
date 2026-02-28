@@ -106,6 +106,7 @@ share/flavor/Basic/static/css/main.css
 share/flavor/Basic/static/js/main.js
 share/flavor/Basic/t/00_compile.t
 share/flavor/Basic/t/03_assets.t
+share/flavor/Basic/t/04_csrf.t
 share/flavor/Basic/t/Util.pm
 share/flavor/Basic/tmpl/include/layout.tx
 share/flavor/Basic/tmpl/include/pager.tx

@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2011-2016 -- leonerd@leonerd.org.uk
 
-package Tickit::Rect 0.74;
+package Tickit::Rect 0.75;
 
 use v5.14;
 use warnings;
@@ -19,11 +19,11 @@ C<Tickit::Rect> - a lightweight data structure representing a rectangle
 
 =head1 SYNOPSIS
 
- use Tickit::Rect;
+   use Tickit::Rect;
 
- my $rect = Tickit::Rect->new(
-    top => 0, left => 5, lines => 3, cols => 10
- );
+   my $rect = Tickit::Rect->new(
+      top => 0, left => 5, lines => 3, cols => 10
+   );
 
 =head1 DESCRIPTION
 
@@ -40,16 +40,16 @@ simply as a convenient data store containing some useful utility methods.
 
 =head2 new
 
-   $rect = Tickit::Rect->new( %args )
+   $rect = Tickit::Rect->new( %args );
 
 Construct a new rectangle of the given geometry, given by C<top>, C<left> and
 either C<lines> and C<cols>, or C<bottom> and C<right>.
 
-   $rect = Tickit::Rect->new( $str )
+   $rect = Tickit::Rect->new( $str );
 
 If given a single string, this will be parsed in the form
 
- (left,top)..(right,bottom)
+   (left,top)..(right,bottom)
 
 =cut
 
@@ -73,7 +73,7 @@ sub new
 
 =head2 intersect
 
-   $rect = $existing_rect->intersect( $other_rect )
+   $rect = $existing_rect->intersect( $other_rect );
 
 If there is an intersection between the given rectangles, return it. If not,
 return C<undef>.
@@ -82,7 +82,7 @@ return C<undef>.
 
 =head2 translate
 
-   $rect = $existing_rect->translate( $downward, $rightward )
+   $rect = $existing_rect->translate( $downward, $rightward );
 
 Returns a new rectangle of the same size as the given one, moved down and to
 the right by the given argmuents (which may be negative)
@@ -101,13 +101,13 @@ the right by the given argmuents (which may be negative)
 
 =head2 right
 
-   $top = $rect->top
+   $top = $rect->top;
 
-   $left = $rect->left
+   $left = $rect->left;
 
-   $bottom = $rect->bottom
+   $bottom = $rect->bottom;
 
-   $right = $rect->right
+   $right = $rect->right;
 
 Return the edge boundaries of the rectangle.
 
@@ -115,9 +115,9 @@ Return the edge boundaries of the rectangle.
 
 =head2 cols
 
-   $lines = $rect->lines
+   $lines = $rect->lines;
 
-   $cols = $rect->cols
+   $cols = $rect->cols;
 
 Return the size of the rectangle.
 
@@ -125,13 +125,13 @@ Return the size of the rectangle.
 
 =head2 linerange
 
-   @lines = $rect->linerange( $min, $max )
+   @lines = $rect->linerange( $min, $max );
 
 A convenient shortcut to generate the list of lines covered that are within
 the given bounds (either bound may be given as C<undef>). Without bounds,
 equivalent to:
 
-   $rect->top .. $rect->bottom - 1
+   $rect->top .. $rect->bottom - 1;
 
 =cut
 
@@ -155,9 +155,9 @@ sub linerange
 
 =head2 equals
 
-   $bool = $rect->equals( $other )
+   $bool = $rect->equals( $other );
 
-   $bool = ( $rect == $other )
+   $bool = ( $rect == $other );
 
 Returns true if C<$other> represents the same area as C<$rect>. This method
 overloads the numerical equality operator (C<==>).
@@ -168,7 +168,7 @@ use overload '==' => "equals", eq => "equals";
 
 =head2 contains
 
-   $bool = $rect->contains( $other )
+   $bool = $rect->contains( $other );
 
 Returns true if C<$other> is entirely contained within the bounds of C<$rect>.
 
@@ -176,7 +176,7 @@ Returns true if C<$other> is entirely contained within the bounds of C<$rect>.
 
 =head2 intersects
 
-   $bool = $rect->intersects( $other )
+   $bool = $rect->intersects( $other );
 
 Returns true if C<$other> and C<$rect> intersect at all, even if they overlap.
 
@@ -197,7 +197,7 @@ use overload
 
 =head2 add
 
-   @r = $rect->add( $other )
+   @r = $rect->add( $other );
 
 Returns a list of the non-overlapping regions covered by either C<$rect> or
 C<$other>.
@@ -211,7 +211,7 @@ the original two. This list will contain anywhere between 1 and 3 rectangles.
 
 =head2 subtract
 
-   @r = $rect->subtract( $other )
+   @r = $rect->subtract( $other );
 
 Returns a list of the non-overlapping regions covered by C<$rect> but not by
 C<$other>.

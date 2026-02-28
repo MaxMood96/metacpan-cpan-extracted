@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2011-2021 -- leonerd@leonerd.org.uk
 
-package Tickit::Test 0.74;
+package Tickit::Test 0.75;
 
 use v5.14;
 use warnings;
@@ -106,7 +106,7 @@ my $tickit;
 
 =head2 mk_term
 
-   $term = mk_term
+   $term = mk_term;
 
 Constructs and returns the mock terminal to unit test with. This object will
 be cached and returned if this function is called again. Most unit tests will
@@ -126,7 +126,7 @@ sub mk_term
 
 =head2 mk_tickit
 
-   $tickit = mk_tickit
+   $tickit = mk_tickit;
 
 Constructs and returns the mock toplevel L<Tickit> instance to unit test with.
 This object will be cached and returned if the function is called again.
@@ -149,7 +149,7 @@ sub mk_tickit
 
 =head2 mk_window
 
-   $win = mk_window
+   $win = mk_window;
 
 Construct a root window using the mock terminal, to unit test with.
 
@@ -169,7 +169,7 @@ sub mk_window
 
 =head2 mk_term_and_window
 
-   ( $term, $win ) = mk_term_and_window
+   ( $term, $win ) = mk_term_and_window;
 
 Constructs and returns the mock terminal and root window; equivalent to
 calling each of C<mk_term> and C<mk_window> separately.
@@ -223,7 +223,7 @@ sub cols  { return $term->cols  }
 
 =head2 flush_tickit
 
-   flush_tickit( $timeskip )
+   flush_tickit( $timeskip );
 
 Flushes any pending timer or later events in the testing C<Tickit> object.
 Because the unit test script has no real event loop, this is required instead,
@@ -256,7 +256,7 @@ sub flush_tickit
 
 =head2 drain_termlog
 
-   drain_termlog
+   drain_termlog;
 
 Drains any pending events from the method log used by the C<is_termlog> test.
 Useful to clear up non-tested events before running a test.
@@ -270,7 +270,7 @@ sub drain_termlog
 
 =head2 clear_term
 
-   clear_term
+   clear_term;
 
 Clears the entire content form the mock terminal. Useful at the end of a
 section of tests before starting another one. Don't forget to C<drain_termlog>
@@ -285,7 +285,7 @@ sub clear_term
 
 =head2 resize_term
 
-   resize_term( $lines, $cols )
+   resize_term( $lines, $cols );
 
 Resize the virtual testing terminal to the size given
 
@@ -299,7 +299,7 @@ sub resize_term
 
 =head2 presskey
 
-   presskey( $type, $str, $mod )
+   presskey( $type, $str, $mod );
 
 Fire a key event
 
@@ -314,7 +314,7 @@ sub presskey
 
 =head2 pressmouse
 
-   pressmouse( $type, $button, $line, $col, $mod )
+   pressmouse( $type, $button, $line, $col, $mod );
 
 Fire a mouse button event
 
@@ -351,7 +351,7 @@ sub _pen2string
 
 =head2 is_termlog
 
-   is_termlog( [ @log ], $name )
+   is_termlog( [ @log ], $name );
 
 Asserts that the mock terminal log contains exactly the given sequence of
 methods. See also the helper functions below.
@@ -360,7 +360,7 @@ Because this test is quite fragile, relying on the exact nature and order of
 drawing methods invoked on the terminal, it should only be used rarely. Most
 normal cases of widget unit tests should instead only use C<is_display>.
 
-   is_termlog( { $pos => \@log, ... }, $name )
+   is_termlog( { $pos => \@log, ... }, $name );
 
 The expectation HASH is keyed by strings giving a GOTO position, and the test
 asserts that a sequence of GOTO and other operations were performed equivalent
@@ -449,7 +449,7 @@ sub is_termlog
       my %regions = %$log;
 
       while( keys %regions and @got_log ) {
-         if( !$got_log[0]->[0] eq "goto" ) {
+         if( $got_log[0]->[0] ne "goto" ) {
             my $ok = $tb->ok( 0, $name );
             $tb->diag( "Expected a goto terminal operation, got " . _step_to_text( $got_log[0] ) );
             return $ok;
@@ -484,7 +484,7 @@ sub is_termlog
 
 =head2 is_display
 
-   is_display( $lines, $name )
+   is_display( $lines, $name );
 
 Asserts that the mock terminal display is exactly that as given by the content
 of C<$lines>, which must be an ARRAY reference containing one value for each
@@ -610,7 +610,7 @@ sub is_display
 
 =head2 is_cursorpos
 
-   is_cursorpos( $line, $col, $name )
+   is_cursorpos( $line, $col, $name );
 
 Asserts that the mock terminal cursor is at the given position.
 
@@ -635,7 +635,7 @@ sub is_cursorpos
 
 =head2 is_termctl
 
-   is_termctl( $ctl, $value, $name )
+   is_termctl( $ctl, $value, $name );
 
 Asserts that the mock terminal has the given value for the given terminal
 control. C<$ctl> should be a value from the C<Tickit::Term::TERMPROP_*>

@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2012-2016 -- leonerd@leonerd.org.uk
 
-package Tickit::RectSet 0.74;
+package Tickit::RectSet 0.75;
 
 use v5.14;
 use warnings;
@@ -36,7 +36,7 @@ left-to-right order.
 
 =head2 new
 
-   $rectset = Tickit::RectSet->new
+   $rectset = Tickit::RectSet->new;
 
 Returns a new C<Tickit::RectSet> instance, initially empty.
 
@@ -48,7 +48,7 @@ Returns a new C<Tickit::RectSet> instance, initially empty.
 
 =head2 rects
 
-   @rects = $rectset->rects
+   @rects = $rectset->rects;
 
 Returns a list of the covered regions, in order first top to bottom, then left
 to right.
@@ -57,7 +57,7 @@ to right.
 
 =head2 add
 
-   $rectset->add( $rect )
+   $rectset->add( $rect );
 
 Adds the region covered by C<$rect> to the stored region list.
 
@@ -65,7 +65,7 @@ Adds the region covered by C<$rect> to the stored region list.
 
 =head2 subtract
 
-   $rectset->subtract( $rect )
+   $rectset->subtract( $rect );
 
 Removes any covered region that intersects with C<$rect> from the stored
 region list.
@@ -74,7 +74,7 @@ region list.
 
 =head2 clear
 
-   $rectset->clear
+   $rectset->clear;
 
 Remove all the regions from the set.
 
@@ -82,7 +82,7 @@ Remove all the regions from the set.
 
 =head2 intersects
 
-   $bool = $rectset->intersects( $rect )
+   $bool = $rectset->intersects( $rect );
 
 Returns true if C<$rect> intersects with any region in the set.
 
@@ -90,7 +90,7 @@ Returns true if C<$rect> intersects with any region in the set.
 
 =head2 contains
 
-   $bool = $rectset->contains( $rect )
+   $bool = $rectset->contains( $rect );
 
 Returns true if C<$rect> is entirely covered by the regions in the set. Note
 that it may be that the rect requires two or more regions in the set to

@@ -20,7 +20,7 @@ sub load_impl_supporting_waitpid
          Future::IO::Impl::IOAsync
       )) {
       eval { require "$impl.pm" =~ s{::}{/}gr; 1 } or next;
-      $impl->can( "waitpid" ) and return;
+      $impl->can( "poll" ) and $impl->can( "waitpid" ) and return;
 
       # Clear that impl before trying again
       undef $Future::IO::IMPL;

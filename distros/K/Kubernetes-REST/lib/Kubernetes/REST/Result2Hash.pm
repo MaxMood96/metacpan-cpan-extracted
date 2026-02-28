@@ -1,5 +1,5 @@
 package Kubernetes::REST::Result2Hash;
-our $VERSION = '1.002';
+our $VERSION = '1.003';
 # ABSTRACT: DEPRECATED - v0 compatibility stub
 use strict;
 use warnings;
@@ -20,7 +20,7 @@ Kubernetes::REST::Result2Hash - DEPRECATED - v0 compatibility stub
 
 =head1 VERSION
 
-version 1.002
+version 1.003
 
 =head1 DESCRIPTION
 

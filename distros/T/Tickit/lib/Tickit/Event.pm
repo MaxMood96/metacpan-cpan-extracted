@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2009-2016 -- leonerd@leonerd.org.uk
 
-package Tickit::Event 0.74;
+package Tickit::Event 0.75;
 
 use v5.14;
 use warnings;

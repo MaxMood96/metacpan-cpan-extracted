@@ -1,5 +1,20 @@
 Revision history for IO-K8s
 
+1.005     2026-02-28 06:43:29Z
+  - Fixed _inflate_struct not recognizing sanitized field names (x-kubernetes-*,
+    $ref, etc.) during JSON deserialization — Bool coercion and type inflation
+    were skipped for these fields, causing JSON::PP::Boolean type constraint
+    failures on e.g. x-kubernetes-preserve-unknown-fields
+
+1.004     2026-02-28 05:42:53Z
+  - Fixed JSONSchemaProps compilation: field names with special characters
+    ($ref, $schema, x-kubernetes-*) are now automatically sanitized to valid
+    Perl identifiers (e.g. _ref, _schema, x_kubernetes_embedded_resource)
+    with init_arg mapping so constructors still accept the original JSON keys
+  - Added comprehensive compile test (t/02_compile_all.t) loading all 697 modules
+
+1.003     2026-02-28 00:35:50Z
+
 1.002     2026-02-23 02:37:32Z
   - Added Authorization API types to default resource map
     (SelfSubjectRulesReview, SelfSubjectAccessReview, SubjectAccessReview,

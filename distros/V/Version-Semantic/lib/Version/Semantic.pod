@@ -26,6 +26,10 @@ objects from their semantic version strings. The method accepts semantic
 version strings that have a C<v> prefix (L<Is "v1.2.3" a semantic
 version?|https://semver.org/spec/v2.0.0.html#is-v123-a-semantic-version>).
 
+The C<semver_re()> class method provides the regular expression that is used
+by the C<parse()> method. The C<parse()> method adds a C<\A> anchor at the
+beginning and a C<\z> anchor at the end of the regular expression pattern.
+
 The class has a usual C<new()> constructor method (class method) to create
 objects from their named attributes.
 

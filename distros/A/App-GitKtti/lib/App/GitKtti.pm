@@ -5,7 +5,7 @@ use warnings;
 use POSIX qw(strftime);
 use Cwd qw(getcwd);
 
-our $VERSION = '2.0.2';
+our $VERSION = '2.0.3';
 
 =head1 NAME
 

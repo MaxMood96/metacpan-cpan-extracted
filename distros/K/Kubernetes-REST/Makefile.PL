@@ -29,6 +29,7 @@ my %WriteMakefileArgs = (
     "MooX::Cmd" => 0,
     "MooX::Options" => 0,
     "Path::Tiny" => 0,
+    "Throwable" => 0,
     "Types::Standard" => 0,
     "YAML::XS" => 0,
     "namespace::clean" => 0
@@ -37,7 +38,7 @@ my %WriteMakefileArgs = (
     "Test::Exception" => 0,
     "Test::More" => 0
   },
-  "VERSION" => "1.002",
+  "VERSION" => "1.003",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -56,6 +57,7 @@ my %FallbackPrereqs = (
   "Path::Tiny" => 0,
   "Test::Exception" => 0,
   "Test::More" => 0,
+  "Throwable" => 0,
   "Types::Standard" => 0,
   "YAML::XS" => 0,
   "namespace::clean" => 0

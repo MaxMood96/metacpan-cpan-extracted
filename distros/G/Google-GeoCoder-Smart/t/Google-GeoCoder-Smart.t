@@ -5,22 +5,14 @@ use Test::More;
 
 BEGIN { use_ok('Google::GeoCoder::Smart') }
 
-my $ok_payload = <<'JSON';
-{
-  "status": "OK",
-  "results": [
-    {
-      "formatted_address": "1600 Amphitheatre Pkwy, Mountain View, CA 94043, USA",
-      "geometry": {
-        "location": {
-          "lat": 37.422,
-          "lng": -122.084
-        }
-      }
-    }
-  ]
+sub _read_file {
+  my ($path) = @_;
+  open my $fh, '<', $path or die "Unable to read ${path}: $!";
+  local $/;
+  return <$fh>;
 }
-JSON
+
+my $ok_payload = _read_file('t/fixtures/geocode-ok.json');
 
 subtest 'geocode_addr builds modern request and parses response' => sub {
   my $geo = Google::GeoCoder::Smart->new(

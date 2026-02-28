@@ -3,7 +3,7 @@
 #
 #  (C) Paul Evans, 2011-2016 -- leonerd@leonerd.org.uk
 
-package Tickit::Utils 0.74;
+package Tickit::Utils 0.75;
 
 use v5.14;
 use warnings;
@@ -46,7 +46,7 @@ This module provides a number of utility functions used across C<Tickit>.
 
 =head2 string_count
 
-   $bytes = string_count( $str, $pos, $limit )
+   $bytes = string_count( $str, $pos, $limit );
 
 Given a string in C<$str> and a L<Tickit::StringPos> instance in C<$pos>,
 updates the counters in C<$pos> by counting the string, and returns the number
@@ -55,14 +55,14 @@ any of the limits given.
 
 =head2 string_countmore
 
-   $bytes = string_countmore( $str, $pos, $limit )
+   $bytes = string_countmore( $str, $pos, $limit );
 
 Similar to C<string_count> but will not zero the counters before it begins.
 Counters in C<$pos> will still be incremented.
 
 =head2 textwidth
 
-   $cols = textwidth( $str )
+   $cols = textwidth( $str );
 
 Returns the number of screen columns consumed by the given (Unicode) string.
 
@@ -72,7 +72,7 @@ Returns the number of screen columns consumed by the given (Unicode) string.
 
 =head2 chars2cols
 
-   @cols = chars2cols( $text, @chars )
+   @cols = chars2cols( $text, @chars );
 
 Given a list of increasing character positions, returns a list of column
 widths of those characters. In scalar context returns the first columns width.
@@ -83,7 +83,7 @@ widths of those characters. In scalar context returns the first columns width.
 
 =head2 cols2chars
 
-   @chars = cols2chars( $text, @cols )
+   @chars = cols2chars( $text, @cols );
 
 Given a list of increasing column widths, returns a list of character
 positions at those widths. In scalar context returns the first character
@@ -95,11 +95,11 @@ position.
 
 =head2 substrwidth
 
-   $substr = substrwidth $text, $startcol
+   $substr = substrwidth $text, $startcol;
 
-   $substr = substrwidth $text, $startcol, $widthcols
+   $substr = substrwidth $text, $startcol, $widthcols;
 
-   $substr = substrwidth $text, $startcol, $widthcols, $replacement
+   $substr = substrwidth $text, $startcol, $widthcols, $replacement;
 
 Similar to C<substr>, but counts start offset and length in screen columns
 instead of characters
@@ -125,7 +125,7 @@ sub substrwidth
 
 =head2 align
 
-   ( $before, $alloc, $after ) = align( $value, $total, $alignment )
+   ( $before, $alloc, $after ) = align( $value, $total, $alignment );
 
 Returns a list of three integers created by aligning the C<$value> to a
 position within the C<$total> according to C<$alignment>. The sum of the three
@@ -155,7 +155,7 @@ sub align
 
 =head2 bound
 
-   $val = bound( $min, $val, $max )
+   $val = bound( $min, $val, $max );
 
 Returns the value of C<$val> bounded by the given minimum and maximum. Either
 limit may be left undefined, causing no limit of that kind to be applied.
@@ -172,7 +172,7 @@ sub bound
 
 =head2 distribute
 
-   distribute( $total, @buckets )
+   distribute( $total, @buckets );
 
 Given a total amount of quota, and a list of buckets, distributes the quota
 among the buckets according to the values given in them.

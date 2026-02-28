@@ -1,5 +1,5 @@
 package Kubernetes::REST::Error;
-our $VERSION = '1.002';
+our $VERSION = '1.003';
 # ABSTRACT: DEPRECATED - v0 error classes
   use Moo;
   use Types::Standard qw/Str/;
@@ -28,7 +28,7 @@ our $VERSION = '1.002';
 
 
 package Kubernetes::REST::RemoteError;
-our $VERSION = '1.001';
+our $VERSION = '1.003';
 # ABSTRACT: DEPRECATED - v0 remote error class
   use Moo;
   use Types::Standard qw/Int/;
@@ -59,7 +59,7 @@ Kubernetes::REST::Error - DEPRECATED - v0 error classes
 
 =head1 VERSION
 
-version 1.002
+version 1.003
 
 =head1 DESCRIPTION
 

@@ -1,6 +1,6 @@
 package IO::K8s::Api::Apps::V1::StatefulSetOrdinals;
 # ABSTRACT: StatefulSetOrdinals describes the policy used for replica ordinal assignment in this StatefulSet.
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 use IO::K8s::Resource;
 
 k8s start => Int;
@@ -20,7 +20,7 @@ IO::K8s::Api::Apps::V1::StatefulSetOrdinals - StatefulSetOrdinals describes the 
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head2 start
 

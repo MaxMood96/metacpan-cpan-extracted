@@ -7,7 +7,7 @@ use Module::Runtime qw(require_module);
 use JSON::MaybeXS;
 use namespace::clean;
 
-our $VERSION = '1.002';
+our $VERSION = '1.005';
 
 # Track which classes we've auto-generated
 my %_autogen_cache;
@@ -440,8 +440,16 @@ sub _inflate_struct {
     # Opaque fields that should be passed through as-is (complex JSON structures)
     my %opaque_fields = map { $_ => 1 } qw(fieldsV1 rawExtension raw);
 
-    # Get attribute info from the registry
+    # Get attribute info from the registry (keyed by Perl attr name)
     my $attr_info = IO::K8s::Resource::_k8s_attr_info($class);
+
+    # Build reverse map: JSON key → Perl attr name (for sanitized names)
+    my %json_to_perl;
+    for my $perl_name (keys %$attr_info) {
+        my $json_key = $attr_info->{$perl_name}{json_key} // $perl_name;
+        $json_to_perl{$json_key} = $perl_name;
+    }
+
     my %args;
 
     for my $attr (keys %$params) {
@@ -454,7 +462,9 @@ sub _inflate_struct {
             next;
         }
 
-        my $info = $attr_info->{$attr} // {};
+        # Look up by Perl attr name (handles sanitized JSON keys like x-kubernetes-*)
+        my $perl_name = $json_to_perl{$attr} // $attr;
+        my $info = $attr_info->{$perl_name} // {};
 
         if ($info->{is_array_of_objects}) {
             my $inner_class = $info->{class};
@@ -557,7 +567,7 @@ IO::K8s - Objects representing things found in the Kubernetes API
 
 =head1 VERSION
 
-version 1.002
+version 1.005
 
 =head1 SYNOPSIS
 

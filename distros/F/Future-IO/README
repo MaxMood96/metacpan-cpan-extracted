@@ -134,7 +134,10 @@ METHODS
     POLLPRI. The result of the future will be a similar bitfield,
     indicating which operations may now take place. If the POLLHUP, POLLERR
     or POLLNVAL events happen, they will always be reported; you do not
-    need to request these specifically.
+    need to request these specifically. You should always request at least
+    one of POLLIN, POLLOUT or POLLPRI. Older versions of some
+    implementation modules did accept just POLLHUP, but that is not
+    supported any more.
 
     Multiple outstanding futures may be enqueued for the same filehandle.
     When an event happens, only the first outstanding future that is
@@ -329,7 +332,7 @@ METHODS
     separator, it will have that prefix applied to it. This allows a
     conveniently short list; e.g.
 
-       Future::IO->load_impl( qw( UV Glib IOAsync ) );
+       Future::IO->load_impl( qw( UV Glib Ppoll ) );
 
     This method is intended to be called once, at startup, by the main
     containing program. Since it sets the implementation, it would
