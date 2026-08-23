@@ -4,18 +4,12 @@ use 5.010;
 use strict;
 use warnings;
 
-our $VERSION = '0.28';
+our $VERSION = '0.30';
 
 use Punk ();
 use File::Spec ();
 use File::Raw::JSON qw(file_json_decode);
 
-# The catalogues are found and parsed HERE, at boot, and handed to _build
-# decoded. punk_i18n.h says why this half is Perl: a directory walk in XS is
-# the Win32 trap, and a decode that croaks needs the filename in the message,
-# which costs two lines here and a hand-rolled JMPENV there.
-#
-# It runs once, before the workers fork, so none of it is on a request path.
 sub register {
     my ($class, $app, $opts) = @_;
     $opts ||= {};
@@ -53,8 +47,6 @@ sub register {
         my $json = do { local $/; <$fh> };
         close $fh;
 
-        # The filename, always. "malformed JSON at offset 412" names neither
-        # the file nor the locale, and an application has one per language.
         my $data = eval { file_json_decode($json) };
         if ($@) {
             my $why = $@;

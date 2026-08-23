@@ -196,6 +196,27 @@ YAML
     }
     is(scalar @warned, 1, 'a password embedded in a dsn is caught too');
 
+    # A key that names WHERE a secret-shaped thing lives holds a model, a
+    # column or a location - the auth keyword's own token_model is the
+    # everyday case, and warning on it teaches people to ignore the warning.
+    for my $key (qw(token_model password_field secret_path api_key_name
+                    token_table credential_header pass_column)) {
+        write_file('punk.yml', "auth:\n  $key: AuthToken\n");
+        @warned = ();
+        {
+            local $SIG{__WARN__} = sub { push @warned, $_[0] };
+            Punk::Config->load(file => "$dir/punk.yml", env => 'none');
+        }
+        is(scalar @warned, 0, "a structural '$key' is not secret-shaped");
+    }
+    write_file('punk.yml', "auth:\n  token_models_secret: oops\n");
+    @warned = ();
+    {
+        local $SIG{__WARN__} = sub { push @warned, $_[0] };
+        Punk::Config->load(file => "$dir/punk.yml", env => 'none');
+    }
+    is(scalar @warned, 1, 'but the suffix has to END the key - the secret wins');
+
     write_file('punk.yml', "app:\n  name: myapp\n  workers: 4\n");
     @warned = ();
     {

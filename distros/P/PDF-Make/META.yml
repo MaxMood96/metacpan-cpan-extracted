@@ -22,8 +22,9 @@ no_index:
     - t
     - inc
 requires:
-  Layout::Flex: '0.01'
+  Font::Metrics: '0.03'
+  Layout::Flex: '0.05'
   Object::Proto: '0.16'
   perl: '5.010001'
-version: '0.11'
+version: '0.12'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

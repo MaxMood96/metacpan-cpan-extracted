@@ -65,28 +65,55 @@ my @DEFINE;
         }
         rmdir $dir;
     }
-    print "DEFINE:   @DEFINE\n" if @DEFINE;
 }
 
-# CLOCK_MONOTONIC, for span durations. A span measured with two wall-clock
-# reads goes backwards across an NTP step; see otel_clock.h.
+# clock_gettime, for span timestamps and durations. Two questions, both put
+# to the LINKER (see the getentropy note above): does clock_gettime link at
+# all, and does it need -lrt to do so. glibc before 2.17 keeps it in librt,
+# so a plain probe fails there and the built .so loads with "undefined
+# symbol: clock_gettime" (CPAN Testers, Debian wheezy, 0.04 on 5.20-5.24),
+# while macOS and the BSDs have no librt at all - so -lrt is added only when
+# it is what makes the probe link. Without clock_gettime the wall clock comes
+# from gettimeofday; without CLOCK_MONOTONIC a duration is two wall-clock
+# reads clamped at zero (see otel_clock.h).
+my $LIBS = '';
 {
     my $dir = "otel_clk_$$";
-    if (mkdir $dir) {
+    my $cc  = $Config{cc} || 'cc';
+    my $try = sub {
+        my ($clock, $libs) = @_;
         my $src = "$dir/probe.c";
-        if (open my $fh, '>', $src) {
-            print $fh "#include <time.h>\n"
-                . "int main(void){struct timespec t;"
-                . "return clock_gettime(CLOCK_MONOTONIC,&t);}\n";
-            close $fh;
-            my $cc = $Config{cc} || 'cc';
+        open my $fh, '>', $src or return 0;
+        print $fh "#include <time.h>\n"
+            . "int main(void){struct timespec t;"
+            . "return clock_gettime($clock,&t);}\n";
+        close $fh;
+        my $ok = system("$cc $src -o $dir/probe $libs >/dev/null 2>&1") == 0;
+        unlink $src, "$dir/probe";
+        return $ok;
+    };
+    if (mkdir $dir) {
+        my $libs;
+        for my $l ('', '-lrt') {
+            if ($try->('CLOCK_REALTIME', $l)) { $libs = $l; last }
+        }
+        if (defined $libs) {
+            push @DEFINE, '-DOTEL_HAVE_CLOCK_GETTIME';
             push @DEFINE, '-DOTEL_HAVE_CLOCK_MONOTONIC'
-                if system("$cc $src -o $dir/probe >/dev/null 2>&1") == 0;
-            unlink $src, "$dir/probe";
+                if $try->('CLOCK_MONOTONIC', $libs);
+            if (length $libs) {
+                $LIBS = $libs;
+                print "clock_gettime needs $libs (old glibc): linking it.\n";
+            }
+        }
+        else {
+            print "No clock_gettime; using gettimeofday.\n";
         }
         rmdir $dir;
     }
 }
+print "DEFINE:   @DEFINE\n" if @DEFINE;
+print "LIBS:     $LIBS\n"   if length $LIBS;
 
 # The shipped semantic-convention schema file has to be INSTALLED, and
 # MakeMaker's default PM map only picks up .pm and .pod - a .yaml under lib/
@@ -143,6 +170,7 @@ my %WriteMakefileArgs = (
         'Hyperman'        => '0.26',   # hm_abi: the post-fork worker hook
     },
     INC    => $INC,
+    (length $LIBS ? (LIBS => [$LIBS]) : ()),
     macro  => { TARFLAGS => "--format=ustar -c -v -f" },
     dist   => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean  => { FILES => 'Punk-OpenTelemetry-*' },

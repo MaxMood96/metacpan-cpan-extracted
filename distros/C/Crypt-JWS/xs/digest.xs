@@ -6,6 +6,7 @@ sha256(bytes)
     ALIAS:
         sha384 = 384
         sha512 = 512
+        sha1   = 160
     CODE:
         STRLEN len;
         const char *p = SvPVbyte(bytes, len);
@@ -25,6 +26,7 @@ hmac_sha256(key, bytes)
     ALIAS:
         hmac_sha384 = 384
         hmac_sha512 = 512
+        hmac_sha1   = 160
     CODE:
         STRLEN klen, len;
         const char *kp = SvPVbyte(key, klen);

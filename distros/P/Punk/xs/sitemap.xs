@@ -51,12 +51,16 @@ import(class, ...)
 
 # register($app, \%opts)
 #
-# `base` is REQUIRED and is configuration, with no default and no fallback to
-# the request's Host. The sitemap protocol wants absolute URLs, and taking the
-# host from the request means an attacker sending `Host: evil.example` gets a
-# sitemap naming their host for every page on the site - delivered to search
-# engines, and invisible to the owner, whose own request produces a correct
-# file. Same shape as `session` refusing to start without a secret.
+# `base` is configuration, with no fallback to the request's Host, ever. The
+# sitemap protocol wants absolute URLs, and taking the host from the request
+# means an attacker sending `Host: evil.example` gets a sitemap naming their
+# host for every page on the site - delivered to search engines, and invisible
+# to the owner, whose own request produces a correct file.
+#
+# When no `base` is passed it defaults to the application's `host` - which is
+# still configuration, declared once at the app level. The check happens at
+# to_app (pks_resolve_base) rather than here, because `host` may legitimately
+# be declared on either side of the `plugin` line.
 void
 register(self, app, opts = &PL_sv_undef)
         SV *self
@@ -69,12 +73,8 @@ register(self, app, opts = &PL_sv_undef)
         PERL_UNUSED_VAR(self);
         if (SvROK(opts) && SvTYPE(SvRV(opts)) == SVt_PVHV)
             b = hv_fetchs((HV *)SvRV(opts), "base", 0);
-        if (!(b && *b && SvOK(*b) && SvCUR(*b)))
-            croak("Punk::Plugin::Sitemap: `base` is required - the sitemap "
-                  "protocol needs absolute URLs, and taking the host from the "
-                  "request would let a crawler be handed somebody else's "
-                  "hostname (plugin 'Sitemap' => { base => 'https://...' })");
-        (void)hv_stores(h, "sitemap_base", newSVsv(*b));
+        if (b && *b && SvOK(*b) && SvCUR(*b))
+            (void)hv_stores(h, "sitemap_base", newSVsv(*b));
         {   /* the routes this plugin adds for itself: out of the sitemap,
              * and out of robots.txt's Disallow list too */
             AV *own = newAV();

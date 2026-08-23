@@ -75,7 +75,7 @@ Features:
 
 =cut
 
-our $VERSION = '0.11';
+our $VERSION = '0.12';
 
 use Carp qw(croak);
 use Scalar::Util qw(blessed);

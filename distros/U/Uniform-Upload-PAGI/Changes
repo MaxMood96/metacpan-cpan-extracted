@@ -1,0 +1,6 @@
+Revision history for Uniform::Upload::PAGI
+
+1.00  2026-08-23
+        - Initial asynchronous PAGI gateway multi-part driver release.
+1.01  2026-08-23
+        - Added github to Makefile.PL.

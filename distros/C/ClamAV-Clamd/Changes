@@ -1,4 +1,20 @@
 Revision history for ClamAV-Clamd
 
+0.03    2026-08-22
+        Linux smoker fixes (two FAILs, t/40-scan.t and t/50-stream.t).
+        - A peer that closes with our bytes still unread surfaces as
+          ECONNRESET on Linux, not EOF.
+        - FakeClamd's fd passing fake read the handshake as two
+          messages, but a stream read did not stop before the
+          fd bearing message.
+
+0.02    2026-08-22
+        Linux smoker fixes (two FAILs, t/40-scan.t and t/50-stream.t).
+        - A peer that closes with our bytes still unread surfaces as
+          ECONNRESET on Linux, not EOF.
+        - FakeClamd's fd passing fake read the handshake as two
+          messages, but a stream read did not stop before the
+          fd bearing message.
+
 0.01    2026-08-21
         First version.

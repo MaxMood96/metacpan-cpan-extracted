@@ -38,14 +38,17 @@ on 'test' => sub {
 	requires 'File::Temp';
 	requires 'File::stat';
 	requires 'FindBin';
+	requires 'HTML::TableExtract';
 	requires 'IPC::System::Simple';
 	requires 'JSON::MaybeXS';
+	requires 'LWP::UserAgent';
 	requires 'POSIX';
 	requires 'Readonly';
 	requires 'Test::Carp';
 	requires 'Test::Compile';
 	requires 'Test::DescribeMe';
 	requires 'Test::Memory::Cycle';
+	requires 'Test::Mockingbird';
 	requires 'Test::Most';
 	requires 'Test::Needs';
 	requires 'Test::NoWarnings';

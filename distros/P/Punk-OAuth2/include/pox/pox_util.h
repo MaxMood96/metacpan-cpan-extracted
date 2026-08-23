@@ -3,6 +3,26 @@
 
 #include "pox_abi.h"
 
+/* Load a module once per process. A hit in %INC costs one hash lookup and
+ * only a genuine first load reaches eval_pv - which matters on a request
+ * path: through perl 5.20 Perl_eval_sv spends references on the immortal
+ * SVs on every call, so a bare eval_pv("require X;") per request drains
+ * PL_sv_undef on those perls (Punk 0.14 found the same class). */
+static int pox_require_once(pTHX_ const char *mod) {
+  char file[128];
+  const char *p;
+  char *q = file;
+  HV *inc = GvHVn(PL_incgv);
+  for (p = mod; *p && q < file + sizeof(file) - 4; p++) {
+    if (p[0] == ':' && p[1] == ':') { *q++ = '/'; p++; }
+    else *q++ = *p;
+  }
+  *q++ = '.'; *q++ = 'p'; *q++ = 'm'; *q = 0;
+  if (inc && hv_exists(inc, file, (I32)(q - file))) return 1;
+  eval_pv(form("require %s;", mod), FALSE);
+  return SvTRUE(ERRSV) ? 0 : 1;
+}
+
 /* RFC 3986 unreserved: A-Z a-z 0-9 - . _ ~ */
 static int pox_unreserved(unsigned char c) {
   return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')

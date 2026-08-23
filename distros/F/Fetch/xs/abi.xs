@@ -51,3 +51,29 @@ _abi_observer_state()
         mPUSHi(FT_OBS_ST_DONES);
         mPUSHi(FT_OBS_ST_OK);
         mPUSHi(FT_OBS_ST_ERR);
+
+# v3 tunnel_starttls, for t/25-tunnel-starttls.t. Returns (step, lines):
+# step is "ok", or the name of the step that stopped the probe ("refused"
+# when the server declined STARTTLS, "starttls" when the handshake failed);
+# lines is what the server said, joined with "\n", as far as the probe got.
+void
+_abi_tunnel_starttls_probe(host, port, verify)
+        const char *host
+        int port
+        int verify
+    PREINIT:
+        const char *where = "";
+        SV *text;
+    PPCODE:
+        text = ft_abi_starttls_selftest(aTHX_ host, port, verify, &where);
+        EXTEND(SP, 2);
+        mPUSHp(where, strlen(where));
+        PUSHs(sv_2mortal(text));
+
+# The table entry's NULL-handle contract, reachable on every build.
+IV
+_abi_tunnel_starttls_null()
+    CODE:
+        RETVAL = FETCH_ABI.tunnel_starttls(NULL, "localhost", 0);
+    OUTPUT:
+        RETVAL

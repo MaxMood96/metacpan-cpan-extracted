@@ -68,7 +68,14 @@ sub conformance {
         my $q = $make->();
         ok(abs($q->backend->clock_delta) < 5,
            'clock delta is small against a local server');
-        ok(abs($q->backend->now - time()) < 5, 'now() is near wall clock');
+        # bracket, never subtract: a loaded box can stall the process for
+        # seconds between two adjacent calls, and a stall must widen the
+        # window rather than fail the assertion
+        my $t0  = time();
+        my $now = $q->backend->now;
+        my $t1  = time();
+        ok($now >= $t0 - 5 && $now <= $t1 + 5,
+           "now() is near wall clock ($now within [$t0, $t1])");
     };
 
     subtest "$name: enqueue defaults" => sub {

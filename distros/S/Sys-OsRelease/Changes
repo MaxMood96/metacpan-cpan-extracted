@@ -1,16 +1,27 @@
 Change log for Sys::OsRelease
 
-0.4.9 2026-08-21T18:26:07-07:00 America/Los_Angeles
+0.5.0 2026-08-22T21:14:49-07:00 America/Los_Angeles
  [MAJOR]
  [API CHANGE]
  [MINOR]
  [ENHANCEMENTS]
+ - export osrelease() into caller namespace to streamline access to
+   instance from Sys::OsRelease or ::Lite
+
  [SECURITY]
  [REVISION]
+ - add version to "provides" metadata, simplify version in source filter
+
+ [BUG FIXES]
+ [DOCS]
+
+0.4.10 2026-08-21T23:44:20-07:00 America/Los_Angeles
+ [BUG FIXES]
+ - more adjustments to MANIFEST to fix errors reported by CPAN Testers
+
+0.4.9 2026-08-21T18:26:07-07:00 America/Los_Angeles
  [BUG FIXES]
  - add missing t/005_pod_content.t to MANIFEST (caught by CPAN Testers)
-
- [DOCS]
 
 0.4.8 2026-08-20T16:36:47-07:00 America/Los_Angeles
  [REVISION]

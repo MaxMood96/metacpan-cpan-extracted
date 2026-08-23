@@ -1425,6 +1425,8 @@ _apply_config(self, cfg)
             SV **mp = hv_fetchs(c, K_MODELS, 0);
             SV **pp = hv_fetchs(c, "plugins", 0);
             SV **sp = hv_fetchs(c, "static", 0);
+            SV **hp = hv_fetchs(c, "host", 0);
+            SV **fvp = hv_fetchs(c, "favicon", 0);
             SSize_t i, n;
 
             /* views: engine => opts, in declaration order */
@@ -1517,6 +1519,54 @@ _apply_config(self, cfg)
                     app_call_list(aTHX_ self, "model_class",
                                   app_list(aTHX_ m, K_MODELS));
                 }
+            }
+
+            /* host: one origin, or a mapping of origin + allow. Applied
+             * before plugins so a plugin registered from the same file
+             * already sees it. */
+            if (hp && *hp && SvOK(*hp)) {
+                AV *args = (AV *)sv_2mortal((SV *)newAV());
+                if (SvROK(*hp) && SvTYPE(SvRV(*hp)) == SVt_PVHV) {
+                    HV *hh = (HV *)SvRV(*hp);
+                    SV **org = hv_fetchs(hh, "origin", 0);
+                    SV **al  = hv_fetchs(hh, "allow", 0);
+                    if (!(org && *org && SvOK(*org) && !SvROK(*org)
+                          && SvCUR(*org)))
+                        croak("Punk: the config host block needs an origin");
+                    av_push(args, newSVsv(*org));
+                    if (al && *al && SvOK(*al)) {
+                        av_push(args, newSVpvs("allow"));
+                        if (SvROK(*al)) av_push(args, newSVsv(*al));
+                        else {          /* one host, written bare */
+                            AV *one = newAV();
+                            av_push(one, newSVsv(*al));
+                            av_push(args, newRV_noinc((SV *)one));
+                        }
+                    }
+                }
+                else if (!SvROK(*hp)) av_push(args, newSVsv(*hp));
+                else croak("Punk: the config host block needs an origin");
+                app_call_list(aTHX_ self, "host", args);
+            }
+
+            /* favicon: a path, or a mapping of path + max_age */
+            if (fvp && *fvp && SvOK(*fvp)) {
+                AV *args = (AV *)sv_2mortal((SV *)newAV());
+                if (SvROK(*fvp) && SvTYPE(SvRV(*fvp)) == SVt_PVHV) {
+                    HV *fh = (HV *)SvRV(*fvp);
+                    SV **fpath = hv_fetchs(fh, "path", 0);
+                    SV **fma   = hv_fetchs(fh, "max_age", 0);
+                    if (!(fpath && *fpath && SvOK(*fpath) && SvCUR(*fpath)))
+                        croak("Punk: the config favicon block needs a path");
+                    av_push(args, newSVsv(*fpath));
+                    if (fma && *fma && SvOK(*fma)) {
+                        av_push(args, newSVpvs("max_age"));
+                        av_push(args, newSVsv(*fma));
+                    }
+                }
+                else if (!SvROK(*fvp)) av_push(args, newSVsv(*fvp));
+                else croak("Punk: the config favicon block needs a path");
+                app_call_list(aTHX_ self, "favicon", args);
             }
 
             /* plugins: name => opts */
@@ -1622,7 +1672,7 @@ _apply_config(self, cfg)
                     }
                     app_call_list(aTHX_ self, K_CSRF, args);
                 }
-                else if (cs && *cs && !SvROK(*cs) && SvTRUE(*cs)) {
+                else if (cs && *cs && app_cfg_on(aTHX_ *cs)) {
                     app_call_list(aTHX_ self, K_CSRF,
                                   (AV *)sv_2mortal((SV *)newAV()));
                 }
@@ -1642,7 +1692,7 @@ _apply_config(self, cfg)
                     }
                     app_call_list(aTHX_ self, K_CORS, args);
                 }
-                else if (co && *co && !SvROK(*co) && SvTRUE(*co)) {
+                else if (co && *co && app_cfg_on(aTHX_ *co)) {
                     app_call_list(aTHX_ self, K_CORS,
                                   (AV *)sv_2mortal((SV *)newAV()));
                 }
@@ -1663,7 +1713,7 @@ _apply_config(self, cfg)
                     }
                     app_call_list(aTHX_ self, K_HEADERS, args);
                 }
-                else if (hd && *hd && !SvROK(*hd) && SvTRUE(*hd)) {
+                else if (hd && *hd && app_cfg_on(aTHX_ *hd)) {
                     app_call_list(aTHX_ self, K_HEADERS,
                                   (AV *)sv_2mortal((SV *)newAV()));
                 }
@@ -1788,6 +1838,164 @@ upload_dir(self, path)
         if (!SvOK(path) || !SvCUR(path))
             croak("Punk: upload_dir needs a directory");
         (void)hv_stores(h, "upload_dir", newSVsv(path));
+        RETVAL = newSVsv(self);
+    }
+    OUTPUT:
+        RETVAL
+
+# host($origin?, allow => \@hosts?): the application's canonical origin,
+# declared once.
+#
+# Plugins that need an absolute base URL - a sitemap, an OAuth redirect -
+# default to this when their own option is not passed, so one fact about the
+# application is stated in one place. It is CONFIGURATION, never the request's
+# Host header: a request-derived origin is attacker-supplied bytes, which is
+# the whole reason those plugins refuse to guess.
+#
+# `allow` is the multi-tenant half: the request hosts that may stand in for
+# the canonical one, so $c->origin can name a tenant without ever reflecting
+# a header nobody configured (punk_host.h). Entries are lowercased and
+# checked at the keyword - a typo fails here rather than never matching.
+#
+# With no argument it reads back the stored value, so a plugin reaches it as
+# $app->host and an older Punk is detected with $app->can('host').
+SV *
+host(self, ...)
+        SV *self
+    CODE:
+    {
+        HV *h = app_hv(aTHX_ self);
+        if (items == 1) {
+            SV *v = app_get(aTHX_ h, "host");
+            RETVAL = (v && SvOK(v)) ? newSVsv(v) : newSV(0);
+        }
+        else {
+            SV *val = ST(1);
+            STRLEN vl, scheme = 0, i;
+            const char *vp;
+            SSize_t oi;
+            if (!SvOK(val) || !SvCUR(val))
+                croak("Punk: host needs an absolute origin "
+                      "(https://example.com)");
+            vp = SvPV_const(val, vl);
+            if (vl > 8 && memEQ(vp, "https://", 8))     scheme = 8;
+            else if (vl > 7 && memEQ(vp, "http://", 7)) scheme = 7;
+            if (!scheme || vp[scheme] == '/')
+                croak("Punk: host needs an absolute origin "
+                      "(https://example.com), not '%.*s'", (int)vl, vp);
+            /* A query, a fragment, whitespace or a control byte in an origin
+             * is always a mistake, and this value is joined onto by code that
+             * must be able to trust it. A backslash is refused for the same
+             * reason $c->safe_path refuses one: browsers fold it to a slash. */
+            for (i = 0; i < vl; i++) {
+                const unsigned char ch = (unsigned char)vp[i];
+                if (ch == '?' || ch == '#' || ch == '\\'
+                    || ch <= 0x20 || ch == 0x7f)
+                    croak("Punk: host may not carry '%c' - an origin has no "
+                          "query, fragment or whitespace", (int)ch);
+            }
+            if ((items - 2) % 2)
+                croak("Punk: host takes key => value options");
+            /* last write wins wholly: a second declaration without `allow`
+             * has no allowlist */
+            (void)hv_delete(h, "host_allow", 10, G_DISCARD);
+            for (oi = 2; oi + 1 < items; oi += 2) {
+                STRLEN kl;
+                const char *k = SvPV_const(ST(oi), kl);
+                SV *v = ST(oi + 1);
+                if (kl == 5 && memEQ(k, "allow", 5)) {
+                    AV *in, *out;
+                    SSize_t ai, an;
+                    if (!(SvROK(v) && SvTYPE(SvRV(v)) == SVt_PVAV))
+                        croak("Punk: host allow needs an arrayref of "
+                              "hostnames");
+                    in  = (AV *)SvRV(v);
+                    out = (AV *)sv_2mortal((SV *)newAV());
+                    an  = av_len(in) + 1;
+                    for (ai = 0; ai < an; ai++) {
+                        SV **e = av_fetch(in, ai, 0);
+                        STRLEN el, j;
+                        const char *ep;
+                        SV *low;
+                        char *lp;
+                        if (!(e && *e && SvOK(*e) && SvCUR(*e)))
+                            croak("Punk: host allow entries are hostnames");
+                        ep  = SvPV_const(*e, el);
+                        low = sv_2mortal(newSVpvn(ep, el));
+                        lp  = SvPVX(low);
+                        for (j = 0; j < el; j++)
+                            if (lp[j] >= 'A' && lp[j] <= 'Z') lp[j] += 32;
+                        if (!pk_host_entry_ok(lp, el))
+                            croak("Punk: host allow entry '%.*s' is not a "
+                                  "hostname - labels of [a-z0-9-], an "
+                                  "optional leading *. and an optional "
+                                  ":port", (int)el, ep);
+                        av_push(out, SvREFCNT_inc_simple_NN(low));
+                    }
+                    (void)hv_stores(h, "host_allow", newRV_inc((SV *)out));
+                }
+                else croak("Punk: host does not understand '%.*s'",
+                           (int)kl, k);
+            }
+            /* trailing slashes trimmed on store, so every consumer joining a
+             * rooted path onto it produces one slash, not two */
+            while (vl > scheme && vp[vl - 1] == '/') vl--;
+            (void)hv_stores(h, "host", newSVpvn(vp, vl));
+            RETVAL = newSVsv(self);
+        }
+    }
+    OUTPUT:
+        RETVAL
+
+# favicon($path, max_age => $secs?): GET /favicon.ico from this file.
+#
+# The route is registered here, once; the bytes are frozen at to_app
+# (pfav_freeze, from the compiler), where a missing file croaks at boot. The
+# route opts itself out of the sitemap - an icon is not a page.
+SV *
+favicon(self, path, ...)
+        SV *self
+        SV *path
+    CODE:
+    {
+        HV *h = app_hv(aTHX_ self);
+        int had = app_get(aTHX_ h, "favicon_path") != NULL;
+        SSize_t i;
+        if (!SvOK(path) || !SvCUR(path))
+            croak("Punk: favicon needs a file path");
+        if ((items - 2) % 2)
+            croak("Punk: favicon takes key => value options");
+        (void)hv_delete(h, "favicon_max_age", 15, G_DISCARD);
+        for (i = 2; i + 1 < items; i += 2) {
+            STRLEN kl;
+            const char *k = SvPV_const(ST(i), kl);
+            SV *v = ST(i + 1);
+            if (kl == 7 && memEQ(k, "max_age", 7)) {
+                if (!SvOK(v) || !looks_like_number(v) || SvIV(v) < 0)
+                    croak("Punk: favicon max_age needs a non-negative "
+                          "number of seconds");
+                (void)hv_stores(h, "favicon_max_age", newSViv(SvIV(v)));
+            }
+            else croak("Punk: favicon does not understand '%.*s'",
+                       (int)kl, k);
+        }
+        (void)hv_stores(h, "favicon_path", newSVsv(path));
+        if (!had) {
+            SV *argv[5], *r;
+            AV *cap = newAV();
+            av_push(cap, newSVsv(self));
+            argv[0] = sv_2mortal(newSVpvs("GET"));
+            argv[1] = sv_2mortal(newSVpvs("/favicon.ico"));
+            argv[2] = sv_2mortal(punk_closure(aTHX_ pfav_serve_cb, cap));
+            argv[3] = &PL_sv_undef;
+            {
+                HV *o = newHV();
+                (void)hv_stores(o, K_SITEMAP, newSViv(0));
+                argv[4] = sv_2mortal(newRV_noinc((SV *)o));
+            }
+            r = pcx_call_meth(aTHX_ self, "route", argv, 5, 1);
+            if (r) SvREFCNT_dec(r);
+        }
         RETVAL = newSVsv(self);
     }
     OUTPUT:

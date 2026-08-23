@@ -6,7 +6,7 @@ package POUA;
 # Fetch::Response surface the provider code uses (status, json, content,
 # header, is_success).
 
-use 5.024;
+use 5.010;
 use strict;
 use warnings;
 use File::Raw::JSON ();

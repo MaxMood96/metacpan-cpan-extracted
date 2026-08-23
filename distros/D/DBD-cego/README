@@ -3,19 +3,20 @@
 	--------
 	A Perl DBD driver for the Cego database system
 
-	Version 1.4.0
+	Version 1.5.8
 
-	(C)opyright 2007-2017 by Bjoern Lemke
+	(C)opyright 2007-2026 by Bjoern Lemke
 
 	This software comes under the GNU general public license
 
 Requirements
 -----------
-To build the Cego DBD driver, you need the following library packages available from www.lemke-it.com:
+To build the Cego DBD driver, you need the following library packages available from www.lemke-it.com
+in the latest version
 
-   lfcbase-1.6.0.tar.gz
-   lfcxml-1.1.7.tar.gz
-   cego-2.22.0.tar.gz ( client library )
+   lfcbasez
+   lfcxml
+   cego ( client library )
 
 Tested platforms and compliers
 ----------------------------

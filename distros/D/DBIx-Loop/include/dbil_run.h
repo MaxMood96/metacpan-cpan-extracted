@@ -13,6 +13,23 @@
  * bench, and a worker re-runs the same SQL constantly. */
 static int DBIL_PREPARE_CACHED = 0;
 
+/* $h->errstr as a mortal SV (best effort; `fallback` when the driver has
+ * nothing to say). Every backend needs this, because DBI's other way of
+ * reporting a failure - a false return from do or execute - only becomes a
+ * croak when the handle was opened with RaiseError, and a handle the
+ * application opened is the application's to configure. */
+static SV *dbil_errstr(pTHX_ SV *h, const char *fallback) {
+    dSP; int n; SV *r = NULL;
+    ENTER; SAVETMPS; PUSHMARK(SP);
+    EXTEND(SP, 1); PUSHs(h); PUTBACK;
+    n = call_method("errstr", G_SCALAR | G_EVAL);
+    SPAGAIN;
+    if (!SvTRUE(ERRSV) && n > 0) { SV *s = POPs; if (SvOK(s) && SvCUR(s)) r = newSVsv(s); }
+    else if (n > 0) (void)POPs;
+    PUTBACK; FREETMPS; LEAVE;
+    return r ? sv_2mortal(r) : sv_2mortal(newSVpv(fallback, 0));
+}
+
 /* $h->FETCH($attr): read a DBI handle attribute from C. Mortal SV, or NULL. */
 static SV *dbil_h_fetch(pTHX_ SV *h, const char *attr) {
     dSP;
@@ -41,7 +58,7 @@ static SV *dbil_run_dbi(pTHX_ SV *dbh, int is_query, SV *sql, AV *bind, SV **err
 
     if (!is_query) {
         dSP;
-        int n;
+        int n, failed = 0;
         IV rows = 0;
         ENTER; SAVETMPS; PUSHMARK(SP);
         EXTEND(SP, 3 + nb);
@@ -51,8 +68,14 @@ static SV *dbil_run_dbi(pTHX_ SV *dbh, int is_query, SV *sql, AV *bind, SV **err
         n = call_method("do", G_SCALAR | G_EVAL);
         SPAGAIN;
         if (SvTRUE(ERRSV)) { SV *e = newSVsv(ERRSV); if (n > 0) (void)POPs; PUTBACK; FREETMPS; LEAVE; *err = sv_2mortal(e); return NULL; }
-        if (n > 0) { SV *r = POPs; rows = SvOK(r) ? SvIV(r) : 0; }
+        /* do returns the row count ("0E0" for none, -1 for unknown) and
+         * UNDEF on failure. Without RaiseError that undef is the only word
+         * the driver gives, and it used to become rows_affected => 0 and a
+         * done future - a constraint violation reported as success. */
+        if (n > 0) { SV *r = POPs; if (!SvOK(r)) failed = 1; else rows = SvIV(r); }
+        else failed = 1;
         PUTBACK; FREETMPS; LEAVE;
+        if (failed) { *err = dbil_errstr(aTHX_ dbh, "do failed"); return NULL; }
         {
             HV *h = newHV();
             (void)hv_stores(h, "rows_affected", newSViv(rows));
@@ -76,6 +99,7 @@ static SV *dbil_run_dbi(pTHX_ SV *dbh, int is_query, SV *sql, AV *bind, SV **err
     }
     else {
         SV *sth = NULL;
+        int failed = 0;
         /* prepare */
         {
             dSP; int n;
@@ -100,8 +124,11 @@ static SV *dbil_run_dbi(pTHX_ SV *dbh, int is_query, SV *sql, AV *bind, SV **err
             n = call_method("execute", G_SCALAR | G_EVAL);
             SPAGAIN;
             if (SvTRUE(ERRSV)) { SV *e = newSVsv(ERRSV); if (n > 0) (void)POPs; PUTBACK; FREETMPS; LEAVE; *err = sv_2mortal(e); return NULL; }
-            if (n > 0) (void)POPs;
+            /* execute returns true ("0E0" for no rows) or false on failure */
+            if (n > 0) { SV *r = POPs; if (!SvTRUE(r)) failed = 1; }
+            else failed = 1;
             PUTBACK; FREETMPS; LEAVE;
+            if (failed) { *err = dbil_errstr(aTHX_ sth, "execute failed"); return NULL; }
         }
         {
             SV *nfld = dbil_h_fetch(aTHX_ sth, "NUM_OF_FIELDS");

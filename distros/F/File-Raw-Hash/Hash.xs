@@ -458,6 +458,209 @@ hash_stream_cb(pTHX_ FilePluginContext *ctx,
 
 static FilePlugin hash_plugin;
 
+/* ============================================================
+ * The C ABI - include/frh_abi.h. Perl-free thunks over the runner,
+ * every runner initialised with HF_RAW so raw digest bytes come out
+ * of the existing finish path (t/14-raw-parity.t proves that path
+ * equals the formatted one, HMAC included).
+ * ============================================================ */
+
+#include "frh_abi.h"
+
+/* The registry rows the ABI hands out. Filled once from the internal
+ * table rather than aliased to it, so frh_algo_t owes nothing to
+ * hash_algo_info_t's layout. */
+static frh_algo_t FRH_ALGOS[HA_COUNT];
+static int frh_algos_ready = 0;
+
+static void frh_algos_fill(void)
+{
+    int i;
+    if (frh_algos_ready)
+        return;
+    for (i = 0; i < HA_COUNT; i++) {
+        const hash_algo_info_t *a = hash_algo_by_id((hash_algo_id_t)i);
+        FRH_ALGOS[i].name        = a->name;
+        FRH_ALGOS[i].id          = i;
+        FRH_ALGOS[i].digest_size = a->digest_size;
+        FRH_ALGOS[i].hmac_able   = a->hmac_able;
+        FRH_ALGOS[i].block_size  = a->hmac_block_size;
+    }
+    frh_algos_ready = 1;
+}
+
+static const frh_algo_t *frh_abi_algo_by_name(const char *name, size_t len)
+{
+    const hash_algo_info_t *a;
+    if (!name)
+        return NULL;
+    frh_algos_fill();
+    a = hash_algo_lookup(name, len);
+    return a ? &FRH_ALGOS[a->id] : NULL;
+}
+
+static const frh_algo_t *frh_abi_algo_by_id(int id)
+{
+    if (id < 0 || id >= HA_COUNT)
+        return NULL;
+    frh_algos_fill();
+    return &FRH_ALGOS[id];
+}
+
+static int frh_abi_algo_count(void)
+{
+    return HA_COUNT;
+}
+
+/* The handle behind the opaque pointer. `finished` enforces the
+ * exactly-once rule the internal finish does not: hash_runner_finish
+ * tolerates a second call for leak safety but would re-finalise dead
+ * contexts and hand back garbage. */
+typedef struct {
+    hash_runner_t r;
+    int           finished;
+} frh_runner_t;
+
+static void *frh_abi_new_runner(const int *ids, int n,
+                                unsigned long long seed)
+{
+    frh_runner_t *w;
+    hash_algo_id_t *hids;
+    int i;
+
+    if (!ids || n < 1)
+        return NULL;
+    for (i = 0; i < n; i++)
+        if (ids[i] < 0 || ids[i] >= HA_COUNT)
+            return NULL;
+
+    hids = (hash_algo_id_t *)malloc((size_t)n * sizeof *hids);
+    if (!hids)
+        return NULL;
+    for (i = 0; i < n; i++)
+        hids[i] = (hash_algo_id_t)ids[i];
+
+    w = (frh_runner_t *)malloc(sizeof *w);
+    if (!w) {
+        free(hids);
+        return NULL;
+    }
+    if (hash_runner_init(&w->r, hids, n, HF_RAW, (uint64_t)seed) != 0) {
+        free(hids);
+        free(w);
+        return NULL;
+    }
+    free(hids);
+    w->finished = 0;
+    return w;
+}
+
+static int frh_abi_runner_set_hmac(void *vr, const unsigned char *key,
+                                   size_t klen)
+{
+    frh_runner_t *w = (frh_runner_t *)vr;
+    if (!w || w->finished)
+        return -1;
+    return hash_runner_set_hmac(&w->r, key, klen);
+}
+
+static void frh_abi_runner_update(void *vr, const void *data, size_t len)
+{
+    frh_runner_t *w = (frh_runner_t *)vr;
+    if (!w || w->finished)
+        return;
+    hash_runner_update(&w->r, data, len);
+}
+
+static int frh_abi_runner_finish(void *vr, unsigned char **outs)
+{
+    frh_runner_t *w = (frh_runner_t *)vr;
+    const hash_result_t *res;
+    int i;
+
+    if (!w || w->finished || !outs)
+        return -1;
+    /* validate every destination BEFORE finalising: a NULL discovered
+     * mid-copy would leave the runner finished and the output partial,
+     * the worst of both */
+    for (i = 0; i < w->r.count; i++)
+        if (!outs[i])
+            return -1;
+    if (hash_runner_finish(&w->r, &res) != 0)
+        return -1;
+    w->finished = 1;
+    for (i = 0; i < w->r.count; i++) {
+        const hash_algo_info_t *a = hash_algo_by_id(res[i].id);
+        memcpy(outs[i], res[i].out, a->digest_size);
+    }
+    return 0;
+}
+
+static void frh_abi_runner_free(void *vr)
+{
+    frh_runner_t *w = (frh_runner_t *)vr;
+    if (!w)
+        return;
+    hash_runner_free(&w->r);
+    free(w);
+}
+
+/* One-shots: a runner born, fed and finished locally, so there is no
+ * second finalisation code path to drift. */
+static int frh_abi_digest_common(int id, const unsigned char *key,
+                                 size_t klen,
+                                 const unsigned char *in, size_t n,
+                                 unsigned char *out)
+{
+    void *w;
+    unsigned char *outs[1];
+    int rc;
+
+    if (!out)
+        return -1;
+    w = frh_abi_new_runner(&id, 1, 0);
+    if (!w)
+        return -1;
+    if (key && frh_abi_runner_set_hmac(w, key, klen) != 0) {
+        frh_abi_runner_free(w);
+        return -1;
+    }
+    frh_abi_runner_update(w, in, n);
+    outs[0] = out;
+    rc = frh_abi_runner_finish(w, outs);
+    frh_abi_runner_free(w);
+    return rc;
+}
+
+static int frh_abi_digest(int id, const unsigned char *in, size_t n,
+                          unsigned char *out)
+{
+    return frh_abi_digest_common(id, NULL, 0, in, n, out);
+}
+
+static int frh_abi_hmac(int id, const unsigned char *key, size_t klen,
+                        const unsigned char *in, size_t n,
+                        unsigned char *out)
+{
+    if (!key)
+        return -1;
+    return frh_abi_digest_common(id, key, klen, in, n, out);
+}
+
+static const frh_abi FRH_ABI = {
+    FRH_ABI_VERSION,
+    frh_abi_algo_by_name,
+    frh_abi_algo_by_id,
+    frh_abi_algo_count,
+    frh_abi_digest,
+    frh_abi_hmac,
+    frh_abi_new_runner,
+    frh_abi_runner_set_hmac,
+    frh_abi_runner_update,
+    frh_abi_runner_finish,
+    frh_abi_runner_free
+};
+
 MODULE = File::Raw::Hash   PACKAGE = File::Raw::Hash
 
 PROTOTYPES: DISABLE
@@ -470,6 +673,161 @@ BOOT:
     hash_plugin.record_fn = hash_record_cb;
     hash_plugin.stream_fn = hash_stream_cb;
     file_register_plugin(aTHX_ &hash_plugin);
+
+IV
+_abi_ptr()
+    CODE:
+        RETVAL = PTR2IV(&FRH_ABI);
+    OUTPUT:
+        RETVAL
+
+SV*
+_abi_selftest()
+    CODE:
+    {
+        /* Drive the table the way a C consumer would and report one
+         * named flag per member group, plus the raw "abc" digest of
+         * every algorithm as hex so the Perl tests can compare this
+         * path against the plugin path byte for byte. */
+        const frh_abi *H = &FRH_ABI;
+        HV *hv = newHV();
+        HV *digests = newHV();
+        int registry_ok = 1, digest_ok = 1, hmac_ok = 0;
+        int runner_ok = 0, edges_ok = 1;
+        int i, n = H->algo_count();
+        unsigned char buf[HASH_MAX_DIGEST_SIZE];
+        char hex[HASH_MAX_DIGEST_SIZE * 2 + 1];
+
+        /* registry: dense ids, names round-trip, sane sizes */
+        for (i = 0; i < n; i++) {
+            const frh_algo_t *a = H->algo_by_id(i);
+            const frh_algo_t *b;
+            if (!a || a->id != i || !a->name ||
+                a->digest_size == 0 ||
+                a->digest_size > HASH_MAX_DIGEST_SIZE) {
+                registry_ok = 0;
+                break;
+            }
+            b = H->algo_by_name(a->name, strlen(a->name));
+            if (b != a) { registry_ok = 0; break; }
+            if (a->hmac_able && a->block_size == 0) {
+                registry_ok = 0;
+                break;
+            }
+        }
+        registry_ok = registry_ok
+            && !H->algo_by_id(-1) && !H->algo_by_id(n)
+            && !H->algo_by_name("nonesuch", 8);
+
+        /* one-shot digest of "abc" per algorithm, reported as hex */
+        for (i = 0; i < n; i++) {
+            const frh_algo_t *a = H->algo_by_id(i);
+            size_t j;
+            if (H->digest(i, (const unsigned char *)"abc", 3, buf) != 0) {
+                digest_ok = 0;
+                continue;
+            }
+            for (j = 0; j < a->digest_size; j++)
+                sprintf(hex + 2 * j, "%02x", buf[j]);
+            (void)hv_store(digests, a->name, (I32)strlen(a->name),
+                           newSVpvn(hex, a->digest_size * 2), 0);
+        }
+
+        /* HMAC: RFC 2202 case 1, checked here in C so the vector
+         * guards the table even if the Perl tests thin out */
+        {
+            const frh_algo_t *sha1 =
+                H->algo_by_name("sha1", 4);
+            static const unsigned char want[20] = {
+                0xb6,0x17,0x31,0x86,0x55,0x05,0x72,0x64,0xe2,0x8b,
+                0xc0,0xb6,0xfb,0x37,0x8c,0x8e,0xf1,0x46,0xbe,0x00
+            };
+            unsigned char key[20];
+            memset(key, 0x0b, sizeof key);
+            if (sha1 &&
+                H->hmac(sha1->id, key, sizeof key,
+                        (const unsigned char *)"Hi There", 8, buf) == 0)
+                hmac_ok = memcmp(buf, want, 20) == 0;
+        }
+
+        /* lockstep: sha256+blake3 over a split stream equals the
+         * one-shots over the joined stream */
+        {
+            const frh_algo_t *s = H->algo_by_name("sha256", 6);
+            const frh_algo_t *b = H->algo_by_name("blake3", 6);
+            if (s && b) {
+                int ids[2];
+                unsigned char o1[HASH_MAX_DIGEST_SIZE];
+                unsigned char o2[HASH_MAX_DIGEST_SIZE];
+                unsigned char *outs[2];
+                void *r;
+                ids[0] = s->id; ids[1] = b->id;
+                outs[0] = o1; outs[1] = o2;
+                r = H->new_runner(ids, 2, 0);
+                if (r) {
+                    unsigned char w1[HASH_MAX_DIGEST_SIZE];
+                    unsigned char w2[HASH_MAX_DIGEST_SIZE];
+                    H->runner_update(r, "lock", 4);
+                    H->runner_update(r, "", 0);
+                    H->runner_update(r, "step", 4);
+                    runner_ok = H->runner_finish(r, outs) == 0
+                        && H->digest(s->id, (const unsigned char *)
+                                     "lockstep", 8, w1) == 0
+                        && H->digest(b->id, (const unsigned char *)
+                                     "lockstep", 8, w2) == 0
+                        && memcmp(o1, w1, s->digest_size) == 0
+                        && memcmp(o2, w2, b->digest_size) == 0;
+                    /* edge: a second finish refuses */
+                    edges_ok = edges_ok
+                        && H->runner_finish(r, outs) == -1;
+                    H->runner_free(r);
+                }
+            }
+        }
+
+        /* edges: free(NULL); set_hmac including a non-hmac_able algo
+         * fails atomically and the runner stays usable plain */
+        H->runner_free(NULL);
+        {
+            const frh_algo_t *s = H->algo_by_name("sha256", 6);
+            const frh_algo_t *c = H->algo_by_name("crc32", 5);
+            if (s && c) {
+                int ids[2];
+                unsigned char o1[HASH_MAX_DIGEST_SIZE];
+                unsigned char o2[HASH_MAX_DIGEST_SIZE];
+                unsigned char *outs[2];
+                void *r;
+                ids[0] = s->id; ids[1] = c->id;
+                outs[0] = o1; outs[1] = o2;
+                r = H->new_runner(ids, 2, 0);
+                edges_ok = edges_ok && r
+                    && H->runner_set_hmac(r,
+                          (const unsigned char *)"k", 1) == -1;
+                if (r) {
+                    H->runner_update(r, "abc", 3);
+                    edges_ok = edges_ok
+                        && H->runner_finish(r, outs) == 0;
+                    H->runner_free(r);
+                }
+            }
+            /* bad ids refuse */
+            edges_ok = edges_ok
+                && H->digest(-1, (const unsigned char *)"x", 1, buf) == -1
+                && H->digest(n, (const unsigned char *)"x", 1, buf) == -1
+                && !H->new_runner(NULL, 1, 0);
+        }
+
+        (void)hv_stores(hv, "version",     newSViv(H->version));
+        (void)hv_stores(hv, "registry_ok", newSViv(registry_ok));
+        (void)hv_stores(hv, "digest_ok",   newSViv(digest_ok));
+        (void)hv_stores(hv, "hmac_ok",     newSViv(hmac_ok));
+        (void)hv_stores(hv, "runner_ok",   newSViv(runner_ok));
+        (void)hv_stores(hv, "edges_ok",    newSViv(edges_ok));
+        (void)hv_stores(hv, "digests",     newRV_noinc((SV *)digests));
+        RETVAL = newRV_noinc((SV *)hv);
+    }
+    OUTPUT:
+        RETVAL
 
 # ============================================================
 # Test helper: invoke the hash plugin's record_fn through File::Raw's

@@ -800,6 +800,10 @@ David E. Condon <dec986@gmail.com>
 
 # Changes
 
+## 0.02 2026-08-22 CDT
+
+Fix for Windows: https://www.cpantesters.org/cpan/report/960c8de0-8001-1014-8897-e6a949c55ebf
+
 ## 0.01 2026-08-21 CDT
 
 initial version: reads PDB into a hash of hashes, single-letter

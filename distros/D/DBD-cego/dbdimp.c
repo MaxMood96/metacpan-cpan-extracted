@@ -82,6 +82,8 @@ cego_db_login(SV *dbh, imp_dbh_t *imp_dbh, char *dbname, char *user, char *pass)
 	protocol=CegoDbHandler::SERIAL;
     else if ( prot == Chain("xml"))
 	protocol=CegoDbHandler::XML;
+    else if ( prot == Chain("fastserial"))
+	protocol=CegoDbHandler::FASTSERIAL;
     else
     {
 	cego_error(dbh, 1, (char*)"Invalid protocol" );	
@@ -333,6 +335,9 @@ cego_st_prepare (SV *sth, imp_sth_t *imp_sth,
     if ( numParams > 0 )
 	imp_sth->paramList = new ListT<CegoDBDParam>;
 
+    imp_sth->msg = NULL;
+    imp_sth->schema = NULL;
+    
     DBIc_NUM_PARAMS(imp_sth) = numParams;
     
     return TRUE;
@@ -467,11 +472,13 @@ cego_st_execute (SV *sth, imp_sth_t *imp_sth)
 
     if ( imp_dbh->cgnet->isFetchable() )
     {
+	if ( imp_sth->schema != NULL )
+	    delete imp_sth->schema;
 	imp_sth->schema = new ListT<CegoField>;
 	imp_dbh->cgnet->getSchema(*(imp_sth->schema));
 	imp_dbh->activeQuery = TRUE;
 	DBIc_NUM_FIELDS(imp_sth) = imp_sth->schema->Size();
-	retCode = 1;
+	retCode = 0;
     }
     else
     {
@@ -504,10 +511,13 @@ cego_st_execute (SV *sth, imp_sth_t *imp_sth)
 	}
 	Chain msg;
 	msg = imp_dbh->cgnet->getMsg();
+
+	if ( imp_sth->msg != NULL )
+	    delete imp_sth->msg;		
 	imp_sth->msg = new char[ msg.length() ];
 	strcpy(imp_sth->msg, (char*)msg);
 	imp_sth->affected = imp_dbh->cgnet->getAffected();
-	retCode = 0;
+	retCode = imp_sth->affected;
     }
 
     DBIc_ACTIVE_on(imp_sth);
@@ -519,8 +529,7 @@ cego_st_execute (SV *sth, imp_sth_t *imp_sth)
 int
 cego_st_rows (SV *sth, imp_sth_t *imp_sth)
 {
-    // actually not implemented
-    return 0;
+    return imp_sth->affected;
 }
 
 int

@@ -3,6 +3,7 @@ Possible items to do, in no particular order
 Feature requests can be entered at 
 https://github.com/bucardo/dbdpg/issues
 
+- Automate rebuilding is_keyword via doc/src/sgml/keywords/*.txt
 - Address that "XXX Wrong" in types.c
 - Consider support for PQchangePassword
 - Support pipeline mode: https://www.postgresql.org/docs/14/libpq-pipeline-mode.html
@@ -17,7 +18,6 @@ https://github.com/bucardo/dbdpg/issues
 - Allow partial result sets, either via PQsetSingleRowMode or something better
 - Hack libpq to make user-defined number of rows returned
 - Map hstore to hashes similar to the array/array mapping
-- Fix ping problem: http://www.cpantesters.org/cpan/report/53c5cc72-6d39-11e1-8b9d-82c3d2d9ea9f
 - Use WITH HOLD for cursor work
 - Devise a way to automatically create ppm for Windows builds
 - I8N docs and error messages

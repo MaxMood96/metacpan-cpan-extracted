@@ -384,6 +384,38 @@ static SV *ft_abi_request_stream(pTHX_ SV *ua_sv, const char *method,
  * Pure C (no pTHX): usable directly in a consumer's splice loop. */
 typedef struct ft_rawconn { int fd; void *ssl; } ft_rawconn;
 
+/* The TLS handshake on an already-connected plaintext rawconn: Fetch's client
+ * SSL_CTX, SNI, hostname verification when asked. One function shared by
+ * tunnel_connect (tls=1) and tunnel_starttls (v3), so the two handshakes
+ * cannot drift apart. 0 on success. -1 when the handle is NULL, already TLS,
+ * or the handshake fails - and then the rawconn is left as it was found
+ * (no ssl, fd still open) for the caller to close. -1 always in a build
+ * without TLS. */
+static int ft_abi_tls_wrap(ft_rawconn *rc, const char *host, int verify) {
+#if FT_TLS_AVAILABLE
+    SSL_CTX *ctx;
+    SSL *ssl;
+    if (!rc || rc->ssl || rc->fd < 0) return -1;
+    ctx = ft_client_ctx(verify);
+    if (!ctx || !(ssl = SSL_new(ctx))) return -1;
+    SSL_set_fd(ssl, FT_SSL_FD(rc->fd));
+    SSL_set_connect_state(ssl);
+#ifdef SSL_set_tlsext_host_name
+    SSL_set_tlsext_host_name(ssl, host);
+#endif
+    if (verify) {
+        SSL_set1_host(ssl, host);
+        SSL_set_hostflags(ssl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+    }
+    if (SSL_connect(ssl) != 1) { SSL_free(ssl); return -1; }
+    rc->ssl = ssl;
+    return 0;
+#else
+    (void)rc; (void)host; (void)verify;
+    return -1;
+#endif
+}
+
 static void *ft_abi_tunnel_connect(const char *host, int port, int tls, int verify) {
     struct addrinfo hints, *ai = NULL, *it;
     char portbuf[16];
@@ -404,27 +436,18 @@ static void *ft_abi_tunnel_connect(const char *host, int port, int tls, int veri
     rc = (ft_rawconn *)calloc(1, sizeof(ft_rawconn));
     if (!rc) { ft_os_close(fd); return NULL; }
     rc->fd = fd; rc->ssl = NULL;
-    if (tls) {
-#if FT_TLS_AVAILABLE
-        SSL_CTX *ctx = ft_client_ctx(verify);
-        SSL *ssl;
-        if (!ctx || !(ssl = SSL_new(ctx))) { ft_os_close(fd); free(rc); return NULL; }
-        SSL_set_fd(ssl, FT_SSL_FD(fd));
-        SSL_set_connect_state(ssl);
-#ifdef SSL_set_tlsext_host_name
-        SSL_set_tlsext_host_name(ssl, host);
-#endif
-        if (verify) {
-            SSL_set1_host(ssl, host);
-            SSL_set_hostflags(ssl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
-        }
-        if (SSL_connect(ssl) != 1) { SSL_free(ssl); ft_os_close(fd); free(rc); return NULL; }
-        rc->ssl = ssl;
-#else
-        ft_os_close(fd); free(rc); return NULL;      /* TLS asked for, unavailable */
-#endif
+    if (tls && ft_abi_tls_wrap(rc, host, verify) != 0) {
+        /* handshake failed, or TLS asked for in a build without it */
+        ft_os_close(fd); free(rc); return NULL;
     }
     return rc;
+}
+
+/* v3: STARTTLS. The application protocol has said "upgrade now" on a tunnel
+ * opened with tls=0; this is the handshake. See ft_abi_tls_wrap for the
+ * failure contract. */
+static int ft_abi_tunnel_starttls(void *h, const char *host, int verify) {
+    return ft_abi_tls_wrap((ft_rawconn *)h, host, verify);
 }
 
 static int ft_abi_tunnel_fd(void *h) { return h ? ((ft_rawconn *)h)->fd : -1; }
@@ -495,7 +518,73 @@ static const fetch_abi FETCH_ABI = {
     ft_abi_tunnel_pending,
     ft_abi_tunnel_close,
     ft_obs_add,                  /* v2 */
+    ft_abi_tunnel_starttls,      /* v3 */
 };
+
+/* ---- the v3 STARTTLS upgrade, driven from C (t/25-tunnel-starttls.t) --- *
+ * A Perl test cannot call into a function-pointer table, so the protocol
+ * dance that exercises it lives here, and goes through FETCH_ABI rather than
+ * the static functions: the probe proves the table ENTRY, not just the code
+ * behind it. Connect plain, take the greeting, send STARTTLS, and upgrade
+ * only on a 220 - a client that upgrades on any reply is the one that hangs
+ * against a server that declined. Then one line each way over TLS.
+ *
+ * Returns what the server said, joined with "\n", as far as the probe got;
+ * *where is "ok" or the name of the step that stopped it. */
+static IV ft_abi_st_readline(const fetch_abi *a, void *h, char *buf, size_t size) {
+    size_t n = 0;
+    while (n + 1 < size) {
+        IV r = a->tunnel_read(h, buf + n, 1);
+        if (r <= 0) return -1;
+        n++;
+        if (buf[n - 1] == '\n') break;
+    }
+    while (n && (buf[n - 1] == '\n' || buf[n - 1] == '\r')) n--;
+    buf[n] = 0;
+    return (IV)n;
+}
+
+static SV *ft_abi_starttls_selftest(pTHX_ const char *host, int port, int verify,
+                                    const char **where) {
+    const fetch_abi *a = &FETCH_ABI;
+    SV *out = newSVpvs("");
+    char buf[512];
+    void *h;
+
+    *where = "connect";
+    h = a->tunnel_connect(host, port, 0, verify);
+    if (!h) return out;
+#ifndef _WIN32
+    {   /* the consumer's side of the timeout contract: the table has no
+         * timeout, the fd does */
+        struct timeval tv; tv.tv_sec = 10; tv.tv_usec = 0;
+        (void)setsockopt(a->tunnel_fd(h), SOL_SOCKET, SO_RCVTIMEO,
+                         (const void *)&tv, sizeof tv);
+    }
+#endif
+    *where = "greeting";
+    if (ft_abi_st_readline(a, h, buf, sizeof buf) < 0) goto done;
+    sv_catpv(out, buf);
+
+    *where = "starttls-request";
+    if (a->tunnel_write_all(h, "STARTTLS\r\n", 10) != 0) goto done;
+    *where = "starttls-reply";
+    if (ft_abi_st_readline(a, h, buf, sizeof buf) < 0) goto done;
+    sv_catpvs(out, "\n"); sv_catpv(out, buf);
+    if (strncmp(buf, "220", 3) != 0) { *where = "refused"; goto done; }
+
+    *where = "starttls";
+    if (a->tunnel_starttls(h, host, verify) != 0) goto done;
+
+    *where = "ping";
+    if (a->tunnel_write_all(h, "PING\r\n", 6) != 0) goto done;
+    if (ft_abi_st_readline(a, h, buf, sizeof buf) < 0) goto done;
+    sv_catpvs(out, "\n"); sv_catpv(out, buf);
+    *where = "ok";
+done:
+    a->tunnel_close(h);
+    return out;
+}
 
 /* ---- the v2 observer, driven from C (t/23-observer.t) -------------- *
  * A Perl test cannot register a C callback, so the observable half lives

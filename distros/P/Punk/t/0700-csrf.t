@@ -257,4 +257,45 @@ my $token = $first->{body};
         'csrf without a session croaks at to_app, naming the fix');
 }
 
+# ---- the bare form from punk.yml --------------------------------------------
+# YAML::XS hands Punk::Config a JSON::PP::Boolean for a bare `true` - a
+# blessed scalar ref, not the scalar 1 - and `csrf: true` has to register
+# from that exactly as `csrf;` does. It silently did not, once: the bare
+# form was tested as "a true non-reference", and a boolean object is
+# neither, so the keyword never registered and the first csrf_field was a
+# 500 at request time.
+SKIP: {
+    skip 'YAML::XS required for the config half', 12
+        unless eval { require YAML::XS; 1 };
+    require File::Temp;
+    require Punk::Test;
+    my $dir = File::Temp->newdir;
+    my $n = 0;
+    for my $case ([ 'true', 1 ], [ 'false', 0 ], [ '{}', 1 ]) {
+        my ($yml, $on) = @$case;
+        open my $fh, '>', "$dir/punk.yml" or die $!;
+        print $fh "session:\n  secret: { \$literal: " . ('x' x 32) . " }\ncsrf: $yml\n";
+        close $fh;
+        my $pkg = 'YmlCsrf' . $n++;
+        eval qq{
+            package $pkg;
+            use Punk;
+            config "$dir/punk.yml";
+            get  '/'     => sub { \$_[0]->html(\$_[0]->csrf_field) };
+            post '/save' => sub { \$_[0]->text('saved') };
+            1;
+        } or die $@;
+        my $t = Punk::Test->new($pkg);
+        if ($on) {
+            $t->get_ok('/')->status_is(200)
+              ->content_like(qr/name="_csrf"/, "csrf: $yml registers the keyword");
+            $t->post_ok('/save')
+              ->status_is(403, '  and an unsafe request without a token is refused');
+        }
+        else {
+            $t->post_ok('/save')->status_is(200, "csrf: $yml leaves it off");
+        }
+    }
+}
+
 done_testing();

@@ -1,12 +1,12 @@
 package Punk::OAuth2::Checker;
 
-use 5.024;
+use 5.010;
 use strict;
 use warnings;
 use Punk::OAuth2;
 use Punk::OAuth2::JWKS;
 use Crypt::JWS::Key;
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 1;
 

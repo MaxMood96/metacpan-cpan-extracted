@@ -1,0 +1,13 @@
+\bRCS\b
+\bCVS\b
+^MANIFEST\.bak$
+^Makefile$
+^blib/
+^pm_to_blib$
+^blibdirs$
+^MYMETA\.
+^Uniform-HTMX-
+^\.git
+^\.gitignore
+\.swp$
+\.bak$

@@ -7,7 +7,7 @@ use warnings;
 our $VERSION;
 
 BEGIN {
-    $VERSION = '0.28';
+    $VERSION = '0.30';
     require XSLoader;
     XSLoader::load('Punk', $VERSION);
 }
@@ -549,6 +549,57 @@ A request with no C<CONTENT_LENGTH> is passed through: that is a chunked
 body, which the server has already decoded and bounded against its own
 ceiling by the time Punk runs.
 
+=head2 host
+
+    host 'https://example.com';
+
+The application's canonical origin, declared once. Anything that needs an
+absolute URL for the application defaults to this instead of asking for
+its own copy, and an explicit option on the plugin still wins -
+L<Punk::Plugin::Sitemap>'s C<base> is the first consumer, so
+
+    host 'https://example.com';
+    plugin 'Sitemap';
+
+is the whole sitemap configuration.
+
+The value must be an absolute C<http://> or C<https://> origin. A path is
+allowed, for an application deployed under a prefix, and trailing slashes
+are trimmed so a consumer joining a rooted path onto it produces one
+slash; a query, a fragment, whitespace or a backslash croaks at the
+keyword. Declared twice, the last declaration wins.
+
+This is configuration, deliberately. The tempting alternative - reading
+the request's Host header - hands every consumer attacker-supplied bytes,
+which is exactly why those plugins refuse to guess. Also configurable
+from C<punk.yml>. With no argument it reads the stored value back, which
+is how a plugin reaches it: C<< $app->host >>.
+
+=head3 Several hosts: the allowlist
+
+    host 'https://example.com', allow => [ '*.example.com', 'shop.tld' ];
+
+One application serving several tenants by Host header has an origin per
+request, and the request's Host is attacker-supplied. C<allow> names the
+hosts that may stand in for the canonical one, and C<< $c->origin >> is
+then the request's scheme and host B<only> when that host is the canonical
+one or matches an entry - the canonical origin otherwise, and never the
+raw header. C<< $c->host_allowed >> says which of those happened, for an
+application that would rather refuse an unknown host than answer for it.
+
+An entry is a hostname, optionally with a C<:port>, or a leading C<*.>
+for every host under a suffix; anything else croaks at the keyword.
+Matching is case-insensitive and ignores the request's port unless the
+entry names one. The canonical host needs no entry.
+
+L<Punk::Plugin::Sitemap> is the first consumer: an allowlisted host is
+handed a sitemap and C<robots.txt> naming itself, rendered from the same
+route table. In C<punk.yml> the block becomes a mapping:
+
+    host:
+      origin: https://example.com
+      allow:  [ '*.example.com', shop.tld ]
+
 =head2 static
 
     static '/static' => 'root/static';
@@ -577,6 +628,32 @@ win is a build step's, paid once, so this needs no zlib and costs one
 C<stat>. A sibling older than its source is ignored rather than served
 stale, and C<Vary: Accept-Encoding> is on every response from the mount
 whether or not one was used.
+
+=head2 favicon
+
+    favicon 'root/static/favicon.ico';
+    favicon 'root/static/favicon.ico', max_age => 3600;
+
+Serve C<GET /favicon.ico> from this file. A browser and a search engine's
+favicon crawler both request it at the site ROOT, where a C</static>
+mount does not answer - without a root route the request is a 404 and
+search results fall back to the generic globe. This keyword is that
+route, replacing the C<send_file> handler every application was writing
+by hand.
+
+The bytes are read once, at C<to_app>, and served from memory with a
+C<Cache-Control> (C<public, max-age=86400> unless C<max_age> says
+otherwise) and a strong C<ETag>; a request carrying the tag back is
+answered C<304> without a body. A file that cannot be read croaks at
+boot rather than 404ing for as long as nobody notices, and C<punk dev>
+picks up a replaced icon on its restart. The content type follows the
+file's extension, so a C<.png> or C<.svg> serves as itself.
+
+The route stays out of L<Punk::Plugin::Sitemap>'s document, and it is a
+route like any other - an application adopting the keyword must delete
+its hand-rolled C<< get '/favicon.ico' >>, or boot croaks a duplicate.
+Also configurable from C<punk.yml>: a path, or a mapping with C<path>
+and C<max_age>.
 
 =head2 markdown
 
@@ -633,6 +710,8 @@ register for real, so deployment configuration needs no code change:
       RequestId: { header: X-Request-Id }
     static:                      # -> static '/static' => 'root/static'
       /static: root/static
+    host: https://myapp.example  # -> host 'https://myapp.example'
+    favicon: root/static/favicon.ico   # -> favicon '...'
 
 Everything else in the file is yours, through C<< $app->config >>.
 

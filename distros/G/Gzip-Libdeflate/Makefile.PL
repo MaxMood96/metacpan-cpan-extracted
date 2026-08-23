@@ -3,6 +3,7 @@ use warnings;
 use ExtUtils::MakeMaker;
 use lib 'inc';
 use CheckCCVersion;
+use Config;
 
 check_cc_version ();
 
@@ -40,5 +41,6 @@ WriteMakefile (
     },
     MIN_PERL_VERSION => '5.006001',
     OBJECT => 'Libdeflate.o',
+    CCFLAGS      => $Config{ccflags} . ' -Wno-compound-token-split-by-macro -Wno-macro-redefined ',
     #    OPTIMIZE => '-g -Wall',
 );

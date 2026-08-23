@@ -4,7 +4,7 @@ use 5.008003;
 use strict;
 use warnings;
 
-our $VERSION = '0.03';
+our $VERSION = '0.05';
 
 use base 'File::Raw';
 
@@ -226,6 +226,50 @@ enhancement.
 
 All algorithms are vendored, public-domain reference implementations.
 There is B<no> external library dependency (no OpenSSL, no libsodium).
+
+=head1 THE C ABI
+
+Other XS distributions can reach the digests, HMAC and the lockstep
+runner without linking, through the table returned by
+C<File::Raw::Hash::_abi_ptr()>. The contract lives in F<frh_abi.h>,
+installed via L<ExtUtils::Depends>:
+
+    use ExtUtils::Depends;
+    my $pkg = ExtUtils::Depends->new('Your::Dist', 'File::Raw::Hash');
+
+and resolved at runtime:
+
+    IV p = 0;
+    dSP;
+    PUSHMARK(SP); PUTBACK;
+    if (call_pv("File::Raw::Hash::_abi_ptr", G_SCALAR|G_EVAL) > 0) {
+        SPAGAIN; p = POPi; PUTBACK;
+    }
+    const frh_abi *H = p ? INT2PTR(const frh_abi *, p) : NULL;
+    #define MY_FRH_NEED 1
+    if (!H || H->version < MY_FRH_NEED) croak(...);
+
+Check the version with C<< >= >> against a constant naming what your
+code actually calls - never against the installed header's
+C<FRH_ABI_VERSION>, and never with equality. The table is append-only,
+so a provider newer than your header is always safe; an equality check
+turns every append into a breaking change for consumers already
+shipped, and comparing against the installed header's constant means
+merely recompiling raises your runtime requirement.
+
+No Perl types cross the seam: handles are opaque and released with
+C<runner_free>, digests land in caller buffers sized from the
+registry, and raw output for the integer checksums (crc32, xxh64) is
+the big-endian rendering of the value, matching what the C<hex>
+format prints.
+
+The charter is hashing: digests, HMAC, cache keys, content
+addressing, checksums. For keys, signatures and JWS - anywhere
+libcrypto is the point rather than a cost - use L<Crypt::JWS> and its
+C<jws_abi> instead.
+
+C<File::Raw::Hash::_abi_selftest> exercises every member from the C
+side and is what F<t/15-abi.t> runs.
 
 =head1 SEE ALSO
 

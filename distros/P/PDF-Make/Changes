@@ -1,5 +1,13 @@
 Revision history for PDF::Make
 
+0.12  2026-08-23
+     - Fix: Font::Metrics was used by PDF::Make::Builder::Font but never
+       declared as a prerequisite, so an install that already had an older
+       Layout::Flex never pulled it in. 
+     - Fix: perl 5.10 and 5.12 failed to build. cBOOL is 5.14+ and the
+       call-checker code is compiled on every perl even though the checkers
+       are only registered from 5.14.
+
 0.11  2026-08-17
      - New: PDF::Make::Markup::Diff - which pages changed between two
        renders, and what text moved, from structured extraction with

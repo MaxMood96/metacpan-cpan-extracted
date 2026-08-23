@@ -1,0 +1,13 @@
+Changes
+LICENSE
+lib/Uniform.pm
+lib/Uniform/Utils.pm
+lib/Uniform/Exceptions.pm
+Makefile.PL
+MANIFEST
+MANIFEST.SKIP
+t/00-load.t
+t/utils.t
+t/exceptions.t
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

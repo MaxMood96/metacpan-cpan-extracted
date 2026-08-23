@@ -5,7 +5,7 @@ package POSpawn;
 # pipe and END blocks (the classic smoker hang); the child here is a
 # fresh exec with STDOUT and STDERR redirected before anything runs.
 
-use 5.024;
+use 5.010;
 use strict;
 use warnings;
 use Exporter 'import';

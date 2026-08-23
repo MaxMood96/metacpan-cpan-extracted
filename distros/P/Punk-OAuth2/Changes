@@ -1,5 +1,13 @@
 Revision history for Punk-OAuth2
 
+0.06    2026-08-23
+        - Lower the min perl from 5.24 to 5.10
+        - Never hand an SV * RETVAL an immortal
+        - Load Fetch, MIME::Base64 and DBI once per process rather than
+          once per request
+        - t/40-server.t and t/44-capstone.t skip without DBI and DBD::SQLite
+          instead of dying
+
 0.05    2026-08-20
         - FIX: change abi version checks from == to <=
 

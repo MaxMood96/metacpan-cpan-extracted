@@ -1,5 +1,13 @@
 Revision history for Hyperman
 
+0.34    2026-08-23
+        - Fix: t/35-bus.t asserted that a queue group's forty messages spread
+          over more than one of four polling children.
+
+0.33    2026-08-23
+        - Fix: t/35-bus.t asserted that a queue group's forty messages spread
+          over more than one of four polling children.
+
 0.32    2026-08-21
         - A worker no longer goes permanently deaf to the bus. The
           wakeup's coalescing flag was cleared before its pipe was

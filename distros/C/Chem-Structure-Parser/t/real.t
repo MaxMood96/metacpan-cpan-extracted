@@ -17,9 +17,15 @@ use File::Basename 'dirname';
 use Chem::Structure::Parser;
 use Test::More;
 
+# Windows has no HOME, and a smoker runs with warnings fatal, so reading it
+# to build the maintainer's default path is what failed the file there rather
+# than skipping it.  USERPROFILE is the Windows spelling; with neither set
+# there is no default path to try, and the entry drops out.
+my $home = defined $ENV{HOME} ? $ENV{HOME} : $ENV{USERPROFILE};
+
 my @DIRS = grep { defined && -d } (
 	$ENV{STRUCTURE_INFO_TEST_DIR},
-	"$ENV{HOME}/ui/pepPriML/PPB/PDB/PDBbind.v2020",
+	defined $home ? "$home/ui/pepPriML/PPB/PDB/PDBbind.v2020" : undef,
 	dirname(abs_path(__FILE__)) . '/real',
 );
 plan skip_all => 'no directory of real structures found; set STRUCTURE_INFO_TEST_DIR'

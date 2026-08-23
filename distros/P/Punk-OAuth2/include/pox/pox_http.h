@@ -59,7 +59,7 @@ static SV *pox_resolve_ua(pTHX_ SV *ua, SV *c, SV **own_ua_slot) {
       dSP;
       int count;
       SV *r = NULL;
-      eval_pv("require Fetch;", FALSE);
+      pox_require_once(aTHX_ "Fetch");
       ENTER; SAVETMPS;
       PUSHMARK(SP);
       XPUSHs(sv_2mortal(newSVpvs("Fetch")));

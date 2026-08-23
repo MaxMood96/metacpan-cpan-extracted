@@ -1,5 +1,9 @@
 Revision history for Reverse-Proxy
 
+0.06    2026-08-23
+        - Requires Fetch 0.19. The t/03-errors.t SEGV on CPAN Testers hosts
+          with liburing was Fetch's io_uring backend
+
 0.05    2026-08-20
         - FIX: Reverse::Proxy would not load at all against Fetch 0.14 or
           later based on == abi version checks these have changed to <=

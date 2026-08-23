@@ -145,6 +145,19 @@ static AV *app_sorted_keys(pTHX_ HV *h) {
 }
 
 /* call $self->$meth(@$args), discarding the (chainable) return */
+/* Is a config value the bare "on" form? A YAML `true` does not arrive as
+ * the scalar 1: Punk::Config loads booleans as JSON::PP::Boolean objects,
+ * a blessed scalar ref whose truth is an overload. So a plain truthy
+ * scalar is on, a boolean object is whatever it says, and any other
+ * reference - a mapping, a list - is not this form at all. */
+static int app_cfg_on(pTHX_ SV *sv) {
+    if (!sv || !SvOK(sv)) return 0;
+    if (!SvROK(sv)) return SvTRUE(sv) ? 1 : 0;
+    if (SvOBJECT(SvRV(sv)) && SvTYPE(SvRV(sv)) < SVt_PVAV)
+        return SvTRUE(sv) ? 1 : 0;
+    return 0;
+}
+
 static void app_call_list(pTHX_ SV *self, const char *meth, AV *args) {
     SSize_t n = av_len(args) + 1, i;
     SV **argv, *r;

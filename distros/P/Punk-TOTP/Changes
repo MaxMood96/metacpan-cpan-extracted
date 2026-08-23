@@ -1,0 +1,17 @@
+Revision history for Punk-TOTP
+
+0.04    2026-08-23
+        - Lower the min perl from 5.16 to 5.10, matching QR::Code and Punk.
+
+0.03    2026-08-22
+        - Define G_LIST as G_ARRAY on perls before 5.36, which only have the
+          old name; 0.02 did not compile on 5.34 and earlier
+        - Declare getentropy properly. macOS and glibc put it in
+          <sys/random.h>, so the configure probe now tries that header
+          first
+
+0.02    2026-08-22
+        - Strip the POD from the example application's modules
+
+0.01    2026-08-22
+        - First version

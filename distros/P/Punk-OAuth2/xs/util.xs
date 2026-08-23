@@ -25,7 +25,8 @@ same_origin_path(path)
         SV *path
     CODE:
         SV *ok = pox_same_origin_path(aTHX_ path);
-        RETVAL = ok ? newSVsv(ok) : &PL_sv_undef;
+        if (!ok) XSRETURN_UNDEF;
+        RETVAL = newSVsv(ok);
     OUTPUT:
         RETVAL
 

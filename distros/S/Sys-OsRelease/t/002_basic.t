@@ -11,7 +11,7 @@
 ## no critic (Modules::RequireExplicitPackage)
 use strict;
 use warnings;
-use Sys::OsRelease;
+use Sys::OsRelease ();  # add () to prevent calling import/init
 use Config;
 
 use Test::More;                      # last test to print

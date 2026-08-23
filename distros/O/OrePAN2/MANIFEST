@@ -34,6 +34,8 @@ t/08_logging.t
 t/09_log_any.t
 t/cli/gc.t
 t/cli/indexer.t
+t/cli/merge-index-protect-errors.t
+t/cli/merge-index-protect.t
 t/cli/merge-index.t
 t/dat/02.packages.details.txt
 t/dat/02.packages.details.txt.gz

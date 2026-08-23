@@ -1,11 +1,11 @@
 package Crypt::JWS;
 
-use 5.016;
+use 5.010;
 use strict;
 use warnings;
 use Exporter 'import';
 
-our $VERSION = '0.03';
+our $VERSION = '0.06';
 
 require XSLoader;
 XSLoader::load('Crypt::JWS', $VERSION);
@@ -14,8 +14,8 @@ require Crypt::JWS::Key;
 
 our @EXPORT_OK = qw(
     sign verify peek
-    sha256 sha384 sha512
-    hmac_sha256 hmac_sha384 hmac_sha512
+    sha1 sha256 sha384 sha512
+    hmac_sha1 hmac_sha256 hmac_sha384 hmac_sha512
     b64url b64url_decode ct_eq random_bytes
 );
 
@@ -125,10 +125,10 @@ API. Perl callers should use L</FUNCTIONS> and L<Crypt::JWS::Key>.
 The contract lives in F<include/jws_abi.h> (installed via
 ExtUtils::Depends):
 
-    #define JWS_ABI_VERSION 1
+    #define JWS_ABI_VERSION 2
 
     typedef struct jws_abi {
-        int version;                              /* == JWS_ABI_VERSION */
+        int version;                     /* >= what the consumer needs */
 
         /* key lifecycle - NULL on failure */
         void *(*key_from_pem)(pTHX_ const char *pem, STRLEN len);
@@ -164,8 +164,11 @@ N keeps working against every later version.
 
 Returns the address of the process-wide C<jws_abi> table as an integer
 (an C<IV>). A consumer calls this once at C<BOOT>, C<INT2PTR>s it to a
-C<< const jws_abi * >>, and checks C<< ->version == JWS_ABI_VERSION >>
-before using it. Not intended to be called from Perl for any other
+C<< const jws_abi * >>, and checks C<< ->version >= JWS_ABI_VERSION >>
+before using it. At least, never exactly: the table is append-only, so
+a provider newer than the consumer is always safe, and an equality
+check turns every append into a breaking change for consumers already
+shipped. Not intended to be called from Perl for any other
 purpose. C<Crypt::JWS::_abi_selftest> exercises the table end to end
 and is what F<t/06-abi.t> runs.
 
@@ -213,7 +216,7 @@ the table at boot, then sign wherever needed:
         }
         if (p) {
             const jws_abi *a = INT2PTR(const jws_abi *, p);
-            if (a && a->version == JWS_ABI_VERSION) JWS = a;
+            if (a && a->version >= JWS_ABI_VERSION) JWS = a;
         }
         /* JWS == NULL => Crypt::JWS is absent or too old; croak at
          * first use, or disable the feature. */

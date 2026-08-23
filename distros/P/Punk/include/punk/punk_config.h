@@ -222,6 +222,22 @@ static SV *pc_resolve(pTHX_ SV *key, SV *arg, const char *where) {
 /* ---- the guardrail --------------------------------------------------------
  * A plaintext value under a secret-shaped key is almost always a mistake -
  * the whole point of the reference syntax is that it need not happen. */
+/* A key that names WHERE something secret-shaped lives, not the thing
+ * itself: `token_model`, `password_field`, `secret_path`. The value is a
+ * model name, a column, a file location - structural, never a secret. */
+static int pc_structural_suffix(const char *buf, STRLEN len) {
+    static const char *const sfx[] = {
+        "_model", "_class", "_table", "_field", "_fields", "_column",
+        "_header", "_cookie", "_path", "_dir", "_name", "_kind", "_key_name",
+    };
+    size_t i;
+    for (i = 0; i < sizeof sfx / sizeof sfx[0]; i++) {
+        size_t sl = strlen(sfx[i]);
+        if (len > sl && memEQ(buf + len - sl, sfx[i], sl)) return 1;
+    }
+    return 0;
+}
+
 static int pc_secretish(const char *key, STRLEN len) {
     char buf[64];
     STRLEN i;
@@ -230,6 +246,7 @@ static int pc_secretish(const char *key, STRLEN len) {
     buf[len] = '\0';
     /* "auth" only as the whole key: an "author" field is not a secret */
     if (strEQ(buf, "auth")) return 1;
+    if (pc_structural_suffix(buf, len)) return 0;
     return strstr(buf, "pass")       != NULL
         || strstr(buf, "secret")     != NULL
         || strstr(buf, "token")      != NULL

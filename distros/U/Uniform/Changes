@@ -1,0 +1,15 @@
+Revision history for Uniform
+
+1.00  2026-08-22
+        - Initial ecosystem base distribution release.
+        - Centralized Uniform::Utils utility module established.
+        - Extracted production-grade case-insensitive priority header normalization logic.
+1.01  2026-08-22
+        - Added links to POD
+1.02  2026-08-23
+        - Uniform::Utils: added parse_size_limit(), a shared human-readable
+          size string parser (e.g. '2M' -> bytes), promoted out of
+          Uniform::Upload::File::max_size for reuse across satellite
+          distributions (upload size caps, request body size caps, etc).
+1.03  2026-08-23
+        - Added links in POD

@@ -1,5 +1,12 @@
 Revision history for Punk-OpenTelemetry
 
+0.05    2026-08-23
+        - Fixed the module failing to load with "undefined symbol:
+          clock_gettime" on glibc before 2.17 (Debian wheezy, reported by
+          CPAN Testers on 5.20, 5.22 and 5.24). clock_gettime lives in librt
+          there, so the configure probe now retries with -lrt and links it
+          when that is what makes it work.
+
 0.04    2026-08-20
         - FIX: change abi version checks from == to <=
         - Fixed a SEGFAULT on perls before 5.32, POPs

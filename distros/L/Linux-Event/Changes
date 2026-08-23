@@ -1,35 +1,385 @@
 Revision history for Linux-Event
 
-0.012  2026-06-13
-  - Add Linux::Event::XS for hot reactor paths.
-  - Replace the external epoll-wrapper runtime dependency with native XS epoll support.
-  - Add an XS fd registry used by the loop and epoll backend.
-  - Add a reusable XS epoll event buffer and event dispatch fast path.
-  - Add XS watcher construction and direct watcher dispatch fast paths.
-  - Add an internal XS timer heap while preserving the public timer API.
-  - Add an events-only run_once fast path for loops with no pending timers.
-  - Preserve the public readiness API while reducing Perl allocation and
-    dispatch overhead on hot reactor paths.
-  - Add and maintain the reactor benchmark harness under bench/ for echo_tcp,
-    pipe_churn, watcher_churn, callback_storm, and timer_heap comparisons.
-  - Refresh README, POD, tests, MANIFEST, and release metadata for the XS
-    reactor optimization release.
-  - Treat Linux::FD::Event, Linux::FD::Signal, and Linux::FD::Pid as optional
-    feature dependencies with clear lazy-load errors when the feature is used.
+0.102  2026-08-21
+    - Fix Linux::Event::Wakeup compilation on Perl builds without
+      PERL_IMPLICIT_CONTEXT, including ordinary non-threaded Perl. Such builds
+      now use the sole interpreter identity while threaded/multiplicity builds
+      retain pointer-based interpreter ownership checks.
+    - Add regression coverage for interpreter identity on both multiplicity
+      and non-multiplicity Perl configurations.
 
-0.011  previous
-  - Simplify Linux::Event to a single readiness event loop.
-  - Remove the experimental proactor/io_uring engine, operation object API,
-    fake completion backend, examples, tests, and documentation.
-  - Remove mandatory model selection. Linux::Event->new and
-    Linux::Event::Loop->new now construct the epoll backend by default.
-  - Passing model => ... is now an error.
-  - Collapse Linux::Event::Reactor into Linux::Event::Loop while preserving
-    the backend abstraction for future readiness backends.
-  - Rename backend modules to Linux::Event::Backend::* and remove the unused
-    Linux::Event::Error module.
-  - Renumber examples and tests into a single consistent naming scheme.
-  - Refresh README, POD, examples, tests, and MANIFEST for the smaller API.
+0.101  2026-08-21
+    - Publish the completed API as a stable release and synchronize every
+      bundled Perl and XS component at version 0.101.
+    - Add Linux::Event::Wakeup, a subclass-defined eventfd boundary with
+      coalesced Loop-thread callbacks, safe fork signalling, and per-ithread
+      descriptor duplication that keeps callbacks and data owner-confined.
+    - Add production Stream socket policy at class and construction time:
+      local address/port binding, TCP_NODELAY, keepalive tuning,
+      TCP_USER_TIMEOUT in seconds, send/receive buffers, SO_BINDTODEVICE, live
+      getters/setters, and a cached configure_socket hook.
+    - Apply Stream socket policy before outbound bind/connect and before
+      accepted or adopted transport attachment; expose local addresses and
+      report family/configuration failures as structured Error values.
+    - Extend the private asynchronous resolver with SOCK_DGRAM requests while
+      preserving its typed native completion queue and cancellation model.
+    - Add Linux::Event::Datagram for connected and unconnected UDP and Unix
+      datagrams, native recvmsg/sendto packet I/O, lazy peer Addresses, whole-
+      packet queues, soft backpressure, hard byte/packet limits, truncation
+      detection, socket policy, ownership, detach, and Unix-path cleanup.
+    - Add Linux::Event::Process using posix_spawnp, pidfd_open,
+      waitid(P_PIDFD), and pidfd_send_signal, with asynchronous pipe stdio,
+      decoded exit status, replacement environments, cwd support, SIGPIPE-safe
+      stdin, atomic close-on-exec pipes, child-side closure of caller stdio
+      source descriptors, deterministic final output draining, and
+      partial-failure cleanup.
+    - Make native resource objects interpreter-owned and non-clonable except
+      for Wakeup's deliberately restricted signalling handle; rebuild cached
+      native class descriptors lazily in a child ithread and reject stale
+      Wakeup handles round-tripped from a worker interpreter.
+    - Complete API, lifecycle, failure, ownership, thread/fork, local-binding,
+      Datagram, and Process regression tests, including callback-exception and
+      descriptor-reuse safety cases.
+    - Add focused Wakeup, Datagram, and Process examples and microbenchmarks;
+      update architecture, lifecycle, transport, roadmap, and module POD around
+      the completed public surface with concrete annotated examples.
+    - Harden distribution configuration for Linux, required libc/OpenSSL
+      capabilities, CPAN metadata, manifest coverage, and clean distribution
+      testing.
 
-0.010  previous
-  - Pre-cleanup release.
+0.100_030  2026-08-21
+    - Make TLS declarative Stream policy: use Linux::Event::TLS on a Stream
+      subclass and let connect or Listener acceptance select the client or
+      server handshake role automatically.
+    - Default outbound TLS server_name, SNI, and hostname verification to the
+      connect host while retaining an explicit override for different service
+      identities and adopted handles.
+    - Load and validate accepted TLS certificate and key policy during Listener
+      construction and create fresh native server state for every connection.
+    - Pass Listener data automatically to each accepted Stream and remove the
+      cumbersome accepted_stream_options hook from the public design.
+    - Expose negotiated ALPN, protocol, cipher, and native TLS statistics
+      directly on Stream without requiring access to its internal provider.
+    - Add declaration validation, inheritance, role, callback-order, metadata,
+      and integrated client/server regression coverage; update all current
+      Listener, Stream, connection, and transport documentation to one model.
+
+0.100_029  2026-08-21
+    - Add optional Listener on_accept($listener, $stream) after Stream
+      construction and Loop attachment, before plain Stream readiness or TLS
+      handshake completion.
+    - Contain on_accept exceptions by closing only the affected Stream,
+      suppressing its pending on_ready, and delivering a nonfatal callback
+      Error through the Listener's on_error policy.
+    - Make Listener family reporting consistent with Address: family returns
+      inet, inet6, unix, or unknown; family_number retains the native value;
+      is_tcp and is_unix provide convenience predicates.
+    - Replace undefined Listener documentation placeholders with complete TCP,
+      Unix, and adopted-socket examples annotated as required, default, or
+      optional.
+    - Add plain and TLS callback-order coverage plus callback-failure cleanup
+      and family-accessor regression tests.
+
+0.100_028  2026-08-21
+    - Correct inbound acquisition ownership: remove the accidental
+      MyStream->listen() proxy and make Linux::Event::Listener->new with an
+      explicit stream_class the sole Listener construction API.
+    - Move runtime Listener error policy off Stream classes. The base Listener
+      remains fatal; applications may override on_error in a Listener subclass.
+    - Add established Stream idle, read, and write inactivity deadlines with
+      cached subclass defaults and per-connection constructor overrides.
+    - Add constructor and runtime overall-operation deadlines through
+      deadline, set_deadline(), clear_deadline(), and monotonic after/at forms.
+    - Start established deadlines only after plain or TLS transport readiness,
+      leaving resolver, connection, TLS handshake, and TLS shutdown deadline
+      ownership unchanged.
+    - Track successful read and write progress natively only for Streams that
+      enable inactivity policy; ordinary Streams perform no activity clock
+      reads in their I/O path.
+    - Use at most one private Timer per deadline-enabled Stream, sharing the
+      Loop's existing timerfd and native deadline heap without exposing the
+      internal Timer object.
+    - Deliver typed timeout errors with operation, duration, and absolute
+      deadline context, then follow ordinary on_error/on_close cleanup.
+    - Add plain, TLS, transition, pause/resume, EOF, queued-write, lifecycle,
+      validation, and benchmark regression coverage.
+
+0.100_027  2026-08-21
+    - Move hostname resolution off the reactor thread into a private XS
+      resolver with two lazy native pthread workers per Loop.
+    - Deliver copied getaddrinfo results through one eventfd watched by the
+      ordinary raw Loop API; no public eventfd, post, or threaded-Perl API is
+      introduced.
+    - Interleave IPv6 and IPv4 candidates, stagger pending attempts by 250 ms,
+      transfer the first successful socket, and deterministically close losers.
+    - Make cancellation discard late completion safely, include DNS in the
+      connection deadline, retain literal-address bypass, and document that
+      processes must fork before starting resolver workers.
+    - Add native delivery, cancellation, hostname connection, ordering, and
+      resolver microbenchmark coverage.
+    - Add subclass-defined Linux::Event::Signal with one lazy signalfd and
+      native fan-out registry per Loop, supporting several signals per object
+      and several objects per signal.
+    - Aggregate complete signalfd drains before callback delivery, preserve
+      attachment-order fan-out, and make self/cross-cancellation callback-safe.
+    - Track signal-mask ownership exactly, reject cross-Loop consumption of one
+      signal number, restore only Loop-owned entries, and make resolver workers
+      block signals independently.
+    - Add Signal API, delivery, lifecycle, mask, error, and benchmark coverage
+      plus explicit thread and fork ownership documentation.
+
+0.100_026  2026-08-21
+    - Add Linux::Event::Timer as an abstract subclass-defined public object
+      with cached on_timer callbacks and the same Loop->add attachment contract
+      as Stream and Listener.
+    - Support relative, absolute monotonic, and fixed-rate recurring schedules,
+      including distinct first deadlines, in-callback rescheduling, and
+      idempotent terminal cancellation.
+    - Give each Loop one lazy timerfd and one indexed native minimum heap for
+      every active Timer, with FIFO equal-deadline order and nanosecond internal
+      deadlines.
+    - Coalesce missed recurring ticks, retain fixed-rate phase, bound callback
+      batches for descriptor fairness, and defer zero-delay callbacks to a
+      later Loop turn.
+    - Define deterministic ownership and cleanup: Loop retains active Timers;
+      final expiration, cancellation, and Loop destruction release application
+      data safely, including cancellation during a callback.
+    - Extend statistics, lifecycle/API/scheduling tests, the release regression
+      contract, and a dedicated scaling benchmark for Timer lifecycle,
+      rescheduling, and expiration delivery.
+
+0.100_025  2026-08-21
+    - Simplify the public hierarchy to Linux::Event::Loop, Stream, Listener,
+      TLS, Framer, Error, and Address. Remove the public Watcher, IO, Connect,
+      Connector, Listen, XSLoop, and XSWatcher compatibility modules.
+    - Make MyStream->connect() the sole public outbound acquisition API and
+      retain one Stream identity across connection, optional TLS readiness,
+      established I/O, and close. Keep the acquisition engine private.
+    - Make MyStream->listen() the normal inbound API and keep accept mechanics
+      in a private Listener engine. Accepted descriptors become the configured
+      Stream subclass directly, without a temporary public registration.
+    - Support both loop => $loop construction and detached construction plus
+      Loop->add() for Stream and Listener. Both forms attach the same object;
+      add() sets its Loop and returns it.
+    - Return only an opaque native registration from the low-level watch API;
+      raw registrations are not a named public class hierarchy.
+    - Consolidate errors under Linux::Event::Error, peer addresses under
+      Linux::Event::Address, and native framing declarations under
+      Linux::Event::Framer::*.
+    - Rewrite the module POD, README, lifecycle, connection, Listener, core,
+      architecture, and benchmark documentation around the reduced API.
+    - Replace obsolete Connect/Listen benchmark modes with raw baselines and
+      direct comparisons of loop => and Loop->add() attachment styles.
+    - Add a permanent capture/compare performance-regression suite covering
+      reactor registration, Stream lifecycle and throughput, native delimiter
+      framing, and integrated connect/listen acquisition.
+    - Align active XS source and build names with the reduced public model and
+      remove stale XSLoop/XSWatcher terminology from the reactor source.
+
+0.100_024  2026-08-16
+    - Introduce Linux::Event::Watcher as the public lifecycle contract and
+      Linux::Event::Loop as the canonical XS-first loop name.
+    - Add Loop->add() for detached high-level Watchers while retaining watch()
+      as the immediate raw-IO registration convenience.
+    - Return Linux::Event::IO objects from raw watch/watch_fd registration;
+      XSWatcher remains their compatibility native-method base.
+    - Make Stream, Connect, and Listen Watchers with detached construction and
+      temporary loop-constructor compatibility.
+    - Add MyStream->connect(), preserving one Stream identity through outbound
+      connection, optional verified TLS negotiation, established I/O, and
+      terminal close. Writes before readiness use the bounded Stream queue.
+    - Add MyStream->listen() and Linux::Event::Listener, which construct and
+      attach accepted Stream subclasses without application socket plumbing.
+    - Add the noun-named Connector and Listener error/peer public aliases while
+      retaining Connect and Listen as advanced compatibility layers.
+    - Expand lifecycle tests through automatic plain and TLS client/server
+      paths, strict Watcher attachment, raw IO typing, and stable identity.
+    - Harden the Connect lifecycle benchmark with balanced order, abortive
+      teardown, configurable deadlines, correctness checks, and JSON output;
+      add integrated Stream and automatic Listener comparison rows.
+
+0.100_023  2026-08-16
+    - Split the Listen benchmark's previous manual-to-raw gap with a handoff
+      row that constructs the same Perl filehandle and lazy Peer representation
+      without invoking Listen control or subclass callback machinery.
+    - Remove an avoidable array shift from Listen's accepted-batch traversal.
+    - Use eight rotating repeats by default so all four benchmark modes occupy
+      every execution position equally.
+
+0.100_022  2026-08-16
+    - Use equal abortive client teardown in every Listen benchmark mode so
+      large matrices do not exhaust ephemeral ports through TIME_WAIT buildup.
+      The complete default 540,000-connection matrix now runs without later
+      rows failing from state accumulated by earlier rows.
+
+0.100_021  2026-08-16
+    - Add a manual XSLoop/native-accept baseline to the permanent Listen
+      lifecycle benchmark, separating Listen handoff cost from Stream cost.
+    - Rotate benchmark mode order across repeats to reduce execution-order
+      bias and print the tested Linux::Event version in the report.
+    - Replace the overly aggressive hardcoded two-second connection deadline
+      with a configurable --timeout option that defaults to 30 seconds.
+
+0.100_020  2026-08-16
+    - Add Linux::Event::Listen as the inbound stream-socket acquisition layer.
+    - Create TCP and Unix listeners or adopt an existing listening handle.
+    - Drain accept4 in XS with atomic nonblocking and close-on-exec flags.
+    - Add bounded level-triggered accept fairness and safe edge-trigger rules.
+    - Add lazy peer addresses, typed failures, resource-error pause/recovery,
+      ownership-aware close/detach behavior, and direct Stream handoff.
+    - Add a runnable line-delimited echo server and permanent Listen lifecycle
+      microbenchmark under the distribution examples and bench directories.
+    - Recover from watched descriptor-number reuse by falling back from epoll
+      MOD/ENOENT to ADD during same-fd watcher replacement.
+
+0.100_019  2026-08-15
+    - Merge a redesigned Linux::Event::Connect into the main distribution.
+      Concrete subclasses define cached on_connect and on_error methods while
+      each request stores only target, lifecycle, and application data.
+    - Transfer a generic connected nonblocking filehandle rather than requiring
+      or constructing Linux::Event::Stream. Stream, TLS, raw watchers, and
+      specialized protocol engines remain independent consumers.
+    - Add typed Linux::Event::Connect::Error failures, a default 10-second
+      connection deadline, silent idempotent cancellation, strict address-mode
+      validation, and loop-dispatched callbacks for immediate outcomes.
+    - Create sockets atomically with SOCK_NONBLOCK and SOCK_CLOEXEC. A small
+      native timerfd helper supplies connection deadlines and deferred terminal
+      delivery while candidate policy remains in the cold Perl control path.
+    - Replace same-fd watchers through one EPOLL_CTL_MOD instead of DEL plus ADD.
+      Old watcher handles remain inert, so Connect can hand a socket to Stream
+      during on_connect and safely cancel only its original registration.
+    - Retain synchronous getaddrinfo and sequential fallback as documented
+      initial limitations. The public contract and internal attempt collection
+      are prepared for a later asynchronous Resolver and Happy Eyeballs.
+
+0.100_018  2026-08-15
+    - Prevent OpenSSL socket writes from delivering SIGPIPE when a TLS peer
+      closes abruptly. The TLS extension now uses a non-owning custom socket
+      BIO whose writes use Linux MSG_NOSIGNAL.
+    - Preserve application signal policy: TLS does not install a process-wide
+      SIGPIPE handler or add per-operation signal-mask syscalls.
+
+0.100_017  2026-08-15
+    - Merge Linux::Event::TLS into the Linux-Event distribution so the reactor,
+      Stream, and OpenSSL transport build and test with one top-level command.
+    - Keep TLS in its own native extension and preserve Stream's specialized
+      plain fast path; plain operations still make no OpenSSL calls.
+    - Remove the duplicate transport ABI header and build the TLS provider
+      against the canonical header owned by XSStream.
+    - Move TLS integration, deadline, EOF, and certificate fixtures into the
+      main test suite and simplify the TLS microbenchmark to use one blib tree.
+    - Add an OpenSSL 1.1.1 configuration probe with a direct diagnostic for
+      missing development headers or libraries.
+
+0.100_016  2026-08-15
+    - Add generic cold-path transport lifecycle hooks used by adjacent
+      providers to install, disarm, reuse, and destroy deadline watchers.
+    - Preserve Stream/XSLoop layering: the core still knows no OpenSSL policy,
+      while transport timeout failures use the existing typed error lifecycle.
+    - Keep ordinary plain Streams free of auxiliary watchers and provider-hook
+      calls in their read/write syscall paths.
+    - Add the permanent top-level run-tls-microbench.pl same-Stream comparison
+      for specialized plain and adjacent OpenSSL transports.
+
+0.100_015  2026-08-15
+    - Publish transport => $provider construction for established descriptors
+      through an exact-version native Stream transport ABI.
+    - Retain provider lifetime in XS and coordinate cross-direction readiness
+      for nonblocking handshakes, reads, writes, and transport shutdown.
+    - Add transport(), is_transport_ready(), and the optional cached
+      on_transport_ready callback while preserving the specialized plain path.
+    - Reject detach() for non-plain transports because an encrypted descriptor
+      cannot safely be returned as an application plaintext handle.
+    - Support the adjacent Linux::Event::TLS OpenSSL provider without adding an
+      OpenSSL dependency to the Linux-Event distribution.
+
+0.100_014  2026-08-15
+    - Introduce an internal native transport operation contract beneath Stream
+      buffering, framing, backpressure, and lifecycle semantics.
+    - Route read, write, writev queue draining, retry classification, errors,
+      EOF, and writable shutdown through the connection's transport provider.
+    - Keep the ordinary plain-fd provider on a specialized direct-syscall path
+      with no Perl callback or indirect function call per syscall.
+    - Distinguish WANT_READ and WANT_WRITE in the native result contract for a
+      future nonblocking OpenSSL provider.
+    - Add transport_name(), plain-provider contract tests, regression benchmark
+      coverage, and a detailed TLS/provider/STARTTLS boundary specification.
+
+0.100_013  2026-08-14
+    - Add the optional class-level max_pending_bytes safety limit while keeping
+      the existing high/low-watermark write() return contract unchanged.
+    - Enforce the bound in XS before allocating an unsent queue segment, so the
+      native pending-output queue never grows beyond its configured limit.
+    - Report overflow as a typed output_limit Stream error with attempted
+      pending_bytes and limit details, invoke on_error, and close the Stream.
+    - Reject protocol transitions atomically when existing queued output exceeds
+      the target class's nonzero max_pending_bytes policy.
+    - Add deterministic output-limit tests, native overflow instrumentation,
+      documentation, and capped/uncapped Stream transport benchmark rows.
+
+0.100_012  2026-08-14
+    - Add in-place Stream protocol transitions through transition_to(). A live
+      connection may change to another Stream subclass without replacing its
+      filehandle, watcher, XSState, output queue, lifecycle, or application data.
+    - Preserve unread native input across raw/framed protocol boundaries and
+      accept an explicit raw-callback suffix through input => $bytes.
+    - Stop the old native parser immediately after an input callback changes
+      descriptors, then reinterpret remaining bytes with the new descriptor
+      without waiting for another readiness event.
+    - Make transition validation atomic, including target max_buffer checks,
+      and retain pause, EOF, backpressure, queued-output, and instrumentation state.
+    - Add transition contract tests, native transition counters, a dedicated
+      transition benchmark, benchmark smoke coverage, and protocol-upgrade docs.
+
+0.100_011  2026-08-14
+    - Redesign Linux::Event::Stream as a subclass-defined API. Callbacks,
+      framing, and transport policy are class behavior; constructor state is
+      limited to loop, fh, and optional per-connection data.
+    - Resolve callbacks and framer/transport configuration once per concrete
+      subclass into a shared immutable XS descriptor, with independent mutable
+      parser and queue state for every connection.
+    - Replace the framer factory and per-connection framer objects with
+      declarative `use Linux::Event::Stream::Framer 'Name', @args` syntax.
+      Exact package-name resolution removes the duplicate keyword registry.
+    - Remove the arbitrary custom-framer object contract and
+      Linux::Event::Stream::Framer::Buffer. Application-specific protocols now
+      parse raw on_data bytes; generally useful families remain native built-ins.
+    - Add cached class-level stream_options for read size, watermarks, and
+      framed-buffer limits.
+    - Rewrite Stream/framer tests, benchmarks, POD, guides, architecture notes,
+      metadata, and examples for the canonical subclass-descriptor model.
+
+0.100_010  2026-08-14
+    - Add the versioned Stream lifecycle and retained-memory benchmark used to
+      capture the object-configured contract-1 baseline before the API redesign.
+
+0.100_009  2026-08-13
+    - Add native inbound ASCII DecimalLength framing for wire forms such as
+      RFC 6587 octet-counted syslog: "5 HELLO".
+    - Support one configurable non-digit separator, include_prefix, max_frame,
+      shared definitions, Perl fallback, and Perl outbound frame()/send().
+    - Reject invalid, overlong, overflowing, and non-canonical decimal lengths.
+    - Extend native-framer tests, benchmarks, and the framer-selection guide.
+
+0.100_008  2026-08-13
+    - Add canonical unsigned LEB128 Varint framing with native inbound parsing.
+    - Preserve Perl outbound frame() compatibility and the custom-framer fallback.
+    - Reject overflowing, overlong, and non-canonical Varint prefixes.
+    - Extend native-framer benchmarks and simplify the framer-selection guide.
+
+0.100_007  2026-08-13
+    - Add named Loop watch(fh => ...) and watch(fd => ...) construction.
+    - Add Linux::Event::Stream::Framer factory methods for built-in framers.
+    - Document and test safe reuse of built-in framer definitions across Streams.
+    - Keep watch_fd and concrete Framer::* constructors available for low-level and subclass use.
+
+0.100_006  2026-08-13
+    - Merge Linux::Event::Stream into the main Linux::Event distribution.
+    - Build Linux::Event::XSLoop and Linux::Event::Stream native extensions from
+      one source distribution and one top-level build/test/install workflow.
+    - Keep the raw reactor and high-level Stream APIs as separate namespaces.
+    - Unify development package versions for the merged native ABI snapshot.
+    - Add a novice-oriented framer-selection guide in Markdown and POD.
+    - Preserve native Delimiter, Fixed, LengthPrefix, U32BE, and Netstring
+      framing plus the custom native-backed Buffer plug-in path.
+    - Preserve the reactor, Stream, framing, and native-framer benchmark tools.

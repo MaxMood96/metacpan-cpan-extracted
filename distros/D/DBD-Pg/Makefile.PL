@@ -5,7 +5,7 @@ use warnings;
 use 5.008001;
 
 ## No version.pm for this one, as the prereqs are not loaded yet.
-my $VERSION = '3.20.2';
+my $VERSION = '3.21.0';
 
 ## App::Info is stored inside t/lib
 ## Create a proper path so we can use it below
@@ -183,18 +183,21 @@ my $dbi_arch_dir;
         print "Could not load DBI::DBD - is the DBI module installed?\n";
         exit 0;
     }
-    local *STDOUT; ## Prevent duplicate debug info as WriteMakefile also calls this
+    # This is also called by WriteMakefile below, so disable all of this output
+    local $SIG{__WARN__} = sub {};
+    local *STDOUT;
     $dbi_arch_dir = DBI::DBD::dbd_dbi_arch_dir();
 }
 
 my $defines = " -DPGLIBVERSION=$serverversion -DPGDEFPORT=$defaultport";
 if ($Config{ivsize} >= 8 && $serverversion >= 90300) {
-    $defines .= ' -DHAS64BITLO';
+    $defines .= ' -DHAS64BITLO ';
 }
 my $comp_opts = $Config{q{ccflags}} . $defines;
 
 if ($ENV{DBDPG_GCCDEBUG}) {
     warn "Enabling many compiler options\n";
+    $comp_opts .= " -isystem $Config{archlibexp}/CORE";
     $comp_opts .= ' -Wchar-subscripts -Wcomment';
     $comp_opts .= ' -Wformat=2'; ## does -Wformat,-Wformat-y2k,-Wformat-nonliteral,-Wformat-security
     $comp_opts .= ' -Wnonnull';
@@ -211,18 +214,18 @@ if ($ENV{DBDPG_GCCDEBUG}) {
     $comp_opts .= ' -Wnested-externs';
     $comp_opts .= ' -Wstrict-prototypes'; ## Still hits a couple places in types.h
     $comp_opts .= ' -Wswitch-default';
-    $comp_opts .= ' -Wsystem-headers';
     $comp_opts .= ' -Wmissing-noreturn';
     $comp_opts .= ' -Wfloat-equal'; ## Does not like SvTRUE() calls
+    $comp_opts .= ' -Wno-inline';
 }
 
 my %opts =
     (
      NAME           => 'DBD::Pg',
      VERSION_FROM   => 'Pg.pm',
-     INC            => "-I$POSTGRES_INCLUDE -I$dbi_arch_dir",
-     OBJECT         => 'Pg$(OBJ_EXT) dbdimp$(OBJ_EXT) quote$(OBJ_EXT) types$(OBJ_EXT)',
-     LIBS           => ["-L$POSTGRES_LIB -lpq -lm"],
+     INC            => qq{-I"$POSTGRES_INCLUDE" -I"$dbi_arch_dir"},
+     OBJECT         => 'Pg$(OBJ_EXT) dbdimp$(OBJ_EXT) quote$(OBJ_EXT) types$(OBJ_EXT) strbuf$(OBJ_EXT)',
+     LIBS           => ["-L\"$POSTGRES_LIB\" -lpq -lm"],
      AUTHOR         => 'Greg Sabino Mullane',
      ABSTRACT       => 'PostgreSQL database driver for the DBI module',
      PREREQ_PM      => {

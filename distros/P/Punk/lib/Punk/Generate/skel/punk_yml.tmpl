@@ -13,6 +13,17 @@ views:
 static:
   /static: root/static
 
+# The application's canonical origin, declared once. Plugins that need an
+# absolute base URL - Sitemap's `base`, for one - default to it. Never taken
+# from a request's Host header, which is attacker-supplied.
+#
+# host: https://{% lc_name %}.example.com
+
+# GET /favicon.ico, from bytes frozen at boot: browsers and search engines
+# ask at the site root, where the /static mount does not answer.
+#
+# favicon: root/static/favicon.ico
+
 # A database, and the shape a secret takes. The value of `password` is
 # resolved at boot from outside this file and kept out of $app->config, which
 # reads [redacted] in its place - so the configuration can be logged or

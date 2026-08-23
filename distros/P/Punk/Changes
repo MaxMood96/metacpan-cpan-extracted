@@ -1,5 +1,30 @@
 Revision history for Punk
 
+0.30    2026-08-22
+        - `csrf: true`, `cors: true` and `headers: true` in punk.yml now
+          register.
+        - The config guardrail no longer flags a key that only names
+          where a secret lives: `token_model`, `password_field`,
+          `secret_path` - anything ending in _model, _class, _table,
+          _field, _column, _header, _cookie, _path, _dir, _name or
+          _kind - holds a model, a column or a location, not a secret.
+
+0.29    2026-08-22
+        - Punk::Plugin::Sitemap: a missing `base` now croaks at to_app
+          rather than at `plugin`
+        - ADDS: `host ..., allow => [...]` - the hosts that may stand in
+          for the canonical one, and $c->origin / $c->host_allowed: the
+          request's origin only when its Host is declared, the canonical
+          origin otherwise, never the raw header.
+        - ADDS: `favicon` - GET /favicon.ico from bytes frozen at
+          to_app, with Cache-Control, a strong ETag and 304s. A missing
+          file croaks at boot. Replaces the send_file boilerplate.
+        - `host` and `favicon` are now DSL keywords: an application
+          defining its own sub with either name sees a redefinition
+          warning at boot.
+        - Test fix: t/1011-ws-live.t and t/1030-room-bus.t read one
+          frame per sysread and threw away the rest of the buffer
+
 0.28    2026-08-21
         - ADDS: Punk::Plugin::I18n - translations and language
           negotiation. 

@@ -1,4 +1,12 @@
 Revision history for QR::Code
 
+0.02    2026-08-21
+        - Lower the minimum perl to 5.10 
+        - Spell G_LIST as G_ARRAY on perls before 5.36, which lacked the name
+
+0.02    2026-08-21
+        - Lower the minimum perl to 5.10 
+        - Spell G_LIST as G_ARRAY on perls before 5.36, which lacked the name
+
 0.01    2026-08-21
         - First version

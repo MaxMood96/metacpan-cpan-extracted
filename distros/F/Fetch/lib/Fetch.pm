@@ -4,7 +4,7 @@ use 5.008003;
 use strict;
 use warnings;
 
-our $VERSION = '0.16';
+our $VERSION = '0.19';
 
 use File::Raw::JSON ();   # JSON encode/decode via its C ABI (ft_json.h / _abi_ptr)
 
@@ -409,10 +409,12 @@ in this distribution under C<include/fetch/>) at a pinned C<FETCH_ABI_VERSION>, 
     const fetch_abi *FETCH = NULL;
     if (p) {
         const fetch_abi *a = INT2PTR(const fetch_abi *, p);
-        if (a && a->abi_version == FETCH_ABI_VERSION) FETCH = a;
+        if (a && a->abi_version >= FETCH_ABI_VERSION) FETCH = a;
     }
-    /* FETCH == NULL means the running Fetch is too old / mismatched; the
-     * consumer decides whether that is a hard error or a Perl fallback. */
+    /* FETCH == NULL means the running Fetch is too old; the consumer decides
+     * whether that is a hard error or a Perl fallback. The check is >=, never
+     * ==: the table only grows at the end, so a newer Fetch still holds every
+     * entry the consumer was written against. */
 
 =head2 Fetch::_abi_ptr
 
@@ -538,6 +540,25 @@ Perl, for a consumer that is not an XS module: it registers a pair of shims
 holding coderefs. Same contract, one Perl call per hop instead of none, and
 the one rule C could state and Perl cannot enforce - "neither may croak" -
 becomes "a death is warned and the request carries on".
+
+=item C<tunnel_starttls(conn, host, verify)>  I<(v3)>
+
+Upgrade a tunnel opened with C<tls> false to TLS, after the application
+protocol has negotiated it - SMTP's C<STARTTLS>, where the connection starts
+in plaintext, the server says C<220>, and only then does the handshake begin.
+The handshake is the one C<tunnel_connect> performs when C<tls> is true: the
+same client C<SSL_CTX>, SNI, and hostname and certificate verification when
+C<verify> is true.
+
+Returns C<0> on success, after which C<tunnel_read>, C<tunnel_write_all> and
+C<tunnel_pending> speak TLS. Returns C<-1> when C<conn> is C<NULL> or already
+TLS, when this build of Fetch has no TLS, or when the handshake fails; after a
+failed handshake the socket is in an undefined state and the caller should
+C<tunnel_close> it. Pure C, no C<pTHX>, like the rest of the tunnel.
+
+The tunnel carries no timeout of its own. A consumer that cannot wait forever
+on a peer sets C<SO_RCVTIMEO> and C<SO_SNDTIMEO> on C<tunnel_fd(conn)>; the
+handshake and every later read honour them.
 
 =back
 

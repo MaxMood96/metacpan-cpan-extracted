@@ -66,6 +66,7 @@ DBISTATE_DECLARE;
 #include "types.h"
 #include "dbdimp.h"
 #include "quote.h"
+#include "strbuf.h"
 
 #define TLEVEL_slow     (DBIS->debug & DBIc_TRACE_LEVEL_MASK)
 #define TFLAGS_slow     (DBIS->debug & DBIc_TRACE_FLAGS_MASK)
@@ -118,6 +119,7 @@ DBISTATE_DECLARE;
 #define TRACE_PQBACKENDPID         TRACE_XX "%sPQbackendPID\n",          THEADER_slow)
 #define TRACE_PQCANCEL             TRACE_XX "%sPQcancel\n",              THEADER_slow)
 #define TRACE_PQCLEAR              TRACE_XX "%sPQclear\n",               THEADER_slow)
+#define TRACE_PQCLOSEPREPARED      TRACE_XX "%sPQclosePrepared\n",       THEADER_slow)
 #define TRACE_PQCMDSTATUS          TRACE_XX "%sPQcmdStatus\n",           THEADER_slow)
 #define TRACE_PQCMDTUPLES          TRACE_XX "%sPQcmdTuples\n",           THEADER_slow)
 #define TRACE_PQCONNECTDB          TRACE_XX "%sPQconnectdb\n",           THEADER_slow)
@@ -157,8 +159,10 @@ DBISTATE_DECLARE;
 #define TRACE_PQPORT               TRACE_XX "%sPQport\n",                THEADER_slow)
 #define TRACE_PQPREPARE            TRACE_XX "%sPQprepare\n",             THEADER_slow)
 #define TRACE_PQPROTOCOLVERSION    TRACE_XX "%sPQprotocolVersion\n",     THEADER_slow)
+#define TRACE_PQFLUSH              TRACE_XX "%sPQflush\n",               THEADER_slow)
 #define TRACE_PQPUTCOPYDATA        TRACE_XX "%sPQputCopyData\n",         THEADER_slow)
 #define TRACE_PQPUTCOPYEND         TRACE_XX "%sPQputCopyEnd\n",          THEADER_slow)
+#define TRACE_PQSETNONBLOCKING     TRACE_XX "%sPQsetnonblocking\n",      THEADER_slow)
 #define TRACE_PQRESULTERRORFIELD   TRACE_XX "%sPQresultErrorField\n",    THEADER_slow)
 #define TRACE_PQRESULTERRORMESSAGE TRACE_XX "%sPQresultErrorMessage\n",  THEADER_slow)
 #define TRACE_PQRESULTSTATUS       TRACE_XX "%sPQresultStatus\n",        THEADER_slow)

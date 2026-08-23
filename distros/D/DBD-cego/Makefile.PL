@@ -5,7 +5,7 @@
 ##
 ## ( derived from the SQLite package )
 ##
-## by Bjoern Lemke, 2007-2013
+## by Bjoern Lemke, 2007-2021
 ##
 
 eval {
@@ -51,13 +51,13 @@ WriteMakefile(
     'MYEXTLIB'    => $opt->{'prefix'} . "/lib/libcego.$so* " 
 	      . $opt->{'prefix'} . "/lib/liblfcxml.$so* " 
 	      . $opt->{'prefix'} . "/lib/liblfcbase.$so",
-    "CC" => "clang++",
-    "LD" => "clang++",
+    "CC" => "c++",
+    "LD" => "c++",
     "XSPROTOARG" => "-noprototypes",
     'OPTIMIZE'      => '-O3 -DNDEBUG=1',
     'XSOPT'             => '-C++',
     'TYPEMAPS'          => ['perlobject.map' ],
-    'LICENSE'	=> 'gpl3',
+    'LICENSE'	=> 'gpl_3',
     'clean'         => { FILES => 'config.h' },
 );
 

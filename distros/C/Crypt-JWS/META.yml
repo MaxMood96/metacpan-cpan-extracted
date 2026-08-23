@@ -24,6 +24,6 @@ requires:
   ExtUtils::Depends: '0.404'
   File::Raw::JSON: '0.05'
   XSLoader: '0'
-  perl: '5.016000'
-version: '0.03'
+  perl: '5.010000'
+version: '0.06'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

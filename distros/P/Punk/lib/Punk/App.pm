@@ -8,7 +8,7 @@ use Punk::Router::Scope;
 use Punk::Context;
 use Punk::Static;
 
-our $VERSION = '0.28';
+our $VERSION = '0.30';
 
 # The boot hook compile() probes just before the state hash freezes
 # (xs/compile.xs). The framework's own extras live here; a subclass that
@@ -60,7 +60,12 @@ Plugins receive this object; each method mirrors a DSL keyword:
 C<route>, C<under>, C<api>, C<docs>, C<static>, C<mount>, C<websocket>,
 C<sse>, C<session>, C<logging>, C<views>, C<database>, C<model_class>, C<hook>,
 C<middleware>, C<on_error>, C<on_not_found>, C<helper>, C<plugin>,
-C<config>, C<secret>.
+C<config>, C<secret>, C<host>, C<favicon>.
+
+C<< $app->host >> with no argument reads the declared origin back (undef
+when the application never declared one), which is how a plugin defaults
+its own base-URL option; a plugin supporting older Punk should guard with
+C<< $app->can('host') >>.
 C<install_kw> gives a plugin a keyword of its own. C<model_auto>
 toggles auto-discovery of C<MyApp::Model::*> (on unless models are named
 explicitly). C<caller_class> and C<config_object> give a plugin the

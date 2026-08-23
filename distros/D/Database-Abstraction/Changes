@@ -1,5 +1,22 @@
 Revision history for Database-Abstraction
 
+0.38	Sat Aug 22 15:21:37 EDT 2026
+	[ Enhancements ]
+	- HTML URL backend: new url => 'https://...' constructor parameter fetches
+	  a remote HTML page with LWP::UserAgent, extracts a <table> element via
+	  HTML::TableExtract, and slurps it into the same in-memory data structure
+	  used by CSV/XML slurp; the first row of the table is treated as column
+	  headers; html_table_index (default 0) selects which table on the page
+	  to use; directory is not required when url is given; both LWP::UserAgent
+	  and HTML::TableExtract are loaded lazily (only when url is given); the
+	  URL is validated in new() against /\Ahttps?:\/\// at construction time
+	  (ftp://, file://, javascript: and all other schemes are rejected);
+	  all in-memory fast-paths (selectall_arrayref, selectall_array,
+	  fetchrow_hashref, count, AUTOLOAD, columns, schema) work without
+	  modification; type is set to 'HTML'; no DBI handle is created; t/html.t
+	  covers keyed and no_entry modes, html_table_index selection, AUTOLOAD
+	  lookup, repeated-call fetch-once guard, and all error paths
+
 0.37	Mon Jul 27 16:58:13 EDT 2026
 	[ Enhancements ]
 	- Remote file support: new host => 'server' (or 'user@host') constructor

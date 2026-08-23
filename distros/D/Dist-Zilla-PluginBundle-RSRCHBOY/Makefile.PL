@@ -81,7 +81,6 @@ my %WriteMakefileArgs = (
     "Dist::Zilla::Plugin::Test::PodSpelling" => "2.002001",
     "Dist::Zilla::Plugin::Test::ReportPrereqs" => 0,
     "Dist::Zilla::Plugin::TestRelease" => 0,
-    "Dist::Zilla::Plugin::Travis::ConfigForReleaseBranch" => "0.004",
     "Dist::Zilla::Plugin::Twitter" => 0,
     "Dist::Zilla::Plugin::UploadToCPAN" => 0,
     "Dist::Zilla::PluginBundle::Git" => "1.121770",
@@ -129,7 +128,7 @@ my %WriteMakefileArgs = (
     "Test::CheckDeps" => "0.010",
     "Test::More" => "0.94"
   },
-  "VERSION" => "0.079",
+  "VERSION" => "0.080",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -192,7 +191,6 @@ my %FallbackPrereqs = (
   "Dist::Zilla::Plugin::Test::PodSpelling" => "2.002001",
   "Dist::Zilla::Plugin::Test::ReportPrereqs" => 0,
   "Dist::Zilla::Plugin::TestRelease" => 0,
-  "Dist::Zilla::Plugin::Travis::ConfigForReleaseBranch" => "0.004",
   "Dist::Zilla::Plugin::Twitter" => 0,
   "Dist::Zilla::Plugin::UploadToCPAN" => 0,
   "Dist::Zilla::PluginBundle::Git" => "1.121770",

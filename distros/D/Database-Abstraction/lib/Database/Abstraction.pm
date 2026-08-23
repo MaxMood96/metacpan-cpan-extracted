@@ -60,11 +60,11 @@ Database::Abstraction - Read-only Database Abstraction Layer (ORM)
 
 =head1 VERSION
 
-Version 0.37
+Version 0.38
 
 =cut
 
-our $VERSION = '0.37';
+our $VERSION = '0.38';
 
 =head1 DESCRIPTION
 
@@ -257,9 +257,19 @@ File ending C<.xml>
 
 Binary key-value file ending C<.db>
 
+=item 7. C<HTML>
+
+Remote HTML page fetched via a URL.  Pass C<url> instead of C<directory>; the
+module fetches the page with L<LWP::UserAgent>, parses all C<< <table> >>
+elements with L<HTML::TableExtract>, and slurps the first (or
+C<html_table_index>-selected) table into memory.  The first row of the table
+is treated as column headers.  Both modules are loaded lazily and are not
+required for other backends.
+
 =back
 
 Pass C<dsn> to bypass file detection entirely and connect via any DBI driver.
+Pass C<url> to fetch and slurp a remote HTML table without a local directory.
 
 =head1 QUERY CRITERIA
 
@@ -443,6 +453,13 @@ applied).  Using C<filename> together with C<host> avoids probing multiple
 extensions and is therefore more efficient.  L<File::Slurp::Remote> must be
 installed; it is loaded lazily (only when C<host> is given).
 
+=item * C<url>
+
+A URL (C<http://> or C<https://>) pointing to an HTML page that contains one
+or more C<< <table> >> elements.  When present, C<directory> is not required.
+The first row of the selected table is used as column headers.
+Requires L<LWP::UserAgent> and L<HTML::TableExtract> (both loaded lazily).
+
 =back
 
 =head3 Behaviour parameters
@@ -478,6 +495,11 @@ read-only via L<Data::Reuse>).
 
 Set to C<0> to disable the AUTOLOAD column shortcut.  Default is C<1>
 (enabled).
+
+=item * C<html_table_index>
+
+Zero-based index of the HTML C<< <table> >> to extract when the C<url>
+backend is used.  Default is C<0> (the first table on the page).
 
 =back
 
@@ -576,7 +598,7 @@ sub new {
 		$args{'logger'} = Log::Abstraction->new($args{'logger'});
 	}
 
-	unless($args{'dsn'} || $defaults{'dsn'}) {
+	unless($args{'dsn'} || $defaults{'dsn'} || $args{'url'} || $defaults{'url'}) {
 		croak("$class: where are the files?") unless($args{'directory'} || $defaults{'directory'});
 
 		# Skip the local -d check only for genuinely remote hosts.
@@ -597,6 +619,10 @@ sub new {
 			croak("$class: unsafe host '$src->{host}'")
 				# \z (not $) so a trailing newline cannot sneak past the anchor.
 				unless $src->{'host'} =~ /\A(?:[a-zA-Z0-9][a-zA-Z0-9._-]*\@)?[a-zA-Z0-9:][a-zA-Z0-9._:-]*\z/;
+		}
+		if(defined $src->{'url'}) {
+			croak("$class: unsafe url '$src->{url}'")
+				unless $src->{'url'} =~ /\Ahttps?:\/\//i;
 		}
 	}
 
@@ -687,6 +713,61 @@ sub _open :Protected
 		$self->{'type'} = 'DBI';
 		$self->{$table} = $dbh;
 		$self->{'_updated'} = time();
+		return $self;
+	}
+
+	# URL-based HTML table backend — lazy-loads LWP::UserAgent and HTML::TableExtract.
+	# Both modules are optional; they are not required for file-based backends.
+	if(my $url = $self->{'url'} || $defaults{'url'}) {
+		require LWP::UserAgent;
+		require HTML::TableExtract;
+
+		my $ua = LWP::UserAgent->new(timeout => 30, agent => 'Database::Abstraction/' . $VERSION);
+		my $response = $ua->get($url);
+		Carp::croak(ref($self), ": cannot fetch '$url': ", $response->status_line)
+			unless $response->is_success;
+
+		my $te = HTML::TableExtract->new();
+		$te->parse($response->decoded_content);
+
+		my $tidx = $self->{'html_table_index'} // $defaults{'html_table_index'} // 0;
+		my @tables = $te->tables;
+		Carp::croak(ref($self), ": no HTML tables found at '$url'")
+			unless @tables;
+		Carp::croak(ref($self), ": html_table_index $tidx out of range (", scalar @tables, " tables) at '$url'")
+			if $tidx >= @tables;
+
+		my @rows = $tables[$tidx]->rows;
+		Carp::croak(ref($self), ": empty HTML table at '$url'")
+			unless @rows;
+
+		my @headers = map { defined($_) ? "$_" : '' } @{$rows[0]};
+		my $id = $self->{'id'};
+
+		if($self->{'no_entry'}) {
+			my @data;
+			for my $i (1 .. $#rows) {
+				my %row;
+				@row{@headers} = map { defined($_) ? "$_" : undef } @{$rows[$i]};
+				push @data, \%row;
+			}
+			$self->{'data'} = \@data;
+		} else {
+			my %data;
+			for my $i (1 .. $#rows) {
+				my %row;
+				@row{@headers} = map { defined($_) ? "$_" : undef } @{$rows[$i]};
+				my $key = $row{$id};
+				next unless defined $key;
+				$data{$key} = \%row;
+			}
+			$self->{'data'} = \%data;
+		}
+
+		$self->{'type'} = 'HTML';
+		$self->{'_updated'} = time();
+		$self->_fixate($self->{'data'}) if $self->{'data'} && ref($self->{'data'}) eq 'HASH';
+		$self->{$table} = undef;	# No DBI handle; all queries use the in-memory data path
 		return $self;
 	}
 
@@ -967,7 +1048,6 @@ sub _open :Protected
 					} else {
 						Carp::croak('XML slurp: cannot handle ', ref($xml), ' structure');
 					}
-					$self->{'data'} = ();
 					if($self->{'no_entry'}) {
 						# Not keyed, will need to scan each entry
 						my $i = 0;

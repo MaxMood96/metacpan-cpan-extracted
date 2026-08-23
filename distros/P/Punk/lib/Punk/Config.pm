@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk ();
 
-our $VERSION = '0.28';
+our $VERSION = '0.30';
 
 # Capture a command's standard output, without a shell. Called from C for
 # { $exec: [...] }; a non-zero exit is fatal, so a broken secret store stops
@@ -94,8 +94,13 @@ all.
 A plaintext value under a secret-shaped key (anything containing
 C<pass>, C<secret>, C<token>, C<api_key>, C<private_key> or
 C<credential>, the exact key C<auth>, or a C<dsn> with C<password=> in
-it) is almost always a mistake. The loader notices and, by default,
-warns:
+it) is almost always a mistake. A key that only names where such a
+thing lives is not secret-shaped - C<token_model>, C<password_field>,
+C<secret_path> and the like, anything ending in C<_model>, C<_class>,
+C<_table>, C<_field>, C<_column>, C<_header>, C<_cookie>, C<_path>,
+C<_dir>, C<_name> or C<_kind> - because its value is a model, a column
+or a location, never the secret itself. The loader notices the rest
+and, by default, warns:
 
     secrets: strict      # refuse to start
     secrets: warn        # the default

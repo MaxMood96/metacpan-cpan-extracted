@@ -4,7 +4,7 @@ package POTest;
 # apps, carrying cookies by hand and following the cross-app redirects
 # of an OAuth2 login.
 
-use 5.024;
+use 5.010;
 use strict;
 use warnings;
 use Exporter 'import';

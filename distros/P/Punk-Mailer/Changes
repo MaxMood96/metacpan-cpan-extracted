@@ -1,0 +1,13 @@
+Revision history for Punk-Mailer
+
+0.02    2026-08-23
+	- define G_LIST as G_ARRAY on perls before 5.36
+	- the resend transport's max_attachment refusal and the plugin's
+	  later_inline_max refusal printed the cap through a bare %.0f with an
+	  NV argument, which reads a double off the varargs and printed 0 on the
+	  long-double smokers; the formats now name the NV width
+	- t/lib/FakeSMTPd: a TLS listener no longer stops serving after a client
+	  refuses its certificate 
+
+0.01    2026-08-22
+	- First version

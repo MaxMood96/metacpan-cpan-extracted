@@ -33,7 +33,8 @@
       },
       "runtime" : {
          "requires" : {
-            "Layout::Flex" : "0.01",
+            "Font::Metrics" : "0.03",
+            "Layout::Flex" : "0.05",
             "Object::Proto" : "0.16",
             "perl" : "5.010001"
          }
@@ -47,6 +48,6 @@
       }
    },
    "release_status" : "stable",
-   "version" : "0.11",
+   "version" : "0.12",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

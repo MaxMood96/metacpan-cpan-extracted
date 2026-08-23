@@ -1,11 +1,12 @@
 ---
-abstract: 'Linux-native readiness event loop for Perl'
+abstract: 'Linux-native reactor, streams, datagrams, and processes'
 author:
-  - 'Joshua S. Day'
+  - 'Joshua S. Day <hax@cpan.org>'
 build_requires:
   ExtUtils::MakeMaker: '0'
-  Test2::V0: '0'
+  Test::More: '0'
 configure_requires:
+  ExtUtils::CBuilder: '0'
   ExtUtils::MakeMaker: '0'
 dynamic_config: 1
 generated_by: 'ExtUtils::MakeMaker version 7.78, CPAN::Meta::Converter version 2.150013'
@@ -18,11 +19,26 @@ no_index:
   directory:
     - t
     - inc
+  package:
+    - Linux::Event::_Registration
+    - Linux::Event::_SocketConfig
+    - Linux::Event::Datagram::_ReadyTimer
+    - Linux::Event::Listener::_Engine
+    - Linux::Event::Signal::_Descriptor
+    - Linux::Event::Signal::_Engine
+    - Linux::Event::Signal::_Service
+    - Linux::Event::Stream::_Connection
+    - Linux::Event::Stream::_Deadline
+    - Linux::Event::Stream::_Resolver
+    - Linux::Event::Stream::_Resolver::_Native
+    - Linux::Event::Stream::XSDescriptor
+    - Linux::Event::Stream::XSState
+    - Linux::Event::Timer::_Descriptor
+    - Linux::Event::Wakeup::_OwnerState
 requires:
-  Carp: '0'
-  Linux::Event::Clock: '0.011'
-  Linux::Event::Timer: '0.01'
+  Socket: '2.033'
   perl: '5.036000'
-resources: {}
-version: '0.012'
+resources:
+  homepage: https://github.com/haxmeister/perl-linux-event
+version: '0.102'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

@@ -1,5 +1,14 @@
 Revision history for DBIx-Loop
 
+0.07    2026-08-23
+        - A statement that fails in the database now fails its future on a
+          handle opened without RaiseError. DBI reports a failure two ways -
+          a croak under RaiseError, or a false return (undef from do, false
+          from execute) without it - and the runner trapped the first and
+          ignored the second, so an INSERT into a NOT NULL column resolved
+          done with rows_affected => 0, and a transaction built on it
+          committed. 
+
 0.06    2026-08-18
         - dbil_abi v2: on_exec, an observer for statements. 
         - DBIx::Loop->on_exec(\&start, \&done): the same registry,

@@ -1,8 +1,5 @@
 Changes
 Code.xs
-MANIFEST
-MANIFEST.SKIP
-Makefile.PL
 include/qr/qr_bits.h
 include/qr/qr_encode.h
 include/qr/qr_gf.h
@@ -11,6 +8,9 @@ include/qr/qr_mask.h
 include/qr/qr_svg.h
 include/qr_abi.h
 lib/QR/Code.pm
+Makefile.PL
+MANIFEST
+README
 t/00-load.t
 t/01-encode.t
 t/01-structure.t

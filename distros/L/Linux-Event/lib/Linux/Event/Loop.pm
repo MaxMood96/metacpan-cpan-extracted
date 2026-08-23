@@ -3,492 +3,27 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.012';
+our $VERSION = '0.102';
 
-use Scalar::Util qw(looks_like_number);
 use Carp qw(croak);
-use Linux::Event::Scheduler;
-use Linux::Event::Clock;
-use Linux::Event::Timer;
-use Linux::Event::Backend::Epoll;
-use Linux::Event::Watcher;
-use Linux::Event::Signal;
-use Linux::Event::Wakeup;
-use Linux::Event::Pid;
-use Linux::Event::XS ();
+use Scalar::Util qw(blessed);
 
-use constant READABLE => 0x01;
-use constant WRITABLE => 0x02;
-use constant PRIO     => 0x04;
-use constant RDHUP    => 0x08;
-use constant ET       => 0x10;
-use constant ONESHOT  => 0x20;
-use constant ERR      => 0x40;
-use constant HUP      => 0x80;
+require XSLoader;
+XSLoader::load(__PACKAGE__, $VERSION);
 
-sub new ($class, %args) {
-  my $backend = delete $args{backend};
-  my $clock   = delete $args{clock};
-  my $timer   = delete $args{timer};
-  croak "model is no longer supported; Linux::Event is backend-only, not model-selected" if exists $args{model};
-
-  croak "unknown args: " . join(", ", sort keys %args) if %args;
-
-  $clock //= Linux::Event::Clock->new(clock => 'monotonic');
-  for my $m (qw(tick now_ns deadline_in_ns remaining_ns)) {
-    croak "clock missing method '$m'" if !$clock->can($m);
-  }
-
-  $timer //= Linux::Event::Timer->new;
-  for my $m (qw(after disarm read_ticks fh)) {
-    croak "timer missing method '$m'" if !$timer->can($m);
-  }
-
-  $backend = _build_backend($backend);
-  for my $m (qw(watch unwatch run_once)) {
-    croak "backend missing method '$m'" if !$backend->can($m);
-  }
-  # modify is optional in this release; Loop can fall back to unwatch+watch.
-
-  my $sched = Linux::Event::Scheduler->new(clock => $clock);
-
-  my $self = bless {
-    clock   => $clock,
-    timer   => $timer,
-    backend => $backend,
-    sched   => $sched,
-    running => 0,
-
-    _watchers => Linux::Event::XS::registry_new(), # fd -> Linux::Event::Watcher
-    _timer_w  => undef,  # internal timerfd watcher
-    _timer_armed => 0,    # whether the Linux timerfd currently has an armed deadline
-  }, $class;
-
-  # Internal timerfd watcher: read -> dispatch due timers -> rearm kernel timer.
-  my $t_fh = $timer->fh;
-  my $t_fd = fileno($t_fh);
-  croak "timer fh has no fileno" if !defined $t_fd;
-
-  $self->{_timer_w} = $self->watch(
-    $t_fh,
-    read => sub ($loop, $fh, $w) {
-      $self->{timer}->read_ticks;
-      $self->{clock}->tick;
-      $self->_dispatch_due;
-      $self->_rearm_timer;
-    },
-    data => undef,
-  );
-
-  return $self;
+sub add ($self, $object) {
+    croak 'add(): object must support loop attachment'
+        if !blessed($object) || !$object->can('_attach_to_loop');
+    $object->_attach_to_loop($self);
+    return $object;
 }
 
-sub _build_backend ($backend) {
-  return Linux::Event::Backend::Epoll->new if !defined $backend;
+sub CLONE_SKIP ($class) { 1 }
 
-  if (!ref($backend)) {
-    return Linux::Event::Backend::Epoll->new if $backend eq 'epoll';
-    croak "unknown backend '$backend'";
-  }
+package Linux::Event::_Registration;
+sub CLONE_SKIP ($class) { 1 }
 
-  return $backend;
-}
-
-sub clock        ($self) { return $self->{clock} }
-sub timer        ($self) { return $self->{timer} }
-sub backend      ($self) { return $self->{backend} }
-sub backend_name ($self) { return $self->{backend}->can('name') ? $self->{backend}->name : ref($self->{backend}) }
-sub sched        ($self) { return $self->{sched} }
-sub is_running   ($self) { return $self->{running} ? 1 : 0 }
-sub _public_loop ($self) { return $self }
-
-# -- Signals --------------------------------------------------------------
-
-sub signal ($self, @args) {
-  return ($self->{_signal} ||= Linux::Event::Signal->new(loop => $self->_public_loop))->signal(@args);
-}
-
-# -- Wakeups --------------------------------------------------------------
-
-sub waker ($self) {
-  if (!$self->{_waker}) {
-    my $w = Linux::Event::Wakeup->new(loop => $self->_public_loop);
-    $self->{_waker} = $w;
-
-    # Internal watcher: drain wakeups.
-    $self->watch(
-      $w->fh,
-      read => sub ($loop, $fh, $watcher) {
-        $w->drain;
-      },
-      data => undef,
-    );
-  }
-
-  return $self->{_waker};
-}
-
-# -- Pidfds ---------------------------------------------------------------
-
-sub pid ($self, @args) {
-  $self->{pid_adaptor} //= Linux::Event::Pid->new(loop => $self->_public_loop);
-  return $self->{pid_adaptor}->pid(@args);
-}
-
-# -- Timers ---------------------------------------------------------------
-
-sub after ($self, $seconds, $cb) {
-  croak "seconds is required" if !defined $seconds;
-  croak "cb is required" if !$cb;
-  croak "cb must be a coderef" if ref($cb) ne 'CODE';
-
-  $self->{clock}->tick;
-
-  my $delta_ns = int($seconds * 1_000_000_000);
-  $delta_ns = 0 if $delta_ns < 0;
-
-  my $id = $self->{sched}->after_ns($delta_ns, $cb);
-  $self->_rearm_timer;
-  return $id;
-}
-
-sub at ($self, $deadline_seconds, $cb) {
-  croak "deadline_seconds is required" if !defined $deadline_seconds;
-  croak "cb is required" if !$cb;
-  croak "cb must be a coderef" if ref($cb) ne 'CODE';
-
-  my $deadline_ns = int($deadline_seconds * 1_000_000_000);
-
-  my $id = $self->{sched}->at_ns($deadline_ns, $cb);
-  $self->_rearm_timer;
-  return $id;
-}
-
-sub cancel ($self, $id) {
-  my $ok = $self->{sched}->cancel($id);
-  $self->_rearm_timer if $ok;
-  return $ok;
-}
-
-# -- Watchers -------------------------------------------------------------
-
-sub watch ($self, $fh, %spec) {
-  croak "fh is required" if !$fh;
-
-  my $read           = delete $spec{read};
-  my $write          = delete $spec{write};
-  my $error          = delete $spec{error};
-  my $data           = delete $spec{data};
-  my $edge_triggered = delete $spec{edge_triggered};
-  my $oneshot        = delete $spec{oneshot};
-
-  croak "unknown args: " . join(", ", sort keys %spec) if %spec;
-
-  if (defined $read && ref($read) ne 'CODE') {
-    croak "read must be a coderef or undef";
-  }
-  if (defined $write && ref($write) ne 'CODE') {
-    croak "write must be a coderef or undef";
-  }
-  if (defined $error && ref($error) ne 'CODE') {
-    croak "error must be a coderef or undef";
-  }
-
-  my $fd = fileno($fh);
-  croak "fh has no fileno" if !defined $fd;
-  $fd = int($fd);
-
-  if (my $old = Linux::Event::XS::registry_get($self->{_watchers}, $fd)) {
-    $self->_watcher_cancel($old);
-  }
-
-  my $w = Linux::Event::XS::watcher_new(
-    'Linux::Event::Watcher',
-    $self->_public_loop,
-    $fh,
-    $fd,
-    $read,
-    $write,
-    $error,
-    $data,
-    $edge_triggered ? 1 : 0,
-    $oneshot ? 1 : 0,
-  );
-
-  my $mask = $self->_watcher_mask($w);
-
-  # Use the single-call XS install path only for the built-in epoll
-  # backend. Custom/mock backends may not have the internal epoll/watch fields
-  # expected by this private fast path. Socket watchers keep the direct backend
-  # record path below, which is faster for the TCP dispatch workload.
-  my $can_xs_backend_fast = do {
-    my $b = $self->{backend};
-    ref($b) eq 'Linux::Event::Backend::Epoll'
-      && exists $b->{ep}
-      && exists $b->{watch};
-  };
-
-  if ($can_xs_backend_fast && !-S $fh && Linux::Event::XS::loop_watch_watcher_fast($self, $fh, $fd, $w, $mask)) {
-    return $w;
-  }
-
-  if ($self->{backend}->can('watch_watcher')) {
-    # Loop-created watchers use an XS direct-dispatch backend record.
-    # This avoids allocating one Perl dispatch closure per watcher while keeping
-    # the public Backend->watch($fh, $mask, $cb) callback API available.
-    Linux::Event::XS::registry_set($self->{_watchers}, $fd, $w);
-    $self->{backend}->watch_watcher($fh, $mask, $w, _loop => $self->_public_loop, tag => undef);
-    return $w;
-  }
-
-  my $public_loop = $self->_public_loop;
-  my $owner = $self;
-
-  my $dispatch = sub ($ignored_loop, $fh_from_backend, $fd2, $mask, $tag) {
-    my $ww = Linux::Event::XS::registry_get($owner->{_watchers}, $fd2) or return;
-
-    my $fhw = $ww->{fh};
-    if (!$fhw) {
-      $owner->_watcher_cancel($ww);
-      return;
-    }
-    my $fnow = fileno($fhw);
-    if (!defined $fnow || int($fnow) != $fd2) {
-      $owner->_watcher_cancel($ww);
-      return;
-    }
-
-    # Frozen dispatch contract:
-    #  - ERR: call error handler first if installed+enabled; otherwise treat as read+write.
-    #  - HUP: also triggers read (EOF detection).
-    my $read_trig  = ($mask & READABLE) ? 1 : 0;
-    my $write_trig = ($mask & WRITABLE) ? 1 : 0;
-
-    if ($mask & ERR) {
-      if ($ww->{error_cb} && $ww->{error_enabled}) {
-        $ww->{error_cb}->($public_loop, $fhw, $ww);
-        return;
-      }
-      $read_trig  = 1;
-      $write_trig = 1;
-    }
-
-    $read_trig = 1 if ($mask & HUP);
-
-    if ($read_trig && $ww->{read_cb} && $ww->{read_enabled}) {
-      $ww->{read_cb}->($public_loop, $fhw, $ww);
-    }
-
-    my $still = Linux::Event::XS::registry_get($owner->{_watchers}, $fd2);
-    if (!$still || $still != $ww) {
-      return;
-    }
-
-    if ($write_trig && $ww->{write_cb} && $ww->{write_enabled}) {
-      $ww->{write_cb}->($public_loop, $fhw, $ww);
-    }
-
-    return;
-  };
-
-  $w->{_dispatch_cb} = $dispatch;
-
-  Linux::Event::XS::registry_set($self->{_watchers}, $fd, $w);
-
-  $self->{backend}->watch($fh, $mask, $dispatch, _loop => $self->_public_loop, tag => undef);
-
-  return $w;
-}
-
-sub _watcher_mask ($self, $w) {
-  my $mask = 0;
-
-  $mask |= READABLE if $w->{read_cb}  && $w->{read_enabled};
-  $mask |= WRITABLE if $w->{write_cb} && $w->{write_enabled};
-
-  $mask |= ET      if $w->{edge_triggered};
-  $mask |= ONESHOT if $w->{oneshot};
-
-  return $mask;
-}
-
-sub _watcher_update ($self, $w) {
-  return 0 if !$w->{active};
-
-  my $mask = $self->_watcher_mask($w);
-
-  if ($self->{backend}->can('modify')) {
-    return $self->{backend}->modify($w->{fh}, $mask, _loop => $self->_public_loop, tag => undef);
-  }
-
-  # Fallback: unwatch+watch, preserving dispatch cb.
-  $self->{backend}->unwatch($w->{fh});
-  $self->{backend}->watch($w->{fh}, $mask, $w->{_dispatch_cb}, _loop => $self->_public_loop, tag => undef);
-  return 1;
-}
-
-sub _watcher_cancel ($self, $w) {
-  return 0 if !$w || !$w->{active};
-
-  my $b = $self->{backend};
-  if (ref($b) eq 'Linux::Event::Backend::Epoll'
-      && exists $b->{ep}
-      && exists $b->{watch}) {
-    return Linux::Event::XS::loop_cancel_watcher($self, $w) ? 1 : 0;
-  }
-
-  # Compatibility path for custom/mock backends used by tests and advanced
-  # callers. The XS cancellation helper intentionally assumes the built-in
-  # epoll backend layout.
-  my $fd = $w->{fd};
-  Linux::Event::XS::registry_delete($self->{_watchers}, $fd) if defined $fd;
-  $self->{backend}->unwatch($w->{fh}) if $self->{backend}->can('unwatch') && $w->{fh};
-  $w->{active} = 0;
-  $w->{fh} = undef;
-  return 1;
-}
-
-sub unwatch ($self, $fh) {
-  return 0 if !$fh;
-
-  my $fd = fileno($fh);
-  return 0 if !defined $fd;
-  $fd = int($fd);
-
-  my $w = Linux::Event::XS::registry_get($self->{_watchers}, $fd) or return 0;
-  $self->_watcher_cancel($w);
-
-  return 1;
-}
-
-sub run ($self) {
-  # run() controls the running flag. run_once() may be called manually even
-  # when the loop is not in run() mode (tests and advanced callers rely on
-  # this), so run_once() must only honor running=0 when run() is active.
-  local $self->{_in_run} = 1;
-  $self->{running} = 1;
-
-  while ($self->{running}) {
-    $self->run_once;
-  }
-
-  return;
-}
-
-sub stop ($self) {
-  $self->{running} = 0;
-
-  # If a waker was already created (user called $loop->waker), poke it so a
-  # currently-blocking backend wait can return promptly. This does not create
-  # the waker implicitly (contract: no implicit watcher).
-  if (my $w = $self->{_waker}) {
-    eval { $w->signal; 1 };
-  }
-
-  return;
-}
-
-sub run_once ($self, $timeout_s = undef) {
-  # One syscall per iteration/batch: refresh cached monotonic time.
-  $self->{clock}->tick;
-
-  # Snapshot whether we were "running" at entry. This matters because callers
-  # are allowed to pump the loop manually via run_once() without calling run()
-  # (so running may be false). If running *was* true and stop() flips it during
-  # callback dispatch, we must not enter backend wait in the same iteration.
-  my $was_running = $self->{running} ? 1 : 0;
-
-  # Run any due timer callbacks before blocking.
-  $self->_dispatch_due;
-
-  # stop() can be called from a timer callback (or other user callback).
-  # - If we're inside run(), honor running immediately.
-  # - If running was true at entry, also honor it (prevents an extra backend wait)
-  # - If running was false at entry, allow manual pumping.
-  return 0 if (!$self->{running} && ($self->{_in_run} || $was_running));
-
-  my $next = $self->{sched}->next_deadline_ns;
-
-  # Fast path: when the XS timer heap is empty, skip timerfd
-  # rearm/disarm churn and wait directly in the backend. Timer-heavy behavior
-  # stays on the scheduler-aware path below.
-  if (!defined $next) {
-    if ($self->{_timer_armed}) {
-      $self->{timer}->disarm;
-      $self->{_timer_armed} = 0;
-    }
-    return $self->{backend}->run_once($self, $timeout_s);
-  }
-
-  # If no explicit timeout was provided, derive one from the next scheduled
-  # timer deadline. This is what makes $loop->run() advance timers without
-  # requiring callers to manually pass a timeout.
-  if (!defined $timeout_s) {
-    my $remain_ns = $self->{clock}->remaining_ns($next);
-    $timeout_s = ($remain_ns <= 0) ? 0 : ($remain_ns / 1_000_000_000);
-  }
-
-  # Keep timerfd state in sync for users who may be watching the timer fd
-  # directly (or for future backends that integrate it). This is not relied on
-  # for core scheduling.
-  $self->_rearm_timer;
-
-  # Re-check after rearm, since user callbacks can run during _rearm_timer()
-  # (e.g. via a custom timer implementation).
-  return 0 if (!$self->{running} && ($self->{_in_run} || $was_running));
-
-  return $self->{backend}->run_once($self, $timeout_s);
-}
-
-
-sub _dispatch_due ($self) {
-  my @ready = $self->{sched}->pop_expired;
-  for my $item (@ready) {
-    my ($id, $cb, $deadline_ns) = @$item;
-
-    # Timer callbacks are invoked with just ($loop).
-    $cb->($self->_public_loop);
-  }
-  return;
-}
-
-
-use Scalar::Util qw(looks_like_number);
-
-sub _rearm_timer ($self) {
-  my $next = $self->{sched}->next_deadline_ns;
-
-  if (!defined $next) {
-    if ($self->{_timer_armed}) {
-      $self->{timer}->disarm;
-      $self->{_timer_armed} = 0;
-    }
-    return;
-  }
-
-  my $remain_ns = $self->{clock}->remaining_ns($next);
-
-  return if !defined $remain_ns;
-  return if !looks_like_number($remain_ns);
-
-  if ($remain_ns <= 0) {
-    # Minimal non-zero delay (fixed decimal, no exponent).
-    my $min_s = sprintf('%.9f', 1 / 1_000_000_000);
-    $self->{timer}->after($min_s);
-    $self->{_timer_armed} = 1;
-    return;
-  }
-
-  my $after_s = $remain_ns / 1_000_000_000;
-
-  return if !looks_like_number($after_s);
-
-  # IMPORTANT: format to fixed decimal so Timer::_num accepts it.
-  $self->{timer}->after(sprintf('%.9f', $after_s));
-  $self->{_timer_armed} = 1;
-
-  return;
-}
+package Linux::Event::Loop;
 
 1;
 
@@ -496,220 +31,189 @@ __END__
 
 =head1 NAME
 
-Linux::Event::Loop - Readiness-based event loop for Linux::Event
+Linux::Event::Loop - Linux-native epoll event loop
 
 =head1 SYNOPSIS
 
-  use v5.36;
-  use Linux::Event;
+  use Linux::Event::Loop;
 
-  my $loop = Linux::Event->new(
-    backend => 'epoll',
-  );
-
-  $loop->after(0.100, sub ($loop) {
-    say "timer fired";
-  });
-
-  my $watcher = $loop->watch(
-    $fh,
-    read => sub ($loop, $fh, $watcher) {
-      my $buf = '';
-      my $n = sysread($fh, $buf, 8192);
-
-      if (!defined $n) {
-        die "sysread failed: $!";
-      }
-
-      if ($n == 0) {
-        $watcher->cancel;
-        $loop->stop;
-        return;
-      }
-
-      print $buf;
-    },
-  );
-
+  my $loop = Linux::Event::Loop->new;
+  my $stream = $loop->add(MyStream->connect(
+      host => '127.0.0.1', # required
+      port => 9999,        # required
+  ));
   $loop->run;
 
 =head1 DESCRIPTION
 
-C<Linux::Event::Loop> is the readiness event loop in this distribution. It is
-built around epoll readiness notifications plus Linux-native primitives for
-monotonic timers, signals, wakeups, and pidfds.
+Linux::Event::Loop owns the native epoll instance, descriptor registry, event
+buffer, and readiness dispatch. It is the only public loop class.
 
-It is deliberately small and explicit:
+High-level objects may be attached in either of two equivalent ways:
 
-=over 4
+  my $stream = MyStream->connect(
+      loop => $loop,        # optional: attach immediately
+      host => '127.0.0.1',  # required
+      port => 9999,         # required
+  );
 
-=item * it watches filehandles for readiness
+  my $stream = MyStream->connect(
+      host => '127.0.0.1', # required
+      port => 9999,        # required
+  );
+  $loop->add($stream);
 
-=item * it schedules timers in monotonic time
+C<add> invokes the concrete object's attachment implementation and
+returns the same object. Stream, Listener, Datagram, Timer, Signal, Wakeup, and
+Process reject attachment to a second Loop or attachment after reaching a
+terminal state.
 
-=item * it adapts Linux signal, wakeup, and pid primitives into the loop
+C<watch> is the low-level descriptor API. It registers immediately and returns
+an opaque native registration handle. The handle is not a public class or a
+subclassing API.
 
-=item * it does not own socket acquisition or buffered stream policy
+=head1 HIGH-LEVEL OBJECTS
 
-=back
+=head2 add($object)
 
-Higher-level networking remains in companion distributions such as
-L<Linux::Event::Listen>, L<Linux::Event::Connect>, and L<Linux::Event::Stream>.
+Attaches a detached L<Linux::Event::Stream>, L<Linux::Event::Listener>,
+L<Linux::Event::Datagram>, L<Linux::Event::Timer>,
+L<Linux::Event::Signal>, L<Linux::Event::Wakeup>, or
+L<Linux::Event::Process> and returns that exact object. The object becomes
+owned by this Loop. Attaching it again, attaching it to another Loop, or
+attaching a terminal object throws an exception.
 
-=head1 CONSTRUCTOR
+The following are equivalent:
 
-=head2 new(%args)
+  my $a = MyStream->connect(
+      loop => $loop,       # optional: attach immediately
+      host => '127.0.0.1', # required
+      port => 9999,        # required
+  );
+  my $b = $loop->add(MyStream->connect(
+      host => '127.0.0.1', # required
+      port => 9999,        # required
+  ));
 
-Recognized arguments:
+  my $timer = $loop->add(MyTimer->new(
+      after => 0.25, # required one-shot delay
+  ));
 
-=over 4
+  my $socket = $loop->add(MyDatagram->new(
+      host => '0.0.0.0', # required
+      port => 9999,      # required
+  ));
 
-=item * C<backend>
+The C<loop> constructor option and C<add> are both primary public APIs.
+Timer construction and scheduling deliberately use this generic attachment
+path; Loop has no Timer-specific factory methods.
 
-Backend name or backend object. The built-in backend is C<epoll>.
+=head1 RAW DESCRIPTOR API
 
-=item * C<clock>
+=head2 watch(fh => $fh, read => $callback) / watch(fd => $fd, read => $callback)
 
-Clock object. It must provide C<tick>, C<now_ns>, C<deadline_in_ns>, and
-C<remaining_ns>.
-
-=item * C<timer>
-
-Timer object. It must provide C<after>, C<disarm>, C<read_ticks>, and C<fh>.
-
-=back
-
-=head1 LIFECYCLE
-
-=head2 run
-
-Enter the event loop and keep running until C<stop> is called.
-
-=head2 run_once($timeout_s = undef)
-
-Advance the loop by one iteration. Due timer callbacks are dispatched first;
-then the backend wait is entered if appropriate.
-
-C<$timeout_s> is in seconds and may be fractional.
-
-=head2 stop
-
-Stop a running loop. If a wakeup object has already been created, the loop
-signals it so a blocking backend wait can return promptly.
-
-=head2 is_running
-
-True while C<run> is actively looping.
-
-=head1 TIMERS
-
-=head2 after($seconds, $cb)
-
-Schedule C<$cb> to run after a relative monotonic delay.
-
-=head2 at($deadline_seconds, $cb)
-
-Schedule C<$cb> for an absolute monotonic deadline expressed in seconds.
-
-=head2 cancel($timer_id)
-
-Cancel a timer previously returned by C<after> or C<at>.
-
-Timer callbacks are invoked as:
-
-  $cb->($loop)
-
-=head1 WATCHERS
-
-=head2 watch($fh, %spec)
-
-Register a watcher for a filehandle. Recognized keys in C<%spec>:
+Registers exactly one filehandle or integer descriptor. Supported options are:
 
 =over 4
 
-=item * C<read>
+=item * C<read>, C<write>, C<error>
 
-=item * C<write>
-
-=item * C<error>
+Coderefs for readable, writable, and terminal/error readiness. Only C<read>
+and C<write> control ordinary interest; terminal flags are always observed.
+For one returned event, callback order is error, read, then write. Cancellation
+after any callback suppresses the remaining callbacks for that event.
 
 =item * C<data>
 
-=item * C<edge_triggered>
+An arbitrary retained value available through C<< $registration->data >>.
 
-=item * C<oneshot>
+=item * C<no_args =E<gt> 1>
 
-=back
+Calls readiness coderefs without an argument. By default each receives the
+opaque registration handle.
 
-Returns a L<Linux::Event::Watcher>.
+=item * C<lean =E<gt> 1>
 
-Watcher callbacks receive:
+With C<no_args>, avoids retaining references used only by handle accessors.
+This is an expert registration-throughput optimization.
 
-  $cb->($loop, $fh, $watcher)
+=item * C<edge_triggered =E<gt> 1>
 
-The dispatch rules are intentionally explicit:
+Uses C<EPOLLET>. The callback must drain the descriptor until C<EAGAIN>.
 
-=over 4
+=item * C<oneshot =E<gt> 1>
 
-=item * error runs first if an error handler is installed and enabled
-
-=item * otherwise an error condition is treated as readable and writable
-
-=item * hup also makes the watcher readable so EOF can be observed
+Uses C<EPOLLONESHOT>. The application is responsible for its rearm policy.
 
 =back
 
-=head2 unwatch($fh)
+Registering an fd that is already registered replaces its native registration
+with C<EPOLL_CTL_MOD>. Cancelling the obsolete handle cannot remove the new
+registration.
 
-Remove the watcher for the given filehandle, if one exists.
+=head2 watch_fd($fd, read => $callback)
 
-=head1 SIGNALS, WAKEUPS, AND PIDFDS
+Low-level positional form used by Linux::Event internals and specialized code.
+It creates the same native registration and has the same dispatch path as
+C<watch>. Normal application code should prefer C<watch>.
 
-=head2 signal(...)
+=head2 unwatch_fd($fd)
 
-Returns the loop-owned L<Linux::Event::Signal> adaptor and subscribes a signal
-handler.
+Cancels the current registration for C<$fd>, if any. Prefer the registration's
+C<cancel> method when the handle is available.
 
-=head2 waker
+=head1 REGISTRATION METHODS
 
-Returns the loop-owned L<Linux::Event::Wakeup> object. The loop installs an
-internal watcher that drains the eventfd so stop and explicit signals can wake
-backend waits promptly.
+The opaque result of C<watch> supports C<fd>, C<fh>, C<data>, C<loop>, C<lean>,
+C<cancel>, C<enable_read>, C<disable_read>, C<enable_write>, and
+C<disable_write>. C<cancel> is idempotent. An fd-only registration returns
+undef from C<fh>.
 
-=head2 pid(...)
+=head1 DRIVING THE LOOP
 
-Returns a pid subscription using the loop-owned L<Linux::Event::Pid> adaptor.
+=head2 run
 
-=head1 ACCESSORS
+Waits and dispatches until C<stop> is called.
 
-=head2 clock
+=head2 run_once($timeout_ms = -1)
 
-Returns the clock object.
+Runs one C<epoll_wait>. A negative timeout blocks indefinitely, zero polls, and
+a positive value is a maximum wait in milliseconds. Returns the number of
+events returned by epoll.
 
-=head2 timer
+=head2 run_for($seconds)
 
-Returns the timer object.
+Runs against a monotonic deadline for the supplied non-negative number of
+seconds.
 
-=head2 backend
+=head2 stop
 
-Returns the backend object.
+Requests that the active C<run> or C<run_for> return after the current dispatch
+work completes.
 
-=head2 backend_name
+=head1 DIAGNOSTICS AND TUNING
 
-Returns the backend name.
+C<stats> returns counters for epoll waits, event classes, callbacks,
+registrations, Timer scheduling and delivery, dispatch batching, and lifecycle
+activity. C<reset_stats>
+resets them. C<enable_profile(1)> additionally records nanosecond timing and
+changes the measured workload, so it should be disabled for normal benchmarks.
 
-=head2 sched
+C<event_capacity> and C<set_event_capacity> inspect or change the reusable
+event array. C<callback_scope_limit> and C<set_callback_scope_limit> control
+bounded Perl temporary scopes. C<enable_watcher_reclaim> exposes an
+experimental native memory/throughput tradeoff. The measured defaults should
+normally remain unchanged.
 
-Returns the internal scheduler object.
+=head1 INTERPRETER OWNERSHIP
 
-=head1 SEE ALSO
+A Loop and every native object it owns belong to the Perl interpreter that
+created them. They are not cloned into a new ithread. Only a cloned
+L<Linux::Event::Wakeup> handle may signal its owner through eventfd; it cannot
+manage the Loop, invoke callbacks, or access owner-interpreter data.
 
-L<Linux::Event::Loop>,
-L<Linux::Event::Watcher>,
-L<Linux::Event::Signal>,
-L<Linux::Event::Wakeup>,
-L<Linux::Event::Pid>,
-L<Linux::Event::Backend>,
-L<Linux::Event::Backend::Epoll>
+=head1 PLATFORM
+
+Linux only. The implementation uses epoll directly.
 
 =cut

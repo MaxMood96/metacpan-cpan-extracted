@@ -21,7 +21,7 @@ static SV *pox_digest(pTHX_ SV *token) {
 static SV *pox_dbi_connect(pTHX_ SV *dsn, SV *user, SV *pass) {
   dSP; int count; SV *h = NULL;
   HV *attr;
-  eval_pv("require DBI;", FALSE);
+  pox_require_once(aTHX_ "DBI");
   SPAGAIN;   /* the require may have reallocated the stack */
   attr = newHV();
   (void)hv_stores(attr, "RaiseError", newSViv(1));

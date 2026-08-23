@@ -12,6 +12,8 @@ use Moo;
 with 'OrePAN2::Role::HasLogger';
 use Types::Standard qw( HashRef );
 use namespace::clean;
+use IO::Compress::Gzip qw( $GzipError );
+use Path::Tiny ();
 
 has index => ( is => 'ro', isa => HashRef, default => sub { +{} } );
 
@@ -83,6 +85,37 @@ sub add_index {
     $self->index->{$package} = [ $version, $archive_file ];
 }
 
+sub merge {
+    my ( $self, $other, %opts ) = @_;
+
+    my %protected_author
+        = map { uc($_) => 1 } grep {length} @{ $opts{protect_author} || [] };
+    my %protected_package;
+    if (%protected_author) {
+        my %matched_author;
+        for my $package ( $self->packages ) {
+            my (undef, $path) = $self->lookup($package);
+            next unless defined $path;
+            my ($author) = $path =~ m{\A[^/]+/[^/]+/([^/]+)/};
+            next unless defined $author && $protected_author{ uc($author) };
+            $protected_package{$package} = 1;
+            $matched_author{ uc($author) } = 1;
+        }
+        for my $author ( sort keys %protected_author ) {
+            $self->log->warn(
+                "protect_author '$author' matched no packages in this index"
+            ) unless $matched_author{$author};
+        }
+    }
+
+    for my $package ( $other->packages ) {
+        next if $protected_package{$package};
+        my ( $version, $archive_file ) = $other->lookup($package);
+        $self->add_index( $package, $version, $archive_file );
+    }
+    return;
+}
+
 sub as_string {
     my ( $self, $opts ) = @_;
     $opts ||= +{};
@@ -115,6 +148,20 @@ sub as_string {
             $entry->[1];
     }
     return join( "\n", @buf ) . "\n";
+}
+
+sub write_gzip {
+    my ( $self, $path, $opts ) = @_;
+
+    my $gzipped;
+    my $gz = IO::Compress::Gzip->new( \$gzipped, Time => 0 )
+        or die "Cannot create gzip stream: $GzipError\n";
+    $gz->print( $self->as_string($opts) )
+        or die "gzip print failed: $GzipError\n";
+    $gz->close
+        or die "gzip close failed: $GzipError\n";
+    Path::Tiny::path($path)->spew_raw($gzipped);
+    return;
 }
 
 1;
@@ -150,6 +197,26 @@ Delete a package from the index.
 
 Add a new entry to the index.
 
+=item C<< $index->merge($other_index, protect_author => \@pause_ids) >>
+
+Merge every package from C<$other_index> into C<$index>, in place. Ordinary
+merges use C<add_index>'s "higher version wins" semantics.
+
+C<protect_author> is an optional list of PAUSE ids. Any package already in
+C<$index> whose entry's path is authored by one of these ids (i.e. the path
+looks like C<X/XX/AUTHORID/...>) keeps its C<$index> entry, even if
+C<$other_index> has a numerically higher version of the same package.
+Matching is case-insensitive.
+
+Protection is applied per I<package>, not per I<distribution>: if
+C<$other_index> provides a package that C<$index>'s copy of a protected
+author's distribution doesn't, that package is still taken from
+C<$other_index>.
+
+If a given C<protect_author> id matches zero packages in C<$index> (a typo,
+or nothing from that author is in the index yet), a warning is logged -- it
+doesn't fail the merge, but it means that id currently protects nothing.
+
 =item C<< $index->as_string() >>
 
 Returns the content of the index as a string.  Some of the index metadata can
@@ -160,5 +227,14 @@ defaults to 0.
     $index->as_string( simple => 1 );
 
 Make index as string.
+
+=item C<< $index->write_gzip( $path, \%options ) >>
+
+Writes the index, gzip-compressed, to the file at C<$path>, replacing any
+existing file there. The write is atomic: concurrent readers see either the
+old file or the complete new one, never a partial write. C<%options> is
+forwarded verbatim to L</as_string>.
+
+    $index->write_gzip( $path, { simple => 1 } );
 
 =back

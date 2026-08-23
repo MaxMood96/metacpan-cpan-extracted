@@ -58,7 +58,7 @@ sub state { return Fetch::_abi_observer_state() }
 
 # ---- nothing registered yet -------------------------------------------------
 {
-    is(Fetch::_abi_version(), 2, 'fetch_abi is at version 2');
+    cmp_ok(Fetch::_abi_version(), '>=', 2, 'fetch_abi is at version 2 or later');
     my ($starts, $dones) = state();
     is($starts, 0, 'no observer has been started');
     is($dones,  0, 'and none finished');

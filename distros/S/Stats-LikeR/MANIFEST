@@ -30,6 +30,7 @@ t/better.coverage.t
 t/binom_test.R.scipy.t
 t/binom_test.t
 t/bodyfat.csv
+t/build.optimize.t
 t/cfilter.t
 t/chisq_test.R.scipy.t
 t/chisq_test.t
@@ -70,6 +71,7 @@ t/help.t
 t/hoa2aoh.t
 t/hoa2hoh.t
 t/hoh2hoa.t
+t/hot_path.t
 t/interpolate.t
 t/interpolate_methods.t
 t/intersection.t
@@ -126,6 +128,7 @@ t/summary.t
 t/survival.t
 t/t_test.t
 t/table_one.t
+t/tied.frames.t
 t/transpose.t
 t/tukey.t
 t/uniq.t
@@ -133,6 +136,8 @@ t/vals.t
 t/vals2.t
 t/value_counts.t
 t/value_counts2.t
+t/var_sd_cov.R.R
+t/var_sd_cov.R.t
 t/view.aoa.t
 t/view.t
 t/view2.t

@@ -40,11 +40,13 @@
             "Fetch" : "0.08",
             "File::Raw::JSON" : "0.07",
             "Punk" : "0.17",
-            "perl" : "5.024000"
+            "perl" : "5.010000"
          }
       },
       "test" : {
          "recommends" : {
+            "DBD::SQLite" : "0",
+            "DBI" : "0",
             "Hyperman" : "0.14"
          },
          "requires" : {
@@ -53,6 +55,6 @@
       }
    },
    "release_status" : "stable",
-   "version" : "0.05",
+   "version" : "0.06",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

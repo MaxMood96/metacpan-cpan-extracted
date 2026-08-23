@@ -6,6 +6,7 @@ hashx.c
 ignore.txt
 include/blake3.h
 include/crc32.h
+include/frh_abi.h
 include/hashx.h
 include/md5.h
 include/sha1.h
@@ -32,6 +33,8 @@ t/10-xxh64.t
 t/11-blake3.t
 t/12-hmac.t
 t/13-record.t
+t/14-raw-parity.t
+t/15-abi.t
 t/manifest.t
 t/pod-coverage.t
 t/pod.t

@@ -1,13 +1,13 @@
 package Punk::OAuth2;
 
-use 5.024;
+use 5.010;
 use strict;
 use warnings;
 use File::Raw::JSON;
 use Crypt::JWS;
 use MIME::Base64 ();   # the XS calls MIME::Base64::{en,de}code_base64 by name
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 require XSLoader;
 XSLoader::load('Punk::OAuth2', $VERSION);

@@ -9,7 +9,7 @@ requires 'Object::Configure';
 requires 'Params::Get';
 requires 'Readonly';
 requires 'Scalar::Util';
-requires 'Sub::Private';
+requires 'Sub::Protected', '0.02';
 
 on 'configure' => sub {
 	requires 'ExtUtils::MakeMaker', '6.64';   # Minimum version for TEST_REQUIRES

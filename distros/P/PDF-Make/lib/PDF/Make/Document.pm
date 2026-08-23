@@ -3,7 +3,7 @@ package PDF::Make::Document;
 use strict;
 use warnings;
 
-our $VERSION = '0.11';
+our $VERSION = '0.12';
 
 # Load the XS code from PDF::Make
 use PDF::Make ();

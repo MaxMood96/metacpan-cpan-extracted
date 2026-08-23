@@ -14,7 +14,7 @@ use File::Basename qw(basename);
 use File::Find;
 use Cwd qw(getcwd);
 use YAML;
-use Sys::OsRelease;
+use Sys::OsRelease ();  # add () to prevent calling import/init
 
 use Test::More; # planned test total will be counted from YAML data
 

@@ -6,7 +6,7 @@ use warnings;
 use Carp ();
 use Punk::OpenTelemetry ();
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 my %STATE;
 

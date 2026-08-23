@@ -33,5 +33,6 @@ xs/jws.xs
 xs/key.xs
 xs/util.xs
 xt/boilerplate.t
+t/07-sha1.t
 META.yml                                 Module YAML meta-data (added by MakeMaker)
 META.json                                Module JSON meta-data (added by MakeMaker)

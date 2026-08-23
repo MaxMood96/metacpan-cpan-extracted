@@ -174,10 +174,14 @@ static SV *pox_store_call(pTHX_ SV *store, const char *meth,
   PUTBACK;
   count = call_method(meth, G_SCALAR | G_EVAL);
   SPAGAIN;
-  if (!SvTRUE(ERRSV) && count > 0) r = SvREFCNT_inc(POPs);
+  if (!SvTRUE(ERRSV) && count > 0) {
+    r = POPs;
+    /* an immortal (the store returned undef) is borrowed, not owned */
+    if (!POX_IMMORTAL(r)) r = SvREFCNT_inc(r);
+  }
   else if (count > 0) (void)POPs;
   PUTBACK; FREETMPS; LEAVE;
-  return r ? sv_2mortal(r) : NULL;
+  return !r ? NULL : POX_IMMORTAL(r) ? r : sv_2mortal(r);
 }
 
 /* ---- JWT access token ----------------------------------------------------- */

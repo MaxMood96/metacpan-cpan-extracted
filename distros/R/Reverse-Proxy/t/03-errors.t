@@ -37,6 +37,8 @@ close $probe;
 # proxy should 502. Some resolvers (seen on CPAN Testers hosts) hijack NXDOMAIN
 # and answer with a parking page, making the upstream reachable; when that
 # happens the DNS-failure path cannot be exercised, so skip rather than fail.
+# Others send it to an unreachable address instead; then the deadline
+# supplies the 502 and the test passes on the timeout path.
 # The connection-refused case above already covers the 502 mapping itself.
 {
 	my $app = Reverse::Proxy->new(

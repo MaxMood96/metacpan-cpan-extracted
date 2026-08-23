@@ -5,7 +5,7 @@ our $AUTHORITY = 'cpan:GENE';
 
 use v5.36;
 
-our $VERSION = '0.0806';
+our $VERSION = '0.0807';
 
 use Moo;
 use strictures 2;
@@ -181,6 +181,7 @@ sub stop ($self) {
     $rtn->kill('TERM');
     $self->loop->remove($rtn);
     $self->_midi_routine(undef);
+    $self->midi_out->close_port() if $self->midi_out;
 }
 
 
@@ -218,7 +219,7 @@ MIDI::RtController - Control your MIDI controller
 
 =head1 VERSION
 
-version 0.0806
+version 0.0807
 
 =head1 SYNOPSIS
 

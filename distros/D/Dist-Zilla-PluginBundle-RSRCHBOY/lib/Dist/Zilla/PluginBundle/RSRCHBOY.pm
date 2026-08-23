@@ -9,8 +9,8 @@
 #
 package Dist::Zilla::PluginBundle::RSRCHBOY;
 our $AUTHORITY = 'cpan:RSRCHBOY';
-# git description: 0.078-3-gd1e63e8
-$Dist::Zilla::PluginBundle::RSRCHBOY::VERSION = '0.079';
+# git description: 0.079-4-ga98733b
+$Dist::Zilla::PluginBundle::RSRCHBOY::VERSION = '0.080';
 
 # ABSTRACT: Zilla your distributions like RSRCHBOY!
 
@@ -106,7 +106,6 @@ sub release_plugins {
 
     my @allow_dirty = qw{
         .gitignore
-        .travis.yml
         Changes
         README.mkdn
         dist.ini
@@ -142,7 +141,6 @@ sub release_plugins {
 
         [ 'Test::CheckDeps' => { ':version' => '0.007', fatal => 1, level => 'suggests' } ],
         'CheckSelfDependency',
-        'Travis::ConfigForReleaseBranch',
         'SchwartzRatio',
 
         [ 'Git::Tag' => { tag_format  => '%v', signed => $self->sign } ],
@@ -276,10 +274,8 @@ sub configure {
             },
         ],
 
-        # this will be added by another plugin to the build
-        [ PruneCruft => { except => '\.travis\.yml' } ],
-
         qw{
+            PruneCruft
             Git::Describe
             ExecDir
             ShareDir
@@ -328,7 +324,10 @@ sub configure {
         }],
         [ CopyFilesFromBuild => { copy => $self->_copy_from_build } ],
 
-        [ 'GitHubREADME::Badge' => { badges => [ qw{ travis cpants coveralls } ] } ],
+        [ 'GitHubREADME::Badge' => { badges => [ qw{
+            github_actions/dzil-matrix.yaml
+            cpants
+        } ] } ],
 
         ($self->is_task ? 'TaskWeaver' : $podweaver),
     );
@@ -378,7 +377,7 @@ Dist::Zilla::PluginBundle::RSRCHBOY - Zilla your distributions like RSRCHBOY!
 
 =head1 VERSION
 
-This document describes version 0.079 of Dist::Zilla::PluginBundle::RSRCHBOY - released August 08, 2026 as part of Dist-Zilla-PluginBundle-RSRCHBOY.
+This document describes version 0.080 of Dist::Zilla::PluginBundle::RSRCHBOY - released August 22, 2026 as part of Dist-Zilla-PluginBundle-RSRCHBOY.
 
 =head1 SYNOPSIS
 
@@ -420,14 +419,14 @@ A list of words our POD spell checker should ignore.
 
 =head1 OPTIONS
 
-=head2 sign (boolean; default: true)
+=head2 sign (boolean; default: false)
 
 On release, use your gpg key to sign the version tag created (if you're using
 git) and also generate a SIGNATURE file.
 
 See also L<Dist::Zilla::Plugin::Signature>.
 
-=head2 tweet (boolean; default: true)
+=head2 tweet (boolean; default: false)
 
 If set to a true value, we'll use L<Dist::Zilla::Plugin::Twitter> to tweet
 when a release occurs.

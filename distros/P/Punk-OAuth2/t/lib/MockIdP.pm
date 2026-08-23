@@ -7,7 +7,7 @@ package MockIdP;
 # Modes: bad_iss, wrong_nonce, tamper_sig, no_id_token, expired_code,
 # wrong_state, iss_param_wrong, non_json_token, refuse_token.
 
-use 5.024;
+use 5.010;
 use strict;
 use warnings;
 use Crypt::JWS qw(sign b64url b64url_decode sha256 ct_eq random_bytes);

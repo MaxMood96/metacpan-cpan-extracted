@@ -10,6 +10,11 @@
 #include "qr/qr_svg.h"
 #include "qr_abi.h"
 
+/* G_LIST is the 5.36 name for G_ARRAY */
+#ifndef G_LIST
+#define G_LIST G_ARRAY
+#endif
+
 /* The whole battery is C: option parsing and validation, the encoder,
  * the serialisers, the ABI. The .pm is a version number and the POD.
  *

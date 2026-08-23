@@ -1,4 +1,4 @@
-use 5.024000;
+use 5.010000;
 use strict;
 use warnings;
 use ExtUtils::MakeMaker;
@@ -56,7 +56,7 @@ WriteMakefile(
     VERSION_FROM     => 'lib/Punk/OAuth2.pm',
     ABSTRACT_FROM    => 'lib/Punk/OAuth2.pm',
     LICENSE          => 'artistic_2',
-    MIN_PERL_VERSION => '5.024000',
+    MIN_PERL_VERSION => '5.010000',
     CONFIGURE_REQUIRES => {
         'ExtUtils::MakeMaker' => '0',
         'ExtUtils::Depends'   => '0.404',
@@ -76,7 +76,11 @@ WriteMakefile(
     META_MERGE => {
         'meta-spec' => { version => 2 },
         prereqs => {
-            test => { recommends => { 'Hyperman' => '0.14' } },
+            test => { recommends => {
+                'Hyperman'    => '0.14',   # t/20-wire-hyperman.t
+                'DBI'         => '0',      # t/40, t/44: the DBI-backed store
+                'DBD::SQLite' => '0',
+            } },
         },
     },
     INC    => $INC,

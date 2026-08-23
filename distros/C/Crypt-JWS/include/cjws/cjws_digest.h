@@ -10,6 +10,11 @@
 
 static const EVP_MD *cjws_md_by_bits(int bits) {
   switch (bits) {
+    /* 160 is SHA-1, which no JWS algorithm reaches - cjws_alg_parse
+     * still admits only 256/384/512. It exists for the raw digest and
+     * HMAC surface, where RFC 6238 makes HMAC-SHA1 the interop
+     * default every authenticator app assumes. */
+    case 160: return EVP_sha1();
     case 256: return EVP_sha256();
     case 384: return EVP_sha384();
     case 512: return EVP_sha512();

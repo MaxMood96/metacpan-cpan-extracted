@@ -34,7 +34,7 @@ WriteMakefile(
 		'Params::Get' => 0,
 		'Readonly' => 0,
 		'Scalar::Util' => 0,
-		'Sub::Private' => 0,
+		'Sub::Protected' => '0.02',
 	}, TEST_REQUIRES => {
 		'IPC::System::Simple' => 0,
 		'Test::Carp' => 0,

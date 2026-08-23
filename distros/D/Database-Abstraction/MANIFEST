@@ -19,7 +19,9 @@ t/chi.t
 t/comment-spelling.t
 t/csv.t
 t/csv_id.t
+t/data-flow.t
 t/data/test1.csv
+t/data/test1.html
 t/data/test2.psv
 t/data/test3.xml
 t/data/test4.csv
@@ -30,11 +32,13 @@ t/data/test8.psv
 t/db.t
 t/db_noentry.t
 t/deep.t
+t/domain.t
 t/edge_cases.t
 t/eof.t
 t/eol.t
 t/extended_tests.t
 t/function.t
+t/html.t
 t/init.t
 t/integration.t
 t/join.t
@@ -54,6 +58,7 @@ t/logger.t
 t/mutant_killers.t
 t/no_entry.t
 t/passwd.t
+t/path.t
 t/pod-cm.t
 t/pod-coverage.t
 t/pod-links.t

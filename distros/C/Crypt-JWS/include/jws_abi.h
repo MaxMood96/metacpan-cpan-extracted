@@ -14,7 +14,7 @@
  * SV * are owned by the caller (REFCNT 1, not mortal).
  */
 
-#define JWS_ABI_VERSION 1
+#define JWS_ABI_VERSION 2
 
 typedef struct jws_abi {
   int version;
@@ -43,6 +43,18 @@ typedef struct jws_abi {
   int  (*ct_eq)(pTHX_ const unsigned char *a, STRLEN alen,
                 const unsigned char *b, STRLEN blen);
   SV  *(*random_bytes)(pTHX_ STRLEN n);
+
+  /* ---- version 2 --------------------------------------------------------
+   * SHA-1 exists for consumers implementing HMAC-based protocols whose
+   * interop default is SHA-1 - RFC 6238 TOTP above all. No JWS
+   * algorithm reaches it. Check `version >= 2` before using these;
+   * never check equality, which turns every later append into a
+   * breaking change for consumers already shipped. */
+  SV  *(*sha1)(pTHX_ const unsigned char *in, STRLEN len);
+  SV  *(*hmac_sha1)(pTHX_ const unsigned char *key, STRLEN keylen,
+                    const unsigned char *in, STRLEN len);
+  SV  *(*hmac_sha512)(pTHX_ const unsigned char *key, STRLEN keylen,
+                      const unsigned char *in, STRLEN len);
 } jws_abi;
 
 #endif

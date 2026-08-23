@@ -14,7 +14,7 @@ use utf8;
 ## use critic (Modules::RequireExplicitPackage)
 
 package Sys::OsRelease;
-$Sys::OsRelease::VERSION = '0.4.9';
+$Sys::OsRelease::VERSION = '0.5.0';
 use if $] >= 5.016, "feature", "fc";  # retain even though 5.22 is minimum Perl, same code in ...::Lite
 use feature qw(say);
 use Config;
@@ -65,6 +65,30 @@ sub init
 {
     my ($class, @params) = @_;
     $class->instance(@params);
+    return;
+}
+
+# exported to caller to provide the instance object whether it loaded Sys::OsRelease or Sys::OsRelease::Lite
+sub osrelease
+{
+    return __PACKAGE__->instance();
+}
+
+# import function called by "use" directive
+# all parameters directed to init() so configs may be set on module load
+sub import
+{
+    my ($class, @params) = @_;
+    $class->init(@params);
+
+    {
+        # export osrelease() to caller to get the instance whether they loaded Sys::OsRelease or Sys::OsRelease::Lite
+        my $callpkg = caller;
+        ## no critic (TestingAndDebugging::ProhibitNoStrict)
+        no strict 'refs';
+        *{ $callpkg . "::osrelease" } = \&osrelease;
+    }
+
     return;
 }
 
@@ -146,35 +170,27 @@ sub fold_case
     return $can_fc ?  $can_fc->($str) : lc($str);
 }
 
-# initialize a new instance
-sub _new_instance
+# load os-release contents into instance
+sub _load_file
 {
-    my ($class, @params) = @_;
-
-    # enforce class lineage - _new_instance() should be overloaded by other classes that import singleton methods
-    if (not $class->isa(__PACKAGE__)) {
-        croak "_new_instance() should be overloaded by calling class: "
-            .(ref $class ? ref $class : $class)." is not a ".__PACKAGE__;
-    }
-
-    # obtain parameters from array or hashref
-    my %obj;
-    if (scalar @params > 0) {
-        if (ref $params[0] eq 'HASH') {
-            $obj{_config} = $params[0];
-        } else {
-            $obj{_config} = {@params};
-        }
-    }
+    my $self = shift;
 
     # locate os-release file in standard places
     my $osrelease_path;
-    my @search_path = ((exists $obj{_config}{search_path}) ? @{$obj{_config}{search_path}} : @std_search_path);
-    my $file_name = ((exists $obj{_config}{file_name}) ? $obj{_config}{file_name} : $std_file_name);
-    foreach my $search_dir (@search_path) {
-        if (-r "$search_dir/$file_name") {
-            $osrelease_path = $search_dir."/".$file_name;
-            last;
+    my $file_name = ((exists $self->{_config}{file_name}) ? $self->{_config}{file_name} : $std_file_name);
+    if (( substr( $file_name, 0, 1 ) eq "/" ) and ( -f $file_name )) {
+        # if file_name parameter is an absolute path to an existing file, use it and ignore search_path
+        $osrelease_path = $file_name;
+    } else {
+        # check search_path directories for first occurrence of file_name
+        my @search_path = ((exists $self->{_config}{search_path})
+            ? @{$self->{_config}{search_path}}
+            : @std_search_path);
+        foreach my $search_dir (@search_path) {
+            if (-r "$search_dir/$file_name") {
+                $osrelease_path = $search_dir."/".$file_name;
+                last;
+            }
         }
     }
 
@@ -182,7 +198,7 @@ sub _new_instance
     # otherwise leave everything empty and platform() method will use Perl's $Config{osname} as a summary value
     if (defined $osrelease_path) {
         # save os-release file path
-        $obj{_config}{osrelease_path} = $osrelease_path;
+        $self->{_config}{osrelease_path} = $osrelease_path;
 
         # read os-release file
         ## no critic (InputOutput::RequireBriefOpen)
@@ -204,15 +220,42 @@ sub _new_instance
                     or $line =~ /^ ([A-Z0-9_]+) = (.*) $/x)
                 {
                     next if $1 eq "_config"; # don't overwrite _config
-                    $obj{fold_case($1)} = $2;
+                    $self->{fold_case($1)} = $2;
                 }
             }
             close $fh;
         }
     }
 
-    # bless instance and generate accessor methods
+    return;
+}
+
+# initialize a new instance
+sub _new_instance
+{
+    my ($class, @params) = @_;
+
+    # enforce class lineage - _new_instance() should be overloaded by other classes that import singleton methods
+    if (not $class->isa(__PACKAGE__)) {
+        croak "_new_instance() should be overloaded by calling class: "
+            .(ref $class ? ref $class : $class)." is not a ".__PACKAGE__;
+    }
+
+    # obtain parameters from array or hashref
+    my %obj;
+    if (scalar @params > 0) {
+        if (ref $params[0] eq 'HASH') {
+            $obj{_config} = $params[0];
+        } else {
+            $obj{_config} = {@params};
+        }
+    }
+
+    # bless instance and load file
     my $obj_ref = bless \%obj, $class;
+    $obj_ref->_load_file();
+
+    # generate accessor methods
     $obj_ref->_gen_accessors();
 
     # instantiate object
@@ -418,41 +461,37 @@ Sys::OsRelease - read operating system details from standard /etc/os-release fil
 
 =head1 VERSION
 
-version 0.4.9
+version 0.5.0
 
 =head1 SYNOPSIS
+
+object-oriented
+
+  use if $] >= 5.022, "Sys::OsRelease";
+  use if $] < 5.022, "Sys::OsRelease::Lite";
+  use feature qw(say);
+
+  sub get_like_distro
+  {
+    my $info = osrelease();
+    my @ids = ( $info->id(), $info->id_like() // () );
+    return @ids;
+  }
+  say join " ", get_like_distro();
 
 non-object-oriented (Perl 5.22 and later):
 
   use Sys::OsRelease;
 
-  Sys::OsRelease->init();
   my $id = Sys::OsRelease->id();
   my $id_like = Sys::OsRelease->id_like();
 
-object-oriented (Perl 5.22 and later):
-
-  use Sys::OsRelease;
-
-  my $osrelease = Sys::OsRelease->instance();
-  my $id = $osrelease->id();
-  my $id_like = $osrelease->id_like();
-
-non-object-oriented (Perl up to 5.20):
+non-object-oriented (Perl 5.10.1 to 5.21):
 
   use Sys::OsRelease::Lite;
 
-  Sys::OsRelease::Lite->init();
   my $id = Sys::OsRelease::Lite->id();
   my $id_like = Sys::OsRelease::Lite->id_like();
-
-object-oriented (Perl up to 5.20):
-
-  use Sys::OsRelease::Lite;
-
-  my $osrelease = Sys::OsRelease::Lite->instance();
-  my $id = $osrelease->id();
-  my $id_like = $osrelease->id_like();
 
 =head1 DESCRIPTION
 
@@ -499,6 +538,16 @@ in order to retain support for legacy Perl installations.
 Sys::OsRelease::Lite is the same module in all but name. A release script filters the source code of Sys::OsRelease to change its name. Then Sys::OsRelease::Lite is built with ExtUtils::MakeMaker to maintain compatibility back to Perl 5.10. The two are released in parallel with the same version number.
 
 =head1 METHODS
+
+=head2 Exported functions
+
+=over 1
+
+=item osrelease()
+
+This function is exported by both I<Sys::OsRelease> and I<Sys::OsRelease::Lite> into the caller's namespace. It takes no arguments and returns a reference to the singleton instance. This can be used for uniform access to the instance by whichever class was loaded.
+
+=back
 
 =head2 Class methods
 

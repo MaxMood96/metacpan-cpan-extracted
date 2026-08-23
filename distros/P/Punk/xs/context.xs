@@ -300,6 +300,38 @@ safe_path(self, path, fallback = &PL_sv_undef)
     OUTPUT:
         RETVAL
 
+# $c->origin - the request's scheme and host, when that host is the
+# application's canonical one or on its allowlist; the canonical origin when
+# it is anything else; undef when no `host` was declared. The raw header is
+# never returned (punk_host.h).
+SV *
+origin(self)
+        SV *self
+    CODE:
+    {
+        int st = 0;
+        SV *o = pk_origin_of(aTHX_ self, &st);
+        RETVAL = o ? o : newSV(0);
+    }
+    OUTPUT:
+        RETVAL
+
+# $c->host_allowed - true when the request's Host is one the application
+# declared: the canonical host, or a match on the allowlist. The signal an
+# application needs to refuse an unknown host rather than answer for it.
+IV
+host_allowed(self)
+        SV *self
+    CODE:
+    {
+        int st = 0;
+        SV *o = pk_origin_of(aTHX_ self, &st);
+        if (o) SvREFCNT_dec(o);
+        RETVAL = st > 0 ? 1 : 0;
+    }
+    OUTPUT:
+        RETVAL
+
 # $c->asset('/static/app.css') - the content-addressed URL for a file under
 # a static mount: '/static/app.9f3a1c2b0d4e5f60.css', which serves with a
 # year and `immutable` because that URL cannot come to mean anything else.

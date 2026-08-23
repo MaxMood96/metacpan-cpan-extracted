@@ -24,7 +24,7 @@
 
 #define MAXLOGFILE 100
 #define MAXLOGMODE 10
-#define MAXPROTSTRING 10
+#define MAXPROTSTRING 15
 
 class CegoDBDParam {
 
@@ -168,7 +168,7 @@ struct imp_sth_st {
 
 static SV *
 newUTF8SVpv(char *s, STRLEN len) {
-  register SV *sv;
+  SV *sv;
 
   sv = newSVpv(s, len);
   SvUTF8_on(sv);
@@ -177,7 +177,7 @@ newUTF8SVpv(char *s, STRLEN len) {
 
 static SV *
 newUTF8SVpvn(char *s, STRLEN len) {
-  register SV *sv;
+  SV *sv;
 
   sv = newSV(0);
   sv_setpvn(sv, s, len);

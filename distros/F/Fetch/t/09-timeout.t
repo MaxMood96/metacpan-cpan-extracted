@@ -46,7 +46,7 @@ if (!$pid) {
 }
 select(undef, undef, undef, 0.2);
 
-plan tests => 4;
+plan tests => 7;
 
 my $ua = Fetch->new;
 
@@ -66,6 +66,26 @@ my $ua = Fetch->new;
 {
     my $res = $ua->get("$base/fast", timeout => 5)->get;
     is($res->content, 'quick', 'fast request succeeds with a timeout set');
+}
+
+# ---- a cancelled deadline must stay cancelled ----------------------------
+# The fast request's timer is cancelled when its response lands. A backend
+# that forgets to tell the kernel (io_uring before 0.19) left the timeout in
+# flight with a freed pointer as its user_data: when it came due during the
+# next wait it was dereferenced as a live timer - a crash, or the next
+# request ending early on a deadline that was never its own. So: cancel a
+# short deadline, then wait on a longer one and check nothing fires early.
+# (A lower bound on the elapsed time cannot be broken by a loaded box.)
+{
+    my $res = $ua->get("$base/fast", timeout => 0.5)->get;
+    is($res->content, 'quick', 'fast request cancels its 0.5s deadline');
+
+    my $t0 = Time::HiRes::time();
+    my $f  = $ua->get("$base/slow2", timeout => 1.2);
+    eval { $f->get };
+    my $elapsed = Time::HiRes::time() - $t0;
+    ok($f->is_failed, 'the following stalled request still fails');
+    cmp_ok($elapsed, '>=', 1.1, 'on its own deadline, not the cancelled one');
 }
 
 END { local $?; if ($pid) { kill 'KILL', $pid; waitpid $pid, 0 } }

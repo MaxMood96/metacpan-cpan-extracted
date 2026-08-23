@@ -768,6 +768,10 @@ compile(self)
                 (void)hv_stores(state, "upload_dir", newSVsv(*ud));
         }
 
+        /* The favicon bytes, frozen now: a missing file croaks here, at
+         * boot, rather than 404ing for as long as nobody notices. */
+        pfav_freeze(aTHX_ h);
+
         {   /* Punk::Plugin::CSP's policy, copied from the app hash so
              * phd_effective can read it once per response without walking
              * back to the registrar. Absent when the plugin was never

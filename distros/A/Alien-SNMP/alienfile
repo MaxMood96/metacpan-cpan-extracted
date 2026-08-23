@@ -157,7 +157,7 @@ share {
   # Canonical raw URL serves the tarball directly (no GitHub blob-page redirects).
   # The netdisco mirror is byte-for-byte identical to the official Net-SNMP
   # release on SourceForge.
-  start_url 'https://raw.githubusercontent.com/netdisco/upstream-sources/master/net-snmp/net-snmp-5.9.5.2.tar.gz';
+  start_url 'https://github.com/netdisco/upstream-sources/raw/refs/heads/master/net-snmp/net-snmp-5.9.5.2.tar.gz';
 
   plugin 'Download';   # https fetch requires a TLS-capable fetcher (Net::SSLeay/IO::Socket::SSL or curl/wget)
 
@@ -205,7 +205,14 @@ share {
     # library/headers/bin AND the bundled Perl modules -- under $DESTDIR with the final
     # install paths baked in (SNMP.so's rpath points at the installed share).  Gather
     # then relocates $DESTDIR/<prefix> (the C library) into the share dir.
-    '%{make} install DESTDIR=$DESTDIR',
+    # -j1 is deliberate and must not be dropped.  Under a parallel install two jobs
+    # in apps/ collide: one relinks the snmptrapd program against
+    # ./.libs/libnetsnmptrapd.so while libtool --mode=relink rewrites that same file
+    # for the DESTDIR install, and ld fails with "cannot find".  The build phase above
+    # keeps its parallelism; only this phase serializes, and it is the cheap one.
+    # A command line -j1 overrides a -j inherited through MAKEFLAGS, which is how
+    # CPAN smokers introduce the parallelism (one reported `make -j3`).
+    '%{make} -j1 install DESTDIR=$DESTDIR',
     $install_perl_modules_into_blib,
   ];
 

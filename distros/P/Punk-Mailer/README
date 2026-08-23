@@ -1,0 +1,30 @@
+Punk-Mailer
+
+Outbound mail for Perl: a hashref message, a MIME builder that streams
+attachments from disk, and the transports that carry the result - SMTP
+(STARTTLS, implicit TLS) over Fetch's tunnel, HTTP providers through
+Fetch's client, a sendmail pipe, and a capture transport for tests.
+Punk::Plugin::Mailer wires it into a Punk application.
+
+INSTALLATION
+
+    perl Makefile.PL
+    make
+    make test
+    make install
+
+Fetch 0.15 or newer must be installed (or present as a sibling directory
+of a checkout) for its fetch_abi.h; nothing else is linked.
+
+SUPPORT AND DOCUMENTATION
+
+    perldoc Punk::Mailer
+    perldoc Punk::Plugin::Mailer
+
+LICENSE AND COPYRIGHT
+
+This software is Copyright (c) 2026 by LNATION <email@lnation.org>.
+
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)

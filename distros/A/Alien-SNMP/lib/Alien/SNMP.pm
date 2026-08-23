@@ -5,7 +5,7 @@ use warnings;
 use 5.010001;
 use parent qw(Alien::Base);
 
-our $VERSION = '4.0509050201';
+our $VERSION = '4.0509050202';
 
 # Preload the dynamic Net-SNMP library with global symbol visibility so that
 # the bundled SNMP XS module (which has `use Alien::SNMP;` injected ahead of
@@ -325,7 +325,7 @@ library.
 
 =head1 AUTHOR
 
-Eric A. Miller, C<< <emiller at cpan.org> >>
+Eric A. Miller
 
 =head1 LICENSE AND COPYRIGHT
 

@@ -20,6 +20,14 @@ if (!$pkg) {
     $pkg->set_inc('-Iinclude ' . ($vars{INC} || ''));
 }
 
+# This dist is a provider too: frh_abi.h is the C ABI other XS
+# distributions consume through File::Raw::Hash::_abi_ptr. Install the
+# header and publish the config so a downstream
+# ExtUtils::Depends->new('X', 'File::Raw::Hash') finds both.
+$pkg->install('include/frh_abi.h');
+mkdir 'Install' unless -d 'Install';
+$pkg->save_config('Install/Files.pm');
+
 my %platform_args;
 if ($^O eq 'linux' || $^O eq 'freebsd' || $^O eq 'openbsd'
         || $^O eq 'netbsd' || $^O eq 'dragonfly') {
@@ -60,12 +68,28 @@ my %WriteMakefileArgs = (
                'xxh64.c', 'blake3.c'],
     XS     => { 'Hash.xs' => 'Hash.c' },
     dist   => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
+    macro => { TARFLAGS => "--format=ustar -c -v -f" },
+    depend => { 'Hash$(OBJ_EXT)'  => join(' ', glob 'include/*.h'),
+                'hashx$(OBJ_EXT)' => join(' ', glob 'include/*.h') },
     clean  => { FILES => 'File-Raw-Hash-* Hash.c Hash.o '
                        . 'hashx.o sha2.o sha1.o md5.o crc32.o '
-                       . 'xxh64.o blake3.o' },
+                       . 'xxh64.o blake3.o Install/Files.pm' },
     %platform_args,
     $pkg->get_makefile_vars,
 );
+
+# ExtUtils::Depends' PM map (installing frh_abi.h + Files.pm) replaces
+# MakeMaker's auto-detected PM, so re-add the module's own .pm files -
+# without this, Hash.pm itself stops installing the moment the header
+# does (house gotcha).
+{
+    require File::Find;
+    File::Find::find(sub {
+        return unless /\.pm\z/;
+        (my $rel = $File::Find::name) =~ s{^lib/}{};
+        $WriteMakefileArgs{PM}{$File::Find::name} = "\$(INST_LIB)/$rel";
+    }, 'lib');
+}
 
 # Compatibility with old versions of ExtUtils::MakeMaker
 unless (eval { ExtUtils::MakeMaker->VERSION('6.64'); 1 }) {

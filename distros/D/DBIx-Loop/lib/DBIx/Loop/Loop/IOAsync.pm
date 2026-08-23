@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Carp ();
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 # A loop adapter over IO::Async::Loop, implementing the DBIx::Loop seam:
 # add_reader / add_writer / remove / timer / new_future / await. The backends

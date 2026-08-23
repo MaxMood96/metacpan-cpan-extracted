@@ -1,0 +1,12 @@
+Changes
+LICENSE
+lib/Uniform/Upload.pm
+lib/Uniform/Upload/File.pm
+Makefile.PL
+MANIFEST
+MANIFEST.SKIP
+t/00-load.t
+t/01-methods.t
+t/02-file.t
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

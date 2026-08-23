@@ -7,7 +7,7 @@ use Punk::Request;
 use Punk::Response;
 use Punk ();
 
-our $VERSION = '0.28';
+our $VERSION = '0.30';
 
 1;
 
@@ -194,6 +194,26 @@ unreadable path instead of croaking).
 
 The path is served as given - if any part of it came from the request,
 the traversal guard is yours.
+
+=head2 origin
+
+    my $base = $c->origin;            # 'https://acme.example.com'
+
+The request's scheme and host, when that host is the application's
+declared L<Punk/host> or matches its C<allow> list; the canonical origin
+when it is anything else; C<undef> when no C<host> was declared. Never
+the raw C<Host> header, so the value can be joined onto and reflected -
+in a sitemap, a redirect, a link in a mail - without handing a client the
+power to choose it. Honours the L<Punk/proxy> keyword, since it reads the
+same resolved environment. No path: C<< $app->host >> keeps one if it was
+declared with one, this is the origin in the browser's sense.
+
+=head2 host_allowed
+
+True when the request's C<Host> is one the application declared: the
+canonical host, or a match on the allowlist. The signal for an application
+that would rather answer C<421> to an unknown host than serve the canonical
+site under a name it does not own.
 
 =head2 asset($url)
 

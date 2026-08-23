@@ -92,7 +92,7 @@ static void pq_inserver_tick(pTHX_ void *ud) {
         dt = pq_now_local(aTHX) - t0;
         if (dt > is->cap) {
             is->breaches++;
-            warn("Punk::Queue in-server: a job ran %.1fs against a %.1fs "
+            warn("Punk::Queue in-server: a job ran %.1" NVff "s against a %.1" NVff "s "
                  "cap (breach %d of 2)", (NV)dt, (NV)is->cap, is->breaches);
             if (is->breaches >= 2) {
                 is->disabled = 1;

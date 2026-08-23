@@ -1,5 +1,30 @@
 Revision history for Crypt-JWS
 
+0.06    2026-08-23
+        - Lower the min perl from 5.16 to 5.10
+        - verify() returns undef through XSRETURN_UNDEF rather than an
+          &PL_sv_undef RETVAL, which xsubpp mortalises: harmless from perl
+          5.20, a spent immortal reference before it.
+
+0.05    2026-08-23
+        - Lower the min perl from 5.16 to 5.10
+        - verify() returns undef through XSRETURN_UNDEF rather than an
+          &PL_sv_undef RETVAL, which xsubpp mortalises: harmless from perl
+          5.20, a spent immortal reference before it.
+
+0.04    2026-08-21
+        - SHA-1: sha1 and hmac_sha1 at the Perl level, and jws_abi
+          version 2 appends sha1, hmac_sha1 and hmac_sha512 to the
+          table. SHA-1 exists for HMAC-based protocols whose interop
+          default is SHA-1 - RFC 6238 TOTP above all; no JWS algorithm
+          reaches it and the JWS algorithm table is unchanged.
+        - The POD's consumer recipe now checks the table version with
+          >= against the version the consumer needs, never equality;
+          the 0.03 fix reached the checks but not the documentation
+          that teaches new consumers to write them.
+        - Vector tests: FIPS 180 SHA-1, all seven RFC 2202 HMAC-SHA1
+          cases, RFC 4231 HMAC-SHA512.
+
 0.03    2026-08-20
         - FIX: change abi version checks from == to <=
 

@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk::OpenTelemetry ();
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 # All of it is C (include/otel_schema.h + xs/schema.xs). The one call back out
 # is the YAML parse: the format needs a parser, which parser is a runtime

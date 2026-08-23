@@ -3,7 +3,7 @@
 require 5.010;
 use strict;
 package Chem::Structure::Parser;
-our $VERSION = '0.01';
+our $VERSION = 0.02;
 require XSLoader;
 use autodie ':default';
 use warnings FATAL => 'all';
@@ -65,7 +65,6 @@ my %ALIAS = (
 	ent => 'pdb',   pdb  => 'pdb',
 );
 
-#
 # Options
 #
 # Anything not listed here is a typo, and a typo that is quietly ignored is a
@@ -112,9 +111,7 @@ my %ION = map { $_ => 1 } qw(
 # itself that is one, and a field of NULL gives up nothing.
 my $NUM = qr/[0-9]*\.?[0-9]+/;
 
-#
 # Public entry points
-#
 
 # structure_info($file, %opt) -- read a structure file into a hash of hashes.
 sub structure_info {
@@ -174,14 +171,12 @@ sub formats {
 		: { (map { $_ => 'supported' } keys %READER), (map { $_ => "not implemented: $NOT_YET{$_}" } keys %NOT_YET) };
 }
 
-#
 # Views over a parsed structure
 #
 # These build what they return.  Nothing in the structure points back up at
 # its parent -- a residue does not hold its chain, an atom does not hold its
 # residue -- because a hash of hashes with parent links is a cycle, and a
 # cycle is a leak that no one notices until the tenth thousand file.
-#
 
 # structure_atoms($info, $chain?) -- every atom as a flat array of hashes,
 # each one carrying the chain/residue it came from, in file order.
@@ -304,9 +299,7 @@ sub structure_summary {
 	return join("\n", @l) . "\n";
 }
 
-#
 # Options and format detection
-#
 
 sub _options {
 	my ($opt, $who) = @_;
@@ -520,7 +513,7 @@ sub _build_structure {
 	return $info;
 }
 
-# --- coordinates
+#  coordinates
 #
 # The XS parse hands back one array per field plus the index of the first and
 # last atom of every residue, so this walks residues, not atoms, and only
@@ -682,7 +675,7 @@ sub _assemble {
 	return \%by_model;
 }
 
-# --- per-chain sequence, type and gaps -------------------------------------
+#  per-chain sequence, type and gaps 
 sub _finish_chains {
 	my ($info) = @_;
 	# with model => 'all' the main model's chains are one of the models, so
@@ -1333,7 +1326,7 @@ sub _parse_cif_meta {
 	return $info;
 }
 
-# --- the entities, and which chains they are -------------------------------
+#  the entities, and which chains they are 
 #
 # COMPND and SOURCE in a PDB file are one _entity plus one _entity_src_* here,
 # so they are put back into the shape _entities() already knows how to turn
@@ -1399,7 +1392,7 @@ sub _cif_entities {
 	return $info;
 }
 
-# --- SEQRES ----------------------------------------------------------------
+#  SEQRES 
 #
 # _entity_poly_seq is the residue list, one row per position, per entity;
 # _entity_poly says which chains an entity was crystallised as.  A chain's
@@ -1443,7 +1436,7 @@ sub _cif_seqres {
 	return $info;
 }
 
-# --- heterogens ------------------------------------------------------------
+#  heterogens
 #
 # _chem_comp describes every residue in the file, standard ones included;
 # $info->{het} is what HET/HETNAM/FORMUL describe, which is the rest.
@@ -1481,7 +1474,7 @@ sub _cif_het {
 	return $info;
 }
 
-# --- secondary structure, bonds and database cross-references --------------
+#  secondary structure, bonds and database cross-references 
 sub _cif_annotations {
 	my ($info, $p) = @_;
 
@@ -1577,7 +1570,7 @@ sub _cif_annotations {
 	return $info;
 }
 
-# --- reading the parsed categories -----------------------------------------
+#  reading the parsed categories 
 
 # _cif_rows($p, $category) -- a category as a list of rows, whether it was
 # written as a loop_ or, having only one row, as a run of plain tags.  The
@@ -1641,7 +1634,7 @@ sub _cif_ptnr {
 	return undef;
 }
 
-# --- small helpers ---------------------------------------------------------
+#  small helpers 
 
 sub _t {
 	my ($s) = @_;
@@ -2691,6 +2684,10 @@ C<benchmark.pl>, which measures all of it rather than asserting any of it.
 David E. Condon L<mailto:dec986@gmail.com>
 
 =head1 Changes
+
+=head2 0.02 2026-08-22 CDT
+
+Fix for Windows: https://www.cpantesters.org/cpan/report/960c8de0-8001-1014-8897-e6a949c55ebf
 
 =head2 0.01 2026-08-21 CDT
 

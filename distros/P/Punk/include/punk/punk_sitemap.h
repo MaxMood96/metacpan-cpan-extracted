@@ -524,8 +524,7 @@ static AV *pks_entries(pTHX_ SV *appsv) {
  * every page changed on every deploy - the fastest way to have the file
  * ignored. The dynamic half supplies its own, where the application does
  * know. */
-static AV *pks_render_parts(pTHX_ SV *appsv, SV *base) {
-    AV *ents = (AV *)sv_2mortal((SV *)pks_entries(aTHX_ appsv));
+static AV *pks_render_parts(pTHX_ AV *ents, SV *base) {
     AV *parts = newAV();
     SSize_t i, n = av_len(ents) + 1;
     SV *cur = NULL;
@@ -616,9 +615,15 @@ static SV *pks_render_index(pTHX_ SV *base, SSize_t nparts) {
 static void pks_build(pTHX_ SV *appsv) {
     HV *h = app_hv(aTHX_ appsv);
     SV *base = h ? app_get(aTHX_ h, "sitemap_base") : NULL;
-    AV *parts;
+    AV *ents, *parts;
     if (!(h && base && SvOK(base))) return;
-    parts = pks_render_parts(aTHX_ appsv, base);
+    /* The entries are kept as well as the rendered parts: a request from an
+     * allowlisted tenant host renders a document naming itself from them
+     * (pks_doc_for), so the sections run once per TTL however many hosts
+     * ask. */
+    ents = pks_entries(aTHX_ appsv);
+    (void)hv_stores(h, "sitemap_entries", newRV_noinc((SV *)ents));
+    parts = pks_render_parts(aTHX_ ents, base);
     (void)hv_stores(h, "sitemap_parts", newRV_noinc((SV *)parts));
     (void)hv_stores(h, "sitemap_index",
                     av_len(parts) > 0
@@ -662,6 +667,30 @@ static void pks_ensure(pTHX_ SV *appsv) {
     pks_build(aTHX_ appsv);
 }
 
+/* The document for another origin - a tenant host on the allowlist -
+ * rendered from the entries the last build kept. Costs the XML emission and
+ * no section run, and is NOT cached: a wildcard allow makes the set of hosts
+ * unbounded, and a cache keyed by hostnames a client chooses is a memory
+ * leak with a name. Mortal, or NULL when nothing has been built. */
+static SV *pks_doc_for(pTHX_ HV *h, SV *base, int is_part, IV n) {
+    SV *es = app_get(aTHX_ h, "sitemap_entries");
+    AV *parts;
+    SV *doc = NULL;
+    if (!(es && SvROK(es) && SvTYPE(SvRV(es)) == SVt_PVAV)) return NULL;
+    parts = (AV *)sv_2mortal((SV *)pks_render_parts(aTHX_ (AV *)SvRV(es),
+                                                     base));
+    if (!is_part) {
+        if (av_len(parts) > 0)
+            return sv_2mortal(pks_render_index(aTHX_ base, av_len(parts) + 1));
+        n = 1;
+    }
+    if (n > 0) {
+        SV **e = av_fetch(parts, (SSize_t)(n - 1), 0);
+        if (e && *e) doc = sv_2mortal(newSVsv(*e));
+    }
+    return doc;
+}
+
 /* Serve a rendered document. cap = [app, is_part].
  *
  * The bytes already exist - the whole document was built at to_app - so a
@@ -703,16 +732,27 @@ XS_INTERNAL(pks_serve_cb) {
         }
     }
 
-    if (!is_part) {
-        doc = app_get(aTHX_ h, "sitemap_index");
-        if (!(doc && SvOK(doc))) n = 1;
-    }
-    if (n > 0) {
-        SV *ps = app_get(aTHX_ h, "sitemap_parts");
-        AV *parts = (ps && SvROK(ps) && SvTYPE(SvRV(ps)) == SVt_PVAV)
-                    ? (AV *)SvRV(ps) : NULL;
-        SV **e = (parts && n >= 1) ? av_fetch(parts, (SSize_t)(n - 1), 0) : NULL;
-        doc = (e && *e) ? *e : NULL;
+    {   /* A tenant host on the allowlist gets a document naming itself;
+         * the canonical host, an unknown one and a malformed one all get
+         * the frozen canonical document - never one naming the header. */
+        int st = 0;
+        SV *origin = c ? pk_origin_of(aTHX_ c, &st) : NULL;
+        if (origin) sv_2mortal(origin);
+        if (st == 2) doc = pks_doc_for(aTHX_ h, origin, is_part, n);
+        else {
+            if (!is_part) {
+                doc = app_get(aTHX_ h, "sitemap_index");
+                if (!(doc && SvOK(doc))) n = 1;
+            }
+            if (n > 0) {
+                SV *ps = app_get(aTHX_ h, "sitemap_parts");
+                AV *parts = (ps && SvROK(ps) && SvTYPE(SvRV(ps)) == SVt_PVAV)
+                            ? (AV *)SvRV(ps) : NULL;
+                SV **e = (parts && n >= 1)
+                         ? av_fetch(parts, (SSize_t)(n - 1), 0) : NULL;
+                doc = (e && *e) ? *e : NULL;
+            }
+        }
     }
 
     /* A part number nobody generated is a 404 and not an empty document: a
@@ -737,6 +777,7 @@ XS_INTERNAL(pks_serve_cb) {
 }
 
 static SV *pks_robots(pTHX_ SV *appsv);
+static SV *pks_robots_for(pTHX_ SV *appsv, SV *base);
 
 /* Serve robots.txt. Rebuilt on demand like the sitemap, because a dynamic
  * section cannot change it but a rebuilt document should not disagree with a
@@ -746,12 +787,18 @@ XS_INTERNAL(pks_robots_cb) {
     dXSARGS;
     AV *cap = punk_clos_cap(aTHX_ cv);
     SV *app = cap ? *av_fetch(cap, 0, 0) : NULL;
+    SV *c = items > 0 ? ST(0) : NULL;
     SV *body;
     AV *resp, *headers, *bodyav;
-    PERL_UNUSED_VAR(items);
 
     if (!app) XSRETURN_EMPTY;
-    body = sv_2mortal(pks_robots(aTHX_ app));
+    {   /* per tenant, like the sitemap it advertises */
+        int st = 0;
+        SV *origin = c ? pk_origin_of(aTHX_ c, &st) : NULL;
+        if (origin) sv_2mortal(origin);
+        body = sv_2mortal(st == 2 ? pks_robots_for(aTHX_ app, origin)
+                                  : pks_robots(aTHX_ app));
+    }
 
     resp = newAV(); headers = newAV(); bodyav = newAV();
     av_push(headers, newSVpvs("Content-Type"));
@@ -982,10 +1029,9 @@ static AV *pks_disallows(pTHX_ SV *appsv) {
     return out;
 }
 
-/* The robots.txt body (+1). */
-static SV *pks_robots(pTHX_ SV *appsv) {
+/* The robots.txt body (+1), advertising the sitemap at `base`. */
+static SV *pks_robots_for(pTHX_ SV *appsv, SV *base) {
     HV *app = app_hv(aTHX_ appsv);
-    SV *base = app ? app_get(aTHX_ app, "sitemap_base") : NULL;
     SV *all  = app ? app_get(aTHX_ app, "sitemap_disallow_all") : NULL;
     SV *out = newSVpvs("User-agent: *\n");
 
@@ -1028,6 +1074,13 @@ static SV *pks_robots(pTHX_ SV *appsv) {
     return out;
 }
 
+/* ... at the canonical base */
+static SV *pks_robots(pTHX_ SV *appsv) {
+    HV *app = app_hv(aTHX_ appsv);
+    return pks_robots_for(aTHX_ appsv,
+                          app ? app_get(aTHX_ app, "sitemap_base") : NULL);
+}
+
 /* Does this class have that method? A `can` through the ordinary lookup, so
  * inheritance and AUTOLOAD behave as they would anywhere else. */
 static int pkc_can_meth(pTHX_ SV *obj, const char *meth) {
@@ -1052,6 +1105,31 @@ static void pks_install_kw(pTHX_ SV *app) {
     if (r) SvREFCNT_dec(r);
 }
 
+/* Resolve the base, at to_app. An explicit `base` was stored by register and
+ * wins; without one, the application's `host` is the same fact declared once
+ * at the app level - and because this runs at compile rather than at the
+ * `plugin` line, `host` may sit on either side of it in the package body.
+ *
+ * There is still no fallback to the request's Host header, and the croak
+ * says why: a request-derived origin is attacker-supplied bytes delivered to
+ * search engines. */
+static void pks_resolve_base(pTHX_ SV *appsv) {
+    HV *h = app_hv(aTHX_ appsv);
+    SV *b = h ? app_get(aTHX_ h, "sitemap_base") : NULL;
+    SV *host;
+    if (!h || (b && SvOK(b) && SvCUR(b))) return;
+    host = app_get(aTHX_ h, "host");
+    if (host && SvOK(host) && SvCUR(host)) {
+        (void)hv_stores(h, "sitemap_base", newSVsv(host));
+        return;
+    }
+    croak("Punk::Plugin::Sitemap: `base` is required - declare the "
+          "application's `host`, or pass base => 'https://...' - the "
+          "sitemap protocol needs absolute URLs, and taking the host from "
+          "the request would let a crawler be handed somebody else's "
+          "hostname");
+}
+
 /* The to_app seam. Punk calls every registered middleware wrapper while it
  * compiles, which is the one moment every route has been declared and nothing
  * has been served - so the document is built there and the wrapper hands the
@@ -1061,7 +1139,10 @@ XS_INTERNAL(pks_mw_cb) {
     dXSARGS;
     AV *cap = punk_clos_cap(aTHX_ cv);
     SV *app = cap ? *av_fetch(cap, 0, 0) : NULL;
-    if (app) pks_build(aTHX_ app);
+    if (app) {
+        pks_resolve_base(aTHX_ app);
+        pks_build(aTHX_ app);
+    }
     if (items > 0) XSRETURN(1);      /* ST(0) is the inner app, unchanged */
     XSRETURN_EMPTY;
 }

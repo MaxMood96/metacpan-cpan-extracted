@@ -21,6 +21,11 @@
        (PERL_VERSION > (v) || (PERL_VERSION == (v) && PERL_SUBVERSION >= (s)))))
 #endif
 
+/* cBOOL is 5.14+; the checker code below is compiled on every perl */
+#ifndef cBOOL
+#  define cBOOL(cnd) ((bool)!!(cnd))
+#endif
+
 /* ============================================
    XOP API compatibility (5.14+)
    For older Perls, use deprecated PL_custom_op_names/PL_custom_op_descs

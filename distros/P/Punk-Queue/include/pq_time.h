@@ -49,4 +49,14 @@ static double pq_now_delta(pTHX_ double delta) {
     return pq_now_local(aTHX) + delta;
 }
 
+/* What a probe stores. The server read landed somewhere inside the round
+ * trip that fetched it - between t0, taken before the query, and now - so
+ * the local clock it is compared against is the midpoint of that trip. A
+ * stall on either side of the query then skews the delta by half its
+ * length rather than all of it, which on a loaded box is the difference
+ * between a probe that is off by seconds and one off by a fraction. */
+static double pq_probe_delta(pTHX_ double t0, double server) {
+    return server - (t0 + pq_now_local(aTHX)) / 2.0;
+}
+
 #endif /* PQ_TIME_H */

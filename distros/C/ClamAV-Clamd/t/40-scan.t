@@ -30,6 +30,11 @@ sub write_file {
 # one-byte message. Sending them together is rejected by clamd with
 # "ancillary data sent without FILDES", and it is the mistake every first
 # implementation makes - including this one's.
+#
+# What a fake can verify is the byte shape: the z-framed command and then
+# exactly one carrier byte. Message boundaries do not survive a plain
+# stream read - see FakeClamd's fildes mode - so the two-message property
+# itself is only provable against a real clamd, in the live half below.
 {
     my $log = "$dir/handshake.log";
     my $srv = FakeClamd->new(mode => 'fildes', log => $log);

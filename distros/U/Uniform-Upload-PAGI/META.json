@@ -1,0 +1,61 @@
+{
+   "abstract" : "Explicit asynchronous multi-part file upload driver for PAGI",
+   "author" : [
+      "Joshua S. Day <HAX@cpan.org>"
+   ],
+   "dynamic_config" : 1,
+   "generated_by" : "ExtUtils::MakeMaker version 7.78, CPAN::Meta::Converter version 2.150013",
+   "license" : [
+      "mit"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "Uniform-Upload-PAGI",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "inc"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "Uniform" : "1.00",
+            "Uniform::Upload" : "0.01",
+            "perl" : "5.010000"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "Test::Deep" : "0",
+            "Test::Exception" : "0",
+            "Test::More" : "0.88"
+         }
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/haxmeister/perl-Uniform-Upload-PAGI/issues"
+      },
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/haxmeister/perl-Uniform-Upload-PAGI",
+         "web" : "https://github.com/haxmeister/perl-Uniform-Upload-PAGI"
+      }
+   },
+   "version" : "1.01",
+   "x_serialization_backend" : "JSON::PP version 4.16"
+}

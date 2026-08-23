@@ -24,7 +24,8 @@ key_for(self, c, kid)
         SV *kid
     CODE:
         SV *key = pox_jwks_key_for(aTHX_ self, c, kid);
-        RETVAL = key ? SvREFCNT_inc(key) : &PL_sv_undef;
+        if (!key) XSRETURN_UNDEF;
+        RETVAL = SvREFCNT_inc(key);
     OUTPUT:
         RETVAL
 

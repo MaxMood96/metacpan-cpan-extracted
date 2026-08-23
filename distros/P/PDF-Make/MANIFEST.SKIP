@@ -1,0 +1,21 @@
+# Build artefacts - never ship compiled objects or generated files
+\.o$
+\.bs$
+\.so$
+\.dylib$
+\.a$
+\.xsc$
+^Make\.c$
+^Makefile(\.old)?$
+^MYMETA\.
+^blib/
+^pm_to_blib$
+^Install/
+^\.gdb_history$
+\.DS_Store$
+~$
+\.bak$
+\.swp$
+^PDF-Make-[\d.]+
+^corpus/feature_examples/
+^corpus/blog_tests/

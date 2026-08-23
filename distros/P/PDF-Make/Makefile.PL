@@ -86,7 +86,8 @@ my %WriteMakefileArgs = (
     },
     PREREQ_PM => {
         'Object::Proto'  => '0.16',
-        'Layout::Flex'   => '0.01',
+        'Layout::Flex'   => '0.05',
+        'Font::Metrics'  => '0.03',
     },
 
     dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz' },

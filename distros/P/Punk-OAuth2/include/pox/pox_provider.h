@@ -244,7 +244,7 @@ static SV *pox_prov_token_call(pTHX_ SV *self, SV *c, HV *fields) {
       {
         STRLEN rl;
         const char *rp = SvPVbyte(raw, rl);
-        eval_pv("require MIME::Base64;", FALSE);
+        pox_require_once(aTHX_ "MIME::Base64");
         {
           dSP; int count; SV *enc = NULL;
           ENTER; SAVETMPS; PUSHMARK(SP);

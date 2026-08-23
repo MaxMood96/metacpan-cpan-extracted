@@ -1,4 +1,4 @@
-use 5.016000;
+use 5.010000;
 use strict;
 use warnings;
 use ExtUtils::MakeMaker;
@@ -113,7 +113,7 @@ WriteMakefile(
     VERSION_FROM     => 'lib/Crypt/JWS.pm',
     ABSTRACT_FROM    => 'lib/Crypt/JWS.pm',
     LICENSE          => 'artistic_2',
-    MIN_PERL_VERSION => '5.016000',
+    MIN_PERL_VERSION => '5.010000',
     CONFIGURE_REQUIRES => {
         'ExtUtils::MakeMaker' => '0',
         'ExtUtils::Depends'   => '0.404',

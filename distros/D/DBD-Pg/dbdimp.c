@@ -4,7 +4,7 @@
   Portions Copyright (c) 2002 Jeffrey W. Baker
   Portions Copyright (c) 1997-2000 Edmund Mergl
   Portions Copyright (c) 1994-1997 Tim Bunce
-   
+
   You may distribute under the terms of either the GNU General Public
   License or the Artistic License, as specified in the Perl README file.
 
@@ -47,6 +47,8 @@ Oid lo_import_with_oid (PGconn *conn, char *filename, unsigned int lobjId) {
 #define PG_DIAG_SEVERITY_NONLOCALIZED 'V'
 #endif
 
+#define MAX_PREPARE_NAME 27  /* "dbdpg_x" + 10 digit PID + _ + 8 hex + NUL */
+
 #ifndef PGErrorVerbosity
 typedef enum
     {
@@ -67,6 +69,29 @@ typedef enum
 #define IS_DBI_HANDLE(h)                                        \
     (SvROK(h) && SvTYPE(SvRV(h)) == SVt_PVHV &&                    \
      SvRMAGICAL(SvRV(h)) && (SvMAGIC(SvRV(h)))->mg_type == 'P')
+
+/*
+  For a database handle's PGresult pointer, free it via PQclear if A) it is non-null, and
+  B) if nothing else is also pointing to it (indicated by result_shared being false)
+*/
+#define CLEAR_LAST_RESULT(mydbh) \
+do { \
+  if (mydbh->last_result && ! mydbh->result_shared) { \
+    TRACE_PQCLEAR; \
+    PQclear(mydbh->last_result); \
+    mydbh->last_result = NULL; \
+  } \
+} while (0)
+
+/* For a statement handle's PGresult pointer, free it as needed */
+#define CLEAR_STH_RESULT(mysth) \
+do { \
+  if (mysth && mysth->result) { \
+    TRACE_PQCLEAR; \
+    PQclear(mysth->result); \
+    mysth->result = NULL; \
+  } \
+} while (0)
 
 enum {
     STH_ASYNC_AUTOERROR = -2,    /* PG_OLDQUERY_WAIT auto-retrieved an error result */
@@ -100,6 +125,99 @@ static int pg_db_start_txn (pTHX_ SV *dbh, imp_dbh_t *imp_dbh);
 static int handle_old_async(pTHX_ SV * handle, imp_dbh_t * imp_dbh, const int asyncflag);
 static void pg_db_detect_client_encoding_utf8(pTHX_ imp_dbh_t *imp_dbh);
 
+static void ph_array_init(imp_sth_t *imp_sth)
+{
+    imp_sth->ph_array.length = 15;
+    imp_sth->ph_array.elements = 0;
+    Newz(0, imp_sth->ph_array.array, imp_sth->ph_array.length, ph_t);
+}
+
+static void ph_array_append(imp_sth_t *imp_sth, ph_t *data)
+{
+    if (imp_sth->ph_array.length == imp_sth->ph_array.elements) {
+        /* The array is full, realloc the array to make it bigger */
+        size_t new_length = imp_sth->ph_array.length;
+        if (new_length > SIZE_MAX / 2)
+            croak("ph_array_append: array too large");
+        new_length *= 2;
+        Renew(imp_sth->ph_array.array, new_length, ph_t);
+        imp_sth->ph_array.length = (int)new_length;
+    }
+
+    imp_sth->ph_array.array[imp_sth->ph_array.elements++] = *data;
+}
+
+static ph_t* ph_array_element(imp_sth_t *imp_sth, int idx)
+{
+    return &(imp_sth->ph_array.array[idx]);
+}
+
+static int ph_array_count(imp_sth_t *imp_sth)
+{
+    return imp_sth->ph_array.elements;
+}
+
+static void ph_array_destroy(imp_sth_t *imp_sth)
+{
+    for (int i = 0; i < imp_sth->ph_array.elements; i++) {
+        ph_t *elem = &(imp_sth->ph_array.array[i]);
+
+        Safefree(elem->fooname);
+        Safefree(elem->value);
+        Safefree(elem->quoted);
+    }
+
+    Safefree(imp_sth->ph_array.array);
+    imp_sth->ph_array.array = NULL;
+    imp_sth->ph_array.length = 0;
+    imp_sth->ph_array.elements = 0;
+}
+
+static void seg_array_init(imp_sth_t *imp_sth)
+{
+    imp_sth->seg_array.length = 15;
+    imp_sth->seg_array.elements = 0;
+    Newz(0, imp_sth->seg_array.array, imp_sth->seg_array.length, seg_t);
+}
+
+static void seg_array_append(imp_sth_t *imp_sth, seg_t *data)
+{
+    if (imp_sth->seg_array.length == imp_sth->seg_array.elements) {
+        /* The array is full, realloc the array to make it bigger */
+        size_t new_length = imp_sth->seg_array.length;
+        if (new_length > SIZE_MAX / 2)
+            croak("seg_array_append: array too large");
+        new_length *= 2;
+        Renew(imp_sth->seg_array.array, new_length, seg_t);
+        imp_sth->seg_array.length = (int)new_length;
+    }
+
+    imp_sth->seg_array.array[imp_sth->seg_array.elements++] = *data;
+}
+
+static seg_t* seg_array_element(imp_sth_t *imp_sth, int idx)
+{
+    return &(imp_sth->seg_array.array[idx]);
+}
+
+static int seg_array_count(imp_sth_t *imp_sth)
+{
+    return imp_sth->seg_array.elements;
+}
+
+static void seg_array_destroy(imp_sth_t *imp_sth)
+{
+    for (int i = 0; i < imp_sth->seg_array.elements; i++) {
+        seg_t *elem = &(imp_sth->seg_array.array[i]);
+        Safefree(elem->segment);
+    }
+
+    Safefree(imp_sth->seg_array.array);
+    imp_sth->seg_array.array = NULL;
+    imp_sth->seg_array.length = 0;
+    imp_sth->seg_array.elements = 0;
+}
+
 static int do_send_cancel(SV *h, imp_dbh_t *imp_dbh, char const *caller)
 {
     dTHX;
@@ -131,6 +249,9 @@ static int do_send_cancel(SV *h, imp_dbh_t *imp_dbh, char const *caller)
 void dbd_init (dbistate_t *dbistate)
 {
     dTHX;
+
+    PERL_UNUSED_VAR(dbistate);
+
     DBISTATE_INIT;
 }
 
@@ -177,7 +298,9 @@ static int after_connect_init(pTHX_ SV *dbh, imp_dbh_t * imp_dbh)
             PQfinish(imp_dbh->conn);
             imp_dbh->conn = NULL;
             sv_free((SV *)imp_dbh->savepoints);
-            if (TEND_slow) TRC(DBILOGFP, "%sEnd dbd_db_login (error)\n", THEADER_slow);
+            Safefree(imp_dbh->sqlstate);
+            imp_dbh->sqlstate = NULL;
+            if (TEND_slow) TRC(DBILOGFP, "%sEnd dbd_db_login6 (error)\n", THEADER_slow);
             return 1;
         }
     }
@@ -298,7 +421,7 @@ int dbd_db_login6 (SV * dbh, imp_dbh_t * imp_dbh, char * dbname, char * uid, cha
     Safefree(conn_str);
 
     /* Set the initial sqlstate */
-    Renew(imp_dbh->sqlstate, 6, char); /* freed in dbd_db_destroy */
+    Renew(imp_dbh->sqlstate, 6, char); /* freed below, or in dbd_db_destroy */
     strncpy(imp_dbh->sqlstate, "25P01", 6); /* "NO ACTIVE SQL TRANSACTION" */
 
     /* Check to see that the backend connection was successfully made */
@@ -314,14 +437,16 @@ int dbd_db_login6 (SV * dbh, imp_dbh_t * imp_dbh, char * dbname, char * uid, cha
         PQfinish(imp_dbh->conn);
         imp_dbh->conn = NULL;
         sv_free((SV *)imp_dbh->savepoints);
-        if (TEND_slow) TRC(DBILOGFP, "%sEnd dbd_db_login (error)\n", THEADER_slow);
+        Safefree(imp_dbh->sqlstate);
+        imp_dbh->sqlstate = NULL;
+        if (TEND_slow) TRC(DBILOGFP, "%sEnd dbd_db_login6 (error)\n", THEADER_slow);
         return 0;
     }
 
     /* Call the pg_warn function anytime this connection raises a notice */
     TRACE_PQSETNOTICEPROCESSOR;
     (void)PQsetNoticeProcessor(imp_dbh->conn, pg_warn, (void *)SvRV(dbh));
-    
+
     imp_dbh->pg_enable_utf8  = -1;
 
     imp_dbh->prepare_now       = DBDPG_FALSE;
@@ -341,7 +466,7 @@ int dbd_db_login6 (SV * dbh, imp_dbh_t * imp_dbh, char * dbname, char * uid, cha
     imp_dbh->async_status      = DBH_NO_ASYNC;
     imp_dbh->async_sth         = NULL;
     imp_dbh->last_result       = NULL; /* NULL or the last PGresult returned by a database or statement handle */
-    imp_dbh->result_clearable  = DBDPG_TRUE;
+    imp_dbh->result_shared     = DBDPG_FALSE;
     imp_dbh->pg_int8_as_string = DBDPG_FALSE;
     imp_dbh->skip_deallocate   = DBDPG_FALSE;
 
@@ -354,11 +479,11 @@ int dbd_db_login6 (SV * dbh, imp_dbh_t * imp_dbh, char * dbname, char * uid, cha
     else
         retval = ! after_connect_init(aTHX_ dbh, imp_dbh);
 
-    if (TEND_slow) TRC(DBILOGFP, "%sEnd dbd_db_login\n", THEADER_slow);
+    if (TEND_slow) TRC(DBILOGFP, "%sEnd dbd_db_login6\n", THEADER_slow);
 
     return retval;
 
-} /* end of dbd_db_login */
+} /* end of dbd_db_login6 */
 
 int pg_db_continue_connect(SV *dbh)
 {
@@ -409,6 +534,12 @@ int pg_db_continue_connect(SV *dbh)
             imp_dbh->async_status = DBH_NO_ASYNC;
 
             status = -2;
+            break;
+
+        default:
+            croak("Unknown status returned in pg_db_continue_connect");
+
+
         }
     }
 
@@ -418,7 +549,7 @@ int pg_db_continue_connect(SV *dbh)
 }
 
 /* ================================================================== */
-/* 
+/*
    Database specific error handling.
 */
 static void pg_error (pTHX_ SV * h, int error_num, const char * error_msg)
@@ -473,13 +604,13 @@ static void pg_warn (void * arg, const char * message)
 
     /* This fun little bit is to prevent a core dump when the following occurs:
        client_min_messages is set to DEBUG3 or greater, and we exit without a disconnect.
-       DBI issues a 'rollback' in this case, which causes some debugging messages 
-       to be emitted from the server (such as "StartTransactionCommand"). However, we can't do 
+       DBI issues a 'rollback' in this case, which causes some debugging messages
+       to be emitted from the server (such as "StartTransactionCommand"). However, we can't do
        the D_imp_dbh call anymore, because the underlying dbh has lost some of its magic.
-       Unfortunately, DBI then coredumps in dbh_getcom2. Hence, we make sure that the 
+       Unfortunately, DBI then coredumps in dbh_getcom2. Hence, we make sure that the
        object passed in is still 'valid', in that a certain level has a ROK flag.
-       If it's not, we just return without issuing any warning, as we can't check things 
-       like DBIc_WARN. There may be a better way of handling all this, and we may want to 
+       If it's not, we just return without issuing any warning, as we can't check things
+       like DBIc_WARN. There may be a better way of handling all this, and we may want to
        default to always warn() - input welcome.
     */
     if (!SvROK(SvMAGIC(SvRV(tmp))->mg_obj)) {
@@ -514,16 +645,12 @@ static ExecStatusType _result(pTHX_ imp_dbh_t * imp_dbh, const char * sql)
 
     if (TSQL) TRC(DBILOGFP, "%s;\n\n", sql);
 
-    /* Free the last_result as needed, as we are about to replace it */
-    if (imp_dbh->last_result && imp_dbh->result_clearable) {
-        TRACE_PQCLEAR;
-        PQclear(imp_dbh->last_result);
-        imp_dbh->last_result = NULL;
-    }
+    CLEAR_LAST_RESULT(imp_dbh);
 
     TRACE_PQEXEC;
     imp_dbh->last_result = PQexec(imp_dbh->conn, sql);
-    imp_dbh->result_clearable = DBDPG_TRUE;
+    imp_dbh->result_shared = DBDPG_FALSE;
+
     status = _sqlstate(aTHX_ imp_dbh, imp_dbh->last_result);
 
     if (TEND_slow) TRC(DBILOGFP, "%sEnd _result\n", THEADER_slow);
@@ -564,15 +691,15 @@ static ExecStatusType _sqlstate(pTHX_ imp_dbh_t * imp_dbh, PGresult * result)
     sqlstate = NULL;
 
     /*
-      Because PQresultErrorField may not work completely when an error occurs, and 
-      we are connecting over TCP/IP, only set it here if non-null, and fall through 
+      Because PQresultErrorField may not work completely when an error occurs, and
+      we are connecting over TCP/IP, only set it here if non-null, and fall through
       to a better default value below.
     */
     if (result) {
         TRACE_PQRESULTERRORFIELD;
         sqlstate = PQresultErrorField(result, PG_DIAG_SQLSTATE);
     }
-    
+
     if (!sqlstate) {
         /* Do our best to map the status result to a sqlstate code */
         switch ((int)status) {
@@ -602,8 +729,8 @@ static ExecStatusType _sqlstate(pTHX_ imp_dbh_t * imp_dbh, PGresult * result)
         }
     }
 
-    strncpy(imp_dbh->sqlstate, sqlstate, 5);
-    imp_dbh->sqlstate[5] = 0;
+    memcpy(imp_dbh->sqlstate, sqlstate, 5);
+    imp_dbh->sqlstate[5] = '\0';
 
     if (TRACE7_slow) TRC(DBILOGFP, "%s_sqlstate txn_status is %d\n",
                     THEADER_slow, pg_db_txn_status(aTHX_ imp_dbh));
@@ -641,7 +768,7 @@ int dbd_db_ping (SV * dbh)
 
     /* No matter what state we are in, send an empty query to the backend */
     TRACE_PQEXEC;
-    result = PQexec(imp_dbh->conn, "/* DBD::Pg ping test v3.20.2 */");
+    result = PQexec(imp_dbh->conn, "/* DBD::Pg ping test v3.21.0 */");
     TRACE_PQRESULTSTATUS;
     status = PQresultStatus(result);
     TRACE_PQCLEAR;
@@ -670,7 +797,7 @@ int dbd_db_ping (SV * dbh)
     return 1+tstatus;
 
 } /* end of dbd_db_ping */
- 
+
 
 /* ================================================================== */
 static PGTransactionStatusType pg_db_txn_status (pTHX_ imp_dbh_t * imp_dbh)
@@ -696,14 +823,14 @@ static int pg_db_rollback_commit (pTHX_ SV * dbh, imp_dbh_t * imp_dbh, int actio
                     action ? "commit" : "rollback",
                     DBIc_is(imp_dbh, DBIcf_AutoCommit) ? 1 : 0,
                     DBIc_is(imp_dbh, DBIcf_BegunWork) ? 1 : 0);
-    
+
     /* No action if AutoCommit = on or the connection is invalid */
     if ((NULL == imp_dbh->conn) || (DBIc_has(imp_dbh, DBIcf_AutoCommit))) {
         if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_rollback_commit (result: 0)\n", THEADER_slow);
         return 0;
     }
 
-    /* We only perform these actions if we need to. For newer servers, we 
+    /* We only perform these actions if we need to. For newer servers, we
        ask it for the status directly and double-check things */
 
     tstatus = pg_db_txn_status(aTHX_ imp_dbh);
@@ -740,7 +867,7 @@ static int pg_db_rollback_commit (pTHX_ SV * dbh, imp_dbh_t * imp_dbh, int actio
     }
 
     status = _result(aTHX_ imp_dbh, action ? "commit" : "rollback");
-        
+
     /* Set this early, for scripts that continue despite the error below */
     imp_dbh->done_begin = DBDPG_FALSE;
 
@@ -791,16 +918,16 @@ int dbd_db_disconnect (SV * dbh, imp_dbh_t * imp_dbh)
 
     if (TSTART_slow) TRC(DBILOGFP, "%sBegin dbd_db_disconnect\n", THEADER_slow);
 
-    /* We assume that disconnect will always work    
+    /* We assume that disconnect will always work
        since most errors imply already disconnected. */
 
     DBIc_ACTIVE_off(imp_dbh);
-    
+
     if (NULL != imp_dbh->conn) {
         /* Attempt a rollback */
         if (0 != dbd_db_rollback(dbh, imp_dbh) && TRACE5_slow)
             TRC(DBILOGFP, "%sdbd_db_disconnect: AutoCommit=off -> rollback\n", THEADER_slow);
-        
+
         TRACE_PQFINISH;
         PQfinish(imp_dbh->conn);
         imp_dbh->conn = NULL;
@@ -830,25 +957,14 @@ void dbd_db_destroy (SV * dbh, imp_dbh_t * imp_dbh)
     if (DBIc_ACTIVE(imp_dbh))
         (void)dbd_db_disconnect(dbh, imp_dbh);
 
-    if (NULL != imp_dbh->async_sth) { /* Just in case */
-        if (imp_dbh->async_sth->result) {
-            TRACE_PQCLEAR;
-            PQclear(imp_dbh->async_sth->result);
-            imp_dbh->async_sth->result = NULL;
-        }
-        imp_dbh->async_sth = NULL;
-    }
+    CLEAR_STH_RESULT(imp_dbh->async_sth);
 
-    /* Free the last_result as needed */
-    if (imp_dbh->last_result && imp_dbh->result_clearable) {
-        TRACE_PQCLEAR;
-        PQclear(imp_dbh->last_result);
-        imp_dbh->last_result = NULL;
-    }
+    CLEAR_LAST_RESULT(imp_dbh);
 
     av_undef(imp_dbh->savepoints);
     sv_free((SV *)imp_dbh->savepoints);
     Safefree(imp_dbh->sqlstate);
+    imp_dbh->sqlstate = NULL;
 
     DBIc_IMPSET_off(imp_dbh);
 
@@ -1020,7 +1136,7 @@ SV * dbd_db_FETCH_attrib (SV * dbh, imp_dbh_t * imp_dbh, SV * keysv)
 
     if (!retsv)
         return Nullsv;
-    
+
     if (retsv == &PL_sv_yes || retsv == &PL_sv_no) {
         return retsv; /* no need to mortalize yes or no */
     }
@@ -1039,7 +1155,7 @@ int dbd_db_STORE_attrib (SV * dbh, imp_dbh_t * imp_dbh, SV * keysv, SV * valuesv
     int          retval = 0;
 
     if (TSTART_slow) TRC(DBILOGFP, "%sBegin dbd_db_STORE (key: %s newval: %d kl:%d)\n", THEADER_slow, key, newval, (int)kl);
-    
+
     switch (kl) {
 
     case 8: /* ReadOnly */
@@ -1070,7 +1186,7 @@ int dbd_db_STORE_attrib (SV * dbh, imp_dbh_t * imp_dbh, SV * keysv, SV * valuesv
             retval = 1;
         }
         break;
-    
+
     case 13: /* pg_errorlevel */
 
         if (strEQ("pg_errorlevel", key)) {
@@ -1094,9 +1210,9 @@ int dbd_db_STORE_attrib (SV * dbh, imp_dbh_t * imp_dbh, SV * keysv, SV * valuesv
             retval = 1;
         }
 
-        /* 
+        /*
            We don't want to check the client_encoding every single time we talk to the database,
-           so we only do it here, which allows people to signal DBD::Pg that something 
+           so we only do it here, which allows people to signal DBD::Pg that something
            may have changed, so could you please rescan client_encoding?
         */
         else if (strEQ("pg_enable_utf8", key)) {
@@ -1186,6 +1302,11 @@ int dbd_db_STORE_attrib (SV * dbh, imp_dbh_t * imp_dbh, SV * keysv, SV * valuesv
             retval = 1;
         }
         break;
+
+    default:
+        /* Do nothing: DBI may want to handle these */
+        break;
+
     }
 
     if (TEND_slow) TRC(DBILOGFP, "%sEnd dbd_db_STORE_attrib\n", THEADER_slow);
@@ -1209,6 +1330,8 @@ SV * dbd_st_FETCH_attrib (SV * sth, imp_sth_t * imp_sth, SV * keysv)
     SV *              retsv = Nullsv;
     int               fields;
 
+    PERL_UNUSED_VAR(sth);
+
     if (TSTART_slow) TRC(DBILOGFP, "%sBegin dbd_st_FETCH (key: %s)\n", THEADER_slow, key);
 
     /* Some can be done before we have a result: */
@@ -1218,16 +1341,14 @@ SV * dbd_st_FETCH_attrib (SV * sth, imp_sth_t * imp_sth, SV * keysv)
 
         if (strEQ("pg_bound", key)) {
             HV *pvhv = newHV();
-            ph_t *currph;
-            int i;
-            for (i=0,currph=imp_sth->ph; NULL != currph; currph=currph->nextph,i++) {
-                SV *key, *val;
-                key = pg_st_placeholder_key(imp_sth, currph, i);
-                val = newSViv(NULL == currph->bind_type ? 0 : 1);
-                if (! hv_store_ent(pvhv, key, val, 0)) {
+            for (int p=0; p < ph_array_count(imp_sth); p++) {
+                ph_t *currph = ph_array_element(imp_sth, p);
+                SV *phkey = pg_st_placeholder_key(imp_sth, currph, p);
+                SV *val = newSViv(NULL == currph->bind_type ? 0 : 1);
+                if (! hv_store_ent(pvhv, phkey, val, 0)) {
                     SvREFCNT_dec(val);
                 }
-                SvREFCNT_dec(key);
+                SvREFCNT_dec(phkey);
             }
             retsv = newRV_noinc((SV*)pvhv);
         }
@@ -1246,14 +1367,13 @@ SV * dbd_st_FETCH_attrib (SV * sth, imp_sth_t * imp_sth, SV * keysv)
 
         if (strEQ("ParamTypes", key)) {
             HV *pvhv = newHV();
-            ph_t *currph;
-            int i;
-            for (i=0,currph=imp_sth->ph; NULL != currph; currph=currph->nextph,i++) {
-                SV *key, *val;
-                key = pg_st_placeholder_key(imp_sth, currph, i);
+            for (int p=0; p < ph_array_count(imp_sth); p++) {
+                ph_t *currph = ph_array_element(imp_sth, p);
+                SV *phkey = pg_st_placeholder_key(imp_sth, currph, p);
+                SV *val;
                 if (NULL == currph->bind_type) {
                     val = newSV(0);
-                    if (! hv_store_ent(pvhv, key, val, 0)) {
+                    if (! hv_store_ent(pvhv, phkey, val, 0)) {
                         SvREFCNT_dec(val);
                     }
                 }
@@ -1266,11 +1386,11 @@ SV * dbd_st_FETCH_attrib (SV * sth, imp_sth_t * imp_sth, SV * keysv)
                         (void)hv_store(pvhv2, "pg_type", 7, newSViv(currph->bind_type->type_id), 0);
                     }
                     val = newRV_noinc((SV*)pvhv2);
-                    if (! hv_store_ent(pvhv, key, val, 0)) {
+                    if (! hv_store_ent(pvhv, phkey, val, 0)) {
                         SvREFCNT_dec(val);
                     }
                 }
-                SvREFCNT_dec(key);
+                SvREFCNT_dec(phkey);
             }
             retsv = newRV_noinc((SV*)pvhv);
         }
@@ -1280,43 +1400,41 @@ SV * dbd_st_FETCH_attrib (SV * sth, imp_sth_t * imp_sth, SV * keysv)
 
         if (strEQ("ParamValues", key)) {
             HV *pvhv = newHV();
-            ph_t *currph;
-            int i;
-            for (i=0,currph=imp_sth->ph; NULL != currph; currph=currph->nextph,i++) {
-                SV *key, *val;
-                key = pg_st_placeholder_key(imp_sth, currph, i);
+            for (int p=0; p < ph_array_count(imp_sth); p++) {
+                ph_t *currph = ph_array_element(imp_sth, p);
+                SV *phkey = pg_st_placeholder_key(imp_sth, currph, p);
+                SV *val;
                 if (NULL == currph->value) {
                     val = newSV(0);
-                    if (!hv_store_ent(pvhv, key, val, 0)) {
+                    if (!hv_store_ent(pvhv, phkey, val, 0)) {
                         SvREFCNT_dec(val);
                     }
                 }
                 else {
                     val = newSVpv(currph->value,currph->valuelen);
-                    if (!hv_store_ent(pvhv, key, val, 0)) {
+                    if (!hv_store_ent(pvhv, phkey, val, 0)) {
                         SvREFCNT_dec(val);
                     }
                 }
-                SvREFCNT_dec(key);
+                SvREFCNT_dec(phkey);
             }
             retsv = newRV_noinc((SV*)pvhv);
         }
         else if (strEQ("pg_segments", key)) {
             AV *arr = newAV();
-            seg_t *currseg;
-            int i;
-            for (i=0,currseg=imp_sth->seg; NULL != currseg; currseg=currseg->nextseg,i++) {
+            for (int s=0; s < seg_array_count(imp_sth); s++) {
+                seg_t *currseg = seg_array_element(imp_sth, s);
                 av_push(arr, newSVpv(currseg->segment ? currseg->segment : "NULL",0));
             }
             retsv = newRV_noinc((SV*)arr);
         }
         else if (strEQ("pg_numbound", key)) {
-            ph_t *currph;
-            int i = 0;
-            for (currph=imp_sth->ph; NULL != currph; currph=currph->nextph) {
-                i += NULL == currph->bind_type ? 0 : 1;
+            int num = 0;
+            for (int p=0; p < ph_array_count(imp_sth); p++) {
+                ph_t *currph = ph_array_element(imp_sth, p);
+                num += NULL == currph->bind_type ? 0 : 1;
             }
-            retsv = newSViv(i);
+            retsv = newSViv(num);
         }
         break;
 
@@ -1378,7 +1496,7 @@ SV * dbd_st_FETCH_attrib (SV * sth, imp_sth_t * imp_sth, SV * keysv)
     }
 
     fields = DBIc_NUM_FIELDS(imp_sth);
-    
+
     switch (kl) {
 
     case 4: /* NAME  TYPE */
@@ -1445,7 +1563,7 @@ SV * dbd_st_FETCH_attrib (SV * sth, imp_sth_t * imp_sth, SV * keysv)
             sql_type_info_t * type_info;
             AV *av = newAV();
             retsv = newRV_inc(sv_2mortal((SV*)av));
-            while(--fields >= 0) {            
+            while(--fields >= 0) {
                 TRACE_PQFTYPE;
                 type_info = pg_type_data((int)PQftype(imp_sth->result,fields));
                 (void)av_store(av, fields, newSVpv(type_info ? type_info->type_name : "unknown", 0));
@@ -1472,10 +1590,10 @@ SV * dbd_st_FETCH_attrib (SV * sth, imp_sth_t * imp_sth, SV * keysv)
                 TRACE_PQFTABLECOL;
                 y = PQftablecol(imp_sth->result, fields);
                 if (InvalidOid != o && y > 0) { /* We know what table and column this came from */
-                    char statement[128];
-                    sprintf(statement, "SELECT attnotnull FROM pg_catalog.pg_attribute WHERE attrelid=%u AND attnum=%d", o, y);
+                    char sqlstring[128];
+                    sprintf(sqlstring, "SELECT attnotnull FROM pg_catalog.pg_attribute WHERE attrelid=%u AND attnum=%d", o, y);
                     TRACE_PQEXEC;
-                    result = PQexec(imp_dbh->conn, statement);
+                    result = PQexec(imp_dbh->conn, sqlstring);
                     TRACE_PQRESULTSTATUS;
                     status = PQresultStatus(result);
                     if (PGRES_TUPLES_OK == status) {
@@ -1575,6 +1693,9 @@ SV * dbd_st_FETCH_attrib (SV * sth, imp_sth_t * imp_sth, SV * keysv)
 int dbd_st_STORE_attrib (SV * sth, imp_sth_t * imp_sth, SV * keysv, SV * valuesv)
 {
     dTHX;
+
+    PERL_UNUSED_VAR(sth);
+
     STRLEN kl;
     char * key = SvPV(keysv,kl);
     STRLEN vl;
@@ -1583,7 +1704,7 @@ int dbd_st_STORE_attrib (SV * sth, imp_sth_t * imp_sth, SV * keysv, SV * valuesv
 
     if (TSTART_slow) TRC(DBILOGFP, "%sBegin dbd_st_STORE (key: %s value: %s)\n",
                     THEADER_slow, key, value);
-    
+
     switch (kl) {
 
     case 8: /* pg_async */
@@ -1661,6 +1782,8 @@ int dbd_discon_all (SV * drh, imp_drh_t * imp_drh)
 {
     dTHX;
 
+    PERL_UNUSED_VAR(drh);
+
     if (TSTART_slow) TRC(DBILOGFP, "%sBegin dbd_discon_all\n", THEADER_slow);
 
     /* The disconnect_all concept is flawed and needs more work */
@@ -1717,7 +1840,7 @@ SV * pg_db_pg_notifies (SV * dbh, imp_dbh_t * imp_dbh)
 
     if (!notify) {
         if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_pg_notifies (undef)\n", THEADER_slow);
-        return &PL_sv_undef; 
+        return &PL_sv_undef;
     }
 
     ret=newAV();
@@ -1778,8 +1901,6 @@ int dbd_st_prepare_sv (SV * sth, imp_sth_t * imp_sth, SV * statement_sv, SV * at
     imp_sth->firstword         = NULL;
     imp_sth->result            = NULL;
     imp_sth->type_info         = NULL;
-    imp_sth->seg               = NULL;
-    imp_sth->ph                = NULL;
     imp_sth->PQvals            = NULL;
     imp_sth->PQlens            = NULL;
     imp_sth->PQfmts            = NULL;
@@ -1793,6 +1914,10 @@ int dbd_st_prepare_sv (SV * sth, imp_sth_t * imp_sth, SV * statement_sv, SV * at
     imp_sth->use_inout         = DBDPG_FALSE; /* Are any of the placeholders using inout? */
     imp_sth->all_bound         = DBDPG_FALSE; /* Have all placeholders been bound? */
     imp_sth->number_iterations = 0;
+
+    /* Create the array of placeholders and array of segments */
+    ph_array_init(imp_sth);
+    seg_array_init(imp_sth);
 
     /* We inherit some preferences from the database handle */
     imp_sth->server_prepare   = imp_dbh->server_prepare;
@@ -1850,6 +1975,9 @@ int dbd_st_prepare_sv (SV * sth, imp_sth_t * imp_sth, SV * statement_sv, SV * at
         }
     }
 
+    /* Tell DBI to call destroy when this handle ends */
+    DBIc_IMPSET_on(imp_sth);
+
     /* Break the statement into segments by placeholder */
     pg_st_split_statement(aTHX_ imp_sth, statement);
 
@@ -1886,9 +2014,6 @@ int dbd_st_prepare_sv (SV * sth, imp_sth_t * imp_sth, SV * statement_sv, SV * at
             imp_dbh->async_status = 1;
     }
 
-    /* Tell DBI to call destroy when this handle ends */
-    DBIc_IMPSET_on(imp_sth);
-
     if (TEND_slow) TRC(DBILOGFP, "%sEnd dbd_st_prepare\n", THEADER_slow);
     return 1;
 
@@ -1915,20 +2040,19 @@ static void pg_st_split_statement (pTHX_ imp_sth_t * imp_sth, char * statement)
 
     PGPlaceholderType placeholder_type; /* Which type we are in: one of none,?,$,: */
 
-     unsigned char ch; /* The current character being checked */
+    unsigned char ch; /* The current character being checked */
 
     unsigned char oldch; /* The previous character */
 
     signed char non_standard_strings = -1; /* Status 0=standard 1=non_standard -1=unknown  */
 
+    seg_t newseg;
+
     int xint;
-
-    seg_t *newseg, *currseg = NULL; /* Segment structures to help build linked lists */
-
-    ph_t *newph, *thisph, *currph = NULL; /* Placeholder structures to help build ll */
 
     bool statement_rewritten = DBDPG_FALSE;
     char * original_statement = NULL; /* Copy as needed so we can restore the original */
+    char * statement_start = statement; /* Safe point to rewind to */
 
     if (TSTART_slow) TRC(DBILOGFP, "%sBegin pg_st_split_statement\n", THEADER_slow);
     if (TRACE6_slow) TRC(DBILOGFP, "%spg_st_split_statement: (%s)\n", THEADER_slow, statement);
@@ -1942,24 +2066,24 @@ static void pg_st_split_statement (pTHX_ imp_sth_t * imp_sth, char * statement)
             TRC(DBILOGFP, "%snot splitting due to %s\n",
                 THEADER_slow, imp_sth->direct ? "pg_direct" : "empty string");
         }
-        imp_sth->numsegs   = 1;
         imp_sth->numphs    = 0;
         imp_sth->totalsize = strlen(statement);
 
-        New(0, imp_sth->seg, 1, seg_t); /* freed in dbd_st_destroy */
-        imp_sth->seg->placeholder = 0;
-        imp_sth->seg->nextseg     = NULL;
-        imp_sth->seg->ph          = NULL;
+        newseg.placeholder = 0;
 
         if (imp_sth->totalsize > 0) {
-            New(0, imp_sth->seg->segment, imp_sth->totalsize+1, char); /* freed in dbd_st_destroy */
-            Copy(statement, imp_sth->seg->segment, imp_sth->totalsize+1, char);
+            New(0, newseg.segment, imp_sth->totalsize+1, char); /* freed in dbd_st_destroy */
+            Copy(statement, newseg.segment, imp_sth->totalsize+1, char);
+
         }
         else {
-            imp_sth->seg->segment = NULL;
+            newseg.segment = NULL;
         }
+        seg_array_append(imp_sth, &newseg);
+        imp_sth->numsegs = 1;
+
         if (TRACE6_slow) TRC(DBILOGFP, "%sdirect split = (%s) length=(%d)\n",
-                        THEADER_slow, imp_sth->seg->segment, (int)imp_sth->totalsize);
+                        THEADER_slow, newseg.segment, (int)imp_sth->totalsize);
         if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_st_split_statement (direct)\n", THEADER_slow);
         return;
     }
@@ -1989,7 +2113,7 @@ static void pg_st_split_statement (pTHX_ imp_sth_t * imp_sth, char * statement)
         if (
             (ch < 34 && ch != 0)
             || (ch > 63 && ch != 91) /* > @ABC... but not [ */
-            || 
+            ||
             (ch!=34 && ch!=39 &&    /* " ' simple quoting */
              ch!=45 && ch!=47 &&    /* - / comment */
              ch!=36 &&              /* $   dollar quoting or placeholder */
@@ -2070,13 +2194,13 @@ static void pg_st_split_statement (pTHX_ imp_sth_t * imp_sth, char * statement)
 
         /* 3: advanced dollar quoting */
         if ('$' == ch &&
-            (*statement == '$' 
+            (*statement == '$'
              || *statement == '_'
-             || (*statement >= 'A' && *statement <= 'Z') 
+             || (*statement >= 'A' && *statement <= 'Z')
              || (*statement >= 'a' && *statement <= 'z')
              || ((unsigned char)*statement >= (unsigned char)'\200'))) {
-            /* "SQL identifiers must begin with a letter (a-z, but also letters with diacritical marks and non-Latin letters) 
-                or an underscore (_). Subsequent characters in an identifier or key word can be letters, underscores, 
+            /* "SQL identifiers must begin with a letter (a-z, but also letters with diacritical marks and non-Latin letters)
+                or an underscore (_). Subsequent characters in an identifier or key word can be letters, underscores,
                 digits (0-9), or dollar signs ($)
             */
             char * dollarstring = NULL; /* Dynamic string between $$ in dollar quoting */
@@ -2096,7 +2220,7 @@ static void pg_st_split_statement (pTHX_ imp_sth_t * imp_sth, char * statement)
                 }
 
                 /* If we hit an invalid character, bail out */
-                if (ch <= 47 
+                if (ch <= 47
                     || (ch >= 58 && ch <= 64)
                     || (ch >= 91 && ch <= 94)
                     || ch == 96
@@ -2177,7 +2301,7 @@ static void pg_st_split_statement (pTHX_ imp_sth_t * imp_sth, char * statement)
             continue;
 
         } /* end dollar quoting */
-        
+
         /* All we care about at this point is placeholder characters and end of string */
         if ('?' != ch && '$' != ch && ':' != ch && 0!=ch) {
             continue;
@@ -2191,8 +2315,8 @@ static void pg_st_split_statement (pTHX_ imp_sth_t * imp_sth, char * statement)
         */
         if ('\\' == oldch && imp_dbh->ph_escaped) {
             if (! statement_rewritten) {
-                New(0, original_statement, strlen(statement-currpos)+1, char);
-                Copy(statement-currpos, original_statement, strlen(statement-currpos)+1, char);
+                New(0, original_statement, strlen(statement_start)+1, char);
+                Copy(statement-currpos, original_statement, strlen(statement_start)+1, char);
                 statement_rewritten = DBDPG_TRUE;
             }
 
@@ -2268,94 +2392,85 @@ static void pg_st_split_statement (pTHX_ imp_sth_t * imp_sth, char * statement)
                       placeholder_string[imp_sth->placeholder_type],
                       placeholder_string[placeholder_type]);
         }
-        
+
         /* Move on to the next letter unless we found a placeholder, or we are at the end of the string */
         if (PLACEHOLDER_NONE == placeholder_type && ch)
             continue;
 
         /* If we got here, we have a segment that needs to be saved */
-        New(0, newseg, 1, seg_t); /* freed in dbd_st_destroy */
-        newseg->nextseg = NULL;
-        newseg->placeholder = 0;
-        newseg->ph = NULL;
+        newseg.placeholder = 0;
 
         if (PLACEHOLDER_QUESTIONMARK == placeholder_type) {
-            newseg->placeholder = ++imp_sth->numphs;
+            newseg.placeholder = ++imp_sth->numphs;
         }
         else if (PLACEHOLDER_DOLLAR == placeholder_type) {
-            newseg->placeholder = atoi(statement-(currpos-sectionstop-1));
+            newseg.placeholder = atoi(statement-(currpos-sectionstop-1));
         }
         else if (PLACEHOLDER_COLON == placeholder_type) {
             STRLEN phsectionsize = currpos-sectionstop;
             /* Have we seen this placeholder yet? */
-            for (xint=1,thisph=imp_sth->ph; NULL != thisph; thisph=thisph->nextph,xint++) {
+            for (int p=0; p < ph_array_count(imp_sth); p++) {
+                ph_t *thisph = ph_array_element(imp_sth, p);
+                STRLEN fooname_len = strlen(thisph->fooname);
+                STRLEN best_len = fooname_len > phsectionsize ? fooname_len : phsectionsize;
                 /*
-                  Because we need to make sure :foobar does not match as a previous 
+                  Because we need to make sure :foobar does not match as a previous
                    hit when seeing :foobar2, we always use the greater of the two lengths:
                    the length of the old name or the current name we are scanning
                 */
-                if (0==strncmp(thisph->fooname, statement-phsectionsize,
-                               strlen(thisph->fooname) > phsectionsize ? strlen(thisph->fooname) : phsectionsize)) {
-                    newseg->placeholder = xint;
-                    newseg->ph = thisph;
+                if (0==strncmp(thisph->fooname, statement-phsectionsize, best_len)) {
+                    newseg.placeholder = p+1;
                     break;
                 }
             }
-            if (0==newseg->placeholder) {
+            if (0==newseg.placeholder) {
+                ph_t newph;
+
                 imp_sth->numphs++;
-                newseg->placeholder = imp_sth->numphs;
-                New(0, newph, 1, ph_t); /* freed in dbd_st_destroy */
-                newseg->ph        = newph;
-                newph->nextph     = NULL;
-                newph->bind_type  = NULL;
-                newph->value      = NULL;
-                newph->quoted     = NULL;
-                newph->referenced = DBDPG_FALSE;
-                newph->defaultval = DBDPG_TRUE;
-                newph->isdefault  = DBDPG_FALSE;
-                newph->iscurrent  = DBDPG_FALSE;
-                newph->isinout    = DBDPG_FALSE;
-                New(0, newph->fooname, phsectionsize+1, char); /* freed in dbd_st_destroy */
-                Copy(statement-phsectionsize, newph->fooname, phsectionsize, char);
-                newph->fooname[phsectionsize] = '\0';
-                if (NULL==currph) {
-                    imp_sth->ph = newph;
-                }
-                else {
-                    currph->nextph = newph;
-                }
-                currph = newph;
+                newseg.placeholder = imp_sth->numphs;
+                newph.bind_type  = NULL;
+                newph.value      = NULL;
+                newph.quoted     = NULL;
+                newph.referenced = DBDPG_FALSE;
+                newph.defaultval = DBDPG_TRUE;
+                newph.isdefault  = DBDPG_FALSE;
+                newph.iscurrent  = DBDPG_FALSE;
+                newph.isinout    = DBDPG_FALSE;
+                newph.valuelen   = 0;
+                newph.quotedlen  = 0;
+
+                New(0, newph.fooname, phsectionsize+1, char); /* freed in dbd_st_destroy */
+                Copy(statement-phsectionsize, newph.fooname, phsectionsize, char);
+                newph.fooname[phsectionsize] = '\0';
+
+                ph_array_append(imp_sth, &newph);
+
             }
         } /* end if placeholder_type */
 
         sectionsize = sectionstop-sectionstart; /* 4-0 for "ABCD" */
         if (sectionsize>0) {
-            New(0, newseg->segment, sectionsize+1, char); /* freed in dbd_st_destroy */
-            Copy(statement-(currpos-sectionstart), newseg->segment, sectionsize, char);
-            newseg->segment[sectionsize] = '\0';
+            New(0, newseg.segment, sectionsize+1, char); /* freed in dbd_st_destroy */
+            Copy(statement-(currpos-sectionstart), newseg.segment, sectionsize, char);
+            newseg.segment[sectionsize] = '\0';
             imp_sth->totalsize += sectionsize;
         }
         else {
-            newseg->segment = NULL;
+            newseg.segment = NULL;
         }
         if (TRACE6_slow)
-            TRC(DBILOGFP, "%sCreated segment (%s)\n", THEADER_slow, newseg->segment);
-        
-        /* Tie it in to the previous one */
-        if (NULL==currseg) {
-            imp_sth->seg = newseg;
-        }
-        else {
-            currseg->nextseg = newseg;
-        }
-        currseg = newseg;
+            TRC(DBILOGFP, "%sCreated segment (%s)\n", THEADER_slow, newseg.segment);
+
+        /* Add to the list of segments */
+        seg_array_append(imp_sth, &newseg);
+
         sectionstart = currpos;
         imp_sth->numsegs++;
 
         if (placeholder_type != PLACEHOLDER_NONE)
             imp_sth->placeholder_type = placeholder_type;
 
-        /* 
+        /*
            Check if this segment also ends the string.
            If it does, we simply leave right away.
            Make sure we don't peek at statement if we know it is past the end of the string.
@@ -2367,19 +2482,21 @@ static void pg_st_split_statement (pTHX_ imp_sth_t * imp_sth, char * statement)
 
     /* For dollar sign placeholders, ensure that the rules are followed */
     if (PLACEHOLDER_DOLLAR == imp_sth->placeholder_type) {
-        /* 
-           We follow the Pg rules: must start with $1, repeats are allowed, 
+        /*
+           We follow the Pg rules: must start with $1, repeats are allowed,
            numbers must be sequential. We change numphs if repeats found
         */
         int topdollar = 0;
-        for (currseg=imp_sth->seg; NULL != currseg; currseg=currseg->nextseg) {
+        for (int s=0; s < seg_array_count(imp_sth); s++) {
+            seg_t *currseg = seg_array_element(imp_sth, s);
             if (currseg->placeholder > topdollar)
                 topdollar = currseg->placeholder;
         }
         /* Make sure every placeholder from 1 to topdollar is used at least once */
         for (xint=1; xint <= topdollar; xint++) {
             bool found = DBDPG_FALSE;
-            for (currseg=imp_sth->seg; NULL != currseg; currseg=currseg->nextseg) {
+            for (int s=0; s < seg_array_count(imp_sth); s++) {
+                seg_t *currseg = seg_array_element(imp_sth, s);
                 if (currseg->placeholder==xint) {
                     found = DBDPG_TRUE;
                     break;
@@ -2395,30 +2512,22 @@ static void pg_st_split_statement (pTHX_ imp_sth_t * imp_sth, char * statement)
     /* Create sequential placeholders */
     if (PLACEHOLDER_COLON != imp_sth->placeholder_type) {
         for (xint=1; xint <= imp_sth->numphs; xint++) {
-            New(0, newph, 1, ph_t); /* freed in dbd_st_destroy */
-            newph->nextph     = NULL;
-            newph->bind_type  = NULL;
-            newph->value      = NULL;
-            newph->quoted     = NULL;
-            newph->fooname    = NULL;
-            newph->referenced = DBDPG_FALSE;
-            newph->defaultval = DBDPG_TRUE;
-            newph->isdefault  = DBDPG_FALSE;
-            newph->iscurrent  = DBDPG_FALSE;
-            newph->isinout    = DBDPG_FALSE;
-            /* Let the correct segment(s) point to it */
-            for (currseg=imp_sth->seg; NULL != currseg; currseg=currseg->nextseg) {
-                if (currseg->placeholder==xint) {
-                    currseg->ph = newph;
-                }
-            }
-            if (NULL==currph) {
-                imp_sth->ph = newph;
-            }
-            else {
-                currph->nextph = newph;
-            }
-            currph = newph;
+            ph_t newph;
+
+            newph.bind_type  = NULL;
+            newph.value      = NULL;
+            newph.quoted     = NULL;
+            newph.fooname    = NULL;
+            newph.inout      = NULL;
+            newph.referenced = DBDPG_FALSE;
+            newph.defaultval = DBDPG_TRUE;
+            newph.isdefault  = DBDPG_FALSE;
+            newph.iscurrent  = DBDPG_FALSE;
+            newph.isinout    = DBDPG_FALSE;
+            newph.valuelen   = 0;
+            newph.quotedlen  = 0;
+
+            ph_array_append(imp_sth, &newph);
         }
     }
 
@@ -2427,16 +2536,16 @@ static void pg_st_split_statement (pTHX_ imp_sth_t * imp_sth, char * statement)
             THEADER_slow, imp_sth->placeholder_type, imp_sth->numsegs, imp_sth->numphs);
         TRC(DBILOGFP, "%sPlaceholder numbers and segments:\n",
             THEADER_slow);
-        for (currseg=imp_sth->seg; NULL != currseg; currseg=currseg->nextseg) {
+        for (int s=0; s < seg_array_count(imp_sth); s++) {
+            seg_t *currseg = seg_array_element(imp_sth, s);
             TRC(DBILOGFP, "%sPH: (%d) SEG: (%s)\n",
                 THEADER_slow, currseg->placeholder, currseg->segment);
         }
         if (imp_sth->numphs) {
             TRC(DBILOGFP, "%sPlaceholder number, fooname, id:\n", THEADER_slow);
-            STRLEN xlen = 1;
-            for (currph=imp_sth->ph; NULL != currph; currph=currph->nextph,xlen++) {
-                TRC(DBILOGFP, "%s#%d FOONAME: (%s)\n",
-                    THEADER_slow, (int)xlen, currph->fooname);
+            for (int p=0; p < ph_array_count(imp_sth); p++) {
+                ph_t *currph = ph_array_element(imp_sth, p);
+                TRC(DBILOGFP, "%s#%d FOONAME: (%s)\n", THEADER_slow, p+1, currph->fooname);
             }
         }
     }
@@ -2444,7 +2553,7 @@ static void pg_st_split_statement (pTHX_ imp_sth_t * imp_sth, char * statement)
     DBIc_NUM_PARAMS(imp_sth) = imp_sth->numphs;
 
     if (statement_rewritten) {
-        Copy(original_statement, statement-currpos, strlen(original_statement)+1, char);
+        Copy(original_statement, statement_start, strlen(original_statement)+1, char);
     }
     Safefree(original_statement);
 
@@ -2461,128 +2570,99 @@ static void pg_st_split_statement (pTHX_ imp_sth_t * imp_sth, char * statement)
 static int pg_st_prepare_statement (pTHX_ SV * sth, imp_sth_t * imp_sth)
 {
     D_imp_dbh_from_sth;
-    char *       statement;
-    unsigned int placeholder_digits;
-    int          x, params;
-    STRLEN       execsize;
-    int          status;
-    seg_t *      currseg;
-    ph_t *       currph;
-    long         power_of_ten;
-
+    strbuf_t      *statement = NULL;
+    int            send_prepare_status;
+    ExecStatusType prepare_status;
 
     if (TSTART_slow) TRC(DBILOGFP, "%sBegin pg_st_prepare_statement\n", THEADER_slow);
 
-    Renew(imp_sth->prepare_name, 25, char); /* freed in dbd_st_destroy */
+    Safefree(imp_sth->prepare_name);
+    Newx(imp_sth->prepare_name, MAX_PREPARE_NAME, char); /* freed in dbd_st_destroy */
 
-    /* Name is "dbdpg_xPID_#", where x is p for positive or n for negative */
-    sprintf(imp_sth->prepare_name,"dbdpg_%c%d_%x",
+    /* Name is "dbdpg_xPID_#", where x = p for positive or n for negative */
+    snprintf(imp_sth->prepare_name, MAX_PREPARE_NAME, "dbdpg_%c%d_%x",
             (imp_dbh->pid_number < 0 ? 'n' : 'p'),
             abs(imp_dbh->pid_number),
             imp_dbh->prepare_number);
 
     if (TRACE5_slow)
-        TRC(DBILOGFP, "%sNew statement name (%s)\n",
-            THEADER_slow, imp_sth->prepare_name);
+        TRC(DBILOGFP, "%sNew statement name (%s)\n", THEADER_slow, imp_sth->prepare_name);
 
-    execsize = imp_sth->totalsize;
-    if (imp_sth->numphs!=0) {
-        for (currseg=imp_sth->seg; NULL != currseg; currseg=currseg->nextseg) {
-            if (0==currseg->placeholder)
-                continue;
-            /* The parameter itself: dollar sign plus digit(s) */
-            power_of_ten = 10;
-            for (placeholder_digits=1; placeholder_digits<7; placeholder_digits++, power_of_ten *= 10) {
-                if (currseg->placeholder < power_of_ten)
-                    break;
-            }
-            if (placeholder_digits >= 7)
-                croak("Too many placeholders!");
-            execsize += placeholder_digits+1;
-        }
-    }
-
-    New(0, statement, execsize+1, char); /* freed below */
-
-    statement[0] = '\0';
 
     /* Construct the statement, with proper placeholders */
-    for (currseg=imp_sth->seg; NULL != currseg; currseg=currseg->nextseg) {
-        if (currseg->segment != NULL)
-            strcat(statement, currseg->segment);
-        if (currseg->placeholder) {
-            sprintf(strchr(statement, '\0'), "$%d", currseg->placeholder);
+    statement = strbuf_create(1024);
+    for (int s = 0; s < seg_array_count(imp_sth); s++) {
+        seg_t *currseg = seg_array_element(imp_sth, s);
+        if (currseg->segment) {
+            strbuf_append_text(statement, currseg->segment);
+        }
+        if (currseg->placeholder != 0) {
+            strbuf_append_dollar_placeholder(statement, currseg->placeholder);
         }
     }
 
-    statement[execsize] = '\0';
-
-    if (TRACE6_slow)
-        TRC(DBILOGFP, "%sPrepared statement (%s)\n", THEADER_slow, statement);
-
-    params = 0;
-    if (imp_sth->numbound!=0) {
-        params = imp_sth->numphs;
-        if (NULL == imp_sth->PQoids) {
-            Newz(0, imp_sth->PQoids, (unsigned int)imp_sth->numphs, Oid);
+    /* If the user has bound anything, send the entire array of oids */
+    if (imp_sth->numbound) {
+        if (!imp_sth->PQoids) {
+            Newz(0, imp_sth->PQoids, ph_array_count(imp_sth), Oid); /* freed in dbd_st_destroy */
         }
-        for (x=0,currph=imp_sth->ph; NULL != currph; currph=currph->nextph) {
-            imp_sth->PQoids[x++] = (currph->defaultval) ? 0 : (Oid)currph->bind_type->type_id;
+        for (int p = 0; p < ph_array_count(imp_sth); p++) {
+            ph_t *currph = ph_array_element(imp_sth, p);
+            imp_sth->PQoids[p] = (currph->defaultval) ? 0 : (Oid)currph->bind_type->type_id;
         }
     }
     if (TSQL)
-        TRC(DBILOGFP, "PREPARE %s AS %s;\n\n", imp_sth->prepare_name, statement);
-
-    /* Free the last_result as needed, even if happens to be owned by us */
-    if (imp_dbh->last_result && imp_dbh->result_clearable) {
-        TRACE_PQCLEAR;
-        PQclear(imp_dbh->last_result);
-        imp_dbh->last_result = NULL;
-    }
-    if (imp_sth->result) {
-
-        TRACE_PQCLEAR;
-        PQclear(imp_sth->result);
-        imp_sth->result = NULL;
-    }
+        TRC(DBILOGFP, "PREPARE %s AS %s;\n\n", imp_sth->prepare_name, strbuf_get(statement));
 
     if (imp_sth->async_flag & PG_ASYNC) {
         TRACE_PQSENDPREPARE;
-        status = PQsendPrepare(imp_dbh->conn, imp_sth->prepare_name, statement, params,
-                               imp_sth->PQoids);
-        if (status) {
+        send_prepare_status =
+            PQsendPrepare(imp_dbh->conn, imp_sth->prepare_name, strbuf_get(statement), imp_sth->numphs, imp_sth->PQoids);
+        strbuf_destroy(statement);
+
+        if (send_prepare_status) {
             imp_sth->async_status = STH_ASYNC_PREPARE;
             imp_dbh->async_sth = imp_sth;
-        } else {
-            status = PGRES_FATAL_ERROR;
-            _fatal_sqlstate(aTHX_ imp_dbh);
+            if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_st_prepare_statement (async)\n", THEADER_slow);
+            return 0;
         }
-    } else {
-        TRACE_PQPREPARE;
-        imp_dbh->last_result = imp_sth->result = PQprepare(imp_dbh->conn, imp_sth->prepare_name, statement, params, imp_sth->PQoids);
-        imp_dbh->result_clearable = DBDPG_FALSE;
 
-        status = _sqlstate(aTHX_ imp_dbh, imp_sth->result);
-        if (PGRES_COMMAND_OK == status) {
-            imp_sth->prepared_by_us = DBDPG_TRUE; /* Done here so deallocate is not called spuriously */
-            imp_dbh->prepare_number++;
-        }
-    }
-
-    Safefree(statement);
-
-    if (PGRES_COMMAND_OK != status) {
+        /* As this was never created, we do not want anything to later try and deallocate it */
         Safefree(imp_sth->prepare_name);
         imp_sth->prepare_name = NULL;
-        TRACE_PQERRORMESSAGE;
-        pg_error(aTHX_ sth, status, PQerrorMessage(imp_dbh->conn));
-        if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_st_prepare_statement (error)\n", THEADER_slow);
+
+        _fatal_sqlstate(aTHX_ imp_dbh);
+        if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_st_prepare_statement (async error)\n", THEADER_slow);
         return -2;
+
     }
 
-    if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_st_prepare_statement\n", THEADER_slow);
-    return 0;
-    
+    CLEAR_LAST_RESULT(imp_dbh);
+
+    CLEAR_STH_RESULT(imp_sth);
+
+    TRACE_PQPREPARE;
+    imp_dbh->last_result = imp_sth->result =
+        PQprepare(imp_dbh->conn, imp_sth->prepare_name, strbuf_get(statement), imp_sth->numphs, imp_sth->PQoids);
+    imp_dbh->result_shared = DBDPG_TRUE;
+    strbuf_destroy(statement);
+
+    prepare_status = _sqlstate(aTHX_ imp_dbh, imp_sth->result);
+
+    if (PGRES_COMMAND_OK == prepare_status) {
+        imp_sth->prepared_by_us = DBDPG_TRUE; /* Done here so deallocate is not called spuriously */
+        imp_dbh->prepare_number++;
+        if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_st_prepare_statement\n", THEADER_slow);
+        return 0;
+    }
+
+    Safefree(imp_sth->prepare_name);
+    imp_sth->prepare_name = NULL;
+    TRACE_PQERRORMESSAGE;
+    pg_error(aTHX_ sth, prepare_status, PQerrorMessage(imp_dbh->conn));
+    if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_st_prepare_statement (error)\n", THEADER_slow);
+    return -2;
+
 } /* end of pg_st_prepare_statement */
 
 
@@ -2598,11 +2678,12 @@ int dbd_bind_ph (SV * sth, imp_sth_t * imp_sth, SV * ph_name, SV * newvalue, IV 
     int    x, phnum;
     SV **  svp;
     bool   reprepare = DBDPG_FALSE;
+    bool   found;
     int    pg_type = 0;
     char * value_string = NULL;
     bool   is_array = DBDPG_FALSE;
 
-    maxlen = 0; /* not used, this makes the compiler happy */
+    PERL_UNUSED_VAR(maxlen);
 
     if (TSTART_slow) TRC(DBILOGFP, "%sBegin dbd_bind_ph (ph_name: %s)\n",
                     THEADER_slow,
@@ -2630,27 +2711,25 @@ int dbd_bind_ph (SV * sth, imp_sth_t * imp_sth, SV * ph_name, SV * newvalue, IV 
     }
 
     /* Find the placeholder in question */
-
     if (PLACEHOLDER_COLON == imp_sth->placeholder_type) {
-        for (x=0,currph=imp_sth->ph; NULL != currph; currph = currph->nextph) {
+        found = 0;
+        for (int p=0; p < ph_array_count(imp_sth); p++) {
+            currph = ph_array_element(imp_sth, p);
             if (0==strcmp(currph->fooname, name)) {
-                x=1;
+                found = 1;
                 break;
             }
         }
-        if (0==x)
+        if (!found)
             croak("Cannot bind unknown placeholder '%s'", name);
     }
-    else { /* We have a number */    
+    else { /* We have a number */
         if ('$' == *name)
             name++;
         phnum = atoi(name);
         if (phnum < 1 || phnum > imp_sth->numphs)
             croak("Cannot bind unknown placeholder %d (%s)", phnum, neatsvpv(ph_name,0));
-        for (x=1,currph=imp_sth->ph; NULL != currph; currph = currph->nextph,x++) {
-            if (x==phnum)
-                break;
-        }
+        currph = ph_array_element(imp_sth, phnum - 1);
     }
 
     /* Check the value */
@@ -2723,13 +2802,13 @@ int dbd_bind_ph (SV * sth, imp_sth_t * imp_sth, SV * ph_name, SV * newvalue, IV 
         if((svp = hv_fetchs((HV*)SvRV(attribs),"pg_type", 0)) != NULL)
             pg_type = (int)SvIV(*svp);
     }
-    
+
     if (sql_type && pg_type)
         croak ("Cannot specify both sql_type and pg_type");
 
     if (NULL == currph->bind_type && (sql_type || pg_type))
         imp_sth->numbound++;
-    
+
     if (pg_type) {
         if ((currph->bind_type = pg_type_data(pg_type))) {
             if (!currph->bind_type->bind_ok) { /* Re-evaluate with new prepare */
@@ -2742,8 +2821,8 @@ int dbd_bind_ph (SV * sth, imp_sth_t * imp_sth, SV * ph_name, SV * newvalue, IV 
         }
     }
     else if (sql_type) {
-        /* always bind as pg_type, because we know we are 
-           inserting into a pg database... It would make no 
+        /* always bind as pg_type, because we know we are
+           inserting into a pg database... It would make no
            sense to quote something to sql semantics and break
            the insert.
         */
@@ -2973,7 +3052,7 @@ SV * pg_stringify_array(SV *input, const char * array_delim, int server_version,
 } /* end of pg_stringify_array */
 
 /* ================================================================== */
-static SV * pg_destringify_array(pTHX_ imp_dbh_t *imp_dbh, unsigned char * input, sql_type_info_t * coltype)
+static SV * pg_destringify_array(pTHX_ imp_dbh_t *imp_dbh, char * input, sql_type_info_t * coltype)
 {
 
     AV*    av;              /* The main array we are returning a reference to */
@@ -2990,7 +3069,7 @@ static SV * pg_destringify_array(pTHX_ imp_dbh_t *imp_dbh, unsigned char * input
                     THEADER_slow, input, coltype->array_delimiter);
 
     /*
-      Note: we don't do careful balance checking here, as this is coming straight from 
+      Note: we don't do careful balance checking here, as this is coming straight from
       the Postgres backend, and we rely on it to give us a sane and balanced structure
     */
 
@@ -3013,7 +3092,7 @@ static SV * pg_destringify_array(pTHX_ imp_dbh_t *imp_dbh, unsigned char * input
     }
     input -= opening_braces;
 
-    New(0, string, strlen((char *)input), char); /* Freed at end of this function */
+    New(0, string, strlen(input), char); /* Freed at end of this function */
     string[0] = '\0';
 
     av = currentav = topav = newAV();
@@ -3207,7 +3286,7 @@ long pg_quickexec (SV * dbh, const char * sql, const int asyncflag)
         else {
             croak("Must call pg_getcopydata until no more rows before issuing more commands");
         }
-    }            
+    }
 
     /* If we are still waiting on an async, handle it */
     switch (imp_dbh->async_status) {
@@ -3278,17 +3357,12 @@ long pg_quickexec (SV * dbh, const char * sql, const int asyncflag)
 
     if (TSQL) TRC(DBILOGFP, "%s;\n\n", sql);
 
-
-    /* Free the last_result as needed, as we are about to replace it */
-    if (imp_dbh->last_result && imp_dbh->result_clearable) {
-        TRACE_PQCLEAR;
-        PQclear(imp_dbh->last_result);
-        imp_dbh->last_result = NULL;
-    }
+    CLEAR_LAST_RESULT(imp_dbh);
 
     TRACE_PQEXEC;
     imp_dbh->last_result = PQexec(imp_dbh->conn, sql);
-    imp_dbh->result_clearable = DBDPG_TRUE;
+    imp_dbh->result_shared = DBDPG_FALSE;
+
     status = _sqlstate(aTHX_ imp_dbh, imp_dbh->last_result);
 
     imp_dbh->copystate = 0; /* Assume not in copy mode until told otherwise */
@@ -3367,19 +3441,14 @@ long dbd_st_execute (SV * sth, imp_sth_t * imp_sth)
 {
     dTHX;
     D_imp_dbh_from_sth;
-    ph_t *        currph;
-    int           status;
-    STRLEN        execsize, x;
-    unsigned int  placeholder_digits;
-    seg_t *       currseg;
-    char *        statement = NULL;
-    int           num_fields;
+    int           status, p, s;
+    STRLEN        execsize;
+    strbuf_t     *statement = NULL;
     long          ret;
     PQExecType    pqtype;
-    long          power_of_ten;
-    
+
     if (TSTART_slow) TRC(DBILOGFP, "%sBegin dbd_st_execute\n", THEADER_slow);
-    
+
     if (NULL == imp_dbh->conn) {
         pg_error(aTHX_ sth, PGRES_FATAL_ERROR, "Cannot call execute on a disconnected database handle");
         return -2;
@@ -3391,7 +3460,8 @@ long dbd_st_execute (SV * sth, imp_sth_t * imp_sth)
 
     /* Ensure that all the placeholders have been bound */
     if (!imp_sth->all_bound && imp_sth->numphs!=0) {
-        for (currph=imp_sth->ph; NULL != currph; currph=currph->nextph) {
+        for (p=0; p < ph_array_count(imp_sth); p++) {
+            ph_t *currph = ph_array_element(imp_sth, p);
             if (NULL == currph->bind_type) {
                 pg_error(aTHX_ sth, PGRES_FATAL_ERROR, "execute called with an unbound placeholder");
                 if (TEND_slow) TRC(DBILOGFP, "%sEnd dbd_st_execute (error: unbound placeholder)\n", THEADER_slow);
@@ -3457,11 +3527,9 @@ long dbd_st_execute (SV * sth, imp_sth_t * imp_sth)
       deleted implicitly the next time pg_db_result is
       called.
     */
-    if (imp_sth->result && !(imp_sth->async_flag & PG_ASYNC)) {
-        TRACE_PQCLEAR;
-        PQclear(imp_sth->result);
-        imp_sth->result = NULL;
-    }
+     if (!(imp_sth->async_flag & PG_ASYNC)) {
+         CLEAR_STH_RESULT(imp_sth);
+     }
 
     /*
       Now, we need to build the statement to send to the backend
@@ -3471,7 +3539,7 @@ long dbd_st_execute (SV * sth, imp_sth_t * imp_sth)
 
     if (TRACE4_slow) TRC(DBILOGFP,
                     "%sPQexec* decision: dml=%d direct=%d server_prepare=%d numbound=%d numphs=%d default=%d current=%d\n",
-                    THEADER_slow, 
+                    THEADER_slow,
                     imp_sth->is_dml,
                     imp_sth->direct,
                     imp_sth->server_prepare,
@@ -3519,7 +3587,8 @@ long dbd_st_execute (SV * sth, imp_sth_t * imp_sth)
 
     /* If using plain old PQexec, we need to quote each value ourselves */
     if (PQTYPE_EXEC == pqtype) {
-        for (currph=imp_sth->ph; NULL != currph; currph=currph->nextph) {
+        for (p=0; p < ph_array_count(imp_sth); p++) {
+            ph_t *currph = ph_array_element(imp_sth, p);
             if (currph->isdefault) {
                 Renew(currph->quoted, 8, char); /* freed in dbd_st_destroy */
                 strncpy(currph->quoted, "DEFAULT", 8);
@@ -3536,8 +3605,10 @@ long dbd_st_execute (SV * sth, imp_sth_t * imp_sth)
                 currph->quotedlen = 4;
             }
             else {
-                if (currph->quoted)
+                if (currph->quoted) {
                     Safefree(currph->quoted);
+                    currph->quoted = NULL;
+                }
                 currph->quoted = currph->bind_type->quote(
                     aTHX_
                     currph->value,
@@ -3552,32 +3623,34 @@ long dbd_st_execute (SV * sth, imp_sth_t * imp_sth)
 
         /* Put all values into an array to pass to one of the above */
         if (NULL == imp_sth->PQvals) {
-            Newz(0, imp_sth->PQvals, (unsigned int)imp_sth->numphs, const char *); /* freed in dbd_st_destroy */
+            Newz(0, imp_sth->PQvals, (size_t)imp_sth->numphs, const char *); /* freed in dbd_st_destroy */
         }
-        for (x=0,currph=imp_sth->ph; NULL != currph; currph=currph->nextph) {
-            imp_sth->PQvals[x++] = currph->value;
+        for (p=0; p < ph_array_count(imp_sth); p++) {
+            ph_t *currph = ph_array_element(imp_sth, p);
+            imp_sth->PQvals[p] = currph->value;
         }
 
         /* Binary or regular? */
 
         if (imp_sth->has_binary) {
             if (NULL == imp_sth->PQlens) {
-                Newz(0, imp_sth->PQlens, (unsigned int)imp_sth->numphs, int); /* freed in dbd_st_destroy */
-                Newz(0, imp_sth->PQfmts, (unsigned int)imp_sth->numphs, int); /* freed below */
+                Newz(0, imp_sth->PQlens, (size_t)imp_sth->numphs, int); /* freed in dbd_st_destroy */
+                Newz(0, imp_sth->PQfmts, (size_t)imp_sth->numphs, int); /* freed in dbd_st_destroy */
             }
-            for (x=0,currph=imp_sth->ph; NULL != currph; currph=currph->nextph,x++) {
+            for (p=0; p < ph_array_count(imp_sth); p++) {
+                ph_t *currph = ph_array_element(imp_sth, p);
                 if (PG_BYTEA==currph->bind_type->type_id) {
-                    imp_sth->PQlens[x] = (int)currph->valuelen;
-                    imp_sth->PQfmts[x] = 1;
+                    imp_sth->PQlens[p] = (int)currph->valuelen;
+                    imp_sth->PQfmts[p] = 1;
                 }
                 else {
-                    imp_sth->PQlens[x] = 0;
-                    imp_sth->PQfmts[x] = 0;
+                    imp_sth->PQlens[p] = 0;
+                    imp_sth->PQfmts[p] = 0;
                 }
             }
         }
     }
-    
+
     /* Run one of PQexec (or PQsendQuery), PQexecParams (or PQsendQueryParams), PQexecPrepared (or PQsendQueryPrepared) */
 
     if (PQTYPE_EXEC == pqtype) { /* PQexec or PQsendQuery */
@@ -3587,33 +3660,35 @@ long dbd_st_execute (SV * sth, imp_sth_t * imp_sth)
                              imp_sth->async_flag & PG_ASYNC ? "PQsendQuery" : "PQexec");
 
         /* Go through and quote each value, then turn into a giant statement */
-        for (currseg=imp_sth->seg; NULL != currseg; currseg=currseg->nextseg) {
-            if (currseg->placeholder!=0)
-                execsize += currseg->ph->quotedlen;
+        for (s=0; s < seg_array_count(imp_sth); s++) {
+            seg_t *currseg = seg_array_element(imp_sth, s);
+            if (currseg->placeholder!=0) {
+                execsize += ph_array_element(imp_sth, currseg->placeholder-1)->quotedlen;
+            }
         }
 
-        New(0, statement, execsize+1, char); /* freed below at end of this 'if' block */
-        statement[0] = '\0';
-        for (currseg=imp_sth->seg; NULL != currseg; currseg=currseg->nextseg) {
+        statement = strbuf_create(execsize + 1);
+
+        for (s=0; s < seg_array_count(imp_sth); s++) {
+            seg_t *currseg = seg_array_element(imp_sth, s);
             if (currseg->segment != NULL)
-                strcat(statement, currseg->segment);
+                strbuf_append_text(statement, currseg->segment);
             if (currseg->placeholder!=0)
-                strcat(statement, currseg->ph->quoted);
+                strbuf_append_text(statement, ph_array_element(imp_sth, currseg->placeholder-1)->quoted);
         }
-        statement[execsize] = '\0';
 
-        if (TRACE5_slow) TRC(DBILOGFP, "%sRunning %s with (%s)\n", 
+        if (TRACE5_slow) TRC(DBILOGFP, "%sRunning %s with (%s)\n",
                              THEADER_slow,
                              imp_sth->async_flag & PG_ASYNC ? "PQsendQuery" : "PQexec",
-                             statement);
-            
+                             strbuf_get(statement));
+
         if (TSQL)
-            TRC(DBILOGFP, "%s;\n\n", statement);
+            TRC(DBILOGFP, "%s;\n\n", strbuf_get(statement));
 
         if (imp_sth->async_flag & PG_ASYNC) {
             TRACE_PQSENDQUERY;
-            if (!PQsendQuery(imp_dbh->conn, statement)) {
-                Safefree(statement);
+            if (!PQsendQuery(imp_dbh->conn, strbuf_get(statement))) {
+                strbuf_destroy(statement);
                 _fatal_sqlstate(aTHX_ imp_dbh);
                 TRACE_PQERRORMESSAGE;
                 pg_error(aTHX_ sth, PGRES_FATAL_ERROR, PQerrorMessage(imp_dbh->conn));
@@ -3623,25 +3698,16 @@ long dbd_st_execute (SV * sth, imp_sth_t * imp_sth)
         }
         else {
 
-            /* Free the last_result as needed, even if happens to be owned by us */
-            if (imp_dbh->last_result && imp_dbh->result_clearable) {
-                TRACE_PQCLEAR;
-                PQclear(imp_dbh->last_result);
-                imp_dbh->last_result = NULL;
-            }
-            if (imp_sth->result) {
-                TRACE_PQCLEAR;
-                PQclear(imp_sth->result);
-                imp_sth->result = NULL;
-            }
+            CLEAR_LAST_RESULT(imp_dbh);
+
+            CLEAR_STH_RESULT(imp_sth);
 
             TRACE_PQEXEC;
-            imp_dbh->last_result = imp_sth->result
-                = PQexec(imp_dbh->conn, statement);
-            imp_dbh->result_clearable = DBDPG_FALSE;
+            imp_dbh->last_result = imp_sth->result = PQexec(imp_dbh->conn, strbuf_get(statement));
+            imp_dbh->result_shared = DBDPG_TRUE;
         }
 
-        Safefree(statement);
+        strbuf_destroy(statement);
 
     }
     else if (PQTYPE_PARAMS == pqtype) { /* PQexecParams or PQsendQueryParams */
@@ -3650,54 +3716,40 @@ long dbd_st_execute (SV * sth, imp_sth_t * imp_sth)
                              THEADER_slow,
                              imp_sth->async_flag & PG_ASYNC ? "PQsendQueryParams" : "PQexecParams");
 
-        /* Figure out how big the statement plus placeholders will be */
-        for (currseg=imp_sth->seg; NULL != currseg; currseg=currseg->nextseg) {
-            if (0==currseg->placeholder)
-                continue;
-            /* The parameter itself: dollar sign plus digit(s) */
-            power_of_ten = 10;
-            for (placeholder_digits=1; placeholder_digits<7; placeholder_digits++, power_of_ten *= 10) {
-                if (currseg->placeholder < power_of_ten)
-                    break;
-            }
-            if (placeholder_digits >= 7)
-                croak("Too many placeholders!");
-            execsize += placeholder_digits+1;
+
+        statement = strbuf_create(1024);
+
+        for (s=0; s < seg_array_count(imp_sth); s++) {
+            seg_t *currseg = seg_array_element(imp_sth, s);
+            if (currseg->segment != NULL)
+                strbuf_append_text(statement, currseg->segment);
+            if (currseg->placeholder!=0)
+                strbuf_append_dollar_placeholder(statement, currseg->placeholder);
         }
 
-        /* Create the statement */
-        New(0, statement, execsize+1, char); /* freed below at end of this 'if' block */
-        statement[0] = '\0';
-        for (currseg=imp_sth->seg; NULL != currseg; currseg=currseg->nextseg) {
-            if (currseg->segment != NULL)
-                strcat(statement, currseg->segment);
-            if (currseg->placeholder!=0)
-                sprintf(strchr(statement, '\0'), "$%d", currseg->placeholder);
-        }
-        statement[execsize] = '\0';
-            
         /* Populate PQoids */
         if (NULL == imp_sth->PQoids) {
-            Newz(0, imp_sth->PQoids, (unsigned int)imp_sth->numphs, Oid);
+            Newz(0, imp_sth->PQoids, (size_t)imp_sth->numphs, Oid); /* freed in dbd_st_destroy */
         }
-        for (x=0,currph=imp_sth->ph; NULL != currph; currph=currph->nextph) {
-            imp_sth->PQoids[x++] = (currph->defaultval) ? 0 : (Oid)currph->bind_type->type_id;
+        for (p=0; p < ph_array_count(imp_sth); p++) {
+            ph_t *currph = ph_array_element(imp_sth, p);
+            imp_sth->PQoids[p] = (currph->defaultval) ? 0 : (Oid)currph->bind_type->type_id;
         }
-        
+
         if (TRACE7_slow) {
-            for (x=0,currph=imp_sth->ph; NULL != currph; currph=currph->nextph,x++) {
-                TRC(DBILOGFP, "%sPQexecParams item #%d\n", THEADER_slow, (int)x);
-                TRC(DBILOGFP, "%s-> Type: (%d)\n", THEADER_slow, imp_sth->PQoids[x]);
-                TRC(DBILOGFP, "%s-> Value: (%s)\n", THEADER_slow, imp_sth->PQvals[x]);
-                TRC(DBILOGFP, "%s-> Length: (%d)\n", THEADER_slow, imp_sth->PQlens ? imp_sth->PQlens[x] : 0);
-                TRC(DBILOGFP, "%s-> Format: (%d)\n", THEADER_slow, imp_sth->PQfmts ? imp_sth->PQfmts[x] : 0);
+            for (p=0; p < ph_array_count(imp_sth); p++) {
+                TRC(DBILOGFP, "%sPQexecParams item #%d\n", THEADER_slow, (int)p);
+                TRC(DBILOGFP, "%s-> Type: (%d)\n", THEADER_slow, imp_sth->PQoids[p]);
+                TRC(DBILOGFP, "%s-> Value: (%s)\n", THEADER_slow, imp_sth->PQvals[p]);
+                TRC(DBILOGFP, "%s-> Length: (%d)\n", THEADER_slow, imp_sth->PQlens ? imp_sth->PQlens[p] : 0);
+                TRC(DBILOGFP, "%s-> Format: (%d)\n", THEADER_slow, imp_sth->PQfmts ? imp_sth->PQfmts[p] : 0);
             }
         }
 
         if (TSQL) {
-            TRC(DBILOGFP, "EXECUTE %s (\n", statement);
-            for (x=0,currph=imp_sth->ph; NULL != currph; currph=currph->nextph,x++) {
-                TRC(DBILOGFP, "$%d: %s\n", (int)x+1, imp_sth->PQvals[x]);
+            TRC(DBILOGFP, "EXECUTE %s (\n", strbuf_get(statement));
+            for (p=0; p < ph_array_count(imp_sth); p++) {
+                TRC(DBILOGFP, "$%d: %s\n", p+1, imp_sth->PQvals[p]);
             }
             TRC(DBILOGFP, ");\n\n");
         }
@@ -3705,12 +3757,12 @@ long dbd_st_execute (SV * sth, imp_sth_t * imp_sth)
         if (TRACE5_slow) TRC(DBILOGFP, "%sRunning %s with (%s)\n",
                              THEADER_slow,
                              imp_sth->async_flag & PG_ASYNC ? "PQsendQueryParams" : "PQexecParams",
-                             statement);
+                             strbuf_get(statement));
 
         if (imp_sth->async_flag & PG_ASYNC) {
             TRACE_PQSENDQUERYPARAMS;
             if (!PQsendQueryParams
-                (imp_dbh->conn, statement, imp_sth->numphs,
+                (imp_dbh->conn, strbuf_get(statement), imp_sth->numphs,
                  imp_sth->PQoids, imp_sth->PQvals, imp_sth->PQlens, imp_sth->PQfmts, 0)) {
                 Safefree(statement);
                 _fatal_sqlstate(aTHX_ imp_dbh);
@@ -3722,32 +3774,24 @@ long dbd_st_execute (SV * sth, imp_sth_t * imp_sth)
         }
         else {
 
-            /* Free the last_result as needed, even if happens to be owned by us */
-            if (imp_dbh->last_result && imp_dbh->result_clearable) {
-                TRACE_PQCLEAR;
-                PQclear(imp_dbh->last_result);
-                imp_dbh->last_result = NULL;
-            }
-            if (imp_sth->result) {
-                TRACE_PQCLEAR;
-                PQclear(imp_sth->result);
-                imp_sth->result = NULL;
-            }
+            CLEAR_LAST_RESULT(imp_dbh);
+
+            CLEAR_STH_RESULT(imp_sth);
 
             TRACE_PQEXECPARAMS;
-            imp_dbh->last_result = imp_sth->result
-                = PQexecParams(
-                               imp_dbh->conn, statement, imp_sth->numphs,
-                               imp_sth->PQoids, imp_sth->PQvals, imp_sth->PQlens, imp_sth->PQfmts, 0
-                               );
-            imp_dbh->result_clearable = DBDPG_FALSE;
+            imp_dbh->last_result = imp_sth->result = PQexecParams
+                (
+                 imp_dbh->conn, strbuf_get(statement), imp_sth->numphs,
+                 imp_sth->PQoids, imp_sth->PQvals, imp_sth->PQlens, imp_sth->PQfmts, 0
+                 );
+            imp_dbh->result_shared = DBDPG_TRUE;
         }
 
-        Safefree(statement);
+        strbuf_destroy(statement);
 
     }
     else if (PQTYPE_PREPARED == pqtype) { /* PQexecPrepared or PQsendQueryPrepared */
-    
+
         if (TRACE4_slow) TRC(DBILOGFP, "%s%s\n",
                              THEADER_slow,
                              imp_sth->async_flag & PG_ASYNC ? "PQsendQueryPrepared" : "PQexecPrepared");
@@ -3771,24 +3815,24 @@ long dbd_st_execute (SV * sth, imp_sth_t * imp_sth)
 
         if (STH_ASYNC_PREPARE != imp_sth->async_status) {
             if (TRACE7_slow) {
-                for (x=0,currph=imp_sth->ph; NULL != currph; currph=currph->nextph,x++) {
-                    TRC(DBILOGFP, "%sPQexecPrepared item #%d\n", THEADER_slow, (int)x);
+                for (p=0; p < ph_array_count(imp_sth); p++) {
+                    TRC(DBILOGFP, "%sPQexecPrepared item #%d\n", THEADER_slow, p);
                     TRC(DBILOGFP, "%s-> Value: (%s)\n",
-                        THEADER_slow, (imp_sth->PQfmts && imp_sth->PQfmts[x]==1) ? "(binary, not shown)" 
-                                    : imp_sth->PQvals[x]);
-                    TRC(DBILOGFP, "%s-> Length: (%d)\n", THEADER_slow, imp_sth->PQlens ? imp_sth->PQlens[x] : 0);
-                    TRC(DBILOGFP, "%s-> Format: (%d)\n", THEADER_slow, imp_sth->PQfmts ? imp_sth->PQfmts[x] : 0);
+                        THEADER_slow, (imp_sth->PQfmts && imp_sth->PQfmts[p]==1) ? "(binary, not shown)"
+                                    : imp_sth->PQvals[p]);
+                    TRC(DBILOGFP, "%s-> Length: (%d)\n", THEADER_slow, imp_sth->PQlens ? imp_sth->PQlens[p] : 0);
+                    TRC(DBILOGFP, "%s-> Format: (%d)\n", THEADER_slow, imp_sth->PQfmts ? imp_sth->PQfmts[p] : 0);
                 }
             }
-        
+
             if (TRACE5_slow) TRC(DBILOGFP, "%sRunning %s with (%s)\n", THEADER_slow,
                                  imp_sth->async_flag & PG_ASYNC ? "PQsendQueryPrepared" : "PQexecPrepared",
                                  imp_sth->prepare_name);
 
             if (TSQL) {
                 TRC(DBILOGFP, "EXECUTE %s (\n", imp_sth->prepare_name);
-                for (x=0,currph=imp_sth->ph; NULL != currph; currph=currph->nextph,x++) {
-                    TRC(DBILOGFP, "$%d: %s\n", (int)x+1, imp_sth->PQvals[x]);
+                for (p=0; p < ph_array_count(imp_sth); p++) {
+                    TRC(DBILOGFP, "$%d: %s\n", p+1, imp_sth->PQvals[p]);
                 }
                 TRC(DBILOGFP, ");\n\n");
             }
@@ -3807,29 +3851,21 @@ long dbd_st_execute (SV * sth, imp_sth_t * imp_sth)
             }
             else {
 
-                /* Free the last_result as needed, even if happens to be owned by us */
-                if (imp_dbh->last_result && imp_dbh->result_clearable) {
-                    TRACE_PQCLEAR;
-                    PQclear(imp_dbh->last_result);
-                    imp_dbh->last_result = NULL;
-                }
-                if (imp_sth->result) {
-                    TRACE_PQCLEAR;
-                    PQclear(imp_sth->result);
-                    imp_sth->result = NULL;
-                }
+                CLEAR_LAST_RESULT(imp_dbh);
+
+                CLEAR_STH_RESULT(imp_sth);
 
                 TRACE_PQEXECPREPARED;
-                imp_dbh->last_result = imp_sth->result
-                    = PQexecPrepared(
-                        imp_dbh->conn, imp_sth->prepare_name, imp_sth->numphs,
-                        imp_sth->PQvals, imp_sth->PQlens, imp_sth->PQfmts, 0
-                        );
-                imp_dbh->result_clearable = DBDPG_FALSE;
+                imp_dbh->last_result = imp_sth->result = PQexecPrepared
+                    (
+                     imp_dbh->conn, imp_sth->prepare_name, imp_sth->numphs,
+                     imp_sth->PQvals, imp_sth->PQlens, imp_sth->PQfmts, 0
+                     );
+                imp_dbh->result_shared = DBDPG_TRUE;
             }
         }
     } /* end new-style prepare */
-        
+
     /* Some form of PQexec* or PQsend* has been run at this point */
 
     /* If running asynchronously, we don't stick around for the result */
@@ -3847,9 +3883,9 @@ long dbd_st_execute (SV * sth, imp_sth_t * imp_sth)
     imp_dbh->copystate = 0; /* Assume not in copy mode until told otherwise */
 
     if (PGRES_TUPLES_OK == status) {
-        TRACE_PQNFIELDS;
-        num_fields = PQnfields(imp_sth->result);
         imp_sth->cur_tuple = 0;
+        TRACE_PQNFIELDS;
+        int num_fields = PQnfields(imp_sth->result);
         DBIc_NUM_FIELDS(imp_sth) = num_fields;
         DBIc_ACTIVE_on(imp_sth);
         TRACE_PQNTUPLES;
@@ -3869,6 +3905,7 @@ long dbd_st_execute (SV * sth, imp_sth_t * imp_sth)
             TRACE_PQCMDTUPLES;
             ret = atol(PQcmdTuples(imp_sth->result));
             gotrows = ret;
+            imp_sth->rows = ret;
         }
         if (!gotrows) {
             /* No rows affected, but check for change of state */
@@ -3902,9 +3939,9 @@ long dbd_st_execute (SV * sth, imp_sth_t * imp_sth)
         if (TEND_slow) TRC(DBILOGFP, "%sEnd dbd_st_execute (error: bad status)\n", THEADER_slow);
         return -2;
     }
-    
+
     /* store the number of affected rows */
-    
+
     imp_sth->rows = ret;
 
     if (TEND_slow) TRC(DBILOGFP, "%sEnd dbd_st_execute (rows: %ld)\n", THEADER_slow, ret);
@@ -3922,12 +3959,12 @@ AV * dbd_st_fetch (SV * sth, imp_sth_t * imp_sth)
     int               i;
     int               chopblanks;
     AV *              av;
-    
+
     if (TSTART_slow) TRC(DBILOGFP, "%sBegin dbd_st_fetch\n", THEADER_slow);
 
     /* Check that execute() was executed successfully */
     if ( !DBIc_ACTIVE(imp_sth) ) {
-        pg_error(aTHX_ sth, PGRES_NONFATAL_ERROR, "no statement executing\n");    
+        pg_error(aTHX_ sth, PGRES_NONFATAL_ERROR, "no statement executing\n");
         if (TEND_slow) TRC(DBILOGFP, "%sEnd dbd_st_fetch (error: no statement)\n", THEADER_slow);
         return Nullav;
     }
@@ -3945,12 +3982,12 @@ AV * dbd_st_fetch (SV * sth, imp_sth_t * imp_sth)
 
     av = DBIc_DBISTATE(imp_sth)->get_fbav(imp_sth);
     num_fields = AvFILL(av)+1;
-    
+
     chopblanks = (int)DBIc_has(imp_sth, DBIcf_ChopBlanks);
 
     /* Set up the type_info array if we have not seen it yet */
     if (NULL == imp_sth->type_info) {
-        Newz(0, imp_sth->type_info, (unsigned int)num_fields, sql_type_info_t*); /* freed in dbd_st_destroy */
+        Newz(0, imp_sth->type_info, (size_t)num_fields, sql_type_info_t*); /* freed in dbd_st_destroy */
         for (i = 0; i < num_fields; ++i) {
             TRACE_PQFTYPE;
             imp_sth->type_info[i] = pg_type_data((int)PQftype(imp_sth->result, i));
@@ -3964,7 +4001,7 @@ AV * dbd_st_fetch (SV * sth, imp_sth_t * imp_sth)
             }
         }
     }
-    
+
     for (i = 0; i < num_fields; ++i) {
         sql_type_info_t * type_info;
         SV *sv;
@@ -3979,9 +4016,9 @@ AV * dbd_st_fetch (SV * sth, imp_sth_t * imp_sth)
             SvROK(sv) ? (void)sv_unref(sv) : (void)SvOK_off(sv);
         }
         else {
-            unsigned char * value;
+            char * value;
             TRACE_PQGETVALUE;
-            value = (unsigned char*)PQgetvalue(imp_sth->result, imp_sth->cur_tuple, i); 
+            value = PQgetvalue(imp_sth->result, imp_sth->cur_tuple, i);
 
             type_info = imp_sth->type_info[i];
 
@@ -3999,7 +4036,7 @@ AV * dbd_st_fetch (SV * sth, imp_sth_t * imp_sth)
                     case PG_BOOL:
                         if (imp_dbh->pg_bool_tf) {
                             *value = ('1' == *value) ? 't' : 'f';
-                            sv_setpvn(sv, (char *)value, value_len);
+                            sv_setpvn(sv, value, value_len);
                         }
                         else
                             sv_setiv(sv, '1' == *value ? 1 : 0);
@@ -4007,26 +4044,27 @@ AV * dbd_st_fetch (SV * sth, imp_sth_t * imp_sth)
 #if IVSIZE >= 8 && LONGSIZE >= 8
                     case PG_INT8:
                         if (imp_dbh->pg_int8_as_string) {
-                            sv_setpvn(sv, (char *)value, value_len);
+                            sv_setpvn(sv, value, value_len);
                             break;
                         }
 #endif
+                    /* fallthrough */
                     case PG_INT2:
                     case PG_INT4:
-                        sv_setiv(sv, atol((char *)value));
+                        sv_setiv(sv, atol(value));
                         break;
                     case PG_FLOAT4:
                     case PG_FLOAT8:
-                        sv_setnv(sv, strtod((char *)value, NULL));
+                        sv_setnv(sv, strtod(value, NULL));
                         break;
                     default:
-                        sv_setpvn(sv, (char *)value, value_len);
+                        sv_setpvn(sv, value, value_len);
                     }
                 }
                 else {
-                    sv_setpv(sv, (char *)value);
+                    sv_setpv(sv, value);
                 }
-            
+
                 if (type_info && (PG_BPCHAR == type_info->type_id) && chopblanks) {
                     char *p = SvEND(sv);
                     STRLEN len = SvCUR(sv);
@@ -4057,15 +4095,15 @@ AV * dbd_st_fetch (SV * sth, imp_sth_t * imp_sth)
             }
         }
     }
-    
+
     imp_sth->cur_tuple += 1;
 
     /* Experimental inout support */
     if (imp_sth->use_inout) {
-        ph_t *currph;
-        for (i=0,currph=imp_sth->ph; NULL != currph && i < num_fields; currph=currph->nextph,i++) {
+        for (int p=0; p < ph_array_count(imp_sth); p++) {
+            ph_t *currph = ph_array_element(imp_sth, p);
             if (currph->isinout)
-                sv_copypv(currph->inout, AvARRAY(av)[i]);
+                sv_copypv(currph->inout, AvARRAY(av)[p]);
         }
     }
 
@@ -4076,7 +4114,7 @@ AV * dbd_st_fetch (SV * sth, imp_sth_t * imp_sth)
 
 
 /* ================================================================== */
-/* 
+/*
    Pop off savepoints to the specified savepoint name
 */
 static void pg_db_free_savepoints_to (pTHX_ imp_dbh_t * imp_dbh, const char *savepoint)
@@ -4103,6 +4141,8 @@ long dbd_st_rows (SV * sth, imp_sth_t * imp_sth)
 {
     dTHX;
 
+    PERL_UNUSED_VAR(sth);
+
     if (TSTART_slow) TRC(DBILOGFP, "%sBegin dbd_st_rows\n", THEADER_slow);
 
     return imp_sth->rows;
@@ -4112,13 +4152,13 @@ long dbd_st_rows (SV * sth, imp_sth_t * imp_sth)
 
 /* ================================================================== */
 int dbd_st_finish (SV * sth, imp_sth_t * imp_sth)
-{    
+{
     dTHX;
     D_imp_dbh_from_sth;
 
     if (TSTART_slow) TRC(DBILOGFP, "%sBegin dbdpg_finish (async: %d)\n",
                     THEADER_slow, imp_dbh->async_status);
-    
+
     /* Only handle async cleanup if THIS statement owns the async query */
     if (imp_dbh->async_status && imp_dbh->async_sth == imp_sth) {
         handle_old_async(aTHX_ sth, imp_dbh, PG_OLDQUERY_WAIT);
@@ -4144,7 +4184,7 @@ static int pg_st_deallocate_statement (pTHX_ SV * sth, imp_sth_t * imp_sth)
     char                    tempsqlstate[6];
     int                     status;
     PGTransactionStatusType tstatus;
-    
+
     if (TSTART_slow) TRC(DBILOGFP, "%sBegin pg_st_deallocate_statement\n", THEADER_slow);
 
     if (imp_dbh->skip_deallocate) {
@@ -4156,7 +4196,7 @@ static int pg_st_deallocate_statement (pTHX_ SV * sth, imp_sth_t * imp_sth)
         if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_st_deallocate_statement (0)\n", THEADER_slow);
         return 0;
     }
-    
+
     tempsqlstate[0] = '\0';
 
     /* What is our status? */
@@ -4201,9 +4241,14 @@ static int pg_st_deallocate_statement (pTHX_ SV * sth, imp_sth_t * imp_sth)
     if (TRACE5_slow)
         TRC(DBILOGFP, "%sUsing PQclosePrepared: %s\n", THEADER_slow, imp_sth->prepare_name);
 
-    imp_dbh->last_result = imp_sth->result
-        = PQclosePrepared(imp_dbh->conn, imp_sth->prepare_name);
-    imp_dbh->result_clearable = DBDPG_FALSE;
+    CLEAR_LAST_RESULT(imp_dbh);
+
+    CLEAR_STH_RESULT(imp_sth);
+
+    TRACE_PQCLOSEPREPARED;
+    imp_dbh->last_result = imp_sth->result = PQclosePrepared(imp_dbh->conn, imp_sth->prepare_name);
+    imp_dbh->result_shared = DBDPG_TRUE;
+
     status = _sqlstate(aTHX_ imp_dbh, imp_sth->result);
 #else
     {
@@ -4244,20 +4289,16 @@ void dbd_st_destroy (SV * sth, imp_sth_t * imp_sth)
 {
     dTHX;
     D_imp_dbh_from_sth;
-    seg_t * currseg;
-    seg_t * nextseg;
-    ph_t *  currph;
-    ph_t *  nextph;
 
     imp_dbh->do_tmp_sth = NULL;
 
     if (TSTART_slow) TRC(DBILOGFP, "%sBegin dbd_st_destroy\n", THEADER_slow);
 
-    if (NULL == imp_sth->seg) /* Already been destroyed! */
+    if (0 == seg_array_count(imp_sth)) /* Already been destroyed! */
         croak("dbd_st_destroy called twice!");
 
     /* If the AutoInactiveDestroy flag has been set, we go no further */
-    if ((DBIc_AIADESTROY(imp_dbh)) && ((U32)PerlProc_getpid() != (unsigned int)imp_dbh->pid_number)) {
+    if ((DBIc_AIADESTROY(imp_dbh)) && ((U32)PerlProc_getpid() != (size_t)imp_dbh->pid_number)) {
         if (TRACE4_slow) {
             TRC(DBILOGFP, "%sskipping sth destroy due to AutoInactiveDestroy\n", THEADER_slow);
         }
@@ -4299,47 +4340,25 @@ void dbd_st_destroy (SV * sth, imp_sth_t * imp_sth)
     Safefree(imp_sth->PQoids);
 
     /*
-      If our result is the same as the last_result, we will not free it, but will 
+      If our result is the same as the last_result, we will not free it, but will
        cede control over it so that the parent dbh can clear it later.
        We do this in case $dbh->pg_error_field() is called
     */
     if (imp_sth->result == imp_dbh->last_result) {
-        imp_dbh->result_clearable = DBDPG_TRUE;
+        imp_dbh->result_shared = DBDPG_FALSE;
     }
     else {
-        if (imp_sth->result) {
-            /* Nobody else is using this PGresult, so we can clear it */
-            TRACE_PQCLEAR;
-            PQclear(imp_sth->result);
-        }
+        CLEAR_STH_RESULT(imp_sth);
     }
 
     /* Regardless of the above, we want to not use this anymore */
     imp_sth->result = NULL;
 
     /* Free all the segments */
-    currseg = imp_sth->seg;
-    while (NULL != currseg) {
-        Safefree(currseg->segment);
-        currseg->ph = NULL;
-        nextseg = currseg->nextseg;
-        Safefree(currseg);
-        currseg = nextseg;
-    }
-    imp_sth->seg = NULL;
+    seg_array_destroy(imp_sth);
 
     /* Free all the placeholders */
-    currph = imp_sth->ph;
-    while (NULL != currph) {
-        Safefree(currph->fooname);
-        Safefree(currph->value);
-        Safefree(currph->quoted);
-         currph->bind_type = NULL;
-        nextph = currph->nextph;
-        Safefree(currph);
-        currph = nextph;
-    }
-    imp_sth->ph = NULL;
+    ph_array_destroy(imp_sth);
 
     if (NULL != imp_dbh->async_sth && imp_dbh->async_sth == imp_sth)
         imp_dbh->async_sth = NULL;
@@ -4391,7 +4410,7 @@ int pg_db_putline (SV * dbh, SV * svbuf)
 
 
 /* ================================================================== */
-int pg_db_getline (SV * dbh, SV * svbuf, int length)
+int pg_db_getline (SV * dbh, SV * svbuf)
 {
     dTHX;
     D_imp_dbh(dbh);
@@ -4406,7 +4425,6 @@ int pg_db_getline (SV * dbh, SV * svbuf, int length)
     if (PGRES_COPY_OUT != imp_dbh->copystate && PGRES_COPY_BOTH != imp_dbh->copystate)
         croak("pg_getline can only be called directly after issuing a COPY TO command\n");
 
-    length = 0; /* Make compilers happy */
     TRACE_PQGETCOPYDATA;
     copystatus = PQgetCopyData(imp_dbh->conn, &tempbuf, 0);
 
@@ -4447,6 +4465,10 @@ int pg_db_getcopydata (SV * dbh, SV * dataline, int async)
     /* We must be in COPY OUT state */
     if (PGRES_COPY_OUT != imp_dbh->copystate && PGRES_COPY_BOTH != imp_dbh->copystate)
         croak("pg_getcopydata can only be called directly after issuing a COPY TO command\n");
+
+    /* The arg to pg_db_getcopydata must be a writeable var */
+    if (SvREADONLY(dataline))
+        croak("pg_getcopydata: argument must be a writeable scalar");
 
     tempbuf = NULL;
 
@@ -4504,7 +4526,7 @@ int pg_db_getcopydata (SV * dbh, SV * dataline, int async)
 
 
 /* ================================================================== */
-int pg_db_putcopydata (SV * dbh, SV * dataline)
+int pg_db_putcopydata (SV * dbh, SV * dataline, int async)
 {
     dTHX;
     D_imp_dbh(dbh);
@@ -4512,11 +4534,24 @@ int pg_db_putcopydata (SV * dbh, SV * dataline)
     const char *copydata;
     STRLEN copylen;
 
-    if (TSTART_slow) TRC(DBILOGFP, "%sBegin pg_db_putcopydata\n", THEADER_slow);
+    if (TSTART_slow) TRC(DBILOGFP, "%sBegin pg_db_putcopydata (async: %d)\n", THEADER_slow, async);
 
     /* We must be in COPY IN state */
     if (PGRES_COPY_IN != imp_dbh->copystate && PGRES_COPY_BOTH != imp_dbh->copystate)
         croak("pg_putcopydata can only be called directly after issuing a COPY FROM command\n");
+
+    /* Enable non-blocking mode for async callers (safe during COPY: no other ops allowed) */
+    if (async && !imp_dbh->copy_nonblocking) {
+        TRACE_PQSETNONBLOCKING;
+        if (PQsetnonblocking(imp_dbh->conn, 1) != 0) {
+            _fatal_sqlstate(aTHX_ imp_dbh);
+            TRACE_PQERRORMESSAGE;
+            pg_error(aTHX_ dbh, PGRES_FATAL_ERROR, PQerrorMessage(imp_dbh->conn));
+            if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_putcopydata (error: setnonblocking)\n", THEADER_slow);
+            return -1;
+        }
+        imp_dbh->copy_nonblocking = 1;
+    }
 
     if (imp_dbh->pg_utf8_flag && !imp_dbh->copybinary)
         copydata = SvPVutf8(dataline, copylen);
@@ -4527,22 +4562,33 @@ int pg_db_putcopydata (SV * dbh, SV * dataline)
     copystatus = PQputCopyData(imp_dbh->conn, copydata, copylen);
 
     if (1 == copystatus) {
-        if (PGRES_COPY_BOTH == imp_dbh->copystate && PQflush(imp_dbh->conn)) {
-            _fatal_sqlstate(aTHX_ imp_dbh);
-            TRACE_PQERRORMESSAGE;
-            pg_error(aTHX_ dbh, PGRES_FATAL_ERROR, PQerrorMessage(imp_dbh->conn));
+        /* For COPY_BOTH (logical replication), flush immediately as before */
+        if (PGRES_COPY_BOTH == imp_dbh->copystate) {
+            TRACE_PQFLUSH;
+            if (PQflush(imp_dbh->conn)) {
+                _fatal_sqlstate(aTHX_ imp_dbh);
+                TRACE_PQERRORMESSAGE;
+                pg_error(aTHX_ dbh, PGRES_FATAL_ERROR, PQerrorMessage(imp_dbh->conn));
+                if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_putcopydata (error: flush)\n", THEADER_slow);
+                return -1;
+            }
         }
+        /* For async mode, caller is responsible for calling pg_flush */
+        if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_putcopydata (1)\n", THEADER_slow);
+        return 1;
     }
-    else if (0 == copystatus) { /* non-blocking mode only */
+    else if (0 == copystatus) {
+        /* Non-blocking mode: output buffer full, caller should wait for write-ready */
+        if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_putcopydata (buffer full)\n", THEADER_slow);
+        return 0;
     }
     else {
         _fatal_sqlstate(aTHX_ imp_dbh);
         TRACE_PQERRORMESSAGE;
         pg_error(aTHX_ dbh, PGRES_FATAL_ERROR, PQerrorMessage(imp_dbh->conn));
+        if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_putcopydata (error)\n", THEADER_slow);
+        return -1;
     }
-
-    if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_putcopydata\n", THEADER_slow);    
-    return copystatus == 1 ? 1 : 0;
 
 } /* end of pg_db_putcopydata */
 
@@ -4612,6 +4658,220 @@ int pg_db_putcopyend (SV * dbh)
     }
 
 } /* end of pg_db_putcopyend */
+
+
+/* ================================================================== */
+/*
+   Non-blocking version of pg_db_putcopyend.
+   Sends the COPY end marker and attempts to collect the server result
+   without blocking. Restores blocking mode on completion (or error).
+
+   This function is designed to be called repeatedly in a poll loop:
+   - First call: sends PQputCopyEnd, attempts flush and result check
+   - Subsequent calls (when returning 0): polls for the server result
+
+   Returns:
+    1 = COPY completed successfully, connection is back in normal mode
+    0 = not ready yet (caller should poll socket and call again)
+   -1 = error
+*/
+int pg_db_putcopyend_async (SV * dbh)
+{
+    dTHX;
+    D_imp_dbh(dbh);
+
+    if (TSTART_slow) TRC(DBILOGFP, "%sBegin pg_db_putcopyend_async (copystate: %d)\n",
+                         THEADER_slow, imp_dbh->copystate);
+
+    switch (imp_dbh->copystate) {
+
+        /*
+          copystate == -1 means we already sent PQputCopyEnd on a prior call
+          and are waiting for the server result. Skip straight to result polling.
+        */
+    case -1:
+        break;
+
+    case 0:
+        warn("pg_putcopyend_async cannot be called until a COPY is issued");
+        if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_putcopyend_async (warning: copystate is 0)\n", THEADER_slow);
+        return -1;
+
+    case PGRES_COPY_OUT:
+        warn("pg_putcopyend_async does not need to be called when using pg_getcopydata");
+        if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_putcopyend_async (warning: copy state is OUT)\n", THEADER_slow);
+        return -1;
+
+    case PGRES_COPY_IN:
+    case PGRES_COPY_BOTH:
+
+        TRACE_PQPUTCOPYEND;
+        int copystatus = PQputCopyEnd(imp_dbh->conn, NULL);
+
+        if (0 == copystatus) {
+            /* Non-blocking mode: buffer full, caller should poll for write-ready */
+            if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_putcopyend_async (buffer full)\n", THEADER_slow);
+            return 0;
+        }
+
+        if (1 != copystatus) {
+            imp_dbh->copystate = 0;
+            if (imp_dbh->copy_nonblocking) {
+                TRACE_PQSETNONBLOCKING;
+                PQsetnonblocking(imp_dbh->conn, 0);
+                imp_dbh->copy_nonblocking = 0;
+            }
+            _fatal_sqlstate(aTHX_ imp_dbh);
+            TRACE_PQERRORMESSAGE;
+            pg_error(aTHX_ dbh, PGRES_FATAL_ERROR, PQerrorMessage(imp_dbh->conn));
+            if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_putcopyend_async (error)\n", THEADER_slow);
+            return -1;
+        }
+
+        /* Mark that PQputCopyEnd has been successfully sent, awaiting result */
+        imp_dbh->copystate = -1;
+
+        /* Flush the end marker to the server */
+        TRACE_PQFLUSH;
+        int flushstatus = PQflush(imp_dbh->conn);
+
+        if (-1 == flushstatus) {
+            imp_dbh->copystate = 0;
+            if (imp_dbh->copy_nonblocking) {
+                TRACE_PQSETNONBLOCKING;
+                PQsetnonblocking(imp_dbh->conn, 0);
+                imp_dbh->copy_nonblocking = 0;
+            }
+            _fatal_sqlstate(aTHX_ imp_dbh);
+            TRACE_PQERRORMESSAGE;
+            pg_error(aTHX_ dbh, PGRES_FATAL_ERROR, PQerrorMessage(imp_dbh->conn));
+            if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_putcopyend_async (error: flush)\n", THEADER_slow);
+            return -1;
+        }
+
+        if (1 == flushstatus) {
+            /* Data pending in output buffer, caller should poll and retry */
+            if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_putcopyend_async (flush pending)\n", THEADER_slow);
+            return 0;
+        }
+
+        /* flushstatus == 0: exit switch and do result polling */
+        break;
+
+    default:
+        /* Should never be reached */
+        imp_dbh->copystate = 0;
+        if (imp_dbh->copy_nonblocking) {
+            TRACE_PQSETNONBLOCKING;
+            PQsetnonblocking(imp_dbh->conn, 0);
+            imp_dbh->copy_nonblocking = 0;
+        }
+        _fatal_sqlstate(aTHX_ imp_dbh);
+        TRACE_PQERRORMESSAGE;
+        pg_error(aTHX_ dbh, PGRES_FATAL_ERROR, PQerrorMessage(imp_dbh->conn));
+        if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_putcopyend_async (invalid copystate)\n", THEADER_slow);
+        return -1;
+    }
+
+    /* result polling: check if the server result is ready (non-blocking) */
+    {
+        PGresult * result;
+        ExecStatusType status = PGRES_FATAL_ERROR;
+
+        TRACE_PQCONSUMEINPUT;
+        if (0 == PQconsumeInput(imp_dbh->conn)) {
+            imp_dbh->copystate = 0;
+            if (imp_dbh->copy_nonblocking) {
+                TRACE_PQSETNONBLOCKING;
+                PQsetnonblocking(imp_dbh->conn, 0);
+                imp_dbh->copy_nonblocking = 0;
+            }
+            _fatal_sqlstate(aTHX_ imp_dbh);
+            TRACE_PQERRORMESSAGE;
+            pg_error(aTHX_ dbh, PGRES_FATAL_ERROR, PQerrorMessage(imp_dbh->conn));
+            if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_putcopyend_async (error: consumeInput)\n", THEADER_slow);
+            return -1;
+        }
+
+        TRACE_PQISBUSY;
+        if (PQisBusy(imp_dbh->conn)) {
+            /* Server hasn't replied yet, caller should poll for read-ready */
+            if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_putcopyend_async (result pending)\n", THEADER_slow);
+            return 0;
+        }
+
+        /* Result is ready. Restore blocking mode and drain results. */
+        if (imp_dbh->copy_nonblocking) {
+            TRACE_PQSETNONBLOCKING;
+            if (-1 == PQsetnonblocking(imp_dbh->conn, 0)) {
+                imp_dbh->copystate = 0;
+                /* Technically, copy_nonblocking is still true, as PQsetnonblocking failed */
+                TRACE_PQERRORMESSAGE;
+                pg_error(aTHX_ dbh, PGRES_FATAL_ERROR, PQerrorMessage(imp_dbh->conn));
+                if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_putcopyend_async (error: setnonblocking)\n", THEADER_slow);
+                return -1;
+            }
+            imp_dbh->copy_nonblocking = 0;
+        }
+
+        imp_dbh->copystate = 0;
+        TRACE_PQGETRESULT;
+        result = PQgetResult(imp_dbh->conn);
+        if (result) {
+            status = _sqlstate(aTHX_ imp_dbh, result);
+            TRACE_PQCLEAR;
+            PQclear(result);
+        }
+        while ((result = PQgetResult(imp_dbh->conn)) != NULL) { // ok to not trace
+            PQclear(result);                                    // ok to not trace
+        }
+
+        if (PGRES_COMMAND_OK != status) {
+            TRACE_PQERRORMESSAGE;
+            pg_error(aTHX_ dbh, status, PQerrorMessage(imp_dbh->conn));
+            if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_putcopyend_async (error: status not OK)\n", THEADER_slow);
+            return -1;
+        }
+
+        if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_putcopyend_async (1)\n", THEADER_slow);
+        return 1;
+    }
+
+} /* end of pg_db_putcopyend_async */
+
+
+/* ================================================================== */
+/*
+   Flush the libpq output buffer. Used during non-blocking COPY operations.
+
+   Returns:
+    0 = all data flushed successfully
+    1 = data still pending (caller should poll for write-ready and call again)
+   -1 = error
+*/
+int pg_db_flush (SV * dbh)
+{
+    dTHX;
+    D_imp_dbh(dbh);
+    int flush_status;
+
+    if (TSTART_slow) TRC(DBILOGFP, "%sBegin pg_db_flush\n", THEADER_slow);
+
+    TRACE_PQFLUSH;
+    flush_status = PQflush(imp_dbh->conn);
+
+    if (-1 == flush_status) {
+        _fatal_sqlstate(aTHX_ imp_dbh);
+        TRACE_PQERRORMESSAGE;
+        pg_error(aTHX_ dbh, PGRES_FATAL_ERROR, PQerrorMessage(imp_dbh->conn));
+        if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_flush (error)\n", THEADER_slow);
+        return -1;
+    }
+
+    if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_flush (%d)\n", THEADER_slow, flush_status);
+    return flush_status;
+
+} /* end of pg_db_flush */
 
 
 /* ================================================================== */
@@ -4702,7 +4962,7 @@ SV * pg_db_error_field (SV *dbh, char * fieldname)
               0 == strncmp(ucname, "SOURCE_FUNCTION", 11)) {
         fieldcode = PG_DIAG_SOURCE_FUNCTION; // i.e. 'R'
     }
-    else if ( 0 == strncmp(ucname, "PG_DIAG_SQLSTATE", 16) || 
+    else if ( 0 == strncmp(ucname, "PG_DIAG_SQLSTATE", 16) ||
               0 == strncmp(ucname, "SQLSTATE", 8) ||
               0 == strncmp(ucname, "STATE", 5)) {
         fieldcode = PG_DIAG_SQLSTATE; // i.e. 'C'
@@ -4929,7 +5189,7 @@ int pg_db_release (SV * dbh, imp_dbh_t * imp_dbh, char * savepoint)
 
 
 /* ================================================================== */
-/* 
+/*
    For lo_* functions. Used to ensure we are in a transaction
 */
 static int pg_db_start_txn (pTHX_ SV * dbh, imp_dbh_t * imp_dbh)
@@ -4955,8 +5215,8 @@ static int pg_db_start_txn (pTHX_ SV * dbh, imp_dbh_t * imp_dbh)
 
 
 /* ================================================================== */
-/* 
-   For lo_import and lo_export functions. Used to commit or rollback a 
+/*
+   For lo_import and lo_export functions. Used to commit or rollback a
    transaction, but only if AutoCommit is on.
 */
 static int pg_db_end_txn (pTHX_ SV * dbh, imp_dbh_t * imp_dbh, int commit)
@@ -5326,7 +5586,7 @@ int dbd_st_blob_read (SV * sth, imp_sth_t * imp_sth, int lobjId, long offset, lo
     STRLEN nread;
     SV *   bufsv;
     char * tmp;
-    
+
     if (TSTART_slow) TRC(DBILOGFP, "%sBegin dbd_st_blob_read (objectid: %d offset: %ld length: %ld)\n",
                     THEADER_slow, lobjId, offset, len);
 
@@ -5351,13 +5611,13 @@ int dbd_st_blob_read (SV * sth, imp_sth_t * imp_sth, int lobjId, long offset, lo
         pg_error(aTHX_ sth, PGRES_FATAL_ERROR, "dbd_st_blob_read: destoffset < 0");
         return 0;
     }
-    
+
     /* dereference destination and ensure it's writable string */
     bufsv = SvRV(destrv);
     if (0==destoffset) {
         sv_setpvn(bufsv, "", 0);
     }
-    
+
     /* open large object */
     lobj_fd = lo_open(imp_dbh->conn, (unsigned)lobjId, INV_READ);
     if (lobj_fd < 0) {
@@ -5366,7 +5626,7 @@ int dbd_st_blob_read (SV * sth, imp_sth_t * imp_sth, int lobjId, long offset, lo
         if (TEND_slow) TRC(DBILOGFP, "%sEnd dbd_st_blob_read (error: open failed)\n", THEADER_slow);
         return 0;
     }
-    
+
     /* seek on large object */
     if (offset > 0) {
         ret = lo_lseek(imp_dbh->conn, lobj_fd, (int)offset, SEEK_SET);
@@ -5377,7 +5637,7 @@ int dbd_st_blob_read (SV * sth, imp_sth_t * imp_sth, int lobjId, long offset, lo
             return 0;
         }
     }
-    
+
     /* read from large object */
     nread = 0;
     SvGROW(bufsv, (STRLEN)(destoffset + nread + BUFSIZ + 1));
@@ -5392,11 +5652,11 @@ int dbd_st_blob_read (SV * sth, imp_sth_t * imp_sth, int lobjId, long offset, lo
         SvGROW(bufsv, (STRLEN)(destoffset + nread + BUFSIZ + 1));
         tmp = (SvPVX(bufsv)) + destoffset + nread;
     }
-    
+
     /* terminate string */
     SvCUR_set(bufsv, (STRLEN)(destoffset + nread));
     *SvEND(bufsv) = '\0';
-    
+
     /* close large object */
     ret = lo_close(imp_dbh->conn, lobj_fd);
     if (ret < 0) {
@@ -5405,7 +5665,7 @@ int dbd_st_blob_read (SV * sth, imp_sth_t * imp_sth, int lobjId, long offset, lo
         if (TEND_slow) TRC(DBILOGFP, "%sEnd dbd_st_blob_read (error: close failed)\n", THEADER_slow);
         return 0;
     }
-    
+
     if (TEND_slow) TRC(DBILOGFP, "%sEnd dbd_st_blob_read (bytes: %d)\n", THEADER_slow, (int)nread);
     return (int)nread;
 
@@ -5413,7 +5673,7 @@ int dbd_st_blob_read (SV * sth, imp_sth_t * imp_sth, int lobjId, long offset, lo
 
 
 /* ================================================================== */
-/* 
+/*
    Return the result of an asynchronous query, waiting if needed
 */
 long pg_db_result (SV *h, imp_dbh_t *imp_dbh)
@@ -5543,6 +5803,7 @@ long pg_db_result (SV *h, imp_dbh_t *imp_dbh)
                 rows = 0;
                 break;
             }
+            /* fallthrough */
 
         default:
             rows = -2;
@@ -5553,39 +5814,31 @@ long pg_db_result (SV *h, imp_dbh_t *imp_dbh)
 
         /* Store the result in the appropriate statement handle */
         if (imp_sth && imp_sth == imp_dbh->async_sth) {
-            if (imp_dbh->last_result && imp_dbh->result_clearable) {
-                TRACE_PQCLEAR;
-                PQclear(imp_dbh->last_result);
-            }
-            if (imp_sth->result && imp_sth->result != imp_dbh->last_result) {
-                TRACE_PQCLEAR;
-                PQclear(imp_sth->result);
-            }
+
+            CLEAR_LAST_RESULT(imp_dbh);
+
+            CLEAR_STH_RESULT(imp_sth);
+
             imp_dbh->last_result = imp_sth->result = result;
-            imp_dbh->result_clearable = DBDPG_FALSE;
+            imp_dbh->result_shared = DBDPG_TRUE;
         }
         else if (NULL == imp_sth && NULL != imp_dbh->async_sth) {
-            if (imp_dbh->last_result && imp_dbh->result_clearable) {
-                TRACE_PQCLEAR;
-                PQclear(imp_dbh->last_result);
-            }
+            CLEAR_LAST_RESULT(imp_dbh);
+
             /* If the above wasn't the async handle's result, free that too */
-            if (imp_dbh->async_sth->result && imp_dbh->async_sth->result != imp_dbh->last_result) {
-                TRACE_PQCLEAR;
-                PQclear(imp_dbh->async_sth->result);
+            if (imp_dbh->async_sth->result != imp_dbh->last_result) {
+                CLEAR_STH_RESULT(imp_dbh->async_sth);
             }
 
             imp_dbh->last_result = imp_dbh->async_sth->result = result;
-            imp_dbh->result_clearable = DBDPG_FALSE;
+            imp_dbh->result_shared = DBDPG_TRUE;
 
         }
         else {
-            if (imp_dbh->last_result && imp_dbh->result_clearable) {
-                TRACE_PQCLEAR;
-                PQclear(imp_dbh->last_result);
-            }
+            CLEAR_LAST_RESULT(imp_dbh);
+
             imp_dbh->last_result = result;
-            imp_dbh->result_clearable = DBDPG_TRUE;
+            imp_dbh->result_shared = DBDPG_FALSE;
         }
         if (rows == -1) {
             break;
@@ -5607,7 +5860,7 @@ long pg_db_result (SV *h, imp_dbh_t *imp_dbh)
 
 
 /* ================================================================== */
-/* 
+/*
    Indicates if an asynchronous query has finished yet
    Accepts either a database or a statement handle
    Returns:
@@ -5651,11 +5904,16 @@ int pg_db_ready(SV *h, imp_dbh_t *imp_dbh)
         if (TRACE5_slow) TRC(DBILOGFP, "%snot yet connected\n", THEADER_slow);
         if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_ready (error: not connected)\n", THEADER_slow);
         return -1;
+
+    default:
+        /* Future fix: handle gracefully or throw a warning */
+        break;
+
     }
 
     TRACE_PQCONSUMEINPUT;
     if (!PQconsumeInput(imp_dbh->conn)) {
-        _fatal_sqlstate(aTHX_ imp_dbh);        
+        _fatal_sqlstate(aTHX_ imp_dbh);
         TRACE_PQERRORMESSAGE;
         pg_error(aTHX_ h, PGRES_FATAL_ERROR, PQerrorMessage(imp_dbh->conn));
         if (TEND_slow) TRC(DBILOGFP, "%sEnd pg_db_ready (error: consume failed)\n", THEADER_slow);
@@ -5852,12 +6110,10 @@ static int handle_old_async(pTHX_ SV * handle, imp_dbh_t * imp_dbh, const int as
 
                 imp_sth_t *orig_sth = async_sth;
 
-                if (orig_sth->result) {
-                    TRACE_PQCLEAR;
-                    PQclear(orig_sth->result);
-                }
+                CLEAR_STH_RESULT(orig_sth);
 
                 orig_sth->result = result;
+
                 if (PGRES_TUPLES_OK == status) {
                     TRACE_PQNTUPLES;
                     orig_sth->rows = PQntuples(result);
@@ -5889,10 +6145,7 @@ static int handle_old_async(pTHX_ SV * handle, imp_dbh_t * imp_dbh, const int as
 
                 imp_sth_t *orig_sth = async_sth;
 
-                if (orig_sth->result) {
-                    TRACE_PQCLEAR;
-                    PQclear(orig_sth->result);
-                }
+                CLEAR_STH_RESULT(orig_sth);
 
                 orig_sth->result = result;
                 orig_sth->rows = -2; /* Error; pg_db_result reports the actual error via pg_error */
@@ -5977,7 +6230,7 @@ static int handle_old_async(pTHX_ SV * handle, imp_dbh_t * imp_dbh, const int as
 
 
 /* ================================================================== */
-/* 
+/*
    Attempt to cancel a synchronous query
    Returns true if the cancel succeeded, and false if it did not
 */
@@ -5998,13 +6251,16 @@ int dbd_st_cancel(SV *sth, imp_sth_t *imp_sth)
 
 
 /* ================================================================== */
-/* 
+/*
    Retrieves table oid and column position (in that table) for every column in resultset
    Returns array of arrays of table oid and column pos or undef if column is not a simple reference
 */
 SV* dbd_st_canonical_ids(SV *sth, imp_sth_t *imp_sth)
 {
     dTHX;
+
+    PERL_UNUSED_VAR(sth);
+
     TRACE_PQNFIELDS;
     int fields = PQnfields(imp_sth->result);
     AV* result = newAV();
@@ -6036,7 +6292,7 @@ SV* dbd_st_canonical_ids(SV *sth, imp_sth_t *imp_sth)
 
 
 /* ================================================================== */
-/* 
+/*
    Retrieves canonical name (schema.table.column) for every column in resultset
    Returns array of strings or undef if column is not a simple reference
 */
@@ -6046,6 +6302,9 @@ SV* dbd_st_canonical_names(SV *sth, imp_sth_t *imp_sth)
     D_imp_dbh_from_sth;
     ExecStatusType status;
     PGresult * result;
+
+    PERL_UNUSED_VAR(sth);
+
     TRACE_PQNFIELDS;
     int fields = PQnfields(imp_sth->result);
     AV* result_av = newAV();
@@ -6061,7 +6320,7 @@ SV* dbd_st_canonical_names(SV *sth, imp_sth_t *imp_sth)
             int pos = PQftablecol(imp_sth->result, fields);
             if(pos > 0){
                 char statement[204];
-                sprintf(statement, 
+                sprintf(statement,
                     "SELECT n.nspname, c.relname, a.attname FROM pg_class c LEFT JOIN pg_namespace n ON c.relnamespace = n.oid LEFT JOIN pg_attribute a ON a.attrelid = c.oid WHERE c.oid = %u AND a.attnum = %d", oid, pos);
                 TRACE_PQEXEC;
                 result = PQexec(imp_dbh->conn, statement);
@@ -6102,19 +6361,19 @@ SV* dbd_st_canonical_names(SV *sth, imp_sth_t *imp_sth)
 Some information to keep you sane:
 typedef enum
 {
-    PGRES_EMPTY_QUERY = 0,        // empty query string was executed 
+    PGRES_EMPTY_QUERY = 0,        // empty query string was executed
 1    PGRES_COMMAND_OK,            // a query command that doesn't return
                                    anything was executed properly by the
-                                   backend 
+                                   backend
 2    PGRES_TUPLES_OK,            // a query command that returns tuples was
                                    executed properly by the backend, PGresult
-                                   contains the result tuples 
-3    PGRES_COPY_OUT,                // Copy Out data transfer in progress 
-4    PGRES_COPY_IN,                // Copy In data transfer in progress 
+                                   contains the result tuples
+3    PGRES_COPY_OUT,                // Copy Out data transfer in progress
+4    PGRES_COPY_IN,                // Copy In data transfer in progress
 5    PGRES_BAD_RESPONSE,            // an unexpected response was recv'd from the
-                                   backend 
-6    PGRES_NONFATAL_ERROR,        // notice or warning message 
-7    PGRES_FATAL_ERROR            // query failed 
+                                   backend
+6    PGRES_NONFATAL_ERROR,        // notice or warning message
+7    PGRES_FATAL_ERROR            // query failed
 } ExecStatusType;
 
 */

@@ -74,6 +74,7 @@ static const frj_abi *punk_frj(pTHX) {
 #include "punk/punk_views.h"      /* the view-engine registry              */
 #include "punk/punk_scope.h"      /* the `under` handle (needs context)     */
 #include "punk/punk_app.h"        /* the Punk::App registrar (needs context) */
+#include "punk/punk_host.h"       /* the origin + host allowlist (needs app) */
 #include "punk/punk_proxy.h"      /* reverse-proxy trust (used by serve)    */
 #include "punk/punk_serve.h"      /* the request dispatcher                 */
 #include "punk/punk_ws.h"         /* the RFC 6455 frame codec (phase 8)    */
@@ -82,6 +83,7 @@ static const frj_abi *punk_frj(pTHX) {
 #include "punk/punk_static.h"    /* the static-file app (a magic-CV closure) */
 #include "punk/punk_sendfile.h"  /* $c->send_file: validators + ranges     */
 #include "punk/punk_cget.h"      /* conditional GET (needs sendfile+context) */
+#include "punk/punk_favicon.h"   /* GET /favicon.ico, frozen at to_app     */
 #include "punk/punk_oamount.h"   /* the `api` mount, boot half (needs static) */
 #include "punk/punk_dbi.h"       /* the shipped DBI model backend           */
 #include "punk/punk_model.h"     /* the model tier: DSL, metadata, contract */

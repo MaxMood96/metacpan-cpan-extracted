@@ -23,7 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 */
-/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.25/lib/adler32.c */
+/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.26/lib/adler32.c */
 
 
 /* #include "lib_common.h" */
@@ -74,8 +74,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -383,8 +383,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -427,15 +427,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -594,7 +585,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -1075,8 +1067,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -1384,8 +1376,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -1428,15 +1420,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -1595,7 +1578,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -2477,8 +2461,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -2786,8 +2770,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -2830,15 +2814,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -2997,7 +2972,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -4699,6 +4675,7 @@ ADD_SUFFIX(adler32_x86)(u32 adler, const u8 *p, size_t len)
 #endif
 
 #if (GCC_PREREQ(8, 1) || CLANG_PREREQ(6, 0, 10000000) || MSVC_PREREQ(1920)) && \
+	!(CLANG_PREREQ(18, 0, 18000000) && !CLANG_PREREQ(19, 0, 19000000)) && \
 	!defined(LIBDEFLATE_ASSEMBLER_DOES_NOT_SUPPORT_AVX512VNNI)
 
 #  define adler32_x86_avx512_vl256_vnni	adler32_x86_avx512_vl256_vnni
@@ -5570,7 +5547,7 @@ libdeflate_adler32(u32 adler, const void *buffer, size_t len)
 		return 1;
 	return adler32_impl(adler, buffer, len);
 }
-/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.25/lib/crc32.c */
+/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.26/lib/crc32.c */
 
 
 
@@ -5623,8 +5600,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -5932,8 +5909,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -5976,15 +5953,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -6143,7 +6111,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -7571,8 +7540,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -7880,8 +7849,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -7924,15 +7893,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -8091,7 +8051,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -9826,8 +9787,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -10135,8 +10096,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -10179,15 +10140,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -10346,7 +10298,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -11819,6 +11772,7 @@ reduce_x0:
 #endif
 
 #if (GCC_PREREQ(10, 1) || CLANG_PREREQ(6, 0, 10000000) || MSVC_PREREQ(1920)) && \
+	!(CLANG_PREREQ(18, 0, 18000000) && !CLANG_PREREQ(19, 0, 19000000)) && \
 	!defined(LIBDEFLATE_ASSEMBLER_DOES_NOT_SUPPORT_VPCLMULQDQ)
 
 #  define crc32_x86_vpclmulqdq_avx512_vl256  crc32_x86_vpclmulqdq_avx512_vl256
@@ -12532,7 +12486,7 @@ libdeflate_crc32(u32 crc, const void *p, size_t len)
 		return 0;
 	return ~crc32_impl(~crc, p, len);
 }
-/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.25/lib/deflate_compress.c */
+/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.26/lib/deflate_compress.c */
 
 
 /* #include "deflate_compress.h" */
@@ -12587,8 +12541,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -12896,8 +12850,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -12940,15 +12894,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -13107,7 +13052,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -13638,8 +13584,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -13947,8 +13893,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -13991,15 +13937,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -14158,7 +14095,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -14626,8 +14564,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -14935,8 +14873,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -14979,15 +14917,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -15146,7 +15075,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -15786,8 +15716,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -16095,8 +16025,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -16139,15 +16069,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -16306,7 +16227,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -17283,8 +17205,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -17592,8 +17514,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -17636,15 +17558,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -17803,7 +17716,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -18271,8 +18185,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -18580,8 +18494,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -18624,15 +18538,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -18791,7 +18696,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -19431,8 +19337,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -19740,8 +19646,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -19784,15 +19690,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -19951,7 +19848,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -20877,8 +20775,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -21186,8 +21084,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -21230,15 +21128,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -21397,7 +21286,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -21865,8 +21755,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -22174,8 +22064,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -22218,15 +22108,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -22385,7 +22266,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -23025,8 +22907,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -23334,8 +23216,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -23378,15 +23260,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -23545,7 +23418,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -27218,6 +27092,10 @@ libdeflate_alloc_compressor_ex(int compression_level,
 	if (options->sizeof_options != sizeof(*options))
 		return NULL;
 
+	
+	if (compression_level == -1)
+		compression_level = 6;
+
 	if (compression_level < 0 || compression_level > 12)
 		return NULL;
 
@@ -27415,7 +27293,7 @@ libdeflate_deflate_compress_bound(struct libdeflate_compressor *c,
 	
 	return (5 * max_blocks) + in_nbytes;
 }
-/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.25/lib/deflate_decompress.c */
+/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.26/lib/deflate_decompress.c */
 
 
 /* #include "lib_common.h" */
@@ -27466,8 +27344,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -27775,8 +27653,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -27819,15 +27697,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -27986,7 +27855,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -29609,8 +29479,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -29918,8 +29788,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -29962,15 +29832,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -30129,7 +29990,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -31266,18 +31128,18 @@ arch_select_decompress_func(void)
 
 #ifdef arch_select_decompress_func
 static enum libdeflate_result
-dispatch_decomp(struct libdeflate_decompressor *d,
-		const void *in, size_t in_nbytes,
-		void *out, size_t out_nbytes_avail,
+dispatch_decomp(struct libdeflate_decompressor * restrict d,
+		const void * restrict in, size_t in_nbytes,
+		void * restrict out, size_t out_nbytes_avail,
 		size_t *actual_in_nbytes_ret, size_t *actual_out_nbytes_ret);
 
 static volatile decompress_func_t decompress_impl = dispatch_decomp;
 
 
 static enum libdeflate_result
-dispatch_decomp(struct libdeflate_decompressor *d,
-		const void *in, size_t in_nbytes,
-		void *out, size_t out_nbytes_avail,
+dispatch_decomp(struct libdeflate_decompressor * restrict d,
+		const void * restrict in, size_t in_nbytes,
+		void * restrict out, size_t out_nbytes_avail,
 		size_t *actual_in_nbytes_ret, size_t *actual_out_nbytes_ret)
 {
 	decompress_func_t f = arch_select_decompress_func();
@@ -31352,7 +31214,7 @@ libdeflate_free_decompressor(struct libdeflate_decompressor *d)
 	if (d)
 		d->free_func(d);
 }
-/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.25/lib/gzip_compress.c */
+/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.26/lib/gzip_compress.c */
 
 
 /* #include "deflate_compress.h" */
@@ -31407,8 +31269,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -31716,8 +31578,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -31760,15 +31622,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -31927,7 +31780,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -32404,7 +32258,7 @@ libdeflate_gzip_compress_bound(struct libdeflate_compressor *c,
 	return GZIP_MIN_OVERHEAD +
 	       libdeflate_deflate_compress_bound(c, in_nbytes);
 }
-/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.25/lib/gzip_decompress.c */
+/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.26/lib/gzip_decompress.c */
 
 
 /* #include "lib_common.h" */
@@ -32455,8 +32309,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -32764,8 +32618,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -32808,15 +32662,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -32975,7 +32820,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -33497,7 +33343,7 @@ libdeflate_gzip_decompress(struct libdeflate_decompressor *d,
 					     out, out_nbytes_avail,
 					     NULL, actual_out_nbytes_ret);
 }
-/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.25/lib/utils.c */
+/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.26/lib/utils.c */
 
 
 /* #include "lib_common.h" */
@@ -33548,8 +33394,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -33857,8 +33703,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -33901,15 +33747,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -34068,7 +33905,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -34539,7 +34377,7 @@ libdeflate_assertion_failed(const char *expr, const char *file, int line)
 	abort();
 }
 #endif 
-/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.25/lib/zlib_compress.c */
+/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.26/lib/zlib_compress.c */
 
 
 /* #include "deflate_compress.h" */
@@ -34594,8 +34432,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -34903,8 +34741,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -34947,15 +34785,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -35114,7 +34943,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -35559,7 +35389,7 @@ libdeflate_zlib_compress_bound(struct libdeflate_compressor *c,
 	return ZLIB_MIN_OVERHEAD +
 	       libdeflate_deflate_compress_bound(c, in_nbytes);
 }
-/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.25/lib/zlib_decompress.c */
+/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.26/lib/zlib_decompress.c */
 
 
 /* #include "lib_common.h" */
@@ -35610,8 +35440,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -35919,8 +35749,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -35963,15 +35793,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -36130,7 +35951,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -36588,7 +36410,7 @@ libdeflate_zlib_decompress(struct libdeflate_decompressor *d,
 					     out, out_nbytes_avail,
 					     NULL, actual_out_nbytes_ret);
 }
-/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.25/lib/arm/cpu_features.c */
+/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.26/lib/arm/cpu_features.c */
 
 
 
@@ -36665,8 +36487,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -36974,8 +36796,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -37018,15 +36840,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -37185,7 +36998,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -37652,8 +37466,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -37961,8 +37775,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -38005,15 +37819,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -38172,7 +37977,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1
@@ -38710,6 +38516,7 @@ static inline u32 get_arm_cpu_features(void) { return 0; }
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -38723,7 +38530,7 @@ static void scan_auxv(unsigned long *hwcap, unsigned long *hwcap2)
 	int filled = 0;
 	int i;
 
-	fd = open("/proc/self/auxv", O_RDONLY);
+	fd = open("/proc/self/auxv", O_RDONLY | O_CLOEXEC);
 	if (fd < 0)
 		return;
 
@@ -38785,6 +38592,44 @@ static u32 query_arm_cpu_features(void)
 #endif
 	return features;
 }
+
+#ifdef ARCH_ARM64
+
+static bool arm64_cpu_is_neoverse_v_class(void)
+{
+	int fd;
+	char buf[32];
+	ssize_t n;
+	unsigned long midr;
+	u32 part;
+
+	fd = open("/sys/devices/system/cpu/cpu0/regs/identification/midr_el1",
+		  O_RDONLY | O_CLOEXEC);
+	if (fd < 0)
+		return false;
+	do {
+		n = read(fd, buf, sizeof(buf) - 1);
+	} while (n < 0 && errno == EINTR);
+	close(fd);
+	if (n <= 0)
+		return false;
+	buf[n] = '\0';
+	midr = strtoul(buf, NULL, 0); 
+
+	
+	if (((midr >> 24) & 0xff) != 0x41) 
+		return false;
+	part = (midr >> 4) & 0xfff;
+	switch (part) {
+	case 0xd40: 
+	case 0xd4f: 
+	case 0xd83: 
+	case 0xd84: 
+		return true;
+	}
+	return false;
+}
+#endif 
 
 #elif defined(__APPLE__)
 
@@ -38858,16 +38703,29 @@ static const struct cpu_feature arm_cpu_feature_table[] = {
 	{ARM_CPU_FEATURE_DOTPROD,	"dotprod"},
 };
 
+
+static bool arm_cpu_prefers_pmull(void)
+{
+#if defined(__APPLE__) && TARGET_OS_OSX
+	return true;
+#elif defined(__linux__) && defined(ARCH_ARM64)
+	if (arm64_cpu_is_neoverse_v_class())
+		return true;
+#endif
+#ifdef TEST_SUPPORT__DO_NOT_USE
+	return true;
+#endif
+	return false;
+}
+
 volatile u32 libdeflate_arm_cpu_features = 0;
 
 void libdeflate_init_arm_cpu_features(void)
 {
 	u32 features = query_arm_cpu_features();
 
-	
-#if (defined(__APPLE__) && TARGET_OS_OSX) || defined(TEST_SUPPORT__DO_NOT_USE)
-	features |= ARM_CPU_FEATURE_PREFER_PMULL;
-#endif
+	if (arm_cpu_prefers_pmull())
+		features |= ARM_CPU_FEATURE_PREFER_PMULL;
 
 	disable_cpu_features_for_testing(&features, arm_cpu_feature_table,
 					 ARRAY_LEN(arm_cpu_feature_table));
@@ -38876,7 +38734,7 @@ void libdeflate_init_arm_cpu_features(void)
 }
 
 #endif 
-/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.25/lib/x86/cpu_features.c */
+/* /usr/home/ben/projects/gzip-libdeflate/../../software/libdeflate/libdeflate-1.26/lib/x86/cpu_features.c */
 
 
 /* #include "cpu_features_common.h" - no include guard */ 
@@ -38934,8 +38792,8 @@ extern "C" {
 #endif
 
 #define LIBDEFLATE_VERSION_MAJOR	1
-#define LIBDEFLATE_VERSION_MINOR	25
-#define LIBDEFLATE_VERSION_STRING	"1.25"
+#define LIBDEFLATE_VERSION_MINOR	26
+#define LIBDEFLATE_VERSION_STRING	"1.26"
 
 
 #ifndef LIBDEFLATEAPI
@@ -39243,8 +39101,8 @@ typedef size_t machine_word_t;
 #endif
 #ifdef _MSC_VER
 #  define MSVC_PREREQ(version)	(_MSC_VER >= (version))
-#  if !MSVC_PREREQ(1900)
-#    error "MSVC versions older than Visual Studio 2015 are no longer supported"
+#  if !MSVC_PREREQ(1928)
+#    error "MSVC versions older than Visual Studio 2019 v16.8 are no longer supported"
 #  endif
 #else
 #  define MSVC_PREREQ(version)	0
@@ -39287,15 +39145,6 @@ typedef size_t machine_word_t;
 #else
 #  define NORETURN
 #endif
-
-
-#if !defined(__STDC_VERSION__) || (__STDC_VERSION__ < 201112L)
-#  if defined(__GNUC__) || defined(__clang__)
-#    define restrict		__restrict__
-#  else
-#    define restrict
-#  endif
-#endif 
 
 
 #if defined(__GNUC__) || __has_builtin(__builtin_expect)
@@ -39454,7 +39303,8 @@ static forceinline u64 bswap64(u64 v)
 
 #if (defined(__GNUC__) || defined(__clang__)) && \
 	(defined(ARCH_X86_64) || defined(ARCH_X86_32) || \
-	 defined(__ARM_FEATURE_UNALIGNED) || defined(__powerpc64__) || \
+	 defined(__ARM_FEATURE_UNALIGNED) || \
+	 defined(__powerpc64__) || defined(__powerpc__) || defined(__POWERPC__) || \
 	 defined(__riscv_misaligned_fast) || \
 	  defined(__wasm__))
 #  define UNALIGNED_ACCESS_IS_FAST	1

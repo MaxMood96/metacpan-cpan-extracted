@@ -1,10 +1,10 @@
 {
    "abstract" : "Build and install Net-SNMP",
    "author" : [
-      "Eric A. Miller <emiller AT cpan DOT org>"
+      "Eric A. Miller"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "ExtUtils::MakeMaker version 7.70, CPAN::Meta::Converter version 2.150010",
+   "generated_by" : "ExtUtils::MakeMaker version 7.78, CPAN::Meta::Converter version 2.150013",
    "license" : [
       "bsd"
    ],
@@ -68,7 +68,7 @@
          "web" : "https://github.com/ollyg/Alien-SNMP"
       }
    },
-   "version" : "4.0509050201",
+   "version" : "4.0509050202",
    "x_alienfile" : {
       "generated_by" : "Alien::Build::MM version 2.84",
       "requires" : {

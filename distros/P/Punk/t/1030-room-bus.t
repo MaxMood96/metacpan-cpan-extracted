@@ -109,22 +109,25 @@ sub ws_connect {
 # uses, because writing a second one is how the two drift.
 sub read_frame {
     my ($s, $timeout) = @_;
-    my $buf = '';
+    my $buf = \${*$s}{ws_buf};
+    $$buf //= '';
     my $f;
     eval {
         local $SIG{ALRM} = sub { die "timeout\n" };
         alarm($timeout || 5);
         while (1) {
-            $f = decode_ref($buf);
+            $f = decode_ref($$buf);
             last if $f && ref $f;
             my $n = sysread $s, my $c, 4096;
             last unless $n;
-            $buf .= $c;
+            $$buf .= $c;
         }
         alarm 0;
     };
     alarm 0;
-    return ref $f ? $f : undef;
+    return undef unless ref $f;
+    substr $$buf, 0, $f->{consumed}, '';
+    return $f;
 }
 
 # ---- the assertion that used to fail ----------------------------------------

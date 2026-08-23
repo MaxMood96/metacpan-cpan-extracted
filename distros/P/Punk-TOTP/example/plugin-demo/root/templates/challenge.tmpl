@@ -1,0 +1,13 @@
+<h2>Second factor</h2>
+<p>The password passed, but <code>totp_pending</code> is not a login: every
+<code>auth_guard</code> in the application still sees nobody.</p>
+{% if error %}
+<p class="notice bad">That code did not work. Try again, or use a recovery
+code - three misses drop you back to the password.</p>
+{% end %}
+<form method="post" action="/login/totp" class="row">
+  <input name="code" autofocus autocomplete="one-time-code"
+         inputmode="numeric" pattern="[0-9A-Za-z -]*"
+         placeholder="000000 or a recovery code" aria-label="code">
+  <button>Verify</button>
+</form>

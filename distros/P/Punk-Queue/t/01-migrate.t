@@ -82,8 +82,13 @@ require Punk::Queue;
     my $delta = $q->backend->clock_delta;
     ok(abs($delta) < 5, "clock delta is small for a local database ($delta)");
 
+    # bracketed with time() on both sides: a stall between two calls on a
+    # loaded box widens the window instead of failing the test
+    my $t0  = time();
     my $now = $q->backend->now;
-    ok(abs($now - time()) < 5, 'now() is close to wall clock');
+    my $t1  = time();
+    ok($now >= $t0 - 5 && $now <= $t1 + 5,
+       "now() is close to wall clock ($now within [$t0, $t1])");
 }
 
 # Partial migration: asking for a version we already have changes nothing.

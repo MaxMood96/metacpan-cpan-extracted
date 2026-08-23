@@ -247,10 +247,14 @@ static void pqs_hard_kill(pTHX_ pq_super *sup, int i) {
     SV *info, *r;
     SV *argv[3];
 
-    /* %f in a perl format reads an NV, which is not a double everywhere:
-     * the quadmath perls take 16 bytes off the varargs where a double put
-     * 8. Every float handed to a perl formatter is cast. */
-    warn("punk-queue: job %ld exceeded its timeout (%.1fs) - killing "
+    /* A float in a perl format reads an NV, which is not a double
+     * everywhere: the quadmath perls take 16 bytes off the varargs where a
+     * double put 8. The cast alone is not enough - the FORMAT has to name
+     * the NV width too (NVff is "Qf" there, "Lf" on longdouble, "f"
+     * otherwise) or the quadmath formatter rejects a bare %f outright. So
+     * every float handed to a perl formatter is cast AND formatted with
+     * NVff. */
+    warn("punk-queue: job %ld exceeded its timeout (%.1" NVff "s) - killing "
          "worker pid %ld", jid, (NV)s->job_timeout, (long)s->pid);
     kill(s->pid, SIGKILL);
     s->current_job = 0;             /* one kill per job */

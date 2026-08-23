@@ -31,6 +31,12 @@ use Test::More;
 
 my $here = dirname(abs_path(__FILE__));
 
+# Windows has no HOME, and a smoker runs with warnings fatal, so reading it
+# to build the maintainer's default paths is what failed the file there rather
+# than skipping it.  USERPROFILE is the Windows spelling; with neither set
+# there is no default path to try, and the entry drops out.
+my $home = defined $ENV{HOME} ? $ENV{HOME} : $ENV{USERPROFILE};
+
 # canon_charges() -- both readers' charges in one spelling, in place.
 #
 # The two formats write a formal charge differently and each reader reports
@@ -149,7 +155,7 @@ sub adds_up {
 {
 	my @dirs = grep { defined && -d } (
 		$ENV{STRUCTURE_INFO_TEST_CIF_DIR},
-		"$ENV{HOME}/ui/pep-priml/metad/systems",
+		defined $home ? "$home/ui/pep-priml/metad/systems" : undef,
 		"$here/real",
 	);
 	my @files;
@@ -330,7 +336,7 @@ sub to_cif {
 {
 	my @dirs = grep { defined && -d } (
 		$ENV{STRUCTURE_INFO_TEST_DIR},
-		"$ENV{HOME}/ui/pepPriML/PPB/PDB/PDBbind.v2020",
+		defined $home ? "$home/ui/pepPriML/PPB/PDB/PDBbind.v2020" : undef,
 		"$here/real",
 	);
 	my @all;

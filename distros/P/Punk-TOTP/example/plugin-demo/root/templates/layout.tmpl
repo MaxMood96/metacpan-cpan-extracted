@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% title | default('Punk::Plugin::TOTP demo') %}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1><a href="/">Punk::Plugin::TOTP</a></h1>
+  <p class="lede">Password, then the factor, then the session - wired by
+  the plugin, rendered by Stencil.</p>
+{% if user %}
+  <nav>
+    <span>signed in as <code>{% user.email %}</code></span>
+    <form method="post" action="/logout"><button>Sign out</button></form>
+  </nav>
+{% end %}
+</header>
+
+{% if notice %}<p class="notice {% kind %}">{% raw notice %}</p>{% end %}
+
+<main>
+{% content %}
+</main>
+
+<footer><small>Everything is in memory: restarting the server is a fresh
+user with no phone enrolled. A code stays good for about ninety seconds of
+clock drift (skew 1), and the replay floor on the user row refuses it a
+second time.</small></footer>
+</body>
+</html>

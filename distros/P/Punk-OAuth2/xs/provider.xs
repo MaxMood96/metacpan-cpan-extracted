@@ -27,7 +27,8 @@ name(self)
         HV *h = pox_prov_hv(aTHX_ self);
         const char *k = ix == 1 ? "issuer" : ix == 2 ? "scope" : "name";
         SV *v = pox_prov_get(aTHX_ h, k);
-        RETVAL = v ? newSVsv(v) : &PL_sv_undef;
+        if (!v) XSRETURN_UNDEF;
+        RETVAL = newSVsv(v);
     OUTPUT:
         RETVAL
 
@@ -51,7 +52,8 @@ jwks(self, ...)
         SV *self
     CODE:
         SV *j = pox_prov_jwks(aTHX_ self);
-        RETVAL = j ? SvREFCNT_inc(j) : &PL_sv_undef;
+        if (!j) XSRETURN_UNDEF;
+        RETVAL = SvREFCNT_inc(j);
     OUTPUT:
         RETVAL
 
@@ -128,7 +130,8 @@ verify_id_token(self, c, id_token, ...)
         {
             SV *claims = pox_prov_verify_id_token(aTHX_ self, c, id_token,
                                                   nonce);
-            RETVAL = claims ? SvREFCNT_inc(claims) : &PL_sv_undef;
+            if (!claims) XSRETURN_UNDEF;
+            RETVAL = SvREFCNT_inc(claims);
         }
     OUTPUT:
         RETVAL

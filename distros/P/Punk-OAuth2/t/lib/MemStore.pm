@@ -5,7 +5,7 @@ package MemStore;
 # "CREATING YOUR OWN STORE" POD. Kept here so the test suite proves the
 # documented contract actually drives the authorization server.
 
-use 5.024;
+use 5.010;
 use strict;
 use warnings;
 use Crypt::JWS qw(sha256 b64url);

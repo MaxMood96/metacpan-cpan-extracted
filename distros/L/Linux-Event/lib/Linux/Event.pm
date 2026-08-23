@@ -3,13 +3,7 @@ use v5.36;
 use strict;
 use warnings;
 
-our $VERSION = '0.012';
-
-use Linux::Event::Loop;
-
-sub new ($class, %args) {
-  return Linux::Event::Loop->new(%args);
-}
+our $VERSION = '0.102';
 
 1;
 
@@ -17,123 +11,126 @@ __END__
 
 =head1 NAME
 
-Linux::Event - Linux-native readiness event loop for Perl
+Linux::Event - Linux-native reactor, streams, datagrams, and processes
 
 =head1 SYNOPSIS
 
-  use v5.36;
-  use Linux::Event;
+  use Linux::Event::Loop;
+  use Linux::Event::Stream;
 
-  my $loop = Linux::Event->new;
-
-  $loop->after(0.250, sub ($loop) {
-    say "timer fired";
-    $loop->stop;
-  });
-
+  my $loop = Linux::Event::Loop->new;
+  $loop->add(MyStream->connect(
+      host => '127.0.0.1', # required
+      port => 9999,        # required
+  ));
   $loop->run;
 
 =head1 DESCRIPTION
 
-C<Linux::Event> is the front door for a Linux-native readiness event loop. It
-currently ships with an epoll backend and uses Linux kernel primitives: timerfd,
-signalfd, eventfd, and pidfd.
+Linux::Event is a Linux-only asynchronous I/O distribution. The
+XS-first C<Linux::Event::Loop> reactor owns native descriptor registrations.
+Public Stream, Listener, Datagram, Timer, Signal, Wakeup, and Process objects
+own their logical resources and attach directly to one Loop; they do not
+inherit from a generic Watcher or IO class.
 
-This distribution intentionally stays at the loop-and-primitives layer. Higher
-level socket, stream, and process helpers live in companion distributions.
-Additional readiness backends may be added in future releases.
+The APIs deliberately remain layered.  Applications that need raw descriptor
+readiness can use the reactor directly.  Applications that want automatic
+socket reads, buffered writes, and native message framing can use a Stream
+subclass on top.
 
-=head1 CONSTRUCTOR
+Every attachable public object accepts C<loop =E<gt> $loop>. It can instead be
+constructed detached and passed to C<< $loop->add($object) >>. C<add> sets the
+Loop, starts the object's activity, and returns the same object.
 
-=head2 new(%args)
-
-Create a new loop. With no arguments, the default epoll backend is used:
-
-  my $loop = Linux::Event->new;
-
-You may pass C<backend =E<gt> 'epoll'> explicitly or provide a custom readiness
-backend object:
-
-  my $loop = Linux::Event->new(backend => 'epoll');
-
-The old model selector has been removed. Passing C<model> is an error.
-
-=head1 CORE MODULES
+=head1 MAIN MODULES
 
 =over 4
 
 =item * L<Linux::Event::Loop>
 
-Public readiness loop.
-
-=item * L<Linux::Event::Backend>
-
-Readiness backend contract.
-
-=item * L<Linux::Event::Backend::Epoll>
-
-Built-in epoll backend.
-
-=item * L<Linux::Event::Watcher>
-
-Mutable watcher handle returned by C<watch()> registrations.
-
-=item * L<Linux::Event::Signal>
-
-signalfd adaptor.
-
-=item * L<Linux::Event::Wakeup>
-
-eventfd-backed wakeup primitive.
-
-=item * L<Linux::Event::Pid>
-
-pidfd-backed process-exit notifications.
-
-=item * L<Linux::Event::Scheduler>
-
-Internal monotonic deadline queue.
-
-=back
-
-=head1 ECOSYSTEM LAYERING
-
-Companion distributions provide higher-level building blocks:
-
-=over 4
-
-=item * L<Linux::Event::Listen>
-
-Server-side socket acquisition.
-
-=item * L<Linux::Event::Connect>
-
-Client-side nonblocking outbound connect.
+XS-first epoll reactor and native watcher registry.
 
 =item * L<Linux::Event::Stream>
 
-Buffered I/O and backpressure management for an established filehandle.
+Subclass-defined buffered byte streams with connection, framing, backpressure,
+half-close, established deadlines, protocol-transition, and transport lifecycle.
 
-=item * L<Linux::Event::Fork>
+=item * L<Linux::Event::Listener>
 
-Asynchronous child-process helpers built on the loop.
+TCP and Unix listeners that automatically construct a chosen Stream subclass.
 
-=item * L<Linux::Event::Clock>
+=item * L<Linux::Event::Datagram>
 
-Monotonic clock helpers used by the core loop and related modules.
+Connected and unconnected UDP and Unix datagram sockets that preserve packet
+boundaries and peer addresses.
 
 =item * L<Linux::Event::Timer>
 
-timerfd wrapper used by the core loop.
+Subclass-defined one-shot and fixed-rate recurring monotonic timers.
+
+=item * L<Linux::Event::Signal>
+
+Subclass-defined synchronous signalfd subscriptions with native fan-out.
+
+=item * L<Linux::Event::Wakeup>
+
+Subclass-defined eventfd notifications that foreign threads or forked children
+may signal without transferring Perl callbacks or values.
+
+=item * L<Linux::Event::Process>
+
+pidfd lifecycle notification, native process spawning, decoded exit status,
+signals, and asynchronous standard I/O.
+
+=item * L<Linux::Event::TLS>
+
+Declarative OpenSSL TLS policy for Stream subclasses.
+
+=item * L<Linux::Event::Framer>
+
+Guide to selecting a framing strategy for message-oriented protocols.
+
+=item * L<Linux::Event::Error>
+
+Structured errors shared by socket, process, connection, and transport paths.
+
+=item * L<Linux::Event::Address>
+
+Lazy IPv4, IPv6, and Unix socket-address values.
 
 =back
 
-=head1 AUTHOR
+=head1 PUBLIC MODEL
 
-Joshua S. Day
+Applications subclass C<Linux::Event::Stream> and
+C<Linux::Event::Datagram> to define network behavior,
+C<Linux::Event::Timer> to define scheduled behavior,
+C<Linux::Event::Signal> to define signal behavior,
+C<Linux::Event::Wakeup> to define notification handling, and
+C<Linux::Event::Process> to define child lifecycle handling. They do not
+subclass Loop registrations. Outbound Stream acquisition is
+C<< MyStream->connect(host =E<gt> '127.0.0.1', port =E<gt> 9999) >>. Inbound
+Stream acquisition is C<< Linux::Event::Listener->new(stream_class =E<gt>
+'MyStream', host =E<gt> '0.0.0.0', port =E<gt> 9999) >>. A Stream subclass
+opts into TLS with C<use Linux::Event::TLS>; C<connect> and Listener acceptance
+select the client or server handshake role.
+
+C<< $loop->watch(fd =E<gt> $fd, read =E<gt> $callback) >> remains available
+for low-level descriptor readiness.
+It immediately returns an opaque native registration handle with methods such
+as C<cancel>, C<enable_read>, and C<disable_write>. That handle is not a named
+public class or a subclassing contract.
+
+=head1 PLATFORM
+
+Linux only. Building the complete distribution requires Linux headers with
+pidfd syscall definitions, a Linux 5.4 or newer runtime for pidfd status,
+a libc providing C<posix_spawn_file_actions_addchdir_np>, and OpenSSL 1.1.1 or
+newer development files. Perl ithreads are not required.
 
 =head1 LICENSE
 
-Same terms as Perl itself.
+This library is free software; you can redistribute it and/or modify it under
+the same terms as Perl itself.
 
 =cut

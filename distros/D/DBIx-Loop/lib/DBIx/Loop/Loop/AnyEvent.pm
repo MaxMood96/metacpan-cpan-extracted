@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Carp ();
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 # The loop adapter for AnyEvent, implementing the DBIx::Loop seam over AE io
 # and timer watchers. AnyEvent has no native future, so queries stay

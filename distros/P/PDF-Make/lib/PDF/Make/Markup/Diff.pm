@@ -8,48 +8,8 @@ use PDF::Make::Builder ();
 use PDF::Make::Parser ();
 use PDF::Make::Reader ();
 
-our $VERSION = '0.11';
+our $VERSION = '0.12';
 
-# Which pages changed between two renders, and what text moved - the
-# question an engine version bump has to answer for every pinned
-# template before anyone opts in, and the question this dist's own CI
-# asks of the corpus on every commit to the layout code. In the dist
-# because the dist's CI is its first caller; the service's upgrade
-# review is the second.
-#
-# The unit is the positioned word: structured extraction gives every
-# word with its coordinates, rounded to the point, so antialias-scale
-# noise cannot flag a page while a moved column can. A pixel mode
-# arrives with the rasterizer; the contract here does not change.
-#
-# What DID change in this release is the reporting. Until now a page was a
-# bag of "text@x,y" counts and the report was the bag difference, sorted
-# by that key. Two things came out of that, and both were wrong for the
-# only reader this exists for - a person deciding whether to publish:
-#
-#   * Editing one word moves every word after it on the line, so all of
-#     them differ by coordinate and all of them are reported. Changing
-#     "may" to "we" reported five removed words and five added ones.
-#   * Sorting by the key sorts by the text, so the report arrived in
-#     alphabetical order: "Aug change separately. ust we". Prose, in the
-#     wrong order, is not readable as prose - it reads as corruption.
-#
-# So the words are kept in reading order and aligned with a longest
-# common subsequence over the TEXT. What is reported is what a proof
-# reader would mark: the words that are actually gone, the words that
-# are actually new, in the order they are read. Movement is reported
-# only when nothing textual changed, because that is the only time it is
-# the news rather than the consequence of the news - a page that reflowed
-# under a new engine with every word intact is exactly what the upgrade
-# review exists to catch.
-
-# pages($bytes): per-page words in reading order,
-#   [ [ { text => $s, x => $int, y => $int }, ... ], ... ]
-#
-# Reading order is imposed here rather than taken from the extractor:
-# lines top to bottom (PDF y grows upward, so descending), words left to
-# right. A re-encode that hands back the same page in a different block
-# order must not read as a change.
 sub pages {
     my ($class, $bytes) = @_;
     my ($fh, $tmp) = File::Temp::tempfile(SUFFIX => '.pdf', UNLINK => 1);
@@ -97,21 +57,6 @@ sub pages {
     return \@pages;
 }
 
-# Structured extraction reports a word per text run, and a run ends
-# wherever the writer happened to end one - a kerning pair, a font
-# switch, the encoder's own buffering. Two renders of nearly the same
-# page therefore chop the same line into different pieces: one gives
-# "rate." and the other "rate" then ".", one gives "Aug" "ust" and the
-# other "Au" "gust". Nothing moved and nothing was edited, but a
-# comparison of the pieces reports four changes.
-#
-# So pieces are glued back into words here, before anything is compared.
-# Two pieces on one line with no gap between them were never two words:
-# there is no space on the page between them, and a reader reading the
-# page aloud would not pause. The threshold is a fraction of the type
-# size rather than a fixed number of points, because the gap that means
-# "space" scales with the type - and it is well under a real space
-# (0.278em in Helvetica) so that words genuinely set apart stay apart.
 my $JOIN_EM = 0.15;
 
 sub _coalesce {
@@ -168,13 +113,8 @@ sub diff {
     };
 }
 
-# The most words either list will report. A page that changed wholesale
-# says so with its first few dozen words; printing nine hundred helps
-# nobody.
 my $CAP = 40;
 
-# _compare(\@a, \@b) -> (\@removed, \@added, \@moved), each a list of
-# words in reading order.
 sub _compare {
     my ($wa, $wb) = @_;
     my @ta = map { $_->{text} } @$wa;
@@ -204,16 +144,6 @@ sub _compare {
     return (\@removed, \@added, \@moved);
 }
 
-# Longest common subsequence over the two word lists, as [ [ai, bi] ]
-# index pairs.
-#
-# The identical head and tail are stripped first, which is not an
-# optimisation so much as the whole algorithm in practice: the two
-# renders being compared are almost always the same page with a few
-# words touched, so the quadratic middle is a handful of entries. When
-# it is not - two genuinely unrelated pages - the fallback is a multiset
-# difference, which loses the alignment but keeps reading order and
-# cannot take a minute over a dense page.
 my $LCS_MAX = 400;
 
 sub _align {
@@ -270,10 +200,6 @@ sub _lcs_middle {
     return @pairs;
 }
 
-# The fallback for two long, wholly different runs: match each word to
-# the next unclaimed occurrence of the same text. Not minimal, but in
-# reading order and linear, and it is only reached where the honest
-# answer is already "this page was rewritten".
 sub _greedy_middle {
     my ($ta, $tb, $head, $ma, $mb) = @_;
     my %next;
@@ -312,19 +238,6 @@ PDF::Make::Markup::Diff - which pages changed between two renders
         printf "page %d: %s moved\n", $p->{page}, "@{$p->{moved}}"
             if @{ $p->{moved} };
     }
-
-=head1 DESCRIPTION
-
-The diff behind the engine version promise. A layout change that moves
-a corpus page is a deliberate engine version bump or it does not merge
-- this dist's own corpus test asks exactly that - and a hosted
-template's upgrade review asks it again per fixture before a customer
-opts in.
-
-The unit is the positioned word from structured extraction, coordinates
-rounded to the point: a moved column flags its page, a re-encoded but
-identical page does not, and no rasterizer is required. When the
-rasterizer lands a pixel mode joins; this interface stays.
 
 =head1 WHAT IS REPORTED
 

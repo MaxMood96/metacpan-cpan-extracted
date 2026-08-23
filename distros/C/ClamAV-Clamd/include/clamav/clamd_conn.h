@@ -345,6 +345,20 @@ static int cc_read_reply(int fd, const cc_target *t, char **out, size_t *outlen,
         }
 #ifndef _WIN32
         if (errno == EINTR) continue;
+        if (cc_errno_is_closed(errno)) {
+            /* A close with our bytes still unread arrives as
+             * ECONNRESET on Linux, not as EOF - treat it as the EOF
+             * it is, or the same hangup is CC_ERR_CLOSED on one
+             * platform and CC_ERR_IO on another. */
+            if (len == 0) {
+                free(buf);
+                cc_err_set(err, CC_ERR_CLOSED, "peer closed without a reply", NULL);
+                return CC_ERR_CLOSED;
+            }
+            buf[len] = '\0';
+            *out = buf; *outlen = len;
+            return CC_OK;
+        }
         if (errno != EAGAIN && errno != EWOULDBLOCK) {
             free(buf);
             cc_err_set(err, CC_ERR_IO, "read", strerror(errno));

@@ -19,7 +19,7 @@
  * Perl headers (EXTERN.h / perl.h / XSUB.h) must be included before this file
  * so SV, AV, HV, STRLEN and pTHX are defined. */
 
-#define FETCH_ABI_VERSION 2
+#define FETCH_ABI_VERSION 3
 
 /* one outbound request header; lengths are explicit (a value may be binary) */
 typedef struct fetch_hdr {
@@ -130,6 +130,16 @@ typedef struct fetch_abi {
      * deregistration. Returns 1, or 0 when the table is full. */
     int (*on_request)(pTHX_ fetch_obs_start_cb start, fetch_obs_done_cb done,
                       void *ud);
+
+    /* ---- v3: upgrade a plaintext tunnel to TLS (SMTP STARTTLS) ---------- *
+     * The handshake tunnel_connect performs when tls=1, on a handle opened
+     * with tls=0, after the application protocol has negotiated the upgrade.
+     * The same SSL_CTX, SNI and hostname verification as tunnel_connect.
+     * 0 on success; -1 when the handle is NULL, already TLS, TLS is
+     * unavailable in this build, or the handshake fails - after a failed
+     * handshake the socket is in an undefined state and the caller closes it.
+     * Pure C, no pTHX, like the rest of the tunnel. */
+    int (*tunnel_starttls)(void *conn, const char *host, int verify);
 } fetch_abi;
 
 /* How many outbound observers Fetch will hold. Fixed, so registration

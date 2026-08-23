@@ -85,10 +85,12 @@ include/punk/punk_dbi.h
 include/punk/punk_dbil.h
 include/punk/punk_dispatch.h
 include/punk/punk_entropy.h
+include/punk/punk_favicon.h
 include/punk/punk_flash.h
 include/punk/punk_future.h
 include/punk/punk_headers.h
 include/punk/punk_health.h
+include/punk/punk_host.h
 include/punk/punk_i18n.h
 include/punk/punk_idem.h
 include/punk/punk_immortal_probe.h
@@ -211,6 +213,9 @@ t/0022-pod-coverage.t
 t/0100-dsl.t
 t/0101-import.t
 t/0102-install-kw.t
+t/0103-host.t
+t/0104-favicon.t
+t/0105-host-allow.t
 t/0110-router.t
 t/0111-xs-router.t
 t/0112-route-spec.t
@@ -288,6 +293,7 @@ t/1122-request-id-log.t
 t/1130-health.t
 t/1131-metrics.t
 t/1140-sitemap.t
+t/1141-sitemap-host.t
 t/1150-i18n.t
 t/1151-i18n-negotiate.t
 t/1152-i18n-template.t

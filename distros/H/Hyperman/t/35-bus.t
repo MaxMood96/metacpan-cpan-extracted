@@ -191,10 +191,14 @@ sub run_group {
     my %stats = Hyperman->bus_stats('thumbs');
     is($stats{group_gaps}, 0, 'and nothing lapped, well inside the ring');
 
-    cmp_ok(scalar(grep { $_ } @$per), '>', 1,
-        'the work spread over more than one worker - balancing falls out of '
-      . 'the claim, with no scheduler to tune')
-        or diag "per worker: @$per";
+    # How the forty split between the four is NOT asserted. The split is a
+    # scheduling outcome, not a bus property: each child polls every 0.5ms
+    # against a 1ms publish gap, so each tick has one message and whichever
+    # child the kernel runs first takes it - and a kernel that fires its
+    # timers in a fixed order hands every tick to the same child (the FreeBSD
+    # 9.2 smoker: 40 0 0 0). That the cursor is shared is already proven
+    # above: a cursor private to each process would have handed all forty to
+    # every child, and exactly-once across four claimers rules that out.
     note "per worker: @$per";
 }
 

@@ -11,11 +11,7 @@ use Params::Get;
 use Readonly;
 use Scalar::Util qw(blessed);
 use I18N::LangTags::Detect;
-
-# enforce mode lets Sub::Private work correctly with OO dispatch ($self->_helper).
-# Tests bypass the check automatically when HARNESS_ACTIVE is set by prove.
-BEGIN { $Sub::Private::config{mode} = 'enforce' }
-use Sub::Private;
+use Sub::Protected;
 
 =head1 NAME
 
@@ -23,11 +19,11 @@ Lingua::Text - Store the same text in many languages; retrieve it in the user's 
 
 =head1 VERSION
 
-Version 0.09
+Version 0.10
 
 =cut
 
-our $VERSION = '0.09';
+our $VERSION = '0.10';
 our $AUTOLOAD;
 
 # ---------------------------------------------------------------------------
@@ -892,7 +888,7 @@ sub AUTOLOAD {
 # Entry:    $key -- key into %MESSAGES.
 # Exit:     Formatted string ready for Carp.
 # Effects:  None.
-sub _err :Private {
+sub _err :Protected {
 	my ($key) = @_;
 	my $fmt = $MESSAGES{$key};
 	return sprintf($fmt, __PACKAGE__) if defined($fmt);
@@ -907,7 +903,7 @@ sub _err :Private {
 # Entry:    None (uses package-level _err).
 # Exit:     undef.
 # Effects:  Emits a Carp warning visible at the caller's call site.
-sub _carp_set_usage :Private {
+sub _carp_set_usage :Protected {
 	Carp::carp(_err('set_usage'));
 	return;
 }
@@ -931,7 +927,7 @@ sub _carp_set_usage :Private {
 {
 	my ($cached_lang, %cached_env);
 
-	sub _get_language :Private {
+	sub _get_language :Protected {
 		# Fast path: env vars unchanged since last call -- return cached result.
 		# Using 'exists' rather than defined($cached_lang) so a cached undef is
 		# also served from cache (avoids re-probing an env with no locale set).
@@ -981,7 +977,7 @@ sub _carp_set_usage :Private {
 #           this module (ISO 639-1 with optional ISO 3166-1 country suffix).
 # Entry:    $lang -- candidate string.
 # Exit:     True if $lang matches $LANG_RE; false otherwise.
-sub _is_valid_language :Private {
+sub _is_valid_language :Protected {
 	my ($lang) = @_;
 	return $lang =~ $LANG_RE;
 }
@@ -1169,7 +1165,7 @@ Runtime:
 
 =item * L<Scalar::Util> -- C<blessed()> for safe type testing
 
-=item * L<Sub::Private> -- enforcement of private method access
+=item * L<Sub::Protected> -- enforcement of protected method access
 
 =back
 

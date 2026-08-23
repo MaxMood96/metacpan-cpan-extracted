@@ -39,6 +39,7 @@ examples/sqlite-blog/script/smoke.pl
 examples/sqlite-dataloader.psgi
 lib/GraphQL/Houtou.pm
 lib/GraphQL/Houtou.xs
+lib/GraphQL/Houtou/Async/Adapter.pm
 lib/GraphQL/Houtou/DataLoader.pm
 lib/GraphQL/Houtou/Directive.pm
 lib/GraphQL/Houtou/Error.pm
@@ -148,10 +149,14 @@ t/58_introspection_policy.t
 t/59_on_stall_native_drive.t
 t/60_utf8_multibyte.t
 t/61_declarative_loader.t
+t/62_async_adapter_future_xs.t
+t/63_async_adapter_promise_es6.t
+t/64_async_adapter_ownership.t
 t/kitchen-sink.graphql
 t/schema-kitchen-sink.graphql
 t/swapi-schema.graphql
 util/accessor-benchmark.pl
+util/async-adapter-benchmark.pl
 util/dataloader-benchmark.pl
 util/execution-benchmark-checkpoint.pl
 util/execution-benchmark.pl

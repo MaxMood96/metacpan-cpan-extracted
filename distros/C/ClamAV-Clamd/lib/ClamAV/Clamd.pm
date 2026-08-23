@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use XSLoader ();
 
-our $VERSION = '0.01';
+our $VERSION = '0.03';
 
 XSLoader::load('ClamAV::Clamd', $VERSION);
 
@@ -423,50 +423,6 @@ undef when it could not get an answer, and sets both L</error> and a
 non-zero L</error_code>. A timeout, a refused connection, a peer that
 closed mid-reply and a reply that exceeded C<reply_max> are all failures
 to answer, never answers.
-
-=head1 C ABI
-
-Another XS distribution can call clamd through this one's C entry points
-without going near Perl, by vendoring F<include/clamav/clamd_abi.h>,
-fetching the table once from C<ClamAV::Clamd::_abi_ptr>, and gating on
-
-    abi->abi_version >= CLAMD_ABI_VERSION
-
-with B<greater-or-equal and never equality>. The table is append-only, so
-a later version is a superset whose prefix stays valid; an equality check
-turns every release of this module into a breaking change for everything
-built against it.
-
-The header is installed for L<ExtUtils::Depends>, which is a
-configure-time dependency only. Nothing is needed at runtime, and a build
-without it produces a fully working module - only the wiring for other XS
-distributions is skipped.
-
-=head2 It is not there for speed
-
-Measured on the machine this was developed on: a small-file scan takes
-about 637 microseconds, a Perl method call into this module takes about
-0.03, and driving a scan to completion from Perl costs roughly 0.1
-microseconds in total. Even a 90 MB stream - the case built to generate
-the most readiness events there are - takes 142 C<step> calls, about five
-microseconds of Perl against a scan lasting 0.64 seconds.
-
-That is B<0.0007%>. A scan is a socket round trip to a daemon holding
-1.6 GB of signatures, and nothing on the Perl side is measurable beside
-it.
-
-The ABI exists so a consumer that is already in C can stay in C, and for
-consistency with how other providers are consumed. If you are reaching
-for it because you expect it to be faster, use the Perl API: it is
-simpler, and it is not measurably slower.
-
-=head1 SEE ALSO
-
-L<ClamAV::Client> and L<File::Scan::ClamAV> are pure-Perl clamd clients.
-If a blocking scan in a cron job is what you need, they have no XS to
-compile and that is a real advantage.
-
-L<Mail::ClamAV> binds libclamav rather than talking to the daemon.
 
 =head1 AUTHOR
 

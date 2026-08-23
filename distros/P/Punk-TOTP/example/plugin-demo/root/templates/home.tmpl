@@ -1,0 +1,24 @@
+<h2>Enrolled</h2>
+<p>Second factor on. The secret and the replay floor
+(<code>totp_last_counter</code>) live on the user row now; the plugin wrote
+the floor when the enrolment code was accepted.</p>
+
+<ul class="status">
+{% if passed %}
+  <li class="ok">this session passed the factor (<code>totp_at</code> set) -
+  <a href="/vault/contents">the vault</a> opens</li>
+{% else %}
+  <li class="quiet">this session has NOT passed the factor -
+  <a href="/vault/contents">the vault</a> will step up to the challenge</li>
+{% end %}
+{% if codes %}
+  <li class="ok">recovery codes, shown once:<br>
+  {% for code in codes %}<code>{% code %}</code> {% end %}</li>
+{% end %}
+</ul>
+
+<form method="post" action="/recovery" class="row">
+  <button>Issue 5 recovery codes</button>
+  <small>a new set revokes the old one</small>
+</form>
+<p><small>Sign out, then sign in again to meet the challenge.</small></p>

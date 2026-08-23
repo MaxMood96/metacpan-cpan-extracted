@@ -349,4 +349,35 @@ SKIP: {
         '...and even that refusal is readable cross-origin');
 }
 
+# ---- the bare form from punk.yml --------------------------------------------
+# A YAML `true` arrives as a JSON::PP::Boolean object, not the scalar 1;
+# `cors: true` has to mean what `cors;` means, and `cors: false` nothing.
+SKIP: {
+    skip 'YAML::XS required for the config half', 6
+        unless eval { require YAML::XS; 1 };
+    require File::Temp;
+    require Punk::Test;
+    my $dir = File::Temp->newdir;
+    my $n = 0;
+    for my $case ([ 'true', '*' ], [ 'false', undef ]) {
+        my ($yml, $want) = @$case;
+        open my $fh, '>', "$dir/punk.yml" or die $!;
+        print $fh "cors: $yml\n";
+        close $fh;
+        my $pkg = 'YmlCors' . $n++;
+        eval qq{
+            package $pkg;
+            use Punk;
+            config "$dir/punk.yml";
+            get '/' => sub { \$_[0]->text('x') };
+            1;
+        } or die $@;
+        my $t = Punk::Test->new($pkg);
+        $t->get_ok('/', headers => { Origin => $ORIGIN })->status_is(200);
+        is($t->header('Access-Control-Allow-Origin'), $want,
+            defined $want ? "cors: $yml is the public bare form"
+                          : "cors: $yml leaves cross-origin off");
+    }
+}
+
 done_testing();

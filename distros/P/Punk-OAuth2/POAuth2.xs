@@ -3,6 +3,8 @@
 #include "perl.h"
 #include "XSUB.h"
 #include "ppport.h"
+#include "pox/pox_compat.h"
+#include "pox/pox_immortal_probe.h"  /* author probe: -DPOX_IMMORTAL_PROBE */
 
 #include "pox/pox_abi.h"
 #include "pox/pox_util.h"

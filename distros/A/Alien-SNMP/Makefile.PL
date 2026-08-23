@@ -21,7 +21,7 @@ WriteMakefile($abmm->mm_args(
   DISTNAME      => 'Alien-SNMP',
   VERSION_FROM  => 'lib/Alien/SNMP.pm',
   ABSTRACT      => 'Build and install Net-SNMP',
-  AUTHOR        => 'Eric A. Miller <emiller AT cpan DOT org>',
+  AUTHOR        => 'Eric A. Miller',
   LICENSE       => 'bsd',
   MIN_PERL_VERSION => '5.010001',
 

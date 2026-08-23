@@ -37,11 +37,19 @@ static const jws_abi *pox_jws(pTHX) {
     IV p = pox_call_abi_ptr(aTHX_ "require Crypt::JWS;",
                             "Crypt::JWS::_abi_ptr");
     const jws_abi *a = p ? INT2PTR(const jws_abi *, p) : NULL;
-    if (a && a->version == JWS_ABI_VERSION) POX_JWS = a;
+    /* >= not ==: the table is append-only, so a Crypt::JWS newer than
+     * this header is always safe. Equality here made every append a
+     * breaking change - the same defect Punk::Queue 0.06 fixed. The
+     * comparison is against the version whose members this file
+     * actually calls, NOT the installed header's JWS_ABI_VERSION:
+     * compiling against a newer header must not raise the runtime
+     * requirement of code that never touches the new members. */
+#define POX_JWS_NEED 1
+    if (a && a->version >= POX_JWS_NEED) POX_JWS = a;
   }
   if (!POX_JWS)
     croak("Punk::OAuth2: Crypt::JWS with a compatible C ABI is required "
-          "(JWS_ABI_VERSION %d)", JWS_ABI_VERSION);
+          "(jws_abi version %d or newer)", POX_JWS_NEED);
   return POX_JWS;
 }
 

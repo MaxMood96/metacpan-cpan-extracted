@@ -39,7 +39,7 @@
             "Params::Get" : "0",
             "Readonly" : "0",
             "Scalar::Util" : "0",
-            "Sub::Private" : "0",
+            "Sub::Protected" : "0.02",
             "perl" : "5.010"
          }
       },
@@ -71,6 +71,6 @@
          "x_repository" : "https://github.com/nigelhorne/Lingua-Text"
       }
    },
-   "version" : "0.09",
+   "version" : "0.10",
    "x_serialization_backend" : "JSON::PP version 4.18"
 }

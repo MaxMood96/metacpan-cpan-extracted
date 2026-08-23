@@ -1,0 +1,16 @@
+Revision history for Uniform::HTMX
+
+0.10  2026-08-22
+        - Production ready abstract base launch.
+        - Core header normalization algorithm stabilized.
+        - Full POD documentation and unit tests compiled.
+0.11  2026-08-22
+        - POD author corrections
+0.13  2026-08-22
+        - now using Uniform ecosystem modules
+0.14  2026-08-22
+        - Extracted internal normalization engine logic out to Uniform::Utils.
+        - Linked validation runtime tracking to object-oriented Uniform::Exceptions.
+        - Upgraded prerequisite version mapping bounds inside Makefile.PL.
+0.15  2026-08-22
+        - Added links to POD

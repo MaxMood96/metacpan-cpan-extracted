@@ -4,7 +4,7 @@ Lingua::Text - Store the same text in many languages; retrieve it in the user's 
 
 # VERSION
 
-Version 0.09
+Version 0.10
 
 # SYNOPSIS
 
@@ -753,7 +753,7 @@ Runtime:
 - [Params::Get](https://metacpan.org/pod/Params%3A%3AGet) -- flexible argument parsing for public methods
 - [Readonly](https://metacpan.org/pod/Readonly) -- constant definitions for the message catalog and patterns
 - [Scalar::Util](https://metacpan.org/pod/Scalar%3A%3AUtil) -- `blessed()` for safe type testing
-- [Sub::Private](https://metacpan.org/pod/Sub%3A%3APrivate) -- enforcement of private method access
+- [Sub::Protected](https://metacpan.org/pod/Sub%3A%3AProtected) -- enforcement of protected method access
 
 # AUTHOR
 

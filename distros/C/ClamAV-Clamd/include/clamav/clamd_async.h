@@ -424,7 +424,13 @@ static int cc_scan_step(cc_scan *s) {
                 }
                 continue;
             }
-            if (n == 0) {
+            if (n == 0 || (n < 0 && cc_errno_is_closed(errno))) {
+                /* A reset IS the close being looked for: when the peer
+                 * hangs up with our bytes still unread - which is
+                 * exactly what clamd does at StreamMaxLength - Linux
+                 * reports ECONNRESET here, not EOF. Same event, same
+                 * handling, or the cut shows up as a generic IO error
+                 * on every Linux box. */
                 if (s->replylen == 0) {
                     cc_fail(s, CC_ERR_STREAMCUT,
                             "clamd closed the stream without a verdict "

@@ -48,6 +48,7 @@ t/15-fork.t
 t/16-abi.t
 t/17-rowhash.t
 t/18-observer.t
+t/19-failure.t
 t/manifest.t
 t/pod-coverage.t
 t/pod.t

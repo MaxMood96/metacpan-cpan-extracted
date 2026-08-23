@@ -67,14 +67,28 @@ sub new {
             }
             elsif ($mode eq 'fildes') {
                 # Record the SHAPE of the fd-passing handshake. A plain
-                # recv cannot see the SCM_RIGHTS payload - core Perl has
-                # no recvmsg - but it does see that the command arrives
-                # alone and a one-byte message follows it, which is the
-                # part clients get wrong.
+                # sysread cannot see the SCM_RIGHTS payload - core Perl
+                # has no recvmsg - and it cannot see message boundaries
+                # either: a stream read does not stop BEFORE the
+                # fd-bearing message, it reads straight through it and
+                # discards the descriptor, so when both messages are
+                # already queued one read returns the command and the
+                # carrier byte glued together (both CPAN smoker FAILs of
+                # 0.01, and a deadlock: this then waits for a second
+                # message that never comes while the client waits for a
+                # reply). So reframe by content: the command up to its
+                # NUL, then whatever follows as the carrier. Whether the
+                # descriptor really rides a separate message only a real
+                # clamd can say - that is 30-live's job.
                 my @steps;
-                for (1 .. 2) {
-                    my $n = sysread($c, my $b, 4096) or last;
-                    push @steps, $b;
+                my $cmd = '';
+                while (sysread($c, my $b, 1)) {
+                    $cmd .= $b;
+                    last if $b eq "\0";
+                }
+                push @steps, $cmd if length $cmd;
+                if (sysread($c, my $carrier, 16)) {
+                    push @steps, $carrier;
                 }
                 open my $log, '>', $opt{log} if $opt{log};
                 if ($log) {
@@ -155,7 +169,13 @@ sub new {
                     syswrite($c, "stream: OK\0");
                 }
                 elsif ($cmd =~ /FILDES/) {
-                    sysread($c, my $pad, 16);
+                    # The carrier byte may already have been merged into
+                    # the command read - see the fildes mode - so wait
+                    # for it only if the command's NUL was the last byte
+                    # received, or this blocks against a client that has
+                    # nothing left to send.
+                    my $i = index($cmd, "\0");
+                    sysread($c, my $pad, 16) if $i == length($cmd) - 1;
                     syswrite($c, "fd[9]: OK\0");
                 }
                 else {

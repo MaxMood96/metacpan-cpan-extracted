@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk::OpenTelemetry ();
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 # All of it is C (include/otel_expo.h, otel_metric.h, otel_meter.h +
 # xs/meter.xs). This file is documentation.

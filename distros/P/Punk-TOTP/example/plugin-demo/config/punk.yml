@@ -1,0 +1,25 @@
+# TOTPDemo configuration. Everything that mirrors a Punk keyword registers
+# for real; `session` and `auth` stay in lib/TOTPDemo.pm because the session
+# secret is minted fresh at every boot, which is the demo's point.
+
+views:
+  Stencil:
+    template_dir: root/templates
+    wrapper: layout.tmpl
+
+static:
+  /static: root/static
+
+# The in-memory backend. A real application deletes this block's `backend`
+# and adds a dsn: the models and the plugin do not change.
+database:
+  backend: TOTPDemo::Backend::Memory
+
+models: [ User, Token ]
+
+plugins:
+  TOTP:
+    issuer:     'Punk::Plugin::TOTP demo'   # names the account in the app
+    login_path: /                           # an unauthenticated step-up goes here
+    attempts:   3                           # then the pending state is dropped
+    render:     totp_page                   # the challenge page, as a helper

@@ -140,24 +140,30 @@ sub ws_connect {
     return ($s, $hdr, $key);
 }
 
-# Read one frame off the wire.
+# Read one frame off the wire. Two server frames can arrive in one TCP
+# segment (broadcast_binary's frame and the sent:N reply do, on a slow
+# box), so keep what follows the decoded frame on the socket for the
+# next call instead of discarding it.
 sub read_frame {
     my ($s) = @_;
-    my $buf = '';
+    my $buf = \${*$s}{ws_buf};
+    $$buf //= '';
     my $f;
     eval {
         local $SIG{ALRM} = sub { die "timeout\n" };
         alarm 5;
         while (1) {
-            $f = decode_ref($buf);
+            $f = decode_ref($$buf);
             last if $f && ref $f;
             my $n = sysread $s, my $c, 4096;
             last unless $n;
-            $buf .= $c;
+            $$buf .= $c;
         }
         alarm 0;
     };
-    return ref $f ? $f : undef;
+    return undef unless ref $f;
+    substr $$buf, 0, $f->{consumed}, '';
+    return $f;
 }
 
 sub http_get {

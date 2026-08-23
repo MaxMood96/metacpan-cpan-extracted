@@ -4,7 +4,7 @@ use 5.008003;
 use strict;
 use warnings;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 require XSLoader;
 XSLoader::load('Punk::OpenTelemetry', $VERSION);
@@ -19,7 +19,7 @@ Punk::OpenTelemetry - OpenTelemetry for Punk: traces, metrics and logs over OTLP
 
 =head1 VERSION
 
-Version 0.04
+Version 0.05
 
 =head1 SYNOPSIS
 

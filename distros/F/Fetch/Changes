@@ -1,5 +1,20 @@
 Revision history for Fetch
 
+0.19    2026-08-23
+        - io_uring: cancelling a request deadline could crash the loop.
+
+0.18    2026-08-23
+        - t/25-tunnel-starttls.t: the fake STARTTLS server now ignores
+          SIGPIPE. LibreSSL writes the TLS 1.3 server flight one record
+          per write, so when the client refuses the certificate mid-flight
+          the next handshake write hits the reset socket and the signal
+          killed the fake
+
+0.17    2026-08-22
+        - fetch_abi v3: tunnel_starttls(conn, host, verify) upgrades a
+          plaintext tunnel to TLS after the application protocol has
+          negotiated it 
+
 0.16    2026-08-20
         - FIX: change abi version checks from == to <=
 

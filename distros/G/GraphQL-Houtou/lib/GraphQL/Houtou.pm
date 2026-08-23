@@ -7,7 +7,7 @@ use Exporter 'import';
 use XSLoader ();
 use GraphQL::Houtou::Runtime::LazyInfo ();
 
-our $VERSION = '0.06';
+our $VERSION = '0.08';
 our $XS_BUNDLE_LOADED = 0;
 our @EXPORT_OK = qw(
   parse
@@ -152,7 +152,7 @@ sub execute {
     $opts{variables} = $variables_or_opts;
   }
 
-  die "promise_code is no longer supported; Promise::XS is detected automatically.\n"
+  die "promise_code is no longer supported; Promise::XS is built in and custom backends use async_adapter.\n"
     if exists $opts{promise_code};
 
   my $runtime = $schema->build_native_runtime;
@@ -577,10 +577,18 @@ C<execute_document_to_json> renders JSON as soon as the response settles.
 Per-request C<on_stall> hooks compose with it as usual and remain the way
 DataLoader batches are flushed.
 
-Without the declaration, requests with variables run on the synchronous
-fast lane, which cannot suspend. A resolver returning a Promise::XS
-promise there fails immediately with an error pointing at C<async =E<gt> 1>
-and C<on_stall> - promise objects never leak into response data.
+External promise implementations register through
+L<GraphQL::Houtou::Async::Adapter> and are selected when the runtime is built:
+
+    my $runtime = build_native_runtime($schema, async_adapter => $adapter);
+
+Promise::XS values, including DataLoader promise chains, remain composable on
+an adapter-backed runtime.
+
+Without C<async =E<gt> 1>, C<async_adapter>, or C<on_stall>, requests with
+variables run on the synchronous fast lane, which cannot suspend. A resolver
+returning a supported promise there fails immediately with an error pointing
+at the async options - promise objects never leak into response data.
 C<strict_sync =E<gt> 1> forces the strict sync lane even on an async runtime.
 
 =head3 Execution lane option
@@ -625,7 +633,7 @@ order)
 (message and path) only when execution errors occurred
 
 =item * without C<on_stall>, the lane is synchronous - a resolver returning
-a Promise::XS promise croaks
+a supported promise croaks
 
 =back
 
@@ -810,8 +818,10 @@ Mutation fields always execute serially: each resolver is called only after
 the previous resolver's promise has resolved, in conformance with the GraphQL
 specification.
 
-Only C<Promise::XS> promises are recognized. Generic promise adapters and
-C<promise_code> injection are no longer part of the active runtime path.
+The built-in backend recognizes C<Promise::XS>. A runtime built with
+C<async_adapter> also recognizes that adapter's promise class; pass the same
+adapter to DataLoader to keep its public promise chains on that backend.
+Legacy C<promise_code> injection is not part of the active runtime path.
 
 =head1 PARSER SURFACE
 
@@ -859,21 +869,34 @@ on the async lane runs at C<63k/s>; one promise per item at C<29k/s>.
 
 =head2 Compared with graphql-perl
 
-Same machine, same 20-item x 3-field list-of-objects query, both sides
-executing to a JSON response. C<util/execution-benchmark.pl> runs the
-upstream lanes automatically when a C<graphql-perl> checkout sits next
-to this repository:
+Medians of five two-second samples on one machine, 2026-08-23, using this
+checkout as the Houtou upstream and GraphQL 0.54. Both sides execute the same
+two-item x two-field C<{ users { id name } }> query to a JSON response:
 
-    graphql-perl, query string each request        5.0k/s
-    graphql-perl, pre-parsed AST + reused schema    23k/s
-    GraphQL::Houtou execute_document_to_json       463k/s
-    GraphQL::Houtou execute_bundle_to_json         894k/s
+    graphql-perl, query string each request         4.9k/s
+    graphql-perl, pre-parsed AST + reused schema   24.8k/s
+    GraphQL::Houtou execute_document_to_json        424k/s
+    GraphQL::Houtou execute_bundle_to_json          945k/s
 
-Against upstream's fastest configuration (pre-parsed AST), the dynamic
-document lane is roughly C<20x> and persisted bundles roughly C<39x>.
-The async lane - resolvers returning promises, which upstream's executor
-resolves through its own promise plumbing - still clears upstream's sync
-numbers by more than C<2x>.
+Against graphql-perl's fastest configuration (pre-parsed AST), the dynamic
+document lane is roughly C<17x> and persisted bundles roughly C<38x>.
+
+A request-scoped DataLoader comparison uses the same loader, ten object rows,
+one batch callback, a pre-parsed operation, and JSON output on both sides.
+graphql-perl accepts the loader tickets through its public C<then> contract;
+Houtou consumes the same tickets directly. The medians are C<6.27k/s> for
+graphql-perl and C<31.2k/s> for Houtou, roughly C<5.0x>.
+
+Reproduce the comparison with:
+
+    perl -Iblib/lib -Iblib/arch util/execution-benchmark-checkpoint.pl \
+      --count=-2 --repeat=5 --case list_of_objects_json \
+      --mode upstream_string --mode upstream_ast \
+      --mode houtou_document_to_json --mode houtou_bundle_to_json
+
+    perl -Iblib/lib -Iblib/arch util/execution-benchmark-checkpoint.pl \
+      --count=-2 --repeat=5 --case dataloader_json \
+      --mode upstream_dataloader_json --mode houtou_dataloader_json
 
 For methodology and reproducible commands, see
 C<docs/execution-benchmark.md>.
@@ -889,10 +912,11 @@ execute a subscription fails closed with a C<SUBSCRIPTION_NOT_SUPPORTED>
 request error.
 
 The PSGI adapter accepts GraphQL execution requests over POST. GET query
-execution, C<@defer>, C<@stream>, WebSocket/SSE subscriptions, a Federation
-Gateway/Router, and generic promise adapters are outside the 0.01 profile.
+execution, C<@defer>, C<@stream>, WebSocket/SSE subscriptions, and a Federation
+Gateway/Router are outside the 0.01 profile.
 Federation 2 subgraph execution is provided by
-L<GraphQL::Houtou::Federation>. Only C<Promise::XS> promises are recognized.
+L<GraphQL::Houtou::Federation>. Pass C<async_adapter> to
+C<build_subgraph_schema> when entity resolvers use another promise backend.
 
 Fixed native bundles are for variable-free queries. Use compiled native
 programs for persisted queries that accept variables.

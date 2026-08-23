@@ -4,7 +4,7 @@ Database::Abstraction - Read-only Database Abstraction Layer (ORM)
 
 # VERSION
 
-Version 0.37
+Version 0.38
 
 # DESCRIPTION
 
@@ -171,7 +171,17 @@ The module probes the `directory` for files in this priority order:
 
     Binary key-value file ending `.db`
 
+- 7. `HTML`
+
+    Remote HTML page fetched via a URL.  Pass `url` instead of `directory`; the
+    module fetches the page with [LWP::UserAgent](https://metacpan.org/pod/LWP%3A%3AUserAgent), parses all `<table>`
+    elements with [HTML::TableExtract](https://metacpan.org/pod/HTML%3A%3ATableExtract), and slurps the first (or
+    `html_table_index`-selected) table into memory.  The first row of the table
+    is treated as column headers.  Both modules are loaded lazily and are not
+    required for other backends.
+
 Pass `dsn` to bypass file detection entirely and connect via any DBI driver.
+Pass `url` to fetch and slurp a remote HTML table without a local directory.
 
 # QUERY CRITERIA
 
@@ -319,6 +329,13 @@ string which is taken to be `directory`.
     extensions and is therefore more efficient.  [File::Slurp::Remote](https://metacpan.org/pod/File%3A%3ASlurp%3A%3ARemote) must be
     installed; it is loaded lazily (only when `host` is given).
 
+- `url`
+
+    A URL (`http://` or `https://`) pointing to an HTML page that contains one
+    or more `<table>` elements.  When present, `directory` is not required.
+    The first row of the selected table is used as column headers.
+    Requires [LWP::UserAgent](https://metacpan.org/pod/LWP%3A%3AUserAgent) and [HTML::TableExtract](https://metacpan.org/pod/HTML%3A%3ATableExtract) (both loaded lazily).
+
 ### Behaviour parameters
 
 - `no_entry`
@@ -350,6 +367,11 @@ string which is taken to be `directory`.
 
     Set to `0` to disable the AUTOLOAD column shortcut.  Default is `1`
     (enabled).
+
+- `html_table_index`
+
+    Zero-based index of the HTML `<table>` to extract when the `url`
+    backend is used.  Default is `0` (the first table on the page).
 
 ### Caching and logging
 

@@ -1,38 +1,36 @@
+4.0509050202 - 2026-08-22
+
+  * Fix a "make install" failure under parallel make, where a libtool relink
+    race aborted with "cannot find ./.libs/libnetsnmptrapd.so"
+  * Fetch the Net-SNMP tarball from a canonical github.com URL instead of
+    raw.githubusercontent.com.  Byte-identical; the pinned SHA256 is unchanged
+  * Add SECURITY.md, covering how to report a vulnerability privately and how
+    vulnerabilities in the bundled Net-SNMP are handled
+
 4.0509050201 - 2026-07-28
 
-  * Fixes the CPAN Testers install failures reported against 4.0509050200:
-    the bundled SNMP / NetSNMP::* modules now honor INSTALL_BASE, PREFIX,
-    DESTDIR and local::lib, instead of failing with "Permission denied"
-    wherever the install target was not writable at build time
-  * Built for the perl that ran Makefile.PL, not the first perl on PATH
-  * Installs a net-snmp header that was silently dropped on Linux and aborted
-    the build outright on FreeBSD and Solaris
-  * Fixes installation on macOS, where the bundled SNMP and NetSNMP::*
-    modules could not load libnetsnmp during make test
-  * Fixes installation on Alpine and other musl systems, which failed the
-    same way
-  * Installs two more net-snmp headers that upstream ships but forgets to
-    install, without which nothing can compile against this Alien on
+  * Fix the install failures in 4.0509050200: the bundled SNMP and NetSNMP::*
+    modules now honor INSTALL_BASE, PREFIX, DESTDIR and local::lib instead of
+    failing with "Permission denied"
+  * Build for the perl that ran Makefile.PL, not the first perl on PATH
+  * Fix loading the bundled modules during make test on macOS, and on Alpine
+    and other musl systems
+  * Install net-snmp headers that upstream ships but does not install: one
+    silently dropped on Linux that aborted the build on FreeBSD and Solaris,
+    and two without which nothing can compile against this Alien on
     FreeBSD 15 or 16
-  * New documentation for the bundled Perl modules, MIB handling and the index
-    files net-snmp 5.9 removed, the command line utilities, and the effects of
-    installing into a system perl that already has SNMP.pm
-  * 4.0509050200 installed net-snmp's Bundle/MakefileSubs.pm and an
-    auto/Bundle/NetSNMP/.packlist beside it. This release installs neither,
-    but upgrading does not remove the old copies; they are safe to delete
-  * Known issue: On FreeBSD 9 the link of libnetsnmp fails with "undefined
-    reference to 'ceil'"; the suspected fix (LIBS=-lm) is untested and not
-    applied
+  * No longer install net-snmp's Bundle/MakefileSubs.pm or its .packlist.
+    Upgrading does not remove the old copies; they are safe to delete
+  * Document the bundled Perl modules, MIB handling, the command line
+    utilities, and installing into a system perl that already has SNMP.pm
 
 4.0509050200 - 2026-07-18
 
-  * Migrate from legacy Alien::Base::ModuleBuild to the modern alienfile /
-    Alien::Build::MM (Makefile.PL) toolchain (major-revision / series bump)
-  * Replace Build.PL + inc/My/ with an alienfile build recipe
+  * Migrate from Alien::Base::ModuleBuild to the alienfile / Alien::Build::MM
+    toolchain (major-revision / series bump)
   * Pin the Net-SNMP source tarball with a SHA256 digest
   * Preload libnetsnmp at use-time so the bundled SNMP XS module resolves it
-    from the Alien share dir without a system-level library; fixes test
-    failures during install when no compatible libnetsnmp is present
+    from the Alien share dir without a system-level library
 
 3.0509050200 - 2026-06-30
 

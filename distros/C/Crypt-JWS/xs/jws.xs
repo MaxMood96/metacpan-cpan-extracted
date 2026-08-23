@@ -87,8 +87,7 @@ verify(token, key, ...)
         if (!algs)
             croak("Crypt::JWS::verify: an algs allowlist is required");
         RETVAL = cjws_compact_verify(aTHX_ token, key, algs);
-        if (!RETVAL)
-            RETVAL = &PL_sv_undef;
+        if (!RETVAL) XSRETURN_UNDEF;   /* never an immortal RETVAL */
     OUTPUT:
         RETVAL
 

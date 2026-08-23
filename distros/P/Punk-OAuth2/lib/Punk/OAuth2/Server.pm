@@ -1,13 +1,13 @@
 package Punk::OAuth2::Server;
 
-use 5.024;
+use 5.010;
 use strict;
 use warnings;
 
 use Punk::OAuth2;
 use Punk::OAuth2::Server::Store;
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 1;
 

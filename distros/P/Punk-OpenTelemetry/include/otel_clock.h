@@ -30,9 +30,11 @@
 #  include <sys/time.h>
 #endif
 
-/* Wall clock, unix nanoseconds. Where a span sits in time. */
+/* Wall clock, unix nanoseconds. Where a span sits in time. clock_gettime
+ * only where the Makefile.PL probe LINKED it: glibc before 2.17 keeps it in
+ * librt, and CLOCK_REALTIME being defined says nothing about that. */
 static U64TYPE otel_wall_nanos(void) {
-#if defined(CLOCK_REALTIME) && !defined(_WIN32)
+#if defined(OTEL_HAVE_CLOCK_GETTIME) && !defined(_WIN32)
     struct timespec ts;
     if (clock_gettime(CLOCK_REALTIME, &ts) == 0)
         return (U64TYPE)ts.tv_sec * 1000000000ULL + (U64TYPE)ts.tv_nsec;

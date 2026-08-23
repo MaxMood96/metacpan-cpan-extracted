@@ -1,7 +1,7 @@
 ---
 abstract: 'Build and install Net-SNMP'
 author:
-  - 'Eric A. Miller <emiller AT cpan DOT org>'
+  - 'Eric A. Miller'
 build_requires:
   Alien::Build: '2.84'
   Alien::Build::MM: '0.25'
@@ -22,7 +22,7 @@ configure_requires:
   Alien::Build::Plugin::Digest::Negotiate: '0'
   ExtUtils::MakeMaker: '7.30'
 dynamic_config: 1
-generated_by: 'ExtUtils::MakeMaker version 7.70, CPAN::Meta::Converter version 2.150010'
+generated_by: 'ExtUtils::MakeMaker version 7.78, CPAN::Meta::Converter version 2.150013'
 license: bsd
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -39,7 +39,7 @@ requires:
 resources:
   bugtracker: https://github.com/ollyg/Alien-SNMP/issues
   repository: https://github.com/ollyg/Alien-SNMP.git
-version: '4.0509050201'
+version: '4.0509050202'
 x_alienfile:
   generated_by: 'Alien::Build::MM version 2.84'
   requires:
@@ -54,4 +54,4 @@ x_alienfile:
       Net::SSLeay: '1.49'
       URI: '0'
     system: {}
-x_serialization_backend: 'CPAN::Meta::YAML version 0.018'
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

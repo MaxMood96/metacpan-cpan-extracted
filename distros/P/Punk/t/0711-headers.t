@@ -280,4 +280,34 @@ YAML
         'the config block can drop a default too');
 }
 
+# ---- the bare form from punk.yml --------------------------------------------
+# A YAML `true` arrives as a JSON::PP::Boolean object, not the scalar 1;
+# `headers: true` has to mean what `headers;` means.
+SKIP: {
+    skip 'YAML::XS required for the config half', 6
+        unless eval { require YAML::XS; 1 };
+    require File::Temp;
+    my $dir = File::Temp->newdir;
+    my $n = 0;
+    for my $case ([ 'true', 'nosniff' ], [ 'false', undef ]) {
+        my ($yml, $want) = @$case;
+        open my $fh, '>', "$dir/punk.yml" or die $!;
+        print $fh "headers: $yml\n";
+        close $fh;
+        my $pkg = 'YmlHeaders' . $n++;
+        eval qq{
+            package $pkg;
+            use Punk;
+            config "$dir/punk.yml";
+            get '/' => sub { \$_[0]->text('x') };
+            1;
+        } or die $@;
+        my $t = Punk::Test->new($pkg);
+        $t->get_ok('/')->status_is(200);
+        is($t->header('X-Content-Type-Options'), $want,
+            defined $want ? "headers: $yml is the safe default set"
+                          : "headers: $yml leaves them off");
+    }
+}
+
 done_testing;

@@ -1,5 +1,5 @@
 #!perl
-use 5.024;
+use 5.010;
 use strict;
 use warnings;
 use FindBin ();
@@ -39,7 +39,9 @@ sub jdec { File::Raw::JSON::file_json_decode($_[0]) }
 sub form_post {
     my ($path, %f) = @_;
     my $body = join '&', map {
-        "$_=" . ($f{$_} =~ s/([^A-Za-z0-9\-._~])/sprintf '%%%02X', ord $1/ger)
+        my $v = $f{$_};
+        $v =~ s/([^A-Za-z0-9\-._~])/sprintf '%%%02X', ord $1/ge;
+        "$_=$v"
     } sort keys %f;
     return POTest::hit($app, POST => $path, body => $body,
         type => 'application/x-www-form-urlencoded');

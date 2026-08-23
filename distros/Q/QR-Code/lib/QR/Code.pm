@@ -1,10 +1,10 @@
 package QR::Code;
 
-use 5.016;
+use 5.010;
 use strict;
 use warnings;
 
-our $VERSION = '0.01';
+our $VERSION = '0.03';
 
 require XSLoader;
 XSLoader::load('QR::Code', $VERSION);

@@ -164,6 +164,8 @@ static const pki_kw PKI_KEYWORDS[] = {
     { "helper",     "helper",      PKW_HELPER },
     { "to_app",     "compile",     PKW_NOARG  },
     { "upload_dir", "upload_dir",  PKW_FWD    },
+    { "host",       "host",        PKW_FWD    },
+    { "favicon",    "favicon",     PKW_FWD    },
     { "punk_app",   NULL,          PKW_SELF   },
     { NULL, NULL, 0 }
 };

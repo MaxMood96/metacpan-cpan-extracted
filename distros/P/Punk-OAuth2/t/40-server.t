@@ -1,10 +1,15 @@
 #!perl
-use 5.024;
+use 5.010;
 use strict;
 use warnings;
 use FindBin ();
 use lib "$FindBin::Bin/lib";
 use Test::More;
+
+BEGIN {
+    plan skip_all => 'DBI and DBD::SQLite required for the DBI-backed store'
+        unless eval { require DBI; require DBD::SQLite; 1 };
+}
 use POTest;
 use Crypt::JWS qw(b64url random_bytes sha256 verify);
 use Crypt::JWS::Key ();
@@ -68,7 +73,8 @@ sub form_post {
     my ($path, %fields) = @_;
     my $body = join '&', map {
         my $v = $fields{$_} // '';
-        "$_=" . ($v =~ s/([^A-Za-z0-9\-._~])/sprintf '%%%02X', ord $1/ger)
+        $v =~ s/([^A-Za-z0-9\-._~])/sprintf '%%%02X', ord $1/ge;
+        "$_=$v"
     } sort keys %fields;
     return POTest::hit($app, POST => $path, body => $body,
         type => 'application/x-www-form-urlencoded');

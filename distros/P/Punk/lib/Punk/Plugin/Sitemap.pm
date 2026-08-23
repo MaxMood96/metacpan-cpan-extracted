@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk ();
 
-our $VERSION = '0.28';
+our $VERSION = '0.30';
 
 1;
 
@@ -75,9 +75,12 @@ copies its guard chain into every route declared inside it, so the plugin can
 see what somebody writing a sitemap by hand has to remember. Every
 hand-written sitemap eventually lists a page behind a login; this one cannot.
 
-=head2 base is required, and it is configuration
+=head2 base is configuration, and the application's host is its default
 
-    plugin 'Sitemap' => { base => 'https://example.com' };
+    host 'https://example.com';
+    plugin 'Sitemap';                                        # base = the host
+
+    plugin 'Sitemap' => { base => 'https://example.com' };   # explicit wins
 
 The sitemap protocol wants absolute URLs. The obvious place to get the scheme
 and host is the request that asked for the sitemap, and that is a host-header
@@ -86,8 +89,25 @@ C<< Host: evil.example >> would produce a file naming that host for every page
 on the site, and the owner could not see it, because their own request
 produces a correct file.
 
-So there is no default and no fallback. Starting without one croaks, for the
-same reason C<session> refuses to start without a secret.
+So the request is never consulted. The base comes from configuration - an
+explicit C<base>, or the application's declared L<Punk/host>, which is the
+same fact stated once for every plugin that needs it. An application with
+neither croaks, for the same reason C<session> refuses to start without a
+secret; it croaks at C<to_app> rather than at the C<plugin> line, so C<host>
+may be declared on either side of it.
+
+=head2 Several hosts
+
+    host 'https://example.com', allow => [ '*.example.com' ];
+    plugin 'Sitemap';
+
+An application with a host allowlist serves a sitemap per tenant: a request
+from an allowlisted host is answered with a document naming that host, and
+C<robots.txt> advertises the same. The route table and the dynamic sections
+are shared - they are computed once per C<ttl> however many hosts ask - and
+only the origin differs. A host on neither the canonical origin nor the
+allowlist is handed the canonical document, because the alternative is the
+host-header injection above.
 
 =head2 What it serves
 
@@ -295,7 +315,8 @@ irrelevant to an application with no sections.
 
 =head2 base
 
-Required. The scheme and host every path is joined onto. A trailing slash is
+The scheme and host every path is joined onto. Defaults to the application's
+L<Punk/host>; with neither declared, C<to_app> croaks. A trailing slash is
 trimmed, since every path already starts with one and C<https://x//about> is a
 different URL to a crawler.
 

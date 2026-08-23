@@ -12,14 +12,15 @@
 /* Server time as epoch seconds, probed once per connection. */
 static double pq_pg_probe_clock(pTHX_ SV *dbh) {
     SV *argv[1], *r;
-    double server;
+    double t0, server;
     int died = 0;
     argv[0] = sv_2mortal(newSVpvs("SELECT extract(epoch from now())"));
+    t0 = pq_now_local(aTHX);
     r = pq_call_meth_ev(aTHX_ dbh, "selectrow_array", argv, 1, 1, &died);
     if (died || !r || !SvOK(r)) { if (r) SvREFCNT_dec(r); return 0.0; }
     server = SvNV(r);
     SvREFCNT_dec(r);
-    return server - pq_now_local(aTHX);
+    return pq_probe_delta(aTHX_ t0, server);
 }
 
 /* ---- transactions ----------------------------------------------------------

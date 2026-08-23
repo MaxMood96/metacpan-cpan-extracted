@@ -1,5 +1,19 @@
 Revision history for Punk::Queue
 
+0.07    2026-08-23
+        - the 0.05 fix for a float in a perl format cast the argument to
+          an NV but left the format as %f. On a quadmath perl the format
+          has to name the width as well (%Qf, via NVff) or the formatter
+          panics - and the panic is a croak. retry_job died between its
+          UPDATE and its commit.
+        - t/01 and t/10 asserted abs(now() - time()) < 5. A loaded smoker
+          stalled the process for longer than that between the two calls.
+          Both now bracket now() with time() on either side, so a stall
+          widens the window instead of failing the test.
+        - the clock probe measures the server clock against the midpoint
+          of its own round trip rather than its end, so a stall on either
+          side of the query skews the delta by half its length, not all.
+
 0.06    2026-08-20
         - FIX: change abi version checks from == to <=
 

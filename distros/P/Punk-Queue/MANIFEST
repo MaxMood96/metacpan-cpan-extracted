@@ -152,6 +152,7 @@ t/80-cron-parse.t
 t/81-cron-leader.t
 t/82-cron-supervisor.t
 t/83-cron-keyword.t
+t/90-punk-subcommand.t
 t/lib/PQConform.pm
 t/lib/PQSpawn.pm
 t/lib/PQTest.pm

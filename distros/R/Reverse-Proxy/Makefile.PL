@@ -17,7 +17,7 @@ my %WriteMakefileArgs = (
         'Test::More' => '0',
     },
     PREREQ_PM => {
-        'Fetch' => '0.13',
+        'Fetch' => '0.19',
     },
     INC   => '-Iinclude',
     macro => { TARFLAGS   => "--format=ustar -c -v -f" },

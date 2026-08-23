@@ -3,10 +3,12 @@ Changes
 lib/Alien/SNMP.pm
 Makefile.PL
 LICENSE
+SECURITY.md
 MANIFEST			This list of files
 META.json
 META.yml
 README
+t/00_diag.pl
 t/00_diag.t
 t/00_diag.txt
 t/01_use.t

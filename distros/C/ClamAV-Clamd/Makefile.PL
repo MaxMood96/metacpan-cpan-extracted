@@ -21,8 +21,9 @@ my %WriteMakefileArgs = (
     },
     INC   => '-I.  -Iinclude',
     dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
-    clean => { FILES => 'ClamAV-Clamd-* Install dev/fildes_probe '
-                      . 'dev/fake_clamd dev/drain_clamd t/abi_consumer/blib '
+    macro => { TARFLAGS => "--format=ustar -c -v -f" },
+    clean => { FILES => 'ClamAV-Clamd-* Install '
+                      . 't/abi_consumer/blib '
                       . 't/abi_consumer/Makefile t/abi_consumer/pm_to_blib' },
 );
 

@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk::OpenTelemetry ();
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 # All of it is C (include/otel_config.h + xs/config.xs).
 

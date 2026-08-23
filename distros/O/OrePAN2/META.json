@@ -4,7 +4,7 @@
       "tokuhirom <tokuhirom@gmail.com>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Minilla/v3.1.28",
+   "generated_by" : "Minilla/v3.1.29",
    "license" : [
       "perl_5"
    ],
@@ -52,10 +52,10 @@
             "File::stat" : "0",
             "Getopt::Long" : "2.39",
             "HTTP::Tiny" : "0",
+            "IO::Compress::Gzip" : "0",
             "IO::File::AtomicChange" : "0",
             "IO::Socket::SSL" : "1.42",
             "IO::Uncompress::Gunzip" : "0",
-            "IO::Zlib" : "0",
             "JSON::PP" : "0",
             "LWP::UserAgent" : "0",
             "List::Compare" : "0",
@@ -84,8 +84,10 @@
       },
       "test" : {
          "requires" : {
+            "Capture::Tiny" : "0",
             "File::Touch" : "0",
             "File::Which" : "0",
+            "IO::Zlib" : "0",
             "Path::Tiny" : "0.119",
             "Test::More" : "0.98",
             "Test::Needs" : "0",
@@ -100,7 +102,7 @@
    "provides" : {
       "OrePAN2" : {
          "file" : "lib/OrePAN2.pm",
-         "version" : "0.53"
+         "version" : "0.54"
       },
       "OrePAN2::Auditor" : {
          "file" : "lib/OrePAN2/Auditor.pm"
@@ -145,7 +147,7 @@
          "web" : "https://github.com/tokuhirom/OrePAN2"
       }
    },
-   "version" : "0.53",
+   "version" : "0.54",
    "x_authority" : "cpan:TOKUHIROM",
    "x_contributors" : [
       "Chad Granum <exodist7@gmail.com>",
@@ -165,9 +167,10 @@
       "Songmu <y.songmu@gmail.com>",
       "Sven Willenbuecher <sven.willenbuecher@gmx.de>",
       "Tatsuhiko Miyagawa <miyagawa@bulknews.net>",
+      "Wesley <wesleys@opperschaap.net>",
       "dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>",
       "moznion <moznion@gmail.com>"
    ],
-   "x_serialization_backend" : "JSON::PP version 4.16",
+   "x_serialization_backend" : "JSON::PP version 4.18",
    "x_static_install" : 1
 }

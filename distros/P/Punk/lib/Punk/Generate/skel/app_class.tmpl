@@ -22,6 +22,12 @@ get '/' => 'Web::Root#index';
 # controller method:
 #
 #   get '/health' => sub { $_[0]->json({ ok => 1 }) };
+#
+# Browsers and search engines request /favicon.ico at the site root, where
+# the /static mount does not answer. One keyword serves it from frozen
+# bytes, with a Cache-Control and an ETag (also settable from punk.yml):
+#
+#   favicon 'root/static/favicon.ico';
 {% if api %}
 # The OpenAPI mount: every operation dispatches to the controller method
 # named after its operationId, with parameters and body validated against

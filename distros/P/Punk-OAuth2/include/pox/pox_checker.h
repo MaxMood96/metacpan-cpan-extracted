@@ -42,7 +42,7 @@ static int pox_scope_ok(pTHX_ HV *claims, AV *required) {
     for (b = 0; b <= sl; b++) {
       if (b == sl || sp[b] == ' ') {
         if (b > a) (void)hv_store(have, sp + a, (I32)(b - a),
-                                  &PL_sv_yes, 0);
+                                  POX_SET_TRUE, 0);
         a = b + 1;
       }
     }
@@ -57,7 +57,7 @@ static int pox_scope_ok(pTHX_ HV *claims, AV *required) {
       const char *ep;
       if (!e || !*e || !SvOK(*e)) continue;
       ep = SvPV_const(*e, el);
-      (void)hv_store(have, ep, (I32)el, &PL_sv_yes, 0);
+      (void)hv_store(have, ep, (I32)el, POX_SET_TRUE, 0);
     }
   }
 
@@ -290,7 +290,7 @@ static SV *pox_checker_introspect(pTHX_ HV *cfg, SV *cred, SV *c,
       {
         STRLEN rl; const char *rp = SvPVbyte(raw, rl);
         dSP; int count; SV *enc = NULL;
-        eval_pv("require MIME::Base64;", FALSE);
+        pox_require_once(aTHX_ "MIME::Base64");
         ENTER; SAVETMPS; PUSHMARK(SP);
         XPUSHs(sv_2mortal(newSVpvn(rp, rl)));
         XPUSHs(sv_2mortal(newSVpvs(""))); PUTBACK;
@@ -555,7 +555,8 @@ XS_INTERNAL(pox_guard_cb) {
     ? (AV *)SvRV(*sc) : NULL;
   const char *realm = (rl && *rl && SvOK(*rl)) ? SvPV_nolen(*rl) : "api";
   SV *r = pox_do_guard(aTHX_ chk ? *chk : &PL_sv_undef, c, scav, realm);
-  ST(0) = sv_2mortal(r);
+  /* a pass is &PL_sv_undef: borrowed, so never mortalised */
+  ST(0) = POX_IMMORTAL(r) ? r : sv_2mortal(r);
   XSRETURN(1);
 }
 

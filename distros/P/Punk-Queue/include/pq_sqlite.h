@@ -11,16 +11,17 @@
  * whole dist can bind its own clock plus a delta. */
 static double pq_sqlite_probe_clock(pTHX_ SV *dbh) {
     SV *argv[1], *r;
-    double server;
+    double t0, server;
     int died = 0;
     argv[0] = sv_2mortal(newSVpvs(
         "SELECT (julianday('now') - 2440587.5) * 86400.0"));
+    t0 = pq_now_local(aTHX);
     r = pq_call_meth_ev(aTHX_ dbh, "selectrow_array", argv, 1, 1, &died);
     if (died || !r || !SvOK(r)) { if (r) SvREFCNT_dec(r); return 0.0; }
     server = SvNV(r);
     SvREFCNT_dec(r);
     /* The delta, not the time: what every later bind adds to its own clock. */
-    return server - pq_now_local(aTHX);
+    return pq_probe_delta(aTHX_ t0, server);
 }
 
 /* SQLite's DDL and its transactions are both transactional, and BEGIN

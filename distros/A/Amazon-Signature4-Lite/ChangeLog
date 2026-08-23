@@ -1,3 +1,25 @@
+Sat Aug 22 05:21:15 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[1.0.4]:
+	* README.md: generated
+	* VERSION: bump
+	* .includes/bash-completion.mk: added by CPAN::Maker::Bootstrapper
+	* .includes/local.mk: new
+	* .includes/modulino.mk: new
+	* .includes/git.mk: updated by CPAN::Maker::Bootstrapper
+	* .includes/help.mk: likewise
+	* .includes/perl.mk: likewise
+	* .includes/release-notes.mk: likewise
+	* .includes/update.mk: likewise
+	* .includes/version.mk: likewise
+	* .gitignore: likewise
+	* .includes/perl.mk: likewise
+	* ChangeLog: modified
+	* Makefile: likewise
+	* builder: likewise
+	* lib/Amazon/Signature4/Lite.pm.in
+	- +$GIT_SHA, $GIT_DIRTY
+
 Mon Aug  3 10:23:20 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[1.0.3]:
@@ -9,7 +31,7 @@ Mon Aug  3 10:23:20 2026  Rob Lauer  <rclauer@gmail.com>
 Mon Aug  3 09:18:24 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[1.0.2]:
-	* release-notes.md: updataed
+	* release-notes.md: updated
 	* release-notes/release-notes-1.0.2.md: new
 	* README.md: generated
 	* VERSION: bump

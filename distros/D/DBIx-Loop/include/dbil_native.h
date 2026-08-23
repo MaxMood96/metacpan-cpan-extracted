@@ -67,18 +67,7 @@ typedef struct dbil_native {
 
 static void dbil_native_pump(pTHX_ dbil_native *nc);   /* fire next; below */
 
-/* $dbh->errstr as a mortal SV (best effort) */
-static SV *dbil_errstr(pTHX_ SV *h, const char *fallback) {
-    dSP; int n; SV *r = NULL;
-    ENTER; SAVETMPS; PUSHMARK(SP);
-    EXTEND(SP, 1); PUSHs(h); PUTBACK;
-    n = call_method("errstr", G_SCALAR | G_EVAL);
-    SPAGAIN;
-    if (!SvTRUE(ERRSV) && n > 0) { SV *s = POPs; if (SvOK(s) && SvCUR(s)) r = newSVsv(s); }
-    else if (n > 0) (void)POPs;
-    PUTBACK; FREETMPS; LEAVE;
-    return r ? sv_2mortal(r) : sv_2mortal(newSVpv(fallback, 0));
-}
+/* dbil_errstr lives in dbil_run.h now: every backend needs it */
 
 /* finish the in-flight query: collect pg_result, fetch rows, settle */
 static void dbil_native_complete(pTHX_ dbil_native *nc) {
@@ -270,7 +259,7 @@ static void dbil_native_fire(pTHX_ dbil_native *nc, int is_query, SV *sql,
     {   /* $sth->execute(@bind) - returns immediately under pg_async */
         AV *bind = (bindref && SvROK(bindref)) ? (AV *)SvRV(bindref) : NULL;
         SSize_t nb = bind ? av_len(bind) + 1 : 0, i;
-        dSP; int n;
+        dSP; int n, exec_failed = 0;
         ENTER; SAVETMPS; PUSHMARK(SP);
         EXTEND(SP, 1 + nb); PUSHs(sth);
         for (i = 0; i < nb; i++) { SV **e = av_fetch(bind, i, 0); PUSHs(e && *e ? *e : &PL_sv_undef); }
@@ -286,8 +275,18 @@ static void dbil_native_fire(pTHX_ dbil_native *nc, int is_query, SV *sql,
             SvREFCNT_dec(future);
             return;
         }
-        if (n > 0) (void)POPs;
+        /* a false return is the driver refusing the statement before it
+         * went to the server; there will be no pg_result to wait for */
+        if (n > 0) { SV *r = POPs; if (!SvTRUE(r)) exec_failed = 1; }
+        else exec_failed = 1;
         PUTBACK; FREETMPS; LEAVE;
+        if (exec_failed) {
+            dbil_future_settle_fail(aTHX_ future,
+                dbil_errstr(aTHX_ sth, "async execute failed"));
+            SvREFCNT_dec(sth);
+            SvREFCNT_dec(future);
+            return;
+        }
     }
 
     nc->inflight = future;   /* takes the +1 we were given */

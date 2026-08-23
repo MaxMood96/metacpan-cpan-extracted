@@ -79,6 +79,22 @@ _abi_selftest()
         digest = J->sha256(aTHX_ (const unsigned char *)"abc", 3);
         ok = ok && digest && SvCUR(digest) == 32;
         if (digest) SvREFCNT_dec(digest);
+        /* v2: SHA-1 answers with the FIPS 180 "abc" vector, so the
+         * selftest proves the digest and not merely the length */
+        digest = J->sha1(aTHX_ (const unsigned char *)"abc", 3);
+        ok = ok && digest && SvCUR(digest) == 20
+           && memEQ(SvPVX(digest),
+                    "\xa9\x99\x3e\x36\x47\x06\x81\x6a\xba\x3e"
+                    "\x25\x71\x78\x50\xc2\x6c\x9c\xd0\xd8\x9d", 20);
+        if (digest) SvREFCNT_dec(digest);
+        digest = J->hmac_sha1(aTHX_ (const unsigned char *)"key", 3,
+                              (const unsigned char *)"msg", 3);
+        ok = ok && digest && SvCUR(digest) == 20;
+        if (digest) SvREFCNT_dec(digest);
+        digest = J->hmac_sha512(aTHX_ (const unsigned char *)"key", 3,
+                                (const unsigned char *)"msg", 3);
+        ok = ok && digest && SvCUR(digest) == 64;
+        if (digest) SvREFCNT_dec(digest);
         rand = J->random_bytes(aTHX_ 16);
         ok = ok && rand && SvCUR(rand) == 16;
         if (rand) SvREFCNT_dec(rand);

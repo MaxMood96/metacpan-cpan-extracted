@@ -1,5 +1,5 @@
 #!perl
-use 5.024;
+use 5.010;
 use strict;
 use warnings;
 use FindBin ();
@@ -42,7 +42,8 @@ my $jwt = Punk::OAuth2::Checker->jwt(
     # a route that calls the checker directly (the OpenAPI-map shape)
     get '/raw' => sub {
         my ($c) = @_;
-        my $cred = ($c->req->header('Authorization') // '') =~ s/^Bearer //r;
+        my $cred = $c->req->header('Authorization') // '';
+        $cred =~ s/^Bearer //;
         my $claims = $j->($cred, $c, 'op', ['read']);
         return $c->json({ ok => $claims ? \1 : \0,
                           err => $c->stash->{'punk.oauth2.error'} });

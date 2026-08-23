@@ -143,7 +143,8 @@ client_get(self, client_id)
         binds[0] = client_id;
         row = pox_dbi_row(aTHX_ dbh,
             "SELECT * FROM oauth2_clients WHERE client_id = ?", binds, 1);
-        RETVAL = row ? newRV_inc((SV *)row) : &PL_sv_undef;
+        if (!row) XSRETURN_UNDEF;
+        RETVAL = newRV_inc((SV *)row);
     OUTPUT:
         RETVAL
 
@@ -194,12 +195,12 @@ code_take(self, code)
         binds[0] = dig;
         row = pox_dbi_row(aTHX_ dbh,
             "SELECT * FROM oauth2_codes WHERE code_digest = ?", binds, 1);
-        if (!row) { RETVAL = &PL_sv_undef; }
-        else {
+        if (!row) XSRETURN_UNDEF;
+        {
             IV deleted = pox_dbi_do(aTHX_ dbh,
                 "DELETE FROM oauth2_codes WHERE code_digest = ?", binds, 1);
-            if (deleted < 1) RETVAL = &PL_sv_undef;  /* lost the race */
-            else RETVAL = newRV_inc((SV *)row);
+            if (deleted < 1) XSRETURN_UNDEF;  /* lost the race */
+            RETVAL = newRV_inc((SV *)row);
         }
     OUTPUT:
         RETVAL
@@ -241,7 +242,8 @@ refresh_take(self, token)
         binds[0] = pox_digest(aTHX_ token);
         row = pox_dbi_row(aTHX_ dbh,
             "SELECT * FROM oauth2_refresh WHERE token_digest = ?", binds, 1);
-        RETVAL = row ? newRV_inc((SV *)row) : &PL_sv_undef;
+        if (!row) XSRETURN_UNDEF;
+        RETVAL = newRV_inc((SV *)row);
     OUTPUT:
         RETVAL
 
@@ -288,7 +290,8 @@ consent_get(self, user_id, client_id)
         row = pox_dbi_row(aTHX_ dbh,
             "SELECT * FROM oauth2_consents WHERE user_id = ? AND "
             "client_id = ?", binds, 2);
-        RETVAL = row ? newRV_inc((SV *)row) : &PL_sv_undef;
+        if (!row) XSRETURN_UNDEF;
+        RETVAL = newRV_inc((SV *)row);
     OUTPUT:
         RETVAL
 

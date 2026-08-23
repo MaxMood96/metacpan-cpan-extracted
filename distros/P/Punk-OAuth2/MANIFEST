@@ -4,7 +4,9 @@ example/README.md
 ignore.txt
 include/pox/pox_abi.h
 include/pox/pox_checker.h
+include/pox/pox_compat.h
 include/pox/pox_http.h
+include/pox/pox_immortal_probe.h
 include/pox/pox_jwks.h
 include/pox/pox_presets.h
 include/pox/pox_provider.h
@@ -43,6 +45,7 @@ t/31-introspect.t
 t/40-server.t
 t/44-capstone.t
 t/45-custom-store.t
+t/46-immortal-refcount.t
 t/lib/MemStore.pm
 t/lib/MockIdP.pm
 t/lib/POSpawn.pm

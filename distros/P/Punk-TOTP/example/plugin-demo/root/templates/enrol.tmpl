@@ -1,0 +1,14 @@
+<h2>Enrol a phone</h2>
+<p>No second factor yet. Scan with Google Authenticator, 1Password, Aegis -
+anything. Or add the secret by hand: <code>{% secret %}</code></p>
+
+<div class="qr">{% raw qr %}</div>
+
+<form method="post" action="/enrol" class="row">
+  <input name="code" autofocus autocomplete="one-time-code"
+         inputmode="numeric" pattern="[0-9]*" placeholder="000000"
+         aria-label="code">
+  <button>Confirm</button>
+</form>
+<p><small>Enrolment is not complete until one code proves the phone has the
+secret - <code>totp_enabled</code> flips only then.</small></p>

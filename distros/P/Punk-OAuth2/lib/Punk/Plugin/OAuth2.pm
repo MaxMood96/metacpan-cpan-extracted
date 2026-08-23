@@ -1,13 +1,13 @@
 package Punk::Plugin::OAuth2;
 
-use 5.024;
+use 5.010;
 use strict;
 use warnings;
 use Carp ();
 use Punk::OAuth2 ();            # XS core: the whole flow (_flow_begin,
 use Punk::OAuth2::Provider ();  # _flow_complete, provider object, ...)
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 my %STATE;
 

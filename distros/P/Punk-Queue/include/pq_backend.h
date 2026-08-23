@@ -501,7 +501,7 @@ static IV pq_fail_job(pTHX_ SV *self, IV id, IV retries, SV *err) {
         if (took > 0) {
             char ebuf[PQ_LOG_ERRMAX];
             pq_log_addf(aTHX_ self, id, "warn",
-                        "attempt %ld of %ld failed: %s - retry due in %.1fs",
+                        "attempt %ld of %ld failed: %s - retry due in %.1" NVff "s",
                         (long)(retries + 1), (long)attempts,
                         pq_log_errpv(aTHX_ err, ebuf, sizeof ebuf),
                         (NV)delay);
@@ -592,7 +592,7 @@ static IV pq_retry_job(pTHX_ SV *self, IV id, IV retries, HV *opts) {
         else if (strEQ(prestate, "failed"))
             pq_children_adjust(aTHX_ self, id, +1, PQ_KIDS_LAX);
         pq_log_addf(aTHX_ self, id, "info",
-                    delay > 0 ? "retried from '%s' - due in %.1fs"
+                    delay > 0 ? "retried from '%s' - due in %.1" NVff "s"
                               : "retried from '%s'",
                     prestate, (NV)delay);
     }

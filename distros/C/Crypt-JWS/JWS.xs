@@ -144,6 +144,25 @@ static SV *cjws_abi_random_bytes(pTHX_ STRLEN n) {
   return out;
 }
 
+/* v2 */
+static SV *cjws_abi_sha1(pTHX_ const unsigned char *in, STRLEN len) {
+  unsigned char out[EVP_MAX_MD_SIZE];
+  unsigned n = cjws_digest(160, in, len, out);
+  return n ? cjws_new_bytes_sv(aTHX_ out, n) : NULL;
+}
+static SV *cjws_abi_hmac_sha1(pTHX_ const unsigned char *key, STRLEN keylen,
+                              const unsigned char *in, STRLEN len) {
+  unsigned char out[EVP_MAX_MD_SIZE];
+  STRLEN n = cjws_hmac(160, key, keylen, in, len, out);
+  return n ? cjws_new_bytes_sv(aTHX_ out, n) : NULL;
+}
+static SV *cjws_abi_hmac_sha512(pTHX_ const unsigned char *key, STRLEN keylen,
+                                const unsigned char *in, STRLEN len) {
+  unsigned char out[EVP_MAX_MD_SIZE];
+  STRLEN n = cjws_hmac(512, key, keylen, in, len, out);
+  return n ? cjws_new_bytes_sv(aTHX_ out, n) : NULL;
+}
+
 static const jws_abi CJWS_ABI = {
   JWS_ABI_VERSION,
   cjws_abi_key_from_pem,
@@ -158,6 +177,10 @@ static const jws_abi CJWS_ABI = {
   cjws_abi_b64url_decode,
   cjws_abi_ct_eq,
   cjws_abi_random_bytes,
+  /* v2 */
+  cjws_abi_sha1,
+  cjws_abi_hmac_sha1,
+  cjws_abi_hmac_sha512,
 };
 
 MODULE = Crypt::JWS  PACKAGE = Crypt::JWS
