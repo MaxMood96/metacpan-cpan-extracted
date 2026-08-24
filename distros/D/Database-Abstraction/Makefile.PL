@@ -37,17 +37,21 @@ WriteMakefile(
 		'Data::Reuse' => 0,	# Required for result-set memory deduplication; see also RT#100461
 		# 'Error' => 0,
 		'DBD::SQLite::Constants' => 0,
-		'ExtUtils::MakeMaker' => 6.64,	# 6.64 for TEST_REQUIRES
 		'File::Spec' => 0,
 		'File::Temp' => 0,
 		'List::Util' => 1.33,
-		'Log::Abstraction' => 0.26,
+		'Log::Abstraction' => 0.33,
 		'Object::Configure' => 0.16,
-		'Params::Get' => 0.13,
+		'Params::Get' => 0.17,
 		'Return::Set' => 0,
 		'Scalar::Util' => 0,
 		'Sub::Private' => 0,
 		'Sub::Protected' => 0,
+		# Core modules required lazily at runtime — not listed as deps because
+		# MIN_PERL_VERSION (5.010) guarantees their presence on all targets:
+		#   DB_File      (core since 5.004; used by BerkeleyDB backend)
+		#   Sys::Hostname (core since 5.006; used by _is_local_host)
+		#   IO::Compress::Gzip (core since 5.9.4; used in t/ fixture creation)
 	}, TEST_REQUIRES => {
 		'DBD::CSV' => 0,
 		'DBD::XMLSimple' => 0.07,
@@ -58,6 +62,7 @@ WriteMakefile(
 		'File::stat' => 0,
 		'File::Temp' => 0,
 		'FindBin' => 0,
+		'Gzip::Faster' => 0,
 		'HTML::TableExtract' => 0,
 		'IPC::System::Simple' => 0,
 		'JSON::MaybeXS' => 0,
@@ -73,6 +78,7 @@ WriteMakefile(
 		'Test::Mockingbird' => 0,
 		'Test::NoWarnings' => 0,
 		'Test::Returns' => 0,
+		'Test::Warn' => 0,
 		'Test::Without::Module' => 0,
 		'Text::xSV::Slurp' => 0,
 		'XML::Simple' => 0

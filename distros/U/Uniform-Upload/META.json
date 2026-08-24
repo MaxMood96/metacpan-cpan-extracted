@@ -1,5 +1,5 @@
 {
-   "abstract" : "Extensible, framework-agnostic base specification layer for multi-part file uploads",
+   "abstract" : "Framework-agnostic upload manager and base driver engine",
    "author" : [
       "Joshua S. Day <HAX@cpan.org>"
    ],
@@ -55,6 +55,6 @@
          "web" : "https://github.com/haxmeister/perl-Uniform-Upload"
       }
    },
-   "version" : "0.01",
+   "version" : "0.02",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

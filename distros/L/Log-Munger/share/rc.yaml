@@ -1,0 +1,104 @@
+---
+# FreeBSD rc(8) service-script log enrichment.
+#
+# rc scripts write to /dev/console, so their output reaches syslog under the
+# kernel program name rather than one of their own; the rc framework's warnings
+# go through logger(1) and land under whichever user ran them, normally root.
+# The gate covers both. Patterns are anchored (each must match the whole
+# MESSAGE) and first-match wins. Every capture is namespaced with rc_ .
+#
+# Gating matters more here than usual. "Starting cron." is two ordinary words,
+# and daemons unrelated to rc write lines that look just like it -- so nothing
+# in this file may be gateless, and each pattern is pinned to rc's exact
+# punctuation rather than to the verb alone.
+includes:
+- base
+vars_templated:
+  # "Starting cron." / "Stopping named."
+  #
+  # The trailing full stop is rc's, and is required: it is what separates these
+  # from the same words in prose. Only the service-lifecycle pair is matched,
+  # not the one-off step announcements ("Clearing /tmp.", "Updating motd:.")
+  # which share no structure worth capturing.
+  RC_SERVICE: '(?<rc_action>Starting|Stopping) (?<rc_service>[A-Za-z][\w.-]*)\.'
+  # "/etc/rc: WARNING: /usr/local/etc/smartd.conf is not readable."
+  RC_DIAGNOSTIC: '(?<rc_script>/etc/rc[\w.-]*): (?<rc_level>WARNING|ERROR|FATAL): (?<rc_message>[% GREEDYDATA %])'
+  # "Waiting for PIDS: 1234 5678" -- shutdown waiting on daemons to exit. The
+  # trailing stop appears once the wait is over.
+  RC_WAITING: 'Waiting for PIDS: (?<rc_pids>[0-9]+(?: [0-9]+)*)\.?'
+vars_tests:
+  RC_SERVICE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Starting cron.'
+        result: 'Starting cron.'
+      - string: 'Stopping named.'
+        result: 'Stopping named.'
+      - string: 'Starting avahi-daemon.'
+        result: 'Starting avahi-daemon.'
+    negative:
+      # no trailing stop, and not a service: an rc step announcement
+      - 'Starting file system checks:'
+      # a daemon of its own that happens to use the word
+      - 'Starting... cat'
+      - 'Starting background file system checks in 60 seconds.'
+  RC_DIAGNOSTIC:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '/etc/rc: WARNING: /usr/local/etc/smartd.conf is not readable.'
+        result: '/etc/rc: WARNING: /usr/local/etc/smartd.conf is not readable.'
+      - string: '/etc/rc: WARNING: failed precmd routine for smartd'
+        result: '/etc/rc: WARNING: failed precmd routine for smartd'
+    negative:
+      - 'Starting cron.'
+  RC_WAITING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Waiting for PIDS: 1234'
+        result: 'Waiting for PIDS: 1234'
+      - string: 'Waiting for PIDS: 1234 5678'
+        result: 'Waiting for PIDS: 1234 5678'
+      - string: 'Waiting for PIDS: 1234.'
+        result: 'Waiting for PIDS: 1234.'
+    negative:
+      - 'Starting cron.'
+rules:
+  - name: rc
+    gate:
+      - field: PROGRAM
+        values:
+          # kernel because rc writes to the console; root because rc's own
+          # warnings go through logger(1) untagged
+          - '//^(?:kernel|root)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - RC_SERVICE
+      - RC_DIAGNOSTIC
+      - RC_WAITING
+    tests:
+      positive:
+        - string: 'Starting cron.'
+          program: 'kernel'
+          result:
+            rc_action: 'Starting'
+            rc_service: 'cron'
+        - string: 'Stopping named.'
+          program: 'root'
+          result:
+            rc_action: 'Stopping'
+            rc_service: 'named'
+        - string: '/etc/rc: WARNING: failed precmd routine for smartd'
+          result:
+            rc_script: '/etc/rc'
+            rc_level: 'WARNING'
+            rc_message: 'failed precmd routine for smartd'
+        - string: 'Waiting for PIDS: 1234 5678'
+          result:
+            rc_pids: '1234 5678'
+      negative:
+        - 'this is not an rc line at all'
+        - 'Starting file system checks:'
+        - 'Starting... cat'
+        - string: 'Starting cron.'
+          program: 'rc-extra'

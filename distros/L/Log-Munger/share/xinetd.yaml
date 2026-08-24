@@ -1,0 +1,116 @@
+---
+# xinetd service-dispatch log enrichment.
+#
+# Gates on the syslog PROGRAM field being "xinetd". Patterns are anchored
+# (each must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with xinetd_ .
+#
+# xinetd is a superserver: it accepts a connection and hands it to a service,
+# so its log is a record of who reached which service and whether they were
+# allowed to. That makes it an access log for everything behind it, including
+# services that keep no log of their own.
+#
+# FAIL is the line to watch. Its second word is the reason -- "address" for a
+# no_access/only_from refusal, "libwrap" for a hosts.allow one, "service" for
+# an instance limit -- which separates being turned away from being turned away
+# for the wrong reason.
+includes:
+- base
+vars_templated:
+  # "START: ftp pid=1234 from=192.0.2.5"
+  XINETD_START: 'START: (?<xinetd_service>[% NOTSPACE %]) pid=(?<xinetd_pid>[% INT %]) from=(?<xinetd_src_ip>[% IP %])(?: [% GREEDYDATA %])?'
+  # "EXIT: ftp status=0 pid=1234 duration=5(sec)"
+  #
+  # duration is written with its unit stuck to the number, so the number is
+  # captured separately from the "(sec)" that follows it.
+  XINETD_EXIT: 'EXIT: (?<xinetd_service>[% NOTSPACE %]) status=(?<xinetd_status>[-0-9]+) pid=(?<xinetd_pid>[% INT %])(?: duration=(?<xinetd_duration>[% INT %])\((?<xinetd_duration_unit>[a-z]+)\))?(?: [% GREEDYDATA %])?'
+  # "FAIL: ftp address from=203.0.113.7"
+  # "FAIL: telnet libwrap from=203.0.113.7"
+  XINETD_FAIL: 'FAIL: (?<xinetd_service>[% NOTSPACE %]) (?<xinetd_fail_reason>[% NOTSPACE %])(?: from=(?<xinetd_src_ip>[% IP %]))?(?: [% GREEDYDATA %])?'
+  # Anything else: startup, configuration reloads, service definitions.
+  XINETD_MESSAGE: '(?<xinetd_message>.+)'
+vars_tests:
+  XINETD_START:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'START: ftp pid=1234 from=192.0.2.5'
+        result: 'START: ftp pid=1234 from=192.0.2.5'
+    negative:
+      - 'EXIT: ftp status=0 pid=1234 duration=5(sec)'
+  XINETD_EXIT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'EXIT: ftp status=0 pid=1234 duration=5(sec)'
+        result: 'EXIT: ftp status=0 pid=1234 duration=5(sec)'
+      - string: 'EXIT: telnet status=1 pid=1234'
+        result: 'EXIT: telnet status=1 pid=1234'
+    negative:
+      - 'START: ftp pid=1234 from=192.0.2.5'
+  XINETD_FAIL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'FAIL: ftp address from=203.0.113.7'
+        result: 'FAIL: ftp address from=203.0.113.7'
+      - string: 'FAIL: telnet libwrap from=203.0.113.7'
+        result: 'FAIL: telnet libwrap from=203.0.113.7'
+    negative:
+      - 'START: ftp pid=1234 from=192.0.2.5'
+  XINETD_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'xinetd Version 2.3.15 started with libwrap loadavg labeled-networking options compiled in.'
+        result: 'xinetd Version 2.3.15 started with libwrap loadavg labeled-networking options compiled in.'
+    negative:
+      - ''
+geoip:
+  - xinetd_src_ip
+convert:
+  xinetd_pid: int
+  xinetd_status: int
+  xinetd_duration: int
+rules:
+  - name: xinetd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^xinetd$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - XINETD_START
+      - XINETD_EXIT
+      - XINETD_FAIL
+      # last: matches anything, which is only safe because the rule is gated
+      - XINETD_MESSAGE
+    tests:
+      positive:
+        - string: 'START: ftp pid=1234 from=192.0.2.5'
+          program: 'xinetd'
+          result:
+            xinetd_service: 'ftp'
+            xinetd_pid: '1234'
+            xinetd_src_ip: '192.0.2.5'
+        - string: 'EXIT: ftp status=0 pid=1234 duration=5(sec)'
+          numeric:
+            - xinetd_duration
+            - xinetd_pid
+            - xinetd_status
+          result:
+            xinetd_service: 'ftp'
+            xinetd_status: '0'
+            xinetd_pid: '1234'
+            xinetd_duration: '5'
+            xinetd_duration_unit: 'sec'
+        # "address" means an only_from / no_access refusal
+        - string: 'FAIL: ftp address from=203.0.113.7'
+          result:
+            xinetd_service: 'ftp'
+            xinetd_fail_reason: 'address'
+            xinetd_src_ip: '203.0.113.7'
+        - string: 'xinetd Version 2.3.15 started with libwrap loadavg labeled-networking options compiled in.'
+          result:
+            xinetd_message: 'xinetd Version 2.3.15 started with libwrap loadavg labeled-networking options compiled in.'
+      negative:
+        - ''
+        - string: 'START: ftp pid=1234 from=192.0.2.5'
+          program: 'xinetd-extra'

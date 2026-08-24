@@ -1,0 +1,239 @@
+---
+# PostgreSQL server-log enrichment.
+#
+# Gates on the syslog PROGRAM field being "postgres" or "postgresql". Patterns
+# are anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with pgsql_ .
+#
+# PostgreSQL's log_line_prefix is configurable, which means the front of a line
+# is whatever the administrator made it and cannot be parsed in general. What
+# is fixed is the severity word and the two spaces after its colon:
+#
+#   ... FATAL:  password authentication failed for user "neti"
+#
+# So every pattern here treats the prefix as text to be stepped over and keys
+# on the severity instead. The prefix is still captured whole as pgsql_prefix
+# for anyone who knows their own log_line_prefix and wants to pick it apart.
+#
+# The connection lines carry the most: "connection received" names the peer,
+# "connection authorized" says who it turned out to be, and a FATAL "password
+# authentication failed" between the two is a failed login.
+includes:
+- base
+vars_templated:
+  # The severity words postgres emits, in the order the manual lists them.
+  PGSQL_LEVEL: 'DEBUG[1-5]|INFO|NOTICE|WARNING|ERROR|LOG|FATAL|PANIC|STATEMENT|DETAIL|HINT|CONTEXT'
+  # Whatever log_line_prefix produced, stepped over rather than parsed.
+  #
+  # Matched lazily so it gives up the first severity it reaches. A greedy run
+  # would sail past "LOG:" in the prefix of a line whose body mentions another
+  # severity word and key on the wrong one.
+  PGSQL_PREFIX: '(?<pgsql_prefix>.*?)'
+  # "FATAL:  password authentication failed for user "neti""
+  #
+  # postgres writes two spaces after the colon; one is tolerated as well, since
+  # some log shippers collapse runs of whitespace.
+  PGSQL_AUTH_FAILED: '[% PGSQL_PREFIX %](?<pgsql_level>FATAL): {1,2}(?<pgsql_auth_error>password authentication failed|no pg_hba\.conf entry|[A-Za-z ]*authentication failed) for (?:user "(?<pgsql_user>[^"]*)"|host "(?<pgsql_src_host>[^"]*)")(?<pgsql_auth_detail>[% GREEDYDATA %])'
+  # "LOG:  connection received: host=192.0.2.5 port=49152"
+  PGSQL_CONN_RECEIVED: '[% PGSQL_PREFIX %](?<pgsql_level>LOG): {1,2}connection received: host=(?:(?<pgsql_src_ip>[% IP %])|(?<pgsql_src_host>[% NOTSPACE %]))(?: port=(?<pgsql_src_port>[% INT %]))?(?: [% GREEDYDATA %])?'
+  # "LOG:  connection authorized: user=neti database=mydb"
+  PGSQL_CONN_AUTHORIZED: '[% PGSQL_PREFIX %](?<pgsql_level>LOG): {1,2}connection authorized: user=(?<pgsql_user>[% NOTSPACE %])(?: database=(?<pgsql_db>[% NOTSPACE %]))?(?: [% GREEDYDATA %])?'
+  # "FATAL:  database "nope" does not exist"
+  # "FATAL:  role "nope" does not exist"
+  #
+  # Its own pattern because a sweep for default databases produces these, and
+  # the line names what was guessed at.
+  PGSQL_NOT_EXIST: '[% PGSQL_PREFIX %](?<pgsql_level>FATAL): {1,2}(?<pgsql_object_kind>database|role|user) "(?<pgsql_object>[^"]*)" does not exist(?: [% GREEDYDATA %])?'
+  # Anything else, keyed on the severity so it can at least be sorted by
+  # importance.
+  PGSQL_MESSAGE: '[% PGSQL_PREFIX %](?<pgsql_level>[% PGSQL_LEVEL %]): {1,2}(?<pgsql_message>.+)'
+  # "[5-3] 	automatic vacuum of table "covering.public.syslog""
+  # "[6-4] 	           values ($1,$2,$3,$4,now(),$5,$6)"
+  #
+  # A message spanning several physical lines is written to syslog one record
+  # per line, numbered [group-index]. Only the first record carries
+  # log_line_prefix and a severity; the rest are the message's own wrapped
+  # lines, which postgres indents with a tab.
+  #
+  # That tab is the whole discriminator. Every record starts with [group-index]
+  # -- a complete line follows it with a timestamp, a continuation with the
+  # tab -- so a lone "[6-4]" says nothing about which kind this is.
+  #
+  # Listed first among the patterns. A wrapped SQL statement can contain a word
+  # like "ERROR: " in its text, and PGSQL_MESSAGE would otherwise read that as
+  # the line's severity.
+  #
+  # Whitespace after the tab is the original statement's own indentation and is
+  # left in pgsql_message rather than trimmed.
+  PGSQL_CONTINUATION: '\[(?<pgsql_chunk_group>[% INT %])-(?<pgsql_chunk_index>[% INT %])\] ?\t(?<pgsql_message>[% GREEDYDATA %])'
+vars_tests:
+  PGSQL_LEVEL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'FATAL'
+        result: 'FATAL'
+      - string: 'LOG'
+        result: 'LOG'
+      - string: 'DEBUG3'
+        result: 'DEBUG3'
+    negative:
+      - 'TRACE'
+  PGSQL_PREFIX:
+    test_template: '^(?<TEST>[% TEST_VAR %])x$'
+    positive:
+      - string: '2026-07-15 10:00:00.123 UTC [1234] neti@mydb x'
+        result: '2026-07-15 10:00:00.123 UTC [1234] neti@mydb '
+      # the prefix can be empty
+      - string: 'x'
+        result: ''
+    negative:
+      # the trailing anchor in the template has to be there
+      - '2026-07-15 10:00:00.123 UTC [1234]'
+  PGSQL_AUTH_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '2026-07-15 10:00:00.123 UTC [1234] neti@mydb FATAL:  password authentication failed for user "neti"'
+        result: '2026-07-15 10:00:00.123 UTC [1234] neti@mydb FATAL:  password authentication failed for user "neti"'
+      - string: 'FATAL:  no pg_hba.conf entry for host "203.0.113.7", user "admin", database "postgres", SSL off'
+        result: 'FATAL:  no pg_hba.conf entry for host "203.0.113.7", user "admin", database "postgres", SSL off'
+    negative:
+      - 'LOG:  connection received: host=192.0.2.5 port=49152'
+  PGSQL_CONN_RECEIVED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'LOG:  connection received: host=192.0.2.5 port=49152'
+        result: 'LOG:  connection received: host=192.0.2.5 port=49152'
+      - string: '2026-07-15 10:00:00.123 UTC [1234] LOG:  connection received: host=192.0.2.5 port=49152'
+        result: '2026-07-15 10:00:00.123 UTC [1234] LOG:  connection received: host=192.0.2.5 port=49152'
+    negative:
+      - 'LOG:  connection authorized: user=neti database=mydb'
+  PGSQL_CONN_AUTHORIZED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'LOG:  connection authorized: user=neti database=mydb'
+        result: 'LOG:  connection authorized: user=neti database=mydb'
+    negative:
+      - 'LOG:  connection received: host=192.0.2.5 port=49152'
+  PGSQL_NOT_EXIST:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'FATAL:  database "nope" does not exist'
+        result: 'FATAL:  database "nope" does not exist'
+      - string: 'FATAL:  role "admin" does not exist'
+        result: 'FATAL:  role "admin" does not exist'
+    negative:
+      - 'FATAL:  password authentication failed for user "neti"'
+  PGSQL_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'LOG:  database system is ready to accept connections'
+        result: 'LOG:  database system is ready to accept connections'
+      - string: '2026-07-15 10:00:00.123 UTC [1234] ERROR:  relation "nope" does not exist at character 15'
+        result: '2026-07-15 10:00:00.123 UTC [1234] ERROR:  relation "nope" does not exist at character 15'
+    negative:
+      # no severity word, so nothing here to key on
+      - 'this is not a postgres line at all'
+  PGSQL_CONTINUATION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: "[5-3] \tautomatic vacuum of table \"covering.public.syslog\""
+        result: "[5-3] \tautomatic vacuum of table \"covering.public.syslog\""
+      - string: "[6-4] \t           values ($1,$2,$3,$4,now(),$5,$6)"
+        result: "[6-4] \t           values ($1,$2,$3,$4,now(),$5,$6)"
+    negative:
+      # same [group-index] opening, but a complete line rather than a wrapped
+      # one: timestamp where the tab would be
+      - '[1-2] 2026-07-16 16:50:55.205 CDT [31011] HINT:  Future log output will go to log destination "syslog".'
+      - 'LOG:  database system is ready to accept connections'
+geoip:
+  - pgsql_src_ip
+convert:
+  pgsql_src_port: int
+  pgsql_chunk_group: int
+  pgsql_chunk_index: int
+rules:
+  - name: postgresql
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postgre(?:s|sql)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      # first: the only pattern keyed on something other than a severity word,
+      # and the one that keeps a wrapped statement's text from being read as one
+      - PGSQL_CONTINUATION
+      - PGSQL_AUTH_FAILED
+      - PGSQL_NOT_EXIST
+      - PGSQL_CONN_RECEIVED
+      - PGSQL_CONN_AUTHORIZED
+      # last: matches any line carrying a severity, so the named ones go first
+      - PGSQL_MESSAGE
+    tests:
+      positive:
+        - string: '2026-07-15 10:00:00.123 UTC [1234] neti@mydb FATAL:  password authentication failed for user "neti"'
+          program: 'postgresql'
+          result:
+            pgsql_prefix: '2026-07-15 10:00:00.123 UTC [1234] neti@mydb '
+            pgsql_level: 'FATAL'
+            pgsql_auth_error: 'password authentication failed'
+            pgsql_user: 'neti'
+            pgsql_auth_detail: ''
+        - string: 'FATAL:  no pg_hba.conf entry for host "203.0.113.7", user "admin", database "postgres", SSL off'
+          program: 'postgres'
+          result:
+            pgsql_prefix: ''
+            pgsql_level: 'FATAL'
+            pgsql_auth_error: 'no pg_hba.conf entry'
+            pgsql_src_host: '203.0.113.7'
+            pgsql_auth_detail: ', user "admin", database "postgres", SSL off'
+        - string: 'LOG:  connection received: host=192.0.2.5 port=49152'
+          numeric:
+            - pgsql_src_port
+          result:
+            pgsql_prefix: ''
+            pgsql_level: 'LOG'
+            pgsql_src_ip: '192.0.2.5'
+            pgsql_src_port: '49152'
+        - string: 'LOG:  connection authorized: user=neti database=mydb'
+          result:
+            pgsql_prefix: ''
+            pgsql_level: 'LOG'
+            pgsql_user: 'neti'
+            pgsql_db: 'mydb'
+        - string: 'FATAL:  database "nope" does not exist'
+          result:
+            pgsql_prefix: ''
+            pgsql_level: 'FATAL'
+            pgsql_object_kind: 'database'
+            pgsql_object: 'nope'
+        - string: '2026-07-15 10:00:00.123 UTC [1234] ERROR:  relation "nope" does not exist at character 15'
+          result:
+            pgsql_prefix: '2026-07-15 10:00:00.123 UTC [1234] '
+            pgsql_level: 'ERROR'
+            pgsql_message: 'relation "nope" does not exist at character 15'
+        # the wrapped lines of a multi-line message
+        - string: "[5-3] \tautomatic vacuum of table \"covering.public.syslog\""
+          numeric:
+            - pgsql_chunk_group
+            - pgsql_chunk_index
+          result:
+            pgsql_chunk_group: '5'
+            pgsql_chunk_index: '3'
+            pgsql_message: 'automatic vacuum of table "covering.public.syslog"'
+        - string: "[6-4] \t           values ($1,$2,$3,$4,now(),$5,$6)"
+          result:
+            pgsql_chunk_group: '6'
+            pgsql_chunk_index: '4'
+            pgsql_message: '           values ($1,$2,$3,$4,now(),$5,$6)'
+        # a complete line that happens to share the [group-index] opening
+        - string: '[1-2] 2026-07-16 16:50:55.205 CDT [31011] HINT:  Future log output will go to log destination "syslog".'
+          result:
+            pgsql_prefix: '[1-2] 2026-07-16 16:50:55.205 CDT [31011] '
+            pgsql_level: 'HINT'
+            pgsql_message: 'Future log output will go to log destination "syslog".'
+      negative:
+        - 'this is not a postgres line at all'
+        - 'Jul 15 10:00:00 host cron[123]: session opened for user root'
+        - string: '2026-07-15 10:00:00.123 UTC [1234] neti@mydb FATAL:  password authentication failed for user "neti"'
+          program: 'postgresql-extra'

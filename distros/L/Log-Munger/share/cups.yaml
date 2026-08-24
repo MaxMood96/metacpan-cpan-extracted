@@ -1,0 +1,136 @@
+---
+# CUPS printing log enrichment.
+#
+# Gates on the syslog PROGRAM field being "cupsd" or "cups". Patterns are
+# anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with cups_ .
+#
+# CUPS writes two logs and this covers both.
+#
+# error_log opens each line with a one-letter severity and a bracketed
+# timestamp, optionally scoped to a job or a client:
+#
+#   E [15/Jul/2026:10:00:00 +0000] [Job 123] The printer is not responding.
+#
+# access_log is Common Log Format with the IPP operation in place of the HTTP
+# request, close enough to an apache line to reuse the same shape. That is why
+# the access rule here is gated rather than gateless: an ungated CLF pattern
+# would compete with http_access_logs for every raw line.
+includes:
+- base
+vars_templated:
+  # The severity letter: Emergency, Alert, Critical, Error, Warning, Notice,
+  # Info, Debug.
+  CUPS_LEVEL: '[EACWNIDacd]'
+  # "E [15/Jul/2026:10:00:00 +0000] [Job 123] "
+  CUPS_ERROR_HEAD: '(?<cups_level>[% CUPS_LEVEL %]) \[(?<cups_timestamp>[^\]]*)\] (?:\[(?<cups_scope>[^\]]*)\] )?'
+  # A full error_log line.
+  CUPS_ERROR: '[% CUPS_ERROR_HEAD %](?<cups_message>.+)'
+  # The access_log form, which is CLF with the IPP operation where the request goes:
+  #
+  #   localhost - neti [15/Jul/2026:10:00:00 +0000] "POST /printers/laser
+  #   HTTP/1.1" 200 1234 Print-Job successful-ok
+  #
+  # The two trailing fields are the IPP operation and its status, which are
+  # what make this a print record rather than a web one.
+  CUPS_ACCESS: '(?<cups_client>[% NOTSPACE %]) (?<cups_ident>[% NOTSPACE %]) (?<cups_user>[% NOTSPACE %]) \[(?<cups_timestamp>[^\]]*)\] "(?<cups_method>[A-Z]+) (?<cups_resource>[% NOTSPACE %])(?: HTTP/(?<cups_httpversion>[% NUMBER %]))?" (?<cups_status>[% INT %]) (?<cups_bytes>[-0-9]+)(?: (?<cups_operation>[% NOTSPACE %]) (?<cups_ipp_status>[% NOTSPACE %]))?'
+  # Anything with no recognisable head.
+  CUPS_MESSAGE: '(?<cups_message>.+)'
+vars_tests:
+  CUPS_LEVEL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'E'
+        result: 'E'
+      - string: 'I'
+        result: 'I'
+    negative:
+      - 'ERROR'
+  CUPS_ERROR_HEAD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'E [15/Jul/2026:10:00:00 +0000] [Job 123] '
+        result: 'E [15/Jul/2026:10:00:00 +0000] [Job 123] '
+      - string: 'I [15/Jul/2026:10:00:00 +0000] '
+        result: 'I [15/Jul/2026:10:00:00 +0000] '
+    negative:
+      - '[15/Jul/2026:10:00:00 +0000] '
+  CUPS_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'E [15/Jul/2026:10:00:00 +0000] [Job 123] The printer is not responding.'
+        result: 'E [15/Jul/2026:10:00:00 +0000] [Job 123] The printer is not responding.'
+      - string: 'I [15/Jul/2026:10:00:00 +0000] Listening to /run/cups/cups.sock:0'
+        result: 'I [15/Jul/2026:10:00:00 +0000] Listening to /run/cups/cups.sock:0'
+    negative:
+      - 'Scheduler shutting down normally.'
+  CUPS_ACCESS:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'localhost - neti [15/Jul/2026:10:00:00 +0000] "POST /printers/laser HTTP/1.1" 200 1234 Print-Job successful-ok'
+        result: 'localhost - neti [15/Jul/2026:10:00:00 +0000] "POST /printers/laser HTTP/1.1" 200 1234 Print-Job successful-ok'
+      - string: '192.0.2.5 - - [15/Jul/2026:10:00:00 +0000] "GET /admin HTTP/1.1" 401 0 - -'
+        result: '192.0.2.5 - - [15/Jul/2026:10:00:00 +0000] "GET /admin HTTP/1.1" 401 0 - -'
+    negative:
+      - 'E [15/Jul/2026:10:00:00 +0000] The printer is not responding.'
+  CUPS_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Scheduler shutting down normally.'
+        result: 'Scheduler shutting down normally.'
+    negative:
+      - ''
+geoip:
+  - cups_client
+convert:
+  cups_status: int
+rules:
+  - name: cups
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^cups(?:d)?$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - CUPS_ACCESS
+      - CUPS_ERROR
+      # last: matches anything, which is only safe because the rule is gated
+      - CUPS_MESSAGE
+    tests:
+      positive:
+        - string: 'E [15/Jul/2026:10:00:00 +0000] [Job 123] The printer is not responding.'
+          program: 'cups'
+          result:
+            cups_level: 'E'
+            cups_timestamp: '15/Jul/2026:10:00:00 +0000'
+            cups_scope: 'Job 123'
+            cups_message: 'The printer is not responding.'
+        - string: 'I [15/Jul/2026:10:00:00 +0000] Listening to /run/cups/cups.sock:0'
+          result:
+            cups_level: 'I'
+            cups_timestamp: '15/Jul/2026:10:00:00 +0000'
+            cups_message: 'Listening to /run/cups/cups.sock:0'
+        - string: 'localhost - neti [15/Jul/2026:10:00:00 +0000] "POST /printers/laser HTTP/1.1" 200 1234 Print-Job successful-ok'
+          numeric:
+            - cups_status
+          result:
+            cups_client: 'localhost'
+            cups_ident: '-'
+            cups_user: 'neti'
+            cups_timestamp: '15/Jul/2026:10:00:00 +0000'
+            cups_method: 'POST'
+            cups_resource: '/printers/laser'
+            cups_httpversion: '1.1'
+            cups_status: '200'
+            cups_bytes: '1234'
+            cups_operation: 'Print-Job'
+            cups_ipp_status: 'successful-ok'
+        - string: 'Scheduler shutting down normally.'
+          program: 'cupsd'
+          result:
+            cups_message: 'Scheduler shutting down normally.'
+      negative:
+        - ''
+        - string: 'E [15/Jul/2026:10:00:00 +0000] [Job 123] The printer is not responding.'
+          program: 'cups-extra'

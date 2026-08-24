@@ -1,0 +1,170 @@
+---
+# daemonlogger packet-logger log enrichment.
+#
+# daemonlogger writes everything it sees to a rolling set of pcap files, which
+# is what a tool like Virani later carves per-request pcaps out of. It says very
+# little: a rollover trio every time it starts a new file, and a short capture
+# summary on the way out.
+#
+# Gates on the syslog PROGRAM field being "daemonlogger". Patterns are anchored
+# (each must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with dlog_ .
+#
+# The drop counters are the ones worth watching. "dropped by kernel" is the
+# capture ring overflowing because daemonlogger could not keep up, and
+# "dropped by interface" is the NIC discarding frames before they ever reached
+# it -- different problems with the same symptom, so they are separate fields.
+includes:
+- base
+vars_templated:
+  # "Logging packets to /var/log/daemonlogger/daemonlogger.1782882100.pcap"
+  # The epoch in the filename is when the file was opened; it is left in the
+  # path rather than split out, because it is the pcap's name and matching it
+  # up with a later reference means matching the whole string.
+  DLOG_LOGGING_TO: 'Logging packets to (?<dlog_pcap_file>[% NOTSPACE %])'
+  # "Rollover timer has expired!" / "Rolling over logfile..."
+  # The pair that precedes every new pcap file.
+  DLOG_ROLLOVER: '(?<dlog_action>Rollover timer has expired!|Rolling over logfile\.\.\.)'
+  # "1916572345 packets received"
+  DLOG_RECEIVED: '(?<dlog_packets_received>[% INT %]) packets received'
+  # "44543 packets dropped by kernel (0.00%)"
+  # The percentage is logged alongside the count and is captured rather than
+  # recomputed, because daemonlogger works it out against a total it does not
+  # otherwise print.
+  DLOG_DROPPED_KERNEL: '(?<dlog_packets_dropped_kernel>[% INT %]) packets dropped by kernel \((?<dlog_drop_percent>[% NUMBER %])%\)'
+  # "0 packets dropped by interface"
+  DLOG_DROPPED_IFACE: '(?<dlog_packets_dropped_iface>[% INT %]) packets dropped by interface'
+  # "Quitting!"
+  DLOG_QUITTING: '(?<dlog_action>Quitting!)'
+  # Everything else it said. Matching anything is only safe because the rule is
+  # gated on PROGRAM.
+  #
+  # This does not match an empty MESSAGE: daemonlogger prints a blank line ahead
+  # of its shutdown summary, and there is nothing in an empty line to keep.
+  DLOG_MESSAGE: '(?<dlog_message>.+)'
+vars_tests:
+  DLOG_LOGGING_TO:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Logging packets to /var/log/daemonlogger/daemonlogger.1782882100.pcap'
+        result: 'Logging packets to /var/log/daemonlogger/daemonlogger.1782882100.pcap'
+      - string: 'Logging packets to /var/log/dl/capture.pcap'
+        result: 'Logging packets to /var/log/dl/capture.pcap'
+    negative:
+      - 'Rolling over logfile...'
+  DLOG_ROLLOVER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Rollover timer has expired!'
+        result: 'Rollover timer has expired!'
+      - string: 'Rolling over logfile...'
+        result: 'Rolling over logfile...'
+    negative:
+      - 'Quitting!'
+  DLOG_RECEIVED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '1916572345 packets received'
+        result: '1916572345 packets received'
+      - string: '0 packets received'
+        result: '0 packets received'
+    negative:
+      - '0 packets dropped by interface'
+  DLOG_DROPPED_KERNEL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '44543 packets dropped by kernel (0.00%)'
+        result: '44543 packets dropped by kernel (0.00%)'
+      - string: '0 packets dropped by kernel (0.00%)'
+        result: '0 packets dropped by kernel (0.00%)'
+    negative:
+      - '0 packets dropped by interface'
+  DLOG_DROPPED_IFACE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '0 packets dropped by interface'
+        result: '0 packets dropped by interface'
+      - string: '17 packets dropped by interface'
+        result: '17 packets dropped by interface'
+    negative:
+      - '44543 packets dropped by kernel (0.00%)'
+  DLOG_QUITTING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Quitting!'
+        result: 'Quitting!'
+    negative:
+      - 'Rollover timer has expired!'
+  DLOG_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'something daemonlogger has not been taught yet'
+        result: 'something daemonlogger has not been taught yet'
+      - string: 'Quitting!'
+        result: 'Quitting!'
+    negative:
+      - ''
+# Coerce the counters to numbers. dlog_drop_percent is a float, so it converts
+# as one -- 0.00 read as an int would round every partial loss away to zero.
+convert:
+  dlog_packets_received: int
+  dlog_packets_dropped_kernel: int
+  dlog_packets_dropped_iface: int
+  dlog_drop_percent: float
+rules:
+  - name: daemonlogger
+    gate:
+      - field: PROGRAM
+        values:
+          - daemonlogger
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - DLOG_LOGGING_TO
+      - DLOG_ROLLOVER
+      - DLOG_RECEIVED
+      - DLOG_DROPPED_KERNEL
+      - DLOG_DROPPED_IFACE
+      - DLOG_QUITTING
+      # last: matches anything, which is only safe because the rule is gated
+      - DLOG_MESSAGE
+    tests:
+      positive:
+        - string: 'Logging packets to /var/log/daemonlogger/daemonlogger.1782882100.pcap'
+          result:
+            dlog_pcap_file: '/var/log/daemonlogger/daemonlogger.1782882100.pcap'
+        - string: 'Rollover timer has expired!'
+          result:
+            dlog_action: 'Rollover timer has expired!'
+        - string: 'Rolling over logfile...'
+          program: 'daemonlogger'
+          result:
+            dlog_action: 'Rolling over logfile...'
+        - string: '1916572345 packets received'
+          numeric:
+            - dlog_packets_received
+          result:
+            dlog_packets_received: '1916572345'
+        - string: '44543 packets dropped by kernel (0.00%)'
+          numeric:
+            - dlog_drop_percent
+            - dlog_packets_dropped_kernel
+          result:
+            dlog_packets_dropped_kernel: '44543'
+            dlog_drop_percent: '0.00'
+        - string: '0 packets dropped by interface'
+          numeric:
+            - dlog_packets_dropped_iface
+          result:
+            dlog_packets_dropped_iface: '0'
+        - string: 'Quitting!'
+          result:
+            dlog_action: 'Quitting!'
+        # falls through to the catch-all
+        - string: 'some future daemonlogger message'
+          result:
+            dlog_message: 'some future daemonlogger message'
+      negative:
+        - ''
+        - string: 'Logging packets to /var/log/daemonlogger/daemonlogger.1782882100.pcap'
+          program: 'daemonlogger-extra'

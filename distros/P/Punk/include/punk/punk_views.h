@@ -121,4 +121,49 @@ static SV *pv_engine(pTHX_ pv_views *v, SV *name_sv) {
     return NULL; /* not reached */
 }
 
+/* ---- before_render ------------------------------------------------------- */
+
+/* Run the application's before_render chain over the data a template is about
+ * to be rendered with. Each hook gets ($c, $template, $data) and whatever it
+ * returns is dropped: the hook's business is the hashref, and a hook that
+ * could replace the response would be a second dispatcher.
+ *
+ * The chain hangs off the app rather than the request state because a render
+ * is reached through a context, which has no route to what the dispatcher is
+ * carrying. Absent unless one was registered, so the common render costs one
+ * hv_fetch that misses.
+ */
+static void pv_before_render(pTHX_ SV *c, SV *template, SV *data) {
+    SV *app, **slot;
+    AV *chain;
+    SSize_t i, n;
+
+    if (!(c && SvROK(c))) return;
+    if (!(data && SvROK(data) && SvTYPE(SvRV(data)) == SVt_PVHV)) return;
+    app = pcx_get(aTHX_ pcx_av(aTHX_ c), PCX_APP);
+    if (!(app && SvROK(app) && SvTYPE(SvRV(app)) == SVt_PVHV)) return;
+    slot = hv_fetchs((HV *)SvRV(app), K_BEFORE_RENDER_C, 0);
+    if (!(slot && *slot && SvROK(*slot) && SvTYPE(SvRV(*slot)) == SVt_PVAV))
+        return;
+
+    chain = (AV *)SvRV(*slot);
+    n = av_len(chain) + 1;
+    for (i = 0; i < n; i++) {
+        SV **cv = av_fetch(chain, i, 0);
+        dSP;
+        if (!(cv && *cv && SvROK(*cv))) continue;
+        ENTER; SAVETMPS;
+        PUSHMARK(SP);
+        EXTEND(SP, 3);
+        PUSHs(c);
+        PUSHs(template);
+        PUSHs(data);
+        PUTBACK;
+        call_sv(*cv, G_VOID | G_DISCARD);
+        SPAGAIN;
+        PUTBACK;
+        FREETMPS; LEAVE;
+    }
+}
+
 #endif /* PUNK_VIEWS_H */

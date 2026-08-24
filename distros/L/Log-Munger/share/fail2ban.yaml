@@ -1,0 +1,145 @@
+---
+# fail2ban intrusion-prevention log enrichment.
+#
+# fail2ban logs via syslog with a PROGRAM field like "fail2ban.actions",
+# "fail2ban.filter", or plain "fail2ban". The MESSAGE that Log::Munger sees is
+# the text after the program + level, e.g. "[sshd] Ban 203.0.113.7". Some
+# deployments prefix a bare level token (e.g. "NOTICE " / "WARNING ") before the
+# "[jail]", so every pattern tolerates an optional leading "(?:[A-Z]+ +)?".
+# Patterns are anchored (each must match the whole MESSAGE) and first-match
+# wins. Every capture is namespaced with f2b_ .
+includes:
+- base
+vars_templated:
+  # "[sshd] Ban 203.0.113.7", "[sshd] Unban 203.0.113.7",
+  # "[sshd] Restore Ban 203.0.113.7".
+  F2B_ACTION_BAN: '(?:[A-Z]+ +)?\[(?<f2b_jail>[% NOTSPACE %])\] (?<f2b_action>Ban|Unban|Restore Ban) (?<f2b_ip>[% IP %])(?: [% GREEDYDATA %])?'
+  # "[sshd] Found 203.0.113.7" and
+  # "[sshd] Found 203.0.113.7 - 2024-01-01 12:00:00".
+  F2B_FOUND: '(?:[A-Z]+ +)?\[(?<f2b_jail>[% NOTSPACE %])\] (?<f2b_action>Found) (?<f2b_ip>[% IP %])(?: [% GREEDYDATA %])?'
+  # "[sshd] Already banned 203.0.113.7".
+  F2B_ALREADY_BANNED: '(?:[A-Z]+ +)?\[(?<f2b_jail>[% NOTSPACE %])\] (?<f2b_action>Already banned) (?<f2b_ip>[% IP %])(?: [% GREEDYDATA %])?'
+  # "[sshd] 203.0.113.7 already banned" (IP-first variant). f2b_action is
+  # normalised to "Already banned" for consistency with F2B_ALREADY_BANNED.
+  F2B_ALREADY_BANNED_ALT: '(?:[A-Z]+ +)?\[(?<f2b_jail>[% NOTSPACE %])\] (?<f2b_ip>[% IP %]) (?<f2b_action>already banned)(?: [% GREEDYDATA %])?'
+  # "[sshd] Ignore 203.0.113.7 by ip".
+  F2B_IGNORE: '(?:[A-Z]+ +)?\[(?<f2b_jail>[% NOTSPACE %])\] (?<f2b_action>Ignore) (?<f2b_ip>[% IP %])(?: [% GREEDYDATA %])?'
+vars_tests:
+  F2B_ACTION_BAN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[sshd] Ban 203.0.113.7'
+        result: '[sshd] Ban 203.0.113.7'
+      - string: 'NOTICE [sshd] Unban 203.0.113.7'
+        result: 'NOTICE [sshd] Unban 203.0.113.7'
+      - string: '[sshd] Restore Ban 203.0.113.7'
+        result: '[sshd] Restore Ban 203.0.113.7'
+    negative:
+      - '[sshd] Found 203.0.113.7'
+  F2B_FOUND:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[sshd] Found 203.0.113.7'
+        result: '[sshd] Found 203.0.113.7'
+      - string: '[sshd] Found 203.0.113.7 - 2024-01-01 12:00:00'
+        result: '[sshd] Found 203.0.113.7 - 2024-01-01 12:00:00'
+    negative:
+      - '[sshd] Ban 203.0.113.7'
+  F2B_ALREADY_BANNED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[sshd] Already banned 203.0.113.7'
+        result: '[sshd] Already banned 203.0.113.7'
+      - string: 'WARNING [sshd] Already banned 198.51.100.9'
+        result: 'WARNING [sshd] Already banned 198.51.100.9'
+    negative:
+      - '[sshd] Ban 203.0.113.7'
+  F2B_ALREADY_BANNED_ALT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[sshd] 203.0.113.7 already banned'
+        result: '[sshd] 203.0.113.7 already banned'
+      - string: 'WARNING [sshd] 198.51.100.9 already banned'
+        result: 'WARNING [sshd] 198.51.100.9 already banned'
+    negative:
+      - '[sshd] Already banned 203.0.113.7'
+  F2B_IGNORE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[sshd] Ignore 203.0.113.7 by ip'
+        result: '[sshd] Ignore 203.0.113.7 by ip'
+      - string: '[sshd] Ignore 198.51.100.9'
+        result: '[sshd] Ignore 198.51.100.9'
+    negative:
+      - '[sshd] Ban 203.0.113.7'
+# Look up the banned/observed source IP.
+geoip:
+  - f2b_ip
+rules:
+  - name: fail2ban
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^fail2ban(\.[a-z]+)?$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - F2B_ACTION_BAN
+      - F2B_FOUND
+      - F2B_ALREADY_BANNED
+      - F2B_ALREADY_BANNED_ALT
+      - F2B_IGNORE
+    tests:
+      positive:
+        - string: '[sshd] Ban 203.0.113.7'
+          program: 'fail2ban'
+          result:
+            f2b_jail: 'sshd'
+            f2b_action: 'Ban'
+            f2b_ip: '203.0.113.7'
+        - string: '[sshd] Unban 203.0.113.7'
+          program: 'fail2ban.actions'
+          result:
+            f2b_jail: 'sshd'
+            f2b_action: 'Unban'
+            f2b_ip: '203.0.113.7'
+        - string: 'NOTICE [sshd] Unban 203.0.113.7'
+          result:
+            f2b_jail: 'sshd'
+            f2b_action: 'Unban'
+            f2b_ip: '203.0.113.7'
+        - string: '[sshd] Restore Ban 203.0.113.7'
+          result:
+            f2b_jail: 'sshd'
+            f2b_action: 'Restore Ban'
+            f2b_ip: '203.0.113.7'
+        - string: '[sshd] Found 203.0.113.7'
+          result:
+            f2b_jail: 'sshd'
+            f2b_action: 'Found'
+            f2b_ip: '203.0.113.7'
+        - string: '[sshd] Found 203.0.113.7 - 2024-01-01 12:00:00'
+          result:
+            f2b_jail: 'sshd'
+            f2b_action: 'Found'
+            f2b_ip: '203.0.113.7'
+        - string: '[sshd] Already banned 203.0.113.7'
+          result:
+            f2b_jail: 'sshd'
+            f2b_action: 'Already banned'
+            f2b_ip: '203.0.113.7'
+        - string: '[sshd] 203.0.113.7 already banned'
+          result:
+            f2b_jail: 'sshd'
+            f2b_action: 'already banned'
+            f2b_ip: '203.0.113.7'
+        - string: '[sshd] Ignore 203.0.113.7 by ip'
+          result:
+            f2b_jail: 'sshd'
+            f2b_action: 'Ignore'
+            f2b_ip: '203.0.113.7'
+      negative:
+        - 'this is not a fail2ban line at all'
+        - 'Jul 15 10:00:00 host cron[123]: session opened for user root'
+        - string: '[sshd] Ban 203.0.113.7'
+          program: 'fail2ban-extra'

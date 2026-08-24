@@ -1,0 +1,255 @@
+---
+# Sendmail MTA log enrichment.
+#
+# Gates on the syslog PROGRAM field being "sendmail" or "sm-mta". Patterns are
+# anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with sendmail_ .
+#
+# Sendmail logs a message as a queue id followed by a comma-separated key=value
+# blob:
+#
+#   1rABCD012345: from=<a@b>, size=1234, class=0, nrcpts=1, proto=ESMTP,
+#   daemon=MTA, relay=mail.example.com [192.0.2.5]
+#   1rABCD012345: to=<c@d>, delay=00:00:01, mailer=local, stat=Sent
+#
+# Which keys appear depends on the stage and on what happened, so the blob is
+# captured whole and split by a decompose rather than being named key by key.
+# A second decompose then splits the relay clause, since "host [address]" is
+# one value to the kv splitter but two things to anyone reading it.
+#
+# Note that a delivery takes at least two lines -- one from=, one to= per
+# recipient -- joined only by the queue id, which is why sendmail_qid is
+# captured on every pattern here.
+includes:
+- base
+vars_templated:
+  # The queue id every per-message line opens with.
+  SENDMAIL_QID: '(?<sendmail_qid>[A-Za-z0-9]+): '
+  # A message transaction: the kv blob, whatever is in it.
+  #
+  # Anchored on the leading key rather than on the shape of the whole blob,
+  # since the shape is exactly what varies. from=, to= and ruleset= are the
+  # three that open a transaction line.
+  SENDMAIL_TRANSACTION: '[% SENDMAIL_QID %](?<sendmail_kv>(?:from|to|ruleset|ctladdr)=[% GREEDYDATA %])'
+  # "host.example.com [192.0.2.5]" as the relay= value. Fed to the second
+  # decompose so the address can be looked up.
+  #
+  # The host is often "[192.0.2.5]" on its own when there is no reverse DNS,
+  # which is why it is optional.
+  SENDMAIL_RELAY_INFO: '(?:(?<sendmail_relay_host>[^\[\s]+) )?\[(?<sendmail_relay_ip>[% IP %])\](?: \(may be forged\))?'
+  # "AUTH failure (LOGIN): authentication failure (-1) SASL(-13): user not
+  #  found, relay=scanner [203.0.113.7]"
+  #
+  # The SMTP AUTH brute force. No queue id, because nothing was accepted.
+  SENDMAIL_AUTH_FAILURE: 'AUTH failure \((?<sendmail_auth_mech>[^)]*)\): (?<sendmail_auth_error>.*), relay=(?<sendmail_relay>[% GREEDYDATA %])'
+  # "ruleset=check_relay, arg1=scanner, arg2=203.0.113.7, relay=scanner
+  #  [203.0.113.7], reject=550 5.7.1 Access denied"
+  #
+  # A connection refused before a queue id existed.
+  SENDMAIL_REJECT: '(?<sendmail_kv>ruleset=[% GREEDYDATA %])'
+  # "did not issue MAIL/EXPN/VRFY/ETRN during connection to MTA"
+  #
+  # A connection that opened and did nothing, which in bulk is a port scan.
+  SENDMAIL_NO_COMMAND: '(?:[% SENDMAIL_QID %])?did not issue (?<sendmail_expected_commands>[% NOTSPACE %]) during connection to (?<sendmail_daemon>[% NOTSPACE %])(?: [% GREEDYDATA %])?'
+  # Anything else logged against a queue id.
+  SENDMAIL_QID_MESSAGE: '[% SENDMAIL_QID %](?<sendmail_message>.+)'
+  # Lines with no queue id: startup, queue runs, configuration.
+  SENDMAIL_MESSAGE: '(?<sendmail_message>.+)'
+vars_tests:
+  SENDMAIL_QID:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '1rABCD012345: '
+        result: '1rABCD012345: '
+    negative:
+      - 'no queue id here'
+  SENDMAIL_TRANSACTION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '1rABCD012345: from=<sender@example.com>, size=1234, class=0, nrcpts=1, proto=ESMTP, daemon=MTA, relay=mail.example.com [192.0.2.5]'
+        result: '1rABCD012345: from=<sender@example.com>, size=1234, class=0, nrcpts=1, proto=ESMTP, daemon=MTA, relay=mail.example.com [192.0.2.5]'
+      - string: '1rABCD012345: to=<victim@example.org>, delay=00:00:01, mailer=local, pri=31234, dsn=2.0.0, stat=Sent'
+        result: '1rABCD012345: to=<victim@example.org>, delay=00:00:01, mailer=local, pri=31234, dsn=2.0.0, stat=Sent'
+    negative:
+      - '1rABCD012345: SYSERR: cannot open /etc/mail/access'
+  SENDMAIL_RELAY_INFO:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'mail.example.com [192.0.2.5]'
+        result: 'mail.example.com [192.0.2.5]'
+      # no reverse DNS, so only the bracketed address
+      - string: '[203.0.113.7]'
+        result: '[203.0.113.7]'
+      - string: 'scanner.example.net [203.0.113.7] (may be forged)'
+        result: 'scanner.example.net [203.0.113.7] (may be forged)'
+    negative:
+      - 'mail.example.com'
+  SENDMAIL_AUTH_FAILURE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'AUTH failure (LOGIN): authentication failure (-1) SASL(-13): user not found, relay=scanner [203.0.113.7]'
+        result: 'AUTH failure (LOGIN): authentication failure (-1) SASL(-13): user not found, relay=scanner [203.0.113.7]'
+    negative:
+      - '1rABCD012345: from=<a@b>, size=1234'
+  SENDMAIL_REJECT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'ruleset=check_relay, arg1=scanner, arg2=203.0.113.7, relay=scanner [203.0.113.7], reject=550 5.7.1 Access denied'
+        result: 'ruleset=check_relay, arg1=scanner, arg2=203.0.113.7, relay=scanner [203.0.113.7], reject=550 5.7.1 Access denied'
+    negative:
+      - '1rABCD012345: from=<a@b>, size=1234'
+  SENDMAIL_NO_COMMAND:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'did not issue MAIL/EXPN/VRFY/ETRN during connection to MTA'
+        result: 'did not issue MAIL/EXPN/VRFY/ETRN during connection to MTA'
+      - string: '1rABCD012345: did not issue MAIL/EXPN/VRFY/ETRN during connection to MTA'
+        result: '1rABCD012345: did not issue MAIL/EXPN/VRFY/ETRN during connection to MTA'
+    negative:
+      - '1rABCD012345: from=<a@b>, size=1234'
+  SENDMAIL_QID_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '1rABCD012345: SYSERR: cannot open /etc/mail/access'
+        result: '1rABCD012345: SYSERR: cannot open /etc/mail/access'
+    negative:
+      - 'starting daemon (8.17.1): SMTP+queueing@00:30:00'
+  SENDMAIL_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'starting daemon (8.17.1): SMTP+queueing@00:30:00'
+        result: 'starting daemon (8.17.1): SMTP+queueing@00:30:00'
+    negative:
+      - ''
+# The relay address, whether it came from a transaction blob or from an AUTH
+# failure.
+geoip:
+  - sendmail_relay_ip
+convert:
+  sendmail_size: int
+  sendmail_nrcpts: int
+  sendmail_pri: int
+# Split the comma-separated kv blob, then split the relay clause out of what
+# that produced. Order matters: the second entry works on a field the first
+# one created.
+# No prefix on the kv split beyond sendmail_, since the keys are already
+# sendmail's own names (from, to, size, nrcpts, proto, daemon, relay, mailer,
+# delay, stat, dsn).
+decompose:
+  - field: sendmail_kv
+    type: kv
+    field_split: ', '
+    value_split: '='
+    prefix: 'sendmail_'
+    remove: true
+    tests:
+      - input: 'from=<sender@example.com>, size=1234, class=0, nrcpts=1, proto=ESMTP, daemon=MTA, relay=mail.example.com [192.0.2.5]'
+        result:
+          sendmail_from: '<sender@example.com>'
+          sendmail_size: '1234'
+          sendmail_class: '0'
+          sendmail_nrcpts: '1'
+          sendmail_proto: 'ESMTP'
+          sendmail_daemon: 'MTA'
+          sendmail_relay: 'mail.example.com [192.0.2.5]'
+  - field: sendmail_relay
+    type: pattern
+    pattern: SENDMAIL_RELAY_INFO
+    tests:
+      - input: 'mail.example.com [192.0.2.5]'
+        result:
+          sendmail_relay: 'mail.example.com [192.0.2.5]'
+          sendmail_relay_host: 'mail.example.com'
+          sendmail_relay_ip: '192.0.2.5'
+rules:
+  - name: sendmail
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^(?:sendmail|sm-mta|sm-msp-queue)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - SENDMAIL_TRANSACTION
+      - SENDMAIL_REJECT
+      - SENDMAIL_AUTH_FAILURE
+      - SENDMAIL_NO_COMMAND
+      - SENDMAIL_QID_MESSAGE
+      # last: matches anything, which is only safe because the rule is gated
+      - SENDMAIL_MESSAGE
+    tests:
+      positive:
+        # the kv blob is still whole here: rule tests check raw captures,
+        # before the decomposes above split it
+        - string: '1rABCD012345: from=<sender@example.com>, size=1234, class=0, nrcpts=1, proto=ESMTP, daemon=MTA, relay=mail.example.com [192.0.2.5]'
+          enriched:
+            sendmail_class: '0'
+            sendmail_daemon: 'MTA'
+            sendmail_from: '<sender@example.com>'
+            sendmail_nrcpts: '1'
+            sendmail_proto: 'ESMTP'
+            sendmail_qid: '1rABCD012345'
+            sendmail_relay: 'mail.example.com [192.0.2.5]'
+            sendmail_relay_host: 'mail.example.com'
+            sendmail_relay_ip: '192.0.2.5'
+            sendmail_size: '1234'
+          numeric:
+            - sendmail_nrcpts
+            - sendmail_size
+          program: 'sendmail'
+          result:
+            sendmail_qid: '1rABCD012345'
+            sendmail_kv: 'from=<sender@example.com>, size=1234, class=0, nrcpts=1, proto=ESMTP, daemon=MTA, relay=mail.example.com [192.0.2.5]'
+        - string: '1rABCD012345: to=<victim@example.org>, delay=00:00:01, mailer=local, pri=31234, dsn=2.0.0, stat=Sent'
+          enriched:
+            sendmail_delay: '00:00:01'
+            sendmail_dsn: '2.0.0'
+            sendmail_mailer: 'local'
+            sendmail_pri: '31234'
+            sendmail_qid: '1rABCD012345'
+            sendmail_stat: 'Sent'
+            sendmail_to: '<victim@example.org>'
+          numeric:
+            - sendmail_pri
+          program: 'sm-msp-queue'
+          result:
+            sendmail_qid: '1rABCD012345'
+            sendmail_kv: 'to=<victim@example.org>, delay=00:00:01, mailer=local, pri=31234, dsn=2.0.0, stat=Sent'
+        - string: 'ruleset=check_relay, arg1=scanner, arg2=203.0.113.7, relay=scanner [203.0.113.7], reject=550 5.7.1 Access denied'
+          enriched:
+            sendmail_arg1: 'scanner'
+            sendmail_arg2: '203.0.113.7'
+            sendmail_reject: '550 5.7.1 Access denied'
+            sendmail_relay: 'scanner [203.0.113.7]'
+            sendmail_relay_host: 'scanner'
+            sendmail_relay_ip: '203.0.113.7'
+            sendmail_ruleset: 'check_relay'
+          result:
+            sendmail_kv: 'ruleset=check_relay, arg1=scanner, arg2=203.0.113.7, relay=scanner [203.0.113.7], reject=550 5.7.1 Access denied'
+        - string: 'AUTH failure (LOGIN): authentication failure (-1) SASL(-13): user not found, relay=scanner [203.0.113.7]'
+          enriched:
+            sendmail_auth_error: 'authentication failure (-1) SASL(-13): user not found'
+            sendmail_auth_mech: 'LOGIN'
+            sendmail_relay: 'scanner [203.0.113.7]'
+            sendmail_relay_host: 'scanner'
+            sendmail_relay_ip: '203.0.113.7'
+          result:
+            sendmail_auth_mech: 'LOGIN'
+            sendmail_auth_error: 'authentication failure (-1) SASL(-13): user not found'
+            sendmail_relay: 'scanner [203.0.113.7]'
+        - string: 'did not issue MAIL/EXPN/VRFY/ETRN during connection to MTA'
+          result:
+            sendmail_expected_commands: 'MAIL/EXPN/VRFY/ETRN'
+            sendmail_daemon: 'MTA'
+        - string: '1rABCD012345: SYSERR: cannot open /etc/mail/access'
+          result:
+            sendmail_qid: '1rABCD012345'
+            sendmail_message: 'SYSERR: cannot open /etc/mail/access'
+        - string: 'starting daemon (8.17.1): SMTP+queueing@00:30:00'
+          program: 'sm-mta'
+          result:
+            sendmail_message: 'starting daemon (8.17.1): SMTP+queueing@00:30:00'
+      negative:
+        - ''
+        - string: '1rABCD012345: from=<sender@example.com>, size=1234, class=0, nrcpts=1, proto=ESMTP, daemon=MTA, relay=mail.example.com [192.0.2.5]'
+          program: 'sendmail-extra'

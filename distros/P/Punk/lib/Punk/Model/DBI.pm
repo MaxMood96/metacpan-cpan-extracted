@@ -6,7 +6,7 @@ use warnings;
 use Punk ();
 use File::Raw::JSON ();
 
-our $VERSION = '0.30';
+our $VERSION = '0.31';
 
 1;
 
@@ -63,20 +63,40 @@ C<SELECT * ... WHERE key = ? ...> - the row hashref, or undef.
 
 =head2 search(\%filter, \%opts)
 
-Equality filters only (C<WHERE a = ? AND b = ?>), C<ORDER BY> the primary
-key, C<LIMIT>. C<$opts> takes C<limit> (default 20) and C<after> - an
-opaque keyset token. Returns
+The filter with its operators (L<Punk::Model/"The filter">), C<ORDER BY>
+the C<order_by> columns with the primary key as the tie-breaker
+(L<Punk::Model/Ordering>), C<LIMIT> one past C<limit> (default 20).
+Returns
 
     { rows => [ \%row, ... ], has_more_data => 0|1, next => $token|undef }
 
-C<has_more_data> comes from fetching one row past the limit; C<next> is a
-url-safe, opaque encoding of the last row's primary key. Pass it back as
-C<< after => $token >> to fetch the following page - a C<WHERE pk > ?>
-continuation, so pagination is seek-based, not offset-based.
+C<next> is a url-safe, opaque encoding of the last row's values under the
+ordering. Passed back as C<< after => $token >> it continues from that
+row - under a single column a C<WHERE pk > ?>, under several the expanded
+comparison C<(a < ?) OR (a = ? AND b > ?) OR ...> with each column in its
+own direction - so pagination is seek-based, not offset-based, and a
+mixed ordering pages correctly. Identifiers are quoted through the
+connection and values bound; keys are sorted so one filter shape is one
+prepared statement.
+
+=head2 count(\%filter)
+
+C<SELECT COUNT(*) ... WHERE ...> for the same filter; the number.
 
 =head2 all()
 
 C<search({}, {})>.
+
+=head2 transactions
+
+C<< $c->txn >> on this backend is C<begin_work>, the block, C<commit> - or
+C<rollback> and a rethrow when the block dies or the commit fails. There is
+one connection per database per worker, so every model on that database
+is inside the transaction for the length of the block, whether it came
+through C<< $tx->model >> or C<< $c->model >>, and so is a raw statement on
+C<< $tx->handle >>, which is the C<$dbh>. A second C<txn> inside the block
+croaks: nested transactions are not supported, and a silent join would
+stop a rollback covering what the outer block thought it covered.
 
 =head2 create(\%data)
 

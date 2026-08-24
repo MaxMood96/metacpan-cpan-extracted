@@ -67,6 +67,11 @@ my %probe;
         base => 'https://t.example', mail_dir => 't/mail',
     };
 
+    # a named route for the `route =>` form: the link comes from the route
+    # table rather than from a path with a %s in it
+    get '/confirm/:token' => sub { $_[0]->text('c') }, { name => 'confirm' }
+        if Punk->VERSION >= 0.31;
+
     get '/probe' => sub {
         my ($c) = @_;
         $probe{token} = sub { $c->mail_token(@_) };
@@ -96,6 +101,31 @@ my $user = T::Backend::Memory->new(table => 'users')->create({ email => 'ann@exa
     my $taken = $probe{take}->($token, 'verify');
     ok($taken, 'the token redeems through take_token');
     ok(!$probe{take}->($token, 'verify'), '  once');
+}
+
+# ---- route => names the route instead of spelling its path -------------------------
+SKIP: {
+    skip 'named routes need Punk 0.31+', 4 unless Punk->VERSION >= 0.31;
+
+    my ($r, $link) = $probe{token}->($user, kind => 'confirm',
+        route => 'confirm', subject => 'Confirm', template => 'token');
+    isa_ok($r, 'Punk::Mailer::Result', 'the result of a route => token');
+    like($link, qr{^https://t\.example/confirm/[A-Za-z0-9_-]+\z},
+        'the link is built from the route table, on the base origin');
+    unlike($link, qr/%s/, 'with no placeholder left to get wrong');
+
+    my ($token) = $link =~ m{/confirm/(.+)\z};
+    ok($probe{take}->($token, 'confirm'),
+        'and the token in it redeems, so the link is one that works');
+}
+
+{
+    my $err = '';
+    eval { $probe{token}->($user, kind => 'verify', route => 'confirm',
+            path => '/verify/%s', subject => 'x', template => 'token') };
+    $err = $@;
+    like($err, qr/takes `route` or `path`, not both/,
+        'giving both is a mistake rather than a silent winner');
 }
 
 # ---- one live link per kind --------------------------------------------------------

@@ -4,7 +4,7 @@ requires 'Plack';
 requires 'Role::Tiny';
 requires 'Router::Boom';
 
-# Should be included by way of Plack
+# Should be included via Plack
 requires 'HTTP::Status';
 requires 'URI';
 
@@ -23,4 +23,8 @@ recommends 'URI::Fast';
 # For Testing
 on 'test' => sub {
     requires 'Test::More', '0.98';
+
+    # Should be included via Plack
+    requires 'HTTP::Server::PSGI';
+    requires 'Plack::LWPish';
 };

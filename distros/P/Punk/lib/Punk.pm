@@ -7,7 +7,7 @@ use warnings;
 our $VERSION;
 
 BEGIN {
-    $VERSION = '0.30';
+    $VERSION = '0.31';
     require XSLoader;
     XSLoader::load('Punk', $VERSION);
 }
@@ -168,6 +168,23 @@ client's retry replays the first response instead of doing the work
 twice. Unsafe methods only. Inert unless
 L<Punk::Plugin::Idempotency> is registered.
 
+=item * C<name> - the route's name, for L</Named routes>. Everything that
+points at the route uses the name instead of spelling the path again:
+C<< $c->url_for('book', id => 42) >> in code, C<< {% url.book %} >> or the
+C<url_for> filter in a template.
+
+A name is an identifier - C<[A-Za-z0-9_]+> - because one name is written
+in all of those places and in C<punk routes --name>. A dot is refused with
+its own message: a template reads C<< {% url.queue.jobs %} >> as a path
+through nested hashes, so a dotted name would be one a handler could build
+and a template could not reach. Namespace with an underscore instead:
+C<queue_jobs>. C<absolute> and C<query> are refused because C<url_for>
+takes them as options.
+
+Names are one namespace for the whole application, and two routes with one
+name croak at C<to_app> naming both. A plugin that takes C<index> has taken
+it from the application.
+
 =back
 
 C<< compress => 0 >> deserves its own note. Punk does not compress -
@@ -183,6 +200,66 @@ B<and> reflects user input - that combination is the BREACH compression
 side channel. Every major server compresses anyway, because the
 alternative is worse for everyone; this is the escape hatch for the
 handful of responses where it matters.
+
+=head3 Named routes
+
+    get '/books'     => 'Web::Book#list', { name => 'books' };
+    get '/books/:id' => 'Web::Book#view', { name => 'book'  };
+
+    $c->url_for('book', id => 42);                 # /books/42
+    $c->url_for('book', id => 42, page => 2);      # /books/42?page=2
+    $c->url_for('book', id => 42, absolute => 1);  # https://example.com/books/42
+
+A route with a name can be pointed at without its path being written a
+second time, which is what makes renaming one a safe edit. Three rules
+carry most of it:
+
+=over 4
+
+=item 1.
+
+An argument naming a capture fills that segment; anything left over becomes
+the query string, keys sorted so the same call always produces the same
+URL. C<< query => \%h >> is the explicit form, for a query key spelled like
+a capture; with it, an argument that names no capture is a mistake rather
+than a query pair.
+
+=item 2.
+
+A missing capture, an empty one, and a C</> in a C<:param> all croak. The
+last is the surprising one: C<PATH_INFO> reaches the router percent-decoded,
+so a C<%2F> would be a C</> again by the time it arrived, the path would
+have one segment too many, and the request would 404. A value with a slash
+in it cannot be expressed on that route, and a URL that cannot work is a
+bug at the call site rather than a value to return. C<*splat> is the
+segment that does take slashes.
+
+=item 3.
+
+C<< absolute => 1 >> builds on L<Punk::Context/origin>, which is the
+canonical L</host> unless the request's C<Host> is on the allowlist, and is
+never the raw header. So a link built in a handler and put in an email
+cannot be poisoned by a crafted C<Host>. Without a C<host> it croaks rather
+than guessing from the request.
+
+=back
+
+Every URL carries the application's prefix, relative or absolute: the path
+on L</host> first, then C<SCRIPT_NAME>. Those are layers rather than
+alternatives - a proxy strips one, a PSGI mount adds the other, and the
+browser sees both - and a relative URL needs the prefix exactly as much as
+an absolute one does, because it is resolved against a page that is already
+under it.
+
+C<websocket> and C<sse> routes take C<name> too, and so does an OpenAPI
+operation: an C<operationId> is a route name in the same namespace, so
+C<< $c->url_for('getBook', id => 1) >> builds the mounted path. Those ids
+are the spec's rather than Punk's, so they are not held to the identifier
+rule above - one that is not an identifier still works with C<url_for> and
+is simply absent from the template C<url> hash.
+
+C<punk routes> shows a C<NAME> column, and C<punk routes --name X> selects
+one. In templates, see L<Punk::View::Stencil/Named routes>.
 
 =head2 under
 
@@ -214,7 +291,10 @@ L<Punk::WebSocket::Room> for broadcasting.
 
 Options: C<protocols> (an arrayref of acceptable subprotocols - a client
 that offers none of them is refused), C<max_message_size> (default 16MB),
-C<write_buffer_limit>, and C<blocking>.
+C<write_buffer_limit>, C<blocking>, and C<name> (L</Named routes>; the
+route is a GET route, so C<< $c->url_for >> and C<< {% url.chat %} >> give
+its path, and an application that wants C<wss://> does the scheme swap
+itself).
 
 WebSocket routes need L<Hyperman> 0.11 or later, whose C<detach> hands
 the socket to the application. On other PSGI servers, C<< blocking => 1 >>
@@ -234,7 +314,8 @@ events onto it for a browser's C<EventSource>. Fully non-blocking on a
 L<Hyperman> worker (the stream lives on the loop); portable to any
 C<psgi.streaming> server; and C<< blocking => 1 >> streams inside the handler
 over C<psgix.io>. Options: C<heartbeat> (seconds, default 15), C<retry> (ms),
-C<write_buffer_limit>, C<blocking>. See L<Punk::SSE>.
+C<write_buffer_limit>, C<blocking>, and C<name> (L</Named routes>).
+See L<Punk::SSE>.
 
     sub feed {
         my ($c, $stream) = @_;

@@ -10,7 +10,7 @@ use File::Basename ();
 use Getopt::Long ();
 use Punk ();
 
-our $VERSION = '0.30';
+our $VERSION = '0.31';
 
 # The whole punk command line. bin/punk is two lines - `exit
 # Punk::Command->main(@ARGV)` - and everything else is here: a registry of
@@ -71,6 +71,7 @@ sub register {
     }
     $OWNER{$name} = $owner;
     push @ORDER, $name;
+    $spec->{name} //= $name;   # so a diagnostic can name the command it is about
     $SPECS{$name} = $spec;
     return $class;
 }
@@ -158,7 +159,25 @@ sub main {
         return defined $code ? int $code : 0;
     }
 
-    my @options = _options_for($spec);
+    # A command may bring options it cannot know at registration time: `new`
+    # asks the kit named in argv for its own. Resolved before Getopt so the
+    # kit's options parse and show up in help like any other, rather than
+    # being scraped out of a leftover argv by the command body.
+    my (@extra, @options);
+    {
+        # Both halves under one eval: resolving them can croak (a kit that
+        # will not load), and so can merging them (an option the command
+        # already declares). Either is a die that has to become one line and
+        # an exit code, not a raw croak out of main.
+        my $ok = eval {
+            @extra = $spec->{extra_options}
+                ? $spec->{extra_options}->(@argv) : ();
+            @options = _options_for($spec, \@extra);
+            1;
+        };
+        return _fail($path, $@, $spec->{hints}) unless $ok;
+    }
+
     my (%opt, @gspec);
     for my $o (@options) {
         my $k = _opt_key($o->{spec});
@@ -187,12 +206,12 @@ sub main {
         if ($err) { print STDERR "punk $path: $err"; return 2 }
         unless ($ok) {
             print STDERR "\n";
-            _usage_cmd($path, $spec, \*STDERR);
+            _usage_cmd($path, $spec, \*STDERR, \@extra);
             return 2;
         }
     }
     if ($opt{help}) {
-        _usage_cmd($path, $spec, \*STDOUT);
+        _usage_cmd($path, $spec, \*STDOUT, \@extra);
         return 0;
     }
     delete $opt{help};
@@ -201,7 +220,7 @@ sub main {
     if (my $err = $@) {
         if (ref $err eq 'HASH' && defined $err->{usage_error}) {
             print STDERR "punk $path: $err->{usage_error}\n\n";
-            _usage_cmd($path, $spec, \*STDERR);
+            _usage_cmd($path, $spec, \*STDERR, \@extra);
             return 2;
         }
         return _fail($path, $err, $spec->{hints});
@@ -247,7 +266,7 @@ sub _fail {
     $err = "$err";
     $err =~ s/ at \S+ line \d+\.?\s*\z//;
     $err =~ s/\s+\z//;
-    $err =~ s/\APunk::Generate: //;
+    $err =~ s/\A(?:Punk::Generate|Punk::Kit::[\w:]+): //;
     print STDERR "punk $path: $err\n";
     for my $h (@{ $hints || [] }) {
         print STDERR "  $h->[1]\n" if $err =~ $h->[0];
@@ -258,12 +277,29 @@ sub _fail {
 # ---- generated help ----------------------------------------------------------
 
 sub _options_for {
-    my ($spec) = @_;
+    my ($spec, $extra) = @_;
     my @own = @{ $spec->{options} || [] };
     my %own_key = map { _opt_key($_->{spec}) => 1 } @own;
+
+    # An option a command brought at run time cannot quietly replace one it
+    # declared: which of the two Getopt bound would decide what the command
+    # does, and that is not a thing to leave to ordering.
+    my @extra;
+    for my $o (@{ $extra || [] }) {
+        my $k = _opt_key($o->{spec});
+        Carp::croak("Punk::Command: option '--$k' is defined by both "
+                  . "'" . ($spec->{name} // '?') . "' and "
+                  . ($o->{owner} // 'a kit'))
+            if $own_key{$k} || $k eq 'help';
+        push @extra, $o;
+    }
+    my %extra_key = map { _opt_key($_->{spec}) => 1 } @extra;
+
     return (
-        (grep { !$own_key{ _opt_key($_->{spec}) } } @SHARED_OPTIONS),
+        (grep { !$own_key{ _opt_key($_->{spec}) }
+                && !$extra_key{ _opt_key($_->{spec}) } } @SHARED_OPTIONS),
         @own,
+        @extra,
         { spec => 'help|h', doc => 'this' },
     );
 }
@@ -287,7 +323,7 @@ sub _usage_all {
 }
 
 sub _usage_cmd {
-    my ($path, $spec, $fh) = @_;
+    my ($path, $spec, $fh, $extra) = @_;
     if ($spec->{raw}) {
         # the adapted CLI owns its own help
         print {$fh} 'usage: punk ' . $path . ' '
@@ -312,8 +348,12 @@ sub _usage_cmd {
         printf {$fh} "  %-*s  %s\n", $w, $_,
             $spec->{commands}{$_}{abstract} // '' for @names;
     }
-    my @options = _options_for($spec);
-    my @rows;
+    # Options a kit brought get their own heading, so it is clear which of
+    # them go away when --kit does.
+    my @extra = @{ $extra || [] };
+    my %is_extra = map { _opt_key($_->{spec}) => 1 } @extra;
+    my @options = _options_for($spec, \@extra);
+    my (@rows, @extra_rows);
     for my $o (@options) {
         next if $o->{hidden};
         my ($long) = $o->{spec} =~ /^([^=|!+\@]+)/;
@@ -324,12 +364,18 @@ sub _usage_cmd {
         $doc .= " (default: $o->{default})"
             if defined $o->{default} && !ref $o->{default}
             && length $o->{default};
-        push @rows, [ $left, $doc ];
+        push @{ $is_extra{ _opt_key($o->{spec}) } ? \@extra_rows : \@rows },
+             [ $left, $doc ];
     }
     my $w = 0;
-    length $_->[0] > $w and $w = length $_->[0] for @rows;
+    length $_->[0] > $w and $w = length $_->[0] for @rows, @extra_rows;
     print {$fh} "\noptions:\n";
     printf {$fh} "  %-*s  %s\n", $w, @{$_}[0, 1] for @rows;
+    if (@extra_rows) {
+        my $title = $extra[0]{section} // 'more options';
+        print {$fh} "\n$title:\n";
+        printf {$fh} "  %-*s  %s\n", $w, @{$_}[0, 1] for @extra_rows;
+    }
     if ($spec->{examples}) {
         print {$fh} "\nexamples:\n";
         print {$fh} "  $_\n" for @{ $spec->{examples} };
@@ -360,6 +406,7 @@ sub routes {
             path   => $rec->{path}   // '?',
             target => _code_name($rec->{code}),
             guards => scalar @{ $rec->{guards} || [] },
+            name   => $rec->{name},
             kind   => 'route',
         };
     }
@@ -382,6 +429,9 @@ sub routes {
                             ? _code_name($code) : $op->{operationId}),
                 guards => (ref $rec eq 'HASH'
                             ? scalar @{ $rec->{guards} || [] } : 0),
+                # an operationId IS the name: it is what url_for takes, and
+                # it shares the one namespace with the route names
+                name   => $op->{operationId},
                 kind   => 'api',
             };
         }
@@ -422,6 +472,11 @@ sub routes {
     if (defined $opt{kind}) {
         @rows = grep { $_->{kind} eq $opt{kind} } @rows;
     }
+    # exact, not a glob: a name is an identifier, and the question `--name`
+    # answers is "which route is this, that my template names?"
+    if (defined $opt{name}) {
+        @rows = grep { defined $_->{name} && $_->{name} eq $opt{name} } @rows;
+    }
     if (defined $opt{path}) {
         my $re = _glob_re($opt{path});
         @rows = grep { $_->{path} =~ $re } @rows;
@@ -442,9 +497,15 @@ sub routes {
 
     my $w_m = _widest('method', \@rows, 6);
     my $w_p = _widest('path',   \@rows, 4);
-    printf "%-*s  %-*s  %s\n", $w_m, 'METHOD', $w_p, 'PATH', 'TARGET';
+    # the NAME column appears only when a route has one, so a table from an
+    # application that names nothing prints exactly as it did before
+    my $named = grep { defined $_->{name} } @rows;
+    my $w_n = $named ? _widest('name', \@rows, 4) : 0;
+    printf "%-*s  %-*s  %s%s\n", $w_m, 'METHOD', $w_p, 'PATH',
+        ($named ? sprintf('%-*s  ', $w_n, 'NAME') : ''), 'TARGET';
     for my $r (@rows) {
-        printf "%-*s  %-*s  %s%s\n", $w_m, $r->{method}, $w_p, $r->{path},
+        printf "%-*s  %-*s  %s%s%s\n", $w_m, $r->{method}, $w_p, $r->{path},
+            ($named ? sprintf('%-*s  ', $w_n, $r->{name} // '') : ''),
             $r->{target},
             $r->{guards} ? "  [$r->{guards} guard"
                          . ($r->{guards} > 1 ? 's' : '') . ']' : '';
@@ -964,20 +1025,19 @@ sub _class_of {
     return undef;
 }
 
-sub _load_app {
-    my ($dir, %o) = @_;
+# Load the application, with the reason out through $err rather than printed:
+# the two callers below want it said in two different ways.
+sub _load_app_info {
+    my ($dir, $errref, %o) = @_;
+    my $say = sub { $$errref = $_[0]; return undef };
+
     my $root = _find_root($dir);
-    unless ($root) {
-        print STDERR "punk: no application found (looked for app.psgi "
-            . "upwards from " . ($dir || Cwd::getcwd()) . ")\n" unless $o{quiet};
-        return undef;
-    }
+    return $say->("no application found (looked for app.psgi upwards from "
+                . ($dir || Cwd::getcwd()) . ")") unless $root;
+
     my $class = _class_of($root);
-    unless ($class) {
-        print STDERR "punk: cannot work out the application class in $root\n"
-            unless $o{quiet};
-        return undef;
-    }
+    return $say->("cannot work out the application class in $root")
+        unless $class;
 
     my $psgi_file = File::Spec->catfile($root, 'app.psgi');
     my $cwd = Cwd::getcwd();
@@ -985,19 +1045,48 @@ sub _load_app {
         local $0 = $psgi_file;    # app.psgi finds lib/ and its root through it
         do $psgi_file;
     };
-    chdir $cwd;
+    # app.psgi chdirs to the application root and everything relative in
+    # punk.yml is written for that. A caller that will go on to open the
+    # database wants to be left there; one that only reads the compiled
+    # tables wants its own directory back.
+    chdir($o{chdir} ? $root : $cwd);
     unless (ref $psgi eq 'CODE') {
         my $err = $@ || $! || 'it returned no coderef';
-        print STDERR "punk: $psgi_file did not load: $err\n" unless $o{quiet};
-        return undef;
+        chdir $cwd unless $o{chdir};
+        return $say->("$psgi_file did not load: $err");
     }
     my $registrar = $class->can('punk_app') ? $class->punk_app : undef;
-    unless ($registrar) {
-        print STDERR "punk: $class is not a Punk application\n" unless $o{quiet};
-        return undef;
-    }
+    return $say->("$class is not a Punk application") unless $registrar;
+
     return { root => $root, class => $class, psgi => $psgi,
              registrar => $registrar };
+}
+
+sub _load_app {
+    my ($dir, %o) = @_;
+    my $err;
+    my $app = _load_app_info($dir, \$err, %o);
+    print STDERR "punk: $err\n" if !$app && !$o{quiet};
+    return $app;
+}
+
+# The public form, for a command in another distribution: same load, but the
+# failure is a die, because a command body's die already becomes one prefixed
+# line through _fail.
+#
+#     my $app = Punk::Command->load_app(dir => $opt->{dir}, chdir => 1);
+#     my $users = $app->{registrar}->model_instance('User');
+#
+# `chdir => 1` leaves the process in the application root, which is what
+# anything opening a relative dsn from punk.yml needs; without it the
+# directory the caller started in is restored.
+sub load_app {
+    my ($class, %o) = @_;
+    my $dir = delete $o{dir};
+    my $err;
+    my $app = _load_app_info($dir, \$err, %o);
+    die "$err\n" unless $app;
+    return $app;
 }
 
 # ---- reporting helpers -------------------------------------------------------
@@ -1301,15 +1390,63 @@ sub _same {
 # The one command that does not need an existing application. The work lives
 # in Punk::Generate; this is argument shape and the next-steps note.
 
+# The kit seam, the command seam's twin: `--kit diy` loads Punk::Kit::Diy and
+# generates through it. Same name shape and same transform as _probe, so a
+# distribution shipping both a kit and a subcommand spells them alike.
+sub _kit_name_ok { return $_[0] =~ /\A[a-z][a-z0-9_-]*\z/ }
+
+sub _kit_class {
+    my ($kit) = @_;
+    (my $mod = ucfirst $kit) =~ s/[-_](\w)/\U$1/g;
+    my $class = "Punk::Kit::$mod";
+    (my $file = "$class.pm") =~ s{::}{/}g;
+    unless (eval { require $file; 1 }) {
+        my $err = $@;
+        # Two different problems with two different answers: one is a cpanm
+        # away, the other is a bug in something already installed.
+        die "kit '$kit' is not installed (no $class on \@INC)\n"
+            if $err =~ /\ACan't locate \Q$file\E in \@INC/;
+        $err =~ s/\s+\z//;
+        die "kit '$kit' failed to load: $err\n";
+    }
+    die "$class is not a kit: a kit subclasses Punk::Generate and overrides "
+      . "run\n" unless $class->isa('Punk::Generate');
+    return $class;
+}
+
+# --kit's value, read out of argv before Getopt has run, so the kit's own
+# options can be added to the ones being parsed. Takes both spellings and only
+# the first: a second --kit is Getopt's to complain about, not this.
+sub _kit_from_argv {
+    my (@argv) = @_;
+    for my $i (0 .. $#argv) {
+        return $1 if $argv[$i] =~ /\A--kit=(.*)\z/s;
+        return $argv[$i + 1] if $argv[$i] eq '--kit' && $i < $#argv;
+    }
+    return;
+}
+
 sub _cmd_new {
     my ($opt, @args) = @_;
     my $name = shift @args;
     die { usage_error => 'an application name is required' }
         unless defined $name && length $name;
     die { usage_error => "unexpected argument '$args[0]'" } if @args;
+    # --sqitch's engine is checked before anything is written
+    die { usage_error => "--sqitch needs an engine: sqlite, pg or mysql, not '$opt->{sqitch}'" }
+        if defined $opt->{sqitch} && $opt->{sqitch} !~ /\A(?:sqlite|pg|mysql)\z/;
+    die { usage_error => "--kit takes a name like 'diy' ([a-z][a-z0-9_-]*), "
+                       . "not '$opt->{kit}'" }
+        if defined $opt->{kit} && !_kit_name_ok($opt->{kit});
 
     require Punk::Generate;
-    my $gen = Punk::Generate->new(
+    my $class = defined $opt->{kit} ? _kit_class($opt->{kit}) : 'Punk::Generate';
+
+    # Every option goes to the constructor: Punk::Generate ignores the keys it
+    # does not know, so a kit reads its own out of the same hash rather than
+    # needing this to know what it takes.
+    my $gen = $class->new(
+        %$opt,
         name  => $name,
         (defined $opt->{dir} ? (dir => $opt->{dir}) : ()),
         (defined $opt->{api} ? (api => $opt->{api}) : ()),
@@ -1319,14 +1456,49 @@ sub _cmd_new {
     my $dir = $gen->dir;
     print "Created $name in $dir\n\n";
     print "  $_\n" for @files;
-    print <<"NEXT";
+
+    # --sqitch ENGINE: a Sqitch project for the schema, through Punk-Sqitch.
+    # The engine is asked for rather than read, because the generated
+    # punk.yml ships its database block commented out. The application is
+    # already written by now, so a missing Punk-Sqitch is reported with the
+    # command to run once it is installed, not as a failed `new`.
+    my $sq = 0;
+    if (defined $opt->{sqitch}
+        && -f File::Spec->catfile($dir, 'sqitch.plan')) {
+        # A kit that manages its own schema has already written the project.
+        # Sqitch's own init is a silent no-op on one, so running it here would
+        # end a successful generation with a confusing message about a project
+        # that is exactly as it should be.
+        print "\npunk new: the kit wrote the Sqitch project; skipping init\n";
+    }
+    elsif (defined $opt->{sqitch}) {
+        my $engine = $opt->{sqitch};
+        if (eval { require Punk::Command::Sqitch; 1 }) {
+            print "\n";
+            $sq = Punk::Command::Sqitch::main('--dir', $dir, 'init', '--engine', $engine);
+        }
+        else {
+            print STDERR "\npunk new: --sqitch needs Punk-Sqitch, which is not installed; "
+                       . "once it is, run\n\n  punk sqitch init --engine $engine\n\n"
+                       . "inside $dir\n";
+            $sq = 1;
+        }
+    }
+    # A kit knows what its application needs before it will serve - a schema
+    # deployed, a secret set - so it gets to say so instead of this.
+    if ($gen->can('next_steps')) {
+        print $gen->next_steps;
+    }
+    else {
+        print <<"NEXT";
 
   cd $dir
   plackup app.psgi
 
 Then open http://localhost:5000/
 NEXT
-    return 0;
+    }
+    return $sq;
 }
 
 # ---- punk generate -----------------------------------------------------------
@@ -1443,13 +1615,36 @@ __PACKAGE__->register(new => {
                 . 'one controller of operation stubs per tag' },
         { spec => 'force',
           doc  => 'write into a directory that is not empty' },
+        { spec => 'sqitch=s', arg => 'ENGINE',
+          doc  => 'also initialise a Sqitch project for the schema (sqlite, pg '
+                . 'or mysql); needs Punk-Sqitch' },
+        { spec => 'kit=s', arg => 'NAME',
+          doc  => 'generate from an installed kit (Punk::Kit::<Name>) instead '
+                . 'of the basic skeleton; `punk new --kit NAME --help` lists '
+                . 'what it takes' },
     ],
+    # The kit named in argv brings its own options, so they parse and appear
+    # in help like any other rather than being scraped out of a leftover argv.
+    extra_options => sub {
+        my (@argv) = @_;
+        my $kit = _kit_from_argv(@argv);
+        return unless defined $kit && _kit_name_ok($kit);
+        my $class = eval { _kit_class($kit) } or return;   # the body reports it
+        return unless $class->can('options');
+        return map { { %$_, owner => $class, section => "kit options ($kit)" } }
+                   $class->options;
+    },
     examples => [
         'punk new MyApp',
         'punk new MyApp --dir ~/code/myapp',
         'punk new MyApp --api ./openapi.json',
+        'punk new MyApp --sqitch pg',
+        'punk new MyApp --kit diy',
     ],
-    hints => [ [ qr/is not empty/, 'use --force to write into it anyway' ] ],
+    hints => [ [ qr/is not empty/, 'use --force to write into it anyway' ],
+               [ qr/kit '.*' is not installed/,
+                 'kits ship in their own distributions; the diy kit is '
+               . 'Punk-DIY' ] ],
     code  => \&_cmd_new,
 });
 
@@ -1508,6 +1703,8 @@ __PACKAGE__->register(routes => {
                 . '** across)' },
         { spec => 'kind=s', arg => 'KIND',
           doc  => 'only route, api, ws, markdown or mount rows' },
+        { spec => 'name=s', arg => 'NAME',
+          doc  => 'only the route with this name (exact)' },
         { spec => 'json',
           doc  => 'machine output: a JSON array of row objects' },
     ],
@@ -1696,6 +1893,38 @@ the common path.
 C<register_doctor($label =E<gt> \&probe)> adds a row to the C<doctor>
 report the same way.
 
+=head2 Options resolved at run time
+
+    extra_options => sub {
+        my (@argv) = @_;
+        return ( { spec => 'shout', doc => '...', owner => $class,
+                   section => 'kit options (diy)' } );
+    },
+
+A command that cannot know all its options at registration - C<new>, whose
+C<--kit> names a generator with options of its own - declares them through
+a callback, run over the raw argv before Getopt. What it returns parses and
+appears in help like the command's own, under the heading its C<section>
+gives, which is what keeps generated help matching what is actually
+accepted. An option that collides with one the command declared croaks
+naming both.
+
+=head1 LOADING THE APPLICATION
+
+    my $app = Punk::Command->load_app(dir => $opt->{dir}, chdir => 1);
+    my $users = $app->{registrar}->model_instance('User');
+
+For a command in another distribution that needs the application itself and
+not just its files. Loads it through its own F<app.psgi> - C<to_app> and
+all, so the compiled tables are there - and returns C<root>, C<class>,
+C<psgi> and C<registrar>. Dies with one line on failure, which a command
+body's die already turns into a prefixed message and exit 1.
+
+F<app.psgi> changes directory to the application root, and everything
+relative in F<punk.yml> is written for that. C<chdir =E<gt> 1> leaves the
+process there, which is what anything going on to open a relative C<dsn>
+needs; without it the caller's directory is restored.
+
 =head1 TESTING
 
     local $Punk::Command::OUT = $out_fh;    # replaces STDOUT
@@ -1709,7 +1938,19 @@ a test gets code, stdout and stderr with no process spawn.
 
 =head2 new
 
-Generates a running application; see L<Punk::Generate>.
+Generates a running application; see L<Punk::Generate>. With
+C<--sqitch ENGINE> it also initialises a Sqitch project for the schema
+through L<Punk::Command::Sqitch> (the Punk-Sqitch distribution), so the
+first model's table can be C<punk sqitch add users --model User>; the
+engine is asked for because the generated F<punk.yml> ships its
+C<database> block commented out.
+
+C<--kit NAME> generates through C<Punk::Kit::E<lt>NameE<gt>> instead of the
+basic skeleton, the same probe by name the command seam above uses. A kit
+declares its own options, so C<punk new --kit NAME --help> lists them under
+the command's own; L<Punk::Generate/KITS> is how one is written. A kit that
+writes its own F<sqitch.plan> makes C<--sqitch> a no-op rather than having
+Sqitch refuse a project that is already correct.
 
 =head2 generate controller / generate model
 

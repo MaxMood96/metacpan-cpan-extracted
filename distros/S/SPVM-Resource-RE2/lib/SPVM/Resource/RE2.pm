@@ -1,12 +1,12 @@
 package SPVM::Resource::RE2;
 
-our $VERSION = "0.047";
+our $VERSION = "0.048";
 
 1;
 
 =head1 Name
 
-SPVM::Resource::RE2 - The Resource of Google/RE2
+SPVM::Resource::RE2 - Resource of Google/RE2
 
 =head1 Description
 

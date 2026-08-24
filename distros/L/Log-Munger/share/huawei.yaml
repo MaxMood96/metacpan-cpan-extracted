@@ -1,0 +1,460 @@
+---
+# Huawei VRP (S-series switches, AR routers, USG firewalls) log enrichment.
+#
+# VRP's info-center writes a tagged header, a prose sentence, and on most
+# events a parenthesised key=value list:
+#
+#   %%01SSH/4/LOGIN_FAIL_PWD_ERR(l): The user failed to log in because of a
+#   wrong password. (UserName=admin, IPAddress=203.0.113.7, Times=3)
+#
+# Three things make this a dialect of its own rather than the FortiOS one: the
+# pairs are separated by ", " and not by spaces, the values are unquoted yet
+# may still hold spaces ("AttackType=IP spoof attack"), and the list is
+# optional, since a blacklist notice is prose alone.
+#
+# The header decomposes into its own fields because it, not the prose,
+# identifies the event. hw_module/hw_mnemonic ("SEC"/"ATCKDF") is VRP's stable
+# name for it, whereas the sentence may be reworded between releases.
+#
+# The rule is gateless and anchored, as in fortinet.yaml and sonicwall.yaml:
+# these lines carry no PROGRAM, so the header shape is the only test. Captures
+# are namespaced hw_ .
+includes:
+- base
+vars:
+  # A bare dotted quad, for lifting an address out of prose. Base IP would also
+  # admit v6, whose colons make a mess of a sentence scan.
+  HUAWEI_V4: '(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)'
+vars_templated:
+  # The BSD syslog head a collector prepends, stepped over rather than
+  # captured. The host is \S+ and not [% HOSTNAME %], whose grok heritage
+  # carries a "(?=.{1,255}$)" lookahead that fails on a long line. See
+  # fortinet.yaml for the full reasoning.
+  HUAWEI_HEAD: '(?:[% SYSLOGTIMESTAMP %] +\S+ +)?'
+  # The info-center tag: "%%01SEC/4/ATCKDF(l)[42]". The sequence number appears
+  # on only some events. The flag letter says whether the log went to the
+  # buffer or the log file, which is the collector's concern.
+  HUAWEI_TAG: '%%\d{2}(?<hw_module>[A-Za-z][A-Za-z0-9_]*)/(?<hw_severity>\d)/(?<hw_mnemonic>\w+)\((?<hw_flag>\w)\)(?:\[(?<hw_seq>\d+)\])?'
+  # The prose, then the parenthesised pair list where the event carries one.
+  # The list must hold an "=", so a sentence that merely ends in parentheses is
+  # not mistaken for one.
+  HUAWEI: '[% HUAWEI_HEAD %][% HUAWEI_TAG %]: *(?<hw_text>.*?)(?: *\((?<hw_kv>[^()]*=[^()]*)\))? *$'
+  # The address a few events name in the sentence instead of the pair list: the
+  # VRRP authentication failure and the blacklist notices. Scoped to one field
+  # the switch itself wrote, so it is not a cross-field reach into text a
+  # client controls. A pattern decompose is anchored, so the tail has to be
+  # consumed as well as the run up to the address.
+  HUAWEI_TEXT_IP: '.*?\b(?<hw_text_ip>[% HUAWEI_V4 %])\b.*'
+  # The interface some DHCP client notices name in the sentence rather than in
+  # an InterfaceName= pair.
+  HUAWEI_TEXT_IFACE: '.*?\b[Ii]nterface (?<hw_text_iface>\S+?)\.?(?: |$).*'
+  # The interface the event concerns: the pair where there is one, the sentence
+  # where there is not. Same first-present-wins collapse as the address.
+  HUAWEI_IFACE: '(?<hw_iface>.+)'
+  # The far end, whatever the event called it, collapsed into one field so that
+  # anything keyed to a single field name, such as a mark or a country gate,
+  # can be written once. Precedence falls out of the decompose engine never
+  # overwriting a key that is already set, so the first present wins.
+  HUAWEI_OFFENDER: '(?<hw_offender_ip>.+)'
+  # The auth pair lists, read by an anchored pattern rather than left to the
+  # generic kv split. This is load bearing.
+  #
+  # VRP does not quote its values and separates pairs with ", ". On the login
+  # failures UserName= comes before IPAddress=, and the account name is
+  # whatever the client typed, so an account of "admin, IPAddress=8.8.8.8"
+  # yields a list holding two IPAddress= pairs. A plain split takes whichever
+  # comes first, which is the attacker's. Quote-aware splitting does not help
+  # either, as there are no quotes. Decomposition alone does not close this the
+  # way it closes the FortiOS and SonicOS equivalents.
+  #
+  # The shape of the list closes it. VRP writes a fixed order and a closed set
+  # of trailing keys, so the account is matched greedily and the tail anchored
+  # to the end of the list. The username then has to give back exactly enough
+  # for a real IPAddress= and a real tail to follow, which means the last
+  # IPAddress= wins and a forged earlier one is absorbed into the name where it
+  # belongs. Same reasoning as the sshd tail anchor.
+  #
+  # This runs ahead of the generic kv step, whose never-overwrite rule then
+  # leaves these fields alone while filling in the rest of the list.
+  HUAWEI_AUTH: '(?:.*?, )?UserName=(?<hw_UserName>.*), IPAddress=(?<hw_IPAddress>[^,\s]+)(?:, Times=(?<hw_Times>\d+))?(?:, AccessType=(?<hw_AccessType>[^,]*))?(?:, VPNInstanceName=(?<hw_VPNInstanceName>[^,]*))?'
+vars_tests:
+  HUAWEI_V4:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '203.0.113.61'
+        result: '203.0.113.61'
+      - string: '0.0.0.0'
+        result: '0.0.0.0'
+      - string: '255.255.255.255'
+        result: '255.255.255.255'
+    negative:
+      - '256.1.1.1'
+      - '1.2.3'
+      - '2001:db8::1'
+  HUAWEI_HEAD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Jul 12 08:15:50 sw01 '
+        result: 'Jul 12 08:15:50 sw01 '
+      # Entirely optional, so the empty string matches.
+      - string: ''
+        result: ''
+    negative:
+      - 'Jul 12 08:15:50 sw01'
+  HUAWEI_TAG:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '%%01SEC/4/ATCKDF(l)'
+        result: '%%01SEC/4/ATCKDF(l)'
+      - string: '%%01SHELL/5/CMDRECORD(s)[203]'
+        result: '%%01SHELL/5/CMDRECORD(s)[203]'
+      # A lower case mnemonic, which VRP does use.
+      - string: '%%01SSH/4/add_success(l)'
+        result: '%%01SSH/4/add_success(l)'
+    negative:
+      - 'SEC/4/ATCKDF(l)'
+      - '%%01SEC/ATCKDF(l)'
+      - '%%01SEC/4/ATCKDF'
+  HUAWEI_TEXT_IP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Received a VRRP packet that failed authentication from 192.168.1.3 on interface Vlanif100.'
+        result: 'Received a VRRP packet that failed authentication from 192.168.1.3 on interface Vlanif100.'
+      - string: '203.0.113.31 is added to blacklist, reason: manual configuration, age: 30 minutes.'
+        result: '203.0.113.31 is added to blacklist, reason: manual configuration, age: 30 minutes.'
+    negative:
+      - 'The blacklist function is enabled.'
+      - 'Flooding from 300.1.1.1 detected.'
+  HUAWEI_OFFENDER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '203.0.113.7'
+        result: '203.0.113.7'
+      - string: '2001:db8::15'
+        result: '2001:db8::15'
+    negative:
+      - ''
+  HUAWEI_TEXT_IFACE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'The interface Vlanif100 has acquired ip address 192.168.1.50 successfully.'
+        result: 'The interface Vlanif100 has acquired ip address 192.168.1.50 successfully.'
+      - string: 'The interface Vlanif100 released its ip address 192.168.1.50.'
+        result: 'The interface Vlanif100 released its ip address 192.168.1.50.'
+    negative:
+      - 'The blacklist function is enabled.'
+  HUAWEI_IFACE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Vlanif100'
+        result: 'Vlanif100'
+    negative:
+      - ''
+  HUAWEI_AUTH:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'UserName=admin, IPAddress=203.0.113.7, Times=3'
+        result: 'UserName=admin, IPAddress=203.0.113.7, Times=3'
+      # The forgery, consumed whole rather than split at the planted comma.
+      - string: 'UserName=admin, IPAddress=8.8.8.8, IPAddress=203.0.113.7, Times=3'
+        result: 'UserName=admin, IPAddress=8.8.8.8, IPAddress=203.0.113.7, Times=3'
+      - string: 'ServiceType=STELNET, FailedReason=Authentication failed, UserName=root, IPAddress=2001:db8::15, VPNInstanceName='
+        result: 'ServiceType=STELNET, FailedReason=Authentication failed, UserName=root, IPAddress=2001:db8::15, VPNInstanceName='
+    negative:
+      # An attack list carries no account, so this fragment must not claim it.
+      - 'AttackType=IP spoof attack, SourceIp=203.0.113.61, DestinationIp=192.0.2.10'
+      # The SHELL login failure puts Ip= first and spells it differently.
+      - 'Ip=203.0.113.9, UserName=admin, Times=1, AccessType=TELNET'
+  HUAWEI:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Jul 12 08:15:50 sw01 %%01SSH/4/LOGIN_FAIL_PWD_ERR(l): The user failed to log in because of a wrong password. (UserName=admin, IPAddress=203.0.113.7, Times=3)'
+        result: 'Jul 12 08:15:50 sw01 %%01SSH/4/LOGIN_FAIL_PWD_ERR(l): The user failed to log in because of a wrong password. (UserName=admin, IPAddress=203.0.113.7, Times=3)'
+      # Prose alone, no pair list.
+      - string: 'Jul 12 08:15:50 sw01 %%01SEC/4/BLACKLIST(l): 203.0.113.31 is added to blacklist, reason: manual configuration, age: 30 minutes.'
+        result: 'Jul 12 08:15:50 sw01 %%01SEC/4/BLACKLIST(l): 203.0.113.31 is added to blacklist, reason: manual configuration, age: 30 minutes.'
+      # No collector head.
+      - string: '%%01SEC/4/ATCKDF(l): The anti-attack module detected an attack. (AttackType=Syn flood attack, SourceIp=203.0.113.21, DestinationIp=192.0.2.10)'
+        result: '%%01SEC/4/ATCKDF(l): The anti-attack module detected an attack. (AttackType=Syn flood attack, SourceIp=203.0.113.21, DestinationIp=192.0.2.10)'
+    negative:
+      # A FortiGate ledger is not a VRP line.
+      - 'Jul 12 08:15:50 fw01 date=2026-07-12 logid="0100032002" srcip=203.0.113.45'
+      - 'Jul 12 08:15:50 sw01 sshd[123]: Invalid user bob from 192.0.2.7 port 22'
+# hw_offender_ip is the normal field to read. VRP names the same thing
+# SourceIp, SrcIp, IPAddress, IpAddress, Ip, HostIp or PeerIp depending on
+# which subsystem logged it, and the decomposes below collapse whichever turned
+# up into that one field. All seven are listed as well, so a consumer looking
+# for the vendor's own name still gets the lookup.
+#
+# hw_text_ip is deliberately absent. When it is set it is also what fed
+# hw_offender_ip, so looking it up again would duplicate the answer under a
+# second name.
+geoip:
+  - hw_offender_ip
+  - hw_SourceIp
+  - hw_SrcIp
+  - hw_IPAddress
+  - hw_IpAddress
+  - hw_Ip
+  - hw_HostIp
+  - hw_PeerIp
+decompose:
+  # The auth lists first, by anchored pattern, because a generic split cannot
+  # tell a forged IPAddress= in the account name from the real one. See
+  # HUAWEI_AUTH. A list of any other shape does not match and is left to the kv
+  # step below, whose never-overwrite rule respects what this step set.
+  - field: hw_kv
+    type: pattern
+    pattern: HUAWEI_AUTH
+    tests:
+      - input: 'UserName=admin, IPAddress=203.0.113.7, Times=3'
+        result:
+          hw_kv: 'UserName=admin, IPAddress=203.0.113.7, Times=3'
+          hw_UserName: 'admin'
+          hw_IPAddress: '203.0.113.7'
+          hw_Times: '3'
+      # The forgery: the account name keeps its comma, and the real address is
+      # still what lands in hw_IPAddress.
+      - input: 'UserName=admin, IPAddress=8.8.8.8, IPAddress=203.0.113.7, Times=3'
+        result:
+          hw_kv: 'UserName=admin, IPAddress=8.8.8.8, IPAddress=203.0.113.7, Times=3'
+          hw_UserName: 'admin, IPAddress=8.8.8.8'
+          hw_IPAddress: '203.0.113.7'
+          hw_Times: '3'
+      - input: 'UserName=oracle, IPAddress=198.51.100.23'
+        result:
+          hw_kv: 'UserName=oracle, IPAddress=198.51.100.23'
+          hw_UserName: 'oracle'
+          hw_IPAddress: '198.51.100.23'
+      # A leading pair or two ahead of the account, which SSH_FAIL writes.
+      - input: 'ServiceType=STELNET, FailedReason=Authentication failed, UserName=root, IPAddress=2001:db8::15, VPNInstanceName='
+        result:
+          hw_kv: 'ServiceType=STELNET, FailedReason=Authentication failed, UserName=root, IPAddress=2001:db8::15, VPNInstanceName='
+          hw_UserName: 'root'
+          hw_IPAddress: '2001:db8::15'
+          hw_VPNInstanceName: ''
+      # An attack list has no UserName, so this step does nothing to it.
+      - input: 'AttackType=IP spoof attack, SourceIp=203.0.113.61, DestinationIp=192.0.2.10'
+        result:
+          hw_kv: 'AttackType=IP spoof attack, SourceIp=203.0.113.61, DestinationIp=192.0.2.10'
+  # The pair list proper. It produces the address fields the offender steps
+  # below fall through.
+  - field: hw_kv
+    type: kv
+    field_split: ', '
+    value_split: '='
+    prefix: 'hw_'
+    remove: true
+    tests:
+      - input: 'UserName=admin, IPAddress=203.0.113.7, Times=3'
+        result:
+          hw_UserName: 'admin'
+          hw_IPAddress: '203.0.113.7'
+          hw_Times: '3'
+      # An unquoted value holding spaces, which is why the split is ", ".
+      - input: 'AttackType=IP spoof attack, SourceIp=203.0.113.61, DestinationIp=192.0.2.10, ReceiveInterface=GigabitEthernet0/0/1'
+        result:
+          hw_AttackType: 'IP spoof attack'
+          hw_SourceIp: '203.0.113.61'
+          hw_DestinationIp: '192.0.2.10'
+          hw_ReceiveInterface: 'GigabitEthernet0/0/1'
+      # A trailing empty value, which VRP writes for an unset VPN instance.
+      - input: 'ServiceType=STELNET, FailedReason=Authentication failed, UserName=root, IPAddress=2001:db8::15, VPNInstanceName='
+        result:
+          hw_ServiceType: 'STELNET'
+          hw_FailedReason: 'Authentication failed'
+          hw_UserName: 'root'
+          hw_IPAddress: '2001:db8::15'
+          hw_VPNInstanceName: ''
+  # The sentence-borne address, for events carrying no pair of their own.
+  - field: hw_text
+    type: pattern
+    pattern: HUAWEI_TEXT_IP
+    tests:
+      - input: 'Received a VRRP packet that failed authentication from 192.168.1.3 on interface Vlanif100.'
+        result:
+          hw_text: 'Received a VRRP packet that failed authentication from 192.168.1.3 on interface Vlanif100.'
+          hw_text_ip: '192.168.1.3'
+      - input: 'The blacklist function is enabled.'
+        result:
+          hw_text: 'The blacklist function is enabled.'
+  # The sentence-borne interface, for the DHCP client notices.
+  - field: hw_text
+    type: pattern
+    pattern: HUAWEI_TEXT_IFACE
+    tests:
+      - input: 'The interface Vlanif100 has acquired ip address 192.168.1.50 successfully.'
+        result:
+          hw_text: 'The interface Vlanif100 has acquired ip address 192.168.1.50 successfully.'
+          hw_text_iface: 'Vlanif100'
+      - input: 'The interface Vlanif100 released its ip address 192.168.1.50.'
+        result:
+          hw_text: 'The interface Vlanif100 released its ip address 192.168.1.50.'
+          hw_text_iface: 'Vlanif100'
+      # A sentence naming no interface leaves nothing behind.
+      - input: 'The blacklist function is enabled.'
+        result:
+          hw_text: 'The blacklist function is enabled.'
+  # The far end, whatever it was called: first present wins.
+  - field: hw_SourceIp
+    type: pattern
+    pattern: HUAWEI_OFFENDER
+    tests:
+      - input: '203.0.113.61'
+        result:
+          hw_SourceIp: '203.0.113.61'
+          hw_offender_ip: '203.0.113.61'
+  - field: hw_SrcIp
+    type: pattern
+    pattern: HUAWEI_OFFENDER
+    tests:
+      - input: '203.0.113.62'
+        result:
+          hw_SrcIp: '203.0.113.62'
+          hw_offender_ip: '203.0.113.62'
+  - field: hw_IPAddress
+    type: pattern
+    pattern: HUAWEI_OFFENDER
+    tests:
+      - input: '203.0.113.7'
+        result:
+          hw_IPAddress: '203.0.113.7'
+          hw_offender_ip: '203.0.113.7'
+  - field: hw_IpAddress
+    type: pattern
+    pattern: HUAWEI_OFFENDER
+    tests:
+      - input: '192.168.1.10'
+        result:
+          hw_IpAddress: '192.168.1.10'
+          hw_offender_ip: '192.168.1.10'
+  - field: hw_Ip
+    type: pattern
+    pattern: HUAWEI_OFFENDER
+    tests:
+      - input: '203.0.113.9'
+        result:
+          hw_Ip: '203.0.113.9'
+          hw_offender_ip: '203.0.113.9'
+  - field: hw_HostIp
+    type: pattern
+    pattern: HUAWEI_OFFENDER
+    tests:
+      - input: '203.0.113.40'
+        result:
+          hw_HostIp: '203.0.113.40'
+          hw_offender_ip: '203.0.113.40'
+  - field: hw_PeerIp
+    type: pattern
+    pattern: HUAWEI_OFFENDER
+    tests:
+      - input: '203.0.113.41'
+        result:
+          hw_PeerIp: '203.0.113.41'
+          hw_offender_ip: '203.0.113.41'
+  - field: hw_text_ip
+    type: pattern
+    pattern: HUAWEI_OFFENDER
+    tests:
+      - input: '192.168.1.3'
+        result:
+          hw_text_ip: '192.168.1.3'
+          hw_offender_ip: '192.168.1.3'
+  # The interface, pair first then sentence: first present wins.
+  - field: hw_InterfaceName
+    type: pattern
+    pattern: HUAWEI_IFACE
+    tests:
+      - input: 'Vlanif100'
+        result:
+          hw_InterfaceName: 'Vlanif100'
+          hw_iface: 'Vlanif100'
+  - field: hw_text_iface
+    type: pattern
+    pattern: HUAWEI_IFACE
+    tests:
+      - input: 'Vlanif200'
+        result:
+          hw_text_iface: 'Vlanif200'
+          hw_iface: 'Vlanif200'
+rules:
+  - name: huawei
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - HUAWEI
+    tests:
+      positive:
+        - string: 'Jul 12 08:15:50 sw01 %%01SSH/4/LOGIN_FAIL_PWD_ERR(l): The user failed to log in because of a wrong password. (UserName=admin, IPAddress=203.0.113.7, Times=3)'
+          enriched:
+            hw_IPAddress: '203.0.113.7'
+            hw_Times: '3'
+            hw_UserName: 'admin'
+            hw_flag: 'l'
+            hw_mnemonic: 'LOGIN_FAIL_PWD_ERR'
+            hw_module: 'SSH'
+            hw_offender_ip: '203.0.113.7'
+            hw_severity: '4'
+            hw_text: 'The user failed to log in because of a wrong password.'
+          result:
+            hw_module: 'SSH'
+            hw_severity: '4'
+            hw_mnemonic: 'LOGIN_FAIL_PWD_ERR'
+            hw_flag: 'l'
+            hw_text: 'The user failed to log in because of a wrong password.'
+            hw_kv: 'UserName=admin, IPAddress=203.0.113.7, Times=3'
+        - string: 'Jul 12 08:15:50 sw01 %%01SSH/5/SSH_FAIL(l)[42]: The SSH user failed to log in. (ServiceType=STELNET, FailedReason=Authentication failed, UserName=root, IPAddress=2001:db8::15, VPNInstanceName=)'
+          enriched:
+            hw_FailedReason: 'Authentication failed'
+            hw_IPAddress: '2001:db8::15'
+            hw_ServiceType: 'STELNET'
+            hw_UserName: 'root'
+            hw_VPNInstanceName: ''
+            hw_flag: 'l'
+            hw_mnemonic: 'SSH_FAIL'
+            hw_module: 'SSH'
+            hw_offender_ip: '2001:db8::15'
+            hw_seq: '42'
+            hw_severity: '5'
+            hw_text: 'The SSH user failed to log in.'
+          result:
+            hw_module: 'SSH'
+            hw_severity: '5'
+            hw_mnemonic: 'SSH_FAIL'
+            hw_flag: 'l'
+            hw_seq: '42'
+            hw_text: 'The SSH user failed to log in.'
+            hw_kv: 'ServiceType=STELNET, FailedReason=Authentication failed, UserName=root, IPAddress=2001:db8::15, VPNInstanceName='
+        # Prose alone: no pair list, so hw_kv does not participate.
+        - string: 'Jul 12 08:15:50 sw01 %%01SEC/4/BLACKLIST(l): 203.0.113.31 is added to blacklist, reason: manual configuration, age: 30 minutes.'
+          result:
+            hw_module: 'SEC'
+            hw_severity: '4'
+            hw_mnemonic: 'BLACKLIST'
+            hw_flag: 'l'
+            hw_text: '203.0.113.31 is added to blacklist, reason: manual configuration, age: 30 minutes.'
+        # The address in the sentence, with a pair list beside it that has none.
+        - string: 'Jul 12 08:15:50 sw01 %%01VRRP/3/LogAuthFailed(l): Received a VRRP packet that failed authentication from 192.168.1.3 on interface Vlanif100. (VRID=10)'
+          enriched:
+            hw_VRID: '10'
+            hw_flag: 'l'
+            hw_iface: 'Vlanif100'
+            hw_mnemonic: 'LogAuthFailed'
+            hw_module: 'VRRP'
+            hw_offender_ip: '192.168.1.3'
+            hw_severity: '3'
+            hw_text: 'Received a VRRP packet that failed authentication from 192.168.1.3 on interface Vlanif100.'
+            hw_text_iface: 'Vlanif100'
+            hw_text_ip: '192.168.1.3'
+          result:
+            hw_module: 'VRRP'
+            hw_severity: '3'
+            hw_mnemonic: 'LogAuthFailed'
+            hw_flag: 'l'
+            hw_text: 'Received a VRRP packet that failed authentication from 192.168.1.3 on interface Vlanif100.'
+            hw_kv: 'VRID=10'
+      negative:
+        # Other vendors' ledgers.
+        - 'Jul 12 08:15:50 fw01 date=2026-07-12 logid="0100032002" srcip=203.0.113.45'
+        - 'Jul 12 04:02:11 fw01 id=firewall sn=0017C5C0A63C msg="Land attack dropped"'
+        - 'Jul 12 08:15:50 sw01 sshd[123]: Invalid user bob from 192.0.2.7 port 22'

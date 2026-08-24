@@ -17,11 +17,11 @@ Database::Abstraction::Query - Fluent, chainable query builder for Database::Abs
 
 =head1 VERSION
 
-Version 0.38
+Version 0.39
 
 =cut
 
-our $VERSION = '0.38';
+our $VERSION = '0.39';
 
 =head1 SYNOPSIS
 
@@ -485,6 +485,8 @@ L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Database-Abstraction>.
 Copyright 2026 Nigel Horne.
 
 Usage is subject to the GPL2 licence terms.
+If you use it,
+please let me know.
 
 =cut
 

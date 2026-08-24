@@ -1,5 +1,30 @@
 Revision history for Database-Abstraction
 
+0.39	Sun Aug 23 09:12:54 PM EDT 2026
+	[ Bug Fixes ]
+	- Bump minimum Log::Abstraction - Fix https://github.com/nigelhorne/Database-Abstraction/issues/13
+	[ Tests ]
+	- t/path.t: control-flow path-coverage tests for all key internal helpers
+	  (_like_match, _match_criterion, _has_complex_criteria, _build_where,
+	  _build_where_conditions, _build_joins, _is_local_host, _fixate via
+	  public-API data integrity checks, _quote_identifier, _is_deep_db,
+	  _open_table, AUTOLOAD); 102 assertions covering every uniquely
+	  identifiable branch
+	- t/transaction.t: transaction-flow and resource-lifecycle tests covering
+	  object lazy-open→query→DESTROY sequencing, query idempotency across all
+	  four select methods, multi-instance isolation (independent data refs,
+	  Data::Reuse stale-address safety), CHI cache MISS→SET→HIT lifecycle,
+	  gzip temp-file born/reused/unlinked on DESTROY, and query-builder chain
+	  idempotency; 31 assertions
+	- t/path.t P8-2, t/data-flow.t DF3: replaced hash-key-lock die assertions
+	  with portable data-integrity checks; hash-key locking via Data::Reuse /
+	  Hash::Util is not guaranteed to throw on all platforms — some CPAN
+	  testers return undef instead; the fix tests that fixated data is a HASH
+	  with expected keys (P8-2) and that the same row is stable across
+	  repeated access (DF3), which guards the actual invariant without
+	  depending on the locking mechanism
+	  Fixes https://www.cpantesters.org/cpan/report/83f9464a-9e6f-11f1-b690-edda6d8775ea
+
 0.38	Sat Aug 22 15:21:37 EDT 2026
 	[ Enhancements ]
 	- HTML URL backend: new url => 'https://...' constructor parameter fetches

@@ -5,10 +5,9 @@ package PlackX::Framework::Request {
   use parent 'Plack::Request';
   use Carp qw(croak);
 
-  use Plack::Util::Accessor qw(stash route_base route_parameters);
+  use Plack::Util::Accessor qw(stash app_base route_base route_parameters);
   sub GlobalRequest    ($class) { ($class->app_namespace.'::Handler')->global_request }
   sub max_reroutes              { 16 }
-  sub app_base          ($self) { eval {$self->app_namespace->uri_prefix} || ''      }
   sub is_get            ($self) { uc $self->method eq 'GET'    }
   sub is_post           ($self) { uc $self->method eq 'POST'   }
   sub is_put            ($self) { uc $self->method eq 'PUT'    }
@@ -20,11 +19,37 @@ package PlackX::Framework::Request {
   sub cgi_param   ($self, $key) { $self->SUPER::param($key)        } # CGI.pm compatibile
   sub route_param ($self, $key) { $self->{route_parameters}{$key}  }
   sub stash_param ($self, $key) { $self->{stash}{$key}             }
-  sub abs_to      ($self, $pth) { $self->base . with_leadslash($pth)           }
+  sub abs_to      ($self, $pth) { no_trailslash($self->base) . with_leadslash($pth) }
   sub rel_to      ($self, $pth) { $self->abs_to($pth) =~ s|^https?://.+?/|/|ir }
   sub urix              ($self) { ($self->app_namespace.'::URIx')->new_from_pxfrequest($self) }
-  sub with_leadslash     ($uri) { substr($uri, 0, 1) eq '/' ? $uri : '/'.$uri }
+  sub with_leadslash     ($uri) { substr($uri,  0, 1) eq '/' ? $uri : '/'.$uri }
+  sub no_trailslash      ($uri) { substr($uri, -1, 1) eq '/' ? substr($uri, 0, -1) : $uri }
   *uri_to = \&abs_to;
+
+  # Return app-relative/absolute uri (i.e. with app_base/uri_prefix)
+  sub app_rel_to   ($self, $uri) {
+    no_trailslash($self->app_base) .
+    with_leadslash($self->rel_to($uri))
+  }
+
+  sub app_abs_to   ($self, $uri) {
+    no_trailslash($self->base) .
+    with_leadslash(no_trailslash($self->app_base)) .
+    with_leadslash($self->rel_to($uri))
+  }
+
+  sub route_rel_to ($self, $uri) {
+    no_trailslash($self->app_base) .
+    with_leadslash(no_trailslash($self->route_base // '')) .
+    with_leadslash($self->rel_to($uri))
+  }
+
+  sub route_abs_to ($self, $uri) {
+    no_trailslash($self->base) .
+    with_leadslash(no_trailslash($self->app_base)) .
+    with_leadslash(no_trailslash($self->route_base // '')) .
+    with_leadslash($self->rel_to($uri))
+  }
 
   # Send request somewhere else without issuing the client an HTTP redirect
   # ::Handler will reprocess if it gets a request instead of response object
@@ -38,7 +63,7 @@ package PlackX::Framework::Request {
     push @{$self->{reroutes}}, $dest;
 
     croak "Excessive reroutes:\n" . join("\n", $self->{reroutes}->@*)
-      if $self->{reroutes}->@* > $self->max_reroutes;
+      if $self->{reroutes}->@* > $self->max_reroutes + 1;
 
     my $orig_path_info        = $self->path_info;
     $self->{"pxf.orig.$_"}  //= $self->env->{$_} for ('PATH_INFO', 'REQUEST_URI');
@@ -140,6 +165,36 @@ error, most like of the "not an arrayref" variety.
 
 =over 4
 
+=item abs_to(STR), rel_to(STR)
+
+Returns a URI with (abs_to) or without (rel_to) the http scheme, host, and
+(if necessary) the port, which are derived from the PSGI environment.
+
+=item app_rel_to(STR), route_rel_to(STR)
+
+Returns a URI relative to the app or route, if an app_base or route base has
+been defined. For example, if your app has defined an app_base of '/app-base',
+and your route has defined a base of '/route-base', these methods will return:
+
+    app_rel_to('/')   # /app-base
+    route_rel_to('/') # /app-base/route-bsae
+    rel_to('/')       # /
+
+Internally, these methods rely on app_base() and route_base() methods described
+below.
+
+=item app_abs_to(STR), route_abs_to(STR)
+
+Like app_rel_to() and route_rel_to(), but with the HTTP scheme, host, and
+(if necessary) the port.
+
+=item app_base(), route_base()
+
+Returns the PXF application's app_base (or uri_prefix) and the route's base() as
+set with the 'base' DSL keyword. These are set by PlackX::Framework::Handler,
+during request processing, and will be undef in a new object instantiated
+directly from PlackX::Framework::Request.
+
 =item param(NAME)
 
 Unlike Plack::Request, our param() method always returns a single scalar value.
@@ -148,7 +203,7 @@ cgi_param().
 
 =item cgi_param(NAME)
 
-Calls Plack::Request's param() method, which may return a scalar or list,
+Equivalent to Plack::Request's param(), which may return a scalar or list,
 depending on context, like CGI.pm or the mod_perl Apache request object.
 
 =item route_param(NAME)
@@ -161,7 +216,7 @@ engine. For example:
     };
 
 At this time, route parameters do not get merged into the general parameters
-list, and cannot be obtaiend with the param() method (or the parent class
+list, and cannot be obtained with the param() method (or the parent class
 parameters() method), even if the route param name is unique.
 
 =item stash_param(NAME)
@@ -182,7 +237,9 @@ on the given key. For example:
 
 Gets the content of the PXF app's flash cookie, if set on the previous request.
 This feature is meant to help pass messages to users, and should not be used to
-store any information that might be subject to security concerns.
+store any information that might be subject to security concerns. If the flash
+was automatically encoded to a JSON string by PXF::Response, it is automatically
+decoded.
 
 =item flash_cookie_name()
 
@@ -199,7 +256,6 @@ is syntactic sugar for $request->method eq $verb;
 
 Returns true if the HTTP X-Requested-With header is set as expected for an AJAX
 request.
-
 
 =item destination()
 

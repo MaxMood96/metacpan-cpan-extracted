@@ -14,7 +14,7 @@ ctgetreports - Quickly fetch cpantesters results with all reports
 =head1 OPTIONS
 
 A distroname is unversioned, e.g. C<IPC-Run>. For versioned names as
-in C<IPC-Run-0.80> see --vdistro.
+in C<IPC-Run-0.80> see C<--vdistro>.
 
 =over 2
 
@@ -43,8 +43,8 @@ installed.
 
 =item B<--cturl=s>
 
-Base URL of the cpantesters website. Defaults to
-C<https://www.cpantesters.org/show>.
+Base URL of the cpantesters API. Defaults to
+C<https://api.cpantesters.org>.
 
 =item B<--distrotransport=s>
 
@@ -100,19 +100,19 @@ After every parsed report asks if you want to see it in a pager.
 
 =item B<--local>
 
-Do not mirror, use a local *.yaml file. Dies if the YAML file
+Do not mirror, use a local C<*.yaml> file. Dies if the YAML file
 is missing, skips missing report files.
 
 =item B<--minfail=i>
 
-Same thing as --minpass but for fail reports.
+Same thing as C<--minpass> but for fail reports.
 
-Default value is the value of --minpass; if this is missing, no
+Default value is the value of C<--minpass>; if this is missing, no
 default applies.
 
 =item B<--minpass=i>
 
-If --sample is set, then it could happen that randomness strikes
+If C<--sample> is set, then it could happen that randomness strikes
 unluckily and the sample ends without a pass report. For the --solve
 option this would then have the consequence that it cannot succeed. By
 setting a minpass, the sample size is iteratively increased by small
@@ -120,7 +120,7 @@ steps until the number of passes is equal to this option or higher.
 
 No default.
 
-If --sample is not set, --minpass and --minfail are ignored.
+If C<--sample> is not set, C<--minpass> and C<--minfail> are ignored.
 
 =item B<--ndjsonurl=s>
 
@@ -129,11 +129,11 @@ this writing no stable such URL exists yet.
 
 =item B<--pager=s>
 
-Pager (needed when -i is given). Defaults to C<less>.
+Pager (needed when C<-i> is given). Defaults to C<less>.
 
 =item B<--parse-common-errors|pce>
 
-While the C<<--q qr:...> syntax ultimately offers free parsing it is
+While the C<--q qr:...> syntax ultimately offers free parsing it is
 cumbersome to use. The C<--parse-common-errors> option is a
 placeholder for a variety of frequent errors to watch. Currently it
 stands for the following additional options:
@@ -181,9 +181,9 @@ concatenated to STDOUT after every status line.
 =item B<--report=s@>
 
 Avert going through a cpan testers index, go straight to the report
-with this number.
+with this guid.
 
-Example: C<--report 1238673>
+Example: C<--report 12386732-1234-1231-8172-178918728017>
 
 If report is set and dumpvars is not set, dumpvars will be set to a
 dot (meaning that all variables shall be dumped into dumpfile).
@@ -203,7 +203,7 @@ total number of reports is larger than specified then the number of
 reports will be sampled randomly to the demanded sample size. Useful
 to limit the computing power needed for a result.
 
-See also --minpass and --minfail.
+See also C<--minpass> and C<--minfail>.
 
 =item B<--solve!>
 
@@ -234,10 +234,10 @@ to display.
 
 Specifies transport to get the reports. Defaults to C<http_cpantesters>.
 
-C<http_cpantesters> uses LWP::UserAgent at static.cpantesters.org.
+C<http_cpantesters> uses LWP::UserAgent at api.cpantesters.org.
 
 C<http_cpantesters_gzip> also uses LWP::UserAgent at
-static.cpantesters.org but compresses the fetched result after fetching
+api.cpantesters.org but compresses the fetched result after fetching
 and decompresses cached results before mirroring. This option
 requires that C<Compress::Zlib> is installed.
 
@@ -272,8 +272,8 @@ Feedback during download.
 
 =item B<--ycb=s>
 
-Only used during --solve. Provides perl code to be used as a callback
-from the regression to determine the B<Y> of the regression equation.
+Only used during C<--solve>. Provides perl code to be used as a callback
+from the regression to determine the I<Y> of the regression equation.
 The callback function gets a record (hashref) as the only argument and
 must return a value or undefined. If it returns undefined, the record
 is skipped, otherwise this record is processed with the returned
@@ -299,7 +299,7 @@ further inspection.
 
 We always only fetch the reports for the most recent (optionally
 picked) release. Target root directory is C<$HOME/var/cpantesters>
-(can be overridden with the --cachedir option).
+(can be overridden with the C<--cachedir> option).
 
 The C<--q> parameter can be repeated. It takes one argument which
 stands for a query. This query must consist of two parts, a qualifier
@@ -338,8 +338,8 @@ Collects reports about Clone and reports the default set of metadata:
   $0 Clone
 
 Collect reports for Devel-Events and report the version number of
-Moose in thses reports and sort by success/failure. If Moose broke
-Devel-Events is becomes pretty obvious:
+Moose in these reports and sort by success/failure. If Moose broke
+Devel-Events it becomes pretty obvious:
 
   $0 --q mod:Moose Devel-Events |sort
 
@@ -366,17 +366,6 @@ The following displays in its own column if the report contains the
 regexp C<division by zero>:
 
   $0 --q qr:"division by zero" CPAN-Testers-ParseReport-0.0.7
-
-The following is a simple job to refresh all HTML pages we already
-have and fetch new reports referenced there too:
-
-  perl -le '
-  for my $dirent (glob "$ENV{HOME}/var/cpantesters/cpantesters-show/*.html"){
-    my($distro) = $dirent =~ m|/([^/]+)\.html$| or next;
-    print $distro;
-    my $system = "ctgetreports --verbose --verbose $distro";
-    0 == system $system or die;
-  }'
 
 =cut
 

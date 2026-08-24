@@ -1,0 +1,130 @@
+---
+# polkit (polkitd) authorization-decision log enrichment.
+#
+# Gates on the syslog PROGRAM field being "polkitd" or "polkit-agent-helper-1".
+# Patterns are anchored (each must match the whole MESSAGE) and first-match
+# wins. Every capture is namespaced with polkit_ .
+#
+# polkit is the third way an unprivileged account gets to do a privileged
+# thing, alongside su and sudo, and the one usually left unwatched.
+# "systemctl restart", mounting a disk, installing a package through PackageKit
+# and changing a network setting all go through it, and every one of those
+# decisions is logged here with the action name and the account that asked.
+#
+# The action id is the field to key on. It is a stable reverse-DNS-style name
+# such as org.freedesktop.systemd1.manage-units, so it groups cleanly, whereas
+# the command in brackets is free text that varies per invocation.
+includes:
+- base
+vars_templated:
+  # "Operator of unix-session:1 FAILED to authenticate to gain authorization
+  #  for action org.freedesktop.systemd1.manage-units for
+  #  system-bus-name::1.234 [systemctl restart foo] (owned by unix-user:neti)"
+  #
+  # Someone was asked for a password and did not produce the right one. In bulk
+  # on a desktop that is a user fumbling; on a server it is not.
+  POLKIT_AUTH_FAILED: 'Operator of (?<polkit_subject>[% NOTSPACE %]) FAILED to authenticate to gain (?<polkit_scope>[A-Z-]+ )?authorization for action (?<polkit_action>[% NOTSPACE %]) for (?<polkit_caller>[% NOTSPACE %]) \[(?<polkit_command>[^\]]*)\](?: \(owned by (?<polkit_owner>[^)]*)\))?(?: [% GREEDYDATA %])?'
+  # "Operator of unix-session:1 successfully authenticated as unix-user:neti
+  #  to gain ONE-SHOT authorization for action org.freedesktop.systemd1.manage-units
+  #  for system-bus-name::1.234 [systemctl] (owned by unix-user:neti)"
+  #
+  # The scope word matters: ONE-SHOT is a single grant, while a plain
+  # "authorization" is one that has been retained for the session.
+  POLKIT_AUTH_OK: 'Operator of (?<polkit_subject>[% NOTSPACE %]) successfully authenticated as (?<polkit_authenticated_as>[% NOTSPACE %]) to gain (?<polkit_scope>[A-Z-]+ )?authorization for action (?<polkit_action>[% NOTSPACE %]) for (?<polkit_caller>[% NOTSPACE %]) \[(?<polkit_command>[^\]]*)\](?: \(owned by (?<polkit_owner>[^)]*)\))?(?: [% GREEDYDATA %])?'
+  # "Registered Authentication Agent for unix-process:1234:5678 (system bus
+  #  name :1.23 [/usr/bin/pkttyagent --notify-fd 5 --fallback], object path
+  #  /org/freedesktop/PolicyKit1/AuthenticationAgent, locale en_US.UTF-8)"
+  #
+  # An agent appearing is how a session gains the ability to prompt at all, so
+  # one registering somewhere unexpected is a finding in itself.
+  POLKIT_AGENT: '(?<polkit_agent_event>Registered|Unregistered) Authentication Agent for (?<polkit_subject>[% NOTSPACE %])(?: \((?<polkit_agent_detail>[% GREEDYDATA %])\))?'
+  # Anything else polkitd said. Requires nothing in particular, so it is gated
+  # rather than gateless and sits last.
+  POLKIT_MESSAGE: '(?<polkit_message>.+)'
+vars_tests:
+  POLKIT_AUTH_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Operator of unix-session:1 FAILED to authenticate to gain authorization for action org.freedesktop.systemd1.manage-units for system-bus-name::1.234 [systemctl restart foo] (owned by unix-user:neti)'
+        result: 'Operator of unix-session:1 FAILED to authenticate to gain authorization for action org.freedesktop.systemd1.manage-units for system-bus-name::1.234 [systemctl restart foo] (owned by unix-user:neti)'
+      - string: 'Operator of unix-session:2 FAILED to authenticate to gain ONE-SHOT authorization for action org.freedesktop.udisks2.filesystem-mount for system-bus-name::1.99 [udisksctl mount] (owned by unix-user:alice)'
+        result: 'Operator of unix-session:2 FAILED to authenticate to gain ONE-SHOT authorization for action org.freedesktop.udisks2.filesystem-mount for system-bus-name::1.99 [udisksctl mount] (owned by unix-user:alice)'
+    negative:
+      - 'Operator of unix-session:1 successfully authenticated as unix-user:neti to gain authorization for action x for y [z]'
+  POLKIT_AUTH_OK:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Operator of unix-session:1 successfully authenticated as unix-user:neti to gain ONE-SHOT authorization for action org.freedesktop.systemd1.manage-units for system-bus-name::1.234 [systemctl] (owned by unix-user:neti)'
+        result: 'Operator of unix-session:1 successfully authenticated as unix-user:neti to gain ONE-SHOT authorization for action org.freedesktop.systemd1.manage-units for system-bus-name::1.234 [systemctl] (owned by unix-user:neti)'
+    negative:
+      - 'Operator of unix-session:1 FAILED to authenticate to gain authorization for action x for y [z]'
+  POLKIT_AGENT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Registered Authentication Agent for unix-process:1234:5678 (system bus name :1.23 [/usr/bin/pkttyagent --notify-fd 5 --fallback], object path /org/freedesktop/PolicyKit1/AuthenticationAgent, locale en_US.UTF-8)'
+        result: 'Registered Authentication Agent for unix-process:1234:5678 (system bus name :1.23 [/usr/bin/pkttyagent --notify-fd 5 --fallback], object path /org/freedesktop/PolicyKit1/AuthenticationAgent, locale en_US.UTF-8)'
+      - string: 'Unregistered Authentication Agent for unix-process:1234:5678 (disconnected from bus)'
+        result: 'Unregistered Authentication Agent for unix-process:1234:5678 (disconnected from bus)'
+    negative:
+      - 'Operator of unix-session:1 FAILED to authenticate to gain authorization for action x for y [z]'
+  POLKIT_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Loading rules from directory /etc/polkit-1/rules.d'
+        result: 'Loading rules from directory /etc/polkit-1/rules.d'
+    negative:
+      # matches anything with text in it, so the empty string is all it refuses
+      - ''
+convert:
+  # the scope is captured with its trailing space when present, and is upper
+  # case, so folding it gives something groupable
+  polkit_scope: lc
+rules:
+  - name: polkit
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^(?:polkitd|polkit|polkit-agent-helper-1)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POLKIT_AUTH_FAILED
+      - POLKIT_AUTH_OK
+      - POLKIT_AGENT
+      # last: matches anything, which is only safe because the rule is gated
+      - POLKIT_MESSAGE
+    tests:
+      positive:
+        - string: 'Operator of unix-session:1 FAILED to authenticate to gain authorization for action org.freedesktop.systemd1.manage-units for system-bus-name::1.234 [systemctl restart foo] (owned by unix-user:neti)'
+          program: 'polkit'
+          result:
+            polkit_subject: 'unix-session:1'
+            polkit_action: 'org.freedesktop.systemd1.manage-units'
+            polkit_caller: 'system-bus-name::1.234'
+            polkit_command: 'systemctl restart foo'
+            polkit_owner: 'unix-user:neti'
+        - string: 'Operator of unix-session:1 successfully authenticated as unix-user:neti to gain ONE-SHOT authorization for action org.freedesktop.systemd1.manage-units for system-bus-name::1.234 [systemctl] (owned by unix-user:neti)'
+          program: 'polkit-agent-helper-1'
+          result:
+            polkit_subject: 'unix-session:1'
+            polkit_authenticated_as: 'unix-user:neti'
+            polkit_scope: 'ONE-SHOT '
+            polkit_action: 'org.freedesktop.systemd1.manage-units'
+            polkit_caller: 'system-bus-name::1.234'
+            polkit_command: 'systemctl'
+            polkit_owner: 'unix-user:neti'
+        - string: 'Unregistered Authentication Agent for unix-process:1234:5678 (disconnected from bus)'
+          result:
+            polkit_agent_event: 'Unregistered'
+            polkit_subject: 'unix-process:1234:5678'
+            polkit_agent_detail: 'disconnected from bus'
+        - string: 'Loading rules from directory /etc/polkit-1/rules.d'
+          program: 'polkitd'
+          result:
+            polkit_message: 'Loading rules from directory /etc/polkit-1/rules.d'
+      negative:
+        # the catch-all takes anything with text in it, so the empty string is
+        # the only thing this rule can refuse
+        - ''
+        - string: 'Operator of unix-session:1 FAILED to authenticate to gain authorization for action org.freedesktop.systemd1.manage-units for system-bus-name::1.234 [systemctl restart foo] (owned by unix-user:neti)'
+          program: 'polkit-extra'

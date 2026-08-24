@@ -49,6 +49,13 @@ typedef struct {
     int     compiled;
     int     n;
     pr_rec *recs;         /* dynamic records */
+    int     nrecs;        /* entries in `records` (and in dyn_of) */
+    IV     *dyn_of;       /* record index -> its position in recs, or -1 for
+                           * a static route. `recs` is indexed by dynamic
+                           * position and `records` by record index, and
+                           * named routes (punk_url.h) arrive holding the
+                           * second and needing the first. Filled in the one
+                           * loop that fills recs; nothing per request. */
     HV     *statics;      /* "METHOD path" -> IV record index */
     HV     *static_paths; /* path -> AV of uppercase method SVs (for Allow) */
     AV     *records;      /* per-route { code, guards, method, path } hashrefs,
@@ -249,7 +256,10 @@ static void pr_build(pTHX_ pr_router *rt, AV *routes) {
     rt->statics      = newHV();
     rt->static_paths = newHV();
     rt->records      = newAV();
+    rt->nrecs        = n;
     if (n > 0) av_extend(rt->records, n - 1);
+    Newx(rt->dyn_of, n ? n : 1, IV);
+    for (i = 0; i < n; i++) rt->dyn_of[i] = -1;
 
     for (i = 0; i < n; i++) {   /* count dynamics for the record array */
         SV **e = av_fetch(routes, i, 0);
@@ -290,7 +300,9 @@ static void pr_build(pTHX_ pr_router *rt, AV *routes) {
             else pr_add_static(aTHX_ rt, seen, m, ml, p, pl, (IV)i);
         }
         else {                                              /* dynamic */
-            pr_rec *r = &rt->recs[di++];
+            pr_rec *r = &rt->recs[di];
+            rt->dyn_of[i] = (IV)di;
+            di++;
             r->method = savepvn(m, ml);
             r->mlen   = ml;
             r->is_any = is_any;
@@ -317,6 +329,7 @@ static void pr_free(pTHX_ pr_router *rt) {
         if (r->method) Safefree(r->method);
     }
     Safefree(rt->recs);
+    Safefree(rt->dyn_of);
     if (rt->statics)      SvREFCNT_dec((SV *)rt->statics);
     if (rt->static_paths) SvREFCNT_dec((SV *)rt->static_paths);
     if (rt->records)      SvREFCNT_dec((SV *)rt->records);

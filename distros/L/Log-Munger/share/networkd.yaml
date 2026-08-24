@@ -1,0 +1,145 @@
+---
+# systemd-networkd log enrichment.
+#
+# Gates on the syslog PROGRAM field being "systemd-networkd". Patterns are
+# anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with networkd_ .
+#
+# Named after the daemon's suffix the way logind.yaml is, since that is what
+# systemd puts in PROGRAM.
+#
+# Almost every line is "<interface>: <what happened>", so the interface comes
+# from one shared fragment. Carrier transitions and DHCP leases are the two to
+# watch: a flapping carrier means a cable or a switch port is going, and a
+# lease changing address on a host that should have a reservation is a
+# misconfiguration that surfaces elsewhere much later.
+includes:
+- base
+vars_templated:
+  # "eth0: " -- the interface every per-link line opens with.
+  NETWORKD_LINK: '(?<networkd_iface>[A-Za-z0-9._@-]+): '
+  # "eth0: Gained carrier" / "eth0: Lost carrier"
+  NETWORKD_CARRIER: '[% NETWORKD_LINK %](?<networkd_carrier_event>Gained|Lost) carrier(?: [% GREEDYDATA %])?'
+  # "eth0: DHCPv4 address 192.0.2.50/24 via 192.0.2.1"
+  NETWORKD_DHCP_ADDRESS: '[% NETWORKD_LINK %]DHCPv(?<networkd_dhcp_family>[46]) address (?<networkd_address>[% IP %])(?:/(?<networkd_prefix_length>[% INT %]))?(?: via (?<networkd_gateway>[% IP %]))?(?: [% GREEDYDATA %])?'
+  # "eth0: Link UP" / "eth0: Link DOWN"
+  NETWORKD_LINK_STATE: '[% NETWORKD_LINK %]Link (?<networkd_link_state>UP|DOWN)(?: [% GREEDYDATA %])?'
+  # "eth0: Gained IPv6LL" / "eth0: Configuring with /etc/systemd/network/10-eth.network"
+  NETWORKD_CONFIGURING: '[% NETWORKD_LINK %]Configuring with (?<networkd_config_file>[% NOTSPACE %])(?: [% GREEDYDATA %])?'
+  # Anything else about a named interface.
+  NETWORKD_LINK_MESSAGE: '[% NETWORKD_LINK %](?<networkd_message>.+)'
+  # Daemon-level messages with no interface: startup, state file writes.
+  NETWORKD_MESSAGE: '(?<networkd_message>.+)'
+vars_tests:
+  NETWORKD_LINK:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'eth0: '
+        result: 'eth0: '
+      - string: 'enp3s0: '
+        result: 'enp3s0: '
+    negative:
+      - 'eth0'
+  NETWORKD_CARRIER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'eth0: Gained carrier'
+        result: 'eth0: Gained carrier'
+      - string: 'eth0: Lost carrier'
+        result: 'eth0: Lost carrier'
+    negative:
+      - 'eth0: Link UP'
+  NETWORKD_DHCP_ADDRESS:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'eth0: DHCPv4 address 192.0.2.50/24 via 192.0.2.1'
+        result: 'eth0: DHCPv4 address 192.0.2.50/24 via 192.0.2.1'
+      - string: 'eth0: DHCPv6 address 2001:db8::50/128'
+        result: 'eth0: DHCPv6 address 2001:db8::50/128'
+    negative:
+      - 'eth0: Gained carrier'
+  NETWORKD_LINK_STATE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'eth0: Link UP'
+        result: 'eth0: Link UP'
+      - string: 'eth0: Link DOWN'
+        result: 'eth0: Link DOWN'
+    negative:
+      - 'eth0: Gained carrier'
+  NETWORKD_CONFIGURING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'eth0: Configuring with /etc/systemd/network/10-eth.network'
+        result: 'eth0: Configuring with /etc/systemd/network/10-eth.network'
+    negative:
+      - 'eth0: Gained carrier'
+  NETWORKD_LINK_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'eth0: Gained IPv6LL'
+        result: 'eth0: Gained IPv6LL'
+    negative:
+      - 'Enumeration completed'
+  NETWORKD_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Enumeration completed'
+        result: 'Enumeration completed'
+    negative:
+      - ''
+convert:
+  networkd_dhcp_family: int
+  networkd_prefix_length: int
+rules:
+  - name: networkd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^systemd-networkd$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - NETWORKD_CARRIER
+      - NETWORKD_DHCP_ADDRESS
+      - NETWORKD_LINK_STATE
+      - NETWORKD_CONFIGURING
+      # the two catch-alls, with an interface then without one
+      - NETWORKD_LINK_MESSAGE
+      - NETWORKD_MESSAGE
+    tests:
+      positive:
+        - string: 'eth0: Gained carrier'
+          result:
+            networkd_iface: 'eth0'
+            networkd_carrier_event: 'Gained'
+        - string: 'eth0: DHCPv4 address 192.0.2.50/24 via 192.0.2.1'
+          numeric:
+            - networkd_dhcp_family
+            - networkd_prefix_length
+          result:
+            networkd_iface: 'eth0'
+            networkd_dhcp_family: '4'
+            networkd_address: '192.0.2.50'
+            networkd_prefix_length: '24'
+            networkd_gateway: '192.0.2.1'
+        - string: 'eth0: Link DOWN'
+          result:
+            networkd_iface: 'eth0'
+            networkd_link_state: 'DOWN'
+        - string: 'eth0: Configuring with /etc/systemd/network/10-eth.network'
+          result:
+            networkd_iface: 'eth0'
+            networkd_config_file: '/etc/systemd/network/10-eth.network'
+        - string: 'eth0: Gained IPv6LL'
+          result:
+            networkd_iface: 'eth0'
+            networkd_message: 'Gained IPv6LL'
+        - string: 'Enumeration completed'
+          program: 'systemd-networkd'
+          result:
+            networkd_message: 'Enumeration completed'
+      negative:
+        - ''
+        - string: 'eth0: Gained carrier'
+          program: 'networkd-extra'

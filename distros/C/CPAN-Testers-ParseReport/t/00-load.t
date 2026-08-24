@@ -3,8 +3,10 @@
 use strict;
 use Test::More tests => 1;
 my $do_mvr;
+my $LOADED;
 BEGIN {
-	use_ok( 'CPAN::Testers::ParseReport' );
+        $LOADED = eval { require CPAN::Testers::ParseReport; 1 };
+        ok $LOADED, "LOADED=$LOADED";
         $do_mvr = eval { require Module::Versions::Report; 1 };
 }
 eval "use Test::CPAN::Meta";
@@ -15,5 +17,5 @@ eval "use Time::HiRes qw(time)";
 if ($do_mvr) {
     diag(Module::Versions::Report->report);
 } else {
-    diag( "Testing CPAN::Testers::ParseReport $CPAN::Testers::ParseReport::VERSION, Perl $], $^X" );
+    diag( "Testing CPAN::Testers::ParseReport LOADED='$LOADED' $CPAN::Testers::ParseReport::VERSION, Perl $], $^X" );
 }

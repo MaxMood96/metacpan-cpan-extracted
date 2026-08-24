@@ -1,0 +1,210 @@
+---
+# strongSwan (charon) IPsec/IKE log enrichment.
+#
+# Gates on the syslog PROGRAM field being "charon" or "ipsec". Patterns are
+# anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with ipsec_ .
+#
+# charon prefixes every line with the worker thread that wrote it and the
+# subsystem it came from:
+#
+#   12[IKE] IKE_SA remote[1] established between 192.0.2.1[server]...203.0.113.7[client]
+#   08[NET] received packet: from 203.0.113.7[500] to 192.0.2.1[500] (464 bytes)
+#
+# The subsystem is the useful half. IKE is the key exchange, NET is packet
+# handling, CFG is configuration matching, and ENC is decryption -- so a run of
+# ENC errors and a run of CFG "no matching peer config" mean very different
+# things about who is on the other end.
+#
+# openvpn.yaml covers the other common VPN. strongSwan is what sits in front of
+# site-to-site tunnels and anything speaking IKEv2.
+includes:
+- base
+vars_templated:
+  # "12[IKE] " -- the thread number and subsystem every line opens with.
+  IPSEC_HEAD: '(?<ipsec_thread>[% INT %])\[(?<ipsec_subsystem>[A-Z]+)\] '
+  # "IKE_SA remote[1] established between 192.0.2.1[server]...203.0.113.7[client]"
+  #
+  # A tunnel came up. Both ends are named as address[identity], and the
+  # identity is whatever the peer authenticated as -- a certificate subject, an
+  # EAP username, or a bare address when there was nothing better.
+  IPSEC_SA_ESTABLISHED: '[% IPSEC_HEAD %](?<ipsec_sa_kind>IKE_SA|CHILD_SA) (?<ipsec_sa_name>[^\[\s]+)(?:\[(?<ipsec_sa_unique>[% INT %])\])? established between (?<ipsec_local_ip>[% IP %])\[(?<ipsec_local_id>[^\]]*)\]\.\.\.(?<ipsec_remote_ip>[% IP %])\[(?<ipsec_remote_id>[^\]]*)\](?: [% GREEDYDATA %])?'
+  # "received packet: from 203.0.113.7[500] to 192.0.2.1[500] (464 bytes)"
+  # "sending packet: from 192.0.2.1[500] to 203.0.113.7[500] (336 bytes)"
+  IPSEC_PACKET: '[% IPSEC_HEAD %](?<ipsec_packet_direction>received|sending) packet: from (?<ipsec_src_ip>[% IP %])\[(?<ipsec_src_port>[% INT %])\] to (?<ipsec_dst_ip>[% IP %])\[(?<ipsec_dst_port>[% INT %])\](?: \((?<ipsec_packet_bytes>[% INT %]) bytes\))?'
+  # "no matching peer config found for 192.0.2.1[%any]...203.0.113.7[client]"
+  #
+  # Something spoke IKE at the host and nothing on it was willing to answer.
+  # On an exposed port this is the scan signature.
+  IPSEC_NO_CONFIG: '[% IPSEC_HEAD %]no matching (?<ipsec_missing>peer config|CHILD_SA config|proposal) found(?: for (?<ipsec_local_ip>[% IP %])\[(?<ipsec_local_id>[^\]]*)\]\.\.\.(?<ipsec_remote_ip>[% IP %])\[(?<ipsec_remote_id>[^\]]*)\])?(?:, (?<ipsec_detail>[% GREEDYDATA %]))?'
+  # "authentication of ''client'' with EAP successful"
+  # "EAP-MSCHAPV2 verification failed, retry (0) left"
+  IPSEC_AUTH: '[% IPSEC_HEAD %](?<ipsec_auth_message>(?:authentication of |EAP-|RSA |initiating |peer didn''t )[% GREEDYDATA %])'
+  # "IKE_SA remote[1] state change: CONNECTING => ESTABLISHED"
+  IPSEC_STATE: '[% IPSEC_HEAD %](?<ipsec_sa_kind>IKE_SA|CHILD_SA) (?<ipsec_sa_name>[^\[\s]+)(?:\[(?<ipsec_sa_unique>[% INT %])\])? state change: (?<ipsec_state_from>[A-Z_]+) => (?<ipsec_state_to>[A-Z_]+)'
+  # Anything else, keeping the thread and subsystem.
+  IPSEC_MESSAGE: '[% IPSEC_HEAD %](?<ipsec_message>.+)'
+  # Lines with no thread prefix at all: startup, plugin loading.
+  IPSEC_PLAIN: '(?<ipsec_message>.+)'
+vars_tests:
+  IPSEC_HEAD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '12[IKE] '
+        result: '12[IKE] '
+      - string: '08[NET] '
+        result: '08[NET] '
+    negative:
+      - '[IKE] '
+  IPSEC_SA_ESTABLISHED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '12[IKE] IKE_SA remote[1] established between 192.0.2.1[server]...203.0.113.7[client]'
+        result: '12[IKE] IKE_SA remote[1] established between 192.0.2.1[server]...203.0.113.7[client]'
+      - string: '12[IKE] CHILD_SA net[2] established between 192.0.2.1[C=CH, O=strongSwan]...198.51.100.9[client.example.net]'
+        result: '12[IKE] CHILD_SA net[2] established between 192.0.2.1[C=CH, O=strongSwan]...198.51.100.9[client.example.net]'
+    negative:
+      - '12[IKE] IKE_SA remote[1] state change: CONNECTING => ESTABLISHED'
+  IPSEC_PACKET:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '08[NET] received packet: from 203.0.113.7[500] to 192.0.2.1[500] (464 bytes)'
+        result: '08[NET] received packet: from 203.0.113.7[500] to 192.0.2.1[500] (464 bytes)'
+      - string: '08[NET] sending packet: from 192.0.2.1[4500] to 203.0.113.7[4500]'
+        result: '08[NET] sending packet: from 192.0.2.1[4500] to 203.0.113.7[4500]'
+    negative:
+      - '12[IKE] IKE_SA remote[1] established between 192.0.2.1[a]...203.0.113.7[b]'
+  IPSEC_NO_CONFIG:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '12[CFG] no matching peer config found for 192.0.2.1[%any]...203.0.113.7[client]'
+        result: '12[CFG] no matching peer config found for 192.0.2.1[%any]...203.0.113.7[client]'
+      - string: '12[CFG] no matching proposal found, sending NO_PROPOSAL_CHOSEN'
+        result: '12[CFG] no matching proposal found, sending NO_PROPOSAL_CHOSEN'
+    negative:
+      - '12[IKE] IKE_SA remote[1] established between 192.0.2.1[a]...203.0.113.7[b]'
+  IPSEC_AUTH:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '12[IKE] authentication of ''client'' with EAP successful'
+        result: '12[IKE] authentication of ''client'' with EAP successful'
+      - string: '12[IKE] EAP-MSCHAPV2 verification failed, retry (0) left'
+        result: '12[IKE] EAP-MSCHAPV2 verification failed, retry (0) left'
+    negative:
+      - '08[NET] received packet: from 203.0.113.7[500] to 192.0.2.1[500]'
+  IPSEC_STATE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '12[IKE] IKE_SA remote[1] state change: CONNECTING => ESTABLISHED'
+        result: '12[IKE] IKE_SA remote[1] state change: CONNECTING => ESTABLISHED'
+    negative:
+      - '12[IKE] IKE_SA remote[1] established between 192.0.2.1[a]...203.0.113.7[b]'
+  IPSEC_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '00[DMN] Starting IKE charon daemon (strongSwan 5.9.8)'
+        result: '00[DMN] Starting IKE charon daemon (strongSwan 5.9.8)'
+    negative:
+      - 'charon stopped after 200 ms'
+  IPSEC_PLAIN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'charon stopped after 200 ms'
+        result: 'charon stopped after 200 ms'
+    negative:
+      - ''
+geoip:
+  - ipsec_remote_ip
+  - ipsec_src_ip
+convert:
+  ipsec_thread: int
+  ipsec_sa_unique: int
+  ipsec_src_port: int
+  ipsec_dst_port: int
+  ipsec_packet_bytes: int
+rules:
+  - name: strongswan
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^(?:charon|ipsec|strongswan|charon-systemd)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - IPSEC_SA_ESTABLISHED
+      - IPSEC_STATE
+      - IPSEC_PACKET
+      - IPSEC_NO_CONFIG
+      - IPSEC_AUTH
+      # last two: with a thread prefix, then without one
+      - IPSEC_MESSAGE
+      - IPSEC_PLAIN
+    tests:
+      positive:
+        - string: '12[IKE] IKE_SA remote[1] established between 192.0.2.1[server]...203.0.113.7[client]'
+          numeric:
+            - ipsec_sa_unique
+          program: 'strongswan'
+          result:
+            ipsec_thread: '12'
+            ipsec_subsystem: 'IKE'
+            ipsec_sa_kind: 'IKE_SA'
+            ipsec_sa_name: 'remote'
+            ipsec_sa_unique: '1'
+            ipsec_local_ip: '192.0.2.1'
+            ipsec_local_id: 'server'
+            ipsec_remote_ip: '203.0.113.7'
+            ipsec_remote_id: 'client'
+        - string: '12[IKE] IKE_SA remote[1] state change: CONNECTING => ESTABLISHED'
+          program: 'ipsec'
+          result:
+            ipsec_thread: '12'
+            ipsec_subsystem: 'IKE'
+            ipsec_sa_kind: 'IKE_SA'
+            ipsec_sa_name: 'remote'
+            ipsec_sa_unique: '1'
+            ipsec_state_from: 'CONNECTING'
+            ipsec_state_to: 'ESTABLISHED'
+        - string: '08[NET] received packet: from 203.0.113.7[500] to 192.0.2.1[500] (464 bytes)'
+          numeric:
+            - ipsec_dst_port
+            - ipsec_packet_bytes
+            - ipsec_src_port
+            - ipsec_thread
+          program: 'charon-systemd'
+          result:
+            ipsec_thread: '08'
+            ipsec_subsystem: 'NET'
+            ipsec_packet_direction: 'received'
+            ipsec_src_ip: '203.0.113.7'
+            ipsec_src_port: '500'
+            ipsec_dst_ip: '192.0.2.1'
+            ipsec_dst_port: '500'
+            ipsec_packet_bytes: '464'
+        - string: '12[CFG] no matching peer config found for 192.0.2.1[%any]...203.0.113.7[client]'
+          result:
+            ipsec_thread: '12'
+            ipsec_subsystem: 'CFG'
+            ipsec_missing: 'peer config'
+            ipsec_local_ip: '192.0.2.1'
+            ipsec_local_id: '%any'
+            ipsec_remote_ip: '203.0.113.7'
+            ipsec_remote_id: 'client'
+        - string: '12[IKE] EAP-MSCHAPV2 verification failed, retry (0) left'
+          result:
+            ipsec_thread: '12'
+            ipsec_subsystem: 'IKE'
+            ipsec_auth_message: 'EAP-MSCHAPV2 verification failed, retry (0) left'
+        - string: '00[DMN] Starting IKE charon daemon (strongSwan 5.9.8)'
+          result:
+            ipsec_thread: '00'
+            ipsec_subsystem: 'DMN'
+            ipsec_message: 'Starting IKE charon daemon (strongSwan 5.9.8)'
+        - string: 'charon stopped after 200 ms'
+          program: 'charon'
+          result:
+            ipsec_message: 'charon stopped after 200 ms'
+      negative:
+        - ''
+        - string: '12[IKE] IKE_SA remote[1] established between 192.0.2.1[server]...203.0.113.7[client]'
+          program: 'strongswan-extra'

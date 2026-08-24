@@ -1,6 +1,6 @@
 package Mail::BIMI::Indicator;
 # ABSTRACT: Class to model a BIMI indicator
-our $VERSION = '3.20260806'; # VERSION
+our $VERSION = '3.20260824'; # VERSION
 use 5.20.0;
 use Moose;
 use Moose::Util::TypeConstraints;
@@ -88,7 +88,14 @@ sub _build_data_xml($self) {
     return;
   }
   eval {
-    $xml = XML::LibXML->new->load_xml(string => $self->data_uncompressed);
+    my $parser = XML::LibXML->new(
+      no_network      => 1,
+      load_ext_dtd    => 0,
+      expand_entities => 0,
+    );
+    $xml = $parser->load_xml(
+      string => $self->data_uncompressed,
+    );
     1;
   } || do {
     $self->add_error('SVG_INVALID_XML');
@@ -99,7 +106,12 @@ sub _build_data_xml($self) {
 }
 
 sub _build_parser($self) {
-  state $parser = XML::LibXML::RelaxNG->new( string => $self->get_data_from_file($self->validator_profile.'.rng'), no_network => 1 );
+  state $parser = XML::LibXML::RelaxNG->new(
+    string          => $self->get_data_from_file($self->validator_profile.'.rng'),
+    no_network      => 1,
+    load_ext_dtd    => 0,
+    expand_entities => 0,
+  );
   return $parser;
 }
 
@@ -236,7 +248,7 @@ Mail::BIMI::Indicator - Class to model a BIMI indicator
 
 =head1 VERSION
 
-version 3.20260806
+version 3.20260824
 
 =head1 DESCRIPTION
 

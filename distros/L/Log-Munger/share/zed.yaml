@@ -1,0 +1,125 @@
+---
+# ZFS Event Daemon (zed) log enrichment.
+#
+# Gates on the syslog PROGRAM field being "zed". Patterns are anchored (each
+# must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with zed_ .
+#
+# kernel.yaml already covers the ZFS messages the FreeBSD kernel writes to the
+# ring buffer. zed is the userland side, on both Linux and FreeBSD, and it is
+# where the events that matter for the health of a pool actually arrive:
+# checksum errors, vdev state changes, resilvers starting and finishing, and
+# scrubs reporting what they found.
+#
+# Most lines are a run of key=value pairs, so they are captured whole and split
+# by a decompose. Which keys appear depends on the event class -- a checksum
+# error carries vdev and error counts, a pool import carries neither -- and a
+# decompose keeps up with that where naming each key in a pattern would not.
+includes:
+- base
+vars_templated:
+  # "eid=5 class=checksum pool='tank' vdev=sda1 ..."
+  #
+  # eid is the event id, unique per event and the field to correlate on. class
+  # is the event type, dotted and namespaced by ZFS itself, so it groups
+  # cleanly: ereport.fs.zfs.checksum, resilver.start, statechange.
+  #
+  # The kv blob is quote-aware because pool and vdev names are single-quoted
+  # and can contain spaces.
+  ZED_EVENT: '(?<zed_kv>eid=[% INT %] class=[% GREEDYDATA %])'
+  # "Diagnosis Engine: vdev sda1 in pool tank is FAULTED"
+  # Free-text notices zed emits alongside the structured events.
+  ZED_NOTICE: '(?<zed_component>[A-Za-z][A-Za-z ]*(?:Engine|Agent)|zed): (?<zed_message>.+)'
+  # Anything else: startup, script invocation, missing hooks.
+  ZED_MESSAGE: '(?<zed_message>.+)'
+vars_tests:
+  ZED_EVENT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'eid=5 class=checksum pool=''tank'' vdev=sda1 cksum_errors=1'
+        result: 'eid=5 class=checksum pool=''tank'' vdev=sda1 cksum_errors=1'
+      - string: 'eid=12 class=resilver.start pool=''tank'''
+        result: 'eid=12 class=resilver.start pool=''tank'''
+    negative:
+      - 'Diagnosis Engine: vdev sda1 in pool tank is FAULTED'
+  ZED_NOTICE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Diagnosis Engine: vdev sda1 in pool tank is FAULTED'
+        result: 'Diagnosis Engine: vdev sda1 in pool tank is FAULTED'
+      - string: 'Retire Agent: zpool_vdev_fault failed'
+        result: 'Retire Agent: zpool_vdev_fault failed'
+    negative:
+      - 'eid=5 class=checksum pool=''tank'''
+  ZED_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'ZFS Event Daemon 2.1.11-1 (PID 1234)'
+        result: 'ZFS Event Daemon 2.1.11-1 (PID 1234)'
+    negative:
+      - ''
+convert:
+  zed_eid: int
+  zed_cksum_errors: int
+  zed_read_errors: int
+  zed_write_errors: int
+# Split the key=value blob. Quote-aware, because pool and vdev names are
+# single-quoted and may contain spaces.
+# The zed_ prefix keeps ZFS's own short key names -- eid, class, pool, vdev --
+# from colliding with anything else in a merged record.
+decompose:
+  - field: zed_kv
+    type: kv
+    quoted: true
+    prefix: 'zed_'
+    remove: true
+    tests:
+      - input: 'eid=5 class=checksum pool=''tank'' vdev=sda1 cksum_errors=1 read_errors=0'
+        result:
+          zed_eid: '5'
+          zed_class: 'checksum'
+          zed_pool: 'tank'
+          zed_vdev: 'sda1'
+          zed_cksum_errors: '1'
+          zed_read_errors: '0'
+rules:
+  - name: zed
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^zed$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - ZED_EVENT
+      - ZED_NOTICE
+      # last: matches anything, which is only safe because the rule is gated
+      - ZED_MESSAGE
+    tests:
+      positive:
+        # the kv blob is still whole here: rule tests check raw captures,
+        # before the decompose above splits it
+        - string: 'eid=5 class=checksum pool=''tank'' vdev=sda1 cksum_errors=1'
+          enriched:
+            zed_cksum_errors: '1'
+            zed_class: 'checksum'
+            zed_eid: '5'
+            zed_pool: 'tank'
+            zed_vdev: 'sda1'
+          numeric:
+            - zed_cksum_errors
+            - zed_eid
+          result:
+            zed_kv: 'eid=5 class=checksum pool=''tank'' vdev=sda1 cksum_errors=1'
+        - string: 'Diagnosis Engine: vdev sda1 in pool tank is FAULTED'
+          result:
+            zed_component: 'Diagnosis Engine'
+            zed_message: 'vdev sda1 in pool tank is FAULTED'
+        - string: 'ZFS Event Daemon 2.1.11-1 (PID 1234)'
+          program: 'zed'
+          result:
+            zed_message: 'ZFS Event Daemon 2.1.11-1 (PID 1234)'
+      negative:
+        - ''
+        - string: 'eid=5 class=checksum pool=''tank'' vdev=sda1 cksum_errors=1'
+          program: 'zed-extra'

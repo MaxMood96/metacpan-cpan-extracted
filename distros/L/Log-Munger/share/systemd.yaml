@@ -1,0 +1,417 @@
+---
+# systemd manager (PID 1) unit lifecycle log enrichment.
+#
+# Gates on the syslog PROGRAM field being "systemd". Patterns are anchored
+# (each must match the whole MESSAGE) and first-match wins, so the more
+# specific unit-scoped "<unit>.service: ..." lines are listed ahead of the
+# generic Started, Stopped, Starting and Stopping messages. Every capture is
+# namespaced with systemd_ .
+includes:
+- base
+vars_templated:
+  # A systemd unit token: a non-space name ending in a known unit-type suffix.
+  # Used to split the newer "<verb> <unit> - <description>" format, from
+  # systemd v248 on, into the unit name and the description.
+  SYSTEMD_UNIT: '[% NOTSPACE %]\.(?:service|socket|target|mount|automount|swap|timer|path|slice|scope|device)'
+  # "<unit>.service: Main process exited, code=exited, status=1/FAILURE"
+  SYSTEMD_MAIN_PROC_EXITED: '(?<systemd_unit>[% NOTSPACE %]): Main process exited, code=(?<systemd_code>[% WORD %]), status=(?<systemd_status>[% INT %])/(?<systemd_status_text>[% WORD %])(?: [% GREEDYDATA %])?'
+  # "<unit>.service: Failed with result 'exit-code'."
+  SYSTEMD_FAILED_RESULT: "(?<systemd_unit>[% NOTSPACE %]): Failed with result '(?<systemd_result>[^']+)'\\.(?: [% GREEDYDATA %])?"
+  # "<unit>.service: Scheduled restart job, restart counter is at 3."
+  SYSTEMD_SCHED_RESTART: '(?<systemd_unit>[% NOTSPACE %]): Scheduled restart job, restart counter is at (?<systemd_restart_counter>[% INT %])\.(?: [% GREEDYDATA %])?'
+  # "<unit>.service: Deactivated successfully." / "<unit>.timer: Deactivated successfully."
+  SYSTEMD_DEACTIVATED: '(?<systemd_unit>[% NOTSPACE %]): Deactivated successfully\.(?: [% GREEDYDATA %])?'
+  # "Reached target multi-user.target."
+  SYSTEMD_REACHED_TARGET: 'Reached target (?<systemd_target>[% GREEDYDATA %])\.'
+  # "Failed to start <unit> - <desc>." (unit prefix optional on older systemd)
+  SYSTEMD_FAILED_TO_START: 'Failed to start (?:(?<systemd_unit>[% SYSTEMD_UNIT %]) - )?(?<systemd_desc>[% GREEDYDATA %])\.'
+  # "Reloading.", "Reloading..." and "Reloading finished in 12 ms."
+  #
+  # systemd v250 changed the bare form from "Reloading." to "Reloading...", so
+  # any number of trailing dots is accepted.
+  SYSTEMD_RELOADING: 'Reloading(?: [% GREEDYDATA %])?\.*'
+  # "<unit>: Consumed 3.100s CPU time." and, on newer systemd,
+  # "<unit>: Consumed 2min 35.058s CPU time, 1.2G memory peak, 0B memory swap peak."
+  #
+  # The resource epitaph systemd writes when a unit stops. The CPU time is kept
+  # as the string systemd printed ("3.100s", "2min 35.058s", "3h 45min
+  # 11.052s") rather than normalized to seconds, since the format varies with
+  # magnitude and guessing at a unit would produce wrong numbers.
+  SYSTEMD_CONSUMED: '(?<systemd_unit>[% NOTSPACE %]): Consumed (?<systemd_cpu_time>.+?) CPU time(?:, (?<systemd_memory_peak>[% NOTSPACE %]) memory peak)?(?:, (?<systemd_swap_peak>[% NOTSPACE %]) memory swap peak)?\.?'
+  # "Listening on dbus.socket - D-Bus User Message Bus Socket." and the matching
+  # "Closed dbus.socket - ...". The socket-unit counterpart of Started/Stopped.
+  SYSTEMD_SOCKET: '(?<systemd_socket_action>Listening on|Closed) (?:(?<systemd_unit>[% SYSTEMD_UNIT %]) - )?(?<systemd_desc>[% GREEDYDATA %])\.'
+  # "Created slice user-65534.slice - User Slice of UID 65534." / "Removed slice
+  # app.slice - User Application Slice."
+  SYSTEMD_SLICE: '(?<systemd_slice_action>Created|Removed) slice (?:(?<systemd_unit>[% SYSTEMD_UNIT %]) - )?(?<systemd_desc>[% GREEDYDATA %])\.'
+  # "Queued start job for default target default.target."
+  SYSTEMD_QUEUED_JOB: 'Queued (?<systemd_job_type>[% WORD %]) job for default target (?<systemd_desc>[% GREEDYDATA %])\.'
+  # "Activating special unit exit.target..."
+  SYSTEMD_SPECIAL_UNIT: 'Activating special unit (?:(?<systemd_unit>[% SYSTEMD_UNIT %])|(?<systemd_desc>[% GREEDYDATA %]))\.\.\.'
+  # "mdcheck_continue.service - MD array scrubbing was skipped because of an
+  #  unmet condition check (ConditionPathExistsGlob=/var/lib/mdcheck/MD_UUID_*)."
+  #
+  # A unit that was pulled in but did not run. Distinct from a failure: nothing
+  # went wrong, the unit declined, and the reason names the condition.
+  SYSTEMD_SKIPPED: '(?:(?<systemd_unit>[% SYSTEMD_UNIT %]) - )?(?<systemd_desc>[% GREEDYDATA %]) was skipped because (?<systemd_skip_reason>[% GREEDYDATA %])\.'
+  # "Startup finished in 301ms." / "Startup finished in 4.512s (kernel) + ..."
+  SYSTEMD_STARTUP_FINISHED: 'Startup finished in (?<systemd_startup_time>[% GREEDYDATA %])\.'
+  # Any other unit-scoped line: "<unit>: <whatever systemd had to say>".
+  #
+  # systemd's message set is large, mostly prose, and changes between releases,
+  # so enumerating it is impractical. This lifts out the unit name, which is
+  # what a consumer filters on, and leaves the prose in systemd_message. A real
+  # unit suffix is required, so a non-unit line such as "Failed to open
+  # /dev/tty0: ..." is not misread as one.
+  #
+  # Must stay after every unit-scoped pattern above.
+  SYSTEMD_UNIT_MESSAGE: '(?<systemd_unit>[% SYSTEMD_UNIT %]): (?<systemd_message>.+)'
+  # "Starting <unit> - <desc>..." / "Starting <desc>..."
+  SYSTEMD_STARTING: 'Starting (?:(?<systemd_unit>[% SYSTEMD_UNIT %]) - )?(?<systemd_desc>[% GREEDYDATA %])\.\.\.'
+  # "Stopping <unit> - <desc>..." / "Stopping <desc>..."
+  SYSTEMD_STOPPING: 'Stopping (?:(?<systemd_unit>[% SYSTEMD_UNIT %]) - )?(?<systemd_desc>[% GREEDYDATA %])\.\.\.'
+  # "Started <unit> - <desc>." / "Started Session 3 of user neti."
+  SYSTEMD_STARTED: 'Started (?:(?<systemd_unit>[% SYSTEMD_UNIT %]) - )?(?<systemd_desc>[% GREEDYDATA %])\.'
+  # "Stopped <unit> - <desc>." / "Stopped <desc>."
+  SYSTEMD_STOPPED: 'Stopped (?:(?<systemd_unit>[% SYSTEMD_UNIT %]) - )?(?<systemd_desc>[% GREEDYDATA %])\.'
+  # "Finished <unit> - <desc>." (oneshot unit completion)
+  SYSTEMD_FINISHED: 'Finished (?:(?<systemd_unit>[% SYSTEMD_UNIT %]) - )?(?<systemd_desc>[% GREEDYDATA %])\.'
+vars_tests:
+  SYSTEMD_UNIT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'cape_utils_eve.service'
+        result: 'cape_utils_eve.service'
+      - string: 'logrotate.timer'
+        result: 'logrotate.timer'
+    negative:
+      - 'notaunit'
+  SYSTEMD_MAIN_PROC_EXITED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'nginx.service: Main process exited, code=exited, status=1/FAILURE'
+        result: 'nginx.service: Main process exited, code=exited, status=1/FAILURE'
+      - string: 'apache2.service: Main process exited, code=killed, status=9/KILL'
+        result: 'apache2.service: Main process exited, code=killed, status=9/KILL'
+    negative:
+      - "nginx.service: Failed with result 'exit-code'."
+  SYSTEMD_FAILED_RESULT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: "nginx.service: Failed with result 'exit-code'."
+        result: "nginx.service: Failed with result 'exit-code'."
+      - string: "foo.timer: Failed with result 'timeout'."
+        result: "foo.timer: Failed with result 'timeout'."
+    negative:
+      - 'nginx.service: Deactivated successfully.'
+  SYSTEMD_SCHED_RESTART:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'nginx.service: Scheduled restart job, restart counter is at 3.'
+        result: 'nginx.service: Scheduled restart job, restart counter is at 3.'
+      - string: 'foo.service: Scheduled restart job, restart counter is at 1.'
+        result: 'foo.service: Scheduled restart job, restart counter is at 1.'
+    negative:
+      - 'nginx.service: Deactivated successfully.'
+  SYSTEMD_DEACTIVATED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'nginx.service: Deactivated successfully.'
+        result: 'nginx.service: Deactivated successfully.'
+      - string: 'logrotate.timer: Deactivated successfully.'
+        result: 'logrotate.timer: Deactivated successfully.'
+    negative:
+      - "nginx.service: Failed with result 'exit-code'."
+  SYSTEMD_REACHED_TARGET:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Reached target multi-user.target.'
+        result: 'Reached target multi-user.target.'
+      - string: 'Reached target Basic System.'
+        result: 'Reached target Basic System.'
+    negative:
+      - 'Started Session 3 of user neti.'
+  SYSTEMD_FAILED_TO_START:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Failed to start nginx - A high performance web server.'
+        result: 'Failed to start nginx - A high performance web server.'
+      - string: 'Failed to start My Service.'
+        result: 'Failed to start My Service.'
+    negative:
+      - 'Started Session 3 of user neti.'
+  SYSTEMD_RELOADING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Reloading.'
+        result: 'Reloading.'
+      - string: 'Reloading...'
+        result: 'Reloading...'
+      - string: 'Reloading finished in 12 ms.'
+        result: 'Reloading finished in 12 ms.'
+    negative:
+      - 'Started Session 3 of user neti.'
+  SYSTEMD_CONSUMED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'cape-web.service: Consumed 3.100s CPU time.'
+        result: 'cape-web.service: Consumed 3.100s CPU time.'
+      - string: 'tor@default.service: Consumed 2min 35.058s CPU time, 1.2G memory peak, 0B memory swap peak.'
+        result: 'tor@default.service: Consumed 2min 35.058s CPU time, 1.2G memory peak, 0B memory swap peak.'
+    negative:
+      - 'nginx.service: Deactivated successfully.'
+  SYSTEMD_SOCKET:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Listening on dbus.socket - D-Bus User Message Bus Socket.'
+        result: 'Listening on dbus.socket - D-Bus User Message Bus Socket.'
+      - string: 'Closed gpg-agent.socket - GnuPG cryptographic agent and passphrase cache.'
+        result: 'Closed gpg-agent.socket - GnuPG cryptographic agent and passphrase cache.'
+    negative:
+      - 'Started Session 3 of user neti.'
+  SYSTEMD_SLICE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Created slice user-65534.slice - User Slice of UID 65534.'
+        result: 'Created slice user-65534.slice - User Slice of UID 65534.'
+      - string: 'Removed slice app.slice - User Application Slice.'
+        result: 'Removed slice app.slice - User Application Slice.'
+    negative:
+      - 'Started Session 3 of user neti.'
+  SYSTEMD_QUEUED_JOB:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Queued start job for default target default.target.'
+        result: 'Queued start job for default target default.target.'
+      - string: 'Queued stop job for default target multi-user.target.'
+        result: 'Queued stop job for default target multi-user.target.'
+    negative:
+      - 'Started Session 3 of user neti.'
+  SYSTEMD_SPECIAL_UNIT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Activating special unit exit.target...'
+        result: 'Activating special unit exit.target...'
+    negative:
+      - 'Starting nginx - A high performance web server...'
+  SYSTEMD_SKIPPED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'mdcheck_continue.service - MD array scrubbing was skipped because of an unmet condition check (ConditionPathExistsGlob=/var/lib/mdcheck/MD_UUID_*).'
+        result: 'mdcheck_continue.service - MD array scrubbing was skipped because of an unmet condition check (ConditionPathExistsGlob=/var/lib/mdcheck/MD_UUID_*).'
+      - string: 'apt-daily.service - Daily apt download activities was skipped because all trigger condition checks failed.'
+        result: 'apt-daily.service - Daily apt download activities was skipped because all trigger condition checks failed.'
+    negative:
+      - 'Started Session 3 of user neti.'
+  SYSTEMD_STARTUP_FINISHED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Startup finished in 301ms.'
+        result: 'Startup finished in 301ms.'
+      - string: 'Startup finished in 4.512s (kernel) + 22.301s (userspace) = 26.813s.'
+        result: 'Startup finished in 4.512s (kernel) + 22.301s (userspace) = 26.813s.'
+    negative:
+      - 'Started Session 3 of user neti.'
+  SYSTEMD_UNIT_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'virtnetworkd.service: Unit process 1215 (dnsmasq) remains running after unit stopped.'
+        result: 'virtnetworkd.service: Unit process 1215 (dnsmasq) remains running after unit stopped.'
+      - string: 'session-9182.scope: A process of this unit has been killed by the OOM killer.'
+        result: 'session-9182.scope: A process of this unit has been killed by the OOM killer.'
+    negative:
+      # No unit suffix before the colon, so this is not a unit-scoped line.
+      - 'Failed to open /dev/tty0: No such device'
+      - 'Started Session 3 of user neti.'
+  SYSTEMD_STARTING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Starting cape_utils_eve.service - Process CAPE eve.json via cape_utils eve...'
+        result: 'Starting cape_utils_eve.service - Process CAPE eve.json via cape_utils eve...'
+      - string: 'Starting Daily apt download activities...'
+        result: 'Starting Daily apt download activities...'
+    negative:
+      - 'Started Session 3 of user neti.'
+  SYSTEMD_STOPPING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Stopping nginx.service - A high performance web server...'
+        result: 'Stopping nginx.service - A high performance web server...'
+      - string: 'Stopping User Manager for UID 1000...'
+        result: 'Stopping User Manager for UID 1000...'
+    negative:
+      - 'Stopped nginx - A high performance web server.'
+  SYSTEMD_STARTED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Started Session 3 of user neti.'
+        result: 'Started Session 3 of user neti.'
+      - string: 'Started nginx.service - A high performance web server.'
+        result: 'Started nginx.service - A high performance web server.'
+    negative:
+      - 'Starting nginx - A high performance web server...'
+  SYSTEMD_STOPPED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Stopped nginx.service - A high performance web server.'
+        result: 'Stopped nginx.service - A high performance web server.'
+      - string: 'Stopped Session 3 of user neti.'
+        result: 'Stopped Session 3 of user neti.'
+    negative:
+      - 'Stopping nginx - A high performance web server...'
+  SYSTEMD_FINISHED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Finished cape_utils_eve.service - Process CAPE eve.json via cape_utils eve.'
+        result: 'Finished cape_utils_eve.service - Process CAPE eve.json via cape_utils eve.'
+      - string: 'Finished Rotate log files.'
+        result: 'Finished Rotate log files.'
+    negative:
+      - 'Starting nginx - A high performance web server...'
+# Coerce the numeric captures to integers.
+convert:
+  systemd_status: int
+  systemd_restart_counter: int
+rules:
+  - name: systemd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^systemd$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - SYSTEMD_MAIN_PROC_EXITED
+      - SYSTEMD_FAILED_RESULT
+      - SYSTEMD_SCHED_RESTART
+      - SYSTEMD_DEACTIVATED
+      - SYSTEMD_CONSUMED
+      - SYSTEMD_REACHED_TARGET
+      - SYSTEMD_FAILED_TO_START
+      - SYSTEMD_RELOADING
+      - SYSTEMD_STARTING
+      - SYSTEMD_STOPPING
+      - SYSTEMD_STARTED
+      - SYSTEMD_STOPPED
+      - SYSTEMD_FINISHED
+      - SYSTEMD_SOCKET
+      - SYSTEMD_SLICE
+      - SYSTEMD_QUEUED_JOB
+      - SYSTEMD_SPECIAL_UNIT
+      - SYSTEMD_SKIPPED
+      - SYSTEMD_STARTUP_FINISHED
+      # Last of the unit-scoped patterns. Everything above is a known shape;
+      # this one only lifts the unit out of whatever else systemd said.
+      - SYSTEMD_UNIT_MESSAGE
+    tests:
+      positive:
+        - string: 'nginx.service: Main process exited, code=exited, status=1/FAILURE'
+          numeric:
+            - systemd_status
+          program: 'systemd'
+          result:
+            systemd_unit: 'nginx.service'
+            systemd_code: 'exited'
+            systemd_status: '1'
+            systemd_status_text: 'FAILURE'
+        - string: "nginx.service: Failed with result 'exit-code'."
+          result:
+            systemd_unit: 'nginx.service'
+            systemd_result: 'exit-code'
+        - string: 'nginx.service: Scheduled restart job, restart counter is at 3.'
+          numeric:
+            - systemd_restart_counter
+          result:
+            systemd_unit: 'nginx.service'
+            systemd_restart_counter: '3'
+        - string: 'nginx.service: Deactivated successfully.'
+          result:
+            systemd_unit: 'nginx.service'
+        - string: 'logrotate.timer: Deactivated successfully.'
+          result:
+            systemd_unit: 'logrotate.timer'
+        - string: 'Reached target multi-user.target.'
+          result:
+            systemd_target: 'multi-user.target'
+        - string: 'Failed to start cape_utils_eve.service - Process CAPE eve.json via cape_utils eve.'
+          result:
+            systemd_unit: 'cape_utils_eve.service'
+            systemd_desc: 'Process CAPE eve.json via cape_utils eve'
+        - string: 'Reloading.'
+          result: {}
+        - string: 'Reloading finished in 12 ms.'
+          result: {}
+        # Newer systemd: "<verb> <unit> - <description>", with the unit split
+        # out.
+        - string: 'Starting cape_utils_eve.service - Process CAPE eve.json via cape_utils eve...'
+          result:
+            systemd_unit: 'cape_utils_eve.service'
+            systemd_desc: 'Process CAPE eve.json via cape_utils eve'
+        - string: 'Finished cape_utils_eve.service - Process CAPE eve.json via cape_utils eve.'
+          result:
+            systemd_unit: 'cape_utils_eve.service'
+            systemd_desc: 'Process CAPE eve.json via cape_utils eve'
+        # The older unit-less form: no "<unit> - " prefix, so it is all desc.
+        - string: 'Stopping User Manager for UID 1000...'
+          result:
+            systemd_desc: 'User Manager for UID 1000'
+        - string: 'Started Session 3 of user neti.'
+          result:
+            systemd_desc: 'Session 3 of user neti'
+        - string: 'Stopped nginx.service - A high performance web server.'
+          result:
+            systemd_unit: 'nginx.service'
+            systemd_desc: 'A high performance web server'
+        # The resource epitaph, with and without the memory figures.
+        - string: 'cape-web.service: Consumed 3.100s CPU time.'
+          result:
+            systemd_unit: 'cape-web.service'
+            systemd_cpu_time: '3.100s'
+        - string: 'tor@default.service: Consumed 2min 35.058s CPU time, 1.2G memory peak, 0B memory swap peak.'
+          result:
+            systemd_unit: 'tor@default.service'
+            systemd_cpu_time: '2min 35.058s'
+            systemd_memory_peak: '1.2G'
+            systemd_swap_peak: '0B'
+        - string: 'Listening on dbus.socket - D-Bus User Message Bus Socket.'
+          result:
+            systemd_socket_action: 'Listening on'
+            systemd_unit: 'dbus.socket'
+            systemd_desc: 'D-Bus User Message Bus Socket'
+        - string: 'Closed gpg-agent.socket - GnuPG cryptographic agent and passphrase cache.'
+          result:
+            systemd_socket_action: 'Closed'
+            systemd_unit: 'gpg-agent.socket'
+            systemd_desc: 'GnuPG cryptographic agent and passphrase cache'
+        - string: 'Created slice user-65534.slice - User Slice of UID 65534.'
+          result:
+            systemd_slice_action: 'Created'
+            systemd_unit: 'user-65534.slice'
+            systemd_desc: 'User Slice of UID 65534'
+        - string: 'Queued start job for default target default.target.'
+          result:
+            systemd_job_type: 'start'
+            systemd_desc: 'default.target'
+        - string: 'Activating special unit exit.target...'
+          result:
+            systemd_unit: 'exit.target'
+        - string: 'mdcheck_continue.service - MD array scrubbing was skipped because of an unmet condition check (ConditionPathExistsGlob=/var/lib/mdcheck/MD_UUID_*).'
+          result:
+            systemd_unit: 'mdcheck_continue.service'
+            systemd_desc: 'MD array scrubbing'
+            systemd_skip_reason: 'of an unmet condition check (ConditionPathExistsGlob=/var/lib/mdcheck/MD_UUID_*)'
+        - string: 'Startup finished in 301ms.'
+          result:
+            systemd_startup_time: '301ms'
+        # Unclaimed above, so the unit comes out and the rest stays prose.
+        - string: 'session-9182.scope: A process of this unit has been killed by the OOM killer.'
+          result:
+            systemd_unit: 'session-9182.scope'
+            systemd_message: 'A process of this unit has been killed by the OOM killer.'
+      negative:
+        - 'this is not a systemd line at all'
+        # a colon with no unit suffix in front of it is not a unit
+        - 'Failed to open /dev/tty0: No such device'
+        - 'Jul 15 10:00:00 host cron[123]: session opened for user root'
+        - string: 'nginx.service: Main process exited, code=exited, status=1/FAILURE'
+          program: 'systemd-extra'

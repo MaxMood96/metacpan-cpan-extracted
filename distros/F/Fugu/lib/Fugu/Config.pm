@@ -18,7 +18,7 @@
 use v5.36;
 
 package Fugu::Config;
-our $VERSION = '0.1.2';
+our $VERSION = '0.2.0';
 
 use File::Basename qw(dirname);
 use File::Spec;
@@ -177,7 +177,9 @@ sub get ( $self, $key, $default = undef )
 #	Return the names of the top-level settings, sorted.
 sub setting_names ($self)
 {
-	return sort keys %{ $self->{settings} };
+	my @names = sort keys %{ $self->{settings} };
+
+	return @names;
 }
 
 # $self->parse_bool($value, $default):

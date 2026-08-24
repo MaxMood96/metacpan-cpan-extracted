@@ -1,0 +1,2117 @@
+---
+includes:
+- base
+vars:
+  POSTFIX_ACTION: |
+    (accept|defer|discard|filter|header-redirect|reject)
+  POSTFIX_CLEANUP_PREPEND_TYPE: "(header|body)\n"
+  POSTFIX_KEYVALUE_DATA: "[\\w-]+=[^;]*\n"
+  POSTFIX_LOSTCONN: |
+    (Connection timed out|No route to host|Connection refused|Network is unreachable|lost connection|timeout|SSL_accept error|-1)
+  POSTFIX_LOSTCONN_REASONS: |
+    (receiving the initial server greeting|sending message body|sending end of data -- message may be sent more than once)
+  POSTFIX_POSTSUPER_ACTIONS: |
+    (removed|requeued|placed on hold|released from hold)
+  POSTFIX_POSTSUPER_SUMMARY_ACTIONS: |
+    (Deleted|Requeued|Placed on hold|Released from hold)
+  POSTFIX_PS_ACCESS_ACTION: |
+    (DISCONNECT|BLACKLISTED|WHITELISTED|WHITELIST VETO|PASS NEW|PASS OLD)
+  POSTFIX_PS_VIOLATION: |
+    (BARE NEWLINE|COMMAND (TIME|COUNT|LENGTH) LIMIT|COMMAND PIPELINING|DNSBL|HANGUP|NON-SMTP COMMAND|PREGREET)
+  POSTFIX_QUEUEID: |
+    ([0-9A-F]{6,}|[0-9a-zA-Z]{12,}|NOQUEUE)
+  # The protocol stage a session was in when something happened. Alongside the
+  # commands that carry mail this has to list the ones a scanner will throw at
+  # the server and get logged for -- HELP, NOOP, QUIT and the rest -- because
+  # they turn up in "lost connection after <stage>" lines.
+  POSTFIX_SMTP_STAGE: |
+    (CONNECT|HELO|EHLO|STARTTLS|AUTH|MAIL( FROM)?|RCPT( TO)?|(end of )?DATA|BDAT|RSET|NOOP|QUIT|HELP|ETRN|EXPN|XCLIENT|XFORWARD|UNKNOWN|END-OF-MESSAGE|VRFY|\.)
+  POSTFIX_STATUS_CODE: "\\d{3}\n"
+  POSTFIX_STATUS_CODE_ENHANCED: "\\d\\.\\d\\.\\d\n"
+  # Every severity postfix prefixes a message with. "error" is a lookup or a
+  # delivery step that failed, "panic" is postfix reporting its own corrupt
+  # state and is the one nobody wants to see. The name is historical... it
+  # gates POSTFIX_WARNING, which reads all five and not only the warnings.
+  POSTFIX_WARNING_LEVEL: "(warning|error|fatal|panic|info)\n"
+vars_templated:
+  POSTFIX_ANVIL: |
+    [% POSTFIX_ANVIL_CONN_RATE %]|[% POSTFIX_ANVIL_CONN_CACHE %]|[% POSTFIX_ANVIL_CONN_COUNT %]|[% POSTFIX_WARNING %]
+  POSTFIX_ANVIL_CONN_CACHE: |
+    statistics: max cache size (?<postfix_anvil_cache_size>[% NUMBER %]) at (?<postfix_anvil_timestamp>[% SYSLOGTIMESTAMP %])
+  POSTFIX_ANVIL_CONN_COUNT: |
+    statistics: max connection count (?<postfix_anvil_conn_count>[% NUMBER %]) for \((?<postfix_service>[% DATA %]):(?<postfix_client_ip>[% IP %])\) at (?<postfix_anvil_timestamp>[% SYSLOGTIMESTAMP %])
+  POSTFIX_ANVIL_CONN_RATE: |
+    statistics: max connection rate (?<postfix_anvil_conn_rate>[% NUMBER %])/(?<postfix_anvil_conn_period>[% POSTFIX_TIME_UNIT %]) for \((?<postfix_service>[% DATA %]):(?<postfix_client_ip>[% IP %])\) at (?<postfix_anvil_timestamp>[% SYSLOGTIMESTAMP %])
+  POSTFIX_BOUNCE: |
+    [% POSTFIX_BOUNCE_NOTIFICATION %]|[% POSTFIX_WARNING %]
+  POSTFIX_BOUNCE_NOTIFICATION: |
+    (?<postfix_queueid>[% POSTFIX_QUEUEID %]): sender (non-delivery|delivery status|delay) notification: (?<postfix_bounce_queueid>[% POSTFIX_QUEUEID %])
+  POSTFIX_CLEANUP: |
+    [% POSTFIX_CLEANUP_MESSAGEID %]|[% POSTFIX_CLEANUP_MILTER %]|[% POSTFIX_CLEANUP_PREPEND %]|[% POSTFIX_REMOVED %]|[% POSTFIX_COMPAT %]|[% POSTFIX_WARNING %]|[% POSTFIX_KEYVALUE %]
+  POSTFIX_CLEANUP_MESSAGEID: |
+    (?<postfix_queueid>[% POSTFIX_QUEUEID %]): message-id=<?(?<postfix_message_id>[% GREEDYDATA_NO_BRACKET %])>?
+  POSTFIX_CLEANUP_MILTER: |
+    (?<postfix_queueid>[% POSTFIX_QUEUEID %]): milter-(?<postfix_milter_result>[% POSTFIX_ACTION %]): (?<postfix_milter_message>[% GREEDYDATA %]); (?<postfix_keyvalue_data>[% GREEDYDATA_NO_COLON %])(: (?<postfix_milter_data>[% GREEDYDATA %]))?
+  POSTFIX_CLEANUP_PREPEND: |
+    (?<postfix_queueid>[% POSTFIX_QUEUEID %]): prepend: (?<postfix_prepend_type>[% POSTFIX_CLEANUP_PREPEND_TYPE %]) (?<postfix_prepend_trigger>[% GREEDYDATA %]) from [% POSTFIX_CLIENT_INFO %]; (?<postfix_keyvalue_data>[% GREEDYDATA_NO_COLON %]): (?<postfix_prepend_value>[% GREEDYDATA %])
+  POSTFIX_CLIENT_INFO: |
+    (?<postfix_client_hostname>[% HOSTNAME %])?\[(?<postfix_client_ip>[% IP %])\](:(?<postfix_client_port>[% INT %]))?
+  POSTFIX_COMMAND_COUNTER_DATA: |
+    (helo=((?<postfix_cmd_helo_accepted>[% INT %])/)?(?<postfix_cmd_helo>[% INT %]) )?(ehlo=((?<postfix_cmd_ehlo_accepted>[% INT %])/)?(?<postfix_cmd_ehlo>[% INT %]) )?(starttls=((?<postfix_cmd_starttls_accepted>[% INT %])/)?(?<postfix_cmd_starttls>[% INT %]) )?(auth=((?<postfix_cmd_auth_accepted>[% INT %])/)?(?<postfix_cmd_auth>[% INT %]) )?(mail=((?<postfix_cmd_mail_accepted>[% INT %])/)?(?<postfix_cmd_mail>[% INT %]) )?(rcpt=((?<postfix_cmd_rcpt_accepted>[% INT %])/)?(?<postfix_cmd_rcpt>[% INT %]) )?(data=((?<postfix_cmd_data_accepted>[% INT %])/)?(?<postfix_cmd_data>[% INT %]) )?(rset=((?<postfix_cmd_rset_accepted>[% INT %])/)?(?<postfix_cmd_rset>[% INT %]) )?(quit=((?<postfix_cmd_quit_accepted>[% INT %])/)?(?<postfix_cmd_quit>[% INT %]) )?(unknown=((?<postfix_cmd_unknown_accepted>[% INT %])/)?(?<postfix_cmd_unknown>[% INT %]) )?commands=((?<postfix_cmd_count_accepted>[% INT %])/)?(?<postfix_cmd_count>[% INT %])
+  POSTFIX_DELAYS: |
+    (?<postfix_delay_before_qmgr>[% NUMBER %])/(?<postfix_delay_in_qmgr>[% NUMBER %])/(?<postfix_delay_conn_setup>[% NUMBER %])/(?<postfix_delay_transmission>[% NUMBER %])
+  # The compatibility_level nag. A daemon left on an older compatibility level
+  # names each setting it is still defaulting the old way:
+  #
+  #   using backwards-compatible default setting smtp_tls_security_level=(empty)
+  #   3F8B2A9C1D5E: using backwards-compatible default setting smtputf8_enable=no
+  #
+  # and the postfix command itself prints a three-line banner pointing at the
+  # documentation. The banner has no structure to name fields for, so it is
+  # kept whole in postfix_compat_message.
+  POSTFIX_COMPAT: |
+    [% POSTFIX_COMPAT_SETTING %]|[% POSTFIX_COMPAT_BANNER %]
+  POSTFIX_COMPAT_BANNER: |
+    (?<postfix_compat_message>(Postfix is using backwards-compatible default settings|To disable backwards compatibility use [% GREEDYDATA %]|See [% GREEDYDATA %] for details))
+  POSTFIX_COMPAT_SETTING: |
+    ((?<postfix_queueid>[% POSTFIX_QUEUEID %]): )?using backwards-compatible default setting (?<postfix_compat_setting>[\w-]+)=(?<postfix_compat_value>[% GREEDYDATA %])
+  POSTFIX_DISCARD: |
+    [% POSTFIX_DISCARD_ANY %]|[% POSTFIX_WARNING %]
+  POSTFIX_DISCARD_ANY: |
+    (?<postfix_queueid>[% POSTFIX_QUEUEID %]): (?<postfix_keyvalue_data>[% POSTFIX_KEYVALUE_DATA %]) status=(?<postfix_status>[% STATUS_WORD %]) [% GREEDYDATA %]
+  POSTFIX_DNSBLOG: |
+    [% POSTFIX_DNSBLOG_LISTING %]|[% POSTFIX_WARNING %]
+  POSTFIX_DNSBLOG_LISTING: |
+    addr (?<postfix_client_ip>[% IP %]) listed by domain (?<postfix_dnsbl_domain>[% HOSTNAME %]) as (?<postfix_dnsbl_result>[% IP %])
+  POSTFIX_DNSBL_MESSAGE: |
+    Service unavailable; .* \[(?<postfix_status_data>[% GREEDYDATA %])\] (?<postfix_status_message>[% GREEDYDATA %]);
+  POSTFIX_ERROR: |
+    [% POSTFIX_ERROR_ANY %]|[% POSTFIX_WARNING %]
+  POSTFIX_ERROR_ANY: |
+    (?<postfix_queueid>[% POSTFIX_QUEUEID %]): (?<postfix_keyvalue_data>[% POSTFIX_KEYVALUE_DATA %]), status=(?<postfix_status>[% STATUS_WORD %]) \((?<postfix_error_response>[% GREEDYDATA %])\)
+  POSTFIX_KEYVALUE: |
+    (?<postfix_queueid>[% POSTFIX_QUEUEID %]): (?<postfix_keyvalue_data>[% POSTFIX_KEYVALUE_DATA %])
+  POSTFIX_LMTP: "[% POSTFIX_SMTP %]\n"
+  POSTFIX_LOCAL: |
+    [% POSTFIX_COMPAT %]|[% POSTFIX_KEYVALUE %]|[% POSTFIX_WARNING %]
+  POSTFIX_MASTER: |
+    [% POSTFIX_MASTER_START %]|[% POSTFIX_MASTER_EXIT %]|[% POSTFIX_COMPAT %]|[% POSTFIX_WARNING %]
+  POSTFIX_MASTER_EXIT: |
+    terminating on signal (?<postfix_termination_signal>[% INT %])
+  POSTFIX_MASTER_START: |
+    (daemon started|reload) -- version (?<postfix_version>[% DATA %]), configuration (?<postfix_config_path>[% PATH %])
+  POSTFIX_ORIG_CLIENT_INFO: |
+    (?<postfix_orig_client_hostname>[% HOSTNAME %])?\[(?<postfix_orig_client_ip>[% IP %])\](:(?<postfix_orig_client_port>[% INT %]))?
+  POSTFIX_PICKUP: |
+    [% POSTFIX_KEYVALUE %]|[% POSTFIX_WARNING %]
+  POSTFIX_PIPE: |
+    [% POSTFIX_PIPE_ANY %]|[% POSTFIX_WARNING %]
+  POSTFIX_PIPE_ANY: |
+    (?<postfix_queueid>[% POSTFIX_QUEUEID %]): (?<postfix_keyvalue_data>[% POSTFIX_KEYVALUE_DATA %]), status=(?<postfix_status>[% STATUS_WORD %]) \((?<postfix_pipe_response>[% GREEDYDATA %])\)
+  POSTFIX_POSTDROP: "[% POSTFIX_WARNING %]\n"
+  POSTFIX_POSTSCREEN: |
+    [% POSTFIX_PS_CONNECT %]|[% POSTFIX_PS_ACCESS %]|[% POSTFIX_PS_NOQUEUE %]|[% POSTFIX_PS_TOOBUSY %]|[% POSTFIX_PS_CACHE %]|[% POSTFIX_PS_DNSBL %]|[% POSTFIX_PS_VIOLATIONS %]|[% POSTFIX_WARNING %]
+  POSTFIX_POSTSUPER: |
+    [% POSTFIX_POSTSUPER_ACTION %]|[% POSTFIX_POSTSUPER_SUMMARY %]|[% POSTFIX_WARNING %]
+  POSTFIX_POSTSUPER_ACTION: |
+    (?<postfix_queueid>[% POSTFIX_QUEUEID %]): (?<postfix_postsuper_action>[% POSTFIX_POSTSUPER_ACTIONS %])
+  POSTFIX_POSTSUPER_SUMMARY: |
+    (?<postfix_postsuper_summary_action>[% POSTFIX_POSTSUPER_SUMMARY_ACTIONS %]): (?<postfix_postsuper_summary_count>[% NUMBER %]) messages?
+  POSTFIX_PROXY_MESSAGE: |
+    ((?<postfix_proxy_status_code>[% POSTFIX_STATUS_CODE %]) )?((?<postfix_proxy_status_code_enhanced>[% POSTFIX_STATUS_CODE_ENHANCED %]))?.*
+  POSTFIX_PS_ACCESS: |
+    (?<postfix_postscreen_access>[% POSTFIX_PS_ACCESS_ACTION %]) [% POSTFIX_CLIENT_INFO %]
+  POSTFIX_PS_CACHE: |
+    cache [% DATA %] full cleanup: retained=(?<postfix_postscreen_cache_retained>[% NUMBER %]) dropped=(?<postfix_postscreen_cache_dropped>[% NUMBER %]) entries
+  POSTFIX_PS_CONNECT: |
+    CONNECT from [% POSTFIX_CLIENT_INFO %] to \[(?<postfix_server_ip>[% IP %])\]:(?<postfix_server_port>[% INT %])
+  POSTFIX_PS_DNSBL: |
+    (?<postfix_postscreen_violation>[% POSTFIX_PS_VIOLATION %]) rank (?<postfix_postscreen_dnsbl_rank>[% INT %]) for [% POSTFIX_CLIENT_INFO %]
+  POSTFIX_PS_NOQUEUE: "[% POSTFIX_SMTPD_NOQUEUE %]\n"
+  POSTFIX_PS_TOOBUSY: |
+    NOQUEUE: reject: CONNECT from [% POSTFIX_CLIENT_INFO %]: (?<postfix_postscreen_toobusy_data>[% GREEDYDATA %])
+  POSTFIX_PS_VIOLATIONS: |
+    (?<postfix_postscreen_violation>[% POSTFIX_PS_VIOLATION %])( [% INT %])?( after (?<postfix_postscreen_violation_time>[% NUMBER %]))? from [% POSTFIX_CLIENT_INFO %](( after (?<postfix_smtp_stage>[% POSTFIX_SMTP_STAGE %]))?(: (?<postfix_postscreen_data>[% GREEDYDATA %]))?| in tests (after|before) SMTP handshake)
+  POSTFIX_QMGR: |
+    [% POSTFIX_REMOVED %]|[% POSTFIX_QMGR_ACTIVE %]|[% POSTFIX_QMGR_EXPIRED %]|[% POSTFIX_COMPAT %]|[% POSTFIX_WARNING %]
+  POSTFIX_QMGR_ACTIVE: |
+    (?<postfix_queueid>[% POSTFIX_QUEUEID %]): (?<postfix_keyvalue_data>[% POSTFIX_KEYVALUE_DATA %]) \(queue active\)
+  POSTFIX_QMGR_EXPIRED: |
+    (?<postfix_queueid>[% POSTFIX_QUEUEID %]): from=<(?<postfix_from>[% DATA %])>, status=(?<postfix_status>[% STATUS_WORD %]), returned to sender
+  # Logged by qmgr when a message leaves the queue, and by cleanup when a
+  # message is abandoned before it ever gets there, in which case the reason
+  # follows in parentheses: "842C71C5ADD: removed (canceled)".
+  POSTFIX_REMOVED: |
+    (?<postfix_queueid>[% POSTFIX_QUEUEID %]): removed( \((?<postfix_removed_reason>[% GREEDYDATA %])\))?
+  # The two forms a relay is logged in: "host[addr]:port" for a network peer and
+  # a bare service name such as "local" or "virtual" for an internal transport.
+  #
+  # The whole thing is wrapped in a non-capturing group because every user of it
+  # embeds it mid-pattern. Without the wrapper the top-level alternation binds to
+  # the entire surrounding regexp instead of to this primitive, so "connect to
+  # mx.example.com[192.0.2.5]:25: Connection refused" would match only as far as
+  # the port and then fail the anchor.
+  POSTFIX_RELAY_INFO: |
+    (?:(?<postfix_relay_hostname>[% HOSTNAME %])?\[((?<postfix_relay_ip>[% IP %])|(?<postfix_relay_service>[% DATA %]))\](:(?<postfix_relay_port>[% INT %]))?|(?<postfix_relay_service>[% WORD %]))
+  POSTFIX_SCACHE: |
+    [% POSTFIX_SCACHE_LOOKUPS %]|[% POSTFIX_SCACHE_SIMULTANEOUS %]|[% POSTFIX_SCACHE_TIMESTAMP %]|[% POSTFIX_WARNING %]
+  POSTFIX_SCACHE_LOOKUPS: |
+    statistics: (address|domain) lookup hits=(?<postfix_scache_hits>[% INT %]) miss=(?<postfix_scache_miss>[% INT %]) success=(?<postfix_scache_success>[% INT %])%
+  POSTFIX_SCACHE_SIMULTANEOUS: |
+    statistics: max simultaneous domains=(?<postfix_scache_domains>[% INT %]) addresses=(?<postfix_scache_addresses>[% INT %]) connection=(?<postfix_scache_connection>[% INT %])
+  POSTFIX_SCACHE_TIMESTAMP: |
+    statistics: start interval (?<postfix_scache_timestamp>[% SYSLOGTIMESTAMP %])
+  POSTFIX_SENDMAIL: "[% POSTFIX_WARNING %]\n"
+  POSTFIX_SMTP: |
+    [% POSTFIX_SMTP_DELIVERY %]|[% POSTFIX_SMTP_CONNERR %]|[% POSTFIX_SMTP_SSLCONNERR %]|[% POSTFIX_SMTP_LOSTCONN %]|[% POSTFIX_SMTP_TIMEOUT %]|[% POSTFIX_SMTP_RELAYERR %]|[% POSTFIX_TLSCONN %]|[% POSTFIX_COMPAT %]|[% POSTFIX_WARNING %]|[% POSTFIX_SMTP_UTF8 %]|[% POSTFIX_TLSVERIFICATION %]
+  POSTFIX_SMTPD: |
+    [% POSTFIX_SMTPD_CONNECT %]|[% POSTFIX_SMTPD_DISCONNECT %]|[% POSTFIX_SMTPD_LOSTCONN %]|[% POSTFIX_SMTPD_NOQUEUE %]|[% POSTFIX_SMTPD_PIPELINING %]|[% POSTFIX_TLSCONN %]|[% POSTFIX_COMPAT %]|[% POSTFIX_WARNING %]|[% POSTFIX_SMTPD_PROXY %]|[% POSTFIX_KEYVALUE %]
+  POSTFIX_SMTPD_CONNECT: |
+    connect from [% POSTFIX_CLIENT_INFO %]
+  POSTFIX_SMTPD_DISCONNECT: |
+    disconnect from [% POSTFIX_CLIENT_INFO %]( (?<postfix_command_counter_data>[% GREEDYDATA %]))?
+  # Postfix 3.x puts the queue id in front of these, and for a session that
+  # never got as far as a queue file that id is the literal NOQUEUE:
+  #
+  #   NOQUEUE: lost connection after AUTH from unknown[192.0.2.5]
+  #   NOQUEUE: timeout after CONNECT from unknown[192.0.2.5]
+  #
+  # Older releases logged the same line without the prefix, so it is optional.
+  POSTFIX_SMTPD_LOSTCONN: |
+    ((?<postfix_queueid>[% POSTFIX_QUEUEID %]): )?(?<postfix_smtpd_lostconn_data>[% POSTFIX_LOSTCONN %])( after (?<postfix_smtp_stage>[% POSTFIX_SMTP_STAGE %])( \([% INT %] bytes\))?)? from [% POSTFIX_CLIENT_INFO %](: (?<postfix_smtpd_lostconn_reason>[% GREEDYDATA %]))?
+  POSTFIX_SMTPD_NOQUEUE: |
+    (?<postfix_queueid>[% POSTFIX_QUEUEID %]): (?<postfix_action>[% POSTFIX_ACTION %]): (?<postfix_smtp_stage>[% POSTFIX_SMTP_STAGE %]) from [% POSTFIX_CLIENT_INFO %]:( (?<postfix_status_code>[% POSTFIX_STATUS_CODE %]) (?<postfix_status_code_enhanced>[% POSTFIX_STATUS_CODE_ENHANCED %]))?( <(?<postfix_status_data>[% DATA %])>:)? ([% POSTFIX_DNSBL_MESSAGE %]|(?<postfix_status_message>[% GREEDYDATA %]);) (?<postfix_keyvalue_data>[% POSTFIX_KEYVALUE_DATA %])
+  POSTFIX_SMTPD_PIPELINING: |
+    improper command pipelining after (?<postfix_smtp_stage>[% POSTFIX_SMTP_STAGE %]) from [% POSTFIX_CLIENT_INFO %]: (?<postfix_improper_pipelining_data>[% GREEDYDATA %])
+  POSTFIX_SMTPD_PROXY: |
+    proxy-(?<postfix_proxy_result>[% POSTFIX_ACTION %]): ((?<postfix_proxy_smtp_stage>[% POSTFIX_SMTP_STAGE %])): (?<postfix_proxy_message>[% POSTFIX_PROXY_MESSAGE %]); (?<postfix_keyvalue_data>[% POSTFIX_KEYVALUE_DATA %])
+  POSTFIX_SMTP_CONNERR: |
+    connect to [% POSTFIX_RELAY_INFO %]: (?<postfix_smtp_lostconn_data>[% POSTFIX_LOSTCONN %])
+  POSTFIX_SMTP_DELIVERY: |
+    [% POSTFIX_KEYVALUE %] status=(?<postfix_status>[% STATUS_WORD %])( \((?<postfix_smtp_response>[% GREEDYDATA %])\))?
+  POSTFIX_SMTP_LOSTCONN: |
+    (?<postfix_queueid>[% POSTFIX_QUEUEID %]): (?<postfix_smtp_lostconn_data>[% POSTFIX_LOSTCONN %]) with [% POSTFIX_RELAY_INFO %]( while (?<postfix_smtp_lostconn_reason>[% POSTFIX_LOSTCONN_REASONS %]))?
+  POSTFIX_SMTP_RELAYERR: |
+    (?<postfix_queueid>[% POSTFIX_QUEUEID %]): host [% POSTFIX_RELAY_INFO %] said: (?<postfix_smtp_response>[% GREEDYDATA %]) \(in reply to (?<postfix_smtp_stage>[% POSTFIX_SMTP_STAGE %]) command\)
+  POSTFIX_SMTP_SSLCONNERR: |
+    SSL_connect error to [% POSTFIX_RELAY_INFO %]: (?<postfix_smtp_lostconn_data>[% POSTFIX_LOSTCONN %])
+  POSTFIX_SMTP_TIMEOUT: |
+    (?<postfix_queueid>[% POSTFIX_QUEUEID %]): conversation with [% POSTFIX_RELAY_INFO %] timed out( while (?<postfix_smtp_lostconn_reason>[% POSTFIX_LOSTCONN_REASONS %]))?
+  POSTFIX_SMTP_UTF8: |
+    host [% POSTFIX_RELAY_INFO %] offers SMTPUTF8 support, but not 8BITMIME
+  POSTFIX_TIME_UNIT: "[% NUMBER %][smhd]\n"
+  POSTFIX_TLSCONN: |
+    (Anonymous|Trusted|Untrusted|Verified) TLS connection established (to [% POSTFIX_RELAY_INFO %]|from [% POSTFIX_CLIENT_INFO %]): (?<postfix_tls_version>[% DATA %]) with cipher (?<postfix_tls_cipher>[% DATA %]) \((?<postfix_tls_cipher_size>[% DATA %]) bits\)
+  POSTFIX_TLSMGR: "[% POSTFIX_WARNING %]\n"
+  POSTFIX_TLSPROXY: |
+    [% POSTFIX_TLSPROXY_CONN %]|[% POSTFIX_WARNING %]
+  POSTFIX_TLSPROXY_CONN: |
+    (DIS)?CONNECT( from)? [% POSTFIX_CLIENT_INFO %]
+  POSTFIX_TLSVERIFICATION: |
+    certificate verification failed for [% POSTFIX_RELAY_INFO %]: (?<postfix_tls_error>[% GREEDYDATA %])
+  POSTFIX_TRIVIAL_REWRITE: "[% POSTFIX_WARNING %]\n"
+  POSTFIX_VIRTUAL: |
+    [% POSTFIX_SMTP_DELIVERY %]|[% POSTFIX_WARNING %]
+  POSTFIX_WARNING: |
+    [% POSTFIX_WARNING_WITH_KV %]|[% POSTFIX_WARNING_WITHOUT_KV %]
+  POSTFIX_WARNING_WITHOUT_KV: |
+    ((?<postfix_queueid>[% POSTFIX_QUEUEID %]): )?(?<postfix_message_level>[% POSTFIX_WARNING_LEVEL %]): ([% POSTFIX_CLIENT_INFO %]: )?(?<postfix_message>[% GREEDYDATA %])
+  POSTFIX_WARNING_WITH_KV: |
+    ((?<postfix_queueid>[% POSTFIX_QUEUEID %]): )?(?<postfix_message_level>[% POSTFIX_WARNING_LEVEL %]): ([% POSTFIX_CLIENT_INFO %]: )?(?<postfix_message>[% GREEDYDATA %]); (?<postfix_keyvalue_data>[% POSTFIX_KEYVALUE_DATA %])
+# Any rule that captures one of these fields gets a geoip lookup on it.
+geoip:
+  - postfix_client_ip
+  - postfix_orig_client_ip
+  - postfix_relay_ip
+# After a rule matches, break these captured fields down further (mirrors the
+# logstash postfix kv + re-grok post-processing). Order matters -- the kv
+# split produces postfix_relay/postfix_delays, which the later pattern entries
+# then decompose.
+decompose:
+  - field: postfix_keyvalue_data
+    type: kv
+    prefix: 'postfix_'
+    trim: '<>,'
+    remove: true
+    tests:
+      - input: 'to=<a@b.com>, orig_to=<c@d.com>, relay=mx.example.com[1.2.3.4]:25, delay=0.12, delays=0.05/0/0/0.07, dsn=2.0.0,'
+        result:
+          postfix_to: 'a@b.com'
+          postfix_orig_to: 'c@d.com'
+          postfix_relay: 'mx.example.com[1.2.3.4]:25'
+          postfix_delay: '0.12'
+          postfix_delays: '0.05/0/0/0.07'
+          postfix_dsn: '2.0.0'
+      - input: 'client=mail.example[203.0.113.31], sasl_method=LOGIN, sasl_username=neti'
+        result:
+          postfix_client: 'mail.example[203.0.113.31]'
+          postfix_sasl_method: 'LOGIN'
+          postfix_sasl_username: 'neti'
+      - input: 'client=mail.example[203.0.113.31]:56789, sasl_method=PLAIN, sasl_username=neti@example.com, sasl_sender=neti@example.com'
+        result:
+          postfix_client: 'mail.example[203.0.113.31]:56789'
+          postfix_sasl_method: 'PLAIN'
+          postfix_sasl_username: 'neti@example.com'
+          postfix_sasl_sender: 'neti@example.com'
+  - field: postfix_client
+    type: pattern
+    pattern: POSTFIX_CLIENT_INFO
+    remove: true
+    tests:
+      - input: 'mail.example.com[1.2.3.4]:26'
+        result:
+          postfix_client_hostname: 'mail.example.com'
+          postfix_client_ip: '1.2.3.4'
+          postfix_client_port: '26'
+      - input: 'mail.example[203.0.113.31]'
+        result:
+          postfix_client_hostname: 'mail.example'
+          postfix_client_ip: '203.0.113.31'
+      - input: 'unknown[2001:db8::1]'
+        result:
+          postfix_client_hostname: 'unknown'
+          postfix_client_ip: '2001:db8::1'
+  - field: postfix_orig_client
+    type: pattern
+    pattern: POSTFIX_ORIG_CLIENT_INFO
+    remove: true
+    tests:
+      - input: 'mail.example[203.0.113.31]'
+        result:
+          postfix_orig_client_hostname: 'mail.example'
+          postfix_orig_client_ip: '203.0.113.31'
+      - input: 'mail.example.com[192.0.2.5]:26'
+        result:
+          postfix_orig_client_hostname: 'mail.example.com'
+          postfix_orig_client_ip: '192.0.2.5'
+          postfix_orig_client_port: '26'
+      - input: 'unknown[2001:db8::1]'
+        result:
+          postfix_orig_client_hostname: 'unknown'
+          postfix_orig_client_ip: '2001:db8::1'
+  - field: postfix_relay
+    type: pattern
+    pattern: POSTFIX_RELAY_INFO
+    remove: true
+    tests:
+      - input: 'mx.example.com[1.2.3.4]:25'
+        result:
+          postfix_relay_hostname: 'mx.example.com'
+          postfix_relay_ip: '1.2.3.4'
+          postfix_relay_port: '25'
+  - field: postfix_delays
+    type: pattern
+    pattern: POSTFIX_DELAYS
+    remove: true
+    tests:
+      - input: '0.05/0/0/0.07'
+        result:
+          postfix_delay_before_qmgr: '0.05'
+          postfix_delay_in_qmgr: '0'
+          postfix_delay_conn_setup: '0'
+          postfix_delay_transmission: '0.07'
+  - field: postfix_command_counter_data
+    type: pattern
+    pattern: POSTFIX_COMMAND_COUNTER_DATA
+    remove: true
+    tests:
+      - input: 'ehlo=1 mail=1 rcpt=0/1 data=0/1 quit=1 commands=3/5'
+        result:
+          postfix_cmd_ehlo: '1'
+          postfix_cmd_mail: '1'
+          postfix_cmd_rcpt_accepted: '0'
+          postfix_cmd_rcpt: '1'
+          postfix_cmd_data_accepted: '0'
+          postfix_cmd_data: '1'
+          postfix_cmd_quit: '1'
+          postfix_cmd_count_accepted: '3'
+          postfix_cmd_count: '5'
+rules:
+  - name: postfix_smtpd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/smtpd$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_SMTPD
+    tests:
+      positive:
+        - string: 'connect from unknown[192.0.2.5]'
+          program: 'postfix/smtpd'
+          result:
+            postfix_client_hostname: 'unknown'
+            postfix_client_ip: '192.0.2.5'
+        - string: 'disconnect from unknown[192.0.2.5]'
+          program: 'postfix-out/smtpd'
+          result:
+            postfix_client_hostname: 'unknown'
+            postfix_client_ip: '192.0.2.5'
+        - string: 'NOQUEUE: reject: RCPT from unknown[192.0.2.5]: 554 5.7.1 <spam@x>: Relay access denied; from=<a@b> to=<c@d> proto=ESMTP helo=<x>'
+          enriched:
+            postfix_action: 'reject'
+            postfix_client_hostname: 'unknown'
+            postfix_client_ip: '192.0.2.5'
+            postfix_from: 'a@b'
+            postfix_helo: 'x'
+            postfix_proto: 'ESMTP'
+            postfix_queueid: 'NOQUEUE'
+            postfix_smtp_stage: 'RCPT'
+            postfix_status_code: '554'
+            postfix_status_code_enhanced: '5.7.1'
+            postfix_status_data: 'spam@x'
+            postfix_status_message: 'Relay access denied'
+            postfix_to: 'c@d'
+          result:
+            postfix_action: 'reject'
+            postfix_client_hostname: 'unknown'
+            postfix_client_ip: '192.0.2.5'
+            postfix_keyvalue_data: 'from=<a@b> to=<c@d> proto=ESMTP helo=<x>'
+            postfix_queueid: 'NOQUEUE'
+            postfix_smtp_stage: 'RCPT'
+            postfix_status_code: '554'
+            postfix_status_code_enhanced: '5.7.1'
+            postfix_status_data: 'spam@x'
+            postfix_status_message: 'Relay access denied'
+        - string: 'Anonymous TLS connection established from unknown[192.0.2.5]: TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)'
+          result:
+            postfix_client_hostname: 'unknown'
+            postfix_client_ip: '192.0.2.5'
+            postfix_tls_cipher: 'TLS_AES_256_GCM_SHA384'
+            postfix_tls_cipher_size: '256/256'
+            postfix_tls_version: 'TLSv1.3'
+        - string: '4Zx1Qk2Y3Zz0jK: client=mail.example[203.0.113.31], sasl_method=LOGIN, sasl_username=neti'
+          result:
+            postfix_keyvalue_data: 'client=mail.example[203.0.113.31], sasl_method=LOGIN, sasl_username=neti'
+            postfix_queueid: '4Zx1Qk2Y3Zz0jK'
+        - string: '4Zx1Qk2Y3Zz0jK: client=mail.example[203.0.113.31]:56789, sasl_method=PLAIN, sasl_username=neti@example.com, sasl_sender=neti@example.com'
+          enriched:
+            postfix_client_hostname: 'mail.example'
+            postfix_client_ip: '203.0.113.31'
+            postfix_client_port: '56789'
+            postfix_queueid: '4Zx1Qk2Y3Zz0jK'
+            postfix_sasl_method: 'PLAIN'
+            postfix_sasl_sender: 'neti@example.com'
+            postfix_sasl_username: 'neti@example.com'
+          result:
+            postfix_keyvalue_data: 'client=mail.example[203.0.113.31]:56789, sasl_method=PLAIN, sasl_username=neti@example.com, sasl_sender=neti@example.com'
+            postfix_queueid: '4Zx1Qk2Y3Zz0jK'
+        - string: '3F8B2A9C1D5E: client=unknown[192.0.2.5]'
+          result:
+            postfix_keyvalue_data: 'client=unknown[192.0.2.5]'
+            postfix_queueid: '3F8B2A9C1D5E'
+        - string: '4Zx1Qk2Y3Zz0jK: client=localhost[127.0.0.1], orig_queue_id=3F8B2A9C1D5E, orig_client=mail.example[203.0.113.31]'
+          enriched:
+            postfix_client_hostname: 'localhost'
+            postfix_client_ip: '127.0.0.1'
+            postfix_orig_client_hostname: 'mail.example'
+            postfix_orig_client_ip: '203.0.113.31'
+            postfix_orig_queue_id: '3F8B2A9C1D5E'
+            postfix_queueid: '4Zx1Qk2Y3Zz0jK'
+          result:
+            postfix_keyvalue_data: 'client=localhost[127.0.0.1], orig_queue_id=3F8B2A9C1D5E, orig_client=mail.example[203.0.113.31]'
+            postfix_queueid: '4Zx1Qk2Y3Zz0jK'
+      negative:
+        - 'this is not a valid smtpd line at all'
+        - 'junk before 4Zx1Qk2Y3Zz0jK: client=mail.example[203.0.113.31], sasl_username=neti'
+        - string: 'connect from unknown[192.0.2.5]'
+          program: 'postfix-extra'
+
+  - name: postfix_smtp
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/smtp$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_SMTP
+    tests:
+      positive:
+        - string: '3F8B2A9C1D5E: to=<u@x.com>, relay=mx.x.com[198.51.100.2]:25, delay=1.2, status=sent (250 ok)'
+          enriched:
+            postfix_delay: '1.2'
+            postfix_queueid: '3F8B2A9C1D5E'
+            postfix_relay_hostname: 'mx.x.com'
+            postfix_relay_ip: '198.51.100.2'
+            postfix_relay_port: '25'
+            postfix_smtp_response: '250 ok'
+            postfix_status: 'sent'
+            postfix_to: 'u@x.com'
+          program: 'postfix/smtp'
+          result:
+            postfix_keyvalue_data: 'to=<u@x.com>, relay=mx.x.com[198.51.100.2]:25, delay=1.2,'
+            postfix_queueid: '3F8B2A9C1D5E'
+            postfix_smtp_response: '250 ok'
+            postfix_status: 'sent'
+        - string: '3F8B2A9C1D5E: host mx.x.com[198.51.100.2] said: 451 try again (in reply to RCPT TO command)'
+          program: 'postfix-out/smtp'
+          result:
+            postfix_queueid: '3F8B2A9C1D5E'
+            postfix_relay_hostname: 'mx.x.com'
+            postfix_relay_ip: '198.51.100.2'
+            postfix_smtp_response: '451 try again'
+            postfix_smtp_stage: 'RCPT TO'
+      negative:
+        - 'this is not a valid smtp line at all'
+        - string: '3F8B2A9C1D5E: to=<u@x.com>, relay=mx.x.com[198.51.100.2]:25, delay=1.2, status=sent (250 ok)'
+          program: 'postfix-extra'
+
+  - name: postfix_lmtp
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/lmtp$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_LMTP
+    tests:
+      positive:
+        - string: '3F8B2A9C1D5E: to=<u@x.com>, relay=mx.x.com[198.51.100.2]:25, delay=1.2, status=sent (250 ok)'
+          enriched:
+            postfix_delay: '1.2'
+            postfix_queueid: '3F8B2A9C1D5E'
+            postfix_relay_hostname: 'mx.x.com'
+            postfix_relay_ip: '198.51.100.2'
+            postfix_relay_port: '25'
+            postfix_smtp_response: '250 ok'
+            postfix_status: 'sent'
+            postfix_to: 'u@x.com'
+          program: 'postfix/lmtp'
+          result:
+            postfix_keyvalue_data: 'to=<u@x.com>, relay=mx.x.com[198.51.100.2]:25, delay=1.2,'
+            postfix_queueid: '3F8B2A9C1D5E'
+            postfix_smtp_response: '250 ok'
+            postfix_status: 'sent'
+        - string: '3F8B2A9C1D5E: host mx.x.com[198.51.100.2] said: 451 try again (in reply to RCPT TO command)'
+          program: 'postfix-out/lmtp'
+          result:
+            postfix_queueid: '3F8B2A9C1D5E'
+            postfix_relay_hostname: 'mx.x.com'
+            postfix_relay_ip: '198.51.100.2'
+            postfix_smtp_response: '451 try again'
+            postfix_smtp_stage: 'RCPT TO'
+      negative:
+        - 'this is not a valid lmtp line at all'
+        - string: '3F8B2A9C1D5E: to=<u@x.com>, relay=mx.x.com[198.51.100.2]:25, delay=1.2, status=sent (250 ok)'
+          program: 'postfix-extra'
+
+  - name: postfix_qmgr
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/qmgr$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_QMGR
+    tests:
+      positive:
+        - string: '3F8B2A9C1D5E: removed'
+          program: 'postfix/qmgr'
+          result:
+            postfix_queueid: '3F8B2A9C1D5E'
+        - string: '3F8B2A9C1D5E: from=<a@b.com>, size=1234, nrcpt=1 (queue active)'
+          enriched:
+            postfix_from: 'a@b.com'
+            postfix_nrcpt: '1'
+            postfix_queueid: '3F8B2A9C1D5E'
+            postfix_size: '1234'
+          program: 'postfix-out/qmgr'
+          result:
+            postfix_keyvalue_data: 'from=<a@b.com>, size=1234, nrcpt=1'
+            postfix_queueid: '3F8B2A9C1D5E'
+        - string: '3F8B2A9C1D5E: from=<a@b.com>, status=expired, returned to sender'
+          result:
+            postfix_from: 'a@b.com'
+            postfix_queueid: '3F8B2A9C1D5E'
+            postfix_status: 'expired'
+      negative:
+        - 'this is not a valid qmgr line at all'
+        - string: '3F8B2A9C1D5E: removed'
+          program: 'postfix-extra'
+
+  - name: postfix_cleanup
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/cleanup$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_CLEANUP
+    tests:
+      positive:
+        - string: '3F8B2A9C1D5E: message-id=<20260715.deadbeef@x.com>'
+          program: 'postfix/cleanup'
+          result:
+            postfix_message_id: '20260715.deadbeef@x.com'
+            postfix_queueid: '3F8B2A9C1D5E'
+        - string: '3F8B2A9C1D5E: milter-reject: END-OF-MESSAGE; from=<a@b> to=<c@d>'
+          enriched:
+            postfix_from: 'a@b'
+            postfix_milter_message: 'END-OF-MESSAGE'
+            postfix_milter_result: 'reject'
+            postfix_queueid: '3F8B2A9C1D5E'
+            postfix_to: 'c@d'
+          program: 'postfix-out/cleanup'
+          result:
+            postfix_keyvalue_data: 'from=<a@b> to=<c@d>'
+            postfix_milter_message: 'END-OF-MESSAGE'
+            postfix_milter_result: 'reject'
+            postfix_queueid: '3F8B2A9C1D5E'
+        # a table postfix could not read, at the error level
+        - string: 'error: unable to look up table hash:/etc/postfix/canonical: No such file or directory'
+          program: 'postfix/cleanup'
+          result:
+            postfix_message: 'unable to look up table hash:/etc/postfix/canonical: No such file or directory'
+            postfix_message_level: 'error'
+        # and the same level carrying a queue id
+        - string: '3F8B2A9C1D5E: error: too many hops'
+          program: 'postfix/cleanup'
+          result:
+            postfix_message: 'too many hops'
+            postfix_message_level: 'error'
+            postfix_queueid: '3F8B2A9C1D5E'
+      negative:
+        - 'this is not a valid cleanup line at all'
+        - string: '3F8B2A9C1D5E: message-id=<20260715.deadbeef@x.com>'
+          program: 'postfix-extra'
+
+  - name: postfix_anvil
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/anvil$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_ANVIL
+    tests:
+      positive:
+        - string: 'statistics: max connection rate 3/60s for (smtp:192.0.2.5) at Jul 15 10:00:00'
+          program: 'postfix/anvil'
+          result:
+            postfix_anvil_conn_period: '60s'
+            postfix_anvil_conn_rate: '3'
+            postfix_anvil_timestamp: 'Jul 15 10:00:00'
+            postfix_client_ip: '192.0.2.5'
+            postfix_service: 'smtp'
+        - string: 'statistics: max connection count 5 for (smtp:192.0.2.5) at Jul 15 10:00:00'
+          program: 'postfix-out/anvil'
+          result:
+            postfix_anvil_conn_count: '5'
+            postfix_anvil_timestamp: 'Jul 15 10:00:00'
+            postfix_client_ip: '192.0.2.5'
+            postfix_service: 'smtp'
+        - string: 'statistics: max cache size 7 at Jul 15 10:00:00'
+          result:
+            postfix_anvil_cache_size: '7'
+            postfix_anvil_timestamp: 'Jul 15 10:00:00'
+      negative:
+        - 'this is not a valid anvil line at all'
+        - string: 'statistics: max connection rate 3/60s for (smtp:192.0.2.5) at Jul 15 10:00:00'
+          program: 'postfix-extra'
+  - name: postfix_bounce
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/bounce$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_BOUNCE
+    tests:
+      positive:
+        - string: '3F8B2A9C1D5E: sender non-delivery notification: 4A2B1C6D7E8F'
+          program: 'postfix/bounce'
+          result:
+            postfix_bounce_queueid: '4A2B1C6D7E8F'
+            postfix_queueid: '3F8B2A9C1D5E'
+        - string: 'ABCDEF123456: sender delay notification: 112233445566'
+          program: 'postfix-out/bounce'
+          result:
+            postfix_bounce_queueid: '112233445566'
+            postfix_queueid: 'ABCDEF123456'
+        - string: 'A1B2C3D4E5F6: sender delivery status notification: 0F1E2D3C4B5A'
+          result:
+            postfix_bounce_queueid: '0F1E2D3C4B5A'
+            postfix_queueid: 'A1B2C3D4E5F6'
+      negative:
+        - 'this is not a valid bounce line at all'
+        - string: '3F8B2A9C1D5E: sender non-delivery notification: 4A2B1C6D7E8F'
+          program: 'postfix-extra'
+
+  - name: postfix_dnsblog
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/dnsblog$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_DNSBLOG
+    tests:
+      positive:
+        - string: 'addr 192.0.2.5 listed by domain zen.spamhaus.org as 127.0.0.2'
+          program: 'postfix/dnsblog'
+          result:
+            postfix_client_ip: '192.0.2.5'
+            postfix_dnsbl_domain: 'zen.spamhaus.org'
+            postfix_dnsbl_result: '127.0.0.2'
+        - string: 'warning: dnsblog_query: lookup error'
+          program: 'postfix-out/dnsblog'
+          result:
+            postfix_message: 'dnsblog_query: lookup error'
+            postfix_message_level: 'warning'
+      negative:
+        - 'this is not a valid dnsblog line at all'
+        - string: 'addr 192.0.2.5 listed by domain zen.spamhaus.org as 127.0.0.2'
+          program: 'postfix-extra'
+
+  - name: postfix_error
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/error$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_ERROR
+    tests:
+      positive:
+        - string: '3F8B2A9C1D5E: to=<u@x.com>, relay=none, delay=0.1, status=bounced (bad address)'
+          enriched:
+            postfix_delay: '0.1'
+            postfix_error_response: 'bad address'
+            postfix_queueid: '3F8B2A9C1D5E'
+            postfix_relay_service: 'none'
+            postfix_status: 'bounced'
+            postfix_to: 'u@x.com'
+          program: 'postfix/error'
+          result:
+            postfix_error_response: 'bad address'
+            postfix_keyvalue_data: 'to=<u@x.com>, relay=none, delay=0.1'
+            postfix_queueid: '3F8B2A9C1D5E'
+            postfix_status: 'bounced'
+        - string: 'ABCDEF123456: to=<x@y.org>, relay=none, delay=2.3, delays=0/0/0/0, dsn=5.0.0, status=bounced (User unknown in local recipient table)'
+          enriched:
+            postfix_delay: '2.3'
+            postfix_delay_before_qmgr: '0'
+            postfix_delay_conn_setup: '0'
+            postfix_delay_in_qmgr: '0'
+            postfix_delay_transmission: '0'
+            postfix_dsn: '5.0.0'
+            postfix_error_response: 'User unknown in local recipient table'
+            postfix_queueid: 'ABCDEF123456'
+            postfix_relay_service: 'none'
+            postfix_status: 'bounced'
+            postfix_to: 'x@y.org'
+          program: 'postfix-out/error'
+          result:
+            postfix_error_response: 'User unknown in local recipient table'
+            postfix_keyvalue_data: 'to=<x@y.org>, relay=none, delay=2.3, delays=0/0/0/0, dsn=5.0.0'
+            postfix_queueid: 'ABCDEF123456'
+            postfix_status: 'bounced'
+      negative:
+        - 'this is not a valid error line at all'
+        - string: '3F8B2A9C1D5E: to=<u@x.com>, relay=none, delay=0.1, status=bounced (bad address)'
+          program: 'postfix-extra'
+
+  - name: postfix_local
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/local$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_LOCAL
+    tests:
+      positive:
+        - string: '3F8B2A9C1D5E: to=<u@x.com>, relay=local, delay=0.1, status=sent (delivered to mailbox)'
+          enriched:
+            postfix_delay: '0.1'
+            postfix_queueid: '3F8B2A9C1D5E'
+            postfix_relay_service: 'local'
+            postfix_status: 'sent'
+            postfix_to: 'u@x.com'
+          program: 'postfix/local'
+          result:
+            postfix_keyvalue_data: 'to=<u@x.com>, relay=local, delay=0.1, status=sent (delivered to mailbox)'
+            postfix_queueid: '3F8B2A9C1D5E'
+        - string: 'warning: dict_nis_init: NIS domain name not set'
+          program: 'postfix-out/local'
+          result:
+            postfix_message: 'dict_nis_init: NIS domain name not set'
+            postfix_message_level: 'warning'
+      negative:
+        - 'this is not a valid local line at all'
+        - string: '3F8B2A9C1D5E: to=<u@x.com>, relay=local, delay=0.1, status=sent (delivered to mailbox)'
+          program: 'postfix-extra'
+
+  - name: postfix_master
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/master$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_MASTER
+    tests:
+      positive:
+        - string: 'daemon started -- version 3.5.6, configuration /etc/postfix'
+          program: 'postfix/master'
+          result:
+            postfix_config_path: '/etc/postfix'
+            postfix_version: '3.5.6'
+        - string: 'terminating on signal 15'
+          program: 'postfix-out/master'
+          result:
+            postfix_termination_signal: '15'
+        - string: 'warning: process /usr/lib/postfix/smtpd pid 1234 exit status 1'
+          result:
+            postfix_message: 'process /usr/lib/postfix/smtpd pid 1234 exit status 1'
+            postfix_message_level: 'warning'
+        # postfix reporting its own corrupt state... the message keeps the
+        # function that noticed, the optional client-info group not eating it
+        - string: 'panic: myfree: corrupt or unallocated memory block'
+          result:
+            postfix_message: 'myfree: corrupt or unallocated memory block'
+            postfix_message_level: 'panic'
+      negative:
+        - 'this is not a valid master line at all'
+        - string: 'daemon started -- version 3.5.6, configuration /etc/postfix'
+          program: 'postfix-extra'
+
+  # The postfix(1) command and postfix-script. Which program name these arrive
+  # under depends on how the start-up script was invoked: the bare "postfix" or
+  # "postfix-script" on some systems, "postfix/postfix-script" on others, so
+  # the gate has to allow both. What comes out of them is the compatibility
+  # banner and the odd warning.
+  - name: postfix_command
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix(-script)?$//'
+          - '//^postfix.*/postfix-script$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_COMPAT
+      - POSTFIX_WARNING
+    tests:
+      positive:
+        - string: 'Postfix is using backwards-compatible default settings'
+          program: 'postfix'
+          result:
+            postfix_compat_message: 'Postfix is using backwards-compatible default settings'
+        - string: 'See https://www.postfix.org/COMPATIBILITY_README.html for details'
+          program: 'postfix-script'
+          result:
+            postfix_compat_message: 'See https://www.postfix.org/COMPATIBILITY_README.html for details'
+        - string: 'warning: /etc/postfix/main.cf, line 42: overriding earlier entry'
+          program: 'postfix/postfix-script'
+          result:
+            postfix_message: '/etc/postfix/main.cf, line 42: overriding earlier entry'
+            postfix_message_level: 'warning'
+      negative:
+        - 'this is not a valid postfix command line at all'
+        - string: 'Postfix is using backwards-compatible default settings'
+          program: 'postfix-extra'
+
+  # The postfix command-line utilities. None of them has a message format of
+  # its own -- everything they log goes through the same msg_syslog() as the
+  # daemons and comes out as "warning:" / "fatal:" / "info:" -- so they share
+  # one rule rather than getting one apiece. postdrop and postsuper are absent
+  # because they do have message formats of their own and are handled above.
+  - name: postfix_utility
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/(postalias|postcat|postconf|postkick|postlock|postlog|postmap|postmulti|postqueue)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_WARNING
+    tests:
+      positive:
+        - string: 'fatal: open database /etc/postfix/aliases.db: Permission denied'
+          program: 'postfix/postcat'
+          result:
+            postfix_message_level: 'fatal'
+            postfix_message: 'open database /etc/postfix/aliases.db: Permission denied'
+        - string: 'warning: /etc/postfix/main.cf, line 42: overriding earlier entry'
+          program: 'postfix/postlog'
+          result:
+            postfix_message_level: 'warning'
+            postfix_message: '/etc/postfix/main.cf, line 42: overriding earlier entry'
+      negative:
+        - 'this is not a valid postfix utility line at all'
+        - string: 'fatal: open database /etc/postfix/aliases.db: Permission denied'
+          program: 'postfix-extra'
+
+  - name: postfix_pickup
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/pickup$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_PICKUP
+    tests:
+      positive:
+        - string: '3F8B2A9C1D5E: uid=0 from=<root>'
+          enriched:
+            postfix_from: 'root'
+            postfix_queueid: '3F8B2A9C1D5E'
+            postfix_uid: '0'
+          program: 'postfix/pickup'
+          result:
+            postfix_keyvalue_data: 'uid=0 from=<root>'
+            postfix_queueid: '3F8B2A9C1D5E'
+        - string: 'ABCDEF123456: uid=1000 from=<alice>'
+          program: 'postfix-out/pickup'
+          result:
+            postfix_keyvalue_data: 'uid=1000 from=<alice>'
+            postfix_queueid: 'ABCDEF123456'
+        - string: 'fatal: scan_dir_push: open directory maildrop: No such file or directory'
+          result:
+            postfix_message_level: 'fatal'
+            postfix_message: 'scan_dir_push: open directory maildrop: No such file or directory'
+      negative:
+        - 'this is not a valid pickup line at all'
+        - string: '3F8B2A9C1D5E: uid=0 from=<root>'
+          program: 'postfix-extra'
+  - name: postfix_pipe
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/pipe$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_PIPE
+    tests:
+      positive:
+        - string: '3F8B2A9C1D5E: to=<u@x.com>, relay=dovecot, delay=0.1, status=sent (delivered via dovecot service)'
+          enriched:
+            postfix_delay: '0.1'
+            postfix_pipe_response: 'delivered via dovecot service'
+            postfix_queueid: '3F8B2A9C1D5E'
+            postfix_relay_service: 'dovecot'
+            postfix_status: 'sent'
+            postfix_to: 'u@x.com'
+          program: 'postfix/pipe'
+          result:
+            postfix_keyvalue_data: 'to=<u@x.com>, relay=dovecot, delay=0.1'
+            postfix_pipe_response: 'delivered via dovecot service'
+            postfix_queueid: '3F8B2A9C1D5E'
+            postfix_status: 'sent'
+      negative:
+        - 'this is not a valid pipe line at all'
+        - string: '3F8B2A9C1D5E: to=<u@x.com>, relay=dovecot, delay=0.1, status=sent (delivered via dovecot service)'
+          program: 'postfix-extra'
+
+  - name: postfix_postdrop
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/postdrop$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_POSTDROP
+    tests:
+      positive:
+        - string: 'warning: uid=1000: File too large'
+          program: 'postfix/postdrop'
+          result:
+            postfix_message: 'uid=1000: File too large'
+            postfix_message_level: 'warning'
+        - string: 'warning: uid=1000: File too large; from=<u@x.com>'
+          enriched:
+            postfix_from: 'u@x.com'
+            postfix_message: 'uid=1000: File too large'
+            postfix_message_level: 'warning'
+          program: 'postfix-out/postdrop'
+          result:
+            postfix_keyvalue_data: 'from=<u@x.com>'
+            postfix_message: 'uid=1000: File too large'
+            postfix_message_level: 'warning'
+      negative:
+        - 'this is not a valid postdrop line at all'
+        - string: 'warning: uid=1000: File too large'
+          program: 'postfix-extra'
+
+  - name: postfix_postscreen
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/postscreen$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_POSTSCREEN
+    tests:
+      positive:
+        - string: 'CONNECT from [192.0.2.5]:26 to [198.51.100.2]:25'
+          program: 'postfix/postscreen'
+          result:
+            postfix_client_ip: '192.0.2.5'
+            postfix_client_port: '26'
+            postfix_server_ip: '198.51.100.2'
+            postfix_server_port: '25'
+        - string: 'PASS NEW [192.0.2.5]:26'
+          program: 'postfix-out/postscreen'
+          result:
+            postfix_client_ip: '192.0.2.5'
+            postfix_client_port: '26'
+            postfix_postscreen_access: 'PASS NEW'
+        - string: 'DNSBL rank 3 for [192.0.2.5]:26'
+          result:
+            postfix_client_ip: '192.0.2.5'
+            postfix_client_port: '26'
+            postfix_postscreen_dnsbl_rank: '3'
+            postfix_postscreen_violation: 'DNSBL'
+        - string: 'NOQUEUE: reject: RCPT from [192.0.2.5]:26: 550 5.5.1 Protocol error; from=<a@b.com> to=<c@d.com> proto=ESMTP'
+          enriched:
+            postfix_action: 'reject'
+            postfix_client_ip: '192.0.2.5'
+            postfix_client_port: '26'
+            postfix_from: 'a@b.com'
+            postfix_proto: 'ESMTP'
+            postfix_queueid: 'NOQUEUE'
+            postfix_smtp_stage: 'RCPT'
+            postfix_status_code: '550'
+            postfix_status_code_enhanced: '5.5.1'
+            postfix_status_message: 'Protocol error'
+            postfix_to: 'c@d.com'
+          result:
+            postfix_action: 'reject'
+            postfix_client_ip: '192.0.2.5'
+            postfix_client_port: '26'
+            postfix_keyvalue_data: 'from=<a@b.com> to=<c@d.com> proto=ESMTP'
+            postfix_queueid: 'NOQUEUE'
+            postfix_smtp_stage: 'RCPT'
+            postfix_status_code: '550'
+            postfix_status_code_enhanced: '5.5.1'
+            postfix_status_message: 'Protocol error'
+      negative:
+        - 'this is not a valid postscreen line at all'
+        - string: 'CONNECT from [192.0.2.5]:26 to [198.51.100.2]:25'
+          program: 'postfix-extra'
+
+  - name: postfix_scache
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/scache$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_SCACHE
+    tests:
+      positive:
+        - string: 'statistics: start interval Jul 15 10:00:00'
+          program: 'postfix/scache'
+          result:
+            postfix_scache_timestamp: 'Jul 15 10:00:00'
+        - string: 'statistics: max simultaneous domains=1 addresses=2 connection=3'
+          program: 'postfix-out/scache'
+          result:
+            postfix_scache_addresses: '2'
+            postfix_scache_connection: '3'
+            postfix_scache_domains: '1'
+        - string: 'statistics: domain lookup hits=0 miss=1 success=0%'
+          result:
+            postfix_scache_hits: '0'
+            postfix_scache_miss: '1'
+            postfix_scache_success: '0'
+      negative:
+        - 'this is not a valid scache line at all'
+        - string: 'statistics: start interval Jul 15 10:00:00'
+          program: 'postfix-extra'
+
+  - name: postfix_sendmail
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/sendmail$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_SENDMAIL
+    tests:
+      positive:
+        - string: 'warning: inet_protocols: disabling IPv6 name/address support'
+          program: 'postfix/sendmail'
+          result:
+            postfix_message: 'inet_protocols: disabling IPv6 name/address support'
+            postfix_message_level: 'warning'
+      negative:
+        - 'this is not a valid sendmail line at all'
+        - string: 'warning: inet_protocols: disabling IPv6 name/address support'
+          program: 'postfix-extra'
+
+  - name: postfix_postsuper
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/postsuper$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_POSTSUPER
+    tests:
+      positive:
+        - string: '3F8B2A9C1D5E: removed'
+          program: 'postfix/postsuper'
+          result:
+            postfix_postsuper_action: 'removed'
+            postfix_queueid: '3F8B2A9C1D5E'
+        - string: 'Deleted: 3 messages'
+          program: 'postfix-out/postsuper'
+          result:
+            postfix_postsuper_summary_action: 'Deleted'
+            postfix_postsuper_summary_count: '3'
+      negative:
+        - 'this is not a valid postsuper line at all'
+        - string: '3F8B2A9C1D5E: removed'
+          program: 'postfix-extra'
+  - name: postfix_tlsmgr
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/tlsmgr$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_TLSMGR
+    tests:
+      positive:
+        - string: 'warning: request to update table btree:/var/lib/postfix/smtp_scache in non-postfix directory'
+          program: 'postfix/tlsmgr'
+          result:
+            postfix_message: 'request to update table btree:/var/lib/postfix/smtp_scache in non-postfix directory'
+            postfix_message_level: 'warning'
+        - string: 'fatal: unable to use random device /dev/urandom: No such file or directory'
+          program: 'postfix-out/tlsmgr'
+          result:
+            postfix_message: 'unable to use random device /dev/urandom: No such file or directory'
+            postfix_message_level: 'fatal'
+      negative:
+        - 'this is not a valid tlsmgr line at all'
+        - string: 'warning: request to update table btree:/var/lib/postfix/smtp_scache in non-postfix directory'
+          program: 'postfix-extra'
+
+  - name: postfix_tlsproxy
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/tlsproxy$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_TLSPROXY
+    tests:
+      positive:
+        - string: 'CONNECT from [192.0.2.5]:26'
+          program: 'postfix/tlsproxy'
+          result:
+            postfix_client_ip: '192.0.2.5'
+            postfix_client_port: '26'
+        - string: 'DISCONNECT [192.0.2.5]:26'
+          program: 'postfix-out/tlsproxy'
+          result:
+            postfix_client_ip: '192.0.2.5'
+            postfix_client_port: '26'
+        - string: 'warning: TLS library problem: error:14094418'
+          result:
+            postfix_message: 'TLS library problem: error:14094418'
+            postfix_message_level: 'warning'
+      negative:
+        - 'this is not a valid tlsproxy line at all'
+        - string: 'CONNECT from [192.0.2.5]:26'
+          program: 'postfix-extra'
+
+  - name: postfix_trivial_rewrite
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/trivial-rewrite$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_TRIVIAL_REWRITE
+    tests:
+      positive:
+        - string: 'warning: do not list domain x.com in BOTH mydestination and virtual_mailbox_domains'
+          program: 'postfix/trivial-rewrite'
+          result:
+            postfix_message: 'do not list domain x.com in BOTH mydestination and virtual_mailbox_domains'
+            postfix_message_level: 'warning'
+      negative:
+        - 'this is not a valid trivial-rewrite line at all'
+        - string: 'warning: do not list domain x.com in BOTH mydestination and virtual_mailbox_domains'
+          program: 'postfix-extra'
+
+  - name: postfix_discard
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/discard$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_DISCARD
+    tests:
+      positive:
+        - string: '3F8B2A9C1D5E: to=<u@x.com>, relay=none, delay=0.0, status=sent (x) discard'
+          enriched:
+            postfix_delay: '0.0'
+            postfix_queueid: '3F8B2A9C1D5E'
+            postfix_relay_service: 'none'
+            postfix_status: 'sent'
+            postfix_to: 'u@x.com'
+          program: 'postfix/discard'
+          result:
+            postfix_keyvalue_data: 'to=<u@x.com>, relay=none, delay=0.0,'
+            postfix_queueid: '3F8B2A9C1D5E'
+            postfix_status: 'sent'
+        - string: 'C3D4E5F6A1B2: to=<z@w.com>, relay=none, delay=0.0, delays=0/0/0/0, dsn=2.0.0, status=sent (x) discard'
+          enriched:
+            postfix_delay: '0.0'
+            postfix_delay_before_qmgr: '0'
+            postfix_delay_conn_setup: '0'
+            postfix_delay_in_qmgr: '0'
+            postfix_delay_transmission: '0'
+            postfix_dsn: '2.0.0'
+            postfix_queueid: 'C3D4E5F6A1B2'
+            postfix_relay_service: 'none'
+            postfix_status: 'sent'
+            postfix_to: 'z@w.com'
+          program: 'postfix-out/discard'
+          result:
+            postfix_keyvalue_data: 'to=<z@w.com>, relay=none, delay=0.0, delays=0/0/0/0, dsn=2.0.0,'
+            postfix_queueid: 'C3D4E5F6A1B2'
+            postfix_status: 'sent'
+        - string: 'warning: discard: connection reset'
+          result:
+            postfix_message: 'discard: connection reset'
+            postfix_message_level: 'warning'
+      negative:
+        - 'this is not a valid discard line at all'
+        - string: '3F8B2A9C1D5E: to=<u@x.com>, relay=none, delay=0.0, status=sent (x) discard'
+          program: 'postfix-extra'
+
+  - name: postfix_virtual
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^postfix.*/virtual$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - POSTFIX_VIRTUAL
+    tests:
+      positive:
+        - string: '3F8B2A9C1D5E: to=<u@x.com>, relay=virtual, delay=0.05, status=sent (delivered to maildir)'
+          enriched:
+            postfix_delay: '0.05'
+            postfix_queueid: '3F8B2A9C1D5E'
+            postfix_relay_service: 'virtual'
+            postfix_smtp_response: 'delivered to maildir'
+            postfix_status: 'sent'
+            postfix_to: 'u@x.com'
+          program: 'postfix/virtual'
+          result:
+            postfix_keyvalue_data: 'to=<u@x.com>, relay=virtual, delay=0.05,'
+            postfix_queueid: '3F8B2A9C1D5E'
+            postfix_smtp_response: 'delivered to maildir'
+            postfix_status: 'sent'
+        - string: 'A1B2C3D4E5F6: to=<other@example.org>, orig_to=<x@y>, relay=virtual, delay=0.12, delays=0.05/0/0/0.07, dsn=2.0.0, status=sent (delivered to maildir)'
+          enriched:
+            postfix_delay: '0.12'
+            postfix_delay_before_qmgr: '0.05'
+            postfix_delay_conn_setup: '0'
+            postfix_delay_in_qmgr: '0'
+            postfix_delay_transmission: '0.07'
+            postfix_dsn: '2.0.0'
+            postfix_orig_to: 'x@y'
+            postfix_queueid: 'A1B2C3D4E5F6'
+            postfix_relay_service: 'virtual'
+            postfix_smtp_response: 'delivered to maildir'
+            postfix_status: 'sent'
+            postfix_to: 'other@example.org'
+          program: 'postfix-out/virtual'
+          result:
+            postfix_keyvalue_data: 'to=<other@example.org>, orig_to=<x@y>, relay=virtual, delay=0.12, delays=0.05/0/0/0.07, dsn=2.0.0,'
+            postfix_queueid: 'A1B2C3D4E5F6'
+            postfix_smtp_response: 'delivered to maildir'
+            postfix_status: 'sent'
+        - string: 'B2C3D4E5F6A1: to=<x@y.com>, relay=virtual, delay=0.03, status=bounced (unknown user)'
+          result:
+            postfix_keyvalue_data: 'to=<x@y.com>, relay=virtual, delay=0.03,'
+            postfix_queueid: 'B2C3D4E5F6A1'
+            postfix_smtp_response: 'unknown user'
+            postfix_status: 'bounced'
+      negative:
+        - 'this is not a valid virtual line at all'
+        - string: '3F8B2A9C1D5E: to=<u@x.com>, relay=virtual, delay=0.05, status=sent (delivered to maildir)'
+          program: 'postfix-extra'
+vars_tests:
+  POSTFIX_ACTION:
+    test_template: 'c=(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'a c=accept d'
+        result: 'accept'
+      - string: 'a c=reject d'
+        result: 'reject'
+      - string: 'a c=header-redirect d'
+        result: 'header-redirect'
+    negative:
+      - 'a c=bounce d'
+      - 'a x=accept d'
+  POSTFIX_CLEANUP_PREPEND_TYPE:
+    test_template: 'c=(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'a c=header d'
+        result: 'header'
+      - string: 'a c=body d'
+        result: 'body'
+    negative:
+      - 'a c=trailer d'
+      - 'a x=header d'
+  POSTFIX_KEYVALUE_DATA:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'to=<u@x>, status=sent'
+        result: 'to=<u@x>, status=sent'
+      - string: 'client=host[1.2.3.4]; more'
+        result: 'client=host[1.2.3.4]'
+    negative:
+      - 'just some words'
+      - '=novalue'
+  POSTFIX_LOSTCONN:
+    test_template: 'c=(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'a c=lost connection d'
+        result: 'lost connection'
+      - string: 'a c=Connection timed out d'
+        result: 'Connection timed out'
+      - string: 'a c=No route to host d'
+        result: 'No route to host'
+    negative:
+      - 'a c=all good d'
+      - 'a x=timeout d'
+  POSTFIX_LOSTCONN_REASONS:
+    test_template: 'c=(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'a c=receiving the initial server greeting d'
+        result: 'receiving the initial server greeting'
+      - string: 'a c=sending message body d'
+        result: 'sending message body'
+    negative:
+      - 'a c=doing something else d'
+      - 'a x=sending message body d'
+  POSTFIX_POSTSUPER_ACTIONS:
+    test_template: 'c=(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'a c=removed d'
+        result: 'removed'
+      - string: 'a c=placed on hold d'
+        result: 'placed on hold'
+      - string: 'a c=released from hold d'
+        result: 'released from hold'
+    negative:
+      - 'a c=deleted d'
+      - 'a x=removed d'
+  POSTFIX_POSTSUPER_SUMMARY_ACTIONS:
+    test_template: 'c=(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'a c=Deleted d'
+        result: 'Deleted'
+      - string: 'a c=Placed on hold d'
+        result: 'Placed on hold'
+      - string: 'a c=Released from hold d'
+        result: 'Released from hold'
+    negative:
+      - 'a c=Removed d'
+      - 'a x=Deleted d'
+  POSTFIX_PS_ACCESS_ACTION:
+    test_template: 'c=(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'a c=DISCONNECT d'
+        result: 'DISCONNECT'
+      - string: 'a c=PASS NEW d'
+        result: 'PASS NEW'
+      - string: 'a c=WHITELIST VETO d'
+        result: 'WHITELIST VETO'
+    negative:
+      - 'a c=ACCEPTED d'
+      - 'a x=DISCONNECT d'
+  POSTFIX_PS_VIOLATION:
+    test_template: 'c=(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'a c=BARE NEWLINE d'
+        result: 'BARE NEWLINE'
+      - string: 'a c=COMMAND TIME LIMIT d'
+        result: 'COMMAND TIME LIMIT'
+      - string: 'a c=PREGREET d'
+        result: 'PREGREET'
+    negative:
+      - 'a c=CLEAN d'
+      - 'a x=DNSBL d'
+  POSTFIX_QUEUEID:
+    test_template: 'c=(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'a c=3F8B2A9C1D5E d'
+        result: '3F8B2A9C1D5E'
+      - string: 'a c=4A2B1F d'
+        result: '4A2B1F'
+      - string: 'a c=NOQUEUE d'
+        result: 'NOQUEUE'
+      - string: 'a c=4Zx1Qk2Y3Zz0jK d'
+        result: '4Zx1Qk2Y3Zz0jK'
+    negative:
+      - 'a c=zz d'
+      - 'a x=NOQUEUE d'
+  POSTFIX_SMTP_STAGE:
+    test_template: 'c=(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'a c=CONNECT d'
+        result: 'CONNECT'
+      - string: 'a c=MAIL FROM d'
+        result: 'MAIL FROM'
+      - string: 'a c=end of DATA d'
+        result: 'end of DATA'
+    negative:
+      - 'a c=GREETING d'
+      - 'a x=HELO d'
+  POSTFIX_STATUS_CODE:
+    test_template: 'c=(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'a c=250 d'
+        result: '250'
+      - string: 'a c=550 d'
+        result: '550'
+    negative:
+      - 'a c=25 d'
+      - 'a x=250 d'
+  POSTFIX_STATUS_CODE_ENHANCED:
+    test_template: 'c=(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'a c=2.0.0 d'
+        result: '2.0.0'
+      - string: 'a c=5.7.1 d'
+        result: '5.7.1'
+    negative:
+      - 'a c=2.0 d'
+      - 'a x=2.0.0 d'
+  POSTFIX_TIME_UNIT:
+    test_template: 'c=(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'a c=60s d'
+        result: '60s'
+      - string: 'a c=1h d'
+        result: '1h'
+      - string: 'a c=1.5m d'
+        result: '1.5m'
+    negative:
+      - 'a c=60 d'
+      - 'a x=60s d'
+  POSTFIX_WARNING_LEVEL:
+    test_template: 'c=(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'a c=warning d'
+        result: 'warning'
+      - string: 'a c=error d'
+        result: 'error'
+      - string: 'a c=fatal d'
+        result: 'fatal'
+      - string: 'a c=panic d'
+        result: 'panic'
+      - string: 'a c=info d'
+        result: 'info'
+    negative:
+      - 'a c=debug d'
+      - 'a x=warning d'
+  POSTFIX_ANVIL:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'statistics: max connection rate 3/60s for (smtp:192.0.2.5) at Jul 15 10:00:00'
+        result: 'statistics: max connection rate 3/60s for (smtp:192.0.2.5) at Jul 15 10:00:00'
+      - string: 'statistics: max cache size 42 at Jul 15 10:00:00'
+        result: 'statistics: max cache size 42 at Jul 15 10:00:00'
+      - string: 'statistics: max connection count 5 for (smtp:192.0.2.5) at Jul 15 10:00:00'
+        result: 'statistics: max connection count 5 for (smtp:192.0.2.5) at Jul 15 10:00:00'
+      - string: 'fatal: watchdog timeout'
+        result: 'fatal: watchdog timeout'
+    negative:
+      - 'no anvil stats here at all'
+
+  POSTFIX_ANVIL_CONN_CACHE:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'statistics: max cache size 42 at Jul 15 10:00:00'
+        result: 'statistics: max cache size 42 at Jul 15 10:00:00'
+    negative:
+      - 'no cache line'
+
+  POSTFIX_ANVIL_CONN_COUNT:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'statistics: max connection count 5 for (smtp:192.0.2.5) at Jul 15 10:00:00'
+        result: 'statistics: max connection count 5 for (smtp:192.0.2.5) at Jul 15 10:00:00'
+    negative:
+      - 'random text'
+
+  POSTFIX_ANVIL_CONN_RATE:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'statistics: max connection rate 3/60s for (smtp:192.0.2.5) at Jul 15 10:00:00'
+        result: 'statistics: max connection rate 3/60s for (smtp:192.0.2.5) at Jul 15 10:00:00'
+    negative:
+      - 'random text'
+
+  POSTFIX_BOUNCE:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: sender non-delivery notification: 4A2B1F9C8D7E'
+        result: '3F8B2A9C1D5E: sender non-delivery notification: 4A2B1F9C8D7E'
+      - string: 'warning: cannot find bounce template'
+        result: 'warning: cannot find bounce template'
+    negative:
+      - 'just a plain line'
+
+  POSTFIX_BOUNCE_NOTIFICATION:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: sender non-delivery notification: 4A2B1F9C8D7E'
+        result: '3F8B2A9C1D5E: sender non-delivery notification: 4A2B1F9C8D7E'
+      - string: '4A2B1F: sender delay notification: NOQUEUE'
+        result: '4A2B1F: sender delay notification: NOQUEUE'
+    negative:
+      - 'just a plain line'
+
+  POSTFIX_CLEANUP:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: message-id=<20260715100000.ABCD@example.com>'
+        result: '3F8B2A9C1D5E: message-id=<20260715100000.ABCD@example.com>'
+    negative:
+      - 'zzz'
+
+  POSTFIX_CLEANUP_MESSAGEID:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: message-id=<20260715100000.ABCD@example.com>'
+        result: '3F8B2A9C1D5E: message-id=<20260715100000.ABCD@example.com>'
+    negative:
+      - 'no message id'
+
+  POSTFIX_CLEANUP_MILTER:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: milter-reject: END-OF-MESSAGE; host mail.example.com said: 5.7.1 blocked'
+        result: '3F8B2A9C1D5E: milter-reject: END-OF-MESSAGE; host mail.example.com said: 5.7.1 blocked'
+    negative:
+      - 'no milter'
+
+  POSTFIX_CLEANUP_PREPEND:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: prepend: header Received: from mail.example.com[192.0.2.5]:26; foo: bar'
+        result: '3F8B2A9C1D5E: prepend: header Received: from mail.example.com[192.0.2.5]:26; foo: bar'
+    negative:
+      - 'no prepend'
+
+  POSTFIX_CLIENT_INFO:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'mail.example.com[192.0.2.5]:26'
+        result: 'mail.example.com[192.0.2.5]:26'
+      - string: '[192.0.2.5]'
+        result: '[192.0.2.5]'
+    negative:
+      - 'no client info here'
+
+  POSTFIX_ORIG_CLIENT_INFO:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'mail.example.com[192.0.2.5]:26'
+        result: 'mail.example.com[192.0.2.5]:26'
+      - string: '[192.0.2.5]'
+        result: '[192.0.2.5]'
+    negative:
+      - 'no client info here'
+
+  POSTFIX_COMMAND_COUNTER_DATA:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'helo=1/1 mail=1/1 rcpt=0/1 data=0/1 quit=1 commands=3/5'
+        result: 'helo=1/1 mail=1/1 rcpt=0/1 data=0/1 quit=1 commands=3/5'
+    negative:
+      - 'no counter'
+
+  POSTFIX_DELAYS:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '0.12/0.03/0.05/1.2'
+        result: '0.12/0.03/0.05/1.2'
+      - string: '1/2/3/4'
+        result: '1/2/3/4'
+    negative:
+      - 'no delays'
+
+  POSTFIX_DISCARD:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: to=<user@example.com>, relay=none status=sent (discarded)'
+        result: '3F8B2A9C1D5E: to=<user@example.com>, relay=none status=sent (discarded)'
+    negative:
+      - 'plain'
+
+  POSTFIX_DISCARD_ANY:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: to=<user@example.com>, relay=none status=sent (discarded)'
+        result: '3F8B2A9C1D5E: to=<user@example.com>, relay=none status=sent (discarded)'
+    negative:
+      - 'plain'
+
+  POSTFIX_DNSBLOG:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'addr 192.0.2.5 listed by domain zen.spamhaus.org as 127.0.0.4'
+        result: 'addr 192.0.2.5 listed by domain zen.spamhaus.org as 127.0.0.4'
+    negative:
+      - 'plain'
+
+  POSTFIX_DNSBLOG_LISTING:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'addr 192.0.2.5 listed by domain zen.spamhaus.org as 127.0.0.4'
+        result: 'addr 192.0.2.5 listed by domain zen.spamhaus.org as 127.0.0.4'
+    negative:
+      - 'plain'
+
+  POSTFIX_DNSBL_MESSAGE:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'Service unavailable; Client host [192.0.2.5] blocked using zen.spamhaus.org; https://example.com'
+        result: 'Service unavailable; Client host [192.0.2.5] blocked using zen.spamhaus.org;'
+    negative:
+      - 'plain'
+
+  POSTFIX_ERROR:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: to=<user@example.com>, relay=none, delay=0.1, status=bounced (mailbox full)'
+        result: '3F8B2A9C1D5E: to=<user@example.com>, relay=none, delay=0.1, status=bounced (mailbox full)'
+      - string: 'fatal: unknown service: error/unix'
+        result: 'fatal: unknown service: error/unix'
+    negative:
+      - 'plain'
+
+  POSTFIX_ERROR_ANY:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: to=<user@example.com>, relay=none, delay=0.1, status=bounced (mailbox full)'
+        result: '3F8B2A9C1D5E: to=<user@example.com>, relay=none, delay=0.1, status=bounced (mailbox full)'
+    negative:
+      - 'plain'
+  POSTFIX_KEYVALUE:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: to=<u@example.com>, relay=none'
+        result: '3F8B2A9C1D5E: to=<u@example.com>, relay=none'
+    negative:
+      - 'nothing relevant here'
+  POSTFIX_LMTP:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'ABCDEF123456: to=<u@example.com>, relay=local, status=sent (delivered)'
+        result: 'ABCDEF123456: to=<u@example.com>, relay=local, status=sent (delivered)'
+    negative:
+      - ':::'
+  POSTFIX_LOCAL:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'ABCDEF123456: to=<u@example.com>, status=bounced'
+        result: 'ABCDEF123456: to=<u@example.com>, status=bounced'
+    negative:
+      - 'nothing relevant here'
+  POSTFIX_MASTER:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'daemon started -- version 3.5.6, configuration /etc/postfix'
+        result: 'daemon started -- version 3.5.6, configuration /etc/postfix'
+    negative:
+      - 'nothing relevant here'
+  POSTFIX_MASTER_EXIT:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'terminating on signal 15'
+        result: 'terminating on signal 15'
+    negative:
+      - 'nothing relevant here'
+  POSTFIX_MASTER_START:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'daemon started -- version 3.5.6, configuration /etc/postfix'
+        result: 'daemon started -- version 3.5.6, configuration /etc/postfix'
+    negative:
+      - 'nothing relevant here'
+  POSTFIX_PICKUP:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'ABCDEF123456: uid=0 from=<root>'
+        result: 'ABCDEF123456: uid=0 from=<root>'
+      - string: 'fatal: scan_dir_push: open directory maildrop: No such file or directory'
+        result: 'fatal: scan_dir_push: open directory maildrop: No such file or directory'
+    negative:
+      - 'nothing relevant here'
+  POSTFIX_PIPE:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'ABCDEF123456: to=<u@example.com>, relay=dovecot, status=sent (delivered via dovecot)'
+        result: 'ABCDEF123456: to=<u@example.com>, relay=dovecot, status=sent (delivered via dovecot)'
+      - string: 'fatal: unknown service: dovecot/unix'
+        result: 'fatal: unknown service: dovecot/unix'
+    negative:
+      - 'nothing relevant here'
+  POSTFIX_PIPE_ANY:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'ABCDEF123456: to=<u@example.com>, relay=dovecot, status=sent (delivered via dovecot)'
+        result: 'ABCDEF123456: to=<u@example.com>, relay=dovecot, status=sent (delivered via dovecot)'
+    negative:
+      - 'nothing relevant here'
+  POSTFIX_POSTDROP:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'warning: unable to look up public/pickup: No such file or directory'
+        result: 'warning: unable to look up public/pickup: No such file or directory'
+    negative:
+      - 'nothing relevant here'
+  POSTFIX_POSTSCREEN:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'CONNECT from [192.0.2.5]:26 to [198.51.100.2]:25'
+        result: 'CONNECT from [192.0.2.5]:26 to [198.51.100.2]:25'
+    negative:
+      - 'nothing relevant here'
+  POSTFIX_POSTSUPER:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: removed'
+        result: '3F8B2A9C1D5E: removed'
+      - string: 'Deleted: 3 messages'
+        result: 'Deleted: 3 messages'
+      - string: 'fatal: Queue report unavailable - mail system is down'
+        result: 'fatal: Queue report unavailable - mail system is down'
+    negative:
+      - 'nothing relevant here'
+  POSTFIX_POSTSUPER_ACTION:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: removed'
+        result: '3F8B2A9C1D5E: removed'
+    negative:
+      - 'nothing relevant here'
+  POSTFIX_POSTSUPER_SUMMARY:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'Deleted: 3 messages'
+        result: 'Deleted: 3 messages'
+    negative:
+      - 'nothing relevant here'
+  POSTFIX_PROXY_MESSAGE:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '250 2.0.0 Ok: queued as ABC'
+        result: '250 2.0.0 Ok: queued as ABC'
+    negative: []
+  POSTFIX_PS_ACCESS:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'WHITELISTED [192.0.2.5]:26'
+        result: 'WHITELISTED [192.0.2.5]:26'
+    negative:
+      - 'nothing relevant here'
+  POSTFIX_PS_CACHE:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'cache btree:/var/lib/postfix/postscreen_cache full cleanup: retained=10 dropped=5 entries'
+        result: 'cache btree:/var/lib/postfix/postscreen_cache full cleanup: retained=10 dropped=5 entries'
+    negative:
+      - 'nothing relevant here'
+  POSTFIX_PS_CONNECT:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'CONNECT from [192.0.2.5]:26 to [198.51.100.2]:25'
+        result: 'CONNECT from [192.0.2.5]:26 to [198.51.100.2]:25'
+    negative:
+      - 'nothing relevant here'
+  POSTFIX_PS_DNSBL:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'DNSBL rank 3 for [192.0.2.5]:26'
+        result: 'DNSBL rank 3 for [192.0.2.5]:26'
+    negative:
+      - 'nothing relevant here'
+  POSTFIX_PS_NOQUEUE:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'NOQUEUE: reject: RCPT from unknown[192.0.2.5]:26: 550 5.7.1 Service unavailable; some message; from=<a@b.com> to=<c@d.com>'
+        result: 'NOQUEUE: reject: RCPT from unknown[192.0.2.5]:26: 550 5.7.1 Service unavailable; some message; from=<a@b.com> to=<c@d.com>'
+    negative:
+      - 'nothing relevant here'
+  POSTFIX_PS_TOOBUSY:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'NOQUEUE: reject: CONNECT from mail.example.com[192.0.2.5]: too many connections'
+        result: 'NOQUEUE: reject: CONNECT from mail.example.com[192.0.2.5]: too many connections'
+    negative:
+      - 'nothing relevant here'
+
+  POSTFIX_PS_VIOLATIONS:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'PREGREET 12 after 0.5 from mail.example.com[192.0.2.5]: EHLO foo'
+        result: 'PREGREET 12 after 0.5 from mail.example.com[192.0.2.5]: EHLO foo'
+    negative:
+      - 'nothing relevant here'
+
+  POSTFIX_QMGR:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: removed'
+        result: '3F8B2A9C1D5E: removed'
+    negative:
+      - 'nothing relevant here'
+
+  POSTFIX_QMGR_ACTIVE:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: from=<u@example.com>, size=1234, nrcpt=1 (queue active)'
+        result: '3F8B2A9C1D5E: from=<u@example.com>, size=1234, nrcpt=1 (queue active)'
+    negative:
+      - 'nothing relevant here'
+
+  POSTFIX_QMGR_EXPIRED:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: from=<u@example.com>, status=expired, returned to sender'
+        result: '3F8B2A9C1D5E: from=<u@example.com>, status=expired, returned to sender'
+    negative:
+      - 'nothing relevant here'
+
+  POSTFIX_REMOVED:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: removed'
+        result: '3F8B2A9C1D5E: removed'
+      - string: '842C71C5ADD: removed (canceled)'
+        result: '842C71C5ADD: removed (canceled)'
+    negative:
+      - 'nothing relevant here'
+
+  POSTFIX_COMPAT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'using backwards-compatible default setting smtp_tls_security_level=(empty)'
+        result: 'using backwards-compatible default setting smtp_tls_security_level=(empty)'
+      - string: 'Postfix is using backwards-compatible default settings'
+        result: 'Postfix is using backwards-compatible default settings'
+    negative:
+      - 'nothing relevant here'
+
+  POSTFIX_COMPAT_SETTING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'using backwards-compatible default setting smtp_tls_security_level=(empty)'
+        result: 'using backwards-compatible default setting smtp_tls_security_level=(empty)'
+      - string: '3F8B2A9C1D5E: using backwards-compatible default setting smtputf8_enable=no'
+        result: '3F8B2A9C1D5E: using backwards-compatible default setting smtputf8_enable=no'
+    negative:
+      - 'Postfix is using backwards-compatible default settings'
+
+  POSTFIX_COMPAT_BANNER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Postfix is using backwards-compatible default settings'
+        result: 'Postfix is using backwards-compatible default settings'
+      - string: 'To disable backwards compatibility use "postconf compatibility_level=3.11" and "postfix reload"'
+        result: 'To disable backwards compatibility use "postconf compatibility_level=3.11" and "postfix reload"'
+      - string: 'See https://www.postfix.org/COMPATIBILITY_README.html for details'
+        result: 'See https://www.postfix.org/COMPATIBILITY_README.html for details'
+    negative:
+      - 'using backwards-compatible default setting smtp_tls_security_level=(empty)'
+
+  POSTFIX_RELAY_INFO:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'mail.example.com[192.0.2.5]:25'
+        result: 'mail.example.com[192.0.2.5]:25'
+    negative:
+      - '@@@ !!! ...'
+
+  POSTFIX_SCACHE:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'statistics: start interval Jul 15 10:00:00'
+        result: 'statistics: start interval Jul 15 10:00:00'
+      - string: 'warning: connection cache: unexpected EOF'
+        result: 'warning: connection cache: unexpected EOF'
+    negative:
+      - 'nothing relevant here'
+
+  POSTFIX_SCACHE_LOOKUPS:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'statistics: address lookup hits=5 miss=3 success=62%'
+        result: 'statistics: address lookup hits=5 miss=3 success=62%'
+    negative:
+      - 'nothing relevant here'
+
+  POSTFIX_SCACHE_SIMULTANEOUS:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'statistics: max simultaneous domains=2 addresses=4 connection=6'
+        result: 'statistics: max simultaneous domains=2 addresses=4 connection=6'
+    negative:
+      - 'nothing relevant here'
+
+  POSTFIX_SCACHE_TIMESTAMP:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'statistics: start interval Jul 15 10:00:00'
+        result: 'statistics: start interval Jul 15 10:00:00'
+    negative:
+      - 'nothing relevant here'
+
+  POSTFIX_SENDMAIL:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'warning: some sendmail warning message'
+        result: 'warning: some sendmail warning message'
+    negative:
+      - 'nothing relevant here'
+
+  POSTFIX_SMTP:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: to=<u@example.com> status=sent'
+        result: '3F8B2A9C1D5E: to=<u@example.com> status=sent'
+    negative:
+      - '@@@ !!! ...'
+
+  POSTFIX_SMTPD:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'connect from mail.example.com[192.0.2.5]'
+        result: 'connect from mail.example.com[192.0.2.5]'
+    negative:
+      - 'nothing relevant here'
+
+  POSTFIX_SMTPD_CONNECT:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'connect from mail.example.com[192.0.2.5]'
+        result: 'connect from mail.example.com[192.0.2.5]'
+    negative:
+      - 'nothing relevant here'
+
+  POSTFIX_SMTPD_DISCONNECT:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'disconnect from mail.example.com[192.0.2.5]'
+        result: 'disconnect from mail.example.com[192.0.2.5]'
+    negative:
+      - 'nothing relevant here'
+
+  POSTFIX_SMTPD_LOSTCONN:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'lost connection after DATA from mail.example.com[192.0.2.5]'
+        result: 'lost connection after DATA from mail.example.com[192.0.2.5]'
+    negative:
+      - 'nothing relevant here'
+
+  POSTFIX_SMTPD_NOQUEUE:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'NOQUEUE: reject: RCPT from mail.example.com[192.0.2.5]: 554 5.7.1 Service unavailable; some reason; from=<a@b.com> to=<c@d.com>'
+        result: 'NOQUEUE: reject: RCPT from mail.example.com[192.0.2.5]: 554 5.7.1 Service unavailable; some reason; from=<a@b.com> to=<c@d.com>'
+    negative:
+      - 'nothing relevant here'
+
+  POSTFIX_SMTPD_PIPELINING:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'improper command pipelining after DATA from mail.example.com[192.0.2.5]: QUIT'
+        result: 'improper command pipelining after DATA from mail.example.com[192.0.2.5]: QUIT'
+    negative:
+      - 'nothing relevant here'
+
+  POSTFIX_SMTPD_PROXY:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'proxy-reject: END-OF-MESSAGE: 550 5.7.1 blocked; from=<a@b.com> to=<c@d.com>'
+        result: 'proxy-reject: END-OF-MESSAGE: 550 5.7.1 blocked; from=<a@b.com> to=<c@d.com>'
+    negative:
+      - 'nothing relevant here'
+  POSTFIX_SMTP_CONNERR:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'connect to mx.example.com[198.51.100.2]:25: Connection refused'
+        result: 'connect to mx.example.com[198.51.100.2]:25: Connection refused'
+    negative:
+      - 'nothing relevant'
+
+  POSTFIX_SMTP_DELIVERY:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: to=<u@example.com>, relay=mx.example.com[198.51.100.2]:25, delay=1.2, status=sent (250 ok)'
+        result: '3F8B2A9C1D5E: to=<u@example.com>, relay=mx.example.com[198.51.100.2]:25, delay=1.2, status=sent (250 ok)'
+    negative:
+      - 'nothing relevant'
+      - 'warning: hostname does not resolve'
+
+  POSTFIX_SMTP_LOSTCONN:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: lost connection with mx.example.com[198.51.100.2]:25 while sending message body'
+        result: '3F8B2A9C1D5E: lost connection with mx.example.com[198.51.100.2]:25 while sending message body'
+    negative:
+      - '!!! ---'
+
+  POSTFIX_SMTP_RELAYERR:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: host mx.example.com[198.51.100.2]:25 said: 550 5.1.1 User unknown (in reply to RCPT TO command)'
+        result: '3F8B2A9C1D5E: host mx.example.com[198.51.100.2]:25 said: 550 5.1.1 User unknown (in reply to RCPT TO command)'
+    negative:
+      - 'nothing relevant'
+
+  POSTFIX_SMTP_SSLCONNERR:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'SSL_connect error to mx.example.com[198.51.100.2]:25: lost connection'
+        result: 'SSL_connect error to mx.example.com[198.51.100.2]:25: lost connection'
+    negative:
+      - 'nothing relevant'
+
+  POSTFIX_SMTP_TIMEOUT:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: conversation with mx.example.com[198.51.100.2]:25 timed out while sending message body'
+        result: '3F8B2A9C1D5E: conversation with mx.example.com[198.51.100.2]:25 timed out while sending message body'
+    negative:
+      - 'nothing relevant'
+
+  POSTFIX_SMTP_UTF8:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'host mx.example.com[198.51.100.2]:25 offers SMTPUTF8 support, but not 8BITMIME'
+        result: 'host mx.example.com[198.51.100.2]:25 offers SMTPUTF8 support, but not 8BITMIME'
+    negative:
+      - 'nothing relevant'
+
+  POSTFIX_TLSCONN:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'Anonymous TLS connection established from mail.example.com[192.0.2.5]: TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)'
+        result: 'Anonymous TLS connection established from mail.example.com[192.0.2.5]: TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)'
+    negative:
+      - 'plain text no tls'
+
+  POSTFIX_TLSMGR:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'warning: request to update table btree:/var/lib/postfix/smtp_scache in non-postfix directory'
+        result: 'warning: request to update table btree:/var/lib/postfix/smtp_scache in non-postfix directory'
+    negative:
+      - 'nothing relevant'
+
+  POSTFIX_TLSPROXY:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'CONNECT from mail.example.com[192.0.2.5]:587'
+        result: 'CONNECT from mail.example.com[192.0.2.5]:587'
+      - string: 'warning: hostname mail.example.com does not resolve'
+        result: 'warning: hostname mail.example.com does not resolve'
+    negative:
+      - 'nothing relevant'
+
+  POSTFIX_TLSPROXY_CONN:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'CONNECT from mail.example.com[192.0.2.5]:587'
+        result: 'CONNECT from mail.example.com[192.0.2.5]:587'
+      - string: 'DISCONNECT mail.example.com[192.0.2.5]'
+        result: 'DISCONNECT mail.example.com[192.0.2.5]'
+    negative:
+      - 'plain text no connect'
+
+  POSTFIX_TLSVERIFICATION:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'certificate verification failed for mx.example.com[198.51.100.2]:25: untrusted issuer /C=US/O=Example'
+        result: 'certificate verification failed for mx.example.com[198.51.100.2]:25: untrusted issuer /C=US/O=Example'
+    negative:
+      - 'nothing relevant'
+
+  POSTFIX_TRIVIAL_REWRITE:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'warning: do not list domain example.com in BOTH mydestination and virtual_mailbox_domains'
+        result: 'warning: do not list domain example.com in BOTH mydestination and virtual_mailbox_domains'
+    negative:
+      - 'nothing relevant'
+
+  POSTFIX_VIRTUAL:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '3F8B2A9C1D5E: to=<u@example.com>, relay=virtual, delay=0.05, status=sent (delivered to maildir)'
+        result: '3F8B2A9C1D5E: to=<u@example.com>, relay=virtual, delay=0.05, status=sent (delivered to maildir)'
+      - string: 'warning: no status here'
+        result: 'warning: no status here'
+    negative:
+      - 'nothing relevant'
+
+  POSTFIX_WARNING:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'warning: hostname mail.example.com does not resolve'
+        result: 'warning: hostname mail.example.com does not resolve'
+      - string: 'warning: header check failed; from=<x@y.z>'
+        result: 'warning: header check failed; from=<x@y.z>'
+    negative:
+      - 'nothing relevant'
+      - 'debug: xyz'
+
+  POSTFIX_WARNING_WITHOUT_KV:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'warning: hostname mail.example.com does not resolve'
+        result: 'warning: hostname mail.example.com does not resolve'
+    negative:
+      - 'no level marker here just text'
+      - 'debug: something happened'
+
+  POSTFIX_WARNING_WITH_KV:
+    test_template: '(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: 'warning: 3F8B2A9C1D5E: message not delivered; delay=1.2'
+        result: 'warning: 3F8B2A9C1D5E: message not delivered; delay=1.2'
+    negative:
+      - 'warning: hostname mail.example.com does not resolve'
+      - 'no level here'

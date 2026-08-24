@@ -102,13 +102,12 @@ static int pdbi_detect_returning(pTHX_ SV *dbh) {
     return 0;
 }
 
-/* The pool slot for this backend's dsn, connected on first use in this
- * process and shared with every other backend on the same one. Borrowed. */
-static HV *pdbi_slot_for(pTHX_ SV *self) {
-    HV *h    = pdbi_hv(aTHX_ self);
-    SV *opts = pdbi_get(aTHX_ h, "opts");
-    HV *o    = (opts && SvROK(opts) && SvTYPE(SvRV(opts)) == SVt_PVHV)
-               ? (HV *)SvRV(opts) : NULL;
+/* The pool slot for a set of connection options, connected on first use in
+ * this process and shared with every backend on the same ones. Borrowed.
+ * Split from pdbi_slot_for so a transaction, which belongs to a connection
+ * and not to any one model, can reach the slot from the database options
+ * the `database` keyword recorded. */
+static HV *pdbi_slot_for_opts(pTHX_ HV *o) {
     SV *dsn  = o ? pdbi_get(aTHX_ o, "dsn") : NULL;
     SV *user = o ? pdbi_get(aTHX_ o, "user") : NULL;
     SV *pass = o ? pdbi_get(aTHX_ o, "password") : NULL;
@@ -168,8 +167,19 @@ static HV *pdbi_slot_for(pTHX_ SV *self) {
          * (or a fork) starts fresh ones. */
         (void)hv_delete(slot, "qi",   2, G_DISCARD);
         (void)hv_delete(slot, "sqlc", 4, G_DISCARD);
+        /* a transaction open on the old handle died with it */
+        (void)hv_delete(slot, "txn",  3, G_DISCARD);
     }
+    return slot;
+}
 
+/* The pool slot for this backend's dsn. Borrowed. */
+static HV *pdbi_slot_for(pTHX_ SV *self) {
+    HV *h    = pdbi_hv(aTHX_ self);
+    SV *opts = pdbi_get(aTHX_ h, "opts");
+    HV *o    = (opts && SvROK(opts) && SvTYPE(SvRV(opts)) == SVt_PVHV)
+               ? (HV *)SvRV(opts) : NULL;
+    HV *slot = pdbi_slot_for_opts(aTHX_ o);
     /* create/update read this off the instance; keep it in step with the
      * pooled slot, which is where the detection actually lives */
     {

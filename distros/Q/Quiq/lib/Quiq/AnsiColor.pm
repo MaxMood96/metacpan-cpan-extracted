@@ -81,7 +81,7 @@ use v5.10;
 use strict;
 use warnings;
 
-our $VERSION = '1.238';
+our $VERSION = '1.239';
 
 use Term::ANSIColor ();
 
@@ -194,12 +194,16 @@ Colorcode 'reset' beendet. Ist die Erzeugung von Colorcodes
 abgeschaltet (siehe Konstruktor), wird die Zeichenkette unverändert
 geliefert.
 
+Ist $str C<undef>, wird ein Leerstring geliefert.
+
 =cut
 
 # -----------------------------------------------------------------------------
 
 sub str {
     my ($self,$attr,$str) = @_;
+
+    $str //= '';
 
     if ($$self) {
         my $esc = Term::ANSIColor::color($attr);
@@ -245,7 +249,7 @@ sub strLn {
 
 =head1 VERSION
 
-1.238
+1.239
 
 =head1 AUTHOR
 

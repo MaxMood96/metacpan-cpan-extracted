@@ -1,0 +1,127 @@
+---
+# systemd-timesyncd log enrichment.
+#
+# Gates on the syslog PROGRAM field being "systemd-timesyncd". Patterns are
+# anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with timesyncd_ .
+#
+# Named after the daemon's suffix the way logind.yaml is, since that is what
+# systemd puts in PROGRAM.
+#
+# timesyncd is the third time client this distribution covers, after chrony and
+# ntpd, and the one most systemd hosts run. It says far less than the other
+# two, having no per-poll offset line, so what is here amounts to whether the
+# clock was set and by whom.
+#
+# The "by whom" is the part that matters. A host switching to a fallback time
+# server, or a large step applied without warning, surfaces later as
+# certificate and log-ordering problems.
+includes:
+- base
+vars_templated:
+  # "Synchronized to time server 192.0.2.1:123 (ntp.example.com)."
+  #
+  # The server is named twice: the address actually used and, in parentheses,
+  # the configured name it came from. Both are kept, since the name is what a
+  # configuration says and the address is what the packets went to.
+  TIMESYNCD_SYNCHRONIZED: 'Synchronized to time server (?<timesyncd_server_ip>[% IP %]):(?<timesyncd_server_port>[% INT %])(?: \((?<timesyncd_server_name>[^)]*)\))?\.?(?: [% GREEDYDATA %])?'
+  # "Timed out waiting for reply from 192.0.2.1:123 (ntp.example.com)."
+  TIMESYNCD_TIMEOUT: 'Timed out waiting for reply from (?<timesyncd_server_ip>[% IP %]):(?<timesyncd_server_port>[% INT %])(?: \((?<timesyncd_server_name>[^)]*)\))?\.?(?: [% GREEDYDATA %])?'
+  # "Initial synchronization to time server 192.0.2.1:123 (ntp.example.com)."
+  TIMESYNCD_INITIAL: 'Initial synchronization to time server (?<timesyncd_server_ip>[% IP %]):(?<timesyncd_server_port>[% INT %])(?: \((?<timesyncd_server_name>[^)]*)\))?\.?(?: [% GREEDYDATA %])?'
+  # "Contacted time server 192.0.2.1:123 (ntp.example.com)."
+  TIMESYNCD_CONTACTED: 'Contacted time server (?<timesyncd_server_ip>[% IP %]):(?<timesyncd_server_port>[% INT %])(?: \((?<timesyncd_server_name>[^)]*)\))?\.?(?: [% GREEDYDATA %])?'
+  # Anything else: startup, network changes, the clock being set from the
+  # on-disk timestamp at boot.
+  TIMESYNCD_MESSAGE: '(?<timesyncd_message>.+)'
+vars_tests:
+  TIMESYNCD_SYNCHRONIZED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Synchronized to time server 192.0.2.1:123 (ntp.example.com).'
+        result: 'Synchronized to time server 192.0.2.1:123 (ntp.example.com).'
+      - string: 'Synchronized to time server 192.0.2.1:123'
+        result: 'Synchronized to time server 192.0.2.1:123'
+    negative:
+      - 'Timed out waiting for reply from 192.0.2.1:123 (ntp.example.com).'
+  TIMESYNCD_TIMEOUT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Timed out waiting for reply from 192.0.2.1:123 (ntp.example.com).'
+        result: 'Timed out waiting for reply from 192.0.2.1:123 (ntp.example.com).'
+    negative:
+      - 'Synchronized to time server 192.0.2.1:123 (ntp.example.com).'
+  TIMESYNCD_INITIAL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Initial synchronization to time server 192.0.2.1:123 (ntp.example.com).'
+        result: 'Initial synchronization to time server 192.0.2.1:123 (ntp.example.com).'
+    negative:
+      - 'Synchronized to time server 192.0.2.1:123 (ntp.example.com).'
+  TIMESYNCD_CONTACTED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Contacted time server 192.0.2.1:123 (ntp.example.com).'
+        result: 'Contacted time server 192.0.2.1:123 (ntp.example.com).'
+    negative:
+      - 'Synchronized to time server 192.0.2.1:123 (ntp.example.com).'
+  TIMESYNCD_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'System clock time unset or jumped backwards, restoring from recorded timestamp: Wed 2026-07-15 10:00:00 UTC'
+        result: 'System clock time unset or jumped backwards, restoring from recorded timestamp: Wed 2026-07-15 10:00:00 UTC'
+    negative:
+      - ''
+geoip:
+  - timesyncd_server_ip
+convert:
+  timesyncd_server_port: int
+rules:
+  - name: timesyncd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^systemd-timesyncd$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      # "Initial synchronization" before "Synchronized": the longer wording is
+      # a different event and would otherwise never be reached
+      - TIMESYNCD_INITIAL
+      - TIMESYNCD_SYNCHRONIZED
+      - TIMESYNCD_TIMEOUT
+      - TIMESYNCD_CONTACTED
+      # last: matches anything, which is only safe because the rule is gated
+      - TIMESYNCD_MESSAGE
+    tests:
+      positive:
+        - string: 'Synchronized to time server 192.0.2.1:123 (ntp.example.com).'
+          numeric:
+            - timesyncd_server_port
+          program: 'systemd-timesyncd'
+          result:
+            timesyncd_server_ip: '192.0.2.1'
+            timesyncd_server_port: '123'
+            timesyncd_server_name: 'ntp.example.com'
+        - string: 'Initial synchronization to time server 192.0.2.1:123 (ntp.example.com).'
+          result:
+            timesyncd_server_ip: '192.0.2.1'
+            timesyncd_server_port: '123'
+            timesyncd_server_name: 'ntp.example.com'
+        - string: 'Timed out waiting for reply from 192.0.2.1:123 (ntp.example.com).'
+          result:
+            timesyncd_server_ip: '192.0.2.1'
+            timesyncd_server_port: '123'
+            timesyncd_server_name: 'ntp.example.com'
+        - string: 'Contacted time server 192.0.2.1:123 (ntp.example.com).'
+          result:
+            timesyncd_server_ip: '192.0.2.1'
+            timesyncd_server_port: '123'
+            timesyncd_server_name: 'ntp.example.com'
+        - string: 'System clock time unset or jumped backwards, restoring from recorded timestamp: Wed 2026-07-15 10:00:00 UTC'
+          result:
+            timesyncd_message: 'System clock time unset or jumped backwards, restoring from recorded timestamp: Wed 2026-07-15 10:00:00 UTC'
+      negative:
+        - ''
+        - string: 'Synchronized to time server 192.0.2.1:123 (ntp.example.com).'
+          program: 'timesyncd-extra'

@@ -18,8 +18,9 @@
 use v5.36;
 
 package Fugu::Process;
-our $VERSION = '0.1.2';
+our $VERSION = '0.2.0';
 
+use Config;
 use Fcntl     qw(F_SETFD FD_CLOEXEC);
 use Fugu::CLI qw(EXIT_ERROR);
 use IO::Select;
@@ -36,6 +37,22 @@ use Time::HiRes qw(time);
 # How often terminate looks again while it waits for a child to go.
 use constant POLL_INTERVAL => 0.05;
 
+# The default @INC paths of this perl. Config.pm holds a small key
+# set, and the first read of any other key pulls Config_heavy.pl from
+# disk. The BEGIN block reads every key that the module needs, so the
+# read happens at compile time. A caller can then pledge without the
+# rpath promise, and no method opens a file behind it. The table is a
+# compile-time constant, not run-time state.
+my %DEFAULT_INC;
+
+BEGIN {
+	for my $key (qw(privlib archlib sitelib sitearch vendorlib vendorarch))
+	{
+		my $path = $Config{$key};
+		$DEFAULT_INC{$path} = 1 if defined $path && length $path;
+	}
+}
+
 # $class->spawn_command(%args):
 #	Fork and execute a command. Optionally run it as a daemon.
 #	The method returns a hashref: {pid => $pid, success => 1} on
@@ -47,9 +64,16 @@ use constant POLL_INTERVAL => 0.05;
 #		stdout    => $path|undef # Optional: redirect stdout (default: /dev/null)
 #		stderr    => $path|undef # Optional: redirect stderr (default: /dev/null)
 #		stdin     => $path|undef # Optional: redirect stdin (default: /dev/null)
+#		env       => \%vars     # Optional: the exact child environment
 #
 #	The method always waits for the exec to resolve, so a command
 #	that does not exist reports its own error message.
+#
+#	The env option names the environment of the child. The child
+#	holds exactly the named variables, and the parent %ENV does not
+#	change. Without the option the child inherits the parent
+#	environment. An empty hashref gives the child an empty
+#	environment. The .pod sidecar states the full contract.
 sub spawn_command ( $class, %args )
 {
 	my $cmd       = $args{cmd};
@@ -65,8 +89,15 @@ sub spawn_command ( $class, %args )
 		};
 	}
 
+	my $env;
+	if ( exists $args{env} ) {
+		my $env_error = _check_env( $args{env} );
+		return { success => 0, error => $env_error } if $env_error;
+		$env = $args{env};
+	}
+
 	my ( $pid, $error ) = _fork_exec(
-		$cmd, undef,
+		$cmd, undef, $env,
 		sub ($exec_w) {
 			if ($daemonize) {
 
@@ -94,7 +125,9 @@ sub spawn_command ( $class, %args )
 #		timeout => $seconds   # Optional: kill the child after this long
 #		stdin   => $string    # Optional: feed this to the child
 #		cwd     => $dir       # Optional: run the child in this directory
+#		env     => \%vars     # Optional: the exact child environment
 #		passthrough => 0|1    # Optional: let the child write to the terminal
+#		new_session => 0|1    # Optional: make the child a group leader
 #
 #	The method returns a hashref with success, stdout, stderr,
 #	exit_code, timed_out and, on a startup failure, error. It never
@@ -107,21 +140,42 @@ sub spawn_command ( $class, %args )
 #	it. A directory that the child cannot enter is a startup
 #	failure with the reason, not a silent run in the wrong place.
 #
+#	The env option names the environment of the child, exactly as
+#	on spawn_command.
+#
 #	With passthrough the child inherits the caller's output, and
 #	stdout and stderr come back empty. Use it for a command that
 #	writes for minutes: an operator who waits needs to see progress,
 #	and a captured stream arrives only after the wait is over.
+#
+#	With new_session the child calls setsid(2) before the
+#	redirect. The child then leads a new session and a new process
+#	group, and its group id equals its pid. The timeout path then
+#	signals the whole group, in both forms of the call. A
+#	grandchild that holds a pipe open therefore dies with the
+#	child, and the drain ends. setsid(2) removes the controlling
+#	terminal, so do not combine new_session with a command that
+#	prompts on the terminal under passthrough.
 sub run ( $class, %args )
 {
 	my $cmd = $args{cmd};
 	unless ( ref $cmd eq 'ARRAY' && @$cmd > 0 ) {
 		return _run_error('Command must be non-empty arrayref');
 	}
-	my $timeout = $args{timeout};
-	my $input   = $args{stdin};
-	my $cwd     = $args{cwd};
+	my $timeout     = $args{timeout};
+	my $input       = $args{stdin};
+	my $cwd         = $args{cwd};
+	my $new_session = $args{new_session} // 0;
 
-	return $class->_run_passthrough( $cmd, $timeout, $input, $cwd )
+	my $env;
+	if ( exists $args{env} ) {
+		my $env_error = _check_env( $args{env} );
+		return _run_error($env_error) if $env_error;
+		$env = $args{env};
+	}
+
+	return $class->_run_passthrough( $cmd, $timeout, $input, $cwd, $env,
+		$new_session )
 	    if $args{passthrough};
 
 	pipe my $out_r, my $out_w
@@ -131,8 +185,12 @@ sub run ( $class, %args )
 	pipe my $in_r, my $in_w or return _run_error("Cannot create pipe: $!");
 
 	my ( $pid, $error ) = _fork_exec(
-		$cmd, $cwd,
+		$cmd, $cwd, $env,
 		sub ($exec_w) {
+			if ($new_session) {
+				setsid() or _fail( $exec_w, "setsid: $!" );
+			}
+
 			close $out_r;
 			close $err_r;
 			close $in_w;
@@ -162,7 +220,7 @@ sub run ( $class, %args )
 	close $in_w;
 
 	my ( $stdout, $stderr, $timed_out ) =
-	    _drain( $out_r, $err_r, $timeout, $pid );
+	    _drain( $out_r, $err_r, $timeout, $pid, $new_session );
 
 	waitpid $pid, 0;
 	my $code = $class->exit_code($?);
@@ -176,16 +234,25 @@ sub run ( $class, %args )
 	};
 }
 
-# $class->_run_passthrough($cmd, $timeout, $input, $cwd):
+# $class->_run_passthrough($cmd, $timeout, $input, $cwd, $env, $new_session):
 #	Run a child that writes straight to the caller's output. Only
 #	the exec confirmation and the exit status come back.
-sub _run_passthrough ( $class, $cmd, $timeout, $input, $cwd = undef )
+sub _run_passthrough (
+	$class, $cmd, $timeout, $input,
+	$cwd         = undef,
+	$env         = undef,
+	$new_session = 0
+    )
 {
 	pipe my $in_r, my $in_w or return _run_error("Cannot create pipe: $!");
 
 	my ( $pid, $error ) = _fork_exec(
-		$cmd, $cwd,
+		$cmd, $cwd, $env,
 		sub ($exec_w) {
+			if ($new_session) {
+				setsid() or _fail( $exec_w, "setsid: $!" );
+			}
+
 			close $in_w;
 
 			open STDIN, '<&', $in_r
@@ -207,7 +274,11 @@ sub _run_passthrough ( $class, $cmd, $timeout, $input, $cwd = undef )
 	my $timed_out = 0;
 	if ( defined $timeout ) {
 		unless ( $class->wait_exit( $pid, $timeout ) ) {
-			$class->terminate( $pid, grace_period => 1 );
+			$class->terminate(
+				$pid,
+				grace_period => 1,
+				group        => $new_session
+			);
 			$timed_out = 1;
 		}
 	}
@@ -279,11 +350,22 @@ sub is_alive ( $class, $pid )
 #	%args:
 #		grace_period => $seconds # Time to wait after TERM before KILL (default: 5)
 #		on_kill      => sub()    # Runs after a successful kill
+#		group        => 0|1      # Signal the process group of $pid
 #
 #	The wait polls with sub-second granularity, so a child that
 #	stops at once does not cost a whole second.
+#
+#	With group each signal goes to the process group of $pid, and
+#	$pid must be the pid of a process-group leader. The liveness
+#	test is then kill 0 on the group, because a group can outlive
+#	its leader, so the group form must not return early on a dead
+#	leader. The method cannot wait for a member that is not its
+#	child. A member that init has yet to reap can therefore still
+#	answer for a moment.
 sub terminate ( $class, $pid, %args )
 {
+	return $class->_terminate_group( $pid, %args ) if $args{group};
+
 	return 1 unless $class->is_alive($pid);
 
 	my $grace_period = $args{grace_period} // 5;
@@ -311,6 +393,96 @@ sub terminate ( $class, $pid, %args )
 
 	$on_kill->() if $on_kill;
 	return 1;
+}
+
+# $class->_terminate_group($pid, %args):
+#	The group form of terminate. Each signal goes to the process
+#	group of $pid, with a negative pid on kill. The method returns
+#	1 when no member answers kill 0 on the group. It returns 0
+#	when a member still answers after the KILL.
+#
+#	The guard on $pid is a safety boundary. kill with the group id
+#	0 signals the group of the caller, and kill with the group id
+#	1 can reach far outside the caller. A bad $pid must therefore
+#	signal nothing.
+sub _terminate_group ( $class, $pid, %args )
+{
+	return 1 unless defined $pid && $pid =~ /^\d+$/ && $pid > 1;
+
+	return 1 unless _group_alive($pid);
+
+	my $grace_period = $args{grace_period} // 5;
+	my $on_kill      = $args{on_kill};
+
+	# Send SIGTERM to the whole group
+	my $killed = kill 'TERM', -$pid;
+	unless ($killed) {
+
+		# Every member is already dead, or there is no
+		# permission
+		return _group_alive($pid) ? 0 : 1;
+	}
+
+	_wait_group_exit( $pid, $grace_period );
+
+	# If a member is still alive, kill the group with force
+	if ( _group_alive($pid) ) {
+		kill 'KILL', -$pid;
+		_wait_group_exit( $pid, 1 );
+
+		# Final check
+		return 0 if _group_alive($pid);
+	}
+
+	$on_kill->() if $on_kill;
+	return 1;
+}
+
+# _group_alive($pid):
+#	Report if a member of the process group of $pid still answers
+#	kill 0. The check reaps each child member first, so a zombie
+#	child of the caller does not count as a live member.
+sub _group_alive ($pid)
+{
+	_reap_group($pid);
+
+	return 1 if kill 0, -$pid;
+
+	# A member can turn into a zombie between the reap above and
+	# the check. Reap once more, so a zombie child never outlives
+	# the answer "gone".
+	_reap_group($pid);
+
+	return 0;
+}
+
+# _reap_group($pid):
+#	Reap each zombie child of the caller in the process group of
+#	$pid. The leader comes first, by its own pid: the Darwin
+#	kernel can detach a zombie from its process group, and the
+#	group sweep below then misses it.
+sub _reap_group ($pid)
+{
+	waitpid( $pid, WNOHANG );
+	1 while waitpid( -$pid, WNOHANG ) > 0;
+
+	return;
+}
+
+# _wait_group_exit($pid, $timeout):
+#	Wait until no member of the process group of $pid answers, or
+#	until the timeout ends. The method returns 1 when the group is
+#	gone. It returns 0 on timeout.
+sub _wait_group_exit ( $pid, $timeout )
+{
+	my $deadline = time + $timeout;
+	while ( time < $deadline ) {
+		return 1 unless _group_alive($pid);
+		select undef, undef, undef, POLL_INTERVAL;
+	}
+
+	# Final check
+	return _group_alive($pid) ? 0 : 1;
 }
 
 # $class->wait_exit($pid, $timeout):
@@ -359,14 +531,15 @@ sub spawn_perl ( $class, %args )
 	return $class->spawn_command(%args);
 }
 
-# _fork_exec($cmd, $cwd, $redirect):
-#	The shared fork-and-exec step. Fork the child, run $redirect in
-#	it to set up the standard handles (failures go through _fail),
-#	move it into $cwd, and exec the command over the close-on-exec
-#	failure pipe. Return ($pid, undef) when the exec resolved, or
-#	(undef, $error) when the machinery or the exec failed - the
-#	child is already reaped in that case.
-sub _fork_exec ( $cmd, $cwd, $redirect )
+# _fork_exec($cmd, $cwd, $env, $redirect):
+#	The shared fork-and-exec step. Fork the child and run
+#	$redirect in it to set up the standard handles; failures go
+#	through _fail. Move the child into $cwd, and give it the
+#	environment that $env names. Then exec the command over the
+#	close-on-exec failure pipe. Return ($pid, undef) when the exec
+#	resolved, or (undef, $error) when the machinery or the exec
+#	failed - the child is already reaped in that case.
+sub _fork_exec ( $cmd, $cwd, $env, $redirect )
 {
 	my ( $exec_r, $exec_w ) = _exec_pipe();
 	return ( undef, "Cannot create pipe: $!" ) unless $exec_r;
@@ -386,6 +559,12 @@ sub _fork_exec ( $cmd, $cwd, $redirect )
 
 		$redirect->($exec_w);
 		_chdir_or_fail( $exec_w, $cwd );
+
+		# Neither the redirect nor the chdir reads the
+		# environment, so the assignment comes after both and
+		# directly before the exec. An undefined $env keeps
+		# the inherited environment in place.
+		%ENV = %$env if defined $env;
 
 		# The pipe is close-on-exec, so a successful exec closes
 		# it and the parent reads EOF.
@@ -461,12 +640,50 @@ sub _run_error ($message)
 	};
 }
 
-# _drain($out, $err, $timeout, $pid):
+# _check_env($env):
+#	Validate the env argument of a public method. Return undef for
+#	a valid argument, or the error message. Each public entry calls
+#	this once, before any pipe and before the fork, so a bad
+#	argument starts nothing.
+sub _check_env ($env)
+{
+	return 'env must be a hashref' unless ref $env eq 'HASH';
+
+	for my $name ( keys %$env ) {
+		return 'env holds an empty variable name'
+		    unless length $name;
+		return 'env name holds an equals sign or a NUL byte'
+		    if index( $name, '=' ) >= 0
+		    || index( $name, "\0" ) >= 0;
+
+		# A character above 255 cannot reach setenv(3) as one
+		# byte. Perl would encode it behind the caller, warn on
+		# the child's stderr, and export bytes the caller never
+		# named. The boundary rejects it instead.
+		return 'env name holds a character above 255'
+		    if $name =~ tr/\x00-\xff//c;
+
+		my $value = $env->{$name};
+		return "env value of $name is not defined"
+		    unless defined $value;
+		return "env value of $name is a reference"
+		    if ref $value;
+		return "env value of $name holds a NUL byte"
+		    if index( $value, "\0" ) >= 0;
+		return "env value of $name holds a character above 255"
+		    if $value =~ tr/\x00-\xff//c;
+	}
+
+	return;
+}
+
+# _drain($out, $err, $timeout, $pid, $group):
 #	Read both pipes until they close. On a timeout, terminate the
-#	child and stop. Reading both at once matters: a child that
-#	fills one pipe blocks until someone drains it, and a reader
-#	that takes them in sequence would deadlock there.
-sub _drain ( $out, $err, $timeout, $pid )
+#	child and stop. With $group true the terminate signals the
+#	whole process group of $pid. Reading both at once matters: a
+#	child that fills one pipe blocks until someone drains it, and
+#	a reader that takes them in sequence would deadlock there.
+sub _drain ( $out, $err, $timeout, $pid, $group = 0 )
 {
 	my %buffer   = ( $out => '', $err => '' );
 	my $select   = IO::Select->new( $out, $err );
@@ -477,8 +694,11 @@ sub _drain ( $out, $err, $timeout, $pid )
 		if ( defined $deadline ) {
 			my $left = $deadline - time;
 			if ( $left <= 0 ) {
-				Fugu::Process->terminate( $pid,
-					grace_period => 1 );
+				Fugu::Process->terminate(
+					$pid,
+					grace_period => 1,
+					group        => $group
+				);
 				return ( $buffer{$out}, $buffer{$err}, 1 );
 			}
 			$wait = $left < POLL_INTERVAL ? $left : POLL_INTERVAL;
@@ -505,26 +725,17 @@ sub _drain ( $out, $err, $timeout, $pid )
 # _custom_inc_paths:
 #	Get the @INC paths that are not part of Perl's default
 #	installation. These paths usually come from -I, use lib, or
-#	PERL5LIB.
+#	PERL5LIB. The default set is %DEFAULT_INC, read at compile
+#	time.
 sub _custom_inc_paths()
 {
-	require Config;
-
-	# Build the set of default Perl lib paths
-	my %default_paths;
-	for my $key (qw(privlib archlib sitelib sitearch vendorlib vendorarch))
-	{
-		my $path = $Config::Config{$key};
-		$default_paths{$path} = 1 if defined $path && length $path;
-	}
-
 	# Return the @INC paths that are not in the default set.
 	# Skip '.' and CODE refs.
 	my @custom;
 	for my $inc (@INC) {
-		next if ref $inc;               # Skip CODE refs
-		next if $inc eq '.';            # Skip the current directory
-		next if $default_paths{$inc};
+		next if ref $inc;             # Skip CODE refs
+		next if $inc eq '.';          # Skip the current directory
+		next if $DEFAULT_INC{$inc};
 		push @custom, $inc;
 	}
 

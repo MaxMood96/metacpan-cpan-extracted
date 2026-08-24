@@ -1,0 +1,532 @@
+---
+# Dovecot (IMAP/POP3) login-line enrichment.
+#
+# Dovecot's login processes emit lines of the shape:
+#   <service>-login: <Event>: key=value, key=value, ...
+# where <service> is imap/pop3/etc, <Event> is Login/Disconnected/etc, and the
+# tail is a ", "-separated key=value list. Some values are wrapped in <...>
+# (user, session) and some tokens are bare flags (TLS, secured) with no "=".
+#
+# The rule gates on the "dovecot" PROGRAM, matches the whole MESSAGE, captures
+# the service/event/kv blob, then the file-level decompose kv-splits the blob
+# into dovecot_user, dovecot_method, dovecot_rip, dovecot_lip, dovecot_mpid,
+# dovecot_session, etc. dovecot_rip (the remote IP) is fed to geoip and
+# dovecot_mpid is converted to an int.
+includes:
+- base
+# Additional primitives used below that are not in base.yaml.
+vars:
+  # A dovecot service name. Like base WORD but with the hyphen allowed, since
+  # auth-worker, indexer-worker, config-dump and dict-async all carry one.
+  DOVECOT_SERVICE_NAME: '[\w-]+'
+vars_templated:
+  # The (user)<pid><session> triplet a post-login process stamps on every line
+  # it writes, e.g. "lda(neti)<40961><NjSbCOQgcmoBoAAAHlxYLA>: ". lmtp writes
+  # the same shape with a numeric connection id where the user goes, and drops
+  # the <pid><session> half on its earliest lines, so both are optional.
+  DOVECOT_SESSION_PREFIX: '(?<dovecot_service>[% WORD %])\((?<dovecot_user>[^)]*)\)(?:<(?<dovecot_pid>[% INT %])><(?<dovecot_session>[^>]*)>)?'
+  # The severity keywords dovecot prefixes a message with. Info is included
+  # because the auth process uses it, but most lines carry no keyword at all.
+  DOVECOT_LEVEL: '(?<dovecot_level>Debug|Info|Warning|Error|Fatal|Panic)'
+  # "imap-login: Login: user=<neti>, method=PLAIN, rip=203.0.113.7, ..."
+  #
+  # The tail has to start with a key=value token. Without that the pattern also
+  # swallows "imap-login: Error: Failed to initialize SSL server context: ..."
+  # and the reason text on a Disconnected line, and the kv decompose then turns
+  # whatever prose it was handed into junk field names.
+  DOVECOT_LOGIN: '(?<dovecot_service>[% WORD %])-login: (?<dovecot_event>[% WORD %]): (?<dovecot_kv>[\w-]+=[% GREEDYDATA %])'
+  # A pre-auth disconnect that says why, e.g.
+  #   imap-login: Disconnected: TLS initialization failed. (auth failed, 2 attempts in 6 secs): user=<x>, method=PLAIN, rip=203.0.113.7, ...
+  #   imap-login: Disconnected: Connection closed (no auth attempts in 0 secs): user=<>, rip=203.0.113.7, ...
+  #
+  # The prose reason comes first and the parenthetical attempt summary last, and
+  # only then does the kv blob start. The reason is optional because a bare
+  # "Disconnected (auth failed, ...)" is also logged.
+  DOVECOT_LOGIN_DISCONNECTED: '(?<dovecot_service>[% WORD %])-login: (?<dovecot_event>[% WORD %])(: (?<dovecot_reason>.*?))? \((?<dovecot_abort_reason>[^)]*)\): (?<dovecot_kv>[\w-]+=[% GREEDYDATA %])'
+  # A login process complaining about itself rather than about a client, e.g.
+  #   imap-login: Error: Failed to initialize SSL server context: Can't load DH parameters
+  DOVECOT_LOGIN_LEVEL: '(?<dovecot_service>[% WORD %])-login: [% DOVECOT_LEVEL %]: (?<dovecot_message>[% GREEDYDATA %])'
+  # Post-login session process logout with byte-count statistics, e.g.
+  #   imap(neti)<1234><AbC>: Disconnected: Logged out in=100 out=200 deleted=0 expunged=0 ...
+  # service is the bare protocol, the (user)<pid><session> triplet follows, then
+  # the event/reason and a SPACE-separated in=/out=/deleted=/expunged= stats blob
+  # captured as dovecot_stats (space-split decompose below).
+  DOVECOT_SESSION_STATS: '(?<dovecot_service>[% WORD %])\((?<dovecot_user>[^)]*)\)<(?<dovecot_pid>[% INT %])><(?<dovecot_session>[^>]*)>: (?<dovecot_event>[% WORD %]): (?<dovecot_reason>.*?) (?<dovecot_stats>in=[% INT %] out=[% INT %][% GREEDYDATA %])'
+  # Aborted pre-auth login, e.g.
+  #   imap-login: Aborted login (auth failed, 1 attempts in 2 secs): user=<x>, method=PLAIN, rip=203.0.113.7, ...
+  # The parenthetical reason is captured, the trailing user=<..>,... blob is fed
+  # to the same comma/<>-style kv decompose as DOVECOT_LOGIN via dovecot_kv.
+  DOVECOT_ABORTED_LOGIN: '(?<dovecot_service>[% WORD %])-login: Aborted login \((?<dovecot_abort_reason>[^)]*)\): (?<dovecot_kv>user=<[% GREEDYDATA %])'
+  # Login failure from a login process, e.g.
+  #   imap-login: Login failed: Authentication failed: Password mismatch, user=<neti>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, TLS, session=<XyZ>
+  # reason is everything up to the ", user=<" that starts the kv blob.
+  DOVECOT_LOGIN_FAILED: '(?<dovecot_service>[% WORD %])-login: (?<dovecot_event>[% WORD %]) failed: (?<dovecot_reason>.*?), (?<dovecot_kv>user=<[% GREEDYDATA %])'
+  # auth backend failure, e.g.
+  #   auth: passwd-file(neti,203.0.113.7): unknown user
+  # the backend name, user, and remote IP (dovecot_rip -> geoip) are captured.
+  DOVECOT_AUTH_FAIL: 'auth: (?<dovecot_auth_db>[^(:]+)\((?<dovecot_user>[^,)]*),(?<dovecot_rip>[% IP %])\): (?<dovecot_auth_reason>[% GREEDYDATA %])'
+  # A generic informational auth line, e.g.
+  #   auth: Info: passwd(neti): unknown user
+  DOVECOT_AUTH_INFO: 'auth: Info: (?<dovecot_auth_info>[% GREEDYDATA %])'
+  # Sieve delivery, from either lda or lmtp, e.g.
+  #   lmtp(neti): sieve: msgid=<abc@example.com>: stored mail into mailbox 'INBOX'
+  #   lda(neti)<40961><NjSbCOQgcmoBoAAAHlxYLA>: sieve: msgid=<x@y>: fileinto action: stored mail into mailbox 'Admin'
+  #
+  # The action name is only printed when a sieve script picked the mailbox; an
+  # unfiltered delivery to INBOX has no action clause. The message id is not
+  # always bracketed -- a message with no Message-Id logs "msgid=unspecified",
+  # and a very long one is truncated mid-value with the closing > cut off --
+  # which is why the brackets are optional rather than being the delimiters.
+  DOVECOT_SIEVE_STORED: '[% DOVECOT_SESSION_PREFIX %]: sieve: msgid=<?(?<dovecot_msgid>.*?)>?: ((?<dovecot_sieve_action>[\w-]+) action: )?stored mail into mailbox ''(?<dovecot_mailbox>[^'']*)'''
+  # Any other sieve outcome, e.g. a discard:
+  #   lda(neti)<8374><peutCD>: sieve: msgid=<x@y>: discard action: Marked message to be discarded if not explicitly delivered (discard action)
+  DOVECOT_SIEVE_ACTION: '[% DOVECOT_SESSION_PREFIX %]: sieve: msgid=<?(?<dovecot_msgid>.*?)>?: ((?<dovecot_sieve_action>[\w-]+) action: )?(?<dovecot_sieve_result>[% GREEDYDATA %])'
+  # A post-login process reporting a problem, e.g.
+  #   lda(neti)<40961><NjSbCOQ>: Error: Mailbox Admin: pwrite_full() failed with file /home/neti/Maildir/...: File too large
+  #   imap(neti)<62913><d43pCH9>: Fatal: block_alloc(4096): Out of memory
+  DOVECOT_SESSION_LEVEL: '[% DOVECOT_SESSION_PREFIX %]: [% DOVECOT_LEVEL %]: (?<dovecot_message>[% GREEDYDATA %])'
+  # LMTP connect, e.g.
+  #   lmtp(1234): Connect from local
+  DOVECOT_LMTP_CONNECT: 'lmtp\((?<dovecot_lmtp_id>[^)]*)\): Connect from (?<dovecot_lmtp_from>[% GREEDYDATA %])'
+  # The master process announcing itself, e.g.
+  #   master: Dovecot v2.3.21.1 (d492236fa0) starting up for imap, lmtp, sieve, pop3
+  DOVECOT_MASTER_STARTUP: 'master: Dovecot v(?<dovecot_version>[% NOTSPACE %]) (\((?<dovecot_build>[^)]*)\) )?starting up for (?<dovecot_protocols>[% GREEDYDATA %])'
+  # Anything a non-login service said with a severity keyword on it, e.g.
+  #   auth: Error: auth client 0 disconnected with 1 pending requests: EOF
+  #   master: Warning: Killed with signal 15 (by pid=86843 uid=0 code=kill)
+  #   auth-worker: Fatal: master: service(auth-worker): child 53847 killed with signal 9
+  #
+  # The service name is matched with DOVECOT_SERVICE_NAME rather than WORD
+  # because several of dovecot's own services have a hyphen in the name --
+  # auth-worker, config-dump, indexer-worker, dict-async -- and WORD is \w only.
+  DOVECOT_SERVICE_LEVEL: '(?<dovecot_service>[% DOVECOT_SERVICE_NAME %]): [% DOVECOT_LEVEL %]: (?<dovecot_message>[% GREEDYDATA %])'
+vars_tests:
+  DOVECOT_LOGIN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'imap-login: Login: user=<neti>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, mpid=1234, TLS, session=<AbC123>'
+        result: 'imap-login: Login: user=<neti>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, mpid=1234, TLS, session=<AbC123>'
+      - string: 'pop3-login: Disconnected: user=<>, method=PLAIN, rip=198.51.100.9, lip=192.0.2.1, TLS, session=<XyZ>'
+        result: 'pop3-login: Disconnected: user=<>, method=PLAIN, rip=198.51.100.9, lip=192.0.2.1, TLS, session=<XyZ>'
+    negative:
+      - 'this is not a dovecot login line at all'
+  DOVECOT_SESSION_STATS:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'imap(neti)<1234><AbC>: Disconnected: Logged out in=100 out=200 deleted=0 expunged=0 trashed=0 hdr_count=1 hdr_bytes=50 body_count=2 body_bytes=300'
+        result: 'imap(neti)<1234><AbC>: Disconnected: Logged out in=100 out=200 deleted=0 expunged=0 trashed=0 hdr_count=1 hdr_bytes=50 body_count=2 body_bytes=300'
+      - string: 'pop3(alice)<55><s1>: Disconnected: Logged out top=0/0, retr=1/2345, del=0/1, size=2345 in=100 out=200'
+        result: 'pop3(alice)<55><s1>: Disconnected: Logged out top=0/0, retr=1/2345, del=0/1, size=2345 in=100 out=200'
+    negative:
+      - 'imap-login: Login: user=<neti>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, mpid=1234, TLS, session=<AbC123>'
+  DOVECOT_ABORTED_LOGIN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'imap-login: Aborted login (auth failed, 1 attempts in 2 secs): user=<x>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, TLS, session=<AbC>'
+        result: 'imap-login: Aborted login (auth failed, 1 attempts in 2 secs): user=<x>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, TLS, session=<AbC>'
+      - string: 'pop3-login: Aborted login (no auth attempts in 0 secs): user=<>, rip=198.51.100.9, lip=192.0.2.1, session=<XyZ>'
+        result: 'pop3-login: Aborted login (no auth attempts in 0 secs): user=<>, rip=198.51.100.9, lip=192.0.2.1, session=<XyZ>'
+    negative:
+      - 'imap-login: Login: user=<neti>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, mpid=1234, TLS, session=<AbC123>'
+  DOVECOT_LOGIN_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'imap-login: Login failed: Authentication failed: Password mismatch, user=<neti>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, TLS, session=<XyZ>'
+        result: 'imap-login: Login failed: Authentication failed: Password mismatch, user=<neti>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, TLS, session=<XyZ>'
+      - string: 'pop3-login: Login failed: unknown user, user=<bob>, method=PLAIN, rip=198.51.100.9, lip=192.0.2.1, session=<q>'
+        result: 'pop3-login: Login failed: unknown user, user=<bob>, method=PLAIN, rip=198.51.100.9, lip=192.0.2.1, session=<q>'
+    negative:
+      - 'imap-login: Login: user=<neti>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, mpid=1234, TLS, session=<AbC123>'
+  DOVECOT_AUTH_FAIL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'auth: passwd-file(neti,203.0.113.7): unknown user'
+        result: 'auth: passwd-file(neti,203.0.113.7): unknown user'
+      - string: 'auth: pam(bob,198.51.100.9): pam_authenticate() failed'
+        result: 'auth: pam(bob,198.51.100.9): pam_authenticate() failed'
+    negative:
+      - 'auth: Info: passwd(neti): unknown user'
+  DOVECOT_AUTH_INFO:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'auth: Info: passwd(neti): unknown user'
+        result: 'auth: Info: passwd(neti): unknown user'
+      - string: 'auth: Info: Client didn''t present valid SSL certificate'
+        result: 'auth: Info: Client didn''t present valid SSL certificate'
+    negative:
+      - 'auth: passwd-file(neti,203.0.113.7): unknown user'
+  DOVECOT_LOGIN_DISCONNECTED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'imap-login: Disconnected: TLS initialization failed. (auth failed, 2 attempts in 6 secs): user=<neti@example.net>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, session=<AbC>'
+        result: 'imap-login: Disconnected: TLS initialization failed. (auth failed, 2 attempts in 6 secs): user=<neti@example.net>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, session=<AbC>'
+      - string: 'imap-login: Disconnected: Connection closed (no auth attempts in 0 secs): user=<>, rip=203.0.113.7, lip=192.0.2.1, session=<q>'
+        result: 'imap-login: Disconnected: Connection closed (no auth attempts in 0 secs): user=<>, rip=203.0.113.7, lip=192.0.2.1, session=<q>'
+    negative:
+      - 'imap-login: Login: user=<neti>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, mpid=1234, TLS, session=<AbC123>'
+  DOVECOT_LOGIN_LEVEL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'imap-login: Error: Failed to initialize SSL server context: Can''t load DH parameters (ssl_dh setting)'
+        result: 'imap-login: Error: Failed to initialize SSL server context: Can''t load DH parameters (ssl_dh setting)'
+    negative:
+      - 'imap-login: Login: user=<neti>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, mpid=1234, TLS, session=<AbC123>'
+  DOVECOT_SESSION_PREFIX:
+    test_template: '^(?<TEST>[% TEST_VAR %]): '
+    positive:
+      - string: 'lda(neti)<40961><NjSbCOQgcmoBoAAAHlxYLA>: sieve: msgid=<x@y>: stored mail into mailbox ''INBOX'''
+        result: 'lda(neti)<40961><NjSbCOQgcmoBoAAAHlxYLA>'
+      - string: 'lmtp(neti): Connect from local'
+        result: 'lmtp(neti)'
+    negative:
+      - 'imap-login: Login: user=<neti>'
+  DOVECOT_LEVEL:
+    test_template: '^[^:]+: (?<TEST>[% TEST_VAR %]): '
+    positive:
+      - string: 'auth: Error: auth client 0 disconnected with 1 pending requests: EOF'
+        result: 'Error'
+      - string: 'master: Warning: Killed with signal 15 (by pid=86843 uid=0 code=kill)'
+        result: 'Warning'
+    negative:
+      - 'auth: passwd-file(neti,203.0.113.7): unknown user'
+  DOVECOT_SIEVE_STORED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'lmtp(neti): sieve: msgid=<abc@example.com>: stored mail into mailbox ''INBOX'''
+        result: 'lmtp(neti): sieve: msgid=<abc@example.com>: stored mail into mailbox ''INBOX'''
+      - string: 'lmtp(bob): sieve: msgid=<xyz@example.org>: stored mail into mailbox ''Junk'''
+        result: 'lmtp(bob): sieve: msgid=<xyz@example.org>: stored mail into mailbox ''Junk'''
+      - string: 'lda(neti)<40961><NjSbCOQgcmoBoAAAHlxYLA>: sieve: msgid=<x@example.net>: fileinto action: stored mail into mailbox ''Admin.lists'''
+        result: 'lda(neti)<40961><NjSbCOQgcmoBoAAAHlxYLA>: sieve: msgid=<x@example.net>: fileinto action: stored mail into mailbox ''Admin.lists'''
+      # a message with no Message-Id header, so no angle brackets to delimit on
+      - string: 'lda(neti)<40961><NjSbCOQgcmoBoAAAHlxYLA>: sieve: msgid=unspecified: fileinto action: stored mail into mailbox ''Admin.lists'''
+        result: 'lda(neti)<40961><NjSbCOQgcmoBoAAAHlxYLA>: sieve: msgid=unspecified: fileinto action: stored mail into mailbox ''Admin.lists'''
+    negative:
+      - 'lmtp(1234): Connect from local'
+  DOVECOT_SIEVE_ACTION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'lda(neti)<8374><peutCD>: sieve: msgid=<x@example.net>: discard action: Marked message to be discarded if not explicitly delivered'
+        result: 'lda(neti)<8374><peutCD>: sieve: msgid=<x@example.net>: discard action: Marked message to be discarded if not explicitly delivered'
+    negative:
+      - 'lmtp(1234): Connect from local'
+  DOVECOT_SESSION_LEVEL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'lda(neti)<40961><NjSbCOQ>: Error: Mailbox Admin: pwrite_full() failed with file /home/neti/Maildir/dovecot.index.cache: File too large'
+        result: 'lda(neti)<40961><NjSbCOQ>: Error: Mailbox Admin: pwrite_full() failed with file /home/neti/Maildir/dovecot.index.cache: File too large'
+      - string: 'imap(neti)<62913><d43pCH9>: Fatal: block_alloc(4096): Out of memory'
+        result: 'imap(neti)<62913><d43pCH9>: Fatal: block_alloc(4096): Out of memory'
+    negative:
+      - 'lmtp(1234): Connect from local'
+  DOVECOT_MASTER_STARTUP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'master: Dovecot v2.3.21.1 (d492236fa0) starting up for imap, lmtp, sieve, pop3'
+        result: 'master: Dovecot v2.3.21.1 (d492236fa0) starting up for imap, lmtp, sieve, pop3'
+      - string: 'master: Dovecot v2.4.1 starting up for imap'
+        result: 'master: Dovecot v2.4.1 starting up for imap'
+    negative:
+      - 'master: Warning: Killed with signal 15 (by pid=86843 uid=0 code=kill)'
+  DOVECOT_SERVICE_LEVEL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'auth: Error: auth client 0 disconnected with 1 pending requests: EOF'
+        result: 'auth: Error: auth client 0 disconnected with 1 pending requests: EOF'
+      - string: 'master: Warning: Killed with signal 15 (by pid=86843 uid=0 code=kill)'
+        result: 'master: Warning: Killed with signal 15 (by pid=86843 uid=0 code=kill)'
+      # A hyphenated service name.
+      - string: 'auth-worker: Fatal: master: service(auth-worker): child 53847 killed with signal 9'
+        result: 'auth-worker: Fatal: master: service(auth-worker): child 53847 killed with signal 9'
+    negative:
+      - 'auth: passwd-file(neti,203.0.113.7): unknown user'
+  DOVECOT_SERVICE_NAME:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'auth'
+        result: 'auth'
+      - string: 'auth-worker'
+        result: 'auth-worker'
+    negative:
+      - 'has a space'
+  DOVECOT_LMTP_CONNECT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'lmtp(1234): Connect from local'
+        result: 'lmtp(1234): Connect from local'
+      - string: 'lmtp(5678): Connect from 192.0.2.5'
+        result: 'lmtp(5678): Connect from 192.0.2.5'
+    negative:
+      - 'lmtp(neti): sieve: msgid=<abc@example.com>: stored mail into mailbox ''INBOX'''
+# After a rule matches, the remote IP captured as dovecot_rip gets a geoip
+# lookup (only used when built with a geoip database).
+geoip:
+  - dovecot_rip
+# The process id parsed out of the kv blob is numeric, as are the byte/message
+# counts pulled out of the session logout stats blob.
+convert:
+  dovecot_mpid: int
+  dovecot_pid: int
+  dovecot_in: int
+  dovecot_out: int
+  dovecot_deleted: int
+  dovecot_expunged: int
+# Break the captured key=value blob into individual dovecot_* fields. Values
+# wrapped in <...> are unwrapped via trim; bare flag tokens without "=" (TLS,
+# secured) are skipped.
+decompose:
+  - field: dovecot_kv
+    type: kv
+    field_split: ', '
+    value_split: '='
+    trim: '<>'
+    prefix: 'dovecot_'
+    remove: true
+    tests:
+      - input: 'user=<neti>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, mpid=1234, TLS, session=<AbC123>'
+        result:
+          dovecot_user: 'neti'
+          dovecot_method: 'PLAIN'
+          dovecot_rip: '203.0.113.7'
+          dovecot_lip: '192.0.2.1'
+          dovecot_mpid: '1234'
+          dovecot_session: 'AbC123'
+  # Second decompose: the session-logout statistics blob captured as
+  # dovecot_stats is a SPACE-separated key=value list (in=100 out=200
+  # deleted=0 expunged=0 ...) with no <> wrapping. Split it into dovecot_*
+  # counters; the numeric ones are coerced to int via the file-level convert.
+  - field: dovecot_stats
+    type: kv
+    field_split: ' '
+    value_split: '='
+    prefix: 'dovecot_'
+    remove: true
+    tests:
+      - input: 'in=100 out=200 deleted=0 expunged=0 trashed=0 hdr_count=1 hdr_bytes=50'
+        result:
+          dovecot_in: '100'
+          dovecot_out: '200'
+          dovecot_deleted: '0'
+          dovecot_expunged: '0'
+          dovecot_trashed: '0'
+          dovecot_hdr_count: '1'
+          dovecot_hdr_bytes: '50'
+rules:
+  - name: dovecot
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^dovecot$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - DOVECOT_LOGIN
+      - DOVECOT_SESSION_STATS
+      - DOVECOT_ABORTED_LOGIN
+      - DOVECOT_LOGIN_FAILED
+      - DOVECOT_LOGIN_DISCONNECTED
+      - DOVECOT_LOGIN_LEVEL
+      - DOVECOT_AUTH_FAIL
+      - DOVECOT_AUTH_INFO
+      - DOVECOT_SIEVE_STORED
+      - DOVECOT_SIEVE_ACTION
+      - DOVECOT_SESSION_LEVEL
+      - DOVECOT_LMTP_CONNECT
+      - DOVECOT_MASTER_STARTUP
+      # Last of the service lines: only reached once the shapes above have been
+      # tried, so it picks up whatever service dovecot grows next
+      - DOVECOT_SERVICE_LEVEL
+    tests:
+      positive:
+        - string: 'imap-login: Login: user=<neti>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, mpid=1234, TLS, session=<AbC123>'
+          enriched:
+            dovecot_event: 'Login'
+            dovecot_lip: '192.0.2.1'
+            dovecot_method: 'PLAIN'
+            dovecot_mpid: '1234'
+            dovecot_rip: '203.0.113.7'
+            dovecot_service: 'imap'
+            dovecot_session: 'AbC123'
+            dovecot_user: 'neti'
+          numeric:
+            - dovecot_mpid
+          program: 'dovecot'
+          result:
+            dovecot_service: 'imap'
+            dovecot_event: 'Login'
+            dovecot_kv: 'user=<neti>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, mpid=1234, TLS, session=<AbC123>'
+        - string: 'pop3-login: Disconnected: user=<>, method=PLAIN, rip=198.51.100.9, lip=192.0.2.1, TLS, session=<XyZ>'
+          result:
+            dovecot_service: 'pop3'
+            dovecot_event: 'Disconnected'
+            dovecot_kv: 'user=<>, method=PLAIN, rip=198.51.100.9, lip=192.0.2.1, TLS, session=<XyZ>'
+        - string: 'imap-login: Login: user=<alice@example.com>, method=PLAIN, rip=192.0.2.9, lip=192.0.2.1, mpid=99, secured, session=<q>'
+          result:
+            dovecot_service: 'imap'
+            dovecot_event: 'Login'
+            dovecot_kv: 'user=<alice@example.com>, method=PLAIN, rip=192.0.2.9, lip=192.0.2.1, mpid=99, secured, session=<q>'
+        # DOVECOT_SESSION_STATS: session logout; the raw pattern captures the
+        # service/user/pid/session/event/reason and the in=/out=/... stats blob
+        # into dovecot_stats (the space-split decompose + int convert of
+        # dovecot_in/out/deleted/expunged is exercised by the decompose tests).
+        - string: 'imap(neti)<1234><AbC>: Disconnected: Logged out in=100 out=200 deleted=0 expunged=0 trashed=0 hdr_count=1 hdr_bytes=50 body_count=2 body_bytes=300'
+          enriched:
+            dovecot_body_bytes: '300'
+            dovecot_body_count: '2'
+            dovecot_deleted: '0'
+            dovecot_event: 'Disconnected'
+            dovecot_expunged: '0'
+            dovecot_hdr_bytes: '50'
+            dovecot_hdr_count: '1'
+            dovecot_in: '100'
+            dovecot_out: '200'
+            dovecot_pid: '1234'
+            dovecot_reason: 'Logged out'
+            dovecot_service: 'imap'
+            dovecot_session: 'AbC'
+            dovecot_trashed: '0'
+            dovecot_user: 'neti'
+          numeric:
+            - dovecot_deleted
+            - dovecot_expunged
+            - dovecot_in
+            - dovecot_out
+            - dovecot_pid
+          result:
+            dovecot_service: 'imap'
+            dovecot_user: 'neti'
+            dovecot_pid: '1234'
+            dovecot_session: 'AbC'
+            dovecot_event: 'Disconnected'
+            dovecot_reason: 'Logged out'
+            dovecot_stats: 'in=100 out=200 deleted=0 expunged=0 trashed=0 hdr_count=1 hdr_bytes=50 body_count=2 body_bytes=300'
+        - string: 'pop3(alice)<55><s1>: Disconnected: Logged out in=100 out=200 deleted=1 expunged=2'
+          result:
+            dovecot_service: 'pop3'
+            dovecot_user: 'alice'
+            dovecot_pid: '55'
+            dovecot_session: 's1'
+            dovecot_event: 'Disconnected'
+            dovecot_reason: 'Logged out'
+            dovecot_stats: 'in=100 out=200 deleted=1 expunged=2'
+        # DOVECOT_ABORTED_LOGIN: raw captures are service, abort reason, and the
+        # user=<..>,... blob in dovecot_kv (kv decompose tested separately).
+        - string: 'imap-login: Aborted login (auth failed, 1 attempts in 2 secs): user=<x>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, TLS, session=<AbC>'
+          result:
+            dovecot_service: 'imap'
+            dovecot_abort_reason: 'auth failed, 1 attempts in 2 secs'
+            dovecot_kv: 'user=<x>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, TLS, session=<AbC>'
+        - string: 'pop3-login: Aborted login (no auth attempts in 0 secs): user=<>, rip=198.51.100.9, lip=192.0.2.1, session=<XyZ>'
+          result:
+            dovecot_service: 'pop3'
+            dovecot_abort_reason: 'no auth attempts in 0 secs'
+            dovecot_kv: 'user=<>, rip=198.51.100.9, lip=192.0.2.1, session=<XyZ>'
+        # DOVECOT_LOGIN_FAILED: raw captures are service/event/reason and the
+        # user=<..>,... blob in dovecot_kv.
+        - string: 'imap-login: Login failed: Authentication failed: Password mismatch, user=<neti>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, TLS, session=<XyZ>'
+          result:
+            dovecot_service: 'imap'
+            dovecot_event: 'Login'
+            dovecot_reason: 'Authentication failed: Password mismatch'
+            dovecot_kv: 'user=<neti>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, TLS, session=<XyZ>'
+        - string: 'pop3-login: Login failed: unknown user, user=<bob>, method=PLAIN, rip=198.51.100.9, lip=192.0.2.1, session=<q>'
+          result:
+            dovecot_service: 'pop3'
+            dovecot_event: 'Login'
+            dovecot_reason: 'unknown user'
+            dovecot_kv: 'user=<bob>, method=PLAIN, rip=198.51.100.9, lip=192.0.2.1, session=<q>'
+        # DOVECOT_AUTH_FAIL: auth backend failure with remote IP
+        - string: 'auth: passwd-file(neti,203.0.113.7): unknown user'
+          result:
+            dovecot_auth_db: 'passwd-file'
+            dovecot_user: 'neti'
+            dovecot_rip: '203.0.113.7'
+            dovecot_auth_reason: 'unknown user'
+        - string: 'auth: pam(bob,198.51.100.9): pam_authenticate() failed'
+          result:
+            dovecot_auth_db: 'pam'
+            dovecot_user: 'bob'
+            dovecot_rip: '198.51.100.9'
+            dovecot_auth_reason: 'pam_authenticate() failed'
+        # DOVECOT_AUTH_INFO: generic informational auth line
+        - string: 'auth: Info: passwd(neti): unknown user'
+          result:
+            dovecot_auth_info: 'passwd(neti): unknown user'
+        - string: 'auth: Info: Client didn''t present valid SSL certificate'
+          result:
+            dovecot_auth_info: 'Client didn''t present valid SSL certificate'
+        # DOVECOT_SIEVE_STORED: sieve delivery into a mailbox, from lmtp with no
+        # session triplet and from lda with one
+        - string: 'lmtp(neti): sieve: msgid=<abc@example.com>: stored mail into mailbox ''INBOX'''
+          result:
+            dovecot_service: 'lmtp'
+            dovecot_user: 'neti'
+            dovecot_msgid: 'abc@example.com'
+            dovecot_mailbox: 'INBOX'
+        - string: 'lda(neti)<40961><NjSbCOQgcmoBoAAAHlxYLA>: sieve: msgid=<x@example.net>: fileinto action: stored mail into mailbox ''Admin.lists'''
+          result:
+            dovecot_service: 'lda'
+            dovecot_user: 'neti'
+            dovecot_pid: '40961'
+            dovecot_session: 'NjSbCOQgcmoBoAAAHlxYLA'
+            dovecot_msgid: 'x@example.net'
+            dovecot_sieve_action: 'fileinto'
+            dovecot_mailbox: 'Admin.lists'
+        # DOVECOT_SIEVE_ACTION: a sieve outcome that is not a store
+        - string: 'lda(neti)<8374><peutCD>: sieve: msgid=<x@example.net>: discard action: Marked message to be discarded if not explicitly delivered'
+          result:
+            dovecot_service: 'lda'
+            dovecot_user: 'neti'
+            dovecot_pid: '8374'
+            dovecot_session: 'peutCD'
+            dovecot_msgid: 'x@example.net'
+            dovecot_sieve_action: 'discard'
+            dovecot_sieve_result: 'Marked message to be discarded if not explicitly delivered'
+        # DOVECOT_SESSION_LEVEL: a post-login process reporting a problem
+        - string: 'lda(neti)<40961><NjSbCOQ>: Error: Mailbox Admin: pwrite_full() failed with file /home/neti/Maildir/dovecot.index.cache: File too large'
+          result:
+            dovecot_service: 'lda'
+            dovecot_user: 'neti'
+            dovecot_pid: '40961'
+            dovecot_session: 'NjSbCOQ'
+            dovecot_level: 'Error'
+            dovecot_message: 'Mailbox Admin: pwrite_full() failed with file /home/neti/Maildir/dovecot.index.cache: File too large'
+        # DOVECOT_LOGIN_DISCONNECTED: pre-auth disconnect that says why
+        - string: 'imap-login: Disconnected: TLS initialization failed. (auth failed, 2 attempts in 6 secs): user=<neti@example.net>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, session=<AbC>'
+          result:
+            dovecot_service: 'imap'
+            dovecot_event: 'Disconnected'
+            dovecot_reason: 'TLS initialization failed.'
+            dovecot_abort_reason: 'auth failed, 2 attempts in 6 secs'
+            dovecot_kv: 'user=<neti@example.net>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, session=<AbC>'
+        # DOVECOT_LOGIN_LEVEL: a login process complaining about itself
+        - string: 'imap-login: Error: Failed to initialize SSL server context: Can''t load DH parameters'
+          result:
+            dovecot_service: 'imap'
+            dovecot_level: 'Error'
+            dovecot_message: 'Failed to initialize SSL server context: Can''t load DH parameters'
+        # DOVECOT_MASTER_STARTUP / DOVECOT_SERVICE_LEVEL
+        - string: 'master: Dovecot v2.3.21.1 (d492236fa0) starting up for imap, lmtp, sieve, pop3'
+          result:
+            dovecot_version: '2.3.21.1'
+            dovecot_build: 'd492236fa0'
+            dovecot_protocols: 'imap, lmtp, sieve, pop3'
+        - string: 'auth: Error: auth client 0 disconnected with 1 pending requests: EOF'
+          result:
+            dovecot_service: 'auth'
+            dovecot_level: 'Error'
+            dovecot_message: 'auth client 0 disconnected with 1 pending requests: EOF'
+        # DOVECOT_LMTP_CONNECT: lmtp connect
+        - string: 'lmtp(1234): Connect from local'
+          result:
+            dovecot_lmtp_id: '1234'
+            dovecot_lmtp_from: 'local'
+        - string: 'lmtp(5678): Connect from 192.0.2.5'
+          result:
+            dovecot_lmtp_id: '5678'
+            dovecot_lmtp_from: '192.0.2.5'
+      negative:
+        - 'this is not a dovecot login line at all'
+        - 'Jul 15 10:00:00 host sshd[123]: Accepted publickey for neti'
+        - string: 'imap-login: Login: user=<neti>, method=PLAIN, rip=203.0.113.7, lip=192.0.2.1, mpid=1234, TLS, session=<AbC123>'
+          program: 'dovecot-extra'

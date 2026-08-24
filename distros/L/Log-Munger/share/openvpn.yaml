@@ -1,0 +1,215 @@
+---
+# OpenVPN server connection / certificate / authentication log enrichment.
+#
+# Gates on the syslog PROGRAM field being "openvpn" or "openvpn-server"
+# (systemd's openvpn-server@.service logs under the latter). Patterns are
+# anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with openvpn_ .
+#
+# OpenVPN prefixes anything it says about a client with that client's identity:
+#
+#   192.0.2.5:49152 ...            before the certificate has been verified
+#   neti/192.0.2.5:49152 ...    once the common name is known
+#
+# So the same peer appears with and without a name depending on how far the
+# handshake had got, which is why the name is optional in the shared prefix
+# below rather than being a pattern of its own.
+includes:
+- base
+vars_templated:
+  # The "[common-name/]address:port" prefix on every per-client message.
+  #
+  # The common name is matched as "no slash and no whitespace" so it cannot run
+  # past the separator into the address.
+  OPENVPN_PEER: '(?:(?<openvpn_cn>[^/\s]+)/)?(?<openvpn_src_ip>[% IP %]):(?<openvpn_src_port>[% INT %])'
+  # "192.0.2.5:49152 TLS: Initial packet from [AF_INET]192.0.2.5:49152,
+  #  sid=abc123 def456"
+  #
+  # The first thing a new peer produces. On an exposed UDP port this is also
+  # what a scanner produces, so it is the line to count when asking who is
+  # knocking.
+  OPENVPN_TLS_INIT: '[% OPENVPN_PEER %] TLS: Initial packet from \[(?<openvpn_af>[% WORD %])\](?<openvpn_peer_addr>[% NOTSPACE %]), sid=(?<openvpn_sid>[% GREEDYDATA %])'
+  # "192.0.2.5:49152 VERIFY ERROR: depth=0, error=certificate has expired:
+  #  CN=client"
+  # "192.0.2.5:49152 VERIFY OK: depth=1, CN=ca"
+  OPENVPN_VERIFY: '[% OPENVPN_PEER %] VERIFY (?<openvpn_verify_result>OK|ERROR): depth=(?<openvpn_cert_depth>[% INT %]),? *(?:error=(?<openvpn_verify_error>.*?): )?(?<openvpn_cert_subject>[% GREEDYDATA %])'
+  # "192.0.2.5:49152 TLS Error: TLS key negotiation failed to occur within 60
+  #  seconds (check your network connectivity)"
+  #
+  # A handshake that never completed. Distinct from VERIFY ERROR, which is a
+  # certificate that was presented and rejected.
+  OPENVPN_TLS_ERROR: '[% OPENVPN_PEER %] TLS Error: (?<openvpn_tls_error>[% GREEDYDATA %])'
+  # "neti/192.0.2.5:49152 [neti] Peer Connection Initiated with
+  #  [AF_INET]192.0.2.5:49152"
+  #
+  # The handshake completed and the client is on the VPN.
+  OPENVPN_PEER_INIT: '[% OPENVPN_PEER %] \[(?<openvpn_peer_cn>[^\]]*)\] Peer Connection Initiated with \[(?<openvpn_af>[% WORD %])\](?<openvpn_peer_addr>[% NOTSPACE %])(?: [% GREEDYDATA %])?'
+  # "neti/192.0.2.5:49152 MULTI: primary virtual IP for
+  #  neti/192.0.2.5:49152: 10.8.0.2"
+  #
+  # Which tunnel address the client was handed. This is the join between a
+  # public address in these logs and an internal address everywhere else, so it
+  # is what makes the rest of a host's logging attributable to a VPN user.
+  # The peer is repeated after "for", and it has colons in it, so it is stepped
+  # over with NOTSPACE rather than with GREEDYDATA_NO_COLON. It is already
+  # captured at the head of the line.
+  OPENVPN_VIRTUAL_IP: '[% OPENVPN_PEER %] MULTI: primary virtual IP for [% NOTSPACE %]: (?<openvpn_virtual_ip>[% IP %])'
+  # "AUTH-PAM: BACKGROUND: user ''admin'' failed to authenticate: Authentication
+  #  failure"
+  #
+  # Has no peer prefix at all -- the PAM helper runs in its own process and
+  # does not know which client it is answering for -- so the address has to
+  # come from the surrounding lines.
+  OPENVPN_AUTH_FAILED: 'AUTH-PAM: BACKGROUND: user ''(?<openvpn_auth_user>[^'']*)'' failed to authenticate: (?<openvpn_auth_error>[% GREEDYDATA %])'
+  # "neti/192.0.2.5:49152 SIGTERM[soft,remote-exit] received,
+  #  client-instance exiting"
+  OPENVPN_CLIENT_EXIT: '[% OPENVPN_PEER %] (?<openvpn_signal>SIG[A-Z]+)\[(?<openvpn_signal_reason>[^\]]*)\] received, client-instance exiting(?: [% GREEDYDATA %])?'
+vars_tests:
+  OPENVPN_PEER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.5:49152'
+        result: '192.0.2.5:49152'
+      - string: 'neti/192.0.2.5:49152'
+        result: 'neti/192.0.2.5:49152'
+    negative:
+      - '192.0.2.5'
+  OPENVPN_TLS_INIT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.5:49152 TLS: Initial packet from [AF_INET]192.0.2.5:49152, sid=abc123 def456'
+        result: '192.0.2.5:49152 TLS: Initial packet from [AF_INET]192.0.2.5:49152, sid=abc123 def456'
+    negative:
+      - '192.0.2.5:49152 TLS Error: TLS key negotiation failed to occur within 60 seconds'
+  OPENVPN_VERIFY:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.5:49152 VERIFY OK: depth=1, CN=ca'
+        result: '192.0.2.5:49152 VERIFY OK: depth=1, CN=ca'
+      - string: '192.0.2.5:49152 VERIFY ERROR: depth=0, error=certificate has expired: CN=client'
+        result: '192.0.2.5:49152 VERIFY ERROR: depth=0, error=certificate has expired: CN=client'
+    negative:
+      - '192.0.2.5:49152 TLS Error: TLS key negotiation failed to occur within 60 seconds'
+  OPENVPN_TLS_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.5:49152 TLS Error: TLS key negotiation failed to occur within 60 seconds (check your network connectivity)'
+        result: '192.0.2.5:49152 TLS Error: TLS key negotiation failed to occur within 60 seconds (check your network connectivity)'
+    negative:
+      - '192.0.2.5:49152 VERIFY OK: depth=1, CN=ca'
+  OPENVPN_PEER_INIT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'neti/192.0.2.5:49152 [neti] Peer Connection Initiated with [AF_INET]192.0.2.5:49152'
+        result: 'neti/192.0.2.5:49152 [neti] Peer Connection Initiated with [AF_INET]192.0.2.5:49152'
+    negative:
+      - '192.0.2.5:49152 TLS: Initial packet from [AF_INET]192.0.2.5:49152, sid=abc123 def456'
+  OPENVPN_VIRTUAL_IP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'neti/192.0.2.5:49152 MULTI: primary virtual IP for neti/192.0.2.5:49152: 10.8.0.2'
+        result: 'neti/192.0.2.5:49152 MULTI: primary virtual IP for neti/192.0.2.5:49152: 10.8.0.2'
+    negative:
+      - 'neti/192.0.2.5:49152 [neti] Peer Connection Initiated with [AF_INET]192.0.2.5:49152'
+  OPENVPN_AUTH_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'AUTH-PAM: BACKGROUND: user ''admin'' failed to authenticate: Authentication failure'
+        result: 'AUTH-PAM: BACKGROUND: user ''admin'' failed to authenticate: Authentication failure'
+    negative:
+      - '192.0.2.5:49152 TLS Error: TLS key negotiation failed to occur within 60 seconds'
+  OPENVPN_CLIENT_EXIT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'neti/192.0.2.5:49152 SIGTERM[soft,remote-exit] received, client-instance exiting'
+        result: 'neti/192.0.2.5:49152 SIGTERM[soft,remote-exit] received, client-instance exiting'
+    negative:
+      - 'neti/192.0.2.5:49152 [neti] Peer Connection Initiated with [AF_INET]192.0.2.5:49152'
+# The tunnel address is not looked up: it is by definition inside the VPN, so a
+# lookup on it says nothing. Only the public source address is placed.
+geoip:
+  - openvpn_src_ip
+convert:
+  openvpn_src_port: int
+  openvpn_cert_depth: int
+rules:
+  - name: openvpn
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^openvpn(?:-server|-client)?$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - OPENVPN_PEER_INIT
+      - OPENVPN_VERIFY
+      - OPENVPN_TLS_INIT
+      - OPENVPN_TLS_ERROR
+      - OPENVPN_VIRTUAL_IP
+      - OPENVPN_CLIENT_EXIT
+      - OPENVPN_AUTH_FAILED
+    tests:
+      positive:
+        - string: '192.0.2.5:49152 TLS: Initial packet from [AF_INET]192.0.2.5:49152, sid=abc123 def456'
+          program: 'openvpn'
+          result:
+            openvpn_src_ip: '192.0.2.5'
+            openvpn_src_port: '49152'
+            openvpn_af: 'AF_INET'
+            openvpn_peer_addr: '192.0.2.5:49152'
+            openvpn_sid: 'abc123 def456'
+        - string: '192.0.2.5:49152 VERIFY ERROR: depth=0, error=certificate has expired: CN=client'
+          numeric:
+            - openvpn_cert_depth
+            - openvpn_src_port
+          program: 'openvpn-client'
+          result:
+            openvpn_src_ip: '192.0.2.5'
+            openvpn_src_port: '49152'
+            openvpn_verify_result: 'ERROR'
+            openvpn_cert_depth: '0'
+            openvpn_verify_error: 'certificate has expired'
+            openvpn_cert_subject: 'CN=client'
+        - string: '192.0.2.5:49152 VERIFY OK: depth=1, CN=ca'
+          program: 'openvpn-server'
+          result:
+            openvpn_src_ip: '192.0.2.5'
+            openvpn_src_port: '49152'
+            openvpn_verify_result: 'OK'
+            openvpn_cert_depth: '1'
+            openvpn_cert_subject: 'CN=ca'
+        - string: '192.0.2.5:49152 TLS Error: TLS key negotiation failed to occur within 60 seconds (check your network connectivity)'
+          result:
+            openvpn_src_ip: '192.0.2.5'
+            openvpn_src_port: '49152'
+            openvpn_tls_error: 'TLS key negotiation failed to occur within 60 seconds (check your network connectivity)'
+        - string: 'neti/192.0.2.5:49152 [neti] Peer Connection Initiated with [AF_INET]192.0.2.5:49152'
+          result:
+            openvpn_cn: 'neti'
+            openvpn_src_ip: '192.0.2.5'
+            openvpn_src_port: '49152'
+            openvpn_peer_cn: 'neti'
+            openvpn_af: 'AF_INET'
+            openvpn_peer_addr: '192.0.2.5:49152'
+        - string: 'neti/192.0.2.5:49152 MULTI: primary virtual IP for neti/192.0.2.5:49152: 10.8.0.2'
+          result:
+            openvpn_cn: 'neti'
+            openvpn_src_ip: '192.0.2.5'
+            openvpn_src_port: '49152'
+            openvpn_virtual_ip: '10.8.0.2'
+        - string: 'neti/192.0.2.5:49152 SIGTERM[soft,remote-exit] received, client-instance exiting'
+          result:
+            openvpn_cn: 'neti'
+            openvpn_src_ip: '192.0.2.5'
+            openvpn_src_port: '49152'
+            openvpn_signal: 'SIGTERM'
+            openvpn_signal_reason: 'soft,remote-exit'
+        - string: 'AUTH-PAM: BACKGROUND: user ''admin'' failed to authenticate: Authentication failure'
+          result:
+            openvpn_auth_user: 'admin'
+            openvpn_auth_error: 'Authentication failure'
+      negative:
+        - 'this is not an openvpn line at all'
+        - 'Jul 15 10:00:00 host cron[123]: session opened for user root'
+        - string: '192.0.2.5:49152 TLS: Initial packet from [AF_INET]192.0.2.5:49152, sid=abc123 def456'
+          program: 'openvpn-extra'

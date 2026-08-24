@@ -1,0 +1,361 @@
+---
+# Sympa mailing list manager log enrichment.
+#
+# Sympa is a family of daemons that all log through the same Sympa::Log, each
+# under its own syslog program name -- sympa, sympa_msg, task_manager, bulk,
+# archived, bounced, wwsympa -- plus "sympa/<subcommand>" for the CLI. The gate
+# below lists them all. Patterns are anchored (each must match the whole
+# MESSAGE) and first-match wins. Every capture is namespaced with sympa_ .
+#
+# Every line has the same three parts: a syslog level word, the caller, and the
+# message. What the caller looks like depends on the level:
+#
+#   notice Sympa::Spindle::ProcessTask::_execute() Running task ...
+#   err main::#84 > Sympa::CLI::run#96 > Sympa::Database::do_query#281 Unable to execute SQL statement ...
+#   notice main:: Task_Manager 6.2.76 Started
+#
+# At err and below Sympa prints the whole call stack rather than only the
+# innermost frame, which is why there are two caller patterns. Either way
+# sympa_function holds the sub the message came from, so a consumer need not
+# know which shape it was, and the full chain is kept in sympa_stack for when
+# the path there is what matters.
+#
+# There is deliberately no catch-all. Several of these program names -- bulk,
+# archived, bounced, task_manager -- are generic enough that another daemon
+# could plausibly use one, and requiring a Sympa-shaped level-and-caller prefix
+# keeps this file off its lines.
+#
+# The message itself is left whole in sympa_message, and the decomposes at the
+# bottom pull the object references Sympa embeds in it -- the list, the message
+# id, the task, the request -- out into fields of their own. Which list a line
+# is about is the usual thing to filter on, and it can appear anywhere in the
+# text, so it is matched positionally rather than written into every pattern.
+includes:
+- base
+# Additional primitives used below that are not in base.yaml.
+vars:
+  # The level words Sympa::Log emits. Longest first so "debug3" is not
+  # shadowed by "debug".
+  SYMPA_LEVEL_WORD: '(?:debug3|debug2|debug|trace|info|notice|warning|err|crit|alert|emerg)'
+  # A perl package-or-sub name as Sympa prints it, e.g. "main::sigterm" or
+  # "Sympa::Spindle::ProcessTask::_execute".
+  SYMPA_SUB: '[\w:]+'
+vars_templated:
+  SYMPA_LEVEL: '(?<sympa_level>[% SYMPA_LEVEL_WORD %])'
+  # One frame of the call stack Sympa prints at err and below: the sub, then
+  # the line number within it. The outermost frame is usually the bare
+  # "main::#84".
+  SYMPA_FRAME: '[% SYMPA_SUB %]#[% INT %]'
+  # "notice main:: Task_Manager 6.2.76 Started" -- a daemon announcing itself.
+  # The name is NOTSPACE because sympa_msg calls itself "Sympa/msg".
+  SYMPA_DAEMON_START: '[% SYMPA_LEVEL %] main:: (?<sympa_daemon>[% NOTSPACE %]) (?<sympa_version>[% NOTSPACE %]) (?<sympa_daemon_state>Started)'
+  # "notice main:: Bounced exited normally due to signal"
+  SYMPA_DAEMON_STOP: '[% SYMPA_LEVEL %] main:: (?<sympa_daemon>[% NOTSPACE %]) (?<sympa_daemon_state>exited [% GREEDYDATA %])'
+  # The ordinary form: the sub the message came from, then the message.
+  SYMPA_CALL_LOG: '[% SYMPA_LEVEL %] (?<sympa_function>[% SYMPA_SUB %])\(\) (?<sympa_message>[% GREEDYDATA %])'
+  # The err-and-below form, which carries the whole chain. The repeated group
+  # is greedy, so sympa_function and sympa_line land on the LAST frame -- the
+  # one the message was actually logged from -- while sympa_stack keeps the
+  # path that got there.
+  SYMPA_TRACE_LOG: '[% SYMPA_LEVEL %] (?<sympa_stack>(?:[% SYMPA_FRAME %] > )*(?<sympa_function>[% SYMPA_SUB %])#(?<sympa_line>[% INT %])) (?<sympa_message>[% GREEDYDATA %])'
+  # Anything logged from outside a sub, once the two daemon banners above have
+  # had their turn.
+  SYMPA_MAIN_LOG: '[% SYMPA_LEVEL %] main:: (?<sympa_message>[% GREEDYDATA %])'
+  # --- object references, used by the decomposes rather than by a rule -------
+  #
+  # Sympa stringifies its objects into the message text as "Sympa::Thing <id>".
+  # These are matched with a leading and trailing GREEDYDATA because the
+  # pattern decompose anchors on the whole field, and the reference can sit
+  # anywhere in it.
+  SYMPA_LIST_REF: '[% GREEDYDATA %]Sympa::List <(?<sympa_list>[^>]*)>[% GREEDYDATA %]'
+  SYMPA_MESSAGE_REF: '[% GREEDYDATA %]Sympa::Message(?:::Template)? <(?<sympa_message_id>[^>]*)>[% GREEDYDATA %]'
+  SYMPA_TASK_REF: '[% GREEDYDATA %]Sympa::Task <(?<sympa_task>[^>]*)>[% GREEDYDATA %]'
+  SYMPA_REQUEST_REF: '[% GREEDYDATA %]Sympa::Request <(?<sympa_request>[^>]*)>[% GREEDYDATA %]'
+vars_tests:
+  SYMPA_LEVEL_WORD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'notice'
+        result: 'notice'
+      - string: 'err'
+        result: 'err'
+    negative:
+      - 'NOTICE'
+      - 'nonsense'
+  SYMPA_SUB:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Sympa::Spindle::ProcessTask::_execute'
+        result: 'Sympa::Spindle::ProcessTask::_execute'
+      - string: 'main::'
+        result: 'main::'
+    negative:
+      - 'has a space'
+  SYMPA_LEVEL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'notice'
+        result: 'notice'
+      - string: 'err'
+        result: 'err'
+    negative:
+      - 'NOTICE'
+  SYMPA_FRAME:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'main::#84'
+        result: 'main::#84'
+      - string: 'Sympa::Database::do_query#281'
+        result: 'Sympa::Database::do_query#281'
+    negative:
+      - 'Sympa::Database::do_query()'
+  SYMPA_DAEMON_START:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'notice main:: Task_Manager 6.2.76 Started'
+        result: 'notice main:: Task_Manager 6.2.76 Started'
+      - string: 'notice main:: Sympa/msg 6.2.76 Started'
+        result: 'notice main:: Sympa/msg 6.2.76 Started'
+    negative:
+      - 'notice main:: Bounced exited normally due to signal'
+  SYMPA_DAEMON_STOP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'notice main:: Bounced exited normally due to signal'
+        result: 'notice main:: Bounced exited normally due to signal'
+      - string: 'notice main:: Bulk exited normally due to signal'
+        result: 'notice main:: Bulk exited normally due to signal'
+    negative:
+      - 'notice main:: Bounced 6.2.76 Started'
+  SYMPA_CALL_LOG:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'notice Sympa::Process::daemonize() Starting bulk daemon, PID 89691'
+        result: 'notice Sympa::Process::daemonize() Starting bulk daemon, PID 89691'
+      - string: 'notice main::sigterm() Signal TERM received, still processing current task'
+        result: 'notice main::sigterm() Signal TERM received, still processing current task'
+    negative:
+      - 'notice main:: Bounced 6.2.76 Started'
+  SYMPA_TRACE_LOG:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'err main::#1518 > main::do_create_list#9390 > Sympa::Spindle::spin#95 Missing list parameter "subject"'
+        result: 'err main::#1518 > main::do_create_list#9390 > Sympa::Spindle::spin#95 Missing list parameter "subject"'
+      - string: 'err Sympa::Database::do_query#281 Unable to execute SQL statement'
+        result: 'err Sympa::Database::do_query#281 Unable to execute SQL statement'
+    negative:
+      - 'notice Sympa::Process::daemonize() Starting bulk daemon, PID 89691'
+  SYMPA_MAIN_LOG:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'notice main:: Bounced 6.2.76 Started'
+        result: 'notice main:: Bounced 6.2.76 Started'
+      - string: 'err main:: something went wrong'
+        result: 'err main:: something went wrong'
+    negative:
+      - 'notice Sympa::Process::daemonize() Starting bulk daemon, PID 89691'
+  SYMPA_LIST_REF:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'No VERP subscribers left to distribute message to list Sympa::List <family@example.net>'
+        result: 'No VERP subscribers left to distribute message to list Sympa::List <family@example.net>'
+      - string: 'Sympa::List <announce@example.net> is closed'
+        result: 'Sympa::List <announce@example.net> is closed'
+    negative:
+      - 'Logs purged'
+  SYMPA_MESSAGE_REF:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Archiving Sympa::Message <family@example.net.1769403321.76321>'
+        result: 'Archiving Sympa::Message <family@example.net.1769403321.76321>'
+      - string: 'Processing Sympa::Message::Template <family@example.net.1769403290.90281,1536/shelved:>'
+        result: 'Processing Sympa::Message::Template <family@example.net.1769403290.90281,1536/shelved:>'
+    negative:
+      - 'Logs purged'
+  SYMPA_TASK_REF:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Running task Sympa::Task <date=1769401093;label=;model=eval_bouncers;context=*>'
+        result: 'Running task Sympa::Task <date=1769401093;label=;model=eval_bouncers;context=*>'
+      - string: 'Sympa::Task <date=1769401093;label=ACTION;model=purge_user_table;context=*> is stored'
+        result: 'Sympa::Task <date=1769401093;label=ACTION;model=purge_user_table;context=*> is stored'
+    negative:
+      - 'Logs purged'
+  SYMPA_REQUEST_REF:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Processing Sympa::Request <action=create_list;context=example.net>'
+        result: 'Processing Sympa::Request <action=create_list;context=example.net>'
+      - string: 'Sympa::Request <action=subscribe;context=family@example.net> accepted'
+        result: 'Sympa::Request <action=subscribe;context=family@example.net> accepted'
+    negative:
+      - 'Logs purged'
+# Coerce numeric captures.
+convert:
+  sympa_line: int
+  sympa_task_date: int
+# Pull the Sympa objects out of the message text. These are pattern decomposes
+# rather than captures inside the rule patterns because a reference can appear
+# anywhere in a message, and because one message often carries two of them. A
+# decompose that does not match leaves the field alone, so all four run
+# against every message and each contributes what it finds.
+# Order matters for the last two: the task and request references are matched
+# first, and the kv splits below them then break the "key=value;key=value"
+# bodies apart.
+decompose:
+  - field: sympa_message
+    type: pattern
+    pattern: SYMPA_LIST_REF
+    tests:
+      - input: 'No VERP subscribers left to distribute message to list Sympa::List <family@example.net>'
+        result:
+          sympa_message: 'No VERP subscribers left to distribute message to list Sympa::List <family@example.net>'
+          sympa_list: 'family@example.net'
+  - field: sympa_message
+    type: pattern
+    pattern: SYMPA_MESSAGE_REF
+    tests:
+      - input: 'Archiving Sympa::Message <family@example.net.1769403321.76321>'
+        result:
+          sympa_message: 'Archiving Sympa::Message <family@example.net.1769403321.76321>'
+          sympa_message_id: 'family@example.net.1769403321.76321'
+  - field: sympa_message
+    type: pattern
+    pattern: SYMPA_TASK_REF
+    tests:
+      - input: 'Running task Sympa::Task <date=1769401093;label=;model=eval_bouncers;context=*>'
+        result:
+          sympa_message: 'Running task Sympa::Task <date=1769401093;label=;model=eval_bouncers;context=*>'
+          sympa_task: 'date=1769401093;label=;model=eval_bouncers;context=*'
+  - field: sympa_message
+    type: pattern
+    pattern: SYMPA_REQUEST_REF
+    tests:
+      - input: 'Processing Sympa::Request <action=create_list;context=example.net>'
+        result:
+          sympa_message: 'Processing Sympa::Request <action=create_list;context=example.net>'
+          sympa_request: 'action=create_list;context=example.net'
+  # the two references that are themselves "key=value;key=value" bodies
+  - field: sympa_task
+    type: kv
+    field_split: ';'
+    prefix: 'sympa_task_'
+    tests:
+      - input: 'date=1769401093;label=ACTION;model=eval_bouncers;context=*'
+        result:
+          sympa_task: 'date=1769401093;label=ACTION;model=eval_bouncers;context=*'
+          sympa_task_date: '1769401093'
+          sympa_task_label: 'ACTION'
+          sympa_task_model: 'eval_bouncers'
+          sympa_task_context: '*'
+  - field: sympa_request
+    type: kv
+    field_split: ';'
+    prefix: 'sympa_request_'
+    tests:
+      - input: 'action=create_list;context=example.net'
+        result:
+          sympa_request: 'action=create_list;context=example.net'
+          sympa_request_action: 'create_list'
+          sympa_request_context: 'example.net'
+rules:
+  - name: sympa
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^(?:sympa|sympa_msg|sympa_automatic|sympa_soap|sympasoap|wwsympa|task_manager|bulk|archived|bounced)$//'
+          # the CLI logs as "sympa/<subcommand>", e.g. sympa/health_check
+          - '//^sympa/[\w-]+$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      # the two daemon banners first: they are "main:: <text>" too, so
+      # SYMPA_MAIN_LOG would otherwise take them
+      - SYMPA_DAEMON_START
+      - SYMPA_DAEMON_STOP
+      - SYMPA_CALL_LOG
+      - SYMPA_TRACE_LOG
+      - SYMPA_MAIN_LOG
+    tests:
+      positive:
+        # decompose does NOT run in rule tests, so the message stays whole here
+        - string: 'notice Sympa::Spindle::ProcessTask::_execute() Running task Sympa::Task <date=1769401093;label=;model=eval_bouncers;context=*>'
+          enriched:
+            sympa_function: 'Sympa::Spindle::ProcessTask::_execute'
+            sympa_level: 'notice'
+            sympa_message: 'Running task Sympa::Task <date=1769401093;label=;model=eval_bouncers;context=*>'
+            sympa_task: 'date=1769401093;label=;model=eval_bouncers;context=*'
+            sympa_task_context: '*'
+            sympa_task_date: '1769401093'
+            sympa_task_label: ''
+            sympa_task_model: 'eval_bouncers'
+          numeric:
+            - sympa_task_date
+          program: 'sympa_msg'
+          result:
+            sympa_level: 'notice'
+            sympa_function: 'Sympa::Spindle::ProcessTask::_execute'
+            sympa_message: 'Running task Sympa::Task <date=1769401093;label=;model=eval_bouncers;context=*>'
+        - string: 'notice main::sigterm() Signal TERM received, still processing current task'
+          program: 'bounced'
+          result:
+            sympa_level: 'notice'
+            sympa_function: 'main::sigterm'
+            sympa_message: 'Signal TERM received, still processing current task'
+        - string: 'err main::#1518 > main::do_create_list#9390 > Sympa::Spindle::spin#95 Missing list parameter "subject"'
+          numeric:
+            - sympa_line
+          program: 'bulk'
+          result:
+            sympa_level: 'err'
+            sympa_stack: 'main::#1518 > main::do_create_list#9390 > Sympa::Spindle::spin#95'
+            sympa_function: 'Sympa::Spindle::spin'
+            sympa_line: '95'
+            sympa_message: 'Missing list parameter "subject"'
+        - string: 'notice main:: Task_Manager 6.2.76 Started'
+          program: 'archived'
+          result:
+            sympa_level: 'notice'
+            sympa_daemon: 'Task_Manager'
+            sympa_version: '6.2.76'
+            sympa_daemon_state: 'Started'
+        - string: 'notice main:: Bounced exited normally due to signal'
+          result:
+            sympa_level: 'notice'
+            sympa_daemon: 'Bounced'
+            sympa_daemon_state: 'exited normally due to signal'
+        # a request reference, whose body is a second kv split
+        - string: 'notice Sympa::Spindle::ProcessRequest::_twist() Processing Sympa::Request <action=create_list;context=example.net>'
+          program: 'sympa_msg'
+          result:
+            sympa_function: 'Sympa::Spindle::ProcessRequest::_twist'
+            sympa_level: 'notice'
+            sympa_message: 'Processing Sympa::Request <action=create_list;context=example.net>'
+          enriched:
+            sympa_function: 'Sympa::Spindle::ProcessRequest::_twist'
+            sympa_level: 'notice'
+            sympa_message: 'Processing Sympa::Request <action=create_list;context=example.net>'
+            sympa_request: 'action=create_list;context=example.net'
+            sympa_request_action: 'create_list'
+            sympa_request_context: 'example.net'
+        # two object references in one line, each lifted out by its own pattern decompose
+        - string: 'notice Sympa::Mailer::store() Done sending message Sympa::Message <1.5.1769403034.x.familytest@example.net_s,90281,2422/s> for Sympa::List <familytest@example.net>'
+          program: 'bulk'
+          result:
+            sympa_function: 'Sympa::Mailer::store'
+            sympa_level: 'notice'
+            sympa_message: 'Done sending message Sympa::Message <1.5.1769403034.x.familytest@example.net_s,90281,2422/s> for Sympa::List <familytest@example.net>'
+          enriched:
+            sympa_function: 'Sympa::Mailer::store'
+            sympa_level: 'notice'
+            sympa_list: 'familytest@example.net'
+            sympa_message: 'Done sending message Sympa::Message <1.5.1769403034.x.familytest@example.net_s,90281,2422/s> for Sympa::List <familytest@example.net>'
+            sympa_message_id: '1.5.1769403034.x.familytest@example.net_s,90281,2422/s'
+      negative:
+        - 'this is not a sympa line at all'
+        # a bare word under one of sympa's very generic program names: the gate
+        # lets it in, and nothing may match it
+        - 'started'
+        - 'Jul 15 10:00:00 host sshd[123]: Accepted publickey for neti'
+        - string: 'notice Sympa::Spindle::ProcessTask::_execute() Running task Sympa::Task <date=1769401093;label=;model=eval_bouncers;context=*>'
+          program: 'sympa-extra'

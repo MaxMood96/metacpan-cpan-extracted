@@ -1,5 +1,5 @@
 package Statocles::Command::daemon;
-our $VERSION = '0.098';
+our $VERSION = '0.099';
 # ABSTRACT: Run a daemon to navigate the site
 
 use Statocles::Base 'Command';
@@ -72,7 +72,7 @@ sub run {
         $self->log( $self->site->log );
 
         # First build the site
-        my $path = Path::Tiny->new( '.statocles/build' );
+        my $path = $self->site->store->path->child( '.statocles', 'build' );
         $path->mkpath;
         my $store = Statocles::Store->new( path => $path );
         $store->write_file( $_->path, $_->render ) for $self->site->pages( %{ $self->options } );
@@ -112,7 +112,7 @@ sub run {
             }
 
             # Watch the theme, but not built-in themes
-            my $theme_path = $self->site->theme->store->path;
+            my $theme_path = $self->site->theme->path;
             if ( !Path::Tiny->new( dist_dir( 'Statocles' ) )->subsumes( $theme_path ) ) {
                 push @{ $watches{ $theme_path } }, $self->site->theme;
             }
@@ -222,7 +222,7 @@ Statocles::Command::daemon - Run a daemon to navigate the site
 
 =head1 VERSION
 
-version 0.098
+version 0.099
 
 =head1 AUTHOR
 

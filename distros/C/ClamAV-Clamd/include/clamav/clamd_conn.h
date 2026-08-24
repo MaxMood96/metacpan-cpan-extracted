@@ -16,6 +16,8 @@
 #define CC_ERR_TOOBIG    -4
 #define CC_ERR_CONFIG    -5
 #define CC_ERR_CLOSED    -6
+/* -7 .. -10 live in clamd_scan.h and clamd_stream.h */
+#define CC_ERR_UNAVAILABLE -11  /* clamd has this command switched off (Enable*Command no) */
 
 #define CC_ERRLEN 256
 

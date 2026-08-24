@@ -1,0 +1,192 @@
+---
+# OpenLDAP (slapd) connection and operation log enrichment.
+#
+# Gates on the syslog PROGRAM field being "slapd". Patterns are anchored (each
+# must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with slapd_ .
+#
+# slapd splits one client operation across several lines, tied together by the
+# conn= number: an ACCEPT names the address, a BIND names the DN, and a RESULT
+# some lines later says whether it worked. Nothing but the connection number
+# joins them, so slapd_conn is captured on every pattern here and is the field
+# to correlate on.
+#
+# RESULT with err=49 is LDAP_INVALID_CREDENTIALS: a failed bind, and the only
+# thing distinguishing a directory being used from one being guessed at.
+includes:
+- base
+vars_templated:
+  # "conn=1000 fd=12 ACCEPT from IP=192.0.2.5:49152 (IP=0.0.0.0:389)"
+  #
+  # The only line that names the peer, which is why every other line has to be
+  # correlated back to it by conn=.
+  SLAPD_ACCEPT: 'conn=(?<slapd_conn>[% INT %]) fd=(?<slapd_fd>[% INT %]) (?<slapd_event>ACCEPT|TLS) from IP=(?<slapd_src_ip>[% IP %]):(?<slapd_src_port>[% INT %])(?: \(IP=(?<slapd_dst_ip>[% IP %]):(?<slapd_dst_port>[% INT %])\))?(?: [% GREEDYDATA %])?'
+  # "conn=1000 op=0 BIND dn="cn=admin,dc=example,dc=com" method=128"
+  # "conn=1000 op=0 BIND dn="cn=admin,dc=example,dc=com" mech=SIMPLE ssf=0"
+  #
+  # slapd logs two BIND lines per bind: the request, carrying method=, and the
+  # outcome of method selection, carrying mech= and ssf=. An anonymous bind has
+  # an empty dn, which must be told apart from a named one.
+  SLAPD_BIND: 'conn=(?<slapd_conn>[% INT %]) op=(?<slapd_op>[% INT %]) BIND dn="(?<slapd_dn>[^"]*)"(?: method=(?<slapd_method>[% NOTSPACE %]))?(?: mech=(?<slapd_mech>[% NOTSPACE %]))?(?: ssf=(?<slapd_ssf>[% INT %]))?(?: [% GREEDYDATA %])?'
+  # "conn=1000 op=0 RESULT tag=97 err=49 text="
+  #
+  # err=0 is success and err=49 is invalid credentials. qtime/etime appear on
+  # newer slapd and are left to the trailing GREEDYDATA.
+  SLAPD_RESULT: 'conn=(?<slapd_conn>[% INT %]) op=(?<slapd_op>[% INT %]) RESULT (?:oid=(?<slapd_oid>[% NOTSPACE %]) )?tag=(?<slapd_tag>[% INT %]) err=(?<slapd_err>[% INT %])(?: qtime=[% NOTSPACE %])?(?: etime=[% NOTSPACE %])?(?: text=(?<slapd_text>[% GREEDYDATA %]))?'
+  # "conn=1000 op=1 SRCH base="dc=example,dc=com" scope=2 deref=0
+  #  filter="(uid=neti)""
+  SLAPD_SEARCH: 'conn=(?<slapd_conn>[% INT %]) op=(?<slapd_op>[% INT %]) SRCH base="(?<slapd_base>[^"]*)" scope=(?<slapd_scope>[% INT %]) deref=(?<slapd_deref>[% INT %]) filter="(?<slapd_filter>.*)"'
+  # "conn=1000 fd=12 closed (connection lost)"
+  SLAPD_CLOSED: 'conn=(?<slapd_conn>[% INT %]) fd=(?<slapd_fd>[% INT %]) closed(?: \((?<slapd_close_reason>[^)]*)\))?(?: [% GREEDYDATA %])?'
+  # Any other per-connection operation: MOD, ADD, DEL, UNBIND, ABANDON, CMP.
+  # Keeps the connection number and the operation name so the line still joins
+  # up with the ACCEPT that named the peer.
+  SLAPD_OP: 'conn=(?<slapd_conn>[% INT %]) op=(?<slapd_op>[% INT %]) (?<slapd_operation>[A-Z]+)(?: (?<slapd_op_detail>[% GREEDYDATA %]))?'
+vars_tests:
+  SLAPD_ACCEPT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'conn=1000 fd=12 ACCEPT from IP=192.0.2.5:49152 (IP=0.0.0.0:389)'
+        result: 'conn=1000 fd=12 ACCEPT from IP=192.0.2.5:49152 (IP=0.0.0.0:389)'
+      - string: 'conn=1000 fd=12 TLS from IP=192.0.2.5:49152'
+        result: 'conn=1000 fd=12 TLS from IP=192.0.2.5:49152'
+    negative:
+      - 'conn=1000 fd=12 closed (connection lost)'
+  SLAPD_BIND:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'conn=1000 op=0 BIND dn="cn=admin,dc=example,dc=com" method=128'
+        result: 'conn=1000 op=0 BIND dn="cn=admin,dc=example,dc=com" method=128'
+      - string: 'conn=1000 op=0 BIND dn="cn=admin,dc=example,dc=com" mech=SIMPLE ssf=0'
+        result: 'conn=1000 op=0 BIND dn="cn=admin,dc=example,dc=com" mech=SIMPLE ssf=0'
+      # an anonymous bind has an empty dn
+      - string: 'conn=1000 op=0 BIND dn="" method=128'
+        result: 'conn=1000 op=0 BIND dn="" method=128'
+    negative:
+      - 'conn=1000 op=0 RESULT tag=97 err=49 text='
+  SLAPD_RESULT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'conn=1000 op=0 RESULT tag=97 err=49 text='
+        result: 'conn=1000 op=0 RESULT tag=97 err=49 text='
+      - string: 'conn=1000 op=1 RESULT tag=101 err=0 qtime=0.000034 etime=0.000512 text='
+        result: 'conn=1000 op=1 RESULT tag=101 err=0 qtime=0.000034 etime=0.000512 text='
+    negative:
+      - 'conn=1000 op=0 BIND dn="cn=admin,dc=example,dc=com" method=128'
+  SLAPD_SEARCH:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'conn=1000 op=1 SRCH base="dc=example,dc=com" scope=2 deref=0 filter="(uid=neti)"'
+        result: 'conn=1000 op=1 SRCH base="dc=example,dc=com" scope=2 deref=0 filter="(uid=neti)"'
+    negative:
+      - 'conn=1000 op=0 RESULT tag=97 err=49 text='
+  SLAPD_CLOSED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'conn=1000 fd=12 closed (connection lost)'
+        result: 'conn=1000 fd=12 closed (connection lost)'
+      - string: 'conn=1000 fd=12 closed'
+        result: 'conn=1000 fd=12 closed'
+    negative:
+      - 'conn=1000 fd=12 ACCEPT from IP=192.0.2.5:49152'
+  SLAPD_OP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'conn=1000 op=2 MOD dn="uid=neti,dc=example,dc=com"'
+        result: 'conn=1000 op=2 MOD dn="uid=neti,dc=example,dc=com"'
+      - string: 'conn=1000 op=3 UNBIND'
+        result: 'conn=1000 op=3 UNBIND'
+    negative:
+      - 'conn=1000 fd=12 closed (connection lost)'
+geoip:
+  - slapd_src_ip
+convert:
+  slapd_conn: int
+  slapd_op: int
+  slapd_fd: int
+  slapd_src_port: int
+  slapd_dst_port: int
+  slapd_tag: int
+  slapd_err: int
+  slapd_scope: int
+  slapd_deref: int
+  slapd_ssf: int
+rules:
+  - name: slapd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^slapd$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - SLAPD_ACCEPT
+      - SLAPD_BIND
+      - SLAPD_RESULT
+      - SLAPD_SEARCH
+      - SLAPD_CLOSED
+      # last: matches any op= line, so the named operations go first
+      - SLAPD_OP
+    tests:
+      positive:
+        - string: 'conn=1000 fd=12 ACCEPT from IP=192.0.2.5:49152 (IP=0.0.0.0:389)'
+          numeric:
+            - slapd_conn
+            - slapd_dst_port
+            - slapd_fd
+            - slapd_src_port
+          result:
+            slapd_conn: '1000'
+            slapd_fd: '12'
+            slapd_event: 'ACCEPT'
+            slapd_src_ip: '192.0.2.5'
+            slapd_src_port: '49152'
+            slapd_dst_ip: '0.0.0.0'
+            slapd_dst_port: '389'
+        - string: 'conn=1000 op=0 BIND dn="cn=admin,dc=example,dc=com" method=128'
+          result:
+            slapd_conn: '1000'
+            slapd_op: '0'
+            slapd_dn: 'cn=admin,dc=example,dc=com'
+            slapd_method: '128'
+        # err=49 is LDAP_INVALID_CREDENTIALS: the failed bind
+        - string: 'conn=1000 op=0 RESULT tag=97 err=49 text='
+          numeric:
+            - slapd_err
+            - slapd_op
+            - slapd_tag
+          program: 'slapd'
+          result:
+            slapd_conn: '1000'
+            slapd_op: '0'
+            slapd_tag: '97'
+            slapd_err: '49'
+            # slapd writes the key with nothing after it on a bind failure, so
+            # the capture is present and empty rather than absent
+            slapd_text: ''
+        - string: 'conn=1000 op=1 SRCH base="dc=example,dc=com" scope=2 deref=0 filter="(uid=neti)"'
+          numeric:
+            - slapd_deref
+            - slapd_scope
+          result:
+            slapd_conn: '1000'
+            slapd_op: '1'
+            slapd_base: 'dc=example,dc=com'
+            slapd_scope: '2'
+            slapd_deref: '0'
+            slapd_filter: '(uid=neti)'
+        - string: 'conn=1000 fd=12 closed (connection lost)'
+          result:
+            slapd_conn: '1000'
+            slapd_fd: '12'
+            slapd_close_reason: 'connection lost'
+        - string: 'conn=1000 op=3 UNBIND'
+          result:
+            slapd_conn: '1000'
+            slapd_op: '3'
+            slapd_operation: 'UNBIND'
+      negative:
+        - 'this is not a slapd line at all'
+        - 'Jul 15 10:00:00 host cron[123]: session opened for user root'
+        - string: 'conn=1000 fd=12 ACCEPT from IP=192.0.2.5:49152 (IP=0.0.0.0:389)'
+          program: 'slapd-extra'

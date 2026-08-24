@@ -1,10 +1,12 @@
 package Statocles::Base;
-our $VERSION = '0.098';
+our $VERSION = '0.099';
 # ABSTRACT: Base module for Statocles modules
 
 use strict;
 use warnings;
 use base 'Import::Base';
+use YAML;
+$YAML::Stringify = 1;
 
 our @IMPORT_MODULES = (
     sub {
@@ -86,7 +88,7 @@ Statocles::Base - Base module for Statocles modules
 
 =head1 VERSION
 
-version 0.098
+version 0.099
 
 =head1 SYNOPSIS
 

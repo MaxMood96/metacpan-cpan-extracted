@@ -18,7 +18,7 @@
 use v5.36;
 
 package Protocol::Imsg;
-our $VERSION = '0.1.2';
+our $VERSION = '0.2.0';
 
 use Errno qw(EBADMSG EMSGSIZE);
 
@@ -32,10 +32,10 @@ use Errno qw(EBADMSG EMSGSIZE);
 # the first paragraph of Protocol/Imsg.pod for that limit and the two
 # others.
 #
-# The wire format is in spec/MDNS-Imsg.md in this repository.
+# The wire format is in spec/protocol/MDNS-Imsg.md in this repository.
 # That document is a curated reference, not an installed manual.
 
-# Header and size constants per spec/MDNS-Imsg.md §1-§2. The header
+# Header and size constants per spec/protocol/MDNS-Imsg.md §1-§2. The header
 # has four native uint32 fields: type, len, peerid, pid. The len field
 # counts the whole message, and MAX_IMSGSIZE bounds it. The
 # HEADER_TEMPLATE pack template pins the field order and widths.

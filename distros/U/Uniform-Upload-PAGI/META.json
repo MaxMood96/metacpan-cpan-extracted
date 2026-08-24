@@ -1,5 +1,5 @@
 {
-   "abstract" : "Explicit asynchronous multi-part file upload driver for PAGI",
+   "abstract" : "Async PAGI framework adapter for Uniform::Upload",
    "author" : [
       "Joshua S. Day <HAX@cpan.org>"
    ],
@@ -32,14 +32,14 @@
       },
       "runtime" : {
          "requires" : {
-            "Uniform" : "1.00",
-            "Uniform::Upload" : "0.01",
+            "Future" : "0.40",
+            "Uniform::Upload" : "0.02",
+            "Uniform::Utils" : "1.01",
             "perl" : "5.010000"
          }
       },
       "test" : {
          "requires" : {
-            "Test::Deep" : "0",
             "Test::Exception" : "0",
             "Test::More" : "0.88"
          }
@@ -56,6 +56,6 @@
          "web" : "https://github.com/haxmeister/perl-Uniform-Upload-PAGI"
       }
    },
-   "version" : "1.01",
+   "version" : "1.02",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

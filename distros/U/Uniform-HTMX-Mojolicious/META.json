@@ -1,5 +1,5 @@
 {
-   "abstract" : "Explicit htmx adapter connector for the Mojolicious ecosystem",
+   "abstract" : "Framework-agnostic htmx adapter for Mojolicious",
    "author" : [
       "Joshua S. Day <HAX@cpan.org>"
    ],
@@ -56,6 +56,6 @@
          "web" : "https://github.com/haxmeister/perl-Uniform-HTMX-Mojolicious"
       }
    },
-   "version" : "1.01",
+   "version" : "1.02",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

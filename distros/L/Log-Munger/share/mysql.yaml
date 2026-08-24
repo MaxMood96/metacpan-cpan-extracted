@@ -1,0 +1,163 @@
+---
+# MySQL / MariaDB error-log enrichment.
+#
+# Gates on the syslog PROGRAM field being one of the server binaries. Patterns
+# are anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with mysql_ .
+#
+# The server writes its own timestamp, thread id and severity into the message
+# body, so all three survive into MESSAGE even when syslog has already stamped
+# the line. How much of that prefix is present depends on the version --
+# MariaDB and MySQL 5.7 write "<date> <thread> [<level>] ", MySQL 8 writes
+# "<date> <thread> [<level>] [<code>] [<subsystem>] " -- so the whole prefix is
+# optional here and the message is matched on its own text.
+#
+# "Access denied" is the line to count. A database reachable from somewhere it
+# should not be says so here first, naming both the account and the host that
+# tried.
+includes:
+- base
+vars_templated:
+  # The server's own prefix: timestamp, thread id, severity, and on MySQL 8 an
+  # error code and subsystem in further brackets.
+  MYSQL_PREFIX: '(?:(?<mysql_timestamp>[% TIMESTAMP_ISO8601 %]) +(?<mysql_thread>[% INT %]) \[(?<mysql_level>[A-Za-z]+)\] (?:\[(?<mysql_code>[A-Za-z0-9-]+)\] )?(?:\[(?<mysql_subsystem>[^\]]+)\] )?)?'
+  # "Access denied for user ''root''@''192.0.2.5'' (using password: YES)"
+  #
+  # The host is whatever MySQL resolved the peer to, so it is an address only
+  # when reverse DNS did not answer. It is matched as an address first and
+  # anything else second, which keeps a real address in the field the geoip
+  # lookup reads instead of in a field that is sometimes a name.
+  MYSQL_ACCESS_DENIED: '[% MYSQL_PREFIX %]Access denied for user ''(?<mysql_user>[^'']*)''@''(?:(?<mysql_src_ip>[% IP %])|(?<mysql_src_host>[^'']*))''(?: \(using password: (?<mysql_used_password>YES|NO)\))?(?: [% GREEDYDATA %])?'
+  # "Aborted connection 5 to db: ''unconnected'' user: ''root'' host: ''192.0.2.5''
+  #  (This connection closed normally without authentication)"
+  #
+  # A connection that opened and went away without completing. In bulk this is
+  # what a port scanner or a misconfigured pooler looks like.
+  MYSQL_ABORTED: '[% MYSQL_PREFIX %]Aborted connection (?<mysql_connection_id>[% INT %]) to db: ''(?<mysql_db>[^'']*)'' user: ''(?<mysql_user>[^'']*)'' host: ''(?:(?<mysql_src_ip>[% IP %])|(?<mysql_src_host>[^'']*))''(?: \((?<mysql_abort_reason>[^)]*)\))?(?: [% GREEDYDATA %])?'
+  # "Host ''scanner.example.net'' is blocked because of many connection errors;
+  #  unblock with ''mysqladmin flush-hosts''"
+  #
+  # max_connect_errors tripped: the server has stopped answering that host
+  # entirely.
+  MYSQL_HOST_BLOCKED: '[% MYSQL_PREFIX %]Host ''(?:(?<mysql_src_ip>[% IP %])|(?<mysql_src_host>[^'']*))'' is blocked because of many connection errors(?:; (?<mysql_block_hint>[% GREEDYDATA %]))?'
+  # Anything else the server logged, keeping the severity so a consumer can at
+  # least sort by it. Requires the prefix, so this only claims lines the
+  # server actually stamped.
+  MYSQL_MESSAGE: '(?<mysql_timestamp>[% TIMESTAMP_ISO8601 %]) +(?<mysql_thread>[% INT %]) \[(?<mysql_level>[A-Za-z]+)\] (?:\[(?<mysql_code>[A-Za-z0-9-]+)\] )?(?:\[(?<mysql_subsystem>[^\]]+)\] )?(?<mysql_message>.+)'
+vars_tests:
+  MYSQL_PREFIX:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '2026-07-15T10:00:00.123456Z 12 [Warning] '
+        result: '2026-07-15T10:00:00.123456Z 12 [Warning] '
+      - string: '2026-07-15T10:00:00.123456Z 12 [Note] [MY-010926] [Server] '
+        result: '2026-07-15T10:00:00.123456Z 12 [Note] [MY-010926] [Server] '
+      # the whole prefix is optional, so nothing at all is a match
+      - string: ''
+        result: ''
+    negative:
+      - 'Access denied for user'
+  MYSQL_ACCESS_DENIED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '2026-07-15T10:00:00.123456Z 12 [Warning] Access denied for user ''root''@''192.0.2.5'' (using password: YES)'
+        result: '2026-07-15T10:00:00.123456Z 12 [Warning] Access denied for user ''root''@''192.0.2.5'' (using password: YES)'
+      # no prefix, and the peer resolved to a name
+      - string: 'Access denied for user ''admin''@''scanner.example.net'' (using password: NO)'
+        result: 'Access denied for user ''admin''@''scanner.example.net'' (using password: NO)'
+    negative:
+      - '2026-07-15T10:00:00.123456Z 5 [Warning] Aborted connection 5 to db: ''x'' user: ''y'' host: ''192.0.2.5'''
+  MYSQL_ABORTED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '2026-07-15T10:00:00.123456Z 5 [Warning] Aborted connection 5 to db: ''unconnected'' user: ''root'' host: ''192.0.2.5'' (This connection closed normally without authentication)'
+        result: '2026-07-15T10:00:00.123456Z 5 [Warning] Aborted connection 5 to db: ''unconnected'' user: ''root'' host: ''192.0.2.5'' (This connection closed normally without authentication)'
+    negative:
+      - 'Access denied for user ''root''@''192.0.2.5'' (using password: YES)'
+  MYSQL_HOST_BLOCKED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Host ''203.0.113.7'' is blocked because of many connection errors; unblock with ''mysqladmin flush-hosts'''
+        result: 'Host ''203.0.113.7'' is blocked because of many connection errors; unblock with ''mysqladmin flush-hosts'''
+    negative:
+      - 'Access denied for user ''root''@''192.0.2.5'' (using password: YES)'
+  MYSQL_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '2026-07-15T10:00:00.123456Z 0 [Note] [MY-010926] [Server] /usr/sbin/mysqld: ready for connections.'
+        result: '2026-07-15T10:00:00.123456Z 0 [Note] [MY-010926] [Server] /usr/sbin/mysqld: ready for connections.'
+      - string: '2026-07-15T10:00:00.123456Z 0 [ERROR] InnoDB: Cannot open datafile'
+        result: '2026-07-15T10:00:00.123456Z 0 [ERROR] InnoDB: Cannot open datafile'
+    negative:
+      # the server prefix is required here, unlike on the patterns above
+      - 'Access denied for user ''root''@''192.0.2.5'' (using password: YES)'
+geoip:
+  - mysql_src_ip
+convert:
+  mysql_thread: int
+  mysql_connection_id: int
+  # the severity is spelled "Warning" by MariaDB and "WARNING" by some MySQL
+  # builds, so it is folded to make it groupable
+  mysql_level: lc
+rules:
+  - name: mysql
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^(?:mysqld|mariadbd|mysqld_safe|mysql)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - MYSQL_ACCESS_DENIED
+      - MYSQL_ABORTED
+      - MYSQL_HOST_BLOCKED
+      # last: matches any prefixed line, so the named messages go first
+      - MYSQL_MESSAGE
+    tests:
+      positive:
+        - string: '2026-07-15T10:00:00.123456Z 12 [Warning] Access denied for user ''root''@''192.0.2.5'' (using password: YES)'
+          program: 'mysql'
+          result:
+            mysql_timestamp: '2026-07-15T10:00:00.123456Z'
+            mysql_thread: '12'
+            mysql_level: 'Warning'
+            mysql_user: 'root'
+            mysql_src_ip: '192.0.2.5'
+            mysql_used_password: 'YES'
+        # the peer resolved to a name, so it does not land in mysql_src_ip
+        - string: 'Access denied for user ''admin''@''scanner.example.net'' (using password: NO)'
+          program: 'mysqld'
+          result:
+            mysql_user: 'admin'
+            mysql_src_host: 'scanner.example.net'
+            mysql_used_password: 'NO'
+        - string: '2026-07-15T10:00:00.123456Z 5 [Warning] Aborted connection 5 to db: ''unconnected'' user: ''root'' host: ''192.0.2.5'' (This connection closed normally without authentication)'
+          numeric:
+            - mysql_connection_id
+            - mysql_thread
+          program: 'mysqld_safe'
+          result:
+            mysql_timestamp: '2026-07-15T10:00:00.123456Z'
+            mysql_thread: '5'
+            mysql_level: 'Warning'
+            mysql_connection_id: '5'
+            mysql_db: 'unconnected'
+            mysql_user: 'root'
+            mysql_src_ip: '192.0.2.5'
+            mysql_abort_reason: 'This connection closed normally without authentication'
+        - string: 'Host ''203.0.113.7'' is blocked because of many connection errors; unblock with ''mysqladmin flush-hosts'''
+          program: 'mariadbd'
+          result:
+            mysql_src_ip: '203.0.113.7'
+            mysql_block_hint: 'unblock with ''mysqladmin flush-hosts'''
+        - string: '2026-07-15T10:00:00.123456Z 0 [ERROR] InnoDB: Cannot open datafile'
+          result:
+            mysql_timestamp: '2026-07-15T10:00:00.123456Z'
+            mysql_thread: '0'
+            mysql_level: 'ERROR'
+            mysql_message: 'InnoDB: Cannot open datafile'
+      negative:
+        - 'this is not a mysql line at all'
+        - 'Jul 15 10:00:00 host cron[123]: session opened for user root'
+        - string: '2026-07-15T10:00:00.123456Z 12 [Warning] Access denied for user ''root''@''192.0.2.5'' (using password: YES)'
+          program: 'mysql-extra'

@@ -97,6 +97,21 @@ static SV *cc_do_command(pTHX_ SV *self, const char *cmd, const char *who) {
         return NULL;
     }
 
+    /* ClamAV 1.5 lets clamd.conf switch commands off one by one
+     * (EnableVersionCommand no, EnableStatsCommand no, EnableReloadCommand
+     * no, ...) and answers a switched-off one with this exact line. It is a
+     * refusal, not a version string or a statistics block, and must not
+     * come back as one: a caller logging "COMMAND UNAVAILABLE" as the
+     * scanner version is wrong in a way it cannot detect. */
+    if (len == 19 && reply && memcmp(reply, "COMMAND UNAVAILABLE", 19) == 0) {
+        SV *m = sv_2mortal(newSVpvf(
+            "clamd has %s disabled (clamd.conf Enable*Command no)", cmd));
+        cc_set_error(aTHX_ hv, CC_ERR_UNAVAILABLE, SvPV_nolen(m));
+        free(reply);
+        return NULL;
+    }
+
+
     out = sv_2mortal(newSVpvn(reply ? reply : "", len));
     if (reply) free(reply);
     return out;
@@ -231,6 +246,7 @@ BOOT:
     newCONSTSUB(stash, "ERR_NOFDPASS", newSViv(CC_ERR_NOFDPASS));
     newCONSTSUB(stash, "ERR_STREAMCUT", newSViv(CC_ERR_STREAMCUT));
     newCONSTSUB(stash, "ERR_TOOBIGLOCAL", newSViv(CC_ERR_TOOBIGLOC));
+    newCONSTSUB(stash, "ERR_UNAVAILABLE", newSViv(CC_ERR_UNAVAILABLE));
 }
 
 # Validates and stores. Nothing connects here.

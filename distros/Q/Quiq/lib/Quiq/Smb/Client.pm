@@ -32,6 +32,12 @@ eine Exception wirft
 
 =back
 
+B<ACHTUNG:> Die Klasse Filesys::SmbClient scheint unsauber programmiert
+zu sein: Kommen in einem Programm mehrere SMB-Objekte vor,
+können diese nicht ohne Neuinstantiierung verschränkt genutzt werden.
+D.h. ein SMB-Objekt muss vor einer Operationen neu instantiiert werden,
+wenn die Operation davor über einem anderen Objekt stattgefunden hat.
+
 =cut
 
 # -----------------------------------------------------------------------------
@@ -43,10 +49,9 @@ use v5.10;
 use strict;
 use warnings;
 
-our $VERSION = '1.238';
+our $VERSION = '1.239';
 
 use Quiq::Path;
-use Quiq::Unindent;
 use Filesys::SmbClient ();
 
 # -----------------------------------------------------------------------------
@@ -85,12 +90,11 @@ Die Eigenschaft C<configuration> gehört nicht zu C<Filesys::SmbClient>,
 sondern ist speziell hinzugefügt. Wenn gesetzt, wird die Datei
 C<~/.smb/smb.conf> mit dem angegebenen Text (SMB-Konfiguration)
 vor der Instantiierung geschrieben. Andernfalls wird eine leere
-Datei angelegt. Die Konfiguration scheint nicht (einmalig) während
-Konstruktoraufrufs gelesen zu werden, sondern bei späteren (der
-ersten?) Operation. Daher ist Vorsicht bei mehreren Objekten
-geboten (TODO: dies genauer untersuchen).
+Datei angelegt.
 
 =head4 Example
+
+Konfiguration SMB 1.0:
 
   my $smb = Quiq::Smb->new(
       username => 'elbrusfse',
@@ -117,7 +121,9 @@ sub new {
     my $confFile = '~/.smb/smb.conf';
 
     my $conf = $args{'configuration'} // '';
-    $conf = Quiq::Unindent->string($conf);
+    # Klappt beides in Zeppelin-Umgebung nicht
+    # $conf = Quiq:: Unindent->string($conf);
+    # $conf = Quiq:: String->unindent($conf);
     $p->write($confFile,$conf);
 
     return $class->SUPER::new(
@@ -445,7 +451,7 @@ sub rename {
 
 =head1 VERSION
 
-1.238
+1.239
 
 =head1 AUTHOR
 

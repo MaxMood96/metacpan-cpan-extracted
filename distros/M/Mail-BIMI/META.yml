@@ -73,7 +73,7 @@ requires:
 resources:
   bugtracker: https://github.com/marcbradshaw/mail-bimi/issues
   repository: git://github.com/marcbradshaw/mail-bimi.git
-version: '3.20260806'
+version: '3.20260824'
 x_contributors:
   - 'Andrew Davis <adavis@fastmailteam.com>'
   - 'Freddie Leeman <freddie@freddieleeman.nl>'

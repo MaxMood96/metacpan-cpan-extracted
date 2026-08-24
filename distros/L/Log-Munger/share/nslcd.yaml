@@ -1,0 +1,341 @@
+---
+# nslcd (the LDAP name service daemon behind libnss_ldap / pam_ldap) log
+# enrichment.
+#
+# Gates on the syslog PROGRAM field being "nslcd". Patterns are anchored (each
+# must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with nslcd_ .
+#
+# Almost every line nslcd writes once it is running carries the same two-part
+# prefix:
+#
+#   [045836] <authc="neti"> uid=neti,ou=users,dc=example,dc=com: Invalid credentials
+#   [192b68] <group=1004> no available LDAP server found: Server is unavailable
+#   [91288f] error reading from client: Operation timed out
+#
+# The bracketed hex is the session id, which is the only thing tying the
+# several lines of one lookup together, and the angle-bracketed token is the
+# request: the map being consulted (passwd, group, shadow, host, netgroup, ...)
+# and the key it was asked about. Both are pulled out by NSLCD_PREFIX and are
+# optional, because the startup lines have neither and a few error paths log
+# the session without a request.
+#
+# What follows the prefix is one of a handful of shapes, all covered below. A
+# host whose LDAP server has gone away writes tens of thousands of these an
+# hour, so they are parsed rather than left as prose. nslcd_error carries the
+# LDAP-side reason and nslcd_request_arg the account it was asked about, which
+# together say whether a directory outage is affecting real logins or only a
+# service account polling in a loop.
+includes:
+- base
+# Additional primitives used below that are not in base.yaml.
+vars:
+  # The request token nslcd stamps on a line, without its angle brackets. The
+  # type is a map name and may carry a "/" ("group/member"); the argument is
+  # quoted for a string key and bare for a numeric one, and is absent entirely
+  # for a whole-map enumeration.
+  NSLCD_REQUEST_TYPE: '[a-z]+(?:/[a-z]+)?'
+  # A distinguished name, matched only as far as the ": " that ends it. Values
+  # in a DN may contain almost anything except the colon that separates the DN
+  # from the error, which is what bounds it here.
+  NSLCD_DN: '[A-Za-z]+=[^\s:][^:]*'
+  # An LDAP URI as nslcd prints it, e.g. ldap://ldap.example.com/ or
+  # ldaps://192.0.2.5:636/. Non-greedy so the ": " that follows wins.
+  NSLCD_URI: '\S+?'
+  # The name of an OpenLDAP C function, without its trailing "()".
+  NSLCD_LDAP_FUNCTION: '\w+'
+vars_templated:
+  # "[045836] <authc="neti"> " -- the session id and the request being served.
+  # Both halves are optional: nslcd logs neither before it starts serving, and
+  # the client-I/O errors below carry the session but no request.
+  NSLCD_PREFIX: '(?:\[(?<nslcd_session>[0-9a-f]+)\] )?(?:<(?<nslcd_request>(?<nslcd_request_type>[% NSLCD_REQUEST_TYPE %])(?:\((?<nslcd_request_scope>[^)]*)\))?(?:="?(?<nslcd_request_arg>[^">]*)"?)?)> )?'
+  # A per-entry failure, reported against the DN it happened on, e.g.
+  #   uid=neti,ou=users,dc=example,dc=com: Invalid credentials
+  # This is how a wrong password appears, and on a host with a service account
+  # retrying in a loop it is by far the highest-volume line.
+  NSLCD_DN_ERROR: '[% NSLCD_PREFIX %](?<nslcd_dn>[% NSLCD_DN %]): (?<nslcd_error>[% GREEDYDATA %])'
+  # "failed to bind to LDAP server ldap://192.0.2.5/: Can't contact LDAP server"
+  NSLCD_BIND_FAILED: '[% NSLCD_PREFIX %]failed to bind to LDAP server (?<nslcd_ldap_uri>[% NSLCD_URI %]): (?<nslcd_error>[% GREEDYDATA %])'
+  # "no available LDAP server found, sleeping 1 seconds" -- the retry backoff.
+  # Split from NSLCD_NO_SERVER because the delay gets a field of its own and
+  # the line has a comma where the other has a colon.
+  NSLCD_NO_SERVER_SLEEP: '[% NSLCD_PREFIX %]no available LDAP server found, sleeping (?<nslcd_sleep_seconds>[% INT %]) seconds'
+  # "no available LDAP server found: Server is unavailable: Resource temporarily unavailable"
+  NSLCD_NO_SERVER: '[% NSLCD_PREFIX %]no available LDAP server found(?:: (?<nslcd_error>[% GREEDYDATA %]))?'
+  # An OpenLDAP call that did not return cleanly, e.g.
+  #   ldap_result() failed: Can't contact LDAP server
+  #   ldap_result() timed out
+  #   ldap_abandon() failed to abandon search: Can't contact LDAP server
+  # The verb and any "to <do something>" tail go in nslcd_ldap_result; the
+  # LDAP-side reason, when there is one, goes in nslcd_error.
+  NSLCD_LDAP_CALL: '[% NSLCD_PREFIX %](?<nslcd_ldap_function>[% NSLCD_LDAP_FUNCTION %])\(\) (?<nslcd_ldap_result>timed out|failed(?: to [% GREEDYDATA_NO_COLON %])?)(?:: (?<nslcd_error>[% GREEDYDATA %]))?'
+  # "request denied by validnames option" -- nslcd refusing to look up a name
+  # that does not match the validnames regexp, before it ever asks LDAP. Its
+  # own pattern because it is a local policy rejection rather than a directory
+  # failure, and the two are otherwise alike in a volume graph.
+  NSLCD_DENIED: '[% NSLCD_PREFIX %]request denied by (?<nslcd_denied_by>[% NOTSPACE %]) option'
+  # "error reading from client: Operation timed out" -- the socket to the NSS
+  # or PAM module, not to LDAP.
+  NSLCD_CLIENT_IO: '[% NSLCD_PREFIX %]error (?<nslcd_io_direction>reading from|writing to) client: (?<nslcd_error>[% GREEDYDATA %])'
+  # "version 0.9.12 starting" / "version 0.9.12 NSLCD_STARTED" -- the startup
+  # banner, which carries no session id.
+  NSLCD_VERSION: 'version (?<nslcd_version>[% NOTSPACE %]) (?<nslcd_state>starting|started)(?: [% GREEDYDATA %])?'
+  # "accepting connections" / "caught signal SIGTERM (15), shutting down" and
+  # the rest of the lifecycle chatter.
+  NSLCD_SIGNAL: 'caught signal (?<nslcd_signal_name>[% NOTSPACE %]) \((?<nslcd_signal>[% INT %])\)(?:, (?<nslcd_message>[% GREEDYDATA %]))?'
+  # Anything else nslcd said. Matching anything is only safe because the rule
+  # is gated on PROGRAM being nslcd. The prefix is still peeled off first, so
+  # even an unrecognised line keeps its session id and request.
+  NSLCD_MESSAGE: '[% NSLCD_PREFIX %](?<nslcd_message>.+)'
+vars_tests:
+  NSLCD_REQUEST_TYPE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'passwd'
+        result: 'passwd'
+      - string: 'group/member'
+        result: 'group/member'
+    negative:
+      - 'has a space'
+      - 'PASSWD'
+  NSLCD_DN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'uid=neti,ou=users,dc=example,dc=com'
+        result: 'uid=neti,ou=users,dc=example,dc=com'
+      - string: 'cn=openvpn,ou=users,dc=example,dc=com'
+        result: 'cn=openvpn,ou=users,dc=example,dc=com'
+    negative:
+      - 'no equals sign here'
+      - 'uid=neti: Invalid credentials'
+  NSLCD_URI:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'ldap://ldap.example.com/'
+        result: 'ldap://ldap.example.com/'
+      - string: 'ldaps://192.0.2.5:636/'
+        result: 'ldaps://192.0.2.5:636/'
+    negative:
+      - 'has a space'
+  NSLCD_LDAP_FUNCTION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'ldap_result'
+        result: 'ldap_result'
+      - string: 'ldap_search_ext'
+        result: 'ldap_search_ext'
+    negative:
+      - 'ldap_result()'
+  NSLCD_PREFIX:
+    test_template: '^(?<TEST>[% TEST_VAR %])'
+    positive:
+      - string: '[045836] <authc="neti"> '
+        result: '[045836] <authc="neti"> '
+      - string: '[192b68] <group=1004> '
+        result: '[192b68] <group=1004> '
+    negative: []
+  NSLCD_DN_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[045836] <authc="neti"> uid=neti,ou=users,dc=example,dc=com: Invalid credentials'
+        result: '[045836] <authc="neti"> uid=neti,ou=users,dc=example,dc=com: Invalid credentials'
+      - string: '[002b36] <authc="neti"> cn=openvpn,ou=users,dc=example,dc=com: Can''t contact LDAP server'
+        result: '[002b36] <authc="neti"> cn=openvpn,ou=users,dc=example,dc=com: Can''t contact LDAP server'
+    negative:
+      - '[91288f] error reading from client: Operation timed out'
+  NSLCD_BIND_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[fb867b] <group/member="root"> failed to bind to LDAP server ldap://192.0.2.5/: Can''t contact LDAP server: Socket is not connected'
+        result: '[fb867b] <group/member="root"> failed to bind to LDAP server ldap://192.0.2.5/: Can''t contact LDAP server: Socket is not connected'
+      - string: '[22b763] <group/member="www"> failed to bind to LDAP server ldap://ldap.example.com/: Timed out'
+        result: '[22b763] <group/member="www"> failed to bind to LDAP server ldap://ldap.example.com/: Timed out'
+    negative:
+      - '[fb867b] <group/member="root"> no available LDAP server found: Can''t contact LDAP server'
+  NSLCD_NO_SERVER_SLEEP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[fb867b] <group/member="root"> no available LDAP server found, sleeping 1 seconds'
+        result: '[fb867b] <group/member="root"> no available LDAP server found, sleeping 1 seconds'
+      - string: '[fb867b] <group/member="root"> no available LDAP server found, sleeping 30 seconds'
+        result: '[fb867b] <group/member="root"> no available LDAP server found, sleeping 30 seconds'
+    negative:
+      - '[fb867b] <group/member="root"> no available LDAP server found: Can''t contact LDAP server'
+  NSLCD_NO_SERVER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[192b68] <group=1004> no available LDAP server found: Server is unavailable: Resource temporarily unavailable'
+        result: '[192b68] <group=1004> no available LDAP server found: Server is unavailable: Resource temporarily unavailable'
+      - string: '[8f7871] <group/member="root"> no available LDAP server found'
+        result: '[8f7871] <group/member="root"> no available LDAP server found'
+    negative:
+      - '[fb867b] <group/member="root"> failed to bind to LDAP server ldap://192.0.2.5/: Timed out'
+  NSLCD_LDAP_CALL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[082490] <group/member="neti"> ldap_result() failed: Can''t contact LDAP server'
+        result: '[082490] <group/member="neti"> ldap_result() failed: Can''t contact LDAP server'
+      - string: '[332c33] <group/member="root"> ldap_result() timed out'
+        result: '[332c33] <group/member="root"> ldap_result() timed out'
+      - string: '[371c52] <group/member="root"> ldap_abandon() failed to abandon search: Can''t contact LDAP server: Socket is not connected'
+        result: '[371c52] <group/member="root"> ldap_abandon() failed to abandon search: Can''t contact LDAP server: Socket is not connected'
+    negative:
+      - '[91288f] error reading from client: Operation timed out'
+  NSLCD_DENIED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[336367] <authc="-"> request denied by validnames option'
+        result: '[336367] <authc="-"> request denied by validnames option'
+      - string: '[984e61] <passwd="-heng"> request denied by validnames option'
+        result: '[984e61] <passwd="-heng"> request denied by validnames option'
+    negative:
+      - '[91288f] error reading from client: Operation timed out'
+  NSLCD_CLIENT_IO:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[91288f] error reading from client: Operation timed out'
+        result: '[91288f] error reading from client: Operation timed out'
+      - string: '[91288f] error writing to client: Broken pipe'
+        result: '[91288f] error writing to client: Broken pipe'
+    negative:
+      - '[332c33] <group/member="root"> ldap_result() timed out'
+  NSLCD_VERSION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'version 0.9.12 starting'
+        result: 'version 0.9.12 starting'
+      - string: 'version 0.9.12 started'
+        result: 'version 0.9.12 started'
+    negative:
+      - 'accepting connections'
+  NSLCD_SIGNAL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'caught signal SIGTERM (15), shutting down'
+        result: 'caught signal SIGTERM (15), shutting down'
+      - string: 'caught signal SIGINT (2)'
+        result: 'caught signal SIGINT (2)'
+    negative:
+      - 'accepting connections'
+  NSLCD_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'accepting connections'
+        result: 'accepting connections'
+      - string: '[045836] <passwd="neti"> no such user'
+        result: '[045836] <passwd="neti"> no such user'
+    negative:
+      - ''
+# Coerce numeric captures.
+convert:
+  nslcd_sleep_seconds: int
+  nslcd_signal: int
+rules:
+  - name: nslcd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^nslcd$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - NSLCD_BIND_FAILED
+      - NSLCD_NO_SERVER_SLEEP
+      - NSLCD_NO_SERVER
+      - NSLCD_LDAP_CALL
+      - NSLCD_DENIED
+      - NSLCD_CLIENT_IO
+      - NSLCD_VERSION
+      - NSLCD_SIGNAL
+      # after every pattern whose text could itself contain a "key=value: rest"
+      # shape, because a DN is only recognisable by being one
+      - NSLCD_DN_ERROR
+      # last: matches anything, which is only safe because the rule is gated
+      - NSLCD_MESSAGE
+    tests:
+      positive:
+        - string: '[045836] <authc="neti"> uid=neti,ou=users,dc=example,dc=com: Invalid credentials'
+          result:
+            nslcd_session: '045836'
+            nslcd_request: 'authc="neti"'
+            nslcd_request_type: 'authc'
+            nslcd_request_arg: 'neti'
+            nslcd_dn: 'uid=neti,ou=users,dc=example,dc=com'
+            nslcd_error: 'Invalid credentials'
+        - string: '[192b68] <group=1004> no available LDAP server found: Server is unavailable: Resource temporarily unavailable'
+          result:
+            nslcd_session: '192b68'
+            nslcd_request: 'group=1004'
+            nslcd_request_type: 'group'
+            nslcd_request_arg: '1004'
+            nslcd_error: 'Server is unavailable: Resource temporarily unavailable'
+        - string: '[fb867b] <group/member="root"> no available LDAP server found, sleeping 1 seconds'
+          numeric:
+            - nslcd_sleep_seconds
+          program: 'nslcd'
+          result:
+            nslcd_session: 'fb867b'
+            nslcd_request: 'group/member="root"'
+            nslcd_request_type: 'group/member'
+            nslcd_request_arg: 'root'
+            nslcd_sleep_seconds: '1'
+        - string: '[fb867b] <group/member="root"> failed to bind to LDAP server ldap://192.0.2.5/: Can''t contact LDAP server: Socket is not connected'
+          result:
+            nslcd_session: 'fb867b'
+            nslcd_request: 'group/member="root"'
+            nslcd_request_type: 'group/member'
+            nslcd_request_arg: 'root'
+            nslcd_ldap_uri: 'ldap://192.0.2.5/'
+            nslcd_error: 'Can''t contact LDAP server: Socket is not connected'
+        - string: '[371c52] <group/member="root"> ldap_abandon() failed to abandon search: Can''t contact LDAP server: Socket is not connected'
+          result:
+            nslcd_session: '371c52'
+            nslcd_request: 'group/member="root"'
+            nslcd_request_type: 'group/member'
+            nslcd_request_arg: 'root'
+            nslcd_ldap_function: 'ldap_abandon'
+            nslcd_ldap_result: 'failed to abandon search'
+            nslcd_error: 'Can''t contact LDAP server: Socket is not connected'
+        - string: '[332c33] <group/member="root"> ldap_result() timed out'
+          result:
+            nslcd_session: '332c33'
+            nslcd_request: 'group/member="root"'
+            nslcd_request_type: 'group/member'
+            nslcd_request_arg: 'root'
+            nslcd_ldap_function: 'ldap_result'
+            nslcd_ldap_result: 'timed out'
+        - string: '[336367] <authc="-"> request denied by validnames option'
+          result:
+            nslcd_session: '336367'
+            nslcd_request: 'authc="-"'
+            nslcd_request_type: 'authc'
+            nslcd_request_arg: '-'
+            nslcd_denied_by: 'validnames'
+        - string: '[91288f] error reading from client: Operation timed out'
+          result:
+            nslcd_session: '91288f'
+            nslcd_io_direction: 'reading from'
+            nslcd_error: 'Operation timed out'
+        - string: 'version 0.9.12 starting'
+          result:
+            nslcd_version: '0.9.12'
+            nslcd_state: 'starting'
+        - string: 'caught signal SIGTERM (15), shutting down'
+          numeric:
+            - nslcd_signal
+          result:
+            nslcd_signal_name: 'SIGTERM'
+            nslcd_signal: '15'
+            nslcd_message: 'shutting down'
+        # falls through to the catch-all, but keeps its prefix
+        - string: '[045836] <passwd="neti"> no such user'
+          result:
+            nslcd_session: '045836'
+            nslcd_request: 'passwd="neti"'
+            nslcd_request_type: 'passwd'
+            nslcd_request_arg: 'neti'
+            nslcd_message: 'no such user'
+      negative:
+        - ''
+        - string: '[045836] <authc="neti"> uid=neti,ou=users,dc=example,dc=com: Invalid credentials'
+          program: 'nslcd-extra'

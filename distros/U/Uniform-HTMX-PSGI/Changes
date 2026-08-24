@@ -1,6 +1,15 @@
 Revision history for Uniform::HTMX::PSGI
 
-1.00  2026-08-22
-        - Production-ready standalone PSGI/Plack ecosystem connector launch.
+1.01  2026-08-22
+        - Fixed documentation errors in POD and MD files.
+
+1.02  2026-08-23
+        - Refactored to use direct object-oriented inheritance
+          from the Uniform::HTMX base package.
+        - Merged tests into a single test file
+        - added example that allows testing in actual app
 1.01  2026-08-22
         - Added links to POD.
+1.00  2026-08-22
+        - Production-ready standalone PSGI/Plack ecosystem connector launch.
+

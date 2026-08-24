@@ -4,7 +4,7 @@ use 5.010;
 use strict;
 use warnings;
 
-our $VERSION = '0.30';
+our $VERSION = '0.31';
 
 use Test::Builder ();
 use Scalar::Util ();
@@ -43,6 +43,7 @@ sub new {
         app         => $app,
         class       => $app_class,
         jar         => {},
+        headers     => {},
         timeout     => $opts{timeout}     // 5,
         max_bytes   => $opts{max_bytes}   // 1_000_000,
         csrf_cookie => $opts{csrf_cookie} // 'csrf',
@@ -85,12 +86,52 @@ sub login_as {
     return $self;
 }
 
+# A header on every request from here on, the way the jar holds a cookie:
+# a credential a client carries, an Accept a whole file's worth of requests
+# needs. undef removes one; no arguments gives back the lot.
+#
+#     $t->request_header(Authorization => "Bearer $key");
+#     $t->request_header(Authorization => undef);
+#
+# A request's own `headers` still wins, so one call can be made an exception
+# without unsetting and setting again around it. Named for the request side
+# because `header` is the last response's, and one name for both directions
+# is how a test comes to assert what it just sent.
+sub request_header {
+    my ($self, %h) = @_;
+    return { %{ $self->{headers} } } unless %h;
+    for my $k (keys %h) {
+        if (defined $h{$k}) { $self->{headers}{$k} = $h{$k} }
+        else                { delete $self->{headers}{$k} }
+    }
+    return $self;
+}
+
 sub _urlenc {
     my ($s) = @_;
     $s = '' unless defined $s;
     utf8::encode($s) if utf8::is_utf8($s);
     $s =~ s/([^A-Za-z0-9_.~-])/sprintf '%%%02X', ord $1/ge;
     return $s;
+}
+
+# A path, or [ 'book', id => 1 ] naming a route.
+#
+# This is what turns a wrong route name into a failing test rather than a
+# 404 in production: url_for croaks on a name no route carries, and the
+# croak arrives here, at the request that named it.
+sub _resolve_path {
+    my ($self, $path) = @_;
+    return $path unless ref $path eq 'ARRAY';
+    my ($name, @args) = @$path;
+    my $class = $self->{class}
+        or die "Punk::Test: [ '$name', ... ] names a route, which needs the "
+             . "application class - construct the client with "
+             . "Punk::Test->new('MyApp') rather than with a coderef\n";
+    my $app = $class->can('punk_app') ? $class->punk_app : undef;
+    $app && $app->can('url_for')
+        or die "Punk::Test: [ '$name', ... ] needs Punk 0.31 or newer\n";
+    return $app->url_for($name, @args);
 }
 
 sub _build_env {
@@ -130,7 +171,10 @@ sub _build_env {
         $env->{CONTENT_LENGTH} = length $body;
         $env->{CONTENT_TYPE}   = $type // '';
     }
-    if (my $h = $o{headers}) {
+    # Sticky headers first, so a single request's `headers` can still override
+    # one of them - the narrower statement wins, as it does everywhere else.
+    for my $h ($self->{headers}, $o{headers}) {
+        next unless $h;
         for my $k (keys %$h) {
             my $ek = uc $k;
             $ek =~ tr/-/_/;
@@ -159,6 +203,7 @@ sub _build_env {
 sub _request_ok {
     my ($self, $method, $path, %o) = @_;
     local $Test::Builder::Level = $Test::Builder::Level + 2;
+    $path = $self->_resolve_path($path);
     my $env = $self->_build_env($method, $path, %o);
     my $r = eval { $self->{app}->($env) };
     my $err = $@;
@@ -443,6 +488,7 @@ sub _body_head {
 sub sse_ok {
     my ($self, $path, %o) = @_;
     local $Test::Builder::Level = $Test::Builder::Level + 1;
+    $path = $self->_resolve_path($path);
     my $name = $o{name} // "SSE $path";
     $o{headers}{Accept} //= 'text/event-stream';
     my $env = $self->_build_env(GET => $path, %o);
@@ -586,6 +632,7 @@ sub ws_live_available {
 sub websocket_ok {
     my ($self, $path, %o) = @_;
     local $Test::Builder::Level = $Test::Builder::Level + 1;
+    $path = $self->_resolve_path($path);
     my $name = $o{name} // "websocket $path";
     $self->_ws_teardown;
 
@@ -937,6 +984,24 @@ configured header), C<env> (raw PSGI env keys, merged last), C<name>
 (the test name). A C<psgi.streaming> response is driven to completion
 and its writes become the body.
 
+=head3 Naming a route instead of typing its path
+
+    $t->get_ok([ 'book', id => 1 ]);          # /books/1
+    $t->get_ok([ 'books', page => 2 ]);       # /books?page=2
+    $t->post_ok([ 'books' ], form => { title => 'x' });
+
+Wherever these take a path they take an arrayref naming a route declared
+with C<< { name => ... } >> and its captures - see L<Punk/Named routes>.
+C<sse_ok> and C<websocket_ok> take the same form.
+
+This is the point of the whole feature reaching the test suite: a name no
+route carries dies here, at the request that named it, rather than
+answering 404 in production for as long as nobody clicks the link. The
+diagnostic still prints the path the name resolved to.
+
+It needs a client built from a class name - a coderef has no route table
+to look a name up in, and says so.
+
 =head2 login_as($user_or_id)
 
     $t->login_as($user->{id});
@@ -947,6 +1012,24 @@ the application's own session config (and the C<auth> keyword's
 C<session_key>), so guarded pages are reachable without driving a login
 flow first. Takes an id or a user row; needs a client built from a class
 name. Chainable.
+
+=head2 request_header($name => $value, ...)
+
+    $t->request_header(Authorization => "Bearer $key");
+    $t->request_header(Accept => 'text/html');   # every request negotiates
+    $t->request_header(Authorization => undef);  # and stop
+
+A header on every request from here on, the way the jar holds a cookie -
+a credential the client carries, or an C<Accept> a whole file's worth of
+requests needs. C<undef> removes one; no arguments returns them all as a
+hashref.
+
+A single request's C<headers> option still wins over these, so one call
+can be made an exception without unsetting and setting again around it.
+Chainable when setting.
+
+Note the name: C<header> is the I<last response's>, this is the
+I<request's>.
 
 =head1 THE RESPONSE
 

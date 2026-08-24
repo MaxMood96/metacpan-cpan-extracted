@@ -3,6 +3,8 @@ abstract: 'A thin framework for PSGI/Plack web apps.'
 author:
   - 'Dondi Michael Stroma, <dstroma@gmail.com>'
 build_requires:
+  HTTP::Server::PSGI: '0'
+  Plack::LWPish: '0'
   Test::More: '0.98'
 configure_requires:
   Module::Build::Tiny: '0.035'
@@ -28,7 +30,7 @@ provides:
     file: lib/PXF/Util.pm
   PlackX::Framework:
     file: lib/PlackX/Framework.pm
-    version: '0.33'
+    version: '0.34'
   PlackX::Framework::Config:
     file: lib/PlackX/Framework/Config.pm
   PlackX::Framework::Handler:
@@ -69,6 +71,6 @@ resources:
   bugtracker: https://github.com/dstroma/PlackX-Framework/issues
   homepage: https://github.com/dstroma/PlackX-Framework
   repository: https://github.com/dstroma/PlackX-Framework.git
-version: '0.33'
+version: '0.34'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'
 x_static_install: 1

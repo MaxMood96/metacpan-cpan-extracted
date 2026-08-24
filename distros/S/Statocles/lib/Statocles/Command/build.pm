@@ -1,5 +1,5 @@
 package Statocles::Command::build;
-our $VERSION = '0.098';
+our $VERSION = '0.099';
 # ABSTRACT: Build the site in a directory
 
 use Statocles::Base 'Command';
@@ -12,7 +12,7 @@ sub run {
         'base_url|base=s',
     );
 
-    my $path = Path::Tiny->new( $argv[0] // '.statocles/build' );
+    my $path = Path::Tiny->new( $argv[0] // $self->site->store->path->child( '.statocles', 'build' ) );
     $path->mkpath;
 
     my $store = StoreType->coercion->( $path );
@@ -43,7 +43,7 @@ Statocles::Command::build - Build the site in a directory
 
 =head1 VERSION
 
-version 0.098
+version 0.099
 
 =head1 AUTHOR
 

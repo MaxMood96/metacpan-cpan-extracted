@@ -44,6 +44,11 @@ use Punk::Test;
         $c->text('hello ' . ($c->session->{user} // 'nobody'));
     };
     get  '/boom' => sub { die "handler exploded\n" };
+
+    # named routes, for the arrayref request form
+    get '/books'     => sub { $_[0]->text('list') },  { name => 'books' };
+    get '/books/:id' => sub { $_[0]->text('book ' . $_[0]->param('id')) },
+        { name => 'book' };
 }
 
 # ---- construction ------------------------------------------------------------
@@ -170,5 +175,100 @@ $c->post_ok('/save', form => { a => 3 }, csrf => 1)
 
 $c->post_ok('/save', form => { a => 4 })
   ->status_is(403, 'no token, no save');
+
+# ---- naming a route instead of typing its path -------------------------------
+
+# The point of named routes reaching the test suite: a name no route carries
+# fails HERE, at the request that named it, rather than answering 404 in
+# production for as long as nobody clicks the link.
+{
+    $t->get_ok([ 'book', id => 7 ])
+      ->status_is(200)
+      ->content_is('book 7', 'an arrayref names a route and its captures');
+
+    $t->get_ok([ 'books' ])->status_is(200, 'a route with no captures');
+
+    $t->get_ok([ 'books', page => 2 ])
+      ->status_is(200, 'a leftover argument is a query pair, as in url_for');
+
+    my $err = '';
+    eval { $t->get_ok([ 'nosuch' ]) } or $err = $@;
+    like($err, qr/no route is named 'nosuch'/,
+        'a name no route carries dies at the request that named it');
+
+    $err = '';
+    eval { $t->get_ok([ 'book' ]) } or $err = $@;
+    like($err, qr/no value for :id/,
+        'and so does a capture with no value');
+}
+
+{
+    # a coderef client has no route table to look a name up in (to_app
+    # compiles once per class, so this case needs a class of its own)
+    package BareApp;
+    use Punk;
+    get '/' => sub { $_[0]->text('bare') };
+    package main;
+    my $raw = Punk::Test->new(BareApp->to_app);
+    my $err = '';
+    eval { $raw->get_ok([ 'book', id => 1 ]) } or $err = $@;
+    like($err, qr/needs the application class/,
+        'a client built from a coderef says why it cannot resolve a name');
+}
+
+# ---- request_header ------------------------------------------------------------
+# A header on every request from here on, the way the jar holds a cookie.
+# Named for the request side because `header` is the last response's.
+
+{
+    package HeaderApp;
+    use Punk;
+    # echo what arrived, so the assertions are about the env and not a guard
+    get '/echo' => sub {
+        my ($c) = @_;
+        my $e = $c->req->env;
+        return $c->text(join '|', map { $e->{$_} // '-' }
+                                  qw(HTTP_AUTHORIZATION HTTP_ACCEPT HTTP_X_TRACE));
+    };
+    package main;
+
+    my $h = Punk::Test->new('HeaderApp');
+
+    $h->get_ok('/echo')->content_is('-|-|-',
+        'nothing sticky to begin with');
+
+    is($h->request_header(Authorization => 'Bearer k1'), $h,
+        'setting one chains');
+    $h->get_ok('/echo')->content_is('Bearer k1|-|-',
+        'and it rides on the next request');
+    $h->get_ok('/echo')->content_is('Bearer k1|-|-',
+        'and the one after that - sticky, not one-shot');
+
+    $h->request_header(Accept => 'text/html', 'X-Trace' => 'abc');
+    $h->get_ok('/echo')->content_is('Bearer k1|text/html|abc',
+        'several at once, and a hyphenated name becomes HTTP_X_TRACE');
+
+    is_deeply($h->request_header,
+        { Authorization => 'Bearer k1', Accept => 'text/html',
+          'X-Trace' => 'abc' },
+        'no arguments gives back what is set');
+
+    # the narrower statement wins: one request can be an exception without
+    # unsetting and setting again around it
+    $h->get_ok('/echo', headers => { Authorization => 'Bearer other' })
+      ->content_is('Bearer other|text/html|abc',
+        "a request's own headers override the sticky ones");
+    $h->get_ok('/echo')->content_is('Bearer k1|text/html|abc',
+        'and only for that request');
+
+    $h->request_header(Authorization => undef);
+    $h->get_ok('/echo')->content_is('-|text/html|abc',
+        'undef removes one, leaving the rest');
+
+    # `header` is still the response accessor, which is the reason for the name
+    $h->get_ok('/echo');
+    is($h->header('Content-Type'), 'text/plain; charset=utf-8',
+        'header() still reads the last response');
+}
 
 done_testing();

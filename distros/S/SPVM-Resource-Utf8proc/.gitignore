@@ -11,6 +11,9 @@
 *.BAK
 *.tmp
 *.o
+*.dll
+*.dylib
+*.so
 *.bs
 .tmp
 .git

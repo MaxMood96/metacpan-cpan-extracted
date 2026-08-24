@@ -34,9 +34,9 @@ use Cwd;
 use File::Spec;
 use File::Temp;
 use List::Util qw(all);
-use Log::Abstraction 0.26;
+use Log::Abstraction 0.33;
 use Object::Configure 0.16;
-use Params::Get 0.13;
+use Params::Get 0.17;
 use Return::Set qw(set_return);
 use Scalar::Util;
 use Sub::Private;
@@ -60,11 +60,11 @@ Database::Abstraction - Read-only Database Abstraction Layer (ORM)
 
 =head1 VERSION
 
-Version 0.38
+Version 0.39
 
 =cut
 
-our $VERSION = '0.38';
+our $VERSION = '0.39';
 
 =head1 DESCRIPTION
 

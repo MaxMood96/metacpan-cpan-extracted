@@ -1,0 +1,313 @@
+---
+# Classic ntpd (Network Time Protocol daemon) log enrichment.
+#
+# Gates on the syslog PROGRAM field being "ntpd". Patterns are anchored (each
+# must match the whole MESSAGE) and first-match wins, most specific first.
+# Every capture is namespaced with ntpd_ .
+includes:
+- base
+# Additional primitives used below that are not in base.yaml.
+vars:
+  # NOTSPACE that also excludes ":" (used to bound a bare function or syscall
+  # name that is followed by ": ")
+  NOTSPACE_NO_COLON: '[^\s:]+'
+vars_templated:
+  # "ntpd 4.2.8p15@1.3728-o Fri Jun 5 ... starting" — daemon startup banner.
+  # 4.2.8p18 capitalised it ("ntpd 4.2.8p18-a (1): Starting"), so both cases
+  # have to be accepted.
+  NTPD_VERSION: 'ntpd (?<ntpd_version>[% NOTSPACE %])(?: [% GREEDYDATA %])? [Ss]tarting(?: [% GREEDYDATA %])?'
+  # "ntpd exiting on signal 15 (Terminated)".
+  NTPD_SIGNAL: 'ntpd exiting on signal (?<ntpd_signal>[% INT %])(?: \([% GREEDYDATA %]\))?(?: [% GREEDYDATA %])?'
+  # "Listen normally on 3 eth0 192.0.2.1:123".
+  NTPD_LISTEN: 'Listen normally on (?<ntpd_listen_iface>[% INT %] [% NOTSPACE %]) (?<ntpd_listen_ip>[% IP %]):(?<ntpd_listen_port>[% INT %])(?: [% GREEDYDATA %])?'
+  # "synchronized to 192.0.2.2, stratum 2" — peer identified by IP.
+  NTPD_SYNC_IP: 'synchronized to (?<ntpd_peer_ip>[% IP %]), stratum (?<ntpd_stratum>[% INT %])(?: [% GREEDYDATA %])?'
+  # "synchronized to LOCAL(0), stratum 10" — peer identified by name/refclock.
+  NTPD_SYNC_NAME: 'synchronized to (?<ntpd_peer_name>[% NOTSPACE %]), stratum (?<ntpd_stratum>[% INT %])(?: [% GREEDYDATA %])?'
+  # "time reset +0.123456 s" / "time reset -1.500000 s".
+  NTPD_TIME_RESET: 'time reset (?<ntpd_offset>[-+]?[% FLOAT %]) s(?: [% GREEDYDATA %])?'
+  # "time correction of 3 seconds exceeds sanity limit (1000); set clock manually ...".
+  NTPD_TIME_CORRECTION: 'time correction of (?<ntpd_correction>[% INT %]) seconds exceeds sanity limit(?: [% GREEDYDATA %])?'
+  # "no servers reachable" — a simple event with no captures.
+  NTPD_NO_SERVERS: 'no servers reachable(?: [% GREEDYDATA %])?'
+  # "kernel time sync status change 0001".
+  NTPD_STATUS: 'kernel time sync status change (?<ntpd_status>[% NOTSPACE %])(?: [% GREEDYDATA %])?'
+  # "frequency error 1024 PPM exceeds tolerance 500 PPM".
+  NTPD_FREQ_ERROR: 'frequency error (?<ntpd_freq_error>[-+]?[% INTorFLOAT %]) PPM exceeds tolerance (?<ntpd_freq_tolerance>[% INT %]) PPM(?: [% GREEDYDATA %])?'
+  # The leap-second table, e.g.:
+  #   leapsecond file ('/var/db/ntpd.leap-seconds.list'): good hash signature
+  #   leapsecond file ('/var/db/ntpd.leap-seconds.list'): loaded, expire=2025-06-28T00:00:00Z last=2017-01-01T00:00:00Z ofs=37
+  NTPD_LEAPSECOND: 'leapsecond file \(''(?<ntpd_leapfile>[^'']*)''\): (?<ntpd_leapfile_status>[% GREEDYDATA %])'
+  # "Command line: /usr/sbin/ntpd -p /var/db/ntp/ntpd.pid -c /etc/ntp.conf".
+  NTPD_COMMAND_LINE: 'Command line: (?<ntpd_command_line>[% GREEDYDATA %])'
+  # A failed system call, reported by ntpd with the source file and line it was
+  # made from, e.g.:
+  #   local_clock: usr/src/contrib/ntp/ntpd/ntp_loopfilter.c line 814: ntp_adjtime: Operation not permitted
+  # A jailed or otherwise unprivileged ntpd logs this on every poll, so the
+  # syscall and errno are pulled out rather than left as prose.
+  NTPD_SYSCALL_ERROR: '(?<ntpd_function>[% NOTSPACE_NO_COLON %]): (?<ntpd_source_file>[% NOTSPACE %]) line (?<ntpd_source_line>[% INT %]): (?<ntpd_syscall>[% NOTSPACE_NO_COLON %]): (?<ntpd_error>[% GREEDYDATA %])'
+  # The same class of failure logged without a source location, e.g.:
+  #   adj_systime: Operation not permitted
+  #   local_clock: ntp_adjtime(TAI) failed: Operation not permitted
+  # Kept after NTPD_SYSCALL_ERROR because it also matches that shape.
+  NTPD_FUNC_ERROR: '(?<ntpd_function>[% NOTSPACE_NO_COLON %]): (?<ntpd_error>[% GREEDYDATA %])'
+  # Anything else ntpd said: the startup banner prose, the rule of dashes it
+  # prints around it, and any message a future release adds.
+  NTPD_MESSAGE: '(?<ntpd_message>.+)'
+vars_tests:
+  NTPD_VERSION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'ntpd 4.2.8p15@1.3728-o Fri Jun 5 08:00:00 UTC 2020 (1): starting'
+        result: 'ntpd 4.2.8p15@1.3728-o Fri Jun 5 08:00:00 UTC 2020 (1): starting'
+      - string: 'ntpd 4.2.8p15@1.3728-o starting'
+        result: 'ntpd 4.2.8p15@1.3728-o starting'
+    negative:
+      - 'ntpd exiting on signal 15 (Terminated)'
+  NTPD_SIGNAL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'ntpd exiting on signal 15 (Terminated)'
+        result: 'ntpd exiting on signal 15 (Terminated)'
+      - string: 'ntpd exiting on signal 2 (Interrupt)'
+        result: 'ntpd exiting on signal 2 (Interrupt)'
+    negative:
+      - 'ntpd 4.2.8p15@1.3728-o starting'
+  NTPD_LISTEN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Listen normally on 3 eth0 192.0.2.1:123'
+        result: 'Listen normally on 3 eth0 192.0.2.1:123'
+      - string: 'Listen normally on 5 lo 127.0.0.1:123'
+        result: 'Listen normally on 5 lo 127.0.0.1:123'
+    negative:
+      - 'no servers reachable'
+  NTPD_SYNC_IP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'synchronized to 192.0.2.2, stratum 2'
+        result: 'synchronized to 192.0.2.2, stratum 2'
+      - string: 'synchronized to 198.51.100.5, stratum 3'
+        result: 'synchronized to 198.51.100.5, stratum 3'
+    negative:
+      - 'synchronized to LOCAL(0), stratum 10'
+  NTPD_SYNC_NAME:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'synchronized to LOCAL(0), stratum 10'
+        result: 'synchronized to LOCAL(0), stratum 10'
+      - string: 'synchronized to time.example.org, stratum 2'
+        result: 'synchronized to time.example.org, stratum 2'
+    negative:
+      - 'no servers reachable'
+  NTPD_TIME_RESET:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'time reset +0.123456 s'
+        result: 'time reset +0.123456 s'
+      - string: 'time reset -1.500000 s'
+        result: 'time reset -1.500000 s'
+    negative:
+      - 'no servers reachable'
+  NTPD_TIME_CORRECTION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'time correction of 3 seconds exceeds sanity limit (1000); set clock manually to the correct UTC time.'
+        result: 'time correction of 3 seconds exceeds sanity limit (1000); set clock manually to the correct UTC time.'
+      - string: 'time correction of 512 seconds exceeds sanity limit (1000); set clock manually'
+        result: 'time correction of 512 seconds exceeds sanity limit (1000); set clock manually'
+    negative:
+      - 'time reset +0.123456 s'
+  NTPD_NO_SERVERS:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'no servers reachable'
+        result: 'no servers reachable'
+    negative:
+      - 'synchronized to 192.0.2.2, stratum 2'
+  NTPD_STATUS:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'kernel time sync status change 0001'
+        result: 'kernel time sync status change 0001'
+      - string: 'kernel time sync status change 2001'
+        result: 'kernel time sync status change 2001'
+    negative:
+      - 'no servers reachable'
+  NTPD_FREQ_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'frequency error 1024 PPM exceeds tolerance 500 PPM'
+        result: 'frequency error 1024 PPM exceeds tolerance 500 PPM'
+      - string: 'frequency error -750.5 PPM exceeds tolerance 500 PPM'
+        result: 'frequency error -750.5 PPM exceeds tolerance 500 PPM'
+    negative:
+      - 'no servers reachable'
+  NOTSPACE_NO_COLON:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'local_clock'
+        result: 'local_clock'
+      - string: 'ntp_adjtime'
+        result: 'ntp_adjtime'
+    negative:
+      - 'has a space'
+      - 'local_clock:'
+  NTPD_LEAPSECOND:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: "leapsecond file ('/var/db/ntpd.leap-seconds.list'): good hash signature"
+        result: "leapsecond file ('/var/db/ntpd.leap-seconds.list'): good hash signature"
+      - string: "leapsecond file ('/var/db/ntpd.leap-seconds.list'): loaded, expire=2025-06-28T00:00:00Z last=2017-01-01T00:00:00Z ofs=37"
+        result: "leapsecond file ('/var/db/ntpd.leap-seconds.list'): loaded, expire=2025-06-28T00:00:00Z last=2017-01-01T00:00:00Z ofs=37"
+    negative:
+      - 'no servers reachable'
+  NTPD_COMMAND_LINE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Command line: /usr/sbin/ntpd -p /var/db/ntp/ntpd.pid -c /etc/ntp.conf'
+        result: 'Command line: /usr/sbin/ntpd -p /var/db/ntp/ntpd.pid -c /etc/ntp.conf'
+      - string: 'Command line: /usr/sbin/ntpd -g'
+        result: 'Command line: /usr/sbin/ntpd -g'
+    negative:
+      - 'no servers reachable'
+  NTPD_SYSCALL_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'local_clock: usr/src/contrib/ntp/ntpd/ntp_loopfilter.c line 814: ntp_adjtime: Operation not permitted'
+        result: 'local_clock: usr/src/contrib/ntp/ntpd/ntp_loopfilter.c line 814: ntp_adjtime: Operation not permitted'
+      - string: 'set_freq: usr/src/contrib/ntp/ntpd/ntp_loopfilter.c line 1105: ntp_adjtime: Operation not permitted'
+        result: 'set_freq: usr/src/contrib/ntp/ntpd/ntp_loopfilter.c line 1105: ntp_adjtime: Operation not permitted'
+    negative:
+      - 'adj_systime: Operation not permitted'
+  NTPD_FUNC_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'adj_systime: Operation not permitted'
+        result: 'adj_systime: Operation not permitted'
+      - string: 'local_clock: ntp_adjtime(TAI) failed: Operation not permitted'
+        result: 'local_clock: ntp_adjtime(TAI) failed: Operation not permitted'
+    negative:
+      - 'no servers reachable'
+  NTPD_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'ntp-4 is maintained by Network Time Foundation,'
+        result: 'ntp-4 is maintained by Network Time Foundation,'
+      - string: '----------------------------------------------------'
+        result: '----------------------------------------------------'
+    negative:
+      - ''
+# Look up peer / listen source IPs.
+geoip:
+  - ntpd_peer_ip
+  - ntpd_listen_ip
+# Coerce numeric captures.
+convert:
+  ntpd_stratum: int
+  ntpd_listen_port: int
+  ntpd_offset: float
+  ntpd_source_line: int
+rules:
+  - name: ntpd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^ntpd$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - NTPD_VERSION
+      - NTPD_SIGNAL
+      - NTPD_LISTEN
+      - NTPD_SYNC_IP
+      - NTPD_SYNC_NAME
+      - NTPD_TIME_RESET
+      - NTPD_TIME_CORRECTION
+      - NTPD_NO_SERVERS
+      - NTPD_STATUS
+      - NTPD_FREQ_ERROR
+      - NTPD_LEAPSECOND
+      - NTPD_COMMAND_LINE
+      - NTPD_SYSCALL_ERROR
+      # after NTPD_SYSCALL_ERROR, because it also matches that shape
+      - NTPD_FUNC_ERROR
+      # last: matches anything, which is only safe because the rule is gated
+      - NTPD_MESSAGE
+    tests:
+      positive:
+        - string: 'ntpd 4.2.8p15@1.3728-o starting'
+          result:
+            ntpd_version: '4.2.8p15@1.3728-o'
+        - string: 'ntpd exiting on signal 15 (Terminated)'
+          result:
+            ntpd_signal: '15'
+        - string: 'Listen normally on 3 eth0 192.0.2.1:123'
+          numeric:
+            - ntpd_listen_port
+          result:
+            ntpd_listen_iface: '3 eth0'
+            ntpd_listen_ip: '192.0.2.1'
+            ntpd_listen_port: '123'
+        - string: 'synchronized to 192.0.2.2, stratum 2'
+          numeric:
+            - ntpd_stratum
+          result:
+            ntpd_peer_ip: '192.0.2.2'
+            ntpd_stratum: '2'
+        - string: 'synchronized to LOCAL(0), stratum 10'
+          result:
+            ntpd_peer_name: 'LOCAL(0)'
+            ntpd_stratum: '10'
+        - string: 'time reset +0.123456 s'
+          numeric:
+            - ntpd_offset
+          result:
+            ntpd_offset: '+0.123456'
+        - string: 'time reset -1.500000 s'
+          result:
+            ntpd_offset: '-1.500000'
+        - string: 'time correction of 3 seconds exceeds sanity limit (1000); set clock manually to the correct UTC time.'
+          result:
+            ntpd_correction: '3'
+        - string: 'no servers reachable'
+          result: {}
+        - string: 'kernel time sync status change 0001'
+          result:
+            ntpd_status: '0001'
+        - string: 'frequency error 1024 PPM exceeds tolerance 500 PPM'
+          result:
+            ntpd_freq_error: '1024'
+            ntpd_freq_tolerance: '500'
+        - string: 'ntpd 4.2.8p18-a (1): Starting'
+          program: 'ntpd'
+          result:
+            ntpd_version: '4.2.8p18-a'
+        - string: "leapsecond file ('/var/db/ntpd.leap-seconds.list'): good hash signature"
+          result:
+            ntpd_leapfile: '/var/db/ntpd.leap-seconds.list'
+            ntpd_leapfile_status: 'good hash signature'
+        - string: 'Command line: /usr/sbin/ntpd -p /var/db/ntp/ntpd.pid -c /etc/ntp.conf'
+          result:
+            ntpd_command_line: '/usr/sbin/ntpd -p /var/db/ntp/ntpd.pid -c /etc/ntp.conf'
+        - string: 'local_clock: usr/src/contrib/ntp/ntpd/ntp_loopfilter.c line 814: ntp_adjtime: Operation not permitted'
+          numeric:
+            - ntpd_source_line
+          result:
+            ntpd_function: 'local_clock'
+            ntpd_source_file: 'usr/src/contrib/ntp/ntpd/ntp_loopfilter.c'
+            ntpd_source_line: '814'
+            ntpd_syscall: 'ntp_adjtime'
+            ntpd_error: 'Operation not permitted'
+        - string: 'adj_systime: Operation not permitted'
+          result:
+            ntpd_function: 'adj_systime'
+            ntpd_error: 'Operation not permitted'
+        # falls through to the catch-all -- part of the startup banner
+        - string: 'ntp-4 is maintained by Network Time Foundation,'
+          result:
+            ntpd_message: 'ntp-4 is maintained by Network Time Foundation,'
+      negative:
+        - ''
+        - string: 'ntpd 4.2.8p15@1.3728-o starting'
+          program: 'ntpd-extra'

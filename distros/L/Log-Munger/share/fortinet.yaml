@@ -1,0 +1,212 @@
+---
+# FortiGate / FortiOS log enrichment.
+#
+# Every FortiOS line is a flat key=value ledger, quoted where a value holds
+# spaces:
+#
+#   date=2026-07-12 time=08:15:50 devname="FGT60F" logid="0100032002"
+#   type="event" user="admin" srcip=203.0.113.45 action="login"
+#
+# There is nothing to pattern out beyond the ledger itself, so the rule takes
+# it whole and a quote-aware kv decompose splits it. The quote handling is a
+# correctness requirement rather than tidiness: a failed admin login records
+# the attempted account in user=, and that name is whatever the client typed.
+# Scanning for the first "srcip=" would find one pasted into a username, while
+# honouring the quoting keeps user="admin srcip=8.8.8.8" a single value.
+#
+# The rule is gateless and anchored. These lines carry no PROGRAM whether they
+# arrive through a syslog reader or are fed in raw, so the ledger shape is the
+# only test. Captures are namespaced fg_ .
+#
+# Two generations are covered. Modern FortiOS writes logid= and srcip=;
+# FortiOS 4.x wrote log_id= and src=. Both are only keys, so kv emits
+# fg_logid/fg_srcip for one and fg_log_id/fg_src for the other.
+includes:
+- base
+vars_templated:
+  # The BSD syslog head a collector prepends, stepped over rather than
+  # captured. Its presence is a property of the reader rather than of the
+  # message, so both shapes have to match.
+  #
+  # The host is \S+ rather than [% HOSTNAME %] deliberately. That primitive
+  # carries grok's "(?=.{1,255}$)" lookahead, which asserts the rest of the
+  # line is at most 255 characters. On a longer line the host cannot match, the
+  # optional head then matches empty, and the ledger is sought at position zero
+  # where the timestamp is. A FortiOS ledger with a full msg= runs 300-500
+  # characters, so that would miss exactly the lines of interest. Stepping over
+  # the field is all that is needed here, not hostname grammar.
+  FORTINET_HEAD: '(?:[% SYSLOGTIMESTAMP %] +\S+ +)?'
+  # The ledger, taken whole. It must open on date= (what a FortiGate emits) or
+  # on the log id (what a FortiAnalyzer relay may lead with), so the gateless
+  # rule does not claim every k=v line on the host.
+  FORTINET_LEDGER: '[% FORTINET_HEAD %](?<fg_kv>(?:date|log_?id)=[% GREEDYDATA %])'
+  # Which key holds the far end depends on the event: srcip= for most, remip=
+  # for SSL-VPN, src= on legacy 4.x. The three are collapsed into one field so
+  # that anything keyed to a single field name, such as a mark or a country
+  # gate, can be written once.
+  #
+  # Precedence falls out of the decompose engine never overwriting a key that
+  # is already set: the steps run srcip, remip, src, so the first present wins.
+  FORTINET_OFFENDER: '(?<fg_offender_ip>.+)'
+vars_tests:
+  FORTINET_OFFENDER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '203.0.113.45'
+        result: '203.0.113.45'
+      - string: '2001:db8::15'
+        result: '2001:db8::15'
+    negative:
+      # Takes the field whole, so only an empty field fails to match.
+      - ''
+  FORTINET_HEAD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Jul 12 08:15:50 fw01 '
+        result: 'Jul 12 08:15:50 fw01 '
+      # Entirely optional, so the empty string matches.
+      - string: ''
+        result: ''
+    negative:
+      # The trailing separator is part of the fragment; without it, no match.
+      - 'Jul 12 08:15:50 fw01'
+  FORTINET_LEDGER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Jul 12 08:15:50 fw01 date=2026-07-12 time=08:15:50 logid="0100032002" srcip=203.0.113.45'
+        result: 'Jul 12 08:15:50 fw01 date=2026-07-12 time=08:15:50 logid="0100032002" srcip=203.0.113.45'
+      # no collector head, straight off the wire
+      - string: 'date=2026-07-12 time=08:15:50 logid="0100032002" srcip=203.0.113.45'
+        result: 'date=2026-07-12 time=08:15:50 logid="0100032002" srcip=203.0.113.45'
+      # Legacy FortiOS 4.x, leading with the log id.
+      - string: 'Jul 12 09:07:02 fw01 log_id=73001 type=traffic src=192.0.2.7'
+        result: 'Jul 12 09:07:02 fw01 log_id=73001 type=traffic src=192.0.2.7'
+      # Over 255 characters, which a [% HOSTNAME %] head would miss.
+      - string: 'Jul 12 08:15:50 fw01 date=2026-07-12 time=08:15:50 devname="FGT60F" devid="FGT60FTK20012345" logid="0100032002" type="event" subtype="system" level="alert" vd="root" eventtime=1752326150456219138 tz="-0500" logdesc="Admin login failed" sn="0" user="admin" ui="https(203.0.113.45)" method="https" srcip=203.0.113.45 dstip=192.168.1.99 action="login" status="failed" reason="passwd_invalid" msg="Administrator admin login failed from https(203.0.113.45) because of invalid password"'
+        result: 'Jul 12 08:15:50 fw01 date=2026-07-12 time=08:15:50 devname="FGT60F" devid="FGT60FTK20012345" logid="0100032002" type="event" subtype="system" level="alert" vd="root" eventtime=1752326150456219138 tz="-0500" logdesc="Admin login failed" sn="0" user="admin" ui="https(203.0.113.45)" method="https" srcip=203.0.113.45 dstip=192.168.1.99 action="login" status="failed" reason="passwd_invalid" msg="Administrator admin login failed from https(203.0.113.45) because of invalid password"'
+    negative:
+      # A k=v line that is not a FortiGate ledger.
+      - 'Jul 12 08:15:50 fw01 id=firewall sn=0017C5C0A63C src=203.0.113.66'
+      # Nothing resembling the ledger.
+      - 'Jul 12 08:15:50 fw01 sshd[123]: Invalid user bob from 192.0.2.7'
+# fg_offender_ip is the normal field to read: it is fed from srcip, remip or
+# src, whichever the event carried. The raw fields are looked up as well
+# because either end of a firewall session can be the remote one, and because
+# dstip never feeds the offender at all. On an outbound session dstip is the
+# only remote address in the record.
+#
+# All four come from the kv decompose rather than from a pattern, so which of
+# them exist varies with the log type. A geoip entry for an uncaptured field
+# does nothing.
+geoip:
+  - fg_offender_ip
+  - fg_srcip
+  - fg_dstip
+  - fg_remip
+decompose:
+  - field: fg_kv
+    type: kv
+    quoted: true
+    prefix: 'fg_'
+    remove: true
+    tests:
+      - input: 'date=2026-07-12 time=08:15:50 devname="FGT60F" logid="0100032002" type="event" user="admin" srcip=203.0.113.45 action="login" status="failed"'
+        result:
+          fg_date: '2026-07-12'
+          fg_time: '08:15:50'
+          fg_devname: 'FGT60F'
+          fg_logid: '0100032002'
+          fg_type: 'event'
+          fg_user: 'admin'
+          fg_srcip: '203.0.113.45'
+          fg_action: 'login'
+          fg_status: 'failed'
+      # The forgery the quote handling defends against: the attacker's account
+      # name carries its own srcip=, which stays inside fg_user.
+      - input: 'date=2026-07-12 time=08:15:50 logid="0100032002" user="admin srcip=8.8.8.8" srcip=203.0.113.45'
+        result:
+          fg_date: '2026-07-12'
+          fg_time: '08:15:50'
+          fg_logid: '0100032002'
+          fg_user: 'admin srcip=8.8.8.8'
+          fg_srcip: '203.0.113.45'
+      # Legacy 4.x spellings, unquoted throughout.
+      - input: 'date=2026-07-12 time=09:07:02 log_id=73001 type=traffic src=192.0.2.7 dst=203.0.113.1'
+        result:
+          fg_date: '2026-07-12'
+          fg_time: '09:07:02'
+          fg_log_id: '73001'
+          fg_type: 'traffic'
+          fg_src: '192.0.2.7'
+          fg_dst: '203.0.113.1'
+      # A quoted value holding its own spaces and punctuation.
+      - input: 'date=2026-07-12 time=14:20:31 logid="0211008192" msg="File is infected." service="HTTP" srcip=192.168.1.30'
+        result:
+          fg_date: '2026-07-12'
+          fg_time: '14:20:31'
+          fg_logid: '0211008192'
+          fg_msg: 'File is infected.'
+          fg_service: 'HTTP'
+          fg_srcip: '192.168.1.30'
+  # srcip, then remip, then legacy src: the first present wins.
+  - field: fg_srcip
+    type: pattern
+    pattern: FORTINET_OFFENDER
+    tests:
+      - input: '203.0.113.45'
+        result:
+          fg_srcip: '203.0.113.45'
+          fg_offender_ip: '203.0.113.45'
+  - field: fg_remip
+    type: pattern
+    pattern: FORTINET_OFFENDER
+    tests:
+      - input: '198.51.100.23'
+        result:
+          fg_remip: '198.51.100.23'
+          fg_offender_ip: '198.51.100.23'
+  - field: fg_src
+    type: pattern
+    pattern: FORTINET_OFFENDER
+    tests:
+      - input: '192.0.2.7'
+        result:
+          fg_src: '192.0.2.7'
+          fg_offender_ip: '192.0.2.7'
+rules:
+  - name: fortinet
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - FORTINET_LEDGER
+    tests:
+      positive:
+        - string: 'Jul 12 08:15:50 fw01 date=2026-07-12 time=08:15:50 devname="FGT60F" logid="0100032002" type="event" user="admin" srcip=203.0.113.45 action="login" status="failed"'
+          enriched:
+            fg_action: 'login'
+            fg_date: '2026-07-12'
+            fg_devname: 'FGT60F'
+            fg_logid: '0100032002'
+            fg_offender_ip: '203.0.113.45'
+            fg_srcip: '203.0.113.45'
+            fg_status: 'failed'
+            fg_time: '08:15:50'
+            fg_type: 'event'
+            fg_user: 'admin'
+          result:
+            fg_kv: 'date=2026-07-12 time=08:15:50 devname="FGT60F" logid="0100032002" type="event" user="admin" srcip=203.0.113.45 action="login" status="failed"'
+        - string: 'date=2026-07-12 time=09:07:02 log_id=73001 type=traffic src=192.0.2.7'
+          enriched:
+            fg_date: '2026-07-12'
+            fg_log_id: '73001'
+            fg_offender_ip: '192.0.2.7'
+            fg_src: '192.0.2.7'
+            fg_time: '09:07:02'
+            fg_type: 'traffic'
+          result:
+            fg_kv: 'date=2026-07-12 time=09:07:02 log_id=73001 type=traffic src=192.0.2.7'
+      negative:
+        # A SonicWall ledger, which is sonicwall.yaml's business.
+        - 'Jul 12 04:02:11 fw01 id=firewall sn=0017C5C0A63C msg="Land attack dropped" src=198.51.100.44:80:X1'
+        # An ordinary syslog line.
+        - 'Jul 12 08:15:50 fw01 sshd[123]: Invalid user bob from 192.0.2.7 port 22'

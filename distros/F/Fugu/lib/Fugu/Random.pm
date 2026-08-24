@@ -18,7 +18,7 @@
 use v5.36;
 
 package Fugu::Random;
-our $VERSION = '0.1.2';
+our $VERSION = '0.2.0';
 
 use MIME::Base64 ();
 

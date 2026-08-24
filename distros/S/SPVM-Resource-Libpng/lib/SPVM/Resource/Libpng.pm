@@ -1,12 +1,12 @@
 package SPVM::Resource::Libpng;
 
-our $VERSION = "0.014";
+our $VERSION = "0.015";
 
 1;
 
 =head1 Name
 
-SPVM::Resource::Libpng - The Resource of The libpng Library
+SPVM::Resource::Libpng - Resource of libpng Library
 
 =head1 Description
 

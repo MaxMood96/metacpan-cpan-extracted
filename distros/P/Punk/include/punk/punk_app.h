@@ -47,6 +47,35 @@ static HV *app_hash(pTHX_ HV *h, const char *k) {
     }
 }
 
+/* A deep copy of plain data: unblessed hash and array references are copied
+ * through, everything else (scalars, blessed objects, coderefs) by newSVsv.
+ * For the read-back accessors - a plugin must not be able to edit the
+ * application's configuration through a nested hash the shallow copy shared. */
+static SV *app_deep_copy(pTHX_ SV *sv) {
+    if (sv && SvROK(sv) && !SvOBJECT(SvRV(sv))) {
+        SV *t = SvRV(sv);
+        if (SvTYPE(t) == SVt_PVHV) {
+            HV *src = (HV *)t, *dst = newHV();
+            HE *e;
+            hv_iterinit(src);
+            while ((e = hv_iternext(src)))
+                (void)hv_store_ent(dst, hv_iterkeysv(e),
+                                   app_deep_copy(aTHX_ hv_iterval(src, e)), 0);
+            return newRV_noinc((SV *)dst);
+        }
+        if (SvTYPE(t) == SVt_PVAV) {
+            AV *src = (AV *)t, *dst = newAV();
+            SSize_t i, n = av_len(src) + 1;
+            for (i = 0; i < n; i++) {
+                SV **x = av_fetch(src, i, 0);
+                av_push(dst, app_deep_copy(aTHX_ (x && *x) ? *x : &PL_sv_undef));
+            }
+            return newRV_noinc((SV *)dst);
+        }
+    }
+    return newSVsv(sv ? sv : &PL_sv_undef);
+}
+
 /* strip a single trailing '/' from a fresh copy of an SV's string */
 static SV *app_strip_slash(pTHX_ SV *sv) {
     STRLEN l;

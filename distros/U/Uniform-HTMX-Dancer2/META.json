@@ -1,0 +1,61 @@
+{
+   "abstract" : "HTMX integration for Dancer2 applications",
+   "author" : [
+      "Joshua S. Day <HAX@cpan.org>"
+   ],
+   "dynamic_config" : 1,
+   "generated_by" : "ExtUtils::MakeMaker version 7.78, CPAN::Meta::Converter version 2.150013",
+   "license" : [
+      "mit"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "Uniform-HTMX-Dancer2",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "inc"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "Dancer2::Plugin" : "0",
+            "Uniform::HTMX" : "0.016",
+            "perl" : "5.020"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "HTTP::Request::Common" : "0",
+            "Plack::Test" : "0",
+            "Test::More" : "0.98"
+         }
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/haxmeister/perl-Uniform-HTMX-Dancer2/issues"
+      },
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/haxmeister/perl-Uniform-HTMX-Dancer2.git",
+         "web" : "https://github.com/haxmeister/perl-Uniform-HTMX-Dancer2"
+      }
+   },
+   "version" : "1.00",
+   "x_serialization_backend" : "JSON::PP version 4.16"
+}

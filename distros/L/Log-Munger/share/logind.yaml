@@ -1,0 +1,187 @@
+---
+# systemd-logind session/seat/power log enrichment.
+#
+# Gates on the syslog PROGRAM field being "systemd-logind". Patterns are
+# anchored (each must match the whole MESSAGE) and first-match wins, with the
+# most specific patterns listed first. Every capture is namespaced with
+# logind_ . No geoip (no source IPs in these messages).
+includes:
+- base
+vars_templated:
+  # "New session 3 of user neti."
+  LOGIND_SESSION_NEW: 'New session (?<logind_session_id>[% INT %]) of user (?<logind_user>[% USERNAME %])\.'
+  # "Session 3 logged out. Waiting for processes to exit."
+  LOGIND_SESSION_LOGOUT: 'Session (?<logind_session_id>[% INT %]) logged out\. Waiting for processes to exit\.'
+  # "Removed session 3."
+  LOGIND_SESSION_REMOVED: 'Removed session (?<logind_session_id>[% INT %])\.'
+  # "New seat seat0."
+  LOGIND_SEAT_NEW: 'New seat (?<logind_seat>[% NOTSPACE %]?)\.'
+  # "Removed seat seat0."
+  LOGIND_SEAT_REMOVED: 'Removed seat (?<logind_seat>[% NOTSPACE %]?)\.'
+  # "Watching system buttons on /dev/input/event0 (Power Button)"
+  LOGIND_WATCH_BUTTONS: 'Watching system buttons on (?<logind_input_device>[% UNIXPATH %]) \((?<logind_button>[% GREEDYDATA_NO_BRACKET %])\)'
+  # "Power key pressed.", "Lid closed.", "Suspending...", etc. — a simple
+  # human-readable event phrase terminated by "." or "...".
+  LOGIND_EVENT: '(?<logind_event>[% GREEDYDATA %]?)\.{1,3}'
+  # "System is powering down." / "System is rebooting."
+  LOGIND_SYSTEM_STATE: 'System is (?<logind_event>powering down|rebooting|halting|suspending|hibernating)\.'
+  # "Failed to start user service, ignoring: ..."
+  LOGIND_FAILED: 'Failed to (?<logind_action>[% GREEDYDATA %]?), ignoring: (?<logind_reason>[% GREEDYDATA %])'
+vars_tests:
+  LOGIND_SESSION_NEW:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'New session 3 of user neti.'
+        result: 'New session 3 of user neti.'
+      - string: 'New session 12 of user root.'
+        result: 'New session 12 of user root.'
+    negative:
+      - 'Removed session 3.'
+  LOGIND_SESSION_LOGOUT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Session 3 logged out. Waiting for processes to exit.'
+        result: 'Session 3 logged out. Waiting for processes to exit.'
+      - string: 'Session 12 logged out. Waiting for processes to exit.'
+        result: 'Session 12 logged out. Waiting for processes to exit.'
+    negative:
+      - 'Removed session 3.'
+  LOGIND_SESSION_REMOVED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Removed session 3.'
+        result: 'Removed session 3.'
+      - string: 'Removed session 12.'
+        result: 'Removed session 12.'
+    negative:
+      - 'New session 3 of user neti.'
+  LOGIND_SEAT_NEW:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'New seat seat0.'
+        result: 'New seat seat0.'
+      - string: 'New seat seat1.'
+        result: 'New seat seat1.'
+    negative:
+      - 'Removed seat seat0.'
+  LOGIND_SEAT_REMOVED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Removed seat seat0.'
+        result: 'Removed seat seat0.'
+      - string: 'Removed seat seat1.'
+        result: 'Removed seat seat1.'
+    negative:
+      - 'New seat seat0.'
+  LOGIND_WATCH_BUTTONS:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Watching system buttons on /dev/input/event0 (Power Button)'
+        result: 'Watching system buttons on /dev/input/event0 (Power Button)'
+      - string: 'Watching system buttons on /dev/input/event2 (Lid Switch)'
+        result: 'Watching system buttons on /dev/input/event2 (Lid Switch)'
+    negative:
+      - 'New seat seat0.'
+  LOGIND_EVENT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Power key pressed.'
+        result: 'Power key pressed.'
+      - string: 'Lid closed.'
+        result: 'Lid closed.'
+      - string: 'Suspending...'
+        result: 'Suspending...'
+    negative:
+      - 'no trailing dot here'
+  LOGIND_SYSTEM_STATE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'System is powering down.'
+        result: 'System is powering down.'
+      - string: 'System is rebooting.'
+        result: 'System is rebooting.'
+    negative:
+      - 'Power key pressed.'
+  LOGIND_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Failed to start user service, ignoring: Unit user@1000.service not found.'
+        result: 'Failed to start user service, ignoring: Unit user@1000.service not found.'
+      - string: 'Failed to abandon session scope, ignoring: No such file or directory'
+        result: 'Failed to abandon session scope, ignoring: No such file or directory'
+    negative:
+      - 'Power key pressed.'
+# coerce the session id to an integer at runtime
+convert:
+  logind_session_id: int
+rules:
+  - name: logind
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^systemd-logind$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - LOGIND_SESSION_NEW
+      - LOGIND_SESSION_LOGOUT
+      - LOGIND_SESSION_REMOVED
+      - LOGIND_SEAT_NEW
+      - LOGIND_SEAT_REMOVED
+      - LOGIND_WATCH_BUTTONS
+      - LOGIND_SYSTEM_STATE
+      - LOGIND_FAILED
+      - LOGIND_EVENT
+    tests:
+      positive:
+        - string: 'New session 3 of user neti.'
+          numeric:
+            - logind_session_id
+          program: 'systemd-logind'
+          result:
+            logind_session_id: '3'
+            logind_user: 'neti'
+        - string: 'New session 12 of user root.'
+          result:
+            logind_session_id: '12'
+            logind_user: 'root'
+        - string: 'Session 3 logged out. Waiting for processes to exit.'
+          result:
+            logind_session_id: '3'
+        - string: 'Removed session 3.'
+          result:
+            logind_session_id: '3'
+        - string: 'New seat seat0.'
+          result:
+            logind_seat: 'seat0'
+        - string: 'Removed seat seat0.'
+          result:
+            logind_seat: 'seat0'
+        - string: 'Watching system buttons on /dev/input/event0 (Power Button)'
+          result:
+            logind_input_device: '/dev/input/event0'
+            logind_button: 'Power Button'
+        - string: 'Power key pressed.'
+          result:
+            logind_event: 'Power key pressed'
+        - string: 'Lid closed.'
+          result:
+            logind_event: 'Lid closed'
+        - string: 'Suspending...'
+          result:
+            logind_event: 'Suspending'
+        - string: 'System is powering down.'
+          result:
+            logind_event: 'powering down'
+        - string: 'System is rebooting.'
+          result:
+            logind_event: 'rebooting'
+        - string: 'Failed to start user service, ignoring: Unit user@1000.service not found.'
+          result:
+            logind_action: 'start user service'
+            logind_reason: 'Unit user@1000.service not found.'
+      negative:
+        - 'this is not a systemd-logind line at all'
+        - 'Jul 15 10:00:00 host sshd[123]: Accepted password for root'
+        - string: 'New session 3 of user neti.'
+          program: 'logind-extra'

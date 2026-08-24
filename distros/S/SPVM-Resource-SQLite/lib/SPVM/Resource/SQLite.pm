@@ -1,6 +1,6 @@
 package SPVM::Resource::SQLite;
 
-our $VERSION = "0.003";
+our $VERSION = "0.004";
 
 1;
 

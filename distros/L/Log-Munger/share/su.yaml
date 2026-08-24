@@ -1,0 +1,131 @@
+---
+# util-linux su (switch-user) log enrichment.
+#
+# Gates on the syslog PROGRAM field being "su". Patterns are anchored (each
+# must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with su_ .
+#
+# Three shapes are handled:
+#   * the classic "(to TARGET) BYUSER on TTY" line, optionally prefixed with
+#     "FAILED SU " (a failed switch, su_result=FAILED) or "su: ".
+#   * the pam/auth style success line: "+ TTY BYUSER:TARGET"
+#   * the pam/auth style failure line: "- TTY BYUSER:TARGET"
+#
+# The generic pam_unix(su:...) session/auth lines are handled by pam.yaml.
+includes:
+- base
+vars_templated:
+  # "(to root) neti on pts/0" and "FAILED SU (to root) neti on pts/0"
+  # (and the "su: (to ...)" variant). su_result is only present on failures.
+  SU_TO: '(?:(?<su_result>FAILED) SU |su: )?\(to (?<su_target_user>[% USERNAME %])\) (?<su_by_user>[% USERNAME %]) on (?<su_tty>[% NOTSPACE %])'
+  # success: "+ pts/0 neti:root"
+  SU_SUCCESS: '\+ (?<su_tty>[% NOTSPACE %]) (?<su_by_user>[% USERNAME %]):(?<su_target_user>[% USERNAME %])'
+  # failure: "- pts/0 neti:root"
+  SU_FAILURE: '- (?<su_tty>[% NOTSPACE %]) (?<su_by_user>[% USERNAME %]):(?<su_target_user>[% USERNAME %])'
+  # ---- FreeBSD su(1) ----
+  # "neti to root on /dev/pts/3" and the failure "BAD SU neti to postgres on
+  # /dev/pts/3". Note the argument order is the reverse of SU_TO above: FreeBSD
+  # names the invoking user first, util-linux names the target first.
+  #
+  # su_result carries the tool's own word for a failed switch, so it reads
+  # "BAD SU" here and "FAILED" from SU_TO. Both mean the same thing.
+  SU_FBSD: '(?:(?<su_result>BAD SU) )?(?<su_by_user>[% USERNAME %]) to (?<su_target_user>[% USERNAME %]) on (?<su_tty>[% NOTSPACE %])'
+vars_tests:
+  SU_TO:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '(to root) neti on pts/0'
+        result: '(to root) neti on pts/0'
+      - string: 'FAILED SU (to root) neti on pts/0'
+        result: 'FAILED SU (to root) neti on pts/0'
+    negative:
+      - '+ pts/0 neti:root'
+  SU_SUCCESS:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '+ pts/0 neti:root'
+        result: '+ pts/0 neti:root'
+      - string: '+ /dev/pts/1 alice:root'
+        result: '+ /dev/pts/1 alice:root'
+    negative:
+      - '- pts/0 neti:root'
+  SU_FAILURE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '- pts/0 neti:root'
+        result: '- pts/0 neti:root'
+    negative:
+      - '+ pts/0 neti:root'
+  SU_FBSD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'neti to root on /dev/pts/3'
+        result: 'neti to root on /dev/pts/3'
+      - string: 'BAD SU neti to postgres on /dev/pts/3'
+        result: 'BAD SU neti to postgres on /dev/pts/3'
+      # su(1) writes a bare "tty" when it cannot name the terminal
+      - string: 'BAD SU neti to postgres on tty'
+        result: 'BAD SU neti to postgres on tty'
+    negative:
+      # the util-linux spelling, which parenthesises the target
+      - '(to root) neti on pts/0'
+      - '+ pts/0 neti:root'
+rules:
+  - name: su
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^su$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - SU_TO
+      - SU_SUCCESS
+      - SU_FAILURE
+      # ---- FreeBSD pattern (appended after the util-linux ones) ----
+      - SU_FBSD
+    tests:
+      positive:
+        - string: '(to root) neti on pts/0'
+          result:
+            su_target_user: 'root'
+            su_by_user: 'neti'
+            su_tty: 'pts/0'
+        - string: 'FAILED SU (to root) neti on pts/0'
+          program: 'su'
+          result:
+            su_result: 'FAILED'
+            su_target_user: 'root'
+            su_by_user: 'neti'
+            su_tty: 'pts/0'
+        - string: '+ pts/0 neti:root'
+          result:
+            su_tty: 'pts/0'
+            su_by_user: 'neti'
+            su_target_user: 'root'
+        - string: '- pts/0 neti:root'
+          result:
+            su_tty: 'pts/0'
+            su_by_user: 'neti'
+            su_target_user: 'root'
+        - string: '+ /dev/pts/1 alice:root'
+          result:
+            su_tty: '/dev/pts/1'
+            su_by_user: 'alice'
+            su_target_user: 'root'
+        # -- FreeBSD su(1) --
+        - string: 'neti to root on /dev/pts/3'
+          result:
+            su_by_user: 'neti'
+            su_target_user: 'root'
+            su_tty: '/dev/pts/3'
+        - string: 'BAD SU neti to postgres on tty'
+          result:
+            su_result: 'BAD SU'
+            su_by_user: 'neti'
+            su_target_user: 'postgres'
+            su_tty: 'tty'
+      negative:
+        - 'this is not a valid su line at all'
+        - string: '(to root) neti on pts/0'
+          program: 'su-extra'

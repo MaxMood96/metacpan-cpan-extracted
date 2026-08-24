@@ -1,6 +1,6 @@
 package SPVM::Resource::Utf8proc;
 
-our $VERSION = "0.004";
+our $VERSION = "0.005";
 
 1;
 

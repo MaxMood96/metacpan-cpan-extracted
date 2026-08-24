@@ -1,0 +1,369 @@
+---
+# Generic PAM (pam_unix) log enrichment.
+#
+# pam_unix lines are emitted under MANY syslog programs (sshd, su, sudo, cron,
+# login, ...), so this file is GATELESS: the rule has no gate and instead relies
+# on being anchored (each pattern must match the whole MESSAGE) plus a leading
+# literal -- "pam_" for the Linux-PAM shapes, "in " for the OpenPAM one -- so
+# that only genuine PAM lines match. First match wins.
+#
+# PAM_AUTH_ERROR is the one exception, having no such prefix to key on. It is
+# held to an exact literal and a username for that reason; see the note there.
+#
+# Every capture is namespaced with pam_ .
+#
+# Two shapes are handled:
+#   * the authentication-failure line, e.g.
+#       pam_unix(sshd:auth): authentication failure; logname= uid=0 euid=0 tty=ssh ruser= rhost=203.0.113.7 user=root
+#     The trailing "logname= uid= euid= tty= ruser= rhost= user=" blob is
+#     captured whole as pam_kv and then split into pam_logname / pam_uid /
+#     pam_euid / pam_tty / pam_ruser / pam_rhost / pam_user by the file-level
+#     decompose (kv, field_split ' ').
+#   * the session open/close line, e.g.
+#       pam_unix(su:session): session opened for user root(uid=0) by neti(uid=1000)
+includes:
+- base
+vars_templated:
+  # authentication-failure line -- module/service/type header, then the whole
+  # "logname= uid= ..." blob captured as pam_kv for the decompose step below.
+  # NOTE: pam_module uses USERNAME rather than WORD because base WORD is
+  # '\b\w+\b' and the leading \b cannot match immediately after the "pam_"
+  # literal ("_u" is not a word boundary), so [% WORD %] would never match here.
+  PAM_AUTH_FAILURE: 'pam_(?<pam_module>[% USERNAME %])\((?<pam_service>[% NOTSPACE %]):(?<pam_type>[% WORD %])\): authentication failure; (?<pam_kv>logname=[% GREEDYDATA %])'
+  # session open/close line.
+  PAM_SESSION: 'pam_(?<pam_module>[% USERNAME %])\((?<pam_service>[% NOTSPACE %]):(?<pam_type>[% WORD %])\): session (?<pam_session_action>opened|closed) for user (?<pam_user>[% USERNAME %])(?:\(uid=(?<pam_uid>[% INT %])\))?(?: by (?:(?<pam_by_user>[% USERNAME %]))?\(uid=(?<pam_by_uid>[% INT %])\))?'
+  # -------------------------------------------------------------------------
+  # additive expansions -- other common PAM message types. All mirror the
+  # module/service/type "pam_<module>(<service>:<type>):" prefix used above and
+  # namespace every capture with pam_ .
+  # -------------------------------------------------------------------------
+  # pam_unix auth check where the account does not exist, e.g.
+  #   pam_unix(sshd:auth): check pass; user unknown
+  # pam_reason records the human-readable failure reason.
+  PAM_CHECK_PASS_USER_UNKNOWN: 'pam_(?<pam_module>[% USERNAME %])\((?<pam_service>[% NOTSPACE %]):(?<pam_type>[% WORD %])\): (?<pam_reason>check pass; user unknown)(?: [% GREEDYDATA %])?'
+  # pam_unix account-management expiry, e.g.
+  #   pam_unix(sshd:account): account root has expired (account expired)
+  #   pam_unix(sshd:account): password has expired
+  # pam_user is present only for the "account <user> has expired" shape; the
+  # parenthesised detail is captured as pam_result.
+  PAM_ACCOUNT_EXPIRED: 'pam_(?<pam_module>[% USERNAME %])\((?<pam_service>[% NOTSPACE %]):(?<pam_type>[% WORD %])\): (?<pam_reason>(?:account (?<pam_user>[% USERNAME %]) has expired|password has expired))(?: \((?<pam_result>[% GREEDYDATA_NO_BRACKET %])\))?'
+  # pam_faillock temporary account lock, e.g.
+  #   pam_faillock(sshd:auth): Consecutive login failures for user root account temporarily locked
+  PAM_FAILLOCK: 'pam_(?<pam_module>[% USERNAME %])\((?<pam_service>[% NOTSPACE %]):(?<pam_type>[% WORD %])\): (?<pam_reason>Consecutive login failures for user (?<pam_user>[% USERNAME %]) account temporarily locked)(?: [% GREEDYDATA %])?'
+  # pam_tally2 lock after N failures, e.g.
+  #   pam_tally2(sshd:auth): user root (1000) has 5 login failures; the account is locked
+  # pam_failures is the failure count (coerced to int via convert below).
+  PAM_TALLY2: 'pam_(?<pam_module>[% USERNAME %])\((?<pam_service>[% NOTSPACE %]):(?<pam_type>[% WORD %])\): user (?<pam_user>[% USERNAME %]) \((?<pam_uid>[% INT %])\) has (?<pam_failures>[% INT %]) login failures; (?<pam_reason>the account is locked)(?: [% GREEDYDATA %])?'
+  # pam_succeed_if requirement not met, e.g.
+  #   pam_succeed_if(sshd:auth): requirement "uid >= 1000" not met by user "root"
+  PAM_SUCCEED_IF: 'pam_(?<pam_module>[% USERNAME %])\((?<pam_service>[% NOTSPACE %]):(?<pam_type>[% WORD %])\): requirement "(?<pam_requirement>[^"]*)" not met by user "(?<pam_user>[% USERNAME %])"(?: [% GREEDYDATA %])?'
+  # -------------------------------------------------------------------------
+  # OpenPAM, the implementation FreeBSD and macOS ship, logs nothing like the
+  # above. openpam_log() prefixes the calling function and gives no
+  # module/service/type header at all:
+  #   in openpam_load_module(): no pam_nologin.so found
+  #   in pam_group(): (pam_group) neither luser nor ruser specified, assuming ruser
+  #   in try_dlopen(): /usr/lib/pam_nologin.so.6: Undefined symbol "initgroups"
+  #
+  # The only clue as to which service was involved is the syslog program name,
+  # which is the binary that called into PAM rather than a PAM service name, so
+  # there is nothing here to fill pam_service with. Some modules name
+  # themselves again in a leading "(pam_group)"; where they do, that is pulled
+  # out into pam_module so it lines up with the Linux-PAM patterns above.
+  PAM_OPENPAM: 'in (?<pam_function>[% PAM_FUNCTION %])\(\): (?:\(pam_(?<pam_module>[% USERNAME %])\) )?(?<pam_message>[% GREEDYDATA %])'
+  # "Authentication error; user=neti"
+  #
+  # Written by the PAM stack but logged under the calling program's pid, which
+  # is why sudo, sshd-session and xscreensaver-auth all emit it byte-identical.
+  # On an LDAP-backed host each one follows an nslcd "Invalid credentials" line
+  # for the same account.
+  #
+  # Alone among the patterns here it has no "pam_" or "in " prefix to key on,
+  # and this file is gateless. It is therefore pinned to the exact literal and
+  # a username with nothing optional and no trailing GREEDYDATA -- a looser
+  # form would claim any program's "Authentication error" line.
+  PAM_AUTH_ERROR: 'Authentication error; user=(?<pam_user>[% USERNAME %])'
+vars_tests:
+  PAM_AUTH_FAILURE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'pam_unix(sshd:auth): authentication failure; logname= uid=0 euid=0 tty=ssh ruser= rhost=203.0.113.7 user=root'
+        result: 'pam_unix(sshd:auth): authentication failure; logname= uid=0 euid=0 tty=ssh ruser= rhost=203.0.113.7 user=root'
+      - string: 'pam_unix(su:auth): authentication failure; logname=neti uid=1000 euid=0 tty=pts/0 ruser=neti rhost= user=root'
+        result: 'pam_unix(su:auth): authentication failure; logname=neti uid=1000 euid=0 tty=pts/0 ruser=neti rhost= user=root'
+    negative:
+      - 'pam_unix(sshd:session): session closed for user neti'
+  PAM_SESSION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'pam_unix(su:session): session opened for user root(uid=0) by neti(uid=1000)'
+        result: 'pam_unix(su:session): session opened for user root(uid=0) by neti(uid=1000)'
+      - string: 'pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)'
+        result: 'pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)'
+      - string: 'pam_unix(sshd:session): session closed for user neti'
+        result: 'pam_unix(sshd:session): session closed for user neti'
+    negative:
+      - 'pam_unix(sshd:auth): authentication failure; logname= uid=0 euid=0 tty=ssh ruser= rhost=203.0.113.7 user=root'
+  PAM_CHECK_PASS_USER_UNKNOWN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'pam_unix(sshd:auth): check pass; user unknown'
+        result: 'pam_unix(sshd:auth): check pass; user unknown'
+      - string: 'pam_unix(login:auth): check pass; user unknown'
+        result: 'pam_unix(login:auth): check pass; user unknown'
+    negative:
+      - 'pam_unix(sshd:auth): authentication failure; logname= uid=0 euid=0 tty=ssh ruser= rhost=203.0.113.7 user=root'
+  PAM_ACCOUNT_EXPIRED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'pam_unix(sshd:account): account root has expired (account expired)'
+        result: 'pam_unix(sshd:account): account root has expired (account expired)'
+      - string: 'pam_unix(sshd:account): password has expired'
+        result: 'pam_unix(sshd:account): password has expired'
+    negative:
+      - 'pam_unix(sshd:session): session closed for user neti'
+  PAM_FAILLOCK:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'pam_faillock(sshd:auth): Consecutive login failures for user root account temporarily locked'
+        result: 'pam_faillock(sshd:auth): Consecutive login failures for user root account temporarily locked'
+      - string: 'pam_faillock(login:auth): Consecutive login failures for user neti account temporarily locked'
+        result: 'pam_faillock(login:auth): Consecutive login failures for user neti account temporarily locked'
+    negative:
+      - 'pam_unix(sshd:auth): check pass; user unknown'
+  PAM_TALLY2:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'pam_tally2(sshd:auth): user root (1000) has 5 login failures; the account is locked'
+        result: 'pam_tally2(sshd:auth): user root (1000) has 5 login failures; the account is locked'
+      - string: 'pam_tally2(login:auth): user neti (1001) has 3 login failures; the account is locked'
+        result: 'pam_tally2(login:auth): user neti (1001) has 3 login failures; the account is locked'
+    negative:
+      - 'pam_faillock(sshd:auth): Consecutive login failures for user root account temporarily locked'
+  PAM_SUCCEED_IF:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'pam_succeed_if(sshd:auth): requirement "uid >= 1000" not met by user "root"'
+        result: 'pam_succeed_if(sshd:auth): requirement "uid >= 1000" not met by user "root"'
+      - string: 'pam_succeed_if(sudo:auth): requirement "uid >= 1000" not met by user "daemon"'
+        result: 'pam_succeed_if(sudo:auth): requirement "uid >= 1000" not met by user "daemon"'
+    negative:
+      - 'pam_unix(sshd:account): password has expired'
+  PAM_OPENPAM:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'in openpam_load_module(): no pam_nologin.so found'
+        result: 'in openpam_load_module(): no pam_nologin.so found'
+      - string: 'in pam_group(): (pam_group) neither luser nor ruser specified, assuming ruser'
+        result: 'in pam_group(): (pam_group) neither luser nor ruser specified, assuming ruser'
+    negative:
+      - 'pam_unix(sshd:account): password has expired'
+      - 'in the middle of a sentence'
+  PAM_AUTH_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Authentication error; user=neti'
+        result: 'Authentication error; user=neti'
+    negative:
+      # sshd's own wording, handled by sshd.yaml, must not be claimed here
+      - 'Authentication error for illegal user admin from 203.0.113.7'
+      - 'error: PAM: Authentication error for root from 203.0.113.7'
+      # nothing may follow the username
+      - 'Authentication error; user=neti and then some'
+  PAM_FUNCTION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'openpam_load_module'
+        result: 'openpam_load_module'
+      - string: 'pam_group'
+        result: 'pam_group'
+    negative:
+      - 'has a space'
+      - 'openpam_load_module()'
+# Additional primitives used above that are not in base.yaml.
+vars:
+  # A C function name, as OpenPAM reports it. base WORD would do the job but
+  # carries \b anchors on both ends, which do not fire cleanly against the
+  # literal "(" that follows.
+  PAM_FUNCTION: '\w+'
+# Look up the remote host from auth failures (empty rhost is skipped by the
+# geoip step).
+geoip:
+- pam_rhost
+# Coerce uids to integers. pam_uid appears both in the decomposed kv blob
+# (auth failures) and in the session pattern.
+convert:
+  pam_uid: int
+  pam_euid: int
+  pam_by_uid: int
+  pam_failures: int
+# Split the "logname= uid= euid= tty= ruser= rhost= user=" blob (captured as
+# pam_kv) into per-key fields, namespaced with pam_ . Empty values (e.g.
+# logname= / rhost=) yield empty-string fields.
+decompose:
+  - field: pam_kv
+    type: kv
+    field_split: ' '
+    prefix: 'pam_'
+    remove: true
+    tests:
+      - input: 'logname= uid=0 euid=0 tty=ssh ruser= rhost=203.0.113.7 user=root'
+        result:
+          pam_logname: ''
+          pam_uid: '0'
+          pam_euid: '0'
+          pam_tty: 'ssh'
+          pam_ruser: ''
+          pam_rhost: '203.0.113.7'
+          pam_user: 'root'
+      - input: 'logname=neti uid=1000 euid=0 tty=pts/0 ruser=neti rhost= user=root'
+        result:
+          pam_logname: 'neti'
+          pam_uid: '1000'
+          pam_euid: '0'
+          pam_tty: 'pts/0'
+          pam_ruser: 'neti'
+          pam_rhost: ''
+          pam_user: 'root'
+rules:
+  - name: pam
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - PAM_AUTH_FAILURE
+      - PAM_SESSION
+      - PAM_CHECK_PASS_USER_UNKNOWN
+      - PAM_ACCOUNT_EXPIRED
+      - PAM_FAILLOCK
+      - PAM_TALLY2
+      - PAM_SUCCEED_IF
+      - PAM_OPENPAM
+      # last: the one pattern with no pam_ / in prefix to key on
+      - PAM_AUTH_ERROR
+    tests:
+      positive:
+        # auth-failure lines -- decompose does NOT run in rule-tests, so the
+        # result is the raw pattern captures (header + whole pam_kv blob).
+        - string: 'pam_unix(sshd:auth): authentication failure; logname= uid=0 euid=0 tty=ssh ruser= rhost=203.0.113.7 user=root'
+          enriched:
+            pam_euid: '0'
+            pam_logname: ''
+            pam_module: 'unix'
+            pam_rhost: '203.0.113.7'
+            pam_ruser: ''
+            pam_service: 'sshd'
+            pam_tty: 'ssh'
+            pam_type: 'auth'
+            pam_uid: '0'
+            pam_user: 'root'
+          numeric:
+            - pam_euid
+            - pam_uid
+          result:
+            pam_module: 'unix'
+            pam_service: 'sshd'
+            pam_type: 'auth'
+            pam_kv: 'logname= uid=0 euid=0 tty=ssh ruser= rhost=203.0.113.7 user=root'
+        - string: 'pam_unix(su:auth): authentication failure; logname=neti uid=1000 euid=0 tty=pts/0 ruser=neti rhost= user=root'
+          result:
+            pam_module: 'unix'
+            pam_service: 'su'
+            pam_type: 'auth'
+            pam_kv: 'logname=neti uid=1000 euid=0 tty=pts/0 ruser=neti rhost= user=root'
+        # session lines
+        - string: 'pam_unix(su:session): session opened for user root(uid=0) by neti(uid=1000)'
+          numeric:
+            - pam_by_uid
+          result:
+            pam_module: 'unix'
+            pam_service: 'su'
+            pam_type: 'session'
+            pam_session_action: 'opened'
+            pam_user: 'root'
+            pam_uid: '0'
+            pam_by_user: 'neti'
+            pam_by_uid: '1000'
+        - string: 'pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)'
+          result:
+            pam_module: 'unix'
+            pam_service: 'cron'
+            pam_type: 'session'
+            pam_session_action: 'opened'
+            pam_user: 'root'
+            pam_uid: '0'
+            pam_by_uid: '0'
+        - string: 'pam_unix(sshd:session): session closed for user neti'
+          result:
+            pam_module: 'unix'
+            pam_service: 'sshd'
+            pam_type: 'session'
+            pam_session_action: 'closed'
+            pam_user: 'neti'
+        # check pass; user unknown
+        - string: 'pam_unix(sshd:auth): check pass; user unknown'
+          result:
+            pam_module: 'unix'
+            pam_service: 'sshd'
+            pam_type: 'auth'
+            pam_reason: 'check pass; user unknown'
+        # account/password expiry
+        - string: 'pam_unix(sshd:account): account root has expired (account expired)'
+          result:
+            pam_module: 'unix'
+            pam_service: 'sshd'
+            pam_type: 'account'
+            pam_reason: 'account root has expired'
+            pam_user: 'root'
+            pam_result: 'account expired'
+        - string: 'pam_unix(sshd:account): password has expired'
+          result:
+            pam_module: 'unix'
+            pam_service: 'sshd'
+            pam_type: 'account'
+            pam_reason: 'password has expired'
+        # faillock temporary lock
+        - string: 'pam_faillock(sshd:auth): Consecutive login failures for user root account temporarily locked'
+          result:
+            pam_module: 'faillock'
+            pam_service: 'sshd'
+            pam_type: 'auth'
+            pam_reason: 'Consecutive login failures for user root account temporarily locked'
+            pam_user: 'root'
+        # tally2 lock after N failures
+        - string: 'pam_tally2(sshd:auth): user root (1000) has 5 login failures; the account is locked'
+          numeric:
+            - pam_failures
+          result:
+            pam_module: 'tally2'
+            pam_service: 'sshd'
+            pam_type: 'auth'
+            pam_user: 'root'
+            pam_uid: '1000'
+            pam_failures: '5'
+            pam_reason: 'the account is locked'
+        # succeed_if requirement not met
+        - string: 'pam_succeed_if(sshd:auth): requirement "uid >= 1000" not met by user "root"'
+          result:
+            pam_module: 'succeed_if'
+            pam_service: 'sshd'
+            pam_type: 'auth'
+            pam_requirement: 'uid >= 1000'
+            pam_user: 'root'
+        # OpenPAM
+        - string: 'in openpam_load_module(): no pam_nologin.so found'
+          result:
+            pam_function: 'openpam_load_module'
+            pam_message: 'no pam_nologin.so found'
+        - string: 'in pam_group(): (pam_group) neither luser nor ruser specified, assuming ruser'
+          result:
+            pam_function: 'pam_group'
+            pam_module: 'group'
+            pam_message: 'neither luser nor ruser specified, assuming ruser'
+        # the stack's own failure, surfaced under whichever binary called it
+        - string: 'Authentication error; user=neti'
+          result:
+            pam_user: 'neti'
+      negative:
+        - 'this is not a pam line at all'
+        # sshd's wording of a PAM failure belongs to sshd.yaml
+        - 'Authentication error for illegal user admin from 203.0.113.7'

@@ -1,0 +1,6 @@
+my $config = SPVM::Builder::Config->new_c99;
+
+$config->use_resource('Resource::Zlib');
+$config->use_resource('Resource::Libpng');
+
+$config;

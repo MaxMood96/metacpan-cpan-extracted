@@ -58,7 +58,7 @@ my %Package;
 
 #  Version information
 #
-$VERSION='3.020';
+$VERSION='3.021';
 
 
 #  Debug load
@@ -356,6 +356,8 @@ sub _start_html {
         hr
         sse
         ws
+        require
+        import
     ), keys %{$WEBDYNE_START_HTML_SHORTCUT_HR});
     debug('start_html %s', Dumper(\%attr_page));
 
@@ -368,7 +370,7 @@ sub _start_html {
     #  Static, cache ? If so mark as such in HTML::Tiny object to be 
     #  reviewed at end of parse by Treebuilder. Not ideal, good enough
     #
-    foreach my $attr (qw(static cache handler sse ws)) {
+    foreach my $attr (qw(static cache handler sse ws require import)) {
         if (my $value=$attr_page{$attr}) {
             debug("found attr: $attr, setting to value: $value");
             $self->{"_${attr}"}=$value;

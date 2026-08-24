@@ -1,5 +1,5 @@
 package Statocles::Page;
-our $VERSION = '0.098';
+our $VERSION = '0.099';
 # ABSTRACT: Base role for rendering files
 
 use Statocles::Base 'Role';
@@ -14,7 +14,7 @@ use Mojo::DOM;
 #pod =cut
 
 has site => (
-    is => 'ro',
+    is => 'rw',
     isa => InstanceOf['Statocles::Site'],
     lazy => 1,
     default => sub { $Statocles::SITE },
@@ -27,7 +27,7 @@ has site => (
 #pod =cut
 
 has app => (
-    is => 'ro',
+    is => 'rw',
     isa => ConsumerOf['Statocles::App'],
 );
 
@@ -342,7 +342,7 @@ Statocles::Page - Base role for rendering files
 
 =head1 VERSION
 
-version 0.098
+version 0.099
 
 =head1 DESCRIPTION
 

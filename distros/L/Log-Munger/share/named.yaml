@@ -1,0 +1,829 @@
+---
+# named / BIND9 log enrichment.
+#
+# Gates on the syslog PROGRAM field being "named". Patterns are anchored (each
+# must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with dns_ .
+#
+# BIND query-log lines look like:
+#   client @0x7f8b1c0d5e00 192.0.2.5#54321 (example.com): query: example.com IN A +E(0)K (192.0.2.1)
+# The "@0x..." internal address token is optional, as is the trailing
+# "(server_ip)" reporting which local address answered.
+#
+# In addition to the query log, BIND emits many other daemon messages: query
+# denials, zone transfers (AXFR/IXFR), zone loads, DNSSEC validation results,
+# response-rate-limiting (RRL), dynamic DNS (DDNS) updates, lame-server reports
+# and general network/resolution errors. Those are parsed by the patterns
+# appended after NAMED_QUERY below.
+includes:
+- base
+vars_templated:
+  # A single BIND9 query-log line. Tolerates the optional "@0x..." client
+  # address token and the optional trailing "(server_ip)".
+  NAMED_QUERY: 'client(?: @0x[0-9a-fA-F]+)? (?<dns_client_ip>[% IP %])#(?<dns_client_port>[% INT %])(?: \([% DATA %]\))?: query: (?<dns_query_name>[% NOTSPACE %]) (?<dns_query_class>[% WORD %]) (?<dns_query_type>[% WORD %]) (?<dns_flags>[% NOTSPACE %])(?: \((?<dns_server_ip>[% IP %])\))?'
+  # Query denied by an ACL, e.g.:
+  #   client @0x7f 203.0.113.7#40000 (example.com): query (cache) 'example.com/A/IN' denied
+  # The "@0x..." token and "(cache)"/"(recursion)" qualifier are optional, as is
+  # the "(view)" between the client address and the colon.
+  NAMED_QUERY_DENIED: 'client(?: @0x[0-9a-fA-F]+)? (?<dns_client_ip>[% IP %])#(?<dns_client_port>[% INT %])(?: \([% DATA %]\))?: query(?: \((?<dns_query_source>[% WORD %])\))? ''(?<dns_query_name>[% NOTSPACE_NO_SLASH %])/(?<dns_query_type>[% WORD %])/(?<dns_query_class>[% WORD %])'' denied(?: [% GREEDYDATA %])?'
+  # Zone transfer start, e.g.:
+  #   client 192.0.2.9#5300 (example.com): transfer of 'example.com/IN': AXFR started
+  #   client 192.0.2.9#5300 (example.com): transfer of 'example.com/IN': AXFR-style IXFR ended
+  NAMED_XFR_CLIENT: 'client(?: @0x[0-9a-fA-F]+)? (?<dns_client_ip>[% IP %])#(?<dns_client_port>[% INT %])(?: \([% DATA %]\))?: transfer of ''(?<dns_zone_name>[% NOTSPACE_NO_SLASH %])/(?<dns_query_class>[% WORD %])'': (?<dns_xfr_type>(?:AXFR-style IXFR|AXFR|IXFR)) (?<dns_xfr_state>started|ended|deferred)(?: [% GREEDYDATA %])?'
+  # Outbound/failed zone transfer from a master, e.g.:
+  #   transfer of 'example.com/IN' from 192.0.2.2#53: failed while receiving responses: ...
+  NAMED_XFR_FROM: 'transfer of ''(?<dns_zone_name>[% NOTSPACE_NO_SLASH %])/(?<dns_query_class>[% WORD %])'' from (?<dns_src_ip>[% IP %])#(?<dns_src_port>[% INT %]): (?<dns_xfr_result>[% GREEDYDATA %])'
+  # Zone load, e.g.:
+  #   zone example.com/IN: loaded serial 2024010101
+  #   zone example.com/IN/internal-view: loaded serial 2024010101
+  # When views are configured the zone name carries a third "/view" component.
+  NAMED_ZONE_LOAD: 'zone (?<dns_zone_name>[% NOTSPACE_NO_SLASH %])/(?<dns_query_class>[% WORD %])(?:/(?<dns_view>[% NOTSPACE_NO_SLASH %]))?: loaded serial (?<dns_zone_serial>[% INT %])(?: [% GREEDYDATA %])?'
+  # A zone that could not be read at all, e.g.:
+  #   zone 255.in-addr.arpa/IN/internal-view: loading from master file /usr/local/etc/namedb/master/empty.db failed: file not found
+  NAMED_ZONE_LOAD_FAILED: 'zone (?<dns_zone_name>[% NOTSPACE_NO_SLASH %])/(?<dns_query_class>[% WORD %])(?:/(?<dns_view>[% NOTSPACE_NO_SLASH %]))?: loading from master file (?<dns_zone_file>[% NOTSPACE %]) failed: (?<dns_zone_error>[% GREEDYDATA %])'
+  # Anything else said about a named zone. This has to sit after the two
+  # patterns above because it would otherwise swallow them, e.g.:
+  #   zone localhost/IN/internal-view: not loaded due to errors.
+  #   zone example.com/IN/internal-view: has no NS records
+  #   zone example.com/IN: sending notifies (serial 2024010101)
+  NAMED_ZONE_STATUS: 'zone (?<dns_zone_name>[% NOTSPACE_NO_SLASH %])/(?<dns_query_class>[% WORD %])(?:/(?<dns_view>[% NOTSPACE_NO_SLASH %]))?: (?<dns_zone_status>[% GREEDYDATA %])'
+  # A syntax problem in a zone file, reported with the file and the line it was
+  # found on, e.g.:
+  #   /usr/local/etc/namedb/master/example.db:11: unknown RR type 'MS'
+  #   /usr/local/etc/namedb/master/example.db:2: ignoring out-of-zone data (a.example.com)
+  NAMED_ZONE_FILE_ERROR: '(?<dns_zone_file>/[% NOTSPACE_NO_COLON %]):(?<dns_zone_file_line>[% INT %]): (?<dns_zone_error>[% GREEDYDATA %])'
+  # A malformed answer from an authoritative server, e.g.:
+  #   DNS format error from 192.0.2.2#53 resolving a.example.com/AAAA for 198.51.100.9#28116: Name example.com (SOA) not subdomain of zone a.example.com -- invalid response
+  # The "for" clause names the client the lookup was on behalf of, and is the
+  # literal "<unknown>" when named generated the query itself.
+  NAMED_FORMAT_ERROR: 'DNS format error from (?<dns_src_ip>[% IP %])#(?<dns_src_port>[% INT %]) resolving (?<dns_query_name>[% NOTSPACE_NO_SLASH %])/(?<dns_query_type>[% WORD %]) for (?:<unknown>|(?<dns_client_ip>[% IP %])#(?<dns_client_port>[% INT %])): (?<dns_error>[% GREEDYDATA %])'
+  # The root-hint priming fetch a resolver does at startup, e.g.:
+  #   resolver priming query complete: failure
+  # Older releases logged it with no result at all, so the result is optional.
+  NAMED_PRIMING: 'resolver priming query complete(?:: (?<dns_priming_result>[% GREEDYDATA %]))?'
+  # RFC 5011 trust-anchor maintenance, e.g.:
+  #   managed-keys-zone/internal-view: Unable to fetch DNSKEY set '.': failure
+  #   managed-keys-zone: Initializing automatic trust anchor management for zone '.'
+  NAMED_MANAGED_KEYS: 'managed-keys-zone(?:/(?<dns_view>[% NOTSPACE_NO_SLASH %]))?: (?<dns_managed_keys_message>[% GREEDYDATA %])'
+  # The rndc control and statistics listeners coming up and going away, e.g.:
+  #   command channel listening on 127.0.0.1#953
+  #   stopping statistics channel on 127.0.0.1#8053
+  NAMED_CHANNEL_START: '(?<dns_channel>command|statistics) channel (?<dns_channel_action>listening) on (?<dns_listen_ip>[% IP %])#(?<dns_listen_port>[% INT %])'
+  NAMED_CHANNEL_STOP: '(?<dns_channel_action>stopping) (?<dns_channel>command|statistics) channel on (?<dns_listen_ip>[% IP %])#(?<dns_listen_port>[% INT %])'
+  # The recursive-client quota adapting to load, e.g.:
+  #   clients-per-query increased to 15
+  NAMED_CLIENTS_PER_QUERY: 'clients-per-query (?<dns_cpq_direction>increased|decreased) to (?<dns_clients_per_query>[% INT %])'
+  # Startup banner version line, e.g.:
+  #   starting BIND 9.18.30 (Extended Support Version) <id:>
+  NAMED_STARTING: 'starting BIND (?<dns_version>[% NOTSPACE %])(?: \((?<dns_version_note>[^)]*)\))?(?: <id:(?<dns_build_id>[^>]*)>)?'
+  # The argv named was started with, e.g.:
+  #   running as: named -4 -u root -c /usr/local/etc/namedb/named.conf
+  NAMED_RUNNING_AS: 'running as: (?<dns_command_line>[% GREEDYDATA %])'
+  # Bare lifecycle words. named logs each on a line of its own with nothing
+  # else on it, so they are named rather than left to the catch-all.
+  NAMED_STATE: '(?<dns_state>running|exiting|all zones loaded|shutting down|reloading configuration succeeded|loading configuration from [% NOTSPACE %])'
+  # DNSSEC validation result, e.g.:
+  #   validating example.com/A: no valid signature found
+  #   validating example.com/A: insecurity proof failed
+  # With views configured the line is prefixed with the view it happened in, and
+  # BIND pads the gap between the colon and "validating" to line the names up:
+  #   view internal-view: validating example.com/A: no valid signature found
+  #   view internal-view:   validating example.com/SOA: no valid signature found
+  NAMED_DNSSEC: '(?:view (?<dns_view>[% NOTSPACE_NO_COLON %]): +)?validating (?:@0x[0-9a-fA-F]+: )?(?<dns_query_name>[% NOTSPACE_NO_SLASH %])/(?<dns_query_type>[% WORD %]): (?<dns_dnssec_result>[% GREEDYDATA %])'
+  # Response-rate-limiting (RRL) action, e.g.:
+  #   client 203.0.113.7#40000 (example.com): rate limit slip response to 203.0.113.0/24 for example.com IN A  (abcd1234)
+  #   client 203.0.113.7#40000 (example.com): rate limit drop responses to ...
+  NAMED_RRL: 'client(?: @0x[0-9a-fA-F]+)? (?<dns_client_ip>[% IP %])#(?<dns_client_port>[% INT %])(?: \([% DATA %]\))?: rate limit (?<dns_rrl_action>[% WORD %]) (?<dns_rrl_kind>[% WORD %]) to (?<dns_rrl_network>[% NOTSPACE %])(?: for (?<dns_query_name>[% NOTSPACE %]) (?<dns_query_class>[% WORD %]) (?<dns_query_type>[% WORD %]))?(?: [% GREEDYDATA %])?'
+  # Dynamic DNS (DDNS) update, e.g.:
+  #   client 192.0.2.9#40000: updating zone 'example.com/IN': adding an RR at 'host.example.com' A 192.0.2.50
+  NAMED_DDNS: 'client(?: @0x[0-9a-fA-F]+)? (?<dns_client_ip>[% IP %])#(?<dns_client_port>[% INT %])(?: \([% DATA %]\))?: updating zone ''(?<dns_zone_name>[% NOTSPACE_NO_SLASH %])/(?<dns_query_class>[% WORD %])'': (?<dns_ddns_op>[% GREEDYDATA %])'
+  # Lame server report, e.g.:
+  #   lame server resolving 'example.com' (in 'example.com'?): 192.0.2.2#53
+  NAMED_LAME: 'lame server resolving ''(?<dns_query_name>[% NOTSPACE %])''(?: \(in ''(?<dns_zone_name>[% NOTSPACE %])''\?\))?: (?<dns_src_ip>[% IP %])#(?<dns_src_port>[% INT %])(?: [% GREEDYDATA %])?'
+  # An authoritative server answering with an error RCODE, e.g.:
+  #   REFUSED unexpected RCODE resolving 'example.com/A/IN': 192.0.2.2#53
+  #   SERVFAIL unexpected RCODE resolving 'test.org/AAAA/IN': 198.51.100.9#53
+  # This is the same shape as NAMED_NET_ERROR and would otherwise land there
+  # with the RCODE buried in the free-text dns_error, so it has to sit ahead of
+  # it. dns_error is still filled in, with the phrase minus the RCODE, so
+  # anything keying off dns_error keeps working.
+  NAMED_RCODE_ERROR: '(?<dns_rcode>[% WORD %]) (?<dns_error>unexpected RCODE) resolving ''(?<dns_query_name>[% NOTSPACE_NO_SLASH %])/(?<dns_query_type>[% WORD %])/(?<dns_query_class>[% WORD %])'': (?<dns_src_ip>[% IP %])#(?<dns_src_port>[% INT %])(?: [% GREEDYDATA %])?'
+  # General resolution / network error, e.g.:
+  #   network unreachable resolving 'example.com/A/IN': 2001:db8::1#53
+  #   host unreachable resolving 'example.com/A/IN': 192.0.2.2#53
+  NAMED_NET_ERROR: '(?<dns_error>[% GREEDYDATA_NO_QUOTE %]) resolving ''(?<dns_query_name>[% NOTSPACE_NO_SLASH %])/(?<dns_query_type>[% WORD %])/(?<dns_query_class>[% WORD %])'': (?<dns_src_ip>[% IP %])#(?<dns_src_port>[% INT %])(?: [% GREEDYDATA %])?'
+  # A resolution that only succeeded once qname minimisation was turned off for
+  # it, e.g.:
+  #   success resolving 'example.com/A' after disabling qname minimization due to 'ncache nxdomain'
+  # The leading word is the outcome and the quoted tail is why minimisation was
+  # abandoned. There is no server address on these.
+  NAMED_QNAME_MIN: '(?<dns_qname_min_result>[% WORD %]) resolving ''(?<dns_query_name>[% NOTSPACE_NO_SLASH %])/(?<dns_query_type>[% WORD %])'' after disabling qname minimization due to ''(?<dns_qname_min_reason>[^'']*)'''
+  # A delegation that points at itself, e.g.:
+  #   loop detected resolving 'ns1.example.com/A'
+  NAMED_LOOP: '(?<dns_error>loop detected) resolving ''(?<dns_query_name>[% NOTSPACE_NO_SLASH %])/(?<dns_query_type>[% WORD %])'''
+  # A fetch abandoned because it never came back, e.g.:
+  #   shut down hung fetch while resolving 'example.com/A'
+  NAMED_HUNG_FETCH: '(?<dns_error>shut down hung fetch) while resolving ''(?<dns_query_name>[% NOTSPACE_NO_SLASH %])/(?<dns_query_type>[% WORD %])'''
+  # A nameserver skipped because the NS record points at a CNAME, e.g.:
+  #   skipping nameserver 'ns1.example.com' because it is a CNAME, while resolving 'test.org/A'
+  NAMED_SKIP_NS: 'skipping nameserver ''(?<dns_nameserver>[^'']*)'' because it is a (?<dns_skip_reason>[% GREEDYDATA_NO_QUOTE %]), while resolving ''(?<dns_query_name>[% NOTSPACE_NO_SLASH %])/(?<dns_query_type>[% WORD %])'''
+  # DNS cookie (RFC 7873) trouble with an upstream server, e.g.:
+  #   bad cookie from 192.0.2.2#53
+  #   missing expected cookie from 198.51.100.9#53
+  NAMED_COOKIE: '(?<dns_cookie_problem>bad|missing expected) cookie from (?<dns_src_ip>[% IP %])#(?<dns_src_port>[% INT %])'
+  # An RFC 1918 / special-use zone named answered for itself rather than asking
+  # upstream, logged once per zone per view at startup, e.g.:
+  #   automatic empty zone: view internal-view: 10.IN-ADDR.ARPA
+  #   automatic empty zone: 10.IN-ADDR.ARPA
+  NAMED_EMPTY_ZONE: 'automatic empty zone: (?:view (?<dns_view>[% NOTSPACE_NO_COLON %]): )?(?<dns_zone_name>[% NOTSPACE %])'
+  # RFC 8145 trust-anchor telemetry, which reports the root keys this resolver
+  # holds back to the root servers, e.g.:
+  #   internal-view: sending trust-anchor-telemetry query '_ta-4f66-9728/NULL'
+  NAMED_TAT: '(?<dns_view>[% NOTSPACE_NO_COLON %]): sending trust-anchor-telemetry query ''(?<dns_query_name>[% NOTSPACE_NO_SLASH %])/(?<dns_query_type>[% WORD %])'''
+  # An address named picked up or dropped during interface scanning, e.g.:
+  #   listening on IPv4 interface em0, 192.0.2.1#53
+  #   no longer listening on 192.0.2.1#53
+  NAMED_LISTEN_START: 'listening on (?<dns_listen_family>IPv4|IPv6) interface (?<dns_listen_iface>[^,]+), (?<dns_listen_ip>[% IP %])#(?<dns_listen_port>[% INT %])'
+  NAMED_LISTEN_STOP: '(?<dns_listen_action>no longer listening) on (?<dns_listen_ip>[% IP %])#(?<dns_listen_port>[% INT %])'
+  # Everything else named said. Most of it is the multi-line startup banner --
+  # build options, library versions, the ISC contact text -- which has no
+  # structure to extract. Matching anything is only safe because the rule is
+  # gated on PROGRAM being named.
+  NAMED_MESSAGE: '(?<dns_message>.+)'
+vars_tests:
+  NOTSPACE_NO_SLASH:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'example.com'
+        result: 'example.com'
+      - string: 'host.sub.test.org'
+        result: 'host.sub.test.org'
+    negative:
+      - 'has a space'
+      - 'example.com/IN'
+  NOTSPACE_NO_COLON:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '/usr/local/etc/namedb/master/example.db'
+        result: '/usr/local/etc/namedb/master/example.db'
+      - string: 'example.com'
+        result: 'example.com'
+    negative:
+      - 'has a space'
+      - '/usr/local/etc/namedb/master/example.db:11'
+  GREEDYDATA_NO_QUOTE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'network unreachable'
+        result: 'network unreachable'
+      - string: 'host unreachable'
+        result: 'host unreachable'
+    negative:
+      - 'has a '' quote'
+  NAMED_QUERY:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'client @0x7f8b1c0d5e00 192.0.2.5#54321 (example.com): query: example.com IN A +E(0)K (192.0.2.1)'
+        result: 'client @0x7f8b1c0d5e00 192.0.2.5#54321 (example.com): query: example.com IN A +E(0)K (192.0.2.1)'
+      - string: 'client 198.51.100.9#40000 (test.org): query: test.org IN AAAA + (192.0.2.1)'
+        result: 'client 198.51.100.9#40000 (test.org): query: test.org IN AAAA + (192.0.2.1)'
+    negative:
+      - 'this is not a named query line at all'
+  NAMED_QUERY_DENIED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'client @0x7f 203.0.113.7#40000 (example.com): query (cache) ''example.com/A/IN'' denied'
+        result: 'client @0x7f 203.0.113.7#40000 (example.com): query (cache) ''example.com/A/IN'' denied'
+      - string: 'client 198.51.100.9#40000 (test.org): query ''test.org/AAAA/IN'' denied'
+        result: 'client 198.51.100.9#40000 (test.org): query ''test.org/AAAA/IN'' denied'
+    negative:
+      - 'client @0x7f 192.0.2.5#54321 (example.com): query: example.com IN A + (192.0.2.1)'
+  NAMED_XFR_CLIENT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'client 192.0.2.9#5300 (example.com): transfer of ''example.com/IN'': AXFR started'
+        result: 'client 192.0.2.9#5300 (example.com): transfer of ''example.com/IN'': AXFR started'
+      - string: 'client 192.0.2.9#5300 (example.com): transfer of ''example.com/IN'': AXFR-style IXFR ended'
+        result: 'client 192.0.2.9#5300 (example.com): transfer of ''example.com/IN'': AXFR-style IXFR ended'
+    negative:
+      - 'transfer of ''example.com/IN'' from 192.0.2.2#53: failed while receiving responses: end of file'
+  NAMED_XFR_FROM:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'transfer of ''example.com/IN'' from 192.0.2.2#53: failed while receiving responses: end of file'
+        result: 'transfer of ''example.com/IN'' from 192.0.2.2#53: failed while receiving responses: end of file'
+      - string: 'transfer of ''test.org/IN'' from 198.51.100.9#53: connected using 192.0.2.1#5300'
+        result: 'transfer of ''test.org/IN'' from 198.51.100.9#53: connected using 192.0.2.1#5300'
+    negative:
+      - 'client 192.0.2.9#5300 (example.com): transfer of ''example.com/IN'': AXFR started'
+  NAMED_ZONE_LOAD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'zone example.com/IN: loaded serial 2024010101'
+        result: 'zone example.com/IN: loaded serial 2024010101'
+      - string: 'zone test.org/IN: loaded serial 1'
+        result: 'zone test.org/IN: loaded serial 1'
+    negative:
+      - 'zone example.com/IN: sending notifies (serial 2024010101)'
+  NAMED_DNSSEC:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'validating example.com/A: no valid signature found'
+        result: 'validating example.com/A: no valid signature found'
+      - string: 'validating example.com/A: insecurity proof failed'
+        result: 'validating example.com/A: insecurity proof failed'
+    negative:
+      - 'zone example.com/IN: loaded serial 2024010101'
+  NAMED_RRL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'client 203.0.113.7#40000 (example.com): rate limit slip response to 203.0.113.0/24 for example.com IN A  (abcd1234)'
+        result: 'client 203.0.113.7#40000 (example.com): rate limit slip response to 203.0.113.0/24 for example.com IN A  (abcd1234)'
+      - string: 'client 203.0.113.7#40000 (example.com): rate limit drop responses to 203.0.113.0/24 for example.com IN A  (abcd1234)'
+        result: 'client 203.0.113.7#40000 (example.com): rate limit drop responses to 203.0.113.0/24 for example.com IN A  (abcd1234)'
+    negative:
+      - 'client @0x7f 192.0.2.5#54321 (example.com): query: example.com IN A + (192.0.2.1)'
+  NAMED_DDNS:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'client 192.0.2.9#40000: updating zone ''example.com/IN'': adding an RR at ''host.example.com'' A 192.0.2.50'
+        result: 'client 192.0.2.9#40000: updating zone ''example.com/IN'': adding an RR at ''host.example.com'' A 192.0.2.50'
+      - string: 'client 192.0.2.9#40000: updating zone ''test.org/IN'': deleting rrset at ''host.test.org'' A'
+        result: 'client 192.0.2.9#40000: updating zone ''test.org/IN'': deleting rrset at ''host.test.org'' A'
+    negative:
+      - 'client @0x7f 192.0.2.5#54321 (example.com): query: example.com IN A + (192.0.2.1)'
+  NAMED_LAME:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'lame server resolving ''example.com'' (in ''example.com''?): 192.0.2.2#53'
+        result: 'lame server resolving ''example.com'' (in ''example.com''?): 192.0.2.2#53'
+      - string: 'lame server resolving ''sub.test.org'' (in ''test.org''?): 198.51.100.9#53'
+        result: 'lame server resolving ''sub.test.org'' (in ''test.org''?): 198.51.100.9#53'
+    negative:
+      - 'network unreachable resolving ''example.com/A/IN'': 2001:db8::1#53'
+  NAMED_NET_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'network unreachable resolving ''example.com/A/IN'': 2001:db8::1#53'
+        result: 'network unreachable resolving ''example.com/A/IN'': 2001:db8::1#53'
+      - string: 'host unreachable resolving ''test.org/AAAA/IN'': 192.0.2.2#53'
+        result: 'host unreachable resolving ''test.org/AAAA/IN'': 192.0.2.2#53'
+    negative:
+      - 'lame server resolving ''example.com'' (in ''example.com''?): 192.0.2.2#53'
+  NAMED_RCODE_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'REFUSED unexpected RCODE resolving ''example.com/A/IN'': 192.0.2.2#53'
+        result: 'REFUSED unexpected RCODE resolving ''example.com/A/IN'': 192.0.2.2#53'
+      - string: 'SERVFAIL unexpected RCODE resolving ''test.org/AAAA/IN'': 198.51.100.9#53'
+        result: 'SERVFAIL unexpected RCODE resolving ''test.org/AAAA/IN'': 198.51.100.9#53'
+    negative:
+      - 'network unreachable resolving ''example.com/A/IN'': 2001:db8::1#53'
+  NAMED_QNAME_MIN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'success resolving ''example.com/A'' after disabling qname minimization due to ''ncache nxdomain'''
+        result: 'success resolving ''example.com/A'' after disabling qname minimization due to ''ncache nxdomain'''
+      - string: 'success resolving ''test.org/TXT'' after disabling qname minimization due to ''failure'''
+        result: 'success resolving ''test.org/TXT'' after disabling qname minimization due to ''failure'''
+    negative:
+      - 'loop detected resolving ''ns1.example.com/A'''
+  NAMED_LOOP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'loop detected resolving ''ns1.example.com/A'''
+        result: 'loop detected resolving ''ns1.example.com/A'''
+      - string: 'loop detected resolving ''ns2.test.org/AAAA'''
+        result: 'loop detected resolving ''ns2.test.org/AAAA'''
+    negative:
+      - 'shut down hung fetch while resolving ''example.com/A'''
+  NAMED_HUNG_FETCH:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'shut down hung fetch while resolving ''example.com/A'''
+        result: 'shut down hung fetch while resolving ''example.com/A'''
+      - string: 'shut down hung fetch while resolving ''13.198.51.100.in-addr.arpa/PTR'''
+        result: 'shut down hung fetch while resolving ''13.198.51.100.in-addr.arpa/PTR'''
+    negative:
+      - 'loop detected resolving ''ns1.example.com/A'''
+  NAMED_SKIP_NS:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'skipping nameserver ''ns1.example.com'' because it is a CNAME, while resolving ''test.org/A'''
+        result: 'skipping nameserver ''ns1.example.com'' because it is a CNAME, while resolving ''test.org/A'''
+      - string: 'skipping nameserver ''a.test.org'' because it is a CNAME, while resolving ''sub.example.com/AAAA'''
+        result: 'skipping nameserver ''a.test.org'' because it is a CNAME, while resolving ''sub.example.com/AAAA'''
+    negative:
+      - 'lame server resolving ''example.com'' (in ''example.com''?): 192.0.2.2#53'
+  NAMED_COOKIE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'bad cookie from 192.0.2.2#53'
+        result: 'bad cookie from 192.0.2.2#53'
+      - string: 'missing expected cookie from 198.51.100.9#53'
+        result: 'missing expected cookie from 198.51.100.9#53'
+    negative:
+      - 'no longer listening on 192.0.2.1#53'
+  NAMED_EMPTY_ZONE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'automatic empty zone: view internal-view: 10.IN-ADDR.ARPA'
+        result: 'automatic empty zone: view internal-view: 10.IN-ADDR.ARPA'
+      - string: 'automatic empty zone: 16.172.IN-ADDR.ARPA'
+        result: 'automatic empty zone: 16.172.IN-ADDR.ARPA'
+    negative:
+      - 'zone example.com/IN: loaded serial 2024010101'
+  NAMED_TAT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'internal-view: sending trust-anchor-telemetry query ''_ta-4f66-9728/NULL'''
+        result: 'internal-view: sending trust-anchor-telemetry query ''_ta-4f66-9728/NULL'''
+      - string: 'external-view: sending trust-anchor-telemetry query ''_ta-4f66/NULL'''
+        result: 'external-view: sending trust-anchor-telemetry query ''_ta-4f66/NULL'''
+    negative:
+      - 'managed-keys-zone/internal-view: Unable to fetch DNSKEY set ''.'': failure'
+  NAMED_LISTEN_START:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'listening on IPv4 interface em0, 192.0.2.1#53'
+        result: 'listening on IPv4 interface em0, 192.0.2.1#53'
+      - string: 'listening on IPv6 interface lo0, ::1#53'
+        result: 'listening on IPv6 interface lo0, ::1#53'
+    negative:
+      - 'command channel listening on 127.0.0.1#953'
+  NAMED_LISTEN_STOP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'no longer listening on 192.0.2.1#53'
+        result: 'no longer listening on 192.0.2.1#53'
+      - string: 'no longer listening on 2001:db8::1#53'
+        result: 'no longer listening on 2001:db8::1#53'
+    negative:
+      - 'stopping command channel on 127.0.0.1#953'
+  NAMED_ZONE_LOAD_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'zone 255.in-addr.arpa/IN/internal-view: loading from master file /usr/local/etc/namedb/master/empty.db failed: file not found'
+        result: 'zone 255.in-addr.arpa/IN/internal-view: loading from master file /usr/local/etc/namedb/master/empty.db failed: file not found'
+      - string: 'zone example.com/IN: loading from master file /etc/namedb/example.db failed: unknown class/type'
+        result: 'zone example.com/IN: loading from master file /etc/namedb/example.db failed: unknown class/type'
+    negative:
+      - 'zone example.com/IN: loaded serial 2024010101'
+  NAMED_ZONE_STATUS:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'zone localhost/IN/internal-view: not loaded due to errors.'
+        result: 'zone localhost/IN/internal-view: not loaded due to errors.'
+      - string: 'zone example.com/IN/internal-view: has no NS records'
+        result: 'zone example.com/IN/internal-view: has no NS records'
+    negative:
+      - 'validating example.com/A: no valid signature found'
+  NAMED_ZONE_FILE_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: "/usr/local/etc/namedb/master/example.db:11: unknown RR type 'MS'"
+        result: "/usr/local/etc/namedb/master/example.db:11: unknown RR type 'MS'"
+      - string: '/etc/namedb/example.db:2: ignoring out-of-zone data (a.example.com)'
+        result: '/etc/namedb/example.db:2: ignoring out-of-zone data (a.example.com)'
+    negative:
+      - 'zone example.com/IN: loaded serial 2024010101'
+  NAMED_FORMAT_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'DNS format error from 192.0.2.2#53 resolving a.example.com/AAAA for 198.51.100.9#28116: Name example.com (SOA) not subdomain of zone a.example.com -- invalid response'
+        result: 'DNS format error from 192.0.2.2#53 resolving a.example.com/AAAA for 198.51.100.9#28116: Name example.com (SOA) not subdomain of zone a.example.com -- invalid response'
+      - string: 'DNS format error from 192.0.2.2#53 resolving a.example.com/NS for <unknown>: reply has no answer'
+        result: 'DNS format error from 192.0.2.2#53 resolving a.example.com/NS for <unknown>: reply has no answer'
+    negative:
+      - 'network unreachable resolving ''example.com/A/IN'': 2001:db8::1#53'
+  NAMED_MANAGED_KEYS:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: "managed-keys-zone/internal-view: Unable to fetch DNSKEY set '.': failure"
+        result: "managed-keys-zone/internal-view: Unable to fetch DNSKEY set '.': failure"
+      - string: "managed-keys-zone: Initializing automatic trust anchor management for zone '.'"
+        result: "managed-keys-zone: Initializing automatic trust anchor management for zone '.'"
+    negative:
+      - 'zone example.com/IN: loaded serial 2024010101'
+  NAMED_PRIMING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'resolver priming query complete: failure'
+        result: 'resolver priming query complete: failure'
+      - string: 'resolver priming query complete'
+        result: 'resolver priming query complete'
+    negative:
+      - 'all zones loaded'
+  NAMED_CHANNEL_START:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'command channel listening on 127.0.0.1#953'
+        result: 'command channel listening on 127.0.0.1#953'
+      - string: 'statistics channel listening on 127.0.0.1#8053'
+        result: 'statistics channel listening on 127.0.0.1#8053'
+    negative:
+      - 'stopping command channel on 127.0.0.1#953'
+  NAMED_CHANNEL_STOP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'stopping command channel on 127.0.0.1#953'
+        result: 'stopping command channel on 127.0.0.1#953'
+      - string: 'stopping statistics channel on 127.0.0.1#8053'
+        result: 'stopping statistics channel on 127.0.0.1#8053'
+    negative:
+      - 'command channel listening on 127.0.0.1#953'
+  NAMED_CLIENTS_PER_QUERY:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'clients-per-query increased to 15'
+        result: 'clients-per-query increased to 15'
+      - string: 'clients-per-query decreased to 13'
+        result: 'clients-per-query decreased to 13'
+    negative:
+      - 'all zones loaded'
+  NAMED_STARTING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'starting BIND 9.18.30 (Extended Support Version) <id:>'
+        result: 'starting BIND 9.18.30 (Extended Support Version) <id:>'
+      - string: 'starting BIND 9.16.48'
+        result: 'starting BIND 9.16.48'
+    negative:
+      - 'running as: named -4 -u root -c /usr/local/etc/namedb/named.conf'
+  NAMED_RUNNING_AS:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'running as: named -4 -u root -c /usr/local/etc/namedb/named.conf'
+        result: 'running as: named -4 -u root -c /usr/local/etc/namedb/named.conf'
+      - string: 'running as: named -u bind'
+        result: 'running as: named -u bind'
+    negative:
+      - 'running on FreeBSD amd64 14.3-RELEASE'
+  NAMED_STATE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'all zones loaded'
+        result: 'all zones loaded'
+      - string: 'exiting'
+        result: 'exiting'
+    negative:
+      - 'running on FreeBSD amd64 14.3-RELEASE'
+  NAMED_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'linked to OpenSSL version: OpenSSL 3.0.16 11 Feb 2025'
+        result: 'linked to OpenSSL version: OpenSSL 3.0.16 11 Feb 2025'
+      - string: 'BIND 9 is maintained by Internet Systems Consortium,'
+        result: 'BIND 9 is maintained by Internet Systems Consortium,'
+    negative:
+      - ''
+# Additional primitives used above that are not in base.yaml.
+vars:
+  # NOTSPACE that also excludes "/" (so a "name/type/class" triple can be split)
+  NOTSPACE_NO_SLASH: '[^\s/]+'
+  # NOTSPACE that also excludes ":" (so a "file:line" pair can be split)
+  NOTSPACE_NO_COLON: '[^\s:]+'
+  # a run of non-quote characters (used to bound a leading error phrase)
+  GREEDYDATA_NO_QUOTE: '[^'']*'
+# Look up any captured client / source IP.
+geoip:
+  - dns_client_ip
+  - dns_src_ip
+# Coerce numeric captures (ports / serials) to integers.
+convert:
+  dns_client_port: int
+  dns_src_port: int
+  dns_zone_serial: int
+  dns_zone_file_line: int
+  dns_listen_port: int
+  dns_clients_per_query: int
+rules:
+  - name: named
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^named$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - NAMED_QUERY
+      - NAMED_QUERY_DENIED
+      - NAMED_XFR_CLIENT
+      - NAMED_XFR_FROM
+      - NAMED_ZONE_LOAD
+      - NAMED_ZONE_LOAD_FAILED
+      - NAMED_DNSSEC
+      - NAMED_RRL
+      - NAMED_DDNS
+      - NAMED_LAME
+      - NAMED_FORMAT_ERROR
+      # ahead of NAMED_NET_ERROR, whose free-text dns_error would swallow the
+      # RCODE
+      - NAMED_RCODE_ERROR
+      - NAMED_NET_ERROR
+      - NAMED_QNAME_MIN
+      - NAMED_LOOP
+      - NAMED_HUNG_FETCH
+      - NAMED_SKIP_NS
+      - NAMED_COOKIE
+      - NAMED_EMPTY_ZONE
+      - NAMED_TAT
+      - NAMED_LISTEN_START
+      - NAMED_LISTEN_STOP
+      - NAMED_MANAGED_KEYS
+      - NAMED_PRIMING
+      - NAMED_CHANNEL_START
+      - NAMED_CHANNEL_STOP
+      - NAMED_CLIENTS_PER_QUERY
+      - NAMED_STARTING
+      - NAMED_RUNNING_AS
+      - NAMED_STATE
+      - NAMED_ZONE_FILE_ERROR
+      # after every "zone <name>/<class>: ..." pattern above, because it
+      # matches any of them
+      - NAMED_ZONE_STATUS
+      # last: matches anything, which is only safe because the rule is gated
+      - NAMED_MESSAGE
+    tests:
+      positive:
+        - string: 'client @0x7f8b1c0d5e00 192.0.2.5#54321 (example.com): query: example.com IN A +E(0)K (192.0.2.1)'
+          numeric:
+            - dns_client_port
+          result:
+            dns_client_ip: '192.0.2.5'
+            dns_client_port: '54321'
+            dns_query_name: 'example.com'
+            dns_query_class: 'IN'
+            dns_query_type: 'A'
+            dns_flags: '+E(0)K'
+            dns_server_ip: '192.0.2.1'
+        - string: 'client 198.51.100.9#40000 (test.org): query: test.org IN AAAA + (192.0.2.1)'
+          result:
+            dns_client_ip: '198.51.100.9'
+            dns_client_port: '40000'
+            dns_query_name: 'test.org'
+            dns_query_class: 'IN'
+            dns_query_type: 'AAAA'
+            dns_flags: '+'
+            dns_server_ip: '192.0.2.1'
+        - string: 'client @0x55a 203.0.113.7#1234 (a.b.c): query: a.b.c IN MX +E (192.0.2.1)'
+          result:
+            dns_client_ip: '203.0.113.7'
+            dns_client_port: '1234'
+            dns_query_name: 'a.b.c'
+            dns_query_class: 'IN'
+            dns_query_type: 'MX'
+            dns_flags: '+E'
+            dns_server_ip: '192.0.2.1'
+        - string: 'client @0x7f 203.0.113.7#40000 (example.com): query (cache) ''example.com/A/IN'' denied'
+          result:
+            dns_client_ip: '203.0.113.7'
+            dns_client_port: '40000'
+            dns_query_source: 'cache'
+            dns_query_name: 'example.com'
+            dns_query_type: 'A'
+            dns_query_class: 'IN'
+        - string: 'client 198.51.100.9#40000 (test.org): query ''test.org/AAAA/IN'' denied'
+          result:
+            dns_client_ip: '198.51.100.9'
+            dns_client_port: '40000'
+            dns_query_name: 'test.org'
+            dns_query_type: 'AAAA'
+            dns_query_class: 'IN'
+        - string: 'client 192.0.2.9#5300 (example.com): transfer of ''example.com/IN'': AXFR started'
+          result:
+            dns_client_ip: '192.0.2.9'
+            dns_client_port: '5300'
+            dns_zone_name: 'example.com'
+            dns_query_class: 'IN'
+            dns_xfr_type: 'AXFR'
+            dns_xfr_state: 'started'
+        - string: 'client 192.0.2.9#5300 (example.com): transfer of ''example.com/IN'': AXFR-style IXFR ended'
+          result:
+            dns_client_ip: '192.0.2.9'
+            dns_client_port: '5300'
+            dns_zone_name: 'example.com'
+            dns_query_class: 'IN'
+            dns_xfr_type: 'AXFR-style IXFR'
+            dns_xfr_state: 'ended'
+        - string: 'transfer of ''example.com/IN'' from 192.0.2.2#53: failed while receiving responses: end of file'
+          numeric:
+            - dns_src_port
+          result:
+            dns_zone_name: 'example.com'
+            dns_query_class: 'IN'
+            dns_src_ip: '192.0.2.2'
+            dns_src_port: '53'
+            dns_xfr_result: 'failed while receiving responses: end of file'
+        - string: 'zone example.com/IN: loaded serial 2024010101'
+          numeric:
+            - dns_zone_serial
+          program: 'named'
+          result:
+            dns_zone_name: 'example.com'
+            dns_query_class: 'IN'
+            dns_zone_serial: '2024010101'
+        - string: 'validating example.com/A: no valid signature found'
+          result:
+            dns_query_name: 'example.com'
+            dns_query_type: 'A'
+            dns_dnssec_result: 'no valid signature found'
+        - string: 'validating example.com/A: insecurity proof failed'
+          result:
+            dns_query_name: 'example.com'
+            dns_query_type: 'A'
+            dns_dnssec_result: 'insecurity proof failed'
+        - string: 'client 203.0.113.7#40000 (example.com): rate limit slip response to 203.0.113.0/24 for example.com IN A  (abcd1234)'
+          result:
+            dns_client_ip: '203.0.113.7'
+            dns_client_port: '40000'
+            dns_rrl_action: 'slip'
+            dns_rrl_kind: 'response'
+            dns_rrl_network: '203.0.113.0/24'
+            dns_query_name: 'example.com'
+            dns_query_class: 'IN'
+            dns_query_type: 'A'
+        - string: 'client 203.0.113.7#40000 (example.com): rate limit drop responses to 203.0.113.0/24 for example.com IN A  (abcd1234)'
+          result:
+            dns_client_ip: '203.0.113.7'
+            dns_client_port: '40000'
+            dns_rrl_action: 'drop'
+            dns_rrl_kind: 'responses'
+            dns_rrl_network: '203.0.113.0/24'
+            dns_query_name: 'example.com'
+            dns_query_class: 'IN'
+            dns_query_type: 'A'
+        - string: 'client 192.0.2.9#40000: updating zone ''example.com/IN'': adding an RR at ''host.example.com'' A 192.0.2.50'
+          result:
+            dns_client_ip: '192.0.2.9'
+            dns_client_port: '40000'
+            dns_zone_name: 'example.com'
+            dns_query_class: 'IN'
+            dns_ddns_op: 'adding an RR at ''host.example.com'' A 192.0.2.50'
+        - string: 'lame server resolving ''example.com'' (in ''example.com''?): 192.0.2.2#53'
+          result:
+            dns_query_name: 'example.com'
+            dns_zone_name: 'example.com'
+            dns_src_ip: '192.0.2.2'
+            dns_src_port: '53'
+        - string: 'network unreachable resolving ''example.com/A/IN'': 2001:db8::1#53'
+          result:
+            dns_error: 'network unreachable'
+            dns_query_name: 'example.com'
+            dns_query_type: 'A'
+            dns_query_class: 'IN'
+            dns_src_ip: '2001:db8::1'
+            dns_src_port: '53'
+        - string: 'zone 255.in-addr.arpa/IN/internal-view: loading from master file /usr/local/etc/namedb/master/empty.db failed: file not found'
+          result:
+            dns_zone_name: '255.in-addr.arpa'
+            dns_query_class: 'IN'
+            dns_view: 'internal-view'
+            dns_zone_file: '/usr/local/etc/namedb/master/empty.db'
+            dns_zone_error: 'file not found'
+        - string: 'zone localhost/IN/internal-view: not loaded due to errors.'
+          result:
+            dns_zone_name: 'localhost'
+            dns_query_class: 'IN'
+            dns_view: 'internal-view'
+            dns_zone_status: 'not loaded due to errors.'
+        - string: "/usr/local/etc/namedb/master/example.db:11: unknown RR type 'MS'"
+          numeric:
+            - dns_zone_file_line
+          result:
+            dns_zone_file: '/usr/local/etc/namedb/master/example.db'
+            dns_zone_file_line: '11'
+            dns_zone_error: "unknown RR type 'MS'"
+        - string: 'DNS format error from 192.0.2.2#53 resolving a.example.com/AAAA for 198.51.100.9#28116: Name example.com (SOA) not subdomain of zone a.example.com -- invalid response'
+          result:
+            dns_src_ip: '192.0.2.2'
+            dns_src_port: '53'
+            dns_query_name: 'a.example.com'
+            dns_query_type: 'AAAA'
+            dns_client_ip: '198.51.100.9'
+            dns_client_port: '28116'
+            dns_error: 'Name example.com (SOA) not subdomain of zone a.example.com -- invalid response'
+        - string: 'DNS format error from 192.0.2.2#53 resolving a.example.com/NS for <unknown>: reply has no answer'
+          result:
+            dns_src_ip: '192.0.2.2'
+            dns_src_port: '53'
+            dns_query_name: 'a.example.com'
+            dns_query_type: 'NS'
+            dns_error: 'reply has no answer'
+        - string: "managed-keys-zone/internal-view: Unable to fetch DNSKEY set '.': failure"
+          result:
+            dns_view: 'internal-view'
+            dns_managed_keys_message: "Unable to fetch DNSKEY set '.': failure"
+        - string: 'resolver priming query complete: failure'
+          result:
+            dns_priming_result: 'failure'
+        - string: 'command channel listening on 127.0.0.1#953'
+          numeric:
+            - dns_listen_port
+          result:
+            dns_channel: 'command'
+            dns_channel_action: 'listening'
+            dns_listen_ip: '127.0.0.1'
+            dns_listen_port: '953'
+        - string: 'stopping statistics channel on 127.0.0.1#8053'
+          result:
+            dns_channel: 'statistics'
+            dns_channel_action: 'stopping'
+            dns_listen_ip: '127.0.0.1'
+            dns_listen_port: '8053'
+        - string: 'clients-per-query increased to 15'
+          numeric:
+            - dns_clients_per_query
+          result:
+            dns_cpq_direction: 'increased'
+            dns_clients_per_query: '15'
+        - string: 'starting BIND 9.18.30 (Extended Support Version) <id:>'
+          result:
+            dns_version: '9.18.30'
+            dns_version_note: 'Extended Support Version'
+            dns_build_id: ''
+        - string: 'running as: named -4 -u root -c /usr/local/etc/namedb/named.conf'
+          result:
+            dns_command_line: 'named -4 -u root -c /usr/local/etc/namedb/named.conf'
+        - string: 'all zones loaded'
+          result:
+            dns_state: 'all zones loaded'
+        - string: 'REFUSED unexpected RCODE resolving ''example.com/A/IN'': 192.0.2.2#53'
+          result:
+            dns_rcode: 'REFUSED'
+            dns_error: 'unexpected RCODE'
+            dns_query_name: 'example.com'
+            dns_query_type: 'A'
+            dns_query_class: 'IN'
+            dns_src_ip: '192.0.2.2'
+            dns_src_port: '53'
+        # no RCODE on the front, so this one still lands in NAMED_NET_ERROR
+        - string: 'connection refused resolving ''test.org/AAAA/IN'': 198.51.100.9#53'
+          result:
+            dns_error: 'connection refused'
+            dns_query_name: 'test.org'
+            dns_query_type: 'AAAA'
+            dns_query_class: 'IN'
+            dns_src_ip: '198.51.100.9'
+            dns_src_port: '53'
+        - string: 'view internal-view:   validating example.com/SOA: no valid signature found'
+          result:
+            dns_view: 'internal-view'
+            dns_query_name: 'example.com'
+            dns_query_type: 'SOA'
+            dns_dnssec_result: 'no valid signature found'
+        - string: 'success resolving ''example.com/A'' after disabling qname minimization due to ''ncache nxdomain'''
+          result:
+            dns_qname_min_result: 'success'
+            dns_query_name: 'example.com'
+            dns_query_type: 'A'
+            dns_qname_min_reason: 'ncache nxdomain'
+        - string: 'loop detected resolving ''ns1.example.com/A'''
+          result:
+            dns_error: 'loop detected'
+            dns_query_name: 'ns1.example.com'
+            dns_query_type: 'A'
+        - string: 'shut down hung fetch while resolving ''example.com/A'''
+          result:
+            dns_error: 'shut down hung fetch'
+            dns_query_name: 'example.com'
+            dns_query_type: 'A'
+        - string: 'skipping nameserver ''ns1.example.com'' because it is a CNAME, while resolving ''test.org/A'''
+          result:
+            dns_nameserver: 'ns1.example.com'
+            dns_skip_reason: 'CNAME'
+            dns_query_name: 'test.org'
+            dns_query_type: 'A'
+        - string: 'missing expected cookie from 198.51.100.9#53'
+          result:
+            dns_cookie_problem: 'missing expected'
+            dns_src_ip: '198.51.100.9'
+            dns_src_port: '53'
+        - string: 'automatic empty zone: view internal-view: 10.IN-ADDR.ARPA'
+          result:
+            dns_view: 'internal-view'
+            dns_zone_name: '10.IN-ADDR.ARPA'
+        - string: 'internal-view: sending trust-anchor-telemetry query ''_ta-4f66-9728/NULL'''
+          result:
+            dns_view: 'internal-view'
+            dns_query_name: '_ta-4f66-9728'
+            dns_query_type: 'NULL'
+        - string: 'listening on IPv4 interface em0, 192.0.2.1#53'
+          result:
+            dns_listen_family: 'IPv4'
+            dns_listen_iface: 'em0'
+            dns_listen_ip: '192.0.2.1'
+            dns_listen_port: '53'
+        - string: 'no longer listening on 192.0.2.1#53'
+          result:
+            dns_listen_action: 'no longer listening'
+            dns_listen_ip: '192.0.2.1'
+            dns_listen_port: '53'
+        # falls through to the catch-all -- part of the startup banner
+        - string: 'linked to OpenSSL version: OpenSSL 3.0.16 11 Feb 2025'
+          result:
+            dns_message: 'linked to OpenSSL version: OpenSSL 3.0.16 11 Feb 2025'
+      negative:
+        - ''
+        - string: 'client @0x7f8b1c0d5e00 192.0.2.5#54321 (example.com): query: example.com IN A +E(0)K (192.0.2.1)'
+          program: 'named-extra'

@@ -96,4 +96,24 @@ plan skip_all => 'needs UNIX sockets' unless ClamAV::Clamd::_sun_path_max();
     }
 }
 
+# --- a switched-off command is a refusal, not an answer -----------------
+# ClamAV 1.5 lets clamd.conf switch VERSION, STATS, RELOAD and SHUTDOWN
+# off one by one, and clamd then answers the literal line COMMAND
+# UNAVAILABLE. Handed back as data it would be logged as the scanner's
+# version, so it is an error with a code of its own - and for reload the
+# code is this one, not the generic "unexpected reply".
+{
+    my $srv = FakeClamd->new(mode => 'literal', literal => 'COMMAND UNAVAILABLE');
+    my $c   = ClamAV::Clamd->new(socket => $srv->path, reply_timeout => 2);
+    ok !defined $c->version, 'version: COMMAND UNAVAILABLE is undef, not a version';
+    is $c->error_code, ClamAV::Clamd::ERR_UNAVAILABLE, '  with ERR_UNAVAILABLE';
+    like $c->error, qr/VERSION.*disabled/, '  and an error naming the command';
+    ok !defined $c->stats, 'stats: the same refusal is undef';
+    is $c->error_code, ClamAV::Clamd::ERR_UNAVAILABLE, '  with ERR_UNAVAILABLE';
+    ok !defined $c->reload, 'reload: the same refusal is undef';
+    is $c->error_code, ClamAV::Clamd::ERR_UNAVAILABLE, '  with ERR_UNAVAILABLE, not ERR_IO';
+    $srv->stop;
+}
+
+
 done_testing;

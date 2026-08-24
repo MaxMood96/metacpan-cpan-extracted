@@ -65,7 +65,7 @@ my %ENV_BASE=(
 
 #  Version information
 #
-$VERSION='3.020';
+$VERSION='3.021';
 
 
 #==================================================================================================
@@ -302,7 +302,23 @@ sub handler_http {
         #  Restrict local env and expose the PAGI request path to WebDyne's
         #  shared Router::Simple based API implementation.
         #
-        my ($r, $html, $html_fh, $status);
+        my ($r, $html, $html_fh, $status, $req_or, $res_or);
+
+        #  CGI::Simple parses URL-encoded bodies synchronously. Read the
+        #  PAGI body while still inside this async request handler, before
+        #  entering the localized %ENV scope below.
+        #
+        $req_or=PAGI::Request->new($scope, $receive) ||
+            return err('unable to get PAGI::Request object');
+        $res_or=PAGI::Response->new($scope) ||
+            return err('unable to get PAGI::Response object');
+        if (
+            ($req_or->content_type() || '') =~ m{\Aapplication/x-www-form-urlencoded\b}i
+            && $req_or->content_length()
+        ) {
+            await $req_or->body();
+        }
+
         {
             #  Keep the request environment localized only while WebDyne is
             #  constructing and executing the request. Do not retain a
@@ -328,13 +344,6 @@ sub handler_http {
                 $api_path=~s{\Q@{[WEBDYNE_PSP_EXT]}\E$}{};
                 $ENV{'PATH_INFO'}=~s{^/\Q$api_path\E(?=/|$)}{}i;
             }
-
-            #  Only need request and response helper objects
-            #
-            my $req_or=PAGI::Request->new($scope, $receive) ||
-                return err('unable to get PAGI::Request object');
-            my $res_or=PAGI::Response->new($scope) ||
-                return err('unable to get PAGI::Response object');
 
             #  Create new WebDyne Request object, optionally using the API
             #  prefix resolved above as its PSP filename.

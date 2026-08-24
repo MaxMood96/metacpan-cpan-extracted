@@ -117,6 +117,56 @@ sub run_punk {
         'the usage_error die surfaces with the command prefix');
 }
 
+# ---- the kit seam --------------------------------------------------------------
+# `punk new X --kit NAME` loads Punk::Kit::<Ucfirst> and generates through it.
+# The options it declares are resolved out of argv before Getopt runs, so they
+# parse and appear in help like the command's own.
+
+{
+    my ($code, $out) = run_punk('new', 'X', '--kit', 'fakekit', '--help');
+    is($code, 0, '--help with a kit exits 0');
+    like($out, qr/kit options \(fakekit\):/,
+        "the kit's options get their own heading");
+    like($out, qr/--shout\s+upper case the note/,
+        'and are listed with the doc the kit declared');
+    like($out, qr/--force\s/, "beside the command's own");
+}
+{
+    # help without a kit must not load one, and must not advertise its options
+    my ($code, $out) = run_punk('new', '--help');
+    is($code, 0, 'plain --help exits 0');
+    unlike($out, qr/--shout/, 'no kit is loaded, so no kit options');
+    like($out, qr/--kit NAME/, 'but --kit is offered');
+}
+{
+    my ($code, undef, $err) = run_punk('new', 'X', '--kit', 'nope');
+    is($code, 1, 'a kit that is not installed exits 1');
+    like($err, qr/kit 'nope' is not installed \(no Punk::Kit::Nope on \@INC\)/,
+        'naming the class it looked for');
+    like($err, qr/kits ship in their own distributions/,
+        'with the hint about where kits come from');
+}
+{
+    my ($code, undef, $err) = run_punk('new', 'X', '--kit', 'Bad Name');
+    is($code, 2, 'a kit name that is not a kit name is misuse');
+    like($err, qr/--kit takes a name like 'diy'/, 'and says what one looks like');
+}
+{
+    # --kit=NAME and --kit NAME are one option, and the pre-scan reads both
+    my ($code, $out) = run_punk('new', 'X', '--kit=fakekit', '--help');
+    is($code, 0, 'the = spelling works too');
+    like($out, qr/--shout/, 'and finds the same kit');
+}
+{
+    # an option the command already declares is refused rather than ordered:
+    # whichever Getopt bound would decide what the command does
+    my ($code, undef, $err) = run_punk('new', 'X', '--kit', 'fakeclash', '--help');
+    is($code, 1, 'a kit option colliding with one of new\'s exits 1');
+    like($err, qr/option '--force' is defined by both 'new' and Punk::Kit::Fakeclash/,
+        'naming both owners');
+    unlike($err, qr/ at \S+ line \d+/, 'as one line, not a raw croak');
+}
+
 # ---- version -------------------------------------------------------------------
 
 {

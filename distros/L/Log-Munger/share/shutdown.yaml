@@ -1,0 +1,85 @@
+---
+# shutdown(8) / reboot(8) / halt(8) log enrichment.
+#
+# Gates on the syslog PROGRAM field being one of those binaries. Patterns are
+# anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with shutdown_ .
+#
+# One line per orderly shutdown, naming who asked for it. Nothing else in the
+# log records that, and the reboot itself leaves only an absence of lines, so
+# this is the difference between a planned restart and an unexplained one.
+includes:
+- base
+vars_templated:
+  # shutdown(8): "power-down by neti: " / "reboot by root: maintenance window"
+  #
+  # The colon and its space are always written even when no message was given,
+  # which is the usual case, so shutdown_message is commonly empty rather than
+  # absent. The action is captured rather than enumerated -- shutdown(8) puts
+  # its own word there and the set differs across releases.
+  SHUTDOWN_BY: '(?<shutdown_action>[a-z][a-z-]*) by (?<shutdown_user>[% USERNAME %]):(?: (?<shutdown_message>[% GREEDYDATA %]))?'
+  # reboot(8) and halt(8) log without the colon or a message:
+  #   "rebooted by root"
+  #   "halted by neti"
+  SHUTDOWN_DONE: '(?<shutdown_action>[a-z][a-z-]*) by (?<shutdown_user>[% USERNAME %])'
+vars_tests:
+  SHUTDOWN_BY:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      # the trailing space is real: an empty message after the colon
+      - string: 'power-down by neti: '
+        result: 'power-down by neti: '
+      - string: 'reboot by root: '
+        result: 'reboot by root: '
+      - string: 'reboot by root: maintenance window'
+        result: 'reboot by root: maintenance window'
+      # no space at all after the colon
+      - string: 'halt by neti:'
+        result: 'halt by neti:'
+    negative:
+      - 'rebooted by root'
+  SHUTDOWN_DONE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'rebooted by root'
+        result: 'rebooted by root'
+      - string: 'halted by neti'
+        result: 'halted by neti'
+    negative:
+      - 'reboot by root: maintenance window'
+rules:
+  - name: shutdown
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^(?:shutdown|reboot|halt|poweroff)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      # the colon-bearing form first; without it SHUTDOWN_DONE would claim the
+      # action and user and leave the message behind
+      - SHUTDOWN_BY
+      - SHUTDOWN_DONE
+    tests:
+      positive:
+        - string: 'power-down by neti: '
+          program: 'shutdown'
+          result:
+            shutdown_action: 'power-down'
+            shutdown_user: 'neti'
+            shutdown_message: ''
+        - string: 'reboot by root: maintenance window'
+          program: 'halt'
+          result:
+            shutdown_action: 'reboot'
+            shutdown_user: 'root'
+            shutdown_message: 'maintenance window'
+        - string: 'rebooted by root'
+          program: 'reboot'
+          result:
+            shutdown_action: 'rebooted'
+            shutdown_user: 'root'
+      negative:
+        - 'this is not a shutdown line at all'
+        - string: 'power-down by neti: '
+          program: 'shutdown-extra'

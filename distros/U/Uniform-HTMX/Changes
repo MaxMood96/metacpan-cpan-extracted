@@ -1,16 +1,40 @@
 Revision history for Uniform::HTMX
 
-0.10  2026-08-22
-        - Production ready abstract base launch.
-        - Core header normalization algorithm stabilized.
-        - Full POD documentation and unit tests compiled.
-0.11  2026-08-22
-        - POD author corrections
-0.13  2026-08-22
-        - now using Uniform ecosystem modules
+0.16  2026-08-23
+        - Added driver() class method: build a per-request framework
+          integration from two plain coderefs (extract/apply) without
+          writing a subclass. Internally generates an anonymous
+          subclass and composes cleanly with hook overrides on any
+          existing subclass.
+        - Refactored internal state access behind overridable _in()/
+          _out() accessor hooks, and JSON (de)serialization behind
+          _encode_json()/_decode_json() hooks, so subclasses can
+          customize storage or serialization without reimplementing
+          any request/response method.
+        - Added an optional base new(%args) constructor that
+          normalizes an 'in' header hash and stores all other args
+          verbatim, for use via SUPER::new() in subclasses.
+        - Rewrote EXTENDING UNIFORM::HTMX POD section as an explicit
+          contract: which methods are safe to override, and which
+          are internal plumbing (header-injection validation) that
+          should not be bypassed.
+        - Fixed a license inconsistency across the distribution: the
+          LICENSE file, Makefile.PL, and POD previously disagreed
+          (MIT vs Artistic License 2.0). Standardized on MIT
+          throughout.
+        - Corrected Makefile.PL PREREQ_PM to depend on Uniform::Utils
+          directly, matching the module's actual `use` statement.
+0.15  2026-08-22
+        - Added links to POD
 0.14  2026-08-22
         - Extracted internal normalization engine logic out to Uniform::Utils.
         - Linked validation runtime tracking to object-oriented Uniform::Exceptions.
         - Upgraded prerequisite version mapping bounds inside Makefile.PL.
-0.15  2026-08-22
-        - Added links to POD
+0.13  2026-08-22
+        - now using Uniform ecosystem modules
+0.11  2026-08-22
+        - POD author corrections
+0.10  2026-08-22
+        - Production ready abstract base launch.
+        - Core header normalization algorithm stabilized.
+        - Full POD documentation and unit tests compiled.

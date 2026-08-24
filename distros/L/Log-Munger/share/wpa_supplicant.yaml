@@ -1,0 +1,213 @@
+---
+# wpa_supplicant wireless client log enrichment.
+#
+# Gates on the syslog PROGRAM field being "wpa_supplicant". Patterns are
+# anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with wpa_ .
+#
+# This is the other half of what hostapd.yaml covers. hostapd is the access
+# point watching stations arrive; this is a station watching itself connect, as
+# written by a laptop, a phone or an embedded device.
+#
+# Almost everything useful arrives as a CTRL-EVENT-* line prefixed with the
+# interface. The disconnection reason code is kept as a number: 15 is a 4-way
+# handshake timeout, which is how a wrong PSK appears, and 3 is a deliberate
+# deauthentication, which is how an active attack appears.
+includes:
+- base
+vars_templated:
+  # "wlan0: " -- the interface every per-interface line opens with. Absent on
+  # the daemon's own startup messages.
+  WPA_IFACE: '(?<wpa_iface>[A-Za-z0-9._-]+): '
+  # "wlan0: CTRL-EVENT-CONNECTED - Connection to aa:bb:cc:dd:ee:ff completed
+  #  [id=0 id_str=]"
+  WPA_CONNECTED: '[% WPA_IFACE %]CTRL-EVENT-CONNECTED - Connection to (?<wpa_bssid>[% MAC %]) (?<wpa_connect_state>completed|reused)(?: \[(?<wpa_connect_detail>[^\]]*)\])?(?: [% GREEDYDATA %])?'
+  # "wlan0: CTRL-EVENT-DISCONNECTED bssid=aa:bb:cc:dd:ee:ff reason=15
+  #  locally_generated=1"
+  #
+  # locally_generated tells a deliberate disconnect from one the access point
+  # or an attacker caused, which is the difference between a roam and a
+  # deauthentication.
+  WPA_DISCONNECTED: '[% WPA_IFACE %]CTRL-EVENT-DISCONNECTED bssid=(?<wpa_bssid>[% MAC %]) reason=(?<wpa_reason_code>[% INT %])(?: locally_generated=(?<wpa_locally_generated>[01]))?(?: [% GREEDYDATA %])?'
+  # "wlan0: SME: Trying to authenticate with aa:bb:cc:dd:ee:ff (SSID=''home''
+  #  freq=2412 MHz)"
+  # "wlan0: Trying to associate with aa:bb:cc:dd:ee:ff (SSID=''home'' freq=2412 MHz)"
+  WPA_ASSOCIATING: '[% WPA_IFACE %](?:SME: )?Trying to (?<wpa_phase>authenticate|associate) with (?<wpa_bssid>[% MAC %])(?: \(SSID=''(?<wpa_ssid>.*)'' freq=(?<wpa_freq>[% INT %]) MHz\))?(?: [% GREEDYDATA %])?'
+  # "wlan0: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid=''home'' auth_failures=1
+  #  duration=10 reason=WRONG_KEY"
+  #
+  # The clearest statement wpa_supplicant makes that a credential was refused.
+  WPA_SSID_DISABLED: '[% WPA_IFACE %]CTRL-EVENT-SSID-(?<wpa_ssid_state>TEMP-DISABLED|REENABLED) id=(?<wpa_network_id>[% INT %]) ssid=''(?<wpa_ssid>.*?)''(?: auth_failures=(?<wpa_auth_failures>[% INT %]))?(?: duration=(?<wpa_duration>[% INT %]))?(?: reason=(?<wpa_reason>[% NOTSPACE %]))?(?: [% GREEDYDATA %])?'
+  # "wlan0: CTRL-EVENT-EAP-FAILURE EAP authentication failed"
+  # "wlan0: CTRL-EVENT-EAP-SUCCESS EAP authentication completed successfully"
+  WPA_EAP: '[% WPA_IFACE %]CTRL-EVENT-EAP-(?<wpa_eap_event>[A-Z-]+)(?: (?<wpa_eap_detail>[% GREEDYDATA %]))?'
+  # Any other CTRL-EVENT, keeping the event name so a consumer can group by it
+  # without this file having to know every one.
+  WPA_EVENT: '[% WPA_IFACE %]CTRL-EVENT-(?<wpa_event>[A-Z0-9-]+)(?: (?<wpa_event_detail>[% GREEDYDATA %]))?'
+  # Anything else on an interface.
+  WPA_IFACE_MESSAGE: '[% WPA_IFACE %](?<wpa_message>.+)'
+  # Daemon-level messages with no interface prefix.
+  WPA_MESSAGE: '(?<wpa_message>.+)'
+vars_tests:
+  WPA_IFACE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'wlan0: '
+        result: 'wlan0: '
+      - string: 'wlp3s0: '
+        result: 'wlp3s0: '
+    negative:
+      - 'wlan0'
+  WPA_CONNECTED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'wlan0: CTRL-EVENT-CONNECTED - Connection to aa:bb:cc:dd:ee:ff completed [id=0 id_str=]'
+        result: 'wlan0: CTRL-EVENT-CONNECTED - Connection to aa:bb:cc:dd:ee:ff completed [id=0 id_str=]'
+    negative:
+      - 'wlan0: CTRL-EVENT-DISCONNECTED bssid=aa:bb:cc:dd:ee:ff reason=15'
+  WPA_DISCONNECTED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'wlan0: CTRL-EVENT-DISCONNECTED bssid=aa:bb:cc:dd:ee:ff reason=15 locally_generated=1'
+        result: 'wlan0: CTRL-EVENT-DISCONNECTED bssid=aa:bb:cc:dd:ee:ff reason=15 locally_generated=1'
+      - string: 'wlan0: CTRL-EVENT-DISCONNECTED bssid=aa:bb:cc:dd:ee:ff reason=3'
+        result: 'wlan0: CTRL-EVENT-DISCONNECTED bssid=aa:bb:cc:dd:ee:ff reason=3'
+    negative:
+      - 'wlan0: CTRL-EVENT-CONNECTED - Connection to aa:bb:cc:dd:ee:ff completed'
+  WPA_ASSOCIATING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'wlan0: SME: Trying to authenticate with aa:bb:cc:dd:ee:ff (SSID=''home'' freq=2412 MHz)'
+        result: 'wlan0: SME: Trying to authenticate with aa:bb:cc:dd:ee:ff (SSID=''home'' freq=2412 MHz)'
+      - string: 'wlan0: Trying to associate with aa:bb:cc:dd:ee:ff (SSID=''home'' freq=2412 MHz)'
+        result: 'wlan0: Trying to associate with aa:bb:cc:dd:ee:ff (SSID=''home'' freq=2412 MHz)'
+    negative:
+      - 'wlan0: CTRL-EVENT-CONNECTED - Connection to aa:bb:cc:dd:ee:ff completed'
+  WPA_SSID_DISABLED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'wlan0: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid=''home'' auth_failures=1 duration=10 reason=WRONG_KEY'
+        result: 'wlan0: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid=''home'' auth_failures=1 duration=10 reason=WRONG_KEY'
+      - string: 'wlan0: CTRL-EVENT-SSID-REENABLED id=0 ssid=''home'''
+        result: 'wlan0: CTRL-EVENT-SSID-REENABLED id=0 ssid=''home'''
+    negative:
+      - 'wlan0: CTRL-EVENT-EAP-FAILURE EAP authentication failed'
+  WPA_EAP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'wlan0: CTRL-EVENT-EAP-FAILURE EAP authentication failed'
+        result: 'wlan0: CTRL-EVENT-EAP-FAILURE EAP authentication failed'
+      - string: 'wlan0: CTRL-EVENT-EAP-SUCCESS EAP authentication completed successfully'
+        result: 'wlan0: CTRL-EVENT-EAP-SUCCESS EAP authentication completed successfully'
+    negative:
+      - 'wlan0: CTRL-EVENT-SCAN-STARTED '
+  WPA_EVENT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'wlan0: CTRL-EVENT-SCAN-RESULTS '
+        result: 'wlan0: CTRL-EVENT-SCAN-RESULTS '
+      - string: 'wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD'
+        result: 'wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD'
+    negative:
+      - 'wlan0: Associated with aa:bb:cc:dd:ee:ff'
+  WPA_IFACE_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'wlan0: WPA: Key negotiation completed with aa:bb:cc:dd:ee:ff [PTK=CCMP GTK=CCMP]'
+        result: 'wlan0: WPA: Key negotiation completed with aa:bb:cc:dd:ee:ff [PTK=CCMP GTK=CCMP]'
+    negative:
+      - 'Successfully initialized wpa_supplicant'
+  WPA_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Successfully initialized wpa_supplicant'
+        result: 'Successfully initialized wpa_supplicant'
+    negative:
+      - ''
+convert:
+  wpa_reason_code: int
+  wpa_locally_generated: int
+  wpa_network_id: int
+  wpa_auth_failures: int
+  wpa_duration: int
+  wpa_freq: int
+rules:
+  - name: wpa_supplicant
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^wpa_supplicant$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - WPA_CONNECTED
+      - WPA_DISCONNECTED
+      - WPA_SSID_DISABLED
+      - WPA_EAP
+      - WPA_ASSOCIATING
+      # the generic CTRL-EVENT catch, then anything else
+      - WPA_EVENT
+      - WPA_IFACE_MESSAGE
+      - WPA_MESSAGE
+    tests:
+      positive:
+        - string: 'wlan0: CTRL-EVENT-CONNECTED - Connection to aa:bb:cc:dd:ee:ff completed [id=0 id_str=]'
+          result:
+            wpa_iface: 'wlan0'
+            wpa_bssid: 'aa:bb:cc:dd:ee:ff'
+            wpa_connect_state: 'completed'
+            wpa_connect_detail: 'id=0 id_str='
+        # reason 15 is a 4-way handshake timeout: what a wrong PSK looks like
+        - string: 'wlan0: CTRL-EVENT-DISCONNECTED bssid=aa:bb:cc:dd:ee:ff reason=15 locally_generated=1'
+          numeric:
+            - wpa_locally_generated
+            - wpa_reason_code
+          result:
+            wpa_iface: 'wlan0'
+            wpa_bssid: 'aa:bb:cc:dd:ee:ff'
+            wpa_reason_code: '15'
+            wpa_locally_generated: '1'
+        - string: 'wlan0: CTRL-EVENT-SSID-TEMP-DISABLED id=0 ssid=''home'' auth_failures=1 duration=10 reason=WRONG_KEY'
+          numeric:
+            - wpa_auth_failures
+            - wpa_duration
+            - wpa_network_id
+          result:
+            wpa_iface: 'wlan0'
+            wpa_ssid_state: 'TEMP-DISABLED'
+            wpa_network_id: '0'
+            wpa_ssid: 'home'
+            wpa_auth_failures: '1'
+            wpa_duration: '10'
+            wpa_reason: 'WRONG_KEY'
+        - string: 'wlan0: CTRL-EVENT-EAP-FAILURE EAP authentication failed'
+          result:
+            wpa_iface: 'wlan0'
+            wpa_eap_event: 'FAILURE'
+            wpa_eap_detail: 'EAP authentication failed'
+        - string: 'wlan0: SME: Trying to authenticate with aa:bb:cc:dd:ee:ff (SSID=''home'' freq=2412 MHz)'
+          numeric:
+            - wpa_freq
+          result:
+            wpa_iface: 'wlan0'
+            wpa_phase: 'authenticate'
+            wpa_bssid: 'aa:bb:cc:dd:ee:ff'
+            wpa_ssid: 'home'
+            wpa_freq: '2412'
+        - string: 'wlan0: CTRL-EVENT-REGDOM-CHANGE init=CORE type=WORLD'
+          result:
+            wpa_iface: 'wlan0'
+            wpa_event: 'REGDOM-CHANGE'
+            wpa_event_detail: 'init=CORE type=WORLD'
+        - string: 'wlan0: WPA: Key negotiation completed with aa:bb:cc:dd:ee:ff [PTK=CCMP GTK=CCMP]'
+          result:
+            wpa_iface: 'wlan0'
+            wpa_message: 'WPA: Key negotiation completed with aa:bb:cc:dd:ee:ff [PTK=CCMP GTK=CCMP]'
+        - string: 'Successfully initialized wpa_supplicant'
+          program: 'wpa_supplicant'
+          result:
+            wpa_message: 'Successfully initialized wpa_supplicant'
+      negative:
+        - ''
+        - string: 'wlan0: CTRL-EVENT-CONNECTED - Connection to aa:bb:cc:dd:ee:ff completed [id=0 id_str=]'
+          program: 'wpa_supplicant-extra'

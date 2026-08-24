@@ -1,5 +1,5 @@
 package Statocles::Plugin::LinkCheck;
-our $VERSION = '0.098';
+our $VERSION = '0.099';
 # ABSTRACT: Check links and images for validity during build
 
 use Statocles::Base 'Class';
@@ -78,7 +78,8 @@ sub check_pages {
                     # Fix ".." and ".". Path::Tiny->canonpath can't do
                     # this for us because these paths do not exist on
                     # the filesystem
-                    $url =~ s{/[^/]+/[.][.]/}{/}g; # Fix ".." to refer to parent
+                    # Fix path/foo/../ into path/
+                    1 while $url =~ s{(/(?![.][.])[^/]+/[.][.](/|\z))}{$2}g; # Fix ".." to refer to parent
                     $url =~ s{/[.]/}{/}g; # Fix "." to refer to self
 
                     $links{ url_unescape $url }{ url_unescape $page->path }++;
@@ -138,7 +139,7 @@ Statocles::Plugin::LinkCheck - Check links and images for validity during build
 
 =head1 VERSION
 
-version 0.098
+version 0.099
 
 =head1 SYNOPSIS
 

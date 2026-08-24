@@ -1,0 +1,285 @@
+---
+# Tor daemon log enrichment.
+#
+# Gates on the syslog PROGRAM field being "Tor" or "tor". Patterns are anchored
+# (each must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with tor_ .
+#
+# The two program names are the same daemon reached two ways, and the messages
+# are shaped differently as a result. Tor's own syslog output arrives under
+# "Tor" as a bare sentence, the severity having gone into the syslog priority.
+# Tor's stdout, which is what systemd captures before the daemon has opened its
+# log and what "tor --verify-config" writes, arrives under "tor" with Tor's own
+# timestamp and "[notice]" level still on the front. TOR_PREFIX makes both
+# optional, so one pattern matches either.
+#
+# Most of what is useful here is reachability. TOR_BOOTSTRAP carries the
+# percentage, and is the only line saying whether Tor can currently carry
+# traffic. The listener lines record where each port was bound: a TransPort or
+# DNSPort on anything other than loopback is reachable from the LAN, and Tor
+# says so at start-up and never again.
+includes:
+- base
+vars:
+  # Tor's own timestamp: "Jul 28 14:41:30.650". Not the syslog one. It sits
+  # inside the message, on lines Tor wrote to stdout rather than to syslog.
+  TOR_TIMESTAMP: '[A-Z][a-z]{2} [ 0-9][0-9] [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}'
+  # Tor's severity names, as they appear in the "[notice]" bracket.
+  TOR_LEVEL_WORD: '(?:debug|info|notice|warn|err)'
+  # A bootstrap phase tag, as it appears inside the parentheses.
+  TOR_BOOTSTRAP_TAG: '[^)\s]+'
+vars_templated:
+  # The optional stdout prefix: timestamp, level, or both. Absent on the lines
+  # Tor logged to syslog itself.
+  TOR_PREFIX: '(?:(?<tor_timestamp>[% TOR_TIMESTAMP %]) )?(?:\[(?<tor_level>[% TOR_LEVEL_WORD %])\] )?'
+  # "Bootstrapped 75% (enough_dirinfo): Loaded enough directory info to build
+  # circuits"
+  #
+  # The tag (enough_dirinfo, conn_done, done) is the stable machine-readable
+  # name for the phase. The summary after it is prose that changes between
+  # releases, so gate on the percentage or the tag rather than on the summary.
+  TOR_BOOTSTRAP: '[% TOR_PREFIX %]Bootstrapped (?<tor_bootstrap_percent>[% INT %])% \((?<tor_bootstrap_tag>[% TOR_BOOTSTRAP_TAG %])\): (?<tor_bootstrap_summary>[% GREEDYDATA %])'
+  # "Opening Socks listener on 127.0.0.1:9050"
+  # "Opened Transparent pf/netfilter listener connection (ready) on 192.0.2.1:9040"
+  # "Opening Control listener on /run/tor/control"
+  #
+  # Tor logs the intent and then the result. The listener kind is prose with
+  # spaces in it ("Transparent pf/netfilter"), so it is matched up to the word
+  # "listener" rather than as one token. The address is either host:port or a
+  # unix socket path and is kept verbatim, since splitting a port off a path
+  # would be wrong half the time.
+  TOR_LISTENER: '[% TOR_PREFIX %](?<tor_listener_action>Opening|Opened|Closing|Closed) (?<tor_listener_type>[% GREEDYDATA %]) listener(?: connection \((?<tor_listener_state>[^)]*)\))? on (?<tor_listener_addr>[% NOTSPACE %])'
+  # "New control connection opened from 127.0.0.1."
+  #
+  # Something opened Tor's control port. Routine where the port is
+  # loopback-only, but it is the only record of who asked Tor to do something
+  # out of band.
+  TOR_CONTROL_CONN: '[% TOR_PREFIX %]New control connection opened from (?<tor_src_ip>[% IP %])\.?'
+  # "You configured a non-loopback address '192.0.2.1:9040' for TransPort. ..."
+  #
+  # Tor warning that a port it is about to open is reachable off-box. The port
+  # kind and the address are the whole content.
+  TOR_NON_LOOPBACK: '[% TOR_PREFIX %]You configured a non-loopback address ''(?<tor_listener_addr>[^'']*)'' for (?<tor_listener_type>[% WORD %])\.(?: (?<tor_message>[% GREEDYDATA %]))?'
+  # "Heartbeat: Tor's uptime is 23:46 hours, with 0 circuits open. I've sent ..."
+  #
+  # The periodic self-report. Uptime and open-circuit count are pulled out. The
+  # traffic totals after them carry units that change with magnitude ("0 kB",
+  # "2.74 MB"), so they stay in tor_message rather than becoming numbers that
+  # cannot be compared.
+  TOR_HEARTBEAT: '[% TOR_PREFIX %]Heartbeat: Tor''s uptime is (?<tor_uptime>[^,]+), with (?<tor_circuits_open>[% INT %]) circuits open\.(?: (?<tor_message>[% GREEDYDATA %]))?'
+  # "Tor 0.4.9.8 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.0.13,
+  # Zlib 1.3, Liblzma 5.4.5, Libzstd 1.5.5 and Glibc 2.39 as libc."
+  TOR_VERSION: '[% TOR_PREFIX %]Tor (?<tor_version>[0-9][^\s]*) running on (?<tor_platform>[% GREEDYDATA %])'
+  # "Read configuration file "/etc/tor/torrc"."
+  TOR_CONFIG_READ: '[% TOR_PREFIX %]Read configuration file "(?<tor_config_file>[^"]*)"\.?'
+  # Anything else Tor had to say.
+  #
+  # Tor is talkative and most of what it says is prose about the directory
+  # system, so the tail gets a catch-all. The gate is two exact program names,
+  # so nothing else can land here. Keeping the prefix means tor_level survives
+  # on unclaimed lines, which is what makes a warn or err findable.
+  TOR_MESSAGE: '[% TOR_PREFIX %](?<tor_message>.+)'
+vars_tests:
+  TOR_TIMESTAMP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Jul 28 14:41:30.650'
+        result: 'Jul 28 14:41:30.650'
+      - string: 'Aug  3 01:02:03.004'
+        result: 'Aug  3 01:02:03.004'
+    negative:
+      - 'Jul 28 14:41:30'
+  TOR_LEVEL_WORD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'notice'
+        result: 'notice'
+      - string: 'warn'
+        result: 'warn'
+    negative:
+      - 'critical'
+  TOR_BOOTSTRAP_TAG:
+    test_template: '^\((?<TEST>[% TEST_VAR %])\)$'
+    positive:
+      - string: '(enough_dirinfo)'
+        result: 'enough_dirinfo'
+      - string: '(ap_handshake_done)'
+        result: 'ap_handshake_done'
+    negative:
+      - '(two words)'
+  TOR_PREFIX:
+    # Wholly optional, so an anchored template would accept anything by
+    # consuming nothing. The tail is matched as well, to prove the prefix is
+    # what was consumed.
+    test_template: '^(?<TEST>[% TEST_VAR %])Bootstrapped'
+    positive:
+      - string: 'Jul 28 14:41:30.650 [notice] Bootstrapped'
+        result: 'Jul 28 14:41:30.650 [notice] '
+      - string: '[notice] Bootstrapped'
+        result: '[notice] '
+      - string: 'Bootstrapped'
+        result: ''
+    negative:
+      - 'Jul 28 14:41:30.650 [notice] Heartbeat'
+  TOR_BOOTSTRAP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Bootstrapped 75% (enough_dirinfo): Loaded enough directory info to build circuits'
+        result: 'Bootstrapped 75% (enough_dirinfo): Loaded enough directory info to build circuits'
+      - string: 'Jul 28 14:41:30.650 [notice] Bootstrapped 0% (starting): Starting'
+        result: 'Jul 28 14:41:30.650 [notice] Bootstrapped 0% (starting): Starting'
+    negative:
+      - 'New control connection opened from 127.0.0.1.'
+  TOR_LISTENER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Opening Socks listener on 127.0.0.1:9050'
+        result: 'Opening Socks listener on 127.0.0.1:9050'
+      - string: 'Opened Transparent pf/netfilter listener connection (ready) on 192.0.2.1:9040'
+        result: 'Opened Transparent pf/netfilter listener connection (ready) on 192.0.2.1:9040'
+      - string: 'Opening Control listener on /run/tor/control'
+        result: 'Opening Control listener on /run/tor/control'
+    negative:
+      - 'New control connection opened from 127.0.0.1.'
+  TOR_CONTROL_CONN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'New control connection opened from 127.0.0.1.'
+        result: 'New control connection opened from 127.0.0.1.'
+    negative:
+      - 'Opening Control listener on /run/tor/control'
+  TOR_NON_LOOPBACK:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: "You configured a non-loopback address '192.0.2.1:9040' for TransPort. This allows everybody on your local network to use your machine as a proxy."
+        result: "You configured a non-loopback address '192.0.2.1:9040' for TransPort. This allows everybody on your local network to use your machine as a proxy."
+      - string: "You configured a non-loopback address '192.0.2.1:5353' for DNSPort."
+        result: "You configured a non-loopback address '192.0.2.1:5353' for DNSPort."
+    negative:
+      - 'Opening Socks listener on 127.0.0.1:9050'
+  TOR_HEARTBEAT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: "Heartbeat: Tor's uptime is 23:46 hours, with 0 circuits open. I've sent 395 kB and received 2.74 MB."
+        result: "Heartbeat: Tor's uptime is 23:46 hours, with 0 circuits open. I've sent 395 kB and received 2.74 MB."
+      - string: "Heartbeat: Tor's uptime is 1 day 0:50 hours, with 3 circuits open."
+        result: "Heartbeat: Tor's uptime is 1 day 0:50 hours, with 3 circuits open."
+    negative:
+      - 'Average packaged cell fullness: 78.680%. TLS write overhead: 3%'
+  TOR_VERSION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Tor 0.4.9.8 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.0.13, Zlib 1.3 and Glibc 2.39 as libc.'
+        result: 'Tor 0.4.9.8 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.0.13, Zlib 1.3 and Glibc 2.39 as libc.'
+    negative:
+      - "Tor can't help you if you use it wrong!"
+  TOR_CONFIG_READ:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Read configuration file "/etc/tor/torrc".'
+        result: 'Read configuration file "/etc/tor/torrc".'
+      - string: 'Jul 24 21:49:31.744 [notice] Read configuration file "/usr/share/tor/tor-service-defaults-torrc".'
+        result: 'Jul 24 21:49:31.744 [notice] Read configuration file "/usr/share/tor/tor-service-defaults-torrc".'
+    negative:
+      - 'Parsing GEOIP IPv4 file /usr/share/tor/geoip.'
+  TOR_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'We now have enough directory information to build circuits.'
+        result: 'We now have enough directory information to build circuits.'
+      - string: '[notice] Signaled readiness to systemd'
+        result: '[notice] Signaled readiness to systemd'
+    negative:
+      - ''
+# Whoever opened the control port.
+geoip:
+  - tor_src_ip
+convert:
+  tor_bootstrap_percent: int
+  tor_circuits_open: int
+rules:
+  - name: tor
+    gate:
+      - field: PROGRAM
+        values:
+          # "Tor" is the daemon's own syslog identity; "tor" is what systemd
+          # labels its stdout with.
+          - '//^[Tt]or$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - TOR_BOOTSTRAP
+      - TOR_CONTROL_CONN
+      - TOR_NON_LOOPBACK
+      - TOR_LISTENER
+      - TOR_HEARTBEAT
+      - TOR_VERSION
+      - TOR_CONFIG_READ
+      # last: matches anything, which is only safe because the rule is gated
+      - TOR_MESSAGE
+    tests:
+      positive:
+        - string: 'Bootstrapped 75% (enough_dirinfo): Loaded enough directory info to build circuits'
+          numeric:
+            - tor_bootstrap_percent
+          result:
+            tor_bootstrap_percent: '75'
+            tor_bootstrap_tag: 'enough_dirinfo'
+            tor_bootstrap_summary: 'Loaded enough directory info to build circuits'
+        # The stdout form: Tor's own timestamp and level are kept.
+        - string: 'Jul 28 14:41:30.650 [notice] Bootstrapped 0% (starting): Starting'
+          program: 'tor'
+          result:
+            tor_timestamp: 'Jul 28 14:41:30.650'
+            tor_level: 'notice'
+            tor_bootstrap_percent: '0'
+            tor_bootstrap_tag: 'starting'
+            tor_bootstrap_summary: 'Starting'
+        - string: 'New control connection opened from 127.0.0.1.'
+          result:
+            tor_src_ip: '127.0.0.1'
+        - string: 'Opening Socks listener on 127.0.0.1:9050'
+          result:
+            tor_listener_action: 'Opening'
+            tor_listener_type: 'Socks'
+            tor_listener_addr: '127.0.0.1:9050'
+        - string: 'Opened Transparent pf/netfilter listener connection (ready) on 192.0.2.1:9040'
+          program: 'Tor'
+          result:
+            tor_listener_action: 'Opened'
+            tor_listener_type: 'Transparent pf/netfilter'
+            tor_listener_state: 'ready'
+            tor_listener_addr: '192.0.2.1:9040'
+        # A unix socket path, kept whole.
+        - string: 'Opening Control listener on /run/tor/control'
+          result:
+            tor_listener_action: 'Opening'
+            tor_listener_type: 'Control'
+            tor_listener_addr: '/run/tor/control'
+        - string: "You configured a non-loopback address '192.0.2.1:5353' for DNSPort."
+          result:
+            tor_listener_addr: '192.0.2.1:5353'
+            tor_listener_type: 'DNSPort'
+        - string: "Heartbeat: Tor's uptime is 23:46 hours, with 0 circuits open. I've sent 395 kB and received 2.74 MB."
+          numeric:
+            - tor_circuits_open
+          result:
+            tor_uptime: '23:46 hours'
+            tor_circuits_open: '0'
+            tor_message: "I've sent 395 kB and received 2.74 MB."
+        - string: 'Tor 0.4.9.8 running on Linux with Libevent 2.1.12-stable, OpenSSL 3.0.13, Zlib 1.3 and Glibc 2.39 as libc.'
+          result:
+            tor_version: '0.4.9.8'
+            tor_platform: 'Linux with Libevent 2.1.12-stable, OpenSSL 3.0.13, Zlib 1.3 and Glibc 2.39 as libc.'
+        - string: 'Read configuration file "/etc/tor/torrc".'
+          result:
+            tor_config_file: '/etc/tor/torrc'
+        # Unclaimed above, so it lands in the catch-all with the level attached.
+        - string: '[notice] Signaled readiness to systemd'
+          result:
+            tor_level: 'notice'
+            tor_message: 'Signaled readiness to systemd'
+      negative:
+        - ''
+        - string: 'Bootstrapped 75% (enough_dirinfo): Loaded enough directory info to build circuits'
+          program: 'tor-extra'

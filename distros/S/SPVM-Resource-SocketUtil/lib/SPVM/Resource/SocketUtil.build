@@ -1,0 +1,10 @@
+# Copyright (c) 2023 Yuki Kimoto
+# MIT License
+
+my $config = SPVM::Builder::Config->new_c99;
+
+$config->is_resource(1);
+
+$config->add_source_file('spvm_socket_util.c');
+
+$config;

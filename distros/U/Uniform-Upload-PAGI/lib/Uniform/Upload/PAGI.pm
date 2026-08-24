@@ -2,57 +2,71 @@ package Uniform::Upload::PAGI;
 
 use strict;
 use warnings;
-use Carp qw(croak);
 use parent 'Uniform::Upload';
+use Future;
+use Carp qw(croak);
 
-our $VERSION = '1.01';
+our $VERSION = '1.02';
 
-# Constructor: Explicitly expects an asynchronous PAGI HTTP connection scope hash reference
 sub new {
-    my ($class, $scope) = @_;
+    my ($class, @args) = @_;
 
-    unless (defined $scope && ref($scope) eq 'HASH') {
-        require Uniform::Exceptions;
-        Uniform::Exceptions->throw(
-            type    => 'TypeError',
-            message => 'PAGI scope context must be a strict HASH reference',
-        );
+    my ($scope, %opts);
+    if (@args % 2 != 0) {
+        $scope = shift @args;
+        %opts  = @args;
+    } else {
+        %opts  = @args;
+        $scope = delete $opts{scope};
     }
 
-    unless (defined $scope->{type} && $scope->{type} eq 'http') {
-        require Uniform::Exceptions;
-        Uniform::Exceptions->throw(
-            type    => 'ValidationError',
-            message => 'Not a valid PAGI HTTP connection scope',
-        );
-    }
+    croak "Scope must be a HASH reference" if defined $scope && ref($scope) ne 'HASH';
 
-    my $self = bless { files => {}, _ctx => $scope }, $class;
+    return $class->SUPER::new(in => $scope, %opts);
+}
 
-    # Extract PAGI multipart attachments if parsed by the gateway pipeline.
-    # The PAGI spec exposes uploaded files inside an array reference block: $scope->{uploads}
-    # where each element is a hash containing: field, tempname, filename, size, and type.
-    my $uploads = $scope->{uploads} || [];
-    if (ref($uploads) eq 'ARRAY') {
-        foreach my $upload_payload (@$uploads) {
-            next unless ref($upload_payload) eq 'HASH';
+sub extract_async {
+    my ($self, $receive) = @_;
 
-            my $field = $upload_payload->{field};
-            next unless defined $field && length $field;
+    my $scope = $self->{in};
+    croak "PAGI scope required to extract uploads" unless defined $scope;
 
-            # Map values explicitly to match your core layout specification expectations.
-            # If duplicate field keys are passed, the trailing definition overrides prior entries,
-            # respecting the strict last-scalar-wins policy standard of your ecosystem.
-            $self->{files}->{$field} = {
-                tempname => $upload_payload->{tempname},
-                filename => $upload_payload->{filename},
-                size     => $upload_payload->{size} || 0,
-                type     => $upload_payload->{type},
-            };
+    return $self->_read_pagi_body($receive)->then(sub {
+        my ($body) = @_;
+
+        # Find Content-Type header from PAGI scope
+        my $content_type = '';
+        for my $h (@{ $scope->{headers} || [] }) {
+            if (lc($h->[0]) eq 'content-type') {
+                $content_type = $h->[1];
+                last;
+            }
         }
-    }
 
-    return $self;
+        # Delegate parsing to base class method
+        my $raw_files = $self->parse_multipart_stream($content_type, $body);
+
+        return Future->done([ map { $self->wrap(%$_) } @$raw_files ]);
+    });
+}
+
+sub _read_pagi_body {
+    my ($self, $receive) = @_;
+
+    my $body = '';
+    my $read_loop;
+    $read_loop = sub {
+        return $receive->()->then(sub {
+            my ($event) = @_;
+            if (($event->{type} || '') eq 'http.request') {
+                $body .= $event->{body} if defined $event->{body};
+                return $read_loop->() if $event->{more_body};
+            }
+            return Future->done($body);
+        });
+    };
+
+    return $read_loop->();
 }
 
 1;
@@ -65,52 +79,90 @@ __END__
 
 =head1 NAME
 
-Uniform::Upload::PAGI - Explicit asynchronous multi-part file upload driver for PAGI
+Uniform::Upload::PAGI - Async PAGI framework adapter for Uniform::Upload
 
 =head1 SYNOPSIS
 
-    use Future::AsyncAwait;
     use Uniform::Upload::PAGI;
 
-    async sub handle_async_upload ($scope, $receive, $send) {
-        # Explicit instantiation with zero implicit guessing overhead
-        my $upload = Uniform::Upload::PAGI->new($scope);
+    # Initialize driver with a PAGI scope and upload constraints
+    my $uploader = Uniform::Upload::PAGI->new(
+        $scope,
+        max_size      => '10MB',
+        allowed_types => [qw( image/png image/jpeg application/pdf )],
+    );
 
-        if ($upload->has_file('document_payload')) {
-            # Execute your core, chainable validation profiles natively
-            $upload->file('document_payload')
-                   ->max_size('10M')
-                   ->allowed_types(['application/pdf'])
-                   ->save_to('/var/secure/storage/');
+    # Parse PAGI stream asynchronously
+    $uploader->extract_async($receive)->then(sub {
+        my ($files) = @_; # Arrayref of Uniform::Upload::File objects
+
+        for my $file (@$files) {
+            if ($file->is_valid) {
+                $file->copy_to('/var/uploads/' . $file->sanitized_filename);
+            } else {
+                warn "Invalid upload: " . $file->error;
+            }
         }
-
-        await $send->({
-            type    => 'http.response.start',
-            status  => 200,
-            headers => [['content-type', 'text/plain']],
-        });
-    }
+    });
 
 =head1 DESCRIPTION
 
-C<Uniform::Upload::PAGI> provides an explicit integration bridge connecting the
-L<Uniform::Upload> specification layer to asynchronous, non-blocking multi-part
-file upload environments built on the L<PAGI stream pipeline specification|https://metacpan.org>.
+C<Uniform::Upload::PAGI> inherits directly from L<Uniform::Upload>. It bridges asynchronous PAGI application streams with the C<Uniform::Upload> file validation engine and wraps extracted files into L<Uniform::Upload::File> instances.
 
 =head1 METHODS
 
-=head2 new( $scope )
+=head2 new
 
-Validates and instantiates the asynchronous multi-part upload driver context. Requires a valid, active
-PAGI connection scope hash reference (C<$scope>). Automatically maps and normalizes raw
-inbound stream payload keys into core file object mutators.
+    my $uploader = Uniform::Upload::PAGI->new($scope, %options);
+    # or
+    my $uploader = Uniform::Upload::PAGI->new(scope => $scope, %options);
+
+Constructs a new PAGI driver instance. Delegates configuration parsing and state setup to L<Uniform::Upload/new> via C<SUPER::new>.
+
+=head2 extract_async
+
+    my $future = $uploader->extract_async($receive);
+
+Asynchronously parses the incoming PAGI multi-part body stream from the configured scope. Returns a L<Future> that resolves to an array reference of validated L<Uniform::Upload::File> instances.
+
+=head1 INHERITED METHODS
+
+This package inherits directly from L<Uniform::Upload>. The following base methods are available:
+
+=over 4
+
+=item * C<wrap(%file_args)>
+
+=item * C<max_size>
+
+=item * C<allowed_types>
+
+=item * C<file_class>
+
+=back
+
+=head1 SEE ALSO
+
+=over 4
+
+=item * L<Uniform::Upload>
+
+=item * L<Uniform::Upload::File>
+
+=item * L<Uniform::Utils>
+
+=back
 
 =head1 AUTHOR
 
 Joshua S. Day E<lt>HAX@cpan.orgE<gt>
 
-=head1 LICENSE
+=head1 LICENSE AND COPYRIGHT
 
-MIT License. Copyright (c) 2026 Joshua S. Day.
+This software is Copyright (c) 2026 by Joshua S. Day.
+
+This is free software, licensed under:
+
+  The MIT (X11) License
 
 =cut

@@ -15,7 +15,12 @@ config 'config/punk.yml';
 # Routes. A target string names a controller relative to
 # {% name %}::Controller - 'Web::Root#index' is
 # {% name %}::Controller::Web::Root::index - or pass a coderef inline.
-get '/' => 'Web::Root#index';
+#
+# `name` is what lets everything else point at this route without spelling
+# its path again: $c->url_for('home') in code, and the `url` hash in a
+# template. Rename the path and the links follow; misspell the name and it
+# fails at boot or in a test, not at a 404 nobody sees.
+get '/' => 'Web::Root#index', { name => 'home' };
 
 # Views and the /static mount come from config/punk.yml, so this file stays
 # the routing table. Add a route with a coderef when it is not worth a

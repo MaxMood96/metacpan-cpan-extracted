@@ -36,7 +36,7 @@ requires:
   List::Util: '1.33'
   Object::Configure: '0'
   Params::Get: '0.13'
-  Params::Validate::Strict: '0.38'
+  Params::Validate::Strict: '0.39'
   Readonly: '2.00'
   Scalar::Util: '0'
   Sub::Protected: '0'
@@ -45,5 +45,5 @@ requires:
 resources:
   bugtracker: https://rt.cpan.org/Public/Dist/Display.html?Name=Database-Join
   repository: https://github.com/nigelhorne/Database-Join.git
-version: v0.001.0
+version: v0.001.1
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

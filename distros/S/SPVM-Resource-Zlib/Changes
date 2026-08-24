@@ -1,3 +1,13 @@
+1.010 2026-08-24
+  [Requirement Changes]
+    * Require SPVM 0.990195.
+  [Makefile.PL Changes]
+    * Catch up with latest SPVM Makefile.PL
+  [Test Improvement]
+    * Add ASan and MSVC tests.
+  [Internal Changes]
+    * Change config extension from .config to .build.
+
 1.009 2026-04-07
   [Warning Fix]
     * Add -D_DEFAULT_SOURCE to ccflags to suppress implicit declaration warnings in Zlib source

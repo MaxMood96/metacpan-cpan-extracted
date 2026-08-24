@@ -1,0 +1,399 @@
+---
+# Galla log-watcher log enrichment.
+#
+# Galla is the detection half of the Ereshkigal suite: it tails log files, counts
+# offences against its rules, and asks a Kur to ban whoever crossed the line.
+# Baphomet supervises the Galla processes.
+#
+# One Galla runs per named instance and syslogs under a PROGRAM of
+# "galla-<instance>" -- "galla-sshd", "galla-suricata". The gate therefore
+# accepts a bare "galla" as well as any "galla-" prefixed tag. The instance name
+# lives in PROGRAM rather than in MESSAGE, so nothing here captures it; a
+# consumer that wants it takes it off the record's PROGRAM field.
+#
+# Patterns are anchored (each must match the whole MESSAGE) and first-match
+# wins. Every capture is namespaced with galla_ .
+#
+# A banish target may be a single address or a whole network, so the ban
+# patterns capture either galla_ip or galla_cidr, never both.
+includes:
+- base
+vars_templated:
+  # An IPv4 or IPv6 network in prefix-length form, e.g. "192.0.2.0/24" or
+  # "2001:db8::/32". base has no CIDR primitive, so it is built here.
+  GALLA_CIDR: '[% IP %]/[% INT %]'
+  # Who a ban is aimed at: a bare address or a network. The two are separate
+  # captures rather than one, so that geoip only ever sees a real address.
+  GALLA_TARGET: '(?:(?<galla_ip>[% IP %])|(?<galla_cidr>[% GALLA_CIDR %]))'
+  # A ban handed to Kur, e.g.:
+  #   banished 192.0.2.7 to Kur ban_time=300
+  #   banished 192.0.2.0/24 to Kur
+  # ban_time is in seconds and is absent when the Kur's own default applies.
+  GALLA_BANISHED: '(?<galla_action>banished) [% GALLA_TARGET %] to Kur(?: ban_time=(?<galla_ban_time>[% INT %]))?'
+  # The same decision taken with banning turned off, e.g.:
+  #   would banish 192.0.2.7 to Kur (observe mode) ban_time=300
+  #   would banish 198.51.100.0/24 to Kur (observe mode)
+  GALLA_WOULD_BANISH: '(?<galla_action>would banish) [% GALLA_TARGET %] to Kur \((?<galla_mode>observe mode)\)(?: ban_time=(?<galla_ban_time>[% INT %]))?'
+  # A ban Galla decided on but could not deliver, e.g.:
+  #   banishing 192.0.2.7 to Kur failed, will retry... no answer from below
+  # Worth alerting on: the offender is still unbanned.
+  GALLA_BANISH_FAILED: '(?<galla_action>banishing) [% GALLA_TARGET %] to Kur failed, will retry\.\.\. (?<galla_error>[% GREEDYDATA %])'
+  # A repeat offender being escalated to the long-ban Kur, e.g.:
+  #   recidivist 192.0.2.7 banished 5 times, dragging through to the recidive kur "recidive"
+  GALLA_RECIDIVIST: '(?<galla_action>recidivist) [% GALLA_TARGET %] banished (?<galla_banish_count>[% INT %]) times, dragging through to the recidive kur "(?<galla_recidive_kur>[^"]*)"'
+  # A rule firing on something that is not (yet) a ban, e.g.:
+  #   sighted 192.0.2.11 (detection)
+  #   sighted alice (detection)
+  # The subject is an address when the rule matched on one and an arbitrary
+  # token (a username, say) otherwise.
+  GALLA_SIGHTED: '(?<galla_action>sighted) (?:(?<galla_ip>[% IP %])|(?<galla_subject>[% NOTSPACE %])) \((?<galla_rule>[^)]*)\)'
+  # A watched file being picked up, resumed mid-file after a restart, or noticed
+  # to have shrunk, e.g.:
+  #   following "/var/log/auth.log" for the watcher "authlog"
+  #   resuming "/var/log/auth.log" at offset 979 for the watcher "authlog"
+  #   the log of the watcher "eve" was reset... rotated?
+  GALLA_WATCHER_FOLLOW: '(?<galla_action>following) "(?<galla_file>[^"]*)" for the watcher "(?<galla_watcher>[^"]*)"'
+  GALLA_WATCHER_RESUME: '(?<galla_action>resuming) "(?<galla_file>[^"]*)" at offset (?<galla_offset>[% INT %]) for the watcher "(?<galla_watcher>[^"]*)"'
+  GALLA_WATCHER_RESET: 'the log of the watcher "(?<galla_watcher>[^"]*)" (?<galla_action>was reset)\.\.\. (?<galla_watcher_note>[% GREEDYDATA %])'
+  # Trouble talking to the Kur that is meant to carry out the bans, e.g.:
+  #   kur client error during connect:connect to "/var/run/kur.sock"... No such file or directory (2)
+  #   kur client disconnected... server closed connection
+  GALLA_KUR_CLIENT_ERROR: '(?<galla_action>kur client error) during connect:connect to "(?<galla_kur_socket>[^"]*)"\.\.\. (?<galla_error>[% GREEDYDATA %])'
+  GALLA_KUR_DISCONNECTED: '(?<galla_action>kur client disconnected)\.\.\. (?<galla_error>[% GREEDYDATA %])'
+  # A hostname-based rule that resolved to more addresses than usedns_max_addrs
+  # allows, so nothing was banned at all, e.g.:
+  #   "wide.example.com" resolves to 5 addresses, past usedns_max_addrs... refused whole, banishing nobody
+  GALLA_TOO_MANY_ADDRS: '"(?<galla_hostname>[^"]*)" resolves to (?<galla_address_count>[% INT %]) addresses, past usedns_max_addrs\.\.\. (?<galla_warning_detail>[% GREEDYDATA %])'
+  # Configuration that will silently do nothing, reported at startup, e.g.:
+  #   usedns is configured on w but enable_dns is off... treated as no, hostname offenders banish nobody
+  #   reverse_dns-gated rules are configured but enable_rdns is off... those gates fail closed and will count nothing
+  GALLA_USEDNS_WARNING: '(?<galla_warning>usedns is configured) on (?<galla_rule>[% NOTSPACE %]) but enable_dns is off\.\.\. (?<galla_warning_detail>[% GREEDYDATA %])'
+  GALLA_RDNS_WARNING: '(?<galla_warning>reverse_dns-gated rules are configured) but enable_rdns is off\.\.\. (?<galla_warning_detail>[% GREEDYDATA %])'
+  # A detection rule that also writes Suricata-style EVE records, e.g.:
+  #   a detection rule is loaded... EVE output enabled to /var/log/baphomet/eve.json
+  GALLA_EVE_OUTPUT: 'a detection rule is loaded\.\.\. EVE output enabled to (?<galla_eve_output>[% NOTSPACE %])'
+  # Startup, naming the control socket and the watchers that were configured,
+  # e.g.:
+  #   started... socket=/var/run/baphomet/galla/sshd.sock watchers=authlog
+  # galla_watchers is a comma-separated list.
+  GALLA_STARTED: '(?<galla_action>started)\.\.\. socket=(?<galla_socket>[% NOTSPACE %]) watchers=(?<galla_watchers>[% NOTSPACE %])'
+  # Bare lifecycle words, each logged on a line of its own.
+  GALLA_STATE: '(?<galla_action>stop requested|stopped)'
+  # Everything else Galla said. Matching anything is only safe because the rule
+  # is gated on PROGRAM.
+  GALLA_MESSAGE: '(?<galla_message>.+)'
+vars_tests:
+  GALLA_CIDR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.0/24'
+        result: '192.0.2.0/24'
+      - string: '2001:db8::/32'
+        result: '2001:db8::/32'
+    negative:
+      - '192.0.2.7'
+  GALLA_TARGET:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.7'
+        result: '192.0.2.7'
+      - string: '192.0.2.0/24'
+        result: '192.0.2.0/24'
+    negative:
+      - 'not-an-address'
+  GALLA_BANISHED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'banished 192.0.2.7 to Kur ban_time=300'
+        result: 'banished 192.0.2.7 to Kur ban_time=300'
+      - string: 'banished 192.0.2.0/24 to Kur'
+        result: 'banished 192.0.2.0/24 to Kur'
+    negative:
+      - 'would banish 192.0.2.7 to Kur (observe mode) ban_time=300'
+  GALLA_WOULD_BANISH:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'would banish 192.0.2.7 to Kur (observe mode) ban_time=300'
+        result: 'would banish 192.0.2.7 to Kur (observe mode) ban_time=300'
+      - string: 'would banish 198.51.100.0/24 to Kur (observe mode)'
+        result: 'would banish 198.51.100.0/24 to Kur (observe mode)'
+    negative:
+      - 'banished 192.0.2.7 to Kur ban_time=300'
+  GALLA_BANISH_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'banishing 192.0.2.7 to Kur failed, will retry... no answer from below'
+        result: 'banishing 192.0.2.7 to Kur failed, will retry... no answer from below'
+      - string: 'banishing 192.0.2.0/24 to Kur failed, will retry... connect failed during connect: No such file or directory'
+        result: 'banishing 192.0.2.0/24 to Kur failed, will retry... connect failed during connect: No such file or directory'
+    negative:
+      - 'banished 192.0.2.7 to Kur ban_time=300'
+  GALLA_RECIDIVIST:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'recidivist 192.0.2.7 banished 5 times, dragging through to the recidive kur "recidive"'
+        result: 'recidivist 192.0.2.7 banished 5 times, dragging through to the recidive kur "recidive"'
+      - string: 'recidivist 198.51.100.0/24 banished 3 times, dragging through to the recidive kur "recidive"'
+        result: 'recidivist 198.51.100.0/24 banished 3 times, dragging through to the recidive kur "recidive"'
+    negative:
+      - 'banished 192.0.2.7 to Kur ban_time=300'
+  GALLA_SIGHTED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'sighted 192.0.2.11 (detection)'
+        result: 'sighted 192.0.2.11 (detection)'
+      - string: 'sighted neti (detection)'
+        result: 'sighted neti (detection)'
+    negative:
+      - 'banished 192.0.2.7 to Kur ban_time=300'
+  GALLA_WATCHER_FOLLOW:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'following "/var/log/auth.log" for the watcher "authlog"'
+        result: 'following "/var/log/auth.log" for the watcher "authlog"'
+      - string: 'following "/var/log/suricata/alert.json" for the watcher "eve"'
+        result: 'following "/var/log/suricata/alert.json" for the watcher "eve"'
+    negative:
+      - 'resuming "/var/log/auth.log" at offset 979 for the watcher "authlog"'
+  GALLA_WATCHER_RESUME:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'resuming "/var/log/auth.log" at offset 979 for the watcher "authlog"'
+        result: 'resuming "/var/log/auth.log" at offset 979 for the watcher "authlog"'
+      - string: 'resuming "/var/log/suricata/alert.json" at offset 127162135 for the watcher "eve"'
+        result: 'resuming "/var/log/suricata/alert.json" at offset 127162135 for the watcher "eve"'
+    negative:
+      - 'following "/var/log/auth.log" for the watcher "authlog"'
+  GALLA_WATCHER_RESET:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'the log of the watcher "eve" was reset... rotated?'
+        result: 'the log of the watcher "eve" was reset... rotated?'
+      - string: 'the log of the watcher "authlog" was reset... rotated?'
+        result: 'the log of the watcher "authlog" was reset... rotated?'
+    negative:
+      - 'following "/var/log/auth.log" for the watcher "authlog"'
+  GALLA_KUR_CLIENT_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'kur client error during connect:connect to "/var/run/kur.sock"... No such file or directory (2)'
+        result: 'kur client error during connect:connect to "/var/run/kur.sock"... No such file or directory (2)'
+      - string: 'kur client error during connect:connect to "/var/run/ereshkigal/kur/sshd.sock"... Connection refused (61)'
+        result: 'kur client error during connect:connect to "/var/run/ereshkigal/kur/sshd.sock"... Connection refused (61)'
+    negative:
+      - 'kur client disconnected... server closed connection'
+  GALLA_KUR_DISCONNECTED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'kur client disconnected... server closed connection'
+        result: 'kur client disconnected... server closed connection'
+      - string: 'kur client disconnected... read failed'
+        result: 'kur client disconnected... read failed'
+    negative:
+      - 'kur client error during connect:connect to "/var/run/kur.sock"... No such file or directory (2)'
+  GALLA_TOO_MANY_ADDRS:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '"wide.example.com" resolves to 5 addresses, past usedns_max_addrs... refused whole, banishing nobody'
+        result: '"wide.example.com" resolves to 5 addresses, past usedns_max_addrs... refused whole, banishing nobody'
+      - string: '"many.test.org" resolves to 12 addresses, past usedns_max_addrs... refused whole, banishing nobody'
+        result: '"many.test.org" resolves to 12 addresses, past usedns_max_addrs... refused whole, banishing nobody'
+    negative:
+      - 'sighted 192.0.2.11 (detection)'
+  GALLA_USEDNS_WARNING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'usedns is configured on w but enable_dns is off... treated as no, hostname offenders banish nobody'
+        result: 'usedns is configured on w but enable_dns is off... treated as no, hostname offenders banish nobody'
+      - string: 'usedns is configured on webrule but enable_dns is off... treated as no, hostname offenders banish nobody'
+        result: 'usedns is configured on webrule but enable_dns is off... treated as no, hostname offenders banish nobody'
+    negative:
+      - 'reverse_dns-gated rules are configured but enable_rdns is off... those gates fail closed and will count nothing'
+  GALLA_RDNS_WARNING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'reverse_dns-gated rules are configured but enable_rdns is off... those gates fail closed and will count nothing'
+        result: 'reverse_dns-gated rules are configured but enable_rdns is off... those gates fail closed and will count nothing'
+      - string: 'reverse_dns-gated rules are configured but enable_rdns is off... nothing will be counted'
+        result: 'reverse_dns-gated rules are configured but enable_rdns is off... nothing will be counted'
+    negative:
+      - 'usedns is configured on w but enable_dns is off... treated as no, hostname offenders banish nobody'
+  GALLA_EVE_OUTPUT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'a detection rule is loaded... EVE output enabled to /var/log/baphomet/eve.json'
+        result: 'a detection rule is loaded... EVE output enabled to /var/log/baphomet/eve.json'
+      - string: 'a detection rule is loaded... EVE output enabled to /var/log/galla/eve.json'
+        result: 'a detection rule is loaded... EVE output enabled to /var/log/galla/eve.json'
+    negative:
+      - 'stopped'
+  GALLA_STARTED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'started... socket=/var/run/baphomet/galla/sshd.sock watchers=authlog'
+        result: 'started... socket=/var/run/baphomet/galla/sshd.sock watchers=authlog'
+      - string: 'started... socket=/var/run/baphomet/galla/web.sock watchers=access,error'
+        result: 'started... socket=/var/run/baphomet/galla/web.sock watchers=access,error'
+    negative:
+      - 'stopped'
+  GALLA_STATE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'stop requested'
+        result: 'stop requested'
+      - string: 'stopped'
+        result: 'stopped'
+    negative:
+      - 'started... socket=/var/run/baphomet/galla/sshd.sock watchers=authlog'
+  GALLA_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'something galla has not been taught yet'
+        result: 'something galla has not been taught yet'
+      - string: 'stopped'
+        result: 'stopped'
+    negative:
+      - ''
+# Look up the address a ban or sighting is aimed at.
+geoip:
+  - galla_ip
+# Coerce numeric captures to integers.
+convert:
+  galla_ban_time: int
+  galla_banish_count: int
+  galla_offset: int
+  galla_address_count: int
+rules:
+  - name: galla
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^galla(?:-.+)?$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - GALLA_BANISHED
+      - GALLA_WOULD_BANISH
+      - GALLA_BANISH_FAILED
+      - GALLA_RECIDIVIST
+      - GALLA_SIGHTED
+      - GALLA_WATCHER_FOLLOW
+      - GALLA_WATCHER_RESUME
+      - GALLA_WATCHER_RESET
+      - GALLA_KUR_CLIENT_ERROR
+      - GALLA_KUR_DISCONNECTED
+      - GALLA_TOO_MANY_ADDRS
+      - GALLA_USEDNS_WARNING
+      - GALLA_RDNS_WARNING
+      - GALLA_EVE_OUTPUT
+      - GALLA_STARTED
+      - GALLA_STATE
+      # last: matches anything, which is only safe because the rule is gated
+      - GALLA_MESSAGE
+    tests:
+      positive:
+        - string: 'banished 192.0.2.7 to Kur ban_time=300'
+          numeric:
+            - galla_ban_time
+          program: 'galla'
+          result:
+            galla_action: 'banished'
+            galla_ip: '192.0.2.7'
+            galla_ban_time: '300'
+        - string: 'banished 198.51.100.0/24 to Kur'
+          program: 'galla-suricata'
+          result:
+            galla_action: 'banished'
+            galla_cidr: '198.51.100.0/24'
+        - string: 'would banish 192.0.2.7 to Kur (observe mode) ban_time=300'
+          result:
+            galla_action: 'would banish'
+            galla_ip: '192.0.2.7'
+            galla_mode: 'observe mode'
+            galla_ban_time: '300'
+        - string: 'banishing 192.0.2.7 to Kur failed, will retry... no answer from below'
+          result:
+            galla_action: 'banishing'
+            galla_ip: '192.0.2.7'
+            galla_error: 'no answer from below'
+        - string: 'recidivist 192.0.2.7 banished 5 times, dragging through to the recidive kur "recidive"'
+          numeric:
+            - galla_banish_count
+          result:
+            galla_action: 'recidivist'
+            galla_ip: '192.0.2.7'
+            galla_banish_count: '5'
+            galla_recidive_kur: 'recidive'
+        - string: 'sighted 192.0.2.11 (detection)'
+          result:
+            galla_action: 'sighted'
+            galla_ip: '192.0.2.11'
+            galla_rule: 'detection'
+        - string: 'sighted neti (detection)'
+          result:
+            galla_action: 'sighted'
+            galla_subject: 'neti'
+            galla_rule: 'detection'
+        - string: 'following "/var/log/auth.log" for the watcher "authlog"'
+          result:
+            galla_action: 'following'
+            galla_file: '/var/log/auth.log'
+            galla_watcher: 'authlog'
+        - string: 'resuming "/var/log/auth.log" at offset 979 for the watcher "authlog"'
+          numeric:
+            - galla_offset
+          result:
+            galla_action: 'resuming'
+            galla_file: '/var/log/auth.log'
+            galla_offset: '979'
+            galla_watcher: 'authlog'
+        - string: 'the log of the watcher "eve" was reset... rotated?'
+          result:
+            galla_watcher: 'eve'
+            galla_action: 'was reset'
+            galla_watcher_note: 'rotated?'
+        - string: 'kur client error during connect:connect to "/var/run/kur.sock"... No such file or directory (2)'
+          result:
+            galla_action: 'kur client error'
+            galla_kur_socket: '/var/run/kur.sock'
+            galla_error: 'No such file or directory (2)'
+        - string: 'kur client disconnected... server closed connection'
+          result:
+            galla_action: 'kur client disconnected'
+            galla_error: 'server closed connection'
+        - string: '"wide.example.com" resolves to 5 addresses, past usedns_max_addrs... refused whole, banishing nobody'
+          numeric:
+            - galla_address_count
+          result:
+            galla_hostname: 'wide.example.com'
+            galla_address_count: '5'
+            galla_warning_detail: 'refused whole, banishing nobody'
+        - string: 'usedns is configured on w but enable_dns is off... treated as no, hostname offenders banish nobody'
+          result:
+            galla_warning: 'usedns is configured'
+            galla_rule: 'w'
+            galla_warning_detail: 'treated as no, hostname offenders banish nobody'
+        - string: 'a detection rule is loaded... EVE output enabled to /var/log/baphomet/eve.json'
+          result:
+            galla_eve_output: '/var/log/baphomet/eve.json'
+        - string: 'started... socket=/var/run/baphomet/galla/sshd.sock watchers=authlog'
+          result:
+            galla_action: 'started'
+            galla_socket: '/var/run/baphomet/galla/sshd.sock'
+            galla_watchers: 'authlog'
+        - string: 'stop requested'
+          result:
+            galla_action: 'stop requested'
+        # falls through to the catch-all
+        - string: 'some future galla message'
+          result:
+            galla_message: 'some future galla message'
+      negative:
+        - ''
+        - string: 'banished 192.0.2.7 to Kur ban_time=300'
+          program: 'gallax'
+        # a sibling in the same suite, and a name the prefix must not swallow
+        - string: 'stopped'
+          program: 'baphomet'
+        - string: 'stopped'
+          program: 'gallant'

@@ -1,5 +1,13 @@
 Revision history for Punk-Mailer
 
+0.03    2026-08-24
+	- ADDS: mail_url takes a route NAME as well as a path, so a mail
+	  body points at a route the way a template does:
+	  $c->mail_url('verify', token => $tok) instead of
+	  $c->mail_url('/verify/' . $tok). 
+	- ADDS: mail_token takes route => 'verify' beside path =>
+	  '/verify/%s'. 
+	
 0.02    2026-08-23
 	- define G_LIST as G_ARRAY on perls before 5.36
 	- the resend transport's max_attachment refusal and the plugin's

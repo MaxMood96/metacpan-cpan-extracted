@@ -1,0 +1,171 @@
+---
+# vsftpd transfer-log enrichment.
+#
+# Gates on the syslog PROGRAM field being "vsftpd". Patterns are anchored
+# (each must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with vsftpd_ .
+#
+# vsftpd writes the same line shape whether it is logging to its own file or to
+# syslog, except that the file gets a leading "Tue Jul 15 10:00:00 2026" that
+# syslog does not (syslog stamps the line itself). The date is therefore
+# optional here, so a rule file works for both a tailed vsftpd.log fed in raw
+# and a syslog-delivered one.
+#
+# FTP has no transport security to speak of and every credential crosses the
+# wire in the clear, so the FAIL LOGIN lines are the ones to count.
+includes:
+- base
+vars_templated:
+  # "Tue Jul 15 10:00:00 2026" -- vsftpd's own timestamp, present only in the
+  # file log.
+  VSFTPD_DATE: '[% DAY %] [% MONTH %] +[% MONTHDAY %] [% TIME %] [% YEAR %]'
+  # The "[pid 1234] [user] " head every logged event shares. The user is
+  # bracketed and absent on the events that happen before anyone has named an
+  # account, which is why CONNECT has a pattern of its own below.
+  VSFTPD_HEAD: '(?:[% VSFTPD_DATE %] )?\[pid (?<vsftpd_pid>[% INT %])\] \[(?<vsftpd_user>[^\]]*)\] (?<vsftpd_result>OK|FAIL) '
+  # "[pid 1234] [neti] OK DOWNLOAD: Client "192.0.2.5",
+  #  "/home/neti/file.txt", 1234 bytes, 12.34Kbyte/sec"
+  # The rate unit is matched as [A-Za-z]+ rather than with the base WORD.
+  # WORD is \b\w+\b, and there is no word boundary between the "4" of "12.34"
+  # and the "K" of "Kbyte" for it to anchor on, so it could never match here.
+  VSFTPD_XFER: '[% VSFTPD_HEAD %](?<vsftpd_action>DOWNLOAD|UPLOAD): Client "(?<vsftpd_client_ip>[% IP %])", "(?<vsftpd_path>[^"]*)", (?<vsftpd_bytes>[% INT %]) bytes, (?<vsftpd_rate>[% NUMBER %])(?<vsftpd_rate_unit>[A-Za-z]+)/sec'
+  # "[pid 1234] [neti] FAIL LOGIN: Client "192.0.2.5""
+  # "[pid 1234] [ftp] OK LOGIN: Client "192.0.2.5", anon password "?""
+  VSFTPD_LOGIN: '[% VSFTPD_HEAD %](?<vsftpd_action>LOGIN): Client "(?<vsftpd_client_ip>[% IP %])"(?:, anon password "(?<vsftpd_anon_password>[^"]*)")?'
+  # Everything else vsftpd reports per-account: MKDIR, RMDIR, DELETE, RENAME,
+  # CHMOD and friends. Same head, same "Client" clause, an action this file
+  # does not need to know the name of in advance.
+  VSFTPD_ACTION: '[% VSFTPD_HEAD %](?<vsftpd_action>[A-Z]+): Client "(?<vsftpd_client_ip>[% IP %])"(?:, (?<vsftpd_detail>[% GREEDYDATA %]))?'
+  # "[pid 1234] CONNECT: Client "192.0.2.5""
+  # No account yet, so no bracketed user and no OK/FAIL.
+  VSFTPD_CONNECT: '(?:[% VSFTPD_DATE %] )?\[pid (?<vsftpd_pid>[% INT %])\] (?<vsftpd_action>CONNECT): Client "(?<vsftpd_client_ip>[% IP %])"(?:, (?<vsftpd_detail>[% GREEDYDATA %]))?'
+vars_tests:
+  VSFTPD_DATE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Tue Jul 15 10:00:00 2026'
+        result: 'Tue Jul 15 10:00:00 2026'
+      # vsftpd pads a single-digit day
+      - string: 'Tue Jul  5 10:00:00 2026'
+        result: 'Tue Jul  5 10:00:00 2026'
+    negative:
+      - '2026-07-15 10:00:00'
+  VSFTPD_HEAD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[pid 1234] [neti] OK '
+        result: '[pid 1234] [neti] OK '
+      - string: 'Tue Jul 15 10:00:00 2026 [pid 1234] [neti] FAIL '
+        result: 'Tue Jul 15 10:00:00 2026 [pid 1234] [neti] FAIL '
+    negative:
+      # CONNECT has no account and no verdict, so it is not this shape
+      - '[pid 1234] CONNECT: '
+  VSFTPD_XFER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[pid 1234] [neti] OK DOWNLOAD: Client "192.0.2.5", "/home/neti/file.txt", 1234 bytes, 12.34Kbyte/sec'
+        result: '[pid 1234] [neti] OK DOWNLOAD: Client "192.0.2.5", "/home/neti/file.txt", 1234 bytes, 12.34Kbyte/sec'
+      - string: 'Tue Jul 15 10:00:00 2026 [pid 1234] [neti] OK UPLOAD: Client "198.51.100.9", "/srv/upload/x.iso", 98765 bytes, 500.00Kbyte/sec'
+        result: 'Tue Jul 15 10:00:00 2026 [pid 1234] [neti] OK UPLOAD: Client "198.51.100.9", "/srv/upload/x.iso", 98765 bytes, 500.00Kbyte/sec'
+    negative:
+      - '[pid 1234] [neti] FAIL LOGIN: Client "192.0.2.5"'
+  VSFTPD_LOGIN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[pid 1234] [neti] FAIL LOGIN: Client "192.0.2.5"'
+        result: '[pid 1234] [neti] FAIL LOGIN: Client "192.0.2.5"'
+      - string: '[pid 1234] [ftp] OK LOGIN: Client "192.0.2.5", anon password "?"'
+        result: '[pid 1234] [ftp] OK LOGIN: Client "192.0.2.5", anon password "?"'
+    negative:
+      - '[pid 1234] CONNECT: Client "192.0.2.5"'
+  VSFTPD_ACTION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[pid 1234] [neti] OK MKDIR: Client "192.0.2.5", "/home/neti/new"'
+        result: '[pid 1234] [neti] OK MKDIR: Client "192.0.2.5", "/home/neti/new"'
+      - string: '[pid 1234] [neti] FAIL DELETE: Client "192.0.2.5", "/etc/shadow"'
+        result: '[pid 1234] [neti] FAIL DELETE: Client "192.0.2.5", "/etc/shadow"'
+    negative:
+      - '[pid 1234] CONNECT: Client "192.0.2.5"'
+  VSFTPD_CONNECT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[pid 1234] CONNECT: Client "192.0.2.5"'
+        result: '[pid 1234] CONNECT: Client "192.0.2.5"'
+      - string: 'Tue Jul 15 10:00:00 2026 [pid 1234] CONNECT: Client "198.51.100.9"'
+        result: 'Tue Jul 15 10:00:00 2026 [pid 1234] CONNECT: Client "198.51.100.9"'
+    negative:
+      - '[pid 1234] [neti] OK LOGIN: Client "192.0.2.5"'
+geoip:
+  - vsftpd_client_ip
+convert:
+  vsftpd_pid: int
+  vsftpd_bytes: int
+  vsftpd_rate: float
+rules:
+  - name: vsftpd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^vsftpd$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      # most specific first: a transfer is an action with a byte count and a
+      # rate on the end, and LOGIN is an action that may carry an anon
+      # password, so both would otherwise be swallowed by the generic form
+      - VSFTPD_XFER
+      - VSFTPD_LOGIN
+      - VSFTPD_ACTION
+      - VSFTPD_CONNECT
+    tests:
+      positive:
+        - string: '[pid 1234] [neti] FAIL LOGIN: Client "192.0.2.5"'
+          program: 'vsftpd'
+          result:
+            vsftpd_pid: '1234'
+            vsftpd_user: 'neti'
+            vsftpd_result: 'FAIL'
+            vsftpd_action: 'LOGIN'
+            vsftpd_client_ip: '192.0.2.5'
+        - string: '[pid 1234] [ftp] OK LOGIN: Client "192.0.2.5", anon password "?"'
+          result:
+            vsftpd_pid: '1234'
+            vsftpd_user: 'ftp'
+            vsftpd_result: 'OK'
+            vsftpd_action: 'LOGIN'
+            vsftpd_client_ip: '192.0.2.5'
+            vsftpd_anon_password: '?'
+        - string: 'Tue Jul 15 10:00:00 2026 [pid 1234] [neti] OK DOWNLOAD: Client "192.0.2.5", "/home/neti/file.txt", 1234 bytes, 12.34Kbyte/sec'
+          numeric:
+            - vsftpd_bytes
+            - vsftpd_pid
+            - vsftpd_rate
+          result:
+            vsftpd_pid: '1234'
+            vsftpd_user: 'neti'
+            vsftpd_result: 'OK'
+            vsftpd_action: 'DOWNLOAD'
+            vsftpd_client_ip: '192.0.2.5'
+            vsftpd_path: '/home/neti/file.txt'
+            vsftpd_bytes: '1234'
+            vsftpd_rate: '12.34'
+            vsftpd_rate_unit: 'Kbyte'
+        - string: '[pid 1234] [neti] FAIL DELETE: Client "192.0.2.5", "/etc/shadow"'
+          result:
+            vsftpd_pid: '1234'
+            vsftpd_user: 'neti'
+            vsftpd_result: 'FAIL'
+            vsftpd_action: 'DELETE'
+            vsftpd_client_ip: '192.0.2.5'
+            vsftpd_detail: '"/etc/shadow"'
+        - string: '[pid 1234] CONNECT: Client "192.0.2.5"'
+          result:
+            vsftpd_pid: '1234'
+            vsftpd_action: 'CONNECT'
+            vsftpd_client_ip: '192.0.2.5'
+      negative:
+        - 'this is not a vsftpd line at all'
+        - 'Jul 15 10:00:00 host cron[123]: session opened for user root'
+        - string: '[pid 1234] [neti] FAIL LOGIN: Client "192.0.2.5"'
+          program: 'vsftpd-extra'

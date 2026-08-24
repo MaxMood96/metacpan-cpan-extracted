@@ -1,0 +1,193 @@
+---
+# chrony (chronyd) NTP daemon log enrichment.
+#
+# Gates on the syslog PROGRAM field being "chronyd". Patterns are anchored
+# (each must match the whole MESSAGE) and first-match wins, most specific
+# first. Every capture is namespaced with chrony_ .
+includes:
+- base
+vars_templated:
+  # "Selected source 192.0.2.2 (pool.ntp.org)" - the parenthesised name is
+  # the reference name/hostname chrony resolved for the selected source.
+  CHRONY_SELECTED_NAMED: 'Selected source (?<chrony_source_ip>[% IP %]) \((?<chrony_source_name>[% NOTSPACE %])\)(?: [% GREEDYDATA %])?'
+  # "Selected source 192.0.2.2" - no resolved name variant.
+  CHRONY_SELECTED: 'Selected source (?<chrony_source_ip>[% IP %])(?: [% GREEDYDATA %])?'
+  # "System clock wrong by 1.234567 seconds, adjustment started" - the offset
+  # may carry a leading sign.
+  CHRONY_CLOCK_WRONG: 'System clock wrong by (?<chrony_offset>-?[% FLOAT %]) seconds, adjustment started(?: [% GREEDYDATA %])?'
+  # "System clock was stepped by -0.000123 seconds" - stepped correction,
+  # signed.
+  CHRONY_CLOCK_STEP: 'System clock was stepped by (?<chrony_step>-?[% FLOAT %]) seconds(?: [% GREEDYDATA %])?'
+  # "Source 192.0.2.2 replaced with 192.0.2.3" - a source was swapped out.
+  CHRONY_SOURCE_REPLACED: 'Source (?<chrony_source_ip>[% IP %]) replaced with (?<chrony_replacement_ip>[% IP %])(?: [% GREEDYDATA %])?'
+  # "Can't synchronise: no majority" / "Can't synchronise: no selectable
+  # sources" - capture the reason clause.
+  CHRONY_CANT_SYNC: 'Can''t synchronise: (?<chrony_reason>[% GREEDYDATA %])'
+  # "Source 192.0.2.2 online" / "Source 192.0.2.2 offline" - source state
+  # change.
+  CHRONY_SOURCE_STATE: 'Source (?<chrony_source_ip>[% IP %]) (?<chrony_source_state>online|offline)(?: [% GREEDYDATA %])?'
+  # "Forward time jump detected!" / "Backward time jump detected!".
+  CHRONY_TIME_JUMP: '(?<chrony_event>Forward|Backward) time jump detected!(?: [% GREEDYDATA %])?'
+  # Startup: "chronyd version 4.3 starting (+CMDMON +NTP +REFCLOCK ...)".
+  CHRONY_STARTUP: 'chronyd version (?<chrony_version>[% NOTSPACE %]) starting(?: [% GREEDYDATA %])?'
+vars_tests:
+  CHRONY_SELECTED_NAMED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Selected source 192.0.2.2 (pool.ntp.org)'
+        result: 'Selected source 192.0.2.2 (pool.ntp.org)'
+      - string: 'Selected source 198.51.100.9 (time.example.net)'
+        result: 'Selected source 198.51.100.9 (time.example.net)'
+    negative:
+      - 'Selected source 192.0.2.2'
+  CHRONY_SELECTED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Selected source 192.0.2.2'
+        result: 'Selected source 192.0.2.2'
+      - string: 'Selected source 198.51.100.9'
+        result: 'Selected source 198.51.100.9'
+    negative:
+      - 'Source 192.0.2.2 online'
+  CHRONY_CLOCK_WRONG:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'System clock wrong by 1.234567 seconds, adjustment started'
+        result: 'System clock wrong by 1.234567 seconds, adjustment started'
+      - string: 'System clock wrong by -0.500000 seconds, adjustment started'
+        result: 'System clock wrong by -0.500000 seconds, adjustment started'
+    negative:
+      - 'System clock was stepped by -0.000123 seconds'
+  CHRONY_CLOCK_STEP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'System clock was stepped by -0.000123 seconds'
+        result: 'System clock was stepped by -0.000123 seconds'
+      - string: 'System clock was stepped by 0.010000 seconds'
+        result: 'System clock was stepped by 0.010000 seconds'
+    negative:
+      - 'System clock wrong by 1.234567 seconds, adjustment started'
+  CHRONY_SOURCE_REPLACED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Source 192.0.2.2 replaced with 192.0.2.3'
+        result: 'Source 192.0.2.2 replaced with 192.0.2.3'
+      - string: 'Source 198.51.100.9 replaced with 203.0.113.7'
+        result: 'Source 198.51.100.9 replaced with 203.0.113.7'
+    negative:
+      - 'Source 192.0.2.2 online'
+  CHRONY_CANT_SYNC:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Can''t synchronise: no majority'
+        result: 'Can''t synchronise: no majority'
+      - string: 'Can''t synchronise: no selectable sources'
+        result: 'Can''t synchronise: no selectable sources'
+    negative:
+      - 'Selected source 192.0.2.2'
+  CHRONY_SOURCE_STATE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Source 192.0.2.2 online'
+        result: 'Source 192.0.2.2 online'
+      - string: 'Source 192.0.2.2 offline'
+        result: 'Source 192.0.2.2 offline'
+    negative:
+      - 'Source 192.0.2.2 replaced with 192.0.2.3'
+  CHRONY_TIME_JUMP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Forward time jump detected!'
+        result: 'Forward time jump detected!'
+      - string: 'Backward time jump detected!'
+        result: 'Backward time jump detected!'
+    negative:
+      - 'Selected source 192.0.2.2'
+  CHRONY_STARTUP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'chronyd version 4.3 starting (+CMDMON +NTP +REFCLOCK +RTC +PRIVDROP +SCFILTER +SIGND +ASYNCDNS +NTS +SECHASH +IPV6 -DEBUG)'
+        result: 'chronyd version 4.3 starting (+CMDMON +NTP +REFCLOCK +RTC +PRIVDROP +SCFILTER +SIGND +ASYNCDNS +NTS +SECHASH +IPV6 -DEBUG)'
+      - string: 'chronyd version 4.5 starting (+CMDMON +NTP)'
+        result: 'chronyd version 4.5 starting (+CMDMON +NTP)'
+    negative:
+      - 'Selected source 192.0.2.2'
+# Look up the source and replacement addresses. Public time servers can be
+# geolocated.
+geoip:
+  - chrony_source_ip
+  - chrony_replacement_ip
+# Coerce the offset and step corrections to float.
+convert:
+  chrony_offset: float
+  chrony_step: float
+rules:
+  - name: chronyd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^chronyd$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - CHRONY_SELECTED_NAMED
+      - CHRONY_SELECTED
+      - CHRONY_CLOCK_WRONG
+      - CHRONY_CLOCK_STEP
+      - CHRONY_SOURCE_REPLACED
+      - CHRONY_CANT_SYNC
+      - CHRONY_SOURCE_STATE
+      - CHRONY_TIME_JUMP
+      - CHRONY_STARTUP
+    tests:
+      positive:
+        - string: 'Selected source 192.0.2.2 (pool.ntp.org)'
+          program: 'chronyd'
+          result:
+            chrony_source_ip: '192.0.2.2'
+            chrony_source_name: 'pool.ntp.org'
+        - string: 'Selected source 198.51.100.9'
+          result:
+            chrony_source_ip: '198.51.100.9'
+        - string: 'System clock wrong by 1.234567 seconds, adjustment started'
+          numeric:
+            - chrony_offset
+          result:
+            chrony_offset: '1.234567'
+        - string: 'System clock was stepped by -0.000123 seconds'
+          numeric:
+            - chrony_step
+          result:
+            chrony_step: '-0.000123'
+        - string: 'Source 192.0.2.2 replaced with 192.0.2.3'
+          result:
+            chrony_source_ip: '192.0.2.2'
+            chrony_replacement_ip: '192.0.2.3'
+        - string: 'Can''t synchronise: no majority'
+          result:
+            chrony_reason: 'no majority'
+        - string: 'Can''t synchronise: no selectable sources'
+          result:
+            chrony_reason: 'no selectable sources'
+        - string: 'Source 192.0.2.2 online'
+          result:
+            chrony_source_ip: '192.0.2.2'
+            chrony_source_state: 'online'
+        - string: 'Source 192.0.2.2 offline'
+          result:
+            chrony_source_ip: '192.0.2.2'
+            chrony_source_state: 'offline'
+        - string: 'Forward time jump detected!'
+          result:
+            chrony_event: 'Forward'
+        - string: 'Backward time jump detected!'
+          result:
+            chrony_event: 'Backward'
+        - string: 'chronyd version 4.3 starting (+CMDMON +NTP +REFCLOCK +RTC +PRIVDROP +SCFILTER +SIGND +ASYNCDNS +NTS +SECHASH +IPV6 -DEBUG)'
+          result:
+            chrony_version: '4.3'
+      negative:
+        - 'this is not a chronyd line at all'
+        - 'Jul 15 10:00:00 host cron[123]: session opened for user root'
+        - string: 'Selected source 192.0.2.2 (pool.ntp.org)'
+          program: 'chrony-extra'

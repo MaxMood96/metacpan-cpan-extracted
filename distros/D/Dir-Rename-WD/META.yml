@@ -19,7 +19,7 @@ name: Dir-Rename-WD
 provides:
   Dir::Rename::WD:
     file: lib/Dir/Rename/WD.pm
-    version: '0.001'
+    version: '0.002'
 requires:
   Cwd: '0'
   Errno: '0'
@@ -30,7 +30,7 @@ resources:
   bugtracker: https://rt.cpan.org/Public/Dist/Display.html?Name=Dir-Rename-WD
   homepage: https://metacpan.org/release/Dir-Rename-WD
   repository: git://github.com/perlancar/perl-Dir-Rename-WD.git
-version: '0.001'
+version: '0.002'
 x_Dist_Zilla:
   perl:
     version: '5.042000'
@@ -477,6 +477,8 @@ x_Dist_Zilla:
       is_trial: 0
     version: '6.036'
 x_authority: cpan:PERLANCAR
+x_contributors:
+  - 'perlancar <perlancar@gmail.com>'
 x_generated_by_perl: v5.42.0
 x_serialization_backend: 'YAML::Tiny version 1.76'
 x_spdx_expression: 'Artistic-1.0-Perl OR GPL-1.0-or-later'

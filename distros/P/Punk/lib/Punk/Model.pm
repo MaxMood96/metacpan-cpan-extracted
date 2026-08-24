@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk (); 
 
-our $VERSION = '0.30';
+our $VERSION = '0.31';
 
 1;
 
@@ -118,6 +118,7 @@ Every model on the same database shares one connection per worker.
     get(%key)                  -> row hashref | undef
     search(\%filter, \%opts)   -> { rows => [...], has_more_data => 0|1,
                                     next => $token | undef }
+    count(\%filter)            -> how many rows match
     all()                      -> search({}, {})
     create(\%data)             -> created row hashref
     update(\%key_and_changes)  -> updated row hashref
@@ -125,14 +126,107 @@ Every model on the same database shares one connection per worker.
 
 C<create> validates C<\%data> against the field schema (required
 included); C<update> validates the changes (the primary key excluded,
-required relaxed). A validation failure croaks. C<search> options are
-the backend's; both shipped backends take C<limit> and an opaque
-C<after> pagination token, and mint the token the same way, so a C<next>
-from one decodes on the other.
+required relaxed). A validation failure croaks. Both shipped backends take
+the same C<search> options - C<limit>, C<order_by> and an opaque C<after>
+pagination token - and mint the token the same way, so a C<next> from one
+decodes on the other.
 
 On L<Punk::Model::DBIx::Loop> each of these is the result the returned
 L<Punk::Future> B<resolves to>, not what the call hands back - see
 L</"A backend may return futures">.
+
+=head2 The filter
+
+A filter is a hashref of field name to either a plain value or a hashref
+of operator to value. Terms AND together.
+
+    { status => 'open' }                          status = ?
+    { closed => undef }                           closed IS NULL
+    { price  => { '>=' => 10, '<' => 50 } }       price >= ? AND price < ?
+    { id     => { in => \@ids } }                 id IN (?, ?, ...)
+    { email  => { like => '%@example.com' } }     email LIKE ?
+    { title  => { starts_with => '100%' } }       title LIKE ? ESCAPE '\'
+
+The operators are C<=> C<!=> C<E<lt>> C<E<lt>=> C<E<gt>> C<E<gt>=> C<in>
+C<not_in> C<like> and C<starts_with>, and that is the whole set. C<=> and
+C<!=> against C<undef> are C<IS NULL> and C<IS NOT NULL>; the ordered
+comparisons and C<like> refuse an undef. C<in> over an empty list matches
+nothing and C<not_in> over one matches everything, rather than being a
+syntax error. C<like> passes the value through with the caller's own
+wildcards; C<starts_with> escapes C<%>, C<_> and C<\> in the value and
+appends the wildcard itself, so C<'100%'> is the four characters and a
+prefix search cannot be widened by what a user typed.
+
+Every field name in a filter is checked against the model's declared
+fields and every operator against the set above B<before> any SQL exists,
+and the values are bound, never interpolated. That is what makes a filter
+that arrived in a request body safe to hand to C<search> - with one thing
+said plainly: names and operators are validated, values are not typed. A
+string where the column is an integer is the driver's to compare or
+refuse.
+
+A bare arrayref as a value croaks and names C<in>; an unknown field, an
+unknown operator, an empty operator hash and a misspelled option all
+croak naming what they saw.
+
+=head2 Ordering
+
+    order_by => 'created'
+    order_by => [ created => 'desc' ]
+    order_by => [ author => 'asc', created => 'desc' ]
+
+Columns and directions, validated the same way. The primary key is always
+appended as the tie-breaker when it is not named, in the direction of the
+last named column - so C<< created => 'desc' >> pages newest-first all the
+way down, ids included. Without that a non-unique sort column would skip
+and repeat rows across pages, invisibly. With no C<order_by> a search is
+ordered by the primary key, as it always was.
+
+=head2 Paging
+
+C<search> returns one page: C<limit> rows (default 20), C<has_more_data>
+from fetching one row past it, and C<next>, an opaque url-safe token that
+continues from the last row under the same ordering - a keyset
+continuation, never an offset, so a page is stable while rows are inserted
+ahead of it. Hand C<next> back as C<after>.
+
+A token belongs to the ordering it was minted under. Presented against a
+different C<order_by> it is refused rather than applied to the wrong
+columns; the plain token a search without C<order_by> mints has the shape
+it always had and still pages the plain ordering. A sort column holding
+NULL compares unknown and falls out of every page, which is the
+database's rule - order by columns that are NOT NULL.
+
+=head2 Schema
+
+A model declares its fields; it does not create its table. The
+Punk-Sqitch distribution manages the schema as a Sqitch plan:
+C<punk sqitch init> once, C<< punk sqitch add users --model User >> for a
+change drafted from the model's fields, C<punk sqitch deploy> to apply
+it, and a boot check that refuses to start an application whose schema is
+behind its plan. See L<Punk::Sqitch>.
+
+=head2 Transactions
+
+A transaction belongs to a database, not to a model, so it lives on the
+context: see L<Punk::Context/txn> and L<Punk::Txn>.
+
+    my $order = $c->txn(sub {
+        my ($tx) = @_;
+        my $o = $tx->model('Order')->create(\%data);
+        $tx->model('Stock')->update({ id => $sku, held => $held + 1 });
+        return $o;
+    });
+
+C<< $tx->model >> is the model bound to the transaction. On
+L<Punk::Model::DBI> every model on that database is inside it anyway -
+one connection per worker - so the binding is a check. On
+L<Punk::Model::DBIx::Loop> it is the only way in: a statement runs on a
+pool, DBIx::Loop pins a transaction to one slot, and a model reached
+through C<< $c->model >> inside the block runs B<outside> the
+transaction. The block's value comes back, on DBI as the value and on
+DBIx::Loop as a L<Punk::Future> that resolves after COMMIT; a die rolls
+back and rethrows.
 
 =head1 METHODS
 
@@ -142,8 +236,13 @@ The row named by C<%key> (usually the primary key) as a hashref, or undef.
 
 =head2 search(\%filter, \%opts)
 
-The C<{ rows, has_more_data, next }> page for the equality C<%filter> and
-backend C<%opts> (L<Punk::Model::DBI> takes C<limit> and C<after>).
+The C<{ rows, has_more_data, next }> page for C<%filter> (see L</"The
+filter">) and C<%opts>: C<limit>, C<order_by> and C<after>.
+
+=head2 count(\%filter)
+
+How many rows match C<%filter> - the same filter C<search> takes, the same
+validation, no page.
 
 =head2 all
 

@@ -67,7 +67,7 @@ use Exporter qw(import);
 #  Version information
 #
 $AUTHORITY='cpan:ASPEER';
-$VERSION='3.020';
+$VERSION='3.021';
 chomp($VERSION_GIT_SHA=do { local (@ARGV, $/) = ($_=__FILE__.'.sha'); <> if -f $_ });
 
 
@@ -576,6 +576,14 @@ sub handler : method {    # no subsort
     #
     my ($meta_hr, $data_ar)=@{$cache_inode_hr}{qw(meta data)};
     debug('meta_hr %s, ', Dumper($meta_hr));
+
+    #  Load page-declared dependencies before dispatching async handlers
+    #
+    if (my $require_fn=$meta_hr->{'require'}) {
+        local @INC=(@INC, $self->cwd());
+        $self->eval_require($require_fn, $meta_hr) ||
+            return err();
+    }
     
     
     #  Custom handler ?
@@ -615,7 +623,9 @@ sub handler : method {    # no subsort
     #
     if (WEBDYNE_PAGI && ($r->{'scope'}->{'type'} eq 'sse') && (my $sse=($self->{'_sse'} || $meta_hr->{'sse'}))) {
         my $sse_cr=&eval_cr($srce_inode, \"&${sse}");
-        $r->custom_response(HTTP_CONTINUE, sub { $sse_cr->($self) });
+        my $cgi_or=$self->{'_CGI'} || $self->CGI();
+        my $param_hr=$cgi_or->Vars();
+        $r->custom_response(HTTP_CONTINUE, sub { $sse_cr->($self, $param_hr) });
         return HTTP_CONTINUE
     }
 
@@ -628,7 +638,9 @@ sub handler : method {    # no subsort
         && (my $ws=($self->{'_ws'} || $meta_hr->{'ws'}))
     ) {
         my $ws_cr=&eval_cr($srce_inode, \"&${ws}");
-        $r->custom_response(HTTP_CONTINUE, sub { $ws_cr->($self) });
+        my $cgi_or=$self->{'_CGI'} || $self->CGI();
+        my $param_hr=$cgi_or->Vars();
+        $r->custom_response(HTTP_CONTINUE, sub { $ws_cr->($self, $param_hr) });
         return HTTP_CONTINUE
     }
 

@@ -768,7 +768,7 @@ int dbd_db_ping (SV * dbh)
 
     /* No matter what state we are in, send an empty query to the backend */
     TRACE_PQEXEC;
-    result = PQexec(imp_dbh->conn, "/* DBD::Pg ping test v3.21.0 */");
+    result = PQexec(imp_dbh->conn, "/* DBD::Pg ping test v3.21.1 */");
     TRACE_PQRESULTSTATUS;
     status = PQresultStatus(result);
     TRACE_PQCLEAR;
@@ -3092,7 +3092,7 @@ static SV * pg_destringify_array(pTHX_ imp_dbh_t *imp_dbh, char * input, sql_typ
     }
     input -= opening_braces;
 
-    New(0, string, strlen(input), char); /* Freed at end of this function */
+    New(0, string, strlen(input) + 1, char); /* Freed at end of this function */
     string[0] = '\0';
 
     av = currentav = topav = newAV();

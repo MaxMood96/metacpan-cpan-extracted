@@ -85,6 +85,6 @@
       },
       "x_IRC" : "irc://irc.perl.org/#dancer"
    },
-   "version" : "0.713",
+   "version" : "0.714",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

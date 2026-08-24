@@ -1,0 +1,193 @@
+---
+# fwupd firmware update daemon log enrichment.
+#
+# Gates on the syslog PROGRAM field being the daemon (fwupd) or one of the
+# clients that log under their own name: fwupdmgr, fwupdtool, and the
+# fwupd-refresh unit Debian and Ubuntu run from a timer. Patterns are anchored
+# (each must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with fwupd_ .
+#
+# The daemon and its clients write the same messages in two different shapes.
+# The daemon keeps its console format when its output is captured to syslog, so
+# its lines start with a time of day and a padded source-domain column:
+#
+#   11:21:52.150 FuEngine             failed to add device /sys/...: No medium found
+#
+# The clients write the bare message with nothing on the front. FWUPD_PREFIX
+# makes the whole prefix optional, so one pattern matches either. The time is
+# the daemon's own and carries no date, so the syslog timestamp is the one to
+# trust. fwupd_time is kept only for its sub-second ordering, which the syslog
+# stamp does not have.
+includes:
+- base
+vars:
+  # The daemon's time of day: "11:21:52.150". fwupd prints no date here.
+  FWUPD_TIME: '[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}'
+  # The source-domain column: a GObject class name such as FuEngine, FuMain or
+  # FuPluginUefiCapsule.
+  FWUPD_DOMAIN: '[A-Za-z][\w-]*'
+  # A metadata remote's short name: "lvfs", "lvfs-testing".
+  FWUPD_REMOTE: '[\w-]+'
+vars_templated:
+  # The optional daemon prefix: time of day then the padded domain column.
+  # Absent on everything the clients write.
+  FWUPD_PREFIX: '(?:(?<fwupd_time>[% FWUPD_TIME %]) +(?<fwupd_domain>[% FWUPD_DOMAIN %]) +)?'
+  # "fwupd 1.9.34 ready for requests (locale en_US.UTF-8)"
+  #
+  # The daemon is up. The version is pulled out because fwupd writes firmware,
+  # so which version did it is the first question after anything goes wrong.
+  FWUPD_READY: '[% FWUPD_PREFIX %]fwupd (?<fwupd_version>[% NOTSPACE %]) ready for requests(?: \(locale (?<fwupd_locale>[^)]*)\))?'
+  # "failed to add device /sys/devices/.../block/sr0: failed to open /dev/sr0:
+  #  No medium found"
+  #
+  # A device fwupd could not enumerate, and therefore is not offering updates
+  # for. The sysfs path identifies it. The reason is usually mundane, such as
+  # the empty optical drive above.
+  FWUPD_DEVICE_FAILED: '[% FWUPD_PREFIX %]failed to add device (?<fwupd_device_path>[% NOTSPACE %]): (?<fwupd_error>[% GREEDYDATA %])'
+  # "Updating lvfs": fwupdmgr refreshing a metadata remote. The remote is
+  # matched as a single word rather than as the rest of the line, so that
+  # "Updating the firmware on ..." is not read as a remote named "the".
+  FWUPD_UPDATING_REMOTE: '[% FWUPD_PREFIX %]Updating (?<fwupd_remote>[% FWUPD_REMOTE %])'
+  # "Successfully downloaded new metadata: 0 local devices supported"
+  #
+  # The count says how many devices on this host the freshly downloaded
+  # metadata covers. Zero means the refresh ran but there is nothing here it
+  # can ever update.
+  FWUPD_METADATA: '[% FWUPD_PREFIX %]Successfully downloaded new metadata: (?<fwupd_supported_devices>[% INT %]) local devices supported'
+  # Anything else. The gate is a short list of exact program names, and the
+  # prefix is still peeled off, so fwupd_domain survives on unclaimed lines.
+  # That is what makes a particular plugin's output findable.
+  FWUPD_MESSAGE: '[% FWUPD_PREFIX %](?<fwupd_message>.+)'
+vars_tests:
+  FWUPD_TIME:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '11:21:52.150'
+        result: '11:21:52.150'
+      - string: '00:40:52.210'
+        result: '00:40:52.210'
+    negative:
+      - '11:21:52'
+  FWUPD_DOMAIN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'FuEngine'
+        result: 'FuEngine'
+      - string: 'FuPluginUefiCapsule'
+        result: 'FuPluginUefiCapsule'
+    negative:
+      - '11:21:52.150'
+  FWUPD_REMOTE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'lvfs'
+        result: 'lvfs'
+      - string: 'lvfs-testing'
+        result: 'lvfs-testing'
+    negative:
+      - 'two words'
+  FWUPD_PREFIX:
+    # Wholly optional, so an anchored template would accept anything by
+    # consuming nothing. The tail is matched as well, to prove the prefix is
+    # what was consumed.
+    test_template: '^(?<TEST>[% TEST_VAR %])Updating'
+    positive:
+      - string: '11:21:52.150 FuEngine             Updating'
+        result: '11:21:52.150 FuEngine             '
+      - string: 'Updating'
+        result: ''
+    negative:
+      - '11:21:52.150 FuEngine             something else'
+  FWUPD_READY:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '00:40:52.210 FuMain               fwupd 1.9.34 ready for requests (locale en_US.UTF-8)'
+        result: '00:40:52.210 FuMain               fwupd 1.9.34 ready for requests (locale en_US.UTF-8)'
+      - string: 'fwupd 1.9.34 ready for requests'
+        result: 'fwupd 1.9.34 ready for requests'
+    negative:
+      - 'Updating lvfs'
+  FWUPD_DEVICE_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '11:21:52.150 FuEngine             failed to add device /sys/devices/pci0000:00/block/sr0: failed to open /dev/sr0: No medium found'
+        result: '11:21:52.150 FuEngine             failed to add device /sys/devices/pci0000:00/block/sr0: failed to open /dev/sr0: No medium found'
+    negative:
+      - 'Updating lvfs'
+  FWUPD_UPDATING_REMOTE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Updating lvfs'
+        result: 'Updating lvfs'
+    negative:
+      # Not a remote name, so this belongs to the catch-all.
+      - 'Updating the firmware on device 0123'
+  FWUPD_METADATA:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Successfully downloaded new metadata: 0 local devices supported'
+        result: 'Successfully downloaded new metadata: 0 local devices supported'
+      - string: 'Successfully downloaded new metadata: 3 local devices supported'
+        result: 'Successfully downloaded new metadata: 3 local devices supported'
+    negative:
+      - 'Updating lvfs'
+  FWUPD_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Updating the firmware on device 0123'
+        result: 'Updating the firmware on device 0123'
+      - string: '11:21:52.150 FuEngine             something new'
+        result: '11:21:52.150 FuEngine             something new'
+    negative:
+      - ''
+convert:
+  fwupd_supported_devices: int
+rules:
+  - name: fwupd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^(?:fwupd|fwupdmgr|fwupdtool|fwupd-refresh)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - FWUPD_READY
+      - FWUPD_DEVICE_FAILED
+      - FWUPD_METADATA
+      - FWUPD_UPDATING_REMOTE
+      # last: matches anything, which is only safe because the rule is gated
+      - FWUPD_MESSAGE
+    tests:
+      positive:
+        - string: '00:40:52.210 FuMain               fwupd 1.9.34 ready for requests (locale en_US.UTF-8)'
+          program: 'fwupd'
+          result:
+            fwupd_time: '00:40:52.210'
+            fwupd_domain: 'FuMain'
+            fwupd_version: '1.9.34'
+            fwupd_locale: 'en_US.UTF-8'
+        - string: '11:21:52.150 FuEngine             failed to add device /sys/devices/pci0000:00/block/sr0: failed to open /dev/sr0: No medium found'
+          program: 'fwupdtool'
+          result:
+            fwupd_time: '11:21:52.150'
+            fwupd_domain: 'FuEngine'
+            fwupd_device_path: '/sys/devices/pci0000:00/block/sr0'
+            fwupd_error: 'failed to open /dev/sr0: No medium found'
+        # The client form, with no prefix.
+        - string: 'Updating lvfs'
+          program: 'fwupdmgr'
+          result:
+            fwupd_remote: 'lvfs'
+        - string: 'Successfully downloaded new metadata: 0 local devices supported'
+          numeric:
+            - fwupd_supported_devices
+          program: 'fwupd-refresh'
+          result:
+            fwupd_supported_devices: '0'
+        - string: 'Updating the firmware on device 0123'
+          result:
+            fwupd_message: 'Updating the firmware on device 0123'
+      negative:
+        - ''
+        - string: '00:40:52.210 FuMain               fwupd 1.9.34 ready for requests (locale en_US.UTF-8)'
+          program: 'fwupd-extra'

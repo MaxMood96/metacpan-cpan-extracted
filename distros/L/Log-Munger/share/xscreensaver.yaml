@@ -1,0 +1,70 @@
+---
+# XScreenSaver lock-screen authentication log enrichment.
+#
+# Gates on the syslog PROGRAM field being xscreensaver or one of its helpers,
+# which is where the unlock attempts are logged (xscreensaver-auth in 6.x).
+# Patterns are anchored (each must match the whole MESSAGE) and first-match
+# wins. Every capture is namespaced with xscreensaver_ .
+#
+# The PAM chatter these binaries also emit -- "Authentication error; user=neti"
+# and the OpenPAM "in _pam_exec(): ..." lines -- comes from the PAM stack rather
+# than from XScreenSaver, and is handled by the gateless pam.yaml. Nothing here
+# is a catch-all, so those lines are left to it rather than being claimed twice.
+includes:
+- base
+vars_templated:
+  # "Failed login on display ":0" for "neti""
+  #
+  # The verb is captured rather than enumerated: only the failure is present in
+  # the logs this was written against, and guessing at the rest of the
+  # vocabulary would claim coverage that has not been checked. Whatever word
+  # XScreenSaver puts there lands in xscreensaver_result.
+  XSCREENSAVER_LOGIN: '(?<xscreensaver_result>[% WORD %]) login on display "(?<xscreensaver_display>[^"]*)" for "(?<xscreensaver_user>[^"]*)"'
+vars_tests:
+  XSCREENSAVER_LOGIN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Failed login on display ":0" for "neti"'
+        result: 'Failed login on display ":0" for "neti"'
+      - string: 'Successful login on display ":0.0" for "neti"'
+        result: 'Successful login on display ":0.0" for "neti"'
+      # a remote display, and a username the quoting has to hold together
+      - string: 'Failed login on display "workstation:1" for "some user"'
+        result: 'Failed login on display "workstation:1" for "some user"'
+    negative:
+      - 'Authentication error; user=neti'
+      - 'in _pam_exec(): pam_sm_setcred: pam_get_authtok(): authentication token not available'
+rules:
+  - name: xscreensaver
+    gate:
+      - field: PROGRAM
+        values:
+          # xscreensaver itself plus its helper binaries (xscreensaver-auth,
+          # xscreensaver-gfx, xscreensaver-systemd). Matched as a family so a
+          # helper renamed between releases does not silently stop matching.
+          - '//^xscreensaver(?:-[a-z]+)?$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - XSCREENSAVER_LOGIN
+    tests:
+      positive:
+        - string: 'Failed login on display ":0" for "neti"'
+          program: 'xscreensaver'
+          result:
+            xscreensaver_result: 'Failed'
+            xscreensaver_display: ':0'
+            xscreensaver_user: 'neti'
+        - string: 'Successful login on display ":0.0" for "neti"'
+          program: 'xscreensaver-auth'
+          result:
+            xscreensaver_result: 'Successful'
+            xscreensaver_display: ':0.0'
+            xscreensaver_user: 'neti'
+      negative:
+        - 'this is not an xscreensaver line at all'
+        # PAM's own lines, which pam.yaml owns
+        - 'Authentication error; user=neti'
+        - 'in _pam_exec(): pam_sm_setcred: pam_get_authtok(): authentication token not available'
+        - string: 'Failed login on display ":0" for "neti"'
+          program: 'xscreensaverx'

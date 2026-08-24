@@ -1,0 +1,41 @@
+NAME
+
+    Pod::DokuWiki - Convert POD to DokuWiki
+
+INSTALLATION
+
+    To install this module, run the following commands:
+
+        perl Makefile.PL
+        make
+        make test
+        make install
+
+SUPPORT AND DOCUMENTATION
+
+    After installing, you can find documentation for this module with the
+    perldoc command.
+
+        perldoc Pod::DokuWiki
+
+    You can also look for information at:
+
+    *   MetaCPAN: <https://metacpan.org/pod/Pod::DokuWiki>
+
+    *   The source repository on Codeberg:
+        <https://codeberg.org/mauke/Pod-DokuWiki>
+
+    *   The module's bug tracker:
+        <https://codeberg.org/mauke/Pod-DokuWiki/issues>
+
+COPYRIGHT & LICENSE
+
+    Copyright © 2026 Lukas Mai.
+
+    This program is free software; you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by the
+    Free Software Foundation, either version 3 of the License, or (at your
+    option) any later version.
+
+    See <https://www.gnu.org/licenses/> for more information.
+

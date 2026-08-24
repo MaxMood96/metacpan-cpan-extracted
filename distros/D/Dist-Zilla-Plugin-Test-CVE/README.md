@@ -23,13 +23,16 @@ Note that this module is _experimental_.  See ["SECURITY CONSIDERATIONS"](#secur
 
 # RECENT CHANGES
 
-Changes for version v0.1.2 (2025-08-19)
+Changes for version v0.1.3 (2026-08-23)
 
-- Enhancements
-    - Internal code improvements.
 - Documentation
-    - Added a discussion of the risks associated with the use/misuse of Test::CVE in the SECURITY CONSIDERATIONS.
-    - Include SECURITY CONSIDERATIONS in the README.
+    - Updated SUPPORT to clarify the minimum Perl version.
+    - Fixed typos.
+    - Updated module author.
+    - Updated copyright year.
+    - Fixed SOURCE link in README.
+- Tests
+    - Added tests.
 
 See the `Changes` file for more details.
 
@@ -86,7 +89,7 @@ For more information, see [How to install CPAN modules](https://www.cpan.org/mod
 
 # SECURITY CONSIDERATIONS
 
-This will only identify known CVEs in list dependencies.
+This will only identify known CVEs in listed dependencies.
 It may not identify CVEs in undeclared prerequisites or deep prerequisites.
 
 The results from running [Test::CVE](https://metacpan.org/pod/Test%3A%3ACVE) on a CPAN distribution may or may not be useful.
@@ -103,8 +106,7 @@ and then forget to remove the issue when a fix is released.
 
 Only the latest version of this module will be supported.
 
-This module requires Perl v5.20 or later.  Future releases may only support Perl versions released in the last ten
-years.
+This module requires Perl v5.20 or later, based on the minimum Perl supported by [Dist::Zilla](https://metacpan.org/pod/Dist%3A%3AZilla).
 
 ## Reporting Bugs and Submitting Feature Requests
 
@@ -121,15 +123,15 @@ then see `SECURITY.md` for instructions how to report security vulnerabilities.
 # SOURCE
 
 The development version is on github at [https://github.com/robrwo/perl-Dist-Zilla-Plugin-Test-CVE](https://github.com/robrwo/perl-Dist-Zilla-Plugin-Test-CVE)
-and may be cloned from [git://github.com/robrwo/perl-Dist-Zilla-Plugin-Test-CVE.git](git://github.com/robrwo/perl-Dist-Zilla-Plugin-Test-CVE.git)
+and may be cloned from [https://github.com/robrwo/perl-Dist-Zilla-Plugin-Test-CVE.git](https://github.com/robrwo/perl-Dist-Zilla-Plugin-Test-CVE.git)
 
 # AUTHOR
 
-Robert Rothenberg <rrwo@cpan.org>
+Robert Rothenberg <perl@rhizomnic.com>
 
 # COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2025 by Robert Rothenberg.
+This software is copyright (c) 2025-2026 by Robert Rothenberg.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

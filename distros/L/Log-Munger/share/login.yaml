@@ -1,0 +1,258 @@
+---
+# util-linux login(1) / console + tty login log enrichment.
+#
+# Gates on the syslog PROGRAM field being "login". This covers local console
+# and tty logins as well as the failure/root-login accounting messages emitted
+# by util-linux login. Patterns are anchored (each must match the whole
+# MESSAGE) and first-match wins. Every capture is namespaced with login_ .
+#
+# "pam_unix(login:session): session opened for user root" is emitted via PAM
+# and is handled by pam.yaml rather than here.
+includes:
+- base
+vars_templated:
+  # "FAILED LOGIN 3 FROM 203.0.113.7 FOR root, Authentication failure"
+  # The "FROM" token may be a tty (e.g. tty1) or a remote host / IP. Capture
+  # it into login_from; when it is an IP also capture it into login_src_ip so
+  # it can be geoip-enriched. Most specific first: IP variant before generic.
+  LOGIN_FAILED_COUNT_IP: 'FAILED LOGIN (?<login_count>[% INT %]) FROM (?<login_from>(?<login_src_ip>[% IP %])) FOR (?<login_user>[% USERNAME %]), (?<login_reason>[% GREEDYDATA %])'
+  # "FAILED LOGIN 1 FROM tty1 FOR root, Authentication failure"
+  LOGIN_FAILED_COUNT: 'FAILED LOGIN (?<login_count>[% INT %]) FROM (?<login_tty>[% NOTSPACE %]) FOR (?<login_user>[% USERNAME %]), (?<login_reason>[% GREEDYDATA %])'
+  # "FAILED LOGIN SESSION FROM tty1 FOR root, Authentication failure"
+  LOGIN_FAILED_SESSION: 'FAILED LOGIN SESSION FROM (?<login_tty>[% NOTSPACE %]) FOR (?<login_user>[% USERNAME %]), (?<login_reason>[% GREEDYDATA %])'
+  # "TOO MANY LOGIN TRIES (3) FROM tty1 FOR root, Authentication failure"
+  LOGIN_TOO_MANY: 'TOO MANY LOGIN TRIES \((?<login_count>[% INT %])\) FROM (?<login_tty>[% NOTSPACE %]) FOR (?<login_user>[% USERNAME %]), (?<login_reason>[% GREEDYDATA %])'
+  # "ROOT LOGIN  on '/dev/tty1'" (note the doubled space + quoted device) and
+  # "ROOT LOGIN ON tty1". Tolerate the quoting and either "on"/"ON".
+  LOGIN_ROOT: 'ROOT LOGIN +(?:on|ON) (?:''(?<login_tty>[% NOTSPACE %])''|(?<login_tty>[% NOTSPACE %]))(?: [% GREEDYDATA %])?'
+  # "LOGIN ON tty1 BY root"
+  LOGIN_ON_BY: 'LOGIN ON (?<login_tty>[% NOTSPACE %]) BY (?<login_user>[% USERNAME %])(?: [% GREEDYDATA %])?'
+  # ---- FreeBSD login(1) ----
+  # A different set of messages from util-linux, not spellings of the ones
+  # above, so they are separate patterns rather than alternations. Each has an
+  # "ON <tty>" form and a "FROM <host>" form, the latter used when login was
+  # invoked with -h. login_from carries whichever was given; login_src_ip is
+  # also set when it parses as an address, so it can be geoip-enriched.
+  # "ROOT LOGIN (root) ON ttyv0" / "ROOT LOGIN (root) ON ttyv0 FROM workstation"
+  LOGIN_FBSD_ROOT: 'ROOT LOGIN \((?<login_user>[% USERNAME %])\) ON (?<login_tty>[% NOTSPACE %])(?: FROM (?<login_from>(?<login_src_ip>[% IP %])|[% HOSTNAME %]))?'
+  # "login on ttyv0 as root"
+  LOGIN_FBSD_ON: 'login on (?<login_tty>[% NOTSPACE %]) as (?<login_user>[% USERNAME %])'
+  # "login from workstation as root"
+  LOGIN_FBSD_FROM: 'login from (?<login_from>(?<login_src_ip>[% IP %])|[% HOSTNAME %]) as (?<login_user>[% USERNAME %])'
+  # "2 LOGIN FAILURES ON ttyv0" / "2 LOGIN FAILURES ON ttyv0, root"
+  # The tty excludes a comma so the optional trailing username is not eaten.
+  LOGIN_FBSD_FAILURES_ON: '(?<login_count>[% INT %]) LOGIN FAILURES? ON (?<login_tty>[^\s,]+)(?:, (?<login_user>[% USERNAME %]))?'
+  # "2 LOGIN FAILURES FROM workstation" / "2 LOGIN FAILURES FROM workstation, root"
+  LOGIN_FBSD_FAILURES_FROM: '(?<login_count>[% INT %]) LOGIN FAILURES? FROM (?<login_from>(?<login_src_ip>[% IP %])|[^\s,]+)(?:, (?<login_user>[% USERNAME %]))?'
+  # "LOGIN root REFUSED (UNKNOWN) ON TTY ttyv0"
+  # "LOGIN root REFUSED (UNKNOWN) FROM workstation ON TTY ttyv0"
+  LOGIN_FBSD_REFUSED: 'LOGIN (?<login_user>[% USERNAME %]) REFUSED \((?<login_reason>[^)]*)\)(?: FROM (?<login_from>(?<login_src_ip>[% IP %])|[% HOSTNAME %]))? ON TTY (?<login_tty>[% NOTSPACE %])'
+vars_tests:
+  LOGIN_FAILED_COUNT_IP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'FAILED LOGIN 3 FROM 203.0.113.7 FOR root, Authentication failure'
+        result: 'FAILED LOGIN 3 FROM 203.0.113.7 FOR root, Authentication failure'
+    negative:
+      - 'FAILED LOGIN 1 FROM tty1 FOR root, Authentication failure'
+  LOGIN_FAILED_COUNT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'FAILED LOGIN 1 FROM tty1 FOR root, Authentication failure'
+        result: 'FAILED LOGIN 1 FROM tty1 FOR root, Authentication failure'
+    negative:
+      - 'FAILED LOGIN SESSION FROM tty1 FOR root, Authentication failure'
+  LOGIN_FAILED_SESSION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'FAILED LOGIN SESSION FROM tty1 FOR root, Authentication failure'
+        result: 'FAILED LOGIN SESSION FROM tty1 FOR root, Authentication failure'
+    negative:
+      - 'FAILED LOGIN 1 FROM tty1 FOR root, Authentication failure'
+  LOGIN_TOO_MANY:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'TOO MANY LOGIN TRIES (3) FROM tty1 FOR root, Authentication failure'
+        result: 'TOO MANY LOGIN TRIES (3) FROM tty1 FOR root, Authentication failure'
+    negative:
+      - 'FAILED LOGIN 1 FROM tty1 FOR root, Authentication failure'
+  LOGIN_ROOT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: "ROOT LOGIN  on '/dev/tty1'"
+        result: "ROOT LOGIN  on '/dev/tty1'"
+      - string: 'ROOT LOGIN ON tty1'
+        result: 'ROOT LOGIN ON tty1'
+    negative:
+      - 'LOGIN ON tty1 BY root'
+  LOGIN_ON_BY:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'LOGIN ON tty1 BY root'
+        result: 'LOGIN ON tty1 BY root'
+    negative:
+      - "ROOT LOGIN ON tty1"
+  LOGIN_FBSD_ROOT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'ROOT LOGIN (root) ON ttyv0'
+        result: 'ROOT LOGIN (root) ON ttyv0'
+      - string: 'ROOT LOGIN (root) ON ttyv0 FROM workstation'
+        result: 'ROOT LOGIN (root) ON ttyv0 FROM workstation'
+    negative:
+      # the util-linux spelling, which has no username in parens
+      - 'ROOT LOGIN ON tty1'
+  LOGIN_FBSD_ON:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'login on ttyv0 as root'
+        result: 'login on ttyv0 as root'
+    negative:
+      - 'login from workstation as root'
+  LOGIN_FBSD_FROM:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'login from workstation as root'
+        result: 'login from workstation as root'
+      - string: 'login from 203.0.113.7 as neti'
+        result: 'login from 203.0.113.7 as neti'
+    negative:
+      - 'login on ttyv0 as root'
+  LOGIN_FBSD_FAILURES_ON:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '2 LOGIN FAILURES ON ttyv0'
+        result: '2 LOGIN FAILURES ON ttyv0'
+      - string: '2 LOGIN FAILURES ON ttyv0, root'
+        result: '2 LOGIN FAILURES ON ttyv0, root'
+      # singular when there was only one
+      - string: '1 LOGIN FAILURE ON ttyv0'
+        result: '1 LOGIN FAILURE ON ttyv0'
+    negative:
+      - '2 LOGIN FAILURES FROM workstation'
+  LOGIN_FBSD_FAILURES_FROM:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '2 LOGIN FAILURES FROM workstation'
+        result: '2 LOGIN FAILURES FROM workstation'
+      - string: '2 LOGIN FAILURES FROM 203.0.113.7, root'
+        result: '2 LOGIN FAILURES FROM 203.0.113.7, root'
+    negative:
+      - '2 LOGIN FAILURES ON ttyv0'
+  LOGIN_FBSD_REFUSED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'LOGIN root REFUSED (UNKNOWN) ON TTY ttyv0'
+        result: 'LOGIN root REFUSED (UNKNOWN) ON TTY ttyv0'
+      - string: 'LOGIN root REFUSED (UNKNOWN) FROM workstation ON TTY ttyv0'
+        result: 'LOGIN root REFUSED (UNKNOWN) FROM workstation ON TTY ttyv0'
+    negative:
+      - 'LOGIN ON tty1 BY root'
+# Look up the source IP.
+geoip:
+  - login_src_ip
+# Coerce the failure/try count to an integer.
+convert:
+  login_count: int
+rules:
+  - name: login
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^login$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - LOGIN_FAILED_COUNT_IP
+      - LOGIN_FAILED_COUNT
+      - LOGIN_FAILED_SESSION
+      - LOGIN_TOO_MANY
+      - LOGIN_ROOT
+      - LOGIN_ON_BY
+      # ---- FreeBSD patterns (appended after the util-linux ones) ----
+      - LOGIN_FBSD_ROOT
+      - LOGIN_FBSD_ON
+      - LOGIN_FBSD_FROM
+      - LOGIN_FBSD_FAILURES_ON
+      - LOGIN_FBSD_FAILURES_FROM
+      - LOGIN_FBSD_REFUSED
+    tests:
+      positive:
+        - string: 'FAILED LOGIN 1 FROM tty1 FOR root, Authentication failure'
+          numeric:
+            - login_count
+          program: 'login'
+          result:
+            login_count: '1'
+            login_tty: 'tty1'
+            login_user: 'root'
+            login_reason: 'Authentication failure'
+        - string: 'FAILED LOGIN 3 FROM 203.0.113.7 FOR root, Authentication failure'
+          result:
+            login_count: '3'
+            login_from: '203.0.113.7'
+            login_src_ip: '203.0.113.7'
+            login_user: 'root'
+            login_reason: 'Authentication failure'
+        - string: 'FAILED LOGIN SESSION FROM tty1 FOR root, Authentication failure'
+          result:
+            login_tty: 'tty1'
+            login_user: 'root'
+            login_reason: 'Authentication failure'
+        - string: 'TOO MANY LOGIN TRIES (3) FROM tty1 FOR root, Authentication failure'
+          result:
+            login_count: '3'
+            login_tty: 'tty1'
+            login_user: 'root'
+            login_reason: 'Authentication failure'
+        - string: "ROOT LOGIN  on '/dev/tty1'"
+          result:
+            login_tty: '/dev/tty1'
+        - string: 'ROOT LOGIN ON tty1'
+          result:
+            login_tty: 'tty1'
+        - string: 'LOGIN ON tty1 BY root'
+          result:
+            login_tty: 'tty1'
+            login_user: 'root'
+        # -- FreeBSD login(1) --
+        - string: 'ROOT LOGIN (root) ON ttyv0'
+          result:
+            login_user: 'root'
+            login_tty: 'ttyv0'
+        - string: 'ROOT LOGIN (root) ON ttyv0 FROM workstation'
+          result:
+            login_user: 'root'
+            login_tty: 'ttyv0'
+            login_from: 'workstation'
+        - string: 'login on ttyv0 as root'
+          result:
+            login_tty: 'ttyv0'
+            login_user: 'root'
+        - string: 'login from 203.0.113.7 as neti'
+          result:
+            login_from: '203.0.113.7'
+            login_src_ip: '203.0.113.7'
+            login_user: 'neti'
+        - string: '2 LOGIN FAILURES ON ttyv0, root'
+          result:
+            login_count: '2'
+            login_tty: 'ttyv0'
+            login_user: 'root'
+        - string: '2 LOGIN FAILURES FROM 203.0.113.7, root'
+          result:
+            login_count: '2'
+            login_from: '203.0.113.7'
+            login_src_ip: '203.0.113.7'
+            login_user: 'root'
+        - string: 'LOGIN root REFUSED (UNKNOWN) FROM workstation ON TTY ttyv0'
+          result:
+            login_user: 'root'
+            login_reason: 'UNKNOWN'
+            login_from: 'workstation'
+            login_tty: 'ttyv0'
+      negative:
+        - 'this is not a login line at all'
+        - 'Jul 15 10:00:00 host cron[123]: session opened for user root'
+        - string: 'FAILED LOGIN 1 FROM tty1 FOR root, Authentication failure'
+          program: 'login-extra'

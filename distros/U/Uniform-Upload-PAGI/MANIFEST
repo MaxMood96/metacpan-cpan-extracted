@@ -1,9 +1,15 @@
 Changes
+CONTRIBUTING.md
+examples/demo.pl
 lib/Uniform/Upload/PAGI.pm
+LICENSE
 Makefile.PL
 MANIFEST
 MANIFEST.SKIP
+README.md
+SECURITY.md
 t/00-load.t
 t/01-methods.t
+t/02-inheritance.t
 META.yml                                 Module YAML meta-data (added by MakeMaker)
 META.json                                Module JSON meta-data (added by MakeMaker)

@@ -1,3 +1,11 @@
+2026-08-24  3.3.5 Dave Cross <dave@perlhacks.com>
+
+  * Change URI in test to avoid redirection which was causing test failures on Perl 5.42.3+
+
+2025-10-20  3.3.4 Dave Cross <dave@perlhacks.com>
+
+  * Stop using "use experimental" to load "try"
+
 2025-04-29  3.3.3 Dave Cross <dave@perlhacks.com>
 
   * Fix spam regex check for entry content

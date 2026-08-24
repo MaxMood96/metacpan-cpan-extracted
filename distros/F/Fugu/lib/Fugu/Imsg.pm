@@ -18,7 +18,7 @@
 use v5.36;
 
 package Fugu::Imsg;
-our $VERSION = '0.1.2';
+our $VERSION = '0.2.0';
 
 use Errno qw(EPIPE);
 use IO::Select;
@@ -98,7 +98,7 @@ sub send ( $self, %args )
 #	returns undef on timeout, clean EOF, or an unrecoverable
 #	framing error. For a framing error the codec sets $! to EBADMSG,
 #	and this method marks the connection dead per
-#	spec/MDNS-Imsg.md §4.
+#	spec/protocol/MDNS-Imsg.md §4.
 #
 #	A timeout of 0 takes what already arrived and returns. This is
 #	the form for an event loop, which knows the socket is readable

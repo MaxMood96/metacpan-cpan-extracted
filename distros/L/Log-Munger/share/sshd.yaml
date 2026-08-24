@@ -1,0 +1,913 @@
+---
+# OpenSSH (sshd) authentication / connection log enrichment.
+#
+# Gates on the syslog PROGRAM field being "sshd" or "sshd-session" (newer
+# OpenSSH splits the per-connection worker into an "sshd-session" program).
+# Patterns are anchored (each must match the whole MESSAGE) and first-match
+# wins. Every capture is namespaced with ssh_ .
+includes:
+- base
+vars_templated:
+  # The authentication methods sshd names in its Accepted / Failed / Postponed /
+  # Partial lines, shared so the four stay in step.
+  #
+  # "none" and "keyboard-interactive/pam" both have to be here. A scan opens
+  # with a "none" probe to find out which methods a host will offer, so
+  # "Failed none for invalid user ..." is one of the most common lines on an
+  # exposed host, and any PAM-backed sshd -- which is to say most of them --
+  # writes "keyboard-interactive/pam" rather than the bare method name.
+  #
+  # The longer keyboard-interactive form is listed before the shorter one. The
+  # engine would backtrack into the right branch either way, but there is no
+  # reason to make it.
+  SSH_AUTH_METHOD: 'publickey|password|keyboard-interactive/pam|keyboard-interactive|gssapi-with-mic|hostbased|none'
+  # The username as the client sent it, for the lines that report one sshd
+  # rejected. base's USERNAME is [a-zA-Z0-9._-]+, which is what a real account
+  # looks like; what a scanner offers is not:
+  #
+  #   Invalid user root/1 from 203.0.113.7 port 40000
+  #   Invalid user p@ssw0rd from 203.0.113.7 port 40000
+  #   Invalid user intel(r) from 203.0.113.7 port 40000
+  #   Invalid user lost+found from 203.0.113.7 port 40000
+  #   Invalid user  from 203.0.113.7 port 40000
+  #
+  # Held to USERNAME those lines match nothing at all, which drops exactly the
+  # traffic worth keeping. The zero-width case is real: sshd prints an empty
+  # field for an empty username, leaving two spaces.
+  #
+  # Used only where sshd has already said the account is invalid or illegal.
+  # The patterns for a successful auth keep USERNAME, because there the name
+  # is an account that exists.
+  SSH_ANY_USERNAME: '\S*'
+  # Accepted publickey/password/keyboard-interactive. For publickey OpenSSH
+  # appends the key type + fingerprint ("ssh2: RSA SHA256:...").
+  SSH_ACCEPTED: 'Accepted (?<ssh_method>[% SSH_AUTH_METHOD %]) for (?<ssh_user>[% USERNAME %]) from (?<ssh_src_ip>[% IP %]) port (?<ssh_src_port>[% INT %])(?: ssh2(?::? (?<ssh_key_type>[% WORD %]) (?<ssh_key_fingerprint>[% NOTSPACE %]))?)?'
+  # Failed password/publickey, optionally "for invalid user X".
+  SSH_FAILED: 'Failed (?<ssh_method>[% SSH_AUTH_METHOD %]) for (?:(?<ssh_invalid>invalid) user )?(?<ssh_user>[% SSH_ANY_USERNAME %]) from (?<ssh_src_ip>[% IP %]) port (?<ssh_src_port>[% INT %])(?: ssh2)?(?: [% GREEDYDATA %])?'
+  # "Invalid user oracle from 203.0.113.7 port 40000"
+  SSH_INVALID_USER: 'Invalid user (?<ssh_user>[% SSH_ANY_USERNAME %]) from (?<ssh_src_ip>[% IP %])(?: port (?<ssh_src_port>[% INT %]))?(?: [% GREEDYDATA %])?'
+  # "Connection closed by 192.0.2.5 port 40000 [preauth]" and the
+  # "authenticating user root" variant.
+  SSH_CONN_CLOSED: 'Connection closed by (?:(?:(?<ssh_conn_state>authenticating|invalid) )?user (?<ssh_user>[% SSH_ANY_USERNAME %]) )?(?<ssh_src_ip>[% IP %]) port (?<ssh_src_port>[% INT %])(?: [% GREEDYDATA %])?'
+  # "Disconnected from ..." and "Received disconnect from ...".
+  SSH_DISCONNECT: '(?:Disconnected|Received disconnect) from (?:(?:(?<ssh_conn_state>authenticating|invalid) )?user (?<ssh_user>[% SSH_ANY_USERNAME %]) )?(?<ssh_src_ip>[% IP %]) port (?<ssh_src_port>[% INT %])(?::[% GREEDYDATA %]| [% GREEDYDATA %])?'
+  # ------------------------------------------------------------------
+  # New (additive) message types.
+  # ------------------------------------------------------------------
+  # "error: maximum authentication attempts exceeded for <user> from <ip>
+  #  port <port> ssh2 [preauth]" (also "invalid user" variant).
+  SSH_MAX_AUTH: 'error: maximum authentication attempts exceeded for (?:(?<ssh_invalid>invalid) user )?(?<ssh_user>[% SSH_ANY_USERNAME %]) from (?<ssh_src_ip>[% IP %]) port (?<ssh_src_port>[% INT %])(?: ssh2)?(?: [% GREEDYDATA %])?'
+  # "error: Too many authentication failures for <user>" and the PAM-style
+  # "...; logname= uid=0 euid=0 tty=ssh ruser= rhost=..." trailer.
+  SSH_TOO_MANY: '(?:error: )?Too many authentication failures for (?:(?<ssh_invalid>invalid) user )?(?<ssh_user>[% USERNAME %])(?:\s*;\s*(?<ssh_pam_kv>[% GREEDYDATA %]))?'
+  # "User <user> from <ip> not allowed because not listed in AllowUsers"
+  # and "...not in any group" / "...listed in DenyUsers" variants.
+  #
+  # The "from <ip>" clause is optional. sshd omits it for the refusals decided
+  # before any connection is considered -- an account whose shell or home is
+  # missing, or whose password has expired:
+  #
+  #   User backup not allowed because shell /usr/local/bin/scponly does not exist
+  SSH_NOT_ALLOWED: 'User (?<ssh_user>[% USERNAME %])(?: from (?<ssh_src_ip>[% IP %]))? not allowed because (?<ssh_reason>[% GREEDYDATA %])'
+  # Reverse-mapping mismatch: "Address <ip> maps to <host>, but this does not
+  # map back to the address - POSSIBLE BREAK-IN ATTEMPT!"
+  #
+  # Current OpenSSH ends the sentence with a full stop and leaves the warning
+  # off, the same split as SSH_REVERSE_MAP_FAILED below.
+  SSH_REVERSE_MAP: 'Address (?<ssh_src_ip>[% IP %]) maps to (?<ssh_rev_host>[% HOSTNAME %]), but this does not map back to the address(?:\.| - POSSIBLE BREAK-IN ATTEMPT!)(?: [% GREEDYDATA %])?'
+  # The other half of the UseDNS story: "reverse mapping checking getaddrinfo
+  # for <host> [<ip>] failed." -- sshd got a PTR back, then could not resolve
+  # that name forward again.
+  #
+  # SSH_REVERSE_MAP above covers the case where the forward lookup succeeds and
+  # disagrees; this one covers the forward lookup failing outright, which is a
+  # different message entirely and by far the more common of the two. On a host
+  # with UseDNS on it is written once per connection, so a single scanner with
+  # broken rDNS can make it the highest-volume line in the auth log.
+  #
+  # The name is whatever the PTR returned, so it is matched as NOTSPACE rather
+  # than HOSTNAME: the whole reason the line exists is that the value did not
+  # resolve, and it need not be well-formed.
+  #
+  # The trailing clause is "failed." on current OpenSSH and "failed -
+  # POSSIBLE BREAK-IN ATTEMPT!" on releases that predate the split.
+  SSH_REVERSE_MAP_FAILED: 'reverse mapping checking getaddrinfo for (?<ssh_rev_host>[% NOTSPACE %]) \[(?<ssh_src_ip>[% IP %])\] failed(?:\.| - POSSIBLE BREAK-IN ATTEMPT!)(?: [% GREEDYDATA %])?'
+  # "Did not receive identification string from <ip> port <port>".
+  SSH_NO_IDENT: 'Did not receive identification string from (?<ssh_src_ip>[% IP %])(?: port (?<ssh_src_port>[% INT %]))?(?: [% GREEDYDATA %])?'
+  # "fatal: Timeout before authentication for <ip> port <port>".
+  # sshd raises this through fatal(), so the line normally carries the "fatal: "
+  # prefix. It is optional here because the prefix is added by the logging
+  # call rather than being part of the message, and a relay or a reformatter
+  # in front of the file being read can have taken it off.
+  SSH_TIMEOUT: '(?:fatal: )?Timeout before authentication for (?<ssh_src_ip>[% IP %]) port (?<ssh_src_port>[% INT %])(?: [% GREEDYDATA %])?'
+  # The older wording of the same event, which names both ends and the pid
+  # rather than the peer's port:
+  #
+  #   Timeout before authentication for connection from 203.0.113.7 to 198.51.100.1, pid = 12345
+  SSH_TIMEOUT_CONN: '(?:fatal: )?Timeout before authentication for connection from (?<ssh_src_ip>[% IP %]) to (?<ssh_dst_ip>[% IP %])(?:, pid = (?<ssh_conn_pid>[% INT %]))?(?: [% GREEDYDATA %])?'
+  # OpenSSH 9.8+ PerSourcePenalties turning a source away before it can speak:
+  #
+  #   drop connection #10 from [203.0.113.7]:40000 on [198.51.100.1]:22 penalty: failed authentication
+  #
+  # The trailing clause is the reason the penalty was applied. The same
+  # "drop connection #N from ... on ..." opening is also used for the
+  # MaxStartups refusal, whose tail is "past MaxStartups" rather than a
+  # penalty, so both are captured into ssh_drop_reason.
+  SSH_DROP_CONNECTION: 'drop connection #(?<ssh_drop_count>[% INT %]) from \[(?<ssh_src_ip>[% IP %])\]:(?<ssh_src_port>[% INT %])(?: on \[(?<ssh_dst_ip>[% IP %])\]:(?<ssh_dst_port>[% INT %]))?(?:[ :]+(?:penalty: )?(?<ssh_drop_reason>[% GREEDYDATA %]))?'
+  # "Received signal 15; terminating." -- an orderly shutdown, which is the
+  # only thing distinguishing a restart from a crash in the log.
+  SSH_SIGNAL: 'Received signal (?<ssh_signal>[% INT %]); terminating\.(?: [% GREEDYDATA %])?'
+  # "Connection reset by <ip> port <port> [preauth]" (optionally with a
+  # "authenticating/invalid user X" prefix, mirroring SSH_CONN_CLOSED).
+  SSH_CONN_RESET: 'Connection reset by (?:(?:(?<ssh_conn_state>authenticating|invalid) )?user (?<ssh_user>[% SSH_ANY_USERNAME %]) )?(?<ssh_src_ip>[% IP %]) port (?<ssh_src_port>[% INT %])(?: [% GREEDYDATA %])?'
+  # Startup: "Server listening on 0.0.0.0 port 22." (IPv4 or IPv6 bind addr).
+  SSH_LISTENING: 'Server listening on (?<ssh_listen_addr>[% NOTSPACE %]) port (?<ssh_listen_port>[% INT %])\.(?: [% GREEDYDATA %])?'
+  # MFA: "Postponed publickey for <user> from <ip> port <port> ssh2 [preauth]".
+  SSH_POSTPONED: 'Postponed (?<ssh_method>[% SSH_AUTH_METHOD %]) for (?:(?<ssh_invalid>invalid) user )?(?<ssh_user>[% SSH_ANY_USERNAME %]) from (?<ssh_src_ip>[% IP %]) port (?<ssh_src_port>[% INT %])(?: ssh2)?(?: [% GREEDYDATA %])?'
+  # MFA: "Partial authentication for <user> from <ip> port <port> ssh2 [preauth]".
+  SSH_PARTIAL: 'Partial authentication(?: for)? (?:(?<ssh_invalid>invalid) user )?(?<ssh_user>[% SSH_ANY_USERNAME %]) from (?<ssh_src_ip>[% IP %]) port (?<ssh_src_port>[% INT %])(?: ssh2)?(?: [% GREEDYDATA %])?'
+  # "Accepted publickey ... ssh2: ED25519-CERT SHA256:... ID user (serial N) CA ...".
+  # Captures the certificate identity clause when present.
+  SSH_ACCEPTED_CERT: 'Accepted (?<ssh_method>publickey) for (?<ssh_user>[% USERNAME %]) from (?<ssh_src_ip>[% IP %]) port (?<ssh_src_port>[% INT %]) ssh2: (?<ssh_key_type>[% NOTSPACE %]) (?<ssh_key_fingerprint>[% NOTSPACE %]) ID (?<ssh_cert_id>[% NOTSPACE %]) \(serial (?<ssh_cert_serial>[% INT %])\)(?: [% GREEDYDATA %])?'
+  # ------------------------------------------------------------------
+  # Connections that never reached authentication.
+  #
+  # These are what an exposed host mostly logs. A scanner that opens a socket
+  # and speaks something other than SSH, or offers only ciphers the host
+  # retired years ago, never gets as far as a username, so none of the auth
+  # patterns above see it at all. Left unmatched they are invisible, which
+  # makes the auth log look far quieter than the host actually is.
+  # ------------------------------------------------------------------
+  # "error: kex_exchange_identification: Connection closed by remote host"
+  # "error: kex_exchange_identification: client sent invalid protocol identifier"
+  # "error: kex_exchange_identification: read: Connection reset by peer"
+  #
+  # Almost certainly the single highest-volume sshd line on anything reachable
+  # from the internet. The message carries no address of its own -- the peer
+  # is on the neighbouring "Connection closed by <ip>" line, which
+  # SSH_CONN_CLOSED picks up -- so this captures the reason and leaves the
+  # correlation to the consumer.
+  #
+  # FreeBSD builds its base OpenSSH with internal symbols renamed to an Fssh_
+  # prefix so they cannot collide with a libssh linked into the same process,
+  # and the renamed symbol is what reaches the log:
+  #   error: Fssh_kex_exchange_identification: read: Connection reset by peer
+  # The prefix is optional here and is not captured, so both spellings land in
+  # the same field.
+  SSH_KEX_ERROR: 'error: (?:Fssh_)?kex_exchange_identification: (?<ssh_kex_error>[% GREEDYDATA %])'
+  # "Unable to negotiate with 203.0.113.7 port 44444: no matching host key type
+  #  found. Their offer: ssh-rsa"
+  #
+  # The offer is captured separately because it is the closest thing sshd gives
+  # to a fingerprint of the client. A host that has just tightened its
+  # KexAlgorithms or Ciphers shows its locked-out clients here.
+  SSH_NO_NEGOTIATE: 'Unable to negotiate with (?<ssh_src_ip>[% IP %]) port (?<ssh_src_port>[% INT %]): (?<ssh_negotiate_error>.*?)(?:\. Their offer: (?<ssh_peer_offer>[% GREEDYDATA %]))?'
+  # "banner exchange: Connection from 203.0.113.7 port 44444: invalid format"
+  SSH_BANNER_EXCHANGE: 'banner exchange: Connection from (?<ssh_src_ip>[% IP %]) port (?<ssh_src_port>[% INT %]): (?<ssh_banner_error>[% GREEDYDATA %])'
+  # "Bad protocol version identification ''GET / HTTP/1.1'' from 203.0.113.7 port 44444"
+  #
+  # A web crawler, a TLS probe or a mistargeted health check landing on port
+  # 22. The identifier is captured verbatim, since what was sent is the line's
+  # entire content.
+  SSH_BAD_PROTOCOL: 'Bad protocol version identification ''(?<ssh_bad_protocol>[^'']*)'' from (?<ssh_src_ip>[% IP %])(?: port (?<ssh_src_port>[% INT %]))?(?: [% GREEDYDATA %])?'
+  # "Connection from 203.0.113.7 port 44444 on 192.0.2.1 port 22"
+  #
+  # Only logged at LogLevel VERBOSE, which is also the level that produces the
+  # kex and banner failures above. This is the line saying which peer those
+  # belonged to.
+  SSH_CONN_FROM: 'Connection from (?<ssh_src_ip>[% IP %]) port (?<ssh_src_port>[% INT %])(?: on (?<ssh_dst_ip>[% IP %]) port (?<ssh_dst_port>[% INT %]))?(?: [% GREEDYDATA %])?'
+  # "error: PAM: Authentication failure for root from 203.0.113.7"
+  # "error: PAM: Authentication failure for illegal user admin from mail.example.net"
+  #
+  # PAM reports the peer as whatever it resolved, so the source is matched as
+  # an address first and a hostname second. Only one of the two captures is
+  # ever set, which keeps the address in ssh_src_ip where the geoip lookup
+  # expects it instead of burying it in a field that is sometimes a name.
+  SSH_PAM_ERROR: 'error: PAM: (?<ssh_pam_error>.*?) for (?:(?<ssh_invalid>illegal|invalid) user )?(?<ssh_user>[% USERNAME %]) from (?:(?<ssh_src_ip>[% IP %])|(?<ssh_src_host>[% HOSTNAME %]))'
+  # "error: Bind to port 2222 on 0.0.0.0 failed: Address already in use."
+  #
+  # A listener that never came up. Its own pattern because the port is the
+  # substance of the line, and because it would otherwise be indistinguishable
+  # from the generic error tail below.
+  SSH_BIND_FAILED: 'error: Bind to port (?<ssh_listen_port>[% INT %]) on (?<ssh_listen_addr>[% NOTSPACE %]) failed: (?<ssh_error>[% GREEDYDATA %])'
+  # "fatal: rexec of /usr/libexec/sshd-session failed: No such file or directory"
+  #
+  # OpenSSH 9.8 moved the per-connection worker into a separate sshd-session
+  # binary that the listener re-executes. If the two are out of step -- a
+  # partial upgrade, a chroot missing the new path -- every connection dies
+  # here, and nothing else in the log says why.
+  SSH_REXEC_FAILED: 'fatal: rexec of (?<ssh_rexec_path>[% NOTSPACE %]) failed: (?<ssh_error>[% GREEDYDATA %])'
+  # The generic "<level>: <function>: <detail>" tail sshd uses for failures that
+  # have no message of their own, e.g.
+  #   fatal: userauth_pubkey: parse publickey packet: incomplete message [preauth]
+  #   error: send_rexec_state: ssh_msg_send failed
+  #   error: Fssh_ssh_msg_send: write: Broken pipe
+  #
+  # Kept last of the error patterns because it matches the shape of most of
+  # them. The Fssh_ prefix is stripped for the same reason as in SSH_KEX_ERROR,
+  # so a FreeBSD host and a Linux host name the same function identically.
+  SSH_ERROR: '(?<ssh_level>error|fatal): (?:Fssh_)?(?<ssh_function>[% NOTSPACE_NO_COLON %]): (?<ssh_error>.*?)(?: \[(?<ssh_preauth>preauth)\])?'
+vars_tests:
+  SSH_ACCEPTED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Accepted publickey for neti from 192.0.2.5 port 54321 ssh2: RSA SHA256:AbCdEf0123456789'
+        result: 'Accepted publickey for neti from 192.0.2.5 port 54321 ssh2: RSA SHA256:AbCdEf0123456789'
+      - string: 'Accepted password for alice from 198.51.100.9 port 40000 ssh2'
+        result: 'Accepted password for alice from 198.51.100.9 port 40000 ssh2'
+    negative:
+      - 'Failed password for root from 203.0.113.7 port 44444 ssh2'
+  SSH_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Failed password for root from 203.0.113.7 port 44444 ssh2'
+        result: 'Failed password for root from 203.0.113.7 port 44444 ssh2'
+      - string: 'Failed password for invalid user admin from 203.0.113.7 port 44444 ssh2'
+        result: 'Failed password for invalid user admin from 203.0.113.7 port 44444 ssh2'
+    negative:
+      - 'Accepted password for alice from 198.51.100.9 port 40000 ssh2'
+  SSH_INVALID_USER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Invalid user oracle from 203.0.113.7 port 40000'
+        result: 'Invalid user oracle from 203.0.113.7 port 40000'
+    negative:
+      - 'Accepted password for alice from 198.51.100.9 port 40000 ssh2'
+  SSH_CONN_CLOSED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Connection closed by 192.0.2.5 port 40000 [preauth]'
+        result: 'Connection closed by 192.0.2.5 port 40000 [preauth]'
+      - string: 'Connection closed by authenticating user root 203.0.113.7 port 44444 [preauth]'
+        result: 'Connection closed by authenticating user root 203.0.113.7 port 44444 [preauth]'
+    negative:
+      - 'Disconnected from 198.51.100.9 port 40000'
+  SSH_DISCONNECT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Disconnected from 198.51.100.9 port 40000'
+        result: 'Disconnected from 198.51.100.9 port 40000'
+      - string: 'Received disconnect from 203.0.113.7 port 44444:11: Bye Bye [preauth]'
+        result: 'Received disconnect from 203.0.113.7 port 44444:11: Bye Bye [preauth]'
+    negative:
+      - 'Connection closed by 192.0.2.5 port 40000 [preauth]'
+  SSH_MAX_AUTH:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'error: maximum authentication attempts exceeded for root from 203.0.113.7 port 44444 ssh2 [preauth]'
+        result: 'error: maximum authentication attempts exceeded for root from 203.0.113.7 port 44444 ssh2 [preauth]'
+      - string: 'error: maximum authentication attempts exceeded for invalid user admin from 198.51.100.9 port 40000 ssh2 [preauth]'
+        result: 'error: maximum authentication attempts exceeded for invalid user admin from 198.51.100.9 port 40000 ssh2 [preauth]'
+    negative:
+      - 'Accepted password for alice from 198.51.100.9 port 40000 ssh2'
+  SSH_TOO_MANY:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'error: Too many authentication failures for root'
+        result: 'error: Too many authentication failures for root'
+      - string: 'Too many authentication failures for invalid user admin; logname= uid=0 euid=0 tty=ssh ruser= rhost=203.0.113.7'
+        result: 'Too many authentication failures for invalid user admin; logname= uid=0 euid=0 tty=ssh ruser= rhost=203.0.113.7'
+    negative:
+      - 'Accepted password for alice from 198.51.100.9 port 40000 ssh2'
+  SSH_NOT_ALLOWED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'User root from 203.0.113.7 not allowed because not listed in AllowUsers'
+        result: 'User root from 203.0.113.7 not allowed because not listed in AllowUsers'
+      - string: 'User oracle from 198.51.100.9 not allowed because none of user''s groups are listed in AllowGroups'
+        result: 'User oracle from 198.51.100.9 not allowed because none of user''s groups are listed in AllowGroups'
+      # no connection named, so no "from <ip>"
+      - string: 'User backup not allowed because shell /usr/local/bin/scponly does not exist'
+        result: 'User backup not allowed because shell /usr/local/bin/scponly does not exist'
+    negative:
+      - 'Accepted password for alice from 198.51.100.9 port 40000 ssh2'
+  SSH_ANY_USERNAME:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'oracle'
+        result: 'oracle'
+      - string: 'root/1'
+        result: 'root/1'
+      - string: 'p@ssw0rd'
+        result: 'p@ssw0rd'
+      - string: 'intel(r)'
+        result: 'intel(r)'
+      - string: 'lost+found'
+        result: 'lost+found'
+      # sshd prints an empty field when the client sent no username
+      - string: ''
+        result: ''
+    negative:
+      # a name with a space in it would run past the field in every line that
+      # uses this, so it must not match
+      - 'two words'
+  SSH_REVERSE_MAP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Address 203.0.113.7 maps to scan.example.net, but this does not map back to the address - POSSIBLE BREAK-IN ATTEMPT!'
+        result: 'Address 203.0.113.7 maps to scan.example.net, but this does not map back to the address - POSSIBLE BREAK-IN ATTEMPT!'
+      # current OpenSSH, no warning appended
+      - string: 'Address 203.0.113.7 maps to scan.example.net, but this does not map back to the address.'
+        result: 'Address 203.0.113.7 maps to scan.example.net, but this does not map back to the address.'
+    negative:
+      - 'Accepted password for alice from 198.51.100.9 port 40000 ssh2'
+      - 'reverse mapping checking getaddrinfo for scan.example.net [203.0.113.7] failed.'
+  SSH_REVERSE_MAP_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'reverse mapping checking getaddrinfo for scan.example.net [203.0.113.7] failed.'
+        result: 'reverse mapping checking getaddrinfo for scan.example.net [203.0.113.7] failed.'
+      # the pre-split wording
+      - string: 'reverse mapping checking getaddrinfo for scan.example.net [203.0.113.7] failed - POSSIBLE BREAK-IN ATTEMPT!'
+        result: 'reverse mapping checking getaddrinfo for scan.example.net [203.0.113.7] failed - POSSIBLE BREAK-IN ATTEMPT!'
+      # a PTR that is not a well-formed hostname still has to be captured
+      - string: 'reverse mapping checking getaddrinfo for 69-5-169-102.example.invalid. [203.0.113.7] failed.'
+        result: 'reverse mapping checking getaddrinfo for 69-5-169-102.example.invalid. [203.0.113.7] failed.'
+    negative:
+      - 'Address 203.0.113.7 maps to scan.example.net, but this does not map back to the address - POSSIBLE BREAK-IN ATTEMPT!'
+  SSH_NO_IDENT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Did not receive identification string from 203.0.113.7 port 44444'
+        result: 'Did not receive identification string from 203.0.113.7 port 44444'
+      - string: 'Did not receive identification string from 198.51.100.9'
+        result: 'Did not receive identification string from 198.51.100.9'
+    negative:
+      - 'Accepted password for alice from 198.51.100.9 port 40000 ssh2'
+  SSH_TIMEOUT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Timeout before authentication for 203.0.113.7 port 44444'
+        result: 'Timeout before authentication for 203.0.113.7 port 44444'
+    negative:
+      - 'Connection reset by 203.0.113.7 port 44444 [preauth]'
+      - 'Timeout before authentication for connection from 203.0.113.7 to 198.51.100.1, pid = 12345'
+  SSH_TIMEOUT_CONN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Timeout before authentication for connection from 203.0.113.7 to 198.51.100.1, pid = 12345'
+        result: 'Timeout before authentication for connection from 203.0.113.7 to 198.51.100.1, pid = 12345'
+    negative:
+      - 'Timeout before authentication for 203.0.113.7 port 44444'
+  SSH_DROP_CONNECTION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'drop connection #10 from [203.0.113.7]:40000 on [198.51.100.1]:22 penalty: failed authentication'
+        result: 'drop connection #10 from [203.0.113.7]:40000 on [198.51.100.1]:22 penalty: failed authentication'
+      # the MaxStartups refusal, same opening, different tail
+      - string: 'drop connection #33 from [203.0.113.7]:40000 on [198.51.100.1]:22 past MaxStartups'
+        result: 'drop connection #33 from [203.0.113.7]:40000 on [198.51.100.1]:22 past MaxStartups'
+      # no local end named
+      - string: 'drop connection #1 from [203.0.113.7]:40000'
+        result: 'drop connection #1 from [203.0.113.7]:40000'
+    negative:
+      - 'Connection closed by 203.0.113.7 port 40000 [preauth]'
+  SSH_SIGNAL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Received signal 15; terminating.'
+        result: 'Received signal 15; terminating.'
+    negative:
+      - 'Received disconnect from 203.0.113.7 port 40000:11: Bye Bye'
+  SSH_CONN_RESET:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Connection reset by 203.0.113.7 port 44444 [preauth]'
+        result: 'Connection reset by 203.0.113.7 port 44444 [preauth]'
+      - string: 'Connection reset by authenticating user root 198.51.100.9 port 40000 [preauth]'
+        result: 'Connection reset by authenticating user root 198.51.100.9 port 40000 [preauth]'
+    negative:
+      - 'Connection closed by 192.0.2.5 port 40000 [preauth]'
+  SSH_LISTENING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Server listening on 0.0.0.0 port 22.'
+        result: 'Server listening on 0.0.0.0 port 22.'
+      - string: 'Server listening on :: port 22.'
+        result: 'Server listening on :: port 22.'
+    negative:
+      - 'Accepted password for alice from 198.51.100.9 port 40000 ssh2'
+  SSH_POSTPONED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Postponed publickey for neti from 192.0.2.5 port 54321 ssh2 [preauth]'
+        result: 'Postponed publickey for neti from 192.0.2.5 port 54321 ssh2 [preauth]'
+      - string: 'Postponed keyboard-interactive for alice from 198.51.100.9 port 40000 ssh2 [preauth]'
+        result: 'Postponed keyboard-interactive for alice from 198.51.100.9 port 40000 ssh2 [preauth]'
+    negative:
+      - 'Accepted publickey for neti from 192.0.2.5 port 54321 ssh2'
+  SSH_PARTIAL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Partial authentication for neti from 192.0.2.5 port 54321 ssh2 [preauth]'
+        result: 'Partial authentication for neti from 192.0.2.5 port 54321 ssh2 [preauth]'
+    negative:
+      - 'Postponed publickey for neti from 192.0.2.5 port 54321 ssh2 [preauth]'
+  SSH_ACCEPTED_CERT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Accepted publickey for neti from 192.0.2.5 port 54321 ssh2: ED25519-CERT SHA256:AbCdEf0123456789 ID neti@example (serial 7) CA ED25519 SHA256:ZzYyXx'
+        result: 'Accepted publickey for neti from 192.0.2.5 port 54321 ssh2: ED25519-CERT SHA256:AbCdEf0123456789 ID neti@example (serial 7) CA ED25519 SHA256:ZzYyXx'
+    negative:
+      - 'Accepted publickey for neti from 192.0.2.5 port 54321 ssh2: RSA SHA256:AbCdEf0123456789'
+  SSH_AUTH_METHOD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'publickey'
+        result: 'publickey'
+      - string: 'password'
+        result: 'password'
+      - string: 'none'
+        result: 'none'
+      # the longer form has to come out whole rather than as the shorter one
+      # with a stray "/pam" left over
+      - string: 'keyboard-interactive/pam'
+        result: 'keyboard-interactive/pam'
+      - string: 'keyboard-interactive'
+        result: 'keyboard-interactive'
+      - string: 'gssapi-with-mic'
+        result: 'gssapi-with-mic'
+      - string: 'hostbased'
+        result: 'hostbased'
+    negative:
+      - 'notanauthmethod'
+      - 'publickeys'
+  SSH_KEX_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'error: kex_exchange_identification: Connection closed by remote host'
+        result: 'error: kex_exchange_identification: Connection closed by remote host'
+      - string: 'error: kex_exchange_identification: read: Connection reset by peer'
+        result: 'error: kex_exchange_identification: read: Connection reset by peer'
+      - string: 'error: kex_exchange_identification: banner line contains invalid characters'
+        result: 'error: kex_exchange_identification: banner line contains invalid characters'
+    negative:
+      - 'error: maximum authentication attempts exceeded for root from 203.0.113.7 port 44444 ssh2'
+      - 'Connection closed by 192.0.2.5 port 40000 [preauth]'
+  SSH_NO_NEGOTIATE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Unable to negotiate with 203.0.113.7 port 44444: no matching host key type found. Their offer: ssh-rsa'
+        result: 'Unable to negotiate with 203.0.113.7 port 44444: no matching host key type found. Their offer: ssh-rsa'
+      - string: 'Unable to negotiate with 198.51.100.9 port 40000: no matching key exchange method found. Their offer: diffie-hellman-group1-sha1'
+        result: 'Unable to negotiate with 198.51.100.9 port 40000: no matching key exchange method found. Their offer: diffie-hellman-group1-sha1'
+      # the offer clause is not always there
+      - string: 'Unable to negotiate with 203.0.113.7 port 44444: no matching cipher found'
+        result: 'Unable to negotiate with 203.0.113.7 port 44444: no matching cipher found'
+    negative:
+      - 'banner exchange: Connection from 203.0.113.7 port 44444: invalid format'
+  SSH_BANNER_EXCHANGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'banner exchange: Connection from 203.0.113.7 port 44444: invalid format'
+        result: 'banner exchange: Connection from 203.0.113.7 port 44444: invalid format'
+    negative:
+      - 'Connection from 203.0.113.7 port 44444 on 192.0.2.1 port 22'
+  SSH_BAD_PROTOCOL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Bad protocol version identification ''GET / HTTP/1.1'' from 203.0.113.7 port 44444'
+        result: 'Bad protocol version identification ''GET / HTTP/1.1'' from 203.0.113.7 port 44444'
+      - string: 'Bad protocol version identification ''\x16\x03\x01'' from 198.51.100.9 port 40000'
+        result: 'Bad protocol version identification ''\x16\x03\x01'' from 198.51.100.9 port 40000'
+      # older sshd left the port off
+      - string: 'Bad protocol version identification ''QUIT'' from 203.0.113.7'
+        result: 'Bad protocol version identification ''QUIT'' from 203.0.113.7'
+    negative:
+      - 'Did not receive identification string from 203.0.113.7 port 44444'
+  SSH_CONN_FROM:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Connection from 203.0.113.7 port 44444 on 192.0.2.1 port 22'
+        result: 'Connection from 203.0.113.7 port 44444 on 192.0.2.1 port 22'
+      - string: 'Connection from 203.0.113.7 port 44444'
+        result: 'Connection from 203.0.113.7 port 44444'
+    negative:
+      - 'banner exchange: Connection from 203.0.113.7 port 44444: invalid format'
+      - 'Connection closed by 192.0.2.5 port 40000 [preauth]'
+  SSH_PAM_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'error: PAM: Authentication failure for root from 203.0.113.7'
+        result: 'error: PAM: Authentication failure for root from 203.0.113.7'
+      - string: 'error: PAM: Authentication failure for illegal user admin from 198.51.100.9'
+        result: 'error: PAM: Authentication failure for illegal user admin from 198.51.100.9'
+      # PAM logs whatever it resolved, which is often a name
+      - string: 'error: PAM: User account has expired for neti from mail.example.net'
+        result: 'error: PAM: User account has expired for neti from mail.example.net'
+    negative:
+      - 'error: kex_exchange_identification: Connection closed by remote host'
+  NOTSPACE_NO_COLON:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'userauth_pubkey'
+        result: 'userauth_pubkey'
+      - string: 'send_rexec_state'
+        result: 'send_rexec_state'
+    negative:
+      - 'has a space'
+      - 'userauth_pubkey:'
+  SSH_BIND_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'error: Bind to port 2222 on 0.0.0.0 failed: Address already in use.'
+        result: 'error: Bind to port 2222 on 0.0.0.0 failed: Address already in use.'
+      - string: 'error: Bind to port 22 on :: failed: Address already in use.'
+        result: 'error: Bind to port 22 on :: failed: Address already in use.'
+    negative:
+      - 'error: kex_exchange_identification: Connection closed by remote host'
+  SSH_REXEC_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'fatal: rexec of /usr/libexec/sshd-session failed: No such file or directory'
+        result: 'fatal: rexec of /usr/libexec/sshd-session failed: No such file or directory'
+      - string: 'fatal: rexec of /usr/sbin/sshd failed: Permission denied'
+        result: 'fatal: rexec of /usr/sbin/sshd failed: Permission denied'
+    negative:
+      - 'error: Bind to port 2222 on 0.0.0.0 failed: Address already in use.'
+  SSH_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'fatal: userauth_pubkey: parse publickey packet: incomplete message [preauth]'
+        result: 'fatal: userauth_pubkey: parse publickey packet: incomplete message [preauth]'
+      - string: 'error: send_rexec_state: ssh_msg_send failed'
+        result: 'error: send_rexec_state: ssh_msg_send failed'
+      # FreeBSD's Fssh_-prefixed symbol name
+      - string: 'error: Fssh_ssh_msg_send: write: Broken pipe'
+        result: 'error: Fssh_ssh_msg_send: write: Broken pipe'
+    negative:
+      - 'Connection closed by 192.0.2.5 port 40000 [preauth]'
+# Look up the source IP.
+geoip:
+  - ssh_src_ip
+# Coerce the source port to an integer at runtime additional primitives used
+# above that are not in base.yaml.
+vars:
+  # NOTSPACE that also excludes ":" (used to bound a bare function name that is
+  # followed by ": ")
+  NOTSPACE_NO_COLON: '[^\s:]+'
+convert:
+  ssh_src_port: int
+  ssh_dst_port: int
+  ssh_listen_port: int
+  ssh_cert_serial: int
+  ssh_drop_count: int
+  ssh_conn_pid: int
+  ssh_signal: int
+rules:
+  - name: sshd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^sshd(?:-session)?$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - SSH_ACCEPTED
+      - SSH_FAILED
+      - SSH_INVALID_USER
+      - SSH_CONN_CLOSED
+      - SSH_DISCONNECT
+      - SSH_ACCEPTED_CERT
+      - SSH_MAX_AUTH
+      - SSH_TOO_MANY
+      - SSH_NOT_ALLOWED
+      - SSH_REVERSE_MAP
+      - SSH_REVERSE_MAP_FAILED
+      - SSH_NO_IDENT
+      # the "connection from X to Y" wording before the "<ip> port <port>" one,
+      # which would otherwise not reach it
+      - SSH_TIMEOUT_CONN
+      - SSH_TIMEOUT
+      - SSH_DROP_CONNECTION
+      - SSH_SIGNAL
+      - SSH_CONN_RESET
+      - SSH_LISTENING
+      - SSH_POSTPONED
+      - SSH_PARTIAL
+      - SSH_KEX_ERROR
+      - SSH_NO_NEGOTIATE
+      - SSH_BANNER_EXCHANGE
+      - SSH_BAD_PROTOCOL
+      - SSH_PAM_ERROR
+      - SSH_BIND_FAILED
+      - SSH_REXEC_FAILED
+      # after every other "error: ..." / "fatal: ..." pattern, because it
+      # matches the shape of most of them
+      - SSH_ERROR
+      # last of the connection patterns: "Connection from <ip> port <port>" is
+      # the loosest of them, so anything with a more specific shape gets first
+      # refusal even though anchoring already keeps them apart
+      - SSH_CONN_FROM
+    tests:
+      positive:
+        - string: 'Accepted publickey for neti from 192.0.2.5 port 54321 ssh2: RSA SHA256:AbCdEf0123456789'
+          result:
+            ssh_method: 'publickey'
+            ssh_user: 'neti'
+            ssh_src_ip: '192.0.2.5'
+            ssh_src_port: '54321'
+            ssh_key_type: 'RSA'
+            ssh_key_fingerprint: 'SHA256:AbCdEf0123456789'
+        - string: 'Accepted password for alice from 198.51.100.9 port 40000 ssh2'
+          result:
+            ssh_method: 'password'
+            ssh_user: 'alice'
+            ssh_src_ip: '198.51.100.9'
+            ssh_src_port: '40000'
+        - string: 'Failed password for root from 203.0.113.7 port 44444 ssh2'
+          program: 'sshd'
+          result:
+            ssh_method: 'password'
+            ssh_user: 'root'
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '44444'
+        - string: 'Failed password for invalid user admin from 203.0.113.7 port 44444 ssh2'
+          program: 'sshd-session'
+          result:
+            ssh_invalid: 'invalid'
+            ssh_method: 'password'
+            ssh_user: 'admin'
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '44444'
+        - string: 'Invalid user oracle from 203.0.113.7 port 40000'
+          result:
+            ssh_user: 'oracle'
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '40000'
+        - string: 'Connection closed by 192.0.2.5 port 40000 [preauth]'
+          result:
+            ssh_src_ip: '192.0.2.5'
+            ssh_src_port: '40000'
+        - string: 'Connection closed by authenticating user root 203.0.113.7 port 44444 [preauth]'
+          result:
+            ssh_conn_state: 'authenticating'
+            ssh_user: 'root'
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '44444'
+        - string: 'Disconnected from 198.51.100.9 port 40000'
+          result:
+            ssh_src_ip: '198.51.100.9'
+            ssh_src_port: '40000'
+        - string: 'Received disconnect from 203.0.113.7 port 44444:11: Bye Bye [preauth]'
+          result:
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '44444'
+        # -- new message types --
+        - string: 'Accepted publickey for neti from 192.0.2.5 port 54321 ssh2: ED25519-CERT SHA256:AbCdEf0123456789 ID neti@example (serial 7) CA ED25519 SHA256:ZzYyXx'
+          numeric:
+            - ssh_cert_serial
+          result:
+            ssh_method: 'publickey'
+            ssh_user: 'neti'
+            ssh_src_ip: '192.0.2.5'
+            ssh_src_port: '54321'
+            ssh_key_type: 'ED25519-CERT'
+            ssh_key_fingerprint: 'SHA256:AbCdEf0123456789'
+            ssh_cert_id: 'neti@example'
+            ssh_cert_serial: '7'
+        - string: 'error: maximum authentication attempts exceeded for root from 203.0.113.7 port 44444 ssh2 [preauth]'
+          result:
+            ssh_user: 'root'
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '44444'
+        - string: 'error: maximum authentication attempts exceeded for invalid user admin from 198.51.100.9 port 40000 ssh2 [preauth]'
+          result:
+            ssh_invalid: 'invalid'
+            ssh_user: 'admin'
+            ssh_src_ip: '198.51.100.9'
+            ssh_src_port: '40000'
+        - string: 'error: Too many authentication failures for root'
+          result:
+            ssh_user: 'root'
+        - string: 'Too many authentication failures for invalid user admin; logname= uid=0 euid=0 tty=ssh ruser= rhost=203.0.113.7'
+          result:
+            ssh_invalid: 'invalid'
+            ssh_user: 'admin'
+            ssh_pam_kv: 'logname= uid=0 euid=0 tty=ssh ruser= rhost=203.0.113.7'
+        - string: 'User root from 203.0.113.7 not allowed because not listed in AllowUsers'
+          result:
+            ssh_user: 'root'
+            ssh_src_ip: '203.0.113.7'
+            ssh_reason: 'not listed in AllowUsers'
+        - string: 'User oracle from 198.51.100.9 not allowed because none of user''s groups are listed in AllowGroups'
+          result:
+            ssh_user: 'oracle'
+            ssh_src_ip: '198.51.100.9'
+            ssh_reason: 'none of user''s groups are listed in AllowGroups'
+        - string: 'Address 203.0.113.7 maps to scan.example.net, but this does not map back to the address - POSSIBLE BREAK-IN ATTEMPT!'
+          result:
+            ssh_src_ip: '203.0.113.7'
+            ssh_rev_host: 'scan.example.net'
+        - string: 'reverse mapping checking getaddrinfo for scan.example.net [203.0.113.7] failed.'
+          result:
+            ssh_src_ip: '203.0.113.7'
+            ssh_rev_host: 'scan.example.net'
+        - string: 'reverse mapping checking getaddrinfo for scan.example.net [203.0.113.7] failed - POSSIBLE BREAK-IN ATTEMPT!'
+          result:
+            ssh_src_ip: '203.0.113.7'
+            ssh_rev_host: 'scan.example.net'
+        - string: 'Did not receive identification string from 203.0.113.7 port 44444'
+          result:
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '44444'
+        - string: 'Did not receive identification string from 198.51.100.9'
+          result:
+            ssh_src_ip: '198.51.100.9'
+        - string: 'Timeout before authentication for 203.0.113.7 port 44444'
+          result:
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '44444'
+        # the older wording, which names both ends and the pid
+        - string: 'Timeout before authentication for connection from 203.0.113.7 to 198.51.100.1, pid = 12345'
+          numeric:
+            - ssh_conn_pid
+          result:
+            ssh_src_ip: '203.0.113.7'
+            ssh_dst_ip: '198.51.100.1'
+            ssh_conn_pid: '12345'
+        # OpenSSH 9.8+ PerSourcePenalties
+        - string: 'drop connection #10 from [203.0.113.7]:40000 on [198.51.100.1]:22 penalty: failed authentication'
+          numeric:
+            - ssh_drop_count
+            - ssh_dst_port
+            - ssh_src_port
+          result:
+            ssh_drop_count: '10'
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '40000'
+            ssh_dst_ip: '198.51.100.1'
+            ssh_dst_port: '22'
+            ssh_drop_reason: 'failed authentication'
+        - string: 'drop connection #33 from [203.0.113.7]:40000 on [198.51.100.1]:22 past MaxStartups'
+          result:
+            ssh_drop_count: '33'
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '40000'
+            ssh_dst_ip: '198.51.100.1'
+            ssh_dst_port: '22'
+            ssh_drop_reason: 'past MaxStartups'
+        - string: 'Received signal 15; terminating.'
+          numeric:
+            - ssh_signal
+          result:
+            ssh_signal: '15'
+        # a refusal decided before any connection, so no source address
+        - string: 'User backup not allowed because shell /usr/local/bin/scponly does not exist'
+          result:
+            ssh_user: 'backup'
+            ssh_reason: 'shell /usr/local/bin/scponly does not exist'
+        - string: 'Address 203.0.113.7 maps to scan.example.net, but this does not map back to the address.'
+          result:
+            ssh_src_ip: '203.0.113.7'
+            ssh_rev_host: 'scan.example.net'
+        # usernames a scanner offered, which USERNAME would have dropped
+        - string: 'Invalid user root/1 from 203.0.113.7 port 40000'
+          result:
+            ssh_user: 'root/1'
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '40000'
+        - string: 'Invalid user p@ssw0rd from 203.0.113.7 port 40000'
+          result:
+            ssh_user: 'p@ssw0rd'
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '40000'
+        - string: 'Connection closed by invalid user intel(r) 203.0.113.7 port 40000 [preauth]'
+          result:
+            ssh_conn_state: 'invalid'
+            ssh_user: 'intel(r)'
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '40000'
+        - string: 'Connection reset by 203.0.113.7 port 44444 [preauth]'
+          result:
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '44444'
+        - string: 'Connection reset by authenticating user root 198.51.100.9 port 40000 [preauth]'
+          result:
+            ssh_conn_state: 'authenticating'
+            ssh_user: 'root'
+            ssh_src_ip: '198.51.100.9'
+            ssh_src_port: '40000'
+        - string: 'Server listening on 0.0.0.0 port 22.'
+          numeric:
+            - ssh_listen_port
+          result:
+            ssh_listen_addr: '0.0.0.0'
+            ssh_listen_port: '22'
+        - string: 'Server listening on :: port 22.'
+          result:
+            ssh_listen_addr: '::'
+            ssh_listen_port: '22'
+        - string: 'Postponed publickey for neti from 192.0.2.5 port 54321 ssh2 [preauth]'
+          result:
+            ssh_method: 'publickey'
+            ssh_user: 'neti'
+            ssh_src_ip: '192.0.2.5'
+            ssh_src_port: '54321'
+        - string: 'Partial authentication for alice from 198.51.100.9 port 40000 ssh2 [preauth]'
+          result:
+            ssh_user: 'alice'
+            ssh_src_ip: '198.51.100.9'
+            ssh_src_port: '40000'
+        # -- the auth methods the shared SSH_AUTH_METHOD list added --
+        - string: 'Failed none for invalid user admin from 203.0.113.7 port 44444 ssh2'
+          result:
+            ssh_invalid: 'invalid'
+            ssh_method: 'none'
+            ssh_user: 'admin'
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '44444'
+        - string: 'Failed keyboard-interactive/pam for root from 203.0.113.7 port 44444 ssh2'
+          result:
+            ssh_method: 'keyboard-interactive/pam'
+            ssh_user: 'root'
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '44444'
+        - string: 'Accepted keyboard-interactive/pam for neti from 192.0.2.5 port 54321 ssh2'
+          result:
+            ssh_method: 'keyboard-interactive/pam'
+            ssh_user: 'neti'
+            ssh_src_ip: '192.0.2.5'
+            ssh_src_port: '54321'
+        # -- connections that never reached authentication --
+        - string: 'error: kex_exchange_identification: Connection closed by remote host'
+          result:
+            ssh_kex_error: 'Connection closed by remote host'
+        - string: 'error: kex_exchange_identification: client sent invalid protocol identifier'
+          result:
+            ssh_kex_error: 'client sent invalid protocol identifier'
+        - string: 'Unable to negotiate with 203.0.113.7 port 44444: no matching host key type found. Their offer: ssh-rsa'
+          result:
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '44444'
+            ssh_negotiate_error: 'no matching host key type found'
+            ssh_peer_offer: 'ssh-rsa'
+        - string: 'Unable to negotiate with 203.0.113.7 port 44444: no matching cipher found'
+          result:
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '44444'
+            ssh_negotiate_error: 'no matching cipher found'
+        - string: 'banner exchange: Connection from 203.0.113.7 port 44444: invalid format'
+          result:
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '44444'
+            ssh_banner_error: 'invalid format'
+        - string: 'Bad protocol version identification ''GET / HTTP/1.1'' from 203.0.113.7 port 44444'
+          result:
+            ssh_bad_protocol: 'GET / HTTP/1.1'
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '44444'
+        - string: 'error: PAM: Authentication failure for illegal user admin from 198.51.100.9'
+          result:
+            ssh_pam_error: 'Authentication failure'
+            ssh_invalid: 'illegal'
+            ssh_user: 'admin'
+            ssh_src_ip: '198.51.100.9'
+        - string: 'error: PAM: User account has expired for neti from mail.example.net'
+          result:
+            ssh_pam_error: 'User account has expired'
+            ssh_user: 'neti'
+            ssh_src_host: 'mail.example.net'
+        - string: 'Connection from 203.0.113.7 port 44444 on 192.0.2.1 port 22'
+          result:
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '44444'
+            ssh_dst_ip: '192.0.2.1'
+            ssh_dst_port: '22'
+        - string: 'fatal: Timeout before authentication for 203.0.113.7 port 44444'
+          result:
+            ssh_src_ip: '203.0.113.7'
+            ssh_src_port: '44444'
+        - string: 'Disconnected from user root 192.0.2.5 port 44398'
+          result:
+            ssh_user: 'root'
+            ssh_src_ip: '192.0.2.5'
+            ssh_src_port: '44398'
+        - string: 'error: Fssh_kex_exchange_identification: read: Connection reset by peer'
+          result:
+            ssh_kex_error: 'read: Connection reset by peer'
+        - string: 'error: Bind to port 2222 on 0.0.0.0 failed: Address already in use.'
+          result:
+            ssh_listen_port: '2222'
+            ssh_listen_addr: '0.0.0.0'
+            ssh_error: 'Address already in use.'
+        - string: 'fatal: rexec of /usr/libexec/sshd-session failed: No such file or directory'
+          result:
+            ssh_rexec_path: '/usr/libexec/sshd-session'
+            ssh_error: 'No such file or directory'
+        - string: 'fatal: userauth_pubkey: parse publickey packet: incomplete message [preauth]'
+          result:
+            ssh_level: 'fatal'
+            ssh_function: 'userauth_pubkey'
+            ssh_error: 'parse publickey packet: incomplete message'
+            ssh_preauth: 'preauth'
+        - string: 'error: send_rexec_state: ssh_msg_send failed'
+          result:
+            ssh_level: 'error'
+            ssh_function: 'send_rexec_state'
+            ssh_error: 'ssh_msg_send failed'
+      negative:
+        - 'this is not an sshd line at all'
+        - 'Jul 15 10:00:00 host cron[123]: session opened for user root'
+        - string: 'Accepted publickey for neti from 192.0.2.5 port 54321 ssh2: RSA SHA256:AbCdEf0123456789'
+          program: 'sshd-extra'

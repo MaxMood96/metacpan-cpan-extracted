@@ -1,5 +1,13 @@
 Revision history for Database::Join
 
+0.001.1	Sun Aug 23 03:29:39 PM EDT 2026
+	[ Bug fixes ]
+	- Fix t/edge_cases.t false failures on CPAN Testers: heap-address guard tests
+	now inspect only the first line of $@ (the error text) rather than the full
+	exception string including croak's stack trace, which naturally contains
+	object addresses.
+	Fixes https://matrix.perl-magpie.org/results/def96e6c-9e2e-11f1-af92-fa432959d47e
+
 0.001.0	Fri Aug 21 08:54:30 PM EDT 2026
     - Initial CPAN release.
     - Read-only combined view across two or more Database::Abstraction objects

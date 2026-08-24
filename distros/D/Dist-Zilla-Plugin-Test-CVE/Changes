@@ -1,5 +1,20 @@
 Release history for Dist-Zilla-Plugin-Test-CVE:
 
+v0.1.3    2026-08-23 23:18:45+01:00 Europe/London
+  [Documentation]
+  - Updated SUPPORT to clarify the minimum Perl version.
+
+  - Fixed typos.
+
+  - Updated module author.
+
+  - Updated copyright year.
+
+  - Fixed SOURCE link in README.
+
+  [Tests]
+  - Added tests.
+
 v0.1.2    2025-08-19 17:20:41+01:00 Europe/London
   [Enhancements]
   - Internal code improvements.

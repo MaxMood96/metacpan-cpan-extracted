@@ -1,0 +1,214 @@
+---
+# Dropbear SSH server log enrichment.
+#
+# Gates on the syslog PROGRAM field being "dropbear". Patterns are anchored
+# (each must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with dropbear_ .
+#
+# Dropbear is the SSH server on OpenWRT and on most other embedded Linux, so
+# on a router or an access point this is the auth log -- there is no sshd and
+# no /var/log/auth.log. The field names deliberately mirror what sshd.yaml
+# produces where the two say the same thing (a user, a source address and
+# port, an authentication method), so a query across a fleet of routers and
+# servers does not have to ask each one differently.
+#
+# Dropbear reports the peer as "<address>:<port>" rather than sshd's
+# "<address> port <port>", and it quotes the username. Otherwise the events
+# are the same ones sshd logs.
+includes:
+- base
+vars_templated:
+  # "Pubkey auth succeeded for 'root' with ssh-ed25519 key SHA256:... from 192.0.2.5:48719"
+  # "Password auth succeeded for 'neti' from 192.0.2.5:48719"
+  # The key type and fingerprint are present only for public-key auth.
+  DROPBEAR_AUTH_SUCCEEDED: '(?<dropbear_method>Pubkey|Password|PAM password) auth succeeded for ''(?<dropbear_user>[^'']*)''(?: with (?<dropbear_key_type>[% NOTSPACE %]) key (?<dropbear_key_fingerprint>[% NOTSPACE %]))? from (?<dropbear_src_ip>[% IP %]):(?<dropbear_src_port>[% INT %])'
+  # "Bad password attempt for 'root' from 192.0.2.5:48719"
+  # "Bad PAM password attempt for 'root' from 192.0.2.5:48719"
+  # The method is captured as whatever dropbear called it rather than being
+  # matched against a list, because which build is in use decides the wording.
+  DROPBEAR_AUTH_FAILED: 'Bad (?<dropbear_method>[^'']*) attempt for ''(?<dropbear_user>[^'']*)'' from (?<dropbear_src_ip>[% IP %]):(?<dropbear_src_port>[% INT %])'
+  # "Login attempt for nonexistent user from 192.0.2.5:48719"
+  # "Login attempt for nonexistent user 'admin' from 192.0.2.5:48719"
+  # Older dropbear does not name the user it was asked for; newer does.
+  DROPBEAR_NONEXISTENT_USER: 'Login attempt for nonexistent user(?: ''(?<dropbear_user>[^'']*)'')? from (?<dropbear_src_ip>[% IP %]):(?<dropbear_src_port>[% INT %])'
+  # "Too many authentication attempts for user root from 192.0.2.5:48719"
+  DROPBEAR_TOO_MANY: 'Too many authentication attempts for user (?<dropbear_user>[% NOTSPACE %]) from (?<dropbear_src_ip>[% IP %]):(?<dropbear_src_port>[% INT %])'
+  # "Child connection from 192.0.2.5:21859" -- a TCP connection accepted,
+  # logged before anything is known about who is on the other end.
+  DROPBEAR_CHILD_CONNECTION: 'Child connection from (?<dropbear_src_ip>[% IP %]):(?<dropbear_src_port>[% INT %])'
+  # "Exit before auth from <192.0.2.5:64040>: (user 'root', 0 fails): Exited normally"
+  # A session that closed without ever authenticating -- a scanner, a health
+  # check, or a client that gave up. Kept ahead of DROPBEAR_EXIT because that
+  # one would otherwise take it.
+  DROPBEAR_EXIT_BEFORE_AUTH: 'Exit before auth from <(?<dropbear_src_ip>[% IP %]):(?<dropbear_src_port>[% INT %])>: (?<dropbear_exit_reason>[% GREEDYDATA %])'
+  # "Exit (root) from <192.0.2.5:64040>: Disconnect received"
+  DROPBEAR_EXIT: 'Exit \((?<dropbear_user>[^)]*)\) from <(?<dropbear_src_ip>[% IP %]):(?<dropbear_src_port>[% INT %])>: (?<dropbear_exit_reason>[% GREEDYDATA %])'
+  # "Early exit: Terminated by signal" -- the daemon itself going away, with no
+  # session attached, so there is no peer on the line.
+  DROPBEAR_EARLY_EXIT: 'Early exit: (?<dropbear_exit_reason>[% GREEDYDATA %])'
+  # Anything else dropbear said. Matching anything is only safe because the
+  # rule is gated on PROGRAM being dropbear.
+  DROPBEAR_MESSAGE: '(?<dropbear_message>.+)'
+vars_tests:
+  DROPBEAR_AUTH_SUCCEEDED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: "Pubkey auth succeeded for 'root' with ssh-ed25519 key SHA256:AbCdEf0123456789 from 192.0.2.5:48719"
+        result: "Pubkey auth succeeded for 'root' with ssh-ed25519 key SHA256:AbCdEf0123456789 from 192.0.2.5:48719"
+      - string: "Password auth succeeded for 'neti' from 198.51.100.9:40000"
+        result: "Password auth succeeded for 'neti' from 198.51.100.9:40000"
+    negative:
+      - "Bad password attempt for 'root' from 192.0.2.5:48719"
+  DROPBEAR_AUTH_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: "Bad password attempt for 'root' from 192.0.2.5:48719"
+        result: "Bad password attempt for 'root' from 192.0.2.5:48719"
+      - string: "Bad PAM password attempt for 'neti' from 198.51.100.9:40000"
+        result: "Bad PAM password attempt for 'neti' from 198.51.100.9:40000"
+    negative:
+      - "Password auth succeeded for 'neti' from 198.51.100.9:40000"
+  DROPBEAR_NONEXISTENT_USER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Login attempt for nonexistent user from 203.0.113.7:44444'
+        result: 'Login attempt for nonexistent user from 203.0.113.7:44444'
+      - string: "Login attempt for nonexistent user 'admin' from 203.0.113.7:44444"
+        result: "Login attempt for nonexistent user 'admin' from 203.0.113.7:44444"
+    negative:
+      - "Bad password attempt for 'root' from 192.0.2.5:48719"
+  DROPBEAR_TOO_MANY:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Too many authentication attempts for user root from 203.0.113.7:44444'
+        result: 'Too many authentication attempts for user root from 203.0.113.7:44444'
+      - string: 'Too many authentication attempts for user neti from 198.51.100.9:40000'
+        result: 'Too many authentication attempts for user neti from 198.51.100.9:40000'
+    negative:
+      - 'Child connection from 192.0.2.5:21859'
+  DROPBEAR_CHILD_CONNECTION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Child connection from 192.0.2.5:21859'
+        result: 'Child connection from 192.0.2.5:21859'
+      - string: 'Child connection from 203.0.113.7:44444'
+        result: 'Child connection from 203.0.113.7:44444'
+    negative:
+      - 'Early exit: Terminated by signal'
+  DROPBEAR_EXIT_BEFORE_AUTH:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: "Exit before auth from <203.0.113.7:44444>: (user 'root', 0 fails): Exited normally"
+        result: "Exit before auth from <203.0.113.7:44444>: (user 'root', 0 fails): Exited normally"
+      - string: 'Exit before auth from <203.0.113.7:44444>: Exited normally'
+        result: 'Exit before auth from <203.0.113.7:44444>: Exited normally'
+    negative:
+      - 'Exit (root) from <192.0.2.5:64040>: Disconnect received'
+  DROPBEAR_EXIT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Exit (root) from <192.0.2.5:64040>: Disconnect received'
+        result: 'Exit (root) from <192.0.2.5:64040>: Disconnect received'
+      - string: 'Exit (root) from <192.0.2.5:56796>: Error reading: Connection reset by peer'
+        result: 'Exit (root) from <192.0.2.5:56796>: Error reading: Connection reset by peer'
+    negative:
+      - 'Early exit: Terminated by signal'
+  DROPBEAR_EARLY_EXIT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Early exit: Terminated by signal'
+        result: 'Early exit: Terminated by signal'
+      - string: 'Early exit: Exited normally'
+        result: 'Early exit: Exited normally'
+    negative:
+      - 'Exit (root) from <192.0.2.5:64040>: Disconnect received'
+  DROPBEAR_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Not backgrounding'
+        result: 'Not backgrounding'
+      - string: 'Failed listening on 22: Address already in use'
+        result: 'Failed listening on 22: Address already in use'
+    negative:
+      - ''
+# Look up the peer address.
+geoip:
+  - dropbear_src_ip
+# Coerce numeric captures.
+convert:
+  dropbear_src_port: int
+rules:
+  - name: dropbear
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^dropbear$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - DROPBEAR_AUTH_SUCCEEDED
+      - DROPBEAR_AUTH_FAILED
+      - DROPBEAR_NONEXISTENT_USER
+      - DROPBEAR_TOO_MANY
+      - DROPBEAR_CHILD_CONNECTION
+      # Before DROPBEAR_EXIT, which also matches the "Exit before auth" shape
+      - DROPBEAR_EXIT_BEFORE_AUTH
+      - DROPBEAR_EXIT
+      - DROPBEAR_EARLY_EXIT
+      # last: matches anything, which is only safe because the rule is gated
+      - DROPBEAR_MESSAGE
+    tests:
+      positive:
+        - string: "Pubkey auth succeeded for 'root' with ssh-ed25519 key SHA256:AbCdEf0123456789 from 192.0.2.5:48719"
+          numeric:
+            - dropbear_src_port
+          program: 'dropbear'
+          result:
+            dropbear_method: 'Pubkey'
+            dropbear_user: 'root'
+            dropbear_key_type: 'ssh-ed25519'
+            dropbear_key_fingerprint: 'SHA256:AbCdEf0123456789'
+            dropbear_src_ip: '192.0.2.5'
+            dropbear_src_port: '48719'
+        - string: "Password auth succeeded for 'neti' from 198.51.100.9:40000"
+          result:
+            dropbear_method: 'Password'
+            dropbear_user: 'neti'
+            dropbear_src_ip: '198.51.100.9'
+            dropbear_src_port: '40000'
+        - string: "Bad password attempt for 'root' from 203.0.113.7:44444"
+          result:
+            dropbear_method: 'password'
+            dropbear_user: 'root'
+            dropbear_src_ip: '203.0.113.7'
+            dropbear_src_port: '44444'
+        - string: 'Login attempt for nonexistent user from 203.0.113.7:44444'
+          result:
+            dropbear_src_ip: '203.0.113.7'
+            dropbear_src_port: '44444'
+        - string: 'Child connection from 192.0.2.5:21859'
+          result:
+            dropbear_src_ip: '192.0.2.5'
+            dropbear_src_port: '21859'
+        - string: 'Exit (root) from <192.0.2.5:64040>: Disconnect received'
+          result:
+            dropbear_user: 'root'
+            dropbear_src_ip: '192.0.2.5'
+            dropbear_src_port: '64040'
+            dropbear_exit_reason: 'Disconnect received'
+        - string: "Exit before auth from <203.0.113.7:44444>: (user 'root', 0 fails): Exited normally"
+          result:
+            dropbear_src_ip: '203.0.113.7'
+            dropbear_src_port: '44444'
+            dropbear_exit_reason: "(user 'root', 0 fails): Exited normally"
+        - string: 'Early exit: Terminated by signal'
+          result:
+            dropbear_exit_reason: 'Terminated by signal'
+        # Falls through to the catch-all.
+        - string: 'Not backgrounding'
+          result:
+            dropbear_message: 'Not backgrounding'
+      negative:
+        - ''
+        - string: 'Pubkey auth succeeded for ''root'' with ssh-ed25519 key SHA256:AbCdEf0123456789 from 192.0.2.5:48719'
+          program: 'dropbear-extra'

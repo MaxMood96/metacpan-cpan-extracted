@@ -9,12 +9,15 @@
 ## "pg_getline"  "pg_endcopy"  "pg_getcopydata"  "pg_getcopydata_async" (see 07copy.t)
 ## "pg_putline"  "pg_putcopydata"  "pg_putcopydata_async (see 07copy.t)
 ## "pg_cancel"  "pg_ready"  "pg_result" (see 08async.t)
+## Reference: https://metacpan.org/pod/Test::Warn
+## Reference: https://metacpan.org/pod/File::Temp
 
 use 5.008001;
 use strict;
 use warnings;
 use lib 'blib/lib', 'blib/arch', 't';
 use Test::More;
+plan tests => 702;
 use Config;
 use DBI     ':sql_types';
 use DBD::Pg ':pg_types';
@@ -2816,8 +2819,6 @@ ASYNC_CONNECT: {
     $rc = $dbh->pg_continue_connect();
     ok (-1 == $rc, 'pg_continue_connect returned -1 when async connect not in progress');
 }
-
-done_testing();
 
 exit;
 

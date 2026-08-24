@@ -36,6 +36,8 @@ lib/Fugu/Process.pm
 lib/Fugu/Process.pod
 lib/Fugu/Proxy.pm
 lib/Fugu/Proxy.pod
+lib/Fugu/REPL.pm
+lib/Fugu/REPL.pod
 lib/Fugu/Random.pm
 lib/Fugu/Random.pod
 lib/Fugu/SSH.pm
@@ -44,6 +46,8 @@ lib/Fugu/Sandbox.pm
 lib/Fugu/Sandbox.pod
 lib/Fugu/Signal.pm
 lib/Fugu/Signal.pod
+lib/Fugu/Signify.pm
+lib/Fugu/Signify.pod
 lib/Fugu/StateFile.pm
 lib/Fugu/StateFile.pod
 lib/Fugu/TestLog.pm
@@ -72,8 +76,10 @@ t/fugu/privdrop.t
 t/fugu/process.t
 t/fugu/proxy.t
 t/fugu/random.t
+t/fugu/repl.t
 t/fugu/sandbox.t
 t/fugu/signal.t
+t/fugu/signify.t
 t/fugu/ssh.t
 t/fugu/statefile.t
 t/fugu/testlog.t

@@ -32,6 +32,7 @@ new(class, ...)
         (void)hv_stores(hooks, K_BEFORE_R, newRV_noinc((SV *)newAV()));
         (void)hv_stores(hooks, K_BEFORE_D, newRV_noinc((SV *)newAV()));
         (void)hv_stores(hooks, K_AFTER_D,  newRV_noinc((SV *)newAV()));
+        (void)hv_stores(hooks, K_BEFORE_RN, newRV_noinc((SV *)newAV()));
         (void)hv_stores(h, K_HOOKS,      newRV_noinc((SV *)hooks));
         (void)hv_stores(h, K_MIDDLEWARE, newRV_noinc((SV *)newAV()));
         (void)hv_stores(h, K_HELPERS,    newRV_noinc((SV *)newHV()));
@@ -99,7 +100,8 @@ route(self, method, path, target, guards = &PL_sv_undef, opts = &PL_sv_undef)
                 STRLEN kl; const char *k = HePV(he, kl);
                 if (!strEQ(k, K_VALIDATE) && !strEQ(k, K_COMPRESS)
                     && !strEQ(k, K_MAX_BODY) && !strEQ(k, K_SITEMAP)
-                    && !strEQ(k, K_ETAG) && !strEQ(k, K_IDEMPOTENT))
+                    && !strEQ(k, K_ETAG) && !strEQ(k, K_IDEMPOTENT)
+                    && !strEQ(k, K_NAME))
                     croak("Punk: unknown route option '%s'", k);
             }
             /* max_body: this route's ceiling on CONTENT_LENGTH, overriding
@@ -197,6 +199,22 @@ route(self, method, path, target, guards = &PL_sv_undef, opts = &PL_sv_undef)
                 av_push(app_av(aTHX_ h, K_IDEM_ROUTES),
                         newRV_noinc((SV *)rec));
             }
+            /* name: this route's name, for $c->url_for and {% url.name %}.
+             * Recorded now, stamped onto the compiled record at to_app and
+             * resolved there into one name -> record index table, where a
+             * duplicate croaks naming both routes. What a name may be is
+             * checked HERE, so a bad one fails on the line that wrote it. */
+            vp = hv_fetchs(oh, K_NAME, 0);
+            if (vp && *vp) {
+                HV *rec;
+                pk_url_check_name(aTHX_ *vp, "route", method, path);
+                rec = newHV();
+                (void)hv_stores(rec, K_METHOD, newSVsv(method));
+                (void)hv_stores(rec, K_PATH,   newSVsv(path));
+                (void)hv_stores(rec, K_NAME,   newSVsv(*vp));
+                av_push(app_av(aTHX_ h, K_NAMED_ROUTES),
+                        newRV_noinc((SV *)rec));
+            }
             vp = hv_fetchs(oh, K_VALIDATE, 0);
             if (vp && *vp && SvOK(*vp)) {
                 HV *rec = newHV();
@@ -254,7 +272,8 @@ websocket(self, path, target, opts = &PL_sv_undef, guards = &PL_sv_undef)
     {
         HV *h = app_hv(aTHX_ self);
         static const char *known[] =
-            { "protocols", "max_message_size", "write_buffer_limit", K_BLOCKING };
+            { "protocols", "max_message_size", "write_buffer_limit", K_BLOCKING,
+              K_NAME };
         HV *oh;
         SV *argv[8], *r; HE *he; HV *rec;
         pk_spec_split(aTHX_ "websocket", path, &target, &opts);
@@ -264,21 +283,41 @@ websocket(self, path, target, opts = &PL_sv_undef, guards = &PL_sv_undef)
             hv_iterinit(oh);
             while ((he = hv_iternext(oh))) {
                 STRLEN kl; const char *k = HePV(he, kl); int ok = 0, i;
-                for (i = 0; i < 4; i++)
+                for (i = 0; i < 5; i++)
                     if (strEQ(k, known[i])) { ok = 1; break; }
                 if (!ok) croak("Punk: unknown websocket option(s) %s", k);
             }
         }
         /* $self->route('GET', $path, $target, $guards || []) */
+        /* `name` is a ROUTE option: forwarding it to route() means phase
+         * 0's recording, stamping and duplicate croak all run unchanged,
+         * and a named websocket route is a named GET route like any other. */
         argv[0] = sv_2mortal(newSVpvs("GET")); argv[1] = path;
         argv[2] = target;
         argv[3] = SvOK(guards) ? guards : sv_2mortal(newRV_noinc((SV *)newAV()));
-        r = pcx_call_meth(aTHX_ self, "route", argv, 4, 1);
+        {
+            SV **nv = oh ? hv_fetchs(oh, K_NAME, 0) : NULL;
+            int nargs = 4;
+            if (nv && *nv) {
+                HV *ro = newHV();
+                pk_url_check_name(aTHX_ *nv, "websocket", argv[0], path);
+                (void)hv_stores(ro, K_NAME, newSVsv(*nv));
+                argv[4] = sv_2mortal(newRV_noinc((SV *)ro));
+                nargs = 5;
+            }
+            r = pcx_call_meth(aTHX_ self, "route", argv, nargs, 1);
+        }
         if (r) SvREFCNT_dec(r);
         rec = newHV();
         (void)hv_stores(rec, K_PATH, newSVsv(path));
-        (void)hv_stores(rec, K_OPTS,
-            oh ? newRV_noinc((SV *)newHVhv(oh)) : newRV_noinc((SV *)newHV()));
+        {   /* The options copy is what reaches Punk::WebSocket as its
+             * configuration, and it does not know `name` - so the key is
+             * dropped from the COPY, never from the caller's hashref, which
+             * an application may be reusing between declarations. */
+            HV *copy = oh ? newHVhv(oh) : newHV();
+            (void)hv_delete(copy, K_NAME, (I32)strlen(K_NAME), G_DISCARD);
+            (void)hv_stores(rec, K_OPTS, newRV_noinc((SV *)copy));
+        }
         av_push(app_av(aTHX_ h, K_WS_ROUTES), newRV_noinc((SV *)rec));
         RETVAL = newSVsv(self);
     }
@@ -298,7 +337,8 @@ sse(self, path, target, opts = &PL_sv_undef, guards = &PL_sv_undef)
     {
         HV *h = app_hv(aTHX_ self);
         static const char *known[] =
-            { "heartbeat", "retry", "write_buffer_limit", K_BLOCKING };
+            { "heartbeat", "retry", "write_buffer_limit", K_BLOCKING,
+              K_NAME };
         HV *oh;
         SV *argv[8], *r; HE *he; HV *rec;
         pk_spec_split(aTHX_ "sse", path, &target, &opts);
@@ -308,20 +348,40 @@ sse(self, path, target, opts = &PL_sv_undef, guards = &PL_sv_undef)
             hv_iterinit(oh);
             while ((he = hv_iternext(oh))) {
                 STRLEN kl; const char *k = HePV(he, kl); int ok = 0, i;
-                for (i = 0; i < 4; i++)
+                for (i = 0; i < 5; i++)
                     if (strEQ(k, known[i])) { ok = 1; break; }
                 if (!ok) croak("Punk: unknown sse option(s) %s", k);
             }
         }
+        /* `name` is a ROUTE option: forwarding it to route() means phase
+         * 0's recording, stamping and duplicate croak all run unchanged,
+         * and a named sse route is a named GET route like any other. */
         argv[0] = sv_2mortal(newSVpvs("GET")); argv[1] = path;
         argv[2] = target;
         argv[3] = SvOK(guards) ? guards : sv_2mortal(newRV_noinc((SV *)newAV()));
-        r = pcx_call_meth(aTHX_ self, "route", argv, 4, 1);
+        {
+            SV **nv = oh ? hv_fetchs(oh, K_NAME, 0) : NULL;
+            int nargs = 4;
+            if (nv && *nv) {
+                HV *ro = newHV();
+                pk_url_check_name(aTHX_ *nv, "sse", argv[0], path);
+                (void)hv_stores(ro, K_NAME, newSVsv(*nv));
+                argv[4] = sv_2mortal(newRV_noinc((SV *)ro));
+                nargs = 5;
+            }
+            r = pcx_call_meth(aTHX_ self, "route", argv, nargs, 1);
+        }
         if (r) SvREFCNT_dec(r);
         rec = newHV();
         (void)hv_stores(rec, K_PATH, newSVsv(path));
-        (void)hv_stores(rec, K_OPTS,
-            oh ? newRV_noinc((SV *)newHVhv(oh)) : newRV_noinc((SV *)newHV()));
+        {   /* The options copy is what reaches Punk::SSE as its
+             * configuration, and it does not know `name` - so the key is
+             * dropped from the COPY, never from the caller's hashref, which
+             * an application may be reusing between declarations. */
+            HV *copy = oh ? newHVhv(oh) : newHV();
+            (void)hv_delete(copy, K_NAME, (I32)strlen(K_NAME), G_DISCARD);
+            (void)hv_stores(rec, K_OPTS, newRV_noinc((SV *)copy));
+        }
         av_push(app_av(aTHX_ h, K_SSE_ROUTES), newRV_noinc((SV *)rec));
         RETVAL = newSVsv(self);
     }
@@ -555,7 +615,7 @@ auth(self, ...)
         int i;
         static const char *known[] =
             { "model", "token_model", "session_key", "login_path",
-              "iterations", "roles", "rank", "fields" };
+              "iterations", "roles", "rank", "fields", "sqitch" };
         static const char *fknown[] =
             { "id", "email", "password", "verified" };
         (void)hv_stores(cfg, "session_key", newSVpvs("user_id"));
@@ -588,7 +648,7 @@ auth(self, ...)
             while ((e = hv_iternext(cfg))) {
                 STRLEN kl; const char *k = HePV(e, kl);
                 int ok = 0, j;
-                for (j = 0; j < 8; j++)
+                for (j = 0; j < 9; j++)
                     if (strEQ(k, known[j])) { ok = 1; break; }
                 if (!ok) {
                     SV *msg = sv_2mortal(newSVpvf(
@@ -638,6 +698,60 @@ auth(self, ...)
                 if (it && *it && SvOK(*it) && SvIV(*it) <= 0) {
                     SvREFCNT_dec((SV *)cfg);
                     croak("Punk: auth iterations must be positive");
+                }
+            }
+            /* sqitch => 1: the schema the defaults expect, shipped as the
+             * Sqitch project `punk_auth` under lib/Punk/Auth/sqitch and
+             * registered with Punk-Sqitch, which deploys it before the
+             * application's own. Opt-in because `fields` exists precisely
+             * for schemas with other spellings, and the project creates
+             * the defaults. Asking for it without Punk-Sqitch installed is
+             * an error, not a silence. */
+            {
+                SV **sq = hv_fetchs(cfg, "sqitch", 0);
+                if (sq && *sq && SvTRUE(*sq)) {
+                    SV *dir, *argv[4], *r;
+                    SV **punkpm = hv_fetchs(GvHV(PL_incgv), "Punk.pm", 0);
+                    if (!pk_require_once(aTHX_ "Punk::Plugin::Sqitch", FALSE)) {
+                        SvREFCNT_dec((SV *)cfg);
+                        croak("Punk: auth sqitch => 1 needs Punk-Sqitch "
+                              "(Punk::Plugin::Sqitch) installed: %s",
+                              SvPV_nolen(ERRSV));
+                    }
+                    if (!(punkpm && *punkpm && SvOK(*punkpm))) {
+                        SvREFCNT_dec((SV *)cfg);
+                        croak("Punk: cannot find Punk.pm in %%INC to locate "
+                              "the punk_auth Sqitch project");
+                    }
+                    /* .../Punk.pm -> .../Punk/Auth/sqitch */
+                    dir = sv_2mortal(newSVsv(*punkpm));
+                    {
+                        STRLEN dl; const char *dp = SvPV_const(dir, dl);
+                        if (dl >= 3 && memEQ(dp + dl - 3, ".pm", 3))
+                            SvCUR_set(dir, dl - 3);
+                    }
+                    sv_catpvs(dir, "/Auth/sqitch");
+                    argv[0] = self;
+                    argv[1] = sv_2mortal(newSVpvs("punk_auth"));
+                    argv[2] = dir;
+                    argv[3] = sv_2mortal(newSVpvs("engines"));
+                    {
+                        AV *eng = newAV();
+                        av_push(eng, newSVpvs("sqlite"));
+                        av_push(eng, newSVpvs("pg"));
+                        av_push(eng, newSVpvs("mysql"));
+                        {
+                            SV *argv5[5];
+                            argv5[0] = argv[0]; argv5[1] = argv[1];
+                            argv5[2] = argv[2]; argv5[3] = argv[3];
+                            argv5[4] = sv_2mortal(newRV_noinc((SV *)eng));
+                            r = pcx_call_meth(aTHX_
+                                    sv_2mortal(newSVpvs("Punk::Plugin::Sqitch")),
+                                    "project", argv5, 5, 1);
+                        }
+                    }
+                    if (r) SvREFCNT_dec(r);
+                    (void)hv_delete(cfg, "sqitch", 6, G_DISCARD);
                 }
             }
             (void)hv_store(h, K_AUTH, (I32)strlen(K_AUTH),
@@ -1129,6 +1243,53 @@ database(self, ...)
     OUTPUT:
         RETVAL
 
+# databases(): the configured databases read back - a deep copy, keyed by
+# name with "default" for the unnamed one. Copies, because a plugin must
+# not be able to edit the connection options of the application it is
+# installed in; everything else on the registrar records, this reads.
+SV *
+databases(self)
+        SV *self
+    CODE:
+    {
+        HV *h  = app_hv(aTHX_ self);
+        HV *db = app_hash(aTHX_ h, K_DATABASES);
+        RETVAL = app_deep_copy(aTHX_ sv_2mortal(newRV_inc((SV *)db)));
+    }
+    OUTPUT:
+        RETVAL
+
+# on_compile($code, $owner?): a callback for to_app, run before anything is
+# compiled and after every keyword has recorded - the moment a plugin that
+# registered above a `database` line needs, and the one Punk::Plugin::Queue
+# faked with a middleware whose constructor runs once at compile. The
+# callback gets the registrar; a die is a boot croak naming the owner. Not
+# a hook phase: those are request phases. Croaks once the app is compiled.
+SV *
+on_compile(self, code, owner = &PL_sv_undef)
+        SV *self
+        SV *code
+        SV *owner
+    CODE:
+    {
+        HV *h = app_hv(aTHX_ self);
+        AV *rec;
+        SV **cp = hv_fetchs(h, K_COMPILED, 0);
+        if (!(SvROK(code) && SvTYPE(SvRV(code)) == SVt_PVCV))
+            croak("Punk: on_compile takes a coderef");
+        if (cp && *cp && SvOK(*cp) && SvIV(*cp) > 0)
+            croak("Punk: on_compile after to_app - the application is already "
+                  "compiled, so the callback would never run");
+        rec = newAV();
+        av_push(rec, newSVsv(code));
+        av_push(rec, SvOK(owner) ? newSVsv(owner)
+                                 : newSVpv(CopSTASHPV(PL_curcop), 0));
+        av_push(app_av(aTHX_ h, K_ON_COMPILE), newRV_noinc((SV *)rec));
+        RETVAL = newSVsv(self);
+    }
+    OUTPUT:
+        RETVAL
+
 # model_class(@names): register model names. Bare `model;` turns
 # auto-discovery on explicitly - load everything under ${caller}::Model:: -
 # which also survives alongside named registrations (naming a model
@@ -1183,8 +1344,8 @@ hook(self, name, code)
         STRLEN nl; const char *n = SvPV_const(name, nl);
         SV **slot = hv_fetch(hooks, n, (I32)nl, 0);
         if (!(slot && *slot && SvROK(*slot) && SvTYPE(SvRV(*slot)) == SVt_PVAV))
-            croak("Punk: unknown hook '%s' "
-                  "(before_request, before_dispatch, after_dispatch)", n);
+            croak("Punk: unknown hook '%s' (before_request, before_dispatch, "
+                  "after_dispatch, before_render)", n);
         av_push((AV *)SvRV(*slot), newSVsv(code));
         RETVAL = newSVsv(self);
     }
@@ -1942,6 +2103,93 @@ host(self, ...)
             while (vl > scheme && vp[vl - 1] == '/') vl--;
             (void)hv_stores(h, "host", newSVpvn(vp, vl));
             RETVAL = newSVsv(self);
+        }
+    }
+    OUTPUT:
+        RETVAL
+
+# $app->url_for($name, %args): the URL of a named route, with NO request.
+#
+# The context method is the one an application uses; this is for the callers
+# that have no context to reach it through - a mail built in a queue worker,
+# a test naming a route instead of typing its path. Same names, same
+# captures, same croaks.
+#
+# Two differences follow from there being no request, and both are the safe
+# direction: the prefix is the path on `host` alone (SCRIPT_NAME belongs to a
+# request, and there is not one), and `absolute` builds on the DECLARED host
+# rather than negotiating the allowlist - a job has no Host header to be
+# allowed or refused.
+SV *
+url_for(self, name, ...)
+        SV *self
+        SV *name
+    CODE:
+    {
+        HV *h = app_hv(aTHX_ self);
+        HV *args, *query = NULL;
+        SV *val, *prefix, *origin = NULL, *host;
+        IV absolute = 0;
+        int i;
+
+        if ((items - 2) % 2)
+            croak("Punk: url_for takes a route name then key => value pairs");
+        if (!SvOK(name) || !SvCUR(name))
+            croak("Punk: url_for needs a route name");
+
+        args = (HV *)sv_2mortal((SV *)newHV());
+        for (i = 2; i + 1 < items; i += 2) {
+            STRLEN kl;
+            const char *k = SvPV_const(ST(i), kl);
+            if (kl == 8 && memEQ(k, "absolute", 8)) {
+                absolute = SvTRUE(ST(i + 1)) ? 1 : 0;
+                continue;
+            }
+            if (kl == 5 && memEQ(k, "query", 5)) {
+                SV *q = ST(i + 1);
+                if (!(SvROK(q) && SvTYPE(SvRV(q)) == SVt_PVHV))
+                    croak("Punk: url_for('%s'): `query` takes a hashref",
+                          SvPV_nolen(name));
+                query = (HV *)SvRV(q);
+                continue;
+            }
+            (void)hv_store(args, k, (I32)kl, newSVsv(ST(i + 1)), 0);
+        }
+
+        val = pk_url_target(aTHX_ h, name);
+        if (!val)
+            croak("Punk: url_for: no route is named '%s' - a name is "
+                  "declared with { name => '...' } on the route, and it is "
+                  "one namespace for the whole application",
+                  SvPV_nolen(name));
+
+        prefix = pk_url_prefix(aTHX_ h, NULL);
+        host = app_get(aTHX_ h, "host");
+        if (absolute) {
+            STRLEN hl, hoff, hlen;
+            const char *hp;
+            if (!(host && SvOK(host) && SvCUR(host)))
+                croak("Punk: url_for('%s', absolute => 1): the application "
+                      "declared no `host` - declare "
+                      "host 'https://example.com'", SvPV_nolen(name));
+            hp = SvPV_const(host, hl);
+            origin = sv_2mortal(pk_origin_bare(aTHX_ hp, hl, &hoff, &hlen));
+        }
+
+        if (SvROK(val) && SvTYPE(SvRV(val)) == SVt_PVAV) {
+            AV *pair = (AV *)SvRV(val);
+            SV **mp = av_fetch(pair, 0, 0);
+            SV **tm = av_fetch(pair, 1, 0);
+            RETVAL = pk_url_build_op(aTHX_ (AV *)SvRV(*tm),
+                        (mp && *mp) ? *mp : NULL, args, query, prefix,
+                        origin, SvPV_nolen(name));
+        }
+        else {
+            pr_router *rt = pk_url_router(aTHX_ h);
+            if (!rt)
+                croak("Punk: url_for: this application is not compiled");
+            RETVAL = pk_url_build(aTHX_ rt, SvIV(val), args, query,
+                                  prefix, origin, SvPV_nolen(name));
         }
     }
     OUTPUT:

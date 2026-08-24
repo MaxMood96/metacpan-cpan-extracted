@@ -1,0 +1,169 @@
+---
+# ClamAV (clamd / freshclam / clamonacc) log enrichment.
+#
+# Gates on the syslog PROGRAM field being one of the ClamAV daemons. Patterns
+# are anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with clamav_ .
+#
+# Two things live in these logs. The FOUND lines say something was caught and
+# name both the file and the signature that caught it. The freshclam lines say
+# whether the signatures are current, which is what quietly stops being true: a
+# database weeks out of date reports clean all day.
+includes:
+- base
+vars_templated:
+  # "/home/neti/file.exe: Win.Test.EICAR_HDB-1 FOUND"
+  #
+  # The path is matched as "anything up to the last colon-space" because a file
+  # name may contain a colon, and the signature name may not contain a space.
+  CLAMAV_FOUND: '(?<clamav_path>.+): (?<clamav_signature>[% NOTSPACE %]) FOUND'
+  # "/tmp/x: OK"
+  #
+  # Only logged when clamd is told to log clean files, which most setups do not
+  # do; it is here so those that do are not left with a rule file that misses
+  # most of its own output.
+  CLAMAV_CLEAN: '(?<clamav_path>.+): OK'
+  # "/tmp/x: Can''t open file or directory ERROR"
+  CLAMAV_ERROR: '(?<clamav_path>.+): (?<clamav_error>.+) ERROR'
+  # "Database correctly reloaded (8700000 signatures)"
+  CLAMAV_DB_RELOAD: 'Database correctly reloaded \((?<clamav_signature_count>[% INT %]) signatures\)'
+  # "daily.cvd database is up-to-date (version: 27000, sigs: 2000000,
+  #  f-level: 90, builder: raynman)"
+  FRESHCLAM_UP_TO_DATE: '(?<clamav_database>[% NOTSPACE %]) database is up-to-date \(version: (?<clamav_db_version>[% INT %]), sigs: (?<clamav_signature_count>[% INT %])(?:, (?<clamav_db_detail>[% GREEDYDATA %]))?\)'
+  # "daily.cld updated (version: 27001, sigs: 2000010, f-level: 90,
+  #  builder: raynman)"
+  FRESHCLAM_UPDATED: '(?<clamav_database>[% NOTSPACE %]) updated \(version: (?<clamav_db_version>[% INT %]), sigs: (?<clamav_signature_count>[% INT %])(?:, (?<clamav_db_detail>[% GREEDYDATA %]))?\)'
+  # "Can''t download daily.cvd from database.clamav.net"
+  # "WARNING: Can''t query current.cvd.clamav.net"
+  #
+  # freshclam failing to reach its mirrors is what precedes a database going
+  # stale, and it is the earliest warning there is.
+  FRESHCLAM_FAILED: '(?:(?<clamav_level>WARNING|ERROR): )?(?<clamav_failure>Can''t (?:download|query|.*?)) (?<clamav_failure_target>[% NOTSPACE %])(?: [% GREEDYDATA %])?'
+  # Anything else: startup, self-checks, limits.
+  CLAMAV_MESSAGE: '(?:(?<clamav_level>WARNING|ERROR|LibClamAV Warning|LibClamAV Error): )?(?<clamav_message>.+)'
+vars_tests:
+  CLAMAV_FOUND:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '/home/neti/file.exe: Win.Test.EICAR_HDB-1 FOUND'
+        result: '/home/neti/file.exe: Win.Test.EICAR_HDB-1 FOUND'
+      - string: '/var/spool/x: Eicar-Signature FOUND'
+        result: '/var/spool/x: Eicar-Signature FOUND'
+    negative:
+      - '/tmp/x: OK'
+  CLAMAV_CLEAN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '/tmp/x: OK'
+        result: '/tmp/x: OK'
+    negative:
+      - '/home/neti/file.exe: Win.Test.EICAR_HDB-1 FOUND'
+  CLAMAV_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '/tmp/x: Can''t open file or directory ERROR'
+        result: '/tmp/x: Can''t open file or directory ERROR'
+    negative:
+      - '/tmp/x: OK'
+  CLAMAV_DB_RELOAD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Database correctly reloaded (8700000 signatures)'
+        result: 'Database correctly reloaded (8700000 signatures)'
+    negative:
+      - 'SelfCheck: Database status OK.'
+  FRESHCLAM_UP_TO_DATE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'daily.cvd database is up-to-date (version: 27000, sigs: 2000000, f-level: 90, builder: raynman)'
+        result: 'daily.cvd database is up-to-date (version: 27000, sigs: 2000000, f-level: 90, builder: raynman)'
+    negative:
+      - 'daily.cld updated (version: 27001, sigs: 2000010, f-level: 90, builder: raynman)'
+  FRESHCLAM_UPDATED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'daily.cld updated (version: 27001, sigs: 2000010, f-level: 90, builder: raynman)'
+        result: 'daily.cld updated (version: 27001, sigs: 2000010, f-level: 90, builder: raynman)'
+    negative:
+      - 'daily.cvd database is up-to-date (version: 27000, sigs: 2000000, f-level: 90, builder: raynman)'
+  FRESHCLAM_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Can''t download daily.cvd from database.clamav.net'
+        result: 'Can''t download daily.cvd from database.clamav.net'
+      - string: 'WARNING: Can''t query current.cvd.clamav.net'
+        result: 'WARNING: Can''t query current.cvd.clamav.net'
+    negative:
+      - 'Database correctly reloaded (8700000 signatures)'
+  CLAMAV_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'SelfCheck: Database status OK.'
+        result: 'SelfCheck: Database status OK.'
+      - string: 'WARNING: Ignoring deprecated option AllowSupplementaryGroups'
+        result: 'WARNING: Ignoring deprecated option AllowSupplementaryGroups'
+    negative:
+      - ''
+convert:
+  clamav_signature_count: int
+  clamav_db_version: int
+rules:
+  - name: clamav
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^(?:clamd|clamav|clamav-daemon|freshclam|clamonacc)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - CLAMAV_FOUND
+      - CLAMAV_ERROR
+      - CLAMAV_CLEAN
+      - CLAMAV_DB_RELOAD
+      - FRESHCLAM_UP_TO_DATE
+      - FRESHCLAM_UPDATED
+      - FRESHCLAM_FAILED
+      # last: matches anything, which is only safe because the rule is gated
+      - CLAMAV_MESSAGE
+    tests:
+      positive:
+        - string: '/home/neti/file.exe: Win.Test.EICAR_HDB-1 FOUND'
+          program: 'clamav'
+          result:
+            clamav_path: '/home/neti/file.exe'
+            clamav_signature: 'Win.Test.EICAR_HDB-1'
+        - string: '/tmp/x: Can''t open file or directory ERROR'
+          program: 'clamav-daemon'
+          result:
+            clamav_path: '/tmp/x'
+            clamav_error: 'Can''t open file or directory'
+        - string: '/tmp/x: OK'
+          program: 'clamonacc'
+          result:
+            clamav_path: '/tmp/x'
+        - string: 'Database correctly reloaded (8700000 signatures)'
+          result:
+            clamav_signature_count: '8700000'
+        - string: 'daily.cvd database is up-to-date (version: 27000, sigs: 2000000, f-level: 90, builder: raynman)'
+          numeric:
+            - clamav_db_version
+            - clamav_signature_count
+          result:
+            clamav_database: 'daily.cvd'
+            clamav_db_version: '27000'
+            clamav_signature_count: '2000000'
+            clamav_db_detail: 'f-level: 90, builder: raynman'
+        - string: 'daily.cld updated (version: 27001, sigs: 2000010, f-level: 90, builder: raynman)'
+          result:
+            clamav_database: 'daily.cld'
+            clamav_db_version: '27001'
+            clamav_signature_count: '2000010'
+            clamav_db_detail: 'f-level: 90, builder: raynman'
+        - string: 'SelfCheck: Database status OK.'
+          program: 'clamd'
+          result:
+            clamav_message: 'SelfCheck: Database status OK.'
+      negative:
+        - ''
+        - string: '/home/neti/file.exe: Win.Test.EICAR_HDB-1 FOUND'
+          program: 'clamav-extra'

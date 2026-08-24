@@ -1,0 +1,5 @@
+my $config = SPVM::Builder::Config->new_cpp17;
+
+$config->use_resource('Resource::Eigen');
+
+$config;

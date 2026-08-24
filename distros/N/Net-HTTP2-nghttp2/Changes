@@ -1,5 +1,15 @@
 Revision history for Net-HTTP2-nghttp2
 
+0.009   2026-08-23
+        - Add end-to-end HTTP/2 trailer support, including submit_trailer(),
+          content EOF without END_STREAM for streamed and direct bodies, and
+          receive-side HEADERS categorization.
+        - Preserve backward compatibility for existing two-value streaming
+          callbacks and three-argument submit_data() calls.
+        - Export standard HTTP/2 wire error codes and header-category constants
+          through dedicated :http2_errors and :header_categories tags.
+        - Complete the advertised constant bindings and add an export audit.
+
 0.008   2026-06-14
         - Expose nghttp2_option_set_stream_reset_rate_limit via new_server's
           stream_reset_burst / stream_reset_rate options (HTTP/2 Rapid Reset,

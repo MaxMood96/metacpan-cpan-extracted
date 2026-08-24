@@ -1,3 +1,0 @@
-<start_html>
-<pre>
-<? shift()->r->path_info() ?>

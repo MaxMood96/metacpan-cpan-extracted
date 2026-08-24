@@ -1,0 +1,142 @@
+---
+# lldpd / lldpcli (Link Layer Discovery Protocol daemon) log enrichment.
+#
+# Gates on the syslog PROGRAM field being "lldpd" or "lldpcli". Patterns are
+# anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with lldpd_ .
+#
+# The two programs are one system: lldpd is the daemon and lldpcli is the
+# client that configures it at start-up, so a boot produces a run of lldpcli
+# lines confirming each setting followed by lldpd lines announcing which
+# protocols came up. They share a rule because they share a vocabulary and a
+# consumer wants them in one place.
+#
+# The port-level neighbour discovery lldpd does at higher verbosity is not
+# covered. At its default level lldpd logs configuration and errors only, which
+# is what these patterns are built from.
+includes:
+- base
+vars_templated:
+  # lldpcli confirming a setting, which is most of what a boot produces.
+  #   system name set to new value wap0.example.net
+  #   transmit hold set to new value 4
+  #   agent type set to new value : nearest bridge
+  #   LLDP PortID TLV type set to new value : macaddress
+  #   transmit delay set to new value
+  #
+  # The colon before the value is there on some settings and not on others,
+  # and the value is missing entirely on a few, so both are optional.
+  LLDPD_SETTING: '(?<lldpd_setting>[% GREEDYDATA %]) set to new value(?: :)?(?: (?<lldpd_value>[% GREEDYDATA %]))?'
+  # "protocol LLDP enabled" / "protocol CDPv2 enabled"
+  LLDPD_PROTOCOL: 'protocol (?<lldpd_protocol>[% NOTSPACE %]) (?<lldpd_protocol_state>enabled|disabled)'
+  # "removal request for phy2-ap0, but no knowledge of it"
+  #
+  # lldpd being told an interface went away that it never knew about. On an
+  # access point this is every wifi BSS teardown, since those interfaces are
+  # created and destroyed outside lldpd's view.
+  LLDPD_REMOVAL: 'removal request for (?<lldpd_iface>[^,]+), but no knowledge of it'
+  # "LLDP-MED location has been set for port br-lan"
+  # "LLDP-MED location has been set for port (default)"
+  LLDPD_MED_LOCATION: 'LLDP-MED location has been set for port (?<lldpd_iface>[% GREEDYDATA %])'
+  # Anything else either program said: the start-up banner, the "unable to get
+  # system name" complaint an unconfigured box repeats, socket errors.
+  # Matching anything is only safe because the rule is gated.
+  LLDPD_MESSAGE: '(?<lldpd_message>.+)'
+vars_tests:
+  LLDPD_SETTING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'system name set to new value wap0.example.net'
+        result: 'system name set to new value wap0.example.net'
+      - string: 'agent type set to new value : nearest bridge'
+        result: 'agent type set to new value : nearest bridge'
+      - string: 'transmit delay set to new value'
+        result: 'transmit delay set to new value'
+    negative:
+      - 'protocol LLDP enabled'
+  LLDPD_PROTOCOL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'protocol LLDP enabled'
+        result: 'protocol LLDP enabled'
+      - string: 'protocol CDPv2 enabled'
+        result: 'protocol CDPv2 enabled'
+    negative:
+      - 'system name set to new value wap0.example.net'
+  LLDPD_REMOVAL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'removal request for phy2-ap0, but no knowledge of it'
+        result: 'removal request for phy2-ap0, but no knowledge of it'
+      - string: 'removal request for mlan0, but no knowledge of it'
+        result: 'removal request for mlan0, but no knowledge of it'
+    negative:
+      - 'protocol LLDP enabled'
+  LLDPD_MED_LOCATION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'LLDP-MED location has been set for port br-lan'
+        result: 'LLDP-MED location has been set for port br-lan'
+      - string: 'LLDP-MED location has been set for port (default)'
+        result: 'LLDP-MED location has been set for port (default)'
+    negative:
+      - 'protocol LLDP enabled'
+  LLDPD_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'unable to get system name'
+        result: 'unable to get system name'
+      - string: 'libevent 2.1.12-stable initialized with epoll method'
+        result: 'libevent 2.1.12-stable initialized with epoll method'
+    negative:
+      - ''
+rules:
+  - name: lldpd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^lldp(?:d|cli)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - LLDPD_PROTOCOL
+      - LLDPD_REMOVAL
+      - LLDPD_MED_LOCATION
+      # after the three above: "... set to new value" opens with a GREEDYDATA
+      # and would take anything that happens to contain the phrase
+      - LLDPD_SETTING
+      # last: matches anything, which is only safe because the rule is gated
+      - LLDPD_MESSAGE
+    tests:
+      positive:
+        - string: 'protocol LLDP enabled'
+          program: 'lldpcli'
+          result:
+            lldpd_protocol: 'LLDP'
+            lldpd_protocol_state: 'enabled'
+        - string: 'removal request for phy2-ap0, but no knowledge of it'
+          result:
+            lldpd_iface: 'phy2-ap0'
+        - string: 'LLDP-MED location has been set for port br-lan'
+          result:
+            lldpd_iface: 'br-lan'
+        - string: 'system name set to new value wap0.example.net'
+          result:
+            lldpd_setting: 'system name'
+            lldpd_value: 'wap0.example.net'
+        - string: 'agent type set to new value : nearest bridge'
+          result:
+            lldpd_setting: 'agent type'
+            lldpd_value: 'nearest bridge'
+        - string: 'transmit delay set to new value'
+          result:
+            lldpd_setting: 'transmit delay'
+        # falls through to the catch-all
+        - string: 'unable to get system name'
+          program: 'lldpd'
+          result:
+            lldpd_message: 'unable to get system name'
+      negative:
+        - ''
+        - string: 'protocol LLDP enabled'
+          program: 'lldpd-extra'

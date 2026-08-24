@@ -1,0 +1,142 @@
+---
+# MongoDB structured logging (mongod / mongos / mongodb).
+#
+# Modern MongoDB emits each log line as a JSON document in the syslog MESSAGE
+# field, e.g.:
+#   {"t":{"$date":"..."},"s":"I","c":"NETWORK","id":22943,"ctx":"listener",
+#    "msg":"Connection accepted","attr":{"remote":"1.2.3.4:5555",...}}
+#
+# The rule captures the whole JSON blob and hands it to a `type: json` decompose
+# that JSON-decodes and flattens it into mongo_ prefixed keys. The MongoDB
+# extended-JSON wrapper {"$date":...} collapses to the timestamp scalar (mongo_t),
+# booleans normalize to 1/0, JSON null is skipped, and the arbitrarily-shaped
+# attr.{...} object flattens generically (mongo_attr_message_category, etc.) so a
+# per-log-id pattern is not needed.
+#
+# The common fields:
+#   mongo_t   -> ISO timestamp (from t.$date)
+#   mongo_s   -> severity (F/E/W/I/D1..D5)
+#   mongo_c   -> component (NETWORK, WTCHKPT, ACCESS, STORAGE, ...)
+#   mongo_id  -> MongoDB numeric log id (stable per message type)
+#   mongo_ctx -> context (thread/subsystem)
+#   mongo_msg -> the human-readable message
+#   mongo_attr_* -> the flattened attr object (varies by mongo_id)
+includes:
+- base
+vars_templated:
+  # the whole MESSAGE is a single JSON object; capture it, decompose does the rest
+  MONGO_JSON: '(?<mongo_json>\{.*\})'
+  # MongoDB records the peer as "ip:port" (IPv4 or bracketed IPv6) under
+  # attr.remote; this splits the flattened mongo_attr_remote into an address and
+  # a port so the address can be geoip'd. The port is optional.
+  MONGO_REMOTE: '(?:\[(?<mongo_attr_remote_ip>[% IPv6 %])\]|(?<mongo_attr_remote_ip>[% IP %]))(?::(?<mongo_attr_remote_port>[% INT %]))?'
+vars_tests:
+  MONGO_JSON:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '{"s":"I","c":"NETWORK","id":22943,"msg":"Connection accepted"}'
+        result: '{"s":"I","c":"NETWORK","id":22943,"msg":"Connection accepted"}'
+      - string: '{"t":{"$date":"2026-07-27T02:49:30.131+00:00"},"s":"I","c":"WTCHKPT","id":22430,"ctx":"Checkpointer","msg":"WiredTiger message","attr":{}}'
+        result: '{"t":{"$date":"2026-07-27T02:49:30.131+00:00"},"s":"I","c":"WTCHKPT","id":22430,"ctx":"Checkpointer","msg":"WiredTiger message","attr":{}}'
+    negative:
+      - 'plain text log line, not JSON'
+  MONGO_REMOTE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.168.14.15:52111'
+        result: '192.168.14.15:52111'
+      - string: '[2001:db8::1]:27017'
+        result: '[2001:db8::1]:27017'
+    negative:
+      - 'not-an-address'
+# JSON-decode the captured blob and flatten it into mongo_*.
+decompose:
+  - field: mongo_json
+    type: json
+    prefix: 'mongo_'
+    remove: true
+    tests:
+      # a WiredTiger checkpoint line: $date collapse, deep attr nesting, a
+      # boolean (-> 1) and a null (skipped)
+      - input: '{"t":{"$date":"2026-07-27T02:49:30.131+00:00"},"s":"I","c":"WTCHKPT","id":22430,"ctx":"Checkpointer","msg":"WiredTiger message","attr":{"message":{"category":"WT_VERB_CHECKPOINT_PROGRESS","verbose_level_id":1,"debug":true,"note":null}}}'
+        result:
+          mongo_t: '2026-07-27T02:49:30.131+00:00'
+          mongo_s: 'I'
+          mongo_c: 'WTCHKPT'
+          mongo_id: 22430
+          mongo_ctx: 'Checkpointer'
+          mongo_msg: 'WiredTiger message'
+          mongo_attr_message_category: 'WT_VERB_CHECKPOINT_PROGRESS'
+          mongo_attr_message_verbose_level_id: 1
+          mongo_attr_message_debug: 1
+      # a network connection-accepted line
+      - input: '{"t":{"$date":"2026-07-27T02:49:30.131+00:00"},"s":"I","c":"NETWORK","id":22943,"ctx":"listener","msg":"Connection accepted","attr":{"remote":"192.168.14.15:52111","connectionId":7}}'
+        result:
+          mongo_t: '2026-07-27T02:49:30.131+00:00'
+          mongo_s: 'I'
+          mongo_c: 'NETWORK'
+          mongo_id: 22943
+          mongo_ctx: 'listener'
+          mongo_msg: 'Connection accepted'
+          mongo_attr_remote: '192.168.14.15:52111'
+          mongo_attr_connectionId: 7
+  # split the flattened "ip:port" peer produced above into an address + port.
+  # the original mongo_attr_remote is kept (remove not set) so both the combined
+  # value and the parts are available.
+  - field: mongo_attr_remote
+    type: pattern
+    pattern: MONGO_REMOTE
+    tests:
+      - input: '192.168.14.15:52111'
+        result:
+          mongo_attr_remote: '192.168.14.15:52111'
+          mongo_attr_remote_ip: '192.168.14.15'
+          mongo_attr_remote_port: '52111'
+      - input: '[2001:db8::1]:27017'
+        result:
+          mongo_attr_remote: '[2001:db8::1]:27017'
+          mongo_attr_remote_ip: '2001:db8::1'
+          mongo_attr_remote_port: '27017'
+# geoip the split peer address (only used when a geoip database is configured);
+# coerce the split port to an integer at runtime.
+geoip:
+  - mongo_attr_remote_ip
+convert:
+  mongo_attr_remote_port: int
+rules:
+  - name: mongodb
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^mongo(d|db|s)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - MONGO_JSON
+    tests:
+      # the rule test checks only the pattern capture (the whole JSON blob);
+      # the flatten-into-mongo_* behavior is validated by the decompose tests above
+      positive:
+        - string: '{"t":{"$date":"2026-07-27T02:49:30.131+00:00"},"s":"I","c":"NETWORK","id":22943,"ctx":"listener","msg":"Connection accepted","attr":{"remote":"192.168.14.15:52111","connectionId":7}}'
+          enriched:
+            mongo_attr_connectionId: '7'
+            mongo_attr_remote: '192.168.14.15:52111'
+            mongo_attr_remote_ip: '192.168.14.15'
+            mongo_attr_remote_port: '52111'
+            mongo_c: 'NETWORK'
+            mongo_ctx: 'listener'
+            mongo_id: '22943'
+            mongo_msg: 'Connection accepted'
+            mongo_s: 'I'
+            mongo_t: '2026-07-27T02:49:30.131+00:00'
+          numeric:
+            - mongo_attr_connectionId
+            - mongo_attr_remote_port
+            - mongo_id
+          program: 'mongodb'
+          result:
+            mongo_json: '{"t":{"$date":"2026-07-27T02:49:30.131+00:00"},"s":"I","c":"NETWORK","id":22943,"ctx":"listener","msg":"Connection accepted","attr":{"remote":"192.168.14.15:52111","connectionId":7}}'
+      negative:
+        - 'this is not a mongodb json log line'
+        - string: '{"t":{"$date":"2026-07-27T02:49:30.131+00:00"},"s":"I","c":"NETWORK","id":22943,"ctx":"listener","msg":"Connection accepted","attr":{"remote":"192.168.14.15:52111","connectionId":7}}'
+          program: 'mongodb-extra'

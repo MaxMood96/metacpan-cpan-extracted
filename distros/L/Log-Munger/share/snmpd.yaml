@@ -1,0 +1,127 @@
+---
+# Net-SNMP (snmpd) log enrichment.
+#
+# Gates on the syslog PROGRAM field being "snmpd". Patterns are anchored (each
+# must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with snmpd_ .
+#
+# The connection lines matter because SNMP is a UDP service often left
+# reachable with a default community string, and it answers with a great deal
+# about the host. These lines are the only record of who asked.
+#
+# Net-SNMP writes a peer as "UDP: [192.0.2.5]:12345->[192.0.2.1]:161", with the
+# local end after the arrow, so both ends are captured. The source port is the
+# ephemeral one and the destination is 161. A source port of 161 instead means
+# something is talking to the agent from the agent port, which both ports being
+# captured makes visible.
+includes:
+- base
+vars_templated:
+  # "UDP: [192.0.2.5]:12345->[192.0.2.1]:161"
+  #
+  # The local half after the arrow is optional: older Net-SNMP omitted it.
+  SNMPD_PEER: '(?<snmpd_transport>UDP|TCP|UDP6|TCP6): \[(?<snmpd_src_ip>[% IP %])\]:(?<snmpd_src_port>[% INT %])(?:->\[(?<snmpd_dst_ip>[% IP %])\]:(?<snmpd_dst_port>[% INT %]))?'
+  # "Connection from UDP: [192.0.2.5]:12345->[192.0.2.1]:161"
+  SNMPD_CONNECTION: 'Connection from [% SNMPD_PEER %](?: [% GREEDYDATA %])?'
+  # "Received SNMP packet(s) from UDP: [192.0.2.5]:12345->[192.0.2.1]:161"
+  SNMPD_PACKET: 'Received SNMP packet\(s\) from [% SNMPD_PEER %](?: [% GREEDYDATA %])?'
+  # "Connection from UDP: [192.0.2.5]:12345->[192.0.2.1]:161" refused by the
+  # access control list:
+  #   "refused (by com2sec) from UDP: [203.0.113.7]:12345"
+  SNMPD_REFUSED: '(?<snmpd_refusal>refused[^:]*) from [% SNMPD_PEER %](?: [% GREEDYDATA %])?'
+  # Anything else: startup, MIB loading, subagent problems, statfs complaints.
+  SNMPD_MESSAGE: '(?<snmpd_message>.+)'
+vars_tests:
+  SNMPD_PEER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'UDP: [192.0.2.5]:12345->[192.0.2.1]:161'
+        result: 'UDP: [192.0.2.5]:12345->[192.0.2.1]:161'
+      - string: 'UDP: [192.0.2.5]:12345'
+        result: 'UDP: [192.0.2.5]:12345'
+      - string: 'TCP6: [2001:db8::1]:12345->[2001:db8::2]:161'
+        result: 'TCP6: [2001:db8::1]:12345->[2001:db8::2]:161'
+    negative:
+      - '192.0.2.5:12345'
+  SNMPD_CONNECTION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Connection from UDP: [192.0.2.5]:12345->[192.0.2.1]:161'
+        result: 'Connection from UDP: [192.0.2.5]:12345->[192.0.2.1]:161'
+    negative:
+      - 'Received SNMP packet(s) from UDP: [192.0.2.5]:12345'
+  SNMPD_PACKET:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Received SNMP packet(s) from UDP: [192.0.2.5]:12345->[192.0.2.1]:161'
+        result: 'Received SNMP packet(s) from UDP: [192.0.2.5]:12345->[192.0.2.1]:161'
+    negative:
+      - 'Connection from UDP: [192.0.2.5]:12345'
+  SNMPD_REFUSED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'refused (by com2sec) from UDP: [203.0.113.7]:12345'
+        result: 'refused (by com2sec) from UDP: [203.0.113.7]:12345'
+    negative:
+      - 'Connection from UDP: [192.0.2.5]:12345'
+  SNMPD_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'NET-SNMP version 5.9.3'
+        result: 'NET-SNMP version 5.9.3'
+      - string: 'Cannot statfs /run/user/1000: Permission denied'
+        result: 'Cannot statfs /run/user/1000: Permission denied'
+    negative:
+      - ''
+geoip:
+  - snmpd_src_ip
+convert:
+  snmpd_src_port: int
+  snmpd_dst_port: int
+rules:
+  - name: snmpd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^snmpd$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - SNMPD_CONNECTION
+      - SNMPD_PACKET
+      - SNMPD_REFUSED
+      # last: matches anything, which is only safe because the rule is gated
+      - SNMPD_MESSAGE
+    tests:
+      positive:
+        - string: 'Connection from UDP: [192.0.2.5]:12345->[192.0.2.1]:161'
+          numeric:
+            - snmpd_dst_port
+            - snmpd_src_port
+          result:
+            snmpd_transport: 'UDP'
+            snmpd_src_ip: '192.0.2.5'
+            snmpd_src_port: '12345'
+            snmpd_dst_ip: '192.0.2.1'
+            snmpd_dst_port: '161'
+        - string: 'Received SNMP packet(s) from UDP: [192.0.2.5]:12345->[192.0.2.1]:161'
+          result:
+            snmpd_transport: 'UDP'
+            snmpd_src_ip: '192.0.2.5'
+            snmpd_src_port: '12345'
+            snmpd_dst_ip: '192.0.2.1'
+            snmpd_dst_port: '161'
+        - string: 'refused (by com2sec) from UDP: [203.0.113.7]:12345'
+          result:
+            snmpd_refusal: 'refused (by com2sec)'
+            snmpd_transport: 'UDP'
+            snmpd_src_ip: '203.0.113.7'
+            snmpd_src_port: '12345'
+        - string: 'NET-SNMP version 5.9.3'
+          program: 'snmpd'
+          result:
+            snmpd_message: 'NET-SNMP version 5.9.3'
+      negative:
+        - ''
+        - string: 'Connection from UDP: [192.0.2.5]:12345->[192.0.2.1]:161'
+          program: 'snmpd-extra'

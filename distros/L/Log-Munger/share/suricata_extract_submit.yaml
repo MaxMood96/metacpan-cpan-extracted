@@ -1,0 +1,210 @@
+---
+# suricata_extract_submit log enrichment.
+#
+# suricata_extract_submit takes the files Suricata carved out of the wire
+# (file-store / filenames JSON under the Suricata log directory) and submits
+# them to a malware sandbox. It runs from cron, so every invocation writes the
+# same short startup trace and then one "Run Stats" line, which is where all the
+# information actually is.
+#
+# Gates on the syslog PROGRAM field being "suricata_extract_submit". Patterns
+# are anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with ses_ .
+#
+# The Run Stats line carries a whole JSON document, so it is captured as one
+# blob and handed to a `type: json` decompose that flattens it into ses_*
+# counters. Each counter has a matching "_delta" giving the change since the
+# previous run, so ses_sub_fail is the running total of failed submissions and
+# ses_sub_fail_delta is how many failed this time -- the delta is the one to
+# alert on.
+includes:
+- base
+vars_templated:
+  # "Run Stats: {"errors":0,...}"
+  #
+  # The whole line after the label is a JSON object. It is matched loosely --
+  # anything starting with "{" -- because asserting its shape here would only
+  # duplicate what the JSON decode already enforces.
+  SES_RUN_STATS: 'Run Stats: (?<ses_json>\{[% GREEDYDATA %])'
+  # "Suricata Malware Extractor starting up.."
+  # Note the two trailing dots; that is what it writes.
+  SES_STARTING: '(?<ses_state>Suricata Malware Extractor starting up)\.\.'
+  # "Config /usr/local/etc/suricata_extract_submit.ini read..."
+  SES_CONFIG_READ: 'Config (?<ses_config_file>[% NOTSPACE %]) read\.\.\.'
+  # "reading in ignoreWebACL file... /usr/local/etc/suricata_extract_submit_webacl.json"
+  SES_WEBACL_FILE: 'reading in ignoreWebACL file\.\.\. (?<ses_webacl_file>[% NOTSPACE %])'
+  # "0 ACLs loaded to ignore for WebACL"
+  SES_WEBACL_LOADED: '(?<ses_webacl_count>[% INT %]) ACLs loaded to ignore for WebACL'
+  # "Looking for JSON files under /var/log/suricata/files/"
+  SES_LOOKING: 'Looking for JSON files under (?<ses_files_dir>[% NOTSPACE %])'
+  # "None found at this time"
+  # The ordinary outcome: Suricata carved nothing out since the last run.
+  SES_NONE_FOUND: '(?<ses_state>None found at this time)'
+  # Everything else it said. Matching anything is only safe because the rule is
+  # gated on PROGRAM.
+  SES_MESSAGE: '(?<ses_message>.+)'
+vars_tests:
+  SES_RUN_STATS:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Run Stats: {"errors":0,"sub":845,"sub_fail":8}'
+        result: 'Run Stats: {"errors":0,"sub":845,"sub_fail":8}'
+      - string: 'Run Stats: {}'
+        result: 'Run Stats: {}'
+    negative:
+      - 'None found at this time'
+  SES_STARTING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Suricata Malware Extractor starting up..'
+        result: 'Suricata Malware Extractor starting up..'
+    negative:
+      - 'None found at this time'
+  SES_CONFIG_READ:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Config /usr/local/etc/suricata_extract_submit.ini read...'
+        result: 'Config /usr/local/etc/suricata_extract_submit.ini read...'
+      - string: 'Config /etc/suricata_extract_submit.ini read...'
+        result: 'Config /etc/suricata_extract_submit.ini read...'
+    negative:
+      - 'reading in ignoreWebACL file... /usr/local/etc/webacl.json'
+  SES_WEBACL_FILE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'reading in ignoreWebACL file... /usr/local/etc/suricata_extract_submit_webacl.json'
+        result: 'reading in ignoreWebACL file... /usr/local/etc/suricata_extract_submit_webacl.json'
+      - string: 'reading in ignoreWebACL file... /etc/webacl.json'
+        result: 'reading in ignoreWebACL file... /etc/webacl.json'
+    negative:
+      - '0 ACLs loaded to ignore for WebACL'
+  SES_WEBACL_LOADED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '0 ACLs loaded to ignore for WebACL'
+        result: '0 ACLs loaded to ignore for WebACL'
+      - string: '12 ACLs loaded to ignore for WebACL'
+        result: '12 ACLs loaded to ignore for WebACL'
+    negative:
+      - 'reading in ignoreWebACL file... /etc/webacl.json'
+  SES_LOOKING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Looking for JSON files under /var/log/suricata/files/'
+        result: 'Looking for JSON files under /var/log/suricata/files/'
+      - string: 'Looking for JSON files under /var/log/suricata/filestore/'
+        result: 'Looking for JSON files under /var/log/suricata/filestore/'
+    negative:
+      - 'None found at this time'
+  SES_NONE_FOUND:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'None found at this time'
+        result: 'None found at this time'
+    negative:
+      - 'Looking for JSON files under /var/log/suricata/files/'
+  SES_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'something it has not been taught yet'
+        result: 'something it has not been taught yet'
+      - string: 'None found at this time'
+        result: 'None found at this time'
+    negative:
+      - ''
+# JSON-decode the Run Stats blob and flatten it into ses_*.
+decompose:
+  - field: ses_json
+    type: json
+    prefix: 'ses_'
+    remove: true
+    tests:
+      # a counter, its delta, a byte total, the run timestamp, and the empty
+      # last_errors array the real line always carries
+      - input: '{"sub":845,"sub_fail":8,"sub_fail_delta":3,"sub_size":920866106,"timestamp":1780440085,"last_errors":[]}'
+        result:
+          ses_sub: 845
+          ses_sub_fail: 8
+          ses_sub_fail_delta: 3
+          ses_sub_size: 920866106
+          ses_timestamp: 1780440085
+# Coerce the counters that come from a pattern rather than from the JSON. The
+# JSON decode already yields numbers for everything under ses_json.
+convert:
+  ses_webacl_count: int
+rules:
+  - name: suricata_extract_submit
+    gate:
+      - field: PROGRAM
+        values:
+          - suricata_extract_submit
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - SES_RUN_STATS
+      - SES_STARTING
+      - SES_CONFIG_READ
+      - SES_WEBACL_FILE
+      - SES_WEBACL_LOADED
+      - SES_LOOKING
+      - SES_NONE_FOUND
+      # last: matches anything, which is only safe because the rule is gated
+      - SES_MESSAGE
+    tests:
+      positive:
+        # the rule tests compare captures before decompose runs, so what is
+        # asserted here is the blob; the flattening is tested by the decompose
+        - string: 'Run Stats: {"errors":0,"sub":845}'
+          enriched:
+            ses_errors: '0'
+            ses_sub: '845'
+          numeric:
+            - ses_errors
+            - ses_sub
+          result:
+            ses_json: '{"errors":0,"sub":845}'
+        - string: 'Suricata Malware Extractor starting up..'
+          result:
+            ses_state: 'Suricata Malware Extractor starting up'
+        - string: 'Config /usr/local/etc/suricata_extract_submit.ini read...'
+          result:
+            ses_config_file: '/usr/local/etc/suricata_extract_submit.ini'
+        - string: 'reading in ignoreWebACL file... /usr/local/etc/suricata_extract_submit_webacl.json'
+          result:
+            ses_webacl_file: '/usr/local/etc/suricata_extract_submit_webacl.json'
+        - string: '0 ACLs loaded to ignore for WebACL'
+          numeric:
+            - ses_webacl_count
+          result:
+            ses_webacl_count: '0'
+        - string: 'Looking for JSON files under /var/log/suricata/files/'
+          result:
+            ses_files_dir: '/var/log/suricata/files/'
+        - string: 'None found at this time'
+          program: 'suricata_extract_submit'
+          result:
+            ses_state: 'None found at this time'
+        # falls through to the catch-all
+        - string: 'some future message'
+          result:
+            ses_message: 'some future message'
+        # a full run-stats payload, so every counter the JSON flatten produces is seen
+        - string: 'Run Stats: {"sub":845,"sub_fail":8,"sub_fail_delta":3,"sub_size":920866106,"timestamp":1780440085}'
+          numeric:
+            - ses_sub_fail
+            - ses_sub_fail_delta
+            - ses_sub_size
+            - ses_timestamp
+          program: 'suricata_extract_submit'
+          result:
+            ses_json: '{"sub":845,"sub_fail":8,"sub_fail_delta":3,"sub_size":920866106,"timestamp":1780440085}'
+          enriched:
+            ses_sub: '845'
+            ses_sub_fail: '8'
+            ses_sub_fail_delta: '3'
+            ses_sub_size: '920866106'
+            ses_timestamp: '1780440085'
+      negative:
+        - ''
+        - string: 'Run Stats: {"errors":0,"sub":845}'
+          program: 'suricata_extract_submit-extra'

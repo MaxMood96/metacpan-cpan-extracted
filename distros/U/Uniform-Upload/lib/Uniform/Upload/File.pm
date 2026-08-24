@@ -2,136 +2,85 @@ package Uniform::Upload::File;
 
 use strict;
 use warnings;
-use File::Copy qw(copy);
+use File::Copy qw(copy move);
 use File::Basename qw(basename);
 use Uniform::Exceptions;
-use Uniform::Utils qw(parse_size_limit);
+use Carp qw(croak);
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
-# Constructor wraps the raw hash attributes
 sub new {
-    my ($class, $meta) = @_;
+    my ($class, %args) = @_;
 
     my $self = {
-        tempname => $meta->{tempname} || undef,
-        filename => $meta->{filename} || undef,
-        size     => $meta->{size}     || 0,
-        type     => $meta->{type}     || undef,
+        name          => $args{name},
+        filename      => $args{filename},
+        tmp_path      => $args{tmp_path},
+        size          => $args{size} || 0,
+        type          => $args{type} || 'application/octet-stream',
+        max_size      => $args{max_size},
+        allowed_types => $args{allowed_types} || [],
+        error         => undef,
     };
 
-    return bless $self, $class;
-}
-
-sub size     { my $self = shift; return $self->{size} }
-sub type     { my $self = shift; return $self->{type} }
-sub filename { my $self = shift; return $self->{filename} }
-
-# Validates the file's size against a human-readable max, e.g. '2M', '500K', '1G', or a plain byte count.
-# Delegates the string parsing to Uniform::Utils::parse_size_limit, shared across the
-# Uniform ecosystem. Throws a ValidationError if the file exceeds the limit (parse_size_limit
-# throws its own ValidationError for a missing/unparsable limit string). Returns $self on success.
-sub max_size {
-    my ($self, $limit) = @_;
-
-    my $bytes = parse_size_limit($limit);
-
-    if (($self->{size} || 0) > $bytes) {
-        Uniform::Exceptions->throw(
-            type      => 'ValidationError',
-            message   => "File size $self->{size} exceeds maximum allowed size of $limit",
-            attribute => 'size',
-        );
-    }
+    bless $self, $class;
+    $self->_validate;
 
     return $self;
 }
 
-# Validates the file's MIME type against a whitelist of allowed types.
-# Throws a ValidationError if the type is not permitted. Returns $self on success for chaining.
-sub allowed_types {
-    my ($self, $types) = @_;
+sub name               { $_[0]->{name} }
+sub filename           { $_[0]->{filename} }
+sub tmp_path           { $_[0]->{tmp_path} }
+sub size               { $_[0]->{size} }
+sub type               { $_[0]->{type} }
+sub error              { $_[0]->{error} }
+sub is_valid           { !defined $_[0]->{error} }
 
-    unless (defined $types && ref($types) eq 'ARRAY' && @$types) {
-        Uniform::Exceptions->throw(
-            type    => 'ValidationError',
-            message => 'allowed_types requires a non-empty arrayref of MIME type strings',
-        );
-    }
-
-    my $type = defined $self->{type} ? $self->{type} : '';
-    unless (grep { $_ eq $type } @$types) {
-        Uniform::Exceptions->throw(
-            type      => 'ValidationError',
-            message   => "File type '$type' is not among the allowed types: " . join(', ', @$types),
-            attribute => 'type',
-        );
-    }
-
-    return $self;
-}
-
-# Defensive security guard scrubbing malicious directory path mutations or null-byte hacks
-sub sanitize_filename {
+sub sanitized_filename {
     my ($self) = @_;
-    return $self unless defined $self->{filename} && length $self->{filename};
+    return '' unless defined $self->{filename};
 
-    my $raw_name = $self->{filename};
-
-    # 1. Standardize cross-platform separators
-    $raw_name =~ s{\\}{/}g;
-
-    # 2. Strip directory segments completely to isolate the true file tail node
-    my $clean = basename($raw_name);
-
-    # 3. Purge dangerous language boundary markers (null bytes)
-    $clean =~ s/\x00//g;
-
-    # 4. Whitelist safe alphanumeric boundaries, converting illegal parameters to hyphens
-    $clean =~ s/[^a-zA-Z0-9._-]/-/g;
-
-    # 5. Collapse duplicate or trailing hyphen strings
-    $clean =~ s/-+/-/g;
-    $clean =~ s/^-+|-+$//g;
-
-    # 6. Safety fallback: If string filtering reduces the name to nothing, provide a safe default string
-    if (!defined $clean || length($clean) == 0 || $clean eq '.') {
-        $clean = 'uploaded_file';
-    }
-
-    $self->{filename} = $clean;
-    return $self;
+    my $clean = basename($self->{filename});
+    $clean =~ s/[^\w\.\-]/_/g;
+    return $clean;
 }
 
-# Output execution boundary: Copies the file from temporary cache storage to live system storage destinations.
-# Always sanitizes the filename first so callers can't accidentally skip that step and reopen a
-# path-traversal hole by passing an unsanitized $self->{filename} straight into the target path.
-sub save_to {
-    my ($self, $destination) = @_;
+sub _validate {
+    my ($self) = @_;
 
-    unless (defined $destination && length $destination) {
-        Uniform::Exceptions->throw(type => 'ValidationError', message => 'save_to requires an absolute folder or string path target destination');
+    if (defined $self->{max_size} && $self->{size} > $self->{max_size}) {
+        $self->{error} = sprintf("File size (%d bytes) exceeds maximum limit (%d bytes)", $self->{size}, $self->{max_size});
+        return;
     }
 
-    my $source = $self->{tempname};
-    unless (defined $source && -e $source) {
-        Uniform::Exceptions->throw(type => 'IOError', message => 'Temporary source cache file does not exist or has expired from system paths');
+    if (@{ $self->{allowed_types} }) {
+        my %allowed = map { $_ => 1 } @{ $self->{allowed_types} };
+        unless ($allowed{ $self->{type} }) {
+            $self->{error} = sprintf("MIME type '%s' is not allowed", $self->{type});
+            return;
+        }
     }
+}
 
-    $self->sanitize_filename;
+sub copy_to {
+    my ($self, $dest) = @_;
 
-    my $target = $destination;
-    if ($destination =~ m{[\\/]$} || -d $destination) {
-        $destination =~ s{[\\/]$}{};
-        $target = "$destination/" . $self->{filename};
-    }
+    croak "Cannot copy invalid file: " . $self->{error}
+        unless $self->is_valid;
 
-    copy($source, $target) or Uniform::Exceptions->throw(
-        type    => 'IOError',
-        message => "Failed to copy file from '$source' to '$target': $!",
-    );
+    copy($self->{tmp_path}, $dest)
+        or Uniform::Exceptions->throw("Failed to copy upload file to $dest: $!");
+}
 
-    return $self;
+sub move_to {
+    my ($self, $dest) = @_;
+
+    croak "Cannot move invalid file: " . $self->{error}
+        unless $self->is_valid;
+
+    move($self->{tmp_path}, $dest)
+        or Uniform::Exceptions->throw("Failed to move upload file to $dest: $!");
 }
 
 1;
@@ -144,101 +93,107 @@ __END__
 
 =head1 NAME
 
-Uniform::Upload::File - Value object wrapping a single uploaded file's metadata and operations
+Uniform::Upload::File - Encapsulated file upload wrapper with validation and file management
 
 =head1 SYNOPSIS
 
-Instances of this class are not normally constructed directly. They are returned by
-L<Uniform::Upload/file>, which lazily wraps the raw upload metadata a driver subclass
-collected:
+    use Uniform::Upload::File;
 
-    my $file = $upload->file('avatar_field');
+    my $file = Uniform::Upload::File->new(
+        name          => 'attachment',
+        filename      => '../../../etc/passwd.jpg',
+        tmp_path      => '/tmp/upload_tmp_8812',
+        size          => 10240,
+        type          => 'image/jpeg',
+        max_size      => 1048576,
+        allowed_types => ['image/jpeg'],
+    );
 
-    $file->max_size('2M');
-    $file->allowed_types(['image/jpeg', 'image/png']);
-
-    $file->sanitize_filename;
-    $file->save_to('/var/www/uploads/');
+    if ($file->is_valid) {
+        print $file->sanitized_filename; # Output: passwd.jpg
+        $file->copy_to('/var/data/uploads/' . $file->sanitized_filename);
+    } else {
+        warn $file->error;
+    }
 
 =head1 DESCRIPTION
 
-C<Uniform::Upload::File> wraps the raw C<tempname>/C<filename>/C<size>/C<type> tuple
-produced by a framework's upload handling and provides a uniform, chainable interface
-for validating, sanitizing, and persisting the file. All validation and I/O methods
-throw L<Uniform::Exceptions> on failure rather than returning false, and return
-C<$self> on success so calls can be chained.
+C<Uniform::Upload::File> encapsulates individual file payloads. It executes automated size and MIME type checks upon instantiation, sanitizes user-supplied filenames to prevent path traversal attacks, and handles file movement operations safely.
 
 =head1 METHODS
 
-=head2 new( \%meta )
+=head2 new
 
-Constructs a new instance from a hashref of raw metadata. Recognized keys are
-C<tempname>, C<filename>, C<size>, and C<type>; any that are missing default to
-C<undef> (or C<0> for C<size>). This is normally called for you by
-L<Uniform::Upload/file>, not directly by application code.
+    my $file = Uniform::Upload::File->new(%args);
 
-=head2 size
+Constructs and validates the file wrapper. Populates C<error> if C<size> exceeds C<max_size> or if C<type> does not match C<allowed_types>.
 
-Returns the file's size in bytes, as reported by the upload metadata.
+=head2 is_valid
 
-=head2 type
+Returns C<1> if the file passed all validation checks, or C<0> if invalid.
 
-Returns the file's MIME type, as reported by the upload metadata.
+=head2 error
+
+Returns the validation error message string if invalid, or C<undef> if valid.
+
+=head2 name
+
+Returns the form parameter field name associated with the upload.
 
 =head2 filename
 
-Returns the file's current filename. This reflects whatever was passed in at
-construction time, unless it has since been overwritten by L</sanitize_filename>
-(which C<save_to> also calls internally).
+Returns the raw original filename supplied by the client.
 
-=head2 max_size( $limit )
+=head2 sanitized_filename
 
-Validates that L</size> does not exceed C<$limit>. Size string parsing is delegated
-to L<Uniform::Utils/parse_size_limit>: C<$limit> may be a human-readable size string
-such as C<'2M'>, C<'500K'>, or C<'1G'> (kilobytes/megabytes/gigabytes, 1024-based),
-or a plain number of bytes. Throws a C<ValidationError> if C<$limit> is missing or
-unparsable (raised by L<Uniform::Utils/parse_size_limit>), or if the limit is
-exceeded (raised here). Returns C<$self> on success.
+    my $clean_name = $file->sanitized_filename;
 
-=head2 allowed_types( \@mime_types )
+Strips leading directory path structures and replaces unsafe characters (excluding letters, numbers, dots, hyphens, and underscores) with underscores to eliminate path traversal threats.
 
-Validates that L</type> exactly matches one of the strings in C<\@mime_types>.
-Throws a C<ValidationError> if the arrayref is missing/empty, or if the file's
-type is not in the list. Returns C<$self> on success.
+=head2 tmp_path
 
-=head2 sanitize_filename
+Returns the path to the buffered temporary file on disk.
 
-Rewrites L</filename> in place to a safe, flat filename: cross-platform path
-separators are normalized, any directory component is stripped (via
-L<File::Basename>), null bytes are removed, and remaining characters outside
-C<[a-zA-Z0-9._-]> are collapsed to hyphens. If sanitization would produce an
-empty or meaningless name, it falls back to C<'uploaded_file'>. Returns C<$self>.
-Safe to call on a file with no filename set (a no-op in that case).
+=head2 size
 
-=head2 save_to( $destination )
+Returns the file payload size in bytes.
 
-Copies the file from its temporary source path to C<$destination>. Always calls
-L</sanitize_filename> first, so the copied file is written under a safe name
-regardless of whether the caller sanitized it beforehand — note this means
-L</filename> may be mutated as a side effect of calling C<save_to>.
+=head2 type
 
-If C<$destination> ends in a path separator, or is an existing directory, the
-file is written inside it under its (now-sanitized) filename; otherwise
-C<$destination> is treated as the full target path. Throws a C<ValidationError>
-if C<$destination> is missing, an C<IOError> if the temporary source file no
-longer exists, and an C<IOError> if the copy itself fails. Returns C<$self> on
-success.
+Returns the declared MIME type string.
+
+=head2 copy_to
+
+    $file->copy_to($destination_path);
+
+Copies the temporary file to the destination path. Croaks if called on an invalid file or throws a L<Uniform::Exceptions> exception on filesystem failure.
+
+=head2 move_to
+
+    $file->move_to($destination_path);
+
+Moves the temporary file to the destination path. Croaks if called on an invalid file or throws a L<Uniform::Exceptions> exception on filesystem failure.
 
 =head1 SEE ALSO
 
-L<Uniform::Upload>, L<Uniform::Exceptions>, L<Uniform::Utils>
+=over 4
+
+=item * L<Uniform::Upload>
+
+=item * L<Uniform::Exceptions>
+
+=back
 
 =head1 AUTHOR
 
 Joshua S. Day E<lt>HAX@cpan.orgE<gt>
 
-=head1 LICENSE
+=head1 LICENSE AND COPYRIGHT
 
-MIT License. Copyright (c) 2026 Joshua S. Day.
+This software is Copyright (c) 2026 by Joshua S. Day[cite: 9].
+
+This is free software, licensed under:
+
+  The MIT (X11) License
 
 =cut

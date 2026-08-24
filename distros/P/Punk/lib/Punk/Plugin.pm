@@ -4,7 +4,7 @@ use 5.010;
 use strict;
 use warnings;
 
-our $VERSION = '0.30';
+our $VERSION = '0.31';
 
 sub new { bless {}, $_[0] }
 
@@ -86,6 +86,31 @@ after the guards for exactly this reason - a C<304> issued before
 authentication is an authorisation check turned into a cache hit - and is on
 an internal seam too. There is currently no public phase between the guards
 and the handler.
+
+=head2 before_render
+
+    $app->hook(before_render => sub {
+        my ($c, $template, $data) = @_;
+        $data->{feature} = $c->features;
+    });
+
+Runs once per C<< $c->render >>, after Punk's own binds (C<url>,
+C<csp_nonce>, C<locale>), with the hashref the engine is about to receive.
+That is where a plugin puts something every template can read without the
+handler passing it.
+
+The return value is dropped. A hook's business is the data; one that could
+replace the response would be a second dispatcher, and this phase is not it.
+
+It runs B<after> the handler has built the data, so a key a hook sets wins
+over one the handler passed under the same name. Set the key a plugin owns
+and nothing else, and give it a name specific enough not to collide - the
+render is shared with the application.
+
+Only renders reach it: a route answering with C<< $c->text >> or
+C<< $c->json >> renders nothing and calls nothing. It is stored only when a
+hook was registered, so an application without one pays a single hash lookup
+that misses.
 
 =head2 A shipped example
 

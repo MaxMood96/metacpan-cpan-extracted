@@ -10,7 +10,7 @@ use File::Copy ();
 use File::Basename ();
 use Template::Stencil;
 
-our $VERSION = '0.30';
+our $VERSION = '0.31';
 
 sub new {
     my ($class, %args) = @_;
@@ -50,9 +50,13 @@ sub ident {
 
 # Render one skeleton template to a string, or straight to a file. Same engine,
 # same options, so a stub added later is identical to one generated up front.
+# Class methods, and the search path below is the invocant's: called on
+# Punk::Generate they see Punk's templates, called on a kit they see the kit's
+# first and Punk's behind them.
 sub render_skel {
     my ($class, $template, $vars) = @_;
-    return _shared_engine()->render($template, $vars || {});
+    my ($dir) = $class->_find_skel($template);
+    return _engine_for($dir)->render($template, $vars || {});
 }
 
 sub write_skel {
@@ -159,27 +163,59 @@ sub _ident {
 
 # ---- writing -----------------------------------------------------------------
 
-sub _skel_dir {
-    my $pm = $INC{'Punk/Generate.pm'}
-        or Carp::croak('Punk::Generate: cannot locate my own installation');
+# Where a class keeps its templates: lib/<class path>/skel, beside the module.
+# Punk::Generate -> Punk/Generate/skel, Punk::Kit::Diy -> Punk/Kit/Diy/skel.
+# Read from %INC rather than computed from @INC, so a blib and an installed
+# copy in the same @INC cannot disagree.
+sub skel_dir {
+    my ($class) = @_;
+    $class = ref $class || $class;
+    (my $file = "$class.pm") =~ s{::}{/}g;
+    my $pm = $INC{$file}
+        or Carp::croak("$class: cannot locate my own installation");
     (my $dir = $pm) =~ s/\.pm\z//;
     return "$dir/skel";
 }
 
-# The engine. auto_escape => 0 because this generates Perl, YAML and psgi -
+# The search path: every class in the inheritance chain that ships templates,
+# most derived first. That is what lets a kit override one of Punk's templates
+# by name and inherit the rest, rather than copying the whole skeleton to
+# change a line of it.
+sub skel_dirs {
+    my ($class) = @_;
+    $class = ref $class || $class;
+    require mro;
+    return grep { -d }
+           map  { $_->can('skel_dir') ? $_->skel_dir : () }
+           @{ mro::get_linear_isa($class) };
+}
+
+# The first directory on the path holding $rel, and the file inside it.
+sub _find_skel {
+    my ($class, $rel) = @_;
+    my @dirs = $class->skel_dirs;
+    for my $d (@dirs) {
+        my $abs = File::Spec->catfile($d, split m{/}, $rel);
+        return ($d, $abs) if -f $abs;
+    }
+    Carp::croak("Punk::Generate: no skeleton template '$rel' in "
+              . (@dirs ? join(', ', @dirs) : '(no skeleton directories)'));
+}
+
+# The engines. auto_escape => 0 because this generates Perl, YAML and psgi -
 # escaping would turn every quote, & and < in the output into an entity.
-# One per process: Stencil caches compiled templates, and there is no reason
-# for a second generator to compile them again.
-my $ENGINE;
-sub _shared_engine {
-    return $ENGINE ||= Template::Stencil->new(
-        template_dir => _skel_dir(),
+# One per directory rather than one per process: Stencil takes a single
+# template_dir, and it caches compiled templates, so a second generator over
+# the same directory should not compile them again.
+my %ENGINE;
+sub _engine_for {
+    my ($dir) = @_;
+    return $ENGINE{$dir} ||= Template::Stencil->new(
+        template_dir => $dir,
         auto_escape  => 0,
         chars        => 1,       # decoded text; the write below encodes once
     );
 }
-
-sub _engine { return _shared_engine() }
 
 sub _has_entries {
     my ($dir) = @_;
@@ -201,16 +237,16 @@ sub _render {
     my $abs = $self->_dest($rel);
     open my $fh, '>:encoding(UTF-8)', $abs
         or Carp::croak("Punk::Generate: cannot write $abs: $!");
-    print $fh $self->_engine->render($template, $vars);
+    print $fh $self->render_skel($template, $vars);
     close $fh or Carp::croak("Punk::Generate: cannot close $abs: $!");
-    push @{ $self->{written} }, $rel;
+    $self->_wrote($rel);
     return $abs;
 }
 
 sub _copy {
     my ($self, $skel_rel, $rel) = @_;
-    return $self->_copy_file(
-        File::Spec->catfile(_skel_dir(), split m{/}, $skel_rel), $rel);
+    my (undef, $src) = $self->_find_skel($skel_rel);
+    return $self->_copy_file($src, $rel);
 }
 
 sub _copy_file {
@@ -218,8 +254,18 @@ sub _copy_file {
     my $abs = $self->_dest($rel);
     File::Copy::copy($src, $abs)
         or Carp::croak("Punk::Generate: cannot copy $src to $abs: $!");
-    push @{ $self->{written} }, $rel;
+    $self->_wrote($rel);
     return $abs;
+}
+
+# One entry per path, in the order it was first written. A kit that renders
+# over one of the base skeleton's files - the point of the search path - must
+# not have it listed twice.
+sub _wrote {
+    my ($self, $rel) = @_;
+    push @{ $self->{written} }, $rel
+        unless grep { $_ eq $rel } @{ $self->{written} };
+    return;
 }
 
 # ---- the OpenAPI side --------------------------------------------------------
@@ -505,6 +551,72 @@ without which Punk croaks at boot naming the scheme. Those stubs refuse
 every request until implemented, so the operations the specification
 protects are not opened by a placeholder. A scheme defined in
 C<components> but never required needs no checker and gets none.
+
+=head1 KITS
+
+A kit is a generator of its own, reached as C<punk new MyApp --kit NAME>,
+which loads C<Punk::Kit::E<lt>NameE<gt>> and generates through that
+instead of the basic skeleton. A distribution ships one to hand somebody
+a whole working application - authentication, a schema, an admin area -
+where this module hands them a welcome page.
+
+    package Punk::Kit::Diy;
+    use parent 'Punk::Generate';
+
+    sub abstract { 'auth, a schema, an admin area and API keys' }
+
+    # Punk::Command option specs, merged into `punk new` for the run;
+    # `punk new --kit diy --help` lists them.
+    sub options {
+        return ( { spec => 'without=s', arg => 'LIST',
+                   doc  => 'parts to leave out (comma separated)' } );
+    }
+
+    sub new {
+        my ($class, %args) = @_;
+        my $self = $class->SUPER::new(%args);
+        $self->{without} = { map { $_ => 1 } split /,/, $args{without} || '' };
+        return $self;
+    }
+
+    sub run {
+        my ($self) = @_;
+        $self->SUPER::run;                      # the base tree
+        $self->_render('admin.tmpl', 'lib/.../Admin.pm', \%vars);
+        return $self->written;
+    }
+
+    sub next_steps { "\n  cd $_[0]{dir}\n  punk sqitch deploy\n" }
+
+C<new> ignores constructor arguments it does not recognise, so a kit
+reads its own options straight out of C<%args>. Only C<name> is required
+of it.
+
+=head2 Templates
+
+A kit keeps its templates in C<skel/> beside its own module -
+C<lib/Punk/Kit/Diy/skel/> for the class above - and C<skel_dirs> makes
+the search path from the inheritance chain, most derived first. So
+C<_render> and C<render_skel> find the kit's template when it has one and
+Punk's when it does not, and a kit that ships C<readme_md.tmpl> overrides
+the one this module ships without touching the rest.
+
+Rendering over a path the base skeleton already wrote is how a kit
+replaces part of the tree; C<written> lists each path once, in the order
+it was first written.
+
+Two things to know. A template's C<{% include %}> resolves against the
+directory that template came from, so a kit's template cannot include one
+of Punk's. And templates are not C<.pm> files, so a distribution shipping
+them has to add them to C<PM> in its F<Makefile.PL> by hand - MakeMaker
+finds C<.pm> and C<.pod> and nothing else.
+
+=head2 Failure
+
+A kit croaks for the same reasons this module does, and C<punk> strips
+the class name from the front of the message the same way, so a kit's
+diagnostics read like Punk's. Anything the kit can reject should be
+rejected in C<new>, before C<run> writes the first file.
 
 =head1 SEE ALSO
 

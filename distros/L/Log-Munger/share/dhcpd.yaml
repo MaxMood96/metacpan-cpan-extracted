@@ -1,0 +1,328 @@
+---
+# ISC dhcpd (DHCP server) lease-transaction log enrichment.
+#
+# Gates on the syslog PROGRAM field being "dhcpd". Patterns are anchored
+# (each must match the whole MESSAGE) and first-match wins. Every capture
+# is namespaced with dhcp_ . A unified dhcp_type capture records the DHCP
+# message type (DHCPDISCOVER / DHCPOFFER / DHCPREQUEST / DHCPACK / DHCPNAK /
+# DHCPRELEASE / DHCPDECLINE). MAC addresses are the colon-separated hex
+# form covered by the base MAC / COMMONMAC primitive.
+includes:
+- base
+vars_templated:
+  # The trailing "via <where>" clause, plus whatever dhcpd appended after it.
+  #
+  # The interface is matched as a bounded character set rather than as
+  # NOTSPACE. dhcpd separates a trailing note from the interface with a colon
+  # and no space -- "via eth0: network 192.0.2.0/24: no free leases" -- so a
+  # greedy NOTSPACE captures "eth0:" with the colon attached, which differs
+  # from the same interface on a line with nothing appended. "via" can also
+  # name a relay agent by address, hence the dots in the set.
+  #
+  # The note is captured rather than discarded, because on the failure lines it
+  # is the message: "no free leases", "unknown lease", "wrong network". A pool
+  # that has run dry says so only here.
+  DHCP_VIA: ' via (?<dhcp_iface>[A-Za-z0-9._-]+)(?::)?(?: (?<dhcp_message>[% GREEDYDATA %]))?'
+  # "DHCPACK on 192.0.2.50 to aa:bb:cc:dd:ee:ff (myhost) via eth0"
+  # ACK/NAK use "on <ip> to <mac>" with an optional client hostname clause.
+  DHCP_ACK: '(?<dhcp_type>DHCPACK|DHCPNAK) on (?<dhcp_ip>[% IP %]) to (?<dhcp_mac>[% MAC %])(?: \((?<dhcp_hostname>[% NOTSPACE %])\))?[% DHCP_VIA %]'
+  # "DHCPOFFER on 192.0.2.50 to aa:bb:cc:dd:ee:ff via eth0"
+  DHCP_OFFER: '(?<dhcp_type>DHCPOFFER) on (?<dhcp_ip>[% IP %]) to (?<dhcp_mac>[% MAC %])(?: \((?<dhcp_hostname>[% NOTSPACE %])\))?[% DHCP_VIA %]'
+  # "DHCPREQUEST for 192.0.2.50 (192.0.2.1) from aa:bb:cc:dd:ee:ff via eth0"
+  # The parenthetical after the requested IP is the server the client picked.
+  DHCP_REQUEST: '(?<dhcp_type>DHCPREQUEST) for (?<dhcp_ip>[% IP %])(?: \((?<dhcp_server_ip>[% IP %])\))? from (?<dhcp_mac>[% MAC %])(?: \((?<dhcp_hostname>[% NOTSPACE %])\))?[% DHCP_VIA %]'
+  # "DHCPRELEASE of 192.0.2.50 from aa:bb:cc:dd:ee:ff via eth0 (found)"
+  # "DHCPDECLINE of 192.0.2.50 from aa:bb:cc:dd:ee:ff via eth0: abandoned"
+  # RELEASE/DECLINE use "of <ip> from <mac>".
+  DHCP_RELEASE: '(?<dhcp_type>DHCPRELEASE|DHCPDECLINE) of (?<dhcp_ip>[% IP %]) from (?<dhcp_mac>[% MAC %])[% DHCP_VIA %]'
+  # "DHCPDISCOVER from aa:bb:cc:dd:ee:ff (myhost) via eth0"
+  # "DHCPDISCOVER from aa:bb:cc:dd:ee:ff via eth0: network 192.0.2.0/24: no free leases"
+  # DISCOVER has no lease IP; the client hostname clause is optional.
+  DHCP_DISCOVER: '(?<dhcp_type>DHCPDISCOVER) from (?<dhcp_mac>[% MAC %])(?: \((?<dhcp_hostname>[% NOTSPACE %])\))?[% DHCP_VIA %]'
+  # "DHCPINFORM from 192.0.2.50 via eth0"
+  # A client that configured its own address and is only asking for the rest of
+  # the options, so it names itself by address rather than by MAC. It is the
+  # one message type with no MAC on the line, hence a pattern of its own rather
+  # than a branch in one of the others.
+  DHCP_INFORM: '(?<dhcp_type>DHCPINFORM) from (?<dhcp_ip>[% IP %])[% DHCP_VIA %]'
+  # "uid lease 192.0.2.50 for client aa:bb:cc:dd:ee:ff is duplicate on 192.0.2.0/24"
+  #
+  # Two leases on one subnet claim the same client identifier, so dhcpd is
+  # throwing one away. It is usually a client that sends a DUID in one state and
+  # a MAC in another, or two pools overlapping, and it repeats on every renewal
+  # for as long as it is true -- which is why it can be the loudest thing dhcpd
+  # says without anyone having asked for it.
+  DHCP_DUPLICATE_UID: 'uid lease (?<dhcp_ip>[% IP %]) for client (?<dhcp_mac>[% MAC %]) is (?<dhcp_conflict>duplicate) on (?<dhcp_subnet>[% NOTSPACE %])'
+  # "Wrote 24 leases to leases file."
+  # "Wrote 0 new dynamic host decls to leases file."
+  # "Wrote 0 deleted host decls to leases file."
+  #
+  # The lease database being rewritten. dhcp_written_kind tells the three apart
+  # and dhcp_written_count is how many records of that kind went out.
+  DHCP_WROTE_LEASES: 'Wrote (?<dhcp_written_count>[% INT %]) (?<dhcp_written_kind>leases|new dynamic host decls|deleted host decls) to leases file\.'
+  # "Internet Systems Consortium DHCP Server 4.4.3-P1"
+  # The one startup banner line worth keeping, because it is the only place the
+  # running server version is recorded.
+  DHCP_VERSION: 'Internet Systems Consortium DHCP Server (?<dhcp_version>[% NOTSPACE %])'
+  # "Server starting service."
+  DHCP_STARTING: '(?<dhcp_state>Server starting service)\.'
+  # The rest of the ISC copyright banner, which has nothing in it worth a field
+  # but is named so it is not mistaken for something unparsed.
+  DHCP_BANNER: '(?<dhcp_banner>Copyright [% GREEDYDATA %]|All rights reserved\.|For info, please visit [% GREEDYDATA %])'
+vars_tests:
+  DHCP_ACK:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'DHCPACK on 192.0.2.50 to aa:bb:cc:dd:ee:ff (myhost) via eth0'
+        result: 'DHCPACK on 192.0.2.50 to aa:bb:cc:dd:ee:ff (myhost) via eth0'
+      - string: 'DHCPNAK on 192.0.2.50 to aa:bb:cc:dd:ee:ff via eth0'
+        result: 'DHCPNAK on 192.0.2.50 to aa:bb:cc:dd:ee:ff via eth0'
+    negative:
+      - 'DHCPOFFER on 192.0.2.50 to aa:bb:cc:dd:ee:ff via eth0'
+  DHCP_OFFER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'DHCPOFFER on 192.0.2.50 to aa:bb:cc:dd:ee:ff via eth0'
+        result: 'DHCPOFFER on 192.0.2.50 to aa:bb:cc:dd:ee:ff via eth0'
+      - string: 'DHCPOFFER on 198.51.100.9 to 00:11:22:33:44:55 (laptop) via eth1'
+        result: 'DHCPOFFER on 198.51.100.9 to 00:11:22:33:44:55 (laptop) via eth1'
+    negative:
+      - 'DHCPACK on 192.0.2.50 to aa:bb:cc:dd:ee:ff via eth0'
+  DHCP_REQUEST:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'DHCPREQUEST for 192.0.2.50 (192.0.2.1) from aa:bb:cc:dd:ee:ff via eth0'
+        result: 'DHCPREQUEST for 192.0.2.50 (192.0.2.1) from aa:bb:cc:dd:ee:ff via eth0'
+      - string: 'DHCPREQUEST for 192.0.2.50 from aa:bb:cc:dd:ee:ff via eth0'
+        result: 'DHCPREQUEST for 192.0.2.50 from aa:bb:cc:dd:ee:ff via eth0'
+    negative:
+      - 'DHCPRELEASE of 192.0.2.50 from aa:bb:cc:dd:ee:ff via eth0 (found)'
+  DHCP_RELEASE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'DHCPRELEASE of 192.0.2.50 from aa:bb:cc:dd:ee:ff via eth0 (found)'
+        result: 'DHCPRELEASE of 192.0.2.50 from aa:bb:cc:dd:ee:ff via eth0 (found)'
+      - string: 'DHCPDECLINE of 192.0.2.50 from aa:bb:cc:dd:ee:ff via eth0: abandoned'
+        result: 'DHCPDECLINE of 192.0.2.50 from aa:bb:cc:dd:ee:ff via eth0: abandoned'
+    negative:
+      - 'DHCPREQUEST for 192.0.2.50 (192.0.2.1) from aa:bb:cc:dd:ee:ff via eth0'
+  DHCP_DISCOVER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'DHCPDISCOVER from aa:bb:cc:dd:ee:ff via eth0'
+        result: 'DHCPDISCOVER from aa:bb:cc:dd:ee:ff via eth0'
+      - string: 'DHCPDISCOVER from aa:bb:cc:dd:ee:ff (myhost) via eth0'
+        result: 'DHCPDISCOVER from aa:bb:cc:dd:ee:ff (myhost) via eth0'
+      - string: 'DHCPDISCOVER from aa:bb:cc:dd:ee:ff via eth0: network 192.0.2.0/24: no free leases'
+        result: 'DHCPDISCOVER from aa:bb:cc:dd:ee:ff via eth0: network 192.0.2.0/24: no free leases'
+    negative:
+      - 'DHCPOFFER on 192.0.2.50 to aa:bb:cc:dd:ee:ff via eth0'
+  DHCP_INFORM:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'DHCPINFORM from 192.0.2.50 via eth0'
+        result: 'DHCPINFORM from 192.0.2.50 via eth0'
+      - string: 'DHCPINFORM from 192.0.2.50 via 192.0.2.1'
+        result: 'DHCPINFORM from 192.0.2.50 via 192.0.2.1'
+    negative:
+      # INFORM names the client by address, never by MAC.
+      - 'DHCPINFORM from aa:bb:cc:dd:ee:ff via eth0'
+      - 'DHCPDISCOVER from aa:bb:cc:dd:ee:ff via eth0'
+  DHCP_VIA:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: ' via eth0'
+        result: ' via eth0'
+      - string: ' via br-lan'
+        result: ' via br-lan'
+      # A relay agent names itself by address.
+      - string: ' via 192.0.2.1'
+        result: ' via 192.0.2.1'
+      # The colon belongs to the note, not to the interface.
+      - string: ' via eth0: network 192.0.2.0/24: no free leases'
+        result: ' via eth0: network 192.0.2.0/24: no free leases'
+      - string: ' via eth0 (found)'
+        result: ' via eth0 (found)'
+    negative:
+      - 'via eth0'
+      - ' via '
+  DHCP_DUPLICATE_UID:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'uid lease 192.0.2.50 for client aa:bb:cc:dd:ee:ff is duplicate on 192.0.2.0/24'
+        result: 'uid lease 192.0.2.50 for client aa:bb:cc:dd:ee:ff is duplicate on 192.0.2.0/24'
+      - string: 'uid lease 198.51.100.9 for client 00:11:22:33:44:55 is duplicate on 198.51.100.0/23'
+        result: 'uid lease 198.51.100.9 for client 00:11:22:33:44:55 is duplicate on 198.51.100.0/23'
+    negative:
+      - 'DHCPACK on 192.0.2.50 to aa:bb:cc:dd:ee:ff via eth0'
+  DHCP_WROTE_LEASES:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Wrote 24 leases to leases file.'
+        result: 'Wrote 24 leases to leases file.'
+      - string: 'Wrote 0 new dynamic host decls to leases file.'
+        result: 'Wrote 0 new dynamic host decls to leases file.'
+      - string: 'Wrote 0 deleted host decls to leases file.'
+        result: 'Wrote 0 deleted host decls to leases file.'
+    negative:
+      - 'Server starting service.'
+  DHCP_VERSION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Internet Systems Consortium DHCP Server 4.4.3-P1'
+        result: 'Internet Systems Consortium DHCP Server 4.4.3-P1'
+      - string: 'Internet Systems Consortium DHCP Server 4.4.2'
+        result: 'Internet Systems Consortium DHCP Server 4.4.2'
+    negative:
+      - 'Copyright 2004-2022 Internet Systems Consortium.'
+  DHCP_STARTING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Server starting service.'
+        result: 'Server starting service.'
+    negative:
+      - 'All rights reserved.'
+  DHCP_BANNER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Copyright 2004-2022 Internet Systems Consortium.'
+        result: 'Copyright 2004-2022 Internet Systems Consortium.'
+      - string: 'All rights reserved.'
+        result: 'All rights reserved.'
+      - string: 'For info, please visit https://www.isc.org/software/dhcp/'
+        result: 'For info, please visit https://www.isc.org/software/dhcp/'
+    negative:
+      - 'Server starting service.'
+# The lease IP. Leases are usually private, but listing it keeps this file
+# consistent with the other daemon rule files.
+geoip:
+  - dhcp_ip
+# Coerce numeric captures to integers.
+convert:
+  dhcp_written_count: int
+rules:
+  - name: dhcpd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^dhcpd$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - DHCP_ACK
+      - DHCP_OFFER
+      - DHCP_REQUEST
+      - DHCP_RELEASE
+      - DHCP_DISCOVER
+      - DHCP_INFORM
+      # non-transaction lines: a lease conflict, the lease file being written,
+      # and startup
+      - DHCP_DUPLICATE_UID
+      - DHCP_WROTE_LEASES
+      - DHCP_VERSION
+      - DHCP_STARTING
+      - DHCP_BANNER
+    tests:
+      positive:
+        - string: 'DHCPDISCOVER from aa:bb:cc:dd:ee:ff via eth0'
+          program: 'dhcpd'
+          result:
+            dhcp_type: 'DHCPDISCOVER'
+            dhcp_mac: 'aa:bb:cc:dd:ee:ff'
+            dhcp_iface: 'eth0'
+        - string: 'DHCPDISCOVER from aa:bb:cc:dd:ee:ff (myhost) via eth0'
+          result:
+            dhcp_type: 'DHCPDISCOVER'
+            dhcp_mac: 'aa:bb:cc:dd:ee:ff'
+            dhcp_hostname: 'myhost'
+            dhcp_iface: 'eth0'
+        - string: 'DHCPOFFER on 192.0.2.50 to aa:bb:cc:dd:ee:ff via eth0'
+          result:
+            dhcp_type: 'DHCPOFFER'
+            dhcp_ip: '192.0.2.50'
+            dhcp_mac: 'aa:bb:cc:dd:ee:ff'
+            dhcp_iface: 'eth0'
+        - string: 'DHCPREQUEST for 192.0.2.50 (192.0.2.1) from aa:bb:cc:dd:ee:ff via eth0'
+          result:
+            dhcp_type: 'DHCPREQUEST'
+            dhcp_ip: '192.0.2.50'
+            dhcp_server_ip: '192.0.2.1'
+            dhcp_mac: 'aa:bb:cc:dd:ee:ff'
+            dhcp_iface: 'eth0'
+        - string: 'DHCPACK on 192.0.2.50 to aa:bb:cc:dd:ee:ff (myhost) via eth0'
+          result:
+            dhcp_type: 'DHCPACK'
+            dhcp_ip: '192.0.2.50'
+            dhcp_mac: 'aa:bb:cc:dd:ee:ff'
+            dhcp_hostname: 'myhost'
+            dhcp_iface: 'eth0'
+        - string: 'DHCPNAK on 192.0.2.50 to aa:bb:cc:dd:ee:ff via eth0'
+          result:
+            dhcp_type: 'DHCPNAK'
+            dhcp_ip: '192.0.2.50'
+            dhcp_mac: 'aa:bb:cc:dd:ee:ff'
+            dhcp_iface: 'eth0'
+        - string: 'DHCPRELEASE of 192.0.2.50 from aa:bb:cc:dd:ee:ff via eth0 (found)'
+          result:
+            dhcp_type: 'DHCPRELEASE'
+            dhcp_ip: '192.0.2.50'
+            dhcp_mac: 'aa:bb:cc:dd:ee:ff'
+            dhcp_iface: 'eth0'
+            dhcp_message: '(found)'
+        - string: 'DHCPDECLINE of 192.0.2.50 from aa:bb:cc:dd:ee:ff via eth0: abandoned'
+          result:
+            dhcp_type: 'DHCPDECLINE'
+            dhcp_ip: '192.0.2.50'
+            dhcp_mac: 'aa:bb:cc:dd:ee:ff'
+            dhcp_iface: 'eth0'
+            dhcp_message: 'abandoned'
+        # The pool running dry: the interface comes out clean and the reason is
+        # kept rather than dropped.
+        - string: 'DHCPDISCOVER from aa:bb:cc:dd:ee:ff via eth0: network 192.0.2.0/24: no free leases'
+          result:
+            dhcp_type: 'DHCPDISCOVER'
+            dhcp_mac: 'aa:bb:cc:dd:ee:ff'
+            dhcp_iface: 'eth0'
+            dhcp_message: 'network 192.0.2.0/24: no free leases'
+        - string: 'DHCPNAK on 192.0.2.50 to aa:bb:cc:dd:ee:ff via eth0: wrong network'
+          result:
+            dhcp_type: 'DHCPNAK'
+            dhcp_ip: '192.0.2.50'
+            dhcp_mac: 'aa:bb:cc:dd:ee:ff'
+            dhcp_iface: 'eth0'
+            dhcp_message: 'wrong network'
+        - string: 'DHCPINFORM from 192.0.2.50 via eth0'
+          result:
+            dhcp_type: 'DHCPINFORM'
+            dhcp_ip: '192.0.2.50'
+            dhcp_iface: 'eth0'
+        - string: 'uid lease 192.0.2.50 for client aa:bb:cc:dd:ee:ff is duplicate on 192.0.2.0/24'
+          result:
+            dhcp_ip: '192.0.2.50'
+            dhcp_mac: 'aa:bb:cc:dd:ee:ff'
+            dhcp_conflict: 'duplicate'
+            dhcp_subnet: '192.0.2.0/24'
+        - string: 'Wrote 24 leases to leases file.'
+          numeric:
+            - dhcp_written_count
+          result:
+            dhcp_written_count: '24'
+            dhcp_written_kind: 'leases'
+        - string: 'Wrote 0 deleted host decls to leases file.'
+          result:
+            dhcp_written_count: '0'
+            dhcp_written_kind: 'deleted host decls'
+        - string: 'Internet Systems Consortium DHCP Server 4.4.3-P1'
+          result:
+            dhcp_version: '4.4.3-P1'
+        - string: 'Server starting service.'
+          result:
+            dhcp_state: 'Server starting service'
+        - string: 'All rights reserved.'
+          result:
+            dhcp_banner: 'All rights reserved.'
+      negative:
+        - 'this is not a dhcpd line at all'
+        - 'Jul 15 10:00:00 host cron[123]: session opened for user root'
+        - string: 'DHCPDISCOVER from aa:bb:cc:dd:ee:ff via eth0'
+          program: 'dhcpd-extra'

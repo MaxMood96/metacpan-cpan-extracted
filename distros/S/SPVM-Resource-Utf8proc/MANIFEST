@@ -1,13 +1,14 @@
 .gitattributes
-.github/workflows/linux-ubuntu-latest-32bit.yml
-.github/workflows/linux-ubuntu-latest-perl-5.8.9.yml
+.github/workflows/linux-ubuntu-latest-asan.yml
+.github/workflows/linux-ubuntu-latest-perls.yml
 .github/workflows/linux-ubuntu-latest.yml
 .github/workflows/macos-latest.yml
-.github/workflows/windows-2019.yml
+.github/workflows/windows-latest-msvc-debug.yml
+.github/workflows/windows-latest-msvc.yml
 .github/workflows/windows-latest.yml
 .gitignore
 Changes
-lib/SPVM/Resource/Utf8proc.config
+lib/SPVM/Resource/Utf8proc.build
 lib/SPVM/Resource/Utf8proc.native/include/.gitkeep
 lib/SPVM/Resource/Utf8proc.native/include/utf8proc.h
 lib/SPVM/Resource/Utf8proc.native/include/utf8proc_data.c
@@ -21,8 +22,8 @@ MANIFEST			This list of files
 MANIFEST.SKIP
 README.md
 t/basic.t
+t/lib/SPVM/TestCase/Resource/Utf8proc.build
 t/lib/SPVM/TestCase/Resource/Utf8proc.c
-t/lib/SPVM/TestCase/Resource/Utf8proc.config
 t/lib/SPVM/TestCase/Resource/Utf8proc.spvm
 META.yml                                 Module YAML meta-data (added by MakeMaker)
 META.json                                Module JSON meta-data (added by MakeMaker)

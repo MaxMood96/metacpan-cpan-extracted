@@ -1,0 +1,185 @@
+---
+# NetworkManager log enrichment.
+#
+# Gates on the syslog PROGRAM field being "NetworkManager". Patterns are
+# anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with nm_ .
+#
+# NetworkManager opens every line with a bracketed severity and a monotonic
+# timestamp:
+#
+#   <info>  [1626345600.1234] device (wlan0): state change: config -> ip-config
+#           (reason 'none', sys-iface-state: 'managed')
+#
+# The device state machine is the useful part. A device walking
+# prepare -> config -> ip-config -> activated is a normal connection; one that
+# stops at config and goes back to disconnected with a reason is a failure, and
+# the reason word says which kind.
+includes:
+- base
+vars_templated:
+  # "<info>  [1626345600.1234] " -- the severity and monotonic clock every line
+  # opens with. The timestamp is seconds since boot with a fractional part,
+  # not a wall clock, so it is kept as a string rather than being treated as a
+  # date.
+  NM_HEAD: '<(?<nm_level>[a-z]+)> +\[(?<nm_timestamp>[0-9.]+)\] '
+  # "device (wlan0): state change: config -> ip-config (reason ''none'',
+  #  sys-iface-state: ''managed'')"
+  NM_STATE_CHANGE: '[% NM_HEAD %]device \((?<nm_device>[^)]*)\): state change: (?<nm_state_from>[% NOTSPACE %]) -> (?<nm_state_to>[% NOTSPACE %])(?: \(reason ''(?<nm_reason>[^'']*)''(?:, (?<nm_state_detail>[% GREEDYDATA %]))?\))?'
+  # "device (wlan0): supplicant interface state: scanning -> authenticating"
+  NM_SUPPLICANT_STATE: '[% NM_HEAD %]device \((?<nm_device>[^)]*)\): supplicant (?<nm_supplicant_scope>interface|connection) state: (?<nm_state_from>[% NOTSPACE %]) -> (?<nm_state_to>[% NOTSPACE %])(?: [% GREEDYDATA %])?'
+  # "dhcp4 (eth0): state changed new lease, address=192.0.2.50"
+  # "dhcp4 (eth0): activation: beginning transaction (timeout in 45 seconds)"
+  NM_DHCP: '[% NM_HEAD %]dhcp(?<nm_dhcp_family>[46]) \((?<nm_device>[^)]*)\): (?<nm_dhcp_message>.*?)(?:, address=(?<nm_address>[% IP %]))?'
+  # "device (wlan0): Activation: successful, device activated."
+  # "device (wlan0): Activation: failed for connection ''home''"
+  NM_ACTIVATION: '[% NM_HEAD %]device \((?<nm_device>[^)]*)\): Activation: (?<nm_activation_result>successful|failed)(?:[,:]? *(?<nm_activation_detail>[% GREEDYDATA %]))?'
+  # Anything else about a named device.
+  NM_DEVICE_MESSAGE: '[% NM_HEAD %]device \((?<nm_device>[^)]*)\): (?<nm_message>.+)'
+  # Anything else with a head but no device.
+  NM_MESSAGE: '[% NM_HEAD %](?<nm_message>.+)'
+  # Anything with no head at all.
+  NM_PLAIN: '(?<nm_message>.+)'
+vars_tests:
+  NM_HEAD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '<info>  [1626345600.1234] '
+        result: '<info>  [1626345600.1234] '
+      - string: '<warn> [1626345600.1234] '
+        result: '<warn> [1626345600.1234] '
+    negative:
+      - 'info [1626345600.1234] '
+  NM_STATE_CHANGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '<info>  [1626345600.1234] device (wlan0): state change: config -> ip-config (reason ''none'', sys-iface-state: ''managed'')'
+        result: '<info>  [1626345600.1234] device (wlan0): state change: config -> ip-config (reason ''none'', sys-iface-state: ''managed'')'
+      - string: '<warn>  [1626345600.1234] device (wlan0): state change: config -> failed (reason ''no-secrets'', sys-iface-state: ''managed'')'
+        result: '<warn>  [1626345600.1234] device (wlan0): state change: config -> failed (reason ''no-secrets'', sys-iface-state: ''managed'')'
+    negative:
+      - '<info>  [1626345600.1234] device (wlan0): Activation: successful, device activated.'
+  NM_SUPPLICANT_STATE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '<info>  [1626345600.1234] device (wlan0): supplicant interface state: scanning -> authenticating'
+        result: '<info>  [1626345600.1234] device (wlan0): supplicant interface state: scanning -> authenticating'
+    negative:
+      - '<info>  [1626345600.1234] device (wlan0): state change: config -> ip-config'
+  NM_DHCP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '<info>  [1626345600.1234] dhcp4 (eth0): state changed new lease, address=192.0.2.50'
+        result: '<info>  [1626345600.1234] dhcp4 (eth0): state changed new lease, address=192.0.2.50'
+      - string: '<info>  [1626345600.1234] dhcp6 (eth0): activation: beginning transaction (timeout in 45 seconds)'
+        result: '<info>  [1626345600.1234] dhcp6 (eth0): activation: beginning transaction (timeout in 45 seconds)'
+    negative:
+      - '<info>  [1626345600.1234] device (wlan0): state change: config -> ip-config'
+  NM_ACTIVATION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '<info>  [1626345600.1234] device (wlan0): Activation: successful, device activated.'
+        result: '<info>  [1626345600.1234] device (wlan0): Activation: successful, device activated.'
+      - string: '<warn>  [1626345600.1234] device (wlan0): Activation: failed for connection ''home'''
+        result: '<warn>  [1626345600.1234] device (wlan0): Activation: failed for connection ''home'''
+    negative:
+      - '<info>  [1626345600.1234] device (wlan0): state change: config -> ip-config'
+  NM_DEVICE_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '<info>  [1626345600.1234] device (wlan0): set-hw-addr: set MAC address to AA:BB:CC:DD:EE:FF'
+        result: '<info>  [1626345600.1234] device (wlan0): set-hw-addr: set MAC address to AA:BB:CC:DD:EE:FF'
+    negative:
+      - '<info>  [1626345600.1234] manager: NetworkManager state is now CONNECTED_GLOBAL'
+  NM_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '<info>  [1626345600.1234] manager: NetworkManager state is now CONNECTED_GLOBAL'
+        result: '<info>  [1626345600.1234] manager: NetworkManager state is now CONNECTED_GLOBAL'
+    negative:
+      - 'NetworkManager (version 1.42.4) is starting'
+  NM_PLAIN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'NetworkManager (version 1.42.4) is starting... (boot:abc)'
+        result: 'NetworkManager (version 1.42.4) is starting... (boot:abc)'
+    negative:
+      - ''
+convert:
+  nm_dhcp_family: int
+rules:
+  - name: networkmanager
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^NetworkManager$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - NM_STATE_CHANGE
+      - NM_SUPPLICANT_STATE
+      - NM_ACTIVATION
+      - NM_DHCP
+      # the three catch-alls, narrowest first
+      - NM_DEVICE_MESSAGE
+      - NM_MESSAGE
+      - NM_PLAIN
+    tests:
+      positive:
+        - string: '<info>  [1626345600.1234] device (wlan0): state change: config -> ip-config (reason ''none'', sys-iface-state: ''managed'')'
+          program: 'NetworkManager'
+          result:
+            nm_level: 'info'
+            nm_timestamp: '1626345600.1234'
+            nm_device: 'wlan0'
+            nm_state_from: 'config'
+            nm_state_to: 'ip-config'
+            nm_reason: 'none'
+            nm_state_detail: 'sys-iface-state: ''managed'''
+        # a wrong wireless key comes back as no-secrets
+        - string: '<warn>  [1626345600.1234] device (wlan0): state change: config -> failed (reason ''no-secrets'', sys-iface-state: ''managed'')'
+          result:
+            nm_level: 'warn'
+            nm_timestamp: '1626345600.1234'
+            nm_device: 'wlan0'
+            nm_state_from: 'config'
+            nm_state_to: 'failed'
+            nm_reason: 'no-secrets'
+            nm_state_detail: 'sys-iface-state: ''managed'''
+        - string: '<info>  [1626345600.1234] device (wlan0): supplicant interface state: scanning -> authenticating'
+          result:
+            nm_level: 'info'
+            nm_timestamp: '1626345600.1234'
+            nm_device: 'wlan0'
+            nm_supplicant_scope: 'interface'
+            nm_state_from: 'scanning'
+            nm_state_to: 'authenticating'
+        - string: '<info>  [1626345600.1234] device (wlan0): Activation: successful, device activated.'
+          result:
+            nm_level: 'info'
+            nm_timestamp: '1626345600.1234'
+            nm_device: 'wlan0'
+            nm_activation_result: 'successful'
+            nm_activation_detail: 'device activated.'
+        - string: '<info>  [1626345600.1234] dhcp4 (eth0): state changed new lease, address=192.0.2.50'
+          numeric:
+            - nm_dhcp_family
+          result:
+            nm_level: 'info'
+            nm_timestamp: '1626345600.1234'
+            nm_dhcp_family: '4'
+            nm_device: 'eth0'
+            nm_dhcp_message: 'state changed new lease'
+            nm_address: '192.0.2.50'
+        - string: '<info>  [1626345600.1234] manager: NetworkManager state is now CONNECTED_GLOBAL'
+          result:
+            nm_level: 'info'
+            nm_timestamp: '1626345600.1234'
+            nm_message: 'manager: NetworkManager state is now CONNECTED_GLOBAL'
+        - string: 'NetworkManager (version 1.42.4) is starting... (boot:abc)'
+          result:
+            nm_message: 'NetworkManager (version 1.42.4) is starting... (boot:abc)'
+      negative:
+        - ''
+        - string: '<info>  [1626345600.1234] device (wlan0): state change: config -> ip-config (reason ''none'', sys-iface-state: ''managed'')'
+          program: 'networkmanager-extra'

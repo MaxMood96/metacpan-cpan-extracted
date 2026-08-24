@@ -1,0 +1,125 @@
+---
+# systemd-resolved log enrichment.
+#
+# Gates on the syslog PROGRAM field being "systemd-resolved". Patterns are
+# anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with resolved_ .
+#
+# Named after the daemon's suffix the way logind.yaml is, since that is what
+# systemd puts in PROGRAM.
+#
+# systemd-resolved is a stub resolver rather than a server, so it does not log
+# queries the way named.yaml or unbound.yaml do; there is no per-lookup line to
+# count. What it does log is how its upstreams are behaving. Feature-level
+# downgrades are how a resolver stops doing DNSSEC without saying so, and
+# DNSSEC validation failures are how it reports an answer was tampered with.
+includes:
+- base
+vars_templated:
+  # "Using degraded feature set UDP instead of TCP for DNS server 192.0.2.1."
+  # "Using degraded feature set TCP instead of UDP for DNS server 192.0.2.1."
+  #
+  # Every downgrade is resolved deciding an upstream cannot do something and
+  # settling for less. A run of these ending in "UDP" means DNSSEC and EDNS
+  # have both been abandoned, which bears on how far an answer can be trusted.
+  RESOLVED_DEGRADED: 'Using degraded feature set (?<resolved_feature_to>[% NOTSPACE %]) instead of (?<resolved_feature_from>[% NOTSPACE %]) for DNS server (?<resolved_server_ip>[% IP %])\.?(?: [% GREEDYDATA %])?'
+  # "Server returned error NXDOMAIN, mitigating potential DNS violation
+  #  DVE-2018-0001, retrying transaction with reduced feature level UDP."
+  RESOLVED_MITIGATION: 'Server returned error (?<resolved_rcode>[A-Z]+), mitigating potential DNS violation (?<resolved_violation>[% NOTSPACE %]), retrying transaction with reduced feature level (?<resolved_feature_to>\S+?)\.?'
+  # "DNSSEC validation failed for question example.com IN A: no-signature"
+  #
+  # The one line here that is a security statement rather than a health one.
+  RESOLVED_DNSSEC_FAILED: 'DNSSEC validation failed for question (?<resolved_query_name>[% NOTSPACE %]) (?<resolved_query_class>[A-Z]+) (?<resolved_query_type>[A-Z0-9]+): (?<resolved_dnssec_result>[% GREEDYDATA %])'
+  # "Using system hostname ''myhost''."
+  # "Switching to DNS server 192.0.2.1 for interface eth0."
+  RESOLVED_SWITCH: 'Switching to (?<resolved_switch_kind>DNS server|fallback DNS server) (?<resolved_server_ip>[% IP %])(?: for interface (?<resolved_iface>\S+?))?\.?(?: [% GREEDYDATA %])?'
+  # Anything else: startup, link configuration, cache flushes.
+  RESOLVED_MESSAGE: '(?<resolved_message>.+)'
+vars_tests:
+  RESOLVED_DEGRADED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Using degraded feature set UDP instead of TCP for DNS server 192.0.2.1.'
+        result: 'Using degraded feature set UDP instead of TCP for DNS server 192.0.2.1.'
+      - string: 'Using degraded feature set TCP instead of UDP for DNS server 192.0.2.1'
+        result: 'Using degraded feature set TCP instead of UDP for DNS server 192.0.2.1'
+    negative:
+      - 'Switching to DNS server 192.0.2.1 for interface eth0.'
+  RESOLVED_MITIGATION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Server returned error NXDOMAIN, mitigating potential DNS violation DVE-2018-0001, retrying transaction with reduced feature level UDP.'
+        result: 'Server returned error NXDOMAIN, mitigating potential DNS violation DVE-2018-0001, retrying transaction with reduced feature level UDP.'
+    negative:
+      - 'Using degraded feature set UDP instead of TCP for DNS server 192.0.2.1.'
+  RESOLVED_DNSSEC_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'DNSSEC validation failed for question example.com IN A: no-signature'
+        result: 'DNSSEC validation failed for question example.com IN A: no-signature'
+    negative:
+      - 'Using degraded feature set UDP instead of TCP for DNS server 192.0.2.1.'
+  RESOLVED_SWITCH:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Switching to DNS server 192.0.2.1 for interface eth0.'
+        result: 'Switching to DNS server 192.0.2.1 for interface eth0.'
+      - string: 'Switching to fallback DNS server 8.8.8.8.'
+        result: 'Switching to fallback DNS server 8.8.8.8.'
+    negative:
+      - 'Using degraded feature set UDP instead of TCP for DNS server 192.0.2.1.'
+  RESOLVED_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Positive Trust Anchors:'
+        result: 'Positive Trust Anchors:'
+    negative:
+      - ''
+geoip:
+  - resolved_server_ip
+rules:
+  - name: resolved
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^systemd-resolved$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - RESOLVED_DEGRADED
+      - RESOLVED_MITIGATION
+      - RESOLVED_DNSSEC_FAILED
+      - RESOLVED_SWITCH
+      # last: matches anything, which is only safe because the rule is gated
+      - RESOLVED_MESSAGE
+    tests:
+      positive:
+        - string: 'Using degraded feature set UDP instead of TCP for DNS server 192.0.2.1.'
+          result:
+            resolved_feature_to: 'UDP'
+            resolved_feature_from: 'TCP'
+            resolved_server_ip: '192.0.2.1'
+        - string: 'Server returned error NXDOMAIN, mitigating potential DNS violation DVE-2018-0001, retrying transaction with reduced feature level UDP.'
+          result:
+            resolved_rcode: 'NXDOMAIN'
+            resolved_violation: 'DVE-2018-0001'
+            resolved_feature_to: 'UDP'
+        - string: 'DNSSEC validation failed for question example.com IN A: no-signature'
+          result:
+            resolved_query_name: 'example.com'
+            resolved_query_class: 'IN'
+            resolved_query_type: 'A'
+            resolved_dnssec_result: 'no-signature'
+        - string: 'Switching to DNS server 192.0.2.1 for interface eth0.'
+          result:
+            resolved_switch_kind: 'DNS server'
+            resolved_server_ip: '192.0.2.1'
+            resolved_iface: 'eth0'
+        - string: 'Positive Trust Anchors:'
+          program: 'systemd-resolved'
+          result:
+            resolved_message: 'Positive Trust Anchors:'
+      negative:
+        - ''
+        - string: 'Using degraded feature set UDP instead of TCP for DNS server 192.0.2.1.'
+          program: 'resolved-extra'

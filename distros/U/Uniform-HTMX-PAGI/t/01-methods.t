@@ -1,57 +1,48 @@
 use strict;
 use warnings;
-
 use Test::More;
 use Test::Exception;
 use Test::Deep;
-
+use JSON::PP qw(decode_json);
 use Uniform::HTMX::PAGI;
 
-# =========================================================================
-# TEST GROUP 1: Inbound Processing & Nested List Flattening
-# =========================================================================
-my $mock_scope = {
-    type    => 'http',
-    path    => '/async-stream-endpoint',
-    headers => [
-        [ 'hx-request' => 'true' ],
-        [ 'HX-Target'  => 'dashboard-grid-panel' ],
-        # Simulating matching keys to verify your multi-value last-scalar-wins reduction rule
-        [ 'hx-trigger' => 'first-clicked-id' ],
-        [ 'hx-trigger' => 'winning-last-id' ],
-    ],
-};
+# Test 1: Exception on invalid environment constructor parameter
+dies_ok { Uniform::HTMX::PAGI->new("not a hash") } 'croaks on non-hash argument';
 
-my $hx = Uniform::HTMX::PAGI->new($mock_scope);
-
-isa_ok($hx, 'Uniform::HTMX', 'PAGI connector correctly inherits from abstract core base');
-is($hx->is_htmx, 1, 'Successfully reads incoming connection context from PAGI array structures');
-is($hx->target, 'dashboard-grid-panel', 'Normalizes mixed case keys inside multi-tier arrays flawlessly');
-is($hx->trigger_id, 'winning-last-id', 'Array reduction engine successfully isolates winning trailing duplicate fields');
-
-# =========================================================================
-# TEST GROUP 2: Outbound Context Marshalling
-# =========================================================================
-$hx->res_retarget('#realtime-error-banner')
-->res_reswap('outerHTML')
-->apply;
-
-my $compiled_outbound = $mock_scope->{'htmx.outbound'};
-
-cmp_deeply(
-    $compiled_outbound,
-    bag(
-        [ 'HX-Retarget' => '#realtime-error-banner' ],
-        [ 'HX-Reswap'   => 'outerHTML' ],
-    ),
-    'Successfully maps and flushes headers back down into standard PAGI array-of-arrays specifications'
+# Setup mock PAGI environment
+my %env = (
+    HTTP_HX_REQUEST     => 'true',
+    HTTP_HX_TARGET      => 'main-content',
+    HTTP_HX_CURRENT_URL => 'http://localhost/app',
 );
 
-# =========================================================================
-# TEST GROUP 3: Security Exception Bounds
-# =========================================================================
-dies_ok {
-    Uniform::HTMX::PAGI->new({ type => 'websocket' });
-} 'Throws strict validation error if connection scope does not declare http types';
+my $htmx = Uniform::HTMX::PAGI->new(\%env);
+
+# Test 2: Request Inspection
+ok($htmx->is_htmx, 'is_htmx detects HX-Request');
+is($htmx->target, 'main-content', 'target extracts HX-Target');
+is($htmx->current_url, 'http://localhost/app', 'current_url extracts HX-Current-URL');
+
+# Test 3: Response Headers Injection into PAGI Response Array
+$htmx->res_reswap('outerHTML')
+->res_trigger('itemUpdated', { id => 123 });
+
+my $pagi_res = [ 200, [ 'Content-Type' => 'text/html' ], [ '<div>Updated</div>' ] ];
+my $applied  = $htmx->apply($pagi_res);
+
+# Convert response header arrayref into key-value pairs
+my %applied_headers = @{ $applied->[1] };
+
+is($applied_headers{'Content-Type'}, 'text/html', 'Content-Type header preserved');
+is($applied_headers{'HX-Reswap'}, 'outerHTML', 'HX-Reswap header injected');
+
+# Decode HX-Trigger JSON string to verify structure independently of key ordering
+my $trigger_data = decode_json($applied_headers{'HX-Trigger'});
+
+cmp_deeply(
+    $trigger_data,
+    { itemUpdated => { id => 123 } },
+    'HX-Trigger encodes event name and payload correctly'
+);
 
 done_testing();

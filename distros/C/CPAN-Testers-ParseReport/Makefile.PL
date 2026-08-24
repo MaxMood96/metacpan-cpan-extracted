@@ -2,7 +2,6 @@ use strict;
 use warnings;
 use ExtUtils::MakeMaker;
 $ExtUtils::MakeMaker::VERSION =~ s/_//g;
-my @sign = (MM->can("signature_target") ? (SIGN => 1) : ());
 my $version_diff = 0; # we'll have to die if this becomes true
 my $trial = 0;
 my $version;
@@ -129,12 +128,16 @@ eval { WriteMakefile
               SUFFIX => ".bz2",
              },
      META_MERGE => {
-                    # write: git push git+ssh://repo.or.cz/srv/git/cpan-testers-parsereport.git master
-                    resources => { repository => "https://repo.or.cz/cpan-testers-parsereport.git" },
-                    provides => { "CPAN::Testers::ParseReport" => { version => $version, file => $version_from }},
-                   },
+         # write: git push git+ssh://repo.or.cz/srv/git/cpan-testers-parsereport.git master
+         resources => {
+             repository => "https://repo.or.cz/cpan-testers-parsereport.git",
+             bugtracker => {
+                 web => "http://rt.cpan.org/Dist/Display.html?Queue=CPAN-Testers-ParseReport",
+             },
+         },
+         provides => { "CPAN::Testers::ParseReport" => { version => $version, file => $version_from }},
+     },
      MIN_PERL_VERSION => '5.008', # Rule: _pragma_utf8
-     @sign,
     );
    };
 if (my $err = $@) {
@@ -153,12 +156,6 @@ if ($version_diff){
 }
 
 package MY;
-sub distsignature {
-    my($self) = shift;
-    my $ret = $self->SUPER::distsignature_target(@_);
-    $ret =~ s|cpansign|\$(PERL) \`dirname \$(PERL)\`/cpansign|g;
-    return $ret;
-}
 sub postamble {
   my @m;
   push @m, q{
@@ -200,8 +197,6 @@ reversion:
 	$(NOECHO) $(ECHO) AGAINST_TAG=$(AGAINST_TAG)
 	$(PERL) dagolden-reversion-gist.pl $(AGAINST_TAG)
 
-sign:
-	$(PERL) `dirname $(PERL)`/cpansign -s
 };
   join "", @m;
 }
@@ -218,7 +213,6 @@ disttest :
 	cd $(DISTVNAME) && $(MAKE) test $(PASTHRU)
 
 distdir ::
-	touch $(DISTVNAME)/SIGNATURE && $(CP) $(DISTVNAME)/SIGNATURE ./SIGNATURE
 	$(CP) $(DISTVNAME)/META.yml  ./META.yml
 	-$(CP) $(DISTVNAME)/META.json  ./META.json
 	$(CP) $(DISTVNAME)/MANIFEST  ./MANIFEST

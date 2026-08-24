@@ -1,0 +1,339 @@
+---
+# Samba (smbd / nmbd / winbindd) authentication and share-access enrichment.
+#
+# Gates on the syslog PROGRAM field being one of the Samba daemons. Patterns
+# are anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with samba_ .
+#
+# Samba indents most of its messages, so every pattern here opens with " *".
+# The indent is a property of Samba's own log formatting rather than of the
+# message, and how much of it survives depends on what carried the line, so it
+# is stepped over rather than captured.
+#
+# The Auth: and Authorization: lines carry the most. They are Samba's own audit
+# output, they are fully structured, and they name the remote host, which none
+# of the older free-text messages reliably do. They need
+# "log level = auth_audit:3" or higher; without it a host falls back to the
+# check_ntlm_password lines, which are also matched here.
+includes:
+- base
+vars_templated:
+  # The bracketed "[DOMAIN]\[user]" pair Samba writes for every account it
+  # names. The domain is often empty on a standalone server, so the capture
+  # can come back as an empty string rather than being absent.
+  SAMBA_ACCOUNT: '\[(?<samba_domain>[^\]]*)\]\\\[(?<samba_user>[^\]]*)\]'
+  # "Auth: [SMB2,(null)] user [DOM]\[admin] at [Tue, 15 Jul 2026 10:00:00 UTC]
+  #  with [NTLMv2] status [NT_STATUS_NO_SUCH_USER] workstation [WS]
+  #  remote host [ipv4:192.0.2.5:49152] mapped to [DOM]\[admin]. local host
+  #  [ipv4:192.0.2.1:445]"
+  #
+  # The whole authentication attempt on one line: who, from where, by what
+  # method, and what the server made of it. samba_status is the NT status
+  # code, so NT_STATUS_OK is a success and anything else is not -- which makes
+  # this the field to count when looking for a password spray.
+  #
+  # Everything from "mapped to"/"became" onwards is left to the trailing
+  # GREEDYDATA. Which of the two appears depends on whether the attempt
+  # succeeded, and the account is already captured at the front of the line.
+  SAMBA_AUTH: ' *Auth: \[(?<samba_auth_service>[^\]]*)\] user [% SAMBA_ACCOUNT %] at \[(?<samba_auth_time>[^\]]*)\] with \[(?<samba_auth_type>[^\]]*)\] status \[(?<samba_status>[^\]]*)\] workstation \[(?<samba_workstation>[^\]]*)\] remote host \[(?<samba_remote>[^\]]*)\](?:[ .] *[% GREEDYDATA %])?'
+  # "Authorization: [SMB2] user [DOM]\[neti] [S-1-5-21-...] at [...]
+  #  Remote host [ipv4:192.0.2.5:49152] local host [ipv4:192.0.2.1:445]"
+  #
+  # Logged once a session has been authorized, after the Auth: line that got it
+  # there. Carries the SID, which the Auth: line does not.
+  SAMBA_AUTHZ: ' *Authorization: \[(?<samba_auth_service>[^\]]*)\] user [% SAMBA_ACCOUNT %] \[(?<samba_sid>[^\]]*)\] at \[(?<samba_auth_time>[^\]]*)\] Remote host \[(?<samba_remote>[^\]]*)\](?:[ .] *[% GREEDYDATA %])?'
+  # The "ipv4:192.0.2.5:49152" form Samba writes a peer as. Used by the
+  # decompose below to get at the bare address, since the combined token is no
+  # use to a geoip lookup.
+  SAMBA_REMOTE_INFO: '(?<samba_remote_proto>ipv[46]):(?<samba_remote_ip>[% IP %]):(?<samba_remote_port>[% INT %])'
+  # "check_ntlm_password:  Authentication for user [admin] -> [admin] FAILED
+  #  with error NT_STATUS_NO_SUCH_USER, authoritative=1"
+  #
+  # The older free-text form, still what a host without auth_audit logging
+  # produces. It names the account but not the peer, so a consumer correlating
+  # these to an address has to reach for the surrounding session lines.
+  SAMBA_NTLM_FAILED: ' *check_ntlm_password: +[Aa]uthentication for user \[(?<samba_user>[^\]]*)\] -> \[(?<samba_mapped_user>[^\]]*)\] FAILED with error (?<samba_status>[A-Z0-9_]+)(?:[,.] *[% GREEDYDATA %])?'
+  # "check_ntlm_password:  authentication for user [neti] -> [neti] ->
+  #  [neti] succeeded"
+  SAMBA_NTLM_OK: ' *check_ntlm_password: +[Aa]uthentication for user \[(?<samba_user>[^\]]*)\] -> \[(?<samba_mapped_user>[^\]]*)\](?: -> \[(?<samba_effective_user>[^\]]*)\])? succeeded(?:[,.] *[% GREEDYDATA %])?'
+  # "connect to service data initially as user neti (uid=1000, gid=1000)
+  #  (pid 1234)"
+  SAMBA_CONNECT: ' *[Cc]onnect(?:ion)? to service (?<samba_service>[% NOTSPACE %]) initially as user (?<samba_user>[% USERNAME %]) \(uid=(?<samba_uid>[% INT %]), *gid=(?<samba_gid>[% INT %])\) \(pid (?<samba_pid>[% INT %])\)(?: [% GREEDYDATA %])?'
+  # "Denied connection from  (192.0.2.5)"
+  #
+  # A host turned away by hosts allow/hosts deny before any account was named.
+  # The hostname before the parenthesis is empty whenever the reverse lookup
+  # failed, which on an internet-facing share is most of the time.
+  SAMBA_DENIED: ' *Denied connection from *(?<samba_remote_host>[^(]*?) *\((?<samba_remote_ip>[% IP %])\)(?: [% GREEDYDATA %])?'
+  # ---- the debug-log envelope ----
+  #
+  # Everything Samba logs at debug level 0 and above comes out as a pair of
+  # syslog records, a header naming the source site and an indented line
+  # carrying the text:
+  #
+  #   [2026/07/27 10:41:12.853887,  0] ../../source3/nmbd/nmbd_subnetdb.c:117(make_subnet)
+  #     make_subnet: Failed to open nmb socket on interface 10.69.0.2 for port 137: Can't assign requested address
+  #
+  # The two arrive separately and cannot be rejoined here, so each is matched
+  # on its own. The header carries no message and the message carries no
+  # timestamp; the pid in the syslog envelope is what ties them together.
+  SAMBA_DEBUG_HEADER: '\[(?<samba_debug_time>[0-9/]+ [0-9:.]+), *(?<samba_debug_level>[% INT %])\] (?<samba_source_file>[^\s:]+):(?<samba_source_line>[% INT %])\((?<samba_function>[% WORD %])\)'
+  # "  nmbd version 4.20.8 started." -- the daemon announcing itself, which is
+  # the only record of a restart when nothing else is logged.
+  SAMBA_VERSION: ' +(?<samba_daemon>[a-z0-9_-]+) version (?<samba_version>[% NOTSPACE %]) started\.'
+  # "  make_subnet: Failed to open nmb socket ..." -- an indented continuation
+  # whose text repeats the function from the header before the message.
+  SAMBA_DEBUG_FUNC_MESSAGE: ' +(?<samba_function>[a-zA-Z_][a-zA-Z0-9_]*): (?<samba_message>[% GREEDYDATA %])'
+  # Any other indented continuation, e.g. "  Copyright Andrew Tridgell and the
+  # Samba Team 1992-2024". Last of the patterns, so the named shapes above win.
+  SAMBA_DEBUG_MESSAGE: ' +(?<samba_message>[% GREEDYDATA %])'
+vars_tests:
+  SAMBA_ACCOUNT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[DOMAIN]\[admin]'
+        result: '[DOMAIN]\[admin]'
+      # standalone servers have no domain, so the first pair comes back empty
+      - string: '[]\[neti]'
+        result: '[]\[neti]'
+    negative:
+      - 'DOMAIN\admin'
+  SAMBA_AUTH:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '  Auth: [SMB2,(null)] user [DOMAIN]\[admin] at [Tue, 15 Jul 2026 10:00:00 UTC] with [NTLMv2] status [NT_STATUS_NO_SUCH_USER] workstation [WORKSTATION] remote host [ipv4:192.0.2.5:49152] mapped to [DOMAIN]\[admin]. local host [ipv4:192.0.2.1:445]'
+        result: '  Auth: [SMB2,(null)] user [DOMAIN]\[admin] at [Tue, 15 Jul 2026 10:00:00 UTC] with [NTLMv2] status [NT_STATUS_NO_SUCH_USER] workstation [WORKSTATION] remote host [ipv4:192.0.2.5:49152] mapped to [DOMAIN]\[admin]. local host [ipv4:192.0.2.1:445]'
+      - string: 'Auth: [SMB2,(null)] user []\[neti] at [Tue, 15 Jul 2026 10:00:00 UTC] with [NTLMv2] status [NT_STATUS_OK] workstation [LAPTOP] remote host [ipv4:198.51.100.9:49153] became []\[neti] [S-1-5-21-1-2-3-1000]. local host [ipv4:192.0.2.1:445]'
+        result: 'Auth: [SMB2,(null)] user []\[neti] at [Tue, 15 Jul 2026 10:00:00 UTC] with [NTLMv2] status [NT_STATUS_OK] workstation [LAPTOP] remote host [ipv4:198.51.100.9:49153] became []\[neti] [S-1-5-21-1-2-3-1000]. local host [ipv4:192.0.2.1:445]'
+    negative:
+      - '  check_ntlm_password:  Authentication for user [admin] -> [admin] FAILED with error NT_STATUS_NO_SUCH_USER'
+  SAMBA_AUTHZ:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '  Authorization: [SMB2] user [DOMAIN]\[neti] [S-1-5-21-1-2-3-1000] at [Tue, 15 Jul 2026 10:00:00 UTC] Remote host [ipv4:192.0.2.5:49152] local host [ipv4:192.0.2.1:445]'
+        result: '  Authorization: [SMB2] user [DOMAIN]\[neti] [S-1-5-21-1-2-3-1000] at [Tue, 15 Jul 2026 10:00:00 UTC] Remote host [ipv4:192.0.2.5:49152] local host [ipv4:192.0.2.1:445]'
+    negative:
+      - '  Auth: [SMB2,(null)] user [DOMAIN]\[admin] at [x] with [NTLMv2] status [NT_STATUS_OK] workstation [W] remote host [ipv4:192.0.2.5:49152]'
+  SAMBA_REMOTE_INFO:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'ipv4:192.0.2.5:49152'
+        result: 'ipv4:192.0.2.5:49152'
+      - string: 'ipv6:fe80::1:445'
+        result: 'ipv6:fe80::1:445'
+    negative:
+      - '192.0.2.5:49152'
+  SAMBA_NTLM_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '  check_ntlm_password:  Authentication for user [admin] -> [admin] FAILED with error NT_STATUS_NO_SUCH_USER, authoritative=1'
+        result: '  check_ntlm_password:  Authentication for user [admin] -> [admin] FAILED with error NT_STATUS_NO_SUCH_USER, authoritative=1'
+      - string: 'check_ntlm_password:  Authentication for user [root] -> [root] FAILED with error NT_STATUS_WRONG_PASSWORD'
+        result: 'check_ntlm_password:  Authentication for user [root] -> [root] FAILED with error NT_STATUS_WRONG_PASSWORD'
+    negative:
+      - '  check_ntlm_password:  authentication for user [neti] -> [neti] -> [neti] succeeded'
+  SAMBA_NTLM_OK:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '  check_ntlm_password:  authentication for user [neti] -> [neti] -> [neti] succeeded'
+        result: '  check_ntlm_password:  authentication for user [neti] -> [neti] -> [neti] succeeded'
+      - string: '  check_ntlm_password:  authentication for user [neti] -> [neti] succeeded'
+        result: '  check_ntlm_password:  authentication for user [neti] -> [neti] succeeded'
+    negative:
+      - '  check_ntlm_password:  Authentication for user [admin] -> [admin] FAILED with error NT_STATUS_NO_SUCH_USER'
+  SAMBA_CONNECT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '  connect to service data initially as user neti (uid=1000, gid=1000) (pid 1234)'
+        result: '  connect to service data initially as user neti (uid=1000, gid=1000) (pid 1234)'
+      - string: 'Connection to service IPC$ initially as user neti (uid=1000, gid=1000) (pid 1234)'
+        result: 'Connection to service IPC$ initially as user neti (uid=1000, gid=1000) (pid 1234)'
+    negative:
+      - '  Denied connection from  (192.0.2.5)'
+  SAMBA_DENIED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '  Denied connection from  (192.0.2.5)'
+        result: '  Denied connection from  (192.0.2.5)'
+      - string: 'Denied connection from scanner.example.net (198.51.100.9)'
+        result: 'Denied connection from scanner.example.net (198.51.100.9)'
+    negative:
+      - '  connect to service data initially as user neti (uid=1000, gid=1000) (pid 1234)'
+  SAMBA_DEBUG_HEADER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[2026/07/27 10:41:12.853887,  0] ../../source3/nmbd/nmbd_subnetdb.c:117(make_subnet)'
+        result: '[2026/07/27 10:41:12.853887,  0] ../../source3/nmbd/nmbd_subnetdb.c:117(make_subnet)'
+      # a two-digit debug level, so the padding is not load-bearing
+      - string: '[2026/07/08 17:46:05.239631, 10] ../../source3/rpc_server/rpc_worker.c:1160(rpc_worker_main)'
+        result: '[2026/07/08 17:46:05.239631, 10] ../../source3/rpc_server/rpc_worker.c:1160(rpc_worker_main)'
+    negative:
+      - '  make_subnet: Failed to open nmb socket'
+  SAMBA_VERSION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '  nmbd version 4.20.8 started.'
+        result: '  nmbd version 4.20.8 started.'
+      - string: '  samba-dcerpcd version 4.20.8 started.'
+        result: '  samba-dcerpcd version 4.20.8 started.'
+    negative:
+      - '  Copyright Andrew Tridgell and the Samba Team 1992-2024'
+  SAMBA_DEBUG_FUNC_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '  smbd_open_one_socket: open_socket_in failed: Can''t assign requested address'
+        result: '  smbd_open_one_socket: open_socket_in failed: Can''t assign requested address'
+      - string: '  exit_daemon: daemon failed to start: NMBD failed when creating subnet lists, error code 13'
+        result: '  exit_daemon: daemon failed to start: NMBD failed when creating subnet lists, error code 13'
+    negative:
+      - '  Copyright Andrew Tridgell and the Samba Team 1992-2024'
+  SAMBA_DEBUG_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '  Copyright Andrew Tridgell and the Samba Team 1992-2024'
+        result: '  Copyright Andrew Tridgell and the Samba Team 1992-2024'
+    negative:
+      - '[2026/07/27 10:41:12.853887,  0] ../../source3/nmbd/nmbd.c:903(main)'
+# Look up whichever address the line turned up with. The Auth:/Authorization:
+# lines carry theirs inside a combined token, which the decompose below splits
+# out into samba_remote_ip first.
+geoip:
+  - samba_remote_ip
+convert:
+  samba_uid: int
+  samba_gid: int
+  samba_pid: int
+  samba_remote_port: int
+  samba_debug_level: int
+  samba_source_line: int
+# Split the "ipv4:192.0.2.5:49152" peer token into its parts. The combined
+# token is what Samba wrote and is kept, so the source field is not removed.
+# The split is what makes the address usable.
+decompose:
+  - field: samba_remote
+    type: pattern
+    pattern: SAMBA_REMOTE_INFO
+    tests:
+      - input: 'ipv4:192.0.2.5:49152'
+        result:
+          samba_remote: 'ipv4:192.0.2.5:49152'
+          samba_remote_proto: 'ipv4'
+          samba_remote_ip: '192.0.2.5'
+          samba_remote_port: '49152'
+rules:
+  - name: samba
+    gate:
+      - field: PROGRAM
+        values:
+          # Modern Samba splits the RPC services into their own daemons, each
+          # logging under its own name: samba-dcerpcd plus a family of
+          # rpcd_* workers (rpcd_classic, rpcd_winreg, rpcd_lsad,
+          # rpcd_spoolss, rpcd_epmapper, rpcd_fsrvp, rpcd_mdssvc,
+          # rpcd_rpcecho, rpcd_witness). Matched by prefix rather than
+          # enumerated, as the set grows between releases.
+          - '//^(?:samba-dcerpcd|rpcd_[a-z0-9_]+|winbindd|smbd|nmbd|samba)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - SAMBA_AUTH
+      - SAMBA_AUTHZ
+      - SAMBA_NTLM_FAILED
+      - SAMBA_NTLM_OK
+      - SAMBA_CONNECT
+      - SAMBA_DENIED
+      # ---- debug-log envelope, after every named shape above ----
+      - SAMBA_DEBUG_HEADER
+      - SAMBA_VERSION
+      - SAMBA_DEBUG_FUNC_MESSAGE
+      # last: any remaining indented continuation
+      - SAMBA_DEBUG_MESSAGE
+    tests:
+      positive:
+        - string: '  Auth: [SMB2,(null)] user [DOMAIN]\[admin] at [Tue, 15 Jul 2026 10:00:00 UTC] with [NTLMv2] status [NT_STATUS_NO_SUCH_USER] workstation [WORKSTATION] remote host [ipv4:192.0.2.5:49152] mapped to [DOMAIN]\[admin]. local host [ipv4:192.0.2.1:445]'
+          enriched:
+            samba_auth_service: 'SMB2,(null)'
+            samba_auth_time: 'Tue, 15 Jul 2026 10:00:00 UTC'
+            samba_auth_type: 'NTLMv2'
+            samba_domain: 'DOMAIN'
+            samba_remote: 'ipv4:192.0.2.5:49152'
+            samba_remote_ip: '192.0.2.5'
+            samba_remote_port: '49152'
+            samba_remote_proto: 'ipv4'
+            samba_status: 'NT_STATUS_NO_SUCH_USER'
+            samba_user: 'admin'
+            samba_workstation: 'WORKSTATION'
+          numeric:
+            - samba_remote_port
+          program: 'smbd'
+          result:
+            samba_auth_service: 'SMB2,(null)'
+            samba_domain: 'DOMAIN'
+            samba_user: 'admin'
+            samba_auth_time: 'Tue, 15 Jul 2026 10:00:00 UTC'
+            samba_auth_type: 'NTLMv2'
+            samba_status: 'NT_STATUS_NO_SUCH_USER'
+            samba_workstation: 'WORKSTATION'
+            samba_remote: 'ipv4:192.0.2.5:49152'
+        - string: '  Authorization: [SMB2] user [DOMAIN]\[neti] [S-1-5-21-1-2-3-1000] at [Tue, 15 Jul 2026 10:00:00 UTC] Remote host [ipv4:192.0.2.5:49152] local host [ipv4:192.0.2.1:445]'
+          program: 'samba'
+          result:
+            samba_auth_service: 'SMB2'
+            samba_domain: 'DOMAIN'
+            samba_user: 'neti'
+            samba_sid: 'S-1-5-21-1-2-3-1000'
+            samba_auth_time: 'Tue, 15 Jul 2026 10:00:00 UTC'
+            samba_remote: 'ipv4:192.0.2.5:49152'
+        - string: '  check_ntlm_password:  Authentication for user [admin] -> [admin] FAILED with error NT_STATUS_NO_SUCH_USER, authoritative=1'
+          program: 'samba-dcerpcd'
+          result:
+            samba_user: 'admin'
+            samba_mapped_user: 'admin'
+            samba_status: 'NT_STATUS_NO_SUCH_USER'
+        - string: '  check_ntlm_password:  authentication for user [neti] -> [neti] -> [neti] succeeded'
+          program: 'nmbd'
+          result:
+            samba_user: 'neti'
+            samba_mapped_user: 'neti'
+            samba_effective_user: 'neti'
+        - string: '  connect to service data initially as user neti (uid=1000, gid=1000) (pid 1234)'
+          numeric:
+            - samba_gid
+            - samba_pid
+            - samba_uid
+          result:
+            samba_service: 'data'
+            samba_user: 'neti'
+            samba_uid: '1000'
+            samba_gid: '1000'
+            samba_pid: '1234'
+        - string: 'Denied connection from scanner.example.net (198.51.100.9)'
+          result:
+            samba_remote_host: 'scanner.example.net'
+            samba_remote_ip: '198.51.100.9'
+        # -- the debug-log envelope --
+        - string: '[2026/07/27 10:41:12.853887,  0] ../../source3/nmbd/nmbd_subnetdb.c:117(make_subnet)'
+          numeric:
+            - samba_debug_level
+            - samba_source_line
+          result:
+            samba_debug_time: '2026/07/27 10:41:12.853887'
+            samba_debug_level: '0'
+            samba_source_file: '../../source3/nmbd/nmbd_subnetdb.c'
+            samba_source_line: '117'
+            samba_function: 'make_subnet'
+        - string: '  make_subnet: Failed to open nmb socket on interface 10.69.0.2 for port 137: Can''t assign requested address'
+          result:
+            samba_function: 'make_subnet'
+            samba_message: 'Failed to open nmb socket on interface 10.69.0.2 for port 137: Can''t assign requested address'
+        - string: '  samba-dcerpcd version 4.20.8 started.'
+          result:
+            samba_daemon: 'samba-dcerpcd'
+            samba_version: '4.20.8'
+        - string: '  Copyright Andrew Tridgell and the Samba Team 1992-2024'
+          result:
+            samba_message: 'Copyright Andrew Tridgell and the Samba Team 1992-2024'
+      negative:
+        - 'this is not a samba line at all'
+        - 'Jul 15 10:00:00 host cron[123]: session opened for user root'
+        - string: '  Auth: [SMB2,(null)] user [DOMAIN]\[admin] at [Tue, 15 Jul 2026 10:00:00 UTC] with [NTLMv2] status [NT_STATUS_NO_SUCH_USER] workstation [WORKSTATION] remote host [ipv4:192.0.2.5:49152] mapped to [DOMAIN]\[admin]. local host [ipv4:192.0.2.1:445]'
+          program: 'samba-extra'

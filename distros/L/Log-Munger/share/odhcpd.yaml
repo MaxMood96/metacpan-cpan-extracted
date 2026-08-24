@@ -1,0 +1,113 @@
+---
+# odhcpd (OpenWRT's DHCPv6 / router-advertisement daemon) log enrichment.
+#
+# Gates on the syslog PROGRAM field being "odhcpd". Patterns are anchored (each
+# must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with odhcpd_ .
+#
+# This covers odhcpd's router-advertisement and per-interface housekeeping
+# messages. The DHCPv6 and DHCPv4 lease transactions (DHCPV6 SOLICIT,
+# ADVERTISE, REPLY, RENEW and the v4 equivalents) are not covered: the logs
+# this was written against come from an access point running odhcpd in RA-only
+# mode, which never emits one. They are left to the catch-all until there is a
+# real lease log to write against, and an unmatched lease line still keeps its
+# text in odhcpd_message.
+includes:
+- base
+# Additional primitives used below that are not in base.yaml.
+vars:
+  # NOTSPACE that also excludes ":" (so a "subsystem: iface: message" triple
+  # can be split)
+  NOTSPACE_NO_COLON: '[^\s:]+'
+vars_templated:
+  # "No default route present, overriding ra_lifetime to 0!"
+  # "No default route present, setting ra_lifetime to 0!"
+  #
+  # An RA-only odhcpd on a bridged access point -- one with no upstream default
+  # route of its own -- repeats this on every advertisement interval, which
+  # makes it by a wide margin the highest-volume line the daemon produces.
+  # Whether it says "overriding" or "setting" is a matter of odhcpd version.
+  ODHCPD_RA_LIFETIME: 'No default route present, (?<odhcpd_action>overriding|setting) ra_lifetime to (?<odhcpd_ra_lifetime>[% INT %])!'
+  # "rfc9096: br-lan: piofile updated" -- a subsystem, the interface it is
+  # talking about, and what it did.
+  ODHCPD_IFACE_MESSAGE: '(?<odhcpd_subsystem>[% NOTSPACE_NO_COLON %]): (?<odhcpd_iface>[% NOTSPACE_NO_COLON %]): (?<odhcpd_message>[% GREEDYDATA %])'
+  # Anything else odhcpd said, including the lease transactions described in
+  # the header. Matching anything is only safe because the rule is gated on
+  # PROGRAM being odhcpd.
+  ODHCPD_MESSAGE: '(?<odhcpd_message>.+)'
+vars_tests:
+  NOTSPACE_NO_COLON:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'br-lan'
+        result: 'br-lan'
+      - string: 'rfc9096'
+        result: 'rfc9096'
+    negative:
+      - 'has a space'
+      - 'br-lan:'
+  ODHCPD_RA_LIFETIME:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'No default route present, overriding ra_lifetime to 0!'
+        result: 'No default route present, overriding ra_lifetime to 0!'
+      - string: 'No default route present, setting ra_lifetime to 0!'
+        result: 'No default route present, setting ra_lifetime to 0!'
+    negative:
+      - 'rfc9096: br-lan: piofile updated'
+  ODHCPD_IFACE_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'rfc9096: br-lan: piofile updated'
+        result: 'rfc9096: br-lan: piofile updated'
+      - string: 'rfc9096: lan: piofile updated'
+        result: 'rfc9096: lan: piofile updated'
+    negative:
+      - 'No default route present, setting ra_lifetime to 0!'
+  ODHCPD_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Raising SIGUSR1 due to reload'
+        result: 'Raising SIGUSR1 due to reload'
+      - string: 'Failed to send to ff02::1%br-lan: Permission denied'
+        result: 'Failed to send to ff02::1%br-lan: Permission denied'
+    negative:
+      - ''
+# Coerce numeric captures.
+convert:
+  odhcpd_ra_lifetime: int
+rules:
+  - name: odhcpd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^odhcpd$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - ODHCPD_RA_LIFETIME
+      - ODHCPD_IFACE_MESSAGE
+      # last: matches anything, which is only safe because the rule is gated
+      - ODHCPD_MESSAGE
+    tests:
+      positive:
+        - string: 'No default route present, overriding ra_lifetime to 0!'
+          numeric:
+            - odhcpd_ra_lifetime
+          result:
+            odhcpd_action: 'overriding'
+            odhcpd_ra_lifetime: '0'
+        - string: 'rfc9096: br-lan: piofile updated'
+          result:
+            odhcpd_subsystem: 'rfc9096'
+            odhcpd_iface: 'br-lan'
+            odhcpd_message: 'piofile updated'
+        # falls through to the catch-all
+        - string: 'Raising SIGUSR1 due to reload'
+          program: 'odhcpd'
+          result:
+            odhcpd_message: 'Raising SIGUSR1 due to reload'
+      negative:
+        - ''
+        - string: 'No default route present, overriding ra_lifetime to 0!'
+          program: 'odhcpd-extra'

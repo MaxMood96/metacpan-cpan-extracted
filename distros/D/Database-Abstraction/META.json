@@ -38,13 +38,12 @@
             "DBD::SQLite::Constants" : "0",
             "DBI" : "1.6",
             "Data::Reuse" : "0",
-            "ExtUtils::MakeMaker" : "6.64",
             "File::Spec" : "0",
             "File::Temp" : "0",
             "List::Util" : "1.33",
-            "Log::Abstraction" : "0.26",
+            "Log::Abstraction" : "0.33",
             "Object::Configure" : "0.16",
-            "Params::Get" : "0.13",
+            "Params::Get" : "0.17",
             "Return::Set" : "0",
             "Scalar::Util" : "0",
             "Sub::Private" : "0",
@@ -67,6 +66,7 @@
             "File::Temp" : "0",
             "File::stat" : "0",
             "FindBin" : "0",
+            "Gzip::Faster" : "0",
             "HTML::TableExtract" : "0",
             "IPC::System::Simple" : "0",
             "JSON::MaybeXS" : "0",
@@ -82,6 +82,7 @@
             "Test::Needs" : "0",
             "Test::NoWarnings" : "0",
             "Test::Returns" : "0",
+            "Test::Warn" : "0",
             "Test::Without::Module" : "0",
             "Text::xSV::Slurp" : "0",
             "XML::Simple" : "0"
@@ -101,6 +102,6 @@
          "x_repository" : "https://github.com/nigelhorne/Database-Abstraction"
       }
    },
-   "version" : "0.38",
+   "version" : "0.39",
    "x_serialization_backend" : "JSON::PP version 4.18"
 }

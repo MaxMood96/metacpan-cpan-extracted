@@ -37,7 +37,7 @@
             "List::Util" : "1.33",
             "Object::Configure" : "0",
             "Params::Get" : "0.13",
-            "Params::Validate::Strict" : "0.38",
+            "Params::Validate::Strict" : "0.39",
             "Readonly" : "2.00",
             "Scalar::Util" : "0",
             "Sub::Protected" : "0",
@@ -76,6 +76,6 @@
          "web" : "https://github.com/nigelhorne/Database-Join"
       }
    },
-   "version" : "v0.001.0",
+   "version" : "v0.001.1",
    "x_serialization_backend" : "JSON::PP version 4.18"
 }

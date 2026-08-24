@@ -1,5 +1,5 @@
 package Statocles::Deploy::Git;
-our $VERSION = '0.098';
+our $VERSION = '0.099';
 # ABSTRACT: Deploy a site to a Git repository
 
 use Statocles::Base 'Class';
@@ -14,7 +14,7 @@ use Git::Repository;
 #pod
 #pod =attr branch
 #pod
-#pod The Git branch to deploy to. Defaults to "master". If you're building a Github Pages
+#pod The Git branch to deploy to. Defaults to "main". If you're building a Github Pages
 #pod site for a project, you probably want to use the "gh-pages" branch.
 #pod
 #pod =cut
@@ -22,7 +22,7 @@ use Git::Repository;
 has branch => (
     is => 'ro',
     isa => Str,
-    default => sub { 'master' },
+    default => sub { 'main' },
 );
 
 #pod =attr remote
@@ -215,7 +215,7 @@ Statocles::Deploy::Git - Deploy a site to a Git repository
 
 =head1 VERSION
 
-version 0.098
+version 0.099
 
 =head1 DESCRIPTION
 
@@ -232,7 +232,7 @@ inside of the Git repository.
 
 =head2 branch
 
-The Git branch to deploy to. Defaults to "master". If you're building a Github Pages
+The Git branch to deploy to. Defaults to "main". If you're building a Github Pages
 site for a project, you probably want to use the "gh-pages" branch.
 
 =head2 remote

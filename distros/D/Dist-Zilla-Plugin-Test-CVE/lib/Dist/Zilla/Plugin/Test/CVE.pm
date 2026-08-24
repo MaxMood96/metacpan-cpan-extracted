@@ -26,7 +26,7 @@ with qw(
   Dist::Zilla::Role::PrereqSource
 );
 
-our $VERSION = 'v0.1.2';
+our $VERSION = 'v0.1.3';
 
 
 
@@ -148,7 +148,7 @@ Dist::Zilla::Plugin::Test::CVE - add tests for known CVEs
 
 =head1 VERSION
 
-version v0.1.2
+version v0.1.3
 
 =head1 SYNOPSIS
 
@@ -177,7 +177,7 @@ All other options are passed to L<Test::CVE>.
 
 =head1 SECURITY CONSIDERATIONS
 
-This will only identify known CVEs in list dependencies.
+This will only identify known CVEs in listed dependencies.
 It may not identify CVEs in undeclared prerequisites or deep prerequisites.
 
 The results from running L<Test::CVE> on a CPAN distribution may or may not be useful.
@@ -194,8 +194,7 @@ and then forget to remove the issue when a fix is released.
 
 Only the latest version of this module will be supported.
 
-This module requires Perl v5.20 or later.  Future releases may only support Perl versions released in the last ten
-years.
+This module requires Perl v5.20 or later, based on the minimum Perl supported by L<Dist::Zilla>.
 
 =head2 Reporting Bugs and Submitting Feature Requests
 
@@ -212,15 +211,15 @@ then see F<SECURITY.md> for instructions how to report security vulnerabilities.
 =head1 SOURCE
 
 The development version is on github at L<https://github.com/robrwo/perl-Dist-Zilla-Plugin-Test-CVE>
-and may be cloned from L<git://github.com/robrwo/perl-Dist-Zilla-Plugin-Test-CVE.git>
+and may be cloned from L<https://github.com/robrwo/perl-Dist-Zilla-Plugin-Test-CVE.git>
 
 =head1 AUTHOR
 
-Robert Rothenberg <rrwo@cpan.org>
+Robert Rothenberg <perl@rhizomnic.com>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2025 by Robert Rothenberg.
+This software is copyright (c) 2025-2026 by Robert Rothenberg.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

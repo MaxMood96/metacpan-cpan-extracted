@@ -1,5 +1,5 @@
 {
-   "abstract" : "Explicit asynchronous htmx driver adapter for the PAGI gateway ecosystem",
+   "abstract" : "Explicit htmx adapter connector for the PAGI ecosystem",
    "author" : [
       "Joshua S. Day <HAX@cpan.org>"
    ],
@@ -55,6 +55,6 @@
          "web" : "https://github.com/haxmeister/perl-Uniform-HTMX-PAGI"
       }
    },
-   "version" : "1.00",
+   "version" : "1.02",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

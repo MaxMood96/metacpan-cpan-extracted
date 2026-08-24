@@ -7,7 +7,7 @@ use Punk::Request;
 use Punk::Response;
 use Punk ();
 
-our $VERSION = '0.30';
+our $VERSION = '0.31';
 
 1;
 
@@ -110,10 +110,52 @@ routes; undef elsewhere.
 The registered L<Punk::Model> instance (per-worker, built on first
 access).
 
+=head2 txn($code) / txn($database => $code)
+
+    my $order = $c->txn(sub {
+        my ($tx) = @_;
+        my $o = $tx->model('Order')->create(\%data);
+        $tx->model('Stock')->update({ id => $sku, held => $held + 1 });
+        return $o;
+    });
+    $c->txn(analytics => sub { ... });
+
+A transaction on the default database, or the one the C<database> keyword
+named. The block receives a L<Punk::Txn>; C<< $tx->model($name) >> is the
+model bound to the transaction, and a model on another database croaks.
+Returns what the block returns: on L<Punk::Model::DBI> the value, after
+commit; on L<Punk::Model::DBIx::Loop> a L<Punk::Future> of it, resolved
+after commit - return that from the handler. A die inside the block rolls
+back and rethrows. What C<< $tx->model >> means on each backend, and why
+it differs, is in L<Punk::Txn>.
+
 =head2 render($template, \%data, %options)
 
 Render through the app's view engines; returns a finished response.
-See L<Punk::Views>.
+Options: C<status>, C<type>, C<engine>, and C<layout> - a wrapper template
+name, or C<undef> for none:
+
+    return $c->render('book/view', { book => $book });               # the page
+    return $c->render('book/_row', { book => $book }, layout => undef); # a piece of one
+    return $c->render('mail/reset', \%data, layout => 'mail');         # other chrome
+
+An option not in that list croaks rather than being skipped. See
+L<Punk::Views>.
+
+=head2 fragment($template, \%data?, %options)
+
+    return $c->fragment('console/_panel', { rows => $rows });
+
+C<render> with C<< layout => undef >> and C<< Cache-Control: private,
+no-store >> on the response - one header, replacing any Cache-Control
+already pending on the context. The other render options pass through;
+C<layout> croaks, since a fragment with a layout is a page.
+
+The header is the default because a fragment is almost always one user's
+data swapped into one user's page, and a shared cache handing it to the
+next visitor is a leak. The public, cacheable partial - a product card, a
+footer - is C<< render(..., layout => undef) >> with a C<Cache-Control>
+of your own.
 
 =head2 json($data, $status?)
 
@@ -207,6 +249,44 @@ in a sitemap, a redirect, a link in a mail - without handing a client the
 power to choose it. Honours the L<Punk/proxy> keyword, since it reads the
 same resolved environment. No path: C<< $app->host >> keeps one if it was
 declared with one, this is the origin in the browser's sense.
+
+=head2 url_for($name, %args)
+
+    $c->url_for('books');                          # /books
+    $c->url_for('book', id => 42);                 # /books/42
+    $c->url_for('book', id => 42, page => 2);      # /books/42?page=2
+    $c->url_for('book', id => 42, absolute => 1);  # https://example.com/books/42
+    $c->url_for('file', path => 'a/b.txt');        # a *splat keeps its slashes
+
+The URL of a route declared with C<< { name => ... } >>, so nothing has to
+spell its path twice. See L<Punk/Named routes> for the rules and
+L<Punk::View::Stencil/Named routes> for the template forms.
+
+An argument naming a capture fills that segment; anything left over becomes
+the query string, keys sorted, C<undef> giving a bare key and an arrayref
+repeating one. Two argument names are reserved rather than captures:
+
+=over 4
+
+=item * C<< absolute => 1 >> prefixes L</origin>, and croaks when no
+L<Punk/host> was declared rather than taking the value from the request.
+
+=item * C<< query => \%h >> is the explicit query hash, for a query key
+spelled like a capture. With it, an argument that names no capture croaks
+instead of becoming a query pair.
+
+=back
+
+The result carries the application's prefix - the path on L<Punk/host>,
+then C<SCRIPT_NAME> - whether or not it is absolute.
+
+It croaks rather than return a URL that cannot work: on a name no route
+carries, on a capture with no value, on an empty one, on a reference, and
+on a C</> inside a C<:param>, which C<PATH_INFO> would deliver decoded and
+split into an extra segment. Those are bugs at the call site, and a 500 in
+development is how they get found; L<Punk::Test> takes C<< [ 'book', id =>
+1 ] >> wherever it takes a path, which turns a wrong name into a failing
+test rather than a 404 in production.
 
 =head2 host_allowed
 

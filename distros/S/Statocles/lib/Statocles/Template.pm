@@ -1,5 +1,5 @@
 package Statocles::Template;
-our $VERSION = '0.098';
+our $VERSION = '0.099';
 # ABSTRACT: A template object to pass around
 
 use Statocles::Base 'Class';
@@ -51,24 +51,24 @@ has theme => (
     coerce => ThemeType->coercion,
 );
 
-#pod =attr include_stores
+#pod =attr include_paths
 #pod
-#pod An array of L<stores|Statocles::Store> to look for includes. Will be
-#pod used in addition to the L<include_stores from the
-#pod Theme|Statocles::Theme/include_stores>.
+#pod An array of paths to look for includes. Will be
+#pod used in addition to the L<include_paths from the
+#pod Theme|Statocles::Theme/include_paths>.
 #pod
 #pod =cut
 
-has include_stores => (
+has include_paths => (
     is => 'ro',
-    isa => ArrayRef[StoreType],
+    isa => ArrayRef[Path],
     default => sub { [] },
     coerce => sub {
         my ( $thing ) = @_;
         if ( ref $thing eq 'ARRAY' ) {
-            return [ map { StoreType->coercion->( $_ ) } @$thing ];
+            return [ map { Path->coercion->( $_ ) } @$thing ];
         }
-        return [ StoreType->coercion->( $thing ) ];
+        return [ Path->coercion->( $thing ) ];
     },
 );
 
@@ -214,7 +214,7 @@ sub _prelude {
 #pod     my $tmpl = $tmpl->include( @path_parts );
 #pod
 #pod Get the desired L<template|Statocles::Template> to include based on the given
-#pod C<path> or C<path_parts>. Looks through all the L<include_stores|/include_stores>.
+#pod C<path> or C<path_parts>. Looks through all the L<include_paths|/include_paths>.
 #pod If nothing is found, looks in the L<theme includes|Statocles::Theme/include>.
 #pod
 #pod =cut
@@ -231,15 +231,15 @@ sub include {
     }
     my $path = Path::Tiny->new( @path );
 
-    my @stores = @{ $self->include_stores };
-    for my $store ( @{ $self->include_stores } ) {
-        if ( $store->has_file( $path ) ) {
+    my @search_paths = @{ $self->include_paths };
+    for my $search_path ( @search_paths ) {
+        if ( $search_path->child( $path )->is_file ) {
             if ( $render ) {
                 return $self->theme->build_template(
-                    $path, $store->path->child( $path )->slurp_utf8,
+                    $path, $search_path->child( $path )->slurp_utf8,
                 );
             }
-            return $store->path->child( $path )->slurp_utf8;
+            return $search_path->child( $path )->slurp_utf8;
         }
     }
 
@@ -248,7 +248,7 @@ sub include {
     };
     if ( $@ && $@ =~ /^Can not find include/ ) {
         die qq{Can not find include "$path" in include directories: }
-            . join( ", ", map { sprintf q{"%s"}, $_->path } @stores, @{ $self->theme->include_stores }, $self->theme->store )
+            . join( ", ", map { sprintf q{"%s"}, $_ } @search_paths, @{ $self->theme->include_paths }, $self->theme->path )
             . "\n";
     }
 
@@ -314,7 +314,7 @@ Statocles::Template - A template object to pass around
 
 =head1 VERSION
 
-version 0.098
+version 0.099
 
 =head1 DESCRIPTION
 
@@ -336,11 +336,11 @@ The path to the file for this template. Optional.
 The theme this template was created from. Used for includes and other
 information.
 
-=head2 include_stores
+=head2 include_paths
 
-An array of L<stores|Statocles::Store> to look for includes. Will be
-used in addition to the L<include_stores from the
-Theme|Statocles::Theme/include_stores>.
+An array of paths to look for includes. Will be
+used in addition to the L<include_paths from the
+Theme|Statocles::Theme/include_paths>.
 
 =head1 METHODS
 
@@ -361,7 +361,7 @@ a scalar in the template.
     my $tmpl = $tmpl->include( @path_parts );
 
 Get the desired L<template|Statocles::Template> to include based on the given
-C<path> or C<path_parts>. Looks through all the L<include_stores|/include_stores>.
+C<path> or C<path_parts>. Looks through all the L<include_paths|/include_paths>.
 If nothing is found, looks in the L<theme includes|Statocles::Theme/include>.
 
 =head2 merge_state
@@ -442,8 +442,8 @@ given the same variables as the current template. Optionally, additional
 name-value pairs can be given to the included template. These additional
 template variables override any current variables.
 
-Includes will be searched for in the L<Theme's C<include_stores>
-attribute|Statocles::Theme/include_stores>. For content documents
+Includes will be searched for in the L<Theme's C<include_paths>
+attribute|Statocles::Theme/include_paths>. For content documents
 rendered by the L<Statocles::Page::Document
 class|Statocles::Page::Document>, this includes the document's parent
 directory.

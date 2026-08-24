@@ -1,0 +1,29 @@
+Punk-Sqitch
+
+Schema change management for Punk applications, on Sqitch. `punk sqitch`
+runs any Sqitch command against the database the application is
+configured for, so the connection is described once.
+
+INSTALLATION
+
+    perl Makefile.PL
+    make
+    make test
+    make install
+
+App::Sqitch v1.6.1 needs `cpanm --notest App::Sqitch` (see the POD). The
+host that deploys needs the database's client binary - sqlite3, psql or
+mysql - on its PATH.
+
+SUPPORT AND DOCUMENTATION
+
+    perldoc Punk::Sqitch
+    perldoc Punk::Command::Sqitch
+
+LICENSE AND COPYRIGHT
+
+This software is Copyright (c) 2026 by LNATION <email@lnation.org>.
+
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)

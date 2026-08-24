@@ -1,12 +1,12 @@
 package Statocles::Theme;
-our $VERSION = '0.098';
+our $VERSION = '0.099';
 # ABSTRACT: Templates, headers, footers, and navigation
 
 use Statocles::Base 'Class';
 use File::Share qw( dist_dir );
 use Scalar::Util qw( blessed );
 use Statocles::Template;
-with 'Statocles::App::Role::Store';
+with 'Statocles::App';
 
 #pod =attr url_root
 #pod
@@ -16,32 +16,49 @@ with 'Statocles::App::Role::Store';
 
 has '+url_root' => ( default => sub { '/theme' } );
 
-#pod =attr store
+#pod =attr path
 #pod
-#pod The source L<store|Statocles::Store> for this theme.
+#pod The path to the theme. Can be a string that starts with C<::> to pick a default theme.
+#pod Included bundled default themes are:
 #pod
-#pod If the path begins with ::, will pull one of the Statocles default
-#pod themes from the Statocles share directory.
+#pod =over
+#pod
+#pod =item default
+#pod
+#pod A clean default theme. Good for starting your own theme.
+#pod
+#pod =item bootstrap
+#pod
+#pod A theme using Bootstrap 3.
+#pod
+#pod =back
 #pod
 #pod =cut
 
-#pod =attr include_stores
-#pod
-#pod An array of L<stores|Statocles::Store> to look for includes. The L</store> is
-#pod added at the end of this list.
-#pod
-#pod =cut
-
-has include_stores => (
+has path => (
     is => 'ro',
-    isa => ArrayRef[StoreType],
+    isa => Path,
+    default => sub { Path->coercion->( 'theme' ) },
+    coerce => Path->coercion,
+);
+
+#pod =attr include_paths
+#pod
+#pod An array of paths to look for includes. The L</path> is added at the end
+#pod of this list.
+#pod
+#pod =cut
+
+has include_paths => (
+    is => 'ro',
+    isa => ArrayRef[Path],
     default => sub { [] },
     coerce => sub {
         my ( $thing ) = @_;
         if ( ref $thing eq 'ARRAY' ) {
-            return [ map { StoreType->coercion->( $_ ) } @$thing ];
+            return [ map { Path->coercion->( $_ ) } @$thing ];
         }
-        return [ StoreType->coercion->( $thing ) ];
+        return [ Path->coercion->( $thing ) ];
     },
 );
 
@@ -134,6 +151,12 @@ has _helpers => (
     init_arg => 'helpers', # Allow initialization via config file
 );
 
+# If true, add the files in the path
+has _add_path_files => (
+    is => 'ro',
+    default => sub { 0 },
+);
+
 #pod =method BUILDARGS
 #pod
 #pod Handle the path :: share theme.
@@ -143,9 +166,16 @@ has _helpers => (
 around BUILDARGS => sub {
     my ( $orig, $self, @args ) = @_;
     my $args = $self->$orig( @args );
-    if ( $args->{store} && !ref $args->{store} && $args->{store} =~ /^::/ ) {
-        my $name = substr $args->{store}, 2;
-        $args->{store} = Path::Tiny->new( dist_dir( 'Statocles' ) )->child( 'theme', $name );
+    if ( $args->{store} ) {
+        $args->{path} = delete $args->{store};
+    }
+    if ( $args->{path} && !ref $args->{path} && $args->{path} =~ /^::/ ) {
+        my $name = substr $args->{path}, 2;
+        $args->{path} = Path::Tiny->new( dist_dir( 'Statocles' ) )->child( 'theme', $name );
+        $args->{_add_path_files} = 1;
+    }
+    if ( $args->{include_stores} ) {
+        $args->{include_paths} = delete $args->{include_stores};
     }
     return $args;
 };
@@ -163,11 +193,11 @@ sub read {
     my ( $self, $path ) = @_;
     $path .= '.ep';
 
-    my $content = eval { $self->store->path->child( $path )->slurp_utf8; };
+    my $content = eval { $self->path->child( $path )->slurp_utf8; };
     if ( $@ ) {
         if ( blessed $@ && $@->isa( 'Path::Tiny::Error' ) && $@->{op} =~ /^open/ ) {
             die sprintf 'ERROR: Template "%s" does not exist in theme directory "%s"' . "\n",
-                $path, $self->store->path;
+                $path, $self->path;
         }
         else {
             die $@;
@@ -218,7 +248,7 @@ sub template {
 #pod
 #pod Get the desired L<template|Statocles::Template> to include based on the given
 #pod C<path> or C<path_parts>. Looks through all the
-#pod L<include_stores|/include_stores> before looking in the L<main store|/store>.
+#pod L<include_paths|/include_paths> before looking in the L<main path|/path>.
 #pod
 #pod =cut
 
@@ -234,20 +264,20 @@ sub include {
     }
     my $path = Path::Tiny->new( @path );
 
-    my @stores = ( @{ $self->include_stores }, $self->store );
-    for my $store ( @stores ) {
-        if ( $store->has_file( $path ) ) {
+    my @search_paths = ( @{ $self->include_paths }, $self->path );
+    for my $search_path ( @search_paths ) {
+        if ( $search_path->child( $path )->is_file ) {
             if ( $render ) {
                 return $self->_includes->{ $path } ||= $self->build_template(
-                    $path, $store->path->child( $path )->slurp_utf8,
+                    $path, $search_path->child( $path )->slurp_utf8,
                 );
             }
-            return $store->path->child( $path )->slurp_utf8;
+            return $search_path->child( $path )->slurp_utf8;
         }
     }
 
     die qq{Can not find include "$path" in include directories: }
-        . join( ", ", map { sprintf q{"%s"}, $_->path } @stores )
+        . join( ", ", map { sprintf q{"%s"}, $_ } @search_paths )
         . "\n";
 }
 
@@ -297,10 +327,29 @@ sub clear {
 #pod
 #pod =cut
 
-around pages => sub {
-    my ( $orig, $self, %args ) = @_;
-    my @pages = $self->$orig( %args );
-    return grep { $_->path !~ /[.]ep$/ } @pages;
+sub pages {
+    my ( $self, $pages, %args ) = @_;
+
+    my %has = map { $_->path => 1 } @$pages;
+
+    # Find extra files in the main path to add
+    my @files;
+    my $iter = $self->path->iterator({ recurse => 1 });
+    while ( my $path = $iter->() ) {
+        next if !$path->is_file;
+        next if $path =~ /[.]ep$/;
+        next if $has{ $path }++;
+        #; say "Theme file path: $path";
+        my $rel_path = Path::Tiny->new( $self->url_root, $path->relative( $self->path ) );
+        push @files, Statocles::Page::File->new(
+            site => $self->site,
+            path => $rel_path->stringify,
+            file_path => $path,
+        );
+    }
+
+    #; say "Found pages: " . join ', ', map { $_->path } @files;
+    return @files;
 };
 
 1;
@@ -317,7 +366,7 @@ Statocles::Theme - Templates, headers, footers, and navigation
 
 =head1 VERSION
 
-version 0.098
+version 0.099
 
 =head1 SYNOPSIS
 
@@ -327,7 +376,7 @@ version 0.098
     /theme/blog/index.html.ep
     /theme/blog/post.html.ep
 
-    my $theme      = Statocles::Theme->new( store => '/theme' );
+    my $theme      = Statocles::Theme->new( path => '/theme' );
     my $layout     = $theme->template( qw( site include layout.html ) );
     my $blog_index = $theme->template( blog => 'index.html' );
     my $blog_post  = $theme->template( 'blog/post.html' );
@@ -341,7 +390,7 @@ A Theme contains all the L<templates|Statocles::Template> that
 L<applications|Statocles::App> need. This class handles finding and parsing
 files into L<template objects|Statocles::Template>.
 
-When the L</store> is read, the templates inside are organized based on
+When the L</path> is read, the templates inside are organized based on
 their name and their parent directory.
 
 =head1 ATTRIBUTES
@@ -350,17 +399,27 @@ their name and their parent directory.
 
 The root URL for this application. Defaults to C</theme>.
 
-=head2 store
+=head2 path
 
-The source L<store|Statocles::Store> for this theme.
+The path to the theme. Can be a string that starts with C<::> to pick a default theme.
+Included bundled default themes are:
 
-If the path begins with ::, will pull one of the Statocles default
-themes from the Statocles share directory.
+=over
 
-=head2 include_stores
+=item default
 
-An array of L<stores|Statocles::Store> to look for includes. The L</store> is
-added at the end of this list.
+A clean default theme. Good for starting your own theme.
+
+=item bootstrap
+
+A theme using Bootstrap 3.
+
+=back
+
+=head2 include_paths
+
+An array of paths to look for includes. The L</path> is added at the end
+of this list.
 
 =head2 tag_start
 
@@ -444,7 +503,7 @@ given C<path_parts>.
 
 Get the desired L<template|Statocles::Template> to include based on the given
 C<path> or C<path_parts>. Looks through all the
-L<include_stores|/include_stores> before looking in the L<main store|/store>.
+L<include_paths|/include_paths> before looking in the L<main path|/path>.
 
 =head2 helper
 

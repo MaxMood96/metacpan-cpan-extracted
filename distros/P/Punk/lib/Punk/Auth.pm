@@ -6,7 +6,7 @@ use warnings;
 use Punk ();
 use Punk::Auth::Password;
 
-our $VERSION = '0.30';
+our $VERSION = '0.31';
 
 # The whole battery is C (punk_auth.h + xs/auth.xs): the guard fast path,
 # current_user and the await seam, check_password with the dummy-verify
@@ -216,6 +216,20 @@ reaped automatically - run
 
 on whatever schedule suits (a L<Punk::Queue> cron task is the natural
 home).
+
+=head2 Shipping it with Sqitch
+
+    auth model => 'User', token_model => 'Token', sqitch => 1;
+
+With the Punk-Sqitch distribution installed, C<< sqitch => 1 >> registers
+the schema above as the Sqitch project C<punk_auth> - C<users>, then
+C<auth_tokens> - with scripts for SQLite, PostgreSQL and MySQL, and
+C<punk sqitch deploy> deploys it before the application's own project.
+An application's plan may then require it (C<punk_auth:users>) and a
+plugin that extends the user row, L<Punk::Plugin::TOTP> among them, does.
+Opt-in, because C<fields> exists precisely for schemas with other
+spellings and the project creates the defaults. Asking for it without
+Punk-Sqitch installed croaks at the keyword. See L<Punk::Plugin::Sqitch>.
 
 =head1 COMPOSING WITH OAUTH2
 

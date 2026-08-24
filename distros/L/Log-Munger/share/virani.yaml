@@ -1,0 +1,510 @@
+---
+# Virani pcap-retrieval daemon log enrichment.
+#
+# Virani answers requests for "the traffic between these hosts over this window"
+# by carving the matching packets out of the rolling pcap set daemonlogger
+# writes, filtering each candidate file with tcpdump, merging the results with
+# mergecap, and caching what it produced. It logs the whole of that as a running
+# trace, one step per line.
+#
+# Gates on the syslog PROGRAM field being "virani". Patterns are anchored (each
+# must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with virani_ .
+#
+# The lines fall into three groups:
+#
+# - Request parameters :: What was asked for, echoed one per line at the top of
+#   a request -- Set, Type, Start/End, Filter, and the cache flags. These share
+#   no fields with each other, so each names what it carries.
+# - Work :: Which pcap files were considered, which tcpdump runs failed, how the
+#   merge went, and the byte totals either side of it.
+# - Result :: What was handed back and whether it came out of the cache.
+#
+# Several lines end in a trailing space, and one closes a quoted path and then
+# adds one. Every pattern that can meet it allows for it -- an anchored pattern
+# that does not simply never matches.
+includes:
+- base
+# Additional primitives used below that are not in base.yaml.
+vars:
+  # A bare token: no spaces and no comma. Used for the pcap path in "Processing"
+  # and for the timestamp in the Start/End lines, both of which are followed by
+  # a comma that must not be swallowed.
+  VIRANI_TOKEN: '[^,\s]+'
+vars_templated:
+  # "Remote IP: 192.0.2.5"
+  # Who asked. Logged on its own line at the head of a request.
+  VIRANI_REMOTE_IP: 'Remote IP: (?<virani_remote_ip>[% IP %])'
+  # "Returned set list to 192.0.2.5"
+  # "Returned cached search list to 192.0.2.5"
+  # The two metadata endpoints, which answer without touching a pcap.
+  VIRANI_RETURNED_LIST: 'Returned (?<virani_list_kind>set list|cached search list) to (?<virani_remote_ip>[% IP %])'
+  # "Set: default" / "Type: tcpdump"
+  # Which configured pcap set to search and which tool to search it with.
+  VIRANI_SET: 'Set: (?<virani_set>[% NOTSPACE %])'
+  VIRANI_TYPE: 'Type: (?<virani_type>[% NOTSPACE %])'
+  # "Start: 2026-07-05T07:48:54+0000, 1783237734"
+  # "Padded End: 2026-07-05T07:51:55+0000, 1783237915"
+  #
+  # The requested window, then the same window widened by the configured padding
+  # so a connection that straddles a file boundary is not clipped. Both are
+  # logged as an ISO timestamp and the epoch it came from; the epoch is the one
+  # to compute with. virani_range_kind tells the four lines apart.
+  VIRANI_TIME_RANGE: '(?<virani_range_kind>Padded Start|Padded End|Start|End): (?<virani_time>[% VIRANI_TOKEN %]), (?<virani_time_epoch>[% INT %])'
+  # "Filter: host 192.0.2.5 and host 198.51.100.9 and ( port 80 or port 49750 )"
+  # The BPF expression handed to tcpdump, kept whole -- it is the request.
+  VIRANI_FILTER: 'Filter: (?<virani_filter>[% GREEDYDATA %])'
+  # "PCAP Glob: *.pcap*"
+  VIRANI_PCAP_GLOB: 'PCAP Glob: (?<virani_pcap_glob>[% GREEDYDATA %])'
+  # "Timestamp Regexp: (?<timestamp>\d\d\d\d\d\d+)(\.pcap|(?<subsec>\.\d+)\.pcap)$"
+  # How Virani reads the capture time out of a pcap filename.
+  VIRANI_TIMESTAMP_REGEXP: 'Timestamp Regexp: (?<virani_timestamp_regexp>[% GREEDYDATA %])'
+  # "no_cache: 0" / "auto_no_cache: 1" / "get_meta: 0"
+  # The per-request flags, all of them 0 or 1. virani_flag names which one.
+  VIRANI_FLAG: '(?<virani_flag>no_cache|auto_no_cache|get_meta): (?<virani_flag_value>[% INT %])'
+  # "Processing /var/log/daemonlogger/daemonlogger.1783237599.pcap, size=1402780 ..."
+  # A candidate pcap being fed to the filter.
+  VIRANI_PROCESSING: 'Processing (?<virani_pcap_file>[% VIRANI_TOKEN %]), size=(?<virani_pcap_size>[% INT %]) \.\.\.'
+  # "Failed /var/log/.../x.pcap ... 'tcpdump -r ... ' exited with value 1"
+  #
+  # One candidate pcap that tcpdump would not read. This is not fatal on its own
+  # -- Virani carries on with the rest -- but it means the answer is missing
+  # whatever was in that file, so it is worth counting.
+  VIRANI_PCAP_FAILED: 'Failed (?<virani_pcap_file>[% NOTSPACE %]) \.\.\. ''(?<virani_command>[^'']*)'' exited with value (?<virani_exit_status>[% INT %])'
+  # "PCAP sizes... failed_size=0 success_size=16732248 total_size=16732248 tmp_size=113000 final_size=119348"
+  #
+  # Byte totals for the run, as a kv blob split by the decompose below.
+  # final_size=0 with a non-zero tmp_size means the merge produced nothing.
+  VIRANI_PCAP_SIZES: 'PCAP sizes\.\.\. (?<virani_sizes_kv>[% GREEDYDATA %])'
+  # "Merging PCAPs... mergecap -w /var/cache/virani/x /var/cache/virani/x-0"
+  VIRANI_MERGING: 'Merging PCAPs\.\.\. (?<virani_command>[% GREEDYDATA %])'
+  # "PCAPs merged into /var/cache/virani/x"
+  VIRANI_MERGED: 'PCAPs merged into (?<virani_output>[% NOTSPACE %])'
+  # "PCAPs merge completely(output file not generated) failed openN: exec of mergecap ... failed: ..."
+  # The merge produced no file at all, so the request cannot be answered.
+  VIRANI_MERGE_FAILED: 'PCAPs merge completely\(output file not generated\) failed (?<virani_error>[% GREEDYDATA %])'
+  # "Only one PCAP, moving "/var/cache/virani/x-0" to "/var/cache/virani/x""
+  # The merge is skipped when the filter only matched one file.
+  VIRANI_ONLY_ONE_PCAP: 'Only one PCAP, moving "(?<virani_source>[^"]*)" to "(?<virani_output>[^"]*)"[% SPACE %]'
+  # "Already cached... "/var/cache/virani/x""
+  VIRANI_ALREADY_CACHED: 'Already cached\.\.\. "(?<virani_output>[^"]*)"[% SPACE %]'
+  # "Creating metadata JSON at "/var/cache/virani/x.json" "
+  VIRANI_CREATING_META: 'Creating metadata JSON at "(?<virani_meta_file>[^"]*)"[% SPACE %]'
+  # "calling get_pcap_local..." / "get_pcap_local finished"
+  VIRANI_GET_PCAP_LOCAL: '(?<virani_action>calling get_pcap_local\.\.\.|get_pcap_local finished)'
+  # "get_pcap_local failed: write_file '...' - sysopen: Permission denied at ..."
+  VIRANI_GET_PCAP_LOCAL_FAILED: 'get_pcap_local failed: (?<virani_error>[% GREEDYDATA %])'
+  # "Start time not specified"
+  # A request that arrived without the one parameter Virani cannot default.
+  VIRANI_BAD_REQUEST: '(?<virani_error>Start time not specified)'
+  # "returning /var/cache/virani/x"
+  # "returning cached json /var/cache/virani/x.json"
+  # "finished returning cached /var/cache/virani/x"
+  # "returning "
+  #
+  # What went back. virani_cached is set when the answer came out of the cache
+  # rather than being built, which is the difference between a request that cost
+  # a tcpdump pass over every pcap and one that cost nothing. The path is
+  # optional because Virani logs the bare verb when it has nothing to return --
+  # which, paired with an error line above it, is how a failed request ends.
+  VIRANI_RETURNING: '(?<virani_action>finished returning|returning)(?: (?<virani_cached>cached))?(?: (?<virani_returned_format>json))?(?: (?<virani_returned>[% NOTSPACE %]))?[% SPACE %]'
+  # Everything else Virani said. Matching anything is only safe because the rule
+  # is gated on PROGRAM.
+  VIRANI_MESSAGE: '(?<virani_message>.+)'
+vars_tests:
+  VIRANI_TOKEN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '/var/log/daemonlogger/daemonlogger.1783237599.pcap'
+        result: '/var/log/daemonlogger/daemonlogger.1783237599.pcap'
+      - string: '2026-07-05T07:48:54+0000'
+        result: '2026-07-05T07:48:54+0000'
+    negative:
+      - 'has a space'
+      - 'has,a,comma'
+  VIRANI_REMOTE_IP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Remote IP: 192.0.2.5'
+        result: 'Remote IP: 192.0.2.5'
+      - string: 'Remote IP: 2001:db8::1'
+        result: 'Remote IP: 2001:db8::1'
+    negative:
+      - 'Returned set list to 192.0.2.5'
+  VIRANI_RETURNED_LIST:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Returned set list to 192.0.2.5'
+        result: 'Returned set list to 192.0.2.5'
+      - string: 'Returned cached search list to 127.0.0.1'
+        result: 'Returned cached search list to 127.0.0.1'
+    negative:
+      - 'Remote IP: 192.0.2.5'
+  VIRANI_SET:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Set: default'
+        result: 'Set: default'
+      - string: 'Set: edge'
+        result: 'Set: edge'
+    negative:
+      - 'Type: tcpdump'
+  VIRANI_TYPE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Type: tcpdump'
+        result: 'Type: tcpdump'
+      - string: 'Type: tshark'
+        result: 'Type: tshark'
+    negative:
+      - 'Set: default'
+  VIRANI_TIME_RANGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Start: 2026-07-05T07:48:54+0000, 1783237734'
+        result: 'Start: 2026-07-05T07:48:54+0000, 1783237734'
+      - string: 'Padded End: 2026-07-05T07:51:55+0000, 1783237915'
+        result: 'Padded End: 2026-07-05T07:51:55+0000, 1783237915'
+      - string: 'End: 2026-07-05T07:50:55+0000, 1783237855'
+        result: 'End: 2026-07-05T07:50:55+0000, 1783237855'
+    negative:
+      - 'Start time not specified'
+  VIRANI_FILTER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Filter: host 192.0.2.5 and port 53'
+        result: 'Filter: host 192.0.2.5 and port 53'
+      - string: 'Filter: host 192.0.2.5 and host 198.51.100.9 and ( port 80 or port 49750 )'
+        result: 'Filter: host 192.0.2.5 and host 198.51.100.9 and ( port 80 or port 49750 )'
+    negative:
+      - 'Set: default'
+  VIRANI_PCAP_GLOB:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'PCAP Glob: *.pcap*'
+        result: 'PCAP Glob: *.pcap*'
+      - string: 'PCAP Glob: *.pcap'
+        result: 'PCAP Glob: *.pcap'
+    negative:
+      - 'Set: default'
+  VIRANI_TIMESTAMP_REGEXP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Timestamp Regexp: (?<timestamp>\d\d\d\d\d\d+)(\.pcap|(?<subsec>\.\d+)\.pcap)$'
+        result: 'Timestamp Regexp: (?<timestamp>\d\d\d\d\d\d+)(\.pcap|(?<subsec>\.\d+)\.pcap)$'
+      - string: 'Timestamp Regexp: (\d+)\.pcap$'
+        result: 'Timestamp Regexp: (\d+)\.pcap$'
+    negative:
+      - 'PCAP Glob: *.pcap*'
+  VIRANI_FLAG:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'no_cache: 0'
+        result: 'no_cache: 0'
+      - string: 'auto_no_cache: 1'
+        result: 'auto_no_cache: 1'
+      - string: 'get_meta: 0'
+        result: 'get_meta: 0'
+    negative:
+      - 'Set: default'
+  VIRANI_PROCESSING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Processing /var/log/daemonlogger/daemonlogger.1783237599.pcap, size=1402780 ...'
+        result: 'Processing /var/log/daemonlogger/daemonlogger.1783237599.pcap, size=1402780 ...'
+      - string: 'Processing /var/log/dl/a.pcap, size=0 ...'
+        result: 'Processing /var/log/dl/a.pcap, size=0 ...'
+    negative:
+      - 'PCAPs merged into /var/cache/virani/x'
+  VIRANI_PCAP_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Failed /var/log/dl/a.pcap ... ''tcpdump -r /var/log/dl/a.pcap -w /var/cache/virani/x-1 host 192.0.2.5'' exited with value 1'
+        result: 'Failed /var/log/dl/a.pcap ... ''tcpdump -r /var/log/dl/a.pcap -w /var/cache/virani/x-1 host 192.0.2.5'' exited with value 1'
+      - string: 'Failed /var/log/dl/b.pcap ... ''tcpdump -r /var/log/dl/b.pcap'' exited with value 2'
+        result: 'Failed /var/log/dl/b.pcap ... ''tcpdump -r /var/log/dl/b.pcap'' exited with value 2'
+    negative:
+      - 'Processing /var/log/dl/a.pcap, size=0 ...'
+  VIRANI_PCAP_SIZES:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'PCAP sizes... failed_size=0 success_size=16732248 total_size=16732248 tmp_size=113000 final_size=119348'
+        result: 'PCAP sizes... failed_size=0 success_size=16732248 total_size=16732248 tmp_size=113000 final_size=119348'
+      - string: 'PCAP sizes... failed_size=1769472 success_size=2157107 total_size=3926579 tmp_size=4028 final_size=0'
+        result: 'PCAP sizes... failed_size=1769472 success_size=2157107 total_size=3926579 tmp_size=4028 final_size=0'
+    negative:
+      - 'PCAPs merged into /var/cache/virani/x'
+  VIRANI_MERGING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Merging PCAPs... mergecap -w /var/cache/virani/x /var/cache/virani/x-0'
+        result: 'Merging PCAPs... mergecap -w /var/cache/virani/x /var/cache/virani/x-0'
+      - string: 'Merging PCAPs... mergecap -w /var/cache/virani/y /var/cache/virani/y-0 /var/cache/virani/y-1'
+        result: 'Merging PCAPs... mergecap -w /var/cache/virani/y /var/cache/virani/y-0 /var/cache/virani/y-1'
+    negative:
+      - 'PCAPs merged into /var/cache/virani/x'
+  VIRANI_MERGED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'PCAPs merged into /var/cache/virani/x'
+        result: 'PCAPs merged into /var/cache/virani/x'
+      - string: 'PCAPs merged into /var/cache/virani/y'
+        result: 'PCAPs merged into /var/cache/virani/y'
+    negative:
+      - 'Merging PCAPs... mergecap -w /var/cache/virani/x'
+  VIRANI_MERGE_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'PCAPs merge completely(output file not generated) failed open3: exec of mergecap failed: No such file or directory'
+        result: 'PCAPs merge completely(output file not generated) failed open3: exec of mergecap failed: No such file or directory'
+      - string: 'PCAPs merge completely(output file not generated) failed something else'
+        result: 'PCAPs merge completely(output file not generated) failed something else'
+    negative:
+      - 'PCAPs merged into /var/cache/virani/x'
+  VIRANI_ONLY_ONE_PCAP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Only one PCAP, moving "/var/cache/virani/x-0" to "/var/cache/virani/x"'
+        result: 'Only one PCAP, moving "/var/cache/virani/x-0" to "/var/cache/virani/x"'
+      - string: 'Only one PCAP, moving "/var/cache/virani/y-0" to "/var/cache/virani/y" '
+        result: 'Only one PCAP, moving "/var/cache/virani/y-0" to "/var/cache/virani/y" '
+    negative:
+      - 'PCAPs merged into /var/cache/virani/x'
+  VIRANI_ALREADY_CACHED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Already cached... "/var/cache/virani/x"'
+        result: 'Already cached... "/var/cache/virani/x"'
+      - string: 'Already cached... "/var/cache/virani/y" '
+        result: 'Already cached... "/var/cache/virani/y" '
+    negative:
+      - 'Creating metadata JSON at "/var/cache/virani/x.json"'
+  VIRANI_CREATING_META:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      # exactly as it is written, with the trailing space
+      - string: 'Creating metadata JSON at "/var/cache/virani/x.json" '
+        result: 'Creating metadata JSON at "/var/cache/virani/x.json" '
+      - string: 'Creating metadata JSON at "/var/cache/virani/y.json"'
+        result: 'Creating metadata JSON at "/var/cache/virani/y.json"'
+    negative:
+      - 'Already cached... "/var/cache/virani/x"'
+  VIRANI_GET_PCAP_LOCAL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'calling get_pcap_local...'
+        result: 'calling get_pcap_local...'
+      - string: 'get_pcap_local finished'
+        result: 'get_pcap_local finished'
+    negative:
+      - 'get_pcap_local failed: write_file'
+  VIRANI_GET_PCAP_LOCAL_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'get_pcap_local failed: write_file ''/var/cache/virani/x.json'' - sysopen: Permission denied'
+        result: 'get_pcap_local failed: write_file ''/var/cache/virani/x.json'' - sysopen: Permission denied'
+      - string: 'get_pcap_local failed: no such set'
+        result: 'get_pcap_local failed: no such set'
+    negative:
+      - 'get_pcap_local finished'
+  VIRANI_BAD_REQUEST:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Start time not specified'
+        result: 'Start time not specified'
+    negative:
+      - 'Start: 2026-07-05T07:48:54+0000, 1783237734'
+  VIRANI_RETURNING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'returning /var/cache/virani/x'
+        result: 'returning /var/cache/virani/x'
+      - string: 'returning cached json /var/cache/virani/x.json'
+        result: 'returning cached json /var/cache/virani/x.json'
+      - string: 'finished returning cached /var/cache/virani/x'
+        result: 'finished returning cached /var/cache/virani/x'
+      # the bare verb with a trailing space, which is what a failed request ends on
+      - string: 'returning '
+        result: 'returning '
+    negative:
+      - 'Returned set list to 192.0.2.5'
+  VIRANI_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'something virani has not been taught yet'
+        result: 'something virani has not been taught yet'
+      - string: 'Start time not specified'
+        result: 'Start time not specified'
+    negative:
+      - ''
+# Split the byte totals into virani_failed_size, virani_success_size,
+# virani_total_size, virani_tmp_size and virani_final_size.
+decompose:
+  - field: virani_sizes_kv
+    type: kv
+    prefix: 'virani_'
+    remove: true
+    tests:
+      - input: 'failed_size=0 success_size=16732248 total_size=16732248 tmp_size=113000 final_size=119348'
+        result:
+          virani_failed_size: '0'
+          virani_success_size: '16732248'
+          virani_total_size: '16732248'
+          virani_tmp_size: '113000'
+          virani_final_size: '119348'
+# Look up whoever made the request.
+geoip:
+  - virani_remote_ip
+# Coerce numeric captures to integers, including the ones the decompose above
+# produced.
+convert:
+  virani_time_epoch: int
+  virani_flag_value: int
+  virani_pcap_size: int
+  virani_exit_status: int
+  virani_failed_size: int
+  virani_success_size: int
+  virani_total_size: int
+  virani_tmp_size: int
+  virani_final_size: int
+rules:
+  - name: virani
+    gate:
+      - field: PROGRAM
+        values:
+          - virani
+    field: MESSAGE
+    anchored: true
+    patterns:
+      # request parameters
+      - VIRANI_REMOTE_IP
+      - VIRANI_RETURNED_LIST
+      - VIRANI_SET
+      - VIRANI_TYPE
+      - VIRANI_TIME_RANGE
+      - VIRANI_FILTER
+      - VIRANI_PCAP_GLOB
+      - VIRANI_TIMESTAMP_REGEXP
+      - VIRANI_FLAG
+      # work
+      - VIRANI_PROCESSING
+      - VIRANI_PCAP_FAILED
+      - VIRANI_PCAP_SIZES
+      - VIRANI_MERGING
+      - VIRANI_MERGED
+      - VIRANI_MERGE_FAILED
+      - VIRANI_ONLY_ONE_PCAP
+      - VIRANI_ALREADY_CACHED
+      - VIRANI_CREATING_META
+      # ahead of VIRANI_GET_PCAP_LOCAL so the failure is not read as the
+      # ordinary finish
+      - VIRANI_GET_PCAP_LOCAL_FAILED
+      - VIRANI_GET_PCAP_LOCAL
+      - VIRANI_BAD_REQUEST
+      # result
+      - VIRANI_RETURNING
+      # last: matches anything, which is only safe because the rule is gated
+      - VIRANI_MESSAGE
+    tests:
+      positive:
+        - string: 'Remote IP: 192.0.2.5'
+          program: 'virani'
+          result:
+            virani_remote_ip: '192.0.2.5'
+        - string: 'Returned cached search list to 127.0.0.1'
+          result:
+            virani_list_kind: 'cached search list'
+            virani_remote_ip: '127.0.0.1'
+        - string: 'Set: default'
+          result:
+            virani_set: 'default'
+        - string: 'Type: tcpdump'
+          result:
+            virani_type: 'tcpdump'
+        - string: 'Padded Start: 2026-07-05T07:47:54+0000, 1783237674'
+          numeric:
+            - virani_time_epoch
+          result:
+            virani_range_kind: 'Padded Start'
+            virani_time: '2026-07-05T07:47:54+0000'
+            virani_time_epoch: '1783237674'
+        - string: 'Filter: host 192.0.2.5 and port 53'
+          result:
+            virani_filter: 'host 192.0.2.5 and port 53'
+        - string: 'auto_no_cache: 1'
+          numeric:
+            - virani_flag_value
+          result:
+            virani_flag: 'auto_no_cache'
+            virani_flag_value: '1'
+        - string: 'Processing /var/log/dl/a.pcap, size=1402780 ...'
+          numeric:
+            - virani_pcap_size
+          result:
+            virani_pcap_file: '/var/log/dl/a.pcap'
+            virani_pcap_size: '1402780'
+        - string: 'Failed /var/log/dl/a.pcap ... ''tcpdump -r /var/log/dl/a.pcap'' exited with value 1'
+          numeric:
+            - virani_exit_status
+          result:
+            virani_pcap_file: '/var/log/dl/a.pcap'
+            virani_command: 'tcpdump -r /var/log/dl/a.pcap'
+            virani_exit_status: '1'
+        # the rule tests compare captures before decompose runs, so the blob is
+        # what is asserted here; the split is tested by the decompose
+        - string: 'PCAP sizes... failed_size=0 success_size=100 total_size=100 tmp_size=10 final_size=10'
+          enriched:
+            virani_failed_size: '0'
+            virani_final_size: '10'
+            virani_success_size: '100'
+            virani_tmp_size: '10'
+            virani_total_size: '100'
+          numeric:
+            - virani_failed_size
+            - virani_final_size
+            - virani_success_size
+            - virani_tmp_size
+            - virani_total_size
+          result:
+            virani_sizes_kv: 'failed_size=0 success_size=100 total_size=100 tmp_size=10 final_size=10'
+        - string: 'PCAPs merged into /var/cache/virani/x'
+          result:
+            virani_output: '/var/cache/virani/x'
+        - string: 'Only one PCAP, moving "/var/cache/virani/x-0" to "/var/cache/virani/x"'
+          result:
+            virani_source: '/var/cache/virani/x-0'
+            virani_output: '/var/cache/virani/x'
+        - string: 'Creating metadata JSON at "/var/cache/virani/x.json" '
+          result:
+            virani_meta_file: '/var/cache/virani/x.json'
+        - string: 'get_pcap_local finished'
+          result:
+            virani_action: 'get_pcap_local finished'
+        - string: 'get_pcap_local failed: no such set'
+          result:
+            virani_error: 'no such set'
+        - string: 'Start time not specified'
+          result:
+            virani_error: 'Start time not specified'
+        - string: 'returning cached json /var/cache/virani/x.json'
+          result:
+            virani_action: 'returning'
+            virani_cached: 'cached'
+            virani_returned_format: 'json'
+            virani_returned: '/var/cache/virani/x.json'
+        - string: 'finished returning /var/cache/virani/x'
+          result:
+            virani_action: 'finished returning'
+            virani_returned: '/var/cache/virani/x'
+        # nothing to hand back, which is how a failed request ends
+        - string: 'returning '
+          result:
+            virani_action: 'returning'
+        # falls through to the catch-all
+        - string: 'some future virani message'
+          result:
+            virani_message: 'some future virani message'
+      negative:
+        - ''
+        - string: 'Remote IP: 192.0.2.5'
+          program: 'virani-extra'

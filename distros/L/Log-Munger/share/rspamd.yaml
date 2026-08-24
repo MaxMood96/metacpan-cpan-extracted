@@ -1,0 +1,166 @@
+---
+# Rspamd scan-result log enrichment.
+#
+# Gates on the syslog PROGRAM field being "rspamd". Patterns are anchored
+# (each must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with rspamd_ .
+#
+# This completes the mail picture the other files start. postfix and exim say
+# a message arrived and where it went; rspamd says what was in it and what was
+# decided, and the two join on the queue id, which rspamd logs as qid.
+#
+# The line to care about is rspamd_task_write_log, written once per scanned
+# message:
+#
+#   <id>; proxy; rspamd_task_write_log: id: <id>, qid: <1rABCD>, ip: 192.0.2.5,
+#   from: <a@b>, (default: F (add header): [8.50/15.00] [SYM(4.50),...]),
+#   len: 1234, time: 50.123ms, ...
+#
+# rspamd_action is the decision -- no action, greylist, add header, rewrite
+# subject, soft reject, reject -- and rspamd_score against
+# rspamd_required_score is how close it came. Both are kept separately from the
+# verdict letter, since a message scoring 14.9 out of 15 was not clean.
+includes:
+- base
+vars_templated:
+  # Scores are signed: a message can score below zero on whitelisting, and the
+  # base NUMBER carries no sign.
+  RSPAMD_SCORE: '[-+]?[% NUMBER %]'
+  # The peer. rspamd writes "unknown" for anything it did not receive over the
+  # network, so the address is matched first and anything else second, which
+  # keeps a real address out of a field that is sometimes a word.
+  RSPAMD_SOURCE: '(?:(?<rspamd_src_ip>[% IP %])|(?<rspamd_src_desc>[% NOTSPACE %]))'
+  # The full per-message result line.
+  #
+  # The symbol list is left as one string. It is a comma-separated list of
+  # NAME(score) pairs with nested parentheses in the descriptions, which is not
+  # something a regexp should be taking apart, and a consumer that wants the
+  # individual symbols is better served splitting the field itself.
+  RSPAMD_TASK: '<(?<rspamd_id>[^>]*)>; (?<rspamd_module>[% NOTSPACE %]); rspamd_task_write_log: id: <(?<rspamd_task_id>[^>]*)>,(?: qid: <(?<rspamd_qid>[^>]*)>,)? ip: [% RSPAMD_SOURCE %], from: <(?<rspamd_from>[^>]*)>, \((?<rspamd_profile>[^:]*): (?<rspamd_verdict>[A-Z]) \((?<rspamd_action>[^)]*)\): \[(?<rspamd_score>[% RSPAMD_SCORE %])/(?<rspamd_required_score>[% RSPAMD_SCORE %])\] \[(?<rspamd_symbols>.*)\]\), len: (?<rspamd_len>[% INT %]), time: (?<rspamd_time>[% NOTSPACE %])(?:, (?<rspamd_detail>[% GREEDYDATA %]))?'
+  # "<id>; proxy; rspamd_proxy_handle_mirror: cannot connect to
+  #  100.64.0.1:11333: Connection refused"
+  #
+  # Anything rspamd logged against a task that was not a result. Keeps the
+  # module, which is what says whether this was the scanner, the proxy, or one
+  # of the modules.
+  RSPAMD_TASK_MESSAGE: '<(?<rspamd_id>[^>]*)>; (?<rspamd_module>[% NOTSPACE %]); (?<rspamd_function>[A-Za-z0-9_]+): (?<rspamd_message>.+)'
+  # Lines with no task at all: startup, config reload, worker management.
+  RSPAMD_MESSAGE: '(?:\((?<rspamd_worker>[^)]*)\): )?(?<rspamd_message>.+)'
+vars_tests:
+  RSPAMD_SCORE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '8.50'
+        result: '8.50'
+      - string: '-1.20'
+        result: '-1.20'
+      - string: '15'
+        result: '15'
+    negative:
+      - 'high'
+  RSPAMD_SOURCE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.5'
+        result: '192.0.2.5'
+      - string: 'unknown'
+        result: 'unknown'
+    negative:
+      - 'two words'
+  RSPAMD_TASK:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '<a1b2c3>; proxy; rspamd_task_write_log: id: <a1b2c3>, qid: <1rABCD>, ip: 192.0.2.5, from: <sender@example.com>, (default: F (add header): [8.50/15.00] [BAYES_SPAM(4.50),MIME_HTML_ONLY(0.20)]), len: 1234, time: 50.123ms, dns req: 12'
+        result: '<a1b2c3>; proxy; rspamd_task_write_log: id: <a1b2c3>, qid: <1rABCD>, ip: 192.0.2.5, from: <sender@example.com>, (default: F (add header): [8.50/15.00] [BAYES_SPAM(4.50),MIME_HTML_ONLY(0.20)]), len: 1234, time: 50.123ms, dns req: 12'
+      # no queue id and a locally-submitted message, so no address either
+      - string: '<d4e5f6>; normal; rspamd_task_write_log: id: <d4e5f6>, ip: unknown, from: <root@localhost>, (default: T (no action): [-1.20/15.00] [BAYES_HAM(-3.00)]), len: 512, time: 10.000ms'
+        result: '<d4e5f6>; normal; rspamd_task_write_log: id: <d4e5f6>, ip: unknown, from: <root@localhost>, (default: T (no action): [-1.20/15.00] [BAYES_HAM(-3.00)]), len: 512, time: 10.000ms'
+    negative:
+      - '<a1b2c3>; proxy; rspamd_proxy_handle_mirror: cannot connect to 100.64.0.1:11333'
+  RSPAMD_TASK_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '<a1b2c3>; proxy; rspamd_proxy_handle_mirror: cannot connect to 100.64.0.1:11333: Connection refused'
+        result: '<a1b2c3>; proxy; rspamd_proxy_handle_mirror: cannot connect to 100.64.0.1:11333: Connection refused'
+    negative:
+      - 'stopping rspamd'
+  RSPAMD_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'rspamd 3.7.5 is loading configuration'
+        result: 'rspamd 3.7.5 is loading configuration'
+      - string: '(main): starting worker process'
+        result: '(main): starting worker process'
+    negative:
+      - ''
+geoip:
+  - rspamd_src_ip
+convert:
+  rspamd_score: float
+  rspamd_required_score: float
+  rspamd_len: int
+rules:
+  - name: rspamd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^rspamd$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - RSPAMD_TASK
+      - RSPAMD_TASK_MESSAGE
+      # last: matches anything, which is only safe because the rule is gated
+      - RSPAMD_MESSAGE
+    tests:
+      positive:
+        - string: '<a1b2c3>; proxy; rspamd_task_write_log: id: <a1b2c3>, qid: <1rABCD>, ip: 192.0.2.5, from: <sender@example.com>, (default: F (add header): [8.50/15.00] [BAYES_SPAM(4.50),MIME_HTML_ONLY(0.20)]), len: 1234, time: 50.123ms, dns req: 12'
+          numeric:
+            - rspamd_len
+            - rspamd_required_score
+            - rspamd_score
+          result:
+            rspamd_id: 'a1b2c3'
+            rspamd_module: 'proxy'
+            rspamd_task_id: 'a1b2c3'
+            rspamd_qid: '1rABCD'
+            rspamd_src_ip: '192.0.2.5'
+            rspamd_from: 'sender@example.com'
+            rspamd_profile: 'default'
+            rspamd_verdict: 'F'
+            rspamd_action: 'add header'
+            rspamd_score: '8.50'
+            rspamd_required_score: '15.00'
+            rspamd_symbols: 'BAYES_SPAM(4.50),MIME_HTML_ONLY(0.20)'
+            rspamd_len: '1234'
+            rspamd_time: '50.123ms'
+            rspamd_detail: 'dns req: 12'
+        - string: '<d4e5f6>; normal; rspamd_task_write_log: id: <d4e5f6>, ip: unknown, from: <root@localhost>, (default: T (no action): [-1.20/15.00] [BAYES_HAM(-3.00)]), len: 512, time: 10.000ms'
+          result:
+            rspamd_id: 'd4e5f6'
+            rspamd_module: 'normal'
+            rspamd_task_id: 'd4e5f6'
+            rspamd_src_desc: 'unknown'
+            rspamd_from: 'root@localhost'
+            rspamd_profile: 'default'
+            rspamd_verdict: 'T'
+            rspamd_action: 'no action'
+            rspamd_score: '-1.20'
+            rspamd_required_score: '15.00'
+            rspamd_symbols: 'BAYES_HAM(-3.00)'
+            rspamd_len: '512'
+            rspamd_time: '10.000ms'
+        - string: '<a1b2c3>; proxy; rspamd_proxy_handle_mirror: cannot connect to 100.64.0.1:11333: Connection refused'
+          result:
+            rspamd_id: 'a1b2c3'
+            rspamd_module: 'proxy'
+            rspamd_function: 'rspamd_proxy_handle_mirror'
+            rspamd_message: 'cannot connect to 100.64.0.1:11333: Connection refused'
+        - string: 'rspamd 3.7.5 is loading configuration'
+          program: 'rspamd'
+          result:
+            rspamd_message: 'rspamd 3.7.5 is loading configuration'
+      negative:
+        - ''
+        - string: '<a1b2c3>; proxy; rspamd_task_write_log: id: <a1b2c3>, qid: <1rABCD>, ip: 192.0.2.5, from: <sender@example.com>, (default: F (add header): [8.50/15.00] [BAYES_SPAM(4.50),MIME_HTML_ONLY(0.20)]), len: 1234, time: 50.123ms, dns req: 12'
+          program: 'rspamd-extra'

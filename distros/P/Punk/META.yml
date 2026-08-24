@@ -34,7 +34,7 @@ recommends:
   Future: '0'
 requires:
   Apophis: '0.05'
-  DBIx::Loop: '0.03'
+  DBIx::Loop: '0.07'
   Fetch: '0.12'
   File::Raw::JSON: '0.06'
   Hyperman: '0.32'
@@ -45,5 +45,5 @@ requires:
   Template::Stencil: '0.10'
   YAML::XS: '0'
   perl: '5.010000'
-version: '0.30'
+version: '0.31'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

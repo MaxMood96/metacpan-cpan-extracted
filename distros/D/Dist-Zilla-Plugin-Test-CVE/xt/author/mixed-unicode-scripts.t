@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 
-# This test was generated with Dist::Zilla::Plugin::Test::MixedScripts v0.2.3.
+# This test was generated with Dist::Zilla::Plugin::Test::MixedScripts v0.2.4.
 
 use Test2::Tools::Basic 1.302200;
 
@@ -14,7 +14,8 @@ my @files = (
     't/00-report-prereqs.dd',
     't/00-report-prereqs.t',
     't/01-basic.t',
-    't/02-no-author.t'
+    't/02-no-author.t',
+    't/03-args.t'
 );
 
 file_scripts_ok($_, { scripts => \@scxs } ) for @files;

@@ -151,8 +151,12 @@ my %WriteMakefileArgs = (
                                             # a filesystem path. 0.05 is the
                                             # first with ap_abi.h, which the
                                             # plugin needs at boot
-        'DBIx::Loop'           => '0.03',   # Punk::Model::DBIx::Loop, the
-                                            # async model backend; dbil_abi.h
+        'DBIx::Loop'           => '0.07',   # Punk::Model::DBIx::Loop, the
+                                            # async model backend; dbil_abi.h.
+                                            # 0.07 is the first where a do()
+                                            # that fails in the database
+                                            # fails its future, which a
+                                            # transaction's rollback relies on
     },
     META_MERGE => {
         'meta-spec' => { version => 2 },

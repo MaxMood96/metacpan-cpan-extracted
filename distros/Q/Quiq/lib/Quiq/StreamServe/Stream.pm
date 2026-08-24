@@ -38,7 +38,7 @@ use v5.10;
 use strict;
 use warnings;
 
-our $VERSION = '1.238';
+our $VERSION = '1.239';
 
 use Quiq::StreamServe::Block;
 use Quiq::FileHandle;
@@ -783,7 +783,7 @@ sub type {
 
 =head1 VERSION
 
-1.238
+1.239
 
 =head1 AUTHOR
 

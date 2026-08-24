@@ -34,6 +34,20 @@ sub punk {
 sub _q { my $s = shift; $s =~ s/'/'\\''/g; return "'$s'" }
 sub tempdir { File::Temp::tempdir(CLEANUP => 1) }
 
+# Run a snippet in a child; returns (exit, output). @INC goes over absolute,
+# because a snippet that loads an application ends up wherever app.psgi
+# chdir-ed to, and a relative -I stops resolving there - which is how a blib
+# quietly loses to an installed copy.
+sub run_perl {
+    my ($code, @args) = @_;
+    my $inc = join ' ',
+        map { '-I' . _q(Cwd::abs_path($_) // $_) } grep { !ref } @INC;
+    my $cmd = sprintf '%s %s -e %s %s 2>&1', _q($^X), $inc, _q($code),
+        join(' ', map { _q($_) } @args);
+    my $out = qx{$cmd};
+    return ($? >> 8, $out // '');
+}
+
 sub generate {
     my (%o) = @_;
     my $dir = tempdir() . '/' . ($o{name} || 'CmdApp');
@@ -48,14 +62,71 @@ sub spew  { open my $f, '>', $_[0] or die $!; print $f $_[1]; close $f }
 # ---- punk routes -------------------------------------------------------------
 
 {
+    # `punk new` names its one route `home`, so a generated application
+    # shows the NAME column from the start
     my $dir = generate();
     my ($rc, $out) = punk($dir, 'routes');
     is($rc, 0, 'punk routes exits 0');
-    like($out, qr/^METHOD\s+PATH\s+TARGET/m, 'it prints a header');
-    like($out, qr{^GET\s+/\s+CmdApp::Controller::Web::Root::index}m,
+    like($out, qr/^METHOD\s+PATH\s+NAME\s+TARGET/m, 'it prints a header');
+    like($out, qr{^GET\s+/\s+home\s+CmdApp::Controller::Web::Root::index}m,
         'a target string resolves to the sub it landed on');
     like($out, qr{/static/\*\s+static}, 'the static mount is listed');
     like($out, qr/^\d+ routes$/m, 'and a count');
+}
+
+{
+    # ... and an application that names nothing prints exactly the table it
+    # printed before names existed: no column, no shifted spacing
+    my $dir = generate(name => 'CmdBare');
+    my $cls = File::Spec->catfile($dir, 'lib', 'CmdBare.pm');
+    my $src = slurp($cls);
+    $src =~ s/\Q, { name => 'home' }\E//
+        or die 'the generated app class did not look as expected';
+    spew($cls, $src);
+
+    my ($rc, $out) = punk($dir, 'routes');
+    is($rc, 0, 'punk routes exits 0 for an application that names nothing');
+    like($out, qr/^METHOD\s+PATH\s+TARGET/m,
+        'and prints no NAME column at all');
+    like($out, qr{^GET\s+/\s+CmdBare::Controller::Web::Root::index}m,
+        'so the target sits where it always did');
+}
+
+{
+    # Named routes (plan_punk_named_routes/ phase 0): the table is where a
+    # person goes to find out what a name means, so `punk routes` shows the
+    # column and filters on it. The column appears only when something is
+    # named - the case above proves the unnamed table is unchanged.
+    my $dir = generate();
+    my $cls = File::Spec->catfile($dir, 'lib', 'CmdApp.pm');
+    my $src = slurp($cls);
+    # `punk new` already names its one route `home`; this adds a second so
+    # the filter and the column have something to choose between
+    my $add = join "\n",
+        q{get '/' => 'Web::Root#index', { name => 'home' };},
+        q{get '/health' => sub { $_[0]->json({ ok => 1 }) }, { name => 'health' };};
+    $src =~ s/\Qget '\/' => 'Web::Root#index', { name => 'home' };\E/$add/
+        or die 'the generated app class did not look as expected';
+    spew($cls, $src);
+
+    my ($rc, $out) = punk($dir, 'routes');
+    is($rc, 0, 'punk routes exits 0 with named routes');
+    like($out, qr/^METHOD\s+PATH\s+NAME\s+TARGET/m,
+        'the NAME column appears once a route has one');
+    like($out, qr{^GET\s+/\s+home\s+CmdApp::Controller::Web::Root::index}m,
+        'and the name sits between the path and the target');
+    like($out, qr{^ANY\s+/static/\*\s+static}m,
+        'an unnamed row leaves the column blank rather than shifting');
+
+    my ($rc2, $one) = punk($dir, 'routes', '--name', 'health');
+    is($rc2, 0, '--name exits 0');
+    like($one, qr{^GET\s+/health\s+health}m, '--name selects its route');
+    unlike($one, qr{^GET\s+/\s+home}m,       'and only that route');
+    like($one, qr/^1 route$/m,               'the count agrees');
+
+    my ($rc3, $none) = punk($dir, 'routes', '--name', 'nope');
+    is($rc3, 0, '--name with no match still exits 0');
+    like($none, qr/no matching routes/, 'and says so');
 }
 
 SKIP: {
@@ -66,9 +137,11 @@ SKIP: {
 
     # Operations live in the mount, not the router: if these are missing the
     # command is only showing half the application.
-    like($out, qr{^GET\s+/api/books\s+CmdApi::Controller::API::Books::allBooks}m,
+    # the NAME column (an operationId) sits between the path and the target
+    like($out, qr{^GET\s+/api/books\s+allBooks\s+CmdApi::Controller::API::Books::allBooks}m,
         'spec operations appear, under the mount prefix');
-    like($out, qr{^POST\s+/api/books\s+\S*addBook}m, 'and the write operation');
+    like($out, qr{^POST\s+/api/books\s+addBook\s+\S*addBook}m,
+        'and the write operation');
 
     SKIP: {
         # The generated app mounts /docs only when Open::API::UI is loadable,
@@ -83,6 +156,16 @@ SKIP: {
 
     my ($rc2, $sorted) = punk($dir, 'routes', '--sort');
     is($rc2, 0, '--sort works');
+
+    # an operationId IS a name - it is what url_for takes for that route, and
+    # it shares the one namespace with the route names
+    like($out, qr/^METHOD\s+PATH\s+NAME\s+TARGET/m,
+        'an api mount gives the table a NAME column');
+    my ($rc3, $one) = punk($dir, 'routes', '--name', 'allBooks');
+    is($rc3, 0, '--name exits 0 for an operation');
+    like($one, qr{^GET\s+/api/books\s+allBooks}m,
+        '--name selects an api row by its operationId');
+    like($one, qr/^1 route$/m, 'and only it');
 }
 
 # ---- punk doctor -------------------------------------------------------------
@@ -262,5 +345,99 @@ SKIP: {
 }
 
 END { chdir $CWD if $CWD }
+
+# ---- punk new --sqitch ---------------------------------------------------------
+
+{
+    # an engine Sqitch has no project for is a usage error before anything
+    # is written
+    my $base = tempdir();
+    my ($rc, $out) = punk($base, 'new', 'SqApp', '--dir', "$base/bad", '--sqitch', 'oracle');
+    is($rc, 2, 'punk new --sqitch with an unknown engine is a usage error');
+    like($out, qr/--sqitch needs an engine: sqlite, pg or mysql, not 'oracle'/, 'naming the three');
+    ok(!-d "$base/bad", 'and nothing was generated');
+
+    # with a real engine the application is generated either way; the Sqitch
+    # half depends on Punk-Sqitch being installed, which this test does not
+    # require - it accepts both outcomes and checks each is honest
+    ($rc, $out) = punk($base, 'new', 'SqApp', '--dir', "$base/ok", '--sqitch', 'sqlite');
+    ok(-f "$base/ok/app.psgi", 'the application is generated');
+    if ($rc == 0) {
+        like(slurp("$base/ok/sqitch.plan"), qr/^%project=sqapp$/m,
+            'Punk-Sqitch present: a project named for the application');
+        like(slurp("$base/ok/sqitch.conf"), qr/^\s*engine = sqlite$/m, 'on the engine asked for');
+    }
+    else {
+        is($rc, 1, 'Punk-Sqitch absent: exit 1, the application still written');
+        like($out, qr/--sqitch needs Punk-Sqitch, which is not installed; once it is, run\n\n  punk sqitch init --engine sqlite/,
+            'with the command to run once it is installed');
+        ok(!-e "$base/ok/sqitch.plan", 'and no half-made project');
+    }
+}
+
+# ---- load_app ------------------------------------------------------------------
+# The public form of what every application-loading command does, for a command
+# in another distribution. Its one addition over the private one is `chdir`:
+# app.psgi changes directory to the application root and everything relative in
+# punk.yml is written for that, so a caller that will go on to open a database
+# has to be left there.
+
+{
+    my $dir = generate(name => 'LoadApp');
+    my $here = Cwd::getcwd();
+
+    # in a child, because loading an application compiles its class and two of
+    # them in one interpreter would collide
+    my $code = <<'CHILD';
+use Cwd ();
+use Punk::Command ();
+my $start = Cwd::getcwd();
+my $app = Punk::Command->load_app(dir => $ARGV[0]);
+print "class=$app->{class}\n";
+print "root=$app->{root}\n";
+print "psgi=", (ref $app->{psgi} eq 'CODE' ? 'code' : 'no'), "\n";
+print "registrar=", ($app->{registrar} ? 'yes' : 'no'), "\n";
+print "cwd_restored=", (Cwd::getcwd() eq $start ? 'yes' : 'no'), "\n";
+CHILD
+    my ($rc, $out) = run_perl($code, $dir);
+    is($rc, 0, 'load_app loads a generated application');
+    like($out, qr/^class=LoadApp$/m,  'the class out of app.psgi');
+    # the root comes back resolved (/private/var, not /var, on darwin)
+    my ($got_root) = $out =~ /^root=(.*)$/m;
+    is($got_root, Cwd::abs_path($dir), 'the root it was found in');
+    like($out, qr/^psgi=code$/m,      'the psgi coderef');
+    like($out, qr/^registrar=yes$/m,  'and the registrar, which needs to_app');
+    like($out, qr/^cwd_restored=yes$/m,
+        'without chdir the caller gets its directory back');
+
+    my $chdir = <<'CHILD';
+use Cwd ();
+use Punk::Command ();
+my $app = Punk::Command->load_app(dir => $ARGV[0], chdir => 1);
+print "cwd=", Cwd::getcwd(), "\n";
+print "root=$app->{root}\n";
+CHILD
+    ($rc, $out) = run_perl($chdir, $dir);
+    is($rc, 0, 'chdir => 1 loads the same way');
+    my ($cwd) = $out =~ /^cwd=(.*)$/m;
+    my ($root) = $out =~ /^root=(.*)$/m;
+    is(Cwd::abs_path($cwd), Cwd::abs_path($root),
+        'and leaves the process in the application root, where a relative '
+      . 'dsn in punk.yml resolves');
+
+    # the failure is a die, because a command body's die already becomes one
+    # prefixed line through _fail
+    my $missing = <<'CHILD';
+use Punk::Command ();
+my $app = eval { Punk::Command->load_app(dir => $ARGV[0]) };
+print "err=$@";
+CHILD
+    ($rc, $out) = run_perl($missing, tempdir());
+    like($out, qr/^err=no application found \(looked for app\.psgi upwards/m,
+        'a directory with no application dies with the reason, unprefixed');
+    unlike($out, qr/^err=punk:/m, 'the command prefix is the caller\'s to add');
+
+    chdir $here;
+}
 
 done_testing();

@@ -91,6 +91,26 @@ records(self)
     OUTPUT:
         RETVAL
 
+# The record index -> dynamic position map, as an arrayref of IVs (-1 for a
+# static route). Internal, and here so the map is falsifiable: named routes
+# (punk_url.h) resolve a name to a RECORD index, and reaching that record's
+# parsed segments means crossing from `records` (indexed by record index) to
+# `recs` (indexed by dynamic position). Nothing else can see that it agrees.
+SV *
+_dyn_of(self)
+        SV *self
+    CODE:
+    {
+        pr_router *rt = punk_router_of(aTHX_ self);
+        AV *out = newAV();
+        int i;
+        for (i = 0; i < rt->nrecs; i++)
+            av_push(out, newSViv(rt->dyn_of[i]));
+        RETVAL = newRV_noinc((SV *)out);
+    }
+    OUTPUT:
+        RETVAL
+
 # The record index for an exact static match (HEAD falls back to GET), or the
 # empty list. Consulted before mounts so a mounted app is never shadowed.
 void

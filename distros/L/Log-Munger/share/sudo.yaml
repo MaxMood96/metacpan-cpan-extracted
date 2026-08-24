@@ -1,0 +1,331 @@
+---
+# sudo command / session log enrichment.
+#
+# Gates on the syslog PROGRAM field being "sudo". Patterns are anchored (each
+# must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with sudo_ .
+#
+# Two shapes are handled:
+#   * the classic command line:
+#       <user> : TTY=... ; PWD=... ; USER=... ; COMMAND=...
+#     The "KEY=VALUE ; KEY=VALUE" blob is captured whole as sudo_kv and then
+#     split into sudo_TTY / sudo_PWD / sudo_USER / sudo_COMMAND by the
+#     file-level decompose (kv, field_split ' ; ').
+#   * the pam_unix session line:
+#       pam_unix(sudo:session): session opened for user root(uid=0) by neti(uid=1000)
+includes:
+- base
+# Additional primitives used below that are not in base.yaml.
+vars:
+  # sudo right-aligns the invoking user in an eight-character field, so all but
+  # the longest names arrive with leading spaces:
+  #
+  #     root : TTY=pts/0 ; ...
+  #    snmpd : PWD=/ ; ...
+  #
+  # Not every build does this, so the pad is optional rather than required.
+  SUDO_USER_PAD: ' *'
+  # First key of the "KEY=VALUE ; KEY=VALUE" blob. sudo logs TTY, PWD, USER,
+  # GROUP, TSID, ENV and COMMAND in that order and drops any it has no value
+  # for, so a command run without a controlling terminal -- from cron, or an
+  # snmpd extend script -- starts the blob at PWD= instead of TTY=. Anchoring
+  # on TTY= alone silently dropped every one of those.
+  SUDO_KV_START: '(?:TTY|PWD)='
+vars_templated:
+  # classic sudo command line -- the invoking user, then the KEY=VALUE ; ...
+  # blob (captured whole for the decompose step below).
+  SUDO_COMMAND: '[% SUDO_USER_PAD %](?<sudo_user>[% USERNAME %]) : (?<sudo_kv>[% SUDO_KV_START %][% GREEDYDATA %])'
+  # pam_unix session open/close line.
+  SUDO_SESSION: 'pam_unix\(sudo:session\): session (?<sudo_session_action>opened|closed) for user (?<sudo_target_user>[% USERNAME %])(?:\(uid=(?<sudo_target_uid>[% INT %])\))?(?: by (?<sudo_by_user>[% USERNAME %])\(uid=(?<sudo_by_uid>[% INT %])\))?'
+  # --- security-relevant DENIALS -------------------------------------------
+  # These share the "<user> : <reason> ; TTY=... ; PWD=... ; USER=... ;
+  # COMMAND=..." shape. The reason is captured as sudo_error and the trailing
+  # "KEY=VALUE ; KEY=VALUE" blob is captured as sudo_kv so the SAME file-level
+  # kv decompose splits out sudo_TTY / sudo_PWD / sudo_USER / sudo_COMMAND.
+  #
+  # "<user> : user NOT in sudoers ; TTY=... ; ..."
+  SUDO_NOT_IN_SUDOERS: '[% SUDO_USER_PAD %](?<sudo_user>[% USERNAME %]) : (?<sudo_error>user NOT in sudoers) ; (?<sudo_kv>[% SUDO_KV_START %][% GREEDYDATA %])'
+  # "<user> : command not allowed ; TTY=... ; ..."
+  SUDO_COMMAND_NOT_ALLOWED: '[% SUDO_USER_PAD %](?<sudo_user>[% USERNAME %]) : (?<sudo_error>command not allowed) ; (?<sudo_kv>[% SUDO_KV_START %][% GREEDYDATA %])'
+  # "<user> : user NOT allowed to execute '\''...'\'' as root ; TTY=... ; ..."
+  # (some distros) -- the reason (including the quoted command + "as <user>")
+  # runs up to the " ; TTY=" that starts the kv blob.
+  SUDO_NOT_ALLOWED_EXECUTE: '[% SUDO_USER_PAD %](?<sudo_user>[% USERNAME %]) : (?<sudo_error>user NOT allowed to execute [% GREEDYDATA_NO_SEMICOLON %]) ; (?<sudo_kv>[% SUDO_KV_START %][% GREEDYDATA %])'
+  # "<user> : N incorrect password attempts ; TTY=... ; ..."
+  SUDO_INCORRECT_PASSWORD: '[% SUDO_USER_PAD %](?<sudo_user>[% USERNAME %]) : (?<sudo_error>(?<sudo_pw_attempts>[% INT %]) incorrect password attempts?) ; (?<sudo_kv>[% SUDO_KV_START %][% GREEDYDATA %])'
+  # "<user> : sorry, you must have a tty to run sudo ; ..."
+  SUDO_NEED_TTY: '[% SUDO_USER_PAD %](?<sudo_user>[% USERNAME %]) : (?<sudo_error>sorry, you must have a tty to run sudo)(?: ; (?<sudo_kv>[% SUDO_KV_START %][% GREEDYDATA %]))?'
+  # pam_unix auth-failure line, gated to sudo by this file's PROGRAM=sudo gate.
+  # The trailing "logname= uid= euid= tty= ruser= rhost= user=" blob is
+  # captured whole as sudo_pam_kv and split by the second decompose below.
+  SUDO_PAM_AUTH_FAILURE: 'pam_unix\(sudo:(?<sudo_pam_type>[% WORD %])\): authentication failure; (?<sudo_pam_kv>logname=[% GREEDYDATA %])'
+  # "failed to get password: Conversation failure"
+  #
+  # sudo could not run the PAM conversation to prompt for a password, so no
+  # attempt was made and no "N incorrect password attempts" line follows. The
+  # trailing text is the PAM error, but the message is sudo's own and carries
+  # none of the "user : " prefix the rest of this file keys on -- which is why
+  # it lives here behind the sudo gate rather than in the gateless pam.yaml.
+  SUDO_PASSWORD_FAILED: 'failed to get password: (?<sudo_error>[% GREEDYDATA %])'
+vars_tests:
+  SUDO_COMMAND:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'neti : TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/bin/ls -la'
+        result: 'neti : TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/bin/ls -la'
+      - string: 'www-data : TTY=unknown ; PWD=/var/www ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx'
+        result: 'www-data : TTY=unknown ; PWD=/var/www ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx'
+      # right-aligned in an eight-character field, and no TTY= because there was
+      # no controlling terminal
+      - string: '   snmpd : PWD=/ ; USER=root ; COMMAND=/usr/local/etc/snmp-extends/bind'
+        result: '   snmpd : PWD=/ ; USER=root ; COMMAND=/usr/local/etc/snmp-extends/bind'
+      - string: '    root : TTY=pts/6 ; PWD=/root ; USER=root ; COMMAND=/usr/bin/true'
+        result: '    root : TTY=pts/6 ; PWD=/root ; USER=root ; COMMAND=/usr/bin/true'
+    negative:
+      - 'pam_unix(sudo:session): session opened for user root(uid=0) by neti(uid=1000)'
+  SUDO_SESSION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'pam_unix(sudo:session): session opened for user root(uid=0) by neti(uid=1000)'
+        result: 'pam_unix(sudo:session): session opened for user root(uid=0) by neti(uid=1000)'
+      - string: 'pam_unix(sudo:session): session closed for user root'
+        result: 'pam_unix(sudo:session): session closed for user root'
+    negative:
+      - 'neti : TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/bin/ls -la'
+  SUDO_NOT_IN_SUDOERS:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'baduser : user NOT in sudoers ; TTY=pts/0 ; PWD=/home/baduser ; USER=root ; COMMAND=/bin/ls'
+        result: 'baduser : user NOT in sudoers ; TTY=pts/0 ; PWD=/home/baduser ; USER=root ; COMMAND=/bin/ls'
+      - string: 'www-data : user NOT in sudoers ; TTY=unknown ; PWD=/var/www ; USER=root ; COMMAND=/usr/bin/id'
+        result: 'www-data : user NOT in sudoers ; TTY=unknown ; PWD=/var/www ; USER=root ; COMMAND=/usr/bin/id'
+    negative:
+      - 'neti : TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/bin/ls -la'
+  SUDO_COMMAND_NOT_ALLOWED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'neti : command not allowed ; TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/sbin/reboot'
+        result: 'neti : command not allowed ; TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/sbin/reboot'
+      - string: 'deploy : command not allowed ; TTY=pts/1 ; PWD=/srv ; USER=root ; COMMAND=/bin/rm -rf /'
+        result: 'deploy : command not allowed ; TTY=pts/1 ; PWD=/srv ; USER=root ; COMMAND=/bin/rm -rf /'
+    negative:
+      - 'neti : TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/bin/ls -la'
+  SUDO_NOT_ALLOWED_EXECUTE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: "neti : user NOT allowed to execute '/bin/su' as root ; TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/bin/su"
+        result: "neti : user NOT allowed to execute '/bin/su' as root ; TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/bin/su"
+      - string: "deploy : user NOT allowed to execute '/usr/bin/passwd' as root ; TTY=pts/1 ; PWD=/srv ; USER=root ; COMMAND=/usr/bin/passwd"
+        result: "deploy : user NOT allowed to execute '/usr/bin/passwd' as root ; TTY=pts/1 ; PWD=/srv ; USER=root ; COMMAND=/usr/bin/passwd"
+    negative:
+      - 'neti : TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/bin/ls -la'
+  SUDO_INCORRECT_PASSWORD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'neti : 3 incorrect password attempts ; TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/bin/ls'
+        result: 'neti : 3 incorrect password attempts ; TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/bin/ls'
+      - string: 'deploy : 1 incorrect password attempt ; TTY=pts/1 ; PWD=/srv ; USER=root ; COMMAND=/usr/bin/id'
+        result: 'deploy : 1 incorrect password attempt ; TTY=pts/1 ; PWD=/srv ; USER=root ; COMMAND=/usr/bin/id'
+    negative:
+      - 'neti : TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/bin/ls -la'
+  SUDO_NEED_TTY:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'neti : sorry, you must have a tty to run sudo ; TTY=unknown ; PWD=/home/neti ; USER=root ; COMMAND=/bin/ls'
+        result: 'neti : sorry, you must have a tty to run sudo ; TTY=unknown ; PWD=/home/neti ; USER=root ; COMMAND=/bin/ls'
+      - string: 'www-data : sorry, you must have a tty to run sudo'
+        result: 'www-data : sorry, you must have a tty to run sudo'
+    negative:
+      - 'neti : TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/bin/ls -la'
+  SUDO_PAM_AUTH_FAILURE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'pam_unix(sudo:auth): authentication failure; logname=neti uid=1000 euid=0 tty=/dev/pts/0 ruser=neti rhost=  user=neti'
+        result: 'pam_unix(sudo:auth): authentication failure; logname=neti uid=1000 euid=0 tty=/dev/pts/0 ruser=neti rhost=  user=neti'
+      - string: 'pam_unix(sudo:auth): authentication failure; logname=deploy uid=1001 euid=0 tty=/dev/pts/1 ruser=deploy rhost=  user=deploy'
+        result: 'pam_unix(sudo:auth): authentication failure; logname=deploy uid=1001 euid=0 tty=/dev/pts/1 ruser=deploy rhost=  user=deploy'
+    negative:
+      - 'pam_unix(sudo:session): session opened for user root(uid=0) by neti(uid=1000)'
+  SUDO_PASSWORD_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'failed to get password: Conversation failure'
+        result: 'failed to get password: Conversation failure'
+    negative:
+      - '  neti : 1 incorrect password attempt ; TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/bin/ls'
+  SUDO_USER_PAD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '    '
+        result: '    '
+      - string: ''
+        result: ''
+    negative:
+      - 'root'
+  SUDO_KV_START:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'TTY='
+        result: 'TTY='
+      - string: 'PWD='
+        result: 'PWD='
+    negative:
+      - 'USER='
+# Coerce the session uids to integers.
+convert:
+  sudo_target_uid: int
+  sudo_by_uid: int
+  sudo_pw_attempts: int
+  sudo_uid: int
+  sudo_euid: int
+# Split the classic "KEY=VALUE ; KEY=VALUE" command blob (captured as sudo_kv)
+# into per-key fields, namespaced with sudo_ .
+decompose:
+  - field: sudo_kv
+    type: kv
+    field_split: ' ; '
+    prefix: 'sudo_'
+    remove: true
+    tests:
+      - input: 'TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/bin/ls -la'
+        result:
+          sudo_TTY: 'pts/0'
+          sudo_PWD: '/home/neti'
+          sudo_USER: 'root'
+          sudo_COMMAND: '/bin/ls -la'
+      - input: 'PWD=/ ; USER=root ; COMMAND=/usr/local/etc/snmp-extends/bind'
+        result:
+          sudo_PWD: '/'
+          sudo_USER: 'root'
+          sudo_COMMAND: '/usr/local/etc/snmp-extends/bind'
+  # pam_unix auth-failure blob (space-separated) -> sudo_logname / sudo_uid /
+  # sudo_euid / sudo_tty / sudo_ruser / sudo_rhost / sudo_user. Empty values
+  # (e.g. "rhost= ") yield empty-string fields.
+  - field: sudo_pam_kv
+    type: kv
+    field_split: ' '
+    prefix: 'sudo_'
+    remove: true
+    tests:
+      - input: 'logname=neti uid=1000 euid=0 tty=/dev/pts/0 ruser=neti rhost= user=neti'
+        result:
+          sudo_logname: 'neti'
+          sudo_uid: '1000'
+          sudo_euid: '0'
+          sudo_tty: '/dev/pts/0'
+          sudo_ruser: 'neti'
+          sudo_rhost: ''
+          sudo_user: 'neti'
+rules:
+  - name: sudo
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^sudo$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - SUDO_COMMAND
+      - SUDO_SESSION
+      - SUDO_NOT_IN_SUDOERS
+      - SUDO_COMMAND_NOT_ALLOWED
+      - SUDO_NOT_ALLOWED_EXECUTE
+      - SUDO_INCORRECT_PASSWORD
+      - SUDO_NEED_TTY
+      - SUDO_PAM_AUTH_FAILURE
+      - SUDO_PASSWORD_FAILED
+    tests:
+      positive:
+        - string: 'neti : TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/bin/ls -la'
+          enriched:
+            sudo_COMMAND: '/bin/ls -la'
+            sudo_PWD: '/home/neti'
+            sudo_TTY: 'pts/0'
+            sudo_USER: 'root'
+            sudo_user: 'neti'
+          program: 'sudo'
+          result:
+            sudo_user: 'neti'
+            sudo_kv: 'TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/bin/ls -la'
+        - string: 'www-data : TTY=unknown ; PWD=/var/www ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx'
+          result:
+            sudo_user: 'www-data'
+            sudo_kv: 'TTY=unknown ; PWD=/var/www ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx'
+        - string: '   snmpd : PWD=/ ; USER=root ; COMMAND=/usr/local/etc/snmp-extends/bind'
+          result:
+            sudo_user: 'snmpd'
+            sudo_kv: 'PWD=/ ; USER=root ; COMMAND=/usr/local/etc/snmp-extends/bind'
+        - string: '    root : TTY=pts/6 ; PWD=/root ; USER=root ; COMMAND=/usr/bin/true'
+          result:
+            sudo_user: 'root'
+            sudo_kv: 'TTY=pts/6 ; PWD=/root ; USER=root ; COMMAND=/usr/bin/true'
+        - string: 'pam_unix(sudo:session): session opened for user root(uid=0) by neti(uid=1000)'
+          numeric:
+            - sudo_by_uid
+            - sudo_target_uid
+          result:
+            sudo_session_action: 'opened'
+            sudo_target_user: 'root'
+            sudo_target_uid: '0'
+            sudo_by_user: 'neti'
+            sudo_by_uid: '1000'
+        - string: 'pam_unix(sudo:session): session closed for user root'
+          result:
+            sudo_session_action: 'closed'
+            sudo_target_user: 'root'
+        - string: 'baduser : user NOT in sudoers ; TTY=pts/0 ; PWD=/home/baduser ; USER=root ; COMMAND=/bin/ls'
+          result:
+            sudo_user: 'baduser'
+            sudo_error: 'user NOT in sudoers'
+            sudo_kv: 'TTY=pts/0 ; PWD=/home/baduser ; USER=root ; COMMAND=/bin/ls'
+        - string: 'neti : command not allowed ; TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/sbin/reboot'
+          result:
+            sudo_user: 'neti'
+            sudo_error: 'command not allowed'
+            sudo_kv: 'TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/sbin/reboot'
+        - string: "neti : user NOT allowed to execute '/bin/su' as root ; TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/bin/su"
+          result:
+            sudo_user: 'neti'
+            sudo_error: "user NOT allowed to execute '/bin/su' as root"
+            sudo_kv: 'TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/bin/su'
+        - string: 'neti : 3 incorrect password attempts ; TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/bin/ls'
+          numeric:
+            - sudo_pw_attempts
+          result:
+            sudo_user: 'neti'
+            sudo_error: '3 incorrect password attempts'
+            sudo_pw_attempts: '3'
+            sudo_kv: 'TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/bin/ls'
+        - string: 'neti : sorry, you must have a tty to run sudo ; TTY=unknown ; PWD=/home/neti ; USER=root ; COMMAND=/bin/ls'
+          result:
+            sudo_user: 'neti'
+            sudo_error: 'sorry, you must have a tty to run sudo'
+            sudo_kv: 'TTY=unknown ; PWD=/home/neti ; USER=root ; COMMAND=/bin/ls'
+        - string: 'www-data : sorry, you must have a tty to run sudo'
+          result:
+            sudo_user: 'www-data'
+            sudo_error: 'sorry, you must have a tty to run sudo'
+        - string: 'pam_unix(sudo:auth): authentication failure; logname=neti uid=1000 euid=0 tty=/dev/pts/0 ruser=neti rhost=  user=neti'
+          enriched:
+            sudo_euid: '0'
+            sudo_logname: 'neti'
+            sudo_pam_type: 'auth'
+            sudo_rhost: ''
+            sudo_ruser: 'neti'
+            sudo_tty: '/dev/pts/0'
+            sudo_uid: '1000'
+            sudo_user: 'neti'
+          numeric:
+            - sudo_euid
+            - sudo_uid
+          result:
+            sudo_pam_type: 'auth'
+            sudo_pam_kv: 'logname=neti uid=1000 euid=0 tty=/dev/pts/0 ruser=neti rhost=  user=neti'
+        # no user prefix at all on this one
+        - string: 'failed to get password: Conversation failure'
+          result:
+            sudo_error: 'Conversation failure'
+      negative:
+        - 'this is not a valid sudo line at all'
+        - string: 'neti : TTY=pts/0 ; PWD=/home/neti ; USER=root ; COMMAND=/bin/ls -la'
+          program: 'sudo-extra'

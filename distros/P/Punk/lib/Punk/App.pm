@@ -8,7 +8,7 @@ use Punk::Router::Scope;
 use Punk::Context;
 use Punk::Static;
 
-our $VERSION = '0.30';
+our $VERSION = '0.31';
 
 # The boot hook compile() probes just before the state hash freezes
 # (xs/compile.xs). The framework's own extras live here; a subclass that
@@ -60,7 +60,9 @@ Plugins receive this object; each method mirrors a DSL keyword:
 C<route>, C<under>, C<api>, C<docs>, C<static>, C<mount>, C<websocket>,
 C<sse>, C<session>, C<logging>, C<views>, C<database>, C<model_class>, C<hook>,
 C<middleware>, C<on_error>, C<on_not_found>, C<helper>, C<plugin>,
-C<config>, C<secret>, C<host>, C<favicon>.
+C<config>, C<secret>, C<host>, C<favicon>. Two read back rather than
+record: C<databases> and, with no argument, C<host>. C<on_compile>
+registers a callback for C<to_app>.
 
 C<< $app->host >> with no argument reads the declared origin back (undef
 when the application never declared one), which is how a plugin defaults
@@ -72,6 +74,36 @@ explicitly). C<caller_class> and C<config_object> give a plugin the
 app's controller namespace and its L<Punk::Config>; C<new> and the
 compile-time helpers (C<compile>, C<model_instance>, C<render_view>) are
 called by the framework, not apps.
+
+=head2 databases
+
+    my $dbs = $app->databases;    # { default => {...}, analytics => {...} }
+
+The configured databases read back: what the C<database> keyword recorded
+and what F<punk.yml> applied, keyed by name with C<default> for the
+unnamed one. A deep copy - a plugin must not be able to edit the
+connection options of the application it is installed in. Credentials
+included, since this is the application's own registrar and a plugin that
+deploys schema needs them. The registrar's other methods record; this one
+reads, the way C<host> reads back with no argument.
+
+=head2 on_compile
+
+    $app->on_compile(sub { my ($app) = @_; ... }, __PACKAGE__);
+
+A callback for C<to_app>: run once, in registration order, after every
+keyword has recorded and before anything is compiled - so it may still
+use the registrar (read C<databases>, add a route, a hook, a helper) and
+what it adds is compiled with the rest. The framework's own
+C<compile_extras> runs after these. A die is a boot croak naming the
+owner (the second argument, defaulting to the registering package).
+Calling it after C<to_app> croaks, since the callback would never run.
+
+This is the moment a plugin needs when its C<plugin> line may sit above
+the C<database> line it depends on, and the one L<Punk::Plugin::Queue>
+reached, before this existed, by registering a middleware whose
+constructor runs once at compile. Not a C<hook> phase: those are request
+phases, and this runs once per compile, never per request.
 
 =head2 helper
 
@@ -116,6 +148,23 @@ needs. Chains. See L<Punk::Plugin/KEYWORDS OF YOUR OWN>.
 The application L<Punk::Logger> (cached on the app), for logging outside a
 request - startup, background work: C<< $app->log->info(...) >>. Its lines have
 no method or path. See L<Punk::Logger> and the C<logging> keyword.
+
+=head2 url_for($name, %args)
+
+    my $link = $app->url_for('verify', token => $tok, absolute => 1);
+
+The URL of a named route (L<Punk/Named routes>), for code that has no
+request to reach L<Punk::Context/url_for> through: a mail built in a queue
+worker, a test naming a route rather than typing its path. Same names, same
+captures, same croaks.
+
+Two things follow from there being no request, and both are the safe
+direction. The prefix is the path on the C<host> keyword alone, because
+C<SCRIPT_NAME> belongs to a request and there is not one. And C<absolute>
+builds on the B<declared> host rather than negotiating the C<allow> list,
+because a background job has no C<Host> header to be allowed or refused.
+
+Only meaningful after C<to_app>: the names are resolved when the routes are.
 
 =head1 COMPILE
 

@@ -1,7 +1,7 @@
 use v5.26;
 use warnings;
 use experimental 'signatures';
-package PlackX::Framework 0.33 {
+package PlackX::Framework 0.34 {
   use PXF::Util ();
   use List::Util qw(any);
 

@@ -519,6 +519,29 @@ XS_INTERNAL(pm_h_mail_template)
     XSRETURN(1);
 }
 
+/* scheme://host[:port] of a base, the path dropped.
+ *
+ * A named route already carries the application's own prefix - the path on
+ * the `host` keyword, and SCRIPT_NAME when there is a request - so joining
+ * the WHOLE base onto it would spell that prefix twice:
+ * https://example.com/app/app/verify. The origin is the half a mail link
+ * needs from configuration; the rest comes from the route table. */
+static SV *pm_origin_of(pTHX_ SV *base)
+{
+    STRLEN bl, i = 0, end;
+    const char *bp = SvPV_const(base, bl);
+    while (i + 2 < bl && !(bp[i] == ':' && bp[i+1] == '/' && bp[i+2] == '/')) i++;
+    end = (i + 2 < bl) ? i + 3 : 0;
+    while (end < bl && bp[end] != '/') end++;
+    return newSVpvn(bp, end);
+}
+
+/* $c->mail_url('/path') or $c->mail_url('name', %captures)
+ *
+ * A first argument starting with '/' is a path and joins the base whole,
+ * exactly as it always has. Anything else is a route name (no route name may
+ * begin with '/', so the two cannot be confused) and is built through
+ * Punk's url_for, which fills the captures and carries the prefix. */
 static SV *pm_url(pTHX_ HV *cfg, SV *path)
 {
     SV *base = pm_hget(aTHX_ cfg, "base");
@@ -535,14 +558,68 @@ static SV *pm_url(pTHX_ HV *cfg, SV *path)
     return out;
 }
 
-/* $c->mail_url($path) */
+/* the named-route half: $c->url_for($name, @args), joined onto the origin */
+static SV *pm_url_named(pTHX_ HV *cfg, SV *c, SV **args, int nargs)
+{
+    SV *base = pm_hget(aTHX_ cfg, "base");
+    SV *rel, *out;
+    dSP;
+    int count, i;
+
+    if (!base)
+        croak("Punk::Plugin::Mailer: mail_url needs a base - give plugin 'Mailer' "
+              "base => 'https://...' or declare the host keyword");
+
+    /* Name the version rather than let call_method say "Can't locate object
+     * method": on an older Punk the argument would otherwise look like a
+     * path that nobody declared. */
+    if (!(c && SvROK(c) && SvOBJECT(SvRV(c))
+          && gv_fetchmethod_autoload(SvSTASH(SvRV(c)), "url_for", 0)))
+        croak("Punk::Plugin::Mailer: mail_url with a route NAME needs Punk "
+              "0.31 or newer (this one has no url_for) - pass a path "
+              "starting with '/' instead");
+
+    ENTER; SAVETMPS;
+    PUSHMARK(SP);
+    EXTEND(SP, nargs + 1);
+    PUSHs(c);
+    for (i = 0; i < nargs; i++) PUSHs(args[i]);
+    PUTBACK;
+    count = call_method("url_for", G_SCALAR);
+    SPAGAIN;
+    rel = count > 0 ? SvREFCNT_inc(POPs) : NULL;
+    PUTBACK;
+    FREETMPS; LEAVE;
+
+    if (!rel) croak("Punk::Plugin::Mailer: url_for returned nothing");
+    sv_2mortal(rel);
+    out = pm_origin_of(aTHX_ base);
+    sv_catsv(out, rel);
+    return out;
+}
+
+/* $c->mail_url($path) / $c->mail_url($name, %captures) */
 XS_INTERNAL(pm_h_mail_url);
 XS_INTERNAL(pm_h_mail_url)
 {
     dXSARGS;
     HV *cfg = pm_cfg_of(aTHX_ cv);
-    if (items < 2) croak("mail_url takes a path");
-    ST(0) = sv_2mortal(pm_url(aTHX_ cfg, ST(1)));
+    STRLEN pl;
+    const char *pp;
+    if (items < 2) croak("mail_url takes a path or a route name");
+    pp = SvOK(ST(1)) ? SvPV_const(ST(1), pl) : NULL;
+    if (pp && pl && pp[0] == '/') {
+        if (items > 2)
+            croak("Punk::Plugin::Mailer: mail_url takes captures only with a "
+                  "route NAME - a path is already complete");
+        ST(0) = sv_2mortal(pm_url(aTHX_ cfg, ST(1)));
+    }
+    else {
+        if (!ST(0) || !SvOK(ST(0)))
+            croak("Punk::Plugin::Mailer: mail_url needs the context to build "
+                  "a named route");
+        ST(0) = sv_2mortal(pm_url_named(aTHX_ cfg, ST(0), &ST(1), items - 1));
+    }
     XSRETURN(1);
 }
 
@@ -553,10 +630,10 @@ XS_INTERNAL(pm_h_mail_token)
     dXSARGS;
     HV *cfg = pm_cfg_of(aTHX_ cv);
     static const char *const ok[] = {
-        "kind", "ttl", "path", "template", "subject", "to", "later", "data",
+        "kind", "ttl", "path", "route", "template", "subject", "to", "later", "data",
         "email_field", "text", "html", "headers", "attachments", "from", "reply_to",
     };
-    SV *c, *user, *kind, *ttl, *path, *to, *data, *token, *link, *id, *out;
+    SV *c, *user, *kind, *ttl, *path, *route, *to, *data, *token, *link, *id, *out;
     HV *opt, *uh, *spec, *dh;
     HE *he;
     STRLEN pl; const char *pp;
@@ -582,7 +659,11 @@ XS_INTERNAL(pm_h_mail_token)
     ttl = pm_hget(aTHX_ opt, "ttl");
     if (!ttl) ttl = sv_2mortal(newSViv(2 * 24 * 60 * 60));
     path = pm_hget(aTHX_ opt, "path");
-    if (!path) path = sv_2mortal(newSVpvs("/verify/%s"));
+    route = pm_hget(aTHX_ opt, "route");
+    if (route && path)
+        croak("Punk::Plugin::Mailer: mail_token takes `route` or `path`, not "
+              "both - a named route already knows where it lives");
+    if (!route && !path) path = sv_2mortal(newSVpvs("/verify/%s"));
     to = pm_hget(aTHX_ opt, "to");
     if (!to) {
         SV *field = pm_hget(aTHX_ opt, "email_field");
@@ -601,12 +682,22 @@ XS_INTERNAL(pm_h_mail_token)
     if (!SvOK(token) || !SvCUR(token))
         croak("Punk::Plugin::Mailer: issue_token returned nothing");
 
-    /* the link: base + path with the first %s replaced by the token */
-    pp = SvPV_const(path, pl);
-    {
+    if (route) {
+        /* the link: the named route, with the token filling its `token`
+         * capture. The route knows its own shape, so there is no %s to get
+         * right and no path spelled twice. */
+        SV *args[3];
+        args[0] = route;
+        args[1] = sv_2mortal(newSVpvs("token"));
+        args[2] = token;
+        link = sv_2mortal(pm_url_named(aTHX_ cfg, c, args, 3));
+    }
+    else {
+        /* the link: base + path with the first %s replaced by the token */
         SV *filled = sv_2mortal(newSVpvs(""));
         const char *at = NULL;
         STRLEN i;
+        pp = SvPV_const(path, pl);
         for (i = 0; i + 1 < pl; i++) if (pp[i] == '%' && pp[i + 1] == 's') { at = pp + i; break; }
         if (!at) croak("Punk::Plugin::Mailer: mail_token's path needs a %%s for the token");
         sv_catpvn(filled, pp, (STRLEN)(at - pp));
@@ -620,7 +711,8 @@ XS_INTERNAL(pm_h_mail_token)
     while ((he = hv_iternext(opt))) {
         STRLEN kl; const char *k = HePV(he, kl);
         if ((kl == 4 && memEQ(k, "kind", 4)) || (kl == 3 && memEQ(k, "ttl", 3))
-            || (kl == 4 && memEQ(k, "path", 4)) || (kl == 11 && memEQ(k, "email_field", 11))
+            || (kl == 4 && memEQ(k, "path", 4)) || (kl == 5 && memEQ(k, "route", 5))
+            || (kl == 11 && memEQ(k, "email_field", 11))
             || (kl == 4 && memEQ(k, "data", 4)))
             continue;
         (void)hv_store(spec, k, (I32)kl, newSVsv(HeVAL(he)), 0);

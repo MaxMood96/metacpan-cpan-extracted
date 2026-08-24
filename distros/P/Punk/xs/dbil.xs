@@ -96,6 +96,15 @@ search(self, filter = &PL_sv_undef, opts = &PL_sv_undef)
         RETVAL
 
 SV *
+count(self, filter = &PL_sv_undef)
+        SV *self
+        SV *filter
+    CODE:
+        RETVAL = pdl_count(aTHX_ self, filter);
+    OUTPUT:
+        RETVAL
+
+SV *
 all(self)
         SV *self
     CODE:

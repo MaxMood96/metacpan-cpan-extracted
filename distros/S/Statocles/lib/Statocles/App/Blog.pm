@@ -1,5 +1,5 @@
 package Statocles::App::Blog;
-our $VERSION = '0.098';
+our $VERSION = '0.099';
 # ABSTRACT: A blog application
 
 use Text::Unidecode;
@@ -9,24 +9,7 @@ use Statocles::Document;
 use Statocles::Page::Document;
 use Statocles::Page::List;
 use Statocles::Util qw( run_editor read_stdin );
-
-with 'Statocles::App::Role::Store';
-
-#pod =attr store
-#pod
-#pod     # site.yml
-#pod     blog:
-#pod         class: Statocles::App::Blog
-#pod         args:
-#pod             store: _posts
-#pod
-#pod The L<store directory path|Statocles::Store> to read for blog posts. Required.
-#pod
-#pod The Blog directory is organized in a tree by date, with a directory for the
-#pod year, month, day, and post. Each blog post is its own directory to allow for
-#pod additional files for the post, like images or additional pages.
-#pod
-#pod =cut
+with 'Statocles::App';
 
 #pod =attr tag_text
 #pod
@@ -228,27 +211,29 @@ ENDHELP
         );
 
         my $slug = $self->make_slug( $doc->title || "new post" );
-        my @partsdir = (@date_parts, $slug);
+        my $url_root = $self->url_root;
+        $url_root =~ s{^/}{}g;
+        my @partsdir = ($url_root, @date_parts, $slug);
         my @partsfile = (@partsdir, "index.markdown");
         my $path = Mojo::Path->new->parts(\@partsfile);
-        $self->store->write_file( $path => $doc );
-        my $full_path = $self->store->path->child( @partsfile );
+        $self->site->store->write_file( $path => $doc );
+        my $full_path = $self->site->store->path->child( @partsfile );
 
         if ( my $content = run_editor( $full_path ) ) {
             my $old_title = $doc->title;
             my $doc = Statocles::Document->parse_content(
                 path => $path.'',
-                store => $self->store,
+                store => $self->site->store,
                 content => $content,
             );
             if ( $doc->title ne $old_title ) {
-                $self->store->path->child( @partsdir )->remove_tree;
+                $self->site->store->path->child( @partsdir )->remove_tree;
                 $slug = $self->make_slug( $doc->title || "new post" );
-                @partsdir = (@date_parts, $slug);
+                @partsdir = ($url_root, @date_parts, $slug);
                 @partsfile = (@partsdir, "index.markdown");
                 $path = Mojo::Path->new->parts(\@partsfile);
-                $self->store->write_file( $path => $doc );
-                $full_path = $self->store->path->child( @partsfile );
+                $self->site->store->write_file( $path => $doc );
+                $full_path = $self->site->store->path->child( @partsfile );
             }
         }
 
@@ -343,6 +328,7 @@ sub index {
     for my $feed ( sort keys %FEEDS ) {
         my $page = Statocles::Page::List->new(
             app => $self,
+            site => $self->site,
             pages => $index->pages,
             path => $self->url( 'index.' . $feed ),
             template => $self->template( $FEEDS{$feed}{template} ),
@@ -411,6 +397,7 @@ sub tag_pages {
 
             my $page = Statocles::Page::List->new(
                 app => $self,
+                site => $self->site,
                 pages => $index->pages,
                 path => $self->url( join( "/", 'tag', $tag_file ) ),
                 template => $self->template( $FEEDS{$feed}{template} ),
@@ -462,13 +449,13 @@ sub tag_pages {
 #pod
 #pod =cut
 
-# sub pages
-around pages => sub {
-    my ( $orig, $self, %opt ) = @_;
+sub pages {
+    my ( $self, $pages, %opt ) = @_;
     $opt{date} ||= DateTime::Moonpig->now( time_zone => 'local' )->ymd;
     my $root = $self->url_root;
-    my $is_dated_path = qr{^$root/?(\d{4})/(\d{2})/(\d{2})/};
-    my @parent_pages = $self->$orig( %opt );
+    $root =~ s{^/}{}g;
+    my $is_dated_path = qr{^/?$root/?(\d{4})/(\d{2})/(\d{2})/};
+    my @parent_pages = @$pages;
     my @pages =
         map { $_->[0] }
         # Only pages today or before
@@ -477,14 +464,16 @@ around pages => sub {
         map { [ $_, join "-", $_->path =~ $is_dated_path ] }
         # Only dated pages
         grep { $_->path =~ $is_dated_path }
-        #$self->$orig( %opt );
         @parent_pages;
     @pages = _sort_page_list( @pages );
 
     my @post_pages;
     my %tag_pages;
 
+    #; say "Got pages: " . join ", ", map { $_->path } @pages;
+
     for my $page ( @pages ) {
+        $page->app( $self );
 
         if ( $page->isa( 'Statocles::Page::Document' ) ) {
 
@@ -524,9 +513,9 @@ around pages => sub {
     # XXX: This needs to be handled more intelligently with proper dependencies
     $self->_post_pages( \@post_pages );
 
-    my @all_pages = ( $self->index( \@post_pages ), $self->tag_pages( \%tag_pages ), @pages );
+    my @all_pages = ( $self->index( \@post_pages ), $self->tag_pages( \%tag_pages ) );
     return @all_pages;
-};
+}
 
 #pod =method tags
 #pod
@@ -654,7 +643,7 @@ Statocles::App::Blog - A blog application
 
 =head1 VERSION
 
-version 0.098
+version 0.099
 
 =head1 DESCRIPTION
 
@@ -696,20 +685,6 @@ C<deploy> in a nightly cron job.
 =back
 
 =head1 ATTRIBUTES
-
-=head2 store
-
-    # site.yml
-    blog:
-        class: Statocles::App::Blog
-        args:
-            store: _posts
-
-The L<store directory path|Statocles::Store> to read for blog posts. Required.
-
-The Blog directory is organized in a tree by date, with a directory for the
-year, month, day, and post. Each blog post is its own directory to allow for
-additional files for the post, like images or additional pages.
 
 =head2 tag_text
 

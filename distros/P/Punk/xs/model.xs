@@ -195,17 +195,18 @@ backend(self)
     OUTPUT:
         RETVAL
 
-# get / search / delete: straight through to the backend, keeping the
-# caller's context so a list-returning backend stays a list.
+# get / search / delete / count: straight through to the backend, keeping
+# the caller's context so a list-returning backend stays a list.
 void
 get(self, ...)
         SV *self
     ALIAS:
         search = 1
         delete = 2
+        count  = 3
     PPCODE:
     {
-        static const char *const m[] = { "get", "search", "delete" };
+        static const char *const m[] = { "get", "search", "delete", "count" };
         PERL_UNUSED_VAR(self);
         pm_delegate(aTHX_ &ST(0), items, m[ix], GIMME_V);
         return;   /* whatever the backend left on the stack */

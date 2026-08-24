@@ -1,5 +1,16 @@
 Revision history for Perl extension PlackX-Framework
 
+0.34 2026-08-24T03:48:54Z
+
+    - Add render_file feature
+    - Improve testing of request/response
+    - $response->last to eventually replace $response->stop
+      (more consistent naming with $response->next)
+    - Add more uri utilities and related tests and pod
+      (with new tests integrating request, router, and app_base)
+    - Avoid testing that requires TCP if unable a simple TCP connection
+    - BUGFIX: Fix double slashes in generated urls
+
 0.33 2026-08-18T07:48:40Z
 
     - Fix more documentation mistakes

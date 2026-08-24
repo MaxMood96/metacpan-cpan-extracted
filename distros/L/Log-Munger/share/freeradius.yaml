@@ -1,0 +1,175 @@
+---
+# FreeRADIUS authentication log enrichment.
+#
+# Gates on the syslog PROGRAM field being "radiusd" or "freeradius". Patterns
+# are anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with radius_ .
+#
+# RADIUS is what sits behind 802.1X on a wired or wireless network and behind a
+# lot of VPN concentrators, which makes these the authentication records for
+# everything that never touches a shell. hostapd.yaml sees the association;
+# this is where the credential check itself lands.
+#
+# The line to count is "Login incorrect". Its parenthesised reason separates a
+# wrong password from an unknown user from a rejected certificate, and the
+# "from client" clause names the NAS -- the access point or switch the attempt
+# came through -- which is what turns a count into a location.
+includes:
+- base
+vars_templated:
+  # Newer FreeRADIUS prefixes each line with the request number it belongs to,
+  # which is what ties an accept back to the request that asked for it.
+  RADIUS_REQUEST: '(?:\((?<radius_request>[% INT %])\) +)?'
+  # "(from client wifi port 0 cli aa-bb-cc-dd-ee-ff)"
+  #
+  # The client is the NAS as named in clients.conf, not the end user. cli is
+  # the calling station -- the supplicant's MAC on 802.1X -- and is absent on
+  # transports that have no such thing.
+  RADIUS_CLIENT: '(?: \(from client (?<radius_client>[% NOTSPACE %]) port (?<radius_nas_port>[% INT %])(?: cli (?<radius_calling_station>[% NOTSPACE %]))?\))?'
+  # "Login OK: [neti/<via Auth-Type = mschap>] (from client wifi port 0)"
+  # "Login incorrect (mschap: MS-CHAP2-Response is incorrect): [admin/pw] (...)"
+  #
+  # The bracketed field is user/credential, and the credential half is either
+  # the password as sent or a note about how it was checked, depending on how
+  # much FreeRADIUS was willing to say.
+  RADIUS_LOGIN: '[% RADIUS_REQUEST %]Login (?<radius_result>OK|incorrect)(?: \((?<radius_reason>.*)\))?: \[(?<radius_user>[^\]/]*)(?:/(?<radius_credential>[^\]]*))?\][% RADIUS_CLIENT %]'
+  # "Invalid user (mschap: External script says Logon failure): [admin/pw]
+  #  (from client wifi port 0)"
+  RADIUS_INVALID_USER: '[% RADIUS_REQUEST %]Invalid user(?: \((?<radius_reason>.*)\))?: \[(?<radius_user>[^\]/]*)(?:/(?<radius_credential>[^\]]*))?\][% RADIUS_CLIENT %]'
+  # "Ignoring request to auth address 192.0.2.1 port 1812 bound to server
+  #  default from unknown client 203.0.113.7 port 45678 proto udp"
+  #
+  # A RADIUS packet from something that is not in clients.conf. On an exposed
+  # port this is a scan; on a working network it is a NAS someone forgot to
+  # add.
+  RADIUS_UNKNOWN_CLIENT: '[% RADIUS_REQUEST %]Ignoring request to (?<radius_socket>[% GREEDYDATA %]) from unknown client (?<radius_src_ip>[% IP %]) port (?<radius_src_port>[% INT %])(?: [% GREEDYDATA %])?'
+  # "Login incorrect: [neti] (from client wifi port 0)" without the reason,
+  # and everything else radiusd says.
+  RADIUS_MESSAGE: '[% RADIUS_REQUEST %](?<radius_message>.+)'
+vars_tests:
+  RADIUS_REQUEST:
+    test_template: '^(?<TEST>[% TEST_VAR %])x$'
+    positive:
+      - string: '(12) x'
+        result: '(12) '
+      # the whole prefix is optional
+      - string: 'x'
+        result: ''
+    negative:
+      - '(12)'
+  RADIUS_CLIENT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: ' (from client wifi port 0 cli aa-bb-cc-dd-ee-ff)'
+        result: ' (from client wifi port 0 cli aa-bb-cc-dd-ee-ff)'
+      - string: ' (from client localhost port 0)'
+        result: ' (from client localhost port 0)'
+      # the whole clause is optional
+      - string: ''
+        result: ''
+    negative:
+      - 'from client wifi port 0'
+  RADIUS_LOGIN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Login OK: [neti/<via Auth-Type = mschap>] (from client wifi port 0 cli aa-bb-cc-dd-ee-ff)'
+        result: 'Login OK: [neti/<via Auth-Type = mschap>] (from client wifi port 0 cli aa-bb-cc-dd-ee-ff)'
+      - string: 'Login incorrect (mschap: MS-CHAP2-Response is incorrect): [admin/password] (from client wifi port 0 cli aa-bb-cc-dd-ee-ff)'
+        result: 'Login incorrect (mschap: MS-CHAP2-Response is incorrect): [admin/password] (from client wifi port 0 cli aa-bb-cc-dd-ee-ff)'
+      - string: '(12) Login OK: [neti] (from client localhost port 0)'
+        result: '(12) Login OK: [neti] (from client localhost port 0)'
+    negative:
+      - 'Invalid user: [admin] (from client wifi port 0)'
+  RADIUS_INVALID_USER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Invalid user (mschap: External script says Logon failure): [admin/password] (from client wifi port 0)'
+        result: 'Invalid user (mschap: External script says Logon failure): [admin/password] (from client wifi port 0)'
+    negative:
+      - 'Login incorrect: [admin] (from client wifi port 0)'
+  RADIUS_UNKNOWN_CLIENT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Ignoring request to auth address 192.0.2.1 port 1812 bound to server default from unknown client 203.0.113.7 port 45678 proto udp'
+        result: 'Ignoring request to auth address 192.0.2.1 port 1812 bound to server default from unknown client 203.0.113.7 port 45678 proto udp'
+    negative:
+      - 'Login incorrect: [admin] (from client wifi port 0)'
+  RADIUS_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Ready to process requests'
+        result: 'Ready to process requests'
+    negative:
+      - ''
+geoip:
+  - radius_src_ip
+convert:
+  radius_request: int
+  radius_nas_port: int
+  radius_src_port: int
+rules:
+  - name: freeradius
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^(?:radiusd|freeradius)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - RADIUS_LOGIN
+      - RADIUS_INVALID_USER
+      - RADIUS_UNKNOWN_CLIENT
+      # last: matches anything, which is only safe because the rule is gated
+      - RADIUS_MESSAGE
+    tests:
+      positive:
+        - string: 'Login OK: [neti/<via Auth-Type = mschap>] (from client wifi port 0 cli aa-bb-cc-dd-ee-ff)'
+          program: 'freeradius'
+          result:
+            radius_result: 'OK'
+            radius_user: 'neti'
+            radius_credential: '<via Auth-Type = mschap>'
+            radius_client: 'wifi'
+            radius_nas_port: '0'
+            radius_calling_station: 'aa-bb-cc-dd-ee-ff'
+        - string: 'Login incorrect (mschap: MS-CHAP2-Response is incorrect): [admin/password] (from client wifi port 0 cli aa-bb-cc-dd-ee-ff)'
+          result:
+            radius_result: 'incorrect'
+            radius_reason: 'mschap: MS-CHAP2-Response is incorrect'
+            radius_user: 'admin'
+            radius_credential: 'password'
+            radius_client: 'wifi'
+            radius_nas_port: '0'
+            radius_calling_station: 'aa-bb-cc-dd-ee-ff'
+        - string: '(12) Login OK: [neti] (from client localhost port 0)'
+          numeric:
+            - radius_nas_port
+            - radius_request
+          result:
+            radius_request: '12'
+            radius_result: 'OK'
+            radius_user: 'neti'
+            radius_client: 'localhost'
+            radius_nas_port: '0'
+        - string: 'Invalid user (mschap: External script says Logon failure): [admin/password] (from client wifi port 0)'
+          result:
+            radius_reason: 'mschap: External script says Logon failure'
+            radius_user: 'admin'
+            radius_credential: 'password'
+            radius_client: 'wifi'
+            radius_nas_port: '0'
+        - string: 'Ignoring request to auth address 192.0.2.1 port 1812 bound to server default from unknown client 203.0.113.7 port 45678 proto udp'
+          numeric:
+            - radius_src_port
+          result:
+            radius_socket: 'auth address 192.0.2.1 port 1812 bound to server default'
+            radius_src_ip: '203.0.113.7'
+            radius_src_port: '45678'
+        - string: 'Ready to process requests'
+          program: 'radiusd'
+          result:
+            radius_message: 'Ready to process requests'
+      negative:
+        - ''
+        - string: 'Login OK: [neti/<via Auth-Type = mschap>] (from client wifi port 0 cli aa-bb-cc-dd-ee-ff)'
+          program: 'freeradius-extra'

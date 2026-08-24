@@ -1,3 +1,15 @@
+1.239 2026-08-23
+================
+
+[Quiq::Smb::Client]
+Doku bearbeitet
+
+[Quiq::AnsiColor]
+* str(): undef als Leerstring behandeln
+
+[Quiq::String]
+Abschnitt "Einrückung" entfernt
+
 1.238 2026-05-20
 ================
 

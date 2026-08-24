@@ -1,0 +1,172 @@
+---
+# ProFTPD session and authentication log enrichment.
+#
+# Gates on the syslog PROGRAM field being "proftpd". Patterns are anchored
+# (each must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with proftpd_ .
+#
+# Every ProFTPD message opens with the same head:
+#
+#   <server> (<client-name>[<client-address>]) - <what happened>
+#
+# The client name is the reverse lookup, falling back to the address where
+# there is none, so the two are usually the same string. The bracketed address
+# is the trustworthy one, and it is what the geoip lookup reads.
+includes:
+- base
+vars_templated:
+  # The "<server> (<name>[<address>]) - " head shared by every message.
+  #
+  # The name is matched as "anything but an opening bracket" rather than as a
+  # hostname: it is whatever the reverse lookup returned, and on an unresolved
+  # v6 peer that is a bare address with colons in it.
+  PROFTPD_HEAD: '(?<proftpd_server>[% NOTSPACE %]) \((?<proftpd_client_host>[^\[]*)\[(?<proftpd_client_ip>[% IP %])\]\) - '
+  # "USER neti: Login successful."
+  PROFTPD_LOGIN_OK: '[% PROFTPD_HEAD %]USER (?<proftpd_user>[% NOTSPACE %]): Login successful\.?(?: [% GREEDYDATA %])?'
+  # "USER admin (Login failed): Incorrect password."
+  #
+  # The reason is kept in a field of its own: "Incorrect password" means the
+  # account exists and "No such user found" that it does not, which is what
+  # separates a targeted attempt from a dictionary sweep.
+  PROFTPD_LOGIN_FAIL: '[% PROFTPD_HEAD %]USER (?<proftpd_user>[% NOTSPACE %]) \(Login failed\): (?<proftpd_reason>[% GREEDYDATA %])'
+  # "FTP session opened." / "FTP session closed."
+  PROFTPD_SESSION: '[% PROFTPD_HEAD %]FTP session (?<proftpd_session_event>opened|closed)\.?(?: [% GREEDYDATA %])?'
+  # "SECURITY VIOLATION: root login attempted."
+  PROFTPD_SECURITY: '[% PROFTPD_HEAD %]SECURITY VIOLATION: (?<proftpd_violation>[% GREEDYDATA %])'
+  # "Maximum login attempts (3) exceeded"
+  PROFTPD_MAXLOGIN: '[% PROFTPD_HEAD %]Maximum (?<proftpd_limit_kind>login attempts|connections?) \((?<proftpd_limit>[% INT %])\) exceeded(?: [% GREEDYDATA %])?'
+  # Anything else ProFTPD said about this session. Last resort, so an
+  # unrecognised message still arrives with its text and, more to the point,
+  # with the client address the head always carries.
+  PROFTPD_GENERIC: '[% PROFTPD_HEAD %](?<proftpd_message>.+)'
+vars_tests:
+  PROFTPD_HEAD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.1 (client.example.net[198.51.100.9]) - '
+        result: '192.0.2.1 (client.example.net[198.51.100.9]) - '
+      # unresolved peers repeat the address in both slots
+      - string: 'ftp.example.com (203.0.113.7[203.0.113.7]) - '
+        result: 'ftp.example.com (203.0.113.7[203.0.113.7]) - '
+    negative:
+      - '192.0.2.1 - USER neti: Login successful.'
+  PROFTPD_LOGIN_OK:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.1 (client.example.net[198.51.100.9]) - USER neti: Login successful.'
+        result: '192.0.2.1 (client.example.net[198.51.100.9]) - USER neti: Login successful.'
+    negative:
+      - '192.0.2.1 (client.example.net[198.51.100.9]) - USER admin (Login failed): Incorrect password.'
+  PROFTPD_LOGIN_FAIL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.1 (scanner[203.0.113.7]) - USER admin (Login failed): Incorrect password.'
+        result: '192.0.2.1 (scanner[203.0.113.7]) - USER admin (Login failed): Incorrect password.'
+      - string: '192.0.2.1 (scanner[203.0.113.7]) - USER oracle (Login failed): No such user found'
+        result: '192.0.2.1 (scanner[203.0.113.7]) - USER oracle (Login failed): No such user found'
+    negative:
+      - '192.0.2.1 (client.example.net[198.51.100.9]) - USER neti: Login successful.'
+  PROFTPD_SESSION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.1 (client.example.net[198.51.100.9]) - FTP session opened.'
+        result: '192.0.2.1 (client.example.net[198.51.100.9]) - FTP session opened.'
+      - string: '192.0.2.1 (client.example.net[198.51.100.9]) - FTP session closed.'
+        result: '192.0.2.1 (client.example.net[198.51.100.9]) - FTP session closed.'
+    negative:
+      - '192.0.2.1 (client.example.net[198.51.100.9]) - USER neti: Login successful.'
+  PROFTPD_SECURITY:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.1 (scanner[203.0.113.7]) - SECURITY VIOLATION: root login attempted.'
+        result: '192.0.2.1 (scanner[203.0.113.7]) - SECURITY VIOLATION: root login attempted.'
+    negative:
+      - '192.0.2.1 (client.example.net[198.51.100.9]) - FTP session opened.'
+  PROFTPD_MAXLOGIN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.1 (scanner[203.0.113.7]) - Maximum login attempts (3) exceeded'
+        result: '192.0.2.1 (scanner[203.0.113.7]) - Maximum login attempts (3) exceeded'
+      - string: '192.0.2.1 (scanner[203.0.113.7]) - Maximum connections (30) exceeded'
+        result: '192.0.2.1 (scanner[203.0.113.7]) - Maximum connections (30) exceeded'
+    negative:
+      - '192.0.2.1 (client.example.net[198.51.100.9]) - FTP session opened.'
+  PROFTPD_GENERIC:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.1 (client.example.net[198.51.100.9]) - Preparing to chroot to directory ''/home/neti'''
+        result: '192.0.2.1 (client.example.net[198.51.100.9]) - Preparing to chroot to directory ''/home/neti'''
+    negative:
+      # the head is required, and there has to be something after it
+      - 'this is not a proftpd line at all'
+      - '192.0.2.1 (client.example.net[198.51.100.9]) - '
+geoip:
+  - proftpd_client_ip
+convert:
+  proftpd_limit: int
+rules:
+  - name: proftpd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^proftpd$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - PROFTPD_LOGIN_OK
+      - PROFTPD_LOGIN_FAIL
+      - PROFTPD_SESSION
+      - PROFTPD_SECURITY
+      - PROFTPD_MAXLOGIN
+      # last: matches anything that carried the head, so everything with a
+      # shape of its own has to have been tried already
+      - PROFTPD_GENERIC
+    tests:
+      positive:
+        - string: '192.0.2.1 (client.example.net[198.51.100.9]) - USER neti: Login successful.'
+          program: 'proftpd'
+          result:
+            proftpd_server: '192.0.2.1'
+            proftpd_client_host: 'client.example.net'
+            proftpd_client_ip: '198.51.100.9'
+            proftpd_user: 'neti'
+        - string: '192.0.2.1 (scanner[203.0.113.7]) - USER admin (Login failed): Incorrect password.'
+          result:
+            proftpd_server: '192.0.2.1'
+            proftpd_client_host: 'scanner'
+            proftpd_client_ip: '203.0.113.7'
+            proftpd_user: 'admin'
+            proftpd_reason: 'Incorrect password.'
+        - string: '192.0.2.1 (client.example.net[198.51.100.9]) - FTP session opened.'
+          result:
+            proftpd_server: '192.0.2.1'
+            proftpd_client_host: 'client.example.net'
+            proftpd_client_ip: '198.51.100.9'
+            proftpd_session_event: 'opened'
+        - string: '192.0.2.1 (scanner[203.0.113.7]) - SECURITY VIOLATION: root login attempted.'
+          result:
+            proftpd_server: '192.0.2.1'
+            proftpd_client_host: 'scanner'
+            proftpd_client_ip: '203.0.113.7'
+            proftpd_violation: 'root login attempted.'
+        - string: '192.0.2.1 (scanner[203.0.113.7]) - Maximum login attempts (3) exceeded'
+          numeric:
+            - proftpd_limit
+          result:
+            proftpd_server: '192.0.2.1'
+            proftpd_client_host: 'scanner'
+            proftpd_client_ip: '203.0.113.7'
+            proftpd_limit_kind: 'login attempts'
+            proftpd_limit: '3'
+        # unrecognised, but the head still gives the peer
+        - string: '192.0.2.1 (client.example.net[198.51.100.9]) - Preparing to chroot to directory ''/home/neti'''
+          result:
+            proftpd_server: '192.0.2.1'
+            proftpd_client_host: 'client.example.net'
+            proftpd_client_ip: '198.51.100.9'
+            proftpd_message: 'Preparing to chroot to directory ''/home/neti'''
+      negative:
+        - 'this is not a proftpd line at all'
+        - 'Jul 15 10:00:00 host cron[123]: session opened for user root'
+        - string: '192.0.2.1 (client.example.net[198.51.100.9]) - USER neti: Login successful.'
+          program: 'proftpd-extra'

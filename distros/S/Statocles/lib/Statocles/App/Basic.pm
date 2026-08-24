@@ -1,18 +1,13 @@
 package Statocles::App::Basic;
-our $VERSION = '0.098';
+our $VERSION = '0.099';
 # ABSTRACT: Build Markdown and collateral files
 
 use Statocles::Base 'Class';
 use Statocles::Document;
 use Statocles::Util qw( run_editor read_stdin );
-with 'Statocles::App::Role::Store';
+with 'Statocles::App';
 
-#pod =attr store
-#pod
-#pod The L<store path|Statocles::Store> containing this app's documents and files.
-#pod Required.
-#pod
-#pod =cut
+sub pages { }
 
 #pod =method command
 #pod
@@ -53,19 +48,19 @@ sub command {
         if ( my $content = read_stdin() ) {
             my $doc = Statocles::Document->parse_content(
                 path => $path.'',
-                store => $self->store,
+                store => $self->site->store,
                 content => $content,
             );
-            $self->store->write_file( $path => $doc );
+            $self->site->store->write_file( $path => $doc );
         }
-        elsif ( !$self->store->has_file( $path ) ) {
+        elsif ( !$self->site->store->has_file( $path ) ) {
             my $doc = Statocles::Document->new(
                 content => "Markdown content goes here.\n",
             );
-            $self->store->write_file( $path => $doc );
+            $self->site->store->write_file( $path => $doc );
         }
 
-        my $full_path = $self->store->path->child( $path );
+        my $full_path = $self->site->store->path->child( $path );
         if ( my $content = run_editor( $full_path ) ) {
             $full_path->spew_utf8( $content );
         }
@@ -97,27 +92,22 @@ Statocles::App::Basic - Build Markdown and collateral files
 
 =head1 VERSION
 
-version 0.098
+version 0.099
 
 =head1 SYNOPSIS
 
     my $app = Statocles::App::Basic->new(
         url_root => '/',
-        store => 'share/root',
     );
     my @pages = $app->pages;
 
 =head1 DESCRIPTION
 
+B<DEPRECATED>: The functionality of this app is now built-in to the site
+itself. There's no reason to use this anymore.
+
 This application builds basic pages based on L<Markdown documents|Statocles::Document> and
 other files. Use this to have basic informational pages like "About Us" and "Contact Us".
-
-=head1 ATTRIBUTES
-
-=head2 store
-
-The L<store path|Statocles::Store> containing this app's documents and files.
-Required.
 
 =head1 METHODS
 

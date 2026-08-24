@@ -1,0 +1,7 @@
+class TestCase::Resource::Libpng {
+  
+  use Resource::Zlib;
+  use Resource::Libpng;
+  
+  native static method test : int ();
+}

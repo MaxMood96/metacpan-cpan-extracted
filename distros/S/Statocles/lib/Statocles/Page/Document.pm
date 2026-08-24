@@ -1,5 +1,5 @@
 package Statocles::Page::Document;
-our $VERSION = '0.098';
+our $VERSION = '0.099';
 # ABSTRACT: Render document objects into HTML
 
 use Statocles::Base 'Class';
@@ -137,7 +137,7 @@ sub _render_content_template {
     my $doc = $self->document;
     if ( $doc->store ) {
         my $document_path = $doc->store->path->child( $doc->path )->parent;
-        push @{ $tmpl->include_stores }, Statocles::Store->new( path => $document_path );
+        push @{ $tmpl->include_paths }, $document_path;
     }
     my $rendered = $tmpl->render( %$vars, $self->vars, self => $doc, page => $self );
     return $rendered;
@@ -283,7 +283,7 @@ has next => (
     lazy => 1,
     isa => PagePath|Undef,
     coerce => PagePath->coercion,
-    default => sub { $_[0]->_page_path('next_page') },
+    default => sub { my $p = $_[0]->_page_path('next_page'); $p && $p !~ /^\// ? "/$p" : $p },
 );
 
 #pod =attr prev
@@ -298,7 +298,7 @@ has prev => (
     lazy => 1,
     isa => PagePath|Undef,
     coerce => PagePath->coercion,
-    default => sub { $_[0]->_page_path('prev_page') },
+    default => sub { my $p = $_[0]->_page_path('prev_page'); $p && $p !~ /^\// ? "/$p" : $p },
 );
 
 sub _page_path {
@@ -338,7 +338,7 @@ Statocles::Page::Document - Render document objects into HTML
 
 =head1 VERSION
 
-version 0.098
+version 0.099
 
 =head1 DESCRIPTION
 

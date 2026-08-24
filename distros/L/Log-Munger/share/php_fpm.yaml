@@ -1,0 +1,193 @@
+---
+# PHP-FPM log enrichment.
+#
+# Gates on the syslog PROGRAM field being "php-fpm" or a versioned variant.
+# Patterns are anchored (each must match the whole MESSAGE) and first-match
+# wins. Every capture is namespaced with php_ .
+#
+# PHP-FPM sits behind nginx or apache, so http_access_logs.yaml sees the
+# request and this sees what the interpreter made of it. The two join on
+# nothing automatic -- there is no shared request id unless one was configured
+# -- but the timestamps line up, and a 500 in the access log with a matching
+# "child exited on signal 11" here is a complete story that neither half tells
+# alone.
+#
+# The pool warnings carry the most: children dying on signals, the process
+# manager running out of children, and slow-request traces. All three are ways
+# a site becomes unavailable without anything crashing outright.
+includes:
+- base
+vars_templated:
+  # "[15-Jul-2026 10:00:00] WARNING: " -- the timestamp and severity every line
+  # opens with. Note the day-month-year with dashes, which is PHP's own format
+  # and not one of the base timestamp primitives.
+  PHP_HEAD: '\[(?<php_timestamp>[^\]]*)\] (?<php_level>[A-Z]+): '
+  # "[pool www] child 1234 exited on signal 11 (SIGSEGV) after 100.123456
+  #  seconds from start"
+  PHP_CHILD_EXIT: '[% PHP_HEAD %]\[pool (?<php_pool>[^\]]*)\] child (?<php_pid>[% INT %]) exited (?:on signal (?<php_signal>[% INT %])(?: \((?<php_signal_name>[^)]*)\))?|with code (?<php_exit_code>[% INT %]))(?: after (?<php_uptime>[% NUMBER %]) seconds from start)?(?: [% GREEDYDATA %])?'
+  # "[pool www] seems busy (you may need to increase pm.start_servers, or
+  #  pm.min/max_spare_servers), spawning 8 children"
+  #
+  # The process manager saying it is out of workers. Under load this is what
+  # precedes the requests that never get answered.
+  PHP_POOL_BUSY: '[% PHP_HEAD %]\[pool (?<php_pool>[^\]]*)\] seems busy (?<php_pool_advice>[% GREEDYDATA %])'
+  # "[pool www] script ''/srv/www/index.php'' (request: "GET /index.php")
+  #  executing too slow (5.123456 sec), logging"
+  PHP_SLOW: '[% PHP_HEAD %]\[pool (?<php_pool>[^\]]*)\] script ''(?<php_script>[^'']*)''(?: \(request: "(?<php_request>[^"]*)"\))? executing too slow \((?<php_duration>[% NUMBER %]) sec\)(?:, (?<php_slow_action>[% GREEDYDATA %]))?'
+  # "[pool www] child 1234 said into stderr: "PHP Fatal error: ...""
+  PHP_CHILD_OUTPUT: '[% PHP_HEAD %]\[pool (?<php_pool>[^\]]*)\] child (?<php_pid>[% INT %]) said into (?<php_stream>stderr|stdout): "(?<php_output>.*)"(?:, and (?<php_output_detail>[% GREEDYDATA %]))?'
+  # Anything else that named a pool.
+  PHP_POOL_MESSAGE: '[% PHP_HEAD %]\[pool (?<php_pool>[^\]]*)\] (?<php_message>.+)'
+  # Anything else with a head: startup, configuration, reloads.
+  PHP_MESSAGE: '[% PHP_HEAD %](?<php_message>.+)'
+  # Anything with no head at all.
+  PHP_PLAIN: '(?<php_message>.+)'
+vars_tests:
+  PHP_HEAD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[15-Jul-2026 10:00:00] WARNING: '
+        result: '[15-Jul-2026 10:00:00] WARNING: '
+      - string: '[15-Jul-2026 10:00:00] NOTICE: '
+        result: '[15-Jul-2026 10:00:00] NOTICE: '
+    negative:
+      - '15-Jul-2026 10:00:00 WARNING: '
+  PHP_CHILD_EXIT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[15-Jul-2026 10:00:00] WARNING: [pool www] child 1234 exited on signal 11 (SIGSEGV) after 100.123456 seconds from start'
+        result: '[15-Jul-2026 10:00:00] WARNING: [pool www] child 1234 exited on signal 11 (SIGSEGV) after 100.123456 seconds from start'
+      - string: '[15-Jul-2026 10:00:00] WARNING: [pool www] child 1234 exited with code 255 after 10.5 seconds from start'
+        result: '[15-Jul-2026 10:00:00] WARNING: [pool www] child 1234 exited with code 255 after 10.5 seconds from start'
+    negative:
+      - '[15-Jul-2026 10:00:00] NOTICE: [pool www] child 1234 started'
+  PHP_POOL_BUSY:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[15-Jul-2026 10:00:00] WARNING: [pool www] seems busy (you may need to increase pm.start_servers), spawning 8 children'
+        result: '[15-Jul-2026 10:00:00] WARNING: [pool www] seems busy (you may need to increase pm.start_servers), spawning 8 children'
+    negative:
+      - '[15-Jul-2026 10:00:00] NOTICE: [pool www] child 1234 started'
+  PHP_SLOW:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[15-Jul-2026 10:00:00] WARNING: [pool www] script ''/srv/www/index.php'' (request: "GET /index.php") executing too slow (5.123456 sec), logging'
+        result: '[15-Jul-2026 10:00:00] WARNING: [pool www] script ''/srv/www/index.php'' (request: "GET /index.php") executing too slow (5.123456 sec), logging'
+    negative:
+      - '[15-Jul-2026 10:00:00] NOTICE: [pool www] child 1234 started'
+  PHP_CHILD_OUTPUT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[15-Jul-2026 10:00:00] WARNING: [pool www] child 1234 said into stderr: "PHP Fatal error:  Uncaught Error"'
+        result: '[15-Jul-2026 10:00:00] WARNING: [pool www] child 1234 said into stderr: "PHP Fatal error:  Uncaught Error"'
+    negative:
+      - '[15-Jul-2026 10:00:00] NOTICE: [pool www] child 1234 started'
+  PHP_POOL_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[15-Jul-2026 10:00:00] NOTICE: [pool www] child 1234 started'
+        result: '[15-Jul-2026 10:00:00] NOTICE: [pool www] child 1234 started'
+    negative:
+      - '[15-Jul-2026 10:00:00] NOTICE: fpm is running, pid 1'
+  PHP_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[15-Jul-2026 10:00:00] NOTICE: fpm is running, pid 1'
+        result: '[15-Jul-2026 10:00:00] NOTICE: fpm is running, pid 1'
+    negative:
+      - 'ready to handle connections'
+  PHP_PLAIN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'ready to handle connections'
+        result: 'ready to handle connections'
+    negative:
+      - ''
+convert:
+  php_pid: int
+  php_signal: int
+  php_exit_code: int
+  php_uptime: float
+  php_duration: float
+  # PHP writes the severity upper case; folding it makes it groupable with
+  # everything else in a merged record
+  php_level: lc
+rules:
+  - name: php_fpm
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^php[0-9.]*-fpm$//'
+          - '//^php-fpm[0-9.]*$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - PHP_CHILD_EXIT
+      - PHP_CHILD_OUTPUT
+      - PHP_POOL_BUSY
+      - PHP_SLOW
+      # the three catch-alls, narrowest first
+      - PHP_POOL_MESSAGE
+      - PHP_MESSAGE
+      - PHP_PLAIN
+    tests:
+      positive:
+        - string: '[15-Jul-2026 10:00:00] WARNING: [pool www] child 1234 exited on signal 11 (SIGSEGV) after 100.123456 seconds from start'
+          numeric:
+            - php_pid
+            - php_signal
+            - php_uptime
+          program: 'php-fpm'
+          result:
+            php_timestamp: '15-Jul-2026 10:00:00'
+            php_level: 'WARNING'
+            php_pool: 'www'
+            php_pid: '1234'
+            php_signal: '11'
+            php_signal_name: 'SIGSEGV'
+            php_uptime: '100.123456'
+        - string: '[15-Jul-2026 10:00:00] WARNING: [pool www] child 1234 said into stderr: "PHP Fatal error:  Uncaught Error"'
+          program: 'php8.2-fpm'
+          result:
+            php_timestamp: '15-Jul-2026 10:00:00'
+            php_level: 'WARNING'
+            php_pool: 'www'
+            php_pid: '1234'
+            php_stream: 'stderr'
+            php_output: 'PHP Fatal error:  Uncaught Error'
+        - string: '[15-Jul-2026 10:00:00] WARNING: [pool www] seems busy (you may need to increase pm.start_servers), spawning 8 children'
+          result:
+            php_timestamp: '15-Jul-2026 10:00:00'
+            php_level: 'WARNING'
+            php_pool: 'www'
+            php_pool_advice: '(you may need to increase pm.start_servers), spawning 8 children'
+        - string: '[15-Jul-2026 10:00:00] WARNING: [pool www] script ''/srv/www/index.php'' (request: "GET /index.php") executing too slow (5.123456 sec), logging'
+          numeric:
+            - php_duration
+          result:
+            php_timestamp: '15-Jul-2026 10:00:00'
+            php_level: 'WARNING'
+            php_pool: 'www'
+            php_script: '/srv/www/index.php'
+            php_request: 'GET /index.php'
+            php_duration: '5.123456'
+            php_slow_action: 'logging'
+        - string: '[15-Jul-2026 10:00:00] NOTICE: [pool www] child 1234 started'
+          result:
+            php_timestamp: '15-Jul-2026 10:00:00'
+            php_level: 'NOTICE'
+            php_pool: 'www'
+            php_message: 'child 1234 started'
+        - string: '[15-Jul-2026 10:00:00] NOTICE: fpm is running, pid 1'
+          result:
+            php_timestamp: '15-Jul-2026 10:00:00'
+            php_level: 'NOTICE'
+            php_message: 'fpm is running, pid 1'
+        - string: 'ready to handle connections'
+          program: 'php-fpm8.2'
+          result:
+            php_message: 'ready to handle connections'
+      negative:
+        - ''
+        - string: '[15-Jul-2026 10:00:00] WARNING: [pool www] child 1234 exited on signal 11 (SIGSEGV) after 100.123456 seconds from start'
+          program: 'php_fpm-extra'

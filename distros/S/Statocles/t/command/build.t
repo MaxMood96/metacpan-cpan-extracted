@@ -9,6 +9,8 @@ use Statocles::Command::build;
 my $SHARE_DIR = path( __DIR__, '..', 'share' );
 
 my $site = Statocles::Site->new(
+    store => tempdir,
+    theme => $SHARE_DIR->child( 'theme' ),
     apps => {
         base => TestApp->new(
             url_root => '/',
@@ -20,8 +22,8 @@ my $site = Statocles::Site->new(
                 },
                 {
                     class => 'Statocles::Page::File',
-                    path => '/static.txt',
-                    file_path => $SHARE_DIR->child( qw( app basic static.txt ) ),
+                    path => '/image.png',
+                    file_path => $SHARE_DIR->child( qw( store docs image.png ) ),
                 },
             ],
         ),
@@ -32,13 +34,11 @@ my $site = Statocles::Site->new(
 subtest 'build site' => sub {
     my $tempdir = tempdir;
 
+    #; say "Site dir is $tempdir";
     my $cmd = Statocles::Command::build->new( site => $site );
     $cmd->run( $tempdir, '--date', '2018-01-01' );
 
-    ok $tempdir->child( 'static.txt' )->exists, 'Statocles::Page::File exists';
-    is $tempdir->child( 'static.txt' )->slurp_utf8,
-        $SHARE_DIR->child( qw( app basic static.txt ) )->slurp_utf8,
-        'Statocles::Page::File content is correct';
+    ok $tempdir->child( 'image.png' )->exists, 'Statocles::Page::File exists';
 
     ok $tempdir->child( 'index.html' )->exists, 'Statocles::Page::Plain exists';
     is $tempdir->child( 'index.html' )->slurp_utf8, "Index\n\n",
@@ -49,23 +49,15 @@ subtest 'build site' => sub {
 };
 
 subtest 'Build site with default path' => sub {
-    my $cwd = cwd;
-    my $tempdir = tempdir;
-    chdir $tempdir;
-
+    my $tempdir = $site->store->path;
     my $cmd = Statocles::Command::build->new( site => $site );
     $cmd->run();
 
-    ok $tempdir->child( '.statocles', 'build', 'static.txt' )->exists, 'Statocles::Page::File exists';
-    is $tempdir->child( '.statocles', 'build', 'static.txt' )->slurp_utf8,
-        $SHARE_DIR->child( qw( app basic static.txt ) )->slurp_utf8,
-        'Statocles::Page::File content is correct';
+    ok $tempdir->child( '.statocles', 'build', 'image.png' )->exists, 'Statocles::Page::File exists';
 
     ok $tempdir->child( '.statocles', 'build', 'index.html' )->exists, 'Statocles::Page::Plain exists';
     is $tempdir->child( '.statocles', 'build', 'index.html' )->slurp_utf8, "Index\n\n",
         'Statocles::Page::Plain content is correct';
-
-    chdir $cwd;
 };
 
 done_testing;

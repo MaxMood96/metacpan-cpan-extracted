@@ -1,0 +1,184 @@
+---
+# FreeBSD ipfw firewall log enrichment.
+#
+# ipfw logs its packet verdicts through the kernel, so the syslog PROGRAM is
+# "kernel" and the MESSAGE Log::Munger sees begins with "ipfw:". A canonical
+# line looks like:
+#   "ipfw: 1000 Deny TCP 203.0.113.7:44321 192.0.2.1:22 in via em0"
+# i.e. rule number, action, protocol, source (ip:port for TCP/UDP), destination
+# (ip:port), direction (in|out) and "via <iface>". ICMP lines omit the ports
+# and carry the protocol as "ICMP" with an optional ":type.code". IPv6
+# endpoints are bracketed literals ("[2001:db8::1]:1234").
+#
+# Patterns are anchored and first-match-wins. The ports-bearing TCP/UDP shape
+# is listed before the port-less ICMP shape so it cannot swallow ICMP lines.
+# Every capture is namespaced with ipfw_ .
+includes:
+- base
+vars_templated:
+  # TCP/UDP verdict: "ipfw: 1000 Deny TCP 203.0.113.7:44321 192.0.2.1:22 in via em0".
+  # Source/destination are "ip:port"; IPv6 endpoints are bracketed and the
+  # brackets are stripped (the v6 literal alone lands in ipfw_src_ip/ipfw_dst_ip).
+  IPFW_VERDICT: 'ipfw: (?<ipfw_rule>[% INT %]) (?<ipfw_action>Deny|Accept|Reject|Unreach|Count|Divert|Pipe|Queue|Nat|Skipto|Reass) (?<ipfw_proto>TCP|UDP) (?:\[(?<ipfw_src_ip>[% IPv6 %])\]|(?<ipfw_src_ip>[% IPv4 %])):(?<ipfw_src_port>[% INT %]) (?:\[(?<ipfw_dst_ip>[% IPv6 %])\]|(?<ipfw_dst_ip>[% IPv4 %])):(?<ipfw_dst_port>[% INT %]) (?<ipfw_direction>in|out) via (?<ipfw_iface>[% NOTSPACE %])(?: [% GREEDYDATA %])?'
+  # ICMP verdict (no ports): "ipfw: 1000 Deny ICMP:8.0 203.0.113.7 192.0.2.1 in via em0".
+  # The protocol may carry an optional ":type.code" suffix captured into
+  # ipfw_icmp_type. Endpoints are bare IPs (bracketed for IPv6).
+  IPFW_ICMP: 'ipfw: (?<ipfw_rule>[% INT %]) (?<ipfw_action>Deny|Accept|Reject|Unreach|Count|Divert|Pipe|Queue|Nat|Skipto|Reass) (?<ipfw_proto>ICMP|ICMPV6|IPV6-ICMP)(?::(?<ipfw_icmp_type>[0-9]+\.[0-9]+))? (?:\[(?<ipfw_src_ip>[% IPv6 %])\]|(?<ipfw_src_ip>[% IPv4 %])) (?:\[(?<ipfw_dst_ip>[% IPv6 %])\]|(?<ipfw_dst_ip>[% IPv4 %])) (?<ipfw_direction>in|out) via (?<ipfw_iface>[% NOTSPACE %])(?: [% GREEDYDATA %])?'
+  # Limit reached: "ipfw: limit 100 reached on entry 5000".
+  IPFW_LIMIT: 'ipfw: limit (?<ipfw_limit>[% INT %]) reached on entry (?<ipfw_limit_entry>[% INT %])(?: [% GREEDYDATA %])?'
+vars_tests:
+  IPFW_VERDICT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'ipfw: 1000 Deny TCP 203.0.113.7:44321 192.0.2.1:22 in via em0'
+        result: 'ipfw: 1000 Deny TCP 203.0.113.7:44321 192.0.2.1:22 in via em0'
+      - string: 'ipfw: 2000 Reject TCP 203.0.113.7:1 192.0.2.1:22 in via em0'
+        result: 'ipfw: 2000 Reject TCP 203.0.113.7:1 192.0.2.1:22 in via em0'
+      - string: 'ipfw: 1000 Deny TCP 203.0.113.7:44321 192.0.2.1:22 in via em0 (frag)'
+        result: 'ipfw: 1000 Deny TCP 203.0.113.7:44321 192.0.2.1:22 in via em0 (frag)'
+      - string: 'ipfw: 1000 Deny TCP [2001:db8::1]:1234 [2001:db8::2]:22 in via em0'
+        result: 'ipfw: 1000 Deny TCP [2001:db8::1]:1234 [2001:db8::2]:22 in via em0'
+    negative:
+      - 'ipfw: 1000 Deny ICMP:8.0 203.0.113.7 192.0.2.1 in via em0'
+  IPFW_ICMP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'ipfw: 1000 Deny ICMP:8.0 203.0.113.7 192.0.2.1 in via em0'
+        result: 'ipfw: 1000 Deny ICMP:8.0 203.0.113.7 192.0.2.1 in via em0'
+      - string: 'ipfw: 1000 Deny ICMP 203.0.113.7 192.0.2.1 in via em0'
+        result: 'ipfw: 1000 Deny ICMP 203.0.113.7 192.0.2.1 in via em0'
+    negative:
+      - 'ipfw: 1000 Deny TCP 203.0.113.7:44321 192.0.2.1:22 in via em0'
+  IPFW_LIMIT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'ipfw: limit 100 reached on entry 5000'
+        result: 'ipfw: limit 100 reached on entry 5000'
+    negative:
+      - 'ipfw: 1000 Deny TCP 203.0.113.7:44321 192.0.2.1:22 in via em0'
+# Look up the source and destination IPs.
+geoip:
+  - ipfw_src_ip
+  - ipfw_dst_ip
+# Coerce the numeric captures to integers.
+convert:
+  ipfw_rule: int
+  ipfw_src_port: int
+  ipfw_dst_port: int
+  ipfw_limit: int
+  ipfw_limit_entry: int
+rules:
+  - name: ipfw
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^kernel$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - IPFW_VERDICT
+      - IPFW_ICMP
+      - IPFW_LIMIT
+    tests:
+      positive:
+        # TCP/UDP verdict.
+        - string: 'ipfw: 1000 Deny TCP 203.0.113.7:44321 192.0.2.1:22 in via em0'
+          numeric:
+            - ipfw_dst_port
+            - ipfw_rule
+            - ipfw_src_port
+          program: 'kernel'
+          result:
+            ipfw_rule: '1000'
+            ipfw_action: 'Deny'
+            ipfw_proto: 'TCP'
+            ipfw_src_ip: '203.0.113.7'
+            ipfw_src_port: '44321'
+            ipfw_dst_ip: '192.0.2.1'
+            ipfw_dst_port: '22'
+            ipfw_direction: 'in'
+            ipfw_iface: 'em0'
+        # Reject with unreach (same shape, action=Reject).
+        - string: 'ipfw: 2000 Reject TCP 203.0.113.7:1 192.0.2.1:22 in via em0'
+          result:
+            ipfw_rule: '2000'
+            ipfw_action: 'Reject'
+            ipfw_proto: 'TCP'
+            ipfw_src_ip: '203.0.113.7'
+            ipfw_src_port: '1'
+            ipfw_dst_ip: '192.0.2.1'
+            ipfw_dst_port: '22'
+            ipfw_direction: 'in'
+            ipfw_iface: 'em0'
+        # Fragmented / trailing annotation.
+        - string: 'ipfw: 1000 Deny TCP 203.0.113.7:44321 192.0.2.1:22 in via em0 (frag)'
+          result:
+            ipfw_rule: '1000'
+            ipfw_action: 'Deny'
+            ipfw_proto: 'TCP'
+            ipfw_src_ip: '203.0.113.7'
+            ipfw_src_port: '44321'
+            ipfw_dst_ip: '192.0.2.1'
+            ipfw_dst_port: '22'
+            ipfw_direction: 'in'
+            ipfw_iface: 'em0'
+        # Trailing "(N connections)" annotation.
+        - string: 'ipfw: 3000 Deny UDP 198.51.100.9:53 192.0.2.1:1234 out via em0 (5 connections)'
+          result:
+            ipfw_rule: '3000'
+            ipfw_action: 'Deny'
+            ipfw_proto: 'UDP'
+            ipfw_src_ip: '198.51.100.9'
+            ipfw_src_port: '53'
+            ipfw_dst_ip: '192.0.2.1'
+            ipfw_dst_port: '1234'
+            ipfw_direction: 'out'
+            ipfw_iface: 'em0'
+        # IPv6 endpoints (brackets stripped).
+        - string: 'ipfw: 1000 Deny TCP [2001:db8::1]:1234 [2001:db8::2]:22 in via em0'
+          result:
+            ipfw_rule: '1000'
+            ipfw_action: 'Deny'
+            ipfw_proto: 'TCP'
+            ipfw_src_ip: '2001:db8::1'
+            ipfw_src_port: '1234'
+            ipfw_dst_ip: '2001:db8::2'
+            ipfw_dst_port: '22'
+            ipfw_direction: 'in'
+            ipfw_iface: 'em0'
+        # ICMP verdict with type.code.
+        - string: 'ipfw: 1000 Deny ICMP:8.0 203.0.113.7 192.0.2.1 in via em0'
+          result:
+            ipfw_rule: '1000'
+            ipfw_action: 'Deny'
+            ipfw_proto: 'ICMP'
+            ipfw_icmp_type: '8.0'
+            ipfw_src_ip: '203.0.113.7'
+            ipfw_dst_ip: '192.0.2.1'
+            ipfw_direction: 'in'
+            ipfw_iface: 'em0'
+        # ICMP verdict without a type.code suffix.
+        - string: 'ipfw: 1000 Deny ICMP 203.0.113.7 192.0.2.1 in via em0'
+          result:
+            ipfw_rule: '1000'
+            ipfw_action: 'Deny'
+            ipfw_proto: 'ICMP'
+            ipfw_src_ip: '203.0.113.7'
+            ipfw_dst_ip: '192.0.2.1'
+            ipfw_direction: 'in'
+            ipfw_iface: 'em0'
+        # Limit reached.
+        - string: 'ipfw: limit 100 reached on entry 5000'
+          numeric:
+            - ipfw_limit
+            - ipfw_limit_entry
+          result:
+            ipfw_limit: '100'
+            ipfw_limit_entry: '5000'
+      negative:
+        # A Linux netfilter/ufw line must NOT match.
+        - '[UFW BLOCK] IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 PROTO=TCP SPT=44444 DPT=22'
+        # Unrelated free text.
+        - 'arp: 203.0.113.7 moved from 00:11:22:33:44:55 to aa:bb:cc:dd:ee:ff on em0'
+        - string: 'ipfw: 1000 Deny TCP 203.0.113.7:44321 192.0.2.1:22 in via em0'
+          program: 'ipfw-extra'

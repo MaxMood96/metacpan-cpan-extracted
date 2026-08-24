@@ -1,0 +1,211 @@
+---
+# HAProxy traffic and health-check log enrichment.
+#
+# Gates on the syslog PROGRAM field being "haproxy". Patterns are anchored
+# (each must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with haproxy_ .
+#
+# HAProxy has two traffic log formats and they differ only in the middle:
+#
+#   HTTP  client:port [date] frontend backend/server TR/Tw/Tc/Tr/Ta status
+#         bytes req_cookie res_cookie term_state conns queues "request"
+#   TCP   client:port [date] frontend backend/server Tw/Tc/Tt bytes
+#         term_state conns queues
+#
+# The timer group is what tells them apart: five slash-separated values for
+# HTTP and three for TCP. HTTP also ends in a quoted request line, which is
+# the surest thing to key on, so that pattern is tried first.
+#
+# A "-1" turns up in any timer whose phase never completed, which is why the
+# timers are captured as text rather than coerced to numbers -- a connection
+# that was aborted mid-handshake is not the same event as one that took 0ms,
+# and folding both to a number loses that.
+includes:
+- base
+vars_templated:
+  # "client:port [date] frontend backend/server " -- the head both formats
+  # share. The accept date carries milliseconds, which HTTPDATE does not, so
+  # it is matched as "anything but a closing bracket" rather than being parsed
+  # here; a consumer that wants it parsed has the string.
+  HAPROXY_HEAD: '(?<haproxy_client_ip>[% IP %]):(?<haproxy_client_port>[% INT %]) \[(?<haproxy_accept_date>[^\]]*)\] (?<haproxy_frontend>[% NOTSPACE %]) (?<haproxy_backend>[^/\s]+)/(?<haproxy_server>[% NOTSPACE %]) '
+  # The full HTTP traffic line.
+  #
+  # term_state is the two-to-four character code saying how the session ended.
+  # The first character carries the verdict: "C" is a client abort, "S" a
+  # server one, "P" the proxy itself, and "s" a server timeout.
+  HAPROXY_HTTP: '[% HAPROXY_HEAD %](?<haproxy_timers>[-0-9]+/[-0-9]+/[-0-9]+/[-0-9]+/[+-]?[0-9]+) (?<haproxy_status>[-0-9]+) (?<haproxy_bytes>[+-]?[0-9]+) (?<haproxy_req_cookie>[% NOTSPACE %]) (?<haproxy_res_cookie>[% NOTSPACE %]) (?<haproxy_term_state>[% NOTSPACE %]) (?<haproxy_conns>[% NOTSPACE %]) (?<haproxy_queues>[% NOTSPACE %]) "(?<haproxy_request>[^"]*)"(?: [% GREEDYDATA %])?'
+  # The TCP traffic line: three timers, no status code and no request.
+  HAPROXY_TCP: '[% HAPROXY_HEAD %](?<haproxy_timers>[-0-9]+/[-0-9]+/[+-]?[0-9]+) (?<haproxy_bytes>[+-]?[0-9]+) (?<haproxy_term_state>[% NOTSPACE %]) (?<haproxy_conns>[% NOTSPACE %]) (?<haproxy_queues>[% NOTSPACE %])(?: [% GREEDYDATA %])?'
+  # "Server backend/server1 is DOWN, reason: Layer4 connection problem, info:
+  #  "Connection refused", check duration: 0ms. 0 active and 0 backup servers
+  #  left. ..."
+  #
+  # A health check changing its mind. Not traffic, but it is the line that
+  # explains a sudden change in the traffic lines around it.
+  # The reason stops at the next comma and the check duration at the sentence's
+  # full stop, rather than either being a lazy run of anything. Every clause
+  # after the state is optional and the line ends in free text, so a lazy
+  # reason could satisfy the whole pattern by growing just far enough for the
+  # trailing catch-all to take over -- which it does, swallowing the info and
+  # duration clauses on the way and leaving both unset.
+  HAPROXY_SERVER_STATE: 'Server (?<haproxy_backend>[^/\s]+)/(?<haproxy_server>[% NOTSPACE %]) is (?<haproxy_server_state>UP|DOWN)(?:, reason: (?<haproxy_state_reason>[^,]*))?(?:, info: "(?<haproxy_state_info>[^"]*)")?(?:, check duration: (?<haproxy_check_duration>[^.,\s]+))?[.,]?(?: [% GREEDYDATA %])?'
+  # "backend backend1 has no server available!"
+  # "proxy backend1 has no server available!"
+  HAPROXY_NO_SERVER: '(?:backend|proxy) (?<haproxy_backend>[% NOTSPACE %]) has no server available!(?: [% GREEDYDATA %])?'
+  # "Connect from 192.0.2.5:49152 to 192.0.2.1:443 (frontend/HTTP)"
+  HAPROXY_CONNECT: 'Connect from (?<haproxy_client_ip>[% IP %]):(?<haproxy_client_port>[% INT %]) to (?<haproxy_dst_ip>[% IP %]):(?<haproxy_dst_port>[% INT %]) \((?<haproxy_frontend>[^/]*)/(?<haproxy_mode>[^)]*)\)'
+vars_tests:
+  HAPROXY_HEAD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.5:49152 [15/Jul/2026:10:00:00.123] http-in backend1/server1 '
+        result: '192.0.2.5:49152 [15/Jul/2026:10:00:00.123] http-in backend1/server1 '
+      # no server was picked, so haproxy writes <NOSRV>
+      - string: '192.0.2.5:49152 [15/Jul/2026:10:00:00.123] http-in backend1/<NOSRV> '
+        result: '192.0.2.5:49152 [15/Jul/2026:10:00:00.123] http-in backend1/<NOSRV> '
+    negative:
+      - 'Server backend1/server1 is DOWN, reason: Layer4 connection problem'
+  HAPROXY_HTTP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.5:49152 [15/Jul/2026:10:00:00.123] http-in backend1/server1 0/0/1/2/3 200 1234 - - ---- 1/1/0/0/0 0/0 "GET /path HTTP/1.1"'
+        result: '192.0.2.5:49152 [15/Jul/2026:10:00:00.123] http-in backend1/server1 0/0/1/2/3 200 1234 - - ---- 1/1/0/0/0 0/0 "GET /path HTTP/1.1"'
+      # a client that gave up: -1 timers, no status, and a C-prefixed term state
+      - string: '192.0.2.5:49152 [15/Jul/2026:10:00:00.123] http-in backend1/<NOSRV> -1/-1/-1/-1/0 400 0 - - CR-- 1/1/0/0/0 0/0 "<BADREQ>"'
+        result: '192.0.2.5:49152 [15/Jul/2026:10:00:00.123] http-in backend1/<NOSRV> -1/-1/-1/-1/0 400 0 - - CR-- 1/1/0/0/0 0/0 "<BADREQ>"'
+    negative:
+      - '192.0.2.5:49152 [15/Jul/2026:10:00:00.123] tcp-in backend1/server1 0/1/2 1234 -- 1/1/0/0/0 0/0'
+  HAPROXY_TCP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.5:49152 [15/Jul/2026:10:00:00.123] tcp-in backend1/server1 0/1/2 1234 -- 1/1/0/0/0 0/0'
+        result: '192.0.2.5:49152 [15/Jul/2026:10:00:00.123] tcp-in backend1/server1 0/1/2 1234 -- 1/1/0/0/0 0/0'
+    negative:
+      # Five timers and a quoted request: that is the HTTP format
+      - '192.0.2.5:49152 [15/Jul/2026:10:00:00.123] http-in backend1/server1 0/0/1/2/3 200 1234 - - ---- 1/1/0/0/0 0/0 "GET /path HTTP/1.1"'
+  HAPROXY_SERVER_STATE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Server backend1/server1 is DOWN, reason: Layer4 connection problem, info: "Connection refused", check duration: 0ms. 0 active and 0 backup servers left.'
+        result: 'Server backend1/server1 is DOWN, reason: Layer4 connection problem, info: "Connection refused", check duration: 0ms. 0 active and 0 backup servers left.'
+      - string: 'Server backend1/server1 is UP.'
+        result: 'Server backend1/server1 is UP.'
+    negative:
+      - 'backend backend1 has no server available!'
+  HAPROXY_NO_SERVER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'backend backend1 has no server available!'
+        result: 'backend backend1 has no server available!'
+      - string: 'proxy backend1 has no server available!'
+        result: 'proxy backend1 has no server available!'
+    negative:
+      - 'Server backend1/server1 is UP.'
+  HAPROXY_CONNECT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Connect from 192.0.2.5:49152 to 192.0.2.1:443 (http-in/HTTP)'
+        result: 'Connect from 192.0.2.5:49152 to 192.0.2.1:443 (http-in/HTTP)'
+    negative:
+      - 'backend backend1 has no server available!'
+geoip:
+  - haproxy_client_ip
+# the timers and the conn/queue groups are slash-joined text and stay text.
+# haproxy writes -1 into any timer whose phase never happened, which is not the
+# same thing as zero, and folding the two together would hide an aborted
+# connection among the fast ones.
+convert:
+  haproxy_client_port: int
+  haproxy_dst_port: int
+rules:
+  - name: haproxy
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^haproxy$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - HAPROXY_HTTP
+      - HAPROXY_TCP
+      - HAPROXY_SERVER_STATE
+      - HAPROXY_NO_SERVER
+      - HAPROXY_CONNECT
+    tests:
+      positive:
+        - string: '192.0.2.5:49152 [15/Jul/2026:10:00:00.123] http-in backend1/server1 0/0/1/2/3 200 1234 - - ---- 1/1/0/0/0 0/0 "GET /path HTTP/1.1"'
+          program: 'haproxy'
+          result:
+            haproxy_client_ip: '192.0.2.5'
+            haproxy_client_port: '49152'
+            haproxy_accept_date: '15/Jul/2026:10:00:00.123'
+            haproxy_frontend: 'http-in'
+            haproxy_backend: 'backend1'
+            haproxy_server: 'server1'
+            haproxy_timers: '0/0/1/2/3'
+            haproxy_status: '200'
+            haproxy_bytes: '1234'
+            haproxy_req_cookie: '-'
+            haproxy_res_cookie: '-'
+            haproxy_term_state: '----'
+            haproxy_conns: '1/1/0/0/0'
+            haproxy_queues: '0/0'
+            haproxy_request: 'GET /path HTTP/1.1'
+        # a client abort: no server was reached and the timers say so
+        - string: '192.0.2.5:49152 [15/Jul/2026:10:00:00.123] http-in backend1/<NOSRV> -1/-1/-1/-1/0 400 0 - - CR-- 1/1/0/0/0 0/0 "<BADREQ>"'
+          result:
+            haproxy_client_ip: '192.0.2.5'
+            haproxy_client_port: '49152'
+            haproxy_accept_date: '15/Jul/2026:10:00:00.123'
+            haproxy_frontend: 'http-in'
+            haproxy_backend: 'backend1'
+            haproxy_server: '<NOSRV>'
+            haproxy_timers: '-1/-1/-1/-1/0'
+            haproxy_status: '400'
+            haproxy_bytes: '0'
+            haproxy_req_cookie: '-'
+            haproxy_res_cookie: '-'
+            haproxy_term_state: 'CR--'
+            haproxy_conns: '1/1/0/0/0'
+            haproxy_queues: '0/0'
+            haproxy_request: '<BADREQ>'
+        - string: '192.0.2.5:49152 [15/Jul/2026:10:00:00.123] tcp-in backend1/server1 0/1/2 1234 -- 1/1/0/0/0 0/0'
+          result:
+            haproxy_client_ip: '192.0.2.5'
+            haproxy_client_port: '49152'
+            haproxy_accept_date: '15/Jul/2026:10:00:00.123'
+            haproxy_frontend: 'tcp-in'
+            haproxy_backend: 'backend1'
+            haproxy_server: 'server1'
+            haproxy_timers: '0/1/2'
+            haproxy_bytes: '1234'
+            haproxy_term_state: '--'
+            haproxy_conns: '1/1/0/0/0'
+            haproxy_queues: '0/0'
+        - string: 'Server backend1/server1 is DOWN, reason: Layer4 connection problem, info: "Connection refused", check duration: 0ms. 0 active and 0 backup servers left.'
+          result:
+            haproxy_backend: 'backend1'
+            haproxy_server: 'server1'
+            haproxy_server_state: 'DOWN'
+            haproxy_state_reason: 'Layer4 connection problem'
+            haproxy_state_info: 'Connection refused'
+            haproxy_check_duration: '0ms'
+        - string: 'backend backend1 has no server available!'
+          result:
+            haproxy_backend: 'backend1'
+        - string: 'Connect from 192.0.2.5:49152 to 192.0.2.1:443 (http-in/HTTP)'
+          numeric:
+            - haproxy_client_port
+            - haproxy_dst_port
+          result:
+            haproxy_client_ip: '192.0.2.5'
+            haproxy_client_port: '49152'
+            haproxy_dst_ip: '192.0.2.1'
+            haproxy_dst_port: '443'
+            haproxy_frontend: 'http-in'
+            haproxy_mode: 'HTTP'
+      negative:
+        - 'this is not a haproxy line at all'
+        - 'Jul 15 10:00:00 host cron[123]: session opened for user root'
+        - string: '192.0.2.5:49152 [15/Jul/2026:10:00:00.123] http-in backend1/server1 0/0/1/2/3 200 1234 - - ---- 1/1/0/0/0 0/0 "GET /path HTTP/1.1"'
+          program: 'haproxy-extra'

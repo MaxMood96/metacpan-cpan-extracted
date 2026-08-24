@@ -1,0 +1,289 @@
+---
+# Asterisk PBX log enrichment.
+#
+# Gates on the syslog PROGRAM field being "asterisk". Patterns are anchored
+# (each must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with asterisk_ .
+#
+# Every line Asterisk writes carries the same prefix, so ASTERISK_PREFIX leads
+# every pattern here and the last pattern is a catch-all that keeps a message
+# type nobody has written a rule for from going missing:
+#
+#   WARNING[101121]: res_pjsip_pubsub.c:3635 in pubsub_on_rx_publish_request: ...
+#   WARNING[578447][C-00000004]: acl.c:1045 in ast_ouraddrfor: ...
+includes:
+- base
+vars_templated:
+  # The prefix every line shares. The optional [C-00000004] is the channel the
+  # message belongs to, present only for messages logged in a call's context.
+  # The source file may contain a directory ("res_pjsip/pjsip_distributor.c"),
+  # so it is bounded by the colon before the line number rather than by NOTSPACE.
+  ASTERISK_PREFIX: '(?<asterisk_level>[A-Z]+)\[(?<asterisk_thread_id>[% INT %])\](?:\[C-(?<asterisk_channel_id>[0-9a-fA-F]+)\])?: (?<asterisk_source_file>[^\s:]+):(?<asterisk_source_line>[% INT %]) in (?<asterisk_function>[% WORD %]): '
+  # Security events, the reason to parse this log at all. res_security_log
+  # writes a comma-separated list of quoted key=value pairs, broken out by the
+  # decompose below:
+  #
+  #   SECURITY[101196]: res_security_log.c:114 in security_event_stasis_cb: SecurityEvent="ChallengeSent",EventTV="2026-08-04T00:02:06.179-0500",Severity="Informational",Service="PJSIP",EventVersion="1",AccountID="1002",SessionID="85fb352e",LocalAddress="IPV4/UDP/192.168.15.2/5060",RemoteAddress="IPV4/UDP/192.168.15.4/55024",Challenge=""
+  #
+  # The event types differ in their trailing keys -- UsingPassword on
+  # SuccessfulAuth, Challenge/Response/ExpectedResponse on
+  # ChallengeResponseFailed, ACLName on FailedACL -- so the blob is taken whole
+  # rather than one pattern per type.
+  ASTERISK_SECURITY: '[% ASTERISK_PREFIX %](?<asterisk_security_kv>SecurityEvent=[% GREEDYDATA %])'
+  # "IPV4/UDP/192.168.15.4/55024". RemoteAddress is the peer and becomes
+  # asterisk_src_ip so it geoips and lines up with the _src_ip other rule files
+  # use; LocalAddress is this host and becomes asterisk_dst_ip.
+  ASTERISK_ADDR_REMOTE: '(?<asterisk_src_family>[A-Za-z0-9]+)/(?<asterisk_src_proto>[A-Za-z]+)/(?<asterisk_src_ip>[% IP %])/(?<asterisk_src_port>[% INT %])'
+  ASTERISK_ADDR_LOCAL: '(?<asterisk_dst_family>[A-Za-z0-9]+)/(?<asterisk_dst_proto>[A-Za-z]+)/(?<asterisk_dst_ip>[% IP %])/(?<asterisk_dst_port>[% INT %])'
+  # "Request 'REGISTER' from '<sip:1003@192.168.15.4>' failed for
+  #  '192.168.15.166:5062' (callid: 260084097-5062-1@BJC.BGI.BF.BGG) - Failed to authenticate"
+  #
+  # A failed SIP request. asterisk_sip_call_id is the Call-ID header and is not
+  # the same thing as asterisk_channel_id in the prefix.
+  ASTERISK_REQUEST_FAILED: '[% ASTERISK_PREFIX %]Request ''(?<asterisk_sip_method>[^'']*)'' from ''(?<asterisk_sip_from>[^'']*)'' failed for ''(?<asterisk_src_ip>[% IP %]):(?<asterisk_src_port>[% INT %])''(?: \(callid: (?<asterisk_sip_call_id>[^)]*)\))?(?: - (?<asterisk_reason>[% GREEDYDATA %]))?'
+  # "Registration attempt from endpoint '1002' (192.168.15.166:5060) to AOR
+  #  '1002' will exceed max contacts of 1"
+  ASTERISK_REGISTER_MAX_CONTACTS: '[% ASTERISK_PREFIX %]Registration attempt from endpoint ''(?<asterisk_endpoint>[^'']*)'' \((?<asterisk_src_ip>[% IP %]):(?<asterisk_src_port>[% INT %])\) to AOR ''(?<asterisk_aor>[^'']*)'' will exceed max contacts of (?<asterisk_max_contacts>[% INT %])'
+  # "No registered publish handler for event presence from 1002"
+  ASTERISK_NO_PUBLISH_HANDLER: '[% ASTERISK_PREFIX %]No registered publish handler for event (?<asterisk_event_package>[% WORD %]) from (?<asterisk_endpoint>[% NOTSPACE %])'
+  # Anything else, so a message type with no pattern of its own still yields
+  # the level, source site and text.
+  ASTERISK: '[% ASTERISK_PREFIX %](?<asterisk_message>[% GREEDYDATA %])'
+vars_tests:
+  ASTERISK_PREFIX:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'WARNING[101121]: res_pjsip_pubsub.c:3635 in pubsub_on_rx_publish_request: '
+        result: 'WARNING[101121]: res_pjsip_pubsub.c:3635 in pubsub_on_rx_publish_request: '
+      # with a channel, and with a directory in the source path
+      - string: 'WARNING[578447][C-00000004]: acl.c:1045 in ast_ouraddrfor: '
+        result: 'WARNING[578447][C-00000004]: acl.c:1045 in ast_ouraddrfor: '
+      - string: 'NOTICE[1037277]: res_pjsip/pjsip_distributor.c:688 in log_failed_request: '
+        result: 'NOTICE[1037277]: res_pjsip/pjsip_distributor.c:688 in log_failed_request: '
+    negative:
+      - 'WARNING: something without a thread id'
+  ASTERISK_SECURITY:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'SECURITY[101196]: res_security_log.c:114 in security_event_stasis_cb: SecurityEvent="ChallengeSent",EventTV="2026-08-04T00:02:06.179-0500",Severity="Informational",Service="PJSIP",EventVersion="1",AccountID="1002",SessionID="85fb352e",LocalAddress="IPV4/UDP/192.168.15.2/5060",RemoteAddress="IPV4/UDP/192.168.15.4/55024",Challenge=""'
+        result: 'SECURITY[101196]: res_security_log.c:114 in security_event_stasis_cb: SecurityEvent="ChallengeSent",EventTV="2026-08-04T00:02:06.179-0500",Severity="Informational",Service="PJSIP",EventVersion="1",AccountID="1002",SessionID="85fb352e",LocalAddress="IPV4/UDP/192.168.15.2/5060",RemoteAddress="IPV4/UDP/192.168.15.4/55024",Challenge=""'
+    negative:
+      - 'WARNING[101121]: res_pjsip_pubsub.c:3635 in pubsub_on_rx_publish_request: No registered publish handler for event presence from 1002'
+  ASTERISK_ADDR_REMOTE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'IPV4/UDP/192.168.15.4/55024'
+        result: 'IPV4/UDP/192.168.15.4/55024'
+      - string: 'IPV4/TCP/203.0.113.7/5060'
+        result: 'IPV4/TCP/203.0.113.7/5060'
+    negative:
+      - '192.168.15.4:55024'
+  ASTERISK_ADDR_LOCAL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'IPV4/UDP/192.168.15.2/5060'
+        result: 'IPV4/UDP/192.168.15.2/5060'
+    negative:
+      - '192.168.15.2:5060'
+  ASTERISK_REQUEST_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: "NOTICE[1037277]: res_pjsip/pjsip_distributor.c:688 in log_failed_request: Request 'REGISTER' from '<sip:1003@192.168.15.4>' failed for '192.168.15.166:5062' (callid: 260084097-5062-1@BJC.BGI.BF.BGG) - Failed to authenticate"
+        result: "NOTICE[1037277]: res_pjsip/pjsip_distributor.c:688 in log_failed_request: Request 'REGISTER' from '<sip:1003@192.168.15.4>' failed for '192.168.15.166:5062' (callid: 260084097-5062-1@BJC.BGI.BF.BGG) - Failed to authenticate"
+      # no callid clause
+      - string: "NOTICE[1037277]: res_pjsip/pjsip_distributor.c:688 in log_failed_request: Request 'INVITE' from '<sip:1003@192.168.15.4>' failed for '192.168.15.166:5062' - No matching endpoint found"
+        result: "NOTICE[1037277]: res_pjsip/pjsip_distributor.c:688 in log_failed_request: Request 'INVITE' from '<sip:1003@192.168.15.4>' failed for '192.168.15.166:5062' - No matching endpoint found"
+    negative:
+      - 'WARNING[101121]: res_pjsip_pubsub.c:3635 in pubsub_on_rx_publish_request: No registered publish handler for event presence from 1002'
+  ASTERISK_REGISTER_MAX_CONTACTS:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: "WARNING[101149]: res_pjsip_registrar.c:841 in register_aor_core: Registration attempt from endpoint '1002' (192.168.15.166:5060) to AOR '1002' will exceed max contacts of 1"
+        result: "WARNING[101149]: res_pjsip_registrar.c:841 in register_aor_core: Registration attempt from endpoint '1002' (192.168.15.166:5060) to AOR '1002' will exceed max contacts of 1"
+    negative:
+      - 'WARNING[101121]: res_pjsip_pubsub.c:3635 in pubsub_on_rx_publish_request: No registered publish handler for event presence from 1002'
+  ASTERISK_NO_PUBLISH_HANDLER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'WARNING[101121]: res_pjsip_pubsub.c:3635 in pubsub_on_rx_publish_request: No registered publish handler for event presence from 1002'
+        result: 'WARNING[101121]: res_pjsip_pubsub.c:3635 in pubsub_on_rx_publish_request: No registered publish handler for event presence from 1002'
+    negative:
+      - 'WARNING[101143]: chan_iax2.c:10454 in socket_process_helper: Silently dropping frame without existent call number: 5537'
+  ASTERISK:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'WARNING[101143]: chan_iax2.c:10454 in socket_process_helper: Silently dropping frame without existent call number: 5537'
+        result: 'WARNING[101143]: chan_iax2.c:10454 in socket_process_helper: Silently dropping frame without existent call number: 5537'
+      - string: 'ERROR[101145]: netsock2.c:646 in ast_sockaddr_stringify_fmt: getnameinfo(): Address family not recognized'
+        result: 'ERROR[101145]: netsock2.c:646 in ast_sockaddr_stringify_fmt: getnameinfo(): Address family not recognized'
+    negative:
+      - 'not an asterisk line'
+# The peer, from either a security event or a failed request.
+geoip:
+  - asterisk_src_ip
+convert:
+  asterisk_thread_id: int
+  asterisk_source_line: int
+  asterisk_src_port: int
+  asterisk_dst_port: int
+  asterisk_max_contacts: int
+# The security-event blob first, then the two composite addresses it produces.
+# Ordered: the address entries operate on fields the kv entry created.
+decompose:
+  - field: asterisk_security_kv
+    type: kv
+    quoted: true
+    prefix: 'asterisk_'
+    remove: true
+    tests:
+      - input: 'SecurityEvent="ChallengeResponseFailed",EventTV="2026-08-04T22:10:00.155-0500",Severity="Error",Service="PJSIP",EventVersion="1",AccountID="1003",SessionID="260084097-5062-1@BJC.BGI.BF.BGG",LocalAddress="IPV4/UDP/192.168.15.2/5060",RemoteAddress="IPV4/UDP/192.168.15.166/5062",Challenge="1785899400/fb1cdad2",Response="59e928dd",ExpectedResponse=""'
+        result:
+          asterisk_SecurityEvent: 'ChallengeResponseFailed'
+          asterisk_EventTV: '2026-08-04T22:10:00.155-0500'
+          asterisk_Severity: 'Error'
+          asterisk_Service: 'PJSIP'
+          asterisk_EventVersion: '1'
+          asterisk_AccountID: '1003'
+          asterisk_SessionID: '260084097-5062-1@BJC.BGI.BF.BGG'
+          asterisk_LocalAddress: 'IPV4/UDP/192.168.15.2/5060'
+          asterisk_RemoteAddress: 'IPV4/UDP/192.168.15.166/5062'
+          asterisk_Challenge: '1785899400/fb1cdad2'
+          asterisk_Response: '59e928dd'
+          asterisk_ExpectedResponse: ''
+      # FailedACL carries ACLName where the others carry their own trailing keys
+      - input: 'SecurityEvent="FailedACL",Severity="Error",Service="PJSIP",AccountID="1002",RemoteAddress="IPV4/UDP/192.168.15.166/5060",ACLName="registrar_attempt_exceeds_maximum_configured_contacts"'
+        result:
+          asterisk_SecurityEvent: 'FailedACL'
+          asterisk_Severity: 'Error'
+          asterisk_Service: 'PJSIP'
+          asterisk_AccountID: '1002'
+          asterisk_RemoteAddress: 'IPV4/UDP/192.168.15.166/5060'
+          asterisk_ACLName: 'registrar_attempt_exceeds_maximum_configured_contacts'
+  - field: asterisk_RemoteAddress
+    type: pattern
+    pattern: ASTERISK_ADDR_REMOTE
+    tests:
+      - input: 'IPV4/UDP/192.168.15.166/5062'
+        result:
+          asterisk_RemoteAddress: 'IPV4/UDP/192.168.15.166/5062'
+          asterisk_src_family: 'IPV4'
+          asterisk_src_proto: 'UDP'
+          asterisk_src_ip: '192.168.15.166'
+          asterisk_src_port: '5062'
+  - field: asterisk_LocalAddress
+    type: pattern
+    pattern: ASTERISK_ADDR_LOCAL
+    tests:
+      - input: 'IPV4/UDP/192.168.15.2/5060'
+        result:
+          asterisk_LocalAddress: 'IPV4/UDP/192.168.15.2/5060'
+          asterisk_dst_family: 'IPV4'
+          asterisk_dst_proto: 'UDP'
+          asterisk_dst_ip: '192.168.15.2'
+          asterisk_dst_port: '5060'
+rules:
+  - name: asterisk
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^asterisk$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - ASTERISK_SECURITY
+      - ASTERISK_REQUEST_FAILED
+      - ASTERISK_REGISTER_MAX_CONTACTS
+      - ASTERISK_NO_PUBLISH_HANDLER
+      # last: matches any line carrying the shared prefix
+      - ASTERISK
+    tests:
+      positive:
+        - string: 'SECURITY[101196]: res_security_log.c:114 in security_event_stasis_cb: SecurityEvent="SuccessfulAuth",EventTV="2026-07-01T00:00:25.218-0500",Severity="Informational",Service="PJSIP",EventVersion="1",AccountID="1002",SessionID="4b4cd701",LocalAddress="IPV4/UDP/192.168.15.2/5060",RemoteAddress="IPV4/UDP/192.168.15.4/43185",UsingPassword="1"'
+          enriched:
+            asterisk_AccountID: '1002'
+            asterisk_EventTV: '2026-07-01T00:00:25.218-0500'
+            asterisk_EventVersion: '1'
+            asterisk_LocalAddress: 'IPV4/UDP/192.168.15.2/5060'
+            asterisk_RemoteAddress: 'IPV4/UDP/192.168.15.4/43185'
+            asterisk_SecurityEvent: 'SuccessfulAuth'
+            asterisk_Service: 'PJSIP'
+            asterisk_SessionID: '4b4cd701'
+            asterisk_Severity: 'Informational'
+            asterisk_UsingPassword: '1'
+            asterisk_dst_family: 'IPV4'
+            asterisk_dst_ip: '192.168.15.2'
+            asterisk_dst_port: '5060'
+            asterisk_dst_proto: 'UDP'
+            asterisk_function: 'security_event_stasis_cb'
+            asterisk_level: 'SECURITY'
+            asterisk_source_file: 'res_security_log.c'
+            asterisk_source_line: '114'
+            asterisk_src_family: 'IPV4'
+            asterisk_src_ip: '192.168.15.4'
+            asterisk_src_port: '43185'
+            asterisk_src_proto: 'UDP'
+            asterisk_thread_id: '101196'
+          numeric:
+            - asterisk_dst_port
+            - asterisk_source_line
+            - asterisk_src_port
+            - asterisk_thread_id
+          program: 'asterisk'
+          result:
+            asterisk_level: 'SECURITY'
+            asterisk_thread_id: '101196'
+            asterisk_source_file: 'res_security_log.c'
+            asterisk_source_line: '114'
+            asterisk_function: 'security_event_stasis_cb'
+            asterisk_security_kv: 'SecurityEvent="SuccessfulAuth",EventTV="2026-07-01T00:00:25.218-0500",Severity="Informational",Service="PJSIP",EventVersion="1",AccountID="1002",SessionID="4b4cd701",LocalAddress="IPV4/UDP/192.168.15.2/5060",RemoteAddress="IPV4/UDP/192.168.15.4/43185",UsingPassword="1"'
+        - string: "NOTICE[1037277]: res_pjsip/pjsip_distributor.c:688 in log_failed_request: Request 'REGISTER' from '<sip:1003@192.168.15.4>' failed for '192.168.15.166:5062' (callid: 260084097-5062-1@BJC.BGI.BF.BGG) - Failed to authenticate"
+          result:
+            asterisk_level: 'NOTICE'
+            asterisk_thread_id: '1037277'
+            asterisk_source_file: 'res_pjsip/pjsip_distributor.c'
+            asterisk_source_line: '688'
+            asterisk_function: 'log_failed_request'
+            asterisk_sip_method: 'REGISTER'
+            asterisk_sip_from: '<sip:1003@192.168.15.4>'
+            asterisk_src_ip: '192.168.15.166'
+            asterisk_src_port: '5062'
+            asterisk_sip_call_id: '260084097-5062-1@BJC.BGI.BF.BGG'
+            asterisk_reason: 'Failed to authenticate'
+        - string: "WARNING[101149]: res_pjsip_registrar.c:841 in register_aor_core: Registration attempt from endpoint '1002' (192.168.15.166:5060) to AOR '1002' will exceed max contacts of 1"
+          numeric:
+            - asterisk_max_contacts
+          result:
+            asterisk_level: 'WARNING'
+            asterisk_thread_id: '101149'
+            asterisk_source_file: 'res_pjsip_registrar.c'
+            asterisk_source_line: '841'
+            asterisk_function: 'register_aor_core'
+            asterisk_endpoint: '1002'
+            asterisk_src_ip: '192.168.15.166'
+            asterisk_src_port: '5060'
+            asterisk_aor: '1002'
+            asterisk_max_contacts: '1'
+        - string: 'WARNING[101121]: res_pjsip_pubsub.c:3635 in pubsub_on_rx_publish_request: No registered publish handler for event presence from 1002'
+          result:
+            asterisk_level: 'WARNING'
+            asterisk_thread_id: '101121'
+            asterisk_source_file: 'res_pjsip_pubsub.c'
+            asterisk_source_line: '3635'
+            asterisk_function: 'pubsub_on_rx_publish_request'
+            asterisk_event_package: 'presence'
+            asterisk_endpoint: '1002'
+        # catch-all, with a channel in the prefix
+        - string: 'WARNING[578447][C-00000004]: acl.c:1045 in ast_ouraddrfor: Cannot connect to 192.168.15.4: Invalid argument'
+          result:
+            asterisk_level: 'WARNING'
+            asterisk_thread_id: '578447'
+            asterisk_channel_id: '00000004'
+            asterisk_source_file: 'acl.c'
+            asterisk_source_line: '1045'
+            asterisk_function: 'ast_ouraddrfor'
+            asterisk_message: 'Cannot connect to 192.168.15.4: Invalid argument'
+      negative:
+        - 'this is not an asterisk line at all'
+        - 'WARNING: no thread id, so not an asterisk log line'
+        - string: 'SECURITY[101196]: res_security_log.c:114 in security_event_stasis_cb: SecurityEvent="SuccessfulAuth",EventTV="2026-07-01T00:00:25.218-0500",Severity="Informational",Service="PJSIP",EventVersion="1",AccountID="1002",SessionID="4b4cd701",LocalAddress="IPV4/UDP/192.168.15.2/5060",RemoteAddress="IPV4/UDP/192.168.15.4/43185",UsingPassword="1"'
+          program: 'asterisk-extra'

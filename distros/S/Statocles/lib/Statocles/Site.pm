@@ -1,5 +1,5 @@
 package Statocles::Site;
-our $VERSION = '0.098';
+our $VERSION = '0.099';
 # ABSTRACT: An entire, configured website
 
 use Statocles::Base 'Class', 'Emitter';
@@ -8,8 +8,26 @@ use Text::Markdown;
 use Mojo::URL;
 use Mojo::Log;
 use Statocles::Page::Plain;
+use Statocles::Page::File;
+use Statocles::Page::Document;
 use Statocles::Util qw( derp );
+use Statocles::Store;
 use List::UtilsBy qw( uniq_by );
+
+#pod =attr store
+#pod
+#pod The L<Store object|Statocles::Store> for the site.
+#pod
+#pod =cut
+
+has store => (
+    is => 'ro',
+    isa => StoreType,
+    coerce => StoreType->coercion,
+    default => sub {
+        return StoreType->coercion->( '.' );
+    },
+);
 
 #pod =attr title
 #pod
@@ -71,8 +89,9 @@ has theme => (
     isa => ThemeType,
     coerce => ThemeType->coercion,
     default => sub {
+        my ( $self ) = @_;
         require Statocles::Theme;
-        Statocles::Theme->new( store => '::default' );
+        Statocles::Theme->new( path => '::default' );
     },
 );
 
@@ -469,116 +488,48 @@ sub pages {
         return @{ $self->_pages };
     }
 
-    # Rewrite page content to add base URL
-    my $base_url = $options{ base_url } || $self->base_url;
-    $self->base_url( $base_url );
-    my $base_path = Mojo::URL->new( $base_url )->path;
-    $base_path =~ s{/$}{};
+    # Load all the files/documents from the site directory
+    my $drain = sub {
+        my $iter = shift;
+        my @f;
+        while ( my $obj = $iter->() ) {
+            next if $obj->path =~ /[.]ep$/;
+            push @f, $obj;
+        }
+        return @f;
+    };
+    my @files = $drain->( $self->store->iterator );
+    # $self->emit(
+    #     'read_files',
+    #     class => 'Statocles::Event::Files',
+    #     files => \@files,
+    # );
 
+    # Build Page objects for each document
+    my @pages = $self->_build_pages( \@files );
+    #; say "Got all pages: " . join ", ", map { $_->path } @pages;
+    # $self->emit(
+    #     'read_pages',
+    #     class => 'Statocles::Event::Pages',
+    #     pages => \@pages,
+    # );
+
+    # Apply applications to specific subsets of pages
     my $apps = $self->apps;
-    my @pages;
     my %seen_paths;
-
-    # Collect all the pages for this site
-    # XXX: Should we allow sites without indexes?
-    my $index_path = $self->index;
-    my $index_orig_path;
-    if ( $index_path && $index_path !~ m{^/} ) {
-        $self->log->warn(
-            sprintf 'site "index" property should be absolute path to index page (got "%s")',
-            $self->index,
+    my @app_pages;
+    for my $app_name ( keys %{ $apps } ) {
+        my $app = $apps->{$app_name};
+        my $app_root = $app->url_root;
+        $app_root =~ s{^/}{}g;
+        my $pages_for_app = [ grep { $_->path =~ m{^/?$app_root} } @pages ];
+        push @app_pages, $app->pages(
+            $pages_for_app,
+            %options,
         );
     }
 
-    for my $app_name ( keys %{ $apps } ) {
-        my $app = $apps->{$app_name};
-        my $index_path_re = qr{^$index_path(?:/index[.]html)?$};
-        if ( $app->DOES( 'Statocles::App::Role::Store' ) ) {
-            # Allow index to be path to document and not the resulting page
-            # (so, ending in ".markdown" or ".md")
-            my $doc_path = $index_path;
-            my $doc_ext = join '|', @{ $app->store->document_extensions };
-            $doc_path =~ s/$doc_ext/html/;
-            $index_path_re = qr{^$doc_path(?:/index[.]html)?$};
-        }
-
-        my @app_pages = $app->pages( %options );
-
-        # DEPRECATED: Index as app name
-        if ( $app_name eq $index_path ) {
-
-            die sprintf 'ERROR: Index app "%s" did not generate any pages' . "\n", $self->index
-                unless @app_pages;
-
-            # Rename the app's page so that we don't get two pages with identical
-            # content, which is bad for SEO
-            $app_pages[0]->path( '/index.html' );
-        }
-
-        for my $page ( @app_pages ) {
-            my $path = $page->path;
-
-            if ( $path =~ $index_path_re ) {
-                # Rename the app's page so that we don't get two pages with identical
-                # content, which is bad for SEO
-                $self->log->debug(
-                    sprintf 'Found index page "%s" from app "%s"',
-                    $path,
-                    $app_name,
-                );
-                $path = '/index.html';
-                $index_orig_path = $page->path;
-                $page->path( '/index.html' );
-            }
-
-            if ( $seen_paths{ $path }{ $app_name } ) {
-                $self->log->warn(
-                    sprintf 'Duplicate page with path "%s" from app "%s"',
-                        $path,
-                        $app_name,
-                );
-                next;
-            }
-
-            $seen_paths{ $path }{ $app_name } = $page;
-        }
-    }
-
-    # XXX: Do we want to allow sites with no index page ever?
-    if ( $self->index && !exists $seen_paths{ '/index.html' } ) {
-        my $index_document = $self->index;
-        unless ( $index_document =~ s{[.]html?}{.markdown} ) {
-            $index_document .= '/index.markdown';
-        }
-        die sprintf qq{ERROR: Index path "%s" does not exist. Do you need to create "%s"?},
-            $self->index,
-            $index_document;
-    }
-
-    for my $path ( keys %seen_paths ) {
-        my %seen_apps = %{ $seen_paths{$path} };
-        # Warn about pages generated by more than one app
-        if ( keys %seen_apps > 1 ) {
-            my @seen_app_names = map { $_->[0] }
-                            sort { $b->[1] <=> $a->[1] }
-                            map { [ $_, $PAGE_PRIORITY{ ref $seen_apps{ $_ } } || 0 ] }
-                            keys %seen_apps
-                            ;
-
-            $self->log->warn(
-                sprintf 'Duplicate page "%s" from apps: %s. Using %s',
-                    $path,
-                    join( ", ", @seen_app_names ),
-                    $seen_app_names[0],
-            );
-
-            push @pages, $seen_apps{ $seen_app_names[0] };
-        }
-        else {
-           push @pages, values %seen_apps;
-        }
-    }
-
+    push @pages, @app_pages;
     $self->emit(
         'collect_pages',
         class => 'Statocles::Event::Pages',
@@ -594,12 +545,112 @@ sub pages {
         pages => \@pages,
     );
 
+    $self->_fix_internal_links( \@pages, \%options );
+
+    push @pages,
+        $self->_build_sitemap( \@pages ),
+        $self->_build_robots,
+        ;
+
+    # Add the theme
+    my $theme_root = $self->theme->url_root;
+    $theme_root =~ s{^/}{}g;
+    my $pages_for_theme = [ grep { $_->path =~ m{^/?$theme_root} } @pages ];
+    $self->theme->site( $self );
+    for my $page ( $self->theme->pages ) {
+        push @pages, $page;
+    }
+
+    # @pages should not change after this, because it is being cached
+    $self->_pages( \@pages );
+
+    $self->emit(
+        'build',
+        class => 'Statocles::Event::Pages',
+        pages => \@pages,
+    );
+
+    return @pages;
+}
+
+sub _build_pages {
+    my ( $self, $files ) = @_;
+    my @pages;
+    for my $obj ( @$files ) {
+        if ( $obj->isa( 'Statocles::Document' ) ) {
+            my $page_path = $obj->path.'';
+            $page_path =~ s{[.]\w+$}{.html};
+
+            my %args = (
+                path => $page_path,
+                site => $self,
+                layout => $self->template( 'layout.html' ),
+                document => $obj,
+            );
+
+            push @pages, Statocles::Page::Document->new( %args );
+        }
+        else {
+            # If there's a markdown file, don't keep the html file, since
+            # we'll be building it from the markdown
+            if ( $obj->path =~ /[.]html$/ ) {
+                my $doc_path = $obj->path."";
+                $doc_path =~ s/[.]html$/.markdown/;
+                next if $self->store->has_file( $doc_path );
+            }
+
+            push @pages, Statocles::Page::File->new(
+                site => $self,
+                path => $obj->path->stringify,
+                file_path => $self->store->path->child( $obj->path ),
+            );
+        }
+    }
+    return @pages;
+}
+
+sub _fix_internal_links {
+    my ( $self, $pages, $options ) = @_;
+
+    # Site-level munging of pages
+    my $base_url = $options->{ base_url } || $self->base_url;
+    $self->base_url( $base_url );
+    my $base_path = Mojo::URL->new( $base_url )->path;
+    $base_path =~ s{/$}{};
+
+    # XXX: Should we allow sites without indexes?
+    my $index_path = $self->index;
+    if ( $index_path && $index_path !~ m{^/} ) {
+        $self->log->warn(
+            sprintf 'site "index" property should be absolute path to index page (got "%s")',
+            $self->index,
+        );
+    }
+    # Allow index to be path to document and not the resulting page
+    # (so, ending in ".markdown" or ".md")
+    my $doc_path = $index_path;
+    my $doc_ext = join '|', @{ $self->store->document_extensions };
+    $doc_path =~ s/$doc_ext/html/;
+    my $index_path_re = qr{^$doc_path(?:/index[.]html)?$};
+
     # DEPRECATED: Index without leading / is an index app
     my $index_root  = $self->index =~ m{^/} ? $self->index
-                    : $self->index ? $apps->{ $self->index }->url_root : '';
+                    : $self->index ? $self->apps->{ $self->index }->url_root : '';
     $index_root =~ s{/index[.]html$}{};
 
-    for my $page ( @pages ) {
+    #; say "Got pages: \n" . join "\n", map { $_->path } @$pages;
+    #; say "Looking for: $index_path_re";
+
+    # First find the index file
+    my ( $index_page ) = grep { $_->path =~ $index_path_re } @$pages;
+    my $index_orig_path;
+    if ( $index_page ) {
+        #; say "Found index: " . $index_page->path;
+        $index_orig_path = $index_page->path;
+        $index_page->path( '/index.html' );
+    }
+
+    for my $page ( @$pages ) {
         my $is_index = $page->path eq '/index.html';
 
         if ( !$page->has_dom ) {
@@ -633,6 +684,10 @@ sub pages {
             }
         }
     }
+}
+
+sub _build_sitemap {
+    my ( $self, $pages ) = @_;
 
     # Build the sitemap.xml
     # html files only
@@ -641,14 +696,17 @@ sub pages {
                         sort { $a->[1] cmp $b->[1] }
                         map { [ $_, $self->url( $_->path ) ] }
                         grep { $_->path =~ /[.]html?$/ }
-                        @pages;
+                        @$pages;
     my $tmpl = $self->template( 'sitemap.xml' );
     my $sitemap = Statocles::Page::Plain->new(
         path => '/sitemap.xml',
         content => $tmpl->render( site => $self, pages => \@indexed_pages ),
     );
-    push @pages, $sitemap;
+    return $sitemap;
+}
 
+sub _build_robots {
+    my ( $self ) = @_;
     # robots.txt is the best way for crawlers to automatically discover sitemap.xml
     # We should do more with this later...
     my $robots_tmpl = $self->template( 'robots.txt' );
@@ -656,16 +714,7 @@ sub pages {
         path => '/robots.txt',
         content => $robots_tmpl->render( site => $self ),
     );
-    push @pages, $robots;
-
-    # Add the theme
-    for my $page ( $self->theme->pages ) {
-        push @pages, $page;
-    }
-
-    $self->emit( build => class => 'Statocles::Event::Pages', pages => \@pages );
-
-    return @pages;
+    return $robots;
 }
 
 #pod =method links
@@ -748,8 +797,8 @@ sub template {
     # If the default layout doesn't exist, use the old default.
     # Remove this in v2.0
     if ( $parts[0] eq 'layout' && $parts[1] eq 'default.html'
-        && !$self->theme->store->path->child( @parts )->is_file
-        && $self->theme->store->path->child( site => 'layout.html.ep' )->is_file
+        && !$self->theme->path->child( @parts )->is_file
+        && $self->theme->path->child( site => 'layout.html.ep' )->is_file
     ) {
         derp qq{Using default layout "site/layout.html.ep" is deprecated and will be removed in v2.0. Move your default layout to "layout/default.html.ep" to fix this warning.};
         return $self->theme->template( qw( site layout.html ) );
@@ -772,7 +821,7 @@ Statocles::Site - An entire, configured website
 
 =head1 VERSION
 
-version 0.098
+version 0.099
 
 =head1 SYNOPSIS
 
@@ -794,6 +843,10 @@ version 0.098
 A Statocles::Site is a collection of L<applications|Statocles::App>.
 
 =head1 ATTRIBUTES
+
+=head2 store
+
+The L<Store object|Statocles::Store> for the site.
 
 =head2 title
 

@@ -1,0 +1,320 @@
+---
+# Kur firewall-ban daemon log enrichment.
+#
+# Kur is the ban backend of the Ereshkigal suite: it holds a table of banned
+# addresses and pushes them into a firewall (pf, ipfw, nftables, ...). Galla
+# decides who to ban and tells Kur to do it, and Ereshkigal supervises the Kur
+# processes.
+#
+# One Kur runs per named instance and syslogs under a PROGRAM of "kur-<instance>"
+# -- "kur-sshd", "kur-suricata", "kur-recidive". The gate therefore accepts a
+# bare "kur" as well as any "kur-" prefixed tag. The instance name lives in
+# PROGRAM rather than in MESSAGE, so nothing here captures it; a consumer that
+# wants it takes it off the record's PROGRAM field.
+#
+# Patterns are anchored (each must match the whole MESSAGE) and first-match
+# wins. Every capture is namespaced with kur_ .
+#
+# kur_expires is a unix epoch, and 0 means the ban never expires.
+includes:
+- base
+vars_templated:
+  # An IPv4 or IPv6 network in prefix-length form, e.g. "192.0.2.0/24" or
+  # "2001:db8::/32". base has no CIDR primitive, so it is built here.
+  KUR_CIDR: '[% IP %]/[% INT %]'
+  # A ban going in, e.g.:
+  #   banned 192.0.2.7 expires=1785727347
+  #   banned cidr 192.0.2.0/24 expires=0
+  KUR_BAN_IP: '(?<kur_action>banned) (?<kur_ip>[% IP %]) expires=(?<kur_expires>[% INT %])'
+  KUR_BAN_CIDR: '(?<kur_action>banned) cidr (?<kur_cidr>[% KUR_CIDR %]) expires=(?<kur_expires>[% INT %])'
+  # An existing ban having its clock pushed back because the offender came back,
+  # e.g.:
+  #   refreshed ban of 192.0.2.7 expires=1785727347
+  #   refreshed cidr ban of 192.0.2.0/24 expires=1785727332
+  KUR_REFRESH_IP: '(?<kur_action>refreshed) ban of (?<kur_ip>[% IP %]) expires=(?<kur_expires>[% INT %])'
+  KUR_REFRESH_CIDR: '(?<kur_action>refreshed) cidr ban of (?<kur_cidr>[% KUR_CIDR %]) expires=(?<kur_expires>[% INT %])'
+  # A ban ageing out, e.g.:
+  #   ban of 192.0.2.7 expired
+  # A ban whose clock ran out while the daemon was down is reaped at startup and
+  # says so, which is worth telling apart from an ordinary expiry:
+  #   ban of 192.0.2.7 expired while not running
+  KUR_EXPIRED: 'ban of (?<kur_ip>[% IP %]) (?<kur_action>expired)(?: (?<kur_expire_note>while not running))?'
+  # A ban request Kur refused because the address would not parse, e.g.:
+  #   ban of "not-an-ip" failed... does not appear to be a IPv4 or IPv6 IP
+  #   cidr ban of "not-a-cidr" failed... does not appear to be a IPv4 or IPv6 CIDR
+  # kur_target is whatever was asked for and is deliberately not an IP -- if it
+  # had been one there would be no error.
+  KUR_BAN_FAILED: '(?:(?<kur_ban_kind>cidr) )?ban of "(?<kur_target>[^"]*)" failed\.\.\. (?<kur_error>[% GREEDYDATA %])'
+  # A ban coming back off, e.g.:
+  #   unbanned 192.0.2.7
+  #   unbanned cidr 192.0.2.0/24
+  KUR_UNBAN_IP: '(?<kur_action>unbanned) (?<kur_ip>[% IP %])'
+  KUR_UNBAN_CIDR: '(?<kur_action>unbanned) cidr (?<kur_cidr>[% KUR_CIDR %])'
+  # Startup, naming the control socket and the firewall backend in use, e.g.:
+  #   started... socket=/var/run/ereshkigal/kur/sshd.sock backend=pf
+  KUR_STARTED: '(?<kur_action>started)\.\.\. socket=(?<kur_socket>[% NOTSPACE %]) backend=(?<kur_backend>[% NOTSPACE %])'
+  # A CIDR ban Kur threw away rather than acted on, e.g.:
+  #   dropping CIDR command... CIDR bans are not enabled for this kur
+  #   dropping CIDR command... the "dummy" backend does not support CIDR bans
+  # Worth alerting on: something upstream believes it banned a network and it
+  # did not happen.
+  KUR_CIDR_DROPPED: '(?<kur_action>dropping CIDR command)\.\.\. (?<kur_drop_reason>[% GREEDYDATA %])'
+  # A line the CSV ban loader could not use, e.g.:
+  #   skipping malformed line 5 in "/var/cache/ereshkigal/kur.loader.csv"... "not,enough"
+  KUR_LOADER_MALFORMED: 'skipping malformed line (?<kur_line_number>[% INT %]) in "(?<kur_file>[^"]*)"\.\.\. "(?<kur_line>[% GREEDYDATA %])"'
+  # Bare lifecycle and housekeeping words, each logged on a line of its own.
+  KUR_STATE: '(?<kur_action>flushed all bans|checkpointed|re_init done|stop requested, tearing the backend down|stopped)'
+  # Everything else Kur said. Matching anything is only safe because the rule is
+  # gated on PROGRAM.
+  KUR_MESSAGE: '(?<kur_message>.+)'
+vars_tests:
+  KUR_CIDR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.0/24'
+        result: '192.0.2.0/24'
+      - string: '2001:db8::/32'
+        result: '2001:db8::/32'
+    negative:
+      - '192.0.2.7'
+  KUR_BAN_IP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'banned 192.0.2.7 expires=1785727347'
+        result: 'banned 192.0.2.7 expires=1785727347'
+      - string: 'banned 2001:db8::1 expires=0'
+        result: 'banned 2001:db8::1 expires=0'
+    negative:
+      - 'banned cidr 192.0.2.0/24 expires=0'
+  KUR_BAN_CIDR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'banned cidr 192.0.2.0/24 expires=1785727332'
+        result: 'banned cidr 192.0.2.0/24 expires=1785727332'
+      - string: 'banned cidr 2001:db8::/32 expires=0'
+        result: 'banned cidr 2001:db8::/32 expires=0'
+    negative:
+      - 'banned 192.0.2.7 expires=1785727347'
+  KUR_REFRESH_IP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'refreshed ban of 192.0.2.7 expires=1785727347'
+        result: 'refreshed ban of 192.0.2.7 expires=1785727347'
+      - string: 'refreshed ban of 2001:db8::1 expires=1785727333'
+        result: 'refreshed ban of 2001:db8::1 expires=1785727333'
+    negative:
+      - 'refreshed cidr ban of 192.0.2.0/24 expires=1785727332'
+  KUR_REFRESH_CIDR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'refreshed cidr ban of 192.0.2.0/24 expires=1785727332'
+        result: 'refreshed cidr ban of 192.0.2.0/24 expires=1785727332'
+      - string: 'refreshed cidr ban of 2001:db8::/32 expires=0'
+        result: 'refreshed cidr ban of 2001:db8::/32 expires=0'
+    negative:
+      - 'refreshed ban of 192.0.2.7 expires=1785727347'
+  KUR_EXPIRED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'ban of 192.0.2.7 expired'
+        result: 'ban of 192.0.2.7 expired'
+      - string: 'ban of 198.51.100.9 expired while not running'
+        result: 'ban of 198.51.100.9 expired while not running'
+    negative:
+      - 'ban of "not-an-ip" failed... does not appear to be a IPv4 or IPv6 IP'
+  KUR_BAN_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'ban of "not-an-ip" failed... does not appear to be a IPv4 or IPv6 IP'
+        result: 'ban of "not-an-ip" failed... does not appear to be a IPv4 or IPv6 IP'
+      - string: 'cidr ban of "not-a-cidr" failed... does not appear to be a IPv4 or IPv6 CIDR'
+        result: 'cidr ban of "not-a-cidr" failed... does not appear to be a IPv4 or IPv6 CIDR'
+    negative:
+      - 'ban of 192.0.2.7 expired'
+  KUR_UNBAN_IP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'unbanned 192.0.2.7'
+        result: 'unbanned 192.0.2.7'
+      - string: 'unbanned 2001:db8::1'
+        result: 'unbanned 2001:db8::1'
+    negative:
+      - 'unbanned cidr 192.0.2.0/24'
+  KUR_UNBAN_CIDR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'unbanned cidr 192.0.2.0/24'
+        result: 'unbanned cidr 192.0.2.0/24'
+      - string: 'unbanned cidr 2001:db8::/32'
+        result: 'unbanned cidr 2001:db8::/32'
+    negative:
+      - 'unbanned 192.0.2.7'
+  KUR_STARTED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'started... socket=/var/run/ereshkigal/kur/sshd.sock backend=pf'
+        result: 'started... socket=/var/run/ereshkigal/kur/sshd.sock backend=pf'
+      - string: 'started... socket=/var/run/ereshkigal/kur/dns.sock backend=dummy'
+        result: 'started... socket=/var/run/ereshkigal/kur/dns.sock backend=dummy'
+    negative:
+      - 'stopped'
+  KUR_CIDR_DROPPED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'dropping CIDR command... CIDR bans are not enabled for this kur'
+        result: 'dropping CIDR command... CIDR bans are not enabled for this kur'
+      - string: 'dropping CIDR command... the "dummy" backend does not support CIDR bans'
+        result: 'dropping CIDR command... the "dummy" backend does not support CIDR bans'
+    negative:
+      - 'flushed all bans'
+  KUR_LOADER_MALFORMED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'skipping malformed line 5 in "/var/cache/ereshkigal/kur.loader.csv"... "not,enough"'
+        result: 'skipping malformed line 5 in "/var/cache/ereshkigal/kur.loader.csv"... "not,enough"'
+      - string: 'skipping malformed line 7 in "/var/cache/ereshkigal/kur.loader.csv"... "192.0.2.5,1785726731,junk"'
+        result: 'skipping malformed line 7 in "/var/cache/ereshkigal/kur.loader.csv"... "192.0.2.5,1785726731,junk"'
+    negative:
+      - 'flushed all bans'
+  KUR_STATE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'flushed all bans'
+        result: 'flushed all bans'
+      - string: 'stop requested, tearing the backend down'
+        result: 'stop requested, tearing the backend down'
+      - string: 'checkpointed'
+        result: 'checkpointed'
+    negative:
+      - 'started... socket=/var/run/ereshkigal/kur/sshd.sock backend=pf'
+  KUR_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'something kur has not been taught yet'
+        result: 'something kur has not been taught yet'
+      - string: 'stopped'
+        result: 'stopped'
+    negative:
+      - ''
+# Look up the banned address.
+geoip:
+  - kur_ip
+# Coerce numeric captures to integers. kur_expires is a unix epoch, 0 meaning
+# a ban that never expires.
+convert:
+  kur_expires: int
+  kur_line_number: int
+rules:
+  - name: kur
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^kur(?:-.+)?$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - KUR_BAN_IP
+      - KUR_BAN_CIDR
+      - KUR_REFRESH_IP
+      - KUR_REFRESH_CIDR
+      - KUR_EXPIRED
+      - KUR_BAN_FAILED
+      - KUR_UNBAN_IP
+      - KUR_UNBAN_CIDR
+      - KUR_STARTED
+      - KUR_CIDR_DROPPED
+      - KUR_LOADER_MALFORMED
+      - KUR_STATE
+      # last: matches anything, which is only safe because the rule is gated
+      - KUR_MESSAGE
+    tests:
+      positive:
+        - string: 'banned 192.0.2.7 expires=1785727347'
+          numeric:
+            - kur_expires
+          program: 'kur'
+          result:
+            kur_action: 'banned'
+            kur_ip: '192.0.2.7'
+            kur_expires: '1785727347'
+        # expires=0 is how a permanent ban is spelled, so the convert has to
+        # keep it as the number 0 rather than dropping it for being falsy
+        - string: 'banned cidr 192.0.2.0/24 expires=0'
+          numeric:
+            - kur_expires
+          program: 'kur-sshd'
+          result:
+            kur_action: 'banned'
+            kur_cidr: '192.0.2.0/24'
+            kur_expires: '0'
+        - string: 'refreshed ban of 2001:db8::1 expires=1785727333'
+          result:
+            kur_action: 'refreshed'
+            kur_ip: '2001:db8::1'
+            kur_expires: '1785727333'
+        - string: 'refreshed cidr ban of 192.0.2.0/24 expires=1785727332'
+          result:
+            kur_action: 'refreshed'
+            kur_cidr: '192.0.2.0/24'
+            kur_expires: '1785727332'
+        - string: 'ban of 192.0.2.7 expired'
+          result:
+            kur_action: 'expired'
+            kur_ip: '192.0.2.7'
+        - string: 'ban of 198.51.100.9 expired while not running'
+          result:
+            kur_action: 'expired'
+            kur_ip: '198.51.100.9'
+            kur_expire_note: 'while not running'
+        - string: 'ban of "not-an-ip" failed... does not appear to be a IPv4 or IPv6 IP'
+          result:
+            kur_target: 'not-an-ip'
+            kur_error: 'does not appear to be a IPv4 or IPv6 IP'
+        - string: 'cidr ban of "not-a-cidr" failed... does not appear to be a IPv4 or IPv6 CIDR'
+          result:
+            kur_ban_kind: 'cidr'
+            kur_target: 'not-a-cidr'
+            kur_error: 'does not appear to be a IPv4 or IPv6 CIDR'
+        - string: 'unbanned 192.0.2.7'
+          result:
+            kur_action: 'unbanned'
+            kur_ip: '192.0.2.7'
+        - string: 'unbanned cidr 192.0.2.0/24'
+          result:
+            kur_action: 'unbanned'
+            kur_cidr: '192.0.2.0/24'
+        - string: 'started... socket=/var/run/ereshkigal/kur/sshd.sock backend=pf'
+          result:
+            kur_action: 'started'
+            kur_socket: '/var/run/ereshkigal/kur/sshd.sock'
+            kur_backend: 'pf'
+        - string: 'dropping CIDR command... the "dummy" backend does not support CIDR bans'
+          result:
+            kur_action: 'dropping CIDR command'
+            kur_drop_reason: 'the "dummy" backend does not support CIDR bans'
+        - string: 'skipping malformed line 5 in "/var/cache/ereshkigal/kur.loader.csv"... "not,enough"'
+          numeric:
+            - kur_line_number
+          result:
+            kur_line_number: '5'
+            kur_file: '/var/cache/ereshkigal/kur.loader.csv'
+            kur_line: 'not,enough'
+        - string: 'stop requested, tearing the backend down'
+          result:
+            kur_action: 'stop requested, tearing the backend down'
+        - string: 'stopped'
+          result:
+            kur_action: 'stopped'
+        # falls through to the catch-all
+        - string: 'some future kur message'
+          result:
+            kur_message: 'some future kur message'
+      negative:
+        - ''
+        - string: 'banned 192.0.2.7 expires=1785727347'
+          program: 'kurx'
+        # a sibling in the same suite, and a name the prefix must not swallow
+        - string: 'stopped'
+          program: 'ereshkigal'
+        - string: 'stopped'
+          program: 'kurt'

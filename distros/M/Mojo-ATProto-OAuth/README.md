@@ -32,6 +32,14 @@ refresh, and scope upgrade
     $oauth->refresh_tokens_p($session)->then(sub ($refreshed) { ... });
     $oauth->start_scope_upgrade_p($session, ['repo:generic'])->then(sub ($redirect_url) { ... });
 
+    # later still: an authenticated XRPC call against the session's own PDS - see L</AUTHENTICATED RESOURCE-SERVER REQUESTS> below
+    $oauth->client->request_p($account_did, $session_id, 'post', '/xrpc/com.atproto.repo.putRecord', {
+        repo       => $account_did,
+        collection => 'app.bsky.feed.post',
+        rkey       => $rkey,
+        record     => {'$type' => 'app.bsky.feed.post', text => 'This post was made by Mojo::ATProto::OAuth', createdAt => $iso8601_timestamp},
+    })->then(sub ($result) { ... });
+
 ### Standalone - no Mojolicious app, no plugin, just this module
 
 This module can bb used outside of a Mojolicious application, so long as there's _some_ way to send the user's browser to a URL, and _some_ way to receive the callback request's query parameters, which any web framework (Dancer, PSGI, plain CGI, a raw socket listener) or even a manual copy/paste can supply. A minimal, complete, synchronous example, using only this module plus its own shipped in-memory [store](#the-store-interface):
@@ -78,7 +86,9 @@ Every network-calling method has a matching non-blocking `_p` ([Mojo::Promise](h
 
 ### scopes
 
-Arrayref of default scope strings requested by ["start\_auth\_flow"](#start_auth_flow) when no per-call `scopes` opt is given. Defaults to `['atproto']`.
+Default scopes requested by ["start\_auth\_flow"](#start_auth_flow) when no per-call `scopes` opt is given. Defaults to `['atproto']`.
+
+Accepts either an arrayref of individual scope strings (`['atproto', 'account:email']`) or a single space-separated string (`'atproto account:email'`) - either form is normalized to the arrayref-of-tokens form internally, and always read back as one. This same acceptance applies everywhere else a `scopes` value is taken (["new\_localhost"](#new_localhost), the `scopes` opt on ["start\_auth\_flow"](#start_auth_flow)/["send\_auth\_request"](#send_auth_request) and their `_p` counterparts).
 
 ### private\_key
 
@@ -114,6 +124,10 @@ A [Mojo::UserAgent](https://metacpan.org/pod/Mojo%3A%3AUserAgent) instance used 
 ### log
 
 A [Mojo::Log](https://metacpan.org/pod/Mojo%3A%3ALog) instance for debug logging (see ["DEBUG LOGGING"](#debug-logging)).  Defaults to a fresh instance at the level named by `MOJO_LOG_LEVEL` (`info` if unset).
+
+### client
+
+A [Mojo::ATProto::OAuth::ResourceClient](https://metacpan.org/pod/Mojo%3A%3AATProto%3A%3AOAuth%3A%3AResourceClient) instance, for making authenticated XRPC requests against a session's own PDS - see ["AUTHENTICATED RESOURCE-SERVER REQUESTS"](#authenticated-resource-server-requests) below. Defaults to a fresh instance wired to this `$oauth` object (built lazily on first access, then reused).
 
 ## CONSTRUCTORS
 
@@ -169,7 +183,7 @@ High-level helper for starting a new login; resolves an identity to auth-server 
 
 Plus, independent of the above:
 
-- `scopes` (optional arrayref) - overrides ["scopes"](#scopes) for just this call; falls back to the client's configured default when omitted.
+- `scopes` (optional, arrayref or space-separated string - see ["scopes"](#scopes)) - overrides ["scopes"](#scopes) for just this call; falls back to the client's configured default when omitted.
 - `client_state` (optional hashref) - opaque, never inspected by this module; persisted on the auth request and handed back untouched inside ["process\_callback"](#process_callback)'s result. Intended for things like a post-login redirect target that needs to survive the round trip to the auth server and back.
 - `extra` (optional hashref) - the same opaque pass-through treatment as `client_state`, but conventionally used by callers for data that belongs in their own session metadata once login completes (e.g. a pre-auth decision worth remembering), rather than callback-routing data. This module draws no distinction between the two beyond "two separate opaque slots" - what each is used for is entirely up to the caller.
 
@@ -241,7 +255,7 @@ These are used internally by the high-level methods above, and are also exposed 
 
     my $info = $oauth->send_auth_request($auth_meta, %opts);
 
-Sends the PAR request that kicks off an authorization flow, given already-validated auth-server metadata (as returned by ["resolve\_auth\_server\_metadata" in Mojo::ATProto::OAuth::Resolver](https://metacpan.org/pod/Mojo%3A%3AATProto%3A%3AOAuth%3A%3AResolver#resolve_auth_server_metadata)).  `%opts`: `scopes` (optional arrayref, defaults to ["scopes"](#scopes)), `login_hint` (optional). Returns an `AuthRequestData`-equivalent hashref (`state`, `auth_server_url`, `scopes`, `pkce_verifier`, `request_uri`, `auth_server_token_endpoint`, `auth_server_revocation_endpoint`, `dpop_authserver_nonce`, `dpop_private_key_pem`) - everything a store needs to persist and later exchange for tokens via ["send\_initial\_token\_request"](#send_initial_token_request). Does not itself persist anything or resolve an identity - see ["start\_auth\_flow"](#start_auth_flow) for the full orchestration.
+Sends the PAR request that kicks off an authorization flow, given already-validated auth-server metadata (as returned by ["resolve\_auth\_server\_metadata" in Mojo::ATProto::OAuth::Resolver](https://metacpan.org/pod/Mojo%3A%3AATProto%3A%3AOAuth%3A%3AResolver#resolve_auth_server_metadata)).  `%opts`: `scopes` (optional, arrayref or space-separated string - see ["scopes"](#scopes); defaults to ["scopes"](#scopes)), `login_hint` (optional). Returns an `AuthRequestData`-equivalent hashref (`state`, `auth_server_url`, `scopes`, `pkce_verifier`, `request_uri`, `auth_server_token_endpoint`, `auth_server_revocation_endpoint`, `dpop_authserver_nonce`, `dpop_private_key_pem`) - everything a store needs to persist and later exchange for tokens via ["send\_initial\_token\_request"](#send_initial_token_request). Does not itself persist anything or resolve an identity - see ["start\_auth\_flow"](#start_auth_flow) for the full orchestration.
 
 ### send\_initial\_token\_request / send\_initial\_token\_request\_p
 
@@ -273,16 +287,36 @@ The Memory store takes no arguments, whereas the SQLite and Pg stores do (connec
     my $pg_backed = Mojo::ATProto::OAuth->new(
         client_id         => $client_id,       
         callback_url      => $callback_url,   
-        scopes            => [ 'atproto account:email' ],
+        scopes            => 'atproto account:email',
         store             => [ 'Pg' => 'postgresql://user:pass@host:port/dbname' ]
     );
 
     my $sqlite_backed = Mojo::ATProto::OAuth->new(
         client_id         => $client_id,       
         callback_url      => $callback_url,   
-        scopes            => [ 'atproto account:email' ],
+        scopes            => 'atproto account:email',
         store             => [ 'SQLite' => 'file:/tmp/test.db?wal_mode=1' ]
     );
+
+## AUTHENTICATED RESOURCE-SERVER REQUESTS
+
+Everything above gets you a persisted session; it doesn't make any calls against the user's own PDS on your behalf. That's what ["client"](#client) (a [Mojo::ATProto::OAuth::ResourceClient](https://metacpan.org/pod/Mojo%3A%3AATProto%3A%3AOAuth%3A%3AResourceClient) instance) is for - it loads a session from ["store"](#store), signs a DPoP proof, sends the XRPC request, and transparently handles both DPoP nonce rotation and access-token refresh (retrying each at most once) before giving up.
+
+    # an authenticated GET
+    my $profile = $oauth->client->request($account_did, $session_id, 'get', '/xrpc/app.bsky.actor.getProfile?actor=' . $account_did);
+
+    # an authenticated POST with optimistic-concurrency conflict handling
+    my $result = eval {
+        $oauth->client->request($account_did, $session_id, 'post', '/xrpc/com.atproto.repo.putRecord', {
+            repo => $account_did, collection => 'app.bsky.feed.post', rkey => $rkey, record => $record, swapRecord => $prior_cid,
+        });
+    };
+    if (my $err = $@) {
+        die $err unless $err =~ /xrpc_error=InvalidSwap/;
+        # ... re-read the record, retry with a fresh $prior_cid ...
+    }
+
+["client"](#client) is built lazily and reused - the same instance is returned every time you call `$oauth->client`. If you need a differently-configured one (a distinct `ua`, say), construct [Mojo::ATProto::OAuth::ResourceClient](https://metacpan.org/pod/Mojo%3A%3AATProto%3A%3AOAuth%3A%3AResourceClient) directly instead; see that module for its full interface, including its non-blocking `request_p` counterpart.
 
 ## ERROR HANDLING
 
@@ -296,4 +330,4 @@ Debug logs never include secret material (tokens, private keys, client assertion
 
 ## SEE ALSO
 
-[Mojo::ATProto::OAuth::Identity](https://metacpan.org/pod/Mojo%3A%3AATProto%3A%3AOAuth%3A%3AIdentity), [Mojo::ATProto::OAuth::Resolver](https://metacpan.org/pod/Mojo%3A%3AATProto%3A%3AOAuth%3A%3AResolver), [Mojo::ATProto::OAuth::DPoP](https://metacpan.org/pod/Mojo%3A%3AATProto%3A%3AOAuth%3A%3ADPoP), [Mojo::ATProto::OAuth::ClientMetadata](https://metacpan.org/pod/Mojo%3A%3AATProto%3A%3AOAuth%3A%3AClientMetadata)
+[Mojo::ATProto::OAuth::Identity](https://metacpan.org/pod/Mojo%3A%3AATProto%3A%3AOAuth%3A%3AIdentity), [Mojo::ATProto::OAuth::Resolver](https://metacpan.org/pod/Mojo%3A%3AATProto%3A%3AOAuth%3A%3AResolver), [Mojo::ATProto::OAuth::DPoP](https://metacpan.org/pod/Mojo%3A%3AATProto%3A%3AOAuth%3A%3ADPoP), [Mojo::ATProto::OAuth::ClientMetadata](https://metacpan.org/pod/Mojo%3A%3AATProto%3A%3AOAuth%3A%3AClientMetadata), [Mojo::ATProto::OAuth::ResourceClient](https://metacpan.org/pod/Mojo%3A%3AATProto%3A%3AOAuth%3A%3AResourceClient)

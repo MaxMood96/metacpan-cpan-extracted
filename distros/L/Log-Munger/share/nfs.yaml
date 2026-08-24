@@ -1,0 +1,150 @@
+---
+# NFS server (rpc.mountd / nfsd / rpc.statd) log enrichment.
+#
+# Gates on the syslog PROGRAM field being one of the NFS daemons. Patterns are
+# anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with nfs_ .
+#
+# rpc.mountd is the piece that logs, and what it logs is every mount attempt
+# and whether it was allowed. NFSv3 authenticates by address alone, so these
+# lines are the entire access-control record for an export -- there is no user
+# to name, only a host that was let in or was not.
+#
+# On "refused mount request" the trailing reason says which check failed:
+# "illegal port" is a client not using a reserved port, and "unmatched host"
+# one that is not in the export list at all.
+includes:
+- base
+vars_templated:
+  # "authenticated mount request from 192.0.2.5:1023 for /export (/export)"
+  #
+  # The path appears twice: the requested path and, in parentheses, the export
+  # it resolved to. They differ when a subdirectory of an export was asked for,
+  # so both are captured.
+  NFS_MOUNT_OK: 'authenticated (?<nfs_request_kind>mount|unmount) request from (?<nfs_src_ip>[% IP %])(?::(?<nfs_src_port>[% INT %]))? for (?<nfs_path>[% NOTSPACE %])(?: \((?<nfs_export>[^)]*)\))?(?: [% GREEDYDATA %])?'
+  # "refused mount request from 203.0.113.7 for /export (/export): illegal port"
+  NFS_MOUNT_REFUSED: 'refused (?<nfs_request_kind>mount|unmount) request from (?<nfs_src_ip>[% IP %])(?::(?<nfs_src_port>[% INT %]))? for (?<nfs_path>[% NOTSPACE %])(?: \((?<nfs_export>[^)]*)\))?: (?<nfs_refusal_reason>[% GREEDYDATA %])'
+  # "export request from 192.0.2.5"
+  #
+  # A client asking what is exported, before mounting anything. On an exposed
+  # server this is the enumeration step.
+  NFS_EXPORT_REQUEST: '(?<nfs_request_kind>export|dump) request from (?<nfs_src_ip>[% IP %])(?::(?<nfs_src_port>[% INT %]))?(?: [% GREEDYDATA %])?'
+  # "Cannot export /export, possibly unsupported filesystem or fsid= required"
+  NFS_EXPORT_ERROR: 'Cannot export (?<nfs_path>[^,]+), (?<nfs_export_error>[% GREEDYDATA %])'
+  # Anything else: version negotiation, grace periods, statd notifications.
+  NFS_MESSAGE: '(?<nfs_message>.+)'
+vars_tests:
+  NFS_MOUNT_OK:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'authenticated mount request from 192.0.2.5:1023 for /export (/export)'
+        result: 'authenticated mount request from 192.0.2.5:1023 for /export (/export)'
+      - string: 'authenticated unmount request from 192.0.2.5:1023 for /export (/export)'
+        result: 'authenticated unmount request from 192.0.2.5:1023 for /export (/export)'
+    negative:
+      - 'refused mount request from 203.0.113.7 for /export (/export): illegal port'
+  NFS_MOUNT_REFUSED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'refused mount request from 203.0.113.7 for /export (/export): illegal port'
+        result: 'refused mount request from 203.0.113.7 for /export (/export): illegal port'
+      - string: 'refused mount request from 203.0.113.7 for /srv (/srv): unmatched host'
+        result: 'refused mount request from 203.0.113.7 for /srv (/srv): unmatched host'
+    negative:
+      - 'authenticated mount request from 192.0.2.5:1023 for /export (/export)'
+  NFS_EXPORT_REQUEST:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'export request from 192.0.2.5'
+        result: 'export request from 192.0.2.5'
+      - string: 'dump request from 203.0.113.7'
+        result: 'dump request from 203.0.113.7'
+    negative:
+      - 'authenticated mount request from 192.0.2.5:1023 for /export (/export)'
+  NFS_EXPORT_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Cannot export /export, possibly unsupported filesystem or fsid= required'
+        result: 'Cannot export /export, possibly unsupported filesystem or fsid= required'
+    negative:
+      - 'export request from 192.0.2.5'
+  NFS_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Version 1.3.4 starting'
+        result: 'Version 1.3.4 starting'
+    negative:
+      - ''
+geoip:
+  - nfs_src_ip
+convert:
+  nfs_src_port: int
+rules:
+  - name: nfs
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^(?:rpc\.mountd|mountd|nfsd|rpc\.statd|statd|rpc\.svcgssd)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - NFS_MOUNT_OK
+      - NFS_MOUNT_REFUSED
+      - NFS_EXPORT_REQUEST
+      - NFS_EXPORT_ERROR
+      # last: matches anything, which is only safe because the rule is gated
+      - NFS_MESSAGE
+    tests:
+      positive:
+        # the mount lines are mountd's, which answers to both spellings
+        - string: 'authenticated mount request from 192.0.2.5:1023 for /export (/export)'
+          numeric:
+            - nfs_src_port
+          program: 'rpc.mountd'
+          result:
+            nfs_request_kind: 'mount'
+            nfs_src_ip: '192.0.2.5'
+            nfs_src_port: '1023'
+            nfs_path: '/export'
+            nfs_export: '/export'
+        # "illegal port" means the client did not use a reserved source port
+        - string: 'refused mount request from 203.0.113.7 for /export (/export): illegal port'
+          program: 'mountd'
+          result:
+            nfs_request_kind: 'mount'
+            nfs_src_ip: '203.0.113.7'
+            nfs_path: '/export'
+            nfs_export: '/export'
+            nfs_refusal_reason: 'illegal port'
+        - string: 'export request from 192.0.2.5'
+          result:
+            nfs_request_kind: 'export'
+            nfs_src_ip: '192.0.2.5'
+        # the gate covers the whole NFS server side, not just mountd. Neither of
+        # these has a pattern of its own, so both land on the catch-all -- which
+        # is the point: gated as they are, their lines are kept rather than
+        # dropped, and only a test naming the program says so.
+        - string: 'nfssvc: Function not implemented'
+          program: 'nfsd'
+          result:
+            nfs_message: 'nfssvc: Function not implemented'
+        - string: 'Received SM_UNMON_ALL request from client.example.net while not monitoring any hosts'
+          program: 'rpc.statd'
+          result:
+            nfs_message: 'Received SM_UNMON_ALL request from client.example.net while not monitoring any hosts'
+        - string: 'Failed to initialize RPCSEC_GSS service'
+          program: 'rpc.svcgssd'
+          result:
+            nfs_message: 'Failed to initialize RPCSEC_GSS service'
+        - string: 'Cannot export /export, possibly unsupported filesystem or fsid= required'
+          result:
+            nfs_path: '/export'
+            nfs_export_error: 'possibly unsupported filesystem or fsid= required'
+        - string: 'Version 1.3.4 starting'
+          program: 'rpc.mountd'
+          result:
+            nfs_message: 'Version 1.3.4 starting'
+      negative:
+        - ''
+        - string: 'authenticated mount request from 192.0.2.5:1023 for /export (/export)'
+          program: 'nfs-extra'

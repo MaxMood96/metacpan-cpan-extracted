@@ -20,6 +20,7 @@ punk - the Punk command line
 =head1 SYNOPSIS
 
     punk new MyApp              # generate a new application
+    punk new MyApp --kit diy    # ...or a whole one, from an installed kit
     punk routes                 # the compiled routing table
     punk api sync               # stubs for operations added to the spec
     punk config check           # resolve configuration and every secret
@@ -41,6 +42,16 @@ environment, 2 the command was used wrongly.
 
 Commands live in L<Punk::Command>, which also documents how a plugin
 distribution adds its own subcommand.
+
+=head1 KITS
+
+C<punk new MyApp --kit NAME> generates through C<Punk::Kit::E<lt>NameE<gt>>
+instead of the basic skeleton - a distribution's own generator, handing you
+a whole working application rather than a welcome page. A kit brings its own
+options, which C<punk new --kit NAME --help> lists under the command's.
+
+Kits ship in their own distributions; L<Punk::Generate/KITS> is how one is
+written.
 
 =head1 ENVIRONMENT
 

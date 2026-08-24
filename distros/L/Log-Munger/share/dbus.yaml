@@ -1,0 +1,215 @@
+---
+# D-Bus message bus daemon log enrichment.
+#
+# Gates on the syslog PROGRAM field being "dbus-daemon" or "dbus-broker" (the
+# newer implementation Fedora and friends ship in its place), and also accepts
+# "dbus-broker-launch", which is what actually logs on those systems. Patterns
+# are anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with dbus_ .
+#
+# The activation records are the reason to parse this at all. When a bus name
+# nobody owns is requested, dbus asks systemd to start the service that would
+# own it and logs who asked: uid, pid and the requesting process's command
+# line. That records which unprivileged process caused a privileged daemon to
+# start, which appears nowhere else. systemd logs the start but not the reason
+# for it.
+#
+# The "[system]" / "[session]" tag says which bus, and is optional because the
+# configuration-file complaints dbus writes before the bus is up do not carry
+# it.
+includes:
+- base
+vars:
+  # A bus name in reverse-DNS form: "org.freedesktop.systemd1".
+  DBUS_BUS_NAME: '[\w.-]+'
+  # A unique connection name: ":1.558".
+  DBUS_UNIQUE_NAME: ':[0-9]+\.[0-9]+'
+vars_templated:
+  # The optional "[system] " / "[session] " tag.
+  DBUS_PREFIX: '(?:\[(?<dbus_bus>[% WORD %])\] )?'
+  # "[system] Activating via systemd: service name='org.freedesktop.fwupd'
+  #  unit='fwupd.service' requested by ':1.558' (uid=989 pid=190138
+  #  comm="/usr/bin/fwupdmgr refresh")"
+  #
+  # The requester's comm is the whole argv, quoted, so it contains spaces. The
+  # trailing parenthesised blob is captured whole and split by the quote-aware
+  # kv decompose below rather than enumerated here, since which keys appear
+  # varies with the dbus version.
+  DBUS_ACTIVATING: '[% DBUS_PREFIX %]Activating (?:via systemd: )?service name=''(?<dbus_service>[% DBUS_BUS_NAME %])''(?: unit=''(?<dbus_unit>[% NOTSPACE %])'')?(?: requested by ''(?<dbus_requested_by>[% DBUS_UNIQUE_NAME %])'')?(?: \((?<dbus_requester>[% GREEDYDATA %])\))?'
+  # "[system] Successfully activated service 'org.freedesktop.fwupd'"
+  DBUS_ACTIVATED: '[% DBUS_PREFIX %]Successfully activated service ''(?<dbus_service>[% DBUS_BUS_NAME %])'''
+  # "[system] Activation via systemd failed for unit
+  #  'dbus-org.freedesktop.resolve1.service': Unit ... not found."
+  DBUS_ACTIVATION_FAILED: '[% DBUS_PREFIX %]Activation via systemd failed for unit ''(?<dbus_unit>[^'']*)'': (?<dbus_error>[% GREEDYDATA %])'
+  # "[system] Reloaded configuration"
+  DBUS_RELOADED: '[% DBUS_PREFIX %]Reloaded configuration'
+  # A configuration complaint, written before the bus tag exists:
+  # "Unknown group "power" in message bus configuration file".
+  DBUS_CONFIG_PROBLEM: '[% DBUS_PREFIX %](?<dbus_config_problem>Unknown (?:group|user) "[^"]*" in message bus configuration file)'
+  # Anything else the bus had to say. The gate is a short list of exact program
+  # names, so nothing but dbus can land here, and the bus tag is still pulled
+  # off the front.
+  DBUS_MESSAGE: '[% DBUS_PREFIX %](?<dbus_message>.+)'
+vars_tests:
+  DBUS_BUS_NAME:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'org.freedesktop.fwupd'
+        result: 'org.freedesktop.fwupd'
+      - string: 'org.freedesktop.PackageKit'
+        result: 'org.freedesktop.PackageKit'
+    negative:
+      - 'has a space'
+  DBUS_UNIQUE_NAME:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: ':1.558'
+        result: ':1.558'
+      - string: ':1.7094'
+        result: ':1.7094'
+    negative:
+      - 'org.freedesktop.fwupd'
+  DBUS_PREFIX:
+    # Wholly optional, so the tail is matched as well, to prove the prefix is
+    # what was consumed.
+    test_template: '^(?<TEST>[% TEST_VAR %])Reloaded'
+    positive:
+      - string: '[system] Reloaded'
+        result: '[system] '
+      - string: 'Reloaded'
+        result: ''
+    negative:
+      - '[system] Something else'
+  DBUS_ACTIVATING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[system] Activating via systemd: service name=''org.freedesktop.fwupd'' unit=''fwupd.service'' requested by '':1.558'' (uid=989 pid=190138 comm="/usr/bin/fwupdmgr refresh")'
+        result: '[system] Activating via systemd: service name=''org.freedesktop.fwupd'' unit=''fwupd.service'' requested by '':1.558'' (uid=989 pid=190138 comm="/usr/bin/fwupdmgr refresh")'
+      # The traditional, non-systemd activation line has no unit.
+      - string: '[system] Activating service name=''org.freedesktop.PolicyKit1'' requested by '':1.4'''
+        result: '[system] Activating service name=''org.freedesktop.PolicyKit1'' requested by '':1.4'''
+    negative:
+      - '[system] Successfully activated service ''org.freedesktop.fwupd'''
+  DBUS_ACTIVATED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[system] Successfully activated service ''org.freedesktop.fwupd'''
+        result: '[system] Successfully activated service ''org.freedesktop.fwupd'''
+    negative:
+      - '[system] Reloaded configuration'
+  DBUS_ACTIVATION_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[system] Activation via systemd failed for unit ''dbus-org.freedesktop.resolve1.service'': Unit dbus-org.freedesktop.resolve1.service not found.'
+        result: '[system] Activation via systemd failed for unit ''dbus-org.freedesktop.resolve1.service'': Unit dbus-org.freedesktop.resolve1.service not found.'
+    negative:
+      - '[system] Successfully activated service ''org.freedesktop.fwupd'''
+  DBUS_RELOADED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[system] Reloaded configuration'
+        result: '[system] Reloaded configuration'
+    negative:
+      - '[system] Successfully activated service ''org.freedesktop.fwupd'''
+  DBUS_CONFIG_PROBLEM:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Unknown group "power" in message bus configuration file'
+        result: 'Unknown group "power" in message bus configuration file'
+      - string: 'Unknown user "haldaemon" in message bus configuration file'
+        result: 'Unknown user "haldaemon" in message bus configuration file'
+    negative:
+      - '[system] Reloaded configuration'
+  DBUS_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[system] Rejected send message, 1 matched rules'
+        result: '[system] Rejected send message, 1 matched rules'
+    negative:
+      - ''
+convert:
+  dbus_requester_uid: int
+  dbus_requester_pid: int
+decompose:
+  # The parenthesised requester blob. Quote-aware, because comm is the whole
+  # argv and holds spaces.
+  - field: dbus_requester
+    type: kv
+    quoted: true
+    prefix: 'dbus_requester_'
+    remove: true
+    tests:
+      - input: 'uid=989 pid=190138 comm="/usr/bin/fwupdmgr refresh"'
+        result:
+          dbus_requester_uid: '989'
+          dbus_requester_pid: '190138'
+          dbus_requester_comm: '/usr/bin/fwupdmgr refresh'
+      - input: 'uid=0 pid=549127 comm="/usr/bin/gdbus call --system" label="unconfined"'
+        result:
+          dbus_requester_uid: '0'
+          dbus_requester_pid: '549127'
+          dbus_requester_comm: '/usr/bin/gdbus call --system'
+          dbus_requester_label: 'unconfined'
+rules:
+  - name: dbus
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^dbus-(?:daemon|broker|broker-launch)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - DBUS_ACTIVATING
+      - DBUS_ACTIVATED
+      - DBUS_ACTIVATION_FAILED
+      - DBUS_RELOADED
+      - DBUS_CONFIG_PROBLEM
+      # last: matches anything, which is only safe because the rule is gated
+      - DBUS_MESSAGE
+    tests:
+      positive:
+        - string: '[system] Activating via systemd: service name=''org.freedesktop.fwupd'' unit=''fwupd.service'' requested by '':1.558'' (uid=989 pid=190138 comm="/usr/bin/fwupdmgr refresh")'
+          enriched:
+            dbus_bus: 'system'
+            dbus_requested_by: ':1.558'
+            dbus_requester_comm: '/usr/bin/fwupdmgr refresh'
+            dbus_requester_pid: '190138'
+            dbus_requester_uid: '989'
+            dbus_service: 'org.freedesktop.fwupd'
+            dbus_unit: 'fwupd.service'
+          numeric:
+            - dbus_requester_pid
+            - dbus_requester_uid
+          program: 'dbus-broker'
+          result:
+            dbus_bus: 'system'
+            dbus_service: 'org.freedesktop.fwupd'
+            dbus_unit: 'fwupd.service'
+            dbus_requested_by: ':1.558'
+            dbus_requester: 'uid=989 pid=190138 comm="/usr/bin/fwupdmgr refresh"'
+        - string: '[system] Successfully activated service ''org.freedesktop.fwupd'''
+          program: 'dbus-broker-launch'
+          result:
+            dbus_bus: 'system'
+            dbus_service: 'org.freedesktop.fwupd'
+        - string: '[system] Activation via systemd failed for unit ''dbus-org.freedesktop.resolve1.service'': Unit dbus-org.freedesktop.resolve1.service not found.'
+          result:
+            dbus_bus: 'system'
+            dbus_unit: 'dbus-org.freedesktop.resolve1.service'
+            dbus_error: 'Unit dbus-org.freedesktop.resolve1.service not found.'
+        - string: '[system] Reloaded configuration'
+          program: 'dbus-daemon'
+          result:
+            dbus_bus: 'system'
+        # Written before the bus tag exists, so there is no dbus_bus.
+        - string: 'Unknown group "power" in message bus configuration file'
+          result:
+            dbus_config_problem: 'Unknown group "power" in message bus configuration file'
+        - string: '[system] Rejected send message, 1 matched rules'
+          result:
+            dbus_bus: 'system'
+            dbus_message: 'Rejected send message, 1 matched rules'
+      negative:
+        - ''
+        - string: '[system] Activating via systemd: service name=''org.freedesktop.fwupd'' unit=''fwupd.service'' requested by '':1.558'' (uid=989 pid=190138 comm="/usr/bin/fwupdmgr refresh")'
+          program: 'dbus-extra'

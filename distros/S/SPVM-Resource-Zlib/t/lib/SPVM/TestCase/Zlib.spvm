@@ -1,0 +1,6 @@
+class TestCase::Zlib {
+  
+  use Resource::Zlib;
+  
+  native static method gzopen_gzread : void ($file : string);
+}

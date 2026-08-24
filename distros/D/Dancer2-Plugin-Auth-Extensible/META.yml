@@ -58,5 +58,5 @@ resources:
   bugtracker: https://github.com/PerlDancer/Dancer2-Plugin-Auth-Extensible/issues
   homepage: https://github.com/PerlDancer/Dancer2-Plugin-Auth-Extensible/
   repository: https://github.com/PerlDancer/Dancer2-Plugin-Auth-Extensible
-version: '0.713'
+version: '0.714'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

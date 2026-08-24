@@ -1,0 +1,397 @@
+---
+# Exim MTA (exim / exim4) main log enrichment.
+#
+# Gates on the syslog PROGRAM field being "exim" or "exim4". Patterns are
+# anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with exim_ .
+#
+# After Log::Munger strips the syslog timestamp + program, most Exim main-log
+# lines begin with the internal message id (e.g. "1rABCD-0001Ab-2x") followed
+# by a one/two character flag describing the event:
+#   <=  arrival        =>  delivery        ->  additional recipient
+#   >>  cutthrough     *>  delivery suppressed
+#   **  delivery failed (bounce)           ==  deferred
+#   Completed          (message fully processed)
+# Some lines (e.g. connection-time RCPT rejections) have NO message id and are
+# handled as separate patterns.
+includes:
+- base
+vars_templated:
+  # The way exim identifies a remote peer, shared by every pattern below that
+  # has one. All three parts appear together as
+  #
+  #   H=mail.example.com (helo.they.claimed) [203.0.113.7]:25
+  #
+  # but exim drops whatever it does not have: no reverse DNS and the hostname
+  # goes, a HELO matching the hostname and the parenthetical goes, and only
+  # newer versions log the port at all. Only the bracketed address is always
+  # there, so it is the only required part.
+  #
+  # The HELO is matched as "anything but a closing paren" rather than with the
+  # base GREEDYDATA_NO_BRACKET, which excludes angle brackets instead and so
+  # would run past the ")" it is supposed to stop at. A HELO is
+  # attacker-controlled text and arrives with anything in it.
+  EXIM_HOST_INFO: '(?:(?<exim_h_host>[% HOSTNAME %]) )?(?:\((?<exim_helo>[^)]*)\) )?\[(?<exim_src_ip>[% IP %])\](?::(?<exim_src_port>[% INT %]))?'
+  # Arrival: "<msgid> <= sender@example.com H=mail.example.com [203.0.113.7]
+  #  P=esmtp S=1234 id=<abc@x>". Sender may be "<>" for bounces (captured as
+  #  the literal token). The H= host clause and later key=value fields are all
+  #  optional so we tolerate the many arrival variants.
+  EXIM_ARRIVAL: '(?<exim_msgid>[% NOTSPACE %]) (?<exim_flag><=) (?<exim_sender>[% NOTSPACE %])(?: H=[% EXIM_HOST_INFO %])?(?: P=(?<exim_proto>[% NOTSPACE %]))?(?: S=(?<exim_size>[% INT %]))?(?: id=(?<exim_id>[% NOTSPACE %]))?(?: [% GREEDYDATA %])?'
+  # Delivery: "<msgid> => recipient@example.net R=dnslookup T=remote_smtp
+  #  H=mx.example.net [198.51.100.2] X=TLS1.3 C=\"250 OK\"".
+  # The H= here is the far end of an outbound connection rather than an
+  # inbound peer, so it captures into exim_dst_ip and cannot share
+  # EXIM_HOST_INFO.
+  EXIM_DELIVERY: '(?<exim_msgid>[% NOTSPACE %]) (?<exim_flag>=>) (?<exim_recipient>[% NOTSPACE %])(?: R=(?<exim_router>[% NOTSPACE %]))?(?: T=(?<exim_transport>[% NOTSPACE %]))?(?: H=(?:(?<exim_h_host>[% HOSTNAME %]) )?\[(?<exim_dst_ip>[% IP %])\](?::(?<exim_dst_port>[% INT %]))?)?(?: [% GREEDYDATA %])?'
+  # Additional recipient of an already-delivered message: "<msgid> ->
+  #  extra@example.net R=... T=...".
+  EXIM_ADDITIONAL: '(?<exim_msgid>[% NOTSPACE %]) (?<exim_flag>->) (?<exim_recipient>[% NOTSPACE %])(?: R=(?<exim_router>[% NOTSPACE %]))?(?: T=(?<exim_transport>[% NOTSPACE %]))?(?: H=(?:(?<exim_h_host>[% HOSTNAME %]) )?\[(?<exim_dst_ip>[% IP %])\](?::(?<exim_dst_port>[% INT %]))?)?(?: [% GREEDYDATA %])?'
+  # Deferred: "<msgid> == recipient@example.net R=dnslookup T=remote_smtp defer
+  #  (-53): retry time not reached". Everything after "defer ..." (or the first
+  #  free-text) becomes the defer reason.
+  EXIM_DEFERRED: '(?<exim_msgid>[% NOTSPACE %]) (?<exim_flag>==) (?<exim_recipient>[% NOTSPACE %])(?: R=(?<exim_router>[% NOTSPACE %]))?(?: T=(?<exim_transport>[% NOTSPACE %]))? (?<exim_defer_reason>[% GREEDYDATA %])'
+  # Failed / bounce: "<msgid> ** recipient@example.net R=dnslookup
+  #  T=remote_smtp: SMTP error from remote mail server after RCPT TO:<...>:
+  #  550 No such user". The trailing free-text after the ": " is the error.
+  EXIM_FAILED: '(?<exim_msgid>[% NOTSPACE %]) (?<exim_flag>\*\*) (?<exim_recipient>[% NOTSPACE %])(?: R=(?<exim_router>[% NOTSPACE %]))?(?: T=(?<exim_transport>[% NOTSPACE %]))?: (?<exim_error>[% GREEDYDATA %])'
+  # Completed: "<msgid> Completed".
+  EXIM_COMPLETED: '(?<exim_msgid>[% NOTSPACE %]) (?<exim_completed>Completed)(?: [% GREEDYDATA %])?'
+  # Connection-time rejection (NO message id): "H=(helo) [203.0.113.7]
+  #  F=<spammer@x> rejected RCPT <victim@example.com>: relay not permitted".
+  #
+  # Both the F=<sender> clause and the <address> after the verb are optional.
+  # A rejection at MAIL time has no recipient yet, and one at HELO or from a
+  # connect-time ACL has neither, so requiring them threw away the earliest
+  # rejections -- exactly the ones that never cost the host any work and so are
+  # the most interesting when counting who is being turned away.
+  EXIM_REJECT: 'H=[% EXIM_HOST_INFO %](?: F=<(?<exim_sender>[% GREEDYDATA_NO_BRACKET %])>)? rejected (?<exim_reject_verb>[% WORD %])(?: <(?<exim_recipient>[% GREEDYDATA_NO_BRACKET %])>)?: (?<exim_reject_reason>[% GREEDYDATA %])'
+  # ------------------------------------------------------------------
+  # Authentication, TLS and connection handling.
+  #
+  # None of these carry a message id, because none of them got far enough for
+  # exim to have accepted a message. They are where the credential stuffing,
+  # the open-relay probing and the TLS misconfiguration live.
+  # ------------------------------------------------------------------
+  # "login authenticator failed for (helo) [203.0.113.7]: 535 Incorrect
+  #  authentication data (set_id=admin)"
+  #
+  # The SMTP AUTH brute force, and the reason this file needs to look past the
+  # message-id lines at all. set_id is the username that was tried, which
+  # exim only appends once an authenticator got far enough to have one, so it
+  # is optional. I= is the local address the connection came in on, logged
+  # when exim is listening on more than one.
+  EXIM_AUTH_FAILED: '(?<exim_authenticator>[% NOTSPACE %]) authenticator failed for [% EXIM_HOST_INFO %](?: I=\[(?<exim_local_ip>[% IP %])\](?::(?<exim_local_port>[% INT %]))?)?: (?<exim_auth_error>.*?)(?: \(set_id=(?<exim_auth_user>[^)]*)\))?'
+  # "H=(helo) [203.0.113.7] rejected connection in ''connect'' ACL"
+  #
+  # Refused before a single SMTP command was read, which is how a blocklist hit
+  # or a rate limit appears. Kept separate from EXIM_REJECT because there is no
+  # verb and no address here, only the ACL that said no.
+  EXIM_REJECT_CONNECTION: 'H=[% EXIM_HOST_INFO %] rejected connection in "(?<exim_acl>[% NOTSPACE %])" ACL(?:[:.]? (?<exim_reject_reason>[% GREEDYDATA %]))?'
+  # "TLS error on connection from (helo) [203.0.113.7] (SSL_accept):
+  #  error:14094416:SSL routines:ssl3_read_bytes:sslv3 alert certificate unknown"
+  #
+  # The stage in parens is which TLS call failed, which is what separates a
+  # client that hung up mid-handshake from one that could not agree on a
+  # cipher or rejected the certificate.
+  EXIM_TLS_ERROR: 'TLS error on connection from [% EXIM_HOST_INFO %](?: \((?<exim_tls_stage>[^)]*)\))?: (?<exim_tls_error>[% GREEDYDATA %])'
+  # "SMTP call from (helo) [203.0.113.7] dropped: too many nonmail commands"
+  # "SMTP connection from [203.0.113.7] lost"
+  # "SMTP command timeout on connection from (helo) [203.0.113.7]"
+  #
+  # How a connection ended when it did not end in a message. "too many nonmail
+  # commands" in particular is exim naming a client that sat there issuing RSET
+  # or VRFY, which is address harvesting.
+  EXIM_SMTP_CONNECTION: 'SMTP (?:(?<exim_smtp_phase>call|connection) from|command timeout on (?<exim_smtp_timeout_on>connection|TLS connection) from) [% EXIM_HOST_INFO %](?:[ :]+(?<exim_smtp_event>[% GREEDYDATA %]))?'
+vars_tests:
+  EXIM_ARRIVAL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '1rABCD-0001Ab-2x <= sender@example.com H=mail.example.com [203.0.113.7] P=esmtp S=1234 id=<abc@x>'
+        result: '1rABCD-0001Ab-2x <= sender@example.com H=mail.example.com [203.0.113.7] P=esmtp S=1234 id=<abc@x>'
+      - string: '1rWXYZ-0002Cd-9y <= bounce@example.org H=relay.example.org [198.51.100.5] P=esmtps S=987'
+        result: '1rWXYZ-0002Cd-9y <= bounce@example.org H=relay.example.org [198.51.100.5] P=esmtps S=987'
+    negative:
+      - '1rABCD-0001Ab-2x => recipient@example.net R=dnslookup T=remote_smtp'
+  EXIM_DELIVERY:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '1rABCD-0001Ab-2x => recipient@example.net R=dnslookup T=remote_smtp H=mx.example.net [198.51.100.2] X=TLS1.3 C="250 OK"'
+        result: '1rABCD-0001Ab-2x => recipient@example.net R=dnslookup T=remote_smtp H=mx.example.net [198.51.100.2] X=TLS1.3 C="250 OK"'
+      - string: '1rABCD-0001Ab-2x => localuser R=localuser T=local_delivery'
+        result: '1rABCD-0001Ab-2x => localuser R=localuser T=local_delivery'
+    negative:
+      - '1rABCD-0001Ab-2x <= sender@example.com H=mail.example.com [203.0.113.7] P=esmtp S=1234'
+  EXIM_ADDITIONAL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '1rABCD-0001Ab-2x -> extra@example.net R=dnslookup T=remote_smtp H=mx.example.net [198.51.100.2]'
+        result: '1rABCD-0001Ab-2x -> extra@example.net R=dnslookup T=remote_smtp H=mx.example.net [198.51.100.2]'
+      - string: '1rABCD-0001Ab-2x -> second@example.net R=dnslookup T=remote_smtp'
+        result: '1rABCD-0001Ab-2x -> second@example.net R=dnslookup T=remote_smtp'
+    negative:
+      - '1rABCD-0001Ab-2x => recipient@example.net R=dnslookup T=remote_smtp'
+  EXIM_DEFERRED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '1rABCD-0001Ab-2x == recipient@example.net R=dnslookup T=remote_smtp defer (-53): retry time not reached'
+        result: '1rABCD-0001Ab-2x == recipient@example.net R=dnslookup T=remote_smtp defer (-53): retry time not reached'
+      - string: '1rABCD-0001Ab-2x == user@example.org R=dnslookup T=remote_smtp defer (110, 0): Connection timed out'
+        result: '1rABCD-0001Ab-2x == user@example.org R=dnslookup T=remote_smtp defer (110, 0): Connection timed out'
+    negative:
+      - '1rABCD-0001Ab-2x ** recipient@example.net R=dnslookup T=remote_smtp: 550 No such user'
+  EXIM_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '1rABCD-0001Ab-2x ** recipient@example.net R=dnslookup T=remote_smtp: SMTP error from remote mail server after RCPT TO:<recipient@example.net>: 550 No such user'
+        result: '1rABCD-0001Ab-2x ** recipient@example.net R=dnslookup T=remote_smtp: SMTP error from remote mail server after RCPT TO:<recipient@example.net>: 550 No such user'
+      - string: '1rABCD-0001Ab-2x ** baduser@example.org R=dnslookup T=remote_smtp: retry timeout exceeded'
+        result: '1rABCD-0001Ab-2x ** baduser@example.org R=dnslookup T=remote_smtp: retry timeout exceeded'
+    negative:
+      - '1rABCD-0001Ab-2x == recipient@example.net R=dnslookup T=remote_smtp defer (-53): retry time not reached'
+  EXIM_COMPLETED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '1rABCD-0001Ab-2x Completed'
+        result: '1rABCD-0001Ab-2x Completed'
+      - string: '1rWXYZ-0002Cd-9y Completed'
+        result: '1rWXYZ-0002Cd-9y Completed'
+    negative:
+      - '1rABCD-0001Ab-2x => recipient@example.net R=dnslookup T=remote_smtp'
+  EXIM_REJECT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'H=(helo) [203.0.113.7] F=<spammer@x> rejected RCPT <victim@example.com>: relay not permitted'
+        result: 'H=(helo) [203.0.113.7] F=<spammer@x> rejected RCPT <victim@example.com>: relay not permitted'
+      - string: 'H=(evil.example) [198.51.100.9] F=<bad@evil.example> rejected RCPT <target@example.org>: sender verify failed'
+        result: 'H=(evil.example) [198.51.100.9] F=<bad@evil.example> rejected RCPT <target@example.org>: sender verify failed'
+      # Rejected at MAIL time, so there is no recipient yet
+      - string: 'H=(evil.example) [198.51.100.9] F=<bad@evil.example> rejected MAIL: sender blocked'
+        result: 'H=(evil.example) [198.51.100.9] F=<bad@evil.example> rejected MAIL: sender blocked'
+      # Rejected at HELO time, so there is no sender either
+      - string: 'H=(localhost) [203.0.113.7] rejected HELO: syntactically invalid argument'
+        result: 'H=(localhost) [203.0.113.7] rejected HELO: syntactically invalid argument'
+      # The full host clause: reverse name, claimed HELO, address and port
+      - string: 'H=mail.example.com (helo.example) [203.0.113.7]:41234 F=<a@b> rejected RCPT <c@d>: relay not permitted'
+        result: 'H=mail.example.com (helo.example) [203.0.113.7]:41234 F=<a@b> rejected RCPT <c@d>: relay not permitted'
+    negative:
+      - '1rABCD-0001Ab-2x Completed'
+      # No verb and no address: that is EXIM_REJECT_CONNECTION
+      - 'H=(helo) [203.0.113.7] rejected connection in "connect" ACL'
+  EXIM_HOST_INFO:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'mail.example.com (helo.example) [203.0.113.7]:41234'
+        result: 'mail.example.com (helo.example) [203.0.113.7]:41234'
+      - string: '(helo.example) [203.0.113.7]'
+        result: '(helo.example) [203.0.113.7]'
+      - string: '[203.0.113.7]'
+        result: '[203.0.113.7]'
+      - string: 'mail.example.com [203.0.113.7]'
+        result: 'mail.example.com [203.0.113.7]'
+    negative:
+      # The bracketed address is the one part that is never absent.
+      - 'mail.example.com (helo.example)'
+      - '203.0.113.7'
+  EXIM_AUTH_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'login authenticator failed for (helo) [203.0.113.7]: 535 Incorrect authentication data (set_id=admin)'
+        result: 'login authenticator failed for (helo) [203.0.113.7]: 535 Incorrect authentication data (set_id=admin)'
+      # no set_id: the authenticator failed before it had a username
+      - string: 'plain authenticator failed for (helo) [203.0.113.7]: 535 Incorrect authentication data'
+        result: 'plain authenticator failed for (helo) [203.0.113.7]: 535 Incorrect authentication data'
+      - string: 'login authenticator failed for mail.example.com (helo) [198.51.100.9]:41234 I=[192.0.2.1]:25: 535 Incorrect authentication data (set_id=user@example.com)'
+        result: 'login authenticator failed for mail.example.com (helo) [198.51.100.9]:41234 I=[192.0.2.1]:25: 535 Incorrect authentication data (set_id=user@example.com)'
+    negative:
+      - 'H=(helo) [203.0.113.7] F=<a@b> rejected RCPT <c@d>: relay not permitted'
+  EXIM_REJECT_CONNECTION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'H=(helo) [203.0.113.7] rejected connection in "connect" ACL'
+        result: 'H=(helo) [203.0.113.7] rejected connection in "connect" ACL'
+      - string: 'H=[198.51.100.9] rejected connection in "connect" ACL: too many connections'
+        result: 'H=[198.51.100.9] rejected connection in "connect" ACL: too many connections'
+    negative:
+      - 'H=(helo) [203.0.113.7] F=<a@b> rejected RCPT <c@d>: relay not permitted'
+  EXIM_TLS_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'TLS error on connection from (helo) [203.0.113.7] (SSL_accept): error:14094416:SSL routines:ssl3_read_bytes:sslv3 alert certificate unknown'
+        result: 'TLS error on connection from (helo) [203.0.113.7] (SSL_accept): error:14094416:SSL routines:ssl3_read_bytes:sslv3 alert certificate unknown'
+      - string: 'TLS error on connection from [198.51.100.9]: The TLS connection was non-properly terminated.'
+        result: 'TLS error on connection from [198.51.100.9]: The TLS connection was non-properly terminated.'
+    negative:
+      - 'SMTP connection from [203.0.113.7] lost'
+  EXIM_SMTP_CONNECTION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'SMTP call from (helo) [203.0.113.7] dropped: too many nonmail commands'
+        result: 'SMTP call from (helo) [203.0.113.7] dropped: too many nonmail commands'
+      - string: 'SMTP connection from [198.51.100.9] lost'
+        result: 'SMTP connection from [198.51.100.9] lost'
+      - string: 'SMTP command timeout on connection from (helo) [203.0.113.7]'
+        result: 'SMTP command timeout on connection from (helo) [203.0.113.7]'
+      - string: 'SMTP command timeout on TLS connection from mail.example.com [198.51.100.9]:41234'
+        result: 'SMTP command timeout on TLS connection from mail.example.com [198.51.100.9]:41234'
+    negative:
+      - 'TLS error on connection from [198.51.100.9]: handshake failed'
+# Look up any captured source / destination IP.
+geoip:
+  - exim_src_ip
+  - exim_dst_ip
+# Coerce the message size and any ports to integers.
+convert:
+  exim_size: int
+  exim_src_port: int
+  exim_dst_port: int
+  exim_local_port: int
+rules:
+  - name: exim
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^exim4?$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - EXIM_COMPLETED
+      - EXIM_ARRIVAL
+      - EXIM_DELIVERY
+      - EXIM_ADDITIONAL
+      - EXIM_DEFERRED
+      - EXIM_FAILED
+      - EXIM_AUTH_FAILED
+      - EXIM_TLS_ERROR
+      # the connect-ACL form has no verb and no address, so it goes ahead of
+      # the general rejection pattern that expects both
+      - EXIM_REJECT_CONNECTION
+      - EXIM_REJECT
+      - EXIM_SMTP_CONNECTION
+    tests:
+      positive:
+        - string: '1rABCD-0001Ab-2x <= sender@example.com H=mail.example.com [203.0.113.7] P=esmtp S=1234 id=<abc@x>'
+          numeric:
+            - exim_size
+          result:
+            exim_msgid: '1rABCD-0001Ab-2x'
+            exim_flag: '<='
+            exim_sender: 'sender@example.com'
+            exim_h_host: 'mail.example.com'
+            exim_src_ip: '203.0.113.7'
+            exim_proto: 'esmtp'
+            exim_size: '1234'
+            exim_id: '<abc@x>'
+        - string: '1rABCD-0001Ab-2x => recipient@example.net R=dnslookup T=remote_smtp H=mx.example.net [198.51.100.2] X=TLS1.3 C="250 OK"'
+          result:
+            exim_msgid: '1rABCD-0001Ab-2x'
+            exim_flag: '=>'
+            exim_recipient: 'recipient@example.net'
+            exim_router: 'dnslookup'
+            exim_transport: 'remote_smtp'
+            exim_h_host: 'mx.example.net'
+            exim_dst_ip: '198.51.100.2'
+        - string: '1rABCD-0001Ab-2x -> extra@example.net R=dnslookup T=remote_smtp H=mx.example.net [198.51.100.2]'
+          result:
+            exim_msgid: '1rABCD-0001Ab-2x'
+            exim_flag: '->'
+            exim_recipient: 'extra@example.net'
+            exim_router: 'dnslookup'
+            exim_transport: 'remote_smtp'
+            exim_h_host: 'mx.example.net'
+            exim_dst_ip: '198.51.100.2'
+        - string: '1rABCD-0001Ab-2x == recipient@example.net R=dnslookup T=remote_smtp defer (-53): retry time not reached'
+          result:
+            exim_msgid: '1rABCD-0001Ab-2x'
+            exim_flag: '=='
+            exim_recipient: 'recipient@example.net'
+            exim_router: 'dnslookup'
+            exim_transport: 'remote_smtp'
+            exim_defer_reason: 'defer (-53): retry time not reached'
+        - string: '1rABCD-0001Ab-2x ** recipient@example.net R=dnslookup T=remote_smtp: SMTP error from remote mail server after RCPT TO:<recipient@example.net>: 550 No such user'
+          result:
+            exim_msgid: '1rABCD-0001Ab-2x'
+            exim_flag: '**'
+            exim_recipient: 'recipient@example.net'
+            exim_router: 'dnslookup'
+            exim_transport: 'remote_smtp'
+            exim_error: 'SMTP error from remote mail server after RCPT TO:<recipient@example.net>: 550 No such user'
+        - string: '1rABCD-0001Ab-2x Completed'
+          result:
+            exim_msgid: '1rABCD-0001Ab-2x'
+            exim_completed: 'Completed'
+        - string: 'H=(helo) [203.0.113.7] F=<spammer@x> rejected RCPT <victim@example.com>: relay not permitted'
+          result:
+            exim_helo: 'helo'
+            exim_src_ip: '203.0.113.7'
+            exim_sender: 'spammer@x'
+            exim_reject_verb: 'RCPT'
+            exim_recipient: 'victim@example.com'
+            exim_reject_reason: 'relay not permitted'
+        # -- authentication, TLS and connection handling --
+        - string: 'login authenticator failed for (helo) [203.0.113.7]: 535 Incorrect authentication data (set_id=admin)'
+          program: 'exim4'
+          result:
+            exim_authenticator: 'login'
+            exim_helo: 'helo'
+            exim_src_ip: '203.0.113.7'
+            exim_auth_error: '535 Incorrect authentication data'
+            exim_auth_user: 'admin'
+        - string: 'plain authenticator failed for (helo) [203.0.113.7]: 535 Incorrect authentication data'
+          result:
+            exim_authenticator: 'plain'
+            exim_helo: 'helo'
+            exim_src_ip: '203.0.113.7'
+            exim_auth_error: '535 Incorrect authentication data'
+        - string: 'login authenticator failed for mail.example.com (helo) [198.51.100.9]:41234 I=[192.0.2.1]:25: 535 Incorrect authentication data (set_id=user@example.com)'
+          numeric:
+            - exim_local_port
+            - exim_src_port
+          result:
+            exim_authenticator: 'login'
+            exim_h_host: 'mail.example.com'
+            exim_helo: 'helo'
+            exim_src_ip: '198.51.100.9'
+            exim_src_port: '41234'
+            exim_local_ip: '192.0.2.1'
+            exim_local_port: '25'
+            exim_auth_error: '535 Incorrect authentication data'
+            exim_auth_user: 'user@example.com'
+        - string: 'TLS error on connection from (helo) [203.0.113.7] (SSL_accept): sslv3 alert certificate unknown'
+          result:
+            exim_helo: 'helo'
+            exim_src_ip: '203.0.113.7'
+            exim_tls_stage: 'SSL_accept'
+            exim_tls_error: 'sslv3 alert certificate unknown'
+        - string: 'H=(helo) [203.0.113.7] rejected connection in "connect" ACL'
+          program: 'exim'
+          result:
+            exim_helo: 'helo'
+            exim_src_ip: '203.0.113.7'
+            exim_acl: 'connect'
+        - string: 'H=(localhost) [203.0.113.7] rejected HELO: syntactically invalid argument'
+          result:
+            exim_helo: 'localhost'
+            exim_src_ip: '203.0.113.7'
+            exim_reject_verb: 'HELO'
+            exim_reject_reason: 'syntactically invalid argument'
+        - string: 'SMTP call from (helo) [203.0.113.7] dropped: too many nonmail commands'
+          result:
+            exim_smtp_phase: 'call'
+            exim_helo: 'helo'
+            exim_src_ip: '203.0.113.7'
+            exim_smtp_event: 'dropped: too many nonmail commands'
+        - string: 'SMTP connection from [198.51.100.9] lost'
+          result:
+            exim_smtp_phase: 'connection'
+            exim_src_ip: '198.51.100.9'
+            exim_smtp_event: 'lost'
+        - string: 'SMTP command timeout on connection from (helo) [203.0.113.7]'
+          result:
+            exim_smtp_timeout_on: 'connection'
+            exim_helo: 'helo'
+            exim_src_ip: '203.0.113.7'
+      negative:
+        - 'this is not an exim line at all'
+        - 'Jul 15 10:00:00 host cron[123]: session opened for user root'
+        - string: '1rABCD-0001Ab-2x <= sender@example.com H=mail.example.com [203.0.113.7] P=esmtp S=1234 id=<abc@x>'
+          program: 'exim-extra'

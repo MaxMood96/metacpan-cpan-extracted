@@ -4,10 +4,13 @@ use 5.34.0;
 use strict;
 use warnings;
 
-use experimental 'try';
+use feature 'try';
 
 use Moose;
 use namespace::autoclean;
+
+# After Moose because Moose turns on warnings
+no warnings 'experimental::try';
 
 use DateTime::Duration;
 use DateTime;
@@ -18,7 +21,7 @@ use XML::Feed;
 
 use Perlanet::Types;
 
-our $VERSION = '3.3.3';
+our $VERSION = '3.3.5';
 
 with 'MooseX::Traits';
 

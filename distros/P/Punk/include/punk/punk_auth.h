@@ -43,23 +43,11 @@ static SV *pauth_session_id(pTHX_ SV *c, HV *cfg) {
     return out;
 }
 
-/* percent-encode a path for the ?to= value - unreserved chars and '/' pass */
+/* percent-encode a path for the ?to= value - unreserved chars and '/' pass.
+ * The encoder itself is punk_url.h's, which url_for uses for a *splat: one
+ * table, one set of tests, two callers that want the same answer. */
 static SV *pauth_escape(pTHX_ const char *s, STRLEN len) {
-    static const char hex[] = "0123456789ABCDEF";
-    SV *out = newSVpvs("");
-    STRLEN i;
-    for (i = 0; i < len; i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')
-            || (ch >= '0' && ch <= '9') || ch == '-' || ch == '_'
-            || ch == '.' || ch == '~' || ch == '/')
-            sv_catpvn(out, (const char *)&s[i], 1);
-        else {
-            char e[3] = { '%', hex[ch >> 4], hex[ch & 15] };
-            sv_catpvn(out, e, 3);
-        }
-    }
-    return out;
+    return pk_pct_encode(aTHX_ s, len, 1);
 }
 
 /* a small finished triplet: status + type + body (+1) */

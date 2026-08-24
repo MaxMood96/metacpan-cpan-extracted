@@ -1,0 +1,184 @@
+---
+# OpenBSD / FreeBSD pf firewall log enrichment.
+#
+# Unlike netfilter and ipfw, pf does not log to syslog. It writes binary pcap
+# to the pflog0 interface, pflogd spools that to /var/log/pflog, and the text
+# form only exists once tcpdump has rendered it:
+#
+#   tcpdump -n -e -ttt -r /var/log/pflog
+#   rule 12/0(match): block in on em0: 192.0.2.5.49152 > 192.0.2.1.22: Flags [S], ...
+#
+# The rule is therefore gateless and anchored, and expects rendered lines fed
+# in raw via process_item(item => $line). Captures are namespaced pf_ .
+#
+# tcpdump separates address from port with a dot rather than a colon, so an
+# endpoint reads as five dot-separated groups: "192.0.2.5.49152". The two are
+# split explicitly rather than with a host:port primitive.
+#
+# The endpoint pair is IPv4 only. tcpdump gives a v6 socket the same trailing
+# ".port" on an address that already contains colons, and a regexp cannot
+# reliably tell where such an address ends. v6 lines fall through to PF_HEADER,
+# which still yields the rule, verdict, direction and interface.
+includes:
+- base
+vars_templated:
+  # "rule 12/0(match): block in on em0: "
+  #
+  # The rule number ties the packet back to a line in pf.conf. The
+  # parenthesised word is why the rule fired: "match" for an ordinary hit,
+  # "bad-offset" and similar for a malformed packet pf rejected outright.
+  PF_HEAD: 'rule (?<pf_rule>[% INT %])(?:\.(?<pf_subrule>[% INT %]))?/(?<pf_rule_index>[% INT %])\((?<pf_reason>[^)]*)\): (?<pf_action>block|pass|rdr|nat|binat) (?<pf_direction>in|out) on (?<pf_iface>[^:]+): '
+  # An "address.port" pair as tcpdump renders it.
+  PF_ENDPOINT_SRC: '(?<pf_src_ip>[% IPv4 %])\.(?<pf_src_port>[% INT %])'
+  PF_ENDPOINT_DST: '(?<pf_dst_ip>[% IPv4 %])\.(?<pf_dst_port>[% INT %])'
+  # A blocked or passed TCP/UDP packet, with both endpoints.
+  #
+  # "rule 12/0(match): block in on em0: 192.0.2.5.49152 > 192.0.2.1.22:
+  #  Flags [S], seq 1234, win 65535, length 0"
+  PF_PACKET: '[% PF_HEAD %][% PF_ENDPOINT_SRC %] > [% PF_ENDPOINT_DST %]:(?: (?<pf_detail>[% GREEDYDATA %]))?'
+  # The same, for a protocol with no ports: ICMP, ESP, and the rest.
+  #
+  # "rule 0/0(match): block in on em0: 192.0.2.5 > 192.0.2.1: ICMP echo request,
+  #  id 1, seq 1, length 64"
+  PF_PACKET_NOPORT: '[% PF_HEAD %](?<pf_src_ip>[% IP %]) > (?<pf_dst_ip>[% IP %]):(?: (?<pf_detail>[% GREEDYDATA %]))?'
+  # Anything else with a recognisable head: an IPv6 packet, or a rendering this
+  # file does not cover. Keeps rule, verdict, direction and interface.
+  PF_HEADER: '[% PF_HEAD %](?<pf_detail>.+)'
+vars_tests:
+  PF_HEAD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'rule 12/0(match): block in on em0: '
+        result: 'rule 12/0(match): block in on em0: '
+      - string: 'rule 0/0(match): pass out on igb0: '
+        result: 'rule 0/0(match): pass out on igb0: '
+      # an anchor puts a sub-rule number in front of the index
+      - string: 'rule 5.2/0(match): block in on vtnet0: '
+        result: 'rule 5.2/0(match): block in on vtnet0: '
+    negative:
+      - 'block in on em0: 192.0.2.5.49152 > 192.0.2.1.22'
+  PF_ENDPOINT_SRC:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.5.49152'
+        result: '192.0.2.5.49152'
+    negative:
+      # no port, so this is not an endpoint
+      - '192.0.2.5'
+      # tcpdump uses a dot, not a colon
+      - '192.0.2.5:49152'
+  PF_ENDPOINT_DST:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.1.22'
+        result: '192.0.2.1.22'
+    negative:
+      - '192.0.2.1'
+  PF_PACKET:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'rule 12/0(match): block in on em0: 192.0.2.5.49152 > 192.0.2.1.22: Flags [S], seq 1234, win 65535, length 0'
+        result: 'rule 12/0(match): block in on em0: 192.0.2.5.49152 > 192.0.2.1.22: Flags [S], seq 1234, win 65535, length 0'
+      - string: 'rule 3/0(match): pass out on igb0: 192.0.2.1.53 > 198.51.100.9.53: 12345+ A? example.com. (29)'
+        result: 'rule 3/0(match): pass out on igb0: 192.0.2.1.53 > 198.51.100.9.53: 12345+ A? example.com. (29)'
+    negative:
+      - 'rule 0/0(match): block in on em0: 192.0.2.5 > 192.0.2.1: ICMP echo request, id 1, seq 1, length 64'
+  PF_PACKET_NOPORT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'rule 0/0(match): block in on em0: 192.0.2.5 > 192.0.2.1: ICMP echo request, id 1, seq 1, length 64'
+        result: 'rule 0/0(match): block in on em0: 192.0.2.5 > 192.0.2.1: ICMP echo request, id 1, seq 1, length 64'
+    negative:
+      - 'this is not a pf line at all'
+  PF_HEADER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'rule 12/0(match): block in on em0: 2001:db8::1.49152 > 2001:db8::2.22: Flags [S], length 0'
+        result: 'rule 12/0(match): block in on em0: 2001:db8::1.49152 > 2001:db8::2.22: Flags [S], length 0'
+    negative:
+      # the head is required, and something has to follow it
+      - 'this is not a pf line at all'
+      - 'rule 12/0(match): block in on em0: '
+# pf logs the direction ("block in" / "block out") but not which side of the
+# firewall is local, so neither end is reliably the remote party: inbound puts
+# it in src, outbound in dst. Both are looked up.
+geoip:
+  - pf_src_ip
+  - pf_dst_ip
+convert:
+  pf_rule: int
+  pf_subrule: int
+  pf_rule_index: int
+  pf_src_port: int
+  pf_dst_port: int
+rules:
+  - name: pf
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - PF_PACKET
+      - PF_PACKET_NOPORT
+      # last: keeps verdict and interface for anything the two above could not
+      # take apart, IPv6 included
+      - PF_HEADER
+    tests:
+      positive:
+        - string: 'rule 12/0(match): block in on em0: 192.0.2.5.49152 > 192.0.2.1.22: Flags [S], seq 1234, win 65535, length 0'
+          result:
+            pf_rule: '12'
+            pf_rule_index: '0'
+            pf_reason: 'match'
+            pf_action: 'block'
+            pf_direction: 'in'
+            pf_iface: 'em0'
+            pf_src_ip: '192.0.2.5'
+            pf_src_port: '49152'
+            pf_dst_ip: '192.0.2.1'
+            pf_dst_port: '22'
+            pf_detail: 'Flags [S], seq 1234, win 65535, length 0'
+        - string: 'rule 5.2/0(match): pass out on igb0: 192.0.2.1.53 > 198.51.100.9.53: 12345+ A? example.com. (29)'
+          numeric:
+            - pf_dst_port
+            - pf_rule
+            - pf_rule_index
+            - pf_src_port
+            - pf_subrule
+          result:
+            pf_rule: '5'
+            pf_subrule: '2'
+            pf_rule_index: '0'
+            pf_reason: 'match'
+            pf_action: 'pass'
+            pf_direction: 'out'
+            pf_iface: 'igb0'
+            pf_src_ip: '192.0.2.1'
+            pf_src_port: '53'
+            pf_dst_ip: '198.51.100.9'
+            pf_dst_port: '53'
+            pf_detail: '12345+ A? example.com. (29)'
+        - string: 'rule 0/0(match): block in on em0: 192.0.2.5 > 192.0.2.1: ICMP echo request, id 1, seq 1, length 64'
+          result:
+            pf_rule: '0'
+            pf_rule_index: '0'
+            pf_reason: 'match'
+            pf_action: 'block'
+            pf_direction: 'in'
+            pf_iface: 'em0'
+            pf_src_ip: '192.0.2.5'
+            pf_dst_ip: '192.0.2.1'
+            pf_detail: 'ICMP echo request, id 1, seq 1, length 64'
+        # IPv6: the endpoints are not split, but the verdict is kept
+        - string: 'rule 12/0(match): block in on em0: 2001:db8::1.49152 > 2001:db8::2.22: Flags [S], length 0'
+          result:
+            pf_rule: '12'
+            pf_rule_index: '0'
+            pf_reason: 'match'
+            pf_action: 'block'
+            pf_direction: 'in'
+            pf_iface: 'em0'
+            pf_detail: '2001:db8::1.49152 > 2001:db8::2.22: Flags [S], length 0'
+      negative:
+        - 'this is not a pf line at all'
+        - 'Jul 15 10:00:00 host sshd[123]: Accepted publickey for neti'
+        # netfilter's kv shape is netfilter.yaml's business
+        - '[UFW BLOCK] IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 PROTO=TCP SPT=44444 DPT=22'

@@ -1,0 +1,115 @@
+---
+# HTTP error-log enrichment for apache (2.4 and 2.2) and nginx error logs.
+#
+# Gateless + anchored, like http_access_logs: it matches the whole MESSAGE
+# field, so it handles raw error-log lines fed straight in
+# (process_item(item => $line)) as well as syslog-delivered error logs.
+includes:
+- base
+vars_templated:
+  # apache: "Wed Oct 11 14:32:52.123456 2000" (day is space-padded)
+  HTTP_ERROR_APACHE_DATE: '[% DAY %] [% MONTH %] +[% MONTHDAY %] [% TIME %] [% YEAR %]'
+  # nginx: "2000/10/11 14:32:52"
+  HTTP_ERROR_NGINX_DATE: '[% YEAR %]/[% MONTHNUM %]/[% MONTHDAY %] [% TIME %]'
+  # apache 2.4: [ts] [module:level] [pid N:tid N] [client ip:port] CODE: message
+  HTTP_ERROR_APACHE24: '\[(?<http_error_timestamp>[% HTTP_ERROR_APACHE_DATE %])\] \[(?:(?<http_error_module>[% WORD %]))?:(?<http_error_loglevel>[% LOGLEVEL %])\] \[pid (?<http_error_pid>[% POSINT %])(?::tid (?<http_error_tid>[% NUMBER %]))?\](?: \[client (?<http_error_client_ip>[% HOSTNAMEorIP %])(?::(?<http_error_client_port>[% POSINT %]))?\])?(?: (?<http_error_code>[% WORD %]):)? (?<http_error_message>[% GREEDYDATA %])'
+  # apache 2.2: [ts] [level] [client ip] message
+  HTTP_ERROR_APACHE22: '\[(?<http_error_timestamp>[% HTTP_ERROR_APACHE_DATE %])\] \[(?<http_error_loglevel>[% LOGLEVEL %])\](?: \[client (?<http_error_client_ip>[% HOSTNAMEorIP %])\])? (?<http_error_message>[% GREEDYDATA %])'
+  # nginx: ts [level] pid#tid: *conn message[, client: .., server: .., request: "..", host: ".."]
+  HTTP_ERROR_NGINX: '(?<http_error_timestamp>[% HTTP_ERROR_NGINX_DATE %]) \[(?<http_error_loglevel>[% LOGLEVEL %])\] (?<http_error_pid>[% POSINT %])#(?<http_error_tid>[% NUMBER %]): (?:\*(?<http_error_connectionid>[% NUMBER %]) )?(?<http_error_message>.*?)(?:, client: (?<http_error_client_ip>[% HOSTNAMEorIP %]))?(?:, server: (?<http_error_server>[^,]*))?(?:, request: "(?<http_error_request>[^"]*)")?(?:, host: "(?<http_error_host>[^"]*)")?'
+vars_tests:
+  HTTP_ERROR_APACHE_DATE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Wed Oct 11 14:32:52.123456 2000'
+        result: 'Wed Oct 11 14:32:52.123456 2000'
+      - string: 'Wed Oct  9 01:02:03 2000'
+        result: 'Wed Oct  9 01:02:03 2000'
+    negative:
+      - '2000/10/11 14:32:52'
+  HTTP_ERROR_NGINX_DATE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '2000/10/11 14:32:52'
+        result: '2000/10/11 14:32:52'
+      - string: '2026/07/15 10:00:00'
+        result: '2026/07/15 10:00:00'
+    negative:
+      - 'Wed Oct 11 14:32:52 2000'
+  HTTP_ERROR_APACHE24:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[Wed Oct 11 14:32:52.123456 2000] [core:error] [pid 12345:tid 140234] [client 192.168.1.1:1234] AH00128: File does not exist: /var/www/html/favicon.ico'
+        result: '[Wed Oct 11 14:32:52.123456 2000] [core:error] [pid 12345:tid 140234] [client 192.168.1.1:1234] AH00128: File does not exist: /var/www/html/favicon.ico'
+    negative:
+      - '[Wed Oct 11 14:32:52 2000] [error] [client 192.168.1.1] File does not exist'
+  HTTP_ERROR_APACHE22:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[Wed Oct 11 14:32:52 2000] [error] [client 192.168.1.1] File does not exist: /var/www/favicon.ico'
+        result: '[Wed Oct 11 14:32:52 2000] [error] [client 192.168.1.1] File does not exist: /var/www/favicon.ico'
+    negative:
+      - '2000/10/11 14:32:52 [error] 12345#0: *67 open() failed'
+  HTTP_ERROR_NGINX:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '2000/10/11 14:32:52 [error] 12345#0: *67 open() "/var/www/html/favicon.ico" failed (2: No such file or directory), client: 192.168.1.1, server: example.com, request: "GET /favicon.ico HTTP/1.1", host: "example.com"'
+        result: '2000/10/11 14:32:52 [error] 12345#0: *67 open() "/var/www/html/favicon.ico" failed (2: No such file or directory), client: 192.168.1.1, server: example.com, request: "GET /favicon.ico HTTP/1.1", host: "example.com"'
+    negative:
+      - '[Wed Oct 11 14:32:52 2000] [error] [client 192.168.1.1] File does not exist'
+rules:
+  - name: http_error
+    field: MESSAGE
+    anchored: true
+    geoip:
+      - http_error_client_ip
+    patterns:
+      - HTTP_ERROR_APACHE24
+      - HTTP_ERROR_APACHE22
+      - HTTP_ERROR_NGINX
+    tests:
+      positive:
+        # apache 2.4
+        - string: '[Wed Oct 11 14:32:52.123456 2000] [core:error] [pid 12345:tid 140234] [client 192.168.1.1:1234] AH00128: File does not exist: /var/www/html/favicon.ico'
+          result:
+            http_error_timestamp: 'Wed Oct 11 14:32:52.123456 2000'
+            http_error_module: 'core'
+            http_error_loglevel: 'error'
+            http_error_pid: '12345'
+            http_error_tid: '140234'
+            http_error_client_ip: '192.168.1.1'
+            http_error_client_port: '1234'
+            http_error_code: 'AH00128'
+            http_error_message: 'File does not exist: /var/www/html/favicon.ico'
+        # apache 2.2
+        - string: '[Wed Oct 11 14:32:52 2000] [error] [client 192.168.1.1] File does not exist: /var/www/favicon.ico'
+          result:
+            http_error_timestamp: 'Wed Oct 11 14:32:52 2000'
+            http_error_loglevel: 'error'
+            http_error_client_ip: '192.168.1.1'
+            http_error_message: 'File does not exist: /var/www/favicon.ico'
+        # nginx with the structured tail (client/server/request/host extracted)
+        - string: '2000/10/11 14:32:52 [error] 12345#0: *67 open() "/var/www/html/favicon.ico" failed (2: No such file or directory), client: 192.168.1.1, server: example.com, request: "GET /favicon.ico HTTP/1.1", host: "example.com"'
+          result:
+            http_error_timestamp: '2000/10/11 14:32:52'
+            http_error_loglevel: 'error'
+            http_error_pid: '12345'
+            http_error_tid: '0'
+            http_error_connectionid: '67'
+            http_error_message: 'open() "/var/www/html/favicon.ico" failed (2: No such file or directory)'
+            http_error_client_ip: '192.168.1.1'
+            http_error_server: 'example.com'
+            http_error_request: 'GET /favicon.ico HTTP/1.1'
+            http_error_host: 'example.com'
+        # nginx without a tail
+        - string: '2026/07/15 10:00:00 [warn] 999#0: *1 a client request body is buffered to a temporary file'
+          result:
+            http_error_timestamp: '2026/07/15 10:00:00'
+            http_error_loglevel: 'warn'
+            http_error_pid: '999'
+            http_error_tid: '0'
+            http_error_connectionid: '1'
+            http_error_message: 'a client request body is buffered to a temporary file'
+      negative:
+        - 'this is not an error log line at all'
+        - '127.0.0.1 - - [12/Jul/2026:08:15:50 +0000] "GET / HTTP/1.1" 200 12'

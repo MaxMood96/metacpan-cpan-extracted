@@ -3,14 +3,23 @@ use warnings;
 use Test::More;
 use ClamAV::Clamd;
 
-# The suite against a real clamd. Skipped unless one is reachable, which
-# is most of the time - so nothing here may be the only coverage of
-# anything. Its job is the things a fake cannot prove: that the framing
-# this client sends is the framing a real clamd accepts.
+# The suite against a real clamd, opt-in (see below) - so nothing here
+# may be the only coverage of anything. Its job is the things a fake
+# cannot prove: that the framing this client sends is the framing a real
+# clamd accepts.
 
 my $sock = $ENV{CLAMD_SOCKET};
 my $host = $ENV{CLAMD_HOST};
 my $port = $ENV{CLAMD_PORT} || 3310;
+
+# Opt-in. A smoker's clamd is somebody else's daemon with somebody else's
+# clamd.conf - ClamAV 1.5 can switch VERSION and STATS off - and a socket
+# found at a well-known path is not a request to test against it.
+# CLAMD_LIVE=1 runs this file against whatever is found; CLAMD_SOCKET or
+# CLAMD_HOST name a daemon and imply it.
+plan skip_all => 'live clamd tests are opt-in: set CLAMD_LIVE=1, '
+    . 'CLAMD_SOCKET=/path or CLAMD_HOST=host'
+    unless $ENV{CLAMD_LIVE} || $sock || $host;
 
 unless ($sock || $host) {
     for my $p (qw(
@@ -45,13 +54,24 @@ plan skip_all => 'clamd configured but not answering: ' . ($c->error // '?')
 
 pass 'PING against a real clamd';
 
+# ClamAV 1.5's clamd.conf can switch VERSION and STATS off one by one;
+# the client reports that as ERR_UNAVAILABLE and this file cannot tell
+# that daemon anything, so those two are skipped rather than failed.
 my $v = $c->version;
-ok defined $v, 'VERSION returns something' or diag $c->error;
-like $v, qr/^ClamAV /, '  and it looks like a version string';
+SKIP: {
+    skip 'this clamd has VERSION disabled (EnableVersionCommand no)', 2
+        if !defined $v && ($c->error_code // 0) == ClamAV::Clamd::ERR_UNAVAILABLE;
+    ok defined $v, 'VERSION returns something' or diag $c->error;
+    like $v, qr/^ClamAV /, '  and it looks like a version string';
+}
 
 my $s = $c->stats;
-ok defined $s, 'STATS returns something' or diag $c->error;
-like $s, qr/THREADS/, '  and mentions the thread pool';
+SKIP: {
+    skip 'this clamd has STATS disabled (EnableStatsCommand no)', 2
+        if !defined $s && ($c->error_code // 0) == ClamAV::Clamd::ERR_UNAVAILABLE;
+    ok defined $s, 'STATS returns something' or diag $c->error;
+    like $s, qr/THREADS/, '  and mentions the thread pool';
+}
 
 # The reply terminator follows the request framing - measured in phase 0,
 # asserted here so a future clamd changing it is caught rather than
@@ -64,12 +84,13 @@ like $s, qr/THREADS/, '  and mentions the thread pool';
 }
 
 # A ceiling smaller than the reply must refuse rather than truncate:
-# a truncated reply is a verdict with its ending cut off.
+# a truncated reply is a verdict with its ending cut off. PONG is four
+# bytes and cannot be switched off, so it is the reply to squeeze.
 {
     my $tiny = $sock
-        ? ClamAV::Clamd->new(socket => $sock, reply_max => 4)
-        : ClamAV::Clamd->new(host => $host, port => $port, reply_max => 4);
-    ok !defined $tiny->stats, 'STATS refused when it exceeds reply_max';
+        ? ClamAV::Clamd->new(socket => $sock, reply_max => 3)
+        : ClamAV::Clamd->new(host => $host, port => $port, reply_max => 3);
+    ok !defined $tiny->ping, 'PING refused when its reply exceeds reply_max';
     is $tiny->error_code, ClamAV::Clamd::ERR_TOOBIG, '  reported as too big';
 }
 

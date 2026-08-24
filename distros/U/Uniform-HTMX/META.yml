@@ -11,7 +11,7 @@ configure_requires:
   ExtUtils::MakeMaker: '0'
 dynamic_config: 1
 generated_by: 'ExtUtils::MakeMaker version 7.78, CPAN::Meta::Converter version 2.150013'
-license: artistic_2
+license: mit
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
   version: '1.4'
@@ -20,12 +20,16 @@ no_index:
   directory:
     - t
     - inc
+provides:
+  Uniform::HTMX:
+    file: lib/Uniform/HTMX.pm
+    version: '0.16'
 requires:
   JSON::MaybeXS: '1.004000'
-  Uniform: '1.00'
+  Uniform::Utils: '1.00'
   perl: '5.010000'
 resources:
   bugtracker: https://github.com/haxmeister/perl-Uniform-HTMX/issues
   repository: https://github.com/haxmeister/perl-Uniform-HTMX
-version: '0.15'
+version: '0.16'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

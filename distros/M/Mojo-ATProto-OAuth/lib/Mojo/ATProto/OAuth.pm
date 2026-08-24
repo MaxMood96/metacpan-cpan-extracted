@@ -6,10 +6,11 @@ use Mojo::URL qw//;
 use Mojo::Promise qw//;
 use Mojo::Log qw//;
 use Mojo::Loader qw/load_class/;
-use Mojo::ATProto::OAuth::ClientMetadata qw//;
-use Mojo::ATProto::OAuth::DPoP           qw//;
-use Mojo::ATProto::OAuth::Identity       qw//;
-use Mojo::ATProto::OAuth::Resolver       qw//;
+use Mojo::ATProto::OAuth::ClientMetadata  qw//;
+use Mojo::ATProto::OAuth::DPoP            qw//;
+use Mojo::ATProto::OAuth::Identity        qw//;
+use Mojo::ATProto::OAuth::Resolver        qw//;
+use Mojo::ATProto::OAuth::ResourceClient  qw//;
 
 use Scalar::Util qw/blessed/;
 
@@ -17,7 +18,7 @@ use feature 'try';
 
 use constant DEBUG => $ENV{MOJO_OAUTH_DEBUG} || 0;
 
-our $VERSION = '1.01'; # VERSION
+our $VERSION = '1.02'; # VERSION
 
 has 'ua'                 => sub { 
     my $ua = Mojo::UserAgent->new(request_timeout => 10);
@@ -28,13 +29,13 @@ has 'ua'                 => sub {
 };
 has 'client_id'          => sub { die "client_id is required\n" };
 has 'callback_url'       => sub { die "callback_url is required\n" };
-has 'scopes'             => sub { ['atproto'] };
 has 'private_key'        => undef;    # Crypt::PK::ECC, confidential clients only
 has 'key_id'             => undef;
 has 'loopback'           => 0;        # true for new_localhost() clients - see below
 has 'identity'           => sub { Mojo::ATProto::OAuth::Identity->new };
 has 'resolver'           => sub { Mojo::ATProto::OAuth::Resolver->new };
 has 'log'                => sub { Mojo::Log->new(level => $ENV{MOJO_LOG_LEVEL} || 'info') };
+has 'client'             => sub($self) { Mojo::ATProto::OAuth::ResourceClient->new(oauth => $self) };
 
 sub is_confidential ($self) {
     return defined($self->private_key) && defined($self->key_id);
@@ -77,12 +78,38 @@ sub store ($self, @value) {
         my $reason = ref($e) ? "$e" : 'no such session store class';
         die "store: could not load session store class $class: $reason\n";
     }
-    return $self->{store} = $class->new(@args); 
+    return $self->{store} = $class->new(@args);
+}
+
+# Custom accessor (rather than a plain `has`) for the same reason as
+# `store` above - Mojo::Base's constructor bypasses accessor methods
+# entirely, so a raw un-normalized value can land in $self->{scopes} via
+# `->new(scopes => ...)` as easily as via `->scopes(...)`; normalizing
+# only here, in the getter, covers both regardless of how it got set.
+sub scopes ($self, @value) {
+    if (@value) {
+        $self->{scopes} = $value[0];
+        return $self;
+    }
+    return _normalize_scopes($self->{scopes}) // ['atproto'];
+}
+
+# Accepts a scopes value in either form this module accepts - an
+# arrayref of individual scope tokens (['atproto', 'account:email']) or
+# a single space-separated string ('atproto account:email') - and
+# normalizes it to the arrayref-of-tokens form every other part of this
+# module expects (join(' ', @$scopes) for wire transmission, per-token
+# union/dedup for scope upgrades). undef stays undef, so callers can
+# keep using `//` for their own default.
+sub _normalize_scopes($scopes) {
+    return undef unless defined $scopes;
+    return $scopes if ref($scopes) eq 'ARRAY';
+    return [split(' ', $scopes)];
 }
 
 sub new_localhost ($class, %args) {
     my $callback_url  = $args{callback_url} // die "new_localhost: 'callback_url' required\n";
-    my $scopes        = $args{scopes}       // ['atproto'];
+    my $scopes        = _normalize_scopes($args{scopes}) // ['atproto'];
 
     my $client_id = Mojo::URL->new('http://localhost')->query({
         redirect_uri => $callback_url,
@@ -239,7 +266,7 @@ sub _post_dpop_retry_p($self, %args) {
 # persist anything or resolve an identity - see start_auth_flow(_p) for
 # the full orchestration.
 sub send_auth_request($self, $auth_meta, %opts) {
-    my $scopes     = $opts{scopes} // $self->scopes;
+    my $scopes     = _normalize_scopes($opts{scopes}) // $self->scopes;
     my $login_hint = $opts{login_hint};
 
     $self->log->debug("send_auth_request: issuer=$auth_meta->{issuer} scopes=[" . join(',', @$scopes) . ']') if DEBUG;
@@ -275,7 +302,7 @@ sub send_auth_request($self, $auth_meta, %opts) {
 }
 
 sub send_auth_request_p($self, $auth_meta, %opts) {
-    my $scopes     = $opts{scopes} // $self->scopes;
+    my $scopes     = _normalize_scopes($opts{scopes}) // $self->scopes;
     my $login_hint = $opts{login_hint};
 
     $self->log->debug("send_auth_request_p: issuer=$auth_meta->{issuer} scopes=[" . join(',', @$scopes) . ']') if DEBUG;
@@ -478,7 +505,7 @@ sub _validate_callback_params($self, $info, $params) {
 #                identity resolution, not something a caller would
 #                plausibly have pre-computed.
 # Plus, independent of the above:
-#   scopes       (optional arrayref) - overrides $self->scopes for just
+#   scopes       (optional, arrayref or space-separated string) - overrides $self->scopes for just
 #                this call, falls back to the client's configured
 #                default when omitted.
 #   client_state (optional hashref) - opaque, never inspected here;
@@ -495,6 +522,7 @@ sub _validate_callback_params($self, $info, $params) {
 #                for is entirely up to the caller.
 sub start_auth_flow($self, %opts) {
     die "start_auth_flow: 'store' must be configured\n" unless defined($self->store);
+    $opts{scopes} = _normalize_scopes($opts{scopes}) if defined($opts{scopes});
     $self->log->debug('start_auth_flow: ' . _describe_start_opts(%opts)) if DEBUG;
 
     my ($did, $handle, $host_url, $auth_server_url) = $self->_resolve_start(%opts);
@@ -515,6 +543,7 @@ sub start_auth_flow($self, %opts) {
 
 sub start_auth_flow_p($self, %opts) {
     die "start_auth_flow_p: 'store' must be configured\n" unless defined($self->store);
+    $opts{scopes} = _normalize_scopes($opts{scopes}) if defined($opts{scopes});
     $self->log->debug('start_auth_flow_p: ' . _describe_start_opts(%opts)) if DEBUG;
 
     return $self->_resolve_start_p(%opts)->then(sub ($did, $handle, $host_url, $auth_server_url) {
@@ -852,6 +881,14 @@ refresh, and scope upgrade
     $oauth->refresh_tokens_p($session)->then(sub ($refreshed) { ... });
     $oauth->start_scope_upgrade_p($session, ['repo:generic'])->then(sub ($redirect_url) { ... });
 
+    # later still: an authenticated XRPC call against the session's own PDS - see L</AUTHENTICATED RESOURCE-SERVER REQUESTS> below
+    $oauth->client->request_p($account_did, $session_id, 'post', '/xrpc/com.atproto.repo.putRecord', {
+        repo       => $account_did,
+        collection => 'app.bsky.feed.post',
+        rkey       => $rkey,
+        record     => {'$type' => 'app.bsky.feed.post', text => 'This post was made by Mojo::ATProto::OAuth', createdAt => $iso8601_timestamp},
+    })->then(sub ($result) { ... });
+
 =head2 Standalone - no Mojolicious app, no plugin, just this module
 
 This module can bb used outside of a Mojolicious application, so long as there's I<some> way to send the user's browser to a URL, and I<some> way to receive the callback request's query parameters, which any web framework (Dancer, PSGI, plain CGI, a raw socket listener) or even a manual copy/paste can supply. A minimal, complete, synchronous example, using only this module plus its own shipped in-memory L<store|/THE STORE INTERFACE>:
@@ -898,7 +935,9 @@ Every network-calling method has a matching non-blocking C<_p> (L<Mojo::Promise>
 
 =head2 scopes
 
-Arrayref of default scope strings requested by L</start_auth_flow> when no per-call C<scopes> opt is given. Defaults to C<['atproto']>.
+Default scopes requested by L</start_auth_flow> when no per-call C<scopes> opt is given. Defaults to C<['atproto']>.
+
+Accepts either an arrayref of individual scope strings (C<['atproto', 'account:email']>) or a single space-separated string (C<'atproto account:email'>) - either form is normalized to the arrayref-of-tokens form internally, and always read back as one. This same acceptance applies everywhere else a C<scopes> value is taken (L</new_localhost>, the C<scopes> opt on L</start_auth_flow>/L</send_auth_request> and their C<_p> counterparts).
 
 =head2 private_key
 
@@ -934,6 +973,10 @@ A L<Mojo::UserAgent> instance used for every HTTP request this module makes. Def
 =head2 log
 
 A L<Mojo::Log> instance for debug logging (see L</DEBUG LOGGING>).  Defaults to a fresh instance at the level named by C<MOJO_LOG_LEVEL> (C<info> if unset).
+
+=head2 client
+
+A L<Mojo::ATProto::OAuth::ResourceClient> instance, for making authenticated XRPC requests against a session's own PDS - see L</AUTHENTICATED RESOURCE-SERVER REQUESTS> below. Defaults to a fresh instance wired to this C<$oauth> object (built lazily on first access, then reused).
 
 =head1 CONSTRUCTORS
 
@@ -996,7 +1039,7 @@ Plus, independent of the above:
 
 =over 4
 
-=item * C<scopes> (optional arrayref) - overrides L</scopes> for just this call; falls back to the client's configured default when omitted.
+=item * C<scopes> (optional, arrayref or space-separated string - see L</scopes>) - overrides L</scopes> for just this call; falls back to the client's configured default when omitted.
 
 =item * C<client_state> (optional hashref) - opaque, never inspected by this module; persisted on the auth request and handed back untouched inside L</process_callback>'s result. Intended for things like a post-login redirect target that needs to survive the round trip to the auth server and back.
 
@@ -1072,7 +1115,7 @@ These are used internally by the high-level methods above, and are also exposed 
 
     my $info = $oauth->send_auth_request($auth_meta, %opts);
 
-Sends the PAR request that kicks off an authorization flow, given already-validated auth-server metadata (as returned by L<Mojo::ATProto::OAuth::Resolver/resolve_auth_server_metadata>).  C<%opts>: C<scopes> (optional arrayref, defaults to L</scopes>), C<login_hint> (optional). Returns an C<AuthRequestData>-equivalent hashref (C<state>, C<auth_server_url>, C<scopes>, C<pkce_verifier>, C<request_uri>, C<auth_server_token_endpoint>, C<auth_server_revocation_endpoint>, C<dpop_authserver_nonce>, C<dpop_private_key_pem>) - everything a store needs to persist and later exchange for tokens via L</send_initial_token_request>. Does not itself persist anything or resolve an identity - see L</start_auth_flow> for the full orchestration.
+Sends the PAR request that kicks off an authorization flow, given already-validated auth-server metadata (as returned by L<Mojo::ATProto::OAuth::Resolver/resolve_auth_server_metadata>).  C<%opts>: C<scopes> (optional, arrayref or space-separated string - see L</scopes>; defaults to L</scopes>), C<login_hint> (optional). Returns an C<AuthRequestData>-equivalent hashref (C<state>, C<auth_server_url>, C<scopes>, C<pkce_verifier>, C<request_uri>, C<auth_server_token_endpoint>, C<auth_server_revocation_endpoint>, C<dpop_authserver_nonce>, C<dpop_private_key_pem>) - everything a store needs to persist and later exchange for tokens via L</send_initial_token_request>. Does not itself persist anything or resolve an identity - see L</start_auth_flow> for the full orchestration.
 
 =head2 send_initial_token_request / send_initial_token_request_p
 
@@ -1119,16 +1162,49 @@ The Memory store takes no arguments, whereas the SQLite and Pg stores do (connec
     my $pg_backed = Mojo::ATProto::OAuth->new(
         client_id         => $client_id,       
         callback_url      => $callback_url,   
-        scopes            => [ 'atproto account:email' ],
+        scopes            => 'atproto account:email',
         store             => [ 'Pg' => 'postgresql://user:pass@host:port/dbname' ]
     );
 
     my $sqlite_backed = Mojo::ATProto::OAuth->new(
         client_id         => $client_id,       
         callback_url      => $callback_url,   
-        scopes            => [ 'atproto account:email' ],
+        scopes            => 'atproto account:email',
         store             => [ 'SQLite' => 'file:/tmp/test.db?wal_mode=1' ]
     );
+
+=head1 AUTHENTICATED RESOURCE-SERVER REQUESTS
+
+Everything above gets you a persisted session; it doesn't make any calls against the user's own PDS on your behalf. That's what L</client> (a L<Mojo::ATProto::OAuth::ResourceClient> instance) is for - it loads a session from L</store>, signs a DPoP proof, sends the XRPC request, and transparently handles both DPoP nonce rotation and access-token refresh (retrying each at most once) before giving up.
+
+    # an authenticated GET (not useful yet, not until Spaces is implemented which apparently sometimes requires authenticated reads)
+    # this particular example is pretty much useless but serves to illustrate the point ;) 
+    my $profile = $oauth->client->request($account_did, $session_id, 'get', '/xrpc/app.bsky.actor.getProfile?actor=' . $account_did);
+
+    # an authenticated POST with optimistic-concurrency conflict handling
+    my $result = eval {
+        $oauth->client->request($account_did, $session_id, 'post', '/xrpc/com.atproto.repo.putRecord', {
+            repo => $account_did, collection => 'app.bsky.feed.post', rkey => $rkey, record => $record, swapRecord => $prior_cid,
+        });
+    };
+    if (my $err = $@) {
+        die $err unless $err =~ /xrpc_error=InvalidSwap/;
+        # ... re-read the record, retry with a fresh $prior_cid ...
+    }
+
+    # the same except now with proper try/catch syntax we get from C<use feature 'try';> 
+    use feature 'try';
+    
+    try {
+        my $result = $oauth->client->request($account_did, $session_id, 'post', '/xrpc/com.atproto.repo.putRecord', {
+            repo => $account_did, collection => 'app.bsky.feed.post', rkey => $rkey, record => $record, swapRecord => $prior_cid,
+        });
+    } catch($ex) {
+        die $ex unless $ex =~ /xrpc_error=InvalidSwap/;
+        # ... re-read the record, retry with a fresh $prior_cid ...
+    }
+
+L</client> is built lazily and reused - the same instance is returned every time you call C<< $oauth->client >>. If you need a differently-configured one (a distinct C<ua>, say), construct L<Mojo::ATProto::OAuth::ResourceClient> directly instead; see that module for its full interface, including its non-blocking C<request_p> counterpart.
 
 =head1 ERROR HANDLING
 
@@ -1142,6 +1218,6 @@ Debug logs never include secret material (tokens, private keys, client assertion
 
 =head1 SEE ALSO
 
-L<Mojo::ATProto::OAuth::Identity>, L<Mojo::ATProto::OAuth::Resolver>, L<Mojo::ATProto::OAuth::DPoP>, L<Mojo::ATProto::OAuth::ClientMetadata>
+L<Mojo::ATProto::OAuth::Identity>, L<Mojo::ATProto::OAuth::Resolver>, L<Mojo::ATProto::OAuth::DPoP>, L<Mojo::ATProto::OAuth::ClientMetadata>, L<Mojo::ATProto::OAuth::ResourceClient>
 
 =cut

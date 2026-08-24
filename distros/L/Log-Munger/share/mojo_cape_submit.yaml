@@ -1,0 +1,441 @@
+---
+# mojo_cape_submit sample-submission log enrichment.
+#
+# Gates on the syslog PROGRAM field being "mojo_cape_submit" or "nergal", the
+# two Mojolicious applications that front a CAPEv2 install: the submission
+# endpoint and the results viewer. They share a message vocabulary, so one rule
+# covers both and PROGRAM says which one spoke. Patterns are anchored (each
+# must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with cape_submit_ .
+#
+# A submission is a dozen lines, tied together by the counter the tool prefixes
+# each one with:
+#
+#   0 : Started. Remote IP: 192.0.2.5  API key:
+#   0 : SHA256: 88d47f55...
+#   0 : Got File... size=237985792 filename="sample.msi" sha256="88d47f55..."
+#   0 : Source Host: sensor.example.net
+#   0 : Submitting "sample.msi" submitted as 116
+#
+# The counter is per worker process, so cape_submit_item alone is not unique:
+# it needs the syslog PID beside it to identify a submission. Without it the
+# lines of two concurrent submissions cannot be told apart. Correlating them is
+# left to the consumer, as it is for auditd's audit_id; this only keeps the key.
+#
+# CAPE_SUBMIT_PREFIX is optional because a few messages are written outside a
+# submission and carry no counter: the resubmission notice and the Mojolicious
+# server's own startup lines.
+#
+# Fields the submitting sensor did not fill in arrive as the string "undef",
+# Perl's undefined value having passed through the tool's formatting. They are
+# captured verbatim rather than dropped, since "the sensor sent no source port"
+# and "this rule did not look for one" are different facts.
+includes:
+- base
+vars:
+  # A hex digest, as written for MD5, SHA1, SHA256 and SHA512.
+  CAPE_SUBMIT_DIGEST: '[0-9a-fA-F]+'
+  # Mojolicious's own timestamp: "2026-07-30 22:53:37.63887".
+  CAPE_SUBMIT_MOJO_TIME: '[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]+'
+vars_templated:
+  # The optional per-submission counter, "0 : ".
+  CAPE_SUBMIT_PREFIX: '(?:(?<cape_submit_item>[% INT %]) : )?'
+  # "0 : Started. Remote IP: 192.0.2.5  API key: "
+  #
+  # The first line of a submission and the only one naming the sensor that made
+  # it. The API key is often empty, so the value is matched as a possibly-empty
+  # run of non-space rather than as a token.
+  CAPE_SUBMIT_STARTED: '[% CAPE_SUBMIT_PREFIX %]Started\. Remote IP: (?<cape_submit_src_ip>[% IP %])(?: +API key:\s*(?<cape_submit_api_key>[^\s]*))?'
+  # "0 : SHA256: 88d47f55..." and the MD5 / SHA1 / SHA512 siblings.
+  #
+  # One capture per algorithm rather than a type/value pair, so
+  # cape_submit_sha256 means the same thing here as in the Got File line below.
+  CAPE_SUBMIT_HASH: '[% CAPE_SUBMIT_PREFIX %](?:MD5: (?<cape_submit_md5>[% CAPE_SUBMIT_DIGEST %])|SHA1: (?<cape_submit_sha1>[% CAPE_SUBMIT_DIGEST %])|SHA256: (?<cape_submit_sha256>[% CAPE_SUBMIT_DIGEST %])|SHA512: (?<cape_submit_sha512>[% CAPE_SUBMIT_DIGEST %]))'
+  # "0 : Got File... size=237985792 filename="sample.msi" sha256="88d47f55...""
+  #
+  # The upload landed. The tail is a quoted k=v run and goes to the decompose
+  # below rather than being enumerated here, since which keys appear depends on
+  # what the sensor sent.
+  CAPE_SUBMIT_GOT_FILE: '[% CAPE_SUBMIT_PREFIX %]Got File\.\.\. (?<cape_submit_file_kv>[% GREEDYDATA %])'
+  # "0 : proto=undef src_ip=undef src_port=undef dest_ip=undef dest_port=undef
+  #  flow_id=undef"
+  #
+  # The network flow the sample was carved out of, where the sensor knew it.
+  # Recognised by its leading "proto=" so it is not confused with another k=v
+  # line, and split into cape_submit_flow_* so its src_ip does not collide with
+  # the submitting sensor's address above. Those are different hosts, and
+  # conflating them would be an error.
+  CAPE_SUBMIT_FLOW: '[% CAPE_SUBMIT_PREFIX %](?<cape_submit_flow_kv>proto=[% GREEDYDATA %])'
+  # "0 : Source Host: sensor.example.net"
+  CAPE_SUBMIT_SOURCE_HOST: '[% CAPE_SUBMIT_PREFIX %]Source Host: (?<cape_submit_source_host>[% NOTSPACE %])'
+  # "0 : Submission Type: undef"
+  CAPE_SUBMIT_TYPE: '[% CAPE_SUBMIT_PREFIX %]Submission Type: (?<cape_submit_type>[% GREEDYDATA %])'
+  # "0 : App Proto: undef"
+  CAPE_SUBMIT_APP_PROTO: '[% CAPE_SUBMIT_PREFIX %]App Proto: (?<cape_submit_app_proto>[% GREEDYDATA %])'
+  # "0 : Submitting "sample.msi" submitted as 116"
+  #
+  # The sample reached CAPE and got a task id. This line joins a submission to
+  # everything CAPE later says about that task.
+  CAPE_SUBMIT_SUBMITTED: '[% CAPE_SUBMIT_PREFIX %]Submitting "(?<cape_submit_filename>[^"]*)" submitted as (?<cape_submit_task_id>[% INT %])'
+  # "0 : Wrote submission data JSON out to "/malware/client-incoming/json/...""
+  CAPE_SUBMIT_WROTE_JSON: '[% CAPE_SUBMIT_PREFIX %]Wrote submission data JSON out to "(?<cape_submit_json_file>[^"]*)"'
+  # "resubmitted "/malware/client-incoming/json/..." as task 107 (was 106)"
+  #
+  # A sample sent to CAPE again, carrying both task ids so the old and new
+  # analyses can be joined. Written outside a submission, so no counter.
+  CAPE_SUBMIT_RESUBMITTED: 'resubmitted "(?<cape_submit_json_file>[^"]*)" as task (?<cape_submit_task_id>[% INT %]) \(was (?<cape_submit_previous_task_id>[% INT %])\)'
+  # "[2026-07-30 22:53:37.63887] [235029] [info] Listening at "http://*:8080""
+  #
+  # Mojolicious's own log line, keeping its timestamp, worker pid and level in
+  # the text. That pid is the worker's and is not always the syslog pid.
+  CAPE_SUBMIT_MOJO_LOG: '\[(?<cape_submit_timestamp>[% CAPE_SUBMIT_MOJO_TIME %])\] \[(?<cape_submit_pid>[% INT %])\] \[(?<cape_submit_level>[% WORD %])\] (?<cape_submit_message>[% GREEDYDATA %])'
+  # "Web application available at http://127.0.0.1:8080"
+  CAPE_SUBMIT_AVAILABLE: 'Web application available at (?<cape_submit_url>[% NOTSPACE %])'
+  # "Route pattern "/results/:task_id/*path" contains a reserved stash value at
+  #  /usr/local/share/perl/5.38.2/Mojolicious/Lite.pm line 33."
+  #
+  # A Perl warning from inside the application, relayed to syslog with the file
+  # and line attached. Both are split out because the same warning repeated
+  # from the same line is one bug rather than many incidents.
+  CAPE_SUBMIT_PERL_WARNING: '[% CAPE_SUBMIT_PREFIX %](?<cape_submit_warning>[% GREEDYDATA %]) at (?<cape_submit_source_file>[% NOTSPACE %]) line (?<cape_submit_source_line>[% INT %])\.'
+  # Anything else. The gate is two exact program names, so nothing else can
+  # land here. The counter is still peeled off, so an unrecognised line stays
+  # attached to its submission.
+  CAPE_SUBMIT_MESSAGE: '[% CAPE_SUBMIT_PREFIX %](?<cape_submit_message>.+)'
+vars_tests:
+  CAPE_SUBMIT_DIGEST:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '4af856823c809983d821097b6e9721c1'
+        result: '4af856823c809983d821097b6e9721c1'
+      - string: 'b42790e8b7951df93c4a852a50fe621b11ee1a87'
+        result: 'b42790e8b7951df93c4a852a50fe621b11ee1a87'
+    negative:
+      - 'not-a-digest'
+  CAPE_SUBMIT_MOJO_TIME:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '2026-07-30 22:53:37.63887'
+        result: '2026-07-30 22:53:37.63887'
+    negative:
+      - '2026-07-30 22:53:37'
+  CAPE_SUBMIT_PREFIX:
+    # Wholly optional, so the tail is matched as well, to prove the prefix is
+    # what was consumed.
+    test_template: '^(?<TEST>[% TEST_VAR %])Started'
+    positive:
+      - string: '0 : Started'
+        result: '0 : '
+      - string: '12 : Started'
+        result: '12 : '
+      - string: 'Started'
+        result: ''
+    negative:
+      - '0 : Finished'
+  CAPE_SUBMIT_STARTED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '0 : Started. Remote IP: 192.0.2.5  API key:'
+        result: '0 : Started. Remote IP: 192.0.2.5  API key:'
+      - string: '0 : Started. Remote IP: 192.0.2.5  API key: 0123456789abcdef'
+        result: '0 : Started. Remote IP: 192.0.2.5  API key: 0123456789abcdef'
+    negative:
+      - '0 : Source Host: sensor.example.net'
+  CAPE_SUBMIT_HASH:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '0 : MD5: 4af856823c809983d821097b6e9721c1'
+        result: '0 : MD5: 4af856823c809983d821097b6e9721c1'
+      - string: '0 : SHA1: b42790e8b7951df93c4a852a50fe621b11ee1a87'
+        result: '0 : SHA1: b42790e8b7951df93c4a852a50fe621b11ee1a87'
+      - string: '0 : SHA256: 88d47f551082e6284d5c0845261a8110e361b6d9ce3fe805af6bec711514a34e'
+        result: '0 : SHA256: 88d47f551082e6284d5c0845261a8110e361b6d9ce3fe805af6bec711514a34e'
+    negative:
+      - '0 : Source Host: sensor.example.net'
+  CAPE_SUBMIT_GOT_FILE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '0 : Got File... size=237985792 filename="sample.msi" sha256="88d47f551082e6284d5c0845261a8110e361b6d9ce3fe805af6bec711514a34e"'
+        result: '0 : Got File... size=237985792 filename="sample.msi" sha256="88d47f551082e6284d5c0845261a8110e361b6d9ce3fe805af6bec711514a34e"'
+    negative:
+      - '0 : Source Host: sensor.example.net'
+  CAPE_SUBMIT_FLOW:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '0 : proto=undef src_ip=undef src_port=undef dest_ip=undef dest_port=undef flow_id=undef'
+        result: '0 : proto=undef src_ip=undef src_port=undef dest_ip=undef dest_port=undef flow_id=undef'
+      - string: '0 : proto=TCP src_ip=198.51.100.9 src_port=44444 dest_ip=192.0.2.1 dest_port=80 flow_id=12345'
+        result: '0 : proto=TCP src_ip=198.51.100.9 src_port=44444 dest_ip=192.0.2.1 dest_port=80 flow_id=12345'
+    negative:
+      # Must start with proto=, so an arbitrary k=v line is not claimed.
+      - '0 : size=1234 filename="sample.msi"'
+  CAPE_SUBMIT_SOURCE_HOST:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '0 : Source Host: sensor.example.net'
+        result: '0 : Source Host: sensor.example.net'
+    negative:
+      - '0 : Submission Type: undef'
+  CAPE_SUBMIT_TYPE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '0 : Submission Type: undef'
+        result: '0 : Submission Type: undef'
+      - string: '0 : Submission Type: file'
+        result: '0 : Submission Type: file'
+    negative:
+      - '0 : App Proto: undef'
+  CAPE_SUBMIT_APP_PROTO:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '0 : App Proto: undef'
+        result: '0 : App Proto: undef'
+      - string: '0 : App Proto: http'
+        result: '0 : App Proto: http'
+    negative:
+      - '0 : Submission Type: undef'
+  CAPE_SUBMIT_SUBMITTED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '0 : Submitting "sample.msi" submitted as 116'
+        result: '0 : Submitting "sample.msi" submitted as 116'
+    negative:
+      - '0 : Wrote submission data JSON out to "/malware/client-incoming/json/sample.msi"'
+  CAPE_SUBMIT_WROTE_JSON:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '0 : Wrote submission data JSON out to "/malware/client-incoming/json/sample.msi"'
+        result: '0 : Wrote submission data JSON out to "/malware/client-incoming/json/sample.msi"'
+    negative:
+      - '0 : Submitting "sample.msi" submitted as 116'
+  CAPE_SUBMIT_RESUBMITTED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'resubmitted "/malware/client-incoming/json/sample.msi" as task 107 (was 106)'
+        result: 'resubmitted "/malware/client-incoming/json/sample.msi" as task 107 (was 106)'
+    negative:
+      - '0 : Submitting "sample.msi" submitted as 116'
+  CAPE_SUBMIT_MOJO_LOG:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[2026-07-30 22:53:37.63887] [235029] [info] Listening at "http://*:8080"'
+        result: '[2026-07-30 22:53:37.63887] [235029] [info] Listening at "http://*:8080"'
+    negative:
+      - 'Web application available at http://127.0.0.1:8080'
+  CAPE_SUBMIT_AVAILABLE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Web application available at http://127.0.0.1:8080'
+        result: 'Web application available at http://127.0.0.1:8080'
+    negative:
+      - '[2026-07-30 22:53:37.63887] [235029] [info] Listening at "http://*:8080"'
+  CAPE_SUBMIT_PERL_WARNING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Route pattern "/results/:task_id/*path" contains a reserved stash value at /usr/share/perl5/Mojolicious/Lite.pm line 33.'
+        result: 'Route pattern "/results/:task_id/*path" contains a reserved stash value at /usr/share/perl5/Mojolicious/Lite.pm line 33.'
+    negative:
+      - 'Web application available at http://127.0.0.1:8080'
+  CAPE_SUBMIT_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '0 : something the tool started logging after this file was written'
+        result: '0 : something the tool started logging after this file was written'
+    negative:
+      - ''
+# The sensor that submitted the sample, and both ends of the flow the sample
+# was carved out of. These are three different hosts: the sensor is local, and
+# neither end of the flow need be. Both flow ends are looked up because which
+# one is the interesting party depends on direction. On a download the source
+# is where the sample came from; on an exfiltration attempt the destination is
+# where it was going. The log does not say which case it is.
+geoip:
+  - cape_submit_src_ip
+  - cape_submit_flow_src_ip
+  - cape_submit_flow_dest_ip
+convert:
+  cape_submit_item: int
+  cape_submit_task_id: int
+  cape_submit_previous_task_id: int
+  cape_submit_pid: int
+  cape_submit_source_line: int
+  cape_submit_size: int
+  cape_submit_flow_src_port: int
+  cape_submit_flow_dest_port: int
+  # The doubled word is not a typo: the key in the blob is "flow_id" and the
+  # prefix is "cape_submit_flow_".
+  cape_submit_flow_flow_id: int
+decompose:
+  # The Got File tail. Quote-aware because the filename is quoted and may hold
+  # spaces.
+  - field: cape_submit_file_kv
+    type: kv
+    quoted: true
+    prefix: 'cape_submit_'
+    remove: true
+    tests:
+      - input: 'size=237985792 filename="sample.msi" sha256="88d47f551082e6284d5c0845261a8110e361b6d9ce3fe805af6bec711514a34e"'
+        result:
+          cape_submit_size: '237985792'
+          cape_submit_filename: 'sample.msi'
+          cape_submit_sha256: '88d47f551082e6284d5c0845261a8110e361b6d9ce3fe805af6bec711514a34e'
+  # The flow blob, kept under its own prefix so its src_ip is not mistaken for
+  # the submitting sensor's.
+  - field: cape_submit_flow_kv
+    type: kv
+    prefix: 'cape_submit_flow_'
+    remove: true
+    tests:
+      - input: 'proto=TCP src_ip=198.51.100.9 src_port=44444 dest_ip=192.0.2.1 dest_port=80 flow_id=12345'
+        result:
+          cape_submit_flow_proto: 'TCP'
+          cape_submit_flow_src_ip: '198.51.100.9'
+          cape_submit_flow_src_port: '44444'
+          cape_submit_flow_dest_ip: '192.0.2.1'
+          cape_submit_flow_dest_port: '80'
+          cape_submit_flow_flow_id: '12345'
+      # The sensor filled none of it in. "undef" is kept rather than dropped.
+      - input: 'proto=undef src_ip=undef src_port=undef dest_ip=undef dest_port=undef flow_id=undef'
+        result:
+          cape_submit_flow_proto: 'undef'
+          cape_submit_flow_src_ip: 'undef'
+          cape_submit_flow_src_port: 'undef'
+          cape_submit_flow_dest_ip: 'undef'
+          cape_submit_flow_dest_port: 'undef'
+          cape_submit_flow_flow_id: 'undef'
+rules:
+  - name: mojo_cape_submit
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^(?:mojo_cape_submit|nergal)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - CAPE_SUBMIT_STARTED
+      - CAPE_SUBMIT_HASH
+      - CAPE_SUBMIT_GOT_FILE
+      - CAPE_SUBMIT_FLOW
+      - CAPE_SUBMIT_SOURCE_HOST
+      - CAPE_SUBMIT_TYPE
+      - CAPE_SUBMIT_APP_PROTO
+      - CAPE_SUBMIT_SUBMITTED
+      - CAPE_SUBMIT_WROTE_JSON
+      - CAPE_SUBMIT_RESUBMITTED
+      - CAPE_SUBMIT_MOJO_LOG
+      - CAPE_SUBMIT_AVAILABLE
+      # After every known shape, since it claims anything ending in
+      # "at <file> line <n>."
+      - CAPE_SUBMIT_PERL_WARNING
+      # last: matches anything, which is only safe because the rule is gated
+      - CAPE_SUBMIT_MESSAGE
+    tests:
+      positive:
+        - string: '0 : Started. Remote IP: 192.0.2.5  API key:'
+          numeric:
+            - cape_submit_item
+          program: 'mojo_cape_submit'
+          result:
+            cape_submit_item: '0'
+            cape_submit_src_ip: '192.0.2.5'
+            cape_submit_api_key: ''
+        - string: '1 : Started. Remote IP: 192.0.2.5  API key: 0123456789abcdef'
+          result:
+            cape_submit_item: '1'
+            cape_submit_src_ip: '192.0.2.5'
+            cape_submit_api_key: '0123456789abcdef'
+        - string: '0 : MD5: 4af856823c809983d821097b6e9721c1'
+          result:
+            cape_submit_item: '0'
+            cape_submit_md5: '4af856823c809983d821097b6e9721c1'
+        - string: '0 : SHA256: 88d47f551082e6284d5c0845261a8110e361b6d9ce3fe805af6bec711514a34e'
+          result:
+            cape_submit_item: '0'
+            cape_submit_sha256: '88d47f551082e6284d5c0845261a8110e361b6d9ce3fe805af6bec711514a34e'
+        # The two k=v blobs are still whole here. Rule tests check raw
+        # captures, before the decomposes above split them.
+        - string: '0 : Got File... size=237985792 filename="sample.msi" sha256="88d47f551082e6284d5c0845261a8110e361b6d9ce3fe805af6bec711514a34e"'
+          enriched:
+            cape_submit_filename: 'sample.msi'
+            cape_submit_item: '0'
+            cape_submit_sha256: '88d47f551082e6284d5c0845261a8110e361b6d9ce3fe805af6bec711514a34e'
+            cape_submit_size: '237985792'
+          numeric:
+            - cape_submit_size
+          result:
+            cape_submit_item: '0'
+            cape_submit_file_kv: 'size=237985792 filename="sample.msi" sha256="88d47f551082e6284d5c0845261a8110e361b6d9ce3fe805af6bec711514a34e"'
+        - string: '0 : proto=undef src_ip=undef src_port=undef dest_ip=undef dest_port=undef flow_id=undef'
+          enriched:
+            cape_submit_flow_dest_ip: 'undef'
+            cape_submit_flow_dest_port: 'undef'
+            cape_submit_flow_flow_id: 'undef'
+            cape_submit_flow_proto: 'undef'
+            cape_submit_flow_src_ip: 'undef'
+            cape_submit_flow_src_port: 'undef'
+            cape_submit_item: '0'
+          result:
+            cape_submit_item: '0'
+            cape_submit_flow_kv: 'proto=undef src_ip=undef src_port=undef dest_ip=undef dest_port=undef flow_id=undef'
+        # a filled-in flow, so the ports the decompose splits out reach convert
+        - string: '0 : proto=TCP src_ip=198.51.100.9 src_port=44444 dest_ip=192.0.2.1 dest_port=80 flow_id=12345'
+          numeric:
+            - cape_submit_flow_flow_id
+            - cape_submit_flow_src_port
+            - cape_submit_flow_dest_port
+          result:
+            cape_submit_item: '0'
+            cape_submit_flow_kv: 'proto=TCP src_ip=198.51.100.9 src_port=44444 dest_ip=192.0.2.1 dest_port=80 flow_id=12345'
+        - string: '0 : Source Host: sensor.example.net'
+          result:
+            cape_submit_item: '0'
+            cape_submit_source_host: 'sensor.example.net'
+        - string: '0 : Submission Type: undef'
+          result:
+            cape_submit_item: '0'
+            cape_submit_type: 'undef'
+        - string: '0 : App Proto: http'
+          result:
+            cape_submit_item: '0'
+            cape_submit_app_proto: 'http'
+        - string: '0 : Submitting "sample.msi" submitted as 116'
+          program: 'nergal'
+          result:
+            cape_submit_item: '0'
+            cape_submit_filename: 'sample.msi'
+            cape_submit_task_id: '116'
+        - string: '0 : Wrote submission data JSON out to "/malware/client-incoming/json/sample.msi"'
+          result:
+            cape_submit_item: '0'
+            cape_submit_json_file: '/malware/client-incoming/json/sample.msi'
+        # Written outside a submission, so there is no counter.
+        - string: 'resubmitted "/malware/client-incoming/json/sample.msi" as task 107 (was 106)'
+          numeric:
+            - cape_submit_task_id
+            - cape_submit_previous_task_id
+          result:
+            cape_submit_json_file: '/malware/client-incoming/json/sample.msi'
+            cape_submit_task_id: '107'
+            cape_submit_previous_task_id: '106'
+        - string: '[2026-07-30 22:53:37.63887] [235029] [info] Listening at "http://*:8080"'
+          numeric:
+            - cape_submit_pid
+          result:
+            cape_submit_timestamp: '2026-07-30 22:53:37.63887'
+            cape_submit_pid: '235029'
+            cape_submit_level: 'info'
+            cape_submit_message: 'Listening at "http://*:8080"'
+        - string: 'Web application available at http://127.0.0.1:8080'
+          result:
+            cape_submit_url: 'http://127.0.0.1:8080'
+        - string: 'Route pattern "/results/:task_id/*path" contains a reserved stash value at /usr/share/perl5/Mojolicious/Lite.pm line 33.'
+          numeric:
+            - cape_submit_source_line
+          result:
+            cape_submit_warning: 'Route pattern "/results/:task_id/*path" contains a reserved stash value'
+            cape_submit_source_file: '/usr/share/perl5/Mojolicious/Lite.pm'
+            cape_submit_source_line: '33'
+      negative:
+        - ''
+        - string: '0 : Started. Remote IP: 192.0.2.5  API key:'
+          program: 'mojo_cape_submit-extra'

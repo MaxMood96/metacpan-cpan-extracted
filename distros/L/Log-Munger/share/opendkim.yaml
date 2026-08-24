@@ -1,0 +1,145 @@
+---
+# OpenDKIM milter log enrichment.
+#
+# Gates on the syslog PROGRAM field being "opendkim". Patterns are anchored
+# (each must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with opendkim_ .
+#
+# Every line opens with the MTA's queue id, which is the same id postfix and
+# exim log, so these join straight onto the delivery records in postfix.yaml
+# and exim.yaml. That join is the point of the file: a message's signing or
+# verification result is useless on its own and tells you a lot next to who
+# sent it and where it went.
+#
+# A verification failure is not by itself an attack, since forwarding and
+# mailing lists break signatures routinely. A "bad signature data" on a domain
+# that normally verifies is a different matter, so the domain is captured to
+# make that comparison possible.
+includes:
+- base
+vars_templated:
+  # The queue id every line carries.
+  OPENDKIM_QID: '(?<opendkim_qid>[A-Za-z0-9]+): '
+  # "1rABCD: DKIM verification successful"
+  # "1rABCD: bad signature data"
+  # "1rABCD: no signature data"
+  OPENDKIM_VERIFY: '[% OPENDKIM_QID %](?<opendkim_result>DKIM verification successful|bad signature data|no signature data|signature data not usable|key retrieval failed|no key for signature)(?: [% GREEDYDATA %])?'
+  # "1rABCD: s=default d=example.com SSL"
+  #
+  # The selector and domain of the signature that was checked, and the
+  # transport it arrived over. d= is the domain claiming responsibility for
+  # the message, which is the field a reputation view keys on.
+  OPENDKIM_SIGNATURE: '[% OPENDKIM_QID %]s=(?<opendkim_selector>[% NOTSPACE %]) d=(?<opendkim_domain>[% NOTSPACE %])(?: (?<opendkim_detail>[% GREEDYDATA %]))?'
+  # "1rABCD: [192.0.2.5] not internal"
+  # "1rABCD: [192.0.2.5] internal host"
+  #
+  # Whether the peer was inside the trusted network, which is what decides
+  # signing versus verifying.
+  OPENDKIM_PEER: '[% OPENDKIM_QID %]\[(?<opendkim_src_ip>[% IP %])\] (?<opendkim_peer_state>[% GREEDYDATA %])'
+  # Anything else logged against a queue id.
+  OPENDKIM_QID_MESSAGE: '[% OPENDKIM_QID %](?<opendkim_message>.+)'
+  # Lines with no queue id: startup, key loading, failures to start.
+  OPENDKIM_MESSAGE: '(?<opendkim_message>.+)'
+vars_tests:
+  OPENDKIM_QID:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '1rABCD: '
+        result: '1rABCD: '
+      - string: '4Wq1234abc: '
+        result: '4Wq1234abc: '
+    negative:
+      - 'no queue id here'
+  OPENDKIM_VERIFY:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '1rABCD: DKIM verification successful'
+        result: '1rABCD: DKIM verification successful'
+      - string: '1rABCD: bad signature data'
+        result: '1rABCD: bad signature data'
+      - string: '1rABCD: no signature data'
+        result: '1rABCD: no signature data'
+    negative:
+      - '1rABCD: s=default d=example.com SSL'
+  OPENDKIM_SIGNATURE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '1rABCD: s=default d=example.com SSL'
+        result: '1rABCD: s=default d=example.com SSL'
+      - string: '1rABCD: s=mail d=example.org'
+        result: '1rABCD: s=mail d=example.org'
+    negative:
+      - '1rABCD: DKIM verification successful'
+  OPENDKIM_PEER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '1rABCD: [192.0.2.5] not internal'
+        result: '1rABCD: [192.0.2.5] not internal'
+      - string: '1rABCD: [198.51.100.9] internal host'
+        result: '1rABCD: [198.51.100.9] internal host'
+    negative:
+      - '1rABCD: DKIM verification successful'
+  OPENDKIM_QID_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '1rABCD: message has signatures from example.com'
+        result: '1rABCD: message has signatures from example.com'
+    negative:
+      - 'OpenDKIM Filter v2.11.0 starting'
+  OPENDKIM_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'OpenDKIM Filter v2.11.0 starting (args: -x /etc/opendkim.conf)'
+        result: 'OpenDKIM Filter v2.11.0 starting (args: -x /etc/opendkim.conf)'
+    negative:
+      - ''
+geoip:
+  - opendkim_src_ip
+rules:
+  - name: opendkim
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^opendkim$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - OPENDKIM_VERIFY
+      - OPENDKIM_SIGNATURE
+      - OPENDKIM_PEER
+      - OPENDKIM_QID_MESSAGE
+      # last: matches anything, which is only safe because the rule is gated
+      - OPENDKIM_MESSAGE
+    tests:
+      positive:
+        - string: '1rABCD: DKIM verification successful'
+          program: 'opendkim'
+          result:
+            opendkim_qid: '1rABCD'
+            opendkim_result: 'DKIM verification successful'
+        - string: '1rABCD: bad signature data'
+          result:
+            opendkim_qid: '1rABCD'
+            opendkim_result: 'bad signature data'
+        - string: '1rABCD: s=default d=example.com SSL'
+          result:
+            opendkim_qid: '1rABCD'
+            opendkim_selector: 'default'
+            opendkim_domain: 'example.com'
+            opendkim_detail: 'SSL'
+        - string: '1rABCD: [192.0.2.5] not internal'
+          result:
+            opendkim_qid: '1rABCD'
+            opendkim_src_ip: '192.0.2.5'
+            opendkim_peer_state: 'not internal'
+        - string: '1rABCD: message has signatures from example.com'
+          result:
+            opendkim_qid: '1rABCD'
+            opendkim_message: 'message has signatures from example.com'
+        - string: 'OpenDKIM Filter v2.11.0 starting (args: -x /etc/opendkim.conf)'
+          result:
+            opendkim_message: 'OpenDKIM Filter v2.11.0 starting (args: -x /etc/opendkim.conf)'
+      negative:
+        - ''
+        - string: '1rABCD: DKIM verification successful'
+          program: 'opendkim-extra'

@@ -18,7 +18,7 @@
 use v5.36;
 
 package Fugu::Mdnsd;
-our $VERSION = '0.1.2';
+our $VERSION = '0.2.0';
 
 use Fugu::Imsg;
 use IO::Socket::UNIX;
@@ -31,7 +31,7 @@ use Time::HiRes qw(time);
 # Fugu::Imsg, and mdnsd(8) sends the packets. There is no mdnsctl(8)
 # child process. The socket is the advertisement's lifetime. Close the
 # socket to withdraw the service. The protocol is per
-# spec/MDNS-Control.md. The module never logs. It returns outcomes and
+# spec/protocol/MDNS-Control.md. The module never logs. It returns outcomes and
 # keeps the last failure in ->error for the caller.
 
 # The imsg_type enum ordinals [MDNS-Control §2]. The values are

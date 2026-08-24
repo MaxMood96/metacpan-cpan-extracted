@@ -1,6 +1,14 @@
 Revision history for Uniform::Upload::PAGI
 
-1.00  2026-08-23
-        - Initial asynchronous PAGI gateway multi-part driver release.
+1.02  2026-08-23
+        - Refactored driver to inherit directly from Uniform::Upload 0.02 base class.
+        - Updated constructor to delegate configuration to SUPER::new.
+        - Streamlined extract_async() to delegate stream parsing to Uniform::Utils.
+        - Updated POD documentation to detail inheritance and inherited methods.
+        - Added comprehensive test suite (t/00-load.t, t/01-methods.t, t/02-inheritance.t).
+
 1.01  2026-08-23
         - Added github to Makefile.PL.
+1.00  2026-08-23
+        - Initial asynchronous PAGI gateway multi-part driver release.
+

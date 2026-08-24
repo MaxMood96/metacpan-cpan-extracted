@@ -2,59 +2,48 @@ package Uniform::HTMX::PSGI;
 
 use strict;
 use warnings;
-use Carp qw(croak);
 use parent 'Uniform::HTMX';
+use Scalar::Util qw(blessed);
+use Carp qw(croak);
 
-our $VERSION = '1.01';
+our $VERSION = '1.03';
 
-# Constructor: Expects a standard PSGI %env Hash reference
 sub new {
     my ($class, $env) = @_;
 
-    croak "PSGI environment context must be a HASH reference"
+    croak "Environment must be a hash reference"
         unless ref($env) eq 'HASH';
 
-    my $self = bless {
-        in   => {},
-        out  => {},
-        _ctx => $env,
-    }, $class;
-
-    # Pass the raw %env directly to your core version 1.01 normalization engine.
-    # Your core automatically strips "HTTP_" prefixes and maps underscores to dashes!
-    $self->{in} = $self->_normalize_headers($env);
-
-    return $self;
+    return $class->SUPER::new(in => $env, env => $env);
 }
 
-# Flushes outbound HTMX instructions securely back into the PSGI lifecycle environment
 sub apply {
-    my ($self, $response_object) = @_;
-    return $self unless ref($self->{out}) eq 'HASH';
+    my ($self, $res) = @_;
+    my $out = $self->_out;
 
-    my %outbound = %{ $self->{out} };
+    return $res unless keys %$out;
 
-    # Strategy A: If a Plack::Response object is explicitly passed, map headers directly
-    if (eval { $response_object && $response_object->can('headers') }) {
-        while (my ($k, $v) = each %outbound) {
-            $response_object->headers->header($k => $v);
+    if (ref($res) eq 'ARRAY' && ref($res->[1]) eq 'ARRAY') {
+        for my $key (keys %$out) {
+            push @{ $res->[1] }, $key, $out->{$key};
         }
     }
-    # Strategy B: Fall back to stashing them inside the standard $env hash slot
-    else {
-        $self->{_ctx}->{'htmx.outbound'} = \%outbound;
+    elsif (blessed($res) && $res->can('headers')) {
+        for my $key (keys %$out) {
+            $res->headers->header($key => $out->{$key});
+        }
+    }
+    elsif (blessed($res) && $res->can('header')) {
+        for my $key (keys %$out) {
+            $res->header($key => $out->{$key});
+        }
     }
 
-    return $self;
+    return $res;
 }
-
 1;
 
 __END__
-
-=pod
-
-=encoding utf-8
 
 =head1 NAME
 
@@ -62,84 +51,62 @@ Uniform::HTMX::PSGI - Explicit framework-agnostic htmx adapter for the PSGI/Plac
 
 =head1 SYNOPSIS
 
-=head2 Pattern A: Implicit Environment Injection (Middleware Friendly)
-
     use Uniform::HTMX::PSGI;
 
     my $app = sub {
-        my $env = shift;
-        my $hx  = Uniform::HTMX::PSGI->new($env);
+        my $env  = shift;
+        my $htmx = Uniform::HTMX::PSGI->new($env);
 
-        if ($hx->is_htmx) {
-            $hx->res_retarget('#status-banner')->apply;
+        # Inspect incoming htmx request attributes
+        if ($htmx->is_htmx) {
+            my $target = $htmx->target;
 
-            my $htmx_headers = $env->{'htmx.outbound'} || {};
-            return [ 200, [ 'Content-Type' => 'text/html', %$htmx_headers ], [ '<p>Updated!</p>' ] ];
-        }
-        return [ 200, [ 'Content-Type' => 'text/html' ], [ '<h1>Home</h1>' ] ];
-    };
-
-=head2 Pattern B: Explicit Plack::Response Target Mapping
-
-    use Plack::Request;
-    use Plack::Response;
-    use Uniform::HTMX::PSGI;
-
-    my $app = sub {
-        my $env = shift;
-        my $req = Plack::Request->new($env);
-        my $res = $req->new_response(200);
-
-        my $hx  = Uniform::HTMX::PSGI->new($env);
-
-        if ($hx->is_htmx) {
-            $res->content_type('text/html');
-            $res->body('<p>Updated Fragment!</p>');
-
-            # Directly updates the $res object headers!
-            $hx->res_retarget('#status-banner')->apply($res);
+            # Queue outbound htmx response headers
+            $htmx->res_trigger('itemSaved', { id => 42 })
+                ->res_reswap('innerHTML');
         }
 
-        return $res->finalize;
+        my $res = [ 200, [ 'Content-Type' => 'text/html' ], [ '<div>Saved!</div>' ] ];
+
+        # Inject queued headers into the PSGI response
+        return $htmx->apply($res);
     };
 
 =head1 DESCRIPTION
 
-C<Uniform::HTMX::PSGI> maps the core L<Uniform::HTMX> specification layer directly to
-raw web execution environments built on the L<PSGI/Plack specification|https://plackperl.org>.
+C<Uniform::HTMX::PSGI> provides a seamless integration between the L<Uniform::HTMX> base class and
+the L<PSGI specification|https://plackperl.org/> (and by extension, the Plack middleware ecosystem).
+
+It automatically translates PSGI C<$env> variables (like C<HTTP_HX_REQUEST>) into
+the standard htmx request headers, and provides an C<apply> method capable of injecting
+htmx response headers into standard PSGI array references or response objects.
 
 =head1 METHODS
 
 =head2 new( $env )
 
-Validates and instantiates the client context mapper. Requires a valid, active PSGI
-environment hash reference (C<$env>). Automatically normalizes inbound environment keys
-via the core parent class.
+Constructs a new C<Uniform::HTMX::PSGI> object. Accepts the standard PSGI C<$env> hashref.
 
-=head2 apply( [ $plack_response ] )
+=head2 apply( $res )
 
-Flushes accumulated response modifiers. If passed an explicit L<Plack::Response> object,
-it modifies its header stack directly. Otherwise, it stashes compiled headers inside
-an isolated reference token located at C<$env-E<gt>{'htmx.outbound'}>.
+Injects any queued htmx outbound headers into the given response. C<$res> can be:
 
-Returns C<$self> to support method chaining.
+=over 4
+
+=item * A standard PSGI array reference: C<[ $status, \@headers, \@body ]>
+
+=item * An object with a C<headers> method.
+
+=item * An object with a C<header> method.
+
+=back
+
+Returns the modified C<$res> for easy chaining.
 
 =head1 SEE ALSO
 
-L<Uniform>
-
 L<Uniform::HTMX>
 
-L<Uniform::HTMX::Mojolicious>
-
-
-
-=head1 AUTHOR
-
-Joshua S. Day E<lt>HAX@cpan.orgE<gt>
-
-=head1 LICENSE
-
-Licensed under the same terms as Uniform::HTMX.
+L<PSGI>
 
 =cut

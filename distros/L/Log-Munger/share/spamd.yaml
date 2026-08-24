@@ -1,0 +1,293 @@
+---
+# SpamAssassin (spamd) scan-result log enrichment.
+#
+# Gates on the syslog PROGRAM field being "spamd". Patterns are anchored (each
+# must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with spamd_ .
+#
+# spamd writes two lines per message. The verdict line is the readable one and
+# the result line is the useful one:
+#
+#   spamd: result: Y 12 - BAYES_99,HTML_MESSAGE scantime=1.2,size=1234,
+#   user=neti,uid=1000,required_score=5.0,rhost=localhost,raddr=127.0.0.1,...
+#
+# Everything after the symbol list is a comma-separated key=value blob, so it
+# is captured whole and handed to a decompose rather than being named field by
+# field in the regexp. Which keys appear depends on the version and on what
+# the scan did, and a decompose keeps up with that where a fixed pattern would
+# not.
+includes:
+- base
+vars_templated:
+  # "spamd: result: Y 12 - BAYES_99,HTML_MESSAGE scantime=1.2,size=1234,..."
+  #
+  # The verdict letter is Y or . (spam or not), and the number after it is the
+  # integer score. The exact score lives in the kv blob beside required_score,
+  # which is why the readable verdict line below is kept as well: it carries
+  # the score to one decimal place.
+  #
+  # The symbol list is a bare comma-separated run with no spaces in it, which
+  # is what separates it from the kv blob that follows.
+  #
+  # The score is printed right-aligned in a two-character field, so a bare "0"
+  # or "7" arrives with a second space in front of it while "-4" and "12" get
+  # only one. The run of spaces before the score has to be variable to take
+  # both, and on a busy host the padded form is the common one.
+  SPAMD_RESULT: 'spamd: result: (?<spamd_verdict>[Y.]) +(?<spamd_score_int>[-+]?[% INT %]) - (?<spamd_symbols>[% NOTSPACE %])? (?<spamd_kv>[% GREEDYDATA %])'
+  # "spamd: server successfully spawned child process, pid 86270"
+  SPAMD_CHILD_SPAWN: 'spamd: server successfully spawned child process, pid (?<spamd_child_pid>[% INT %])'
+  # "spamd: handled cleanup of child pid [23902] due to SIGCHLD: exit 0"
+  SPAMD_CHILD_CLEANUP: 'spamd: handled cleanup of child pid \[(?<spamd_child_pid>[% INT %])\] due to (?<spamd_child_signal>[% NOTSPACE %]): exit (?<spamd_child_exit>[-+]?[% INT %])'
+  # "prefork: adjust: 0 idle children less than 2 minimum idle children.
+  #  Increasing spamd children: 1 started."
+  # "prefork: adjust: 3 idle children more than 2 maximum idle children.
+  #  Decreasing spamd children: 1 killed."
+  #
+  # Two spaces separate the sentences in the "less than" form and one in the
+  # "more than" form, hence the variable run.
+  SPAMD_PREFORK_ADJUST: 'prefork: adjust: (?<spamd_idle_children>[% INT %]) idle children (?<spamd_adjust_direction>less|more) than (?<spamd_idle_children_limit>[% INT %]) (minimum|maximum) idle children\. +(Increasing|Decreasing) spamd children: (?<spamd_children_changed>[% INT %]) (?<spamd_adjust_action>started|killed)\.'
+  # "prefork: child states: IIB"
+  # One letter per child: I idle, B busy, S starting, K killed. A repeated
+  # line gets a syslog "[... logline repeated N times]" tail glued onto it.
+  SPAMD_PREFORK_STATES: 'prefork: child states: (?<spamd_child_states>[A-Z]+)(?: \[\.\.\. logline repeated (?<spamd_repeated>[% INT %]) times\])?'
+  # "spamd: identified spam (12.3/5.0) for neti:1000 in 1.2 seconds,
+  #  1234 bytes."
+  # "spamd: clean message (0.1/5.0) for neti:1000 in 0.5 seconds, 1234 bytes."
+  SPAMD_VERDICT: 'spamd: (?<spamd_disposition>identified spam|clean message) \((?<spamd_score>[-+]?[% NUMBER %])/(?<spamd_required_score>[-+]?[% NUMBER %])\) for (?<spamd_user>[^:\s]+):(?<spamd_uid>[% INT %]) in (?<spamd_scantime>[% NUMBER %]) seconds, (?<spamd_size>[% INT %]) bytes\.?'
+  # "spamd: connection from localhost [127.0.0.1]:45678 to port 783, fd 6"
+  # The trailing "fd" clause is separated by a comma rather than by a space, so
+  # the tail here allows one; the usual " GREEDYDATA" tail would not match.
+  SPAMD_CONNECTION: 'spamd: connection from (?<spamd_client_host>[% NOTSPACE %]) \[(?<spamd_client_ip>[% IP %])\](?::(?<spamd_client_port>[% INT %]))? to port (?<spamd_port>[% INT %])(?:,? *[% GREEDYDATA %])?'
+  # "spamd: processing message <x@y> for neti:1000"
+  SPAMD_PROCESSING: 'spamd: processing message <(?<spamd_message_id>[^>]*)> for (?<spamd_user>[^:\s]+):(?<spamd_uid>[% INT %])(?: [% GREEDYDATA %])?'
+  # Anything else spamd said: startup, child management, plugin warnings.
+  SPAMD_MESSAGE: '(?<spamd_message>.+)'
+vars_tests:
+  SPAMD_RESULT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'spamd: result: Y 12 - BAYES_99,HTML_MESSAGE scantime=1.2,size=1234,user=neti,uid=1000,required_score=5.0,rhost=localhost,raddr=127.0.0.1'
+        result: 'spamd: result: Y 12 - BAYES_99,HTML_MESSAGE scantime=1.2,size=1234,user=neti,uid=1000,required_score=5.0,rhost=localhost,raddr=127.0.0.1'
+      # a clean message that matched no rules has an empty symbol list
+      - string: 'spamd: result: . 0 -  scantime=0.5,size=512,user=neti,uid=1000,required_score=5.0'
+        result: 'spamd: result: . 0 -  scantime=0.5,size=512,user=neti,uid=1000,required_score=5.0'
+      # a one-digit score is padded out to the two-character field width
+      - string: 'spamd: result: .  0 - BAYES_00,NO_RELAYS scantime=0.8,size=1458,user=neti,uid=58,required_score=4.0,raddr=::1'
+        result: 'spamd: result: .  0 - BAYES_00,NO_RELAYS scantime=0.8,size=1458,user=neti,uid=58,required_score=4.0,raddr=::1'
+      - string: 'spamd: result: . -4 - BAYES_00,DKIM_VALID scantime=1.2,size=125001,user=neti,uid=58,required_score=4.0'
+        result: 'spamd: result: . -4 - BAYES_00,DKIM_VALID scantime=1.2,size=125001,user=neti,uid=58,required_score=4.0'
+    negative:
+      - 'spamd: clean message (0.1/5.0) for neti:1000 in 0.5 seconds, 1234 bytes.'
+  SPAMD_VERDICT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'spamd: identified spam (12.3/5.0) for neti:1000 in 1.2 seconds, 1234 bytes.'
+        result: 'spamd: identified spam (12.3/5.0) for neti:1000 in 1.2 seconds, 1234 bytes.'
+      - string: 'spamd: clean message (0.1/5.0) for neti:1000 in 0.5 seconds, 1234 bytes.'
+        result: 'spamd: clean message (0.1/5.0) for neti:1000 in 0.5 seconds, 1234 bytes.'
+    negative:
+      - 'spamd: result: Y 12 - BAYES_99 scantime=1.2,size=1234'
+  SPAMD_CONNECTION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'spamd: connection from localhost [127.0.0.1]:45678 to port 783, fd 6'
+        result: 'spamd: connection from localhost [127.0.0.1]:45678 to port 783, fd 6'
+      - string: 'spamd: connection from mail.example.net [192.0.2.5] to port 783, fd 7'
+        result: 'spamd: connection from mail.example.net [192.0.2.5] to port 783, fd 7'
+    negative:
+      - 'spamd: processing message <x@y> for neti:1000'
+  SPAMD_PROCESSING:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'spamd: processing message <abc@example.com> for neti:1000'
+        result: 'spamd: processing message <abc@example.com> for neti:1000'
+    negative:
+      - 'spamd: connection from localhost [127.0.0.1]:45678 to port 783, fd 6'
+  SPAMD_CHILD_SPAWN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'spamd: server successfully spawned child process, pid 86270'
+        result: 'spamd: server successfully spawned child process, pid 86270'
+    negative:
+      - 'spamd: handled cleanup of child pid [23902] due to SIGCHLD: exit 0'
+  SPAMD_CHILD_CLEANUP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'spamd: handled cleanup of child pid [23902] due to SIGCHLD: exit 0'
+        result: 'spamd: handled cleanup of child pid [23902] due to SIGCHLD: exit 0'
+    negative:
+      - 'spamd: server successfully spawned child process, pid 86270'
+  SPAMD_PREFORK_ADJUST:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'prefork: adjust: 0 idle children less than 1 minimum idle children.  Increasing spamd children: 1 started.'
+        result: 'prefork: adjust: 0 idle children less than 1 minimum idle children.  Increasing spamd children: 1 started.'
+      - string: 'prefork: adjust: 3 idle children more than 2 maximum idle children. Decreasing spamd children: 1 killed.'
+        result: 'prefork: adjust: 3 idle children more than 2 maximum idle children. Decreasing spamd children: 1 killed.'
+    negative:
+      - 'prefork: child states: II'
+  SPAMD_PREFORK_STATES:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'prefork: child states: IIB'
+        result: 'prefork: child states: IIB'
+      - string: 'prefork: child states: II [... logline repeated 4 times]'
+        result: 'prefork: child states: II [... logline repeated 4 times]'
+    negative:
+      - 'prefork: adjust: 0 idle children less than 1 minimum idle children.  Increasing spamd children: 1 started.'
+  SPAMD_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'spamd: server started on IO::Socket::IP [::1]:783 (running version 4.0.0)'
+        result: 'spamd: server started on IO::Socket::IP [::1]:783 (running version 4.0.0)'
+    negative:
+      - ''
+geoip:
+  - spamd_client_ip
+  # produced by the decompose below, out of the result line's kv blob
+  - spamd_raddr
+convert:
+  spamd_score: float
+  spamd_required_score: float
+  spamd_score_int: int
+  spamd_scantime: float
+  spamd_size: int
+  spamd_uid: int
+  spamd_port: int
+  spamd_client_port: int
+  spamd_child_pid: int
+  spamd_child_exit: int
+  spamd_idle_children: int
+  spamd_idle_children_limit: int
+  spamd_children_changed: int
+  spamd_repeated: int
+# The tail of the result line is a comma-separated k=v blob whose keys vary by
+# version and by what the scan did. Splitting it keeps up with that where
+# naming each key in the pattern would not.
+# No prefix is applied: the keys are already spamd's own field names
+# (scantime, size, user, uid, required_score, rhost, raddr, rport, mid, bayes,
+# autolearn) and prefixing them would only make them longer.
+decompose:
+  - field: spamd_kv
+    type: kv
+    field_split: ','
+    value_split: '='
+    remove: true
+    tests:
+      - input: 'scantime=1.2,size=1234,user=neti,uid=1000,required_score=5.0,rhost=localhost,raddr=127.0.0.1'
+        result:
+          scantime: '1.2'
+          size: '1234'
+          user: 'neti'
+          uid: '1000'
+          required_score: '5.0'
+          rhost: 'localhost'
+          raddr: '127.0.0.1'
+rules:
+  - name: spamd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^spamd$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - SPAMD_RESULT
+      - SPAMD_VERDICT
+      - SPAMD_CONNECTION
+      - SPAMD_PROCESSING
+      - SPAMD_CHILD_SPAWN
+      - SPAMD_CHILD_CLEANUP
+      - SPAMD_PREFORK_ADJUST
+      - SPAMD_PREFORK_STATES
+      # last: matches anything, which is only safe because the rule is gated
+      - SPAMD_MESSAGE
+    tests:
+      positive:
+        # the kv blob is still whole here: rule tests check the raw captures,
+        # before the decompose above splits it
+        - string: 'spamd: result: Y 12 - BAYES_99,HTML_MESSAGE scantime=1.2,size=1234,user=neti,uid=1000,required_score=5.0,rhost=localhost,raddr=127.0.0.1'
+          enriched:
+            raddr: '127.0.0.1'
+            required_score: '5.0'
+            rhost: 'localhost'
+            scantime: '1.2'
+            size: '1234'
+            spamd_score_int: '12'
+            spamd_symbols: 'BAYES_99,HTML_MESSAGE'
+            spamd_verdict: 'Y'
+            uid: '1000'
+            user: 'neti'
+          numeric:
+            - spamd_score_int
+          program: 'spamd'
+          result:
+            spamd_verdict: 'Y'
+            spamd_score_int: '12'
+            spamd_symbols: 'BAYES_99,HTML_MESSAGE'
+            spamd_kv: 'scantime=1.2,size=1234,user=neti,uid=1000,required_score=5.0,rhost=localhost,raddr=127.0.0.1'
+        - string: 'spamd: identified spam (12.3/5.0) for neti:1000 in 1.2 seconds, 1234 bytes.'
+          numeric:
+            - spamd_required_score
+            - spamd_scantime
+            - spamd_score
+            - spamd_size
+            - spamd_uid
+          result:
+            spamd_disposition: 'identified spam'
+            spamd_score: '12.3'
+            spamd_required_score: '5.0'
+            spamd_user: 'neti'
+            spamd_uid: '1000'
+            spamd_scantime: '1.2'
+            spamd_size: '1234'
+        - string: 'spamd: connection from mail.example.net [192.0.2.5] to port 783, fd 7'
+          numeric:
+            - spamd_port
+          result:
+            spamd_client_host: 'mail.example.net'
+            spamd_client_ip: '192.0.2.5'
+            spamd_port: '783'
+        - string: 'spamd: processing message <abc@example.com> for neti:1000'
+          result:
+            spamd_message_id: 'abc@example.com'
+            spamd_user: 'neti'
+            spamd_uid: '1000'
+        - string: 'spamd: result: .  0 - BAYES_00,NO_RELAYS scantime=0.8,size=1458,user=neti,uid=58,required_score=4.0'
+          result:
+            spamd_verdict: '.'
+            spamd_score_int: '0'
+            spamd_symbols: 'BAYES_00,NO_RELAYS'
+            spamd_kv: 'scantime=0.8,size=1458,user=neti,uid=58,required_score=4.0'
+        - string: 'spamd: server successfully spawned child process, pid 86270'
+          result:
+            spamd_child_pid: '86270'
+        - string: 'spamd: handled cleanup of child pid [23902] due to SIGCHLD: exit 0'
+          numeric:
+            - spamd_child_exit
+            - spamd_child_pid
+          result:
+            spamd_child_pid: '23902'
+            spamd_child_signal: 'SIGCHLD'
+            spamd_child_exit: '0'
+        - string: 'prefork: adjust: 3 idle children more than 2 maximum idle children. Decreasing spamd children: 1 killed.'
+          numeric:
+            - spamd_children_changed
+            - spamd_idle_children
+            - spamd_idle_children_limit
+          result:
+            spamd_idle_children: '3'
+            spamd_adjust_direction: 'more'
+            spamd_idle_children_limit: '2'
+            spamd_children_changed: '1'
+            spamd_adjust_action: 'killed'
+        - string: 'prefork: child states: IIB'
+          result:
+            spamd_child_states: 'IIB'
+        - string: 'spamd: server started on IO::Socket::IP [::1]:783 (running version 4.0.0)'
+          result:
+            spamd_message: 'spamd: server started on IO::Socket::IP [::1]:783 (running version 4.0.0)'
+      negative:
+        - ''
+        - string: 'spamd: result: Y 12 - BAYES_99,HTML_MESSAGE scantime=1.2,size=1234,user=neti,uid=1000,required_score=5.0,rhost=localhost,raddr=127.0.0.1'
+          program: 'spamd-extra'

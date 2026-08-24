@@ -1,0 +1,196 @@
+---
+# Ereshkigal log enrichment.
+#
+# Ereshkigal supervises the Kur ban daemons: it spawns one Kur per configured
+# instance, restarts them when they die, lets instances be added and removed at
+# runtime, and hands out a control socket. Baphomet does the same job for the
+# Galla log-watchers.
+#
+# Ereshkigal syslogs under a PROGRAM of "ereshkigal". Patterns are anchored
+# (each must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with eresh_ .
+#
+# Only the messages seen in the wild are given patterns; anything else falls to
+# the catch-all as eresh_message rather than being guessed at.
+includes:
+- base
+vars_templated:
+  # Startup, naming the control socket and the Kurs that were configured, e.g.:
+  #   started... socket=/var/run/ereshkigal/socket kurs=recidive,sshd,suricata
+  # eresh_kurs is a comma-separated list.
+  ERESH_STARTED: '(?<eresh_action>started)\.\.\. socket=(?<eresh_socket>[% NOTSPACE %]) kurs=(?<eresh_kurs>[% NOTSPACE %])'
+  # A child being started, with the command line it was given, e.g.:
+  #   spawned kur "sshd" as PID 97452... /usr/local/bin/kur --foreground --name sshd --backend pf
+  ERESH_SPAWNED: '(?<eresh_action>spawned) kur "(?<eresh_kur>[^"]*)" as PID (?<eresh_pid>[% INT %])\.\.\. (?<eresh_command>[% GREEDYDATA %])'
+  # A child reaped, e.g.:
+  #   kur "sshd" PID 97452 exited with 0
+  # A non-zero eresh_exit_status is the interesting case.
+  ERESH_EXITED: 'kur "(?<eresh_kur>[^"]*)" PID (?<eresh_pid>[% INT %]) (?<eresh_action>exited) with (?<eresh_exit_status>[% INT %])'
+  # A child that will be brought back, e.g.:
+  #   kur "sshd" died, restarting in 1 seconds
+  ERESH_DIED: 'kur "(?<eresh_kur>[^"]*)" (?<eresh_action>died), restarting in (?<eresh_restart_delay>[% INT %]) seconds'
+  # A child that would not shut down cleanly over its own socket and had to be
+  # signalled instead, e.g.:
+  #   stopping kur "down" via it's socket failed, sending TERM... Failed to connect to "/var/run/kur/down.sock"
+  ERESH_STOP_FAILED: 'stopping kur "(?<eresh_kur>[^"]*)" via it''s socket failed, (?<eresh_action>sending) (?<eresh_signal>[% WORD %])\.\.\. (?<eresh_error>[% GREEDYDATA %])'
+  # An instance appearing or disappearing from the supervised set at runtime,
+  # e.g.:
+  #   added kur "dns"
+  #   removed kur "dns"
+  ERESH_MEMBERSHIP: '(?<eresh_action>added|removed) kur "(?<eresh_kur>[^"]*)"'
+  # Bare lifecycle words, each logged on a line of its own.
+  ERESH_STATE: '(?<eresh_action>stop requested|stopped)'
+  # Everything else Ereshkigal said. Matching anything is only safe because the
+  # rule is gated on PROGRAM.
+  ERESH_MESSAGE: '(?<eresh_message>.+)'
+vars_tests:
+  ERESH_STARTED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'started... socket=/var/run/ereshkigal/socket kurs=recidive,sshd,suricata'
+        result: 'started... socket=/var/run/ereshkigal/socket kurs=recidive,sshd,suricata'
+      - string: 'started... socket=/var/run/ereshkigal/socket kurs=smtp'
+        result: 'started... socket=/var/run/ereshkigal/socket kurs=smtp'
+    negative:
+      - 'stopped'
+  ERESH_SPAWNED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'spawned kur "sshd" as PID 97452... /usr/local/bin/kur --foreground --name sshd --backend pf'
+        result: 'spawned kur "sshd" as PID 97452... /usr/local/bin/kur --foreground --name sshd --backend pf'
+      - string: 'spawned kur "recidive" as PID 97180... /usr/local/bin/kur --foreground --name recidive --backend pf'
+        result: 'spawned kur "recidive" as PID 97180... /usr/local/bin/kur --foreground --name recidive --backend pf'
+    negative:
+      - 'kur "sshd" PID 97452 exited with 0'
+  ERESH_EXITED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'kur "sshd" PID 97452 exited with 0'
+        result: 'kur "sshd" PID 97452 exited with 0'
+      - string: 'kur "suricata" PID 97730 exited with 2'
+        result: 'kur "suricata" PID 97730 exited with 2'
+    negative:
+      - 'kur "sshd" died, restarting in 1 seconds'
+  ERESH_DIED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'kur "sshd" died, restarting in 1 seconds'
+        result: 'kur "sshd" died, restarting in 1 seconds'
+      - string: 'kur "recidive" died, restarting in 5 seconds'
+        result: 'kur "recidive" died, restarting in 5 seconds'
+    negative:
+      - 'kur "sshd" PID 97452 exited with 0'
+  ERESH_STOP_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'stopping kur "down" via it''s socket failed, sending TERM... Failed to connect to "/var/run/kur/down.sock"'
+        result: 'stopping kur "down" via it''s socket failed, sending TERM... Failed to connect to "/var/run/kur/down.sock"'
+      - string: 'stopping kur "sshd" via it''s socket failed, sending KILL... no answer'
+        result: 'stopping kur "sshd" via it''s socket failed, sending KILL... no answer'
+    negative:
+      - 'kur "sshd" died, restarting in 1 seconds'
+  ERESH_MEMBERSHIP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'added kur "dns"'
+        result: 'added kur "dns"'
+      - string: 'removed kur "gate"'
+        result: 'removed kur "gate"'
+    negative:
+      - 'kur "sshd" died, restarting in 1 seconds'
+  ERESH_STATE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'stop requested'
+        result: 'stop requested'
+      - string: 'stopped'
+        result: 'stopped'
+    negative:
+      - 'started... socket=/var/run/ereshkigal/socket kurs=sshd'
+  ERESH_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'something ereshkigal has not been taught yet'
+        result: 'something ereshkigal has not been taught yet'
+      - string: 'stopped'
+        result: 'stopped'
+    negative:
+      - ''
+# Coerce numeric captures to integers.
+convert:
+  eresh_pid: int
+  eresh_exit_status: int
+  eresh_restart_delay: int
+rules:
+  - name: ereshkigal
+    gate:
+      - field: PROGRAM
+        values:
+          - ereshkigal
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - ERESH_STARTED
+      - ERESH_SPAWNED
+      - ERESH_EXITED
+      - ERESH_DIED
+      - ERESH_STOP_FAILED
+      - ERESH_MEMBERSHIP
+      - ERESH_STATE
+      # last: matches anything, which is only safe because the rule is gated
+      - ERESH_MESSAGE
+    tests:
+      positive:
+        - string: 'started... socket=/var/run/ereshkigal/socket kurs=recidive,sshd,suricata'
+          result:
+            eresh_action: 'started'
+            eresh_socket: '/var/run/ereshkigal/socket'
+            eresh_kurs: 'recidive,sshd,suricata'
+        - string: 'spawned kur "sshd" as PID 97452... /usr/local/bin/kur --foreground --name sshd --backend pf'
+          result:
+            eresh_action: 'spawned'
+            eresh_kur: 'sshd'
+            eresh_pid: '97452'
+            eresh_command: '/usr/local/bin/kur --foreground --name sshd --backend pf'
+        - string: 'kur "sshd" PID 97452 exited with 0'
+          numeric:
+            - eresh_exit_status
+            - eresh_pid
+          result:
+            eresh_kur: 'sshd'
+            eresh_pid: '97452'
+            eresh_action: 'exited'
+            eresh_exit_status: '0'
+        - string: 'kur "sshd" died, restarting in 1 seconds'
+          numeric:
+            - eresh_restart_delay
+          result:
+            eresh_kur: 'sshd'
+            eresh_action: 'died'
+            eresh_restart_delay: '1'
+        - string: 'stopping kur "down" via it''s socket failed, sending TERM... no answer'
+          result:
+            eresh_kur: 'down'
+            eresh_action: 'sending'
+            eresh_signal: 'TERM'
+            eresh_error: 'no answer'
+        - string: 'added kur "dns"'
+          program: 'ereshkigal'
+          result:
+            eresh_action: 'added'
+            eresh_kur: 'dns'
+        - string: 'removed kur "gate"'
+          result:
+            eresh_action: 'removed'
+            eresh_kur: 'gate'
+        - string: 'stop requested'
+          result:
+            eresh_action: 'stop requested'
+        # falls through to the catch-all
+        - string: 'some future ereshkigal message'
+          result:
+            eresh_message: 'some future ereshkigal message'
+      negative:
+        - ''
+        - string: 'started... socket=/var/run/ereshkigal/socket kurs=recidive,sshd,suricata'
+          program: 'ereshkigal-extra'

@@ -1,5 +1,5 @@
 package Statocles::Command::create;
-our $VERSION = '0.098';
+our $VERSION = '0.099';
 # ABSTRACT: The command to create new Statocles site
 
 use Statocles::Base 'Command';
@@ -38,7 +38,7 @@ sub create_site {
         bundle_theme => 'Do you want to bundle the theme? ([Y]/n)',
         base_url => 'What is the URL where the site will be deployed?',
         deploy_class => 'How would you like to deploy? ([1], 2, 0)',
-        git_branch => 'What branch? [master]',
+        git_branch => 'What branch? [main]',
         deploy_path => 'Where to deploy the site? (default: current directory)',
     );
 
@@ -83,7 +83,7 @@ sub create_site {
         print "\n", "\n", $question->{git_branch};
         print "\n", "\n", $prompt{git_branch}, " ";
         chomp( $answer{git_branch} = <STDIN> );
-        $answer{git_branch} ||= "master";
+        $answer{git_branch} ||= "main";
     }
     elsif ( $answer{deploy_class} == 2 ) {
         # File deploy questions
@@ -110,7 +110,7 @@ sub create_site {
         };
     }
     elsif ( $answer{flavor} == 2 ) {
-        $vars{site}{index} = "/page";
+        $vars{site}{index} = "/";
         $vars{site}{nav}{main}[0] = {
             href => "/blog",
             text => "Blog",
@@ -174,33 +174,24 @@ sub create_site {
     ### Copy initial site content
     # Blog
     if ( my $ref = $site->{site}{apps}{blog} ) {
-        my $path = $site->{ $ref->{ '$ref' } }{store};
-        if ( $path ) {
-            my ( undef, undef, undef, $day, $mon, $year ) = localtime;
-            $year += 1900;
-            $mon += 1;
+        my $path = $site->{blog_app}{url_root};
+        my ( undef, undef, undef, $day, $mon, $year ) = localtime;
+        $year += 1900;
+        $mon += 1;
 
-            my @date_parts = (
-                sprintf( '%04i', $year ),
-                sprintf( '%02i', $mon ),
-                sprintf( '%02i', $day ),
-            );
+        my @date_parts = (
+            sprintf( '%04i', $year ),
+            sprintf( '%02i', $mon ),
+            sprintf( '%02i', $day ),
+        );
 
-            my $post_path = $root->child( $path, @date_parts, 'first-post', 'index.markdown' );
-            $post_path->parent->mkpath;
-            $create_dir->child( 'blog', 'post.markdown' )->copy( $post_path );
-        }
+        my $post_path = $root->child( $path, @date_parts, 'first-post', 'index.markdown' );
+        $post_path->parent->mkpath;
+        $create_dir->child( 'blog', 'post.markdown' )->copy( $post_path );
     }
-
-    # Page
-    if ( my $ref = $site->{site}{apps}{page} ) {
-        my $path = $site->{ $ref->{ '$ref' } }{store};
-        if ( $path ) {
-            my $page_path = $root->child( $path, 'index.markdown' );
-            $page_path->parent->mkpath;
-            $create_dir->child( 'page', 'index.markdown' )->copy( $page_path );
-        };
-    }
+    my $page_path = $root->child( 'index.markdown' );
+    $page_path->parent->mkpath;
+    $create_dir->child( 'page', 'index.markdown' )->copy( $page_path );
 
     ### DONE!
     print "\n", "\n", $question->{finish}, "\n", "\n";
@@ -222,7 +213,7 @@ Statocles::Command::create - The command to create new Statocles site
 
 =head1 VERSION
 
-version 0.098
+version 0.099
 
 =head1 AUTHOR
 

@@ -11,6 +11,7 @@ lib/Mojo/ATProto/OAuth/ClientMetadata.pm
 lib/Mojo/ATProto/OAuth/DPoP.pm
 lib/Mojo/ATProto/OAuth/Identity.pm
 lib/Mojo/ATProto/OAuth/Resolver.pm
+lib/Mojo/ATProto/OAuth/ResourceClient.pm
 lib/Mojo/ATProto/OAuth/SessionStore.pm
 lib/Mojo/ATProto/OAuth/SessionStore/Memory.pm
 lib/Mojo/ATProto/OAuth/SessionStore/Pg.pm
@@ -23,6 +24,8 @@ t/identity_async.t
 t/par.t
 t/refresh_and_scope_upgrade.t
 t/resolver.t
+t/resource_client.t
+t/scopes.t
 t/session_store_memory.t
 t/session_store_pg.t
 t/session_store_sqlite.t

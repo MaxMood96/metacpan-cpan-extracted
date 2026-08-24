@@ -1,0 +1,279 @@
+---
+# Netfilter / iptables / ufw kernel firewall log enrichment.
+#
+# The kernel logs firewall events as one big "KEY=VALUE" blob (space
+# separated), usually preceded by a human-readable action prefix such as
+# "[UFW BLOCK]" or "IPTABLES-DROP:". The whole enrichment is:
+#   1. match a thin pattern that captures the optional prefix (nf_action)
+#      and the "IN=..." blob (nf_kv), and
+#   2. kv-decompose the blob into nf_* fields.
+#
+# Flag tokens that have no "=" (DF, SYN, URGP=0 aside) are naturally skipped
+# by the kv splitter, which is fine.
+includes:
+- base
+vars_templated:
+  # The printk uptime rsyslog's kernel reader leaves at the head of a ring
+  # buffer line, "[ 1234.567890] ". Same fragment and same reasoning as the one
+  # in share/kernel.yaml (which see): whether it is present is a property of
+  # the READER, not of the message, so both shapes have to match, and it is
+  # stepped over rather than captured.
+  #
+  # It has to be consumed EXPLICITLY rather than left to nf_action's greedy
+  # [% GREEDYDATA %]. Without it the pattern still matched, but the prefix was
+  # swallowed into the action, so a ufw drop on a stock Debian came back as
+  # nf_action="[ 1234.567890] [UFW BLOCK]" where the same event elsewhere came
+  # back "[UFW BLOCK]"... a field quietly differing between two hosts logging
+  # the same thing, which is worse than a miss.
+  KERNEL_PRINTK: '(?:\[ *[% INT %]\.[% INT %]\] +)?'
+  NETFILTER: '[% KERNEL_PRINTK %](?:(?<nf_action>[% GREEDYDATA %]) )?(?<nf_kv>IN=[% GREEDYDATA %])'
+vars_tests:
+  # an all-optional fragment under an anchored template, so anything it cannot
+  # consume whole is a negative
+  KERNEL_PRINTK:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[ 1234.567890] '
+        result: '[ 1234.567890] '
+      - string: '[    0.000000] '
+        result: '[    0.000000] '
+    negative:
+      # no fractional part
+      - '[1234] '
+      # the trailing space is part of the fragment
+      - '[ 1234.567890]'
+      - '[UFW BLOCK] IN=eth0'
+  NETFILTER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[UFW BLOCK] IN=eth0 OUT= MAC=00:11:22:33:44:55 SRC=203.0.113.7 DST=192.0.2.1 LEN=60 TOS=0x00 PREC=0x00 TTL=54 ID=1234 DF PROTO=TCP SPT=44444 DPT=22 WINDOW=1024 RES=0x00 SYN URGP=0'
+        result: '[UFW BLOCK] IN=eth0 OUT= MAC=00:11:22:33:44:55 SRC=203.0.113.7 DST=192.0.2.1 LEN=60 TOS=0x00 PREC=0x00 TTL=54 ID=1234 DF PROTO=TCP SPT=44444 DPT=22 WINDOW=1024 RES=0x00 SYN URGP=0'
+      - string: 'IPTABLES-DROP: IN=eth0 OUT= SRC=198.51.100.9 DST=192.0.2.1 LEN=28 TTL=64 ID=0 PROTO=UDP SPT=53 DPT=1234 LEN=8'
+        result: 'IPTABLES-DROP: IN=eth0 OUT= SRC=198.51.100.9 DST=192.0.2.1 LEN=28 TTL=64 ID=0 PROTO=UDP SPT=53 DPT=1234 LEN=8'
+      # ICMP echo request: the kv blob carries TYPE/CODE/ID/SEQ instead of ports.
+      - string: '[UFW BLOCK] IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 LEN=84 TOS=0x00 PREC=0x00 TTL=54 ID=1234 PROTO=ICMP TYPE=8 CODE=0 ID=1234 SEQ=1'
+        result: '[UFW BLOCK] IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 LEN=84 TOS=0x00 PREC=0x00 TTL=54 ID=1234 PROTO=ICMP TYPE=8 CODE=0 ID=1234 SEQ=1'
+      # IPv6: SRC/DST are v6 literals; the kv value is whatever follows SRC=.
+      - string: '[UFW BLOCK] IN=eth0 OUT= SRC=2001:db8::1 DST=2001:db8::2 LEN=60 TC=0 HOPLIMIT=64 FLOWLBL=0 PROTO=TCP SPT=1 DPT=22 WINDOW=1024 RES=0x00 SYN URGP=0'
+        result: '[UFW BLOCK] IN=eth0 OUT= SRC=2001:db8::1 DST=2001:db8::2 LEN=60 TC=0 HOPLIMIT=64 FLOWLBL=0 PROTO=TCP SPT=1 DPT=22 WINDOW=1024 RES=0x00 SYN URGP=0'
+      # nftables prefix (multi-word action text).
+      - string: '[nftables] input drop IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 PROTO=TCP SPT=5 DPT=80'
+        result: '[nftables] input drop IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 PROTO=TCP SPT=5 DPT=80'
+      # IPTables-Dropped prefix.
+      - string: 'IPTables-Dropped: IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 PROTO=TCP SPT=5 DPT=80'
+        result: 'IPTables-Dropped: IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 PROTO=TCP SPT=5 DPT=80'
+      # bare blob with no action prefix at all.
+      - string: 'IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 PROTO=TCP SPT=5 DPT=80'
+        result: 'IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 PROTO=TCP SPT=5 DPT=80'
+      # UDP with a MAC= field and a LEN=.
+      - string: '[UFW BLOCK] IN=eth0 OUT= MAC=00:11:22:33:44:55 SRC=198.51.100.9 DST=192.0.2.1 LEN=32 TTL=64 ID=0 PROTO=UDP SPT=68 DPT=67'
+        result: '[UFW BLOCK] IN=eth0 OUT= MAC=00:11:22:33:44:55 SRC=198.51.100.9 DST=192.0.2.1 LEN=32 TTL=64 ID=0 PROTO=UDP SPT=68 DPT=67'
+      # carrying the printk uptime, the shape a Debian or Ubuntu kern.log holds
+      - string: '[ 1234.567890] [UFW BLOCK] IN=eth0 OUT= MAC=00:11:22:33:44:55 SRC=203.0.113.7 DST=192.0.2.1 LEN=60 TOS=0x00 PREC=0x00 TTL=54 ID=1234 DF PROTO=TCP SPT=44444 DPT=22 WINDOW=1024 RES=0x00 SYN URGP=0'
+        result: '[ 1234.567890] [UFW BLOCK] IN=eth0 OUT= MAC=00:11:22:33:44:55 SRC=203.0.113.7 DST=192.0.2.1 LEN=60 TOS=0x00 PREC=0x00 TTL=54 ID=1234 DF PROTO=TCP SPT=44444 DPT=22 WINDOW=1024 RES=0x00 SYN URGP=0'
+    negative:
+      - 'martian source 203.0.113.7 from 198.51.100.9, on dev eth0'
+geoip:
+  - nf_SRC
+convert:
+  nf_SPT: int
+  nf_DPT: int
+  nf_LEN: int
+  nf_TTL: int
+  nf_ID: int
+  # ICMP payload fields (present on PROTO=ICMP lines).
+  nf_TYPE: int
+  nf_CODE: int
+  nf_SEQ: int
+  # v6 hop limit (the v6 analogue of TTL).
+  nf_HOPLIMIT: int
+  # tcp window size.
+  nf_WINDOW: int
+decompose:
+  - field: nf_kv
+    type: kv
+    prefix: 'nf_'
+    remove: true
+    tests:
+      - input: 'IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 LEN=60 TTL=54 ID=1234 PROTO=TCP SPT=44444 DPT=22'
+        result:
+          nf_IN: 'eth0'
+          nf_OUT: ''
+          nf_SRC: '203.0.113.7'
+          nf_DST: '192.0.2.1'
+          nf_LEN: '60'
+          nf_TTL: '54'
+          nf_ID: '1234'
+          nf_PROTO: 'TCP'
+          nf_SPT: '44444'
+          nf_DPT: '22'
+      # ICMP: no SPT/DPT, but TYPE/CODE/ID/SEQ. A duplicate key (ID appears twice)
+      # keeps the first occurrence.
+      - input: 'IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 LEN=84 TTL=54 ID=1234 PROTO=ICMP TYPE=8 CODE=0 SEQ=1'
+        result:
+          nf_IN: 'eth0'
+          nf_OUT: ''
+          nf_SRC: '203.0.113.7'
+          nf_DST: '192.0.2.1'
+          nf_LEN: '84'
+          nf_TTL: '54'
+          nf_ID: '1234'
+          nf_PROTO: 'ICMP'
+          nf_TYPE: '8'
+          nf_CODE: '0'
+          nf_SEQ: '1'
+      # IPv6: SRC/DST are v6 literals; kv splitter is agnostic to the value shape.
+      - input: 'IN=eth0 OUT= SRC=2001:db8::1 DST=2001:db8::2 LEN=60 HOPLIMIT=64 PROTO=TCP SPT=1 DPT=22'
+        result:
+          nf_IN: 'eth0'
+          nf_OUT: ''
+          nf_SRC: '2001:db8::1'
+          nf_DST: '2001:db8::2'
+          nf_LEN: '60'
+          nf_HOPLIMIT: '64'
+          nf_PROTO: 'TCP'
+          nf_SPT: '1'
+          nf_DPT: '22'
+      # UDP with a MAC= field.
+      - input: 'IN=eth0 OUT= MAC=00:11:22:33:44:55 SRC=198.51.100.9 DST=192.0.2.1 LEN=32 TTL=64 ID=0 PROTO=UDP SPT=68 DPT=67'
+        result:
+          nf_IN: 'eth0'
+          nf_OUT: ''
+          nf_MAC: '00:11:22:33:44:55'
+          nf_SRC: '198.51.100.9'
+          nf_DST: '192.0.2.1'
+          nf_LEN: '32'
+          nf_TTL: '64'
+          nf_ID: '0'
+          nf_PROTO: 'UDP'
+          nf_SPT: '68'
+          nf_DPT: '67'
+rules:
+  - name: netfilter
+    gate:
+      - field: PROGRAM
+        values:
+          - kernel
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - NETFILTER
+    tests:
+      positive:
+        - string: '[UFW BLOCK] IN=eth0 OUT= MAC=00:11:22:33:44:55 SRC=203.0.113.7 DST=192.0.2.1 LEN=60 TOS=0x00 PREC=0x00 TTL=54 ID=1234 DF PROTO=TCP SPT=44444 DPT=22 WINDOW=1024 RES=0x00 SYN URGP=0'
+          enriched:
+            nf_DPT: '22'
+            nf_DST: '192.0.2.1'
+            nf_ID: '1234'
+            nf_IN: 'eth0'
+            nf_LEN: '60'
+            nf_MAC: '00:11:22:33:44:55'
+            nf_OUT: ''
+            nf_PREC: '0x00'
+            nf_PROTO: 'TCP'
+            nf_RES: '0x00'
+            nf_SPT: '44444'
+            nf_SRC: '203.0.113.7'
+            nf_TOS: '0x00'
+            nf_TTL: '54'
+            nf_URGP: '0'
+            nf_WINDOW: '1024'
+            nf_action: '[UFW BLOCK]'
+          numeric:
+            - nf_DPT
+            - nf_ID
+            - nf_LEN
+            - nf_SPT
+            - nf_TTL
+            - nf_WINDOW
+          program: 'kernel'
+          result:
+            nf_action: '[UFW BLOCK]'
+            nf_kv: 'IN=eth0 OUT= MAC=00:11:22:33:44:55 SRC=203.0.113.7 DST=192.0.2.1 LEN=60 TOS=0x00 PREC=0x00 TTL=54 ID=1234 DF PROTO=TCP SPT=44444 DPT=22 WINDOW=1024 RES=0x00 SYN URGP=0'
+        - string: 'IPTABLES-DROP: IN=eth0 OUT= SRC=198.51.100.9 DST=192.0.2.1 LEN=28 TTL=64 ID=0 PROTO=UDP SPT=53 DPT=1234 LEN=8'
+          result:
+            nf_action: 'IPTABLES-DROP:'
+            nf_kv: 'IN=eth0 OUT= SRC=198.51.100.9 DST=192.0.2.1 LEN=28 TTL=64 ID=0 PROTO=UDP SPT=53 DPT=1234 LEN=8'
+        # ICMP echo-request: the whole "IN=..." tail (incl. TYPE/CODE/ID/SEQ) is nf_kv.
+        - string: '[UFW BLOCK] IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 LEN=84 TOS=0x00 PREC=0x00 TTL=54 ID=1234 PROTO=ICMP TYPE=8 CODE=0 ID=1234 SEQ=1'
+          enriched:
+            nf_CODE: '0'
+            nf_DST: '192.0.2.1'
+            nf_ID: '1234'
+            nf_IN: 'eth0'
+            nf_LEN: '84'
+            nf_OUT: ''
+            nf_PREC: '0x00'
+            nf_PROTO: 'ICMP'
+            nf_SEQ: '1'
+            nf_SRC: '203.0.113.7'
+            nf_TOS: '0x00'
+            nf_TTL: '54'
+            nf_TYPE: '8'
+            nf_action: '[UFW BLOCK]'
+          numeric:
+            - nf_CODE
+            - nf_SEQ
+            - nf_TYPE
+          result:
+            nf_action: '[UFW BLOCK]'
+            nf_kv: 'IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 LEN=84 TOS=0x00 PREC=0x00 TTL=54 ID=1234 PROTO=ICMP TYPE=8 CODE=0 ID=1234 SEQ=1'
+        # IPv6 source/destination.
+        - string: '[UFW BLOCK] IN=eth0 OUT= SRC=2001:db8::1 DST=2001:db8::2 LEN=60 TC=0 HOPLIMIT=64 FLOWLBL=0 PROTO=TCP SPT=1 DPT=22 WINDOW=1024 RES=0x00 SYN URGP=0'
+          enriched:
+            nf_DPT: '22'
+            nf_DST: '2001:db8::2'
+            nf_FLOWLBL: '0'
+            nf_HOPLIMIT: '64'
+            nf_IN: 'eth0'
+            nf_LEN: '60'
+            nf_OUT: ''
+            nf_PROTO: 'TCP'
+            nf_RES: '0x00'
+            nf_SPT: '1'
+            nf_SRC: '2001:db8::1'
+            nf_TC: '0'
+            nf_URGP: '0'
+            nf_WINDOW: '1024'
+            nf_action: '[UFW BLOCK]'
+          numeric:
+            - nf_HOPLIMIT
+          result:
+            nf_action: '[UFW BLOCK]'
+            nf_kv: 'IN=eth0 OUT= SRC=2001:db8::1 DST=2001:db8::2 LEN=60 TC=0 HOPLIMIT=64 FLOWLBL=0 PROTO=TCP SPT=1 DPT=22 WINDOW=1024 RES=0x00 SYN URGP=0'
+        # nftables prefix (multi-word action captured whole into nf_action).
+        - string: '[nftables] input drop IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 PROTO=TCP SPT=5 DPT=80'
+          result:
+            nf_action: '[nftables] input drop'
+            nf_kv: 'IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 PROTO=TCP SPT=5 DPT=80'
+        # IPTables-Dropped prefix.
+        - string: 'IPTables-Dropped: IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 PROTO=TCP SPT=5 DPT=80'
+          result:
+            nf_action: 'IPTables-Dropped:'
+            nf_kv: 'IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 PROTO=TCP SPT=5 DPT=80'
+        # bare blob, no action prefix: nf_action does not participate, so it is absent.
+        - string: 'IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 PROTO=TCP SPT=5 DPT=80'
+          result:
+            nf_kv: 'IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 PROTO=TCP SPT=5 DPT=80'
+        # UDP with a MAC= field.
+        - string: '[UFW BLOCK] IN=eth0 OUT= MAC=00:11:22:33:44:55 SRC=198.51.100.9 DST=192.0.2.1 LEN=32 TTL=64 ID=0 PROTO=UDP SPT=68 DPT=67'
+          result:
+            nf_action: '[UFW BLOCK]'
+            nf_kv: 'IN=eth0 OUT= MAC=00:11:22:33:44:55 SRC=198.51.100.9 DST=192.0.2.1 LEN=32 TTL=64 ID=0 PROTO=UDP SPT=68 DPT=67'
+        # The printk uptime is stepped over rather than swallowed, so nf_action
+        # comes out "[UFW BLOCK]" exactly as on a host whose reader stripped
+        # it. A pattern that swallowed it would return
+        # "[ 1234.567890] [UFW BLOCK]".
+        - string: '[ 1234.567890] [UFW BLOCK] IN=eth0 OUT= MAC=00:11:22:33:44:55 SRC=203.0.113.7 DST=192.0.2.1 LEN=60 TOS=0x00 PREC=0x00 TTL=54 ID=1234 DF PROTO=TCP SPT=44444 DPT=22 WINDOW=1024 RES=0x00 SYN URGP=0'
+          result:
+            nf_action: '[UFW BLOCK]'
+            nf_kv: 'IN=eth0 OUT= MAC=00:11:22:33:44:55 SRC=203.0.113.7 DST=192.0.2.1 LEN=60 TOS=0x00 PREC=0x00 TTL=54 ID=1234 DF PROTO=TCP SPT=44444 DPT=22 WINDOW=1024 RES=0x00 SYN URGP=0'
+        # The same with no action prefix, only the uptime, which must not
+        # become the action.
+        - string: '[ 1234.567890] IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 PROTO=TCP SPT=5 DPT=80'
+          result:
+            nf_kv: 'IN=eth0 OUT= SRC=203.0.113.7 DST=192.0.2.1 PROTO=TCP SPT=5 DPT=80'
+      negative:
+        - 'martian source 203.0.113.7 from 198.51.100.9, on dev eth0'
+        - string: '[UFW BLOCK] IN=eth0 OUT= MAC=00:11:22:33:44:55 SRC=203.0.113.7 DST=192.0.2.1 LEN=60 TOS=0x00 PREC=0x00 TTL=54 ID=1234 DF PROTO=TCP SPT=44444 DPT=22 WINDOW=1024 RES=0x00 SYN URGP=0'
+          program: 'netfilter-extra'

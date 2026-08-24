@@ -1,0 +1,100 @@
+use strict;
+use warnings;
+use FindBin;
+use lib "$FindBin::Bin/../lib";
+
+use Uniform::HTMX::PAGI;
+use Future;
+
+my $app = sub {
+    my ($scope, $receive, $send) = @_;
+
+    if ($scope->{type} eq 'lifespan') {
+        return Future->done;
+    }
+
+    return Future->fail("Unsupported protocol") unless $scope->{type} eq 'http';
+
+    my $path = $scope->{path} || '/';
+
+    # Map CGI environment variables from PAGI scope headers
+    my %env;
+    if (my $headers = $scope->{headers}) {
+        for my $pair (@$headers) {
+            my ($key, $val) = @$pair;
+            $key =~ s/-/_/g;
+            $env{'HTTP_' . uc($key)} = $val;
+        }
+    }
+
+    my $htmx = Uniform::HTMX::PAGI->new(\%env);
+
+    # Route: Main Page
+    if ($path eq '/' && !$htmx->is_htmx) {
+        my $html = <<'HTML';
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Uniform::HTMX::PAGI Test App</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 600px; }
+        .box { border: 1px solid #ccc; padding: 1rem; margin-top: 0.5rem; border-radius: 6px; }
+    </style>
+</head>
+<body>
+    <h1>Uniform::HTMX::PAGI Live Test</h1>
+    <button hx-post="/time" hx-target="#output">Get Time</button>
+    <div id="output" class="box">Output area...</div>
+</body>
+</html>
+HTML
+        return $send->({
+            type    => 'http.response.start',
+            status  => 200,
+            headers => [ ['content-type', 'text/html; charset=utf-8'] ],
+        })->then(sub {
+            $send->({
+                type => 'http.response.body',
+                body => $html,
+            });
+        });
+    }
+
+    # Route: HTMX Endpoint
+    if ($path eq '/time') {
+        $htmx->res_trigger('pagiEvent', { status => 'ok' });
+
+        my $time = scalar localtime;
+        my $res  = [ 200, [ ['content-type', 'text/html'] ], [ "<strong>Time:</strong> $time" ] ];
+
+        # Injects HX-* headers as 2-element sub-arrays
+        $htmx->apply($res);
+
+        return $send->({
+            type    => 'http.response.start',
+            status  => $res->[0],
+            headers => $res->[1],
+        })->then(sub {
+            $send->({
+                type => 'http.response.body',
+                body => $res->[2][0],
+            });
+        });
+    }
+
+    # 404 Fallback
+    return $send->({
+        type    => 'http.response.start',
+        status  => 404,
+        headers => [ ['content-type', 'text/plain'] ],
+    })->then(sub {
+        $send->({
+            type => 'http.response.body',
+            body => 'Not Found',
+        });
+    });
+};
+
+$app;

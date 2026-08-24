@@ -1,5 +1,13 @@
 Revision history for Uniform::Upload
 
+0.02  2026-08-23
+        - Abstracted Uniform::Upload as a base class for extension drivers.
+        - Added constructor delegation support (SUPER::new) for framework drivers.
+        - Added max_size limit string normalization (e.g., accepting '2MB' alongside '2M').
+        - Added full POD documentation and inheritance guides for subclasses.
+        - Added comprehensive test suite (t/00-load.t through t/03-inheritance.t).
+        - Added examples/demo.pl demonstration script.
+
 0.01  2026-08-22
         - Repository specification abstraction initialize launch.
         - Fluid validation instance file wrapper tracking engine stabilized.

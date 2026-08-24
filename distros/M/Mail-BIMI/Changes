@@ -1,3 +1,7 @@
+3.20260824 2026-08-24 Australia/Melbourne
+  - Ensure all relevant network and security options are passed to
+    XML::LibXML whenever a new object is created.
+
 3.20260806 2026-08-06 Australia/Melbourne
   - Record: Enforce ASCII printable in BIMI records
 

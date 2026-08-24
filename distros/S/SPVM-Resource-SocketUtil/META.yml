@@ -4,11 +4,12 @@ author:
   - 'Yuki Kimoto<kimoto.yuki@gmail.com>'
 build_requires:
   ExtUtils::MakeMaker: '0'
+  Test::More: '0.92'
 configure_requires:
-  SPVM: '0.990042'
+  SPVM: '0.990195'
 dynamic_config: 1
 generated_by: 'ExtUtils::MakeMaker version 7.76, CPAN::Meta::Converter version 2.150010'
-license: perl
+license: mit
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
   version: '1.4'
@@ -18,8 +19,9 @@ no_index:
     - t
     - inc
 requires:
-  SPVM: '0.990042'
+  SPVM: '0.990195'
 resources:
+  bugtracker: https://github.com/yuki-kimoto/SPVM-Resource-SocketUtil/issues
   repository: https://github.com/yuki-kimoto/SPVM-Resource-SocketUtil.git
-version: '1.006'
+version: '1.007'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

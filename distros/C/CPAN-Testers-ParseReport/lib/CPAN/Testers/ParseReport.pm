@@ -3,12 +3,14 @@ package CPAN::Testers::ParseReport;
 use warnings;
 use strict;
 
-use Compress::Zlib ();
-use DateTime::Format::Strptime;
+use Compress::Zlib ('$gzerrno');
+my $LOADED = eval { require DateTime::Format::Strptime; 1; }; # uses Params::Util which may cause loading warnings with perl 5.8.9
+die $@ if !$LOADED and $@;
 use File::Basename qw(basename);
 use File::Path qw(mkpath);
 use File::ReadBackwards;
 use HTML::Entities qw(decode_entities);
+use JSON::XS ();
 use LWP::UserAgent;
 use List::AllUtils qw(uniq max min sum);
 use MIME::QuotedPrint ();
@@ -18,7 +20,7 @@ use utf8;
 
 our $default_distrotransport = "ctjson";
 our $default_transport = "http_cpantesters";
-our $default_cturl = "https://www.cpantesters.org/show";
+our $default_cturl = "https://api.cpantesters.org";
 our $Signal = 0;
 
 =encoding utf-8
@@ -29,7 +31,7 @@ CPAN::Testers::ParseReport - parse reports to www.cpantesters.org from various s
 
 =cut
 
-use version; our $VERSION = qv('0.5.0');
+use version; our $VERSION = qv('0.6.0');
 
 =head1 SYNOPSIS
 
@@ -64,13 +66,49 @@ options would require different ones.
 
 mirrors and reads this report. $report is of the form
 
-  { id => <integer>, guid => <guid>, }
+  { guid => <guid>, }
 
 $dumpvar is a hashreference that gets filled with data.
 
 $extract is the result of parse_report() described below.
 
 =cut
+
+# A mapping of v3 API osname to a user-friendly label for the OS
+# to use in reporting.
+# TODO: This should probably be done by the API instead of here...
+my %OSNAME = (
+    aix => 'AIX',
+    bsdos => 'BSD/OS',
+    cygwin => "Windows (Cygwin)",
+    darwin => "Mac OS X",
+    dec_osf => "Tru64",
+    dragonfly => "Dragonfly BSD",
+    freebsd => "FreeBSD",
+    gnu => "GNU Hurd",
+    haiku => "Haiku",
+    hpux => "HP-UX",
+    irix => "IRIX",
+    linux => "GNU/Linux",
+    macos => "Mac OS classic",
+    midnightbsd => "MidnightBSD",
+    mirbsd => "MirOS BSD",
+    mswin32 => "Windows (Win32)",
+    netbsd => "NetBSD",
+    openbsd => "OpenBSD",
+    os2 => "OS/2",
+    os390 => "OS390/zOS",
+    gnukfreebsd => "Debian GNU/kFreeBSD",
+    sco => "SCO",
+    solaris => "SunOS/Solaris",
+    vms => "VMS",
+    beos => "BeOS",
+    interix => "Interix",
+    nto => "QNX Neutrino",
+    minix => "MINIX",
+    bitrig => "BITRIG",
+    Mac => "MAC",
+);
 
 {
     my $ua;
@@ -103,7 +141,6 @@ $extract is the result of parse_report() described below.
 
 {
     # we called it yaml because it was yaml; now it is json
-    use JSON::XS;
     my $j = JSON::XS->new->ascii->pretty;
     sub _slurp {
         my($file) = @_;
@@ -114,7 +151,7 @@ $extract is the result of parse_report() described below.
     sub _yaml_loadfile {
         my $file = shift;
         my $content = _slurp $file;
-        $DB::single = 1;
+        # $DB::single = 1;
         if ($file =~ /\.ndjson$/) {
             $content =~ s/}$/},/gm;
             $content =~ s/,\s*\z//;
@@ -148,8 +185,8 @@ sub _download_overview {
                     my $timestamp = gmtime $stat[9];
                     print STDERR "(timestamp $timestamp GMT)\n" unless $Opt{quiet};
                 }
-                print STDERR "Fetching $ctarget..." if $Opt{verbose} && !$Opt{quiet};
-                my $uri = "$cturl/$distro.json";
+                my $uri = "$cturl/v3/summary/$distro";
+                print STDERR "Fetching $ctarget ($uri)...\n" if $Opt{verbose} && !$Opt{quiet};
                 my $resp = _ua->mirror($uri,$ctarget); # should most probably be _ua_gip, but then we need to deal with uncompressing
                 if ($resp->is_success) {
                     print STDERR "DONE\n" if $Opt{verbose} && !$Opt{quiet};
@@ -187,7 +224,11 @@ sub _download_overview {
                         last BW;
                     }
                 }
-                $uri = "$ndjsonurl?dist=$distro&after=$highestguid";
+                if ($highestguid) {
+                    $uri = "$ndjsonurl?dist=$distro&after=$highestguid";
+                } else {
+                    $uri = "$ndjsonurl?dist=$distro";
+                }
             } else {
                 $uri = "$ndjsonurl?dist=$distro";
             }
@@ -211,6 +252,8 @@ sub _download_overview {
                      $resp->status_line,
                     );
             }
+        } else {
+          die {severity=>0, text=>"Unknown distrotransport '$Opt{distrotransport}'"};
         }
     }
     return $ctarget;
@@ -225,10 +268,14 @@ sub _parse_yaml {
         $arr = [grep { ($_->{distversion}||=join("-",$_->{dist},$_->{version})) eq $Opt{vdistro} } @$arr];
         ($selected_release_distrov) = $arr->[0]{distversion};
     } else {
+        # To find the "latest" version of the dist, we used to sort by the report's numeric ID
+        # and use the last newly-seen dist-version. The new API does not have the numeric ID, but it
+        # does have an ISO-8601 date/time string...
         $excuse_string = "any distro";
         my $last_addition;
         my %seen;
-        for my $report (sort { $a->{id} <=> $b->{id} } @$arr) {
+        for my $report (sort { $a->{date} cmp $b->{date} } @$arr) {
+            $report->{distversion}||=join("-",$report->{dist},$report->{version});
             unless ($seen{$report->{distversion}}++) {
                 $last_addition = $report->{distversion};
             }
@@ -243,27 +290,25 @@ sub _parse_yaml {
     print STDERR "SELECTED: $selected_release_distrov\n" unless $Opt{quiet};
     my @all;
     for my $test (@$arr) {
-        my $id = $test->{id};
         push @all, {
-                    id   => $test->{id},
                     guid => $test->{guid},
                    };
         return if $Signal;
     }
-    @all = sort { $b->{id} <=> $a->{id} } @all;
+    @all = sort { $b->{guid} cmp $a->{guid} } @all;
     return \@all;
 }
 
 sub parse_single_report {
     my($report, $dumpvars, %Opt) = @_;
-    my($id) = $report->{id};
     my($guid) = $report->{guid};
     $Opt{cachedir} ||= "$ENV{HOME}/var/cpantesters";
+    my $cturl = $Opt{cturl} ||= $default_cturl;
     # the name nntp-testers was picked because originally the reports
     # were available from an NNTP server
     my $nnt_dir = "$Opt{cachedir}/nntp-testers";
     mkpath $nnt_dir;
-    my $target = "$nnt_dir/$id";
+    my $target = "$nnt_dir/$guid";
     if ($Opt{local}) {
         unless (-e $target) {
             die {severity=>0,text=>"Warning: No local file '$target' found, skipping\n"};
@@ -308,8 +353,49 @@ sub parse_single_report {
                     $mustfetch = 1;
                 }
                 if ($mustfetch) {
-                    my $resp = _ua->mirror("http://www.cpantesters.org/cpan/report/$guid?raw=1",$target);
+                    # The API server returns a JSON structure containing both the
+                    # raw output and details parsed from that output.
+                    my $uri = "$cturl/v3/report/$guid";
+                    my $resp = _ua->get($uri);
                     if ($resp->is_success) {
+                        my $json = $resp->decoded_content;
+                        my $report;
+                        local $@;
+                        eval {
+                          $report = JSON::XS::decode_json($json);
+                        };
+                        if (my $e = $@) {
+                          die {severity=>0,
+                            text=>sprintf "Failed to parse JSON for report guid[%s]: %s", $guid, $e};
+                        }
+                        open my $fh, ">", $target or die {severity=>0,text=>"Could not open >$target: $!"};
+                        # The v3 report format keeps metadata in the JSON structure, but later
+                        # when we're parsing the report, we expect to see the same NNTP/SMTP-style
+                        # headers.
+                        # TODO: We should probably have this module use the JSON natively.
+                        printf $fh "From: %s <%s>\n",
+                            $report->{reporter}{name},
+                            $report->{reporter}{email},
+                            ;
+                        my $x = $OSNAME{ $report->{environment}{system}{osname} };
+                        $x = $report->{environment}{system}{osname} unless defined $x;
+                        printf $fh "Subject: %s %s-%s perl-%s %s\n",
+                            uc $report->{result}{grade},
+                            $report->{distribution}{name},
+                            $report->{distribution}{version},
+                            $report->{environment}{language}{version},
+                            $x,
+                            ;
+                        printf $fh "Date: %s\n\n",
+                            $report->{created},
+                            ;
+
+                        # The v3 report format allows for separating output into phases
+                        # (in order: configure, build, install, test),
+                        # though no client currently (2026-01-10) does so it all ends up
+                        # in "uncategorized"...
+                        print $fh grep defined, @{$report->{result}{output}}{qw(configure build install test uncategorized)};
+                        close $fh;
                         if ($Opt{verbose}) {
                             my(@stat) = stat $target;
                             my $timestamp = gmtime $stat[9];
@@ -319,11 +405,14 @@ sub parse_single_report {
                             }
                         }
                         my $headers = "$target.headers";
-                        open my $fh, ">", $headers or die {severity=>1,text=>"Could not open >$headers: $!"};
+                        open $fh, ">", $headers or die {severity=>1,text=>"Could not open >$headers: $!"};
                         print $fh $resp->headers->as_string;
                     } else {
-                        die {severity=>0,
-                                 text=>sprintf "HTTP Server Error[%s] for id[%s] guid[%s]", $resp->status_line, $id, $guid};
+                        die {
+                            severity => 0,
+                            text     => sprintf("HTTP Server Error[%s] for guid[%s]", $resp->status_line, $guid),
+                            uri      => $uri,
+                        };
                     }
                 }
             } elsif ($Opt{transport} eq "http_cpantesters_gzip") {
@@ -336,8 +425,47 @@ sub parse_single_report {
                     $mustfetch = 1;
                 }
                 if ($mustfetch) {
-                    my $resp = _ua_gzip->mirror("http://www.cpantesters.org/cpan/report/$guid?raw=1","$target.gz");
+                    # The API server returns a JSON structure containing both the
+                    # raw output and details parsed from that output.
+                    my $resp = _ua_gzip->get("$cturl/v3/report/$guid");
                     if ($resp->is_success) {
+                        my $json = $resp->decoded_content;
+                        my $report;
+                        local $@;
+                        eval {
+                          $report = JSON::XS::decode_json($json);
+                        };
+                        if (my $e = $@) {
+                          die {severity=>0,
+                            text=>sprintf "Failed to parse JSON for report guid[%s]: %s", $guid, $e};
+                        }
+                        my $gz = Compress::Zlib::gzopen("$target.gz", "wb")
+                            or die {severity=>0,text=>"Could not open >$target.gz: $gzerrno"};
+                        # The v3 report format keeps metadata in the JSON structure, but later
+                        # when we're parsing the report, we expect to see the same NNTP/SMTP-style
+                        # headers.
+                        # TODO: We should probably have this module use the JSON natively.
+                        $gz->gzwrite(sprintf "From: %s <%s>\n",
+                            $report->{reporter}{name},
+                            $report->{reporter}{email},
+                        );
+                        my $x = $OSNAME{ $report->{environment}{system}{osname} };
+                        $x = $report->{environment}{system}{osname} unless defined $x;
+                        $gz->gzwrite(sprintf "Subject: %s %s-%s perl-%s %s\n",
+                            uc $report->{result}{grade},
+                            $report->{distribution}{name},
+                            $report->{distribution}{version},
+                            $report->{environment}{language}{version},
+                            $x,
+                        );
+                        $gz->gzwrite(sprintf "Date: %s\n\n", $report->{created});
+
+                        # The v3 report format allows for separating output into phases
+                        # (in order: configure, build, install, test),
+                        # though no client currently (2026-01-10) does so it all ends up
+                        # in "uncategorized"...
+                        $gz->gzwrite(join "\n", grep defined, @{$report->{result}{output}}{qw(configure build install test uncategorized)});
+                        $gz->gzclose;
                         if ($Opt{verbose}) {
                             my(@stat) = stat "$target.gz";
                             my $timestamp = gmtime $stat[9];
@@ -351,7 +479,7 @@ sub parse_single_report {
                         print $fh $resp->headers->as_string;
                     } else {
                         die {severity=>0,
-                                 text=>sprintf "HTTP Server Error[%s] for id[%s] guid[%s]", $resp->status_line, $id, $guid};
+                                 text=>sprintf "HTTP Server Error[%s] for guid[%s]", $resp->status_line, $guid};
                     }
                 }
             } else {
@@ -396,13 +524,12 @@ sub parse_distro {
         my $d = CPAN::DistnameInfo->new("FOO/$Opt{vdistro}.tgz");
         my $dist = $d->dist;
         my $version = $d->version;
-        my $sql = "select id, guid from cpanstats where dist=? and version=? order by id desc";
+        my $sql = "select guid from cpanstats where dist=? and version=? order by id desc";
         my @rows = $dbi->get_query($sql,$dist,$version);
         my @all;
         for my $row (@rows) {
             push @all, {
-                        id   => $row->[0],
-                        guid => $row->[1],
+                        guid => $row->[0],
                        };
         }
         $reports = \@all;
@@ -433,7 +560,8 @@ sub parse_distro {
                     if ($@->{severity}) {
                         die $@->{text};
                     } else {
-                        warn $@->{text};
+                        my $j = JSON::XS->new->ascii->canonical;
+                        warn sprintf "%s (%s)", $@->{text}, $j->encode({%{$@}, line => __LINE__, file => __FILE__});
                     }
                 } else {
                     die $@;
@@ -512,14 +640,14 @@ In %Opt you can use
 
 to use this function to parse one full article as text. When this is
 given, the argument $target is not read, but its basename is taken to
-be the id of the article. (OMG, hackers!)
+be the guid of the article. (OMG, hackers!)
 
 =cut
 sub parse_report {
     my($target,$dumpvars,%Opt) = @_;
     our @q;
-    my $id = basename($target);
-    # warn "DEBUG: id[$id]";
+    my $guid = basename($target);
+    # warn "DEBUG: guid[$guid]";
     my($ok,$about);
 
     my(%extract);
@@ -972,7 +1100,7 @@ sub parse_report {
         $extract{"meta:perl"} = $p5;
         $extract{"conf:git_describe"} = $patch if defined $patch;
     }
-    $extract{id} = $id;
+    $extract{guid} = $guid;
     if (my $filtercbbody = $Opt{filtercb}) {
         my $filtercb = eval('sub {'.$filtercbbody.'}');
         $filtercb->(\%extract);
@@ -1002,7 +1130,7 @@ sub parse_report {
         $diag .= " $want\[$have]";
     }
     binmode \*STDERR, ":encoding(UTF-8)";
-    printf STDERR " %-4s %8s%s\n", $extract{"meta:ok"}, $id, $diag unless $Opt{quiet};
+    printf STDERR " %-4s %36s%s\n", $extract{"meta:ok"}, $guid, $diag unless $Opt{quiet};
     if ($Opt{raw}) {
         $report =~ s/\s+\z//;
         print STDERR $report, "\n================\n" unless $Opt{quiet};
@@ -1014,7 +1142,7 @@ sub parse_report {
         local $ARGV;
         my $ans = IO::Prompt::prompt
             (
-             -p => "View $id? [onechar: ynq] ",
+             -p => "View $guid? [onechar: ynq] ",
              -d => "y",
              -u => qr/[ynq]/,
              -onechar,
@@ -1141,11 +1269,10 @@ code for details.
          'env:PERL_CPAN_REPORTER_DIR',
          'meta:ok',
          'meta:perl_compiled_at',
+         'guid',
         );
     my %normalize_numeric =
         (
-         id => sub { return shift },
-
          # here we were treating date as numeric; current
          # implementation requires to decide for one normalization, so
          # we decided 2012-02 for a sampling focussing on recentness;
@@ -1299,7 +1426,7 @@ sub solve {
                     my $v = $1;
                     $obs{$x} = eval { $normalize_numeric{$v}->($rec->{$v}); };
                     if ($@) {
-                        warn "Warning: error during parsing v[$v] in record[$rec->{id}]: $@; continuing with undef value";
+                        warn "Warning: error during parsing v[$v] in record[$rec->{guid}]: $@; continuing with undef value";
                     }
                 }
             }

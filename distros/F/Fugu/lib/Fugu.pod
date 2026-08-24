@@ -55,6 +55,8 @@ optional feature, loaded lazily.
 
 =item L<Fugu::Proxy> - a caching HTTP proxy
 
+=item L<Fugu::REPL> - a line editor for an operator prompt
+
 =item L<Fugu::Random> - random bytes and random passwords
 
 =item L<Fugu::SSH> - run a command on another machine over SSH
@@ -62,6 +64,8 @@ optional feature, loaded lazily.
 =item L<Fugu::Sandbox> - pledge and unveil as a platform abstraction
 
 =item L<Fugu::Signal> - signal handlers for graceful shutdown
+
+=item L<Fugu::Signify> - verify a signify(1) signature and a SHA256 manifest
 
 =item L<Fugu::StateFile> - a small JSON state file
 

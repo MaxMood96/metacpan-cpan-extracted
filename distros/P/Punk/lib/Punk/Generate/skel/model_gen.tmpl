@@ -8,4 +8,12 @@ table '{% table %}';
 # See Punk::Model for types and constraints.
 field id => { type => 'integer' };
 
+# A filter names fields and operators, an ordering names fields and
+# directions, and a page continues from its `next` token:
+#
+#   $c->model('{% name %}')->search(
+#       { id => { '>' => 0 } },
+#       { order_by => [ id => 'desc' ], limit => 20, after => $token });
+#   $c->model('{% name %}')->count({ ... });
+
 1;

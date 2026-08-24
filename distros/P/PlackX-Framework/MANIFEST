@@ -56,6 +56,7 @@ t/01_pxf_export.t
 t/02_pxf_app.t
 t/03_pxf_examples.t
 t/04_pxf_streaming.t
+t/05_pxf_integration.t
 t/config.t
 t/handler.t
 t/request.t
@@ -66,6 +67,8 @@ t/tlib/BrokenTest.pm
 t/tlib/MyApp.pm
 t/tsupport/config.json
 t/tsupport/config.pl
+t/tsupport/image.png
+t/tsupport/nothing.empty
 t/urix.t
 t/util.t
 META.yml

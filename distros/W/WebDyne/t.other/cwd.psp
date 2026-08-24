@@ -1,6 +1,0 @@
-<start_html>
-<pre>
-Cwd: <? shift()->cwd() ?>
-URI: ^{uri}
-Filename: ^{filename}
-Location: ^{location}

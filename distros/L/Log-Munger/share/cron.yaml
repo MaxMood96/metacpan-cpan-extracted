@@ -1,0 +1,310 @@
+---
+# cron / crond job execution and session log enrichment.
+#
+# Gates on the syslog PROGRAM field being "cron", "crond", "CRON" or
+# "anacron", optionally with a leading path, since FreeBSD cron logs under its
+# full "/usr/sbin/cron" argv[0] rather than a bare name. Patterns are anchored
+# (each must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with cron_ .
+#
+# Three shapes are handled:
+#   * the CMD line, "(user) CMD (command ...)"
+#   * the pam_unix session open and close lines
+#   * the informational lines, "(user) INFO|RELOAD|STARTUP|LIST (...)"
+includes:
+- base
+vars_templated:
+  # "(root) CMD (/usr/bin/foo --flag)"
+  CRON_CMD: '\((?<cron_user>[% USERNAME %])\) CMD \((?<cron_command>[% GREEDYDATA %])\)'
+  # pam_unix session open/close line.
+  CRON_SESSION: 'pam_unix\(cron:session\): session (?<cron_session_action>opened|closed) for user (?<cron_user>[% USERNAME %])(?:\(uid=(?<cron_uid>[% INT %])\))?(?: by (?:(?<cron_by_user>[% USERNAME %]))?\(uid=(?<cron_by_uid>[% INT %])\))?'
+  # "(CRON) INFO (Running @reboot jobs)" and "(*system*) RELOAD (/etc/crontab)".
+  # The user field is NOTSPACE so that "(*system*)" matches.
+  #
+  # WARNING and DEATH come from FreeBSD cron: "(CRON) WARNING (madvise()
+  # failed)" is what a jailed cron says on every start. REPLACE, DELETE and the
+  # BEGIN and END EDIT pair are crontab(1) announcing that someone changed a
+  # crontab, which is the only record of the change that reaches the log.
+  CRON_INFO: '\((?<cron_user>[% NOTSPACE %])\) (?<cron_info_type>INFO|RELOAD|STARTUP|LIST|WARNING|DEATH|REPLACE|DELETE|BEGIN EDIT|END EDIT) \((?<cron_info>[% GREEDYDATA %])\)'
+  # "(root) MAIL (mailed 123 bytes of output but got status 0x004b from MTA)".
+  # The mailed byte count is coerced to int; the MTA status (hex like 0x004b) is
+  # kept verbatim as it is not always numeric.
+  #
+  # cron builds this message with a trailing newline, and a syslog daemon that
+  # escapes control characters turns that into a literal "#012", as in
+  # "... from MTA#012)". rsyslog does so by default on Debian and Ubuntu, so on
+  # those systems every MAIL line carries the escape. Any run of them after
+  # "MTA" is tolerated and none is captured: they are the transport's
+  # punctuation rather than cron's.
+  #
+  # FreeBSD cron names no MTA and leaves the space where Vixie puts one:
+  # "(root) MAIL (mailed 1993 bytes of output but got status 0x0001 )".
+  CRON_MAIL: '\((?<cron_user>[% USERNAME %])\) MAIL \(mailed (?<cron_mail_bytes>[% INT %]) bytes of output but got status (?<cron_mail_status>[% NOTSPACE %])(?: from MTA(?:#[0-9]{3})*)? *\)'
+  # The lowercase crond "error" line reporting a failed grandchild and its exit
+  # status: "(CRON) error (grandchild #1234 failed with exit status 1)".
+  CRON_GRANDCHILD: '\((?<cron_user>[% NOTSPACE %])\) error \(grandchild #(?<cron_grandchild_pid>[% INT %]) failed with exit status (?<cron_exit_status>[% INT %])\)'
+  # The parenthesised error line: "(root) ERROR (Mailing user)". Vixie cron and
+  # its descendants disagree on the case, FreeBSD writing "(CRON) error (can't
+  # start PAM)" for the same class of failure, so both spellings are accepted.
+  # Sits after CRON_GRANDCHILD, the one lowercase "error (...)" line with
+  # structure to pull apart.
+  CRON_ERROR: '\((?<cron_user>[% NOTSPACE %])\) (?:ERROR|error) \((?<cron_error>[% GREEDYDATA %])\)'
+  # A crontab parse error: "Error: bad minute; while reading /etc/crontab".
+  # This shape names no invoking user.
+  CRON_PARSE_ERROR: 'Error: (?<cron_error>[% GREEDYDATA_NO_SEMICOLON %]); while reading (?<cron_crontab>[% PATH %])'
+  # "sendmail: fatal: open /etc/postfix/main.cf: No such file or directory"
+  #
+  # cron runs the local MTA to mail a job's output and relays whatever that MTA
+  # writes to stderr under cron's own syslog identity, so the line arrives with
+  # PROGRAM=cron and nothing to mark it as another program's. It is easy to
+  # miss: the job still logs a clean CMD line, and only this says its output
+  # went nowhere.
+  CRON_MTA_ERROR: '(?<cron_mta>sendmail|postdrop|exim|msmtp|ssmtp|mail): (?<cron_mta_level>fatal|error|panic|warning): (?<cron_error>[% GREEDYDATA %])'
+  # "anacron[1234]: Job `cron.daily' started" and "... terminated". PROGRAM is
+  # "anacron", and the "[pid]:" prefix is anacron's own.
+  CRON_ANACRON: 'anacron\[(?<cron_anacron_pid>[% INT %])\]: Job `(?<cron_anacron_job>[^'']+)'' (?<cron_anacron_action>started|terminated)(?: [% GREEDYDATA %])?'
+vars_tests:
+  CRON_CMD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '(root) CMD (/usr/bin/foo --flag)'
+        result: '(root) CMD (/usr/bin/foo --flag)'
+      - string: '(neti) CMD (command_name)'
+        result: '(neti) CMD (command_name)'
+    negative:
+      - 'pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)'
+  CRON_SESSION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)'
+        result: 'pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)'
+      - string: 'pam_unix(cron:session): session closed for user root'
+        result: 'pam_unix(cron:session): session closed for user root'
+    negative:
+      - '(root) CMD (/usr/bin/foo --flag)'
+  CRON_INFO:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '(CRON) INFO (Running @reboot jobs)'
+        result: '(CRON) INFO (Running @reboot jobs)'
+      - string: '(*system*) RELOAD (/etc/crontab)'
+        result: '(*system*) RELOAD (/etc/crontab)'
+      - string: '(CRON) WARNING (madvise() failed)'
+        result: '(CRON) WARNING (madvise() failed)'
+      - string: '(root) BEGIN EDIT (neti)'
+        result: '(root) BEGIN EDIT (neti)'
+    negative:
+      - 'pam_unix(cron:session): session closed for user root'
+  CRON_MAIL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '(root) MAIL (mailed 123 bytes of output but got status 0x004b from MTA)'
+        result: '(root) MAIL (mailed 123 bytes of output but got status 0x004b from MTA)'
+      - string: '(neti) MAIL (mailed 4096 bytes of output but got status 0x0000 from MTA)'
+        result: '(neti) MAIL (mailed 4096 bytes of output but got status 0x0000 from MTA)'
+      # rsyslog escaped cron's trailing newline.
+      - string: '(root) MAIL (mailed 46 bytes of output but got status 0x004b from MTA#012)'
+        result: '(root) MAIL (mailed 46 bytes of output but got status 0x004b from MTA#012)'
+      # FreeBSD: no MTA named, and the space it leaves behind
+      - string: '(root) MAIL (mailed 1993 bytes of output but got status 0x0001 )'
+        result: '(root) MAIL (mailed 1993 bytes of output but got status 0x0001 )'
+      - string: '(neti) MAIL (mailed 46 bytes of output but got status 0x0001)'
+        result: '(neti) MAIL (mailed 46 bytes of output but got status 0x0001)'
+    negative:
+      - '(root) CMD (/usr/bin/foo --flag)'
+  CRON_MTA_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'sendmail: fatal: open /etc/postfix/main.cf: No such file or directory'
+        result: 'sendmail: fatal: open /etc/postfix/main.cf: No such file or directory'
+      - string: 'postdrop: warning: unable to look up public/pickup: No such file or directory'
+        result: 'postdrop: warning: unable to look up public/pickup: No such file or directory'
+    negative:
+      # Not one of the known MTA front ends.
+      - 'someprogram: fatal: it broke'
+      - '(root) CMD (/usr/bin/foo --flag)'
+  CRON_GRANDCHILD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '(CRON) error (grandchild #1234 failed with exit status 1)'
+        result: '(CRON) error (grandchild #1234 failed with exit status 1)'
+      - string: '(root) error (grandchild #42 failed with exit status 127)'
+        result: '(root) error (grandchild #42 failed with exit status 127)'
+    negative:
+      - '(root) ERROR (Mailing user)'
+  CRON_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '(root) ERROR (Mailing user)'
+        result: '(root) ERROR (Mailing user)'
+      - string: '(neti) ERROR (getpwnam() failed)'
+        result: '(neti) ERROR (getpwnam() failed)'
+      # FreeBSD spells it in lower case.
+      - string: "(CRON) error (can't start PAM)"
+        result: "(CRON) error (can't start PAM)"
+    negative:
+      - '(root) CMD (/usr/bin/foo --flag)'
+  CRON_PARSE_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Error: bad minute; while reading /etc/crontab'
+        result: 'Error: bad minute; while reading /etc/crontab'
+      - string: 'Error: bad command; while reading /var/spool/cron/root'
+        result: 'Error: bad command; while reading /var/spool/cron/root'
+    negative:
+      - '(root) ERROR (Mailing user)'
+  CRON_ANACRON:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: "anacron[1234]: Job `cron.daily' started"
+        program: 'anacron'
+        program: 'anacron'
+        result: "anacron[1234]: Job `cron.daily' started"
+      - string: "anacron[1234]: Job `cron.weekly' terminated"
+        result: "anacron[1234]: Job `cron.weekly' terminated"
+    negative:
+      - '(root) CMD (/usr/bin/foo --flag)'
+# Coerce the session uids to integers.
+convert:
+  cron_uid: int
+  cron_by_uid: int
+  cron_mail_bytes: int
+  cron_grandchild_pid: int
+  cron_exit_status: int
+  cron_anacron_pid: int
+rules:
+  - name: cron
+    gate:
+      - field: PROGRAM
+        values:
+          # crontab(1) logs the LIST / REPLACE / DELETE / BEGIN EDIT / END EDIT
+          # lines CRON_INFO already matches, under its own program name.
+          # Longest alternatives first, so the engine does not backtrack.
+          - '//^(?:/\S+/)?(?:crontab|anacron|crond|cron|CRON)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - CRON_CMD
+      - CRON_SESSION
+      - CRON_INFO
+      - CRON_MAIL
+      - CRON_GRANDCHILD
+      - CRON_ERROR
+      - CRON_PARSE_ERROR
+      - CRON_MTA_ERROR
+      - CRON_ANACRON
+    tests:
+      positive:
+        - string: '(root) CMD (/usr/bin/foo --flag)'
+          program: 'CRON'
+          result:
+            cron_user: 'root'
+            cron_command: '/usr/bin/foo --flag'
+        - string: '(neti) CMD (command_name)'
+          program: 'crond'
+          result:
+            cron_user: 'neti'
+            cron_command: 'command_name'
+        - string: 'pam_unix(cron:session): session opened for user root(uid=0) by (uid=0)'
+          numeric:
+            - cron_by_uid
+            - cron_uid
+          program: 'cron'
+          result:
+            cron_session_action: 'opened'
+            cron_user: 'root'
+            cron_uid: '0'
+            cron_by_uid: '0'
+        - string: 'pam_unix(cron:session): session closed for user root'
+          result:
+            cron_session_action: 'closed'
+            cron_user: 'root'
+        - string: '(CRON) INFO (Running @reboot jobs)'
+          result:
+            cron_user: 'CRON'
+            cron_info_type: 'INFO'
+            cron_info: 'Running @reboot jobs'
+        - string: '(*system*) RELOAD (/etc/crontab)'
+          result:
+            cron_user: '*system*'
+            cron_info_type: 'RELOAD'
+            cron_info: '/etc/crontab'
+        - string: '(root) MAIL (mailed 123 bytes of output but got status 0x004b from MTA)'
+          result:
+            cron_user: 'root'
+            cron_mail_bytes: '123'
+            cron_mail_status: '0x004b'
+        - string: '(neti) MAIL (mailed 4096 bytes of output but got status 0x0000 from MTA)'
+          result:
+            cron_user: 'neti'
+            cron_mail_bytes: '4096'
+            cron_mail_status: '0x0000'
+        # FreeBSD names no MTA; the status must not absorb the trailing space.
+        - string: '(root) MAIL (mailed 1993 bytes of output but got status 0x0001 )'
+          numeric:
+            - cron_mail_bytes
+          result:
+            cron_user: 'root'
+            cron_mail_bytes: '1993'
+            cron_mail_status: '0x0001'
+        # crontab(1) lines, reached through the gate rather than cron(8)
+        - string: '(neti) LIST (neti)'
+          result:
+            cron_user: 'neti'
+            cron_info_type: 'LIST'
+            cron_info: 'neti'
+        - string: '(neti) BEGIN EDIT (neti)'
+          program: 'crontab'
+          result:
+            cron_user: 'neti'
+            cron_info_type: 'BEGIN EDIT'
+            cron_info: 'neti'
+        - string: '(CRON) error (grandchild #1234 failed with exit status 1)'
+          numeric:
+            - cron_exit_status
+            - cron_grandchild_pid
+          result:
+            cron_user: 'CRON'
+            cron_grandchild_pid: '1234'
+            cron_exit_status: '1'
+        - string: '(root) ERROR (Mailing user)'
+          result:
+            cron_user: 'root'
+            cron_error: 'Mailing user'
+        - string: 'Error: bad minute; while reading /etc/crontab'
+          result:
+            cron_error: 'bad minute'
+            cron_crontab: '/etc/crontab'
+        - string: '(root) MAIL (mailed 46 bytes of output but got status 0x004b from MTA#012)'
+          numeric:
+            - cron_mail_bytes
+          result:
+            cron_user: 'root'
+            cron_mail_bytes: '46'
+            cron_mail_status: '0x004b'
+        - string: 'sendmail: fatal: open /etc/postfix/main.cf: No such file or directory'
+          result:
+            cron_mta: 'sendmail'
+            cron_mta_level: 'fatal'
+            cron_error: 'open /etc/postfix/main.cf: No such file or directory'
+        - string: "anacron[1234]: Job `cron.daily' started"
+          numeric:
+            - cron_anacron_pid
+          program: 'anacron'
+          result:
+            cron_anacron_pid: '1234'
+            cron_anacron_job: 'cron.daily'
+            cron_anacron_action: 'started'
+        - string: '(CRON) WARNING (madvise() failed)'
+          result:
+            cron_user: 'CRON'
+            cron_info_type: 'WARNING'
+            cron_info: 'madvise() failed'
+        - string: "(CRON) error (can't start PAM)"
+          result:
+            cron_user: 'CRON'
+            cron_error: "can't start PAM"
+      negative:
+        - 'this is not a valid cron line at all'
+        - string: '(root) CMD (/usr/bin/foo --flag)'
+          program: 'cron-extra'

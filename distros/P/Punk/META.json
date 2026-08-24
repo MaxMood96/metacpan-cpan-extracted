@@ -48,7 +48,7 @@
          },
          "requires" : {
             "Apophis" : "0.05",
-            "DBIx::Loop" : "0.03",
+            "DBIx::Loop" : "0.07",
             "Fetch" : "0.12",
             "File::Raw::JSON" : "0.06",
             "Hyperman" : "0.32",
@@ -68,6 +68,6 @@
       }
    },
    "release_status" : "stable",
-   "version" : "0.30",
+   "version" : "0.31",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

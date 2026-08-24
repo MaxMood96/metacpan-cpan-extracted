@@ -126,8 +126,9 @@ all(self)
 
 # search(\%filter, \%opts) -> { rows, has_more_data, next }
 #
-# Equality filters, ORDER BY the primary key, LIMIT n+1 so one row past the
-# limit answers "is there another page" without a second COUNT query.
+# The filter and its operators, the ordering and the keyset continuation are
+# built in punk_dbq.h, shared with the async backend. LIMIT n+1 so one row
+# past the limit answers "is there another page" without a second COUNT.
 SV *
 search(self, filter = &PL_sv_undef, opts = &PL_sv_undef)
         SV *self
@@ -142,42 +143,21 @@ search(self, filter = &PL_sv_undef, opts = &PL_sv_undef)
                  ? (HV *)SvRV(opts) : NULL;
         SV *pk    = pdbi_get(aTHX_ h, "primary");
         SV *table = pdbi_get(aTHX_ h, "table");
-        SV *lim_sv = o ? pdbi_get(aTHX_ o, "limit") : NULL;
-        SV *after  = o ? pdbi_get(aTHX_ o, "after") : NULL;
-        IV limit = (lim_sv && SvOK(lim_sv)) ? SvIV(lim_sv) : 20;
-        AV *bind = (AV *)sv_2mortal((SV *)newAV());
-        AV *keys = pdbi_sorted_keys(aTHX_ f);
+        SV *colsv = pdbi_get(aTHX_ h, "col");
+        HV *col   = (colsv && SvROK(colsv)) ? (HV *)SvRV(colsv) : NULL;
+        HV *slot  = pdbi_slot_for(aTHX_ self);
+        SV *dbh   = pdbi_get(aTHX_ slot, "dbh");
+        AV *bind  = (AV *)sv_2mortal((SV *)newAV());
+        AV *cols, *desc;
+        IV limit;
+        int pk_only;
         SV *sql, *sth, *rows_sv;
-        AV *rows;
-        SSize_t got;
-        int has_more;
-        HV *out;
 
-        if (limit < 1) limit = 1;
+        sql = pdbq_search_sql(aTHX_ slot, dbh, col, table, pk, f, o,
+                              "Punk::Model::DBI", bind,
+                              &limit, &cols, &desc, &pk_only);
 
-        sql = sv_2mortal(newSVpvs("SELECT * FROM "));
-        sv_catsv(sql, pdbi_qi(aTHX_ self, table));
-
-        if (av_len(keys) >= 0 || (after && SvOK(after) && SvCUR(after))) {
-            SV *where = pdbi_where_eq(aTHX_ self, f, keys, bind);
-            sv_catpvs(sql, " WHERE ");
-            sv_catsv(sql, where);
-            if (after && SvOK(after) && SvCUR(after)) {
-                if (!(pk && SvOK(pk)))
-                    croak("Punk::Model::DBI: pagination needs a primary key");
-                if (av_len(keys) >= 0) sv_catpvs(sql, " AND ");
-                sv_catsv(sql, pdbi_qi(aTHX_ self, pk));
-                sv_catpvs(sql, " > ?");
-                av_push(bind, pdbi_decode_token(aTHX_ after, "Punk::Model::DBI"));
-            }
-        }
-        if (pk && SvOK(pk)) {
-            sv_catpvs(sql, " ORDER BY ");
-            sv_catsv(sql, pdbi_qi(aTHX_ self, pk));
-        }
-        sv_catpvf(sql, " LIMIT %" IVdf, (IV)(limit + 1));
-
-        sth = pdbi_sth(aTHX_ self, sql);
+        sth = pdbi_sth_dbh(aTHX_ dbh, sql);
         pdbi_execute_sql(aTHX_ sth, bind, sql);
         {
             SV *argv[1];
@@ -186,29 +166,42 @@ search(self, filter = &PL_sv_undef, opts = &PL_sv_undef)
         }
         { SV *f2 = pdbi_meth0(aTHX_ sth, "finish"); if (f2) SvREFCNT_dec(f2); }
 
-        if (!(rows_sv && SvROK(rows_sv) && SvTYPE(SvRV(rows_sv)) == SVt_PVAV)) {
-            if (rows_sv) SvREFCNT_dec(rows_sv);
-            rows_sv = newRV_noinc((SV *)newAV());
-        }
-        rows = (AV *)SvRV(rows_sv);
-        got  = av_len(rows) + 1;
-        has_more = (got > limit) ? 1 : 0;
-        if (has_more) { SV *x = av_pop(rows); if (x) SvREFCNT_dec(x); }
+        RETVAL = pdbq_page(aTHX_ rows_sv, limit, cols, desc, pk_only);
+    }
+    OUTPUT:
+        RETVAL
 
-        out = newHV();
-        (void)hv_stores(out, "rows", rows_sv);          /* takes the ref */
-        (void)hv_stores(out, "has_more_data", newSViv(has_more));
-        if (has_more && pk && SvOK(pk) && av_len(rows) >= 0) {
-            SV **last = av_fetch(rows, av_len(rows), 0);
-            HE *he = (last && *last && SvROK(*last)
-                      && SvTYPE(SvRV(*last)) == SVt_PVHV)
-                     ? hv_fetch_ent((HV *)SvRV(*last), pk, 0, 0) : NULL;
-            (void)hv_stores(out, "next",
-                he ? pdbi_encode_token(aTHX_ HeVAL(he)) : newSV(0));
-        }
-        else (void)hv_stores(out, "next", newSV(0));
+# count(\%filter) -> how many rows match. The same filter search takes, and
+# the same validation; no page, no order, no token.
+IV
+count(self, filter = &PL_sv_undef)
+        SV *self
+        SV *filter
+    CODE:
+    {
+        HV *h  = pdbi_hv(aTHX_ self);
+        HV *f  = (SvROK(filter) && SvTYPE(SvRV(filter)) == SVt_PVHV)
+                 ? (HV *)SvRV(filter) : NULL;
+        SV *table = pdbi_get(aTHX_ h, "table");
+        SV *colsv = pdbi_get(aTHX_ h, "col");
+        HV *col   = (colsv && SvROK(colsv)) ? (HV *)SvRV(colsv) : NULL;
+        HV *slot  = pdbi_slot_for(aTHX_ self);
+        SV *dbh   = pdbi_get(aTHX_ slot, "dbh");
+        AV *bind  = (AV *)sv_2mortal((SV *)newAV());
+        SV *sql   = pdbq_count_sql(aTHX_ slot, dbh, col, table, f,
+                                   "Punk::Model::DBI", bind);
+        SV *sth, *row;
 
-        RETVAL = newRV_noinc((SV *)out);
+        sth = pdbi_sth_dbh(aTHX_ dbh, sql);
+        pdbi_execute_sql(aTHX_ sth, bind, sql);
+        row = pdbi_meth0(aTHX_ sth, "fetchrow_arrayref");
+        { SV *f2 = pdbi_meth0(aTHX_ sth, "finish"); if (f2) SvREFCNT_dec(f2); }
+        RETVAL = 0;
+        if (row && SvROK(row) && SvTYPE(SvRV(row)) == SVt_PVAV) {
+            SV **n = av_fetch((AV *)SvRV(row), 0, 0);
+            if (n && *n && SvOK(*n)) RETVAL = SvIV(*n);
+        }
+        if (row) SvREFCNT_dec(row);
     }
     OUTPUT:
         RETVAL

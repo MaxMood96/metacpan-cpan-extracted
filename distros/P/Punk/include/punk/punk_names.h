@@ -73,11 +73,13 @@ static int pk_require_once(pTHX_ const char *mod, int fatal) {
 #define K_MOUNTS     "mounts"
 #define K_VIEWS      "views"
 #define K_DATABASES  "databases"
+#define K_ON_COMPILE "on_compile"   /* [ [code, owner], ... ] run at to_app */
 #define K_MODELS     "models"
 #define K_HOOKS      "hooks"
 #define K_BEFORE_R   "before_request"
 #define K_BEFORE_D   "before_dispatch"
 #define K_AFTER_D    "after_dispatch"
+#define K_BEFORE_RN  "before_render"
 #define K_MIDDLEWARE "middleware"
 #define K_HELPERS    "helpers"
 #define K_KEYWORDS   "keywords"    /* plugin-installed DSL keywords */
@@ -121,6 +123,7 @@ static int pk_require_once(pTHX_ const char *mod, int fatal) {
 #define K_BEFORE_REQ "before_req"   /* compiled before_request chain */
 #define K_BEFORE   "before"
 #define K_AFTER    "after"
+#define K_BEFORE_RENDER_C "before_render_c" /* compiled before_render chain */
 #define K_CODE     "code"
 #define K_OWNER    "owner"
 #define K_WS       "ws"
@@ -147,6 +150,11 @@ static int pk_require_once(pTHX_ const char *mod, int fatal) {
 #define K_IDEMPOTENT "idempotent"
 #define K_IDEM_ROUTES "idempotent_routes"
 #define K_IDEM     "idempotency"       /* the plugin's config */
+#define K_NAME     "name"               /* the route option and the record key */
+#define K_NAMED_ROUTES "named_routes"   /* accumulated { method, path, name } */
+#define K_NAMES_C  "names_c"            /* compiled: name -> record index */
+#define K_HOST_PATH_C "host_path_c"     /* compiled: the path on `host` */
+#define K_URL_PREFIX_C "url_prefix_c"   /* the SV the url_for filter reads */
 #define K_CSP      "csp"                /* Punk::Plugin::CSP config  */
 #define K_I18N     "i18n"               /* Punk::Plugin::I18n config */
 

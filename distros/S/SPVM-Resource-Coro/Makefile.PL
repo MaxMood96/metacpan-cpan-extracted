@@ -1,27 +1,37 @@
 use 5.020;
-use ExtUtils::MakeMaker;
 use strict;
 use warnings;
+use ExtUtils::MakeMaker;
 use Config;
 use Getopt::Long 'GetOptions';
 use File::Path 'mkpath', 'rmtree';
 
 GetOptions(
-  'meta' => \my $meta,
-  'no-build-spvm-modules' => \my $no_build_spvm_modules,
+  # Compiler and linker flags
   'cc=s' => \my $cc,
   'ccflag=s' => \my @ccflags,
   'define=s' => \my @defines,
+  'include-dir=s' => \my @include_dirs,
   'ld=s' => \my $ld,
   'ldflag=s' => \my @ldflags,
+  'lib=s' => \my @libs,
+  'lib-dir=s' => \my @lib_dirs,
   'debug' => \my $debug,
   'build-type=s' => \my $build_type,
   'asan-on-linux' => \my $asan_on_linux,
   'msvc' => \my $msvc,
+  
+  # Build target settings
+  'no-build-spvm-modules' => \my $no_build_spvm_modules,
+  
+  # For cpan/cpanm to run Makefile.PL
+  'meta' => \my $meta,
+  
+  # Parallel settings
   'parallel-make' => \my $parallel_make,
   'parallel-test' => \my $parallel_test,
   'jobs=i' => \my $jobs,
-);
+) or die 'Invalid command line options are specified.';
 
 if ($meta) {
   $no_build_spvm_modules = 1;
@@ -35,12 +45,15 @@ generate_config_global_file($config_global_file, {
   cc            => $cc,
   ccflags       => \@ccflags,
   defines       => \@defines,
+  include_dirs  => \@include_dirs,
   ld            => $ld,
   ldflags       => \@ldflags,
+  libs          => \@libs,
+  lib_dirs      => \@lib_dirs,
   debug         => $debug,
   build_type    => $build_type,
   asan_on_linux => $asan_on_linux,
-  msvc => $msvc,
+  msvc          => $msvc,
 });
 
 my $asan_logs_dir = ".tmp/asan_logs";
@@ -59,39 +72,48 @@ unless ($meta) {
 }
 
 unless ($meta) {
+  # Jobs count for parallel build and tests
   unless (defined $jobs) {
     my $cpus = SPVM::Builder::Util::API::get_cpu_count();
     $jobs = $cpus + 2;
   }
-
+  # Limit the maximum number of parallel jobs to 16
   if ($jobs > 16) {
     $jobs = 16;
   }
 }
 $jobs //= 1;
 
+# Always true in SPVM modern build
+$parallel_make = 1;
+$parallel_test = 1;
+
 my %configure_requires_and_prereq_pm = (
-  'SPVM' => '0.990191',
+  'SPVM' => '0.990195',
 );
+my @test_clean_files = map { "t/" . join('', map { '*/' } 1 .. $_) . "*.$Config{so}" } (1 .. 10);
+
 WriteMakefile(
-  NAME => 'SPVM::Resource::Coro',
-  VERSION_FROM => 'lib/SPVM/Resource/Coro.pm',
-  LICENSE => 'mit',
-  ($] >= 5.005 ?
-    (ABSTRACT_FROM => 'lib/SPVM/Resource/Coro.pm',
-     AUTHOR => 'Yuki Kimoto<kimoto.yuki@gmail.com>') : ()),
-  test => {TESTS => 't/*.t t/*/*.t t/*/*/*.t'},
-  clean => {FILES => ['.spvm_build']},
+  NAME              => 'SPVM::Resource::Coro',
+  VERSION_FROM      => 'lib/SPVM/Resource/Coro.pm',
+  LICENSE           => 'mit',
+  ($] >= 5.005 ?    
+    (ABSTRACT_FROM  => 'lib/SPVM/Resource/Coro.pm',
+     AUTHOR         => 'Yuki Kimoto<kimoto.yuki@gmail.com>') : ()),
+  test => {TESTS => 't/*.t t/*/*.t t/*/*/*.t t/*/*/*/*.t'},
+  clean => {FILES => ".spvm_build .tmp @test_clean_files"},
   META_MERGE => {
     'meta-spec' => {
       version => 2,
-      # release_status => 'stable', # stable, testing, or unstable
     },
     resources => {
       repository => {
         type => 'git',
-        url  => '',
-        web  => '',
+        url  => 'https://github.com/yuki-kimoto/SPVM-Resource-Coro.git',
+        web  => 'https://github.com/yuki-kimoto/SPVM-Resource-Coro',
+      },
+      bugtracker => {
+        web  => "https://github.com/yuki-kimoto/SPVM-Resource-Coro/issues",
       },
     },
     no_index => {
@@ -111,27 +133,35 @@ WriteMakefile(
   PREREQ_PM => {
     %configure_requires_and_prereq_pm,
   },
+  TEST_REQUIRES => {
+    'Test::More' => '0.92',
+  },
 );
 
 package MY {
-  
   sub postamble {
     my $make_rule = '';
+    
     unless ($no_build_spvm_modules) {
+      require SPVM::Builder::Util::API;
+      
+      local @INC = ('lib', @INC);
+      
       my $options = {};
       $options->{config_global_file} = $config_global_file;
       $options->{order_only_dependent_files} = ['pm_to_blib'];
       
       $options->{native_classes} = [
-        'Resource::Coro'
       ];
       
       $options->{precompile_classes} = [
         
       ];
       
-      
+      my $test_class_search_dir = 't/lib';
+      $make_rule .= SPVM::Builder::Util::API::create_make_rule_native('TestCase::Resource::Coro', {%$options, output_dir => $test_class_search_dir, class_search_dir => [$test_class_search_dir]});
     }
+    
     return $make_rule;
   }
 }
@@ -139,15 +169,18 @@ package MY {
 sub generate_config_global_file {
   my ($config_global_file, $options) = @_;
   
-  my $cc             = $options->{cc};
-  my $ccflags        = $options->{ccflags} // [];
-  my $defines        = $options->{defines} // [];
-  my $ld             = $options->{ld};
-  my $ldflags        = $options->{ldflags} // [];
-  my $build_type     = $options->{build_type};
-  my $debug          = $options->{debug};
+  my $cc            = $options->{cc};
+  my $ccflags       = $options->{ccflags} // [];
+  my $defines       = $options->{defines} // [];
+  my $include_dirs  = $options->{include_dirs};
+  my $ld            = $options->{ld};
+  my $ldflags       = $options->{ldflags} // [];
+  my $libs          = $options->{libs};
+  my $lib_dirs      = $options->{lib_dirs};
+  my $build_type    = $options->{build_type};
+  my $debug         = $options->{debug};
   my $asan_on_linux = $options->{asan_on_linux};
-  my $msvc = $options->{msvc};
+  my $msvc          = $options->{msvc};
   
   if ($debug) {
     $build_type = 'Debug';
@@ -195,6 +228,12 @@ EOS
 EOS
   }
   
+  for my $include_dir (@$include_dirs) {
+    $config_global_content .= <<"EOS";
+\$config_global->build_rule_any({'+include_dirs' => ['$include_dir']});
+EOS
+  }
+  
   if (defined $ld) {
     $config_global_content .= <<"EOS";
 \$config_global->build_rule_any({'ld' => '$ld'});
@@ -204,6 +243,18 @@ EOS
   for my $ldflag (@$ldflags) {
     $config_global_content .= <<"EOS";
 \$config_global->build_rule_any({'+ldflags' => ['$ldflag']});
+EOS
+  }
+  
+  for my $lib (@$libs) {
+    $config_global_content .= <<"EOS";
+\$config_global->build_rule_any({'+libs' => ['$lib']});
+EOS
+  }
+  
+  for my $lib_dir (@$lib_dirs) {
+    $config_global_content .= <<"EOS";
+\$config_global->build_rule_any({'+lib_dirs' => ['$lib_dir']});
 EOS
   }
   

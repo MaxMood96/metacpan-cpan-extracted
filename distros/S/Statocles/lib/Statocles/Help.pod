@@ -13,7 +13,7 @@ Statocles::Help - Get help for Statocles
 
 =head1 VERSION
 
-version 0.098
+version 0.099
 
 =head1 GUIDES
 
@@ -246,8 +246,8 @@ Be patient, it's a slow channel.
 
 =head1 SEE ALSO
 
-For news and documentation, L<visit the Statocles website at
-http:E<sol>E<sol>preaction.me<sol>statocles|http://preaction.me/statocles>.
+For news and documentation, visit the Statocles website at
+L<http://preaction.me/statocles>.
 
 =head1 AUTHOR
 

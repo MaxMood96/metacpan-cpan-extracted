@@ -10,7 +10,6 @@ MANIFEST.SKIP
 META.json			Module JSON meta-data (added by MakeMaker)
 META.yml
 README
-SIGNATURE			Public-key signature (added by MakeMaker)
 t/00-load.t
 t/01-metayaml.t
 t/ctgetreports.t

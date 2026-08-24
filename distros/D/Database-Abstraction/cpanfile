@@ -8,13 +8,12 @@ requires 'Cwd';
 requires 'DBD::SQLite::Constants';
 requires 'DBI', '1.6';
 requires 'Data::Reuse';   # Required for result-set memory deduplication; see also RT#100461
-requires 'ExtUtils::MakeMaker', '6.64';   # 6.64 for TEST_REQUIRES
 requires 'File::Spec';
 requires 'File::Temp';
 requires 'List::Util', '1.33';
-requires 'Log::Abstraction', '0.26';
+requires 'Log::Abstraction', '0.33';
 requires 'Object::Configure', '0.16';
-requires 'Params::Get', '0.13';
+requires 'Params::Get', '0.17';
 requires 'Return::Set';
 requires 'Scalar::Util';
 requires 'Sub::Private';
@@ -38,6 +37,7 @@ on 'test' => sub {
 	requires 'File::Temp';
 	requires 'File::stat';
 	requires 'FindBin';
+	requires 'Gzip::Faster';
 	requires 'HTML::TableExtract';
 	requires 'IPC::System::Simple';
 	requires 'JSON::MaybeXS';
@@ -53,6 +53,7 @@ on 'test' => sub {
 	requires 'Test::Needs';
 	requires 'Test::NoWarnings';
 	requires 'Test::Returns';
+	requires 'Test::Warn';
 	requires 'Test::Without::Module';
 	requires 'Text::xSV::Slurp';
 	requires 'XML::Simple';

@@ -117,12 +117,8 @@ static SV *pdl_build_adapter(pTHX_ const dbil_abi *A) {
 
 /* The slot for this backend's connection: { pid, db, dbh, adapter,
  * returning }, connected on first use in this process. Borrowed. */
-static HV *pdl_handle(pTHX_ SV *self) {
+static HV *pdl_handle_opts(pTHX_ HV *o) {
     const dbil_abi *A = punk_dbil(aTHX);
-    HV *h    = pdbi_hv(aTHX_ self);
-    SV *opts = pdbi_get(aTHX_ h, "opts");
-    HV *o    = (opts && SvROK(opts) && SvTYPE(SvRV(opts)) == SVt_PVHV)
-               ? (HV *)SvRV(opts) : NULL;
     SV *dsn  = o ? pdbi_get(aTHX_ o, "dsn") : NULL;
     SV *user = o ? pdbi_get(aTHX_ o, "user") : NULL;
     SV *pass = o ? pdbi_get(aTHX_ o, "password") : NULL;
@@ -189,12 +185,30 @@ static HV *pdl_handle(pTHX_ SV *self) {
             else if (loop_sv) SvREFCNT_dec(loop_sv);
         }
     }
+    return slot;
+}
 
+static HV *pdl_handle(pTHX_ SV *self) {
+    HV *h    = pdbi_hv(aTHX_ self);
+    SV *opts = pdbi_get(aTHX_ h, "opts");
+    HV *o    = (opts && SvROK(opts) && SvTYPE(SvRV(opts)) == SVt_PVHV)
+               ? (HV *)SvRV(opts) : NULL;
+    HV *slot = pdl_handle_opts(aTHX_ o);
     {   /* keep the instance's slot in step, as the DBI backend does */
         SV *r = pdbi_get(aTHX_ slot, "returning");
         (void)hv_stores(h, "returning", newSViv(r ? SvIV(r) : 0));
     }
     return slot;
+}
+
+/* The transaction this backend instance is bound to, or NULL. Set by
+ * Punk::Txn::model on a copy of the instance, never on the shared one: a
+ * "current transaction" on the worker would be wrong under an event loop,
+ * where the requests in flight between two of this request's queries are
+ * somebody else's. */
+static SV *pdl_tx_of(pTHX_ SV *self) {
+    SV *tx = pdbi_get(aTHX_ pdbi_hv(aTHX_ self), "_tx");
+    return (tx && SvROK(tx)) ? tx : NULL;
 }
 
 /* ---- the bridge: one C continuation from DBIx::Loop into Punk::Future ---- */
@@ -225,6 +239,11 @@ typedef struct pdl_pend {
     SV *table;     /* (+1) for follow-up SQL                           */
     HV *slot;      /* the pool slot, borrowed - for the quoting cache  */
     SV *data;      /* CREATE_FB with no pk: the payload to echo (+1)   */
+    AV *cols;      /* SEARCH: the resolved ordering, for the token (+1) */
+    AV *desc;      /* SEARCH: its directions (+1)                      */
+    int pk_only;   /* SEARCH: no order_by asked - the one-value token  */
+    SV *tx;        /* the DBIx::Loop::Txn the statement ran on (+1), or NULL */
+    int shape;     /* a raw result still to be reshaped (tx path), or 0 */
 } pdl_pend;
 
 static void pdl_pend_free(pTHX_ pdl_pend *p) {
@@ -235,6 +254,9 @@ static void pdl_pend_free(pTHX_ pdl_pend *p) {
     if (p->pkval) SvREFCNT_dec(p->pkval);
     if (p->table) SvREFCNT_dec(p->table);
     if (p->data)  SvREFCNT_dec(p->data);
+    if (p->cols)  SvREFCNT_dec((SV *)p->cols);
+    if (p->desc)  SvREFCNT_dec((SV *)p->desc);
+    if (p->tx)    SvREFCNT_dec(p->tx);
     Safefree(p);
 }
 
@@ -254,6 +276,35 @@ static void pdl_fail(pTHX_ pdl_pend *p, SV *err) {
     pf_settle_argv(aTHX_ p->pf, PF_FAILED, &e, 1);
 }
 
+/* Run one statement for a pending op and attach the continuation: on the
+ * worker's connection through the ABI, or - when the instance is bound to a
+ * transaction - on the DBIx::Loop::Txn handle pinned to it, through its own
+ * query/do, with the shape recorded for the continuation to apply. */
+static void pdl_exec(pTHX_ pdl_pend *p, SV *db, SV *tx, int is_query,
+                     SV *sql, AV *bind, int shape) {
+    const dbil_abi *A = p->A;
+    if (tx && SvROK(tx)) {
+        SSize_t i, n = bind ? av_len(bind) + 1 : 0;
+        SV **argv, *f;
+        Newx(argv, n + 1, SV *);
+        argv[0] = sql;
+        for (i = 0; i < n; i++) {
+            SV **e = av_fetch(bind, i, 0);
+            argv[i + 1] = (e && *e) ? *e : &PL_sv_undef;
+        }
+        f = pcx_call_meth(aTHX_ tx, is_query ? "query" : "do",
+                          argv, (int)n + 1, 1);
+        Safefree(argv);
+        if (!f) croak(PDL_CLS ": the transaction handle returned no future");
+        p->shape = is_query ? shape : 0;
+        if (!p->tx) p->tx = newSVsv(tx);
+        pdl_attach(aTHX_ f, p);
+        return;
+    }
+    pdl_attach(aTHX_ is_query ? A->exec_shaped(aTHX_ db, sql, bind, shape, NULL)
+                              : A->exec(aTHX_ db, 0, sql, bind), p);
+}
+
 /* The continuation. This runs inside DBIx::Loop's settle path, so it must
  * not croak - a longjmp out of a fire loop leaves the queue half-run. Every
  * failure becomes a failed Punk::Future instead. */
@@ -269,6 +320,24 @@ static void pdl_ready_cb(pTHX_ SV *fut, void *ud) {
         return;
     }
     n = A->future_values(aTHX_ fut, v, 1);
+
+    /* A statement on a transaction handle settles with the raw result -
+     * the pinned handle has no shaped form - so the shape exec_shaped would
+     * have applied is applied here instead, before the op sees it. */
+    if (p->shape && n > 0) {
+        AV *out = (AV *)sv_2mortal((SV *)newAV());
+        SV *err = A->reshape(aTHX_ p->shape, v[0], NULL, out);
+        if (err) {
+            pdl_fail(aTHX_ p, err);
+            SvREFCNT_dec(err);
+            pdl_pend_free(aTHX_ p);
+            return;
+        }
+        n = av_len(out) + 1;
+        v[0] = n > 0 ? *av_fetch(out, 0, 0) : &PL_sv_undef;
+        if (n > 0) n = 1;
+        p->shape = 0;
+    }
 
     switch (p->op) {
 
@@ -286,27 +355,12 @@ static void pdl_ready_cb(pTHX_ SV *fut, void *ud) {
     }
 
     case PDL_OP_SEARCH: {
-        AV *rows = (n > 0 && SvROK(v[0])
-                    && SvTYPE(SvRV(v[0])) == SVt_PVAV)
-                 ? (AV *)SvRV(v[0]) : NULL;
-        HV *out = newHV();
-        SSize_t got = rows ? av_len(rows) + 1 : 0;
-        int has_more = (got > p->limit) ? 1 : 0;
-        SV *out_rv;
-        if (has_more && rows) { SV *x = av_pop(rows); if (x) SvREFCNT_dec(x); }
-        (void)hv_stores(out, "rows",
-            rows ? newRV_inc((SV *)rows) : newRV_noinc((SV *)newAV()));
-        (void)hv_stores(out, "has_more_data", newSViv(has_more));
-        if (has_more && p->pk && rows && av_len(rows) >= 0) {
-            SV **last = av_fetch(rows, av_len(rows), 0);
-            HE *he = (last && *last && SvROK(*last)
-                      && SvTYPE(SvRV(*last)) == SVt_PVHV)
-                     ? hv_fetch_ent((HV *)SvRV(*last), p->pk, 0, 0) : NULL;
-            (void)hv_stores(out, "next",
-                he ? pdbi_encode_token(aTHX_ HeVAL(he)) : newSV(0));
-        }
-        else (void)hv_stores(out, "next", newSV(0));
-        out_rv = sv_2mortal(newRV_noinc((SV *)out));
+        /* the rows are borrowed from the DBIx::Loop future; pdbq_page takes
+         * ownership of the reference it is handed, so hand it one of ours */
+        SV *rows_rv = (n > 0 && SvROK(v[0]) && SvTYPE(SvRV(v[0])) == SVt_PVAV)
+                    ? newRV_inc(SvRV(v[0])) : NULL;
+        SV *out_rv = sv_2mortal(pdbq_page(aTHX_ rows_rv, p->limit,
+                                          p->cols, p->desc, p->pk_only));
         pf_settle_argv(aTHX_ p->pf, PF_DONE, &out_rv, 1);
         break;
     }
@@ -351,10 +405,12 @@ static void pdl_ready_cb(pTHX_ SV *fut, void *ud) {
             sv_catsv(sql, pdbi_qi_slot(aTHX_ p->slot, p->dbh, p->pk));
             sv_catpvs(sql, " = ? LIMIT 1");
             av_push(bind, newSVsv(id));
-            nf = A->exec_shaped(aTHX_ p->db, sql, bind,
-                                DBIL_ABI_ROW_HASHREF, NULL);
             p->op = PDL_OP_PASS;
-            pdl_attach(aTHX_ nf, p);   /* the same pend rides along */
+            /* inside a transaction the re-get must run on the pinned
+             * handle, or it runs on another slot and cannot see the row */
+            pdl_exec(aTHX_ p, p->db, p->tx, 1, sql, bind,
+                     DBIL_ABI_ROW_HASHREF);   /* the same pend rides along */
+            PERL_UNUSED_VAR(nf);
             return;                    /* not freed: the follow-up owns it */
         }
     }
@@ -418,8 +474,7 @@ static SV *pdl_get(pTHX_ SV *self, SV **st, I32 items) {
 
     p = pdl_start(aTHX_ A, slot, &out);
     p->op = PDL_OP_PASS;
-    pdl_attach(aTHX_ A->exec_shaped(aTHX_ db, sql, bind,
-                                    DBIL_ABI_ROW_HASHREF, NULL), p);
+    pdl_exec(aTHX_ p, db, pdl_tx_of(aTHX_ self), 1, sql, bind, DBIL_ABI_ROW_HASHREF);
     return out;
 }
 
@@ -432,50 +487,56 @@ static SV *pdl_search(pTHX_ SV *self, SV *filter, SV *opts) {
              ? (HV *)SvRV(opts) : NULL;
     SV *pk     = pdbi_get(aTHX_ h, "primary");
     SV *table  = pdbi_get(aTHX_ h, "table");
-    SV *lim_sv = o ? pdbi_get(aTHX_ o, "limit") : NULL;
-    SV *after  = o ? pdbi_get(aTHX_ o, "after") : NULL;
-    IV limit   = (lim_sv && SvOK(lim_sv)) ? SvIV(lim_sv) : 20;
+    SV *colsv  = pdbi_get(aTHX_ h, "col");
+    HV *col    = (colsv && SvROK(colsv)) ? (HV *)SvRV(colsv) : NULL;
     HV *slot   = pdl_handle(aTHX_ self);
     SV *db     = pdbi_get(aTHX_ slot, "db");
     SV *dbh    = pdbi_get(aTHX_ slot, "dbh");
     AV *bind   = (AV *)sv_2mortal((SV *)newAV());
-    AV *keys   = pdbi_sorted_keys(aTHX_ f);
     const dbil_abi *A = punk_dbil(aTHX);
+    AV *cols, *desc;
+    IV limit;
+    int pk_only;
     SV *sql, *out;
     pdl_pend *p;
 
-    if (limit < 1) limit = 1;
-
-    sql = sv_2mortal(newSVpvs("SELECT * FROM "));
-    sv_catsv(sql, pdbi_qi_slot(aTHX_ slot, dbh, table));
-
-    if (av_len(keys) >= 0 || (after && SvOK(after) && SvCUR(after))) {
-        SV *where = pdbi_where_eq_slot(aTHX_ slot, dbh, f, keys, bind);
-        sv_catpvs(sql, " WHERE ");
-        sv_catsv(sql, where);
-        if (after && SvOK(after) && SvCUR(after)) {
-            if (!(pk && SvOK(pk)))
-                croak(PDL_CLS ": pagination needs a primary key");
-            if (av_len(keys) >= 0) sv_catpvs(sql, " AND ");
-            sv_catsv(sql, pdbi_qi_slot(aTHX_ slot, dbh, pk));
-            sv_catpvs(sql, " > ?");
-            /* synchronous, before the exec: a bad token is a client error
-             * and croaks here, exactly as the DBI backend's search does */
-            av_push(bind, pdbi_decode_token(aTHX_ after, PDL_CLS));
-        }
-    }
-    if (pk && SvOK(pk)) {
-        sv_catpvs(sql, " ORDER BY ");
-        sv_catsv(sql, pdbi_qi_slot(aTHX_ slot, dbh, pk));
-    }
-    sv_catpvf(sql, " LIMIT %" IVdf, (IV)(limit + 1));
+    /* synchronous, before the exec: a bad filter, option or token is a
+     * caller error and croaks here, exactly as the DBI backend's does */
+    sql = pdbq_search_sql(aTHX_ slot, dbh, col, table, pk, f, o, PDL_CLS,
+                          bind, &limit, &cols, &desc, &pk_only);
 
     p = pdl_start(aTHX_ A, slot, &out);
-    p->op    = PDL_OP_SEARCH;
-    p->limit = limit;
-    if (pk && SvOK(pk)) p->pk = newSVsv(pk);
-    pdl_attach(aTHX_ A->exec_shaped(aTHX_ db, sql, bind,
-                                    DBIL_ABI_ALL_ROWHASH, NULL), p);
+    p->op      = PDL_OP_SEARCH;
+    p->limit   = limit;
+    p->cols    = (AV *)SvREFCNT_inc((SV *)cols);
+    p->desc    = (AV *)SvREFCNT_inc((SV *)desc);
+    p->pk_only = pk_only;
+    pdl_exec(aTHX_ p, db, pdl_tx_of(aTHX_ self), 1, sql, bind, DBIL_ABI_ALL_ROWHASH);
+    return out;
+}
+
+/* count(\%filter) -> future of the matching row count */
+static SV *pdl_count(pTHX_ SV *self, SV *filter) {
+    HV *h  = pdbi_hv(aTHX_ self);
+    HV *f  = (SvROK(filter) && SvTYPE(SvRV(filter)) == SVt_PVHV)
+             ? (HV *)SvRV(filter) : NULL;
+    SV *table  = pdbi_get(aTHX_ h, "table");
+    SV *colsv  = pdbi_get(aTHX_ h, "col");
+    HV *col    = (colsv && SvROK(colsv)) ? (HV *)SvRV(colsv) : NULL;
+    HV *slot   = pdl_handle(aTHX_ self);
+    SV *db     = pdbi_get(aTHX_ slot, "db");
+    SV *dbh    = pdbi_get(aTHX_ slot, "dbh");
+    AV *bind   = (AV *)sv_2mortal((SV *)newAV());
+    const dbil_abi *A = punk_dbil(aTHX);
+    SV *sql = pdbq_count_sql(aTHX_ slot, dbh, col, table, f, PDL_CLS, bind);
+    SV *out;
+    pdl_pend *p;
+
+    p = pdl_start(aTHX_ A, slot, &out);
+    /* the first row as a list, and the first value of that list is the
+     * count: the PASS continuation settles with values[0] */
+    p->op = PDL_OP_PASS;
+    pdl_exec(aTHX_ p, db, pdl_tx_of(aTHX_ self), 1, sql, bind, DBIL_ABI_ROW_ARRAY);
     return out;
 }
 
@@ -535,8 +596,7 @@ static SV *pdl_create(pTHX_ SV *self, SV *data) {
          * The row arrives already reshaped. */
         sv_catpvs(sql, " RETURNING *");
         p->op = PDL_OP_PASS;
-        pdl_attach(aTHX_ A->exec_shaped(aTHX_ db, sql, bind,
-                                        DBIL_ABI_ROW_HASHREF, NULL), p);
+        pdl_exec(aTHX_ p, db, pdl_tx_of(aTHX_ self), 1, sql, bind, DBIL_ABI_ROW_HASHREF);
         return out;
     }
 
@@ -550,7 +610,7 @@ static SV *pdl_create(pTHX_ SV *self, SV *data) {
         if (he && SvOK(HeVAL(he))) p->pkval = newSVsv(HeVAL(he));
     }
     if (d) p->data = newSVsv(data);
-    pdl_attach(aTHX_ A->exec(aTHX_ db, 0, sql, bind), p);
+    pdl_exec(aTHX_ p, db, pdl_tx_of(aTHX_ self), 0, sql, bind, 0);
     return out;
 }
 
@@ -620,8 +680,7 @@ static SV *pdl_update(pTHX_ SV *self, SV *data) {
     if (ret && SvIV(ret)) {
         sv_catpvs(sql, " RETURNING *");
         p->op = PDL_OP_PASS;
-        pdl_attach(aTHX_ A->exec_shaped(aTHX_ db, sql, bind,
-                                        DBIL_ABI_ROW_HASHREF, NULL), p);
+        pdl_exec(aTHX_ p, db, pdl_tx_of(aTHX_ self), 1, sql, bind, DBIL_ABI_ROW_HASHREF);
         return out;
     }
 
@@ -631,7 +690,7 @@ static SV *pdl_update(pTHX_ SV *self, SV *data) {
     p->table = newSVsv(table);
     p->pk    = newSVsv(pk);
     p->pkval = newSVsv(id);
-    pdl_attach(aTHX_ A->exec(aTHX_ db, 0, sql, bind), p);
+    pdl_exec(aTHX_ p, db, pdl_tx_of(aTHX_ self), 0, sql, bind, 0);
     return out;
 }
 
@@ -656,7 +715,7 @@ static SV *pdl_delete(pTHX_ SV *self, SV **st, I32 items) {
 
     p = pdl_start(aTHX_ A, slot, &out);
     p->op = PDL_OP_COUNT;
-    pdl_attach(aTHX_ A->exec(aTHX_ db, 0, sql, bind), p);
+    pdl_exec(aTHX_ p, db, pdl_tx_of(aTHX_ self), 0, sql, bind, 0);
     return out;
 }
 

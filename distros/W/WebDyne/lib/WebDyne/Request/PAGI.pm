@@ -46,7 +46,7 @@ use WebDyne::Request::Fake;
 
 #  Version information
 #
-$VERSION='3.020';
+$VERSION='3.021';
 
 
 #  Debug load
@@ -334,6 +334,10 @@ sub server_port {
 sub body {
 
     my $r=shift();
+
+    return $r->{'scope'}{'pagi.request.body'}
+        if $r->{'scope'}{'pagi.request.body.read'};
+
     my $body;
     if (my $body_or=$r->{'req'}->body()) {
         $body=$body_or->get;

@@ -1,5 +1,44 @@
 Revision history for Punk
 
+0.31    2026-08-23
+        - ADDS: kits. `punk new MyApp --kit diy` generates through
+          Punk::Kit::Diy instead of the basic skeleton
+        - A kit subclasses Punk::Generate, keeps its templates in skel/
+          beside its own module, and declares the options it takes, which
+          are read out of argv before Getopt runs so they parse and show
+          up under `punk new --kit NAME --help` like the command's own 
+        - ADDS: hook before_render. Runs once per $c->render, after
+          Punk's own binds (url, csp_nonce, locale), with the data
+          hashref the engine is about to receive - so a plugin can put a
+          value into every template without the handler passing it.
+        - ADDS: Punk::Command->load_app, the public form of what every
+          application-loading command does, for a command in another
+          distributio
+        - ADDS: $t->request_header in Punk::Test - a header on every
+          request from here on
+        - ADDS: named routes. A route takes { name => 'book' }, and
+          $c->url_for('book', id => 42) gives back its path 
+        - In a template, {% url.books %} for a static route and
+          {% row | url_for('book') %} for one with captures
+        - ADDS: `layout` as a render option. $c->render($tpl, \%data,
+          layout => undef) renders a template without the configured
+          wrapper
+        - ADDS: $c->fragment($tpl, \%data, %opts) - render with no layout
+          and Cache-Control: private
+        - ADDS: $app->databases - the configured databases read back, a
+          deep copy keyed by name with `default` for the unnamed one
+        - ADDS: $app->on_compile($code, $owner?) - a callback for to_app,
+          run in registration order after every keyword has recorded and
+          before anything is compiled
+        - ADDS: filter operators on Punk::Model search and count, on both
+          backends: = != < <= > >= in not_in like starts_with, as
+          { column => { op => value } } beside the plain equality.
+        - ADDS: order_by on search - a column, or [ column => 'asc'|'desc',
+          ... ] pairs 
+        - ADDS: count(\%filter) on the model and both backends.
+        - ADDS: $c->txn(sub { my ($tx) = @_; ... }) and $c->txn($database
+          => sub { ... }), with Punk::Txn
+
 0.30    2026-08-22
         - `csrf: true`, `cors: true` and `headers: true` in punk.yml now
           register.

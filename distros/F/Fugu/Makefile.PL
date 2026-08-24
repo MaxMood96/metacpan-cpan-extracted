@@ -4,7 +4,7 @@ use ExtUtils::MakeMaker;
 
 WriteMakefile(
 	NAME             => 'Fugu',
-	VERSION          => '0.1.2',
+	VERSION          => '0.2.0',
 	ABSTRACT         => 'OpenBSD-style daemon utilities for Perl',
 	LICENSE          => 'open_source',
 	MIN_PERL_VERSION => '5.036',
@@ -47,6 +47,8 @@ WriteMakefile(
 		'lib/Fugu/Process.pod' => '$(INST_LIB)/Fugu/Process.pod',
 		'lib/Fugu/Proxy.pm' => '$(INST_LIB)/Fugu/Proxy.pm',
 		'lib/Fugu/Proxy.pod' => '$(INST_LIB)/Fugu/Proxy.pod',
+		'lib/Fugu/REPL.pm' => '$(INST_LIB)/Fugu/REPL.pm',
+		'lib/Fugu/REPL.pod' => '$(INST_LIB)/Fugu/REPL.pod',
 		'lib/Fugu/Random.pm' => '$(INST_LIB)/Fugu/Random.pm',
 		'lib/Fugu/Random.pod' => '$(INST_LIB)/Fugu/Random.pod',
 		'lib/Fugu/SSH.pm' => '$(INST_LIB)/Fugu/SSH.pm',
@@ -55,6 +57,8 @@ WriteMakefile(
 		'lib/Fugu/Sandbox.pod' => '$(INST_LIB)/Fugu/Sandbox.pod',
 		'lib/Fugu/Signal.pm' => '$(INST_LIB)/Fugu/Signal.pm',
 		'lib/Fugu/Signal.pod' => '$(INST_LIB)/Fugu/Signal.pod',
+		'lib/Fugu/Signify.pm' => '$(INST_LIB)/Fugu/Signify.pm',
+		'lib/Fugu/Signify.pod' => '$(INST_LIB)/Fugu/Signify.pod',
 		'lib/Fugu/StateFile.pm' => '$(INST_LIB)/Fugu/StateFile.pm',
 		'lib/Fugu/StateFile.pod' => '$(INST_LIB)/Fugu/StateFile.pod',
 		'lib/Fugu/TestLog.pm' => '$(INST_LIB)/Fugu/TestLog.pm',

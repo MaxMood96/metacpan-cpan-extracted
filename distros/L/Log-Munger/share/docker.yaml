@@ -1,0 +1,118 @@
+---
+# Docker / containerd daemon log enrichment.
+#
+# Gates on the syslog PROGRAM field being one of the container runtimes.
+# Patterns are anchored (each must match the whole MESSAGE) and first-match
+# wins. Every capture is namespaced with docker_ .
+#
+# Both daemons log through logrus in logfmt: space-separated key=value pairs
+# with quoted values.
+#
+#   time="2026-07-15T10:00:00.123456789Z" level=error msg="Handler for GET
+#   /v1.43/containers/json returned error" error="No such container"
+#
+# That is what the quote-aware kv decompose is for, so the line is captured
+# whole and split rather than having each key named in a regexp. Which keys
+# appear varies with the subsystem doing the logging -- container=, image=,
+# plugin=, module= -- and a decompose keeps up with that.
+#
+# The rule is gated because a bare logfmt line is a shape lots of Go daemons
+# share, and a gateless pattern for it would claim theirs too.
+includes:
+- base
+vars_templated:
+  # A logrus line. Anchored on the leading time= key, which every one carries
+  # and which is what separates this from free text that happens to contain an
+  # equals sign.
+  DOCKER_LOGFMT: '(?<docker_kv>time="[% GREEDYDATA %])'
+  # containerd sometimes leads with the severity instead:
+  #   level=info msg="starting containerd" revision=... version=v1.7.2
+  DOCKER_LOGFMT_LEVEL: '(?<docker_kv>level=[% NOTSPACE %] [% GREEDYDATA %])'
+  # Anything else: the runtime's own stderr, or a message from before logging
+  # was configured.
+  DOCKER_MESSAGE: '(?<docker_message>.+)'
+vars_tests:
+  DOCKER_LOGFMT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'time="2026-07-15T10:00:00.123456789Z" level=error msg="Handler for GET /v1.43/containers/json returned error" error="No such container"'
+        result: 'time="2026-07-15T10:00:00.123456789Z" level=error msg="Handler for GET /v1.43/containers/json returned error" error="No such container"'
+    negative:
+      - 'level=info msg="starting containerd" version=v1.7.2'
+  DOCKER_LOGFMT_LEVEL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'level=info msg="starting containerd" revision=abc123 version=v1.7.2'
+        result: 'level=info msg="starting containerd" revision=abc123 version=v1.7.2'
+    negative:
+      - 'time="2026-07-15T10:00:00Z" level=info msg="x"'
+  DOCKER_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'failed to start daemon: error while opening volume store metadata database'
+        result: 'failed to start daemon: error while opening volume store metadata database'
+    negative:
+      - ''
+convert:
+  # logrus already writes lower case, but containerd and some plugins do not,
+  # so the case is folded to keep the severity groupable.
+  docker_level: lc
+# Split the logfmt blob. Quote-aware, because msg= and error= values are
+# quoted and hold spaces, which is why a plain space split will not do.
+decompose:
+  - field: docker_kv
+    type: kv
+    quoted: true
+    prefix: 'docker_'
+    remove: true
+    tests:
+      - input: 'time="2026-07-15T10:00:00.123456789Z" level=error msg="Handler for GET /v1.43/containers/json returned error" error="No such container" container=abc123'
+        result:
+          docker_time: '2026-07-15T10:00:00.123456789Z'
+          docker_level: 'error'
+          docker_msg: 'Handler for GET /v1.43/containers/json returned error'
+          docker_error: 'No such container'
+          docker_container: 'abc123'
+rules:
+  - name: docker
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^(?:dockerd|docker|containerd|containerd-shim.*|podman)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - DOCKER_LOGFMT
+      - DOCKER_LOGFMT_LEVEL
+      # last: matches anything, which is only safe because the rule is gated
+      - DOCKER_MESSAGE
+    tests:
+      positive:
+        # The logfmt blob is still whole here. Rule tests check raw captures,
+        # before the decompose above splits it.
+        - string: 'time="2026-07-15T10:00:00.123456789Z" level=error msg="Handler for GET /v1.43/containers/json returned error" error="No such container"'
+          enriched:
+            docker_error: 'No such container'
+            docker_level: 'error'
+            docker_msg: 'Handler for GET /v1.43/containers/json returned error'
+            docker_time: '2026-07-15T10:00:00.123456789Z'
+          program: 'dockerd'
+          result:
+            docker_kv: 'time="2026-07-15T10:00:00.123456789Z" level=error msg="Handler for GET /v1.43/containers/json returned error" error="No such container"'
+        - string: 'level=info msg="starting containerd" revision=abc123 version=v1.7.2'
+          enriched:
+            docker_level: 'info'
+            docker_msg: 'starting containerd'
+            docker_revision: 'abc123'
+            docker_version: 'v1.7.2'
+          program: 'docker'
+          result:
+            docker_kv: 'level=info msg="starting containerd" revision=abc123 version=v1.7.2'
+        - string: 'failed to start daemon: error while opening volume store metadata database'
+          program: 'podman'
+          result:
+            docker_message: 'failed to start daemon: error while opening volume store metadata database'
+      negative:
+        - ''
+        - string: 'time="2026-07-15T10:00:00.123456789Z" level=error msg="Handler for GET /v1.43/containers/json returned error" error="No such container"'
+          program: 'docker-extra'

@@ -1,0 +1,199 @@
+---
+# Avahi mDNS/DNS-SD responder log enrichment.
+#
+# Gates on the syslog PROGRAM field being "avahi-daemon". Patterns are anchored
+# (each must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with avahi_ .
+#
+# Nearly everything avahi says is about which interfaces and addresses it is
+# answering on, said four ways: joining or leaving the multicast group, an
+# interface becoming or ceasing to be relevant, and an address record being
+# registered or withdrawn. Together they record what this host has advertised
+# to the local network and when. On a virtualisation or container host, where
+# interfaces come and go constantly, nothing else records it.
+#
+# Avahi qualifies an interface with the protocol it is talking: "virbr0.IPv4",
+# "veth-h.IPv6", "eno3.*" for both, and sometimes the bare interface. The
+# suffix is split off into avahi_protocol so avahi_iface holds the same token
+# as anywhere else. It is matched as a known set rather than as "whatever
+# follows the last dot", because an interface name may hold a dot of its own: a
+# VLAN is "eth0.100", and "eth0.100.IPv4" has to come apart in the right place.
+#
+# Service registration and host-name conflicts are not covered. The corpus this
+# was written from is a host with no published services, so there is no sample
+# of "Service 'x' successfully established" or of a name conflict to write
+# against. Both fall to the catch-all and keep their text.
+includes:
+- base
+vars:
+  # The protocol qualifier avahi appends to an interface name.
+  AVAHI_PROTOCOL: '(?:IPv4|IPv6|\*)'
+  # An address as avahi writes it, mid-sentence. Dots and colons are allowed
+  # inside it but not at the end, so the full stop that closes the sentence is
+  # left for the pattern rather than swallowed into the address.
+  AVAHI_ADDRESS_TOKEN: '[^\s.]+(?:[.:][^\s.]+)*'
+vars_templated:
+  # An interface as avahi writes it: the name, then optionally a dotted
+  # protocol qualifier. The name is non-greedy so the qualifier is preferred
+  # when one is there, which is what keeps "eth0.100.IPv4" splitting into
+  # "eth0.100" and "IPv4" rather than "eth0" and nothing.
+  AVAHI_IFACE: '(?<avahi_iface>[^\s]+?)(?:\.(?<avahi_protocol>[% AVAHI_PROTOCOL %]))?'
+  # "Joining mDNS multicast group on interface virbr0.IPv4 with address 192.0.2.1."
+  # "Leaving mDNS multicast group on interface veth-h.IPv6 with address fd00:aaaa::1."
+  AVAHI_MULTICAST_GROUP: '(?<avahi_action>Joining|Leaving) mDNS multicast group on interface [% AVAHI_IFACE %] with address (?<avahi_address>[% AVAHI_ADDRESS_TOKEN %])\.'
+  # "New relevant interface virbr0.IPv4 for mDNS."
+  AVAHI_IFACE_RELEVANT: 'New relevant interface [% AVAHI_IFACE %] for mDNS\.'
+  # "Interface virbr0.IPv4 no longer relevant for mDNS."
+  AVAHI_IFACE_IRRELEVANT: 'Interface [% AVAHI_IFACE %] no longer relevant for mDNS\.'
+  # "Registering new address record for 192.0.2.1 on virbr0.IPv4."
+  # "Withdrawing address record for fd00:aaaa::1 on veth-h."
+  #
+  # The verb is captured on both branches so avahi_record_action is one word
+  # either way, rather than "Registering new" on one and "Withdrawing" on the
+  # other. Perl allows the repeated group name, and only the branch that
+  # matched contributes a value.
+  AVAHI_ADDRESS_RECORD: '(?:(?<avahi_record_action>Registering) new|(?<avahi_record_action>Withdrawing)) address record for (?<avahi_address>[% AVAHI_ADDRESS_TOKEN %]) on [% AVAHI_IFACE %]\.'
+  # Anything else. The gate is one exact program name, so nothing else can
+  # land here.
+  AVAHI_MESSAGE: '(?<avahi_message>.+)'
+vars_tests:
+  AVAHI_PROTOCOL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'IPv4'
+        result: 'IPv4'
+      - string: 'IPv6'
+        result: 'IPv6'
+      - string: '*'
+        result: '*'
+    negative:
+      - 'IPv5'
+  AVAHI_ADDRESS_TOKEN:
+    test_template: '^(?<TEST>[% TEST_VAR %])\.$'
+    positive:
+      - string: '192.0.2.1.'
+        result: '192.0.2.1'
+      - string: 'fd00:aaaa::1.'
+        result: 'fd00:aaaa::1'
+    negative:
+      - 'no trailing stop'
+  AVAHI_IFACE:
+    test_template: '^(?<TEST>[% TEST_VAR %]) for mDNS$'
+    positive:
+      - string: 'virbr0.IPv4 for mDNS'
+        result: 'virbr0.IPv4'
+      - string: 'eno3.* for mDNS'
+        result: 'eno3.*'
+      # A VLAN interface has a dot of its own, which must not be mistaken for
+      # the protocol qualifier.
+      - string: 'eth0.100.IPv6 for mDNS'
+        result: 'eth0.100.IPv6'
+      - string: 'veth-h for mDNS'
+        result: 'veth-h'
+    negative:
+      - 'virbr0.IPv4 for something else'
+  AVAHI_MULTICAST_GROUP:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Joining mDNS multicast group on interface virbr0.IPv4 with address 192.0.2.1.'
+        result: 'Joining mDNS multicast group on interface virbr0.IPv4 with address 192.0.2.1.'
+      - string: 'Leaving mDNS multicast group on interface veth-h.IPv6 with address fd00:aaaa::1.'
+        result: 'Leaving mDNS multicast group on interface veth-h.IPv6 with address fd00:aaaa::1.'
+    negative:
+      - 'New relevant interface virbr0.IPv4 for mDNS.'
+  AVAHI_IFACE_RELEVANT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'New relevant interface virbr0.IPv4 for mDNS.'
+        result: 'New relevant interface virbr0.IPv4 for mDNS.'
+    negative:
+      - 'Interface virbr0.IPv4 no longer relevant for mDNS.'
+  AVAHI_IFACE_IRRELEVANT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Interface virbr0.IPv4 no longer relevant for mDNS.'
+        result: 'Interface virbr0.IPv4 no longer relevant for mDNS.'
+    negative:
+      - 'New relevant interface virbr0.IPv4 for mDNS.'
+  AVAHI_ADDRESS_RECORD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Registering new address record for 192.0.2.1 on virbr0.IPv4.'
+        result: 'Registering new address record for 192.0.2.1 on virbr0.IPv4.'
+      - string: 'Withdrawing address record for fd00:aaaa::1 on veth-h.'
+        result: 'Withdrawing address record for fd00:aaaa::1 on veth-h.'
+      - string: 'Registering new address record for fd00:aaaa::1 on veth-h.*.'
+        result: 'Registering new address record for fd00:aaaa::1 on veth-h.*.'
+    negative:
+      - 'New relevant interface virbr0.IPv4 for mDNS.'
+  AVAHI_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Server startup complete. Host name is host.local. Local service cookie is 1234567890.'
+        result: 'Server startup complete. Host name is host.local. Local service cookie is 1234567890.'
+    negative:
+      - ''
+rules:
+  - name: avahi
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^avahi-daemon$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - AVAHI_MULTICAST_GROUP
+      - AVAHI_IFACE_RELEVANT
+      - AVAHI_IFACE_IRRELEVANT
+      - AVAHI_ADDRESS_RECORD
+      # last: matches anything, which is only safe because the rule is gated
+      - AVAHI_MESSAGE
+    tests:
+      positive:
+        - string: 'Joining mDNS multicast group on interface virbr0.IPv4 with address 192.0.2.1.'
+          result:
+            avahi_action: 'Joining'
+            avahi_iface: 'virbr0'
+            avahi_protocol: 'IPv4'
+            avahi_address: '192.0.2.1'
+        - string: 'Leaving mDNS multicast group on interface veth-h.IPv6 with address fd00:aaaa::1.'
+          result:
+            avahi_action: 'Leaving'
+            avahi_iface: 'veth-h'
+            avahi_protocol: 'IPv6'
+            avahi_address: 'fd00:aaaa::1'
+        - string: 'New relevant interface virbr0.IPv4 for mDNS.'
+          result:
+            avahi_iface: 'virbr0'
+            avahi_protocol: 'IPv4'
+        - string: 'Interface veth-h.IPv4 no longer relevant for mDNS.'
+          result:
+            avahi_iface: 'veth-h'
+            avahi_protocol: 'IPv4'
+        - string: 'Registering new address record for 192.0.2.1 on virbr0.IPv4.'
+          result:
+            avahi_record_action: 'Registering'
+            avahi_address: '192.0.2.1'
+            avahi_iface: 'virbr0'
+            avahi_protocol: 'IPv4'
+        # The withdraw side names no protocol.
+        - string: 'Withdrawing address record for fd00:aaaa::1 on veth-h.'
+          program: 'avahi-daemon'
+          result:
+            avahi_record_action: 'Withdrawing'
+            avahi_address: 'fd00:aaaa::1'
+            avahi_iface: 'veth-h'
+        # "*" means avahi is answering for both protocols on that interface.
+        - string: 'Registering new address record for fd00:aaaa::1 on veth-h.*.'
+          result:
+            avahi_record_action: 'Registering'
+            avahi_address: 'fd00:aaaa::1'
+            avahi_iface: 'veth-h'
+            avahi_protocol: '*'
+        - string: 'Server startup complete. Host name is host.local. Local service cookie is 1234567890.'
+          result:
+            avahi_message: 'Server startup complete. Host name is host.local. Local service cookie is 1234567890.'
+      negative:
+        - ''
+        - string: 'Joining mDNS multicast group on interface virbr0.IPv4 with address 192.0.2.1.'
+          program: 'avahi-extra'

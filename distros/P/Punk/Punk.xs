@@ -81,11 +81,13 @@ static const frj_abi *punk_frj(pTHX) {
 #include "punk/punk_config.h"      /* layered YAML config + resolved secrets */
 #include "punk/punk_asset.h"     /* content-addressed asset URLs (needs sha256) */
 #include "punk/punk_static.h"    /* the static-file app (a magic-CV closure) */
+#include "punk/punk_url.h"       /* named routes: names, url_for, the filter */
 #include "punk/punk_sendfile.h"  /* $c->send_file: validators + ranges     */
 #include "punk/punk_cget.h"      /* conditional GET (needs sendfile+context) */
 #include "punk/punk_favicon.h"   /* GET /favicon.ico, frozen at to_app     */
 #include "punk/punk_oamount.h"   /* the `api` mount, boot half (needs static) */
 #include "punk/punk_dbi.h"       /* the shipped DBI model backend           */
+#include "punk/punk_dbq.h"       /* the query shapes both backends share    */
 #include "punk/punk_model.h"     /* the model tier: DSL, metadata, contract */
 #include "punk/punk_csrf.h"      /* single-use tokens over the session */
 #include "punk/punk_entropy.h"   /* sliced, pid-guarded entropy (needs csrf) */
@@ -116,6 +118,7 @@ static const frj_abi *punk_frj(pTHX) {
 #include "punk/punk_future.h"      /* async result: loop when live, else block */
 #include "punk/punk_dbil.h"        /* the async model backend, on DBIx::Loop's
                                       C ABI (needs punk_dbi.h + punk_future.h) */
+#include "punk/punk_txn.h"         /* $c->txn on either backend (needs dbil) */
 #include "punk/punk_import.h"     /* `use Punk` and the DSL table */
 #include "punk/punk_cors.h"       /* cross-origin: preflight + headers   */
 #include "punk/punk_headers.h"    /* security headers on every response  */
@@ -173,6 +176,7 @@ INCLUDE: xs/model.xs
 INCLUDE: xs/oamount.xs
 INCLUDE: xs/dbi.xs
 INCLUDE: xs/dbil.xs
+INCLUDE: xs/txn.xs
 INCLUDE: xs/cache.xs
 INCLUDE: xs/blob.xs
 INCLUDE: xs/sitemap.xs
@@ -182,4 +186,5 @@ INCLUDE: xs/conditionalget.xs
 INCLUDE: xs/idempotency.xs
 INCLUDE: xs/csp.xs
 INCLUDE: xs/i18n.xs
+INCLUDE: xs/url.xs
 INCLUDE: xs/compile.xs

@@ -1,0 +1,210 @@
+---
+# smartd (smartmontools) disk-health log enrichment.
+#
+# Gates on the syslog PROGRAM field being "smartd". Patterns are anchored
+# (each must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with smartd_ .
+#
+# Every per-device message opens the same way:
+#
+#   Device: /dev/sda [SAT], <what smartd noticed>
+#
+# so the device and its access type come from one shared fragment and the
+# patterns below differ only in what follows.
+#
+# Not all of these mean the same thing. A temperature attribute drifting by a
+# degree is noise; Reallocated_Sector_Ct moving at all is a disk beginning to
+# fail, and "FAILED SMART self-check" is one that already has. Keeping the
+# attribute name and both values rather than just the text is what lets a
+# consumer tell those apart without re-parsing the message.
+includes:
+- base
+vars_templated:
+  # "Device: /dev/sda [SAT], " -- the head every per-device message shares.
+  # The bracketed type is the access method smartd used (SAT, NVMe, megaraid_disk_00
+  # and so on) and is absent on some controllers.
+  SMARTD_DEVICE: 'Device: (?<smartd_device>[% NOTSPACE %])(?: \[(?<smartd_device_type>[^\]]*)\])?, '
+  # "SMART Usage Attribute: 194 Temperature_Celsius changed from 118 to 117"
+  # "SMART Prefailure Attribute: 5 Reallocated_Sector_Ct changed from 100 to 99"
+  #
+  # Prefailure and Usage are smartd's own words for "this predicts failure" and
+  # "this is wear". The two mean different things, so the kind is captured
+  # rather than folded into the message.
+  #
+  # The values are the NORMALISED attribute values, not raw counts: they start
+  # near 100 or 200 and fall towards the threshold, so a drop is bad news even
+  # though the number went down.
+  SMARTD_ATTRIBUTE: '[% SMARTD_DEVICE %]SMART (?<smartd_attribute_kind>Usage|Prefailure) Attribute: (?<smartd_attribute_id>[% INT %]) (?<smartd_attribute_name>[% NOTSPACE %]) changed from (?<smartd_value_from>[% INT %]) to (?<smartd_value_to>[% INT %])(?: [% GREEDYDATA %])?'
+  # "1 Currently unreadable (pending) sectors"
+  # "2 Offline uncorrectable sectors"
+  #
+  # Either of these being non-zero means data has already been lost or is about
+  # to be. Neither is a drill.
+  SMARTD_SECTORS: '[% SMARTD_DEVICE %](?<smartd_sector_count>[% INT %]) (?<smartd_sector_kind>Currently unreadable \(pending\)|Offline uncorrectable) sectors?(?: [% GREEDYDATA %])?'
+  # "FAILED SMART self-check. BACK UP DATA NOW!"
+  SMARTD_SELFCHECK_FAILED: '[% SMARTD_DEVICE %]FAILED SMART self-check\.?(?: (?<smartd_selfcheck_detail>[% GREEDYDATA %]))?'
+  # "ATA error count increased from 0 to 1"
+  SMARTD_ERROR_COUNT: '[% SMARTD_DEVICE %](?<smartd_error_kind>ATA|Self-Test) error count increased from (?<smartd_value_from>[% INT %]) to (?<smartd_value_to>[% INT %])(?: [% GREEDYDATA %])?'
+  # "Temperature 45 Celsius reached limit of 40 Celsius (Min/Max 20/46)"
+  SMARTD_TEMPERATURE: '[% SMARTD_DEVICE %]Temperature (?<smartd_temperature>[% INT %]) Celsius reached (?<smartd_temperature_kind>limit|critical limit) of (?<smartd_temperature_limit>[% INT %]) Celsius(?: [% GREEDYDATA %])?'
+  # Anything else smartd said about a device: "not capable of SMART
+  # self-check", "open() failed", "Device is in STANDBY mode". The device is
+  # kept, since without it the line says nothing.
+  SMARTD_OTHER: '[% SMARTD_DEVICE %](?<smartd_message>.+)'
+  # Messages with no device at all: startup, configuration, shutdown.
+  SMARTD_DAEMON: '(?<smartd_message>(?:smartd |Configuration file |Opened configuration file|Monitoring |Unable to |Exiting |smartd has fresh)[% GREEDYDATA %])'
+vars_tests:
+  SMARTD_DEVICE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Device: /dev/sda [SAT], '
+        result: 'Device: /dev/sda [SAT], '
+      - string: 'Device: /dev/nvme0, '
+        result: 'Device: /dev/nvme0, '
+    negative:
+      - '/dev/sda [SAT], '
+  SMARTD_ATTRIBUTE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Device: /dev/sda [SAT], SMART Usage Attribute: 194 Temperature_Celsius changed from 118 to 117'
+        result: 'Device: /dev/sda [SAT], SMART Usage Attribute: 194 Temperature_Celsius changed from 118 to 117'
+      - string: 'Device: /dev/sda [SAT], SMART Prefailure Attribute: 5 Reallocated_Sector_Ct changed from 100 to 99'
+        result: 'Device: /dev/sda [SAT], SMART Prefailure Attribute: 5 Reallocated_Sector_Ct changed from 100 to 99'
+    negative:
+      - 'Device: /dev/sda [SAT], ATA error count increased from 0 to 1'
+  SMARTD_SECTORS:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Device: /dev/sda [SAT], 1 Currently unreadable (pending) sectors'
+        result: 'Device: /dev/sda [SAT], 1 Currently unreadable (pending) sectors'
+      - string: 'Device: /dev/sda [SAT], 2 Offline uncorrectable sectors'
+        result: 'Device: /dev/sda [SAT], 2 Offline uncorrectable sectors'
+    negative:
+      - 'Device: /dev/sda [SAT], FAILED SMART self-check. BACK UP DATA NOW!'
+  SMARTD_SELFCHECK_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Device: /dev/sda [SAT], FAILED SMART self-check. BACK UP DATA NOW!'
+        result: 'Device: /dev/sda [SAT], FAILED SMART self-check. BACK UP DATA NOW!'
+    negative:
+      - 'Device: /dev/sda [SAT], 1 Currently unreadable (pending) sectors'
+  SMARTD_ERROR_COUNT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Device: /dev/sda [SAT], ATA error count increased from 0 to 1'
+        result: 'Device: /dev/sda [SAT], ATA error count increased from 0 to 1'
+      - string: 'Device: /dev/sda [SAT], Self-Test error count increased from 0 to 2'
+        result: 'Device: /dev/sda [SAT], Self-Test error count increased from 0 to 2'
+    negative:
+      - 'Device: /dev/sda [SAT], SMART Usage Attribute: 194 Temperature_Celsius changed from 118 to 117'
+  SMARTD_TEMPERATURE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Device: /dev/sda [SAT], Temperature 45 Celsius reached limit of 40 Celsius (Min/Max 20/46)'
+        result: 'Device: /dev/sda [SAT], Temperature 45 Celsius reached limit of 40 Celsius (Min/Max 20/46)'
+      - string: 'Device: /dev/sda [SAT], Temperature 60 Celsius reached critical limit of 55 Celsius (Min/Max 20/60)'
+        result: 'Device: /dev/sda [SAT], Temperature 60 Celsius reached critical limit of 55 Celsius (Min/Max 20/60)'
+    negative:
+      - 'Device: /dev/sda [SAT], ATA error count increased from 0 to 1'
+  SMARTD_OTHER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Device: /dev/sda [SAT], is SMART capable. Adding to "monitor" list.'
+        result: 'Device: /dev/sda [SAT], is SMART capable. Adding to "monitor" list.'
+    negative:
+      # the device head is required, and something has to follow it
+      - 'Monitoring 2 ATA/SATA, 0 SCSI/SAS and 0 NVMe devices'
+      - 'Device: /dev/sda [SAT], '
+  SMARTD_DAEMON:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Monitoring 2 ATA/SATA, 0 SCSI/SAS and 0 NVMe devices'
+        result: 'Monitoring 2 ATA/SATA, 0 SCSI/SAS and 0 NVMe devices'
+      - string: 'smartd 7.3 2022-02-28 r5338 [x86_64-linux-6.1.0] (local build)'
+        result: 'smartd 7.3 2022-02-28 r5338 [x86_64-linux-6.1.0] (local build)'
+    negative:
+      - 'Device: /dev/sda [SAT], FAILED SMART self-check.'
+convert:
+  smartd_attribute_id: int
+  smartd_value_from: int
+  smartd_value_to: int
+  smartd_sector_count: int
+  smartd_temperature: int
+  smartd_temperature_limit: int
+rules:
+  - name: smartd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^smartd$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - SMARTD_ATTRIBUTE
+      - SMARTD_SECTORS
+      - SMARTD_SELFCHECK_FAILED
+      - SMARTD_ERROR_COUNT
+      - SMARTD_TEMPERATURE
+      # last two: SMARTD_OTHER takes anything that carried a device head, and
+      # SMARTD_DAEMON anything that did not
+      - SMARTD_OTHER
+      - SMARTD_DAEMON
+    tests:
+      positive:
+        - string: 'Device: /dev/sda [SAT], SMART Prefailure Attribute: 5 Reallocated_Sector_Ct changed from 100 to 99'
+          numeric:
+            - smartd_attribute_id
+            - smartd_value_from
+            - smartd_value_to
+          program: 'smartd'
+          result:
+            smartd_device: '/dev/sda'
+            smartd_device_type: 'SAT'
+            smartd_attribute_kind: 'Prefailure'
+            smartd_attribute_id: '5'
+            smartd_attribute_name: 'Reallocated_Sector_Ct'
+            smartd_value_from: '100'
+            smartd_value_to: '99'
+        - string: 'Device: /dev/sda [SAT], 1 Currently unreadable (pending) sectors'
+          numeric:
+            - smartd_sector_count
+          result:
+            smartd_device: '/dev/sda'
+            smartd_device_type: 'SAT'
+            smartd_sector_count: '1'
+            smartd_sector_kind: 'Currently unreadable (pending)'
+        - string: 'Device: /dev/sda [SAT], FAILED SMART self-check. BACK UP DATA NOW!'
+          result:
+            smartd_device: '/dev/sda'
+            smartd_device_type: 'SAT'
+            smartd_selfcheck_detail: 'BACK UP DATA NOW!'
+        - string: 'Device: /dev/sda [SAT], ATA error count increased from 0 to 1'
+          result:
+            smartd_device: '/dev/sda'
+            smartd_device_type: 'SAT'
+            smartd_error_kind: 'ATA'
+            smartd_value_from: '0'
+            smartd_value_to: '1'
+        - string: 'Device: /dev/sda [SAT], Temperature 60 Celsius reached critical limit of 55 Celsius (Min/Max 20/60)'
+          numeric:
+            - smartd_temperature
+            - smartd_temperature_limit
+          result:
+            smartd_device: '/dev/sda'
+            smartd_device_type: 'SAT'
+            smartd_temperature: '60'
+            smartd_temperature_kind: 'critical limit'
+            smartd_temperature_limit: '55'
+        - string: 'Device: /dev/sda [SAT], is SMART capable. Adding to "monitor" list.'
+          result:
+            smartd_device: '/dev/sda'
+            smartd_device_type: 'SAT'
+            smartd_message: 'is SMART capable. Adding to "monitor" list.'
+        - string: 'Monitoring 2 ATA/SATA, 0 SCSI/SAS and 0 NVMe devices'
+          result:
+            smartd_message: 'Monitoring 2 ATA/SATA, 0 SCSI/SAS and 0 NVMe devices'
+      negative:
+        - 'this is not a smartd line at all'
+        - 'Jul 15 10:00:00 host cron[123]: session opened for user root'
+        - string: 'Device: /dev/sda [SAT], SMART Prefailure Attribute: 5 Reallocated_Sector_Ct changed from 100 to 99'
+          program: 'smartd-extra'

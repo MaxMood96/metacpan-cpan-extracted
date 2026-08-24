@@ -1,0 +1,149 @@
+---
+# OpenDMARC milter log enrichment.
+#
+# Gates on the syslog PROGRAM field being "opendmarc". Patterns are anchored
+# (each must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with opendmarc_ .
+#
+# Like opendkim.yaml, every result line opens with the MTA's queue id, so these
+# join onto the postfix and exim delivery records for the same message.
+#
+# DMARC is the verdict the other two feed into: it takes the SPF and DKIM
+# results, checks whether either aligns with the From: domain, and applies
+# whatever policy that domain published. So opendmarc_result is the closest
+# thing in a mail log to "is this really who it says it is", and a fail on a
+# domain that publishes p=reject is a forgery that got as far as your MTA.
+includes:
+- base
+vars_templated:
+  # The queue id every per-message line carries.
+  OPENDMARC_QID: '(?<opendmarc_qid>[A-Za-z0-9]+): '
+  # "1rABCD: example.com fail; dkim=fail (bad signature) spf=pass"
+  # "1rABCD: example.com pass"
+  #
+  # The domain is the From: domain the policy was looked up for rather than the
+  # envelope sender, which is what DMARC adds over plain SPF.
+  OPENDMARC_RESULT: '[% OPENDMARC_QID %](?<opendmarc_domain>[% NOTSPACE %]) (?<opendmarc_result>pass|fail|none|temperror|permerror)(?:; (?<opendmarc_detail>[% GREEDYDATA %]))?'
+  # "1rABCD: SPF(mailfrom): example.com pass"
+  #
+  # The individual input results OpenDMARC logs before the verdict.
+  OPENDMARC_INPUT: '[% OPENDMARC_QID %](?<opendmarc_method>SPF|DKIM)\((?<opendmarc_method_scope>[^)]*)\): (?<opendmarc_domain>[% NOTSPACE %]) (?<opendmarc_result>pass|fail|none|neutral|softfail|temperror|permerror)(?: [% GREEDYDATA %])?'
+  # "1rABCD: policy for example.com applied: reject"
+  #
+  # What was actually done, which is not always what the policy said: an
+  # OpenDMARC in report-only mode logs a policy of reject and applies none.
+  OPENDMARC_POLICY: '[% OPENDMARC_QID %]policy for (?<opendmarc_domain>[% NOTSPACE %]) applied: (?<opendmarc_policy>[% NOTSPACE %])(?: [% GREEDYDATA %])?'
+  # "ignoring connection from localhost"
+  OPENDMARC_IGNORED: 'ignoring (?<opendmarc_ignored_what>connection|mail) from (?<opendmarc_ignored_source>[% GREEDYDATA %])'
+  # Anything else logged against a queue id.
+  OPENDMARC_QID_MESSAGE: '[% OPENDMARC_QID %](?<opendmarc_message>.+)'
+  # Lines with no queue id: startup, database problems, report generation.
+  OPENDMARC_MESSAGE: '(?<opendmarc_message>.+)'
+vars_tests:
+  OPENDMARC_QID:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '1rABCD: '
+        result: '1rABCD: '
+    negative:
+      - 'no queue id here'
+  OPENDMARC_RESULT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '1rABCD: example.com pass'
+        result: '1rABCD: example.com pass'
+      - string: '1rABCD: example.com fail; dkim=fail (bad signature) spf=pass'
+        result: '1rABCD: example.com fail; dkim=fail (bad signature) spf=pass'
+    negative:
+      - '1rABCD: SPF(mailfrom): example.com pass'
+  OPENDMARC_INPUT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '1rABCD: SPF(mailfrom): example.com pass'
+        result: '1rABCD: SPF(mailfrom): example.com pass'
+      - string: '1rABCD: DKIM(d): example.org fail'
+        result: '1rABCD: DKIM(d): example.org fail'
+    negative:
+      - '1rABCD: example.com pass'
+  OPENDMARC_POLICY:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '1rABCD: policy for example.com applied: reject'
+        result: '1rABCD: policy for example.com applied: reject'
+    negative:
+      - '1rABCD: example.com pass'
+  OPENDMARC_IGNORED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'ignoring connection from localhost'
+        result: 'ignoring connection from localhost'
+      - string: 'ignoring mail from 192.0.2.5'
+        result: 'ignoring mail from 192.0.2.5'
+    negative:
+      - '1rABCD: example.com pass'
+  OPENDMARC_QID_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '1rABCD: internal host, ignoring'
+        result: '1rABCD: internal host, ignoring'
+    negative:
+      - 'OpenDMARC Filter v1.4.2 starting'
+  OPENDMARC_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'OpenDMARC Filter v1.4.2 starting (args: -c /etc/opendmarc.conf)'
+        result: 'OpenDMARC Filter v1.4.2 starting (args: -c /etc/opendmarc.conf)'
+    negative:
+      - ''
+rules:
+  - name: opendmarc
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^opendmarc$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - OPENDMARC_INPUT
+      - OPENDMARC_POLICY
+      - OPENDMARC_RESULT
+      - OPENDMARC_IGNORED
+      - OPENDMARC_QID_MESSAGE
+      # last: matches anything, which is only safe because the rule is gated
+      - OPENDMARC_MESSAGE
+    tests:
+      positive:
+        - string: '1rABCD: SPF(mailfrom): example.com pass'
+          program: 'opendmarc'
+          result:
+            opendmarc_qid: '1rABCD'
+            opendmarc_method: 'SPF'
+            opendmarc_method_scope: 'mailfrom'
+            opendmarc_domain: 'example.com'
+            opendmarc_result: 'pass'
+        - string: '1rABCD: policy for example.com applied: reject'
+          result:
+            opendmarc_qid: '1rABCD'
+            opendmarc_domain: 'example.com'
+            opendmarc_policy: 'reject'
+        - string: '1rABCD: example.com fail; dkim=fail (bad signature) spf=pass'
+          result:
+            opendmarc_qid: '1rABCD'
+            opendmarc_domain: 'example.com'
+            opendmarc_result: 'fail'
+            opendmarc_detail: 'dkim=fail (bad signature) spf=pass'
+        - string: 'ignoring connection from localhost'
+          result:
+            opendmarc_ignored_what: 'connection'
+            opendmarc_ignored_source: 'localhost'
+        - string: '1rABCD: internal host, ignoring'
+          result:
+            opendmarc_qid: '1rABCD'
+            opendmarc_message: 'internal host, ignoring'
+        - string: 'OpenDMARC Filter v1.4.2 starting (args: -c /etc/opendmarc.conf)'
+          result:
+            opendmarc_message: 'OpenDMARC Filter v1.4.2 starting (args: -c /etc/opendmarc.conf)'
+      negative:
+        - ''
+        - string: '1rABCD: SPF(mailfrom): example.com pass'
+          program: 'opendmarc-extra'

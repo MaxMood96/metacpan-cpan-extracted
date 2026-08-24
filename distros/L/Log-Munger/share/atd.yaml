@@ -1,0 +1,102 @@
+---
+# atd (at job scheduler) log enrichment.
+#
+# Gates on the syslog PROGRAM field being "atd". Patterns are anchored (each
+# must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with atd_ .
+#
+# The companion to cron.yaml. A job scheduled for later is a common way to
+# have something run after the session that arranged it has gone, so atd
+# warrants the same attention as cron. It says far less, though: most of what a
+# modern host writes for an `at` job comes through PAM and is handled by
+# pam.yaml.
+#
+# atd's wording for starting a job has changed between releases and differs
+# between the BSD and Debian lineages, so ATD_JOB below is deliberately loose.
+# It keys on the words that have stayed put and leaves the rest to a capture. A
+# wording it does not fit still comes back through the catch-all as atd_message
+# with its text intact, so a mismatch costs visibility rather than data.
+includes:
+- base
+vars_templated:
+  # The forms seen across versions:
+  #   "Starting job 5 (a000050192abc) for user 'neti' (1000)"
+  #   "Running job 5 as neti"
+  #
+  # The job identifier and the user are what every wording carries, so they are
+  # what is captured. Everything else is left alone.
+  ATD_JOB: '(?<atd_action>Starting|Running|Deleting) job (?<atd_job>[% NOTSPACE %])(?: \((?<atd_job_file>[^)]*)\))?(?: (?:for user|as) ''?(?<atd_user>[A-Za-z0-9._-]+)''?)?(?: \((?<atd_uid>[% INT %])\))?(?: [% GREEDYDATA %])?'
+  # "Exec failed for mail command: No such file or directory"
+  ATD_EXEC_FAILED: 'Exec failed for (?<atd_failed_command>[^:]+): (?<atd_error>[% GREEDYDATA %])'
+  # Anything else atd said, which given the above is most of it.
+  ATD_MESSAGE: '(?<atd_message>.+)'
+vars_tests:
+  ATD_JOB:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Starting job 5 (a000050192abc) for user ''neti'' (1000)'
+        result: 'Starting job 5 (a000050192abc) for user ''neti'' (1000)'
+      - string: 'Running job 5 as neti'
+        result: 'Running job 5 as neti'
+      - string: 'Deleting job 7'
+        result: 'Deleting job 7'
+    negative:
+      - 'Exec failed for mail command: No such file or directory'
+  ATD_EXEC_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Exec failed for mail command: No such file or directory'
+        result: 'Exec failed for mail command: No such file or directory'
+    negative:
+      - 'Running job 5 as neti'
+  ATD_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'File a000050192abc is in the future'
+        result: 'File a000050192abc is in the future'
+    negative:
+      - ''
+convert:
+  atd_uid: int
+rules:
+  - name: atd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^atd$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - ATD_JOB
+      - ATD_EXEC_FAILED
+      # last: matches anything, which is only safe because the rule is gated.
+      # It is also what keeps an unfamiliar wording from being a silent miss.
+      - ATD_MESSAGE
+    tests:
+      positive:
+        - string: 'Starting job 5 (a000050192abc) for user ''neti'' (1000)'
+          numeric:
+            - atd_uid
+          result:
+            atd_action: 'Starting'
+            atd_job: '5'
+            atd_job_file: 'a000050192abc'
+            atd_user: 'neti'
+            atd_uid: '1000'
+        - string: 'Running job 5 as neti'
+          result:
+            atd_action: 'Running'
+            atd_job: '5'
+            atd_user: 'neti'
+        - string: 'Exec failed for mail command: No such file or directory'
+          result:
+            atd_failed_command: 'mail command'
+            atd_error: 'No such file or directory'
+        - string: 'File a000050192abc is in the future'
+          program: 'atd'
+          result:
+            atd_message: 'File a000050192abc is in the future'
+      negative:
+        - ''
+        - string: 'Starting job 5 (a000050192abc) for user ''neti'' (1000)'
+          program: 'atd-extra'

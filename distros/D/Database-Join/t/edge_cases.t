@@ -227,7 +227,9 @@ subtest 'constructor: join_map reference value triggers heap-address guard' => s
 		)
 	} $ERR_HEAP, 'ref-valued join_map triggers early croak';
 
-	# The error message must NOT contain a heap address (e.g. "HASH(0x7f...")
+	# The error message text must NOT contain a heap address (e.g. "HASH(0x7f...").
+	# croak() appends a stack trace that naturally contains object addresses, so
+	# we check only the first line (the error text itself), not the full $@.
 	my $msg = '';
 	eval {
 		Database::Join->new(
@@ -236,7 +238,7 @@ subtest 'constructor: join_map reference value triggers heap-address guard' => s
 			join_map    => { 0 => [1, 2, 3] },
 		);
 	};
-	$msg = $@ // '';
+	($msg) = split /\n/, ($@ // ''), 2;
 	unlike $msg, qr/0x[0-9a-f]{4,}/i, 'error message contains no heap address';
 };
 
@@ -654,7 +656,10 @@ subtest 'security: join_map ref value guard prevents heap address in error messa
 			join_map    => { 0 => [] },   # arrayref value, not string
 		);
 	};
-	$msg = $@ // '';
+	# croak() appends a stack trace containing object addresses; check only the
+	# first line (the error text itself) for the heap-address guard property.
+	my ($first_line) = split /\n/, ($@ // ''), 2;
+	$msg = $first_line // '';
 	unlike $msg, qr/0x[0-9a-f]{4,}/i,
 		'heap address not present in join_map-ref error message';
 	like $msg, qr/must be a string/,

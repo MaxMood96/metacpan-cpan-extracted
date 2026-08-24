@@ -1,0 +1,123 @@
+---
+# sSMTP (ssmtp) send-only MTA log enrichment.
+#
+# Gates on the syslog PROGRAM field being sSMTP or ssmtp -- the FreeBSD port
+# logs under the mixed-case name, Linux packages under the lowercase one.
+# Patterns are anchored (each must match the whole MESSAGE) and first-match
+# wins. Every capture is namespaced with ssmtp_ .
+#
+# sSMTP has no queue: a message is either handed to the smarthost immediately
+# or lost. These two lines are the entire record of which happened, so a
+# rejection here means a mail nothing else will ever mention again -- cron
+# output most often.
+includes:
+- base
+vars_templated:
+  # A server reply, either standing alone as the whole message or nested in the
+  # "Sent mail for" line below. The enhanced status code is optional; servers
+  # predating RFC 3463 send only the three-digit code.
+  #
+  #   501 5.1.7 Bad sender address syntax
+  #   221 2.0.0 Bye
+  #   250 Ok
+  SSMTP_REPLY: '(?<ssmtp_code>[0-9]{3})(?: (?<ssmtp_status>[0-9]+\.[0-9]+\.[0-9]+))?(?: (?<ssmtp_message>[% GREEDYDATA %]))?'
+  # "Sent mail for root@example.net (221 2.0.0 Bye) uid=0 username=neti outbytes=9907"
+  #
+  # The parenthesised reply is the last thing the server said, and is split by
+  # the decompose below into the same ssmtp_code / ssmtp_status fields the
+  # standalone reply produces, so a filter on ssmtp_code works either way.
+  SSMTP_SENT: 'Sent mail for (?<ssmtp_to>[% NOTSPACE %]) \((?<ssmtp_reply>[^)]*)\) uid=(?<ssmtp_uid>[% INT %]) username=(?<ssmtp_user>[% NOTSPACE %]) outbytes=(?<ssmtp_bytes>[% INT %])'
+vars_tests:
+  SSMTP_REPLY:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '501 5.1.7 Bad sender address syntax'
+        result: '501 5.1.7 Bad sender address syntax'
+      - string: '221 2.0.0 Bye'
+        result: '221 2.0.0 Bye'
+      # no enhanced status code
+      - string: '250 Ok'
+        result: '250 Ok'
+      # code alone
+      - string: '220'
+        result: '220'
+    negative:
+      - 'Sent mail for root@example.net (221 2.0.0 Bye) uid=0 username=neti outbytes=9907'
+      - 'Cannot open mail.example.net:25'
+  SSMTP_SENT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Sent mail for root@example.net (221 2.0.0 Bye) uid=0 username=neti outbytes=9907'
+        result: 'Sent mail for root@example.net (221 2.0.0 Bye) uid=0 username=neti outbytes=9907'
+    negative:
+      - '501 5.1.7 Bad sender address syntax'
+convert:
+  ssmtp_code: int
+  ssmtp_uid: int
+  ssmtp_bytes: int
+# Break the reply nested in a "Sent mail for" line into the same fields the
+# standalone reply pattern produces. The combined text is what sSMTP wrote and
+# is kept, so the source field is not removed.
+decompose:
+  - field: ssmtp_reply
+    type: pattern
+    pattern: SSMTP_REPLY
+    tests:
+      - input: '221 2.0.0 Bye'
+        result:
+          ssmtp_reply: '221 2.0.0 Bye'
+          ssmtp_code: '221'
+          ssmtp_status: '2.0.0'
+          ssmtp_message: 'Bye'
+rules:
+  - name: ssmtp
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^(?:sSMTP|ssmtp)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - SSMTP_SENT
+      # last: a bare reply is three digits and free text, so it must not get
+      # first refusal on a line with more structure
+      - SSMTP_REPLY
+    tests:
+      positive:
+        - string: '501 5.1.7 Bad sender address syntax'
+          program: 'ssmtp'
+          result:
+            ssmtp_code: '501'
+            ssmtp_status: '5.1.7'
+            ssmtp_message: 'Bad sender address syntax'
+        - string: '250 Ok'
+          program: 'sSMTP'
+          result:
+            ssmtp_code: '250'
+            ssmtp_message: 'Ok'
+        # ssmtp_code / ssmtp_status / ssmtp_message come from the decompose,
+        # which rule tests do not run; they are covered by its own tests above.
+        - string: 'Sent mail for root@example.net (221 2.0.0 Bye) uid=0 username=neti outbytes=9907'
+          enriched:
+            ssmtp_bytes: '9907'
+            ssmtp_code: '221'
+            ssmtp_message: 'Bye'
+            ssmtp_reply: '221 2.0.0 Bye'
+            ssmtp_status: '2.0.0'
+            ssmtp_to: 'root@example.net'
+            ssmtp_uid: '0'
+            ssmtp_user: 'neti'
+          numeric:
+            - ssmtp_bytes
+            - ssmtp_code
+            - ssmtp_uid
+          result:
+            ssmtp_to: 'root@example.net'
+            ssmtp_reply: '221 2.0.0 Bye'
+            ssmtp_uid: '0'
+            ssmtp_user: 'neti'
+            ssmtp_bytes: '9907'
+      negative:
+        - 'this is not an ssmtp line at all'
+        - string: '501 5.1.7 Bad sender address syntax'
+          program: 'ssmtp-extra'

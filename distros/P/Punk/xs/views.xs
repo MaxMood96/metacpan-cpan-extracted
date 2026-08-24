@@ -65,9 +65,20 @@ engine(self, ...)
         RETVAL
 
 # render($c, $template, \%data, %over): call the engine's render and assemble
-# the PSGI triplet in C. $over: status, type, engine. Status and headers fold
-# in from $c (a Punk::Context, or undef). The engine's returned bytes are
+# the PSGI triplet in C. $over: status, type, engine, layout. Status and headers
+# fold in from $c (a Punk::Context, or undef). The engine's returned bytes are
 # copied into the body so Template::Stencil's reused render buffer is intact.
+#
+# `layout` reaches the engine as a third argument, { wrapper => $name | undef }
+# - the per-render option Template::Stencil already takes, spelled with the
+# framework's word on this side and the engine's on that. It is passed only
+# when given, so an engine written to the two-argument contract sees nothing
+# new until a caller asks for a layout - and then ignores it, which the
+# contract in Punk::Views says in so many words.
+#
+# An override this does not know croaks. It used to be skipped, which meant
+# `layout => undef` rendered WITH the layout and told nobody - the option that
+# looks like it worked is worse than the one that failed.
 void
 render(self, c, template, data = &PL_sv_undef, ...)
         SV *self
@@ -78,27 +89,45 @@ render(self, c, template, data = &PL_sv_undef, ...)
     {
         pv_views *v = pv_of(aTHX_ self);
         SV *o_status = NULL, *o_type = NULL, *o_engine = NULL;
+        SV *o_layout = NULL; int have_layout = 0;
         SV *engine, *bytes, *body, *ct;
         AV *headers, *bodyav, *resp;
         IV status = 0;
         int i;
         int have_c = (c && SvOK(c));
 
+        if (items > 4 && ((items - 4) & 1))
+            croak("Punk::Views::render: overrides are name => value pairs "
+                  "(status, type, engine, layout)");
         for (i = 4; i + 1 < items; i += 2) {
             STRLEN kl;
             const char *k = SvPV_const(ST(i), kl);
             if      (kl == 6 && memEQ(k, "status", 6)) o_status = ST(i + 1);
             else if (kl == 4 && memEQ(k, "type", 4))   o_type   = ST(i + 1);
             else if (kl == 6 && memEQ(k, "engine", 6)) o_engine = ST(i + 1);
+            else if (kl == 6 && memEQ(k, "layout", 6)) {
+                o_layout = ST(i + 1); have_layout = 1;
+            }
+            else
+                croak("Punk::Views::render: unknown override '%.*s' "
+                      "(known: status, type, engine, layout)", (int)kl, k);
         }
 
         engine = pv_engine(aTHX_ v, o_engine);
 
-        /* engine->render($template, $data || {}) */
+        /* engine->render($template, $data || {} [, { wrapper => $layout }]) */
         {
             dSP;
             int count;
             SV *d = SvOK(data) ? data : sv_2mortal(newRV_noinc((SV *)newHV()));
+            SV *eo = NULL;
+            if (have_layout) {
+                HV *oh = newHV();
+                (void)hv_stores(oh, "wrapper",
+                                (o_layout && SvOK(o_layout)) ? newSVsv(o_layout)
+                                                             : newSV(0));
+                eo = sv_2mortal(newRV_noinc((SV *)oh));
+            }
             /* Punk::Plugin::CSP: this request's nonce, so `{% csp_nonce %}`
              * resolves without the handler passing anything. A no-op unless
              * the plugin is registered for this app. */
@@ -108,11 +137,24 @@ render(self, c, template, data = &PL_sv_undef, ...)
              * anything. A no-op unless the plugin is registered. */
             if (have_c) pi_bind_vars(aTHX_ c, d);
             ENTER; SAVETMPS;
+            /* Named routes: this request's `url` hash, so `{% url.books %}`
+             * resolves without the handler passing anything, and the prefix
+             * the url_for filter reads for the length of this render. Inside
+             * the ENTER because it save_items that prefix - punk_url.h says
+             * why putting it back matters more than setting it. */
+            if (have_c) pk_url_bind_vars(aTHX_ c, d);
+            /* before_render: a plugin's chance to put something into the data
+             * every template gets, after Punk's own binds so an application
+             * that wants the last word still has it by passing the key. The
+             * chain is absent unless somebody registered one, so the ordinary
+             * render pays one hv_fetch that misses. */
+            if (have_c) pv_before_render(aTHX_ c, template, d);
             PUSHMARK(SP);
-            EXTEND(SP, 3);
+            EXTEND(SP, 4);
             PUSHs(engine);
             PUSHs(template);
             PUSHs(d);
+            if (eo) PUSHs(eo);
             PUTBACK;
             count = call_method("render", G_SCALAR);
             SPAGAIN;

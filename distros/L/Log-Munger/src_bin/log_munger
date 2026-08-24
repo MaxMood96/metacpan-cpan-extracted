@@ -1,0 +1,42 @@
+#!perl
+
+use strict;
+use warnings;
+
+use Log::Munger::App;
+Log::Munger::App->run;
+
+=head1 NAME
+
+log_munger - Extract structured fields from log records using YAML rule files.
+
+=head1 SYNOPSIS
+
+log_munger commands
+
+log_munger help <command>
+
+log_munger munge -r <rule file> [-s <item>] [--raw] [-g <mmdb>]
+
+log_munger enrich -r <rule file> [--raw] [--flat] [--drop-unmatched] [-g <mmdb>]
+
+log_munger explain -r <rule file> [-s <item>] [--raw] [-g <mmdb>]
+
+log_munger test_all [-v]
+
+=head1 DESCRIPTION
+
+The command line front end to L<Log::Munger>. Feed it a decoded log record as
+JSON, NDJSON on stdin, or a raw log line with C<--raw>, and it runs the record
+through the named rule files, printing the fields the first matching rule
+captured.
+
+C<log_munger commands> lists every subcommand and C<log_munger help E<lt>commandE<gt>>
+gives the usage for one. The C<docs/> directory in the distribution covers the
+CLI, the rule file format, and writing rule files in full.
+
+=head1 SEE ALSO
+
+L<Log::Munger>
+
+=cut

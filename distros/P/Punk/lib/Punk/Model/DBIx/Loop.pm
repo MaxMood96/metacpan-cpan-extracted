@@ -6,7 +6,7 @@ use warnings;
 use Punk ();
 use DBIx::Loop ();
 
-our $VERSION = '0.30';
+our $VERSION = '0.31';
 
 1;
 
@@ -104,8 +104,11 @@ preforking worker never inherits another process's pool.
 Identical to the default L<Punk::Model::DBI>, wrapped in a future. C<get> resolves to the
 row hashref or undef; C<search> to
 C<< { rows => [...], has_more_data => 0|1, next => $token|undef } >>;
-C<all> to C<search({}, {})>; C<create> and C<update> to the stored row;
-C<delete> to the affected row count.
+C<count> to the number; C<all> to C<search({}, {})>; C<create> and
+C<update> to the stored row; C<delete> to the affected row count. The
+filter operators, C<order_by> and the keyset continuation are the ones
+L<Punk::Model/"The filter"> describes - the same builder produces the SQL
+for both backends.
 
 Pagination tokens are the B<same> opaque encoding both backends use, so a
 C<next> token minted by one decodes on the other and switching backends does
@@ -127,6 +130,35 @@ failing its future.
 
 A query that fails B<in the database> fails the future, and the error reaches
 your C<else> or the dispatcher's error handler.
+
+=head2 Transactions
+
+C<< $c->txn >> on this backend is L<DBIx::Loop/txn>: a pool slot is
+acquired, C<BEGIN> runs, the block runs with a L<Punk::Txn>, and the
+block's result - a value, or a L<Punk::Future> - commits or rolls back
+when it settles. C<txn> returns a L<Punk::Future> of the block's value,
+resolved after C<COMMIT>; return it from the handler.
+
+    return $c->txn(sub {
+        my ($tx) = @_;
+        return $tx->model('Order')->create(\%data)
+          ->then(sub { $tx->model('Stock')->update({ ... }) });
+    })->then(sub { $c->json($_[0]) });
+
+DBIx::Loop pins a transaction to one connection, and its rule is that
+plain statements during a transaction run on other slots and never join.
+So C<< $tx->model($name) >> is the only way into the transaction: it is a
+copy of the model whose statements run on the pinned handle, and a model
+reached through C<< $c->model >> inside the block is B<outside> - its
+writes commit on their own, whatever the block then does. C<< $tx->handle >>
+is the L<DBIx::Loop::Txn> for a raw statement on the same connection.
+
+Two cautions that are DBIx::Loop's own: a C<txn> inside the block is an
+independent transaction on another slot, and awaiting one while the
+block's own transaction holds the last slot waits forever; and before
+DBIx::Loop 0.07 a C<do> that failed in the database on a handle opened
+without C<RaiseError> resolved done rather than failing, so a transaction
+whose write failed committed - 0.07 is the version to have.
 
 =head1 METHODS BEYOND THE CONTRACT
 

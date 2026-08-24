@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk::Mailer ();    # one dist, one bootstrap: the plugin lives in its bundle
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 1;
 
@@ -142,16 +142,36 @@ permanent rejection wastes a few.
     my $parts = $c->mail_template('welcome', { name => 'Ann' });
     # { text => ..., html => ... }, undef for a kind that has no file
 
-=head2 $c->mail_url($path)
+=head2 $c->mail_url($path) / $c->mail_url($name, %captures)
 
-C<base> joined to a path starting with C</>. Croaks with no base.
+    $c->mail_url('/verify/' . $token);        # a path, joined to base
+    $c->mail_url('verify', token => $token);  # a named route and its captures
+
+A first argument starting with C</> is a path and joins C<base> whole,
+exactly as it always has. Anything else is the name of a route declared
+with C<< { name => ... } >> (see L<Punk/Named routes>), built through
+C<< $c->url_for >>: the captures are filled and encoded, a leftover
+argument becomes a query pair, and a capture with no value croaks rather
+than mailing a link with a hole in it. No route name may begin with C</>,
+so the two forms cannot be confused.
+
+The named form joins the B<origin> of C<base> rather than the whole of it,
+because a named route already carries the application's own prefix - the
+path on L<Punk/host>, and C<SCRIPT_NAME> under a mount. Joining the whole
+base would spell that prefix twice:
+C<https://example.com/app/app/verify>. So an application deployed under a
+prefix gets a correct link from either form, and an explicit C<base>
+pointing somewhere else is honoured as the origin the mail is sent from.
+
+Croaks with no base. Named routes need L<Punk> 0.31 or newer.
 
 =head2 $c->mail_token($user, %options)
 
     my ($result, $link) = $c->mail_token($user,
         kind     => 'verify',              # required: the token kind
         ttl      => 2 * 24 * 60 * 60,      # default two days
-        path     => '/verify/%s',          # %s is the token
+        route    => 'verify',              # a named route (fills :token)
+        path     => '/verify/%s',          # ... or a path; %s is the token
         subject  => 'Verify your address', # required
         template => 'verify',              # required; data gets link, token, user
         to       => $user->{email},        # default: the user's email field
@@ -160,7 +180,12 @@ C<base> joined to a path starting with C</>. Croaks with no base.
 
 Issues a single-use token through L<Punk::Auth>'s C<issue_token>
 (croaks without the C<auth> keyword), builds the link on C<base>,
-renders and sends. Returns the Result (or the job id) and the link -
+renders and sends.
+
+C<route> is the alternative to C<path>: it names a route (L<Punk/Named
+routes>) and the token fills that route's C<token> capture, so the link
+comes from the route table and there is no C<%s> to get wrong. Giving both
+croaks rather than picking a winner. C<route> needs L<Punk> 0.31 or newer. Returns the Result (or the job id) and the link -
 the link so a development page can show it when no mail is
 configured. Auth's rule applies: issuing a new token of a kind
 invalidates the user's older ones, so a re-sent mail leaves exactly one

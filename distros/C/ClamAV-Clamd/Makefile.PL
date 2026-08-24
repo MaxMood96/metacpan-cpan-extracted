@@ -2,6 +2,7 @@ use 5.010;
 use strict;
 use warnings;
 use ExtUtils::MakeMaker;
+use Config;
 
 my %WriteMakefileArgs = (
     NAME             => 'ClamAV::Clamd',
@@ -71,6 +72,37 @@ else {
 ExtUtils::Depends is not installed. ClamAV::Clamd will build and work
 normally; only the C ABI wiring for other XS distributions is skipped.
 NOTE
+}
+
+# --- clock_gettime: needs -lrt on old glibc (< 2.17) ---------------------
+#
+# clamd_compat.h's deadline clock is clock_gettime(CLOCK_MONOTONIC). Before
+# glibc 2.17 that symbol lives in librt, so the .so loads with "undefined
+# symbol: clock_gettime" unless we link -lrt (CPAN Testers, glibc 2.13).
+# Newer glibc folds it into libc, and macOS/BSD have no librt, so only add
+# it when a link probe needs it.
+{
+    my $inc  = '#include <time.h>';
+    my $body = 'struct timespec ts; return clock_gettime(CLOCK_MONOTONIC, &ts);';
+    if (!probe('rt', $inc, $body, '') && probe('rt', $inc, $body, '-lrt')) {
+        $WriteMakefileArgs{LIBS} = ['-lrt'];
+        print "clock_gettime needs -lrt (old glibc): linking it.\n";
+    }
+}
+
+sub probe {
+    my ($name, $includes, $body, $libs) = @_;
+    my $dir = "cc_probe_${name}_$$";
+    mkdir $dir or return 0;
+    my ($src, $bin, $ok) = ("$dir/p.c", "$dir/p", 0);
+    if (open my $fh, '>', $src) {
+        print $fh "$includes\nint main(void){ $body }\n";
+        close $fh;
+        my $cc = $Config{cc} || 'cc';
+        $ok = system("$cc $src -o $bin $libs >/dev/null 2>&1") == 0;
+    }
+    unlink $src, $bin; rmdir $dir;
+    return $ok;
 }
 
 # MakeMaker tracks neither include/*.h nor anything an XS file pulls in,

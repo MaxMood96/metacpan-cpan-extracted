@@ -1,5 +1,5 @@
 ---
-abstract: 'Explicit htmx adapter connector for the Mojolicious ecosystem'
+abstract: 'Framework-agnostic htmx adapter for Mojolicious'
 author:
   - 'Joshua S. Day <HAX@cpan.org>'
 build_requires:
@@ -27,5 +27,5 @@ requires:
 resources:
   bugtracker: https://github.com/haxmeister/perl-Uniform-HTMX-Mojolicious/issues
   repository: https://github.com/haxmeister/perl-Uniform-HTMX-Mojolicious
-version: '1.01'
+version: '1.02'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

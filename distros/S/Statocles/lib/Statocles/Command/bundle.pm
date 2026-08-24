@@ -1,5 +1,5 @@
 package Statocles::Command::bundle;
-our $VERSION = '0.098';
+our $VERSION = '0.099';
 # ABSTRACT: Copy a default theme to this site to make changes
 
 use Statocles::Base 'Command';
@@ -16,7 +16,7 @@ sub run {
             return 1;
         }
 
-        my $dest_dir = $self->site->theme->store->path;
+        my $dest_dir = $self->site->theme->path;
         $self->bundle_theme( $theme_name, $dest_dir, @argv[2..$#argv] );
         say qq{Theme "$theme_name" written to "$dest_dir"};
     }
@@ -66,7 +66,7 @@ Statocles::Command::bundle - Copy a default theme to this site to make changes
 
 =head1 VERSION
 
-version 0.098
+version 0.099
 
 =head1 AUTHOR
 

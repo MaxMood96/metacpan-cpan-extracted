@@ -1,3 +1,9 @@
+0.002   2026-04-28  Released-By: PERLANCAR; Urgency: high
+
+        - [bugfix] rename_wd() did not set actual errnos because of
+          misunderstanding of the purpose of $!{EFOO}.
+
+
 0.001   2026-04-28  Released-By: PERLANCAR
 
         - First release.

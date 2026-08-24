@@ -41,11 +41,11 @@
             "ExtUtils::MakeMaker" : "6.48",
             "File::Path" : "1.08",
             "File::ReadBackwards" : "1.06",
-            "File::Spec" : "3.74",
+            "File::Spec" : "3.84",
             "Getopt::Long" : "0",
             "HTML::Entities" : "0",
             "Hash::Util" : "0",
-            "JSON::PP" : "2.97001",
+            "JSON::PP" : "4.07",
             "JSON::XS" : "0",
             "LWP::UserAgent" : "0",
             "List::AllUtils" : "0",
@@ -57,14 +57,14 @@
             "Test::Pod" : "0",
             "Time::Local" : "1.11",
             "perl" : "5.008",
-            "version" : "0.99"
+            "version" : "0.9929"
          }
       }
    },
    "provides" : {
       "CPAN::Testers::ParseReport" : {
          "file" : "./lib/CPAN/Testers/ParseReport.pm",
-         "version" : "v0.5.0"
+         "version" : "v0.6.0"
       }
    },
    "release_status" : "stable",
@@ -73,6 +73,6 @@
          "url" : "https://repo.or.cz/cpan-testers-parsereport.git"
       }
    },
-   "version" : "0.5.0",
-   "x_serialization_backend" : "JSON::PP version 2.97001"
+   "version" : "0.6.0",
+   "x_serialization_backend" : "JSON::PP version 4.07"
 }

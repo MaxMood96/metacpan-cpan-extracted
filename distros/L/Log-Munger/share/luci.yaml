@@ -1,0 +1,99 @@
+---
+# LuCI (the OpenWRT web interface) authentication log enrichment.
+#
+# Gates on the syslog PROGRAM field being one of the programs LuCI runs under
+# and requires the "luci: " prefix it puts on its own messages. Patterns are
+# anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with luci_ .
+#
+# LuCI is not a daemon. It runs as a CGI under uhttpd and, on newer releases,
+# as the ucode dispatcher, so its lines arrive under whichever of those was
+# serving the request -- "uhttpd" or "dispatcher.uc" -- rather than under a
+# program of its own. Both are gated here, and so is a bare "luci" for the
+# setups that set an identifier explicitly.
+#
+# There is deliberately no catch-all. uhttpd logs plenty that has nothing to do
+# with LuCI -- its own errors and, when a LuCI page throws, multi-line ucode
+# backtraces -- and requiring the "luci: " prefix keeps this file off them. A
+# login on a router's web interface is a root-equivalent authentication event
+# and belongs in a field; the backtraces do not.
+includes:
+- base
+vars_templated:
+  # "luci: accepted login on /admin/system/package-manager for root from 192.0.2.5"
+  # "[info] luci: failed login on / for root from 203.0.113.7"
+  #
+  # uhttpd prefixes a syslog level in brackets and the ucode dispatcher does
+  # not, so the level is optional.
+  LUCI_LOGIN: '(?:\[(?<luci_level>[% WORD %])\] )?luci: (?<luci_result>accepted|failed) login on (?<luci_path>[% NOTSPACE %]) for (?<luci_user>[% USERNAME %]) from (?<luci_src_ip>[% IP %])'
+  # Anything else LuCI logged about itself, still behind the "luci: " prefix.
+  LUCI_MESSAGE: '(?:\[(?<luci_level>[% WORD %])\] )?luci: (?<luci_message>.+)'
+vars_tests:
+  LUCI_LOGIN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'luci: accepted login on / for root from 192.0.2.5'
+        result: 'luci: accepted login on / for root from 192.0.2.5'
+      - string: '[info] luci: accepted login on /admin/system/package-manager for root from 192.0.2.5'
+        result: '[info] luci: accepted login on /admin/system/package-manager for root from 192.0.2.5'
+      - string: '[info] luci: failed login on / for root from 203.0.113.7'
+        result: '[info] luci: failed login on / for root from 203.0.113.7'
+    negative:
+      - 'Runtime error: Unable to dlopen file ''/usr/lib/ucode/ubus.so'''
+  LUCI_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'luci: session expired for root'
+        result: 'luci: session expired for root'
+      - string: '[info] luci: something new'
+        result: '[info] luci: something new'
+    negative:
+      # no "luci: " prefix, so uhttpd's own output is left alone
+      - 'Runtime error: Unable to dlopen file ''/usr/lib/ucode/ubus.so'''
+# Look up the client address.
+geoip:
+  - luci_src_ip
+rules:
+  - name: luci
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^(?:luci|uhttpd|dispatcher\.uc)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - LUCI_LOGIN
+      - LUCI_MESSAGE
+    tests:
+      positive:
+        - string: 'luci: accepted login on / for root from 192.0.2.5'
+          program: 'uhttpd'
+          result:
+            luci_result: 'accepted'
+            luci_path: '/'
+            luci_user: 'root'
+            luci_src_ip: '192.0.2.5'
+        - string: '[info] luci: accepted login on /admin/system/package-manager for root from 192.0.2.5'
+          program: 'luci'
+          result:
+            luci_level: 'info'
+            luci_result: 'accepted'
+            luci_path: '/admin/system/package-manager'
+            luci_user: 'root'
+            luci_src_ip: '192.0.2.5'
+        - string: '[info] luci: failed login on / for root from 203.0.113.7'
+          program: 'dispatcher.uc'
+          result:
+            luci_level: 'info'
+            luci_result: 'failed'
+            luci_path: '/'
+            luci_user: 'root'
+            luci_src_ip: '203.0.113.7'
+        - string: 'luci: session expired for root'
+          result:
+            luci_message: 'session expired for root'
+      negative:
+        - 'this is not a luci line at all'
+        - "Runtime error: Unable to dlopen file '/usr/lib/ucode/ubus.so'"
+        - string: 'luci: accepted login on / for root from 192.0.2.5'
+          program: 'luci-extra'

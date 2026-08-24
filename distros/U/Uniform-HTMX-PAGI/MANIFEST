@@ -1,10 +1,15 @@
 Changes
+CONTRIBUTING.md
+examples/app.pagi
 lib/Uniform/HTMX/PAGI.pm
+LICENSE
 Makefile.PL
 MANIFEST
 MANIFEST.SKIP
-LICENSE
+README.md
+SECURITY.md
 t/00-load.t
 t/01-methods.t
+t/02-inheritance.t
 META.yml                                 Module YAML meta-data (added by MakeMaker)
 META.json                                Module JSON meta-data (added by MakeMaker)

@@ -52,6 +52,7 @@ t/21-templates.t
 t/22-later.t
 t/23-mail-token.t
 t/24-host.t
+t/25-named-routes.t
 t/bin/sink.pl
 t/lib/FakeResend.pm
 t/lib/FakeSMTPd.pm

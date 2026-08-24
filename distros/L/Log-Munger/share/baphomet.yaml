@@ -1,0 +1,211 @@
+---
+# Baphomet log enrichment.
+#
+# Baphomet supervises the Galla log-watchers of the Ereshkigal suite: it spawns
+# one Galla per configured instance, restarts them when they die, and hands out
+# a control socket. Ereshkigal does the same job for the Kur ban daemons.
+#
+# Baphomet syslogs under a PROGRAM of "baphomet". Patterns are anchored (each
+# must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with bph_ .
+#
+# Only the messages seen in the wild are given patterns; anything else falls to
+# the catch-all as bph_message rather than being guessed at.
+includes:
+- base
+vars_templated:
+  # Startup, naming the control socket, whether the socket requires auth, and
+  # the Gallas that were configured, e.g.:
+  #   started... socket=/var/run/baphomet/socket auth=off gallas=sshd,suricata
+  # bph_gallas is a comma-separated list.
+  BPH_STARTED: '(?<bph_action>started)\.\.\. socket=(?<bph_socket>[% NOTSPACE %]) auth=(?<bph_auth>[% NOTSPACE %]) gallas=(?<bph_gallas>[% NOTSPACE %])'
+  # A child being started, with the command line it was given, e.g.:
+  #   spawned galla "sshd" as PID 29308... /usr/local/bin/galla --foreground --name sshd --config /usr/local/etc/baphomet/config.toml
+  BPH_SPAWNED: '(?<bph_action>spawned) galla "(?<bph_galla>[^"]*)" as PID (?<bph_pid>[% INT %])\.\.\. (?<bph_command>[% GREEDYDATA %])'
+  # A child reaped, e.g.:
+  #   galla "sshd" PID 42876 exited with 2
+  # A non-zero bph_exit_status is the interesting case.
+  BPH_EXITED: 'galla "(?<bph_galla>[^"]*)" PID (?<bph_pid>[% INT %]) (?<bph_action>exited) with (?<bph_exit_status>[% INT %])'
+  # A child that will be brought back, e.g.:
+  #   galla "sshd" died, restarting in 1 seconds
+  BPH_DIED: 'galla "(?<bph_galla>[^"]*)" (?<bph_action>died), restarting in (?<bph_restart_delay>[% INT %]) seconds'
+  # Whatever a child wrote to stderr, relayed verbatim, e.g.:
+  #   galla "sshd" stderr... can't exec (galla --foreground --name sshd) in child pid 42876: No such file or directory
+  BPH_STDERR: 'galla "(?<bph_galla>[^"]*)" (?<bph_action>stderr)\.\.\. (?<bph_stderr>[% GREEDYDATA %])'
+  # A child being signalled because it would not stop on its own, e.g.:
+  #   galla "one" is still running past the stop grace period, sending TERM
+  #   galla "one" is still running past the stop grace period, sending KILL
+  BPH_GRACE_EXPIRED: 'galla "(?<bph_galla>[^"]*)" is still running past the stop grace period, (?<bph_action>sending) (?<bph_signal>[% WORD %])'
+  # Baphomet failing to reach one of its own children over that child's socket,
+  # e.g.:
+  #   galla client "web" error during connect:connect to "/var/run/galla/web.sock"... No such file or directory (2)
+  BPH_GALLA_CLIENT_ERROR: 'galla client "(?<bph_galla>[^"]*)" (?<bph_action>error during connect):connect to "(?<bph_galla_socket>[^"]*)"\.\.\. (?<bph_error>[% GREEDYDATA %])'
+  # Bare lifecycle words, each logged on a line of its own.
+  BPH_STATE: '(?<bph_action>stop requested|stopped)'
+  # Everything else Baphomet said. Matching anything is only safe because the
+  # rule is gated on PROGRAM.
+  BPH_MESSAGE: '(?<bph_message>.+)'
+vars_tests:
+  BPH_STARTED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'started... socket=/var/run/baphomet/socket auth=off gallas=sshd,suricata'
+        result: 'started... socket=/var/run/baphomet/socket auth=off gallas=sshd,suricata'
+      - string: 'started... socket=/var/run/baphomet/socket auth=on gallas=web'
+        result: 'started... socket=/var/run/baphomet/socket auth=on gallas=web'
+    negative:
+      - 'stopped'
+  BPH_SPAWNED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'spawned galla "sshd" as PID 29308... /usr/local/bin/galla --foreground --name sshd'
+        result: 'spawned galla "sshd" as PID 29308... /usr/local/bin/galla --foreground --name sshd'
+      - string: 'spawned galla "suricata" as PID 29587... /usr/local/bin/galla --foreground --name suricata'
+        result: 'spawned galla "suricata" as PID 29587... /usr/local/bin/galla --foreground --name suricata'
+    negative:
+      - 'galla "sshd" PID 42876 exited with 2'
+  BPH_EXITED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'galla "sshd" PID 42876 exited with 2'
+        result: 'galla "sshd" PID 42876 exited with 2'
+      - string: 'galla "one" PID 111 exited with 0'
+        result: 'galla "one" PID 111 exited with 0'
+    negative:
+      - 'galla "sshd" died, restarting in 1 seconds'
+  BPH_DIED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'galla "sshd" died, restarting in 1 seconds'
+        result: 'galla "sshd" died, restarting in 1 seconds'
+      - string: 'galla "suricata" died, restarting in 5 seconds'
+        result: 'galla "suricata" died, restarting in 5 seconds'
+    negative:
+      - 'galla "sshd" PID 42876 exited with 2'
+  BPH_STDERR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'galla "sshd" stderr... can''t exec (galla --foreground --name sshd) in child pid 42876: No such file or directory'
+        result: 'galla "sshd" stderr... can''t exec (galla --foreground --name sshd) in child pid 42876: No such file or directory'
+      - string: 'galla "web" stderr... config parse failed'
+        result: 'galla "web" stderr... config parse failed'
+    negative:
+      - 'galla "sshd" died, restarting in 1 seconds'
+  BPH_GRACE_EXPIRED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'galla "one" is still running past the stop grace period, sending TERM'
+        result: 'galla "one" is still running past the stop grace period, sending TERM'
+      - string: 'galla "one" is still running past the stop grace period, sending KILL'
+        result: 'galla "one" is still running past the stop grace period, sending KILL'
+    negative:
+      - 'galla "sshd" died, restarting in 1 seconds'
+  BPH_GALLA_CLIENT_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'galla client "web" error during connect:connect to "/var/run/galla/web.sock"... No such file or directory (2)'
+        result: 'galla client "web" error during connect:connect to "/var/run/galla/web.sock"... No such file or directory (2)'
+      - string: 'galla client "sshd" error during connect:connect to "/var/run/galla/sshd.sock"... Connection refused (61)'
+        result: 'galla client "sshd" error during connect:connect to "/var/run/galla/sshd.sock"... Connection refused (61)'
+    negative:
+      - 'galla "sshd" died, restarting in 1 seconds'
+  BPH_STATE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'stop requested'
+        result: 'stop requested'
+      - string: 'stopped'
+        result: 'stopped'
+    negative:
+      - 'started... socket=/var/run/baphomet/socket auth=off gallas=sshd'
+  BPH_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'something baphomet has not been taught yet'
+        result: 'something baphomet has not been taught yet'
+      - string: 'stopped'
+        result: 'stopped'
+    negative:
+      - ''
+# Coerce numeric captures to integers.
+convert:
+  bph_pid: int
+  bph_exit_status: int
+  bph_restart_delay: int
+rules:
+  - name: baphomet
+    gate:
+      - field: PROGRAM
+        values:
+          - baphomet
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - BPH_STARTED
+      - BPH_SPAWNED
+      - BPH_EXITED
+      - BPH_DIED
+      - BPH_STDERR
+      - BPH_GRACE_EXPIRED
+      - BPH_GALLA_CLIENT_ERROR
+      - BPH_STATE
+      # last: matches anything, which is only safe because the rule is gated
+      - BPH_MESSAGE
+    tests:
+      positive:
+        - string: 'started... socket=/var/run/baphomet/socket auth=off gallas=sshd,suricata'
+          result:
+            bph_action: 'started'
+            bph_socket: '/var/run/baphomet/socket'
+            bph_auth: 'off'
+            bph_gallas: 'sshd,suricata'
+        - string: 'spawned galla "sshd" as PID 29308... /usr/local/bin/galla --foreground --name sshd'
+          result:
+            bph_action: 'spawned'
+            bph_galla: 'sshd'
+            bph_pid: '29308'
+            bph_command: '/usr/local/bin/galla --foreground --name sshd'
+        - string: 'galla "sshd" PID 42876 exited with 2'
+          numeric:
+            - bph_exit_status
+            - bph_pid
+          result:
+            bph_galla: 'sshd'
+            bph_pid: '42876'
+            bph_action: 'exited'
+            bph_exit_status: '2'
+        - string: 'galla "sshd" died, restarting in 1 seconds'
+          numeric:
+            - bph_restart_delay
+          program: 'baphomet'
+          result:
+            bph_galla: 'sshd'
+            bph_action: 'died'
+            bph_restart_delay: '1'
+        - string: 'galla "web" stderr... config parse failed'
+          result:
+            bph_galla: 'web'
+            bph_action: 'stderr'
+            bph_stderr: 'config parse failed'
+        - string: 'galla "one" is still running past the stop grace period, sending KILL'
+          result:
+            bph_galla: 'one'
+            bph_action: 'sending'
+            bph_signal: 'KILL'
+        - string: 'galla client "web" error during connect:connect to "/var/run/galla/web.sock"... No such file or directory (2)'
+          result:
+            bph_galla: 'web'
+            bph_action: 'error during connect'
+            bph_galla_socket: '/var/run/galla/web.sock'
+            bph_error: 'No such file or directory (2)'
+        - string: 'stop requested'
+          result:
+            bph_action: 'stop requested'
+        # falls through to the catch-all
+        - string: 'some future baphomet message'
+          result:
+            bph_message: 'some future baphomet message'
+      negative:
+        - ''
+        - string: 'started... socket=/var/run/baphomet/socket auth=off gallas=sshd,suricata'
+          program: 'baphomet-extra'

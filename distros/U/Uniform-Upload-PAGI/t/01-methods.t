@@ -1,67 +1,37 @@
 use strict;
 use warnings;
-use FindBin;
-use File::Temp qw(tempfile);
-
-use lib "$FindBin::Bin/../lib";
-use lib "$FindBin::Bin/../../perl-Uniform/lib";
-use lib "$FindBin::Bin/../../perl-Uniform-Upload/lib";
-
 use Test::More;
 use Test::Exception;
-use Test::Deep;
-
 use Uniform::Upload::PAGI;
 
-# 1. Establish a virtual local temporary file node on disk to mock the multi-part file layout
-my ($fh, $tmp_file_path) = tempfile();
-print $fh "Asynchronous PAGI multipart upload data content testing block stream.";
-close($fh);
-
-# 2. Build a valid mock PAGI connection scope hash tracking multipart items
 my $mock_scope = {
     type    => 'http',
-    path    => '/submit-pagi-upload',
-    uploads => [
-        {
-            field    => 'avatar_field',
-            tempname => $tmp_file_path,
-            filename => 'first_attempt_ignored.png',
-            size     => 500,
-            type     => 'image/gif',
-        },
-        {
-            field    => 'avatar_field',
-            tempname => $tmp_file_path,
-            filename => 'final_winning_target.png',
-            size     => 12345,
-            type     => 'image/png',
-        }
-    ],
+    method  => 'POST',
+    headers => [ ['content-type', 'multipart/form-data; boundary=---123'] ],
 };
 
-my $upload = Uniform::Upload::PAGI->new($mock_scope);
+# Test 1: Positional instantiation
+my $pagi = Uniform::Upload::PAGI->new(
+    $mock_scope,
+    max_size      => '5MB',
+    allowed_types => ['image/png'],
+);
 
-# =========================================================================
-# ASSERTS
-# =========================================================================
-isa_ok($upload, 'Uniform::Upload', 'PAGI driver correctly inherits core upload base specification');
-ok($upload->has_file('avatar_field'), 'Correctly flags field presence tracking properties');
+isa_ok($pagi, 'Uniform::Upload::PAGI');
+isa_ok($pagi, 'Uniform::Upload');
+is($pagi->max_size, 5242880, 'max_size inherited and parsed from base');
+is_deeply($pagi->allowed_types, ['image/png'], 'allowed_types correctly passed via SUPER::new');
 
-my $file = $upload->file('avatar_field');
-isa_ok($file, 'Uniform::Upload::File', 'Lazy encapsulation structures return clean file mutator targets');
+# Test 2: Named instantiation
+my $pagi_named = Uniform::Upload::PAGI->new(
+    scope    => $mock_scope,
+    max_size => '1MB',
+);
 
-# Verify your structural duplicate resolution rules pass cleanly
-is($file->filename, 'final_winning_target.png', 'Prioritizes and isolates the trailing duplicate entry scalar definition');
-is($file->type, 'image/png', 'Extracts and maps MIME file profiles successfully out of arrays');
-is($file->size, 12345, 'Extracts non-zero numeric byte dimensions perfectly');
+isa_ok($pagi_named, 'Uniform::Upload::PAGI');
+is($pagi_named->max_size, 1048576, 'named options work via SUPER::new');
 
-# 3. Exception Boundary Assert Check
-throws_ok {
-    Uniform::Upload::PAGI->new({ type => 'websocket' });
-} 'Uniform::Exceptions', 'Throws explicit validation failure if connection context scope declarations mismatch http configurations';
-
-# Evaporate the local test artifact safely
-unlink($tmp_file_path);
+# Test 3: Invalid scope throws exception
+dies_ok { Uniform::Upload::PAGI->new("invalid_scope") } 'croaks on non-hash scope';
 
 done_testing();

@@ -1,0 +1,24 @@
+Changes
+MANIFEST			This list of files
+Makefile.PL
+README
+ignore.txt
+lib/Punk/Command/Sqitch.pm
+lib/Punk/Plugin/Sqitch.pm
+lib/Punk/Sqitch.pm
+t/00-load.t
+t/01-target.t
+t/02-command.t
+t/03-pending.t
+t/04-plugin.t
+t/05-projects.t
+t/06-scaffold.t
+t/07-pg.t
+t/lib/Punk/Plugin/TestSchema.pm
+t/lib/Punk/Plugin/TestSchemaB.pm
+t/manifest.t
+t/pod-coverage.t
+t/pod.t
+xt/boilerplate.t
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

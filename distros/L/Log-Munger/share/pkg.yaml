@@ -1,0 +1,183 @@
+---
+# FreeBSD pkg(8) package-change log enrichment.
+#
+# Gates on the syslog PROGRAM field being "pkg" or "pkg-static". Patterns are
+# anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with pkg_ .
+#
+# pkg writes one syslog line per package it changed, in one of two shapes:
+#
+#   openjdk21-21.0.4+7.1 installed
+#   openjdk17-17.0.15+6.1_1 deinstalled
+#   nginx upgraded: 1.28.0_2,3 -> 1.28.0_3,3
+#   vim downgraded: 9.1.1006 -> 9.1.0764
+#   pkg reinstalled: 2.1.0 -> 2.1.0
+#
+# That is the whole grammar, and between them the lines are the only durable
+# record of what changed on a host and when. install and deinstall name the
+# package as a single "name-version" token. The three that change a version
+# already have the name on its own and give the versions either side.
+#
+# pkg_version always holds the version the event left in place, so a consumer
+# that only wants "what is on this box now" can read one field regardless of
+# which shape produced it. pkg_version_from is set only by the three that
+# changed a version.
+includes:
+- base
+# Additional primitives used below that are not in base.yaml.
+vars:
+  # A version as pkg prints it: always starts with a digit, and may carry a
+  # PORTREVISION ("_3") and a PORTEPOCH (",1"). A hyphen cannot appear in one,
+  # which is what makes the name/version split below unambiguous.
+  PKG_VERSION: '[0-9][^-\s]*'
+  # A package origin name. Hyphens are allowed and common ("py311-certifi",
+  # "fd-find"), so this is only ever bounded by what follows it.
+  PKG_NAME: '\S+'
+vars_templated:
+  # The "name-version" token pkg uses on install and deinstall. The name is
+  # matched greedily so the split lands on the LAST hyphen that is followed by
+  # a digit, which is the hyphen separating the version: "py311-certifi" and
+  # "2024.8.30" rather than "py311" and everything after it.
+  PKG_NAME_VERSION: '(?<pkg_name>.+)-(?<pkg_version>[% PKG_VERSION %])'
+  # "openjdk21-21.0.4+7.1 installed" / "postfix-3.10.3,1 deinstalled"
+  PKG_INSTALL: '[% PKG_NAME_VERSION %] (?<pkg_action>installed|deinstalled)[% SPACE %]'
+  # "nginx upgraded: 1.28.0_2,3 -> 1.28.0_3,3"
+  #
+  # reinstalled is here rather than with install because pkg logs it in this
+  # shape, with both versions, even though they are usually the same -- a
+  # reinstall after a dependency ABI bump reports "2.1.0 -> 2.1.0".
+  #
+  # The trailing [% SPACE %] is not cosmetic. pkg emits the three version-change
+  # lines with a space after the new version and the two install lines without
+  # one, so an anchored pattern that does not allow it matches every install and
+  # no upgrade at all. Both shapes tolerate it so neither can be caught out
+  # again.
+  PKG_VERSION_CHANGE: '(?<pkg_name>[% PKG_NAME %]) (?<pkg_action>upgraded|downgraded|reinstalled): (?<pkg_version_from>[% PKG_VERSION %]) -> (?<pkg_version>[% PKG_VERSION %])[% SPACE %]'
+  # Anything else pkg said. Matching anything is only safe because the rule is
+  # gated on PROGRAM being pkg.
+  PKG_MESSAGE: '(?<pkg_message>.+)'
+vars_tests:
+  PKG_VERSION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '21.0.4+7.1'
+        result: '21.0.4+7.1'
+      - string: '1.28.0_3,3'
+        result: '1.28.0_3,3'
+    negative:
+      - 'nginx'
+      - '1.0-beta'
+  PKG_NAME:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'nginx'
+        result: 'nginx'
+      - string: 'py311-certifi'
+        result: 'py311-certifi'
+    negative:
+      - 'has a space'
+  PKG_NAME_VERSION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'openjdk21-21.0.4+7.1'
+        result: 'openjdk21-21.0.4+7.1'
+      - string: 'py311-certifi-2024.8.30'
+        result: 'py311-certifi-2024.8.30'
+    negative:
+      - 'nginx'
+  PKG_INSTALL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'openjdk21-21.0.4+7.1 installed'
+        result: 'openjdk21-21.0.4+7.1 installed'
+      - string: 'postfix-3.10.3,1 deinstalled'
+        result: 'postfix-3.10.3,1 deinstalled'
+    negative:
+      - 'nginx upgraded: 1.28.0_2,3 -> 1.28.0_3,3'
+  PKG_VERSION_CHANGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'nginx upgraded: 1.28.0_2,3 -> 1.28.0_3,3'
+        result: 'nginx upgraded: 1.28.0_2,3 -> 1.28.0_3,3'
+      - string: 'pkg reinstalled: 2.1.0 -> 2.1.0'
+        result: 'pkg reinstalled: 2.1.0 -> 2.1.0'
+      # the trailing space pkg actually emits on this shape
+      - string: 'p5-YAML-LibYAML upgraded: 0.90 -> 0.910.0 '
+        result: 'p5-YAML-LibYAML upgraded: 0.90 -> 0.910.0 '
+    negative:
+      - 'openjdk21-21.0.4+7.1 installed'
+  PKG_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'pkg-1.21.3 installed'
+        result: 'pkg-1.21.3 installed'
+      - string: 'something pkg has not said before'
+        result: 'something pkg has not said before'
+    negative:
+      - ''
+rules:
+  - name: pkg
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^pkg(?:-static)?$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - PKG_INSTALL
+      - PKG_VERSION_CHANGE
+      # last: matches anything, which is only safe because the rule is gated
+      - PKG_MESSAGE
+    tests:
+      positive:
+        - string: 'openjdk21-21.0.4+7.1 installed'
+          program: 'pkg-static'
+          result:
+            pkg_name: 'openjdk21'
+            pkg_version: '21.0.4+7.1'
+            pkg_action: 'installed'
+        - string: 'py311-certifi-2024.8.30 installed'
+          result:
+            pkg_name: 'py311-certifi'
+            pkg_version: '2024.8.30'
+            pkg_action: 'installed'
+        - string: 'postfix-3.10.3,1 deinstalled'
+          result:
+            pkg_name: 'postfix'
+            pkg_version: '3.10.3,1'
+            pkg_action: 'deinstalled'
+        - string: 'nginx upgraded: 1.28.0_2,3 -> 1.28.0_3,3'
+          program: 'pkg'
+          result:
+            pkg_name: 'nginx'
+            pkg_action: 'upgraded'
+            pkg_version_from: '1.28.0_2,3'
+            pkg_version: '1.28.0_3,3'
+        - string: 'vim downgraded: 9.1.1006 -> 9.1.0764'
+          result:
+            pkg_name: 'vim'
+            pkg_action: 'downgraded'
+            pkg_version_from: '9.1.1006'
+            pkg_version: '9.1.0764'
+        - string: 'pkg reinstalled: 2.1.0 -> 2.1.0'
+          result:
+            pkg_name: 'pkg'
+            pkg_action: 'reinstalled'
+            pkg_version_from: '2.1.0'
+            pkg_version: '2.1.0'
+        # exactly as pkg writes it, trailing space and all -- without that being
+        # allowed for, every version change fell through to the catch-all
+        - string: 'p5-YAML-LibYAML upgraded: 0.90 -> 0.910.0 '
+          result:
+            pkg_name: 'p5-YAML-LibYAML'
+            pkg_action: 'upgraded'
+            pkg_version_from: '0.90'
+            pkg_version: '0.910.0'
+        # falls through to the catch-all
+        - string: 'something pkg has not said before'
+          result:
+            pkg_message: 'something pkg has not said before'
+      negative:
+        - ''
+        - string: 'openjdk21-21.0.4+7.1 installed'
+          program: 'pkg-extra'

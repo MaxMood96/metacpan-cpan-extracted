@@ -2,7 +2,7 @@
 # MIT License
 
 class Resource::Coro {
-  version "0.001";
+  version "0.002";
   
   static method my_method : void () {
     

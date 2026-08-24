@@ -1,0 +1,10 @@
+Changes
+lib/Pod/DokuWiki.pm
+Makefile.PL
+Makefile_PL_settings.plx
+MANIFEST			This list of files
+MANIFEST.SKIP
+t/basic.t
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)
+README                                   generated from Pod::DokuWiki POD (added by maint/eumm-fixup.pl)

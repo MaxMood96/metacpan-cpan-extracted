@@ -7,6 +7,7 @@ package PlackX::Framework::Handler {
   use HTTP::Status qw(status_message);
 
   my  %globals;
+  our %app_bases;       # memoized, but in an "our" var so tests can change it
   our $psgix_streaming; # memoized, but in an "our" var so tests can change it
   sub use_global_request_response    { } # Override in subclass to turn on
   sub global_request        ($class) { $globals{$class->app_namespace}->[0]            }
@@ -36,6 +37,7 @@ package PlackX::Framework::Handler {
 
     # if app_base is specified, use URLMap, we don't need to cascade
     if (my $app_base = $class->app_base) {
+      $app_bases{$class->app_namespace} = $app_base;
       require Plack::App::URLMap;
       my $mapper = Plack::App::URLMap->new;
       $mapper->map($app_base => $app);
@@ -94,6 +96,7 @@ package PlackX::Framework::Handler {
   sub route_request ($class, $request, $response, $rt_engine = undef) {
     $rt_engine //= ($class->app_namespace . '::Router::Engine')->instance;
     if (my $match = $rt_engine->match($request)) {
+      $request->app_base($app_bases{$request->app_namespace});
       $request->route_base($match->{base}) if defined $match->{base};
       $request->route_parameters($match->{route_parameters});
 

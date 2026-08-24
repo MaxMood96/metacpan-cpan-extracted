@@ -1,0 +1,246 @@
+---
+# rsyslog and syslog-ng internal-message enrichment.
+#
+# Gates on the syslog PROGRAM field being one of the two daemons. Patterns are
+# anchored (each must match the whole MESSAGE) and first-match wins. Every
+# capture is namespaced with syslogd_ .
+#
+# Two daemons in one file because they are the same concern: the health of the
+# pipeline every other rule file's input arrives through.
+#
+# When this log goes wrong it makes every other one lie. Rate limiting drops
+# messages and says so once; a full disk or a stalled remote destination stops
+# delivery without a word. Anything counting events elsewhere should watch
+# these lines, since a fall in event volume means either the attack stopped or
+# the logging did, and only this file says which.
+includes:
+- base
+vars_templated:
+  # rsyslog's structured startup banner:
+  #   [origin software="rsyslogd" swVersion="8.2302.0" x-pid="1234"
+  #   x-info="https://www.rsyslog.com"] start
+  #
+  # The bracketed part is RFC 5424 structured data, and the trailing word is
+  # the event: start, or exiting on signal N.
+  SYSLOGD_ORIGIN: '\[origin (?<syslogd_kv>software="[% GREEDYDATA %])\] (?<syslogd_event>[% GREEDYDATA %])'
+  # "imuxsock: begin to drop messages due to rate-limiting"
+  # "imjournal: begin to drop messages due to rate-limiting"
+  #
+  # Messages are being thrown away. rsyslog says this once and then stays quiet
+  # until it stops, so a single occurrence covers an unknown span.
+  SYSLOGD_RATELIMIT_BEGIN: '(?<syslogd_module>[a-z]+): begin to drop messages due to rate-limiting(?: [% GREEDYDATA %])?'
+  # "imuxsock: 1234 messages lost due to rate-limiting"
+  #
+  # The count, logged when the dropping stops.
+  SYSLOGD_RATELIMIT_LOST: '(?<syslogd_module>[a-z]+): (?<syslogd_lost>[% INT %]) messages lost due to rate-limiting(?: [% GREEDYDATA %])?'
+  # "action ''action-3-builtin:omfwd'' suspended (module ''builtin:omfwd''),
+  #  retry 0. There should be messages before this one giving the reason for
+  #  suspension. [v8.2302.0 try https://www.rsyslog.com/e/2007 ]"
+  #
+  # An output stopped working. If it is the remote destination, nothing after
+  # this is reaching the collector.
+  SYSLOGD_ACTION_SUSPENDED: 'action ''(?<syslogd_action>[^'']*)'' (?<syslogd_action_state>suspended|resumed)(?: \(module ''(?<syslogd_module>[^'']*)''\))?(?:, retry (?<syslogd_retry>[% INT %]))?(?:[.] (?<syslogd_action_detail>[% GREEDYDATA %]))?'
+  # syslog-ng's own statistics line:
+  #   Log statistics; processed=''src.internal(s_local#0)=123'',
+  #   stamp=''src.internal(s_local#0)=1626345600''
+  #
+  # The counters are one long quoted kv run, kept whole rather than split,
+  # since the key names embed the source instance and are not a fixed set.
+  SYSLOGD_STATS: 'Log statistics; (?<syslogd_stats>[% GREEDYDATA %])'
+  # "syslog-ng starting up; version=''4.0.1''"
+  # "syslog-ng shutting down; version=''4.0.1''"
+  SYSLOGD_LIFECYCLE: 'syslog-ng (?<syslogd_event>starting up|shutting down); (?<syslogd_kv>[% GREEDYDATA %])'
+  # "message repeated 11 times: [ failed to send packet: Operation not permitted]"
+  #
+  # Repeat suppression. This is the syslog daemon speaking, but under the
+  # identity of whichever program was repeating itself, so it cannot be gated
+  # on the daemon's own PROGRAM the way everything above is. It gets its own
+  # gateless rule at the bottom of this file.
+  #
+  # Without it the suppressed events are invisible: eleven send failures become
+  # one line that no dnsmasq pattern matches, and a consumer counting failures
+  # sees one. The count comes out as syslogd_repeated and the original text as
+  # syslogd_repeated_message, which the caller can re-feed to recover the
+  # fields it would have had.
+  SYSLOGD_REPEATED: 'message repeated (?<syslogd_repeated>[% INT %]) times: \[ ?(?<syslogd_repeated_message>.*?) ?\]'
+  # Anything else either daemon said.
+  SYSLOGD_MESSAGE: '(?<syslogd_message>.+)'
+vars_tests:
+  SYSLOGD_ORIGIN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '[origin software="rsyslogd" swVersion="8.2302.0" x-pid="1234" x-info="https://www.rsyslog.com"] start'
+        result: '[origin software="rsyslogd" swVersion="8.2302.0" x-pid="1234" x-info="https://www.rsyslog.com"] start'
+      - string: '[origin software="rsyslogd" swVersion="8.2302.0" x-pid="1234" x-info="https://www.rsyslog.com"] exiting on signal 15.'
+        result: '[origin software="rsyslogd" swVersion="8.2302.0" x-pid="1234" x-info="https://www.rsyslog.com"] exiting on signal 15.'
+    negative:
+      - 'imuxsock: begin to drop messages due to rate-limiting'
+  SYSLOGD_REPEATED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'message repeated 11 times: [ failed to send packet: Operation not permitted]'
+        result: 'message repeated 11 times: [ failed to send packet: Operation not permitted]'
+      - string: 'message repeated 2 times: [pam_unix(cron:session): session closed for user root]'
+        result: 'message repeated 2 times: [pam_unix(cron:session): session closed for user root]'
+    negative:
+      - 'imuxsock: begin to drop messages due to rate-limiting'
+  SYSLOGD_RATELIMIT_BEGIN:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'imuxsock: begin to drop messages due to rate-limiting'
+        result: 'imuxsock: begin to drop messages due to rate-limiting'
+      - string: 'imjournal: begin to drop messages due to rate-limiting'
+        result: 'imjournal: begin to drop messages due to rate-limiting'
+    negative:
+      - 'imuxsock: 1234 messages lost due to rate-limiting'
+  SYSLOGD_RATELIMIT_LOST:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'imuxsock: 1234 messages lost due to rate-limiting'
+        result: 'imuxsock: 1234 messages lost due to rate-limiting'
+    negative:
+      - 'imuxsock: begin to drop messages due to rate-limiting'
+  SYSLOGD_ACTION_SUSPENDED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'action ''action-3-builtin:omfwd'' suspended (module ''builtin:omfwd''), retry 0. There should be messages before this one giving the reason for suspension.'
+        result: 'action ''action-3-builtin:omfwd'' suspended (module ''builtin:omfwd''), retry 0. There should be messages before this one giving the reason for suspension.'
+      - string: 'action ''action-3-builtin:omfwd'' resumed (module ''builtin:omfwd'')'
+        result: 'action ''action-3-builtin:omfwd'' resumed (module ''builtin:omfwd'')'
+    negative:
+      - 'imuxsock: begin to drop messages due to rate-limiting'
+  SYSLOGD_STATS:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Log statistics; processed=''src.internal(s_local#0)=123'', stamp=''src.internal(s_local#0)=1626345600'''
+        result: 'Log statistics; processed=''src.internal(s_local#0)=123'', stamp=''src.internal(s_local#0)=1626345600'''
+    negative:
+      - 'syslog-ng starting up; version=''4.0.1'''
+  SYSLOGD_LIFECYCLE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'syslog-ng starting up; version=''4.0.1'''
+        result: 'syslog-ng starting up; version=''4.0.1'''
+      - string: 'syslog-ng shutting down; version=''4.0.1'''
+        result: 'syslog-ng shutting down; version=''4.0.1'''
+    negative:
+      - 'Log statistics; processed=''src.internal(s_local#0)=123'''
+  SYSLOGD_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'rsyslogd''s groupid changed to 106'
+        result: 'rsyslogd''s groupid changed to 106'
+    negative:
+      - ''
+convert:
+  syslogd_lost: int
+  syslogd_retry: int
+  syslogd_repeated: int
+# Split the structured-data and version blobs. Quote-aware, because both
+# daemons quote their values and some hold spaces.
+#
+# The syslogd_ prefix keeps generic key names like "version" and "software"
+# from colliding with anything else in a merged record.
+decompose:
+  - field: syslogd_kv
+    type: kv
+    quoted: true
+    prefix: 'syslogd_'
+    remove: true
+    tests:
+      - input: 'software="rsyslogd" swVersion="8.2302.0" x-pid="1234" x-info="https://www.rsyslog.com"'
+        result:
+          syslogd_software: 'rsyslogd'
+          syslogd_swVersion: '8.2302.0'
+          syslogd_x-pid: '1234'
+          syslogd_x-info: 'https://www.rsyslog.com'
+rules:
+  - name: syslog_daemon
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^(?:rsyslogd|rsyslog|syslog-ng|syslogd)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - SYSLOGD_ORIGIN
+      - SYSLOGD_RATELIMIT_LOST
+      - SYSLOGD_RATELIMIT_BEGIN
+      - SYSLOGD_ACTION_SUSPENDED
+      - SYSLOGD_STATS
+      - SYSLOGD_LIFECYCLE
+      # last: matches anything, which is only safe because the rule is gated
+      - SYSLOGD_MESSAGE
+    tests:
+      positive:
+        # The structured-data blob is still whole here. Rule tests check raw
+        # captures, before the decompose above splits it.
+        - string: '[origin software="rsyslogd" swVersion="8.2302.0" x-pid="1234" x-info="https://www.rsyslog.com"] start'
+          enriched:
+            syslogd_event: 'start'
+            syslogd_software: 'rsyslogd'
+            syslogd_swVersion: '8.2302.0'
+            syslogd_x-info: 'https://www.rsyslog.com'
+            syslogd_x-pid: '1234'
+          program: 'rsyslogd'
+          result:
+            syslogd_kv: 'software="rsyslogd" swVersion="8.2302.0" x-pid="1234" x-info="https://www.rsyslog.com"'
+            syslogd_event: 'start'
+        - string: 'imuxsock: 1234 messages lost due to rate-limiting'
+          numeric:
+            - syslogd_lost
+          program: 'rsyslog'
+          result:
+            syslogd_module: 'imuxsock'
+            syslogd_lost: '1234'
+        - string: 'imuxsock: begin to drop messages due to rate-limiting'
+          program: 'syslogd'
+          result:
+            syslogd_module: 'imuxsock'
+        - string: 'action ''action-3-builtin:omfwd'' resumed (module ''builtin:omfwd'')'
+          program: 'syslog-ng'
+          result:
+            syslogd_action: 'action-3-builtin:omfwd'
+            syslogd_action_state: 'resumed'
+            syslogd_module: 'builtin:omfwd'
+        - string: 'Log statistics; processed=''src.internal(s_local#0)=123'', stamp=''src.internal(s_local#0)=1626345600'''
+          result:
+            syslogd_stats: 'processed=''src.internal(s_local#0)=123'', stamp=''src.internal(s_local#0)=1626345600'''
+        - string: 'syslog-ng starting up; version=''4.0.1'''
+          enriched:
+            syslogd_event: 'starting up'
+            syslogd_version: '4.0.1'
+          result:
+            syslogd_event: 'starting up'
+            syslogd_kv: 'version=''4.0.1'''
+        - string: 'rsyslogd''s groupid changed to 106'
+          result:
+            syslogd_message: 'rsyslogd''s groupid changed to 106'
+      negative:
+        - ''
+        - string: '[origin software="rsyslogd" swVersion="8.2302.0" x-pid="1234" x-info="https://www.rsyslog.com"] start'
+          program: 'syslog_daemon-extra'
+  # Repeat suppression, which arrives under the repeating program's identity
+  # rather than the syslog daemon's, so this rule is deliberately gateless.
+  # It sits after the gated rule above so that a "message repeated ..." line
+  # from the daemon itself is still attributed to the daemon.
+  - name: syslog_repeated
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - SYSLOGD_REPEATED
+    tests:
+      positive:
+        - string: 'message repeated 11 times: [ failed to send packet: Operation not permitted]'
+          numeric:
+            - syslogd_repeated
+          result:
+            syslogd_repeated: '11'
+            syslogd_repeated_message: 'failed to send packet: Operation not permitted'
+        - string: 'message repeated 2 times: [pam_unix(cron:session): session closed for user root]'
+          result:
+            syslogd_repeated: '2'
+            syslogd_repeated_message: 'pam_unix(cron:session): session closed for user root'
+      negative:
+        - 'imuxsock: begin to drop messages due to rate-limiting'
+        - 'this is not a repeat suppression line'

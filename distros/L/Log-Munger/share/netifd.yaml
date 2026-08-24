@@ -1,0 +1,150 @@
+---
+# netifd (OpenWRT's network interface daemon) log enrichment.
+#
+# Gates on the syslog PROGRAM field being "netifd". Patterns are anchored (each
+# must match the whole MESSAGE) and first-match wins. Every capture is
+# namespaced with netifd_ .
+#
+# netifd owns everything about the network on an OpenWRT box: it brings
+# interfaces up, runs the protocol handlers, and drives hostapd and
+# wpa_supplicant over ubus. Two kinds of line come out of it.
+#
+# The first is netifd's own state reporting -- a link changing, a wireless
+# device coming up or failing to.
+#
+# The second is the output of the shell and ucode helpers it runs, which netifd
+# relays verbatim behind a "<device> (<pid>): " prefix. That prefix is the only
+# structure those lines have. The rest is whatever the helper printed, up to
+# and including blank continuation lines and multi-line ucode backtraces, so
+# they are captured as a device, a pid and a message and no further: there is
+# nothing consistent underneath.
+#
+# The interface-level lines an OpenWRT router emits -- "Interface 'wan' is now
+# up", the DHCP and PPP protocol handlers, the hotplug calls -- are not covered.
+# The logs this was written against come from a bridged access point, which has
+# no managed interfaces and emits none of them. They fall to the catch-all and
+# keep their text.
+includes:
+- base
+vars_templated:
+  # "Network device 'phy0-ap1' link is up"
+  NETIFD_LINK: 'Network device ''(?<netifd_iface>[^'']*)'' link is (?<netifd_link_state>up|down)'
+  # "Wireless device 'radio2' is now up"
+  NETIFD_WIRELESS_STATE: 'Wireless device ''(?<netifd_device>[^'']*)'' is now (?<netifd_state>up|down)'
+  # "Wireless device 'radio2' setup failed, retry=3"
+  #
+  # The retry counter is what separates a radio that came up on the second
+  # attempt from one that is looping, and on a flaky radio this is the only
+  # line that says so.
+  NETIFD_WIRELESS_FAILED: 'Wireless device ''(?<netifd_device>[^'']*)'' setup failed(?:, retry=(?<netifd_retry>[% INT %]))?'
+  # "radio1 (12693): wifi-scripts: Preparing interface: phy1-ap1 with MAC: ..."
+  # "radio0 (23893):"
+  #
+  # Relayed helper output. The message is optional because netifd passes blank
+  # lines through as-is, prefix and all, when the helper prints one.
+  NETIFD_SCRIPT: '(?<netifd_device>[% NOTSPACE %]) \((?<netifd_pid>[% INT %])\):(?: (?<netifd_message>[% GREEDYDATA %]))?'
+  # Anything else netifd said. Matching anything is only safe because the rule
+  # is gated on PROGRAM being netifd.
+  NETIFD_MESSAGE: '(?<netifd_message>.+)'
+vars_tests:
+  NETIFD_LINK:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: "Network device 'phy0-ap1' link is up"
+        result: "Network device 'phy0-ap1' link is up"
+      - string: "Network device 'lan2' link is down"
+        result: "Network device 'lan2' link is down"
+    negative:
+      - "Wireless device 'radio2' is now up"
+  NETIFD_WIRELESS_STATE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: "Wireless device 'radio2' is now up"
+        result: "Wireless device 'radio2' is now up"
+      - string: "Wireless device 'radio1' is now down"
+        result: "Wireless device 'radio1' is now down"
+    negative:
+      - "Wireless device 'radio2' setup failed, retry=3"
+  NETIFD_WIRELESS_FAILED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: "Wireless device 'radio2' setup failed, retry=3"
+        result: "Wireless device 'radio2' setup failed, retry=3"
+      - string: "Wireless device 'radio0' setup failed"
+        result: "Wireless device 'radio0' setup failed"
+    negative:
+      - "Wireless device 'radio2' is now up"
+  NETIFD_SCRIPT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'radio1 (12693): wifi-scripts: Starting'
+        result: 'radio1 (12693): wifi-scripts: Starting'
+      # a blank continuation line, prefix and all
+      - string: 'radio0 (23893):'
+        result: 'radio0 (23893):'
+    negative:
+      - "Network device 'phy0-ap1' link is up"
+  NETIFD_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Interface has link connectivity loss'
+        result: 'Interface has link connectivity loss'
+      - string: 'bridge br-lan link is up'
+        result: 'bridge br-lan link is up'
+    negative:
+      - ''
+# Coerce numeric captures.
+convert:
+  netifd_pid: int
+  netifd_retry: int
+rules:
+  - name: netifd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^netifd$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - NETIFD_LINK
+      - NETIFD_WIRELESS_STATE
+      - NETIFD_WIRELESS_FAILED
+      - NETIFD_SCRIPT
+      # last: matches anything, which is only safe because the rule is gated
+      - NETIFD_MESSAGE
+    tests:
+      positive:
+        - string: "Network device 'phy0-ap1' link is up"
+          program: 'netifd'
+          result:
+            netifd_iface: 'phy0-ap1'
+            netifd_link_state: 'up'
+        - string: "Wireless device 'radio2' is now up"
+          result:
+            netifd_device: 'radio2'
+            netifd_state: 'up'
+        - string: "Wireless device 'radio2' setup failed, retry=3"
+          numeric:
+            - netifd_retry
+          result:
+            netifd_device: 'radio2'
+            netifd_retry: '3'
+        - string: 'radio1 (12693): wifi-scripts: Preparing interface: phy1-ap1 with MAC: aa:bb:cc:dd:ee:ff'
+          numeric:
+            - netifd_pid
+          result:
+            netifd_device: 'radio1'
+            netifd_pid: '12693'
+            netifd_message: 'wifi-scripts: Preparing interface: phy1-ap1 with MAC: aa:bb:cc:dd:ee:ff'
+        - string: 'radio0 (23893):'
+          result:
+            netifd_device: 'radio0'
+            netifd_pid: '23893'
+        # falls through to the catch-all
+        - string: 'Interface has link connectivity loss'
+          result:
+            netifd_message: 'Interface has link connectivity loss'
+      negative:
+        - ''
+        - string: 'Network device ''phy0-ap1'' link is up'
+          program: 'netifd-extra'

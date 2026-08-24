@@ -8,6 +8,12 @@ BEGIN {
             $exit_message = "envariable AUTHOR_TEST not set";
         }
     }
+    unless ($exit_message) {
+        my $HAS_Compress_Zlib = eval { require Compress::Zlib; 1; };
+        if (!$HAS_Compress_Zlib) {
+            $exit_message = "Compress::Zlib not installed";
+        }
+    }
     if ($exit_message) {
         $|=1;
         print "1..0 # SKIP $exit_message\n";
@@ -32,6 +38,7 @@ my $plan;
     open my $fh, "-|", $system or die "could not fork: $!";
     my @reg;
     while (<$fh>) {
+        warn sprintf "    # %s", $_;
         push @reg, $1 if /^Regression '(.+)'/;
     }
     my $duration = time - $start;

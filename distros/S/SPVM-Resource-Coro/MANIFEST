@@ -9,7 +9,7 @@
 .gitignore
 Changes
 coro_fix.patch
-lib/SPVM/Resource/Coro.config
+lib/SPVM/Resource/Coro.build
 lib/SPVM/Resource/Coro.native/include/.gitkeep
 lib/SPVM/Resource/Coro.native/include/coro.h
 lib/SPVM/Resource/Coro.native/src/.gitkeep
@@ -22,8 +22,8 @@ MANIFEST			This list of files
 MANIFEST.SKIP
 README.md
 t/basic.t
+t/lib/SPVM/TestCase/Resource/Coro.build
 t/lib/SPVM/TestCase/Resource/Coro.c
-t/lib/SPVM/TestCase/Resource/Coro.config
 t/lib/SPVM/TestCase/Resource/Coro.spvm
 META.yml                                 Module YAML meta-data (added by MakeMaker)
 META.json                                Module JSON meta-data (added by MakeMaker)

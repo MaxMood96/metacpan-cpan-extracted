@@ -2,50 +2,46 @@ package Uniform::HTMX::Mojolicious;
 
 use strict;
 use warnings;
-use Carp qw(croak);
 use parent 'Uniform::HTMX';
+use Scalar::Util qw(blessed);
+use Carp qw(croak);
 
-our $VERSION = '1.01';
+our $VERSION = '1.02';
 
-# Constructor: Explicitly expects a Mojolicious Controller object ($c)
 sub new {
     my ($class, $c) = @_;
 
-    croak "Mojolicious context must be a blessed object reference" unless ref($c);
-    croak "Not a valid Mojolicious controller execution context"
-        unless $c->can('req') && $c->req->can('headers');
+    croak "Constructor requires a Mojolicious controller object"
+        unless blessed($c) && $c->isa('Mojolicious::Controller');
 
-    my $self = bless {
-        in   => {},
-        out  => {},
-        _ctx => $c,
-    }, $class;
-
-    # Extract headers out of Mojo::Headers
-    my %raw;
+    # Extract HTTP headers from Mojo::Headers object into CGI-style key hash
     my $headers = $c->req->headers;
-    foreach my $name (@{ $headers->names }) {
-        $raw{$name} = $headers->header($name);
+    my %env;
+
+    for my $name (@{ $headers->names }) {
+        my $key = uc($name);
+        $key =~ s/-/_/g;
+        $env{"HTTP_$key"} = $headers->header($name);
     }
 
-    # Execute your core baseline normalization utility inherited from Uniform::HTMX
-    $self->{in} = $self->_normalize_headers(\%raw);
-    return $self;
+    return $class->SUPER::new(in => \%env, env => \%env);
 }
 
-# Flushes outbound HTMX modifications directly onto Mojolicious's active response stream
 sub apply {
-    my ($self) = @_;
-    return $self unless ref($self->{out}) eq 'HASH';
+    my ($self, $c) = @_;
 
-    my %outbound = %{ $self->{out} };
-    my $res_headers = $self->{_ctx}->res->headers;
+    croak "apply() requires a Mojolicious controller object"
+        unless blessed($c) && $c->isa('Mojolicious::Controller');
 
-    while (my ($k, $v) = each %outbound) {
-        $res_headers->header($k => "$v");
+    my $out = $self->_out;
+    return $c unless %$out;
+
+    my $res_headers = $c->res->headers;
+    for my $key (keys %$out) {
+        $res_headers->header($key => $out->{$key});
     }
 
-    return $self;
+    return $c;
 }
 
 1;
@@ -58,66 +54,92 @@ __END__
 
 =head1 NAME
 
-Uniform::HTMX::Mojolicious - Explicit htmx adapter connector for the Mojolicious ecosystem
+Uniform::HTMX::Mojolicious - Framework-agnostic htmx adapter for Mojolicious
 
 =head1 SYNOPSIS
 
-    package MyApp::Controller::Example;
-    use Mojo::Base 'Mojolicious::Controller';
+    use Mojolicious::Lite;
     use Uniform::HTMX::Mojolicious;
 
-    sub update_widget ($self) {
-        # Explicit instantiation with zero auto-detection overhead
-        my $hx = Uniform::HTMX::Mojolicious->new($self);
+    get '/time' => sub {
+        my $c    = shift;
+        my $htmx = Uniform::HTMX::Mojolicious->new($c);
 
-        if ($hx->is_htmx) {
-            # Chain your core operations seamlessly
-            $hx->res_retarget('#realtime-status')
-               ->res_trigger('widgetRefreshed')
-               ->apply; # Modifies $self->res->headers immediately
+        if ($htmx->is_htmx) {
+            $htmx->res_reswap('innerHTML')
+                 ->res_trigger('timeUpdated', { time => scalar localtime });
 
-            return $self->render(text => '<p>Updated content fragment!</p>');
+            $htmx->apply($c);
+            return $c->render(text => '<div>Time updated!</div>');
         }
 
-        return $self->render(template => 'full_page');
-    }
+        $c->render(text => 'Standard non-htmx request');
+    };
+
+    app->start;
 
 =head1 DESCRIPTION
 
-C<Uniform::HTMX::Mojolicious> provides an explicit integration binding bridge that
-enables the L<Uniform::HTMX> specification layer to interact natively inside
-L<Mojolicious::Controller> routing loops.
+C<Uniform::HTMX::Mojolicious> bridges the C<Uniform::HTMX> base protocol engine with the L<Mojolicious> web framework. It automatically extracts incoming C<HX-*> HTTP request headers from L<Mojolicious::Controller> objects and provides a clean pipeline for queuing and applying outbound htmx response headers directly to the controller's response object.
 
 =head1 METHODS
 
-=head2 new( $c )
+=head2 new
 
-Validates and instantiates the client context mapper. Requires a valid, active
-L<Mojolicious::Controller> reference. Automatically normalizes inbound request
-headers via the core parent class utilities.
+    my $htmx = Uniform::HTMX::Mojolicious->new($c);
 
-=head2 apply()
+Constructs a new instance. Requires a valid L<Mojolicious::Controller> object. Inbound headers are normalized and passed directly to the C<Uniform::HTMX> base constructor.
 
-Flushes and commits your accumulated state modifications down into the target transaction.
-Injects compiled htmx configuration strings directly onto the outbound response header stack.
+=head2 apply
 
-Returns C<$self> to support method chaining.
+    $htmx->apply($c);
+
+Injects all accumulated outbound htmx response headers (such as C<HX-Trigger>, C<HX-Reswap>, C<HX-Redirect>, etc.) into the controller's L<Mojo::Headers> response object via C<< $c->res->headers >>. Returns the controller object.
+
+=head1 INHERITED METHODS
+
+This package inherits directly from L<Uniform::HTMX>. All request inspection and response manipulation methods provided by C<Uniform::HTMX> are fully available:
+
+=over 4
+
+=item * C<is_htmx>
+
+=item * C<target>
+
+=item * C<trigger_name>
+
+=item * C<current_url>
+
+=item * C<res_trigger($event, $payload)>
+
+=item * C<res_reswap($swap_mode)>
+
+=item * C<res_redirect($url)>
+
+=back
 
 =head1 SEE ALSO
 
-L<Uniform>
+=over 4
 
-L<Uniform::HTMX>
+=item * L<Uniform::HTMX>
 
-L<Uniform::HTMX::PSGI>
+=item * L<Mojolicious>
 
+=item * L<https://htmx.org/reference/#request_headers>
+
+=back
 
 =head1 AUTHOR
 
 Joshua S. Day E<lt>HAX@cpan.orgE<gt>
 
-=head1 LICENSE
+=head1 LICENSE AND COPYRIGHT
 
-Licensed under the same terms as Uniform::HTMX.
+This software is Copyright (c) 2026 by Joshua S. Day.
+
+This is free software, licensed under:
+
+  The MIT (X11) License
 
 =cut

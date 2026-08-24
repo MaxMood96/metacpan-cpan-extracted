@@ -236,6 +236,48 @@ compile(self)
         SV *caller = app_get(aTHX_ h, K_CALLER);
         AV *rcap = newAV();
 
+        /* The on_compile callbacks, FIRST: every keyword has recorded and
+         * nothing is compiled yet, so a callback may still use the registrar
+         * - read the databases, add a route, a hook or a helper - and what
+         * it adds is compiled below with the rest. In registration order; a
+         * die is this boot croak, naming the owner. */
+        {
+            SV **lp = hv_fetchs(h, K_ON_COMPILE, 0);
+            if (lp && *lp && SvROK(*lp) && SvTYPE(SvRV(*lp)) == SVt_PVAV) {
+                AV *list = (AV *)SvRV(*lp);
+                SSize_t i, n = av_len(list) + 1;
+                for (i = 0; i < n; i++) {
+                    SV **rp = av_fetch(list, i, 0);
+                    AV *rec; SV **code, **owner;
+                    dSP; int count;
+                    if (!(rp && *rp && SvROK(*rp))) continue;
+                    rec   = (AV *)SvRV(*rp);
+                    code  = av_fetch(rec, 0, 0);
+                    owner = av_fetch(rec, 1, 0);
+                    ENTER; SAVETMPS;
+                    PUSHMARK(SP);
+                    XPUSHs(self);
+                    PUTBACK;
+                    count = call_sv(*code, G_VOID | G_EVAL);
+                    SPAGAIN;
+                    SP -= count;
+                    PUTBACK;
+                    if (SvTRUE(ERRSV)) {
+                        /* copied BEFORE the frame closes, made mortal AFTER:
+                         * a mortal made inside the frame is freed by this
+                         * FREETMPS before croak reads it */
+                        SV *e = newSVsv(ERRSV);
+                        FREETMPS; LEAVE;
+                        sv_2mortal(e);
+                        croak("Punk: on_compile callback registered by %s died: %s",
+                              owner && *owner ? SvPV_nolen(*owner) : "?",
+                              SvPV_nolen(e));
+                    }
+                    FREETMPS; LEAVE;
+                }
+            }
+        }
+
         /* Register the cross-worker bus subscription for every worker.
          *
          * HERE, at compile, because this runs in the PARENT before the server
@@ -493,6 +535,181 @@ compile(self)
             }
         }
 
+        {   /* named routes: stamp the name onto the compiled record (the
+             * etag walk), then resolve the whole set into ONE name ->
+             * record index table.
+             *
+             * The table is the one namespace for the application: a plugin
+             * that takes `index` has taken it from the application, and a
+             * duplicate croaks here naming BOTH routes, because the person
+             * reading it wants to know which one to rename. */
+            SV **nc = hv_fetchs(h, K_NAMED_ROUTES, 0);
+            AV *recs = (all_recs && SvROK(all_recs)) ? (AV *)SvRV(all_recs) : NULL;
+            HV *names = newHV();
+            if (nc && *nc && SvROK(*nc) && SvTYPE(SvRV(*nc)) == SVt_PVAV) {
+                AV *ncr = (AV *)SvRV(*nc);
+                SSize_t ci, cn = av_len(ncr) + 1;
+                for (ci = 0; ci < cn; ci++) {
+                    HV *w = (HV *)SvRV(*av_fetch(ncr, ci, 0));
+                    SV **wm = hv_fetchs(w, K_METHOD, 0);
+                    SV **wp = hv_fetchs(w, K_PATH, 0);
+                    SV **wv = hv_fetchs(w, K_NAME, 0);
+                    SSize_t ri, rn = recs ? av_len(recs) + 1 : 0;
+                    if (!(wm && *wm && wp && *wp && wv && *wv)) continue;
+                    for (ri = 0; ri < rn; ri++) {
+                        HV *rr = (HV *)SvRV(*av_fetch(recs, ri, 0));
+                        SV **rm = hv_fetchs(rr, K_METHOD, 0);
+                        SV **rp = hv_fetchs(rr, K_PATH, 0);
+                        if (rm && *rm && rp && *rp
+                            && sv_eq(*rm, *wm) && sv_eq(*rp, *wp))
+                            (void)hv_stores(rr, K_NAME, newSVsv(*wv));
+                    }
+                }
+            }
+            {   /* one pass over the records, in declaration order, so the
+                 * route the croak calls "already" is the earlier one */
+                SSize_t ri, rn = recs ? av_len(recs) + 1 : 0;
+                for (ri = 0; ri < rn; ri++) {
+                    HV *rr = (HV *)SvRV(*av_fetch(recs, ri, 0));
+                    SV **nm = hv_fetchs(rr, K_NAME, 0);
+                    HE *he;
+                    if (!(nm && *nm && SvOK(*nm))) continue;
+                    he = hv_fetch_ent(names, *nm, 0, 0);
+                    if (he) {
+                        HV *first = (HV *)SvRV(*av_fetch(recs,
+                                        (SSize_t)SvIV(HeVAL(he)), 0));
+                        SV **fm = hv_fetchs(first, K_METHOD, 0);
+                        SV **fp = hv_fetchs(first, K_PATH, 0);
+                        SV **rm = hv_fetchs(rr, K_METHOD, 0);
+                        SV **rp = hv_fetchs(rr, K_PATH, 0);
+                        SvREFCNT_dec((SV *)names);
+                        croak("Punk: route name '%s' is declared twice: "
+                              "%s %s and %s %s - a name is one route, and "
+                              "url_for would have had to choose",
+                              SvPV_nolen(*nm),
+                              fm && *fm ? SvPV_nolen(*fm) : "?",
+                              fp && *fp ? SvPV_nolen(*fp) : "?",
+                              rm && *rm ? SvPV_nolen(*rm) : "?",
+                              rp && *rp ? SvPV_nolen(*rp) : "?");
+                    }
+                    (void)hv_store_ent(names, *nm, newSViv((IV)ri), 0);
+                }
+            }
+            {   /* The API mount is a routing table too.
+                 *
+                 * An operation has an operationId and a path template with
+                 * {holes} - a named route by another spelling - so an
+                 * application with an `api` keyword would be half-named
+                 * without this. They go into the SAME table: one namespace
+                 * for the whole application, and a route named like an
+                 * operation is a duplicate like any other.
+                 *
+                 * The value is a REFERENCE where a route's is an integer,
+                 * which is how url_for tells the two apart: [ mount prefix,
+                 * parsed template ].
+                 *
+                 * operationIds are NOT held to phase 0's identifier rule.
+                 * They are the spec's, and a spec may say `get-book` or
+                 * `book.get`; those are callable from url_for as whatever
+                 * they are, and simply absent from the template `url` hash,
+                 * which the documentation says. It is the spec's choice,
+                 * not Punk's. */
+                SSize_t mi, mn = av_len(api_mounts) + 1;
+                for (mi = 0; mi < mn; mi++) {
+                    HV *mrec = (HV *)SvRV(*av_fetch(api_mounts, mi, 0));
+                    SV **msv = hv_fetchs(mrec, K_MOUNT, 0);
+                    SV **psv = hv_fetchs(mrec, K_PREFIX, 0);
+                    SV *apio, *ops;
+                    AV *opav;
+                    SSize_t oi, on;
+                    if (!(msv && *msv)) continue;
+                    apio = sv_2mortal(pcx_call_meth(aTHX_ *msv, "api",
+                                                    NULL, 0, 1));
+                    if (!(apio && SvOK(apio) && SvROK(apio))) continue;
+                    ops = sv_2mortal(pcx_call_meth(aTHX_ apio, "operations",
+                                                   NULL, 0, 1));
+                    if (!(ops && SvROK(ops) && SvTYPE(SvRV(ops)) == SVt_PVAV))
+                        continue;
+                    opav = (AV *)SvRV(ops);
+                    on = av_len(opav) + 1;
+                    for (oi = 0; oi < on; oi++) {
+                        SV **e = av_fetch(opav, oi, 0);
+                        HV *op;
+                        SV **id, **pth;
+                        STRLEN tl;
+                        const char *tp;
+                        AV *pair;
+                        if (!(e && *e && SvROK(*e)
+                              && SvTYPE(SvRV(*e)) == SVt_PVHV)) continue;
+                        op  = (HV *)SvRV(*e);
+                        id  = hv_fetchs(op, "operationId", 0);
+                        pth = hv_fetchs(op, "path", 0);
+                        if (!(id && *id && SvOK(*id) && SvCUR(*id)
+                              && pth && *pth && SvOK(*pth))) continue;
+                        if (hv_exists_ent(names, *id, 0)) {
+                            SV *prev = HeVAL(hv_fetch_ent(names, *id, 0, 0));
+                            if (SvROK(prev))
+                                croak("Punk: route name '%s' is declared "
+                                      "twice: two api mounts both have an "
+                                      "operation called that - a name is "
+                                      "one route across the whole "
+                                      "application", SvPV_nolen(*id));
+                            {
+                                HV *rr = (HV *)SvRV(*av_fetch(recs,
+                                            (SSize_t)SvIV(prev), 0));
+                                SV **rm = hv_fetchs(rr, K_METHOD, 0);
+                                SV **rp = hv_fetchs(rr, K_PATH, 0);
+                                croak("Punk: route name '%s' is declared "
+                                      "twice: %s %s and the operation of "
+                                      "that name in the %s mount - the "
+                                      "names are one namespace",
+                                      SvPV_nolen(*id),
+                                      rm && *rm ? SvPV_nolen(*rm) : "?",
+                                      rp && *rp ? SvPV_nolen(*rp) : "?",
+                                      (psv && *psv && SvOK(*psv)
+                                       && SvCUR(*psv))
+                                          ? SvPV_nolen(*psv) : "/");
+                            }
+                        }
+                        tp = SvPV_const(*pth, tl);
+                        pair = newAV();
+                        av_push(pair, (psv && *psv) ? newSVsv(*psv) : newSV(0));
+                        av_push(pair, newRV_noinc((SV *)
+                                    pk_url_parse_template(aTHX_ tp, tl)));
+                        (void)hv_store_ent(names, *id,
+                                           newRV_noinc((SV *)pair), 0);
+                    }
+                }
+            }
+            (void)hv_stores(h, K_NAMES_C, newRV_noinc((SV *)names));
+
+            {   /* The path on `host`, split off once.
+                 *
+                 * A route matches PATH_INFO, and PATH_INFO is what is left
+                 * after whatever sits in front of the application. Two
+                 * things can: SCRIPT_NAME, which the request carries, and
+                 * the path on `host` - `host 'https://example.com/app'`,
+                 * which is how an application says a proxy strips /app
+                 * before Punk ever sees the request. Only configuration
+                 * knows the second, and $c->origin deliberately drops it
+                 * (pk_origin_bare returns scheme://host, which is what an
+                 * origin means to a browser), so it is kept here for the
+                 * URL builder to put back. Empty for the deployments that
+                 * have no prefix, which is nearly all of them. */
+                SV *host = app_get(aTHX_ h, "host");
+                if (host && SvOK(host) && SvCUR(host)) {
+                    STRLEN hl, hoff, hlen;
+                    const char *hp = SvPV_const(host, hl);
+                    SV *bare = pk_origin_bare(aTHX_ hp, hl, &hoff, &hlen);
+                    STRLEN bl = SvCUR(bare);
+                    if (hl > bl)
+                        (void)hv_stores(h, K_HOST_PATH_C,
+                                        newSVpvn(hp + bl, hl - bl));
+                    SvREFCNT_dec(bare);
+                }
+            }
+        }
+
         /* sse routes: mark the records; the transport is chosen per request
          * (detach / psgi.streaming / blocking), so no boot capability check */
         x = hv_fetchs(h, K_SSE_ROUTES, 0);
@@ -566,6 +783,22 @@ compile(self)
                     if (!hv_exists(filters, "asset", 5))
                         (void)hv_stores(filters, "asset",
                                         pa_asset_filter(aTHX_ self));
+                    /* ... and `url_for`, on the same terms. The
+                     * application's own filter of either name wins,
+                     * silently: `filters` is the application's, and Punk
+                     * adds to it only where it left a gap. The prefix slot
+                     * is created once and held by both the closure and the
+                     * app, so the binder can set it per render. */
+                    if (!hv_exists(filters, "url_for", 7)) {
+                        SV *slot = hv_fetchs(h, K_URL_PREFIX_C, 0)
+                                   ? *hv_fetchs(h, K_URL_PREFIX_C, 0) : NULL;
+                        if (!slot) {
+                            slot = newSVpvs("");
+                            (void)hv_stores(h, K_URL_PREFIX_C, slot);
+                        }
+                        (void)hv_stores(filters, "url_for",
+                                        pk_url_filter(aTHX_ self, slot));
+                    }
                 }
             }
             if (av_len(views) >= 0) {
@@ -661,6 +894,26 @@ compile(self)
             for (i = 0; i < n; i++)
                 av_push(after_out,
                     pc_resolve_target(aTHX_ self, *av_fetch(al, i, 0), whata));
+
+            /* before_render lives on the app rather than in the request
+             * state: a render is reached from a context, and the views object
+             * has no route to the compiled state the dispatcher carries.
+             * Stored only when there is one, so the ordinary render does one
+             * hv_fetch that misses and nothing else. */
+            {
+                SV **np = hv_fetchs(hooks, K_BEFORE_RN, 0);
+                AV *nl = (np && *np && SvROK(*np)) ? (AV *)SvRV(*np) : NULL;
+                SV *whatn = sv_2mortal(newSVpvs("before_render hook"));
+                n = nl ? av_len(nl) + 1 : 0;
+                if (n) {
+                    AV *render_out = newAV();
+                    for (i = 0; i < n; i++)
+                        av_push(render_out, pc_resolve_target(aTHX_ self,
+                                    *av_fetch(nl, i, 0), whatn));
+                    (void)hv_stores(h, K_BEFORE_RENDER_C,
+                                    newRV_noinc((SV *)render_out));
+                }
+            }
 
             /* The csrf check goes at the head of before_dispatch: a forged
              * request should be refused before an application hook sees it. */

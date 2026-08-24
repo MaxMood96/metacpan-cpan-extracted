@@ -18,6 +18,7 @@ typedef struct {
     SV *user_data;          /* User data for callback */
     int32_t stream_id;      /* Stream ID */
     int eof;                /* End of data flag */
+    int no_end_stream;      /* Suppress END_STREAM at EOF */
     int deferred;           /* Currently deferred */
 } nghttp2_perl_data_provider;
 
@@ -113,6 +114,42 @@ static void remove_data_provider(nghttp2_perl_session *ps, int32_t stream_id) {
     }
 }
 
+static nghttp2_nv *perl_headers_to_nva(pTHX_ AV *headers_av,
+                                       size_t *nvlen_out) {
+    I32 last_index = av_len(headers_av);
+    size_t nvlen = last_index < 0 ? 0 : (size_t)last_index + 1;
+    nghttp2_nv *nva = NULL;
+    I32 i;
+
+    *nvlen_out = nvlen;
+    if (nvlen == 0) {
+        return NULL;
+    }
+
+    Newxz(nva, nvlen, nghttp2_nv);
+
+    for (i = 0; i < (I32)nvlen; i++) {
+        SV **pair = av_fetch(headers_av, i, 0);
+        if (pair && SvROK(*pair) && SvTYPE(SvRV(*pair)) == SVt_PVAV) {
+            AV *pair_av = (AV *)SvRV(*pair);
+            SV **name_sv = av_fetch(pair_av, 0, 0);
+            SV **value_sv = av_fetch(pair_av, 1, 0);
+
+            if (name_sv && value_sv) {
+                STRLEN name_len;
+                STRLEN value_len;
+                nva[i].name = (uint8_t *)SvPVbyte(*name_sv, name_len);
+                nva[i].namelen = name_len;
+                nva[i].value = (uint8_t *)SvPVbyte(*value_sv, value_len);
+                nva[i].valuelen = value_len;
+                nva[i].flags = NGHTTP2_NV_FLAG_NONE;
+            }
+        }
+    }
+
+    return nva;
+}
+
 /* Data provider read callback - called by nghttp2 when it wants response body data */
 static ssize_t perl_data_source_read_callback(
     nghttp2_session *session,
@@ -151,6 +188,11 @@ static ssize_t perl_data_source_read_callback(
             dp->user_data = NULL;
             if (dp->eof) {
                 *data_flags |= NGHTTP2_DATA_FLAG_EOF;
+                if (dp->no_end_stream) {
+                    *data_flags |= NGHTTP2_DATA_FLAG_NO_END_STREAM;
+                }
+            } else {
+                dp->no_end_stream = 0;
             }
         } else {
             /* Partial send - keep remainder for next call */
@@ -166,6 +208,9 @@ static ssize_t perl_data_source_read_callback(
     if (!dp->callback || !SvOK(dp->callback)) {
         if (dp->eof) {
             *data_flags |= NGHTTP2_DATA_FLAG_EOF;
+            if (dp->no_end_stream) {
+                *data_flags |= NGHTTP2_DATA_FLAG_NO_END_STREAM;
+            }
             return 0;
         }
         /* No EOF requested - defer until more data arrives via submit_data */
@@ -177,8 +222,8 @@ static ssize_t perl_data_source_read_callback(
     SAVETMPS;
     PUSHMARK(SP);
 
-    /* Call: $callback->($stream_id, $max_length) */
-    /* Returns: ($data, $eof) or undef for deferred */
+    /* Call: $callback->($stream_id, $max_length[, $user_data]) */
+    /* Returns: ($data, $eof[, $no_end_stream]) or undef/empty list to defer */
     XPUSHs(sv_2mortal(newSViv(stream_id)));
     XPUSHs(sv_2mortal(newSVuv(length)));
     if (dp->user_data && SvOK(dp->user_data)) {
@@ -197,14 +242,11 @@ static ssize_t perl_data_source_read_callback(
         /* No return value = defer */
         dp->deferred = 1;
         ret = NGHTTP2_ERR_DEFERRED;
-    } else if (count >= 1) {
-        SV *eof_sv = NULL;
-        SV *data_sv = NULL;
-
-        if (count >= 2) {
-            eof_sv = POPs;
-        }
-        data_sv = POPs;
+    } else {
+        SV **return_values = SP - count + 1;
+        SV *data_sv = return_values[0];
+        SV *eof_sv = count >= 2 ? return_values[1] : NULL;
+        SV *no_end_stream_sv = count >= 3 ? return_values[2] : NULL;
 
         if (!SvOK(data_sv)) {
             /* undef = defer */
@@ -227,7 +269,11 @@ static ssize_t perl_data_source_read_callback(
             if (eof_sv && SvTRUE(eof_sv)) {
                 *data_flags |= NGHTTP2_DATA_FLAG_EOF;
                 dp->eof = 1;
+                if (no_end_stream_sv && SvTRUE(no_end_stream_sv)) {
+                    *data_flags |= NGHTTP2_DATA_FLAG_NO_END_STREAM;
+                }
             }
+
             /* If returned empty string with no eof, also defer */
             if (data_len == 0 && !dp->eof) {
                 dp->deferred = 1;
@@ -236,6 +282,9 @@ static ssize_t perl_data_source_read_callback(
         }
     }
 
+    if (count > 0) {
+        SP -= count;
+    }
     PUTBACK;
     FREETMPS;
     LEAVE;
@@ -386,6 +435,10 @@ static int perl_on_frame_recv_callback(nghttp2_session *session,
     hv_store(frame_hv, "type", 4, newSViv(frame->hd.type), 0);
     hv_store(frame_hv, "flags", 5, newSViv(frame->hd.flags), 0);
     hv_store(frame_hv, "length", 6, newSViv(frame->hd.length), 0);
+    if (frame->hd.type == NGHTTP2_HEADERS) {
+        hv_store(frame_hv, "headers_category", 16,
+                 newSViv(frame->headers.cat), 0);
+    }
 
     args = newAV();
     av_push(args, newRV_noinc((SV *)frame_hv));
@@ -533,6 +586,146 @@ int
 NGHTTP2_FLAG_ACK()
     CODE:
         RETVAL = NGHTTP2_FLAG_ACK;
+    OUTPUT:
+        RETVAL
+
+int
+NGHTTP2_FLAG_PADDED()
+    CODE:
+        RETVAL = NGHTTP2_FLAG_PADDED;
+    OUTPUT:
+        RETVAL
+
+int
+NGHTTP2_FLAG_PRIORITY()
+    CODE:
+        RETVAL = NGHTTP2_FLAG_PRIORITY;
+    OUTPUT:
+        RETVAL
+
+int
+NGHTTP2_NO_ERROR()
+    CODE:
+        RETVAL = NGHTTP2_NO_ERROR;
+    OUTPUT:
+        RETVAL
+
+int
+NGHTTP2_PROTOCOL_ERROR()
+    CODE:
+        RETVAL = NGHTTP2_PROTOCOL_ERROR;
+    OUTPUT:
+        RETVAL
+
+int
+NGHTTP2_INTERNAL_ERROR()
+    CODE:
+        RETVAL = NGHTTP2_INTERNAL_ERROR;
+    OUTPUT:
+        RETVAL
+
+int
+NGHTTP2_FLOW_CONTROL_ERROR()
+    CODE:
+        RETVAL = NGHTTP2_FLOW_CONTROL_ERROR;
+    OUTPUT:
+        RETVAL
+
+int
+NGHTTP2_SETTINGS_TIMEOUT()
+    CODE:
+        RETVAL = NGHTTP2_SETTINGS_TIMEOUT;
+    OUTPUT:
+        RETVAL
+
+int
+NGHTTP2_STREAM_CLOSED()
+    CODE:
+        RETVAL = NGHTTP2_STREAM_CLOSED;
+    OUTPUT:
+        RETVAL
+
+int
+NGHTTP2_FRAME_SIZE_ERROR()
+    CODE:
+        RETVAL = NGHTTP2_FRAME_SIZE_ERROR;
+    OUTPUT:
+        RETVAL
+
+int
+NGHTTP2_REFUSED_STREAM()
+    CODE:
+        RETVAL = NGHTTP2_REFUSED_STREAM;
+    OUTPUT:
+        RETVAL
+
+int
+NGHTTP2_CANCEL()
+    CODE:
+        RETVAL = NGHTTP2_CANCEL;
+    OUTPUT:
+        RETVAL
+
+int
+NGHTTP2_COMPRESSION_ERROR()
+    CODE:
+        RETVAL = NGHTTP2_COMPRESSION_ERROR;
+    OUTPUT:
+        RETVAL
+
+int
+NGHTTP2_CONNECT_ERROR()
+    CODE:
+        RETVAL = NGHTTP2_CONNECT_ERROR;
+    OUTPUT:
+        RETVAL
+
+int
+NGHTTP2_ENHANCE_YOUR_CALM()
+    CODE:
+        RETVAL = NGHTTP2_ENHANCE_YOUR_CALM;
+    OUTPUT:
+        RETVAL
+
+int
+NGHTTP2_INADEQUATE_SECURITY()
+    CODE:
+        RETVAL = NGHTTP2_INADEQUATE_SECURITY;
+    OUTPUT:
+        RETVAL
+
+int
+NGHTTP2_HTTP_1_1_REQUIRED()
+    CODE:
+        RETVAL = NGHTTP2_HTTP_1_1_REQUIRED;
+    OUTPUT:
+        RETVAL
+
+int
+NGHTTP2_HCAT_REQUEST()
+    CODE:
+        RETVAL = NGHTTP2_HCAT_REQUEST;
+    OUTPUT:
+        RETVAL
+
+int
+NGHTTP2_HCAT_RESPONSE()
+    CODE:
+        RETVAL = NGHTTP2_HCAT_RESPONSE;
+    OUTPUT:
+        RETVAL
+
+int
+NGHTTP2_HCAT_PUSH_RESPONSE()
+    CODE:
+        RETVAL = NGHTTP2_HCAT_PUSH_RESPONSE;
+    OUTPUT:
+        RETVAL
+
+int
+NGHTTP2_HCAT_HEADERS()
+    CODE:
+        RETVAL = NGHTTP2_HCAT_HEADERS;
     OUTPUT:
         RETVAL
 
@@ -928,33 +1121,12 @@ _submit_response_with_body(self, stream_id, headers_av, body)
         size_t nvlen;
         nghttp2_data_provider data_prd;
         int rv;
-        I32 i;
         STRLEN body_len;
         char *body_ptr;
     CODE:
         ps = (nghttp2_perl_session *)SvIV(SvRV(self));
 
-        /* Build name-value array from Perl array of arrayrefs */
-        nvlen = av_len(headers_av) + 1;
-        Newxz(nva, nvlen, nghttp2_nv);
-
-        for (i = 0; i < (I32)nvlen; i++) {
-            SV **pair = av_fetch(headers_av, i, 0);
-            if (pair && SvROK(*pair) && SvTYPE(SvRV(*pair)) == SVt_PVAV) {
-                AV *pair_av = (AV *)SvRV(*pair);
-                SV **name_sv = av_fetch(pair_av, 0, 0);
-                SV **value_sv = av_fetch(pair_av, 1, 0);
-
-                if (name_sv && value_sv) {
-                    STRLEN name_len, value_len;
-                    nva[i].name = (uint8_t *)SvPVbyte(*name_sv, name_len);
-                    nva[i].namelen = name_len;
-                    nva[i].value = (uint8_t *)SvPVbyte(*value_sv, value_len);
-                    nva[i].valuelen = value_len;
-                    nva[i].flags = NGHTTP2_NV_FLAG_NONE;
-                }
-            }
-        }
+        nva = perl_headers_to_nva(aTHX_ headers_av, &nvlen);
 
         /* For now, submit without data provider (headers only) */
         /* TODO: Implement proper data provider for body */
@@ -962,7 +1134,7 @@ _submit_response_with_body(self, stream_id, headers_av, body)
 
         rv = nghttp2_submit_response(ps->session, stream_id, nva, nvlen, NULL);
 
-        Safefree(nva);
+        if (nva) Safefree(nva);
 
         if (rv != 0) {
             croak("nghttp2_submit_response failed: %s", nghttp2_strerror(rv));
@@ -982,38 +1154,44 @@ _submit_response_no_body(self, stream_id, headers_av)
         nghttp2_nv *nva;
         size_t nvlen;
         int rv;
-        I32 i;
     CODE:
         ps = (nghttp2_perl_session *)SvIV(SvRV(self));
 
-        /* Build name-value array */
-        nvlen = av_len(headers_av) + 1;
-        Newxz(nva, nvlen, nghttp2_nv);
-
-        for (i = 0; i < (I32)nvlen; i++) {
-            SV **pair = av_fetch(headers_av, i, 0);
-            if (pair && SvROK(*pair) && SvTYPE(SvRV(*pair)) == SVt_PVAV) {
-                AV *pair_av = (AV *)SvRV(*pair);
-                SV **name_sv = av_fetch(pair_av, 0, 0);
-                SV **value_sv = av_fetch(pair_av, 1, 0);
-
-                if (name_sv && value_sv) {
-                    STRLEN name_len, value_len;
-                    nva[i].name = (uint8_t *)SvPVbyte(*name_sv, name_len);
-                    nva[i].namelen = name_len;
-                    nva[i].value = (uint8_t *)SvPVbyte(*value_sv, value_len);
-                    nva[i].valuelen = value_len;
-                    nva[i].flags = NGHTTP2_NV_FLAG_NONE;
-                }
-            }
-        }
+        nva = perl_headers_to_nva(aTHX_ headers_av, &nvlen);
 
         rv = nghttp2_submit_response(ps->session, stream_id, nva, nvlen, NULL);
 
-        Safefree(nva);
+        if (nva) Safefree(nva);
 
         if (rv != 0) {
             croak("nghttp2_submit_response failed: %s", nghttp2_strerror(rv));
+        }
+        RETVAL = rv;
+    OUTPUT:
+        RETVAL
+
+int
+_submit_trailer_xs(self, stream_id, headers_av)
+        SV *self
+        int stream_id
+        AV *headers_av
+    PREINIT:
+        nghttp2_perl_session *ps;
+        nghttp2_nv *nva;
+        size_t nvlen;
+        int rv;
+    CODE:
+        ps = (nghttp2_perl_session *)SvIV(SvRV(self));
+        nva = perl_headers_to_nva(aTHX_ headers_av, &nvlen);
+
+        rv = nghttp2_submit_trailer(ps->session, stream_id, nva, nvlen);
+
+        if (nva) {
+            Safefree(nva);
+        }
+
+        if (rv != 0) {
+            croak("nghttp2_submit_trailer failed: %s", nghttp2_strerror(rv));
         }
         RETVAL = rv;
     OUTPUT:
@@ -1090,8 +1268,11 @@ terminate_session(self, error_code)
         RETVAL
 
 # Submit response with streaming data callback
-# Callback receives ($stream_id, $max_length, $user_data) and returns ($data, $eof)
-# Return undef or empty list to defer (call resume_data later)
+# Callback receives ($stream_id, $max_length[, $user_data]); user data is optional.
+# It returns:
+#   ($data, $eof_flag)                 - send data; EOF ends the stream
+#   ($data, $eof_flag, $no_end_stream) - EOF without DATA END_STREAM for trailers
+#   defer: return undef or an empty list; resume or submit data later
 int
 _submit_response_streaming(self, stream_id, headers_av, data_callback, cb_user_data)
         SV *self
@@ -1106,31 +1287,10 @@ _submit_response_streaming(self, stream_id, headers_av, data_callback, cb_user_d
         nghttp2_data_provider data_prd;
         nghttp2_perl_data_provider *dp;
         int rv;
-        I32 i;
     CODE:
         ps = (nghttp2_perl_session *)SvIV(SvRV(self));
 
-        /* Build name-value array from Perl array of arrayrefs */
-        nvlen = av_len(headers_av) + 1;
-        Newxz(nva, nvlen, nghttp2_nv);
-
-        for (i = 0; i < (I32)nvlen; i++) {
-            SV **pair = av_fetch(headers_av, i, 0);
-            if (pair && SvROK(*pair) && SvTYPE(SvRV(*pair)) == SVt_PVAV) {
-                AV *pair_av = (AV *)SvRV(*pair);
-                SV **name_sv = av_fetch(pair_av, 0, 0);
-                SV **value_sv = av_fetch(pair_av, 1, 0);
-
-                if (name_sv && value_sv) {
-                    STRLEN name_len, value_len;
-                    nva[i].name = (uint8_t *)SvPVbyte(*name_sv, name_len);
-                    nva[i].namelen = name_len;
-                    nva[i].value = (uint8_t *)SvPVbyte(*value_sv, value_len);
-                    nva[i].valuelen = value_len;
-                    nva[i].flags = NGHTTP2_NV_FLAG_NONE;
-                }
-            }
-        }
+        nva = perl_headers_to_nva(aTHX_ headers_av, &nvlen);
 
         /* Create data provider state */
         Newxz(dp, 1, nghttp2_perl_data_provider);
@@ -1151,7 +1311,7 @@ _submit_response_streaming(self, stream_id, headers_av, data_callback, cb_user_d
 
         rv = nghttp2_submit_response(ps->session, stream_id, nva, nvlen, &data_prd);
 
-        Safefree(nva);
+        if (nva) Safefree(nva);
 
         if (rv != 0) {
             remove_data_provider(ps, stream_id);
@@ -1168,11 +1328,12 @@ _submit_response_streaming(self, stream_id, headers_av, data_callback, cb_user_d
 # state, and calls nghttp2_session_resume_data so the next mem_send will
 # invoke the read callback which returns this data.
 int
-submit_data(self, stream_id, data_sv, eof)
+submit_data(self, stream_id, data_sv, eof, no_end_stream = 0)
         SV *self
         int stream_id
         SV *data_sv
         int eof
+        int no_end_stream
     PREINIT:
         nghttp2_perl_session *ps;
         nghttp2_perl_data_provider *dp;
@@ -1198,6 +1359,7 @@ submit_data(self, stream_id, data_sv, eof)
         }
         dp->user_data = SvOK(data_sv) ? newSVsv(data_sv) : NULL;
         dp->eof = eof ? 1 : 0;
+        dp->no_end_stream = (eof && no_end_stream) ? 1 : 0;
         dp->deferred = 0;
 
         /* Resume the stream so nghttp2 calls the read callback */
@@ -1330,32 +1492,11 @@ _submit_request_xs(self, headers_av, body_sv)
         nghttp2_data_provider *data_prd_ptr = NULL;
         nghttp2_perl_data_provider *dp = NULL;
         int32_t stream_id;
-        I32 i;
         STRLEN body_len = 0;
     CODE:
         ps = (nghttp2_perl_session *)SvIV(SvRV(self));
 
-        /* Build name-value array from Perl array of arrayrefs */
-        nvlen = av_len(headers_av) + 1;
-        Newxz(nva, nvlen, nghttp2_nv);
-
-        for (i = 0; i < (I32)nvlen; i++) {
-            SV **pair = av_fetch(headers_av, i, 0);
-            if (pair && SvROK(*pair) && SvTYPE(SvRV(*pair)) == SVt_PVAV) {
-                AV *pair_av = (AV *)SvRV(*pair);
-                SV **name_sv = av_fetch(pair_av, 0, 0);
-                SV **value_sv = av_fetch(pair_av, 1, 0);
-
-                if (name_sv && value_sv) {
-                    STRLEN name_len, value_len;
-                    nva[i].name = (uint8_t *)SvPVbyte(*name_sv, name_len);
-                    nva[i].namelen = name_len;
-                    nva[i].value = (uint8_t *)SvPVbyte(*value_sv, value_len);
-                    nva[i].valuelen = value_len;
-                    nva[i].flags = NGHTTP2_NV_FLAG_NONE;
-                }
-            }
-        }
+        nva = perl_headers_to_nva(aTHX_ headers_av, &nvlen);
 
         /* Check if we have a body to send */
         if (SvOK(body_sv) && SvROK(body_sv) && SvTYPE(SvRV(body_sv)) == SVt_PVCV) {
@@ -1389,7 +1530,7 @@ _submit_request_xs(self, headers_av, body_sv)
 
         stream_id = nghttp2_submit_request(ps->session, NULL, nva, nvlen, data_prd_ptr, NULL);
 
-        Safefree(nva);
+        if (nva) Safefree(nva);
 
         if (stream_id < 0) {
             if (dp) {

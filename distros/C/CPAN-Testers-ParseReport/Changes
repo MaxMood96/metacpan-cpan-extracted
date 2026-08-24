@@ -1,3 +1,25 @@
+0.6.0 2026-08-23  k  <andk@cpan.org>
+
+	* release 0.6.0
+
+	* Unchanged from 0.6.0-TRIAL4
+
+0.6.0-TRIAL4 2026-08-16  k  <andk@cpan.org>
+
+	* support perl 5.8.9
+
+0.6.0-TRIAL2 2026-08-09  k  <andk@cpan.org>
+
+	* remove SIGNATURE from MANIFEST
+
+	* no code changes
+
+0.6.0-TRIAL 2026-08-09  k  <andk@cpan.org>
+
+	* adjust all parts to updated web app (Thanks to Doug Bell)
+
+	* minor fixes and cosmetics
+
 0.5.0 2025-05-25  k  <andk@cpan.org>
 
 	* Release 0.5.0

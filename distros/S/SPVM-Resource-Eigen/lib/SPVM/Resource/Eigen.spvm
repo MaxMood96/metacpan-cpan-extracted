@@ -2,5 +2,5 @@
 # MIT License
 
 class Resource::Eigen {
-  version "0.005";
+  version "0.006";
 }

@@ -22,7 +22,7 @@ use strict;
 use warnings;
 use utf8;
 
-our $VERSION = '1.238';
+our $VERSION = '1.239';
 
 use Encode::Guess ();
 use Encode ();
@@ -147,8 +147,6 @@ sub autoDecode {
 }
 
 # -----------------------------------------------------------------------------
-
-=head2 Einrückung
 
 =head3 indent() - Rücke Text ein
 
@@ -905,7 +903,7 @@ sub concat {
 
 =head1 VERSION
 
-1.238
+1.239
 
 =head1 AUTHOR
 

@@ -1,0 +1,186 @@
+---
+# libvirt daemon log enrichment.
+#
+# Gates on the syslog PROGRAM field being the monolithic libvirtd or any of the
+# modular daemons it was split into in libvirt 5.7: virtqemud, virtnetworkd,
+# virtstoraged, virtlogd, virtproxyd, virtsecretd, virtnodedevd, virtinterfaced
+# and virtnwfilterd. They share a message vocabulary, so one rule covers all of
+# them and PROGRAM says which one spoke. Patterns are anchored (each must match
+# the whole MESSAGE) and first-match wins. Every capture is namespaced with
+# libvirt_ .
+#
+# The taint record is the main reason to parse this. libvirt writes one
+# whenever a domain starts with something it cannot vouch for -- root
+# privileges, a passthrough device, a custom QEMU argv, a shared writable disk
+# -- and names the domain and its UUID while doing so. On a host that runs
+# untrusted guests deliberately, such as a malware sandbox, it is the record of
+# which guest got which escape hatch.
+#
+# Domain lifecycle (defined, started, stopped) is deliberately not covered.
+# Those events go to the libvirt event API and to journald's structured fields
+# rather than to a syslog line with a stable shape.
+includes:
+- base
+vars:
+  # A libvirt object name: no whitespace, no quotes.
+  LIBVIRT_NAME: '[^''\s]+'
+  # The leading token of libvirt's error prose: "internal error", "operation
+  # failed", "Cannot get interface flags on ...". Matched as far as the first
+  # colon.
+  LIBVIRT_ERROR_KIND: '[^:]+'
+vars_templated:
+  # "Domain id=17 name='cuckoo70' uuid=4886ce36-05ed-4f35-bfbf-a6950de14804 is
+  #  tainted: high-privileges"
+  #
+  # One line per taint flag, so a domain with three of them produces three
+  # lines sharing an id and uuid. The uuid is the stable key, since the numeric
+  # id is reassigned on every start.
+  LIBVIRT_TAINT: 'Domain id=(?<libvirt_domain_id>[% INT %]) name=''(?<libvirt_domain>[% LIBVIRT_NAME %])'' uuid=(?<libvirt_domain_uuid>[% UUID %]) is tainted: (?<libvirt_taint>[% GREEDYDATA %])'
+  # "libvirt version: 11.1.0" and "libvirt version: 9.0.0, package: 10.el9"
+  #
+  # Part of the three-line banner libvirt writes ahead of its first error after
+  # a restart: version, hostname, then the error itself.
+  LIBVIRT_VERSION: 'libvirt version: (?<libvirt_version>[^,]+)(?:, (?<libvirt_build>[% GREEDYDATA %]))?'
+  # The second banner line: "hostname: host.example.net".
+  LIBVIRT_HOSTNAME: 'hostname: (?<libvirt_hostname>[% HOSTNAME %])'
+  # "Configured security driver "none" disables default policy to create
+  #  confined guests"
+  #
+  # libvirt saying its guests are unconfined. Expected on a host that runs
+  # deliberately unconfined guests and alarming anywhere else, so the driver
+  # name is pulled out rather than left in the prose.
+  LIBVIRT_SECURITY_DRIVER: 'Configured security driver "(?<libvirt_security_driver>[^"]*)" disables default policy to create confined guests'
+  # "internal error: Child process (...) unexpected exit status 2: ..." /
+  # "Cannot get interface flags on 'virbr0': No such device"
+  #
+  # libvirt's errors are "<kind>: <detail>" often enough to split on the first
+  # colon. That puts the class of failure in one field and the detail, which
+  # often embeds a whole command line, in another.
+  LIBVIRT_ERROR: '(?<libvirt_error_kind>[% LIBVIRT_ERROR_KIND %]): (?<libvirt_error>[% GREEDYDATA %])'
+  # Anything else. The gate is an explicit list of libvirt daemon names, so
+  # nothing else can land here.
+  LIBVIRT_MESSAGE: '(?<libvirt_message>.+)'
+vars_tests:
+  LIBVIRT_NAME:
+    test_template: "^'(?<TEST>[% TEST_VAR %])'$"
+    positive:
+      - string: "'cuckoo70'"
+        result: 'cuckoo70'
+      - string: "'virbr0'"
+        result: 'virbr0'
+    negative:
+      - "'two words'"
+  LIBVIRT_ERROR_KIND:
+    test_template: '^(?<TEST>[% TEST_VAR %]): '
+    positive:
+      - string: 'internal error: something'
+        result: 'internal error'
+      - string: 'operation failed: something'
+        result: 'operation failed'
+    negative:
+      - 'no colon here'
+  LIBVIRT_TAINT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: "Domain id=17 name='cuckoo70' uuid=4886ce36-05ed-4f35-bfbf-a6950de14804 is tainted: high-privileges"
+        result: "Domain id=17 name='cuckoo70' uuid=4886ce36-05ed-4f35-bfbf-a6950de14804 is tainted: high-privileges"
+      - string: "Domain id=2 name='buildbox' uuid=f98befd3-501f-40b5-8e18-314233f1305c is tainted: custom-argv"
+        result: "Domain id=2 name='buildbox' uuid=f98befd3-501f-40b5-8e18-314233f1305c is tainted: custom-argv"
+    negative:
+      - 'libvirt version: 11.1.0'
+  LIBVIRT_VERSION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'libvirt version: 11.1.0'
+        result: 'libvirt version: 11.1.0'
+      - string: 'libvirt version: 9.0.0, package: 10.el9'
+        result: 'libvirt version: 9.0.0, package: 10.el9'
+    negative:
+      - 'hostname: host.example.net'
+  LIBVIRT_HOSTNAME:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'hostname: host.example.net'
+        result: 'hostname: host.example.net'
+    negative:
+      - 'libvirt version: 11.1.0'
+  LIBVIRT_SECURITY_DRIVER:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Configured security driver "none" disables default policy to create confined guests'
+        result: 'Configured security driver "none" disables default policy to create confined guests'
+    negative:
+      - 'libvirt version: 11.1.0'
+  LIBVIRT_ERROR:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: "Cannot get interface flags on 'virbr0': No such device"
+        result: "Cannot get interface flags on 'virbr0': No such device"
+      - string: 'internal error: Child process (dnsmasq) unexpected exit status 2'
+        result: 'internal error: Child process (dnsmasq) unexpected exit status 2'
+    negative:
+      - 'no colon in this one'
+  LIBVIRT_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'no colon in this one'
+        result: 'no colon in this one'
+    negative:
+      - ''
+rules:
+  - name: libvirt
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^(?:libvirtd|virt(?:qemud|networkd|storaged|logd|proxyd|secretd|nodedevd|interfaced|nwfilterd))$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - LIBVIRT_TAINT
+      - LIBVIRT_VERSION
+      - LIBVIRT_HOSTNAME
+      - LIBVIRT_SECURITY_DRIVER
+      # After every known shape, since it claims anything holding a colon.
+      - LIBVIRT_ERROR
+      # last: matches anything, which is only safe because the rule is gated
+      - LIBVIRT_MESSAGE
+    tests:
+      positive:
+        - string: "Domain id=17 name='cuckoo70' uuid=4886ce36-05ed-4f35-bfbf-a6950de14804 is tainted: high-privileges"
+          numeric:
+            - libvirt_domain_id
+          program: 'virtlogd'
+          result:
+            libvirt_domain_id: '17'
+            libvirt_domain: 'cuckoo70'
+            libvirt_domain_uuid: '4886ce36-05ed-4f35-bfbf-a6950de14804'
+            libvirt_taint: 'high-privileges'
+        - string: 'libvirt version: 11.1.0'
+          program: 'virtqemud'
+          result:
+            libvirt_version: '11.1.0'
+        - string: 'libvirt version: 9.0.0, package: 10.el9'
+          program: 'virtproxyd'
+          result:
+            libvirt_version: '9.0.0'
+            libvirt_build: 'package: 10.el9'
+        - string: 'hostname: host.example.net'
+          result:
+            libvirt_hostname: 'host.example.net'
+        - string: 'Configured security driver "none" disables default policy to create confined guests'
+          result:
+            libvirt_security_driver: 'none'
+        - string: "Cannot get interface flags on 'virbr0': No such device"
+          program: 'libvirtd'
+          result:
+            libvirt_error_kind: "Cannot get interface flags on 'virbr0'"
+            libvirt_error: 'No such device'
+        - string: 'no colon in this one'
+          result:
+            libvirt_message: 'no colon in this one'
+      negative:
+        - ''
+        - string: 'Domain id=17 name=''cuckoo70'' uuid=4886ce36-05ed-4f35-bfbf-a6950de14804 is tainted: high-privileges'
+          program: 'libvirt-extra'
+convert:
+  libvirt_domain_id: int

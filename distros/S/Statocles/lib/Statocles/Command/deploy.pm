@@ -1,5 +1,5 @@
 package Statocles::Command::deploy;
-our $VERSION = '0.098';
+our $VERSION = '0.099';
 # ABSTRACT: Deploy the site
 
 use Statocles::Base 'Command';
@@ -8,8 +8,12 @@ use Statocles::Command::build;
 has build_dir => (
     is => 'ro',
     isa => Path,
+    lazy => 1,
     coerce => Path->coercion,
-    default => sub { Path->coercion->( '.statocles/build' ) },
+    default => sub {
+        my ( $self ) = @_;
+        $self->site->store->path->child( '.statocles', 'build' );
+    },
 );
 
 sub run {
@@ -58,7 +62,7 @@ Statocles::Command::deploy - Deploy the site
 
 =head1 VERSION
 
-version 0.098
+version 0.099
 
 =head1 AUTHOR
 

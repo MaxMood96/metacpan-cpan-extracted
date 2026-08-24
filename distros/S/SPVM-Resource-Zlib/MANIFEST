@@ -1,10 +1,14 @@
 .gitattributes
+.github/workflows/linux-ubuntu-latest-asan.yml
+.github/workflows/linux-ubuntu-latest-perls.yml
 .github/workflows/linux-ubuntu-latest.yml
 .github/workflows/macos-latest.yml
+.github/workflows/windows-latest-msvc-debug.yml
+.github/workflows/windows-latest-msvc.yml
 .github/workflows/windows-latest.yml
 .gitignore
 Changes
-lib/SPVM/Resource/Zlib.config
+lib/SPVM/Resource/Zlib.build
 lib/SPVM/Resource/Zlib.native/include/.gitkeep
 lib/SPVM/Resource/Zlib.native/include/crc32.h
 lib/SPVM/Resource/Zlib.native/include/deflate.h
@@ -256,8 +260,9 @@ MANIFEST.SKIP
 README.md
 t/basic.t
 t/lib/SPVM/MyZlib.c
-t/lib/SPVM/MyZlib.config
-t/lib/SPVM/MyZlib.spvm
+t/lib/SPVM/TestCase/Zlib.build
+t/lib/SPVM/TestCase/Zlib.c
+t/lib/SPVM/TestCase/Zlib.spvm
 t/minitest.txt.gz
 META.yml                                 Module YAML meta-data (added by MakeMaker)
 META.json                                Module JSON meta-data (added by MakeMaker)

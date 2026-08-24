@@ -1,2 +1,0 @@
-<start_html>
-The current server time is: <? localtime() ?>

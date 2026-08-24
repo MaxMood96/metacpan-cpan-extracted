@@ -1,0 +1,330 @@
+---
+# hostapd (WiFi access point daemon) client association / authentication log
+# enrichment.
+#
+# Gates on the syslog PROGRAM field being "hostapd". The MESSAGE is normally
+# prefixed with the AP interface (e.g. "wlan0: STA aa:bb:cc:dd:ee:ff IEEE
+# 802.11: associated (aid 1)"). Patterns are anchored (each must match the whole
+# MESSAGE) and first-match wins. Every capture is namespaced with hostapd_ .
+#
+#   hostapd_iface     -> the AP interface (wlan0, phy1-ap1, ...)
+#   hostapd_sta       -> the client (station) MAC address
+#   hostapd_event     -> the event text / control-event name
+#   hostapd_subsystem -> the reporting subsystem for STA lines
+#                        (IEEE 802.11 / IEEE 802.1X / WPA / RADIUS / MLME / WPS)
+#   hostapd_phy       -> the radio, for the reconfiguration messages that name
+#                        one instead of an interface
+#
+# OpenWRT drives hostapd over ubus from netifd rather than restarting it, so a
+# wifi reconfigure arrives as a run of phy/bss management messages rather than
+# as a daemon restart. Those are handled by the HOSTAPD_PHY_* and
+# HOSTAPD_BSS_ACTION patterns and appear on no other kind of host.
+includes:
+- base
+# Additional primitives used below that are not in base.yaml.
+vars:
+  # The control events hostapd publishes on its ctrl_interface and mirrors to
+  # syslog. They are enumerated by prefix rather than matched as "a run of
+  # capitals", because plenty of ordinary hostapd prose opens with an
+  # all-capitals word: "WPA-PSK enabled, but PSK or passphrase is not
+  # configured." would otherwise be read as an event named WPA-PSK.
+  HOSTAPD_EVENT_NAME: '(?:AP|ACS|CTRL-EVENT|DFS|EAPOL|WPS|MESH|WDS|BSS-TM|RRM|OCV|UNPROT)-[A-Z0-9-]+'
+  # hostapd puts either the interface a line is about ("phy1-ap1: ...") or the
+  # subsystem reporting it ("nl80211: ...", "ACS: ...") in the same position,
+  # and the two are the same shape. An interface name is at most IFNAMSIZ-1
+  # characters and in practice always carries a digit, which is what rules out
+  # the subsystem tags and the function names hostapd also prefixes lines with
+  # ("hostapd_free_hapd_data: Interface phy2-ap0 wasn't started"). nl80211 is
+  # the one tag that passes that test, so it is excluded by name.
+  #
+  # Only the catch-all needs this. The patterns above it are pinned by what
+  # follows the prefix, so they can afford to take anything.
+  HOSTAPD_IFACE: '(?!nl80211:)(?=[\w.-]{1,15}:)[a-z][\w.-]*[0-9][\w.-]*'
+vars_templated:
+  # Control event: a station (dis)connected. "wlan0: AP-STA-CONNECTED <mac> [kv...]"
+  HOSTAPD_AP_STA_CONNECTED: '(?<hostapd_iface>[% NOTSPACE %]): (?<hostapd_event>AP-STA-CONNECTED) (?<hostapd_sta>[% COMMONMAC %])(?: [% GREEDYDATA %])?'
+  HOSTAPD_AP_STA_DISCONNECTED: '(?<hostapd_iface>[% NOTSPACE %]): (?<hostapd_event>AP-STA-DISCONNECTED) (?<hostapd_sta>[% COMMONMAC %])(?: [% GREEDYDATA %])?'
+  # Per-station events: "<iface>: STA <mac> <subsystem>: <event>" where the
+  # subsystem is IEEE 802.11 / IEEE 802.1X / WPA / RADIUS / MLME / WPS. The
+  # subsystem is captured up to the first ":" (it never contains one); the event
+  # is the remainder (which may contain colons, e.g. an embedded MAC).
+  HOSTAPD_STA: '(?<hostapd_iface>[% NOTSPACE %]): STA (?<hostapd_sta>[% COMMONMAC %]) (?<hostapd_subsystem>[^:]+): (?<hostapd_event>[% GREEDYDATA %])'
+  # The interface state machine: "<iface>: interface state ENABLED->DISABLED"
+  HOSTAPD_IFACE_STATE: '(?<hostapd_iface>[% NOTSPACE %]): interface state (?<hostapd_state_from>[% NOTSPACE %])->(?<hostapd_state_to>[% NOTSPACE %])(?: [% GREEDYDATA %])?'
+  # AP up/down control events: "<iface>: AP-ENABLED" / "<iface>: AP-DISABLED"
+  HOSTAPD_AP_STATE: '(?<hostapd_iface>[% NOTSPACE %]): (?<hostapd_event>AP-ENABLED|AP-DISABLED)(?: [% GREEDYDATA %])?'
+  # Any other control event that names a station, e.g.
+  #   phy1-ap1: EAPOL-4WAY-HS-COMPLETED aa:bb:cc:dd:ee:ff
+  #   phy0-ap0: AP-STA-POSSIBLE-PSK-MISMATCH aa:bb:cc:dd:ee:ff
+  #
+  # AP-STA-CONNECTED and AP-STA-DISCONNECTED keep patterns of their own above
+  # because they are the two a consumer is most likely to key on. This catches
+  # the rest, which on a working AP is the bulk of the traffic: the 4-way
+  # handshake completion alone outnumbers every other hostapd line there is.
+  HOSTAPD_STA_EVENT: '(?:(?<hostapd_iface>[% NOTSPACE %]): )?(?<hostapd_event>[% HOSTAPD_EVENT_NAME %]) (?<hostapd_sta>[% COMMONMAC %])(?: (?<hostapd_event_data>[% GREEDYDATA %]))?'
+  # The same, for the control events that name no station, e.g.
+  #   phy2-ap0: ACS-COMPLETED freq=2462 channel=11
+  #   phy2-ap0: CTRL-EVENT-TERMINATING
+  HOSTAPD_CTRL_EVENT: '(?:(?<hostapd_iface>[% NOTSPACE %]): )?(?<hostapd_event>[% HOSTAPD_EVENT_NAME %])(?: (?<hostapd_event_data>[% GREEDYDATA %]))?'
+  # "phy1-ap2: Prune association for aa:bb:cc:dd:ee:ff" -- the AP dropping a
+  # station's association on one BSS because it has just turned up on another.
+  # On a multi-SSID AP this is the far side of a roam.
+  HOSTAPD_PRUNE: '(?:(?<hostapd_iface>[% NOTSPACE %]): )?Prune association for (?<hostapd_sta>[% COMMONMAC %])'
+  # --- OpenWRT phy/bss management (see the header) --------------------------
+  #
+  # "Set new config for phy phy1: /var/run/hostapd-phy1.conf". The path is
+  # optional because hostapd logs the same line with nothing after the colon
+  # when it is being handed an inline configuration.
+  HOSTAPD_PHY_CONFIG: 'Set new config for phy (?<hostapd_phy>[^\s:]+):(?: (?<hostapd_config_file>[% GREEDYDATA %]))?'
+  # "Reloaded settings for phy phy1" / "Restart interface for phy phy2"
+  HOSTAPD_PHY_ACTION: '(?<hostapd_phy_action>Reloaded settings|Restart interface) for phy (?<hostapd_phy>[% NOTSPACE %])'
+  # "Add bss phy1-ap1 on phy phy1" / "Remove bss 'phy1-ap1' on phy 'phy1'" /
+  # "Rename bss phy0-ap1 to phy0-ap2". hostapd quotes the names on some of
+  # these and not on others, so the quotes are optional throughout.
+  HOSTAPD_BSS_ACTION: '(?<hostapd_bss_action>Add|Remove|Rename) bss ''?(?<hostapd_bss>[^''\s]+)''?(?: on phy ''?(?<hostapd_phy>[^''\s]+)''?| to ''?(?<hostapd_bss_renamed_to>[^''\s]+)''?)?'
+  # Anything else hostapd said: driver errors, configuration complaints, and
+  # the running commentary OpenWRT's build adds around a reconfigure. Matching
+  # anything is only safe because the rule is gated on PROGRAM being hostapd.
+  # The interface prefix is peeled off first where there is one, so even an
+  # unrecognised line says which AP it was about.
+  HOSTAPD_MESSAGE: '(?:(?<hostapd_iface>[% HOSTAPD_IFACE %]): )?(?<hostapd_message>.+)'
+vars_tests:
+  HOSTAPD_AP_STA_CONNECTED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'wlan0: AP-STA-CONNECTED aa:bb:cc:dd:ee:ff'
+        result: 'wlan0: AP-STA-CONNECTED aa:bb:cc:dd:ee:ff'
+      - string: 'wlan1: AP-STA-CONNECTED 11:22:33:44:55:66 auth_alg=open'
+        result: 'wlan1: AP-STA-CONNECTED 11:22:33:44:55:66 auth_alg=open'
+    negative:
+      - 'wlan0: AP-STA-DISCONNECTED aa:bb:cc:dd:ee:ff'
+  HOSTAPD_AP_STA_DISCONNECTED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'wlan0: AP-STA-DISCONNECTED aa:bb:cc:dd:ee:ff'
+        result: 'wlan0: AP-STA-DISCONNECTED aa:bb:cc:dd:ee:ff'
+      - string: 'wlan1: AP-STA-DISCONNECTED 11:22:33:44:55:66'
+        result: 'wlan1: AP-STA-DISCONNECTED 11:22:33:44:55:66'
+    negative:
+      - 'wlan0: AP-STA-CONNECTED aa:bb:cc:dd:ee:ff'
+  HOSTAPD_STA:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'wlan0: STA aa:bb:cc:dd:ee:ff IEEE 802.11: associated (aid 1)'
+        result: 'wlan0: STA aa:bb:cc:dd:ee:ff IEEE 802.11: associated (aid 1)'
+      - string: 'wlan0: STA aa:bb:cc:dd:ee:ff WPA: pairwise key handshake completed (RSN)'
+        result: 'wlan0: STA aa:bb:cc:dd:ee:ff WPA: pairwise key handshake completed (RSN)'
+    negative:
+      - 'wlan0: AP-STA-CONNECTED aa:bb:cc:dd:ee:ff'
+  HOSTAPD_IFACE_STATE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'wlan0: interface state UNINITIALIZED->COUNTRY_UPDATE'
+        result: 'wlan0: interface state UNINITIALIZED->COUNTRY_UPDATE'
+      - string: 'wlan0: interface state ENABLED->DISABLED'
+        result: 'wlan0: interface state ENABLED->DISABLED'
+    negative:
+      - 'wlan0: AP-ENABLED'
+  HOSTAPD_AP_STATE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'wlan0: AP-ENABLED'
+        result: 'wlan0: AP-ENABLED'
+      - string: 'wlan0: AP-DISABLED'
+        result: 'wlan0: AP-DISABLED'
+    negative:
+      - 'wlan0: interface state ENABLED->DISABLED'
+  HOSTAPD_EVENT_NAME:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'EAPOL-4WAY-HS-COMPLETED'
+        result: 'EAPOL-4WAY-HS-COMPLETED'
+      - string: 'CTRL-EVENT-TERMINATING'
+        result: 'CTRL-EVENT-TERMINATING'
+    negative:
+      # Ordinary prose that happens to open with capitals.
+      - 'WPA-PSK'
+      - 'SAE'
+  HOSTAPD_IFACE:
+    # the trailing colon is part of what this recognises -- it is a lookahead
+    # rather than a literal so the colon stays available to the caller -- so
+    # the template has to supply one
+    test_template: '^(?<TEST>[% TEST_VAR %]):'
+    positive:
+      - string: 'phy1-ap1:'
+        result: 'phy1-ap1'
+      - string: 'wlan0:'
+        result: 'wlan0'
+    negative:
+      # a subsystem tag, not an interface
+      - 'nl80211:'
+      # a function name: too long, and no digit
+      - 'hostapd_free_hapd_data:'
+  HOSTAPD_STA_EVENT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'phy1-ap1: EAPOL-4WAY-HS-COMPLETED aa:bb:cc:dd:ee:ff'
+        result: 'phy1-ap1: EAPOL-4WAY-HS-COMPLETED aa:bb:cc:dd:ee:ff'
+      - string: 'phy0-ap0: AP-STA-POSSIBLE-PSK-MISMATCH aa:bb:cc:dd:ee:ff'
+        result: 'phy0-ap0: AP-STA-POSSIBLE-PSK-MISMATCH aa:bb:cc:dd:ee:ff'
+    negative:
+      - 'phy2-ap0: CTRL-EVENT-TERMINATING'
+  HOSTAPD_CTRL_EVENT:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'phy2-ap0: CTRL-EVENT-TERMINATING'
+        result: 'phy2-ap0: CTRL-EVENT-TERMINATING'
+      - string: 'phy2-ap0: ACS-COMPLETED freq=2462 channel=11'
+        result: 'phy2-ap0: ACS-COMPLETED freq=2462 channel=11'
+    negative:
+      - 'WPA-PSK enabled, but PSK or passphrase is not configured.'
+  HOSTAPD_PRUNE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'phy1-ap2: Prune association for aa:bb:cc:dd:ee:ff'
+        result: 'phy1-ap2: Prune association for aa:bb:cc:dd:ee:ff'
+      - string: 'Prune association for aa:bb:cc:dd:ee:ff'
+        result: 'Prune association for aa:bb:cc:dd:ee:ff'
+    negative:
+      - 'phy2-ap0: CTRL-EVENT-TERMINATING'
+  HOSTAPD_PHY_CONFIG:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Set new config for phy phy1: /var/run/hostapd-phy1.conf'
+        result: 'Set new config for phy phy1: /var/run/hostapd-phy1.conf'
+      - string: 'Set new config for phy phy2:'
+        result: 'Set new config for phy phy2:'
+    negative:
+      - 'Reloaded settings for phy phy1'
+  HOSTAPD_PHY_ACTION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Reloaded settings for phy phy1'
+        result: 'Reloaded settings for phy phy1'
+      - string: 'Restart interface for phy phy2'
+        result: 'Restart interface for phy phy2'
+    negative:
+      - 'Set new config for phy phy2:'
+  HOSTAPD_BSS_ACTION:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Add bss phy1-ap1 on phy phy1'
+        result: 'Add bss phy1-ap1 on phy phy1'
+      - string: "Remove bss 'phy1-ap1' on phy 'phy1'"
+        result: "Remove bss 'phy1-ap1' on phy 'phy1'"
+      - string: 'Rename bss phy0-ap1 to phy0-ap2'
+        result: 'Rename bss phy0-ap1 to phy0-ap2'
+    negative:
+      - 'Reloaded settings for phy phy1'
+  HOSTAPD_MESSAGE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'phy2-ap0: Unable to setup interface.'
+        result: 'phy2-ap0: Unable to setup interface.'
+      - string: 'nl80211: netlink: recvfrom failed: No buffer space available'
+        result: 'nl80211: netlink: recvfrom failed: No buffer space available'
+    negative:
+      - ''
+rules:
+  - name: hostapd
+    gate:
+      - field: PROGRAM
+        values:
+          - '//^hostapd$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - HOSTAPD_AP_STA_CONNECTED
+      - HOSTAPD_AP_STA_DISCONNECTED
+      - HOSTAPD_STA
+      - HOSTAPD_IFACE_STATE
+      # Before HOSTAPD_CTRL_EVENT, which also matches AP-ENABLED / AP-DISABLED
+      - HOSTAPD_AP_STATE
+      - HOSTAPD_STA_EVENT
+      - HOSTAPD_CTRL_EVENT
+      - HOSTAPD_PRUNE
+      - HOSTAPD_PHY_CONFIG
+      - HOSTAPD_PHY_ACTION
+      - HOSTAPD_BSS_ACTION
+      # last: matches anything, which is only safe because the rule is gated
+      - HOSTAPD_MESSAGE
+    tests:
+      positive:
+        - string: 'wlan0: AP-STA-CONNECTED aa:bb:cc:dd:ee:ff'
+          result:
+            hostapd_iface: 'wlan0'
+            hostapd_event: 'AP-STA-CONNECTED'
+            hostapd_sta: 'aa:bb:cc:dd:ee:ff'
+        - string: 'wlan0: AP-STA-DISCONNECTED aa:bb:cc:dd:ee:ff'
+          result:
+            hostapd_iface: 'wlan0'
+            hostapd_event: 'AP-STA-DISCONNECTED'
+            hostapd_sta: 'aa:bb:cc:dd:ee:ff'
+        - string: 'wlan0: STA aa:bb:cc:dd:ee:ff IEEE 802.11: associated (aid 1)'
+          result:
+            hostapd_iface: 'wlan0'
+            hostapd_sta: 'aa:bb:cc:dd:ee:ff'
+            hostapd_subsystem: 'IEEE 802.11'
+            hostapd_event: 'associated (aid 1)'
+        - string: 'wlan0: STA aa:bb:cc:dd:ee:ff IEEE 802.11: deauthenticated due to local deauth request'
+          result:
+            hostapd_iface: 'wlan0'
+            hostapd_sta: 'aa:bb:cc:dd:ee:ff'
+            hostapd_subsystem: 'IEEE 802.11'
+            hostapd_event: 'deauthenticated due to local deauth request'
+        - string: 'wlan0: STA aa:bb:cc:dd:ee:ff WPA: pairwise key handshake completed (RSN)'
+          result:
+            hostapd_iface: 'wlan0'
+            hostapd_sta: 'aa:bb:cc:dd:ee:ff'
+            hostapd_subsystem: 'WPA'
+            hostapd_event: 'pairwise key handshake completed (RSN)'
+        - string: 'wlan0: interface state ENABLED->DISABLED'
+          result:
+            hostapd_iface: 'wlan0'
+            hostapd_state_from: 'ENABLED'
+            hostapd_state_to: 'DISABLED'
+        - string: 'wlan0: AP-ENABLED'
+          result:
+            hostapd_iface: 'wlan0'
+            hostapd_event: 'AP-ENABLED'
+        - string: 'phy1-ap1: EAPOL-4WAY-HS-COMPLETED aa:bb:cc:dd:ee:ff'
+          program: 'hostapd'
+          result:
+            hostapd_iface: 'phy1-ap1'
+            hostapd_event: 'EAPOL-4WAY-HS-COMPLETED'
+            hostapd_sta: 'aa:bb:cc:dd:ee:ff'
+        - string: 'phy2-ap0: ACS-COMPLETED freq=2462 channel=11'
+          result:
+            hostapd_iface: 'phy2-ap0'
+            hostapd_event: 'ACS-COMPLETED'
+            hostapd_event_data: 'freq=2462 channel=11'
+        - string: 'phy1-ap2: Prune association for aa:bb:cc:dd:ee:ff'
+          result:
+            hostapd_iface: 'phy1-ap2'
+            hostapd_sta: 'aa:bb:cc:dd:ee:ff'
+        - string: 'Set new config for phy phy1: /var/run/hostapd-phy1.conf'
+          result:
+            hostapd_phy: 'phy1'
+            hostapd_config_file: '/var/run/hostapd-phy1.conf'
+        - string: 'Reloaded settings for phy phy1'
+          result:
+            hostapd_phy_action: 'Reloaded settings'
+            hostapd_phy: 'phy1'
+        - string: "Remove bss 'phy1-ap1' on phy 'phy1'"
+          result:
+            hostapd_bss_action: 'Remove'
+            hostapd_bss: 'phy1-ap1'
+            hostapd_phy: 'phy1'
+        # Falls through to the catch-all, keeping the interface.
+        - string: 'phy2-ap0: Unable to setup interface.'
+          result:
+            hostapd_iface: 'phy2-ap0'
+            hostapd_message: 'Unable to setup interface.'
+        # ...and one with a subsystem tag rather than an interface in front
+        - string: "hostapd_free_hapd_data: Interface phy2-ap0 wasn't started"
+          result:
+            hostapd_message: "hostapd_free_hapd_data: Interface phy2-ap0 wasn't started"
+      negative:
+        - ''
+        - string: 'wlan0: AP-STA-CONNECTED aa:bb:cc:dd:ee:ff'
+          program: 'hostapd-extra'

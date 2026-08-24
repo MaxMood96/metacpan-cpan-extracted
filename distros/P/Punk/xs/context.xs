@@ -239,6 +239,76 @@ render(self, ...)
     OUTPUT:
         RETVAL
 
+# fragment($template, \%data?, %over): render with no layout, and
+# `Cache-Control: private, no-store` on the finished response.
+#
+# A fragment is one user's data swapped into one user's page - the panel
+# PDFMake-Site rendered through a private engine - and a shared cache handing
+# it to the next visitor is a leak, so the header is the default and not a
+# reminder. The public, cacheable partial is `render` with layout => undef and
+# a Cache-Control of its own. A `layout` override here croaks: a fragment with
+# a layout is a page, and the caller wanted `render`.
+SV *
+fragment(self, ...)
+        SV *self
+    CODE:
+    {
+        AV *av  = pcx_av(aTHX_ self);
+        SV *app = pcx_get(aTHX_ av, PCX_APP);
+        int nargs = items - 1, i, n = 0;
+        SV **argv, *r, *lay;
+        if (nargs < 1)
+            croak("Punk::Context::fragment: a template name is required");
+        /* ST(1) template, ST(2) data, ST(3..) overrides - every override
+         * pair is checked for `layout` before anything is called */
+        for (i = 3; i + 1 < items; i += 2) {
+            STRLEN kl; const char *k = SvPV_const(ST(i), kl);
+            if (kl == 6 && memEQ(k, "layout", 6))
+                croak("Punk::Context::fragment: a fragment has no layout - "
+                      "to render inside one, use render(..., layout => ...)");
+        }
+        /* self, template, data (undef if not given), overrides, layout, undef */
+        Newx(argv, nargs + 4, SV *);
+        argv[n++] = self;
+        argv[n++] = ST(1);
+        argv[n++] = items > 2 ? ST(2) : &PL_sv_undef;
+        for (i = 3; i < items; i++) argv[n++] = ST(i);
+        lay = sv_2mortal(newSVpvs("layout"));
+        argv[n++] = lay;
+        argv[n++] = &PL_sv_undef;
+        r = pcx_call_meth(aTHX_ app ? app : &PL_sv_undef, "render_view",
+                          argv, n, 1);
+        Safefree(argv);
+        if (!r) r = newSV(0);
+        /* the header: replace an existing Cache-Control, else append one */
+        if (SvROK(r) && SvTYPE(SvRV(r)) == SVt_PVAV) {
+            SV **hp = av_fetch((AV *)SvRV(r), 1, 0);
+            if (hp && *hp && SvROK(*hp) && SvTYPE(SvRV(*hp)) == SVt_PVAV) {
+                AV *hd = (AV *)SvRV(*hp);
+                SSize_t j, hn = av_len(hd) + 1;
+                int found = 0;
+                for (j = 0; j + 1 < hn; j += 2) {
+                    SV **nm = av_fetch(hd, j, 0);
+                    STRLEN nl; const char *np;
+                    if (!(nm && *nm && SvOK(*nm))) continue;
+                    np = SvPV_const(*nm, nl);
+                    if (nl == 13 && foldEQ(np, "Cache-Control", (I32)13)) {
+                        SV **vp = av_fetch(hd, j + 1, 1);
+                        if (vp && *vp) sv_setpvs(*vp, "private, no-store");
+                        found = 1;
+                    }
+                }
+                if (!found) {
+                    av_push(hd, newSVpvs("Cache-Control"));
+                    av_push(hd, newSVpvs("private, no-store"));
+                }
+            }
+        }
+        RETVAL = r;
+    }
+    OUTPUT:
+        RETVAL
+
 # ---- finished responses ------------------------------------------------------
 
 SV *
@@ -312,6 +382,125 @@ origin(self)
         int st = 0;
         SV *o = pk_origin_of(aTHX_ self, &st);
         RETVAL = o ? o : newSV(0);
+    }
+    OUTPUT:
+        RETVAL
+
+# $c->url_for($name, %args) - the URL of a named route.
+#
+#     $c->url_for('book', id => 42)                 # /books/42
+#     $c->url_for('book', id => 42, page => 2)      # /books/42?page=2
+#     $c->url_for('book', id => 42, absolute => 1)  # https://example.com/books/42
+#
+# An argument naming a capture fills that segment; anything left over is the
+# query string, keys sorted. `absolute` and `query` are reserved words rather
+# than captures - phase 0 refuses them as route names for that reason.
+#
+# Every result carries the application's prefix: the path on `host` and then
+# SCRIPT_NAME, which are layers rather than alternatives (a proxy strips one,
+# a PSGI mount adds the other, and the browser sees both). A relative URL is
+# an href resolved against a page that is already under the prefix, so it
+# needs the prefix exactly as much as an absolute one does.
+#
+# `absolute` joins $c->origin, which is the canonical origin unless the
+# request's Host is on the allowlist and is never the raw header - so a link
+# built here and mailed cannot be poisoned by a crafted Host.
+SV *
+url_for(self, name, ...)
+        SV *self
+        SV *name
+    CODE:
+    {
+        AV *av = pcx_av(aTHX_ self);
+        SV *appsv = pcx_get(aTHX_ av, PCX_APP);
+        HV *h, *args, *query = NULL;
+        SV *namesv, *routersv, *prefix = NULL, *origin = NULL;
+        HE *he;
+        SV *val;
+        IV absolute = 0;
+        int i;
+
+        if ((items - 2) % 2)
+            croak("Punk: url_for takes a route name then key => value pairs");
+        if (!SvOK(name) || !SvCUR(name))
+            croak("Punk: url_for needs a route name");
+        if (!(appsv && SvROK(appsv) && SvTYPE(SvRV(appsv)) == SVt_PVHV))
+            croak("Punk: url_for: no application on this context");
+        h = (HV *)SvRV(appsv);
+
+        args = (HV *)sv_2mortal((SV *)newHV());
+        for (i = 2; i + 1 < items; i += 2) {
+            STRLEN kl;
+            const char *k = SvPV_const(ST(i), kl);
+            if (kl == 8 && memEQ(k, "absolute", 8)) {
+                absolute = SvTRUE(ST(i + 1)) ? 1 : 0;
+                continue;
+            }
+            if (kl == 5 && memEQ(k, "query", 5)) {
+                SV *q = ST(i + 1);
+                if (!(SvROK(q) && SvTYPE(SvRV(q)) == SVt_PVHV))
+                    croak("Punk: url_for('%s'): `query` takes a hashref",
+                          SvPV_nolen(name));
+                query = (HV *)SvRV(q);
+                continue;
+            }
+            (void)hv_store(args, k, (I32)kl, newSVsv(ST(i + 1)), 0);
+        }
+
+        namesv = app_get(aTHX_ h, K_NAMES_C);
+        he = (namesv && SvROK(namesv) && SvTYPE(SvRV(namesv)) == SVt_PVHV)
+             ? hv_fetch_ent((HV *)SvRV(namesv), name, 0, 0) : NULL;
+        if (!he)
+            croak("Punk: url_for: no route is named '%s' - a name is "
+                  "declared with { name => '...' } on the route, and it is "
+                  "one namespace for the whole application",
+                  SvPV_nolen(name));
+        val = HeVAL(he);
+
+        routersv = app_get(aTHX_ h, K_ROUTER);
+        if (!(routersv && SvROK(routersv)))
+            croak("Punk: url_for: this application is not compiled");
+
+        {   /* prefix = the path on `host`, then SCRIPT_NAME */
+            SV *hp = app_get(aTHX_ h, K_HOST_PATH_C);
+            SV *envsv = pcx_get(aTHX_ av, PCX_ENV);
+            SV **sn = (envsv && SvROK(envsv) && SvTYPE(SvRV(envsv)) == SVt_PVHV)
+                      ? hv_fetchs((HV *)SvRV(envsv), "SCRIPT_NAME", 0) : NULL;
+            int have_hp = (hp && SvOK(hp) && SvCUR(hp));
+            int have_sn = (sn && *sn && SvOK(*sn) && SvCUR(*sn));
+            if (have_hp || have_sn) {
+                prefix = sv_2mortal(newSVpvs(""));
+                if (have_hp) sv_catsv(prefix, hp);
+                if (have_sn) sv_catsv(prefix, *sn);
+            }
+        }
+
+        if (absolute) {
+            int st = 0;
+            origin = pk_origin_of(aTHX_ self, &st);
+            if (!origin)
+                croak("Punk: url_for('%s', absolute => 1): the application "
+                      "declared no `host`, and the request's Host is not "
+                      "something a link may be built on - declare "
+                      "host 'https://example.com'", SvPV_nolen(name));
+            sv_2mortal(origin);
+        }
+
+        /* A route's entry is a record index; an API operation's is a
+         * reference to [ mount prefix, parsed template ]. One table, two
+         * kinds of route, and the shape says which. */
+        if (SvROK(val) && SvTYPE(SvRV(val)) == SVt_PVAV) {
+            AV *pair = (AV *)SvRV(val);
+            SV **mp = av_fetch(pair, 0, 0);
+            SV **tm = av_fetch(pair, 1, 0);
+            RETVAL = pk_url_build_op(aTHX_
+                        (AV *)SvRV(*tm), (mp && *mp) ? *mp : NULL,
+                        args, query, prefix, origin, SvPV_nolen(name));
+        }
+        else
+            RETVAL = pk_url_build(aTHX_ punk_router_of(aTHX_ routersv),
+                                  SvIV(val), args, query, prefix, origin,
+                                  SvPV_nolen(name));
     }
     OUTPUT:
         RETVAL

@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use XSLoader ();
 
-our $VERSION = '0.03';
+our $VERSION = '0.05';
 
 XSLoader::load('ClamAV::Clamd', $VERSION);
 
@@ -120,13 +120,19 @@ True if clamd answered C<PONG>, undef otherwise with L</error> set.
 
 clamd's version string, or undef.
 
+A clamd whose clamd.conf says C<EnableVersionCommand no> (ClamAV 1.5 and
+later can) refuses with C<COMMAND UNAVAILABLE>. That comes back as undef
+with L</error_code> C<ERR_UNAVAILABLE>, never as the string.
+
 =head2 stats
 
-The C<STATS> reply, or undef.
+The C<STATS> reply, or undef. Undef with C<ERR_UNAVAILABLE> when clamd.conf
+has C<EnableStatsCommand no>.
 
 =head2 reload
 
-Asks clamd to reload its signature database. True if it accepted.
+Asks clamd to reload its signature database. True if it accepted; undef
+with C<ERR_UNAVAILABLE> when clamd.conf has C<EnableReloadCommand no>.
 
 Reloading is normally the operator's business, and a client that calls
 this on a timer is picking a fight with whatever else manages that
@@ -407,8 +413,9 @@ The message from the last failed command, or undef if it succeeded.
 =head2 error_code
 
 The code for that failure: C<ERR_CONNECT>, C<ERR_TIMEOUT>, C<ERR_IO>,
-C<ERR_TOOBIG>, C<ERR_CONFIG>, C<ERR_CLOSED>, C<ERR_NOTREG> or
-C<ERR_NOFDPASS>. Compare against these rather than matching on message
+C<ERR_TOOBIG>, C<ERR_CONFIG>, C<ERR_CLOSED>, C<ERR_NOTREG>,
+C<ERR_NOFDPASS>, C<ERR_STREAMCUT>, C<ERR_TOOBIGLOCAL> or
+C<ERR_UNAVAILABLE>. Compare against these rather than matching on message
 text.
 
 =head2 have_fd_passing
@@ -423,6 +430,15 @@ undef when it could not get an answer, and sets both L</error> and a
 non-zero L</error_code>. A timeout, a refused connection, a peer that
 closed mid-reply and a reply that exceeded C<reply_max> are all failures
 to answer, never answers.
+
+=head1 TESTING AGAINST A REAL CLAMD
+
+The test suite runs against a fake clamd and needs no ClamAV installed.
+C<t/30-live.t> talks to a real daemon and is opt-in: set C<CLAMD_LIVE=1>
+to run it against a clamd found at the usual socket paths, or name one
+with C<CLAMD_SOCKET=/path/to/clamd.ctl> or C<CLAMD_HOST=host> (and
+C<CLAMD_PORT>, default 3310). A daemon that has C<VERSION> or C<STATS>
+switched off passes with those checks skipped.
 
 =head1 AUTHOR
 

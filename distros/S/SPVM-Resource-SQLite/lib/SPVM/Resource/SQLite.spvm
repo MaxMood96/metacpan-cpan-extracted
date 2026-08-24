@@ -2,5 +2,5 @@
 # MIT License
 
 class Resource::SQLite {
-  version "0.003";
+  version "0.004";
 }

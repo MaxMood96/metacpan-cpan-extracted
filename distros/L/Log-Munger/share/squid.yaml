@@ -1,0 +1,258 @@
+---
+# Squid enrichment, covering both logs.
+#
+# access.log, in all three of the layouts squid ships:
+#   logformat squid     <time.msec> <elapsed> <client_ip> <result_code>/<status>
+#                       <bytes> <method> <url> <user> <hierarchy>/<peer> <type>
+#   logformat common    apache CLF, then <result_code>:<hierarchy>
+#   logformat combined  apache combined, then <result_code>:<hierarchy>
+#
+# The access rule is gateless and anchored, so it works both for raw lines fed
+# straight in (process_item(item => $line)) and for syslog-delivered logs.
+#
+# cache.log gets a second rule, and that one is gated on PROGRAM. Its patterns
+# have to be loose, since a cache.log line is a severity and free text and
+# nothing more structural, and a loose pattern on a gateless rule would match
+# other daemons' lines whenever squid was among the loaded rule files. The gate
+# is what makes being loose safe.
+includes:
+- base
+vars:
+  # contents of a "double quoted" field (no embedded quotes)
+  SQUID_QS: '[^"]*'
+vars_templated:
+  SQUID_ACCESS: '(?<squid_timestamp>[% NUMBER %]) +(?<squid_elapsed>[% INT %]) (?<squid_client_ip>[% IP %]) (?<squid_result_code>[% NOTSPACE %])/(?<squid_status>[% INT %]) (?<squid_bytes>[% INT %]) (?<squid_method>[% WORD %]) (?<squid_url>[% NOTSPACE %]) (?<squid_user>[% NOTSPACE %]) (?<squid_hierarchy>[% NOTSPACE %])/(?<squid_peer>[% NOTSPACE %]) (?<squid_content_type>[% NOTSPACE %])'
+  # The apache-shaped half of squid''s common and combined layouts, up to the
+  # byte count. Split out because combined wedges the quoted referrer and
+  # user-agent between this and the tail rather than appending them.
+  SQUID_HTTP_HEAD: '(?<squid_client_ip>[% IP %]) (?<squid_ident>[% NOTSPACE %]) (?<squid_user>[% NOTSPACE %]) \[(?<squid_timestamp>[% HTTPDATE %])\] "(?<squid_method>[% WORD %]) (?<squid_url>[% NOTSPACE %])(?: HTTP/(?<squid_httpversion>[% NUMBER %]))?" (?<squid_status>[% INT %]) (?<squid_bytes>[% INT %])'
+  # The "%Ss:%Sh" tail, e.g. "TCP_MISS:HIER_DIRECT".
+  #
+  # Required rather than optional, deliberately. Without it these patterns
+  # would match a plain apache access line, and since the access rule is
+  # gateless they would then steal those lines from http_access_logs whenever
+  # both files were loaded and squid came first. The tail is what makes a
+  # squid line a squid line.
+  SQUID_HTTP_TAIL: '(?<squid_result_code>[% NOTSPACE %]):(?<squid_hierarchy>[% NOTSPACE %])'
+  SQUID_COMMON: '[% SQUID_HTTP_HEAD %] [% SQUID_HTTP_TAIL %]'
+  SQUID_COMBINED: '[% SQUID_HTTP_HEAD %] "(?<squid_referrer>[% SQUID_QS %])" "(?<squid_agent>[% SQUID_QS %])" [% SQUID_HTTP_TAIL %]'
+  # cache.log. Under SMP squid prefixes each line with the kid that wrote it.
+  #
+  # "kid1| WARNING: Cannot write log file: /var/log/squid/access.log"
+  SQUID_CACHE_LEVEL: '(?:(?<squid_kid>kid[% INT %])\| *)?(?<squid_level>WARNING|ERROR|FATAL|CRITICAL|SECURITY ALERT|SECURITY NOTICE): (?<squid_message>[% GREEDYDATA %])'
+  # Anything else squid said. Last resort, and the reason the cache rule is
+  # gated: it matches everything. An unrecognised cache.log line still comes
+  # back with its text in a named field rather than as no match at all, which
+  # is the difference between a quiet log and a log nobody is reading.
+  #
+  # The message is ".+" rather than the usual GREEDYDATA ".*" so that an empty
+  # MESSAGE is still a miss. There is nothing to capture out of one, and a
+  # pattern with no string it will refuse cannot be tested.
+  SQUID_CACHE: '(?:(?<squid_kid>kid[% INT %])\| *)?(?<squid_message>.+)'
+vars_tests:
+  SQUID_ACCESS:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '1626345600.123 234 192.0.2.5 TCP_MISS/200 1234 GET http://example.com/ - DIRECT/93.184.216.34 text/html'
+        result: '1626345600.123 234 192.0.2.5 TCP_MISS/200 1234 GET http://example.com/ - DIRECT/93.184.216.34 text/html'
+      - string: '1626345601.000 5 198.51.100.9 TCP_DENIED/403 210 GET http://blocked.example/ neti NONE/- text/html'
+        result: '1626345601.000 5 198.51.100.9 TCP_DENIED/403 210 GET http://blocked.example/ neti NONE/- text/html'
+    negative:
+      - 'this is not a squid access log line'
+  SQUID_QS:
+    test_template: '"(?<TEST>[% TEST_VAR %])"'
+    positive:
+      - string: '"Mozilla/5.0 (X11)"'
+        result: 'Mozilla/5.0 (X11)'
+      - string: '"-"'
+        result: '-'
+    negative:
+      - 'no surrounding quotes'
+  SQUID_HTTP_TAIL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'TCP_MISS:HIER_DIRECT'
+        result: 'TCP_MISS:HIER_DIRECT'
+      - string: 'TCP_DENIED:HIER_NONE'
+        result: 'TCP_DENIED:HIER_NONE'
+    negative:
+      # the native layout separates these with a slash, not a colon
+      - 'TCP_MISS/HIER_DIRECT'
+  SQUID_HTTP_HEAD:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.5 - neti [15/Jul/2026:10:00:00 +0000] "GET http://example.com/ HTTP/1.1" 200 1234'
+        result: '192.0.2.5 - neti [15/Jul/2026:10:00:00 +0000] "GET http://example.com/ HTTP/1.1" 200 1234'
+      - string: '192.0.2.5 - - [15/Jul/2026:10:00:00 +0000] "CONNECT example.com:443 HTTP/1.1" 200 0'
+        result: '192.0.2.5 - - [15/Jul/2026:10:00:00 +0000] "CONNECT example.com:443 HTTP/1.1" 200 0'
+    negative:
+      - 'this is not an access log line'
+  SQUID_COMMON:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.5 - neti [15/Jul/2026:10:00:00 +0000] "GET http://example.com/ HTTP/1.1" 200 1234 TCP_MISS:HIER_DIRECT'
+        result: '192.0.2.5 - neti [15/Jul/2026:10:00:00 +0000] "GET http://example.com/ HTTP/1.1" 200 1234 TCP_MISS:HIER_DIRECT'
+    negative:
+      # a plain apache line has no squid tail, and must not be taken for one
+      - '127.0.0.1 - frank [10/Oct/2000:13:55:36 -0700] "GET /a.gif HTTP/1.0" 200 2326'
+  SQUID_COMBINED:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: '192.0.2.5 - neti [15/Jul/2026:10:00:00 +0000] "GET http://example.com/ HTTP/1.1" 200 1234 "http://ref.example/" "Mozilla/5.0" TCP_MISS:HIER_DIRECT'
+        result: '192.0.2.5 - neti [15/Jul/2026:10:00:00 +0000] "GET http://example.com/ HTTP/1.1" 200 1234 "http://ref.example/" "Mozilla/5.0" TCP_MISS:HIER_DIRECT'
+    negative:
+      # apache combined, again with no squid tail
+      - '127.0.0.1 - frank [10/Oct/2000:13:55:36 -0700] "GET /a.gif HTTP/1.0" 200 2326 "-" "Mozilla/5.0"'
+  SQUID_CACHE_LEVEL:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'WARNING: Cannot write log file: /var/log/squid/access.log'
+        result: 'WARNING: Cannot write log file: /var/log/squid/access.log'
+      - string: 'kid1| ERROR: Unsupported method in request'
+        result: 'kid1| ERROR: Unsupported method in request'
+      - string: 'SECURITY ALERT: Host header forgery detected'
+        result: 'SECURITY ALERT: Host header forgery detected'
+    negative:
+      - 'Ready to serve requests.'
+  SQUID_CACHE:
+    test_template: '^(?<TEST>[% TEST_VAR %])$'
+    positive:
+      - string: 'Ready to serve requests.'
+        result: 'Ready to serve requests.'
+      - string: 'kid1| Starting Squid Cache version 6.6 for x86_64-pc-linux-gnu'
+        result: 'kid1| Starting Squid Cache version 6.6 for x86_64-pc-linux-gnu'
+    negative:
+      # this one matches anything non-empty, so the only negative it can have
+      # is the empty string
+      - ''
+geoip:
+- squid_client_ip
+convert:
+  squid_elapsed: int
+  squid_status: int
+  squid_bytes: int
+rules:
+  - name: squid_access
+    field: MESSAGE
+    anchored: true
+    geoip:
+      - squid_client_ip
+    patterns:
+      - SQUID_ACCESS
+      # combined before common: combined is common plus two quoted fields, so
+      # common would match its head and then fail on the leftovers, and there
+      # is no reason to make the engine find that out the long way
+      - SQUID_COMBINED
+      - SQUID_COMMON
+    tests:
+      positive:
+        - string: '1626345600.123 234 192.0.2.5 TCP_MISS/200 1234 GET http://example.com/ - DIRECT/93.184.216.34 text/html'
+          numeric:
+            - squid_bytes
+            - squid_elapsed
+            - squid_status
+          result:
+            squid_timestamp: '1626345600.123'
+            squid_elapsed: '234'
+            squid_client_ip: '192.0.2.5'
+            squid_result_code: 'TCP_MISS'
+            squid_status: '200'
+            squid_bytes: '1234'
+            squid_method: 'GET'
+            squid_url: 'http://example.com/'
+            squid_user: '-'
+            squid_hierarchy: 'DIRECT'
+            squid_peer: '93.184.216.34'
+            squid_content_type: 'text/html'
+        - string: '1626345601.000 5 198.51.100.9 TCP_DENIED/403 210 GET http://blocked.example/ neti NONE/- text/html'
+          result:
+            squid_timestamp: '1626345601.000'
+            squid_elapsed: '5'
+            squid_client_ip: '198.51.100.9'
+            squid_result_code: 'TCP_DENIED'
+            squid_status: '403'
+            squid_bytes: '210'
+            squid_method: 'GET'
+            squid_url: 'http://blocked.example/'
+            squid_user: 'neti'
+            squid_hierarchy: 'NONE'
+            squid_peer: '-'
+            squid_content_type: 'text/html'
+        - string: '192.0.2.5 - neti [15/Jul/2026:10:00:00 +0000] "GET http://example.com/ HTTP/1.1" 200 1234 "http://ref.example/" "Mozilla/5.0" TCP_MISS:HIER_DIRECT'
+          result:
+            squid_client_ip: '192.0.2.5'
+            squid_ident: '-'
+            squid_user: 'neti'
+            squid_timestamp: '15/Jul/2026:10:00:00 +0000'
+            squid_method: 'GET'
+            squid_url: 'http://example.com/'
+            squid_httpversion: '1.1'
+            squid_status: '200'
+            squid_bytes: '1234'
+            squid_referrer: 'http://ref.example/'
+            squid_agent: 'Mozilla/5.0'
+            squid_result_code: 'TCP_MISS'
+            squid_hierarchy: 'HIER_DIRECT'
+        - string: '192.0.2.5 - - [15/Jul/2026:10:00:00 +0000] "CONNECT example.com:443 HTTP/1.1" 200 0 TCP_TUNNEL:HIER_DIRECT'
+          result:
+            squid_client_ip: '192.0.2.5'
+            squid_ident: '-'
+            squid_user: '-'
+            squid_timestamp: '15/Jul/2026:10:00:00 +0000'
+            squid_method: 'CONNECT'
+            squid_url: 'example.com:443'
+            squid_httpversion: '1.1'
+            squid_status: '200'
+            squid_bytes: '0'
+            squid_result_code: 'TCP_TUNNEL'
+            squid_hierarchy: 'HIER_DIRECT'
+      negative:
+        - 'this is not a squid access log line at all'
+        - 'Jul 15 10:00:00 host sshd[123]: Accepted publickey for neti'
+        # an apache line: squid must not claim it, since this rule is gateless
+        - '127.0.0.1 - frank [10/Oct/2000:13:55:36 -0700] "GET /a.gif HTTP/1.0" 200 2326 "-" "Mozilla/5.0"'
+  # cache.log. Gated, because its patterns match far too much to be let loose
+  # on every record the way the access rule is.
+  - name: squid_cache
+    gate:
+      - field: PROGRAM
+        values:
+          - squid
+          - '//^\(squid(?:-[0-9]+)?\)$//'
+    field: MESSAGE
+    anchored: true
+    patterns:
+      - SQUID_CACHE_LEVEL
+      - SQUID_CACHE
+    tests:
+      positive:
+        - string: 'WARNING: Cannot write log file: /var/log/squid/access.log'
+          program: '(squid)'
+          result:
+            squid_level: 'WARNING'
+            squid_message: 'Cannot write log file: /var/log/squid/access.log'
+        - string: 'kid1| ERROR: Unsupported method in request'
+          program: '(squid-8)'
+          result:
+            squid_kid: 'kid1'
+            squid_level: 'ERROR'
+            squid_message: 'Unsupported method in request'
+        - string: 'SECURITY ALERT: Host header forgery detected'
+          result:
+            squid_level: 'SECURITY ALERT'
+            squid_message: 'Host header forgery detected'
+        # no severity, so the catch-all keeps the text rather than dropping it
+        - string: 'Ready to serve requests.'
+          program: 'squid'
+          result:
+            squid_message: 'Ready to serve requests.'
+        - string: 'kid1| Starting Squid Cache version 6.6 for x86_64-pc-linux-gnu'
+          result:
+            squid_kid: 'kid1'
+            squid_message: 'Starting Squid Cache version 6.6 for x86_64-pc-linux-gnu'
+      negative:
+        # the catch-all takes anything with text in it, so the empty string is
+        # the only thing this rule can refuse
+        - ''
+        - string: 'WARNING: Cannot write log file: /var/log/squid/access.log'
+          program: 'squid-extra'

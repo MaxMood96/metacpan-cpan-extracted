@@ -62,6 +62,8 @@
       },
       "test" : {
          "requires" : {
+            "HTTP::Server::PSGI" : "0",
+            "Plack::LWPish" : "0",
             "Test::More" : "0.98"
          }
       }
@@ -72,7 +74,7 @@
       },
       "PlackX::Framework" : {
          "file" : "lib/PlackX/Framework.pm",
-         "version" : "0.33"
+         "version" : "0.34"
       },
       "PlackX::Framework::Config" : {
          "file" : "lib/PlackX/Framework/Config.pm"
@@ -117,7 +119,7 @@
          "web" : "https://github.com/dstroma/PlackX-Framework"
       }
    },
-   "version" : "0.33",
+   "version" : "0.34",
    "x_serialization_backend" : "JSON::PP version 4.16",
    "x_static_install" : 1
 }
