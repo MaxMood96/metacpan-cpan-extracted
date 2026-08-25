@@ -76,6 +76,43 @@ $t->get_ok('/probe');
 
     like +Punk::Plugin::TOTP::state_for('T')->{issuer},
         qr/test\.example/, 'config frozen under the app class';
+
+    my $cfg = Punk::Plugin::TOTP::state_for('T');
+    is $cfg->{attempts}, 5, 'attempts defaults to 5';
+    is $cfg->{attempt_window}, 900, 'attempt_window defaults to 900';
+    is $cfg->{fields}{failed}, 'totp_failed',
+        'the attempt count has a default column';
+    is $cfg->{fields}{failed_at}, 'totp_failed_at',
+        'and so does the epoch that dates it';
+}
+
+# both of these fail in a direction that is hard to spot from the outside: no
+# attempts locks every account out for good, and no window means every failure
+# has already lapsed, which is a limit that never counts
+{
+    package BadAttempts;
+    use Punk;
+    session secret => 'x' x 32;
+    package BadWindow;
+    use Punk;
+    session secret => 'x' x 32;
+    package main;
+
+    my %bad = (
+        BadAttempts => [ attempts       => 0, qr/attempts must be 1 or more/ ],
+        BadWindow   => [ attempt_window => 0,
+                         qr/attempt_window must be 1 second or more/ ],
+    );
+    for my $app (sort keys %bad) {
+        my ($k, $val, $re) = @{ $bad{$app} };
+        my $err = do {
+            local $@;
+            eval { $app->punk_app->plugin('TOTP',
+                       { issuer => 'x', $k => $val }) };
+            $@;
+        };
+        like $err, $re, "$k => $val croaks at boot";
+    }
 }
 
 # ---- the helpers -----------------------------------------------------------

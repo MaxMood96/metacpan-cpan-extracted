@@ -26,6 +26,17 @@ include/ptotp/ptotp_otp.h
 include/ptotp/ptotp_plugin.h
 include/ptotp/ptotp_rand.h
 lib/Punk/Plugin/TOTP.pm
+lib/Punk/Plugin/TOTP/sqitch/mysql/deploy/totp.sql
+lib/Punk/Plugin/TOTP/sqitch/mysql/revert/totp.sql
+lib/Punk/Plugin/TOTP/sqitch/mysql/verify/totp.sql
+lib/Punk/Plugin/TOTP/sqitch/pg/deploy/totp.sql
+lib/Punk/Plugin/TOTP/sqitch/pg/revert/totp.sql
+lib/Punk/Plugin/TOTP/sqitch/pg/verify/totp.sql
+lib/Punk/Plugin/TOTP/sqitch/sqitch.conf
+lib/Punk/Plugin/TOTP/sqitch/sqitch.plan
+lib/Punk/Plugin/TOTP/sqitch/sqlite/deploy/totp.sql
+lib/Punk/Plugin/TOTP/sqitch/sqlite/revert/totp.sql
+lib/Punk/Plugin/TOTP/sqitch/sqlite/verify/totp.sql
 lib/Punk/TOTP.pm
 t/00-load.t
 t/01-hotp.t
@@ -36,6 +47,7 @@ t/05-uri-secret.t
 t/06-plugin.t
 t/07-recovery.t
 t/08-challenge.t
+t/09-sqitch.t
 t/manifest.t
 t/pod-coverage.t
 t/pod.t

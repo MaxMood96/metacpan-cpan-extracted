@@ -18,6 +18,7 @@ include/stencil_buf.h
 include/stencil_compile.h
 include/stencil_engine.h
 include/stencil_escape.h
+include/stencil_expfix.h
 include/stencil_filters.h
 include/stencil_render.h
 include/stencil_types.h

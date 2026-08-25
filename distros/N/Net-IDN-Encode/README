@@ -6,7 +6,7 @@ OVERVIEW
   Net::IDN::UTS46    --	Unicode IDNA Compatibility Processing
 			(UTS #46)
 
-  Net::IDN::Punycode -- ASCII-compatible encoding of Unicode 
+  Net::IDN::Punycode -- ASCII-compatible encoding of Unicode
   			(Punycode, RFC 3492)
 
 INSTALLATION
@@ -26,9 +26,23 @@ DEPENDENCIES
 
 AUTHOR
 
-  Claus Färber <CFAERBER@cpan.org>
+  Claus Färber
+
+  Currently maintained by Robert Rothenberg <perl@rhizomnic.com> and Paul Johnson <paul@pjcj.net>.
 
 ACKNOWLEDGMENTS
 
-  Tatsuhiko Miyagawa <miyagawa@bulknews.net>
-  Robert Urban <urban@UNIX-Beratung.de>
+  Alexander Bluhm
+  Andreas Koenig
+  Christian Walde
+  Csillag Tamas
+  Daniel Muey
+  David Steinbrunner
+  Felix Antonius Wilhelm Ostmann
+  Gregor Herrmann
+  Karen Etheridge
+  Loïc Etienne
+  Robert Urban
+  Shin Kojima
+  Tatsuhiko Miyagawa
+  Victor Efimov

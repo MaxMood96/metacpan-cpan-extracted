@@ -70,11 +70,16 @@ static const fetch_abi *pox_fetch(pTHX) {
   if (!POX_FETCH) {
     IV p = pox_call_abi_ptr(aTHX_ "require Fetch;", "Fetch::_abi_ptr");
     const fetch_abi *a = p ? INT2PTR(const fetch_abi *, p) : NULL;
-    if (a && a->abi_version >= FETCH_ABI_VERSION) POX_FETCH = a;
+    /* Against the version whose members this file calls (`request`, v1),
+     * NOT the installed header's FETCH_ABI_VERSION - see pox_jws above.
+     * Compiling against a newer header must not raise the runtime
+     * requirement of code that never touches the new members. */
+#define POX_FETCH_NEED 1
+    if (a && a->abi_version >= POX_FETCH_NEED) POX_FETCH = a;
   }
   if (!POX_FETCH)
     croak("Punk::OAuth2: Fetch with a compatible C ABI is required "
-          "(FETCH_ABI_VERSION %d)", FETCH_ABI_VERSION);
+          "(fetch_abi version %d or newer)", POX_FETCH_NEED);
   return POX_FETCH;
 }
 

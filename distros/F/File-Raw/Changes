@@ -1,5 +1,9 @@
 Revision history for File-Raw
 
+0.15    2026-08-24
+        - Windows/MSVC: export the plugin registry and dispatch API from
+          Raw.dll.
+
 0.14    2026-07-07
         - Fix Perl 5.12.x build failure: add op_contextualize compat macro
           in include/file_compat.h

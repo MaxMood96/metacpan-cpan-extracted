@@ -4,7 +4,7 @@
       "John Napiorkowski <jjnapiork@cpan.org>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Dist::Zilla version 6.032, CPAN::Meta::Converter version 2.150010",
+   "generated_by" : "Dist::Zilla version 6.037, CPAN::Meta::Converter version 2.150010",
    "license" : [
       "artistic_2"
    ],
@@ -18,6 +18,7 @@
          "examples"
       ],
       "package" : [
+         "PAGI::Server::AppNormalizer",
          "PAGI::Server::Protocol::HTTP2::Session"
       ]
    },
@@ -41,7 +42,7 @@
             "Future::IO" : "0.23",
             "IO::Async::SSL" : "0.25",
             "IO::Socket::SSL" : "2.074",
-            "Net::HTTP2::nghttp2" : "0.008"
+            "Net::HTTP2::nghttp2" : "0.009"
          },
          "requires" : {
             "Future" : "0.50",
@@ -77,9 +78,9 @@
          "web" : "https://github.com/jjn1056/pagi-server"
       }
    },
-   "version" : "0.002006",
-   "x_generated_by_perl" : "v5.40.0",
-   "x_serialization_backend" : "Cpanel::JSON::XS version 4.38",
+   "version" : "0.002007",
+   "x_generated_by_perl" : "v5.42.2",
+   "x_serialization_backend" : "Cpanel::JSON::XS version 4.42",
    "x_spdx_expression" : "Artistic-2.0"
 }
 

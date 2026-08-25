@@ -1,8 +1,12 @@
 Revision history for QR::Code
 
-0.02    2026-08-21
-        - Lower the minimum perl to 5.10 
-        - Spell G_LIST as G_ARRAY on perls before 5.36, which lacked the name
+0.04    2026-08-24
+        - Return _abi_ptr as a UV, not an IV.
+
+0.03    2026-08-21
+        - Add qr_abi.h version 2: capacity, the styled serialiser, and the
+          centre logo, reachable from C without calling back into Perl
+        - Calibrate the style floors: dot scale 0.30, contrast ratio 0.40
 
 0.02    2026-08-21
         - Lower the minimum perl to 5.10 

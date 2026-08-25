@@ -20,10 +20,6 @@
 #ifndef PUNK_CONFIG_H
 #define PUNK_CONFIG_H
 
-#define PC_SECRETS_OFF    0
-#define PC_SECRETS_WARN   1
-#define PC_SECRETS_STRICT 2
-
 typedef struct punk_config {
     HV *public;      /* redacted copy                      */
     HV *resolved;    /* real values                        */
@@ -31,7 +27,6 @@ typedef struct punk_config {
     AV *files;       /* the layers actually read           */
     SV *file;        /* the base path as given             */
     SV *env;         /* environment name                   */
-    int mode;        /* PC_SECRETS_*                       */
 } punk_config;
 
 static punk_config *punk_config_of(pTHX_ SV *self) {
@@ -212,96 +207,11 @@ static SV *pc_resolve(pTHX_ SV *key, SV *arg, const char *where) {
         return out;
     }
     if (klen == 8 && memEQ(k, "$literal", 8))
-        return newSVsv(arg);      /* deliberate plaintext; skips the guard */
+        return newSVsv(arg);      /* deliberate plaintext, spelled out */
 
     croak("Punk::Config: %s uses an unknown resolver '%s' "
           "(known: $env, $exec, $file, $literal)", where, k);
     return NULL;   /* not reached */
-}
-
-/* ---- the guardrail --------------------------------------------------------
- * A plaintext value under a secret-shaped key is almost always a mistake -
- * the whole point of the reference syntax is that it need not happen. */
-/* A key that names WHERE something secret-shaped lives, not the thing
- * itself: `token_model`, `password_field`, `secret_path`. The value is a
- * model name, a column, a file location - structural, never a secret. */
-static int pc_structural_suffix(const char *buf, STRLEN len) {
-    static const char *const sfx[] = {
-        "_model", "_class", "_table", "_field", "_fields", "_column",
-        "_header", "_cookie", "_path", "_dir", "_name", "_kind", "_key_name",
-    };
-    size_t i;
-    for (i = 0; i < sizeof sfx / sizeof sfx[0]; i++) {
-        size_t sl = strlen(sfx[i]);
-        if (len > sl && memEQ(buf + len - sl, sfx[i], sl)) return 1;
-    }
-    return 0;
-}
-
-static int pc_secretish(const char *key, STRLEN len) {
-    char buf[64];
-    STRLEN i;
-    if (len >= sizeof buf) len = sizeof(buf) - 1;
-    for (i = 0; i < len; i++) buf[i] = (char)toLOWER((U8)key[i]);
-    buf[len] = '\0';
-    /* "auth" only as the whole key: an "author" field is not a secret */
-    if (strEQ(buf, "auth")) return 1;
-    if (pc_structural_suffix(buf, len)) return 0;
-    return strstr(buf, "pass")       != NULL
-        || strstr(buf, "secret")     != NULL
-        || strstr(buf, "token")      != NULL
-        || strstr(buf, "apikey")     != NULL
-        || strstr(buf, "api_key")    != NULL
-        || strstr(buf, "api-key")    != NULL
-        || strstr(buf, "privatekey") != NULL
-        || strstr(buf, "private_key")!= NULL
-        || strstr(buf, "credential") != NULL;
-}
-
-/* A dsn with the password inline is the other common way to leak one. */
-static int pc_dsn_with_password(pTHX_ const char *key, STRLEN klen,
-                                SV *value) {
-    STRLEN vlen;
-    const char *v;
-    if (!(klen == 3 && (key[0] == 'd' || key[0] == 'D')
-                    && (key[1] == 's' || key[1] == 'S')
-                    && (key[2] == 'n' || key[2] == 'N')))
-        return 0;
-    if (!SvOK(value) || SvROK(value)) return 0;
-    v = SvPV_const(value, vlen);
-    {   /* case-insensitive search for "password=" */
-        STRLEN i;
-        const char *needle = "password=";
-        for (i = 0; i + 9 <= vlen; i++) {
-            STRLEN j;
-            for (j = 0; j < 9; j++)
-                if (toLOWER((U8)v[i + j]) != needle[j]) break;
-            if (j == 9) return 1;
-        }
-    }
-    return 0;
-}
-
-static void pc_guard(pTHX_ punk_config *cfg, const char *key, STRLEN klen,
-                     SV *value, SV *path) {
-    if (cfg->mode == PC_SECRETS_OFF) return;
-    if (!value || !SvOK(value) || SvROK(value) || !SvCUR(value)) return;
-    if (!(pc_secretish(key, klen)
-          || pc_dsn_with_password(aTHX_ key, klen, value)))
-        return;
-    {
-        const char *p = SvPV_nolen(path);
-        const char *f = SvPV_nolen(cfg->file);
-        if (cfg->mode == PC_SECRETS_STRICT)
-            croak("Punk::Config: '%s' holds a plaintext value in %s - use "
-                  "{ $env: NAME }, { $file: PATH } or { $exec: [...] } so "
-                  "the secret stays out of the file (or { $literal: ... } "
-                  "if it really is not a secret)", p, f);
-        warn("Punk::Config: '%s' holds a plaintext value in %s - use "
-             "{ $env: NAME }, { $file: PATH } or { $exec: [...] } so the "
-             "secret stays out of the file (or { $literal: ... } if it "
-             "really is not a secret)\n", p, f);
-    }
 }
 
 /* ---- the walk ------------------------------------------------------------
@@ -336,7 +246,6 @@ static SV *pc_walk(pTHX_ punk_config *cfg, SV *node, SV *path,
                 : sv_2mortal(newSVsv(k));
             SV *rnode = NULL;
             SV *pnode;
-            pc_guard(aTHX_ cfg, kp, klen, HeVAL(he), child);
             pnode = pc_walk(aTHX_ cfg, HeVAL(he), child, &rnode);
             (void)hv_store_ent(pub, k, pnode, 0);
             (void)hv_store_ent(res, k, rnode ? rnode : newSVsv(HeVAL(he)), 0);

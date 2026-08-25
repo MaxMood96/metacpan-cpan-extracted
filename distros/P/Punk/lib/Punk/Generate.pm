@@ -10,7 +10,7 @@ use File::Copy ();
 use File::Basename ();
 use Template::Stencil;
 
-our $VERSION = '0.31';
+our $VERSION = '0.33';
 
 sub new {
     my ($class, %args) = @_;
@@ -69,6 +69,12 @@ sub write_skel {
     return $abs;
 }
 
+# The variables every skeleton template is rendered with. A kit adds its own
+# here rather than re-rendering the base tree with a second set: the templates
+# it overrides by name are found through the search path and want the same
+# hash the rest do.
+sub vars { return $_[1] }
+
 sub name    { $_[0]{name} }
 sub dir     { $_[0]{dir} }
 sub written { @{ $_[0]{written} } }
@@ -103,6 +109,7 @@ sub run {
         $vars{schemes}    = $api->{schemes};
         $vars{auth_class} = $api->{auth_class};
     }
+    $self->vars(\%vars);        # a kit's own, for the templates it overrides
 
     $self->_render('app_psgi.tmpl',             'app.psgi',       \%vars);
     $self->_render('punk_yml.tmpl',             'config/punk.yml', \%vars);

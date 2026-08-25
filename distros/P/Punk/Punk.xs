@@ -80,6 +80,8 @@ static const frj_abi *punk_frj(pTHX) {
 #include "punk/punk_ws.h"         /* the RFC 6455 frame codec (phase 8)    */
 #include "punk/punk_config.h"      /* layered YAML config + resolved secrets */
 #include "punk/punk_asset.h"     /* content-addressed asset URLs (needs sha256) */
+#include "punk/punk_filecache.h" /* static files by content + their stat: the
+                                    syscalls were 2/3 of a static hit        */
 #include "punk/punk_static.h"    /* the static-file app (a magic-CV closure) */
 #include "punk/punk_url.h"       /* named routes: names, url_for, the filter */
 #include "punk/punk_sendfile.h"  /* $c->send_file: validators + ranges     */

@@ -1,3 +1,7 @@
+version 0.007; 2026-08-24
+
+  * Fix test failure with USE_ITHREADS and DEBUGGING
+
 version 0.006; 2026-08-02
 
   * Allow building on Mac OS

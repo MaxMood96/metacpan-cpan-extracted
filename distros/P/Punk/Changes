@@ -1,5 +1,24 @@
 Revision history for Punk
 
+0.33    2026-08-25
+        - Static mounts hold small files in memory per worker, so a hit does
+          no file syscall
+
+0.32    2026-08-23
+        - ADDS: `punk serve [DIR]` - a directory of files over HTTP under
+          Hyperman, on 127.0.0.1:8000 by default
+        - ADDS: `index` and `list` options on Punk::Static, so the `static`
+          keyword serves a tree of index.html files
+        - Return _abi_ptr as a UV, not an IV.
+        - `punk doctor` loads every Punk::Command::* on @INC before it
+          prints, so a plugin distribution's register_doctor row appears
+          without that plugin's own command having been named first.
+        - REMOVES: the plaintext-secret guardrail in Punk::Config, and the
+          `secrets` option that set its mode. A value written into the
+          configuration file in plaintext is the decision of whoever writes
+          the file
+        - ADDS: $app->auth_config - the frozen auth configuration read back
+
 0.31    2026-08-23
         - ADDS: kits. `punk new MyApp --kit diy` generates through
           Punk::Kit::Diy instead of the basic skeleton

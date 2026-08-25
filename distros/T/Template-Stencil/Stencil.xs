@@ -356,8 +356,8 @@ _escape_off(sv, off)
         stencil_buf b;
         if (off > len)
             croak("_escape_off: offset %" UVuf " past end", off);
-        stencil_buf_init(aTHX_ &b, len - off + 16);
-        stencil_dispatch.escape(&b, p + off, len - off);
+        stencil_buf_init(aTHX_ &b, len - (STRLEN)off + 16);
+        stencil_dispatch.escape(&b, p + (STRLEN)off, len - (STRLEN)off);
         if (SvUTF8(sv))
             b.utf8 = 1;
         RETVAL = stencil_buf_done(&b);

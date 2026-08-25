@@ -25,9 +25,12 @@ if (!$pkg) {
     $pkg->set_inc('-I. -Iinclude ' . ($vars{INC} || ''));
 }
 
-# This dist is also a producer: publishes archive_plugin.h for sister
-# dists (File::Raw::Archive::Zip, ::Cpio, ::Ar) via ExtUtils::Depends.
+# This dist is also a producer: publishes archive_plugin.h and arch_io.h
+# for sister dists (File::Raw::Archive::Zip, ::Cpio, ::Ar) via ExtUtils::Depends.
+# arch_io.h exposes archive_fd_state_t + archive_pull_fd so plugins can
+# detect seekable fd sources and implement random-access seek_to.
 $pkg->install('include/archive_plugin.h');
+$pkg->install('include/arch_io.h');
 
 # Platform link recipe.
 #
@@ -48,7 +51,12 @@ if ($^O eq 'linux' || $^O eq 'freebsd' || $^O eq 'openbsd'
         . ' -Wl,--allow-shlib-undefined'
         . ' -Wl,-soname,Archive.so';
 }
-elsif ($^O eq 'MSWin32' || $^O eq 'cygwin' || $^O eq 'msys') {
+elsif (($^O eq 'MSWin32' || $^O eq 'cygwin' || $^O eq 'msys')
+        && $Config{gccversion}) {
+    # GNU toolchain only. MSVC ignores these -Wl, options (link.exe warns
+    # LNK4044), so there the registry API is exported per function by
+    # ARCHIVE_API in include/archive_plugin.h, switched on by the
+    # -DFILE_RAW_ARCHIVE_BUILDING below.
     my $implib = 'blib/arch/auto/File/Raw/Archive/libArchive.dll.a';
     $platform_args{LDDLFLAGS} = ($Config{lddlflags} || '')
         . ' -Wl,--export-all-symbols'
@@ -90,7 +98,7 @@ my %WriteMakefileArgs = (
     CONFIGURE_REQUIRES => {
         'ExtUtils::MakeMaker' => '0',
         'ExtUtils::Depends'   => '0.404',
-        'File::Raw'           => '0.12',
+        'File::Raw'           => '0.15',
     },
     TEST_REQUIRES => {
         'Test::More'         => '0',
@@ -98,12 +106,15 @@ my %WriteMakefileArgs = (
         'IO::Compress::Gzip' => '0',
     },
     PREREQ_PM => {
-        'File::Raw'       => '0.12',
+        'File::Raw'       => '0.15',
         'File::Raw::Gzip' => '0.01',
     },
     OBJECT => 'Archive$(OBJ_EXT) arch_io$(OBJ_EXT) tar$(OBJ_EXT) extract$(OBJ_EXT) marshal$(OBJ_EXT)',
     C      => ['arch_io.c', 'tar.c', 'extract.c', 'marshal.c'],
     XS     => { 'Archive.xs' => 'Archive.c' },
+    # Marks this build as the provider side, so archive_plugin.h declares
+    # the registry dllexport rather than dllimport. No effect off MSVC.
+    DEFINE => '-DFILE_RAW_ARCHIVE_BUILDING',
     dist   => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean  => { FILES => 'File-Raw-Archive-* Archive.c Archive.o arch_io.o tar.o extract.o marshal.o Install/Files.pm' },
     %platform_args,

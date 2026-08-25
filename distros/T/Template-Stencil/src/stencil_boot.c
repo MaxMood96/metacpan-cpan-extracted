@@ -39,6 +39,30 @@ static uint32_t stencil_x86_caps(void)
     }
     return caps;
 }
+#elif defined(_MSC_VER) && (defined(_M_IX86) || defined(_M_X64))
+/* MSVC: the same leaves through <intrin.h>. Only the SSE2 variant is ever
+ * compiled there (the others need __attribute__((target))), but the CPU
+ * is still asked so a build with STENCIL_HAVE_SSE2 actually uses it. */
+#  include <intrin.h>
+#  define STENCIL_X86_CPUID 1
+static uint32_t stencil_x86_caps(void)
+{
+    uint32_t caps = 0;
+    int r[4];
+    unsigned int max;
+    __cpuid(r, 0);
+    max = (unsigned int)r[0];
+    if (max >= 1) {
+        __cpuidex(r, 1, 0);
+        if (r[3] & (1 << 26)) caps |= STENCIL_CAP_SSE2;
+        if (r[2] & (1 << 20)) caps |= STENCIL_CAP_SSE42;
+    }
+    if (max >= 7) {
+        __cpuidex(r, 7, 0);
+        if (r[1] & (1 << 5))  caps |= STENCIL_CAP_AVX2;
+    }
+    return caps;
+}
 #endif
 
 void stencil_boot(pTHX)

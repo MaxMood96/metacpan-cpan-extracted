@@ -205,6 +205,14 @@ static SSL_CTX *hm_tls_ctx_one(const char *cert, const char *key,
     if (!ctx) return NULL;
     SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
     SSL_CTX_set_options(ctx, SSL_OP_NO_COMPRESSION | SSL_OP_CIPHER_SERVER_PREFERENCE
+#ifdef HM_HAVE_KTLS
+                             /* Ask for the kernel record layer. OpenSSL only
+                              * takes it up if the kernel has the tls ULP and
+                              * the negotiated cipher is one it can offload;
+                              * otherwise this is inert and every connection
+                              * encrypts in userspace exactly as before. */
+                             | SSL_OP_ENABLE_KTLS
+#endif
 #ifdef SSL_OP_NO_RENEGOTIATION
                              /* client-initiated TLS 1.2 renegotiation is an
                               * asymmetric-CPU DoS and nothing here wants it;
@@ -487,13 +495,45 @@ static void hm_tls_conn_free(hm_conn *c) {
  * writes $env->{HTTPS}, and perl assigns into the SV already in the hash slot
  * rather than replacing it, so a shared value SV would let one request's
  * rewrite bleed into the next on the same keep-alive connection. */
+/* Is this connection's SEND side offloaded to the kernel right now?
+ *
+ * When it is, the socket itself is in TLS mode: a plain writev(2) or
+ * sendfile(2) on the descriptor comes out as encrypted records, which is what
+ * lets an HTTPS response take the same two fast paths a plaintext one takes.
+ *
+ * ASKED EVERY TIME, NEVER CACHED, and that is the important part. OpenSSL
+ * hands the record layer back to userspace if it ever has to take it back - a
+ * TLS 1.3 KeyUpdate is the case that does - and a connection that answered
+ * "yes" at handshake would then have Hyperman writing straight to a socket
+ * that is no longer encrypting. That failure does not look like a crash or a
+ * corrupt response: it PUTS THE PLAINTEXT ON THE WIRE. A cached flag is not
+ * worth that, and the check is a flag test on the BIO, not a syscall.
+ *
+ * c->ktls_tx is a report of what happened at handshake, for stats and tests.
+ * It is deliberately not what the write paths consult. */
+static int hm_ktls_tx(hm_conn *c) {
+#ifdef HM_HAVE_KTLS
+    if (!c->ssl) return 0;
+    return BIO_get_ktls_send(SSL_get_wbio((SSL *)c->ssl)) > 0;
+#else
+    (void)c;
+    return 0;
+#endif
+}
+
 enum {
     HM_TLSK_HTTPS, HM_TLSK_PROTOCOL, HM_TLSK_CIPHER,
-    HM_TLSK_VERIFY, HM_TLSK_S_DN, HM_TLSK_I_DN, HM_TLSK_COUNT
+    HM_TLSK_VERIFY, HM_TLSK_S_DN, HM_TLSK_I_DN, HM_TLSK_KTLS, HM_TLSK_COUNT
 };
 static const char *const hm_tlsk_name[HM_TLSK_COUNT] = {
     "HTTPS", "SSL_PROTOCOL", "SSL_CIPHER",
-    "SSL_CLIENT_VERIFY", "SSL_CLIENT_S_DN", "SSL_CLIENT_I_DN"
+    "SSL_CLIENT_VERIFY", "SSL_CLIENT_S_DN", "SSL_CLIENT_I_DN",
+    /* 1 when the kernel took the send side of this connection. The only way
+     * to SEE kTLS working: it depends on the kernel, the OpenSSL build and
+     * the negotiated cipher all agreeing, any of which can silently say no,
+     * and a server that quietly did not offload looks exactly like one that
+     * did. */
+    "SSL_KTLS"
 };
 static SV *hm_tlsk[HM_TLSK_COUNT];
 
@@ -517,6 +557,8 @@ static void hm_tls_env(pTHX_ hm_conn *c, HV *env) {
     if (c->tls_cipher)
         (void)hv_store_ent(env, hm_tlsk[HM_TLSK_CIPHER],
                            newSVpv(c->tls_cipher, 0), 0);
+    (void)hv_store_ent(env, hm_tlsk[HM_TLSK_KTLS],
+                       newSViv(hm_ktls_tx(c) ? 1 : 0), 0);
     p = (hm_tls_peer *)c->tls_peer;
     if (p) {
         (void)hv_store_ent(env, hm_tlsk[HM_TLSK_VERIFY],
@@ -596,6 +638,7 @@ static int  hm_tls_wrap(hm_conn *c, void *ctx) { (void)c; (void)ctx; return -1; 
 static void hm_tls_capture_peer(hm_conn *c) { (void)c; }
 static void hm_tls_conn_free(hm_conn *c) { (void)c; }
 static void hm_tls_env(pTHX_ hm_conn *c, HV *env) { (void)c; (void)env; }
+static int     hm_ktls_tx(hm_conn *c) { (void)c; return 0; }
 static ssize_t hm_cread(hm_conn *c, void *buf, size_t n)
     { return hm_os_recv(c->fd, buf, n); }
 static ssize_t hm_cwrite(hm_conn *c, const void *buf, size_t n)

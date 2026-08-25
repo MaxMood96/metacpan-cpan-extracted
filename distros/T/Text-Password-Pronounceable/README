@@ -33,6 +33,9 @@ DESCRIPTION
         Generate password. If used as an instance method, arguments override
         the factory settings.
 
+        Returns an empty string on failure, emitting an appropriate error
+        message via Carp::carp.
+
 HISTORY
     This code derived from mpw.pl, a bit of code with a sordid history.
 

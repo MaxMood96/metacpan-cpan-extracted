@@ -13,7 +13,7 @@ eval {
 };
 if (!$pkg) {
     die "Cannot find File::Raw and/or Tie::OrderedHash dependencies.\n"
-      . "Install File::Raw 0.12+ and Tie::OrderedHash 0.01+, or place\n"
+      . "Install File::Raw 0.15+ and Tie::OrderedHash 0.05+, or place\n"
       . "them as sibling directories.\n"
         unless -d '../File-Raw/include' && -d '../Tie-OrderedHash/include';
     $pkg = ExtUtils::Depends->new('File::Raw::JSON');
@@ -57,15 +57,15 @@ my %WriteMakefileArgs = (
     CONFIGURE_REQUIRES => {
         'ExtUtils::MakeMaker' => '0',
         'ExtUtils::Depends'   => '0.404',
-        'File::Raw'           => '0.12',
-        'Tie::OrderedHash'    => '0.02',
+        'File::Raw'           => '0.15',
+        'Tie::OrderedHash'    => '0.05',
     },
     TEST_REQUIRES => {
         'Test::More' => '0',
     },
     PREREQ_PM => {
-        'File::Raw'        => '0.12',
-        'Tie::OrderedHash' => '0.02',
+        'File::Raw'        => '0.15',
+        'Tie::OrderedHash' => '0.05',
     },
     OBJECT => 'JSON$(OBJ_EXT) file_raw_json$(OBJ_EXT) yyjson$(OBJ_EXT)',
     C      => ['file_raw_json.c', 'yyjson.c'],

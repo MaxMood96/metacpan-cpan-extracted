@@ -30,14 +30,14 @@
             "Crypt::JWS" : "0.01",
             "ExtUtils::Depends" : "0.404",
             "ExtUtils::MakeMaker" : "0",
-            "Fetch" : "0.08",
+            "Fetch" : "0.19",
             "File::Raw::JSON" : "0.05"
          }
       },
       "runtime" : {
          "requires" : {
             "Crypt::JWS" : "0.02",
-            "Fetch" : "0.08",
+            "Fetch" : "0.19",
             "File::Raw::JSON" : "0.07",
             "Punk" : "0.17",
             "perl" : "5.010000"
@@ -55,6 +55,6 @@
       }
    },
    "release_status" : "stable",
-   "version" : "0.06",
+   "version" : "0.07",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

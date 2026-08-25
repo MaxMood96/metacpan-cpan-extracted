@@ -37,7 +37,6 @@ local $Data::Dumper::Sortkeys=1;
 
 #  PAGI modules we need
 #
-use PAGI::Middleware::Builder;
 use WebDyne::PAGI;
 use WebDyne::Constant;
 use WebDyne::PAGI::Constant;
@@ -45,7 +44,7 @@ use WebDyne::PAGI::Constant;
 
 #  Version Info, must be all one line for MakeMaker, CPAN.
 #
-$VERSION='3.021';
+$VERSION='3.023';
 
 
 #  Check for supporting modules
@@ -73,7 +72,8 @@ if (!caller || exists $ENV{PAR_TEMP}) {
     my %opt=(
         test    => 0,
         static  => 1,
-        index   => defined($ENV{'DOCUMENT_DEFAULT'}) ? $ENV{'DOCUMENT_DEFAULT'} : 1,
+        conf    => 1,
+        index   => defined($ENV{'DOCUMENT_DEFAULT'}) ? $ENV{'DOCUMENT_DEFAULT'} : 0,
         %{do(glob(sprintf('~/.%s.opt', basename(__FILE__)))) || {}}
     );
     if (delete $opt{'no_index'}) {
@@ -110,6 +110,7 @@ if (!caller || exists $ENV{PAR_TEMP}) {
         'no_index' => sub {
             $opt{'index'}=0
         },
+        'view_source|view-source!',
         'root|docroot|doc_root|doc-root|document_root|document-root:s',
         'env|E=s',
         'argv:s',
@@ -131,6 +132,7 @@ if (!caller || exists $ENV{PAR_TEMP}) {
 
     #  Dump options for debugging
     #
+    &view_source_apply(\%opt);
     die Dumper(\%opt) if $opt{'dump_opt'};
     
     
@@ -146,7 +148,13 @@ else {
     #
     my %opt=(
         root    => $ENV{'DOCUMENT_ROOT'} || $DOCUMENT_ROOT || fastcwd(),
-        index   => $ENV{'DOCUMENT_DEFAULT'} || $DOCUMENT_DEFAULT
+        index   => defined($ENV{'DOCUMENT_DEFAULT'})
+            ? $ENV{'DOCUMENT_DEFAULT'}
+            : defined($DOCUMENT_DEFAULT)
+                ? $DOCUMENT_DEFAULT
+                : 0,
+        static  => 1,
+        conf    => 1
     );
     return &build(\%opt);
     
@@ -160,62 +168,29 @@ else {
 sub build {
 
 
-    #  Build app code ref, options passed for builder
+    #  WebDyne::PAGI owns local config loading and middleware wrapping.
     #
     my $opt_hr=shift();
+    return WebDyne::PAGI->new(%{$opt_hr})->to_app();
+
+}
 
 
-    #  Read in local webdyne.conf.pl before middleware and app setup so
-    #  wrapper and external server loading use the same root config.
+sub view_source_apply {
+
+
+    #  Source viewing is an extra opt-in on top of built-in index handling.
     #
-    &local_constant_load($opt_hr->{'root'});
-
-
-    my $builder_or=PAGI::Middleware::Builder->new();
-    
-    
-    #  Adjust static service config var based on opts if
-    #  they exist
-    #
-    if (exists($opt_hr->{'static'})) {
-        $WEBDYNE_PAGI_STATIC=$opt_hr->{'static'};
+    my $opt_hr=shift();
+    if ($opt_hr->{'index'} && $opt_hr->{'view_source'}) {
+        $ENV{'WEBDYNE_INDEX_SOURCE_ENABLE'}=1;
+        $WebDyne::WEBDYNE_INDEX_SOURCE_ENABLE=1;
+        $WebDyne::Constant::Constant{'WEBDYNE_INDEX_SOURCE_ENABLE'}=1;
     }
-    
-    
-    #  Add in any middleware in config file
-    #
-    foreach my $middleware_ar (@{$WEBDYNE_PAGI_MIDDLEWARE}) {
-        my ($middleware, $middleware_opt_hr)=@{$middleware_ar};
-        
-        #  Skip static if not wanted
-        #
-        if ($middleware eq 'Static') {
-            next unless $WEBDYNE_PAGI_STATIC;
-        }
-        
-        
-        #  And code refs are run and given opt as first param
-        #
-        if (ref($middleware_opt_hr) eq 'CODE') {
-            $middleware_opt_hr=$middleware_opt_hr->($opt_hr);
-        }
-        
-        
-        #  Now add it
-        #
-        $builder_or->add_middleware($middleware, %{$middleware_opt_hr});
+    else {
+        $opt_hr->{'view_source'}=0;
     }
-    
-
-    #  Read in local webdyne.conf.pl
-    #
-    #&local_constant_load($opt_hr->{'root'});
-
-
-    #  Finally return as app code ref
-    #
-    return $builder_or->to_app(
-        WebDyne::PAGI->new(%{$opt_hr})->to_app())
+    return \undef;
 
 }
 
@@ -274,24 +249,6 @@ sub startup {
 }
 
 
-sub local_constant_load {
-
-
-    #  Read in local webdyne.conf.pl
-    #
-    my $root_dn=shift();
-    
-    
-    #  If root_dn is a file get dir name
-    #
-    if (-f $root_dn) {
-        $root_dn=(File::Spec->splitpath($root_dn))[1];
-    }
-    WebDyne::Constant->import(File::Spec->catfile($root_dn, sprintf('.%s', $WEBDYNE_CONF_FN)));
-
-}
-
-
 __END__
 
 =begin markdown
@@ -334,11 +291,19 @@ Wrapper options handled by `webdyne.pagi` itself:
 
 * **--index**
 
-    Enable or disable directory index handling. With the default enabled setting, `--index` uses WebDyne's built-in dynamic index page.
+    Enable directory index handling. With no value, `--index` uses WebDyne's built-in dynamic index page. Index handling is disabled by default.
 
 * **--index=FILE**
 
     Use `FILE` as the default document for directory requests instead of the built-in dynamic index page. Use the equals form so the document root argument is not consumed as the index value.
+
+* **--view-source**
+
+    Enable the built-in index page source viewer. This only takes effect when `--index` also enables WebDyne's built-in dynamic index page.
+
+* **--no-index**
+
+    Disable wrapper-managed index handling. This is the default unless `DOCUMENT_DEFAULT`, `~/.webdyne.pagi.opt`, or `--index` enables it.
 
 * **--root**
 
@@ -405,13 +370,25 @@ To run the script for basic functionality and serve files from `/var/www/html`, 
 
 `webdyne.pagi /var/www/html`
 
-Disable wrapper-managed index handling and rely on the PAGI request layer's default document behaviour instead:
+Enable WebDyne's built-in dynamic index page for local development/debugging:
 
-`webdyne.pagi --no-index /var/www/html`
+`webdyne.pagi --index /var/www/html`
+
+Enable the built-in index page source viewer as an additional local development/debugging aid:
+
+`webdyne.pagi --index --view-source /var/www/html`
 
 Use `home.psp` as the default document for directory requests:
 
 `webdyne.pagi --index=home.psp /var/www/html`
+
+Persist index handling for local development by adding it to `~/.webdyne.pagi.opt`:
+
+```perl
+{
+    index => 1,
+}
+```
 
 Start in production mode:
 
@@ -443,7 +420,7 @@ This script is a frontend to the WebDyne PAGI stack. It uses WebDyne configurati
 
 * **DOCUMENT_DEFAULT**
 
-    Supplies the default `index` value before `~/.webdyne.pagi.opt` and command-line options are applied. This means explicit CLI index options override the environment, and `~/.webdyne.pagi.opt` also overrides the environment. When the script is loaded by `pagi-server` instead of run directly, the PAGI constant layer default is `app.psp`.
+    Supplies the default `index` value before `~/.webdyne.pagi.opt` and command-line options are applied. If unset, wrapper-managed index handling is disabled by default. Explicit CLI index options override the environment, and `~/.webdyne.pagi.opt` also overrides the environment. When the script is loaded by `pagi-server` instead of run directly, the PAGI constant layer default is `app.psp` unless the wrapper supplies another value.
 
 * **PAGI_ENV**
 
@@ -548,7 +525,7 @@ Enable or disable PAGI static-file middleware.
 
 B<--index>
 
-Enable or disable directory index handling. With the default enabled setting, C<--index> uses WebDyne's built-in dynamic index page.
+Enable directory index handling. With no value, C<--index> uses WebDyne's built-in dynamic index page. Index handling is disabled by default.
 
 
 
@@ -557,6 +534,22 @@ Enable or disable directory index handling. With the default enabled setting, C<
 B<--index=FILE>
 
 Use C<FILE> as the default document for directory requests instead of the built-in dynamic index page. Use the equals form so the document root argument is not consumed as the index value.
+
+
+
+=item *
+
+B<--view-source>
+
+Enable the built-in index page source viewer. This only takes effect when C<--index> also enables WebDyne's built-in dynamic index page.
+
+
+
+=item *
+
+B<--no-index>
+
+Disable wrapper-managed index handling. This is the default unless C<DOCUMENT_DEFAULT>, C<~/.webdyne.pagi.opt>, or C<--index> enables it.
 
 
 
@@ -684,14 +677,24 @@ To run the script for basic functionality and serve files from C</var/www/html>,
 
 C<webdyne.pagi /var/www/html>
 
-Disable wrapper-managed index handling and rely on the PAGI request layer's default document behaviour instead:
+Enable WebDyne's built-in dynamic index page for local development/debugging:
 
-C<webdyne.pagi --no-index /var/www/html>
+C<webdyne.pagi --index /var/www/html>
+
+Enable the built-in index page source viewer as an additional local development/debugging aid:
+
+C<webdyne.pagi --index --view-source /var/www/html>
 
 Use C<home.psp> as the default document for directory requests:
 
 C<webdyne.pagi --index=home.psp /var/www/html>
 
+Persist index handling for local development by adding it to C<~/.webdyne.pagi.opt>:
+
+
+ {
+     index => 1,
+ }
 Start in production mode:
 
 C<webdyne.pagi --env production /var/www/html>
@@ -731,7 +734,7 @@ Supplies the document root when neither C<--root> nor a final non-option documen
 
 B<DOCUMENT_DEFAULT>
 
-Supplies the default C<index> value before C<~/.webdyne.pagi.opt> and command-line options are applied. This means explicit CLI index options override the environment, and C<~/.webdyne.pagi.opt> also overrides the environment. When the script is loaded by C<pagi-server> instead of run directly, the PAGI constant layer default is C<app.psp>.
+Supplies the default C<index> value before C<~/.webdyne.pagi.opt> and command-line options are applied. If unset, wrapper-managed index handling is disabled by default. Explicit CLI index options override the environment, and C<~/.webdyne.pagi.opt> also overrides the environment. When the script is loaded by C<pagi-server> instead of run directly, the PAGI constant layer default is C<app.psp> unless the wrapper supplies another value.
 
 
 

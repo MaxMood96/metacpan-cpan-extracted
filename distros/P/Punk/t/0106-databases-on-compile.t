@@ -138,4 +138,33 @@ use PunkTest;
         'on_compile callbacks run before compile_extras, so the extras see what they added');
 }
 
+# ---- auth_config -----------------------------------------------------------------
+# The `auth` keyword is write-only too, and a plugin that decides "may this
+# user act on this row" needs its rank ladder and its roles hook rather than
+# a second copy of either.
+{
+    package AuthCfgApp;
+    use Punk;
+    session secret => 'x' x 32;
+    auth model => 'User', rank => [qw(member admin owner)],
+         roles => sub { 'admin' }, fields => { password => 'pw_hash' };
+    package main;
+    my $cfg = AuthCfgApp->punk_app->auth_config;
+    is($cfg->{model}, 'User', 'auth_config: the model');
+    is_deeply($cfg->{rank}, [qw(member admin owner)], 'the rank ladder, in order');
+    is(ref $cfg->{roles}, 'CODE', 'the roles hook itself, not a copy of its name');
+    is($cfg->{fields}{password}, 'pw_hash', 'the fields map, merged over the defaults');
+    is($cfg->{fields}{email}, 'email', 'defaults included');
+    $cfg->{rank}[0] = 'tampered';
+    $cfg->{fields}{email} = 'tampered';
+    is(AuthCfgApp->punk_app->auth_config->{rank}[0], 'member', 'a copy: the ladder cannot be edited through it');
+    is(AuthCfgApp->punk_app->auth_config->{fields}{email}, 'email', 'nor the nested fields map');
+}
+{
+    package NoAuthApp;
+    use Punk;
+    package main;
+    is(NoAuthApp->punk_app->auth_config, undef, 'undef when no auth keyword ran');
+}
+
 done_testing();

@@ -1,5 +1,35 @@
 Revision history for Template-Stencil
 
+0.12    2026-08-24
+        - Windows. MSVC never linked: the src/ objects were compiled with
+          -o, which cl ignores (it writes x.obj into the top directory), so
+          the link could not find src/x.obj; the rule now says -Fo there.
+          The __builtin_expect probe links as well as compiles (cl only warns
+          about an undeclared function), the gcc -O3/-fomit-frame-pointer
+          probes are skipped on cl (it warns and exits 0 for unknown
+          options), and the SSE2 variant is now selected on MSVC through
+          <intrin.h> cpuid.
+        - The fmt filter printed three-digit exponents (1.5e+003) on the
+          Windows CRT; two digits everywhere now.
+        - The tests write templates in binary mode. Text-mode handles on
+          Windows turned every newline into CRLF, which the engine kept,
+          so t/56 and t/70 compared against LF goldens and failed.
+
+0.11    2026-08-23
+        - Windows. MSVC never linked: the src/ objects were compiled with
+          -o, which cl ignores (it writes x.obj into the top directory), so
+          the link could not find src/x.obj; the rule now says -Fo there.
+          The __builtin_expect probe links as well as compiles (cl only warns
+          about an undeclared function), the gcc -O3/-fomit-frame-pointer
+          probes are skipped on cl (it warns and exits 0 for unknown
+          options), and the SSE2 variant is now selected on MSVC through
+          <intrin.h> cpuid.
+        - The fmt filter printed three-digit exponents (1.5e+003) on the
+          Windows CRT; two digits everywhere now.
+        - The tests write templates in binary mode. Text-mode handles on
+          Windows turned every newline into CRLF, which the engine kept,
+          so t/56 and t/70 compared against LF goldens and failed.
+
 0.10    2026-08-21
         - Add support for tied hashes in data passed to the template
 

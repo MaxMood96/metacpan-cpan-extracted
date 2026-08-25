@@ -42,6 +42,7 @@ my $expected = do {
     require File::Temp;
     my $dir = File::Temp::tempdir(CLEANUP => 1);
     open my $fh, '>', "$dir/w.tmpl" or die $!;
+    binmode $fh;
     print $fh "<main>\n\n{% content %}\n\n</main>";
     close $fh;
     my $s = Template::Stencil->new(template_dir => $dir,

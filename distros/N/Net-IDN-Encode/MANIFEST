@@ -30,4 +30,3 @@ t/uts46_to_ascii-trans.t
 t/uts46_to_ascii.t
 t/uts46_to_unicode.t
 t/xtra_pp.t
-SIGNATURE    Added here by Module::Build

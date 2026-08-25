@@ -12,9 +12,11 @@ use Template::Stencil;
 
 my $dir = File::Temp::tempdir(CLEANUP => 1);
 open my $fh, '>', "$dir/inc.tmpl" or die $!;
+binmode $fh;
 print $fh 'I:{% v %}';
 close $fh;
 open $fh, '>', "$dir/wrap.tmpl" or die $!;
+binmode $fh;
 print $fh '[{% content %}]';
 close $fh;
 

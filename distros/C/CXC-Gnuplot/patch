@@ -1,0 +1,139 @@
+# HG changeset patch
+# User Diab Jerius <djerius@cfa.harvard.edu>
+# Date 1787265248 14400
+#      Thu Aug 20 18:34:08 2026 -0400
+# Node ID bd79581eea2b9166ebdba6166adc2054f8f74b74
+# Parent  7c5cf7d3eae3b26b1ee2c7f221c4c0111f441770
+fold-temp-revision 25bb38f2d3c3
+
+diff --git a/lib/CXC/Gnuplot/V1/Timestamp.pm b/lib/CXC/Gnuplot/V1/Timestamp.pm
+--- a/lib/CXC/Gnuplot/V1/Timestamp.pm
++++ b/lib/CXC/Gnuplot/V1/Timestamp.pm
+@@ -1,16 +1,17 @@
+-package CXC::Gnuplot::V0::Timestamp;
++package CXC::Gnuplot::V1::Timestamp;
+ 
+ use v5.38;
+ use experimental 'builtin', 'declared_refs';
+-use Feature::Compat::Class;
++use Object::Pad 0.821;
+ 
+ our $VERSION = 'v0.29.3';
+ 
+-class CXC::Gnuplot::V0::Timestamp;
++class CXC::Gnuplot::V1::Timestamp : isa(CXC::Gnuplot::V1::Base)
++  does( CXC::Gnuplot::V1::Role::Clone );
+ 
+ use builtin 'is_bool', 'true', 'false';
+ 
+-use CXC::Gnuplot::V0::Types -lexical, qw(
++use CXC::Gnuplot::V1::Types -lexical, qw(
+   Enum
+   is_Num
+   CoordOffset2D
+@@ -18,9 +19,11 @@ use CXC::Gnuplot::V0::Types -lexical, qw
+ 
+   signature_for
+ );
+-use CXC::Gnuplot::V0::Util -lexical, 'maybe_quote', 'assert_coerce_object', 'clone_object',
+-  'pvalidate', 'to_hash_r', 'render_opts', 'render_set';
+-use CXC::Gnuplot::V0::AxisFormat;
++
++use CXC::Gnuplot::V1::Util -lexical, 'maybe_quote', 'pvalidate', 'to_hash_r', 'render_opts',
++  'render_set';
++
++use CXC::Gnuplot::V1::AxisFormat;
+ 
+ 
+ my sub croak {
+@@ -52,6 +55,8 @@ field $textcolor     :param  :reader  = 
+ =for Pod::Coverage
+ META
+ DOES
++BUILDARGS
++clone
+ 
+ =class_method new
+ 
+@@ -89,23 +94,6 @@ method to_hash {
+     } );
+ }
+ 
+-=class_method assert_coerce
+-
+-=cut
+-
+-sub assert_coerce( $class, $args ) {
+-    assert_coerce_object( $class, $args );
+-}
+-
+-=method clone
+-
+-=cut
+-
+-method clone ( %args ) {
+-    return clone_object( $self, \%args );
+-}
+-
+-
+ =method opts
+ 
+ =cut
+diff --git a/t/V1/Timestamp.t b/t/V1/Timestamp.t
+--- a/t/V1/Timestamp.t
++++ b/t/V1/Timestamp.t
+@@ -4,12 +4,12 @@
+ use Test::Lib;
+ use My::Test;
+ 
+-use aliased 'CXC::Gnuplot::V0::Timestamp';
+-use aliased 'CXC::Gnuplot::V0::Font';
+-use aliased 'CXC::Gnuplot::V0::ColorSpec';
+-use aliased 'CXC::Gnuplot::V0::CoordOffset2D';
+-use aliased 'CXC::Gnuplot::V0::CoordValue';
+-use aliased 'CXC::Gnuplot::V0::LiteralDataValue';
++use aliased 'CXC::Gnuplot::V1::Timestamp';
++use aliased 'CXC::Gnuplot::V1::Font';
++use aliased 'CXC::Gnuplot::V1::ColorSpec';
++use aliased 'CXC::Gnuplot::V1::CoordOffset2D';
++use aliased 'CXC::Gnuplot::V1::CoordValue';
++use aliased 'CXC::Gnuplot::V1::LiteralDataValue';
+ 
+ subtest 'a mish-mash' => sub {
+ 
+@@ -94,11 +94,6 @@ subtest 'a mish-mash' => sub {
+         'hash',
+     );
+ 
+-    subtest 'assert_coerce' => sub {
+-        is( Timestamp->assert_coerce( \%args ),                  $expected, 'hashref' );
+-        is( Timestamp->assert_coerce( Timestamp->new( %args ) ), $expected, 'object' );
+-    };
+-
+     subtest 'clone' => sub {
+         is( $object->clone, $expected, 'no args' );
+         is(
+@@ -154,23 +149,4 @@ subtest 'rotate' => sub {
+ 
+ };
+ 
+-
+-subtest 'assert_coerce' => sub {
+-
+-    my %args = ( font => { name => 'foo', size => 12 }, );
+-
+-    my $expected = object {
+-        prop blessed => Timestamp;
+-        call font => object {
+-            prop blessed => Font;
+-            call name => 'foo';
+-            call size => 12;
+-        };
+-    };
+-
+-    is( Timestamp->assert_coerce( \%args ),                  $expected, 'hashref' );
+-    is( Timestamp->assert_coerce( Timestamp->new( %args ) ), $expected, 'object' );
+-
+-};
+-
+ done_testing;

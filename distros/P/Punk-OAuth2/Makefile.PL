@@ -62,7 +62,7 @@ WriteMakefile(
         'ExtUtils::Depends'   => '0.404',
         'Crypt::JWS'          => '0.01',
         'File::Raw::JSON'     => '0.05',
-        'Fetch'               => '0.08',
+        'Fetch'               => '0.19',
     },
     TEST_REQUIRES => {
         'Test::More' => '0.98',
@@ -71,7 +71,7 @@ WriteMakefile(
         'Punk'            => '0.17',
         'Crypt::JWS'      => '0.02',
         'File::Raw::JSON' => '0.07',
-        'Fetch'           => '0.08',
+        'Fetch'           => '0.19',   # 0.19: the io_uring cancelled-deadline crash
     },
     META_MERGE => {
         'meta-spec' => { version => 2 },

@@ -363,15 +363,17 @@ END { chdir $CWD if $CWD }
     ($rc, $out) = punk($base, 'new', 'SqApp', '--dir', "$base/ok", '--sqitch', 'sqlite');
     ok(-f "$base/ok/app.psgi", 'the application is generated');
     if ($rc == 0) {
-        like(slurp("$base/ok/sqitch.plan"), qr/^%project=sqapp$/m,
+        # Punk-Sqitch keeps everything it owns under sqitch/
+        like(slurp("$base/ok/sqitch/sqitch.plan"), qr/^%project=sqapp$/m,
             'Punk-Sqitch present: a project named for the application');
-        like(slurp("$base/ok/sqitch.conf"), qr/^\s*engine = sqlite$/m, 'on the engine asked for');
+        like(slurp("$base/ok/sqitch/sqitch.conf"), qr/^\s*engine = sqlite$/m,
+            'on the engine asked for');
     }
     else {
         is($rc, 1, 'Punk-Sqitch absent: exit 1, the application still written');
         like($out, qr/--sqitch needs Punk-Sqitch, which is not installed; once it is, run\n\n  punk sqitch init --engine sqlite/,
             'with the command to run once it is installed');
-        ok(!-e "$base/ok/sqitch.plan", 'and no half-made project');
+        ok(!-e "$base/ok/sqitch/sqitch.plan", 'and no half-made project');
     }
 }
 

@@ -19,6 +19,29 @@
 #define TIE_ORDEREDHASH_ABI 1
 
 /*
+ * Windows has no global symbol namespace: a function is only reachable
+ * from a dependent DLL if the defining DLL exports it. GNU toolchains
+ * get that wholesale from --export-all-symbols (see Makefile.PL), but
+ * MSVC exports nothing beyond the boot XSUB unless each function says
+ * so, and consumers then fail to link with
+ *
+ *     error LNK2001: unresolved external symbol _tie_oh_new
+ *
+ * TIE_OH_BUILDING is defined only while building OrderedHash.dll itself;
+ * every consumer sees the same declarations as dllimport. Elsewhere -
+ * and on the GNU toolchains, which already work - this is nothing.
+ */
+#if defined(_MSC_VER)
+#  ifdef TIE_OH_BUILDING
+#    define TIE_OH_API __declspec(dllexport)
+#  else
+#    define TIE_OH_API __declspec(dllimport)
+#  endif
+#else
+#  define TIE_OH_API
+#endif
+
+/*
  * All functions take the blessed impl SV (the return value of
  * Tie::OrderedHash->new or TIEHASH).  The SV is *not* the tied %h
  * itself; it's the underlying object.  When you have a tied HV, you
@@ -28,34 +51,34 @@
 /* ---- construction ---------------------------------------------- */
 
 /* refcount=1 blessed RV; caller owns it.  Free with SvREFCNT_dec. */
-SV *tie_oh_new(pTHX);
+TIE_OH_API SV *tie_oh_new(pTHX);
 
 /* ---- mutation -------------------------------------------------- */
 
 /* Store (key, val) into self.  TAKES OWNERSHIP of `val`'s refcount;
  * the AV stores it directly with no extra inc/dec.  If you need to
  * keep a reference yourself, SvREFCNT_inc before calling. */
-void tie_oh_store(pTHX_ SV *self,
+TIE_OH_API void tie_oh_store(pTHX_ SV *self,
                   const char *key, STRLEN klen,
                   SV *val);
 
 /* Remove `key` from self.  Returns the deleted value as a mortal,
  * or NULL if the key wasn't present. */
-SV *tie_oh_delete(pTHX_ SV *self, const char *key, STRLEN klen);
+TIE_OH_API SV *tie_oh_delete(pTHX_ SV *self, const char *key, STRLEN klen);
 
 /* Drop everything; equivalent to a fresh tie_oh_new contents. */
-void tie_oh_clear(pTHX_ SV *self);
+TIE_OH_API void tie_oh_clear(pTHX_ SV *self);
 
 /* ---- accessors ------------------------------------------------- */
 
 /* Returns the value SV as a mortal (you don't own a refcount), or
  * NULL if absent.  Note: NULL distinguishes "not present" from
  * "stored undef" - the latter returns a mortal &PL_sv_undef-equivalent. */
-SV *tie_oh_fetch(pTHX_ SV *self, const char *key, STRLEN klen);
+TIE_OH_API SV *tie_oh_fetch(pTHX_ SV *self, const char *key, STRLEN klen);
 
-int tie_oh_exists(pTHX_ SV *self, const char *key, STRLEN klen);
+TIE_OH_API int tie_oh_exists(pTHX_ SV *self, const char *key, STRLEN klen);
 
-SSize_t tie_oh_count(pTHX_ SV *self);
+TIE_OH_API SSize_t tie_oh_count(pTHX_ SV *self);
 
 /* ---- iteration ------------------------------------------------- */
 
@@ -68,13 +91,13 @@ typedef struct {
     SSize_t end;
 } tie_oh_iter_t;
 
-void tie_oh_iter_init(pTHX_ SV *self, tie_oh_iter_t *iter);
+TIE_OH_API void tie_oh_iter_init(pTHX_ SV *self, tie_oh_iter_t *iter);
 
 /* Advance the cursor.  Returns 1 if a value was produced, 0 at end.
  * `*out_key`/`*out_klen` point into storage owned by `self` and are
  * valid until the next mutation.  `*out_val` is a non-mortal SV
  * (you don't own a refcount); mortalise if you need one. */
-int tie_oh_iter_next(pTHX_ SV *self, tie_oh_iter_t *iter,
+TIE_OH_API int tie_oh_iter_next(pTHX_ SV *self, tie_oh_iter_t *iter,
                      const char **out_key, STRLEN *out_klen,
                      SV **out_val);
 
@@ -84,6 +107,6 @@ int tie_oh_iter_next(pTHX_ SV *self, tie_oh_iter_t *iter,
  * Cheap: a single string compare on the stash name.  Use this
  * before calling the rest of the ABI on a tie object whose class
  * you don't otherwise know. */
-int tie_oh_is_instance(pTHX_ SV *sv);
+TIE_OH_API int tie_oh_is_instance(pTHX_ SV *sv);
 
 #endif /* TIE_ORDEREDHASH_H */

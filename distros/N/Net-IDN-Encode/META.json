@@ -1,16 +1,18 @@
 {
    "abstract" : "Internationalizing Domain Names in Applications (UTS #46)",
    "author" : [
-      "Claus Färber <CFAERBER@cpan.org>"
+      "Claus Färber",
+      "Robert Rothenberg <perl@rhizomnic.com>",
+      "Paul Johnson <paul@pjcj.net>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "Module::Build version 0.4224",
+   "generated_by" : "Module::Build version 0.4234",
    "license" : [
       "perl_5"
    ],
    "meta-spec" : {
       "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
-      "version" : "2"
+      "version" : 2
    },
    "name" : "Net-IDN-Encode",
    "no_index" : {
@@ -50,9 +52,9 @@
       },
       "homepage" : "https://metacpan.org/release/Net-IDN-Encode",
       "repository" : {
-         "url" : "http://github.com/cfaerber/Net-IDN-Encode"
+         "url" : "http://github.com/robrwo/Net-IDN-Encode"
       }
    },
-   "version" : "2.500",
-   "x_serialization_backend" : "JSON::PP version 2.27400_02"
+   "version" : "2.502",
+   "x_serialization_backend" : "JSON::PP version 4.16"
 }

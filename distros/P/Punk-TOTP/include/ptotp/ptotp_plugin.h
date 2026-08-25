@@ -41,7 +41,7 @@ static const qr_abi_t *PP_QR = NULL;
 
 static void pp_qr_boot(pTHX)
 {
-    IV p = 0;
+    UV p = 0;
     dSP;
 
     if (PP_QR)
@@ -51,7 +51,7 @@ static void pp_qr_boot(pTHX)
     PUSHMARK(SP); PUTBACK;
     if (call_pv("QR::Code::_abi_ptr", G_SCALAR | G_EVAL) > 0) {
         SPAGAIN;
-        p = POPi;
+        p = POPu;
         PUTBACK;
     }
     FREETMPS; LEAVE;
@@ -111,10 +111,14 @@ static HV *pp_cfg_of(pTHX_ CV *cv)
  * the result, undef when there was none - so a caller owns what it
  * holds and mortalises it. */
 
+/* `threw`, when given, catches a die instead of letting it out: the only
+ * caller that wants this is the attempt counter, which must not turn a
+ * failed sign-in into a 500 on a database missing its columns. */
 static SV *pp_call_common(pTHX_ SV *inv, const char *meth, SV *code,
-                          SV **argv, int argc)
+                          SV **argv, int argc, int *threw)
 {
     dSP;
+    I32 flags = G_SCALAR | (threw ? G_EVAL : 0);
     int count, i;
     SV *ret;
 
@@ -124,9 +128,9 @@ static SV *pp_call_common(pTHX_ SV *inv, const char *meth, SV *code,
     if (inv) PUSHs(inv);
     for (i = 0; i < argc; i++) PUSHs(argv[i]);
     PUTBACK;
-    if (code)      count = call_sv(code, G_SCALAR);
-    else if (inv)  count = call_method(meth, G_SCALAR);
-    else           count = call_pv(meth, G_SCALAR);
+    if (code)      count = call_sv(code, flags);
+    else if (inv)  count = call_method(meth, flags);
+    else           count = call_pv(meth, flags);
     SPAGAIN;
     if (count > 0) {
         SV *top = POPs;
@@ -134,6 +138,7 @@ static SV *pp_call_common(pTHX_ SV *inv, const char *meth, SV *code,
     } else {
         ret = newSV(0);
     }
+    if (threw) *threw = SvTRUE(ERRSV) ? 1 : 0;
     PUTBACK; FREETMPS; LEAVE;
     return ret;
 }
@@ -141,18 +146,18 @@ static SV *pp_call_common(pTHX_ SV *inv, const char *meth, SV *code,
 /* $inv->$meth(@argv) */
 static SV *pp_call(pTHX_ SV *inv, const char *meth, SV **argv, int argc)
 {
-    return pp_call_common(aTHX_ inv, meth, NULL, argv, argc);
+    return pp_call_common(aTHX_ inv, meth, NULL, argv, argc, NULL);
 }
 
 /* $code->(@argv) */
 static SV *pp_call_code(pTHX_ SV *code, SV **argv, int argc)
 {
-    return pp_call_common(aTHX_ NULL, NULL, code, argv, argc);
+    return pp_call_common(aTHX_ NULL, NULL, code, argv, argc, NULL);
 }
 
 /* Punk::Auth::_await($c, $v) for a value that may be a future; a plain
  * value, or a Punk without the seam, passes straight through. */
-static SV *pp_await(pTHX_ SV *c, SV *v)
+static SV *pp_await_ev(pTHX_ SV *c, SV *v, int *threw)
 {
     SV *argv[2];
     if (!v) return newSV(0);
@@ -160,7 +165,12 @@ static SV *pp_await(pTHX_ SV *c, SV *v)
         return newSVsv(v);
     argv[0] = c;
     argv[1] = v;
-    return pp_call_common(aTHX_ NULL, "Punk::Auth::_await", NULL, argv, 2);
+    return pp_call_common(aTHX_ NULL, "Punk::Auth::_await", NULL, argv, 2, threw);
+}
+
+static SV *pp_await(pTHX_ SV *c, SV *v)
+{
+    return pp_await_ev(aTHX_ c, v, NULL);
 }
 
 static int pp_is_hash(SV *sv)
@@ -254,8 +264,109 @@ static void pp_set_pending(pTHX_ HV *cfg, HV *s, SV *id, SV *to)
     (void)hv_stores(p, "exp",   newSViv((IV)time(NULL)
                                         + pp_cfg_iv(aTHX_ cfg, "pending_ttl", 300)));
     (void)hv_stores(p, "to",    (to && SvOK(to)) ? newSVsv(to) : newSVpvs("/"));
-    (void)hv_stores(p, "tries", newSViv(0));
     (void)hv_stores(s, "totp_pending", newRV_noinc((SV *)p));
+}
+
+/* ---- the attempt counter ---------------------------------------------------
+ *
+ * On the user row, and NOT in the session, which is the whole point: a Punk
+ * session without a store is a signed cookie and nothing more, so a client
+ * that keeps a copy from before its failures and presents it again gets its
+ * counter back and the limit never fires. Counting in state the client holds
+ * is counting in state the client chooses.
+ *
+ * Per account rather than per pending marker for the same reason one level
+ * up: re-running the password step mints a fresh marker, so a per-marker
+ * count never bounded guessing of the second factor either - it only made an
+ * attacker repeat a step they had already passed.
+ *
+ * The window makes it self-healing. A permanent lock would hand anyone who
+ * knows a password a way to keep the account's owner out for good, which is
+ * a worse bargain than the guessing it prevents. */
+
+static IV pp_user_iv(pTHX_ HV *cfg, HV *uh, const char *which)
+{
+    SV *v = pp_user_get(aTHX_ cfg, uh, which);
+    return v ? SvIV(v) : 0;
+}
+
+/* the failures that still count: a window that has lapsed counts as none */
+static IV pp_fail_count(pTHX_ HV *cfg, HV *uh)
+{
+    IV n  = pp_user_iv(aTHX_ cfg, uh, "failed");
+    IV at = pp_user_iv(aTHX_ cfg, uh, "failed_at");
+    IV w  = pp_cfg_iv(aTHX_ cfg, "attempt_window", 900);
+    if (n <= 0) return 0;
+    if (at && (IV)time(NULL) - at >= w) return 0;
+    return n;
+}
+
+/* said once per process: a limit that is silently not running is the bug
+ * this release exists to fix, so it does not get to be quiet */
+static void pp_counter_broken(pTHX)
+{
+    static int said = 0;
+    if (said) return;
+    said = 1;
+    warn("Punk::Plugin::TOTP: the second-factor attempt count could not be "
+         "written to the user row - the user table needs the totp_failed and "
+         "totp_failed_at columns (or whatever `fields` names them). Every "
+         "failed attempt un-answers the first factor until it does.");
+}
+
+/* write columns to the user row, mirroring them into the hash the caller
+ * holds; 0 when the write did not land */
+static int pp_user_write(pTHX_ HV *cfg, SV *c, HV *uh,
+                         const char *const *which, IV *vals, int n)
+{
+    SV *model = pp_model(aTHX_ cfg, c, "model");
+    HV *data  = newHV();
+    SV *dref, *ret, *id = pp_hget(aTHX_ uh, "id");
+    int i, threw = 0;
+
+    (void)hv_stores(data, "id", id ? newSVsv(id) : newSV(0));
+    for (i = 0; i < n; i++) {
+        STRLEN fl;
+        const char *fp = SvPV_const(pp_field(aTHX_ cfg, which[i]), fl);
+        (void)hv_store(data, fp, (I32)fl, newSViv(vals[i]), 0);
+    }
+    dref = sv_2mortal(newRV_noinc((SV *)data));
+    ret  = pp_call_common(aTHX_ model, "update", NULL, &dref, 1, &threw);
+    if (!threw && SvROK(ret))
+        SvREFCNT_dec(pp_await_ev(aTHX_ c, ret, &threw));
+    SvREFCNT_dec(ret);
+    if (threw) {
+        pp_counter_broken(aTHX);
+        return 0;
+    }
+    for (i = 0; i < n; i++) {
+        STRLEN fl;
+        const char *fp = SvPV_const(pp_field(aTHX_ cfg, which[i]), fl);
+        (void)hv_store(uh, fp, (I32)fl, newSViv(vals[i]), 0);
+    }
+    return 1;
+}
+
+static const char *const PP_FAILF[2] = { "failed", "failed_at" };
+
+static int pp_fail_bump(pTHX_ HV *cfg, SV *c, HV *uh, IV n)
+{
+    IV vals[2];
+    vals[0] = n + 1;
+    vals[1] = (IV)time(NULL);
+    return pp_user_write(aTHX_ cfg, c, uh, PP_FAILF, vals, 2);
+}
+
+static void pp_fail_clear(pTHX_ HV *cfg, SV *c, HV *uh)
+{
+    IV vals[2];
+    /* nothing to clear: the pass costs no write on the ordinary path */
+    if (!pp_user_iv(aTHX_ cfg, uh, "failed")
+        && !pp_user_iv(aTHX_ cfg, uh, "failed_at"))
+        return;
+    vals[0] = 0;
+    vals[1] = 0;
+    (void)pp_user_write(aTHX_ cfg, c, uh, PP_FAILF, vals, 2);
 }
 
 static SV *pp_redirect(pTHX_ SV *c, SV *where)
@@ -801,6 +912,10 @@ XS_INTERNAL(pp_h_use_recovery)
     m = pp_model(aTHX_ cfg, c, "recovery_model");
     f = newHV();
     (void)hv_stores(f, "digest", pp_recovery_digest(aTHX_ code));
+    /* scoped to the challenged account: a search on the digest alone walks
+     * every user's rows, which leaves the ownership test below as the only
+     * thing binding a code to the account it was issued to */
+    (void)hv_stores(f, "user_id", newSVsv(id));
     fref = sv_2mortal(newRV_noinc((SV *)f));
     res  = sv_2mortal(pp_await(aTHX_ c,
                sv_2mortal(pp_call(aTHX_ m, "search", &fref, 1))));
@@ -823,8 +938,14 @@ XS_INTERNAL(pp_h_use_recovery)
     if (!SvTRUE(gone)) XSRETURN_IV(0);                 /* raced; the other take won */
     v = pp_hget(aTHX_ rh, "kind");
     if (!v || !strEQ(SvPV_nolen_const(v), PP_RKIND)) XSRETURN_IV(0);
+    /* as bytes, not as integers: a user model may be keyed on a username, an
+     * email address or a UUID, and every one of those coerces to 0, which
+     * makes any two of them compare equal - one account's recovery code then
+     * passes another account's challenge. The filter above should mean this
+     * never fires; it stays because a model that ignores a filter key must
+     * not be the difference between accounts. */
     v = pp_hget(aTHX_ rh, "user_id");
-    if (!v || SvIV(v) != SvIV(id)) XSRETURN_IV(0);
+    if (!v || !sv_eq(v, id)) XSRETURN_IV(0);
     v = pp_hget(aTHX_ rh, "expires");
     if (v && SvIV(v) && SvIV(v) < (IV)time(NULL)) XSRETURN_IV(0);
     XSRETURN_IV(1);
@@ -951,7 +1072,7 @@ XS_INTERNAL(pp_r_post)
     HV *cfg = pp_cfg_of(aTHX_ cv);
     SV *c, *id, *model, *user, *code, *ok, *argv[2], *name;
     HV *p;
-    IV tries;
+    IV tries, limit;
 
     if (items < 1) XSRETURN_EMPTY;
     c = ST(0);
@@ -974,6 +1095,17 @@ XS_INTERNAL(pp_r_post)
         XSRETURN(1);
     }
 
+    /* the count is read BEFORE the code is judged, and an account over the
+     * limit is refused without judging it: a limit that still tells you
+     * whether the guess was right is not a limit */
+    limit = pp_cfg_iv(aTHX_ cfg, "attempts", 5);
+    tries = pp_fail_count(aTHX_ cfg, (HV *)SvRV(user));
+    if (tries >= limit) {
+        (void)hv_delete(pp_session(aTHX_ c), "totp_pending", 12, G_DISCARD);
+        ST(0) = sv_2mortal(pp_redirect(aTHX_ c, pp_cfg_sv(aTHX_ cfg, "login_path")));
+        XSRETURN(1);
+    }
+
     name = sv_2mortal(newSVpvs("code"));
     code = sv_2mortal(pp_call(aTHX_ c, "param", &name, 1));
     if (!SvOK(code)) sv_setpvs(code, "");
@@ -984,7 +1116,9 @@ XS_INTERNAL(pp_r_post)
     if (!SvTRUE(ok))
         ok = sv_2mortal(pp_call(aTHX_ c, "totp_use_recovery", argv, 2));
     if (SvTRUE(ok)) {
-        SV *to = sv_2mortal(pp_call(aTHX_ c, "totp_complete", NULL, 0));
+        SV *to;
+        pp_fail_clear(aTHX_ cfg, c, (HV *)SvRV(user));
+        to = sv_2mortal(pp_call(aTHX_ c, "totp_complete", NULL, 0));
         if (!SvOK(to)) sv_setpvs(to, "/");
         ST(0) = sv_2mortal(pp_redirect(aTHX_ c, to));
         XSRETURN(1);
@@ -993,18 +1127,16 @@ XS_INTERNAL(pp_r_post)
     /* repeated failure clears the pending state entirely, dropping the
      * attacker back to needing the password again - a limit that only
      * delays is a limit a patient script waits out */
+    /* a count that cannot be written is a limit that is not running, so the
+     * failure spends the marker instead: safe, and loud enough to notice */
+    tries = pp_fail_bump(aTHX_ cfg, c, (HV *)SvRV(user), tries) ? tries + 1
+                                                                : limit;
     p = pp_pending(aTHX_ c);                  /* re-read: Perl ran in between */
-    if (!p) {
-        ST(0) = sv_2mortal(pp_redirect(aTHX_ c, pp_cfg_sv(aTHX_ cfg, "login_path")));
-        XSRETURN(1);
-    }
-    tries = pp_cfg_iv(aTHX_ p, "tries", 0) + 1;
-    if (tries >= pp_cfg_iv(aTHX_ cfg, "attempts", 5)) {
+    if (!p || tries >= limit) {
         (void)hv_delete(pp_session(aTHX_ c), "totp_pending", 12, G_DISCARD);
         ST(0) = sv_2mortal(pp_redirect(aTHX_ c, pp_cfg_sv(aTHX_ cfg, "login_path")));
         XSRETURN(1);
     }
-    (void)hv_stores(p, "tries", newSViv(tries));   /* the dirty check sees it */
     ST(0) = sv_2mortal(pp_render(aTHX_ cfg, c, 1));
     XSRETURN(1);
 }
@@ -1088,8 +1220,9 @@ static void pp_register(pTHX_ SV *app, SV *optsv)
     static const char *const known[] = {
         "issuer", "algorithm", "digits", "period", "skew", "model",
         "fields", "recovery_model", "challenge_path", "login_path",
-        "attempts", "pending_ttl", "render" };
-    static const char *const fkeys[] = { "secret", "counter", "enabled", "email" };
+        "attempts", "attempt_window", "pending_ttl", "render", "sqitch" };
+    static const char *const fkeys[] = { "secret", "counter", "enabled", "email",
+                                         "failed", "failed_at" };
     HV *opts, *cfg, *fields;
     SV *pkgsv, *v;
     STRLEN pl;
@@ -1163,7 +1296,17 @@ static void pp_register(pTHX_ SV *app, SV *optsv)
     (void)hv_stores(cfg, "recovery_model", pp_opt_or(aTHX_ opts, "recovery_model", newSVpvs("Token")));
     (void)hv_stores(cfg, "challenge_path", pp_opt_or(aTHX_ opts, "challenge_path", newSVpvs("/login/totp")));
     (void)hv_stores(cfg, "login_path",     pp_opt_or(aTHX_ opts, "login_path",     newSVpvs("/login")));
-    (void)hv_stores(cfg, "attempts",       pp_opt_or(aTHX_ opts, "attempts",       newSViv(5)));
+    /* both are checked because both fail in a direction that is easy to miss:
+     * no attempts locks every account out for good, and no window means every
+     * failure has already lapsed, which is a limit that never counts */
+    {
+        IV a = (v = pp_hget(aTHX_ opts, "attempts")) ? SvIV(v) : 5;
+        IV w = (v = pp_hget(aTHX_ opts, "attempt_window")) ? SvIV(v) : 900;
+        if (a < 1) croak("TOTP attempts must be 1 or more");
+        if (w < 1) croak("TOTP attempt_window must be 1 second or more");
+        (void)hv_stores(cfg, "attempts",       newSViv(a));
+        (void)hv_stores(cfg, "attempt_window", newSViv(w));
+    }
     (void)hv_stores(cfg, "pending_ttl",    pp_opt_or(aTHX_ opts, "pending_ttl",    newSViv(300)));
     if ((v = pp_hget(aTHX_ opts, "render")))
         (void)hv_stores(cfg, "render", newSVsv(v));
@@ -1173,7 +1316,9 @@ static void pp_register(pTHX_ SV *app, SV *optsv)
     (void)hv_stores(fields, "secret",  newSVpvs("totp_secret"));
     (void)hv_stores(fields, "counter", newSVpvs("totp_last_counter"));
     (void)hv_stores(fields, "enabled", newSVpvs("totp_enabled"));
-    (void)hv_stores(fields, "email",   newSVpvs("email"));
+    (void)hv_stores(fields, "email",     newSVpvs("email"));
+    (void)hv_stores(fields, "failed",    newSVpvs("totp_failed"));
+    (void)hv_stores(fields, "failed_at", newSVpvs("totp_failed_at"));
     (void)hv_stores(cfg, "fields", newRV_noinc((SV *)fields));
     if ((v = pp_hget(aTHX_ opts, "fields"))) {
         HE *he;
@@ -1182,7 +1327,8 @@ static void pp_register(pTHX_ SV *app, SV *optsv)
         while ((he = hv_iternext((HV *)SvRV(v)))) {
             const char *k = SvPV_nolen_const(hv_iterkeysv(he));
             int found = 0;
-            for (i = 0; i < 4; i++) if (strEQ(k, fkeys[i])) { found = 1; break; }
+            for (i = 0; i < (int)(sizeof fkeys / sizeof fkeys[0]); i++)
+                if (strEQ(k, fkeys[i])) { found = 1; break; }
             if (!found) croak("unknown TOTP fields key '%s'", k);
             (void)hv_store(fields, k, (I32)strlen(k),
                            newSVsv(hv_iterval((HV *)SvRV(v), he)), 0);
@@ -1190,6 +1336,51 @@ static void pp_register(pTHX_ SV *app, SV *optsv)
     }
 
     (void)hv_store(PP_STATE, pkg, (I32)pl, newRV_inc((SV *)cfg), 0);
+
+    /* sqitch => 1: the three columns, shipped as the Sqitch project
+     * `punk_totp` under lib/Punk/Plugin/TOTP/sqitch - one change requiring
+     * punk_auth:users - and registered with Punk-Sqitch, which deploys it
+     * after Punk::Auth's project and before the application's. Opt-in, as
+     * `fields` exists for rows with other column names; asking without
+     * Punk-Sqitch installed is an error, not a silence. */
+    if ((v = pp_hget(aTHX_ opts, "sqitch")) && SvTRUE(v)) {
+        /* Located from Punk/TOTP.pm, the module this XS always loads through:
+         * Punk/Plugin/TOTP.pm may never be in %INC at all, since Punk skips
+         * the require when the package already has a register - which it
+         * does the moment Punk::TOTP is loaded by anything. */
+        SV **totppm = hv_fetchs(GvHV(PL_incgv), "Punk/TOTP.pm", 0);
+        SV *dir, *argv[4], *cls, *r;
+        AV *eng;
+        eval_pv("require Punk::Plugin::Sqitch; 1", FALSE);
+        if (SvTRUE(ERRSV))
+            croak("plugin 'TOTP': sqitch => 1 needs Punk-Sqitch "
+                  "(Punk::Plugin::Sqitch) installed: %s", SvPV_nolen(ERRSV));
+        if (!(totppm && *totppm && SvOK(*totppm)))
+            croak("plugin 'TOTP': cannot find Punk/TOTP.pm in %%INC to "
+                  "locate the punk_totp Sqitch project");
+        dir = sv_2mortal(newSVsv(*totppm));
+        {   /* .../Punk/TOTP.pm -> .../Punk/Plugin/TOTP/sqitch */
+            STRLEN dl; const char *dp = SvPV_const(dir, dl);
+            if (dl >= 7 && memEQ(dp + dl - 7, "TOTP.pm", 7)) SvCUR_set(dir, dl - 7);
+        }
+        sv_catpvs(dir, "Plugin/TOTP/sqitch");
+        eng = newAV();
+        av_push(eng, newSVpvs("sqlite"));
+        av_push(eng, newSVpvs("pg"));
+        av_push(eng, newSVpvs("mysql"));
+        cls = sv_2mortal(newSVpvs("Punk::Plugin::Sqitch"));
+        argv[0] = app;
+        argv[1] = sv_2mortal(newSVpvs("punk_totp"));
+        argv[2] = dir;
+        argv[3] = sv_2mortal(newSVpvs("engines"));
+        {
+            SV *argv5[5] = { argv[0], argv[1], argv[2], argv[3],
+                             sv_2mortal(newRV_noinc((SV *)eng)) };
+            r = pp_call(aTHX_ cls, "project", argv5, 5);
+        }
+        if (r) SvREFCNT_dec(r);
+        (void)hv_delete(cfg, "sqitch", 6, G_DISCARD);
+    }
 
     /* the QR renderer, resolved now: fail at boot, not at enrolment */
     pp_qr_boot(aTHX);

@@ -19,6 +19,28 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/*
+ * Windows has no global symbol namespace: a function is only reachable
+ * from a dependent DLL if the defining DLL exports it. GNU toolchains
+ * get that wholesale from --export-all-symbols (see Makefile.PL), but
+ * MSVC exports nothing beyond the boot XSUB unless each function says
+ * so, and sister plugin dists then fail to link with
+ *
+ *     error LNK2001: unresolved external symbol _archive_register_plugin
+ *
+ * FILE_RAW_ARCHIVE_BUILDING is defined only while building Archive.dll
+ * itself; every consumer sees the same declarations as dllimport.
+ */
+#if defined(_MSC_VER)
+#  ifdef FILE_RAW_ARCHIVE_BUILDING
+#    define ARCHIVE_API __declspec(dllexport)
+#  else
+#    define ARCHIVE_API __declspec(dllimport)
+#  endif
+#else
+#  define ARCHIVE_API
+#endif
+
 /* Entry types. Matches POSIX archive flavours. */
 typedef enum {
     AE_FILE     = 1,
@@ -121,15 +143,17 @@ struct ArchivePlugin {
 };
 
 /* Registry. Mirrors file_plugin.h's shape so the patterns match. */
-int archive_register_plugin(pTHX_ const ArchivePlugin *plugin);
-int archive_unregister_plugin(pTHX_ const char *name);
-const ArchivePlugin *archive_lookup_plugin(pTHX_ const char *name);
-const ArchivePlugin *archive_probe_for(pTHX_ const char *bytes, size_t len);
+ARCHIVE_API int archive_register_plugin(pTHX_ const ArchivePlugin *plugin);
+ARCHIVE_API int archive_unregister_plugin(pTHX_ const char *name);
+ARCHIVE_API const ArchivePlugin *archive_lookup_plugin(pTHX_ const char *name);
+ARCHIVE_API const ArchivePlugin *archive_probe_for(pTHX_ const char *bytes, size_t len);
 
 /* Apply xattrs to an open file descriptor using the platform's native
  * extended-attribute API. Returns 0 on success, -1 on the first
  * error (errno set). On platforms without xattr support (Windows),
- * returns 0 without doing anything. */
-int archive_apply_xattrs(int fd, const ArchiveXattr *xattrs, size_t n);
+ * returns 0 without doing anything - as does a destination filesystem
+ * that rejects extended attributes outright (ENOTSUP/EOPNOTSUPP, e.g.
+ * tmpfs before Linux 6.6): the attributes are dropped, not an error. */
+ARCHIVE_API int archive_apply_xattrs(int fd, const ArchiveXattr *xattrs, size_t n);
 
 #endif /* ARCHIVE_PLUGIN_H */

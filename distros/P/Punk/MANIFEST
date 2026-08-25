@@ -15,6 +15,8 @@ bench/apps/mojo-dyn.psgi
 bench/apps/mojo-hello.psgi
 bench/apps/mojo-json.psgi
 bench/apps/oa-plack.psgi
+bench/apps/punk-304.psgi
+bench/apps/punk-404.psgi
 bench/apps/punk-api.psgi
 bench/apps/punk-cache-file.psgi
 bench/apps/punk-cache-memory.psgi
@@ -28,6 +30,7 @@ bench/apps/punk-idempotency.psgi
 bench/apps/punk-json.psgi
 bench/apps/punk-page.psgi
 bench/apps/punk-request-id.psgi
+bench/apps/punk-static.psgi
 bench/apps/punk-upload.psgi
 bench/apps/punk-validate.psgi
 bench/bench.pl
@@ -87,6 +90,7 @@ include/punk/punk_dbq.h
 include/punk/punk_dispatch.h
 include/punk/punk_entropy.h
 include/punk/punk_favicon.h
+include/punk/punk_filecache.h
 include/punk/punk_flash.h
 include/punk/punk_future.h
 include/punk/punk_headers.h
@@ -266,6 +270,9 @@ t/0310-static.t
 t/0311-static-precompressed.t
 t/0312-compress-optout.t
 t/0313-static-cache.t
+t/0314-static-index.t
+t/0315-static-filecache.t
+t/0316-static-stat-cache.t
 t/0400-sendfile-parse.t
 t/0401-sendfile.t
 t/0410-upload.t
@@ -344,6 +351,7 @@ t/1300-generate.t
 t/1301-generate-into.t
 t/1310-command.t
 t/1311-cli.t
+t/1312-serve.t
 t/1320-test-client.t
 t/1321-test-client-stream.t
 t/1330-dev-error.t

@@ -4,7 +4,7 @@ use 5.010001;
 use strict;
 use warnings;
 
-our $VERSION = '0.10';
+our $VERSION = '0.12';
 
 require XSLoader;
 XSLoader::load('Template::Stencil', $VERSION);

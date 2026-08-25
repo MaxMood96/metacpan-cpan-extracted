@@ -5,10 +5,14 @@ PROTOTYPES: DISABLE
 # Address of Punk's own C ABI table (pk_abi.h). A consumer XS module fetches
 # this once at boot, INT2PTRs it to a `const pk_abi *`, and checks
 # ->abi_version before using it. Not part of the public Perl API.
-IV
+#
+# Unsigned, not IV: where the loader maps this object decides the sign bit.
+# A 32-bit perl above 0x7fffffff, or illumos putting shared objects up at
+# 0xfffffd7f..., would hand back a negative number from PTR2IV.
+UV
 _abi_ptr()
     CODE:
-        RETVAL = PTR2IV(&PK_ABI);
+        RETVAL = PTR2UV(&PK_ABI);
     OUTPUT:
         RETVAL
 

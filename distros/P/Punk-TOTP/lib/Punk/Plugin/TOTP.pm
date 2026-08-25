@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk::TOTP ();    # one dist, one bootstrap: the plugin lives in its bundle
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 1;
 
@@ -58,12 +58,16 @@ is easy to get wrong.
         period    => 30,
         skew      => 1,
         model     => 'User',
-        render    => sub { ... }, # render the challenge form can also be a context method name 
+        attempts       => 5,      # failed codes before the factor locks
+        attempt_window => 900,    # ... and how long the count stands
+        render    => sub { ... }, # render the challenge form can also be a context method name
         fields    => {
-            secret  => 'totp_secret',
-            counter => 'totp_last_counter',
-            enabled => 'totp_enabled',
-            email   => 'email',
+            secret    => 'totp_secret',
+            counter   => 'totp_last_counter',
+            enabled   => 'totp_enabled',
+            email     => 'email',
+            failed    => 'totp_failed',
+            failed_at => 'totp_failed_at',
         },
     };
 
@@ -121,10 +125,17 @@ path rather than weakening them.
 =head2 $c->totp_use_recovery($user, $code)
 
 Spends a code: true once, false forever after. Case and grouping fold
-before the digest, so what the paper shows is what works. The row is
-deleted BEFORE the code is judged - a probe with the wrong user or
-the wrong kind burns the row it hit rather than leaving it live for
-its real endpoint, the same discipline C<take_token> documents.
+before the digest, so what the paper shows is what works.
+
+The lookup is scoped to C<$user>, and the row's C<user_id> is compared
+as bytes, so a code only ever works for the account it was issued to
+whether that account is keyed on a number, a username, an email
+address or a UUID. Rows belonging to anyone else are never reached.
+
+Within that scope the row is deleted BEFORE the code is judged - a
+probe with the wrong kind burns the row it hit rather than leaving it
+live for its real endpoint, the same discipline C<take_token>
+documents.
 
 =head1 THE AUTH SEAM
 
@@ -162,6 +173,25 @@ after C<attempts> failures> (default 5): a limit that only delays is
 a limit a patient script waits out; this one un-answers the first
 factor. A per-address C<rate_limit> (30/minute) sits on top.
 
+The count is kept B<on the user row>, in the C<failed> and C<failed_at>
+columns, and so belongs to the account rather than to the session or to
+the pending marker. Both of the other places would have been the
+client's to choose: a Punk session without a store is a signed cookie,
+which a client can keep a copy of and present again with its counter
+intact, and a new marker is one password step away in any case. While
+an account is over the limit the submitted code is not judged at all -
+a limit that still answers whether the guess was right is not a limit.
+
+C<attempt_window> (default 900 seconds) is how long a failure counts
+for. The window is what makes this self-healing, and it is not
+optional: a lock with no way out hands anyone who knows a password a
+way to keep the account's owner locked out for good, which is a worse
+bargain than the guessing it prevents.
+
+If the columns are missing the count cannot be kept, and rather than
+guess, every failed attempt then un-answers the first factor and the
+plugin warns once. Deploy the schema (see L</STORAGE>).
+
 An application with the C<csrf> keyword enabled must pass its own
 C<render> that includes the token, or exempt the path; the default
 form carries none.
@@ -187,12 +217,29 @@ of enforcement where the step-up guard stands.
 
 =head1 STORAGE
 
-Three columns on the user row, named by C<fields>: the secret (text,
+Five columns on the user row, named by C<fields>: the secret (text,
 and it cannot be hashed - whoever reads it can mint codes), the last
 accepted counter (the replay floor; one write per successful
-verification), and the enabled flag the application flips only after
+verification), the enabled flag the application flips only after
 a first successful verification - enrolment is not complete until one
-code proves the phone has the secret.
+code proves the phone has the secret - and the failure count with the
+epoch of the failure that last moved it, which is what bounds guessing
+at the challenge (see L</The challenge route>). Only a failed attempt
+writes the count; a sign-in that never failed costs nothing.
+
+=head2 Shipping them with Sqitch
+
+    plugin 'TOTP' => { issuer => 'MyApp', sqitch => 1 };
+
+With the Punk-Sqitch distribution installed, C<< sqitch => 1 >> registers
+the columns as the Sqitch project C<punk_totp> - one change,
+C<totp>, that requires C<punk_auth:users> from L<Punk::Auth>'s own
+project (C<< auth sqitch => 1 >>) - with scripts for SQLite, PostgreSQL
+and MySQL, and C<punk sqitch deploy> deploys it after Punk::Auth's and
+before the application's. Opt-in, because C<fields> exists for rows
+with other column names and the project adds the defaults. Asking for
+it without Punk-Sqitch installed croaks at the plugin line. See
+L<Punk::Plugin::Sqitch>.
 
 =head1 AUTHOR
 

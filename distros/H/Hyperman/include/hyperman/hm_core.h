@@ -97,6 +97,18 @@ struct hm_conn {
     unsigned char tls_hs;         /* TLS handshake in progress       */
     unsigned char tls_r_wants_w;  /* SSL_read blocked wanting write  */
     unsigned char tls_w_wants_r;  /* SSL_write blocked wanting read  */
+    unsigned char ktls_tx;        /* TX offloaded to the kernel (reporting
+                                   * only - the write paths ask OpenSSL
+                                   * itself, see hm_ktls_tx)          */
+    unsigned char recv_fallback;  /* this connection reads off readiness for
+                                   * good: completion was unavailable or
+                                   * refused once, and a persistent watcher
+                                   * is armed                    */
+    unsigned char recv_inflight;  /* a completion-mode recv is outstanding
+                                   * into c->rbuf; the kernel may write to
+                                   * it at any moment, so it must not be
+                                   * grown, freed or reused until the
+                                   * completion lands            */
     unsigned char detached;       /* app took the socket (see hm_detach) */
     unsigned char accepts_gzip;   /* this request's Accept-Encoding    */
     hm_bsrc  bsrc;          /* streaming body being dripped, if any */
@@ -156,6 +168,12 @@ struct hm_loop {
     int         hidx_cap;
     hm_conn    *lru_head, *lru_tail;
     hm_conn    *pool; int pool_n;
+    /* Completion-mode receive (io_uring only, opt-in). `completion` is set
+     * once at loop start when the backend can do it and the operator asked.
+     * `quar` holds read buffers belonging to connections that closed with a
+     * recv still outstanding - see hm_quar_push. */
+    int         completion;
+    struct hm_quar *quar;
     hm_tw      *sweep_tw;
     SV         *app;                /* server: PSGI app coderef     */
     hm_listener *listeners;         /* server: bound listeners      */
@@ -738,7 +756,120 @@ static void hm_lru_touch(hm_loop *loop, hm_conn *c) {
     if (!loop->lru_head) loop->lru_head = c;
 }
 
+/* ---- completion-mode receive ---------------------------------------------
+ *
+ * A readiness backend says "this fd has bytes" and the core reads them. A
+ * completion backend is asked for the read UP FRONT and hands back bytes that
+ * are already in the buffer - which is how the read syscall stops being a
+ * syscall per request and becomes part of one batched submission per turn of
+ * the loop.
+ *
+ * What that costs is that the kernel holds a pointer into c->rbuf for a while,
+ * and the two things the core does casually with that buffer - GROW it, and
+ * POOL it for the next connection - both become memory corruption if they
+ * happen while a read is outstanding. Growth is handled by only ever growing
+ * before arming (hm_arm_recv). Pooling is handled here.
+ *
+ * The identity problem is the other half. A completion can outlive the
+ * connection that asked for it: hm_close closes the fd, the number is reused
+ * by a new connection moments later, and the old read lands looking exactly
+ * like the new one's. So every read carries a token of fd plus the
+ * connection's generation id, and a completion whose token does not match the
+ * connection now holding that fd is somebody else's. */
+
+#define HM_RECV_TOKEN(c) \
+    (((uint64_t)(c)->id << 17) | (uint64_t)(unsigned)(c)->fd)
+
+/* A read buffer whose connection is gone but whose kernel read is not. Parked
+ * under the token the kernel will hand back, and freed when it does. */
+typedef struct hm_quar {
+    uint64_t        token;
+    char           *buf;
+    struct hm_quar *next;
+} hm_quar;
+
+static void hm_quar_push(hm_loop *loop, uint64_t token, char *buf) {
+    hm_quar *q;
+    if (!buf) return;
+    q = (hm_quar *)malloc(sizeof(hm_quar));
+    /* Out of memory with a read outstanding: the buffer CANNOT be freed, so
+     * it is leaked deliberately. One leaked read buffer beats handing the
+     * kernel a pointer into the heap it no longer owns. */
+    if (!q) return;
+    q->token = token;
+    q->buf   = buf;
+    q->next  = loop->quar;
+    loop->quar = q;
+}
+
+static void hm_quar_release(hm_loop *loop, uint64_t token) {
+    hm_quar **pp = &loop->quar, *q;
+    while ((q = *pp)) {
+        if (q->token == token) { *pp = q->next; free(q->buf); free(q); return; }
+        pp = &q->next;
+    }
+}
+
+static void hm_quar_free_all(hm_loop *loop) {
+    hm_quar *q = loop->quar, *n;
+    while (q) { n = q->next; free(q->buf); free(q); q = n; }
+    loop->quar = NULL;
+}
+
+/* Ask for this connection's next read. 1 if one is now outstanding, 0 if the
+ * caller must fall back to a readiness watcher - which is always correct, so
+ * every refusal here is a performance decision and never a correctness one. */
+static int hm_arm_recv(hm_loop *loop, hm_conn *c) {
+    size_t want;
+    if (!loop->completion || !loop->be->submit_recv) return 0;
+    /* TLS reads belong to OpenSSL: the bytes on the socket are ciphertext and
+     * the engine may already hold plaintext this would never see. */
+    if (c->ssl || c->recv_inflight || c->detached) return 0;
+    if (c->rlen == c->rcap) {
+        /* Grow BEFORE the kernel is given the pointer. Never while a read is
+         * outstanding, which is why this cannot live in the completion. */
+        size_t ncap;
+        if (c->rcap >= loop->max_read) return 0;   /* the readiness path owns
+                                                    * the oversize/413 answer */
+        ncap = c->rcap * 2;
+        if (ncap > loop->max_read) ncap = loop->max_read;
+        c->rbuf = (char *)hm_xrealloc(c->rbuf, ncap);
+        c->rcap = ncap;
+    }
+    want = c->rcap - c->rlen;
+    if (loop->be->submit_recv(loop->be, c->fd, c->rbuf + c->rlen, want,
+                              HM_RECV_TOKEN(c)) != 0)
+        return 0;
+    c->recv_inflight = 1;
+    return 1;
+}
+
+/* Arm the next read however this connection reads: a completion if it can,
+ * a readiness watcher otherwise. */
+static void hm_rearm_read(hm_loop *loop, hm_conn *c) {
+    /* Already reading off readiness: the watcher is persistent and
+     * level-triggered, so re-adding it would be a syscall per response on
+     * epoll for no effect at all. */
+    if (c->recv_fallback) return;
+    if (hm_arm_recv(loop, c)) return;
+    c->recv_fallback = 1;
+    loop->be->add_io(loop->be, c->fd, HM_EV_READ, 0);
+}
+
 static void hm_close(pTHX_ hm_loop *loop, hm_conn *c) {
+    /* Before anything else touches the buffers: if the kernel is still
+     * holding a pointer into this connection's read buffer, take the buffer
+     * away from the connection so the pooling below cannot hand it to the
+     * next one. The connection is pooled with a NULL rbuf and hm_new_conn
+     * allocates a fresh one. */
+    if (c && c->recv_inflight) {
+        if (loop->be->cancel_recv) loop->be->cancel_recv(loop->be, c->fd);
+        hm_quar_push(loop, HM_RECV_TOKEN(c), c->rbuf);
+        c->rbuf = NULL;
+        c->rcap = 0;
+        c->rlen = 0;
+        c->recv_inflight = 0;
+    }
     if (c && c->spill_fd >= 0) {     /* a body was still draining */
         PerlLIO_close(c->spill_fd);
         c->spill_fd = -1;
@@ -895,8 +1026,13 @@ static hm_conn *hm_new_conn(hm_loop *loop, int fd, hm_listener *lst) {
     loop->nconns++;
     hm_set_nonblock(fd);
     { int one = 1; hm_os_setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one)); }
-    loop->be->add_io(loop->be, fd, HM_EV_READ, 0);
-    if (lst && lst->tls_ctx) hm_tls_wrap(c, lst->tls_ctx);   /* TLS: handshake first */
+    if (lst && lst->tls_ctx) {
+        /* TLS wraps first: the handshake is driven off readiness, and
+         * hm_arm_recv would decline a TLS connection anyway. */
+        loop->be->add_io(loop->be, fd, HM_EV_READ, 0);
+        hm_tls_wrap(c, lst->tls_ctx);
+    }
+    else hm_rearm_read(loop, c);
     /* append to LRU tail */
     c->lru_prev = loop->lru_tail;
     if (loop->lru_tail) loop->lru_tail->lru_next = c;
@@ -1695,7 +1831,8 @@ static int hm_queue_response(pTHX_ hm_conn *c, SV *resp) {
 
     /* fast path: nothing queued before this response -> writev header+body
      * straight from the response SVs, no body copy */
-    if (hdr_start == 0 && c->woff == 0 && !c->writing && !fh_body && !c->ssl
+    if (hdr_start == 0 && c->woff == 0 && !c->writing && !fh_body
+        && (!c->ssl || hm_ktls_tx(c))
         && !c->bsrc.kind && bav && bn >= 0 && bn < HM_IOV_MAX) {
         hm_iovec iov[HM_IOV_MAX];
         size_t total = c->wlen;
@@ -1800,7 +1937,7 @@ static int hm_flush(pTHX_ hm_conn *c) {
 #if defined(HM_HAVE_SENDFILE_LINUX) || defined(HM_HAVE_SENDFILE_FREEBSD) \
     || defined(HM_HAVE_SENDFILE_MACOS)
         /* file straight to a plaintext socket, no copy through userspace */
-        if (c->bsrc.kind == 1 && !c->ssl && !c->bsrc.nosf) {
+        if (c->bsrc.kind == 1 && (!c->ssl || hm_ktls_tx(c)) && !c->bsrc.nosf) {
             size_t want = c->bsrc.remaining < HM_SENDFILE_MAX
                               ? (size_t)c->bsrc.remaining : HM_SENDFILE_MAX;
             ssize_t sent = -1;
@@ -1869,7 +2006,11 @@ static int hm_flush(pTHX_ hm_conn *c) {
     if (!c->keepalive && !c->awaiting) { hm_close(aTHX_ loop, c); return -1; }
     /* requests that pipelined in behind the stream were parked; pick them
      * up on the next loop turn */
-    if (src_done && c->rlen > 0) hm_again_push(loop, c);
+    /* Pipelined requests behind the stream are picked up next turn - and in
+     * completion mode the SAME push is what re-arms the read, which is why
+     * an empty buffer is scheduled too. Without that a connection that
+     * streamed a body would never be read from again. */
+    if (src_done && (c->rlen > 0 || loop->completion)) hm_again_push(loop, c);
     return 0;
 }
 
@@ -1910,6 +2051,11 @@ static void hm_deliver(pTHX_ int fd, UV id, SV *resp) {
         } else {
             SvREFCNT_dec(env_rv);
         }
+        /* Parked connections have no read outstanding - the completion
+         * handler skipped arming one while the response was being made - so
+         * the re-arm is scheduled here, for the top of the next turn. */
+        if (loop->conns[fd] == c && !c->awaiting && !c->bsrc.kind)
+            hm_again_push(loop, c);
         return;
     }
     if (hm_queue_response(aTHX_ c, resp) == 0
@@ -1919,6 +2065,8 @@ static void hm_deliver(pTHX_ int fd, UV id, SV *resp) {
         hm_process(aTHX_ c);
         if (loop->conns[fd] == c) hm_flush(aTHX_ c);
     }
+    if (loop->conns[fd] == c && !c->awaiting && !c->bsrc.kind)
+        hm_again_push(loop, c);
 }
 
 /* Send status+headers for a streaming response; body follows via
@@ -2558,6 +2706,10 @@ static void hm_tls_handshake(pTHX_ hm_conn *c) {
     if (r == 1) {
         c->tls_hs = 0;
         hm_tls_capture_peer(c);       /* protocol/cipher + any client cert */
+        /* What the kernel took, for stats and tests. The write paths do NOT
+         * read this - they ask OpenSSL again each time, because the answer
+         * can change under them (see hm_ktls_tx). */
+        c->ktls_tx = hm_ktls_tx(c) ? 1 : 0;
         if (c->writing) {
             loop->be->remove_io(loop->be, c->fd, HM_EV_WRITE);
             c->writing = 0;
@@ -2692,7 +2844,16 @@ static void hm_run_again(pTHX_ hm_loop *loop) {
         if (c && c->id == loop->again[i].id && !c->awaiting
             && !c->bsrc.kind) {
             hm_process(aTHX_ c);
-            if (loop->conns[c->fd] == c) hm_flush(aTHX_ c);
+            if (loop->conns[c->fd] == c) {
+                hm_flush(aTHX_ c);
+                /* THE re-arm point for completion mode, and the reason
+                 * anything that wants a read armed calls hm_again_push
+                 * rather than arming for itself: this runs at the top of a
+                 * loop turn, so hm_process is not on the stack and growing
+                 * the read buffer cannot pull the ground out from under the
+                 * pointers it holds into it. */
+                if (loop->conns[c->fd] == c) hm_rearm_read(loop, c);
+            }
         }
     }
 }
@@ -2741,6 +2902,51 @@ static void hm_dispatch(pTHX_ hm_loop *loop, hm_event *ev) {
         }
         hm_on_signal(aTHX_ loop);
         return;
+    case HM_EV_RECV: {
+        /* A read the core asked for has finished; the bytes are already in
+         * the buffer it supplied. */
+        int fd = ev->fd;
+        hm_conn *c = (fd >= 0 && fd < HM_MAXFD) ? loop->conns[fd] : NULL;
+
+        /* Is this OUR read? A completion can outlive its connection - the fd
+         * may have been closed and reused since - and the token is the only
+         * thing that can tell the difference. Anything that does not match
+         * belongs to a connection that is gone, and the buffer it was reading
+         * into is parked waiting for exactly this moment. */
+        if (!c || !c->recv_inflight || HM_RECV_TOKEN(c) != ev->token) {
+            hm_quar_release(loop, ev->token);
+            return;
+        }
+        c->recv_inflight = 0;
+        if (ev->res <= 0) {   /* EOF, error, or the cancel from a close */
+            hm_close(aTHX_ loop, c);
+            return;
+        }
+        c->rlen += (size_t)ev->res;
+        c->last_active = loop->now;
+        hm_lru_touch(loop, c);
+        hm_process(aTHX_ c);
+        if (loop->conns[fd] != c) return;      /* dispatch closed it */
+        hm_flush(aTHX_ c);
+        if (loop->conns[fd] != c) return;      /* flush closed it */
+        /* Re-armed even while PARKED or streaming, and that is not an
+         * optimisation - it is how a disconnect is noticed at all.
+         *
+         * A readiness backend keeps a persistent watcher on every connection,
+         * so a client that walks away from a parked async request wakes the
+         * loop with EOF and the response Future gets cancelled. Completion
+         * mode has no such watcher: with no read outstanding the close is
+         * simply never seen, the Future is never cancelled, and the
+         * connection sits there until the idle sweep. t/13-async-psgi.t
+         * catches exactly this.
+         *
+         * Safe because the request's bytes are gone from the buffer before it
+         * parks - hm_process consumes them, and hm_new_input COPIES the body
+         * into an SV - so nothing points into rbuf across a park, and the
+         * kernel only ever writes past rlen. */
+        hm_rearm_read(loop, c);
+        return;
+    }
     case HM_EV_READ: {
         int fd = ev->fd;
         hm_conn *c;
@@ -2834,6 +3040,23 @@ static hm_loop *hm_loop_new(pTHX_ const char *backend_name) {
     loop->compress_min   = HZ_MIN_LENGTH;
     loop->compress_level = HZ_LEVEL;
     loop->shutdown_grace = 30.0;
+    /* Completion-mode reads, on wherever the backend can do them.
+     *
+     * That is io_uring alone, and io_uring is never auto-selected - the
+     * chooser goes kqueue, epoll, poll - so this only ever applies to a loop
+     * somebody asked for by name. Having asked for io_uring, they get its
+     * better mode rather than a second switch to find.
+     *
+     * HYPERMAN_COMPLETION overrides, exactly as HYPERMAN_BACKEND overrides
+     * the chooser; run(completion => ...) overrides both, being the most
+     * specific thing the caller said. */
+    loop->completion = loop->be->submit_recv ? 1 : 0;
+    {
+        const char *v = getenv("HYPERMAN_COMPLETION");
+        if (v && *v)
+            loop->completion =
+                (*v != '0' && loop->be->submit_recv) ? 1 : 0;
+    }
     return loop;
 }
 
@@ -2867,6 +3090,10 @@ static void hm_loop_free(pTHX_ hm_loop *loop) {
     int owned;
     if (!loop) return;
     owned = (loop->pid == hm_os_getpid());
+    /* Read buffers still parked for completions that will now never be
+     * reaped. The ring is torn down with the backend below, so nothing can
+     * be writing into them by the time this returns. */
+    hm_quar_free_all(loop);
     for (i = 0; i < HM_MAXFD; i++) {
         if (loop->conns[i]) {
             hm_conn *c = loop->conns[i];
@@ -3158,6 +3385,7 @@ typedef struct {
     int         nlspecs;
     double      idle_t, header_t, grace;
     int         max_pipe, reuseport, affinity, nworkers;
+    int         completion;        /* -1 = say nothing, 0/1 = force        */
     int         compress;
     size_t      compress_min;
     int         compress_level;
@@ -3325,6 +3553,10 @@ static void hm_worker(pTHX_ const hm_worker_cfg *cfg, const int *fds) {
     if (cfg->max_pipe > 0) loop->max_pipeline   = cfg->max_pipe;
     if (cfg->grace    > 0) loop->shutdown_grace = cfg->grace;
     loop->max_requests = cfg->max_requests;
+    /* Only when the caller actually said so: -1 leaves whatever the loop
+     * decided for itself from the backend and the environment. */
+    if (cfg->completion >= 0)
+        loop->completion = (cfg->completion && loop->be->submit_recv) ? 1 : 0;
     loop->compress      = cfg->compress;
     if (cfg->compress_min) loop->compress_min = cfg->compress_min;
     if (cfg->compress_level) loop->compress_level = cfg->compress_level;

@@ -36,23 +36,33 @@ File::Find::find(sub {
 # object (which would crash older CPUs); runtime dispatch in stencil_boot.c
 # picks a variant only when the CPU actually supports it.
 
+# MSVC spells its output flags -Fo (object) and -Fe (exe) and merely warns
+# about -o, writing the file somewhere else; gcc and clang take -o for both.
+# $Config{cc} is plain "cl" on a Visual Studio perl.
+my $MSVC = ($Config{cc} || '') =~ /\bcl(?:\.exe)?\s*$/i ? 1 : 0;
+
 sub try_compile {
     my ($code, $flags, $link) = @_;
     $flags = '' unless defined $flags;
     my $dir = "ts_probe_$$";
     mkdir $dir or return 0;
-    my ($src, $out, $ok) = ("$dir/probe.c", "$dir/probe.out", 0);
+    my ($src, $out, $obj, $ok)
+        = ("$dir/probe.c", "$dir/probe.out", "$dir/probe.obj", 0);
     if (open my $fh, '>', $src) {
         print $fh $code;
         close $fh;
         my $cc  = $Config{cc} || 'cc';
-        my $c   = $link ? '' : '-c';
+        my $cmd = $MSVC
+            ? ($link ? "$cc $flags $src -Fo$obj -Fe$out"
+                     : "$cc $flags -c $src -Fo$out")
+            : ($link ? "$cc $flags $src -o $out"
+                     : "$cc $flags -c $src -o $out");
         # cmd.exe has no /dev/null and no 2>&1-after-redirect ordering
         # quirks worth fighting; NUL does the same job there.
         my $null = $^O eq 'MSWin32' ? 'NUL' : '/dev/null';
-        $ok = system("$cc $flags $c $src -o $out >$null 2>&1") == 0;
+        $ok = system("$cmd >$null 2>&1") == 0;
     }
-    unlink $src, $out;
+    unlink $src, $out, $obj;
     rmdir $dir;
     return $ok;
 }
@@ -66,7 +76,9 @@ push @defines, '-DSTENCIL_HAVE_COMPUTED_GOTO' if try_compile(<<'C');
 int main(void) { static void *t[] = { &&a }; goto *t[0]; a: return 0; }
 C
 
-push @defines, '-DSTENCIL_HAVE_BUILTIN_EXPECT' if try_compile(<<'C');
+# Compile AND link: cl takes an undeclared __builtin_expect as a warning
+# (C4013, exit 0) and the define then breaks the link of the real .dll.
+push @defines, '-DSTENCIL_HAVE_BUILTIN_EXPECT' if try_compile(<<'C', '', 1);
 int main(void) { return __builtin_expect(0, 0); }
 C
 
@@ -105,10 +117,14 @@ my $trivial  = "int main(void) { return 0; }\n";
 my $optimize = $Config{optimize} || '-O2';
 my $ldflags  = '';
 
-for my $flag ('-O3', '-fomit-frame-pointer') {
-    if (try_compile($trivial, "$optimize $flag")) {
-        $optimize =~ s/(?:^|\s)-O[0-9s]\b//g if $flag eq '-O3';
-        $optimize = join ' ', grep { length } $optimize, $flag;
+# These are gcc spellings. cl "ignores unknown option" with a warning and
+# exit 0, so the probe cannot tell, and its own -O1 -Zi -GL stays as is.
+unless ($MSVC) {
+    for my $flag ('-O3', '-fomit-frame-pointer') {
+        if (try_compile($trivial, "$optimize $flag")) {
+            $optimize =~ s/(?:^|\s)-O[0-9s]\b//g if $flag eq '-O3';
+            $optimize = join ' ', grep { length } $optimize, $flag;
+        }
     }
 }
 # Not on Windows: MinGW's DLL auto-export cannot see symbols inside LTO
@@ -189,12 +205,15 @@ WriteMakefile(%WriteMakefileArgs);
 sub MY::postamble {
     my $headers = join ' ', 'ppport.h',
                             sort(glob('include/*.h'), glob('src/*.inc'));
+    # cl only warns about -o and writes x.obj into the cwd, so the link
+    # cannot find src/x.obj (the VS2013 smoker on 0.10); -Fo is its spelling.
+    my $ofl = $MSVC ? '-Fo$@' : '-o $@';
     my $mk = '';
     for my $c (sort glob 'src/*.c') {
         (my $o = $c) =~ s/\.c$/\$(OBJ_EXT)/;
         $mk .= "$o: $c $headers\n"
              . "\t\$(CCCMD) \$(CCCDLFLAGS) \"-I\$(PERL_INC)\" "
-             . "\$(PASTHRU_DEFINE) \$(DEFINE) $c -o \$@\n\n";
+             . "\$(PASTHRU_DEFINE) \$(DEFINE) $c $ofl\n\n";
     }
     return $mk;
 }

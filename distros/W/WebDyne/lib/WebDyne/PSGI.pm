@@ -28,6 +28,7 @@ use IO::String;
 use Data::Dumper;
 use Cwd qw(fastcwd);
 use File::Spec;
+use Plack::Builder;
 
 
 #  PSGI modules
@@ -62,7 +63,7 @@ my %ENV_BASE=(
 
 #  Version information
 #
-$VERSION='3.021';
+$VERSION='3.023';
 
 
 #==================================================================================================
@@ -94,6 +95,14 @@ sub new {
     $opt{'root'}=File::Spec->rel2abs($opt{'root'});
 
 
+    #  Load local config if requested. Keep the default off so direct
+    #  WebDyne::PSGI->new()->to_app callers preserve existing behaviour.
+    #
+    if ($opt{'conf'}) {
+        $class->local_constant_load($opt{'root'}, $opt{'conf'});
+    }
+
+
     #  API file name cache
     #
     $opt{'API_fn'}={};
@@ -117,12 +126,106 @@ sub to_app {
     #  Dispatch code ref
     #
     my $app_cr=sub { $self->handler(@_) };
+
+
+    #  Wrap with configured PSGI middleware.
+    #
+    $app_cr=$self->build($app_cr);
     
 
     #  Done
     #
     return $app_cr;
     
+}
+
+
+sub build {
+
+
+    #  Wrap a PSGI app code ref in configured middleware.
+    #
+    my ($self, $app_cr)=@_;
+
+
+    #  Build middleware stack
+    #
+    my $builder_or=Plack::Builder->new();
+
+
+    #  Static service can be overridden per instance without changing the
+    #  package default for later apps in the same interpreter.
+    #
+    my $static_fg=$WEBDYNE_PSGI_STATIC;
+    $static_fg=$self->{'static'} if exists($self->{'static'});
+
+
+    #  Add configured middleware.
+    #
+    foreach my $middleware_ar (@{$WEBDYNE_PSGI_MIDDLEWARE}) {
+        my ($middleware, $middleware_opt_hr)=@{$middleware_ar};
+
+        #  Skip static if not wanted
+        #
+        if ($middleware eq 'Static') {
+            next unless $static_fg;
+        }
+
+
+        #  And code refs are run and given self as first param
+        #
+        if (ref($middleware_opt_hr) eq 'CODE') {
+            $middleware_opt_hr=$middleware_opt_hr->($self);
+        }
+
+
+        #  Now add it
+        #
+        $builder_or->add_middleware($middleware, %{$middleware_opt_hr});
+    }
+
+
+    #  Done
+    #
+    return $builder_or->to_app($app_cr);
+
+}
+
+
+sub local_constant_load {
+
+
+    #  Read in local webdyne.conf.pl
+    #
+    my ($class, $root_dn, $conf)=@_;
+
+
+    #  If root_dn is a file get dir name
+    #
+    if (-f $root_dn) {
+        $root_dn=(File::Spec->splitpath($root_dn))[1];
+    }
+
+
+    #  Resolve conf option. 1 means root/.webdyne.conf.pl, otherwise use
+    #  explicit path relative to root unless already absolute.
+    #
+    my $conf_fn;
+    if ($conf eq '1') {
+        $conf_fn=File::Spec->catfile($root_dn, sprintf('.%s', $WEBDYNE_CONF_FN));
+    }
+    else {
+        $conf_fn=File::Spec->file_name_is_absolute($conf) ?
+            $conf :
+            File::Spec->catfile($root_dn, $conf);
+    }
+
+
+    #  Load via existing constant import path.
+    #
+    WebDyne::Constant->import($conf_fn);
+    return $conf_fn;
+
 }
 
 
@@ -318,18 +421,23 @@ sub api_filename {
     my ($self, $r)=@_;
     return unless WEBDYNE_API_ENABLE;
 
-    my $document_root=$r->document_root;
-    my $api_dn=$ENV{'PATH_INFO'} || '';
-    $api_dn=~s/^${document_root}//;
-    my @api_dn=grep {$_} File::Spec::Unix->splitdir($api_dn);
-    my @api_fn;
+    my $path=$ENV{'PATH_INFO'} || '';
+    return unless length($path);
+
+    my @part=grep { length($_) } split(m{/+}, $path);
+    return if grep { $_ eq '.' || $_ eq '..' } @part;
+
+    my $document_root=File::Spec->rel2abs($r->document_root);
     my $API_fn=$self->{'API_fn'};
-    while (my $dn=shift @api_dn) {
-        push @api_fn, $dn;
-        my $api_fn=File::Spec->catfile($document_root, @api_fn) . WEBDYNE_PSP_EXT;
+    for my $ix (0 .. $#part) {
+        my $api_fn=File::Spec->catfile($document_root, @part[0 .. $ix]);
+        $api_fn .= WEBDYNE_PSP_EXT unless $api_fn =~ WEBDYNE_PSP_EXT_RE;
         debug("check $api_fn");
+
         #  Check of outside docroot
-        last if (index($api_fn, $document_root) !=0);
+        #
+        my $relative=File::Spec->abs2rel($api_fn, $document_root);
+        next if $relative eq '..' || $relative =~ /^\.\.(?:[\\\/]|$)/;
         if ($API_fn->{$api_fn} || (-f $api_fn)) {
             debug("found api file name: $api_fn, %s, dispatching", Dumper($API_fn));
             $API_fn->{$api_fn}++; # Cache so not stat()ing on file system
@@ -393,8 +501,10 @@ WebDyne::PSGI - PSGI application wrapper for WebDyne
 use WebDyne::PSGI;
 
 my $app = WebDyne::PSGI->new(
-    root  => '.',
-    index => 1,
+    root   => '.',
+    index  => 1,
+    static => 1,
+    conf   => 1,
 )->to_app;
 
 my $single_file_app = WebDyne::PSGI->new(
@@ -413,13 +523,17 @@ The module also contains special handling for API-style fallback resolution when
 
 * **new(%options)**
 
-    Construct a PSGI application wrapper. Options include `root`, `index`, `test`, `filename`, and related runtime settings.
+    Construct a PSGI application wrapper. Options include `root`, `index`, `test`, `filename`, `static`, `conf`, and related runtime settings.
 
     The `filename` option is an explicit source-file override for the application. When supplied, it is passed to `WebDyne::Request::PSGI` for every request and always wins over normal filename derivation from the PSGI environment, including `PATH_INFO`, `SCRIPT_FILENAME`, `DOCUMENT_ROOT`, and default document handling. This is useful for helper tools or deliberate single-file PSGI applications; do not set it for normal multi-page applications that should dispatch from the request path.
 
+    The `static` option enables or disables the configured PSGI static-file middleware for this app instance. Static middleware is disabled by the package default, but wrapper scripts such as `webdyne.psgi` may pass `static => 1`.
+
+    The `conf` option loads local WebDyne constants during app construction. A true value of `1` loads `$root/.webdyne.conf.pl`; any other true value is treated as an explicit config filename, relative to `root` unless already absolute.
+
 * **to_app()**
 
-    Return the PSGI application code reference.
+    Return the PSGI application code reference, wrapped in configured PSGI middleware.
 
 * **handler($env, @param)**
 
@@ -468,8 +582,10 @@ WebDyne::PSGI - PSGI application wrapper for WebDyne
  use WebDyne::PSGI;
  
  my $app = WebDyne::PSGI->new(
-     root  => '.',
-     index => 1,
+     root   => '.',
+     index  => 1,
+     static => 1,
+     conf   => 1,
  )->to_app;
  
  my $single_file_app = WebDyne::PSGI->new(
@@ -492,9 +608,13 @@ The module also contains special handling for API-style fallback resolution when
 
 B<new(%options)>
 
-Construct a PSGI application wrapper. Options include C<root>, C<index>, C<test>, C<filename>, and related runtime settings.
+Construct a PSGI application wrapper. Options include C<root>, C<index>, C<test>, C<filename>, C<static>, C<conf>, and related runtime settings.
 
 The C<filename> option is an explicit source-file override for the application. When supplied, it is passed to C<WebDyne::Request::PSGI> for every request and always wins over normal filename derivation from the PSGI environment, including C<PATH_INFO>, C<SCRIPT_FILENAME>, C<DOCUMENT_ROOT>, and default document handling. This is useful for helper tools or deliberate single-file PSGI applications; do not set it for normal multi-page applications that should dispatch from the request path.
+
+The C<static> option enables or disables the configured PSGI static-file middleware for this app instance. Static middleware is disabled by the package default, but wrapper scripts such as C<webdyne.psgi> may pass C<<< static => 1 >>>.
+
+The C<conf> option loads local WebDyne constants during app construction. A true value of C<1> loads C<$root/.webdyne.conf.pl>; any other true value is treated as an explicit config filename, relative to C<root> unless already absolute.
 
 
 
@@ -502,7 +622,7 @@ The C<filename> option is an explicit source-file override for the application. 
 
 B<to_app()>
 
-Return the PSGI application code reference.
+Return the PSGI application code reference, wrapped in configured PSGI middleware.
 
 
 

@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk ();
 
-our $VERSION = '0.31';
+our $VERSION = '0.33';
 
 # Capture a command's standard output, without a shell. Called from C for
 # { $exec: [...] }; a non-zero exit is fatal, so a broken secret store stops
@@ -59,7 +59,7 @@ environment; and applied to the application before C<to_app> freezes it.
 See L<Punk/config> for what the known blocks do.
 
 Implemented in C (F<include/punk/punk_config.h>): the layering, the deep
-merge, secret resolution, the guardrail and the redacted copy. Only YAML
+merge, secret resolution and the redacted copy. Only YAML
 parsing (one L<YAML::XS> call per file) and the C<$exec> resolver's
 subprocess are Perl, both once per boot.
 
@@ -79,8 +79,9 @@ starting with an empty password). C<$file> reads a file and trims one
 trailing newline, which is exactly how Docker and Kubernetes deliver
 secrets to a container. C<$exec> runs a command without a shell and takes
 its standard output, for Vault, C<aws secretsmanager>, C<op read> and
-friends; a non-zero exit is fatal. C<$literal> is a deliberate inline
-value that bypasses the guardrail below.
+friends; a non-zero exit is fatal. C<$literal> is an inline
+value spelled out as one, for a place where a reference would otherwise
+be expected.
 
 Resolved secrets are kept apart from the public structure:
 C<< $app->config >> has C<[redacted]> where each one was, so it can be
@@ -88,25 +89,6 @@ logged, dumped or serialised safely, and C<< $app->secret($path) >>
 reaches the real value. Boot-time consumers are handed the real value
 directly, so a database password never sits in a general-purpose hash at
 all.
-
-=head2 The guardrail
-
-A plaintext value under a secret-shaped key (anything containing
-C<pass>, C<secret>, C<token>, C<api_key>, C<private_key> or
-C<credential>, the exact key C<auth>, or a C<dsn> with C<password=> in
-it) is almost always a mistake. A key that only names where such a
-thing lives is not secret-shaped - C<token_model>, C<password_field>,
-C<secret_path> and the like, anything ending in C<_model>, C<_class>,
-C<_table>, C<_field>, C<_column>, C<_header>, C<_cookie>, C<_path>,
-C<_dir>, C<_name> or C<_kind> - because its value is a model, a column
-or a location, never the secret itself. The loader notices the rest
-and, by default, warns:
-
-    secrets: strict      # refuse to start
-    secrets: warn        # the default
-    secrets: off
-
-C<auth> matches only as a whole key, so an C<author> field is left alone.
 
 =head2 Layering
 
@@ -121,11 +103,14 @@ may keep a throwaway value.
 
 =head1 METHODS
 
-=head2 load(file => $path, env => $name, secrets => $mode)
+=head2 load(file => $path, env => $name)
 
-Read, layer, resolve and validate. Croaks if no layer exists, if a
-reference cannot be resolved, or - in C<strict> mode - if the guardrail
-fires.
+Read, layer, resolve and validate. Croaks if no layer exists or if a
+reference cannot be resolved.
+
+Whether a value sits in the file in plaintext is the decision of
+whoever writes the file. Nothing here inspects a key's name to guess
+whether its value ought to have been a reference.
 
 =head2 config
 

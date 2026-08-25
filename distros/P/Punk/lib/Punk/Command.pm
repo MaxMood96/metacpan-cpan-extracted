@@ -10,7 +10,7 @@ use File::Basename ();
 use Getopt::Long ();
 use Punk ();
 
-our $VERSION = '0.31';
+our $VERSION = '0.33';
 
 # The whole punk command line. bin/punk is two lines - `exit
 # Punk::Command->main(@ARGV)` - and everything else is here: a registry of
@@ -31,9 +31,9 @@ our $VERSION = '0.31';
 # `punk help X`, `punk X --help` and every misuse path read one source and
 # cannot drift - the invariant the old %USAGE heredocs tried to hold by hand.
 #
-#     Punk::Command->register(serve => {
+#     Punk::Command->register(greet => {
 #         abstract => 'one line for the command list',
-#         display  => 'serve <what>',   # the list row, when the name alone misleads
+#         display  => 'greet <what>',   # the list row, when the name alone misleads
 #         usage    => '[options]',      # after "usage: punk serve "
 #         desc     => 'a paragraph for the help page',
 #         options  => [ { spec => 'port=i', arg => 'N',
@@ -567,6 +567,19 @@ sub doctor {
         _line($abi->{name}, $abi->{detail}, $abi->{state});
     }
 
+    # Load every Punk::Command::* on @INC first.
+    #
+    # A plugin's command module registers at load, and nothing loads it until
+    # somebody types its name - which is right for `punk dev`, where the cost
+    # of scanning would be paid on every invocation, and wrong here. `doctor`
+    # is the command whose whole job is "what have I got installed", and a
+    # row that only appears when you were already running that plugin's
+    # command is a row nobody will ever see when they need it.
+    #
+    # A module that dies on load is skipped rather than fatal: doctor is what
+    # somebody runs when something is already broken.
+    _load_command_plugins();
+
     # rows other distributions registered (register_doctor) - a probe returns
     # (ok, detail); a die is a failed row, not a failed doctor
     if (@DOCTOR) {
@@ -996,6 +1009,50 @@ sub dev {
     return 0;
 }
 
+# ---- punk serve --------------------------------------------------------------
+
+# The other command that needs no application. `dev` serves an application and
+# refuses without one; this serves a directory of files and never looks for
+# one - the whole server is Punk::Static->app, which carries no framework
+# state at all.
+#
+# There is no watch-and-restart loop here, unlike `dev`: a file is read on the
+# request that asks for it, so there is nothing compiled to invalidate.
+sub _cmd_serve {
+    my ($opt, @args) = @_;
+    my $dir = shift(@args);
+    die { usage_error => "unexpected argument '$args[0]'" } if @args;
+    $dir = $opt->{dir} unless defined $dir && length $dir;
+    $dir = '.' unless defined $dir && length $dir;
+
+    -d $dir or die "no such directory: $dir\n";
+
+    unless (eval { require Hyperman; 1 }) {
+        print STDERR "punk serve: Hyperman is not installed\n";
+        return 1;
+    }
+
+    require Punk::Static;
+    my $app = Punk::Static->app($dir,
+        ($opt->{no_index} ? () : (index => $opt->{index})),
+        ($opt->{list}     ? (list  => 1) : ()),
+        (defined $opt->{max_age} ? (max_age => $opt->{max_age}) : ()),
+    );
+
+    my $port = $opt->{port} || 8000;
+    my $host = $opt->{host} || '127.0.0.1';
+    printf "punk serve  http://%s:%d\n", $host, $port;
+    printf "serving     %s\n\n", Cwd::abs_path($dir) // $dir;
+
+    # access_log takes an open handle and formats Combined Log Format in C,
+    # buffered and flushed once per wakeup - a request log with no per-request
+    # Perl frame, which is the only reason it is on by default.
+    Hyperman->run(app => $app, host => $host, port => $port,
+                  workers => ($opt->{workers} || 1),
+                  ($opt->{quiet} ? () : (access_log => \*STDERR)));
+    return 0;
+}
+
 # ---- finding and loading an application --------------------------------------
 
 # app.psgi is the marker: it is what a server is pointed at, so it is what
@@ -1087,6 +1144,28 @@ sub load_app {
     my $app = _load_app_info($dir, \$err, %o);
     die "$err\n" unless $app;
     return $app;
+}
+
+# Every Punk/Command/*.pm an @INC entry holds, loaded once. Only that exact
+# directory, only a plain .pm, and each in its own eval - this walks
+# directories a user did not ask it to walk, so it does as little as it can.
+sub _load_command_plugins {
+    my %seen;
+    for my $inc (@INC) {
+        next if ref $inc;
+        my $dir = File::Spec->catdir($inc, 'Punk', 'Command');
+        next unless -d $dir;
+        opendir(my $dh, $dir) or next;
+        my @mods = grep { /\A[A-Za-z]\w*\.pm\z/ } readdir $dh;
+        closedir $dh;
+        for my $file (sort @mods) {
+            next if $seen{$file}++;
+            (my $mod = "Punk/Command/$file") =~ s{/}{/}g;
+            next if $INC{$mod};
+            eval { require $mod; 1 };
+        }
+    }
+    return;
 }
 
 # ---- reporting helpers -------------------------------------------------------
@@ -1826,6 +1905,47 @@ __PACKAGE__->register(dev => {
     code => sub { my ($opt) = @_; return dev(%$opt) },
 });
 
+__PACKAGE__->register(serve => {
+    abstract => 'serve a directory of files over HTTP',
+    display  => 'serve [DIR]',
+    usage    => '[DIR] [options]',
+    desc     => "Serve a directory of files under Hyperman. There is no "
+              . "application involved -\nno app.psgi, no configuration, "
+              . "nothing to generate. A directory resolves to\nits "
+              . 'index.html, and --list renders one for a directory that '
+              . 'has none.',
+    options  => [
+        # displaces the shared --dir, which is about finding an application
+        { spec => 'dir=s', arg => 'PATH',
+          doc  => 'the directory to serve, if not given as an argument',
+          default => '.' },
+        { spec => 'port=i', arg => 'N',    doc => 'listen port',
+          default => 8000 },
+        { spec => 'host=s', arg => 'ADDR', doc => 'listen address',
+          default => '127.0.0.1' },
+        { spec => 'workers=i', arg => 'N', doc => 'worker processes',
+          default => 1 },
+        { spec => 'index=s', arg => 'NAME',
+          doc  => 'the file a directory resolves to', default => 'index.html' },
+        { spec => 'no-index',
+          doc  => 'leave a directory as a 404 instead' },
+        { spec => 'list',
+          doc  => 'render a listing for a directory with no index file' },
+        { spec => 'max-age=i', arg => 'N',
+          doc  => 'Cache-Control freshness in seconds (default: revalidate '
+                . 'every time)' },
+        { spec => 'quiet', doc => 'no access log' },
+    ],
+    examples => [
+        'punk serve',
+        'punk serve ./public --port 3000',
+        'punk serve --host 0.0.0.0 --list',
+    ],
+    hints => [ [ qr/Hyperman is not installed/,
+                 'cpanm Hyperman' ] ],
+    code => \&_cmd_serve,
+});
+
 __PACKAGE__->register(version => {
     abstract => 'print the version',
     hidden   => 1,                     # the list already shows punk --version
@@ -1849,6 +1969,7 @@ Punk::Command - the punk command line: registry, dispatcher and commands
     punk doctor                 # versions, C ABIs, application health
     punk console                # a REPL with the application compiled
     punk dev                    # Hyperman with restart-on-change
+    punk serve ./public         # a directory of files, no application
 
 =head1 DESCRIPTION
 
@@ -1857,9 +1978,9 @@ application fast and opaque in equal measure. These commands open it
 up - what the router holds, what the specification maps to, what the
 configuration resolved to, and which C ABIs are in play.
 
-Except for C<new>, each finds the application by walking up from the
-current directory looking for F<app.psgi>, and takes the class from that
-file's C<< Class->to_app >>.
+Except for C<new> and C<serve>, each finds the application by walking up
+from the current directory looking for F<app.psgi>, and takes the class
+from that file's C<< Class->to_app >>.
 
 F<bin/punk> is two lines over C<< Punk::Command->main(@ARGV) >>. Commands
 are specs in a registry; option parsing, generated help and the exit-code
@@ -1869,7 +1990,7 @@ path read one declaration and cannot drift.
 
 =head1 THE REGISTRY
 
-    Punk::Command->register(serve => {
+    Punk::Command->register(greet => {
         abstract => 'one line for the command list',
         usage    => '[options]',
         desc     => 'a paragraph for the help page',
@@ -2015,6 +2136,27 @@ Runs the application under L<Hyperman> and restarts it when anything
 under F<lib/>, F<config/> or F<root/templates/> changes. A
 compiled-at-boot application cannot hot-reload - there is no live
 structure to patch - so restarting is the honest implementation.
+
+=head2 serve
+
+    punk serve
+    punk serve ./public --port 3000
+    punk serve --host 0.0.0.0 --list
+
+Serves a directory of files under L<Hyperman>, on C<127.0.0.1:8000> by
+default. C<dev>'s twin, and its opposite: this is the one command besides
+C<new> that never looks for an application. The whole server is
+C<< Punk::Static->app >>, so what it serves and how is
+L<Punk::Static> - content types, C<ETag>, C<If-Modified-Since>, ranges,
+precompressed C<.gz> siblings and the traversal guard, all of it.
+
+A directory resolves to its F<index.html> (C<--index NAME> for another
+name, C<--no-index> for the plain 404), and C<--list> renders a listing
+for a directory that has none. Hyperman's C access log goes to stderr
+unless C<--quiet>.
+
+There is no watch-and-restart loop, unlike C<dev>: a file is read on the
+request that asks for it, so there is nothing compiled to invalidate.
 
 =head1 SEE ALSO
 

@@ -5,6 +5,7 @@ inc/Module/Install/Can.pm
 inc/Module/Install/Fetch.pm
 inc/Module/Install/Makefile.pm
 inc/Module/Install/Metadata.pm
+inc/Module/Install/ReadmeFromPod.pm
 inc/Module/Install/Win32.pm
 inc/Module/Install/WriteAll.pm
 lib/Text/Password/Pronounceable.pm
@@ -14,5 +15,6 @@ META.yml
 README
 t/00use.t
 t/01basic.t
+t/02random.t
 t/99pod-coverage.t
 t/99pod.t

@@ -8,6 +8,7 @@ use Template::Stencil;
 
 my $dir = File::Temp::tempdir(CLEANUP => 1);
 open my $fh, '>', "$dir/real.tmpl" or die $!;
+binmode $fh;
 print $fh 'real';
 close $fh;
 
@@ -15,9 +16,11 @@ close $fh;
 my $parent = File::Temp::tempdir(CLEANUP => 1);
 mkdir "$parent/tpl" or die $!;
 open $fh, '>', "$parent/secret.txt" or die $!;
+binmode $fh;
 print $fh 'SECRET';
 close $fh;
 open $fh, '>', "$parent/tpl/ok.tmpl" or die $!;
+binmode $fh;
 print $fh 'ok';
 close $fh;
 

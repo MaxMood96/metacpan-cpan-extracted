@@ -30,6 +30,28 @@
 #  define GvCV_set(gv, cv) (GvCV(gv) = (cv))
 #endif
 
+/* The Op*SIB* accessors arrived in 5.22 with the op_sibparent work; before
+ * that a sibling is just the op_sibling field, and there is no separate
+ * "last sibling" flag to maintain. These have to be macros, not calls: on
+ * 5.14-5.20 the missing names compile as implicit declarations (a warning
+ * on the old compilers, an error on gcc 14) and the .so then fails to load
+ * with "Undefined symbol: OpHAS_SIBLING". */
+#ifndef OpSIBLING
+#  define OpSIBLING(o)                   ((o)->op_sibling)
+#endif
+#ifndef OpHAS_SIBLING
+#  define OpHAS_SIBLING(o)               ((o)->op_sibling != NULL)
+#endif
+#ifndef OpMORESIB_set
+#  define OpMORESIB_set(o, sib)          ((o)->op_sibling = (sib))
+#endif
+#ifndef OpLASTSIB_set
+#  define OpLASTSIB_set(o, parent)       ((void)(parent), (o)->op_sibling = NULL)
+#endif
+#ifndef OpMAYBESIB_set
+#  define OpMAYBESIB_set(o, sib, parent) ((void)(parent), (o)->op_sibling = (sib))
+#endif
+
 #include "archive_plugin.h"
 #include "arch_io.h"
 #include "tar.h"
@@ -766,6 +788,17 @@ do_extract_one(pTHX_ archive_handle_t *h,
     if (!h || h->is_writer || h->closed)
         croak("File::Raw::Archive::extract: invalid handle");
 
+    /* Use CDH-based random access when the plugin supports it.
+     * Returns 1 = positioned at LFH, 0 = not in archive, -1 = fallback. */
+    if (h->plugin->read_seek_to) {
+        int sr = h->plugin->read_seek_to(aTHX_ h->plugin, h->cursor,
+                                          match_name, (size_t)match_len);
+        if (sr == 0) return 0;   /* CDH confirms entry not present */
+        if (sr < 0) goto sequential;
+        /* sr == 1: fd positioned at the entry's LFH — fall into loop. */
+    }
+
+sequential:
     for (;;) {
         ArchiveEntry e;
         int rc = h->plugin->read_next(aTHX_ h->plugin, h->cursor, &e);

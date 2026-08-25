@@ -11,6 +11,8 @@ use QR::Code;
 my $ptr = QR::Code::_abi_ptr();
 ok($ptr, 'the table resolves to a non-NULL pointer');
 is($ptr, QR::Code::_abi_ptr(), 'and is stable across calls');
+cmp_ok($ptr, '>', 0,
+   'and reads back positive wherever the loader mapped the object');
 
 my $self = QR::Code::_abi_selftest();
 is($self->{version}, 2, 'QR_ABI_VERSION is 2');

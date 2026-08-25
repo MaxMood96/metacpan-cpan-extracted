@@ -12,7 +12,13 @@ if ($^O eq 'linux' || $^O eq 'freebsd' || $^O eq 'netbsd'
     $platform_args{LDDLFLAGS} = $Config{lddlflags}
         . ' -Wl,--export-dynamic -Wl,-soname,OrderedHash.so';
 }
-elsif ($^O eq 'MSWin32' || $^O eq 'cygwin' || $^O eq 'msys') {
+elsif (($^O eq 'MSWin32' || $^O eq 'cygwin' || $^O eq 'msys')
+        && $Config{gccversion}) {
+    # GNU toolchain (Strawberry, Cygwin, MSYS2): export everything in one
+    # go. MSVC has no equivalent - link.exe merely warns LNK4044 on these
+    # -Wl, options and ignores them - so there the ABI is exported per
+    # function by TIE_OH_API in include/tie_orderedhash.h, switched on by
+    # the -DTIE_OH_BUILDING below.
     my $implib = 'blib/arch/auto/Tie/OrderedHash/libOrderedHash.dll.a';
     $platform_args{LDDLFLAGS} = ($Config{lddlflags} || '')
         . ' -Wl,--export-all-symbols'
@@ -55,6 +61,9 @@ my %WriteMakefileArgs = (
     OBJECT => 'OrderedHash$(OBJ_EXT) oh_core$(OBJ_EXT)',
     C      => ['oh_core.c'],
     XS     => { 'OrderedHash.xs' => 'OrderedHash.c' },
+    # Marks this build as the provider side, so tie_orderedhash.h declares
+    # the ABI dllexport rather than dllimport. No effect off MSVC.
+    DEFINE => '-DTIE_OH_BUILDING',
     dist   => { COMPRESS => 'gzip -9f', SUFFIX => 'gz' },
     clean  => { FILES => 'Tie-OrderedHash-* OrderedHash.c OrderedHash.o '
                        . 'oh_core.o Install/Files.pm' },

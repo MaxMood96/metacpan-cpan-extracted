@@ -1,5 +1,14 @@
 Revision history for Hyperman
 
+0.35    2026-08-25
+        - ADDS: completion-mode reads on the io_uring backend, on by default
+          there and off with run(completion => 0)
+        - ADDS: kernel TLS, where the OpenSSL build and the kernel both have
+          it: an HTTPS connection gains the writev and sendfile fast paths.
+        - ADDS: Hyperman->has_ktls, and SSL_KTLS in $env for what a given
+          connection actually got.
+        - Plack::Handler::Hyperman passes `completion` through
+
 0.34    2026-08-23
         - Fix: t/35-bus.t asserted that a queue group's forty messages spread
           over more than one of four polling children.

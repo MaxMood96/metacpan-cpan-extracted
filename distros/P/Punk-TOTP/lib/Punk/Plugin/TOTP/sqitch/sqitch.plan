@@ -1,0 +1,5 @@
+%syntax-version=1.0.0
+%project=punk_totp
+%uri=https://metacpan.org/pod/Punk::Plugin::TOTP
+
+totp [punk_auth:users] 2026-08-23T12:10:00Z LNATION <email@lnation.org> # the secret, the replay floor, the enabled flag and the attempt count on the user row

@@ -24,6 +24,7 @@ my $dir = File::Temp::tempdir(CLEANUP => 1);
 sub put {
     my ($name, $content) = @_;
     open my $fh, '>', "$dir/$name" or die $!;
+    binmode $fh;
     print $fh $content;
     close $fh;
 }
@@ -90,12 +91,14 @@ my $got = $s->render('sink.tmpl', \%data);
 my $golden_file = 't/corpus/kitchen.golden';
 if ($ENV{STENCIL_REGOLD}) {
     open my $fh, '>', $golden_file or die $!;
+    binmode $fh;
     print $fh $got;
     close $fh;
     diag 'kitchen golden regenerated';
 }
 my $want = do {
     open my $fh, '<', $golden_file or die "$golden_file: $!";
+    binmode $fh;
     local $/;
     <$fh>;
 };

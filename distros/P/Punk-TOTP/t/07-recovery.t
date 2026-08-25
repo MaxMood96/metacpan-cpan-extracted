@@ -122,12 +122,16 @@ ok $use_h->($user, $spaced), 'spacing variants fold';
 is scalar @{ $tokens->() }, 7, 'three spent';
 
 # ---- the wrong user does not spend another user's code ---------------------
+# The search is scoped to the challenged user, so another account's row is
+# never fetched - and so never burned. The burn discipline below still holds
+# for every row the search CAN reach.
 ok !$use_h->({ id => 99 }, $codes->[3]),
     'another user cannot use the code';
-is scalar @{ $tokens->() }, 6,
-    'but the probe BURNED it - delete first, validate after';
-ok !$use_h->($user, $codes->[3]),
-    'so it is gone for the real owner too';
+is scalar @{ $tokens->() }, 7,
+    'and the probe did not reach the row, so it did not burn it';
+ok $use_h->($user, $codes->[3]),
+    'the real owner still has it';
+is scalar @{ $tokens->() }, 6, 'four spent';
 
 # ---- wrong-kind probe burns the row it hit ---------------------------------
 {
@@ -156,5 +160,40 @@ is scalar grep({ $_->{kind} eq 'totp_recovery' } @{ $tokens->() }), 5,
 ok !$use_h->($user, $codes->[4]),
     'a code from the revoked set refuses';
 ok $use_h->($user, $second->[0]), 'a code from the new set works';
+
+# ---- non-numeric user ids (CVE-2026-78619) ---------------------------------
+# A user model may be keyed on a username, an email address or a UUID. Those
+# all coerce to 0 under integer comparison, which made any two of them equal
+# and let one account's recovery code pass another's challenge. The ownership
+# test compares identifiers as the bytes they are.
+for my $pair (
+    [ 'alice',             'bob'               ],
+    [ 'alice@example.com', 'bob@example.com'   ],
+    [ '3f1a-uuid',         '9c2b-uuid'         ],
+) {
+    my ($vid, $aid) = @$pair;
+    my $victim   = { id => $vid };
+    my $attacker = { id => $aid };
+    my $vcodes   = $codes_h->($victim);
+    my $acodes   = $codes_h->($attacker);
+
+    ok !$use_h->($victim, $acodes->[0]),
+        "a code issued to $aid does not pass the challenge for $vid";
+    ok !$use_h->($attacker, $vcodes->[0]),
+        'and it does not work the other way round either';
+
+    # the refusal did not spend either owner's code
+    ok $use_h->($attacker, $acodes->[0]), "$aid still holds their own code";
+    ok $use_h->($victim,   $vcodes->[0]), "$vid still holds their own code";
+}
+
+# a numeric id keeps comparing as it always did, including across the
+# string/integer seam a database round trip puts identifiers through
+{
+    my $ncodes = $codes_h->({ id => 41 });
+    ok !$use_h->({ id => 4 }, $ncodes->[0]), 'no prefix match on numeric ids';
+    ok $use_h->({ id => '41' }, $ncodes->[0]),
+        'the owner passes with the id stringified';
+}
 
 done_testing;

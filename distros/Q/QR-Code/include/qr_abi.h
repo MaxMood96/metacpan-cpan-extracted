@@ -11,8 +11,13 @@
  *     ENTER; SAVETMPS; PUSHMARK(SP); PUTBACK;
  *     count = call_pv("QR::Code::_abi_ptr", G_SCALAR | G_NOARGS);
  *     SPAGAIN;
- *     qr = count == 1 ? INT2PTR(qr_abi_t *, POPi) : NULL;
+ *     qr = count == 1 ? INT2PTR(qr_abi_t *, POPu) : NULL;
  *     PUTBACK; FREETMPS; LEAVE;
+ *
+ * POPu, not POPi: the address is unsigned. Where the loader maps this
+ * object decides the sign bit, and a 32-bit perl above 0x7fffffff, or
+ * illumos mapping shared objects up at 0xfffffd7f..., makes a signed
+ * read of it negative.
  *
  * Check `version <= QR_ABI_VERSION`, never `==`. The table is
  * append-only: a newer QR::Code adds members after `free_fn` and bumps

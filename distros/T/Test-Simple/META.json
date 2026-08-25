@@ -1,7 +1,7 @@
 {
    "abstract" : "Basic utilities for writing tests.",
    "author" : [
-      "Chad Granum <exodist@cpan.org>"
+      "Chad Granum <exodist7@gmail.com>"
    ],
    "dynamic_config" : 0,
    "generated_by" : "Dist::Zilla version 6.037, CPAN::Meta::Converter version 2.150010",
@@ -61,7 +61,7 @@
          "url" : "https://github.com/Test-More/test-more/"
       }
    },
-   "version" : "1.302222",
+   "version" : "1.302224",
    "x_breaks" : {
       "Log::Dispatch::Config::TestLog" : "<= 0.02",
       "Test2::Harness" : "<= 0.000013",

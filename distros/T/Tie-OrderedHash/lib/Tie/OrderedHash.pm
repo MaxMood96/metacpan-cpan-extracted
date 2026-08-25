@@ -7,7 +7,7 @@ use Tie::Hash ();
 
 use DynaLoader;
 our @ISA = ('Tie::Hash', 'DynaLoader');
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 sub dl_load_flags { 0x01 }   # RTLD_GLOBAL
 
 __PACKAGE__->bootstrap($VERSION);
@@ -22,7 +22,7 @@ Tie::OrderedHash - Ordered Hashes with a public C ABI
 
 =head1 VERSION
 
-Version 0.01
+Version 0.05
 
 =head1 SYNOPSIS
 

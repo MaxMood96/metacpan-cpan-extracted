@@ -55,6 +55,33 @@ sub run_punk {
         'doctor rows collide by label too');
 }
 
+# ---- doctor finds a plugin's row without being told the plugin exists --------
+#
+# A command module registers at load, and nothing loads it until somebody
+# types its name. That is right everywhere except here: `doctor` is the
+# command whose job is "what have I got", so it loads every Punk::Command::*
+# on @INC before printing the rows.
+#
+# In a subprocess, because the point is a module that has NOT been loaded and
+# this file loads the fixture a few tests further down.
+{
+    my $code = 'require Punk::Command; '
+             . 'my $o = q{}; open my $fh, q{>}, \\$o or die; '
+             . 'local $Punk::Command::OUT = $fh; '
+             . 'local $Punk::Command::ERR = $fh; '
+             . 'Punk::Command->main(q{doctor}); close $fh; print $o;';
+    my @inc = map { "-I$_" } ('blib/lib', 'blib/arch', 't/lib');
+    my $out = qx{"$^X" @inc -e '$code' 2>&1};
+
+    like($out, qr/\bFakecmd\b/,
+        'doctor reports a plugin row from a module nothing had loaded');
+    like($out, qr/the fixture is installed/, 'with what the probe returned');
+}
+
+{
+    my $unused = 1;
+}
+
 # ---- generated help ------------------------------------------------------------
 
 {

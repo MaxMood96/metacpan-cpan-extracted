@@ -3,8 +3,9 @@ package Text::Password::Pronounceable;
 use strict;
 use warnings;
 use Carp;
+use Crypt::URandom ();
 
-our $VERSION = '0.30';
+our $VERSION = '0.31';
 
 # frequency of English digraphs (from D Edwards 1/27/66) 
 my  $frequency = [
@@ -137,6 +138,14 @@ my  $start_freq = [
 my  $total_sum = 0;
 $total_sum += $_ for @$start_freq;
 
+# Store why the last attempt to generate a password failed,
+# for the generate method to report.
+my $GENERATE_ERROR;
+
+# A draw is four bytes wide, so it has this many possible values.
+my $DRAW_BYTES = 4;
+my $DRAW_SPACE = 2 ** ( 8 * $DRAW_BYTES );
+
 sub _check_lengths {
     my ($min, $max) = @_;
 
@@ -178,39 +187,132 @@ sub generate {
         return q[]; # no random password
     }
 
-    # When munging characters, we need to know where to start counting letters from
-    my $a = ord('a');
+    undef $GENERATE_ERROR;
+    my $password = $self->_build_password( $min, $max );
 
-    my $length = $min + int( rand( $max - $min ) );
-
-    my $char = $self->_generate_nextchar( $total_sum, $start_freq );
-    my @word = ( $char + $a );
-    for ( 2 .. $length ) {
-        $char =
-          $self->_generate_nextchar( $row_sums->[$char],
-            $frequency->[$char] );
-        push ( @word, $char + $a );
+    if ( !defined $password ) {
+        my $error = defined $GENERATE_ERROR ? $GENERATE_ERROR : 'unknown error';
+        Carp::carp "Unable to generate a password: $error";
+        return q[]; # never fall back on weaker randomness
     }
 
-    #Return the password
-    return pack( "C*", @word );
-
+    # Return the password
+    return $password;
 }
 
-#A private helper function for RandomPassword
+# A private helper function for RandomPassword
 # Takes a row summary and a frequency chart for the next character to be searched
 sub _generate_nextchar {
     my $self = shift;
     my ( $all, $freq ) = @_;
     my ( $pos, $i );
 
-    for ( $pos = int( rand($all) ), $i = 0 ;
+    $pos = $self->_random_int($all);
+    return undef if !defined $pos;
+
+    for ( $i = 0 ;
         $pos >= $freq->[$i] ;
         $pos -= $freq->[$i], $i++ )
     {
     }
 
     return ($i);
+}
+
+# The password itself, or undef if a draw from the CSPRNG failed.
+sub _build_password {
+    my $self = shift;
+    my ($min, $max) = @_;
+
+    # When munging characters, we need to know where to start counting letters from
+    my $a = ord('a');
+
+    # Lengths run from $min to $max inclusive.  A $max below $min is an error
+    # that _check_lengths carps about but has never been fatal: the old
+    # int( rand( $max - $min ) ) drew downwards from $min there, so keep that
+    # rather than silently pinning every such password to $min.
+    my $span = $max - $min;
+    my $offset = $self->_random_int( $span >= 0 ? $span + 1 : -$span );
+    return undef if !defined $offset;
+    my $length = $span >= 0 ? $min + $offset : $min - $offset;
+
+    my $char = $self->_generate_nextchar( $total_sum, $start_freq );
+    return undef if !defined $char;
+
+    my @word = ( $char + $a );
+    for ( 2 .. $length ) {
+        $char =
+          $self->_generate_nextchar( $row_sums->[$char],
+            $frequency->[$char] );
+        return undef if !defined $char;
+        push ( @word, $char + $a );
+    }
+
+    return pack( "C*", @word );
+}
+
+# A uniformly distributed integer in [0, $limit), or undef if the CSPRNG cannot
+# be read.  Crypt::URandom deals only in bytes, so a draw of four of them is
+# unpacked into a number in [0, 2**32) and reduced modulo $limit.
+#
+# Modulo on its own would favor the low end of the range, since $limit rarely
+# divides the draw space evenly. Draws landing in that leftover partial block
+# are discarded and redrawn, leaving a span that does divide evenly.  The block
+# is a thin slice of 2**32, so a redraw should be very infrequent.
+sub _random_int {
+    my ($self, $limit) = @_;
+    return 0 if !$limit || $limit <= 1;
+
+    # Only reachable from an absurd max length. Guarded because a wider limit
+    # would leave $ceiling at zero, so no draw could ever be accepted and the
+    # loop below would spin forever.
+    if ( $limit > $DRAW_SPACE ) {
+        $GENERATE_ERROR =
+            "a range of $limit values is wider than a $DRAW_BYTES byte draw";
+        return undef;
+    }
+
+    my $ceiling = int( $DRAW_SPACE / $limit ) * $limit;
+
+    while (1) {
+        my $draw = _random_bytes($DRAW_BYTES);
+        return undef if !defined $draw;
+
+        my $value = unpack 'N', $draw;
+        return $value % $limit if $value < $ceiling;
+    }
+}
+
+# Bytes from the system CSPRNG, or undef if none are to be had.  Crypt::URandom
+# dies on error. Trap that here.
+sub _random_bytes {
+    my ($count) = @_;
+
+    # $@ is localized so that a draw leaves the caller's copy alone, and so
+    # that nothing unwinding out of the eval can clobber the reason on the way.
+    my ( $bytes, $err );
+    {
+        local $@;
+        $bytes = eval { Crypt::URandom::urandom($count) };
+        $err   = $@;
+    }
+
+    return $bytes if defined $bytes && length $bytes == $count;
+
+    my $why;
+    if ( defined $bytes ) {
+        $why = sprintf 'asked for %d byte(s) but received %d',
+            $count, length $bytes;
+    }
+    else {
+        $why = $err || 'unknown error';
+        $why =~ s/\s+\z//;
+    }
+
+    $GENERATE_ERROR
+        = "no secure source of randomness is available: $why";
+
+    return undef;
 }
 
 
@@ -258,6 +360,9 @@ is provided.
 
 Generate password. If used as an instance method, arguments override
 the factory settings.
+
+Returns an empty string on failure, emitting an appropriate error message via
+Carp::carp.
 
 =back
 

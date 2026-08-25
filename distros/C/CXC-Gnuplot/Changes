@@ -1,0 +1,274 @@
+Revision history for CXC-Gnuplot
+
+v0.29.3   2026-08-24 18:42:26 EDT
+
+  [ENHANCEMENT]
+
+     * V1, now based on Object::Pad. Lots of complexity removed due to
+       use of BUILDARGS, etc.
+
+v0.29.2   2025-09-18 13:53:42-04:00 America/New_York
+
+  [WORKAROUND]
+
+     * Object::Pad (or its dependencies) doesn't understand
+       a signature of ($=).
+
+v0.29.1   2025-09-18 12:28:30-04:00 America/New_York
+
+  [MISC]
+
+     * fix changelog for last release
+
+v0.29.00  2025-09-18 12:23:05-04:00 America/New_York
+
+  [ENHANCEMENT]
+
+     * Add timestamp
+
+0.27      2025-04-08 17:54:48-04:00 America/New_York
+
+  [ENHANCEMENT]
+
+     * MultiPlot->opts can now be rendered as a string.
+
+0.26      2025-04-08 15:57:06-04:00 America/New_York
+
+  [BUG FIX]
+
+     * set methods weren't uniformly returning the same structure of
+       commands (e.g. an array of commands)
+
+     * revert note in Changes in 0.25 about TO_JSON methods; there are none.
+
+0.25      2025-04-08 14:34:36-04:00 America/New_York
+
+  [API CHANGE]
+
+     * ->set() methods default to returning an array of
+       strings. previously it returned arrays of nested arrays which
+       had to be flattened and converted into a string for use.
+
+    * all quoted strings will be double-quoted with escapes.
+      previously the caller could (sometimes) specify the type of
+      quotes (which was sometimes ignored).
+
+    *
+
+  [BUG FIX]
+
+    * render non-numeric literal data values correctly.
+
+  [BUG NOT FIXED]
+
+    * can't use Gnuplot variables as parameter values.  All
+      values are assumed to be literal data values.
+
+  [ENHANCEMENTS]
+
+    * colors are now properly handled
+
+  [INTERNALS]
+
+    * significant internal restructure to allow lower-level objects to
+      contain other objects and be properly cloned. kludges have been
+      removed.
+
+    * translate more lower-level structures into objects which render
+      themselves.
+
+0.24      2025-03-27 15:01:29-04:00 America/New_York
+
+  [FIX]
+
+    * Coordinate values were constrained to be numbers, which fails if the value is a date or time.
+
+0.23      2025-03-21 13:19:02-04:00 America/New_York
+
+  [EHANCEMENT]
+
+    * V0::AxisTics: position can take a single number, which is
+      treated as an increment.
+
+0.22      2024-12-18 12:16:39-05:00 America/New_York
+
+  [EHANCEMENT]
+
+    * V0::Util::gnuplot_color_names, V0::Util::gnuplot_color
+
+0.21      2024-12-17 23:09:04-05:00 America/New_York
+
+  [BUG FIX]
+
+    * 'key box'  was incorrectly rendered.
+
+0.20      2024-12-14 15:58:50-05:00 America/New_York
+
+  [EHANCEMENT]
+
+    * Add Label
+
+0.19      2024-12-06 19:19:40-05:00 America/New_York
+
+  [BUG FIX]
+
+    * Range::opts method didn't output all of the attributes.
+    * Range::to_hash method didn't output all of the attributes.
+
+  [EHANCEMENT]
+
+    * added Range writeback, reverse, and restore, attributes
+
+    * add Range::set method.
+
+    * MinorTics::assert_coerce will interpret a single scalar argument
+      as the "intervals" parameter.
+
+0.18      2024-12-06 10:39:55-05:00 America/New_York
+
+  [BUG FIX]
+
+    * Bounds new_from_string used boolean rather than defined check, and thus was fooled by a bound of 0.
+
+
+0.17      2024-11-26 23:14:58-05:00 America/New_York
+
+  [BUG FIX]
+
+    * V0::Key: on => false didn't work.
+
+  [EHANCEMENT]
+
+    * V0: key attribute can be a boolean, which just turns on or off keys
+
+0.16      2024-11-25 23:25:31-05:00 America/New_York
+
+  [EHANCEMENT]
+
+    * Add AxisMinorTics class; added to Axis
+
+0.15      2024-11-21 13:28:25-05:00 America/New_York
+
+  [BUG FIX]
+
+    * Key offsets were unabled to be processed.
+    * The key "samplen" option may be zero.
+
+0.14      2024-11-14 15:38:48-05:00 America/New_York
+
+  [EHANCEMENT]
+
+    * when cloning, the new attributes may now be merged with the existing
+      ones, rather than replacing them.
+
+0.13      2024-11-13 21:52:22-05:00 America/New_York
+
+  [ENHANCEMENT]
+
+    * add TermOptions
+
+0.12      2024-11-13 16:29:41-05:00 America/New_York
+
+  [API CHANGE]
+
+    * MultiPlot layout "rows", "cols" is now nrows, ncols
+
+  [ENHANCEMENT]
+
+    * add x2 and y2 axes to V0
+
+0.11      2024-10-07 15:53:38-04:00 America/New_York
+
+  [API CHANGE]
+
+    * MultiPlot "grid", "rows", "columns" is now just "layout" to
+      reflect multiplot's 'layout' parameter
+
+  [INTERNALS]
+
+    * consolidate object construction parameter validation routines
+
+
+0.10      2024-08-29 18:39:27-04:00 America/New_York
+
+  [ENHANCEMENT]
+
+    * V0 object supports "margin" parameter
+    * MultiPlot object for "multiplot"
+
+0.09      2024-08-27 14:01:10-04:00 America/New_York
+
+  [BUG FIX]
+
+    * Key "layout" parameter was not properly handled
+
+0.08      2024-08-23 16:02:09-04:00 America/New_York
+
+  [INTERNALS]
+
+    * object cloning algorithms have been abstracted out of the
+      classes into a helper sub, with new methods (to_hash,
+      coerce_attrs, attr_classes) added to provide context for
+      them. (No roles in Perl class feature yet, so can't use 'em)
+
+  [ENHANCEMENT]
+
+    * cloning now accepts a '-without' option which indicates the
+      fields from the orignal object should not carry over to the
+      clone.
+
+  [BUG FIX]
+
+    * (AxisLabel|Title|KeyTitle)->clone, were borked.
+
+0.07      2024-08-21 01:06:48-04:00 America/New_York
+
+  [API BREAKAGE]
+
+    * caller of V0->set no longer adds the "set" command; that is done
+      internally, as "set" is not always the appropriate command
+      (e.g. "unset" to turn axis tics)
+
+  [BUG FIX]
+
+    * x2/y2 axes were mistakenly set as x/y
+
+  [ENHANCEMENT]
+
+    * tics can now be a boolean to simply turn on and off tics
+
+0.06      2024-08-20 17:18:31-04:00 America/New_York
+
+  [BUG FIX]
+
+    * Axis clone failed because AxisTics wasn't loaded
+
+0.05      2024-08-20 17:11:15-04:00 America/New_York
+
+  [ENHANCEMENT]
+
+    * actually add support for major tics to V0 object
+
+0.04      2024-08-20 16:58:30-04:00 America/New_York
+
+  [ENHANCEMENT]
+
+    * add support for major tics
+
+0.03      2024-08-16 17:36:02-04:00 America/New_York
+
+  [BUG FIX]
+
+    * "set format" must specify a format. previously AxisFormat would
+      output the format type (numeric, etc.) even when there was no
+      format.
+
+0.02      2024-08-14 15:35:31-04:00 America/New_York
+
+  [BUG FIX]
+
+    * Title text attribute is called "text", not "title"
+
+0.01      2024-08-13 13:43:09-04:00 America/New_York
+
+    * First release upon an unsuspecting world.

@@ -485,9 +485,9 @@ is(eval{uts46_to_ascii("xn--jbf911clb.xn----p9j493ivi4l", %p)},	undef,	"to_ascii
 is(eval{uts46_to_ascii("xn--jbf929a90b0b.xn----p9j493ivi4l", %p)},	undef,	"to_ascii\(\'xn\-\-jbf929a90b0b\.xn\-\-\-\-p9j493ivi4l\'\)\ throws\ error\ C2\ V6\ \[data\/IdnaTest\.txt\:627\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--jbf911clb.xn----6zg521d196p", %p)},	undef,	"to_ascii\(\'xn\-\-jbf911clb\.xn\-\-\-\-6zg521d196p\'\)\ throws\ error\ V6\ \[data\/IdnaTest\.txt\:628\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--jbf929a90b0b.xn----6zg521d196p", %p)},	undef,	"to_ascii\(\'xn\-\-jbf929a90b0b\.xn\-\-\-\-6zg521d196p\'\)\ throws\ error\ C2\ V6\ \[data\/IdnaTest\.txt\:629\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("񯞜．𐿇\x{0FA2}\x{077D}\x{0600}", %p)},	undef,	"to_ascii\(\'\?．\?\\u0FA2\\u077D\\u0600\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:630\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("񯞜．𐿇\x{0FA1}\x{0FB7}\x{077D}\x{0600}", %p)},	undef,	"to_ascii\(\'\?．\?\\u0FA1\\u0FB7\\u077D\\u0600\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:631\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("񯞜.𐿇\x{0FA1}\x{0FB7}\x{077D}\x{0600}", %p)},	undef,	"to_ascii\(\'\?\.\?\\u0FA1\\u0FB7\\u077D\\u0600\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:632\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("񯞜．𐿇\x{0FA2}\x{077D}\x{0600}", %p)},	undef,	"to_ascii\(\'\?．𐿇\\u0FA2\\u077D\\u0600\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:630\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("񯞜．𐿇\x{0FA1}\x{0FB7}\x{077D}\x{0600}", %p)},	undef,	"to_ascii\(\'\?．𐿇\\u0FA1\\u0FB7\\u077D\\u0600\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:631\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("񯞜.𐿇\x{0FA1}\x{0FB7}\x{077D}\x{0600}", %p)},	undef,	"to_ascii\(\'\?\.𐿇\\u0FA1\\u0FB7\\u077D\\u0600\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:632\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--gw68a.xn--ifb57ev2psc6027m", %p)},	undef,	"to_ascii\(\'xn\-\-gw68a\.xn\-\-ifb57ev2psc6027m\'\)\ throws\ error\ V6\ \[data\/IdnaTest\.txt\:633\]") or ($@ and diag($@));
 SKIP: { skip sprintf("requires Unicode® v7.0 (perl v5.21.1) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v7.0; is(eval{uts46_to_ascii("𣳔\x{0303}.𑓂", %p)},	undef,	"to_ascii\(\'𣳔\\u0303\.𑓂\'\)\ throws\ error\ V5\ \[data\/IdnaTest\.txt\:634\]") or ($@ and diag($@)); }
 is(eval{uts46_to_ascii("xn--nsa95820a.xn--wz1d", %p)},	undef,	"to_ascii\(\'xn\-\-nsa95820a\.xn\-\-wz1d\'\)\ throws\ error\ V5\ \[data\/IdnaTest\.txt\:635\]") or ($@ and diag($@));
@@ -715,8 +715,8 @@ is(eval{uts46_to_ascii("xn--3gb910r.", %p)},	undef,	"to_ascii\(\'xn\-\-3gb910r\.
 is(eval{uts46_to_ascii("xn--3gb910r.xn--1ug", %p)},	undef,	"to_ascii\(\'xn\-\-3gb910r\.xn\-\-1ug\'\)\ throws\ error\ B1\ B5\ B6\ C2\ \[data\/IdnaTest\.txt\:912\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--3gb194c.", %p)},	undef,	"to_ascii\(\'xn\-\-3gb194c\.\'\)\ throws\ error\ B5\ B6\ V6\ \[data\/IdnaTest\.txt\:913\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--3gb194c.xn--1ug", %p)},	undef,	"to_ascii\(\'xn\-\-3gb194c\.xn\-\-1ug\'\)\ throws\ error\ B1\ B5\ B6\ C2\ V6\ \[data\/IdnaTest\.txt\:914\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("󠆸｡₆０𐺧\x{0756}", %p)},	undef,	"to_ascii\(\'\󠆸｡₆０\?\\u0756\'\)\ throws\ error\ B1\ P1\ V6\ A4_2\ \[data\/IdnaTest\.txt\:915\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("󠆸。60𐺧\x{0756}", %p)},	undef,	"to_ascii\(\'\󠆸\。60\?\\u0756\'\)\ throws\ error\ B1\ P1\ V6\ A4_2\ \[data\/IdnaTest\.txt\:916\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("󠆸｡₆０𐺧\x{0756}", %p)},	undef,	"to_ascii\(\'\󠆸｡₆０𐺧\\u0756\'\)\ throws\ error\ B1\ P1\ V6\ A4_2\ \[data\/IdnaTest\.txt\:915\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("󠆸。60𐺧\x{0756}", %p)},	undef,	"to_ascii\(\'\󠆸\。60𐺧\\u0756\'\)\ throws\ error\ B1\ P1\ V6\ A4_2\ \[data\/IdnaTest\.txt\:916\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii(".xn--60-cke9470y", %p)},	undef,	"to_ascii\(\'\.xn\-\-60\-cke9470y\'\)\ throws\ error\ B1\ V6\ A4_2\ \[data\/IdnaTest\.txt\:917\]") or ($@ and diag($@));
 SKIP: { skip sprintf("requires Unicode® v7.0 (perl v5.21.1) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v7.0; is(eval{uts46_to_ascii("6\x{084F}｡-𑈴", %p)},	undef,	"to_ascii\(\'6\\u084F｡\-𑈴\'\)\ throws\ error\ B1\ V3\ \[data\/IdnaTest\.txt\:918\]") or ($@ and diag($@)); }
 SKIP: { skip sprintf("requires Unicode® v7.0 (perl v5.21.1) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v7.0; is(eval{uts46_to_ascii("6\x{084F}。-𑈴", %p)},	undef,	"to_ascii\(\'6\\u084F\。\-𑈴\'\)\ throws\ error\ B1\ V3\ \[data\/IdnaTest\.txt\:919\]") or ($@ and diag($@)); }
@@ -889,8 +889,8 @@ is(eval{uts46_to_ascii("\x{200C}긃.榶-", %p)},	undef,	"to_ascii\(\'\\u200C긃\
 is(eval{uts46_to_ascii("\x{200C}긃.榶-", %p)},	undef,	"to_ascii\(\'\\u200C긃\.榶\-\'\)\ throws\ error\ C1\ V3\ \[data\/IdnaTest\.txt\:1118\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--ej0b.xn----d87b", %p)},	undef,	"to_ascii\(\'xn\-\-ej0b\.xn\-\-\-\-d87b\'\)\ throws\ error\ V3\ \[data\/IdnaTest\.txt\:1119\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--0ug3307c.xn----d87b", %p)},	undef,	"to_ascii\(\'xn\-\-0ug3307c\.xn\-\-\-\-d87b\'\)\ throws\ error\ C1\ V3\ \[data\/IdnaTest\.txt\:1120\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("뉓泓𜵽.\x{09CD}\x{200D}", %p)},	undef,	"to_ascii\(\'뉓泓\?\.\\u09CD\\u200D\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:1122\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("뉓泓𜵽.\x{09CD}\x{200D}", %p)},	undef,	"to_ascii\(\'뉓泓\?\.\\u09CD\\u200D\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:1124\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("뉓泓𜵽.\x{09CD}\x{200D}", %p)},	undef,	"to_ascii\(\'뉓泓𜵽\.\\u09CD\\u200D\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:1122\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("뉓泓𜵽.\x{09CD}\x{200D}", %p)},	undef,	"to_ascii\(\'뉓泓𜵽\.\\u09CD\\u200D\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:1124\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--lwwp69lqs7m.xn--b7b", %p)},	undef,	"to_ascii\(\'xn\-\-lwwp69lqs7m\.xn\-\-b7b\'\)\ throws\ error\ V5\ V6\ \[data\/IdnaTest\.txt\:1125\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--lwwp69lqs7m.xn--b7b605i", %p)},	undef,	"to_ascii\(\'xn\-\-lwwp69lqs7m\.xn\-\-b7b605i\'\)\ throws\ error\ V5\ V6\ \[data\/IdnaTest\.txt\:1126\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("\x{200D}𐹴ß｡\x{0EB4}\x{2B75}񪅌", %p)},	undef,	"to_ascii\(\'\\u200D𐹴ß｡\\u0EB4\\u2B75\?\'\)\ throws\ error\ B1\ C2\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:1128\]") or ($@ and diag($@));
@@ -918,10 +918,10 @@ is(eval{uts46_to_ascii("xn--osd925cvyn.xn--73g3065g", %p)},	undef,	"to_ascii\(\'
 is(eval{uts46_to_ascii("xn--pnd26a55x.xn--f3g7465g", %p)},	undef,	"to_ascii\(\'xn\-\-pnd26a55x\.xn\-\-f3g7465g\'\)\ throws\ error\ V5\ V6\ \[data\/IdnaTest\.txt\:1157\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("\x{1BF3}ⴑ\x{115F}．𑄴ⅎ", %p)},	undef,	"to_ascii\(\'\\u1BF3ⴑ\\u115F．𑄴ⅎ\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:1158\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("\x{1BF3}Ⴑ\x{115F}．𑄴ⅎ", %p)},	undef,	"to_ascii\(\'\\u1BF3Ⴑ\\u115F．𑄴ⅎ\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:1159\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("𜉆。Ⴃ𐴣𐹹똯", %p)},	undef,	"to_ascii\(\'\?\。Ⴃ\?𐹹똯\'\)\ throws\ error\ B5\ P1\ V6\ \[data\/IdnaTest\.txt\:1160\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("𜉆。Ⴃ𐴣𐹹똯", %p)},	undef,	"to_ascii\(\'\?\。Ⴃ\?𐹹똯\'\)\ throws\ error\ B5\ P1\ V6\ \[data\/IdnaTest\.txt\:1161\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("𜉆。ⴃ𐴣𐹹똯", %p)},	undef,	"to_ascii\(\'\?\。ⴃ\?𐹹똯\'\)\ throws\ error\ B5\ P1\ V6\ \[data\/IdnaTest\.txt\:1162\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("𜉆。ⴃ𐴣𐹹똯", %p)},	undef,	"to_ascii\(\'\?\。ⴃ\?𐹹똯\'\)\ throws\ error\ B5\ P1\ V6\ \[data\/IdnaTest\.txt\:1163\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("𜉆。Ⴃ𐴣𐹹똯", %p)},	undef,	"to_ascii\(\'\?\。Ⴃ𐴣𐹹똯\'\)\ throws\ error\ B5\ P1\ V6\ \[data\/IdnaTest\.txt\:1160\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("𜉆。Ⴃ𐴣𐹹똯", %p)},	undef,	"to_ascii\(\'\?\。Ⴃ𐴣𐹹똯\'\)\ throws\ error\ B5\ P1\ V6\ \[data\/IdnaTest\.txt\:1161\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("𜉆。ⴃ𐴣𐹹똯", %p)},	undef,	"to_ascii\(\'\?\。ⴃ𐴣𐹹똯\'\)\ throws\ error\ B5\ P1\ V6\ \[data\/IdnaTest\.txt\:1162\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("𜉆。ⴃ𐴣𐹹똯", %p)},	undef,	"to_ascii\(\'\?\。ⴃ𐴣𐹹똯\'\)\ throws\ error\ B5\ P1\ V6\ \[data\/IdnaTest\.txt\:1163\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--187g.xn--ukjy205b8rscdeb", %p)},	undef,	"to_ascii\(\'xn\-\-187g\.xn\-\-ukjy205b8rscdeb\'\)\ throws\ error\ B5\ V6\ \[data\/IdnaTest\.txt\:1164\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--187g.xn--bnd4785f8r8bdeb", %p)},	undef,	"to_ascii\(\'xn\-\-187g\.xn\-\-bnd4785f8r8bdeb\'\)\ throws\ error\ B5\ V6\ \[data\/IdnaTest\.txt\:1165\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("𐫀｡⳻󠙾󠄷\x{3164}", %p)},	undef,	"to_ascii\(\'𐫀｡⳻\?\󠄷\\u3164\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:1166\]") or ($@ and diag($@));
@@ -982,10 +982,10 @@ is(eval{uts46_to_ascii("򈛉\x{200C}\x{08A9}｡⧅񘘡-𐭡", %p)},	undef,	"to_a
 is(eval{uts46_to_ascii("򈛉\x{200C}\x{08A9}。⧅񘘡-𐭡", %p)},	undef,	"to_ascii\(\'\?\\u200C\\u08A9\。\⧅\?\-𐭡\'\)\ throws\ error\ B1\ B5\ B6\ C1\ P1\ V6\ \[data\/IdnaTest\.txt\:1238\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--yyb56242i.xn----zir1232guu71b", %p)},	undef,	"to_ascii\(\'xn\-\-yyb56242i\.xn\-\-\-\-zir1232guu71b\'\)\ throws\ error\ B1\ B5\ B6\ V6\ \[data\/IdnaTest\.txt\:1239\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--yyb780jll63m.xn----zir1232guu71b", %p)},	undef,	"to_ascii\(\'xn\-\-yyb780jll63m\.xn\-\-\-\-zir1232guu71b\'\)\ throws\ error\ B1\ B5\ B6\ C1\ V6\ \[data\/IdnaTest\.txt\:1240\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("룱\x{200D}𰍨\x{200C}。𝨖︒", %p)},	undef,	"to_ascii\(\'룱\\u200D\?\\u200C\。𝨖︒\'\)\ throws\ error\ C1\ C2\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:1242\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("룱\x{200D}𰍨\x{200C}。𝨖︒", %p)},	undef,	"to_ascii\(\'룱\\u200D\?\\u200C\。𝨖︒\'\)\ throws\ error\ C1\ C2\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:1244\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("룱\x{200D}𰍨\x{200C}。𝨖。", %p)},	undef,	"to_ascii\(\'룱\\u200D\?\\u200C\。𝨖\。\'\)\ throws\ error\ C1\ C2\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:1246\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("룱\x{200D}𰍨\x{200C}。𝨖。", %p)},	undef,	"to_ascii\(\'룱\\u200D\?\\u200C\。𝨖\。\'\)\ throws\ error\ C1\ C2\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:1248\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("룱\x{200D}𰍨\x{200C}。𝨖︒", %p)},	undef,	"to_ascii\(\'룱\\u200D𰍨\\u200C\。𝨖︒\'\)\ throws\ error\ C1\ C2\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:1242\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("룱\x{200D}𰍨\x{200C}。𝨖︒", %p)},	undef,	"to_ascii\(\'룱\\u200D𰍨\\u200C\。𝨖︒\'\)\ throws\ error\ C1\ C2\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:1244\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("룱\x{200D}𰍨\x{200C}。𝨖。", %p)},	undef,	"to_ascii\(\'룱\\u200D𰍨\\u200C\。𝨖\。\'\)\ throws\ error\ C1\ C2\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:1246\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("룱\x{200D}𰍨\x{200C}。𝨖。", %p)},	undef,	"to_ascii\(\'룱\\u200D𰍨\\u200C\。𝨖\。\'\)\ throws\ error\ C1\ C2\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:1248\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--ct2b0738h.xn--772h.", %p)},	undef,	"to_ascii\(\'xn\-\-ct2b0738h\.xn\-\-772h\.\'\)\ throws\ error\ V5\ V6\ \[data\/IdnaTest\.txt\:1249\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--0ugb3358ili2v.xn--772h.", %p)},	undef,	"to_ascii\(\'xn\-\-0ugb3358ili2v\.xn\-\-772h\.\'\)\ throws\ error\ C1\ C2\ V5\ V6\ \[data\/IdnaTest\.txt\:1250\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--ct2b0738h.xn--y86cl899a", %p)},	undef,	"to_ascii\(\'xn\-\-ct2b0738h\.xn\-\-y86cl899a\'\)\ throws\ error\ V5\ V6\ \[data\/IdnaTest\.txt\:1251\]") or ($@ and diag($@));
@@ -1088,17 +1088,17 @@ is(eval{uts46_to_ascii("xn--tlvq3513e.xn--hib9228d", %p)},	undef,	"to_ascii\(\'x
 is(eval{uts46_to_ascii("󠄚≯ꡢ。\x{0891}\x{1DFF}", %p)},	undef,	"to_ascii\(\'\󠄚\≯ꡢ\。\\u0891\\u1DFF\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:1381\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("󠄚>\x{0338}ꡢ。\x{0891}\x{1DFF}", %p)},	undef,	"to_ascii\(\'\󠄚\>\\u0338ꡢ\。\\u0891\\u1DFF\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:1382\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--hdh7783c.xn--9xb680i", %p)},	undef,	"to_ascii\(\'xn\-\-hdh7783c\.xn\-\-9xb680i\'\)\ throws\ error\ B1\ V6\ \[data\/IdnaTest\.txt\:1383\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{FDC3}𮁱\x{0B4D}𐨿.󐧤Ⴗ", %p)},	undef,	"to_ascii\(\'\\uFDC3\?\\u0B4D𐨿\.\?Ⴗ\'\)\ throws\ error\ B2\ B3\ P1\ V6\ \[data\/IdnaTest\.txt\:1384\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{0643}\x{0645}\x{0645}𮁱\x{0B4D}𐨿.󐧤Ⴗ", %p)},	undef,	"to_ascii\(\'\\u0643\\u0645\\u0645\?\\u0B4D𐨿\.\?Ⴗ\'\)\ throws\ error\ B2\ B3\ P1\ V6\ \[data\/IdnaTest\.txt\:1385\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{0643}\x{0645}\x{0645}𮁱\x{0B4D}𐨿.󐧤ⴗ", %p)},	undef,	"to_ascii\(\'\\u0643\\u0645\\u0645\?\\u0B4D𐨿\.\?ⴗ\'\)\ throws\ error\ B2\ B3\ P1\ V6\ \[data\/IdnaTest\.txt\:1386\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{FDC3}𮁱\x{0B4D}𐨿.󐧤Ⴗ", %p)},	undef,	"to_ascii\(\'\\uFDC3𮁱\\u0B4D𐨿\.\?Ⴗ\'\)\ throws\ error\ B2\ B3\ P1\ V6\ \[data\/IdnaTest\.txt\:1384\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{0643}\x{0645}\x{0645}𮁱\x{0B4D}𐨿.󐧤Ⴗ", %p)},	undef,	"to_ascii\(\'\\u0643\\u0645\\u0645𮁱\\u0B4D𐨿\.\?Ⴗ\'\)\ throws\ error\ B2\ B3\ P1\ V6\ \[data\/IdnaTest\.txt\:1385\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{0643}\x{0645}\x{0645}𮁱\x{0B4D}𐨿.󐧤ⴗ", %p)},	undef,	"to_ascii\(\'\\u0643\\u0645\\u0645𮁱\\u0B4D𐨿\.\?ⴗ\'\)\ throws\ error\ B2\ B3\ P1\ V6\ \[data\/IdnaTest\.txt\:1386\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--fhbea662czx68a2tju.xn--fljz2846h", %p)},	undef,	"to_ascii\(\'xn\-\-fhbea662czx68a2tju\.xn\-\-fljz2846h\'\)\ throws\ error\ B2\ B3\ V6\ \[data\/IdnaTest\.txt\:1387\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--fhbea662czx68a2tju.xn--vnd55511o", %p)},	undef,	"to_ascii\(\'xn\-\-fhbea662czx68a2tju\.xn\-\-vnd55511o\'\)\ throws\ error\ B2\ B3\ V6\ \[data\/IdnaTest\.txt\:1388\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{FDC3}𮁱\x{0B4D}𐨿.󐧤ⴗ", %p)},	undef,	"to_ascii\(\'\\uFDC3\?\\u0B4D𐨿\.\?ⴗ\'\)\ throws\ error\ B2\ B3\ P1\ V6\ \[data\/IdnaTest\.txt\:1389\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{FDC3}𮁱\x{0B4D}𐨿.󐧤ⴗ", %p)},	undef,	"to_ascii\(\'\\uFDC3𮁱\\u0B4D𐨿\.\?ⴗ\'\)\ throws\ error\ B2\ B3\ P1\ V6\ \[data\/IdnaTest\.txt\:1389\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("𞀨｡\x{1B44}򡛨𞎇", %p)},	undef,	"to_ascii\(\'𞀨｡\\u1B44\?\?\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:1390\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("𞀨。\x{1B44}򡛨𞎇", %p)},	undef,	"to_ascii\(\'𞀨\。\\u1B44\?\?\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:1391\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--mi4h.xn--1uf6843smg20c", %p)},	undef,	"to_ascii\(\'xn\-\-mi4h\.xn\-\-1uf6843smg20c\'\)\ throws\ error\ V5\ V6\ \[data\/IdnaTest\.txt\:1392\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("󠣼\x{200C}．𐺰\x{200C}ᡟ", %p)},	undef,	"to_ascii\(\'\?\\u200C．\?\\u200Cᡟ\'\)\ throws\ error\ B1\ B2\ B3\ C1\ P1\ V6\ \[data\/IdnaTest\.txt\:1394\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("󠣼\x{200C}.𐺰\x{200C}ᡟ", %p)},	undef,	"to_ascii\(\'\?\\u200C\.\?\\u200Cᡟ\'\)\ throws\ error\ B1\ B2\ B3\ C1\ P1\ V6\ \[data\/IdnaTest\.txt\:1396\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("󠣼\x{200C}．𐺰\x{200C}ᡟ", %p)},	undef,	"to_ascii\(\'\?\\u200C．𐺰\\u200Cᡟ\'\)\ throws\ error\ B1\ B2\ B3\ C1\ P1\ V6\ \[data\/IdnaTest\.txt\:1394\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("󠣼\x{200C}.𐺰\x{200C}ᡟ", %p)},	undef,	"to_ascii\(\'\?\\u200C\.𐺰\\u200Cᡟ\'\)\ throws\ error\ B1\ B2\ B3\ C1\ P1\ V6\ \[data\/IdnaTest\.txt\:1396\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--q046e.xn--v8e7227j", %p)},	undef,	"to_ascii\(\'xn\-\-q046e\.xn\-\-v8e7227j\'\)\ throws\ error\ B1\ B2\ B3\ V6\ \[data\/IdnaTest\.txt\:1397\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--0ug18531l.xn--v8e340bp21t", %p)},	undef,	"to_ascii\(\'xn\-\-0ug18531l\.xn\-\-v8e340bp21t\'\)\ throws\ error\ B1\ B2\ B3\ C1\ V6\ \[data\/IdnaTest\.txt\:1398\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("ᢛ󨅟ß.ጧ", %p)},	undef,	"to_ascii\(\'ᢛ\?ß\.ጧ\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:1400\]") or ($@ and diag($@));
@@ -1218,8 +1218,8 @@ is(eval{uts46_to_ascii("xn--f-tgn9761i.xn--7656e.xn--fqb4175k", %p)},	undef,	"to
 is(eval{uts46_to_ascii("\x{200D}f𑓂。󠺨︒\x{077E}𐹢", %p)},	undef,	"to_ascii\(\'\\u200Df𑓂\。\?︒\\u077E𐹢\'\)\ throws\ error\ B1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:1539\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--f-kq9i.xn--fqb1637j8hky9452a", %p)},	undef,	"to_ascii\(\'xn\-\-f\-kq9i\.xn\-\-fqb1637j8hky9452a\'\)\ throws\ error\ B1\ V6\ \[data\/IdnaTest\.txt\:1540\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--f-tgn9761i.xn--fqb1637j8hky9452a", %p)},	undef,	"to_ascii\(\'xn\-\-f\-tgn9761i\.xn\-\-fqb1637j8hky9452a\'\)\ throws\ error\ B1\ C2\ V6\ \[data\/IdnaTest\.txt\:1541\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{0845}🄇𐼗︒｡𐹻𑜫", %p)},	undef,	"to_ascii\(\'\\u0845🄇\?︒｡𐹻𑜫\'\)\ throws\ error\ B1\ B3\ P1\ V6\ \[data\/IdnaTest\.txt\:1542\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{0845}6,𐼗。。𐹻𑜫", %p)},	undef,	"to_ascii\(\'\\u08456\,\?\。\。𐹻𑜫\'\)\ throws\ error\ B1\ P1\ V6\ A4_2\ \[data\/IdnaTest\.txt\:1543\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{0845}🄇𐼗︒｡𐹻𑜫", %p)},	undef,	"to_ascii\(\'\\u0845🄇𐼗︒｡𐹻𑜫\'\)\ throws\ error\ B1\ B3\ P1\ V6\ \[data\/IdnaTest\.txt\:1542\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{0845}6,𐼗。。𐹻𑜫", %p)},	undef,	"to_ascii\(\'\\u08456\,𐼗\。\。𐹻𑜫\'\)\ throws\ error\ B1\ P1\ V6\ A4_2\ \[data\/IdnaTest\.txt\:1543\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--6,-r4e4420y..xn--zo0di2m", %p)},	undef,	"to_ascii\(\'xn\-\-6\,\-r4e4420y\.\.xn\-\-zo0di2m\'\)\ throws\ error\ B1\ P1\ V6\ A4_2\ \[data\/IdnaTest\.txt\:1544\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--3vb4696jpxkjh7s.xn--zo0di2m", %p)},	undef,	"to_ascii\(\'xn\-\-3vb4696jpxkjh7s\.xn\-\-zo0di2m\'\)\ throws\ error\ B1\ B3\ V6\ \[data\/IdnaTest\.txt\:1545\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("𐹈.\x{1DC0}𑈱𐦭", %p)},	undef,	"to_ascii\(\'\?\.\\u1DC0𑈱𐦭\'\)\ throws\ error\ B1\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:1546\]") or ($@ and diag($@));
@@ -1312,8 +1312,8 @@ is(eval{uts46_to_ascii("𵋅。Ss𬵩\x{200D}", %p)},	undef,	"to_ascii\(\'\?\。
 is(eval{uts46_to_ascii("xn--ey1p.xn--ss-eq36b", %p)},	undef,	"to_ascii\(\'xn\-\-ey1p\.xn\-\-ss\-eq36b\'\)\ throws\ error\ V6\ \[data\/IdnaTest\.txt\:1663\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--ey1p.xn--ss-n1tx0508a", %p)},	undef,	"to_ascii\(\'xn\-\-ey1p\.xn\-\-ss\-n1tx0508a\'\)\ throws\ error\ C2\ V6\ \[data\/IdnaTest\.txt\:1664\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--ey1p.xn--zca870nz438b", %p)},	undef,	"to_ascii\(\'xn\-\-ey1p\.xn\-\-zca870nz438b\'\)\ throws\ error\ C2\ V6\ \[data\/IdnaTest\.txt\:1665\]") or ($@ and diag($@));
-SKIP: { skip sprintf("requires Unicode® v10.0 (perl v5.28.0) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v10.0; is(eval{uts46_to_ascii("\x{200C}𭉝。\x{07F1}\x{0301}𞹻", %p)},	undef,	"to_ascii\(\'\\u200C\?\。\\u07F1\\u0301𞹻\'\)\ throws\ error\ B1\ C1\ V5\ \[data\/IdnaTest\.txt\:1667\]") or ($@ and diag($@)); }
-SKIP: { skip sprintf("requires Unicode® v10.0 (perl v5.28.0) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v10.0; is(eval{uts46_to_ascii("\x{200C}𭉝。\x{07F1}\x{0301}\x{063A}", %p)},	undef,	"to_ascii\(\'\\u200C\?\。\\u07F1\\u0301\\u063A\'\)\ throws\ error\ B1\ C1\ V5\ \[data\/IdnaTest\.txt\:1669\]") or ($@ and diag($@)); }
+SKIP: { skip sprintf("requires Unicode® v10.0 (perl v5.28.0) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v10.0; is(eval{uts46_to_ascii("\x{200C}𭉝。\x{07F1}\x{0301}𞹻", %p)},	undef,	"to_ascii\(\'\\u200C𭉝\。\\u07F1\\u0301𞹻\'\)\ throws\ error\ B1\ C1\ V5\ \[data\/IdnaTest\.txt\:1667\]") or ($@ and diag($@)); }
+SKIP: { skip sprintf("requires Unicode® v10.0 (perl v5.28.0) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v10.0; is(eval{uts46_to_ascii("\x{200C}𭉝。\x{07F1}\x{0301}\x{063A}", %p)},	undef,	"to_ascii\(\'\\u200C𭉝\。\\u07F1\\u0301\\u063A\'\)\ throws\ error\ B1\ C1\ V5\ \[data\/IdnaTest\.txt\:1669\]") or ($@ and diag($@)); }
 is(eval{uts46_to_ascii("xn--634m.xn--lsa46nuub", %p)},	undef,	"to_ascii\(\'xn\-\-634m\.xn\-\-lsa46nuub\'\)\ throws\ error\ B1\ V5\ \[data\/IdnaTest\.txt\:1670\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--0ugy003y.xn--lsa46nuub", %p)},	undef,	"to_ascii\(\'xn\-\-0ugy003y\.xn\-\-lsa46nuub\'\)\ throws\ error\ B1\ C1\ V5\ \[data\/IdnaTest\.txt\:1671\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("𞼌\x{200C}𑈶。𐹡", %p)},	undef,	"to_ascii\(\'\?\\u200C𑈶\。𐹡\'\)\ throws\ error\ B1\ B3\ C1\ P1\ V6\ \[data\/IdnaTest\.txt\:1673\]") or ($@ and diag($@));
@@ -1378,14 +1378,14 @@ is(eval{uts46_to_ascii("򔊱񁦮۸。󠾭-", %p)},	undef,	"to_ascii\(\'\?\?۸\�
 is(eval{uts46_to_ascii("xn--lmb18944c0g2z.xn----2k81m", %p)},	undef,	"to_ascii\(\'xn\-\-lmb18944c0g2z\.xn\-\-\-\-2k81m\'\)\ throws\ error\ V3\ V6\ \[data\/IdnaTest\.txt\:1753\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("𼗸\x{07CD}𐹮。\x{06DD}ᡎᠴ", %p)},	undef,	"to_ascii\(\'\?\\u07CD𐹮\。\\u06DDᡎᠴ\'\)\ throws\ error\ B1\ B5\ B6\ P1\ V6\ \[data\/IdnaTest\.txt\:1754\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--osb0855kcc2r.xn--tlb299fhc", %p)},	undef,	"to_ascii\(\'xn\-\-osb0855kcc2r\.xn\-\-tlb299fhc\'\)\ throws\ error\ B1\ B5\ B6\ V6\ \[data\/IdnaTest\.txt\:1755\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200D}ᠮႾ🄂.🚗\x{0841}𮹌\x{200C}", %p)},	undef,	"to_ascii\(\'\\u200DᠮႾ🄂\.🚗\\u0841\?\\u200C\'\)\ throws\ error\ B1\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:1757\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200D}ᠮႾ1,.🚗\x{0841}𮹌\x{200C}", %p)},	undef,	"to_ascii\(\'\\u200DᠮႾ1\,\.🚗\\u0841\?\\u200C\'\)\ throws\ error\ B1\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:1759\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200D}ᠮⴞ1,.🚗\x{0841}𮹌\x{200C}", %p)},	undef,	"to_ascii\(\'\\u200Dᠮⴞ1\,\.🚗\\u0841\?\\u200C\'\)\ throws\ error\ B1\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:1761\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200D}ᠮႾ🄂.🚗\x{0841}𮹌\x{200C}", %p)},	undef,	"to_ascii\(\'\\u200DᠮႾ🄂\.🚗\\u0841𮹌\\u200C\'\)\ throws\ error\ B1\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:1757\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200D}ᠮႾ1,.🚗\x{0841}𮹌\x{200C}", %p)},	undef,	"to_ascii\(\'\\u200DᠮႾ1\,\.🚗\\u0841𮹌\\u200C\'\)\ throws\ error\ B1\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:1759\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200D}ᠮⴞ1,.🚗\x{0841}𮹌\x{200C}", %p)},	undef,	"to_ascii\(\'\\u200Dᠮⴞ1\,\.🚗\\u0841𮹌\\u200C\'\)\ throws\ error\ B1\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:1761\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--1,-v3o625k.xn--zvb3124wpkpf", %p)},	undef,	"to_ascii\(\'xn\-\-1\,\-v3o625k\.xn\-\-zvb3124wpkpf\'\)\ throws\ error\ B1\ B6\ P1\ V6\ \[data\/IdnaTest\.txt\:1762\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--1,-v3o161c53q.xn--zvb692j9664aic1g", %p)},	undef,	"to_ascii\(\'xn\-\-1\,\-v3o161c53q\.xn\-\-zvb692j9664aic1g\'\)\ throws\ error\ B1\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:1763\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--1,-ogkx89c.xn--zvb3124wpkpf", %p)},	undef,	"to_ascii\(\'xn\-\-1\,\-ogkx89c\.xn\-\-zvb3124wpkpf\'\)\ throws\ error\ B1\ B6\ P1\ V6\ \[data\/IdnaTest\.txt\:1764\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--1,-ogkx89c39j.xn--zvb692j9664aic1g", %p)},	undef,	"to_ascii\(\'xn\-\-1\,\-ogkx89c39j\.xn\-\-zvb692j9664aic1g\'\)\ throws\ error\ B1\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:1765\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200D}ᠮⴞ🄂.🚗\x{0841}𮹌\x{200C}", %p)},	undef,	"to_ascii\(\'\\u200Dᠮⴞ🄂\.🚗\\u0841\?\\u200C\'\)\ throws\ error\ B1\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:1767\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200D}ᠮⴞ🄂.🚗\x{0841}𮹌\x{200C}", %p)},	undef,	"to_ascii\(\'\\u200Dᠮⴞ🄂\.🚗\\u0841𮹌\\u200C\'\)\ throws\ error\ B1\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:1767\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--h7e438h1p44a.xn--zvb3124wpkpf", %p)},	undef,	"to_ascii\(\'xn\-\-h7e438h1p44a\.xn\-\-zvb3124wpkpf\'\)\ throws\ error\ B1\ V6\ \[data\/IdnaTest\.txt\:1768\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--h7e341b0wlbv45b.xn--zvb692j9664aic1g", %p)},	undef,	"to_ascii\(\'xn\-\-h7e341b0wlbv45b\.xn\-\-zvb692j9664aic1g\'\)\ throws\ error\ B1\ C1\ C2\ V6\ \[data\/IdnaTest\.txt\:1769\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--2nd129ai554b.xn--zvb3124wpkpf", %p)},	undef,	"to_ascii\(\'xn\-\-2nd129ai554b\.xn\-\-zvb3124wpkpf\'\)\ throws\ error\ B1\ V6\ \[data\/IdnaTest\.txt\:1770\]") or ($@ and diag($@));
@@ -1428,10 +1428,10 @@ is(eval{uts46_to_ascii("𑑄>\x{0338}｡𑜤", %p)},	undef,	"to_ascii\(\'𑑄\>\
 is(eval{uts46_to_ascii("𑑄≯。𑜤", %p)},	undef,	"to_ascii\(\'𑑄\≯\。𑜤\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:1813\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("𑑄>\x{0338}。𑜤", %p)},	undef,	"to_ascii\(\'𑑄\>\\u0338\。𑜤\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:1814\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--hdh5636g.xn--ci2d", %p)},	undef,	"to_ascii\(\'xn\-\-hdh5636g\.xn\-\-ci2d\'\)\ throws\ error\ V5\ V6\ \[data\/IdnaTest\.txt\:1815\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("Ⴋ≮𱲆。\x{200D}\x{07A7}𐋣", %p)},	undef,	"to_ascii\(\'Ⴋ\≮\?\。\\u200D\\u07A7𐋣\'\)\ throws\ error\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:1817\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("Ⴋ<\x{0338}𱲆。\x{200D}\x{07A7}𐋣", %p)},	undef,	"to_ascii\(\'Ⴋ\<\\u0338\?\。\\u200D\\u07A7𐋣\'\)\ throws\ error\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:1819\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("ⴋ<\x{0338}𱲆。\x{200D}\x{07A7}𐋣", %p)},	undef,	"to_ascii\(\'ⴋ\<\\u0338\?\。\\u200D\\u07A7𐋣\'\)\ throws\ error\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:1821\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("ⴋ≮𱲆。\x{200D}\x{07A7}𐋣", %p)},	undef,	"to_ascii\(\'ⴋ\≮\?\。\\u200D\\u07A7𐋣\'\)\ throws\ error\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:1823\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("Ⴋ≮𱲆。\x{200D}\x{07A7}𐋣", %p)},	undef,	"to_ascii\(\'Ⴋ\≮𱲆\。\\u200D\\u07A7𐋣\'\)\ throws\ error\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:1817\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("Ⴋ<\x{0338}𱲆。\x{200D}\x{07A7}𐋣", %p)},	undef,	"to_ascii\(\'Ⴋ\<\\u0338𱲆\。\\u200D\\u07A7𐋣\'\)\ throws\ error\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:1819\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("ⴋ<\x{0338}𱲆。\x{200D}\x{07A7}𐋣", %p)},	undef,	"to_ascii\(\'ⴋ\<\\u0338𱲆\。\\u200D\\u07A7𐋣\'\)\ throws\ error\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:1821\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("ⴋ≮𱲆。\x{200D}\x{07A7}𐋣", %p)},	undef,	"to_ascii\(\'ⴋ\≮𱲆\。\\u200D\\u07A7𐋣\'\)\ throws\ error\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:1823\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--gdhz03bxt42d.xn--lrb6479j", %p)},	undef,	"to_ascii\(\'xn\-\-gdhz03bxt42d\.xn\-\-lrb6479j\'\)\ throws\ error\ V5\ V6\ \[data\/IdnaTest\.txt\:1824\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--gdhz03bxt42d.xn--lrb506jqr4n", %p)},	undef,	"to_ascii\(\'xn\-\-gdhz03bxt42d\.xn\-\-lrb506jqr4n\'\)\ throws\ error\ C2\ V6\ \[data\/IdnaTest\.txt\:1825\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--jnd802gsm17c.xn--lrb6479j", %p)},	undef,	"to_ascii\(\'xn\-\-jnd802gsm17c\.xn\-\-lrb6479j\'\)\ throws\ error\ V5\ V6\ \[data\/IdnaTest\.txt\:1826\]") or ($@ and diag($@));
@@ -1585,26 +1585,26 @@ is(eval{uts46_to_ascii("𐶭⾆｡\x{200C}𑚶򟱃𞰘", %p)},	undef,	"to_ascii\
 is(eval{uts46_to_ascii("𐶭舌。\x{200C}𑚶򟱃𞰘", %p)},	undef,	"to_ascii\(\'\?舌\。\\u200C𑚶\?\?\'\)\ throws\ error\ B1\ B2\ B3\ C1\ P1\ V6\ \[data\/IdnaTest\.txt\:1997\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--tc1ao37z.xn--6e2dw557azds2d", %p)},	undef,	"to_ascii\(\'xn\-\-tc1ao37z\.xn\-\-6e2dw557azds2d\'\)\ throws\ error\ B2\ B3\ B5\ B6\ V5\ V6\ \[data\/IdnaTest\.txt\:1998\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--tc1ao37z.xn--0ugx728gi1nfwqz2e", %p)},	undef,	"to_ascii\(\'xn\-\-tc1ao37z\.xn\-\-0ugx728gi1nfwqz2e\'\)\ throws\ error\ B1\ B2\ B3\ C1\ V6\ \[data\/IdnaTest\.txt\:1999\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200C}Ⴠ-.𝟷ς𞴺ς", %p)},	undef,	"to_ascii\(\'\\u200CჀ\-\.𝟷ς\?ς\'\)\ throws\ error\ B1\ C1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:2001\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200C}Ⴠ-.1ς𞴺ς", %p)},	undef,	"to_ascii\(\'\\u200CჀ\-\.1ς\?ς\'\)\ throws\ error\ B1\ C1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:2003\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200C}ⴠ-.1ς𞴺ς", %p)},	undef,	"to_ascii\(\'\\u200Cⴠ\-\.1ς\?ς\'\)\ throws\ error\ B1\ C1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:2005\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200C}Ⴠ-.1Σ𞴺Σ", %p)},	undef,	"to_ascii\(\'\\u200CჀ\-\.1Σ\?Σ\'\)\ throws\ error\ B1\ C1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:2007\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200C}ⴠ-.1σ𞴺σ", %p)},	undef,	"to_ascii\(\'\\u200Cⴠ\-\.1σ\?σ\'\)\ throws\ error\ B1\ C1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:2009\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200C}Ⴠ-.𝟷ς𞴺ς", %p)},	undef,	"to_ascii\(\'\\u200CჀ\-\.𝟷ς𞴺ς\'\)\ throws\ error\ B1\ C1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:2001\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200C}Ⴠ-.1ς𞴺ς", %p)},	undef,	"to_ascii\(\'\\u200CჀ\-\.1ς𞴺ς\'\)\ throws\ error\ B1\ C1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:2003\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200C}ⴠ-.1ς𞴺ς", %p)},	undef,	"to_ascii\(\'\\u200Cⴠ\-\.1ς𞴺ς\'\)\ throws\ error\ B1\ C1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:2005\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200C}Ⴠ-.1Σ𞴺Σ", %p)},	undef,	"to_ascii\(\'\\u200CჀ\-\.1Σ𞴺Σ\'\)\ throws\ error\ B1\ C1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:2007\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200C}ⴠ-.1σ𞴺σ", %p)},	undef,	"to_ascii\(\'\\u200Cⴠ\-\.1σ𞴺σ\'\)\ throws\ error\ B1\ C1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:2009\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn----2ws.xn--1-0mba52321c", %p)},	undef,	"to_ascii\(\'xn\-\-\-\-2ws\.xn\-\-1\-0mba52321c\'\)\ throws\ error\ B1\ B6\ V3\ V6\ \[data\/IdnaTest\.txt\:2010\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn----rgn530d.xn--1-0mba52321c", %p)},	undef,	"to_ascii\(\'xn\-\-\-\-rgn530d\.xn\-\-1\-0mba52321c\'\)\ throws\ error\ B1\ C1\ V3\ V6\ \[data\/IdnaTest\.txt\:2011\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn----z1g.xn--1-0mba52321c", %p)},	undef,	"to_ascii\(\'xn\-\-\-\-z1g\.xn\-\-1\-0mba52321c\'\)\ throws\ error\ B1\ B6\ V3\ V6\ \[data\/IdnaTest\.txt\:2012\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn----z1g168i.xn--1-0mba52321c", %p)},	undef,	"to_ascii\(\'xn\-\-\-\-z1g168i\.xn\-\-1\-0mba52321c\'\)\ throws\ error\ B1\ C1\ V3\ V6\ \[data\/IdnaTest\.txt\:2013\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn----rgn530d.xn--1-ymba92321c", %p)},	undef,	"to_ascii\(\'xn\-\-\-\-rgn530d\.xn\-\-1\-ymba92321c\'\)\ throws\ error\ B1\ C1\ V3\ V6\ \[data\/IdnaTest\.txt\:2014\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn----z1g168i.xn--1-ymba92321c", %p)},	undef,	"to_ascii\(\'xn\-\-\-\-z1g168i\.xn\-\-1\-ymba92321c\'\)\ throws\ error\ B1\ C1\ V3\ V6\ \[data\/IdnaTest\.txt\:2015\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200C}ⴠ-.𝟷ς𞴺ς", %p)},	undef,	"to_ascii\(\'\\u200Cⴠ\-\.𝟷ς\?ς\'\)\ throws\ error\ B1\ C1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:2017\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200C}Ⴠ-.𝟷Σ𞴺Σ", %p)},	undef,	"to_ascii\(\'\\u200CჀ\-\.𝟷Σ\?Σ\'\)\ throws\ error\ B1\ C1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:2019\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200C}ⴠ-.𝟷σ𞴺σ", %p)},	undef,	"to_ascii\(\'\\u200Cⴠ\-\.𝟷σ\?σ\'\)\ throws\ error\ B1\ C1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:2021\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("𑲘󠄒𓑡｡𝟪Ⴜ", %p)},	undef,	"to_ascii\(\'𑲘\󠄒\?｡𝟪Ⴜ\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:2022\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("𑲘󠄒𓑡。8Ⴜ", %p)},	undef,	"to_ascii\(\'𑲘\󠄒\?\。8Ⴜ\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:2023\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("𑲘󠄒𓑡。8ⴜ", %p)},	undef,	"to_ascii\(\'𑲘\󠄒\?\。8ⴜ\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:2024\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200C}ⴠ-.𝟷ς𞴺ς", %p)},	undef,	"to_ascii\(\'\\u200Cⴠ\-\.𝟷ς𞴺ς\'\)\ throws\ error\ B1\ C1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:2017\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200C}Ⴠ-.𝟷Σ𞴺Σ", %p)},	undef,	"to_ascii\(\'\\u200CჀ\-\.𝟷Σ𞴺Σ\'\)\ throws\ error\ B1\ C1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:2019\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200C}ⴠ-.𝟷σ𞴺σ", %p)},	undef,	"to_ascii\(\'\\u200Cⴠ\-\.𝟷σ𞴺σ\'\)\ throws\ error\ B1\ C1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:2021\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("𑲘󠄒𓑡｡𝟪Ⴜ", %p)},	undef,	"to_ascii\(\'𑲘\󠄒𓑡｡𝟪Ⴜ\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:2022\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("𑲘󠄒𓑡。8Ⴜ", %p)},	undef,	"to_ascii\(\'𑲘\󠄒𓑡\。8Ⴜ\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:2023\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("𑲘󠄒𓑡。8ⴜ", %p)},	undef,	"to_ascii\(\'𑲘\󠄒𓑡\。8ⴜ\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:2024\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--7m3d291b.xn--8-vws", %p)},	undef,	"to_ascii\(\'xn\-\-7m3d291b\.xn\-\-8\-vws\'\)\ throws\ error\ V5\ V6\ \[data\/IdnaTest\.txt\:2025\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--7m3d291b.xn--8-s1g", %p)},	undef,	"to_ascii\(\'xn\-\-7m3d291b\.xn\-\-8\-s1g\'\)\ throws\ error\ V5\ V6\ \[data\/IdnaTest\.txt\:2026\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("𑲘󠄒𓑡｡𝟪ⴜ", %p)},	undef,	"to_ascii\(\'𑲘\󠄒\?｡𝟪ⴜ\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:2027\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("𑲘󠄒𓑡｡𝟪ⴜ", %p)},	undef,	"to_ascii\(\'𑲘\󠄒𓑡｡𝟪ⴜ\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:2027\]") or ($@ and diag($@));
 SKIP: { skip sprintf("requires Unicode® v5.0 (perl v5.9.5) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v5.0; is(eval{uts46_to_ascii("䪏\x{06AB}\x{07E0}\x{0941}｡뭕ᢝ\x{17B9}", %p)},	undef,	"to_ascii\(\'䪏\\u06AB\\u07E0\\u0941｡뭕ᢝ\\u17B9\'\)\ throws\ error\ B5\ B6\ \[data\/IdnaTest\.txt\:2028\]") or ($@ and diag($@)); }
 SKIP: { skip sprintf("requires Unicode® v5.0 (perl v5.9.5) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v5.0; is(eval{uts46_to_ascii("䪏\x{06AB}\x{07E0}\x{0941}｡뭕ᢝ\x{17B9}", %p)},	undef,	"to_ascii\(\'䪏\\u06AB\\u07E0\\u0941｡뭕ᢝ\\u17B9\'\)\ throws\ error\ B5\ B6\ \[data\/IdnaTest\.txt\:2029\]") or ($@ and diag($@)); }
 SKIP: { skip sprintf("requires Unicode® v5.0 (perl v5.9.5) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v5.0; is(eval{uts46_to_ascii("䪏\x{06AB}\x{07E0}\x{0941}。뭕ᢝ\x{17B9}", %p)},	undef,	"to_ascii\(\'䪏\\u06AB\\u07E0\\u0941\。뭕ᢝ\\u17B9\'\)\ throws\ error\ B5\ B6\ \[data\/IdnaTest\.txt\:2030\]") or ($@ and diag($@)); }
@@ -1634,17 +1634,17 @@ SKIP: { skip sprintf("requires Unicode® v5.0 (perl v5.9.5) or higher, only v%vd
 is(eval{uts46_to_ascii("xn----8cd.xn--r5g", %p)},	undef,	"to_ascii\(\'xn\-\-\-\-8cd\.xn\-\-r5g\'\)\ throws\ error\ B1\ V3\ \[data\/IdnaTest\.txt\:2058\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn----8cd.xn--q5g", %p)},	undef,	"to_ascii\(\'xn\-\-\-\-8cd\.xn\-\-q5g\'\)\ throws\ error\ B1\ V3\ V6\ \[data\/IdnaTest\.txt\:2059\]") or ($@ and diag($@));
 SKIP: { skip sprintf("requires Unicode® v5.0 (perl v5.9.5) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v5.0; is(eval{uts46_to_ascii("-\x{07E1}｡ↄ", %p)},	undef,	"to_ascii\(\'\-\\u07E1｡ↄ\'\)\ throws\ error\ B1\ V3\ \[data\/IdnaTest\.txt\:2060\]") or ($@ and diag($@)); }
-is(eval{uts46_to_ascii("\x{200D}-︒󠄄。ß哑\x{200C}𐵿", %p)},	undef,	"to_ascii\(\'\\u200D\-︒\󠄄\。ß哑\\u200C\?\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:2062\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200D}-。󠄄。ß哑\x{200C}𐵿", %p)},	undef,	"to_ascii\(\'\\u200D\-\。\󠄄\。ß哑\\u200C\?\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V3\ V6\ A4_2\ \[data\/IdnaTest\.txt\:2064\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200D}-。󠄄。SS哑\x{200C}𐵿", %p)},	undef,	"to_ascii\(\'\\u200D\-\。\󠄄\。SS哑\\u200C\?\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V3\ V6\ A4_2\ \[data\/IdnaTest\.txt\:2066\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200D}-。󠄄。ss哑\x{200C}𐵿", %p)},	undef,	"to_ascii\(\'\\u200D\-\。\󠄄\。ss哑\\u200C\?\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V3\ V6\ A4_2\ \[data\/IdnaTest\.txt\:2068\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200D}-。󠄄。Ss哑\x{200C}𐵿", %p)},	undef,	"to_ascii\(\'\\u200D\-\。\󠄄\。Ss哑\\u200C\?\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V3\ V6\ A4_2\ \[data\/IdnaTest\.txt\:2070\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200D}-︒󠄄。ß哑\x{200C}𐵿", %p)},	undef,	"to_ascii\(\'\\u200D\-︒\󠄄\。ß哑\\u200C𐵿\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:2062\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200D}-。󠄄。ß哑\x{200C}𐵿", %p)},	undef,	"to_ascii\(\'\\u200D\-\。\󠄄\。ß哑\\u200C𐵿\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V3\ V6\ A4_2\ \[data\/IdnaTest\.txt\:2064\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200D}-。󠄄。SS哑\x{200C}𐵿", %p)},	undef,	"to_ascii\(\'\\u200D\-\。\󠄄\。SS哑\\u200C𐵿\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V3\ V6\ A4_2\ \[data\/IdnaTest\.txt\:2066\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200D}-。󠄄。ss哑\x{200C}𐵿", %p)},	undef,	"to_ascii\(\'\\u200D\-\。\󠄄\。ss哑\\u200C𐵿\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V3\ V6\ A4_2\ \[data\/IdnaTest\.txt\:2068\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200D}-。󠄄。Ss哑\x{200C}𐵿", %p)},	undef,	"to_ascii\(\'\\u200D\-\。\󠄄\。Ss哑\\u200C𐵿\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V3\ V6\ A4_2\ \[data\/IdnaTest\.txt\:2070\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("-..xn--ss-h46c5711e", %p)},	undef,	"to_ascii\(\'\-\.\.xn\-\-ss\-h46c5711e\'\)\ throws\ error\ B1\ B5\ B6\ V3\ V6\ A4_2\ \[data\/IdnaTest\.txt\:2071\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn----tgn..xn--ss-k1ts75zb8ym", %p)},	undef,	"to_ascii\(\'xn\-\-\-\-tgn\.\.xn\-\-ss\-k1ts75zb8ym\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ V3\ V6\ A4_2\ \[data\/IdnaTest\.txt\:2072\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn----tgn..xn--zca670n5f0binyk", %p)},	undef,	"to_ascii\(\'xn\-\-\-\-tgn\.\.xn\-\-zca670n5f0binyk\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ V3\ V6\ A4_2\ \[data\/IdnaTest\.txt\:2073\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200D}-︒󠄄。SS哑\x{200C}𐵿", %p)},	undef,	"to_ascii\(\'\\u200D\-︒\󠄄\。SS哑\\u200C\?\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:2075\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200D}-︒󠄄。ss哑\x{200C}𐵿", %p)},	undef,	"to_ascii\(\'\\u200D\-︒\󠄄\。ss哑\\u200C\?\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:2077\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200D}-︒󠄄。Ss哑\x{200C}𐵿", %p)},	undef,	"to_ascii\(\'\\u200D\-︒\󠄄\。Ss哑\\u200C\?\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:2079\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200D}-︒󠄄。SS哑\x{200C}𐵿", %p)},	undef,	"to_ascii\(\'\\u200D\-︒\󠄄\。SS哑\\u200C𐵿\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:2075\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200D}-︒󠄄。ss哑\x{200C}𐵿", %p)},	undef,	"to_ascii\(\'\\u200D\-︒\󠄄\。ss哑\\u200C𐵿\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:2077\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200D}-︒󠄄。Ss哑\x{200C}𐵿", %p)},	undef,	"to_ascii\(\'\\u200D\-︒\󠄄\。Ss哑\\u200C𐵿\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:2079\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn----o89h.xn--ss-h46c5711e", %p)},	undef,	"to_ascii\(\'xn\-\-\-\-o89h\.xn\-\-ss\-h46c5711e\'\)\ throws\ error\ B1\ B5\ B6\ V3\ V6\ \[data\/IdnaTest\.txt\:2080\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn----tgnt341h.xn--ss-k1ts75zb8ym", %p)},	undef,	"to_ascii\(\'xn\-\-\-\-tgnt341h\.xn\-\-ss\-k1ts75zb8ym\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ V6\ \[data\/IdnaTest\.txt\:2081\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn----tgnt341h.xn--zca670n5f0binyk", %p)},	undef,	"to_ascii\(\'xn\-\-\-\-tgnt341h\.xn\-\-zca670n5f0binyk\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ V6\ \[data\/IdnaTest\.txt\:2082\]") or ($@ and diag($@));
@@ -1764,8 +1764,8 @@ is(eval{uts46_to_ascii("\x{200C}.≯", %p)},	undef,	"to_ascii\(\'\\u200C\.\≯\'
 is(eval{uts46_to_ascii("\x{200C}.>\x{0338}", %p)},	undef,	"to_ascii\(\'\\u200C\.\>\\u0338\'\)\ throws\ error\ C1\ P1\ V6\ \[data\/IdnaTest\.txt\:2221\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii(".xn--hdh", %p)},	undef,	"to_ascii\(\'\.xn\-\-hdh\'\)\ throws\ error\ V6\ A4_2\ \[data\/IdnaTest\.txt\:2222\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--0ug.xn--hdh", %p)},	undef,	"to_ascii\(\'xn\-\-0ug\.xn\-\-hdh\'\)\ throws\ error\ C1\ V6\ \[data\/IdnaTest\.txt\:2223\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("𰅧񣩠-．\x{ABED}-悜", %p)},	undef,	"to_ascii\(\'\?\?\-．\\uABED\-悜\'\)\ throws\ error\ P1\ V3\ V5\ V6\ \[data\/IdnaTest\.txt\:2224\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("𰅧񣩠-.\x{ABED}-悜", %p)},	undef,	"to_ascii\(\'\?\?\-\.\\uABED\-悜\'\)\ throws\ error\ P1\ V3\ V5\ V6\ \[data\/IdnaTest\.txt\:2225\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("𰅧񣩠-．\x{ABED}-悜", %p)},	undef,	"to_ascii\(\'𰅧\?\-．\\uABED\-悜\'\)\ throws\ error\ P1\ V3\ V5\ V6\ \[data\/IdnaTest\.txt\:2224\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("𰅧񣩠-.\x{ABED}-悜", %p)},	undef,	"to_ascii\(\'𰅧\?\-\.\\uABED\-悜\'\)\ throws\ error\ P1\ V3\ V5\ V6\ \[data\/IdnaTest\.txt\:2225\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn----7m53aj640l.xn----8f4br83t", %p)},	undef,	"to_ascii\(\'xn\-\-\-\-7m53aj640l\.xn\-\-\-\-8f4br83t\'\)\ throws\ error\ V3\ V5\ V6\ \[data\/IdnaTest\.txt\:2226\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("ᡉ𶓧⬞ᢜ.-\x{200D}𞣑\x{202E}", %p)},	undef,	"to_ascii\(\'ᡉ\?\⬞ᢜ\.\-\\u200D𞣑\\u202E\'\)\ throws\ error\ C2\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:2228\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--87e0ol04cdl39e.xn----qinu247r", %p)},	undef,	"to_ascii\(\'xn\-\-87e0ol04cdl39e\.xn\-\-\-\-qinu247r\'\)\ throws\ error\ V3\ V6\ \[data\/IdnaTest\.txt\:2229\]") or ($@ and diag($@));
@@ -1950,12 +1950,12 @@ is(eval{uts46_to_ascii("\x{07E2}Σ\x{200D}𝟳。蔑򛖢", %p)},	undef,	"to_asci
 is(eval{uts46_to_ascii("\x{07E2}σ\x{200D}𝟳。蔑򛖢", %p)},	undef,	"to_ascii\(\'\\u07E2σ\\u200D𝟳\。蔑\?\'\)\ throws\ error\ B2\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:2462\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("𐹰.\x{0600}", %p)},	undef,	"to_ascii\(\'𐹰\.\\u0600\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:2463\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--oo0d.xn--ifb", %p)},	undef,	"to_ascii\(\'xn\-\-oo0d\.xn\-\-ifb\'\)\ throws\ error\ B1\ V6\ \[data\/IdnaTest\.txt\:2464\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("-\x{08A8}.𱠖", %p)},	undef,	"to_ascii\(\'\-\\u08A8\.\?\'\)\ throws\ error\ B1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:2465\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("-\x{08A8}.𱠖", %p)},	undef,	"to_ascii\(\'\-\\u08A8\.𱠖\'\)\ throws\ error\ B1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:2465\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn----mod.xn--5o9n", %p)},	undef,	"to_ascii\(\'xn\-\-\-\-mod\.xn\-\-5o9n\'\)\ throws\ error\ B1\ V3\ V6\ \[data\/IdnaTest\.txt\:2466\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("≯𞱸󠇀。誆⒈", %p)},	undef,	"to_ascii\(\'\≯\?\󠇀\。誆⒈\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:2467\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii(">\x{0338}𞱸󠇀。誆⒈", %p)},	undef,	"to_ascii\(\'\>\\u0338\?\󠇀\。誆⒈\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:2468\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("≯𞱸󠇀。誆1.", %p)},	undef,	"to_ascii\(\'\≯\?\󠇀\。誆1\.\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:2469\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii(">\x{0338}𞱸󠇀。誆1.", %p)},	undef,	"to_ascii\(\'\>\\u0338\?\󠇀\。誆1\.\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:2470\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("≯𞱸󠇀。誆⒈", %p)},	undef,	"to_ascii\(\'\≯𞱸\󠇀\。誆⒈\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:2467\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii(">\x{0338}𞱸󠇀。誆⒈", %p)},	undef,	"to_ascii\(\'\>\\u0338𞱸\󠇀\。誆⒈\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:2468\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("≯𞱸󠇀。誆1.", %p)},	undef,	"to_ascii\(\'\≯𞱸\󠇀\。誆1\.\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:2469\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii(">\x{0338}𞱸󠇀。誆1.", %p)},	undef,	"to_ascii\(\'\>\\u0338𞱸\󠇀\。誆1\.\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:2470\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--hdh7151p.xn--1-dy1d.", %p)},	undef,	"to_ascii\(\'xn\-\-hdh7151p\.xn\-\-1\-dy1d\.\'\)\ throws\ error\ B1\ V6\ \[data\/IdnaTest\.txt\:2471\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--hdh7151p.xn--tsh1248a", %p)},	undef,	"to_ascii\(\'xn\-\-hdh7151p\.xn\-\-tsh1248a\'\)\ throws\ error\ B1\ V6\ \[data\/IdnaTest\.txt\:2472\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("\x{0616}𞥙䐊\x{0650}．︒\x{0645}↺\x{069C}", %p)},	undef,	"to_ascii\(\'\\u0616𞥙䐊\\u0650．︒\\u0645\↺\\u069C\'\)\ throws\ error\ B1\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:2473\]") or ($@ and diag($@));
@@ -2038,8 +2038,8 @@ is(eval{uts46_to_ascii("xn--1t56e.xn--2nd141ghl2a", %p)},	undef,	"to_ascii\(\'xn
 is(eval{uts46_to_ascii("xn--1t56e.xn--2nd159e9vb743e", %p)},	undef,	"to_ascii\(\'xn\-\-1t56e\.xn\-\-2nd159e9vb743e\'\)\ throws\ error\ C2\ V6\ \[data\/IdnaTest\.txt\:2567\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("󠳛．\x{200D}䤫=\x{0338}ⴞ", %p)},	undef,	"to_ascii\(\'\?．\\u200D䤫\=\\u0338ⴞ\'\)\ throws\ error\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:2569\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("󠳛．\x{200D}䤫≠ⴞ", %p)},	undef,	"to_ascii\(\'\?．\\u200D䤫\≠ⴞ\'\)\ throws\ error\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:2571\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("𐽘𑈵．𐹣🕥", %p)},	undef,	"to_ascii\(\'\?𑈵．𐹣🕥\'\)\ throws\ error\ B1\ B2\ B3\ P1\ V6\ \[data\/IdnaTest\.txt\:2572\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("𐽘𑈵.𐹣🕥", %p)},	undef,	"to_ascii\(\'\?𑈵\.𐹣🕥\'\)\ throws\ error\ B1\ B2\ B3\ P1\ V6\ \[data\/IdnaTest\.txt\:2573\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("𐽘𑈵．𐹣🕥", %p)},	undef,	"to_ascii\(\'𐽘𑈵．𐹣🕥\'\)\ throws\ error\ B1\ B2\ B3\ P1\ V6\ \[data\/IdnaTest\.txt\:2572\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("𐽘𑈵.𐹣🕥", %p)},	undef,	"to_ascii\(\'𐽘𑈵\.𐹣🕥\'\)\ throws\ error\ B1\ B2\ B3\ P1\ V6\ \[data\/IdnaTest\.txt\:2573\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--bv0d02c.xn--bo0dq650b", %p)},	undef,	"to_ascii\(\'xn\-\-bv0d02c\.xn\-\-bo0dq650b\'\)\ throws\ error\ B1\ B2\ B3\ V6\ \[data\/IdnaTest\.txt\:2574\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("⒊⒈𑁄。9", %p)},	undef,	"to_ascii\(\'⒊⒈𑁄\。9\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:2575\]") or ($@ and diag($@));
 SKIP: { skip sprintf("requires Unicode® v6.0 (perl v5.13.7) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v6.0; is(eval{uts46_to_ascii("3.1.𑁄。9", %p)},	undef,	"to_ascii\(\'3\.1\.𑁄\。9\'\)\ throws\ error\ V5\ \[data\/IdnaTest\.txt\:2576\]") or ($@ and diag($@)); }
@@ -2108,10 +2108,10 @@ SKIP: { skip sprintf("requires Unicode® v7.0 (perl v5.21.1) or higher, only v%v
 SKIP: { skip sprintf("requires Unicode® v7.0 (perl v5.21.1) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v7.0; is(eval{uts46_to_ascii("𐋵。\x{0643}\x{0645}", %p)},	undef,	"to_ascii\(\'𐋵\。\\u0643\\u0645\'\)\ throws\ error\ B1\ \[data\/IdnaTest\.txt\:2655\]") or ($@ and diag($@)); }
 is(eval{uts46_to_ascii("xn--p97c.xn--fhbe", %p)},	undef,	"to_ascii\(\'xn\-\-p97c\.xn\-\-fhbe\'\)\ throws\ error\ B1\ \[data\/IdnaTest\.txt\:2656\]") or ($@ and diag($@));
 SKIP: { skip sprintf("requires Unicode® v7.0 (perl v5.21.1) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v7.0; is(eval{uts46_to_ascii("𐋵.\x{0643}\x{0645}", %p)},	undef,	"to_ascii\(\'𐋵\.\\u0643\\u0645\'\)\ throws\ error\ B1\ \[data\/IdnaTest\.txt\:2657\]") or ($@ and diag($@)); }
-is(eval{uts46_to_ascii("≮𝅶．񱲁\x{AAEC}⹈󰥭", %p)},	undef,	"to_ascii\(\'\≮\?．\?\\uAAEC\?\?\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:2658\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("<\x{0338}𝅶．񱲁\x{AAEC}⹈󰥭", %p)},	undef,	"to_ascii\(\'\<\\u0338\?．\?\\uAAEC\?\?\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:2659\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("≮𝅶.񱲁\x{AAEC}⹈󰥭", %p)},	undef,	"to_ascii\(\'\≮\?\.\?\\uAAEC\?\?\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:2660\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("<\x{0338}𝅶.񱲁\x{AAEC}⹈󰥭", %p)},	undef,	"to_ascii\(\'\<\\u0338\?\.\?\\uAAEC\?\?\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:2661\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("≮𝅶．񱲁\x{AAEC}⹈󰥭", %p)},	undef,	"to_ascii\(\'\≮\?．\?\\uAAEC\⹈\?\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:2658\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("<\x{0338}𝅶．񱲁\x{AAEC}⹈󰥭", %p)},	undef,	"to_ascii\(\'\<\\u0338\?．\?\\uAAEC\⹈\?\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:2659\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("≮𝅶.񱲁\x{AAEC}⹈󰥭", %p)},	undef,	"to_ascii\(\'\≮\?\.\?\\uAAEC\⹈\?\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:2660\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("<\x{0338}𝅶.񱲁\x{AAEC}⹈󰥭", %p)},	undef,	"to_ascii\(\'\<\\u0338\?\.\?\\uAAEC\⹈\?\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:2661\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--gdh0880o.xn--4tjx101bsg00ds9pyc", %p)},	undef,	"to_ascii\(\'xn\-\-gdh0880o\.xn\-\-4tjx101bsg00ds9pyc\'\)\ throws\ error\ V6\ \[data\/IdnaTest\.txt\:2662\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("\x{2DF0}\x{0358}ᢕ．\x{0361}𐹷󠴍", %p)},	undef,	"to_ascii\(\'\\u2DF0\\u0358ᢕ．\\u0361𐹷\?\'\)\ throws\ error\ B1\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:2663\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("\x{2DF0}\x{0358}ᢕ.\x{0361}𐹷󠴍", %p)},	undef,	"to_ascii\(\'\\u2DF0\\u0358ᢕ\.\\u0361𐹷\?\'\)\ throws\ error\ B1\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:2664\]") or ($@ and diag($@));
@@ -2193,7 +2193,7 @@ is(eval{uts46_to_ascii("𞮑ss􏞞。ᡁ", %p)},	undef,	"to_ascii\(\'\?ss\?\。�
 is(eval{uts46_to_ascii("𞮑Ss􏞞。ᡁ", %p)},	undef,	"to_ascii\(\'\?Ss\?\。ᡁ\'\)\ throws\ error\ B2\ B3\ P1\ V6\ \[data\/IdnaTest\.txt\:2754\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--ss-o412ac6305g.xn--07e", %p)},	undef,	"to_ascii\(\'xn\-\-ss\-o412ac6305g\.xn\-\-07e\'\)\ throws\ error\ B2\ B3\ V6\ \[data\/IdnaTest\.txt\:2755\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--zca9432wb989f.xn--07e", %p)},	undef,	"to_ascii\(\'xn\-\-zca9432wb989f\.xn\-\-07e\'\)\ throws\ error\ B2\ B3\ V6\ \[data\/IdnaTest\.txt\:2756\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{A953}\x{200D}\x{062C}\x{066C}。𱆎󻡟\x{200C}󠅆", %p)},	undef,	"to_ascii\(\'\\uA953\\u200D\\u062C\\u066C\。\?\?\\u200C\󠅆\'\)\ throws\ error\ B5\ B6\ C1\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:2758\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{A953}\x{200D}\x{062C}\x{066C}。𱆎󻡟\x{200C}󠅆", %p)},	undef,	"to_ascii\(\'\\uA953\\u200D\\u062C\\u066C\。𱆎\?\\u200C\󠅆\'\)\ throws\ error\ B5\ B6\ C1\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:2758\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--rgb2k6711c.xn--ec8nj3948b", %p)},	undef,	"to_ascii\(\'xn\-\-rgb2k6711c\.xn\-\-ec8nj3948b\'\)\ throws\ error\ B5\ B6\ V5\ V6\ \[data\/IdnaTest\.txt\:2759\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--rgb2k500fhq9j.xn--0ug78870a5sp9d", %p)},	undef,	"to_ascii\(\'xn\-\-rgb2k500fhq9j\.xn\-\-0ug78870a5sp9d\'\)\ throws\ error\ B5\ B6\ C1\ V5\ V6\ \[data\/IdnaTest\.txt\:2760\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("󠕏．-ß\x{200C}≠", %p)},	undef,	"to_ascii\(\'\?．\-ß\\u200C\≠\'\)\ throws\ error\ C1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:2762\]") or ($@ and diag($@));
@@ -2221,8 +2221,8 @@ is(eval{uts46_to_ascii("ᡙ\x{200C}。≯𐋲≠", %p)},	undef,	"to_ascii\(\'ᡙ
 is(eval{uts46_to_ascii("ᡙ\x{200C}。>\x{0338}𐋲=\x{0338}", %p)},	undef,	"to_ascii\(\'ᡙ\\u200C\。\>\\u0338𐋲\=\\u0338\'\)\ throws\ error\ C1\ P1\ V6\ \[data\/IdnaTest\.txt\:2803\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--p8e.xn--1ch3a7084l", %p)},	undef,	"to_ascii\(\'xn\-\-p8e\.xn\-\-1ch3a7084l\'\)\ throws\ error\ V6\ \[data\/IdnaTest\.txt\:2804\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--p8e650b.xn--1ch3a7084l", %p)},	undef,	"to_ascii\(\'xn\-\-p8e650b\.xn\-\-1ch3a7084l\'\)\ throws\ error\ C1\ V6\ \[data\/IdnaTest\.txt\:2805\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("𐹧𞲄󠁭񆼩。\x{034E}🄀", %p)},	undef,	"to_ascii\(\'𐹧\?\?\?\。\\u034E🄀\'\)\ throws\ error\ B1\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:2806\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("𐹧𞲄󠁭񆼩。\x{034E}0.", %p)},	undef,	"to_ascii\(\'𐹧\?\?\?\。\\u034E0\.\'\)\ throws\ error\ B1\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:2807\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("𐹧𞲄󠁭񆼩。\x{034E}🄀", %p)},	undef,	"to_ascii\(\'𐹧𞲄\?\?\。\\u034E🄀\'\)\ throws\ error\ B1\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:2806\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("𐹧𞲄󠁭񆼩。\x{034E}0.", %p)},	undef,	"to_ascii\(\'𐹧𞲄\?\?\。\\u034E0\.\'\)\ throws\ error\ B1\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:2807\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--fo0dw409aq58qrn69d.xn--0-bgb.", %p)},	undef,	"to_ascii\(\'xn\-\-fo0dw409aq58qrn69d\.xn\-\-0\-bgb\.\'\)\ throws\ error\ B1\ V5\ V6\ \[data\/IdnaTest\.txt\:2808\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--fo0dw409aq58qrn69d.xn--sua6883w", %p)},	undef,	"to_ascii\(\'xn\-\-fo0dw409aq58qrn69d\.xn\-\-sua6883w\'\)\ throws\ error\ B1\ V5\ V6\ \[data\/IdnaTest\.txt\:2809\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("Ⴄ．\x{200D}\x{0721}󻣋ς", %p)},	undef,	"to_ascii\(\'Ⴄ．\\u200D\\u0721\?ς\'\)\ throws\ error\ B1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:2811\]") or ($@ and diag($@));
@@ -2329,7 +2329,7 @@ is(eval{uts46_to_ascii("🂃\x{0666}Ss\x{200D}。󠠂򭰍𞩒-", %p)},	undef,	"t
 is(eval{uts46_to_ascii("xn--ss-pyd98921c.xn----nz8rh7531csznt", %p)},	undef,	"to_ascii\(\'xn\-\-ss\-pyd98921c\.xn\-\-\-\-nz8rh7531csznt\'\)\ throws\ error\ B1\ V3\ V6\ \[data\/IdnaTest\.txt\:2950\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--ss-pyd483x5k99b.xn----nz8rh7531csznt", %p)},	undef,	"to_ascii\(\'xn\-\-ss\-pyd483x5k99b\.xn\-\-\-\-nz8rh7531csznt\'\)\ throws\ error\ B1\ C2\ V3\ V6\ \[data\/IdnaTest\.txt\:2951\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--zca34z68yzu83b.xn----nz8rh7531csznt", %p)},	undef,	"to_ascii\(\'xn\-\-zca34z68yzu83b\.xn\-\-\-\-nz8rh7531csznt\'\)\ throws\ error\ B1\ C2\ V3\ V6\ \[data\/IdnaTest\.txt\:2952\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("ꇟ-𐾺\x{069F}。򰀺\x{200C}", %p)},	undef,	"to_ascii\(\'ꇟ\-\?\\u069F\。\?\\u200C\'\)\ throws\ error\ B5\ B6\ C1\ P1\ V6\ \[data\/IdnaTest\.txt\:2954\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("ꇟ-𐾺\x{069F}。򰀺\x{200C}", %p)},	undef,	"to_ascii\(\'ꇟ\-𐾺\\u069F\。\?\\u200C\'\)\ throws\ error\ B5\ B6\ C1\ P1\ V6\ \[data\/IdnaTest\.txt\:2954\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn----utc4430jd3zd.xn--bp20d", %p)},	undef,	"to_ascii\(\'xn\-\-\-\-utc4430jd3zd\.xn\-\-bp20d\'\)\ throws\ error\ B5\ B6\ V6\ \[data\/IdnaTest\.txt\:2955\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn----utc4430jd3zd.xn--0ugx6670i", %p)},	undef,	"to_ascii\(\'xn\-\-\-\-utc4430jd3zd\.xn\-\-0ugx6670i\'\)\ throws\ error\ B5\ B6\ C1\ V6\ \[data\/IdnaTest\.txt\:2956\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("\x{0665}.\x{0484}𐨗𝩋𴤃", %p)},	undef,	"to_ascii\(\'\\u0665\.\\u0484𐨗𝩋\?\'\)\ throws\ error\ B1\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:2957\]") or ($@ and diag($@));
@@ -2822,14 +2822,14 @@ is(eval{uts46_to_ascii("xn--tshz828m.xn--3kj4524l", %p)},	undef,	"to_ascii\(\'xn
 is(eval{uts46_to_ascii("xn--1ug68oq348b.xn--3kj4524l", %p)},	undef,	"to_ascii\(\'xn\-\-1ug68oq348b\.xn\-\-3kj4524l\'\)\ throws\ error\ B1\ B5\ B6\ C2\ V5\ V6\ \[data\/IdnaTest\.txt\:3555\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--tshz828m.xn--knd8464v", %p)},	undef,	"to_ascii\(\'xn\-\-tshz828m\.xn\-\-knd8464v\'\)\ throws\ error\ B1\ B5\ B6\ V5\ V6\ \[data\/IdnaTest\.txt\:3556\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--1ug68oq348b.xn--knd8464v", %p)},	undef,	"to_ascii\(\'xn\-\-1ug68oq348b\.xn\-\-knd8464v\'\)\ throws\ error\ B1\ B5\ B6\ C2\ V5\ V6\ \[data\/IdnaTest\.txt\:3557\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("󠣙\x{0A4D}𱫘𞤸.ς񵯞􈰔", %p)},	undef,	"to_ascii\(\'\?\\u0A4D\?𞤸\.ς\?\?\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:3559\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("󠣙\x{0A4D}𱫘𞤖.Σ񵯞􈰔", %p)},	undef,	"to_ascii\(\'\?\\u0A4D\?𞤖\.Σ\?\?\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:3560\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("󠣙\x{0A4D}𱫘𞤸.σ񵯞􈰔", %p)},	undef,	"to_ascii\(\'\?\\u0A4D\?𞤸\.σ\?\?\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:3561\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("󠣙\x{0A4D}𱫘𞤖.σ񵯞􈰔", %p)},	undef,	"to_ascii\(\'\?\\u0A4D\?𞤖\.σ\?\?\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:3562\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("󠣙\x{0A4D}𱫘𞤸.ς񵯞􈰔", %p)},	undef,	"to_ascii\(\'\?\\u0A4D𱫘𞤸\.ς\?\?\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:3559\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("󠣙\x{0A4D}𱫘𞤖.Σ񵯞􈰔", %p)},	undef,	"to_ascii\(\'\?\\u0A4D𱫘𞤖\.Σ\?\?\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:3560\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("󠣙\x{0A4D}𱫘𞤸.σ񵯞􈰔", %p)},	undef,	"to_ascii\(\'\?\\u0A4D𱫘𞤸\.σ\?\?\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:3561\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("󠣙\x{0A4D}𱫘𞤖.σ񵯞􈰔", %p)},	undef,	"to_ascii\(\'\?\\u0A4D𱫘𞤖\.σ\?\?\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:3562\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--ybc0236vjvxgt5q0g.xn--4xa82737giye6b", %p)},	undef,	"to_ascii\(\'xn\-\-ybc0236vjvxgt5q0g\.xn\-\-4xa82737giye6b\'\)\ throws\ error\ B1\ V6\ \[data\/IdnaTest\.txt\:3563\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("󠣙\x{0A4D}𱫘𞤖.ς񵯞􈰔", %p)},	undef,	"to_ascii\(\'\?\\u0A4D\?𞤖\.ς\?\?\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:3565\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("󠣙\x{0A4D}𱫘𞤖.ς񵯞􈰔", %p)},	undef,	"to_ascii\(\'\?\\u0A4D𱫘𞤖\.ς\?\?\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:3565\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--ybc0236vjvxgt5q0g.xn--3xa03737giye6b", %p)},	undef,	"to_ascii\(\'xn\-\-ybc0236vjvxgt5q0g\.xn\-\-3xa03737giye6b\'\)\ throws\ error\ B1\ V6\ \[data\/IdnaTest\.txt\:3566\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("󠣙\x{0A4D}𱫘𞤸.Σ񵯞􈰔", %p)},	undef,	"to_ascii\(\'\?\\u0A4D\?𞤸\.Σ\?\?\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:3567\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("󠣙\x{0A4D}𱫘𞤸.Σ񵯞􈰔", %p)},	undef,	"to_ascii\(\'\?\\u0A4D𱫘𞤸\.Σ\?\?\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:3567\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("\x{07D3}。\x{200C}𐫀򞭱", %p)},	undef,	"to_ascii\(\'\\u07D3\。\\u200C𐫀\?\'\)\ throws\ error\ B1\ C1\ P1\ V6\ \[data\/IdnaTest\.txt\:3569\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--usb.xn--pw9ci1099a", %p)},	undef,	"to_ascii\(\'xn\-\-usb\.xn\-\-pw9ci1099a\'\)\ throws\ error\ B2\ B3\ V6\ \[data\/IdnaTest\.txt\:3570\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--usb.xn--0ug9553gm3v5d", %p)},	undef,	"to_ascii\(\'xn\-\-usb\.xn\-\-0ug9553gm3v5d\'\)\ throws\ error\ B1\ C1\ V6\ \[data\/IdnaTest\.txt\:3571\]") or ($@ and diag($@));
@@ -2956,8 +2956,8 @@ is(eval{uts46_to_ascii("xn----p26i72em2894c.xn--zw6h", %p)},	undef,	"to_ascii\(\
 is(eval{uts46_to_ascii("\x{06B9}．ᡳ\x{115F}", %p)},	undef,	"to_ascii\(\'\\u06B9．ᡳ\\u115F\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:3715\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("\x{06B9}.ᡳ\x{115F}", %p)},	undef,	"to_ascii\(\'\\u06B9\.ᡳ\\u115F\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:3716\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--skb.xn--osd737a", %p)},	undef,	"to_ascii\(\'xn\-\-skb\.xn\-\-osd737a\'\)\ throws\ error\ V6\ \[data\/IdnaTest\.txt\:3717\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("㨛𘱎.︒𝟕\x{0D01}", %p)},	undef,	"to_ascii\(\'㨛\?\.︒𝟕\\u0D01\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:3718\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("㨛𘱎.。7\x{0D01}", %p)},	undef,	"to_ascii\(\'㨛\?\.\。7\\u0D01\'\)\ throws\ error\ P1\ V6\ A4_2\ \[data\/IdnaTest\.txt\:3719\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("㨛𘱎.︒𝟕\x{0D01}", %p)},	undef,	"to_ascii\(\'㨛𘱎\.︒𝟕\\u0D01\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:3718\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("㨛𘱎.。7\x{0D01}", %p)},	undef,	"to_ascii\(\'㨛𘱎\.\。7\\u0D01\'\)\ throws\ error\ P1\ V6\ A4_2\ \[data\/IdnaTest\.txt\:3719\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--mbm8237g..xn--7-7hf", %p)},	undef,	"to_ascii\(\'xn\-\-mbm8237g\.\.xn\-\-7\-7hf\'\)\ throws\ error\ V6\ A4_2\ \[data\/IdnaTest\.txt\:3720\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--mbm8237g.xn--7-7hf1526p", %p)},	undef,	"to_ascii\(\'xn\-\-mbm8237g\.xn\-\-7\-7hf1526p\'\)\ throws\ error\ V6\ \[data\/IdnaTest\.txt\:3721\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("\x{06DD}𻱧-｡𞷁\x{2064}𞤣≮", %p)},	undef,	"to_ascii\(\'\\u06DD\?\-｡\?\\u2064𞤣\≮\'\)\ throws\ error\ B1\ B3\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:3722\]") or ($@ and diag($@));
@@ -3042,8 +3042,8 @@ is(eval{uts46_to_ascii("ቬ򔠼񁗶。𐨬8", %p)},	undef,	"to_ascii\(\'ቬ\?\?\
 is(eval{uts46_to_ascii("xn--d0d41273c887z.xn--8-ob5i", %p)},	undef,	"to_ascii\(\'xn\-\-d0d41273c887z\.xn\-\-8\-ob5i\'\)\ throws\ error\ V6\ \[data\/IdnaTest\.txt\:3833\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("𐱲。蔫\x{0766}", %p)},	undef,	"to_ascii\(\'\?\。蔫\\u0766\'\)\ throws\ error\ B5\ B6\ P1\ V6\ \[data\/IdnaTest\.txt\:3834\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--389c.xn--qpb7055d", %p)},	undef,	"to_ascii\(\'xn\-\-389c\.xn\-\-qpb7055d\'\)\ throws\ error\ B5\ B6\ V6\ \[data\/IdnaTest\.txt\:3835\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("򒲧₃｡ꡚ𛇑󠄳\x{0647}", %p)},	undef,	"to_ascii\(\'\?₃｡ꡚ\?\󠄳\\u0647\'\)\ throws\ error\ B5\ B6\ P1\ V6\ \[data\/IdnaTest\.txt\:3836\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("򒲧3。ꡚ𛇑󠄳\x{0647}", %p)},	undef,	"to_ascii\(\'\?3\。ꡚ\?\󠄳\\u0647\'\)\ throws\ error\ B5\ B6\ P1\ V6\ \[data\/IdnaTest\.txt\:3837\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("򒲧₃｡ꡚ𛇑󠄳\x{0647}", %p)},	undef,	"to_ascii\(\'\?₃｡ꡚ𛇑\󠄳\\u0647\'\)\ throws\ error\ B5\ B6\ P1\ V6\ \[data\/IdnaTest\.txt\:3836\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("򒲧3。ꡚ𛇑󠄳\x{0647}", %p)},	undef,	"to_ascii\(\'\?3\。ꡚ𛇑\󠄳\\u0647\'\)\ throws\ error\ B5\ B6\ P1\ V6\ \[data\/IdnaTest\.txt\:3837\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--3-ep59g.xn--jhb5904fcp0h", %p)},	undef,	"to_ascii\(\'xn\-\-3\-ep59g\.xn\-\-jhb5904fcp0h\'\)\ throws\ error\ B5\ B6\ V6\ \[data\/IdnaTest\.txt\:3838\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("蓸\x{0642}≠.ß", %p)},	undef,	"to_ascii\(\'蓸\\u0642\≠\.ß\'\)\ throws\ error\ B5\ B6\ P1\ V6\ \[data\/IdnaTest\.txt\:3840\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("蓸\x{0642}=\x{0338}.ß", %p)},	undef,	"to_ascii\(\'蓸\\u0642\=\\u0338\.ß\'\)\ throws\ error\ B5\ B6\ P1\ V6\ \[data\/IdnaTest\.txt\:3842\]") or ($@ and diag($@));
@@ -3423,16 +3423,16 @@ is(eval{uts46_to_ascii("\x{17DD}󠁣=\x{0338}｡𐹼𐋤", %p)},	undef,	"to_asci
 is(eval{uts46_to_ascii("\x{17DD}󠁣≠。𐹼𐋤", %p)},	undef,	"to_ascii\(\'\\u17DD\?\≠\。𐹼𐋤\'\)\ throws\ error\ B1\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:4301\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("\x{17DD}󠁣=\x{0338}。𐹼𐋤", %p)},	undef,	"to_ascii\(\'\\u17DD\?\=\\u0338\。𐹼𐋤\'\)\ throws\ error\ B1\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:4302\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--54e694cn389z.xn--787ct8r", %p)},	undef,	"to_ascii\(\'xn\-\-54e694cn389z\.xn\-\-787ct8r\'\)\ throws\ error\ B1\ V5\ V6\ \[data\/IdnaTest\.txt\:4303\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("ß𰀻񆬗｡𝩨🕮ß", %p)},	undef,	"to_ascii\(\'ß\?\?｡𝩨🕮ß\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:4305\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("ß𰀻񆬗。𝩨🕮ß", %p)},	undef,	"to_ascii\(\'ß\?\?\。𝩨🕮ß\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:4307\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("SS𰀻񆬗。𝩨🕮SS", %p)},	undef,	"to_ascii\(\'SS\?\?\。𝩨🕮SS\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:4308\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("ss𰀻񆬗。𝩨🕮ss", %p)},	undef,	"to_ascii\(\'ss\?\?\。𝩨🕮ss\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:4309\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("Ss𰀻񆬗。𝩨🕮Ss", %p)},	undef,	"to_ascii\(\'Ss\?\?\。𝩨🕮Ss\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:4310\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("ß𰀻񆬗｡𝩨🕮ß", %p)},	undef,	"to_ascii\(\'ß𰀻\?｡𝩨🕮ß\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:4305\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("ß𰀻񆬗。𝩨🕮ß", %p)},	undef,	"to_ascii\(\'ß𰀻\?\。𝩨🕮ß\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:4307\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("SS𰀻񆬗。𝩨🕮SS", %p)},	undef,	"to_ascii\(\'SS𰀻\?\。𝩨🕮SS\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:4308\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("ss𰀻񆬗。𝩨🕮ss", %p)},	undef,	"to_ascii\(\'ss𰀻\?\。𝩨🕮ss\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:4309\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("Ss𰀻񆬗。𝩨🕮Ss", %p)},	undef,	"to_ascii\(\'Ss𰀻\?\。𝩨🕮Ss\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:4310\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--ss-jl59biy67d.xn--ss-4d11aw87d", %p)},	undef,	"to_ascii\(\'xn\-\-ss\-jl59biy67d\.xn\-\-ss\-4d11aw87d\'\)\ throws\ error\ V5\ V6\ \[data\/IdnaTest\.txt\:4311\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--zca20040bgrkh.xn--zca3653v86qa", %p)},	undef,	"to_ascii\(\'xn\-\-zca20040bgrkh\.xn\-\-zca3653v86qa\'\)\ throws\ error\ V5\ V6\ \[data\/IdnaTest\.txt\:4312\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("SS𰀻񆬗｡𝩨🕮SS", %p)},	undef,	"to_ascii\(\'SS\?\?｡𝩨🕮SS\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:4313\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("ss𰀻񆬗｡𝩨🕮ss", %p)},	undef,	"to_ascii\(\'ss\?\?｡𝩨🕮ss\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:4314\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("Ss𰀻񆬗｡𝩨🕮Ss", %p)},	undef,	"to_ascii\(\'Ss\?\?｡𝩨🕮Ss\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:4315\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("SS𰀻񆬗｡𝩨🕮SS", %p)},	undef,	"to_ascii\(\'SS𰀻\?｡𝩨🕮SS\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:4313\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("ss𰀻񆬗｡𝩨🕮ss", %p)},	undef,	"to_ascii\(\'ss𰀻\?｡𝩨🕮ss\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:4314\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("Ss𰀻񆬗｡𝩨🕮Ss", %p)},	undef,	"to_ascii\(\'Ss𰀻\?｡𝩨🕮Ss\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:4315\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("\x{200D}。\x{200C}", %p)},	undef,	"to_ascii\(\'\\u200D\。\\u200C\'\)\ throws\ error\ C1\ C2\ \[data\/IdnaTest\.txt\:4317\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--1ug.xn--0ug", %p)},	undef,	"to_ascii\(\'xn\-\-1ug\.xn\-\-0ug\'\)\ throws\ error\ C1\ C2\ \[data\/IdnaTest\.txt\:4318\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("\x{0483}𐭞\x{200D}.\x{17B9}𞯌򟩚", %p)},	undef,	"to_ascii\(\'\\u0483𐭞\\u200D\.\\u17B9\?\?\'\)\ throws\ error\ B1\ C2\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:4320\]") or ($@ and diag($@));
@@ -3654,8 +3654,8 @@ SKIP: { skip sprintf("requires Unicode® v8.0 (perl v5.24.0) or higher, only v%v
 SKIP: { skip sprintf("requires Unicode® v8.0 (perl v5.24.0) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v8.0; is(eval{uts46_to_ascii("𐹬𝩇．\x{0FB2}\x{0F80}", %p)},	undef,	"to_ascii\(\'𐹬𝩇．\\u0FB2\\u0F80\'\)\ throws\ error\ B1\ B3\ B6\ V5\ \[data\/IdnaTest\.txt\:4583\]") or ($@ and diag($@)); }
 SKIP: { skip sprintf("requires Unicode® v8.0 (perl v5.24.0) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v8.0; is(eval{uts46_to_ascii("𐹬𝩇.\x{0FB2}\x{0F80}", %p)},	undef,	"to_ascii\(\'𐹬𝩇\.\\u0FB2\\u0F80\'\)\ throws\ error\ B1\ B3\ B6\ V5\ \[data\/IdnaTest\.txt\:4584\]") or ($@ and diag($@)); }
 is(eval{uts46_to_ascii("xn--ko0d8295a.xn--zed3h", %p)},	undef,	"to_ascii\(\'xn\-\-ko0d8295a\.xn\-\-zed3h\'\)\ throws\ error\ B1\ B3\ B6\ V5\ \[data\/IdnaTest\.txt\:4585\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("-𑈶⒏．⒎𰛢󠎭", %p)},	undef,	"to_ascii\(\'\-𑈶⒏．⒎\?\?\'\)\ throws\ error\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:4586\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("-𑈶8..7.𰛢󠎭", %p)},	undef,	"to_ascii\(\'\-𑈶8\.\.7\.\?\?\'\)\ throws\ error\ P1\ V3\ V6\ A4_2\ \[data\/IdnaTest\.txt\:4587\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("-𑈶⒏．⒎𰛢󠎭", %p)},	undef,	"to_ascii\(\'\-𑈶⒏．⒎𰛢\?\'\)\ throws\ error\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:4586\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("-𑈶8..7.𰛢󠎭", %p)},	undef,	"to_ascii\(\'\-𑈶8\.\.7\.𰛢\?\'\)\ throws\ error\ P1\ V3\ V6\ A4_2\ \[data\/IdnaTest\.txt\:4587\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn---8-bv5o..7.xn--c35nf1622b", %p)},	undef,	"to_ascii\(\'xn\-\-\-8\-bv5o\.\.7\.xn\-\-c35nf1622b\'\)\ throws\ error\ V3\ V6\ A4_2\ \[data\/IdnaTest\.txt\:4588\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn----scp6252h.xn--zshy411yzpx2d", %p)},	undef,	"to_ascii\(\'xn\-\-\-\-scp6252h\.xn\-\-zshy411yzpx2d\'\)\ throws\ error\ V3\ V6\ \[data\/IdnaTest\.txt\:4589\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("\x{200C}Ⴁ畝\x{200D}．≮", %p)},	undef,	"to_ascii\(\'\\u200CႡ畝\\u200D．\≮\'\)\ throws\ error\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:4591\]") or ($@ and diag($@));
@@ -3680,12 +3680,12 @@ is(eval{uts46_to_ascii("\x{0ECB}\x{200D}．鎁󠰑", %p)},	undef,	"to_ascii\(\'\
 is(eval{uts46_to_ascii("\x{0ECB}\x{200D}.鎁󠰑", %p)},	undef,	"to_ascii\(\'\\u0ECB\\u200D\.鎁\?\'\)\ throws\ error\ C2\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:4623\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--t8c.xn--iz4a43209d", %p)},	undef,	"to_ascii\(\'xn\-\-t8c\.xn\-\-iz4a43209d\'\)\ throws\ error\ V5\ V6\ \[data\/IdnaTest\.txt\:4624\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--t8c059f.xn--iz4a43209d", %p)},	undef,	"to_ascii\(\'xn\-\-t8c059f\.xn\-\-iz4a43209d\'\)\ throws\ error\ C2\ V5\ V6\ \[data\/IdnaTest\.txt\:4625\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200D}\x{200C}𞤀｡𱘅𐶃", %p)},	undef,	"to_ascii\(\'\\u200D\\u200C𞤀｡\?\?\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:4627\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200D}\x{200C}𞤀。𱘅𐶃", %p)},	undef,	"to_ascii\(\'\\u200D\\u200C𞤀\。\?\?\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:4629\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200D}\x{200C}𞤢。𱘅𐶃", %p)},	undef,	"to_ascii\(\'\\u200D\\u200C𞤢\。\?\?\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:4631\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200D}\x{200C}𞤀｡𱘅𐶃", %p)},	undef,	"to_ascii\(\'\\u200D\\u200C𞤀｡𱘅𐶃\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:4627\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200D}\x{200C}𞤀。𱘅𐶃", %p)},	undef,	"to_ascii\(\'\\u200D\\u200C𞤀\。𱘅𐶃\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:4629\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200D}\x{200C}𞤢。𱘅𐶃", %p)},	undef,	"to_ascii\(\'\\u200D\\u200C𞤢\。𱘅𐶃\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:4631\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--9d6h.xn--wh0dj799f", %p)},	undef,	"to_ascii\(\'xn\-\-9d6h\.xn\-\-wh0dj799f\'\)\ throws\ error\ B5\ B6\ V6\ \[data\/IdnaTest\.txt\:4632\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--0ugb45126a.xn--wh0dj799f", %p)},	undef,	"to_ascii\(\'xn\-\-0ugb45126a\.xn\-\-wh0dj799f\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ V6\ \[data\/IdnaTest\.txt\:4633\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200D}\x{200C}𞤢｡𱘅𐶃", %p)},	undef,	"to_ascii\(\'\\u200D\\u200C𞤢｡\?\?\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:4635\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200D}\x{200C}𞤢｡𱘅𐶃", %p)},	undef,	"to_ascii\(\'\\u200D\\u200C𞤢｡𱘅𐶃\'\)\ throws\ error\ B1\ B5\ B6\ C1\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:4635\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("\x{0628}≠𝟫-.ς⒍𐹦≠", %p)},	undef,	"to_ascii\(\'\\u0628\≠𝟫\-\.ς⒍𐹦\≠\'\)\ throws\ error\ B3\ B5\ B6\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:4637\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("\x{0628}=\x{0338}𝟫-.ς⒍𐹦=\x{0338}", %p)},	undef,	"to_ascii\(\'\\u0628\=\\u0338𝟫\-\.ς⒍𐹦\=\\u0338\'\)\ throws\ error\ B3\ B5\ B6\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:4639\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("\x{0628}≠9-.ς6.𐹦≠", %p)},	undef,	"to_ascii\(\'\\u0628\≠9\-\.ς6\.𐹦\≠\'\)\ throws\ error\ B1\ B3\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:4641\]") or ($@ and diag($@));
@@ -4114,8 +4114,8 @@ is(eval{uts46_to_ascii("xn--xx5gy2741c.xn--re6hw266j", %p)},	undef,	"to_ascii\(\
 is(eval{uts46_to_ascii("𛜯󠊛．𞤑񏥾", %p)},	undef,	"to_ascii\(\'\?\?．𞤑\?\'\)\ throws\ error\ B2\ B3\ B6\ P1\ V6\ \[data\/IdnaTest\.txt\:5175\]") or ($@ and diag($@));
 SKIP: { skip sprintf("requires Unicode® v7.0 (perl v5.21.1) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v7.0; is(eval{uts46_to_ascii("\x{071C}𐫒\x{062E}.𐋲", %p)},	undef,	"to_ascii\(\'\\u071C𐫒\\u062E\.𐋲\'\)\ throws\ error\ B1\ \[data\/IdnaTest\.txt\:5176\]") or ($@ and diag($@)); }
 is(eval{uts46_to_ascii("xn--tgb98b8643d.xn--m97c", %p)},	undef,	"to_ascii\(\'xn\-\-tgb98b8643d\.xn\-\-m97c\'\)\ throws\ error\ B1\ \[data\/IdnaTest\.txt\:5177\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("𐼑𞤓\x{0637}\x{08E2}.\x{DF56}", %p)},	undef,	"to_ascii\(\'\?𞤓\\u0637\\u08E2\.\\uDF56\'\)\ throws\ error\ P1\ V6\ A3\ \[data\/IdnaTest\.txt\:5178\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("𐼑𞤵\x{0637}\x{08E2}.\x{DF56}", %p)},	undef,	"to_ascii\(\'\?𞤵\\u0637\\u08E2\.\\uDF56\'\)\ throws\ error\ P1\ V6\ A3\ \[data\/IdnaTest\.txt\:5179\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("𐼑𞤓\x{0637}\x{08E2}.\x{DF56}", %p)},	undef,	"to_ascii\(\'𐼑𞤓\\u0637\\u08E2\.\\uDF56\'\)\ throws\ error\ P1\ V6\ A3\ \[data\/IdnaTest\.txt\:5178\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("𐼑𞤵\x{0637}\x{08E2}.\x{DF56}", %p)},	undef,	"to_ascii\(\'𐼑𞤵\\u0637\\u08E2\.\\uDF56\'\)\ throws\ error\ P1\ V6\ A3\ \[data\/IdnaTest\.txt\:5179\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--2gb08k9w69agm0g.\x{DF56}", %p)},	undef,	"to_ascii\(\'xn\-\-2gb08k9w69agm0g\.\\uDF56\'\)\ throws\ error\ P1\ V6\ A3\ \[data\/IdnaTest\.txt\:5180\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("XN--2GB08K9W69AGM0G.\x{DF56}", %p)},	undef,	"to_ascii\(\'XN\-\-2GB08K9W69AGM0G\.\\uDF56\'\)\ throws\ error\ P1\ V6\ A3\ \[data\/IdnaTest\.txt\:5181\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("Xn--2Gb08k9w69agm0g.\x{DF56}", %p)},	undef,	"to_ascii\(\'Xn\-\-2Gb08k9w69agm0g\.\\uDF56\'\)\ throws\ error\ P1\ V6\ A3\ \[data\/IdnaTest\.txt\:5182\]") or ($@ and diag($@));
@@ -4257,20 +4257,20 @@ is(eval{uts46_to_ascii("𝩏󠲉Ss.ᢤ򄦌\x{200C}𐹫", %p)},	undef,	"to_ascii\
 is(eval{uts46_to_ascii("xn--ss-zb11ap1427e.xn--ubf2596jbt61c", %p)},	undef,	"to_ascii\(\'xn\-\-ss\-zb11ap1427e\.xn\-\-ubf2596jbt61c\'\)\ throws\ error\ B1\ B5\ B6\ V5\ V6\ \[data\/IdnaTest\.txt\:5351\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--ss-zb11ap1427e.xn--ubf609atw1tynn3d", %p)},	undef,	"to_ascii\(\'xn\-\-ss\-zb11ap1427e\.xn\-\-ubf609atw1tynn3d\'\)\ throws\ error\ B1\ B5\ B6\ C1\ V5\ V6\ \[data\/IdnaTest\.txt\:5352\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--zca3153vupz3e.xn--ubf609atw1tynn3d", %p)},	undef,	"to_ascii\(\'xn\-\-zca3153vupz3e\.xn\-\-ubf609atw1tynn3d\'\)\ throws\ error\ B1\ B5\ B6\ C1\ V5\ V6\ \[data\/IdnaTest\.txt\:5353\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("ß𐵳񗘁Ⴇ｡\x{A67A}", %p)},	undef,	"to_ascii\(\'ß\?\?Ⴇ｡\\uA67A\'\)\ throws\ error\ B1\ B3\ B5\ B6\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5355\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("ß𐵳񗘁Ⴇ。\x{A67A}", %p)},	undef,	"to_ascii\(\'ß\?\?Ⴇ\。\\uA67A\'\)\ throws\ error\ B1\ B3\ B5\ B6\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5357\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("ß𐵳񗘁ⴇ。\x{A67A}", %p)},	undef,	"to_ascii\(\'ß\?\?ⴇ\。\\uA67A\'\)\ throws\ error\ B1\ B3\ B5\ B6\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5359\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("SS𐵳񗘁Ⴇ。\x{A67A}", %p)},	undef,	"to_ascii\(\'SS\?\?Ⴇ\。\\uA67A\'\)\ throws\ error\ B1\ B3\ B5\ B6\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5360\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("ss𐵳񗘁ⴇ。\x{A67A}", %p)},	undef,	"to_ascii\(\'ss\?\?ⴇ\。\\uA67A\'\)\ throws\ error\ B1\ B3\ B5\ B6\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5361\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("Ss𐵳񗘁Ⴇ。\x{A67A}", %p)},	undef,	"to_ascii\(\'Ss\?\?Ⴇ\。\\uA67A\'\)\ throws\ error\ B1\ B3\ B5\ B6\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5362\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("ß𐵳񗘁Ⴇ｡\x{A67A}", %p)},	undef,	"to_ascii\(\'ß𐵳\?Ⴇ｡\\uA67A\'\)\ throws\ error\ B1\ B3\ B5\ B6\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5355\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("ß𐵳񗘁Ⴇ。\x{A67A}", %p)},	undef,	"to_ascii\(\'ß𐵳\?Ⴇ\。\\uA67A\'\)\ throws\ error\ B1\ B3\ B5\ B6\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5357\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("ß𐵳񗘁ⴇ。\x{A67A}", %p)},	undef,	"to_ascii\(\'ß𐵳\?ⴇ\。\\uA67A\'\)\ throws\ error\ B1\ B3\ B5\ B6\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5359\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("SS𐵳񗘁Ⴇ。\x{A67A}", %p)},	undef,	"to_ascii\(\'SS𐵳\?Ⴇ\。\\uA67A\'\)\ throws\ error\ B1\ B3\ B5\ B6\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5360\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("ss𐵳񗘁ⴇ。\x{A67A}", %p)},	undef,	"to_ascii\(\'ss𐵳\?ⴇ\。\\uA67A\'\)\ throws\ error\ B1\ B3\ B5\ B6\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5361\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("Ss𐵳񗘁Ⴇ。\x{A67A}", %p)},	undef,	"to_ascii\(\'Ss𐵳\?Ⴇ\。\\uA67A\'\)\ throws\ error\ B1\ B3\ B5\ B6\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5362\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--ss-rek7420r4hs7b.xn--9x8a", %p)},	undef,	"to_ascii\(\'xn\-\-ss\-rek7420r4hs7b\.xn\-\-9x8a\'\)\ throws\ error\ B1\ B3\ B5\ B6\ V5\ V6\ \[data\/IdnaTest\.txt\:5363\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--ss-e61ar955h4hs7b.xn--9x8a", %p)},	undef,	"to_ascii\(\'xn\-\-ss\-e61ar955h4hs7b\.xn\-\-9x8a\'\)\ throws\ error\ B1\ B3\ B5\ B6\ V5\ V6\ \[data\/IdnaTest\.txt\:5364\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--zca227tpy4lkns1b.xn--9x8a", %p)},	undef,	"to_ascii\(\'xn\-\-zca227tpy4lkns1b\.xn\-\-9x8a\'\)\ throws\ error\ B1\ B3\ B5\ B6\ V5\ V6\ \[data\/IdnaTest\.txt\:5365\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--zca491fci5qkn79a.xn--9x8a", %p)},	undef,	"to_ascii\(\'xn\-\-zca491fci5qkn79a\.xn\-\-9x8a\'\)\ throws\ error\ B1\ B3\ B5\ B6\ V5\ V6\ \[data\/IdnaTest\.txt\:5366\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("ß𐵳񗘁ⴇ｡\x{A67A}", %p)},	undef,	"to_ascii\(\'ß\?\?ⴇ｡\\uA67A\'\)\ throws\ error\ B1\ B3\ B5\ B6\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5368\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("SS𐵳񗘁Ⴇ｡\x{A67A}", %p)},	undef,	"to_ascii\(\'SS\?\?Ⴇ｡\\uA67A\'\)\ throws\ error\ B1\ B3\ B5\ B6\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5369\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("ss𐵳񗘁ⴇ｡\x{A67A}", %p)},	undef,	"to_ascii\(\'ss\?\?ⴇ｡\\uA67A\'\)\ throws\ error\ B1\ B3\ B5\ B6\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5370\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("Ss𐵳񗘁Ⴇ｡\x{A67A}", %p)},	undef,	"to_ascii\(\'Ss\?\?Ⴇ｡\\uA67A\'\)\ throws\ error\ B1\ B3\ B5\ B6\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5371\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("ß𐵳񗘁ⴇ｡\x{A67A}", %p)},	undef,	"to_ascii\(\'ß𐵳\?ⴇ｡\\uA67A\'\)\ throws\ error\ B1\ B3\ B5\ B6\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5368\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("SS𐵳񗘁Ⴇ｡\x{A67A}", %p)},	undef,	"to_ascii\(\'SS𐵳\?Ⴇ｡\\uA67A\'\)\ throws\ error\ B1\ B3\ B5\ B6\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5369\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("ss𐵳񗘁ⴇ｡\x{A67A}", %p)},	undef,	"to_ascii\(\'ss𐵳\?ⴇ｡\\uA67A\'\)\ throws\ error\ B1\ B3\ B5\ B6\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5370\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("Ss𐵳񗘁Ⴇ｡\x{A67A}", %p)},	undef,	"to_ascii\(\'Ss𐵳\?Ⴇ｡\\uA67A\'\)\ throws\ error\ B1\ B3\ B5\ B6\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5371\]") or ($@ and diag($@));
 SKIP: { skip sprintf("requires Unicode® v7.0 (perl v5.21.1) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v7.0; is(eval{uts46_to_ascii("\x{1714}。󠆣-𑋪", %p)},	undef,	"to_ascii\(\'\\u1714\。\󠆣\-𑋪\'\)\ throws\ error\ V3\ V5\ \[data\/IdnaTest\.txt\:5372\]") or ($@ and diag($@)); }
 is(eval{uts46_to_ascii("xn--fze.xn----ly8i", %p)},	undef,	"to_ascii\(\'xn\-\-fze\.xn\-\-\-\-ly8i\'\)\ throws\ error\ V3\ V5\ \[data\/IdnaTest\.txt\:5373\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("\x{ABE8}-．򨏜\x{05BD}ß", %p)},	undef,	"to_ascii\(\'\\uABE8\-．\?\\u05BDß\'\)\ throws\ error\ P1\ V3\ V5\ V6\ \[data\/IdnaTest\.txt\:5375\]") or ($@ and diag($@));
@@ -4334,8 +4334,8 @@ is(eval{uts46_to_ascii("xn--3xa.xn--dhbip2802atb20c", %p)},	undef,	"to_ascii\(\'
 is(eval{uts46_to_ascii("🗩-｡𐹻󐞆񥉮", %p)},	undef,	"to_ascii\(\'🗩\-｡𐹻\?\?\'\)\ throws\ error\ B1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:5448\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("🗩-。𐹻󐞆񥉮", %p)},	undef,	"to_ascii\(\'🗩\-\。𐹻\?\?\'\)\ throws\ error\ B1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:5449\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn----6t3s.xn--zo0d4811u6ru6a", %p)},	undef,	"to_ascii\(\'xn\-\-\-\-6t3s\.xn\-\-zo0d4811u6ru6a\'\)\ throws\ error\ B1\ V3\ V6\ \[data\/IdnaTest\.txt\:5450\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("𐡜-🔪｡𝟻\x{200C}𐿀", %p)},	undef,	"to_ascii\(\'𐡜\-🔪｡𝟻\\u200C\?\'\)\ throws\ error\ B1\ B3\ C1\ P1\ V6\ \[data\/IdnaTest\.txt\:5452\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("𐡜-🔪。5\x{200C}𐿀", %p)},	undef,	"to_ascii\(\'𐡜\-🔪\。5\\u200C\?\'\)\ throws\ error\ B1\ B3\ C1\ P1\ V6\ \[data\/IdnaTest\.txt\:5454\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("𐡜-🔪｡𝟻\x{200C}𐿀", %p)},	undef,	"to_ascii\(\'𐡜\-🔪｡𝟻\\u200C𐿀\'\)\ throws\ error\ B1\ B3\ C1\ P1\ V6\ \[data\/IdnaTest\.txt\:5452\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("𐡜-🔪。5\x{200C}𐿀", %p)},	undef,	"to_ascii\(\'𐡜\-🔪\。5\\u200C𐿀\'\)\ throws\ error\ B1\ B3\ C1\ P1\ V6\ \[data\/IdnaTest\.txt\:5454\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn----5j4iv089c.xn--5-bn7i", %p)},	undef,	"to_ascii\(\'xn\-\-\-\-5j4iv089c\.xn\-\-5\-bn7i\'\)\ throws\ error\ B1\ B3\ V6\ \[data\/IdnaTest\.txt\:5455\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn----5j4iv089c.xn--5-sgn7149h", %p)},	undef,	"to_ascii\(\'xn\-\-\-\-5j4iv089c\.xn\-\-5\-sgn7149h\'\)\ throws\ error\ B1\ B3\ C1\ V6\ \[data\/IdnaTest\.txt\:5456\]") or ($@ and diag($@));
 SKIP: { skip sprintf("requires Unicode® v5.2 (perl v5.11.5) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v5.2; is(eval{uts46_to_ascii("𐹣늿\x{200D}ß．\x{07CF}0\x{05BC}", %p)},	undef,	"to_ascii\(\'𐹣늿\\u200Dß．\\u07CF0\\u05BC\'\)\ throws\ error\ B1\ C2\ \[data\/IdnaTest\.txt\:5458\]") or ($@ and diag($@)); }
@@ -4437,12 +4437,12 @@ is(eval{uts46_to_ascii("\x{0750}。≯σ", %p)},	undef,	"to_ascii\(\'\\u0750\。
 is(eval{uts46_to_ascii("\x{0750}。>\x{0338}σ", %p)},	undef,	"to_ascii\(\'\\u0750\。\>\\u0338σ\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:5602\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--3ob.xn--4xa718m", %p)},	undef,	"to_ascii\(\'xn\-\-3ob\.xn\-\-4xa718m\'\)\ throws\ error\ B1\ V6\ \[data\/IdnaTest\.txt\:5603\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--3ob.xn--3xa918m", %p)},	undef,	"to_ascii\(\'xn\-\-3ob\.xn\-\-3xa918m\'\)\ throws\ error\ B1\ V6\ \[data\/IdnaTest\.txt\:5604\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{07FC}𐸆.𓖏︒񊨩Ⴐ", %p)},	undef,	"to_ascii\(\'\\u07FC\?\.\?︒\?Ⴐ\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:5605\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{07FC}𐸆.𓖏。񊨩Ⴐ", %p)},	undef,	"to_ascii\(\'\\u07FC\?\.\?\。\?Ⴐ\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:5606\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{07FC}𐸆.𓖏。񊨩ⴐ", %p)},	undef,	"to_ascii\(\'\\u07FC\?\.\?\。\?ⴐ\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:5607\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{07FC}𐸆.𓖏︒񊨩Ⴐ", %p)},	undef,	"to_ascii\(\'\\u07FC\?\.𓖏︒\?Ⴐ\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:5605\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{07FC}𐸆.𓖏。񊨩Ⴐ", %p)},	undef,	"to_ascii\(\'\\u07FC\?\.𓖏\。\?Ⴐ\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:5606\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{07FC}𐸆.𓖏。񊨩ⴐ", %p)},	undef,	"to_ascii\(\'\\u07FC\?\.𓖏\。\?ⴐ\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:5607\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--0tb8725k.xn--tu8d.xn--7kj73887a", %p)},	undef,	"to_ascii\(\'xn\-\-0tb8725k\.xn\-\-tu8d\.xn\-\-7kj73887a\'\)\ throws\ error\ V6\ \[data\/IdnaTest\.txt\:5608\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--0tb8725k.xn--tu8d.xn--ond97931d", %p)},	undef,	"to_ascii\(\'xn\-\-0tb8725k\.xn\-\-tu8d\.xn\-\-ond97931d\'\)\ throws\ error\ V6\ \[data\/IdnaTest\.txt\:5609\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{07FC}𐸆.𓖏︒񊨩ⴐ", %p)},	undef,	"to_ascii\(\'\\u07FC\?\.\?︒\?ⴐ\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:5610\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{07FC}𐸆.𓖏︒񊨩ⴐ", %p)},	undef,	"to_ascii\(\'\\u07FC\?\.𓖏︒\?ⴐ\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:5610\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--0tb8725k.xn--7kj9008dt18a7py9c", %p)},	undef,	"to_ascii\(\'xn\-\-0tb8725k\.xn\-\-7kj9008dt18a7py9c\'\)\ throws\ error\ V6\ \[data\/IdnaTest\.txt\:5611\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--0tb8725k.xn--ond3562jt18a7py9c", %p)},	undef,	"to_ascii\(\'xn\-\-0tb8725k\.xn\-\-ond3562jt18a7py9c\'\)\ throws\ error\ V6\ \[data\/IdnaTest\.txt\:5612\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("Ⴥ⚭󠖫⋃｡𑌼", %p)},	undef,	"to_ascii\(\'Ⴥ\⚭\?\⋃｡𑌼\'\)\ throws\ error\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5613\]") or ($@ and diag($@));
@@ -4473,7 +4473,7 @@ is(eval{uts46_to_ascii("xn--lgb32f2753cosb.xn--jkb91hlz1a", %p)},	undef,	"to_asc
 is(eval{uts46_to_ascii("xn--lgb32f2753cosb.xn--jkb91hlz1azih", %p)},	undef,	"to_ascii\(\'xn\-\-lgb32f2753cosb\.xn\-\-jkb91hlz1azih\'\)\ throws\ error\ B2\ B3\ V6\ \[data\/IdnaTest\.txt\:5642\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("\x{0816}.𐨕𚚕", %p)},	undef,	"to_ascii\(\'\\u0816\.𐨕\?\'\)\ throws\ error\ B1\ B2\ B3\ B6\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:5643\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--rub.xn--tr9c248x", %p)},	undef,	"to_ascii\(\'xn\-\-rub\.xn\-\-tr9c248x\'\)\ throws\ error\ B1\ B2\ B3\ B6\ V5\ V6\ \[data\/IdnaTest\.txt\:5644\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("--。𽊆\x{0767}𐽋𞠬", %p)},	undef,	"to_ascii\(\'\-\-\。\?\\u0767\?𞠬\'\)\ throws\ error\ B1\ B5\ B6\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:5645\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("--。𽊆\x{0767}𐽋𞠬", %p)},	undef,	"to_ascii\(\'\-\-\。\?\\u0767𐽋𞠬\'\)\ throws\ error\ B1\ B5\ B6\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:5645\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("--.xn--rpb6226k77pfh58p", %p)},	undef,	"to_ascii\(\'\-\-\.xn\-\-rpb6226k77pfh58p\'\)\ throws\ error\ B1\ B5\ B6\ V3\ V6\ \[data\/IdnaTest\.txt\:5646\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("򛭦𐋥𹸐.≯\x{08B0}\x{08A6}󔛣", %p)},	undef,	"to_ascii\(\'\?𐋥\?\.\≯\\u08B0\\u08A6\?\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:5647\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("򛭦𐋥𹸐.>\x{0338}\x{08B0}\x{08A6}󔛣", %p)},	undef,	"to_ascii\(\'\?𐋥\?\.\>\\u0338\\u08B0\\u08A6\?\'\)\ throws\ error\ B1\ P1\ V6\ \[data\/IdnaTest\.txt\:5648\]") or ($@ and diag($@));
@@ -5546,7 +5546,7 @@ SKIP: { skip sprintf("requires Unicode® v9.0 (perl v5.25.3) or higher, only v%v
 is(eval{uts46_to_ascii("xn--ce6h.xn----cod.", %p)},	undef,	"to_ascii\(\'xn\-\-ce6h\.xn\-\-\-\-cod\.\'\)\ throws\ error\ B1\ V3\ \[data\/IdnaTest\.txt\:6981\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("𞤂．-\x{08A3}︒", %p)},	undef,	"to_ascii\(\'𞤂．\-\\u08A3︒\'\)\ throws\ error\ B1\ P1\ V3\ V6\ \[data\/IdnaTest\.txt\:6982\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--ce6h.xn----cod7069p", %p)},	undef,	"to_ascii\(\'xn\-\-ce6h\.xn\-\-\-\-cod7069p\'\)\ throws\ error\ B1\ V3\ V6\ \[data\/IdnaTest\.txt\:6983\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("\x{200C}𐺨.\x{0859}--", %p)},	undef,	"to_ascii\(\'\\u200C\?\.\\u0859\-\-\'\)\ throws\ error\ B1\ C1\ P1\ V3\ V5\ V6\ \[data\/IdnaTest\.txt\:6985\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("\x{200C}𐺨.\x{0859}--", %p)},	undef,	"to_ascii\(\'\\u200C𐺨\.\\u0859\-\-\'\)\ throws\ error\ B1\ C1\ P1\ V3\ V5\ V6\ \[data\/IdnaTest\.txt\:6985\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--9p0d.xn-----h6e", %p)},	undef,	"to_ascii\(\'xn\-\-9p0d\.xn\-\-\-\-\-h6e\'\)\ throws\ error\ B1\ V3\ V5\ V6\ \[data\/IdnaTest\.txt\:6986\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--0ug7905g.xn-----h6e", %p)},	undef,	"to_ascii\(\'xn\-\-0ug7905g\.xn\-\-\-\-\-h6e\'\)\ throws\ error\ B1\ C1\ V3\ V5\ V6\ \[data\/IdnaTest\.txt\:6987\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("𐋸󮘋Ⴢ.Ⴁ", %p)},	undef,	"to_ascii\(\'𐋸\?Ⴢ\.Ⴁ\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:6988\]") or ($@ and diag($@));
@@ -5565,14 +5565,14 @@ is(eval{uts46_to_ascii("񗑿\x{A806}₄򩞆｡𲩧󠒹Σ", %p)},	undef,	"to_asci
 is(eval{uts46_to_ascii("񗑿\x{A806}₄򩞆｡𲩧󠒹σ", %p)},	undef,	"to_ascii\(\'\?\\uA806₄\?｡\?\?σ\'\)\ throws\ error\ P1\ V6\ \[data\/IdnaTest\.txt\:7003\]") or ($@ and diag($@));
 SKIP: { skip sprintf("requires Unicode® v7.0 (perl v5.21.1) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v7.0; is(eval{uts46_to_ascii("󠆀\x{0723}。\x{1DF4}\x{0775}", %p)},	undef,	"to_ascii\(\'\󠆀\\u0723\。\\u1DF4\\u0775\'\)\ throws\ error\ B1\ V5\ \[data\/IdnaTest\.txt\:7004\]") or ($@ and diag($@)); }
 is(eval{uts46_to_ascii("xn--tnb.xn--5pb136i", %p)},	undef,	"to_ascii\(\'xn\-\-tnb\.xn\-\-5pb136i\'\)\ throws\ error\ B1\ V5\ \[data\/IdnaTest\.txt\:7005\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("𐹱\x{0842}𝪨｡𬼖Ⴑ\x{200D}", %p)},	undef,	"to_ascii\(\'𐹱\\u0842𝪨｡\?Ⴑ\\u200D\'\)\ throws\ error\ B1\ B6\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:7007\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("𐹱\x{0842}𝪨。𬼖Ⴑ\x{200D}", %p)},	undef,	"to_ascii\(\'𐹱\\u0842𝪨\。\?Ⴑ\\u200D\'\)\ throws\ error\ B1\ B6\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:7009\]") or ($@ and diag($@));
-SKIP: { skip sprintf("requires Unicode® v10.0 (perl v5.28.0) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v10.0; is(eval{uts46_to_ascii("𐹱\x{0842}𝪨。𬼖ⴑ\x{200D}", %p)},	undef,	"to_ascii\(\'𐹱\\u0842𝪨\。\?ⴑ\\u200D\'\)\ throws\ error\ B1\ B6\ C2\ \[data\/IdnaTest\.txt\:7011\]") or ($@ and diag($@)); }
+is(eval{uts46_to_ascii("𐹱\x{0842}𝪨｡𬼖Ⴑ\x{200D}", %p)},	undef,	"to_ascii\(\'𐹱\\u0842𝪨｡𬼖Ⴑ\\u200D\'\)\ throws\ error\ B1\ B6\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:7007\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("𐹱\x{0842}𝪨。𬼖Ⴑ\x{200D}", %p)},	undef,	"to_ascii\(\'𐹱\\u0842𝪨\。𬼖Ⴑ\\u200D\'\)\ throws\ error\ B1\ B6\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:7009\]") or ($@ and diag($@));
+SKIP: { skip sprintf("requires Unicode® v10.0 (perl v5.28.0) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v10.0; is(eval{uts46_to_ascii("𐹱\x{0842}𝪨。𬼖ⴑ\x{200D}", %p)},	undef,	"to_ascii\(\'𐹱\\u0842𝪨\。𬼖ⴑ\\u200D\'\)\ throws\ error\ B1\ B6\ C2\ \[data\/IdnaTest\.txt\:7011\]") or ($@ and diag($@)); }
 is(eval{uts46_to_ascii("xn--0vb1535kdb6e.xn--8kjz186s", %p)},	undef,	"to_ascii\(\'xn\-\-0vb1535kdb6e\.xn\-\-8kjz186s\'\)\ throws\ error\ B1\ \[data\/IdnaTest\.txt\:7012\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--0vb1535kdb6e.xn--1ug742c5714c", %p)},	undef,	"to_ascii\(\'xn\-\-0vb1535kdb6e\.xn\-\-1ug742c5714c\'\)\ throws\ error\ B1\ B6\ C2\ \[data\/IdnaTest\.txt\:7013\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--0vb1535kdb6e.xn--pnd93707a", %p)},	undef,	"to_ascii\(\'xn\-\-0vb1535kdb6e\.xn\-\-pnd93707a\'\)\ throws\ error\ B1\ V6\ \[data\/IdnaTest\.txt\:7014\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--0vb1535kdb6e.xn--pnd879eqy33c", %p)},	undef,	"to_ascii\(\'xn\-\-0vb1535kdb6e\.xn\-\-pnd879eqy33c\'\)\ throws\ error\ B1\ B6\ C2\ V6\ \[data\/IdnaTest\.txt\:7015\]") or ($@ and diag($@));
-SKIP: { skip sprintf("requires Unicode® v10.0 (perl v5.28.0) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v10.0; is(eval{uts46_to_ascii("𐹱\x{0842}𝪨｡𬼖ⴑ\x{200D}", %p)},	undef,	"to_ascii\(\'𐹱\\u0842𝪨｡\?ⴑ\\u200D\'\)\ throws\ error\ B1\ B6\ C2\ \[data\/IdnaTest\.txt\:7017\]") or ($@ and diag($@)); }
+SKIP: { skip sprintf("requires Unicode® v10.0 (perl v5.28.0) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v10.0; is(eval{uts46_to_ascii("𐹱\x{0842}𝪨｡𬼖ⴑ\x{200D}", %p)},	undef,	"to_ascii\(\'𐹱\\u0842𝪨｡𬼖ⴑ\\u200D\'\)\ throws\ error\ B1\ B6\ C2\ \[data\/IdnaTest\.txt\:7017\]") or ($@ and diag($@)); }
 is(eval{uts46_to_ascii("\x{1714}𐭪󠙘\x{200D}｡-𐹴", %p)},	undef,	"to_ascii\(\'\\u1714𐭪\?\\u200D｡\-𐹴\'\)\ throws\ error\ B1\ C2\ P1\ V3\ V5\ V6\ \[data\/IdnaTest\.txt\:7019\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("\x{1714}𐭪󠙘\x{200D}。-𐹴", %p)},	undef,	"to_ascii\(\'\\u1714𐭪\?\\u200D\。\-𐹴\'\)\ throws\ error\ B1\ C2\ P1\ V3\ V5\ V6\ \[data\/IdnaTest\.txt\:7021\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--fze4126jujt0g.xn----c36i", %p)},	undef,	"to_ascii\(\'xn\-\-fze4126jujt0g\.xn\-\-\-\-c36i\'\)\ throws\ error\ B1\ V3\ V5\ V6\ \[data\/IdnaTest\.txt\:7022\]") or ($@ and diag($@));
@@ -5803,8 +5803,8 @@ is(eval{uts46_to_ascii("xn--qib.xn--4xa21s", %p)},	undef,	"to_ascii\(\'xn\-\-qib
 is(eval{uts46_to_ascii("xn--qib.xn--3xa41s", %p)},	undef,	"to_ascii\(\'xn\-\-qib\.xn\-\-3xa41s\'\)\ throws\ error\ B5\ B6\ \[data\/IdnaTest\.txt\:7320\]") or ($@ and diag($@));
 SKIP: { skip sprintf("requires Unicode® v5.0 (perl v5.9.5) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v5.0; is(eval{uts46_to_ascii("\x{0671}．Σ\x{07DC}", %p)},	undef,	"to_ascii\(\'\\u0671．Σ\\u07DC\'\)\ throws\ error\ B5\ B6\ \[data\/IdnaTest\.txt\:7321\]") or ($@ and diag($@)); }
 SKIP: { skip sprintf("requires Unicode® v5.0 (perl v5.9.5) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v5.0; is(eval{uts46_to_ascii("\x{0671}．σ\x{07DC}", %p)},	undef,	"to_ascii\(\'\\u0671．σ\\u07DC\'\)\ throws\ error\ B5\ B6\ \[data\/IdnaTest\.txt\:7322\]") or ($@ and diag($@)); }
-is(eval{uts46_to_ascii("񼈶\x{0605}．\x{08C1}\x{200D}𑑂𱼱", %p)},	undef,	"to_ascii\(\'\?\\u0605．\\u08C1\\u200D𑑂\?\'\)\ throws\ error\ B2\ B3\ B5\ B6\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:7324\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("񼈶\x{0605}.\x{08C1}\x{200D}𑑂𱼱", %p)},	undef,	"to_ascii\(\'\?\\u0605\.\\u08C1\\u200D𑑂\?\'\)\ throws\ error\ B2\ B3\ B5\ B6\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:7326\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("񼈶\x{0605}．\x{08C1}\x{200D}𑑂𱼱", %p)},	undef,	"to_ascii\(\'\?\\u0605．\\u08C1\\u200D𑑂𱼱\'\)\ throws\ error\ B2\ B3\ B5\ B6\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:7324\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("񼈶\x{0605}.\x{08C1}\x{200D}𑑂𱼱", %p)},	undef,	"to_ascii\(\'\?\\u0605\.\\u08C1\\u200D𑑂𱼱\'\)\ throws\ error\ B2\ B3\ B5\ B6\ C2\ P1\ V6\ \[data\/IdnaTest\.txt\:7326\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--nfb17942h.xn--nzb6708kx3pn", %p)},	undef,	"to_ascii\(\'xn\-\-nfb17942h\.xn\-\-nzb6708kx3pn\'\)\ throws\ error\ B2\ B3\ B5\ B6\ V6\ \[data\/IdnaTest\.txt\:7327\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--nfb17942h.xn--nzb240jv06otevq", %p)},	undef,	"to_ascii\(\'xn\-\-nfb17942h\.xn\-\-nzb240jv06otevq\'\)\ throws\ error\ B2\ B3\ B5\ B6\ C2\ V6\ \[data\/IdnaTest\.txt\:7328\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("𐹾𐋩𞵜｡\x{1BF2}", %p)},	undef,	"to_ascii\(\'𐹾𐋩\?｡\\u1BF2\'\)\ throws\ error\ B1\ P1\ V5\ V6\ \[data\/IdnaTest\.txt\:7329\]") or ($@ and diag($@));
@@ -6070,11 +6070,11 @@ is(eval{uts46_to_ascii("xn--ie8c.xn--2g51a", %p)},	undef,	"to_ascii\(\'xn\-\-ie8
 is(eval{uts46_to_ascii("xn--ie8c.xn--0ug03366c", %p)},	undef,	"to_ascii\(\'xn\-\-ie8c\.xn\-\-0ug03366c\'\)\ throws\ error\ C1\ V5\ V6\ \[data\/IdnaTest\.txt\:7658\]") or ($@ and diag($@));
 SKIP: { skip sprintf("requires Unicode® v5.1 (perl v5.10.1) or higher, only v%vd is supported (perl v%vd)", $UCD_VERSION, $^V), 1 if $UCD_VERSION lt v5.1; is(eval{uts46_to_ascii("\x{063D}\x{06E3}.𐨎", %p)},	undef,	"to_ascii\(\'\\u063D\\u06E3\.𐨎\'\)\ throws\ error\ B1\ B3\ B6\ V5\ \[data\/IdnaTest\.txt\:7659\]") or ($@ and diag($@)); }
 is(eval{uts46_to_ascii("xn--8gb64a.xn--mr9c", %p)},	undef,	"to_ascii\(\'xn\-\-8gb64a\.xn\-\-mr9c\'\)\ throws\ error\ B1\ B3\ B6\ V5\ \[data\/IdnaTest\.txt\:7660\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("漦Ⴙς.񡻀𐴄", %p)},	undef,	"to_ascii\(\'漦Ⴙς\.\?\?\'\)\ throws\ error\ B5\ B6\ P1\ V6\ \[data\/IdnaTest\.txt\:7662\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("漦ⴙς.񡻀𐴄", %p)},	undef,	"to_ascii\(\'漦ⴙς\.\?\?\'\)\ throws\ error\ B5\ B6\ P1\ V6\ \[data\/IdnaTest\.txt\:7664\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("漦ႹΣ.񡻀𐴄", %p)},	undef,	"to_ascii\(\'漦ႹΣ\.\?\?\'\)\ throws\ error\ B5\ B6\ P1\ V6\ \[data\/IdnaTest\.txt\:7665\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("漦ⴙσ.񡻀𐴄", %p)},	undef,	"to_ascii\(\'漦ⴙσ\.\?\?\'\)\ throws\ error\ B5\ B6\ P1\ V6\ \[data\/IdnaTest\.txt\:7666\]") or ($@ and diag($@));
-is(eval{uts46_to_ascii("漦Ⴙσ.񡻀𐴄", %p)},	undef,	"to_ascii\(\'漦Ⴙσ\.\?\?\'\)\ throws\ error\ B5\ B6\ P1\ V6\ \[data\/IdnaTest\.txt\:7667\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("漦Ⴙς.񡻀𐴄", %p)},	undef,	"to_ascii\(\'漦Ⴙς\.\?𐴄\'\)\ throws\ error\ B5\ B6\ P1\ V6\ \[data\/IdnaTest\.txt\:7662\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("漦ⴙς.񡻀𐴄", %p)},	undef,	"to_ascii\(\'漦ⴙς\.\?𐴄\'\)\ throws\ error\ B5\ B6\ P1\ V6\ \[data\/IdnaTest\.txt\:7664\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("漦ႹΣ.񡻀𐴄", %p)},	undef,	"to_ascii\(\'漦ႹΣ\.\?𐴄\'\)\ throws\ error\ B5\ B6\ P1\ V6\ \[data\/IdnaTest\.txt\:7665\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("漦ⴙσ.񡻀𐴄", %p)},	undef,	"to_ascii\(\'漦ⴙσ\.\?𐴄\'\)\ throws\ error\ B5\ B6\ P1\ V6\ \[data\/IdnaTest\.txt\:7666\]") or ($@ and diag($@));
+is(eval{uts46_to_ascii("漦Ⴙσ.񡻀𐴄", %p)},	undef,	"to_ascii\(\'漦Ⴙσ\.\?𐴄\'\)\ throws\ error\ B5\ B6\ P1\ V6\ \[data\/IdnaTest\.txt\:7667\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--4xa947d717e.xn--9d0d3162t", %p)},	undef,	"to_ascii\(\'xn\-\-4xa947d717e\.xn\-\-9d0d3162t\'\)\ throws\ error\ B5\ B6\ V6\ \[data\/IdnaTest\.txt\:7668\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--4xa772sl47b.xn--9d0d3162t", %p)},	undef,	"to_ascii\(\'xn\-\-4xa772sl47b\.xn\-\-9d0d3162t\'\)\ throws\ error\ B5\ B6\ V6\ \[data\/IdnaTest\.txt\:7669\]") or ($@ and diag($@));
 is(eval{uts46_to_ascii("xn--3xa972sl47b.xn--9d0d3162t", %p)},	undef,	"to_ascii\(\'xn\-\-3xa972sl47b\.xn\-\-9d0d3162t\'\)\ throws\ error\ B5\ B6\ V6\ \[data\/IdnaTest\.txt\:7670\]") or ($@ and diag($@));

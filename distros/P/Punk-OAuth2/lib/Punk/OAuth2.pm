@@ -7,7 +7,7 @@ use File::Raw::JSON;
 use Crypt::JWS;
 use MIME::Base64 ();   # the XS calls MIME::Base64::{en,de}code_base64 by name
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 require XSLoader;
 XSLoader::load('Punk::OAuth2', $VERSION);

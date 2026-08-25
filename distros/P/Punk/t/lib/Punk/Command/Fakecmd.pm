@@ -18,4 +18,10 @@ Punk::Command->register(fakecmd => {
     },
 }, __PACKAGE__);
 
+# A doctor row, so t/1311 can prove `punk doctor` finds a plugin's row
+# without that plugin's command having been named first.
+Punk::Command->register_doctor('Fakecmd' => sub {
+    return (1, 'the fixture is installed');
+}, __PACKAGE__) if Punk::Command->can('register_doctor');
+
 1;

@@ -7,7 +7,7 @@ use Carp ();
 use Punk::OAuth2 ();            # XS core: the whole flow (_flow_begin,
 use Punk::OAuth2::Provider ();  # _flow_complete, provider object, ...)
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 my %STATE;
 

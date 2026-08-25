@@ -27,11 +27,34 @@ unless (@APPS) {
     @APPS = ('bare', grep { $_ ne 'bare' } @APPS);
 }
 
-sub bench_path {
+# An app's own directives, read out of its source:
+#
+#   # BENCH-PATH:   /some/path        the path to drive (default /)
+#   # BENCH-HEADER: If-None-Match: "v1"
+#
+# BENCH-HEADER may repeat. A validator route cannot be measured without one -
+# a 304 is only reached by a request that carries the validator, and the whole
+# point of that path is that it is cheaper than the 200 it replaces.
+sub bench_directives {
     my ($file) = @_;
-    open my $fh, '<', $file or return '/';
-    while (<$fh>) { return $1 if /^#\s*BENCH-PATH:\s*(\S+)/ }
-    return '/';
+    my ($path, @hdr) = ('/');
+    open my $fh, '<', $file or return ($path, \@hdr);
+    while (<$fh>) {
+        $path = $1 if /^#\s*BENCH-PATH:\s*(\S+)/;
+        push @hdr, $1 if /^#\s*BENCH-HEADER:\s*(.+?)\s*$/;
+    }
+    return ($path, \@hdr);
+}
+
+# "If-None-Match: v1" -> ('HTTP_IF_NONE_MATCH', 'v1'), with the two entity
+# headers PSGI spells without the prefix.
+sub header_to_env {
+    my ($line) = @_;
+    my ($name, $value) = $line =~ /^([^:]+):\s*(.*)$/ or return ();
+    $name =~ s/-/_/g;
+    $name = uc $name;
+    return ($name, $value) if $name eq 'CONTENT_TYPE' || $name eq 'CONTENT_LENGTH';
+    return ("HTTP_$name", $value);
 }
 
 # A PSGI environment the way a server would hand one over: a new hash per
@@ -41,7 +64,7 @@ sub bench_path {
 my $EMPTY = '';
 open my $IN, '<', \$EMPTY or die $!;
 sub env_for {
-    my ($path) = @_;
+    my ($path, $extra) = @_;
     my $in = $IN;
     seek $in, 0, 0;
     return {
@@ -57,6 +80,9 @@ sub env_for {
         'psgi.multithread' => 0,   'psgi.multiprocess' => 1,
         'psgi.run_once' => 0,      'psgi.nonblocking'  => 0,
         'psgi.streaming' => 1,
+        # last, so an app's BENCH-HEADER wins over the defaults rather than
+        # being silently dropped by them
+        %{ $extra || {} },
     };
 }
 
@@ -91,7 +117,8 @@ sub consume {
 }
 
 sub run_one {
-    my ($file, $path) = @_;
+    my ($file, $path, $hdr) = @_;
+    my %extra = map { header_to_env($_) } @$hdr;
     pipe my $r, my $w or die $!;
     my $pid = fork // die $!;
     if (!$pid) {
@@ -99,11 +126,11 @@ sub run_one {
         my $app = do $file;
         die "$file did not compile: " . ($@ || $!) . "\n"
             unless ref $app eq 'CODE';
-        my $bytes = consume($app->(env_for($path)));   # warm the paths
+        my $bytes = consume($app->(env_for($path, \%extra)));   # warm the paths
         my $best;
         for (1 .. $REPS) {
             my $start = Time::HiRes::time();
-            consume($app->(env_for($path))) for 1 .. $ITERS;
+            consume($app->(env_for($path, \%extra))) for 1 .. $ITERS;
             my $secs = Time::HiRes::time() - $start;
             $best = $secs if !defined $best || $secs < $best;
         }
@@ -125,7 +152,7 @@ my %rps;
 printf "%-16s %12s %10s %8s\n", 'app', 'req/s', 'us/req', 'bytes';
 for my $name (@APPS) {
     my $file = "$FindBin::Bin/apps/$name.psgi";
-    my ($rps, $us, $bytes) = run_one($file, bench_path($file));
+    my ($rps, $us, $bytes) = run_one($file, bench_directives($file));
     $rps{$name} = $rps;
     printf "%-16s %12.0f %10.2f %8d\n", $name, $rps, $us, $bytes;
 }

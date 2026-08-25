@@ -1,5 +1,8 @@
 Revision history for Perl::Critic::Grape
 
+0.0.8 - 2026-08-24
+	- viv RequireSlices
+
 0.0.7 - 2026-01-11
 	- fixes/attempts
 

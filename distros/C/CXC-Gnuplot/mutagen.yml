@@ -1,0 +1,17 @@
+sync:
+  defaults:
+    mode: "one-way-safe"
+    flushOnCreate: true
+    ignore:
+      vcs: false
+  code:
+    alpha: "."
+    beta: "macabre:/home/dj/axaf/src/CXC-Gnuplot"
+    ignore:
+      paths:
+        - ".build"
+        - "local"
+        - "devel"
+        - ".tidyall.d"
+        - ".plx"
+        - "mutagen.yml.lock"

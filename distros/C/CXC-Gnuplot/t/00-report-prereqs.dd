@@ -1,0 +1,103 @@
+do { my $x = {
+       'configure' => {
+                        'requires' => {
+                                        'Module::Build::Tiny' => '0.034'
+                                      }
+                      },
+       'develop' => {
+                      'requires' => {
+                                      'Dist::Zilla' => '5',
+                                      'Dist::Zilla::Plugin::CheckMetaResources' => '0',
+                                      'Dist::Zilla::Plugin::Encoding' => '0',
+                                      'Dist::Zilla::Plugin::EnsureChangesHasContent' => '0',
+                                      'Dist::Zilla::Plugin::EnsurePrereqsInstalled' => '0',
+                                      'Dist::Zilla::Plugin::GatherDir' => '0',
+                                      'Dist::Zilla::Plugin::GatherDir::Template' => '0',
+                                      'Dist::Zilla::Plugin::InsertCopyright' => '0',
+                                      'Dist::Zilla::Plugin::InsertExample' => '0',
+                                      'Dist::Zilla::Plugin::MetaNoIndex' => '0',
+                                      'Dist::Zilla::Plugin::MetaResources' => '0',
+                                      'Dist::Zilla::Plugin::PodCoverageTests' => '0',
+                                      'Dist::Zilla::Plugin::PodWeaver' => '0',
+                                      'Dist::Zilla::Plugin::Prereqs' => '0',
+                                      'Dist::Zilla::Plugin::Prereqs::AuthorDeps' => '0',
+                                      'Dist::Zilla::Plugin::ReadmeAnyFromPod' => '0',
+                                      'Dist::Zilla::Plugin::Regenerate' => '0',
+                                      'Dist::Zilla::Plugin::Run::Release' => '0',
+                                      'Dist::Zilla::Plugin::Test::CPAN::Changes' => '0',
+                                      'Dist::Zilla::Plugin::Test::CPAN::Meta::JSON' => '0',
+                                      'Dist::Zilla::Plugin::Test::CleanNamespaces' => '0',
+                                      'Dist::Zilla::Plugin::Test::Compile' => '0',
+                                      'Dist::Zilla::Plugin::Test::DistManifest' => '0',
+                                      'Dist::Zilla::Plugin::Test::Fixme' => '0',
+                                      'Dist::Zilla::Plugin::Test::NoBreakpoints' => '0',
+                                      'Dist::Zilla::Plugin::Test::NoTabs' => '0',
+                                      'Dist::Zilla::Plugin::Test::Perl::Critic' => '0',
+                                      'Dist::Zilla::Plugin::Test::PodSpelling' => '0',
+                                      'Dist::Zilla::Plugin::Test::TrailingSpace' => '0',
+                                      'Dist::Zilla::Plugin::Test::Version' => '0',
+                                      'Dist::Zilla::Plugin::if' => '0',
+                                      'Dist::Zilla::PluginBundle::Starter' => '0',
+                                      'File::Spec' => '0',
+                                      'IO::Handle' => '0',
+                                      'IPC::Open3' => '0',
+                                      'Pod::Coverage::TrustPod' => '0',
+                                      'Pod::Weaver::Plugin::StopWords' => '0',
+                                      'Pod::Weaver::Section::Contributors' => '0',
+                                      'Pod::Weaver::Section::GenerateSection' => '0',
+                                      'Pod::Weaver::Section::SeeAlso' => '0',
+                                      'Software::License::GPL_3' => '0',
+                                      'Test::CPAN::Changes' => '0.19',
+                                      'Test::CPAN::Meta::JSON' => '0.16',
+                                      'Test::CleanNamespaces' => '0.15',
+                                      'Test::DistManifest' => '0',
+                                      'Test::More' => '0.88',
+                                      'Test::NoBreakpoints' => '0.15',
+                                      'Test::NoTabs' => '0',
+                                      'Test::Perl::Critic' => '0',
+                                      'Test::Pod' => '1.41',
+                                      'Test::Pod::Coverage' => '1.08',
+                                      'Test::Spelling' => '0.17',
+                                      'Test::TrailingSpace' => '0.0203',
+                                      'Test::Version' => '1'
+                                    }
+                    },
+       'runtime' => {
+                      'requires' => {
+                                      'CXC::Data::Visitor' => '0',
+                                      'Exporter::Shiny' => '0',
+                                      'Feature::Compat::Class' => '0.08',
+                                      'File::ShareDir::Tarball' => '0',
+                                      'Hash::Merge' => '0',
+                                      'Import::Into' => '0',
+                                      'Lexical::Import' => '0',
+                                      'Path::Tiny' => '0',
+                                      'Ref::Util' => '0',
+                                      'Regexp::Common' => '0',
+                                      'Syntax::Operator::Elem' => '0',
+                                      'Text::Balanced' => '0',
+                                      'Type::Library' => '2.008003',
+                                      'builtin::compat' => '0.003003',
+                                      'experimental' => '0',
+                                      'namespace::clean' => '0'
+                                    }
+                    },
+       'test' => {
+                   'recommends' => {
+                                     'CPAN::Meta' => '2.120900'
+                                   },
+                   'requires' => {
+                                   'ExtUtils::MakeMaker' => '0',
+                                   'File::Spec' => '0',
+                                   'IO::Handle' => '0',
+                                   'IPC::Open3' => '0',
+                                   'Test2::Tools::TypeTiny' => 'v0.93.1',
+                                   'Test2::V0' => '0',
+                                   'Test::File::ShareDir' => '0',
+                                   'Test::Lib' => '0',
+                                   'Test::More' => '0'
+                                 }
+                 }
+     };
+  $x;
+ }

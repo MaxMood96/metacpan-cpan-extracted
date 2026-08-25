@@ -8,7 +8,7 @@ use Test::More;
 use File::Temp ();
 use Punk::Config;
 
-# Configuration: layering, the secret resolvers, the plaintext guardrail,
+# Configuration: layering, the secret resolvers,
 # and the promise that $app->config carries no secrets.
 
 plan skip_all => 'YAML::XS required for these tests'
@@ -132,52 +132,19 @@ YAML
     like($err, qr/unknown resolver/, 'an unknown resolver croaks, listing them');
 }
 
-# ---- the guardrail -----------------------------------------------------------
+# ---- a plaintext value is nobody else's business -----------------------------
+#
+# There used to be a guardrail here: a plaintext value under a key whose NAME
+# looked secret-shaped warned, and `secrets => 'strict'` refused to boot. It
+# is gone. Whether a password sits in the file is the decision of whoever
+# writes the file, and a warning that fires on a key's name rather than on
+# anything it knows is a warning people learn to ignore.
+#
+# These assert the silence, so reintroducing it fails here rather than in
+# somebody's boot log.
 {
-    write_file('punk.yml', <<'YAML');
-database:
-  password: hunter2
-YAML
     unlink "$dir/punk.local.yml" if -e "$dir/punk.local.yml";
 
-    my @warned;
-    {
-        local $SIG{__WARN__} = sub { push @warned, $_[0] };
-        Punk::Config->load(file => "$dir/punk.yml", env => 'none');
-    }
-    is(scalar @warned, 1, 'a plaintext secret warns by default');
-    like($warned[0], qr/database\.password.*plaintext/s,
-        'naming the path, and what to do instead');
-    like($warned[0], qr/\$env/, 'pointing at the reference syntax');
-
-    my $err = '';
-    eval {
-        Punk::Config->load(file => "$dir/punk.yml", env => 'none',
-                           secrets => 'strict');
-    } or $err = $@;
-    like($err, qr/plaintext/, 'strict mode refuses to start');
-
-    @warned = ();
-    {
-        local $SIG{__WARN__} = sub { push @warned, $_[0] };
-        Punk::Config->load(file => "$dir/punk.yml", env => 'none',
-                           secrets => 'off');
-    }
-    is(scalar @warned, 0, 'off says nothing');
-
-    # $literal is the documented way to say "I meant it"
-    write_file('punk.yml', "database:\n  password: { \$literal: hunter2 }\n");
-    @warned = ();
-    {
-        local $SIG{__WARN__} = sub { push @warned, $_[0] };
-        Punk::Config->load(file => "$dir/punk.yml", env => 'none',
-                           secrets => 'strict');
-    }
-    is(scalar @warned, 0, '$literal is exempt even in strict mode');
-}
-
-# ---- which keys count as secret-shaped --------------------------------------
-{
     for my $key (qw(password passwd secret token api_key private_key
                     credentials auth)) {
         write_file('punk.yml', "thing:\n  $key: something\n");
@@ -186,44 +153,28 @@ YAML
             local $SIG{__WARN__} = sub { push @warned, $_[0] };
             Punk::Config->load(file => "$dir/punk.yml", env => 'none');
         }
-        is(scalar @warned, 1, "a plaintext '$key' is caught");
+        is(scalar @warned, 0, "a plaintext '$key' is loaded without comment");
     }
+
     write_file('punk.yml', "db:\n  dsn: dbi:Pg:dbname=x;password=oops\n");
     my @warned;
     {
         local $SIG{__WARN__} = sub { push @warned, $_[0] };
-        Punk::Config->load(file => "$dir/punk.yml", env => 'none');
+        my $c = Punk::Config->load(file => "$dir/punk.yml", env => 'none');
+        is($c->get('db.dsn'), 'dbi:Pg:dbname=x;password=oops',
+            'and a dsn with the password in it is just a dsn');
     }
-    is(scalar @warned, 1, 'a password embedded in a dsn is caught too');
+    is(scalar @warned, 0, 'no warning for that either');
 
-    # A key that names WHERE a secret-shaped thing lives holds a model, a
-    # column or a location - the auth keyword's own token_model is the
-    # everyday case, and warning on it teaches people to ignore the warning.
-    for my $key (qw(token_model password_field secret_path api_key_name
-                    token_table credential_header pass_column)) {
-        write_file('punk.yml', "auth:\n  $key: AuthToken\n");
-        @warned = ();
-        {
-            local $SIG{__WARN__} = sub { push @warned, $_[0] };
-            Punk::Config->load(file => "$dir/punk.yml", env => 'none');
-        }
-        is(scalar @warned, 0, "a structural '$key' is not secret-shaped");
-    }
-    write_file('punk.yml', "auth:\n  token_models_secret: oops\n");
-    @warned = ();
-    {
-        local $SIG{__WARN__} = sub { push @warned, $_[0] };
-        Punk::Config->load(file => "$dir/punk.yml", env => 'none');
-    }
-    is(scalar @warned, 1, 'but the suffix has to END the key - the secret wins');
-
-    write_file('punk.yml', "app:\n  name: myapp\n  workers: 4\n");
-    @warned = ();
-    {
-        local $SIG{__WARN__} = sub { push @warned, $_[0] };
-        Punk::Config->load(file => "$dir/punk.yml", env => 'none');
-    }
-    is(scalar @warned, 0, 'ordinary keys say nothing');
+    # The resolvers are untouched: this is about not second-guessing a
+    # plaintext value, not about taking the alternative away.
+    local $ENV{PUNK_T_SECRET} = 'from-the-environment';
+    write_file('punk.yml', "database:\n  password: { \$env: PUNK_T_SECRET }\n");
+    my $cfg = Punk::Config->load(file => "$dir/punk.yml", env => 'none');
+    is($cfg->secret('database.password'), 'from-the-environment',
+        '$env still resolves');
+    is($cfg->config->{database}{password}, '[redacted]',
+        'and a resolved secret is still redacted out of the public copy');
 }
 
 # ---- config drives the DSL ---------------------------------------------------
@@ -332,11 +283,14 @@ YAML
     eval { Punk::Config->load(file => "$dir/nothing-here.yml") } or $err = $@;
     like($err, qr/no config file found/, 'a missing file croaks');
 
+    # Named rather than falling through to "unknown option", because this
+    # one used to work and the reader needs to know it was removed rather
+    # than mistyped.
     $err = '';
-    eval { Punk::Config->load(file => "$dir/punk.yml", secrets => 'maybe') }
+    eval { Punk::Config->load(file => "$dir/punk.yml", secrets => 'strict') }
         or $err = $@;
-    like($err, qr/secrets must be strict, warn or off/,
-        'an unknown secrets mode croaks');
+    like($err, qr/'secrets' option is gone/,
+        'the removed option says so by name');
 }
 
 done_testing();

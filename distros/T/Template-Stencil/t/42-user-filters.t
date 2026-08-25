@@ -92,6 +92,7 @@ like($@, qr/filter 'bad' is not a coderef/, 'bad registration rejected');
     require File::Temp;
     my $dir = File::Temp::tempdir(CLEANUP => 1);
     open my $fh, '>', "$dir/inc.tmpl" or die $!;
+    binmode $fh;
     print $fh '{% v | money %}';
     close $fh;
     my $e = Template::Stencil::_engine_new($dir, undef, 0, 1, 256,

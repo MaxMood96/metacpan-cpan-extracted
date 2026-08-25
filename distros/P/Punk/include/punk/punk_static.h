@@ -165,6 +165,150 @@ static int ps_path_unsafe(const char *p, STRLEN len) {
     return 0;
 }
 
+/* ---- directories -----------------------------------------------------------
+ * A directory is not a file, so by itself it is a 404. Two options give it
+ * one more chance first: `index` names a file inside it to serve in its
+ * place, and `list` renders what it holds.
+ *
+ * The directory is served WHERE IT WAS ASKED FOR - there is no 301 to the
+ * trailing-slash form. Both spellings arrive here (`/about/` with the slash
+ * PATH_INFO carried, `/about` without), and both name the same directory;
+ * redirecting one to the other would spend a round trip to say so. */
+
+/* `file` names a directory: append the index filename, with the separator
+ * only when the path does not already end in one. Returns the new length, or
+ * 0 when it would not fit. `idx` is a filename - the constructor rejects one
+ * with a separator in it - so nothing here can escape the directory. */
+static STRLEN ps_dir_index(char *file, STRLEN flen,
+                           const char *idx, STRLEN ilen) {
+    int slash = (flen > 0 && file[flen - 1] == '/') ? 0 : 1;
+    if (flen + slash + ilen > MAXPATHLEN) return 0;
+    if (slash) file[flen++] = '/';
+    memcpy(file + flen, idx, ilen);
+    file[flen + ilen] = '\0';
+    return flen + ilen;
+}
+
+/* A filename is not markup and it is not a URL. Two escapes, because the one
+ * name goes into both a href and the text of the link. */
+static void ps_html_esc(pTHX_ SV *out, const char *s, STRLEN len) {
+    STRLEN i, run = 0;
+    for (i = 0; i < len; i++) {
+        const char *rep = NULL;
+        switch (s[i]) {
+            case '&':  rep = "&amp;";  break;
+            case '<':  rep = "&lt;";   break;
+            case '>':  rep = "&gt;";   break;
+            case '"':  rep = "&quot;"; break;
+            case '\'': rep = "&#39;";  break;
+            default:   run++;          continue;
+        }
+        if (run) sv_catpvn(out, s + i - run, run);
+        run = 0;
+        sv_catpv(out, rep);
+    }
+    if (run) sv_catpvn(out, s + len - run, run);
+}
+
+static void ps_url_esc(pTHX_ SV *out, const char *s, STRLEN len) {
+    static const char hex[] = "0123456789ABCDEF";
+    STRLEN i, run = 0;
+    for (i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)s[i];
+        char buf[3];
+        if (isALPHA(c) || isDIGIT(c) || c == '-' || c == '_' || c == '.'
+            || c == '~' || c == '/') { run++; continue; }
+        if (run) sv_catpvn(out, s + i - run, run);
+        run = 0;
+        buf[0] = '%'; buf[1] = hex[c >> 4]; buf[2] = hex[c & 15];
+        sv_catpvn(out, buf, 3);
+    }
+    if (run) sv_catpvn(out, s + len - run, run);
+}
+
+/* The listing itself. The directory is read through PerlDir_*, not opendir:
+ * there is no ambient DIR on native Windows, and perl's own layer is already
+ * the shim - the same idiom the model scan in punk_compile.h uses.
+ *
+ * `no-store`, because a listing is stale the moment anything in the
+ * directory changes and there is no cheap validator for "what this directory
+ * holds" the way there is for one file's bytes. */
+static SV *ps_listing(pTHX_ const char *file, STRLEN flen,
+                      const char *urlpath, STRLEN ulen, int is_head) {
+    DIR *dh = PerlDir_open(file);
+    Direntry_t *de;
+    AV *ents, *resp, *headers, *body;
+    SV *html;
+    SSize_t i, n;
+    char child[MAXPATHLEN + 1];
+
+    if (!dh) return NULL;
+    ents = (AV *)sv_2mortal((SV *)newAV());
+    while ((de = PerlDir_read(dh))) {
+        const char *nm = de->d_name;
+        if (nm[0] == '.' && (nm[1] == '\0'
+                             || (nm[1] == '.' && nm[2] == '\0'))) continue;
+        av_push(ents, newSVpv(nm, 0));
+    }
+    PerlDir_close(dh);
+    n = av_len(ents) + 1;
+    if (n > 1) sortsv(AvARRAY(ents), (STRLEN)n, Perl_sv_cmp);
+
+    html = sv_2mortal(newSVpvs(
+        "<!doctype html>\n<meta charset=\"utf-8\">\n"
+        "<meta name=\"viewport\" content=\"width=device-width\">\n<title>"));
+    sv_catpvs(html, "Index of ");
+    ps_html_esc(aTHX_ html, urlpath, ulen);
+    sv_catpvs(html, "</title>\n<h1>Index of ");
+    ps_html_esc(aTHX_ html, urlpath, ulen);
+    sv_catpvs(html, "</h1>\n<ul>\n");
+
+    /* The parent, except at the root of the mount, where there is none to
+     * offer that is still inside it. */
+    if (!(ulen == 1 && urlpath[0] == '/'))
+        sv_catpvs(html, "<li><a href=\"..\">../</a></li>\n");
+
+    for (i = 0; i < n; i++) {
+        SV **ep = av_fetch(ents, i, 0);
+        STRLEN el;
+        const char *es;
+        int isdir = 0;
+        if (!ep || !*ep) continue;
+        es = SvPV_const(*ep, el);
+        if (flen + 1 + el <= MAXPATHLEN) {
+            Stat_t st;
+            memcpy(child, file, flen);
+            child[flen] = '/';
+            memcpy(child + flen + 1, es, el);
+            child[flen + 1 + el] = '\0';
+            if (PerlLIO_stat(child, &st) == 0 && S_ISDIR(st.st_mode)) isdir = 1;
+        }
+        /* A relative href, so it works from both spellings of the directory
+         * URL without this having to know which one was asked for. */
+        sv_catpvs(html, "<li><a href=\"");
+        ps_url_esc(aTHX_ html, es, el);
+        if (isdir) sv_catpvs(html, "/");
+        sv_catpvs(html, "\">");
+        ps_html_esc(aTHX_ html, es, el);
+        if (isdir) sv_catpvs(html, "/");
+        sv_catpvs(html, "</a></li>\n");
+    }
+    sv_catpvs(html, "</ul>\n");
+
+    resp = newAV(); headers = newAV(); body = newAV();
+    av_push(headers, newSVpvs("Content-Type"));
+    av_push(headers, newSVpvs("text/html; charset=utf-8"));
+    av_push(headers, newSVpvs("Content-Length"));
+    av_push(headers, newSViv((IV)SvCUR(html)));
+    av_push(headers, newSVpvs("Cache-Control"));
+    av_push(headers, newSVpvs("no-store"));
+    if (!is_head) av_push(body, newSVsv(html));
+    av_push(resp, newSViv(200));
+    av_push(resp, newRV_noinc((SV *)headers));
+    av_push(resp, newRV_noinc((SV *)body));
+    return newRV_noinc((SV *)resp);
+}
+
 /* ---- serving one file ------------------------------------------------------
  * The stat / conditional-request / range / header / body half of a static
  * response, split out so the markdown mount can serve the images and other
@@ -205,7 +349,9 @@ enum {
     PSC_CC_IMM = 2,   /* ... and for a URL whose digest checked out       */
     PSC_CACHE  = 3,   /* the digest cache (hashref), or undef: no         */
                       /* fingerprinting on this mount                    */
-    PSC_DEV    = 4    /* re-stat cached digests (development)             */
+    PSC_DEV    = 4,   /* re-stat cached digests (development)             */
+    PSC_INDEX  = 5,   /* the index filename, or undef: no directory index */
+    PSC_LIST   = 6    /* list a directory that has no index file          */
 };
 
 static SV *psc_cap(pTHX_ AV *cap, int slot) {
@@ -273,7 +419,7 @@ XS_INTERNAL(punk_static_cb) {
         STRLEN blen;
         Stat_t st;
         if ((blen = pa_defingerprint(file, flen, base, digest)) != 0
-            && (PerlLIO_stat(file, &st) < 0 || !S_ISREG(st.st_mode))) {
+            && (!pfc_stat(aTHX_ file, flen, &st) || !S_ISREG(st.st_mode))) {
             SV *have = pa_digest_cached(aTHX_ (HV *)SvRV(cachesv), base, blen,
                                         psc_cap(aTHX_ cap, PSC_DEV) ? 1 : 0);
             memcpy(file, base, blen + 1);
@@ -285,6 +431,43 @@ XS_INTERNAL(punk_static_cb) {
             if (have && SvCUR(have) == PA_DIGEST_LEN
                 && memEQ(SvPVX(have), digest, PA_DIGEST_LEN))
                 fo.cache_control = psc_cap(aTHX_ cap, PSC_CC_IMM);
+        }
+    }
+
+    /* A directory, on a mount that has something to do with one. Both
+     * spellings land here - `/about/` and `/about` name the same directory -
+     * and the index is tried before the listing, because a directory holding
+     * an index.html is that file's URL and nothing else.
+     *
+     * One extra stat, and only when an option asked for it: a mount with
+     * neither runs exactly the code it ran before. */
+    {
+        SV *idxsv  = psc_cap(aTHX_ cap, PSC_INDEX);
+        SV *listsv = psc_cap(aTHX_ cap, PSC_LIST);
+        Stat_t dst;
+        if ((idxsv || listsv)
+            && pfc_stat(aTHX_ file, flen, &dst) && S_ISDIR(dst.st_mode)) {
+            STRLEN dirlen = flen;
+            int served = 0;
+            if (idxsv) {
+                STRLEN ilen;
+                const char *idx = SvPV_const(idxsv, ilen);
+                STRLEN n = ps_dir_index(file, flen, idx, ilen);
+                Stat_t ist;
+                if (n && pfc_stat(aTHX_ file, n, &ist) && S_ISREG(ist.st_mode)) {
+                    flen = n;
+                    served = 1;
+                }
+                else { file[dirlen] = '\0'; flen = dirlen; }
+            }
+            if (!served) {
+                /* No index, or none wanted. A listing if this mount renders
+                 * them; otherwise fall through, and the 404 below stands. */
+                if (listsv) {
+                    resp = ps_listing(aTHX_ file, flen, path, plen, is_head);
+                    if (resp) { ST(0) = sv_2mortal(resp); XSRETURN(1); }
+                }
+            }
         }
     }
 

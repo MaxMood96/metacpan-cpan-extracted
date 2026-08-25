@@ -8,9 +8,11 @@ use Template::Stencil;
 
 my $dir = File::Temp::tempdir(CLEANUP => 1);
 open my $fh, '>', "$dir/w.tmpl" or die $!;
+binmode $fh;
 print $fh '[{% content %}]';
 close $fh;
 open $fh, '>', "$dir/w2.tmpl" or die $!;
+binmode $fh;
 print $fh '{{% content %}}';
 close $fh;
 

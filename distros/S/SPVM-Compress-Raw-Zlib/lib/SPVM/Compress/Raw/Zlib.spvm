@@ -2,7 +2,7 @@
 # MIT License
 
 class Compress::Raw::Zlib {
-  version "0.009";
+  version "0.010";
   
   use Resource::Zlib;
   
@@ -34,5 +34,7 @@ class Compress::Raw::Zlib {
     
     $inflate->inflate($input_copy, $output_ref);
   }
+  
+  native static method dummy : void ();
   
 }

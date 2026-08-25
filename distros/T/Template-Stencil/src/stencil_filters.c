@@ -3,6 +3,7 @@
 #define NEED_utf8_to_uvchr_buf
 
 #include "stencil.h"
+#include "stencil_expfix.h"
 
 void stencil_filt_case(pTHX_ SV *in, SV *out, int to_upper)
 {
@@ -244,6 +245,11 @@ void stencil_filt_fmt(pTHX_ SV *in, SV *out, const char *fmt, STRLEN flen,
          * which has no Q modifier. A double and a plain format are well
          * defined everywhere, and display formatting is what this is for. */
         olen = snprintf(obuf, sizeof obuf, rf, (double)SvNV(in));
+#ifdef _WIN32
+        /* The Windows CRT prints 1.5e+003; make it 1.5e+03 like everyone. */
+        if (olen > 0 && (size_t)olen < sizeof obuf)
+            olen = stencil_expfix(obuf, olen);
+#endif
         break;
     }
 

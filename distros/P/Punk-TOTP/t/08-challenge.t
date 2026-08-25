@@ -116,6 +116,9 @@ for my $try (1 .. 2) {
     is $t->status, 200, "wrong code $try re-renders";
     like $t->body, qr/did not work/, 'with the error';
 }
+is T::Backend::Memory::_rows('users')->{7}{totp_failed}, 2,
+    'the failures are counted on the user row, not in the session';
+
 $t->post_ok('/login/totp', form => { code => '000000' });
 is $t->status, 302, 'the third failure clears the pending state';
 is $t->header('Location'), '/login', 'back to the password';
@@ -124,6 +127,20 @@ $t->post_ok('/login/totp', form => { code => code_now() });
 is $t->header('Location'), '/login',
     'and a correct code after the clear finds no pending - the '
   . 'attacker is back to needing the first factor';
+
+# ---- the count survives a fresh pending marker (CVE-2026-78655) ------------
+# Re-running the first factor mints a new marker. When the count lived in
+# that marker, that alone handed the guesser another `attempts` tries; the
+# same reason a replayed cookie did. The count is the account's, so it does
+# not reset, and a correct code is refused while the account is over it.
+$t->post_ok('/start');
+$t->post_ok('/login/totp', form => { code => code_now() });
+is $t->status, 302, 'a fresh marker does not buy more attempts';
+is $t->header('Location'), '/login',
+    'the account is over the limit and the code is not even judged';
+
+# the window is what releases it, so the lock cannot be held for good
+T::Backend::Memory::_rows('users')->{7}{totp_failed_at} = time - 901;
 
 # ---- the pass --------------------------------------------------------------
 $t->post_ok('/start');
@@ -175,6 +192,39 @@ is $t2->body, 'admin ok', 'and through';
     $t3->get_ok('/login/totp');
     is $t3->header('Location'), '/login',
         'an expired pending is a dead end, not a stuck half-state';
+}
+
+# ---- replaying the cookie from before the failures (CVE-2026-78655) --------
+# Punk carries the session in a signed cookie unless the application declares
+# a store, and an earlier copy of a session stays valid until the expiry
+# sealed inside it. A client that keeps the cookie from before its failed
+# attempts and presents it again used to get the pending record back with its
+# counter, so the limit never fired. The count is not in the cookie now.
+{
+    my $row = T::Backend::Memory::_rows('users')->{7};
+    @{$row}{qw(totp_failed totp_failed_at totp_last_counter)} =
+        (0, undef, int(time / 30) - 1);
+
+    my $t5 = Punk::Test->new('T');
+    $t5->post_ok('/start');
+    my %saved = %{ $t5->{jar} };        # the cookie BEFORE any failure
+
+    for my $try (1 .. 3) {
+        $t5->post_ok('/login/totp', form => { code => '000000' });
+    }
+    is $t5->header('Location'), '/login', 'three failures cleared the pending';
+    is $row->{totp_failed}, 3, 'and the account carries the count';
+
+    %{ $t5->{jar} } = %saved;           # replay it
+
+    $t5->post_ok('/login/totp', form => { code => code_now() });
+    is $t5->status, 302, 'the replayed cookie does not re-open the challenge';
+    is $t5->header('Location'), '/login',
+        'a correct code on a replayed pending record is refused - the '
+      . 'counter is not in the state the client holds';
+
+    $t5->get_ok('/private/x');
+    isnt $t5->status, 200, 'and nothing was signed in';
 }
 
 # ---- an unsigned session at the step-up guard ------------------------------

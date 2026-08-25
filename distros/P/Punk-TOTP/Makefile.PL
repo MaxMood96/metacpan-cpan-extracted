@@ -92,7 +92,9 @@ delete $dep{LDFROM};
 {
     require File::Find;
     File::Find::find(sub {
-        return unless /\.pm\z/;
+        # every file, not only .pm: the punk_totp Sqitch project ships under
+        # lib/Punk/Plugin/TOTP/sqitch (a plan, a conf and SQL scripts)
+        return unless -f $_;
         (my $rel = $File::Find::name) =~ s{^lib/}{};
         $dep{PM}{$File::Find::name} = "\$(INST_LIB)/$rel";
     }, 'lib');

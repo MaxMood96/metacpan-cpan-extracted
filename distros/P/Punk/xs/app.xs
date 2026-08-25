@@ -1259,6 +1259,30 @@ databases(self)
     OUTPUT:
         RETVAL
 
+# auth_config(): the frozen auth configuration read back - a deep copy,
+# and undef when no `auth` keyword ran. (Not "# undef when ..." on a line of
+# its own: xsubpp reads a comment beginning with a directive name as the
+# directive, and `# undef` becomes an #undef in the generated C.)
+# The keyword is write-only otherwise, and
+# a plugin that answers "may this user act on this row"
+# (Punk::Plugin::Authorization) needs two things out of it: the `rank`
+# ladder, so a rank name it is given can be checked against the one
+# auth_guard uses rather than a second copy, and the `roles` hook, so it can
+# ask outside a guard - $c->stash->{auth}{roles} is only there when a guard
+# ran. The `databases` read-back next to it is the precedent.
+SV *
+auth_config(self)
+        SV *self
+    CODE:
+    {
+        HV *h = app_hv(aTHX_ self);
+        SV **a = hv_fetchs(h, K_AUTH, 0);
+        RETVAL = (a && *a && SvROK(*a))
+               ? app_deep_copy(aTHX_ *a) : newSV(0);
+    }
+    OUTPUT:
+        RETVAL
+
 # on_compile($code, $owner?): a callback for to_app, run before anything is
 # compiled and after every keyword has recorded - the moment a plugin that
 # registered above a `database` line needs, and the one Punk::Plugin::Queue

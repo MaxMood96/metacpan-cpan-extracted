@@ -34,7 +34,13 @@ for my $e (qw(sqlite pg mysql)) {
 }
 
 # ---- without Punk-Sqitch: an error, not a silence ------------------------------
-{
+# Only assertable where Punk-Sqitch is genuinely absent: the keyword's croak
+# is what a machine without it sees, and a machine with it installed cannot
+# be made to forget (the module would already be in %INC by the time any
+# @INC trick applied).
+SKIP: {
+    skip 'Punk-Sqitch is installed here, so its absence cannot be staged', 1
+        if eval { require Punk::Plugin::Sqitch; 1 };
     package NoSqitchApp;
     use Punk;
     session secret => 'x' x 32;
@@ -45,11 +51,19 @@ for my $e (qw(sqlite pg mysql)) {
 }
 
 # ---- with a stand-in Punk-Sqitch: the registration --------------------------------
+# A stand-in for the registration, so this needs nothing installed. When the
+# real Punk-Sqitch IS installed its `project` is replaced for the rest of
+# this file: what is under test is that `auth` calls it with the right
+# arguments, not what Punk-Sqitch then does with them.
 {
     package Punk::Plugin::Sqitch;
     our @PROJECTS;
-    sub project { my ($class, $app, $name, $dir, %o) = @_; push @PROJECTS, [ $app, $name, $dir, \%o ]; return }
-    $INC{'Punk/Plugin/Sqitch.pm'} = __FILE__;
+    # `once` as well as `redefine`: this glob is the only mention of
+    # Punk::Plugin::Sqitch::project in the file, and when the real module is
+    # not installed there is nothing else to mention it either.
+    no warnings qw(redefine once);
+    *project = sub { my ($class, $app, $name, $dir, %o) = @_; push @PROJECTS, [ $app, $name, $dir, \%o ]; return };
+    $INC{'Punk/Plugin/Sqitch.pm'} ||= __FILE__;
 }
 {
     package SqitchApp;

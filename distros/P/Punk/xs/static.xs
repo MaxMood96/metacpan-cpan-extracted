@@ -9,8 +9,10 @@ PROTOTYPES: DISABLE
 #
 # Options: max_age (seconds of freshness for a plain URL), cache_control (a
 # verbatim header value, overriding max_age), fingerprint (content-addressed
-# URLs, on by default) and dev (re-check digests against the filesystem;
-# defaults from PUNK_ENV, and the compiler passes the app's own env).
+# URLs, on by default), dev (re-check digests against the filesystem;
+# defaults from PUNK_ENV, and the compiler passes the app's own env), index
+# (the file a directory resolves to) and list (render a listing for a
+# directory that has no index).
 SV *
 app(class, dir, ...)
         SV *class
@@ -21,7 +23,8 @@ app(class, dir, ...)
         Stat_t st;
         HV *opts = NULL;
         SV **o;
-        SV *cc = NULL;
+        SV *cc = NULL, *index = NULL;
+        int list = 0;
         const char *d = SvPV_nolen(dir);
         /* fingerprinting is opt-in: it changes what a path MEANS - a URL
          * shaped like a fingerprint stops being a 404 and starts resolving
@@ -51,7 +54,8 @@ app(class, dir, ...)
 
         if (opts) {
             static const char *const known[] = {
-                "max_age", "cache_control", "fingerprint", "dev", NULL
+                "max_age", "cache_control", "fingerprint", "dev",
+                "index", "list", NULL
             };
             HE *he;
             hv_iterinit(opts);
@@ -68,6 +72,27 @@ app(class, dir, ...)
             if (o && *o) dev = SvTRUE(*o) ? 1 : 0;
             else dev = (getenv("PUNK_ENV")
                         && strEQ(getenv("PUNK_ENV"), "development")) ? 1 : 0;
+            /* `index => 1` is the spelling for "the usual one", so a mount
+             * that only wants directories to work does not have to name the
+             * file. A name with a separator in it would be a path, and a
+             * path is how a directory index turns into a way out of the
+             * directory - so it is refused here rather than guarded for on
+             * every request. */
+            o = hv_fetchs(opts, "index", 0);
+            if (o && *o && SvOK(*o)) {
+                if (!SvPOK(*o) && SvTRUE(*o)) index = newSVpvs("index.html");
+                else if (SvTRUE(*o)) {
+                    STRLEN il;
+                    const char *ip = SvPV_const(*o, il);
+                    if (!il || memchr(ip, '/', il) || memchr(ip, '\\', il)
+                        || memchr(ip, '\0', il))
+                        croak("Punk::Static: index must be a filename inside "
+                              "the directory, not a path");
+                    index = newSVpvn(ip, il);
+                }
+            }
+            o = hv_fetchs(opts, "list", 0);
+            if (o && *o) list = SvTRUE(*o) ? 1 : 0;
             /* cache_control is verbatim and wins; max_age is the spelling
              * that covers what almost everyone means by it */
             o = hv_fetchs(opts, "cache_control", 0);
@@ -85,7 +110,7 @@ app(class, dir, ...)
                    && strEQ(getenv("PUNK_ENV"), "development")) ? 1 : 0;
 
         cap = newAV();
-        av_extend(cap, PSC_DEV);
+        av_extend(cap, PSC_LIST);
         {   /* keep the directory without a trailing slash, so joining a
              * PATH_INFO (which always starts with one) cannot double it */
             STRLEN dlen;
@@ -104,6 +129,8 @@ app(class, dir, ...)
         (void)av_store(cap, PSC_CACHE,
             fingerprint ? newRV_noinc((SV *)newHV()) : newSV(0));
         (void)av_store(cap, PSC_DEV, dev ? newSViv(1) : newSV(0));
+        (void)av_store(cap, PSC_INDEX, index ? index : newSV(0));
+        (void)av_store(cap, PSC_LIST, list ? newSViv(1) : newSV(0));
         RETVAL = punk_closure(aTHX_ punk_static_cb, cap);
     }
     OUTPUT:

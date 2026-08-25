@@ -82,7 +82,7 @@ use strict;
 
 use Hash::SharedMem ();
 
-our $VERSION = "0.006";
+our $VERSION = "0.007";
 
 =head1 CLASS METHODS
 

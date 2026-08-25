@@ -14,9 +14,11 @@ use Template::Stencil;
 
 my $dir = File::Temp::tempdir(CLEANUP => 1);
 open my $fh, '>', "$dir/page.tmpl" or die $!;
+binmode $fh;
 print $fh '<p>{% name %}</p>';
 close $fh;
 open $fh, '>', "$dir/wrap.tmpl" or die $!;
+binmode $fh;
 print $fh '[{% content %}]';
 close $fh;
 

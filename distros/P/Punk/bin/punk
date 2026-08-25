@@ -27,13 +27,15 @@ punk - the Punk command line
     punk doctor                 # versions, C ABIs, application health
     punk console                # a REPL with the application compiled
     punk dev                    # Hyperman with restart-on-change
+    punk serve ./public         # a directory of files, no application
     punk help [command]         # generated from each command's declaration
 
 =head1 DESCRIPTION
 
-The command line for L<Punk> applications. Except for C<new>, every command
-finds the application by walking up from the current directory looking for
-F<app.psgi>, and takes the class from that file's C<< Class->to_app >>.
+The command line for L<Punk> applications. Except for C<new> and C<serve>,
+every command finds the application by walking up from the current directory
+looking for F<app.psgi>, and takes the class from that file's
+C<< Class->to_app >>.
 
 Help is generated from each command's declared options, so C<punk help X>
 and C<punk X --help> always match what the command actually accepts. Exit

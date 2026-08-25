@@ -4,7 +4,7 @@ use 5.010;
 use strict;
 use warnings;
 
-our $VERSION = '0.34';
+our $VERSION = '0.35';
 
 require XSLoader;
 XSLoader::load('Hyperman', $VERSION);
@@ -92,6 +92,40 @@ interfaces (F<xs/>).
 
 The event backend is chosen automatically (kqueue, io_uring, epoll, then poll) and can
 be forced with C<HYPERMAN_BACKEND>.
+
+B<Completion-mode reads.> On the io_uring backend the kernel is asked for each
+read up front instead of being waited on to say a socket is readable, so the
+bytes are already in the buffer when the loop hears about them and the read
+stops being a syscall of its own - it becomes part of the single batched
+submission each turn of the loop makes anyway. Measured over 2000 keep-alive
+requests on 50 connections:
+
+    readiness    read 10050  writev 10000  enter 222   2.02 syscalls/request
+    completion   read     0  writev 10000  enter 203   1.02 syscalls/request
+
+The remaining syscall is the C<writev> that sends the response.
+
+This is B<on by default wherever it is available>, which is the io_uring
+backend and only when that backend was asked for by name - nothing
+auto-selects it. C<< run(completion => 0) >> turns it off, and
+C<HYPERMAN_COMPLETION> does the same from the environment the way
+C<HYPERMAN_BACKEND> overrides the chooser; the C<run> option wins over the
+environment variable, being the more specific statement. C<<
+Hyperman::Loop->new('io_uring', completion => 0) >> is the loop-level
+spelling.
+
+TLS connections keep reading through OpenSSL, since the bytes on the socket
+are ciphertext. Every other backend is untouched: they do not offer the
+operation, the option is accepted and inert, and the loop reads for itself
+exactly as before.
+
+B<Fewer syscalls has not meant faster>, and it is worth saying so. On a
+virtualised Linux the same workload costs about 4.2us of server CPU per
+request under io_uring and about 2.9us under epoll, so epoll is ahead while
+issuing twice the syscalls. Completion mode is a clear improvement on
+io_uring in poll mode (roughly 4.7us to 4.2us) but it does not close that
+gap. io_uring stays off the auto-selection list until that is understood on
+real hardware.
 
 C<bus_slots> and C<bus_slot_size> answer two different complaints and it is
 worth knowing which is which: raise C<bus_slots> when a burst is outrunning a
@@ -332,6 +366,22 @@ B<SNI (multiple certificates).> C<tls_sni> maps hostnames to their own
 C<cert>/C<key>; the certificate is chosen from the TLS ServerName, falling
 back to C<tls_cert>/C<tls_key>. See L</tls_reload> for replacing that map
 while the server is running.
+
+B<Kernel TLS (kTLS).> Where the platform supports it, the record layer moves
+into the kernel once the handshake is done: the socket itself encrypts, so an
+HTTPS response takes the same C<writev> and C<sendfile> fast paths a plaintext
+one takes instead of copying through OpenSSL. Three things must agree - an
+OpenSSL built with C<enable-ktls> (C<< Hyperman->has_ktls >> reports whether
+the code was compiled in), a kernel with the TLS upper-layer protocol
+(Linux 4.13+ with C<CONFIG_TLS>, or FreeBSD), and a negotiated cipher the
+kernel can offload. Any of them declining is normal and costs nothing: the
+connection encrypts in userspace exactly as it always did.
+
+Because all three can decline silently, and a server that failed to offload
+looks precisely like one that succeeded, C<$env> carries C<SSL_KTLS> - C<1>
+when the kernel took the send side of I<that> connection, C<0> otherwise. It
+is the only way to confirm kTLS is doing anything, and worth checking once on
+any host where it is expected to be on.
 
 B<The library.> C<< Hyperman->tls_library >> returns the runtime TLS
 library banner (C<OpenSSL 3.0.13 30 Jan 2024>, C<LibreSSL 3.8.2>), or

@@ -18,6 +18,7 @@
 use strict;
 use vars   qw($VERSION);
 use warnings;
+no warnings qw(once);
 
 
 #  External modules
@@ -36,7 +37,6 @@ local $Data::Dumper::Sortkeys=1;
 
 #  PSGI modules we need
 #
-use Plack::Builder;
 use WebDyne::PSGI;
 use WebDyne::Constant;
 use WebDyne::PSGI::Constant;
@@ -44,7 +44,7 @@ use WebDyne::PSGI::Constant;
 
 #  Version Info, must be all one line for MakeMaker, CPAN.
 #
-$VERSION='3.021';
+$VERSION='3.023';
 
 
 #  Check for supporting modules
@@ -72,7 +72,8 @@ if (!caller || exists $ENV{PAR_TEMP}) {
     my %opt=(
         test    => 0,
         static  => 1,
-        index   => defined($ENV{'DOCUMENT_DEFAULT'}) ? $ENV{'DOCUMENT_DEFAULT'} : 1,
+        conf    => 1,
+        index   => defined($ENV{'DOCUMENT_DEFAULT'}) ? $ENV{'DOCUMENT_DEFAULT'} : 0,
         %{do(glob(sprintf('~/.%s.opt', basename(__FILE__)))) || {}}
     );
     if (delete $opt{'no_index'}) {
@@ -109,6 +110,7 @@ if (!caller || exists $ENV{PAR_TEMP}) {
         'no_index' => sub {
             $opt{'index'}=0
         },
+        'view_source|view-source!',
         'root|docroot|doc_root|doc-root|document_root|document-root:s',
         'env|E=s',
         'argv:s',
@@ -130,6 +132,7 @@ if (!caller || exists $ENV{PAR_TEMP}) {
 
     #  Dump options for debugging
     #
+    &view_source_apply(\%opt);
     die Dumper(\%opt) if $opt{'dump_opt'};
     
     
@@ -145,7 +148,13 @@ else {
     #
     my %opt=(
         root    => $ENV{'DOCUMENT_ROOT'} || $DOCUMENT_ROOT || fastcwd(),
-        index   => $ENV{'DOCUMENT_DEFAULT'} || $DOCUMENT_DEFAULT
+        index   => defined($ENV{'DOCUMENT_DEFAULT'})
+            ? $ENV{'DOCUMENT_DEFAULT'}
+            : defined($DOCUMENT_DEFAULT)
+                ? $DOCUMENT_DEFAULT
+                : 0,
+        static  => 1,
+        conf    => 1
     );
     return &build(\%opt);
     
@@ -159,62 +168,29 @@ else {
 sub build {
 
 
-    #  Build app code ref, options passed for builder
+    #  WebDyne::PSGI owns local config loading and middleware wrapping.
     #
     my $opt_hr=shift();
+    return WebDyne::PSGI->new(%{$opt_hr})->to_app();
+
+}
 
 
-    #  Read in local webdyne.conf.pl before middleware and app setup so
-    #  wrapper and external server loading use the same root config.
+sub view_source_apply {
+
+
+    #  Source viewing is an extra opt-in on top of built-in index handling.
     #
-    &local_constant_load($opt_hr->{'root'});
-
-
-    my $builder_or=Plack::Builder->new();
-    
-    
-    #  Adjust static service config var based on opts if
-    #  they exist
-    #
-    if (exists($opt_hr->{'static'})) {
-        $WEBDYNE_PSGI_STATIC=$opt_hr->{'static'};
+    my $opt_hr=shift();
+    if ($opt_hr->{'index'} && $opt_hr->{'view_source'}) {
+        $ENV{'WEBDYNE_INDEX_SOURCE_ENABLE'}=1;
+        $WebDyne::WEBDYNE_INDEX_SOURCE_ENABLE=1;
+        $WebDyne::Constant::Constant{'WEBDYNE_INDEX_SOURCE_ENABLE'}=1;
     }
-    
-    
-    #  Add in any middleware in config file
-    #
-    foreach my $middleware_ar (@{$WEBDYNE_PSGI_MIDDLEWARE}) {
-        my ($middleware, $middleware_opt_hr)=@{$middleware_ar};
-        
-        #  Skip static if not wanted
-        #
-        if ($middleware eq 'Static') {
-            next unless $WEBDYNE_PSGI_STATIC;
-        }
-        
-        
-        #  And code refs are run and given opt as first param
-        #
-        if (ref($middleware_opt_hr) eq 'CODE') {
-            $middleware_opt_hr=$middleware_opt_hr->($opt_hr);
-        }
-        
-        
-        #  Now add it
-        #
-        $builder_or->add_middleware($middleware, %{$middleware_opt_hr});
+    else {
+        $opt_hr->{'view_source'}=0;
     }
-    
-
-    #  Read in local webdyne.conf.pl
-    #
-    #&local_constant_load($opt_hr->{'root'});
-
-
-    #  Finally return as app code ref
-    #
-    return $builder_or->to_app(
-        WebDyne::PSGI->new(%{$opt_hr})->to_app())
+    return \undef;
 
 }
 
@@ -268,24 +244,6 @@ sub startup {
 }
 
 
-sub local_constant_load {
-
-
-    #  Read in local webdyne.conf.pl
-    #
-    my $root_dn=shift();
-    
-    
-    #  If root_dn is a file get dir name
-    #
-    if (-f $root_dn) {
-        $root_dn=(File::Spec->splitpath($root_dn))[1];
-    }
-    WebDyne::Constant->import(File::Spec->catfile($root_dn, sprintf('.%s', $WEBDYNE_CONF_FN)));
-
-}
-
-
 __END__
 
 =begin markdown
@@ -326,11 +284,19 @@ Wrapper options handled by `webdyne.psgi` itself:
 
 * **--index**
 
-    Enable or disable directory index handling. With the default enabled setting, `--index` uses WebDyne's built-in dynamic index page.
+    Enable directory index handling. With no value, `--index` uses WebDyne's built-in dynamic index page. Index handling is disabled by default.
 
 * **--index=FILE**
 
     Use `FILE` as the default document for directory requests instead of the built-in dynamic index page. Use the equals form so the document root argument is not consumed as the index value.
+
+* **--view-source**
+
+    Enable the built-in index page source viewer. This only takes effect when `--index` also enables WebDyne's built-in dynamic index page.
+
+* **--no-index**
+
+    Disable wrapper-managed index handling. This is the default unless `DOCUMENT_DEFAULT`, `~/.webdyne.psgi.opt`, or `--index` enables it.
 
 * **--root**
 
@@ -379,17 +345,29 @@ On macOS, if no `--port` option is passed through to `Plack::Runner`, the wrappe
 
 # EXAMPLES
 
-To run the script, use the following command for basic functionality and serving files from the /var/www/html directory. With default settings, index handling is enabled and the wrapper uses WebDyne's built-in dynamic index page.
+To run the script, use the following command for basic functionality and serving files from the /var/www/html directory. With default settings, wrapper-managed index handling is disabled.
 
 `webdyne.psgi /var/www/html`
 
-Disable wrapper-managed index handling and rely on the PSGI request layer's default document behaviour instead
+Enable WebDyne's built-in dynamic index page for local development/debugging
 
-`webdyne.psgi --no-index /var/www/html`
+`webdyne.psgi --index /var/www/html`
+
+Enable the built-in index page source viewer as an additional local development/debugging aid
+
+`webdyne.psgi --index --view-source /var/www/html`
 
 Use `home.psp` as the default document for directory requests
 
 `webdyne.psgi --index=home.psp /var/www/html`
+
+Persist index handling for local development by adding it to `~/.webdyne.psgi.opt`
+
+```perl
+{
+    index => 1,
+}
+```
 
 Start in production mode
 
@@ -413,7 +391,7 @@ This script is a frontend to the WebDyne PSGI stack. In addition to `Plack::Runn
 
 * **DOCUMENT_DEFAULT**
 
-    Supplies the default `index` value before `~/.webdyne.psgi.opt` and command-line options are applied. This means explicit CLI index options override the environment, and `~/.webdyne.psgi.opt` also overrides the environment. When the script is loaded by `plackup` or `starman` instead of run directly, the PSGI constant layer default is `app.psp`.
+    Supplies the default `index` value before `~/.webdyne.psgi.opt` and command-line options are applied. If unset, wrapper-managed index handling is disabled by default. Explicit CLI index options override the environment, and `~/.webdyne.psgi.opt` also overrides the environment. When the script is loaded by `plackup` or `starman` instead of run directly, the PSGI constant layer default is `app.psp` unless the wrapper supplies another value.
 
 * **PLACK_ENV**
 
@@ -498,7 +476,7 @@ Enable or disable PSGI static-file middleware.
 
 B<--index>
 
-Enable or disable directory index handling. With the default enabled setting, C<--index> uses WebDyne's built-in dynamic index page.
+Enable directory index handling. With no value, C<--index> uses WebDyne's built-in dynamic index page. Index handling is disabled by default.
 
 
 
@@ -507,6 +485,22 @@ Enable or disable directory index handling. With the default enabled setting, C<
 B<--index=FILE>
 
 Use C<FILE> as the default document for directory requests instead of the built-in dynamic index page. Use the equals form so the document root argument is not consumed as the index value.
+
+
+
+=item *
+
+B<--view-source>
+
+Enable the built-in index page source viewer. This only takes effect when C<--index> also enables WebDyne's built-in dynamic index page.
+
+
+
+=item *
+
+B<--no-index>
+
+Disable wrapper-managed index handling. This is the default unless C<DOCUMENT_DEFAULT>, C<~/.webdyne.psgi.opt>, or C<--index> enables it.
 
 
 
@@ -603,18 +597,28 @@ On macOS, if no C<--port> option is passed through to C<Plack::Runner>, the wrap
 
 =head1 EXAMPLES
 
-To run the script, use the following command for basic functionality and serving files from the /var/www/html directory. With default settings, index handling is enabled and the wrapper uses WebDyne's built-in dynamic index page.
+To run the script, use the following command for basic functionality and serving files from the /var/www/html directory. With default settings, wrapper-managed index handling is disabled.
 
 C<webdyne.psgi /var/www/html>
 
-Disable wrapper-managed index handling and rely on the PSGI request layer's default document behaviour instead
+Enable WebDyne's built-in dynamic index page for local development/debugging
 
-C<webdyne.psgi --no-index /var/www/html>
+C<webdyne.psgi --index /var/www/html>
+
+Enable the built-in index page source viewer as an additional local development/debugging aid
+
+C<webdyne.psgi --index --view-source /var/www/html>
 
 Use C<home.psp> as the default document for directory requests
 
 C<webdyne.psgi --index=home.psp /var/www/html>
 
+Persist index handling for local development by adding it to C<~/.webdyne.psgi.opt>
+
+
+ {
+     index => 1,
+ }
 Start in production mode
 
 C<webdyne.psgi --env production /var/www/html>
@@ -646,7 +650,7 @@ Supplies the document root when neither C<--root> nor a final non-option documen
 
 B<DOCUMENT_DEFAULT>
 
-Supplies the default C<index> value before C<~/.webdyne.psgi.opt> and command-line options are applied. This means explicit CLI index options override the environment, and C<~/.webdyne.psgi.opt> also overrides the environment. When the script is loaded by C<plackup> or C<starman> instead of run directly, the PSGI constant layer default is C<app.psp>.
+Supplies the default C<index> value before C<~/.webdyne.psgi.opt> and command-line options are applied. If unset, wrapper-managed index handling is disabled by default. Explicit CLI index options override the environment, and C<~/.webdyne.psgi.opt> also overrides the environment. When the script is loaded by C<plackup> or C<starman> instead of run directly, the PSGI constant layer default is C<app.psp> unless the wrapper supplies another value.
 
 
 

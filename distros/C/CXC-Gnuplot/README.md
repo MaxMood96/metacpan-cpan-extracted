@@ -1,0 +1,50 @@
+# NAME
+
+CXC::Gnuplot - An class based interface to Gnuplot control structures
+
+# VERSION
+
+version v0.29.3
+
+# DESCRIPTION
+
+**CXC::Gnupot** is a collection of classes which model Gnuplot control
+structures.  It does not invoke Gnuplot itself, just provides a means
+of organizing the constructs in Gnuplot which are used to plot.
+
+Current recommendation is to use this in cahoots with [Gnuplot::Builder](https://metacpan.org/pod/Gnuplot%3A%3ABuilder)
+
+This module is not useful in and of itself. **CXC::Gnuplot** uses an
+explicit versioned API.  The current API is `V1`, and is available
+via [CXC::Gnuplot::V1](https://metacpan.org/pod/CXC%3A%3AGnuplot%3A%3AV1).  Earlier versions _may_ receive bug fixes,
+but only if they do not impact the API.
+
+# INTERNALS
+
+# SUPPORT
+
+## Bugs
+
+Please report any bugs or feature requests to bug-cxc-gnuplot@rt.cpan.org  or through the web interface at: [https://rt.cpan.org/Public/Dist/Display.html?Name=CXC-Gnuplot](https://rt.cpan.org/Public/Dist/Display.html?Name=CXC-Gnuplot)
+
+## Source
+
+Source is available at
+
+    https://codeberg.org/CXC-Optics/p5-CXC-Gnuplot
+
+and may be cloned from
+
+    https://codeberg.org/CXC-Optics/p5-CXC-Gnuplot.git
+
+# AUTHOR
+
+Diab Jerius <djerius@cfa.harvard.edu>
+
+# COPYRIGHT AND LICENSE
+
+This software is Copyright (c) 2024 by Smithsonian Astrophysical Observatory.
+
+This is free software, licensed under:
+
+    The GNU General Public License, Version 3, June 2007

@@ -255,6 +255,13 @@ typedef struct psf_src {
     UV          size;
     UV          mtime;
     int         has_mtime;     /* scalar sources only via the option   */
+    /* The rest of the caller's stat, so the descriptor cache can tell
+     * "the same path" from "the same FILE" without a syscall of its own.
+     * has_id is 0 for a caller that did not stat (an in-memory source, or
+     * one that built psf_src by hand), and then the cache is not consulted -
+     * an unverifiable descriptor is worse than an open. */
+    UV          dev, ino;
+    int         has_id;
 } psf_src;
 
 typedef struct psf_opts {
@@ -430,7 +437,26 @@ static SV *psf_respond(pTHX_ HV *env, psf_src *src, psf_opts *opt) {
         if (is_head)
             body = NULL;                             /* headers, no body */
         else if (src->path) {
-            PerlIO *fp = PerlIO_open(src->path, "rb");
+            /* The content cache first: open + read + close is about two
+             * thirds of a small static request, and a hit does none of them.
+             * It validates against the stat the caller has already done, so
+             * consulting it costs no syscall. NULL means "read it yourself"
+             * - too large, unreadable, or not worth holding - never "the
+             * file is missing". */
+            PerlIO *fp;
+            /* Not for a RANGE. A 206 body is a Punk::SendFile::Reader - an
+             * object with getline/close - and callers read it as one. Slicing
+             * the cached bytes instead would hand back a plain arrayref and
+             * break that contract, for a request shape that is rare (seeking
+             * a video, resuming a download) and that streaming already suits.
+             * The whole-file 200 is what static traffic actually is, and what
+             * was measured. */
+            SV *cached = (src->has_id && !partial)
+                ? pfc_get(aTHX_ src->path, src->plen,
+                          src->dev, src->ino, src->mtime, src->size)
+                : NULL;
+            if (cached) { body = cached; goto have_body; }
+            fp = PerlIO_open(src->path, "rb");
             if (!fp) {
                 SvREFCNT_dec((SV *)hdr);
                 return NULL;
@@ -455,6 +481,7 @@ static SV *psf_respond(pTHX_ HV *env, psf_src *src, psf_opts *opt) {
         else
             body = newSVpvn(src->bytes + (partial ? off : 0), bl);
 
+    have_body:
         return psf_wrap(aTHX_ partial ? 206 : 200, hdr, body);
     }
 }
@@ -551,7 +578,7 @@ static SV *ps_serve_file_opt(pTHX_ HV *env, const char *file, STRLEN flen,
     STRLEN ael = 0;
     int i;
     PERL_UNUSED_ARG(is_head);
-    if (PerlLIO_stat(file, &st) < 0 || !S_ISREG(st.st_mode)) return NULL;
+    if (!pfc_stat(aTHX_ file, flen, &st) || !S_ISREG(st.st_mode)) return NULL;
     Zero(&s, 1, psf_src);
     Zero(&o, 1, psf_opts);
     s.path      = file;
@@ -559,6 +586,11 @@ static SV *ps_serve_file_opt(pTHX_ HV *env, const char *file, STRLEN flen,
     s.size      = (UV)st.st_size;
     s.mtime     = (UV)st.st_mtime;
     s.has_mtime = 1;
+    /* the rest of the stat we just did, for the descriptor cache to validate
+     * against - no extra syscall, this one was already paid for */
+    s.dev       = (UV)st.st_dev;
+    s.ino       = (UV)st.st_ino;
+    s.has_id    = 1;
     o.ranges    = 1;
     if (fo) o.cache_control = fo->cache_control;
 
@@ -577,7 +609,12 @@ static SV *ps_serve_file_opt(pTHX_ HV *env, const char *file, STRLEN flen,
             if (!psf_accepts(aTHX_ ae, ael, enc->token, enc->tlen)) continue;
             memcpy(sib, file, flen);
             memcpy(sib + flen, enc->suffix, enc->slen + 1);
-            if (PerlLIO_stat(sib, &sst) < 0 || !S_ISREG(sst.st_mode)) continue;
+            /* Through the cache, which remembers ABSENCE too: every browser
+             * sends Accept-Encoding, so on a site with no build step this
+             * probe asks for a .br and a .gz that have never existed, on
+             * every single request. */
+            if (!pfc_stat(aTHX_ sib, flen + enc->slen, &sst)
+                || !S_ISREG(sst.st_mode)) continue;
             /* A sibling older than its source is a stale build artefact.
              * Serving it would ship last week's CSS forever, silently,
              * which is the failure nobody thinks to look for. */
@@ -591,6 +628,11 @@ static SV *ps_serve_file_opt(pTHX_ HV *env, const char *file, STRLEN flen,
             s.plen  = flen + enc->slen;
             s.size  = (UV)sst.st_size;
             s.mtime = (UV)sst.st_mtime;
+            /* the sibling is a different file, so it carries its own identity
+             * - reusing the original's would key the cache on one path and
+             * validate it against another */
+            s.dev   = (UV)sst.st_dev;
+            s.ino   = (UV)sst.st_ino;
 
             /* an encoding-tagged ETag, so an identity client and this one
              * never collide in a shared cache even if the two files should

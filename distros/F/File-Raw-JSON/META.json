@@ -29,14 +29,14 @@
          "requires" : {
             "ExtUtils::Depends" : "0.404",
             "ExtUtils::MakeMaker" : "0",
-            "File::Raw" : "0.12",
-            "Tie::OrderedHash" : "0.02"
+            "File::Raw" : "0.15",
+            "Tie::OrderedHash" : "0.05"
          }
       },
       "runtime" : {
          "requires" : {
-            "File::Raw" : "0.12",
-            "Tie::OrderedHash" : "0.02",
+            "File::Raw" : "0.15",
+            "Tie::OrderedHash" : "0.05",
             "perl" : "5.010000"
          }
       },
@@ -47,6 +47,6 @@
       }
    },
    "release_status" : "stable",
-   "version" : "0.07",
+   "version" : "0.08",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

@@ -11,7 +11,7 @@ use base 'Perl::Critic::Policy';
 use PPI::Document;
 use PPIx::QuoteLike;
 
-our $VERSION = '0.0.7';
+our $VERSION = '0.0.8';
 
 Readonly::Scalar my $DESC  => q{Only use arrows for methods};
 Readonly::Scalar my $EXPL  => undef;

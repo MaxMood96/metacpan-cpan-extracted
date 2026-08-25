@@ -1,0 +1,200 @@
+package CXC::Gnuplot::V1::CoordValue;
+
+# ABSTRACT: A Coordinate Value, with optional coordinate system
+
+use v5.38;
+use Object::Pad 0.821;
+
+our $VERSION = 'v0.29.3';
+
+class CXC::Gnuplot::V1::CoordValue : isa(CXC::Gnuplot::V1::Base)
+  does( CXC::Gnuplot::V1::Role::Clone );
+
+no namespace::clean;
+
+use CXC::Gnuplot::V1::Types -lexical => 'CoordSys', 'CoordValue';
+use CXC::Gnuplot::V1::Util
+  -lexical => 'pvalidate',
+  'to_hash_r',
+  ;
+
+use experimental 'builtin';
+use builtin 'true';
+use Ref::Util 'is_plain_hashref', 'is_plain_arrayref', 'is_ref';
+
+use namespace::clean;
+
+use overload q{""} => \&stringify, bool => sub { true }, fallback => true;
+
+
+
+
+
+
+
+#<<< no tidy
+field $value    :param :reader;
+field $coordsys :param :reader = undef;
+field $string;
+#>>>
+
+ADJUST {
+
+    pvalidate( value    => LiteralDataValue => \$value );
+    pvalidate( coordsys => CoordSys, \$coordsys );
+
+    $string = defined( $coordsys ) ? "$coordsys $value" : $value . q{};
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+method BUILDARGS : common (@args ) {
+    return ( value    => $args[0] ) if @args == 1 && !is_ref( $args[0] );
+    return ( coordsys => $args[0][0], value => $args[0][1] )
+      if @args == 1 && is_plain_arrayref( $args[0] ) && $args[0]->@* == 2;
+    return $class->SUPER::BUILDARGS( @args );
+}
+
+
+
+
+
+
+
+
+method to_hash {
+
+    to_hash_r( {
+        value => $value->value,
+        ( defined $coordsys ? ( coordsys => $coordsys ) : () ),
+    } );
+}
+
+
+
+
+
+
+
+
+
+method stringify {
+    return $string;
+}
+
+
+1;
+
+__END__
+
+=pod
+
+=for :stopwords Diab Jerius Smithsonian Astrophysical Observatory coordsys
+
+=head1 NAME
+
+CXC::Gnuplot::V1::CoordValue - A Coordinate Value, with optional coordinate system
+
+=head1 VERSION
+
+version v0.29.3
+
+=head1 OBJECT ATTRIBUTES
+
+=head2 value
+
+=head2 coordsys
+
+=head1 CONSTRUCTORS
+
+=head2 new
+
+  $object = $class->new( @args )
+
+Construct an object from the supplied arguments.
+
+Arguments may be supplied as a name/value list or as a single plain hash
+reference. As shorthand, a single scalar is used as the C<value> parameter:
+
+  $object = $class->new( $value )
+
+A two-element array reference supplies C<coordsys> and C<value>, respectively:
+
+  $object = $class->new( [ $coordsys, $value ] )
+
+=head1 METHODS
+
+=head2 to_hash
+
+Returns a hashref whose contents can be passed to the constructor to
+generate a duplicate of the object.
+
+=head2 stringify
+
+   $str = $value->stringify;
+
+Return a Gnuplot safe representation of the value.
+
+=head1 INTERNALS
+
+=for Pod::Coverage DOES
+META
+BUILDARGS
+clone
+
+=head1 SUPPORT
+
+=head2 Bugs
+
+Please report any bugs or feature requests to bug-cxc-gnuplot@rt.cpan.org  or through the web interface at: L<https://rt.cpan.org/Public/Dist/Display.html?Name=CXC-Gnuplot>
+
+=head2 Source
+
+Source is available at
+
+  https://codeberg.org/CXC-Optics/p5-CXC-Gnuplot
+
+and may be cloned from
+
+  https://codeberg.org/CXC-Optics/p5-CXC-Gnuplot.git
+
+=head1 SEE ALSO
+
+Please see those modules/websites for more information related to this module.
+
+=over 4
+
+=item *
+
+L<CXC::Gnuplot|CXC::Gnuplot>
+
+=back
+
+=head1 AUTHOR
+
+Diab Jerius <djerius@cfa.harvard.edu>
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is Copyright (c) 2024 by Smithsonian Astrophysical Observatory.
+
+This is free software, licensed under:
+
+  The GNU General Public License, Version 3, June 2007
+
+=cut

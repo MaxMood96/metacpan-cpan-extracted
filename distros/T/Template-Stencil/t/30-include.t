@@ -11,6 +11,7 @@ my $dir = File::Temp::tempdir(CLEANUP => 1);
 sub put {
     my ($name, $content) = @_;
     open my $fh, '>', "$dir/$name" or die "$dir/$name: $!";
+    binmode $fh;
     print $fh $content;
     close $fh;
 }

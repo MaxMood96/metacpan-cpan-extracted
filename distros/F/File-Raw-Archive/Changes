@@ -1,5 +1,14 @@
 Revision history for File-Raw-Archive
 
+0.03    2026-08-24
+        - Fix the module failing to load on perls older than 5.22 with
+          "Undefined symbol: OpHAS_SIBLING".
+        - Extraction no longer fails when the destination filesystem
+          cannot hold extended attributes. 
+        - Windows/MSVC: export the archive plugin registry from
+          Archive.dll. 
+        - Require File::Raw 0.15 for the matching export fix.
+
 0.02    2026-07-04
         - Archive.xs: PERL_VERSION_GE compat shim for Perls older than
           5.33.3 (macro was missing; caused compile failure on 5.28 and

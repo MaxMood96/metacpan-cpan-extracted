@@ -815,10 +815,17 @@ _sniff(bytes)
         mPUSHu((UV)h);
     }
 
-IV
+# Address of the qr_abi table (qr_abi.h). A consumer XS module fetches this
+# once at boot, INT2PTRs it, and checks ->version before using it. Not part
+# of the public Perl API.
+#
+# Unsigned, not IV: where the loader maps this object decides the sign bit.
+# A 32-bit perl above 0x7fffffff, or illumos putting shared objects up at
+# 0xfffffd7f..., would hand back a negative number from PTR2IV.
+UV
 _abi_ptr()
   CODE:
-    RETVAL = PTR2IV(&qc_abi);
+    RETVAL = PTR2UV(&qc_abi);
   OUTPUT:
     RETVAL
 

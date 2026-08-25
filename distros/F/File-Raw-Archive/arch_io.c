@@ -353,6 +353,23 @@ archive_gz_sink_free(archive_gz_sink_t *s)
  * Cross-platform xattr application
  * ============================================================ */
 
+/* A destination filesystem that cannot hold extended attributes is not an
+ * extraction failure: it is the same situation as a platform with no xattr
+ * API at all, which this function already reports as success. tmpfs is the
+ * common case - it rejects user.* with EOPNOTSUPP before Linux 6.6 - and it
+ * showed up as a smoker FAIL extracting into /tmp. */
+#if defined(ARCHIVE_HAVE_XATTR) || defined(ARCHIVE_HAVE_EXTATTR)
+static int
+xattr_unsupported(int err)
+{
+    if (err == ENOTSUP) return 1;
+#ifdef EOPNOTSUPP
+    if (err == EOPNOTSUPP) return 1;
+#endif
+    return 0;
+}
+#endif
+
 int
 archive_apply_xattrs(int fd, const ArchiveXattr *xattrs, size_t n)
 {
@@ -365,10 +382,14 @@ archive_apply_xattrs(int fd, const ArchiveXattr *xattrs, size_t n)
         memcpy(keybuf, xattrs[i].key, xattrs[i].key_len);
         keybuf[xattrs[i].key_len] = '\0';
 # if defined(ARCHIVE_DARWIN_XATTR)
-        if (fsetxattr(fd, keybuf, xattrs[i].value, xattrs[i].value_len, 0, 0) < 0) return -1;
+        if (fsetxattr(fd, keybuf, xattrs[i].value, xattrs[i].value_len, 0, 0) < 0) {
 # else
-        if (fsetxattr(fd, keybuf, xattrs[i].value, xattrs[i].value_len, 0) < 0) return -1;
+        if (fsetxattr(fd, keybuf, xattrs[i].value, xattrs[i].value_len, 0) < 0) {
 # endif
+            /* Nothing on this filesystem will take an xattr; stop trying. */
+            if (xattr_unsupported(errno)) return 0;
+            return -1;
+        }
     }
     return 0;
 #elif defined(ARCHIVE_HAVE_EXTATTR)
@@ -385,7 +406,10 @@ archive_apply_xattrs(int fd, const ArchiveXattr *xattrs, size_t n)
             name = keybuf + 7;
             ns = EXTATTR_NAMESPACE_SYSTEM;
         }
-        if (extattr_set_fd(fd, ns, name, xattrs[i].value, xattrs[i].value_len) < 0) return -1;
+        if (extattr_set_fd(fd, ns, name, xattrs[i].value, xattrs[i].value_len) < 0) {
+            if (xattr_unsupported(errno)) return 0;
+            return -1;
+        }
     }
     return 0;
 #else

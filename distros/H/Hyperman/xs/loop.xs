@@ -9,10 +9,27 @@ new(class, ...)
     CODE:
     {
         const char *bname = (items > 1 && SvOK(ST(1))) ? SvPV_nolen(ST(1)) : NULL;
-        hm_loop *loop = hm_loop_new(aTHX_ bname);
+        hm_loop *loop;
+        int i;
         PERL_UNUSED_VAR(class);
+        loop = hm_loop_new(aTHX_ bname);
         if (!loop) croak("Hyperman::Loop: no usable event backend%s%s",
                          bname ? " named " : "", bname ? bname : "");
+        /* Key/value options after the backend name, so the loop takes the
+         * same settings the server does rather than only reading the
+         * environment. Odd counts croak instead of silently dropping one. */
+        if (items > 2) {
+            if ((items - 2) % 2)
+                croak("Hyperman::Loop->new: odd number of options");
+            for (i = 2; i + 1 < items; i += 2) {
+                const char *key = SvPV_nolen(ST(i));
+                SV *val = ST(i + 1);
+                if (strEQ(key, "completion"))
+                    loop->completion =
+                        (SvTRUE(val) && loop->be->submit_recv) ? 1 : 0;
+                else croak("Hyperman::Loop->new: unknown option '%s'", key);
+            }
+        }
         loop->perl_owned = 1;
         RETVAL = hm_loop_to_sv(aTHX_ loop);
     }

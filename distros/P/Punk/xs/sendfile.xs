@@ -79,6 +79,24 @@ send_file(self, src, ...)
             s.mtime = (mtime_opt && SvOK(mtime_opt))
                           ? (UV)SvUV(mtime_opt) : (UV)st.st_mtime;
             s.has_mtime = 1;
+            /* NOT eligible for the content cache, deliberately - has_id
+             * stays 0 here.
+             *
+             * send_file's body is a FILEHANDLE, and that is not merely how it
+             * happens to be built: other features read it as a fact about the
+             * response. Idempotency treats a filehandle body as unrecordable,
+             * because recording it would consume what is being sent, and
+             * ConditionalGet declines to hash one for the same reason. Serving
+             * these from memory instead would silently make those responses
+             * recordable and replayable - a change to what two plugins do,
+             * arrived at through a cache, which is the last place anyone would
+             * look for it.
+             *
+             * The static mounts are where the measured cost was (19us a hit,
+             * two thirds of it syscalls) and they set has_id for themselves in
+             * ps_serve_file_opt. A download through send_file is usually large
+             * and usually cold, which is the case streaming is already right
+             * for. */
         }
 
         resp = psf_respond(aTHX_ env, &s, &o);

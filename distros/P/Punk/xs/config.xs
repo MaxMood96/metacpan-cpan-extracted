@@ -13,36 +13,34 @@ load(class, ...)
     CODE:
     {
         punk_config *cfg;
-        SV *file = NULL, *env = NULL, *mode_sv = NULL;
+        SV *file = NULL, *env = NULL;
         SV *merged = NULL;
         const char *stem, *ext;
         STRLEN flen;
         char layer[2048];
-        int i, mode = PC_SECRETS_WARN;
+        int i;
 
         for (i = 1; i + 1 < items; i += 2) {
             STRLEN kl;
             const char *k = SvPV_const(ST(i), kl);
             if      (kl == 4 && memEQ(k, "file", 4))    file    = ST(i + 1);
             else if (kl == 3 && memEQ(k, "env", 3))     env     = ST(i + 1);
-            else if (kl == 7 && memEQ(k, "secrets", 7)) mode_sv = ST(i + 1);
+            /* Named rather than left to the generic message below, because
+             * this one used to work: whether a password sits in the file in
+             * plaintext is the person writing the file's decision, so there
+             * is no longer a mode to put it in. */
+            else if (kl == 7 && memEQ(k, "secrets", 7))
+                croak("Punk::Config->load: the 'secrets' option is gone - "
+                      "a plaintext value in the file is no longer second-"
+                      "guessed. Drop the option; secret(), $env, $file and "
+                      "$exec are unchanged");
             else croak("Punk::Config->load: unknown option '%.*s'",
                        (int)kl, k);
         }
         if (!(file && SvOK(file)))
             croak("Punk::Config->load: a file is required");
-        if (mode_sv && SvOK(mode_sv)) {
-            const char *m = SvPV_nolen(mode_sv);
-            mode = strEQ(m, "strict") ? PC_SECRETS_STRICT
-                 : strEQ(m, "warn")   ? PC_SECRETS_WARN
-                 : strEQ(m, "off")    ? PC_SECRETS_OFF : -1;
-            if (mode < 0)
-                croak("Punk::Config: secrets must be strict, warn or off "
-                      "(not '%s')", m);
-        }
 
         Newxz(cfg, 1, punk_config);
-        cfg->mode    = mode;
         cfg->file    = newSVsv(file);
         cfg->secrets = newHV();
         cfg->files   = newAV();

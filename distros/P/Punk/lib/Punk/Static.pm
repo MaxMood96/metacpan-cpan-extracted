@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk ();
 
-our $VERSION = '0.31';
+our $VERSION = '0.33';
 
 1;
 
@@ -21,6 +21,10 @@ Punk::Static - serving files from a directory
 
     # a freshness lifetime for plain URLs
     static '/static' => 'root/static', max_age => 3600;
+
+    # a tree of index.html files - a docs site, a generated manual
+    static '/docs' => 'root/docs', index => 'index.html';
+    static '/files' => 'root/files', list => 1;
 
     # content-addressed URLs, opt-in
     static '/static' => 'root/static', fingerprint => 1;
@@ -48,7 +52,36 @@ returns is the date it was given.
 
 A path containing a C<..> segment or a NUL byte is a B<404>, not
 something to normalise: a request carrying one is not asking for a file
-this serves. Anything that is not a regular file is a 404 too.
+this serves. Anything that is not a regular file is a 404 too, unless it
+is a directory and L</index> or L</list> has given the mount something to
+do with one.
+
+=head2 Directories
+
+A directory is not a file, so on its own it is a 404. C<index> names a
+file inside it to serve in its place, which is what makes a tree of
+F<index.html> files - a documentation site, anything generated - servable
+at all:
+
+    static '/docs' => 'root/docs', index => 'index.html';
+
+Both spellings of the URL answer: C</docs/guide/> and C</docs/guide> name
+the same directory, and both serve F<guide/index.html> B<where they were
+asked for>, with no redirect between them. A C<301> to the trailing-slash
+form would spend a round trip to say something the server already knows,
+and a page whose relative links work from one spelling works from the
+other.
+
+C<list> renders what a directory holds when it has no index file. The
+listing is C<no-store>: it is stale the moment anything in the directory
+changes, and unlike one file's bytes there is no cheap validator for
+"what this directory holds". Filenames are escaped for both the link text
+and the C<href>, so a file called C<< <script>.txt >> is a link and not a
+script.
+
+C<index> is tried before C<list>: a directory holding an index file is
+that file's URL and nothing else. With neither option the directory is
+the 404 it always was.
 
 =head2 Freshness
 
@@ -136,6 +169,23 @@ what a path means - a URL shaped like a fingerprint stops being a 404
 and starts resolving to another file - and a mount should not begin
 doing that because it was upgraded. Until it is on, L</asset> hands back
 the URL it was given, so a template written against it works either way.
+
+=item index
+
+The file a directory resolves to - C<< index => 'index.html' >>, or
+C<< index => 1 >> for that name without spelling it. B<Off> unless asked
+for, so a mount serving assets does not start answering for its own
+directories.
+
+It is a filename, not a path: a value with C</> or C<\> in it is refused
+at boot rather than guarded for on every request, because a path is how a
+directory index turns into a way out of the directory.
+
+=item list
+
+Render a listing for a directory that has no index file. B<Off> unless
+asked for - what a directory holds is not usually something a site means
+to publish.
 
 =item dev
 

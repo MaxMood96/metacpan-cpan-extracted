@@ -26,6 +26,11 @@ run(class, ...)
 
         memset(&cfg, 0, sizeof(cfg));
         cfg.log_fd = -1;
+        /* -1 is "the caller said nothing", which is NOT the same as
+         * completion => 0. The memset above would otherwise read as an
+         * explicit request to turn completion-mode reads off on every
+         * server that never mentions them. */
+        cfg.completion = -1;
         memset(&dfl, 0, sizeof(dfl));
         dfl.host = "0.0.0.0";
         dfl.port = 8080;
@@ -42,6 +47,11 @@ run(class, ...)
             else if (strEQ(key, "header_timeout")) cfg.header_t = SvNV(val);
             else if (strEQ(key, "max_pipeline"))   cfg.max_pipe = (int)SvIV(val);
             else if (strEQ(key, "reuseport"))      cfg.reuseport = SvTRUE(val) ? 1 : 0;
+            /* Completion-mode reads. On by default wherever the backend can
+             * do them - which is io_uring, and only when it was asked for by
+             * name - so this is here to turn them OFF. Inert everywhere else:
+             * a backend that cannot submit reads simply ignores it. */
+            else if (strEQ(key, "completion"))     cfg.completion = SvTRUE(val) ? 1 : 0;
             else if (strEQ(key, "deny"))           { if (SvOK(val) && SvROK(val)) cfg.deny = val; }
             else if (strEQ(key, "deny_capacity"))  cfg.deny_cap = (unsigned)SvUV(val);
             else if (strEQ(key, "rate_capacity"))  cfg.rate_cap = (unsigned)SvUV(val);
@@ -289,6 +299,22 @@ has_tls(...)
     CODE:
         PERL_UNUSED_VAR(items);
         RETVAL = hm_tls_available();
+    OUTPUT:
+        RETVAL
+
+# True when the kernel-TLS code was BUILT IN - an OpenSSL with enable-ktls.
+# It says nothing about whether kTLS engages: that needs a kernel with the
+# tls ULP and an offloadable cipher, is decided per connection at handshake,
+# and falls back to ordinary OpenSSL writes whenever it does not happen.
+int
+has_ktls(...)
+    CODE:
+        PERL_UNUSED_VAR(items);
+#ifdef HM_HAVE_KTLS
+        RETVAL = 1;
+#else
+        RETVAL = 0;
+#endif
     OUTPUT:
         RETVAL
 

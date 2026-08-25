@@ -149,6 +149,12 @@ render(self, c, template, data = &PL_sv_undef, ...)
              * chain is absent unless somebody registered one, so the ordinary
              * render pays one hv_fetch that misses. */
             if (have_c) pv_before_render(aTHX_ c, template, d);
+            /* A hook is arbitrary Perl, and every call it makes moves the
+             * real stack - so the SP this scope has held since the top of
+             * the function is stale. Pushing the engine call onto it writes
+             * over whatever is there now, which surfaces as "Out of memory
+             * during stack extend" somewhere else entirely. */
+            SPAGAIN;
             PUSHMARK(SP);
             EXTEND(SP, 4);
             PUSHs(engine);
@@ -228,6 +234,22 @@ render(self, c, template, data = &PL_sv_undef, ...)
         av_push(resp, newSViv(status));
         av_push(resp, newRV_noinc((SV *)headers));
         av_push(resp, newRV_noinc((SV *)bodyav));
+
+        /* SPAGAIN before the push, and it is not ceremony.
+         *
+         * Everything between here and the top of this XSUB - the engine's
+         * render, _status, _headers, and any before_render hook - is Perl,
+         * and Perl that grows the value stack REALLOCATES it. `sp` has been
+         * a C pointer into the old buffer since the PPCODE prologue, so
+         * pushing on it writes into freed memory and the caller gets an
+         * empty list back: a handler returning nothing, which the dispatcher
+         * serialises as `null` with a 200.
+         *
+         * It only bites when something in the middle grows the stack far
+         * enough to realloc - a first render that opens a database will,
+         * a second one will not - which is why it looks intermittent and is
+         * not. */
+        SPAGAIN;
         mXPUSHs(newRV_noinc((SV *)resp));
     }
 

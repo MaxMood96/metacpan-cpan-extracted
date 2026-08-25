@@ -3,7 +3,7 @@ package PAGI;
 use strict;
 use warnings;
 
-our $VERSION = '0.002002';
+our $VERSION = '0.002003';
 
 1;
 
@@ -170,9 +170,55 @@ C<PAGI-Server> distribution and the application toolkit in C<PAGI-Tools>. The
 project repository is L<https://github.com/jjn1056/pagi>; its history holds the
 original combined distribution from before the split.
 
-Beyond the core distributions, other projects build on PAGI -- for example
-L<Thunderhorse>, an asynchronous web framework. See the project repository for
-an up-to-date list of conforming servers, frameworks, and tools.
+=head2 Built on PAGI
+
+Beyond the core distributions, a growing set of projects target PAGI
+directly. A sampling, roughly from full frameworks down to focused tools:
+
+=over 4
+
+=item L<Thunderhorse>
+
+An asynchronous web framework built for PAGI from the ground up.
+
+=item L<PAGI::FastAPI>
+
+A FastAPI-style asynchronous microframework: C<Future::AsyncAwait>-native
+handlers, type-safe request validation via L<Type::Tiny>, automatic OpenAPI
+documentation, WebSocket support, and dependency injection, with concerns
+like CORS, rate limiting, and authentication composed as middleware and
+route dependencies.
+
+=item L<WebDyne>
+
+A long-standing server-page framework rendering F<.psp> files with embedded
+Perl; it runs under Apache/mod_perl, PSGI, or PAGI as its application
+runtime.
+
+=item L<PAGI::Nano>
+
+A compact micro-framework front door over C<PAGI-Tools>, aimed at demos and
+small applications: routing, middleware, lifecycle, static files, streaming,
+WebSocket, and SSE, arranged so a whole small app fits on one screen and
+reads top to bottom.
+
+=item L<Uniform::HTMX::PAGI>
+
+Bridges L<Uniform::HTMX> into native PAGI web-context routines, with
+chainable helpers (for example C<res_retarget>, C<res_trigger>) for shaping
+HTMX response headers from PAGI applications.
+
+=back
+
+See the project repository for an up-to-date list of conforming servers,
+frameworks, and tools -- and if you have built something on PAGI, open a
+pull request adding it here.
+
+=head2 Announcements
+
+Release and specification announcements are posted to the C<pagi-announce>
+mailing list at L<https://groups.google.com/g/pagi-announce>, and to the
+project repository at L<https://github.com/jjn1056/pagi>.
 
 =head1 INSTALLATION AND BACKWARD COMPATIBILITY
 
@@ -246,6 +292,13 @@ Process startup/shutdown lifecycle events
 
 =head1 UTF-8 HANDLING OVERVIEW
 
+Applications built on the C<PAGI-Tools> toolkit rarely touch encoding at
+all: L<PAGI::Request> decodes on the way in and L<PAGI::Response> encodes on
+the way out, so handler code works purely in Perl character strings. The
+rules below govern the B<raw interface> underneath -- the contract that
+toolkits, frameworks, and servers implement so that applications never have
+to.
+
 PAGI scopes provide decoded text where mandated by the spec and preserve raw
 bytes where the application must decide. Broad guidance:
 
@@ -271,10 +324,38 @@ C<Content-Length> based on byte length.
 
 =back
 
-Raw PAGI example with explicit UTF-8 handling:
+Here is the same application written both ways. This is how it looks with
+the toolkit, which is how most application code should look -- no C<Encode>
+in sight:
+
+    use PAGI::Request;
+    use PAGI::Response;
+    use Future::AsyncAwait;
+
+    async sub app {
+        my ($scope, $receive, $send) = @_;
+        my $req  = PAGI::Request->new($scope, $receive);
+        my $text = $req->query_param('text') // '';
+
+        await PAGI::Response->new($scope)
+            ->status(200)
+            ->text("You sent: $text")
+            ->respond($send);
+    }
+
+C<query_param> URL-decodes (including C<+> as space) and UTF-8-decodes with
+replacement characters for invalid bytes (pass C<< strict => 1 >> to raise
+instead); C<text> encodes the body as UTF-8, sets
+C<text/plain; charset=utf-8>, and computes an authoritative
+C<Content-Length> from the encoded bytes.
+
+And here is the raw-interface equivalent -- what a toolkit like the one
+above is doing on the application's behalf. It is shown so the underlying
+contract is explicit, not as a recommended application style:
 
     use Future::AsyncAwait;
     use Encode qw(encode decode);
+    use URI::Escape qw(uri_unescape);
 
     async sub app {
         my ($scope, $receive, $send) = @_;
@@ -282,11 +363,13 @@ Raw PAGI example with explicit UTF-8 handling:
         # Handle lifespan if your server sends it; otherwise fail on unsupported types.
         die "Unsupported type: $scope->{type}" unless $scope->{type} eq 'http';
 
-        # Decode query param manually (percent-decoded bytes)
+        # Decode a query param by hand: split, '+' to space, percent-decode
+        # to bytes, then UTF-8 decode.
         my $text = '';
-        if ($scope->{query_string} =~ /text=([^&]+)/) {
-            my $bytes = $1; $bytes =~ s/%([0-9A-Fa-f]{2})/chr hex $1/eg;
-            $text = decode('UTF-8', $bytes, Encode::FB_DEFAULT);  # replacement for invalid
+        if ($scope->{query_string} =~ /(?:^|&)text=([^&]*)/) {
+            (my $bytes = $1) =~ tr/+/ /;
+            $bytes = uri_unescape($bytes);
+            $text  = decode('UTF-8', $bytes, Encode::FB_DEFAULT);  # replacement for invalid
         }
 
         my $body = "You sent: $text";

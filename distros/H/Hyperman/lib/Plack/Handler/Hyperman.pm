@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use Hyperman ();
 
-our $VERSION = '0.33';
+our $VERSION = '0.35';
 
 sub new {
     my ($class, %args) = @_;
@@ -31,7 +31,7 @@ sub run {
                   : defined $self->{max_workers} ? $self->{max_workers}
                   : 0),                            # 0 = ncpu
         map { defined $self->{$_} ? ($_ => $self->{$_}) : () }
-            qw(reuseport max_requests_per_worker shutdown_grace affinity
+            qw(reuseport completion max_requests_per_worker shutdown_grace affinity
                idle_timeout header_timeout max_pipeline http2 redirect_https
                compress compress_min_length compress_level max_body
                access_log deny_capacity rate_capacity
@@ -80,7 +80,7 @@ in one server - see L<Hyperman/"Multiple listeners">.
 B<Every> other C<< Hyperman->run >> option is passed through when given
 and left alone when not, so a server started by C<plackup> behaves
 identically to the same options passed to C<run> directly:
-C<reuseport>, C<max_requests_per_worker>, C<shutdown_grace>, C<affinity>,
+C<reuseport>, C<completion>, C<max_requests_per_worker>, C<shutdown_grace>, C<affinity>,
 C<idle_timeout>, C<header_timeout>, C<max_pipeline>, C<http2>,
 C<redirect_https>, C<max_body>, C<access_log>, C<deny>,
 C<deny_capacity>, C<rate_capacity>, C<bus_slots>, C<bus_slot_size>,

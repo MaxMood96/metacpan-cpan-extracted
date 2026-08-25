@@ -1,5 +1,8 @@
 Revision history for Tie-OrderedHash
 
+0.05    2026-08-24
+        - Windows/MSVC: export the C ABI from OrderedHash.dll
+
 0.04	2026-07-05
 	- Add unit test for UTF8 keys and fix bugs
 

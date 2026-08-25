@@ -43,6 +43,18 @@ if ($^O eq 'linux') {
         $uring_inc  = " $cflags -DHM_HAVE_LIBURING";
         $uring_libs = $libs;
         print "Found liburing: io_uring backend enabled.\n";
+        # Completion-mode reads need IORING_OP_RECV, which arrived in kernel
+        # 5.6 / liburing 0.6. It CANNOT be tested with #ifdef: it is an enum
+        # member, not a macro, so the preprocessor never sees it and a guard
+        # written that way silently compiles the whole feature out while
+        # every test still passes. Ask the compiler instead.
+        if (probe_uring_recv($cflags || '', $libs)) {
+            $uring_inc .= " -DHM_HAVE_URING_RECV";
+            print "  ...IORING_OP_RECV present: completion-mode reads "
+                . "available (opt in with HYPERMAN_COMPLETION=1).\n";
+        } else {
+            print "  ...no IORING_OP_RECV: completion-mode reads compiled out.\n";
+        }
     } else {
         print "liburing not found: io_uring backend disabled "
             . "(epoll/poll remain available; install liburing-dev to enable it).\n";
@@ -80,10 +92,63 @@ my ($tls_inc, $tls_libs) = ('', '');
         $tls_inc  = " $cflags -DHM_HAVE_OPENSSL";
         $tls_libs = " $libs";
         print "Found OpenSSL: TLS/HTTPS support enabled.\n";
+        # Kernel TLS: the record layer moves into the kernel after the
+        # handshake, which gives an HTTPS connection back the writev and
+        # sendfile fast paths a plaintext one already has. Needs BOTH an
+        # OpenSSL built with enable-ktls AND, at runtime, a kernel with the
+        # tls ULP - so this only says the CODE can be built. Whether it
+        # ENGAGES is decided per connection, and everything falls back to
+        # ordinary OpenSSL writes when it does not.
+        if (probe_ktls($cflags || '', $libs)) {
+            $tls_inc .= " -DHM_HAVE_KTLS";
+            print "  ...OpenSSL supports kernel TLS: kTLS code compiled in.\n";
+        } else {
+            print "  ...no kernel TLS in this OpenSSL: kTLS compiled out.\n";
+        }
     } else {
         print "OpenSSL not found: TLS/HTTPS support disabled "
             . "(install libssl-dev to enable it).\n";
     }
+}
+
+# Does this OpenSSL know how to hand the record layer to the kernel?
+#
+# The #error lines are the whole probe. BIO_get_ktls_send is a MACRO that
+# expands to a constant 0 when OpenSSL was built without kTLS, so a probe that
+# merely calls it compiles and links happily against an OpenSSL that cannot do
+# this at all - it would confirm the feature rather than test for it. Asking
+# the preprocessor directly is the only form that can answer no.
+sub probe_ktls {
+    my ($cflags, $libs) = @_;
+    my $dir = "hm_ktls_probe_$$";
+    mkdir $dir or return 0;
+    my ($src, $bin, $ok) = ("$dir/probe.c", "$dir/probe", 0);
+    if (open my $fh, '>', $src) {
+        print $fh <<'C';
+#include <openssl/ssl.h>
+#include <openssl/bio.h>
+#ifdef OPENSSL_NO_KTLS
+#error "OpenSSL built without kernel TLS"
+#endif
+#ifndef SSL_OP_ENABLE_KTLS
+#error "no SSL_OP_ENABLE_KTLS"
+#endif
+int main(int argc, char **argv) {
+    SSL_CTX *c = SSL_CTX_new(TLS_server_method());
+    (void)argv;
+    if (c) { SSL_CTX_set_options(c, SSL_OP_ENABLE_KTLS); SSL_CTX_free(c); }
+    /* referenced so it must compile and link, guarded so it never runs */
+    if (argc > 99) return BIO_get_ktls_send(NULL);
+    return 0;
+}
+C
+        close $fh;
+        my $cc = $Config{cc} || 'cc';
+        $ok = system("$cc $cflags $src -o $bin $libs >$DEVNULL 2>&1") == 0;
+    }
+    unlink $src, $bin;
+    rmdir $dir;
+    return $ok;
 }
 
 sub probe_openssl {
@@ -317,6 +382,39 @@ C
 }
 
 # Compile+link a tiny liburing program to confirm header and lib are usable.
+# Can this liburing submit a recv? See the note at the call site for why this
+# is a compile probe and not an #ifdef.
+sub probe_uring_recv {
+    my ($cflags, $libs) = @_;
+    my $dir = "hm_urecv_probe_$$";
+    mkdir $dir or return 0;
+    my ($src, $bin, $ok) = ("$dir/probe.c", "$dir/probe", 0);
+    if (open my $fh, '>', $src) {
+        print $fh <<'C';
+#include <liburing.h>
+int main(void) {
+    struct io_uring ring;
+    struct io_uring_sqe *sqe;
+    char buf[16];
+    if (io_uring_queue_init(8, &ring, 0) != 0) return 1;
+    sqe = io_uring_get_sqe(&ring);
+    if (sqe) {
+        io_uring_prep_recv(sqe, 0, buf, sizeof(buf), 0);
+        sqe->user_data = (unsigned long long)IORING_OP_RECV;
+    }
+    io_uring_queue_exit(&ring);
+    return 0;
+}
+C
+        close $fh;
+        my $cc = $Config{cc} || 'cc';
+        $ok = system("$cc $cflags $src -o $bin $libs >$DEVNULL 2>&1") == 0;
+    }
+    unlink $src, $bin;
+    rmdir $dir;
+    return $ok;
+}
+
 sub probe_liburing {
     my $dir  = "hm_uring_probe_$$";
     mkdir $dir or return 0;

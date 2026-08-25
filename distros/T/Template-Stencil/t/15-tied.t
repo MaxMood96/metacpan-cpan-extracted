@@ -28,6 +28,7 @@ my $dir = File::Temp::tempdir(CLEANUP => 1);
 sub tmpl {
     my ($name, $body) = @_;
     open my $fh, '>', File::Spec->catfile($dir, "$name.tmpl") or die $!;
+    binmode $fh;
     print $fh $body;
     close $fh;
 }

@@ -63,6 +63,7 @@ t/33-worker-start.t
 t/34-perl-arena.t
 t/35-bus.t
 t/36-bus-wakeup.t
+t/37-ktls.t
 t/lib/HMTest.pm
 t/manifest.t
 t/pod-coverage.t

@@ -1,7 +1,9 @@
 ---
 abstract: 'Internationalizing Domain Names in Applications (UTS #46)'
 author:
-  - 'Claus Färber <CFAERBER@cpan.org>'
+  - 'Claus Färber'
+  - 'Robert Rothenberg <perl@rhizomnic.com>'
+  - 'Paul Johnson <paul@pjcj.net>'
 build_requires:
   ExtUtils::CBuilder: '0'
   Test::More: '0'
@@ -9,7 +11,7 @@ build_requires:
 configure_requires:
   Module::Build: '0.42'
 dynamic_config: 1
-generated_by: 'Module::Build version 0.4224, CPAN::Meta::Converter version 2.150010'
+generated_by: 'Module::Build version 0.4234, CPAN::Meta::Converter version 2.150010'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -25,6 +27,6 @@ requires:
 resources:
   bugtracker: https://rt.cpan.org/Public/Dist/Display.html?Name=Net-IDN-Encode
   homepage: https://metacpan.org/release/Net-IDN-Encode
-  repository: http://github.com/cfaerber/Net-IDN-Encode
-version: '2.500'
-x_serialization_backend: 'CPAN::Meta::YAML version 0.018'
+  repository: http://github.com/robrwo/Net-IDN-Encode
+version: '2.502'
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

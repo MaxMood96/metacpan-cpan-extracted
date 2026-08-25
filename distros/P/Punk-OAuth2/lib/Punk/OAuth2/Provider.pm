@@ -6,7 +6,7 @@ use warnings;
 
 use Punk::OAuth2;   # the XS core installs this package's methods
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 
 1;

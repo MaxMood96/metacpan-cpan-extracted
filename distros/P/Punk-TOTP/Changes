@@ -1,5 +1,20 @@
 Revision history for Punk-TOTP
 
+0.05    2026-08-25
+        - SECURITY (CVE-2026-78619): totp_use_recovery compared the row's
+          user_id with the challenged user's numerically, so identifiers with
+          no leading digits all coerced to 0 and compared equal 
+        - SECURITY (CVE-2026-78655): the challenge route counted failed
+          attempts in the session, which without a session store is a signed
+          cookie the client can replay from before its failures. The count
+          moves to the user row, as totp_failed and totp_failed_at, and
+          belongs to the account rather than the session.
+        - ADDS: attempt_window (default 900), how long a failed attempt
+          counts for.
+        - The punk_totp Sqitch change adds the two columns.
+        - ADDS: plugin 'TOTP' => { sqitch => 1 } ships the five columns as
+          the Sqitch project punk_totp 
+
 0.04    2026-08-23
         - Lower the min perl from 5.16 to 5.10, matching QR::Code and Punk.
 

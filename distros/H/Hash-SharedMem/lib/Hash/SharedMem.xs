@@ -1635,7 +1635,7 @@ static int THX_mmap_mg_free(pTHX_ SV *sv, MAGIC *mg)
 	PERL_UNUSED_THX();
 #if QWITH_DUP
 	if(unlikely(threadrc_dec((word*)mg->mg_ptr))) return 0;
-	Safefree(mg->mg_ptr);
+	free(mg->mg_ptr);
 #endif /* QWITH_DUP */
 	PERL_UNUSED_ARG(mg);
 	addr = SvPVX(sv);
@@ -1693,7 +1693,19 @@ static SV *THX_mmap_as_sv(pTHX_ int fd, word len, bool writable)
 	{
 		word *rcp;
 		MAGIC *mg;
-		Newxz(rcp, 1, word);
+		/*
+		 * The last reference to this refcount word can be dropped
+		 * by any thread sharing the mapping, not necessarily this
+		 * one, so it must not be allocated through Perl's own
+		 * (per-interpreter-tracked) memory allocator: see dirref_t
+		 * for the same requirement on the same kind of object.
+		 */
+		rcp = malloc(sizeof(word));
+		if(unlikely(!rcp)) {
+			errno = ENOMEM;
+			return NULL;
+		}
+		*rcp = 0;
 		mg = sv_magicext(mapsv, NULL, PERL_MAGIC_ext,
 				(MGVTBL*)&mmap_mgvtbl, (char*)rcp, 0);
 		mg->mg_flags |= MGf_DUP;

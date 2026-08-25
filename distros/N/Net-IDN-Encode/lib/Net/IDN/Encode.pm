@@ -6,7 +6,7 @@ use strict;
 use utf8;
 use warnings;
 
-our $VERSION = "2.500";
+our $VERSION = "2.502";
 $VERSION = eval $VERSION;
 
 use Carp;
@@ -329,11 +329,15 @@ at).
 
 =head1 AUTHOR
 
-Claus FE<auml>rber <CFAERBER@cpan.org>
+Claus FE<auml>rber
+
+Currently maintained by Robert Rothenberg <perl@rhizomnic.com> and Paul Johnson <paul@pjcj.net>.
 
 =head1 LICENSE
 
-Copyright 2007-2014 Claus FE<auml>rber.
+Copyright 2007-2018 Claus FE<auml>rber.
+
+Parts copyright 2026 Robert Rothenberg <perl@rhizomnic.com> and Paul Johnson <paul@pjcj.net>.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.

@@ -19,12 +19,18 @@
 #define HM_EV_WRITE  0x2
 #define HM_EV_TIMER  0x4
 #define HM_EV_SIGNAL 0x8
+/* A COMPLETION, not a readiness: the read the core asked for has already
+ * happened and the bytes are in the buffer it supplied. Only a backend that
+ * implements submit_recv ever produces these. */
+#define HM_EV_RECV   0x10
 
-/* one normalized readiness event out of the backend */
+/* one normalized event out of the backend - readiness, or a completion */
 typedef struct {
     int      kind;   /* HM_EV_* */
     int      fd;     /* READ/WRITE: the fd; SIGNAL: signo */
     void    *udata;  /* TIMER: the watcher registered with add_timer */
+    int      res;    /* RECV: bytes read, 0 = EOF, <0 = -errno */
+    uint64_t token;  /* RECV: whatever the core passed to submit_recv */
 } hm_event;
 
 /* Backend interface: add($fd,$mask) / modify / remove /
@@ -49,6 +55,33 @@ struct hm_backend {
     /* timeout < 0 waits forever; returns count or -1 (errno) */
     int  (*wait)      (hm_backend *, hm_event *out, int max, double timeout);
     void (*destroy)   (hm_backend *);
+
+    /* ---- optional: completion-based receive ----------------------------
+     *
+     * NULL on a readiness backend, which is all of them but io_uring - the
+     * core then reads for itself exactly as it always has, and none of this
+     * is reachable. The whole point of the vtable staying a superset is that
+     * kqueue, epoll, poll and wsapoll are not touched by any of it.
+     *
+     * submit_recv asks for ONE read of up to len bytes into buf, delivered
+     * later as an HM_EV_RECV carrying `token` back. The buffer must stay put
+     * and untouched until that completion arrives - the kernel writes into it
+     * whenever it likes.
+     *
+     * `token` is opaque here on purpose. The core puts an fd-plus-generation
+     * in it, because a completion can outlive the connection that asked for
+     * it: the fd may be closed and REUSED before the kernel gets round to
+     * it, and a bare fd would then deliver another connection's bytes to
+     * whoever now holds that number.
+     *
+     * Returns 0 if submitted, -1 if not (the core falls back to reading).
+     *
+     * cancel_recv drops an in-flight read at close. It is best-effort: a
+     * completion may already be on its way, which is what the generation in
+     * the token is for. */
+    int  (*submit_recv)(hm_backend *, int fd, void *buf, size_t len,
+                        uint64_t token);
+    void (*cancel_recv)(hm_backend *, int fd);
 };
 
 hm_backend *hm_backend_kqueue_new(void);

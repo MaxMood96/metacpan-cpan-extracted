@@ -7,7 +7,7 @@ use warnings;
 our $VERSION;
 
 BEGIN {
-    $VERSION = '0.31';
+    $VERSION = '0.33';
     require XSLoader;
     XSLoader::load('Punk', $VERSION);
 }
@@ -74,8 +74,9 @@ C<punk doctor> reports the environment and C ABIs, C<punk config check>
 resolves the configuration and its secrets, and C<punk dev> serves with
 restart-on-change. C<punk generate controller|model> adds to an existing
 application, C<punk test> runs its suite, and C<punk secret> mints key
-material for the session config. See L<Punk::Generate> and
-L<Punk::Command>.
+material for the session config. C<punk serve ./public> is the odd one
+out - a directory of files over HTTP, with no application anywhere near
+it. See L<Punk::Generate> and L<Punk::Command>.
 
 The generated test drives the app through L<Punk::Test>: an in-process
 client with a cookie jar and chained assertions, so sessions, CSRF,
@@ -686,6 +687,7 @@ route table. In C<punk.yml> the block becomes a mapping:
     static '/static' => 'root/static';
     static '/static' => 'root/static', max_age => 3600;
     static '/static' => 'root/static', fingerprint => 1;
+    static '/docs'   => 'root/docs',   index => 'index.html';
 
 Serve files from a directory; see L<Punk::Static>.
 
@@ -709,6 +711,37 @@ win is a build step's, paid once, so this needs no zlib and costs one
 C<stat>. A sibling older than its source is ignored rather than served
 stale, and C<Vary: Accept-Encoding> is on every response from the mount
 whether or not one was used.
+
+A directory is a 404 on its own. C<index> names the file it resolves to -
+which is what makes a tree of F<index.html> files servable - and answers
+for both C</docs/guide> and C</docs/guide/> where they were asked for,
+with no redirect between them. C<list> renders a listing for a directory
+that has no index file. Both are off unless asked for.
+
+Small files are held in memory per worker after their first read, so a hit
+does no file syscall at all - the syscalls were two thirds of the cost of
+serving one. Files above half a megabyte, and C<Range> requests, stream from
+disk as they always did.
+
+Two things are cached, and they keep different promises.
+
+The B<content> is exact. It is re-read whenever the file's inode,
+modification time or size changes, so publishing a new file by any ordinary
+means - a rename into place, an install, a build step - is picked up at once.
+The only case it cannot see is a file rewritten IN PLACE that keeps both its
+modification time and its exact size.
+
+The B<stat> is held for one second, which is also how long a change can go
+unnoticed: within that second the file is not looked at, so a file edited and
+reloaded may serve its old bytes once. C<PUNK_STATIC_STAT_TTL> sets the
+window, and C<PUNK_STATIC_STAT_TTL=0> removes it - every request stats, the
+content cache still applies, and the result is exactly correct at most of the
+speed. C<PUNK_NO_STATIC_FILE_CACHE=1> turns off both.
+
+The same cache remembers that a file is B<absent>, which is what makes the
+precompressed-sibling lookup free: every browser sends C<Accept-Encoding>, so
+without it every request would go looking for a C<.br> and a C<.gz> that most
+sites have never had.
 
 =head2 favicon
 
@@ -775,7 +808,7 @@ mounted. A docs path the spec already declares croaks at boot.
 =head2 config
 
     config 'config/punk.yml';
-    config 'config/punk.yml', env => 'production', secrets => 'strict';
+    config 'config/punk.yml', env => 'production';
 
 Load YAML configuration and apply it. Blocks that mirror a DSL keyword
 register for real, so deployment configuration needs no code change:
@@ -804,8 +837,8 @@ B<Secrets never belong in the file.> A value written
 C<< { $env: NAME } >>, C<< { $file: PATH } >> or C<< { $exec: [...] } >>
 is resolved at boot from outside it; C<< $app->config >> shows
 C<[redacted]> in its place and C<< $app->secret('database.password') >>
-reaches the real thing. A plaintext value under a secret-shaped key
-warns by default (C<< secrets => 'strict' >> refuses to start). See
+reaches the real thing. Whether a value is written into the file in
+plaintext instead is the decision of whoever writes the file. See
 L<Punk::Config>.
 
 YAML parsing is one L<YAML::XS> call per file; it is loaded only when

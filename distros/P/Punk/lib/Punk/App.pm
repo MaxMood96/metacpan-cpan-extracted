@@ -8,7 +8,7 @@ use Punk::Router::Scope;
 use Punk::Context;
 use Punk::Static;
 
-our $VERSION = '0.31';
+our $VERSION = '0.33';
 
 # The boot hook compile() probes just before the state hash freezes
 # (xs/compile.xs). The framework's own extras live here; a subclass that
@@ -61,8 +61,8 @@ C<route>, C<under>, C<api>, C<docs>, C<static>, C<mount>, C<websocket>,
 C<sse>, C<session>, C<logging>, C<views>, C<database>, C<model_class>, C<hook>,
 C<middleware>, C<on_error>, C<on_not_found>, C<helper>, C<plugin>,
 C<config>, C<secret>, C<host>, C<favicon>. Two read back rather than
-record: C<databases> and, with no argument, C<host>. C<on_compile>
-registers a callback for C<to_app>.
+record: C<databases>, C<auth_config> and, with no argument, C<host>.
+C<on_compile> registers a callback for C<to_app>.
 
 C<< $app->host >> with no argument reads the declared origin back (undef
 when the application never declared one), which is how a plugin defaults
@@ -86,6 +86,16 @@ connection options of the application it is installed in. Credentials
 included, since this is the application's own registrar and a plugin that
 deploys schema needs them. The registrar's other methods record; this one
 reads, the way C<host> reads back with no argument.
+
+=head2 auth_config
+
+    my $cfg = $app->auth_config;    # { model, fields, rank, roles, ... } | undef
+
+The frozen L<Punk::Auth> configuration read back, a deep copy, or C<undef>
+when no C<auth> keyword ran. The C<rank> ladder and the C<roles> hook are
+what a plugin deciding "may this user act on this row" needs, and it needs
+them from here rather than from an option of its own: two ladders, one on
+the plugin and one on C<auth_guard>, drift.
 
 =head2 on_compile
 

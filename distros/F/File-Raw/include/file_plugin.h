@@ -24,6 +24,29 @@
 #include "EXTERN.h"
 #include "perl.h"
 
+/*
+ * Windows has no global symbol namespace: a function is only reachable
+ * from a dependent DLL if the defining DLL exports it. GNU toolchains
+ * get that wholesale from --export-all-symbols (see Makefile.PL), but
+ * MSVC exports nothing beyond the boot XSUB unless each function says
+ * so, and consumers then fail to link with
+ *
+ *     error LNK2001: unresolved external symbol _file_register_plugin
+ *
+ * FILE_RAW_BUILDING is defined only while building Raw.dll itself; every
+ * consumer sees the same declarations as dllimport. Elsewhere - and on
+ * the GNU toolchains, which already work - this expands to nothing.
+ */
+#if defined(_MSC_VER)
+#  ifdef FILE_RAW_BUILDING
+#    define FILE_RAW_API __declspec(dllexport)
+#  else
+#    define FILE_RAW_API __declspec(dllimport)
+#  endif
+#else
+#  define FILE_RAW_API
+#endif
+
 /* Phase identifiers. A plugin only has to implement the phases it cares
  * about; unimplemented phases are NULL function pointers and any caller
  * that requests them gets a croak. */
@@ -84,13 +107,13 @@ typedef struct FilePlugin {
 /* Register a plugin. Returns 1 on success, 0 if a plugin with the same
  * name is already registered (use file_unregister_plugin first), -1 on
  * invalid input (NULL plugin, NULL/empty name). */
-int file_register_plugin(pTHX_ const FilePlugin *plugin);
+FILE_RAW_API int file_register_plugin(pTHX_ const FilePlugin *plugin);
 
 /* Remove a plugin by name. Returns 1 if found and removed, 0 if not. */
-int file_unregister_plugin(pTHX_ const char *name);
+FILE_RAW_API int file_unregister_plugin(pTHX_ const char *name);
 
 /* Look up a plugin by name. Returns the registered struct or NULL. */
-const FilePlugin *file_lookup_plugin(pTHX_ const char *name);
+FILE_RAW_API const FilePlugin *file_lookup_plugin(pTHX_ const char *name);
 
 /* ============================================
    Dispatch helpers used by File::Raw XSUBs
@@ -104,19 +127,19 @@ const FilePlugin *file_lookup_plugin(pTHX_ const char *name);
    ============================================ */
 
 /* READ phase: bytes -> transformed SV. NULL return means cancelled. */
-SV*  file_plugin_dispatch_read  (pTHX_ HV *opts, const char *path, SV *bytes);
+FILE_RAW_API SV*  file_plugin_dispatch_read  (pTHX_ HV *opts, const char *path, SV *bytes);
 
 /* WRITE phase: payload -> bytes SV. NULL return means cancelled. */
-SV*  file_plugin_dispatch_write (pTHX_ HV *opts, const char *path, SV *payload);
+FILE_RAW_API SV*  file_plugin_dispatch_write (pTHX_ HV *opts, const char *path, SV *payload);
 
 /* STREAM phase: opens path, reads in chunks, feeds plugin which emits
  * records via cb. Returns &PL_sv_yes on success, NULL on cancel. */
-SV*  file_plugin_dispatch_stream(pTHX_ HV *opts, const char *path, SV *cb);
+FILE_RAW_API SV*  file_plugin_dispatch_stream(pTHX_ HV *opts, const char *path, SV *cb);
 
 /* RECORD phase: invokes plugin->record once with a single pre-built
  * record. Returns the record value the plugin emitted (caller-mortal-
  * ised) or NULL on cancel. */
-SV*  file_plugin_dispatch_record(pTHX_ HV *opts, const char *path, SV *record);
+FILE_RAW_API SV*  file_plugin_dispatch_record(pTHX_ HV *opts, const char *path, SV *record);
 
 /* ============================================
    Variadic-XSUB option parsing helper
@@ -127,7 +150,7 @@ SV*  file_plugin_dispatch_record(pTHX_ HV *opts, const char *path, SV *record);
    (no extra args). The HV always has 'plugin' key after this returns
    (helper croaks otherwise) so dispatch helpers can rely on it.
    ============================================ */
-HV*  file_plugin_build_opts(pTHX_ SV **stack, int start, int items,
+FILE_RAW_API HV*  file_plugin_build_opts(pTHX_ SV **stack, int start, int items,
                             const char *fn_name);
 
 #endif /* FILE_PLUGIN_H */

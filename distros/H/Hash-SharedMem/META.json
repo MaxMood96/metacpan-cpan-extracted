@@ -72,6 +72,6 @@
          "web" : "https://rt.cpan.org/Public/Dist/Display.html?Name=Hash-SharedMem"
       }
    },
-   "version" : "0.006",
+   "version" : "0.007",
    "x_serialization_backend" : "JSON::PP version 4.18"
 }
