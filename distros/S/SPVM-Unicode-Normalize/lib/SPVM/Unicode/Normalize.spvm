@@ -2,7 +2,7 @@
 # MIT License
 
 class Unicode::Normalize {
-  version "0.010";
+  version "0.011";
   
   use Resource::Utf8proc;
   

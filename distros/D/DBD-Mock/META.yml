@@ -12,7 +12,7 @@ build_requires:
 configure_requires:
   Module::Build::Tiny: '0.035'
 dynamic_config: 0
-generated_by: 'Minilla/v3.1.6, CPAN::Meta::Converter version 2.150005'
+generated_by: 'Minilla/v3.1.29, CPAN::Meta::Converter version 2.150010'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -31,7 +31,7 @@ no_index:
 provides:
   DBD::Mock:
     file: lib/DBD/Mock.pm
-    version: '1.59'
+    version: '1.60'
   DBD::Mock::Pool:
     file: lib/DBD/Mock/Pool.pm
   DBD::Mock::Pool::db:
@@ -51,17 +51,18 @@ provides:
 requires:
   DBI: '1.3'
   List::Util: '1.27'
-  perl: '5.008001'
+  perl: v5.12.0
 resources:
   bugtracker: https://gitlab.com/scrapheap/DBD-Mock/issues
   homepage: https://gitlab.com/scrapheap/DBD-Mock
-  repository: git://gitlab.com/scrapheap/DBD-Mock.git
-version: '1.59'
+  repository: https://gitlab.com/scrapheap/DBD-Mock.git
+version: '1.60'
 x_authority: cpan:JLCOOPER
 x_contributors:
   - 'Bernhard Graf <GRAF@cpan.org>'
   - 'Chisel <CHISEL@cpan.org>'
   - 'Dave Rolsky <DROLSKY@cpan.org>'
+  - 'Erik Huelsmann <ehuels@gmail.com>'
   - 'Frédéric Brière <FBRIERE@cpan.org>'
   - 'Gines R <ginesr@gmail.com>'
   - 'Max Carey <MHC@cpan.org>'

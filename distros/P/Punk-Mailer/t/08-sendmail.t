@@ -61,12 +61,24 @@ my %msg  = (to => 'Alice <a@example.com>', cc => 'c@example.com', bcc => 'b@exam
 }
 
 {
+    # a body too big for the pipe buffer, so the write is certain to hit
+    # EPIPE - the exit status still has to win, or the exec failure comes
+    # back as a broken pipe with no code
     my $m = Punk::Mailer->new(transport => 'sendmail', from => 'ops@example.com',
                               sendmail => { command => [ "$dir/no-such-command" ] });
-    my $r = $m->send(\%msg);
+    my $r = $m->send({ %msg, text => ('x' x 200_000) . "\n" });
     is($r->status, 'failed', 'a command that cannot run is failed');
     is($r->code, 127, '  with 127');
     like($r->message, qr/not found or not executable/, '  and the hint');
+}
+
+{
+    # a command that both stops reading and exits non-zero: the status wins
+    my $m = Punk::Mailer->new(transport => 'sendmail', from => 'ops@example.com',
+                              sendmail => { command => [ $^X, '-e', 'close STDIN; exit 3' ] });
+    my $r = $m->send({ %msg, text => ('x' x 200_000) . "\n" });
+    is($r->code, 3, 'the exit status beats the broken pipe');
+    like($r->message, qr/exited 3/, '  and the message says so');
 }
 
 {

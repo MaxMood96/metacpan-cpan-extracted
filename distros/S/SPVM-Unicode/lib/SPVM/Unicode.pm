@@ -1,6 +1,6 @@
 package SPVM::Unicode;
 
-our $VERSION = "0.057";
+our $VERSION = "0.058";
 
 1;
 
@@ -12,7 +12,7 @@ SPVM::Unicode - Unicode Utilities
 
 =head1 Description
 
-Unicode class in L<SPVM> has unicode utilities.
+Unicode class in L<SPVM> provides unicode utilities.
 
 =head1 Usage
 

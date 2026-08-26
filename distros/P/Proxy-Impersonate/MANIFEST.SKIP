@@ -1,0 +1,15 @@
+^\.git/
+(^|/)\.gitignore$
+^\.tmp/
+^blib/
+^Makefile$
+^Makefile\.old$
+^pm_to_blib$
+^MYMETA\.
+^docs/
+^xt/spike-
+~$
+^\.github/
+^README\.md$
+^Proxy-Impersonate-.*\.tar\.gz$
+^MANIFEST\.bak$

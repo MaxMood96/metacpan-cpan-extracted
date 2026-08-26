@@ -1,0 +1,72 @@
+{
+   "abstract" : "High-performance Berkeley DB (DB_File) flat-file database engine",
+   "author" : [
+      "Maruf Cetin <marufcetin@gmail.com>"
+   ],
+   "dynamic_config" : 1,
+   "generated_by" : "ExtUtils::MakeMaker version 7.68, CPAN::Meta::Converter version 2.150010",
+   "license" : [
+      "artistic_2"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "AmberDB",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "inc"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "File::Temp" : "0",
+            "FindBin" : "0",
+            "Test::More" : "0.98"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "Carp" : "0",
+            "DB_File" : "0",
+            "Encode" : "0",
+            "Fcntl" : "0",
+            "File::Path" : "0",
+            "File::Spec" : "0",
+            "Getopt::Long" : "0",
+            "List::Util" : "0",
+            "Time::HiRes" : "0",
+            "Time::Local" : "0",
+            "parent" : "0",
+            "perl" : "5.016"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "File::Temp" : "0",
+            "FindBin" : "0",
+            "Test::More" : "0.98"
+         }
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/marufcetin/amberdb/issues"
+      },
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/marufcetin/amberdb.git",
+         "web" : "https://github.com/marufcetin/amberdb"
+      }
+   },
+   "version" : "5.02",
+   "x_serialization_backend" : "JSON::PP version 4.16"
+}

@@ -1,0 +1,234 @@
+NAME
+    Curl::Impersonate - HTTP client that impersonates a browser's TLS/HTTP2
+    fingerprint
+
+SYNOPSIS
+        use Curl::Impersonate;
+
+        # synchronous
+        my $c   = Curl::Impersonate->new(impersonate => 'chrome131', timeout => 20);
+        my $res = $c->get('https://example.com/');
+        #   $res = { status => 200, headers => { 'content-type' => '...' }, body => '...' }
+
+        my $post = $c->request(
+            method  => 'POST',
+            url     => 'https://example.com/api',
+            headers => { 'content-type' => 'application/json' },
+            body    => '{"hello":"world"}',
+        );
+
+        # which browsers can I be?
+        my @targets = Curl::Impersonate->targets;
+
+        # asynchronous (concurrent upstreams)
+        my $m = Curl::Impersonate->multi;
+        for my $url (@urls) {
+            my $h = Curl::Impersonate->new(impersonate => 'chrome131');
+            $m->add($h, { url => $url }, sub {
+                my ($res, $err) = @_;
+                $err ? warn($err) : print $res->{status}, "\n";
+            });
+        }
+        $m->perform_blocking;
+
+DESCRIPTION
+    Wraps "libcurl-impersonate" (a patched libcurl built against BoringSSL,
+    via Alien::curlimpersonate) so a request carries a chosen real browser's
+    TLS (JA3/JA4) and HTTP/2 (Akamai) connection fingerprint. Origin
+    certificate verification stays on by default; impersonation changes the
+    handshake shape, not whether the peer is verified.
+
+    This is an HTTP client, not a full browser. It reproduces the connection
+    fingerprint (TLS + HTTP/2); it does not run JavaScript, and HTTP/3 and
+    WebSockets are out of scope in this release.
+
+REQUIREMENTS
+    Requires Alien::curlimpersonate 0.02 or newer, which builds
+    "libcurl-impersonate" (a patched curl plus BoringSSL) from source at
+    install time. That build needs a C/C++ toolchain, cmake, ninja, go and
+    patch -- see that module for the details. No system
+    "libcurl-impersonate" is used.
+
+METHODS
+  new
+        my $c = Curl::Impersonate->new(%opt);
+
+    Creates a client (one reusable connection handle). Options:
+
+    impersonate => $target
+        A browser profile name (see "targets"), e.g. 'chrome131'. Applies
+        that browser's TLS/HTTP2 fingerprint and, unless "default_headers"
+        is false, its default header set. An unknown target croaks.
+
+    default_headers => $bool
+        Whether to also install the target's default request headers.
+        Default true.
+
+    timeout => $seconds
+        Whole-request timeout. There is no default: libcurl waits
+        indefinitely, so a blackholed address or a server that accepts and
+        never answers will hang the caller. Set one for anything talking to
+        the open internet.
+
+    verify => $bool
+        TLS peer/host verification. Default true. Set false only for testing
+        against self-signed endpoints.
+
+    follow_redirects => $bool
+        Follow "3xx" redirects. Default false. libcurl bounds the chain
+        itself, so a redirect loop ends with "Number of redirects hit
+        maximum amount" rather than spinning.
+
+    proxy => $url
+        Route requests through a proxy, e.g. 'http://127.0.0.1:8080' or
+        'socks5h://host:1080'. Credentials go in the URL. Note that a proxy
+        which terminates TLS presents its own fingerprint, not the
+        impersonated one; to keep the fingerprint intact the proxy must
+        tunnel with "CONNECT".
+
+  get
+        my $res = $c->get($url);
+
+    Convenience for a GET "request".
+
+  request
+        my $res = $c->request(
+            method  => 'GET',      # default GET
+            url     => $url,       # required
+            headers => \%headers,  # optional; values are strings
+            body    => $bytes,     # optional request body
+        );
+
+    A header name or value containing CR, LF or NUL croaks: libcurl would
+    pass such a line through verbatim and the origin would read it as extra
+    headers. An undef value removes a header the impersonation profile would
+    otherwise send.
+
+    Performs the request and returns a hashref. On success:
+
+        { status => $int, headers => \%response_headers, body => $bytes,
+          url => $effective_url }
+
+    "url" is where the request actually ended up, which differs from the one
+    asked for when "follow_redirects" sent it elsewhere.
+
+    Response header names are lower-cased; a header that appears more than
+    once (e.g. "set-cookie") is kept as an arrayref of its values. On a
+    transport-level failure (DNS, TLS, timeout) it returns instead:
+
+        { error => $string, code => $curl_errno }
+
+  targets
+        my @names = Curl::Impersonate->targets;
+
+    A sorted list of impersonation profiles verified against the built
+    library. The underlying library may accept additional names; any string
+    it recognises works when passed to "new".
+
+ASYNCHRONOUS INTERFACE
+    The methods below belong to "Curl::Impersonate::Multi", which has no
+    constructor of its own -- it is documented here because "multi" is the
+    only way to get one.
+
+  multi
+        my $m = Curl::Impersonate->multi;
+
+    Returns a "Curl::Impersonate::Multi", a "curl_multi"-backed handle for
+    running several requests concurrently.
+
+  add
+        $m->add($handle, \%request, sub { my ($res, $err) = @_; ... });
+
+    Queues $request (same keys as "request") on $handle (a
+    "Curl::Impersonate" object). The callback fires exactly once on
+    completion with either "($res, undef)" or "(undef, $error_string)".
+    $handle is kept alive until then; use one handle per in-flight request.
+
+    If the callback closes over $m itself, that forms a reference cycle ($m
+    -> queued request -> callback -> $m) which is broken only when the
+    request completes or is "remove"d. Dropping $m while such a request is
+    still in flight leaks the cycle -- and the underlying curl handles --
+    until process exit. Drive every request to completion, "remove" it, or
+    "Scalar::Util::weaken" the captured $m.
+
+  perform_blocking
+        $m->perform_blocking;
+
+    Runs an internal poll loop until every queued request has completed and
+    its callback has fired. Convenient for scripts and tests.
+
+    It cannot drive paused transfers: if an "add_streaming" "on_body"
+    returns a true value (pause), "perform_blocking" has no way to resume it
+    and will spin. Use the "Event-loop integration" surface for
+    streaming/backpressure.
+
+  add_streaming
+        $m->add_streaming($handle, \%request, {
+            on_headers => sub { my ($status, $headers) = @_; ... },
+            on_body    => sub { my ($chunk) = @_; ...; return $pause },
+            on_done    => sub { my ($err) = @_; ... },
+        });
+
+    Like "add", but delivers the response incrementally instead of buffering
+    it. "on_headers" fires once when the upstream status and headers are
+    known; "on_body" fires per body chunk. Returning a true value from
+    "on_body" pauses the upstream transfer ("CURLPAUSE_RECV") -- use this to
+    apply backpressure when your downstream consumer is full; return the
+    value 2 to abort the transfer (its "on_done" then fires with an error).
+    "on_headers" also fires for a bodyless response. "on_done" fires once at
+    the end with an error string or "undef". Do not call "resume"/"remove"
+    from inside these callbacks. Resume a paused transfer with "resume".
+
+    Pausing and the chunk contract: libcurl treats a pause as "this chunk
+    was not consumed" and re-delivers it to "on_body" when you "resume". So
+    decide whether to pause before consuming $chunk: if you return a pause
+    value you must NOT have already consumed $chunk -- take it on the
+    re-delivery instead. Consuming a chunk and then returning a pause value
+    on the same call delivers it twice. The correct idiom is "if ($full) {
+    ...arrange resume...; return 1 } consume($chunk); return 0" (this is
+    exactly what Proxy::Impersonate does for its HIWAT backpressure).
+
+  resume
+        $m->resume($handle);
+
+    Unpause a transfer paused by an "on_body" that returned true, and nudge
+    the loop so delivery continues.
+
+  remove
+        $m->remove($handle);
+
+    Cancel an in-flight request and free its state without firing "on_done"
+    -- for tearing down a request whose consumer has gone away.
+
+  Event-loop integration
+    For an external event loop (e.g. EV), drive the handle through the
+    "curl_multi" socket-action surface instead of "perform_blocking":
+
+    set_socket_callback(sub { my ($fd, $what) = @_; ... })
+        Registered with curl. $what is curl's "CURL_POLL_*": 1=want-read,
+        2=want-write, 3=both, 4=stop watching $fd. Arm/disarm an I/O watcher
+        on $fd accordingly.
+
+    set_timer_callback(sub { my ($timeout_ms) = @_; ... })
+        Registered with curl. Arm a one-shot timer for $timeout_ms (or
+        disarm on -1).
+
+    socket_action($fd, $ev)
+        Call when a watched socket is ready: $ev bit 1=readable, bit
+        2=writable. Call with "$fd = -1" (and "$ev = 0") when the timer
+        fires. Completed requests' callbacks are dispatched from within this
+        call.
+
+    timeout_ms
+        The current recommended timeout in milliseconds (-1 for none).
+
+SEE ALSO
+    Alien::curlimpersonate, <https://github.com/lexiforest/curl-impersonate>
+
+AUTHOR
+    vividsnow
+
+LICENSE
+    This library is free software; you can redistribute it and/or modify it
+    under the same terms as Perl itself.
+

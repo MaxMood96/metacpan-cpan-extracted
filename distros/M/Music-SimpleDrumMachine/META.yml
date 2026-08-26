@@ -24,6 +24,7 @@ requires:
   IO::Async::Loop: '0'
   IO::Async::Timer::Periodic: '0'
   MIDI::RtMidi::FFI::Device: '0'
+  MIDI::Util: '0'
   Moo: '2'
   Music::Duration::Partition: '0'
   feature: '0'
@@ -34,7 +35,7 @@ requires:
 resources:
   homepage: https://github.com/ology/Music-SimpleDrumMachine
   repository: https://github.com/ology/Music-SimpleDrumMachine.git
-version: '0.0510'
+version: '0.0600'
 x_Dist_Zilla:
   perl:
     version: '5.042000'

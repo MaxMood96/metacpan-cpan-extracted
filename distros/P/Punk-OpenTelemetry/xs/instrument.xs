@@ -45,14 +45,23 @@ install(tracer, ...)
                       && A->on_response(aTHX_ otel_on_response, (void *)A);
                 if (ok) OTEL_PK_INSTALLED = 1;
                 (void)hv_stores(out, "server", newSViv(ok ? 1 : 0));
-                if (A->abi_version >= 2) {
-                    int q = A->on_query(aTHX_ otel_on_query,
-                                        otel_on_query_done, NULL);
-                    (void)hv_stores(out, "db_punk", newSViv(q ? 1 : 0));
-                }
+                if (A->abi_version >= 2)
+                    OTEL_PK_DB = A->on_query(aTHX_ otel_on_query,
+                                             otel_on_query_done, NULL);
+                /* THE LOGS SIGNAL, from the logger the application already
+                 * uses. v4 is the version that hands an observer the context,
+                 * and without the context a record cannot be correlated - so
+                 * an older Punk exports nothing here rather than exporting
+                 * lines with no trace id, which would look like working
+                 * correlation that never joins. */
+                if (A->abi_version >= 4)
+                    OTEL_PK_LOGS = A->on_log_ctx(aTHX_ otel_on_log, (void *)A);
             }
             else (void)hv_stores(out, "server",
                                  newSViv(OTEL_PK_INSTALLED ? 1 : 0));
+            /* Reported every time, not only on the call that registered. */
+            (void)hv_stores(out, "db_punk", newSViv(OTEL_PK_DB));
+            (void)hv_stores(out, "logs",    newSViv(OTEL_PK_LOGS));
         }
 
         /* ---- Fetch: client spans, and the traceparent that makes a trace

@@ -1,0 +1,68 @@
+{
+   "abstract" : "HTTP client that impersonates a browser TLS/HTTP2 fingerprint",
+   "author" : [
+      "vividsnow"
+   ],
+   "dynamic_config" : 1,
+   "generated_by" : "ExtUtils::MakeMaker version 7.78, CPAN::Meta::Converter version 2.150013",
+   "license" : [
+      "perl_5"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "Curl-Impersonate",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "inc"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "Alien::Base::Wrapper" : "1.97",
+            "Alien::curlimpersonate" : "0.02",
+            "ExtUtils::MakeMaker" : "6.52"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "perl" : "5.010"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "Test::More" : "0"
+         }
+      }
+   },
+   "provides" : {
+      "Curl::Impersonate" : {
+         "file" : "lib/Curl/Impersonate.pm",
+         "version" : "0.01"
+      },
+      "Curl::Impersonate::Multi" : {
+         "file" : "lib/Curl/Impersonate.pm"
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/vividsnow/perl5-curl-impersonate/issues"
+      },
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/vividsnow/perl5-curl-impersonate.git",
+         "web" : "https://github.com/vividsnow/perl5-curl-impersonate"
+      }
+   },
+   "version" : "0.01",
+   "x_serialization_backend" : "JSON::PP version 4.18"
+}

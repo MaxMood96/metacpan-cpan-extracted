@@ -8,7 +8,7 @@
       "Jason Cooper <JLCOOPER@cpan.org>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Minilla/v3.1.6",
+   "generated_by" : "Minilla/v3.1.29",
    "license" : [
       "perl_5"
    ],
@@ -54,14 +54,14 @@
          "requires" : {
             "DBI" : "1.3",
             "List::Util" : "1.27",
-            "perl" : "5.008001"
+            "perl" : "v5.12.0"
          }
       }
    },
    "provides" : {
       "DBD::Mock" : {
          "file" : "lib/DBD/Mock.pm",
-         "version" : "1.59"
+         "version" : "1.60"
       },
       "DBD::Mock::Pool" : {
          "file" : "lib/DBD/Mock/Pool.pm"
@@ -95,22 +95,24 @@
       },
       "homepage" : "https://gitlab.com/scrapheap/DBD-Mock",
       "repository" : {
-         "url" : "git://gitlab.com/scrapheap/DBD-Mock.git",
+         "type" : "git",
+         "url" : "https://gitlab.com/scrapheap/DBD-Mock.git",
          "web" : "https://gitlab.com/scrapheap/DBD-Mock"
       }
    },
-   "version" : "1.59",
+   "version" : "1.60",
    "x_authority" : "cpan:JLCOOPER",
    "x_contributors" : [
       "Bernhard Graf <GRAF@cpan.org>",
       "Chisel <CHISEL@cpan.org>",
       "Dave Rolsky <DROLSKY@cpan.org>",
+      "Erik Huelsmann <ehuels@gmail.com>",
       "Frédéric Brière <FBRIERE@cpan.org>",
       "Gines R <ginesr@gmail.com>",
       "Max Carey <MHC@cpan.org>",
       "gregor herrmann <gregoa@debian.org>",
       "wu-lee <git.wu-lee@noodlefactory.co.uk>"
    ],
-   "x_serialization_backend" : "JSON::PP version 2.27300_01",
+   "x_serialization_backend" : "JSON::PP version 4.16",
    "x_static_install" : 1
 }

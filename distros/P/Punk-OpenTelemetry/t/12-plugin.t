@@ -367,4 +367,107 @@ sub state_of { Punk::Plugin::OpenTelemetry->state_for($_[0]) }
       . 'losses is asking to be trusted for no reason');
 }
 
+# ---- THE APPLICATION'S OWN LOGGER IS THE LOGS SIGNAL -----------------------
+#
+# There is no second logging call. `$c->log->error(...)` is the whole
+# interface: Punk hands the plugin a copy of every record and the context it
+# was logged against, and the copy leaves carrying that request's trace id.
+#
+# Before pk_abi v4 an observer got the record and no way to reach the request,
+# so a telemetry layer could export a line but never correlate it - and the
+# only alternative, a process-global "current span", attributes one request's
+# lines to another the moment two are in flight.
+{
+    my $pkg = 'OTelLogApp';
+    $PLUGIN_OPTS{$pkg} = {};
+    my @keys = do { my %s; grep { !$s{$_}++ } @OTEL };
+    local @ENV{@keys};
+    delete @ENV{@keys};
+
+    eval qq{
+        package $pkg;
+        use Punk;
+        use Punk::Plugin::OpenTelemetry;
+        otel service_name => 'logging';
+        plugin 'OpenTelemetry' => \$main::PLUGIN_OPTS{'$pkg'};
+        get '/pay' => sub {
+            my (\$c) = \@_;
+            # The ordinary logger. Nothing here knows about telemetry.
+            \$c->log->error({ message => 'card refused',
+                             'payment.reason' => 'insufficient_funds' });
+            \$c->render(text => 'no');
+        };
+        1;
+    } or die "building $pkg: $@";
+
+    my $psgi = $pkg->to_app;
+    my $st   = state_of($pkg);
+    my $logs = $st->{logs};
+    ok($logs, 'the logs signal is on by default');
+
+    # `points->{logs}` is the install reporting whether the ABI was new
+    # enough to give a log observer the context. Older Punk exports nothing
+    # here by design, so this is a skip and not a failure.
+  SKIP: {
+        skip 'Punk pk_abi is older than v4 (need Punk 0.34)', 9
+            unless ($st->{points} || {})->{logs};
+
+        $psgi->({
+            REQUEST_METHOD => 'GET', PATH_INFO => '/pay',
+            SCRIPT_NAME => '', QUERY_STRING => '', SERVER_NAME => 'localhost',
+            SERVER_PORT => 80, 'psgi.url_scheme' => 'http',
+            'psgi.input' => undef, 'psgi.errors' => \*STDERR,
+        });
+
+        my %stats = $logs->stats;
+        cmp_ok($stats{emitted}, '>=', 1,
+               'an ordinary $c->log call reached the logs signal');
+
+        my $payload = $logs->drain;
+        ok($payload, 'and it drains as a payload');
+        my $rec = $payload->{resource_logs}[0]{scope_logs}[0]{log_records}[0];
+        ok($rec, 'with a record in it');
+        is($rec->{severity_number}, 17,
+           '  at error on the twenty-four point scale');
+        is($rec->{attributes}{'payment.reason'}, 'insufficient_funds',
+           '  carrying the record\'s own fields as attributes');
+
+        # THE PART THAT NEEDED v4. A log line with a trace id is a click into
+        # the trace that produced it; the same line without one is an access
+        # log.
+        ok($rec->{trace_id}, 'the record carries the trace id of its request');
+        ok($rec->{span_id},  '  and the span id');
+        ok($rec->{trace_id} =~ /[^0]/, '  which is not all zeroes');
+
+        # Reading the span must not END it, or the trace loses its root.
+        my $spans = $st->{tracer}->drain;
+        my $span = $spans->{resource_spans}[0]{scope_spans}[0]{spans}[-1];
+        is(($span || {})->{attributes}{'http.route'}, '/pay',
+           'the server span was still ended normally');
+    }
+}
+
+# The helper that used to be the only way in is GONE. Two logging calls into
+# two loggers diverge the first time somebody adds a line to one of them, and
+# the telemetry copy is always the one that gets forgotten.
+{
+    my ($pkg, $psgi) = build_app(
+        declare => q{ otel service_name => 'nohelper'; },
+        route   => '/x',
+    );
+    ok(!$pkg->can('otel_log'), 'there is no otel_log helper on the app');
+}
+
+# A log emitted with the signal off costs a lookup and returns false, rather
+# than dying in an application that turned metrics and logs off to save the
+# egress.
+{
+    my ($pkg, $psgi) = build_app(
+        declare => q{ otel service_name => 'nologs', logs => 0; },
+        route   => '/quiet',
+    );
+    my $st = state_of($pkg);
+    ok(!$st->{logs}, 'the logs signal can be turned off');
+}
+
 done_testing;

@@ -2,7 +2,7 @@
 # MIT License
 
 class Unicode : precompile {
-  version "0.057";
+  version "0.058";
   
   use IntList;
   use Resource::Utf8proc;

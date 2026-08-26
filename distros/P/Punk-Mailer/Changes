@@ -1,5 +1,10 @@
 Revision history for Punk-Mailer
 
+0.04    2026-08-25
+	- the sendmail transport reads the child's exit status before the
+	  write failure, so a command that cannot be exec'd is 127 and not
+	  a broken pipe.
+
 0.03    2026-08-24
 	- ADDS: mail_url takes a route NAME as well as a path, so a mail
 	  body points at a route the way a template does:

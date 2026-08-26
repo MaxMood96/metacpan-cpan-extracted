@@ -139,7 +139,13 @@ static size_t otel_pb_hdp_size(pTHX_ HV *dp) {
     n += otel_pb_fixed64_size(PB_HDP_TIME);
     n += otel_pb_fixed64_size(PB_HDP_COUNT);
     n += otel_pb_double_size(PB_HDP_SUM);
-    if (nb) n += otel_pb_packed_u64_size(PB_HDP_BUCKET_COUNTS, bk, nb);
+    /* PACKED VARINTS. OTLP declares bucket_counts `repeated uint64`, and a
+     * uint64 in proto3 is a varint - the fixed64 writer beside it encodes a
+     * different wire type entirely, so a conformant receiver reads eight
+     * bytes where one was meant and every bucket comes out wrong. The
+     * exponential histogram's buckets, which are the same proto type, used
+     * the varint writer all along. */
+    if (nb) n += otel_pb_packed_varint_size(PB_HDP_BUCKET_COUNTS, bk, nb);
     if (nd) n += otel_pb_packed_double_size(PB_HDP_EXPLICIT_BOUNDS, nd);
     if (otel_h(aTHX_ dp, "min")) n += otel_pb_double_size(PB_HDP_MIN);
     if (otel_h(aTHX_ dp, "max")) n += otel_pb_double_size(PB_HDP_MAX);
@@ -175,7 +181,7 @@ static void otel_pb_hdp_write(pTHX_ otel_buf *b, HV *dp) {
     otel_pb_fixed64(b, PB_HDP_COUNT, v ? (U64TYPE)SvUV(v) : 0);
     v = otel_h(aTHX_ dp, "sum");
     otel_pb_double(b, PB_HDP_SUM, v ? SvNV(v) : 0);
-    if (nb) otel_pb_packed_u64(b, PB_HDP_BUCKET_COUNTS, bk, nb);
+    if (nb) otel_pb_packed_varint(b, PB_HDP_BUCKET_COUNTS, bk, nb);
     if (nd) otel_pb_packed_double(b, PB_HDP_EXPLICIT_BOUNDS, bd, nd);
     if ((v = otel_h(aTHX_ dp, "min"))) otel_pb_double(b, PB_HDP_MIN, SvNV(v));
     if ((v = otel_h(aTHX_ dp, "max"))) otel_pb_double(b, PB_HDP_MAX, SvNV(v));

@@ -9,7 +9,7 @@ use ClamAV::Clamd ();
 use Hyperman;
 use Hyperman::Future;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 our %WORDS;
 

@@ -6,7 +6,7 @@ use diagnostics;
 use mro 'c3';
 use English qw(-no_match_vars);
 use Carp qw[carp croak confess cluck longmess shortmess];
-our $VERSION = 36;
+our $VERSION = 37;
 use autodie qw( close );
 use Array::Contains;
 use utf8;
@@ -147,6 +147,7 @@ sub init($self, $username, $password, $clientname, $iscaching) {
         'Terry Pratchett',
         'Sven Guckes',
         'Sheila', # faithful four-legged family member of @NightStorm_KPC
+        'Dolly Parton',
     ];
     $self->{remembranceinterval} = 3600; # One hour
     $self->{nextremembrance} = time + $self->{remembranceinterval};

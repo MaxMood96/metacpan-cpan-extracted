@@ -102,7 +102,8 @@ sub execute {
         eval {
             my $state = $session->current_state;
             $session->verify_statement( $sth->{Statement});
-            $session->verify_bound_params( $tracker->bound_params() );
+            $session->verify_bound_params( $tracker->bound_params(),
+                                           { bound_arrays => $dbh->{mock_bound_array_support} } );
 
             # Load a copy of the results to return (minus the field
             # names) into the tracker

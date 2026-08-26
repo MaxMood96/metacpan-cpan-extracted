@@ -1,54 +1,46 @@
 Punk-ClamAV
-===========
 
-Virus scanning for Punk uploads, through clamd.
+The README is used to introduce the module and provide instructions on
+how to install the module, any machine dependencies it may have (for
+example C compilers and installed libraries) and any other information
+that should be provided before the module is installed.
 
-    plugin 'ClamAV' => { socket => '/run/clamav/clamd.ctl' };
-
-    post '/avatar' => sub {
-        my ($c) = @_;
-        my $up = $c->upload('file') or return $c->text('no file', 400);
-        return $c->text('no thanks', 422) unless $c->upload_ok($up);
-        $up->save("/var/lib/app/avatars/" . $c->auth_id);   # not $up->filename
-        $c->json({ ok => 1 });
-    };
-
-BEFORE YOU RELY ON IT
----------------------
-
-clamd answers "OK" for files it DECLINED to scan. Punk accepts 128 MiB
-uploads and clamd's MaxFileSize defaults to 100 MiB, so out of the box
-your largest uploads come back clean without having been looked at. The
-same is true of a password-protected archive at any size.
-
-Set these in clamd.conf:
-
-    AlertExceedsMax       yes
-    AlertEncryptedArchive yes
-    AlertEncryptedDoc     yes
-
-With them a skipped scan arrives as an "unscannable" verdict, which this
-plugin treats as a rejection rather than a pass.
+A README file is required for CPAN modules since CPAN extracts the README
+file from a module distribution so that people browsing the archive
+can use it to get an idea of the module's uses. It is usually a good idea
+to provide version information here so that people can decide whether
+fixes for the module are worth downloading.
 
 INSTALLATION
-------------
 
-    perl Makefile.PL
-    make
-    make test
-    make install
+To install this module, run the following commands:
 
-Requires Punk and ClamAV::Clamd. A running clamd is not needed to build
-or test - the suite runs against an internal fake, and the tests that
-want a real clamd skip cleanly without one.
+	perl Makefile.PL
+	make
+	make test
+	make install
 
-DOCUMENTATION
--------------
+SUPPORT AND DOCUMENTATION
 
-    perldoc Punk::Plugin::ClamAV
+After installing, you can find documentation for this module with the
+perldoc command.
+
+    perldoc Punk::ClamAV
+
+You can also look for information at:
+
+    RT, CPAN's request tracker (report bugs here)
+        https://rt.cpan.org/NoAuth/Bugs.html?Dist=Punk-ClamAV
+
+    Search CPAN
+        https://metacpan.org/release/Punk-ClamAV
+
 
 LICENSE AND COPYRIGHT
 
-This software is Copyright (c) 2026 by LNATION.
+This software is Copyright (c) 2026 by LNATION <email@lnation.org>.
 
-This is free software, licensed under the Artistic License 2.0.
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
+

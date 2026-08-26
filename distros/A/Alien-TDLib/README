@@ -1,0 +1,179 @@
+NAME
+    Alien::TDLib - Find or build TDLib, the Telegram client library
+
+SYNOPSIS
+    In the Makefile.PL of an XS consumer:
+
+        use ExtUtils::MakeMaker;
+        use Alien::TDLib;
+
+        WriteMakefile(
+            ...
+            INC  => Alien::TDLib->cflags,
+            LIBS => [ Alien::TDLib->libs ],
+        );
+
+DESCRIPTION
+    Alien::TDLib locates TDLib (the Telegram Database Library) on the
+    system, or installs it, and reports the compiler and linker flags needed
+    to use the tdjson C interface.
+
+    By default it installs the newest TDLib release published by the
+    prebuilt-tdlib project. That project is the version signal because
+    tdlib/td publishes no releases of its own and its newest tag is v1.8.0
+    (2021); each prebuilt-tdlib package records the TDLib commit it was
+    built from, which makes it a curated pointer rather than a moving
+    branch. Releases land roughly every three weeks. Set
+    "ALIEN_TDLIB_VERSION" to install a specific version or commit instead.
+
+    At install time the system is probed first: "pkg-config tdjson", then a
+    compile-link-and-run test against "-ltdjson" for distributions that ship
+    the shared library without a pkg-config file. The probe asks the library
+    its own version and accepts it only at 1.8.66 or newer, the oldest
+    release this family has been checked against; anything older is rejected
+    with a log line naming the version and the install falls through to the
+    share path. There is deliberately no upper bound: capping it would start
+    rejecting installs the day TDLib ships a new minor, which is the
+    maintenance this design exists to avoid.
+
+    If neither probe finds a usable library, TDLib is installed into the
+    Alien share directory: built from source by default, or fetched as a
+    prebuilt shared library when "ALIEN_TDLIB_PREBUILT=1" is set (see
+    ENVIRONMENT).
+
+    Whichever version is resolved, the install is anchored to one commit:
+    the source archive is fetched by commit sha, and the prebuilt package is
+    refused unless its recorded TDLib commit is the one that was resolved.
+    The prebuilt tarball is additionally checked against the sha512 the npm
+    registry publishes for it. The source archive carries a recorded SHA-256
+    only for the fallback release named below; for any other release the
+    commit sha in the URL is what anchors the content.
+
+  install_type
+    "system" means a system libtdjson was found and nothing was compiled.
+    "share" means TDLib was installed into the share directory, from source
+    or prebuilt. Alien::TDLib->commit returns the pinned commit sha for
+    share installs and undef for system installs. Alien::TDLib->version
+    returns the pinned version for share installs and the probed version for
+    system installs. Alien::TDLib->prebuilt returns true when the share
+    install is a prebuilt package rather than a source build.
+
+BUILD REQUIREMENTS
+    A share build needs:
+
+    *   CMake 3.10 or later
+
+    *   a C++17 compiler (gcc 7+ or clang 5+)
+
+    *   gperf
+
+    *   OpenSSL and zlib development headers
+
+    Missing build tools are reported before any compilation starts, with the
+    package names for common platforms.
+
+    TDLib needs roughly 1 GB of RAM per translation unit under GCC, so the
+    parallel job count is throttled to at most one job per 1.5 GB of
+    available RAM, and capped at one below the CPU count to leave a core
+    free.
+
+ENVIRONMENT
+    ALIEN_TDLIB_PREBUILT
+        Set to 1 to skip the source build in favour of the prebuilt shared
+        library published as "@prebuilt-tdlib" on npm (version 0.1008066.0,
+        which is TDLib 1.8.66). The source build stays the default. The
+        opt-in takes precedence over a system libtdjson: when a prebuilt
+        package exists for the platform, the system is not probed at all.
+        Platforms with a prebuilt package:
+
+            linux-x64-glibc   linux-x64-musl   linux-arm64-glibc
+            linux-arm64-musl  darwin-x64       darwin-arm64
+            win32-x64
+
+        An unsupported platform falls through to the source build with a log
+        line; it is never an error. musl is detected from
+        "/lib/ld-musl-*.so.1" or "ldd --version", since $Config{archname}
+        does not distinguish it.
+
+        The prebuilt tarball is verified against the sha512 integrity
+        published in the npm registry metadata, and its "package.json"
+        records the TDLib commit it was built from; the package is refused
+        when that record differs from the pinned commit, so the binary is
+        checkable rather than trusted. The trade-offs:
+
+        *   it is a third-party binary, not code compiled locally from the
+            pinned source;
+
+        *   its statically linked OpenSSL never picks up system OpenSSL
+            security updates;
+
+        *   there are no BSD builds, so the source build remains necessary
+            for this family's FreeBSD/OpenBSD/NetBSD CI.
+
+    ALIEN_TDLIB_VERSION
+        Which TDLib to install. Unset, or "latest", installs the newest
+        release published by prebuilt-tdlib. A version such as 1.8.66
+        installs that release. A 40-character commit sha installs that
+        commit, which is built from source unless prebuilt-tdlib happens to
+        have published a package for it.
+
+        Pin this if reproducible installs matter to you: without it, two
+        installs a month apart can get different TDLib versions. The
+        trade-off is the other way round from most Aliens, and deliberate --
+        an unattended pin rots into shipping a years-old TDLib, whereas
+        floating keeps up with a library that releases roughly every three
+        weeks.
+
+        If the npm registry cannot be reached, the install falls back to a
+        known-good release rather than failing, and logs that it did so.
+
+    ALIEN_TDLIB_JOBS
+        Overrides the throttled parallel job count of the share build.
+
+    ALIEN_TDLIB_SKIP_DIGEST
+        Set to 1 to skip the archive verification of the downloaded TDLib
+        source archive (SHA-256) or prebuilt tarball (npm sha512 integrity).
+        The archives are fetched over TLS from URLs that already pin the
+        commit, so this only trades away detection of a corrupted or
+        re-rolled tarball.
+
+    ALIEN_TDLIB_SKIP_VERSION
+        Set to 1 to accept a system libtdjson of any version, bypassing the
+        1.8.66 floor. Unsupported: an older library may answer with
+        different wire shapes, and the failures are silent. No bug reports
+        for installs that used this.
+
+WATCHING FOR SCHEMA DRIFT
+    Following the newest release means TDLib's API can move underneath a
+    consumer without anyone editing this distribution. What matters is not
+    which version arrived but whether the types that consumer uses still
+    look the same.
+
+    maint/bump-tdlib.pl (in the repository; not shipped) answers exactly
+    that:
+
+        perl maint/bump-tdlib.pl --consumer ../EV-Telegram-TDLib
+
+    It resolves the newest published release, then diffs td_api.tl
+    restricted to the types named anywhere in that consumer's sources, field
+    by field. A release that touches none of them cannot change a wire shape
+    the consumer hardcodes. "--master" compares against tdlib/td master
+    instead, which is built and smoke-tested nowhere.
+
+    Two things stay manual: the fallback release in
+    inc/Alien/TDLib/Resolve.pm, used when npm is unreachable and worth
+    advancing occasionally, and the vendored prebuilt/tdjson_export.h (CMake
+    GenerateExportHeader boilerplate -- generic, but worth re-checking
+    against a newer tree).
+
+LICENSE OF TDLIB
+    TDLib itself is distributed under the Boost Software License 1.0. See
+    https://github.com/tdlib/td for details.
+
+AUTHOR
+    vividsnow
+
+LICENSE
+    This library is free software; you can redistribute it and/or modify it
+    under the same terms as Perl itself.
+

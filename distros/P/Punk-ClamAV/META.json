@@ -32,9 +32,9 @@
       },
       "runtime" : {
          "requires" : {
-            "ClamAV::Clamd" : "0.01",
-            "Hyperman" : "0.23",
-            "Punk" : "0.28",
+            "ClamAV::Clamd" : "0.06",
+            "Hyperman" : "0.35",
+            "Punk" : "0.33",
             "perl" : "5.010"
          }
       },
@@ -45,6 +45,6 @@
       }
    },
    "release_status" : "stable",
-   "version" : "0.01",
+   "version" : "0.02",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

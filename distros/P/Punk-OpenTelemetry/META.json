@@ -32,7 +32,7 @@
             "Fetch" : "0.15",
             "File::Raw::JSON" : "0.06",
             "Hyperman" : "0.26",
-            "Punk" : "0.20"
+            "Punk" : "0.34"
          }
       },
       "runtime" : {
@@ -40,7 +40,7 @@
             "Fetch" : "0.15",
             "File::Raw::JSON" : "0.06",
             "Hyperman" : "0.26",
-            "Punk" : "0.20",
+            "Punk" : "0.34",
             "perl" : "5.010000"
          }
       },
@@ -51,6 +51,6 @@
       }
    },
    "release_status" : "stable",
-   "version" : "0.05",
+   "version" : "0.07",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

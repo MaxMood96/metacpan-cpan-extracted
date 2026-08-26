@@ -124,9 +124,20 @@ static void pk_obs_query_done(pTHX_ void *tv, SV *r) {
 typedef void (*pl_obs_cb)(pTHX_ const char *level, STRLEN llen, SV *msg,
                           HV *fields, void *ud);
 
+/* The same tap, plus the CONTEXT the line was logged against - which is what
+ * an observer needs to correlate a record with the request that produced it.
+ * Without it the only way to find the active span is a process-global, and on
+ * an event loop with two requests in flight that attributes one request's
+ * lines to the other. `c` is NULL for a line logged against the application
+ * rather than a request. */
+typedef void (*pl_obs_ctx_cb)(pTHX_ SV *c, const char *level, STRLEN llen,
+                              SV *msg, HV *fields, void *ud);
+
 #define PL_OBS_MAX 4
 static struct { pl_obs_cb cb; void *ud; } PL_OBS[PL_OBS_MAX];
 static int PL_OBS_N = 0;
+static struct { pl_obs_ctx_cb cb; void *ud; } PL_OBS_CTX[PL_OBS_MAX];
+static int PL_OBS_CTX_N = 0;
 
 static int pl_observe(pTHX_ pl_obs_cb cb, void *ud) {
     PERL_UNUSED_CONTEXT;
@@ -134,6 +145,15 @@ static int pl_observe(pTHX_ pl_obs_cb cb, void *ud) {
     PL_OBS[PL_OBS_N].cb = cb;
     PL_OBS[PL_OBS_N].ud = ud;
     PL_OBS_N++;
+    return 1;
+}
+
+static int pl_observe_ctx(pTHX_ pl_obs_ctx_cb cb, void *ud) {
+    PERL_UNUSED_CONTEXT;
+    if (!cb || PL_OBS_CTX_N >= PL_OBS_MAX) return 0;
+    PL_OBS_CTX[PL_OBS_CTX_N].cb = cb;
+    PL_OBS_CTX[PL_OBS_CTX_N].ud = ud;
+    PL_OBS_CTX_N++;
     return 1;
 }
 

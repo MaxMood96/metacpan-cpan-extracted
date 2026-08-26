@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk::OpenTelemetry ();
 
-our $VERSION = '0.05';
+our $VERSION = '0.07';
 
 # All of it is C (include/otel_semconv.h, otel_instr.h, otel_consume.h +
 # xs/instrument.xs). This file is documentation.

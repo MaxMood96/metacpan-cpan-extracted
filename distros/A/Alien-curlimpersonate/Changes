@@ -1,0 +1,17 @@
+Revision history for Alien-curlimpersonate
+
+0.02  2026-08-25
+        - build curl-impersonate v2.1.1 instead of v1.5.6: Chrome 150 era
+          BoringSSL and curl 8.21.0. Existing target names such as chrome131
+          still resolve.
+        - upstream 2.0.0 replaced autotools with a CMake superbuild, so the
+          build recipe is rewritten around cmake.
+        - built from a fork of upstream at v2.1.1 carrying one commit, because
+          upstream does not configure under CMake 4. Reverts to upstream if
+          that fix lands (lexiforest/curl-impersonate#302).
+
+0.01  2026-08-25
+        - initial release: builds libcurl-impersonate v1.5.6 from source and
+          exposes its cflags/libs, so an XS module can link a libcurl that
+          reproduces a browser's TLS and HTTP/2 fingerprint. Source-only:
+          there is no system package to find.

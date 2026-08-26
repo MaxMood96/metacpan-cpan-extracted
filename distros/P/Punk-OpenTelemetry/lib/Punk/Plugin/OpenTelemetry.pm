@@ -6,7 +6,7 @@ use warnings;
 use Carp ();
 use Punk::OpenTelemetry ();
 
-our $VERSION = '0.05';
+our $VERSION = '0.07';
 
 my %STATE;
 
@@ -65,7 +65,31 @@ sub register {
 
     $app->helper(otel       => sub { $st->{tracer} }, __PACKAGE__);
     $app->helper(otel_meter => sub { $st->{meter}  }, __PACKAGE__);
+    $app->helper(otel_logs  => sub { $st->{logs}   }, __PACKAGE__);
+    $app->helper(otel_span  => sub { _current_span($_[0]) }, __PACKAGE__);
+
     return;
+}
+
+# The server span for this request, as `emit` takes one.
+#
+# READ AND NEVER TAKEN. The response side unstashes the span to end it, and
+# unstashing CLEARS the slot - so a helper that used the same call would end
+# the request's span by looking at it, and the trace would lose its root.
+sub _current_span {
+    my ($c) = @_;
+    my $stash = eval { $c->stash } or return undef;
+    my $ptr = $stash->{'punk.otel.span'};
+    # Zero is the response side saying it has already taken the span. A record
+    # emitted after the span ended is correlated with nothing rather than with
+    # freed memory.
+    return undef unless defined $ptr && $ptr =~ /\A\d+\z/ && $ptr > 0;
+
+    # BORROWED, and blessed into the class that cannot free it. The same
+    # pointer in a Punk::OpenTelemetry::Span would be freed when this handle
+    # went out of scope, and the response side would then end a span that had
+    # already gone back to the allocator.
+    return bless \$ptr, 'Punk::OpenTelemetry::SpanRef';
 }
 
 sub _build {
@@ -119,6 +143,17 @@ sub _build {
         resource   => $resource,
         scope_name => 'Punk::OpenTelemetry',
     ) if _want($cfg, 'logs');
+
+    # THE APPLICATION'S OWN LOGGER IS THE LOGS SIGNAL.
+    #
+    # `$c->log->error(...)` is the whole interface. Punk hands this a copy of
+    # every record it emits and the context it was emitted against, and the
+    # copy leaves here with the request's trace id on it.
+    #
+    # A tap and not a sink: the line still goes wherever it was going, so
+    # turning telemetry on never takes an operator's logs away and a collector
+    # outage never silences them.
+    Punk::OpenTelemetry::Logs::install_tap($st->{logs});
 
     $st->{points} = Punk::OpenTelemetry::Instrument::install($tracer,
         server => _want($cfg, 'server'),
@@ -194,12 +229,20 @@ sub _tick {
 sub flush {
     my ($st) = @_;
     return unless $st->{exporter};
-    eval {
-        if (my $t = $st->{tracer}) { my $p = $t->drain;   _send($st, traces  => $p) if $p }
-        if (my $m = $st->{meter})  { my $p = $m->collect; _send($st, metrics => $p) if $p }
-        if (my $l = $st->{logs})   { my $p = $l->drain;   _send($st, logs    => $p) if $p }
-        1;
-    } or do { $st->{exporter}{stats}{failures}++ };
+
+    # ONE EVAL PER SIGNAL, not one around all three.
+    #
+    # A single eval means the first signal that throws takes the other two
+    # with it - and the drain that never ran leaves its records queued, so
+    # they are not even lost loudly. That is how metrics failing to encode
+    # silently stopped logs from being exported at all: two signals gone to
+    # one broken encoder, with nothing in the output to say so.
+    eval { if (my $t = $st->{tracer}) { my $p = $t->drain;   _send($st, traces  => $p) if $p } 1 }
+        or do { $st->{exporter}{stats}{failures}++ };
+    eval { if (my $m = $st->{meter})  { my $p = $m->collect; _send($st, metrics => $p) if $p } 1 }
+        or do { $st->{exporter}{stats}{failures}++ };
+    eval { if (my $l = $st->{logs})   { my $p = $l->drain;   _send($st, logs    => $p) if $p } 1 }
+        or do { $st->{exporter}{stats}{failures}++ };
     return;
 }
 
@@ -286,8 +329,19 @@ sub _diagnostic {
     my ($app, $cfg) = @_;
     my $line = Punk::OpenTelemetry::Config::diagnostic($cfg);
     my $log  = eval { $app->can('log') ? $app->log : undef };
-    if ($log && $log->can('info')) { $log->info($line) }
+
+    # SUPPRESSED, because the log tap is live by now and this is the SDK
+    # talking about itself. Everything the SDK does on its own behalf runs
+    # inside the guard - otherwise its own boot line becomes a log record,
+    # which becomes an export, and its own report of a failed export becomes
+    # another one.
+    #
+    # The operator still gets the line. It goes to the log exactly as before;
+    # it just is not also telemetry about the telemetry.
+    Punk::OpenTelemetry::Instrument::suppress_begin();
+    if ($log && $log->can('info')) { eval { $log->info($line) } }
     else { warn "$line\n" }
+    Punk::OpenTelemetry::Instrument::suppress_end();
     return $line;
 }
 
@@ -451,6 +505,63 @@ The tracer.
 =head2 $c->otel_meter
 
 The meter, when the metrics signal is on.
+
+=head2 $c->otel_logs
+
+The logger, when the logs signal is on.
+
+=head2 $c->otel_span
+
+The request's own server span, in the form C<< $logger->emit >> and
+C<< $meter->record >> take one, or C<undef> when there is none - before the
+span starts, after it ends, or when the request was not sampled.
+
+Pass it to C<record> to attach an exemplar: an exemplar is the trace id on a
+point of a histogram, and it is what turns "the p99 got worse" into the
+specific request that made it worse.
+
+=head1 THE LOGS SIGNAL IS YOUR OWN LOGGER
+
+There is no separate call. C<< $c->log->error(...) >> is the whole interface:
+Punk hands this plugin a copy of every record its logger emits, together with
+the context it was emitted against, and the copy is exported carrying that
+request's trace id.
+
+    $c->log->error('card refused');
+    $c->log->error({ message => 'card refused',
+                     'payment.reason' => 'insufficient_funds' });
+
+A record's fields become the log record's attributes, so the structured form
+is how you attach detail.
+
+An earlier version of this plugin offered C<< $c->otel_log >>, a second
+logging call into a second logger. That is a design that goes wrong quietly:
+the two diverge the first time somebody adds a line to one of them, and the
+telemetry copy is always the one that gets forgotten. An application should
+log the way it already logs.
+
+=head2 A tap, not a sink
+
+The line still goes wherever it was going - stderr, C<psgix.logger>, a C<to>
+coderef - and the exporter receives a duplicate. Turning telemetry on never
+takes an operator's logs away, and a collector outage never silences them.
+Nobody should have to weigh having their logs against exporting them.
+
+=head2 It needs Punk 0.34
+
+Correlation needs the context, and C<pk_abi> only began passing it to log
+observers at version 4. Against an older Punk the logs signal exports
+B<nothing> rather than exporting records with no trace id - which would look
+like working correlation that never joins up.
+
+C<< Punk::OpenTelemetry::Instrument::install >> reports this: the C<logs> key
+of its return is false when the ABI is too old.
+
+=head2 The SDK's own diagnostics do not come back round
+
+A record emitted while the exporter is working is dropped rather than queued.
+Without that, one collector outage becomes an unbounded loop of telemetry
+about failing to send telemetry.
 
 =head1 SEE ALSO
 

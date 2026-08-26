@@ -1,5 +1,26 @@
 Revision history for Punk-OpenTelemetry
 
+0.07    2026-08-26
+        - An outbound call joins the trace it was made from.
+        - A traceparent the caller already set is honoured as the parent and
+        replaced in place.
+        - Punk::OpenTelemetry::SpanRef, a BORROWED span handle with no
+        DESTROY: the request's span belongs to the instrumentation, and a
+        handle to it in the owning class would free what the response side
+        is about to end.
+        - Span: add sampled, child_of and traceparent.
+        - The logs signal is the application's own logger: $c->log is tapped
+        through pk_abi v4 and exported with its request's trace id. 
+        - REMOVED: the $c->otel_log helper
+
+0.06    2026-08-26
+        - Metrics and logs encode. Both encoders existed in the header and the
+        exporter never dispatched to them, so every signal but traces was
+        refused at the last step.
+        - One eval per signal in flush. A failure in any one signal aborted
+        the block, so metrics failing to encode meant logs were never
+        drained: two signals lost to one broken encoder.
+
 0.05    2026-08-23
         - Fixed the module failing to load with "undefined symbol:
           clock_gettime" on glibc before 2.17 (Debian wheezy, reported by

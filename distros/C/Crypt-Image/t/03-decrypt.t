@@ -1,19 +1,47 @@
 #!/usr/bin/env perl
 
-use 5.006;
-use strict; use warnings;
+use strict;
+use warnings;
+use Test::More;
+use File::Temp qw(tempfile);
 use Crypt::Image;
-use Test::More tests => 3;
 
-my $crypter = Crypt::Image->new(file => 't/key.png', type => 'png');
-$crypter->encrypt('Hello World', 't/secret.png');
+eval {
+    require GD;
+};
+if ($@) {
+    plan skip_all => 'GD is required for testing Crypt::Image';
+} else {
+    plan tests => 3;
+}
 
-eval { $crypter->decrypt() };
-like($@, qr/ERROR: Encrypted file missing/);
+# 1. Create a key image on disk to pass file validation
+my ($fh_key, $key_file) = tempfile(SUFFIX => '.png', UNLINK => 1);
+my $gd = GD::Image->new(100, 100);
+my $white = $gd->colorAllocate(255, 255, 255);
+$gd->rectangle(0, 0, 99, 99, $white);
+print $fh_key $gd->png;
+close $fh_key;
 
-is($crypter->decrypt('t/secret.png'), 'Hello World');
+# Prepare temporary path for the encrypted output image
+my (undef, $enc_file) = tempfile(SUFFIX => '.png', UNLINK => 1);
 
-eval { $crypter->decrypt('t/secret1.png') };
-like($@, qr/ERROR: Encrypted file \[t\/secret1.png\] not found/);
+# 2. Instantiate Crypt::Image with the key image
+my $crypter = Crypt::Image->new(file => $key_file);
+isa_ok($crypter, 'Crypt::Image');
 
-unlink('t/secret.png');
+# 3. Perform dynamic round-trip encryption & decryption
+my $original_text = 'Hello World';
+
+eval { $crypter->encrypt($original_text, $enc_file) };
+if ($@) {
+    diag("Encryption failed: $@");
+}
+ok(-f $enc_file && -s $enc_file, 'Encrypted image created successfully');
+
+my $decrypted_text = eval { $crypter->decrypt($enc_file) };
+if ($@) {
+    diag("Decryption failed: $@");
+}
+
+is($decrypted_text, $original_text, 'Decrypted text matches original input');

@@ -36,8 +36,9 @@
 /* Version history (append-only; a consumer checks abi_version):
  *   1 - context accessors, route_pattern_of, on_request/on_response
  *   2 - on_query (the shipped Punk::Model::DBI backend)
- *   3 - on_log (a COPY of every log record, for a logs signal) */
-#define PK_ABI_VERSION 3
+ *   3 - on_log (a COPY of every log record, for a logs signal)
+ *   4 - on_log_ctx (the same, plus the context, so it can be correlated) */
+#define PK_ABI_VERSION 4
 
 /* An observer of the start of a request. `c` is the request context - the same
  * one the handler will get, so anything left in its stash is there later.
@@ -98,6 +99,22 @@ typedef void  (*pk_abi_query_done_cb)(pTHX_ void *token, int ok, void *ud);
  * it was never a record. MUST NOT croak. */
 typedef void (*pk_abi_log_cb)(pTHX_ const char *level, STRLEN llen, SV *msg,
                               HV *fields, void *ud);
+
+/* v4. The same tap, plus the CONTEXT the line was logged against.
+ *
+ * WITHOUT THE CONTEXT A LOG OBSERVER CANNOT CORRELATE. `trace_id` and
+ * `span_id` are reserved logger keys precisely so a telemetry layer can write
+ * them from the active span - and v3 gave an observer no way to find that
+ * span. The only alternative is a process-global "current span", which on an
+ * event loop with two requests in flight attributes one request's lines to
+ * the other: worse than no correlation, because it is confidently wrong.
+ *
+ * `c` is the request context, or NULL for a line logged against the
+ * application rather than a request (`$app->log`, boot, a background job).
+ * Borrowed, like every other context here. Everything else is v3's contract,
+ * including MUST NOT croak. */
+typedef void (*pk_abi_log_ctx_cb)(pTHX_ SV *c, const char *level, STRLEN llen,
+                                  SV *msg, HV *fields, void *ud);
 
 typedef struct pk_abi {
     int abi_version;                     /* == PK_ABI_VERSION */
@@ -179,6 +196,14 @@ typedef struct pk_abi {
      * field of the same name would forge a correlation - pointing a reader at
      * somebody else's trace. */
     int (*on_log)(pTHX_ pk_abi_log_cb cb, void *ud);
+
+    /* ---- v4 ------------------------------------------------------------- *
+     * A log tap that is handed the context, so the record can be correlated
+     * with the request that produced it. Same contract as on_log otherwise.
+     *
+     * Prefer this to on_log. A consumer registering both receives every
+     * record twice. */
+    int (*on_log_ctx)(pTHX_ pk_abi_log_ctx_cb cb, void *ud);
 } pk_abi;
 
 /* How many observers of each kind the dispatcher will hold. Fixed, so

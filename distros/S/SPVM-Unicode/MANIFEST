@@ -8,8 +8,8 @@
 .github/workflows/windows-latest.yml
 .gitignore
 Changes
+lib/SPVM/Unicode.build
 lib/SPVM/Unicode.c
-lib/SPVM/Unicode.config
 lib/SPVM/Unicode.pm
 lib/SPVM/Unicode.spvm
 LICENSE

@@ -1,0 +1,106 @@
+use alienfile;
+
+# There is no system libcurl-impersonate; always build from source.
+probe sub { 'share' };
+
+share {
+    # A fork of lexiforest/curl-impersonate at v2.1.1, carrying one commit:
+    # upstream's configure aborts under CMake 4 because curl's
+    # curl_openssl_check_exists() puts imported OpenSSL targets in
+    # CMAKE_REQUIRED_LIBRARIES, which try_compile's scratch project has not got.
+    # The pin moves back to upstream once an equivalent fix lands there.
+    meta->prop->{start_url} = 'https://github.com/vividsnow/curl-impersonate.git';
+    plugin 'Download::Git' => ( version => qr/^v(2\.1\.1)-cmake4$/ );   # pin
+
+    # A CMake superbuild since upstream 2.0.0. Alien::cmake3 supplies a cmake
+    # where the system has none, but it only promises 3.x -- see the check below.
+    plugin 'Build::CMake';
+    # Build::CMake turns destdir on, which makes %{.install.prefix} the FINAL
+    # install location. ExternalProject_Add creates its INSTALL_DIR at configure
+    # time, so cmake then tries to mkdir the perl site directory during the
+    # build -- fine as a local user, "No such file or directory" on a runner
+    # installing into /usr/local. With destdir off the prefix is the stage
+    # directory instead: writable, inside the build tree, and copied out later.
+    meta->prop->{destdir} = 0;
+
+    build [
+        # The curl subproject forces -GNinja, BoringSSL runs go, deps are
+        # patched, and libidn2 is fetched and built outside cmake with curl and
+        # make. None of that is cmake's to find.
+        sub {
+            my ($build) = @_;
+            my @path = grep { length } split /:/, ($ENV{PATH} // '');
+            my $have = sub {
+                my $name = shift;
+                for my $dir (@path) { return 1 if -x "$dir/$name" }
+                return 0;
+            };
+            my @missing;
+            for my $alt ([qw(git)], [qw(ninja ninja-build)], [qw(go)], [qw(patch)],
+                         [qw(curl)], [qw(gmake make)]) {
+                push @missing, join('/', @$alt) unless grep { $have->($_) } @$alt;
+            }
+            return unless @missing;
+            die "Alien::curlimpersonate: cannot build, missing: @missing\n"
+              . "curl-impersonate builds BoringSSL (Go + Ninja) and curl from\n"
+              . "source. Install the toolchain and try again:\n"
+              . "  Debian/Ubuntu  apt-get install git ninja-build golang-go patch curl build-essential\n"
+              . "  Fedora/RHEL    dnf install git ninja-build golang patch curl gcc gcc-c++ make\n"
+              . "  macOS          brew install ninja go\n";
+        },
+        # Upstream wants cmake >= 3.20. Alien::cmake3 promises only 3.x, and the
+        # version it reports is recorded at ITS install time, so it can lag the
+        # binary by a whole major. Ask the binary.
+        sub {
+            my ($build) = @_;
+            my $cmake = $build->meta->interpolator->interpolate('%{cmake}');
+            my ($maj, $min) = `"$cmake" --version` =~ /cmake version (\d+)\.(\d+)/;
+            die "Alien::curlimpersonate: cannot read a version from $cmake\n"
+                unless defined $min;
+            die "Alien::curlimpersonate: curl-impersonate needs cmake 3.20 or "
+              . "newer, but $cmake is $maj.$min\n"
+                if $maj < 3 || ($maj == 3 && $min < 20);
+        },
+        # A prerequisite CMake requires but will not build: configure aborts
+        # unless libidn2.a is already staged, and upstream's own Makefile leaves
+        # it a step of its own.
+        [ 'sh', 'scripts/build-libidn2.sh' ],
+        [ '%{cmake}', '-S', '.', '-B', 'build',
+                      '-DCMAKE_BUILD_TYPE=Release',
+                      '-DCMAKE_INSTALL_PREFIX=%{.install.prefix}' ],
+        [ '%{cmake}', '--build', 'build', '--parallel' ],
+        [ '%{cmake}', '--build', 'build', '--target', 'install-all' ],
+    ];
+
+    # libcurl-impersonate ships no .pc file; set cflags/libs explicitly.
+    gather sub {
+        my ($build) = @_;
+        # The files are in the stage dir now (destdir is off, see above);
+        # $prefix is where they end up, and is what the flags must name.
+        my $prefix = $build->runtime_prop->{prefix};
+        my $built  = $build->install_prop->{stage};
+        # Not just lib/: GNUInstallDirs uses lib64/ on some distros, and
+        # asserting nothing would ship an Alien whose flags point at nothing.
+        my $libdir;
+        for my $dir (qw(lib lib64)) {
+            next unless -d "$built/$dir";
+            # List context: a scalar glob is a per-call-site iterator, and a hit
+            # leaves it mid-stream (lib/ holds .so, .so.4, .so.4.8.0).
+            my @found = glob "$built/$dir/libcurl-impersonate.*";
+            next unless @found;
+            $libdir = $dir;
+            last;
+        }
+        die "Alien::curlimpersonate: build reported success but no "
+          . "libcurl-impersonate.* is under $built (looked in lib/ and lib64/)\n"
+            unless defined $libdir;
+        # As load-bearing as libs: a consumer finds out at "curl/curl.h: No such file".
+        die "Alien::curlimpersonate: build reported success but "
+          . "$built/include/curl/curl.h is missing\n"
+            unless -f "$built/include/curl/curl.h";
+        $build->runtime_prop->{cflags} = "-I$prefix/include";
+        # No rpath: Alien::Base relocates -L but not -Wl,-rpath, so one set here
+        # would point at the stage dir. See "LINKING AGAINST IT" in the POD.
+        $build->runtime_prop->{libs}   = "-L$prefix/$libdir -lcurl-impersonate";
+    };
+};

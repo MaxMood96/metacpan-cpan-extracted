@@ -1,5 +1,14 @@
 Revision history for Music-SimpleDrumMachine
 
+0.0600 2026-08-25 19:49:57
+    - Add the save attribute and logic.
+
+0.0512 2026-08-25 14:21:48
+    Add tests!
+
+0.0511 2026-08-25 12:42:45
+    - Add the shared pattern file to the Grooves constructor.
+
 0.0510 2026-06-11 16:02:23
     - Drop unused cruft: "notes."
     - Use `try` to improve / simplify the error message when opening the port.

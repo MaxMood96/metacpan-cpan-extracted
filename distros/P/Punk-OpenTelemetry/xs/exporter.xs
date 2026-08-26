@@ -263,22 +263,36 @@ encode(self, signal, payload)
         STRLEN sl;
         const char *sp = SvOK(signal) ? SvPV_const(signal, sl) : "";
         if (!SvOK(signal)) sl = 0;
+        int is_traces  = (sl == 6 && memEQ(sp, "traces",  6));
+        int is_metrics = (sl == 7 && memEQ(sp, "metrics", 7));
+        int is_logs    = (sl == 4 && memEQ(sp, "logs",    4));
+
         if (!h) croak("Punk::OpenTelemetry::Exporter::encode: not an exporter");
-        if (!(sl == 6 && memEQ(sp, "traces", 6)))
-            croak("Punk::OpenTelemetry::Exporter: only traces are "
-                  "implemented\n");
+        if (!(is_traces || is_metrics || is_logs))
+            croak("Punk::OpenTelemetry::Exporter: unknown signal '%.*s' - "
+                  "traces, metrics and logs exist\n", (int)sl, sp);
         if (!(payload && SvROK(payload) && SvTYPE(SvRV(payload)) == SVt_PVHV))
             croak("Punk::OpenTelemetry::Exporter::encode: "
                   "expected a hashref payload");
         if (otel_exp_is_json(aTHX_ h)) {
             frj_opts o;
             SV *tree;
+            /* Only traces have a JSON rendering. Refused by NAME rather than
+             * silently sent as protobuf under a JSON content type, which
+             * would be a body the far side cannot parse and an error message
+             * blaming the receiver. */
+            if (!is_traces)
+                croak("Punk::OpenTelemetry::Exporter: %.*s over OTLP/JSON is "
+                      "not implemented - use http/protobuf for this signal\n",
+                      (int)sl, sp);
             Zero(&o, 1, frj_opts);
             o.sort_keys = 1;      /* same reason as Encode::traces_json */
             tree = sv_2mortal(otel_json_traces_sv(aTHX_ (HV *)SvRV(payload)));
             RETVAL = otel_frj(aTHX)->encode(aTHX_ tree, &o);
         }
-        else RETVAL = otel_encode_traces(aTHX_ (HV *)SvRV(payload));
+        else if (is_metrics) RETVAL = otel_encode_metrics(aTHX_ (HV *)SvRV(payload));
+        else if (is_logs)    RETVAL = otel_encode_logs(aTHX_ (HV *)SvRV(payload));
+        else                 RETVAL = otel_encode_traces(aTHX_ (HV *)SvRV(payload));
     }
     OUTPUT:
         RETVAL

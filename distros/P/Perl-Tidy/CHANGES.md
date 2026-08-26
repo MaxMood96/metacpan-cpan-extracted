@@ -1,5 +1,11 @@
 # Perltidy Change Log
 
+## 2026 08 26
+
+   - Fixed git #213, --heredoc-extra-spaces flag not working correctly.
+
+   - Additional checks have been added to help catch missing semicolons.
+
 ## 2026 08 08
 
    - Fixed git #211, an unusual instability with the following eval block:

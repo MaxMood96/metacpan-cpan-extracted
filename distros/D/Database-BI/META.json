@@ -1,0 +1,78 @@
+{
+   "abstract" : "Web-based Business Intelligence viewer for flat data files",
+   "author" : [
+      "Nigel Horne <njh@nigelhorne.com>"
+   ],
+   "dynamic_config" : 1,
+   "generated_by" : "ExtUtils::MakeMaker version 7.78, CPAN::Meta::Converter version 2.150013",
+   "license" : [
+      "gpl_2"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "Database-BI",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "inc"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "Carp" : "0",
+            "DBI" : "0",
+            "Database::Abstraction" : "0.38",
+            "HTML::TableExtract" : "0",
+            "LWP::UserAgent" : "0",
+            "Mojolicious" : "9.49",
+            "Mojolicious::Plugin::TemplateToolkit" : "0",
+            "Params::Get" : "0",
+            "Params::Validate::Strict" : "0.39",
+            "Readonly" : "0",
+            "Sub::Private" : "0",
+            "perl" : "5.020000"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "DBD::CSV" : "0",
+            "IPC::System::Simple" : "0",
+            "Test::Memory::Cycle" : "0",
+            "Test::Mockingbird" : "0",
+            "Test::Mojo" : "0",
+            "Test::Most" : "0",
+            "Test::Needs" : "0",
+            "Test::Returns" : "0",
+            "Test::Without::Module" : "0",
+            "Text::xSV::Slurp" : "0",
+            "XML::Simple" : "0"
+         }
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/nigelhorne/Database-BI/issues"
+      },
+      "repository" : {
+         "type" : "git",
+         "url" : "https://github.com/nigelhorne/Database-BI.git",
+         "web" : "https://github.com/nigelhorne/Database-BI"
+      }
+   },
+   "version" : "v0.001.0",
+   "x_serialization_backend" : "JSON::PP version 4.18"
+}

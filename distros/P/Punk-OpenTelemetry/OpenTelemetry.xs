@@ -94,6 +94,84 @@ static const frj_abi *otel_frj(pTHX) {
 /* configuration */
 #include "otel_config.h"    /* the OTEL_* surface, precedence, the boot line */
 
+
+/* ---- the log tap -------------------------------------------------------- *
+ * Glue between two subsystems, so it lives in the file that includes both:
+ * the observer is typed by pk_abi (otel_instr.h) and emits into the logger
+ * (otel_log.h), and the logger header is included after the instrumentation
+ * one. */
+/* The logger this process exports through. Set by the plugin when the logs
+ * signal is on, and NULL when it is off - which is what makes a log line cost
+ * a load and a branch on a deployment that has turned logs off. */
+static otel_logger *OTEL_LOGGER = NULL;
+
+/* pk_abi's on_log_ctx: EVERY LINE THE APPLICATION LOGS, exported.
+ *
+ * This is why there is no separate "log to telemetry" call. An application
+ * already has a logger and already uses it; asking it to make a second call
+ * to a second logger means the two disagree the first time somebody adds a
+ * line to one of them, and the telemetry copy is always the one that gets
+ * forgotten. `$c->log->error(...)` is the whole interface.
+ *
+ * A TAP, NOT A SINK. The line still goes wherever it was going - Punk emits
+ * it and then hands over a copy - so turning telemetry on never takes an
+ * operator's logs away, and a collector outage never silences them.
+ *
+ * The span comes from the context, which is what v4 of the ABI exists to
+ * pass. A record logged outside a request, or after the response ended,
+ * carries no trace id rather than a stale one. */
+static void otel_on_log(pTHX_ SV *c, const char *level, STRLEN llen, SV *msg,
+                        HV *fields, void *ud) {
+    const pk_abi *A = (const pk_abi *)ud;
+    otel_span *span = NULL;
+    SV *lvl;
+
+    /* The SDK's own diagnostics must not come back round through here: the
+     * exporter logs a failure, the failure becomes a record, the record is
+     * exported... */
+    if (!OTEL_LOGGER || OTEL_INSTR.suppress || !OTEL_INSTR.enabled) return;
+
+    /* READ, NEVER TAKEN. otel_unstash_span CLEARS the slot - it is how the
+     * response side ends the span - so using it here would end the request's
+     * span by logging a line, and the trace would lose its root. */
+    if (c && A) {
+        SV *st = A->stash_of(aTHX_ c);
+        if (st && SvROK(st) && SvTYPE(SvRV(st)) == SVt_PVHV) {
+            SV **e = hv_fetch((HV *)SvRV(st), OTEL_STASH_KEY,
+                              (I32)(sizeof(OTEL_STASH_KEY) - 1), 0);
+            if (e && *e && SvIOK(*e) && SvIV(*e))
+                span = INT2PTR(otel_span *, SvIV(*e));
+        }
+    }
+
+    lvl = sv_2mortal(newSVpvn(level, llen));
+
+    /* `message` IS THE BODY, so it does not also become an attribute.
+     *
+     * Punk's structured form puts the message inside the record - and the
+     * record is what an observer is handed - so passing the hash through
+     * unchanged exported every line twice: once as the body and once as an
+     * attribute of the same name. That is bytes on every record, for ever,
+     * saying the thing the record already says.
+     *
+     * A COPY, because the hash belongs to the caller. Filtering in place
+     * would delete a key out of a live application's data structure. */
+    if (fields && HvUSEDKEYS(fields)) {
+        HV *attrs = newHV();
+        HE *he;
+        hv_iterinit(fields);
+        while ((he = hv_iternext(fields))) {
+            STRLEN kl;
+            const char *k = HePV(he, kl);
+            if (kl == 7 && memcmp(k, "message", 7) == 0) continue;
+            (void)hv_store_ent(attrs, HeSVKEY_force(he), newSVsv(HeVAL(he)), 0);
+        }
+        otel_logger_emit(aTHX_ OTEL_LOGGER, lvl, msg, attrs, span);
+        SvREFCNT_dec((SV *)attrs);   /* emit took its own reference */
+    }
+    else otel_logger_emit(aTHX_ OTEL_LOGGER, lvl, msg, NULL, span);
+}
+
 MODULE = Punk::OpenTelemetry    PACKAGE = Punk::OpenTelemetry
 
 PROTOTYPES: DISABLE

@@ -28,6 +28,9 @@ sub connect {
         $attributes->{mock_database_name} = $driverParameters{database};
     }
 
+    if (($driverParameters{database} || '') eq 'PostgreSQL') {
+        $attributes->{mock_bound_array_support} = 1;
+    }
     # holds statement parsing coderefs/objects
     $attributes->{mock_parser} = [];
 

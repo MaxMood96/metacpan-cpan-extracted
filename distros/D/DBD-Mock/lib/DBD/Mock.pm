@@ -30,7 +30,7 @@ sub import {
       if ( @_ && lc( $_[0] ) eq "pool" );
 }
 
-our $VERSION = '1.59';
+our $VERSION = '1.60';
 
 our $drh    = undef;    # will hold driver handle
 our $err    = 0;        # will hold any error codes
@@ -1206,6 +1206,26 @@ the C<$params> against the current state's C<bound_params> value. Both number
 of parameters and the parameters themselves must match, or an error will be
 raised.
 
+Parameters are compared using string comparison or, when a regular expression
+is supplied in the parameter position, matched against the regular expression.
+
+When a PostgreSQL database is mocked
+
+    my $dbh = DBI->connect('dbi:Mock:PostgreSQL', ...);
+
+support for bound array parameters (a feature specific to L<DBD::Pg>) is
+enabled. Array elements are compared using the comparison method above. Array
+elements which are themselves arrays are I<not> traversed into.
+
+    my $session = DBD::Mock::Session->new( 'my_session' => (
+        {
+            statement => 'SELECT foo FROM bar WHERE baz = ANY(?)',
+            bound_params => [
+               [ 'uvw', 'xyz' ] # bound array param
+            ]
+        }
+    ));
+
 =item B<C<reset>>
 
 Calling this method will reset the state of the session object so that it can
@@ -1560,7 +1580,8 @@ C<mock_can_execute>, and C<mock_can_fetch> features.
 and adding a new I<One Shot Failure> feature to C<mock_add_resultset>.
 
 =item Thanks to Erik Huelsmann for testing the new result set custom attributes
-feature.
+feature and also adding support for using arrayref's as bound parameters with
+PostgreSQL databases.
 
 =back
 

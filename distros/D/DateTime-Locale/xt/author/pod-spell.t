@@ -1771,6 +1771,7 @@ Arbaco
 Arbc
 Are
 Argentina
+Arim
 Ariyo
 Ariŋuu
 Arj
@@ -1898,6 +1899,7 @@ Baada
 Bafia
 Bahamas
 Bahrain
+Bakhtiari
 Bal
 Bala
 Balaza
@@ -1978,6 +1980,7 @@ Bulgaria
 Bulgarian
 Bur
 Bureet
+Buriat
 Burkina
 Burma
 Burmese
@@ -3410,6 +3413,7 @@ E2
 E3
 E4
 EA
+EBh
 EBh:mm
 EBh:mm:ss
 EBhm
@@ -3419,12 +3423,14 @@ EEEE
 EEEEd
 EEEE،
 EEEEที่
+EG
 EHH:mm
 EHH:mm:ss
 EHm
 EHms
 EW
 EY
+Eah
 Eah:mm
 Eah:mm:ss
 Ean
@@ -3707,6 +3713,7 @@ Gwynngala
 Gy
 Gy/M/d
 GyM
+GyMEd
 GyMMM
 GyMMMEEEEd
 GyMMMEd
@@ -3730,8 +3737,13 @@ H.mm:ss
 H:mm
 H:mm:ss
 HH
+HH'H
+HH'e
 HH'h
 HH'h'mm
+HH'klst
+HH'u
+HH'v
 HH.mm
 HH.mm.ss
 HH:mm
@@ -3793,6 +3805,7 @@ Hlakola
 Hlakubele
 Hm
 Hmm
+Hmnp
 Hmong
 Hms
 Hmsv
@@ -3820,6 +3833,7 @@ Hunyo
 Hut
 Huw
 Huwebes
+Hv
 Hvse
 Hwaĩ-inĩ
 Hwe
@@ -4372,6 +4386,7 @@ Kurmaana
 Kurume
 Kusa
 Kuta
+Kutan
 Kuuza
 Kuvi
 Kuvita
@@ -4487,6 +4502,7 @@ Latin
 Latn
 Latvia
 Latvian
+Laz
 Lebanon
 Lehin
 Lem
@@ -5320,6 +5336,7 @@ Ogs
 Ogus
 Ojola
 Ok
+Okanagan
 Oke
 Oketopa
 Oki
@@ -5434,6 +5451,7 @@ Pachibelushi
 Pakistan
 Palau
 Palestinian
+Pali
 Palichibuli
 Palichimo
 Palichine
@@ -5484,6 +5502,7 @@ Phukwi
 Phupjane
 Phupu
 Pidgin
+Piedmontese
 Piektd
 Piektdiena
 Pierre
@@ -5642,6 +5661,7 @@ SM4
 SPT
 ST
 SUPPORT
+SY
 Sa
 Saa
 Saambá
@@ -5677,6 +5697,8 @@ Samh
 Samhain
 Sami
 Samoa
+Samogitian
+Samogitian,
 Samschdeg
 Samschtig
 Samsdaach
@@ -5865,6 +5887,8 @@ Sunguti
 Sunndaach
 Sunntag
 Sunntig
+Sunu
+Sunuwar
 Suriname
 Suw
 Suwe
@@ -6176,6 +6200,8 @@ Vrydag
 Vunjo
 Vɨɨrɨ
 W
+W'a
+W'an
 W'em
 W'ja
 W'ª
@@ -6615,6 +6641,7 @@ asa-TZ
 asa_TZ
 asamas
 asati
+ascii
 asi
 asib
 asiibi
@@ -6809,6 +6836,8 @@ borgemánnu
 bosi
 bow
 bowte
+bqi
+bqi_IR
 br
 br-FR
 br_FR
@@ -6830,6 +6859,8 @@ bs_Latn_BA
 bss
 bss-CM
 bss_CM
+bua
+bua_RU
 byn
 byn-ER
 byn_ER
@@ -6916,6 +6947,8 @@ colte
 comme
 contains
 coo
+cop
+cop_EG
 cot
 cotmeh
 cristu
@@ -7018,6 +7051,7 @@ dd.MMM
 dd/MM
 dd/MM/y
 ddC
+ddE
 dd‏/MM
 de
 de''l
@@ -7210,6 +7244,7 @@ dä
 dèidh
 déc
 décembre
+dû
 dşm
 dטן
 dھەم
@@ -7417,34 +7452,43 @@ en_CK
 en_CM
 en_CX
 en_CY
+en_CZ
 en_DE
 en_DG
 en_DK
 en_DM
 en_Dsrt
 en_Dsrt_US
+en_EE
 en_ER
+en_ES
 en_FI
 en_FJ
 en_FK
 en_FM
+en_FR
 en_GB
 en_GD
+en_GE
 en_GG
 en_GH
 en_GI
 en_GM
+en_GS
 en_GU
 en_GY
 en_HK
+en_HU
 en_ID
 en_IE
 en_IL
 en_IM
 en_IN
 en_IO
+en_IT
 en_JE
 en_JM
+en_JP
 en_KE
 en_KI
 en_KN
@@ -7452,6 +7496,8 @@ en_KY
 en_LC
 en_LR
 en_LS
+en_LT
+en_LV
 en_MG
 en_MH
 en_MO
@@ -7466,15 +7512,19 @@ en_NA
 en_NF
 en_NG
 en_NL
+en_NO
 en_NR
 en_NU
 en_NZ
 en_PG
 en_PH
 en_PK
+en_PL
 en_PN
 en_PR
+en_PT
 en_PW
+en_RO
 en_RW
 en_SB
 en_SC
@@ -7483,6 +7533,7 @@ en_SE
 en_SG
 en_SH
 en_SI
+en_SK
 en_SL
 en_SS
 en_SX
@@ -7495,6 +7546,7 @@ en_TO
 en_TT
 en_TV
 en_TZ
+en_UA
 en_UG
 en_UM
 en_US
@@ -7519,6 +7571,7 @@ entang’ani
 eo
 eo-001
 eo_001
+eqchi
 era
 eramızdan
 erao
@@ -7964,6 +8017,7 @@ gwa
 gÿo
 gɔ
 h
+h'HH
 h'h'mm
 h'h'mm:ss
 h'ê
@@ -8064,6 +8118,8 @@ hr_HR
 hsb
 hsb-DE
 hsb_DE
+ht
+ht_HT
 hu
 hu-HU
 hu_HU
@@ -8073,6 +8129,7 @@ huhtikuu
 huhtikuuta
 hutala
 huɗu
+hv
 hy
 hy-AM
 hy_AM
@@ -8136,6 +8193,7 @@ ikota
 ikumi
 ikũmi
 ile
+ilo
 ils
 ilĩ
 im
@@ -8187,6 +8245,7 @@ iul
 iulie
 iun
 iunie
+iveki
 iwi
 iyl
 iyn
@@ -8395,6 +8454,8 @@ kea-CV
 kea_CV
 kedd
 kee
+kek
+kek_GT
 kel
 kele
 kelĩ
@@ -8522,6 +8583,13 @@ ktu
 ktubr
 ku
 ku-TR
+ku_Arab
+ku_Arab_IQ
+ku_Arab_IR
+ku_Latn
+ku_Latn_IQ
+ku_Latn_SY
+ku_Latn_TR
 ku_TR
 kua
 kuarta-fera
@@ -8536,6 +8604,7 @@ kumwe
 kuni
 kuovâ
 kuovâmáánu
+kutan
 kutúan
 kuŋgwɛ
 kuɔth
@@ -8748,6 +8817,7 @@ lunes
 lunesdì
 luni
 lunis
+lunnidìa
 luns
 luo
 luo-KE
@@ -8768,6 +8838,8 @@ lyatatu
 lyɛ'̌ʼ
 lyɛʼɛ́
 lyɛ̌ʼ
+lzz
+lzz_TR
 làm
 làmpadas
 lá
@@ -8830,6 +8902,7 @@ maiatza
 maig
 maijs
 maio
+mais
 maiu
 maj
 maja
@@ -9110,6 +9183,9 @@ mwambe
 mwd
 mwedzi
 mwom
+mww
+mww_Hmnp
+mww_Hmnp_US
 my
 my-MM
 my_MM
@@ -9491,6 +9567,9 @@ octombrie
 octubre
 of
 og
+oka
+oka_CA
+oka_US
 okko
 okt
 oktabr
@@ -9616,6 +9695,8 @@ pet
 petak
 petek
 pi
+pi_Latn
+pi_Latn_GB
 piatok
 piektd
 piektdiena
@@ -9645,6 +9726,8 @@ pl-PL
 pl_PL
 pm
 pm06:30:30
+pms
+pms_IT
 pn
 po
 pod
@@ -9862,6 +9945,7 @@ sabbo
 sabet
 sabide
 sabo
+sagat
 sah
 sah-RU
 sah_RU
@@ -9954,6 +10038,7 @@ sekmadienis
 seld
 selmana
 semaine
+semajno
 semana
 semane
 sen
@@ -10005,6 +10090,8 @@ sg_CF
 sginer
 sgiovedì
 sgiugn
+sgs
+sgs_LT
 sh
 shahulembela
 shahuviluha
@@ -10230,6 +10317,11 @@ suoi
 suoidnemánnu
 sup
 supapá
+suz
+suz_Deva
+suz_Deva_NP
+suz_Sunu
+suz_Sunu_NP
 sv
 sv-AX
 sv-FI
@@ -10353,6 +10445,7 @@ teden
 tedoxe
 teisipäev
 telu
+tenpo
 teo
 teo-KE
 teo-UG
@@ -10593,7 +10686,9 @@ v.C
 v.Chr
 v.M
 vC
+vH
 va
+vah
 vahkku
 vai
 vai-Latn
@@ -10612,6 +10707,7 @@ vas
 vasario
 vasaris
 vasárnap
+vaztam
 vaŋdɛrɛdi
 ve
 ve-ZA
@@ -10684,6 +10780,8 @@ vür
 vẽn
 vẽnhkãgra-kurã-há
 w
+w'a
+w'an
 w'em
 w'ja
 w'ª
@@ -10885,6 +10983,7 @@ yue_Hans_CN
 yue_Hant
 yue_Hant_CN
 yue_Hant_HK
+yue_Hant_MO
 yuk
 yukuakú
 yul

@@ -369,6 +369,12 @@ static void pl_emit(pTHX_ SV *self, int lvl, SV *msg, HV *fields) {
     SV *detail;
     if (lvl < threshold) return;                       /* dropped, no work */
 
+    /* The context is resolved BEFORE the observers rather than after, because
+     * a ctx-aware observer is given it. Reading one hash slot is not
+     * rendering, so the promise below still holds. */
+    ctxp = hv_fetchs(lg, "ctx", 0);
+    ctx = (ctxp && *ctxp && SvOK(*ctxp)) ? *ctxp : NULL;
+
     /* The observers, before any rendering. They want the record - the level,
      * the message and the fields - not a formatted line, and a line that was
      * dropped for being below the threshold was never a record at all. */
@@ -378,9 +384,13 @@ static void pl_emit(pTHX_ SV *self, int lvl, SV *msg, HV *fields) {
             PL_OBS[oi].cb(aTHX_ name, strlen(name), msg, fields,
                           PL_OBS[oi].ud);
     }
+    if (PL_OBS_CTX_N) {
+        int oi;
+        for (oi = 0; oi < PL_OBS_CTX_N; oi++)
+            PL_OBS_CTX[oi].cb(aTHX_ ctx, name, strlen(name), msg, fields,
+                              PL_OBS_CTX[oi].ud);
+    }
 
-    ctxp = hv_fetchs(lg, "ctx", 0);
-    ctx = (ctxp && *ctxp && SvOK(*ctxp)) ? *ctxp : NULL;
     if (ctx) {
         SV *e = pcx_get(aTHX_ pcx_av(aTHX_ ctx), PCX_ENV);
         if (e && SvROK(e) && SvTYPE(SvRV(e)) == SVt_PVHV) {

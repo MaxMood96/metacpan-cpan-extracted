@@ -1,0 +1,53 @@
+---
+abstract: 'build and find libcurl-impersonate'
+author:
+  - vividsnow
+build_requires:
+  Alien::Build::MM: '0.32'
+  Alien::Build::Plugin::Download::Git: '0'
+  Alien::cmake3: '0.02'
+  Alien::git: '0'
+  Config: '0'
+  Sort::Versions: '0'
+  Test::Alien: '0'
+  Test::More: '0'
+configure_requires:
+  Alien::Build::MM: '0.32'
+  Alien::Build::Plugin::Build::CMake: '0.99'
+  Alien::Build::Plugin::Download::Git: '0.01'
+  Alien::Build::Plugin::Extract::Directory: '0.65'
+  Alien::Build::Plugin::Fetch::Git: '0.01'
+  Alien::Build::Plugin::Prefer::SortVersions: '0.65'
+dynamic_config: 1
+generated_by: 'ExtUtils::MakeMaker version 7.78, CPAN::Meta::Converter version 2.150013'
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: '1.4'
+name: Alien-curlimpersonate
+no_index:
+  directory:
+    - t
+    - inc
+provides:
+  Alien::curlimpersonate:
+    file: lib/Alien/curlimpersonate.pm
+    version: '0.02'
+requires:
+  Alien::Base: '0'
+  Alien::Build: '0.25'
+  perl: '5.010'
+resources:
+  bugtracker: https://github.com/vividsnow/perl5-alien-curlimpersonate/issues
+  repository: https://github.com/vividsnow/perl5-alien-curlimpersonate.git
+version: '0.02'
+x_alienfile:
+  generated_by: 'Alien::Build::MM version 2.84'
+  requires:
+    share:
+      Alien::cmake3: '0.02'
+      Alien::git: '0'
+      Config: '0'
+      Sort::Versions: '0'
+    system: {}
+x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

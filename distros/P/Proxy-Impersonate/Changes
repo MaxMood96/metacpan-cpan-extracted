@@ -1,0 +1,7 @@
+Revision history for Proxy-Impersonate
+
+0.01  2026-08-25
+    - initial release: an EV-driven MITM proxy that re-originates each request
+      through Curl::Impersonate, so the origin sees a chosen browser's TLS and
+      HTTP/2 fingerprint rather than the client's. Generates its own CA, and
+      forwards per-request headers so the request context stays coherent.

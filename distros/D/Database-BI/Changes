@@ -1,0 +1,17 @@
+Revision history for Database-BI
+
+0.001.0	Tue Aug 25 08:14:37 PM EDT 2026
+    - Initial CPAN release.
+    - Mojolicious web application presenting arbitrary flat data files
+      (CSV, PSV, XML, SQLite) as styled, sortable, reorderable HTML tables.
+    - Home page card grid; filesystem browser (/browse, /open).
+    - In-memory left-join engine (/join) with repeatable join steps.
+    - Server-side result filters (eq, ne, contains, starts, lt, le, gt, ge,
+      empty, notempty operators).
+    - CSV and SQLite export via GET /export (stream download) and
+      POST /export (filesystem write).
+    - Drag-and-drop file upload (POST /upload).
+    - JSON APIs: /api/columns, /api/dirs, /api/stat.
+    - URL import: fetch and display an HTML table from any public URL
+      (/import).
+    - localStorage persistence for column order and sort state.

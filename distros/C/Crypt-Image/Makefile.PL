@@ -1,4 +1,5 @@
-use 5.006;
+#!/usr/bin/env perl
+
 use strict;
 use warnings FATAL => 'all';
 use ExtUtils::MakeMaker;
@@ -17,7 +18,7 @@ WriteMakefile(
         'Test::More' => 0,
     },
     PREREQ_PM => {
-        'Math::Random'         => '0.71',
+        'CryptX'               => '0.089',
         'POSIX'                => '1.09',
         'GD::Image'            => '2.38',
         'autodie'              => 0,
@@ -27,13 +28,25 @@ WriteMakefile(
     },
     dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean => { FILES => 'Crypt-Image-*' },
-    (eval { ExtUtils::MakeMaker->VERSION(6.46) } ? (META_MERGE => {
+    META_MERGE => {
         'meta-spec' => { version => 2 },
         provides    => {
-            'Crypt::Image'         => { file => 'lib/Crypt/Image.pm',        version => '0.15' },
-            'Crypt::Image::Axis'   => { file => 'lib/Crypt/Image/Axis.pm',   version => '0.15' },
-            'Crypt::Image::Util'   => { file => 'lib/Crypt/Image/Util.pm',   version => '0.15' },
-            'Crypt::Image::Params' => { file => 'lib/Crypt/Image/Params.pm', version => '0.15' },
+            'Crypt::Image' => {
+                file    => 'lib/Crypt/Image.pm',
+                version => MM->parse_version('lib/Crypt/Image.pm'),
+            },
+            'Crypt::Image::Axis' => {
+                file    => 'lib/Crypt/Image/Axis.pm',
+                version => MM->parse_version('lib/Crypt/Image/Axis.pm'),
+            },
+            'Crypt::Image::Util' => {
+                file    => 'lib/Crypt/Image/Util.pm',
+                version => MM->parse_version('lib/Crypt/Image/Util.pm'),
+            },
+            'Crypt::Image::Params' => {
+                file    => 'lib/Crypt/Image/Params.pm',
+                version => MM->parse_version('lib/Crypt/Image/Params.pm'),
+            },
         },
         resources => {
             repository => {
@@ -41,7 +54,9 @@ WriteMakefile(
                 url  => 'https://github.com/manwar/Crypt-Image.git',
                 web  => 'https://github.com/manwar/Crypt-Image',
             },
-        }})
-     : ()
-    ),
+            bugtracker => {
+                web => 'https://github.com/manwar/Crypt-Image/issues',
+            },
+        },
+    },
 );

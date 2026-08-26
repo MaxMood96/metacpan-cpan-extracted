@@ -246,9 +246,68 @@ SKIP: {
         Punk::OpenTelemetry::Encode::traces_json($PAYLOAD),
         'and to the JSON one under http/json');
 
+    # All three signals encode to protobuf. The metrics and logs encoders
+    # existed in the header the whole time and were simply never dispatched
+    # to here - which cost the two signals entirely, and cost LOGS twice
+    # because the flush that sent them shared one eval with metrics.
+    is($pb->encode(metrics => $PAYLOAD),
+        Punk::OpenTelemetry::Encode::metrics_protobuf($PAYLOAD),
+        'metrics encode to the protobuf writer');
+    is($pb->encode(logs => $PAYLOAD),
+        Punk::OpenTelemetry::Encode::logs_protobuf($PAYLOAD),
+        '  and so do logs');
+
+    # BUCKET COUNTS ARE PACKED VARINTS.
+    #
+    # OTLP declares `repeated uint64 bucket_counts`, and a uint64 in proto3 is
+    # a varint. Writing them as fixed64 - which this did - encodes a different
+    # wire type entirely: a conformant receiver reads eight bytes where one was
+    # meant, and every bucket in every histogram comes out wrong while the
+    # payload still parses. Asserted on the LENGTH, because that is what tells
+    # the two encodings apart.
+    {
+        my $hist = {
+            resource_metrics => [ {
+                resource      => { attributes => {} },
+                scope_metrics => [ {
+                    scope   => { name => 't' },
+                    metrics => [ {
+                        name        => 'h',
+                        aggregation => 3,
+                        temporality => 2,
+                        data_points => [ {
+                            time_unix_nano  => '1',
+                            count           => 3,
+                            sum             => 6,
+                            bucket_counts   => [ 1, 1, 1 ],
+                            explicit_bounds => [ 1, 2 ],
+                            attributes      => {},
+                        } ],
+                    } ],
+                } ],
+            } ],
+        };
+        my $bytes = $pb->encode(metrics => $hist);
+        # Three small counts as varints are three bytes; as fixed64 they are
+        # twenty-four, and the whole message grows by twenty-one.
+        my $packed = "\x01\x01\x01";
+        ok(index($bytes, $packed) >= 0,
+            'bucket_counts are packed VARINTS, not fixed64');
+        ok(length($bytes) < 150,
+            '  so a three-bucket histogram stays small');
+    }
+
     my $err = '';
-    eval { $pb->encode(metrics => $PAYLOAD) } or $err = $@;
-    like($err, qr/only traces are implemented/, 'another signal is refused');
+    eval { $pb->encode(profiles => $PAYLOAD) } or $err = $@;
+    like($err, qr/unknown signal/, 'a signal that does not exist is refused');
+
+    # JSON has only the traces rendering. Refused BY NAME rather than
+    # silently sent as protobuf under a JSON content type, which would be a
+    # body the far side cannot parse and an error blaming the receiver.
+    $err = '';
+    eval { $js->encode(metrics => $PAYLOAD) } or $err = $@;
+    like($err, qr/OTLP\/JSON is not implemented/,
+        'metrics over OTLP/JSON say so rather than sending protobuf');
 
     $err = '';
     eval { Punk::OpenTelemetry::Exporter->new(protocol => 'grpc') } or $err = $@;

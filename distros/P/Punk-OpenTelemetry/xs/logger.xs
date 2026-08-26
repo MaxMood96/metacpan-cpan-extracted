@@ -135,3 +135,25 @@ logs_protobuf(payload)
     }
     OUTPUT:
         RETVAL
+
+MODULE = Punk::OpenTelemetry    PACKAGE = Punk::OpenTelemetry::Logs
+
+# Make this the logger the log tap emits into.
+#
+# THE PACKAGE LINE ABOVE IS LOAD-BEARING. This file switches to
+# Punk::OpenTelemetry::Encode part way down, so anything appended to the end
+# of it lands in THAT package - which is a method that exists, on the wrong
+# class, and fails only when something calls it.
+#
+# The tap is a C observer registered with Punk's logger; it needs to know
+# which logger to put records in, and there is exactly one per process. The
+# plugin calls this once, when the logs signal is on - and passing undef turns
+# the tap off, which is what "logs => 0" has to mean.
+void
+install_tap(self = &PL_sv_undef)
+        SV *self
+    CODE:
+    {
+        OTEL_LOGGER = (SvROK(self) && SvIOK(SvRV(self)) && SvIV(SvRV(self)))
+            ? INT2PTR(otel_logger *, SvIV(SvRV(self))) : NULL;
+    }

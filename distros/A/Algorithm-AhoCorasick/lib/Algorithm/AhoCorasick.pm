@@ -16,7 +16,7 @@ our %EXPORT_TAGS = ( 'all' => [ qw(
 
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 sub find_first {
     my $text = shift;
@@ -126,7 +126,7 @@ Algorithm::AhoCorasick::SearchMachine POD for details.
 
 =head1 AUTHOR
 
-Vaclav Barta, C<< <vbar@comp.cz> >>
+Vaclav Barta, C<< <vbarta@mangrove.cz> >>
 
 =head1 BUGS
 
@@ -138,7 +138,7 @@ your bug as I make changes.
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2010 Vaclav Barta, all rights reserved.
+Copyright (C) 2007 - 2026 Vaclav Barta, all rights reserved.
 
 This program is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.

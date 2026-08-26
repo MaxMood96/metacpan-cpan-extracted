@@ -10,3 +10,4 @@ t/SearchMachine.t
 t/circular-ref.t
 t/find_all.t
 t/find_first.t
+META.json                                Module JSON meta-data (added by MakeMaker)

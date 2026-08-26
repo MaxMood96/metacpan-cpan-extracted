@@ -109,6 +109,7 @@ t/56-post-completion-exception.t
 t/57-date-consistency.t
 t/58-h1-connection-header-ownership.t
 t/59-ws-disconnect-exactly-once.t
+t/60-multi-server-coexistence.t
 t/certs/ca.crt
 t/certs/ca.key
 t/certs/ca.srl

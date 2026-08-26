@@ -114,7 +114,7 @@ sub results_for {
 }
 
 sub verify_bound_params {
-    my ( $self, $params ) = @_;
+    my ( $self, $params, $options ) = @_;
 
     my $current_state = $self->current_state;
     if ( exists ${$current_state}{bound_params} ) {
@@ -128,7 +128,7 @@ sub verify_bound_params {
         }
 
         for ( 0 .. scalar @{$params} - 1 ) {
-            $self->_verify_bound_param( $params->[$_], $expected->[$_], $_ );
+            $self->_verify_bound_param( $params->[$_], $expected->[$_], $_, $options );
         }
 
     }
@@ -165,8 +165,72 @@ sub _remaining_states {
     @{ $self->{states} }[ $start_index .. $end_index ];
 }
 
-sub _verify_bound_param {
+sub _array_compare {
     my ( $self, $got, $expected, $index ) = @_;
+    no warnings;
+
+    my $ref_got = ref $got;
+
+    if (not $ref_got or $ref_got ne 'ARRAY') {
+        die "Bound param $index does not match (using ARRAY) "
+            . "in current state in DBD::Mock::Session ($self->{name})\n"
+            . "      got: $got\n"
+            . " expected: ARRAY\n";
+    }
+
+    if ( scalar( @{ $got } ) != scalar( @{ $expected } ) ) {
+        my $got_len = scalar( @{ $got } );
+        my $expected_len = scalar( @{ $expected } );
+        die "Bound param $index does not match (using ARRAY) "
+            . "in current state in DBD::Mock::Session ($self->{name})\n"
+            . "      got: array of length $got_len\n"
+            . " expected: array of length $expected_len\n";
+    }
+
+    for my $i ( 0 .. $#{ $expected } ) {
+        my $got_value = $got->[$i];
+        my $expected_value = $expected->[$i];
+
+        if ( not defined $expected_value
+             and not defined $got_value ) {
+            next;
+        }
+
+        if ( not defined $got_value ) {
+            die "Bound array param $index differs at offset $i "
+                . "in current state in DBD::Mock::Session ($self->{name})\n"
+                . "      got: <undef>\n"
+                . " expected: $expected_value\n";
+        }
+
+        if ( not defined $expected_value ) {
+            die "Bound array param $index differs at offset $i "
+                . "in current state in DBD::Mock::Session ($self->{name})\n"
+                . "      got: $got_value"
+                . " expected: <undef>\n";
+        }
+
+        my $ref = ref $expected_value;
+        if ( $ref and $ref eq 'Regexp' ) {
+
+            if ( $got_value !~ /$expected_value/ ) {
+                die "Bound array param $index differs at offset $i "
+                    . "in current state in DBD::Mock::Session ($self->{name})\n"
+                    . "      got: $got_value\n"
+                    . " expected: $expected_value\n";
+            }
+
+        } elsif ( $got_value ne $expected_value ) {
+            die "Bound array param $index differs at offset $i "
+                . "in current state in DBD::Mock::Session ($self->{name})\n"
+                . "      got: $got_value"
+                . " expected: $expected_value\n";
+        }
+    }
+}
+
+sub _verify_bound_param {
+    my ( $self, $got, $expected, $index, $options ) = @_;
     no warnings;
 
     my $ref = ref $expected;
@@ -179,7 +243,8 @@ sub _verify_bound_param {
               . "      got: $got\n"
               . " expected: $expected";
         }
-
+    } elsif ( $ref eq 'ARRAY' and $options->{bound_arrays} ) {
+        $self->_array_compare( $got, $expected, $index, $options );
     } elsif ( $got ne $expected ) {
         die "Bound param $index do not match "
           . "in current state in DBD::Mock::Session ($self->{name})\n"

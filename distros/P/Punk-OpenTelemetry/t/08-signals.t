@@ -5,6 +5,25 @@ use warnings;
 use FindBin ();
 use lib "$FindBin::Bin/lib";
 use Test::More;
+
+# Read a packed varint field. The fixed-width unpack that used to stand here
+# read the right number of bytes for the wrong encoding.
+sub unpack_varints {
+    my ($b) = @_;
+    my @out;
+    my $i = 0;
+    while ($i < length $b) {
+        my ($v, $shift) = (0, 0);
+        while ($i < length $b) {
+            my $c = ord substr($b, $i++, 1);
+            $v |= ($c & 0x7f) << $shift;
+            last unless $c & 0x80;
+            $shift += 7;
+        }
+        push @out, $v;
+    }
+    return @out;
+}
 use OTelWire qw(pb_parse pb_field pb_fields pb_str);
 use Punk::OpenTelemetry;
 
@@ -82,14 +101,22 @@ use Punk::OpenTelemetry;
     # packed repeated fields: ONE length-delimited field holding the values
     # back to back, not a tag per value. The schema declares these packed and
     # strict consumers read them that way.
+    #
+    # AND bucket_counts ARE VARINTS. OTLP declares them `repeated uint64`, and
+    # a uint64 in proto3 is a varint - this asserted fixed64 for a while,
+    # which pinned the encoder to a wire type no conformant receiver reads.
+    # A test written from the implementation rather than from the schema locks
+    # the mistake in, and this is what that looks like.
     my $bk = pb_field($dp, 6);
-    is(length($bk) % 8, 0, 'bucket_counts is packed fixed64');
-    is(length($bk) / 8, 15, 'with one bucket per boundary plus the overflow');
-    my @counts = unpack 'Q<*', $bk;
+    my @counts = unpack_varints($bk);
+    is(scalar @counts, 15, 'one bucket per boundary plus the overflow');
     is(eval { my $t = 0; $t += $_ for @counts; $t }, 3,
         'and every observation is in exactly one bucket');
+    cmp_ok(length($bk), '<', 15 * 8,
+        'and they are varints, not eight bytes apiece');
 
     my $bd = pb_field($dp, 7);
+    # explicit_bounds IS `repeated double`, so this one really is fixed64.
     is(length($bd) / 8, 14, 'explicit_bounds is packed double');
 }
 

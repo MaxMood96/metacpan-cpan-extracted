@@ -1,0 +1,139 @@
+NAME
+    Alien::curlimpersonate - build and find libcurl-impersonate
+
+SYNOPSIS
+    In your Makefile.PL:
+
+        use ExtUtils::MakeMaker;
+        use Alien::Base::Wrapper ();
+        use Alien::curlimpersonate ();
+
+        my %args = Alien::Base::Wrapper->new('Alien::curlimpersonate')->mm_args2;
+
+        # See "LINKING AGAINST IT" below: the wrapper emits no rpath, so add one.
+        my ($libdir) = Alien::curlimpersonate->dynamic_libs;
+        $libdir =~ s{/[^/]+$}{} if defined $libdir;
+        $args{LDDLFLAGS} = join ' ', grep { defined && length }
+            $args{LDDLFLAGS}, ($libdir ? "-Wl,-rpath,$libdir" : ());
+
+        WriteMakefile(NAME => 'My::Module', %args);
+
+    Or just to see what was built:
+
+        use Alien::curlimpersonate;
+        say Alien::curlimpersonate->cflags;        # -I/.../include
+        say Alien::curlimpersonate->libs;          # -L/.../lib -lcurl-impersonate
+        say for Alien::curlimpersonate->dynamic_libs;
+
+DESCRIPTION
+    Builds curl-impersonate (a patched libcurl with a bundled BoringSSL)
+    from source and exposes its cflags/libs, so an XS module can link a
+    libcurl that reproduces a real browser's TLS and HTTP/2 fingerprint --
+    JA3/JA4 and the HTTP/2 SETTINGS "Akamai" fingerprint -- rather than the
+    one libcurl would otherwise present. See Curl::Impersonate for a Perl
+    client built on it.
+
+    This is a source-only Alien: there is no system package of
+    libcurl-impersonate to find, so the probe always selects a "share"
+    install and the library is compiled at install time. See "SYSTEM
+    REQUIREMENTS", because that build is neither short nor dependency-free.
+
+    The pinned version is v2.1.1, built from
+    <https://github.com/vividsnow/curl-impersonate> -- a fork of
+    <https://github.com/lexiforest/curl-impersonate> at that tag, carrying
+    one commit. Upstream's CMake configure aborts under CMake 4, because
+    curl's curl_openssl_check_exists() puts the imported targets
+    "OpenSSL::SSL" and "OpenSSL::Crypto" into "CMAKE_REQUIRED_LIBRARIES" and
+    the scratch project try_compile() generates has no such targets. CMake 3
+    tolerated that; CMake 4 does not. The pin returns to upstream once an
+    equivalent fix lands there.
+
+SYSTEM REQUIREMENTS
+    curl-impersonate statically builds BoringSSL, zlib, zstd, brotli,
+    nghttp2 and ngtcp2 alongside curl itself. That needs, on top of a C and
+    C++ compiler:
+
+    *   "git" -- the source is fetched by cloning the upstream repository
+
+    *   "cmake" 3.20 or newer -- the build is a CMake superbuild.
+        Alien::cmake3 supplies one where the system has none, but it
+        promises only 3.x, so the version is checked before the build
+        starts.
+
+    *   "ninja" (or "ninja-build") -- the curl subproject forces the Ninja
+        generator
+
+    *   "go" -- BoringSSL's build generates sources with it
+
+    *   "patch" -- upstream patches curl and its dependencies
+
+    *   "curl" and "make" -- libidn2 is fetched and built by a shell script,
+        separately from CMake, because CMake requires it prebuilt and will
+        not build it
+
+    The build checks for these before it starts and names anything missing,
+    rather than failing deep inside a compile. On Debian or Ubuntu:
+
+        apt-get install git cmake ninja-build golang-go patch curl build-essential
+
+    Expect the install to take several minutes -- around five or six on a
+    current machine, and longer on a slow or loaded one. It is a full
+    BoringSSL and curl build, which is why installing this dist takes far
+    longer than the Perl code in it would suggest.
+
+METHODS
+    This is an Alien::Base subclass and adds nothing of its own; the useful
+    methods are inherited. The ones that matter here:
+
+    "Alien::curlimpersonate->cflags"
+        The include flags, as "-I$prefix/include".
+
+    "Alien::curlimpersonate->libs"
+        The link flags, as "-L$prefix/lib -lcurl-impersonate". No rpath --
+        see below.
+
+    "Alien::curlimpersonate->dynamic_libs"
+        The shared library file paths -- not directories, and including the
+        versioned names. The order is not defined, but they all live in the
+        same directory, so taking that of any one of them is what you want
+        for an rpath.
+
+LINKING AGAINST IT
+    "libs" deliberately carries no "-Wl,-rpath". Alien::Base relocates the
+    "-L" it emits when the Alien is installed to its final location, but it
+    does not relocate an rpath -- so an rpath baked in here would point at
+    the staging directory and be wrong by the time anyone links against it.
+
+    The consequence is that a consumer linking with "libs" alone produces an
+    extension that builds cleanly and then fails at runtime with something
+    like "libcurl-impersonate.so.4: cannot open shared object file", unless
+    "LD_LIBRARY_PATH" happens to be set.
+
+    So add the rpath yourself, against the resolved library directory, as
+    the SYNOPSIS shows: take "dynamic_libs", strip the filename, and pass
+    "-Wl,-rpath,$libdir". Curl::Impersonate's Makefile.PL is a working
+    example.
+
+CAVEATS
+    The version is pinned exactly. That is deliberate -- the whole point of
+    this Alien is a reproducible fingerprint, and the set of impersonation
+    targets changes between releases -- but it means a newer
+    curl-impersonate needs a new release of this dist rather than a rebuild.
+    It is also load-bearing: upstream 2.0.0 replaced the autotools build
+    with CMake outright, so a floating pin would have broken the build the
+    moment that tag was cut.
+
+SEE ALSO
+    Curl::Impersonate, Alien::Base, Alien::Build,
+    <https://github.com/lexiforest/curl-impersonate>
+
+AUTHOR
+    vividsnow
+
+LICENSE
+    This library is free software; you can redistribute it and/or modify it
+    under the same terms as Perl itself.
+
+    The library it builds, curl-impersonate, is distributed under its own
+    terms; see the upstream project for details.
+

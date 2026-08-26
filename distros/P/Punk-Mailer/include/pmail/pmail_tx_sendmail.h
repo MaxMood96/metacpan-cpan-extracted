@@ -85,7 +85,7 @@ static SV *pmail_sendmail_deliver(pTHX_ SV *self_sv, SV *spec_sv, SV *env_sv)
     pmail_child child;
     struct sigaction ign;
     pmail_sink s;
-    int wrote;
+    int wrote, wrote_errno = 0;
     int status = 0;
     SV *result, *id = NULL;
     SV *bytes_for_id;
@@ -138,6 +138,7 @@ static SV *pmail_sendmail_deliver(pTHX_ SV *self_sv, SV *spec_sv, SV *env_sv)
 
     pmail_sink_fd(&s, child.fd);
     wrote = pmail_build(aTHX_ spec, &s);
+    wrote_errno = errno;        /* before close/waitpid/sigaction touch it */
     close(child.fd); child.fd = -1;
     while (waitpid(pid, &status, 0) < 0 && errno == EINTR) { /* retry */ }
     child.pid = 0;
@@ -156,12 +157,17 @@ static SV *pmail_sendmail_deliver(pTHX_ SV *self_sv, SV *spec_sv, SV *env_sv)
         (void)ref;
     }
 
-    if (wrote != 0)
-        result = pmail_result_newf(aTHX_ PMAIL_ST_FAILED, 0, NULL, "sendmail", id,
-                                   "%s stopped reading: %s", argv[0], strerror(errno));
-    else if (WIFEXITED(status) && WEXITSTATUS(status) == 0)
-        result = pmail_result_newf(aTHX_ PMAIL_ST_ACCEPTED, 0, NULL, "sendmail", id,
-                                   "%s accepted the message", argv[0]);
+    /* the exit status is read first even when the write failed: a command
+     * that cannot be exec'd dies before it reads a byte, so whether the
+     * parent saw EPIPE is a race against the fork - and 127 says far more
+     * than "broken pipe" does. Only a child that exited 0 leaves the write
+     * failure as the whole story. */
+    if (WIFEXITED(status) && WEXITSTATUS(status) == 0)
+        result = wrote != 0
+            ? pmail_result_newf(aTHX_ PMAIL_ST_FAILED, 0, NULL, "sendmail", id,
+                                "%s stopped reading: %s", argv[0], strerror(wrote_errno))
+            : pmail_result_newf(aTHX_ PMAIL_ST_ACCEPTED, 0, NULL, "sendmail", id,
+                                "%s accepted the message", argv[0]);
     else if (WIFEXITED(status))
         result = pmail_result_newf(aTHX_ PMAIL_ST_FAILED, (IV)WEXITSTATUS(status), NULL,
                                    "sendmail", id, "%s exited %d%s", argv[0],

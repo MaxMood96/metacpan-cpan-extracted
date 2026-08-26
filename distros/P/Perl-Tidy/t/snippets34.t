@@ -3,6 +3,10 @@
 # Contents:
 #1 c622.c622
 #2 c622.def
+#3 hxs.def
+#4 hxs.hxs1
+#5 c636.c636
+#6 c636.def
 
 # To locate test #13 you can search for its name or the string '#13'
 
@@ -21,7 +25,17 @@ BEGIN {
     ###########################################
     $rparams = {
         'c622' => "-dws -naws",
+        'c636' => <<'----------',
+-hct=indented
+-hiu
+-hxs=4
+----------
         'def'  => "",
+        'hxs1' => <<'----------',
+-hct=indented
+-hiu
+-hxs=4
+----------
     };
 
     ############################
@@ -35,6 +49,32 @@ my $ONE = 1;
 use constant two => 2;
 print $ONE << two, "\n";
 print "OK\n";
+----------
+
+        'c636' => <<'----------',
+# test backslash removal
+print <<"print \"[BYE!]\n\n\";";
+name
+rank
+serial number
+
+print "[BYE!]\n\n";
+----------
+
+        'hxs' => <<'----------',
+sub demo {
+    my $inside_block = <<'BLOCK';
+one
+two
+BLOCK
+}
+
+my @outside_block = (
+    <<'LIST',
+alpha
+beta
+LIST
+);
 ----------
     };
 
@@ -65,6 +105,74 @@ use constant two => 2;
 print $ONE << two, "\n";
 print "OK\n";
 #2...........
+        },
+
+        'hxs.def' => {
+            source => "hxs",
+            params => "def",
+            expect => <<'#3...........',
+sub demo {
+    my $inside_block = <<'BLOCK';
+one
+two
+BLOCK
+}
+
+my @outside_block = (
+    <<'LIST',
+alpha
+beta
+LIST
+);
+#3...........
+        },
+
+        'hxs.hxs1' => {
+            source => "hxs",
+            params => "hxs1",
+            expect => <<'#4...........',
+sub demo {
+    my $inside_block = <<~'BLOCK';
+        one
+        two
+        BLOCK
+}
+
+my @outside_block = (
+    <<~'LIST',
+        alpha
+        beta
+        LIST
+);
+#4...........
+        },
+
+        'c636.c636' => {
+            source => "c636",
+            params => "c636",
+            expect => <<'#5...........',
+# test backslash removal
+print <<~"print \"[BYE!]\n\n\";";
+    name
+    rank
+    serial number
+
+    print "[BYE!]\n\n";
+#5...........
+        },
+
+        'c636.def' => {
+            source => "c636",
+            params => "def",
+            expect => <<'#6...........',
+# test backslash removal
+print <<"print \"[BYE!]\n\n\";";
+name
+rank
+serial number
+
+print "[BYE!]\n\n";
+#6...........
         },
     };
 

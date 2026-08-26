@@ -1,5 +1,34 @@
 Revision history for Crypt::Image
 
+v1.0.1  2026-08-25
+        [SECURITY FIXES]
+        - Replaced non-cryptographic Math::Random generator with
+          Crypt::PRNG (irand) to ensure secure random noise generation for
+          steganographic padding.
+
+        [POD]
+        - Updated package title and POD documentation (NAME, DESCRIPTION,
+          encrypt, decrypt) to explicitly highlight steganography for
+          improved CPAN search indexing.
+
+        [PACKAGING]
+        - Added CryptX to prerequisite module dependencies and removed Math::Random.
+
+v1.0.0  2026-08-25
+        - Proposed fix for issue #3, raised by @andk.
+        - Updated version format across all modules to strict semantic
+          v-strings (v1.0.0).
+        - Modernised Makefile.PL to parse module versions dynamically
+          via ExtUtils::MakeMaker.
+        - Streamlined module documentation, POD headers, and simplified
+          license notices.
+        - Replaced static test fixtures (t/key.*) in unit tests with dynamic
+          GD image generation using File::Temp.
+        - Moved author and release maintenance tests (manifest.t, pod.t,
+          changes.t) to xt/ directory.
+        - Added xt/version.t to enforce version consistency between code and
+          POD across lib/.
+
 0.15  2024-02-04T11:50:00+01:00
       - Recovered from backpan.
 

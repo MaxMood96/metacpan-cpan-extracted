@@ -1,0 +1,5 @@
+<catalog>
+  <product><sku>SKU001</sku><label>Widget A</label><category>hardware</category></product>
+  <product><sku>SKU002</sku><label>Gizmo B</label><category>software</category></product>
+  <product><sku>SKU003</sku><label>Doohickey C</label><category>hardware</category></product>
+</catalog>

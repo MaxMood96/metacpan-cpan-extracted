@@ -1,4 +1,4 @@
-package Net::IDN::PP 0.02;
+package Net::IDN::PP 0.03;
 # ABSTRACT: A pure-Perl implementation of the Punycode algorithm for encoding internationalized domain names (IDNs)
 use common::sense;
 
@@ -206,7 +206,7 @@ Net::IDN::PP - A pure-Perl implementation of the Punycode algorithm for encoding
 
 =head1 VERSION
 
-version 0.02
+version 0.03
 
 =head1 SYNOPSIS
 
@@ -214,7 +214,7 @@ version 0.02
 
     say Net::IDN::PP->decode('xn--caf-dma.com'); # prints café.com
 
-    say Net::IDN::PP->decode('café.com'); # prints xn--caf-dma.com
+    say Net::IDN::PP->encode('café.com'); # prints xn--caf-dma.com
 
 =head1 DESCRIPTION
 
@@ -222,7 +222,8 @@ Net::IDN::PP is a pure Perl IDN encoder/decoder. The C<decode()> method takes an
 "A-label" and decodes it, and C<encode()> takes a "U-label" and encodes it.
 
 Other modules exist which provide similar functionality, but they all rely on
-external C libraries such as libidn/libidn2 or ICU.
+external C libraries such as libidn/libidn2 or ICU. This can make them
+challenging to install on some systems.
 
 =head2 IMPORTANT NOTE
 
@@ -232,6 +233,8 @@ any of the "Nameprep" logic described in IDNA2003 or IDNA2008. This makes it
 unsuitable for use in provisioning (domain registrar or registry) systems, but
 it should work fine if you don't mind working on a "garbage in, garbage out"
 basis.
+
+If you need proper IDNA2008 support, use C<Net::LibIDN2>.
 
 =head1 AUTHOR
 

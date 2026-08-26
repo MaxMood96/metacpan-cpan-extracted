@@ -1,5 +1,15 @@
-@  changeset:   230:abdc7cc978ca
+@  changeset:   232:bd91780505a4
 |  tag:         tip
+|  user:        Rene Schickbauer <cavac@palebluedot>
+|  date:        Wed Aug 26 11:08:44 2026 +0200
+|  summary:     Prepare Dolly Parton Memorial release
+|
+o  changeset:   231:8d0b888d5b9d
+|  user:        Rene Schickbauer <cavac@palebluedot>
+|  date:        Wed May 06 15:26:24 2026 +0200
+|  summary:     Prepare for release 36
+|
+o  changeset:   230:abdc7cc978ca
 |  user:        Rene Schickbauer <cavac@virgo.cavac.at>
 |  date:        Tue May 05 14:36:41 2026 +0200
 |  summary:     Make disconnects more reliable

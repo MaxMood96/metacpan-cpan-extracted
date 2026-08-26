@@ -78,7 +78,7 @@ use constant BACKSLASH    => q{\\};
 use Carp;
 use English    qw( -no_match_vars );
 use List::Util qw( min max first );    # min, max first are in Perl 5.8
-our $VERSION = '20260808';
+our $VERSION = '20260826';
 
 # List of hash keys to prevent -duk from listing them.
 # 'Unicode::Collate::Locale' is in the data for scan_unique_keys
@@ -590,9 +590,6 @@ BEGIN {
         _rLL_                       => $i++,
         _Klimit_                    => $i++,
         _rdepth_of_opening_seqno_   => $i++,
-        _rSS_                       => $i++,
-        _rI_opening_                => $i++,
-        _rI_closing_                => $i++,
         _rK_next_seqno_by_K_        => $i++,
         _rblock_type_of_seqno_      => $i++,
         _ris_asub_block_            => $i++,
@@ -1172,14 +1169,6 @@ sub initialize_self_vars {
     # A list of index K of sequenced tokens to allow loops over them all
     $self->[_rK_sequenced_token_list_] = [];
 
-    # 'rSS' is the 'Signed Sequence' list, a continuous list of all sequence
-    # numbers with + or - indicating opening or closing. This list represents
-    # the entire container tree and is invariant under reformatting.  It can be
-    # used to quickly travel through the tree.  Indexes in the rSS array begin
-    # with '$I' by convention.
-    $self->[_rSS_]                = [];
-    $self->[_rI_opening_]         = [];
-    $self->[_rI_closing_]         = [];
     $self->[_rK_next_seqno_by_K_] = [];
 
     # Arrays to help traverse the tree
@@ -2112,16 +2101,6 @@ sub is_in_list_by_i {
     }
     return;
 } ## end sub is_in_list_by_i
-
-sub is_list_by_seqno {
-
-    my ( $self, $seqno ) = @_;
-
-    # Return true if the immediate contents of a container appears to be a
-    # list.
-    return unless ( defined($seqno) );
-    return $self->[_ris_list_by_seqno_]->{$seqno};
-} ## end sub is_list_by_seqno
 
 sub is_interpolated_here_doc {
     my ($token) = @_;
@@ -3283,12 +3262,12 @@ sub initialize_here_doc_control_hash {
     my $hxs_str = $rOpts->{$hxs_key};
     if ( defined($hxs_str) ) {
         $hxs_str =~ s/\s+//g;
-        my ( $n1, $n2 ) = ( 0, 0 );
+
+        # Note that $1 and $3 below are undef if no match, but $2 is an
+        # empty string if no match; git #213.
         if ( $hxs_str =~ /^(\d+)?(;?)(\d+)?$/ ) {
-            $n1                                        = $1;
-            $n2                                        = defined($2) ? $3 : $n1;
-            $here_doc_control_hash{extra_spaces_block} = $n1;
-            $here_doc_control_hash{extra_spaces_non_block} = $n2;
+            $here_doc_control_hash{extra_spaces_block}     = $1;
+            $here_doc_control_hash{extra_spaces_non_block} = $2 ? $3 : $1;
         }
         else {
             my $msg = <<EOM;
@@ -8292,8 +8271,6 @@ EOM
     # Local variables for improved efficiency
     my $K_opening_container;
     my $K_closing_container;
-    my $rI_opening;
-    my $rI_closing;
 
     sub initialize_closure_write_line {
 
@@ -8315,8 +8292,6 @@ EOM
 
         $K_opening_container = $self->[_K_opening_container_];
         $K_closing_container = $self->[_K_closing_container_];
-        $rI_opening          = $self->[_rI_opening_];
-        $rI_closing          = $self->[_rI_closing_];
 
         return;
     } ## end sub initialize_closure_write_line
@@ -8589,7 +8564,6 @@ EOM
         # deleted, it should not matter because it does not get displayed.
 
         my $rLL                     = $self->[_rLL_];
-        my $rSS                     = $self->[_rSS_];
         my $rdepth_of_opening_seqno = $self->[_rdepth_of_opening_seqno_];
 
         # Does this qw text spill over onto another line?
@@ -8702,14 +8676,12 @@ EOM
             # update relevant seqno hashes
             $rdepth_of_opening_seqno->[$seqno] = $nesting_depth;
             $nesting_depth++;
-            $rI_opening->[$seqno] = @{$rSS};
 
             if ( $level_words > $self->[_maximum_level_] ) {
                 my $input_line_no = $line_of_tokens->{_line_number};
                 $self->[_maximum_level_]         = $level_words;
                 $self->[_maximum_level_at_line_] = $input_line_no;
             }
-            push @{$rSS}, $seqno;
 
             # make and push the 'qw' token
             my $rtoken_qw = copy_token_as_type( $rtoken_q, 'U', 'qw' );
@@ -8805,9 +8777,7 @@ EOM
 
             my $seqno = $in_qw_seqno;
             $K_closing_container->{$seqno} = @{$rLL};
-            $nesting_depth                 = $rdepth_of_opening_seqno->[$seqno];
-            $rI_closing->[$seqno]          = @{$rSS};
-            push @{$rSS}, -1 * $seqno;
+            $nesting_depth = $rdepth_of_opening_seqno->[$seqno];
 
             # make the ')'
             my $rtoken_closing = copy_token_as_type( $rtoken_q, '}', ')' );
@@ -8869,7 +8839,6 @@ EOM
         }
 
         my $rLL                     = $self->[_rLL_];
-        my $rSS                     = $self->[_rSS_];
         my $rdepth_of_opening_seqno = $self->[_rdepth_of_opening_seqno_];
 
         DEVEL_MODE
@@ -9032,7 +9001,6 @@ EOM
                 }
 
                 if ( $sign > 0 ) {
-                    $rI_opening->[$seqno] = @{$rSS};
 
                     # For efficiency, we find the maximum level of
                     # opening tokens of any type.  The actual maximum
@@ -9045,10 +9013,6 @@ EOM
                         $self->[_maximum_level_at_line_] = $line_number;
                     }
                 }
-                else {
-                    $rI_closing->[$seqno] = @{$rSS};
-                }
-                push @{$rSS}, $sign * $seqno;
                 $tokary[_TYPE_SEQUENCE_] = $seqno;
             }
             else {
@@ -9367,66 +9331,58 @@ sub find_level_info {
     # Returns:
     #   ref to hash with block info, with seqno as key (see below)
 
-    # The array _rSS_ has the complete container tree for this file.
-    my $rSS = $self->[_rSS_];
-
-    # We will be ignoring everything except code block containers
     my $rblock_type_of_seqno = $self->[_rblock_type_of_seqno_];
+    my $K_opening_container  = $self->[_K_opening_container_];
+    my $K_closing_container  = $self->[_K_closing_container_];
 
     my @stack;
     my %level_info;
 
-    # TREE_LOOP:
-    foreach my $sseq ( @{$rSS} ) {
+    # Loop over blocks in increasing sequence numbers
+    foreach my $seq_next ( sort { $a <=> $b } keys %{$rblock_type_of_seqno} ) {
+        my $K_opening = $K_opening_container->{$seq_next};
+        my $K_closing = $K_closing_container->{$seq_next};
+
+        # Pop closed blocks off of the stack
+        while (@stack) {
+            my $seq = $stack[-1];
+            last if ( $level_info{$seq}->{K_closing} > $K_opening );
+            pop @stack;
+        }
+
+        # Update info of blocks which contain this new block
         my $stack_depth = @stack;
-        my $seq_next    = $sseq > 0 ? $sseq : -$sseq;
-
-        next if ( !$rblock_type_of_seqno->{$seq_next} );
-        if ( $sseq > 0 ) {
-
-            # STACK_LOOP:
-            my $item;
-            foreach my $seq (@stack) {
-                $item = $level_info{$seq};
-                if ( $item->{maximum_depth} < $stack_depth ) {
-                    $item->{maximum_depth} = $stack_depth;
-                }
-                $item->{block_count}++;
-            } ## end STACK LOOP
-
-            push @stack, $seq_next;
-            my $block_type = $rblock_type_of_seqno->{$seq_next};
-
-            # If this block is a loop nested within a loop, then we
-            # will mark it as an 'inner_loop'. This is a useful
-            # complexity measure.
-            my $is_inner_loop = 0;
-            if ( $is_loop_type{$block_type} && defined($item) ) {
-                $is_inner_loop = $is_loop_type{ $item->{block_type} };
+        my $item;
+        foreach my $seq (@stack) {
+            $item = $level_info{$seq};
+            if ( $item->{maximum_depth} < $stack_depth ) {
+                $item->{maximum_depth} = $stack_depth;
             }
-
-            $level_info{$seq_next} = {
-                starting_depth => $stack_depth,
-                maximum_depth  => $stack_depth,
-                block_count    => 1,
-                block_type     => $block_type,
-                is_inner_loop  => $is_inner_loop,
-            };
+            $item->{block_count}++;
         }
-        else {
-            my $seq_test = pop @stack;
 
-            # error check
-            if ( $seq_test != $seq_next ) {
+        # Save info for this block
+        push @stack, $seq_next;
+        my $block_type = $rblock_type_of_seqno->{$seq_next};
 
-                # Shouldn't happen - the $rSS array must have an error
-                DEVEL_MODE && Fault("stack error finding total depths\n");
-
-                %level_info = ();
-                last;
-            }
+        # If this block is a loop nested within a loop, then we
+        # will mark it as an 'inner_loop'. This is a useful
+        # complexity measure.
+        my $is_inner_loop = 0;
+        if ( $is_loop_type{$block_type} && defined($item) ) {
+            $is_inner_loop = $is_loop_type{ $item->{block_type} };
         }
-    } ## end TREE_LOOP
+
+        $level_info{$seq_next} = {
+            starting_depth => $stack_depth,
+            maximum_depth  => $stack_depth,
+            block_count    => 1,
+            block_type     => $block_type,
+            is_inner_loop  => $is_inner_loop,
+            K_opening      => $K_opening,
+            K_closing      => $K_closing,
+        };
+    }
 
     return \%level_info;
 } ## end sub find_level_info
@@ -11762,7 +11718,7 @@ sub sweep_similar_pairs {
     #   $max_diff = maximum number of differences for similarity
     #   $reverse = 1 if this is a reverse sweep, 0 if forward
     # Return:
-    #   ref to list of similar pairs
+    #   ref to hash of similar pairs
 
     my @sorted_words = sort {
         $rword_info->{$a}->{first_letter} cmp $rword_info->{$b}->{first_letter}
@@ -11817,9 +11773,15 @@ sub sweep_similar_pairs {
                     ( $w1,     $w2 )     = ( $w2,     $w1 );
                     ( $count1, $count2 ) = ( $count2, $count1 );
                 }
+
                 push @word_pairs,
-                  [ $w1, $w2, $count1, $count2, $diff_count + $reverse ];
-                ##    0    1        2        3            4
+                  {
+                    word1      => $w1,
+                    word2      => $w2,
+                    count1     => $count1,
+                    count2     => $count2,
+                    diff_count => $diff_count + $reverse,
+                  };
             }
         }
     } ## end while (@sorted_words)
@@ -11923,38 +11885,52 @@ sub find_similar_keys {
     #  1. Top priority is diff_count (low diffs go out before high diffs)
     #  2. Next priority is uniform distribution of output words
 
+    # Contents of a word pair hash returned by sweep_similar_pairs:
+    #  $rword_pair =
+    #   {
+    #       word1      => $w1,
+    #       word2      => $w2,
+    #       count1     => $count1,
+    #       count2     => $count2,
+    #       diff_count => $diff_count,
+    #   };
+
     # Handle case of too many pairs
     my $num_skipped = $num_pairs - $max_pairs;
     if ( $num_skipped > 0 ) {
 
-        # [ $w1, $w2, $count1, $count2, $diff_count ];
-        #    0    1        2        3            4
-
-        # remember the order
+        # remember the order of discovery
         my $n = 0;
         foreach (@word_pairs) {
-            $_->[5] = ++$n;
+            $_->{order_found} = ++$n;
         }
 
         # sort by diff count, then by order
         my @sorted_pairs =
-          sort { $a->[4] <=> $b->[4] || $a->[5] <=> $b->[5] } @word_pairs;
+          sort {
+                 $a->{diff_count}  <=> $b->{diff_count}
+              || $a->{order_found} <=> $b->{order_found}
+          } @word_pairs;
 
         # resort by diff count, min occurrences so far, then by the start order
         my %word_count;
         foreach my $pair (@sorted_pairs) {
-            my ( $w1, $w2 ) = @{$pair};
+            my $w1        = $pair->{word1};
+            my $w2        = $pair->{word2};
             my $min_count = min( ++$word_count{$w1}, ++$word_count{$w2} );
-            $pair->[6] = $min_count;
+            $pair->{min_count} = $min_count;
         }
         @sorted_pairs =
           sort {
-            $a->[4] <=> $b->[4] || $a->[6] <=> $b->[6] || $a->[5] <=> $b->[5]
+                 $a->{diff_count}  <=> $b->{diff_count}
+              || $a->{min_count}   <=> $b->{min_count}
+              || $a->{order_found} <=> $b->{order_found}
           } @sorted_pairs;
 
         # Truncate the list and resort
         $#sorted_pairs = $max_pairs - 1;
-        @word_pairs    = sort { $a->[5] <=> $b->[5] } @sorted_pairs;
+        @word_pairs =
+          sort { $a->{order_found} <=> $b->{order_found} } @sorted_pairs;
 
         $output_string .=
 "Note: showing $max_pairs of $num_pairs pairs; increase -skmp to show more\n";
@@ -11963,7 +11939,10 @@ sub find_similar_keys {
     if (@word_pairs) {
         $output_string .= "key1,key2,count1,count2\n";
         foreach my $pair (@word_pairs) {
-            my ( $w1, $w2, $count1, $count2, $diff_count_uu ) = @{$pair};
+            my $w1     = $pair->{word1};
+            my $w2     = $pair->{word2};
+            my $count1 = $pair->{count1};
+            my $count2 = $pair->{count2};
             $output_string .= "$w1,$w2,$count1,$count2\n";
         }
     }
@@ -16617,6 +16596,12 @@ sub scan_call_parens {
         next if ( $token_Kn eq '=>' );
         next if ( $token_Kn eq '->' );
 
+        # Be sure a type 'w' is not a keyword or hash key (c641)
+        if ( $type eq 'w' ) {
+            if ( $rLL->[$Kn]->[_TYPE_] eq 'R' ) { next }
+            if ( is_keyword($token) )           { next }
+        }
+
         # If paren after keyword...
         if ( $token_Kn eq '(' ) {
 
@@ -17655,7 +17640,7 @@ sub respace_tokens {
     # update the token limits of each line
     ( $severe_error, $rqw_lines ) = $self->resync_lines_and_tokens();
 
-    $self->warn_unexpected_code_container()
+    $self->warn_unexpected_code_container( \@wucc_error_list )
       if (@wucc_error_list);
 
     return ( $severe_error, $rqw_lines );
@@ -18459,23 +18444,6 @@ sub respace_post_loop_ops {
 
     $self->[_rK_next_seqno_by_K_]      = \@K_next_seqno_by_K;
     $self->[_rK_sequenced_token_list_] = \@K_sequenced_token_list;
-
-    # Verify that arrays @K_sequenced_token_list and @{$rSS} are parallel
-    # arrays, meaning that they have a common array index 'I'. This index maybe
-    # be found by seqno with rI_container and rI_closing.
-    if (DEVEL_MODE) {
-        my $num_rSS  = @{ $self->[_rSS_] };
-        my $num_Kseq = @K_sequenced_token_list;
-
-        # If this error occurs, we have gained or lost one or more of the
-        # sequenced tokens received from the tokenizer. This should never
-        # happen.
-        if ( $num_rSS != $num_Kseq ) {
-            Fault(<<EOM);
-num_rSS= $num_rSS != num_Kseq=$num_Kseq
-EOM
-        }
-    }
 
     # Find and remember lists by sequence number
     foreach my $seqno ( keys %{$K_opening_container} ) {
@@ -20275,8 +20243,8 @@ sub check_Q {
     # Check that a quote looks okay, and report possible problems
     # to the logfile.
     # Given:
-    #   $KK = index of the quote token
-    #   $Kfirst = index of first token on the line
+    #   $KK = index of the quote token in the old array ($rLL)
+    #   $Kfirst = index of first token on the line in the old array ($rLL)
     #   $line_number = number of the line in the input stream
 
     my $token = $rLL->[$KK]->[_TOKEN_];
@@ -20346,6 +20314,7 @@ sub add_wucc_error {
     my ( $self, $rtoken_vars ) = @_;
 
     # Register a -wucc error for token $rtoken_vars. c607.
+    # Called from sub respace_tokens during respace operations
     my $token_o = $non_block_container_stack{ $depth_next - 1 };
     my $seqno_o = $seqno_stack{ $depth_next - 1 };
     my $token   = $rtoken_vars->[_TOKEN_];
@@ -20360,29 +20329,38 @@ sub add_wucc_error {
     return;
 } ## end sub add_wucc_error
 
+} ## end closure respace_tokens
+
 use constant MAX_WUCC_LINES => 5;
 
 sub warn_unexpected_code_container {
-    my ($self) = @_;
+    my ( $self, $rwucc_error_list ) = @_;
 
     # Process --warn-unexpected-code-container warnings found in respace ops
     # Notes:
     # - This is called after sub respace tokens, so we are using
     #   the updated indexes.
+    # - Note that this sub is NOT in the respace closure, so the new tokens
+    #   are in the current $rLL array (see c639).
     # - A test was made with these checks done in the tokenizer, but
     #   the output could be confusing if the file had unbalanced containers.
     #   So it is better to do these checks here, when we know that the
     #   file has balanced containers. c607.
 
+    my $rLL                 = $self->[_rLL_];
+    my $K_opening_container = $self->[_K_opening_container_];
+    my $ris_c_style_for_paren_by_seqno =
+      $self->[_ris_c_style_for_paren_by_seqno_];
+
     my $wucc_key = 'warn-unexpected-code-container';
-    if ( $rOpts->{$wucc_key} && @wucc_error_list ) {
+    if ( $rOpts->{$wucc_key} && @{$rwucc_error_list} ) {
 
         my $output_lines = EMPTY_STRING;
         my $count        = 0;
-        while (@wucc_error_list) {
-            my $item = shift @wucc_error_list;
+        while ( @{$rwucc_error_list} ) {
+            my $item = shift @{$rwucc_error_list};
             if ( $count >= MAX_WUCC_LINES ) {
-                my $skipped_count = 1 + @wucc_error_list;
+                my $skipped_count = 1 + @{$rwucc_error_list};
                 $output_lines .= <<EOM;
       ... skipping $skipped_count more issues
 EOM
@@ -20410,7 +20388,7 @@ EOM
                 $msg .= " (see line $lno_c)";
             }
             $output_lines .= $msg . "\n";
-        } ## end while (@wucc_error_list)
+        } ## end while ( @{$rwucc_error_list...})
         if ($output_lines) {
             chomp $output_lines;
             $self->warning(<<EOM);
@@ -20423,8 +20401,6 @@ EOM
     }
     return;
 } ## end sub warn_unexpected_code_container
-
-} ## end closure respace_tokens
 
 sub resync_lines_and_tokens {
 
@@ -20956,7 +20932,7 @@ sub count_list_elements {
                     }
 
                     # If not a list..
-                    if ( !$self->is_list_by_seqno($seqno) ) {
+                    if ( !$self->[_ris_list_by_seqno_]->{$seqno} ) {
 
                         # always enter a container following 'return', as in:
                         #   return (find_sub($subname) =~ /^(.*):(\d+)-(\d+)$/);
@@ -20993,7 +20969,7 @@ sub count_list_elements {
                         if ( $Kn && $rLL->[$Kn]->[_TOKEN_] eq '[' ) {
                             my $seqno_next = $rLL->[$Kn]->[_TYPE_SEQUENCE_];
                             if (   $seqno_next
-                                && $self->is_list_by_seqno($seqno_next) )
+                                && $self->[_ris_list_by_seqno_]->{$seqno_next} )
                             {
                                 $KK = $Kn;
                                 push @seqno_stack, $seqno_next;
@@ -23916,6 +23892,14 @@ sub check_indented_here_docs {
         return $extra_spaces;
     }; ## end $get_heredoc_extra_spaces = sub
 
+    my $un_escape_quotes = sub {
+        my ( $here_tag, $quote_char ) = @_;
+        if ($quote_char) {
+            $here_tag =~ s/(\\($quote_char))/$2/g;
+        }
+        return $here_tag;
+    }; ## end $un_escape_quotes = sub
+
     # Create the following list which will be used by sub convey_batch for
     # making indentation updates when -hiu is set:
     my @here_doc_update_list;
@@ -24021,10 +24005,8 @@ sub check_indented_here_docs {
 
                 # Remove backslashes if necessary.  Conversions for this here
                 # doc will be skipped if this doesn't work.
-                if ( index( $here_tag, BACKSLASH ) >= 0
-                    && $here_tag !~ /^\s*$end_text$/ )
-                {
-                    $here_tag =~ s/(\\(.))/$2/g;
+                if ( $quote_char && index( $here_tag, $quote_char ) >= 0 ) {
+                    $here_tag = $un_escape_quotes->( $here_tag, $quote_char );
                 }
 
                 # Get the end tag and its leading whitespace. This is tricky
@@ -24122,8 +24104,9 @@ EOM
                 if ( $here_tag ne $end_text ) {
 
                     # Try removing backslashes
-                    if ( index( $here_tag, BACKSLASH ) >= 0 ) {
-                        $here_tag =~ s/(\\(.))/$2/g;
+                    if ( $quote_char && index( $here_tag, $quote_char ) >= 0 ) {
+                        $here_tag =
+                          $un_escape_quotes->( $here_tag, $quote_char );
                     }
 
                     if ( $here_tag ne $end_text ) {
@@ -27265,6 +27248,7 @@ sub break_before_list_opening_containers {
     my $K_closing_container       = $self->[_K_closing_container_];
     my $rline_diff_by_seqno       = $self->[_rline_diff_by_seqno_];
     my $ris_permanently_broken    = $self->[_ris_permanently_broken_];
+    my $ris_list_by_seqno         = $self->[_ris_list_by_seqno_];
     my $rhas_list                 = $self->[_rhas_list_];
     my $rhas_broken_list_with_lec = $self->[_rhas_broken_list_with_lec_];
     my $radjusted_levels          = $self->[_radjusted_levels_];
@@ -27308,7 +27292,7 @@ sub break_before_list_opening_containers {
         # Note1: switched from 'has_broken_list' to 'has_list' to fix b1024.
         # Note2: 'has_list' holds the depth to the sub-list.  We will require
         #  a depth of just 1
-        my $is_list  = $self->is_list_by_seqno($seqno);
+        my $is_list  = $ris_list_by_seqno->{$seqno};
         my $has_list = $rhas_list->{$seqno};
 
         # Fix for b1173: if welded opening container, use flag of innermost
@@ -27319,7 +27303,7 @@ sub break_before_list_opening_containers {
             if ( defined($KK_test) ) {
                 my $seqno_inner = $rLL->[$KK_test]->[_TYPE_SEQUENCE_];
                 if ($seqno_inner) {
-                    $is_list ||= $self->is_list_by_seqno($seqno_inner);
+                    $is_list ||= $ris_list_by_seqno->{$seqno_inner};
                     $has_list = $rhas_list->{$seqno_inner};
                 }
             }
@@ -27410,7 +27394,7 @@ sub break_before_list_opening_containers {
                 # and it is also complex if the parent is a list
                 if ( !$is_complex ) {
                     my $parent = $rparent_of_seqno->{$seqno};
-                    if ( $self->is_list_by_seqno($parent) ) {
+                    if ( $parent && $ris_list_by_seqno->{$parent} ) {
                         $is_complex = 1;
                     }
                 }
@@ -27493,7 +27477,7 @@ sub break_before_list_opening_containers {
                 if ($has_list) { $rno_xci_by_seqno->{$seqno} = 1 }
 
                 my $parent = $rparent_of_seqno->{$seqno};
-                if ( $self->is_list_by_seqno($parent) ) {
+                if ( $parent && $ris_list_by_seqno->{$parent} ) {
                     DEBUG_BBX && do { $Msg = "parent is list" };
                     $ok_to_break = 1;
                 }
@@ -28909,6 +28893,18 @@ sub is_fragile_block_type {
                             {
                                 push @{$rix_no_comma}, [ $iline, $KK_p ];
                             }
+                        }
+                    }
+
+                    # Turn off -xci at short welded containers (b1609)
+                    if (   $rOpts_extended_continuation_indentation
+                        && $self->[_rK_weld_right_]->{$KK}
+                        && !$self->[_ris_permanently_broken_]->{$seqno} )
+                    {
+                        my $excess =
+                          $self->excess_line_length_for_Krange( $KK, $K_c );
+                        if ( $excess <= 0 ) {
+                            $self->[_rno_xci_by_seqno_]->{$seqno} = 1;
                         }
                     }
 
@@ -37147,17 +37143,17 @@ sub break_long_lines {
     # This is a sufficient but not necessary condition for colon chain
     my $is_colon_chain = ( $colons_in_order && @{$rcolon_list} > 2 );
 
-    #------------------------------------------
-    # BEGINNING of main loop to set breakpoints
+    #--------------------------------------
+    # MAIN LOOP to set breakpoints
     # Keep iterating until we reach the end
-    #------------------------------------------
+    #--------------------------------------
     while ( $i_begin <= $imax ) {
 
-        #------------------------------------------------------------------
-        # Find the best next breakpoint based on token-token bond strengths
-        #------------------------------------------------------------------
+        #--------------------------------------------------------------------
+        # INNER LOOP to find the best next breakpoint based on bond strengths
+        #--------------------------------------------------------------------
         my ( $i_lowest, $lowest_strength, $Msg ) =
-          $self->break_lines_inner_loop(
+          $self->break_long_lines_inner_loop(
 
             $i_begin,
             $i_last_break,
@@ -37169,13 +37165,15 @@ sub break_long_lines {
 
           );
 
-        # Now make any adjustments required by ternary breakpoint rules
+        #----------------
+        # Apply ?/: RULES
+        #----------------
         if ( @{$rcolon_list} ) {
 
             my $i_next_nonblank = $inext_to_go[$i_lowest];
 
             #-------------------------------------------------------
-            # ?/: rule 1 : if a break here will separate a '?' on this
+            # ?/: RULE 1 : if a break here will separate a '?' on this
             # line from its closing ':', then break at the '?' instead.
             # But do not break a sequential chain of ?/: statements
             #-------------------------------------------------------
@@ -37204,7 +37202,7 @@ sub break_long_lines {
             my $next_nonblank_type = $types_to_go[$i_next_nonblank];
 
             #-------------------------------------------------------------
-            # ?/: rule 2 : if we break at a '?', then break at its ':'
+            # ?/: RULE 2 : if we break at a '?', then break at its ':'
             #
             # Note: this rule is also in sub break_lists to handle a break
             # at the start and end of a line (in case breaks are dictated
@@ -37221,7 +37219,7 @@ sub break_long_lines {
             }
 
             #--------------------------------------------------------
-            # ?/: rule 3 : if we break at a ':' then we save
+            # ?/: RULE 3 : if we break at a ':' then we save
             # its location for further work below.  We may need to go
             # back and break at its '?'.
             #--------------------------------------------------------
@@ -37239,12 +37237,13 @@ sub break_long_lines {
             # separated by this line
         }
 
-        # Fix two-line shear (c406)
+        #------------------------------------------
+        # Check for and fix a two-line shear (c406)
+        #------------------------------------------
         my $i_next_nonblank = $inext_to_go[$i_lowest];
         if ( $tokens_to_go[$i_next_nonblank] eq ')' ) {
 
             # Example of a '2 line shear':
-
             #   $wrapped->add_around_modifier(
             #       sub { push @tracelog => 'around 1'; $_[0]->(); } );
 
@@ -37270,7 +37269,7 @@ sub break_long_lines {
         }
 
         #--------------------------------------------------
-        # guard against infinite loop (should never happen)
+        # Guard against infinite loop (should never happen)
         #--------------------------------------------------
         if ( $i_lowest <= $i_last_break ) {
             DEVEL_MODE
@@ -37282,15 +37281,16 @@ sub break_long_lines {
           && print {*STDOUT}
 "BREAK: best is i = $i_lowest strength = $lowest_strength;\nReason>> $Msg\n";
 
+        #----------------------------------------------------------
+        # Accept this line break, after trimming blanks at the ends
+        #----------------------------------------------------------
         $line_count++;
-
-        # save this line segment, after trimming blanks at the ends
         push @i_first,
           ( $types_to_go[$i_begin] eq 'b' ) ? $i_begin + 1 : $i_begin;
         push @i_last,
           ( $types_to_go[$i_lowest] eq 'b' ) ? $i_lowest - 1 : $i_lowest;
 
-        # set a forced breakpoint at a container opening, if necessary, to
+        # Set a forced breakpoint at a container opening, if necessary, to
         # signal a break at a closing container.  Excepting '(' for now.
         if (
             (
@@ -37303,12 +37303,12 @@ sub break_long_lines {
             $self->set_closing_breakpoint($i_lowest);
         }
 
-        # get ready to find the next breakpoint
+        # Get ready to find the next breakpoint
         $last_break_strength = $lowest_strength;
         $i_last_break        = $i_lowest;
         $i_begin             = $i_lowest + 1;
 
-        # skip past a blank
+        # The next search starts after any blank
         if ( ( $i_begin <= $imax ) && ( $types_to_go[$i_begin] eq 'b' ) ) {
             $i_begin++;
         }
@@ -37319,7 +37319,7 @@ sub break_long_lines {
     #-------------------------------------------------
 
     #-----------------------------------------------------------
-    # ?/: rule 4 -- if we broke at a ':', then break at
+    # ?/: RULE 4 -- if we broke at a ':', then break at
     # corresponding '?' unless this is a chain of ?: expressions
     #-----------------------------------------------------------
     if (@i_colon_breaks) {
@@ -37343,7 +37343,7 @@ BEGIN {
     $is_dot_and_or{$_} = 1 for @q;
 }
 
-sub break_lines_inner_loop {
+sub break_long_lines_inner_loop {
 
     # Find the best next breakpoint in index range ($i_begin .. $imax)
     # which, if possible, does not exceed the maximum line length.
@@ -37631,9 +37631,9 @@ sub break_lines_inner_loop {
         #------------------------------------------------------------
         if ( ( $strength <= $lowest_strength ) && ( $strength < NO_BREAK ) ) {
 
-            # break at previous best break if it would have produced
-            # a leading alignment of certain common tokens, and it
-            # is different from the latest candidate break
+            # Break at previous best break if it would have produced a leading
+            # alignment of certain common tokens, and it is different from the
+            # latest candidate break.
             if ($leading_alignment_type) {
                 DEBUG_BREAK_LINES && do {
                     $Msg .=
@@ -37642,12 +37642,10 @@ sub break_lines_inner_loop {
                 last;
             }
 
-            # Force at least one breakpoint if old code had good
-            # break It is only called if a breakpoint is required or
-            # desired.  This will probably need some adjustments
-            # over time.  A goal is to try to be sure that, if a new
-            # side comment is introduced into formatted text, then
-            # the same breakpoints will occur.  scbreak.t
+            # Force at least one breakpoint if old code had good break.  A goal
+            # is to try to be sure that, if a new side comment is introduced
+            # into formatted text, then the same breakpoints will occur.  See
+            # 'scbreak.t'.
             if (
                 $i_test == $imax            # we are at the end
                 && !$forced_breakpoint_count
@@ -37713,8 +37711,8 @@ sub break_lines_inner_loop {
                 last;
             }
 
-            # set flags to remember if a break here will produce a
-            # leading alignment of certain common tokens
+            # Set a flag to remember if a break here will produce a
+            # leading alignment of certain common 'chain operator' tokens
             if (   $line_count > 0
                 && $i_test < $imax
                 && ( $lowest_strength - $last_break_strength <= MAX_BIAS ) )
@@ -37724,7 +37722,7 @@ sub break_lines_inner_loop {
                 my $type_beg   = $types_to_go[$i_begin];
                 if (
 
-                    # check for leading alignment of certain tokens
+                    # Check for a leading chain operator
                     (
                            $tok_beg eq $next_nonblank_token
                         && $is_chain_operator{$tok_beg}
@@ -37797,7 +37795,9 @@ sub break_lines_inner_loop {
             ## too long
         }
 
-        # a break here makes the line too long ...
+        #------------------------------------------------------------
+        # Section E: A break here will exceed the maximum line length
+        #------------------------------------------------------------
 
         DEBUG_BREAK_LINES && do {
             my $ltok = $token;
@@ -37834,6 +37834,9 @@ sub break_lines_inner_loop {
             };
             last;
         }
+
+        # Otherwise keep going even though the line length is being exceeded
+
     } ## end while ( ++$i_test <= $imax)
 
     #-----------------------------------------------------
@@ -37845,7 +37848,7 @@ sub break_lines_inner_loop {
     if ( $i_lowest < 0 ) { $i_lowest = $imax }
 
     return ( $i_lowest, $lowest_strength, $Msg );
-} ## end sub break_lines_inner_loop
+} ## end sub break_long_lines_inner_loop
 
 sub do_colon_breaks {
 
@@ -38049,7 +38052,7 @@ sub do_colon_breaks {
             $last_dot_index[$depth_t]              = undef;
             $old_breakpoint_count_stack[$depth_t]  = undef;
             $has_old_logical_breakpoints[$depth_t] = 0;
-            $rand_or_list[$depth_t]                = [];
+            $rand_or_list[$depth_t]                = {};
             $rfor_semicolon_list[$depth_t]         = [];
             $i_equals[$depth_t]                    = -1;
 
@@ -38250,14 +38253,26 @@ EOM
             && $old_breakpoint_to_go[$i_first_comma]
             && $level_comma == $levels_to_go[0] )
         {
-            my $ibreak    = -1;
-            my $obp_count = 0;
+            my $ibreak             = -1;
+            my $obp_count          = 0;
+            my $colon_question_sum = 0;
             foreach my $ii ( reverse( 0 .. $i_first_comma - 1 ) ) {
+
+                # Fix for issue b1608: ignore if the comma and previous break
+                # are are in different parts of a ternary.
+                if ( $types_to_go[$ii] eq ':' ) { $colon_question_sum -= 1 }
+                if ( $types_to_go[$ii] eq '?' ) {
+                    last if ( !$colon_question_sum );
+                    $colon_question_sum += 1;
+                }
+
                 if ( $old_breakpoint_to_go[$ii] ) {
                     $obp_count++;
                     last if ( $obp_count > 1 );
+
                     $ibreak = $ii
-                      if ( $levels_to_go[$ii] == $level_comma );
+                      if ( $levels_to_go[$ii] == $level_comma
+                        && !$colon_question_sum );
                 }
             }
 
@@ -38373,17 +38388,19 @@ EOM
             # Look for breaks in this order:
             # 0   1    2   3
             # or  and  ||  &&
-            foreach my $ii ( 0 .. 3 ) {
-                if ( $rand_or_list[$dd]->[$ii] ) {
-                    foreach ( @{ $rand_or_list[$dd]->[$ii] } ) {
+            foreach my $op (qw( or and || && )) {
+                if ( $rand_or_list[$dd]->{$op} ) {
+                    foreach ( @{ $rand_or_list[$dd]->{$op} } ) {
                         $self->set_forced_breakpoint($_);
                     }
 
-                    # break at any 'if' and 'unless' too
-                    foreach ( @{ $rand_or_list[$dd]->[4] } ) {
+                    # Break at any 'if' and 'unless' too,
+                    foreach ( @{ $rand_or_list[$dd]->{if} } ) {
                         $self->set_forced_breakpoint($_);
                     }
-                    $rand_or_list[$dd] = [];
+
+                    # then stop and ignore higher precedence operators
+                    $rand_or_list[$dd] = {};
                     last;
                 }
             }
@@ -38556,14 +38573,8 @@ EOM
             # remember locations of '||'  and '&&' for possible breaks if we
             # decide this is a long logical expression.
             if ( $quick_filter_A{$type} ) {
-                if ( $type eq '||' ) {
-                    push @{ $rand_or_list[$depth]->[2] }, $i;
-                    ++$has_old_logical_breakpoints[$depth]
-                      if ( ( $i == $i_line_start || $i == $i_line_end )
-                        && $rOpts_break_at_old_logical_breakpoints );
-                }
-                elsif ( $type eq '&&' ) {
-                    push @{ $rand_or_list[$depth]->[3] }, $i;
+                if ( $type eq '&&' || $type eq '||' ) {
+                    push @{ $rand_or_list[$depth]->{$type} }, $i;
                     ++$has_old_logical_breakpoints[$depth]
                       if ( ( $i == $i_line_start || $i == $i_line_end )
                         && $rOpts_break_at_old_logical_breakpoints );
@@ -38573,40 +38584,40 @@ EOM
                 }
                 elsif ( $type eq 'k' ) {
                     if ( $token eq 'and' ) {
-                        push @{ $rand_or_list[$depth]->[1] }, $i;
+                        push @{ $rand_or_list[$depth]->{$token} }, $i;
                         ++$has_old_logical_breakpoints[$depth]
                           if ( ( $i == $i_line_start || $i == $i_line_end )
                             && $rOpts_break_at_old_logical_breakpoints );
                     }
 
-                    # break immediately at 'or's which are probably not in a
+                    # Break immediately at 'or's which are probably not in a
                     # logical block -- but we will break in logical breaks
                     # below so that they do not add to the
                     # forced_breakpoint_count
                     elsif ( $token eq 'or' ) {
-                        push @{ $rand_or_list[$depth]->[0] }, $i;
+                        push @{ $rand_or_list[$depth]->{$token} }, $i;
+
+                        my $is_old_breakpoint =
+                          ( $i == $i_line_start || $i == $i_line_end )
+                          && $rOpts_break_at_old_logical_breakpoints;
+
                         ++$has_old_logical_breakpoints[$depth]
-                          if ( ( $i == $i_line_start || $i == $i_line_end )
-                            && $rOpts_break_at_old_logical_breakpoints );
-                        if ( $is_logical_container{ $container_type[$depth] } )
+                          if ($is_old_breakpoint);
+
+                        if ( !$is_logical_container{ $container_type[$depth] } )
                         {
-                        }
-                        else {
                             if ($is_long_line) {
                                 $self->set_forced_breakpoint($i);
                             }
-                            elsif ( ( $i == $i_line_start || $i == $i_line_end )
-                                && $rOpts_break_at_old_logical_breakpoints )
-                            {
-                                $saw_good_breakpoint = 1;
-                            }
                             else {
-                                ## not a good break
+                                $saw_good_breakpoint ||= $is_old_breakpoint;
                             }
                         }
                     }
                     elsif ( $is_if_unless{$token} ) {
-                        push @{ $rand_or_list[$depth]->[4] }, $i;
+
+                        # Store both 'if' and 'unless' with key 'if'
+                        push @{ $rand_or_list[$depth]->{if} }, $i;
                     }
                     else {
                         ## not one of: 'and' 'or' 'if' 'unless'
@@ -38765,9 +38776,7 @@ EOM
         # This flag indicates if the input file had some good breakpoints.
         # It will be used to force a break in a line shorter than the
         # allowed line length.
-        if ( $has_old_logical_breakpoints[$current_depth] ) {
-            $saw_good_breakpoint = 1;
-        }
+        $saw_good_breakpoint ||= $has_old_logical_breakpoints[$current_depth];
 
         # A complex line with one break at an = has a good breakpoint.
         # This is not complex ($total_depth_variation=0):
@@ -38779,16 +38788,11 @@ EOM
         #  (is_boundp("a", 'self-insert') && is_boundp("b", 'self-insert'));
 
         # The check ($i_old_.. < $max_index_to_go) was added to fix b1333
-        elsif ($i_old_assignment_break
-            && $total_depth_variation > 4
-            && $old_breakpoint_count == 1
-            && $i_old_assignment_break < $max_index_to_go )
-        {
-            $saw_good_breakpoint = 1;
-        }
-        else {
-            ## not a good breakpoint
-        }
+        $saw_good_breakpoint ||=
+             $i_old_assignment_break
+          && $total_depth_variation > 4
+          && $old_breakpoint_count == 1
+          && $i_old_assignment_break < $max_index_to_go;
 
         return $saw_good_breakpoint;
     } ## end sub break_lists
@@ -39225,7 +39229,7 @@ EOM
         $last_dot_index[$depth]              = undef;
         $old_breakpoint_count_stack[$depth]  = $old_breakpoint_count;
         $has_old_logical_breakpoints[$depth] = 0;
-        $rand_or_list[$depth]                = [];
+        $rand_or_list[$depth]                = {};
         $rfor_semicolon_list[$depth]         = [];
         $i_equals[$depth]                    = -1;
 

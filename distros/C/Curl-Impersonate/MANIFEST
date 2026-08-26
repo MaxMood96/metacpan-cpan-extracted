@@ -1,0 +1,19 @@
+Changes
+Impersonate.xs
+lib/Curl/Impersonate.pm
+Makefile.PL
+MANIFEST			This list of files
+MANIFEST.SKIP
+README
+t/00-load.t
+t/30-targets.t
+t/40-async.t
+t/50-streaming.t
+t/60-edge.t
+t/61-http-method.t
+t/62-multi-safety.t
+t/63-redirect.t
+t/64-proxy-url.t
+xt/20-fingerprint.t
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

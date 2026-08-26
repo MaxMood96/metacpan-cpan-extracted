@@ -2,7 +2,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 16;
+use Test::More tests => 18;
 
 use Algorithm::AhoCorasick qw(find_first);
 
@@ -48,3 +48,16 @@ is($keyword, "be");
 
 $mismatch = find_first("To be or not to be", 0);
 ok(!defined($mismatch));
+
+# RT #181060: when several keywords match ending at the same
+# position, find_first must consistently report the same one - it
+# must not depend on Perl's (randomized) hash key iteration order.
+my %seen;
+for (1..50) {
+    my ($p, $k) = find_first("hers", qw( hers hers rs s ));
+    $seen{"$p\t$k"} = 1;
+}
+is(scalar(keys(%seen)), 1, "find_first is deterministic across repeated calls");
+
+($pos, $keyword) = find_first("hers", qw( hers hers rs s ));
+is_deeply([ $pos, $keyword ], [ 0, "hers" ], "find_first picks the longest match");

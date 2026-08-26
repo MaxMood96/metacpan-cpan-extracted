@@ -3,7 +3,7 @@ package DateTime::Locale::Catalog;
 use strict;
 use warnings;
 
-our $VERSION = '1.45';
+our $VERSION = '1.46';
 
 1;
 
@@ -21,7 +21,7 @@ DateTime::Locale::Catalog - Provides a catalog of all valid locale names
 
 =head1 VERSION
 
-version 1.45
+version 1.46
 
 =head1 DESCRIPTION
 
@@ -115,8 +115,8 @@ The available locales are:
  az-Cyrl-AZ       Azerbaijani Azerbaijan Cyrillic                   азәрбајҹан Азәрбајҹан Кирил
  az-Latn          Azerbaijani Latin                                 azərbaycan latın
  az-Latn-AZ       Azerbaijani Azerbaijan Latin                      azərbaycan Azərbaycan latın
- ba               Bashkir                                           башҡорт теле
- ba-RU            Bashkir Russia                                    башҡорт теле
+ ba               Bashkir                                           башҡорт
+ ba-RU            Bashkir Russia                                    башҡорт Рәсәй
  bal              Baluchi                                           بلۆچی
  bal-Arab         Baluchi Arabic                                    بلۆچی
  bal-Arab-PK      Baluchi Pakistan Arabic                           بلۆچی
@@ -159,6 +159,8 @@ The available locales are:
  bo               Tibetan                                           བོད་སྐད་
  bo-CN            Tibetan China                                     བོད་སྐད་ རྒྱ་ནག
  bo-IN            Tibetan India                                     བོད་སྐད་ རྒྱ་གར་
+ bqi              Bakhtiari
+ bqi-IR           Bakhtiari Iran
  br               Breton                                            brezhoneg
  br-FR            Breton France                                     brezhoneg Frañs
  brx              Bodo                                              बर’
@@ -170,6 +172,8 @@ The available locales are:
  bs-Latn-BA       Bosnian Bosnia & Herzegovina Latin                bosanski Bosna i Hercegovina latinica
  bss              Akoose                                            Akoose
  bss-CM           Akoose Cameroon                                   Akoose Kamerûn
+ bua              Buriat                                            буряад
+ bua-RU           Buriat Russia                                     буряад Ород Улас
  byn              Blin
  byn-ER           Blin Eritrea
  ca               Catalan                                           català
@@ -188,7 +192,7 @@ The available locales are:
  ce               Chechen                                           нохчийн
  ce-RU            Chechen Russia                                    нохчийн Росси
  ceb              Cebuano                                           Cebuano
- ceb-PH           Cebuano Philippines                               Cebuano Pilipinas
+ ceb-PH           Cebuano Philippines                               Cebuano Philippines
  cgg              Chiga                                             Rukiga
  cgg-UG           Chiga Uganda                                      Rukiga Uganda
  cho              Choctaw                                           Chahta
@@ -210,8 +214,8 @@ The available locales are:
  csw-CA           Swampy Cree Canada                                ᓀᐦᐃᓇᐍᐏᐣ ᑳᓇᑕ
  cu               Church Slavic
  cu-RU            Church Slavic Russia
- cv               Chuvash                                           чӑваш
- cv-RU            Chuvash Russia                                    чӑваш Раҫҫей
+ cv               Chuvash                                           чӑваш чӗлхи
+ cv-RU            Chuvash Russia                                    чӑваш чӗлхи Раҫҫей
  cy               Welsh                                             Cymraeg
  cy-GB            Welsh United Kingdom                              Cymraeg Y Deyrnas Unedig
  da               Danish                                            dansk
@@ -280,6 +284,7 @@ The available locales are:
  en-DM            English Dominica                                  English Dominica
  en-Dsrt          English Deseret                                   𐐀𐑍𐑊𐐮𐑇 𐐔𐐯𐑆𐐲𐑉𐐯𐐻
  en-Dsrt-US       English United States Deseret                     𐐀𐑍𐑊𐐮𐑇 𐐏𐐭𐑌𐐴𐐻𐐲𐐼 𐐝𐐻𐐩𐐻𐑅 𐐔𐐯𐑆𐐲𐑉𐐯𐐻
+ en-EE            English Estonia                                   English Estonia
  en-ER            English Eritrea                                   English Eritrea
  en-ES            English Spain                                     English Spain
  en-FI            English Finland                                   English Finland
@@ -289,6 +294,7 @@ The available locales are:
  en-FR            English France                                    English France
  en-GB            English United Kingdom                            English United Kingdom
  en-GD            English Grenada                                   English Grenada
+ en-GE            English Georgia                                   English Georgia
  en-GG            English Guernsey                                  English Guernsey
  en-GH            English Ghana                                     English Ghana
  en-GI            English Gibraltar                                 English Gibraltar
@@ -307,6 +313,7 @@ The available locales are:
  en-IT            English Italy                                     English Italy
  en-JE            English Jersey                                    English Jersey
  en-JM            English Jamaica                                   English Jamaica
+ en-JP            English Japan                                     English Japan
  en-KE            English Kenya                                     English Kenya
  en-KI            English Kiribati                                  English Kiribati
  en-KN            English St. Kitts & Nevis                         English St Kitts & Nevis
@@ -314,6 +321,8 @@ The available locales are:
  en-LC            English St. Lucia                                 English St Lucia
  en-LR            English Liberia                                   English Liberia
  en-LS            English Lesotho                                   English Lesotho
+ en-LT            English Lithuania                                 English Lithuania
+ en-LV            English Latvia                                    English Latvia
  en-MG            English Madagascar                                English Madagascar
  en-MH            English Marshall Islands                          English Marshall Islands
  en-MO            English Macao SAR China                           English Macao SAR China
@@ -362,6 +371,7 @@ The available locales are:
  en-TT            English Trinidad & Tobago                         English Trinidad & Tobago
  en-TV            English Tuvalu                                    English Tuvalu
  en-TZ            English Tanzania                                  English Tanzania
+ en-UA            English Ukraine                                   English Ukraine
  en-UG            English Uganda                                    English Uganda
  en-UM            English U.S. Outlying Islands                     English U.S. Outlying Islands
  en-US            English United States                             English United States
@@ -605,6 +615,8 @@ The available locales are:
  kde-TZ           Makonde Tanzania                                  Chimakonde Tanzania
  kea              Kabuverdianu                                      kabuverdianu
  kea-CV           Kabuverdianu Cape Verde                           kabuverdianu Kabu Verdi
+ kek              Qʼeqchiʼ                                          Qʼeqchiʼ
+ kek-GT           Qʼeqchiʼ Guatemala                                Qʼeqchiʼ
  ken              Kenyang                                           Kɛnyaŋ
  ken-CM           Kenyang Cameroon                                  Kɛnyaŋ
  kgp              Kaingang                                          kanhgág
@@ -614,8 +626,8 @@ The available locales are:
  ki               Kikuyu                                            Gikuyu
  ki-KE            Kikuyu Kenya                                      Gikuyu Kenya
  kk               Kazakh                                            қазақ тілі
- kk-Arab          Kazakh Arabic
- kk-Arab-CN       Kazakh China Arabic
+ kk-Arab          Kazakh Arabic                                     قازاق ءتىلى اراب جازۋى
+ kk-Arab-CN       Kazakh China Arabic                               قازاق ءتىلى قىتاي اراب جازۋى
  kk-Cyrl          Kazakh Cyrillic                                   қазақ тілі кирилл жазуы
  kk-Cyrl-KZ       Kazakh Kazakhstan Cyrillic                        қазақ тілі Қазақстан кирилл жазуы
  kk-KZ            Kazakh Kazakhstan                                 қазақ тілі Қазақстан
@@ -653,7 +665,14 @@ The available locales are:
  ksh              Colognian                                         Kölsch
  ksh-DE           Colognian Germany                                 Kölsch Doütschland
  ku               Kurdish                                           kurdî (kurmancî)
- ku-TR            Kurdish Türkiye                                   kurdî (kurmancî) Tirkîye
+ ku-Arab          Kurdish Arabic
+ ku-Arab-IQ       Kurdish Iraq Arabic
+ ku-Arab-IR       Kurdish Iran Arabic
+ ku-Latn          Kurdish Latin                                     kurdî (kurmancî) latînî
+ ku-Latn-IQ       Kurdish Iraq Latin                                kurdî (kurmancî) Îraq latînî
+ ku-Latn-SY       Kurdish Syria Latin                               kurdî (kurmancî) Sûrîye latînî
+ ku-Latn-TR       Kurdish Türkiye Latin                             kurdî (kurmancî) Türkiye latînî
+ ku-TR            Kurdish Türkiye                                   kurdî (kurmancî) Türkiye
  kw               Cornish                                           kernewek
  kw-GB            Cornish United Kingdom                            kernewek Rywvaneth Unys
  kxv              Kuvi                                              kuvi
@@ -705,6 +724,8 @@ The available locales are:
  luy-KE           Luyia Kenya                                       Luluhia Kenya
  lv               Latvian                                           latviešu
  lv-LV            Latvian Latvia                                    latviešu Latvija
+ lzz              Laz
+ lzz-TR           Laz Türkiye
  mai              Maithili                                          मैथिली
  mai-IN           Maithili India                                    मैथिली भारत
  mas              Masai                                             Maa
@@ -760,6 +781,9 @@ The available locales are:
  mua-CM           Mundang Cameroon                                  MUNDAŊ kameruŋ
  mus              Muscogee                                          Mvskoke
  mus-US           Muscogee United States                            Mvskoke United States
+ mww
+ mww-Hmnp         Nyiakeng Puachue Hmong
+ mww-Hmnp-US      United States Nyiakeng Puachue Hmong
  my               Burmese                                           မြန်မာ
  my-MM            Burmese Myanmar (Burma)                           မြန်မာ မြန်မာ
  myv              Erzya                                             эрзянь кель
@@ -811,6 +835,9 @@ The available locales are:
  oc               Occitan                                           occitan
  oc-ES            Occitan Spain                                     occitan Espanha
  oc-FR            Occitan France                                    occitan França
+ oka              Okanagan                                          n̓səl̓xcin̓
+ oka-CA           Okanagan Canada                                   n̓səl̓xcin̓
+ oka-US           Okanagan United States                            n̓səl̓xcin̓
  om               Oromo                                             Oromoo
  om-ET            Oromo Ethiopia                                    Oromoo Itoophiyaa
  om-KE            Oromo Kenya                                       Oromoo Keeniyaa
@@ -831,10 +858,15 @@ The available locales are:
  pap-CW           Papiamento Curaçao                                Papiamentu Kòrsou
  pcm              Nigerian Pidgin                                   Naijíriá Píjin
  pcm-NG           Nigerian Pidgin Nigeria                           Naijíriá Píjin Naijíria
+ pi               Pali
+ pi-Latn          Pali Latin
+ pi-Latn-GB       Pali United Kingdom Latin
  pis              Pijin                                             Pijin
  pis-SB           Pijin Solomon Islands                             Pijin Solomon Aelan
  pl               Polish                                            polski
  pl-PL            Polish Poland                                     polski Polska
+ pms              Piedmontese                                       piemontèis
+ pms-IT           Piedmontese Italy                                 piemontèis Italia
  prg              Prussian                                          prūsiskan
  prg-PL           Prussian Poland                                   prūsiskan Pōli
  ps               Pashto                                            پښتو
@@ -903,7 +935,7 @@ The available locales are:
  sc               Sardinian                                         sardu
  sc-IT            Sardinian Italy                                   sardu Itàlia
  scn              Sicilian                                          sicilianu
- scn-IT           Sicilian Italy                                    sicilianu
+ scn-IT           Sicilian Italy                                    sicilianu Italia
  sd               Sindhi                                            سنڌي
  sd-Arab          Sindhi Arabic                                     سنڌي عربي
  sd-Arab-PK       Sindhi Pakistan Arabic                            سنڌي پاڪستان عربي
@@ -922,6 +954,8 @@ The available locales are:
  ses-ML           Koyraboro Senni Mali                              Koyraboro senni Maali
  sg               Sango                                             Sängö
  sg-CF            Sango Central African Republic                    Sängö Ködörösêse tî Bêafrîka
+ sgs              Samogitian
+ sgs-LT           Samogitian Lithuania
  shi              Tachelhit                                         ⵜⴰⵛⵍⵃⵉⵜ
  shi-Latn         Tachelhit Latin                                   Tashelḥiyt
  shi-Latn-MA      Tachelhit Morocco Latin                           Tashelḥiyt lmɣrib
@@ -983,12 +1017,17 @@ The available locales are:
  su               Sundanese                                         Basa Sunda
  su-Latn          Sundanese Latin                                   Basa Sunda Latin
  su-Latn-ID       Sundanese Indonesia Latin                         Basa Sunda Indonesia Latin
+ suz
+ suz-Deva         Devanagari
+ suz-Deva-NP      Nepal Devanagari
+ suz-Sunu         Sunuwar
+ suz-Sunu-NP      Nepal Sunuwar
  sv               Swedish                                           svenska
  sv-AX            Swedish Åland Islands                             svenska Åland
  sv-FI            Swedish Finland                                   svenska Finland
  sv-SE            Swedish Sweden                                    svenska Sverige
  sw               Swahili                                           Kiswahili
- sw-CD            Swahili Congo - Kinshasa                          Kiswahili Jamhuri ya Kidemokrasia ya Kongo
+ sw-CD            Swahili Congo - Kinshasa                          Kiswahili Kongo - Kinshasa
  sw-KE            Swahili Kenya                                     Kiswahili Kenya
  sw-TZ            Swahili Tanzania                                  Kiswahili Tanzania
  sw-UG            Swahili Uganda                                    Kiswahili Uganda
@@ -1040,8 +1079,8 @@ The available locales are:
  tt-RU            Tatar Russia                                      татар Россия
  twq              Tasawaq                                           Tasawaq senni
  twq-NE           Tasawaq Niger                                     Tasawaq senni Nižer
- tyv              Tuvinian
- tyv-RU           Tuvinian Russia
+ tyv              Tuvinian                                          Тыва
+ tyv-RU           Tuvinian Russia                                   Тыва Россия Федерациязы
  tzm              Central Atlas Tamazight                           Tamaziɣt n laṭlaṣ
  tzm-MA           Central Atlas Tamazight Morocco                   Tamaziɣt n laṭlaṣ Meṛṛuk
  ug               Uyghur                                            ئۇيغۇرچە
@@ -1105,7 +1144,7 @@ The available locales are:
  yrl-VE           Nheengatu Venezuela                               ñengatú Wenesuera
  yue              Cantonese                                         粵語
  yue-Hans         Cantonese Simplified                              粤语 简体
- yue-Hans-CN      Cantonese China Simplified                        粤语 中华人民共和国 简体
+ yue-Hans-CN      Cantonese China Simplified                        粤语 中国 简体
  yue-Hant         Cantonese Traditional                             粵語 繁體
  yue-Hant-CN      Cantonese China Traditional                       粵語 中國 繁體
  yue-Hant-HK      Cantonese Hong Kong SAR China Traditional         粵語 中國香港特別行政區 繁體
@@ -1148,7 +1187,7 @@ Dave Rolsky <autarch@urth.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2003 - 2025 by Dave Rolsky.
+This software is copyright (c) 2003 - 2026 by Dave Rolsky.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

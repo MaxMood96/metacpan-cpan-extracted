@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk::Test::WS ();
 
-our $VERSION = '0.33';
+our $VERSION = '0.34';
 
 sub new {
     my ($class, %a) = @_;

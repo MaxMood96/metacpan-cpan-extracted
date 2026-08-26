@@ -34,7 +34,7 @@ use strict;
 use warnings;
 use English qw( -no_match_vars );
 
-our $VERSION = '20260808';
+our $VERSION = '20260826';
 
 use Carp;
 
@@ -185,6 +185,7 @@ my (
     $rOpts_non_indenting_braces,
     $rOpts_non_indenting_brace_prefix,
     $rOpts_whitespace_cycle,
+    $rOpts_warn_unexpected_code_container,
 
     $tabsize,
     %is_END_DATA_format_sub,
@@ -513,6 +514,9 @@ sub check_options {
     $rOpts_non_indenting_braces       = $rOpts->{'non-indenting-braces'};
     $rOpts_non_indenting_brace_prefix = $rOpts->{'non-indenting-brace-prefix'};
     $rOpts_whitespace_cycle           = $rOpts->{'whitespace-cycle'};
+
+    $rOpts_warn_unexpected_code_container =
+      $rOpts->{'warn-unexpected-code-container'};
 
     # In the Tokenizer, --indent-columns is just used for guessing old
     # indentation, and must be positive.  If -i=0 is used for this run (which
@@ -1261,18 +1265,6 @@ EOM
 
     return;
 } ## end sub show_indentation_table
-
-sub report_v_string {
-
-    # warn if this version can't handle v-strings
-    my ( $self, $tok ) = @_;
-    if ( $] < 5.006 ) {
-        $self->warning(
-"Found v-string '$tok' but v-strings are not implemented in your version of perl; see Camel 3 book ch 2\n"
-        );
-    }
-    return;
-} ## end sub report_v_string
 
 sub is_valid_token_type {
     my ($type) = @_;
@@ -3650,15 +3642,19 @@ EOM
                 if ( defined($rvars) ) {
                     my ( $type_lp_uu, $want_brace ) = @{$rvars};
 
-                    # OLD: Now verify that this is not a trailing form
-                    # FIX for git #124: we have to skip this check because
-                    # the 'gather' keyword of List::Gather can operate on
-                    # a full statement, so it isn't possible to be sure
-                    # this is a trailing form.
-                    if ( 0 && !$want_brace ) {
-                        $self->warning(
-"syntax error at ') {', unexpected '{' after closing ')' of a trailing '$last_nonblank_token'\n"
-                        );
+                    # Issue an error if we are definitely not expecting a block
+                    # brace.  Since this type of error can be triggered by a
+                    # previous error, to avoid confusion we will only issue a
+                    # warning if no other warnings have gone out yet.
+                    # See git #124 and c635.
+                    if (  !$want_brace
+                        && $rOpts_warn_unexpected_code_container
+                        && !$self->[_warning_count_] )
+                    {
+                        $self->warning(<<EOM);
+unexpected '{' after closing ')' of a trailing '$last_nonblank_token'" ... missing ';' above?
+   to skip this warning, use -nwucc
+EOM
                     }
                 }
             }
@@ -4666,18 +4662,10 @@ EOM
 
             if ( $is_keyword{$next_nonblank_tok2} ) {
 
-                # Assume qw is used as a quote and okay, as in:
+                # One example of where a keyword could follow is 'qw' here:
                 #  use constant qw{ DEBUG 0 };
-                # Not worth trying to parse for just a warning
-
-                # NOTE: This warning is deactivated because recent
-                # versions of perl do not complain here, but
-                # the coding is retained for reference.
-                if ( 0 && $next_nonblank_tok2 ne 'qw' ) {
-                    $self->warning(
-"Attempting to define constant '$next_nonblank_tok2' which is a perl keyword\n"
-                    );
-                }
+                # But otherwise, using a keyword here is probably not a good
+                # idea. But perl does not complain, so we will not.
             }
 
             else {
@@ -4700,9 +4688,16 @@ EOM
         # Previously, before update   c230 : if ( $is_for_foreach{$tok} ) {
         ##(if elsif unless while until for foreach switch case given when catch)
         if ( $is_blocktype_with_paren{$tok} ) {
-            if ( new_statement_ok() ) {
-                $want_paren = $tok;
-            }
+
+            # Set $want_paren to help catch missing semicolon errors.
+            # Bias the result in favor of the block form of the keyword.
+            # That is, if (!$want_paren) then we really do not expect a block,
+            # and we can be confident that a warning should be given.
+            # See issue git124, and update c635.
+            $want_paren =
+              ( $expecting == OPERATOR )
+              ? EMPTY_STRING
+              : $tok;
         }
 
         # Catch unexpected keywords (c517, c613).
@@ -5219,15 +5214,10 @@ EOM
             # Bareword followed by a fat comma - see 'git18.in'
             # This code was previously sub do_QUOTED_BAREWORD: see c316, c317
 
-            # Older perl:
-            #   'v25=>1'   is a v-string key!
-            #   '-v25=>1'  is also a v-string key!
-            # Deactivated: this is no longer true; see git #165
-            if ( 0 && $tok =~ /^v\d+$/ ) {
-                $type = 'v';
-                $self->complain("v-string used as hash key\n");
-                $self->report_v_string($tok);
-            }
+            # Note: in some older perl versions these would produce an error:
+            #   'v25=>1'   # is a v-string key!
+            #   '-v25=>1'  # is also a v-string key!
+            # This is no longer true; see git #165
 
             # If tok is something like 'x17' then it could
             # actually be operator x followed by number 17.
@@ -5246,7 +5236,7 @@ EOM
             # a key with 18 a's.  But something like
             #    push @array, a x18;
             # is a syntax error.
-            elsif (
+            if (
                    $expecting == OPERATOR
                 && substr( $tok, 0, 1 ) eq 'x'
                 && ( length($tok) == 1
@@ -8615,7 +8605,6 @@ sub scan_bare_identifier_do {
                     $tok  = substr( $input_line, $pos_beg, $numc );
                 }
                 $type = 'v';
-                $self->report_v_string($tok);
             }
 
             # bareword after sort has implied empty prototype; for example:

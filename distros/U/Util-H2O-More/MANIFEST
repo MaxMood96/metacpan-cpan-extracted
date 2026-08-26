@@ -94,6 +94,7 @@ t/10-yaml2o.t
 t/11-HTTPTiny2h2o.t
 t/12-debug.t
 t/13-modulino.t
+t/14-lvalue.t
 t/lib/Bar.pm
 t/lib/Foo.pm
 t/lib/ModulinoH2O.pm

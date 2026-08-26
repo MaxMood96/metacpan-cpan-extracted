@@ -177,25 +177,6 @@ static void otel_pb_msg_head(otel_buf *b, int field, size_t inner) {
  * histogram's buckets would arrive empty from something that only accepts
  * what the schema promised. */
 
-static size_t otel_pb_packed_u64_size(int field, const IV *v, int n) {
-    size_t inner = 0;
-    int i;
-    for (i = 0; i < n; i++) inner += 8;          /* fixed64 elements */
-    PERL_UNUSED_VAR(v);
-    return otel_pb_tag_size(field, PB_BYTES)
-         + otel_pb_varint_size((UV)inner) + inner;
-}
-static void otel_pb_packed_u64(otel_buf *b, int field, const IV *v, int n) {
-    int i, j;
-    otel_pb_tag(b, field, PB_BYTES);
-    otel_pb_varint(b, (UV)(n * 8));
-    otel_buf_need(b, (size_t)n * 8);
-    for (i = 0; i < n; i++) {
-        U64TYPE u = (U64TYPE)v[i];
-        for (j = 0; j < 8; j++) b->buf[b->len++] = (char)((u >> (j * 8)) & 0xff);
-    }
-}
-
 /* packed varints, for repeated uint64 (the exponential histogram's buckets) */
 static size_t otel_pb_packed_varint_size(int field, const IV *v, int n) {
     size_t inner = 0;

@@ -387,7 +387,7 @@ Net::Clacks::Client now supports "fastdisconnect" that closes a connection immed
 
 ClacksCache now only connects to server on first use, instead on instantiation.
 
-This version is fully backwards compatible to Version 33
+This version is fully backwards compatible to Version 33.
 
 =head2 VERSION 35
 
@@ -402,6 +402,12 @@ This version is fully backwards compatible to Version 34, minus the bugs i hopef
 This version squashes some long standing bugs regarding connection management. Very busy servers should now run more stable.
 
 This version is fully backwards compatible to Version 34, minus the bugs i hopefully managed to squash.
+
+=head2 VERSION 37
+
+Dolly Parton Memorial release. Adds her name to the overhead keep-alive client broadcasts.
+
+This version is fully backwards compatible to Version 34.
 
 =head1 AUTHOR
 

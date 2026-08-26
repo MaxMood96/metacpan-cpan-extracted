@@ -2,7 +2,7 @@ package PAGI::Server::Connection;
 use strict;
 use warnings;
 
-our $VERSION = '0.002007';
+our $VERSION = '0.002009';
 
 use Future;
 use Future::AsyncAwait;
@@ -79,7 +79,11 @@ sub _h2_strip_connection_headers {
             if (!$in_trailers && $lc_name eq 'te') {
                 (my $v = lc $value) =~ s/^\s+|\s+\z//g;
                 if ($v eq 'trailers') {
-                    push @kept, $h;
+                    # Submit the normalized token, never the original value:
+                    # RFC 9113 8.2.1 forbids OWS in field values, and
+                    # libnghttp2 versions disagree on how to punish one
+                    # (omit the field vs corrupt the whole response).
+                    push @kept, [$name, 'trailers'];
                     next;
                 }
             }
@@ -4391,6 +4395,16 @@ sub _create_send {
             my @final_headers = @$headers;
             unless (grep { lc($_->[0]) eq 'date' } @final_headers) {
                 push @final_headers, ['date', $weak_self->{protocol}->format_date];
+            }
+
+            # PAGI spec Upgrade companion rule: over HTTP/1.1, a response
+            # carrying an app-supplied Upgrade header (e.g. 426 Upgrade
+            # Required) must also carry 'upgrade' among the server-supplied
+            # Connection tokens -- RFC 9110 requires the pair from any
+            # Upgrade sender, and the app's own Connection header was
+            # stripped above. HTTP/1.0 has no upgrade mechanism.
+            if (!$is_http10 && grep { lc($_->[0]) eq 'upgrade' } @final_headers) {
+                push @final_headers, ['connection', 'upgrade'];
             }
 
             # For HEAD requests, don't use chunked encoding (no body will be sent)

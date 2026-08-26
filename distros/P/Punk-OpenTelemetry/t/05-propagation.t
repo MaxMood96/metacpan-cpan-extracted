@@ -252,4 +252,87 @@ my $SID = '00f067aa0ba902b7';
     is($span->to_hash->{parent_span_id}, $SID, 'with the right parent');
 }
 
+# --- an outbound call joins the trace it was made from ----------------------
+#
+# THE CLIENT OBSERVER USED TO START A ROOT SPAN AND APPEND A SECOND HEADER.
+#
+# Both halves were wrong and each hid the other. The span had a NULL parent,
+# so every outbound call opened a new trace and the callee joined a trace
+# containing nothing but itself. And the header was pushed onto the list
+# rather than set in it, so a caller that propagated deliberately sent TWO
+# `traceparent` headers - which is not a request with a fallback, it is a
+# malformed request whose trace joins up or does not depending on which one
+# the callee happens to read.
+#
+# The visible symptom was a store in which every trace was one span long and
+# no service map edge ever crossed a process, which reads as "the tracing is
+# broken" and not as "this function is wrong".
+SKIP: {
+    eval { require Fetch; 1 } or skip 'Fetch is not installed', 6;
+    skip 'Fetch has no _abi_ptr', 6 unless Fetch->can('_abi_ptr');
+
+    require IO::Socket::INET;
+    my $srv = IO::Socket::INET->new(LocalAddr => '127.0.0.1', LocalPort => 0,
+                                    Listen => 5, ReuseAddr => 1)
+        or skip "cannot listen: $!", 6;
+    my $port = $srv->sockport;
+
+    my $pid = fork;
+    skip 'cannot fork', 6 unless defined $pid;
+
+    if (!$pid) {
+        # THE CHILD MUST NOT WRITE TO THE TAP PIPE. It inherited the
+        # harness's STDOUT, and anything it prints there is parsed as test
+        # output - which presents as a smoker reporting a killed run after
+        # every test had already passed.
+        close STDOUT; close STDERR;
+        my $c = $srv->accept;
+        if ($c) {
+            my $req = '';
+            while (my $l = <$c>) { $req .= $l; last if $l =~ /^\r?$/ }
+            my $body = $req;
+            print $c "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n"
+                   . "Content-Length: " . length($body) . "\r\n"
+                   . "Connection: close\r\n\r\n" . $body;
+            close $c;
+        }
+        POSIX::_exit(0) if eval { require POSIX; 1 };
+        exit 0;
+    }
+    close $srv;
+
+    my $tracer = Punk::OpenTelemetry::Tracer->new(scope_name => 'test');
+    {
+        no warnings 'once';
+        $Punk::OpenTelemetry::Instrument::TRACER = $tracer;
+    }
+    Punk::OpenTelemetry::Instrument::install($tracer, client => 1);
+
+    my $caller_span = $tracer->start('caller', kind => 2);
+    my $sent = eval {
+        Fetch->new(timeout => 5)->get("http://127.0.0.1:$port/x",
+            headers => { traceparent => $caller_span->traceparent })->get;
+    };
+    waitpid $pid, 0;
+
+    my $echoed = $sent ? $sent->content : '';
+    my @tp = ($echoed =~ /^traceparent:\s*(\S+)/mig);
+
+    is(scalar @tp, 1, 'exactly ONE traceparent reaches the callee')
+        or diag("headers seen: @tp");
+
+  SKIP: {
+        skip 'no traceparent was sent', 4 unless @tp;
+        my ($ver, $trace, $span, $flags) = split /-/, $tp[0];
+        is(length $trace, 32, '  a well-formed trace id');
+        is($trace, $caller_span->trace_id,
+           '  and it is the CALLER\'s trace, not a new one');
+        isnt($span, $caller_span->span_id,
+             '  the parent id is the client span, not the caller itself');
+        like($flags, qr/^0[01]$/, '  with the sampled flag');
+    }
+
+    $tracer->enqueue($caller_span);
+}
+
 done_testing;

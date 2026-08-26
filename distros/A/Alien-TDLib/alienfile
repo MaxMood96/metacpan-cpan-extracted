@@ -1,0 +1,344 @@
+use alienfile;
+
+# GitHub generated tarballs are not guaranteed byte-stable over time, so a
+# digest mismatch may mean the pin needs re-recording rather than tampering;
+# the commit sha in start_url is what anchors the content.
+my $ARCHIVE_SHA256 = 'b0837cd880a6de8d45abdfd5024fe0f042c100eb5f241a5f185ba65579acfc32';
+
+use File::Basename ();
+my $dist_root = File::Basename::dirname(__FILE__);
+require "$dist_root/inc/Alien/TDLib/Guards.pm";
+require "$dist_root/inc/Alien/TDLib/Prebuilt.pm";
+require "$dist_root/inc/Alien/TDLib/Version.pm";
+require "$dist_root/inc/Alien/TDLib/Resolve.pm";
+
+# Decided at parse time so the prebuilt path never registers the CMake
+# recipe at all: no Build::CMake plugin, no Alien::cmake3 share requires,
+# no out_of_source staging for an install that runs no compiler.
+my $prebuilt = $ENV{ALIEN_TDLIB_PREBUILT} ? Alien::TDLib::Prebuilt::platform() : undef;
+
+sub _npm_registry_integrity {
+    my ($plat, $npm) = @_;
+    require HTTP::Tiny;
+    require JSON::PP;
+    my $url = Alien::TDLib::Prebuilt::metadata_url($plat);
+    my $res = HTTP::Tiny->new(verify_SSL => 1)->get($url);
+    die "Alien::TDLib: cannot fetch $url: $res->{status} $res->{reason}\n"
+        unless $res->{success};
+    my $meta = eval { JSON::PP::decode_json($res->{content}) };
+    my $integrity = eval { $meta->{versions}{$npm}{dist}{integrity} };
+    die "Alien::TDLib: registry metadata has no dist.integrity for "
+        . "\@prebuilt-tdlib/$plat $npm\n"
+        unless $integrity;
+    return $integrity;
+}
+
+sub _fetch_pinned_header {
+    my ($to, $commit) = @_;
+    require HTTP::Tiny;
+    my $url = "https://raw.githubusercontent.com/tdlib/td/$commit/td/telegram/td_json_client.h";
+    my $res = HTTP::Tiny->new(verify_SSL => 1)->get($url);
+    die "Alien::TDLib: cannot fetch $url: $res->{status} $res->{reason}\n"
+        unless $res->{success};
+    open my $fh, '>', $to or die "$to: $!\n";
+    binmode $fh;
+    print $fh $res->{content};
+    close $fh;
+}
+
+sub _install_prebuilt {
+    my ($build, $plat) = @_;
+
+    # Refuse a prebuilt package whose recorded TDLib commit is not our pin:
+    # this is what makes the third-party binary checkable rather than trusted.
+    my $extract = $build->install_prop->{extract};
+    my $r  = _resolved($build);
+    my $td = eval { Alien::TDLib::Prebuilt::check_pin($extract, $r->{commit}, $r->{version}) };
+    if (my $err = $@) {
+        $build->log("Alien::TDLib: refusing the prebuilt package: $err");
+        die "Alien::TDLib: prebuilt package does not match the pinned TDLib commit;\n"
+            . "rebuild without ALIEN_TDLIB_PREBUILT to use the pinned source build\n";
+    }
+    $build->log("Alien::TDLib: prebuilt provenance matches the pinned TDLib "
+        . "$td->{version} commit");
+
+    my $prefix = $build->install_prop->{prefix};
+    my $dest   = $build->meta_prop->{destdir} ? $ENV{DESTDIR} . $prefix : $prefix;
+
+    require File::Path;
+    require File::Copy;
+    File::Path::make_path("$dest/lib", "$dest/include/td/telegram");
+
+    my $lib = Alien::TDLib::Prebuilt::shared_lib_name($plat);
+    my $src = -f "$extract/$lib" ? "$extract/$lib" : "$extract/package/$lib";
+    File::Copy::copy($src, "$dest/lib/$lib")
+        or die "Alien::TDLib: copy $src: $!\n";
+    chmod 0755, "$dest/lib/$lib";
+
+    if ($plat =~ /^linux/) {
+        # the linker records the SONAME, so the bare .so alone is not findable
+        my $soname = "$lib.$r->{version}";
+        symlink $lib, "$dest/lib/$soname"
+            or die "Alien::TDLib: symlink $soname: $!\n";
+    }
+
+    _fetch_pinned_header("$dest/include/td/telegram/td_json_client.h", $r->{commit});
+    File::Copy::copy("$dist_root/prebuilt/tdjson_export.h",
+        "$dest/include/td/telegram/tdjson_export.h")
+        or die "Alien::TDLib: copy tdjson_export.h: $!\n";
+
+    $build->log("Alien::TDLib: installed prebuilt $lib and headers into $dest");
+}
+
+configure {
+    requires 'Alien::Build' => '2.40';
+};
+
+# ALIEN_TDLIB_PREBUILT=1 wins: the system probes are never registered
+if (!$prebuilt) {
+    plugin 'PkgConfig' => (pkg_name => 'tdjson');
+
+    plugin 'Probe::CBuilder' => (
+        options => { quiet => 1 },
+        cflags  => '',
+        libs    => '-ltdjson',
+        # the plugin captures $1 of the probe's stdout into the version property
+        version => qr/"value"\s*:\s*"([^"]+)"/,
+        program => <<'END_C',
+#include <stdio.h>
+#include <td/telegram/td_json_client.h>
+int main(void) {
+    const char *reply = td_execute("{\"@type\":\"getOption\",\"name\":\"version\"}");
+    if (!reply) return 1;
+    printf("%s\n", reply);
+    return 0;
+}
+END_C
+    );
+
+    # Accept a system libtdjson only inside the audited window (Version.pm):
+    # consumers hardcode wire shapes from the pinned schema, so an unaudited
+    # system library must fall through to a pinned share install. A rejection
+    # dies inside the probe hook, which Alien::Build treats as a failed probe:
+    # the remaining hooks run and the share path takes over.
+    meta->around_hook(probe => sub {
+        my ($orig, $build) = @_;
+        my $type = $orig->($build);
+        return $type unless $type eq 'system';
+        if ($ENV{ALIEN_TDLIB_SKIP_VERSION}) {
+            $build->log('Alien::TDLib: ALIEN_TDLIB_SKIP_VERSION=1, accepting the '
+                . 'system libtdjson without a version check (unsupported)');
+            return $type;
+        }
+        my $v = $build->hook_prop->{version};
+        my ($ok, $why) = Alien::TDLib::Version::check($v);
+        $build->log('Alien::TDLib: ' . ($ok ? 'accepting' : 'rejecting')
+            . " system libtdjson: $why");
+        if (!$ok) {
+            $build->log('Alien::TDLib: falling back to a pinned share install; set '
+                . 'ALIEN_TDLIB_SKIP_VERSION=1 to accept an unaudited system library '
+                . '(unsupported)');
+            die "Alien::TDLib: system libtdjson rejected: $why\n";
+        }
+        return $type;
+    });
+}
+
+    # runs only when the system probes found nothing
+probe sub {
+    my ($build) = @_;
+    return 'share' unless $ENV{ALIEN_TDLIB_PREBUILT};
+    if ($prebuilt) {
+        $build->log("Alien::TDLib: ALIEN_TDLIB_PREBUILT=1, using the prebuilt "
+            . "\@prebuilt-tdlib/$prebuilt package; no system libtdjson was probed");
+    } else {
+        $build->log('Alien::TDLib: ALIEN_TDLIB_PREBUILT=1 but no prebuilt package '
+            . 'exists for this platform; falling back to the source build');
+    }
+    return 'share';
+};
+
+# Resolved once at download time and cached, so gather can never disagree with
+# what was installed.
+sub _resolved {
+    my ($build) = @_;
+    return $build->install_prop->{tdlib} if $build->install_prop->{tdlib};
+    die "Alien::TDLib: internal error, the TDLib release was never resolved\n"
+        if $build->install_prop->{complete}{download};
+    my $r = Alien::TDLib::Resolve::resolve(
+        $ENV{ALIEN_TDLIB_VERSION}, $prebuilt,
+        sub { $build->log("Alien::TDLib: $_[0]") },
+    );
+    return $build->install_prop->{tdlib} = $r;
+}
+
+share {
+    start_url "https://github.com/tdlib/td/archive/$Alien::TDLib::Resolve::FALLBACK_COMMIT.tar.gz";
+
+    plugin 'Fetch::HTTPTiny';
+    plugin 'Extract' => 'tar.gz';
+
+    before 'download' => sub {
+        my ($build) = @_;
+        my $td   = _resolved($build);
+        my $want = $ENV{ALIEN_TDLIB_VERSION};
+        $build->log(sprintf 'Alien::TDLib: installing TDLib %s (%s), %s',
+            $td->{version} // 'unknown', substr($td->{commit}, 0, 12),
+            defined $want && $want ne '' ? "ALIEN_TDLIB_VERSION=$want"
+                                         : 'newest published; set ALIEN_TDLIB_VERSION to pin');
+
+        if ($prebuilt && $td->{npm}) {
+            $build->install_prop->{prebuilt}  = $prebuilt;
+            $build->install_prop->{fetch_url}
+                = Alien::TDLib::Prebuilt::tarball_url($prebuilt, $td->{npm});
+        } else {
+            $build->log('Alien::TDLib: no prebuilt package for that commit; '
+                . 'building it from source') if $prebuilt;
+            $build->install_prop->{fetch_url}
+                = "https://github.com/tdlib/td/archive/$td->{commit}.tar.gz";
+        }
+        $build->meta_prop->{start_url} = $build->install_prop->{fetch_url};
+    };
+
+        # Fetch::HTTPTiny caches start_url at plugin init; pass it to the hook
+    meta->around_hook(fetch => sub {
+        my ($orig, $build, @rest) = @_;
+        my $url = $build->install_prop->{fetch_url} or return $orig->($build, @rest);
+        return $orig->($build, $url);
+    });
+
+    # after 'download': a before-build hook needs a registered build recipe
+    after 'download' => sub {
+        my ($build) = @_;
+
+        if (my $plat = $build->install_prop->{prebuilt}) {
+            if (!$ENV{ALIEN_TDLIB_SKIP_DIGEST}) {
+                my $archive = $build->install_prop->{download};
+                my $expected = _npm_registry_integrity($plat, _resolved($build)->{npm});
+                my $got = Alien::TDLib::Prebuilt::npm_integrity($archive);
+                if (!Alien::TDLib::Prebuilt::integrity_matches($archive, $expected)) {
+                    $build->log("Alien::TDLib: npm integrity mismatch on $archive");
+                    $build->log("  expected $expected");
+                    $build->log("  got      $got");
+                    die "Alien::TDLib: prebuilt tarball does not match the npm registry integrity;\n"
+                        . "the package may have been re-published, or set ALIEN_TDLIB_SKIP_DIGEST=1 to skip this check\n";
+                }
+            }
+            return;
+        }
+
+        my @missing;
+        push @missing, 'gperf' unless Alien::TDLib::Guards::find_tool('gperf');
+        push @missing, 'cmake' unless Alien::TDLib::Guards::find_tool('cmake');
+        if (@missing) {
+            $build->log('');
+            $build->log('Alien::TDLib cannot build TDLib from source: missing '
+                . join(', ', @missing));
+            $build->log('  Debian/Ubuntu: apt-get install gperf cmake');
+            $build->log('  Fedora:        dnf install gperf cmake');
+            $build->log('  Alpine:        apk add gperf cmake');
+            $build->log('  macOS:         brew install gperf cmake');
+            die "missing build tool: @missing\n";
+        }
+
+        # the digest is recorded for one release only; for any other release the
+        # commit sha in the URL is what anchors the content
+        if (!$ENV{ALIEN_TDLIB_SKIP_DIGEST}
+            && _resolved($build)->{commit} eq $Alien::TDLib::Resolve::FALLBACK_COMMIT) {
+            require Digest::SHA;
+            my $archive = $build->install_prop->{download};
+            my $got = Digest::SHA->new(256)->addfile($archive)->hexdigest;
+            if ($got ne $ARCHIVE_SHA256) {
+                $build->log("Alien::TDLib: SHA-256 mismatch on $archive");
+                $build->log("  expected $ARCHIVE_SHA256");
+                $build->log("  got      $got");
+                die "Alien::TDLib: downloaded archive does not match the recorded SHA-256;\n"
+                    . "the pin may need re-recording, or set ALIEN_TDLIB_SKIP_DIGEST=1 to skip this check\n";
+            }
+        }
+
+        my $cpus = Alien::TDLib::Guards::cpu_count();
+        my $gb   = Alien::TDLib::Guards::ram_gb();
+        my $jobs = Alien::TDLib::Guards::build_jobs($cpus, $gb);
+        $build->log("Alien::TDLib: building TDLib "
+            . (_resolved($build)->{version} // 'from source') . " with $jobs job(s) "
+            . "($cpus cpus, ${gb}GB RAM available). This takes tens of minutes.");
+    };
+
+    if ($prebuilt) {
+        build sub {
+            my ($build) = @_;
+            _install_prebuilt($build, $prebuilt);
+        };
+    } else {
+        requires 'Alien::Build::Plugin::Build::CMake' => 0;
+
+        plugin 'Build::CMake';
+
+        # TDLib ships CMake/PreventInSourceBuild.cmake and refuses in-source builds.
+        meta->prop->{out_of_source} = 1;
+
+        meta->interpolator->add_helper(alien_tdlib_jobs => sub {
+            Alien::TDLib::Guards::build_jobs();
+        });
+
+        build [
+            ['%{cmake}',
+                @{ meta->prop->{plugin_build_cmake}->{args} },
+                '-DCMAKE_BUILD_TYPE=Release',
+                '-DTD_ENABLE_LTO=OFF',
+                '-DTD_INSTALL_STATIC_LIBRARIES=ON',
+                '-DTD_INSTALL_SHARED_LIBRARIES=OFF',
+                '%{.install.extract}',
+            ],
+            ['%{cmake}', '--build', '.', '--parallel', '%{alien_tdlib_jobs}'],
+            ['%{cmake}', '--install', '.'],
+        ];
+    }
+
+    # around-replace rather than a plain gather hook: the PkgConfig plugin registers
+    # gather_share as a command list, which call_hook treats as successful even when
+    # its commands fail, so a plain gather hook after it would never run. The core
+    # gather wrappers (destdir mirror, alien.json writer) sit outside this hook and
+    # still run.
+    meta->around_hook(gather_share => sub {
+        my ($orig, $build) = @_;
+
+        if ($build->install_prop->{prebuilt}) {
+            my $prefix = $build->runtime_prop->{prefix};
+            my $r = _resolved($build);
+            # no -lstdc++ or -DTDJSON_STATIC_DEFINE here, unlike the static
+            # build: OpenSSL, zlib and libstdc++ are inside the prebuilt .so
+            $build->runtime_prop->{cflags}   = "-I$prefix/include";
+            $build->runtime_prop->{libs}     = "-L$prefix/lib -ltdjson -Wl,-rpath,$prefix/lib";
+            $build->runtime_prop->{commit}   = $r->{commit};
+            $build->runtime_prop->{version}  = $r->{version};
+            $build->runtime_prop->{prebuilt} = 1;
+            return;
+        }
+
+        # gather_share runs with CWD at the installed tree (DESTDIR prefix)
+        require Cwd;
+        my $cwd = Cwd::getcwd();
+        local $ENV{PKG_CONFIG_PATH} = join ':', "$cwd/lib/pkgconfig",
+            ($ENV{PKG_CONFIG_PATH} // '');
+
+        my $libs = `pkg-config --static --libs tdjson_static`;
+        die "cannot read tdjson_static.pc under $cwd\n" if $?;
+        my $cflags = `pkg-config --static --cflags tdjson_static`;
+        die "cannot read tdjson_static.pc under $cwd\n" if $?;
+        chomp($libs, $cflags);
+
+        # TDLib's .pc assumes a C++ linker driver; cc-driven consumers must
+        # name the C++ runtime or the .so fails to dlopen
+        my $cxx_rt = $^O =~ /^(darwin|freebsd|openbsd)$/ ? '-lc++' : '-lstdc++';
+        $libs .= " $cxx_rt" unless $libs =~ /\Q$cxx_rt\E/;
+
+        my $prefix = $build->runtime_prop->{prefix};
+        $build->runtime_prop->{cflags}  = $cflags || "-I$prefix/include";
+        $build->runtime_prop->{libs}    = $libs;
+        $build->runtime_prop->{commit}  = _resolved($build)->{commit};
+        $build->runtime_prop->{version} = _resolved($build)->{version}
+            // $Alien::TDLib::Resolve::FALLBACK_VERSION;
+    });
+};

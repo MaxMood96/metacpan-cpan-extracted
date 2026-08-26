@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Punk::Mailer ();    # one dist, one bootstrap: the plugin lives in its bundle
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 1;
 

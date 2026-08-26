@@ -1,5 +1,32 @@
 # This file documents the revision history for Perl extension PAGI
 
+0.002005 - 2026-08-26
+
+  [Specification clarifications - resolved ambiguities]
+  - Consolidated the connection-level-headers rule: PAGI defines no header
+    exceptions of its own -- where the HTTP RFCs carve one out (te with the
+    trailers token per RFC 9113, forwarded normalized; the Connection:
+    upgrade companion an Upgrade sender owes per RFC 9110), the server
+    implements the RFC rather than the blanket strip. Replaces the separate
+    426-companion paragraph and corrects the blanket "strips all of these"
+    overstatement; no server behavior change.
+
+0.002004 - 2026-08-25
+
+  [Specification clarifications - resolved ambiguities]
+  - Connection-level headers: over HTTP/1.1, when an application response
+    carries an Upgrade header (e.g. on a 426 Upgrade Required), the server
+    must include 'upgrade' among the tokens of the Connection header it
+    supplies, per RFC 9110's requirement on any Upgrade sender. The
+    application never sends Connection: upgrade itself; the server
+    completes the pair. Closes the conflict between the
+    server-owns-connection-headers rule and RFC 9110's 426 requirements.
+  - The incomplete-response definition now says explicitly that it covers an
+    application Future that fails with an exception, not only one that
+    resolves, after http.response.start and before the terminal event. No
+    behavior change: the neighboring clauses already treat exceptions
+    identically, and the reference server conforms both ways.
+
 0.002003 - 2026-08-24
   [Specification clarifications - resolved ambiguities]
   - http.response.body payload keys (body / file / fh) are at-most-one per

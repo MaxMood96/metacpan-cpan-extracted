@@ -1,0 +1,7 @@
+id,product,region,sales_rep,amount,sale_date
+1,Widget A,North,Alice Smith,1250.00,2025-01-15
+2,Widget B,South,Bob Jones,875.50,2025-01-16
+3,Gadget Pro,East,Carol White,2100.00,2025-01-17
+4,Widget A,West,David Lee,950.00,2025-01-18
+5,Gadget Pro,North,Alice Smith,1875.00,2025-01-19
+6,Widget B,East,Carol White,725.25,2025-01-20

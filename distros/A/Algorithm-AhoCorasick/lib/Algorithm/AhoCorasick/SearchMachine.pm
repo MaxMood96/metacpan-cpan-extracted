@@ -176,11 +176,11 @@ sub transitions {
     return values %{$self->{transitions}};
 }
 
-# Returns a list of patterns ending in this node.
+# Returns a list of patterns ending in this node, longest first.
 sub results {
     my $self = shift;
 
-    return keys %{$self->{results}};
+    return sort { length($b) <=> length($a) || $a cmp $b } keys %{$self->{results}};
 }
 
 # Adds pattern ending in this node.

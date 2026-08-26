@@ -3,7 +3,7 @@ package PAGI::Server::AppNormalizer;
 use strict;
 use warnings;
 
-our $VERSION = '0.002007';
+our $VERSION = '0.002009';
 
 use Scalar::Util qw(blessed reftype);
 

@@ -1,5 +1,5 @@
 package MIDI::Drummer::Tiny::Grooves;
-$MIDI::Drummer::Tiny::Grooves::VERSION = '0.7014';
+$MIDI::Drummer::Tiny::Grooves::VERSION = '0.7015';
 our $AUTHORITY = 'cpan:GENE';
 
 use Moo;
@@ -133,6 +133,30 @@ has return_patterns => (
   default => sub { 0 },
 );
 
+#pod =head2 share_file
+#pod
+#pod   $share_file = $grooves->share_file;
+#pod
+#pod The path to the F<drum-pattern-bit-strings.txt> file.
+#pod
+#pod Default: The installed distribution directory/file.
+#pod
+#pod =cut
+
+has share_file => (
+  is      => 'rw',
+  isa     => sub { die "Invalid share_file" unless -e $_[0] },
+  builder => '_build_share_file',
+);
+
+sub _build_share_file {
+    my ($self) = @_;
+    my $file = '/drum-pattern-bit-strings.txt';
+    my $path = dist_dir('MIDI-Drummer-Tiny') . $file;
+    $path = 'share' . $file unless -e $path;
+    return $path;
+}
+
 has _grooves => (
     is      => 'lazy',
     builder => '_build__grooves',
@@ -154,9 +178,7 @@ sub _build__grooves {
         LT => 'low_tom',
         HC => 'conga',
     );
-    my $file = '/drum-pattern-bit-strings.txt';
-    my $path = dist_dir('MIDI-Drummer-Tiny') . $file;
-    $path = 'share' . $file unless -e $path;
+    my $path = $self->share_file;
     my @contents = path($path)->lines;
     my (%grooves, $cat, $name, %patterns);
     my $i = 0;
@@ -342,7 +364,7 @@ MIDI::Drummer::Tiny::Grooves
 
 =head1 VERSION
 
-version 0.7014
+version 0.7015
 
 =head1 SYNOPSIS
 
@@ -439,6 +461,14 @@ Either return the raw patterns of 16 beats or C<synch>'ed B<drummer>
 object phrases from the B<groove()> method.
 
 Default: C<0>
+
+=head2 share_file
+
+  $share_file = $grooves->share_file;
+
+The path to the F<drum-pattern-bit-strings.txt> file.
+
+Default: The installed distribution directory/file.
 
 =head1 METHODS
 

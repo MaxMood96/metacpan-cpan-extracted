@@ -121,9 +121,18 @@ my $clean = write_file('clean.txt', 'nothing to see here');
     is $c->scan_path("$dir/no-such-file")->state, 'error', 'a missing path is an error verdict';
     is $c->error_code, ClamAV::Clamd::ERR_IO, '  reported as an IO error';
 
+    # fileno on a directory handle only started returning a descriptor in
+    # perl 5.22; before that it is undef, which scan_fd refuses as a config
+    # error long before it can fstat anything. The pipe below drives the
+    # same S_ISREG check on every perl.
     opendir my $dh, $dir or die $!;
-    is $c->scan_fd(fileno $dh)->state, 'error', 'a directory descriptor is refused';
-    is $c->error_code, ClamAV::Clamd::ERR_NOTREG, '  reported as not-a-regular-file';
+    SKIP: {
+        my $dfd = fileno $dh;
+        skip 'fileno on a directory handle needs perl 5.22', 2
+            unless defined $dfd && $dfd >= 0;
+        is $c->scan_fd($dfd)->state, 'error', 'a directory descriptor is refused';
+        is $c->error_code, ClamAV::Clamd::ERR_NOTREG, '  reported as not-a-regular-file';
+    }
     closedir $dh;
 
     pipe(my $r, my $w) or die $!;

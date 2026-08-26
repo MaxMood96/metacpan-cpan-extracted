@@ -19,8 +19,13 @@ use lib "$FindBin::Bin/../../lib";
 
 eval { require Future::IO::Impl::IOAsync; 1 }
     or plan skip_all => 'Future::IO::Impl::IOAsync required for SSE tests';
-eval { require PAGI::SSE; 1 }
-    or plan skip_all => 'PAGI::SSE (PAGI-Tools) not on @INC; run with -I <PAGI-Tools>/lib';
+# The version floor matters: the pre-split PAGI dist (0.001x) also shipped a
+# PAGI::SSE, whose close() is synchronous -- awaiting it dies. close() became
+# awaitable (async sub) in PAGI-Tools 0.002001.
+plan(skip_all => q{Cross-distribution integration test; set INTEGRATION_TEST=1 to run})
+    unless $ENV{INTEGRATION_TEST};
+eval { require PAGI::Tools; PAGI::Tools->VERSION(0.002001); require PAGI::SSE; 1 }
+    or plan skip_all => 'PAGI-Tools 0.002001+ (PAGI::SSE) not installed; run with -I <PAGI-Tools>/lib';
 
 plan skip_all => "Server integration tests not supported on Windows" if $^O eq 'MSWin32';
 

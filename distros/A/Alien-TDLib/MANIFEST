@@ -1,0 +1,21 @@
+alienfile
+Changes
+inc/Alien/TDLib/Guards.pm
+inc/Alien/TDLib/Prebuilt.pm
+inc/Alien/TDLib/Resolve.pm
+inc/Alien/TDLib/Version.pm
+lib/Alien/TDLib.pm
+Makefile.PL
+MANIFEST			This list of files
+MANIFEST.SKIP
+prebuilt/tdjson_export.h
+README
+t/00_use.t
+t/01_basic.t
+t/02_xs.t
+t/03_guards.t
+t/04_prebuilt.t
+t/05_version.t
+t/06_resolve.t
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

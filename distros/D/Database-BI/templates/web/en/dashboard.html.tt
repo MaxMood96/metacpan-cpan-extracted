@@ -1,0 +1,847 @@
+[%- WRAPPER 'web/en/layouts/default.html.tt' -%]
+
+[%- IF back_url -%]
+<p class="back-link"><a href="[% back_url | html %]">&larr; [% back_label || 'Back' | html %]</a></p>
+[%- ELSE -%]
+<p class="back-link"><a href="/">&larr; Choose another database</a></p>
+[%- END -%]
+
+[%- IF left_spec -%]
+<div class="toolbar">
+  <p class="record-count">[% records.size %] record[% records.size != 1 ? 's' : '' %]
+    [%- IF join_summaries.size -%]
+    &ensp;
+    [%- FOREACH s IN join_summaries -%]
+    <span class="join-chip">&#x2b; [% s.label | html %] <span class="join-chip-key">(on [% s.left_key | html %] = [% s.right_key | html %])</span></span>
+    [%- END -%]
+    [%- END -%]
+  </p>
+  [%- IF filter_specs.size -%]
+  <span class="filter-chips" id="filter-chip-row">
+    [%- FOREACH fs IN filter_specs -%]
+    <span class="filter-chip">[% fs | html %]</span>
+    [%- END -%]
+  </span>
+  <a class="btn-clear-filters" id="btn-clear-filters" href="#">&#x2715; Clear filters</a>
+  [%- END -%]
+  [%- IF left_spec -%]
+  <button class="btn-export-open" id="btn-export-open" type="button">&#x2193; Export&hellip;</button>
+  [%- END -%]
+  <button class="btn-add-db" id="btn-add-db" type="button" title="Combine this table with another data file, or narrow down the rows you see by applying conditions">&#x2295; Merge data&hellip;</button>
+</div>
+
+[%- IF left_spec -%]
+<div class="export-panel" id="export-panel"
+     data-left-spec="[% left_spec | html %]"
+     data-default-dir="[% download_dir | html %]"
+     hidden>
+  <h3 class="export-panel-title">&#x2193; Save export</h3>
+
+  <div class="export-dir-bar">
+    <input type="text" id="export-dir-inp" autocomplete="off" spellcheck="false"
+           value="[% download_dir | html %]" aria-label="Output directory">
+    <button type="button" class="btn-dir-up" id="export-dir-up" disabled
+            title="Go to parent directory">&#x2191; Up</button>
+  </div>
+
+  <div class="export-dir-browser" id="export-dir-browser">
+    <span class="export-dir-msg">Loading&hellip;</span>
+  </div>
+
+  <div class="export-filename-row">
+    <label for="export-filename-inp">Filename</label>
+    <input type="text" id="export-filename-inp" autocomplete="off" spellcheck="false"
+           placeholder="output.csv">
+    <span class="export-format-badge unknown" id="export-format-badge">CSV</span>
+  </div>
+
+  <div class="join-actions">
+    <button type="button" id="btn-cancel-export" class="btn-secondary">Cancel</button>
+    <button type="button" id="btn-do-export" class="btn-primary" disabled>Save</button>
+  </div>
+
+  <p class="export-result" id="export-result" hidden></p>
+</div>
+[%- END -%]
+
+<div class="join-panel" id="join-panel"
+     data-current-label="[% title | html %]"
+     hidden>
+  <script>window.__biFilters = [% filters_json %];</script>
+  <form id="join-form" method="get" action="/join">
+    <input type="hidden" name="l" value="[% left_spec | html %]">
+    [%- FOREACH jspec IN current_joins -%]
+    <input type="hidden" name="j" value="[% jspec | html %]">
+    [%- END -%]
+    [%- FOREACH fs IN filter_specs -%]
+    <input type="hidden" name="f" value="[% fs | html %]" class="f-preserved">
+    [%- END -%]
+
+    <h3 class="join-panel-title">Merge data / Filter results</h3>
+
+    <div class="join-fields">
+      <div class="join-field">
+        <label for="right-table-sel">Table from the data directory</label>
+        <select id="right-table-sel">
+          <option value="">— select a table —</option>
+          [%- FOREACH t IN available_tables -%]
+          <option value="table:[% t.name | html %]">[% t.name | html %]</option>
+          [%- END -%]
+        </select>
+      </div>
+
+      <div class="join-or">or</div>
+
+      <div class="join-field">
+        <label for="right-path-inp">File path <span style="font-weight:400;color:#999;font-size:.78rem;">(browser or drag &amp; drop)</span></label>
+        <input type="text" id="right-path-inp" placeholder="/path/to/file.csv"
+               autocomplete="off" spellcheck="false">
+      </div>
+
+      <div class="join-field">
+        <label for="left-key-sel">Column in <strong>[% title | html %]</strong> to join on</label>
+        <select id="left-key-sel">
+          <option value="">— select a column —</option>
+          [%- FOREACH col IN columns -%]
+          <option value="[% col | html %]">[% col | html %]</option>
+          [%- END -%]
+        </select>
+      </div>
+
+      <div class="join-field">
+        <label for="right-key-sel">Matching column in the new database</label>
+        <select id="right-key-sel" disabled>
+          <option value="">— select a database first —</option>
+        </select>
+      </div>
+    </div>
+
+    <p class="join-desc" id="join-desc" hidden></p>
+
+    <div class="filter-section">
+      <div class="filter-section-header">
+        <span class="filter-section-label">Filter results</span>
+        <button type="button" id="btn-add-filter" class="btn-add-filter">&#x2b; Add condition</button>
+      </div>
+      <div id="filter-rows"></div>
+    </div>
+
+    <div class="join-actions">
+      <button type="button" id="btn-cancel-join" class="btn-secondary">Cancel</button>
+      <button type="submit" id="btn-do-join" class="btn-primary" disabled>Apply</button>
+    </div>
+  </form>
+</div>
+[%- END -%]
+
+[% IF records.size %]
+<table id="bi-table" data-table="[% table | html %]">
+  <thead>
+    <tr>
+      [% FOREACH col IN columns -%]
+      <th draggable="true" aria-sort="none">[% col | html %]</th>
+      [%- END %]
+    </tr>
+  </thead>
+  <tbody>
+    [% FOREACH row IN records -%]
+    <tr>
+      [% FOREACH col IN columns -%]
+      <td>[% row.$col | html %]</td>
+      [%- END %]
+    </tr>
+    [%- END %]
+  </tbody>
+</table>
+[% ELSE %]
+<p class="empty-state">No records found in <strong>[% table | html %]</strong>.</p>
+[% END %]
+
+<script>
+(function () {
+  var table = document.getElementById('bi-table');
+  if (!table) return;
+
+  var headers    = Array.from(table.querySelectorAll('thead th'));
+  var dragSrcIdx = null;
+  var sortColIdx = -1;
+  var sortAsc    = true;
+  var STORE_KEY  = 'bi:' + (table.dataset.table || '');
+
+  // --- Persistence ---
+
+  function loadState() {
+    try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }
+    catch (e) { return {}; }
+  }
+
+  function saveState() {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({
+        columns: headers.map(function (h) { return h.textContent.trim(); }),
+        sortCol: sortColIdx >= 0 ? headers[sortColIdx].textContent.trim() : null,
+        sortAsc: sortAsc
+      }));
+    } catch (e) {}
+  }
+
+  // --- Column helpers ---
+
+  function colIndex(th) { return headers.indexOf(th); }
+
+  function moveCol(from, to) {
+    Array.from(table.rows).forEach(function (row) {
+      var cells  = Array.from(row.children);
+      var moving = cells[from];
+      var target = cells[to];
+      if (!moving || !target) return;
+      row.insertBefore(moving, from < to ? target.nextSibling : target);
+    });
+    var moved = headers.splice(from, 1)[0];
+    headers.splice(to, 0, moved);
+    if      (sortColIdx === from)                                  sortColIdx = to;
+    else if (from < to && sortColIdx > from && sortColIdx <= to)   sortColIdx--;
+    else if (from > to && sortColIdx >= to  && sortColIdx <  from) sortColIdx++;
+  }
+
+  // --- Sort ---
+
+  function sortByCol(idx, asc) {
+    var tbody   = table.tBodies[0];
+    var rows    = Array.from(tbody.rows);
+    var numeric = rows.every(function (r) {
+      var v = r.cells[idx] ? r.cells[idx].textContent.trim() : '';
+      return v === '' || !isNaN(Number(v));
+    });
+    rows.sort(function (a, b) {
+      var av  = a.cells[idx] ? a.cells[idx].textContent.trim() : '';
+      var bv  = b.cells[idx] ? b.cells[idx].textContent.trim() : '';
+      var cmp = numeric
+        ? (av === '' ? -Infinity : Number(av)) - (bv === '' ? -Infinity : Number(bv))
+        : av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' });
+      return asc ? cmp : -cmp;
+    });
+    rows.forEach(function (r) { tbody.appendChild(r); });
+    headers.forEach(function (h, i) {
+      h.setAttribute('aria-sort', i === idx ? (asc ? 'ascending' : 'descending') : 'none');
+    });
+  }
+
+  // --- Restore saved state on load ---
+
+  (function restore() {
+    var state = loadState();
+
+    if (state.columns && state.columns.length) {
+      var currentNames = headers.map(function (h) { return h.textContent.trim(); });
+      var inSaved = {};
+      state.columns.forEach(function (n) { inSaved[n] = true; });
+      var reconciled = state.columns.filter(function (n) {
+        return currentNames.indexOf(n) !== -1;
+      });
+      currentNames.forEach(function (n) {
+        if (!inSaved[n]) reconciled.push(n);
+      });
+
+      for (var i = 0; i < reconciled.length; i++) {
+        var name = reconciled[i];
+        var cur  = -1;
+        headers.forEach(function (h, j) { if (h.textContent.trim() === name) cur = j; });
+        if (cur !== -1 && cur !== i) moveCol(cur, i);
+      }
+    }
+
+    if (state.sortCol) {
+      var idx = -1;
+      headers.forEach(function (h, i) {
+        if (h.textContent.trim() === state.sortCol) idx = i;
+      });
+      if (idx !== -1) {
+        sortColIdx = idx;
+        sortAsc    = state.sortAsc !== false;
+        sortByCol(sortColIdx, sortAsc);
+      }
+    }
+  }());
+
+  // --- Event listeners ---
+
+  headers.forEach(function (th) {
+    th.addEventListener('click', function () {
+      if (dragSrcIdx !== null) return;
+      var idx = colIndex(th);
+      if (sortColIdx === idx) { sortAsc = !sortAsc; }
+      else { sortColIdx = idx; sortAsc = true; }
+      sortByCol(sortColIdx, sortAsc);
+      saveState();
+    });
+
+    th.addEventListener('dragstart', function (e) {
+      dragSrcIdx = colIndex(th);
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(function () { th.classList.add('dragging'); }, 0);
+    });
+
+    th.addEventListener('dragend', function () {
+      th.classList.remove('dragging');
+      headers.forEach(function (h) { h.classList.remove('drag-over'); });
+      dragSrcIdx = null;
+    });
+
+    th.addEventListener('dragover', function (e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      headers.forEach(function (h) { h.classList.remove('drag-over'); });
+      if (colIndex(th) !== dragSrcIdx) th.classList.add('drag-over');
+    });
+
+    th.addEventListener('dragleave', function () {
+      th.classList.remove('drag-over');
+    });
+
+    th.addEventListener('drop', function (e) {
+      e.preventDefault();
+      var toIdx = colIndex(th);
+      if (dragSrcIdx !== null && dragSrcIdx !== toIdx) {
+        moveCol(dragSrcIdx, toIdx);
+        saveState();
+      }
+      headers.forEach(function (h) { h.classList.remove('drag-over'); });
+    });
+  });
+}());
+
+// ---------------------------------------------------------------------------
+// Join / filter panel
+// ---------------------------------------------------------------------------
+(function () {
+  var btnAdd      = document.getElementById('btn-add-db');
+  var panel       = document.getElementById('join-panel');
+  if (!btnAdd || !panel) return;
+
+  var btnCancel    = document.getElementById('btn-cancel-join');
+  var btnDo        = document.getElementById('btn-do-join');
+  var rightTblSel  = document.getElementById('right-table-sel');
+  var rightPathInp = document.getElementById('right-path-inp');
+  var leftKeySel   = document.getElementById('left-key-sel');
+  var rightKeySel  = document.getElementById('right-key-sel');
+  var joinDesc     = document.getElementById('join-desc');
+  var filterRows   = document.getElementById('filter-rows');
+  var joinForm     = document.getElementById('join-form');
+  var currentLabel = panel.dataset.currentLabel || 'current table';
+
+  // Column tracking — kept in sync as right-table columns load.
+  var allColumns = Array.from(leftKeySel.options)
+      .slice(1).map(function (o) { return o.value; });
+
+  var rightSpec  = '';
+  var rightLabel = '';
+  var joinSpec   = '';
+
+  // Operator definitions.
+  var OPS = [
+    ['eq',       'equals'],
+    ['ne',       'not equals'],
+    ['contains', 'contains'],
+    ['starts',   'starts with'],
+    ['lt',       '<'],
+    ['le',       '≤'],
+    ['gt',       '>'],
+    ['ge',       '≥'],
+    ['empty',    'is empty'],
+    ['notempty', 'is not empty'],
+  ];
+
+  // --- Filter row management ---
+
+  function populateColSelect(sel, current) {
+    var prev = current !== undefined ? current : sel.value;
+    sel.innerHTML = '<option value="">— column —</option>';
+    allColumns.forEach(function (col) {
+      var opt = document.createElement('option');
+      opt.value = col; opt.textContent = col;
+      sel.appendChild(opt);
+    });
+    sel.value = prev;
+  }
+
+  function updateFilterCols(additionalCols) {
+    (additionalCols || []).forEach(function (col) {
+      if (allColumns.indexOf(col) === -1) allColumns.push(col);
+    });
+    document.querySelectorAll('#filter-rows .filter-col-sel').forEach(function (sel) {
+      populateColSelect(sel);
+    });
+  }
+
+  function addFilterRow(prefill) {
+    prefill = prefill || {};
+    var row    = document.createElement('div');
+    row.className = 'filter-row';
+
+    var colSel = document.createElement('select');
+    colSel.className = 'filter-col-sel';
+    populateColSelect(colSel, prefill.col || '');
+    colSel.addEventListener('change', checkApply);
+
+    var opSel = document.createElement('select');
+    opSel.className = 'filter-op-sel';
+    OPS.forEach(function (pair) {
+      var opt = document.createElement('option');
+      opt.value = pair[0]; opt.textContent = pair[1];
+      opSel.appendChild(opt);
+    });
+    opSel.value = prefill.op || 'eq';
+
+    var valInp = document.createElement('input');
+    valInp.type = 'text';
+    valInp.className = 'filter-val-inp';
+    valInp.placeholder = 'value';
+    valInp.value = prefill.val !== undefined ? prefill.val : '';
+
+    function toggleValInp() {
+      var hide = opSel.value === 'empty' || opSel.value === 'notempty';
+      valInp.style.display = hide ? 'none' : '';
+      checkApply();
+    }
+    opSel.addEventListener('change', toggleValInp);
+    toggleValInp();
+
+    var rmBtn = document.createElement('button');
+    rmBtn.type = 'button';
+    rmBtn.className = 'btn-remove-filter';
+    rmBtn.textContent = '×';
+    rmBtn.addEventListener('click', function () { row.remove(); checkApply(); });
+
+    row.appendChild(colSel);
+    row.appendChild(opSel);
+    row.appendChild(valInp);
+    row.appendChild(rmBtn);
+    filterRows.appendChild(row);
+    checkApply();
+  }
+
+  document.getElementById('btn-add-filter').addEventListener('click', function () {
+    addFilterRow();
+  });
+
+  // --- Join config ---
+
+  function loadRightColumns(spec, label) {
+    var url;
+    if (spec.indexOf('table:') === 0) {
+      url = '/api/columns?table=' + encodeURIComponent(spec.slice(6));
+    } else if (spec.indexOf('path:') === 0) {
+      url = '/api/columns?path=' + encodeURIComponent(spec.slice(5));
+    } else { return; }
+
+    rightSpec  = spec;
+    rightLabel = label;
+    rightKeySel.disabled  = true;
+    rightKeySel.innerHTML = '<option value="">Loading…</option>';
+
+    fetch(url)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var cols = data.columns || [];
+        rightKeySel.innerHTML = '<option value="">— select a column —</option>';
+        cols.forEach(function (col) {
+          var opt = document.createElement('option');
+          opt.value = col; opt.textContent = col;
+          rightKeySel.appendChild(opt);
+        });
+        rightKeySel.disabled = cols.length === 0;
+        updateFilterCols(cols);
+        updateJoinDesc();
+      })
+      .catch(function () {
+        rightKeySel.innerHTML = '<option value="">Could not load columns</option>';
+      });
+  }
+
+  rightTblSel.addEventListener('change', function () {
+    if (!this.value) return;
+    rightPathInp.value = '';
+    loadRightColumns(this.value, this.options[this.selectedIndex].textContent.trim());
+  });
+
+  var pathTimer;
+  rightPathInp.addEventListener('input', function () {
+    var val = this.value.trim();
+    rightTblSel.value = '';
+    clearTimeout(pathTimer);
+    if (!val) { rightSpec = ''; rightLabel = ''; updateJoinDesc(); return; }
+    pathTimer = setTimeout(function () {
+      var fname = val.replace(/.*[/\\]/, '').replace(/\.[^.]+$/, '') || val;
+      loadRightColumns('path:' + val, fname);
+    }, 500);
+  });
+
+  function updateJoinDesc() {
+    var lk = leftKeySel.value;
+    var rk = rightKeySel.value;
+    if (rightSpec && lk && rk) {
+      joinDesc.textContent =
+        'Add columns from "' + rightLabel + '" to "' + currentLabel +
+        '" by matching ' + currentLabel + '.' + lk + ' with ' + rightLabel + '.' + rk +
+        '. Every row in "' + currentLabel + '" is kept; rows with no match in "' +
+        rightLabel + '" will have empty values for the new columns.';
+      joinDesc.hidden = false;
+      joinSpec = rightSpec + '|' + lk + '|' + rk;
+    } else {
+      joinDesc.hidden = true;
+      joinSpec = '';
+    }
+    checkApply();
+  }
+
+  leftKeySel.addEventListener('change',  updateJoinDesc);
+  rightKeySel.addEventListener('change', updateJoinDesc);
+
+  // --- Apply button gate ---
+
+  function checkApply() {
+    var hasJoin   = !!joinSpec;
+    var hasFilter = Array.from(
+      document.querySelectorAll('#filter-rows .filter-col-sel')
+    ).some(function (sel) { return sel.value; });
+    btnDo.disabled = !(hasJoin || hasFilter);
+  }
+
+  // --- Form submission ---
+
+  joinForm.addEventListener('submit', function (e) {
+    // Remove previously-generated dynamic inputs.
+    Array.from(joinForm.querySelectorAll('[data-dyn]')).forEach(function (i) { i.remove(); });
+    // Remove the preserved f inputs — we'll re-add from filter rows below.
+    Array.from(joinForm.querySelectorAll('.f-preserved')).forEach(function (i) { i.remove(); });
+
+    // Add new join spec if valid.
+    if (joinSpec) {
+      var jInp = document.createElement('input');
+      jInp.type = 'hidden'; jInp.name = 'j';
+      jInp.setAttribute('data-dyn', '1');
+      jInp.value = joinSpec;
+      joinForm.appendChild(jInp);
+    }
+
+    // Collect filter rows and add f inputs.
+    var hasFilter = false;
+    document.querySelectorAll('#filter-rows .filter-row').forEach(function (row) {
+      var col = row.querySelector('.filter-col-sel').value;
+      var op  = row.querySelector('.filter-op-sel').value;
+      var valEl = row.querySelector('.filter-val-inp');
+      var val = (valEl && valEl.style.display !== 'none') ? valEl.value : '';
+      if (!col || !op) return;
+      var fInp = document.createElement('input');
+      fInp.type = 'hidden'; fInp.name = 'f';
+      fInp.setAttribute('data-dyn', '1');
+      fInp.value = col + ':' + op + ':' + val;
+      joinForm.appendChild(fInp);
+      hasFilter = true;
+    });
+
+    if (!joinSpec && !hasFilter) {
+      e.preventDefault();
+    }
+  });
+
+  // --- Open/close ---
+
+  btnAdd.addEventListener('click', function () {
+    panel.hidden    = false;
+    btnAdd.disabled = true;
+    // Pre-populate filter rows from server-rendered filter state.
+    if (filterRows.childElementCount === 0) {
+      try {
+        var saved = window.__biFilters || [];
+        saved.forEach(function (f) { addFilterRow(f); });
+      } catch (ex) {}
+    }
+  });
+
+  btnCancel.addEventListener('click', function () {
+    panel.hidden    = true;
+    btnAdd.disabled = false;
+    resetPanel();
+  });
+
+  function resetPanel() {
+    rightTblSel.value     = '';
+    rightPathInp.value    = '';
+    rightKeySel.innerHTML = '<option value="">— select a database first —</option>';
+    rightKeySel.disabled  = true;
+    leftKeySel.value      = '';
+    joinDesc.hidden       = true;
+    joinSpec = ''; rightSpec = ''; rightLabel = '';
+    filterRows.innerHTML  = '';
+    checkApply();
+  }
+
+  // --- Clear filters link ---
+
+  var btnClear = document.getElementById('btn-clear-filters');
+  if (btnClear) {
+    btnClear.addEventListener('click', function (e) {
+      e.preventDefault();
+      var url = location.href
+        .replace(/[?&]f=[^&]*/g, '')
+        .replace(/\?&/, '?')
+        .replace(/[?&]$/, '');
+      location.href = url;
+    });
+  }
+}());
+</script>
+
+<script>
+// ---------------------------------------------------------------------------
+// Export panel — save to a user-chosen directory on the server filesystem
+// ---------------------------------------------------------------------------
+(function () {
+  var btnOpen    = document.getElementById('btn-export-open');
+  var panel      = document.getElementById('export-panel');
+  if (!btnOpen || !panel) return;
+
+  var dirInp     = document.getElementById('export-dir-inp');
+  var dirBrowser = document.getElementById('export-dir-browser');
+  var dirUp      = document.getElementById('export-dir-up');
+  var fnInp      = document.getElementById('export-filename-inp');
+  var fmtBadge   = document.getElementById('export-format-badge');
+  var btnCancel  = document.getElementById('btn-cancel-export');
+  var btnSave    = document.getElementById('btn-do-export');
+  var resultEl   = document.getElementById('export-result');
+
+  var currentParent = null;
+  var dirTimer;
+
+  // Derive a safe default filename from the left-table spec.
+  var leftSpec = panel.dataset.leftSpec || '';
+  var baseName = leftSpec
+    .replace(/^table:/, '')
+    .replace(/^path:.*[\/\\]/, '')
+    .replace(/\.[^.]+$/, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_') || 'export';
+
+  function getFormat(name) {
+    if (/\.csv$/i.test(name)) return 'csv';
+    if (/\.sql$/i.test(name)) return 'sqlite';
+    return null;
+  }
+
+  function updateFormatBadge() {
+    var fmt = getFormat(fnInp.value.trim());
+    if (fmt === 'csv') {
+      fmtBadge.textContent = 'CSV';
+      fmtBadge.className   = 'export-format-badge csv';
+    } else if (fmt === 'sqlite') {
+      fmtBadge.textContent = 'SQLite';
+      fmtBadge.className   = 'export-format-badge sqlite';
+    } else {
+      fmtBadge.textContent = 'unknown — add .csv or .sql';
+      fmtBadge.className   = 'export-format-badge unknown';
+    }
+    btnSave.disabled = !fmt;
+  }
+
+  function loadDir(path) {
+    dirInp.value           = path;
+    dirBrowser.innerHTML   = '<span class="export-dir-msg">Loading…</span>';
+    dirUp.disabled         = true;
+
+    fetch('/api/dirs?path=' + encodeURIComponent(path))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        dirInp.value    = data.path;
+        currentParent   = data.parent || null;
+        dirUp.disabled  = !currentParent;
+
+        if (!data.dirs || data.dirs.length === 0) {
+          dirBrowser.innerHTML = '<span class="export-dir-msg">No subdirectories</span>';
+          return;
+        }
+        dirBrowser.innerHTML = '';
+        data.dirs.forEach(function (d) {
+          var btn = document.createElement('button');
+          btn.type      = 'button';
+          btn.className = 'export-dir-entry';
+          btn.dataset.path = d.path;
+          btn.innerHTML = '&#x1F4C1; ' + d.name.replace(/[<>&"]/g, function(c) {
+            return { '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;' }[c];
+          });
+          btn.addEventListener('click', function () { loadDir(d.path); });
+          dirBrowser.appendChild(btn);
+        });
+      })
+      .catch(function () {
+        dirBrowser.innerHTML = '<span class="export-dir-msg">Could not read directory</span>';
+        dirUp.disabled = false;
+      });
+  }
+
+  // Navigate up.
+  dirUp.addEventListener('click', function () {
+    if (currentParent) loadDir(currentParent);
+  });
+
+  // Typing in the directory input — debounced fetch.
+  dirInp.addEventListener('input', function () {
+    clearTimeout(dirTimer);
+    var val = dirInp.value.trim();
+    dirTimer = setTimeout(function () { loadDir(val); }, 600);
+  });
+
+  fnInp.addEventListener('input', updateFormatBadge);
+
+  // Open panel.
+  btnOpen.addEventListener('click', function () {
+    panel.hidden     = false;
+    btnOpen.disabled = true;
+    resultEl.hidden  = true;
+    fnInp.value      = baseName + '.csv';
+    updateFormatBadge();
+    loadDir(panel.dataset.defaultDir || dirInp.value);
+  });
+
+  // Close panel.
+  btnCancel.addEventListener('click', function () {
+    panel.hidden     = false;
+    panel.hidden     = true;
+    btnOpen.disabled = false;
+    resultEl.hidden  = true;
+  });
+
+  // Save.
+  btnSave.addEventListener('click', function () {
+    var dir      = dirInp.value.trim();
+    var filename = fnInp.value.trim();
+    if (!dir || !filename || !getFormat(filename)) return;
+
+    btnSave.disabled    = true;
+    btnSave.textContent = 'Saving…';
+    resultEl.hidden     = true;
+
+    // Collect the current view's l=, j=, f= params.
+    var params = new URLSearchParams();
+    params.set('dir',      dir);
+    params.set('filename', filename);
+
+    // l= comes from the join-form hidden input (not always in the URL).
+    var lInp = document.querySelector('#join-form input[name="l"]');
+    if (lInp) params.set('l', lInp.value);
+
+    // j= and f= reflect the already-rendered view, so read from the URL.
+    var urlP = new URLSearchParams(location.search);
+    urlP.getAll('j').forEach(function (v) { params.append('j', v); });
+    urlP.getAll('f').forEach(function (v) { params.append('f', v); });
+
+    fetch('/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        btnSave.disabled    = false;
+        btnSave.textContent = 'Save';
+        if (data.saved) {
+          resultEl.textContent = '✓ Saved to ' + data.saved;
+          resultEl.className   = 'export-result success';
+        } else {
+          resultEl.textContent = data.error || 'Unknown error';
+          resultEl.className   = 'export-result error';
+        }
+        resultEl.hidden = false;
+      })
+      .catch(function () {
+        btnSave.disabled    = false;
+        btnSave.textContent = 'Save';
+        resultEl.textContent = 'Save failed — check the server log';
+        resultEl.className   = 'export-result error';
+        resultEl.hidden      = false;
+      });
+  });
+}());
+</script>
+
+<script>
+// Drag-and-drop integration with the shared overlay (default.html.tt)
+(function () {
+  var panel        = document.getElementById('join-panel');
+  var rightPathInp = document.getElementById('right-path-inp');
+  var rightTblSel  = document.getElementById('right-table-sel');
+
+  // Tell the overlay what label to show based on current UI state.
+  window.__biDropLabel = function () {
+    return (panel && !panel.hidden)
+      ? 'Drop to set as join database'
+      : 'Drop to open database';
+  };
+
+  // Called by the overlay after a successful upload.
+  window.__biDropCallback = function (data) {
+    if (panel && !panel.hidden && data.path && rightPathInp) {
+      // Join panel is open: populate the path field and trigger column fetch.
+      rightPathInp.value = data.path;
+      if (rightTblSel) rightTblSel.value = '';
+      rightPathInp.dispatchEvent(new Event('input', { bubbles: true }));
+    } else if (data.url) {
+      // Panel is closed (or no path returned): navigate to the opened file.
+      window.location = data.url;
+    }
+  };
+}());
+</script>
+
+[%- IF file_path -%]
+<div id="bi-open-meta"
+     data-name="[% title | html %]"
+     data-path="[% file_path | html %]"
+     hidden></div>
+<script>
+(function () {
+  try {
+    var el    = document.getElementById('bi-open-meta');
+    var href  = '/open?path=' + encodeURIComponent(el.dataset.path);
+    var entry = {
+      name:       el.dataset.name,
+      href:       href,
+      path:       el.dataset.path,
+      lastOpened: new Date().toISOString(),
+    };
+    var recent = JSON.parse(localStorage.getItem('bi:recent') || '[]');
+    recent = recent.filter(function (r) { return r.href !== href; });
+    recent.unshift(entry);
+    if (recent.length > 5) recent.length = 5;
+    localStorage.setItem('bi:recent', JSON.stringify(recent));
+  } catch (e) {}
+}());
+</script>
+[%- ELSIF source_url -%]
+<div id="bi-open-meta"
+     data-name="[% title | html %]"
+     data-url="[% source_url | html %]"
+     hidden></div>
+<script>
+(function () {
+  try {
+    var el    = document.getElementById('bi-open-meta');
+    var href  = '/import?url=' + encodeURIComponent(el.dataset.url);
+    var entry = {
+      name:       el.dataset.name,
+      href:       href,
+      url:        el.dataset.url,
+      lastOpened: new Date().toISOString(),
+    };
+    var recent = JSON.parse(localStorage.getItem('bi:recent') || '[]');
+    recent = recent.filter(function (r) { return r.href !== href; });
+    recent.unshift(entry);
+    if (recent.length > 5) recent.length = 5;
+    localStorage.setItem('bi:recent', JSON.stringify(recent));
+  } catch (e) {}
+}());
+</script>
+[%- END -%]
+
+[%- END -%]

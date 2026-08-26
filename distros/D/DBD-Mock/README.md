@@ -29,11 +29,11 @@ types of persistence schemes, then it may be more useful to simply verify what
 the framework is trying to do -- ensure the right SQL is generated and that the
 correct parameters are bound. `DBD::Mock` makes it easy to just modify your
 configuration (presumably held outside your code) and just use it instead of
-`DBD::Foo` (like [DBD::Pg](https://metacpan.org/pod/DBD::Pg) or [DBD::mysql](https://metacpan.org/pod/DBD::mysql)) in your framework.
+`DBD::Foo` (like [DBD::Pg](https://metacpan.org/pod/DBD%3A%3APg) or [DBD::mysql](https://metacpan.org/pod/DBD%3A%3Amysql)) in your framework.
 
 There is no distinct area where using this module makes sense. (Some people may
 successfully argue that this is a solution looking for a problem...) Indeed, if
-you can assume your users have something like [DBD::AnyData](https://metacpan.org/pod/DBD::AnyData) or [DBD::SQLite](https://metacpan.org/pod/DBD::SQLite)
+you can assume your users have something like [DBD::AnyData](https://metacpan.org/pod/DBD%3A%3AAnyData) or [DBD::SQLite](https://metacpan.org/pod/DBD%3A%3ASQLite)
 or if you do not mind creating a dependency on them then it makes far more sense
 to use these legitimate driver implementations and test your application in the
 real world -- at least as much of the real world as you can create in your
@@ -41,8 +41,8 @@ tests...
 
 And if your database handle exists as a package variable or something else
 easily replaced at test-time then it may make more sense to use
-[Test::MockObject](https://metacpan.org/pod/Test::MockObject) to create a fully dynamic handle. There is an excellent
-article by chromatic about using [Test::MockObject](https://metacpan.org/pod/Test::MockObject) in this and other ways,
+[Test::MockObject](https://metacpan.org/pod/Test%3A%3AMockObject) to create a fully dynamic handle. There is an excellent
+article by chromatic about using [Test::MockObject](https://metacpan.org/pod/Test%3A%3AMockObject) in this and other ways,
 strongly recommended. (See ["SEE ALSO"](#see-also) for a link)
 
 ## How does it work?
@@ -804,7 +804,7 @@ triggered and `DBD::Mock::Session` will need to know about these statements.
 
 # DBD::Mock::Pool
 
-This module can be used to emulate [Apache::DBI](https://metacpan.org/pod/Apache::DBI) style DBI connection pooling.
+This module can be used to emulate [Apache::DBI](https://metacpan.org/pod/Apache%3A%3ADBI) style DBI connection pooling.
 Just as with `Apache::DBI`, you must enable `DBD::Mock::Pool` before loading
 DBI.
 
@@ -987,7 +987,7 @@ forms. The simplest is a string, which will be compared using `eq` against the
 currently running statement. The next is a reg-exp reference, this too will get
 compared against the currently running statement. The last option is a CODE
 ref, this is sort of a catch-all to allow for a wide range of SQL comparison
-approaches (including using modules like [SQL::Statement](https://metacpan.org/pod/SQL::Statement) or [SQL::Parser](https://metacpan.org/pod/SQL::Parser)
+approaches (including using modules like [SQL::Statement](https://metacpan.org/pod/SQL%3A%3AStatement) or [SQL::Parser](https://metacpan.org/pod/SQL%3A%3AParser)
 for detailed functional comparisons). The first argument to the CODE ref will
 be the currently active SQL statement to compare against, the second argument
 is a reference to the current state HASH (in case you need to alter the
@@ -1014,6 +1014,26 @@ and throws and exception if it is false.
     the `$params` against the current state's `bound_params` value. Both number
     of parameters and the parameters themselves must match, or an error will be
     raised.
+
+    Parameters are compared using string comparison or, when a regular expression
+    is supplied in the parameter position, matched against the regular expression.
+
+    When a PostgreSQL database is mocked
+
+        my $dbh = DBI->connect('dbi:Mock:PostgreSQL', ...);
+
+    support for bound array parameters (a feature specific to [DBD::Pg](https://metacpan.org/pod/DBD%3A%3APg)) is
+    enabled. Array elements are compared using the comparison method above. Array
+    elements which are themselves arrays are _not_ traversed into.
+
+        my $session = DBD::Mock::Session->new( 'my_session' => (
+            {
+                statement => 'SELECT foo FROM bar WHERE baz = ANY(?)',
+                bound_params => [
+                   [ 'uvw', 'xyz' ] # bound array param
+                ]
+            }
+        ));
 
 - **`reset`**
 
@@ -1312,9 +1332,9 @@ great caution (if at all).
 
 [DBI](https://metacpan.org/pod/DBI)
 
-[DBD::NullP](https://metacpan.org/pod/DBD::NullP), which provided a good starting point
+[DBD::NullP](https://metacpan.org/pod/DBD%3A%3ANullP), which provided a good starting point
 
-[Test::MockObject](https://metacpan.org/pod/Test::MockObject), which provided the approach
+[Test::MockObject](https://metacpan.org/pod/Test%3A%3AMockObject), which provided the approach
 
 Test::MockObject article - [http://www.perl.com/pub/a/2002/07/10/tmo.html](http://www.perl.com/pub/a/2002/07/10/tmo.html)
 
@@ -1339,7 +1359,8 @@ methods and tests.
 - Thanks to Bernhard Graf for multiple patches fixing a range of issues
 and adding a new _One Shot Failure_ feature to `mock_add_resultset`.
 - Thanks to Erik Huelsmann for testing the new result set custom attributes
-feature.
+feature and also adding support for using arrayref's as bound parameters with
+PostgreSQL databases.
 
 # COPYRIGHT
 

@@ -157,7 +157,12 @@ my %WriteMakefileArgs = (
         'ExtUtils::Depends'   => '0.404',
         'File::Raw::JSON'     => '0.06',   # provides frj_abi.h
         'Fetch'               => '0.15',   # fetch_abi v2 + HTTP/2 trailers
-        'Punk'                => '0.20',   # provides pk_abi.h
+        # 0.34 for pk_abi v4. The BUILD needs it whatever the runtime does:
+        # the vendored header is where the on_log_ctx slot is declared, and a
+        # 0.20 header will not compile the call. The runtime still checks
+        # abi_version, so a process that loaded an older Punk degrades rather
+        # than misbehaves.
+        'Punk'                => '0.34',   # provides pk_abi.h
         'Hyperman'            => '0.26',   # provides hm_abi.h (v4 worker start)
     },
     TEST_REQUIRES => {
@@ -166,7 +171,7 @@ my %WriteMakefileArgs = (
     PREREQ_PM => {
         'File::Raw::JSON' => '0.06',   # OTLP/JSON encoding
         'Fetch'           => '0.15',   # the OTLP/HTTP client; h2 trailers for gRPC
-        'Punk'            => '0.20',   # pk_abi: request/response/query observers
+        'Punk'            => '0.34',   # pk_abi v4: the log tap carries the context
         'Hyperman'        => '0.26',   # hm_abi: the post-fork worker hook
     },
     INC    => $INC,

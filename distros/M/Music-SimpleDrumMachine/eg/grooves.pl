@@ -19,14 +19,17 @@ my $chan = shift // 9;
 my $cat  = shift // 'rock';
 my $name = shift // '';
 
-my $grooves = MIDI::Drummer::Tiny::Grooves->new(return_patterns => 1);
+my $grooves = MIDI::Drummer::Tiny::Grooves->new(
+    return_patterns => 1,
+    # share_file => '/Users/gene/sandbox/MIDI-Drummer-Tiny/share/drum-pattern-bit-strings.txt',
+);
 
 $cat  = undef if $cat eq '*';
 $name = undef if $name eq '*';
 my $set;
 $set = $grooves->search({ cat => $cat }) if $cat;
 $set = $grooves->search({ name => $name }, $set) if $name;
-die "No matching grooves for $cat + $name\n" unless keys %$set;
+die "No matching grooves\n" unless keys %$set;
 say scalar(keys %$set), " grooves found.\n";
 
 my $dm = Music::SimpleDrumMachine->new(

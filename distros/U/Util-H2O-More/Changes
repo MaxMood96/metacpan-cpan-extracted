@@ -234,3 +234,36 @@
 	- added a complete tested-modulino recipe and clarified the intended scope
 	  relative to more declarative option frameworks such as MooX::Options
 	- documented the ini2o and o2ini backward-compatibility aliases explicitly
+
+0.4.6  2026-08-25
+    - Added opt-in -lvalue support for generated H2O accessors.
+      Accessors created with -lvalue may now be assigned to directly:
+
+          $obj->foo = 42;
+          $obj->count++;
+          $obj->name .= q{ Jr.};
+
+      Existing setter syntax remains supported:
+
+          $obj->foo(42);
+
+    - Added -lvalue support throughout Util::H2O::More helpers, including
+      h2o, baptise, d2o, Getopt2h2o, o2h2o, ini2h2o, yaml2h2o, and
+      HTTPTiny2h2o.
+    - d2o -lvalue propagates lvalue accessors through nested HASH
+      structures and through HASH elements contained in ARRAY refs.
+    - ARRAY container virtual methods remain normal methods rather than
+      lvalue accessors.  New HASH elements added with push/unshift inherit
+      the container's lvalue objectification mode.
+    - Custom -meth methods and AUTOLOAD handlers remain normal,
+      non-lvalue methods.
+    - Explicitly reject the incompatible combination of -ro and -lvalue.
+    - Preserved normal non-lvalue behavior and existing setter semantics
+      when -lvalue is not requested.
+    - Documented lvalue assignment semantics and important edge cases,
+      including missing declared keys, autoundef behavior, references/
+      aliases, nested structures, and replacement HASH refs.
+    - Added extensive tests covering new lvalue behavior, compatibility
+      with existing features, option combinations, expected exceptions,
+      nested data, constructors, Getopt helpers, config/YAML/HTTP helpers,
+      and edge cases.

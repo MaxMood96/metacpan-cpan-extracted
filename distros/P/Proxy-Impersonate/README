@@ -1,0 +1,252 @@
+NAME
+    Proxy::Impersonate - EV MITM proxy that re-originates with a browser
+    TLS/HTTP2 fingerprint
+
+SYNOPSIS
+        use EV;
+        use Proxy::Impersonate;
+
+        my $proxy = Proxy::Impersonate->new(
+            impersonate => 'chrome131',
+            listen      => '127.0.0.1:0',   # ephemeral port
+            cert_dir    => '/path/to/ca',   # persists the self-signed cert
+        );
+        printf "proxy on 127.0.0.1:%d\n", $proxy->port;
+        $proxy->run;   # EV loop
+
+    A client (or EV::WebKit) uses it as an HTTP/HTTPS forward proxy. For
+    HTTPS the client issues "CONNECT host:443"; the proxy terminates that
+    TLS with its own cert, then re-originates the request upstream through
+    Curl::Impersonate so the origin sees the chosen browser's TLS (JA3/JA4)
+    and HTTP/2 (Akamai) fingerprint.
+
+DESCRIPTION
+    EV::WebKit cannot present a browser's connection fingerprint itself --
+    WebKitGTK speaks GnuTLS/libsoup. This proxy sits in front of it: it
+    MITMs WebKit's TLS on localhost, reads the plaintext request, and sends
+    it upstream with a real browser's handshake via "libcurl-impersonate".
+    The origin's TLS/HTTP2 fingerprint therefore matches the impersonated
+    browser, not WebKit.
+
+    It is an HTTP client, not a browser: it reproduces the connection
+    fingerprint only. HTTP/3 and WebSockets are out of scope in this
+    release, as are streaming request uploads. A CONNECT client must wait
+    for the 200 response before beginning its TLS handshake: a ClientHello
+    optimistically coalesced into the CONNECT segment is not supported (the
+    connection is closed rather than left to stall). Browsers and libsoup --
+    the intended clients -- already do this.
+
+    Header-order ceiling: curl-impersonate reproduces the target's TLS
+    (JA3/JA4) and HTTP/2 (Akamai) fingerprints exactly, and template headers
+    keep their positions. But headers the proxy adds that are not in the
+    template (Cookie, Referer, and the high-entropy Sec-CH-UA hints) are
+    appended after the template block rather than in the browser's exact
+    positions, so a header-order-only hash (e.g. JA4H) will not match on
+    requests carrying them. The dominant fingerprints (JA3/JA4/Akamai) are
+    unaffected.
+
+    Priority ceiling: the proxy synthesizes a per-destination Accept, but
+    the HTTP/2 request priority (the "priority" header and any
+    PRIORITY_UPDATE frames) comes from curl-impersonate's static template,
+    not from the resource type. Chrome varies urgency per resource; the
+    proxy does not, so a resource-priority-aware fingerprinter could tell
+    subresources apart. This lives in curl-impersonate's protocol layer, not
+    in a header the proxy re-writes.
+
+TRUST MODEL
+    WebKitGTK 6.0 exposes no way to trust a custom CA (its network process
+    honors neither "SSL_CERT_FILE" nor a settable "GTlsDatabase"; this was
+    verified by a spike). So the proxy presents a single self-signed cert
+    and the WebKit side is told to accept it:
+
+        # on the EV::WebKit network session (sub-project 3 wires this):
+        $session->set_tls_errors_policy('ignore');
+        $browser->set_proxy("http://127.0.0.1:" . $proxy->port);
+
+    This is safe: the WebKit-to-proxy hop is localhost, and the proxy
+    re-verifies the real origin certificate upstream ("verify => 1", the
+    default).
+
+METHODS
+  new
+        my $proxy = Proxy::Impersonate->new(%opt);
+
+    impersonate => $target
+        Required. The Curl::Impersonate target (e.g. 'chrome131') applied to
+        every upstream request. Keep it coherent with EV::WebKit's
+        "fingerprint" profile.
+
+    listen => 'host:port'
+        Bind address; default '127.0.0.1:0' (an ephemeral port, reported by
+        "port").
+
+    cert_dir => $path
+        Where the self-signed cert is persisted. Defaults to a temporary
+        directory (mode 0700), which is the safe case.
+
+        If you point this at a location of your own, note that an existing
+        key there is adopted, and whoever can write that key can impersonate
+        this proxy to the client it fronts -- which is configured to accept
+        its certificate. So a key that is group- or world-accessible, owned
+        by another user, or a symlink is refused rather than used. Keep it
+        0600 and yours.
+
+    on_request => sub { my ($req) = @_; ... }
+        Per-request interception hook, called after TLS termination and
+        before anything goes upstream -- so it sees every request the client
+        makes (navigations, subresources, XHR, fetch), and can rewrite,
+        answer or refuse each one.
+
+        $req is a hashref with "method", "url", "headers" (a lowercase-keyed
+        hashref), "body" and "host" (the bare hostname). Modify any of them
+        in place to rewrite the request:
+
+            on_request => sub {
+                my ($req) = @_;
+                $req->{url} =~ s{^https://cdn\.}{https://local-mirror.};
+                $req->{headers}{'x-trace'} = 'yes';
+                return;                       # proceed with the rewrite
+            }
+
+        Return value decides what happens next:
+
+        nothing (or "undef")
+            The request proceeds, carrying whatever rewrites the handler
+            made.
+
+        a hashref
+            Answered locally; the network is never touched. Keys: "status"
+            (default 200), "headers", "body". "Content-Length" is computed
+            from the body, not taken from the handler, so a handler that
+            disagrees with its own body cannot desynchronise the connection.
+            Useful for mocking an endpoint, or for blocking with a visible
+            answer:
+
+                return { status => 403, body => 'blocked' } if $req->{host} =~ /ads\./;
+
+        the string 'abort'
+            The connection is closed without any response -- the closest
+            thing to a network-level block.
+
+        What the handler sees in "headers" is the set this proxy forces on
+        top of Curl::Impersonate's template: what the client sent that must
+        be carried through ("Cookie", "Referer", "Sec-Fetch-*",
+        "Content-Type", ...). It does not include the headers
+        curl-impersonate supplies from its fingerprint template
+        ("User-Agent", "Accept", "Accept-Language", "Sec-CH-UA", ...) --
+        forwarding the client's own would break the very fingerprint this
+        proxy exists to reproduce. Setting any of those keys still works and
+        overrides the template; you simply cannot read their template values
+        here.
+
+        A handler that dies refuses the request with a 502 and warns. It
+        fails closed deliberately: this hook is used to block traffic, so an
+        exception must not quietly let through exactly what the caller was
+        trying to stop.
+
+    on_response => sub { my ($res) = @_; ... }
+        The counterpart to "on_request", called when the upstream response
+        head arrives -- before any of it reaches the client, so the status
+        and headers can be observed or rewritten. Stripping a policy header
+        is the usual reason:
+
+            on_response => sub {
+                my ($res) = @_;
+                delete $res->{headers}{'content-security-policy'};
+                delete $res->{headers}{'x-frame-options'};
+                return;
+            }
+
+        $res has "status", "headers" (lowercase-keyed), and -- for context
+        -- the request's "url", "method" and "host". Modify "status" or
+        "headers" in place; the return value is ignored.
+
+        The framing is not yours. "Content-Length", "Connection" and the
+        hop-by-hop headers are snapshotted before the hook and forced back
+        after it: a handler that edits them does not desynchronise its own
+        connection, it desynchronises the client's. Setting "content-length"
+        to a value that disagrees with the body, or reintroducing
+        "transfer-encoding", therefore has no effect.
+
+        Bodies are out of scope: they stream through with backpressure, and
+        buffering them to offer a rewrite would defeat that. Use
+        "on_request"'s synthetic response if you need to replace content
+        wholesale.
+
+        A handler that dies passes the response through unchanged and warns.
+        It fails open, unlike "on_request": the request has already been
+        made and the response already fetched, so there is no security
+        decision left to protect, and breaking the page over a bug in an
+        observer would be the worse outcome.
+
+    timeout => $seconds
+        Per-request upstream timeout. Default 30.
+
+    verify => $bool
+        Verify the real origin's certificate upstream. Default true; leave
+        it on.
+
+    follow_redirects => $bool
+        Whether the upstream client follows redirects. Default false -- the
+        browser handles 3xx itself, so the proxy forwards them.
+
+  port
+    The bound listen port (useful with "listen => '...:0'").
+
+  cert_dir
+    The directory holding the self-signed cert.
+
+  run
+    Run the EV loop. Blocks until "stop" or "EV::break".
+
+  stop
+    Stop accepting and break the EV loop. Use this when the proxy owns the
+    loop -- i.e. when you called "run".
+
+  shutdown
+    Stop accepting, close every active connection, and release the
+    "curl_multi" wiring -- without breaking the EV loop, so a caller whose
+    loop is shared keeps running. That is the difference from "stop": this
+    is the in-process teardown, and it is what EV::WebKit calls when the
+    browser it fronts quits.
+
+    Safe to call more than once, and safe from inside a callback: it is
+    plain EV/Perl with no GObject-Introspection dispatch to unwind.
+
+REQUEST HANDLING LIMITS
+    The proxy refuses what it cannot frame exactly, because guessing would
+    leave bytes in the read buffer to be re-parsed as a second request:
+
+    *   A request head over 64KB is closed, which also caps a slow-drip
+        head.
+
+    *   A chunked request body gets 411: there is no chunked decoder, since
+        streaming uploads are out of scope.
+
+    *   A "Content-Length" that is repeated with disagreeing values, or is
+        not a plain non-negative integer, gets 400. An identical repeat is
+        legal and is accepted.
+
+    *   A header value containing NUL, CR or LF gets 400. RFC 9110 bars all
+        three from a field value; CR and LF cannot survive the line split,
+        but a NUL can, and forwarded headers are re-sent upstream.
+
+    Request bodies are buffered whole before being forwarded -- there is no
+    streaming upload path, and therefore no size cap. A client that uploads
+    a gigabyte makes the proxy hold a gigabyte. That is tolerable because
+    the listener is bound to localhost by default and fronts one browser,
+    but it is worth knowing before binding it anywhere else.
+
+REQUIREMENTS
+    Curl::Impersonate 0.01 or later, Net::SSLeay, EV.
+
+SEE ALSO
+    Curl::Impersonate, EV::WebKit
+
+AUTHOR
+    vividsnow
+
+LICENSE
+    This library is free software; you can redistribute it and/or modify it
+    under the same terms as Perl itself.
+

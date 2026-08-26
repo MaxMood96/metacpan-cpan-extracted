@@ -1,0 +1,56 @@
+# Version control
+\B\.git\b
+\B\.github\b
+\B\.gitignore\b
+\B\.gitattributes\b
+
+# Temp, backup and editor files
+~$
+\.bak$
+\.old$
+\.tmp$
+\.swp$
+\#.*#$
+\.\#.*
+\b\.vscode\b
+\b\.idea\b
+\bamber\.code-workspace\b
+\b\.DS_Store\b
+\bThumbs\.db\b
+\bDesktop\.ini\b
+
+# Build and MakeMaker artifacts
+\bMakefile$
+\bMakefile\.old$
+\bMANIFEST\.bak$
+\bMYMETA\b
+\bpm_to_blib$
+\bblib\b
+\b_build\b
+\bBuild$
+\b_eumm\b
+^AmberDB-[0-9]
+\.tar\.gz$
+\.tgz$
+\.zip$
+
+# Database runtime stores and temp files
+\bdbstore\b
+\bdata/
+\.db$
+\.inx$
+\.src$
+\.fld$
+\.fac$
+\.srt$
+\.del$
+\.lnk$
+\.jnl$
+\.aut$
+\.cnt$
+\.log$
+
+# Coverage and profiling
+\bcover_db\b
+\bnytprof\b
+\.out$

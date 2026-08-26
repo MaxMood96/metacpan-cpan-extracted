@@ -8,8 +8,8 @@
 .github/workflows/windows-latest.yml
 .gitignore
 Changes
+lib/SPVM/Unicode/Normalize.build
 lib/SPVM/Unicode/Normalize.c
-lib/SPVM/Unicode/Normalize.config
 lib/SPVM/Unicode/Normalize.pm
 lib/SPVM/Unicode/Normalize.spvm
 LICENSE

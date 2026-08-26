@@ -17,9 +17,9 @@ my %WriteMakefileArgs = (
         'Test::More' => '0',
     },
     PREREQ_PM => {
-        'Punk'          => '0.28',
-        'ClamAV::Clamd' => '0.01',
-        'Hyperman'      => '0.23',
+        'Punk'          => '0.33',
+        'ClamAV::Clamd' => '0.06',
+        'Hyperman'      => '0.35',
     },
     dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean => { FILES => 'Punk-ClamAV-*' },

@@ -325,6 +325,65 @@ span_id(self)
     OUTPUT:
         RETVAL
 
+# The sampled flag, which is the third thing a `traceparent` needs and the
+# only one of the three that had no accessor. A caller propagating a context
+# by hand had the trace id and the span id and no way to ask this, so it
+# either guessed - and a guess of "sampled" makes the callee keep spans whose
+# parent was dropped - or died reaching for a method that was not there.
+int
+sampled(self)
+        SV *self
+    CODE:
+    {
+        otel_span *s = OTEL_SPAN_OF(self);
+        RETVAL = s ? s->sampled : 0;
+    }
+    OUTPUT:
+        RETVAL
+
+# The parent shape `start` takes, so a child span is one call rather than
+# three and cannot be assembled wrongly.
+SV *
+child_of(self)
+        SV *self
+    CODE:
+    {
+        otel_span *s = OTEL_SPAN_OF(self);
+        char thex[32], shex[16];
+        HV *h;
+        if (!s) XSRETURN_UNDEF;
+        otel_bytes_to_hex(s->trace_id, 16, thex);
+        otel_bytes_to_hex(s->span_id, 8, shex);
+        h = newHV();
+        hv_stores(h, "trace_id", newSVpvn(thex, 32));
+        hv_stores(h, "span_id",  newSVpvn(shex, 16));
+        hv_stores(h, "sampled",  newSViv(s->sampled));
+        RETVAL = newRV_noinc((SV *)h);
+    }
+    OUTPUT:
+        RETVAL
+
+# The W3C trace context header for this span, which is what an outbound call
+# has to carry for the callee's server span to join this trace.
+SV *
+traceparent(self)
+        SV *self
+    CODE:
+    {
+        otel_span *s = OTEL_SPAN_OF(self);
+        char thex[32], shex[16], out[64];
+        if (!s) XSRETURN_UNDEF;
+        otel_bytes_to_hex(s->trace_id, 16, thex);
+        otel_bytes_to_hex(s->span_id, 8, shex);
+        /* version-traceid-parentid-flags, and the parent id is THIS span:
+         * the callee is a child of the span that made the call. */
+        (void)snprintf(out, sizeof(out), "00-%.32s-%.16s-%02x",
+                       thex, shex, s->sampled ? 1 : 0);
+        RETVAL = newSVpv(out, 0);
+    }
+    OUTPUT:
+        RETVAL
+
 # The span as the payload shape the encoders take, without queueing it.
 SV *
 to_hash(self)
@@ -350,3 +409,117 @@ counts(self)
         mPUSHi(s->n_events);              mPUSHi(s->dropped_events);
         mPUSHi(s->n_links);               mPUSHi(s->dropped_links);
     }
+
+MODULE = Punk::OpenTelemetry    PACKAGE = Punk::OpenTelemetry::SpanRef
+
+PROTOTYPES: DISABLE
+
+# A BORROWED span handle. Same pointer as Punk::OpenTelemetry::Span, and
+# deliberately NOT that class, because that one frees what it points at.
+#
+# The instrumentation owns the request's server span: it opened it in one
+# callback and will end and enqueue it in another. A handle to it blessed into
+# Span would free it the moment the caller's variable went out of scope, and
+# the response side would then end a span that had already been returned to
+# the allocator. So this class exists to have no DESTROY at all.
+#
+# It answers the two questions an application actually has - what trace am I
+# in, and what should I parent a child span to - and lets an annotation
+# through, because annotating the request's own span is the ordinary thing to
+# want and cannot outlive it.
+
+#define OTEL_REF_OF(sv) \
+    ((SvROK(sv) && SvIOK(SvRV(sv)) && SvIV(SvRV(sv))) \
+        ? INT2PTR(otel_span *, SvIV(SvRV(sv))) : NULL)
+
+SV *
+trace_id(self)
+        SV *self
+    CODE:
+    {
+        otel_span *s = OTEL_REF_OF(self);
+        char hex[32];
+        if (!s) XSRETURN_UNDEF;
+        otel_bytes_to_hex(s->trace_id, 16, hex);
+        RETVAL = newSVpvn(hex, 32);
+    }
+    OUTPUT:
+        RETVAL
+
+SV *
+span_id(self)
+        SV *self
+    CODE:
+    {
+        otel_span *s = OTEL_REF_OF(self);
+        char hex[16];
+        if (!s) XSRETURN_UNDEF;
+        otel_bytes_to_hex(s->span_id, 8, hex);
+        RETVAL = newSVpvn(hex, 16);
+    }
+    OUTPUT:
+        RETVAL
+
+int
+sampled(self)
+        SV *self
+    CODE:
+    {
+        otel_span *s = OTEL_REF_OF(self);
+        RETVAL = s ? s->sampled : 0;
+    }
+    OUTPUT:
+        RETVAL
+
+# The parent shape `start` takes, so a child span is one call rather than
+# three and cannot be assembled wrongly.
+SV *
+child_of(self)
+        SV *self
+    CODE:
+    {
+        otel_span *s = OTEL_REF_OF(self);
+        char thex[32], shex[16];
+        HV *h;
+        if (!s) XSRETURN_UNDEF;
+        otel_bytes_to_hex(s->trace_id, 16, thex);
+        otel_bytes_to_hex(s->span_id, 8, shex);
+        h = newHV();
+        hv_stores(h, "trace_id", newSVpvn(thex, 32));
+        hv_stores(h, "span_id",  newSVpvn(shex, 16));
+        hv_stores(h, "sampled",  newSViv(s->sampled));
+        RETVAL = newRV_noinc((SV *)h);
+    }
+    OUTPUT:
+        RETVAL
+
+SV *
+attr(self, key, value)
+        SV *self
+        SV *key
+        SV *value
+    CODE:
+    {
+        otel_span *s = OTEL_REF_OF(self);
+        if (s) otel_span_attr(aTHX_ s, key, value);
+        RETVAL = newSVsv(self);        /* chainable */
+    }
+    OUTPUT:
+        RETVAL
+
+SV *
+traceparent(self)
+        SV *self
+    CODE:
+    {
+        otel_span *s = OTEL_REF_OF(self);
+        char thex[32], shex[16], out[64];
+        if (!s) XSRETURN_UNDEF;
+        otel_bytes_to_hex(s->trace_id, 16, thex);
+        otel_bytes_to_hex(s->span_id, 8, shex);
+        (void)snprintf(out, sizeof(out), "00-%.32s-%.16s-%02x",
+                       thex, shex, s->sampled ? 1 : 0);
+        RETVAL = newSVpv(out, 0);
+    }
+    OUTPUT:
+        RETVAL

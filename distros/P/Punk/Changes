@@ -1,5 +1,9 @@
 Revision history for Punk
 
+0.34    2026-08-26
+        - ADDS: pk_abi v4 - `on_log_ctx`, a log tap that is handed the
+          CONTEXT the line was logged against.
+
 0.33    2026-08-25
         - Static mounts hold small files in memory per worker, so a hit does
           no file syscall

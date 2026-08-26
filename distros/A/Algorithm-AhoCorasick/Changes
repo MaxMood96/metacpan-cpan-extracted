@@ -11,3 +11,5 @@ Revision history for Algorithm-AhoCorasick
 	Using weak references to avoid leaking memory (bug found and
 	fixed by Daniel Kimsey, http://dekimsey.myopenid.com/ ).
 
+0.04	Wed Aug 26 08:21:30 AM CEST 2026
+	Sorting matches for deterministic results.

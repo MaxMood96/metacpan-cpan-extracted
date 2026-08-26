@@ -1,5 +1,50 @@
 # Revision history for PAGI-Server
 
+0.002009 - 2026-08-26
+
+  Bug Fixes
+  - Constructing a second PAGI::Server in the same process no longer
+    closes the first server's listeners: PAGI_REUSE entries published by
+    live servers in this process are now exempt from inherited-fd
+    collection. Exec-based hot restart and forked workers are unaffected.
+    (Surfaced as "Epoll cannot cope with fd changing handle under it" on
+    CPAN smokers; on other loops the first server silently stopped
+    accepting.)
+  - An HTTP/2 response 'te' header passing the trailers carve-out is now
+    submitted as the canonical lowercase token: libnghttp2 versions punish
+    RFC-forbidden whitespace in field values differently, some by
+    corrupting the whole response.
+
+  Maintenance (CPAN smoker-proofing)
+  - t/http2/34 accepts either RFC-legal teardown frame (GOAWAY or
+    RST_STREAM) for a malformed trailer block instead of pinning one
+    libnghttp2 version's choice.
+  - The SSE end-to-end test requires PAGI-Tools 0.002001+; a pre-split
+    PAGI install shipped a PAGI::SSE whose close() is not awaitable.
+  - All cross-distribution integration tests now gate on
+    INTEGRATION_TEST=1, so smoker results never depend on whichever
+    PAGI-Tools version is installed.
+
+0.002008 - 2026-08-25
+
+  Maintenance
+  - t/lifespan-mode.t no longer asserts the exact exit code of the CLI's
+    --lifespan off rejection. An uncaught die's exit status is $! when
+    errno is nonzero (else 255), and ambient errno at die time varies by
+    platform and module-search history -- CPAN smokers' long PERL5LIB
+    searches leave ENOENT set, so every Linux smoker saw exit 2 and
+    failed 0.002007's exact-255 assertion. The test now requires only a
+    nonzero exit; the rejection message assertions are unchanged.
+
+  Specification Alignment
+  - HTTP/1.1 responses carrying an application-supplied Upgrade header
+    (e.g. 426 Upgrade Required) now also carry 'upgrade' among the
+    server-supplied Connection tokens, per the PAGI spec's new Upgrade
+    companion rule (RFC 9110 requires the pair from any Upgrade sender).
+    The application's own Connection header is still stripped; the server
+    completes the pair itself. Responses without Upgrade are unchanged
+    (no Connection header; keep-alive stays implicit).
+
 0.002007 - 2026-08-24
 
   Specification Alignment

@@ -16,18 +16,41 @@
 
 #include "fetch_abi.h"   /* pk_abi.h comes in with otel_instr.h */
 
+/* A header name compared without regard to case, because HTTP field names
+ * are case-insensitive and a caller writing `TraceParent` has set the header
+ * whatever this file thinks of the spelling. Written out rather than reached
+ * for through strncasecmp, which is locale-dependent: in a Turkish locale
+ * tolower('I') is not 'i'. */
+static int otel_ieq(const char *a, const char *b, STRLEN n) {
+    STRLEN i;
+    for (i = 0; i < n; i++) {
+        char x = a[i], y = b[i];
+        if (x >= 'A' && x <= 'Z') x = (char)(x - 'A' + 'a');
+        if (y >= 'A' && y <= 'Z') y = (char)(y - 'A' + 'a');
+        if (x != y) return 0;
+    }
+    return 1;
+}
+
 static const pk_abi    *OTEL_PK = NULL;
 static const fetch_abi *OTEL_FT = NULL;
 static int OTEL_PK_TRIED = 0, OTEL_FT_TRIED = 0;
 static int OTEL_PK_INSTALLED = 0, OTEL_FT_INSTALLED = 0;
+/* What the one-and-only registration actually managed, kept so that a LATER
+ * install() reports the same answer. Registration is process-global and
+ * happens once; a second application asking what is installed was being told
+ * only about the server hook, so a test - or an operator - reading the
+ * report from any app but the first saw the logs signal as absent when it was
+ * running. */
+static int OTEL_PK_DB = 0, OTEL_PK_LOGS = 0;
 
 /* The shared shape of an optional ABI lookup: require the module, call its
  * _abi_ptr, check the version. A miss is NOT an error - it means that dist is
  * not in this process, and there is simply nothing of its kind to instrument. */
-static IV otel_abi_ptr(pTHX_ const char *module, const char *fn) {
+static UV otel_abi_ptr(pTHX_ const char *module, const char *fn) {
     dSP;
     int count;
-    IV p = 0;
+    UV p = 0;
     SV *req = sv_2mortal(newSVpvf("require %s;", module));
     eval_pv(SvPV_nolen(req), FALSE);
     SPAGAIN;                      /* the require ran Perl; the stack may move */
@@ -35,7 +58,7 @@ static IV otel_abi_ptr(pTHX_ const char *module, const char *fn) {
     ENTER; SAVETMPS; PUSHMARK(SP); PUTBACK;
     count = call_pv(fn, G_SCALAR | G_EVAL);
     SPAGAIN;
-    if (!SvTRUE(ERRSV) && count > 0) p = POPi;
+    if (!SvTRUE(ERRSV) && count > 0) p = POPu;
     else if (count > 0)             (void)POPs;
     PUTBACK; FREETMPS; LEAVE;
     return p;
@@ -43,7 +66,7 @@ static IV otel_abi_ptr(pTHX_ const char *module, const char *fn) {
 
 static const pk_abi *otel_pk(pTHX) {
     if (!OTEL_PK && !OTEL_PK_TRIED) {
-        IV p;
+        UV p;
         OTEL_PK_TRIED = 1;
         p = otel_abi_ptr(aTHX_ "Punk", "Punk::_abi_ptr");
         if (p) {
@@ -59,7 +82,7 @@ static const pk_abi *otel_pk(pTHX) {
 
 static const fetch_abi *otel_ft(pTHX) {
     if (!OTEL_FT && !OTEL_FT_TRIED) {
-        IV p;
+        UV p;
         OTEL_FT_TRIED = 1;
         p = otel_abi_ptr(aTHX_ "Fetch", "Fetch::_abi_ptr");
         if (p) {
@@ -90,8 +113,47 @@ static void *otel_ft_start(pTHX_ const char *method, STRLEN mlen,
 
     canon = otel_sc_method(method, mlen);
     name = sv_2mortal(newSVpv(canon ? canon : "HTTP", 0));
-    s = otel_tracer_start(aTHX_ OTEL_TRACER, NULL, NULL, 0, name,
-                          OTEL_KIND_CLIENT);
+
+    /* A `traceparent` THE CALLER ALREADY SET IS THE PARENT.
+     *
+     * Started with a NULL parent, every outbound call opened a BRAND NEW
+     * TRACE: the client span was a root, the header derived from it named
+     * that new trace, and the callee's server span joined a trace containing
+     * nothing but itself. The visible effect is a store in which every trace
+     * is one span long and no service map edge ever crosses a process.
+     *
+     * There is no ambient current span to take instead - two requests are in
+     * flight on one worker at any moment, and a process-global would
+     * attribute one request's calls to the other. So the context comes from
+     * where a caller can actually put it: the header. A caller that has
+     * propagated deliberately gets its context honoured, and its call joined
+     * to its own trace, rather than silently overridden.
+     */
+    {
+        SSize_t i, n = headers ? (av_len(headers) + 1) : 0;
+        otel_ctx in;
+        int have = 0;
+        otel_ctx_clear(&in);
+
+        for (i = 0; i + 1 < n; i += 2) {
+            SV **k = av_fetch(headers, i, 0);
+            SV **v = av_fetch(headers, i + 1, 0);
+            STRLEN kl, vl;
+            const char *kp, *vp;
+            if (!k || !*k || !v || !*v) continue;
+            kp = SvPV_const(*k, kl);
+            if (kl != 11 || !otel_ieq(kp, "traceparent", 11)) continue;
+            vp = SvPV_const(*v, vl);
+            have = otel_w3c_parse(vp, vl, &in);
+            break;
+        }
+
+        s = have ? otel_tracer_start(aTHX_ OTEL_TRACER, in.trace_id, in.span_id,
+                                     (in.flags & OTEL_FLAG_SAMPLED) ? 1 : 0,
+                                     name, OTEL_KIND_CLIENT)
+                 : otel_tracer_start(aTHX_ OTEL_TRACER, NULL, NULL, 0, name,
+                                     OTEL_KIND_CLIENT);
+    }
     if (!s) return NULL;
 
     {
@@ -113,17 +175,43 @@ static void *otel_ft_start(pTHX_ const char *method, STRLEN mlen,
 
     /* The traceparent. Without this the far side starts a new trace and the
      * two halves of the call are never joined - which is the entire point of
-     * the hook Fetch grew. */
+     * the hook Fetch grew.
+     *
+     * SET IN PLACE WHERE ONE IS ALREADY THERE, never appended beside it. Two
+     * `traceparent` headers on one request is not a request with a fallback:
+     * it is malformed, the callee picks whichever it picks, and the trace
+     * joins up or does not depending on which. The value is REPLACED rather
+     * than left alone because the callee should be a child of this client
+     * span - which is itself now a child of whatever the caller propagated,
+     * so the chain is caller -> client -> callee either way. */
     {
         otel_ctx ctx;
         char buf[56];
+        SSize_t i, n = headers ? (av_len(headers) + 1) : 0;
+        int replaced = 0;
+
         otel_ctx_clear(&ctx);
         Copy(s->trace_id, ctx.trace_id, 16, unsigned char);
         Copy(s->span_id,  ctx.span_id,   8, unsigned char);
         ctx.flags = OTEL_FLAG_SAMPLED;    /* the span exists, so it is sampled */
         otel_w3c_format(&ctx, buf);
-        av_push(headers, newSVpvs("traceparent"));
-        av_push(headers, newSVpv(buf, 0));
+
+        for (i = 0; i + 1 < n; i += 2) {
+            SV **k = av_fetch(headers, i, 0);
+            SV **v = av_fetch(headers, i + 1, 0);
+            STRLEN kl;
+            const char *kp;
+            if (!k || !*k || !v || !*v) continue;
+            kp = SvPV_const(*k, kl);
+            if (kl != 11 || !otel_ieq(kp, "traceparent", 11)) continue;
+            sv_setpv(*v, buf);
+            replaced = 1;
+            break;
+        }
+        if (!replaced) {
+            av_push(headers, newSVpvs("traceparent"));
+            av_push(headers, newSVpv(buf, 0));
+        }
     }
     return (void *)s;
 }

@@ -26,5 +26,5 @@ requires:
   perl: '5.016'
 resources:
   repository: https://github.com/jtrujil43/Physics-CVD.git
-version: '0.01'
+version: '0.03'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.020'

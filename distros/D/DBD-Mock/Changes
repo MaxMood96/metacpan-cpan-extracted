@@ -1,5 +1,11 @@
 Revision history for Perl extension DBD::Mock.
 
+1.60 2026-08-26T07:32:31Z
+    - Requires at least Perl v5.12 (bringing it inline with DBI)
+    - Added support for using arrayref's as bound parameters with PostgreSQL
+      databases. Thanks to Erik Huelsmann for the both the suggestion and the
+      merge request that provided the feature.
+
 1.59 2021-02-22T13:25:52Z
     - Added error detection for when a result set's callback doesn't return
       an arrayref or arrayrefs

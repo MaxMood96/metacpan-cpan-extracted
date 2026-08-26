@@ -1,0 +1,24 @@
+Changes
+lib/Proxy/Impersonate.pm
+lib/Proxy/Impersonate/Cert.pm
+lib/Proxy/Impersonate/Connection.pm
+lib/Proxy/Impersonate/HTTP.pm
+Makefile.PL
+MANIFEST			This list of files
+MANIFEST.SKIP
+README
+t/10-cert.t
+t/20-http.t
+t/21-target-family.t
+t/30-connection.t
+t/31-on-request.t
+t/32-on-response.t
+t/40-integration.t
+t/41-verify.t
+t/42-hints.t
+t/43-ssl-moving-buffer.t
+t/44-backpressure.t
+t/50-shutdown.t
+xt/50-fingerprint.t
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

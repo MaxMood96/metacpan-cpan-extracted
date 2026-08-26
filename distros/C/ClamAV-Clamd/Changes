@@ -1,5 +1,9 @@
 Revision history for ClamAV-Clamd
 
+0.06    2026-08-25
+        - t/40-scan.t skips the directory descriptor refusal on perls before
+          5.22.
+
 0.05    2026-08-23
         CPAN Testers fixes
         - t/30-live.t is opt-in: CLAMD_LIVE=1, CLAMD_SOCKET or CLAMD_HOST.

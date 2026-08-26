@@ -1,0 +1,7 @@
+Revision history for Curl-Impersonate
+
+0.01  2026-08-25
+    - initial release: an HTTP client that reproduces a chosen browser's TLS and
+      HTTP/2 fingerprint, over libcurl-impersonate via Alien::curlimpersonate
+      0.02. Blocking and curl_multi-backed asynchronous interfaces, the latter
+      with streaming, backpressure and event-loop integration.
