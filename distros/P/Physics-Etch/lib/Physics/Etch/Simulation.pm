@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use Carp qw(croak);
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 # ===========================================================================
 # Ties an etch process to a chamber, a mask layout and a loading model, then

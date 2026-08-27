@@ -1,7 +1,9 @@
 Changes
 cpanfile
 data/catalog.xml
+data/cats.csv
 data/cities.csv
+data/dogs.csv
 data/products.psv
 data/sales.csv
 data/states.csv

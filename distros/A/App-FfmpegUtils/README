@@ -2,8 +2,8 @@ NAME
     App::FfmpegUtils - Utilities related to ffmpeg
 
 VERSION
-    This document describes version 0.015 of App::FfmpegUtils (from Perl
-    distribution App-FfmpegUtils), released on 2025-10-29.
+    This document describes version 0.016 of App::FfmpegUtils (from Perl
+    distribution App-FfmpegUtils), released on 2026-08-26.
 
 FUNCTIONS
   cut_duration_from_video
@@ -170,6 +170,65 @@ FUNCTIONS
         (No description)
 
     *   start => *duration|percent_str* (default: 0)
+
+        (No description)
+
+    Special arguments:
+
+    *   -dry_run => *bool*
+
+        Pass -dry_run=>1 to enable simulation mode.
+
+    Returns an enveloped result (an array).
+
+    First element ($status_code) is an integer containing HTTP-like status
+    code (200 means OK, 4xx caller error, 5xx function error). Second
+    element ($reason) is a string containing error message, or something
+    like "OK" if status is 200. Third element ($payload) is the actual
+    result, but usually not present when enveloped result is an error
+    response ($status_code is not 2xx). Fourth element (%result_meta) is
+    called result metadata and is optional, a hash that contains extra
+    information, much like how HTTP response headers provide additional
+    metadata.
+
+    Return value: (any)
+
+  join_audio
+    Usage:
+
+     join_audio(%args) -> [$status_code, $reason, $payload, \%result_meta]
+
+    Join two or more audios (e.g. MP3 files).
+
+    Examples:
+
+    *   Join 3 MP3 files, output in joined.mp3:
+
+         join_audio(files => ["1.mp3", "2.mp3", "3.mp3"]);
+
+    This utility uses *ffmpeg* to join two or more audio files (e.g. MP3
+    files) into one.
+
+    This function is not exported.
+
+    This function supports dry-run operation.
+
+    Arguments ('*' denotes required arguments):
+
+    *   copy => *bool* (default: 1)
+
+        Whether to use the "copy" codec (fast but produces inaccurate
+        timings).
+
+    *   files* => *array[filename]*
+
+        (No description)
+
+    *   output => *filename* (default: "joined.mp3")
+
+        (No description)
+
+    *   overwrite => *bool*
 
         (No description)
 
@@ -398,7 +457,8 @@ CONTRIBUTING
     required beyond that are considered a bug and can be reported to me.
 
 COPYRIGHT AND LICENSE
-    This software is copyright (c) 2025 by perlancar <perlancar@cpan.org>.
+    This software is copyright (c) 2026, 2025 by perlancar
+    <perlancar@cpan.org>.
 
     This is free software; you can redistribute it and/or modify it under
     the same terms as the Perl 5 programming language system itself.

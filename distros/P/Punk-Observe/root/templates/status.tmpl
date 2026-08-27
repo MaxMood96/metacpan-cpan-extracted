@@ -1,0 +1,70 @@
+<dl class="stats">
+  <div><dt>accepted</dt><dd>{% accepted %}</dd></div>
+  <div><dt>records</dt><dd>{% ingest_rate %}</dd></div>
+  <div><dt>logs</dt><dd>{% logs %}</dd></div>
+  <div><dt>spans</dt><dd>{% spans %}</dd></div>
+  <div><dt>metric points</dt><dd>{% metrics %}</dd></div>
+  <div><dt>traces</dt><dd>{% traces %}</dd></div>
+  <div><dt>spans in error</dt><dd>{% errors %}</dd></div>
+  <div><dt>segments</dt><dd>{% segments %}</dd></div>
+  <div><dt>live logs</dt><dd>{% wal_depth %}</dd></div>
+  <div><dt>unsummarised</dt><dd>{% compaction_lag %}</dd></div>
+  <div><dt>rate rejected</dt><dd>{% rate_rejected %}</dd></div>
+  <div><dt>accepted bytes</dt><dd>{% accepted_bytes %}</dd></div>
+  <div><dt>deleted but mapped</dt><dd>{% mapped_deleted %}</dd></div>
+  <div><dt>on disk</dt><dd>{% store_bytes %}</dd></div>
+</dl>
+
+{% if counters_shared %}{% else %}
+<p class="note">The shared counters are unavailable on this platform, so the
+  arrival figures above count only the worker that answered this request. The
+  stored totals are unaffected.</p>
+{% end %}
+
+{% if ingest_plot %}
+<div class="panel">
+  <h2>Logs and spans arriving</h2>
+  <p class="note">Metric points are not counted here: a metric query names
+    the metric, so there is no total across all of them.</p>
+  <div class="chartwrap" data-chart>
+    <script type="application/json" data-plot>{% raw ingest_plot %}</script>
+    <noscript><p class="note">This chart needs JavaScript. The totals it
+      summarises are above.</p></noscript>
+  </div>
+</div>
+{% end %}
+
+{% if storage_gauge_plot %}
+<div class="panel">
+  <div class="chartwrap" data-chart>
+    <script type="application/json" data-plot>{% raw storage_gauge_plot %}</script>
+  </div>
+</div>
+{% end %}
+
+{% if services %}
+<div class="panel">
+  <h2>What is reporting</h2>
+  <div class="tablewrap">
+    <table class="rows">
+      <thead><tr><th>service</th><th class="num">records</th></tr></thead>
+      <tbody>
+      {% for s in services %}
+      <tr>
+        <td><a href="{% prefix %}/traces?service={% s.name %}{% range_amp %}">{% s.name %}</a></td>
+        <td class="num mono">{% s.count %}</td>
+      </tr>
+      {% end %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="panel">
+  <p class="empty">Nothing has been received yet. Point an exporter at this
+    host and the signals will appear here.</p>
+  <p class="note">Set <code class="mono">OTEL_EXPORTER_OTLP_ENDPOINT</code> to
+    this application's own origin. The receiver answers on the OTLP paths
+    beneath the ingest prefix.</p>
+</div>
+{% end %}

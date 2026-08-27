@@ -14,7 +14,7 @@ use Physics::Etch::Chamber;
 use Physics::Etch::Loading;
 use Physics::Etch::Simulation;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 # ===========================================================================
 # Material database  (density in g/cm^3; illustrative)
@@ -324,8 +324,42 @@ Physics::Etch - model wet and dry semiconductor etch processes
 C<Physics::Etch> is a facade over the etch models
 L<Physics::Etch::WetEtch> (isotropic, Arrhenius-activated) and
 L<Physics::Etch::DryEtch> (anisotropic plasma / RIE). It ships a small
-database of materials and etch recipes so a working process can be built with
-one call, then customised via overrides.
+built-in database of materials and etch recipes so a working process can be
+built with one call, then customised via overrides.
+
+The module also exposes a pattern / reactor toolkit: a self-contained
+L<Physics::Etch::GDSII> reader/writer for resist masks, L<Physics::Etch::Layout>
+geometry analysis, a L<Physics::Etch::Chamber> model, L<Physics::Etch::Loading>
+(macro, micro and ARDE / RIE-lag), and L<Physics::Etch::Simulation> to tie
+them together for per-feature results.
+
+=head2 Physics
+
+B<Wet etch> (L<Physics::Etch::WetEtch>) is a liquid-chemical, essentially
+isotropic process:
+
+    R(T) = rate * exp( (Ea/kB) * (1/Tref - 1/T) ) * concentration * agitation
+    lateral = R * isotropy            # isotropy defaults to 1.0
+
+Isotropy makes the lateral rate roughly equal to the vertical rate, so
+undercut is comparable to etch depth and sidewalls are sloped/rounded. Strong
+temperature activation (the Arrhenius term) is the main rate knob.
+
+B<Dry etch> (L<Physics::Etch::DryEtch>) is a directional plasma / RIE process:
+
+    Rv = rate * (P/Pnom)^0.8 * (p/pnom)^0.3 * (Vb/Vbnom)^0.5 * loading * arrhenius
+    A_eff  = 1 - (1 - A_nom) * (p/pnom) * (Vbnom/Vb)      # clamped to [0,1]
+    lateral = Rv * (1 - A_eff)
+
+High DC bias and low pressure drive vertical etching and steep sidewalls;
+high pressure or low bias lets radicals attack laterally, lowering anisotropy
+and increasing undercut. An optional Arrhenius term models hot dry etches.
+
+The L<Physics::Etch::Process> base class derives C<time_to_clear>,
+C<etch_time> (clear time plus over-etch), C<etch_depth>, C<undercut>,
+C<anisotropy>, C<profile> (top/bottom width, etch bias, sidewall angle,
+aspect ratio), C<mask_loss> / C<mask_survives>, C<substrate_overetch>,
+C<uniformity_report>, and a formatted C<report()>.
 
 =head2 Factory methods
 
@@ -335,26 +369,265 @@ one call, then customised via overrides.
 
 =item C<< Physics::Etch->dry_etch($material, %overrides) >>
 
-Build a process object from the recipe database. C<%overrides> may set
-C<thickness>, C<temperature>, C<feature_cd>, C<mask>, C<mask_thickness>,
-C<substrate>, C<overetch>, C<uniformity>, C<time>, C<etchant> (to pick a
-specific chemistry), and any rate parameter (C<rate>, C<Ea>, C<power>,
-C<pressure>, C<bias>, C<anisotropy>, ...).
+Build a L<Physics::Etch::WetEtch> or L<Physics::Etch::DryEtch> process object
+from the recipe database. C<%overrides> may set C<thickness>, C<temperature>,
+C<feature_cd>, C<mask>, C<mask_thickness>, C<substrate>, C<overetch>,
+C<uniformity>, C<time>, C<etchant> (to pick a specific chemistry), and any rate
+parameter such as C<rate>, C<Ea>, C<power>, C<pressure>, C<bias>, or
+C<anisotropy>.
 
 =item C<< Physics::Etch->material($name, thickness => $nm) >>
 
-Return a L<Physics::Etch::Material> from the database.
+Return a L<Physics::Etch::Material> from the built-in material database.
 
-=item C<< Physics::Etch->recipes(%filter) >> / C<< find_recipe >> / C<< material_names >>
+=item C<< Physics::Etch->recipes(%filter) >>
 
-Introspect the built-in database.
+=item C<< Physics::Etch->find_recipe($material, $process, $etchant) >>
+
+=item C<< Physics::Etch->material_names() >>
+
+Introspect the built-in material and recipe database. C<recipes> accepts
+C<material>, C<process> and/or C<etchant> filters and returns matching recipe
+hashrefs. C<find_recipe> returns the first match.
+
+=item C<< Physics::Etch->chamber(%args) >>
+
+Convenience constructor for L<Physics::Etch::Chamber>.
+
+=item C<< Physics::Etch->loading(%args) >>
+
+Convenience constructor for L<Physics::Etch::Loading>.
+
+=item C<< Physics::Etch->layout(%args) >>
+
+Convenience constructor for L<Physics::Etch::Layout>.
+
+=item C<< Physics::Etch->read_gdsii($file) >>
+
+=item C<< Physics::Etch->new_gdsii(%args) >>
+
+Convenience constructors for L<Physics::Etch::GDSII>.
+
+=item C<< Physics::Etch->layout_from_gds($file, %args) >>
+
+Read a GDSII file and return a L<Physics::Etch::Layout>.
+
+=item C<< Physics::Etch->simulate(%args) >>
+
+Convenience constructor for L<Physics::Etch::Simulation>.
 
 =back
 
+=head2 Pattern-dependent anisotropy, loading & chamber tools
+
+    use Physics::Etch;
+    use Physics::Etch::Loading;
+
+    my $etch    = Physics::Etch->dry_etch('silicon_nitride', thickness => 200);
+    my $chamber = Physics::Etch->chamber(
+        wafer_diameter_mm => 200, gap_cm => 2.5,
+        pressure_mtorr => 20, power_w => 300, flow_sccm => 80,
+        gas => 'SF6', gas_mass_amu => 146, gas_diameter_m => 4.8e-10);
+    my $layout  = Physics::Etch->layout_from_gds('mask.gds',
+        layer => 1, structure => 'TOP', tone => 'clear', field => [200,200]);
+    my $loading = Physics::Etch::Loading->from_chamber($chamber, arde_length => 5);
+
+    my $sim = Physics::Etch->simulate(
+        process => $etch, chamber => $chamber,
+        layout  => $layout, loading => $loading);
+    print $sim->report;               # per-CD anisotropy, undercut, RIE lag
+
+=over 4
+
+=item * L<Physics::Etch::GDSII> - a dependency-free GDSII stream reader/writer;
+flattens C<SREF>/C<AREF> hierarchies with reflection, magnification and
+rotation into absolute polygons.
+
+=item * L<Physics::Etch::Layout> - open area / open fraction (macro-loading
+input), per-feature CD from bounding boxes (ARDE input), and a local open-density
+grid (micro-loading input). C<tone> selects clear vs dark field.
+
+=item * L<Physics::Etch::Chamber> - reactor geometry to electrode C<area_ratio>,
+C<power_density>, C<residence_time>, C<mean_free_path>, C<knudsen>, and a
+heuristic DC C<self_bias> / C<ion_energy>. C<process_conditions> returns
+pressure and bias ready to pass to the dry etch.
+
+=item * L<Physics::Etch::Loading> - macro loading C<R/R0 = 1/(1+kappa*A_open)>,
+micro loading C<1/(1+k_micro*density)>, and ARDE / RIE-lag
+C<1/(1+AR/AR0)> (narrow features etch slower and taper). C<from_chamber>
+estimates C<kappa> from residence time.
+
+=item * L<Physics::Etch::Simulation> - applies chamber conditions, macro loading
+from open area times wafer area, then per feature converts CD to aspect ratio,
+applies ARDE plus micro-loading, and reports local rate, depth, undercut,
+anisotropy, sidewall angle, and any features that fail to clear.
+
+=back
+
+=head2 Examples
+
+The F<examples/> directory contains one runnable script per material and several
+toolkit demos:
+
+    examples/etch_copper.pl              Cu, wet FeCl3 vs dry Ar ion-mill
+    examples/etch_photoresist_strip.pl   wet solvent / piranha strip
+    examples/etch_photoresist_ash.pl     dry O2 plasma ash + RIE trim
+    examples/etch_aluminum_silicide.pl   dry Cl2/BCl3 RIE vs wet PAN
+    examples/etch_tantalum.pl            dry SF6 RIE, pressure/bias tuning
+    examples/etch_titanium.pl            wet dilute-HF, SiO2 selectivity
+    examples/etch_silicon_nitride.pl     wet hot H3PO4 + CF4/O2 RIE
+    examples/etch_polyimide.pl           dry O2 RIE thick-film via etch
+    examples/make_sample_mask.pl         writes sample_mask.gds
+    examples/etch_gdsii_simulation.pl    GDSII-driven per-feature + RIE lag
+    examples/etch_loading_effect.pl      macro & micro loading
+    examples/etch_chamber_geometry.pl    reactor geometry -> bias / mfp
+
+Run any example with:
+
+    perl -Ilib examples/etch_copper.pl
+
+=head2 Installation
+
+With ExtUtils::MakeMaker:
+
+    perl Makefile.PL
+    make
+    make test
+    make install
+
+On Windows with Strawberry Perl, use C<gmake> instead of C<make> if needed.
+
+To build a release tarball:
+
+    perl Makefile.PL
+    make dist
+
+This creates C<Physics-Etch-0.02.tar.gz>. Upload that tarball to PAUSE to publish
+it on CPAN; after indexing you can install with C<cpanm Physics::Etch>.
+
+=head1 EXTENDING THE DATABASE
+
+The material and recipe databases are ordinary Perl data structures at the top
+of F<lib/Physics/Etch.pm>. You can extend them by editing that file, or bypass
+them entirely by constructing L<Physics::Etch::WetEtch> / L<Physics::Etch::DryEtch>
+directly with your own parameters.
+
+=head2 Adding a material
+
+Add an entry to C<%MATERIAL>:
+
+    my %MATERIAL = (
+        # ... existing entries ...
+        tungsten => {
+            formula => 'W',
+            pretty  => 'Tungsten',
+            density => 19.25,          # g/cm^3, optional / illustrative
+        },
+    );
+
+Required fields:
+
+=over 4
+
+=item * C<pretty> - human-readable name used in reports.
+
+=item * C<formula> - chemical formula or identifier (may be empty).
+
+=item * C<density> - density in g/cm^3, currently illustrative.
+
+=back
+
+=head2 Adding a wet-etch recipe
+
+Wet recipes live in C<@RECIPE> and must contain at least C<material>,
+C<process> set to C<'wet'>, C<etchant>, C<mechanism>, and C<rate> (nm/min at
+C<ref_temp>). Common additional fields:
+
+    {
+        material  => 'tungsten',
+        process   => 'wet',
+        etchant   => 'H2O2/NH4OH',
+        composition => 'Hydrogen peroxide / ammonium hydroxide',
+        mechanism => 'chemical',
+        rate      => 50,              # nm/min at ref_temp
+        ref_temp  => 25,              # degC
+        Ea        => 0.40,            # eV, Arrhenius activation energy
+        isotropy  => 1.0,             # lateral/vertical ratio
+        sel_mask       => 30,         # target:mask etch-rate selectivity
+        sel_substrate  => 50,         # target:substrate selectivity
+        default_mask   => 'photoresist',
+        default_substrate => 'silicon_dioxide',
+        notes => 'Brief description of the process.',
+    },
+
+=head2 Adding a dry-etch recipe
+
+Dry recipes set C<process> to C<'dry'> and include plasma-specific knobs:
+
+    {
+        material  => 'tungsten',
+        process   => 'dry',
+        etchant   => 'SF6',
+        composition => 'SF6 plasma',
+        mechanism => 'ion-assisted',
+        rate      => 150,             # nm/min at nominal conditions
+        anisotropy => 0.85,           # nominal anisotropy, 0..1
+        power_nom    => 300,          # W
+        pressure_nom => 20,           # mTorr
+        bias_nom     => 250,          # V
+        sel_mask       => 4,
+        sel_substrate  => 8,
+        default_mask   => 'photoresist',
+        default_substrate => 'silicon',
+        notes => 'Brief description of the process.',
+    },
+
+Optional wet-style fields C<Ea> and C<ref_temp> may also be supplied for dry
+recipes if you want a temperature correction.
+
+=head2 Using custom materials without editing the database
+
+Anywhere a material name is accepted you may pass a L<Physics::Etch::Material>
+object, or construct L<Physics::Etch::WetEtch> / L<Physics::Etch::DryEtch>
+directly:
+
+    use Physics::Etch::WetEtch;
+    use Physics::Etch::Material;
+    use Physics::Etch::Etchant;
+
+    my $etch = Physics::Etch::WetEtch->new(
+        target    => Physics::Etch::Material->new(
+            name => 'my_film', formula => 'X2Y', pretty => 'My Film', thickness => 300),
+        etchant   => Physics::Etch::Etchant->new(
+            name => 'custom', type => 'wet', composition => '...', mechanism => 'chemical'),
+        rate      => 200,
+        ref_temp  => 25,
+        Ea        => 0.5,
+        isotropy  => 0.9,
+        feature_cd => 500,
+    );
+    print $etch->report;
+
 =head1 DISCLAIMER
 
-Rates, activation energies and selectivities are illustrative teaching values,
-not process specifications. Always calibrate against your own tool and
-chemistry.
+Rates, activation energies, selectivities and all other numeric values in the
+embedded databases are illustrative teaching values, not process
+specifications. Always calibrate against your own tool and chemistry.
+
+=head1 SEE ALSO
+
+L<Physics::Etch::WetEtch>, L<Physics::Etch::DryEtch>,
+L<Physics::Etch::Process>, L<Physics::Etch::Material>,
+L<Physics::Etch::Etchant>, L<Physics::Etch::Chamber>,
+L<Physics::Etch::Loading>, L<Physics::Etch::Layout>,
+L<Physics::Etch::GDSII>, L<Physics::Etch::Simulation>
+
+=head1 AUTHOR
+
+Jovan Trujillo <jtrujil43@users.noreply.github.com>
+
+=head1 LICENSE
+
+This software is licensed under the GPL-3.0-or-later license.
 
 =cut

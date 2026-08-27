@@ -2,7 +2,7 @@ use strict;
 use warnings;
 use Dispatch::Fu;
 
-use Test::More tests => 5;
+use Test::More tests => 8;
 
 my $INPUT = q{case1};
 
@@ -88,3 +88,38 @@ $INPUT,
   on case5   => sub { 5 };
 
 is $results, 0, q{POD example for xdefault works when $input_str is undef (uses 'case0')};
+
+$INPUT = q{0};
+
+$results = dispatch {
+    xdefault shift;
+}
+$INPUT,
+  on default => sub { 6 },
+  on 0       => sub { 0 };
+
+is $results, 0, q{xdefault accepts false-but-defined case key "0"};
+
+$INPUT = q{case};
+
+$results = dispatch {
+    xdefault shift;
+}
+$INPUT,
+  on default => sub { 6 },
+  on case1   => sub { 1 };
+
+is $results, 6, q{xdefault requires an exact case match, not a substring match};
+
+$INPUT = q{case.};
+
+$results = dispatch {
+    xdefault shift;
+}
+$INPUT,
+  on default => sub { 6 },
+  on case1   => sub { 1 };
+
+is $results, 6, q{xdefault treats regex metacharacters as literal characters};
+
+

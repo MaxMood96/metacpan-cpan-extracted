@@ -1,6 +1,6 @@
 package API::Docker::API::Networks;
 # ABSTRACT: Docker Engine Networks API
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 use Moo;
 use API::Docker::Network;
 use Carp qw( croak );
@@ -98,7 +98,7 @@ API::Docker::API::Networks - Docker Engine Networks API
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 

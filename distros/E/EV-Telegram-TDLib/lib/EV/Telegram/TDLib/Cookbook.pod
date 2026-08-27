@@ -1,0 +1,894 @@
+=head1 NAME
+
+EV::Telegram::TDLib::Cookbook - task-oriented recipes for EV::Telegram::TDLib
+
+=head1 DESCRIPTION
+
+Recipes for common tasks, showing how the pieces of
+L<EV::Telegram::TDLib> combine. This is not the reference; the main
+L<EV::Telegram::TDLib> manual is, and it documents every option and
+callback named here.
+
+Conventions in every recipe:
+
+=over 4
+
+=item *
+
+Callbacks receive C<($result, $err)>; C<$err> is undef on success.
+Errors are never thrown.
+
+=item *
+
+C<use EV; use EV::Telegram::TDLib;> is assumed, as is a constructed
+C<$td> client. Credentials come from the environment
+(TD_API_ID, TD_API_HASH, TD_PHONE, TD_BOT_TOKEN) -- a convention of
+these recipes and F<eg/>, not the module's API.
+
+=item *
+
+Every snippet ends up inside a running EV loop; stand-alone recipes
+finish with C<EV::run>.
+
+=back
+
+The recipes that need no credentials (formatted text, raw methods,
+multiple clients) were run for real against TDLib 1.8.66. The rest
+were checked field by field against the pinned TDLib scheme
+(td_api.tl at commit 022d60202e446ad1287b9fb68e687c8a0760788b).
+
+=head1 RECIPES
+
+=head2 Logging in as a user, and reusing the session
+
+Problem: authorize a user account with phone number, SMS code and
+optional 2FA password -- and do it only once.
+
+The database directory IS the session. The first run asks for the
+code; every later run with the same C<database_directory> goes
+straight to authorizationStateReady and C<on_code> never fires. Keep
+the callbacks in place anyway: sessions can be revoked server-side.
+
+A mistyped code or password does not fail login: the callback fires
+again with the TDLib error as a third argument, so prompt again and
+resubmit. What fails login outright is a rejected automatic step --
+an invalid phone number or bot token, or parameters Telegram
+refuses.
+
+    my $td = EV::Telegram::TDLib->new(
+        api_id             => $ENV{TD_API_ID},
+        api_hash           => $ENV{TD_API_HASH},
+        phone_number       => $ENV{TD_PHONE},
+        database_directory => 'tdlib-db',   # the session; keep it secret
+        on_code => sub {
+            my ($info, $submit) = @_;
+            print "code from Telegram: ";
+            chomp(my $code = <STDIN>);
+            $submit->($code);
+        },
+        on_password => sub {   # only fires when 2FA is enabled
+            my ($info, $submit) = @_;
+            print "2FA password: ";
+            chomp(my $password = <STDIN>);
+            $submit->($password);
+        },
+        on_error => sub { warn "tdlib: $_[0]\n" },
+    );
+
+    $td->login(sub {
+        my (undef, $err) = @_;
+        die "login failed: $err->{message}\n" if $err;
+        $td->me(sub {
+            my ($me, $err) = @_;
+            die "getMe failed: $err->{message}\n" if $err;
+            # usernames is a plural object in this TDLib; there is
+            # no user->{username} field
+            my $names = $me->{usernames};
+            my $username = $names ? $names->{active_usernames}[0] : undef;
+            print "logged in as $me->{first_name}",
+                  (defined $username ? " (\@$username)" : ''), "\n";
+            $td->close(sub { EV::break });
+        });
+    });
+
+    EV::run;
+
+=head2 Logging in as a bot
+
+Problem: authorize with a bot token from BotFather.
+
+C<bot_token> is answered automatically at
+authorizationStateWaitPhoneNumber; no credential callbacks are
+involved. A bot session needs its own database directory -- do not
+point it at a user session.
+
+    my $td = EV::Telegram::TDLib->new(
+        api_id             => $ENV{TD_API_ID},
+        api_hash           => $ENV{TD_API_HASH},
+        bot_token          => $ENV{TD_BOT_TOKEN},
+        database_directory => 'tdlib-bot-db',
+        on_error => sub { warn "tdlib: $_[0]\n" },
+    );
+
+    $td->login(sub {
+        my (undef, $err) = @_;
+        die "login failed: $err->{message}\n" if $err;
+        print "bot authorized\n";
+    });
+
+    EV::run;
+
+=head2 Logging in with a QR code
+
+Problem: authorize by scanning a QR code with the Telegram app,
+instead of typing a phone number and code.
+
+Set C<on_qr> and give no C<phone_number>: the state machine requests
+QR authentication only in that branch. Note the asymmetric signature:
+C<on_qr> receives C<($link)> only. There is no C<$submit>, because
+nothing is submitted -- the other device confirms the login. TDLib
+refreshes the link periodically, and C<on_qr> fires again with the
+new one.
+
+    my $td = EV::Telegram::TDLib->new(
+        api_id             => $ENV{TD_API_ID},
+        api_hash           => $ENV{TD_API_HASH},
+        database_directory => 'tdlib-db',
+        on_qr => sub {
+            my ($link) = @_;
+            print "scan as a QR code with your phone:\n$link\n";
+        },
+        on_error => sub { warn "tdlib: $_[0]\n" },
+    );
+
+    $td->login(sub {
+        my (undef, $err) = @_;
+        die "login failed: $err->{message}\n" if $err;
+        print "confirmed by the other device\n";
+    });
+
+    EV::run;
+
+Render C<$link> with any QR tool; it is a login URL, not image data.
+
+=head2 Reacting to incoming messages
+
+Problem: handle new messages, ignoring your own.
+
+C<on_message> fires on updateNewMessage, including echoes of messages
+you sent. Text lives in C<< $msg->{content} >>: a messageText content
+wraps a formattedText, so the plain string is one more level down.
+
+    $td->on_message(sub {
+        my ($msg) = @_;
+        return if $msg->{is_outgoing};   # our own messages echo back
+        my $content = $msg->{content} // {};
+        return unless ($content->{'@type'} // '') eq 'messageText';
+        my $text = $content->{text}{text};   # messageText wraps formattedText
+        return unless defined $text && length $text;
+        my $sender = $msg->{sender_id} // {};
+        my $who = $sender->{user_id} // $sender->{chat_id} // '?';
+        printf "%s in chat %d: %s\n", $who, $msg->{chat_id}, $text;
+    });
+
+A full echo bot that adds send_message to this is F<eg/02-bot-echo.pl>.
+
+=head2 Sending formatted text safely
+
+Problem: send markdown or HTML without hand-building entity arrays --
+and without blowing up when the markup is bad.
+
+C<send_message> with C<parse_mode> runs the text through the
+synchronous parseTextEntities call first. A parse error is delivered
+to your callback before C<send_message> even returns, and nothing is
+sent. A parse failure is reported synchronously, before the method
+returns, unlike every other error in the module.
+
+    $td->send_message($chat_id, 'bold *here*, _italic_ too',
+        parse_mode => 'markdown',
+        sub {
+            my ($msg, $err) = @_;
+            if ($err) { warn "not sent: $err->{message}\n"; return }
+            print "delivered, message id $msg->{id}\n";
+        });
+
+To parse ahead of time (or to inspect entities), call
+parseTextEntities yourself through the synchronous execute():
+
+    my $formatted = EV::Telegram::TDLib->execute({
+        '@type'    => 'parseTextEntities',
+        text       => 'bold *here*',
+        parse_mode => { '@type' => 'textParseModeMarkdown', version => 2 },
+    });
+    if (($formatted->{'@type'} // '') eq 'error') {
+        die "parse failed: $formatted->{message}\n";
+    }
+    # { '@type' => 'formattedText', text => 'bold here',
+    #   entities => [ { offset => 5, length => 4,
+    #                   type => { '@type' => 'textEntityTypeBold' } } ] }
+
+C<parse_mode> accepts C<markdown> (MarkdownV2, as above) and C<html>
+(C<< { '@type' => 'textParseModeHTML' } >>).
+
+That C<< offset => 5 >> is in UTF-16 code units, not characters. The
+two agree here only because the text is ASCII; put an emoji in front
+and they part company. See L</Reading the formatting off a message>
+before slicing a formattedText by hand.
+
+=head2 Reading the formatting off a message
+
+Problem: a message arrived with bold runs, links or a code block, and
+you want the text each one covers.
+
+Do not reach for substr. TDLib counts entity offsets and lengths in
+UTF-16 code units, so the moment a message contains an emoji -- one
+Perl character, two UTF-16 units -- every offset after it is shifted
+and substr quietly returns the wrong run:
+
+    my $ft = $msg->{content}{text};
+
+    # wrong: right only while the text is entirely inside the BMP
+    substr($ft->{text}, $_->{offset}, $_->{length}) for @{ $ft->{entities} };
+
+    # right
+    for my $e (@{ $td->entity_texts($ft) }) {
+        print "$e->{type}: $e->{text}\n";
+    }
+
+An ASCII example agrees under both readings, which is exactly why this
+is easy to get wrong and hard to notice.
+
+The offsets are left as TDLib sent them on purpose. Forwarding,
+editing or copying a message sends its entities back, and offsets
+rewritten into character counts would corrupt the result -- so the
+module hands you a slicer rather than converting anything.
+
+=head2 Replying to a message, and sending silently
+
+Problem: reply to a specific message, or send without waking up the
+chat's members.
+
+    $td->send_message($chat_id, 'ack', reply_to => $msg->{id}, sub {
+        my ($reply, $err) = @_;
+        warn "reply failed: $err->{message}\n" if $err;
+    });
+
+    $td->send_message($chat_id, 'background sync done', silent => 1, sub {
+        my ($sent, $err) = @_;
+        warn "send failed: $err->{message}\n" if $err;
+    });
+
+On the wire these are NOT the classic Bot-API-style fields. The
+pinned TDLib schema has no C<reply_to_message_id> and no
+C<disable_notification> on sendMessage; the module emits the 1.8.66
+shapes:
+
+    reply_to => { '@type' => 'inputMessageReplyToMessage',
+                  message_id => $msg->{id} },
+    options  => { '@type' => 'messageSendOptions',
+                  disable_notification => \1 },   # JSON true
+
+If you write raw sendMessage requests by hand, use those shapes.
+
+=head2 Resolving a chat by @username
+
+Problem: turn a public @username into a chat id you can send to.
+
+    $td->chat_by_username('durov', sub {   # leading @ is optional
+        my ($chat, $err) = @_;
+        die "resolve failed: $err->{message}\n" if $err;
+        print "chat id $chat->{id} ($chat->{title})\n";
+    });
+
+The resolved chat is also stored in the cache, so C<< $td->chat($id) >>
+works afterwards. Only public usernames resolve this way; private
+chats appear through the chat list.
+
+=head2 Walking the chat list
+
+Problem: enumerate the user's chats.
+
+TDLib hands chats out asynchronously as updateNewChat, and loadChats
+nudges more of them into existence. Collect ids from C<on_chat>, page
+with C<load_chats> until TDLib reports the list exhausted (a 404 the
+module normalizes to an undef result with no error), then read the
+cache:
+
+    my %seen;
+    $td->on_chat(sub { $seen{ $_[0]{id} } = 1 });
+
+    $td->login(sub {
+        my (undef, $err) = @_;
+        die "login failed: $err->{message}\n" if $err;
+        my $load;
+        $load = sub {
+            $td->load_chats(100, sub {
+                my ($res, $err) = @_;
+                die "load_chats failed: $err->{message}\n" if $err;
+                return $load->() if $res;   # Ok: more may exist
+                for my $id (sort { $a <=> $b } keys %seen) {
+                    my $chat = $td->chat($id) or next;
+                    printf "%d\t%s\n", $chat->{id}, $chat->{title};
+                }
+                $td->close(sub { EV::break });
+            });
+        };
+        $load->();
+    });
+
+This is F<eg/03-list-chats.pl>.
+
+=head2 Knowing when you are offline
+
+Problem: stop sending (or tell the user) when the network is gone,
+and know when you are back.
+
+TDLib reports connectivity through updateConnectionState. The module
+tracks it: C<connection_state> returns the last seen state name
+(undef until the first update arrives), and C<on_connection_state>
+fires with the state name on every change. The state is
+connectionStateReady only when the client is connected and caught
+up; connectionStateUpdating means connected but still syncing, and
+connectionStateWaitingForNetwork, connectionStateConnectingToProxy
+and connectionStateConnecting mean there is no usable route to
+Telegram.
+
+    my $online = 0;
+    $td->on_connection_state(sub {
+        my ($state) = @_;
+        $online = ($state eq 'connectionStateReady');
+        warn $online ? "back online\n" : "offline ($state)\n";
+    });
+
+    sub send_when_online {
+        my ($chat_id, $text) = @_;
+        if (!$online) { warn "offline, not sending\n"; return }
+        $td->send_message($chat_id, $text, sub {
+            my ($msg, $err) = @_;
+            warn "send failed: $err->{message}\n" if $err;
+        });
+    }
+
+Requests made while offline are not rejected: TDLib queues them and
+they go out when the connection returns, and only then does the
+callback fire. A missing reply can mean "still offline", not
+"request lost" -- check C<connection_state> before concluding a
+request failed, and give C<send> a C<timeout> (see
+L<EV::Telegram::TDLib/"send(\%request, $cb, %opt)">) when waiting
+indefinitely is not acceptable.
+
+=head2 Paging through history
+
+Problem: fetch more messages than a single getChatHistory page
+returns, and resume later.
+
+C<history> pages backwards from the newest message (or from
+C<from_message_id>), up to C<limit> messages in at most C<max_pages>
+requests:
+
+    $td->history($chat_id, limit => 200, sub {
+        my ($msgs, $err, $state) = @_;
+        die "history failed: $err->{message}\n" if $err;
+        printf "got %d messages%s\n", scalar @$msgs,
+               $state->{complete} ? '' : ' (max_pages hit, more exist)';
+        # newest first; resume older with:
+        # $td->history($chat_id, limit => 200,
+        #     from_message_id => $state->{last_message_id}, sub { ... });
+    });
+
+C<< $state->{complete} >> is true when the limit was reached or the
+history was exhausted; C<< $state->{last_message_id} >> is the id of
+the oldest message fetched, for resuming.
+
+=head2 Downloading a file with progress
+
+Problem: download a file attachment, showing progress.
+
+File ids come from message content and are per-session. For a
+document message the file is two levels down (messageDocument wraps a
+document, which wraps a file); for a photo, pick a size:
+
+    # my $file_id = $msg->{content}{document}{document}{id};  # document
+    # my $file_id = $msg->{content}{photo}{sizes}[-1]{photo}{id};  # largest photo
+
+    $td->download($file_id,
+        on_progress => sub {
+            my ($file) = @_;
+            my $total = $file->{expected_size} // $file->{size} // 0;
+            return unless $total > 0;
+            my $done = $file->{local} ? $file->{local}{downloaded_size} // 0 : 0;
+            printf "\r%d%%", int(100 * $done / $total);
+        },
+        sub {
+            my ($file, $err) = @_;
+            die "\ndownload failed: $err->{message}\n" if $err;
+            print "\nsaved at $file->{local}{path}\n";
+            $td->close(sub { EV::break });
+        });
+
+The main callback fires once
+C<< $file->{local}{is_downloading_completed} >> is true; the path
+under it is inside C<files_directory>. C<cancel_download($file_id)>
+aborts a pending download and fails its callback.
+
+=head2 Uploading a file
+
+Problem: send a local file as a document.
+
+    $td->send_file($chat_id, '/tmp/report.pdf',
+        caption => 'quarterly report', sub {
+            my ($msg, $err) = @_;
+            warn "upload failed: $err->{message}\n" if $err;
+        });
+
+send_file builds the nesting TDLib expects: every media content wraps
+its InputFile in a per-kind object, so inputMessageDocument takes an
+inputDocument which in turn holds the inputFileLocal. Passing the
+InputFile straight to inputMessageDocument is the common mistake, and
+it reports only "InputFile is not specified", which does not point
+anywhere near the real problem.
+
+C<upload($path)> still exists and returns just the inputFileLocal
+hashref, for building a request by hand.
+
+=head2 Watching upload progress
+
+Problem: the upload above is not fire-and-forget -- for a large file
+you want progress, like download() gives you.
+
+Upload progress arrives through the same updateFile as downloads,
+but on the remote side of the file: C<remote.uploaded_size> grows
+until C<remote.is_uploading_completed> is true. Register the file id
+with C<on_upload>; the id becomes known once the send is accepted,
+from the returned message content. C<< wait => 'accepted' >> is what
+makes this work: the default resolves on final delivery, by which
+point the upload has already finished and the watcher would never see
+a single update.
+
+    $td->send_file($chat_id, '/tmp/report.pdf', wait => 'accepted', sub {
+        my ($msg, $err) = @_;
+        die "send failed: $err->{message}\n" if $err;
+        my $file_id = $msg->{content}{document}{document}{id};
+        $td->on_upload($file_id, sub {
+            my ($file) = @_;
+            my $total = $file->{expected_size} // $file->{size} // 0;
+            my $done  = $file->{remote} ? $file->{remote}{uploaded_size} // 0 : 0;
+            printf "\ruploaded %d%%", int(100 * $done / $total) if $total > 0;
+            print "\nupload complete\n"
+                if $file->{remote} && $file->{remote}{is_uploading_completed};
+        });
+    });
+
+The watcher fires on every updateFile for that id and is removed
+automatically once the completing update has been delivered;
+C<< $td->on_upload($file_id, undef) >> removes it earlier. Early
+progress updates can precede the registration -- the file id does
+not exist before the send is accepted -- so the first events may be
+missed; correctness is not affected, only the first percentage
+printed.
+
+=head2 Sending photos, animations and other media
+
+Problem: send something other than a document.
+
+C<kind> picks the content type: C<document> (the default), C<photo>,
+C<video>, C<audio>, C<animation>, C<voice_note>, C<video_note>,
+C<sticker>.
+
+    $td->send_file($chat_id, '/tmp/chart.png', kind => 'photo',
+                   caption => 'this quarter', sub { ... });
+
+Telegram classifies media by the metadata it is given, so pass what
+the kind defines: C<width> and C<height> for photo, animation, video
+and sticker; C<duration> for the time-based kinds; C<title> and
+C<performer> for audio; C<length> for video_note.
+
+A Telegram animation, the thing the apps call a GIF, is an B<MP4>. A
+real C<.gif> sent as C<animation> is accepted without error and
+arrives as a plain document -- the conversion is yours to do, not the
+server's:
+
+    # convert first, e.g. with ffmpeg:
+    #   ffmpeg -i loop.gif -pix_fmt yuv420p loop.mp4
+    $td->send_file($chat_id, '/tmp/loop.mp4', kind => 'animation',
+                   duration => 3, width => 320, height => 240,
+                   sub { ... });
+
+Stickers and video notes have no caption in the schema, so a caption
+passed with them is dropped. An existing sticker is sent by its remote
+file id; an arbitrary local file will not pass sticker validation.
+
+=head2 A bot with buttons
+
+Problem: send an inline keyboard and react when someone taps it.
+
+Callback data is TL C<bytes>, which the JSON interface carries base64
+encoded. C<inline_keyboard> encodes it and C<on_callback_query>
+decodes it again, so your code only ever sees the plain string:
+
+    my $kb = $td->inline_keyboard([
+        [ { text => 'Yes', data => 'vote:yes' },
+          { text => 'No',  data => 'vote:no'  } ],
+        [ { text => 'Docs', url => 'https://example.org' } ],
+    ]);
+
+    $td->send_message($chat_id, 'Coming?', reply_markup => $kb, sub { });
+
+    $td->on_callback_query(sub {
+        my ($q) = @_;
+        # $q->{data} is 'vote:yes', already decoded
+        $td->answer_callback_query($q->{id},
+            text => "recorded $q->{data}", sub { });
+    });
+
+Answer every query: until you do, the tapping client shows a spinner.
+An answer with C<show_alert> set is shown as a dialog instead of a
+toast.
+
+Where C<$chat_id> comes from matters, and getting it wrong produces
+errors that do not explain themselves. Take it from an incoming
+update -- C<< $msg->{chat_id} >> in L</Reacting to incoming messages>,
+or C<< $q->{chat_id} >> on the query above. A bot cannot open a
+conversation: sending to a user id it has never heard from fails with
+"Chat not found", and resolving the chat first only moves the failure
+to "Not enough rights to send text messages to the chat". Both mean
+the same thing -- that user has not started the bot.
+
+=head2 Marking a chat read, and showing typing
+
+Problem: clear a chat's unread count, and look like a real client.
+
+    $td->mark_read($chat_id, sub { });          # last message
+    $td->mark_read($chat_id, message_ids => \@ids, sub { });
+
+TDLib only honours a read while the chat is open, so mark_read sends
+openChat and viewMessages as a pair. Without it an automated account
+accumulates unread counts forever.
+
+    $td->chat_action($chat_id, 'typing', sub { });
+
+The indicator expires by itself after a few seconds, so repeat it
+while the work lasts, and send C<cancel> when it ends early. Other
+actions: C<upload_document>, C<upload_photo>, C<upload_video>,
+C<upload_voice>, C<record_video>, C<record_voice>.
+
+=head2 Searching a chat
+
+Problem: find a message without paging the whole history.
+
+    $td->search_messages($chat_id, 'invoice', limit => 20, sub {
+        my ($msgs, $err, $info) = @_;
+        die "search failed: $err->{message}\n" if $err;
+        printf "%d of %d\n", scalar @$msgs, $info->{total_count};
+    });
+
+C<< $info->{next_from_message_id} >> continues the search: pass it
+back as C<from_message_id> for the next page.
+
+=head2 Dressing a bot: name, descriptions and photo
+
+Problem: set up a bot's profile from code instead of from BotFather.
+
+TDLib addresses a bot by user id, and a bot session's own id arrives
+as an option right after login, so C<my_id> covers the common case and
+these need no argument for it:
+
+    $bot->login(sub {
+        $bot->set_bot_name('Helper', sub { });
+        $bot->set_bot_short_description('answers questions', sub { });
+        $bot->set_bot_description('Ask me anything.', sub { });
+        $bot->set_bot_photo('/tmp/avatar.png', sub { });
+        $bot->set_commands([
+            [ 'start', 'Begin'    ],
+            [ 'help',  'Show help'],
+        ], sub { });
+    });
+
+The short description is the one-liner in the profile and in search
+results; the long description is what fills an empty chat with the
+bot. Pass C<language_code> to any of them to set a localised value,
+and C<bot_user_id> to dress a bot from an account that owns it rather
+than from the bot's own session.
+
+The signed-in account has its own set -- C<set_name>, C<set_bio>,
+C<set_username>, C<set_profile_photo> -- which take no user id
+because they always act on the account you are logged in as. Those
+four are for user accounts only: a bot session is refused them ("The
+method is not available to bots", and BOT_FALLBACK_UNSUPPORTED for
+the photo), which is why the set_bot_* family exists at all.
+
+=head2 Running a group
+
+Problem: moderate a group and keep its profile up to date.
+
+    $td->set_chat_title($chat_id, 'Release war room', sub { });
+    $td->set_chat_photo($chat_id, '/tmp/logo.png', sub { });
+    $td->add_chat_member($chat_id, $user_id, sub { });
+    $td->pin_message($chat_id, $message_id, silent => 1, sub { });
+
+Removing someone has two flavours. C<left> is the plain kick and they
+can come back; C<banned> removes and blocks them, with C<until> as a
+unix timestamp for a temporary ban:
+
+    $td->set_member_status($chat_id, $user_id, 'left', sub { });
+    $td->set_member_status($chat_id, $user_id, 'banned',
+                           until => time + 3600, sub { });
+
+C<block_user($user_id)> is the account-level block, independent of any
+chat; C<< block_user($user_id, unblock => 1) >> reverses it.
+
+=head2 Asking a question with a poll
+
+Problem: collect answers without parsing replies.
+
+    $td->send_poll($chat_id, 'Ship it?', [ 'Yes', 'Not yet' ], sub {
+        my ($msg, $err) = @_;
+        die "poll failed: $err->{message}\n" if $err;
+    });
+
+Polls here are anonymous unless you say otherwise -- the opposite of
+TDLib's own default, and what Telegram's clients actually create. Add
+C<multiple> for several answers, C<open_period> to close it after so
+many seconds, or C<quiz> with C<correct> for a quiz. Answers arrive as
+updateMessageContent for the poll message, carrying the new
+messagePoll content -- both updatePoll and updatePollAnswer are
+bots-only, so a user session never sees them. Watch for it with
+L<EV::Telegram::TDLib/"on_update($cb), on_error($cb)">.
+
+=head2 Text that is not ASCII
+
+Problem: your messages are in Russian, or Chinese, or contain emoji,
+and you want to be sure nothing mangles them.
+
+Pass characters and read characters. The module encodes on the way out
+and decodes on the way in, so there is nothing to do at the boundary:
+
+    binmode STDOUT, ':encoding(UTF-8)';
+
+    # escapes here so this page stays ASCII; write the letters directly
+    # in your own source and add "use utf8" so perl reads them as text
+    my $greeting = "\x{41F}\x{440}\x{438}\x{432}\x{435}\x{442}, \x{4E16}\x{754C}";
+    $td->send_message($chat_id, $greeting, sub { });
+
+    $td->on_message(sub {
+        my ($msg) = @_;
+        my $text = $msg->{content}{text}{text} // return;
+        print "$text\n";            # already characters
+        printf "%d characters\n", length $text;
+    });
+
+The one way to get this wrong is to encode it yourself first. Doing so
+sends each byte as its own character, and nothing complains:
+
+    use Encode ();
+    $td->send_message($chat_id, Encode::encode('UTF-8', $text), sub { });
+    # arrives as mojibake, with no error anywhere
+
+C<use utf8> matters only for literals in your own source. Text read
+from a socket, a file or a database is bytes until you decode it, so
+decode once where it enters and pass characters from there on. See
+L<EV::Telegram::TDLib/UNICODE> for the details.
+
+=head2 Calling a TDLib method with no wrapper
+
+Problem: use one of the roughly one thousand TDLib methods the mixins
+do not cover.
+
+C<send> takes any raw request hashref and correlates the reply by
+C<@extra>, which it assigns itself and returns. Never set C<@extra>
+by hand: a caller-supplied value is overwritten on purpose, because a
+collision would misroute a reply to the wrong callback. C<execute> is
+the synchronous twin for the few methods TDLib documents as
+synchronous; it needs no network and no authorization.
+
+    my $version = EV::Telegram::TDLib->execute(
+        { '@type' => 'getOption', name => 'version' });
+    print "TDLib $version->{value}\n";   # an optionValueString reply
+
+    my $extra;
+    $extra = $td->send({ '@type' => 'getOption', name => 'version' }, sub {
+        my ($res, $err) = @_;
+        die "getOption failed: $err->{message}\n" if $err;
+        print "async reply: $res->{value} (\@extra $extra)\n";
+        $td->close(sub { EV::break });
+    });
+
+This recipe runs with C<auto_auth =E<gt> 0> and no credentials at
+all; F<eg/06-raw-method.pl> is exactly that.
+
+=head2 Timing out a request
+
+Problem: do not wait forever for a reply that may never come.
+
+C<send> accepts a C<timeout> in seconds. On expiry the callback
+fails with a synthetic error -- code -1, message C<timeout>:
+
+    $td->send({ '@type' => 'getMe' }, sub {
+        my ($user, $err) = @_;
+        if ($err) {
+            if (($err->{code} // 0) == -1 && $err->{message} eq 'timeout') {
+                warn "getMe gave up after 5s\n";
+            } else {
+                warn "getMe failed: $err->{message}\n";
+            }
+            return;
+        }
+        print "hello $user->{first_name}\n";
+    }, timeout => 5);
+
+If TDLib's reply arrives after the timeout, it is dropped with a
+warning on stderr. It is never delivered to your callback a second
+time, and never to a later request that reused the C<@extra> sequence.
+
+=head2 Handling rate limits
+
+Problem: Telegram answered error code 429, "Too Many Requests:
+retry after N" -- and a naive immediate-retry loop is how accounts
+get limited.
+
+Code 429 means slow down. In this TDLib the generic error type is
+just C<code> and C<message>, so the delay lives in the message text;
+L<EV::Telegram::TDLib/"retry_after($err)"> digs it out, returning
+undef for anything that is not a 429 carrying a delay. The retry is
+then scheduled with an EV::timer, never a sleep and never an
+immediate retry:
+
+    sub send_with_backoff {
+        my ($req, $cb) = @_;
+        $td->send($req, sub {
+            my ($res, $err) = @_;
+            if (defined(my $wait = $td->retry_after($err))) {
+                $wait += 1;                               # a little margin
+                warn "rate limited, retrying in ${wait}s\n";
+                my $t; $t = EV::timer $wait, 0, sub {
+                    undef $t;
+                    send_with_backoff($req, $cb);
+                };
+                return;
+            }
+            $cb->($res, $err);
+        });
+    }
+
+    send_with_backoff({ '@type' => 'getMe' }, sub {
+        my ($user, $err) = @_;
+        warn "getMe failed: $err->{message}\n" if $err;
+    });
+
+This is a pattern for the CALLER, not module policy: the module
+retries nothing on its own, by design -- a wrong retry policy inside
+a binding hides the 429 signal and can make limiting worse. A real
+implementation should also cap the attempts and lengthen the wait on
+repeated 429s. And remember that TDLib already paces many
+operations internally, so a 429 you never see is normal operation,
+not a failure.
+
+A flood wait on a message send does not arrive as a 429 reply. With
+C<send_message> in the default C<sent> wait mode it surfaces as
+updateMessageSendFailed, whose message carries a C<sending_state>
+of type messageSendingStateFailed with a numeric C<retry_after>
+field in seconds (and C<can_retry>) -- the one place this TDLib
+offers the delay as a structured field. The send callback receives
+only the error object, so watch updateMessageSendFailed through
+C<on_update> when you want that value:
+
+    $td->on_update(sub {
+        my ($obj) = @_;
+        return unless ($obj->{'@type'} // '') eq 'updateMessageSendFailed';
+        my $state = $obj->{message}{sending_state} // {};
+        my $wait  = $state->{retry_after};
+        warn "message $obj->{old_message_id} failed, retry after $wait\n"
+            if defined $wait;
+    });
+
+=head2 Running several clients in one process
+
+Problem: run a user session and a bot session side by side.
+
+Just construct two clients. All clients share one reader thread and
+one default loop; each still needs its own C<database_directory>.
+
+    my $user = EV::Telegram::TDLib->new(
+        api_id => $ENV{TD_API_ID}, api_hash => $ENV{TD_API_HASH},
+        phone_number => $ENV{TD_PHONE},
+        database_directory => 'tdlib-user-db',
+        on_code => sub {
+            my ($info, $submit) = @_;
+            print "code: ";
+            chomp(my $code = <STDIN>);
+            $submit->($code);
+        },
+    );
+    my $bot = EV::Telegram::TDLib->new(
+        api_id => $ENV{TD_API_ID}, api_hash => $ENV{TD_API_HASH},
+        bot_token => $ENV{TD_BOT_TOKEN},
+        database_directory => 'tdlib-bot-db',
+    );
+
+    my $ready = 0;
+    $_->login(sub {
+        my (undef, $err) = @_;
+        die "login failed: $err->{message}\n" if $err;
+        print "both ready\n" if ++$ready == 2;
+    }) for $user, $bot;
+
+    EV::run;   # one loop drives both
+
+=head2 Shutting down cleanly, inside an application that already runs EV
+
+Problem: integrate a client into an app that already owns the loop,
+and shut down without corrupting the session database.
+
+Do not call C<EV::run> yourself; the app runs it. Do call C<close>:
+TDLib requires every client to be closed before exit, and dropping
+your last Perl reference does not close anything. An open client
+holds the default loop alive; C<keepalive(0)> releases that if the
+client must not keep the process running on its own.
+
+    my $td = EV::Telegram::TDLib->new(
+        api_id => $ENV{TD_API_ID}, api_hash => $ENV{TD_API_HASH},
+        bot_token => $ENV{TD_BOT_TOKEN},
+        database_directory => 'tdlib-bot-db',
+        on_error => sub { warn "tdlib: $_[0]\n" },
+    );
+    $td->login(sub {
+        my (undef, $err) = @_;
+        warn "login failed: $err->{message}\n" if $err;
+    });
+
+    my $sigint = EV::signal 'INT', sub {
+        print "shutting down\n";
+        $td->close(sub { EV::break });
+    };
+
+On close, in-flight requests, sends and downloads are failed with a
+synthetic C<client closed> error, so no callback is left hanging. If
+you forget C<close> entirely, an END block closes leftover clients
+and pumps the loop for a bounded interval -- a safety net, not a
+substitute.
+
+=head2 Forking: why not, and what to do instead
+
+Problem: you want a worker process doing Telegram work.
+
+Never fork with an open client. TDLib itself is not fork-safe, and
+every method of this module croaks after fork
+(C<cannot be used after fork>). Fork first, create the client in the
+child:
+
+    my $pid = fork();
+    die "fork: $!" unless defined $pid;
+    if ($pid == 0) {
+        # child: this process never made a client, so the pump it
+        # inherited was never used and creating one here is allowed
+        my $td = EV::Telegram::TDLib->new(
+            api_id => $ENV{TD_API_ID}, api_hash => $ENV{TD_API_HASH},
+            bot_token => $ENV{TD_BOT_TOKEN},
+            database_directory => 'tdlib-worker-db',   # per process
+            on_error => sub { warn "tdlib: $_[0]\n" },
+        );
+        $td->login(sub { ... });
+        EV::run;
+        exit 0;
+    }
+    # parent: create its own client here, or none
+
+Each process needs its own database directory: TDLib locks the
+session database, and two processes sharing one directory is as
+broken as two clients sharing one.
+
+=head1 SEE ALSO
+
+L<EV::Telegram::TDLib> (the reference manual), L<Alien::TDLib>,
+L<EV>, the scripts in F<eg/>, L<https://core.telegram.org/tdlib>.
+
+=head1 AUTHOR
+
+vividsnow
+
+=head1 LICENSE
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.
+
+=cut

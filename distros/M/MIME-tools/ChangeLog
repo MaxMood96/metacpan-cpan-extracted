@@ -1,3 +1,22 @@
+5.518	  2026-08-26  Dianne Skoll <dianne@skoll.ca>
+
+	* VERSION 5.518 RELEASED
+
+	* Add tests for encoded "boundary=XXX" parameters and set
+	  the ambiguous-parse flag if any are found.  Patch courtesy
+	  of Dominik Csapak <d.csapak@proxmox.com>
+
+	  MIME::tools chooses to decode encoded boundary parameters.
+	  MUA behaviors differ; Claws-Mail decodes them while Thunderbird
+	  does not.
+
+	* Don't ignore invalid whitespace after "boundary=XXX" parameter.
+	  Patch courtesy of Dominik Csapak <d.csapak@proxmox.com>
+
+	* Ignore comments between tokens.  A header parameter can be
+	  written foo(comment)=bar and it's the same as foo=bar.
+	  Patch courtesy of Dominik Csapak <d.csapak@proxmox.com>
+
 5.517	  2026-02-10  Dianne Skoll <dianne@skoll.ca>
 
 	* VERSION 5.517 RELEASED

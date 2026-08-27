@@ -1,7 +1,7 @@
 ---
 abstract: 'store/restore file handles'
 author:
-  - 'Diab Jerius <djerius@cpan.org>'
+  - 'Diab Jerius <djerius@cfa.harvard.edu>'
 build_requires:
   ExtUtils::MakeMaker: '0'
   File::Slurper: '0'
@@ -15,7 +15,7 @@ build_requires:
 configure_requires:
   Module::Build::Tiny: '0.034'
 dynamic_config: 0
-generated_by: 'Dist::Zilla version 6.030, CPAN::Meta::Converter version 2.150010'
+generated_by: 'Dist::Zilla version 6.037, CPAN::Meta::Converter version 2.150010'
 license: gpl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -32,7 +32,7 @@ no_index:
 provides:
   IO::ReStoreFH:
     file: lib/IO/ReStoreFH.pm
-    version: '0.11'
+    version: '0.13'
 requires:
   Carp: '0'
   FileHandle::Fmode: '0'
@@ -46,8 +46,8 @@ requires:
   warnings: '0'
 resources:
   bugtracker: https://rt.cpan.org/Public/Dist/Display.html?Name=IO-ReStoreFH
-  repository: https://gitlab.com/djerius/io-restorefh.git
-version: '0.11'
-x_generated_by_perl: v5.36.1
-x_serialization_backend: 'YAML::Tiny version 1.73'
+  repository: https://codeberg.org/djerius/p5-IO-ReStoreFH.git
+version: '0.13'
+x_generated_by_perl: v5.42.1
+x_serialization_backend: 'YAML::Tiny version 1.76'
 x_spdx_expression: GPL-3.0-only

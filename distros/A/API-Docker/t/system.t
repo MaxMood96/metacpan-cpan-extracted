@@ -109,9 +109,15 @@ subtest 'events' => sub {
 
   my $events = $docker->system->events(since => 1705290000, until => 1705310000);
 
-  is(ref $events, 'ARRAY', 'events is array');
-
-  unless (is_live()) {
+  if (is_live()) {
+    # A real daemon may legitimately have no events in the requested
+    # window, in which case the body is empty and _request returns
+    # undef rather than an arrayref.
+    ok(!defined($events) || ref($events) eq 'ARRAY',
+      'events is array or undef (empty window is a valid live response)');
+  }
+  else {
+    is(ref $events, 'ARRAY', 'events is array');
     is($events->[0]{Type}, 'container', 'event type');
     is($events->[0]{Action}, 'start', 'event action');
   }

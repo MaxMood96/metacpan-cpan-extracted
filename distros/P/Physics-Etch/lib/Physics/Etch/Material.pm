@@ -3,7 +3,7 @@ package Physics::Etch::Material;
 use strict;
 use warnings;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 # A thin film / bulk material that can be etched or used as mask/substrate.
 #

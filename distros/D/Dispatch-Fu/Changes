@@ -94,3 +94,23 @@ Revision history for Dispatch::Fu.
        first element ("$_[0]") of "@_"
      - updated POD, added a test for "xshift_and_deref"
      - fixed tests failing for 5.8.9 (thanks @Bscan on Discord #perl!)
+
+1.07 Thu Aug 27 12:02:34 2026
+     - expanded the test suite to 426 tests and achieved 100% statement,
+       branch, condition, subroutine, and POD coverage for Dispatch::Fu
+     - fixed "xshift_and_deref" to correctly dereference SCALAR references
+       and return undef for unsupported input
+     - fixed dispatch handling for false-but-valid case names such as "0"
+     - fixed dispatch state handling so cases from a failed dispatch cannot
+       leak into subsequent dispatches
+     - fixed the no-cases-defined diagnostic path
+     - changed "xdefault" to use exact literal matching rather than regular
+       expression matching, including correct handling of "0" and case names
+       containing regex metacharacters
+     - removed the unnecessary Test::Warn and Test::Exception test
+       dependencies
+     - substantially updated and clarified the POD with API documentation,
+       usage examples, return-value behavior, diagnostics, case lifecycle,
+       and default handling
+     - updated README.md to reflect the module's production-ready status and
+       current API and behavior

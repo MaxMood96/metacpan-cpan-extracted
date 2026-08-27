@@ -10,6 +10,7 @@ use Exporter 'import';
 our @EXPORT = qw(
   test_docker
   load_fixture
+  load_fixture_raw
   is_live
   can_write
   skip_unless_write
@@ -26,6 +27,16 @@ sub load_fixture {
   my $file = $FIXTURES_DIR->child("$name.json");
   croak "Fixture not found: $file" unless $file->exists;
   return decode_json($file->slurp_utf8);
+}
+
+# Some fixtures are not JSON: the framed log/exec streams are captured
+# engine bytes, and the build/pull event streams are newline-delimited JSON
+# whose line framing is the thing under test. Both must come back byte-exact.
+sub load_fixture_raw {
+  my ($name) = @_;
+  my $file = $FIXTURES_DIR->child($name);
+  croak "Fixture not found: $file" unless $file->exists;
+  return $file->slurp_raw;
 }
 
 sub is_live {

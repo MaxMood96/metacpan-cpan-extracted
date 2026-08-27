@@ -11,33 +11,37 @@ test_wfh 'new: fh >', '>', sub { IO::ReStoreFH->new( $_[0] ) };
 
 test_wfh 'new: fh >>', '>>', sub { IO::ReStoreFH->new( $_[0] ) };
 
+test_wfh 'new: fh +<', '+<', sub { IO::ReStoreFH->new( $_[0] ) };
+
 test_wfh 'new: fh +>', '+>', sub { IO::ReStoreFH->new( $_[0] ) };
+
+test_wfh 'new: fh +>>', '+>>', sub { IO::ReStoreFH->new( $_[0] ) };
 
 like( dies { IO::ReStoreFH->new( 3.2 ) }, qr/must be opened/, 'bad fd' );
 
 like(
-    dies { IO::ReStoreFH->new( bless {} ) },
+    dies { IO::ReStoreFH->new( bless {}, 'My::BogusFH' ) },
     qr/not an open filehandle/,
-    'no fileno method'
+    'no fileno method',
 );
 
 like(
     dies { IO::ReStoreFH->new( IO::Handle->new ) },
     qr/not an open filehandle/,
-    'undefined fileno'
+    'undefined fileno',
 );
 
 # try and make fcntl fail to test rest of mode setting code
 {
     package MyTest;
     sub new    { bless {}, shift; }
-    sub fileno { return 22; }
+    sub fileno { return 22; }  ## no critic (BuiltinHomonyms)
 }
 
 like(
     dies { IO::ReStoreFH->new( MyTest->new ) },
     qr/not an open filehandle/i,
-    'defined fileno'
+    'defined fileno',
 );
 
 done_testing;

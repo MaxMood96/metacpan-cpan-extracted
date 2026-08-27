@@ -1,0 +1,6 @@
+# Demo::Cards - the card processor the shop calls.
+#
+# No views and no static mount: this service answers JSON only. It exists to
+# be a SECOND service.name in the trace, so the map has an edge in it.
+
+plugins: {}

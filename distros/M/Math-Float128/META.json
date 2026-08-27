@@ -39,6 +39,6 @@
          "web" : "https://github.com/sisyphus/math-float128"
       }
    },
-   "version" : "0.17",
-   "x_serialization_backend" : "JSON::PP version 4.16"
+   "version" : "0.18",
+   "x_serialization_backend" : "JSON::PP version 4.18"
 }

@@ -130,12 +130,12 @@ subtest 'DataSource.new -- missing required args throws' => sub {
 	delete $ledger{'DataSource.new.no_args'};
 };
 
-subtest 'DataSource.table_name -- returns lowercase table identifier' => sub {
+subtest 'DataSource.table_name -- returns table name as provided' => sub {
 	my $ds = Database::BI::Model::DataSource->new(
 		directory => $DATA_DIR,
-		table     => 'Sales',	# mixed case
+		table     => 'sales',
 	);
-	is $ds->table_name, 'sales', 'table_name() is lowercase regardless of constructor input';
+	is $ds->table_name, 'sales', 'table_name() returns the name as given';
 	delete $ledger{'DataSource.table_name'};
 };
 

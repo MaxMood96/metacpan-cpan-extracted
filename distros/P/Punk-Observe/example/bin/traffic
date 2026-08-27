@@ -1,0 +1,182 @@
+#!/usr/bin/env perl
+# Mock live user traffic against the shop.
+#
+#   ./bin/traffic --seconds 120 --incident
+#   ./bin/traffic --rate 20            twenty requests a second, no incident
+#
+# Runs on its own against an already-running demo, or is driven by ./bin/demo.
+#
+# THE REQUESTS ARE REAL. This is Fetch against a real HTTP server, so every
+# span, metric and log the observe app receives was produced by the
+# instrumentation rather than written by this script. Nothing here fabricates
+# telemetry.
+use 5.010;
+use strict;
+use warnings;
+use Getopt::Long ();
+use Time::HiRes ();
+use Fetch ();
+use POSIX ();
+use IO::Handle ();
+
+my %o = (
+    shop     => 'http://127.0.0.1:5000',
+    cards    => 'http://127.0.0.1:5002',
+    seconds  => 60,
+    rate     => 8,
+    # How many requests may be in flight at once. Enough that a three-second
+    # checkout does not stop the browsing traffic, which is what a real client
+    # population looks like and what makes an error RATE mean anything.
+    concurrency => 12,
+    incident => 0,
+    quiet    => 0,
+);
+Getopt::Long::GetOptions(\%o,
+    'shop=s', 'cards=s', 'seconds=i', 'rate=i', 'concurrency=i',
+    'incident!', 'quiet')
+    or die "usage: $0 [--shop URL] [--seconds N] [--rate N] "
+         . "[--concurrency N] [--incident]\n";
+
+$| = 1;
+
+# A weighted mix, because uniform traffic makes every route look the same and
+# a demo is about telling them apart. Checkout is the interesting one and is
+# also the one that breaks, so it is not the most common - a real shop has far
+# more browsing than buying, and that ratio is what makes an error RATE mean
+# something.
+my @MIX = (
+    ( [ 'GET', '/' ] )            x 3,
+    ( [ 'GET', '/product/1' ] )   x 2,
+    ( [ 'GET', '/product/2' ] )   x 2,
+    ( [ 'GET', '/product/4' ] )   x 1,
+    ( [ 'GET', '/cart' ] )        x 2,
+    ( [ 'POST', '/checkout' ] )   x 5,
+    ( [ 'GET', '/health' ] )      x 1,
+    ( [ 'GET', '/product/99' ] )  x 1,     # a real 404, so 4xx is not always 0
+);
+
+# One user agent for the whole run, so connections are reused the way a real
+# client would reuse them. Every Fetch call returns a Future; ->get awaits it.
+my $UA = Fetch->new(timeout => 10);
+
+sub incident {
+    my ($on) = @_;
+    my $r = eval {
+        $UA->put("$o{cards}/incident?on=" . ($on ? 1 : 0))->get
+    };
+    return $r ? 1 : 0;
+}
+
+my $start = Time::HiRes::time();
+my $end   = $start + $o{seconds};
+
+# The incident occupies the middle third, so the run has a healthy baseline
+# before it and a recovery after it. Without both, there is nothing to compare
+# the spike against and no transition back to watch.
+my ($break_at, $fix_at) = ($start + $o{seconds} / 3,
+                           $start + $o{seconds} * 2 / 3);
+my $broken = 0;
+
+my %count;
+my $sent = 0;
+my $interval = 1 / ($o{rate} || 1);
+
+print "driving $o{shop} at ~$o{rate}/s for $o{seconds}s"
+    . ($o{incident} ? " (incident in the middle third)" : "") . "\n"
+    unless $o{quiet};
+
+# REQUESTS OVERLAP, because real ones do.
+#
+# Awaiting each response before sending the next makes the CLIENT the
+# bottleneck the moment the server is slow: during the incident a checkout
+# takes three seconds, so a sequential driver sends one request every three
+# seconds instead of eight a second - and the incident it exists to
+# demonstrate produces a handful of requests, a handful of errors, and a
+# picture of a service that is mostly fine.
+#
+# CONCURRENCY HERE IS PROCESSES, not futures. A Fetch with no event loop
+# resolves a future only when something calls ->get on it, so launching
+# several and polling them is a set of requests that never leave - which is
+# exactly what the first attempt did, and it reported every one as "no
+# answer". A script has no loop to join, so the honest way to have N requests
+# in flight is N processes.
+my $KIDS = $o{concurrency} < 1 ? 1 : $o{concurrency};
+
+pipe(my $rd, my $wr) or die "pipe: $!";
+$wr->autoflush(1);
+
+my @pids;
+for my $k (0 .. $KIDS - 1) {
+    my $pid = fork();
+    die "fork: $!" unless defined $pid;
+    if ($pid) { push @pids, $pid; next }
+
+    # THE CHILD. It never writes to stdout - the parent owns the terminal, and
+    # N processes interleaving progress characters would be unreadable. One
+    # line per request goes up the pipe and the parent renders it.
+    close $rd;
+    my $ua = Fetch->new(timeout => 10);
+    my $per = $interval * $KIDS;          # each child keeps 1/N of the rate
+    # Stagger the start, so N children do not all fire on the same tick.
+    Time::HiRes::sleep($interval * $k);
+
+    while ((my $now = Time::HiRes::time()) < $end) {
+        my $pick = $MIX[ int rand @MIX ];
+        my ($method, $path) = @$pick;
+        my $res = eval {
+            $method eq 'POST'
+                ? $ua->post("$o{shop}$path",
+                            headers => { 'Content-Type' => 'application/json' },
+                            body => '{}')->get
+                : $ua->get("$o{shop}$path")->get;
+        };
+        print {$wr} (($res ? $res->status : 0) . "\n");
+        my $spent = Time::HiRes::time() - $now;
+        Time::HiRes::sleep($per - $spent) if $spent < $per;
+    }
+    close $wr;
+    POSIX::_exit(0);
+}
+close $wr;
+
+# THE PARENT drives the incident and renders what the children report. It does
+# not send traffic itself: a parent that also made requests would block on a
+# three-second checkout and stop flipping the incident on time, which is the
+# one thing it has to be punctual about.
+while (my $line = <$rd>) {
+    my $now = Time::HiRes::time();
+    if ($o{incident} && !$broken && $now >= $break_at) {
+        $broken = 1;
+        incident(1);
+        print "\n  -- the card processor started timing out --\n" unless $o{quiet};
+    }
+    elsif ($o{incident} && $broken == 1 && $now >= $fix_at) {
+        $broken = 2;
+        incident(0);
+        print "\n  -- the card processor recovered --\n" unless $o{quiet};
+    }
+
+    chomp $line;
+    my $status = $line + 0;
+    $count{$status}++;
+    $sent++;
+    unless ($o{quiet}) {
+        # One character per request: . ok, 4 a 4xx, ! a 5xx, x no answer.
+        print $status == 0   ? 'x'
+            : $status >= 500 ? '!'
+            : $status >= 400 ? '4'
+            :                  '.';
+        print "\n" if $sent % 72 == 0;
+    }
+}
+close $rd;
+waitpid $_, 0 for @pids;
+
+incident(0) if $o{incident} && $broken;
+
+print "\n\n" unless $o{quiet};
+printf "%d requests\n", $sent;
+for my $s (sort { $a <=> $b } keys %count) {
+    printf "  %-3s %5d%s\n", ($s || 'err'), $count{$s},
+        $s >= 500 ? '   <- the incident' : '';
+}

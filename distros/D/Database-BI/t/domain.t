@@ -182,6 +182,88 @@ subtest 'open path BV-empty: empty path param yields 404' => sub {
 };
 
 # ======================================================================
+# DOMAIN 2b: /open with bank-export CSV shapes (bug-regression)
+#
+# Three production bugs triggered when opening a real bank-export CSV:
+#
+#  Bug 1 (case):  table stem was lowercased before file lookup.  On a
+#                 case-sensitive Linux filesystem "MyData.csv" was not found
+#                 when the derived table name was "mydata".
+#  Bug 2 (space): first column "Account Number" (contains a space) is not a
+#                 valid identifier; Database::Abstraction croaked at new().
+#  Bug 3 (empty): first safe-name column "Check" was always empty; D::A's
+#                 empty_is_undef => 1 made it undef, so the row-sentinel
+#                 grep silently dropped every row that had no check number.
+# ======================================================================
+
+subtest 'open path BV-mixed-case-stem: MixedCase.csv opens all rows (bug 1)' => sub {
+	# The file stem has mixed case; the controller must NOT lowercase it
+	# before calling open_table or DataSource will look for "mixedcase.csv".
+	Mojo::File->new("$TMPDIR/MixedCase.csv")->spew("id,label\n1,Alpha\n2,Beta\n");
+	$t->get_ok('/open?path=' . url_escape("$TMPDIR/MixedCase.csv"))
+		->status_is(200, 'bug 1: mixed-case stem opens without error')
+		->content_like(qr/Alpha/, 'bug 1: first row data visible')
+		->content_like(qr/Beta/,  'bug 1: second row data visible');
+	$t->content_unlike(qr/Could not open &quot;MixedCase/, 'bug 1: no server-side error message');
+};
+
+subtest 'open path BV-spaced-header: "Account Number" first col opens all rows (bug 2)' => sub {
+	# "Account Number" is not a valid SQL identifier; _detect_file_info must
+	# fall through to the first safe column ("Date") so D::A construction succeeds.
+	Mojo::File->new("$TMPDIR/spending.csv")->spew(
+		"Account Number,Date,Amount\nXX1234,2026-01-01,42.00\nXX1234,2026-01-02,13.50\n"
+	);
+	$t->get_ok('/open?path=' . url_escape("$TMPDIR/spending.csv"))
+		->status_is(200, 'bug 2: CSV with spaced first-col header opens without error')
+		->content_like(qr/42\.00/, 'bug 2: first row data visible')
+		->content_like(qr/13\.50/, 'bug 2: second row data visible');
+	$t->content_unlike(qr/unsafe id column name|Could not open &quot;spending/, 'bug 2: no D::A identifier error');
+};
+
+subtest 'open path BV-empty-safe-col: empty sentinel col shows all rows (bug 3)' => sub {
+	# "ref" is the first safe-identifier column but is empty in every row.
+	# D::A uses empty_is_undef; picking "ref" as id would drop every row.
+	# _detect_file_info must scan the data row and pick "description" instead.
+	Mojo::File->new("$TMPDIR/bankstmt.csv")->spew(
+		"Account Number,ref,description,amount\n" .
+		"XX1234,,Coffee,4.50\n" .
+		"XX1234,,Groceries,23.10\n" .
+		"XX1234,,Salary,1500.00\n"
+	);
+	$t->get_ok('/open?path=' . url_escape("$TMPDIR/bankstmt.csv"))
+		->status_is(200, 'bug 3: CSV with empty safe-col sentinel opens without error')
+		->content_like(qr/Coffee/,    'bug 3: row 1 visible')
+		->content_like(qr/Groceries/, 'bug 3: row 2 visible')
+		->content_like(qr/Salary/,    'bug 3: row 3 visible -- not filtered out');
+};
+
+subtest 'open path BV-large-spaced-header: spaced col names survive > 16 KB file (bug 4)' => sub {
+	# DBD::CSV (used by Database::Abstraction for files > 16 KB) sanitizes column
+	# names: "Account Number" -> "account_number".  The slurp path
+	# (Text::xSV::Slurp) preserves original names.  DataSource now passes the
+	# actual file size as max_slurp_size to force the slurp path and prevent the
+	# restricted-hash "disallowed key" crash at render time.
+	my $header = "Account Number,Date,Description,Amount\n";
+	my @rows;
+	for my $i (1 .. 400) {
+		push @rows, sprintf("ACC%05d,2024-%02d-%02d,Transaction %d,%.2f\n",
+			$i, ($i % 12) + 1, ($i % 28) + 1, $i, $i * 1.5);
+	}
+	my $content = $header . join('', @rows);
+	# Verify the generated file actually exceeds the 16 KB slurp threshold.
+	ok length($content) > 16 * 1024, "bug 4: test file is > 16 KB (" . length($content) . " bytes)";
+
+	Mojo::File->new("$TMPDIR/largebankstmt.csv")->spew($content);
+	$t->get_ok('/open?path=' . url_escape("$TMPDIR/largebankstmt.csv"))
+		->status_is(200, 'bug 4: large CSV with spaced header opens without crash')
+		->content_like(qr/Account Number/, 'bug 4: original column header preserved in table')
+		->content_like(qr/ACC00001/,       'bug 4: first row data visible')
+		->content_like(qr/ACC00400/,       'bug 4: last row data visible');
+	$t->content_unlike(qr/disallowed key|restricted hash|internal server error/i,
+		'bug 4: no restricted-hash crash or server error');
+};
+
+# ======================================================================
 # DOMAIN 3: Browse path domain -- GET /browse?path=
 #
 # Default: $ENV{HOME} // '/' when ?path= is absent.

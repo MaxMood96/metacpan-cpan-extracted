@@ -1,5 +1,9 @@
 Revision history for Hyperman
 
+0.36    2026-08-27
+        - FIXES: hm_bus.h and hm_atomic.h are now installed and published, so
+          a consumer with Hyperman installed can build the cross-worker bus.
+
 0.35    2026-08-25
         - ADDS: completion-mode reads on the io_uring backend, on by default
           there and off with run(completion => 0)

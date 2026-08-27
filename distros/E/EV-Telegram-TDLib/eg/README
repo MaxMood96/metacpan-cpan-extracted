@@ -1,0 +1,52 @@
+EV::Telegram::TDLib examples
+============================
+
+Prerequisites
+-------------
+Get api_id and api_hash for your application at https://my.telegram.org
+(API development tools). Credentials come from the environment, never
+from source:
+
+  TD_API_ID      application api_id
+  TD_API_HASH    application api_hash
+  TD_PHONE       phone number in international format (user login)
+  TD_BOT_TOKEN   bot token from BotFather (bot login)
+  TD_DATABASE_DIRECTORY  optional, overrides the default session directory
+
+WARNING: the database directory holds the session. Whoever reads it owns
+the account; treat it as exactly as sensitive as a password. Do not
+commit it.
+
+Run the examples from the distribution root, e.g.:
+
+  perl -Mblib eg/01-login.pl
+
+Scripts
+-------
+01-login.pl         user login (phone, code, 2FA); creates the session database
+02-bot-echo.pl      bot login via token; echoes incoming text messages
+03-list-chats.pl    loads the chat list and prints id and title per chat
+04-send-message.pl  sends a markdown message and waits for real delivery
+05-download-file.pl downloads a file id with progress percentage
+06-raw-method.pl    raw send()/execute() for methods the mixins do not wrap
+07-gtk4-chat.pl     a GTK4 chat window driven by EV, not by gtk_main
+08-tickit-chat.pl   the same two panes in a terminal, also driven by EV
+09-mcp-server.pl    exposes Telegram as MCP tools over JSON-RPC on stdio
+
+07-gtk4-chat.pl needs GTK4 and Glib::Object::Introspection. It loads
+them at run time, so the file still compiles where they are absent.
+EV::Glib embeds the glib context into EV, which is what lets one loop
+drive both the widgets and the TDLib pump: there is no gtk_main and no
+$app->run anywhere in it.
+
+08-tickit-chat.pl needs Tickit and IO::Async::Loop::EV, loaded the same
+way at run time. Tickit runs on IO::Async, and IO::Async::Loop::EV backs
+that with EV, so the terminal and the TDLib pump share one loop just as
+EV::Glib arranges for GTK4.
+
+09-mcp-server.pl speaks the newline-delimited JSON-RPC that MCP clients
+use for local servers. It reads stdin through an EV::io watcher rather
+than a blocking loop, so the protocol and the TDLib pump share one loop,
+and a tools/call is answered when TDLib replies instead of by waiting
+for it. It needs a session that already exists: a server started on
+stdio has nowhere to ask for a login code, so run 01-login.pl first.

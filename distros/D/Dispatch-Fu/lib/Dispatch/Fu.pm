@@ -5,7 +5,7 @@ use warnings;
 use Exporter qw/import/;
 use Carp qw/carp croak/;
 
-our $VERSION       = q{1.06};
+our $VERSION       = q{1.07};
 our @EXPORT        = qw(dispatch on cases xdefault xshift_and_deref);
 our @EXPORT_OK     = qw(dispatch on cases xdefault xshift_and_deref);
 
@@ -35,13 +35,18 @@ sub dispatch (&@) {
     my $code_ref  = shift;    # catch sub ref that was coerced from the 'dispatch' BLOCK
     my $match_ref = shift;    # catch the input reference passed after the 'dispatch' BLOCK
 
+    # A failed dispatch can exit before the normal reset below. Start every
+    # dispatch from a clean table so cases never leak between calls.
+    _reset_default_handler;
+
+    croak qq{Dispatch::Fu [warning]: no cases defined. Make sure no semicolons are in places that need commas!} if not @_;
+
     # build up dispatch table for each k/v pair preceded by 'on'
-    while ( my $key = shift @_ ) {
-        my $HV = shift @_;
+    while (@_) {
+        my $key = shift @_;
+        my $HV  = shift @_;
         $DISPATCH_TABLE->{$key} = _to_sub($HV);
     }
-
-    croak qq{Dispatch::Fu [warning]: no cases defined. Make sure no semicolons are in places that need commas!} if not %$DISPATCH_TABLE;
 
     # call $code_ref that needs to return a valid bucket name
     my $key = $code_ref->($match_ref);
@@ -51,17 +56,18 @@ sub dispatch (&@) {
     # call subroutine ref defined as the v in the k/v $DISPATCH_TABLE->{$key} slot
     my $sub_to_call = $DISPATCH_TABLE->{$key};
 
-    # reset table, happens after call to CODE ref so that C<cases> is available inside
-    # of the body of the sub
+    # Reset before invoking the selected handler so one dispatch cannot leak
+    # cases into the next call, even if the handler dies. C<cases> is intended
+    # for introspection while the classification block is running.
     _reset_default_handler;
 
     return $sub_to_call->($match_ref);
 }
 
-# on accumulater, wants h => v pair, where h is a static bucket string and v is a sub ref
+# on accumulator: accepts a key/value pair where the key is a static case name and the value is a subroutine reference
 sub on (@) {
     my ($key, $val) = @_;
-    # detect situations like when instead of a comma, "on" sits behind a semicolon
+    # Detect situations where "on" follows a semicolon instead of a comma.
     carp qq{Dispatch::Fu [warning]: "on $key" used in void context is always a mistake. The "on" method always follows a comma!} unless wantarray;
     return @_;
 }
@@ -70,18 +76,19 @@ sub on (@) {
 # Note: $default defaults to q{default}; i.e., if the name of the
 # default case is not specified, the string 'default' is returned
 sub xdefault($;$) {
-  my ($case, $default) = @_;
-  if ($case and grep { /$case/ } (cases)){
-    return $case;
-  }
-  return (defined $default) ? $default : q{default};
+    my ($case, $default) = @_;
+    if (defined $case and grep { $_ eq $case } cases) {
+        return $case;
+    }
+    return (defined $default) ? $default : q{default};
 }
 
 # for multi-assignment syntax, given the first reference in the parameter list; e.g., "my ($x, $y, $z) = ..."
 sub xshift_and_deref(@) {
     return %{ +shift } if ref $_[0] eq q{HASH};
     return @{ +shift } if ref $_[0] eq q{ARRAY};
-    return shift @_    if ref $_[0] eq q{SCALAR};
+    return ${ +shift } if ref $_[0] eq q{SCALAR};
+    return;
 }
 
 # utility sub to force a BLOCK into a sub reference
@@ -97,396 +104,376 @@ __END__
 
 =head1 NAME
 
-Dispatch::Fu - Converts any complicated conditional dispatch situation into familiar static hash-key based dispatch
+Dispatch::Fu - Compute a static key and dispatch to the corresponding Perl handler
 
 =head1 SYNOPSIS
 
   use strict;
   use warnings;
-  use Dispatch::Fu; # exports 'dispatch', 'cases', 'xdefault', and 'on'
+  use Dispatch::Fu;
 
-  my $INPUT = [qw/1 2 3 4 5/];
+  my $input = [qw/1 2 3 4 5/];
 
-  my $result  = dispatch {
-      my $input_ref = shift;
-      return ( scalar @$input_ref > 5 )
-       ? q{case5}
-       : sprintf qq{case%d}, scalar @$input_ref;
-  } $INPUT,
-    on case0 => sub { my $INPUT = shift; return qq{case 0}},
-    on case1 => sub { my $INPUT = shift; return qq{case 1}},
-    on case2 => sub { my $INPUT = shift; return qq{case 2}},
-    on case3 => sub { my $INPUT = shift; return qq{case 3}},
-    on case4 => sub { my $INPUT = shift; return qq{case 4}},
-    on case5 => sub { my $INPUT = shift; return qq{case 5}};
+  my $result = dispatch {
+      my $values = shift;
+
+      return scalar(@$values) > 5
+        ? q{bucket5}
+        : sprintf q{bucket%d}, scalar @$values;
+  }
+  $input,
+    on bucket0 => sub { return q{bucket 0} },
+    on bucket1 => sub { return q{bucket 1} },
+    on bucket2 => sub { return q{bucket 2} },
+    on bucket3 => sub { return q{bucket 3} },
+    on bucket4 => sub { return q{bucket 4} },
+    on bucket5 => sub { return q{bucket 5} };
+
+  print "$result\n";    # bucket 5
+
+C<Dispatch::Fu> exports C<dispatch>, C<on>, C<cases>, C<xdefault>, and
+C<xshift_and_deref> by default. The same names are also available through
+C<@EXPORT_OK>.
 
 =head1 DESCRIPTION
 
-C<Dispatch::Fu> provides an idiomatic and succinct way to organize a C<HASH>-based
-dispatch table by first computing a static key using a developer defined process.
-This static key is then used immediate to execute the subroutine reference registered
-to the key.
+C<Dispatch::Fu> provides a small, idiomatic layer around Perl's familiar
+hash-based dispatch-table pattern. Instead of requiring the input value to
+already be a suitable hash key, a C<dispatch> block computes a static key from
+whatever input and application rules are appropriate. That key selects a
+handler registered with C<on>.
 
-This module presents a generic structure that can be used to implement all of the past
-attemts to bring things to Perl like, I<switch> or I<case> statements, I<given>/I<when>,
-I<smartmatch>, etc.
+This is useful when the decision depends on ranges, several values, request
+metadata, normalization, or other logic that would otherwise grow into a long
+C<if>/C<elsif> chain. The classification logic remains ordinary Perl; the
+resulting action remains an ordinary hash-style dispatch.
 
-=head2 The Problem
+For example, a traditional dispatch table works naturally when C<$action> is
+already one of a fixed set of keys:
 
-C<HASH> based dispatching in Perl is a very fast and well established way
-to organize your code.  A dispatch table can be fashioned easily when the
-dispatch may occur on a single variable that may be one or more static
-strings suitable to serve also as C<HASH> a key.
-
-For example, the following is more or less a classical example of this approach
-that is fundamentally based on a 1:1 mapping of a value of C<$action> to a
-C<HASH> key defined in C<$dispatch>:
-
-  my $CASE = get_case(); # presumed to return one of the hash keys used below
-
-  my $dispatch = {
-    do_dis  => sub { ... },
-    do_dat  => sub { ... },
-    do_deez => sub { ... },
-    do_doze => sub { ... },
+  my $handlers = {
+      start => sub { ... },
+      stop  => sub { ... },
   };
 
-  if (not $CASE or not exists $dispatch->{$CASE}) {
-    die qq{case not supported\n};
+  die "Unsupported action\n"
+    if not defined $action or not exists $handlers->{$action};
+
+  my $result = $handlers->{$action}->();
+
+C<Dispatch::Fu> adds a classification stage when the key must first be derived:
+
+  my $result = dispatch {
+      my $value = shift;
+
+      return q{small}  if $value < 10;
+      return q{medium} if $value < 100;
+      return q{large};
   }
+  $value,
+    on small  => sub { ... },
+    on medium => sub { ... },
+    on large  => sub { ... };
 
-  my $result  = $dispatch->{$CASE}->();
+The value passed to C<dispatch> is passed unchanged to both the classification
+block and the selected handler.
 
-But this nice situation breaks down if C<$CASE> is a value that is not suitable
-for us as a C<HASH> key, is a range of values, or a single variable (e.g.,
-C<$CASE>) is not sufficient to determine what case to dispatch. C<Dispatch::Fu>
-solves this problem by providing a stage where a static key might be computed
-or classified.
+=head1 API
 
-=head2 The Solution
+=head2 dispatch BLOCK, INPUT, CASES
 
-C<Dispatch::Fu> solves the problem by providing a I<Perlish> and I<idiomatic>
-hook for computing a static key from an arbitrarily defined algorithm written
-by the developer using this module.
+  my $result = dispatch {
+      my $input = shift;
+      return q{some_case};
+  }
+  $input,
+    on some_case  => sub { ... },
+    on other_case => sub { ... };
 
-The C<dispatch> keyword and associated lexical block (I<that should be treated
-as the body of a subroutine that receives exactly one parameter>), determines
-what I<case> defined by the C<on> keyword is immediately executed.
+C<dispatch> coerces C<BLOCK> to a subroutine reference. The block receives the
+single C<INPUT> scalar and must return the name of a registered case.
 
-The simple case above can be trivially replicated below using C<Dispatch::Fu>,
-as follows:
+C<INPUT> can be any scalar value, including a reference. A reference is often
+convenient when the classification decision needs several values:
 
-  my $result  = dispatch {
-    my $case = shift;
-    return $case;
-  },
-  $CASE,
-   on do_dis  => sub { ... },
-   on do_dat  => sub { ... },
-   on do_deez => sub { ... },
-   on do_doze => sub { ... };
+  my $input = {
+      method => q{POST},
+      role   => q{admin},
+  };
 
-The one difference here is, if C<$case> is defined but not accounted for
-using the C<on> keyword, then C<dispatch> will throw an exception via
-C<die>. Certainly any logic meant to deal with the value (or lack thereof)
-of C<$CASE> should be handled in the C<dispatch> BLOCK.
+  my $result = dispatch {
+      my $input = shift;
 
-An example of a more complicated scenario for generating the static key might
-be defined, follows:
+      return q{admin_post}
+        if $input->{method} eq q{POST} and $input->{role} eq q{admin};
 
-  my $result  = dispatch {
-    my $input_ref = shift;
-    my $rand  = $input_ref->[0];
-    if ( $rand < 2.5 ) {
-        return q{do_dis};
-    }
-    elsif ( $rand >= 2.5 and $rand < 5.0 ) {
-        return q{do_dat};
-    }
-    elsif ( $rand >= 5.0 and $rand < 7.5 ) {
-        return q{do_deez};
-    }
-    elsif ( $rand >= 7.5 ) {
-        return q{do_doze};
-    }
-  },
-  [ rand 10 ],
-   on do_dis  => sub { ... },
-   on do_dat  => sub { ... },
-   on do_deez => sub { ... },
-   on do_doze => sub { ... };
+      return q{other};
+  }
+  $input,
+    on admin_post => sub { ... },
+    on other      => sub { ... };
 
-The approach facilited by C<Dispatch::Fu> is one that requires the programmer
-to define each case by a static key via C<on>, and define a custom algorithm
-for picking which case (by way of C<return>'ing the correct static key as
-a string) to execute using the C<dispatch> BLOCK.
+The selected handler receives the original C<INPUT> scalar unchanged.
+C<dispatch> returns whatever the handler returns and preserves the caller's
+context. A handler may therefore return a scalar, a reference, a list, or any
+other normal Perl return value.
 
-=head1 USAGE
+  my @values = dispatch {
+      return q{numbers};
+  }
+  undef,
+    on numbers => sub { return qw/1 2 3 4 5/ };
 
-For more working examples, look at the tests in the C<./t> directory. It
-should quickly become apparent how to use this method and what it's for by
-trying it out. But if in doubt, please inquire here, there, everywhere.
+If the classification block returns a key that is not registered to a C<CODE>
+reference, C<dispatch> throws an exception with C<croak>.
+
+Each call to C<dispatch> starts with a fresh internal dispatch table. Cases from
+a previous successful or failed dispatch are never carried into the next call.
+
+=head2 on KEY => CODEREF
+
+  on start => sub { ... }
+
+C<on> contributes a static case name and handler to the current C<dispatch>
+call. The handler must be a C<CODE> reference.
+
+The C<on> expressions are part of the argument list to C<dispatch>, so they
+must be separated with commas. Accidentally ending one with a semicolon moves
+C<on> into void or scalar context. C<Dispatch::Fu> detects that common mistake
+and emits a warning with C<carp>.
+
+  my $result = dispatch {
+      return q{start};
+  }
+  $input,
+    on start => sub { ... },
+    on stop  => sub { ... };
+
+=head2 cases
+
+  my @cases = cases;
+
+C<cases> returns the currently registered case names as a sorted list.
+
+During the C<dispatch> classification block, the list contains all cases
+registered by C<on> plus the built-in C<default> case. This makes C<cases>
+useful for introspection while deciding which key to return:
+
+  my $result = dispatch {
+      my $candidate = shift;
+      my %supported = map { $_ => 1 } cases;
+
+      return $supported{$candidate} ? $candidate : q{default};
+  }
+  $action,
+    on default => sub { ... },
+    on start   => sub { ... },
+    on stop    => sub { ... };
+
+The internal table is reset before the selected handler is invoked. Therefore,
+outside the classification block, including from inside a selected handler,
+C<cases> reflects only the built-in C<default> case. This reset is deliberate:
+it keeps one dispatch operation isolated from the next, even when an earlier
+operation fails.
+
+=head2 xdefault CASE, [DEFAULT]
+
+  my $key = xdefault $candidate;
+  my $key = xdefault $candidate, q{not_found};
+
+C<xdefault> is a shortcut for the common case where the candidate value itself
+should be used as the dispatch key when it exactly matches one of the currently
+registered cases.
+
+Matching is literal string equality, not substring or regular-expression
+matching. False-but-defined keys such as C<"0"> are valid case names.
+
+If C<CASE> is undefined or does not exactly match a registered case,
+C<xdefault> returns C<DEFAULT>. When C<DEFAULT> is omitted, it returns the
+string C<default>.
+
+It is particularly convenient as the last expression in a classification
+block:
+
+  my $result = dispatch {
+      xdefault shift;
+  }
+  $action,
+    on default => sub { ... },
+    on start   => sub { ... },
+    on stop    => sub { ... };
+
+A custom fallback key works the same way:
+
+  my $result = dispatch {
+      xdefault shift, q{not_found};
+  }
+  $action,
+    on not_found => sub { ... },
+    on start     => sub { ... },
+    on stop      => sub { ... };
+
+=head2 xshift_and_deref LIST
+
+  my ($x, $y, $z) = xshift_and_deref @_;
+
+C<xshift_and_deref> removes common unpacking boilerplate when C<INPUT> is a
+reference. It examines the first value in C<LIST>, shifts it, and dereferences
+it according to its reference type.
+
+It supports C<HASH>, C<ARRAY>, and C<SCALAR> references:
+
+  my @values = xshift_and_deref \@array;
+  my %values = xshift_and_deref \%hash;
+  my $value  = xshift_and_deref \$scalar;
+
+For unsupported reference types or non-reference values, it returns C<undef>
+in scalar context (or an empty list in list context).
+
+A typical dispatch using an array reference can be written as:
+
+  my $result = dispatch {
+      my ($left, $right) = xshift_and_deref @_;
+      return $left > $right ? q{left} : q{right};
+  }
+  [ $left, $right ],
+    on left => sub {
+        my ($left, $right) = xshift_and_deref @_;
+        return $left;
+    },
+    on right => sub {
+        my ($left, $right) = xshift_and_deref @_;
+        return $right;
+    };
+
+=head1 EXAMPLES
+
+=head2 Dispatching on several conditions
+
+The classification block can combine as many inputs as needed while still
+reducing the final action to a small set of static keys:
+
+  my $job = {
+      priority => 9,
+      retries  => 0,
+      enabled  => 1,
+  };
+
+  my $result = dispatch {
+      my $job = shift;
+
+      return q{disabled} if not $job->{enabled};
+      return q{urgent}   if $job->{priority} >= 8 and $job->{retries} < 2;
+      return q{normal};
+  }
+  $job,
+    on disabled => sub { ... },
+    on urgent   => sub { ... },
+    on normal   => sub { ... };
+
+=head2 CGI::Tiny request dispatch
+
+C<Dispatch::Fu> can also provide a compact routing layer for a small CGI
+application. C<CGI::Tiny> exposes the request method and path directly, while
+C<Dispatch::Fu> reduces those values to a static handler name. The original
+C<CGI::Tiny> object is then passed to the selected handler.
+
+  #!/usr/bin/env perl
+  use strict;
+  use warnings;
+  use CGI::Tiny;
+  use Dispatch::Fu;
+
+  cgi {
+      my $cgi = $_;
+
+      dispatch {
+          my $cgi = shift;
+          my $method = $cgi->method;
+          my $path   = $cgi->path;
+
+          return q{home}
+            if $method eq q{GET} and $path eq q{/};
+
+          return q{create_item}
+            if $method eq q{POST} and $path eq q{/item};
+
+          return q{not_found};
+      }
+      $cgi,
+        on home => sub {
+            my $cgi = shift;
+            return $cgi->render(html => q{<h1>Home</h1>});
+        },
+        on create_item => sub {
+            my $cgi = shift;
+            my $name = $cgi->param(q{name});
+            return $cgi->render(text => qq{created: $name});
+        },
+        on not_found => sub {
+            my $cgi = shift;
+            $cgi->set_response_status(404);
+            return $cgi->render(text => q{Not Found});
+        };
+  };
+
+This is not intended to replace a full routing framework. It is useful when a
+small CGI program already has a modest, static set of actions and the route or
+action key needs to be computed from several pieces of request state.
+
+=head1 DEFAULT HANDLER
+
+Every dispatch table contains an internal C<default> handler. If a
+classification block returns C<default> and the caller has not supplied its
+own C<on default =E<gt> ...> handler, the built-in handler warns with
+C<carp> and prints the currently supported case names.
+
+Applications normally provide their own C<default> handler when default
+behavior is expected:
+
+  my $result = dispatch {
+      xdefault shift;
+  }
+  $action,
+    on default => sub { return q{unsupported} },
+    on start   => sub { return q{started} };
+
+=head1 DIAGNOSTICS
+
+C<Dispatch::Fu> uses C<Carp> so diagnostics are reported from the caller's
+perspective.
 
 =over 4
 
-=item C<dispatch> BLOCK
+=item * No cases supplied
 
-C<BLOCK> is required, and is coerced to be an anonymous subroutine that
-is passed a single scalar reference; this reference can be a single value
-or point to anything a Perl scalar reference can point to. It's the single
-point of entry for input.
+Calling C<dispatch> without any C<on> cases throws an exception with C<croak>.
+This often indicates that a semicolon ended the argument list too early.
 
-  my $result  = dispatch {
-    my $input_ref = shift; 
-    my $key = q{default};
-    ...                    
-    return $key;           
-  }
-  ...
+=item * Unsupported or invalid computed key
 
-The C<dispatch> implementation must return a static string, and that string
-should be one of the keys added using the C<on> keyword. Otherwise, an exception
-will be thrown via C<die>.
+If the classification block returns a key that is not mapped to a C<CODE>
+handler, C<dispatch> throws an exception with C<croak>.
 
-B<Returning Values from Dispatched> C<sub>
+=item * C<on> used in void or scalar context
 
-Be sure that C<dispatch> faithfully returns whatever the dispatched
-C<subroutine> is written to return; including a single value C<SCALAR>,
-C<SCALAR> refernce, C<LIST>, etc.
-
-  my @results = dispatch {
-    my $input_ref = shift;
-    my $key = q{default};
-    ...                   
-    return $key;          
-  }
-  ...
-  on default => sub { return qw/1 2 3 4 5 6 7 8 9 10/ },
-  ...
-
-If the C<default> case is the one dispatched, then C<@results> will contain
-the digits C<1 .. 10> returned as a LIST via C<qw//>, above.
-
-=item C<cases>
-
-This routine is for introspection inside of the C<dispatch> BLOCK. It returns
-the list of all cases added by the C<on> routine. Outside of the C<dispatch>
-BLOCK, it returns an empty C<HASH> reference. It is available within the C<CODE>
-body of each case handler registered via `on`.
-
-B<Note:> do not rely on the ordering of these cases to be consistent; it relies
-on the C<keys> keyword, which operates on C<HASH>es and key order is therefore
-not deterministic.
-
-Given the full example above,
-
-  my $result  = dispatch {
-    my $input_ref = shift;
-    ...
-    my @cases = cases; # (qw/do_dis do_dat do_deez do_doze/)
-    ...
-  },
-  [ rand 10 ],
-   on do_dis  => sub { ... },
-   on do_dat  => sub { ... },
-   on do_deez => sub { ... },
-   on do_doze => sub { ... };
-
-=item C<xdefault> SCALAR, [DEFAULT_STRING]
-
-Note: SCALAR must be an actual value (string, e.g.) or C<undef>.
-
-Provides a shortcut for the common situation where one static value really
-define the case key. Used idiomatically without the explicit return provided
-it is as the very last line of the C<dispatch> BLOCK.
-
-  my $result  = dispatch {
-    my $input_str = shift;
-    xdefault $input_str, q{do_default}; # if $input_str is not in supported cases, return the string 'default'
-  },
-  $somestring,
-   on do_default => sub { ... },
-   on do_dis     => sub { ... },
-   on do_dat     => sub { ... },
-   on do_deez    => sub { ... },
-   on do_doze    => sub { ... };
-
-C<xdefault> can be passed just the string that is checked for membership in C<cases>,
-if just provided the I<default> case key, the string C<default> will be used if the
-string being tested is not in the set of cases defined using C<on>.
-
-  my $result  = dispatch {
-    my $input_str = shift;
-    xdefault $input_str;      # if $input_str is not in the set of supported cases, it will return the string 'default'
-  },
-  $somestring,
-   on default => sub { ... }, #<~ default case
-   on do_dis  => sub { ... },
-   on do_dat  => sub { ... },
-   on do_deez => sub { ... },
-   on do_doze => sub { ... };
-
-And just for the sake of minimization, we can get rid of one more line here:
-
-  my $result  = dispatch {
-    xdefault shift;           #<~ if $input_str is not in supported cases, return the string 'default'
-  },
-  $somestring,
-   on default => sub { ... }, #<~ default case
-   on do_dis  => sub { ... },
-   on do_dat  => sub { ... },
-   on do_deez => sub { ... },
-   on do_doze => sub { ... };
-
-=item C<REF>
-
-This is the singular scalar reference that contains all the stuff to be used
-in the C<dispatch> BLOCK. In the example above it is, C<[rand 10]>. It is
-the way to pass arbitrary data into C<dispatch>. E.g.,
-
-  my $INPUT  = [qw/foo bar baz 1 3 4 5/];
-
-  my $result = dispatch {
-    my $input_ref = shift; 
-    my $key = q{default}; 
-    ...                    
-    return $key;           
-
-  } $INPUT,                   # <><~ the single scalar reference to be passed to the C<dispatch> BLOCK
-  ...
-
-=item C<on>
-
-This keyword builds up the dispatch table. It consists of a static string and
-a subroutine reference. In order for this to work for you, the C<dispatch>
-BLOCK must return strictly only the keys that are defined via C<on>.
-
-  my $INPUT = [qw/foo bar baz 1 3 4 5/];
-
-  my $result  = dispatch {
-
-    my $input_ref = shift; 
-    my $key = q{default};
-    ...                    
-    return $key;           
-
-  } $INPUT,            
-   on case1 => sub { my $INPUT = shift; ... },
-   on case2 => sub { my $INPUT = shift; ... },
-   on case3 => sub { my $INPUT = shift; ... },
-   on case4 => sub { my $INPUT = shift; ... },
-   on case5 => sub { my $INPUT = shift; ... };
-
-Note: when the subroutine associated with each I<case> is dispatched, the
-C<$INPUT> scalar is provide as input.
-
-  my $INPUT = [qw/foo bar baz 1 3 4 5/];
-
-  my $result  = dispatch {
-
-    my $input_ref = shift;     
-    my $key    = q{default}; 
-    ...                         
-    return $key;                
-
-  } $INPUT,                   # <~ the single scalar reference to be passed to the C<dispatch> BLOCK
-   on default  => sub {
-     my $INPUT = shift;
-     do_default($INPUT);
-   },
-   on key1     => sub {
-     my $INPUT = shift;
-     do_key1(cases => $INPUT);
-   },
-   on key2     => sub {
-     my $INPUT = shift;
-     do_key2(qw/some other inputs entirely/);
-   };
-
-=item C<xshift_and_deref> ARRAY
-
-Used within C<dispatch> and static key handlers defined by C<on> to provide a
-single statement for C<shift @_>, then an immediate I<dereferencing> of the
-C<SCALAR> reference based on it's reference I<type> based on the results of
-C<CORE::ref> (or just, C<ref>. E.g.,
-
-  my ($thing1, $thing2, $thing3) = xshift_and_deref @_;
-
-And as part of a mostly complete C<dispatch> block,
-
-  dispatch {
-    my ($thing1, $thing2, $thing3) = xshift_and_deref @_; # <~ HERE
-    ...
-    return q{do_dis} if ...;
-    return q{do_dat};
-  } [ qw/thing1 thing2 thing3/ ],
-  on do_dis => sub {
-    my ($thing1, $thing2, $thing3) = xshift_and_deref @_; # <~ HERE
-    ...
-  },
-  on do_dat => sub {
-    my ($thing1, $thing2, $thing3) = xshift_and_deref @_; # <~ HERE
-    ...
-  };
-
-This makes dealing with C<REF>s passed into C<dispatch> (and additinally into
-the static key handler) very convenient. It eliminates potentally many lines
-of boilerplate code that is meant simply for getting the contents of C<$_[0]>
-into a set of explicit variables inside of C<dispatch>.
+C<on> emits a warning with C<carp>. This is commonly caused by using a
+semicolon where the C<dispatch> argument list required a comma.
 
 =back
 
-=head3 Diagnostics and Warnings
+=head1 STABILITY
 
-The C<on> method must always follow a comma! Commas and semicolons look a
-lot alike. This is why a C<wantarray> check inside is able to warn when it's
-being used in a useless C<void> or C<scalar> contexts. Experience has show
-that it's easy for a semicolon to sneak into a series of C<on> statements
-as they are added or reorganized. For example, how quickly can you spot a
-the misplaced semicolon below:
-
-  my $result  = dispatch {
-    my $input_ref = shift;
-    ...
-    return $key;
-  } $INPUT,
-   on case01 => sub { my $INPUT = shift; ... },
-   on case02 => sub { my $INPUT = shift; ... },
-   on case03 => sub { my $INPUT = shift; ... },
-   on case04 => sub { my $INPUT = shift; ... },
-   on case05 => sub { my $INPUT = shift; ... },
-   on case06 => sub { my $INPUT = shift; ... };
-   on case07 => sub { my $INPUT = shift; ... },
-   on case08 => sub { my $INPUT = shift; ... },
-   on case09 => sub { my $INPUT = shift; ... },
-   on case10 => sub { my $INPUT = shift; ... },
-   on case11 => sub { my $INPUT = shift; ... },
-   on case12 => sub { my $INPUT = shift; ... },
-   on case13 => sub { my $INPUT = shift; ... },
-   on case14 => sub { my $INPUT = shift; ... },
-   on case15 => sub { my $INPUT = shift; ... },
-   on case16 => sub { my $INPUT = shift; ... },
-   on case17 => sub { my $INPUT = shift; ... },
-   on case18 => sub { my $INPUT = shift; ... },
-   on case19 => sub { my $INPUT = shift; ... },
-   on case20 => sub { my $INPUT = shift; ... };
-
-This module will also throw an exeption (via C<croak>) if C<dispatch> is
-defined, but there are no C<on> statements. This covers the situation where
-a semicolon has also snuck in prematurely; E.g., the following examples will
-die because due to lack of C<on> cases before C<on> warns that it's being
-used in a useless context:
-
-  my $result  = dispatch {
-
-  } $INPUT;
-  on foo => sub { ... },
-  on bar => sub { ... };
+C<Dispatch::Fu> is maintained as production code with a deliberately small
+public API and core-only runtime dependencies. Changes should preserve existing
+calling conventions and the lightweight nature of the module. The test suite
+covers normal dispatch, defaults, introspection, diagnostics, return context,
+reference unpacking, invalid handlers, state isolation, and false-but-valid
+case keys.
 
 =head1 BUGS
 
-Please report any bugs or ideas about making this module an even better
-basis for doing dynamic dispatching.
+Please report bugs and feature ideas through the project issue tracker.
 
 =head1 AUTHOR
 
@@ -494,6 +481,7 @@ O. ODLER 558 L<< <oodler@cpan.org> >>.
 
 =head1 LICENSE AND COPYRIGHT
 
-Same as Perl.
+Same terms as Perl itself.
 
 =cut
+

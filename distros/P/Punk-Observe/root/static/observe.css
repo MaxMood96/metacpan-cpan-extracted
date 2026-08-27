@@ -1,0 +1,792 @@
+/* observe.css - the whole design system.
+ *
+ * Three layers, and the rule that keeps this file from doubling every time a
+ * screen is added:
+ *
+ *   LAYER 1  primitives   the ground, the ink, the scale
+ *   LAYER 2  semantic     what a colour MEANS here
+ *   LAYER 3  component    what one widget needs
+ *
+ * A COMPONENT NEVER NAMES A COLOUR, and nothing inside a theme block ever
+ * names a component. Themes swap layers 1 and 2; layer 3 follows for free.
+ *
+ * No framework, no build step, no chart library. Charts are inline SVG using
+ * currentColor and these tokens, so the same markup is correct in both
+ * themes - a chart with a baked hex is invisible in one of them.
+ */
+
+/* ==========================================================================
+   LAYER 1 - primitives
+   ========================================================================== */
+
+:root {
+    /* the ground and its ink */
+    --paper:      #f7f8fa;
+    --raised:     #ffffff;
+    --sunken:     #eceef2;
+    --ink:        #16181d;
+    --muted:      #5a6069;
+    --faint:      #878d97;
+    --line:       rgba(22, 24, 29, .14);
+    --line-firm:  rgba(22, 24, 29, .28);
+
+    /* type */
+    --stack: ui-sans-serif, -apple-system, "Segoe UI", Roboto,
+             "Helvetica Neue", Arial, sans-serif;
+    --mono:  ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+             "Liberation Mono", monospace;
+
+    /* An observability UI is denser than a content site. A log explorer
+     * showing twelve lines per screen is useless, so the scale bottoms out
+     * smaller than a marketing site's would. */
+    --fs-xs:  11px;
+    --fs-sm:  12px;
+    --fs-md:  13px;
+    --fs-lg:  16px;
+    --fs-xl:  22px;
+    --fs-2xl: 30px;
+
+    --lh-tight: 1.25;
+    --lh-body:  1.5;
+
+    /* spacing */
+    --s1: 4px;
+    --s2: 8px;
+    --s3: 12px;
+    --s4: 16px;
+    --s5: 24px;
+    --s6: 40px;
+
+    --radius:    6px;
+    --radius-sm: 3px;
+
+    --shadow: 0 1px 2px rgba(22, 24, 29, .06),
+              0 4px 12px rgba(22, 24, 29, .04);
+
+/* ==========================================================================
+   LAYER 2 - semantic
+   This is where an observability UI differs from a marketing site.
+   ========================================================================== */
+
+    --ok:    #0b7a55;
+    --warn:  #9a5b00;
+    --err:   #b32330;
+    --info:  #1d5fb4;
+    --on-accent: #ffffff;
+    --wash: rgba(29, 95, 180, .14);   /* the brush selection */
+
+    /* SEVERITY IS A FIRST-CLASS COLOUR DIMENSION.
+     *
+     * Six steps, and they must read as an ORDERED SCALE rather than six
+     * unrelated colours, because a log list is scanned rather than read.
+     *
+     * LIGHTNESS CARRIES THE ORDER; hue only reinforces it. These were
+     * GENERATED at controlled CIE Lab lightness rather than picked, because
+     * hand-picked hex never lands on a monotonic ramp - the first three
+     * attempts all had a step going the wrong way. xt/palette.t asserts the
+     * monotonicity, which is the ordering signal that survives desaturation.
+     *
+     * Six steps cannot all be pairwise distinct under dichromacy, and that is
+     * why colour is never the only signal here: .row-error carries weight, an
+     * inset rule and a text marker as well as a hue. */
+    --sev-trace: #9aa8b0;
+    --sev-debug: #5895b7;
+    --sev-info:  #468362;
+    --sev-warn:  #7d5e22;
+    --sev-error: #8c322f;
+    --sev-fatal: #5d2546;
+
+    /* SPAN KIND. A waterfall is unreadable without it. */
+    --span-server:   #2f6fb5;
+    --span-client:   #7a4fa8;
+    --span-internal: #6b7280;
+    --span-producer: #0f7a6a;
+    --span-consumer: #9a6a00;
+
+    /* THE CATEGORICAL SERIES RAMP.
+     *
+     * Eight colours that must stay distinguishable from each other, in light
+     * and in dark, and under the common colour vision deficiencies. Roughly
+     * one man in twelve cannot separate the red and green most default
+     * palettes put adjacent, so a legend that only works in light mode is a
+     * bug and not a preference.
+     *
+     * These are CHECKED, not chosen. xt/palette.t measures pairwise
+     * perceptual distance in both themes and under simulated deuteranopia and
+     * protanopia. The first hand-picked ramp had two colours 0.5 apart under
+     * deuteranopia - indistinguishable - and so, measured on the same metric,
+     * does the standard Okabe-Ito palette at eight entries. These eight came
+     * out of a subset search over a larger pool, and clear the threshold in
+     * both themes and both simulated deficiencies.
+     *
+     * Eight that survive that are worth more than sixteen that do not. */
+    --series-1: #0072B2;
+    --series-2: #D55E00;
+    --series-3: #009E73;
+    --series-4: #4D4D4D;
+    --series-5: #F0E442;
+    --series-6: #117733;
+    --series-7: #88CCEE;
+    --series-8: #DDCC77;
+
+/* ==========================================================================
+   LAYER 3 - component
+   Phase 13 drives two of these as LIVE variables, which is what makes a
+   waterfall pan cost one style write instead of four thousand DOM updates.
+   ========================================================================== */
+
+    --wf-row-h:   22px;
+    --wf-scale:   1;
+    --wf-offset:  0px;
+    /* Per-bar geometry, written inline on each .wf-bar by the server. The
+     * defaults are here so a bar with no inline value collapses to nothing
+     * visible rather than resolving to an invalid calc() and disappearing
+     * the whole row. */
+    --start: 0;
+    --width: 0;
+    --wf-bar-r:   2px;
+    --fg-row-h:   18px;
+    --grid-line:  var(--line);
+    --brush-fill: rgba(31, 111, 178, .16);
+    --tail-row-h: 20px;
+    --panel-pad:  var(--s4);
+}
+
+/* --------------------------------------------------------------------------
+   THEMES.
+   Only layers 1 and 2 are redefined. Three states, not two: an explicit
+   choice stamps data-theme, and the default "system" setting stamps nothing -
+   so the media query and the attribute block both have to exist, and the
+   media query is guarded so an explicit light choice wins inside a dark OS.
+
+   Observability tools are looked at for hours, often in a dark room, usually
+   at the moment something is broken. Dark is the default; light is complete
+   and equal, not an afterthought.
+   -------------------------------------------------------------------------- */
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --paper:     #0f1116;
+        --raised:    #161a21;
+        --sunken:    #0a0c10;
+        --ink:       #e6e9ef;
+        --muted:     #9aa3b0;
+        --faint:     #6b7480;
+        --line:      rgba(230, 233, 239, .12);
+        --line-firm: rgba(230, 233, 239, .24);
+        --shadow:    0 1px 2px rgba(0, 0, 0, .5),
+                     0 4px 14px rgba(0, 0, 0, .35);
+
+        --ok:   #3fbf8f;
+        --warn: #d99b28;
+        --err:  #f0666f;
+        --info: #5aa0f0;
+        --on-accent: #0f1116;
+        --wash: rgba(90, 160, 240, .22);
+
+        --sev-trace: #606970;
+        --sev-debug: #4889a6;
+        --sev-info:  #67a981;
+        --sev-warn:  #cfac63;
+        --sev-error: #ffada7;
+        --sev-fatal: #ffcde9;
+
+        --span-server:   #5aa0f0;
+        --span-client:   #b98ae0;
+        --span-internal: #8b95a3;
+        --span-producer: #3fc5ae;
+        --span-consumer: #d9a83c;
+
+        --series-1: #56B4E9;
+        --series-2: #F09052;
+        --series-3: #3FC08D;
+        --series-4: #E08AC8;
+        --series-5: #C9A227;
+        --series-6: #F2706B;
+        --series-7: #DDCC77;
+        --series-8: #D55E00;
+    }
+}
+
+:root[data-theme="dark"] {
+    --paper:     #0f1116;
+    --raised:    #161a21;
+    --sunken:    #0a0c10;
+    --ink:       #e6e9ef;
+    --muted:     #9aa3b0;
+    --faint:     #6b7480;
+    --line:      rgba(230, 233, 239, .12);
+    --line-firm: rgba(230, 233, 239, .24);
+    --shadow:    0 1px 2px rgba(0, 0, 0, .5),
+                 0 4px 14px rgba(0, 0, 0, .35);
+
+    --ok:   #3fbf8f;
+    --warn: #d99b28;
+    --err:  #f0666f;
+    --info: #5aa0f0;
+    --on-accent: #0f1116;
+    --wash: rgba(90, 160, 240, .22);
+
+    --sev-trace: #606970;
+    --sev-debug: #4889a6;
+    --sev-info:  #67a981;
+    --sev-warn:  #cfac63;
+    --sev-error: #ffada7;
+    --sev-fatal: #ffcde9;
+
+    --span-server:   #5aa0f0;
+    --span-client:   #b98ae0;
+    --span-internal: #8b95a3;
+    --span-producer: #3fc5ae;
+    --span-consumer: #d9a83c;
+
+    --series-1: #56B4E9;
+    --series-2: #F09052;
+    --series-3: #3FC08D;
+    --series-4: #E08AC8;
+    --series-5: #C9A227;
+    --series-6: #F2706B;
+    --series-7: #DDCC77;
+    --series-8: #D55E00;
+}
+
+:root[data-theme="light"] {
+    --paper:     #f7f8fa;
+    --raised:    #ffffff;
+    --sunken:    #eceef2;
+    --ink:       #16181d;
+    --muted:     #5a6069;
+    --faint:     #878d97;
+    --line:      rgba(22, 24, 29, .14);
+    --line-firm: rgba(22, 24, 29, .28);
+    --shadow:    0 1px 2px rgba(22, 24, 29, .06),
+                 0 4px 12px rgba(22, 24, 29, .04);
+
+    --ok:   #0b7a55;
+    --warn: #9a5b00;
+    --err:  #b32330;
+    --info: #1d5fb4;
+    --on-accent: #ffffff;
+    --wash: rgba(29, 95, 180, .14);
+
+    --sev-trace: #9aa8b0;
+    --sev-debug: #5895b7;
+    --sev-info:  #468362;
+    --sev-warn:  #7d5e22;
+    --sev-error: #8c322f;
+    --sev-fatal: #5d2546;
+
+    --span-server:   #2f6fb5;
+    --span-client:   #7a4fa8;
+    --span-internal: #6b7280;
+    --span-producer: #0f7a6a;
+    --span-consumer: #9a6a00;
+
+    --series-1: #0072B2;
+    --series-2: #D55E00;
+    --series-3: #009E73;
+    --series-4: #4D4D4D;
+    --series-5: #F0E442;
+    --series-6: #117733;
+    --series-7: #88CCEE;
+    --series-8: #DDCC77;
+}
+
+/* ==========================================================================
+   base
+   ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+    /* An explicit token background, always. A transparent body borrows the
+     * host's colour in an embedding context, and the result is unreadable
+     * text on the wrong ground. */
+    background: var(--paper);
+    color: var(--ink);
+    font: var(--fs-md)/var(--lh-body) var(--stack);
+    margin: 0;
+    /* The page body must NEVER scroll horizontally. Wide things scroll
+     * inside their own container - see .tablewrap. */
+    overflow-x: hidden;
+}
+
+a { color: var(--info); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+code, pre, .mono { font-family: var(--mono); font-size: var(--fs-sm); }
+
+/* Focus survives the redesign. A custom-styled control with no visible ring
+ * is a regression from the browser default, and the time somebody needs the
+ * keyboard is the time something is broken. */
+:focus-visible {
+    outline: 2px solid var(--info);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+
+/* ==========================================================================
+   layout primitives - six, which is enough for every screen and few enough
+   to remember
+   ========================================================================== */
+
+.shell {
+    display: grid;
+    grid-template-columns: 216px 1fr;
+    grid-template-rows: auto 1fr;
+    grid-template-areas: "brand head" "nav main";
+    min-height: 100vh;
+}
+.shell > .brand { grid-area: brand; }
+.shell > .head  { grid-area: head; }
+.shell > .nav   { grid-area: nav; }
+.shell > .main  { grid-area: main; padding: var(--s5); min-width: 0; }
+
+/* min-width:0 above is load-bearing: a grid item defaults to min-content
+ * width, so one wide table would push the whole layout sideways and defeat
+ * the overflow-x rule on body. */
+
+.brand {
+    padding: var(--s3) var(--s4);
+    font-weight: 600;
+    letter-spacing: -.01em;
+    border-bottom: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+}
+.head {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    padding: var(--s3) var(--s5);
+    border-bottom: 1px solid var(--line);
+}
+.nav {
+    padding: var(--s3) var(--s2);
+    border-right: 1px solid var(--line);
+    background: var(--sunken);
+}
+.nav a {
+    display: block;
+    padding: var(--s2) var(--s3);
+    border-radius: var(--radius-sm);
+    color: var(--muted);
+    font-size: var(--fs-sm);
+}
+.nav a:hover { background: var(--raised); color: var(--ink); text-decoration: none; }
+.nav a[aria-current="page"] { background: var(--raised); color: var(--ink); font-weight: 600; }
+
+.panel {
+    background: var(--raised);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: var(--panel-pad);
+    box-shadow: var(--shadow);
+    margin-bottom: var(--s5);
+    min-width: 0;
+}
+.panel > h2 {
+    margin: 0 0 var(--s3);
+    font-size: var(--fs-lg);
+    line-height: var(--lh-tight);
+}
+
+.stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    gap: var(--s3);
+    margin: 0;
+    margin-bottom: 1em;
+}
+.stats > div {
+    background: var(--raised);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: var(--s3) var(--s4);
+}
+.stats dt { color: var(--muted); font-size: var(--fs-xs);
+            text-transform: uppercase; letter-spacing: .04em; }
+.stats dd { margin: var(--s1) 0 0; font-size: var(--fs-xl);
+            font-family: var(--mono); line-height: var(--lh-tight); }
+
+/* NOT OPTIONAL. A trace attribute table or a log line will always be wider
+ * than a phone. */
+.tablewrap { overflow-x: auto; max-width: 100%; }
+.tablewrap table { border-collapse: collapse; width: 100%; font-size: var(--fs-sm); }
+.tablewrap th, .tablewrap td {
+    text-align: left;
+    padding: var(--s2) var(--s3);
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+}
+.tablewrap th { color: var(--muted); font-weight: 600; font-size: var(--fs-xs);
+                text-transform: uppercase; letter-spacing: .04em; }
+
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s5); min-width: 0; }
+.split > * { min-width: 0; }
+
+.toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s2);
+    margin-bottom: var(--s4);
+}
+.toolbar input[type="text"], .toolbar input[type="search"] {
+    flex: 1 1 22rem;
+    min-width: 0;
+    font: var(--fs-sm)/1.4 var(--mono);
+    padding: var(--s2) var(--s3);
+    background: var(--raised);
+    color: var(--ink);
+    border: 1px solid var(--line-firm);
+    border-radius: var(--radius-sm);
+}
+
+@media (max-width: 860px) {
+    .shell { grid-template-columns: 1fr;
+             grid-template-areas: "brand" "head" "nav" "main"; }
+    .nav { border-right: 0; border-bottom: 1px solid var(--line);
+           display: flex; gap: var(--s1); overflow-x: auto; }
+    .split { grid-template-columns: 1fr; }
+    .shell > .main { padding: var(--s4); }
+}
+
+/* ==========================================================================
+   severity and span kind, applied
+   ========================================================================== */
+
+.sev { display: inline-block; padding: 0 var(--s2); border-radius: var(--radius-sm);
+       font-size: var(--fs-xs); font-weight: 600; letter-spacing: .03em; }
+.sev-trace { color: var(--sev-trace); }
+.sev-debug { color: var(--sev-debug); }
+.sev-info  { color: var(--sev-info); }
+.sev-warn  { color: var(--sev-warn); }
+.sev-error { color: var(--sev-error); }
+.sev-fatal { color: var(--sev-fatal); }
+
+/* COLOUR IS NEVER THE ONLY SIGNAL. An error row gets weight and a marker as
+ * well as a hue, or it does not exist for a colourblind reader. */
+.row-error { font-weight: 600; box-shadow: inset 2px 0 0 var(--sev-error); }
+.row-warn  { box-shadow: inset 2px 0 0 var(--sev-warn); }
+.row-error td:first-child::before { content: "! "; color: var(--sev-error); }
+.row-warn  td:first-child::before { content: "\25B2 "; color: var(--sev-warn); }
+
+.kind-server   { background: var(--span-server); }
+.kind-client   { background: var(--span-client); }
+.kind-internal { background: var(--span-internal); }
+.kind-producer { background: var(--span-producer); }
+.kind-consumer { background: var(--span-consumer); }
+
+/* ==========================================================================
+   charts - server-rendered inline SVG
+   ========================================================================== */
+
+.chart { display: block; width: 100%; height: auto; overflow: visible; }
+.chart .axis   { stroke: var(--grid-line); stroke-width: 1; }
+.chart .label  { fill: var(--faint); font: var(--fs-xs) var(--stack); }
+/* currentColor is what makes a server-rendered chart themeable: the series
+ * class sets colour, the path inherits it. */
+.chart .line   { fill: none; stroke: currentColor; stroke-width: 1.5;
+                 stroke-linejoin: round; }
+.chart .area   { fill: currentColor; opacity: .12; stroke: none; }
+.chart .point  { fill: currentColor; }
+.chart .exemplar { fill: var(--sev-error); stroke: var(--raised); stroke-width: 1; }
+
+.s1 { color: var(--series-1); } .s2 { color: var(--series-2); }
+.s3 { color: var(--series-3); } .s4 { color: var(--series-4); }
+.s5 { color: var(--series-5); } .s6 { color: var(--series-6); }
+.s7 { color: var(--series-7); } .s8 { color: var(--series-8); }
+
+/* the waterfall - phase 13 rewrites --wf-scale and --wf-offset on the
+   container, so a pan is ONE style write
+
+   THE ROW IS THREE COLUMNS, NOT AN OVERLAY. The bar was absolutely positioned
+   across the whole row with the label and the duration in normal flow
+   underneath it, so the bar covered the text it was labelling and the
+   waterfall could be looked at but not read. The bar now has a track of its
+   own and the text has columns of its own, which is also what makes a long
+   span name truncate instead of pushing the timings off the row. */
+.waterfall { position: relative; min-width: 0; }
+.waterfall ol { list-style: none; margin: 0; padding: 0; }
+.waterfall li {
+    display: grid;
+    grid-template-columns: minmax(6ch, 30ch) minmax(0, 1fr) max-content;
+    align-items: center;
+    gap: var(--s3);
+    height: var(--wf-row-h);
+    border-bottom: 1px solid var(--line);
+}
+.wf-label {
+    grid-column: 1; grid-row: 1;
+    min-width: 0; overflow: hidden;
+    white-space: nowrap; text-overflow: ellipsis;
+    font-size: var(--fs-sm);
+}
+.wf-time { grid-column: 3; grid-row: 1;
+           font-size: var(--fs-xs); color: var(--muted); }
+.wf-bar {
+    /* Relative rather than absolute, so the percentages resolve against the
+       TRACK and not against the row: a span 40% into a trace belongs 40% into
+       the space the bars occupy. */
+    grid-column: 2; grid-row: 1;
+    position: relative;
+    height: calc(var(--wf-row-h) - 9px);
+    border-radius: var(--wf-bar-r);
+    left:  calc((var(--start) * var(--wf-scale)) + var(--wf-offset));
+    width: calc(var(--width) * var(--wf-scale));
+    min-width: 2px;
+    background: var(--span-internal);
+}
+
+/* SPAN KIND IS A CLASS, so the token sheet colours it and the markup carries
+   no colour at all. The classes were emitted from the first render and the
+   rules were never written, which left every bar transparent - a waterfall
+   drawn entirely in whitespace. */
+.wf-bar.kind-server   { background: var(--span-server); }
+.wf-bar.kind-client   { background: var(--span-client); }
+.wf-bar.kind-internal { background: var(--span-internal); }
+.wf-bar.kind-producer { background: var(--span-producer); }
+.wf-bar.kind-consumer { background: var(--span-consumer); }
+
+/* A span in error is not distinguished by COLOUR ALONE: the row carries the
+   same weight-and-marker treatment every other error row gets. */
+.waterfall li.row-error .wf-bar { outline: 2px solid var(--sev-error);
+                                  outline-offset: 1px; }
+
+/* the flamegraph.
+
+   `fill` was never set, so every frame painted in the SVG default - black on
+   black in the dark theme, and a solid black block in the light one. Depth is
+   what the colour carries here, and it carries nothing else: WIDTH IS THE
+   SIGNAL and a flamegraph that colours by anything meaningful invites reading
+   the hue instead of the width. */
+.flame { display: block; width: 100%; }
+.flame rect { stroke: var(--paper); stroke-width: .5; fill: var(--series-4);
+              cursor: pointer; }
+.flame rect[data-depth="0"] { fill: var(--series-1); }
+.flame rect[data-depth="1"] { fill: var(--series-2); }
+.flame rect[data-depth="2"] { fill: var(--series-3); }
+.flame rect[data-depth="3"] { fill: var(--series-6); }
+.flame rect[data-depth="4"] { fill: var(--series-7); }
+.flame rect[data-depth="5"] { fill: var(--series-8); }
+.flame rect.hit { stroke: var(--sev-error); stroke-width: 2; }
+.flame text { fill: var(--paper); font: var(--fs-xs) var(--stack);
+              pointer-events: none; dominant-baseline: middle; }
+
+/* the time-range picker - one row of small toggles, the active one filled */
+.rangepick { display: inline-flex; gap: 2px; margin-left: var(--s3); }
+.rangebtn {
+    font: var(--fs-xs) var(--stack);
+    padding: 2px var(--s2);
+    border: 1px solid var(--line-firm);
+    background: var(--raised);
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+}
+.rangebtn:hover { color: var(--ink); }
+/* The active range is marked by FILL and by weight, not by colour alone. */
+.rangebtn.on { background: var(--sunken); color: var(--ink); font-weight: 600;
+               border-color: var(--info); }
+
+.empty { color: var(--muted); padding: var(--s5); text-align: center; }
+.note  { color: var(--muted); font-size: var(--fs-sm); }
+.warnbox {
+    border-left: 3px solid var(--warn);
+    background: var(--sunken);
+    padding: var(--s3) var(--s4);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--s4);
+}
+
+/* --- phase 13: the live tail and the brush ------------------------------- */
+
+/* The tail's row list scrolls on its own, so pausing means "the user scrolled
+   THIS box up" rather than "the page moved". A fixed height is what makes
+   that question answerable at all. */
+.tail .tailhead { display: flex; align-items: baseline; gap: var(--s3); }
+.tailrows {
+    max-height: 60vh;
+    overflow-y: auto;
+    overflow-x: auto;
+    font-size: var(--fs-sm);
+    border-top: 1px solid var(--line);
+    margin-top: var(--s3);
+}
+.logrow {
+    display: grid;
+    grid-template-columns: 12ch 7ch 14ch minmax(0, 1fr);
+    gap: var(--s3);
+    padding: 2px var(--s3);
+    border-bottom: 1px solid var(--line);
+}
+.logrow .col-body { overflow-wrap: anywhere; }
+
+/* A truncation is MARKED, not hidden. It is a link to the whole record,
+   because the reader's next question is always what was cut. */
+.truncated { color: var(--warn); font-size: var(--fs-sm); white-space: nowrap; }
+
+/* The brush. `position: relative` on the wrapper is what makes the selection
+   and the crosshair position against the chart rather than the page. */
+.chartwrap { position: relative; min-width: 0; }
+.brush-sel {
+    position: absolute;
+    top: 0; bottom: 0;
+    background: var(--wash);
+    border-left: 1px solid var(--info);
+    border-right: 1px solid var(--info);
+    pointer-events: none;
+}
+
+/* Moved with transform, never with `left`: one composited move per chart
+   rather than a layout pass over everything beneath it. */
+.crosshair {
+    position: absolute;
+    top: 0; bottom: 0; left: 0;
+    width: 1px;
+    background: var(--muted);
+    pointer-events: none;
+    will-change: transform;
+}
+
+.exemplar { cursor: pointer; }
+
+/* --- phase 14: alert states and the dashboard grid ----------------------- */
+
+/* An alert state is a WORD as well as a colour. Six states cannot be made
+   pairwise distinct under dichromacy, so the text carries the meaning and the
+   colour is the accelerator - the same rule severity follows. */
+.al {
+    display: inline-block;
+    padding: 1px var(--s2);
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    border: 1px solid currentColor;
+}
+.al-ok       { color: var(--ok); }
+.al-pending  { color: var(--warn); }
+.al-firing   { color: var(--err); }
+/* Stale and error are NOT green and NOT red: neither is healthy, and neither
+   is a firing condition. Reading either as one is the mistake. */
+.al-stale    { color: var(--muted); border-style: dashed; }
+.al-error    { color: var(--warn); border-style: double; }
+.al-silenced { color: var(--faint); font-weight: 400; }
+
+.row-firing { font-weight: 600; box-shadow: inset 2px 0 0 var(--err); }
+.row-error  { box-shadow: inset 2px 0 0 var(--warn); }
+
+.grid { display: grid; gap: var(--s4); grid-template-columns: 1fr; }
+@media (min-width: 60rem) {
+    .cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    .span-2 { grid-column: span 2; }
+    .span-3 { grid-column: span 3; }
+    .span-4 { grid-column: span 4; }
+}
+/* min-width:0 on every grid child, or one wide table pushes the whole grid
+   sideways and defeats the overflow-x rule. */
+.grid > .panel { min-width: 0; }
+
+/* --- the time range picker -------------------------------------------------
+ *
+ * daterangepicker.css is vendored unmodified, so this is a layer of token
+ * overrides on top of it rather than an edit to it. Its own palette is a
+ * light one with hard-coded greys; every one of those is replaced here with
+ * the same variables the rest of the console uses, which is what makes it
+ * follow the theme control instead of staying white in dark mode.
+ *
+ * The picker appends itself to document.body rather than to the toolbar, so
+ * these selectors are deliberately NOT nested under .shell - the element is
+ * not inside it. The tokens are on :root, so they reach it anyway.
+ */
+.rangeinput {
+    font: var(--fs-xs) var(--stack);
+    padding: 2px var(--s2);
+    border: 1px solid var(--line-firm);
+    border-radius: var(--radius-sm);
+    background: var(--raised);
+    color: var(--ink);
+    cursor: pointer;
+    min-width: 15em;
+}
+.rangeinput:hover { border-color: var(--info); }
+/* THE BUTTONS GO ONLY WHEN THE PICKER IS UP. daterange.js adds this class as
+   its last act, so a page where the picker failed to build keeps the row it
+   was already showing rather than losing the control entirely. */
+.rangepick.picked .rangebtn { display: none; }
+
+.daterangepicker {
+    font: var(--fs-md) var(--stack);
+    background: var(--raised);
+    color: var(--ink);
+    border: 1px solid var(--line-firm);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+.daterangepicker:before, .daterangepicker:after { display: none; }
+.daterangepicker .calendar-table {
+    background: var(--raised);
+    border: 1px solid transparent;
+}
+.daterangepicker .calendar-table th,
+.daterangepicker .calendar-table td { color: var(--ink); }
+.daterangepicker td.available:hover,
+.daterangepicker th.available:hover { background: var(--sunken); }
+.daterangepicker td.off,
+.daterangepicker td.off.in-range,
+.daterangepicker td.off.start-date,
+.daterangepicker td.off.end-date {
+    background: transparent;
+    color: var(--faint);
+}
+.daterangepicker td.in-range { background: var(--wash); color: var(--ink); }
+.daterangepicker td.active,
+.daterangepicker td.active:hover {
+    background: var(--info);
+    color: var(--on-accent);
+}
+.daterangepicker td.disabled, .daterangepicker option.disabled {
+    color: var(--faint);
+    text-decoration: line-through;
+}
+.daterangepicker select.monthselect,
+.daterangepicker select.yearselect,
+.daterangepicker select.hourselect,
+.daterangepicker select.minuteselect,
+.daterangepicker select.secondselect,
+.daterangepicker select.ampmselect {
+    background: var(--sunken);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+}
+.daterangepicker .calendar-time { color: var(--muted); }
+.daterangepicker .drp-buttons { border-top: 1px solid var(--line); }
+.daterangepicker .drp-selected { color: var(--muted); font-size: var(--fs-sm); }
+.daterangepicker .drp-buttons .btn {
+    font: var(--fs-sm) var(--stack);
+    padding: var(--s1) var(--s3);
+    border: 1px solid var(--line-firm);
+    border-radius: var(--radius-sm);
+    background: var(--raised);
+    color: var(--ink);
+    cursor: pointer;
+}
+.daterangepicker .drp-buttons .btn.btn-primary {
+    background: var(--info);
+    border-color: var(--info);
+    color: var(--on-accent);
+}
+.daterangepicker .ranges li {
+    color: var(--muted);
+    border-radius: var(--radius-sm);
+}
+.daterangepicker .ranges li:hover { background: var(--sunken); color: var(--ink); }
+.daterangepicker .ranges li.active { background: var(--info); color: var(--on-accent); }
+.daterangepicker.show-ranges .drp-calendar.left { border-left: 1px solid var(--line); }

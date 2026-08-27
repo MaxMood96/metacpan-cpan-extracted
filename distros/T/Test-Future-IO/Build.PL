@@ -7,7 +7,7 @@ use Module::Build;
 my $build = Module::Build->new(
    module_name => 'Test::Future::IO',
    requires => {
-      'perl' => '5.014',
+      'perl' => '5.020',
 
       'Future::Buffer' => 0,
       'Future::IO' => 0,

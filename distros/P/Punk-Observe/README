@@ -1,0 +1,47 @@
+Punk-Observe - an OpenTelemetry observability and logging backend
+
+This is a BACKEND, not a client. It receives OTLP, stores it, queries it and
+draws it. To emit telemetry from a Perl application, see Punk::OpenTelemetry.
+
+WHAT IS HERE
+
+    Ingest      OTLP over http/protobuf and http/json, gzip and deflate
+                bodies, partial success, and a tenant resolver. Served as a
+                PSGI application, so it mounts into Punk, plackup or anything
+                else that speaks PSGI.
+    Storage     a write-ahead log, immutable segments with content-derived
+                series ids, compressed metric chunks, deflated log blocks with
+                a trigram filter, and spans assembled at read time.
+    Queries     one language over all three signals, with a planner that
+                refuses an over-budget query and a resumable executor that
+                yields to the event loop.
+    Retention   compaction, five-minute and hourly rollups, and deletion by
+                whole block.
+    Drawing     server-rendered chart primitives, service graph layout and
+                flamegraph folding.
+
+The read interface, dashboards and alerting are not in this release, and
+neither is a packaged server binary: what ships is the engine and the PSGI
+receiver, assembled by the host application.
+
+gRPC ingest is deliberately not offered. It reports failure in HTTP/2
+trailers, PSGI has no trailer channel, and an endpoint answering 200 with no
+grpc-status is an exporter that looks successful while losing every batch.
+
+INSTALLATION
+
+    perl Makefile.PL
+    make
+    make test
+    make install
+
+DOCUMENTATION
+
+    perldoc Punk::Observe            the system, and why it is shaped this way
+    perldoc Punk::Observe::Ingest    the receiver
+    perldoc Punk::Observe::Query     the query language
+
+LICENSE AND COPYRIGHT
+
+This software is Copyright (c) 2026 by LNATION.
+This is free software, licensed under the Artistic License 2.0.

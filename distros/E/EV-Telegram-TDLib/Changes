@@ -1,0 +1,7 @@
+Revision history for EV-Telegram-TDLib
+
+0.02    2026-08-26
+        Entity text slicing, unicode documentation, GTK4/Tickit/MCP examples
+
+0.01    2026-08-26
+        Initial release

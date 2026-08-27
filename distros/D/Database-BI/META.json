@@ -32,9 +32,13 @@
       },
       "runtime" : {
          "requires" : {
+            "CGI::Info" : "0",
+            "CGI::Lingua" : "0",
             "Carp" : "0",
             "DBI" : "0",
             "Database::Abstraction" : "0.38",
+            "File::Spec" : "3.40",
+            "File::Temp" : "0.22",
             "HTML::TableExtract" : "0",
             "LWP::UserAgent" : "0",
             "Mojolicious" : "9.49",
@@ -42,7 +46,9 @@
             "Params::Get" : "0",
             "Params::Validate::Strict" : "0.39",
             "Readonly" : "0",
-            "Sub::Private" : "0",
+            "Scalar::Util" : "1.40",
+            "Socket" : "2.010",
+            "Sub::Protected" : "0",
             "perl" : "5.020000"
          }
       },
@@ -73,6 +79,6 @@
          "web" : "https://github.com/nigelhorne/Database-BI"
       }
    },
-   "version" : "v0.001.0",
+   "version" : "v0.003.2",
    "x_serialization_backend" : "JSON::PP version 4.18"
 }

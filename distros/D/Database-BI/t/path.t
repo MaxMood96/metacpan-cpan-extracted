@@ -184,8 +184,7 @@ subtest '_url_label path-F: DEAD CODE -- html_table fallback provably unreachabl
 	# In all cases $last is truthy => lc($last || 'html_table') == lc($last).
 	# To verify: the "html" path (E above) is the closest we can get to the fallback,
 	# but $last = 'html' (truthy) so 'html_table' is still unreachable.
-	pass 'path-F: dead code formally proven -- html_table fallback never selected';
-	note 'See TODO comment above lc($last || html_table) in DataSource.pm';
+	pass 'path-F: dead code formally proven -- html_table fallback removed from DataSource.pm';
 };
 
 # ======================================================================
@@ -228,22 +227,33 @@ subtest 'DataSource::new path-C: table name invalid -> croak' => sub {
 		'path C: digit-start table -> croak error_table_name_invalid';
 };
 
-subtest 'DataSource::new path-D: _init_backend throws -> croak error_backend_init' => sub {
-	# Drive a natural D::A failure: create a CSV whose first header column
-	# contains a hyphen.  _detect_file_info extracts that as the 'id' and
-	# passes it verbatim to D::A->new, which validates id against
-	# $SAFE_IDENTIFIER (qr/\A[a-zA-Z_][a-zA-Z0-9_]*\z/).  The hyphen fails
-	# that check, so D::A croaks "unsafe id column name 'my-col'" inside
-	# _init_backend's eval, which re-croaks as error_backend_init.
-	my $bad_id_dir = tempdir(CLEANUP => 1);
-	Mojo::File->new("$bad_id_dir/badid.csv")->spew("my-col,other\n1,2\n");
+subtest 'DataSource::new path-D: unsafe CSV column names' => sub {
+	# D1: First column unsafe but a later column IS safe -> _detect_file_info
+	# picks the first safe column as id; construction succeeds.  This is the
+	# common case for bank/account exports ("Account Number,Date,Amount,...").
+	my $mixed_dir = tempdir(CLEANUP => 1);
+	Mojo::File->new("$mixed_dir/mixed.csv")->spew("my-col,amount\n1,100\n");
+	my $ds;
+	lives_ok {
+		$ds = Database::BI::Model::DataSource->new(
+			directory => $mixed_dir,
+			table     => 'mixed',
+		)
+	} 'path D1: first-col unsafe but second safe -> construction succeeds';
+	isa_ok $ds, 'Database::BI::Model::DataSource',
+		'path D1: returns a DataSource object';
+
+	# D2: ALL column names contain hyphens — no safe fallback exists.
+	# _init_backend should croak error_no_safe_id before calling D::A.
+	my $bad_dir = tempdir(CLEANUP => 1);
+	Mojo::File->new("$bad_dir/allbad.csv")->spew("my-col,his-col\n1,2\n");
 	throws_ok {
 		Database::BI::Model::DataSource->new(
-			directory => $bad_id_dir,
-			table     => 'badid',
+			directory => $bad_dir,
+			table     => 'allbad',
 		)
-	} qr/failed to initialise database backend/,
-		'path D: unsafe CSV id column -> D::A croaks -> croak error_backend_init';
+	} qr/no column with a safe identifier name/,
+		'path D2: all CSV columns unsafe -> croak error_no_safe_id';
 };
 
 subtest 'DataSource::new path-E: happy path -> blessed DataSource returned' => sub {
@@ -305,6 +315,63 @@ subtest '_detect_file_info path-F: CSV absent, PSV present -> use PSV' => sub {
 	Mojo::File->new("$TMPDIR/psvonly.psv")->spew("id|label\n1|Foo\n");
 	my $result = $DETECT->($TMPDIR, 'psvonly');
 	is $result->{sep_char}, '|', 'path F: CSV absent; PSV found and used';
+};
+
+# Paths G-J cover the new data-row scan logic added to fix the bank-CSV bugs.
+
+subtest '_detect_file_info path-G: first col unsafe -> id skips to safe col' => sub {
+	# Bug 2 regression: "Account Number" has a space -> not a safe identifier.
+	# id must be the next column whose name IS safe.
+	Mojo::File->new("$TMPDIR/gtest.csv")->spew(
+		"Account Number,Date,Amount\n12345,2026-01-01,99.00\n"
+	);
+	my $result = $DETECT->($TMPDIR, 'gtest');
+	is $result->{id}, 'Date', 'path G: id skips unsafe first col, picks Date';
+};
+
+subtest '_detect_file_info path-H: first safe col empty in data row -> next safe col' => sub {
+	# Bug 3 regression: "ref" is a safe identifier but its value is empty in
+	# the data row.  D::A uses empty_is_undef, so picking it would silently
+	# drop every row where ref is blank.  id must advance to "description".
+	Mojo::File->new("$TMPDIR/htest.csv")->spew(
+		"Account Number,ref,description\nXX1234,,Transfer\n"
+	);
+	my $result = $DETECT->($TMPDIR, 'htest');
+	is $result->{id}, 'description',
+		'path H: id skips safe-but-empty "ref", picks "description"';
+};
+
+subtest '_detect_file_info path-I: all cols unsafe -> id undef' => sub {
+	# When no column has a safe identifier name, _init_backend must croak
+	# error_no_safe_id rather than letting D::A silently return 0 rows.
+	Mojo::File->new("$TMPDIR/itest.csv")->spew("my-col,his-col\n1,2\n");
+	my $result = $DETECT->($TMPDIR, 'itest');
+	ok !defined $result->{id}, 'path I: id is undef when all column names are unsafe';
+};
+
+subtest '_detect_file_info path-J: header-only file (no data row) -> safe header col' => sub {
+	# No data rows to probe: fall back to first safe column from the header.
+	Mojo::File->new("$TMPDIR/jtest.csv")->spew("Account Number,amount\n");
+	my $result = $DETECT->($TMPDIR, 'jtest');
+	is $result->{id}, 'amount',
+		'path J: no data row -> falls back to first safe column in header';
+};
+
+subtest '_detect_file_info path-K: file_size returned for CSV' => sub {
+	# file_size is used by _init_backend to set max_slurp_size, forcing the
+	# Text::xSV::Slurp path so DBD::CSV never sanitizes column names.
+	my $content = "id,label\n1,Alpha\n2,Beta\n";
+	my $path = "$TMPDIR/ktest.csv";
+	Mojo::File->new($path)->spew($content);
+	my $result = $DETECT->($TMPDIR, 'ktest');
+	ok exists $result->{file_size}, 'path K: file_size key is present in result';
+	is $result->{file_size}, -s $path, 'path K: file_size matches actual file size';
+};
+
+subtest '_detect_file_info path-K2: file_size absent for non-CSV/PSV (empty hashref)' => sub {
+	# Non-CSV/PSV tables (SQLite, XML) return {} with no file_size key.
+	my $result = $DETECT->($TMPDIR, 'no_such_table_xyz');
+	ok !exists $result->{file_size}, 'path K2: no file_size in empty hashref';
 };
 
 # ======================================================================
@@ -785,40 +852,39 @@ subtest '_csv_row path-E: undef field -> empty string in output' => sub {
 # ======================================================================
 
 subtest '_resolve_language path-A: no Accept-Language header -> default' => sub {
-	my $ctrl = mock_ctrl(undef);    # undef accept_language -> '' via //
-	my $lang = $RESOLVE_LANG->($ctrl, 'en');
-	is $lang, 'en', 'path A: undef header -> default (en)';
+	my $ctrl = mock_ctrl(undef);    # undef accept_language -> early return
+	my $lang = $RESOLVE_LANG->($ctrl, 'web', 'en');
+	is $lang, 'en', 'path A: absent header -> early return with default (en)';
 };
 
 subtest '_resolve_language path-B: header code equals default -> return default (no dir check)' => sub {
 	my $ctrl = mock_ctrl('en-US,en;q=0.9');
-	my $lang = $RESOLVE_LANG->($ctrl, 'en');
+	my $lang = $RESOLVE_LANG->($ctrl, 'web', 'en');
 	is $lang, 'en', 'path B: code == default -> returns default without dir check';
 };
 
 subtest '_resolve_language path-C: header code ne default, template dir exists -> use it' => sub {
-	# Create a temporary templates/web/xx directory that _resolve_language can stat.
-	my $xx_dir = Mojo::File->new($APP_HOME)->child('templates/web/xx');
-	my $created = !-d $xx_dir;
-	$xx_dir->make_path if $created;
-	my $ctrl = mock_ctrl('xx');
-	my $lang = $RESOLVE_LANG->($ctrl, 'en');
-	is $lang, 'xx', 'path C: template dir exists -> extracted code returned';
-	$xx_dir->remove_tree if $created;    # clean up temp dir
+	# Create a temporary templates/web/fr directory so CGI::Lingua can select 'fr'.
+	my $fr_dir = Mojo::File->new($APP_HOME)->child('templates/web/fr');
+	my $created = !-d $fr_dir;
+	$fr_dir->make_path if $created;
+	my $ctrl = mock_ctrl('fr-FR,fr;q=0.9,en;q=0.8');
+	my $lang = $RESOLVE_LANG->($ctrl, 'web', 'en');
+	is $lang, 'fr', 'path C: template dir exists -> CGI::Lingua selects fr';
+	$fr_dir->remove_tree if $created;    # clean up temp dir
 };
 
-subtest '_resolve_language path-D: header code ne default, template dir missing -> default' => sub {
-	my $ctrl = mock_ctrl('fr,fr-FR;q=0.9');
-	my $lang = $RESOLVE_LANG->($ctrl, 'en');
-	is $lang, 'en', 'path D: no templates/web/fr -> fall back to default';
+subtest '_resolve_language path-D: no supported template for requested language -> default' => sub {
+	# 'de' templates do not exist; CGI::Lingua finds no match in supported list -> undef -> default.
+	my $ctrl = mock_ctrl('de,de-DE;q=0.9');
+	my $lang = $RESOLVE_LANG->($ctrl, 'web', 'en');
+	is $lang, 'en', 'path D: no templates/web/de -> CGI::Lingua returns undef -> default';
 };
 
-subtest '_resolve_language path-E: no parseable 2-letter code -> default' => sub {
-	# Accept-Language: zh-Hans-CN has no 2-letter primary subtag matching /\b([a-z]{2})\b/
-	# Actually zh is 2 letters... but Accept-Language: q=0.9 has none.
+subtest '_resolve_language path-E: no parseable language -> default' => sub {
 	my $ctrl = mock_ctrl('q=0.9');
-	my $lang = $RESOLVE_LANG->($ctrl, 'en');
-	is $lang, 'en', 'path E: no 2-letter code -> default';
+	my $lang = $RESOLVE_LANG->($ctrl, 'web', 'en');
+	is $lang, 'en', 'path E: unrecognised Accept-Language -> default';
 };
 
 # ======================================================================

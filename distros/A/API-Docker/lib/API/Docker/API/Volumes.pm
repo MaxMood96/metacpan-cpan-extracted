@@ -1,6 +1,6 @@
 package API::Docker::API::Volumes;
 # ABSTRACT: Docker Engine Volumes API
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 use Moo;
 use API::Docker::Volume;
 use Carp qw( croak );
@@ -83,7 +83,7 @@ API::Docker::API::Volumes - Docker Engine Volumes API
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 

@@ -31,6 +31,40 @@ my $INC = '-Iinclude';
     }
 }
 
+# PROVIDER SIDE, and until 0.08 there was not one.
+#
+# This distribution owns the OTLP field numbers, and Punk::Observe reads them
+# rather than keeping a second copy: two sources of truth for a field number
+# is the one thing that must not happen across a wire format. The client
+# writing field 9 and the server reading field 9 as something else produces
+# plausible wrong data, silently, with no error anywhere.
+#
+# But asking ExtUtils::Depends for those numbers only works if this dist
+# ANSWERS, and it never did: it used ExtUtils::Depends purely as a consumer,
+# installed no headers, and wrote no Install/Files.pm. So every consumer fell
+# through to the sibling-checkout branch, and anyone building from a released
+# tarball outside the source tree was told the dependency was "neither
+# installed nor findable" while holding a correctly installed copy of it.
+#
+# ONLY otel_proto.h IS PUBLISHED. The rest of include/ is this dist's own
+# working surface, and installing it would make every one of those headers a
+# compatibility commitment - the append-only rule applies to what is
+# published, not to what exists.
+#
+# A SEPARATE OBJECT FROM THE CONSUMER ONE ABOVE, and that is the whole point
+# rather than tidiness. ExtUtils::Depends records its dependency list into the
+# file it writes, so publishing through the object that names Fetch, Punk,
+# Hyperman and File::Raw::JSON would declare all four - and their transitive
+# closure, which here came to fourteen distributions - as things a consumer
+# must also have installed. Reading a field number would then require the
+# whole client stack.
+#
+# otel_proto.h includes nothing and needs nothing. What is published says so.
+my $provider = ExtUtils::Depends->new('Punk::OpenTelemetry');
+$provider->install('include/otel_proto.h');
+mkdir 'Install' unless -d 'Install';
+$provider->save_config('Install/Files.pm');
+
 # getentropy(2), for trace and span ids - macOS 10.12+, glibc 2.25+, the BSDs.
 # Declared in <sys/random.h> on macOS and <unistd.h> on glibc, so both are
 # probed. Without it otel_id.h falls back to a cached /dev/urandom descriptor,
@@ -140,6 +174,17 @@ my %PM;
     }
 }
 
+# As a provider, get_makefile_vars returns a PM map - otel_proto.h and
+# Files.pm - and naming PM ourselves would REPLACE it. Merged rather than
+# either one winning: dropping theirs installs no header, dropping ours
+# installs no modules.
+my %dep_vars = $provider->get_makefile_vars;
+@PM{ keys %{ $dep_vars{PM} || {} } } = values %{ $dep_vars{PM} || {} };
+delete $dep_vars{PM};
+# The INC above is already the full answer, including the sibling case that
+# ExtUtils::Depends knows nothing about.
+delete $dep_vars{INC};
+
 my %WriteMakefileArgs = (
     NAME             => 'Punk::OpenTelemetry',
     PM               => \%PM,
@@ -178,13 +223,14 @@ my %WriteMakefileArgs = (
     (length $LIBS ? (LIBS => [$LIBS]) : ()),
     macro  => { TARFLAGS => "--format=ustar -c -v -f" },
     dist   => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
-    clean  => { FILES => 'Punk-OpenTelemetry-*' },
+    clean  => { FILES => 'Punk-OpenTelemetry-* Install/Files.pm' },
     # MakeMaker maps OpenTelemetry.xs -> .c and does not rescan the INCLUDE:
     # fragments or the C headers, so force a regenerate when either changes.
     depend => {
         'OpenTelemetry.c' => join(' ', glob('xs/*.xs')),
         'OpenTelemetry.o' => join(' ', glob('include/*.h')),
     },
+    %dep_vars,
 );
 
 unless (eval { ExtUtils::MakeMaker->VERSION('6.64'); 1 }) {

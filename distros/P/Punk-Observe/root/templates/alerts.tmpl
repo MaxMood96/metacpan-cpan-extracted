@@ -1,0 +1,77 @@
+<div class="toolbar">
+  <form method="get" action="{% prefix %}/alerts" style="display:contents">
+    <input type="text" name="q" value="{% query %}" placeholder="filter by name or label">
+    <button type="submit">Filter</button>
+  </form>
+  {% if can_edit %}<a class="btn" href="{% prefix %}/alerts/new">New rule</a>{% end %}
+</div>
+
+{% if error %}
+<div class="warnbox"><strong>{% error %}</strong>{% if hint %} {% hint %}{% end %}</div>
+{% end %}
+
+{% if broken %}
+<div class="warnbox"><strong>{% broken %} rule(s) could not be evaluated.</strong>
+  A rule whose query fails is not a rule reporting healthy.</div>
+{% end %}
+
+{% if timeline_plot %}
+<div class="panel">
+  <h2>Recent history</h2>
+  <div class="chartwrap" data-chart>
+    <script type="application/json" data-plot>{% raw timeline_plot %}</script>
+  </div>
+</div>
+{% end %}
+
+<div class="panel">
+  {% if rules %}
+  <div class="tablewrap">
+    <table>
+      <thead><tr>
+        <th>state</th><th>rule</th><th>series</th><th>for</th><th>value</th><th></th>
+      </tr></thead>
+      <tbody>
+      {% for r in rules %}
+      <tr class="{% r.row_class %}">
+        <td><span class="al al-{% r.state %}">{% r.state %}</span>
+          {% if r.silenced %}<span class="al al-silenced">silenced</span>{% end %}</td>
+        <td><a href="{% prefix %}/alerts/{% r.id %}">{% r.name %}</a></td>
+        <td class="mono">{% r.series %}</td>
+        <td class="mono">{% r.held %}</td>
+        <td class="mono">{% r.value %}</td>
+        <td><a href="{% prefix %}/explore?q={% r.query_esc %}{% range_amp %}">explore</a></td>
+      </tr>
+      {% end %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  {% if configured %}
+  <p class="empty">No alert rules yet.</p>
+  {% else %}
+  <p class="empty">No rule source is configured, so this screen cannot say
+    whether anything is firing. Pass <code class="mono">alerts</code> to the
+    plugin with a reader for wherever your rules are kept.</p>
+  {% end %}
+  {% end %}
+</div>
+
+{% if silences %}
+<div class="panel">
+  <h2>Silences</h2>
+  <p class="note">A silenced rule still reaches firing and still shows red.
+    It does not page.</p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>pattern</th><th>until</th><th>by</th><th>reason</th></tr></thead>
+      <tbody>
+      {% for s in silences %}
+      <tr><td class="mono">{% s.pattern %}</td><td class="mono">{% s.until %}</td>
+        <td>{% s.by %}</td><td>{% s.reason %}</td></tr>
+      {% end %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% end %}

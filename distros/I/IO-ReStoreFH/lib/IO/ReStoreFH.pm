@@ -7,7 +7,7 @@ use 5.10.0;
 use strict;
 use warnings;
 
-our $VERSION = '0.11';
+our $VERSION = '0.13';
 
 # In Perl 5.10.1 a use or require of FileHandle or something in the
 # FileHandle hierarchy (like FileHandle::Fmode, below) will cause the
@@ -37,6 +37,32 @@ sub _croak {
     goto &Carp::croak;
 }
 
+sub _dup_mode {
+
+    my ( $fh ) = @_;
+
+    return '<&' if FileHandle::Fmode::is_RO( $fh );
+
+    my $is_WO = FileHandle::Fmode::is_WO( $fh );
+    my $is_A;
+
+    if ( $is_WO ) {
+        $is_A = FileHandle::Fmode::is_A( $fh );
+        return '>>&' if $is_A;
+        return '>&';
+    }
+
+    if (   FileHandle::Fmode::is_W( $fh )
+        && FileHandle::Fmode::is_R( $fh ) )
+    {
+        $is_A //= FileHandle::Fmode::is_A( $fh );
+        return '+>>&' if $is_A;
+        return '+<&';
+    }
+
+    return undef;
+}
+
 sub new {
     my $class = shift;
 
@@ -61,21 +87,14 @@ sub store {
 
         # get access mode; open documentation says mode must
         # match that of original filehandle; do the best we can
-        my $mode
-          = FileHandle::Fmode::is_RO( $fh ) ? '<'
-          : FileHandle::Fmode::is_WO( $fh ) ? '>'
-          : FileHandle::Fmode::is_W( $fh )
-          && FileHandle::Fmode::is_R( $fh ) ? '+<'
-          : undef;
+        my $mode = _dup_mode( $fh );
 
         # give up
         _croak( "inexplicable error: unable to determine mode for \$fh;\n" )
           if !defined $mode;
 
-        $mode .= '>' if FileHandle::Fmode::is_A( $fh );
-
         # dup the filehandle
-        open my $dup, $mode . q{&}, $fh
+        open my $dup, $mode, $fh
           or _croak( "error fdopening \$fh: $!\n" );
 
         push @{ $self->{dups} }, { fh => $fh, mode => $mode, dup => $dup };
@@ -113,7 +132,7 @@ sub restore {
         }
 
         else {
-            open( $dup->{fh}, $dup->{mode} . q{&}, $dup->{dup} )
+            open( $dup->{fh}, $dup->{mode}, $dup->{dup} )
               or _croak( "error restoring file handle $dup->{fh}: $!" );
             close( $dup->{dup} ) or _croak( q{error closing dup'ed filehandle} );
         }
@@ -152,7 +171,7 @@ IO::ReStoreFH - store/restore file handles
 
 =head1 VERSION
 
-version 0.11
+version 0.13
 
 =head1 SYNOPSIS
 
@@ -276,15 +295,15 @@ Please report any bugs or feature requests to bug-io-restorefh@rt.cpan.org  or t
 
 Source is available at
 
-  https://gitlab.com/djerius/io-restorefh
+  https://codeberg.org/djerius/p5-IO-ReStoreFH
 
 and may be cloned from
 
-  https://gitlab.com/djerius/io-restorefh.git
+  https://codeberg.org/djerius/p5-IO-ReStoreFH.git
 
 =head1 AUTHOR
 
-Diab Jerius <djerius@cpan.org>
+Diab Jerius <djerius@cfa.harvard.edu>
 
 =head1 COPYRIGHT AND LICENSE
 

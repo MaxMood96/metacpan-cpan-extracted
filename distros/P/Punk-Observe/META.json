@@ -1,0 +1,54 @@
+{
+   "abstract" : "an OpenTelemetry observability and logging backend",
+   "author" : [
+      "LNATION <email@lnation.org>"
+   ],
+   "dynamic_config" : 1,
+   "generated_by" : "ExtUtils::MakeMaker version 7.7702, CPAN::Meta::Converter version 2.150010",
+   "license" : [
+      "artistic_2"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : 2
+   },
+   "name" : "Punk-Observe",
+   "no_index" : {
+      "directory" : [
+         "t",
+         "inc"
+      ]
+   },
+   "prereqs" : {
+      "build" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "0"
+         }
+      },
+      "configure" : {
+         "requires" : {
+            "ExtUtils::Depends" : "0.404",
+            "ExtUtils::MakeMaker" : "0",
+            "Punk::OpenTelemetry" : "0.08"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "File::Raw::JSON" : "0.06",
+            "Hyperman" : "0.36",
+            "IO::Uncompress::Gunzip" : "0",
+            "Punk::OpenTelemetry" : "0.08",
+            "perl" : "5.010000"
+         }
+      },
+      "test" : {
+         "requires" : {
+            "IO::Compress::Gzip" : "0",
+            "Test::More" : "0"
+         }
+      }
+   },
+   "release_status" : "stable",
+   "version" : "0.01",
+   "x_serialization_backend" : "JSON::PP version 4.16"
+}

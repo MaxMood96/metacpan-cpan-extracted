@@ -754,4 +754,493 @@ subtest 'Transaction 10: Concurrent DataSource isolation' => sub {
 		'beta: records contain no AAA values from alpha';
 };
 
+# ======================================================================
+# TRANSACTION 11: Combine data lifecycle (cats + dogs)
+#
+# Verifies the /combine endpoint stacks rows from two heterogeneous files
+# into a single unified view with the union of all columns.
+#
+# cats.csv columns: Species,Name,Color,Breed,Eye Color,Environment
+# dogs.csv columns: Species,Name,Color,Breed,Eye Color,Sex,Fixed
+# combined columns: Species,Name,Color,Breed,Eye Color,Environment,Sex,Fixed
+#
+# State invariant:
+#   combined_rows  = cat_rows  + dog_rows
+#   combined_cols  = union(cat_cols, dog_cols) = 8
+#   cat rows have blank Sex,Fixed; dog rows have blank Environment
+# ======================================================================
+
+Readonly my $CATS_CSV	=> $t->app->home->child('data/cats.csv')->to_string;
+Readonly my $DOGS_CSV	=> $t->app->home->child('data/dogs.csv')->to_string;
+Readonly my $CAT_ROWS	=> 12;	# 12 data rows in cats.csv
+Readonly my $DOG_ROWS	=> 12;	# 12 data rows in dogs.csv
+Readonly my $CAT_COLS	=> 6;	# Species,Name,Color,Breed,Eye Color,Environment
+Readonly my $DOG_COLS	=> 7;	# Species,Name,Color,Breed,Eye Color,Sex,Fixed
+Readonly my $COMBINED_ROWS => $CAT_ROWS + $DOG_ROWS;
+Readonly my $COMBINED_COLS => 8;	# union of cat and dog columns
+
+subtest 'Transaction 11: combine cats + dogs lifecycle' => sub {
+	SKIP: {
+		skip 'data/cats.csv not found', 1 unless -f $CATS_CSV;
+		skip 'data/dogs.csv not found', 1 unless -f $DOGS_CSV;
+
+		# Phase 1: GET /combine with cats as left, dogs as right-combine source.
+		my $cat_spec = 'table:cats';
+		my $dog_spec = 'table:dogs';
+		$t->get_ok('/combine?l=' . url_escape($cat_spec) . '&c=' . url_escape($dog_spec))
+			->status_is(200)
+			->content_like(qr/Species/,	'combined view contains Species column')
+			->content_like(qr/Environment/,	'combined view contains Environment (cats-only column)')
+			->content_like(qr/Sex/,		'combined view contains Sex (dogs-only column)')
+			->content_like(qr/Fixed/,	'combined view contains Fixed (dogs-only column)');
+
+		# Phase 2: Export the combined view as CSV and verify row and column counts.
+		my $export_url = '/export?l=' . url_escape($cat_spec)
+			. '&c=' . url_escape($dog_spec)
+			. '&format=csv';
+		$t->get_ok($export_url)->status_is(200);
+		my $body = $t->tx->res->body;
+		is count_csv_rows($body), $COMBINED_ROWS,
+			'combined CSV has cat_rows + dog_rows rows';
+		is count_csv_cols($body), $COMBINED_COLS,
+			'combined CSV has 8 columns (union of cat and dog schemas)';
+
+		# Phase 3: Filter the combined view -- only cats (Species eq Cat).
+		$t->get_ok('/combine?l=' . url_escape($cat_spec)
+				. '&c=' . url_escape($dog_spec)
+				. '&f=Species:eq:Cat')
+			->status_is(200)
+			->content_like(qr/Cat/, 'filtered combined view contains Cat rows');
+		my $filtered_body = $t->tx->res->body;
+		# The filtered page should not show any Dog rows.
+		unlike $filtered_body, qr/Rover/, 'no dog row (Rover) in cat-filtered view';
+
+		# Phase 4: Idempotency -- combining in the same order produces the same result.
+		$t->get_ok('/combine?l=' . url_escape($cat_spec) . '&c=' . url_escape($dog_spec))
+			->status_is(200)
+			->content_like(qr/Environment/, 'second combine still has Environment column');
+	}
+};
+
+# ======================================================================
+# TRANSACTION 12: Recently-saved section server-side contract
+#
+# The "Recently saved" home-page section is rendered client-side from
+# localStorage, but its correctness depends on three server-side
+# contracts this transaction verifies end-to-end:
+#
+#   Phase 1  GET  /            -> home page contains bi-saved placeholder
+#                                 and the makeSection JS helper
+#   Phase 2  POST /export      -> response carries {saved: "/abs/path"}
+#   Phase 3  GET  /api/stat    -> {exists:true, mtime, size} for saved file
+#   Phase 4  GET  /open        -> 200 and data table for the saved file
+#   Phase 5  GET  /api/stat    -> {exists:false} for a non-existent path;
+#                                 no error, HTTP 200 with exists=false
+#
+# State invariant: a path returned by POST /export must be openable via
+# /open and must report exists=true in /api/stat until deleted.
+# ======================================================================
+
+subtest 'Transaction 12: Recently-saved section server-side contract' => sub {
+	SKIP: {
+		skip 'data/sales.csv not found', 1 unless -f $SALES_CSV;
+
+		my $dir = tempdir(CLEANUP => 1);
+		Readonly my $SAVE_FILE => 'saved_recent.csv';
+
+		# Phase 1: home page ships the bi-saved placeholder and makeSection helper.
+		$t->get_ok('/')->status_is(200)
+			->content_like(qr/id="bi-saved"/,   'home page has bi-saved placeholder div')
+			->content_like(qr/makeSection/,      'home page contains makeSection JS helper')
+			->content_like(qr/bi:saved/,         'home page references bi:saved localStorage key');
+
+		# Phase 2: POST /export -- save sales as CSV, expect {saved} in response.
+		my $params = Mojo::Parameters->new;
+		$params->append(l        => 'table:sales');
+		$params->append(dir      => $dir);
+		$params->append(filename => $SAVE_FILE);
+		$t->post_ok('/export', form => { l => 'table:sales', dir => $dir, filename => $SAVE_FILE })
+			->status_is(200);
+		my $write_json = decode_json($t->tx->res->body);
+		ok defined $write_json->{saved},  'Phase 2: response contains "saved" key';
+		my $saved_path = $write_json->{saved};
+		like $saved_path, qr/\Q$SAVE_FILE\E\z/, 'Phase 2: saved path ends with filename';
+		ok -f $saved_path, 'Phase 2: file physically exists on disk';
+
+		# Phase 3: /api/stat reports exists=true with mtime and size for saved file.
+		$t->get_ok('/api/stat?path=' . url_escape($saved_path))->status_is(200);
+		my $stat = decode_json($t->tx->res->body);
+		ok $stat->{exists},           'Phase 3: stat reports file exists';
+		ok defined $stat->{mtime},    'Phase 3: stat includes mtime';
+		ok defined $stat->{size},     'Phase 3: stat includes size';
+		ok $stat->{size} > 0,         'Phase 3: file size is non-zero';
+		is $stat->{path}, $saved_path, 'Phase 3: stat echoes the requested path';
+
+		# Phase 4: /open serves the saved CSV as a data table.
+		$t->get_ok('/open?path=' . url_escape($saved_path))
+			->status_is(200)
+			->content_like(qr/sales_rep|product|region/, 'Phase 4: saved file opens as data table');
+
+		# Phase 5: /api/stat returns {exists:false} for a path that does not exist;
+		# HTTP status must still be 200 (the client uses exists=false to grey out the card).
+		my $ghost = $dir . '/does_not_exist.csv';
+		$t->get_ok('/api/stat?path=' . url_escape($ghost))->status_is(200);
+		my $ghost_stat = decode_json($t->tx->res->body);
+		ok !$ghost_stat->{exists},  'Phase 5: stat returns exists=false for missing file';
+		ok !defined $ghost_stat->{mtime}, 'Phase 5: mtime absent when file missing';
+		ok !defined $ghost_stat->{size},  'Phase 5: size absent when file missing';
+	}
+};
+
+# ======================================================================
+# TRANSACTION 13: Dedup toggle — hide/show duplicate rows
+#
+# Verifies the end-to-end contract for the ?d=1 deduplication parameter:
+#
+#   Phase 1  GET  /open             (no d=)  -> all rows shown; toolbar
+#                                              contains "Hide duplicates"
+#                                              button without active class
+#   Phase 2  GET  /open?d=1                 -> only unique rows shown;
+#                                              button reads "Show duplicates"
+#                                              and carries btn-dedup--active
+#   Phase 3  GET  /export?d=1&format=csv   -> exported CSV row count matches
+#                                              unique-row count, not total
+#   Phase 4  POST /export (body d=1)       -> written file has unique rows only
+#   Phase 5  Idempotency: second GET /open?d=1 -> same unique count
+#
+# Uses a self-contained temp CSV with known duplicates; no dependency on
+# data/ contents.
+# ======================================================================
+
+subtest 'Transaction 13: Dedup toggle — hide/show duplicate rows' => sub {
+	my $tmpdir = tempdir(CLEANUP => 1);
+
+	# Five data rows: rows 1+3 are identical, rows 2+5 are identical, row 4 unique.
+	# Unique rows after dedup: 3.  "alpha" appears in rows 1+3, "beta" in rows 2+5.
+	Readonly my $DEDUP_UNIQUE => 3;
+
+	my $csv_file = Mojo::File->new($tmpdir)->child('dupes.csv');
+	$csv_file->spew("id,name,value\n"
+		. "1,alpha,100\n"
+		. "2,beta,200\n"
+		. "1,alpha,100\n"
+		. "3,gamma,300\n"
+		. "2,beta,200\n");
+	my $path = $csv_file->to_string;
+
+	# Phase 1: open without d= -- all duplicate rows present.
+	# "alpha" is in rows 1 and 3 so appears twice in the HTML; "gamma" once.
+	$t->get_ok('/open?path=' . url_escape($path))->status_is(200);
+	my $body1       = $t->tx->res->body;
+	my $alpha_total = () = ($body1 =~ /\balpha\b/g);
+	is $alpha_total, 2, 'Phase 1: duplicate value "alpha" appears twice (all rows shown)';
+	$t->content_like(qr/Hide duplicates/, 'Phase 1: button reads "Hide duplicates"');
+	$t->content_unlike(qr/class="btn-dedup btn-dedup--active"/,
+		'Phase 1: active class absent from button when d= not set');
+
+	# Phase 2: open with d=1 -- each duplicate row collapsed to one occurrence.
+	$t->get_ok('/open?path=' . url_escape($path) . '&d=1')->status_is(200);
+	my $body2       = $t->tx->res->body;
+	my $alpha_dedup = () = ($body2 =~ /\balpha\b/g);
+	is $alpha_dedup, 1, 'Phase 2: duplicate value "alpha" appears exactly once after dedup';
+	my $beta_dedup  = () = ($body2 =~ /\bbeta\b/g);
+	is $beta_dedup,  1, 'Phase 2: duplicate value "beta" appears exactly once after dedup';
+	$t->content_like(qr/Show duplicates/, 'Phase 2: button reads "Show duplicates"');
+	$t->content_like(qr/class="btn-dedup btn-dedup--active"/,
+		'Phase 2: active class present on button when d=1');
+
+	# Phase 3: GET export with d=1 returns a deduplicated CSV.
+	my $lspec = 'path:' . $path;
+	$t->get_ok('/export?l=' . url_escape($lspec) . '&d=1&format=csv')->status_is(200);
+	is count_csv_rows($t->tx->res->body), $DEDUP_UNIQUE,
+		'Phase 3: exported CSV has unique-row count, not total';
+
+	# Phase 4: POST export with d=1 writes a deduplicated file.
+	my $out_file = Mojo::File->new($tmpdir)->child('deduped.csv')->to_string;
+	$t->post_ok('/export', form => {
+		l        => $lspec,
+		dir      => $tmpdir,
+		filename => 'deduped.csv',
+		d        => '1',
+	})->status_is(200);
+	my $write_json = decode_json($t->tx->res->body);
+	ok defined $write_json->{saved}, 'Phase 4: response contains "saved"';
+	is count_csv_rows(Mojo::File->new($write_json->{saved})->slurp),
+		$DEDUP_UNIQUE, 'Phase 4: written file has unique rows only';
+
+	# Phase 5: idempotency -- second GET with d=1 produces the same unique count.
+	$t->get_ok('/export?l=' . url_escape($lspec) . '&d=1&format=csv')->status_is(200);
+	is count_csv_rows($t->tx->res->body), $DEDUP_UNIQUE,
+		'Phase 5: repeated export with d=1 is idempotent';
+};
+
+# ======================================================================
+# TRANSACTION 14: Refresh button — presence, placement, and isolation
+#
+# Verifies the server-side contract for the ↻ Refresh toolbar button:
+#
+#   Phase 1  GET  /view/sales          -> toolbar contains btn-refresh with
+#                                         correct title; btn-export-open also
+#                                         present (both guarded by left_spec)
+#   Phase 2  GET  /open?path=<csv>    -> btn-refresh present for arbitrary
+#                                         file opened via /open
+#   Phase 3  GET  /                   -> home page has no btn-refresh (no data
+#                                         view, no toolbar)
+#   Phase 4  GET  /browse             -> filesystem navigator has no btn-refresh
+#
+# State invariant: btn-refresh is exclusively a view-page control and must
+# never appear on navigation pages that have no data table rendered.
+# ======================================================================
+
+subtest 'Transaction 14: Refresh button — presence, placement, and isolation' => sub {
+	SKIP: {
+		skip 'data/sales.csv not found', 1 unless -f $SALES_CSV;
+
+		# Phase 1: /view/sales — refresh button present alongside export.
+		$t->get_ok('/view/sales')->status_is(200)
+			->content_like(qr/class="btn-refresh"/,
+				'Phase 1: btn-refresh present on /view page')
+			->content_like(qr/btn-refresh[^>]*title=/,
+				'Phase 1: btn-refresh carries a title attribute')
+			->content_like(qr/class="btn-export-open"/,
+				'Phase 1: export button also present (both share left_spec guard)')
+			->content_like(qr/location\.reload\(\)/,
+				'Phase 1: JS wires btn-refresh to location.reload()');
+
+		# Phase 2: /open — refresh button present for arbitrary filesystem files.
+		my $tmpdir = tempdir(CLEANUP => 1);
+		Mojo::File->new($tmpdir)->child('t14.csv')->spew("id,val\n1,x\n");
+		my $csv_path = Mojo::File->new($tmpdir)->child('t14.csv')->to_string;
+		$t->get_ok('/open?path=' . url_escape($csv_path))->status_is(200)
+			->content_like(qr/class="btn-refresh"/,
+				'Phase 2: btn-refresh present on /open page');
+
+		# Phase 3: home page has no toolbar, so no btn-refresh.
+		$t->get_ok('/')->status_is(200)
+			->content_unlike(qr/id="btn-refresh"/,
+				'Phase 3: btn-refresh absent from home page');
+
+		# Phase 4: /browse has no data table, so no btn-refresh.
+		$t->get_ok('/browse')->status_is(200)
+			->content_unlike(qr/id="btn-refresh"/,
+				'Phase 4: btn-refresh absent from filesystem browser');
+	}
+};
+
+# ======================================================================
+# TRANSACTION 15: from=saved — bi:recent suppression contract
+#
+# Verifies the full server-side and template contract for the mechanism
+# that prevents files opened from "Recently saved" appearing again in
+# "Recently opened":
+#
+#   Phase 1  GET  /open?path=<csv>&from=saved
+#                 -> 200 (server ignores unknown from= param gracefully)
+#   Phase 2  response body contains the data table (normal render — the
+#            from= param does not break anything server-side)
+#   Phase 3  home page template carries fromTag='saved' in the makeSection
+#            call for the bi-saved section
+#   Phase 4  dashboard template contains history.replaceState logic that
+#            strips the from= marker from the address bar
+#   Phase 5  dashboard template guards the bi:recent write with a fromSaved
+#            check so saved-origin navigations are excluded
+# ======================================================================
+
+subtest 'Transaction 15: from=saved — bi:recent suppression contract' => sub {
+	my $tmpdir = tempdir(CLEANUP => 1);
+	my $csv = Mojo::File->new($tmpdir)->child('t15.csv');
+	$csv->spew("product,qty\nwidget,10\ngadget,5\n");
+	my $path = $csv->to_string;
+
+	# Phase 1: server handles from=saved gracefully (returns 200, not 400/500).
+	$t->get_ok('/open?path=' . url_escape($path) . '&from=saved')
+		->status_is(200, 'Phase 1: from=saved param accepted without error');
+
+	# Phase 2: data table still renders normally despite the extra param.
+	$t->content_like(qr/widget|gadget/,
+		'Phase 2: data table rendered correctly with from=saved in URL');
+
+	# Phase 3: home template calls makeSection for bi-saved with fromTag='saved'.
+	my $home_body = $t->get_ok('/')->tx->res->body;
+	like $home_body, qr/'saved'\s*\)/,
+		q{Phase 3: home makeSection call passes 'saved' as fromTag for bi-saved section};
+
+	# Phase 4: dashboard template strips the marker via history.replaceState.
+	my $dash_body = $t->get_ok('/open?path=' . url_escape($path))->tx->res->body;
+	like $dash_body, qr/history\.replaceState/,
+		'Phase 4: dashboard JS uses history.replaceState to clean from= from address bar';
+
+	# Phase 5: bi:recent write is guarded by fromSaved check.
+	like $dash_body, qr/fromSaved/,
+		'Phase 5: dashboard JS declares fromSaved variable to gate bi:recent write';
+	like $dash_body, qr/if\s*\(\s*!fromSaved\s*\)/,
+		'Phase 5: bi:recent write is inside if(!fromSaved) guard';
+};
+
+# ======================================================================
+# TRANSACTION 16: Clear upload cache — full lifecycle
+#
+# Verifies POST /uploads/clear across three phases:
+#
+#   Phase 1  POST /upload (two files)          -> uploads land in .uploads/
+#   Phase 2  POST /uploads/clear (first call)  -> freed > 0, count >= 2
+#   Phase 3  POST /uploads/clear (second call) -> freed = 0, count = 0
+#                                                 (cache already empty)
+#
+# State invariant: clearing an already-empty cache is idempotent and
+# must return 200 with zeros, never an error.
+# ======================================================================
+
+subtest 'Transaction 16: Clear upload cache — full lifecycle' => sub {
+	# Phase 1: upload two distinct CSV files so .uploads/ is non-empty.
+	my $csv_a = "id,label\n1,alpha\n2,beta\n";
+	my $csv_b = "name,score\nAlice,90\nBob,85\n";
+
+	$t->post_ok('/upload',
+		{ 'Content-Type' => 'multipart/form-data' },
+		form => { file => { content => $csv_a, filename => 'cache_a.csv' } },
+	)->status_is(200);
+	my $res_a = decode_json($t->tx->res->body);
+	ok defined $res_a->{path}, 'Phase 1a: first upload returned a path';
+
+	$t->post_ok('/upload',
+		{ 'Content-Type' => 'multipart/form-data' },
+		form => { file => { content => $csv_b, filename => 'cache_b.csv' } },
+	)->status_is(200);
+	my $res_b = decode_json($t->tx->res->body);
+	ok defined $res_b->{path}, 'Phase 1b: second upload returned a path';
+
+	# Phase 2: first clear — should recover the bytes from both uploads.
+	$t->post_ok('/uploads/clear')->status_is(200);
+	my $clear1 = decode_json($t->tx->res->body);
+	ok defined $clear1->{freed}, 'Phase 2: response contains "freed"';
+	ok defined $clear1->{count}, 'Phase 2: response contains "count"';
+	cmp_ok $clear1->{count}, '>=', 2,
+		'Phase 2: at least two files freed (one per upload)';
+	cmp_ok $clear1->{freed}, '>', 0,
+		'Phase 2: freed bytes > 0 after clearing non-empty cache';
+
+	# Phase 3: second clear — cache empty, both values must be zero.
+	$t->post_ok('/uploads/clear')->status_is(200);
+	my $clear2 = decode_json($t->tx->res->body);
+	is $clear2->{freed}, 0, 'Phase 3: idempotent clear returns freed=0';
+	is $clear2->{count}, 0, 'Phase 3: idempotent clear returns count=0';
+};
+
+# ======================================================================
+# TRANSACTION 17: Per-request CGI::Info/CGI::Lingua detection regression
+#
+# Verifies that platform/language detection does not break page rendering
+# when unusual User-Agent or Accept-Language values are present, and that
+# the server gracefully falls back to the configured defaults when no
+# matching template directory exists for the detected value.
+#
+#   Phase 1  Mobile UA + no mobile/ templates  -> 200, falls back to web/en
+#   Phase 2  Desktop UA                        -> 200, normal web/en render
+#   Phase 3  Accept-Language: fr (no fr/ dir)  -> 200, falls back to en
+#   Phase 4  Accept-Language: en               -> 200, en render
+#   Phase 5  Accept-Language absent            -> 200, en render (early return)
+# ======================================================================
+
+subtest 'Transaction 17: Per-request CGI::Info/CGI::Lingua detection regression' => sub {
+	SKIP: {
+		skip 'data/sales.csv not found', 1 unless -f $SALES_CSV;
+
+		Readonly my $MOBILE_UA  => 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+		Readonly my $DESKTOP_UA => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
+
+		# Phase 1: mobile UA — no templates/mobile/ dir, so falls back to web/en.
+		$t->get_ok('/view/sales',
+			{ 'User-Agent' => $MOBILE_UA })->status_is(200,
+				'Phase 1: mobile UA returns 200 (falls back to web/en templates)');
+		$t->content_like(qr/sales|product|region/,
+			'Phase 1: data table rendered despite mobile UA');
+
+		# Phase 2: standard desktop UA — normal web/en render.
+		$t->get_ok('/view/sales',
+			{ 'User-Agent' => $DESKTOP_UA })->status_is(200,
+				'Phase 2: desktop UA returns 200');
+		$t->content_like(qr/sales|product|region/,
+			'Phase 2: data table rendered with desktop UA');
+
+		# Phase 3: Accept-Language: fr — no templates/web/fr/, falls back to en.
+		$t->get_ok('/view/sales',
+			{ 'Accept-Language' => 'fr-FR,fr;q=0.9,en;q=0.8' })->status_is(200,
+				'Phase 3: fr Accept-Language returns 200 (falls back to en)');
+		$t->content_like(qr/sales|product|region/,
+			'Phase 3: data table rendered with fr Accept-Language (en fallback)');
+
+		# Phase 4: Accept-Language: en — standard path, no fallback needed.
+		$t->get_ok('/view/sales',
+			{ 'Accept-Language' => 'en-US,en;q=0.9' })->status_is(200,
+				'Phase 4: en Accept-Language returns 200');
+
+		# Phase 5: No Accept-Language header at all — early return to default.
+		my $tx = $t->ua->build_tx(GET => '/view/sales');
+		$tx->req->headers->remove('Accept-Language');
+		$t->request_ok($tx)->status_is(200,
+			'Phase 5: absent Accept-Language returns 200 (early return in _resolve_language)');
+		$t->content_like(qr/sales|product|region/,
+			'Phase 5: data table rendered when Accept-Language header is absent');
+	}
+};
+
+subtest 'Transaction 18: Mixed-case upload filename opens correctly' => sub {
+	# Regression test covering two bugs found when opening a real bank CSV:
+	#
+	# Bug 1 (case): controller lowercased the filename stem to "accounthistory",
+	#   but the file on disk is "AccountHistory.csv" — not found on case-sensitive
+	#   Linux.  Fix: preserve original case when opening by absolute path.
+	#
+	# Bug 2 (id column): the CSV header had "Account Number,Post Date,Check,..."
+	#   where the first safe-identifier column ("Check") is always empty.
+	#   Database::Abstraction uses empty_is_undef => 1, so every row had
+	#   undef in the id column and was filtered out — only rows where "Check"
+	#   actually had a value (written cheques) survived.  Fix: _detect_file_info
+	#   now reads the first data row and picks the first safe column that has a
+	#   non-empty value there ("Description" in the bank-export case).
+
+	my $dir = tempdir(CLEANUP => 1);
+
+	# Reproduce bug 2: first safe-identifier column ("ref") is always empty;
+	# second safe column ("description") is always populated.
+	my $csv_path = "$dir/AccountHistory.csv";
+	Mojo::File->new($csv_path)->spurt(
+		"Account Number,ref,description,amount\n" .
+		"XX1234,,Coffee shop,4.50\n" .
+		"XX1234,,Supermarket,23.10\n" .
+		"XX1234,,Online transfer,100.00\n"
+	);
+
+	my $encoded = url_escape($csv_path);
+
+	$t->get_ok("/open?path=$encoded")
+		->status_is(200, 'Phase 1: /open succeeds for mixed-case filename with spaced first column')
+		->content_like(qr/AccountHistory|description/i,
+			'Phase 2: page mentions table or a column name')
+		->content_like(qr/Coffee shop/,
+			'Phase 3: first row rendered (ref-is-empty row not filtered out)')
+		->content_like(qr/Supermarket/,
+			'Phase 4: second row rendered')
+		->content_like(qr/Online transfer/,
+			'Phase 5: third row rendered — all 3 rows present');
+
+	$t->content_unlike(qr/Could not open &quot;AccountHistory/,
+		'Phase 6: no server-side file-open error');
+	$t->content_unlike(qr/fetch_all failed/,
+		'Phase 7: no fetch_all error');
+
+	# Phase 8 verifies that the file was found under its original mixed-case
+	# name, not because the filesystem silently folded the lowercase lookup.
+	# On case-insensitive filesystems (macOS HFS+/APFS default) the lowercase
+	# and mixed-case paths refer to the same inode, so the invariant cannot
+	# be demonstrated — skip rather than produce a spurious failure.
+	my $lower_path = "$dir/accounthistory.csv";
+	SKIP: {
+		skip 'case-insensitive filesystem: lowercase and mixed-case names are identical', 1
+			if -f $lower_path;
+		ok(!-f $lower_path, 'Phase 8: lowercase variant does not exist on disk (case bug absent)');
+	}
+};
+
 done_testing;

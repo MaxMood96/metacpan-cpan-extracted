@@ -271,12 +271,13 @@ subtest '_url_label -- no path component: hostname used as label' => sub {
 # ======================================================================
 # Section 5: _write_sqlite_db -- resource lifecycle
 #
-# O~ anomaly: $tmpfile is NOT unlinked if $dbh->do() or execute() throws.
-# See TODO comment in Dashboard.pm near the $dbh->do() call.
+# O~ anomaly (fixed): mid-flight DBI failure now triggers disconnect + unlink
+# inside an eval wrapper in _write_sqlite_db, so no temp file is orphaned.
 #
-# D~ anomaly: @quoted may be empty when @$columns is empty, producing
-# "CREATE TABLE data ()" which is invalid SQLite syntax.
-# See TODO comment in Dashboard.pm near the @quoted computation.
+# D~ anomaly (not guarded): @quoted is empty when @$columns is empty, producing
+# "CREATE TABLE data ()" which is invalid SQLite syntax.  In practice the
+# controller always passes at least one column, so this path is never reached,
+# but the code has no explicit guard for the empty-column edge case.
 # ======================================================================
 
 subtest '_write_sqlite_db -- returns valid SQLite3 binary on success' => sub {

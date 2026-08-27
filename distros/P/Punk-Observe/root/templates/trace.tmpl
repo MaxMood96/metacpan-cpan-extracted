@@ -1,0 +1,141 @@
+
+{% if error %}
+<div class="warnbox"><strong>{% error %}</strong>{% if hint %} {% hint %}{% end %}</div>
+{% end %}
+
+{% if spans %}{% else %}
+<div class="toolbar">
+  <form method="get" action="{% prefix %}/traces" style="display:contents">
+    <input type="text" name="q" value="{% query %}" spellcheck="false"
+           placeholder="a trace id, or POST, /checkout, cards">
+    <label class="check"><input type="checkbox" name="errors" value="1"
+      {% if errors_only %}checked{% end %}> errors only</label>
+    <input type="text" name="min_ms" value="{% min_ms %}" size="10"
+           placeholder="e.g. 500ms"
+           title="Duration: 500ms is slower than 500ms; &lt; 100ms is faster than 100ms. 100 means 100ms; 250us and 1.5s work too.">
+    <button type="submit">Search</button>
+    {% include _range.tmpl %}
+  </form>
+</div>
+{% end %}
+
+{% if traces %}
+<div class="panel">
+  <h2>{% root_name %}</h2>
+  <p class="note">{% total %} traces, {% span_count %} spans</p>
+
+  {% if scatter_plot %}
+  <div class="chartwrap" data-chart data-from="{% from %}" data-to="{% to %}"
+       data-trace-base="{% prefix %}/traces/">
+    <script type="application/json" data-plot>{% raw scatter_plot %}</script>
+    <noscript><p class="note">The chart needs JavaScript. Every trace on it is
+      in the table below.</p></noscript>
+  </div>
+  {% end %}
+
+  <div class="tablewrap">
+    <table class="rows">
+      <thead><tr><th>trace</th><th>root</th><th></th><th class="num">spans</th>
+                 <th class="num">errors</th><th class="num">duration</th></tr></thead>
+      <tbody>
+      {% for t in traces %}
+      <tr class="{% t.row_class %}">
+        <td class="mono nowrap"><a href="{% prefix %}/traces/{% t.id %}">{% t.id %}</a></td>
+        <td class="nowrap">{% t.service %} <span class="dim">{% t.name %}</span></td>
+        <td class="barcell">
+          <span class="bar" style="width:{% t.width_pct %}%"></span>
+        </td>
+        <td class="num mono">{% t.spans %}</td>
+        <td class="num mono">{% t.errors %}</td>
+        <td class="num mono">{% t.duration %}</td>
+      </tr>
+      {% end %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% end %}
+
+{% if spans %}
+<div class="panel">
+  <h2>{% root_name %}</h2>
+  <p class="note">{% span_count %} spans, {% duration_ms %}{% if errors %},
+     {% errors %} in error{% end %}{% if orphans %},
+     {% orphans %} with a parent that never arrived{% end %}</p>
+
+  {% if cycles %}
+  <div class="warnbox">This trace has {% cycles %} spans whose parent chain
+    loops. That is broken instrumentation, not a rendering fault; the affected
+    spans are shown at the root.</div>
+  {% end %}
+
+  <div class="waterfall" id="wf">
+    <ol>
+      {% for s in spans %}
+      <li data-depth="{% s.depth %}" data-span="{% s.span_id %}"
+          class="{% s.row_class %}">
+        <div class="wf-bar kind-{% s.kind_name %}"
+             style="--start:{% s.start_pct %}%;--width:{% s.width_pct %}%"
+             title="{% s.service %} {% s.name %} {% s.dur_ms %}"></div>
+        <span class="wf-label" style="padding-left:{% s.indent %}px"
+              >{% if s.service %}<span class="dim">{% s.service %}</span> {% end %}{% s.name %}</span>
+        <span class="wf-time mono">{% s.dur_ms %}</span>
+      </li>
+      {% end %}
+    </ol>
+  </div>
+</div>
+
+{% if logs %}
+<div class="panel">
+  <h2>What it logged</h2>
+  <div class="tablewrap">
+    <table class="rows">
+      <thead><tr><th>time</th><th>severity</th><th>service</th>
+                 <th>message</th></tr></thead>
+      <tbody>
+      {% for l in logs %}
+      <tr class="{% l.row_class %}">
+        <td class="mono nowrap"><a href="{% prefix %}/logs/{% l.id %}">{% l.time %}</a></td>
+        <td><span class="sev sev-{% l.sev_name %}">{% l.sev_name %}</span></td>
+        <td class="nowrap">{% l.service %}</td>
+        <td class="mono body">{% l.body %}</td>
+      </tr>
+      {% end %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% end %}
+
+{% if flame %}
+<div class="panel">
+  <div class="tailhead">
+    <h2>Where the time went</h2>
+    <input id="flame-search" type="text" placeholder="highlight frames" size="18">
+    <span class="note" id="flame-matched"></span>
+    <button type="button" id="flame-reset">reset</button>
+  </div>
+  <svg id="flame" class="flame" width="100%" height="{% flame_height %}"
+       role="img" aria-label="Time by frame">
+    {% for f in flame %}
+    <rect data-name="{% f.name %}" data-self="{% f.self %}"
+          data-total="{% f.total %}" data-start="{% f.start %}"
+          data-depth="{% f.depth %}" data-path="{% f.path %}"
+          x="{% f.x %}%" y="{% f.y %}" width="{% f.width %}%" height="16"
+          rx="2"><title>{% f.name %} - {% f.self_ms %} self, {% f.total_ms %} total, {% f.count %} spans</title></rect>
+    {% if f.label %}
+    <text x="{% f.x %}%" y="{% f.text_y %}" dx="3">{% f.label %}</text>
+    {% end %}
+    {% end %}
+  </svg>
+</div>
+{% end %}
+{% end %}
+
+{% if traces %}{% else %}{% if spans %}{% else %}
+<div class="panel"><p class="empty">No traces in the {% range %} window.
+  {% if range_all %}The store has nothing at all yet - point an exporter at
+  this host.{% else %}Try a wider range above, or <b>all</b> for everything
+  the store still holds.{% end %}</p></div>
+{% end %}{% end %}

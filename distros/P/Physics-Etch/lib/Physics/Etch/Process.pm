@@ -7,7 +7,7 @@ use Carp qw(croak);
 use Physics::Etch::Material;
 use Physics::Etch::Etchant;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 # Boltzmann constant in eV/K (used by Arrhenius scaling in subclasses).
 use constant KB_EV => 8.617333262e-5;

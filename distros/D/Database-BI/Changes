@@ -1,5 +1,145 @@
 Revision history for Database-BI
 
+0.003.2	Wed Aug 26 09:24:45 PM EDT 2026
+    [ Bug Fixes ]
+    - Large CSV files (> 16 KB) with column names containing spaces — such as
+      bank-export files with an "Account Number" column — now render correctly.
+      Files exceeding Database::Abstraction's default 16 KB slurp threshold
+      previously fell through to the DBD::CSV SQL path, which sanitizes column
+      names (lowercases them and replaces spaces with underscores, so "Account
+      Number" becomes "account_number").  The template then tried to access the
+      original name in a restricted hash that only permitted the sanitized key,
+      producing "Attempt to access disallowed key 'Account Number' in a
+      restricted hash".  DataSource::_detect_file_info now returns the file
+      size, and _init_backend passes it as max_slurp_size to
+      Database::Abstraction, ensuring the Text::xSV::Slurp path is always
+      taken for CSV/PSV files so original column names are preserved regardless
+      of file size.
+
+    [ Test Improvements ]
+    - Added path-K and path-K2 subtests in t/path.t asserting that
+      _detect_file_info now returns file_size in its result hashref for
+      CSV/PSV files and omits it for the empty-hashref (non-CSV) case.
+    - Added end-to-end regression subtest BV-large-spaced-header in t/domain.t:
+      creates a > 16 KB CSV with "Account Number" as a column header, opens
+      it via /open, and asserts all rows are visible and no restricted-hash
+      crash occurs.
+
+0.003.1	Wed Aug 26 04:54:25 PM EDT 2026
+    [ Enhancements ]
+    - Allow files to be removed from the recently opened and recently saved
+      lists
+    [ Bug Fixes ]
+    - Drag-and-dropped files now appear in "Recently opened" under their
+      original filesystem location, not the temporary .uploads/ copy.  The
+      drop handler now extracts the file:// URI from the DataTransfer
+      text/uri-list item (provided by desktop file managers such as Nautilus
+      and Finder) and stashes it in sessionStorage before starting the
+      upload.  The dashboard page then reads that stash and records the real
+      path.  If no file:// URI is available (browser drag, email attachment,
+      etc.), the entry is omitted entirely so a useless temp path never
+    - Dragging and dropping the same file more than once no longer creates
+      duplicate entries in the "Recently opened" section on the home page.
+      Each upload creates a new random .uploads/<tempdir>/ subdirectory, so
+      the href changed on every drop even for the same file, bypassing the
+      existing href-based deduplication.  The dedup key is now normalised:
+      upload entries are keyed by display name ("upload:<filename>"); all
+      other entries (browser-opened files, URL imports) continue to be keyed
+      by their full href so that two different files with the same name from
+      different directories can both appear in the list.
+    - Opening a file whose name has a mixed-case stem (e.g. AccountHistory.csv)
+      now works correctly on case-sensitive Linux filesystems.  The controller
+      was lowercasing the stem before calling open_table, causing DataSource to
+      look for "accounthistory.csv" which does not exist.  The stem is now
+      passed verbatim from the filesystem path; URL-sourced names (from
+      /view/:table and table: join specs) are still normalised to lowercase as
+      before because data/ files are lowercase by convention.
+    - CSV files whose first column header is not a valid SQL identifier (e.g.
+      "Account Number" from a bank export) now open without error.
+      DataSource::_detect_file_info previously passed the first column name
+      directly to Database::Abstraction as the id parameter; D::A validates id
+      against $SAFE_IDENTIFIER and croaked "unsafe id column name".
+      _detect_file_info now scans the header and picks the first column name
+      that IS a safe identifier.
+    - CSV files where the first safe-identifier column is always empty (e.g.
+      "Check" in a US bank statement) now show all rows.  Database::Abstraction
+      uses empty_is_undef => 1, so an empty Check cell becomes undef and the
+      row-existence sentinel grep discards every row where Check is blank.
+      _detect_file_info now reads the first data row and skips safe-identifier
+      columns whose value there is empty, landing on a reliably populated column
+      (e.g. "Description") as the id.
+    - If no column header in a CSV satisfies the safe-identifier constraint,
+      DataSource now croaks error_no_safe_id with a clear message asking the
+      user to rename at least one column, rather than silently returning 0 rows.
+
+    [ Test Improvements ]
+    - Added targeted tests in t/function.t, t/path.t, and t/domain.t that
+      would have caught all three bugs above before they reached production:
+      unit-level _detect_file_info subtests for each id-selection scenario,
+      new CFG paths G-J in path.t, and end-to-end HTTP domain subtests that
+      assert all rows are visible for mixed-case stems, spaced column headers,
+      and empty sentinel columns.
+
+0.003.0  Wed Aug 26 16:54:40 UTC 2026
+    [ Enhancements ]
+    - Platform and language are now detected per-request rather than read
+      statically from config.  CGI::Info inspects the User-Agent header to
+      select 'mobile', 'tablet', or 'web'; CGI::Lingua selects the best
+      ISO 639-1 language from the Accept-Language header against the set of
+      languages that have a template directory under templates/<platform>/.
+      Config values (platform, language) remain as fallbacks for when a
+      module is unavailable, the header is absent, or no template directory
+      exists for the detected value.
+    - Add "Refresh" button (↻) to the toolbar next to Export.  Pressing it
+      reloads the current view from disk, picking up any changes to the
+      source file(s) since the page was last loaded.  All URL state (joins,
+      filters, dedup) is preserved because location.reload() reuses the
+      current URL.
+    - Add "Hide duplicates / Show duplicates" toggle button to the toolbar.
+      When active (filled blue), duplicate rows are removed from the displayed
+      table and from any CSV or SQLite export.  The button text reflects the
+      current state: "Hide duplicates" when duplicates are visible, "Show
+      duplicates" when they are suppressed.  State is carried in the ?d=1
+      query parameter so the URL remains shareable and bookmarkable.
+    - Added "Clear upload cache" button (POST /uploads/clear).
+      Mojo::File->list() requires {dir => 1} to
+      include subdirectories; without it the upload subdirs are silently
+      skipped and the action always reports 0 files freed.
+
+    [ Bug Fixes ]
+    - Files opened via the "recently saved" section are no longer also added
+      to the "recently opened" list.  The saved-section card href now carries
+      a transient ?from=saved marker; the dashboard JS reads and removes it
+      via history.replaceState (keeping the address bar clean) and skips the
+      bi:recent write when the marker is present.
+    - Recently saved files on the home page now open with a single click;
+      double-click was required before, making the feature effectively
+      inaccessible on touch devices and to users who did not discover the
+      interaction.  Missing files (greyed-out cards) still block navigation.
+
+0.002.0	Wed Aug 26 08:21:12 EDT 2026
+    [ Enhancements ]
+    - Add "Recently saved" section to the home page: the last 5 files written
+      via POST /export appear as cards below "Recently opened".  Each card
+      fetches /api/stat on page load -- missing files are immediately greyed
+      out and their cards block navigation.  Mouseover shows saved-on date,
+      last-modified time, file size, and a "File not found on disk" warning
+      when the file has been moved or deleted.
+    - Add "Combine data" feature (GET /combine): stack rows from two or more
+      data files vertically into a unified view.  All columns from all sources
+      appear as headers; cells are blank where a source file lacks that column.
+      Equivalent to a SQL UNION ALL across heterogeneous schemas.
+    - New "Combine data..." toolbar button (teal) sits next to "Merge data...";
+      both panels are mutually exclusive (opening one closes the other).
+    - Export pipeline (GET /export, POST /export) now handles c= params so
+      combined views can be downloaded or saved to disk.
+    - Internal helpers migrated from Sub::Private (:Private) to Sub::Protected
+      (:Protected) in Dashboard.pm and DataSource.pm for correct OO dispatch
+      in production (morbo/hypnotoad) without the CHECK-phase stash-deletion
+      side-effect that made :Private OO calls fail at runtime.
+    - "Merge data" button tooltip improved; join chip no longer shows key
+      annotation for combine summaries that have no join key.
+
 0.001.0	Tue Aug 25 08:14:37 PM EDT 2026
     - Initial CPAN release.
     - Mojolicious web application presenting arbitrary flat data files

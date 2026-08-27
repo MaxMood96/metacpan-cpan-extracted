@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use POSIX qw(floor);
 
-our $VERSION = '1.00';
+our $VERSION = '1.01';
 
 #-----------------------------------------------------------------------------
 # Physical constants (SI / CGS mixed as noted).  Internal length unit is cm,
@@ -830,6 +830,7 @@ semiconductor wafers.
 
     use Physics::Electrodeposition;
 
+    # Blanket, constant-current copper plating on a 300 mm wafer.
     my $ecd = Physics::Electrodeposition->new(
         metal            => 'Copper',
         wafer_diameter   => 300,      # mm
@@ -845,6 +846,25 @@ semiconductor wafers.
     my $P  = $ecd->power;             # cell power, W
     my $mb = $ecd->mass_balance;      # hashref of species moles/grams
 
+    # Through-mask plating from a GDSII opening layer.
+    my $pillars = Physics::Electrodeposition->new(
+        gdsii                 => 'reticle.gds',
+        pattern_layer         => 10,       # layer containing plating openings
+        pattern_datatype      => 0,        # optional datatype filter
+        pattern_scope         => 'die',    # stepped reticle, not full wafer
+        resist_thickness      => 50,       # um
+        current_density       => 10,       # mA/cm^2 in the openings
+        current_density_basis => 'active',
+        target_thickness      => 40,       # um pillar height
+        ion_conc              => 0.63,     # mol/L Cu2+
+        boundary_layer        => 0.008,    # cm
+    );
+
+    printf "open %.1f%%, active j %.1f mA/cm2, time %.1f min\n",
+        100 * $pillars->open_fraction,
+        $pillars->j_active_mA,
+        $pillars->process_time / 60;
+
 =head1 DESCRIPTION
 
 Physics::Electrodeposition implements a first-principles engineering model of
@@ -858,61 +878,476 @@ additive drop) for power, a diffusion-limited current density for transport, and
 geometry-based estimates of uniformity (Wagner number, seed terminal effect) and
 surface smoothness.
 
-=head1 KEY METHODS
+=head1 CONSTRUCTOR
 
 =over 4
 
 =item new(%args)
 
-Construct a model. See the source header for the full list of named parameters
-and their default (copper) values.
+Construct a simulation object. All inputs are named arguments. Defaults describe
+an acid copper-sulfate bath with a soluble copper anode on a 300 mm wafer; any
+metal, bath, tool, pattern, or recipe parameter may be overridden.
 
-=item film_thickness_um / deposition_rate_um_min / process_time
+Metal and cathode-deposit inputs include C<metal>, C<molar_mass> (g/mol),
+C<valence>, C<density> (g/cm3), C<E0> (V vs SHE), and C<seed_resistivity>
+(Ohm*cm). Bath inputs include C<ion_conc> and C<acid_conc> (mol/L),
+C<conductivity> (S/cm), C<diffusivity> (cm2/s), C<temperature> (K), C<j0>
+(A/cm2), C<alpha>, C<additive_drop> (V), and C<additive_use> (mL/kA*h).
+Tool inputs include C<wafer_diameter> (mm), C<electrode_gap> (cm),
+C<seed_thickness> (nm), C<boundary_layer> (cm), and C<anode_type>, either
+C<soluble> or C<inert>.
 
-Growth results from Faraday's law.
+Recipe inputs are C<current_density> (mA/cm2), C<current_density_basis>,
+C<time> (s), C<target_thickness> (um), and C<efficiency>. If C<time> is not
+given, C<process_time> is solved from C<target_thickness>. For patterned models,
+C<current_density_basis> defaults to C<active> (current density in openings);
+for blanket models it defaults to C<applied> (current density over the wafer).
 
-=item mass_deposited / moles_deposited / charge / mass_balance
+    my $ni = Physics::Electrodeposition->new(
+        metal           => 'Nickel',
+        molar_mass      => 58.6934,
+        valence         => 2,
+        density         => 8.90,
+        E0              => -0.257,
+        ion_conc        => 0.90,
+        conductivity    => 0.12,
+        current_density => 5,
+        time            => 20 * 60,
+    );
 
-Chemistry mass balance, including anode reaction, hydrogen side reaction, acid
-balance, gas evolution, and additive consumption.
+=back
 
-=item cell_voltage / power / energy / specific_energy_kWh_kg
+=head1 MODEL AND GEOMETRY ACCESSORS
 
-Electrical power model.
+=over 4
 
-=item limiting_current_density / current_fraction_of_limit / wagner_number /
-terminal_effect_drop / nonuniformity_percent / roughness_nm / smoothness_verdict
+=item open_fraction
 
-Transport, uniformity and smoothness metrics.
+Return the plated/open area fraction. Blanket simulations return C<1.0>.
+Patterned simulations return the GDSII opening area divided by the pattern
+field area.
 
-=item open_fraction / j_applied / j_active / active_area /
-blanket_equivalent_thickness_um
+    printf "open area = %.2f%%\n", 100 * $model->open_fraction;
 
-Through-mask patterning: the open-area fraction from the GDSII mask, the applied
-(wafer-referenced) and active (in-opening) current densities, the plated area,
-and the blanket-equivalent thickness for the same charge.
+=item j_applied
 
-=item loading_nonuniformity / isolated_to_dense_ratio / feature_aspect_ratio /
-fill_risk_verdict
+Return the wafer-referenced current density in A/cm2. This drives total tool
+current, bulk electrolyte IR drop, and seed terminal-effect calculations.
 
-Pattern-density (loading) effect on thickness uniformity and feature fill risk.
+    my $tool_j = $model->j_applied;
+
+=item j_active
+
+Return the feature/opening-referenced current density in A/cm2. This drives
+Faraday growth, interfacial kinetics, and mass-transport checks. For a patterned
+run with C<current_density_basis => 'applied'>, this is the applied current
+density divided by C<open_fraction>.
+
+    printf "surface j = %.3f A/cm2\n", $model->j_active;
+
+=item j
+
+Backward-compatible alias for C<j_applied>.
+
+=item j_applied_mA
+
+Return C<j_applied> in mA/cm2.
+
+=item j_active_mA
+
+Return C<j_active> in mA/cm2.
+
+    printf "applied/active = %.2f / %.2f mA/cm2\n",
+        $model->j_applied_mA, $model->j_active_mA;
+
+=item wafer_area
+
+Return circular wafer cathode area in cm2 from C<wafer_diameter>.
+
+=item wafer_radius
+
+Return wafer radius in cm.
+
+=item current
+
+Return total cell current in amperes, C<j_applied * wafer_area>.
+
+=item active_area
+
+Return plated area in cm2, C<open_fraction * wafer_area>.
+
+    printf "wafer %.1f cm2, active %.1f cm2, current %.2f A\n",
+        $model->wafer_area, $model->active_area, $model->current;
+
+=item ion_conc_cgs
+
+Return metal-ion concentration in mol/cm3, converted from constructor
+C<ion_conc> in mol/L.
+
+=item seed_sheet_resistance
+
+Return seed-layer sheet resistance in Ohm/square from C<seed_resistivity> and
+C<seed_thickness>.
+
+    printf "Cu seed Rs = %.3f Ohm/sq\n", $model->seed_sheet_resistance;
+
+=back
+
+=head1 GROWTH, TIME, CHARGE, AND MASS METHODS
+
+=over 4
+
+=item deposition_rate
+
+Return Faraday-law growth rate in cm/s at the active plating surface.
+
+=item deposition_rate_um_min
+
+Return the same growth rate in um/min.
+
+=item process_time
+
+Return plating time in seconds. If C<time> was supplied to C<new>, that value is
+returned. Otherwise the method solves the time required to reach
+C<target_thickness> from C<deposition_rate>.
+
+=item film_thickness
+
+Return final active-area film thickness in cm.
+
+=item film_thickness_um
+
+Return final active-area film thickness in um.
+
+=item blanket_equivalent_thickness_um
+
+For patterned runs, return the blanket film thickness that the same total charge
+would deposit if spread over the full wafer. This equals
+C<film_thickness_um * open_fraction>. For blanket runs it equals the film
+thickness.
+
+    printf "rate %.3f um/min, time %.1f min, feature h %.2f um\n",
+        $model->deposition_rate_um_min,
+        $model->process_time / 60,
+        $model->film_thickness_um;
+    printf "blanket-equivalent h %.3f um\n",
+        $model->blanket_equivalent_thickness_um;
+
+=item charge
+
+Return total charge passed in coulombs.
+
+=item moles_deposited
+
+Return moles of metal deposited at the cathode, including current efficiency.
+
+=item mass_deposited
+
+Return grams of metal deposited.
+
+=item mass_balance
+
+Return a hash reference with run chemistry quantities. Keys include
+C<charge_C>, C<amp_hours>, C<metal_mol>, C<metal_g>, C<ion_consumed_mol>,
+C<H2_evolved_mol>, C<H2_evolved_L_STP>, C<Hplus_consumed_cathode_mol>,
+C<net_Hplus_change_mol>, and C<additive_mL>. Soluble-anode runs also include
+C<anode_metal_dissolved_mol>, C<ion_replenished_mol>, and
+C<net_ion_change_mol>. Inert-anode runs set metal replenishment to zero and add
+C<O2_evolved_mol>, C<O2_evolved_L_STP>, and C<Hplus_generated_anode_mol>.
+
+    my $mb = $model->mass_balance;
+    printf "Q %.0f C, metal %.4f g, additive %.3f mL\n",
+        $model->charge, $model->mass_deposited, $mb->{additive_mL};
+    printf "net ion change %.6f mol\n", $mb->{net_ion_change_mol};
+
+=back
+
+=head1 TRANSPORT, VOLTAGE, AND POWER METHODS
+
+=over 4
+
+=item limiting_current_density
+
+Return diffusion-limited active current density in A/cm2,
+C<n F D C / delta>, using C<diffusivity>, C<ion_conc>, C<boundary_layer>, and
+C<valence>.
+
+=item current_fraction_of_limit
+
+Return C<j_active / limiting_current_density>. Values below about 0.7 generally
+indicate transport margin; values near 1 indicate starvation, roughness, or
+powdery deposit risk.
+
+    die "too close to limiting current"
+        if $model->current_fraction_of_limit > 0.8;
+
+=item thermodynamic_voltage
+
+Return reversible cell-voltage contribution in volts. A soluble symmetric metal
+anode returns approximately zero; an inert anode includes oxygen evolution
+relative to the metal reduction potential.
+
+=item activation_overpotential
+
+Return cathodic activation overpotential magnitude in volts from a Tafel form
+using C<j_active>, C<j0>, C<alpha>, C<temperature>, and C<valence>.
+
+=item concentration_overpotential
+
+Return mass-transport concentration overpotential magnitude in volts from
+C<current_fraction_of_limit>.
+
+=item ohmic_drop
+
+Return electrolyte IR drop in volts from C<j_applied>, C<electrode_gap>, and
+C<conductivity>.
+
+=item cell_voltage
+
+Return total lumped cell voltage in volts: thermodynamic, cathodic activation,
+anodic activation, concentration, ohmic, and additive terms.
+
+=item power
+
+Return electrical power in watts, C<cell_voltage * current>.
+
+=item energy
+
+Return total electrical energy in joules.
+
+=item energy_Wh
+
+Return total electrical energy in watt-hours.
+
+=item specific_energy_kWh_kg
+
+Return electrical energy intensity in kWh/kg of deposited metal.
+
+    printf "jlim %.1f mA/cm2, eta_act %.3f V, eta_conc %.3f V\n",
+        1000 * $model->limiting_current_density,
+        $model->activation_overpotential,
+        $model->concentration_overpotential;
+    printf "cell %.2f V, %.1f W, %.3f Wh, %.2f kWh/kg\n",
+        $model->cell_voltage, $model->power,
+        $model->energy_Wh, $model->specific_energy_kWh_kg;
+
+=back
+
+=head1 UNIFORMITY AND SURFACE QUALITY METHODS
+
+=over 4
+
+=item polarization_resistance
+
+Return charge-transfer areal resistance in Ohm*cm2,
+C<d eta_act / d j>, at the active current density.
+
+=item concentration_resistance
+
+Return concentration-polarization areal resistance in Ohm*cm2,
+C<d eta_conc / d j>, at the active current density.
+
+=item electrolyte_areal_resistance
+
+Return normal electrolyte areal resistance in Ohm*cm2, C<electrode_gap /
+conductivity>.
+
+=item series_areal_resistance
+
+Return the sum of polarization, concentration, and electrolyte areal
+resistances. The terminal-effect metric compares lateral seed drop against this
+wafer-normal resistance.
+
+=item wagner_number
+
+Return the wafer-scale Wagner number. Larger values imply that kinetics help
+throw current uniformly; small values imply a primary/ohmic distribution that
+needs tool shaping.
+
+=item terminal_effect_drop
+
+Return estimated center-to-edge voltage drop in the seed layer in volts.
+
+=item terminal_effect_ratio
+
+Return dimensionless terminal-effect severity: lateral seed drop divided by the
+wafer-normal voltage scale.
+
+=item nonuniformity_percent
+
+Return estimated uncompensated within-wafer non-uniformity in percent (1 sigma).
+
+=item roughness_nm
+
+Return estimated RMS roughness in nm from film thickness, transport loading,
+and additive leveling.
+
+=item smoothness_verdict
+
+Return a qualitative string such as C<EXCELLENT>, C<GOOD>, C<MARGINAL>, or
+C<ROUGH / powdery risk> based mainly on the fraction of limiting current.
+
+    printf "Wa %.2f, seed drop %.3f V, terminal ratio %.2f\n",
+        $model->wagner_number,
+        $model->terminal_effect_drop,
+        $model->terminal_effect_ratio;
+    printf "WIWNU %.1f%%, roughness %.1f nm: %s\n",
+        $model->nonuniformity_percent,
+        $model->roughness_nm,
+        $model->smoothness_verdict;
+
+=back
+
+=head1 PATTERN AND GDSII METHODS
+
+=over 4
+
+=item has_pattern
+
+Return true when the model has a C<Physics::Electrodeposition::Pattern> object,
+either supplied directly with C<pattern> or built from C<gdsii>.
+
+=item loading_nonuniformity
+
+Return estimated within-die non-uniformity in percent from local pattern-density
+loading. It delegates to the Pattern object and uses C<loading_exponent>.
+
+=item isolated_to_dense_ratio
+
+Return estimated height ratio of isolated openings to dense-array openings.
+Values above 1 mean isolated features plate taller.
+
+=item pattern_radial_nonuniformity
+
+Return radial density-driven within-wafer non-uniformity in percent for
+C<pattern_scope => 'wafer'>. For die-scope or blanket runs, returns zero.
+
+=item feature_aspect_ratio
+
+Return C<resist_thickness / minimum_CD>. Returns zero when no pattern is present
+or C<resist_thickness> is not set.
+
+=item fill_risk_verdict
+
+Return a qualitative through-mask filling warning based on aspect ratio and
+transport loading.
+
+    if ($model->has_pattern) {
+        printf "loading %.1f%%, iso/dense %.2fx\n",
+            $model->loading_nonuniformity,
+            $model->isolated_to_dense_ratio;
+        printf "radial NU %.1f%%, AR %.2f, risk: %s\n",
+            $model->pattern_radial_nonuniformity,
+            $model->feature_aspect_ratio,
+            $model->fill_risk_verdict;
+    }
+
+=back
+
+=head1 REPORTING
+
+=over 4
 
 =item report
 
 Return a formatted multi-section text report with narrative insight (adds a
 PHOTORESIST PATTERN section when a GDSII mask is supplied).
 
+    print $model->report;
+
 =back
 
 =head1 PHOTORESIST PATTERNING (GDSII)
 
-Pass C<< gdsii => 'mask.gds' >> (and usually C<pattern_layer>) to model
-through-mask plating. The metal then grows only in the resist openings, so the
-in-opening (active) current density is the applied density divided by the open
-fraction, features grow C<1/open_fraction> thicker than a blanket film for the
-same charge, and pattern-density variation drives a loading (isolated-vs-dense)
-non-uniformity. See L<Physics::Electrodeposition::GDSII> and
-L<Physics::Electrodeposition::Pattern>.
+Pass C<< gdsii => 'mask.gds' >> to import mask openings from a GDSII layout.
+The constructor creates a L<Physics::Electrodeposition::Pattern> object by
+calling L<Physics::Electrodeposition::Pattern/new> with the file path, optional
+C<pattern_layer>, optional C<pattern_datatype>, C<pattern_scope>, and
+C<wafer_diameter>. You may also construct a Pattern object yourself and pass it
+as C<pattern => $pat> when you want to reuse parsed geometry or inspect it
+before simulation.
+
+    use Physics::Electrodeposition;
+    use Physics::Electrodeposition::Pattern;
+
+    my $pat = Physics::Electrodeposition::Pattern->new(
+        file     => 'bumps.gds',
+        layer    => 10,
+        datatype => 0,
+        scope    => 'die',
+        grid     => 16,
+    );
+
+    my $run = Physics::Electrodeposition->new(
+        pattern               => $pat,
+        pattern_layer         => 10,
+        pattern_scope         => 'die',
+        resist_thickness      => 45,
+        current_density       => 8,
+        current_density_basis => 'active',
+        target_thickness      => 30,
+    );
+
+    print $run->report;
+
+The GDSII reader is dependency-free and understands the subset needed for mask
+geometry extraction: units, structures, BOUNDARY and BOX elements, and SREF/AREF
+cell references. Referenced cells are flattened with their transforms, and
+returned polygon coordinates are converted to micrometres. The pattern layer is
+interpreted as plating openings in photoresist; the code sums those polygon
+areas and assumes the openings are non-overlapping. It does not perform Boolean
+union/overlap cleanup, resist-profile modeling, or a full 3-D field solve.
+
+C<pattern_layer> should identify the layout layer that represents open resist
+windows, not metal fill or keep-out layers. If it is omitted, all polygon layers
+are included. C<pattern_datatype> further filters shapes on that layer.
+C<pattern_scope => 'die'> treats the GDSII bounding box as one reticle/die field
+that is stepped across the wafer and reports within-die loading. C<pattern_scope
+=> 'wafer'> treats the GDSII as a full-wafer mask and enables radial
+pattern-density non-uniformity.
+
+Current-density basis is important for patterned simulations. With
+C<current_density_basis => 'active'>, the recipe current density is already
+referenced to the open plating area, so total tool current decreases with open
+fraction. With C<current_density_basis => 'applied'>, the recipe current density
+is referenced to the full wafer, so the active in-opening current density
+increases as open fraction decreases.
+
+    my $applied_basis = Physics::Electrodeposition->new(
+        gdsii                 => 'mask.gds',
+        pattern_layer         => 10,
+        current_density       => 20,       # mA/cm2 over the full wafer
+        current_density_basis => 'applied',
+        target_thickness      => 10,
+    );
+
+    printf "open %.3f, applied %.1f, active %.1f mA/cm2\n",
+        $applied_basis->open_fraction,
+        $applied_basis->j_applied_mA,
+        $applied_basis->j_active_mA;
+
+For self-contained tests or examples, simple GDSII files can be generated with
+L<Physics::Electrodeposition::GDSII/write_boundaries>. Coordinates are in
+micrometres:
+
+    use Physics::Electrodeposition::GDSII;
+
+    Physics::Electrodeposition::GDSII->write_boundaries('openings.gds', [
+        { layer => 10, datatype => 0,
+          pts => [[0,0], [25,0], [25,25], [0,25]] },
+        { layer => 10, datatype => 0,
+          pts => [[75,0], [100,0], [100,25], [75,25]] },
+    ]);
+
+    my $gds_run = Physics::Electrodeposition->new(
+        gdsii                 => 'openings.gds',
+        pattern_layer         => 10,
+        pattern_datatype      => 0,
+        resist_thickness      => 50,
+        current_density       => 10,
+        current_density_basis => 'active',
+        target_thickness      => 40,
+    );
 
 =head1 UNITS
 

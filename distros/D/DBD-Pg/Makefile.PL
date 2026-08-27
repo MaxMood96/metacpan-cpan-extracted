@@ -5,7 +5,7 @@ use warnings;
 use 5.008001;
 
 ## No version.pm for this one, as the prereqs are not loaded yet.
-my $VERSION = '3.21.1';
+my $VERSION = '3.21.2';
 
 ## App::Info is stored inside t/lib
 ## Create a proper path so we can use it below
@@ -193,6 +193,15 @@ my $defines = " -DPGLIBVERSION=$serverversion -DPGDEFPORT=$defaultport";
 if ($Config{ivsize} >= 8 && $serverversion >= 90300) {
     $defines .= ' -DHAS64BITLO ';
 }
+
+# GCC versions < 5 need -std=gnu99 to support for-loop local declarations
+if ($Config{gccversion} && $Config{gccversion} =~ /^(\d+)\./) {
+    my $gcc_major_version = $1;
+    if ($gcc_major_version < 5) {
+        $defines .= ' -std=gnu99 ';
+    }
+}
+
 my $comp_opts = $Config{q{ccflags}} . $defines;
 
 if ($ENV{DBDPG_GCCDEBUG}) {
@@ -301,6 +310,8 @@ sub MY::postamble { ## no critic ProhibitQualifiedSubDeclarations
 
         my $tags = <<'MAKE_FRAG';
 .PHONY: tags
+
+check: test
 
 tags:
 	ctags -f tags --recurse --totals \

@@ -242,6 +242,93 @@ subtest '_detect_file_info -- sniffs separator and column order' => sub {
 };
 
 # ---------------------------------------------------------------------------
+# Bug-regression subtests for _detect_file_info id-column selection.
+#
+# Three production bugs were found when opening a real bank-export CSV:
+#
+#  Bug 1 (case):  table name was lowercased before file lookup -- missed on
+#                 case-sensitive Linux when the stem had mixed case.
+#  Bug 2 (space): first column "Account Number" fails $SAFE_IDENTIFIER ->
+#                 Database::Abstraction croaked "unsafe id column name".
+#  Bug 3 (empty): first *safe* column "Check" was always empty (undef with
+#                 empty_is_undef) so D::A grep dropped every non-cheque row.
+#
+# These subtests call _detect_file_info directly to pin the id-selection
+# logic before the HTTP layer is involved.
+# ---------------------------------------------------------------------------
+
+{
+	my $fn  = \&Database::BI::Model::DataSource::_detect_file_info;
+	my $dir = File::Temp::tempdir(CLEANUP => 1);
+
+	# Bug 2: first column has a space -> must pick a safe column instead.
+	subtest '_detect_file_info -- unsafe first column (space) uses first safe col' => sub {
+		Mojo::File->new("$dir/bank.csv")->spew(
+			"Account Number,Date,Amount\n12345,2026-01-01,100.00\n"
+		);
+		my $info = $fn->($dir, 'bank');
+		like   $info->{id}, qr/\A[a-zA-Z_][a-zA-Z0-9_]*\z/,
+			'id is a safe identifier despite unsafe first column';
+		is     $info->{id}, 'Date',
+			'id falls back to first safe column (Date)';
+		is_deeply $info->{columns}, ['Account Number', 'Date', 'Amount'],
+			'original column names preserved for display';
+	};
+
+	# Bug 3: first safe column is empty in the data row -> must skip to next.
+	subtest '_detect_file_info -- first safe col empty in data row -> picks next' => sub {
+		# "ref" is a safe identifier but always blank; "description" is the
+		# first safe column that has a value in the data row.
+		Mojo::File->new("$dir/acct.csv")->spew(
+			"Account Number,ref,description,amount\n" .
+			"XX1234,,Coffee shop,4.50\n"
+		);
+		my $info = $fn->($dir, 'acct');
+		is $info->{id}, 'description',
+			'id skips empty "ref" column and picks "description"';
+	};
+
+	# Both bug 2 and 3 together: real-world bank CSV shape.
+	subtest '_detect_file_info -- bank CSV: unsafe + empty cols, picks reliable id' => sub {
+		# Mirrors AccountHistory.csv: "Check" is safe but always empty;
+		# "Description" is safe and always populated.
+		Mojo::File->new("$dir/history.csv")->spew(
+			"Account Number,Post Date,Check,Description,Debit,Credit,Status\n" .
+			"XX2106,8/26/2026,,Coffee shop,4.50,,Posted\n" .
+			"XX2106,8/25/2026,,Supermarket,12.00,,Posted\n"
+		);
+		my $info = $fn->($dir, 'history');
+		is $info->{id}, 'Description',
+			'id skips "Check" (empty in data) and picks "Description"';
+		is scalar(@{$info->{columns}}), 7,
+			'all 7 original columns preserved';
+	};
+
+	# Bug 2+3 guard: all columns have unsafe names -> id must be undef.
+	subtest '_detect_file_info -- all columns unsafe -> id undef' => sub {
+		Mojo::File->new("$dir/allbad.csv")->spew("my-col,his-col\n1,2\n");
+		my $info = $fn->($dir, 'allbad');
+		ok exists $info->{columns}, 'columns key present';
+		ok !defined $info->{id},    'id is undef when no safe column exists';
+	};
+
+	# CRLF line endings (Windows exports) must not bleed \r into column names.
+	subtest '_detect_file_info -- CRLF endings stripped from column names' => sub {
+		{
+			# Write raw CRLF bytes without :encoding layer.
+			no autodie 'open';
+			open my $fh, '>:raw', "$dir/crlf.csv" or die $!;
+			print {$fh} "id,name,amount\r\n1,Alice,42.00\r\n";
+			close $fh;
+		}
+		my $info = $fn->($dir, 'crlf');
+		is $info->{id}, 'id', 'id column correct despite CRLF';
+		is_deeply $info->{columns}, [qw(id name amount)],
+			'no \\r in column names';
+	};
+}
+
+# ---------------------------------------------------------------------------
 # Subtest: DataSource::fetch_all -- normal path returns records
 # ---------------------------------------------------------------------------
 subtest 'DataSource::fetch_all -- returns records from CSV' => sub {
@@ -764,7 +851,7 @@ subtest 'Dashboard::_resolve_language -- uses config default when no header' => 
 	my $tx = $t->ua->build_tx(GET => '/');
 	$tx->req->headers->remove('Accept-Language');
 	my $c = $t->app->build_controller($tx);
-	my $lang = Database::BI::Controller::Dashboard::_resolve_language($c, 'en');
+	my $lang = Database::BI::Controller::Dashboard::_resolve_language($c, 'web', 'en');
 	is $lang, 'en', 'falls back to config default when Accept-Language absent';
 };
 
@@ -773,7 +860,7 @@ subtest 'Dashboard::_resolve_language -- valid header parsed, falls back when no
 	# 'fr' has no template directory in this installation; should fall back to 'en'.
 	$tx->req->headers->header('Accept-Language' => 'fr-FR,fr;q=0.9,en;q=0.8');
 	my $c    = $t->app->build_controller($tx);
-	my $lang = Database::BI::Controller::Dashboard::_resolve_language($c, 'en');
+	my $lang = Database::BI::Controller::Dashboard::_resolve_language($c, 'web', 'en');
 	ok $lang eq 'fr' || $lang eq 'en',
 		"resolved language is 'fr' or 'en' (fallback when no fr templates)";
 };
@@ -782,8 +869,25 @@ subtest 'Dashboard::_resolve_language -- garbage header falls back to default' =
 	my $tx = $t->ua->build_tx(GET => '/');
 	$tx->req->headers->header('Accept-Language' => ';;; junk ;;;');
 	my $c    = $t->app->build_controller($tx);
-	my $lang = Database::BI::Controller::Dashboard::_resolve_language($c, 'en');
+	my $lang = Database::BI::Controller::Dashboard::_resolve_language($c, 'web', 'en');
 	is $lang, 'en', 'garbage Accept-Language header falls back to default';
+};
+
+subtest 'Dashboard::_detect_platform -- desktop UA -> web' => sub {
+	my $platform = Database::BI::Controller::Dashboard::_detect_platform(
+		'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'web');
+	is $platform, 'web', 'desktop UA maps to web platform';
+};
+
+subtest 'Dashboard::_detect_platform -- mobile UA -> mobile' => sub {
+	my $platform = Database::BI::Controller::Dashboard::_detect_platform(
+		'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15', 'web');
+	is $platform, 'mobile', 'iPhone UA maps to mobile platform';
+};
+
+subtest 'Dashboard::_detect_platform -- empty UA -> fallback' => sub {
+	my $platform = Database::BI::Controller::Dashboard::_detect_platform('', 'web');
+	is $platform, 'web', 'empty UA returns fallback';
 };
 
 # ---------------------------------------------------------------------------

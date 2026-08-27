@@ -131,7 +131,7 @@
     }
     .join-chip-key { color: #888; font-size: 0.7rem; }
 
-    /* "Add database" button */
+    /* "Merge data" button */
     .btn-add-db {
       flex-shrink: 0;
       padding: 0.3rem 0.9rem;
@@ -145,6 +145,64 @@
     }
     .btn-add-db:hover:not(:disabled) { background: #eef1fb; }
     .btn-add-db:disabled { opacity: 0.4; cursor: default; }
+
+    /* "Hide / Show duplicates" toggle button */
+    .btn-dedup {
+      flex-shrink: 0;
+      padding: 0.3rem 0.9rem;
+      border: 1px solid #888;
+      border-radius: 6px;
+      background: transparent;
+      color: #444;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-dedup:hover { background: #f0f0f0; }
+    .btn-dedup--active {
+      background: #2c3e7a;
+      border-color: #2c3e7a;
+      color: #fff;
+    }
+    .btn-dedup--active:hover { background: #3a50a0; }
+
+    /* "Combine data" button — same shape as Merge, teal accent */
+    .btn-combine {
+      flex-shrink: 0;
+      padding: 0.3rem 0.9rem;
+      border: 1px solid #2a6a5a;
+      border-radius: 6px;
+      background: transparent;
+      color: #1a4a3a;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-combine:hover:not(:disabled) { background: #e6f4f0; }
+    .btn-combine:disabled { opacity: 0.4; cursor: default; }
+
+    /* Combine-data panel — teal-tinted background to distinguish from merge */
+    .combine-panel {
+      background: #f0f8f5;
+      border: 1px solid #a8d0c0;
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+
+    .combine-panel-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #1a4a3a;
+      margin-bottom: 0.6rem;
+    }
+
+    .combine-desc-static {
+      font-size: 0.85rem;
+      color: #2a4a3a;
+      margin-bottom: 1rem;
+      line-height: 1.45;
+    }
 
     /* Join configuration panel */
     .join-panel {
@@ -266,6 +324,15 @@
       background: #eef1fb;
       box-shadow: 0 2px 6px rgba(44,62,122,.12);
     }
+    .db-card--missing {
+      opacity: 0.45;
+      filter: grayscale(1);
+      cursor: not-allowed;
+    }
+    .db-card--missing:hover {
+      background: transparent;
+      box-shadow: none;
+    }
 
     .db-icon { font-size: 2rem; }
 
@@ -301,6 +368,32 @@
       margin-bottom: 0.75rem;
     }
 
+    /* Per-card remove button (trash can) in recent sections */
+    .recent-remove {
+      position: absolute;
+      top: 0.3rem;
+      right: 0.3rem;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 0.8rem;
+      color: #888;
+      opacity: 0;
+      padding: 0.15rem 0.3rem;
+      border-radius: 4px;
+      line-height: 1;
+      z-index: 2;
+      transition: opacity 0.1s, background 0.1s, color 0.1s;
+    }
+    .db-list li:hover .recent-remove {
+      opacity: 0.5;
+    }
+    .recent-remove:hover {
+      opacity: 1 !important;
+      background: rgba(192, 57, 43, 0.12);
+      color: #c0392b;
+    }
+
     /* Export button in the toolbar */
     .btn-export-open {
       flex-shrink: 0;
@@ -317,7 +410,22 @@
     .btn-export-open:hover:not(:disabled) { background: #eef5e8; }
     .btn-export-open:disabled { opacity: 0.4; cursor: default; }
 
-    /* Export save-to-disk panel */
+    /* Refresh button in the toolbar */
+    .btn-refresh {
+      flex-shrink: 0;
+      padding: 0.28rem 0.75rem;
+      border: 1px solid #888;
+      border-radius: 6px;
+      background: transparent;
+      color: #444;
+      font-size: 0.82rem;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .btn-refresh:hover { background: #f0f0f0; }
+
+    /* Export save-to-disc panel */
     .export-panel {
       background: #f5f8f0;
       border: 1px solid #b8d0a0;
@@ -881,6 +989,25 @@
       dragDepth = 0;
       var file = e.dataTransfer.files[0];
       if (!file) { hideOverlay(); return; }
+
+      // When the file comes from a local file manager (Nautilus, Finder, etc.)
+      // the DataTransfer includes a file:// URI in text/uri-list.  Stash the
+      // decoded local path so the dashboard page can record the original
+      // location in bi:recent instead of the temporary .uploads/ copy.
+      try {
+        var uriList = (e.dataTransfer.getData('text/uri-list') || '').trim();
+        var fileUri = uriList.split(/\r?\n/).filter(function (l) {
+          return l && l[0] !== '#' && l.indexOf('file://') === 0;
+        })[0];
+        if (fileUri) {
+          sessionStorage.setItem('bi:pending-original-path',
+            decodeURIComponent(fileUri.replace(/^file:\/\//, '')));
+        } else {
+          sessionStorage.removeItem('bi:pending-original-path');
+        }
+      } catch (ex) {
+        try { sessionStorage.removeItem('bi:pending-original-path'); } catch (ex2) {}
+      }
 
       overlay.classList.add('loading');
       overlayTxt.textContent = 'Opening…';

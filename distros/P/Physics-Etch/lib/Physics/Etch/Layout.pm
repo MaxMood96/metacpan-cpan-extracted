@@ -6,7 +6,7 @@ use Carp qw(croak);
 
 use Physics::Etch::GDSII;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 # ===========================================================================
 # Geometric analysis of a mask layer for etch modelling.

@@ -1,5 +1,183 @@
 Revision history for API-Docker
 
+0.003     2026-08-27 03:37:00Z
+  - t/containers.t: the registered cleanup tolerates the container the
+    happy path already removed, so a live run no longer warns "Cleanup
+    failed: ... no such container" on every pass. The safety net still
+    warns on any other failure.
+  - The `>= 400` croak now falls back to `errorDetail.message` and then to
+    the flat `error` key when the JSON error body carries no `message`.
+    Docker answers `{"message":...}`; Podman answers a failed push with
+    the stream shape instead -- `{"errorDetail":{"message":...},"error":
+    ...}` and no `message` at all -- so the whole JSON object used to be
+    the croak text and the reason had to be dug out of it by eye. A body
+    that is not an object still surfaces verbatim.
+  - `images->build`, `->pull` and `->push` now croak when the engine
+    reports a failure inside the event stream, instead of returning the
+    stream and leaving the check to the caller. A failed build, pull or
+    push is answered with HTTP 200 -- the status line is committed
+    before the operation is attempted -- and the failure arrives as an
+    `errorDetail` object among the progress events, so nothing about the
+    response says the operation broke. Measured against the rootless
+    Podman socket (5.4.2, API 1.41): a Dockerfile of `FROM alpine:3` /
+    `RUN exit 7` answers `200 OK` and ends the stream with
+    `{"errorDetail":{"message":"building at STEP \"RUN exit 7\": while
+    running runtime: exit status 7\n"},"error":"..."}`, the flat `error`
+    key carrying the same text. Callers that never scanned for it -- the
+    documented shape until now -- reported a broken build as a success.
+    The exception is an `API::Docker::Error::Stream`, a new class whose
+    whole purpose is that the progress output is not lost with the
+    return value: `$err->events` is the complete event list, error event
+    included. It overloads stringification and produces exactly what the
+    plain croak it replaces produced, reason plus Carp's ` at FILE line
+    N.` suffix, so existing eval-and-inspect-$@ code needs no change;
+    `$@ =~ s/...//` on it yields a plain string as it would for any
+    overloaded object. The trigger is the `errorDetail` key alone, never
+    the word "error" in payload text.
+    Which of the three actually takes that route depends on the engine,
+    and Podman is not Docker here -- measured on the same socket, all
+    three cases: only `build` answers 200 with the failure in the
+    stream. A pull of a missing repository answers `403 Forbidden` with
+    `{"message":"denied: requested access to the resource is denied"}`,
+    a missing tag answers `404 Not Found` with `{"message":"manifest
+    unknown: manifest unknown"}`, and a push to an unreachable registry
+    answers `500 Internal Server Error` with an `errorDetail` body and
+    no `message` key at all. The first two never reach the stream; the
+    third has its whole JSON body used as the croak text, because the
+    >= 400 path looks for `message`. So on Podman the new check fires
+    for `build` and the pre-existing status check catches the other two.
+    All three are loud either way, but catching
+    `API::Docker::Error::Stream` specifically is not a reliable way to
+    catch a failed pull or push -- inspect $@ as a string, which both
+    routes satisfy. The POD on each method says which engine does what.
+    `system->events` is explicitly exempt and never croaks on stream
+    content: it is a feed, so an object in it records something that
+    happened on the engine rather than the outcome of this call. The
+    check is on by default for the transport's `ndjson` option and
+    exempting an endpoint is deliberate (`croak_on_error => 0`), because
+    the operation-shaped streaming endpoints are open-ended while the
+    feed-shaped ones are `/events` and nothing else.
+  - `tls => 1` now croaks with "not implemented" instead of being
+    accepted and ignored. `tls` and `cert_path` were attributes no code
+    read: `API::Docker::Role::HTTP` builds a plain IO::Socket::INET and
+    speaks HTTP over it, so a `tcp://` daemon was always addressed in
+    cleartext and a caller who asked for TLS got an unencrypted
+    connection with no indication of it -- anyone passing the option was
+    by definition sending credentials in the clear while believing
+    otherwise. TLS is still not implemented; the croak names the reason
+    and the way round it, which is to terminate TLS in front of the
+    daemon (stunnel, socat, `ssh -N -L`) and point `host` at the local
+    end. Both attributes are kept. `cert_path` on its own does not
+    croak: it defaults from `DOCKER_CERT_PATH`, which is exported on
+    plenty of machines that also run the docker CLI, so croaking on it
+    would break constructions over a value the caller never passed, and
+    on its own it transmits nothing and makes an unencrypted connection
+    look no different. The POD called TLS "experimental", as though it
+    partly worked; it never worked at all.
+  - A header name passed through the transport's `headers` option is now
+    validated against the RFC 9110 token grammar and rejected if it does
+    not match. Only values were sanitised before, so a caller-supplied
+    key carrying CR/LF could open a header line of its own. Not
+    reachable from this distribution -- the one caller, `push`, passes
+    the literal `X-Registry-Auth` -- but the option is public. Names are
+    rejected rather than stripped, unlike values: a value can pick up a
+    stray newline honestly (`encode_base64` wraps its output by
+    default), and flattening it keeps what the caller meant, while a
+    name is a literal the programmer wrote and rewriting
+    "X-Foo\r\nX-Bar" into "X-FooX-Bar" would put a header on the wire
+    under a name nobody asked for. The check also catches spaces and
+    colons, which corrupt the request without injecting anything.
+  - `containers->logs` and `exec->start` now demultiplex the Docker
+    stream format and return an ArrayRef of frames, each a HashRef with
+    `stream` and `data`:
+      [ { stream => 'stdout', data => "OUT\n" },
+        { stream => 'stderr', data => "ERR\n" } ]
+    Both used to hand the caller the framed bytes, so the 8-byte frame
+    header of every frame landed inside the log text. Measured against
+    the rootless Podman socket (5.4.2, API 1.41) with a container
+    running `echo OUT; echo ERR 1>&2`: without a TTY the body is
+    `01 00 00 00 00 00 00 04 "OUT\n" 02 00 00 00 00 00 00 04 "ERR\n"`,
+    and the same exec produces byte-identical output. With a TTY there
+    is no framing at all -- the body is `"OUT\r\n" "ERR\r\n"` -- which
+    is why hand-testing interactively never showed the defect. TTY
+    output comes back as one frame with `stream => 'raw'`, so the shape
+    never varies and `$_->{stream} eq 'stderr'` is safe on any frame.
+    Callers wanting plain text use
+    `join '', map { $_->{data} } @$frames`.
+    Framing is decided from the response bytes, not from `Content-Type`.
+    Measured on Podman: `GET /containers/{id}/logs` sends no
+    `Content-Type` whatsoever, for either kind of container, and
+    `POST /exec/{id}/start` sends
+    `application/vnd.docker.raw-stream` for both -- including the
+    non-TTY exec whose body is in fact multiplexed. Trusting that header
+    would put frame headers back into the caller's output on that
+    engine. Instead the body is walked as frames and is only treated as
+    framed when the walk consumes it exactly; the one way to fool it,
+    and the `tty => 1` option that overrides it, are documented on
+    `API::Docker::Role::HTTP::stream_frames`.
+    `exec->start` also gained POD saying where the exit status actually
+    comes from -- `exec->inspect($id)->{ExitCode}`, a separate call --
+    which the method's documentation never mentioned.
+  - `images->build`, `->pull` and `->push` now always return an ArrayRef
+    of events. `_request` used to try `decode_json` on the whole body
+    first and only fall back to line-by-line parsing, so a stream that
+    carried exactly one JSON object came back as a HashRef while a
+    multi-event stream came back as an ArrayRef, and every caller had to
+    check `ref` before iterating. Measured on Podman: `POST /build?q=1`
+    emits exactly one object, which is the case that used to change
+    shape. The ordinary single-JSON-object endpoints (`/version`,
+    `/containers/{id}/json`, ...) are untouched and still return a
+    HashRef -- the streaming behaviour is now requested explicitly with
+    the new `ndjson => 1` transport option rather than guessed from the
+    body. The option is named for the format and not `stream`, which is
+    already a query parameter of `/events` and
+    `/containers/{id}/stats`.
+    `system->events` takes the same option. It was reaching an ArrayRef
+    only through the implicit fallback that has now gone, so without it
+    the endpoint would have quietly started returning an undecoded
+    string. Measured on Podman for one container create/init/start/
+    died/remove cycle: five newline-delimited objects, and the body is
+    not valid JSON as a whole. Its POD now also says to always pass
+    `until`, since the transport buffers the whole response and an
+    unbounded event stream therefore never returns.
+    Note for anyone scanning these events: a failed build is still HTTP
+    200 with the failure carried as an `errorDetail` object inside the
+    stream, confirmed on Podman for a Dockerfile whose `RUN` exits 7.
+    A failed *pull* differs there -- Podman answers 404 with a plain
+    `{"message":...}` body where Docker streams `errorDetail` on a 200 --
+    so `pull` can croak as well as report an error event.
+  - Bring the cpanfile in line with what the code loads. `URI` was
+    required and is used nowhere in `lib/` or `t/`, so every consumer
+    installed it for nothing; it is gone. `Carp` (loaded by eight of the
+    twelve modules) and `IO::Socket::INET` (loaded by
+    API::Docker::Role::HTTP beside its already-declared `IO::Socket::UNIX`
+    sibling) were undeclared and are now required, as is `Exporter`
+    under `on test` for the mock helper. Nothing else in the tree loads
+    an undeclared module: `SOCK_STREAM` in the HTTP role comes from
+    IO::Socket, which IO::Socket::UNIX and IO::Socket::INET both
+    re-export, and `Path::Tiny` appears in `lib/` only inside the
+    API::Docker::API::Images SYNOPSIS, so it stays a test dependency.
+  - Fix every image push failing with a 400. The X-Registry-Auth header
+    was encoded as base64url with the padding stripped; the engine
+    decodes it with Go's `base64.URLEncoding`, which requires padding
+    and answers `failed to parse "X-Registry-Auth" header ... unexpected
+    EOF` without it. That hit authenticated and anonymous pushes alike
+    -- the anonymous payload is `{}`, which encodes to three characters
+    and one `=`. Measured against a local registry: before, all three
+    tags of a test image came back 400 and nothing reached the registry;
+    after, all three are there.
+    The test that covered this could not have caught it. Its decode
+    helper computed the missing padding and appended it before decoding,
+    so the assertions passed either way. It now decodes what the engine
+    would get, and a separate case pins the exact padded header.
+  - Document that this client speaks the Docker Engine HTTP API over a
+    socket and never shells out to the `docker` binary, so any engine
+    serving that API works -- Podman's rootless socket needs nothing
+    but `DOCKER_HOST`. The new CONTAINER ENGINES section also states
+    what socket discovery deliberately does not do: Docker contexts
+    (`currentContext`, `~/.docker/contexts/meta/*/meta.json`) are never
+    consulted, unlike the `docker` CLI, docker-java or Testcontainers.
+
 0.002     2026-05-17 05:36:20Z
   - HTTP role: `_request` now accepts a `headers => {}` option to set
     extra HTTP request headers. Headers are sanitised against CR/LF

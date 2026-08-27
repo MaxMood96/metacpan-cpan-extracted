@@ -460,6 +460,28 @@ if (!probe_clock_gettime('') && probe_clock_gettime('-lrt')) {
 my $pkg = ExtUtils::Depends->new('Hyperman');
 $pkg->set_inc('-Iinclude/hyperman');
 $pkg->install('include/hyperman/hm_abi.h');
+
+# THE BUS IS PUBLISHED TOO, and under a `hyperman/` subdirectory.
+#
+# A consumer that wants the cross-worker live tail includes
+# "hyperman/hm_bus.h" - Punk::Observe does - and hm_bus.h in turn includes
+# "hm_atomic.h" relative to its own directory. So both have to land together
+# in a directory of that name, or the include resolves and its dependency
+# does not.
+#
+# NOT through ExtUtils::Depends' install(), which takes the basename and
+# would flatten both into Install/ - where "hyperman/hm_bus.h" does not
+# resolve at all. The PM entries are written out instead.
+#
+# Publishing only hm_abi.h was the whole of the bug this fixes: a consumer
+# with Hyperman correctly installed found no hm_bus.h, silently fell back to
+# an in-process tail, and a live tail on a prefork pool then showed whichever
+# quarter of the traffic the answering worker happened to hold.
+for my $h (qw(hm_bus.h hm_atomic.h)) {
+    $pkg->add_pm("include/hyperman/$h",
+                 '$(INST_ARCHLIB)/$(FULLEXT)/Install/hyperman/' . $h);
+}
+
 mkdir 'Install' unless -d 'Install';
 $pkg->save_config('Install/Files.pm');
 my %DEP = $pkg->get_makefile_vars;

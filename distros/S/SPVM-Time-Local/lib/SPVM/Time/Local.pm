@@ -1,6 +1,6 @@
 package SPVM::Time::Local;
 
-our $VERSION = '0.117';
+our $VERSION = '0.118';
 
 1;
 
@@ -10,7 +10,7 @@ SPVM::Time::Local - Reverse Operations of localtime and gmtime.
 
 =head1 Description
 
-Time::Local class in L<SPVM> has methods to do reverse operations of L<localtime|SPVM::Sys/"localtime"> and L<gmtime|SPVM::Sys/"gmtime"> functions.
+Time::Local class in L<SPVM> performs reverse operations of L<localtime|SPVM::Sys/"localtime"> and L<gmtime|SPVM::Sys/"gmtime"> functions.
 
 =head1 Usage
   

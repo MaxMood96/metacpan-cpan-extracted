@@ -46,6 +46,13 @@ EXPECTATIONS
        $exp = $controller->expect_sysread( $fh, $len );
        $exp = $controller->expect_syswrite( $fh, $bytes );
 
+    Also, since version 0.07:
+
+       $exp = $controller->expect_recv( $fh, $length, $flags );
+       $exp = $controller->expect_recvfrom( $fh, $length, $flags );
+    
+       $exp = $controller->expect_send( $fh, $bytes, $flags, $to );
+
     For testing simpler code that does not operate on multiple filehandles,
     two additional methods that ignore the filehandle argument may be more
     convenient:
@@ -67,10 +74,10 @@ EXPECTATIONS
 
        $exp->remains_pending;
 
-    As a convenience, a syswrite expectation will default to returning a
-    future that will complete yielding its length (as is usual for
-    successful writes), and a sleep or connect expectation will return a
-    future that completes yielding nothing.
+    As a convenience, a syswrite and send expectation will default to
+    returning a future that will complete yielding its length (as is usual
+    for successful writes), and a sleep or connect expectation will return
+    a future that completes yielding nothing.
 
     Testing event-based code with expect_sysread can be fragile, as it
     relies on exact ordering, buffer sizes, and so on. A more flexible

@@ -3,7 +3,7 @@ package Physics::Etch::Etchant;
 use strict;
 use warnings;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 # The chemistry that does the etching.
 #

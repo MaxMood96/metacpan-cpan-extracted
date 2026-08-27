@@ -1,5 +1,9 @@
 Revision history for Punk-OpenTelemetry
 
+0.08    2026-08-27
+        - This distribution is now an ExtUtils::Depends PROVIDER
+        - otel_proto.h is installed and published
+
 0.07    2026-08-26
         - An outbound call joins the trace it was made from.
         - A traceparent the caller already set is honoured as the parent and

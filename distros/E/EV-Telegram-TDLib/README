@@ -1,0 +1,956 @@
+NAME
+    EV::Telegram::TDLib - asynchronous Telegram client on TDLib and EV
+
+SYNOPSIS
+        use EV;
+        use EV::Telegram::TDLib;
+
+        my $chat_id = $ENV{TD_CHAT_ID};
+
+        my $td = EV::Telegram::TDLib->new(
+            api_id             => $ENV{TD_API_ID},
+            api_hash           => $ENV{TD_API_HASH},
+            phone_number       => '+10000000000',
+            database_directory => 'tdlib-db',
+            on_code    => sub {
+                my ($info, $submit) = @_;
+                print "code from Telegram: ";
+                chomp(my $code = <STDIN>);
+                $submit->($code);
+            },
+            on_message => sub {
+                my ($msg) = @_;
+                print "message $msg->{id} in chat $msg->{chat_id}\n";
+            },
+            on_error   => sub { warn "tdlib: $_[0]\n" },
+        );
+
+        $td->login(sub {
+            my (undef, $err) = @_;
+            die "login failed: $err->{message}\n" if $err;
+            $td->send_message($chat_id, 'hello', sub {
+                my ($msg, $err) = @_;
+                die "send failed: $err->{message}\n" if $err;
+                $td->close(sub { EV::break });
+            });
+        });
+
+        EV::run;
+
+DESCRIPTION
+    EV::Telegram::TDLib binds TDLib's tdjson C interface to the EV event
+    loop. A dedicated reader thread blocks in td_receive, copies each JSON
+    result, and wakes the loop through ev_async; the loop decodes,
+    correlates replies to pending requests by @extra, drives the
+    authorization state machine, maintains user and chat caches, and calls
+    your handlers.
+
+    Asynchronous callbacks follow the family idiom: they receive "($result,
+    $err)" where $err is undef on success and a decoded TDLib error object
+    on failure. Errors are never thrown.
+
+    Requires a perl with 64-bit integers: Telegram ids are int64 and message
+    ids are shifted left by 20 bits, so they must never round-trip through
+    an NV. The Makefile refuses to build otherwise.
+
+    The bundled TDLib is 1.8.66, pinned by Alien::TDLib at commit
+    022d60202e446ad1287b9fb68e687c8a0760788b.
+
+CONSTRUCTOR
+  new(%opt)
+    Creates a client and registers it in a process-global registry. The
+    client is held under a strong reference until close() completes; see
+    "CAVEATS". Options:
+
+    api_id, api_hash
+        Telegram application credentials from https://my.telegram.org. Keep
+        them in the environment, not in source; see "SECURITY".
+
+    phone_number
+        Phone number in international format for user authorization. Used
+        when the state machine reaches authorizationStateWaitPhoneNumber,
+        unless bot_token is present. Setting on_qr as well does not override
+        it: a QR link is requested only when on_qr is set and no
+        phone_number was given.
+
+    bot_token
+        Bot token from BotFather. When present it is sent automatically at
+        authorizationStateWaitPhoneNumber and no further credential
+        callbacks are needed.
+
+    database_directory
+        Session and database directory. Default "tdlib-db". See "SECURITY".
+
+    files_directory
+        Downloaded files directory. Defaults to database_directory.
+
+    database_encryption_key
+        Encryption key for the local database. Empty by default; set it.
+
+    use_test_dc
+        Use the Telegram test data centers instead of production. Always set
+        this in tests.
+
+    use_file_database, use_chat_info_database, use_message_database,
+    use_secret_chats
+        TDLib feature switches, all defaulting to true.
+
+    system_language_code, device_model, system_version, application_version
+        Client identification sent with setTdlibParameters. Defaults: "en",
+        "EV::Telegram::TDLib", $^O, this distribution's version.
+
+    auto_auth
+        Drive the authorization state machine automatically (default true).
+        With auto_auth false, only the login and close lifecycle
+        continuations run; every credential step is left to you via send().
+
+    register
+        Hashref "{ first_name => ..., last_name => ... }". When set,
+        authorizationStateWaitRegistration is answered with registerUser;
+        without it the state fails login.
+
+    on_update, on_error, on_close, on_user, on_chat, on_message,
+    on_connection_state
+        Update handlers; see "UPDATES" and the mixin methods below.
+
+    on_code, on_password, on_email, on_email_code, on_qr
+        Authorization credential callbacks; see "AUTHORIZATION".
+
+METHODS
+  Core
+   send(\%request, $cb, %opt)
+    Encodes the request, assigns a fresh @extra, and hands it to TDLib. The
+    reply is delivered as "$cb->($result, $err)". Returns the assigned
+    @extra sequence number.
+
+    send() deliberately overwrites any caller-supplied @extra: it is the
+    reply correlation channel, and a collision would misroute a reply to the
+    wrong callback.
+
+    Option: "timeout" in seconds. A timed-out request fails its callback
+    with a synthetic error; the late reply, if it ever arrives, is dropped
+    with a warning, never delivered to a reused @extra. See "ERROR
+    HANDLING".
+
+    On a closed client send() sends nothing, registers nothing and returns
+    undef: the callback is failed deferred with a synthetic "client is
+    closed" error.
+
+   execute(\%request)
+    Synchronous td_execute. No network, usable before authorization, and
+    usable as a class method as well as an instance method:
+
+        my $me = EV::Telegram::TDLib->execute({ '@type' => 'getMe' });
+
+    Only the TDLib methods documented as synchronous return a meaningful
+    result here; anything else returns undef or an error.
+
+   login($cb)
+    Completes when the authorization state machine (see "AUTHORIZATION")
+    reaches authorizationStateReady: "$cb->(undef, undef)". On failure the
+    callback receives a decoded or synthetic error. The callback never fires
+    synchronously, even when the state is already settled. Calling login()
+    again before Ready chains the callbacks, as with close(); none is
+    dropped. A login that has already failed fails a later login() deferred
+    with the recorded error instead of hanging: the state machine stays in
+    the failed state and never re-emits it.
+
+   auth_state()
+    Returns the last seen authorization state name.
+
+   close($cb)
+    Sends "{"@type":"close"}" and calls $cb once authorizationStateClosed
+    arrives. close() is not optional; see "CAVEATS". Calling close() a
+    second time before Closed is legal: the callbacks chain and none is
+    dropped.
+
+   keepalive([$on])
+    An open client holds an ev_ref on the default loop so EV::run does not
+    return while TDLib traffic is pending. keepalive(0) releases it, so the
+    loop may exit with the client still open. Defaults to on. The reference
+    is accounted per client: close() releases it only while still held, and
+    keepalive() on a closed client is a no-op that returns off.
+
+   on_update($cb), on_error($cb)
+    Get or set the generic update and error handlers. on_error receives
+    non-fatal internal errors (undecodable frames, callback exceptions);
+    without it they go to warn.
+
+   retry_after($err)
+    Returns the delay in seconds that a 429 error asks for, parsed out of
+    its message text, or undef for any other error or when no delay is
+    stated. Usable as a method or a plain function. See "Rate limiting:
+    error code 429"; the module still performs no retry of its own.
+
+  Users mixin
+   me($cb)
+    Fetches the current user (getMe) into the user cache and calls
+    "$cb->($user, $err)".
+
+   user($id)
+    Returns the cached user hashref, or undef.
+
+   set_name($first, $last, $cb), set_bio($text, $cb), set_username($name, $cb)
+    Change the signed-in account's own profile. set_name requires a first
+    name; the last name is optional. set_username takes the name with or
+    without a leading at-sign, and an empty string removes it.
+
+    These are user-account methods. A bot session is refused them by TDLib
+    with "The method is not available to bots"; a bot changes its own
+    profile through the Bots mixin instead.
+
+   set_profile_photo($path, %opt, $cb)
+    Sets the account's profile photo. "animation" treats the file as a video
+    avatar, with "main_frame_timestamp" (seconds, default 0) selecting the
+    still frame. "public" (default on) controls whether users who cannot see
+    the full profile get this photo. $path may be an InputFile hashref
+    instead of a path.
+
+    Bots do not use this: a bot session is refused it with
+    BOT_FALLBACK_UNSUPPORTED. See set_bot_photo in the Bots mixin.
+
+   on_user($cb)
+    Handler for updateUser, called with the decoded user after the cache is
+    updated.
+
+   user_by_username($name, $cb)
+    Resolves a public @name to a user, with or without the leading at-sign.
+    A name that resolves to a channel or a group is reported as an error
+    saying so, since only a private chat has a user behind it. Bots are
+    users and resolve normally.
+
+  Chats mixin
+   chat($id)
+    Returns the cached chat hashref, or undef. The cache is fed by
+    updateNewChat and kept current by the chat-field updates listed under
+    "UPDATES".
+
+   on_chat($cb)
+    Handler for updateNewChat, called with the decoded chat.
+
+   load_chats($limit, $cb)
+    Loads more chats from TDLib (loadChats). TDLib answers with a 404 error
+    once the list is exhausted; that is reported as success, not failure.
+
+   pin_message($chat_id, $message_id, %opt, $cb), unpin_message($chat_id, $message_id, $cb)
+    Pins or unpins a message. Options: "silent" to pin without notifying,
+    "only_for_self" to pin it just for you.
+
+   set_chat_title($chat_id, $title, $cb), set_chat_photo($chat_id, $path, %opt, $cb)
+    Changes a chat's title or photo. set_chat_photo takes the same
+    "animation" and "main_frame_timestamp" options as
+    "set_profile_photo($path, %opt, $cb)".
+
+   add_chat_member($chat_id, $user_id, %opt, $cb)
+    Adds a user to a chat. "forward_limit" (default 0) is how many recent
+    messages they get to see.
+
+   set_member_status($chat_id, $user_id, $status, %opt, $cb)
+    Sets a member's status: "member", "left" or "banned". "left" is the
+    plain kick, which leaves them free to come back; "banned" removes and
+    blocks them. "until" is a unix timestamp for a temporary ban or
+    membership, 0 (the default) meaning forever. An unknown status croaks.
+
+   block_user($user_id, %opt, $cb)
+    Blocks a user. "unblock" reverses it, and "stories" acts on the stories
+    block list rather than the main one.
+
+   join_chat($chat_id, $cb), leave_chat($chat_id, $cb)
+    Joins or leaves a chat. joinChat answers with a ChatJoinResult, which
+    reports a join request awaiting approval as well as a plain success.
+
+   chat_by_username($name, $cb)
+    Resolves a public username (with or without the leading @) to a chat via
+    searchPublicChat and caches it.
+
+   mark_read($chat_id, %opt, $cb)
+    Marks messages read: openChat followed by viewMessages, which TDLib only
+    honours while the chat is open. "message_ids" defaults to the chat's
+    last message, so "$td->mark_read($chat_id, sub {})" clears a chat. Fails
+    if nothing is known to mark.
+
+   chat_action($chat_id, $action, $cb)
+    Sends a chat action, the "typing..." class of indicator. $action is one
+    of "typing" (the default), "upload_document", "upload_photo",
+    "upload_video", "upload_voice", "record_video", "record_voice",
+    "cancel". An unknown action croaks. The indicator expires on its own
+    after a few seconds, so repeat it while the work lasts.
+
+  Messages mixin
+   send_message($chat_id, $text, %opt, $cb)
+    Sends a text message.
+
+    TDLib will not send to a chat it has not loaded, and answers "Chat not
+    found" instead. A chat id taken from an update or from
+    "chat_by_username($name, $cb)" is already known; one you constructed
+    yourself may not be, and that includes your own Saved Messages, whose
+    chat id is your user id. Open it first with createPrivateChat and send
+    to the id that returns:
+
+        $td->send({ '@type' => 'createPrivateChat',
+                    user_id => $me->{id} }, sub {
+            my ($chat, $err) = @_;
+            die "$err->{message}\n" if $err;
+            $td->send_message($chat->{id}, 'note to self', sub { });
+        });
+
+    Options:
+
+    parse_mode
+        "markdown" (MarkdownV2) or "html", parsed through the synchronous
+        parseTextEntities call. Unlike every other error path, a parse error
+        is delivered synchronously: send_message invokes $cb with the error
+        before returning, because parseTextEntities never reaches the
+        network.
+
+    wait
+        "sent" (default) fires the callback on final delivery: sendMessage
+        returns a message with a temporary id, and the real outcome arrives
+        later as updateMessageSendSucceeded or updateMessageSendFailed keyed
+        by that id. "accepted" fires the callback with the temporary message
+        as soon as TDLib accepts the request.
+
+    reply_to
+        Message id to reply to.
+
+    silent
+        Send without a notification.
+
+    disable_preview
+        Suppress the link preview.
+
+    reply_markup
+        A reply markup hashref, as built by "inline_keyboard(\@rows)".
+
+   entity_text($formatted_text, $entity), entity_texts($formatted_text)
+    Returns the text a formatting entity covers. TDLib measures "offset" and
+    "length" in UTF-16 code units, so "substr" is wrong for any text
+    containing a character outside the BMP -- an emoji is one Perl character
+    but two UTF-16 units, and every entity after it is shifted. entity_text
+    does the slicing; entity_texts does it for every entity at once,
+    returning an arrayref whose elements carry the entity's own fields, its
+    "type" flattened to the type name, and the "text" it covers.
+
+        for my $e (@{ $td->entity_texts($msg->{content}{text}) }) {
+            print "$e->{type}: $e->{text}\n";
+        }
+
+    The offsets themselves are left exactly as TDLib sent them. They are
+    sent back unchanged when a message is forwarded, edited or copied, so
+    rewriting them into character counts would corrupt the message.
+
+   history($chat_id, %opt, $cb)
+    Pages getChatHistory backwards. Options: "limit" (messages wanted,
+    default 50), "max_pages" (default 10), "from_message_id". The callback
+    receives "(\@messages, $err, $state)"; "$state->{complete}" is true when
+    the requested limit was reached or the history was exhausted.
+
+   edit_message($chat_id, $message_id, $text, %opt, $cb)
+    Edits a text message. Accepts parse_mode and disable_preview; parse
+    errors are synchronous, as in send_message.
+
+   edit_message_markup($chat_id, $message_id, $markup, $cb)
+    Replaces a message's reply markup and nothing else, for updating buttons
+    after a tap. Pass an empty hashref to remove them.
+
+    Note that "edit_message($chat_id, $message_id, $text, %opt, $cb)" takes
+    "reply_markup" as an option, and an edit that omits it drops whatever
+    buttons the message had.
+
+   react($chat_id, $message_id, $emoji, %opt, $cb)
+    Adds an emoji reaction. Options: "remove" to take the reaction away
+    again, "is_big" for the animated form, "update_recent" (default on) to
+    fold the emoji into the sender's recent reactions.
+
+   delete_messages($chat_id, \@message_ids, %opt, $cb)
+    Deletes messages. "revoke" defaults to true (delete for all
+    participants).
+
+   forward_messages($chat_id, $from_chat_id, \@message_ids, %opt, $cb)
+    Forwards messages. Options: "send_copy", "remove_caption", "silent".
+
+   on_message($cb)
+    Handler for updateNewMessage, called with the decoded message. Its text
+    is a character string, but any formatting entities on it are measured in
+    UTF-16 code units: slice them with "entity_text($formatted_text,
+    $entity), entity_texts($formatted_text)" rather than "substr".
+
+   send_file($chat_id, $path, %opt, $cb)
+    Sends a local file. "kind" selects the content: "document" (the
+    default), "photo", "video", "audio", "animation", "voice_note",
+    "video_note", "sticker"; an unknown kind croaks. $path may instead be an
+    InputFile hashref, as returned by "upload($path, %opt)". "caption" is
+    formatted with the same "parse_mode" rules as "send_message($chat_id,
+    $text, %opt, $cb)", and "reply_to", "silent", "wait" and "reply_markup"
+    behave as they do there.
+
+    Each kind nests its InputFile inside a per-kind wrapper object --
+    inputMessageDocument takes an inputDocument, inputMessagePhoto an
+    inputPhoto, and so on. This method builds that nesting; handing TDLib
+    the InputFile directly yields only "InputFile is not specified".
+
+    Kinds accept the metadata their wrapper defines, and Telegram classifies
+    media by what it is given: "width" and "height" for photo, animation,
+    video and sticker; "duration" for animation, video, audio, voice_note
+    and video_note; "title" and "performer" for audio; "length" for
+    video_note; "emoji" for sticker. "sticker" and "video_note" have no
+    caption field in the schema, so a caption passed with them is dropped
+    rather than sent.
+
+    A Telegram animation is an MP4, not a GIF. Sending a ".gif" file as
+    "animation" succeeds but arrives as a plain document: the conversion is
+    the sender's job, not the server's. Convert to MP4 first (H.264,
+    "yuv420p") and it arrives as a real animation. Sending an existing
+    sticker means sending its remote file id, since an arbitrary local file
+    will not pass Telegram's sticker validation.
+
+   send_poll($chat_id, $question, \@options, %opt, $cb)
+    Sends a poll, which needs at least two options. Polls are anonymous
+    unless "anonymous" is turned off, which is the opposite of TDLib's own
+    default but matches what Telegram's clients create. Options: "multiple"
+    to allow several answers, "open_period" to close the poll after that
+    many seconds, "allow_adding_options", and "quiz" with "correct" (an
+    option index, default 0) and "explanation" for a quiz.
+
+    All three of these, like the other senders, accept "reply_to", "silent",
+    "reply_markup" and "wait".
+
+   send_location($chat_id, $latitude, $longitude, %opt, $cb), send_contact($chat_id, $phone, $first_name, %opt, $cb)
+    Sends a location or a contact. send_location takes "accuracy" in metres;
+    send_contact takes "last_name", "vcard" and "user_id".
+
+   search_messages($chat_id, $query, %opt, $cb)
+    searchChatMessages over one chat. Options: "limit" (default 50),
+    "from_message_id", "offset". The callback receives "(\@messages, $err,
+    $info)", where $info carries "total_count" and "next_from_message_id"
+    for paging.
+
+  Files mixin
+   download($file_id, %opt, $cb)
+    Starts a download (downloadFile). "on_progress" receives the decoded
+    file on every related updateFile; the main callback fires with the file
+    once local.is_downloading_completed is true. A file that is already
+    downloaded fires it from the downloadFile reply itself: TDLib emits no
+    updateFile when nothing changed. A download that fails after starting
+    (TDLib signals this only via updateFile, with is_downloading_active and
+    is_downloading_completed both false) fails the callback with a synthetic
+    "download failed" error. Option: "priority" (default 1).
+
+    One registration per file id: a second download() for the same id while
+    the first is in flight fails its callback immediately with a synthetic
+    "already in progress" error, delivered synchronously like a parse_mode
+    error since nothing is sent; the first download is left alone.
+
+   cancel_download($file_id)
+    Cancels a pending download and fails its callback.
+
+   upload($path, %opt)
+    Returns an inputFileLocal hashref for use as message content or
+    elsewhere in a request. It only builds the shape: nothing is sent and
+    nothing is tracked. The actual upload is reported by TDLib through the
+    same updateFile as downloads, but on the remote side of the file
+    ("remote.uploaded_size" up to "remote.is_uploading_completed"), and is
+    observed with "on_upload($file_id, $cb)".
+
+    Every send that takes a path uploads asynchronously, so the file must
+    still be on disk when TDLib gets to it, not merely when the call
+    returns. A File::Temp object scoped to the enclosing block is the way
+    this goes wrong: it unlinks on destruction and the upload then fails
+    with "Need full local (or generate, or inactive remote) location for
+    upload". Keep the handle alive until the callback runs.
+
+   on_upload($file_id, $cb)
+    Registers $cb to fire with the decoded file on every updateFile for
+    $file_id. The registration is removed automatically once the update with
+    "remote.is_uploading_completed" true has been delivered; pass an undef
+    $cb to remove it earlier. The file id becomes known only after the send
+    is accepted: read it from the returned message content (for a document,
+    "$msg->{content}{document}{document}{id}") and register then. On close
+    the watchers are dropped silently.
+
+    Unlike the other on_* methods, on_upload is a per-id registration, not a
+    single-handler setter, and it returns nothing.
+
+  Connection mixin
+   connection_state()
+    Returns the last seen connection state name, or undef before the first
+    updateConnectionState arrives. One of connectionStateWaitingForNetwork,
+    connectionStateConnectingToProxy, connectionStateConnecting,
+    connectionStateUpdating or connectionStateReady. Anything but the last
+    means you are offline (or catching up): requests may still be sent, but
+    they will not reach Telegram until the state returns to
+    connectionStateReady.
+
+   option($name), my_id()
+    TDLib reports its options as updates rather than replies, so the module
+    caches them as they arrive; option() reads one back. Boolean options are
+    cached as 1 or 0 and an empty option as undef.
+
+    my_id() is the signed-in account's own user id, which TDLib pushes right
+    after login. It is undef until then.
+
+   on_connection_state($cb)
+    Handler for updateConnectionState, called with the state name string
+    after connection_state() is updated.
+
+  Bots mixin
+   inline_keyboard(\@rows)
+    Builds a replyMarkupInlineKeyboard for the "reply_markup" option of
+    "send_message($chat_id, $text, %opt, $cb)" and "send_file($chat_id,
+    $path, %opt, $cb)". Each row is an arrayref of buttons, and each button
+    is "{ text => ..., data => ... }" for a callback button or "{ text =>
+    ..., url => ... }" for a link. A button with neither croaks.
+
+    Callback data is TL "bytes", which the JSON interface carries base64
+    encoded; this method encodes it, and "on_callback_query($cb)" decodes it
+    again, so callers only ever handle the plain bytes.
+
+   reply_keyboard(\@rows, %opt)
+    Builds a replyMarkupShowKeyboard, the custom keyboard that replaces a
+    user's normal one. A button may be a plain string or a hashref; "{ text
+    => ..., request => 'phone' }" (or 'location') asks the user to share
+    that instead of sending text. Options: "one_time", "resize" (default
+    on), "persistent", "placeholder".
+
+   remove_keyboard(%opt)
+    Builds a replyMarkupRemoveKeyboard, which takes a custom keyboard away
+    again. Option: "personal".
+
+   set_commands(\@commands, %opt, $cb)
+    Sets the "/" command menu a bot offers. Each command is "['start',
+    'Begin']" or "{ command => 'start', description => 'Begin' }"; a leading
+    slash is stripped. An empty list clears the menu. Options: "scope" (a
+    BotCommandScope hashref, default botCommandScopeDefault),
+    "language_code".
+
+   set_bot_name($name, %opt, $cb), set_bot_description($text, %opt, $cb), set_bot_short_description($text, %opt, $cb), set_bot_photo($path, %opt, $cb)
+    Change a bot's own profile. The description is the long text shown on an
+    empty chat screen with the bot; the short description is the one-liner
+    shown in its profile and in search results. set_bot_photo takes the same
+    "animation" and "main_frame_timestamp" options as
+    "set_profile_photo($path, %opt, $cb)".
+
+    TDLib addresses a bot by user id. These default to "option($name),
+    my_id()", which is what a bot session wants; pass "bot_user_id" to act
+    on a bot from another account that owns it. All four accept
+    "language_code" for a localised value.
+
+   on_callback_query($cb)
+    Handler for updateNewCallbackQuery, called with a hashref carrying "id",
+    "sender_user_id", "chat_id", "message_id", "type", and the decoded
+    "data". Answer it with "answer_callback_query($id, %opt, $cb)"; Telegram
+    shows the user a spinner until you do.
+
+   on_inline_query($cb)
+    Handler for updateNewInlineQuery, the typing-ahead queries an inline bot
+    answers. It is called with a hashref carrying "id", "sender_user_id",
+    "query", "offset" and "chat_type". Inline mode must be turned on for the
+    bot first, through BotFather.
+
+   answer_inline_query($id, \@results, %opt, $cb)
+    Answers an inline query with a list of article results. Each result is
+    "{ title => ..., message => ..., description => ..., url => ...,
+    thumbnail_url => ..., reply_markup => ... }"; "message" is the text sent
+    when the result is picked, defaulting to the title, and "id" is
+    generated if you leave it out. Options: "cache_time" (default 300),
+    "personal" for per-user results, "next_offset" for paging.
+
+   answer_callback_query($id, %opt, $cb)
+    Answers a callback query. Options: "text", "show_alert", "url",
+    "cache_time". The id is sent as a string, since it is a TL "int64" and
+    would lose precision as a number.
+
+AUTHORIZATION
+    TDLib drives authorization as a state machine reported through
+    updateAuthorizationState; "auth_state()" exposes the current state. With
+    auto_auth on (the default), each state is answered automatically or
+    routed to a credential callback:
+
+    authorizationStateWaitTdlibParameters
+        setTdlibParameters is sent automatically from the constructor
+        options. No callback. An error reply (bad api credentials, an
+        unwritable database_directory) fails login: the values come from the
+        constructor, so there is no interactive channel to retry through.
+
+    authorizationStateWaitPhoneNumber
+        bot_token is sent when given; otherwise requestQrCodeAuthentication
+        when on_qr is set and no phone_number was given; otherwise the
+        phone_number is sent. No callback in any branch. An error reply (an
+        invalid phone number or bot token) fails login, for the same reason
+        as above.
+
+    authorizationStateWaitCode
+        "on_code" receives "($info, $submit)": $info is the decoded
+        authenticationCodeInfo, $submit is a code ref that sends the code.
+        The split exists so the code can come from anywhere (a prompt, a
+        GUI, a queue) without blocking the loop. A missing callback fails
+        login.
+
+        A rejected submission does not fail login: TDLib stays in the state
+        after an error reply (a mistyped code, an expired one), so the
+        handler is called again as "($info, $submit, $err)" with the decoded
+        error as the third argument, and may submit a corrected value. To
+        give up instead, close the client.
+
+    authorizationStateWaitPassword
+        "on_password" receives "($info, $submit)"; $info carries the
+        password_hint. A missing callback fails login. A rejected password
+        re-asks with the error as a third argument, as above.
+
+    authorizationStateWaitEmailAddress, authorizationStateWaitEmailCode
+        "on_email" and "on_email_code", same "($info, $submit)" shape and
+        the same retry-on-error behaviour.
+
+    authorizationStateWaitOtherDeviceConfirmation
+        "on_qr" receives "($link)" only. The signature is deliberately
+        asymmetric: QR confirmation has nothing to submit, the other device
+        confirms the login, so there is no $submit callback.
+
+    authorizationStateWaitRegistration
+        Answered automatically from the register option; without it login
+        fails. An error reply from registerUser fails login: like the other
+        automatic steps, it has no interactive channel.
+
+    authorizationStateWaitPremiumPurchase
+        Cannot be satisfied programmatically; login fails with an error.
+
+    authorizationStateReady
+        The login() callback succeeds.
+
+    authorizationStateClosed
+        Pending requests, in-flight sends and downloads are failed, close()
+        callbacks run, then on_close fires.
+
+    A login failure that arrives when no login() is pending is reported to
+    the on_error handler instead (or warn, when none is set), and recorded:
+    a login() called after the failure fails deferred with the same error
+    rather than waiting for a state that never comes.
+
+UPDATES
+    Anything arriving without a pending @extra is an update -- with one
+    exception: a reply whose @extra matches no pending and no recently
+    timed-out request is a stray, dropped with a warning rather than
+    dispatched as an update. Dispatch order: the authorization state
+    machine, then the per-type handlers that maintain the user and chat
+    caches, track the connection state and drive downloads, upload watchers
+    and in-flight sends, then the generic on_update handler.
+
+    A live client emits updateOption traffic (and other service updates)
+    that reaches on_update as soon as a loop runs, before any request is
+    made. Handlers must tolerate updates they do not recognize.
+
+    The chat cache is maintained against a fixed table of chat-field updates
+    (updateChatTitle, updateChatLastMessage, updateChatPosition and friends)
+    that targets the pinned TDLib 1.8.66, commit
+    022d60202e446ad1287b9fb68e687c8a0760788b. A newer TDLib that renames
+    these updates would leave the cache stale; the unknown updates would
+    fall through to on_update only.
+
+    Payload fields the schema marks nullable (last_message, draft_message,
+    photo, action_bar, theme, block_list, pending_join_requests) are
+    assigned even when the update omits them: TDLib drops null object fields
+    from its JSON entirely, so an absent key means the value was cleared,
+    not that it stayed unchanged.
+
+ESCAPE HATCH
+    The convenience methods cover a small fraction of the API. send() and
+    execute() take any raw TDLib request hashref, so the roughly one
+    thousand unwrapped TDLib methods remain fully usable:
+
+        $td->send({ '@type' => 'getCountries' }, sub {
+            my ($res, $err) = @_;
+            ...
+        });
+
+    Do not set @extra yourself; see "send(\%request, $cb, %opt)".
+
+    For offline tests, _inject_raw($json) feeds a JSON string through the
+    normal dispatch path. It is an internal test hook, not part of the
+    supported API.
+
+    Injecting an authorizationStateClosed makes the module forget the
+    client. That is only safe while nothing has been sent to it: tdjson
+    creates a client on its first request, so an id that never carried one
+    has nothing behind it. Inject it after real traffic and the module stops
+    tracking a client TDLib still holds.
+
+UNICODE
+    Work in character strings. Text you pass in is encoded for you, and text
+    you get back is decoded for you; the conversion happens at the XS
+    boundary, where TDLib's JSON is read and written as UTF-8 octets.
+
+        $td->send_message($chat_id, "\x{41F}\x{440}\x{438}\x{432}\x{435}\x{442}", sub { });
+
+        $td->on_message(sub {
+            my ($msg) = @_;
+            my $text = $msg->{content}{text}{text};
+            # a character string: length is in characters, not bytes
+            printf "%d characters\n", length $text;
+        });
+
+    Do not encode it yourself. Passing bytes you have already run through
+    "Encode::encode" sends those bytes as though each one were a character,
+    and Telegram stores the result:
+
+        use Encode ();
+        my $text = "\x{410}\x{411}";               # two characters
+
+        $td->send_message($chat_id, $text, sub { });
+        # on the wire: d0 90 d0 91   -- correct
+
+        $td->send_message($chat_id, Encode::encode('UTF-8', $text), sub { });
+        # on the wire: c3 90 c2 90 c3 90 c2 91   -- mojibake, and no error
+
+    Nothing warns about this. Both calls succeed, and the damage is only
+    visible in the message itself, so it is worth being deliberate about
+    where text enters your program: decode once at the edge, and pass
+    characters from there on.
+
+    Formatting entities are counted differently again: TDLib gives "offset"
+    and "length" in UTF-16 code units, not characters. Use
+    "entity_text($formatted_text, $entity), entity_texts($formatted_text)"
+    rather than "substr", which is right only while the text stays inside
+    the BMP.
+
+    The same applies to every string the module sends -- captions, chat
+    titles, bot descriptions, poll questions and options, keyboard labels,
+    inline query results, search queries -- and to the @extra correlation
+    ids, which are generated internally and never contain anything but
+    digits.
+
+    Printing text you received to a filehandle with no encoding layer raises
+    "Wide character in print". Set the layer once:
+
+        binmode STDOUT, ':encoding(UTF-8)';
+
+    Reading a code or password from STDIN in an interactive login is the
+    mirror image: "binmode STDIN, ':encoding(UTF-8)'" if it may contain
+    anything but ASCII, so that what you submit is characters.
+
+ERROR HANDLING
+    Errors are never thrown. Every asynchronous callback follows the
+    contract "$cb->($result, $err)": $err is undef on success and a hashref
+    on failure, and $result is undef whenever $err is set. Test $err, not
+    $result.
+
+    "history($chat_id, %opt, $cb)" is the one exception, and it is
+    deliberate: paging can fail partway, so a failure after some pages have
+    arrived hands you both the messages collected so far and the error that
+    stopped it.
+
+    A TDLib error arrives as the decoded object:
+
+        { '@type' => 'error', code => 400, message => 'PHONE_NUMBER_INVALID' }
+
+    Synthetic errors generated by the module itself use the same shape with
+    code -1:
+
+    *   "timeout" -- a send() request whose "timeout" option expired. The
+        late reply, if it ever arrives, is dropped with a warning; it is
+        never delivered to a reused @extra.
+
+    *   "client closed" -- delivered to every in-flight request, pending
+        send and active download when the client closes; a pending login()
+        fails with "client closed during login".
+
+    *   "client is closed" -- a send() attempted after the client closed;
+        nothing is sent and the callback fails deferred.
+
+    *   "download canceled" -- delivered by "cancel_download($file_id)".
+
+    *   "download failed" -- a "download($file_id, %opt, $cb)" that failed
+        after starting; TDLib reports a permanent download failure only
+        through updateFile, never as a request reply.
+
+  Rate limiting: error code 429
+    Telegram answers too-frequent requests with error code 429 and a message
+    of the form "Too Many Requests: retry after N", where N is the number of
+    seconds to wait. In this TDLib the generic error type carries only
+    "code" and "message", so the delay exists only in the message text and
+    must be parsed from it. Do not retry immediately, and never retry in a
+    tight loop: that is the pattern that gets an account limited. Back off
+    for at least the stated delay, with a timer rather than a blocking
+    sleep. TDLib performs its own internal rate limiting for many operations
+    -- it queues and paces requests on its own -- so a 429 that reaches you
+    is a hard signal, not routine operation.
+
+    The module deliberately implements no automatic retry: a wrong retry
+    policy inside a binding hides the signal and can make limiting worse.
+    The back-off policy belongs to the caller; see "Handling rate limits" in
+    EV::Telegram::TDLib::Cookbook.
+
+    One structured exception: a failed message send surfaces through
+    updateMessageSendFailed, whose message carries a
+    messageSendingStateFailed with a numeric "retry_after" field in seconds,
+    next to "can_retry". The "send_message($chat_id, $text, %opt, $cb)"
+    callback receives only the error object; watch updateMessageSendFailed
+    via "on_update($cb), on_error($cb)" when you need the structured field.
+
+  Internal failures
+    Internal failures that own no request -- a TDLib frame that fails JSON
+    decoding, a user callback that dies -- are reported to the "on_error"
+    handler, or to warn when none is set. A dying callback is contained by
+    the dispatch (wrapped in G_EVAL): it is reported, and the remaining
+    updates in the same batch still run; the drain does not abort. The close
+    chain is contained per callback as well: one dying callback during close
+    cannot skip the remaining pending failures, the close() callbacks or
+    on_close.
+
+    The containment covers dispatch context. An exception in a send()
+    timeout callback runs in an EV timer, not in the dispatch: it is not
+    contained and propagates out of EV::run like any other EV watcher
+    callback.
+
+    Some errors are delivered synchronously, before the method returns: a
+    parse_mode failure in "send_message($chat_id, $text, %opt, $cb)" or
+    "edit_message($chat_id, $message_id, $text, %opt, $cb)", and equally in
+    send_file, send_poll and answer_inline_query, invokes the callback with
+    the parseTextEntities error before the method returns, and nothing is
+    sent. A download already in progress and a mark_read with nothing to
+    mark report the same way.
+
+ENVIRONMENT
+    EV_TDLIB_SHUTDOWN_TIMEOUT
+        Seconds the END block waits for open clients to finish closing
+        before giving up, default 3. Giving up tears TDLib's statics down
+        while it is still closing, which can abort the process at exit --
+        TDLib detaches its scheduler thread rather than joining it once exit
+        has begun, so the crash is a race and will not show on every run.
+        Raise this on a heavily loaded machine or under a sanitizer, where
+        everything runs several times slower.
+
+    TDLIB_LOG_VERBOSITY
+        TDLib's log verbosity level, applied once when the module is loaded.
+        Defaults to 1; TDLib's own default of 5 is very noisy on stderr.
+
+    TD_API_ID, TD_API_HASH, TD_PHONE, TD_BOT_TOKEN, TD_DATABASE_DIRECTORY
+        Not the module's API: the credential convention shared by the
+        scripts in eg/ and by xt/live_auth.t. The module itself takes
+        credentials only as constructor options; see "new(%opt)".
+
+EXAMPLES
+    Runnable scripts live in eg/ (from the distribution root: "perl -Mblib
+    eg/NAME.pl"; credentials come from the environment, see "ENVIRONMENT"):
+
+    eg/01-login.pl
+        user login with phone, SMS code and 2FA; creates the session
+        database
+
+    eg/02-bot-echo.pl
+        bot login via token; echoes incoming text messages
+
+    eg/03-list-chats.pl
+        loads the chat list and prints id and title per chat
+
+    eg/04-send-message.pl
+        sends a markdown message and waits for real delivery
+
+    eg/05-download-file.pl
+        downloads a file id with progress percentage
+
+    eg/06-raw-method.pl
+        raw send()/execute() for methods the mixins do not wrap
+
+    EV::Telegram::TDLib::Cookbook has task-oriented recipes.
+
+CAVEATS
+    *   Not fork-safe. TDLib itself is not fork-safe, so every method croaks
+        after fork. Do not fork with an open client. Forking before this
+        process has ever made one is allowed, and is how a preforking worker
+        pool should be built: the child inherits a pump that was never used.
+
+    *   One reader thread per process, shared by all clients. It starts with
+        the first client and runs until the process ends: closing every
+        client releases the loop reference, so EV::run can return, but the
+        reader itself is only joined by the END-block shutdown.
+
+    *   The default EV loop only. Requests are delivered on EV_DEFAULT; a
+        non-default loop cannot receive them. Destroying the default loop
+        ("default_destroy" in EV) while a client is open is out of contract:
+        the reader thread would keep signalling the freed loop through
+        ev_async_send. Close every client first.
+
+    *   Pinned assumption: TDLib's receive/execute buffer is thread-local.
+        The no-lock design -- the reader thread copies every td_receive
+        result before anything else runs, and execute() needs no lock
+        against it -- rests on the "current_output" buffer in TDLib's
+        ClientJson.cpp being "TD_THREAD_LOCAL". That is an implementation
+        detail, not a public guarantee: the header only promises the pointer
+        stays valid until the next call. Verified against the bundled TDLib
+        1.8.66, commit 022d60202e446ad1287b9fb68e687c8a0760788b; re-verify
+        whenever the pin moves, because a process-global buffer would make
+        concurrent execute() a use-after-free race.
+
+    *   Clients stay registered until closed. The registry holds a strong
+        reference on purpose: TDLib requires every client to be closed
+        before process exit, so an object must not vanish when the caller
+        drops its last reference. "close($cb)" is not optional; dropping
+        your last Perl reference does not close anything. See
+        "AUTHORIZATION" for the Closed state that ends the lifecycle.
+
+    *   An END block closes leftover clients and pumps the loop for a
+        bounded interval (three seconds) so TDLib flushes its database, then
+        joins the reader thread. It is a safety net, not a substitute for
+        close().
+
+    *   A callback that dies is contained and reported through on_error; the
+        drain continues. See "ERROR HANDLING".
+
+SECURITY
+    The database directory holds the session: whoever reads it owns the
+    account. Treat it as exactly as sensitive as a password: restrictive
+    permissions, no commits, no backups to third-party storage.
+
+    Set database_encryption_key so the local database is encrypted at rest,
+    and keep the key out of source control.
+
+    api_id and api_hash identify your application to Telegram. Read them
+    from the environment (TD_API_ID, TD_API_HASH), never hardcode them.
+
+REQUIREMENTS
+    *   perl 5.12 or later, built with 64-bit integers. The Makefile refuses
+        to build when ivsize is below 8: Telegram chat and user ids are
+        int64, and message ids are shifted left by 20 bits, so they must
+        never round-trip through an NV.
+
+    *   EV 4.11 or later.
+
+    *   Cpanel::JSON::XS 4.00 or later.
+
+    *   Alien::TDLib, at configure and build time. It provides TDLib 1.8.66,
+        pinned at commit 022d60202e446ad1287b9fb68e687c8a0760788b; TDLib
+        itself is licensed under the Boost Software License 1.0.
+
+LIMITATIONS
+    Deliberately not in 0.01:
+
+    *   No Bot API (HTTP) client; this binding speaks tdjson only.
+
+    *   No voice or video calls.
+
+    *   No secret-chat sugar beyond the use_secret_chats switch.
+
+    *   No per-method wrappers for the roughly one thousand TDLib methods;
+        send() and "execute(\%request)" are the escape hatch (see "ESCAPE
+        HATCH").
+
+    *   No log message callback (TDLib's setLogMessageCallback is not
+        bound); TDLIB_LOG_VERBOSITY (see "ENVIRONMENT") is the only log
+        control.
+
+    *   Linux-focused: developed and CI-tested on Linux, untested elsewhere.
+
+    *   The default EV loop only; see "CAVEATS".
+
+SEE ALSO
+    Alien::TDLib, EV, EV::Telegram::TDLib::Cookbook,
+    <https://core.telegram.org/tdlib> and the td_api documentation linked
+    from it, Telegram::JsonAPI (synchronous prior art on CPAN).
+
+AUTHOR
+    vividsnow
+
+LICENSE
+    This library is free software; you can redistribute it and/or modify it
+    under the same terms as Perl itself.
+

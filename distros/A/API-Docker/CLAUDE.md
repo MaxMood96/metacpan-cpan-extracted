@@ -27,9 +27,10 @@ for this distribution.
    conventions belong in this `CLAUDE.md` or in a skill, never in
    auto-memory.
 
-6. **Load the `perl-core` skill before editing any Perl** in this
+6. **Load the `getty-perl-core` skill before editing any Perl** in this
    workspace. It encodes Getty's house rules; the rules below are the
-   TL;DR.
+   TL;DR. The `api-docker-*` agents get it force-loaded — see
+   [Delegation](#delegation).
 
 7. **`use Module;` to load modules.** Only use `require` when there's a
    real runtime reason (lazy plugin loading, optional deps), not just to
@@ -47,7 +48,9 @@ for this distribution.
 
 11. **The version in `lib/API/Docker.pm` is the NEXT release.** What's
     currently on CPAN is the previous tag. `dzil release` bumps the
-    version automatically — never bump it by hand before a release.
+    version automatically — never bump it by hand before a release. The
+    same literal is repeated in all twelve `lib/**/*.pm` files and must
+    stay in sync.
 
 12. **`{{$NEXT}}` in `Changes` is the placeholder for the upcoming
     release.** Add entries under it as you change behavior; `dzil
@@ -57,12 +60,17 @@ for this distribution.
 
 A pure-Perl client for the Docker Engine API. No LWP, no shell-outs —
 HTTP/1.1 (incl. chunked) is spoken directly over the daemon's Unix
-socket (default) or a TCP endpoint.
+socket (default) or a TCP endpoint. Any engine serving that API works;
+Podman needs nothing but `DOCKER_HOST`.
 
 The synchronous `_request` core lives in
 `API::Docker::Role::HTTP`; resource-specific API methods live in
 `API::Docker::API::*`. Entity wrappers (`API::Docker::Container`,
 `API::Docker::Image`, ...) hang off the resource APIs.
+
+Architecture, transport invariants, the streaming and `X-Registry-Auth`
+details, and the mock harness are in skill `api-docker-core` — that is
+the source of truth, not this file.
 
 ## Layout
 
@@ -76,61 +84,73 @@ lib/API/Docker/API/Networks.pm          # network endpoints
 lib/API/Docker/API/Volumes.pm           # volume endpoints
 lib/API/Docker/API/Exec.pm              # exec endpoints
 lib/API/Docker/{Container,Image,Network,Volume}.pm  # entity classes
-t/                                      # tests (prove -l t/)
+t/                                      # tests (prove -lr t/)
 t/lib/Test/API/Docker/Mock.pm           # fixture-driven mock helper
 t/fixtures/*.json                       # captured daemon responses
+.claude/agents/                         # the api-docker-* subagents
+.claude/rules/api-docker-rules.md       # house rules, auto-loaded every turn
+.claude/skills/                         # briefed skills (hardlinked + owned)
 ```
 
 ## Build and test
 
 ```bash
-dzil build              # build the dist
-dzil test               # full test suite
+prove -lr t/            # canonical — recursive; plain `prove -l t/` skips subdirs
 prove -lv t/images.t    # single test
+dzil build              # build the dist
+dzil test               # full suite incl. generated xt/
 cpanm --installdeps .   # install deps from cpanfile
 ```
 
-By default tests are fixture-driven (no Docker daemon needed). Set
-`API_DOCKER_TEST_HOST=unix:///var/run/docker.sock` to also exercise the
-read-only live paths; add `API_DOCKER_TEST_WRITE=1` to enable mutating
-tests (create/remove containers, etc.).
+By default tests are fixture-driven — no daemon, no network, and it stays
+that way. For the read-only live paths set `API_DOCKER_TEST_HOST`; add
+`API_DOCKER_TEST_WRITE=1` for the mutating ones (they create and remove
+real containers, images and volumes).
 
-## API conventions
+**On this machine that host is Podman, not Docker.**
+`/var/run/docker.sock` does not exist here, and a missing socket makes the
+suite `skip_all` — a live run pointed at the default reports success while
+testing nothing:
 
-- **Resource accessors live under the client:** `$docker->images`,
-  `$docker->containers`, etc. Each returns a `*::API::*` instance.
-- **List/inspect endpoints return entity objects** (e.g.
-  `$docker->images->list` returns `[API::Docker::Image, ...]`); raw
-  endpoints (e.g. `tag`, `push`) return the raw daemon response.
-- **`$docker->_request($method, $path, %opts)`** is the single transport
-  entry point. Opts: `body` (auto-JSON-encoded), `raw_body` +
-  `content_type` (e.g. tarballs), `params` (query string),
-  `headers` (extra HTTP headers — used by push for `X-Registry-Auth`).
-- **`/build`, `/images/create`, `/images/.../push`** are streaming
-  endpoints. `_request` parses newline-delimited JSON and returns an
-  arrayref of events; callers iterate and look for `errorDetail`,
-  `progress`, `aux`, etc.
-- **`X-Registry-Auth` is required on every push** by the Docker Engine —
-  even anonymous attempts. `images->push` always sends the header; pass
-  `auth => { username, password, serveraddress, identitytoken }` to
-  authenticate, omit it for the empty-`{}` form.
+```bash
+API_DOCKER_TEST_HOST=unix:///run/user/1000/podman/podman.sock prove -lr t/
+```
 
-## Testing notes
+That run is currently not green: `t/system.t`'s `events` subtest asserts a
+shape a real daemon does not return for an empty window. It is on the board,
+not a new finding.
 
-- New tests should use the `Test::API::Docker::Mock` helper. Pass a
-  `'METHOD /path' => $fixture_or_coderef` route table; the helper
-  monkey-patches `_request` to dispatch against it.
-- Don't add network-dependent assertions to default test runs. Gate them
-  on `is_live()` / `can_write()` from the mock helper.
-- Fixtures live in `t/fixtures/*.json`. Capture them from a real daemon
-  rather than hand-rolling — keeps drift detectable.
+## Delegation
+
+Don't touch behavior-relevant code yourself — hand it to the right agent.
+The principle, the lanes and the repo's hazards are in
+`.claude/rules/api-docker-rules.md`.
+
+| Task | Agent |
+|---|---|
+| What the daemon does or expects — endpoints, wire formats, filters, registry auth | `api-docker-engine-worker` |
+| The Perl side — Moo, transport internals, entities, refactoring, cpanfile | `api-docker-worker` (default) |
+| Write/extend tests, add fixtures | `api-docker-test-writer` |
+| Pre-release audit | `api-docker-release-checker` |
+| POD and README | `api-docker-doc-writer` |
+
+The two workers split by question, not by file. Only `api-docker-engine-worker`
+is briefed with `docker-engine-api`, the shared Engine API reference.
+
+The agents carry their skills via `briefing.skills` (see `.claude/agents/`);
+the main agent delegates rather than loading them. Skill sources live under
+`.claude/skills/` — `api-docker-core` is owned here, the rest are hardlinks
+managed with `manage-skills` (`docker-engine-api` lives in the shared library and
+is reused by `../p5-dist-zilla-plugin-docker-api`).
+
+Ticket coordination runs on the repo's `karr` board (`karr board`).
 
 ## When changing behavior
 
-- Add a `Changes` entry under `{{$NEXT}}`.
+- Add a `Changes` entry under `{{$NEXT}}`, and say what was measured.
 - Update the POD on the affected class. POD lives next to the code
   (`=method`, `=attr`, `=head1 SYNOPSIS` ...) and is woven by the
   `@Author::GETTY` bundle.
-- If you change a public method signature, check that callers in the
-  workspace (notably `../p5-dist-zilla-plugin-docker-api`) still build
-  and test green.
+- If you change a public method signature or a return shape, check that
+  callers in the workspace (notably `../p5-dist-zilla-plugin-docker-api`)
+  still build and test green.

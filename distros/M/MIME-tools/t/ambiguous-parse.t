@@ -2,7 +2,7 @@
 use strict;
 use warnings;
 use Test::Deep;
-use Test::More tests => 32;
+use Test::More tests => 53;
 
 use MIME::Entity;
 use MIME::Parser;
@@ -76,3 +76,49 @@ cmp_deeply($ans, ['boundary'], 'Empty "boundary" parameter value was detected in
 ok($parser->ambiguous_content(), 'Ambiguous content was detected in message with "" boundary parameter');
 ok($entity->ambiguous_content(), 'Entity method matches parser method');
 
+$entity = $parser->parse_open('testmsgs/rfc2231boundary.msg');
+$ans = $entity->head->mime_attr('content-type.@boundary_ambiguous');
+ok(defined($ans), 'No ambiguous boundary found');
+ok($parser->ambiguous_content(), 'Ambiguous content was detected in message with rfc2231 boundary parameter');
+# Ensure that we actually decoded the boundary
+is ($entity->head->multipart_boundary, 'X', 'Boundary parameter was decoded');
+
+# And ensure we parsed the message using the decoded boundary
+my @parts = $entity->parts;
+is (scalar(@parts), 2, 'Got two parts');
+is ($parts[0]->head->mime_type, 'text/plain', 'First part is text/plain');
+is ($parts[1]->head->mime_type, 'application/octet-stream', 'Second part is application/octet-stream');
+
+$entity = $parser->parse_open('testmsgs/qpboundary.msg');
+$ans = $entity->head->mime_attr('content-type.@boundary_ambiguous');
+ok(defined($ans), 'No ambiguous boundary found');
+ok($parser->ambiguous_content(), 'Ambiguous content was detected in message with quoted-printable encoded boundary parameter');
+# Ensure that we actually decoded the boundary
+is ($entity->head->multipart_boundary, 'X', 'Boundary parameter was decoded');
+
+# And ensure we parsed the message using the decoded boundary
+@parts = $entity->parts;
+is (scalar(@parts), 2, 'Got two parts');
+is ($parts[0]->head->mime_type, 'text/plain', 'First part is text/plain');
+is ($parts[1]->head->mime_type, 'application/octet-stream', 'Second part is application/octet-stream');
+
+$entity = $parser->parse_open('testmsgs/invalid-boundary.msg');
+$ans = $entity->head->mime_attr('content-type.@boundary_ambiguous');
+ok(defined($ans), 'No ambiguous boundary found');
+ok($parser->ambiguous_content(), 'Ambiguous content was detected in message with non rfc 2045 conform boundary parameter');
+
+$entity = $parser->parse_open('testmsgs/invalid-quoted-boundary.msg');
+$ans = $entity->head->mime_attr('content-type.@boundary_ambiguous');
+ok(defined($ans), 'No ambiguous boundary found');
+ok($parser->ambiguous_content(), 'Ambiguous content was detected in message with non rfc 2045 conform boundary parameter');
+
+$entity = $parser->parse_open('testmsgs/unusual-space-in-boundary.msg');
+$ans = $entity->head->mime_attr('content-type.@boundary_ambiguous');
+ok(defined($ans), 'No ambiguous boundary found');
+ok($parser->ambiguous_content(), 'Ambiguous content was detected in message with unusual white space in boundary parameter');
+
+$entity = $parser->parse_open('testmsgs/double-boundary-with-comment.msg');
+$ans = $entity->head->mime_attr('content-type.@duplicate_parameters');
+ok(defined($ans), 'No duplicate parameters');
+cmp_deeply($ans, ['boundary'], 'Duplicate "boundary" parameter was detected in bad message');
+ok($parser->ambiguous_content(), 'Ambiguous content was detected in message with duplicate boundary parameters, one of them with comment');

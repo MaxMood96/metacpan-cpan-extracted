@@ -6,6 +6,7 @@ build_requires:
   CPAN::Uploader: '0'
   Crypt::Rijndael: '0'
   Mojo::SQLite: '0'
+  Text::QRCode: '0'
 configure_requires:
   ExtUtils::MakeMaker: '0'
 dynamic_config: 1
@@ -41,5 +42,5 @@ resources:
   bugtracker: https://github.com/oetiker/callbackery/issues
   license: http://opensource.org/licenses/GPL-3.0
   repository: https://github.com/oetiker/callbackery
-version: v0.59.0
+version: v0.60.0
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'

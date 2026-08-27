@@ -41,11 +41,13 @@ my ($inc_options, $libs_options, $lddlflags_options) = ('', '', '');
 if($Config{osname} =~ /bsd/i) {
   # Try to find the settings that will enable Math::Float128 to build successfully on BSD boxes.
   $inc_options  = `find /usr/local/lib -name quadmath.h`;
-  chomp $inc_options;
+  # chomp $inc_options;
+  $inc_options = (split /\n/, $inc_options)[0];
   $inc_options  = "-I" . $inc_options if $inc_options;;
   $inc_options  =~ s/\/quadmath\.h$//;
   $libs_options = `find /usr/local/lib -name libquadmath.a`;
-  chomp $libs_options;
+  # chomp $libs_options;
+  $libs_options = (split /\n/, $libs_options)[0];
   $libs_options = "-L" . $libs_options if $libs_options;
   $libs_options =~ s/\/libquadmath\.a$//;
   $lddlflags_options = $Config{lddlflags} . " $libs_options ";

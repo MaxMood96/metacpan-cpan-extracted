@@ -7,7 +7,7 @@ use warnings;
 use ExtUtils::MakeMaker;
 
 my %WriteMakefileArgs = (
-  "ABSTRACT" => "Perl extension managing OpenMP variables in C<%ENV> within a script.",
+  "ABSTRACT" => "manage OpenMP and GNU libgomp environment variables from Perl",
   "AUTHOR" => "oodler577 <oodler\@cpan.org>",
   "CONFIGURE_REQUIRES" => {
     "ExtUtils::MakeMaker" => 0
@@ -23,7 +23,7 @@ my %WriteMakefileArgs = (
     "Test::Exception" => 0,
     "Test::More" => 0
   },
-  "VERSION" => "1.2.3",
+  "VERSION" => "1.4.0",
   "test" => {
     "TESTS" => "t/*.t"
   }

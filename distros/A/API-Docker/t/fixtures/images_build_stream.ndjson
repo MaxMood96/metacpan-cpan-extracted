@@ -1,0 +1,10 @@
+{"stream":"STEP 1/2: FROM alpine:3\n"}
+{"stream":"STEP 2/2: RUN echo hello\n"}
+{"stream":"hello\n"}
+{"stream":"COMMIT docker.io/library/apidocker-probe-build:latest\n"}
+{"stream":"--\u003e e86921698152\n"}
+{"stream":"Successfully tagged docker.io/library/apidocker-probe-build:latest\n"}
+{"stream":"e86921698152879ba0417c21c74979a2c949d008c3799661974e23b15ad229ed\n"}
+{"aux":{"ID":"sha256:e86921698152879ba0417c21c74979a2c949d008c3799661974e23b15ad229ed"}}
+{"stream":"Successfully built e86921698152\n"}
+{"stream":"Successfully tagged apidocker-probe-build:latest\n"}

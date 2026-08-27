@@ -1,7 +1,7 @@
 This archive contains the distribution OpenMP-Environment,
-version 1.2.3:
+version 1.4.0:
 
-  Perl extension managing OpenMP variables in C<%ENV> within a script.
+  manage OpenMP and GNU libgomp environment variables from Perl
 
 This software is copyright (c) 2023 by oodler577.
 

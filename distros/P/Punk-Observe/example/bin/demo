@@ -1,0 +1,221 @@
+#!/usr/bin/env perl
+# Start the whole demo: two instrumented services, one receiver, and traffic.
+#
+#   ./bin/demo              start everything, seed, then run live traffic
+#   ./bin/demo --no-traffic start everything and stop
+#   ./bin/demo --seconds 90 how long the live traffic runs
+#
+# Everything runs on localhost and nothing is installed. Ctrl-C stops it all.
+use 5.010;
+use strict;
+use warnings;
+use FindBin ();
+use File::Path ();
+use Getopt::Long ();
+use POSIX ();
+
+my $HERE = $FindBin::Bin;
+my $EXAMPLE = "$HERE/..";       # the example directory
+my $ROOT    = "$HERE/../..";    # the Punk-Observe checkout
+
+my %PORT = (observe => 5001, cards => 5002, shop => 5000);
+
+# HYPERMAN, NOT PLACKUP'S DEFAULT SERVER.
+#
+# HTTP::Server::PSGI serves one connection at a time. With keep-alive clients
+# and a dependency that takes three seconds, that means the shop stops
+# answering entirely during the incident and the receiver stops accepting
+# telemetry - so the demo shows a dead server rather than a slow one, which is
+# the wrong lesson and not what the code does.
+#
+# Hyperman is the event loop Punk is built for and the one this whole
+# distribution is designed around. Fall back if it is not installed, and say
+# so, because the demo still works and only looks worse.
+my $SERVER = eval { require Plack::Handler::Hyperman; 1 } ? 'Hyperman' : 'Standalone';
+my ($seconds, $traffic, $keep, $WORKERS) = (120, 1, 0, 4);
+Getopt::Long::GetOptions(
+    'seconds=i' => \$seconds,
+    'traffic!'  => \$traffic,
+    'keep'      => \$keep,
+    'workers=i' => \$WORKERS,
+) or die "usage: $0 [--seconds N] [--no-traffic] [--keep] [--workers N]\n";
+
+# The dist's own blib, plus its siblings. A demo inside a checkout runs
+# against THAT checkout, not against whatever is installed - otherwise it
+# demonstrates the wrong version and says nothing about the code in front of
+# you.
+my @INC_ARGS = map { ("-I", $_) } grep { -d $_ } (
+    "$ROOT/blib/lib", "$ROOT/blib/arch",
+    "$ROOT/../Punk-OpenTelemetry/blib/lib",
+    "$ROOT/../Punk-OpenTelemetry/blib/arch",
+);
+
+my $STORE = "$EXAMPLE/var/store";
+File::Path::remove_tree($STORE) if -d $STORE && !$keep;
+File::Path::make_path($STORE);
+
+# ---------------------------------------------------------------------------
+
+my @kids;
+sub spawn {
+    my ($name, $dir, $port, %env) = @_;
+    my $pid = fork();
+    die "fork: $!" unless defined $pid;
+    if ($pid == 0) {
+        %ENV = (%ENV, %env);
+        chdir "$EXAMPLE/$dir" or die "chdir $dir: $!";
+        open STDOUT, '>>', "$EXAMPLE/var/$name.log" or die $!;
+        open STDERR, '>&', \*STDOUT or die $!;
+        $| = 1;
+        exec $^X, @INC_ARGS, "-I", "lib", scalar(_plackup()),
+             '-s', $SERVER, '--port', $port, '--app', 'app.psgi',
+             # A REAL POOL. Every worker writes its own write-ahead log and
+             # the read side merges them, which is the whole storage design in
+             # miniature - and running one worker to make the numbers add up
+             # would have hidden it.
+             ($SERVER eq 'Hyperman' ? ('--workers', $WORKERS) : ())
+            or die "exec: $!";
+    }
+    push @kids, [ $name, $pid, $port ];
+    return $pid;
+}
+
+sub _plackup {
+    for my $p (split /:/, $ENV{PATH}) {
+        return "$p/plackup" if -x "$p/plackup";
+    }
+    die "plackup not found in PATH\n";
+}
+
+sub shutdown_all {
+    for my $k (reverse @kids) {
+        kill 'TERM', $k->[1];
+    }
+    for my $k (@kids) { waitpid $k->[1], 0 }
+    @kids = ();
+}
+$SIG{INT} = $SIG{TERM} = sub { print "\nstopping\n"; shutdown_all(); exit 0 };
+
+# Wait for a port to answer rather than sleeping a guessed amount. A fixed
+# sleep is a coin toss on a loaded machine.
+sub wait_for {
+    my ($port, $what) = @_;
+    require IO::Socket::INET;
+    for (1 .. 200) {
+        my $s = IO::Socket::INET->new(PeerAddr => '127.0.0.1', PeerPort => $port,
+                                      Proto => 'tcp', Timeout => 1);
+        if ($s) { close $s; return 1 }
+        select undef, undef, undef, 0.1;
+    }
+    die "$what did not come up on port $port - see example/var/$what.log:\n"
+          . `tail -5 $EXAMPLE/var/$what.log 2>/dev/null`;
+}
+
+# ---------------------------------------------------------------------------
+
+File::Path::make_path("$EXAMPLE/var");
+
+# The incident flag is a FILE now, because a package variable is per worker
+# and this starts a pool. A stale one left by a killed run would start the
+# demo already broken, which is a confusing first thirty seconds.
+unlink "$EXAMPLE/cards/var/incident";
+
+# A port left occupied by an earlier run is the most common way a demo fails,
+# and "Address already in use" three screens down a log file is not a useful
+# way to find out. Checked before anything is started, and named.
+{
+    require IO::Socket::INET;
+    my @busy;
+    for my $name (sort keys %PORT) {
+        my $s = IO::Socket::INET->new(PeerAddr => '127.0.0.1',
+                                      PeerPort => $PORT{$name},
+                                      Proto => 'tcp', Timeout => 1);
+        if ($s) { close $s; push @busy, "$name ($PORT{$name})" }
+    }
+    die "already listening: " . join(', ', @busy) . "\n"
+      . "Something is using those ports - an earlier run, most likely:\n"
+      . "  pkill -f 'plackup.*app.psgi'\n" if @busy;
+}
+
+print "starting (server: $SERVER)\n";
+print "  NOTE: Hyperman is not installed, so a slow dependency will block.\n"
+    if $SERVER ne 'Hyperman';
+
+# The receiver FIRST, so the services have somewhere to export to from their
+# very first request. An SDK with no endpoint exports nothing and costs
+# nothing, which is correct behaviour and a boring demo.
+spawn('observe', 'observe', $PORT{observe}, DEMO_STORE => $STORE);
+wait_for($PORT{observe}, 'observe');
+printf "  observe  http://127.0.0.1:%d/     (UI /observe, OTLP /v1)%s\n",
+    $PORT{observe},
+    $SERVER eq 'Hyperman' ? ", $WORKERS workers" : "";
+
+my %otel = (
+    # The BASE, not the ingest path. An OTLP exporter appends /v1/traces,
+    # /v1/metrics and /v1/logs to whatever this names - the paths are fixed by
+    # the specification. Putting /v1 here too produces /v1/v1/traces, which is
+    # a 404 that looks like the receiver is broken.
+    OTEL_EXPORTER_OTLP_ENDPOINT => "http://127.0.0.1:$PORT{observe}",
+    OTEL_EXPORTER_OTLP_PROTOCOL => 'http/protobuf',
+    # Small batches and a short delay, because a demo that exports every five
+    # seconds looks broken for the first five seconds.
+    OTEL_BSP_SCHEDULE_DELAY     => 1000,
+    OTEL_BSP_MAX_EXPORT_BATCH_SIZE => 64,
+);
+
+spawn('cards', 'cards', $PORT{cards}, %otel);
+wait_for($PORT{cards}, 'cards');
+printf "  cards    http://127.0.0.1:%d/     service.name=cards\n", $PORT{cards};
+
+spawn('shop', 'shop', $PORT{shop}, %otel,
+      DEMO_CARDS_URL => "http://127.0.0.1:$PORT{cards}");
+wait_for($PORT{shop}, 'shop');
+printf "  shop     http://127.0.0.1:%d/     service.name=shop\n", $PORT{shop};
+
+# THE ALERT EVALUATOR IS ITS OWN PROCESS, which is the shape a real deployment
+# has: cron, Punk::Queue, or a leader-elected worker. Evaluating on the request
+# that draws the screen would make the states depend on who last looked at
+# them, and would record nothing at all when nobody is watching - which is
+# exactly when an incident happens.
+{
+    my $pid = fork();
+    die "fork: $!" unless defined $pid;
+    if (!$pid) {
+        local $ENV{DEMO_STORE} = $STORE;
+        chdir $EXAMPLE or die "chdir: $!";
+        open STDOUT, '>>', "$EXAMPLE/var/evaluate.log" or die $!;
+        open STDERR, '>&', \*STDOUT or die $!;
+        $| = 1;
+        exec $^X, @INC_ARGS, "$HERE/evaluate", '--every', 15
+            or die "exec evaluate: $!";
+    }
+    push @kids, [ 'evaluate', $pid, 0 ];
+    print "  evaluate every 15s                     var/evaluate.log\n";
+}
+
+print "\n";
+
+if (!$traffic) {
+    print "running. Ctrl-C to stop.\n";
+    print "  drive it:  ./bin/traffic --seconds 60\n";
+    print "  break it:  curl -X PUT '127.0.0.1:$PORT{cards}/incident?on=1'\n";
+    sleep 1 while 1;
+}
+
+# ---- traffic ---------------------------------------------------------------
+
+my $rc = system($^X, @INC_ARGS, "$HERE/traffic",
+                '--shop',  "http://127.0.0.1:$PORT{shop}",
+                '--cards', "http://127.0.0.1:$PORT{cards}",
+                '--seconds', $seconds, '--incident');
+
+print "\n";
+print "what to look at:\n";
+printf "  http://127.0.0.1:%d/observe/alerts   evaluated, and RECORDED\n",
+    $PORT{observe};
+printf "  sqlite3 %s/alerts.db 'SELECT * FROM alert_events'\n", $STORE;
+printf "  ls %s/default/wal/\n", $STORE;
+print "  var/observe.log, var/shop.log, var/cards.log, var/evaluate.log\n\n";
+
+print "leaving the servers up. Ctrl-C to stop.\n";
+sleep 1 while 1;

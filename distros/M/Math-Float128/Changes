@@ -1,3 +1,6 @@
+0.18
+ - Tweak to the enabling of *BSD builds.
+
 0.17
  - Simplify overloading of '++' and '--'.
  - Silence pointless warnings.

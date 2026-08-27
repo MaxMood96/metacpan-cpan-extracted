@@ -1,5 +1,10 @@
 Revision history for Physics-Etch
 
+0.02  2026-08-25
+    - Expanded perldoc in Physics::Etch with full usage, physics, examples,
+      and a detailed section on extending the material and recipe database.
+    - Version bump to 0.02.
+
 0.01  2026-08-18
     - Initial release of Physics::Etch and related model/toolkit modules.
     - Added CPAN distribution scaffolding (Makefile.PL, metadata, manifest).

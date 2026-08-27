@@ -1,0 +1,10 @@
+<input type="hidden" name="range" value="{% range %}">
+{% if range_custom %}
+<input type="hidden" name="from" value="{% from %}">
+<input type="hidden" name="to" value="{% to %}">
+{% end %}
+<span class="rangepick" data-rangepick>
+  {% for r in ranges %}<button type="submit" name="range" value="{% r.key %}"
+    class="rangebtn{% if r.current %} on{% end %}"
+    title="{% r.label %}">{% r.key %}</button>{% end %}
+</span>

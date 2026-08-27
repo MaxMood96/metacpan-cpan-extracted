@@ -1,6 +1,6 @@
 package API::Docker::API::Exec;
 # ABSTRACT: Docker Engine Exec API
-our $VERSION = '0.002';
+our $VERSION = '0.003';
 use Moo;
 use Carp qw( croak );
 use namespace::clean;
@@ -28,7 +28,10 @@ sub start {
     Detach => $opts{Detach} ? \1 : \0,
     Tty    => $opts{Tty}    ? \1 : \0,
   };
-  return $self->client->post("/exec/$exec_id/start", $body);
+  return $self->client->stream_frames('POST', "/exec/$exec_id/start",
+    body => $body,
+    $opts{Tty} ? ( tty => 1 ) : (),
+  );
 }
 
 
@@ -64,7 +67,7 @@ API::Docker::API::Exec - Docker Engine Exec API
 
 =head1 VERSION
 
-version 0.002
+version 0.003
 
 =head1 SYNOPSIS
 
@@ -77,8 +80,12 @@ version 0.002
         AttachStderr => 1,
     );
 
-    # Start the exec
-    $docker->exec->start($exec->{Id});
+    # Start the exec -- ArrayRef of { stream => ..., data => ... } frames
+    my $frames = $docker->exec->start($exec->{Id});
+    my $output = join '', map { $_->{data} } @$frames;
+
+    # The exit status comes from a separate call
+    my $exit = $docker->exec->inspect($exec->{Id})->{ExitCode};
 
     # Inspect exec instance
     my $info = $docker->exec->inspect($exec->{Id});
@@ -112,9 +119,40 @@ C<Env>, C<User>, C<WorkingDir>.
 
 =head2 start
 
-    $exec->start($exec_id, Detach => 0);
+    my $frames = $exec->start($exec_id, Detach => 0);
 
-Start an exec instance. Options: C<Detach>, C<Tty>.
+    my $output = join '', map { $_->{data} } @$frames;
+
+Start an exec instance. Returns an ArrayRef of frames in the same shape as
+L<API::Docker::API::Containers/logs>:
+
+    [ { stream => 'stdout', data => "OUT\n" },
+      { stream => 'stderr', data => "ERR\n" } ]
+
+An exec instance created without a TTY multiplexes stdout and stderr into one
+framed stream, which this method demultiplexes. One created with a TTY has no
+frame headers and its output arrives as a single C<< stream => 'raw' >> frame.
+A detached start produces no output, so it returns an empty ArrayRef.
+
+The exit status is B<not> part of this response. It comes from a separate call
+once the exec has finished:
+
+    my $exit = $exec->inspect($exec_id)->{ExitCode};
+
+Options:
+
+=over
+
+=item * C<Detach> - Run detached; the engine returns immediately and no output
+is streamed
+
+=item * C<Tty> - Declares that this exec instance was created with a TTY. It is
+sent in the request body, where the engine expects it to match the C<Tty> given
+to L</create>, and it also suppresses demultiplexing of the response. Framing is
+otherwise detected from the response bytes -- see
+L<API::Docker::Role::HTTP/"Detecting a framed stream">
+
+=back
 
 =head2 resize
 

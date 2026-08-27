@@ -150,6 +150,7 @@ testmsgs/bluedot-postcard.msg
 testmsgs/bluedot-postcard.ref
 testmsgs/bluedot-simple.msg
 testmsgs/bluedot-simple.ref
+testmsgs/double-boundary-with-comment.msg
 testmsgs/double-boundary.msg
 testmsgs/double-content-disposition-param.msg
 testmsgs/double-content-disposition.msg
@@ -161,8 +162,8 @@ testmsgs/double-semicolon2.msg
 testmsgs/dup-names.msg
 testmsgs/dup-names.ref
 testmsgs/empty-boundary.msg
-testmsgs/empty-quoted-boundary.msg
 testmsgs/empty-preamble.msg
+testmsgs/empty-quoted-boundary.msg
 testmsgs/frag.msg
 testmsgs/german-qp.msg
 testmsgs/german.msg
@@ -170,6 +171,8 @@ testmsgs/german.ref
 testmsgs/hdr-fakeout-newmailtools-ref
 testmsgs/hdr-fakeout.msg
 testmsgs/hdr-fakeout.ref
+testmsgs/invalid-boundary.msg
+testmsgs/invalid-quoted-boundary.msg
 testmsgs/malformed-content-type-zip.msg
 testmsgs/multi-2evil.msg
 testmsgs/multi-2evil.ref
@@ -194,14 +197,17 @@ testmsgs/multi-simple.msg
 testmsgs/multi-simple.ref
 testmsgs/multi-weirdspace.msg
 testmsgs/multi-weirdspace.ref
+testmsgs/qpboundary.msg
 testmsgs/re-fwd.msg
 testmsgs/re-fwd.ref
+testmsgs/rfc2231boundary.msg
 testmsgs/russian.msg
 testmsgs/russian.ref
 testmsgs/simple.msg
 testmsgs/simple.ref
 testmsgs/ticket-60931.msg
 testmsgs/triple-boundary-one-empty.msg
+testmsgs/unusual-space-in-boundary.msg
 testmsgs/utf8-bom-at-start.msg
 testmsgs/uu-junk-extracted.ref
 testmsgs/uu-junk-target.msg

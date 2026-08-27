@@ -21,8 +21,14 @@ WriteMakefile(
 	EXE_FILES	=> ['script/database-bi'],
 	PREREQ_PM => {
 		'Carp'				=> 0,
+		'CGI::Info'			=> 0,
+		'CGI::Lingua'			=> 0,
 		'Database::Abstraction'		=> '0.38',
 		'DBI'				=> 0,
+		'File::Spec'			=> '3.40',
+		'File::Temp'			=> '0.22',
+		'Scalar::Util'			=> '1.40',
+		'Socket'			=> '2.010',
 		'HTML::TableExtract'		=> 0,
 		'LWP::UserAgent'		=> 0,
 		'Mojolicious'			=> '9.49',
@@ -30,7 +36,7 @@ WriteMakefile(
 		'Params::Get'			=> 0,
 		'Params::Validate::Strict'	=> '0.39',
 		'Readonly'			=> 0,
-		'Sub::Private'			=> 0,
+		'Sub::Protected'	=> 0,
 	}, TEST_REQUIRES => {
 		'DBD::CSV' => 0,
 		'IPC::System::Simple' => 0,

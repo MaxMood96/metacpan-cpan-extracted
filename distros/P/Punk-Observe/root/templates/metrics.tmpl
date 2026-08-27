@@ -1,0 +1,90 @@
+<div class="toolbar">
+  <form method="get" action="{% prefix %}/metrics" style="display:contents">
+    <input type="text" name="q" value="{% query %}" spellcheck="false"
+           placeholder="metric http.server.duration | p95 by http.route">
+    <button type="submit">Run</button>
+    {% include _range.tmpl %}
+  </form>
+</div>
+
+{% if error %}
+<div class="warnbox"><strong>{% error %}</strong>{% if hint %} {% hint %}{% end %}</div>
+{% end %}
+
+{% if refusal %}
+<div class="warnbox"><strong>Cannot answer that from this range.</strong>
+  {% refusal %}</div>
+{% end %}
+
+{% if names %}
+<div class="panel">
+  <h2>Metrics in this window</h2>
+  <div class="tablewrap">
+    <table class="rows">
+      <thead><tr><th>metric</th><th class="num">points</th></tr></thead>
+      <tbody>
+      {% for m in names %}
+      <tr><td><a href="{% prefix %}/metrics?q={% m.query %}{% range_amp %}">{% m.name %}</a></td>
+          <td class="num mono">{% m.count %}</td></tr>
+      {% end %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% end %}
+
+{% if series_plot %}
+<div class="panel">
+  <h2>{% title %}</h2>
+  <div class="chartwrap" data-chart data-from="{% from %}" data-to="{% to %}"
+       data-trace-base="{% prefix %}/traces/">
+    <script type="application/json" data-plot>{% raw series_plot %}</script>
+    <noscript><p class="note">This chart is drawn in the browser and needs
+      JavaScript. The numbers behind it are in
+      <a href="{% prefix %}/explore?q={% query_esc %}{% range_amp %}">the explorer</a>.</p></noscript>
+  </div>
+  {% if series %}
+  <p class="note">
+    {% for s in series %}<span class="{% s.class %}">&#9632;</span> {% s.name %}
+      <span class="dim">({% s.points %} points{% if s.exemplars %},
+      {% s.exemplars %} linked to traces{% end %})</span> {% end %}
+  </p>
+  {% end %}
+</div>
+{% end %}
+
+{% if groups %}
+<div class="panel">
+  <h2>{% title %}</h2>
+  {% if exact %}{% else %}
+  <p class="note">The percentile is estimated from a histogram rather than
+    computed from every point, which is what makes it answerable at all over
+    this range.</p>
+  {% end %}
+  {% if groups_plot %}
+  <div class="chartwrap" data-chart>
+    <script type="application/json" data-plot>{% raw groups_plot %}</script>
+  </div>
+  {% end %}
+  <div class="tablewrap">
+    <table class="rows">
+      <thead><tr><th>group</th><th class="num">value</th>
+                 <th class="num">points</th></tr></thead>
+      <tbody>
+      {% for g in groups %}
+      <tr>
+        <td class="nowrap">{% g.key %}</td>
+        <td class="num mono">{% g.value %}</td>
+        <td class="num mono">{% g.count %}</td>
+      </tr>
+      {% end %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% end %}
+
+{% if empty %}
+<div class="panel"><p class="empty">No metric points in the {% range %}
+  window.{% if range_all %}{% else %} Try a wider range above.{% end %}</p></div>
+{% end %}

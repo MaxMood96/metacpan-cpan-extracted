@@ -54,7 +54,8 @@
       "test" : {
          "requires" : {
             "Crypt::Rijndael" : "0",
-            "Mojo::SQLite" : "0"
+            "Mojo::SQLite" : "0",
+            "Text::QRCode" : "0"
          }
       }
    },
@@ -70,6 +71,6 @@
          "url" : "https://github.com/oetiker/callbackery"
       }
    },
-   "version" : "v0.59.0",
+   "version" : "v0.60.0",
    "x_serialization_backend" : "JSON::PP version 4.16"
 }

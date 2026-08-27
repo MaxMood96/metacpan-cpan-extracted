@@ -1,0 +1,95 @@
+<div class="toolbar">
+  <form method="get" action="{% prefix %}/logs" style="display:contents">
+    <input type="text" name="q" value="{% query %}" spellcheck="false"
+           placeholder='log | where severity >= error | search "refused"'>
+    <button type="submit">Run</button>
+    {% include _range.tmpl %}
+  </form>
+</div>
+
+{% if error %}
+<div class="warnbox"><strong>{% error %}</strong>{% if hint %} {% hint %}{% end %}</div>
+{% end %}
+
+{% if truncated %}
+<div class="warnbox">Showing a partial result: the scan stopped after
+  {% scanned %} rows. Narrow the time range or add a filter for a complete
+  answer.</div>
+{% end %}
+
+{% if degraded %}
+<div class="warnbox">One or more segments could not be read in full, so this
+  answer is short by an unknown amount.</div>
+{% end %}
+
+{% if volume_plot %}
+<div class="panel">
+  <div class="chartwrap" data-chart data-from="{% from %}" data-to="{% to %}">
+    <script type="application/json" data-plot>{% raw volume_plot %}</script>
+    <noscript><p class="note">The volume chart needs JavaScript. The lines it
+      summarises are below.</p></noscript>
+  </div>
+</div>
+{% end %}
+
+{% if tail %}
+<div class="panel tail" data-tail="{% prefix %}/logs/stream?q={% query_esc %}"
+     data-record="{% prefix %}/logs/">
+  <div class="tailhead">
+    <h2>Live</h2>
+    <span class="note" data-tail-status hidden></span>
+    <noscript><span class="note">Live updates need JavaScript. The rows
+      below are the result at page load.</span></noscript>
+  </div>
+  <div class="tailrows mono" data-tail-rows></div>
+</div>
+{% end %}
+
+{% if groups %}
+<div class="panel">
+  <h2>{% query %}</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>group</th><th class="num">value</th><th class="num">rows</th></tr></thead>
+      <tbody>
+      {% for g in groups %}
+      <tr><td>{% g.key %}</td><td class="num mono">{% g.value %}</td>
+          <td class="num mono">{% g.count %}</td></tr>
+      {% end %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% end %}
+
+<div class="panel">
+  {% if rows %}
+  <div class="tablewrap">
+    <table class="rows">
+      <thead><tr><th>time</th><th>severity</th><th>service</th><th>message</th><th></th></tr></thead>
+      <tbody>
+      {% for r in rows %}
+      <tr class="{% r.row_class %}">
+        <td class="mono nowrap"><a href="{% prefix %}/logs/{% r.id %}{% range_qs %}"
+            title="{% r.date %}">{% r.time %}</a></td>
+        <td><span class="sev sev-{% r.sev_name %}">{% r.sev_name %}</span></td>
+        <td class="nowrap">{% r.service %}</td>
+        <td class="mono body"><a class="rowlink"
+            href="{% prefix %}/logs/{% r.id %}{% range_qs %}">{% r.body %}</a></td>
+        <td class="nowrap">{% if r.trace %}<a class="tracelink"
+            href="{% prefix %}/traces/{% r.trace %}{% range_qs %}" title="the trace this
+            line belongs to">trace</a>{% end %}</td>
+      </tr>
+      {% end %}
+      </tbody>
+    </table>
+  </div>
+  <p class="note">{% scanned %} rows scanned.</p>
+  {% else %}
+  {% if groups %}{% else %}
+  <p class="empty">No log lines matched in the {% range %} window.
+    {% if range_all %}Nothing has been received yet.{% else %}Try a wider
+    range above, or <b>all</b> for everything the store still holds.{% end %}</p>
+  {% end %}
+  {% end %}
+</div>

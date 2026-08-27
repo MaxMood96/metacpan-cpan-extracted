@@ -16,19 +16,22 @@ my %WriteMakefileArgs = (
   "LICENSE" => "perl",
   "NAME" => "API::Docker",
   "PREREQ_PM" => {
+    "Carp" => 0,
+    "IO::Socket::INET" => 0,
     "IO::Socket::UNIX" => 0,
     "JSON::MaybeXS" => 0,
     "Log::Any" => 0,
     "MIME::Base64" => 0,
     "Moo" => 0,
-    "URI" => 0,
-    "namespace::clean" => 0
+    "namespace::clean" => 0,
+    "overload" => 0
   },
   "TEST_REQUIRES" => {
+    "Exporter" => 0,
     "Path::Tiny" => 0,
     "Test::More" => 0
   },
-  "VERSION" => "0.002",
+  "VERSION" => "0.003",
   "test" => {
     "TESTS" => "t/*.t"
   }
@@ -36,6 +39,9 @@ my %WriteMakefileArgs = (
 
 
 my %FallbackPrereqs = (
+  "Carp" => 0,
+  "Exporter" => 0,
+  "IO::Socket::INET" => 0,
   "IO::Socket::UNIX" => 0,
   "JSON::MaybeXS" => 0,
   "Log::Any" => 0,
@@ -43,8 +49,8 @@ my %FallbackPrereqs = (
   "Moo" => 0,
   "Path::Tiny" => 0,
   "Test::More" => 0,
-  "URI" => 0,
-  "namespace::clean" => 0
+  "namespace::clean" => 0,
+  "overload" => 0
 );
 
 

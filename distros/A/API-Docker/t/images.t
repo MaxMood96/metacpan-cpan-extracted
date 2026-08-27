@@ -3,6 +3,14 @@ use warnings;
 use Test::More;
 use lib 't/lib';
 use Test::API::Docker::Mock;
+use JSON::MaybeXS qw( decode_json );
+
+# The engine's build stream, as captured from a real daemon. build/pull/push
+# hand the caller one event per line, always as an ArrayRef.
+sub build_events {
+  my $body = load_fixture_raw('images_build_stream.ndjson');
+  return [ map { decode_json($_) } grep { /\S/ } split /\n/, $body ];
+}
 
 check_live_access();
 
@@ -141,7 +149,8 @@ subtest 'image build and pull lifecycle' => sub {
       my ($method, $path, %opts) = @_;
       ok(defined $opts{raw_body}, 'raw_body present in request');
       is($opts{content_type}, 'application/x-tar', 'content type is tar');
-      return { stream => 'Successfully built abc123def456' };
+      ok($opts{ndjson}, 'build asks for stream decoding');
+      return build_events();
     },
     'POST /images/create' => sub {
       my ($method, $path, %opts) = @_;
@@ -188,8 +197,10 @@ subtest 'image build and pull lifecycle' => sub {
     $tar .= "\0" x 1024;
 
     my $tag = 'api-docker-test-build:latest';
+    # q => 1 makes the engine emit exactly one event -- the case that used
+    # to come back as a HashRef instead of an ArrayRef.
     my $result = $docker->images->build(context => $tar, t => $tag, q => 1);
-    ok($result, 'build returned result');
+    is(ref $result, 'ARRAY', 'a single-event build stream is still an ArrayRef');
     register_cleanup(sub { eval { $docker->images->remove($tag, force => 1) } });
   } else {
     my $result = $docker->images->build(
@@ -197,8 +208,12 @@ subtest 'image build and pull lifecycle' => sub {
       t          => 'myapp:latest',
       dockerfile => 'Dockerfile',
     );
-    ok($result, 'build returned a result');
-    like($result->{stream}, qr/Successfully built/, 'build output contains success');
+    is(ref $result, 'ARRAY', 'build returns an ArrayRef of events');
+    like(
+      join('', map { $_->{stream} // '' } @$result),
+      qr/Successfully built/,
+      'build output contains success',
+    );
 
     $docker->images->pull(fromImage => 'nginx', tag => 'latest');
     pass('pull completed');

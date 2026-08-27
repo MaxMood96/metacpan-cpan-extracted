@@ -1,0 +1,14 @@
+# TSan suppressions -- keep this list as small as possible, and justify each
+# entry: a suppression is how a real race gets hidden.
+#
+# libev synchronises ev_async_send with the loop using hand-rolled
+# ECB_MEMORY_FENCE barriers rather than C11 atomics. TSan does not model those
+# fences as happens-before edges (its atomic_thread_fence support is
+# incomplete), so the one libev call documented as safe from another thread --
+# ev_async_send, which is exactly how the reader wakes the loop -- is reported
+# as a race on default_loop_struct against ev_run.
+#
+# This suppresses reports whose top frame is inside libev. A race in our own
+# queue surfaces with td_reader or td_drain on top and is NOT suppressed.
+race:evpipe_write
+race:ev_run

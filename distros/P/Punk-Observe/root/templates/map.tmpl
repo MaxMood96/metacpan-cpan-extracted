@@ -1,0 +1,66 @@
+<div class="toolbar">
+  <form method="get" action="{% prefix %}/map" style="display:contents">
+    <span class="note">The graph over</span>
+    {% include _range.tmpl %}
+  </form>
+</div>
+
+<div class="panel">
+  <h2>Service map</h2>
+  {% if back_edges %}
+  <p class="note">{% back_edges %} edges close a cycle and are drawn dashed.
+     Services calling each other back is a real topology, not a fault.</p>
+  {% end %}
+
+  {% if empty %}
+  <p class="empty">No calls between services in the {% range %} window. The
+    map is drawn from spans, so a service that has not been called does not
+    appear - and neither does one whose caller is not instrumented, except
+    through the <em>internet</em> node.
+    {% if range_all %}{% else %}A wider range may show more.{% end %}</p>
+  {% else %}
+  <svg class="chart map" viewBox="0 0 {% width %} {% height %}" role="img"
+       aria-label="Service call graph">
+    {% for e in edges %}
+    <path class="line edge-{% e.state %}{% if e.back %} back{% end %}"
+          d="{% e.path %}"
+          style="stroke-width:{% e.weight %}{% if e.back %};stroke-dasharray:4 3{% end %}">
+      <title>{% e.label %}</title>
+    </path>
+    {% end %}
+    {% for n in nodes %}
+    <g transform="translate({% n.x %},{% n.y %})" class="node node-{% n.state %}">
+      <rect x="-52" y="-15" width="104" height="30" rx="5"/>
+      <text class="label" text-anchor="middle" y="-1">{% n.name %}</text>
+      <text class="sublabel" text-anchor="middle" y="10">{% n.in %} calls</text>
+      <title>{% n.name %}: {% n.in %} in, {% n.errors %} errors</title>
+    </g>
+    {% end %}
+  </svg>
+
+  {% if flow_plot %}
+  <h3>Call volume</h3>
+  <div class="chartwrap" data-chart>
+    <script type="application/json" data-plot>{% raw flow_plot %}</script>
+  </div>
+  {% end %}
+
+  <div class="tablewrap">
+    <table class="rows">
+      <thead><tr><th>caller</th><th>callee</th><th class="num">calls</th>
+                 <th class="num">errors</th></tr></thead>
+      <tbody>
+      {% for e in edges %}
+      <tr class="{% if e.errors %}row-error{% end %}">
+        <td class="nowrap">{% e.caller %}</td>
+        <td class="nowrap"><a href="{% prefix %}/traces?service={% e.callee %}{% range_amp %}"
+          >{% e.callee %}</a></td>
+        <td class="num mono">{% e.count_label %}</td>
+        <td class="num mono">{% e.errors %}</td>
+      </tr>
+      {% end %}
+      </tbody>
+    </table>
+  </div>
+  {% end %}
+</div>

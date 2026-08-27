@@ -1,0 +1,3 @@
+{"stream":"STEP 1/2: FROM alpine:3\n"}
+{"stream":"STEP 2/2: RUN exit 7\n"}
+{"errorDetail":{"message":"building at STEP \"RUN exit 7\": while running runtime: exit status 7\n"},"error":"building at STEP \"RUN exit 7\": while running runtime: exit status 7\n"}

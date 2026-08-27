@@ -1,0 +1,68 @@
+#!/usr/bin/perl
+# 03-list-chats.pl - load the chat list and print id and title of each chat
+#
+# Demonstrates: load_chats() paged until TDLib reports the list exhausted,
+# chats collected through on_chat, and titles read back from the chat()
+# cache. Uses the session created by 01-login.pl (or a bot token).
+#
+# The database directory (default ./tdlib-db) holds the session: it is
+# exactly as sensitive as a password.
+#
+# Environment:
+#   TD_API_ID, TD_API_HASH  application credentials from https://my.telegram.org
+#   TD_PHONE                phone number in international format, unless TD_BOT_TOKEN
+#   TD_BOT_TOKEN            bot token from BotFather, alternative to TD_PHONE
+#   TD_DATABASE_DIRECTORY   optional, default ./tdlib-db
+#
+# Run: perl -Mblib eg/03-list-chats.pl
+
+use strict;
+use warnings;
+use EV;
+use EV::Telegram::TDLib;
+
+sub env_or_die {
+    my ($name, $hint) = @_;
+    return $ENV{$name} // die "missing environment variable $name ($hint)\n";
+}
+
+my %auth = $ENV{TD_BOT_TOKEN}
+    ? (bot_token => $ENV{TD_BOT_TOKEN})
+    : (phone_number => env_or_die('TD_PHONE', 'phone number in international format'),
+       on_code => sub {
+           my ($info, $submit) = @_;
+           print "code from Telegram: ";
+           chomp(my $code = <STDIN>);
+           $submit->($code);
+       });
+
+my %seen;
+my $td = EV::Telegram::TDLib->new(
+    api_id             => env_or_die('TD_API_ID', 'api_id from https://my.telegram.org'),
+    api_hash           => env_or_die('TD_API_HASH', 'api_hash from https://my.telegram.org'),
+    database_directory => $ENV{TD_DATABASE_DIRECTORY} // 'tdlib-db',
+    %auth,
+    on_chat  => sub { $seen{ $_[0]{id} } = 1 },
+    on_error => sub { warn "tdlib: $_[0]\n" },
+);
+
+$td->login(sub {
+    my (undef, $err) = @_;
+    die "login failed: $err->{message}\n" if $err;
+    my $load;
+    $load = sub {
+        $td->load_chats(100, sub {
+            my ($res, $err) = @_;
+            die "load_chats failed: $err->{message}\n" if $err;
+            return $load->() if $res;
+            for my $id (sort { $a <=> $b } keys %seen) {
+                my $chat = $td->chat($id) or next;
+                printf "%d\t%s\n", $chat->{id}, $chat->{title};
+            }
+            $td->close(sub { EV::break });
+        });
+    };
+    $load->();
+});
+
+EV::run;

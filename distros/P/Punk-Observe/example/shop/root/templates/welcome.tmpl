@@ -1,0 +1,9 @@
+<h1>{% title %}</h1>
+<p>A shop that is being watched. Every request below is a server span, and
+   a checkout is a distributed trace across two services.</p>
+<ul class="catalogue">
+{% for p in catalogue %}
+  <li><a href="/product/{% p.id %}">{% p.name %}</a> - {% p.price %}p</li>
+{% end %}
+</ul>
+<form method="post" action="/checkout"><button>Check out</button></form>

@@ -2,6 +2,7 @@ alienfile
 cpanfile
 examples/airbp-animals.pl
 examples/process-flow-check.pl
+Inline-CLIPS-0.001.tar.gz
 lib/Alien/CLIPS.pm
 lib/Inline/CLIPS.pm
 LICENSE

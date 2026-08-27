@@ -12,7 +12,7 @@
     [%- IF join_summaries.size -%]
     &ensp;
     [%- FOREACH s IN join_summaries -%]
-    <span class="join-chip">&#x2b; [% s.label | html %] <span class="join-chip-key">(on [% s.left_key | html %] = [% s.right_key | html %])</span></span>
+    <span class="join-chip">&#x2b; [% s.label | html %][% IF s.left_key %] <span class="join-chip-key">(on [% s.left_key | html %] = [% s.right_key | html %])</span>[% END %]</span>
     [%- END -%]
     [%- END -%]
   </p>
@@ -26,8 +26,13 @@
   [%- END -%]
   [%- IF left_spec -%]
   <button class="btn-export-open" id="btn-export-open" type="button">&#x2193; Export&hellip;</button>
+  <button class="btn-refresh" id="btn-refresh" type="button"
+          title="Reload the data from disc - use this after the source file has changed">&#x21BB; Refresh</button>
   [%- END -%]
+  <button class="btn-dedup[% IF dedup %] btn-dedup--active[% END %]" id="btn-dedup" type="button"
+          title="Remove duplicate rows from the view and from any export">[% IF dedup %]Show duplicates[% ELSE %]Hide duplicates[% END %]</button>
   <button class="btn-add-db" id="btn-add-db" type="button" title="Combine this table with another data file, or narrow down the rows you see by applying conditions">&#x2295; Merge data&hellip;</button>
+  <button class="btn-combine" id="btn-combine" type="button" title="Stack rows from another data file beneath these rows, using a unified set of columns and leaving blanks where a column does not exist in a given file">&#x229E; Combine data&hellip;</button>
 </div>
 
 [%- IF left_spec -%]
@@ -129,6 +134,50 @@
     <div class="join-actions">
       <button type="button" id="btn-cancel-join" class="btn-secondary">Cancel</button>
       <button type="submit" id="btn-do-join" class="btn-primary" disabled>Apply</button>
+    </div>
+  </form>
+</div>
+
+<div class="combine-panel" id="combine-panel" hidden>
+  <form id="combine-form" method="get" action="/combine">
+    <input type="hidden" name="l" value="[% left_spec | html %]">
+    [%- FOREACH cspec IN combine_specs -%]
+    <input type="hidden" name="c" value="[% cspec | html %]">
+    [%- END -%]
+    [%- FOREACH jspec IN current_joins -%]
+    <input type="hidden" name="j" value="[% jspec | html %]">
+    [%- END -%]
+    [%- FOREACH fs IN filter_specs -%]
+    <input type="hidden" name="f" value="[% fs | html %]">
+    [%- END -%]
+
+    <h3 class="combine-panel-title">Combine data</h3>
+
+    <p class="combine-desc-static">Stack rows from another file beneath the current data. All columns from both files will appear as headers; where a row has no value for a column it will be left blank.</p>
+
+    <div class="join-fields">
+      <div class="join-field">
+        <label for="combine-table-sel">Table from the data directory</label>
+        <select id="combine-table-sel">
+          <option value="">&#x2014; select a table &#x2014;</option>
+          [%- FOREACH t IN available_tables -%]
+          <option value="table:[% t.name | html %]">[% t.name | html %]</option>
+          [%- END -%]
+        </select>
+      </div>
+
+      <div class="join-or">or</div>
+
+      <div class="join-field">
+        <label for="combine-path-inp">File path <span style="font-weight:400;color:#999;font-size:.78rem;">(browse or drag &amp; drop)</span></label>
+        <input type="text" id="combine-path-inp" placeholder="/path/to/file.csv"
+               autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+
+    <div class="join-actions">
+      <button type="button" id="btn-cancel-combine" class="btn-secondary">Cancel</button>
+      <button type="submit" id="btn-do-combine" class="btn-primary" disabled>Combine</button>
     </div>
   </form>
 </div>
@@ -549,6 +598,13 @@
   // --- Open/close ---
 
   btnAdd.addEventListener('click', function () {
+    // Close combine panel if open.
+    var combinePanel = document.getElementById('combine-panel');
+    var btnCombine   = document.getElementById('btn-combine');
+    if (combinePanel && !combinePanel.hidden) {
+      combinePanel.hidden      = true;
+      if (btnCombine) btnCombine.disabled = false;
+    }
     panel.hidden    = false;
     btnAdd.disabled = true;
     // Pre-populate filter rows from server-rendered filter state.
@@ -591,6 +647,102 @@
       location.href = url;
     });
   }
+}());
+</script>
+
+<script>
+// ---------------------------------------------------------------------------
+// Refresh button — reload the page so the server re-reads the source file(s)
+// ---------------------------------------------------------------------------
+(function () {
+  var btn = document.getElementById('btn-refresh');
+  if (!btn) return;
+  btn.addEventListener('click', function () { location.reload(); });
+}());
+
+// Dedup button — toggle d=1 in the URL and reload
+// ---------------------------------------------------------------------------
+(function () {
+  var btn = document.getElementById('btn-dedup');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    var u = new URL(location.href);
+    if (u.searchParams.get('d')) { u.searchParams.delete('d'); }
+    else                         { u.searchParams.set('d', '1'); }
+    location.href = u.toString();
+  });
+}());
+</script>
+
+<script>
+// ---------------------------------------------------------------------------
+// Combine panel — stack rows from another file beneath the current view
+// ---------------------------------------------------------------------------
+(function () {
+  var btnCombine  = document.getElementById('btn-combine');
+  var panel       = document.getElementById('combine-panel');
+  if (!btnCombine || !panel) return;
+
+  var btnCancel   = document.getElementById('btn-cancel-combine');
+  var btnDo       = document.getElementById('btn-do-combine');
+  var tblSel      = document.getElementById('combine-table-sel');
+  var pathInp     = document.getElementById('combine-path-inp');
+  var combineForm = document.getElementById('combine-form');
+  var joinPanel   = document.getElementById('join-panel');
+  var btnMerge    = document.getElementById('btn-add-db');
+
+  var combineSpec = '';
+  var pathTimer;
+
+  function checkApply() {
+    btnDo.disabled = !combineSpec;
+  }
+
+  tblSel.addEventListener('change', function () {
+    combineSpec   = this.value ? this.value : '';
+    pathInp.value = '';
+    checkApply();
+  });
+
+  pathInp.addEventListener('input', function () {
+    var val = this.value.trim();
+    tblSel.value = '';
+    clearTimeout(pathTimer);
+    if (!val) { combineSpec = ''; checkApply(); return; }
+    pathTimer = setTimeout(function () {
+      combineSpec = 'path:' + val;
+      checkApply();
+    }, 300);
+  });
+
+  combineForm.addEventListener('submit', function (e) {
+    Array.from(combineForm.querySelectorAll('[data-dyn]')).forEach(function (i) { i.remove(); });
+    if (!combineSpec) { e.preventDefault(); return; }
+    var cInp = document.createElement('input');
+    cInp.type = 'hidden'; cInp.name = 'c';
+    cInp.setAttribute('data-dyn', '1');
+    cInp.value = combineSpec;
+    combineForm.appendChild(cInp);
+  });
+
+  btnCombine.addEventListener('click', function () {
+    // Close merge panel if open.
+    if (joinPanel && !joinPanel.hidden) {
+      joinPanel.hidden    = true;
+      if (btnMerge) btnMerge.disabled = false;
+    }
+    panel.hidden         = false;
+    btnCombine.disabled  = true;
+  });
+
+  btnCancel.addEventListener('click', function () {
+    panel.hidden        = true;
+    btnCombine.disabled = false;
+    tblSel.value        = '';
+    pathInp.value       = '';
+    combineSpec         = '';
+    checkApply();
+  });
 }());
 </script>
 
@@ -731,10 +883,12 @@
     var lInp = document.querySelector('#join-form input[name="l"]');
     if (lInp) params.set('l', lInp.value);
 
-    // j= and f= reflect the already-rendered view, so read from the URL.
+    // j=, c=, f=, and d= reflect the already-rendered view, so read from the URL.
     var urlP = new URLSearchParams(location.search);
     urlP.getAll('j').forEach(function (v) { params.append('j', v); });
+    urlP.getAll('c').forEach(function (v) { params.append('c', v); });
     urlP.getAll('f').forEach(function (v) { params.append('f', v); });
+    if (urlP.get('d')) params.set('d', '1');
 
     fetch('/export', {
       method: 'POST',
@@ -748,6 +902,20 @@
         if (data.saved) {
           resultEl.textContent = '✓ Saved to ' + data.saved;
           resultEl.className   = 'export-result success';
+          try {
+            var savedName  = data.saved.replace(/.*[\/\\]/, '');
+            var savedEntry = {
+              name:      savedName,
+              path:      data.saved,
+              href:      '/open?path=' + encodeURIComponent(data.saved),
+              lastSaved: new Date().toISOString(),
+            };
+            var savedList = JSON.parse(localStorage.getItem('bi:saved') || '[]');
+            savedList = savedList.filter(function (s) { return s.path !== data.saved; });
+            savedList.unshift(savedEntry);
+            if (savedList.length > 5) savedList.length = 5;
+            localStorage.setItem('bi:saved', JSON.stringify(savedList));
+          } catch (eS) {}
         } else {
           resultEl.textContent = data.error || 'Unknown error';
           resultEl.className   = 'export-result error';
@@ -802,19 +970,51 @@
 <script>
 (function () {
   try {
-    var el    = document.getElementById('bi-open-meta');
-    var href  = '/open?path=' + encodeURIComponent(el.dataset.path);
-    var entry = {
-      name:       el.dataset.name,
-      href:       href,
-      path:       el.dataset.path,
-      lastOpened: new Date().toISOString(),
-    };
-    var recent = JSON.parse(localStorage.getItem('bi:recent') || '[]');
-    recent = recent.filter(function (r) { return r.href !== href; });
-    recent.unshift(entry);
-    if (recent.length > 5) recent.length = 5;
-    localStorage.setItem('bi:recent', JSON.stringify(recent));
+    var u      = new URL(location.href);
+    var fromSaved = u.searchParams.get('from') === 'saved';
+    // Remove the from= marker from the address bar so the URL stays clean.
+    if (fromSaved) {
+      u.searchParams.delete('from');
+      history.replaceState(null, '', u.toString());
+    }
+    // Files opened from the "recently saved" list are not also tracked as
+    // "recently opened" -- they already have their own section on the home page.
+    if (!fromSaved) {
+      var el       = document.getElementById('bi-open-meta');
+      // For drag-and-drop uploads the server stores the file under a random
+      // .uploads/<tempdir>/ path.  Prefer the original local path stashed by
+      // the drop handler in sessionStorage (from text/uri-list).  Fall back to
+      // the upload path when the browser does not supply a file:// URI — an
+      // imperfect but functional link is better than a missing entry.
+      var filePath = el.dataset.path;
+      var fileHref = '/open?path=' + encodeURIComponent(filePath);
+      if (/[/\\]\.uploads[/\\]/.test(filePath)) {
+        // Try to replace the temp .uploads/ path with the original local path
+        // that the drop handler stashed in sessionStorage via text/uri-list.
+        // Not all browsers/file-managers supply this (Firefox, some OSes omit
+        // it), so we fall through to the upload path rather than skip the
+        // entry — an imperfect link is better than no entry at all.
+        try {
+          var origPath = sessionStorage.getItem('bi:pending-original-path');
+          sessionStorage.removeItem('bi:pending-original-path');
+          if (origPath) {
+            filePath = origPath;
+            fileHref = '/open?path=' + encodeURIComponent(origPath);
+          }
+        } catch (ex) {}
+      }
+      var entry = {
+        name:       el.dataset.name,
+        href:       fileHref,
+        path:       filePath,
+        lastOpened: new Date().toISOString(),
+      };
+      var recent = JSON.parse(localStorage.getItem('bi:recent') || '[]');
+      recent = recent.filter(function (r) { return r.href !== fileHref; });
+      recent.unshift(entry);
+      if (recent.length > 5) recent.length = 5;
+      localStorage.setItem('bi:recent', JSON.stringify(recent));
+    }
   } catch (e) {}
 }());
 </script>
@@ -826,19 +1026,27 @@
 <script>
 (function () {
   try {
-    var el    = document.getElementById('bi-open-meta');
-    var href  = '/import?url=' + encodeURIComponent(el.dataset.url);
-    var entry = {
-      name:       el.dataset.name,
-      href:       href,
-      url:        el.dataset.url,
-      lastOpened: new Date().toISOString(),
-    };
-    var recent = JSON.parse(localStorage.getItem('bi:recent') || '[]');
-    recent = recent.filter(function (r) { return r.href !== href; });
-    recent.unshift(entry);
-    if (recent.length > 5) recent.length = 5;
-    localStorage.setItem('bi:recent', JSON.stringify(recent));
+    var u      = new URL(location.href);
+    var fromSaved = u.searchParams.get('from') === 'saved';
+    if (fromSaved) {
+      u.searchParams.delete('from');
+      history.replaceState(null, '', u.toString());
+    }
+    if (!fromSaved) {
+      var el    = document.getElementById('bi-open-meta');
+      var href  = '/import?url=' + encodeURIComponent(el.dataset.url);
+      var entry = {
+        name:       el.dataset.name,
+        href:       href,
+        url:        el.dataset.url,
+        lastOpened: new Date().toISOString(),
+      };
+      var recent = JSON.parse(localStorage.getItem('bi:recent') || '[]');
+      recent = recent.filter(function (r) { return r.href !== href; });
+      recent.unshift(entry);
+      if (recent.length > 5) recent.length = 5;
+      localStorage.setItem('bi:recent', JSON.stringify(recent));
+    }
   } catch (e) {}
 }());
 </script>

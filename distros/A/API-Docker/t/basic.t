@@ -15,10 +15,26 @@ use_ok('API::Docker::Image');
 use_ok('API::Docker::Network');
 use_ok('API::Docker::Volume');
 
-# Test default construction
-my $docker = API::Docker->new(api_version => '1.47');
+# Test default construction. host resolves DOCKER_HOST before the socket path,
+# so the socket default is only observable with that variable gone -- any
+# machine pointing at rootless Podman has it set, and this test used to read it.
+my $docker;
+{
+  delete local $ENV{DOCKER_HOST};
+  $docker = API::Docker->new(api_version => '1.47');
+}
 isa_ok($docker, 'API::Docker');
 is($docker->host, 'unix:///var/run/docker.sock', 'default host');
+
+# The other half of that resolution, which nothing covered.
+{
+  local $ENV{DOCKER_HOST} = 'tcp://from-env:2375';
+  is(
+    API::Docker->new(api_version => '1.47')->host,
+    'tcp://from-env:2375',
+    'DOCKER_HOST outranks the socket default',
+  );
+}
 is($docker->api_version, '1.47', 'api_version set');
 is($docker->tls, 0, 'tls off by default');
 

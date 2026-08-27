@@ -8,7 +8,7 @@
 .github/workflows/windows-latest.yml
 .gitignore
 Changes
-lib/SPVM/Time/Piece.config
+lib/SPVM/Time/Piece.build
 lib/SPVM/Time/Piece.cpp
 lib/SPVM/Time/Piece.pm
 lib/SPVM/Time/Piece.spvm

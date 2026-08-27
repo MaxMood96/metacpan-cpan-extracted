@@ -1,5 +1,18 @@
 Revision history for IO-ReStoreFH
 
+0.13      2026-08-26 11:55:34 EDT
+
+  [META]
+
+    * fix incorrect repo location
+
+0.12      2026-08-26 11:42:34 EDT
+
+  [BUGFIX]
+
+    * the generated Perl open mode for duplicated filehandles could be
+      illegal.
+
 0.11      2023-08-23 11:30:22-04:00 America/New_York
 
   [BUILD]

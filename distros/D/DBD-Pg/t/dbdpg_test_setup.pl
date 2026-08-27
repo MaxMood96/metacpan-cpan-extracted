@@ -414,8 +414,9 @@ version: $version
             my @userlist = (qw/postgres postgresql pgsql _postgres/);
 
             ## Start with whoever owns this file, unless it's us
-            my $username = getpwuid ((stat($0))[4]);
-            unshift @userlist, $username if defined $username and $username ne getpwent;
+            my $file_owner_uid = (stat($0))[4];
+            my $username = defined $file_owner_uid ? getpwuid($file_owner_uid) : undef;
+            unshift @userlist, $username if defined $username and $file_owner_uid != $<;
 
             my %doneuser;
             for (@userlist) {
@@ -429,7 +430,7 @@ version: $version
                 $su = $testuser;
                 $founduser++;
                 $olddir = getcwd;
-                my $sucom = build_command(q{su TESTUSER -m -c "/bin/sh -c 'INITDB --locale=C -E utf8 -D DATADIR 2>&1'},
+                my $sucom = build_command(q{su TESTUSER -m -c "/bin/sh -c 'INITDB --locale=C -E utf8 -D DATADIR 2>&1'"},
                                           [$testuser, $initdb, "$testdir/data"], 'backslash_spaces');
                 chdir $testdir;
                 $info = '';
@@ -497,15 +498,15 @@ version: $version
         $info = '';
         my $evalok = 0;
         eval {
-            $info = $^O =~ /Win32/ ? qx{netstat -anp TCP}: qx{ss -QanO 2>&1};
+            $info = $^O =~ /(?:Win32|darwin|bsd|dragonfly)/ ? qx{netstat -anp TCP 2>&1} : qx{ss -anO 2>&1};
             $evalok = 1;
         };
         if (!$evalok or ! defined $info) {
-            Test::More::diag "ss call to determine open port failed, trying port $testport\n";
+            Test::More::diag "Unable to determine open port, trying port $testport\n";
         }
         else {
             {
-                last if $info !~ /:$testport /m;
+                last if $info !~ /^\s*tcp.+?(?:\d+\.\d+\.\d+\.\d+|\*)[:.]$testport\s/im;
                 last if ++$testport > $TEST_PORT_MAX;
                 redo;
             }
@@ -569,7 +570,7 @@ version: $version
 
             ## Attempt to start up the test server
             my $COM = $su ?
-                build_command(q{su TESTUSER -m -c "PGCTL -o '-k TESTDIR' -l LOGFILE -D DATADIR start},
+                build_command(q{su TESTUSER -m -c "PGCTL -o '-k TESTDIR' -l LOGFILE -D DATADIR start"},
                               [$su, $pg_ctl, $testdir, "$testdir/$logfile", "$testdir/data"], 'backslash_spaces')
                 : build_command(q{PGCTL -o '-k TESTDIR' -l LOGFILE -D DATADIR start},
                                 [$pg_ctl, $testdir, "$testdir/$logfile", "$testdir/data"]);

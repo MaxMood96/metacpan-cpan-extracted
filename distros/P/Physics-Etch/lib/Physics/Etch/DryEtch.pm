@@ -6,7 +6,7 @@ use parent -norequire, 'Physics::Etch::Process';
 
 use Physics::Etch::Process ();   # for KB_EV constant
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 # Dry (plasma / RIE / ion) etch: directional, tunable anisotropy.
 #

@@ -10,9 +10,9 @@ use Perinci::Exporter;
 use Perinci::Object;
 
 our $AUTHORITY = 'cpan:PERLANCAR'; # AUTHORITY
-our $DATE = '2025-10-29'; # DATE
+our $DATE = '2026-08-26'; # DATE
 our $DIST = 'App-FfmpegUtils'; # DIST
-our $VERSION = '0.015'; # VERSION
+our $VERSION = '0.016'; # VERSION
 
 our %SPEC;
 
@@ -53,6 +53,14 @@ our %argspecopt_copy = (
     },
 );
 
+our %argspecopt_copy_default1 = (
+    copy => {
+        summary => 'Whether to use the "copy" codec (fast but produces inaccurate timings)',
+        schema => 'bool*',
+        default => 1,
+    },
+);
+
 our %argspecsopt_duration = (
     start => {
         schema => ['any*', of=>['duration*', 'percent_str*']],
@@ -66,6 +74,13 @@ our %argspecsopt_duration = (
     duration => {
         schema => ['any*', of=>['duration*', 'percent_str*']],
         cmdline_aliases => {d=>{}},
+    },
+);
+
+our %argspecopt_overwrite = (
+    overwrite => {
+        schema => 'bool*',
+        cmdline_aliases => {O=>{}},
     },
 );
 
@@ -168,10 +183,7 @@ MARKDOWN
             schema => 'uint*',
             cmdline_aliases => {sample_rate=>{}},
         },
-        overwrite => {
-            schema => 'bool*',
-            cmdline_aliases => {O=>{}},
-        },
+        %argspecopt_overwrite,
     },
     features => {
         dry_run => 1,
@@ -801,6 +813,80 @@ sub cut_duration_from_video {
     $envres->as_struct;
 }
 
+$SPEC{join_audio} = {
+    v => 1.1,
+    summary => 'Join two or more audios (e.g. MP3 files)',
+    description => <<'MARKDOWN',
+
+This utility uses *ffmpeg* to join two or more audio files (e.g. MP3 files) into
+one.
+
+MARKDOWN
+    args => {
+        %argspec0_files,
+        %argspecopt_copy_default1,
+        output => {
+            schema => 'filename*',
+            cmdline_aliases => {o=>{}},
+            default => 'joined.mp3', # XXX should follow extension of input
+        },
+        %argspecopt_overwrite,
+    },
+    examples => [
+        {
+            summary => 'Join 3 MP3 files, output in joined.mp3',
+            argv => ['1.mp3', '2.mp3', '3.mp3'],
+            test => 0,
+            'x.doc.show_result' => 0,
+        },
+    ],
+    features => {
+        dry_run => 1,
+    },
+    deps => {
+        prog => "ffmpeg", # XXX allow FFMPEG_PATH
+    },
+    links => [
+    ],
+};
+sub join_audio {
+    require Cwd;
+    require File::Temp;
+    require IPC::System::Options;
+
+    my %args = @_;
+    my $files = $args{files};
+    unless (@$files >= 2) { return [400, "Please specify two or more audio files"] }
+    my $copy = $args{copy};
+    my $output = $args{output} // 'joined.mp3';
+    my $overwrite = $args{overwrite};
+
+    if (-f $output) {
+        if ($overwrite) {
+            log_info "Will overwrite output file '$output'";
+        } else {
+            return [409, "Refusing to overwrite existing output file '$output', use --overwrite to overwrite"];
+        }
+    }
+
+    my ($tempfh, $tempname) = File::Temp::tempfile(DIR => $CWD);
+    for my $file (@$files) {
+        print $tempfh "file '", Cwd::abs_path($file), "'\n";
+    }
+    close $tempfh;
+
+    IPC::System::Options::system(
+        {log=>1, die=>1},
+        "ffmpeg", "-f", "concat",
+        "-safe", 0,
+        "-i", $tempname,
+        ($copy ? ("-c", "copy") : ()),
+        $output,
+    );
+
+    [200];
+}
+
 1;
 # ABSTRACT: Utilities related to ffmpeg
 
@@ -816,7 +902,7 @@ App::FfmpegUtils - Utilities related to ffmpeg
 
 =head1 VERSION
 
-This document describes version 0.015 of App::FfmpegUtils (from Perl distribution App-FfmpegUtils), released on 2025-10-29.
+This document describes version 0.016 of App::FfmpegUtils (from Perl distribution App-FfmpegUtils), released on 2026-08-26.
 
 =head1 FUNCTIONS
 
@@ -998,6 +1084,78 @@ Whether to use the "copy" codec (fast but produces inaccurate timings).
 (No description)
 
 =item * B<start> => I<duration|percent_str> (default: 0)
+
+(No description)
+
+
+=back
+
+Special arguments:
+
+=over 4
+
+=item * B<-dry_run> => I<bool>
+
+Pass -dry_run=E<gt>1 to enable simulation mode.
+
+=back
+
+Returns an enveloped result (an array).
+
+First element ($status_code) is an integer containing HTTP-like status code
+(200 means OK, 4xx caller error, 5xx function error). Second element
+($reason) is a string containing error message, or something like "OK" if status is
+200. Third element ($payload) is the actual result, but usually not present when enveloped result is an error response ($status_code is not 2xx). Fourth
+element (%result_meta) is called result metadata and is optional, a hash
+that contains extra information, much like how HTTP response headers provide additional metadata.
+
+Return value:  (any)
+
+
+
+=head2 join_audio
+
+Usage:
+
+ join_audio(%args) -> [$status_code, $reason, $payload, \%result_meta]
+
+Join two or more audios (e.g. MP3 files).
+
+Examples:
+
+=over
+
+=item * Join 3 MP3 files, output in joined.mp3:
+
+ join_audio(files => ["1.mp3", "2.mp3", "3.mp3"]);
+
+=back
+
+This utility uses I<ffmpeg> to join two or more audio files (e.g. MP3 files) into
+one.
+
+This function is not exported.
+
+This function supports dry-run operation.
+
+
+Arguments ('*' denotes required arguments):
+
+=over 4
+
+=item * B<copy> => I<bool> (default: 1)
+
+Whether to use the "copy" codec (fast but produces inaccurate timings).
+
+=item * B<files>* => I<array[filename]>
+
+(No description)
+
+=item * B<output> => I<filename> (default: "joined.mp3")
+
+(No description)
+
+=item * B<overwrite> => I<bool>
 
 (No description)
 
@@ -1254,7 +1412,7 @@ that are considered a bug and can be reported to me.
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2025 by perlancar <perlancar@cpan.org>.
+This software is copyright (c) 2026, 2025 by perlancar <perlancar@cpan.org>.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

@@ -1,12 +1,15 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2020-2024 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2020-2026 -- leonerd@leonerd.org.uk
 
-package Test::Future::IO 0.06;
+package Test::Future::IO 0.07;
 
-use v5.14;
+use v5.20;
 use warnings;
+
+use feature qw( signatures );
+no warnings qw( experimental::signatures );
 
 use Carp;
 
@@ -18,6 +21,8 @@ use Test::Deep ();
 C<Test::Future::IO> - unit testing on C<Future::IO>
 
 =head1 SYNOPSIS
+
+=for highlighter language=perl
 
    use Test::More;
    use Test::Future::IO;
@@ -62,6 +67,13 @@ additional methods to control the behaviour of that invocation.
    $exp = $controller->expect_sysread( $fh, $len );
    $exp = $controller->expect_syswrite( $fh, $bytes );
 
+Also, I<since version 0.07>:
+
+   $exp = $controller->expect_recv( $fh, $length, $flags );
+   $exp = $controller->expect_recvfrom( $fh, $length, $flags );
+
+   $exp = $controller->expect_send( $fh, $bytes, $flags, $to );
+
 For testing simpler code that does not operate on multiple filehandles, two
 additional methods that ignore the filehandle argument may be more convenient:
 
@@ -82,10 +94,10 @@ Expectations can be set to remain pending rather than completing.
 
    $exp->remains_pending;
 
-As a convenience, a C<syswrite> expectation will default to returning a future
-that will complete yielding its length (as is usual for successful writes),
-and a C<sleep> or C<connect> expectation will return a future that completes
-yielding nothing.
+As a convenience, a C<syswrite> and C<send> expectation will default to
+returning a future that will complete yielding its length (as is usual for
+successful writes), and a C<sleep> or C<connect> expectation will return a
+future that completes yielding nothing.
 
 Testing event-based code with C<expect_sysread> can be fragile, as it relies
 on exact ordering, buffer sizes, and so on. A more flexible approach that
@@ -117,67 +129,71 @@ my %sysread_buffers;
 require Future::IO;
 Future::IO->override_impl( $obj );
 
-sub expect_accept
+sub expect_accept ( $self, $fh )
 {
-   my $self = shift;
-   my ( $fh ) = @_;
-
    return $controller->expect( accept => $fh );
 }
 
-sub expect_connect
+sub expect_connect ( $self, $fh, $name )
 {
-   my $self = shift;
-   my ( $fh, $name ) = @_;
-
    return $controller->expect( connect => $fh, $name )
       ->will_done();
 }
 
-sub expect_sleep
+sub expect_recv ( $self, $fh, $length, $flags = undef )
 {
-   my $self = shift;
-   my ( $secs ) = @_;
+   return $controller->expect( recv => $fh, $length, $flags );
+}
 
+sub expect_recvfrom ( $self, $fh, $length, $flags = undef )
+{
+   return $controller->expect( recvfrom => $fh, $length, $flags );
+}
+
+sub expect_send ( $self, $fh, $bytes, $flags = undef, $to = undef )
+{
+   # TODO: Think about what missing flags or to means
+   return $controller->expect( send => $fh, $bytes, $flags, $to )
+      ->will_done( length $bytes );
+}
+
+sub expect_sleep ( $self, $secs )
+{
    return $controller->expect( sleep => $secs )
       ->will_done();
 }
 
-sub expect_sysread
+sub expect_sysread ( $self, @args )
 {
-   my $self = shift;
-   my ( $fh, $len ) = @_;
-   if( @_ == 1 ) {
+   my ( $fh, $len ) = @args;
+   if( @args == 1 ) {
       carp "->expect_sysread with one argument is now deprecated";
-      ( $fh, $len ) = ( Test::Deep::ignore(), @_ );
+      ( $fh, $len ) = ( Test::Deep::ignore(), @args );
    }
 
    return $controller->expect( sysread => $fh, $len );
 }
 
-sub expect_syswrite
+sub expect_syswrite ( $self, @args )
 {
-   my $self = shift;
-   my ( $fh, $bytes ) = @_;
-   if( @_ == 1 ) {
+   my ( $fh, $bytes ) = @args;
+   if( @args == 1 ) {
       carp "->expect_syswrite with one argument is now deprecated";
-      ( $fh, $bytes ) = ( Test::Deep::ignore(), @_ );
+      ( $fh, $bytes ) = ( Test::Deep::ignore(), @args );
    }
 
    return $controller->expect( syswrite => $fh, $bytes )
       ->will_done( length $bytes );
 }
 
-sub expect_sysread_anyfh
+sub expect_sysread_anyfh ( $self, @args )
 {
-   my $self = shift;
-   $self->expect_sysread( Test::Deep::ignore() => @_ );
+   $self->expect_sysread( Test::Deep::ignore() => @args );
 }
 
-sub expect_syswrite_anyfh
+sub expect_syswrite_anyfh ( $self, @args )
 {
-   my $self = shift;
-   $self->expect_syswrite( Test::Deep::ignore() => @_ );
+   $self->expect_syswrite( Test::Deep::ignore() => @args );
 }
 
 =head1 METHODS
@@ -193,7 +209,7 @@ C<check_and_clear> can be invoked.
 
 =cut
 
-sub controller { __PACKAGE__ }
+sub controller ( $ ) { __PACKAGE__ }
 
 =head2 check_and_clear
 
@@ -205,11 +221,8 @@ cleared out ready for the start of the next test.
 
 =cut
 
-sub check_and_clear
+sub check_and_clear ( $, $name )
 {
-   shift;
-   my ( $name ) = @_;
-
    local $Test::Builder::Level = $Test::Builder::Level + 1;
    $controller->check_and_clear( $name );
 }
@@ -238,19 +251,15 @@ calls to L</check_and_clear>.
 
 =cut
 
-sub use_sysread_buffer
+sub use_sysread_buffer ( $self, $fh )
 {
-   my $self = shift;
-   my ( $fh ) = @_;
-
    require Future::Buffer;
 
    # Not //= so that each test gets a new buffer
    my $buffer = $sysread_buffers{$fh} = Future::Buffer->new;
 
    return $controller->whenever( sysread => $fh, Test::Deep::ignore() )
-      ->will_return_using( sub {
-         my ( $args ) = @_;
+      ->will_return_using( sub ( $args ) {
          return $buffer->read_atmost( $args->[1] );
       });
 }
@@ -276,11 +285,8 @@ For example:
 
 =cut
 
-sub write_sysread_buffer
+sub write_sysread_buffer ( $self, $fh, $data )
 {
-   my $self = shift;
-   my ( $fh, $data ) = @_;
-
    my $buffer = $sysread_buffers{$fh} or
       croak "Filehandle $fh is not managed by a Test::Future::IO buffer";
 
@@ -297,22 +303,16 @@ sub write_sysread_buffer
    package Test::Future::IO::_Expectation;
    use base qw( Test::ExpectAndCheck::Future::_Expectation );
 
-   sub will_write_sysread_buffer
+   sub will_write_sysread_buffer ( $self, $fh, $data )
    {
-      my $self = shift;
-      my ( $fh, $data ) = @_;
-
-      return $self->will_also( sub {
+      return $self->will_also( sub () {
          Test::Future::IO->write_sysread_buffer( $fh, $data );
       });
    }
 
-   sub will_write_sysread_buffer_later
+   sub will_write_sysread_buffer_later ( $self, $fh, $data )
    {
-      my $self = shift;
-      my ( $fh, $data ) = @_;
-
-      return $self->will_also_later( sub {
+      return $self->will_also_later( sub () {
          Test::Future::IO->write_sysread_buffer( $fh, $data );
       });
    }

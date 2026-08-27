@@ -2,7 +2,7 @@
 # MIT License
 
 class Time::Local {
-  version "0.117";
+  version "0.118";
   
   use Sys::Time::Tm;
   

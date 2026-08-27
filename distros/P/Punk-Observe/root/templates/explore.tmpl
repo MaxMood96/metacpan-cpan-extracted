@@ -1,0 +1,129 @@
+<div class="toolbar">
+  <form method="get" action="{% prefix %}/explore" style="display:contents">
+    <input type="text" name="q" value="{% query %}" spellcheck="false"
+           placeholder='spans | where duration > 500ms | by service | count'>
+    <button type="submit">Run</button>
+    {% include _range.tmpl %}
+  </form>
+</div>
+
+{% if error %}
+<div class="warnbox"><strong>{% error %}</strong>
+  {% if offset %}<span class="dim">at character {% offset %}</span>{% end %}
+  {% if hint %} {% hint %}{% end %}</div>
+{% end %}
+
+{% if truncated %}
+<div class="warnbox">Showing a partial result: the scan stopped after
+  {% scanned %} rows.</div>
+{% end %}
+
+{% if series_plot %}
+<div class="panel">
+  <h2>{% query %}</h2>
+  <div class="chartwrap" data-chart data-from="{% from %}" data-to="{% to %}">
+    <script type="application/json" data-plot>{% raw series_plot %}</script>
+    <noscript><p class="note">This chart is drawn in the browser and needs
+      JavaScript.</p></noscript>
+  </div>
+
+  {% if bucket_rows %}
+  {% if bucket_truncated %}
+  <div class="warnbox">Showing the most recent 500 of {% bucket_truncated %}
+    buckets. Widen the bucket or narrow the range for all of them.</div>
+  {% end %}
+  <div class="tablewrap">
+    <table class="rows">
+      <thead><tr><th>bucket</th>{% if has_series %}<th>series</th>{% end %}
+                 <th class="num">value</th><th class="num">rows</th></tr></thead>
+      <tbody>
+      {% for b in bucket_rows %}
+      <tr>
+        <td class="mono nowrap">{% b.time %}</td>
+        {% if has_series %}<td class="nowrap">{% b.series %}</td>{% end %}
+        <td class="num mono">{% b.value %}</td>
+        <td class="num mono">{% b.count %}</td>
+      </tr>
+      {% end %}
+      </tbody>
+    </table>
+  </div>
+  {% end %}
+
+  <p class="note">{% scanned %} rows scanned.</p>
+</div>
+{% end %}
+
+{% if rows %}
+<div class="panel">
+  <h2>{% scanned %} rows scanned</h2>
+  <div class="tablewrap">
+    <table class="rows">
+      <thead><tr><th>time</th>
+                 {% if has_severity %}<th>severity</th>{% end %}
+                 <th>service</th><th>message</th>
+                 {% if has_duration %}<th class="num">duration</th>{% end %}
+                 {% if has_value %}<th class="num">value</th>{% end %}
+                 {% if has_trace %}<th></th>{% end %}</tr></thead>
+      <tbody>
+      {% for r in rows %}
+      <tr>
+        <td class="mono nowrap">{% r.time %}</td>
+        {% if has_severity %}
+        <td>{% if r.severity %}<span class="sev sev-{% r.severity %}">{% r.severity %}</span>{% end %}</td>
+        {% end %}
+        <td class="nowrap">{% r.service %}</td>
+        <td class="mono body">{% r.body %}</td>
+        {% if has_duration %}<td class="num mono">{% r.duration %}</td>{% end %}
+        {% if has_value %}<td class="num mono">{% r.value %}</td>{% end %}
+        {% if has_trace %}
+        <td>{% if r.trace %}<a href="{% prefix %}/traces/{% r.trace %}{% range_qs %}">trace</a>{% end %}</td>
+        {% end %}
+      </tr>
+      {% end %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% end %}
+
+{% if groups %}
+<div class="panel">
+  <h2>{% query %}</h2>
+  {% if exact %}{% else %}
+  <p class="note">Estimated rather than computed exactly.</p>
+  {% end %}
+  <div class="tablewrap">
+    <table class="rows">
+      <thead><tr><th>group</th><th></th><th class="num">value</th>
+                 <th class="num">rows</th></tr></thead>
+      <tbody>
+      {% for g in groups %}
+      <tr>
+        <td class="nowrap">{% g.key %}</td>
+        <td class="barcell"><span class="bar" style="width:{% g.width_pct %}%"></span></td>
+        <td class="num mono">{% g.value %}</td>
+        <td class="num mono">{% g.count %}</td>
+      </tr>
+      {% end %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% end %}
+
+<div class="panel">
+  <h2>The language</h2>
+  <div class="tablewrap">
+    <table class="rows">
+      <tbody>
+      {% for e in examples %}
+      <tr>
+        <td class="mono"><a href="{% prefix %}/explore?q={% e.href %}{% range_amp %}">{% e.q %}</a></td>
+        <td class="dim">{% e.why %}</td>
+      </tr>
+      {% end %}
+      </tbody>
+    </table>
+  </div>
+</div>

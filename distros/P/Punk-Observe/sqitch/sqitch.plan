@@ -1,0 +1,4 @@
+%syntax-version=1.0.0
+%project=punk-observe
+
+alerts 2026-08-25T00:00:00Z LNATION <email@lnation.org> # dashboards, rules, per-series state, routing and the outbox

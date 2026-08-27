@@ -4,7 +4,7 @@ Database::BI - Web-based Business Intelligence viewer for flat data files
 
 # VERSION
 
-0.001.0
+0.003.2
 
 # SYNOPSIS
 
@@ -147,6 +147,16 @@ path as CSV (`.csv`) or SQLite (`.sql`).
     which HTML table on the page to display when the page contains multiple
     tables.
 
+- `GET /combine`
+
+    Stacks rows from two or more tables vertically (UNION ALL) into a unified
+    view.  All columns from all sources appear as headers; cells are blank
+    where a source file lacks a column.  Parameters:
+
+        l=<spec>               left table: "table:name" or "path:/abs/path"
+        c=<spec>               additional table to stack (repeatable)
+        f=<col>:<op>:<val>     result filter applied after combining (repeatable)
+
 # CONFIGURATION
 
 Place a `database_bi.conf` file in the application root to override
@@ -225,13 +235,15 @@ For very large files, replace the `open_table` helper body with a
 `Database::Join` instance (Phase 2) without changing the controller.
 - The `.uploads/` directory grows indefinitely; no automatic eviction is
 performed.  Users may delete `.uploads/` at any time to reclaim space.
-- `Sub::Private`/:Private enforcement relies on the CHECK compilation
+- `Sub::Protected`/:Protected enforcement relies on the CHECK compilation
 phase.  When a module is loaded dynamically at test time (e.g. via
 `Test::Mojo-`new(...)>), the CHECK phase has already passed and the
-"Too late to run CHECK block" warning is emitted -- the private
-restriction is not enforced in that context.  This is a known
-limitation of `Sub::Private` and does not affect production
-(morbo/hypnotoad) deployments where the module is compiled on startup.
+"Too late to run CHECK block" warning is emitted -- the access
+restriction is not enforced in that test context.  This does not affect
+production (morbo/hypnotoad) deployments where modules are compiled on
+startup.  Unlike the former `Sub::Private` approach, `Sub::Protected`
+does not delete stash entries, so OO dispatch `$self->_method()`
+works correctly in production without any special workarounds.
 
 # SEE ALSO
 

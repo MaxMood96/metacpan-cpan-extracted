@@ -1,3 +1,8 @@
+0.016   2026-08-26  Released-By: PERLANCAR; Urgency: medium
+
+        - Add utility: join-audio.
+
+
 0.015   2025-10-29  Released-By: PERLANCAR; Urgency: medium
 
         - [ux][cli cut-video-by-duration] Make --start optional (default to 0).

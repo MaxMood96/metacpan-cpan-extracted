@@ -13,4 +13,6 @@ t/02sysread.t
 t/03syswrite.t
 t/04connect.t
 t/05accept.t
+t/06recv.t
+t/07send.t
 t/99pod.t

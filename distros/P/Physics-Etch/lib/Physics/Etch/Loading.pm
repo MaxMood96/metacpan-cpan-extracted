@@ -3,7 +3,7 @@ package Physics::Etch::Loading;
 use strict;
 use warnings;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 # ===========================================================================
 # Etch loading and aspect-ratio-dependent-etch (ARDE / RIE-lag) models.

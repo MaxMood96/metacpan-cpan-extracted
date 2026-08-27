@@ -187,18 +187,18 @@ perl Makefile.PL
 make dist
 ```
 
-This creates `Physics-Etch-0.01.tar.gz`.
+This creates `Physics-Etch-0.02.tar.gz`.
 
 If `make dist` fails because `gzip` is unavailable on Windows, create it with:
 
 ```sh
-perl -MIO::Compress::Gzip=gzip -e "gzip 'Physics-Etch-0.01.tar' => 'Physics-Etch-0.01.tar.gz' or die $IO::Compress::Gzip::GzipError"
+perl -MIO::Compress::Gzip=gzip -e "gzip 'Physics-Etch-0.02.tar' => 'Physics-Etch-0.02.tar.gz' or die $IO::Compress::Gzip::GzipError"
 ```
 
 2. Upload the tarball to PAUSE:
    - Log in at <https://pause.perl.org/>
    - Use **Upload a file to CPAN**
-   - Upload `Physics-Etch-0.01.tar.gz`
+   - Upload `Physics-Etch-0.02.tar.gz`
 
 After indexing completes, install from CPAN with:
 
